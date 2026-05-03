@@ -1,0 +1,78 @@
+# infra/docker-compose.yml — 本地开发用，包含前端服务
+# 与根目录 docker-compose.yml 的区别：新增前端服务，简化监控组件
+# 启动方式：cd infra && docker compose up -d
+version: '3.8'
+
+services:
+  # PostgreSQL 16（含 pgvector 扩展，用于长期记忆向量存储）
+  postgres:
+    image: pgvector/pgvector:pg16
+    platform: linux/amd64
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mydb}
+      POSTGRES_USER: ${POSTGRES_USER:-myuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mypassword}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-myuser} -d ${POSTGRES_DB:-mydb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis 7（兼容 Upstash Redis，本地用 redis:7-alpine）
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # 后端 FastAPI（热重载）
+  backend:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../.env
+    environment:
+      POSTGRES_HOST: postgres
+      VALKEY_HOST: redis
+      APP_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../app:/app/app
+      - ../logs:/app/logs
+    restart: on-failure
+
+  # 前端 Next.js
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    depends_on:
+      - backend
+    restart: on-failure
+
+volumes:
+  postgres_data:
+  redis_data:
