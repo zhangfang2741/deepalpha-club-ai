@@ -32,7 +32,7 @@ from tenacity import (
 
 from app.core.config import settings
 from app.core.logging import logger
-from app.services.llm.registry import LLMRegistry
+from app.services.llm.registry import LLMRegistry, llm_registry
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -57,10 +57,10 @@ class LLMService:
         self._current_model_index: int = 0
         self._bound_tools: List = []
 
-        all_names = LLMRegistry.get_all_names()
+        all_names = llm_registry.get_all_names()
         try:
             self._current_model_index = all_names.index(settings.DEFAULT_LLM_MODEL)
-            self._llm = LLMRegistry.get(settings.DEFAULT_LLM_MODEL)
+            self._llm = llm_registry.get(settings.DEFAULT_LLM_MODEL)
             logger.info(
                 "llm_service_initialized",
                 default_model=settings.DEFAULT_LLM_MODEL,
@@ -70,7 +70,7 @@ class LLMService:
             )
         except Exception as e:
             self._current_model_index = 0
-            self._llm = LLMRegistry.LLMS[0]["llm"]
+            self._llm = llm_registry.LLMS[0]["llm"]
             logger.warning(
                 "default_model_not_found_using_first",
                 requested=settings.DEFAULT_LLM_MODEL,
@@ -218,8 +218,8 @@ class LLMService:
             ``True`` on success, ``False`` if the switch failed.
         """
         try:
-            next_index = (self._current_model_index + 1) % len(LLMRegistry.LLMS)
-            next_entry = LLMRegistry.get_model_at_index(next_index)
+            next_index = (self._current_model_index + 1) % len(llm_registry.LLMS)
+            next_entry = llm_registry.get_model_at_index(next_index)
             logger.warning(
                 "switching_to_next_model",
                 from_index=self._current_model_index,
@@ -255,7 +255,7 @@ class LLMService:
         """
 
         def _override_target(idx: int) -> Any:
-            base = LLMRegistry.get(LLMRegistry.LLMS[idx]["name"], **model_kwargs)
+            base = llm_registry.get(llm_registry.LLMS[idx]["name"], **model_kwargs)
             return base.with_structured_output(response_format) if response_format else base
 
         def _default_target(_: int) -> Any:
@@ -265,7 +265,7 @@ class LLMService:
             return self._current_model_index if self._switch_to_next_model() else None
 
         if model_name or response_format or model_kwargs:
-            all_names = LLMRegistry.get_all_names()
+            all_names = llm_registry.get_all_names()
             if model_name and model_name not in all_names:
                 logger.error("requested_model_not_found", model_name=model_name)
                 raise ValueError(
@@ -273,7 +273,7 @@ class LLMService:
                 )
 
             start = all_names.index(model_name) if model_name else self._current_model_index
-            total = len(LLMRegistry.LLMS)
+            total = len(llm_registry.LLMS)
             get_target: Callable[[int], Any] = _override_target
 
             def _override_advance(idx: int) -> Optional[int]:
@@ -308,13 +308,13 @@ class LLMService:
         Raises:
             RuntimeError: When all models have been exhausted.
         """
-        total = len(LLMRegistry.LLMS)
+        total = len(llm_registry.LLMS)
         current = start
         models_tried = 0
         last_error: Optional[Exception] = None
 
         for models_tried in range(1, total + 1):
-            current_name = LLMRegistry.LLMS[current]["name"]
+            current_name = llm_registry.LLMS[current]["name"]
             try:
                 return await self._invoke_with_retry(get_target(current), messages)
             except OpenAIError as e:
@@ -328,7 +328,7 @@ class LLMService:
                 )
                 if models_tried >= total:
                     logger.error(
-                        "all_models_failed", models_tried=models_tried, starting_model=LLMRegistry.LLMS[start]["name"]
+                        "all_models_failed", models_tried=models_tried, starting_model=llm_registry.LLMS[start]["name"]
                     )
                     break
                 next_idx = advance(current)

@@ -218,6 +218,24 @@ class Settings:
         self.EVALUATION_API_KEY = os.getenv("EVALUATION_API_KEY", self.OPENAI_API_KEY)
         self.EVALUATION_SLEEP_TIME = int(os.getenv("EVALUATION_SLEEP_TIME", "10"))
 
+        # LLM 供应商配置
+        self.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")  # openai | claude | minimax | gemini
+        self.ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+        self.MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY", "")
+        self.MINIMAX_BASE_URL = os.getenv("MINIMAX_BASE_URL", "https://api.minimax.chat/v1")
+        self.GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+
+        # JWT 补充配置（与现有 JWT_ACCESS_TOKEN_EXPIRE_DAYS 对齐）
+        self.ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+        self.REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+
+        # CORS（别名，兼容 ALLOWED_ORIGINS）
+        cors_env = os.getenv("CORS_ORIGINS", "")
+        if cors_env:
+            self.CORS_ORIGINS = parse_list_from_env("CORS_ORIGINS", ["http://localhost:3000"])
+        else:
+            self.CORS_ORIGINS = self.ALLOWED_ORIGINS
+
         # Apply environment-specific settings
         self.apply_environment_settings()
 

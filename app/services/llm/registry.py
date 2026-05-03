@@ -1,13 +1,9 @@
-"""LLM model registry with pre-initialized instances."""
+# app/services/llm/registry.py
+"""LLM 模型注册表：按 LLM_PROVIDER 动态构建，支持 openai / claude / minimax / gemini。"""
 
-from typing import (
-    Any,
-    Dict,
-    List,
-)
+from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
 from app.core.config import (
@@ -16,51 +12,29 @@ from app.core.config import (
 )
 from app.core.logging import logger
 
-_TOKEN_LIMIT: Dict[str, Any] = {"max_completion_tokens": settings.MAX_TOKENS}
-_API_KEY = SecretStr(settings.OPENAI_API_KEY)
 
+def _build_openai_llms() -> list[dict[str, Any]]:
+    """构建 OpenAI 模型列表。"""
+    from langchain_openai import ChatOpenAI
 
-class LLMRegistry:
-    """Registry of available LLM models with pre-initialized instances.
-
-    This class maintains a list of LLM configurations and provides
-    methods to retrieve them by name with optional argument overrides.
-    """
-
-    LLMS: List[Dict[str, Any]] = [
+    api_key = SecretStr(settings.OPENAI_API_KEY)
+    token_limit: dict[str, Any] = {"max_completion_tokens": settings.MAX_TOKENS}
+    return [
         {
-            "name": "gpt-5-mini",
+            "name": "gpt-4o-mini",
             "llm": ChatOpenAI(
-                model="gpt-5-mini",
-                api_key=_API_KEY,
-                model_kwargs=_TOKEN_LIMIT,
-                reasoning={"effort": "low"},
+                model="gpt-4o-mini",
+                api_key=api_key,
+                model_kwargs=token_limit,
+                temperature=settings.DEFAULT_LLM_TEMPERATURE,
             ),
         },
         {
-            "name": "gpt-5.4",
+            "name": "gpt-4o",
             "llm": ChatOpenAI(
-                model="gpt-5",
-                api_key=_API_KEY,
-                model_kwargs=_TOKEN_LIMIT,
-                reasoning={"effort": "medium"},
-            ),
-        },
-        {
-            "name": "gpt-5.4-nano",
-            "llm": ChatOpenAI(
-                model="gpt-5.4-nano",
-                api_key=_API_KEY,
-                model_kwargs=_TOKEN_LIMIT,
-                reasoning={"effort": "low"},
-            ),
-        },
-        {
-            "name": "gpt-5",
-            "llm": ChatOpenAI(
-                model="gpt-5",
-                api_key=_API_KEY,
-                model_kwargs=_TOKEN_LIMIT,
+                model="gpt-4o",
+                api_key=api_key,
+                model_kwargs=token_limit,
                 top_p=0.95 if settings.ENVIRONMENT == Environment.PRODUCTION else 0.8,
                 presence_penalty=0.1 if settings.ENVIRONMENT == Environment.PRODUCTION else 0.0,
                 frequency_penalty=0.1 if settings.ENVIRONMENT == Environment.PRODUCTION else 0.0,
@@ -68,55 +42,168 @@ class LLMRegistry:
         },
     ]
 
-    @classmethod
-    def get(cls, model_name: str, **kwargs) -> BaseChatModel:
-        """Get an LLM by name with optional argument overrides.
 
-        When kwargs are provided a fresh ChatOpenAI instance is returned with
-        those overrides applied, leaving the shared registry entry untouched.
+def _build_claude_llms() -> list[dict[str, Any]]:
+    """构建 Anthropic Claude 模型列表。"""
+    from langchain_anthropic import ChatAnthropic
+
+    api_key = SecretStr(settings.ANTHROPIC_API_KEY)
+    return [
+        {
+            "name": "claude-haiku-4-5",
+            "llm": ChatAnthropic(
+                model="claude-haiku-4-5-20251001",
+                api_key=api_key,
+                max_tokens=settings.MAX_TOKENS,
+                temperature=settings.DEFAULT_LLM_TEMPERATURE,
+            ),
+        },
+        {
+            "name": "claude-sonnet-4-5",
+            "llm": ChatAnthropic(
+                model="claude-sonnet-4-5",
+                api_key=api_key,
+                max_tokens=settings.MAX_TOKENS,
+                temperature=settings.DEFAULT_LLM_TEMPERATURE,
+            ),
+        },
+        {
+            "name": "claude-sonnet-4-6",
+            "llm": ChatAnthropic(
+                model="claude-sonnet-4-6",
+                api_key=api_key,
+                max_tokens=settings.MAX_TOKENS,
+                temperature=settings.DEFAULT_LLM_TEMPERATURE,
+            ),
+        },
+    ]
+
+
+def _build_minimax_llms() -> list[dict[str, Any]]:
+    """构建 MiniMax 模型列表（OpenAI 兼容接口）。"""
+    from langchain_openai import ChatOpenAI
+
+    api_key = SecretStr(settings.MINIMAX_API_KEY)
+    return [
+        {
+            "name": "minimax-text-01",
+            "llm": ChatOpenAI(
+                model="MiniMax-Text-01",
+                api_key=api_key,
+                base_url=settings.MINIMAX_BASE_URL,
+                max_tokens=settings.MAX_TOKENS,
+                temperature=settings.DEFAULT_LLM_TEMPERATURE,
+            ),
+        },
+        {
+            "name": "minimax-m1",
+            "llm": ChatOpenAI(
+                model="MiniMax-M1",
+                api_key=api_key,
+                base_url=settings.MINIMAX_BASE_URL,
+                max_tokens=settings.MAX_TOKENS,
+            ),
+        },
+    ]
+
+
+def _build_gemini_llms() -> list[dict[str, Any]]:
+    """构建 Google Gemini 模型列表。"""
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    return [
+        {
+            "name": "gemini-2.0-flash",
+            "llm": ChatGoogleGenerativeAI(
+                model="gemini-2.0-flash",
+                google_api_key=settings.GOOGLE_API_KEY,
+                max_output_tokens=settings.MAX_TOKENS,
+                temperature=settings.DEFAULT_LLM_TEMPERATURE,
+            ),
+        },
+        {
+            "name": "gemini-2.5-pro",
+            "llm": ChatGoogleGenerativeAI(
+                model="gemini-2.5-pro-preview-05-06",
+                google_api_key=settings.GOOGLE_API_KEY,
+                max_output_tokens=settings.MAX_TOKENS,
+            ),
+        },
+    ]
+
+
+_BUILDERS = {
+    "openai": _build_openai_llms,
+    "claude": _build_claude_llms,
+    "minimax": _build_minimax_llms,
+    "gemini": _build_gemini_llms,
+}
+
+
+class LLMRegistry:
+    """按 LLM_PROVIDER 动态构建模型注册表。
+
+    通过环境变量 LLM_PROVIDER 切换供应商：
+        LLM_PROVIDER=claude  → 使用 Claude 系列
+        LLM_PROVIDER=openai  → 使用 GPT 系列
+        LLM_PROVIDER=minimax → 使用 MiniMax 系列
+        LLM_PROVIDER=gemini  → 使用 Gemini 系列
+    """
+
+    def __init__(self) -> None:
+        provider = settings.LLM_PROVIDER.lower()
+        builder = _BUILDERS.get(provider)
+        if builder is None:
+            raise ValueError(
+                f"不支持的 LLM_PROVIDER: '{provider}'。可选值：{list(_BUILDERS.keys())}"
+            )
+        self.LLMS: list[dict[str, Any]] = builder()
+        logger.info(
+            "llm_registry_initialized",
+            provider=provider,
+            models=[e["name"] for e in self.LLMS],
+        )
+
+    def get(self, model_name: str, **kwargs: Any) -> BaseChatModel:
+        """按名称获取 LLM 实例。
 
         Args:
-            model_name: Name of the model to retrieve.
-            **kwargs: Optional arguments to override default model configuration.
+            model_name: 模型名称（需与 LLMS 列表中的 name 一致）
+            **kwargs: 保留参数（当前未使用）
 
         Returns:
-            BaseChatModel instance.
+            对应的 BaseChatModel 实例
 
         Raises:
-            ValueError: If model_name is not found in LLMS.
+            ValueError: 模型名称不存在时
         """
-        model_entry = next((e for e in cls.LLMS if e["name"] == model_name), None)
-
-        if not model_entry:
-            available = ", ".join(e["name"] for e in cls.LLMS)
-            raise ValueError(f"model '{model_name}' not found in registry. available models: {available}")
-
+        entry = next((e for e in self.LLMS if e["name"] == model_name), None)
+        if not entry:
+            available = ", ".join(e["name"] for e in self.LLMS)
+            raise ValueError(f"模型 '{model_name}' 不存在。可用模型：{available}")
         if kwargs:
-            logger.debug("creating_llm_with_custom_args", model_name=model_name, custom_args=list(kwargs.keys()))
-            return ChatOpenAI(model=model_name, api_key=_API_KEY, **kwargs)
+            logger.debug("llm_get_with_kwargs_ignored", model=model_name, kwargs=list(kwargs.keys()))
+        return entry["llm"]
 
-        logger.debug("using_default_llm_instance", model_name=model_name)
-        return model_entry["llm"]
+    def get_all_names(self) -> list[str]:
+        """返回所有已注册模型名称。"""
+        return [e["name"] for e in self.LLMS]
 
-    @classmethod
-    def get_all_names(cls) -> List[str]:
-        """Return all registered model names in order.
+    def get_model_at_index(self, index: int) -> dict[str, Any]:
+        """按索引获取模型条目，索引越界时返回第一个。"""
+        if 0 <= index < len(self.LLMS):
+            return self.LLMS[index]
+        return self.LLMS[0]
 
-        Returns:
-            List of model name strings.
-        """
-        return [e["name"] for e in cls.LLMS]
+    def get_default(self) -> BaseChatModel:
+        """返回 DEFAULT_LLM_MODEL 指定的模型，找不到时回退到列表第一个。"""
+        name = settings.DEFAULT_LLM_MODEL
+        try:
+            return self.get(name)
+        except ValueError:
+            logger.warning("default_model_not_found_using_first", requested=name)
+            return self.LLMS[0]["llm"]
 
-    @classmethod
-    def get_model_at_index(cls, index: int) -> Dict[str, Any]:
-        """Return the model entry at a specific index, wrapping to 0 if out of range.
 
-        Args:
-            index: Index into LLMS.
-
-        Returns:
-            Model entry dict.
-        """
-        if 0 <= index < len(cls.LLMS):
-            return cls.LLMS[index]
-        return cls.LLMS[0]
+# 全局单例（由 service.py 使用）
+llm_registry = LLMRegistry()
