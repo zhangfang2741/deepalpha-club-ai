@@ -40,6 +40,10 @@ dependencies = [
     "uvloop>=0.22.1; platform_system != 'Windows'",
     "asgi-correlation-id>=4.3.4",
     "alembic>=1.18.4",
+    "asyncpg>=0.31.0",
+    "langchain-anthropic>=1.4.2",
+    "langchain-google-genai>=4.2.2",
+    "redis>=7.4.0",
 ]
 
 [project.optional-dependencies]
