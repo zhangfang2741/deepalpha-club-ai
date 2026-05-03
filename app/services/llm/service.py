@@ -32,7 +32,7 @@ from tenacity import (
 
 from app.core.config import settings
 from app.core.logging import logger
-from app.services.llm.registry import LLMRegistry, llm_registry
+from app.services.llm.registry import llm_registry
 
 T = TypeVar("T", bound=BaseModel)
 
