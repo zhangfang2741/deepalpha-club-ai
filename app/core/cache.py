@@ -111,6 +111,7 @@ class ValkeyCacheService:
             password=settings.VALKEY_PASSWORD or None,
             max_connections=settings.VALKEY_MAX_CONNECTIONS,
             decode_responses=True,
+            ssl=settings.VALKEY_SSL,
         )
         await cast(Awaitable[bool], client.ping())
         self._client = client

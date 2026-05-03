@@ -31,6 +31,7 @@ async def init_redis() -> None:
         password=settings.VALKEY_PASSWORD or None,
         max_connections=settings.VALKEY_MAX_CONNECTIONS,
         decode_responses=True,
+        ssl=settings.VALKEY_SSL,
     )
     _client = Redis(connection_pool=_pool)
     await _client.ping()

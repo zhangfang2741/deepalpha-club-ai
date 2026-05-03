@@ -187,6 +187,7 @@ class Settings:
         self.VALKEY_PORT = int(os.getenv("VALKEY_PORT", "6379"))
         self.VALKEY_DB = int(os.getenv("VALKEY_DB", "0"))
         self.VALKEY_PASSWORD = os.getenv("VALKEY_PASSWORD", "")
+        self.VALKEY_SSL = os.getenv("VALKEY_SSL", "false").lower() in ("true", "1", "yes")
         self.VALKEY_MAX_CONNECTIONS = int(os.getenv("VALKEY_MAX_CONNECTIONS", "20"))
         self.CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "60"))
 

@@ -9,8 +9,12 @@ from app.core.logging import logger
 
 def langfuse_init():
     """Initialize Langfuse."""
+    # 未启用时跳过，避免因缺少密钥导致启动失败
+    if not settings.LANGFUSE_TRACING_ENABLED:
+        logger.debug("langfuse_tracing_disabled_skipping_init")
+        return
+
     langfuse = Langfuse(
-        tracing_enabled=settings.LANGFUSE_TRACING_ENABLED,
         public_key=settings.LANGFUSE_PUBLIC_KEY,
         secret_key=settings.LANGFUSE_SECRET_KEY,
         host=settings.LANGFUSE_HOST,
