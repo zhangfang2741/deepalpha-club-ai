@@ -221,6 +221,7 @@ class Settings:
         # LLM 供应商配置
         self.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")  # openai | claude | minimax | gemini
         self.ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+        self.ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "")  # 为空则使用官方地址
         self.MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY", "")
         self.MINIMAX_BASE_URL = os.getenv("MINIMAX_BASE_URL", "https://api.minimax.chat/v1")
         self.GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")

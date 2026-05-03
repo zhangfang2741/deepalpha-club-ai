@@ -44,10 +44,15 @@ def _build_openai_llms() -> list[dict[str, Any]]:
 
 
 def _build_claude_llms() -> list[dict[str, Any]]:
-    """构建 Anthropic Claude 模型列表。"""
+    """构建 Anthropic Claude 模型列表（支持自定义 base_url，可接 MiniMax 等兼容接口）。"""
     from langchain_anthropic import ChatAnthropic
 
     api_key = SecretStr(settings.ANTHROPIC_API_KEY)
+    # 有 ANTHROPIC_BASE_URL 时传入（如 MiniMax Anthropic 兼容接口），否则使用官方地址
+    extra: dict[str, Any] = {}
+    if settings.ANTHROPIC_BASE_URL:
+        extra["base_url"] = settings.ANTHROPIC_BASE_URL
+
     return [
         {
             "name": "claude-haiku-4-5",
@@ -56,6 +61,7 @@ def _build_claude_llms() -> list[dict[str, Any]]:
                 api_key=api_key,
                 max_tokens=settings.MAX_TOKENS,
                 temperature=settings.DEFAULT_LLM_TEMPERATURE,
+                **extra,
             ),
         },
         {
@@ -65,6 +71,7 @@ def _build_claude_llms() -> list[dict[str, Any]]:
                 api_key=api_key,
                 max_tokens=settings.MAX_TOKENS,
                 temperature=settings.DEFAULT_LLM_TEMPERATURE,
+                **extra,
             ),
         },
         {
@@ -74,6 +81,7 @@ def _build_claude_llms() -> list[dict[str, Any]]:
                 api_key=api_key,
                 max_tokens=settings.MAX_TOKENS,
                 temperature=settings.DEFAULT_LLM_TEMPERATURE,
+                **extra,
             ),
         },
     ]
