@@ -1,7 +1,7 @@
 [project]
-name = "langgraph-fastapi-template"
+name = "deepalpha-club-ai"
 version = "0.1.0"
-description = "LangGraph FastAPI Template"
+description = "deepalpha club ai"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -44,6 +44,7 @@ dependencies = [
     "langchain-anthropic>=1.4.2",
     "langchain-google-genai>=4.2.2",
     "redis>=7.4.0",
+    "httpx>=0.28.1",
 ]
 
 [project.optional-dependencies]
@@ -73,6 +74,7 @@ test = ["httpx>=0.28.1", "pytest>=8.3.5"]
 [tool.pytest.ini_options]
 markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
 python_files = ["test_*.py", "*_test.py", "tests.py"]
+pythonpath = ["."]
 
 [tool.black]
 line-length = 119

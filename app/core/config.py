@@ -219,6 +219,9 @@ class Settings:
         self.EVALUATION_API_KEY = os.getenv("EVALUATION_API_KEY", self.OPENAI_API_KEY)
         self.EVALUATION_SLEEP_TIME = int(os.getenv("EVALUATION_SLEEP_TIME", "10"))
 
+        # Financial Modeling Prep API
+        self.FMP_API_KEY: str = os.getenv("FMP_API_KEY", "")
+
         # LLM 供应商配置
         self.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")  # openai | claude | minimax | gemini
         self.ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
