@@ -1,7 +1,7 @@
 """ETF 资金流看板 Pydantic schemas。"""
 
 import datetime
-from typing import List
+from typing import List, Optional
 
 from pydantic import Field
 
@@ -44,3 +44,37 @@ class ETFListResponse(BaseResponse):
 
     period: str
     etfs: List[ETFSummary]
+
+
+# ── 热力图相关 Schema ──────────────────────────────────────────────────────────
+
+class HeatmapCell(BaseResponse):
+    """热力图单元格：某只 ETF 在某日期的标准化强度。"""
+
+    date: str = Field(description="日期标签，格式因粒度而异：day='2026-04-24'，week='2026-W18'，month='2026-04'")
+    intensity: Optional[float] = Field(None, description="Z-score 标准化后的资金流强度，None 表示无数据")
+
+
+class HeatmapETFRow(BaseResponse):
+    """热力图中单只 ETF 的一行数据。"""
+
+    symbol: str
+    name: str
+    cells: List[HeatmapCell]
+
+
+class HeatmapSectorGroup(BaseResponse):
+    """热力图中一个板块的分组数据（含板块均值行和 ETF 明细）。"""
+
+    sector: str = Field(description="板块名称，如 '01 信息技术'")
+    avg_cells: List[HeatmapCell] = Field(description="板块内所有 ETF 的强度均值，用于折叠状态展示")
+    etfs: List[HeatmapETFRow]
+
+
+class HeatmapResponse(BaseResponse):
+    """GET /etf/heatmap 响应体。"""
+
+    granularity: str = Field(description="粒度：day | week | month")
+    days: int = Field(description="请求的交易日数量")
+    date_labels: List[str] = Field(description="所有列的日期标签（升序，最新在末尾）")
+    sectors: List[HeatmapSectorGroup]
