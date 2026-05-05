@@ -90,3 +90,64 @@ def test_chinese_names_covers_all_etfs():
     all_symbols = [sym for symbols in ETF_LIBRARY.values() for sym in symbols]
     for sym in all_symbols:
         assert sym in CHINESE_NAMES, f"{sym} 缺少中文名"
+
+
+# ── 端点测试 ───────────────────────────────────────────────────────────────────
+
+from unittest.mock import AsyncMock, patch
+from fastapi.testclient import TestClient
+from app.main import app
+from app.cache.client import get_redis
+
+
+def _mock_heatmap_response() -> HeatmapResponse:
+    return HeatmapResponse(
+        granularity="day",
+        days=5,
+        date_labels=["2026-04-28"],
+        sectors=[
+            HeatmapSectorGroup(
+                sector="01 信息技术",
+                avg_cells=[HeatmapCell(date="2026-04-28", intensity=0.5)],
+                etfs=[
+                    HeatmapETFRow(
+                        symbol="XLK",
+                        name="科技行业精选指数ETF-SPDR",
+                        cells=[HeatmapCell(date="2026-04-28", intensity=1.2)],
+                    )
+                ],
+            )
+        ],
+    )
+
+
+def test_heatmap_endpoint_returns_cached_data():
+    mock_redis = AsyncMock()
+
+    async def override_redis():
+        yield mock_redis
+
+    # patch 导入点（etf.py 中 from app.cache.etf_cache import get_heatmap_cache）
+    mock_cache = AsyncMock(return_value=_mock_heatmap_response())
+    with patch("app.api.v1.etf.get_heatmap_cache", mock_cache):
+        app.dependency_overrides[get_redis] = override_redis
+        client = TestClient(app)
+        response = client.get("/api/v1/etf/heatmap?granularity=day&days=5")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["granularity"] == "day"
+        assert len(data["sectors"]) == 1
+        app.dependency_overrides.clear()
+
+
+def test_heatmap_endpoint_invalid_granularity():
+    mock_redis = AsyncMock()
+
+    async def override_redis():
+        yield mock_redis
+
+    app.dependency_overrides[get_redis] = override_redis
+    client = TestClient(app)
+    response = client.get("/api/v1/etf/heatmap?granularity=invalid")
+    assert response.status_code == 422
+    app.dependency_overrides.clear()
