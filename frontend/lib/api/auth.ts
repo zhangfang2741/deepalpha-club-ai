@@ -1,40 +1,54 @@
 // frontend/lib/api/auth.ts
 import apiClient from './client'
 
-export interface AuthResponse {
-  access_token: string
-  token_type: string
-}
-
-export interface User {
+export interface AuthUser {
   id: number
   email: string
-  username?: string
-  created_at: string
+  username: string | null
 }
 
-export const login = async (email: string, password: string): Promise<AuthResponse> => {
-  // 后端 /auth/login 使用 OAuth2 form 格式
-  const form = new URLSearchParams()
-  form.append('username', email)
-  form.append('password', password)
+// 登录响应（只含 token，无用户信息）
+export interface LoginResponse {
+  access_token: string
+  token_type: string
+  expires_at: string
+}
 
-  const response = await apiClient.post<AuthResponse>('/api/v1/auth/login', form, {
+// 注册响应（含用户信息 + token）
+export interface RegisterResponse {
+  id: number
+  email: string
+  username: string | null
+  token: {
+    access_token: string
+    token_type: string
+    expires_at: string
+  }
+}
+
+// 登录：使用 form-urlencoded，字段名为 email（不是 username）
+export const login = async (email: string, password: string): Promise<LoginResponse> => {
+  const form = new URLSearchParams()
+  form.append('email', email)
+  form.append('password', password)
+  form.append('grant_type', 'password')
+
+  const response = await apiClient.post<LoginResponse>('/api/v1/auth/login', form, {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   })
   return response.data
 }
 
-export const register = async (email: string, password: string): Promise<User> => {
-  const response = await apiClient.post<User>('/api/v1/auth/register', { email, password })
-  return response.data
-}
-
-export const logout = async (): Promise<void> => {
-  await apiClient.post('/api/v1/auth/logout')
-}
-
-export const getMe = async (): Promise<User> => {
-  const response = await apiClient.get<User>('/api/v1/auth/me')
+// 注册：使用 JSON，username 可选
+export const register = async (
+  email: string,
+  password: string,
+  username?: string
+): Promise<RegisterResponse> => {
+  const response = await apiClient.post<RegisterResponse>('/api/v1/auth/register', {
+    email,
+    password,
+    ...(username ? { username } : {}),
+  })
   return response.data
 }

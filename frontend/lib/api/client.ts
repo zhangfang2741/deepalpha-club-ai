@@ -22,14 +22,15 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
-// 响应拦截器：401 自动跳转登录页，统一错误结构
+// 响应拦截器：401 清除 token 并跳转落地页
+// 注意：不能在此导入 store（循环依赖），直接操作 localStorage
 apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('access_token')
-        window.location.href = '/login'
+        window.location.href = '/'
       }
     }
     return Promise.reject(error)
