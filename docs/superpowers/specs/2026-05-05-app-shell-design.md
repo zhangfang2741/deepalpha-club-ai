@@ -201,9 +201,25 @@ interface AuthState {
 
 ## 后端 API 依赖
 
-| 接口 | 方法 | 路径 |
-|---|---|---|
-| 登录 | POST | `/api/v1/auth/login` |
-| 注册 | POST | `/api/v1/auth/register` |
+### 登录 `POST /api/v1/auth/login`
 
-请求/响应格式以后端实际文档为准。
+- 请求格式：`application/x-www-form-urlencoded`（字段：`email`、`password`、`grant_type=password`）
+- 成功响应（`TokenResponse`）：
+  ```json
+  { "access_token": "...", "token_type": "bearer", "expires_at": "..." }
+  ```
+- 前端处理：将 `access_token` 存入 store + localStorage；**需额外调用一次接口获取用户信息**，或在 token decode 中取 user_id
+
+### 注册 `POST /api/v1/auth/register`
+
+- 请求格式：`application/json`（字段：`email`、`password`、`username?`）
+- 成功响应（`UserResponse`）：
+  ```json
+  { "id": 1, "email": "...", "username": "...", "token": { "access_token": "...", "expires_at": "..." } }
+  ```
+- 前端处理：注册成功即已登录，从响应中取 `token.access_token` + `{ id, email, username }` 直接调用 `setAuth()`，**无需再调登录接口**
+
+### 注意事项
+
+- 登录和注册的响应结构不同，`LoginRegisterForm` 需分别处理两条成功路径
+- 登录响应不含用户信息，Zustand store 中的 `user` 字段需从注册响应或单独的 `/me` 接口获取；若后端暂无 `/me` 接口，登录后 `user` 可存储 `null`，仅凭 `isAuthenticated` 控制访问权限
