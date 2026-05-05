@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, Fragment } from 'react'
-import type { HeatmapResponse, HeatmapCell, HeatmapSectorGroup } from '@/lib/api/etf'
+import type { HeatmapResponse, HeatmapCell, HeatmapSectorGroup, Granularity } from '@/lib/api/etf'
 import ETFCandleModal from '@/components/etf/ETFCandleModal'
 
 interface ETFHeatmapTableProps {
   data: HeatmapResponse
+  granularity: Granularity
 }
 
 type SortKey = string  // 日期标签
@@ -53,7 +54,7 @@ function sortSectors(
   })
 }
 
-export default function ETFHeatmapTable({ data }: ETFHeatmapTableProps) {
+export default function ETFHeatmapTable({ data, granularity }: ETFHeatmapTableProps) {
   const [expandedSectors, setExpandedSectors] = useState<Set<string>>(new Set())
   const [sortKey, setSortKey] = useState<SortKey | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>('desc')
@@ -87,6 +88,7 @@ export default function ETFHeatmapTable({ data }: ETFHeatmapTableProps) {
       <ETFCandleModal
         symbol={selectedETF.symbol}
         name={selectedETF.name}
+        granularity={granularity}
         onClose={() => setSelectedETF(null)}
       />
     )}

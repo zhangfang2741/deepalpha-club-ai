@@ -431,10 +431,23 @@ def build_heatmap_data(granularity: str = "day", days: int = 30) -> HeatmapRespo
 
 # ── K 线数据抓取 ──────────────────────────────────────────────────────────────
 
-def fetch_candles(symbol: str, days: int = 365) -> CandleResponse:
-    """抓取单只 ETF 近 days 个交易日的 OHLCV K 线数据。"""
+_CANDLE_CALENDAR_DAYS = {
+    "day": 365,    # 1 年日 K，约 252 根
+    "week": 730,   # 2 年周 K，约 104 根
+    "month": 1825, # 5 年月 K，约 60 根
+}
+
+_RESAMPLE_RULE = {
+    "week": "W-FRI",
+    "month": "ME",   # pandas ≥2.2 month-end
+}
+
+
+def fetch_candles(symbol: str, granularity: str = "day") -> CandleResponse:
+    """抓取单只 ETF K 线数据，按 granularity 聚合为日/周/月 K。"""
+    calendar_days = _CANDLE_CALENDAR_DAYS.get(granularity, 365)
     today = datetime.date.today()
-    from_date = today - datetime.timedelta(days=days)
+    from_date = today - datetime.timedelta(days=calendar_days)
 
     try:
         df = yf.download(
@@ -450,7 +463,24 @@ def fetch_candles(symbol: str, days: int = 365) -> CandleResponse:
 
     candles: List[Candle] = []
     if df is not None and not df.empty:
-        # 单 symbol 时 columns 为单层
+        # 多 ticker 下载时 columns 可能为 MultiIndex，取单层
+        if hasattr(df.columns, "levels"):
+            df = df.xs(symbol, axis=1, level=1) if symbol in df.columns.get_level_values(1) else df
+
+        # 按粒度聚合
+        rule = _RESAMPLE_RULE.get(granularity)
+        if rule:
+            try:
+                df = df.resample(rule).agg({
+                    "Open": "first",
+                    "High": "max",
+                    "Low": "min",
+                    "Close": "last",
+                    "Volume": "sum",
+                }).dropna(subset=["Open", "Close"])
+            except Exception as e:
+                logger.warning("candle_resample_failed", granularity=granularity, error=str(e))
+
         for idx, row in df.iterrows():
             try:
                 candles.append(

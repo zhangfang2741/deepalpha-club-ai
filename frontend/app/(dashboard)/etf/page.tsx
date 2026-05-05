@@ -95,7 +95,7 @@ export default function ETFPage() {
       {/* 热力图表格 */}
       {data && (
         <div className={loading ? 'opacity-60 pointer-events-none' : ''}>
-          <ETFHeatmapTable data={data} />
+          <ETFHeatmapTable data={data} granularity={granularity} />
         </div>
       )}
     </div>

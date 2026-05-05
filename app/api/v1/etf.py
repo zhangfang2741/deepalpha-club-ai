@@ -37,6 +37,9 @@ async def get_etf_heatmap(
 
 
 @router.get("/{symbol}/candles", response_model=CandleResponse)
-async def get_etf_candles(symbol: str) -> CandleResponse:
-    """获取单只 ETF 近一年的 K 线数据（OHLCV，日线）。"""
-    return fetch_candles(symbol.upper(), days=365)
+async def get_etf_candles(
+    symbol: str,
+    granularity: Annotated[str, Query(pattern="^(day|week|month)$")] = "day",
+) -> CandleResponse:
+    """获取单只 ETF K 线数据（日/周/月）。"""
+    return fetch_candles(symbol.upper(), granularity=granularity)

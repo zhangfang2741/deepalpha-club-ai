@@ -42,8 +42,13 @@ export interface CandleResponse {
   candles: Candle[]
 }
 
-export const fetchETFCandles = async (symbol: string): Promise<CandleResponse> => {
-  const response = await apiClient.get<CandleResponse>(`/api/v1/etf/${symbol}/candles`)
+export const fetchETFCandles = async (
+  symbol: string,
+  granularity: Granularity = 'day'
+): Promise<CandleResponse> => {
+  const response = await apiClient.get<CandleResponse>(`/api/v1/etf/${symbol}/candles`, {
+    params: { granularity },
+  })
   return response.data
 }
 
