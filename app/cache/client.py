@@ -9,7 +9,7 @@
 from collections.abc import AsyncGenerator
 from typing import Optional
 
-from redis.asyncio import ConnectionPool, Redis
+from redis.asyncio import ConnectionPool, Redis, SSLConnection
 
 from app.core.config import settings
 from app.core.logging import logger
@@ -24,15 +24,17 @@ async def init_redis() -> None:
     global _pool, _client
 
     host = settings.VALKEY_HOST or "localhost"
-    _pool = ConnectionPool(
-        host=host,
-        port=settings.VALKEY_PORT,
-        db=settings.VALKEY_DB,
-        password=settings.VALKEY_PASSWORD or None,
-        max_connections=settings.VALKEY_MAX_CONNECTIONS,
-        decode_responses=True,
-        ssl=settings.VALKEY_SSL,
-    )
+    pool_kwargs: dict = {
+        "host": host,
+        "port": settings.VALKEY_PORT,
+        "db": settings.VALKEY_DB,
+        "password": settings.VALKEY_PASSWORD or None,
+        "max_connections": settings.VALKEY_MAX_CONNECTIONS,
+        "decode_responses": True,
+    }
+    if settings.VALKEY_SSL:
+        pool_kwargs["connection_class"] = SSLConnection
+    _pool = ConnectionPool(**pool_kwargs)
     _client = Redis(connection_pool=_pool)
     await _client.ping()
     logger.info(

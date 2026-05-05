@@ -18,7 +18,8 @@ from app.core.logging import logger
 _storage_uri = None
 if settings.VALKEY_HOST:
     _password_part = f":{settings.VALKEY_PASSWORD}@" if settings.VALKEY_PASSWORD else ""
-    _storage_uri = f"redis://{_password_part}{settings.VALKEY_HOST}:{settings.VALKEY_PORT}/{settings.VALKEY_DB}"
+    _scheme = "rediss" if settings.VALKEY_SSL else "redis"
+    _storage_uri = f"{_scheme}://{_password_part}{settings.VALKEY_HOST}:{settings.VALKEY_PORT}/{settings.VALKEY_DB}"
     logger.info("rate_limiter_using_valkey", host=settings.VALKEY_HOST, port=settings.VALKEY_PORT)
 
 # Initialize rate limiter (uses in-memory storage if no Valkey)

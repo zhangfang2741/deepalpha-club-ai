@@ -107,6 +107,8 @@ def get_log_file_path() -> Path:
 class JsonlFileHandler(logging.Handler):
     """Custom handler for writing JSONL logs to daily files."""
 
+    _open = staticmethod(open)  # 解释器关闭时 open 可能被置为 None，提前保存引用
+
     def __init__(self, file_path: Path):
         """Initialize the JSONL file handler.
 
@@ -134,7 +136,7 @@ class JsonlFileHandler(logging.Handler):
             if isinstance(extra, dict):
                 log_entry.update(extra)
 
-            with open(self.file_path, "a", encoding="utf-8") as f:
+            with self._open(self.file_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(log_entry) + "\n")
         except Exception:
             self.handleError(record)

@@ -46,6 +46,27 @@ class ETFListResponse(BaseResponse):
     etfs: List[ETFSummary]
 
 
+# ── K 线相关 Schema ───────────────────────────────────────────────────────────
+
+class Candle(BaseResponse):
+    """单根 K 线数据。"""
+
+    t: str = Field(description="日期，格式 YYYY-MM-DD")
+    o: float = Field(description="开盘价")
+    h: float = Field(description="最高价")
+    l: float = Field(description="最低价")
+    c: float = Field(description="收盘价（复权）")
+    v: int = Field(description="成交量")
+
+
+class CandleResponse(BaseResponse):
+    """GET /etf/{symbol}/candles 响应体。"""
+
+    symbol: str
+    name: str
+    candles: List[Candle]
+
+
 # ── 热力图相关 Schema ──────────────────────────────────────────────────────────
 
 class HeatmapCell(BaseResponse):

@@ -1,22 +1,103 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { fetchETFHeatmap } from '@/lib/api/etf'
+import type { HeatmapResponse, Granularity } from '@/lib/api/etf'
+import { useETFStore } from '@/lib/store/etf'
+import GranularityToggle from '@/components/etf/GranularityToggle'
+import ETFHeatmapTable from '@/components/etf/ETFHeatmapTable'
+
 export default function ETFPage() {
+  const { granularity, days, setGranularity } = useETFStore()
+  const [data, setData] = useState<HeatmapResponse | null>(null)
+  // 初始为 true，后续由事件处理器在切换粒度时重置为 true
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+
+    fetchETFHeatmap(granularity, days)
+      .then((result) => {
+        if (!cancelled) {
+          setData(result)
+          setError('')
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setError('数据加载失败，请重试')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [granularity, days])
+
+  const handleGranularityChange = (g: Granularity) => {
+    setLoading(true)
+    setGranularity(g)
+  }
+
+  const handleRetry = () => {
+    setLoading(true)
+    setError('')
+    fetchETFHeatmap(granularity, days)
+      .then((result) => {
+        setData(result)
+      })
+      .catch(() => setError('数据加载失败，请重试'))
+      .finally(() => setLoading(false))
+  }
+
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">ETF 资金流</h1>
-
-      <div className="bg-white rounded-xl border border-gray-200 p-12 flex flex-col items-center justify-center text-center">
-        <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mb-4">
-          <svg className="w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-            />
-          </svg>
-        </div>
-        <h2 className="text-base font-semibold text-gray-900 mb-2">ETF 资金流数据</h2>
-        <p className="text-sm text-gray-500">功能即将上线，敬请期待</p>
+      {/* 页头 */}
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-bold text-gray-900">ETF 资金流</h1>
+        <GranularityToggle
+          value={granularity}
+          onChange={handleGranularityChange}
+          disabled={loading}
+        />
       </div>
+
+      {/* 说明文字 */}
+      <p className="text-sm text-gray-500 mb-4">
+        资金流强度基于 CLV × 价格 × 成交量计算，经 Z-score 标准化。
+        红色表示资金流入，绿色表示资金流出，颜色越深强度越大。
+      </p>
+
+      {/* 错误状态 */}
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+          <span className="text-sm text-red-600">{error}</span>
+          <button
+            onClick={handleRetry}
+            className="text-sm text-red-600 font-medium hover:text-red-800 underline"
+          >
+            重试
+          </button>
+        </div>
+      )}
+
+      {/* 加载骨架 */}
+      {loading && !data && (
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-10 border-b border-gray-100 animate-pulse bg-gray-50" />
+          ))}
+        </div>
+      )}
+
+      {/* 热力图表格 */}
+      {data && (
+        <div className={loading ? 'opacity-60 pointer-events-none' : ''}>
+          <ETFHeatmapTable data={data} />
+        </div>
+      )}
     </div>
   )
 }

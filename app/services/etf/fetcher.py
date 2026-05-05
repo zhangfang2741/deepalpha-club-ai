@@ -11,10 +11,13 @@ import math
 from typing import Dict, List, Optional, Tuple
 
 import httpx
+import yfinance as yf
 
 from app.core.config import settings
 from app.core.logging import logger
 from app.schemas.etf import (
+    Candle,
+    CandleResponse,
     ETFSummary,
     FlowDataPoint,
     HeatmapCell,
@@ -125,7 +128,7 @@ TRACKED_ETFS: List[dict] = [
     for sym in symbols
 ]
 
-_FMP_BASE = "https://financialmodelingprep.com/api/v3"
+_FMP_BASE = "https://financialmodelingprep.com/stable"
 
 _TIMESERIES_MAP = {
     "1w": 7,
@@ -169,22 +172,24 @@ def z_score_normalize(flows: List[float]) -> List[float]:
 
 # ── FMP 数据抓取 ──────────────────────────────────────────────────────────────
 
+def _date_range(calendar_days: int) -> tuple[str, str]:
+    """返回 (from_date, to_date) 字符串，to_date 为今天，from_date 为 calendar_days 天前。"""
+    today = datetime.date.today()
+    from_date = today - datetime.timedelta(days=calendar_days)
+    return from_date.isoformat(), today.isoformat()
+
+
 def _build_url(symbol: str, period: str) -> str:
-    """构造 FMP historical-price-full 请求 URL（旧接口用）。"""
+    """构造 FMP historical-price-eod 请求 URL（兼容旧接口调用）。"""
     api_key = settings.FMP_API_KEY
     if period == "ytd":
-        start = datetime.date(datetime.date.today().year, 1, 1).isoformat()
-        today = datetime.date.today().isoformat()
-        return f"{_FMP_BASE}/historical-price-full/{symbol}?from={start}&to={today}&apikey={api_key}"
-    timeseries = _TIMESERIES_MAP.get(period, 31)
-    return f"{_FMP_BASE}/historical-price-full/{symbol}?timeseries={timeseries}&apikey={api_key}"
+        from_date = datetime.date(datetime.date.today().year, 1, 1).isoformat()
+        to_date = datetime.date.today().isoformat()
+    else:
+        calendar_days = _TIMESERIES_MAP.get(period, 31)
+        from_date, to_date = _date_range(calendar_days)
+    return f"{_FMP_BASE}/historical-price-eod/full?symbol={symbol}&from={from_date}&to={to_date}&apikey={api_key}"
 
-
-def _build_heatmap_url(symbol: str, days: int) -> str:
-    """构造热力图专用 FMP URL，days × 2 换算为日历天数保证覆盖足够交易日。"""
-    api_key = settings.FMP_API_KEY
-    timeseries = days * 2
-    return f"{_FMP_BASE}/historical-price-full/{symbol}?timeseries={timeseries}&apikey={api_key}"
 
 
 def fetch_etf_flows(symbol: str, period: str) -> List[FlowDataPoint]:
@@ -193,7 +198,8 @@ def fetch_etf_flows(symbol: str, period: str) -> List[FlowDataPoint]:
     try:
         resp = httpx.get(url, timeout=15)
         resp.raise_for_status()
-        historical = resp.json().get("historical", [])
+        body = resp.json()
+        historical = body if isinstance(body, list) else body.get("historical", [])
     except Exception as e:
         logger.exception("fmp_fetch_failed", symbol=symbol, period=period, error=str(e))
         return []
@@ -276,7 +282,7 @@ def build_heatmap_data(granularity: str = "day", days: int = 30) -> HeatmapRespo
     5. 按 ETF_LIBRARY 分组，计算板块均值
     6. 返回 HeatmapResponse
     """
-    # Step 1: 抓取所有 ETF 原始数据（去重，PKB/UFO 在多个板块出现）
+    # Step 1: 批量抓取所有 ETF 原始数据（去重，PKB/UFO 在多个板块出现）
     seen: set = set()
     unique_symbols = [
         sym
@@ -285,33 +291,50 @@ def build_heatmap_data(granularity: str = "day", days: int = 30) -> HeatmapRespo
         if not (sym in seen or seen.add(sym))  # type: ignore[func-returns-value]
     ]
 
-    # raw_data[symbol] = [(date_str, adj_close, high, low, volume), ...]（升序，最多 days 条）
+    today = datetime.date.today()
+    from_date = today - datetime.timedelta(days=days * 2)
+
+    try:
+        df = yf.download(
+            unique_symbols,
+            start=from_date.isoformat(),
+            end=today.isoformat(),
+            auto_adjust=True,
+            progress=False,
+            threads=True,
+        )
+    except Exception as e:
+        logger.exception("yfinance_download_failed", error=str(e))
+        df = None
+
+    # raw_data[symbol] = [(date_str, close, high, low, volume), ...]（升序，最多 days 条）
     raw_data: Dict[str, List[Tuple[str, float, float, float, int]]] = {}
 
-    for symbol in unique_symbols:
-        url = _build_heatmap_url(symbol, days)
-        try:
-            resp = httpx.get(url, timeout=15)
-            resp.raise_for_status()
-            historical = resp.json().get("historical", [])
-        except Exception as e:
-            logger.exception("fmp_heatmap_fetch_failed", symbol=symbol, error=str(e))
-            continue
-
-        if not historical:
-            continue
-
-        rows = list(reversed(historical))[-days:]
-        raw_data[symbol] = [
-            (
-                row["date"],
-                float(row.get("adjClose") or row.get("close") or 0),
-                float(row.get("high") or 0),
-                float(row.get("low") or 0),
-                int(row.get("volume") or 0),
-            )
-            for row in rows
-        ]
+    if df is not None and not df.empty:
+        for symbol in unique_symbols:
+            try:
+                # 多 symbol 时 columns 为 (field, symbol) 的 MultiIndex
+                sym_close = df["Close"][symbol].dropna()
+                sym_high = df["High"][symbol].dropna()
+                sym_low = df["Low"][symbol].dropna()
+                sym_volume = df["Volume"][symbol].dropna()
+                # 取最近 days 个交易日
+                sym_close = sym_close.tail(days)
+                if sym_close.empty:
+                    continue
+                raw_data[symbol] = [
+                    (
+                        str(idx.date()),
+                        float(sym_close.loc[idx]),
+                        float(sym_high.loc[idx]) if idx in sym_high.index else 0.0,
+                        float(sym_low.loc[idx]) if idx in sym_low.index else 0.0,
+                        int(sym_volume.loc[idx]) if idx in sym_volume.index else 0,
+                    )
+                    for idx in sym_close.index
+                ]
+            except Exception as e:
+                logger.warning("yfinance_parse_failed", symbol=symbol, error=str(e))
+                continue
 
     # Step 2: 计算每个数据点的 CLV 和 Flow
     symbol_flows: Dict[str, Dict[str, float]] = {}
@@ -403,4 +426,48 @@ def build_heatmap_data(granularity: str = "day", days: int = 30) -> HeatmapRespo
         days=days,
         date_labels=date_labels,
         sectors=sectors,
+    )
+
+
+# ── K 线数据抓取 ──────────────────────────────────────────────────────────────
+
+def fetch_candles(symbol: str, days: int = 365) -> CandleResponse:
+    """抓取单只 ETF 近 days 个交易日的 OHLCV K 线数据。"""
+    today = datetime.date.today()
+    from_date = today - datetime.timedelta(days=days)
+
+    try:
+        df = yf.download(
+            symbol,
+            start=from_date.isoformat(),
+            end=today.isoformat(),
+            auto_adjust=True,
+            progress=False,
+        )
+    except Exception as e:
+        logger.exception("yfinance_candle_download_failed", symbol=symbol, error=str(e))
+        df = None
+
+    candles: List[Candle] = []
+    if df is not None and not df.empty:
+        # 单 symbol 时 columns 为单层
+        for idx, row in df.iterrows():
+            try:
+                candles.append(
+                    Candle(
+                        t=str(idx.date()),
+                        o=round(float(row["Open"]), 4),
+                        h=round(float(row["High"]), 4),
+                        l=round(float(row["Low"]), 4),
+                        c=round(float(row["Close"]), 4),
+                        v=int(row["Volume"]),
+                    )
+                )
+            except Exception:
+                continue
+
+    return CandleResponse(
+        symbol=symbol,
+        name=CHINESE_NAMES.get(symbol, symbol),
+        candles=candles,
     )

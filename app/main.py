@@ -19,6 +19,7 @@ from asgi_correlation_id import CorrelationIdMiddleware
 
 from app.api.v1.api import api_router
 from app.api.v1.chatbot import agent
+from app.cache.client import close_redis, init_redis
 from app.core.cache import cache_service
 from app.core.config import settings
 from app.core.limiter import limiter
@@ -54,6 +55,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.exception("cache_initialization_failed", error=str(e))
 
+    # Initialize Redis client for business endpoints (get_redis dependency)
+    try:
+        await init_redis()
+    except Exception as e:
+        logger.exception("redis_client_initialization_failed", error=str(e))
+
     # Pre-warm the LangGraph agent: create graph + connection pool at startup
     # to avoid cold-start latency on the first request
     try:
@@ -72,6 +79,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Cleanup on shutdown
+    await close_redis()
     await cache_service.close()
     if agent._connection_pool:
         await agent._connection_pool.close()
