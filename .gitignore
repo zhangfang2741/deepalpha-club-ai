@@ -24,3 +24,6 @@ evals/reports/
 
 # git worktrees
 .worktrees/
+
+# Superpowers brainstorm sessions
+.superpowers/
