@@ -21,7 +21,7 @@ async def get_fear_greed_cache(redis: Redis) -> Optional[FearGreedResponse]:
     if raw is None:
         return None
     try:
-        return FearGreedResponse(**json.loads(raw))
+        return FearGreedResponse.model_validate(json.loads(raw))
     except Exception as e:
         logger.warning("fear_greed_cache_deserialize_error", error=str(e))
         return None

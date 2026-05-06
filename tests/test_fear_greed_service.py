@@ -19,13 +19,13 @@ def test_normalize_rating_maps_all_variants():
 
 def test_score_to_rating_boundaries():
     assert _score_to_rating(0) == "Extreme Fear"
-    assert _score_to_rating(24) == "Extreme Fear"
+    assert _score_to_rating(24.9) == "Extreme Fear"
     assert _score_to_rating(25) == "Fear"
-    assert _score_to_rating(44) == "Fear"
+    assert _score_to_rating(44.9) == "Fear"
     assert _score_to_rating(45) == "Neutral"
-    assert _score_to_rating(55) == "Neutral"
+    assert _score_to_rating(55.9) == "Neutral"
     assert _score_to_rating(56) == "Greed"
-    assert _score_to_rating(75) == "Greed"
+    assert _score_to_rating(75.9) == "Greed"
     assert _score_to_rating(76) == "Extreme Greed"
     assert _score_to_rating(100) == "Extreme Greed"
 

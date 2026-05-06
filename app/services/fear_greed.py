@@ -28,13 +28,13 @@ def _normalize_rating(raw: str) -> str:
 
 
 def _score_to_rating(score: float) -> str:
-    if score <= 24:
+    if score < 25:
         return "Extreme Fear"
-    if score <= 44:
+    if score < 45:
         return "Fear"
-    if score <= 55:
+    if score < 56:
         return "Neutral"
-    if score <= 75:
+    if score < 76:
         return "Greed"
     return "Extreme Greed"
 
@@ -52,11 +52,14 @@ class FearGreedService:
     async def _fetch_and_cache(self, redis: Redis) -> FearGreedResponse:
         start_date = (date.today() - timedelta(days=365)).isoformat()
         url = f"{_CNN_BASE}/{start_date}"
-
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(url, headers=_HEADERS)
-            resp.raise_for_status()
-            raw = resp.json()
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(url, headers=_HEADERS)
+                resp.raise_for_status()
+                raw = resp.json()
+        except Exception:
+            logger.exception("fear_greed_fetch_failed", url=url)
+            raise
 
         data = self._parse(raw)
         await set_fear_greed_cache(redis, data)
