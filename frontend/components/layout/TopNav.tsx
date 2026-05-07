@@ -6,6 +6,7 @@ import { useAuthStore } from '@/lib/store/auth'
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: '仪表盘' },
+  { href: '/fear-greed', label: '恐慌指数' },
   { href: '/etf', label: 'ETF 资金流' },
   { href: '/chat', label: 'AI 对话' },
   { href: '/settings', label: '设置' },
