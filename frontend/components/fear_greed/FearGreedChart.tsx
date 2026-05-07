@@ -8,7 +8,6 @@ import {
   CrosshairMode,
   IChartApi,
   ISeriesApi,
-  LineData,
 } from 'lightweight-charts'
 import { FearGreedPoint, FearGreedSnapshot } from '@/lib/api/fear_greed'
 
@@ -41,6 +40,7 @@ export default function FearGreedChart({ history, current }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const ratingByDateRef = useRef<Record<string, string>>({})
   const [tooltip, setTooltip] = useState<{
     visible: boolean
     x: number
@@ -50,6 +50,7 @@ export default function FearGreedChart({ history, current }: Props) {
     rating: string
   }>({ visible: false, x: 0, y: 0, date: '', score: 0, rating: '' })
 
+  // Effect 1: 仅在 mount/unmount 时创建/销毁图表
   useEffect(() => {
     if (!containerRef.current) return
 
@@ -74,7 +75,7 @@ export default function FearGreedChart({ history, current }: Props) {
     chartRef.current = chart
 
     const lineSeries = chart.addSeries(LineSeries, {
-      color: getColor(current.rating),
+      color: getColor('Neutral'),
       lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: false,
@@ -90,14 +91,6 @@ export default function FearGreedChart({ history, current }: Props) {
       }),
     })
 
-    const chartData: LineData[] = history.map((p) => ({
-      time: p.date as `${number}-${number}-${number}`,
-      value: p.score,
-    }))
-    lineSeries.setData(chartData)
-    chart.timeScale().fitContent()
-
-    const ratingByDate = Object.fromEntries(history.map((p) => [p.date, p.rating]))
     chart.subscribeCrosshairMove((param) => {
       if (!param.point || !param.time || !containerRef.current) {
         setTooltip((t) => ({ ...t, visible: false }))
@@ -109,14 +102,15 @@ export default function FearGreedChart({ history, current }: Props) {
         return
       }
       const dateStr = String(param.time)
-      const score = (seriesData as LineData).value
-      const rating = ratingByDate[dateStr] ?? ''
-      const rect = containerRef.current.getBoundingClientRect()
+      const score = (seriesData as { value: number }).value
+      const rating = ratingByDateRef.current[dateStr] ?? ''
       const x = param.point.x
       const y = param.point.y
+      const containerWidth = containerRef.current.clientWidth
       const tooltipWidth = 160
-      const adjustedX = x + tooltipWidth > rect.width ? x - tooltipWidth - 10 : x + 10
-      setTooltip({ visible: true, x: adjustedX, y: Math.max(0, y - 60), date: dateStr, score, rating })
+      const adjustedX = x + tooltipWidth > containerWidth ? x - tooltipWidth - 10 : x + 10
+      const adjustedY = Math.max(0, y - 60)
+      setTooltip({ visible: true, x: adjustedX, y: adjustedY, date: dateStr, score, rating })
     })
 
     const observer = new ResizeObserver(() => {
@@ -129,6 +123,26 @@ export default function FearGreedChart({ history, current }: Props) {
     return () => {
       observer.disconnect()
       chart.remove()
+      chartRef.current = null
+      seriesRef.current = null
+    }
+  }, []) // 空依赖：仅 mount/unmount 时执行
+
+  // Effect 2: 数据或颜色变化时更新 series（不重建图表）
+  useEffect(() => {
+    if (!seriesRef.current || !chartRef.current) return
+
+    ratingByDateRef.current = Object.fromEntries(history.map((p) => [p.date, p.rating]))
+
+    const chartData = history.map((p) => ({
+      time: p.date as `${number}-${number}-${number}`,
+      value: p.score,
+    }))
+    seriesRef.current.setData(chartData)
+    seriesRef.current.applyOptions({ color: getColor(current.rating) })
+
+    if (chartData.length > 0) {
+      chartRef.current.timeScale().fitContent()
     }
   }, [history, current.rating])
 
@@ -136,10 +150,10 @@ export default function FearGreedChart({ history, current }: Props) {
 
   return (
     <div className="relative">
-      {/* 情绪色带背景 */}
+      {/* 情绪色带背景（Y 轴锁定 0-100，色带按分值比例定位） */}
       <div
         className="absolute inset-0 pointer-events-none rounded-lg overflow-hidden"
-        aria-hidden
+        aria-hidden="true"
       >
         <div
           className="w-full h-full"
