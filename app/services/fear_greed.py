@@ -1,4 +1,4 @@
-"""Fear & Greed Index 数据获取与缓存服务。"""
+"""Fear & Greed Index 数据获取与缓存服务."""
 from datetime import date, datetime, timedelta, timezone
 
 import httpx
@@ -40,7 +40,10 @@ def _score_to_rating(score: float) -> str:
 
 
 class FearGreedService:
+    """CNN Fear & Greed Index 数据获取与缓存服务."""
+
     async def get_history(self, redis: Redis) -> FearGreedResponse:
+        """检查 Redis 缓存，命中时返回缓存，未命中时调用 CNN API 并写入缓存."""
         cached = await get_fear_greed_cache(redis)
         if cached is not None:
             logger.info("fear_greed_cache_hit")
@@ -61,7 +64,12 @@ class FearGreedService:
             logger.exception("fear_greed_fetch_failed", url=url)
             raise
 
-        data = self._parse(raw)
+        try:
+            data = self._parse(raw)
+        except (KeyError, ValueError, TypeError):
+            logger.exception("fear_greed_parse_failed", url=url)
+            raise
+
         await set_fear_greed_cache(redis, data)
         return data
 
