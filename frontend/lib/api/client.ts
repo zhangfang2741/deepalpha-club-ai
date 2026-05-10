@@ -28,7 +28,11 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      if (typeof window !== 'undefined') {
+      // 如果是登录或注册接口报错 401，不要自动跳转，让页面处理逻辑
+      const isAuthRequest = error.config?.url?.includes('/api/v1/auth/login') || 
+                           error.config?.url?.includes('/api/v1/auth/register')
+
+      if (!isAuthRequest && typeof window !== 'undefined') {
         localStorage.removeItem('access_token')
         window.location.href = '/'
       }

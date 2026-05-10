@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from app.api.v1.analysis import router as analysis_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.chatbot import router as chatbot_router
 from app.api.v1.etf import router as etf_router
@@ -10,6 +11,7 @@ from app.core.logging import logger
 
 api_router = APIRouter()
 
+api_router.include_router(analysis_router, prefix="/analysis", tags=["analysis"])
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
 api_router.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
 api_router.include_router(etf_router, prefix="/etf", tags=["etf"])

@@ -21,7 +21,12 @@ from app.core.logging import logger
 
 async def get(redis: Redis, key: str) -> Optional[str]:
     """获取字符串值，key 不存在返回 None。"""
-    return await redis.get(key)
+    raw = await redis.get(key)
+    if raw is None:
+        return None
+    if isinstance(raw, bytes):
+        return raw.decode("utf-8")
+    return str(raw)
 
 
 async def set(redis: Redis, key: str, value: Any, expire: Optional[int] = None) -> None:
@@ -47,6 +52,8 @@ async def get_json(redis: Redis, key: str) -> Optional[dict]:
     if raw is None:
         return None
     try:
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
         return json.loads(raw)
     except json.JSONDecodeError as e:
         logger.warning("cache_json_decode_error", key=key, error=str(e))
@@ -76,7 +83,12 @@ async def set_session(redis: Redis, user_id: str, token: str, expire: int = 8640
 async def get_session(redis: Redis, user_id: str) -> Optional[str]:
     """获取用户 JWT Session Token，不存在或已过期返回 None。"""
     key = f"{_SESSION_PREFIX}:{user_id}"
-    return await redis.get(key)
+    raw = await redis.get(key)
+    if raw is None:
+        return None
+    if isinstance(raw, bytes):
+        return raw.decode("utf-8")
+    return str(raw)
 
 
 async def delete_session(redis: Redis, user_id: str) -> None:

@@ -1,5 +1,6 @@
 """This file contains the user model for the application."""
 
+from datetime import datetime
 from typing import (
     TYPE_CHECKING,
     List,
@@ -34,6 +35,7 @@ class User(BaseModel, table=True):
     email: str = Field(unique=True, index=True)
     hashed_password: str
     username: Optional[str] = Field(default=None, index=False)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
     sessions: List["Session"] = Relationship(back_populates="user")
 
     def verify_password(self, password: str) -> bool:

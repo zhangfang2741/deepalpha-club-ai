@@ -30,13 +30,13 @@ async def init_redis() -> None:
         "db": settings.VALKEY_DB,
         "password": settings.VALKEY_PASSWORD or None,
         "max_connections": settings.VALKEY_MAX_CONNECTIONS,
-        "decode_responses": True,
+        "decode_responses": False,
     }
     if settings.VALKEY_SSL:
         pool_kwargs["connection_class"] = SSLConnection
     _pool = ConnectionPool(**pool_kwargs)
     _client = Redis(connection_pool=_pool)
-    await _client.ping()
+    await _client.ping()  # type: ignore[misc]
     logger.info(
         "redis_client_initialized",
         host=host,
@@ -73,7 +73,7 @@ async def health_check() -> bool:
     """检查 Redis 连接健康状态。"""
     try:
         if _client:
-            await _client.ping()
+            await _client.ping()  # type: ignore[misc]
             return True
         return False
     except Exception as e:

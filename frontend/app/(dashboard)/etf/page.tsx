@@ -6,6 +6,7 @@ import type { HeatmapResponse, Granularity } from '@/lib/api/etf'
 import { useETFStore } from '@/lib/store/etf'
 import GranularityToggle from '@/components/etf/GranularityToggle'
 import ETFHeatmapTable from '@/components/etf/ETFHeatmapTable'
+import Spinner from '@/components/ui/Spinner'
 
 export default function ETFPage() {
   const { granularity, days, setGranularity } = useETFStore()
@@ -83,19 +84,22 @@ export default function ETFPage() {
         </div>
       )}
 
-      {/* 加载骨架 */}
+      {/* 初始加载 */}
       {loading && !data && (
-        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-10 border-b border-gray-100 animate-pulse bg-gray-50" />
-          ))}
+        <div className="rounded-xl border border-gray-200 bg-white flex items-center justify-center h-64">
+          <Spinner size={40} />
         </div>
       )}
 
-      {/* 热力图表格 */}
+      {/* 热力图表格（切换粒度时叠遮罩） */}
       {data && (
-        <div className={loading ? 'opacity-60 pointer-events-none' : ''}>
+        <div className="relative">
           <ETFHeatmapTable data={data} granularity={granularity} />
+          {loading && (
+            <div className="absolute inset-0 bg-white/60 rounded-xl flex items-center justify-center pointer-events-none">
+              <Spinner size={40} />
+            </div>
+          )}
         </div>
       )}
     </div>

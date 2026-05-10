@@ -19,9 +19,12 @@ _PG_BASE = (
     f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
 )
 
+# SSL 参数（Supabase/云数据库需要）
+_PG_SSL_QUERY = "?sslmode=require" if settings.POSTGRES_SSL else ""
+
 # 同步引擎（Celery 任务 / 兼容现有 DatabaseService）
 sync_engine = create_engine(
-    f"postgresql://{_PG_BASE}",
+    f"postgresql://{_PG_BASE}{_PG_SSL_QUERY}",
     pool_pre_ping=True,
     poolclass=QueuePool,
     pool_size=settings.POSTGRES_POOL_SIZE,
@@ -32,7 +35,7 @@ sync_engine = create_engine(
 
 # 异步引擎（FastAPI 异步端点用）
 async_engine = create_async_engine(
-    f"postgresql+asyncpg://{_PG_BASE}",
+    f"postgresql+asyncpg://{_PG_BASE}{_PG_SSL_QUERY}",
     pool_pre_ping=True,
     pool_size=settings.POSTGRES_POOL_SIZE,
     max_overflow=settings.POSTGRES_MAX_OVERFLOW,

@@ -5,6 +5,7 @@ import httpx
 from redis.asyncio import Redis
 
 from app.cache.fear_greed_cache import get_fear_greed_cache, set_fear_greed_cache
+from app.core.config import settings
 from app.core.logging import logger
 from app.schemas.fear_greed import FearGreedPoint, FearGreedResponse, FearGreedSnapshot
 
@@ -27,6 +28,17 @@ def _normalize_rating(raw: str) -> str:
     return _RATING_MAP.get(raw.lower(), raw.title())
 
 
+def _extract_snapshot(value: dict | float | int) -> tuple[float, str | None]:
+    """兼容 CNN API 两种格式：嵌套 dict 或直接 float."""
+    if isinstance(value, dict):
+        score = float(value["score"])
+        rating = value.get("rating")
+    else:
+        score = float(value)
+        rating = None
+    return score, rating
+
+
 def _score_to_rating(score: float) -> str:
     if score < 25:
         return "Extreme Fear"
@@ -42,21 +54,59 @@ def _score_to_rating(score: float) -> str:
 class FearGreedService:
     """CNN Fear & Greed Index 数据获取与缓存服务."""
 
-    async def get_history(self, redis: Redis) -> FearGreedResponse:
-        """检查 Redis 缓存，命中时返回缓存，未命中时调用 CNN API 并写入缓存."""
+    async def get_history(
+        self,
+        redis: Redis,
+        start_date: date | None = None,
+        end_date: date | None = None,
+    ) -> FearGreedResponse:
+        """检查 Redis 缓存，命中时返回缓存，未命中时调用 CNN API 并写入缓存.
+
+        Args:
+            redis: Redis client for caching.
+            start_date: Filter history from this date. Defaults to 1 year ago.
+            end_date: Filter history to this date. Defaults to today.
+        """
         cached = await get_fear_greed_cache(redis)
         if cached is not None:
             logger.info("fear_greed_cache_hit")
-            return cached
+            # Apply date filtering on cached data
+            return self._filter_by_date_range(cached, start_date, end_date)
 
         logger.info("fear_greed_cache_miss")
-        return await self._fetch_and_cache(redis)
+        return await self._fetch_and_cache(redis, start_date, end_date)
 
-    async def _fetch_and_cache(self, redis: Redis) -> FearGreedResponse:
-        start_date = (date.today() - timedelta(days=365)).isoformat()
-        url = f"{_CNN_BASE}/{start_date}"
+    def _filter_by_date_range(
+        self,
+        data: FearGreedResponse,
+        start_date: date | None,
+        end_date: date | None,
+    ) -> FearGreedResponse:
+        """Filter history by date range while keeping snapshots from full dataset."""
+        if not start_date and not end_date:
+            return data
+
+        filtered_history = [
+            point for point in data.history
+            if (not start_date or point.date >= start_date.isoformat())
+            and (not end_date or point.date <= end_date.isoformat())
+        ]
+        return data.model_copy(update={"history": filtered_history})
+
+    async def _fetch_and_cache(
+        self,
+        redis: Redis,
+        start_date: date | None = None,
+        end_date: date | None = None,
+    ) -> FearGreedResponse:
+        # Fetch 5 years of data to support various time range selections
+        fetch_start = (date.today() - timedelta(days=1825)).isoformat()
+        url = f"{_CNN_BASE}/{fetch_start}"
         try:
-            async with httpx.AsyncClient(timeout=15) as client:
+            async with httpx.AsyncClient(
+                timeout=15,
+                proxy=settings.HTTP_PROXY or settings.HTTPS_PROXY or None,
+            ) as client:
                 resp = await client.get(url, headers=_HEADERS)
                 resp.raise_for_status()
                 raw = resp.json()
@@ -70,6 +120,11 @@ class FearGreedService:
             logger.exception("fear_greed_parse_failed", url=url)
             raise
 
+        # 数据为空时不写缓存，避免缓存空数据
+        if not data.history:
+            logger.warning("fear_greed_empty_data", url=url)
+            return data
+
         await set_fear_greed_cache(redis, data)
         return data
 
@@ -77,19 +132,20 @@ class FearGreedService:
         fg = raw["fear_and_greed"]
         historical = raw["fear_and_greed_historical"]["data"]
 
-        history_points = []
+        seen: dict[str, FearGreedPoint] = {}
         for item in historical:
             ts_ms = item["x"]
             score = float(item["y"])
             dt = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).date()
+            date_str = dt.isoformat()
             rating_raw = item.get("rating", _score_to_rating(score))
-            history_points.append(FearGreedPoint(
-                date=dt.isoformat(),
+            seen[date_str] = FearGreedPoint(
+                date=date_str,
                 score=round(score, 1),
                 rating=_normalize_rating(rating_raw),
-            ))
+            )
 
-        history_points.sort(key=lambda p: p.date)
+        history_points = sorted(seen.values(), key=lambda p: p.date)
 
         scores = [p.score for p in history_points]
         low_idx = scores.index(min(scores)) if scores else 0
@@ -98,6 +154,10 @@ class FearGreedService:
         current_score = round(float(fg["score"]), 1)
         current_date = datetime.fromisoformat(fg["timestamp"].split("T")[0]).date().isoformat()
 
+        w_score, w_rating = _extract_snapshot(fg["previous_1_week"])
+        m_score, m_rating = _extract_snapshot(fg["previous_1_month"])
+        y_score, y_rating = _extract_snapshot(fg["previous_1_year"])
+
         return FearGreedResponse(
             current=FearGreedSnapshot(
                 score=current_score,
@@ -105,22 +165,16 @@ class FearGreedService:
                 date=current_date,
             ),
             previous_week=FearGreedSnapshot(
-                score=round(float(fg["previous_1_week"]["score"]), 1),
-                rating=_normalize_rating(
-                    fg["previous_1_week"].get("rating", _score_to_rating(fg["previous_1_week"]["score"]))
-                ),
+                score=round(w_score, 1),
+                rating=_normalize_rating(w_rating or _score_to_rating(w_score)),
             ),
             previous_month=FearGreedSnapshot(
-                score=round(float(fg["previous_1_month"]["score"]), 1),
-                rating=_normalize_rating(
-                    fg["previous_1_month"].get("rating", _score_to_rating(fg["previous_1_month"]["score"]))
-                ),
+                score=round(m_score, 1),
+                rating=_normalize_rating(m_rating or _score_to_rating(m_score)),
             ),
             previous_year=FearGreedSnapshot(
-                score=round(float(fg["previous_1_year"]["score"]), 1),
-                rating=_normalize_rating(
-                    fg["previous_1_year"].get("rating", _score_to_rating(fg["previous_1_year"]["score"]))
-                ),
+                score=round(y_score, 1),
+                rating=_normalize_rating(y_rating or _score_to_rating(y_score)),
             ),
             history_low=FearGreedSnapshot(
                 score=history_points[low_idx].score if history_points else 0.0,

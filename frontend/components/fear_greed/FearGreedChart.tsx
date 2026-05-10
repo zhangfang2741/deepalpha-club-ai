@@ -8,39 +8,23 @@ import {
   CrosshairMode,
   IChartApi,
   ISeriesApi,
+  LineData,
 } from 'lightweight-charts'
 import { FearGreedPoint, FearGreedSnapshot } from '@/lib/api/fear_greed'
+import { RATING_COLOR, getRatingColor, getRatingLabel } from '@/lib/constants/fearGreed'
 
 interface Props {
   history: FearGreedPoint[]
   current: FearGreedSnapshot
+  onRangeChange?: (startDate: string, endDate: string) => void
 }
 
-const RATING_COLOR: Record<string, string> = {
-  'Extreme Greed': '#16a34a',
-  'Greed': '#4ade80',
-  'Neutral': '#ca8a04',
-  'Fear': '#f87171',
-  'Extreme Fear': '#ef4444',
-}
-
-const RATING_LABEL: Record<string, string> = {
-  'Extreme Greed': '极度贪婪',
-  'Greed': '贪婪',
-  'Neutral': '中性',
-  'Fear': '恐惧',
-  'Extreme Fear': '极度恐惧',
-}
-
-function getColor(rating: string): string {
-  return RATING_COLOR[rating] ?? '#3b82f6'
-}
-
-export default function FearGreedChart({ history, current }: Props) {
+export default function FearGreedChart({ history, current, onRangeChange }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Line'> | null>(null)
   const ratingByDateRef = useRef<Record<string, string>>({})
+  const onRangeChangeRef = useRef(onRangeChange)
   const [tooltip, setTooltip] = useState<{
     visible: boolean
     x: number
@@ -49,6 +33,11 @@ export default function FearGreedChart({ history, current }: Props) {
     score: number
     rating: string
   }>({ visible: false, x: 0, y: 0, date: '', score: 0, rating: '' })
+
+  // Keep ref updated
+  useEffect(() => {
+    onRangeChangeRef.current = onRangeChange
+  }, [onRangeChange])
 
   // Effect 1: 仅在 mount/unmount 时创建/销毁图表
   useEffect(() => {
@@ -59,11 +48,12 @@ export default function FearGreedChart({ history, current }: Props) {
       height: 340,
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#374151',
+        textColor: '#6b7280',
+        fontSize: 12,
       },
       grid: {
-        vertLines: { color: 'rgba(156,163,175,0.15)' },
-        horzLines: { color: 'rgba(156,163,175,0.15)' },
+        vertLines: { color: 'rgba(156,163,175,0.08)', style: 2 },
+        horzLines: { color: 'rgba(156,163,175,0.08)', style: 2 },
       },
       crosshair: { mode: CrosshairMode.Magnet },
       rightPriceScale: { borderColor: 'rgba(156,163,175,0.3)' },
@@ -75,12 +65,15 @@ export default function FearGreedChart({ history, current }: Props) {
     chartRef.current = chart
 
     const lineSeries = chart.addSeries(LineSeries, {
-      color: getColor('Neutral'),
-      lineWidth: 2,
+      color: getRatingColor('Neutral'),
+      lineWidth: 3,
       priceLineVisible: false,
       lastValueVisible: false,
       crosshairMarkerVisible: true,
-      crosshairMarkerRadius: 5,
+      crosshairMarkerRadius: 6,
+      crosshairMarkerBorderColor: '#ffffff',
+      crosshairMarkerBorderWidth: 2,
+      lineType: 2, // CurveLine for smoother curves
     })
     seriesRef.current = lineSeries
 
@@ -134,42 +127,58 @@ export default function FearGreedChart({ history, current }: Props) {
 
     ratingByDateRef.current = Object.fromEntries(history.map((p) => [p.date, p.rating]))
 
-    const chartData = history.map((p) => ({
-      time: p.date as `${number}-${number}-${number}`,
-      value: p.score,
-    }))
+    const seen = new Map<string, number>()
+    history.forEach((p) => seen.set(p.date, p.score))
+    const chartData: LineData[] = Array.from(seen.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, score]) => ({
+        time: date as `${number}-${number}-${number}`,
+        value: score,
+      }))
+    
+    // 根据当前评分设置渐变色
+    const currentColor = getRatingColor(current.rating)
     seriesRef.current.setData(chartData)
-    seriesRef.current.applyOptions({ color: getColor(current.rating) })
+    seriesRef.current.applyOptions({
+      color: currentColor,
+      lineType: 2, // CurveLine
+      lineWidth: 3,
+      crosshairMarkerVisible: true,
+      crosshairMarkerRadius: 6,
+      crosshairMarkerBorderColor: '#ffffff',
+      crosshairMarkerBorderWidth: 2,
+    })
 
     if (chartData.length > 0) {
       chartRef.current.timeScale().fitContent()
     }
   }, [history, current.rating])
 
-  const currentColor = getColor(current.rating)
+  const currentColor = getRatingColor(current.rating)
 
-  return (
+  // @ts-ignore
+    return (
     <div className="relative">
       {/* 情绪色带背景（Y 轴锁定 0-100，色带按分值比例定位） */}
       <div
-        className="absolute inset-0 pointer-events-none rounded-lg overflow-hidden"
+        className="absolute inset-0 pointer-events-none rounded-xl overflow-hidden"
         aria-hidden="true"
       >
         <div
-          className="w-full h-full"
+          className="w-full h-full opacity-60"
           style={{
             background: [
               'linear-gradient(to bottom,',
-              'rgba(22,163,74,0.08) 0%,',
-              'rgba(22,163,74,0.08) 24%,',
-              'rgba(74,222,128,0.08) 24%,',
-              'rgba(74,222,128,0.08) 44%,',
+              'rgba(239,68,68,0.15) 0%,',
+              'rgba(239,68,68,0.15) 24%,',
+              'rgba(248,113,113,0.10) 24%,',
+              'rgba(248,113,113,0.10) 44%,',
               'rgba(202,138,4,0.08) 44%,',
               'rgba(202,138,4,0.08) 55%,',
-              'rgba(248,113,113,0.08) 55%,',
-              'rgba(248,113,113,0.08) 75%,',
-              'rgba(239,68,68,0.10) 75%,',
-              'rgba(239,68,68,0.10) 100%)',
+              'rgba(74,222,128,0.10) 55%,',
+              'rgba(74,222,128,0.10) 75%,',
+              'rgba(22,163,74,0.12) 75%,',
+              'rgba(22,163,74,0.12) 100%)',
             ].join(' '),
           }}
         />
@@ -178,30 +187,60 @@ export default function FearGreedChart({ history, current }: Props) {
       <div ref={containerRef} className="relative" style={{ height: 340 }} />
 
       {/* 当前值叠加显示 */}
-      <div className="absolute top-3 left-4 pointer-events-none">
-        <div className="text-4xl font-bold" style={{ color: currentColor }}>
+      <div className="absolute top-4 left-5 pointer-events-none">
+        <div 
+          className="text-5xl font-bold tracking-tight drop-shadow-sm" 
+          style={{ color: currentColor }}
+        >
           {Math.round(current.score)}
         </div>
-        <div className="text-sm font-medium mt-0.5" style={{ color: currentColor }}>
-          {RATING_LABEL[current.rating] ?? current.rating}
+        <div 
+          className="text-sm font-semibold mt-1 uppercase tracking-wide" 
+          style={{ color: currentColor }}
+        >
+          {getRatingLabel(current.rating)}
         </div>
       </div>
 
       {/* Crosshair Tooltip */}
       {tooltip.visible && (
         <div
-          className="absolute pointer-events-none bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs z-10"
+          className="absolute pointer-events-none bg-white/95 backdrop-blur-sm border border-gray-200/80 rounded-xl shadow-xl px-4 py-3 text-xs z-10 transition-all duration-150"
           style={{ left: tooltip.x, top: tooltip.y }}
         >
-          <div className="text-gray-500 mb-1">{tooltip.date}</div>
-          <div className="font-bold text-base" style={{ color: getColor(tooltip.rating) }}>
+          <div className="text-gray-500 mb-1.5 font-medium">{tooltip.date}</div>
+          <div className="font-bold text-2xl mb-0.5" style={{ color: getRatingColor(tooltip.rating) }}>
             {Math.round(tooltip.score)}
           </div>
-          <div className="font-medium" style={{ color: getColor(tooltip.rating) }}>
-            {RATING_LABEL[tooltip.rating] ?? tooltip.rating}
+          <div className="font-semibold uppercase tracking-wide" style={{ color: getRatingColor(tooltip.rating) }}>
+            {getRatingLabel(tooltip.rating)}
           </div>
         </div>
       )}
+
+      {/* 颜色区间图例 */}
+      <div className="flex items-center justify-center gap-4 mt-3 text-xs">
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: RATING_COLOR['Extreme Greed'] }}></div>
+          <span className="text-gray-600">极度贪婪</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: RATING_COLOR['Greed'] }}></div>
+          <span className="text-gray-600">贪婪</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: RATING_COLOR['Neutral'] }}></div>
+          <span className="text-gray-600">中性</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: RATING_COLOR['Fear'] }}></div>
+          <span className="text-gray-600">恐惧</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: RATING_COLOR['Extreme Fear'] }}></div>
+          <span className="text-gray-600">极度恐惧</span>
+        </div>
+      </div>
     </div>
   )
 }

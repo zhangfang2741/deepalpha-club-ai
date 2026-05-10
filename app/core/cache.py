@@ -91,19 +91,42 @@ class InMemoryCacheService:
 
 
 class ValkeyCacheService:
-    """Redis/Valkey cache backend for distributed caching."""
+    """Redis/Valkey cache backend for distributed caching.
+
+    This service reuses the shared Redis client from app.cache.client
+    to avoid duplicate connection pools.
+    """
 
     def __init__(self, default_ttl: int = 60):
-        """Initialize cache service with Redis client.
+        """Initialize cache service.
 
         Args:
             default_ttl: Default time-to-live in seconds for cache entries.
         """
         self._client: Optional[Redis] = None
         self._default_ttl = default_ttl
+        self._owns_client = False  # 是否拥有客户端（需要关闭）
 
     async def initialize(self) -> None:
-        """Connect to Redis/Valkey server."""
+        """Initialize cache service using shared Redis client."""
+        # 尝试使用共享的 Redis 客户端
+        try:
+            from app.cache.client import _client as shared_client
+
+            if shared_client is not None:
+                self._client = shared_client
+                self._owns_client = False
+                logger.info(
+                    "cache_initialized",
+                    backend="redis",
+                    mode="shared",
+                    ttl=self._default_ttl,
+                )
+                return
+        except ImportError:
+            pass
+
+        # 回退：创建独立客户端（用于测试或独立使用）
         client = Redis(
             host=settings.VALKEY_HOST,
             port=settings.VALKEY_PORT,
@@ -115,9 +138,11 @@ class ValkeyCacheService:
         )
         await cast(Awaitable[bool], client.ping())
         self._client = client
+        self._owns_client = True
         logger.info(
             "cache_initialized",
             backend="redis",
+            mode="standalone",
             host=settings.VALKEY_HOST,
             port=settings.VALKEY_PORT,
             ttl=self._default_ttl,
@@ -169,10 +194,11 @@ class ValkeyCacheService:
             logger.warning("cache_delete_failed", key=key, error=str(e))
 
     async def close(self) -> None:
-        """Close the Valkey connection."""
-        if self._client:
+        """Close the Valkey connection if owned."""
+        if self._client and self._owns_client:
             await self._client.aclose()
             logger.info("cache_connection_closed")
+        self._client = None
 
 
 def _create_cache_service() -> InMemoryCacheService | ValkeyCacheService:

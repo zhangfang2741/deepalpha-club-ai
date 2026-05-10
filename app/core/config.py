@@ -178,6 +178,7 @@ class Settings:
         self.POSTGRES_DB = os.getenv("POSTGRES_DB", "food_order_db")
         self.POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
         self.POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+        self.POSTGRES_SSL = os.getenv("POSTGRES_SSL", "false").lower() in ("true", "1", "yes")
         self.POSTGRES_POOL_SIZE = int(os.getenv("POSTGRES_POOL_SIZE", "20"))
         self.POSTGRES_MAX_OVERFLOW = int(os.getenv("POSTGRES_MAX_OVERFLOW", "10"))
         self.CHECKPOINT_TABLES = ["checkpoint_blobs", "checkpoint_writes", "checkpoints"]
@@ -221,6 +222,9 @@ class Settings:
 
         # Financial Modeling Prep API
         self.FMP_API_KEY: str = os.getenv("FMP_API_KEY", "")
+        
+        # News API Key
+        self.NEWS_API_KEY: str = os.getenv("NEWS_API_KEY", "")
 
         # LLM 供应商配置
         self.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")  # openai | claude | minimax | gemini
@@ -240,6 +244,10 @@ class Settings:
             self.CORS_ORIGINS = parse_list_from_env("CORS_ORIGINS", ["http://localhost:3000"])
         else:
             self.CORS_ORIGINS = self.ALLOWED_ORIGINS
+
+        # HTTP Proxy Configuration
+        self.HTTP_PROXY = os.getenv("HTTP_PROXY", os.getenv("http_proxy", ""))
+        self.HTTPS_PROXY = os.getenv("HTTPS_PROXY", os.getenv("https_proxy", ""))
 
         # Apply environment-specific settings
         self.apply_environment_settings()

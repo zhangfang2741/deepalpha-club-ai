@@ -24,7 +24,14 @@ export interface FearGreedResponse {
   history: FearGreedPoint[]
 }
 
-export async function fetchFearGreed(): Promise<FearGreedResponse> {
-  const { data } = await apiClient.get<FearGreedResponse>('/api/v1/fear-greed')
+export async function fetchFearGreed(
+  startDate?: string,
+  endDate?: string
+): Promise<FearGreedResponse> {
+  const params: Record<string, string> = {}
+  if (startDate) params.start_date = startDate
+  if (endDate) params.end_date = endDate
+  
+  const { data } = await apiClient.get<FearGreedResponse>('/api/v1/fear-greed', { params })
   return data
 }

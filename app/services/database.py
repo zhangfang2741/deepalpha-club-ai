@@ -39,19 +39,28 @@ class DatabaseService:
             max_overflow = settings.POSTGRES_MAX_OVERFLOW
 
             # Create engine with appropriate pool configuration
+            # Build connection URL with SSL support for cloud databases (Neon, etc.)
+            # Note: Neon requires sslmode=require in the connection URL
             connection_url = (
                 f"postgresql://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
                 f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
             )
-
+            
+            # Build connect_args for psycopg2/postgres driver options
+            # SSL must be passed as connect_args for cloud databases
+            connect_args = {}
+            if settings.POSTGRES_SSL:
+                connect_args["sslmode"] = "require"
+            
             self.engine = create_engine(
                 connection_url,
-                pool_pre_ping=True,
+                pool_pre_ping=True,  # Test connection before using
                 poolclass=QueuePool,
                 pool_size=pool_size,
                 max_overflow=max_overflow,
-                pool_timeout=30,  # Connection timeout (seconds)
-                pool_recycle=1800,  # Recycle connections after 30 minutes
+                pool_timeout=10,  # Reduced from 30s for faster failure detection
+                pool_recycle=300,  # Recycle connections every 5 minutes (faster than 30 min)
+                connect_args=connect_args,
             )
 
             logger.info(
@@ -66,7 +75,7 @@ class DatabaseService:
             if settings.ENVIRONMENT != Environment.PRODUCTION:
                 raise
 
-    async def create_user(self, email: str, password: str, username: str | None = None) -> User:
+    def create_user(self, email: str, password: str, username: str | None = None) -> User:
         """Create a new user.
 
         Args:
@@ -85,7 +94,7 @@ class DatabaseService:
             logger.info("user_created", email=email)
             return user
 
-    async def get_user(self, user_id: int) -> Optional[User]:
+    def get_user(self, user_id: int) -> Optional[User]:
         """Get a user by ID.
 
         Args:
@@ -98,7 +107,7 @@ class DatabaseService:
             user = session.get(User, user_id)
             return user
 
-    async def get_user_by_email(self, email: str) -> Optional[User]:
+    def get_user_by_email(self, email: str) -> Optional[User]:
         """Get a user by email.
 
         Args:
@@ -112,7 +121,37 @@ class DatabaseService:
             user = session.exec(statement).first()
             return user
 
-    async def delete_user_by_email(self, email: str) -> bool:
+    def update_user(self, user_id: int, username: str | None = None, hashed_password: str | None = None) -> User:
+        """Update user profile information.
+
+        Args:
+            user_id: The ID of the user to update
+            username: New username (optional)
+            hashed_password: New hashed password (optional)
+
+        Returns:
+            User: The updated user
+
+        Raises:
+            HTTPException: If user not found
+        """
+        with Session(self.engine) as session:
+            user = session.get(User, user_id)
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+
+            if username is not None:
+                user.username = username
+            if hashed_password is not None:
+                user.hashed_password = hashed_password
+
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+            logger.info("user_updated", user_id=user_id)
+            return user
+
+    def delete_user_by_email(self, email: str) -> bool:
         """Delete a user by email.
 
         Args:
@@ -131,7 +170,7 @@ class DatabaseService:
             logger.info("user_deleted", email=email)
             return True
 
-    async def create_session(
+    def create_session(
         self, session_id: str, user_id: int, name: str = "", username: str | None = None
     ) -> ChatSession:
         """Create a new chat session.
@@ -153,7 +192,7 @@ class DatabaseService:
             logger.info("session_created", session_id=session_id, user_id=user_id, name=name)
             return chat_session
 
-    async def delete_session(self, session_id: str) -> bool:
+    def delete_session(self, session_id: str) -> bool:
         """Delete a session by ID.
 
         Args:
@@ -172,7 +211,7 @@ class DatabaseService:
             logger.info("session_deleted", session_id=session_id)
             return True
 
-    async def get_session(self, session_id: str) -> Optional[ChatSession]:
+    def get_session(self, session_id: str) -> Optional[ChatSession]:
         """Get a session by ID.
 
         Args:
@@ -185,7 +224,7 @@ class DatabaseService:
             chat_session = session.get(ChatSession, session_id)
             return chat_session
 
-    async def get_user_sessions(self, user_id: int) -> List[ChatSession]:
+    def get_user_sessions(self, user_id: int) -> List[ChatSession]:
         """Get all sessions for a user.
 
         Args:
@@ -201,7 +240,7 @@ class DatabaseService:
             sessions = session.exec(statement).all()
             return list(sessions)
 
-    async def update_session_name(self, session_id: str, name: str) -> ChatSession:
+    def update_session_name(self, session_id: str, name: str) -> ChatSession:
         """Update a session's name.
 
         Args:
@@ -234,7 +273,7 @@ class DatabaseService:
         """
         return Session(self.engine)
 
-    async def health_check(self) -> bool:
+    def health_check(self) -> bool:
         """Check database connection health.
 
         Returns:

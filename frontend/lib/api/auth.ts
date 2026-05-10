@@ -52,3 +52,42 @@ export const register = async (
   })
   return response.data
 }
+
+// ============ User Profile & Settings ============
+
+// 用户资料响应
+export interface UserProfileResponse {
+  id: number
+  email: string
+  username: string | null
+  created_at: string
+}
+
+// 更新用户资料请求
+export interface UpdateProfileRequest {
+  username?: string | null
+}
+
+// 修改密码请求
+export interface ChangePasswordRequest {
+  current_password: string
+  new_password: string
+}
+
+// 获取当前用户资料
+export const getUserProfile = async (): Promise<UserProfileResponse> => {
+  const response = await apiClient.get<UserProfileResponse>('/api/v1/auth/me')
+  return response.data
+}
+
+// 更新用户资料
+export const updateUserProfile = async (data: UpdateProfileRequest): Promise<UserProfileResponse> => {
+  const response = await apiClient.patch<UserProfileResponse>('/api/v1/auth/me', data)
+  return response.data
+}
+
+// 修改密码
+export const changePassword = async (data: ChangePasswordRequest): Promise<{ message: string }> => {
+  const response = await apiClient.post<{ message: string }>('/api/v1/auth/me/password', data)
+  return response.data
+}

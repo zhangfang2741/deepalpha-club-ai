@@ -1,5 +1,6 @@
 """This file contains the main application entry point."""
 
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -188,7 +189,7 @@ async def health_check(request: Request) -> JSONResponse:
     logger.info("health_check_called")
 
     # Check database connectivity
-    db_healthy = await database_service.health_check()
+    db_healthy = await asyncio.to_thread(database_service.health_check)
 
     response = {
         "status": "healthy" if db_healthy else "degraded",

@@ -99,6 +99,8 @@ class LangGraphAgent:
                 # Configure pool size based on environment
                 max_size = settings.POSTGRES_POOL_SIZE
 
+                # SSL 参数（Supabase/云数据库需要）
+                _ssl_mode = "require" if settings.POSTGRES_SSL else "disable"
                 connection_url = (
                     "postgresql://"
                     f"{quote_plus(settings.POSTGRES_USER)}:{quote_plus(settings.POSTGRES_PASSWORD)}"
@@ -114,6 +116,7 @@ class LangGraphAgent:
                         "connect_timeout": 5,
                         "prepare_threshold": None,
                         "row_factory": dict_row,
+                        "sslmode": _ssl_mode,
                     },
                 )
                 await self._connection_pool.open()
