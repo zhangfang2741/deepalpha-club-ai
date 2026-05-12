@@ -9,14 +9,24 @@ from app.core.logging import logger
 from app.schemas import Message
 
 # Cache tiktoken encoding at module level — thread-safe and reusable
+_TIKTOKEN_ENCODING = None
 try:
     _TIKTOKEN_ENCODING = tiktoken.encoding_for_model(settings.DEFAULT_LLM_MODEL)
 except KeyError:
-    _TIKTOKEN_ENCODING = tiktoken.get_encoding("cl100k_base")
+    try:
+        _TIKTOKEN_ENCODING = tiktoken.get_encoding("cl100k_base")
+    except Exception:
+        logger.warning("tiktoken_encoding_unavailable_using_char_fallback")
 
 
 def _count_tokens_tiktoken(messages: list) -> int:
     """Count tokens locally using tiktoken — no API call needed."""
+
+    def _encode_len(text: str) -> int:
+        if _TIKTOKEN_ENCODING is not None:
+            return len(_TIKTOKEN_ENCODING.encode(text))
+        return len(text) // 4  # rough char-based fallback (~4 chars per token)
+
     num_tokens = 0
     for message in messages:
         # Every message has overhead tokens for role/name
@@ -24,17 +34,17 @@ def _count_tokens_tiktoken(messages: list) -> int:
         if isinstance(message, dict):
             for _, value in message.items():
                 if isinstance(value, str):
-                    num_tokens += len(_TIKTOKEN_ENCODING.encode(value))
+                    num_tokens += _encode_len(value)
         elif isinstance(message, BaseMessage):
             content = message.content
             if isinstance(content, str):
-                num_tokens += len(_TIKTOKEN_ENCODING.encode(content))
+                num_tokens += _encode_len(content)
             elif isinstance(content, list):
                 for block in content:
                     if isinstance(block, str):
-                        num_tokens += len(_TIKTOKEN_ENCODING.encode(block))
+                        num_tokens += _encode_len(block)
                     elif isinstance(block, dict) and "text" in block:
-                        num_tokens += len(_TIKTOKEN_ENCODING.encode(block["text"]))
+                        num_tokens += _encode_len(block["text"])
     num_tokens += 2  # every reply is primed with assistant
     return num_tokens
 

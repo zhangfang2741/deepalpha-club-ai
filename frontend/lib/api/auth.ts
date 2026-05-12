@@ -91,3 +91,20 @@ export const changePassword = async (data: ChangePasswordRequest): Promise<{ mes
   const response = await apiClient.post<{ message: string }>('/api/v1/auth/me/password', data)
   return response.data
 }
+
+// 聊天会话响应
+export interface ChatSessionResponse {
+  session_id: string
+  name: string
+  token: {
+    access_token: string
+    token_type: string
+    expires_at: string
+  }
+}
+
+// 创建聊天会话（用 user token 换取 session token）
+export const createChatSession = async (): Promise<ChatSessionResponse> => {
+  const response = await apiClient.post<ChatSessionResponse>('/api/v1/auth/session')
+  return response.data
+}

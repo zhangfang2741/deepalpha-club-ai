@@ -16,10 +16,7 @@ import { Bot, SendHorizontal, Trash2 } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
-const getToken = () =>
-  typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
-
-function buildChatAdapter(): ChatModelAdapter {
+function buildChatAdapter(sessionToken: string): ChatModelAdapter {
   return {
     async *run({ messages, abortSignal }) {
       const lastMsg = messages[messages.length - 1]
@@ -32,12 +29,11 @@ function buildChatAdapter(): ChatModelAdapter {
 
       if (!text.trim()) return
 
-      const token = getToken()
-      const res = await fetch(`${API_URL}/api/v1/chat/stream`, {
+      const res = await fetch(`${API_URL}/api/v1/chatbot/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({ messages: [{ role: 'user', content: text }] }),
         signal: abortSignal,
@@ -61,15 +57,19 @@ function buildChatAdapter(): ChatModelAdapter {
 
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue
+            let data: { content: string; done: boolean }
             try {
-              const data = JSON.parse(line.slice(6)) as { content: string; done: boolean }
-              if (data.done) continue
-              if (data.content) {
-                accumulated += data.content
-                yield { content: [{ type: 'text' as const, text: accumulated }] }
-              }
+              data = JSON.parse(line.slice(6))
             } catch {
-              // skip malformed SSE chunks
+              continue // skip malformed SSE chunks
+            }
+            if (data.done) {
+              if (data.content) throw new Error(data.content) // backend error propagated via SSE
+              break
+            }
+            if (data.content) {
+              accumulated += data.content
+              yield { content: [{ type: 'text' as const, text: accumulated }] }
             }
           }
         }
@@ -111,12 +111,13 @@ function AssistantMessage() {
 }
 
 interface ChatThreadProps {
+  sessionToken: string
   initialMessages?: readonly ThreadMessageLike[]
   onClearHistory?: () => void
 }
 
-export function ChatThread({ initialMessages, onClearHistory }: ChatThreadProps) {
-  const chatAdapter = useMemo(() => buildChatAdapter(), [])
+export function ChatThread({ sessionToken, initialMessages, onClearHistory }: ChatThreadProps) {
+  const chatAdapter = useMemo(() => buildChatAdapter(sessionToken), [sessionToken])
   const runtime = useLocalRuntime(chatAdapter, { initialMessages })
 
   return (
