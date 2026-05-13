@@ -1,2 +1,6 @@
 #!/bin/sh
-exec /app/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port "$PORT"
+exec /app/.venv/bin/python -c "
+import os, uvicorn
+port = int(os.environ.get('PORT', 8000))
+uvicorn.run('app.main:app', host='0.0.0.0', port=port)
+"
