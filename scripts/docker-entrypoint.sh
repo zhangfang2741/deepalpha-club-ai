@@ -49,7 +49,7 @@ else
 fi
 
 # Check required sensitive environment variables
-required_vars=("JWT_SECRET_KEY" "OPENAI_API_KEY")
+required_vars=("JWT_SECRET_KEY")
 missing_vars=()
 
 for var in "${required_vars[@]}"; do
@@ -57,6 +57,14 @@ for var in "${required_vars[@]}"; do
         missing_vars+=("$var")
     fi
 done
+
+# 根据 LLM_PROVIDER 校验对应的 API Key
+case "${LLM_PROVIDER:-claude}" in
+    openai)   [[ -z "${OPENAI_API_KEY}" ]]    && missing_vars+=("OPENAI_API_KEY") ;;
+    claude)   [[ -z "${ANTHROPIC_API_KEY}" ]] && missing_vars+=("ANTHROPIC_API_KEY") ;;
+    minimax)  [[ -z "${MINIMAX_API_KEY}" ]]   && missing_vars+=("MINIMAX_API_KEY") ;;
+    gemini)   [[ -z "${GOOGLE_API_KEY}" ]]    && missing_vars+=("GOOGLE_API_KEY") ;;
+esac
 
 if [[ ${#missing_vars[@]} -gt 0 ]]; then
     echo "ERROR: The following required environment variables are missing:"
