@@ -23,17 +23,17 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col overflow-hidden">
       {/* 顶部导航 */}
-      <nav className="h-16 px-8 flex items-center justify-between flex-shrink-0 bg-white/80 backdrop-blur-sm border-b border-slate-100">
+      <nav className="h-16 border-b border-blue-700 bg-blue-600 px-8 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center shadow-sm">
-            <TrendingUp className="w-4 h-4" />
+          <div className="w-8 h-8 bg-white text-blue-600 rounded-lg flex items-center justify-center shadow-sm">
+            <TrendingUp className="w-5 h-5" />
           </div>
-          <span className="font-bold text-slate-900 text-xl tracking-tight">DeepAlpha</span>
+          <span className="font-bold text-white text-xl tracking-tight">DeepAlpha</span>
         </div>
-        <div className="hidden sm:flex items-center gap-6 text-sm text-slate-500">
-          <span className="hover:text-slate-800 cursor-default transition-colors">ETF 资金流</span>
-          <span className="hover:text-slate-800 cursor-default transition-colors">功能介绍</span>
-          <span className="hover:text-slate-800 cursor-default transition-colors">关于我们</span>
+        <div className="hidden sm:flex items-center gap-6 text-sm text-blue-100">
+          <span className="hover:text-white cursor-default transition-colors">ETF 资金流</span>
+          <span className="hover:text-white cursor-default transition-colors">功能介绍</span>
+          <span className="hover:text-white cursor-default transition-colors">关于我们</span>
         </div>
       </nav>
 
