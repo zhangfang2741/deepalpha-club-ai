@@ -166,7 +166,7 @@ export default function LoginRegisterForm() {
   const labelClass = 'block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide'
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-8 w-full shadow-lg shadow-slate-200/60">
+    <div className="bg-white rounded-2xl border border-blue-100 p-8 w-full shadow-xl shadow-blue-900/[0.08]">
       {/* 表单标题 */}
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-slate-900">
@@ -237,7 +237,7 @@ export default function LoginRegisterForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-1 shadow-sm shadow-blue-900/50"
+            className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-1 shadow-sm shadow-blue-600/20"
           >
             {loading ? '登录中...' : '登录'}
           </button>
@@ -289,7 +289,7 @@ export default function LoginRegisterForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-1 shadow-sm shadow-blue-900/50"
+            className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-1 shadow-sm shadow-blue-600/20"
           >
             {loading ? '注册中...' : '注册'}
           </button>
