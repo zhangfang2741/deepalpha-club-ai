@@ -1,14 +1,17 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { TrendingUp, BarChart3, LineChart, CircleDollarSign, Activity, PieChart } from 'lucide-react'
+import { TrendingUp, BarChart3, LineChart, CircleDollarSign, Activity, PieChart, Menu, X } from 'lucide-react'
 import LoginRegisterForm from '@/components/auth/LoginRegisterForm'
 import { useAuthStore } from '@/lib/store/auth'
+
+const NAV_ITEMS = ['ETF 资金流', '功能介绍', '关于我们'] as const
 
 export default function LandingPage() {
   const router = useRouter()
   const { isAuthenticated, hydrated, hydrate } = useAuthStore()
+  const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
     hydrate()
@@ -21,31 +24,59 @@ export default function LandingPage() {
   }, [hydrated, isAuthenticated, router])
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col overflow-hidden">
+    <div className="min-h-screen bg-[#f0f4ff] text-slate-900 flex flex-col overflow-hidden">
       {/* 顶部导航 */}
-      <nav className="h-16 px-8 flex items-center justify-between flex-shrink-0 bg-white/80 backdrop-blur-sm border-b border-slate-100">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center shadow-sm">
-            <TrendingUp className="w-4 h-4" />
+      <nav className="border-b border-blue-700 bg-blue-600 px-6 sm:px-8 flex-shrink-0">
+        <div className="h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 bg-white text-blue-600 rounded-lg flex items-center justify-center shadow-sm">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+            <span className="font-bold text-white text-xl tracking-tight">DeepAlpha</span>
           </div>
-          <span className="font-bold text-slate-900 text-xl tracking-tight">DeepAlpha</span>
+
+          {/* 桌面端导航 */}
+          <div className="hidden sm:flex items-center gap-6 text-sm text-blue-100">
+            {NAV_ITEMS.map((item) => (
+              <span key={item} className="hover:text-white cursor-default transition-colors">{item}</span>
+            ))}
+          </div>
+
+          {/* 移动端汉堡按钮 */}
+          <button
+            className="sm:hidden text-white p-1 rounded-md hover:bg-blue-700/50 transition-colors"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="菜单"
+          >
+            {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
         </div>
-        <div className="hidden sm:flex items-center gap-6 text-sm text-slate-500">
-          <span className="hover:text-slate-800 cursor-default transition-colors">ETF 资金流</span>
-          <span className="hover:text-slate-800 cursor-default transition-colors">功能介绍</span>
-          <span className="hover:text-slate-800 cursor-default transition-colors">关于我们</span>
-        </div>
+
+        {/* 移动端下拉菜单 */}
+        {menuOpen && (
+          <div className="sm:hidden border-t border-blue-700/60 py-2 flex flex-col">
+            {NAV_ITEMS.map((item) => (
+              <span
+                key={item}
+                className="px-2 py-2.5 text-sm text-blue-100 hover:text-white hover:bg-blue-700/40 rounded-md cursor-default transition-colors"
+                onClick={() => setMenuOpen(false)}
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        )}
       </nav>
 
       {/* 主体 */}
       <div className="relative flex-1 flex items-center">
 
         {/* 背景半透明金融科技图标 */}
-        <BarChart3  className="absolute top-8   left-12  w-32 h-32 text-blue-400/10 rotate-[-12deg]" />
-        <LineChart  className="absolute bottom-12 left-1/4 w-40 h-40 text-indigo-400/10 rotate-[8deg]" />
-        <PieChart   className="absolute top-1/4  left-1/2 w-24 h-24 text-blue-300/10 rotate-[15deg]" />
-        <Activity   className="absolute bottom-8 right-16  w-36 h-36 text-cyan-400/10 rotate-[-6deg]" />
-        <CircleDollarSign className="absolute top-12 right-1/4 w-28 h-28 text-blue-400/10 rotate-[20deg]" />
+        <BarChart3        className="absolute top-8   left-12  w-32 h-32 text-blue-600/[0.08] rotate-[-12deg]" />
+        <LineChart        className="absolute bottom-12 left-1/4 w-40 h-40 text-blue-600/[0.07] rotate-[8deg]" />
+        <PieChart         className="absolute top-1/4  left-1/2 w-24 h-24 text-blue-600/[0.07] rotate-[15deg]" />
+        <Activity         className="absolute bottom-8 right-16  w-36 h-36 text-blue-600/[0.08] rotate-[-6deg]" />
+        <CircleDollarSign className="absolute top-12 right-1/4 w-28 h-28 text-blue-600/[0.07] rotate-[20deg]" />
 
         <div className="max-w-7xl mx-auto px-6 sm:px-12 py-16 flex items-center gap-16 flex-wrap lg:flex-nowrap w-full relative z-10">
 
@@ -88,7 +119,7 @@ export default function LandingPage() {
       </div>
 
       {/* 底部版权 */}
-      <footer className="border-t border-slate-100 py-4 px-8 flex items-center justify-between text-xs text-slate-400 bg-white/60">
+      <footer className="border-t border-blue-100 py-4 px-8 flex items-center justify-between text-xs text-slate-400">
         <span>© 2025 DeepAlpha. All rights reserved.</span>
         <span className="hidden sm:block">AI 驱动的投资决策平台</span>
       </footer>
