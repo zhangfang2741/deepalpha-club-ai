@@ -9,6 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@assistant-ui/react": "^0.14.0",
+    "@assistant-ui/react-markdown": "^0.14.0",
+    "@assistant-ui/react-ui": "^0.2.1",
     "@base-ui/react": "^1.4.1",
     "axios": "^1.16.0",
     "class-variance-authority": "^0.7.1",
