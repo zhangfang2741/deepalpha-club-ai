@@ -1,5 +1,10 @@
+'use client'
+
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { TrendingUp, BarChart3, MessageSquare, Shield, Zap, LineChart } from 'lucide-react'
 import LoginRegisterForm from '@/components/auth/LoginRegisterForm'
+import { useAuthStore } from '@/lib/store/auth'
 
 const FEATURE_CHIPS = [
   { icon: BarChart3, label: 'ETF 资金流' },
@@ -16,6 +21,19 @@ const STATS = [
 ] as const
 
 export default function LandingPage() {
+  const router = useRouter()
+  const { isAuthenticated, hydrated, hydrate } = useAuthStore()
+
+  useEffect(() => {
+    hydrate()
+  }, [hydrate])
+
+  useEffect(() => {
+    if (hydrated && isAuthenticated) {
+      router.replace('/dashboard')
+    }
+  }, [hydrated, isAuthenticated, router])
+
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col">
       {/* 顶部导航 — 与 dashboard TopNav 保持一致品牌色 */}
