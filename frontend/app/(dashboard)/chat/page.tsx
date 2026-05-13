@@ -5,22 +5,25 @@ import {
   AssistantRuntimeProvider,
   useLocalRuntime,
   ExportedMessageRepository,
+  MessagePrimitive,
   type ChatModelAdapter,
   type ThreadHistoryAdapter,
   type ExportedMessageRepositoryItem,
 } from '@assistant-ui/react'
 import { Thread, makeMarkdownText } from '@assistant-ui/react-ui'
+import remarkGfm from 'remark-gfm'
 import {
   getChatHistory,
   clearChatHistory,
   getOrCreateSessionToken,
   clearStoredSessionToken,
 } from '@/lib/api/chat'
+import { useAuthStore } from '@/lib/store/auth'
 import Spinner from '@/components/ui/Spinner'
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
-const MarkdownText = makeMarkdownText()
+const MarkdownText = makeMarkdownText({ remarkPlugins: [remarkGfm] })
 
 function buildChatAdapter(sessionToken: string): ChatModelAdapter {
   return {
@@ -97,6 +100,23 @@ function buildHistoryAdapter(sessionToken: string): ThreadHistoryAdapter {
   }
 }
 
+function UserMessageWithAvatar() {
+  const user = useAuthStore((s) => s.user)
+  const raw = user?.username ?? user?.email ?? 'U'
+  const initials = raw.slice(0, 2).toUpperCase()
+
+  return (
+    <MessagePrimitive.Root className="flex justify-end items-end gap-2 w-full py-3 px-1">
+      <div className="max-w-[75%] bg-gray-900 text-white rounded-2xl rounded-br-sm px-4 py-2.5 text-sm leading-relaxed">
+        <MessagePrimitive.Content />
+      </div>
+      <div className="w-8 h-8 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+        {initials}
+      </div>
+    </MessagePrimitive.Root>
+  )
+}
+
 interface ChatRuntimeProps {
   sessionToken: string
   children: React.ReactNode
@@ -165,8 +185,11 @@ export default function ChatPage() {
         ) : (
           <ChatRuntime key={chatKey} sessionToken={sessionToken}>
             <Thread
+              assistantAvatar={{ fallback: 'DA' }}
               assistantMessage={{ components: { Text: MarkdownText } }}
-              welcome={{ message: '开始与 AI 对话，分析市场动态' }}
+              components={{ UserMessage: UserMessageWithAvatar }}
+              strings={{ composer: { input: { placeholder: '输入你的问题，例如：分析一下 NVDA...' } } }}
+              welcome={{ message: '你好！我是 DeepAlpha AI 分析师，可以帮你分析美股、ETF 等市场动态。' }}
             />
           </ChatRuntime>
         )}

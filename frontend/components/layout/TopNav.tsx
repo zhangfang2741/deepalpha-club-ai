@@ -84,7 +84,6 @@ export default function TopNav() {
               <User className="w-4 h-4 text-blue-100" />
             </div>
             <div className="hidden sm:flex flex-col">
-              <span className="text-[10px] uppercase tracking-wider text-blue-300 font-semibold">User</span>
               <span className="text-sm font-medium text-white leading-tight">{displayName}</span>
             </div>
           </div>
