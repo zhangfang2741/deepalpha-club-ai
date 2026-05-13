@@ -30,7 +30,7 @@ RUN uv venv && . .venv/bin/activate && uv pip install -e .
 COPY . .
 
 # Make entrypoint script executable - do this before changing user
-RUN chmod +x /app/scripts/docker-entrypoint.sh
+RUN chmod +x /app/scripts/docker-entrypoint.sh /app/start.sh
 
 # Create a non-root user
 RUN useradd -m appuser && chown -R appuser:appuser /app
@@ -47,4 +47,4 @@ RUN echo "Using ${APP_ENV} environment"
 
 # Command to run the application
 ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
-CMD ["/bin/sh", "-c", "/app/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["/app/start.sh"]
