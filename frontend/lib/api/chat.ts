@@ -21,7 +21,6 @@ export function clearStoredSessionToken(): void {
   localStorage.removeItem(SESSION_TOKEN_KEY)
 }
 
-// 获取有效的 session token：使用缓存或新建
 export async function getOrCreateSessionToken(): Promise<string> {
   const stored = getStoredSessionToken()
   if (stored) return stored
