@@ -178,13 +178,13 @@ export default function LoginRegisterForm() {
       </div>
 
       {/* Tab 切换 */}
-      <div className="flex mb-6 bg-slate-100 rounded-lg p-1 border border-slate-200">
+      <div className="flex mb-6 bg-slate-100 rounded-lg p-1">
         <button
           type="button"
           onClick={() => switchTab('login')}
           className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
             tab === 'login'
-              ? 'bg-white text-blue-600 shadow-sm border border-slate-200'
+              ? 'bg-blue-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-600'
           }`}
         >
@@ -195,7 +195,7 @@ export default function LoginRegisterForm() {
           onClick={() => switchTab('register')}
           className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
             tab === 'register'
-              ? 'bg-white text-blue-600 shadow-sm border border-slate-200'
+              ? 'bg-blue-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-600'
           }`}
         >
