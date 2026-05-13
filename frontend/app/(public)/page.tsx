@@ -105,7 +105,7 @@ export default function LandingPage() {
               ].map(({ value, desc }) => (
                 <div key={desc} className="flex flex-col gap-0.5">
                   <span className="text-2xl font-bold text-slate-900">{value}</span>
-                  <span className="text-xs text-slate-400">{desc}</span>
+                  <span className="text-xs text-slate-500">{desc}</span>
                 </div>
               ))}
             </div>
