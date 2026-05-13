@@ -1,14 +1,17 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { TrendingUp, BarChart3, LineChart, CircleDollarSign, Activity, PieChart } from 'lucide-react'
+import { TrendingUp, BarChart3, LineChart, CircleDollarSign, Activity, PieChart, Menu, X } from 'lucide-react'
 import LoginRegisterForm from '@/components/auth/LoginRegisterForm'
 import { useAuthStore } from '@/lib/store/auth'
+
+const NAV_ITEMS = ['ETF 资金流', '功能介绍', '关于我们'] as const
 
 export default function LandingPage() {
   const router = useRouter()
   const { isAuthenticated, hydrated, hydrate } = useAuthStore()
+  const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
     hydrate()
@@ -23,18 +26,46 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#f0f4ff] text-slate-900 flex flex-col overflow-hidden">
       {/* 顶部导航 */}
-      <nav className="h-16 border-b border-blue-700 bg-blue-600 px-8 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-white text-blue-600 rounded-lg flex items-center justify-center shadow-sm">
-            <TrendingUp className="w-5 h-5" />
+      <nav className="border-b border-blue-700 bg-blue-600 px-6 sm:px-8 flex-shrink-0">
+        <div className="h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 bg-white text-blue-600 rounded-lg flex items-center justify-center shadow-sm">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+            <span className="font-bold text-white text-xl tracking-tight">DeepAlpha</span>
           </div>
-          <span className="font-bold text-white text-xl tracking-tight">DeepAlpha</span>
+
+          {/* 桌面端导航 */}
+          <div className="hidden sm:flex items-center gap-6 text-sm text-blue-100">
+            {NAV_ITEMS.map((item) => (
+              <span key={item} className="hover:text-white cursor-default transition-colors">{item}</span>
+            ))}
+          </div>
+
+          {/* 移动端汉堡按钮 */}
+          <button
+            className="sm:hidden text-white p-1 rounded-md hover:bg-blue-700/50 transition-colors"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="菜单"
+          >
+            {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
         </div>
-        <div className="hidden sm:flex items-center gap-6 text-sm text-blue-100">
-          <span className="hover:text-white cursor-default transition-colors">ETF 资金流</span>
-          <span className="hover:text-white cursor-default transition-colors">功能介绍</span>
-          <span className="hover:text-white cursor-default transition-colors">关于我们</span>
-        </div>
+
+        {/* 移动端下拉菜单 */}
+        {menuOpen && (
+          <div className="sm:hidden border-t border-blue-700/60 py-2 flex flex-col">
+            {NAV_ITEMS.map((item) => (
+              <span
+                key={item}
+                className="px-2 py-2.5 text-sm text-blue-100 hover:text-white hover:bg-blue-700/40 rounded-md cursor-default transition-colors"
+                onClick={() => setMenuOpen(false)}
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        )}
       </nav>
 
       {/* 主体 */}
