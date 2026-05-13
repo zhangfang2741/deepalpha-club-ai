@@ -161,31 +161,31 @@ export default function LoginRegisterForm() {
   }
 
   const inputClass =
-    'w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700/80 rounded-lg text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/60 focus:border-blue-500/60 transition-colors'
+    'w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition-colors'
 
-  const labelClass = 'block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide'
+  const labelClass = 'block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide'
 
   return (
-    <div className="bg-slate-900/80 backdrop-blur-sm rounded-2xl border border-slate-700/60 p-8 w-full shadow-2xl shadow-black/40">
+    <div className="bg-white rounded-2xl border border-slate-200 p-8 w-full shadow-lg shadow-slate-200/60">
       {/* 表单标题 */}
       <div className="mb-6">
-        <h2 className="text-lg font-semibold text-white">
+        <h2 className="text-lg font-semibold text-slate-900">
           {tab === 'login' ? '欢迎回来' : '创建账号'}
         </h2>
-        <p className="text-xs text-slate-500 mt-1">
+        <p className="text-xs text-slate-400 mt-1">
           {tab === 'login' ? '登录以访问你的投资分析面板' : '免费注册，开始智能投资分析'}
         </p>
       </div>
 
       {/* Tab 切换 */}
-      <div className="flex mb-6 bg-slate-800/60 rounded-lg p-1 border border-slate-700/40">
+      <div className="flex mb-6 bg-slate-100 rounded-lg p-1 border border-slate-200">
         <button
           type="button"
           onClick={() => switchTab('login')}
           className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
             tab === 'login'
-              ? 'bg-blue-600 text-white shadow-sm shadow-blue-900/50'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-white text-blue-600 shadow-sm border border-slate-200'
+              : 'text-slate-400 hover:text-slate-600'
           }`}
         >
           登录
@@ -195,8 +195,8 @@ export default function LoginRegisterForm() {
           onClick={() => switchTab('register')}
           className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
             tab === 'register'
-              ? 'bg-blue-600 text-white shadow-sm shadow-blue-900/50'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-white text-blue-600 shadow-sm border border-slate-200'
+              : 'text-slate-400 hover:text-slate-600'
           }`}
         >
           注册
@@ -246,7 +246,7 @@ export default function LoginRegisterForm() {
         <form onSubmit={handleRegister} className="flex flex-col gap-4">
           <div>
             <label className={labelClass}>
-              用户名 <span className="text-slate-600 normal-case tracking-normal">（可选）</span>
+              用户名 <span className="text-slate-400 normal-case tracking-normal">（可选）</span>
             </label>
             <input
               type="text"
