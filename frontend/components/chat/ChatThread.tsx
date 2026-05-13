@@ -1,6 +1,9 @@
 'use client'
 
 import { useMemo } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import type { Components } from 'react-markdown'
 import {
   AssistantRuntimeProvider,
   useLocalRuntime,
@@ -80,16 +83,74 @@ function buildChatAdapter(sessionToken: string): ChatModelAdapter {
   }
 }
 
-const MessageText: TextMessagePartComponent = () => {
+const mdComponents: Components = {
+  p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+  h1: ({ children }) => <h1 className="text-base font-bold mb-2 mt-3 first:mt-0">{children}</h1>,
+  h2: ({ children }) => <h2 className="text-sm font-bold mb-1.5 mt-2.5 first:mt-0">{children}</h2>,
+  h3: ({ children }) => <h3 className="text-sm font-semibold mb-1 mt-2 first:mt-0">{children}</h3>,
+  ul: ({ children }) => <ul className="list-disc pl-5 mb-2 space-y-0.5">{children}</ul>,
+  ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 space-y-0.5">{children}</ol>,
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  pre: ({ children }) => <pre className="mb-2 rounded-lg overflow-hidden">{children}</pre>,
+  code: ({ className, children }) => {
+    const isBlock = Boolean(className) || String(children).includes('\n')
+    return isBlock ? (
+      <code className={`block bg-gray-900 text-green-300 px-4 py-3 text-xs font-mono leading-relaxed overflow-x-auto ${className ?? ''}`}>
+        {children}
+      </code>
+    ) : (
+      <code className="bg-gray-100 text-pink-600 px-1.5 py-0.5 rounded font-mono text-[0.85em]">
+        {children}
+      </code>
+    )
+  },
+  strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
+  em: ({ children }) => <em className="italic text-gray-700">{children}</em>,
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+      {children}
+    </a>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-[3px] border-gray-300 pl-3 my-2 text-gray-600 italic">
+      {children}
+    </blockquote>
+  ),
+  hr: () => <hr className="border-gray-200 my-3" />,
+  table: ({ children }) => (
+    <div className="overflow-x-auto mb-2">
+      <table className="border-collapse w-full text-xs">{children}</table>
+    </div>
+  ),
+  th: ({ children }) => (
+    <th className="border border-gray-200 bg-gray-50 px-3 py-1.5 text-left font-semibold text-gray-700">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="border border-gray-200 px-3 py-1.5 text-gray-700">{children}</td>
+  ),
+}
+
+const UserMessageText: TextMessagePartComponent = () => {
   const { text } = useMessagePartText()
   return <span className="whitespace-pre-wrap break-words leading-relaxed">{text}</span>
+}
+
+const AssistantMessageText: TextMessagePartComponent = () => {
+  const { text } = useMessagePartText()
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+      {text}
+    </ReactMarkdown>
+  )
 }
 
 function UserMessage() {
   return (
     <MessagePrimitive.Root className="flex justify-end mb-3">
       <div className="max-w-[75%] bg-gray-900 text-white rounded-2xl rounded-br-sm px-4 py-2.5 text-sm">
-        <MessagePrimitive.Content components={{ Text: MessageText }} />
+        <MessagePrimitive.Content components={{ Text: UserMessageText }} />
       </div>
     </MessagePrimitive.Root>
   )
@@ -102,8 +163,8 @@ function AssistantMessage() {
         <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
           <Bot className="w-4 h-4 text-white" />
         </div>
-        <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm text-gray-800">
-          <MessagePrimitive.Content components={{ Text: MessageText }} />
+        <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm text-gray-800 min-w-0">
+          <MessagePrimitive.Content components={{ Text: AssistantMessageText }} />
         </div>
       </div>
     </MessagePrimitive.Root>
