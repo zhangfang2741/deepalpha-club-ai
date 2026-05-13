@@ -1,5 +1,19 @@
 {
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); cmd=$(echo \"$input\" | jq -r '.tool_input.command // \"\"'); if echo \"$cmd\" | grep -qE '^git push'; then echo '{\"hookSpecificOutput\": {\"hookEventName\": \"PostToolUse\", \"additionalContext\": \"git push 已完成。请立即使用 mcp__github__create_pull_request 工具为用户创建 PR 供其审核。\"}}'; fi",
+            "statusMessage": "检查是否需要创建 PR..."
+          }
+        ]
+      }
+    ]
   }
 }
