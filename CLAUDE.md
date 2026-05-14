@@ -138,6 +138,74 @@ deepalpha-club-ai/
 - **数据库生产**：Supabase PostgreSQL（支持 pgvector），配置 `POSTGRES_*` 变量。
 - **缓存生产**：Upstash Redis，配置 `VALKEY_HOST/PORT/PASSWORD`。
 
+## 生产部署详情（当前实际配置）
+
+### 域名规划（Cloudflare DNS）
+
+| 子域名 | 指向 | 说明 |
+|--------|------|------|
+| `deepalpha.club` | Vercel（`cname.vercel-dns.com`） | 根域名，用户入口 |
+| `www.deepalpha.club` | Vercel（重定向到根域名） | www 跳转 |
+| `api.deepalpha.club` | Railway（`*.railway.app`） | 后端 API |
+
+Cloudflare 代理状态：三条记录均开启橙色云朵（代理模式），SSL/TLS 加密模式设为 **Full**。
+
+### 前端（Vercel）
+
+- 仓库根目录：`frontend/`
+- 框架：Next.js，`output: 'standalone'`（`frontend/next.config.ts`）
+- 生产环境变量（在 Vercel Dashboard 配置）：
+  ```
+  NEXT_PUBLIC_API_URL=https://api.deepalpha.club
+  ```
+- 自定义域名：`deepalpha.club`、`www.deepalpha.club`
+
+### 后端（Railway）
+
+- 启动命令来自 `Procfile`：
+  ```
+  web: /app/.venv/bin/python -c "import os,uvicorn; uvicorn.run('app.main:app', host='0.0.0.0', port=int(os.environ.get('PORT',8000)))"
+  ```
+- 自定义域名：`api.deepalpha.club`
+- 生产环境变量（在 Railway Dashboard 配置）：
+  ```
+  APP_ENV=production
+  DEBUG=false
+  LOG_FORMAT=json
+  ALLOWED_ORIGINS=https://deepalpha.club,https://www.deepalpha.club
+  CORS_ORIGINS=https://deepalpha.club,https://www.deepalpha.club
+  POSTGRES_SSL=true
+  VALKEY_SSL=true
+  ```
+
+### 数据库（Supabase）
+
+- 提供 PostgreSQL + pgvector，配置 `POSTGRES_HOST/PORT/DB/USER/PASSWORD`
+- 生产必须设置 `POSTGRES_SSL=true`
+
+### 缓存（Upstash Redis）
+
+- 配置 `VALKEY_HOST`（`*.upstash.io`）、`VALKEY_PASSWORD`、`VALKEY_SSL=true`
+
+### Chat 会话认证流程
+
+前端 Chat 使用独立的 **session token**（区别于登录的 `access_token`）：
+1. 前端调用 `POST /api/v1/auth/sessions` 创建 Chat Session，返回 `session.token.access_token`
+2. Session token 存储在 `localStorage`（key：`chat_session_token`）
+3. 后续所有聊天请求携带 `Authorization: Bearer <session_token>`
+4. `ThreadHistoryAdapter.load()` 调用 `GET /api/v1/chatbot/messages` 恢复历史
+5. 清空对话：`DELETE /api/v1/chatbot/messages`，同时清除 localStorage 中的 session token
+
+### 验证命令
+
+```bash
+# 检查后端健康
+curl https://api.deepalpha.club/api/v1/health
+
+# 验证 Cloudflare 代理（响应头含 cf-ray 即为正常）
+curl -I https://deepalpha.club
+```
+
 ## 包管理规则
 - 安装依赖：`uv add <package>`，禁止 `pip install`。
 - 运行脚本：`uv run python ...` 或 `uv run alembic ...`。
