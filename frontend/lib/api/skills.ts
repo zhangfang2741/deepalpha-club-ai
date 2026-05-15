@@ -5,7 +5,6 @@
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
-export type SkillModel = 'claude-sonnet-4-6' | 'claude-haiku-4-5'
 export type Freq = 'daily' | 'weekly'
 
 export interface SkillMessage {
@@ -47,7 +46,6 @@ function getToken(): string {
 /** 流式生成 Skill 代码（SSE），逐 chunk 回调 */
 export async function generateSkillStream(
   messages: SkillMessage[],
-  model: SkillModel,
   onChunk: (text: string) => void,
   onDone: () => void,
   signal?: AbortSignal,
@@ -61,7 +59,7 @@ export async function generateSkillStream(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ messages, model }),
+    body: JSON.stringify({ messages }),
     signal,
   })
 

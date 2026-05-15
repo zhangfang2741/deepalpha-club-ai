@@ -42,13 +42,12 @@ async def generate_skill(
     logger.info(
         "skill_generate_request",
         user_id=user.id,
-        model=body.model,
         turns=len(body.messages),
     )
 
     async def event_generator():
         try:
-            async for chunk in generate_skill_stream(body.messages, body.model):
+            async for chunk in generate_skill_stream(body.messages):
                 payload = SkillGenerateResponse(content=chunk, done=False)
                 yield f"data: {payload.model_dump_json()}\n\n"
             yield f"data: {SkillGenerateResponse(content='', done=True).model_dump_json()}\n\n"

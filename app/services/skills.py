@@ -75,17 +75,12 @@ def _build_lc_messages(messages: list) -> list:
 
 async def generate_skill_stream(
     messages: list,
-    model_name: str,
 ) -> AsyncGenerator[str, None]:
     """Stream Skill code generation, yielding text tokens incrementally."""
     lc_messages = _build_lc_messages(messages)
-    try:
-        llm = llm_registry.get(model_name)
-    except ValueError:
-        logger.warning("skill_model_not_found_using_default", requested=model_name)
-        llm = llm_registry.LLMS[0]["llm"]
+    llm = llm_registry.get_default()
 
-    logger.info("skill_generate_stream_start", model=model_name, turns=len(messages))
+    logger.info("skill_generate_stream_start", turns=len(messages))
     async for chunk in llm.astream(lc_messages):
         text = chunk.content if isinstance(chunk.content, str) else ""
         if not text and isinstance(chunk.content, list):
