@@ -160,7 +160,7 @@ export default function ChatPage() {
   }, [sessionToken])
 
   return (
-    <div className="flex flex-col h-[calc(100vh-5rem)]">
+    <div className="-mx-6 -my-8 flex flex-col h-full overflow-hidden px-6 py-8">
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <h1 className="text-2xl font-bold text-gray-900">AI 对话</h1>
         {sessionToken && (
