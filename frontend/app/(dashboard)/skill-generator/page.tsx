@@ -259,15 +259,6 @@ export default function FactorExplorerPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
-  // 锁定 document 滚动，防止顶部导航被划走
-  useEffect(() => {
-    const prev = document.documentElement.style.overflow
-    document.documentElement.style.overflow = 'hidden'
-    return () => {
-      document.documentElement.style.overflow = prev
-    }
-  }, [])
-
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
@@ -379,10 +370,7 @@ export default function FactorExplorerPage() {
   // ─── 渲染 ──────────────────────────────────────────────────────────────────
 
   return (
-    <div
-      className="-mx-6 -my-8 flex flex-col overflow-hidden bg-gray-950"
-      style={{ height: 'calc(100dvh - 4rem)' }}
-    >
+    <div className="-mx-6 -my-8 flex flex-col overflow-hidden bg-gray-950 h-full">
 
       {/* ── 环境准备区（横向滚动，所有控件单行） ──────────────────────────── */}
       <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-900 border-b border-gray-700 flex-shrink-0 overflow-x-auto">
