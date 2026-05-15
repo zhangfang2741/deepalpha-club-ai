@@ -16,7 +16,6 @@ class SkillGenerateRequest(BaseModel):
     """Request body for streaming Skill code generation."""
 
     messages: list[SkillMessage] = Field(..., min_length=1, max_length=40)
-    model: Literal["claude-sonnet-4-6", "claude-haiku-4-5"] = "claude-sonnet-4-6"
 
 
 class SkillGenerateResponse(BaseModel):

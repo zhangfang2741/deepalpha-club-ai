@@ -22,7 +22,6 @@ import {
   type Freq,
   type KlineBar,
   type SkillMessage,
-  type SkillModel,
   fetchKline,
   generateSkillStream,
   runSkill,
@@ -63,11 +62,6 @@ const TEMPLATES = [
     prompt: '构建一个成交量加权动量因子：以成交量为权重，计算过去30天的加权价格变化率。',
   },
 ] as const
-
-const MODELS: { id: SkillModel; label: string }[] = [
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6（推荐）' },
-  { id: 'claude-haiku-4-5', label: 'Haiku 4.5（快速）' },
-]
 
 // ─── 工具函数 ─────────────────────────────────────────────────────────────────
 
@@ -241,7 +235,6 @@ export default function FactorExplorerPage() {
   const [startDate, setStartDate] = useState('2023-01-01')
   const [endDate, setEndDate] = useState('2026-05-01')
   const [freq, setFreq] = useState<Freq>('daily')
-  const [model, setModel] = useState<SkillModel>('claude-sonnet-4-6')
 
   // 数据状态
   const [klines, setKlines] = useState<KlineBar[]>([])
@@ -265,6 +258,15 @@ export default function FactorExplorerPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
+
+  // 锁定 document 滚动，防止顶部导航被划走
+  useEffect(() => {
+    const prev = document.documentElement.style.overflow
+    document.documentElement.style.overflow = 'hidden'
+    return () => {
+      document.documentElement.style.overflow = prev
+    }
+  }, [])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -316,7 +318,6 @@ export default function FactorExplorerPage() {
     try {
       await generateSkillStream(
         historyForApi,
-        model,
         (chunk) => {
           accumulated += chunk
           const display = getDisplayText(accumulated)
@@ -378,25 +379,29 @@ export default function FactorExplorerPage() {
   // ─── 渲染 ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="-mx-6 -my-8 flex flex-col overflow-hidden bg-gray-950" style={{ height: 'calc(100vh - 4rem)' }}>
+    <div
+      className="-mx-6 -my-8 flex flex-col overflow-hidden bg-gray-950"
+      style={{ height: 'calc(100dvh - 4rem)' }}
+    >
 
-      {/* ── 环境准备区 ──────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-gray-900 border-b border-gray-700 flex-shrink-0">
-        <div className="flex items-center gap-2">
+      {/* ── 环境准备区（横向滚动，所有控件单行） ──────────────────────────── */}
+      <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-900 border-b border-gray-700 flex-shrink-0 overflow-x-auto">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
           <FlaskConical className="w-4 h-4 text-blue-400" />
-          <span className="text-sm font-semibold text-white">因子探索</span>
+          <span className="text-sm font-semibold text-white whitespace-nowrap">因子探索</span>
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-400">股票</label>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <label className="text-xs text-gray-400 whitespace-nowrap">股票</label>
           <input
             value={symbol}
             onChange={(e) => setSymbol(e.target.value)}
-            placeholder="如 600519"
-            className="w-24 h-8 px-2 text-sm bg-gray-800 border border-gray-600 rounded text-white placeholder:text-gray-500 focus:outline-none focus:border-blue-500"
+            onKeyDown={(e) => e.key === 'Enter' && handleLoadKline()}
+            placeholder="600519"
+            className="w-20 h-8 px-2 text-sm bg-gray-800 border border-gray-600 rounded text-white placeholder:text-gray-500 focus:outline-none focus:border-blue-500"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-400">开始</label>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <label className="text-xs text-gray-400 whitespace-nowrap">开始</label>
           <input
             type="date"
             value={startDate}
@@ -404,8 +409,8 @@ export default function FactorExplorerPage() {
             className="h-8 px-2 text-sm bg-gray-800 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-400">结束</label>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <label className="text-xs text-gray-400 whitespace-nowrap">结束</label>
           <input
             type="date"
             value={endDate}
@@ -413,8 +418,8 @@ export default function FactorExplorerPage() {
             className="h-8 px-2 text-sm bg-gray-800 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-400">粒度</label>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <label className="text-xs text-gray-400 whitespace-nowrap">粒度</label>
           <select
             value={freq}
             onChange={(e) => setFreq(e.target.value as Freq)}
@@ -427,43 +432,33 @@ export default function FactorExplorerPage() {
         <button
           onClick={handleLoadKline}
           disabled={loadingKline}
-          className="h-8 px-4 text-sm font-medium bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white rounded transition-colors flex items-center gap-2"
+          className="h-8 px-4 text-sm font-medium bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white rounded transition-colors flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap"
         >
           {loadingKline ? (
-            <><Loader2 className="w-3.5 h-3.5 animate-spin" />加载中...</>
+            <><Loader2 className="w-3.5 h-3.5 animate-spin" />加载中</>
           ) : (
             '▶ 加载数据'
           )}
         </button>
-        {loadError && <span className="text-xs text-red-400">{loadError}</span>}
+        {loadError && (
+          <span className="text-xs text-red-400 whitespace-nowrap flex-shrink-0">{loadError}</span>
+        )}
         {dataReady && !loadingKline && (
-          <span className="text-xs text-green-400 flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3" />{symbol} 数据就绪
+          <span className="text-xs text-green-400 flex items-center gap-1 flex-shrink-0 whitespace-nowrap">
+            <CheckCircle2 className="w-3 h-3" />{symbol.toUpperCase()} 就绪
           </span>
         )}
-        <div className="ml-auto flex items-center gap-2">
-          <label className="text-xs text-gray-400">模型</label>
-          <select
-            value={model}
-            onChange={(e) => setModel(e.target.value as SkillModel)}
-            className="h-8 px-2 text-sm bg-gray-800 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
-          >
-            {MODELS.map((m) => (
-              <option key={m.id} value={m.id}>{m.label}</option>
-            ))}
-          </select>
-        </div>
       </div>
 
       {/* ── 主内容区 ──────────────────────────────────────────────────────── */}
       <div className="flex flex-1 min-h-0 divide-x divide-gray-700">
 
         {/* ── 左侧：对话区 ──────────────────────────────────────────────── */}
-        <div className="w-[40%] flex flex-col min-h-0 bg-gray-900">
+        <div className="w-[40%] min-w-[220px] flex flex-col min-h-0 bg-gray-900">
 
           {/* 快速模板 */}
           {dataReady && (
-            <div className="flex gap-1.5 flex-wrap px-3 py-2.5 border-b border-gray-700 flex-shrink-0">
+            <div className="flex gap-1.5 flex-wrap px-3 py-2 border-b border-gray-700 flex-shrink-0">
               {TEMPLATES.map((t) => (
                 <button
                   key={t.label}
@@ -484,7 +479,7 @@ export default function FactorExplorerPage() {
                 <FlaskConical className="w-10 h-10 text-gray-700" />
                 <div>
                   <p className="font-medium text-gray-400">开始因子探索</p>
-                  <p className="text-xs mt-1">在顶部输入股票代码并加载数据，然后用自然语言描述你的因子思路</p>
+                  <p className="text-xs mt-1">在顶部输入股票代码并加载数据，<br />然后描述你的因子思路</p>
                 </div>
               </div>
             ) : messages.length === 0 ? (
@@ -493,7 +488,7 @@ export default function FactorExplorerPage() {
                   <FlaskConical className="w-6 h-6 text-blue-400" />
                 </div>
                 <div>
-                  <p className="font-medium text-gray-300">{symbol} 数据已就绪</p>
+                  <p className="font-medium text-gray-300">{symbol.toUpperCase()} 数据已就绪</p>
                   <p className="text-xs mt-1 text-gray-500">选择快速模板或描述你的因子分析思路</p>
                 </div>
               </div>
@@ -542,7 +537,7 @@ export default function FactorExplorerPage() {
               <button
                 onClick={loading ? handleAbort : handleSend}
                 disabled={!dataReady || (!loading && !input.trim())}
-                className={`w-10 h-full rounded-xl flex items-center justify-center transition-colors ${
+                className={`w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-colors ${
                   loading
                     ? 'bg-red-600 hover:bg-red-500 text-white'
                     : 'bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 text-white disabled:text-gray-500'
