@@ -7,6 +7,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.chatbot import router as chatbot_router
 from app.api.v1.etf import router as etf_router
 from app.api.v1.fear_greed import router as fear_greed_router
+from app.api.v1.skills import router as skills_router
 from app.core.logging import logger
 
 api_router = APIRouter()
@@ -16,6 +17,7 @@ api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
 api_router.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
 api_router.include_router(etf_router, prefix="/etf", tags=["etf"])
 api_router.include_router(fear_greed_router, prefix="/fear-greed", tags=["fear-greed"])
+api_router.include_router(skills_router, prefix="/skills", tags=["skills"])
 
 
 @api_router.get("/health")
