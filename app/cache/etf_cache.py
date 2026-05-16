@@ -125,10 +125,10 @@ async def set_heatmap_cache(redis: Redis, granularity: str, days: int, data: "He
     logger.info("etf_heatmap_cache_set", granularity=granularity, days=days, size_bytes=len(payload))
 
 
-async def get_deviation_cache(redis: Redis, days: int) -> Optional["DeviationScoreResponse"]:
-    """读取偏离分缓存，未命中返回 None。key: etf:deviation:{days}"""
+async def get_deviation_cache(redis: Redis, days: int, days_hist: int) -> Optional["DeviationScoreResponse"]:
+    """读取错杀分缓存，未命中返回 None。key: etf:deviation:{days}:{days_hist}"""
     from app.schemas.etf import DeviationScoreResponse  # 避免循环导入
-    key = f"etf:deviation:{days}"
+    key = f"etf:deviation:{days}:{days_hist}"
     raw = await redis.get(key)
     if raw is None:
         return None
@@ -148,10 +148,10 @@ async def get_deviation_cache(redis: Redis, days: int) -> Optional["DeviationSco
         return None
 
 
-async def set_deviation_cache(redis: Redis, days: int, data: "DeviationScoreResponse") -> None:
-    """将偏离分数据写入 Redis（使用 zlib 压缩），TTL = 3600s。key: etf:deviation:{days}"""
-    key = f"etf:deviation:{days}"
+async def set_deviation_cache(redis: Redis, days: int, days_hist: int, data: "DeviationScoreResponse") -> None:
+    """将错杀分数据写入 Redis（使用 zlib 压缩），TTL = 3600s。key: etf:deviation:{days}:{days_hist}"""
+    key = f"etf:deviation:{days}:{days_hist}"
     json_str = json.dumps(data.model_dump(mode="json"), ensure_ascii=False)
     payload = zlib.compress(json_str.encode("utf-8"))
     await redis.set(key, payload, ex=ETF_FLOW_TTL)
-    logger.info("etf_deviation_cache_set", days=days, size_bytes=len(payload))
+    logger.info("etf_deviation_cache_set", days=days, days_hist=days_hist, size_bytes=len(payload))

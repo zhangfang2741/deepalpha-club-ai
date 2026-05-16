@@ -105,20 +105,20 @@ class HeatmapResponse(BaseResponse):
 
 
 class ETFDeviationScore(BaseResponse):
-    """单只 ETF 的偏离分详情。"""
+    """单只 ETF 的错杀分详情（近期 vs 自身历史基准对比）。"""
 
     symbol: str
     name: str
     sector: str
-    panic_score: Optional[float] = Field(None, description="恐慌期（FG<45）相对市场均值偏离的平均值，None 表示无恐慌期数据")
-    panic_days: int = Field(0, description="参与计算的恐慌期交易日数量")
-    greed_score: Optional[float] = Field(None, description="贪婪期（FG>55）相对市场均值偏离的平均值，None 表示无贪婪期数据")
-    greed_days: int = Field(0, description="参与计算的贪婪期交易日数量")
-    overall_score: Optional[float] = Field(None, description="综合偏离分 = (panic_score + greed_score) / 2，两者任一为 None 则为 None")
+    panic_score: Optional[float] = Field(None, description="恐慌期错杀分 = 近期恐慌均值 - 历史恐慌均值，负值=被错杀")
+    panic_days: int = Field(0, description="近期恐慌期匹配天数")
+    greed_score: Optional[float] = Field(None, description="贪婪期超买分 = 近期贪婪均值 - 历史贪婪均值，正值=被追高")
+    greed_days: int = Field(0, description="近期贪婪期匹配天数")
+    overall_score: Optional[float] = Field(None, description="综合错位分 = (panic_score + greed_score) / 2，两者任一为 None 则为 None")
 
 
 class SectorDeviationGroup(BaseResponse):
-    """偏离分按板块分组。"""
+    """错杀分按板块分组。"""
 
     sector: str = Field(description="板块名称，如 '01 信息技术'")
     avg_panic_score: Optional[float] = Field(None, description="板块内所有 ETF panic_score 的均值")
@@ -130,7 +130,8 @@ class SectorDeviationGroup(BaseResponse):
 class DeviationScoreResponse(BaseResponse):
     """GET /etf/deviation-scores 响应体。"""
 
-    days: int = Field(description="分析所用的交易日窗口")
+    days: int = Field(description="近期窗口交易日数量")
+    days_hist: int = Field(description="历史基准窗口交易日数量")
     fg_score: float = Field(description="当前恐惧贪婪指数（0-100）")
     fg_rating: str = Field(description="当前情绪评级，如 'Greed'")
     sectors: List[SectorDeviationGroup]

@@ -85,16 +85,18 @@ export interface SectorDeviationGroup {
 
 export interface DeviationScoreResponse {
   days: number
+  days_hist: number
   fg_score: number
   fg_rating: string
   sectors: SectorDeviationGroup[]
 }
 
 export const fetchETFDeviationScores = async (
-  days: number = 30
+  days: number = 30,
+  daysHist: number = 365
 ): Promise<DeviationScoreResponse> => {
   const response = await apiClient.get<DeviationScoreResponse>('/api/v1/etf/deviation-scores', {
-    params: { days },
+    params: { days, days_hist: daysHist },
   })
   return response.data
 }

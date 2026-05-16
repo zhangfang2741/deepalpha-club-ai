@@ -11,18 +11,19 @@ interface Props {
 type SortKey = 'panic_score' | 'greed_score' | 'overall_score'
 type SortDir = 'asc' | 'desc'
 
-function deviationStyle(score: number | null): CSSProperties {
+// 错杀分颜色：负值=被错杀=橙色（机会信号），正值=超强=青色，接近0=灰色
+function killScoreStyle(score: number | null): CSSProperties {
   if (score === null || Math.abs(score) < 0.001) return { color: '#94a3b8' }
   const alpha = Math.min(0.15 + 0.7 * Math.sqrt(Math.abs(score) / 2), 0.85)
-  if (score > 0) {
+  if (score < 0) {
     return {
-      backgroundColor: `rgba(239,68,68,${alpha})`,
-      color: alpha > 0.5 ? '#fff' : '#7f1d1d',
+      backgroundColor: `rgba(249,115,22,${alpha})`,
+      color: alpha > 0.5 ? '#fff' : '#7c2d12',
     }
   }
   return {
-    backgroundColor: `rgba(34,197,94,${alpha})`,
-    color: alpha > 0.5 ? '#fff' : '#14532d',
+    backgroundColor: `rgba(20,184,166,${alpha})`,
+    color: alpha > 0.5 ? '#fff' : '#134e4a',
   }
 }
 
@@ -34,8 +35,8 @@ function fmt(v: number | null): string {
 function ScoreCell({ score }: { score: number | null }) {
   return (
     <td
-      className="px-3 py-2 text-center text-xs font-mono font-semibold rounded"
-      style={deviationStyle(score)}
+      className="px-3 py-2 text-center text-xs font-mono font-semibold"
+      style={killScoreStyle(score)}
     >
       {fmt(score)}
     </td>
@@ -63,7 +64,7 @@ function SortHeader({
     >
       {label}
       <span className="ml-1 text-gray-400">
-        {active ? (direction === 'desc' ? '↓' : '↑') : '↕'}
+        {active ? (direction === 'asc' ? '↑' : '↓') : '↕'}
       </span>
     </th>
   )
@@ -76,7 +77,7 @@ function sortEtfs(etfs: ETFDeviationScore[], key: SortKey, dir: SortDir): ETFDev
     if (av === null && bv === null) return 0
     if (av === null) return 1
     if (bv === null) return -1
-    return dir === 'desc' ? bv - av : av - bv
+    return dir === 'asc' ? av - bv : bv - av
   })
 }
 
@@ -84,12 +85,10 @@ function SectorRow({
   sector,
   expanded,
   onToggle,
-  sortKey,
 }: {
   sector: SectorDeviationGroup
   expanded: boolean
   onToggle: () => void
-  sortKey: SortKey
 }) {
   return (
     <tr
@@ -113,15 +112,16 @@ function SectorRow({
 
 export default function ETFDeviationTable({ data }: Props) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
-  const [sortKey, setSortKey] = useState<SortKey>('overall_score')
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  // 默认按错杀分升序（最被错杀的排最前）
+  const [sortKey, setSortKey] = useState<SortKey>('panic_score')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
 
   const handleSort = (key: SortKey) => {
     if (key === sortKey) {
-      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     } else {
       setSortKey(key)
-      setSortDir('desc')
+      setSortDir('asc')
     }
   }
 
@@ -140,7 +140,7 @@ export default function ETFDeviationTable({ data }: Props) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
       {/* 顶部信息栏 */}
-      <div className="flex items-center gap-4 px-4 py-3 border-b border-gray-100 bg-gray-50/50">
+      <div className="flex items-center gap-4 px-4 py-3 border-b border-gray-100 bg-gray-50/50 flex-wrap">
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">当前市场情绪</span>
           <span
@@ -152,21 +152,24 @@ export default function ETFDeviationTable({ data }: Props) {
           </span>
         </div>
         <span className="text-xs text-gray-400">·</span>
-        <span className="text-xs text-gray-500">数据窗口：过去 {data.days} 个交易日</span>
+        <span className="text-xs text-gray-500">
+          近期 <span className="font-semibold text-gray-700">{data.days}</span> 天
+          &nbsp;vs&nbsp;历史基准 <span className="font-semibold text-gray-700">{data.days_hist}</span> 天
+        </span>
         <div className="ml-auto flex items-center gap-3 text-xs text-gray-400">
           <span>
             <span
               className="inline-block w-3 h-3 rounded-sm mr-1 align-middle"
-              style={{ backgroundColor: 'rgba(239,68,68,0.6)' }}
+              style={{ backgroundColor: 'rgba(249,115,22,0.7)' }}
             />
-            高于市场均值
+            被错杀（低于历史）
           </span>
           <span>
             <span
               className="inline-block w-3 h-3 rounded-sm mr-1 align-middle"
-              style={{ backgroundColor: 'rgba(34,197,94,0.6)' }}
+              style={{ backgroundColor: 'rgba(20,184,166,0.7)' }}
             />
-            低于市场均值
+            异常强势（高于历史）
           </span>
         </div>
       </div>
@@ -183,23 +186,23 @@ export default function ETFDeviationTable({ data }: Props) {
                 代码
               </th>
               <SortHeader
-                label="恐慌偏离"
+                label="错杀分"
                 sortKey="panic_score"
                 currentKey={sortKey}
                 direction={sortDir}
                 onClick={handleSort}
               />
-              <th className="px-3 py-2 text-center text-xs text-gray-400 font-normal">天数</th>
+              <th className="px-3 py-2 text-center text-xs text-gray-400 font-normal whitespace-nowrap">恐慌天数</th>
               <SortHeader
-                label="贪婪偏离"
+                label="超买分"
                 sortKey="greed_score"
                 currentKey={sortKey}
                 direction={sortDir}
                 onClick={handleSort}
               />
-              <th className="px-3 py-2 text-center text-xs text-gray-400 font-normal">天数</th>
+              <th className="px-3 py-2 text-center text-xs text-gray-400 font-normal whitespace-nowrap">贪婪天数</th>
               <SortHeader
-                label="综合偏离"
+                label="综合错位"
                 sortKey="overall_score"
                 currentKey={sortKey}
                 direction={sortDir}
@@ -217,7 +220,6 @@ export default function ETFDeviationTable({ data }: Props) {
                   sector={sector}
                   expanded={isExpanded}
                   onToggle={() => toggleSector(sector.sector)}
-                  sortKey={sortKey}
                 />,
                 ...(isExpanded
                   ? sortedEtfs.map((etf) => (
@@ -252,9 +254,11 @@ export default function ETFDeviationTable({ data }: Props) {
       {/* 底部说明 */}
       <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/50">
         <p className="text-xs text-gray-400">
-          偏离分 = ETF 当日强度 − 全市场均值，正值表示该 ETF 资金流高于市场均值。
-          恐慌期（FG&lt;45）正值意味抗跌，贪婪期（FG&gt;55）正值意味强势。
-          天数为所选窗口内实际匹配的恐慌/贪婪交易日数量。
+          <span className="font-medium text-orange-500">错杀分</span> = 近期恐慌期强度均值 − 历史恐慌期强度均值。
+          负值越大说明近期被市场过度抛售，偏离自身历史规律越远，可能存在错杀机会。
+          <span className="font-medium text-teal-500 ml-2">超买分</span> = 近期贪婪期强度均值 − 历史贪婪期强度均值，
+          正值大说明近期被过度追高。
+          天数为近期窗口内实际匹配的情绪日数量。
         </p>
       </div>
     </div>
