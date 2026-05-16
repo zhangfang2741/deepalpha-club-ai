@@ -39,3 +39,35 @@ class ETFPricePoint(BaseResponse):
 class ETFPriceResponse(BaseResponse):
     symbol: str
     prices: List[ETFPricePoint]
+
+
+class ETFValuationSummaryItem(BaseResponse):
+    symbol: str
+    name: str
+    sector_key: str
+    sector_cn: str
+    current_pe: Optional[float] = None
+    hist_mean: Optional[float] = None
+    hist_std: Optional[float] = None
+    z_score: Optional[float] = None
+    label: str = "数据不足"
+    label_en: str = "insufficient"
+    data_quarters: int = 0
+
+
+class ETFValuationSummaryResponse(BaseResponse):
+    as_of: str
+    etfs: List[ETFValuationSummaryItem]
+
+
+class ETFValuationDetail(BaseResponse):
+    symbol: str
+    name: str
+    current_pe: Optional[float] = None
+    hist_mean: Optional[float] = None
+    hist_std: Optional[float] = None
+    z_score: Optional[float] = None
+    label: str = "数据不足"
+    label_en: str = "insufficient"
+    hist_pe: List[Dict[str, Any]] = Field(default_factory=list)
+    data_quarters: int = 0

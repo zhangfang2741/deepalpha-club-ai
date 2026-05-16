@@ -29,19 +29,46 @@ export const fetchSectorValuations = async (): Promise<SectorValuationResponse> 
   return response.data
 }
 
-export interface ETFPricePoint {
-  date: string
-  close: number
-}
-
-export interface ETFPriceResponse {
+export interface ETFValuationSummaryItem {
   symbol: string
-  prices: ETFPricePoint[]
+  name: string
+  sector_key: string
+  sector_cn: string
+  current_pe: number | null
+  hist_mean: number | null
+  hist_std: number | null
+  z_score: number | null
+  label: string
+  label_en: string
+  data_quarters: number
 }
 
-export const fetchETFPrice = async (symbol: string, days = 730): Promise<ETFPriceResponse> => {
-  const response = await apiClient.get<ETFPriceResponse>('/api/v1/valuation/etf-price', {
-    params: { symbol, days },
+export interface ETFValuationSummaryResponse {
+  as_of: string
+  etfs: ETFValuationSummaryItem[]
+}
+
+export interface ETFValuationDetail {
+  symbol: string
+  name: string
+  current_pe: number | null
+  hist_mean: number | null
+  hist_std: number | null
+  z_score: number | null
+  label: string
+  label_en: string
+  hist_pe: SectorPERecord[]
+  data_quarters: number
+}
+
+export const fetchETFSummary = async (): Promise<ETFValuationSummaryResponse> => {
+  const response = await apiClient.get<ETFValuationSummaryResponse>('/api/v1/valuation/etf-summary')
+  return response.data
+}
+
+export const fetchETFDetail = async (symbol: string): Promise<ETFValuationDetail> => {
+  const response = await apiClient.get<ETFValuationDetail>('/api/v1/valuation/etf-detail', {
+    params: { symbol },
   })
   return response.data
 }
