@@ -60,36 +60,39 @@ async def get_etf_heatmap(
 
 @router.get("/deviation-scores", response_model=DeviationScoreResponse)
 async def get_etf_deviation_scores(
-    days: Annotated[int, Query(ge=5, le=700)] = 30,
+    days: Annotated[int, Query(ge=5, le=365)] = 30,
+    days_hist: Annotated[int, Query(ge=30, le=700)] = 365,
     redis: Redis = Depends(get_redis),
 ) -> DeviationScoreResponse:
-    """获取 ETF 相对市场均值的偏离分。
+    """获取 ETF 错杀分（近期 vs 自身历史基准对比）。
 
-    - days: 分析窗口交易日数量，与 heatmap 端点保持一致，默认 30
-    - 恐慌期（FG<45）：正值=抗跌/避险，负值=高波
-    - 贪婪期（FG>55）：正值=强势，负值=防御
+    - days: 近期窗口交易日数量（默认 30）
+    - days_hist: 历史基准窗口交易日数量（默认 365）
+    - 恐慌期错杀分（FG<45）：负值=被错杀/潜在机会，正值=异常强势
+    - 贪婪期超买分（FG>55）：正值=被追高，负值=贪婪期滞涨
     """
     t0 = time.perf_counter()
-    cached = await get_deviation_cache(redis, days)
+    cached = await get_deviation_cache(redis, days, days_hist)
     if cached is not None:
         elapsed = (time.perf_counter() - t0) * 1000
-        logger.info("etf_deviation_cache_hit", days=days, cache_read_ms=round(elapsed, 1))
+        logger.info("etf_deviation_cache_hit", days=days, days_hist=days_hist, cache_read_ms=round(elapsed, 1))
         return cached
 
-    logger.info("etf_deviation_cache_miss", days=days)
+    logger.info("etf_deviation_cache_miss", days=days, days_hist=days_hist)
     t1 = time.perf_counter()
-    data = await compute_deviation_scores(redis, days=days)
+    data = await compute_deviation_scores(redis, days=days, days_hist=days_hist)
     compute_ms = (time.perf_counter() - t1) * 1000
 
     if not data.sectors:
-        logger.warning("etf_deviation_empty_data", days=days)
+        logger.warning("etf_deviation_empty_data", days=days, days_hist=days_hist)
         return data
 
-    await set_deviation_cache(redis, days, data)
+    await set_deviation_cache(redis, days, days_hist, data)
     total_ms = (time.perf_counter() - t0) * 1000
     logger.info(
         "etf_deviation_cache_set_complete",
         days=days,
+        days_hist=days_hist,
         compute_ms=round(compute_ms, 1),
         total_ms=round(total_ms, 1),
     )
