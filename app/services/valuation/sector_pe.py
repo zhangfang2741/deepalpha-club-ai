@@ -1,6 +1,6 @@
 """行业估值 z-score 计算服务（FMP 直接行业 PE 数据）。
 
-数据源：FMP v4 /sector_price_earning_ratio?date=YYYY-MM-DD
+数据源：FMP stable /sector-pe-snapshot?date=YYYY-MM-DD&exchange=NYSE
   每次请求返回当日所有 GICS 行业的 PE 比率。
   批量拉取近 10 年每季度末日期（40 次并发请求），聚合构建历史序列。
 
@@ -27,7 +27,7 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.schemas.valuation import SectorValuation, SectorValuationResponse
 
-_FMP_V4_BASE = "https://financialmodelingprep.com/api/v4"
+_FMP_STABLE_BASE = "https://financialmodelingprep.com/stable"
 
 # FMP 返回的行业名 → 中文映射
 SECTOR_CN_MAP: Dict[str, str] = {
@@ -148,20 +148,28 @@ def build_sector_valuation(
 
 
 async def _fetch_date_sector_pe(client: httpx.AsyncClient, dt: str) -> List[dict]:
-    """拉取单个日期的行业 PE 数据。"""
+    """拉取单个日期的行业 PE 数据（FMP stable /sector-pe-snapshot）。"""
     try:
         resp = await client.get(
-            f"{_FMP_V4_BASE}/sector_price_earning_ratio",
+            f"{_FMP_STABLE_BASE}/sector-pe-snapshot",
             params={"date": dt, "exchange": "NYSE", "apikey": settings.FMP_API_KEY},
             timeout=20,
         )
         if resp.status_code == 401:
             logger.warning("fmp_sector_pe_unauthorized", date=dt)
             return []
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            logger.warning(
+                "fmp_sector_pe_http_error",
+                date=dt,
+                status=resp.status_code,
+                body=resp.text[:200],
+            )
+            return []
         data = resp.json()
         if isinstance(data, list):
             return data
+        logger.warning("fmp_sector_pe_unexpected_payload", date=dt, payload_type=type(data).__name__)
         return []
     except Exception as e:
         logger.warning("fmp_sector_pe_fetch_failed", date=dt, error=str(e))
@@ -170,6 +178,10 @@ async def _fetch_date_sector_pe(client: httpx.AsyncClient, dt: str) -> List[dict
 
 async def compute_sector_valuations() -> SectorValuationResponse:
     """并发拉取 40 个季度的行业 PE，聚合后计算 z-score。"""
+    if not settings.FMP_API_KEY:
+        logger.warning("sector_valuation_no_api_key")
+        return SectorValuationResponse(as_of="", sectors=[])
+
     dates = _quarter_end_dates(years=10)
     logger.info("sector_valuation_compute_start", quarters=len(dates))
 
@@ -217,9 +229,14 @@ async def compute_sector_valuations() -> SectorValuationResponse:
         sv = build_sector_valuation(sector=sector, sector_cn=sector_cn, pe_series=pe_series)
         valuations.append(sv)
 
+    total_records = sum(len(records) for _, records in all_records)
+    non_empty_dates = sum(1 for _, records in all_records if records)
     logger.info(
         "sector_valuation_compute_done",
         sectors=len(valuations),
         with_data=sum(1 for v in valuations if v.z_score is not None),
+        total_records=total_records,
+        non_empty_dates=non_empty_dates,
+        total_dates=len(all_records),
     )
     return SectorValuationResponse(as_of=as_of, sectors=valuations)
