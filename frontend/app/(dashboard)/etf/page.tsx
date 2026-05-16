@@ -2,14 +2,17 @@
 
 import { useEffect, useState } from 'react'
 import { fetchETFHeatmap, fetchETFDeviationScores } from '@/lib/api/etf'
+import { fetchSectorValuations } from '@/lib/api/valuation'
 import type { HeatmapResponse, Granularity, DeviationScoreResponse } from '@/lib/api/etf'
+import type { SectorValuationResponse } from '@/lib/api/valuation'
 import { useETFStore } from '@/lib/store/etf'
 import GranularityToggle from '@/components/etf/GranularityToggle'
 import ETFHeatmapTable from '@/components/etf/ETFHeatmapTable'
 import ETFDeviationTable from '@/components/etf/ETFDeviationTable'
+import SectorValuationGrid from '@/components/valuation/SectorValuationGrid'
 import Spinner from '@/components/ui/Spinner'
 
-type ActiveTab = 'heatmap' | 'deviation'
+type ActiveTab = 'heatmap' | 'deviation' | 'valuation'
 
 export default function ETFPage() {
   const { granularity, days, setGranularity } = useETFStore()
@@ -20,10 +23,15 @@ export default function ETFPage() {
   const [heatmapLoading, setHeatmapLoading] = useState(true)
   const [heatmapError, setHeatmapError] = useState('')
 
-  // 偏离分状态（懒加载：切换到该 Tab 时才加载）
+  // 偏离分状态（懒加载）
   const [deviationData, setDeviationData] = useState<DeviationScoreResponse | null>(null)
   const [deviationLoading, setDeviationLoading] = useState(false)
   const [deviationError, setDeviationError] = useState('')
+
+  // 行业估值状态（懒加载）
+  const [valuationData, setValuationData] = useState<SectorValuationResponse | null>(null)
+  const [valuationLoading, setValuationLoading] = useState(false)
+  const [valuationError, setValuationError] = useState('')
 
   // 热力图加载
   useEffect(() => {
@@ -49,7 +57,7 @@ export default function ETFPage() {
     }
   }, [granularity, days])
 
-  // 偏离分懒加载：首次切换到 deviation Tab 时触发（deviationLoading 不放入依赖，避免触发 cleanup 取消请求）
+  // 偏离分懒加载
   useEffect(() => {
     if (activeTab !== 'deviation' || deviationData !== null) return
 
@@ -58,9 +66,7 @@ export default function ETFPage() {
     setDeviationError('')
     fetchETFDeviationScores(days)
       .then((result) => {
-        if (!cancelled) {
-          setDeviationData(result)
-        }
+        if (!cancelled) setDeviationData(result)
       })
       .catch(() => {
         if (!cancelled) setDeviationError('偏离分数据加载失败，请重试')
@@ -74,10 +80,32 @@ export default function ETFPage() {
     }
   }, [activeTab, days, deviationData])
 
+  // 行业估值懒加载（不依赖 days，数据固定为 10 年季度）
+  useEffect(() => {
+    if (activeTab !== 'valuation' || valuationData !== null) return
+
+    let cancelled = false
+    setValuationLoading(true)
+    setValuationError('')
+    fetchSectorValuations()
+      .then((result) => {
+        if (!cancelled) setValuationData(result)
+      })
+      .catch(() => {
+        if (!cancelled) setValuationError('估值数据加载失败，请重试')
+      })
+      .finally(() => {
+        if (!cancelled) setValuationLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeTab, valuationData])
+
   const handleGranularityChange = (g: Granularity) => {
     setHeatmapLoading(true)
     setGranularity(g)
-    // 切换粒度时重置偏离分数据，等待重新加载
     setDeviationData(null)
   }
 
@@ -93,6 +121,17 @@ export default function ETFPage() {
   const handleDeviationRetry = () => {
     setDeviationData(null)
     setDeviationError('')
+  }
+
+  const handleValuationRetry = () => {
+    setValuationData(null)
+    setValuationError('')
+  }
+
+  const TAB_LABELS: Record<ActiveTab, string> = {
+    heatmap: '资金流热力图',
+    deviation: '错杀分析',
+    valuation: '估值热度',
   }
 
   return (
@@ -111,7 +150,7 @@ export default function ETFPage() {
 
       {/* 标签切换 */}
       <div className="flex gap-1 mb-4 border-b border-gray-200">
-        {(['heatmap', 'deviation'] as const).map((tab) => (
+        {(['heatmap', 'deviation', 'valuation'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -122,7 +161,7 @@ export default function ETFPage() {
                 : 'border-transparent text-gray-500 hover:text-gray-700',
             ].join(' ')}
           >
-            {tab === 'heatmap' ? '资金流热力图' : '偏离分析'}
+            {TAB_LABELS[tab]}
           </button>
         ))}
       </div>
@@ -170,8 +209,8 @@ export default function ETFPage() {
       {activeTab === 'deviation' && (
         <>
           <p className="text-sm text-gray-500 mb-4">
-            衡量每只 ETF 在市场恐慌（FG&lt;45）或贪婪（FG&gt;55）期间相对于全市场均值的资金流偏离程度。
-            红色=高于市场均值，绿色=低于市场均值。
+            将每只 ETF 近期在恐慌（FG&lt;45）或贪婪（FG&gt;55）期间的资金流强度与其自身历史基准对比，
+            发现被市场过度抛售（错杀）或过度追高的行业。
           </p>
 
           {deviationError && (
@@ -192,9 +231,37 @@ export default function ETFPage() {
             </div>
           )}
 
-          {deviationData && (
-            <ETFDeviationTable data={deviationData} />
+          {deviationData && <ETFDeviationTable data={deviationData} />}
+        </>
+      )}
+
+      {/* 估值热度 Tab */}
+      {activeTab === 'valuation' && (
+        <>
+          <p className="text-sm text-gray-500 mb-4">
+            基于 S&P 500 GICS 行业过去 10 年季度 PE 数据，计算当前估值 z-score，
+            识别各行业的历史高估/低估程度。
+          </p>
+
+          {valuationError && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+              <span className="text-sm text-red-600">{valuationError}</span>
+              <button
+                onClick={handleValuationRetry}
+                className="text-sm text-red-600 font-medium hover:text-red-800 underline"
+              >
+                重试
+              </button>
+            </div>
           )}
+
+          {valuationLoading && !valuationData && (
+            <div className="rounded-xl border border-gray-200 bg-white flex items-center justify-center h-64">
+              <Spinner size={40} />
+            </div>
+          )}
+
+          {valuationData && <SectorValuationGrid data={valuationData} />}
         </>
       )}
     </div>
