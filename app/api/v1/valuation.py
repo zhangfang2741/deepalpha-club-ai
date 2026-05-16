@@ -13,8 +13,9 @@ from redis.asyncio import Redis
 from app.cache.client import get_redis
 from app.cache.valuation_cache import get_valuation_cache, set_valuation_cache
 from app.core.logging import logger
-from app.schemas.valuation import ETFPricePoint, ETFPriceResponse, SectorValuationResponse
+from app.schemas.valuation import ETFPricePoint, ETFPriceResponse, ETFValuationDetail, ETFValuationSummaryResponse, SectorValuationResponse
 from app.services.valuation.sector_pe import compute_sector_valuations
+from app.services.valuation.etf_pe import compute_etf_valuation_detail, compute_etf_valuation_summary
 
 router = APIRouter()
 
@@ -120,3 +121,65 @@ async def get_etf_price(
             pass
 
     return result
+
+
+_ETF_SUMMARY_CACHE_KEY = "valuation:etf-summary"
+_ETF_SUMMARY_TTL = 14400  # 4h
+_ETF_DETAIL_TTL = 14400   # 4h
+
+
+@router.get("/etf-summary", response_model=ETFValuationSummaryResponse)
+async def get_etf_valuation_summary(
+    redis: Redis = Depends(get_redis),
+) -> ETFValuationSummaryResponse:
+    """获取所有热力图 ETF 的 PE z-score 摘要（冷启动约 10s，之后 4h 缓存）。"""
+    try:
+        raw = await redis.get(_ETF_SUMMARY_CACHE_KEY)
+        if raw:
+            payload = json.loads(zlib.decompress(raw))
+            return ETFValuationSummaryResponse(**payload)
+    except Exception:
+        pass
+
+    t0 = time.perf_counter()
+    data = await compute_etf_valuation_summary()
+    elapsed = (time.perf_counter() - t0) * 1000
+    logger.info("etf_summary_computed", ms=round(elapsed, 1), etfs=len(data.etfs))
+
+    if data.etfs:
+        try:
+            compressed = zlib.compress(data.model_dump_json().encode())
+            await redis.set(_ETF_SUMMARY_CACHE_KEY, compressed, ex=_ETF_SUMMARY_TTL)
+        except Exception:
+            pass
+
+    return data
+
+
+@router.get("/etf-detail", response_model=ETFValuationDetail)
+async def get_etf_valuation_detail(
+    symbol: Annotated[str, Query(min_length=1, max_length=10)],
+    redis: Redis = Depends(get_redis),
+) -> ETFValuationDetail:
+    """获取单个 ETF 的完整季度 PE 历史（用于详情图表）。"""
+    sym = symbol.upper()
+    cache_key = f"valuation:etf-detail:{sym}"
+
+    try:
+        raw = await redis.get(cache_key)
+        if raw:
+            payload = json.loads(zlib.decompress(raw))
+            return ETFValuationDetail(**payload)
+    except Exception:
+        pass
+
+    data = await compute_etf_valuation_detail(sym)
+
+    if data.hist_pe:
+        try:
+            compressed = zlib.compress(data.model_dump_json().encode())
+            await redis.set(cache_key, compressed, ex=_ETF_DETAIL_TTL)
+        except Exception:
+            pass
+
+    return data
