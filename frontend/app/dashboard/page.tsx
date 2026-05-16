@@ -1,6 +1,8 @@
+import DashboardShell from '@/components/layout/DashboardShell'
+
 export default function DashboardPage() {
   return (
-    <div>
+    <DashboardShell>
       <h1 className="text-2xl font-bold text-gray-900 mb-6">仪表盘</h1>
 
       <div className="grid grid-cols-3 gap-4 mb-6">
@@ -18,6 +20,6 @@ export default function DashboardPage() {
           <p className="text-sm text-gray-400">图表数据即将上线</p>
         </div>
       </div>
-    </div>
+    </DashboardShell>
   )
 }

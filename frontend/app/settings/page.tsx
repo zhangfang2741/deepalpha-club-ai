@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { getUserProfile, updateUserProfile, changePassword, type UserProfileResponse } from '@/lib/api/auth'
+import DashboardShell from '@/components/layout/DashboardShell'
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<UserProfileResponse | null>(null)
@@ -142,7 +143,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div>
+    <DashboardShell>
       <h1 className="text-2xl font-bold text-gray-900 mb-6">个人设置</h1>
 
       {/* Success message */}
@@ -246,6 +247,6 @@ export default function SettingsPage() {
           </form>
         </div>
       </div>
-    </div>
+    </DashboardShell>
   )
 }
