@@ -11,6 +11,7 @@ import ETFHeatmapTable from '@/components/etf/ETFHeatmapTable'
 import ETFDeviationTable from '@/components/etf/ETFDeviationTable'
 import SectorValuationGrid from '@/components/valuation/SectorValuationGrid'
 import Spinner from '@/components/ui/Spinner'
+import DashboardShell from '@/components/layout/DashboardShell'
 
 type ActiveTab = 'heatmap' | 'deviation' | 'valuation'
 
@@ -135,7 +136,7 @@ export default function ETFPage() {
   }
 
   return (
-    <div>
+    <DashboardShell>
       {/* 页头 */}
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold text-gray-900">ETF 资金流</h1>
@@ -264,6 +265,6 @@ export default function ETFPage() {
           {valuationData && <SectorValuationGrid data={valuationData} />}
         </>
       )}
-    </div>
+    </DashboardShell>
   )
 }

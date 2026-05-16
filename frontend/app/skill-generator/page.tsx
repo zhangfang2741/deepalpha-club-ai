@@ -26,6 +26,7 @@ import {
   generateSkillStream,
   runSkill,
 } from '@/lib/api/skills'
+import DashboardShell from '@/components/layout/DashboardShell'
 
 // ─── 类型 ─────────────────────────────────────────────────────────────────────
 
@@ -370,7 +371,8 @@ export default function FactorExplorerPage() {
   // ─── 渲染 ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="-mx-6 -my-8 flex flex-col overflow-hidden bg-gray-950 h-full">
+    <DashboardShell>
+      <div className="-mx-6 -my-8 flex flex-col overflow-hidden bg-gray-950 h-full">
 
       {/* ── 环境准备区（横向滚动，所有控件单行） ──────────────────────────── */}
       <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-900 border-b border-gray-700 flex-shrink-0 overflow-x-auto">
@@ -597,6 +599,7 @@ export default function FactorExplorerPage() {
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </DashboardShell>
   )
 }

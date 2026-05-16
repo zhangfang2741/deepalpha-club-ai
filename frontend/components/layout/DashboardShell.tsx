@@ -1,7 +1,7 @@
 import AuthGuard from '@/components/auth/AuthGuard'
 import TopNav from '@/components/layout/TopNav'
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
     <AuthGuard>
       <div className="h-screen bg-background flex flex-col relative overflow-hidden">

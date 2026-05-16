@@ -20,6 +20,7 @@ import {
 } from '@/lib/api/chat'
 import { useAuthStore } from '@/lib/store/auth'
 import Spinner from '@/components/ui/Spinner'
+import DashboardShell from '@/components/layout/DashboardShell'
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -160,7 +161,8 @@ export default function ChatPage() {
   }, [sessionToken])
 
   return (
-    <div className="-mx-6 -my-8 flex flex-col h-full overflow-hidden px-6 py-8">
+    <DashboardShell>
+      <div className="-mx-6 -my-8 flex flex-col h-full overflow-hidden px-6 py-8">
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <h1 className="text-2xl font-bold text-gray-900">AI 对话</h1>
         {sessionToken && (
@@ -194,6 +196,7 @@ export default function ChatPage() {
           </ChatRuntime>
         )}
       </div>
-    </div>
+      </div>
+    </DashboardShell>
   )
 }
