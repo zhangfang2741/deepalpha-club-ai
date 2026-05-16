@@ -6,6 +6,7 @@ import FearGreedChart from '@/components/fear_greed/FearGreedChart'
 import { FearGreedSnapshot } from '@/lib/api/fear_greed'
 import Spinner from '@/components/ui/Spinner'
 import { getRatingColor, getRatingLabel } from '@/lib/constants/fearGreed'
+import DashboardShell from '@/components/layout/DashboardShell'
 
 // Time range options
 const TIME_RANGES = [
@@ -87,7 +88,8 @@ export default function FearGreedPage() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <DashboardShell>
+      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex flex-col gap-2">
@@ -187,6 +189,7 @@ export default function FearGreedPage() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </DashboardShell>
   )
 }

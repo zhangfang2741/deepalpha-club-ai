@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { analyzeStock, AnalysisResponse } from '@/lib/api/analysis'
 import StockAnalysisCard from '@/components/analysis/StockAnalysisCard'
 import { LineChart, TrendingUp, Search, Info } from 'lucide-react'
+import DashboardShell from '@/components/layout/DashboardShell'
 
 export default function AnalysisPage() {
   const [ticker, setTicker] = useState('')
@@ -38,7 +39,8 @@ export default function AnalysisPage() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <DashboardShell>
+      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       {/* Header */}
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
@@ -158,6 +160,7 @@ export default function AnalysisPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </DashboardShell>
   )
 }
