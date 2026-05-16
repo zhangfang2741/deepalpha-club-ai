@@ -7,9 +7,15 @@ from fastapi import APIRouter, Depends, Query
 from redis.asyncio import Redis
 
 from app.cache.client import get_redis
-from app.cache.etf_cache import get_heatmap_cache, set_heatmap_cache
+from app.cache.etf_cache import (
+    get_deviation_cache,
+    get_heatmap_cache,
+    set_deviation_cache,
+    set_heatmap_cache,
+)
 from app.core.logging import logger
-from app.schemas.etf import CandleResponse, HeatmapResponse
+from app.schemas.etf import CandleResponse, DeviationScoreResponse, HeatmapResponse
+from app.services.etf.deviation import compute_deviation_scores
 from app.services.etf.fetcher import build_heatmap_data, fetch_candles
 
 router = APIRouter()
@@ -49,6 +55,44 @@ async def get_etf_heatmap(
     await set_heatmap_cache(redis, granularity, days, data)
     total_ms = (time.perf_counter() - t0) * 1000
     logger.info("etf_heatmap_cache_set_complete", granularity=granularity, days=days, build_ms=round(build_ms, 1), total_ms=round(total_ms, 1))
+    return data
+
+
+@router.get("/deviation-scores", response_model=DeviationScoreResponse)
+async def get_etf_deviation_scores(
+    days: Annotated[int, Query(ge=5, le=700)] = 30,
+    redis: Redis = Depends(get_redis),
+) -> DeviationScoreResponse:
+    """获取 ETF 相对市场均值的偏离分。
+
+    - days: 分析窗口交易日数量，与 heatmap 端点保持一致，默认 30
+    - 恐慌期（FG<45）：正值=抗跌/避险，负值=高波
+    - 贪婪期（FG>55）：正值=强势，负值=防御
+    """
+    t0 = time.perf_counter()
+    cached = await get_deviation_cache(redis, days)
+    if cached is not None:
+        elapsed = (time.perf_counter() - t0) * 1000
+        logger.info("etf_deviation_cache_hit", days=days, cache_read_ms=round(elapsed, 1))
+        return cached
+
+    logger.info("etf_deviation_cache_miss", days=days)
+    t1 = time.perf_counter()
+    data = await compute_deviation_scores(redis, days=days)
+    compute_ms = (time.perf_counter() - t1) * 1000
+
+    if not data.sectors:
+        logger.warning("etf_deviation_empty_data", days=days)
+        return data
+
+    await set_deviation_cache(redis, days, data)
+    total_ms = (time.perf_counter() - t0) * 1000
+    logger.info(
+        "etf_deviation_cache_set_complete",
+        days=days,
+        compute_ms=round(compute_ms, 1),
+        total_ms=round(total_ms, 1),
+    )
     return data
 
 

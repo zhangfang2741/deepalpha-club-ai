@@ -61,3 +61,40 @@ export const fetchETFHeatmap = async (
   })
   return response.data
 }
+
+// ── 偏离分相关类型 ────────────────────────────────────────────────────────────
+
+export interface ETFDeviationScore {
+  symbol: string
+  name: string
+  sector: string
+  panic_score: number | null
+  panic_days: number
+  greed_score: number | null
+  greed_days: number
+  overall_score: number | null
+}
+
+export interface SectorDeviationGroup {
+  sector: string
+  avg_panic_score: number | null
+  avg_greed_score: number | null
+  avg_overall_score: number | null
+  etfs: ETFDeviationScore[]
+}
+
+export interface DeviationScoreResponse {
+  days: number
+  fg_score: number
+  fg_rating: string
+  sectors: SectorDeviationGroup[]
+}
+
+export const fetchETFDeviationScores = async (
+  days: number = 30
+): Promise<DeviationScoreResponse> => {
+  const response = await apiClient.get<DeviationScoreResponse>('/api/v1/etf/deviation-scores', {
+    params: { days },
+  })
+  return response.data
+}
