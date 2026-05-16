@@ -49,17 +49,17 @@ export default function ETFPage() {
     }
   }, [granularity, days])
 
-  // 偏离分懒加载：首次切换到 deviation Tab 时触发
+  // 偏离分懒加载：首次切换到 deviation Tab 时触发（deviationLoading 不放入依赖，避免触发 cleanup 取消请求）
   useEffect(() => {
-    if (activeTab !== 'deviation' || deviationData !== null || deviationLoading) return
+    if (activeTab !== 'deviation' || deviationData !== null) return
 
     let cancelled = false
     setDeviationLoading(true)
+    setDeviationError('')
     fetchETFDeviationScores(days)
       .then((result) => {
         if (!cancelled) {
           setDeviationData(result)
-          setDeviationError('')
         }
       })
       .catch(() => {
@@ -72,7 +72,7 @@ export default function ETFPage() {
     return () => {
       cancelled = true
     }
-  }, [activeTab, days, deviationData, deviationLoading])
+  }, [activeTab, days, deviationData])
 
   const handleGranularityChange = (g: Granularity) => {
     setHeatmapLoading(true)
