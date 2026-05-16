@@ -29,3 +29,13 @@ class SectorValuation(BaseResponse):
 class SectorValuationResponse(BaseResponse):
     as_of: str = Field(description="最新数据日期")
     sectors: List[SectorValuation]
+
+
+class ETFPricePoint(BaseResponse):
+    date: str
+    close: float
+
+
+class ETFPriceResponse(BaseResponse):
+    symbol: str
+    prices: List[ETFPricePoint]

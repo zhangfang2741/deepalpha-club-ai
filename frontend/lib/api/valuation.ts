@@ -28,3 +28,20 @@ export const fetchSectorValuations = async (): Promise<SectorValuationResponse> 
   const response = await apiClient.get<SectorValuationResponse>('/api/v1/valuation/sectors')
   return response.data
 }
+
+export interface ETFPricePoint {
+  date: string
+  close: number
+}
+
+export interface ETFPriceResponse {
+  symbol: string
+  prices: ETFPricePoint[]
+}
+
+export const fetchETFPrice = async (symbol: string, days = 730): Promise<ETFPriceResponse> => {
+  const response = await apiClient.get<ETFPriceResponse>('/api/v1/valuation/etf-price', {
+    params: { symbol, days },
+  })
+  return response.data
+}

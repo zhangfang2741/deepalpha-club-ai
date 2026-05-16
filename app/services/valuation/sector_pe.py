@@ -49,6 +49,26 @@ SECTOR_CN_MAP: Dict[str, str] = {
     "Materials": "原材料",
 }
 
+# GICS 行业 → SPDR 板块 ETF（用于价格图表展示，非估值计算）
+SECTOR_ETF_MAP: Dict[str, str] = {
+    "Technology": "XLK",
+    "Healthcare": "XLV",
+    "Health Care": "XLV",
+    "Financial Services": "XLF",
+    "Financials": "XLF",
+    "Consumer Cyclical": "XLY",
+    "Consumer Discretionary": "XLY",
+    "Communication Services": "XLC",
+    "Industrials": "XLI",
+    "Consumer Defensive": "XLP",
+    "Consumer Staples": "XLP",
+    "Energy": "XLE",
+    "Utilities": "XLU",
+    "Real Estate": "XLRE",
+    "Basic Materials": "XLB",
+    "Materials": "XLB",
+}
+
 # 每批并发请求数量，避免超出 FMP 速率限制
 _BATCH_SIZE = 10
 
@@ -135,7 +155,7 @@ def build_sector_valuation(
     return SectorValuation(
         sector=sector,
         sector_cn=sector_cn,
-        etf_symbol="",
+        etf_symbol=SECTOR_ETF_MAP.get(sector, ""),
         current_pe=current_pe,
         hist_mean=hist_mean,
         hist_std=hist_std,

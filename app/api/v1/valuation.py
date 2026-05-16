@@ -1,17 +1,28 @@
 """行业估值热度 API 端点。"""
 
+import json
 import time
+import zlib
+from datetime import date, timedelta
+from typing import Annotated
 
-from fastapi import APIRouter, Depends
+import httpx
+from fastapi import APIRouter, Depends, Query
 from redis.asyncio import Redis
 
 from app.cache.client import get_redis
 from app.cache.valuation_cache import get_valuation_cache, set_valuation_cache
 from app.core.logging import logger
-from app.schemas.valuation import SectorValuationResponse
+from app.schemas.valuation import ETFPricePoint, ETFPriceResponse, SectorValuationResponse
 from app.services.valuation.sector_pe import compute_sector_valuations
 
 router = APIRouter()
+
+_ETF_PRICE_TTL = 7200  # 2h
+
+
+def _etf_price_cache_key(symbol: str, days: int) -> str:
+    return f"valuation:etf-price:{symbol.upper()}:{days}"
 
 
 @router.get("/sectors", response_model=SectorValuationResponse)
@@ -48,3 +59,64 @@ async def get_sector_valuations(
         total_ms=round(total_ms, 1),
     )
     return data
+
+
+@router.get("/etf-price", response_model=ETFPriceResponse)
+async def get_etf_price(
+    symbol: Annotated[str, Query(min_length=1, max_length=10)],
+    days: Annotated[int, Query(ge=30, le=1825)] = 730,
+    redis: Redis = Depends(get_redis),
+) -> ETFPriceResponse:
+    """获取指定 ETF 的历史收盘价（用于行业估值详情图表）。"""
+    from app.core.config import settings
+
+    sym = symbol.upper()
+    cache_key = _etf_price_cache_key(sym, days)
+
+    # 尝试缓存
+    try:
+        raw = await redis.get(cache_key)
+        if raw:
+            payload = json.loads(zlib.decompress(raw))
+            return ETFPriceResponse(**payload)
+    except Exception:
+        pass
+
+    # 拉取 FMP stable historical-price-eod
+    to_date = date.today().strftime("%Y-%m-%d")
+    from_date = (date.today() - timedelta(days=days)).strftime("%Y-%m-%d")
+
+    prices: list[ETFPricePoint] = []
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.get(
+                "https://financialmodelingprep.com/stable/historical-price-eod/full",
+                params={"symbol": sym, "from": from_date, "to": to_date, "apikey": settings.FMP_API_KEY},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                # stable API 返回列表
+                records = data if isinstance(data, list) else data.get("historical", [])
+                for rec in records:
+                    dt = rec.get("date") or rec.get("Date")
+                    close = rec.get("close") or rec.get("Close")
+                    if dt and close and float(close) > 0:
+                        prices.append(ETFPricePoint(date=dt, close=round(float(close), 4)))
+                # 按日期升序
+                prices.sort(key=lambda p: p.date)
+            else:
+                logger.warning("etf_price_fetch_error", symbol=sym, status=resp.status_code)
+    except Exception as e:
+        logger.warning("etf_price_fetch_failed", symbol=sym, error=str(e))
+
+    result = ETFPriceResponse(symbol=sym, prices=prices)
+
+    # 写缓存（仅当有数据时）
+    if prices:
+        try:
+            compressed = zlib.compress(result.model_dump_json().encode())
+            await redis.set(cache_key, compressed, ex=_ETF_PRICE_TTL)
+        except Exception:
+            pass
+
+    return result
