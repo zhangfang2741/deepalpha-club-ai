@@ -39,6 +39,11 @@ function SkillGeneratorContent() {
     setActiveTab(tab)
   }
 
+  // Debug: 记录 store 状态变化
+  useEffect(() => {
+    console.log('[SkillGenerator] activeTab:', activeTab, 'selectedSkillId:', selectedSkillId)
+  }, [activeTab, selectedSkillId])
+
   return (
     <div className="h-full flex flex-col">
       <div className="border-b border-gray-200 bg-white px-6 py-3 flex gap-1 flex-shrink-0">
