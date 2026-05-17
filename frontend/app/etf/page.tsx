@@ -138,8 +138,10 @@ export default function ETFPage() {
       {/* 行业估值分析 Tab */}
       {activeTab === 'valuation' && (
         <>
-          {/* 计算方法说明卡片 */}
-          <div className="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+          <SectorValuationGrid />
+
+          {/* 计算方法说明卡片（图表下方） */}
+          <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm">
             <div className="font-semibold text-slate-700 mb-3">计算方法（PE z-score）</div>
             <div className="space-y-2 text-slate-600">
               <div>
@@ -189,8 +191,6 @@ export default function ETFPage() {
               </div>
             </div>
           </div>
-
-          <SectorValuationGrid />
         </>
       )}
     </DashboardShell>

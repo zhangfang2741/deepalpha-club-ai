@@ -17,7 +17,7 @@ from app.core.logging import logger
 if TYPE_CHECKING:
     from app.schemas.valuation import SectorValuationResponse
 
-_KEY = "valuation:sectors-v4"
+_KEY = "valuation:sectors-v5"
 _TTL = 14400  # 4 小时
 
 

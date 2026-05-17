@@ -1,8 +1,8 @@
 """GICS 两层行业 PE 估值服务。
 
 数据来源：
-  一级板块：FMP v3 /sector_price_earning_ratio（11 大类）
-  细粒度行业：FMP v3 /industry_price_earning_ratio（60+ 子行业）
+  一级板块：FMP v4 /sector_price_earning_ratio（11 大类，付费端点）
+  细粒度行业：FMP v4 /industry_price_earning_ratio（60+ 子行业，付费端点）
 
 批量拉取 5 年 × 20 季度末数据，构建带 z-score 的估值层级树。
 """
@@ -24,7 +24,7 @@ from app.services.valuation.sector_pe import (
     get_valuation_label,
 )
 
-_FMP_V3_BASE = "https://financialmodelingprep.com/api/v3"
+_FMP_V4_BASE = "https://financialmodelingprep.com/api/v4"
 _BATCH_SIZE = 10
 _YEARS = 5
 
@@ -340,7 +340,7 @@ async def _fetch_pe_snapshot(
     """拉取单个日期的 PE 快照，返回 {name: pe}。"""
     try:
         resp = await client.get(
-            f"{_FMP_V3_BASE}/{endpoint}",
+            f"{_FMP_V4_BASE}/{endpoint}",
             params={"date": dt, "exchange": "NYSE", "apikey": settings.FMP_API_KEY},
             timeout=20,
         )
@@ -436,7 +436,7 @@ async def compute_gics_valuations() -> GICSValuationResponse:
         sector_pe, industry_pe = await asyncio.gather(
             _fetch_all_pe(client, "sector_price_earning_ratio", "sector"),
             _fetch_all_pe(client, "industry_price_earning_ratio", "industry"),
-        )
+        )  # FMP v4 付费端点，需 premium API key
 
     # 收集一级板块实际出现的名称（规范化别名）
     raw_sector_names: set = set()

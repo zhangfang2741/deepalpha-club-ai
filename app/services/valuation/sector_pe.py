@@ -27,7 +27,7 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.schemas.valuation import SectorValuation, SectorValuationResponse
 
-_FMP_V3_BASE = "https://financialmodelingprep.com/api/v3"
+_FMP_V4_BASE = "https://financialmodelingprep.com/api/v4"
 
 # FMP 返回的行业名 → 中文映射
 SECTOR_CN_MAP: Dict[str, str] = {
@@ -167,10 +167,10 @@ def build_sector_valuation(
 
 
 async def _fetch_date_sector_pe(client: httpx.AsyncClient, dt: str) -> List[dict]:
-    """拉取单个日期的行业 PE 数据（FMP v3 /sector_price_earning_ratio）。"""
+    """拉取单个日期的行业 PE 数据（FMP v4 /sector_price_earning_ratio）。"""
     try:
         resp = await client.get(
-            f"{_FMP_V3_BASE}/sector_price_earning_ratio",
+            f"{_FMP_V4_BASE}/sector_price_earning_ratio",
             params={"date": dt, "exchange": "NYSE", "apikey": settings.FMP_API_KEY},
             timeout=20,
         )
