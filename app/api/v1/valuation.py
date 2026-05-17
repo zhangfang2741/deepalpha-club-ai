@@ -186,7 +186,7 @@ async def get_etf_valuation_detail(
     return data
 
 
-_GICS_CACHE_KEY = "valuation:gics-v6"
+_GICS_CACHE_KEY = "valuation:gics-v7"
 _GICS_CACHE_TTL = 14400  # 4h
 
 

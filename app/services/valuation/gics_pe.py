@@ -25,8 +25,15 @@ from app.services.valuation.sector_pe import (
 )
 
 _FMP_V4_BASE = "https://financialmodelingprep.com/api/v4"
+_FMP_STABLE_BASE = "https://financialmodelingprep.com/stable"
 _BATCH_SIZE = 10
 _YEARS = 5
+
+# v4 端点名 → stable 端点名（用于降级回退）
+_STABLE_FALLBACK: Dict[str, str] = {
+    "sector_price_earning_ratio": "sector-pe-snapshot",
+    "industry_price_earning_ratio": "industry-pe-snapshot",
+}
 
 # FMP 行业英文名 → 中文
 INDUSTRY_CN_MAP: Dict[str, str] = {
@@ -331,56 +338,76 @@ _SECTOR_ORDER = [
 ]
 
 
+def _parse_pe_records(data: list, name_field: str) -> Dict[str, float]:
+    """从 FMP 记录列表中提取 {name: pe}，兼容多种字段名。"""
+    result: Dict[str, float] = {}
+    for rec in data:
+        name = rec.get(name_field) or rec.get(f"{name_field}Name") or ""
+        pe_raw = rec.get("pe") or rec.get("peRatio") or rec.get("pe_ratio")
+        if not name or pe_raw is None:
+            continue
+        try:
+            pe_f = float(pe_raw)
+            if pe_f > 0:
+                result[str(name)] = round(pe_f, 2)
+        except (TypeError, ValueError):
+            pass
+    return result
+
+
 async def _fetch_pe_snapshot(
     client: httpx.AsyncClient,
     endpoint: str,
     name_field: str,
     dt: str,
 ) -> Dict[str, float]:
-    """拉取单个日期的 PE 快照，返回 {name: pe}。"""
+    """拉取单个日期的 PE 快照：先试 v4（付费，5年），失败则降级至 stable（4季度）。"""
+    # ── 1. 尝试 v4 ───────────────────────────────────────────────────
     try:
         resp = await client.get(
             f"{_FMP_V4_BASE}/{endpoint}",
-            params={"date": dt, "apikey": settings.FMP_API_KEY},  # 不加 exchange，覆盖 NYSE+NASDAQ
+            params={"date": dt, "apikey": settings.FMP_API_KEY},
             timeout=20,
         )
-        if resp.status_code != 200:
-            logger.warning(
-                "gics_pe_http_error",
-                endpoint=endpoint, date=dt,
-                status=resp.status_code, body=resp.text[:300],
-            )
-            return {}
-        data = resp.json()
-        if not isinstance(data, list):
-            # 非 list 通常是 FMP 返回的错误/权限提示，记录以便诊断
-            logger.warning(
-                "gics_pe_non_list_response",
-                endpoint=endpoint, date=dt,
-                response_type=type(data).__name__,
-                body=str(data)[:300],
-            )
-            return {}
-        if not data:
-            logger.warning("gics_pe_empty_list", endpoint=endpoint, date=dt)
-            return {}
-        result: Dict[str, float] = {}
-        for rec in data:
-            name = rec.get(name_field, "")
-            # 兼容 FMP 不同版本字段名：pe / peRatio / pe_ratio
-            pe_raw = rec.get("pe") or rec.get("peRatio") or rec.get("pe_ratio")
-            if not name or pe_raw is None:
-                continue
-            try:
-                pe_f = float(pe_raw)
-                if pe_f > 0:
-                    result[name] = round(pe_f, 2)
-            except (TypeError, ValueError):
-                pass
-        return result
+        if resp.status_code == 200:
+            body = resp.json()
+            if isinstance(body, list) and body:
+                result = _parse_pe_records(body, name_field)
+                if result:
+                    return result
+                logger.warning("gics_pe_v4_parsed_empty", endpoint=endpoint, date=dt,
+                               first_record=str(body[0])[:200])
+            elif isinstance(body, list):
+                pass  # 空 list，static endpoint 可能无该日期数据
+            else:
+                logger.warning("gics_pe_v4_non_list", endpoint=endpoint, date=dt,
+                               body=str(body)[:300])
+        else:
+            logger.warning("gics_pe_v4_http_error", endpoint=endpoint, date=dt,
+                           status=resp.status_code, body=resp.text[:300])
     except Exception as e:
-        logger.warning("gics_pe_fetch_failed", endpoint=endpoint, date=dt, error=str(e))
+        logger.warning("gics_pe_v4_exception", endpoint=endpoint, date=dt, error=str(e))
+
+    # ── 2. 降级至 stable ─────────────────────────────────────────────
+    stable_ep = _STABLE_FALLBACK.get(endpoint)
+    if not stable_ep:
         return {}
+    try:
+        resp2 = await client.get(
+            f"{_FMP_STABLE_BASE}/{stable_ep}",
+            params={"date": dt, "apikey": settings.FMP_API_KEY},
+            timeout=20,
+        )
+        if resp2.status_code == 200:
+            body2 = resp2.json()
+            if isinstance(body2, list):
+                return _parse_pe_records(body2, name_field)
+        logger.warning("gics_pe_stable_fallback_failed", endpoint=stable_ep, date=dt,
+                       status=resp2.status_code)
+    except Exception as e:
+        logger.warning("gics_pe_stable_exception", endpoint=stable_ep, date=dt, error=str(e))
+
+    return {}
 
 
 async def _fetch_all_pe(
