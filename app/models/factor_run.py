@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Column
-from sqlmodel import Field, SQLModel, UniqueConstraint
+from sqlalchemy import JSON, Column, UniqueConstraint
+from sqlmodel import Field, SQLModel
+
+from app.db.base import UUIDModel
 
 
-class FactorRun(SQLModel, table=True):
+class FactorRun(UUIDModel, table=True):
     """换股重跑历史记录。"""
 
     __tablename__ = "factor_runs"
@@ -19,16 +20,6 @@ class FactorRun(SQLModel, table=True):
         ),
     )
 
-    id: uuid.UUID = Field(
-        default_factory=uuid.uuid4, primary_key=True, index=True, nullable=False
-    )
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC), nullable=False
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC),
-        nullable=False,
-    )
     skill_id: uuid.UUID = Field(..., index=True, nullable=False)
     user_id: int = Field(..., index=True, nullable=False)
     symbol: str = Field(..., max_length=20, nullable=False)

@@ -1,14 +1,13 @@
 """因子 Skill 模型（平台精选 + 用户私有）。"""
 from __future__ import annotations
 
-import uuid
-from datetime import UTC, datetime
-
 from sqlalchemy import JSON, Column, Index
 from sqlmodel import Field, SQLModel
 
+from app.db.base import UUIDModel
 
-class FactorSkill(SQLModel, table=True):
+
+class FactorSkill(UUIDModel, table=True):
     """因子 Skill（平台精选 + 用户私有）。"""
 
     __tablename__ = "factor_skills"
@@ -17,16 +16,6 @@ class FactorSkill(SQLModel, table=True):
         Index("ix_factor_skills_category", "category"),
     )
 
-    id: uuid.UUID = Field(
-        default_factory=uuid.uuid4, primary_key=True, index=True, nullable=False
-    )
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC), nullable=False
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC),
-        nullable=False,
-    )
     owner_id: int | None = Field(default=None, index=True, nullable=True)
     title: str = Field(..., max_length=80, nullable=False)
     description: str = Field(..., max_length=200, nullable=False)

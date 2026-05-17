@@ -112,10 +112,10 @@ def upgrade() -> None:
         conn.execute(
             sa.text(
                 """INSERT INTO factor_skills
-                   (id, title, description, category, code,
+                   (id, created_at, updated_at, title, description, category, code,
                     default_symbol, default_start_date, default_end_date, default_freq,
                     snapshot_factor_jsonb, narrative_jsonb, is_public, pin_priority)
-                   VALUES (:id, :title, :description, :category, :code,
+                   VALUES (:id, NOW(), NOW(), :title, :description, :category, :code,
                            :symbol, :start, :end, 'daily',
                            :snapshot, NULL, false, :pin)
                    ON CONFLICT DO NOTHING"""
