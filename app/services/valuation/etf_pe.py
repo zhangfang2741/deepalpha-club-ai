@@ -1,9 +1,16 @@
-"""个 ETF 历史 PE 数据服务（FMP key-metrics 端点）。"""
+"""个 ETF 历史 PE 数据服务。
+
+数据策略：
+  SPDR 板块 ETF（XLK/XLV/XLF 等 11 只）：直接复用
+    FMP stable /sector-pe-snapshot 的行业 PE，与行业估值保持一致。
+  其余 ETF：依次尝试 key-metrics → ratios（含/不含 period 参数）。
+  商品/债券/加密类 ETF 通常无 PE，返回空序列。
+"""
 
 import asyncio
 import statistics
 from datetime import date
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import httpx
 
@@ -11,11 +18,29 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.schemas.valuation import ETFValuationDetail, ETFValuationSummaryItem, ETFValuationSummaryResponse
 from app.services.etf.constants import CHINESE_NAMES, ETF_LIBRARY
+from app.services.valuation.sector_pe import _quarter_end_dates
 
 _FMP_STABLE_BASE = "https://financialmodelingprep.com/stable"
 _BATCH_SIZE = 10
 _QUARTERS = 20  # 5 年季度数据
 
+# SPDR 板块 ETF → FMP sector-pe-snapshot 中对应的行业名称（可能有多个别名）
+SPDR_ETF_SECTOR: Dict[str, Set[str]] = {
+    "XLK":  {"Technology"},
+    "XLV":  {"Healthcare", "Health Care"},
+    "XLF":  {"Financial Services", "Financials"},
+    "XLY":  {"Consumer Cyclical", "Consumer Discretionary"},
+    "XLC":  {"Communication Services"},
+    "XLI":  {"Industrials"},
+    "XLP":  {"Consumer Defensive", "Consumer Staples"},
+    "XLE":  {"Energy"},
+    "XLU":  {"Utilities"},
+    "XLRE": {"Real Estate"},
+    "XLB":  {"Basic Materials", "Materials"},
+}
+
+
+# ── 辅助：z-score / 标签 ──────────────────────────────────────────────────────
 
 def compute_etf_z_score(pe_series: List[float], current_pe: float) -> Optional[float]:
     if len(pe_series) < 4:
@@ -43,23 +68,80 @@ def get_etf_label(z_score: Optional[float]) -> Tuple[str, str]:
     return "极度高估", "extreme_overvalue"
 
 
-async def _fetch_etf_pe_series(client: httpx.AsyncClient, symbol: str) -> List[Tuple[str, float]]:
-    """获取单个 ETF 的历史季度 PE 序列（最新在前）。先试 key-metrics，再试 ratios。"""
-    for endpoint, pe_field in (
-        ("key-metrics", "peRatio"),
-        ("ratios", "priceEarningsRatio"),
-    ):
+# ── SPDR 板块 ETF：复用 sector-pe-snapshot ───────────────────────────────────
+
+async def _fetch_sector_snapshot_on_date(client: httpx.AsyncClient, dt: str) -> List[dict]:
+    """拉取指定日期的全行业 PE 快照。"""
+    try:
+        resp = await client.get(
+            f"{_FMP_STABLE_BASE}/sector-pe-snapshot",
+            params={"date": dt, "exchange": "NYSE", "apikey": settings.FMP_API_KEY},
+            timeout=20,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            return data if isinstance(data, list) else []
+    except Exception as e:
+        logger.warning("spdr_sector_snapshot_failed", date=dt, error=str(e))
+    return []
+
+
+async def _fetch_spdr_pe_series(client: httpx.AsyncClient, symbol: str) -> List[Tuple[str, float]]:
+    """SPDR 板块 ETF 使用行业 PE 数据（近 5 年 20 季度）。"""
+    sector_names = SPDR_ETF_SECTOR.get(symbol, set())
+    if not sector_names:
+        return []
+
+    dates = _quarter_end_dates(years=5)  # 20 个季度
+    results: List[Tuple[str, float]] = []
+
+    for i in range(0, len(dates), _BATCH_SIZE):
+        batch = dates[i: i + _BATCH_SIZE]
+        snapshots = await asyncio.gather(
+            *[_fetch_sector_snapshot_on_date(client, dt) for dt in batch],
+            return_exceptions=True,
+        )
+        for dt, recs in zip(batch, snapshots):
+            if isinstance(recs, Exception) or not recs:
+                continue
+            for rec in recs:
+                if rec.get("sector") in sector_names:
+                    pe = rec.get("pe")
+                    try:
+                        pe_f = float(pe)
+                    except (TypeError, ValueError):
+                        continue
+                    if pe_f > 0:
+                        results.append((dt, round(pe_f, 2)))
+                    break  # 每个日期只取一条匹配记录
+
+    # 去重 + 按日期降序（最新在前）
+    seen: Set[str] = set()
+    deduped: List[Tuple[str, float]] = []
+    for dt, pe in sorted(results, key=lambda x: x[0], reverse=True):
+        if dt not in seen:
+            seen.add(dt)
+            deduped.append((dt, pe))
+    return deduped
+
+
+# ── 非 SPDR ETF：尝试多个 FMP 端点 ──────────────────────────────────────────
+
+async def _fetch_equity_etf_pe_series(client: httpx.AsyncClient, symbol: str) -> List[Tuple[str, float]]:
+    """
+    对权益类 ETF 尝试 4 种 FMP 端点组合获取历史 PE。
+    对商品/债券/加密类 ETF 通常返回空列表。
+    """
+    attempts = [
+        ("key-metrics", "peRatio",              {"period": "quarter", "limit": _QUARTERS}),
+        ("key-metrics", "peRatio",              {"limit": _QUARTERS}),
+        ("ratios",      "priceEarningsRatio",   {"period": "quarter", "limit": _QUARTERS}),
+        ("ratios",      "priceEarningsRatio",   {"limit": _QUARTERS}),
+    ]
+    for endpoint, pe_field, extra_params in attempts:
         try:
-            resp = await client.get(
-                f"{_FMP_STABLE_BASE}/{endpoint}",
-                params={
-                    "symbol": symbol,
-                    "limit": _QUARTERS,
-                    "period": "quarter",
-                    "apikey": settings.FMP_API_KEY,
-                },
-                timeout=20,
-            )
+            params = {"symbol": symbol, "apikey": settings.FMP_API_KEY, **extra_params}
+            resp = await client.get(f"{_FMP_STABLE_BASE}/{endpoint}", params=params, timeout=20)
             if resp.status_code != 200:
                 continue
             data = resp.json()
@@ -78,11 +160,26 @@ async def _fetch_etf_pe_series(client: httpx.AsyncClient, symbol: str) -> List[T
                 if pe > 0:
                     series.append((dt, round(pe, 2)))
             if series:
+                logger.info("equity_etf_pe_found", symbol=symbol, endpoint=endpoint, points=len(series))
                 return series
         except Exception as e:
-            logger.warning("etf_pe_fetch_failed", symbol=symbol, endpoint=endpoint, error=str(e))
+            logger.warning("equity_etf_pe_attempt_failed", symbol=symbol, endpoint=endpoint, error=str(e))
     return []
 
+
+# ── 统一入口 ──────────────────────────────────────────────────────────────────
+
+async def _fetch_etf_pe_series(client: httpx.AsyncClient, symbol: str) -> List[Tuple[str, float]]:
+    """获取 ETF 历史季度 PE 序列（最新在前）。"""
+    if symbol in SPDR_ETF_SECTOR:
+        series = await _fetch_spdr_pe_series(client, symbol)
+        if series:
+            return series
+        # sector-pe-snapshot 失败时回退到 equity 路径
+    return await _fetch_equity_etf_pe_series(client, symbol)
+
+
+# ── 摘要 / 详情构建 ───────────────────────────────────────────────────────────
 
 def _build_summary_item(
     symbol: str,
@@ -124,11 +221,10 @@ async def compute_etf_valuation_summary() -> ETFValuationSummaryResponse:
         logger.warning("etf_valuation_no_api_key")
         return ETFValuationSummaryResponse(as_of=str(date.today()), etfs=[])
 
-    # 去重并记录每个 ETF 所属板块（取首次出现的板块）
     ordered: List[Tuple[str, str, str]] = []
-    seen: set = set()
+    seen: Set[str] = set()
     for sector_key, symbols in ETF_LIBRARY.items():
-        sector_cn = sector_key[3:]  # "01 信息技术" → "信息技术"
+        sector_cn = sector_key[3:]
         for sym in symbols:
             if sym not in seen:
                 seen.add(sym)
@@ -139,7 +235,7 @@ async def compute_etf_valuation_summary() -> ETFValuationSummaryResponse:
     pe_map: Dict[str, List[Tuple[str, float]]] = {}
     async with httpx.AsyncClient() as client:
         for i in range(0, len(ordered), _BATCH_SIZE):
-            batch = ordered[i : i + _BATCH_SIZE]
+            batch = ordered[i: i + _BATCH_SIZE]
             results = await asyncio.gather(
                 *[_fetch_etf_pe_series(client, sym) for sym, _, _ in batch],
                 return_exceptions=True,
@@ -175,7 +271,6 @@ async def compute_etf_valuation_detail(symbol: str) -> ETFValuationDetail:
         hist_std = None
 
     label, label_en = get_etf_label(z)
-    # hist_pe 按日期升序返回（前端图表用）
     hist_pe_asc = [{"date": d, "pe": pe} for d, pe in reversed(pe_series)]
 
     return ETFValuationDetail(
