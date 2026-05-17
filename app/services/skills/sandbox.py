@@ -3,9 +3,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 
 from app.services.skills.errors import SkillSandboxError, SkillTimeoutError
+
+# 用文件路径代替 `-m` 避免 `__package__` 链触发 app/ 包初始化（日志污染 stdout）
+_WORKER_PATH = os.path.join(os.path.dirname(__file__), "sandbox_worker.py")
 
 
 async def run_in_subprocess(
@@ -29,7 +33,7 @@ async def run_in_subprocess(
     preexec = _apply_rlimits if sys.platform.startswith("linux") else None
 
     proc = await asyncio.create_subprocess_exec(
-        sys.executable, "-m", "app.services.skills.sandbox_worker",
+        sys.executable, _WORKER_PATH,
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
