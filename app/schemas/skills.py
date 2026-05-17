@@ -67,3 +67,55 @@ class SkillRunResponse(BaseModel):
     symbol: str
     output_type: str
     factor: list[FactorPoint]
+
+
+from uuid import UUID
+from datetime import datetime
+
+
+class FactorSkillBrief(BaseModel):
+    id: UUID
+    title: str
+    description: str
+    category: str
+    default_symbol: str
+    is_public: bool
+    pin_priority: int | None = None
+    created_at: datetime
+
+
+class FactorSkillDetail(FactorSkillBrief):
+    code: str
+    default_start_date: str
+    default_end_date: str
+    default_freq: str
+    snapshot: dict
+    narrative: dict | None = None
+    owner_id: int | None = None
+
+
+class FactorSkillGalleryResponse(BaseModel):
+    hero: FactorSkillDetail | None = None
+    cases: list[FactorSkillBrief] = []
+
+
+class FactorSkillMineResponse(BaseModel):
+    skills: list[FactorSkillBrief] = []
+
+
+class SaveSkillRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=80)
+    description: str = Field(..., min_length=1, max_length=200)
+    category: str = Field(..., max_length=30)
+    code: str = Field(..., max_length=20000)
+    symbol: str = Field(..., max_length=20)
+    start_date: str = Field(..., max_length=10)
+    end_date: str = Field(..., max_length=10)
+    freq: Literal["daily", "weekly"] = "daily"
+
+
+class RerunRequest(BaseModel):
+    symbol: str = Field(..., max_length=20)
+    start_date: str = Field(..., max_length=10)
+    end_date: str = Field(..., max_length=10)
+    freq: Literal["daily", "weekly"] = "daily"
