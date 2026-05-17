@@ -188,7 +188,10 @@ async def _fetch_date_sector_pe(client: httpx.AsyncClient, dt: str) -> List[dict
         data = resp.json()
         if isinstance(data, list):
             return data
-        logger.warning("fmp_sector_pe_unexpected_payload", date=dt, payload_type=type(data).__name__)
+        logger.warning(
+            "fmp_sector_pe_unexpected_payload",
+            date=dt, payload_type=type(data).__name__, body=str(data)[:300],
+        )
         return []
     except Exception as e:
         logger.warning("fmp_sector_pe_fetch_failed", date=dt, error=str(e))

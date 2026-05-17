@@ -186,7 +186,7 @@ async def get_etf_valuation_detail(
     return data
 
 
-_GICS_CACHE_KEY = "valuation:gics-v4"
+_GICS_CACHE_KEY = "valuation:gics-v5"
 _GICS_CACHE_TTL = 14400  # 4h
 
 
@@ -219,3 +219,38 @@ async def get_gics_valuations(
             pass
 
     return data
+
+
+@router.get("/fmp-probe")
+async def probe_fmp_api() -> dict:
+    """诊断端点：直接调用 FMP v4 sector PE，返回原始响应（前 3 条），用于排查 API key / 响应格式问题。"""
+    from app.core.config import settings
+    from app.services.valuation.sector_pe import _quarter_end_dates
+
+    dt = _quarter_end_dates(years=1)[0]  # 最近季度末
+    result: dict = {"date_queried": dt, "api_key_suffix": ""}
+
+    if settings.FMP_API_KEY:
+        result["api_key_suffix"] = f"...{settings.FMP_API_KEY[-4:]}"
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                "https://financialmodelingprep.com/api/v4/sector_price_earning_ratio",
+                params={"date": dt, "exchange": "NYSE", "apikey": settings.FMP_API_KEY},
+            )
+            result["status_code"] = resp.status_code
+            try:
+                body = resp.json()
+                result["response_type"] = type(body).__name__
+                if isinstance(body, list):
+                    result["record_count"] = len(body)
+                    result["sample"] = body[:3]
+                else:
+                    result["body"] = body
+            except Exception:
+                result["raw_body"] = resp.text[:500]
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result
