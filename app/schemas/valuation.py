@@ -71,3 +71,41 @@ class ETFValuationDetail(BaseResponse):
     label_en: str = "insufficient"
     hist_pe: List[Dict[str, Any]] = Field(default_factory=list)
     data_quarters: int = 0
+
+
+class IndustryValuation(BaseResponse):
+    """细粒度 GICS 行业（约 60+ 条）的 PE z-score 估值。"""
+
+    industry: str = Field(description="行业英文名（FMP 原始名）")
+    industry_cn: str = Field(description="行业中文名")
+    current_pe: Optional[float] = None
+    hist_mean: Optional[float] = None
+    hist_std: Optional[float] = None
+    z_score: Optional[float] = None
+    label: str = "数据不足"
+    label_en: str = "insufficient"
+    hist_pe: List[Dict[str, Any]] = Field(default_factory=list)
+    data_quarters: int = 0
+
+
+class SectorWithIndustries(BaseResponse):
+    """一级 GICS 板块，包含其下属细粒度行业列表。"""
+
+    sector: str = Field(description="GICS 一级板块英文名")
+    sector_cn: str = Field(description="板块中文名")
+    current_pe: Optional[float] = None
+    hist_mean: Optional[float] = None
+    hist_std: Optional[float] = None
+    z_score: Optional[float] = None
+    label: str = "数据不足"
+    label_en: str = "insufficient"
+    hist_pe: List[Dict[str, Any]] = Field(default_factory=list)
+    data_quarters: int = 0
+    industries: List[IndustryValuation] = Field(default_factory=list, description="下属细粒度行业列表（z_score 升序）")
+
+
+class GICSValuationResponse(BaseResponse):
+    """GICS 两层行业估值响应（一级板块 + 细粒度行业）。"""
+
+    as_of: str = Field(description="最新数据日期")
+    sectors: List[SectorWithIndustries]

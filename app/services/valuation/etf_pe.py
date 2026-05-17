@@ -1,12 +1,13 @@
-"""개 ETF 历史 PE 数据服务。
+"""各 ETF 历史 PE 数据服务。
 
 数据策略：
   所有权益类 ETF 通过 ETF_SECTOR_MAP 映射到对应 GICS 行业，
-  批量调用 sector-pe-snapshot 获取近 5 年 20 个季度 PE。
+  批量调用 FMP v4 /sector_price_earning_ratio 获取近 5 年 20 个季度 PE。
 
   关键优化：先一次性拉取所有季度的全行业快照（仅 20 次 API 调用），
   再按行业分配给各 ETF，避免 60×20=1200 次并发请求导致速率限制。
 
+  注意：stable/sector-pe-snapshot 仅有约 4 季度历史，须使用 v4 端点。
   商品/债券/加密类 ETF（无行业映射）返回空序列。
 """
 
@@ -23,14 +24,12 @@ from app.schemas.valuation import ETFValuationDetail, ETFValuationSummaryItem, E
 from app.services.etf.constants import CHINESE_NAMES, ETF_LIBRARY
 from app.services.valuation.sector_pe import _quarter_end_dates
 
-_FMP_STABLE_BASE = "https://financialmodelingprep.com/stable"
+_FMP_V4_BASE = "https://financialmodelingprep.com/api/v4"
 _BATCH_SIZE = 10
 _YEARS = 5  # 近 5 年数据
 
-# 所有权益类 ETF → FMP sector-pe-snapshot 中对应的行业名称
-# 子板块 ETF 使用其最近的父 GICS 行业 PE（同数据源，与行业估值保持一致）
+# 仅 SPDR 11 只一级板块 ETF 有行业 PE 映射，子板块 ETF 不显示 PE。
 ETF_SECTOR_MAP: Dict[str, Set[str]] = {
-    # ── SPDR 11 只标准板块 ETF ──
     "XLK":  {"Technology"},
     "XLV":  {"Healthcare", "Health Care"},
     "XLF":  {"Financial Services", "Financials"},
@@ -42,70 +41,6 @@ ETF_SECTOR_MAP: Dict[str, Set[str]] = {
     "XLU":  {"Utilities"},
     "XLRE": {"Real Estate"},
     "XLB":  {"Basic Materials", "Materials"},
-    # ── 信息技术子板块 ──
-    "SOXX": {"Technology"},   # 半导体
-    "IGV":  {"Technology"},   # 软件
-    "AIQ":  {"Technology"},   # 人工智能
-    "SKYY": {"Technology"},   # 云计算
-    "QTUM": {"Technology"},   # 量子计算
-    "BUG":  {"Technology"},   # 网络安全
-    "BLOK": {"Technology"},   # 区块链
-    "PNQI": {"Technology"},   # 纳斯达克互联网
-    "QQQ":  {"Technology"},   # 纳斯达克100
-    "ARKK": {"Technology"},   # ARK 创新
-    # ── 医疗保健子板块 ──
-    "XHE":  {"Healthcare", "Health Care"},
-    "IHF":  {"Healthcare", "Health Care"},
-    "XBI":  {"Healthcare", "Health Care"},
-    "PJP":  {"Healthcare", "Health Care"},
-    # ── 金融子板块 ──
-    "KBE":  {"Financial Services", "Financials"},
-    "IYG":  {"Financial Services", "Financials"},
-    "KIE":  {"Financial Services", "Financials"},
-    "KCE":  {"Financial Services", "Financials"},
-    "REM":  {"Real Estate"},
-    # ── 可选消费子板块 ──
-    "CARZ": {"Consumer Cyclical", "Consumer Discretionary"},
-    "XRT":  {"Consumer Cyclical", "Consumer Discretionary"},
-    "XHB":  {"Consumer Cyclical", "Consumer Discretionary"},
-    "PEJ":  {"Consumer Cyclical", "Consumer Discretionary"},
-    "PKB":  {"Consumer Cyclical", "Consumer Discretionary"},
-    # ── 必需消费子板块 ──
-    "PBJ":  {"Consumer Defensive", "Consumer Staples"},
-    "MOO":  {"Consumer Defensive", "Consumer Staples"},
-    # ── 工业子板块 ──
-    "ITA":  {"Industrials"},
-    "PAVE": {"Industrials"},
-    "IYT":  {"Industrials"},
-    "JETS": {"Industrials"},
-    "BOAT": {"Industrials"},
-    "IFRA": {"Industrials"},
-    "UFO":  {"Industrials"},
-    "SHLD": {"Industrials"},
-    # ── 能源子板块 ──
-    "IEZ":  {"Energy"},
-    "XOP":  {"Energy"},
-    "FAN":  {"Utilities"},
-    "TAN":  {"Utilities"},
-    "NLR":  {"Utilities"},
-    # ── 原材料子板块 ──
-    "XME":  {"Basic Materials", "Materials"},
-    "WOOD": {"Basic Materials", "Materials"},
-    "COPX": {"Basic Materials", "Materials"},
-    "SLX":  {"Basic Materials", "Materials"},
-    "BATT": {"Basic Materials", "Materials"},
-    # ── 通信服务子板块 ──
-    "IYZ":  {"Communication Services"},
-    # ── 房地产子板块 ──
-    "INDS": {"Real Estate"},
-    "REZ":  {"Real Estate"},
-    "SRVR": {"Real Estate"},
-    # ── 公用事业子板块 ──
-    "ICLN": {"Utilities"},
-    "PHO":  {"Utilities"},
-    "GRID": {"Utilities"},
-    # 无行业映射（商品/债券/加密/国际宽基）：
-    #   GLD GLTR SLV TLT EEM VEA FXI BITO GBTC ETHE MSOS IPO SPY → 返回空序列
 }
 
 
@@ -143,13 +78,14 @@ async def _fetch_sector_snapshot_on_date(client: httpx.AsyncClient, dt: str) -> 
     """拉取指定日期的全行业 PE 快照。"""
     try:
         resp = await client.get(
-            f"{_FMP_STABLE_BASE}/sector-pe-snapshot",
+            f"{_FMP_V4_BASE}/sector_price_earning_ratio",
             params={"date": dt, "exchange": "NYSE", "apikey": settings.FMP_API_KEY},
             timeout=20,
         )
         if resp.status_code == 200:
             data = resp.json()
             return data if isinstance(data, list) else []
+        logger.warning("sector_snapshot_failed", date=dt, status=resp.status_code)
     except Exception as e:
         logger.warning("sector_snapshot_failed", date=dt, error=str(e))
     return []
