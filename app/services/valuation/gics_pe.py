@@ -341,19 +341,34 @@ async def _fetch_pe_snapshot(
     try:
         resp = await client.get(
             f"{_FMP_V4_BASE}/{endpoint}",
-            params={"date": dt, "exchange": "NYSE", "apikey": settings.FMP_API_KEY},
+            params={"date": dt, "apikey": settings.FMP_API_KEY},  # 不加 exchange，覆盖 NYSE+NASDAQ
             timeout=20,
         )
         if resp.status_code != 200:
-            logger.warning("gics_pe_http_error", endpoint=endpoint, date=dt, status=resp.status_code)
+            logger.warning(
+                "gics_pe_http_error",
+                endpoint=endpoint, date=dt,
+                status=resp.status_code, body=resp.text[:300],
+            )
             return {}
         data = resp.json()
         if not isinstance(data, list):
+            # 非 list 通常是 FMP 返回的错误/权限提示，记录以便诊断
+            logger.warning(
+                "gics_pe_non_list_response",
+                endpoint=endpoint, date=dt,
+                response_type=type(data).__name__,
+                body=str(data)[:300],
+            )
+            return {}
+        if not data:
+            logger.warning("gics_pe_empty_list", endpoint=endpoint, date=dt)
             return {}
         result: Dict[str, float] = {}
         for rec in data:
             name = rec.get(name_field, "")
-            pe_raw = rec.get("pe")
+            # 兼容 FMP 不同版本字段名：pe / peRatio / pe_ratio
+            pe_raw = rec.get("pe") or rec.get("peRatio") or rec.get("pe_ratio")
             if not name or pe_raw is None:
                 continue
             try:
@@ -430,6 +445,12 @@ async def compute_gics_valuations() -> GICSValuationResponse:
     if not settings.FMP_API_KEY:
         logger.warning("gics_valuation_no_api_key")
         return GICSValuationResponse(as_of=str(date.today()), sectors=[])
+
+    logger.info(
+        "gics_valuation_start",
+        api_key_suffix=settings.FMP_API_KEY[-4:] if len(settings.FMP_API_KEY) >= 4 else "***",
+        years=_YEARS,
+    )
 
     async with httpx.AsyncClient() as client:
         # 并行拉取一级板块 PE 和细粒度行业 PE

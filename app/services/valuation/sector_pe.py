@@ -171,7 +171,7 @@ async def _fetch_date_sector_pe(client: httpx.AsyncClient, dt: str) -> List[dict
     try:
         resp = await client.get(
             f"{_FMP_V4_BASE}/sector_price_earning_ratio",
-            params={"date": dt, "exchange": "NYSE", "apikey": settings.FMP_API_KEY},
+            params={"date": dt, "apikey": settings.FMP_API_KEY},  # 不加 exchange，覆盖 NYSE+NASDAQ
             timeout=20,
         )
         if resp.status_code == 401:
@@ -188,7 +188,10 @@ async def _fetch_date_sector_pe(client: httpx.AsyncClient, dt: str) -> List[dict
         data = resp.json()
         if isinstance(data, list):
             return data
-        logger.warning("fmp_sector_pe_unexpected_payload", date=dt, payload_type=type(data).__name__)
+        logger.warning(
+            "fmp_sector_pe_unexpected_payload",
+            date=dt, payload_type=type(data).__name__, body=str(data)[:300],
+        )
         return []
     except Exception as e:
         logger.warning("fmp_sector_pe_fetch_failed", date=dt, error=str(e))
