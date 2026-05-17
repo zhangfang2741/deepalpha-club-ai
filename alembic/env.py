@@ -14,6 +14,9 @@ from app.core.config import settings
 from app.models.session import Session  # noqa: F401
 from app.models.thread import Thread  # noqa: F401
 from app.models.user import User  # noqa: F401
+from app.models.factor_category import FactorCategory  # noqa: F401
+from app.models.factor_skill import FactorSkill  # noqa: F401
+from app.models.factor_run import FactorRun  # noqa: F401
 
 # Alembic Config object
 config = context.config

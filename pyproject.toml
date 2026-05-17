@@ -130,8 +130,11 @@ unfixable = ["B"]
 convention = "google"
 
 # Ignore `E402` (import violations) in all `__init__.py` files
+# Ignore `D415` (中文句号不被识别为合法结尾) for models and scripts
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["E402"]
+"app/models/factor_*.py" = ["D415"]
+"scripts/*.py" = ["D415"]
 
 [tool.pyright]
 include = ["app", "evals"]
