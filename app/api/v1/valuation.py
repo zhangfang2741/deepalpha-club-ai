@@ -186,7 +186,7 @@ async def get_etf_valuation_detail(
     return data
 
 
-_GICS_CACHE_KEY = "valuation:gics-v5"
+_GICS_CACHE_KEY = "valuation:gics-v6"
 _GICS_CACHE_TTL = 14400  # 4h
 
 
@@ -237,7 +237,7 @@ async def probe_fmp_api() -> dict:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
                 "https://financialmodelingprep.com/api/v4/sector_price_earning_ratio",
-                params={"date": dt, "exchange": "NYSE", "apikey": settings.FMP_API_KEY},
+                params={"date": dt, "apikey": settings.FMP_API_KEY},
             )
             result["status_code"] = resp.status_code
             try:

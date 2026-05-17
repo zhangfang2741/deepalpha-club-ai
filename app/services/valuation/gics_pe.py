@@ -341,7 +341,7 @@ async def _fetch_pe_snapshot(
     try:
         resp = await client.get(
             f"{_FMP_V4_BASE}/{endpoint}",
-            params={"date": dt, "exchange": "NYSE", "apikey": settings.FMP_API_KEY},
+            params={"date": dt, "apikey": settings.FMP_API_KEY},  # 不加 exchange，覆盖 NYSE+NASDAQ
             timeout=20,
         )
         if resp.status_code != 200:
