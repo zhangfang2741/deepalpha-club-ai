@@ -31,6 +31,7 @@ sync_engine = create_engine(
     max_overflow=settings.POSTGRES_MAX_OVERFLOW,
     pool_timeout=30,
     pool_recycle=1800,
+    connect_args={"sslmode": "require"} if settings.POSTGRES_SSL else {},
 )
 
 # 异步引擎（FastAPI 异步端点用）
@@ -41,6 +42,7 @@ async_engine = create_async_engine(
     max_overflow=settings.POSTGRES_MAX_OVERFLOW,
     pool_timeout=30,
     pool_recycle=1800,
+    connect_args={"sslmode": "require"} if settings.POSTGRES_SSL else {},
 )
 
 # 异步 session 工厂
