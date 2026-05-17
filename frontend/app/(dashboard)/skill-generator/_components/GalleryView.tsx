@@ -4,9 +4,34 @@ import { useSkillsStore } from '@/lib/store/skills'
 import { getGallery } from '@/lib/api/skills'
 import { FactorCard } from './FactorCard'
 
+const CATEGORY_LABELS: Record<string, string> = {
+  momentum: '动量',
+  reversal: '均值回归',
+  volatility: '波动率',
+  volume: '量价',
+  sentiment: '情绪',
+  technical: '技术指标',
+}
+
 interface GalleryData {
-  hero: { id: string; title: string; description: string; category: string; default_symbol: string; pin_priority: number | null; [key: string]: unknown } | null
-  cases: Array<{ id: string; title: string; description: string; category: string; default_symbol: string; pin_priority: number | null; [key: string]: unknown }>
+  hero: {
+    id: string
+    title: string
+    description: string
+    category: string
+    default_symbol: string
+    pin_priority: number | null
+    created_at: string
+  } | null
+  cases: Array<{
+    id: string
+    title: string
+    description: string
+    category: string
+    default_symbol: string
+    pin_priority: number | null
+    created_at: string
+  }>
 }
 
 export function GalleryView() {
@@ -17,26 +42,54 @@ export function GalleryView() {
 
   useEffect(() => {
     getGallery()
-      .then(setData)
-      .catch(() => setError('加载失败，请刷新重试'))
+      .then((res: GalleryData) => {
+        console.log('[Gallery] loaded:', res)
+        setData(res)
+      })
+      .catch((err) => {
+        console.error('[Gallery] error:', err)
+        setError(String(err))
+      })
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="text-center py-20 text-gray-400">加载中...</div>
-  if (error) return <div className="text-center py-20 text-red-400">{error}</div>
-  if (!data) return null
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-gray-400">加载案例馆...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-2">
+        <p className="text-red-400">加载失败</p>
+        <p className="text-xs text-gray-400">{error}</p>
+      </div>
+    )
+  }
+
+  if (!data) {
+    return (
+      <div className="text-center py-20 text-gray-400">
+        <p className="text-lg">暂无数据</p>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Hero */}
       {data.hero && (
         <button
           onClick={() => openDetail(data.hero!.id)}
-          className="w-full bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-lg hover:border-blue-200 transition-all text-left group"
+          className="w-full bg-gradient-to-br from-blue-50 to-white border border-blue-200 rounded-2xl p-6 hover:shadow-lg hover:border-blue-300 transition-all text-left group"
         >
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <span className="inline-block text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full mb-3">
+              <span className="inline-block text-xs font-semibold text-blue-600 bg-blue-100 px-2.5 py-0.5 rounded-full mb-3">
                 ⭐ 今日精选
               </span>
               <h2 className="text-2xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
@@ -44,12 +97,11 @@ export function GalleryView() {
               </h2>
               <p className="text-gray-500 mt-2 text-base">{data.hero.description}</p>
               <div className="flex items-center gap-3 mt-4">
-                <span className="text-sm font-mono text-gray-400">{data.hero.default_symbol}</span>
-                <span className="text-xs text-gray-300">|</span>
-                <span className="text-xs text-gray-400">点击查看详情 →</span>
+                <span className="text-xs font-mono text-blue-500 bg-blue-50 px-2 py-0.5 rounded">{data.hero.default_symbol}</span>
+                <span className="text-xs text-gray-400">{CATEGORY_LABELS[data.hero.category] || data.hero.category}</span>
               </div>
             </div>
-            <div className="text-6xl opacity-20 select-none">📊</div>
+            <div className="text-5xl opacity-30 select-none">📊</div>
           </div>
         </button>
       )}
