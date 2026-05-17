@@ -28,10 +28,8 @@ _FMP_V4_BASE = "https://financialmodelingprep.com/api/v4"
 _BATCH_SIZE = 10
 _YEARS = 5  # 近 5 年数据
 
-# 所有权益类 ETF → FMP sector_price_earning_ratio 中对应的行业名称
-# 子板块 ETF 使用其最近的父 GICS 行业 PE（同数据源，与行业估值保持一致）
+# 仅 SPDR 11 只一级板块 ETF 有行业 PE 映射，子板块 ETF 不显示 PE。
 ETF_SECTOR_MAP: Dict[str, Set[str]] = {
-    # ── SPDR 11 只标准板块 ETF ──
     "XLK":  {"Technology"},
     "XLV":  {"Healthcare", "Health Care"},
     "XLF":  {"Financial Services", "Financials"},
@@ -43,70 +41,6 @@ ETF_SECTOR_MAP: Dict[str, Set[str]] = {
     "XLU":  {"Utilities"},
     "XLRE": {"Real Estate"},
     "XLB":  {"Basic Materials", "Materials"},
-    # ── 信息技术子板块 ──
-    "SOXX": {"Technology"},   # 半导体
-    "IGV":  {"Technology"},   # 软件
-    "AIQ":  {"Technology"},   # 人工智能
-    "SKYY": {"Technology"},   # 云计算
-    "QTUM": {"Technology"},   # 量子计算
-    "BUG":  {"Technology"},   # 网络安全
-    "BLOK": {"Technology"},   # 区块链
-    "PNQI": {"Technology"},   # 纳斯达克互联网
-    "QQQ":  {"Technology"},   # 纳斯达克100
-    "ARKK": {"Technology"},   # ARK 创新
-    # ── 医疗保健子板块 ──
-    "XHE":  {"Healthcare", "Health Care"},
-    "IHF":  {"Healthcare", "Health Care"},
-    "XBI":  {"Healthcare", "Health Care"},
-    "PJP":  {"Healthcare", "Health Care"},
-    # ── 金融子板块 ──
-    "KBE":  {"Financial Services", "Financials"},
-    "IYG":  {"Financial Services", "Financials"},
-    "KIE":  {"Financial Services", "Financials"},
-    "KCE":  {"Financial Services", "Financials"},
-    "REM":  {"Real Estate"},
-    # ── 可选消费子板块 ──
-    "CARZ": {"Consumer Cyclical", "Consumer Discretionary"},
-    "XRT":  {"Consumer Cyclical", "Consumer Discretionary"},
-    "XHB":  {"Consumer Cyclical", "Consumer Discretionary"},
-    "PEJ":  {"Consumer Cyclical", "Consumer Discretionary"},
-    "PKB":  {"Consumer Cyclical", "Consumer Discretionary"},
-    # ── 必需消费子板块 ──
-    "PBJ":  {"Consumer Defensive", "Consumer Staples"},
-    "MOO":  {"Consumer Defensive", "Consumer Staples"},
-    # ── 工业子板块 ──
-    "ITA":  {"Industrials"},
-    "PAVE": {"Industrials"},
-    "IYT":  {"Industrials"},
-    "JETS": {"Industrials"},
-    "BOAT": {"Industrials"},
-    "IFRA": {"Industrials"},
-    "UFO":  {"Industrials"},
-    "SHLD": {"Industrials"},
-    # ── 能源子板块 ──
-    "IEZ":  {"Energy"},
-    "XOP":  {"Energy"},
-    "FAN":  {"Utilities"},
-    "TAN":  {"Utilities"},
-    "NLR":  {"Utilities"},
-    # ── 原材料子板块 ──
-    "XME":  {"Basic Materials", "Materials"},
-    "WOOD": {"Basic Materials", "Materials"},
-    "COPX": {"Basic Materials", "Materials"},
-    "SLX":  {"Basic Materials", "Materials"},
-    "BATT": {"Basic Materials", "Materials"},
-    # ── 通信服务子板块 ──
-    "IYZ":  {"Communication Services"},
-    # ── 房地产子板块 ──
-    "INDS": {"Real Estate"},
-    "REZ":  {"Real Estate"},
-    "SRVR": {"Real Estate"},
-    # ── 公用事业子板块 ──
-    "ICLN": {"Utilities"},
-    "PHO":  {"Utilities"},
-    "GRID": {"Utilities"},
-    # 无行业映射（商品/债券/加密/国际宽基）：
-    #   GLD GLTR SLV TLT EEM VEA FXI BITO GBTC ETHE MSOS IPO SPY → 返回空序列
 }
 
 
