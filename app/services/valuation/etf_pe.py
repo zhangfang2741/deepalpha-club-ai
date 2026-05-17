@@ -1,10 +1,9 @@
 """个 ETF 历史 PE 数据服务。
 
 数据策略：
-  SPDR 板块 ETF（XLK/XLV/XLF 等 11 只）：直接复用
-    FMP stable /sector-pe-snapshot 的行业 PE，与行业估值保持一致。
-  其余 ETF：依次尝试 key-metrics → ratios（含/不含 period 参数）。
-  商品/债券/加密类 ETF 通常无 PE，返回空序列。
+  权益类 ETF：通过 ETF_SECTOR_MAP 映射到 FMP sector-pe-snapshot 行业 PE，
+    按季度批量拉取近 5 年共 20 个数据点，保证历史深度一致。
+  商品/债券/加密类 ETF（无映射）：返回空序列。
 """
 
 import asyncio
@@ -24,8 +23,10 @@ _FMP_STABLE_BASE = "https://financialmodelingprep.com/stable"
 _BATCH_SIZE = 10
 _QUARTERS = 20  # 5 年季度数据
 
-# SPDR 板块 ETF → FMP sector-pe-snapshot 中对应的行业名称（可能有多个别名）
-SPDR_ETF_SECTOR: Dict[str, Set[str]] = {
+# 所有权益类 ETF → FMP sector-pe-snapshot 中对应的行业名称
+# 子板块 ETF 使用其最近的父 GICS 行业 PE（近似值，但保证 5 年历史深度）
+ETF_SECTOR_MAP: Dict[str, Set[str]] = {
+    # ── SPDR 11 只标准板块 ETF ──
     "XLK":  {"Technology"},
     "XLV":  {"Healthcare", "Health Care"},
     "XLF":  {"Financial Services", "Financials"},
@@ -37,6 +38,71 @@ SPDR_ETF_SECTOR: Dict[str, Set[str]] = {
     "XLU":  {"Utilities"},
     "XLRE": {"Real Estate"},
     "XLB":  {"Basic Materials", "Materials"},
+    # ── 信息技术子板块 ──
+    "SOXX": {"Technology"},   # 半导体
+    "IGV":  {"Technology"},   # 软件
+    "AIQ":  {"Technology"},   # 人工智能
+    "SKYY": {"Technology"},   # 云计算
+    "QTUM": {"Technology"},   # 量子计算
+    "BUG":  {"Technology"},   # 网络安全
+    "BLOK": {"Technology"},   # 区块链
+    "PNQI": {"Technology"},   # 纳斯达克互联网
+    "QQQ":  {"Technology"},   # 纳斯达克100
+    "ARKK": {"Technology"},   # ARK 创新
+    # ── 医疗保健子板块 ──
+    "XHE":  {"Healthcare", "Health Care"},  # 医疗设备
+    "IHF":  {"Healthcare", "Health Care"},  # 医疗保险
+    "XBI":  {"Healthcare", "Health Care"},  # 生物科技
+    "PJP":  {"Healthcare", "Health Care"},  # 制药
+    # ── 金融子板块 ──
+    "KBE":  {"Financial Services", "Financials"},  # 银行
+    "IYG":  {"Financial Services", "Financials"},  # 金融服务
+    "KIE":  {"Financial Services", "Financials"},  # 保险
+    "KCE":  {"Financial Services", "Financials"},  # 资本市场
+    "REM":  {"Real Estate"},                        # 抵押 REIT
+    # ── 可选消费子板块 ──
+    "CARZ": {"Consumer Cyclical", "Consumer Discretionary"},  # 汽车
+    "XRT":  {"Consumer Cyclical", "Consumer Discretionary"},  # 零售
+    "XHB":  {"Consumer Cyclical", "Consumer Discretionary"},  # 家居建设
+    "PEJ":  {"Consumer Cyclical", "Consumer Discretionary"},  # 休闲娱乐
+    "PKB":  {"Consumer Cyclical", "Consumer Discretionary"},  # 住宅建设
+    # ── 必需消费子板块 ──
+    "PBJ":  {"Consumer Defensive", "Consumer Staples"},  # 食品饮料
+    "MOO":  {"Consumer Defensive", "Consumer Staples"},  # 农业
+    # ── 工业子板块 ──
+    "ITA":  {"Industrials"},   # 航空航天防务
+    "PAVE": {"Industrials"},   # 基础设施
+    "IYT":  {"Industrials"},   # 交通运输
+    "JETS": {"Industrials"},   # 航空
+    "BOAT": {"Industrials"},   # 航运
+    "IFRA": {"Industrials"},   # 基础设施
+    "UFO":  {"Industrials"},   # 太空
+    "SHLD": {"Industrials"},   # 国防
+    # ── 能源子板块 ──
+    "IEZ":  {"Energy"},        # 油气设备服务
+    "XOP":  {"Energy"},        # 油气勘探
+    "FAN":  {"Utilities"},     # 风能
+    "TAN":  {"Utilities"},     # 太阳能
+    "NLR":  {"Utilities"},     # 核能
+    # ── 原材料子板块 ──
+    "XME":  {"Basic Materials", "Materials"},   # 金属采矿
+    "WOOD": {"Basic Materials", "Materials"},   # 林业
+    "COPX": {"Basic Materials", "Materials"},   # 铜矿
+    "SLX":  {"Basic Materials", "Materials"},   # 钢铁
+    "BATT": {"Basic Materials", "Materials"},   # 锂电池
+    # ── 通信服务子板块 ──
+    "IYZ":  {"Communication Services"},         # 电信
+    # ── 房地产子板块 ──
+    "INDS": {"Real Estate"},   # 工业地产
+    "REZ":  {"Real Estate"},   # 住宅 REIT
+    "SRVR": {"Real Estate"},   # 数据中心 REIT
+    # ── 公用事业子板块 ──
+    "ICLN": {"Utilities"},     # 清洁能源
+    "PHO":  {"Utilities"},     # 水资源
+    "GRID": {"Utilities"},     # 智能电网
+    # 无法映射（商品/债券/加密/国际宽基）：
+    #   GLD GLTR SLV TLT EEM VEA FXI BITO GBTC ETHE MSOS IPO SPY
+    #   → 返回空序列
 }
 
 
@@ -68,7 +134,7 @@ def get_etf_label(z_score: Optional[float]) -> Tuple[str, str]:
     return "极度高估", "extreme_overvalue"
 
 
-# ── SPDR 板块 ETF：复用 sector-pe-snapshot ───────────────────────────────────
+# ── sector-pe-snapshot 批量拉取 ───────────────────────────────────────────────
 
 async def _fetch_sector_snapshot_on_date(client: httpx.AsyncClient, dt: str) -> List[dict]:
     """拉取指定日期的全行业 PE 快照。"""
@@ -82,17 +148,19 @@ async def _fetch_sector_snapshot_on_date(client: httpx.AsyncClient, dt: str) -> 
             data = resp.json()
             return data if isinstance(data, list) else []
     except Exception as e:
-        logger.warning("spdr_sector_snapshot_failed", date=dt, error=str(e))
+        logger.warning("sector_snapshot_failed", date=dt, error=str(e))
     return []
 
 
-async def _fetch_spdr_pe_series(client: httpx.AsyncClient, symbol: str) -> List[Tuple[str, float]]:
-    """SPDR 板块 ETF 使用行业 PE 数据（近 5 年 20 季度）。"""
-    sector_names = SPDR_ETF_SECTOR.get(symbol, set())
+async def _fetch_sector_mapped_pe_series(
+    client: httpx.AsyncClient, symbol: str
+) -> List[Tuple[str, float]]:
+    """使用 sector-pe-snapshot 获取 ETF 历史 PE（近 5 年 20 季度）。"""
+    sector_names = ETF_SECTOR_MAP.get(symbol, set())
     if not sector_names:
         return []
 
-    dates = _quarter_end_dates(years=5)  # 20 个季度
+    dates = _quarter_end_dates(years=5)
     results: List[Tuple[str, float]] = []
 
     for i in range(0, len(dates), _BATCH_SIZE):
@@ -113,7 +181,7 @@ async def _fetch_spdr_pe_series(client: httpx.AsyncClient, symbol: str) -> List[
                         continue
                     if pe_f > 0:
                         results.append((dt, round(pe_f, 2)))
-                    break  # 每个日期只取一条匹配记录
+                    break
 
     # 去重 + 按日期降序（最新在前）
     seen: Set[str] = set()
@@ -125,58 +193,13 @@ async def _fetch_spdr_pe_series(client: httpx.AsyncClient, symbol: str) -> List[
     return deduped
 
 
-# ── 非 SPDR ETF：尝试多个 FMP 端点 ──────────────────────────────────────────
-
-async def _fetch_equity_etf_pe_series(client: httpx.AsyncClient, symbol: str) -> List[Tuple[str, float]]:
-    """
-    对权益类 ETF 尝试 4 种 FMP 端点组合获取历史 PE。
-    对商品/债券/加密类 ETF 通常返回空列表。
-    """
-    attempts = [
-        ("key-metrics", "peRatio",              {"period": "quarter", "limit": _QUARTERS}),
-        ("key-metrics", "peRatio",              {"limit": _QUARTERS}),
-        ("ratios",      "priceEarningsRatio",   {"period": "quarter", "limit": _QUARTERS}),
-        ("ratios",      "priceEarningsRatio",   {"limit": _QUARTERS}),
-    ]
-    for endpoint, pe_field, extra_params in attempts:
-        try:
-            params = {"symbol": symbol, "apikey": settings.FMP_API_KEY, **extra_params}
-            resp = await client.get(f"{_FMP_STABLE_BASE}/{endpoint}", params=params, timeout=20)
-            if resp.status_code != 200:
-                continue
-            data = resp.json()
-            if not isinstance(data, list):
-                continue
-            series: List[Tuple[str, float]] = []
-            for rec in data:
-                dt = rec.get("date") or rec.get("Date")
-                raw = rec.get(pe_field)
-                if not dt or raw is None:
-                    continue
-                try:
-                    pe = float(raw)
-                except (TypeError, ValueError):
-                    continue
-                if pe > 0:
-                    series.append((dt, round(pe, 2)))
-            if series:
-                logger.info("equity_etf_pe_found", symbol=symbol, endpoint=endpoint, points=len(series))
-                return series
-        except Exception as e:
-            logger.warning("equity_etf_pe_attempt_failed", symbol=symbol, endpoint=endpoint, error=str(e))
-    return []
-
-
-# ── 统一入口 ──────────────────────────────────────────────────────────────────
-
 async def _fetch_etf_pe_series(client: httpx.AsyncClient, symbol: str) -> List[Tuple[str, float]]:
-    """获取 ETF 历史季度 PE 序列（最新在前）。"""
-    if symbol in SPDR_ETF_SECTOR:
-        series = await _fetch_spdr_pe_series(client, symbol)
-        if series:
-            return series
-        # sector-pe-snapshot 失败时回退到 equity 路径
-    return await _fetch_equity_etf_pe_series(client, symbol)
+    """获取 ETF 历史季度 PE 序列（最新在前）。
+
+    映射到行业的 ETF → sector-pe-snapshot（保证近 5 年数据）
+    未映射 ETF（商品/债券/加密等） → 返回空序列
+    """
+    return await _fetch_sector_mapped_pe_series(client, symbol)
 
 
 # ── 摘要 / 详情构建 ───────────────────────────────────────────────────────────
