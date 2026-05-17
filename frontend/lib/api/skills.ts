@@ -3,6 +3,9 @@
  * 使用 native fetch 处理 SSE 流式响应，Axios 不支持 ReadableStream
  */
 
+import client from './client'
+import type { SkillMessage } from './skills'
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 export type Freq = 'daily' | 'weekly'
@@ -142,4 +145,59 @@ export async function runSkill(
     throw new Error(`Skill 执行失败 (${response.status}): ${detail}`)
   }
   return response.json()
+}
+
+// ── Gallery/Mine API ───────────────────────────────────────────────────────────
+
+export async function getGallery() {
+  const resp = await client.get('/api/v1/skills/gallery')
+  return resp.data
+}
+
+export async function getMine() {
+  const resp = await client.get('/api/v1/skills/mine')
+  return resp.data
+}
+
+export async function getSkillDetail(id: string) {
+  const resp = await client.get(`/api/v1/skills/${id}`)
+  return resp.data
+}
+
+export interface SaveSkillPayload {
+  title: string
+  description: string
+  category: string
+  code: string
+  symbol: string
+  start_date: string
+  end_date: string
+  freq: 'daily' | 'weekly'
+}
+
+export async function saveSkill(payload: SaveSkillPayload) {
+  const resp = await client.post('/api/v1/skills/save', payload)
+  return resp.data
+}
+
+export interface RerunPayload {
+  symbol: string
+  start_date: string
+  end_date: string
+  freq: 'daily' | 'weekly'
+}
+
+export interface RerunResult {
+  cached: boolean
+  snapshot: Record<string, unknown>
+  narrative: Record<string, unknown> | null
+}
+
+export async function rerunSkill(id: string, payload: RerunPayload) {
+  const resp = await client.post(`/api/v1/skills/${id}/rerun`, payload)
+  return resp.data
+}
+
+export async function deleteSkill(id: string) {
+  await client.delete(`/api/v1/skills/${id}`)
 }
