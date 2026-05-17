@@ -123,7 +123,7 @@ async def get_etf_price(
     return result
 
 
-_ETF_SUMMARY_CACHE_KEY = "valuation:etf-summary"
+_ETF_SUMMARY_CACHE_KEY = "valuation:etf-summary-v2"
 _ETF_SUMMARY_TTL = 14400  # 4h
 _ETF_DETAIL_TTL = 14400   # 4h
 
@@ -163,7 +163,7 @@ async def get_etf_valuation_detail(
 ) -> ETFValuationDetail:
     """获取单个 ETF 的完整季度 PE 历史（用于详情图表）。"""
     sym = symbol.upper()
-    cache_key = f"valuation:etf-detail:{sym}"
+    cache_key = f"valuation:etf-detail-v2:{sym}"
 
     try:
         raw = await redis.get(cache_key)

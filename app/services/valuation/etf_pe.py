@@ -1,9 +1,13 @@
-"""个 ETF 历史 PE 数据服务。
+"""개 ETF 历史 PE 数据服务。
 
 数据策略：
-  权益类 ETF：通过 ETF_SECTOR_MAP 映射到 FMP sector-pe-snapshot 行业 PE，
-    按季度批量拉取近 5 年共 20 个数据点，保证历史深度一致。
-  商品/债券/加密类 ETF（无映射）：返回空序列。
+  所有权益类 ETF 通过 ETF_SECTOR_MAP 映射到对应 GICS 行业，
+  批量调用 sector-pe-snapshot 获取近 5 年 20 个季度 PE。
+
+  关键优化：先一次性拉取所有季度的全行业快照（仅 20 次 API 调用），
+  再按行业分配给各 ETF，避免 60×20=1200 次并发请求导致速率限制。
+
+  商品/债券/加密类 ETF（无行业映射）返回空序列。
 """
 
 import asyncio
@@ -21,10 +25,10 @@ from app.services.valuation.sector_pe import _quarter_end_dates
 
 _FMP_STABLE_BASE = "https://financialmodelingprep.com/stable"
 _BATCH_SIZE = 10
-_QUARTERS = 20  # 5 年季度数据
+_YEARS = 5  # 近 5 年数据
 
 # 所有权益类 ETF → FMP sector-pe-snapshot 中对应的行业名称
-# 子板块 ETF 使用其最近的父 GICS 行业 PE（近似值，但保证 5 年历史深度）
+# 子板块 ETF 使用其最近的父 GICS 行业 PE（同数据源，与行业估值保持一致）
 ETF_SECTOR_MAP: Dict[str, Set[str]] = {
     # ── SPDR 11 只标准板块 ETF ──
     "XLK":  {"Technology"},
@@ -50,59 +54,58 @@ ETF_SECTOR_MAP: Dict[str, Set[str]] = {
     "QQQ":  {"Technology"},   # 纳斯达克100
     "ARKK": {"Technology"},   # ARK 创新
     # ── 医疗保健子板块 ──
-    "XHE":  {"Healthcare", "Health Care"},  # 医疗设备
-    "IHF":  {"Healthcare", "Health Care"},  # 医疗保险
-    "XBI":  {"Healthcare", "Health Care"},  # 生物科技
-    "PJP":  {"Healthcare", "Health Care"},  # 制药
+    "XHE":  {"Healthcare", "Health Care"},
+    "IHF":  {"Healthcare", "Health Care"},
+    "XBI":  {"Healthcare", "Health Care"},
+    "PJP":  {"Healthcare", "Health Care"},
     # ── 金融子板块 ──
-    "KBE":  {"Financial Services", "Financials"},  # 银行
-    "IYG":  {"Financial Services", "Financials"},  # 金融服务
-    "KIE":  {"Financial Services", "Financials"},  # 保险
-    "KCE":  {"Financial Services", "Financials"},  # 资本市场
-    "REM":  {"Real Estate"},                        # 抵押 REIT
+    "KBE":  {"Financial Services", "Financials"},
+    "IYG":  {"Financial Services", "Financials"},
+    "KIE":  {"Financial Services", "Financials"},
+    "KCE":  {"Financial Services", "Financials"},
+    "REM":  {"Real Estate"},
     # ── 可选消费子板块 ──
-    "CARZ": {"Consumer Cyclical", "Consumer Discretionary"},  # 汽车
-    "XRT":  {"Consumer Cyclical", "Consumer Discretionary"},  # 零售
-    "XHB":  {"Consumer Cyclical", "Consumer Discretionary"},  # 家居建设
-    "PEJ":  {"Consumer Cyclical", "Consumer Discretionary"},  # 休闲娱乐
-    "PKB":  {"Consumer Cyclical", "Consumer Discretionary"},  # 住宅建设
+    "CARZ": {"Consumer Cyclical", "Consumer Discretionary"},
+    "XRT":  {"Consumer Cyclical", "Consumer Discretionary"},
+    "XHB":  {"Consumer Cyclical", "Consumer Discretionary"},
+    "PEJ":  {"Consumer Cyclical", "Consumer Discretionary"},
+    "PKB":  {"Consumer Cyclical", "Consumer Discretionary"},
     # ── 必需消费子板块 ──
-    "PBJ":  {"Consumer Defensive", "Consumer Staples"},  # 食品饮料
-    "MOO":  {"Consumer Defensive", "Consumer Staples"},  # 农业
+    "PBJ":  {"Consumer Defensive", "Consumer Staples"},
+    "MOO":  {"Consumer Defensive", "Consumer Staples"},
     # ── 工业子板块 ──
-    "ITA":  {"Industrials"},   # 航空航天防务
-    "PAVE": {"Industrials"},   # 基础设施
-    "IYT":  {"Industrials"},   # 交通运输
-    "JETS": {"Industrials"},   # 航空
-    "BOAT": {"Industrials"},   # 航运
-    "IFRA": {"Industrials"},   # 基础设施
-    "UFO":  {"Industrials"},   # 太空
-    "SHLD": {"Industrials"},   # 国防
+    "ITA":  {"Industrials"},
+    "PAVE": {"Industrials"},
+    "IYT":  {"Industrials"},
+    "JETS": {"Industrials"},
+    "BOAT": {"Industrials"},
+    "IFRA": {"Industrials"},
+    "UFO":  {"Industrials"},
+    "SHLD": {"Industrials"},
     # ── 能源子板块 ──
-    "IEZ":  {"Energy"},        # 油气设备服务
-    "XOP":  {"Energy"},        # 油气勘探
-    "FAN":  {"Utilities"},     # 风能
-    "TAN":  {"Utilities"},     # 太阳能
-    "NLR":  {"Utilities"},     # 核能
+    "IEZ":  {"Energy"},
+    "XOP":  {"Energy"},
+    "FAN":  {"Utilities"},
+    "TAN":  {"Utilities"},
+    "NLR":  {"Utilities"},
     # ── 原材料子板块 ──
-    "XME":  {"Basic Materials", "Materials"},   # 金属采矿
-    "WOOD": {"Basic Materials", "Materials"},   # 林业
-    "COPX": {"Basic Materials", "Materials"},   # 铜矿
-    "SLX":  {"Basic Materials", "Materials"},   # 钢铁
-    "BATT": {"Basic Materials", "Materials"},   # 锂电池
+    "XME":  {"Basic Materials", "Materials"},
+    "WOOD": {"Basic Materials", "Materials"},
+    "COPX": {"Basic Materials", "Materials"},
+    "SLX":  {"Basic Materials", "Materials"},
+    "BATT": {"Basic Materials", "Materials"},
     # ── 通信服务子板块 ──
-    "IYZ":  {"Communication Services"},         # 电信
+    "IYZ":  {"Communication Services"},
     # ── 房地产子板块 ──
-    "INDS": {"Real Estate"},   # 工业地产
-    "REZ":  {"Real Estate"},   # 住宅 REIT
-    "SRVR": {"Real Estate"},   # 数据中心 REIT
+    "INDS": {"Real Estate"},
+    "REZ":  {"Real Estate"},
+    "SRVR": {"Real Estate"},
     # ── 公用事业子板块 ──
-    "ICLN": {"Utilities"},     # 清洁能源
-    "PHO":  {"Utilities"},     # 水资源
-    "GRID": {"Utilities"},     # 智能电网
-    # 无法映射（商品/债券/加密/国际宽基）：
-    #   GLD GLTR SLV TLT EEM VEA FXI BITO GBTC ETHE MSOS IPO SPY
-    #   → 返回空序列
+    "ICLN": {"Utilities"},
+    "PHO":  {"Utilities"},
+    "GRID": {"Utilities"},
+    # 无行业映射（商品/债券/加密/国际宽基）：
+    #   GLD GLTR SLV TLT EEM VEA FXI BITO GBTC ETHE MSOS IPO SPY → 返回空序列
 }
 
 
@@ -134,7 +137,7 @@ def get_etf_label(z_score: Optional[float]) -> Tuple[str, str]:
     return "极度高估", "extreme_overvalue"
 
 
-# ── sector-pe-snapshot 批量拉取 ───────────────────────────────────────────────
+# ── 核心：一次性拉取所有季度全行业 PE ────────────────────────────────────────
 
 async def _fetch_sector_snapshot_on_date(client: httpx.AsyncClient, dt: str) -> List[dict]:
     """拉取指定日期的全行业 PE 快照。"""
@@ -152,16 +155,16 @@ async def _fetch_sector_snapshot_on_date(client: httpx.AsyncClient, dt: str) -> 
     return []
 
 
-async def _fetch_sector_mapped_pe_series(
-    client: httpx.AsyncClient, symbol: str
-) -> List[Tuple[str, float]]:
-    """使用 sector-pe-snapshot 获取 ETF 历史 PE（近 5 年 20 季度）。"""
-    sector_names = ETF_SECTOR_MAP.get(symbol, set())
-    if not sector_names:
-        return []
+async def _fetch_all_sector_pe(
+    client: httpx.AsyncClient, years: int = _YEARS
+) -> Dict[str, Dict[str, float]]:
+    """批量拉取近 years 年每季度末全行业 PE，返回 {date: {sector_name: pe}}。
 
-    dates = _quarter_end_dates(years=5)
-    results: List[Tuple[str, float]] = []
+    只需 20 次 API 调用（2 批 × 10 次），全部 ETF 共用此数据，
+    避免 ETF 数量×季度数 = 1200+ 次重复请求触发速率限制。
+    """
+    dates = _quarter_end_dates(years=years)
+    date_to_sectors: Dict[str, Dict[str, float]] = {}
 
     for i in range(0, len(dates), _BATCH_SIZE):
         batch = dates[i: i + _BATCH_SIZE]
@@ -172,34 +175,42 @@ async def _fetch_sector_mapped_pe_series(
         for dt, recs in zip(batch, snapshots):
             if isinstance(recs, Exception) or not recs:
                 continue
+            sector_pe: Dict[str, float] = {}
             for rec in recs:
-                if rec.get("sector") in sector_names:
-                    pe = rec.get("pe")
-                    try:
-                        pe_f = float(pe)
-                    except (TypeError, ValueError):
-                        continue
+                sector_name = rec.get("sector", "")
+                pe_raw = rec.get("pe")
+                if not sector_name or pe_raw is None:
+                    continue
+                try:
+                    pe_f = float(pe_raw)
                     if pe_f > 0:
-                        results.append((dt, round(pe_f, 2)))
-                    break
+                        sector_pe[sector_name] = round(pe_f, 2)
+                except (TypeError, ValueError):
+                    pass
+            if sector_pe:
+                date_to_sectors[dt] = sector_pe
 
-    # 去重 + 按日期降序（最新在前）
-    seen: Set[str] = set()
-    deduped: List[Tuple[str, float]] = []
-    for dt, pe in sorted(results, key=lambda x: x[0], reverse=True):
-        if dt not in seen:
-            seen.add(dt)
-            deduped.append((dt, pe))
-    return deduped
+    logger.info("sector_pe_fetched", dates_with_data=len(date_to_sectors), total_dates=len(dates))
+    return date_to_sectors
 
 
-async def _fetch_etf_pe_series(client: httpx.AsyncClient, symbol: str) -> List[Tuple[str, float]]:
-    """获取 ETF 历史季度 PE 序列（最新在前）。
+def _extract_etf_pe_series(
+    symbol: str,
+    date_to_sectors: Dict[str, Dict[str, float]],
+) -> List[Tuple[str, float]]:
+    """从行业 PE 字典中提取 ETF 对应行业的历史 PE 序列（最新在前）。"""
+    sector_names = ETF_SECTOR_MAP.get(symbol, set())
+    if not sector_names:
+        return []
 
-    映射到行业的 ETF → sector-pe-snapshot（保证近 5 年数据）
-    未映射 ETF（商品/债券/加密等） → 返回空序列
-    """
-    return await _fetch_sector_mapped_pe_series(client, symbol)
+    series: List[Tuple[str, float]] = []
+    for dt, sector_map in date_to_sectors.items():
+        for sn in sector_names:
+            if sn in sector_map:
+                series.append((dt, sector_map[sn]))
+                break
+
+    return sorted(series, key=lambda x: x[0], reverse=True)
 
 
 # ── 摘要 / 详情构建 ───────────────────────────────────────────────────────────
@@ -239,7 +250,11 @@ def _build_summary_item(
 
 
 async def compute_etf_valuation_summary() -> ETFValuationSummaryResponse:
-    """并发拉取所有 ETF 的季度 PE，计算 z-score 摘要（4h 缓存）。"""
+    """获取所有 ETF 的 PE z-score 摘要。
+
+    优化：一次性拉取所有季度全行业 PE（20 次 API 调用），
+    再同步提取各 ETF 的行业 PE 序列，无并发速率限制风险。
+    """
     if not settings.FMP_API_KEY:
         logger.warning("etf_valuation_no_api_key")
         return ETFValuationSummaryResponse(as_of=str(date.today()), etfs=[])
@@ -255,19 +270,11 @@ async def compute_etf_valuation_summary() -> ETFValuationSummaryResponse:
 
     logger.info("etf_valuation_summary_start", total_etfs=len(ordered))
 
-    pe_map: Dict[str, List[Tuple[str, float]]] = {}
     async with httpx.AsyncClient() as client:
-        for i in range(0, len(ordered), _BATCH_SIZE):
-            batch = ordered[i: i + _BATCH_SIZE]
-            results = await asyncio.gather(
-                *[_fetch_etf_pe_series(client, sym) for sym, _, _ in batch],
-                return_exceptions=True,
-            )
-            for (sym, _, _), res in zip(batch, results):
-                pe_map[sym] = res if not isinstance(res, Exception) else []
+        date_to_sectors = await _fetch_all_sector_pe(client, years=_YEARS)
 
     etfs = [
-        _build_summary_item(sym, sector_key, sector_cn, pe_map.get(sym, []))
+        _build_summary_item(sym, sector_key, sector_cn, _extract_etf_pe_series(sym, date_to_sectors))
         for sym, sector_key, sector_cn in ordered
     ]
     with_data = sum(1 for e in etfs if e.z_score is not None)
@@ -278,8 +285,11 @@ async def compute_etf_valuation_summary() -> ETFValuationSummaryResponse:
 async def compute_etf_valuation_detail(symbol: str) -> ETFValuationDetail:
     """获取单个 ETF 完整的 PE 历史（用于详情图表）。"""
     sym = symbol.upper()
+
     async with httpx.AsyncClient() as client:
-        pe_series = await _fetch_etf_pe_series(client, sym)
+        date_to_sectors = await _fetch_all_sector_pe(client, years=_YEARS)
+
+    pe_series = _extract_etf_pe_series(sym, date_to_sectors)
 
     if pe_series:
         current_pe = pe_series[0][1]
