@@ -24,13 +24,13 @@ type LabelEn =
   | 'insufficient'
 
 // 估值状态配置
-const LABEL_CONFIG: Record<LabelEn, { dot: string; badge: string; bar: string; text: string }> = {
-  extreme_undervalue: { dot: 'bg-blue-700',   badge: 'bg-blue-700 text-white',          bar: 'bg-blue-700',   text: 'text-blue-700' },
-  undervalue:         { dot: 'bg-blue-400',   badge: 'bg-blue-100 text-blue-700',       bar: 'bg-blue-400',   text: 'text-blue-600' },
-  neutral:            { dot: 'bg-slate-300',  badge: 'bg-slate-100 text-slate-500',     bar: 'bg-slate-300',  text: 'text-slate-500' },
-  overvalue:          { dot: 'bg-orange-400', badge: 'bg-orange-100 text-orange-600',   bar: 'bg-orange-400', text: 'text-orange-500' },
-  extreme_overvalue:  { dot: 'bg-red-500',    badge: 'bg-red-100 text-red-600',         bar: 'bg-red-500',    text: 'text-red-500' },
-  insufficient:       { dot: 'bg-slate-200',  badge: 'bg-slate-50 text-slate-300',      bar: 'bg-slate-200',  text: 'text-slate-300' },
+const LABEL_CONFIG: Record<LabelEn, { dot: string; badge: string; bar: string; text: string; cn: string }> = {
+  extreme_undervalue: { dot: 'bg-blue-700',   badge: 'bg-blue-700 text-white',        bar: 'bg-blue-700',   text: 'text-blue-700',   cn: '极度低估' },
+  undervalue:         { dot: 'bg-blue-400',   badge: 'bg-blue-100 text-blue-700',     bar: 'bg-blue-400',   text: 'text-blue-600',   cn: '低估'     },
+  neutral:            { dot: 'bg-slate-300',  badge: 'bg-slate-100 text-slate-500',   bar: 'bg-slate-300',  text: 'text-slate-500',  cn: '中性'     },
+  overvalue:          { dot: 'bg-orange-400', badge: 'bg-orange-100 text-orange-600', bar: 'bg-orange-400', text: 'text-orange-500', cn: '高估'     },
+  extreme_overvalue:  { dot: 'bg-red-500',    badge: 'bg-red-100 text-red-600',       bar: 'bg-red-500',    text: 'text-red-500',    cn: '极度高估' },
+  insufficient:       { dot: 'bg-slate-200',  badge: 'bg-slate-50 text-slate-300',    bar: 'bg-slate-200',  text: 'text-slate-300',  cn: '—'        },
 }
 
 // 计算板块主要估值状态（取有数据的ETF中出现频率最高的）
@@ -50,16 +50,19 @@ function getSectorDominantLabel(etfs: ETFValuationSummaryItem[]): LabelEn {
   return 'neutral'
 }
 
-// z-score 小徽章
-function ZBadge({ item }: { item: ETFValuationSummaryItem }) {
+// 估值标签徽章：中文标签 + z-score 数值
+function ValuationBadge({ item }: { item: ETFValuationSummaryItem }) {
   const key = (item.label_en || 'insufficient') as LabelEn
   const cfg = LABEL_CONFIG[key]
   const zStr = item.z_score !== null
     ? (item.z_score >= 0 ? '+' : '') + item.z_score.toFixed(2)
-    : '—'
+    : null
   return (
-    <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold shrink-0 ${cfg.badge}`}>
-      {zStr}σ
+    <span className={`flex flex-col items-center px-1.5 py-0.5 rounded shrink-0 min-w-[44px] ${cfg.badge}`}>
+      <span className="text-[10px] font-bold leading-tight">{cfg.cn}</span>
+      {zStr && (
+        <span className="text-[9px] font-mono leading-tight opacity-75">{zStr}σ</span>
+      )}
     </span>
   )
 }
@@ -91,8 +94,8 @@ function ETFRow({
       </span>
       {/* 名称 */}
       <span className="text-[10px] text-slate-400 flex-1 min-w-0 truncate">{item.name.slice(0, 10)}</span>
-      {/* z 徽章 */}
-      <ZBadge item={item} />
+      {/* 估值标签 */}
+      <ValuationBadge item={item} />
     </button>
   )
 }
@@ -129,23 +132,24 @@ function SectorHeader({
       </span>
       {/* 板块名 */}
       <span className="flex-1 text-xs font-semibold text-slate-700 text-left truncate">{label}</span>
-      {/* 低估/高估小标 */}
-      {withData.length > 0 && (
-        <span className="flex items-center gap-1 shrink-0">
-          {underCnt > 0 && (
-            <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-1 py-0.5 rounded">
-              ↓{underCnt}
-            </span>
-          )}
-          {overCnt > 0 && (
-            <span className="text-[9px] font-bold text-orange-500 bg-orange-50 px-1 py-0.5 rounded">
-              ↑{overCnt}
-            </span>
-          )}
-        </span>
-      )}
-      {/* 主色点 */}
-      <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
+      {/* 低估/高估计数 + 主色标签 */}
+      <span className="flex items-center gap-1 shrink-0">
+        {underCnt > 0 && (
+          <span className="text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-full">
+            低估 {underCnt}
+          </span>
+        )}
+        {overCnt > 0 && (
+          <span className="text-[9px] font-bold text-orange-500 bg-orange-50 border border-orange-100 px-1.5 py-0.5 rounded-full">
+            高估 {overCnt}
+          </span>
+        )}
+        {withData.length > 0 && underCnt === 0 && overCnt === 0 && (
+          <span className="text-[9px] text-slate-400 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-full">
+            中性
+          </span>
+        )}
+      </span>
     </button>
   )
 }
