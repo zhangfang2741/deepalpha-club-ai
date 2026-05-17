@@ -1,5 +1,7 @@
 """Skill factor explorer API: SSE code generation, K-line pre-load, and Skill execution."""
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -18,12 +20,15 @@ from app.schemas.skills import (
     SkillRunRequest,
     SkillRunResponse,
 )
+from app.services.llm.registry import llm_registry
 from app.services.skills import (
-    execute_skill,
-    fetch_and_cache_kline,
+    compute_factor_snapshot,
+    fetch_kline,
     generate_skill_stream,
-    get_cached_price_df,
 )
+from app.services.skills.kline import bars_to_price_records
+
+_executor = ThreadPoolExecutor(max_workers=4)
 
 router = APIRouter()
 
@@ -70,10 +75,17 @@ async def get_kline(
     redis: Redis = Depends(get_redis),
 ) -> KlineResponse:
     """Pre-load K-line data and write to Redis cache for reuse during Skill execution."""
+    from app.schemas.skills import KlineBar
+
     logger.info("skill_kline_request", user_id=user.id, symbol=symbol)
     try:
-        bars, _ = await fetch_and_cache_kline(redis, symbol, start_date, end_date, freq)
-        return KlineResponse(symbol=symbol, freq=freq, klines=bars)
+        bars = await fetch_kline(user.id, symbol, start_date, end_date, freq, redis=redis)
+        klines = [
+            KlineBar(time=b["time"], open=b["open"], high=b["high"],
+                     low=b["low"], close=b["close"], volume=b["volume"])
+            for b in bars
+        ]
+        return KlineResponse(symbol=symbol, freq=freq, klines=klines)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -90,20 +102,21 @@ async def run_skill(
     redis: Redis = Depends(get_redis),
 ) -> SkillRunResponse:
     """Execute Skill code and return factor data, reusing cached price data from Redis."""
+    from app.schemas.skills import FactorPoint
+
     logger.info("skill_run_request", user_id=user.id, symbol=body.symbol)
     try:
-        price_df = await get_cached_price_df(redis, body.symbol, body.start_date, body.end_date, body.freq)
-        if price_df is None:
-            bars, price_df = await fetch_and_cache_kline(
-                redis, body.symbol, body.start_date, body.end_date, body.freq
-            )
+        bars = await fetch_kline(user.id, body.symbol, body.start_date, body.end_date, body.freq, redis=redis)
+        price_records = bars_to_price_records(bars)
 
-        factor_points, output_type = await execute_skill(
-            body.code, price_df, body.symbol, body.start_date, body.end_date
+        result = await compute_factor_snapshot(
+            body.code, price_records, body.symbol, body.start_date, body.end_date,
         )
+        factor = result["factor"]
+        factor_points = [FactorPoint(time=f["time"], value=f["value"]) for f in factor]
         return SkillRunResponse(
             symbol=body.symbol,
-            output_type=output_type,
+            output_type="factor",
             factor=factor_points,
         )
     except ValueError as e:
