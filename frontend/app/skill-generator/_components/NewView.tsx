@@ -1,82 +1,218 @@
 'use client'
 import { useState } from 'react'
-import { saveSkill, generateSkillStream } from '@/lib/api/skills'
+import { generateSkillStream, runSkill, saveSkill, fetchKline } from '@/lib/api/skills'
+import type { KlineBar, FactorPoint } from '@/lib/api/skills'
+import { SymbolAutocomplete } from './SymbolAutocomplete'
+import { ChatPanel, type ChatMessage } from './ChatPanel'
+import { KlineFactorChart } from './KlineFactorChart'
+import { DataHelpModal } from './DataHelpModal'
 
-const CATEGORIES = [
-  { id: 'momentum', label: '强者恒强', desc: '动量/趋势类因子' },
-  { id: 'reversal', label: '跌深必反', desc: '均值回归类因子' },
-  { id: 'volatility', label: '波动突破', desc: '波动率类因子' },
-  { id: 'volume', label: '量价共振', desc: '成交量类因子' },
-  { id: 'sentiment', label: '情绪极端', desc: '情绪/RSI 类因子' },
-  { id: 'technical', label: '技术指标', desc: '均线/MACD 等技术指标' },
-]
+// LLM 偶尔会把后端的 SSE 帧抄进自己的回复，剥掉这种嵌套
+function stripSseWrappers(text: string): string {
+  const matches = [...text.matchAll(/data:\s*({[\s\S]*?})\s*(?:\n|$)/g)]
+  if (matches.length === 0) return text
+  const parts: string[] = []
+  for (const m of matches) {
+    try {
+      const obj = JSON.parse(m[1])
+      if (typeof obj.content === 'string') parts.push(obj.content)
+    } catch { /* 忽略 */ }
+  }
+  const merged = parts.join('')
+  return /data:\s*{/.test(merged) ? stripSseWrappers(merged) : merged
+}
 
 function extractCode(text: string): string {
-  const matches = [...text.matchAll(/```python\n([\s\S]*?)```/g)]
-  return matches.length ? matches[matches.length - 1][1].trim() : text.trim()
+  const cleaned = stripSseWrappers(text)
+  const blocks = [...cleaned.matchAll(/```(?:python)?\s*\n?([\s\S]*?)```/g)]
+  const withCompute = blocks.find((m) => /\bdef\s+compute\s*\(/.test(m[1]))
+  if (withCompute) return withCompute[1].trim()
+  if (blocks.length > 0) return blocks[0][1].trim()
+  const idx = cleaned.search(/\bdef\s+compute\s*\(/)
+  if (idx >= 0) return cleaned.slice(idx).trim()
+  return ''
+}
+
+// 把后端技术错误翻译成人话
+function humanizeRunError(detail: string): string {
+  if (!detail) return '这次没能生成可用的因子，请换种说法再试一次。'
+  // K 线数据问题
+  if (/K\s*线|kline|无法获取股票数据/i.test(detail)) {
+    return '股票数据加载失败，请检查代码、日期范围或换一只股票。'
+  }
+  // 沙箱安全 / 语法 / 字段错误 → 代码 bug，建议重述
+  if (/Traceback|KeyError|NameError|TypeError|AttributeError|ValueError|IndexError|ZeroDivisionError|sandbox|超时|timeout/i.test(detail)) {
+    return 'AI 这次写的代码有点小问题，请把需求说得更具体一点再试一次（比如指明窗口期、阈值）。'
+  }
+  // 数据点不足
+  if (/有效数据点不足|至少\s*\d+\s*个/.test(detail)) {
+    return '这次因子能用的数据点太少，请把时间范围拉长，或换一个不同的逻辑。'
+  }
+  return '这次没能跑出有效的因子，请换种说法再试一次。'
+}
+
+const PRESET_RANGES: Array<{ label: string; days: number }> = [
+  { label: '1月', days: 30 },
+  { label: '半年', days: 183 },
+  { label: '1年', days: 365 },
+  { label: '3年', days: 365 * 3 },
+  { label: '5年', days: 365 * 5 },
+]
+
+// 给用户看的纯文字：剥掉 SSE 包装和代码块
+function stripCodeForChat(text: string): string {
+  return stripSseWrappers(text)
+    .replace(/```(?:python)?\s*\n?[\s\S]*?```/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 export function NewView() {
-  const [step, setStep] = useState(1)
+  // 选股表单
+  const [stage, setStage] = useState<'select' | 'workbench'>('select')
   const [symbol, setSymbol] = useState('')
   const [startDate, setStartDate] = useState('2024-01-01')
   const [endDate, setEndDate] = useState('2025-05-16')
   const [freq, setFreq] = useState<'daily' | 'weekly'>('daily')
-  const [category, setCategory] = useState('')
-  const [description, setDescription] = useState('')
-  const [code, setCode] = useState('')
+
+  // 工作台状态
+  const [klines, setKlines] = useState<KlineBar[]>([])
+  const [klineLoading, setKlineLoading] = useState(false)
+  const [factor, setFactor] = useState<FactorPoint[]>([])
+  const [factorLoading, setFactorLoading] = useState(false)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [streamingText, setStreamingText] = useState('')
   const [generating, setGenerating] = useState(false)
+  const [latestCode, setLatestCode] = useState('')
+  const [latestDesc, setLatestDesc] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [generatedCode, setGeneratedCode] = useState('')
 
-  const canStep2 = symbol.trim().length > 0 && startDate && endDate
+  const canEnter = symbol.trim().length > 0 && startDate && endDate
 
-  const handleGenerate = async () => {
-    if (!category && !description.trim()) {
-      setError('请选择命题类型或输入描述')
-      return
-    }
-    setError(null)
-    setGenerating(true)
-    setGeneratedCode('')
+  const applyRange = (days: number) => {
+    const fmt = (d: Date) => d.toISOString().slice(0, 10)
+    const today = new Date()
+    const start = new Date(today.getTime() - days * 86400000)
+    setEndDate(fmt(today))
+    setStartDate(fmt(start))
+  }
 
-    const prompt = description.trim() || `请生成一个 ${CATEGORIES.find((c) => c.id === category)?.label || category} 类因子，用于分析 ${symbol}`
-
+  const reloadKlines = async (days: number) => {
+    const fmt = (d: Date) => d.toISOString().slice(0, 10)
+    const today = new Date()
+    const start = new Date(today.getTime() - days * 86400000)
+    setEndDate(fmt(today))
+    setStartDate(fmt(start))
+    setFactor([])
+    setFactorLoading(true)
     try {
-      let fullContent = ''
+      const data = await fetchKline(symbol, fmt(start), fmt(today), freq)
+      setKlines(data.klines)
+    } catch {
+      setError('K 线加载失败')
+    } finally {
+      setFactorLoading(false)
+    }
+  }
+
+  const enterWorkbench = async () => {
+    if (!canEnter) return
+    setStage('workbench')
+    setError(null)
+    setKlineLoading(true)
+    try {
+      const data = await fetchKline(symbol, startDate, endDate, freq)
+      setKlines(data.klines)
+    } catch (e) {
+      setError('K 线数据加载失败，请检查 symbol 或日期范围')
+    } finally {
+      setKlineLoading(false)
+    }
+  }
+
+  const handleSubmit = async (userText: string) => {
+    setMessages((prev) => [...prev, { role: 'user', text: userText }])
+    setStreamingText('')
+    setGenerating(true)
+    setFactorLoading(true)
+    setError(null)
+
+    // 把已有用户描述串起来作为多轮上下文
+    const llmMessages: { role: 'user' | 'assistant'; content: string }[] = []
+    for (const m of messages) {
+      if (m.role === 'user') llmMessages.push({ role: 'user', content: m.text })
+    }
+    llmMessages.push({ role: 'user', content: userText })
+
+    let fullContent = ''
+    try {
       await generateSkillStream(
-        [{ role: 'user', content: prompt }],
-        (chunk) => { fullContent += chunk },
+        llmMessages,
+        (chunk) => {
+          fullContent += chunk
+          setStreamingText(stripCodeForChat(fullContent))
+        },
         () => {},
       )
-      const extracted = extractCode(fullContent)
-      setGeneratedCode(extracted)
-      setCode(extracted)
-      setStep(3)
-    } catch (e) {
-      setError('生成失败，请重试')
+
+      const code = extractCode(fullContent)
+      if (!code || !/\bdef\s+compute\s*\(/.test(code)) {
+        const assistantText = stripCodeForChat(fullContent) || '抱歉，这次没能生成可执行的因子代码，请换种说法再试一次。'
+        setMessages((prev) => [...prev, { role: 'assistant', text: assistantText }])
+        setError('AI 生成的代码不完整，已忽略这一轮')
+        return
+      }
+
+      const run = await runSkill(code, symbol, startDate, endDate, freq, {
+        include_financials: true,
+        include_news: true,
+      })
+      setFactor(run.factor)
+      setLatestCode(code)
+      setLatestDesc(userText)
+
+      const assistantText = stripCodeForChat(fullContent) || '已生成因子，请看右侧副图。'
+      setMessages((prev) => [...prev, { role: 'assistant', text: assistantText }])
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail
+        ?? (e as { message?: string })?.message
+        ?? ''
+      // 把技术错误（traceback / KeyError / module not found 等）翻译成人话
+      const friendly = humanizeRunError(typeof detail === 'string' ? detail : '')
+      setMessages((prev) => [...prev, { role: 'assistant', text: friendly }])
+      setError(friendly)
+      // 把原始错误打到 console，方便开发者排查
+      console.error('[skill-generator] run failed:', detail)
     } finally {
+      setStreamingText('')
       setGenerating(false)
+      setFactorLoading(false)
     }
   }
 
   const handleSave = async () => {
-    if (!code.trim()) return
+    if (!latestCode || !latestDesc) return
+    setSaving(true)
+    setError(null)
     try {
       await saveSkill({
-        title: `${symbol} · ${category || '自定义'} 因子`,
-        description: description || CATEGORIES.find((c) => c.id === category)?.desc || '自定义因子',
-        category: category || 'custom',
-        code,
+        title: `${symbol} · ${latestDesc.slice(0, 24)}`,
+        description: latestDesc,
+        category: 'custom',
+        code: latestCode,
         symbol,
         start_date: startDate,
         end_date: endDate,
         freq,
       })
       setSaved(true)
-    } catch (e) {
-      setError('保存失败')
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? '保存失败'
+      setError(typeof detail === 'string' ? detail : '保存失败')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -87,7 +223,16 @@ export function NewView() {
         <h2 className="text-xl font-bold text-gray-900">保存成功！</h2>
         <p className="text-gray-500 mt-2">去「我的因子」查看</p>
         <button
-          onClick={() => setSaved(false)}
+          onClick={() => {
+            setSaved(false)
+            setStage('select')
+            setMessages([])
+            setFactor([])
+            setKlines([])
+            setLatestCode('')
+            setLatestDesc('')
+            setSymbol('')
+          }}
           className="mt-6 text-sm text-blue-600 hover:underline"
         >
           继续新建
@@ -96,36 +241,18 @@ export function NewView() {
     )
   }
 
-  return (
-    <div className="max-w-2xl mx-auto">
-      {/* 步骤指示 */}
-      <div className="flex items-center gap-2 mb-8">
-        {[1, 2, 3].map((s) => (
-          <div key={s} className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
-              step >= s ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-400'
-            }`}>{s}</div>
-            <span className={`text-sm ${step >= s ? 'text-gray-900' : 'text-gray-400'}`}>
-              {s === 1 ? '选股' : s === 2 ? '选命题' : '生成保存'}
-            </span>
-            {s < 3 && <div className="w-8 h-px bg-gray-200" />}
-          </div>
-        ))}
-      </div>
-
-      {/* Step 1: 选股 */}
-      {step === 1 && (
+  if (stage === 'select') {
+    return (
+      <div className="max-w-xl mx-auto">
         <div className="space-y-4 bg-white border border-gray-200 rounded-xl p-6">
-          <h2 className="text-lg font-semibold">第一步：选择股票</h2>
+          <div>
+            <h2 className="text-lg font-semibold">选择股票</h2>
+            <p className="text-xs text-gray-500 mt-1">选完后进入因子工作台，与 AI 实时共创</p>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-gray-500 mb-1">股票代码</label>
-              <input
-                value={symbol}
-                onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-                placeholder="如 NVDA / 600519"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <SymbolAutocomplete value={symbol} onChange={setSymbol} />
             </div>
             <div>
               <label className="block text-sm text-gray-500 mb-1">频率</label>
@@ -156,85 +283,94 @@ export function NewView() {
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+            <div className="col-span-2 flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-gray-400">快捷区间：</span>
+              {PRESET_RANGES.map((r) => (
+                <button
+                  key={r.label}
+                  type="button"
+                  onClick={() => applyRange(r.days)}
+                  className="text-xs px-2.5 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors"
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
           </div>
+          {error && <p className="text-sm text-red-500">{error}</p>}
           <button
-            disabled={!canStep2}
-            onClick={() => setStep(2)}
+            disabled={!canEnter}
+            onClick={enterWorkbench}
             className="w-full py-2.5 rounded-lg text-white font-medium bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
           >
-            下一步
+            开始 →
           </button>
         </div>
-      )}
+      </div>
+    )
+  }
 
-      {/* Step 2: 选命题 */}
-      {step === 2 && (
-        <div className="space-y-4 bg-white border border-gray-200 rounded-xl p-6">
-          <h2 className="text-lg font-semibold">第二步：选择因子方向</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {CATEGORIES.map((cat) => (
+  // 工作台
+  return (
+    <div className="-mx-6 -my-6 h-[calc(100%+3rem)] flex flex-col bg-gray-50">
+      <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setStage('select')}
+            className="text-gray-400 hover:text-gray-600 text-sm"
+          >
+            ← 换一只股票
+          </button>
+          <span className="text-sm font-mono font-semibold text-gray-900">{symbol}</span>
+          <span className="text-xs text-gray-400">
+            {startDate} ~ {endDate} · {freq === 'daily' ? '日线' : '周线'}
+          </span>
+          <div className="flex items-center gap-1 ml-2">
+            {PRESET_RANGES.map((r) => (
               <button
-                key={cat.id}
-                onClick={() => setCategory(cat.id)}
-                className={`p-3 rounded-lg border text-left transition-all ${
-                  category === cat.id
-                    ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
+                key={r.label}
+                type="button"
+                onClick={() => reloadKlines(r.days)}
+                className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors"
               >
-                <div className="font-medium text-sm">{cat.label}</div>
-                <div className="text-xs text-gray-400 mt-0.5">{cat.desc}</div>
+                {r.label}
               </button>
             ))}
           </div>
-          <div>
-            <label className="block text-sm text-gray-500 mb-1">或自由描述（可选）</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-              placeholder="描述你想分析的因子逻辑，例如：'过去 20 天的价格动量变化'"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-            />
-          </div>
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <div className="flex gap-3">
-            <button onClick={() => setStep(1)} className="flex-1 py-2.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors">
-              上一步
-            </button>
-            <button
-              onClick={handleGenerate}
-              disabled={generating || (!category && !description.trim())}
-              className="flex-1 py-2.5 rounded-lg text-white font-medium bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 transition-colors"
-            >
-              {generating ? '生成中...' : '生成因子代码'}
-            </button>
-          </div>
         </div>
+        <button
+          onClick={handleSave}
+          disabled={!latestCode || saving}
+          className="px-4 py-1.5 rounded-lg text-white text-sm font-medium bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+        >
+          {saving ? '保存中…' : '保存到我的因子'}
+        </button>
+        <DataHelpModal />
+      </div>
+
+      {error && (
+        <div className="px-4 py-1.5 bg-red-50 text-red-700 text-xs border-b border-red-100">{error}</div>
       )}
 
-      {/* Step 3: 结果 */}
-      {step === 3 && (
-        <div className="space-y-4 bg-white border border-gray-200 rounded-xl p-6">
-          <h2 className="text-lg font-semibold">第三步：检查并保存</h2>
-          {code ? (
-            <>
-              <pre className="bg-gray-900 text-gray-100 rounded-lg p-4 text-xs overflow-x-auto max-h-96 overflow-y-auto">{code}</pre>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              <div className="flex gap-3">
-                <button onClick={() => { setCode(''); setStep(2) }} className="flex-1 py-2.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors">
-                  重新生成
-                </button>
-                <button onClick={handleSave} className="flex-1 py-2.5 rounded-lg text-white font-medium bg-blue-600 hover:bg-blue-700 transition-colors">
-                  保存到我的因子
-                </button>
-              </div>
-            </>
-          ) : (
-            <div className="text-center py-8 text-gray-400">代码生成中...</div>
-          )}
+      <div className="flex-1 min-h-0 flex">
+        <div className="w-[40%] min-w-[320px] max-w-[500px] border-r border-gray-200">
+          <ChatPanel
+            messages={messages}
+            streamingText={streamingText}
+            generating={generating}
+            onSubmit={handleSubmit}
+          />
         </div>
-      )}
+        <div className="flex-1 min-w-0 p-3">
+          <KlineFactorChart
+            klines={klines}
+            factor={factor}
+            klineLoading={klineLoading}
+            factorLoading={factorLoading}
+            emptyHint="在左侧描述你想要的因子，副图会实时显示"
+          />
+        </div>
+      </div>
     </div>
   )
 }

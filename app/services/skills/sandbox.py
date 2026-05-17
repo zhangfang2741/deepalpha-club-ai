@@ -20,6 +20,8 @@ async def run_in_subprocess(
     end_date: str,
     *,
     timeout: float = 30.0,
+    news: list[dict] | None = None,
+    financials: dict | None = None,
 ) -> tuple[list[dict], str]:
     """以独立 Python 子进程执行 skill，Linux 上 setrlimit 限 CPU/内存/fd。"""
     payload = json.dumps({
@@ -28,6 +30,8 @@ async def run_in_subprocess(
         "symbol": symbol,
         "start_date": start_date,
         "end_date": end_date,
+        "news": news or [],
+        "financials": financials or {},
     }).encode()
 
     preexec = _apply_rlimits if sys.platform.startswith("linux") else None
