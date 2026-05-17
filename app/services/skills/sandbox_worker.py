@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import traceback
 
@@ -12,24 +13,48 @@ import numpy as np
 import pandas as pd
 
 _ALLOWED_NS = {
-    "abs": abs, "len": len, "range": range, "enumerate": enumerate,
-    "zip": zip, "min": min, "max": max, "sum": sum, "sorted": sorted,
-    "reversed": reversed, "list": list, "dict": dict, "tuple": tuple,
-    "set": set, "float": float, "int": int, "str": str, "bool": bool,
-    "type": type, "isinstance": isinstance, "round": round, "pow": pow,
-    "None": None, "True": True, "False": False,
     "math": math, "np": np, "numpy": np, "pd": pd, "pandas": pd,
-    "Exception": Exception, "ValueError": ValueError, "TypeError": TypeError,
-    "__builtins__": {},
+    # ast_check.py 已在 AST 层拦截 __import__/getattr/open 等危险调用，
+    # 此处放开完整 __builtins__ 以兼容 pandas/numpy C 代码内部依赖
+    "__builtins__": __builtins__,
 }
 
 
+_REDUNDANT_IMPORT = re.compile(
+    r"^[ \t]*(?:from\s+(?:numpy|pandas|math)(?:\.\w+)?\s+import\s+.+|"
+    r"import\s+(?:numpy|pandas|math)(?:\s+as\s+\w+)?)\s*$",
+    re.MULTILINE,
+)
+
+
+def _strip_redundant_imports(code: str) -> str:
+    """剥掉顶层冗余的 numpy/pandas/math import 行（沙箱已注入 np/pd/math）"""
+    return _REDUNDANT_IMPORT.sub("", code)
+
+
 def _run(payload: dict) -> dict:
-    code = payload["code"]
+    code = _strip_redundant_imports(payload["code"])
     price_records = payload["price"]
     symbol = payload["symbol"]
+    news_records = payload.get("news", [])
+    financials = payload.get("financials", {})
 
     ns = dict(_ALLOWED_NS)
+    ns["prices"] = price_records
+    ns["news"] = news_records
+    # 财务数据 dict（含 income_statement/balance_sheet/cash_flow/key_metrics/analyst_estimates/dcf/dividends）
+    ns["financials"] = financials
+    # analyst_estimates 和 dcf/dividends 也作为顶层变量方便访问
+    if isinstance(financials, dict):
+        ns["analyst_estimates"] = financials.get("analyst_estimates", [])
+        ns["dcf"] = financials.get("dcf", [])
+        ns["dividends"] = financials.get("dividends", [])
+        ns["income_statement"] = financials.get("income_statement", [])
+        ns["balance_sheet"] = financials.get("balance_sheet", [])
+        ns["cash_flow"] = financials.get("cash_flow", [])
+        ns["key_metrics"] = financials.get("key_metrics", [])
+        ns["earnings"] = financials.get("earnings", [])
+        ns["profile"] = financials.get("profile", {})
     exec(code, ns)  # noqa: S102
 
     if "compute" not in ns:

@@ -29,10 +29,13 @@ from app.schemas.skills import (
 from app.services.skills import (
     compute_factor_snapshot,
     fetch_kline,
+    fetch_news,
     generate_skill_stream,
 )
 from app.services.skills import SkillError, SkillSyntaxError
+from app.services.skills.fmp_data import fetch_all_financial_data
 from app.services.skills.kline import bars_to_price_records
+from app.services.skills.symbol_search import search_us_symbols
 
 _executor = ThreadPoolExecutor(max_workers=4)
 
@@ -67,6 +70,23 @@ async def generate_skill(
             yield f"data: {SkillGenerateResponse(content=str(e), done=True).model_dump_json()}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.get("/symbol-search")
+@limiter.limit("60 per minute")
+async def symbol_search(
+    request: Request,
+    q: str = Query(..., min_length=1, max_length=30, description="搜索关键词（symbol 或公司名）"),
+    limit: int = Query(10, ge=1, le=20),
+    user: User = Depends(get_current_user),
+    redis: Redis = Depends(get_redis),
+) -> list[dict]:
+    """美股 symbol 联想搜索，过滤主流交易所，Redis 缓存 24h。"""
+    try:
+        return await search_us_symbols(q, redis=redis, limit=limit)
+    except Exception as e:
+        logger.exception("symbol_search_failed", query=q, error=str(e))
+        raise HTTPException(status_code=500, detail=f"symbol 搜索失败：{e}")
 
 
 @router.get("/kline", response_model=KlineResponse)
@@ -115,8 +135,20 @@ async def run_skill(
         bars = await fetch_kline(user.id, body.symbol, body.start_date, body.end_date, body.freq, redis=redis)
         price_records = bars_to_price_records(bars)
 
+        # 舆情因子：新闻数据
+        news_records = []
+        if body.include_news:
+            news_records = await fetch_news(body.symbol)
+
+        # 财务因子：income/balance/cash-flow/key-metrics/analyst-estimates/dcf/dividends
+        financials_data = None
+        if body.include_financials:
+            financials_data = await fetch_all_financial_data(body.symbol)
+
         result = await compute_factor_snapshot(
             body.code, price_records, body.symbol, body.start_date, body.end_date,
+            news=news_records if body.include_news else None,
+            financials=financials_data if body.include_financials else None,
         )
         factor = result["factor"]
         factor_points = [FactorPoint(time=f["time"], value=f["value"]) for f in factor]

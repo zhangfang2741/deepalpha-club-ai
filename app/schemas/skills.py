@@ -59,6 +59,8 @@ class SkillRunRequest(BaseModel):
     start_date: str
     end_date: str
     freq: Literal["daily", "weekly"] = "daily"
+    include_news: bool = False  # 舆情因子
+    include_financials: bool = False  # 财务/分析师预测数据
 
 
 class SkillRunResponse(BaseModel):

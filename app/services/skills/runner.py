@@ -14,12 +14,17 @@ async def compute_factor_snapshot(
     symbol: str,
     start_date: str,
     end_date: str,
+    *,
+    news: list[dict] | None = None,
+    financials: dict | None = None,
 ) -> dict:
     """执行 skill，返回 {factor, signals, metrics} 快照 dict。"""
     check_code_safety(code)
 
     raw_result, output_type = await run_in_subprocess(
         code, price_records, symbol, start_date, end_date, timeout=30.0,
+        news=news or [],
+        financials=financials or {},
     )
 
     if not raw_result:

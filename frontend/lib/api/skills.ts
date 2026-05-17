@@ -128,6 +128,7 @@ export async function runSkill(
   startDate: string,
   endDate: string,
   freq: Freq,
+  options?: { include_news?: boolean; include_financials?: boolean },
 ): Promise<SkillRunResponse> {
   const token = getToken()
   const response = await fetch(`${BASE_URL}/api/v1/skills/run`, {
@@ -136,7 +137,11 @@ export async function runSkill(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ code, symbol, start_date: startDate, end_date: endDate, freq }),
+    body: JSON.stringify({
+      code, symbol, start_date: startDate, end_date: endDate, freq,
+      include_news: options?.include_news ?? false,
+      include_financials: options?.include_financials ?? false,
+    }),
   })
   if (!response.ok) {
     const json = await response.json().catch(() => null)
@@ -144,6 +149,22 @@ export async function runSkill(
     throw new Error(`Skill 执行失败 (${response.status}): ${detail}`)
   }
   return response.json()
+}
+
+export interface SymbolSuggestion {
+  symbol: string
+  name: string
+  exchange: string
+}
+
+/** 美股 symbol 联想搜索（后端代理 FMP，Redis 缓存 24h） */
+export async function searchSymbol(q: string, limit = 10): Promise<SymbolSuggestion[]> {
+  const trimmed = q.trim()
+  if (!trimmed) return []
+  const resp = await client.get('/api/v1/skills/symbol-search', {
+    params: { q: trimmed, limit },
+  })
+  return resp.data
 }
 
 // ── Gallery/Mine API ───────────────────────────────────────────────────────────
