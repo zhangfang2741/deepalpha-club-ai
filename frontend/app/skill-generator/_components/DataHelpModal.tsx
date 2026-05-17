@@ -108,11 +108,15 @@ const DATA_TREE: DataNode[] = [
     ],
   },
   {
-    title: '公司基本信息',
-    emoji: '🏢',
-    description: '行业、市值、员工数等',
-    usage: '描述"大盘股"、"科技行业"等筛选条件',
-    example: '"市值超过100亿美元"',
+    title: '员工与公司规模',
+    emoji: '👥',
+    description: '员工历史人数（年度时间序列）',
+    usage: '描述"员工增长超过20%"、"公司规模扩张"等因子时使用',
+    example: '"员工同比增长超过20%"',
+    children: [
+      { title: '员工历史', emoji: '📊', description: '年度员工数量时间序列', usage: '"员工连续2年增长"' },
+      { title: '公司概况', emoji: '🏢', description: '行业/市值/员工数', usage: '"市值超过1000亿美元"' },
+    ],
   },
 ]
 

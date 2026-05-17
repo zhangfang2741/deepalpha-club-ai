@@ -36,6 +36,10 @@ function extractCode(text: string): string {
 // 把后端技术错误翻译成人话
 function humanizeRunError(detail: string): string {
   if (!detail) return '这次没能生成可用的因子，请换种说法再试一次。'
+  // 因子计算返回空（AI 可能生成了代码但数据不支持，尝试返回了空）
+  if (/空结果|返回.*条|compute returned/.test(detail)) {
+    return 'AI 生成的因子无法计算（所请求的数据在当前不可用）。请尝试基于 K 线价格、成交量、财务报表（收入/利润/ROE）、分析师预测上调等数据描述因子。'
+  }
   // K 线数据问题
   if (/K\s*线|kline|无法获取股票数据/i.test(detail)) {
     return '股票数据加载失败，请检查代码、日期范围或换一只股票。'
@@ -167,7 +171,7 @@ export function NewView() {
 
       const run = await runSkill(code, symbol, startDate, endDate, freq, {
         include_financials: true,
-        include_news: true,
+        include_news: false,
       })
       setFactor(run.factor)
       setLatestCode(code)

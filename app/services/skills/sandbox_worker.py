@@ -41,30 +41,50 @@ def _run(payload: dict) -> dict:
 
     ns = dict(_ALLOWED_NS)
     ns["prices"] = price_records
-    ns["news"] = news_records
-    # 财务数据 dict（含 income_statement/balance_sheet/cash_flow/key_metrics/analyst_estimates/dcf/dividends）
-    ns["financials"] = financials
-    # analyst_estimates 和 dcf/dividends 也作为顶层变量方便访问
+    # 类型检查：确保 financial 各字段都是 list/dict，API 失败时可能返回 string
+    ns["news"] = news_records if isinstance(news_records, list) else []
     if isinstance(financials, dict):
-        ns["analyst_estimates"] = financials.get("analyst_estimates", [])
-        ns["dcf"] = financials.get("dcf", [])
-        ns["dividends"] = financials.get("dividends", [])
-        ns["income_statement"] = financials.get("income_statement", [])
-        ns["balance_sheet"] = financials.get("balance_sheet", [])
-        ns["cash_flow"] = financials.get("cash_flow", [])
-        ns["key_metrics"] = financials.get("key_metrics", [])
-        ns["earnings"] = financials.get("earnings", [])
-        ns["profile"] = financials.get("profile", {})
+        ns["financials"] = financials
+        ns["analyst_estimates"] = financials.get("analyst_estimates") if isinstance(financials.get("analyst_estimates"), list) else []
+        ns["dcf"] = financials.get("dcf") if isinstance(financials.get("dcf"), list) else []
+        ns["dividends"] = financials.get("dividends") if isinstance(financials.get("dividends"), list) else []
+        ns["income_statement"] = financials.get("income_statement") if isinstance(financials.get("income_statement"), list) else []
+        ns["balance_sheet"] = financials.get("balance_sheet") if isinstance(financials.get("balance_sheet"), list) else []
+        ns["cash_flow"] = financials.get("cash_flow") if isinstance(financials.get("cash_flow"), list) else []
+        ns["key_metrics"] = financials.get("key_metrics") if isinstance(financials.get("key_metrics"), list) else []
+        ns["earnings"] = financials.get("earnings") if isinstance(financials.get("earnings"), list) else []
+        ns["profile"] = financials.get("profile") if isinstance(financials.get("profile"), dict) else {}
+        # employees 字段是单一当前值，不是时间序列
+        ns["current_employees"] = ns["profile"].get("employees") if isinstance(ns["profile"], dict) else None
+        # employee_count 是时间序列（年度），可用于计算员工增长因子
+        ns["employee_count"] = financials.get("employee_count") if isinstance(financials.get("employee_count"), list) else []
+    else:
+        ns["financials"] = {}
+        for k in ["analyst_estimates", "dcf", "dividends", "income_statement",
+                  "balance_sheet", "cash_flow", "key_metrics", "earnings",
+                  "profile", "employee_count"]:
+            ns[k] = [] if k != "profile" else {}
+        ns["current_employees"] = None
     exec(code, ns)  # noqa: S102
 
     if "compute" not in ns:
         raise RuntimeError("因子代码必须定义 compute(prices, symbol) 函数")
 
-    result = ns["compute"](price_records, symbol)
+    try:
+        result = ns["compute"](price_records, symbol)
+    except Exception as exc:
+        import sys as _sys
+        _sys.stderr.write(f"[sandbox] compute 错误: {exc}\n")
+        raise
 
     if not isinstance(result, list):
         raise TypeError(f"compute() 必须返回 list，实际返回 {type(result).__name__}")
 
+    # 日志输出，方便排查（不影响主流程）
+    import sys as _sys
+    _sys.stderr.write(f"[sandbox] compute returned {len(result)} records\n")
+    if result:
+        _sys.stderr.write(f"[sandbox] first record: {result[0]}\n")
     return {"records": result, "output_type": "factor"}
 
 

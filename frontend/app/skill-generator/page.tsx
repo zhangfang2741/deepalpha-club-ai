@@ -35,6 +35,9 @@ function SkillGeneratorContent() {
   }, [tabParam, activeTab, setActiveTab])
 
   const switchTab = (tab: 'gallery' | 'mine' | 'new') => {
+    // 切换标签时关闭详情页
+    const { closeDetail } = useSkillsStore.getState()
+    closeDetail()
     router.replace(`/skill-generator?tab=${tab}`)
     setActiveTab(tab)
   }

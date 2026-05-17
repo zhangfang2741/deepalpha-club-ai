@@ -6,6 +6,7 @@ import json
 import os
 import sys
 
+from app.core.logging import logger
 from app.services.skills.errors import SkillSandboxError, SkillTimeoutError
 
 # 用文件路径代替 `-m` 避免 `__package__` 链触发 app/ 包初始化（日志污染 stdout）
@@ -53,7 +54,11 @@ async def run_in_subprocess(
         raise SkillTimeoutError(f"Skill 执行超时（>{int(timeout)}s），请简化逻辑")
 
     if proc.returncode != 0:
-        raise SkillSandboxError(stderr.decode("utf-8", errors="replace")[:500])
+        stderr_text = stderr.decode("utf-8", errors="replace")
+        logger.warning("skill_sandbox_error", stderr=stderr_text[:500])
+        if "[sandbox] compute" in stderr_text:
+            raise SkillSandboxError(f"compute 返回了空结果（可能过滤后无有效数据点）\n{stderr_text[:300]}")
+        raise SkillSandboxError(stderr_text[:500])
 
     result = json.loads(stdout)
     return result["records"], result.get("output_type", "factor")

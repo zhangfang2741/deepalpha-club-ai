@@ -173,6 +173,17 @@ async def fetch_earnings(symbol: str, limit: int = 20) -> list[dict]:
     ]
 
 
+async def fetch_historical_employee_count(symbol: str, limit: int = 20) -> list[dict]:
+    """员工历史人数（年度），返回 date/employeeCount。"""
+    url = f"{_FMP_BASE}/historical-employee-count"
+    rows = await _get(url, {"symbol": symbol, "limit": limit})
+    return [
+        {"date": r.get("periodOfReport"), "employeeCount": r.get("employeeCount")}
+        for r in rows
+        if r.get("employeeCount")
+    ]
+
+
 async def fetch_news(symbol: str, limit: int = 50) -> list[dict]:
     """股票新闻列表，返回 date/title/text/sentiment/score。"""
     url = f"{_FMP_BASE}/stock_news"
@@ -285,6 +296,7 @@ async def fetch_all_financial_data(symbol: str) -> dict:
         fetch_earnings(symbol),
         fetch_dividends(symbol),
         fetch_dcf_history(symbol),
+        fetch_historical_employee_count(symbol),
         return_exceptions=True,
     )
     return {
@@ -297,6 +309,7 @@ async def fetch_all_financial_data(symbol: str) -> dict:
         "earnings": _safe(results, 6),
         "dividends": _safe(results, 7),
         "dcf": _safe(results, 8),
+        "employee_count": _safe(results, 9),
     }
 
 
