@@ -1,7 +1,7 @@
 # app/db/session.py
 """双引擎 Session 管理：AsyncSession（FastAPI 异步端点）+ SyncSession（Celery 任务）。"""
 
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -51,8 +51,13 @@ AsyncSessionFactory = async_sessionmaker(
 )
 
 
-def get_sync_session() -> Generator[Session, None, None]:
-    """Celery 任务用同步 session 依赖。"""
+def get_sync_session_cm() -> Session:
+    """同步 session 上下文管理器，直接返回 Session 实例。"""
+    return Session(sync_engine)
+
+
+def get_sync_session() -> Session:
+    """Celery 任务用同步 session 依赖（generator，兼容 FastAPI Depends）。"""
     with Session(sync_engine) as session:
         yield session
 
