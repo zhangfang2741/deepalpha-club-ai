@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef } from 'react'
 import { useSkillsStore } from '@/lib/store/skills'
+import { createChart, CrosshairMode, CandlestickSeries, BaselineSeries, type Time } from 'lightweight-charts'
 
 export function DetailPage() {
   const { selectedSkillId, detailSkill, detailLoading, closeDetail } = useSkillsStore()
@@ -10,10 +11,7 @@ export function DetailPage() {
   useEffect(() => {
     if (!detailSkill?.snapshot || !klineRef.current || !factorRef.current) return
 
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { createChart, ColorType, BaselineSeries, CrosshairMode } = require('lightweight-charts') as typeof import('lightweight-charts')
-    const snapshot = detailSkill.snapshot as { factor?: Array<{ time: string; value: number }>; signals?: Array<{ date: string; z: number; close: number }>; metrics?: Record<string, number> }
-    const signals = snapshot.signals || []
+    const snapshot = detailSkill.snapshot as { factor?: Array<{ time: string; value: number }>; metrics?: Record<string, number> }
 
     // K 线图
     const klineChart = createChart(klineRef.current, {
@@ -26,13 +24,13 @@ export function DetailPage() {
 
     // 简化 mock K 线（实际从 API 拉）
     const mockCandles = (snapshot.factor || []).slice(-100).map((f, i) => ({
-      time: f.time as any,
+      time: f.time as Time,
       open: 100 + i * 0.5,
       high: 102 + i * 0.5,
       low: 99 + i * 0.5,
       close: 101 + i * 0.5,
     }))
-    const klineSeries = klineChart.addCandlestickSeries({ upColor: '#22c55e', downColor: '#ef4444' })
+    const klineSeries = klineChart.addSeries(CandlestickSeries, { upColor: '#22c55e', downColor: '#ef4444' })
     klineSeries.setData(mockCandles)
     klineChart.timeScale().fitContent()
 
@@ -49,9 +47,9 @@ export function DetailPage() {
       topFillColor2: '#3b82f640',
       bottomFillColor1: '#ef4444',
       bottomFillColor2: '#ef444440',
-      baseValue: { type: 'zero' },
+      baseValue: { type: 'price', price: 0 } as any,
     })
-    baselineSeries.setData((snapshot.factor || []).map((f) => ({ time: f.time as any, value: f.value })))
+    baselineSeries.setData((snapshot.factor || []).map((f) => ({ time: f.time as Time, value: f.value })))
     factorChart.timeScale().fitContent()
 
     const resizeObserver = new ResizeObserver(() => {

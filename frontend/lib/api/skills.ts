@@ -4,7 +4,6 @@
  */
 
 import client from './client'
-import type { SkillMessage } from './skills'
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 

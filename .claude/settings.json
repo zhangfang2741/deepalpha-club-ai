@@ -2,6 +2,14 @@
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true
   },
+  "permissions": {
+    "defaultMode": "auto",
+    "allow": [
+      "Bash(npx tsc --noEmit)",
+      "Bash(cd frontend && npx tsc --noEmit)",
+      "Bash", "filesystem"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {

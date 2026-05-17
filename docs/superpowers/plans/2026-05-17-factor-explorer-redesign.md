@@ -267,7 +267,7 @@ def upgrade():
                     '{uuid.uuid4()}', '{case['title']}', '{case['description']}',
                     '{case['category']}', '{case['symbol']}',
                     '{case['start']}', '{case['end']}', 'daily',
-                    '{json.dumps(case['snapshot'])}', {None if case['narrative'] is None else f"'{json.dumps(case['narrative'])}'"},
+                    '{json.dumps(case['snapshot'])}', {f"'{json.dumps(case['narrative'])}'" if case['narrative'] is not None else "NULL"},
                     false, {case['pin_priority']}
                 ) ON CONFLICT DO NOTHING"""
         )
