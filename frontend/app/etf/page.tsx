@@ -1,17 +1,16 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { fetchETFHeatmap, fetchETFDeviationScores } from '@/lib/api/etf'
-import type { HeatmapResponse, Granularity, DeviationScoreResponse } from '@/lib/api/etf'
+import { fetchETFHeatmap } from '@/lib/api/etf'
+import type { HeatmapResponse, Granularity } from '@/lib/api/etf'
 import { useETFStore } from '@/lib/store/etf'
 import GranularityToggle from '@/components/etf/GranularityToggle'
 import ETFHeatmapTable from '@/components/etf/ETFHeatmapTable'
-import ETFDeviationTable from '@/components/etf/ETFDeviationTable'
 import SectorValuationGrid from '@/components/valuation/SectorValuationGrid'
 import Spinner from '@/components/ui/Spinner'
 import DashboardShell from '@/components/layout/DashboardShell'
 
-type ActiveTab = 'heatmap' | 'deviation' | 'valuation'
+type ActiveTab = 'heatmap' | 'valuation'
 
 export default function ETFPage() {
   const { granularity, days, setGranularity } = useETFStore()
@@ -21,12 +20,6 @@ export default function ETFPage() {
   const [heatmapData, setHeatmapData] = useState<HeatmapResponse | null>(null)
   const [heatmapLoading, setHeatmapLoading] = useState(true)
   const [heatmapError, setHeatmapError] = useState('')
-
-  // 偏离分状态（懒加载）
-  const [deviationData, setDeviationData] = useState<DeviationScoreResponse | null>(null)
-  const [deviationLoading, setDeviationLoading] = useState(false)
-  const [deviationError, setDeviationError] = useState('')
-
 
   // 热力图加载
   useEffect(() => {
@@ -52,33 +45,9 @@ export default function ETFPage() {
     }
   }, [granularity, days])
 
-  // 偏离分懒加载
-  useEffect(() => {
-    if (activeTab !== 'deviation' || deviationData !== null) return
-
-    let cancelled = false
-    setDeviationLoading(true)
-    setDeviationError('')
-    fetchETFDeviationScores(days)
-      .then((result) => {
-        if (!cancelled) setDeviationData(result)
-      })
-      .catch(() => {
-        if (!cancelled) setDeviationError('偏离分数据加载失败，请重试')
-      })
-      .finally(() => {
-        if (!cancelled) setDeviationLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [activeTab, days, deviationData])
-
   const handleGranularityChange = (g: Granularity) => {
     setHeatmapLoading(true)
     setGranularity(g)
-    setDeviationData(null)
   }
 
   const handleHeatmapRetry = () => {
@@ -90,15 +59,9 @@ export default function ETFPage() {
       .finally(() => setHeatmapLoading(false))
   }
 
-  const handleDeviationRetry = () => {
-    setDeviationData(null)
-    setDeviationError('')
-  }
-
   const TAB_LABELS: Record<ActiveTab, string> = {
     heatmap: '资金流热力图',
-    deviation: '错杀分析',
-    valuation: '估值热度',
+    valuation: '行业估值分析',
   }
 
   return (
@@ -117,7 +80,7 @@ export default function ETFPage() {
 
       {/* 标签切换 */}
       <div className="flex gap-1 mb-4 border-b border-gray-200">
-        {(['heatmap', 'deviation', 'valuation'] as const).map((tab) => (
+        {(['heatmap', 'valuation'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -172,43 +135,61 @@ export default function ETFPage() {
         </>
       )}
 
-      {/* 偏离分 Tab */}
-      {activeTab === 'deviation' && (
-        <>
-          <p className="text-sm text-gray-500 mb-4">
-            将每只 ETF 近期在恐慌（FG&lt;45）或贪婪（FG&gt;55）期间的资金流强度与其自身历史基准对比，
-            发现被市场过度抛售（错杀）或过度追高的行业。
-          </p>
-
-          {deviationError && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
-              <span className="text-sm text-red-600">{deviationError}</span>
-              <button
-                onClick={handleDeviationRetry}
-                className="text-sm text-red-600 font-medium hover:text-red-800 underline"
-              >
-                重试
-              </button>
-            </div>
-          )}
-
-          {deviationLoading && !deviationData && (
-            <div className="rounded-xl border border-gray-200 bg-white flex items-center justify-center h-64">
-              <Spinner size={40} />
-            </div>
-          )}
-
-          {deviationData && <ETFDeviationTable data={deviationData} />}
-        </>
-      )}
-
-      {/* 估值热度 Tab */}
+      {/* 行业估值分析 Tab */}
       {activeTab === 'valuation' && (
         <>
-          <p className="text-sm text-gray-500 mb-4">
-            基于 FMP GICS 行业近 5 年季度 PE 数据计算 z-score，
-            展示一级板块与细粒度子行业的历史高估/低估程度。
-          </p>
+          {/* 计算方法说明卡片 */}
+          <div className="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+            <div className="font-semibold text-slate-700 mb-3">计算方法（PE z-score）</div>
+            <div className="space-y-2 text-slate-600">
+              <div>
+                <span className="font-medium text-slate-800">1. 数据采集</span>
+                ：从 FMP 拉取 GICS 各行业近 5 年（约 20 个季度）的季度末市盈率（PE）历史序列。
+              </div>
+              <div>
+                <span className="font-medium text-slate-800">2. 标准化公式</span>
+                ：
+                <code className="mx-1.5 px-2 py-0.5 bg-white border border-slate-200 rounded text-xs font-mono text-slate-700">
+                  z-score = (当前 PE − 历史均值 μ) / 历史标准差 σ
+                </code>
+              </div>
+              <div>
+                <span className="font-medium text-slate-800">3. 热度分级</span>
+                ：根据 z-score 落入的标准差区间判断估值冷热——
+                <span className="text-blue-700 font-medium"> z ≤ −2σ</span> 极度低估 ·
+                <span className="text-blue-500 font-medium"> −2σ ~ −1σ</span> 低估 ·
+                <span className="text-slate-500 font-medium"> −1σ ~ +1σ</span> 中性 ·
+                <span className="text-orange-500 font-medium"> +1σ ~ +2σ</span> 高估 ·
+                <span className="text-red-500 font-medium"> z ≥ +2σ</span> 极度高估
+              </div>
+            </div>
+
+            {/* 示例 */}
+            <div className="mt-3 p-3 bg-white border border-slate-100 rounded-lg">
+              <div className="text-xs font-semibold text-slate-600 mb-2">示例：信息技术行业</div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                <div className="space-y-0.5">
+                  <div className="text-slate-400">历史均值 μ（5年）</div>
+                  <div className="font-mono font-bold text-slate-700">28.00</div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-slate-400">历史标准差 σ</div>
+                  <div className="font-mono font-bold text-slate-700">4.20</div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-slate-400">当前 PE</div>
+                  <div className="font-mono font-bold text-slate-700">35.00</div>
+                </div>
+              </div>
+              <div className="mt-2 text-xs text-slate-500 border-t border-slate-50 pt-2">
+                z-score = (35.00 − 28.00) / 4.20 ≈{' '}
+                <span className="font-bold font-mono text-orange-500">+1.67</span>
+                <span className="ml-2">→ 落在 [+1σ, +2σ) 区间 →</span>
+                <span className="ml-1 font-semibold text-orange-500">高估</span>
+              </div>
+            </div>
+          </div>
+
           <SectorValuationGrid />
         </>
       )}
