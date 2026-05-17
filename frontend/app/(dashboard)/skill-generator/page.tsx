@@ -3,6 +3,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { Suspense, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { useSkillsStore } from '@/lib/store/skills'
+import DashboardShell from '@/components/layout/DashboardShell'
 
 const GalleryView = dynamic(() => import('./_components/GalleryView').then(m => ({ default: m.GalleryView })), { ssr: false })
 const MineView = dynamic(() => import('./_components/MineView').then(m => ({ default: m.MineView })), { ssr: false })
@@ -39,13 +40,13 @@ function SkillGeneratorContent() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="border-b border-gray-200 bg-white px-6 py-3 flex gap-1">
+    <div className="h-full flex flex-col">
+      <div className="border-b border-gray-200 bg-white px-6 py-3 flex gap-1 flex-shrink-0">
         <TabButton label="案例馆" active={activeTab === 'gallery'} onClick={() => switchTab('gallery')} />
         <TabButton label="我的因子" active={activeTab === 'mine'} onClick={() => switchTab('mine')} />
         <TabButton label="新建" active={activeTab === 'new'} onClick={() => switchTab('new')} />
       </div>
-      <div className="p-6">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6">
         {activeTab === 'gallery' && <GalleryView />}
         {activeTab === 'mine' && <MineView />}
         {activeTab === 'new' && <NewView />}
@@ -58,7 +59,9 @@ function SkillGeneratorContent() {
 export default function SkillGeneratorPage() {
   return (
     <Suspense>
-      <SkillGeneratorContent />
+      <DashboardShell>
+        <SkillGeneratorContent />
+      </DashboardShell>
     </Suspense>
   )
 }
