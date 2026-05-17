@@ -1,11 +1,11 @@
 """Analysis database models."""
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import JSON, Float, Integer, String, Text, DateTime, Boolean, Index
-from sqlmodel import Field, SQLModel
+from sqlalchemy import JSON, Float, String, Text, DateTime, Boolean, Index
+from sqlmodel import Field
 
 from app.db.base import UUIDModel
 

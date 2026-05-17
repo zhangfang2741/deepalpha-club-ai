@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import JSON, Column, UniqueConstraint
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field
 
 from app.db.base import UUIDModel
 

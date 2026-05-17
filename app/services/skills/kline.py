@@ -5,7 +5,6 @@ import os
 import re
 
 import httpx
-import pandas as pd
 from redis.asyncio import Redis
 
 from app.cache.operations import get_json, set_json

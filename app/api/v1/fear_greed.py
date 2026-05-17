@@ -1,6 +1,6 @@
 """Fear & Greed Index API endpoints."""
 
-from datetime import date, timedelta
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query

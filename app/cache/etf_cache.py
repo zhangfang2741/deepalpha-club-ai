@@ -17,7 +17,6 @@ TTL：3600 秒（1 小时）
 
 import json
 import zlib
-from typing import List, Optional
 
 from redis.asyncio import Redis
 

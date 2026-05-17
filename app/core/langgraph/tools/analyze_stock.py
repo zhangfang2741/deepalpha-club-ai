@@ -23,7 +23,6 @@ from app.schemas.analysis import (
 )
 from app.services.analyzer.fmp_client import fmp_client
 from app.services.analyzer.news_client import news_client
-from app.services.analyzer.sec_edgar import sec_edgar_client
 
 
 # Dynamic input schema builder (used by langgraph tools when needed)
@@ -301,14 +300,14 @@ async def _analyze_sentiment_layer(ticker: str) -> LayerAnalysis:
     findings = []
     article_count = sentiment.get('article_count', 0)
     if sentiment_score >= 60:
-        findings.append(f"市场新闻情绪偏向积极，媒体报道与分析师观点整体看多，市场预期乐观")
-        findings.append(f"正面报道占比较高，反映出投资者对该股票的信心较强")
+        findings.append("市场新闻情绪偏向积极，媒体报道与分析师观点整体看多，市场预期乐观")
+        findings.append("正面报道占比较高，反映出投资者对该股票的信心较强")
     elif sentiment_score <= 40:
-        findings.append(f"市场新闻情绪偏向负面，近期存在不利消息或市场担忧情绪蔓延")
-        findings.append(f"负面报道较多，需警惕情绪面对股价形成短期压制")
+        findings.append("市场新闻情绪偏向负面，近期存在不利消息或市场担忧情绪蔓延")
+        findings.append("负面报道较多，需警惕情绪面对股价形成短期压制")
     else:
-        findings.append(f"市场新闻情绪中性，多空观点分歧均衡，市场处于观望状态")
-        findings.append(f"情绪面无明显方向性，股价走势更多依赖基本面数据驱动")
+        findings.append("市场新闻情绪中性，多空观点分歧均衡，市场处于观望状态")
+        findings.append("情绪面无明显方向性，股价走势更多依赖基本面数据驱动")
     
     findings.append(f"本次情绪分析共采集 {article_count} 篇近期相关报道，数据来源涵盖主流财经媒体")
     

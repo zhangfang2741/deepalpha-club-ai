@@ -1,6 +1,5 @@
 """Skill factor explorer API: SSE code generation, K-line pre-load, and Skill execution."""
 
-import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 from uuid import UUID

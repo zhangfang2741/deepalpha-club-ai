@@ -10,15 +10,12 @@ All data is traceable with source attribution.
 """
 
 import asyncio
-import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from urllib.parse import quote_plus
 
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from app.core.config import settings
 from app.core.logging import logger
 from app.schemas.analysis import DataPoint, DataSource
 

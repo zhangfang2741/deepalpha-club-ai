@@ -1,5 +1,4 @@
-"""
-子进程入口：从 stdin 读 JSON {"code", "price", "symbol", "start_date", "end_date"}
+"""子进程入口：从 stdin 读 JSON {"code", "price", "symbol", "start_date", "end_date"}
 执行因子代码（compute 函数），stdout 写 {"records": [...], "output_type": str}
 """
 from __future__ import annotations
@@ -29,8 +28,6 @@ def _run(payload: dict) -> dict:
     code = payload["code"]
     price_records = payload["price"]
     symbol = payload["symbol"]
-    start_date = payload["start_date"]
-    end_date = payload["end_date"]
 
     ns = dict(_ALLOWED_NS)
     exec(code, ns)  # noqa: S102

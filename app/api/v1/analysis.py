@@ -1,6 +1,6 @@
 """Analysis API endpoints for structural investment scoring."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query

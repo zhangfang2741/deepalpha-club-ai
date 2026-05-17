@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from sqlalchemy import JSON, Column, Index
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field
 
 from app.db.base import UUIDModel
 
