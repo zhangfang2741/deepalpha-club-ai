@@ -72,3 +72,40 @@ export const fetchETFDetail = async (symbol: string): Promise<ETFValuationDetail
   })
   return response.data
 }
+
+export interface IndustryValuation {
+  industry: string
+  industry_cn: string
+  current_pe: number | null
+  hist_mean: number | null
+  hist_std: number | null
+  z_score: number | null
+  label: string
+  label_en: string
+  hist_pe: SectorPERecord[]
+  data_quarters: number
+}
+
+export interface SectorWithIndustries {
+  sector: string
+  sector_cn: string
+  current_pe: number | null
+  hist_mean: number | null
+  hist_std: number | null
+  z_score: number | null
+  label: string
+  label_en: string
+  hist_pe: SectorPERecord[]
+  data_quarters: number
+  industries: IndustryValuation[]
+}
+
+export interface GICSValuationResponse {
+  as_of: string
+  sectors: SectorWithIndustries[]
+}
+
+export const fetchGICSValuations = async (): Promise<GICSValuationResponse> => {
+  const response = await apiClient.get<GICSValuationResponse>('/api/v1/valuation/gics')
+  return response.data
+}

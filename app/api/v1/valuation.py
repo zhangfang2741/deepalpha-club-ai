@@ -13,9 +13,10 @@ from redis.asyncio import Redis
 from app.cache.client import get_redis
 from app.cache.valuation_cache import get_valuation_cache, set_valuation_cache
 from app.core.logging import logger
-from app.schemas.valuation import ETFPricePoint, ETFPriceResponse, ETFValuationDetail, ETFValuationSummaryResponse, SectorValuationResponse
+from app.schemas.valuation import ETFPricePoint, ETFPriceResponse, ETFValuationDetail, ETFValuationSummaryResponse, GICSValuationResponse, SectorValuationResponse
 from app.services.valuation.sector_pe import compute_sector_valuations
 from app.services.valuation.etf_pe import compute_etf_valuation_detail, compute_etf_valuation_summary
+from app.services.valuation.gics_pe import compute_gics_valuations
 
 router = APIRouter()
 
@@ -179,6 +180,41 @@ async def get_etf_valuation_detail(
         try:
             compressed = zlib.compress(data.model_dump_json().encode())
             await redis.set(cache_key, compressed, ex=_ETF_DETAIL_TTL)
+        except Exception:
+            pass
+
+    return data
+
+
+_GICS_CACHE_KEY = "valuation:gics-v1"
+_GICS_CACHE_TTL = 14400  # 4h
+
+
+@router.get("/gics", response_model=GICSValuationResponse)
+async def get_gics_valuations(
+    redis: Redis = Depends(get_redis),
+) -> GICSValuationResponse:
+    """获取 GICS 两层行业 PE z-score 估值（一级板块 + 细粒度行业）。
+
+    冷启动约 15 秒（40 次 API 调用），之后 4h 缓存。
+    """
+    try:
+        raw = await redis.get(_GICS_CACHE_KEY)
+        if raw:
+            payload = json.loads(zlib.decompress(raw))
+            return GICSValuationResponse(**payload)
+    except Exception:
+        pass
+
+    t0 = time.perf_counter()
+    data = await compute_gics_valuations()
+    elapsed = (time.perf_counter() - t0) * 1000
+    logger.info("gics_valuations_computed", ms=round(elapsed, 1), sectors=len(data.sectors))
+
+    if data.sectors:
+        try:
+            compressed = zlib.compress(data.model_dump_json().encode())
+            await redis.set(_GICS_CACHE_KEY, compressed, ex=_GICS_CACHE_TTL)
         except Exception:
             pass
 

@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { fetchETFHeatmap, fetchETFDeviationScores } from '@/lib/api/etf'
-import { fetchSectorValuations } from '@/lib/api/valuation'
 import type { HeatmapResponse, Granularity, DeviationScoreResponse } from '@/lib/api/etf'
-import type { SectorValuationResponse } from '@/lib/api/valuation'
 import { useETFStore } from '@/lib/store/etf'
 import GranularityToggle from '@/components/etf/GranularityToggle'
 import ETFHeatmapTable from '@/components/etf/ETFHeatmapTable'
@@ -29,10 +27,6 @@ export default function ETFPage() {
   const [deviationLoading, setDeviationLoading] = useState(false)
   const [deviationError, setDeviationError] = useState('')
 
-  // 行业估值状态（懒加载）
-  const [valuationData, setValuationData] = useState<SectorValuationResponse | null>(null)
-  const [valuationLoading, setValuationLoading] = useState(false)
-  const [valuationError, setValuationError] = useState('')
 
   // 热力图加载
   useEffect(() => {
@@ -81,29 +75,6 @@ export default function ETFPage() {
     }
   }, [activeTab, days, deviationData])
 
-  // 行业估值懒加载（不依赖 days，数据固定为 10 年季度）
-  useEffect(() => {
-    if (activeTab !== 'valuation' || valuationData !== null) return
-
-    let cancelled = false
-    setValuationLoading(true)
-    setValuationError('')
-    fetchSectorValuations()
-      .then((result) => {
-        if (!cancelled) setValuationData(result)
-      })
-      .catch(() => {
-        if (!cancelled) setValuationError('估值数据加载失败，请重试')
-      })
-      .finally(() => {
-        if (!cancelled) setValuationLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [activeTab, valuationData])
-
   const handleGranularityChange = (g: Granularity) => {
     setHeatmapLoading(true)
     setGranularity(g)
@@ -122,11 +93,6 @@ export default function ETFPage() {
   const handleDeviationRetry = () => {
     setDeviationData(null)
     setDeviationError('')
-  }
-
-  const handleValuationRetry = () => {
-    setValuationData(null)
-    setValuationError('')
   }
 
   const TAB_LABELS: Record<ActiveTab, string> = {
@@ -240,29 +206,10 @@ export default function ETFPage() {
       {activeTab === 'valuation' && (
         <>
           <p className="text-sm text-gray-500 mb-4">
-            基于 S&P 500 GICS 行业过去 10 年季度 PE 数据，计算当前估值 z-score，
-            识别各行业的历史高估/低估程度。
+            基于 FMP GICS 行业近 5 年季度 PE 数据计算 z-score，
+            展示一级板块与细粒度子行业的历史高估/低估程度。
           </p>
-
-          {valuationError && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
-              <span className="text-sm text-red-600">{valuationError}</span>
-              <button
-                onClick={handleValuationRetry}
-                className="text-sm text-red-600 font-medium hover:text-red-800 underline"
-              >
-                重试
-              </button>
-            </div>
-          )}
-
-          {valuationLoading && !valuationData && (
-            <div className="rounded-xl border border-gray-200 bg-white flex items-center justify-center h-64">
-              <Spinner size={40} />
-            </div>
-          )}
-
-          {valuationData && <SectorValuationGrid data={valuationData} />}
+          <SectorValuationGrid />
         </>
       )}
     </DashboardShell>
