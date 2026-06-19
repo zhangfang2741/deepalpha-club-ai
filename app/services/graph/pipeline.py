@@ -217,6 +217,43 @@ async def ingest_earnings_call(
     return count, str(doc.id)
 
 
+async def ingest_raw_text(
+    raw_text: str,
+    document_type: DocumentType,
+    llm_client,
+    ticker: Optional[str] = None,
+    company_name: Optional[str] = None,
+    period_of_report: Optional[datetime] = None,
+    section: Optional[str] = None,
+    title: Optional[str] = None,
+) -> tuple[int, Optional[str]]:
+    """直接接收原始文本并执行摄取流水线（无需 URL）。
+
+    适用场景：用户从 Seeking Alpha、公司 IR 网站等处复制的电话会议记录文本。
+
+    Returns:
+        (存储事实条数, doc_id 字符串) 或 (0, None)
+    """
+    if not raw_text or len(raw_text.strip()) < 100:
+        logger.warning("ingest_raw_text_too_short", length=len(raw_text))
+        return 0, None
+
+    placeholder_url = f"text://manual/{ticker or 'unknown'}/{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
+
+    doc = SourceDocument(
+        url=placeholder_url,
+        document_type=document_type,
+        ticker=ticker.upper() if ticker else None,
+        company_name=company_name or ticker,
+        period_of_report=period_of_report,
+        section=section,
+        title=title or f"{ticker or 'Manual'} {document_type.value}",
+    )
+    doc = _save_doc_sync(doc)
+    count = await run_ingest_pipeline(doc, llm_client, raw_text=raw_text)
+    return count, str(doc.id)
+
+
 async def run_ingest_pipeline(
     doc: SourceDocument,
     llm_client,

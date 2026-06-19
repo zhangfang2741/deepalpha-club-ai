@@ -37,6 +37,18 @@ class IngestDocumentResponse(BaseModel):
     message: str
 
 
+class IngestTextRequest(BaseModel):
+    """直接摄取原始文本请求。"""
+
+    text: str = Field(description="原始文本内容（电话会议记录、IR 材料等）", min_length=100)
+    document_type: DocumentType
+    ticker: Optional[str] = Field(default=None, description="相关股票代码（如 NVDA）")
+    company_name: Optional[str] = Field(default=None)
+    period_of_report: Optional[datetime] = Field(default=None, description="报告期 YYYY-MM-DD")
+    section: Optional[str] = Field(default=None)
+    title: Optional[str] = Field(default=None)
+
+
 # ──────────────────────────────────────────────
 # 实体（Entity）
 # ──────────────────────────────────────────────

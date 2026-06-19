@@ -26,9 +26,11 @@ from app.schemas.supply_chain import (
     GraphQueryParams,
     IngestDocumentRequest,
     IngestDocumentResponse,
+    IngestTextRequest,
 )
 from app.services.graph.pipeline import (
     ingest_earnings_call,
+    ingest_raw_text,
     ingest_sec_filing,
     run_ingest_pipeline,
 )
@@ -350,6 +352,49 @@ def demand_chain_analysis(concept: str, session: Session = Depends(get_sync_sess
 # ──────────────────────────────────────────────
 # 批量摄取（按 ticker 一键拉取）
 # ──────────────────────────────────────────────
+
+
+@router.post(
+    "/ingest/text",
+    response_model=IngestDocumentResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="直接摄取文本内容",
+)
+async def ingest_text_endpoint(
+    request: IngestTextRequest,
+    background_tasks: BackgroundTasks,
+):
+    """接收用户粘贴的原始文本，异步执行事实抽取。
+
+    适用于 FMP 无权限时从 Seeking Alpha 等公开来源复制的电话会议记录。
+    """
+    import uuid as _uuid
+
+    llm = _get_llm()
+    doc_id = _uuid.uuid4()
+
+    async def _task():
+        try:
+            count, doc_id_str = await ingest_raw_text(
+                raw_text=request.text,
+                document_type=request.document_type,
+                llm_client=llm,
+                ticker=request.ticker,
+                company_name=request.company_name,
+                period_of_report=request.period_of_report,
+                section=request.section,
+                title=request.title,
+            )
+            logger.info("text_ingest_done", ticker=request.ticker, facts=count, doc_id=doc_id_str)
+        except Exception as e:
+            logger.exception("text_ingest_task_failed", ticker=request.ticker, error=str(e))
+
+    background_tasks.add_task(_task)
+    return IngestDocumentResponse(
+        doc_id=doc_id,
+        status="queued",
+        message=f"文本已加入处理队列，共 {len(request.text)} 字符",
+    )
 
 
 @router.post(

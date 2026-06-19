@@ -100,6 +100,16 @@ export interface IngestRequest {
   title?: string
 }
 
+export interface IngestTextRequest {
+  text: string
+  document_type: DocumentType
+  ticker?: string
+  company_name?: string
+  period_of_report?: string
+  section?: string
+  title?: string
+}
+
 const BASE = '/api/v1/supply-chain'
 
 export const supplyChainApi = {
@@ -192,6 +202,11 @@ export const supplyChainApi = {
 
   ingestDocument: async (body: IngestRequest): Promise<{ doc_id: string; status: string; message: string }> => {
     const { data } = await apiClient.post(`${BASE}/ingest`, body)
+    return data
+  },
+
+  ingestText: async (body: IngestTextRequest): Promise<{ doc_id: string; status: string; message: string }> => {
+    const { data } = await apiClient.post(`${BASE}/ingest/text`, body)
     return data
   },
 

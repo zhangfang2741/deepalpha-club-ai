@@ -1,12 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Upload, X, Check, Loader2, Zap, Search } from 'lucide-react'
+import { Upload, X, Check, Loader2, Zap, Search, ClipboardPaste } from 'lucide-react'
 import { supplyChainApi, type DocumentType } from '@/lib/api/supply_chain'
 import apiClient from '@/lib/api/client'
 
 // ── 类型 ────────────────────────────────────────
-type Mode = 'quick' | 'url'
+type Mode = 'quick' | 'url' | 'paste'
 
 const DOC_TYPES: { value: DocumentType; label: string }[] = [
   { value: '10-K', label: 'SEC 10-K（年报）' },
@@ -308,13 +308,139 @@ function UrlIngest({ onSuccess }: IngestPanelProps) {
   )
 }
 
+// ── 粘贴文本摄取 ──────────────────────────────
+function PasteIngest({ onSuccess }: IngestPanelProps) {
+  const [text, setText] = useState('')
+  const [docType, setDocType] = useState<DocumentType>('earnings_call')
+  const [ticker, setTicker] = useState('')
+  const [periodStr, setPeriodStr] = useState('')
+  const [title, setTitle] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<Result | null>(null)
+
+  const charCount = text.length
+  const isValid = charCount >= 100
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!isValid) return
+    setLoading(true)
+    setResult(null)
+    try {
+      const res = await supplyChainApi.ingestText({
+        text: text.trim(),
+        document_type: docType,
+        ticker: ticker.trim() || undefined,
+        period_of_report: periodStr || undefined,
+        title: title.trim() || undefined,
+      })
+      setResult({ success: true, message: res.message })
+      setText('')
+      onSuccess?.()
+    } catch (e: unknown) {
+      setResult({ success: false, message: e instanceof Error ? e.message : '提交失败' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
+        从 Seeking Alpha、公司 IR 官网等处复制电话会议记录文本，直接粘贴到下方。
+        无需 FMP 权限。
+      </div>
+      <div>
+        <label className="text-xs font-medium text-gray-600 block mb-1">
+          文本内容 * <span className={`ml-1 ${isValid ? 'text-green-600' : 'text-gray-400'}`}>({charCount} 字符{isValid ? '' : '，需至少 100 字符'})</span>
+        </label>
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="粘贴电话会议记录、投资者关系材料或其他文本..."
+          rows={8}
+          className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y font-mono"
+          required
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">文档类型 *</label>
+          <select
+            value={docType}
+            onChange={(e) => setDocType(e.target.value as DocumentType)}
+            className="w-full text-xs border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {DOC_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">股票代码</label>
+          <input
+            type="text"
+            value={ticker}
+            onChange={(e) => setTicker(e.target.value.toUpperCase())}
+            placeholder="NVDA"
+            className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">报告期</label>
+          <input
+            type="date"
+            value={periodStr}
+            onChange={(e) => setPeriodStr(e.target.value)}
+            className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">标题（可选）</label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="NVDA Q3 2024 Earnings Call"
+            className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+      {result && (
+        <div
+          className={`flex items-start gap-2 rounded-lg px-3 py-2 text-xs ${
+            result.success
+              ? 'bg-green-50 border border-green-200 text-green-700'
+              : 'bg-red-50 border border-red-200 text-red-700'
+          }`}
+        >
+          {result.success
+            ? <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+            : <X className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />}
+          <span>{result.message}</span>
+        </div>
+      )}
+      <button
+        type="submit"
+        disabled={loading || !isValid}
+        className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-medium rounded-lg transition-colors"
+      >
+        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ClipboardPaste className="w-3.5 h-3.5" />}
+        {loading ? '处理中…' : '提交文本'}
+      </button>
+    </form>
+  )
+}
+
 // ── 主组件（Tab 切换） ──────────────────────────
 export default function IngestPanel({ onSuccess }: IngestPanelProps) {
   const [mode, setMode] = useState<Mode>('quick')
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-1 border-b border-gray-100 pb-2">
+      <div className="flex gap-1 border-b border-gray-100 pb-2 flex-wrap">
         <button
           onClick={() => setMode('quick')}
           className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
@@ -337,9 +463,22 @@ export default function IngestPanel({ onSuccess }: IngestPanelProps) {
           <Upload className="w-3 h-3 inline mr-1" />
           手动 URL
         </button>
+        <button
+          onClick={() => setMode('paste')}
+          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+            mode === 'paste'
+              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <ClipboardPaste className="w-3 h-3 inline mr-1" />
+          粘贴文本
+        </button>
       </div>
 
-      {mode === 'quick' ? <QuickIngest onSuccess={onSuccess} /> : <UrlIngest onSuccess={onSuccess} />}
+      {mode === 'quick' && <QuickIngest onSuccess={onSuccess} />}
+      {mode === 'url' && <UrlIngest onSuccess={onSuccess} />}
+      {mode === 'paste' && <PasteIngest onSuccess={onSuccess} />}
     </div>
   )
 }
