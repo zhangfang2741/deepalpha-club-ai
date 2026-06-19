@@ -32,8 +32,10 @@ export interface PriceTargetHistoryResponse {
   points: PriceTargetPoint[]
 }
 
-export async function fetchNasdaq100Upgrades(): Promise<Nasdaq100UpgradesResponse> {
-  const res = await apiClient.get<Nasdaq100UpgradesResponse>('/api/v1/analyst-upgrades/nasdaq100')
+export async function fetchNasdaq100Upgrades(refresh = false): Promise<Nasdaq100UpgradesResponse> {
+  const res = await apiClient.get<Nasdaq100UpgradesResponse>('/api/v1/analyst-upgrades/nasdaq100', {
+    params: refresh ? { refresh: true } : undefined,
+  })
   return res.data
 }
 
