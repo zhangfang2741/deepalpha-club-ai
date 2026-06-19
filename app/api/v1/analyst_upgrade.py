@@ -1,0 +1,81 @@
+"""分析师目标价持续上调 API 端点."""
+
+import json
+import zlib
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Path
+from redis.asyncio import Redis
+
+from app.cache.client import get_redis
+from app.core.logging import logger
+from app.schemas.analyst_upgrade import Nasdaq100UpgradesResponse, PriceTargetHistoryResponse
+from app.services.analyst_upgrade.nasdaq100 import compute_nasdaq100_upgrades, compute_price_target_history
+
+router = APIRouter()
+
+_UPGRADES_CACHE_KEY = "analyst_upgrade:nasdaq100:v1"
+_UPGRADES_TTL = 21600  # 6h
+
+_HISTORY_TTL = 43200  # 12h
+
+
+def _history_cache_key(symbol: str) -> str:
+    return f"analyst_upgrade:history:{symbol.upper()}:v1"
+
+
+@router.get("/nasdaq100", response_model=Nasdaq100UpgradesResponse)
+async def get_nasdaq100_upgrades(
+    redis: Redis = Depends(get_redis),
+) -> Nasdaq100UpgradesResponse:
+    """返回纳斯达克 100 中分析师目标价持续上调的股票列表（月均>季均>年均）.
+
+    冷启动约 15 秒（100 次并发 FMP 请求），之后 6h 缓存。
+    """
+    try:
+        raw = await redis.get(_UPGRADES_CACHE_KEY)
+        if raw:
+            return Nasdaq100UpgradesResponse(**json.loads(zlib.decompress(raw)))
+    except Exception:
+        pass
+
+    data = await compute_nasdaq100_upgrades()
+
+    if data.stocks:
+        try:
+            compressed = zlib.compress(data.model_dump_json().encode())
+            await redis.set(_UPGRADES_CACHE_KEY, compressed, ex=_UPGRADES_TTL)
+        except Exception:
+            pass
+
+    logger.info("nasdaq100_upgrades_served", count=data.upgrade_count)
+    return data
+
+
+@router.get("/price-target-history/{symbol}", response_model=PriceTargetHistoryResponse)
+async def get_price_target_history(
+    symbol: Annotated[str, Path(min_length=1, max_length=10)],
+    redis: Redis = Depends(get_redis),
+) -> PriceTargetHistoryResponse:
+    """返回个股近 5 年按季度聚合的分析师平均目标价（用于折线图）."""
+    sym = symbol.upper()
+    cache_key = _history_cache_key(sym)
+
+    try:
+        raw = await redis.get(cache_key)
+        if raw:
+            return PriceTargetHistoryResponse(**json.loads(zlib.decompress(raw)))
+    except Exception:
+        pass
+
+    data = await compute_price_target_history(sym)
+
+    if data.quarters:
+        try:
+            compressed = zlib.compress(data.model_dump_json().encode())
+            await redis.set(cache_key, compressed, ex=_HISTORY_TTL)
+        except Exception:
+            pass
+
+    logger.info("price_target_history_served", symbol=sym, quarters=len(data.quarters))
+    return data
