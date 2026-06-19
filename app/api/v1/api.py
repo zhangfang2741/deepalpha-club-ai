@@ -8,6 +8,7 @@ from app.api.v1.chatbot import router as chatbot_router
 from app.api.v1.etf import router as etf_router
 from app.api.v1.fear_greed import router as fear_greed_router
 from app.api.v1.skills import router as skills_router
+from app.api.v1.supply_chain import router as supply_chain_router
 from app.api.v1.valuation import router as valuation_router
 from app.core.logging import logger
 
@@ -19,6 +20,7 @@ api_router.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
 api_router.include_router(etf_router, prefix="/etf", tags=["etf"])
 api_router.include_router(fear_greed_router, prefix="/fear-greed", tags=["fear-greed"])
 api_router.include_router(skills_router, prefix="/skills", tags=["skills"])
+api_router.include_router(supply_chain_router, prefix="/supply-chain", tags=["supply-chain"])
 api_router.include_router(valuation_router, prefix="/valuation", tags=["valuation"])
 
 

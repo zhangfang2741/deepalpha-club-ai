@@ -134,6 +134,11 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["E402"]
 "app/models/factor_*.py" = ["D415"]
+"app/models/graph_*.py" = ["D415"]
+"app/services/graph/*.py" = ["D415"]
+"app/schemas/supply_chain.py" = ["D415"]
+"app/api/v1/supply_chain.py" = ["D415"]
+"alembic/versions/*.py" = ["D415"]
 "scripts/*.py" = ["D415"]
 
 [tool.pyright]
