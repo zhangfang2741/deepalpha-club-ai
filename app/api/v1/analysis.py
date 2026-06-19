@@ -1,6 +1,6 @@
 """Analysis API endpoints for structural investment scoring."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -78,7 +78,7 @@ async def analyze_stock_endpoint(request: AnalysisRequest) -> AnalysisResponse:
     """
     logger.info("stock_analysis_request_received", ticker=request.ticker)
     
-    start_time = datetime.utcnow()
+    start_time = datetime.now(UTC)
     
     try:
         # Call the async analysis tool
@@ -90,7 +90,7 @@ async def analyze_stock_endpoint(request: AnalysisRequest) -> AnalysisResponse:
         )
         
         # Calculate duration
-        duration = (datetime.utcnow() - start_time).total_seconds()
+        duration = (datetime.now(UTC) - start_time).total_seconds()
         
         # Check for errors in result
         if "error" in result:

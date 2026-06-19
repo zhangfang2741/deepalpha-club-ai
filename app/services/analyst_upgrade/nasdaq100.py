@@ -19,17 +19,144 @@ _FMP_STABLE = "https://financialmodelingprep.com/stable"
 _FMP_V3 = "https://financialmodelingprep.com/api/v3"
 _CONCURRENCY = 20
 
+# 兜底成分股列表：当 FMP nasdaq_constituent 接口不可用时使用
+# 格式：(symbol, name, sector)
+_FALLBACK_NDX100: list[tuple[str, str, str]] = [
+    ("AAPL",  "Apple Inc.",              "Technology"),
+    ("MSFT",  "Microsoft Corp.",         "Technology"),
+    ("NVDA",  "NVIDIA Corp.",            "Technology"),
+    ("AMZN",  "Amazon.com Inc.",         "Consumer Cyclical"),
+    ("META",  "Meta Platforms Inc.",     "Communication Services"),
+    ("GOOGL", "Alphabet Inc. (A)",       "Communication Services"),
+    ("GOOG",  "Alphabet Inc. (C)",       "Communication Services"),
+    ("TSLA",  "Tesla Inc.",              "Consumer Cyclical"),
+    ("AVGO",  "Broadcom Inc.",           "Technology"),
+    ("COST",  "Costco Wholesale Corp.",  "Consumer Defensive"),
+    ("NFLX",  "Netflix Inc.",            "Communication Services"),
+    ("ARM",   "Arm Holdings plc",        "Technology"),
+    ("ASML",  "ASML Holding NV",         "Technology"),
+    ("AMD",   "Advanced Micro Devices",  "Technology"),
+    ("AZN",   "AstraZeneca PLC",         "Healthcare"),
+    ("CSCO",  "Cisco Systems Inc.",      "Technology"),
+    ("ADBE",  "Adobe Inc.",              "Technology"),
+    ("QCOM",  "Qualcomm Inc.",           "Technology"),
+    ("INTU",  "Intuit Inc.",             "Technology"),
+    ("TXN",   "Texas Instruments Inc.",  "Technology"),
+    ("AMGN",  "Amgen Inc.",              "Healthcare"),
+    ("ISRG",  "Intuitive Surgical Inc.", "Healthcare"),
+    ("BKNG",  "Booking Holdings Inc.",   "Consumer Cyclical"),
+    ("AMAT",  "Applied Materials Inc.",  "Technology"),
+    ("LRCX",  "Lam Research Corp.",      "Technology"),
+    ("MU",    "Micron Technology Inc.",  "Technology"),
+    ("ADI",   "Analog Devices Inc.",     "Technology"),
+    ("PANW",  "Palo Alto Networks Inc.", "Technology"),
+    ("REGN",  "Regeneron Pharma.",       "Healthcare"),
+    ("VRTX",  "Vertex Pharmaceuticals",  "Healthcare"),
+    ("GILD",  "Gilead Sciences Inc.",    "Healthcare"),
+    ("KLAC",  "KLA Corp.",               "Technology"),
+    ("SNPS",  "Synopsys Inc.",           "Technology"),
+    ("CDNS",  "Cadence Design Systems",  "Technology"),
+    ("MRVL",  "Marvell Technology Inc.", "Technology"),
+    ("MELI",  "MercadoLibre Inc.",       "Consumer Cyclical"),
+    ("FTNT",  "Fortinet Inc.",           "Technology"),
+    ("MNST",  "Monster Beverage Corp.",  "Consumer Defensive"),
+    ("NXPI",  "NXP Semiconductors NV",  "Technology"),
+    ("DXCM",  "DexCom Inc.",             "Healthcare"),
+    ("CRWD",  "CrowdStrike Holdings",    "Technology"),
+    ("SMCI",  "Super Micro Computer",    "Technology"),
+    ("KDP",   "Keurig Dr Pepper Inc.",   "Consumer Defensive"),
+    ("PCAR",  "PACCAR Inc.",             "Industrials"),
+    ("MDLZ",  "Mondelez International",  "Consumer Defensive"),
+    ("ORLY",  "O'Reilly Automotive",     "Consumer Cyclical"),
+    ("ADP",   "Automatic Data Processing","Technology"),
+    ("CSGP",  "CoStar Group Inc.",       "Real Estate"),
+    ("ABNB",  "Airbnb Inc.",             "Consumer Cyclical"),
+    ("PYPL",  "PayPal Holdings Inc.",    "Financial Services"),
+    ("CHTR",  "Charter Communications",  "Communication Services"),
+    ("MAR",   "Marriott International",  "Consumer Cyclical"),
+    ("ROP",   "Roper Technologies Inc.", "Technology"),
+    ("BIIB",  "Biogen Inc.",             "Healthcare"),
+    ("WDAY",  "Workday Inc.",            "Technology"),
+    ("VRSK",  "Verisk Analytics Inc.",   "Industrials"),
+    ("FAST",  "Fastenal Co.",            "Industrials"),
+    ("CPRT",  "Copart Inc.",             "Industrials"),
+    ("PAYX",  "Paychex Inc.",            "Technology"),
+    ("IDXX",  "IDEXX Laboratories",      "Healthcare"),
+    ("TEAM",  "Atlassian Corp.",         "Technology"),
+    ("DLTR",  "Dollar Tree Inc.",        "Consumer Defensive"),
+    ("ODFL",  "Old Dominion Freight",    "Industrials"),
+    ("TTWO",  "Take-Two Interactive",    "Communication Services"),
+    ("WBD",   "Warner Bros. Discovery",  "Communication Services"),
+    ("ZS",    "Zscaler Inc.",            "Technology"),
+    ("ALGN",  "Align Technology Inc.",   "Healthcare"),
+    ("ENPH",  "Enphase Energy Inc.",     "Technology"),
+    ("ILMN",  "Illumina Inc.",           "Healthcare"),
+    ("GEHC",  "GE HealthCare Tech.",     "Healthcare"),
+    ("ON",    "ON Semiconductor Corp.",  "Technology"),
+    ("LULU",  "Lululemon Athletica",     "Consumer Cyclical"),
+    ("SBUX",  "Starbucks Corp.",         "Consumer Cyclical"),
+    ("CMCSA", "Comcast Corp.",           "Communication Services"),
+    ("HON",   "Honeywell International", "Industrials"),
+    ("EA",    "Electronic Arts Inc.",    "Communication Services"),
+    ("EBAY",  "eBay Inc.",               "Consumer Cyclical"),
+    ("DOCU",  "DocuSign Inc.",           "Technology"),
+    ("XEL",   "Xcel Energy Inc.",        "Utilities"),
+    ("ANSS",  "Ansys Inc.",              "Technology"),
+    ("OKTA",  "Okta Inc.",               "Technology"),
+    ("DDOG",  "Datadog Inc.",            "Technology"),
+    ("INTC",  "Intel Corp.",             "Technology"),
+    ("WDC",   "Western Digital Corp.",   "Technology"),
+    ("STX",   "Seagate Technology",      "Technology"),
+    ("SNDK",  "SanDisk Corp.",           "Technology"),
+    ("CEG",   "Constellation Energy",    "Utilities"),
+    ("MCHP",  "Microchip Technology",    "Technology"),
+    ("PDD",   "PDD Holdings Inc.",       "Consumer Cyclical"),
+    ("JD",    "JD.com Inc.",             "Consumer Cyclical"),
+    ("FANG",  "Diamondback Energy",      "Energy"),
+    ("ZM",    "Zoom Video Comm.",        "Technology"),
+    ("SNOW",  "Snowflake Inc.",          "Technology"),
+    ("HOOD",  "Robinhood Markets",       "Financial Services"),
+    ("APP",   "Applovin Corp.",          "Technology"),
+    ("PLTR",  "Palantir Technologies",   "Technology"),
+]
+
+
+def _fallback_constituents() -> list[dict]:
+    return [
+        {"symbol": sym, "name": name, "sector": sector}
+        for sym, name, sector in _FALLBACK_NDX100
+    ]
+
 
 async def _fetch_constituents(client: httpx.AsyncClient) -> list[dict]:
-    resp = await client.get(
-        f"{_FMP_V3}/nasdaq_constituent",
-        params={"apikey": settings.FMP_API_KEY},
-    )
+    if not settings.FMP_API_KEY:
+        logger.warning("nasdaq_constituent_no_api_key_using_fallback")
+        return _fallback_constituents()
+
+    try:
+        resp = await client.get(
+            f"{_FMP_V3}/nasdaq_constituent",
+            params={"apikey": settings.FMP_API_KEY},
+        )
+    except Exception as e:
+        logger.warning("nasdaq_constituent_request_failed", error=str(e))
+        return _fallback_constituents()
+
     if resp.status_code != 200:
-        logger.warning("nasdaq_constituent_error", status=resp.status_code)
-        return []
+        logger.warning(
+            "nasdaq_constituent_http_error",
+            status=resp.status_code,
+            body=resp.text[:200],
+        )
+        return _fallback_constituents()
+
     data = resp.json()
-    return data if isinstance(data, list) else []
+    if not isinstance(data, list) or not data:
+        logger.warning("nasdaq_constituent_empty_response", raw=str(data)[:200])
+        return _fallback_constituents()
+
+    logger.info("nasdaq_constituent_fetched", count=len(data))
+    return data
 
 
 async def _fetch_summary(client: httpx.AsyncClient, symbol: str) -> dict | None:
@@ -61,13 +188,6 @@ async def compute_nasdaq100_upgrades() -> Nasdaq100UpgradesResponse:
     """拉取纳斯达克 100 成分股，筛选目标价三层单调递增的股票."""
     async with httpx.AsyncClient(timeout=30) as client:
         constituents = await _fetch_constituents(client)
-        if not constituents:
-            return Nasdaq100UpgradesResponse(
-                as_of=date.today().isoformat(),
-                total_constituents=0,
-                upgrade_count=0,
-                stocks=[],
-            )
 
         name_map = {c["symbol"]: c.get("name", c["symbol"]) for c in constituents}
         sector_map = {c["symbol"]: c.get("sector", "") for c in constituents}
