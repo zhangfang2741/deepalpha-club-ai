@@ -5,6 +5,14 @@ from pydantic import Field
 from app.schemas.base import BaseResponse
 
 
+class PriceTargetPoint(BaseResponse):
+    """单月平均目标价."""
+
+    label: str = Field(description="月份标签，如 2024-06")
+    avg_target: float
+    count: int
+
+
 class UpgradeStock(BaseResponse):
     """单只满足上调条件的股票数据."""
 
@@ -19,6 +27,8 @@ class UpgradeStock(BaseResponse):
     month_mom: float
     quarter_yoy: float
     year_vs_all: float
+    # 近 18 个月月度目标价，用于表格 sparkline（与弹窗数据同源）
+    recent_points: list[PriceTargetPoint] = Field(default_factory=list)
 
 
 class Nasdaq100UpgradesResponse(BaseResponse):
@@ -28,14 +38,6 @@ class Nasdaq100UpgradesResponse(BaseResponse):
     total_constituents: int
     upgrade_count: int
     stocks: list[UpgradeStock]
-
-
-class PriceTargetPoint(BaseResponse):
-    """单月平均目标价."""
-
-    label: str = Field(description="月份标签，如 2024-06")
-    avg_target: float
-    count: int
 
 
 class PriceTargetHistoryResponse(BaseResponse):

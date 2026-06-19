@@ -1,5 +1,11 @@
 import apiClient from './client'
 
+export interface PriceTargetPoint {
+  label: string
+  avg_target: number
+  count: number
+}
+
 export interface UpgradeStock {
   symbol: string
   name: string
@@ -12,6 +18,7 @@ export interface UpgradeStock {
   month_mom: number
   quarter_yoy: number
   year_vs_all: number
+  recent_points: PriceTargetPoint[]
 }
 
 export interface Nasdaq100UpgradesResponse {
@@ -19,12 +26,6 @@ export interface Nasdaq100UpgradesResponse {
   total_constituents: number
   upgrade_count: number
   stocks: UpgradeStock[]
-}
-
-export interface PriceTargetPoint {
-  label: string
-  avg_target: number
-  count: number
 }
 
 export interface PriceTargetHistoryResponse {

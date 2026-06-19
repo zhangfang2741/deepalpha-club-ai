@@ -315,6 +315,18 @@ async def compute_nasdaq100_upgrades() -> Nasdaq100UpgradesResponse:
 
     stocks.sort(key=lambda s: s.month_mom, reverse=True)
 
+    # 并发拉取合格股票近 18 个月月度目标价，嵌入 recent_points 供 sparkline 使用
+    if stocks:
+        cutoff_18m = date.today() - timedelta(days=548)
+        sem2 = asyncio.Semaphore(10)
+        async with httpx.AsyncClient(timeout=30) as client2:
+            history_pairs = await asyncio.gather(
+                *[_compute_recent_points(client2, s.symbol, sem2, cutoff_18m) for s in stocks]
+            )
+        history_map = dict(history_pairs)
+        for stock in stocks:
+            stock.recent_points = history_map.get(stock.symbol, [])
+
     logger.info(
         "nasdaq100_upgrades_computed",
         total=len(constituents),
@@ -394,6 +406,37 @@ async def _fetch_price_target_records(client: httpx.AsyncClient, symbol: str) ->
             return records
     logger.warning("price_target_records_empty", symbol=symbol)
     return []
+
+
+async def _compute_recent_points(
+    client: httpx.AsyncClient,
+    sym: str,
+    sem: asyncio.Semaphore,
+    cutoff: date,
+) -> tuple[str, list[PriceTargetPoint]]:
+    """拉取单只股票近期月度目标价（用于列表 sparkline）."""
+    async with sem:
+        records = await _fetch_price_target_records(client, sym)
+    monthly: dict[str, list[float]] = defaultdict(list)
+    for rec in records:
+        dt = _extract_pt_date(rec)
+        pt = _extract_pt_value(rec)
+        if dt is None or pt is None or dt < cutoff:
+            continue
+        monthly[f"{dt.year}-{dt.month:02d}"].append(pt)
+    pts = sorted(
+        [
+            PriceTargetPoint(
+                label=lbl,
+                avg_target=round(sum(v) / len(v), 2),
+                count=len(v),
+            )
+            for lbl, v in monthly.items()
+            if v
+        ],
+        key=lambda p: p.label,
+    )
+    return sym, pts
 
 
 async def compute_price_target_history(symbol: str) -> PriceTargetHistoryResponse:
