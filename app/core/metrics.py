@@ -41,14 +41,25 @@ session_names_generated_total = Counter(
 )
 
 
+def _safe_get_path_template(self, request):
+    """starlette_prometheus 默认实现在遇到 _IncludedRouter 时会因缺少 .path
+    属性而崩溃。此补丁在访问 route.path 前先检查 hasattr，避免 500 错误。"""
+    from starlette.routing import Match
+
+    for route in request.app.routes:
+        try:
+            match, _ = route.matches({"type": "http", **request.scope})
+            if match == Match.FULL:
+                return getattr(route, "path", request.url.path), True
+        except Exception:
+            continue
+    return request.url.path, False
+
+
+PrometheusMiddleware.get_path_template = _safe_get_path_template
+
+
 def setup_metrics(app):
-    """Set up Prometheus metrics middleware and endpoints.
-
-    Args:
-        app: FastAPI application instance
-    """
-    # Add Prometheus middleware
+    """Set up Prometheus metrics middleware and endpoints."""
     app.add_middleware(PrometheusMiddleware)
-
-    # Add metrics endpoint
     app.add_route("/metrics", metrics)
