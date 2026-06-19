@@ -273,36 +273,59 @@ async def compute_price_target_history(symbol: str) -> PriceTargetHistoryRespons
     cutoff = date.today() - timedelta(days=5 * 365)
     quarterly: dict[str, list[float]] = defaultdict(list)
 
+    # 依次尝试 stable / v4 / v3，任一返回数据即停止
+    _BASES = [_FMP_STABLE, "https://financialmodelingprep.com/api/v4", _FMP_V3]
+
     async with httpx.AsyncClient(timeout=30) as client:
-        for page in range(15):
-            resp = await client.get(
-                f"{_FMP_STABLE}/price-target",
-                params={"symbol": symbol.upper(), "page": page, "apikey": settings.FMP_API_KEY},
-            )
-            if resp.status_code != 200:
-                break
-            records = resp.json()
-            if not isinstance(records, list) or not records:
-                break
-
-            stop = False
-            for rec in records:
-                dt_str = rec.get("publishedDate", "")
-                pt = rec.get("priceTarget")
-                if not dt_str or pt is None:
-                    continue
-                try:
-                    dt = datetime.fromisoformat(dt_str[:10]).date()
-                except ValueError:
-                    continue
-                if dt < cutoff:
-                    stop = True
+        for base in _BASES:
+            quarterly.clear()
+            for page in range(15):
+                resp = await client.get(
+                    f"{base}/price-target",
+                    params={"symbol": symbol.upper(), "page": page, "apikey": settings.FMP_API_KEY},
+                )
+                if resp.status_code != 200:
+                    if page == 0:
+                        logger.warning(
+                            "price_target_history_http_error",
+                            symbol=symbol,
+                            base=base,
+                            status=resp.status_code,
+                        )
                     break
-                q_num = (dt.month - 1) // 3 + 1
-                quarterly[f"{dt.year} Q{q_num}"].append(float(pt))
+                records = resp.json()
+                if not isinstance(records, list) or not records:
+                    break
 
-            if stop:
+                stop = False
+                for rec in records:
+                    # 兼容 stable / v4 / v3 的字段名差异
+                    dt_str = (
+                        rec.get("publishedDate")
+                        or rec.get("date")
+                        or rec.get("published_date")
+                        or ""
+                    )
+                    pt = rec.get("priceTarget") or rec.get("adjPriceTarget") or rec.get("price_target")
+                    if not dt_str or pt is None:
+                        continue
+                    try:
+                        dt = datetime.fromisoformat(dt_str[:10]).date()
+                    except ValueError:
+                        continue
+                    if dt < cutoff:
+                        stop = True
+                        break
+                    q_num = (dt.month - 1) // 3 + 1
+                    quarterly[f"{dt.year} Q{q_num}"].append(float(pt))
+
+                if stop:
+                    break
+
+            if quarterly:
+                logger.info("price_target_history_fetched", symbol=symbol, base=base, quarters=len(quarterly))
                 break
+            logger.warning("price_target_history_empty", symbol=symbol, base=base)
 
     quarters: list[PriceTargetQuarter] = [
         PriceTargetQuarter(
