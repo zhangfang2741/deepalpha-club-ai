@@ -36,6 +36,7 @@ export default function UpgradeTable({ stocks }: Props) {
               <th className="py-3 px-3 text-xs font-medium text-gray-500 text-right">近月目标价</th>
               <th className="py-3 px-3 text-xs font-medium text-gray-500 text-right">月环比↑</th>
               <th className="py-3 px-3 text-xs font-medium text-gray-500 text-right hidden sm:table-cell">季环比↑</th>
+              <th className="py-3 px-3 text-xs font-medium text-gray-500 text-right hidden md:table-cell">年环比↑</th>
               <th className="py-3 px-3 text-xs font-medium text-gray-500 text-right hidden lg:table-cell">报告机构</th>
               <th className="py-3 px-3 text-xs font-medium text-gray-500 text-center">目标价走势</th>
             </tr>
@@ -59,6 +60,9 @@ export default function UpgradeTable({ stocks }: Props) {
                 </td>
                 <td className="py-3 px-3 text-right text-sm text-blue-600 font-medium hidden sm:table-cell">
                   +{stock.quarter_yoy.toFixed(1)}%
+                </td>
+                <td className="py-3 px-3 text-right text-sm text-purple-600 font-medium hidden md:table-cell">
+                  {stock.year_vs_all > 0 ? '+' : ''}{stock.year_vs_all.toFixed(1)}%
                 </td>
                 <td className="py-3 px-3 text-right text-xs text-gray-400 hidden lg:table-cell">
                   {stock.last_month_count} 家
