@@ -9,7 +9,7 @@ This tool performs comprehensive investment analysis combining data from:
 All data is traceable with source attribution.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
@@ -127,7 +127,7 @@ async def _analyze_financial_layer(ticker: str) -> LayerAnalysis:
                 label="Revenue",
                 source="FMP",
                 url=fmp_url,
-                fetched_at=datetime.utcnow(),
+                fetched_at=datetime.now(UTC),
             ))
 
         if revenue and net_income:
@@ -147,7 +147,7 @@ async def _analyze_financial_layer(ticker: str) -> LayerAnalysis:
                 label="Net Profit Margin",
                 source="FMP",
                 url=fmp_url,
-                fetched_at=datetime.utcnow(),
+                fetched_at=datetime.now(UTC),
             ))
             score = (
                 85.0 if net_margin > 25
@@ -185,7 +185,7 @@ async def _analyze_financial_layer(ticker: str) -> LayerAnalysis:
             label="Debt-to-Equity Ratio",
             source="FMP",
             url=fmp_url,
-            fetched_at=datetime.utcnow(),
+            fetched_at=datetime.now(UTC),
         ))
 
     if cash_flow:
@@ -207,7 +207,7 @@ async def _analyze_financial_layer(ticker: str) -> LayerAnalysis:
                 label="Free Cash Flow",
                 source="FMP",
                 url=fmp_url,
-                fetched_at=datetime.utcnow(),
+                fetched_at=datetime.now(UTC),
             ))
 
     if not findings:
@@ -249,14 +249,14 @@ async def _analyze_industry_layer(ticker: str) -> LayerAnalysis:
             label="Industry",
             source="FMP",
             url=f"https://site.financialmodelingprep.com/financial-statements/{ticker}",
-            fetched_at=datetime.utcnow(),
+            fetched_at=datetime.now(UTC),
         ))
         data_points.append(DataPoint(
             value=sector,
             label="Sector",
             source="FMP",
             url=f"https://site.financialmodelingprep.com/financial-statements/{ticker}",
-            fetched_at=datetime.utcnow(),
+            fetched_at=datetime.now(UTC),
         ))
     
     # Industry scoring (simplified - in production would use industry reports)
@@ -353,7 +353,7 @@ async def _analyze_company_layer(ticker: str, financial_layer: "LayerAnalysis") 
                 label="ROE",
                 source="FMP",
                 url=fmp_url,
-                fetched_at=datetime.utcnow(),
+                fetched_at=datetime.now(UTC),
             ))
 
         gpm = r.get("grossProfitMargin")
@@ -450,7 +450,7 @@ async def _analyze_competition_layer(ticker: str) -> "LayerAnalysis":
             label="Market Cap",
             source="FMP",
             url=fmp_url,
-            fetched_at=datetime.utcnow(),
+            fetched_at=datetime.now(UTC),
         ))
         score = (
             80.0 if mc_b > 200
@@ -473,7 +473,7 @@ async def _analyze_competition_layer(ticker: str) -> "LayerAnalysis":
             label="Full-Time Employees",
             source="FMP",
             url=fmp_url,
-            fetched_at=datetime.utcnow(),
+            fetched_at=datetime.now(UTC),
         ))
 
     if description:
@@ -516,7 +516,6 @@ async def _analyze_trading_layer(ticker: str) -> "LayerAnalysis":
         pe = price_data.get("pe")
         price = price_data.get("price")
         eps = price_data.get("eps")
-        market_cap = price_data.get("marketCap")
         div_yield = price_data.get("dividendYield") or 0
 
         if price:
@@ -539,7 +538,7 @@ async def _analyze_trading_layer(ticker: str) -> "LayerAnalysis":
                 label="P/E Ratio",
                 source="FMP",
                 url=fmp_url,
-                fetched_at=datetime.utcnow(),
+                fetched_at=datetime.now(UTC),
             ))
             score = (
                 40.0 if pe > 50
@@ -577,7 +576,7 @@ async def _analyze_trading_layer(ticker: str) -> "LayerAnalysis":
                 label="P/B Ratio",
                 source="FMP",
                 url=fmp_url,
-                fetched_at=datetime.utcnow(),
+                fetched_at=datetime.now(UTC),
             ))
 
         ev_ebitda = m.get("enterpriseValueOverEBITDA") or m.get("evToEbitda")
@@ -595,7 +594,7 @@ async def _analyze_trading_layer(ticker: str) -> "LayerAnalysis":
                 label="EV/EBITDA",
                 source="FMP",
                 url=fmp_url,
-                fetched_at=datetime.utcnow(),
+                fetched_at=datetime.now(UTC),
             ))
 
     if not findings:
@@ -708,7 +707,7 @@ async def analyze_stock_async(
                 }
                 for dp in all_sources[:20]  # Limit to top 20 sources
             ],
-            "analysis_timestamp": datetime.utcnow().isoformat(),
+            "analysis_timestamp": datetime.now(UTC).isoformat(),
         }
     
     try:
@@ -739,7 +738,7 @@ async def analyze_stock_async(
                 "trading": {"score": 50.0, "summary": "Analysis unavailable", "key_findings": ["API key not configured"], "confidence": 0.1},
             },
             "sources": [],
-            "analysis_timestamp": datetime.utcnow().isoformat(),
+            "analysis_timestamp": datetime.now(UTC).isoformat(),
             "warning": "FMP API key not configured. Analysis may be incomplete.",
         }
 

@@ -3,8 +3,10 @@
 import asyncio
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from io import StringIO
 
 import httpx
+import pandas as pd
 
 from app.core.config import settings
 from app.core.logging import logger
@@ -18,18 +20,170 @@ from app.schemas.analyst_upgrade import (
 _FMP_STABLE = "https://financialmodelingprep.com/stable"
 _FMP_V3 = "https://financialmodelingprep.com/api/v3"
 _CONCURRENCY = 20
+_WIKI_NDX_URL = "https://en.wikipedia.org/wiki/Nasdaq-100"
+_WIKI_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; DeepAlpha-Bot/1.0)"}
+
+# 兜底成分股列表：当 FMP nasdaq_constituent 接口不可用时使用
+# 格式：(symbol, name, sector)
+_FALLBACK_NDX100: list[tuple[str, str, str]] = [
+    ("AAPL",  "Apple Inc.",              "Technology"),
+    ("MSFT",  "Microsoft Corp.",         "Technology"),
+    ("NVDA",  "NVIDIA Corp.",            "Technology"),
+    ("AMZN",  "Amazon.com Inc.",         "Consumer Cyclical"),
+    ("META",  "Meta Platforms Inc.",     "Communication Services"),
+    ("GOOGL", "Alphabet Inc. (A)",       "Communication Services"),
+    ("GOOG",  "Alphabet Inc. (C)",       "Communication Services"),
+    ("TSLA",  "Tesla Inc.",              "Consumer Cyclical"),
+    ("AVGO",  "Broadcom Inc.",           "Technology"),
+    ("COST",  "Costco Wholesale Corp.",  "Consumer Defensive"),
+    ("NFLX",  "Netflix Inc.",            "Communication Services"),
+    ("ARM",   "Arm Holdings plc",        "Technology"),
+    ("ASML",  "ASML Holding NV",         "Technology"),
+    ("AMD",   "Advanced Micro Devices",  "Technology"),
+    ("AZN",   "AstraZeneca PLC",         "Healthcare"),
+    ("CSCO",  "Cisco Systems Inc.",      "Technology"),
+    ("ADBE",  "Adobe Inc.",              "Technology"),
+    ("QCOM",  "Qualcomm Inc.",           "Technology"),
+    ("INTU",  "Intuit Inc.",             "Technology"),
+    ("TXN",   "Texas Instruments Inc.",  "Technology"),
+    ("AMGN",  "Amgen Inc.",              "Healthcare"),
+    ("ISRG",  "Intuitive Surgical Inc.", "Healthcare"),
+    ("BKNG",  "Booking Holdings Inc.",   "Consumer Cyclical"),
+    ("AMAT",  "Applied Materials Inc.",  "Technology"),
+    ("LRCX",  "Lam Research Corp.",      "Technology"),
+    ("MU",    "Micron Technology Inc.",  "Technology"),
+    ("ADI",   "Analog Devices Inc.",     "Technology"),
+    ("PANW",  "Palo Alto Networks Inc.", "Technology"),
+    ("REGN",  "Regeneron Pharma.",       "Healthcare"),
+    ("VRTX",  "Vertex Pharmaceuticals",  "Healthcare"),
+    ("GILD",  "Gilead Sciences Inc.",    "Healthcare"),
+    ("KLAC",  "KLA Corp.",               "Technology"),
+    ("SNPS",  "Synopsys Inc.",           "Technology"),
+    ("CDNS",  "Cadence Design Systems",  "Technology"),
+    ("MRVL",  "Marvell Technology Inc.", "Technology"),
+    ("MELI",  "MercadoLibre Inc.",       "Consumer Cyclical"),
+    ("FTNT",  "Fortinet Inc.",           "Technology"),
+    ("MNST",  "Monster Beverage Corp.",  "Consumer Defensive"),
+    ("NXPI",  "NXP Semiconductors NV",  "Technology"),
+    ("DXCM",  "DexCom Inc.",             "Healthcare"),
+    ("CRWD",  "CrowdStrike Holdings",    "Technology"),
+    ("SMCI",  "Super Micro Computer",    "Technology"),
+    ("KDP",   "Keurig Dr Pepper Inc.",   "Consumer Defensive"),
+    ("PCAR",  "PACCAR Inc.",             "Industrials"),
+    ("MDLZ",  "Mondelez International",  "Consumer Defensive"),
+    ("ORLY",  "O'Reilly Automotive",     "Consumer Cyclical"),
+    ("ADP",   "Automatic Data Processing","Technology"),
+    ("CSGP",  "CoStar Group Inc.",       "Real Estate"),
+    ("ABNB",  "Airbnb Inc.",             "Consumer Cyclical"),
+    ("PYPL",  "PayPal Holdings Inc.",    "Financial Services"),
+    ("CHTR",  "Charter Communications",  "Communication Services"),
+    ("MAR",   "Marriott International",  "Consumer Cyclical"),
+    ("ROP",   "Roper Technologies Inc.", "Technology"),
+    ("BIIB",  "Biogen Inc.",             "Healthcare"),
+    ("WDAY",  "Workday Inc.",            "Technology"),
+    ("VRSK",  "Verisk Analytics Inc.",   "Industrials"),
+    ("FAST",  "Fastenal Co.",            "Industrials"),
+    ("CPRT",  "Copart Inc.",             "Industrials"),
+    ("PAYX",  "Paychex Inc.",            "Technology"),
+    ("IDXX",  "IDEXX Laboratories",      "Healthcare"),
+    ("TEAM",  "Atlassian Corp.",         "Technology"),
+    ("DLTR",  "Dollar Tree Inc.",        "Consumer Defensive"),
+    ("ODFL",  "Old Dominion Freight",    "Industrials"),
+    ("TTWO",  "Take-Two Interactive",    "Communication Services"),
+    ("WBD",   "Warner Bros. Discovery",  "Communication Services"),
+    ("ZS",    "Zscaler Inc.",            "Technology"),
+    ("ALGN",  "Align Technology Inc.",   "Healthcare"),
+    ("ENPH",  "Enphase Energy Inc.",     "Technology"),
+    ("ILMN",  "Illumina Inc.",           "Healthcare"),
+    ("GEHC",  "GE HealthCare Tech.",     "Healthcare"),
+    ("ON",    "ON Semiconductor Corp.",  "Technology"),
+    ("LULU",  "Lululemon Athletica",     "Consumer Cyclical"),
+    ("SBUX",  "Starbucks Corp.",         "Consumer Cyclical"),
+    ("CMCSA", "Comcast Corp.",           "Communication Services"),
+    ("HON",   "Honeywell International", "Industrials"),
+    ("EA",    "Electronic Arts Inc.",    "Communication Services"),
+    ("EBAY",  "eBay Inc.",               "Consumer Cyclical"),
+    ("DOCU",  "DocuSign Inc.",           "Technology"),
+    ("XEL",   "Xcel Energy Inc.",        "Utilities"),
+    ("ANSS",  "Ansys Inc.",              "Technology"),
+    ("OKTA",  "Okta Inc.",               "Technology"),
+    ("DDOG",  "Datadog Inc.",            "Technology"),
+    ("INTC",  "Intel Corp.",             "Technology"),
+    ("WDC",   "Western Digital Corp.",   "Technology"),
+    ("STX",   "Seagate Technology",      "Technology"),
+    ("SNDK",  "SanDisk Corp.",           "Technology"),
+    ("CEG",   "Constellation Energy",    "Utilities"),
+    ("MCHP",  "Microchip Technology",    "Technology"),
+    ("PDD",   "PDD Holdings Inc.",       "Consumer Cyclical"),
+    ("JD",    "JD.com Inc.",             "Consumer Cyclical"),
+    ("FANG",  "Diamondback Energy",      "Energy"),
+    ("ZM",    "Zoom Video Comm.",        "Technology"),
+    ("SNOW",  "Snowflake Inc.",          "Technology"),
+    ("HOOD",  "Robinhood Markets",       "Financial Services"),
+    ("APP",   "Applovin Corp.",          "Technology"),
+    ("PLTR",  "Palantir Technologies",   "Technology"),
+]
+
+
+def _fallback_constituents() -> list[dict]:
+    return [
+        {"symbol": sym, "name": name, "sector": sector}
+        for sym, name, sector in _FALLBACK_NDX100
+    ]
+
+
+def _parse_wiki_html(html: str) -> list[dict]:
+    """从 Wikipedia HTML 中解析纳斯达克 100 成分股表格."""
+    tables = pd.read_html(StringIO(html))
+    for table in tables:
+        cols = [str(c).strip() for c in table.columns]
+        # 找到含有 Ticker 列的表格
+        ticker_col = next((c for c in cols if "ticker" in c.lower() or "symbol" in c.lower()), None)
+        if ticker_col is None:
+            continue
+        name_col = next((c for c in cols if "company" in c.lower() or "name" in c.lower()), None)
+        sector_col = next((c for c in cols if "sector" in c.lower() or "gics" in c.lower()), None)
+        result = []
+        for _, row in table.iterrows():
+            sym = str(row[ticker_col]).strip()
+            if not sym or sym == "nan":
+                continue
+            result.append({
+                "symbol": sym,
+                "name": str(row[name_col]).strip() if name_col else sym,
+                "sector": str(row[sector_col]).strip() if sector_col else "",
+            })
+        if len(result) >= 90:
+            return result
+    return []
+
+
+async def _fetch_constituents_from_wiki(client: httpx.AsyncClient) -> list[dict]:
+    """从 Wikipedia 动态拉取纳斯达克 100 成分股."""
+    try:
+        resp = await client.get(_WIKI_NDX_URL, headers=_WIKI_HEADERS, timeout=15)
+        if resp.status_code != 200:
+            logger.warning("wiki_ndx100_http_error", status=resp.status_code)
+            return []
+        constituents = await asyncio.get_event_loop().run_in_executor(
+            None, _parse_wiki_html, resp.text
+        )
+        if constituents:
+            logger.info("wiki_ndx100_fetched", count=len(constituents))
+        return constituents
+    except Exception as e:
+        logger.warning("wiki_ndx100_fetch_failed", error=str(e))
+        return []
 
 
 async def _fetch_constituents(client: httpx.AsyncClient) -> list[dict]:
-    resp = await client.get(
-        f"{_FMP_V3}/nasdaq_constituent",
-        params={"apikey": settings.FMP_API_KEY},
-    )
-    if resp.status_code != 200:
-        logger.warning("nasdaq_constituent_error", status=resp.status_code)
-        return []
-    data = resp.json()
-    return data if isinstance(data, list) else []
+    """获取纳斯达克 100 成分股：Wikipedia 动态拉取，失败时降级兜底列表."""
+    constituents = await _fetch_constituents_from_wiki(client)
+    if constituents:
+        return constituents
+
+    logger.warning("nasdaq_constituent_using_fallback_list")
+    return _fallback_constituents()
 
 
 async def _fetch_summary(client: httpx.AsyncClient, symbol: str) -> dict | None:
@@ -61,13 +215,6 @@ async def compute_nasdaq100_upgrades() -> Nasdaq100UpgradesResponse:
     """拉取纳斯达克 100 成分股，筛选目标价三层单调递增的股票."""
     async with httpx.AsyncClient(timeout=30) as client:
         constituents = await _fetch_constituents(client)
-        if not constituents:
-            return Nasdaq100UpgradesResponse(
-                as_of=date.today().isoformat(),
-                total_constituents=0,
-                upgrade_count=0,
-                stocks=[],
-            )
 
         name_map = {c["symbol"]: c.get("name", c["symbol"]) for c in constituents}
         sector_map = {c["symbol"]: c.get("sector", "") for c in constituents}
