@@ -1,7 +1,7 @@
 'use client'
 
 interface Props {
-  values: number[]   // 按时间顺序，如 [allTime, year, quarter, month]
+  values: number[]   // 按时间先后顺序，如 [year, quarter, month]
   width?: number
   height?: number
   color?: string

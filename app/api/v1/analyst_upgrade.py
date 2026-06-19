@@ -4,7 +4,7 @@ import json
 import zlib
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Query
 from redis.asyncio import Redis
 
 from app.cache.client import get_redis
@@ -27,17 +27,20 @@ def _history_cache_key(symbol: str) -> str:
 @router.get("/nasdaq100", response_model=Nasdaq100UpgradesResponse)
 async def get_nasdaq100_upgrades(
     redis: Redis = Depends(get_redis),
+    refresh: Annotated[bool, Query(description="为 true 时跳过缓存，强制重新计算")] = False,
 ) -> Nasdaq100UpgradesResponse:
     """返回纳斯达克 100 中分析师目标价持续上调的股票列表（月均>季均>年均）.
 
     冷启动约 15 秒（100 次并发 FMP 请求），之后 6h 缓存。
+    传 ?refresh=true 可跳过缓存强制刷新。
     """
-    try:
-        raw = await redis.get(_UPGRADES_CACHE_KEY)
-        if raw:
-            return Nasdaq100UpgradesResponse(**json.loads(zlib.decompress(raw)))
-    except Exception:
-        pass
+    if not refresh:
+        try:
+            raw = await redis.get(_UPGRADES_CACHE_KEY)
+            if raw:
+                return Nasdaq100UpgradesResponse(**json.loads(zlib.decompress(raw)))
+        except Exception:
+            pass
 
     data = await compute_nasdaq100_upgrades()
 

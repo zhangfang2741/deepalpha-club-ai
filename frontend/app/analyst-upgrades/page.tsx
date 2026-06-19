@@ -13,10 +13,10 @@ export default function AnalystUpgradesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const load = () => {
+  const load = (refresh = false) => {
     setLoading(true)
     setError('')
-    fetchNasdaq100Upgrades()
+    fetchNasdaq100Upgrades(refresh)
       .then(setData)
       .catch(() => setError('数据加载失败，请稍后重试'))
       .finally(() => setLoading(false))
@@ -39,7 +39,7 @@ export default function AnalystUpgradesPage() {
             </p>
           </div>
           <button
-            onClick={load}
+            onClick={() => load(true)}
             disabled={loading}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 disabled:opacity-40 transition-colors"
           >

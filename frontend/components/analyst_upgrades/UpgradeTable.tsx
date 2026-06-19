@@ -74,9 +74,9 @@ export default function UpgradeTable({ stocks }: Props) {
                     title="点击查看大图"
                     className="group inline-flex items-center justify-center hover:opacity-80 transition-opacity cursor-zoom-in"
                   >
+                    {/* 近一年上调轨迹：年均 → 季均 → 月均，方向与放大图近期走势一致 */}
                     <Sparkline
                       values={[
-                        stock.all_time_target,
                         stock.last_year_target,
                         stock.last_quarter_target,
                         stock.last_month_target,
