@@ -1,0 +1,581 @@
+"""供应链因果图谱系统集成测试。
+
+覆盖：
+  1. 实体归一化（纯单元）
+  2. LLM 抽取 JSON 解析（纯单元）
+  3. 转录抓取器级联（mock httpx）
+  4. 摄取流水线（SQLite + mock LLM）
+  5. REST API 端点（TestClient + SQLite + mock LLM）
+"""
+
+import json
+from datetime import datetime
+from typing import Generator
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlmodel import Session, SQLModel, create_engine
+
+# ── SQLite 内存数据库 ─────────────────────────────────────────────────────────
+
+_DB_URL = "sqlite:///file::memory:?cache=shared&uri=true"
+
+
+@pytest.fixture(scope="session")
+def test_engine():
+    engine = create_engine(_DB_URL, connect_args={"check_same_thread": False})
+    from app.models.graph_entity import GraphEntity  # noqa: F401
+    from app.models.graph_fact import GraphFact  # noqa: F401
+    from app.models.graph_source import SourceDocument  # noqa: F401
+    SQLModel.metadata.create_all(engine)
+    yield engine
+    SQLModel.metadata.drop_all(engine)
+
+
+@pytest.fixture
+def db(test_engine) -> Generator[Session, None, None]:
+    with Session(test_engine) as session:
+        yield session
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. 实体归一化
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestNormalizer:
+    def test_ticker_aliases(self):
+        from app.services.graph.normalizer import normalize_entity_name
+        assert normalize_entity_name("NVDA") == "NVIDIA"
+        assert normalize_entity_name("nvidia corporation") == "NVIDIA"
+        assert normalize_entity_name("Nvidia") == "NVIDIA"
+
+    def test_product_aliases(self):
+        from app.services.graph.normalizer import normalize_entity_name
+        assert normalize_entity_name("H100") == "H100"
+        assert normalize_entity_name("h100") == "H100"
+        assert normalize_entity_name("hbm3e") == "HBM3E"
+        assert normalize_entity_name("cowos") == "CoWoS"
+
+    def test_technology_aliases(self):
+        from app.services.graph.normalizer import normalize_entity_name
+        assert normalize_entity_name("cuda") == "CUDA"
+        assert normalize_entity_name("infiniband") == "InfiniBand"
+
+    def test_unknown_returns_original(self):
+        from app.services.graph.normalizer import normalize_entity_name
+        assert normalize_entity_name("SomeUnknownEntity") == "SomeUnknownEntity"
+
+    def test_guess_entity_type(self):
+        from app.services.graph.normalizer import guess_entity_type
+        assert guess_entity_type("NVIDIA") == "Company"
+        assert guess_entity_type("H100") == "Product"
+        assert guess_entity_type("CoWoS") == "Technology"
+        assert guess_entity_type("Power Capacity") == "Resource"
+        assert guess_entity_type("AI Training") == "Concept"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. LLM 抽取 JSON 解析
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestExtractor:
+    def test_parse_object_format(self):
+        from app.services.graph.extractor import _parse_llm_response
+        raw = json.dumps({"facts": [
+            {"source_entity": {"name": "NVIDIA", "type": "Company"},
+             "relation": "HAS_PRODUCT",
+             "target_entity": {"name": "H100", "type": "Product"},
+             "evidence": "NVIDIA sells H100 GPUs",
+             "confidence": 0.95,
+             "event_time": None}
+        ]})
+        result = _parse_llm_response(raw)
+        assert len(result) == 1
+        assert result[0]["relation"] == "HAS_PRODUCT"
+
+    def test_parse_array_format(self):
+        from app.services.graph.extractor import _parse_llm_response
+        raw = json.dumps([
+            {"source_entity": {"name": "TSMC", "type": "Company"},
+             "relation": "SUPPLIED_BY",
+             "target_entity": {"name": "NVIDIA", "type": "Company"},
+             "evidence": "TSMC supplies chips",
+             "confidence": 0.9}
+        ])
+        result = _parse_llm_response(raw)
+        assert len(result) == 1
+
+    def test_parse_markdown_wrapped(self):
+        from app.services.graph.extractor import _parse_llm_response
+        raw = '```json\n{"facts": [{"source_entity": {"name": "CoWoS", "type": "Technology"}, "relation": "SUPPLIED_BY", "target_entity": {"name": "TSMC", "type": "Company"}, "evidence": "TSMC CoWoS", "confidence": 0.9}]}\n```'
+        result = _parse_llm_response(raw)
+        assert len(result) == 1
+
+    def test_parse_empty(self):
+        from app.services.graph.extractor import _parse_llm_response
+        assert _parse_llm_response("[]") == []
+        assert _parse_llm_response('{"facts": []}') == []
+
+    def test_relation_type_mapping(self):
+        from app.services.graph.extractor import _map_relation_type
+        from app.models.graph_fact import RelationType
+        assert _map_relation_type("HAS_PRODUCT") == RelationType.HAS_PRODUCT
+        assert _map_relation_type("supplied_by") == RelationType.SUPPLIED_BY
+        assert _map_relation_type("ENABLED_BY") == RelationType.ENABLED_BY
+        assert _map_relation_type("constrained_by") == RelationType.CONSTRAINED_BY
+        assert _map_relation_type("unknown_relation") is None
+
+    def test_event_time_parsing(self):
+        from app.services.graph.extractor import _parse_event_time
+        assert _parse_event_time("2024-Q3") == datetime(2024, 7, 1)
+        assert _parse_event_time("2024-Q1") == datetime(2024, 1, 1)
+        assert _parse_event_time("2024-Q4") == datetime(2024, 10, 1)
+        assert _parse_event_time("2024-01-15") == datetime(2024, 1, 15)
+        assert _parse_event_time(None) is None
+        assert _parse_event_time("invalid") is None
+
+    def test_full_parse_extracted_facts(self):
+        from app.services.graph.extractor import parse_extracted_facts
+        from app.models.graph_fact import RelationType
+        raw = [
+            {"source_entity": {"name": "NVIDIA", "type": "Company"},
+             "relation": "HAS_PRODUCT",
+             "target_entity": {"name": "H100", "type": "Product"},
+             "evidence": "NVIDIA sells H100 GPUs to hyperscalers",
+             "confidence": 0.95,
+             "event_time": "2024-Q3"},
+            {"source_entity": {"name": "H100", "type": "Product"},
+             "relation": "CONSTRAINED_BY",
+             "target_entity": {"name": "CoWoS", "type": "Resource"},
+             "evidence": "H100 supply constrained by CoWoS packaging capacity",
+             "confidence": 0.88,
+             "event_time": None},
+        ]
+        facts = parse_extracted_facts(raw)
+        assert len(facts) == 2
+        assert facts[0].source_name == "NVIDIA"
+        assert facts[0].target_name == "H100"
+        assert facts[0].relation == RelationType.HAS_PRODUCT
+        assert facts[0].confidence == 0.95
+        assert facts[0].event_time == datetime(2024, 7, 1)
+        assert facts[1].relation == RelationType.CONSTRAINED_BY
+        assert facts[1].event_time is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. 转录抓取器（mock httpx）
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestTranscriptScraper:
+    def _make_response(self, json_data=None, text=None, status=200):
+        mock = MagicMock()
+        mock.status_code = status
+        mock.raise_for_status = MagicMock()
+        if json_data is not None:
+            mock.json.return_value = json_data
+        if text is not None:
+            mock.text = text
+        return mock
+
+    @pytest.mark.asyncio
+    async def test_alpha_vantage_success(self):
+        from app.services.graph.transcript_scraper import TranscriptScraper
+        scraper = TranscriptScraper()
+
+        av_payload = {
+            "symbol": "NVDA",
+            "quarter": "2024Q3",
+            "transcript": [
+                {"name": "Jensen Huang", "content": "We delivered record revenue driven by data center demand for H100."},
+                {"name": "Colette Kress", "content": "Data center revenue was $14.5 billion, up 154% year-over-year."},
+            ] * 50,  # 保证超过 500 字符
+        }
+        mock_resp = self._make_response(json_data=av_payload)
+
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.get = AsyncMock(return_value=mock_resp)
+            mock_client_cls.return_value = mock_client
+
+            text = await scraper._fetch_alpha_vantage("NVDA", 2024, 3)
+
+        assert text is not None
+        assert "Jensen Huang" in text
+        assert len(text) > 500
+
+    @pytest.mark.asyncio
+    async def test_alpha_vantage_empty_falls_through(self):
+        from app.services.graph.transcript_scraper import TranscriptScraper
+        scraper = TranscriptScraper()
+
+        av_payload = {"symbol": "NVDA", "quarter": "2024Q3", "transcript": []}
+        mock_resp = self._make_response(json_data=av_payload)
+
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.get = AsyncMock(return_value=mock_resp)
+            mock_client_cls.return_value = mock_client
+
+            text = await scraper._fetch_alpha_vantage("NVDA", 2024, 3)
+
+        assert text is None
+
+    @pytest.mark.asyncio
+    async def test_motley_fool_success(self):
+        from app.services.graph.transcript_scraper import TranscriptScraper
+        scraper = TranscriptScraper()
+
+        search_payload = {
+            "solrResults": {
+                "results": [
+                    {"url": "/earnings/call-transcripts/2024/08/28/nvidia-nvda-q3-2024-earnings-call-transcript/"}
+                ]
+            }
+        }
+        transcript_html = """
+        <html><body>
+        <article>
+        <p>Jensen Huang - CEO: Good afternoon, everyone. We are pleased to report record quarterly revenue.</p>
+        <p>Our data center business continued its strong momentum, with H100 demand exceeding supply.</p>
+        <p>TSMC CoWoS packaging capacity remains a key constraint that we are working to expand.</p>
+        <p>We expect continued strong demand from hyperscalers including Microsoft, Meta, and Google.</p>
+        </article>
+        </body></html>
+        """ * 10  # 保证超过 500 字符
+
+        search_resp = self._make_response(json_data=search_payload)
+        page_resp = self._make_response(text=transcript_html)
+
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.get = AsyncMock(side_effect=[search_resp, page_resp])
+            mock_client_cls.return_value = mock_client
+
+            text = await scraper._fetch_motley_fool("NVDA", 2024, 3)
+
+        assert text is not None
+        assert "Jensen Huang" in text
+        assert len(text) > 500
+
+    @pytest.mark.asyncio
+    async def test_cascade_falls_through_to_motley_fool(self):
+        """AV 失败时级联到 Motley Fool。"""
+        from app.services.graph.transcript_scraper import TranscriptScraper
+        scraper = TranscriptScraper()
+
+        long_text = "Jensen Huang: We delivered record revenue. " * 30
+
+        with (
+            patch.object(scraper, "_fetch_alpha_vantage", new=AsyncMock(return_value=None)),
+            patch.object(scraper, "_fetch_motley_fool", new=AsyncMock(return_value=long_text)),
+            patch.object(scraper, "_fetch_sec_8k", new=AsyncMock(return_value=None)),
+        ):
+            result = await scraper.get_transcript("NVDA", 2024, 3)
+
+        assert result is not None
+        assert "Jensen Huang" in result
+        assert "EARNINGS CALL TRANSCRIPT" in result
+        assert "Motley Fool" in result
+
+    @pytest.mark.asyncio
+    async def test_cascade_all_fail_returns_none(self):
+        from app.services.graph.transcript_scraper import TranscriptScraper
+        scraper = TranscriptScraper()
+
+        with (
+            patch.object(scraper, "_fetch_alpha_vantage", new=AsyncMock(return_value=None)),
+            patch.object(scraper, "_fetch_motley_fool", new=AsyncMock(return_value=None)),
+            patch.object(scraper, "_fetch_sec_8k", new=AsyncMock(return_value=None)),
+        ):
+            result = await scraper.get_transcript("NVDA", 2024, 3)
+
+        assert result is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. 摄取流水线（SQLite + mock LLM）
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SAMPLE_TRANSCRIPT = """
+EARNINGS CALL TRANSCRIPT
+Company: NVDA | Period: 2024 Q3
+============================================================
+
+Jensen Huang - CEO: Good afternoon. We reported record revenue of $35.1 billion, up 94% year-over-year.
+Our data center segment revenue was $30.8 billion, driven by strong demand for NVIDIA H100 and H200 GPUs.
+
+TSMC manufactures our Blackwell chips using CoWoS advanced packaging technology.
+SK Hynix supplies the HBM3E memory integrated into our H200 GPU.
+H100 production remains constrained by CoWoS packaging capacity at TSMC.
+
+Microsoft, Meta, and Google are our largest hyperscaler customers, deploying our GPUs for AI training workloads.
+The demand for large language model training continues to drive infrastructure investment.
+
+Colette Kress - CFO: NVIDIA's H100 enabled the next wave of generative AI applications.
+CoWoS capacity supplied by TSMC is ramping to meet demand throughout fiscal year 2025.
+"""
+
+_MOCK_LLM_RESPONSE = json.dumps({"facts": [
+    {"source_entity": {"name": "NVIDIA", "type": "Company"},
+     "relation": "HAS_PRODUCT",
+     "target_entity": {"name": "H100", "type": "Product"},
+     "evidence": "data center segment driven by strong demand for NVIDIA H100",
+     "confidence": 0.95,
+     "event_time": "2024-Q3"},
+    {"source_entity": {"name": "CoWoS", "type": "Technology"},
+     "relation": "SUPPLIED_BY",
+     "target_entity": {"name": "TSMC", "type": "Company"},
+     "evidence": "TSMC manufactures our Blackwell chips using CoWoS advanced packaging technology",
+     "confidence": 0.93,
+     "event_time": None},
+    {"source_entity": {"name": "H100", "type": "Product"},
+     "relation": "CONSTRAINED_BY",
+     "target_entity": {"name": "CoWoS", "type": "Resource"},
+     "evidence": "H100 production remains constrained by CoWoS packaging capacity at TSMC",
+     "confidence": 0.91,
+     "event_time": "2024-Q3"},
+]})
+
+
+def _mock_llm(response_text: str):
+    """创建返回固定文本的 mock LLM 客户端。"""
+    llm = MagicMock()
+    msg = MagicMock()
+    msg.content = response_text
+    llm.ainvoke = AsyncMock(return_value=msg)
+    return llm
+
+
+@pytest.mark.asyncio
+async def test_pipeline_run_end_to_end(test_engine):
+    """完整流水线：文本 → 切片 → LLM 抽取 → SQLite 存储。"""
+    from app.models.graph_source import DocumentStatus, DocumentType, SourceDocument
+    from app.services.graph.pipeline import run_ingest_pipeline
+
+    doc = SourceDocument(
+        url="transcript://NVDA/2024Q3",
+        document_type=DocumentType.EARNINGS_CALL,
+        ticker="NVDA",
+        company_name="NVIDIA",
+        title="NVDA Earnings Call 2024 Q3",
+        section="Full Transcript",
+    )
+    with Session(test_engine) as session:
+        session.add(doc)
+        session.commit()
+        session.refresh(doc)
+
+    llm = _mock_llm(_MOCK_LLM_RESPONSE)
+
+    with patch("app.services.graph.pipeline.sync_engine", test_engine):
+        count = await run_ingest_pipeline(doc, llm, raw_text=_SAMPLE_TRANSCRIPT)
+
+    assert count > 0, "应该至少存入一条事实"
+
+    from sqlmodel import select
+    from app.models.graph_entity import GraphEntity
+    from app.models.graph_fact import GraphFact
+    with Session(test_engine) as session:
+        entities = session.exec(select(GraphEntity)).all()
+        facts = session.exec(select(GraphFact)).all()
+
+    entity_names = {e.name for e in entities}
+    assert "NVIDIA" in entity_names
+    assert "H100" in entity_names
+    assert "TSMC" in entity_names
+
+    assert len(facts) > 0
+
+    updated_doc = None
+    with Session(test_engine) as session:
+        updated_doc = session.get(SourceDocument, doc.id)
+    assert updated_doc.status == DocumentStatus.DONE
+    assert updated_doc.fact_count > 0
+
+
+@pytest.mark.asyncio
+async def test_ingest_raw_text(test_engine):
+    """ingest_raw_text 函数：直接传文本，自动建 doc 并跑流水线。"""
+    from app.services.graph.pipeline import ingest_raw_text
+    from app.models.graph_source import DocumentType
+
+    llm = _mock_llm(_MOCK_LLM_RESPONSE)
+
+    with patch("app.services.graph.pipeline.sync_engine", test_engine):
+        count, doc_id = await ingest_raw_text(
+            raw_text=_SAMPLE_TRANSCRIPT,
+            document_type=DocumentType.EARNINGS_CALL,
+            llm_client=llm,
+            ticker="NVDA",
+            title="NVDA Q3 2024 Manual Test",
+        )
+
+    assert doc_id is not None
+    assert count > 0
+
+
+@pytest.mark.asyncio
+async def test_ingest_too_short_text_rejected():
+    """文本过短时 ingest_raw_text 直接拒绝，返回 (0, None)。"""
+    from app.services.graph.pipeline import ingest_raw_text
+    from app.models.graph_source import DocumentType
+
+    count, doc_id = await ingest_raw_text(
+        raw_text="Too short.",
+        document_type=DocumentType.EARNINGS_CALL,
+        llm_client=MagicMock(),
+    )
+    assert count == 0
+    assert doc_id is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 5. API 端点（TestClient + SQLite）
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.fixture(scope="module")
+def api_client(test_engine):
+    """FastAPI TestClient，db 依赖指向 SQLite 内存库。"""
+    from app.main import app
+    from app.db.session import get_sync_session
+
+    def _override_session():
+        with Session(test_engine) as session:
+            yield session
+
+    app.dependency_overrides[get_sync_session] = _override_session
+    with TestClient(app) as client:
+        yield client
+    app.dependency_overrides.clear()
+
+
+class TestSupplyChainAPI:
+    def test_stats_endpoint(self, api_client):
+        resp = api_client.get("/api/v1/supply-chain/stats")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "entities" in data
+        assert "facts" in data
+        assert "total_entities" in data
+        assert "total_facts" in data
+
+    def test_list_entities_empty(self, api_client):
+        resp = api_client.get("/api/v1/supply-chain/entities")
+        assert resp.status_code == 200
+        assert isinstance(resp.json(), list)
+
+    def test_create_entity(self, api_client):
+        payload = {
+            "entity_type": "Company",
+            "name": "Test Corp",
+            "ticker": "TEST",
+            "description": "A test company",
+        }
+        resp = api_client.post("/api/v1/supply-chain/entities", json=payload)
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["name"] == "Test Corp"
+        assert data["ticker"] == "TEST"
+        assert "id" in data
+
+    def test_create_entity_duplicate_rejected(self, api_client):
+        payload = {"entity_type": "Company", "name": "DupCorp"}
+        api_client.post("/api/v1/supply-chain/entities", json=payload)
+        resp = api_client.post("/api/v1/supply-chain/entities", json=payload)
+        assert resp.status_code == 409
+
+    def test_get_entity_by_id(self, api_client):
+        create_resp = api_client.post(
+            "/api/v1/supply-chain/entities",
+            json={"entity_type": "Product", "name": "H200 GPU"},
+        )
+        entity_id = create_resp.json()["id"]
+        resp = api_client.get(f"/api/v1/supply-chain/entities/{entity_id}")
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "H200 GPU"
+
+    def test_get_entity_not_found(self, api_client):
+        import uuid
+        resp = api_client.get(f"/api/v1/supply-chain/entities/{uuid.uuid4()}")
+        assert resp.status_code == 404
+
+    def test_create_and_list_facts(self, api_client):
+        src = api_client.post(
+            "/api/v1/supply-chain/entities",
+            json={"entity_type": "Company", "name": "FactSrc Co"},
+        ).json()
+        tgt = api_client.post(
+            "/api/v1/supply-chain/entities",
+            json={"entity_type": "Product", "name": "FactTgt Product"},
+        ).json()
+
+        fact_payload = {
+            "source_entity_id": src["id"],
+            "target_entity_id": tgt["id"],
+            "relation_type": "HAS_PRODUCT",
+            "evidence_text": "FactSrc Co manufactures FactTgt Product.",
+            "confidence": 0.9,
+        }
+        resp = api_client.post("/api/v1/supply-chain/facts", json=fact_payload)
+        assert resp.status_code == 201
+        fact = resp.json()
+        assert fact["relation_type"] == "HAS_PRODUCT"
+        assert fact["source_entity_name"] == "FactSrc Co"
+        assert fact["target_entity_name"] == "FactTgt Product"
+
+    def test_get_graph_data(self, api_client):
+        resp = api_client.get("/api/v1/supply-chain/graph")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "nodes" in data
+        assert "edges" in data
+        assert "total_entities" in data
+        assert "total_facts" in data
+
+    def test_get_graph_filter_by_entity_type(self, api_client):
+        resp = api_client.get("/api/v1/supply-chain/graph?entity_types=Company")
+        assert resp.status_code == 200
+
+    def test_ingest_text_endpoint(self, api_client):
+        """POST /ingest/text 提交原始文本，返回 202 + doc_id。"""
+        payload = {
+            "text": _SAMPLE_TRANSCRIPT,
+            "document_type": "earnings_call",
+            "ticker": "NVDA",
+            "title": "NVDA Q3 2024 Test",
+        }
+        with patch("app.api.v1.supply_chain._get_llm", return_value=_mock_llm(_MOCK_LLM_RESPONSE)):
+            resp = api_client.post("/api/v1/supply-chain/ingest/text", json=payload)
+        assert resp.status_code == 202
+        data = resp.json()
+        assert data["status"] == "queued"
+        assert "doc_id" in data
+
+    def test_ingest_text_too_short_rejected(self, api_client):
+        payload = {
+            "text": "too short",
+            "document_type": "earnings_call",
+        }
+        resp = api_client.post("/api/v1/supply-chain/ingest/text", json=payload)
+        assert resp.status_code == 422  # Pydantic min_length 验证
+
+    def test_bottleneck_analysis(self, api_client):
+        resp = api_client.get("/api/v1/supply-chain/analysis/bottlenecks")
+        assert resp.status_code == 200
+        assert isinstance(resp.json(), list)
+
+    def test_demand_chain_not_found(self, api_client):
+        resp = api_client.get("/api/v1/supply-chain/analysis/demand-chain/NonExistentConcept")
+        assert resp.status_code == 404
+
+    def test_list_documents(self, api_client):
+        resp = api_client.get("/api/v1/supply-chain/documents")
+        assert resp.status_code == 200
+        assert isinstance(resp.json(), list)

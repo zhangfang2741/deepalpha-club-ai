@@ -121,7 +121,7 @@ def _store_facts_sync(
 
 def _save_doc_sync(doc: SourceDocument) -> SourceDocument:
     """持久化新建的 SourceDocument，返回已有 id 的对象。"""
-    with Session(sync_engine) as session:
+    with Session(sync_engine, expire_on_commit=False) as session:
         session.add(doc)
         session.commit()
         session.refresh(doc)
@@ -292,10 +292,14 @@ async def run_ingest_pipeline(
     Returns:
         总存储事实条数
     """
-    logger.info("ingest_pipeline_started", doc_id=str(doc.id), url=doc.url)
+    # 在任何 session 操作前缓存关键属性，避免 detach 后的 DetachedInstanceError
+    doc_id = doc.id
+    doc_url = doc.url
+
+    logger.info("ingest_pipeline_started", doc_id=str(doc_id), url=doc_url)
 
     # 1. 更新状态为 processing
-    with Session(sync_engine) as session:
+    with Session(sync_engine, expire_on_commit=False) as session:
         doc.status = DocumentStatus.PROCESSING
         session.add(doc)
         session.commit()
@@ -303,14 +307,14 @@ async def run_ingest_pipeline(
     try:
         # 2. 获取文本
         if raw_text is None:
-            raw_text = await _fetch_text_from_url(doc.url)
-        logger.info("document_fetched", doc_id=str(doc.id), text_len=len(raw_text))
+            raw_text = await _fetch_text_from_url(doc_url)
+        logger.info("document_fetched", doc_id=str(doc_id), text_len=len(raw_text))
 
         # 3. 切片
         chunks = _chunk_text(raw_text)
-        logger.info("document_chunked", doc_id=str(doc.id), chunk_count=len(chunks))
+        logger.info("document_chunked", doc_id=str(doc_id), chunk_count=len(chunks))
 
-        with Session(sync_engine) as session:
+        with Session(sync_engine, expire_on_commit=False) as session:
             doc.chunk_count = len(chunks)
             session.add(doc)
             session.commit()
@@ -324,14 +328,14 @@ async def run_ingest_pipeline(
         for i, chunk in enumerate(chunks):
             if len(chunk.strip()) < 50:  # 跳过过短 chunk
                 continue
-            chunk_id = f"{doc.id}:chunk:{i}"
+            chunk_id = f"{doc_id}:chunk:{i}"
             facts = await extract_facts_from_chunk(chunk, source_info, llm_client)
             if facts:
                 stored = _store_facts_sync(doc, facts, chunk_id)
                 total_stored += stored
 
         # 5. 更新状态为 done
-        with Session(sync_engine) as session:
+        with Session(sync_engine, expire_on_commit=False) as session:
             doc.status = DocumentStatus.DONE
             doc.ingested_at = datetime.now(UTC)
             session.add(doc)
@@ -339,15 +343,15 @@ async def run_ingest_pipeline(
 
         logger.info(
             "ingest_pipeline_completed",
-            doc_id=str(doc.id),
+            doc_id=str(doc_id),
             chunk_count=len(chunks),
             total_facts=total_stored,
         )
         return total_stored
 
     except Exception as e:
-        logger.exception("ingest_pipeline_failed", doc_id=str(doc.id), error=str(e))
-        with Session(sync_engine) as session:
+        logger.exception("ingest_pipeline_failed", doc_id=str(doc_id), error=str(e))
+        with Session(sync_engine, expire_on_commit=False) as session:
             doc.status = DocumentStatus.FAILED
             doc.error_message = str(e)[:500]
             session.add(doc)
