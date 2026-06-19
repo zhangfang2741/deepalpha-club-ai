@@ -57,7 +57,7 @@ async def get_price_target_history(
     symbol: Annotated[str, Path(min_length=1, max_length=10)],
     redis: Redis = Depends(get_redis),
 ) -> PriceTargetHistoryResponse:
-    """返回个股近 5 年按季度聚合的分析师平均目标价（用于折线图）."""
+    """返回个股近 5 年按月聚合的分析师平均目标价（用于折线图）."""
     sym = symbol.upper()
     cache_key = _history_cache_key(sym)
 
@@ -70,12 +70,12 @@ async def get_price_target_history(
 
     data = await compute_price_target_history(sym)
 
-    if data.quarters:
+    if data.points:
         try:
             compressed = zlib.compress(data.model_dump_json().encode())
             await redis.set(cache_key, compressed, ex=_HISTORY_TTL)
         except Exception:
             pass
 
-    logger.info("price_target_history_served", symbol=sym, quarters=len(data.quarters))
+    logger.info("price_target_history_served", symbol=sym, months=len(data.points))
     return data

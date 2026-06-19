@@ -30,16 +30,16 @@ class Nasdaq100UpgradesResponse(BaseResponse):
     stocks: list[UpgradeStock]
 
 
-class PriceTargetQuarter(BaseResponse):
-    """单季度平均目标价."""
+class PriceTargetPoint(BaseResponse):
+    """单月平均目标价."""
 
-    label: str = Field(description="季度标签，如 2024 Q1")
+    label: str = Field(description="月份标签，如 2024-06")
     avg_target: float
     count: int
 
 
 class PriceTargetHistoryResponse(BaseResponse):
-    """个股历史目标价季度序列."""
+    """个股历史目标价月度序列."""
 
     symbol: str
-    quarters: list[PriceTargetQuarter]
+    points: list[PriceTargetPoint]
