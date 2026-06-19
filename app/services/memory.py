@@ -17,6 +17,11 @@ class MemoryService:
         """Initialize the memory service."""
         self._memory: AsyncMemory | None = None
 
+    @property
+    def enabled(self) -> bool:
+        """Long-term memory requires an OpenAI key for the embedder/LLM."""
+        return bool(settings.OPENAI_API_KEY)
+
     async def _get_memory(self) -> AsyncMemory:
         if self._memory is None:
             self._memory = await AsyncMemory.from_config(
@@ -34,11 +39,17 @@ class MemoryService:
                     },
                     "llm": {
                         "provider": "openai",
-                        "config": {"model": settings.LONG_TERM_MEMORY_MODEL},
+                        "config": {
+                            "model": settings.LONG_TERM_MEMORY_MODEL,
+                            "api_key": settings.OPENAI_API_KEY,
+                        },
                     },
                     "embedder": {
                         "provider": "openai",
-                        "config": {"model": settings.LONG_TERM_MEMORY_EMBEDDER_MODEL},
+                        "config": {
+                            "model": settings.LONG_TERM_MEMORY_EMBEDDER_MODEL,
+                            "api_key": settings.OPENAI_API_KEY,
+                        },
                     },
                 }
             )
@@ -48,8 +59,12 @@ class MemoryService:
         """Pre-warm the mem0 AsyncMemory instance and its pgvector connection pool.
 
         Call once at startup so the first search() or add() doesn't pay the
-        ~130ms from_config + pgvector.list_cols() cold-init cost.
+        ~130ms from_config + pgvector.list_cols() cold-init cost. Skips silently
+        when no OpenAI key is configured so the app can boot without long-term memory.
         """
+        if not self.enabled:
+            logger.warning("memory_service_disabled_no_openai_key")
+            return
         await self._get_memory()
         logger.info("memory_service_initialized")
 
@@ -62,7 +77,7 @@ class MemoryService:
         no user_id is supplied (anonymous sessions skip long-term memory
         rather than pooling under a shared partition).
         """
-        if user_id is None:
+        if user_id is None or not self.enabled:
             return ""
         try:
             # Check cache first
@@ -90,7 +105,7 @@ class MemoryService:
 
         No-op when ``user_id`` is ``None`` (see ``search`` for rationale).
         """
-        if user_id is None:
+        if user_id is None or not self.enabled:
             return
         try:
             memory = await self._get_memory()
