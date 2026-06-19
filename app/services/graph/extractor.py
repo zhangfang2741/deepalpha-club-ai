@@ -76,7 +76,10 @@ def _parse_llm_response(response_text: str) -> list[dict[str, Any]]:
 
     try:
         data = json.loads(text)
-        return data.get("facts", [])
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            return data.get("facts", [])
     except json.JSONDecodeError:
         # 尝试提取 JSON 对象
         match = re.search(r'\{.*"facts"\s*:\s*\[.*?\]\s*\}', text, re.DOTALL)
@@ -159,7 +162,7 @@ def _map_relation_type(raw_relation: str) -> Optional[RelationType]:
         "enabled_by": RelationType.ENABLED_BY,
         "constrained_by": RelationType.CONSTRAINED_BY,
     }
-    return mapping.get(raw_relation.upper().replace(" ", "_").replace("-", "_"))
+    return mapping.get(raw_relation.lower().replace(" ", "_").replace("-", "_"))
 
 
 def parse_extracted_facts(raw_facts: list[dict[str, Any]]) -> list[ExtractedFact]:
