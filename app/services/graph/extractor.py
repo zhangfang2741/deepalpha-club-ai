@@ -229,7 +229,17 @@ async def extract_facts_from_chunk(
 
     try:
         response = await llm_client.ainvoke(messages)
-        raw_text = response.content if hasattr(response, "content") else str(response)
+        content = response.content if hasattr(response, "content") else str(response)
+        # Claude API 有时返回 content blocks 列表而非字符串
+        if isinstance(content, list):
+            raw_text = " ".join(
+                (b.get("text", "") if isinstance(b, dict) else getattr(b, "text", str(b)))
+                for b in content
+                if (isinstance(b, dict) and b.get("type") == "text")
+                or (hasattr(b, "type") and b.type == "text")
+            )
+        else:
+            raw_text = content
         raw_facts = _parse_llm_response(raw_text)
         facts = parse_extracted_facts(raw_facts)
         logger.info(
