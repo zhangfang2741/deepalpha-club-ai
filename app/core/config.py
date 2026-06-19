@@ -222,7 +222,10 @@ class Settings:
 
         # Financial Modeling Prep API
         self.FMP_API_KEY: str = os.getenv("FMP_API_KEY", "")
-        
+
+        # Alpha Vantage API（电话会议记录抓取备用源）
+        self.ALPHA_VANTAGE_KEY: str | None = os.getenv("ALPHA_VANTAGE_KEY", None)
+
         # News API Key
         self.NEWS_API_KEY: str = os.getenv("NEWS_API_KEY", "")
 

@@ -186,7 +186,7 @@ async def ingest_earnings_call(
     quarter: int,
     llm_client,
 ) -> tuple[int, Optional[str]]:
-    """一键抓取并摄取 FMP 电话会议记录。
+    """一键抓取并摄取电话会议记录（FMP 优先，失败时级联多源抓取）。
 
     Returns:
         (存储事实条数, doc_id 字符串) 或 (0, None)
@@ -196,7 +196,30 @@ async def ingest_earnings_call(
     text = await fmp_transcript_fetcher.get_transcript(ticker, year, quarter)
     if not text:
         logger.warning("fmp_transcript_empty", ticker=ticker, year=year, quarter=quarter)
-        return 0, None
+        # FMP 失败时用多源抓取器兜底
+        from app.services.graph.transcript_scraper import transcript_scraper
+        text = await transcript_scraper.get_transcript(ticker, year, quarter)
+        if not text:
+            logger.warning("all_transcript_sources_failed", ticker=ticker, year=year, quarter=quarter)
+            return 0, None
+
+        try:
+            period_date = datetime(year, (quarter - 1) * 3 + 1, 1)
+        except ValueError:
+            period_date = None
+
+        doc = SourceDocument(
+            url=f"transcript://{ticker}/{year}Q{quarter}",
+            document_type=DocumentType.EARNINGS_CALL,
+            ticker=ticker.upper(),
+            company_name=ticker.upper(),
+            period_of_report=period_date,
+            title=f"{ticker} Earnings Call {year} Q{quarter}",
+            section="Full Transcript",
+        )
+        doc = _save_doc_sync(doc)
+        count = await run_ingest_pipeline(doc, llm_client, raw_text=text)
+        return count, str(doc.id)
 
     try:
         period_date = datetime(year, (quarter - 1) * 3 + 1, 1)
