@@ -21,7 +21,7 @@ export interface Nasdaq100UpgradesResponse {
   stocks: UpgradeStock[]
 }
 
-export interface PriceTargetQuarter {
+export interface PriceTargetPoint {
   label: string
   avg_target: number
   count: number
@@ -29,7 +29,7 @@ export interface PriceTargetQuarter {
 
 export interface PriceTargetHistoryResponse {
   symbol: string
-  quarters: PriceTargetQuarter[]
+  points: PriceTargetPoint[]
 }
 
 export async function fetchNasdaq100Upgrades(): Promise<Nasdaq100UpgradesResponse> {

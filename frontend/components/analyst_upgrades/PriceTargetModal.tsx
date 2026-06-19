@@ -11,7 +11,7 @@ import {
   ISeriesApi,
 } from 'lightweight-charts'
 import { fetchPriceTargetHistory } from '@/lib/api/analyst_upgrade'
-import type { PriceTargetQuarter, UpgradeStock } from '@/lib/api/analyst_upgrade'
+import type { PriceTargetPoint, UpgradeStock } from '@/lib/api/analyst_upgrade'
 
 interface TooltipState {
   visible: boolean
@@ -22,23 +22,29 @@ interface TooltipState {
   count: number
 }
 
+// 月份标签 "2024-06" → "2024年6月"
+function formatMonthLabel(label: string): string {
+  const [y, m] = label.split('-')
+  if (!y || !m) return label
+  return `${y}年${parseInt(m)}月`
+}
+
 interface ChartPanelProps {
-  symbol: string
-  quarters: PriceTargetQuarter[]
+  points: PriceTargetPoint[]
   synthetic: boolean
 }
 
-function ChartPanel({ quarters, synthetic }: ChartPanelProps) {
+function ChartPanel({ points, synthetic }: ChartPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const quartersByTime = useRef<Record<number, PriceTargetQuarter>>({})
+  const pointsByTime = useRef<Record<number, PriceTargetPoint>>({})
   const [tooltip, setTooltip] = useState<TooltipState>({
     visible: false, x: 0, y: 0, label: '', value: 0, count: 0,
   })
 
   useEffect(() => {
-    if (!containerRef.current || quarters.length === 0) return
+    if (!containerRef.current || points.length === 0) return
 
     const chart = createChart(containerRef.current, {
       layout: {
@@ -51,7 +57,7 @@ function ChartPanel({ quarters, synthetic }: ChartPanelProps) {
         horzLines: { color: '#f3f4f6' },
       },
       rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false, tickMarkFormatter: () => '' },
+      timeScale: { borderVisible: false, timeVisible: false },
       crosshair: {
         mode: CrosshairMode.Magnet,
         vertLine: { labelVisible: false },
@@ -72,14 +78,13 @@ function ChartPanel({ quarters, synthetic }: ChartPanelProps) {
       crosshairMarkerBackgroundColor: '#fff',
     })
 
-    // 季度标签 → unix 时间戳
-    quartersByTime.current = {}
-    const data = quarters.map((q) => {
-      const [yearStr, qStr] = q.label.split(' Q')
-      const month = (parseInt(qStr) - 1) * 3 + 1
-      const ts = Math.floor(new Date(parseInt(yearStr), month - 1, 1).getTime() / 1000)
-      quartersByTime.current[ts] = q
-      return { time: ts as number, value: q.avg_target }
+    // 月份标签 "2024-06" → unix 时间戳
+    pointsByTime.current = {}
+    const data = points.map((p) => {
+      const [yearStr, monthStr] = p.label.split('-')
+      const ts = Math.floor(new Date(parseInt(yearStr), parseInt(monthStr) - 1, 1).getTime() / 1000)
+      pointsByTime.current[ts] = p
+      return { time: ts as number, value: p.avg_target }
     })
 
     series.setData(data as never[])
@@ -96,14 +101,14 @@ function ChartPanel({ quarters, synthetic }: ChartPanelProps) {
         return
       }
       const ts = param.time as number
-      const q = quartersByTime.current[ts]
+      const p = pointsByTime.current[ts]
       setTooltip({
         visible: true,
         x: param.point.x,
         y: param.point.y,
-        label: q?.label ?? '',
+        label: p ? formatMonthLabel(p.label) : '',
         value: (price as { value: number }).value,
-        count: q?.count ?? 0,
+        count: p?.count ?? 0,
       })
     })
 
@@ -122,9 +127,9 @@ function ChartPanel({ quarters, synthetic }: ChartPanelProps) {
       chart.remove()
       chartRef.current = null
     }
-  }, [quarters])
+  }, [points])
 
-  if (quarters.length === 0) {
+  if (points.length === 0) {
     return (
       <div className="flex items-center justify-center h-60 text-gray-400 text-sm">
         暂无历史数据
@@ -132,8 +137,8 @@ function ChartPanel({ quarters, synthetic }: ChartPanelProps) {
     )
   }
 
-  const first = quarters[0]
-  const last = quarters[quarters.length - 1]
+  const first = points[0]
+  const last = points[points.length - 1]
   const totalPct = first.avg_target > 0
     ? ((last.avg_target - first.avg_target) / first.avg_target * 100).toFixed(1)
     : null
@@ -141,8 +146,8 @@ function ChartPanel({ quarters, synthetic }: ChartPanelProps) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-4 text-sm items-center">
-        <span className="text-gray-500">起点 <span className="font-semibold text-gray-800">${first.avg_target.toFixed(0)}</span> <span className="text-xs text-gray-400">({first.label})</span></span>
-        <span className="text-gray-500">最新 <span className="font-semibold text-gray-800">${last.avg_target.toFixed(0)}</span> <span className="text-xs text-gray-400">({last.label})</span></span>
+        <span className="text-gray-500">起点 <span className="font-semibold text-gray-800">${first.avg_target.toFixed(0)}</span> <span className="text-xs text-gray-400">({formatMonthLabel(first.label)})</span></span>
+        <span className="text-gray-500">最新 <span className="font-semibold text-gray-800">${last.avg_target.toFixed(0)}</span> <span className="text-xs text-gray-400">({formatMonthLabel(last.label)})</span></span>
         {totalPct && (
           <span className={`font-semibold ${parseFloat(totalPct) > 0 ? 'text-green-600' : 'text-red-500'}`}>
             区间涨幅 {parseFloat(totalPct) > 0 ? '+' : ''}{totalPct}%
@@ -176,27 +181,21 @@ function ChartPanel({ quarters, synthetic }: ChartPanelProps) {
   )
 }
 
-/** 当 API 无历史数据时，用 stock 的 4 个汇总点生成合成走势 */
-function makeSyntheticQuarters(stock: UpgradeStock): PriceTargetQuarter[] {
+/** 当 API 无历史数据时，用 stock 的 4 个汇总点生成合成月度走势 */
+function makeSyntheticPoints(stock: UpgradeStock): PriceTargetPoint[] {
   const now = new Date()
-  const yr = now.getFullYear()
-  const currentQ = Math.floor(now.getMonth() / 3) + 1
 
-  const subQ = (year: number, qn: number, n: number) => {
-    const total = year * 4 + (qn - 1) - n
-    return { year: Math.floor(total / 4), q: (total % 4) + 1 }
+  // 相对当前月份回退 n 个月，返回 "YYYY-MM" 标签
+  const monthsAgo = (n: number): string => {
+    const d = new Date(now.getFullYear(), now.getMonth() - n, 1)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   }
 
-  const q0 = { year: yr, q: currentQ }
-  const q1 = subQ(yr, currentQ, 1)
-  const q4 = subQ(yr, currentQ, 4)
-  const q8 = subQ(yr, currentQ, 8)
-
   return [
-    { label: `${q8.year} Q${q8.q}`, avg_target: stock.all_time_target, count: 0 },
-    { label: `${q4.year} Q${q4.q}`, avg_target: stock.last_year_target, count: 0 },
-    { label: `${q1.year} Q${q1.q}`, avg_target: stock.last_quarter_target, count: 0 },
-    { label: `${q0.year} Q${q0.q}`, avg_target: stock.last_month_target, count: 0 },
+    { label: monthsAgo(36), avg_target: stock.all_time_target, count: 0 },
+    { label: monthsAgo(12), avg_target: stock.last_year_target, count: 0 },
+    { label: monthsAgo(3), avg_target: stock.last_quarter_target, count: 0 },
+    { label: monthsAgo(0), avg_target: stock.last_month_target, count: 0 },
   ].filter((pt) => pt.avg_target > 0)
 }
 
@@ -206,23 +205,23 @@ interface Props {
 }
 
 export default function PriceTargetModal({ stock, onClose }: Props) {
-  const [quarters, setQuarters] = useState<PriceTargetQuarter[] | null>(null)
+  const [points, setPoints] = useState<PriceTargetPoint[] | null>(null)
   const [synthetic, setSynthetic] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetchPriceTargetHistory(stock.symbol)
       .then((res) => {
-        if (res.quarters.length > 0) {
-          setQuarters(res.quarters)
+        if (res.points.length > 1) {
+          setPoints(res.points)
           setSynthetic(false)
         } else {
-          setQuarters(makeSyntheticQuarters(stock))
+          setPoints(makeSyntheticPoints(stock))
           setSynthetic(true)
         }
       })
       .catch(() => {
-        setQuarters(makeSyntheticQuarters(stock))
+        setPoints(makeSyntheticPoints(stock))
         setSynthetic(true)
       })
       .finally(() => setLoading(false))
@@ -248,7 +247,7 @@ export default function PriceTargetModal({ stock, onClose }: Props) {
               <span className="text-lg font-bold text-gray-900">{stock.symbol}</span>
               <span className="text-sm text-gray-500">{stock.name}</span>
             </div>
-            <p className="text-xs text-gray-400 mt-0.5">近 5 年分析师平均目标价 · 按季度聚合</p>
+            <p className="text-xs text-gray-400 mt-0.5">近 5 年分析师平均目标价 · 按月聚合</p>
           </div>
           <button
             onClick={onClose}
@@ -281,8 +280,8 @@ export default function PriceTargetModal({ stock, onClose }: Props) {
               <Loader2 className="w-4 h-4 animate-spin" />
               加载历史数据…
             </div>
-          ) : quarters !== null ? (
-            <ChartPanel symbol={stock.symbol} quarters={quarters} synthetic={synthetic} />
+          ) : points !== null ? (
+            <ChartPanel points={points} synthetic={synthetic} />
           ) : null}
         </div>
       </div>

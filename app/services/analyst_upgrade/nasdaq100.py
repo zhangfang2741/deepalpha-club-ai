@@ -13,12 +13,11 @@ from app.core.logging import logger
 from app.schemas.analyst_upgrade import (
     Nasdaq100UpgradesResponse,
     PriceTargetHistoryResponse,
-    PriceTargetQuarter,
+    PriceTargetPoint,
     UpgradeStock,
 )
 
 _FMP_STABLE = "https://financialmodelingprep.com/stable"
-_FMP_V3 = "https://financialmodelingprep.com/api/v3"
 _CONCURRENCY = 20
 _WIKI_NDX_URL = "https://en.wikipedia.org/wiki/Nasdaq-100"
 # Wikipedia 官方 action API：返回 JSON 包裹的渲染 HTML，比直接爬文章页更适合程序化访问
@@ -330,79 +329,99 @@ async def compute_nasdaq100_upgrades() -> Nasdaq100UpgradesResponse:
     )
 
 
-async def compute_price_target_history(symbol: str) -> PriceTargetHistoryResponse:
-    """拉取个股近 5 年分析师目标价，按季度聚合均值."""
-    cutoff = date.today() - timedelta(days=5 * 365)
-    quarterly: dict[str, list[float]] = defaultdict(list)
+# 逐条目标价端点候选：stable price-target-news 为正确历史端点，依次降级 v4 / stable price-target
+_FMP_PT_URLS = (
+    f"{_FMP_STABLE}/price-target-news",
+    "https://financialmodelingprep.com/api/v4/price-target",
+    f"{_FMP_STABLE}/price-target",
+)
+# 不同端点/版本的字段名差异，做兼容
+_PT_DATE_FIELDS = ("publishedDate", "date", "published_date", "datePublished", "publishedAt")
+_PT_VALUE_FIELDS = ("priceTarget", "adjPriceTarget", "price_target")
 
-    # 依次尝试 stable / v4 / v3，任一返回数据即停止
-    _BASES = [_FMP_STABLE, "https://financialmodelingprep.com/api/v4", _FMP_V3]
+
+def _extract_pt_date(rec: dict) -> date | None:
+    for k in _PT_DATE_FIELDS:
+        v = rec.get(k)
+        if v:
+            try:
+                return datetime.fromisoformat(str(v)[:10]).date()
+            except ValueError:
+                continue
+    return None
+
+
+def _extract_pt_value(rec: dict) -> float | None:
+    for k in _PT_VALUE_FIELDS:
+        v = rec.get(k)
+        if v:
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+async def _fetch_price_target_records(client: httpx.AsyncClient, symbol: str) -> list[dict]:
+    """逐条拉取个股分析师目标价记录，依次尝试多个端点，命中即返回."""
+    for url in _FMP_PT_URLS:
+        records: list[dict] = []
+        for page in range(20):
+            try:
+                resp = await client.get(
+                    url,
+                    params={
+                        "symbol": symbol.upper(),
+                        "page": page,
+                        "limit": 100,
+                        "apikey": settings.FMP_API_KEY,
+                    },
+                )
+            except Exception as e:
+                logger.warning("price_target_fetch_error", symbol=symbol, url=url, error=str(e))
+                break
+            if resp.status_code != 200:
+                break
+            batch = resp.json()
+            if not isinstance(batch, list) or not batch:
+                break
+            records.extend(batch)
+            # 单次返回不足一页说明已到末尾（或该端点不分页）
+            if len(batch) < 100:
+                break
+        if records:
+            logger.info("price_target_records_fetched", symbol=symbol, url=url, count=len(records))
+            return records
+    logger.warning("price_target_records_empty", symbol=symbol)
+    return []
+
+
+async def compute_price_target_history(symbol: str) -> PriceTargetHistoryResponse:
+    """拉取个股近 5 年分析师目标价，按月聚合均值."""
+    cutoff = date.today() - timedelta(days=5 * 365)
+    monthly: dict[str, list[float]] = defaultdict(list)
 
     async with httpx.AsyncClient(timeout=30) as client:
-        for base in _BASES:
-            quarterly.clear()
-            for page in range(15):
-                resp = await client.get(
-                    f"{base}/price-target",
-                    params={"symbol": symbol.upper(), "page": page, "apikey": settings.FMP_API_KEY},
-                )
-                if resp.status_code != 200:
-                    if page == 0:
-                        logger.warning(
-                            "price_target_history_http_error",
-                            symbol=symbol,
-                            base=base,
-                            status=resp.status_code,
-                        )
-                    break
-                records = resp.json()
-                if not isinstance(records, list) or not records:
-                    break
+        records = await _fetch_price_target_records(client, symbol)
 
-                stop = False
-                for rec in records:
-                    # 兼容 stable / v4 / v3 的字段名差异
-                    dt_str = (
-                        rec.get("publishedDate")
-                        or rec.get("date")
-                        or rec.get("published_date")
-                        or ""
-                    )
-                    pt = rec.get("priceTarget") or rec.get("adjPriceTarget") or rec.get("price_target")
-                    if not dt_str or pt is None:
-                        continue
-                    try:
-                        dt = datetime.fromisoformat(dt_str[:10]).date()
-                    except ValueError:
-                        continue
-                    if dt < cutoff:
-                        stop = True
-                        break
-                    q_num = (dt.month - 1) // 3 + 1
-                    quarterly[f"{dt.year} Q{q_num}"].append(float(pt))
+    for rec in records:
+        dt = _extract_pt_date(rec)
+        pt = _extract_pt_value(rec)
+        if dt is None or pt is None or dt < cutoff:
+            continue
+        monthly[f"{dt.year}-{dt.month:02d}"].append(pt)
 
-                if stop:
-                    break
-
-            if quarterly:
-                logger.info("price_target_history_fetched", symbol=symbol, base=base, quarters=len(quarterly))
-                break
-            logger.warning("price_target_history_empty", symbol=symbol, base=base)
-
-    quarters: list[PriceTargetQuarter] = [
-        PriceTargetQuarter(
+    points: list[PriceTargetPoint] = [
+        PriceTargetPoint(
             label=label,
             avg_target=round(sum(vals) / len(vals), 2),
             count=len(vals),
         )
-        for label, vals in quarterly.items()
+        for label, vals in monthly.items()
         if vals
     ]
+    points.sort(key=lambda p: p.label)
 
-    def _sort_key(q: PriceTargetQuarter) -> tuple[int, int]:
-        year, qn = q.label.split(" Q")
-        return int(year), int(qn)
+    logger.info("price_target_history_computed", symbol=symbol, months=len(points))
 
-    quarters.sort(key=_sort_key)
-
-    return PriceTargetHistoryResponse(symbol=symbol.upper(), quarters=quarters)
+    return PriceTargetHistoryResponse(symbol=symbol.upper(), points=points)
