@@ -3,8 +3,10 @@
 import asyncio
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from io import StringIO
 
 import httpx
+import pandas as pd
 
 from app.core.config import settings
 from app.core.logging import logger
@@ -18,6 +20,8 @@ from app.schemas.analyst_upgrade import (
 _FMP_STABLE = "https://financialmodelingprep.com/stable"
 _FMP_V3 = "https://financialmodelingprep.com/api/v3"
 _CONCURRENCY = 20
+_WIKI_NDX_URL = "https://en.wikipedia.org/wiki/Nasdaq-100"
+_WIKI_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; DeepAlpha-Bot/1.0)"}
 
 # 兜底成分股列表：当 FMP nasdaq_constituent 接口不可用时使用
 # 格式：(symbol, name, sector)
@@ -128,35 +132,58 @@ def _fallback_constituents() -> list[dict]:
     ]
 
 
-async def _fetch_constituents(client: httpx.AsyncClient) -> list[dict]:
-    if not settings.FMP_API_KEY:
-        logger.warning("nasdaq_constituent_no_api_key_using_fallback")
-        return _fallback_constituents()
+def _parse_wiki_html(html: str) -> list[dict]:
+    """从 Wikipedia HTML 中解析纳斯达克 100 成分股表格."""
+    tables = pd.read_html(StringIO(html))
+    for table in tables:
+        cols = [str(c).strip() for c in table.columns]
+        # 找到含有 Ticker 列的表格
+        ticker_col = next((c for c in cols if "ticker" in c.lower() or "symbol" in c.lower()), None)
+        if ticker_col is None:
+            continue
+        name_col = next((c for c in cols if "company" in c.lower() or "name" in c.lower()), None)
+        sector_col = next((c for c in cols if "sector" in c.lower() or "gics" in c.lower()), None)
+        result = []
+        for _, row in table.iterrows():
+            sym = str(row[ticker_col]).strip()
+            if not sym or sym == "nan":
+                continue
+            result.append({
+                "symbol": sym,
+                "name": str(row[name_col]).strip() if name_col else sym,
+                "sector": str(row[sector_col]).strip() if sector_col else "",
+            })
+        if len(result) >= 90:
+            return result
+    return []
 
+
+async def _fetch_constituents_from_wiki(client: httpx.AsyncClient) -> list[dict]:
+    """从 Wikipedia 动态拉取纳斯达克 100 成分股."""
     try:
-        resp = await client.get(
-            f"{_FMP_V3}/nasdaq_constituent",
-            params={"apikey": settings.FMP_API_KEY},
+        resp = await client.get(_WIKI_NDX_URL, headers=_WIKI_HEADERS, timeout=15)
+        if resp.status_code != 200:
+            logger.warning("wiki_ndx100_http_error", status=resp.status_code)
+            return []
+        constituents = await asyncio.get_event_loop().run_in_executor(
+            None, _parse_wiki_html, resp.text
         )
+        if constituents:
+            logger.info("wiki_ndx100_fetched", count=len(constituents))
+        return constituents
     except Exception as e:
-        logger.warning("nasdaq_constituent_request_failed", error=str(e))
-        return _fallback_constituents()
+        logger.warning("wiki_ndx100_fetch_failed", error=str(e))
+        return []
 
-    if resp.status_code != 200:
-        logger.warning(
-            "nasdaq_constituent_http_error",
-            status=resp.status_code,
-            body=resp.text[:200],
-        )
-        return _fallback_constituents()
 
-    data = resp.json()
-    if not isinstance(data, list) or not data:
-        logger.warning("nasdaq_constituent_empty_response", raw=str(data)[:200])
-        return _fallback_constituents()
+async def _fetch_constituents(client: httpx.AsyncClient) -> list[dict]:
+    """获取纳斯达克 100 成分股：Wikipedia 动态拉取，失败时降级兜底列表."""
+    constituents = await _fetch_constituents_from_wiki(client)
+    if constituents:
+        return constituents
 
-    logger.info("nasdaq_constituent_fetched", count=len(data))
-    return data
+    logger.warning("nasdaq_constituent_using_fallback_list")
+    return _fallback_constituents()
 
 
 async def _fetch_summary(client: httpx.AsyncClient, symbol: str) -> dict | None:
