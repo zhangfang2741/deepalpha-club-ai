@@ -21,9 +21,21 @@ _FMP_STABLE = "https://financialmodelingprep.com/stable"
 _FMP_V3 = "https://financialmodelingprep.com/api/v3"
 _CONCURRENCY = 20
 _WIKI_NDX_URL = "https://en.wikipedia.org/wiki/Nasdaq-100"
-_WIKI_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; DeepAlpha-Bot/1.0)"}
+# 使用浏览器级别的 User-Agent，避免被 Wikipedia 拦截
+_WIKI_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
+}
+_WIKI_RETRIES = 3
 
-# 兜底成分股列表：当 FMP nasdaq_constituent 接口不可用时使用
+# 兜底成分股列表：当 Wikipedia 和 FMP 均不可用时使用
+# 最后更新：2025-06，对照官方 Nasdaq-100 成分股名单校准
+# 已移除：ENPH（2022-12）、ILMN（2023-12）、DOCU（2023-06）、
+#         WBD（2024-06）、SNDK（分拆新股，FMP 数据继承 WDC 历史目标价，失真）
 # 格式：(symbol, name, sector)
 _FALLBACK_NDX100: list[tuple[str, str, str]] = [
     ("AAPL",  "Apple Inc.",              "Technology"),
@@ -90,11 +102,8 @@ _FALLBACK_NDX100: list[tuple[str, str, str]] = [
     ("DLTR",  "Dollar Tree Inc.",        "Consumer Defensive"),
     ("ODFL",  "Old Dominion Freight",    "Industrials"),
     ("TTWO",  "Take-Two Interactive",    "Communication Services"),
-    ("WBD",   "Warner Bros. Discovery",  "Communication Services"),
     ("ZS",    "Zscaler Inc.",            "Technology"),
     ("ALGN",  "Align Technology Inc.",   "Healthcare"),
-    ("ENPH",  "Enphase Energy Inc.",     "Technology"),
-    ("ILMN",  "Illumina Inc.",           "Healthcare"),
     ("GEHC",  "GE HealthCare Tech.",     "Healthcare"),
     ("ON",    "ON Semiconductor Corp.",  "Technology"),
     ("LULU",  "Lululemon Athletica",     "Consumer Cyclical"),
@@ -103,7 +112,6 @@ _FALLBACK_NDX100: list[tuple[str, str, str]] = [
     ("HON",   "Honeywell International", "Industrials"),
     ("EA",    "Electronic Arts Inc.",    "Communication Services"),
     ("EBAY",  "eBay Inc.",               "Consumer Cyclical"),
-    ("DOCU",  "DocuSign Inc.",           "Technology"),
     ("XEL",   "Xcel Energy Inc.",        "Utilities"),
     ("ANSS",  "Ansys Inc.",              "Technology"),
     ("OKTA",  "Okta Inc.",               "Technology"),
@@ -111,7 +119,6 @@ _FALLBACK_NDX100: list[tuple[str, str, str]] = [
     ("INTC",  "Intel Corp.",             "Technology"),
     ("WDC",   "Western Digital Corp.",   "Technology"),
     ("STX",   "Seagate Technology",      "Technology"),
-    ("SNDK",  "SanDisk Corp.",           "Technology"),
     ("CEG",   "Constellation Energy",    "Utilities"),
     ("MCHP",  "Microchip Technology",    "Technology"),
     ("PDD",   "PDD Holdings Inc.",       "Consumer Cyclical"),
@@ -122,6 +129,9 @@ _FALLBACK_NDX100: list[tuple[str, str, str]] = [
     ("HOOD",  "Robinhood Markets",       "Financial Services"),
     ("APP",   "Applovin Corp.",          "Technology"),
     ("PLTR",  "Palantir Technologies",   "Technology"),
+    ("TTD",   "The Trade Desk Inc.",     "Technology"),
+    ("CTAS",  "Cintas Corp.",            "Industrials"),
+    ("TTWO",  "Take-Two Interactive",    "Communication Services"),
 ]
 
 
@@ -159,21 +169,27 @@ def _parse_wiki_html(html: str) -> list[dict]:
 
 
 async def _fetch_constituents_from_wiki(client: httpx.AsyncClient) -> list[dict]:
-    """从 Wikipedia 动态拉取纳斯达克 100 成分股."""
-    try:
-        resp = await client.get(_WIKI_NDX_URL, headers=_WIKI_HEADERS, timeout=15)
-        if resp.status_code != 200:
-            logger.warning("wiki_ndx100_http_error", status=resp.status_code)
-            return []
-        constituents = await asyncio.get_event_loop().run_in_executor(
-            None, _parse_wiki_html, resp.text
-        )
-        if constituents:
-            logger.info("wiki_ndx100_fetched", count=len(constituents))
-        return constituents
-    except Exception as e:
-        logger.warning("wiki_ndx100_fetch_failed", error=str(e))
-        return []
+    """从 Wikipedia 动态拉取纳斯达克 100 成分股，失败时最多重试 _WIKI_RETRIES 次."""
+    for attempt in range(1, _WIKI_RETRIES + 1):
+        try:
+            resp = await client.get(_WIKI_NDX_URL, headers=_WIKI_HEADERS, timeout=20)
+            if resp.status_code != 200:
+                logger.warning("wiki_ndx100_http_error", status=resp.status_code, attempt=attempt)
+                if attempt < _WIKI_RETRIES:
+                    await asyncio.sleep(2 ** attempt)
+                continue
+            constituents = await asyncio.get_event_loop().run_in_executor(
+                None, _parse_wiki_html, resp.text
+            )
+            if constituents:
+                logger.info("wiki_ndx100_fetched", count=len(constituents), attempt=attempt)
+                return constituents
+            logger.warning("wiki_ndx100_parse_empty", attempt=attempt)
+        except Exception as e:
+            logger.warning("wiki_ndx100_fetch_failed", error=str(e), attempt=attempt)
+            if attempt < _WIKI_RETRIES:
+                await asyncio.sleep(2 ** attempt)
+    return []
 
 
 async def _fetch_constituents(client: httpx.AsyncClient) -> list[dict]:
