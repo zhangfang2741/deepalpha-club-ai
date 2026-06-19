@@ -194,4 +194,49 @@ export const supplyChainApi = {
     const { data } = await apiClient.post(`${BASE}/ingest`, body)
     return data
   },
+
+  ingestSec: async (params: {
+    ticker: string
+    form_type?: string
+    section?: string
+  }): Promise<{ status: string; message: string }> => {
+    const { data } = await apiClient.post(`${BASE}/ingest/sec`, null, { params })
+    return data
+  },
+
+  ingestEarningsCall: async (params: {
+    ticker: string
+    year: number
+    quarter: number
+  }): Promise<{ status: string; message: string }> => {
+    const { data } = await apiClient.post(`${BASE}/ingest/earnings-call`, null, { params })
+    return data
+  },
+
+  searchSecFilings: async (params: {
+    ticker: string
+    form_types?: string
+    start_date?: string
+    end_date?: string
+    max_results?: number
+  }): Promise<{ ticker: string; results: Array<{
+    form: string
+    filing_date: string
+    period_of_report: string
+    entity_name: string
+    ticker: string
+    index_url: string | null
+  }>; count: number }> => {
+    const { data } = await apiClient.get(`${BASE}/ingest/sec/search`, { params })
+    return data
+  },
+
+  listEarningsCallAvailable: async (ticker: string): Promise<{
+    ticker: string
+    available: Array<{ year: number; quarter: number; date: string }>
+    count: number
+  }> => {
+    const { data } = await apiClient.get(`${BASE}/ingest/earnings-call/list`, { params: { ticker } })
+    return data
+  },
 }

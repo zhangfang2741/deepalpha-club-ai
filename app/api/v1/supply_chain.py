@@ -27,7 +27,11 @@ from app.schemas.supply_chain import (
     IngestDocumentRequest,
     IngestDocumentResponse,
 )
-from app.services.graph.pipeline import run_ingest_pipeline
+from app.services.graph.pipeline import (
+    ingest_earnings_call,
+    ingest_sec_filing,
+    run_ingest_pipeline,
+)
 from app.services.graph.query import (
     get_bottleneck_report,
     get_demand_chain,
@@ -341,6 +345,94 @@ def demand_chain_analysis(concept: str, session: Session = Depends(get_sync_sess
     if not chain:
         raise HTTPException(status_code=404, detail=f"未找到概念实体 '{concept}'")
     return chain
+
+
+# ──────────────────────────────────────────────
+# 批量摄取（按 ticker 一键拉取）
+# ──────────────────────────────────────────────
+
+
+@router.post(
+    "/ingest/sec",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="一键摄取 SEC 文件",
+)
+async def ingest_sec_endpoint(
+    ticker: str = Query(description="股票代码，如 NVDA"),
+    form_type: str = Query(default="10-K", description="文件类型：10-K / 10-Q / 8-K"),
+    section: Optional[str] = Query(default=None, description="章节提示，如 Risk Factors"),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    """自动查找并摄取 ticker 最新一份 SEC 文件（无需手动提交 URL）。"""
+    llm = _get_llm()
+
+    async def _task():
+        try:
+            count, doc_id = await ingest_sec_filing(ticker, form_type, llm, section)
+            logger.info("sec_ingest_done", ticker=ticker, form=form_type, facts=count, doc_id=doc_id)
+        except Exception as e:
+            logger.exception("sec_ingest_task_failed", ticker=ticker, error=str(e))
+
+    background_tasks.add_task(_task)
+    return {
+        "status": "queued",
+        "message": f"已启动 {ticker} {form_type} 摄取任务，后台处理中",
+    }
+
+
+@router.post(
+    "/ingest/earnings-call",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="摄取电话会议记录",
+)
+async def ingest_earnings_call_endpoint(
+    ticker: str = Query(description="股票代码，如 NVDA"),
+    year: int = Query(description="年份，如 2024"),
+    quarter: int = Query(ge=1, le=4, description="季度 1-4"),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    """通过 FMP API 摄取指定季度电话会议文字记录。"""
+    llm = _get_llm()
+
+    async def _task():
+        try:
+            count, doc_id = await ingest_earnings_call(ticker, year, quarter, llm)
+            logger.info("earnings_call_ingest_done", ticker=ticker, year=year, quarter=quarter, facts=count)
+        except Exception as e:
+            logger.exception("earnings_call_ingest_failed", ticker=ticker, error=str(e))
+
+    background_tasks.add_task(_task)
+    return {
+        "status": "queued",
+        "message": f"已启动 {ticker} {year}Q{quarter} 电话会议记录摄取任务",
+    }
+
+
+@router.get("/ingest/sec/search", summary="EDGAR 全文搜索")
+async def search_sec_filings(
+    ticker: str = Query(description="股票代码，如 NVDA"),
+    form_types: str = Query(default="10-K,10-Q,8-K", description="逗号分隔的文件类型"),
+    start_date: Optional[str] = Query(default=None, description="起始日期 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(default=None, description="截止日期 YYYY-MM-DD"),
+    max_results: int = Query(default=10, ge=1, le=50),
+):
+    """搜索 EDGAR 返回文件列表（不触发摄取），可用于预览可用文件。"""
+    from app.services.graph.sec_fetcher import sec_fetcher
+
+    forms = [f.strip() for f in form_types.split(",") if f.strip()]
+    results = await sec_fetcher.search_filings(ticker, forms, start_date, end_date, max_results)
+    return {"ticker": ticker, "results": results, "count": len(results)}
+
+
+@router.get("/ingest/earnings-call/list", summary="列出可用电话会议记录")
+async def list_earnings_calls(
+    ticker: str = Query(description="股票代码，如 NVDA"),
+):
+    """列出 FMP 上该 ticker 所有可用的电话会议记录（年份+季度）。"""
+    from app.services.graph.fmp_fetcher import fmp_transcript_fetcher
+
+    items = await fmp_transcript_fetcher.list_available_transcripts(ticker)
+    return {"ticker": ticker, "available": items, "count": len(items)}
 
 
 @router.get("/stats", summary="图谱统计摘要")

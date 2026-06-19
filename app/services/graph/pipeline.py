@@ -14,7 +14,7 @@ from app.core.logging import logger
 from app.db.session import sync_engine
 from app.models.graph_entity import EntityType, GraphEntity
 from app.models.graph_fact import GraphFact
-from app.models.graph_source import DocumentStatus, SourceDocument
+from app.models.graph_source import DocumentStatus, DocumentType, SourceDocument
 from app.services.graph.extractor import ExtractedFact, extract_facts_from_chunk
 from app.services.graph.normalizer import normalize_entity_name
 
@@ -22,9 +22,6 @@ _HEADERS = {
     "User-Agent": "DeepAlpha/1.0 (investment research; mailto:research@deepalpha.ai)",
     "Accept-Encoding": "gzip, deflate",
 }
-
-# SEC 文档原文抓取基址
-_SEC_FULL_TEXT_BASE = "https://efts.sec.gov/LATEST/search-index?q=%22{ticker}%22&dateRange=custom&startdt={start}&enddt={end}&forms=10-K"
 
 
 def _chunk_text(text: str, max_tokens: int = 1200) -> list[str]:
@@ -120,6 +117,104 @@ def _store_facts_sync(
         session.commit()
 
     return stored
+
+
+def _save_doc_sync(doc: SourceDocument) -> SourceDocument:
+    """持久化新建的 SourceDocument，返回已有 id 的对象。"""
+    with Session(sync_engine) as session:
+        session.add(doc)
+        session.commit()
+        session.refresh(doc)
+        return doc
+
+
+async def ingest_sec_filing(
+    ticker: str,
+    form_type: str,
+    llm_client,
+    section: Optional[str] = None,
+) -> tuple[int, Optional[str]]:
+    """一键抓取并摄取 ticker 最新一份 SEC 文件。
+
+    Args:
+        ticker: 股票代码（如 NVDA）
+        form_type: 文件类型（10-K / 10-Q / 8-K）
+        llm_client: LangChain BaseChatModel
+        section: 可选章节提示（用于 source_info）
+
+    Returns:
+        (存储事实条数, doc_id 字符串) 或 (0, None)
+    """
+    from app.services.graph.sec_fetcher import sec_fetcher
+
+    text, filing_info = await sec_fetcher.fetch_latest_filing_text(
+        ticker=ticker,
+        form_type=form_type,
+        section_hint=section,
+    )
+    if not text:
+        logger.warning("sec_filing_no_text", ticker=ticker, form=form_type)
+        return 0, None
+
+    filing_date_str = filing_info.get("filing_date", "")
+    period_str = filing_info.get("period_of_report", "")
+
+    try:
+        filing_date = datetime.strptime(filing_date_str, "%Y-%m-%d") if filing_date_str else None
+        period_date = datetime.strptime(period_str, "%Y-%m-%d") if period_str else None
+    except ValueError:
+        filing_date, period_date = None, None
+
+    doc = SourceDocument(
+        url=filing_info.get("doc_url", f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={ticker}"),
+        document_type=DocumentType(form_type) if form_type in ("10-K", "10-Q", "8-K") else DocumentType.SEC_10K,
+        ticker=ticker.upper(),
+        company_name=filing_info.get("entity_name"),
+        filing_date=filing_date,
+        period_of_report=period_date,
+        section=section,
+        title=f"{ticker} {form_type} {period_str}",
+    )
+    doc = _save_doc_sync(doc)
+    count = await run_ingest_pipeline(doc, llm_client, raw_text=text)
+    return count, str(doc.id)
+
+
+async def ingest_earnings_call(
+    ticker: str,
+    year: int,
+    quarter: int,
+    llm_client,
+) -> tuple[int, Optional[str]]:
+    """一键抓取并摄取 FMP 电话会议记录。
+
+    Returns:
+        (存储事实条数, doc_id 字符串) 或 (0, None)
+    """
+    from app.services.graph.fmp_fetcher import fmp_transcript_fetcher
+
+    text = await fmp_transcript_fetcher.get_transcript(ticker, year, quarter)
+    if not text:
+        logger.warning("fmp_transcript_empty", ticker=ticker, year=year, quarter=quarter)
+        return 0, None
+
+    try:
+        period_date = datetime(year, (quarter - 1) * 3 + 1, 1)
+    except ValueError:
+        period_date = None
+
+    doc = SourceDocument(
+        url=f"https://financialmodelingprep.com/financial-summaries/earning-call-transcript/{ticker}",
+        document_type=DocumentType.EARNINGS_CALL,
+        ticker=ticker.upper(),
+        company_name=ticker.upper(),
+        period_of_report=period_date,
+        title=f"{ticker} Earnings Call {year} Q{quarter}",
+        section="Full Transcript",
+    )
+    doc = _save_doc_sync(doc)
+    count = await run_ingest_pipeline(doc, llm_client, raw_text=text)
+    return count, str(doc.id)
 
 
 async def run_ingest_pipeline(
