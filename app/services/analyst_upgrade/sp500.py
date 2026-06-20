@@ -661,6 +661,8 @@ async def compute_sp500_upgrades() -> SP500UpgradesResponse:
     stocks.sort(key=lambda s: s.month_mom, reverse=True)
 
     if stocks:
+        # 摘要阶段发出约 503 次 FMP 请求，等待 6 秒让限速窗口重置再拉取 history
+        await asyncio.sleep(6)
         cutoff_5y = date.today() - timedelta(days=5 * 365)
         sem2 = asyncio.Semaphore(5)  # 限速保护：S&P 500 成分多，并发降至 5
         async with httpx.AsyncClient(timeout=60) as client2:
