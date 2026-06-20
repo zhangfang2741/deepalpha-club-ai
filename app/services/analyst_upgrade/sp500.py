@@ -194,7 +194,6 @@ async def _fetch_sp500_via_article(client: httpx.AsyncClient) -> list[dict]:
     if resp.status_code != 200:
         logger.warning("wiki_sp500_article_http_error", status=resp.status_code)
         return []
-    import asyncio
     return await asyncio.get_event_loop().run_in_executor(
         None, _parse_wiki_html, resp.text
     )
@@ -210,7 +209,6 @@ async def _fetch_sp500_via_api(client: httpx.AsyncClient) -> list[dict]:
     html = resp.json().get("parse", {}).get("text", "")
     if not html:
         return []
-    import asyncio
     return await asyncio.get_event_loop().run_in_executor(
         None, _parse_wiki_html, html
     )
