@@ -37,9 +37,9 @@ _WIKI_HEADERS = {
 _WIKI_RETRIES = 3
 
 # 兜底成分股列表：当 Wikipedia 和 FMP 均不可用时使用
-# 最后更新：2025-06，对照官方 Nasdaq-100 成分股名单校准
-# 已移除：ENPH（2022-12）、ILMN（2023-12）、DOCU（2023-06）、
-#         WBD（2024-06）、SNDK（分拆新股，FMP 数据继承 WDC 历史目标价，失真）
+# 最后更新：2026-06，对照官方 Nasdaq-100 成分股名单校准
+# 已移除：ENPH（2022-12）、ILMN（2023-12）、DOCU（2023-06）、WBD（2024-06）
+# SNDK（2025-02 从 WDC 拆分）已恢复：FMP 数据已独立，不再继承 WDC 历史价
 # 格式：(symbol, name, sector)
 _FALLBACK_NDX100: list[tuple[str, str, str]] = [
     ("AAPL",  "Apple Inc.",              "Technology"),
@@ -122,6 +122,7 @@ _FALLBACK_NDX100: list[tuple[str, str, str]] = [
     ("DDOG",  "Datadog Inc.",            "Technology"),
     ("INTC",  "Intel Corp.",             "Technology"),
     ("WDC",   "Western Digital Corp.",   "Technology"),
+    ("SNDK",  "Sandisk Corp.",           "Technology"),
     ("STX",   "Seagate Technology",      "Technology"),
     ("CEG",   "Constellation Energy",    "Utilities"),
     ("MCHP",  "Microchip Technology",    "Technology"),
