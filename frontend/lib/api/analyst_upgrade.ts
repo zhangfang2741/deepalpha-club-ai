@@ -28,6 +28,13 @@ export interface Nasdaq100UpgradesResponse {
   stocks: UpgradeStock[]
 }
 
+export interface SP500UpgradesResponse {
+  as_of: string
+  total_constituents: number
+  upgrade_count: number
+  stocks: UpgradeStock[]
+}
+
 export interface PriceTargetHistoryResponse {
   symbol: string
   points: PriceTargetPoint[]
@@ -35,6 +42,13 @@ export interface PriceTargetHistoryResponse {
 
 export async function fetchNasdaq100Upgrades(refresh = false): Promise<Nasdaq100UpgradesResponse> {
   const res = await apiClient.get<Nasdaq100UpgradesResponse>('/api/v1/analyst-upgrades/nasdaq100', {
+    params: refresh ? { refresh: true } : undefined,
+  })
+  return res.data
+}
+
+export async function fetchSP500Upgrades(refresh = false): Promise<SP500UpgradesResponse> {
+  const res = await apiClient.get<SP500UpgradesResponse>('/api/v1/analyst-upgrades/sp500', {
     params: refresh ? { refresh: true } : undefined,
   })
   return res.data

@@ -40,6 +40,15 @@ class Nasdaq100UpgradesResponse(BaseResponse):
     stocks: list[UpgradeStock]
 
 
+class SP500UpgradesResponse(BaseResponse):
+    """标普 500 上调筛选结果."""
+
+    as_of: str
+    total_constituents: int
+    upgrade_count: int
+    stocks: list[UpgradeStock]
+
+
 class PriceTargetHistoryResponse(BaseResponse):
     """个股历史目标价月度序列."""
 
