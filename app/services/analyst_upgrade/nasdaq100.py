@@ -37,9 +37,10 @@ _WIKI_HEADERS = {
 _WIKI_RETRIES = 3
 
 # 兜底成分股列表：当 Wikipedia 和 FMP 均不可用时使用
-# 最后更新：2025-06，对照官方 Nasdaq-100 成分股名单校准
-# 已移除：ENPH（2022-12）、ILMN（2023-12）、DOCU（2023-06）、
-#         WBD（2024-06）、SNDK（分拆新股，FMP 数据继承 WDC 历史目标价，失真）
+# 最后更新：2026-06，对照官方 Nasdaq-100 成分股名单校准
+# 已移除：ENPH（2022-12）、ILMN（2023-12）、DOCU（2023-06）、WBD（2024-06）
+# SNDK（2025-02 从 WDC 拆分）已恢复：FMP 数据已独立，不再继承 WDC 历史价
+# MSTR（2024-12 加入）已补充；TTWO 重复条目已清理；GEV/VST 为 NYSE 股，不入列
 # 格式：(symbol, name, sector)
 _FALLBACK_NDX100: list[tuple[str, str, str]] = [
     ("AAPL",  "Apple Inc.",              "Technology"),
@@ -122,6 +123,7 @@ _FALLBACK_NDX100: list[tuple[str, str, str]] = [
     ("DDOG",  "Datadog Inc.",            "Technology"),
     ("INTC",  "Intel Corp.",             "Technology"),
     ("WDC",   "Western Digital Corp.",   "Technology"),
+    ("SNDK",  "Sandisk Corp.",           "Technology"),
     ("STX",   "Seagate Technology",      "Technology"),
     ("CEG",   "Constellation Energy",    "Utilities"),
     ("MCHP",  "Microchip Technology",    "Technology"),
@@ -135,7 +137,7 @@ _FALLBACK_NDX100: list[tuple[str, str, str]] = [
     ("PLTR",  "Palantir Technologies",   "Technology"),
     ("TTD",   "The Trade Desk Inc.",     "Technology"),
     ("CTAS",  "Cintas Corp.",            "Industrials"),
-    ("TTWO",  "Take-Two Interactive",    "Communication Services"),
+    ("MSTR",  "Strategy Inc.",           "Financial Services"),
 ]
 
 
@@ -315,6 +317,18 @@ async def compute_nasdaq100_upgrades() -> Nasdaq100UpgradesResponse:
 
     stocks.sort(key=lambda s: s.month_mom, reverse=True)
 
+    # 并发拉取合格股票近 18 个月月度目标价，嵌入 recent_points 供 sparkline 使用
+    if stocks:
+        cutoff_18m = date.today() - timedelta(days=548)
+        sem2 = asyncio.Semaphore(10)
+        async with httpx.AsyncClient(timeout=30) as client2:
+            history_pairs = await asyncio.gather(
+                *[_compute_recent_points(client2, s.symbol, sem2, cutoff_18m) for s in stocks]
+            )
+        history_map = dict(history_pairs)
+        for stock in stocks:
+            stock.recent_points = history_map.get(stock.symbol, [])
+
     logger.info(
         "nasdaq100_upgrades_computed",
         total=len(constituents),
@@ -394,6 +408,37 @@ async def _fetch_price_target_records(client: httpx.AsyncClient, symbol: str) ->
             return records
     logger.warning("price_target_records_empty", symbol=symbol)
     return []
+
+
+async def _compute_recent_points(
+    client: httpx.AsyncClient,
+    sym: str,
+    sem: asyncio.Semaphore,
+    cutoff: date,
+) -> tuple[str, list[PriceTargetPoint]]:
+    """拉取单只股票近期月度目标价（用于列表 sparkline）."""
+    async with sem:
+        records = await _fetch_price_target_records(client, sym)
+    monthly: dict[str, list[float]] = defaultdict(list)
+    for rec in records:
+        dt = _extract_pt_date(rec)
+        pt = _extract_pt_value(rec)
+        if dt is None or pt is None or dt < cutoff:
+            continue
+        monthly[f"{dt.year}-{dt.month:02d}"].append(pt)
+    pts = sorted(
+        [
+            PriceTargetPoint(
+                label=lbl,
+                avg_target=round(sum(v) / len(v), 2),
+                count=len(v),
+            )
+            for lbl, v in monthly.items()
+            if v
+        ],
+        key=lambda p: p.label,
+    )
+    return sym, pts
 
 
 async def compute_price_target_history(symbol: str) -> PriceTargetHistoryResponse:

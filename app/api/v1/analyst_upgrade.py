@@ -14,7 +14,7 @@ from app.services.analyst_upgrade.nasdaq100 import compute_nasdaq100_upgrades, c
 
 router = APIRouter()
 
-_UPGRADES_CACHE_KEY = "analyst_upgrade:nasdaq100:v1"
+_UPGRADES_CACHE_KEY = "analyst_upgrade:nasdaq100:v2"
 _UPGRADES_TTL = 21600  # 6h
 
 _HISTORY_TTL = 43200  # 12h
