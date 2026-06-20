@@ -9,15 +9,21 @@ from redis.asyncio import Redis
 
 from app.cache.client import get_redis
 from app.core.logging import logger
-from app.schemas.analyst_upgrade import Nasdaq100UpgradesResponse, PriceTargetHistoryResponse
+from app.schemas.analyst_upgrade import (
+    Nasdaq100UpgradesResponse,
+    PriceTargetHistoryResponse,
+    SP500UpgradesResponse,
+)
 from app.services.analyst_upgrade.nasdaq100 import compute_nasdaq100_upgrades, compute_price_target_history
+from app.services.analyst_upgrade.sp500 import compute_sp500_upgrades
 
 router = APIRouter()
 
 _UPGRADES_CACHE_KEY = "analyst_upgrade:nasdaq100:v2"
-_UPGRADES_TTL = 21600  # 6h
-
-_HISTORY_TTL = 43200  # 12h
+_SP500_CACHE_KEY = "analyst_upgrade:sp500:v1"
+_UPGRADES_TTL = 21600   # 6h
+_SP500_TTL = 21600      # 6h
+_HISTORY_TTL = 43200    # 12h
 
 
 def _history_cache_key(symbol: str) -> str:
@@ -52,6 +58,37 @@ async def get_nasdaq100_upgrades(
             pass
 
     logger.info("nasdaq100_upgrades_served", count=data.upgrade_count)
+    return data
+
+
+@router.get("/sp500", response_model=SP500UpgradesResponse)
+async def get_sp500_upgrades(
+    redis: Redis = Depends(get_redis),
+    refresh: Annotated[bool, Query(description="为 true 时跳过缓存，强制重新计算")] = False,
+) -> SP500UpgradesResponse:
+    """返回标普 500 中分析师目标价持续上调的股票列表（月均>季均>年均）.
+
+    冷启动约 75 秒（500 次并发 FMP 请求），之后 6h 缓存。
+    传 ?refresh=true 可跳过缓存强制刷新。
+    """
+    if not refresh:
+        try:
+            raw = await redis.get(_SP500_CACHE_KEY)
+            if raw:
+                return SP500UpgradesResponse(**json.loads(zlib.decompress(raw)))
+        except Exception:
+            pass
+
+    data = await compute_sp500_upgrades()
+
+    if data.stocks:
+        try:
+            compressed = zlib.compress(data.model_dump_json().encode())
+            await redis.set(_SP500_CACHE_KEY, compressed, ex=_SP500_TTL)
+        except Exception:
+            pass
+
+    logger.info("sp500_upgrades_served", count=data.upgrade_count)
     return data
 
 

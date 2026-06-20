@@ -157,7 +157,7 @@ def _parse_wiki_html(html: str) -> list[dict]:
         ticker_col = next((c for c in cols if "ticker" in c.lower() or "symbol" in c.lower()), None)
         if ticker_col is None:
             continue
-        name_col = next((c for c in cols if "company" in c.lower() or "name" in c.lower()), None)
+        name_col = next((c for c in cols if "company" in c.lower() or "name" in c.lower() or "security" in c.lower()), None)
         sector_col = next((c for c in cols if "sector" in c.lower() or "gics" in c.lower()), None)
         result = []
         for _, row in table.iterrows():

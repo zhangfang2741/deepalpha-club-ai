@@ -6,18 +6,18 @@ import { TrendingUp, RefreshCw, Info } from 'lucide-react'
 import DashboardShell from '@/components/layout/DashboardShell'
 import UpgradeTable from '@/components/analyst_upgrades/UpgradeTable'
 import Spinner from '@/components/ui/Spinner'
-import { fetchNasdaq100Upgrades } from '@/lib/api/analyst_upgrade'
-import type { Nasdaq100UpgradesResponse } from '@/lib/api/analyst_upgrade'
+import { fetchSP500Upgrades } from '@/lib/api/analyst_upgrade'
+import type { SP500UpgradesResponse } from '@/lib/api/analyst_upgrade'
 
-export default function AnalystUpgradesPage() {
-  const [data, setData] = useState<Nasdaq100UpgradesResponse | null>(null)
+export default function SP500UpgradesPage() {
+  const [data, setData] = useState<SP500UpgradesResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   const load = (refresh = false) => {
     setLoading(true)
     setError('')
-    fetchNasdaq100Upgrades(refresh)
+    fetchSP500Upgrades(refresh)
       .then(setData)
       .catch(() => setError('数据加载失败，请稍后重试'))
       .finally(() => setLoading(false))
@@ -51,15 +51,15 @@ export default function AnalystUpgradesPage() {
 
         {/* 指数切换标签 */}
         <div className="flex gap-1 border-b border-gray-200">
-          <span className="px-4 py-2 text-sm font-medium text-blue-600 border-b-2 border-blue-600 -mb-px">
-            纳斯达克 100
-          </span>
           <Link
-            href="/analyst-upgrades/sp500"
+            href="/analyst-upgrades"
             className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
           >
-            标普 500
+            纳斯达克 100
           </Link>
+          <span className="px-4 py-2 text-sm font-medium text-blue-600 border-b-2 border-blue-600 -mb-px">
+            标普 500
+          </span>
         </div>
 
         {/* 元信息条 */}
@@ -79,7 +79,7 @@ export default function AnalystUpgradesPage() {
         {loading && (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
             <Spinner />
-            <p className="text-sm text-gray-400">正在拉取 100 只成分股数据，首次约 15 秒…</p>
+            <p className="text-sm text-gray-400">正在拉取 500 只成分股数据，首次约 75 秒…</p>
           </div>
         )}
 
@@ -99,7 +99,7 @@ export default function AnalystUpgradesPage() {
         <div className="text-xs text-gray-400 bg-gray-50 rounded-lg p-4 space-y-1">
           <p><span className="font-medium text-gray-500">筛选逻辑：</span>月均目标价 &gt; 季均目标价 &gt; 年均目标价，且近月至少有 2 家机构出报告</p>
           <p><span className="font-medium text-gray-500">月环比：</span>(月均 - 季均) / 季均，衡量最近一个月分析师上调的加速程度</p>
-          <p><span className="font-medium text-gray-500">数据源：</span>Financial Modeling Prep (FMP) · 纳斯达克 100 成分股每次动态拉取</p>
+          <p><span className="font-medium text-gray-500">数据源：</span>Financial Modeling Prep (FMP) · 标普 500 成分股每次动态拉取</p>
         </div>
       </div>
     </DashboardShell>
