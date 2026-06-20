@@ -661,11 +661,11 @@ async def compute_sp500_upgrades() -> SP500UpgradesResponse:
     stocks.sort(key=lambda s: s.month_mom, reverse=True)
 
     if stocks:
-        cutoff_18m = date.today() - timedelta(days=548)
+        cutoff_5y = date.today() - timedelta(days=5 * 365)
         sem2 = asyncio.Semaphore(10)
         async with httpx.AsyncClient(timeout=30) as client2:
             history_pairs = await asyncio.gather(
-                *[_compute_recent_points(client2, s.symbol, sem2, cutoff_18m) for s in stocks]
+                *[_compute_recent_points(client2, s.symbol, sem2, cutoff_5y) for s in stocks]
             )
         history_map = dict(history_pairs)
         for stock in stocks:

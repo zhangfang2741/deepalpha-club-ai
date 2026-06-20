@@ -19,8 +19,8 @@ from app.services.analyst_upgrade.sp500 import compute_sp500_upgrades
 
 router = APIRouter()
 
-_UPGRADES_CACHE_KEY = "analyst_upgrade:nasdaq100:v2"
-_SP500_CACHE_KEY = "analyst_upgrade:sp500:v1"
+_UPGRADES_CACHE_KEY = "analyst_upgrade:nasdaq100:v3"
+_SP500_CACHE_KEY = "analyst_upgrade:sp500:v2"
 _UPGRADES_TTL = 21600   # 6h
 _SP500_TTL = 21600      # 6h
 _HISTORY_TTL = 43200    # 12h

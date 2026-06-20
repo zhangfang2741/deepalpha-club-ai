@@ -330,13 +330,13 @@ async def compute_nasdaq100_upgrades() -> Nasdaq100UpgradesResponse:
 
     stocks.sort(key=lambda s: s.month_mom, reverse=True)
 
-    # 并发拉取合格股票近 18 个月月度目标价，嵌入 recent_points 供 sparkline 使用
+    # 并发拉取合格股票近 5 年月度目标价，嵌入 recent_points 供 sparkline 使用（与 modal 数据范围一致）
     if stocks:
-        cutoff_18m = date.today() - timedelta(days=548)
+        cutoff_5y = date.today() - timedelta(days=5 * 365)
         sem2 = asyncio.Semaphore(10)
         async with httpx.AsyncClient(timeout=30) as client2:
             history_pairs = await asyncio.gather(
-                *[_compute_recent_points(client2, s.symbol, sem2, cutoff_18m) for s in stocks]
+                *[_compute_recent_points(client2, s.symbol, sem2, cutoff_5y) for s in stocks]
             )
         history_map = dict(history_pairs)
         for stock in stocks:
