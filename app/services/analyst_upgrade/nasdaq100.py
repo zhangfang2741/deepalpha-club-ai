@@ -40,6 +40,7 @@ _WIKI_RETRIES = 3
 # 最后更新：2026-06，对照官方 Nasdaq-100 成分股名单校准
 # 已移除：ENPH（2022-12）、ILMN（2023-12）、DOCU（2023-06）、WBD（2024-06）
 # SNDK（2025-02 从 WDC 拆分）已恢复：FMP 数据已独立，不再继承 WDC 历史价
+# MSTR（2024-12 加入）已补充；TTWO 重复条目已清理；GEV/VST 为 NYSE 股，不入列
 # 格式：(symbol, name, sector)
 _FALLBACK_NDX100: list[tuple[str, str, str]] = [
     ("AAPL",  "Apple Inc.",              "Technology"),
@@ -136,7 +137,7 @@ _FALLBACK_NDX100: list[tuple[str, str, str]] = [
     ("PLTR",  "Palantir Technologies",   "Technology"),
     ("TTD",   "The Trade Desk Inc.",     "Technology"),
     ("CTAS",  "Cintas Corp.",            "Industrials"),
-    ("TTWO",  "Take-Two Interactive",    "Communication Services"),
+    ("MSTR",  "Strategy Inc.",           "Financial Services"),
 ]
 
 
