@@ -392,12 +392,16 @@ def _extract_pt_value(rec: dict) -> float | None:
 async def _fetch_price_target_records(client: httpx.AsyncClient, symbol: str) -> list[dict]:
     """逐条拉取个股分析师目标价记录，依次尝试多个端点，命中即返回.
 
-    遇到 429 限速时等待 3 秒重试一次，避免 S&P 500 批量拉取时被 FMP 封堵。
+    遇到 429 限速时使用指数退避重试（5s → 10s → 20s），确保多页数据能完整拉取，
+    避免分析师覆盖多（报告数 > 100）的股票因第 2 页限速而数据被截断。
     """
     for url in _FMP_PT_URLS:
         records: list[dict] = []
         for page in range(20):
-            for _attempt in range(2):  # 限速时重试一次
+            resp = None
+            for wait_secs in (0, 5, 10, 20):  # 最多重试 3 次，指数退避
+                if wait_secs:
+                    await asyncio.sleep(wait_secs)
                 try:
                     resp = await client.get(
                         url,
@@ -412,11 +416,8 @@ async def _fetch_price_target_records(client: httpx.AsyncClient, symbol: str) ->
                     logger.warning("price_target_fetch_error", symbol=symbol, url=url, error=str(e))
                     resp = None
                     break
-
-                if resp.status_code == 429:
-                    await asyncio.sleep(3)
-                    continue  # 重试
-                break  # 非 429 则跳出重试循环
+                if resp.status_code != 429:
+                    break  # 非 429 则退出重试循环
 
             if resp is None or resp.status_code != 200:
                 break
