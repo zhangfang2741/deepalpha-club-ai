@@ -210,6 +210,14 @@ export default function PriceTargetModal({ stock, onClose }: Props) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // 优先使用列表响应中嵌入的 recent_points（与 sparkline 数据源一致）
+    if (stock.recent_points && stock.recent_points.length >= 2) {
+      setPoints(stock.recent_points)
+      setSynthetic(false)
+      setLoading(false)
+      return
+    }
+
     fetchPriceTargetHistory(stock.symbol)
       .then((res) => {
         if (res.points.length > 1) {

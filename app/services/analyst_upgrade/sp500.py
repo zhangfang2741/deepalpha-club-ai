@@ -662,8 +662,8 @@ async def compute_sp500_upgrades() -> SP500UpgradesResponse:
 
     if stocks:
         cutoff_5y = date.today() - timedelta(days=5 * 365)
-        sem2 = asyncio.Semaphore(10)
-        async with httpx.AsyncClient(timeout=30) as client2:
+        sem2 = asyncio.Semaphore(5)  # 限速保护：S&P 500 成分多，并发降至 5
+        async with httpx.AsyncClient(timeout=60) as client2:
             history_pairs = await asyncio.gather(
                 *[_compute_recent_points(client2, s.symbol, sem2, cutoff_5y) for s in stocks]
             )
