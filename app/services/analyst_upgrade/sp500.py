@@ -133,6 +133,7 @@ _FALLBACK_SP500: list[tuple[str, str, str]] = [
     ("RTX",   "RTX Corp.",                   "Industrials"),
     ("LMT",   "Lockheed Martin Corp.",       "Industrials"),
     ("GE",    "GE Aerospace",                "Industrials"),
+    ("GEV",   "GE Vernova Inc.",             "Industrials"),
     ("VRT",   "Vertiv Holdings Co.",        "Industrials"),
     ("BA",    "Boeing Co.",                  "Industrials"),
     ("UPS",   "United Parcel Service",       "Industrials"),
