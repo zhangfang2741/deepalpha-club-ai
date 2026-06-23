@@ -10,11 +10,11 @@ import {
   ISeriesApi,
   LineData,
 } from 'lightweight-charts'
-import type { SectorWithIndustries } from '@/lib/api/valuation'
-import { zScoreToPanic, getPanicColor, getPanicLevel } from '@/lib/constants/industryPanic'
+import type { SectorPanic } from '@/lib/api/industry_panic'
+import { getPanicColor, getPanicLevel } from '@/lib/constants/industryPanic'
 
 interface Props {
-  sector: SectorWithIndustries
+  sector: SectorPanic
 }
 
 export default function IndustryPanicChart({ sector }: Props) {
@@ -27,10 +27,10 @@ export default function IndustryPanicChart({ sector }: Props) {
     y: number
     date: string
     panic: number
-    pe: number
-  }>({ visible: false, x: 0, y: 0, date: '', panic: 0, pe: 0 })
+    rsi: number
+  }>({ visible: false, x: 0, y: 0, date: '', panic: 0, rsi: 0 })
 
-  // 只在 mount/unmount 创建/销毁图表
+  // 仅 mount/unmount 创建/销毁图表
   useEffect(() => {
     if (!containerRef.current) return
 
@@ -87,15 +87,15 @@ export default function IndustryPanicChart({ sector }: Props) {
       }
       const dateStr = String(param.time)
       const panic = (seriesData as { value: number }).value
-      const peRecord = sector.hist_pe.find((p) => p.date === dateStr)
-      const pe = peRecord?.pe ?? 0
+      const point = sector.history.find((p) => p.date === dateStr)
+      const rsi = point?.rsi ?? 0
       const x = param.point.x
       const y = param.point.y
       const containerWidth = containerRef.current.clientWidth
       const tooltipWidth = 160
       const adjustedX = x + tooltipWidth > containerWidth ? x - tooltipWidth - 10 : x + 10
       const adjustedY = Math.max(0, y - 60)
-      setTooltip({ visible: true, x: adjustedX, y: adjustedY, date: dateStr, panic, pe })
+      setTooltip({ visible: true, x: adjustedX, y: adjustedY, date: dateStr, panic, rsi })
     })
 
     const observer = new ResizeObserver(() => {
@@ -113,26 +113,16 @@ export default function IndustryPanicChart({ sector }: Props) {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 数据更新时重设 series
+  // 数据变化时更新 series
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current) return
-    if (!sector.hist_mean || !sector.hist_std || sector.hist_std === 0) return
 
-    const { hist_mean, hist_std, hist_pe } = sector
+    const chartData: LineData[] = sector.history.map((p) => ({
+      time: p.date as `${number}-${number}-${number}`,
+      value: p.panic,
+    }))
 
-    const chartData: LineData[] = hist_pe
-      .filter((p) => p.pe != null)
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .map((p) => {
-        const z = (p.pe - hist_mean) / hist_std
-        const panic = zScoreToPanic(z)
-        return {
-          time: p.date as `${number}-${number}-${number}`,
-          value: panic,
-        }
-      })
-
-    const currentPanic = zScoreToPanic(sector.z_score)
+    const currentPanic = sector.current_panic ?? 50
     const color = getPanicColor(currentPanic)
 
     seriesRef.current.setData(chartData)
@@ -143,12 +133,12 @@ export default function IndustryPanicChart({ sector }: Props) {
     }
   }, [sector])
 
-  const currentPanic = zScoreToPanic(sector.z_score)
+  const currentPanic = sector.current_panic ?? 50
   const currentLevel = getPanicLevel(currentPanic)
 
   return (
     <div className="relative">
-      {/* 情绪色带背景 */}
+      {/* 情绪色带背景（上红=恐慌，下蓝=平静） */}
       <div
         className="absolute inset-0 pointer-events-none rounded-xl overflow-hidden"
         aria-hidden="true"
@@ -210,8 +200,8 @@ export default function IndustryPanicChart({ sector }: Props) {
           >
             {getPanicLevel(tooltip.panic).label}
           </div>
-          {tooltip.pe > 0 && (
-            <div className="text-gray-400 mt-1.5 font-mono">PE {tooltip.pe.toFixed(2)}</div>
+          {tooltip.rsi > 0 && (
+            <div className="text-gray-400 mt-1.5 font-mono">RSI {tooltip.rsi.toFixed(1)}</div>
           )}
         </div>
       )}
