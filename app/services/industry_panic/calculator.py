@@ -49,7 +49,7 @@ def _fetch_closes(symbol: str) -> list[tuple[str, float]]:
     try:
         resp = httpx.get(
             url,
-            timeout=20,
+            timeout=8,
             proxy=settings.HTTP_PROXY or settings.HTTPS_PROXY or None,
         )
         resp.raise_for_status()
