@@ -1,7 +1,7 @@
 """行业恐慌指数 API 端点。"""
 
 import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ALL_COMPLETED, ThreadPoolExecutor, wait
 from typing import Optional
 
 from fastapi import APIRouter, Depends
@@ -61,15 +61,19 @@ async def get_industry_panic(
 
     sectors: list[SectorPanic] = []
 
-    with ThreadPoolExecutor(max_workers=6) as executor:
+    with ThreadPoolExecutor(max_workers=11) as executor:
         futures = {
             executor.submit(compute_sector_panic, m["symbol"]): m
             for m in SECTOR_ETF_MAP
         }
-        for future in as_completed(futures):
+        # 总超时 25s：11 个并发请求 × 8s httpx timeout，留出计算余量
+        done, not_done = wait(futures, timeout=25, return_when=ALL_COMPLETED)
+        for future in not_done:
+            future.cancel()
+        for future in done | not_done:
             meta = futures[future]
             try:
-                history = future.result()
+                history = future.result() if not future.cancelled() else []
             except Exception as e:
                 logger.exception("industry_panic_sector_failed", symbol=meta["symbol"], error=str(e))
                 history = []
