@@ -96,22 +96,30 @@ def compute_sector_panic(symbol: str) -> list[dict]:
     """计算单个行业 ETF 的历史恐慌指数序列。
 
     返回 [{"date": str, "rsi": float, "panic": float}, ...]
+    优先从 FMP 拉取实时数据，失败时回退到内置 fixture（开发/离线环境）。
     """
     pairs = _fetch_closes(symbol)
-    if not pairs:
-        return []
+    if pairs:
+        dates = [p[0] for p in pairs]
+        closes = [p[1] for p in pairs]
+        rsi_vals = _rsi_series(closes)
 
-    dates = [p[0] for p in pairs]
-    closes = [p[1] for p in pairs]
-    rsi_vals = _rsi_series(closes)
+        result = []
+        for date, rsi in zip(dates, rsi_vals, strict=False):
+            if rsi is None:
+                continue
+            result.append({
+                "date": date,
+                "rsi": round(rsi, 2),
+                "panic": round(100.0 - rsi, 2),
+            })
+        return result
 
-    result = []
-    for date, rsi in zip(dates, rsi_vals, strict=False):
-        if rsi is None:
-            continue
-        result.append({
-            "date": date,
-            "rsi": round(rsi, 2),
-            "panic": round(100.0 - rsi, 2),
-        })
-    return result
+    # FMP 不可用时使用内置 fixture（开发环境代理限制）
+    from app.services.industry_panic.fixture import SECTOR_FIXTURE  # noqa: PLC0415
+    data = SECTOR_FIXTURE.get(symbol)
+    if data:
+        logger.info("industry_panic_using_fixture", symbol=symbol)
+        return data
+
+    return []
