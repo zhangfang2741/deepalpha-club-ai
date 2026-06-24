@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from redis.asyncio import Redis
 
-from app.cache.client import get_redis
+from app.cache.client import get_redis_optional
 from app.core.logging import logger
 from app.services.industry_panic.calculator import SECTOR_ETF_MAP, compute_sector_panic
 
@@ -44,17 +44,18 @@ class IndustryPanicResponse(BaseModel):
 
 @router.get("", response_model=IndustryPanicResponse)
 async def get_industry_panic(
-    redis: Redis = Depends(get_redis),
+    redis: Optional[Redis] = Depends(get_redis_optional),
 ) -> IndustryPanicResponse:
     """获取 11 个 GICS 一级行业的历史 RSI 恐慌指数。
 
     panic = 100 - RSI(14)，基于行业代表性 SPDR ETF 日收盘价计算。
-    结果缓存 1 小时。
+    结果缓存 1 小时；Redis 不可用时跳过缓存直接计算。
     """
-    cached = await redis.get(CACHE_KEY)
-    if cached:
-        logger.info("industry_panic_cache_hit")
-        return IndustryPanicResponse.model_validate_json(cached)
+    if redis is not None:
+        cached = await redis.get(CACHE_KEY)
+        if cached:
+            logger.info("industry_panic_cache_hit")
+            return IndustryPanicResponse.model_validate_json(cached)
 
     logger.info("industry_panic_cache_miss")
 
@@ -101,6 +102,7 @@ async def get_industry_panic(
         sectors=sectors,
     )
 
-    await redis.set(CACHE_KEY, result.model_dump_json(), ex=CACHE_TTL)
-    logger.info("industry_panic_cache_set", sector_count=len(sectors))
+    if redis is not None:
+        await redis.set(CACHE_KEY, result.model_dump_json(), ex=CACHE_TTL)
+        logger.info("industry_panic_cache_set", sector_count=len(sectors))
     return result

@@ -142,6 +142,7 @@ convention = "google"
 "scripts/*.py" = ["D415"]
 "app/api/v1/industry_panic.py" = ["D415", "D101"]
 "app/services/industry_panic/*.py" = ["D415", "D101", "D104"]
+"app/cache/client.py" = ["D415"]
 
 [tool.pyright]
 include = ["app", "evals"]
