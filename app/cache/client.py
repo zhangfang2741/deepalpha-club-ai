@@ -36,7 +36,12 @@ async def init_redis() -> None:
         pool_kwargs["connection_class"] = SSLConnection
     _pool = ConnectionPool(**pool_kwargs)
     _client = Redis(connection_pool=_pool)
-    await _client.ping()  # type: ignore[misc]
+    try:
+        await _client.ping()  # type: ignore[misc]
+    except Exception:
+        # ping 失败说明 Redis 不可用；重置为 None 让 get_redis_optional 能正确降级
+        _client = None
+        raise
     logger.info(
         "redis_client_initialized",
         host=host,
@@ -66,6 +71,11 @@ async def get_redis() -> AsyncGenerator[Redis, None]:
     """
     if _client is None:
         raise RuntimeError("Redis 未初始化，请检查应用启动流程")
+    yield _client
+
+
+async def get_redis_optional() -> AsyncGenerator[Optional[Redis], None]:
+    """可选 Redis 依赖：Redis 不可用时 yield None，端点自行降级处理。"""
     yield _client
 
 
