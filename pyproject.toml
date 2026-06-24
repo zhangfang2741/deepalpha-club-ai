@@ -140,6 +140,8 @@ convention = "google"
 "app/api/v1/supply_chain.py" = ["D415"]
 "alembic/versions/*.py" = ["D415"]
 "scripts/*.py" = ["D415"]
+"app/api/v1/industry_panic.py" = ["D415", "D101"]
+"app/services/industry_panic/*.py" = ["D415", "D101", "D104"]
 
 [tool.pyright]
 include = ["app", "evals"]

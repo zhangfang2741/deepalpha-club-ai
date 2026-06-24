@@ -6,12 +6,13 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
 import {
   LogOut, User, LayoutDashboard, TrendingUp, BarChart3,
-  LineChart, MessageSquare, Settings, Menu, X, FlaskConical, Network, ArrowUpRight,
+  LineChart, MessageSquare, Settings, Menu, X, FlaskConical, Network, ArrowUpRight, Activity,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
   { href: '/dashboard',          label: '仪表盘',   icon: LayoutDashboard },
   { href: '/fear-greed',         label: '恐慌指数', icon: TrendingUp },
+  { href: '/industry-panic',     label: '行业恐慌', icon: Activity },
   { href: '/etf',                label: 'ETF 资金流', icon: BarChart3 },
   { href: '/analysis',           label: '投资评分', icon: LineChart },
   { href: '/analyst-upgrades',   label: '分析师上调', icon: ArrowUpRight },
