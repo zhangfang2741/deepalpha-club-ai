@@ -52,10 +52,14 @@ async def get_industry_panic(
     结果缓存 1 小时；Redis 不可用时跳过缓存直接计算。
     """
     if redis is not None:
-        cached = await redis.get(CACHE_KEY)
-        if cached:
-            logger.info("industry_panic_cache_hit")
-            return IndustryPanicResponse.model_validate_json(cached)
+        try:
+            cached = await redis.get(CACHE_KEY)
+            if cached:
+                logger.info("industry_panic_cache_hit")
+                return IndustryPanicResponse.model_validate_json(cached)
+        except Exception as e:
+            logger.warning("industry_panic_cache_read_failed", error=str(e))
+            # Redis 故障时降级到实时拉取，不中断请求
 
     logger.info("industry_panic_cache_miss")
 
@@ -107,6 +111,9 @@ async def get_industry_panic(
     )
 
     if redis is not None:
-        await redis.set(CACHE_KEY, result.model_dump_json(), ex=CACHE_TTL)
-        logger.info("industry_panic_cache_set", sector_count=len(sectors))
+        try:
+            await redis.set(CACHE_KEY, result.model_dump_json(), ex=CACHE_TTL)
+            logger.info("industry_panic_cache_set", sector_count=len(sectors))
+        except Exception as e:
+            logger.warning("industry_panic_cache_write_failed", error=str(e))
     return result

@@ -21,6 +21,8 @@ export interface IndustryPanicResponse {
 }
 
 export async function fetchIndustryPanic(): Promise<IndustryPanicResponse> {
-  const { data } = await apiClient.get<IndustryPanicResponse>('/api/v1/industry-panic')
+  const { data } = await apiClient.get<IndustryPanicResponse>('/api/v1/industry-panic', {
+    timeout: 60000,  // 该端点并发拉取 11 个 ETF，给足 60s
+  })
   return data
 }
