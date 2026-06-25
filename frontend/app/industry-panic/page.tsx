@@ -28,7 +28,10 @@ export default function IndustryPanicPage() {
           setSelected(sorted[0])
         }
       })
-      .catch(() => setError('数据加载失败，请刷新重试'))
+      .catch((err) => {
+        console.error('[industry-panic] fetch error:', err?.response?.status, err?.response?.data, err?.message, err)
+        setError(`数据加载失败：${err?.response?.status ?? err?.message ?? '未知错误'}`)
+      })
       .finally(() => setLoading(false))
   }, [])
 
