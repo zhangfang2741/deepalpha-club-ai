@@ -2,13 +2,11 @@
 
 import json
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
-from app.api.v1.auth import get_current_user
 from app.core.limiter import limiter
 from app.core.logging import logger
-from app.models.user import User
 from app.schemas.research import IndustryResearchRequest
 from app.services.research import industry_research_service
 
@@ -20,10 +18,9 @@ router = APIRouter()
 async def research_industry(
     request: Request,
     body: IndustryResearchRequest,
-    current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
     """启动行业研究，以 SSE 流式返回 7 个步骤结果."""
-    logger.info("industry_research_started", industry=body.industry, user_id=current_user.id)
+    logger.info("industry_research_started", industry=body.industry)
 
     async def event_generator():
         try:
