@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { fetchIndustryPanic } from '@/lib/api/industry_panic'
 import type { IndustryPanicResponse, SectorPanic } from '@/lib/api/industry_panic'
 import DashboardShell from '@/components/layout/DashboardShell'
@@ -9,19 +9,30 @@ import IndustryPanicChart from '@/components/industry_panic/IndustryPanicChart'
 import SectorPanicBar from '@/components/industry_panic/SectorPanicBar'
 import { getRsiColor, getRsiLevel } from '@/lib/constants/industryPanic'
 
+function getErrorMessage(err: unknown): string {
+  const e = err as { response?: { status?: number }; code?: string; message?: string }
+  const status = e?.response?.status
+  if (status === 404) return '数据接口暂不可用（404），后端服务可能正在更新，请稍后重试'
+  if (status === 503 || status === 502) return `服务暂时不可用（${status}），请稍后重试`
+  if (status && status >= 500) return `服务器错误（${status}），请稍后重试`
+  if (e?.code === 'ECONNABORTED') return '请求超时（数据量较大，请稍后重试）'
+  if (status) return `数据加载失败（${status}）`
+  return `数据加载失败：${e?.message ?? '网络错误'}`
+}
+
 export default function IndustryPanicPage() {
   const [data, setData] = useState<IndustryPanicResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<SectorPanic | null>(null)
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
     setLoading(true)
+    setError('')
     fetchIndustryPanic()
       .then((res) => {
         setData(res)
         if (res.sectors.length > 0) {
-          // 默认选中 RSI 最低（最弱势）的行业
           const sorted = [...res.sectors].sort(
             (a, b) => (a.current_rsi ?? 50) - (b.current_rsi ?? 50)
           )
@@ -30,10 +41,12 @@ export default function IndustryPanicPage() {
       })
       .catch((err) => {
         console.error('[industry-panic] fetch error:', err?.response?.status, err?.response?.data, err?.message, err)
-        setError(`数据加载失败：${err?.response?.status ?? err?.message ?? '未知错误'}`)
+        setError(getErrorMessage(err))
       })
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => { loadData() }, [loadData])
 
   const currentRsi = selected?.current_rsi ?? 50
   const currentLevel = getRsiLevel(currentRsi)
@@ -69,8 +82,14 @@ export default function IndustryPanicPage() {
         )}
 
         {error && !loading && (
-          <div className="p-6 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-medium">
-            {error}
+          <div className="p-6 bg-red-50 border border-red-200 rounded-xl flex items-start justify-between gap-4">
+            <p className="text-red-600 text-sm font-medium">{error}</p>
+            <button
+              onClick={loadData}
+              className="shrink-0 text-xs font-semibold text-red-700 border border-red-300 rounded-lg px-3 py-1.5 hover:bg-red-100 transition-colors"
+            >
+              重试
+            </button>
           </div>
         )}
 
