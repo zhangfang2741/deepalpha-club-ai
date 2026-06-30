@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   ReactFlow,
   Background,
@@ -9,6 +9,7 @@ import {
   type Node,
   type Edge,
   type NodeTypes,
+  type ReactFlowInstance,
   MarkerType,
   Handle,
   Position,
@@ -159,8 +160,22 @@ export default function SupplyChainGraph({ graphData, onNodeClick, onEdgeClick }
   const initialNodes = useMemo(() => layoutNodes(graphData.nodes), [graphData.nodes])
   const initialEdges = useMemo(() => buildEdges(graphData.edges), [graphData.edges])
 
-  const [nodes, , onNodesChange] = useNodesState(initialNodes)
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges)
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+
+  const rfRef = useRef<ReactFlowInstance | null>(null)
+
+  // graphData 异步加载/过滤刷新后，useNodesState/useEdgesState 不会自动跟随
+  // 初值变化，必须手动同步，否则画布始终停留在首次渲染时的空数据。
+  useEffect(() => {
+    setNodes(initialNodes)
+    setEdges(initialEdges)
+    // 等待新节点提交到 DOM 后再适配视图（fitView 仅在挂载时自动执行一次）。
+    const id = requestAnimationFrame(() => {
+      rfRef.current?.fitView({ padding: 0.15 })
+    })
+    return () => cancelAnimationFrame(id)
+  }, [initialNodes, initialEdges, setNodes, setEdges])
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
@@ -200,6 +215,7 @@ export default function SupplyChainGraph({ graphData, onNodeClick, onEdgeClick }
         onEdgesChange={onEdgesChange}
         onNodeClick={handleNodeClick}
         onEdgeClick={handleEdgeClick}
+        onInit={(instance) => { rfRef.current = instance }}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.15 }}

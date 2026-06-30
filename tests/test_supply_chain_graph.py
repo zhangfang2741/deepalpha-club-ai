@@ -579,3 +579,52 @@ class TestSupplyChainAPI:
         resp = api_client.get("/api/v1/supply-chain/documents")
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6. 种子数据集完整性（scripts/seed_supply_chain.py）
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestSeedDataset:
+    """校验种子数据集自洽：类型合法、事实两端实体均已定义、覆盖全部关系。"""
+
+    def _load(self):
+        import importlib.util
+        from pathlib import Path
+
+        path = Path(__file__).resolve().parent.parent / "scripts" / "seed_supply_chain.py"
+        spec = importlib.util.spec_from_file_location("seed_supply_chain", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_entity_types_valid(self):
+        from app.models.graph_entity import EntityType
+        mod = self._load()
+        valid = {e.value for e in EntityType}
+        for name, etype, _ticker, _desc in mod.ENTITIES:
+            assert etype in valid, f"非法实体类型 {etype}（{name}）"
+
+    def test_entity_names_unique(self):
+        mod = self._load()
+        names = [e[0] for e in mod.ENTITIES]
+        assert len(names) == len(set(names)), "存在重复实体名称"
+
+    def test_facts_reference_known_entities(self):
+        mod = self._load()
+        names = {e[0] for e in mod.ENTITIES}
+        for src, _rel, tgt, *_ in mod.FACTS:
+            assert src in names, f"事实来源实体未定义：{src}"
+            assert tgt in names, f"事实目标实体未定义：{tgt}"
+
+    def test_facts_cover_all_relations(self):
+        from app.models.graph_fact import RelationType
+        mod = self._load()
+        used = {f[1] for f in mod.FACTS}
+        for rel in RelationType:
+            assert rel.value in used, f"种子缺少关系类型 {rel.value}"
+
+    def test_facts_confidence_in_range(self):
+        mod = self._load()
+        for _src, _rel, _tgt, _ev, conf, _t in mod.FACTS:
+            assert 0.0 <= conf <= 1.0
