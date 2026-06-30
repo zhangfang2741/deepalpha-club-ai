@@ -676,6 +676,9 @@ const DOC_STATUS_META: Record<string, { label: string; cls: string }> = {
 function DocStatusList() {
   const [docs, setDocs] = useState<SourceDoc[]>([])
   const [loading, setLoading] = useState(false)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [factsByDoc, setFactsByDoc] = useState<Record<string, Fact[]>>({})
+  const [loadingFacts, setLoadingFacts] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -698,6 +701,22 @@ function DocStatusList() {
     return () => clearInterval(id)
   }, [docs, load])
 
+  const toggleExpand = useCallback(async (id: string) => {
+    if (expandedId === id) { setExpandedId(null); return }
+    setExpandedId(id)
+    if (!factsByDoc[id]) {
+      setLoadingFacts(true)
+      try {
+        const facts = await supplyChainApi.getFacts({ doc_id: id, limit: 200 })
+        setFactsByDoc((prev) => ({ ...prev, [id]: facts }))
+      } catch {
+        setFactsByDoc((prev) => ({ ...prev, [id]: [] }))
+      } finally {
+        setLoadingFacts(false)
+      }
+    }
+  }, [expandedId, factsByDoc])
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4">
       <div className="flex items-center justify-between mb-3">
@@ -714,25 +733,65 @@ function DocStatusList() {
 
       {docs.length === 0 ? (
         <p className="text-xs text-gray-400 py-4 text-center">
-          还没有摄取记录。提交文档后，这里会显示处理进度与抽取到的事实数。
+          还没有摄取记录。提交文档后，这里会显示处理进度与抽取到的原文。
         </p>
       ) : (
         <div className="space-y-1.5">
           {docs.map((d) => {
             const meta = DOC_STATUS_META[d.status] ?? DOC_STATUS_META.pending
+            const expanded = expandedId === d.id
+            const canExpand = d.status === 'done' && d.fact_count > 0
+            const facts = factsByDoc[d.id] ?? []
             return (
-              <div key={d.id} className="flex items-center gap-2 text-xs border border-gray-100 rounded-lg px-2.5 py-2">
-                <span className={`flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded font-medium ${meta.cls}`}>
-                  {d.status === 'processing' && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
-                  {meta.label}
-                </span>
-                <span className="flex-1 truncate text-gray-700">
-                  {d.ticker && <span className="font-medium">{d.ticker} · </span>}
-                  {d.document_type}
-                </span>
-                <span className="flex-shrink-0 text-gray-400">
-                  {d.status === 'done' ? `${d.fact_count} 条事实` : d.status === 'failed' ? '可重试' : `${d.chunk_count} 切片`}
-                </span>
+              <div key={d.id} className="border border-gray-100 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => canExpand && toggleExpand(d.id)}
+                  disabled={!canExpand}
+                  className={`w-full flex items-center gap-2 text-xs px-2.5 py-2 text-left ${canExpand ? 'hover:bg-gray-50 cursor-pointer' : 'cursor-default'}`}
+                >
+                  {canExpand
+                    ? <ChevronRight className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+                    : <span className="w-3.5 flex-shrink-0" />}
+                  <span className={`flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded font-medium ${meta.cls}`}>
+                    {d.status === 'processing' && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
+                    {meta.label}
+                  </span>
+                  <span className="flex-1 truncate text-gray-700">
+                    {d.ticker && <span className="font-medium">{d.ticker} · </span>}
+                    {d.document_type}
+                  </span>
+                  <span className="flex-shrink-0 text-gray-400">
+                    {d.status === 'done' ? `${d.fact_count} 条原文` : d.status === 'failed' ? '可重试' : `${d.chunk_count} 切片`}
+                  </span>
+                </button>
+
+                {/* 展开：该文档抽取出的原句 */}
+                {expanded && (
+                  <div className="border-t border-gray-100 bg-gray-50/60 px-2.5 py-2 space-y-2 max-h-72 overflow-y-auto">
+                    {loadingFacts && !factsByDoc[d.id] ? (
+                      <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-gray-300" /></div>
+                    ) : facts.length === 0 ? (
+                      <p className="text-xs text-gray-400 py-2 text-center">未找到原文</p>
+                    ) : facts.map((f) => (
+                      <div key={f.id} className="text-xs bg-white border border-gray-100 rounded-lg p-2">
+                        <div className="flex items-center gap-1 mb-1 flex-wrap">
+                          <span className="text-gray-600 font-medium truncate max-w-[90px]">{f.source_entity_name}</span>
+                          <RelationBadge type={f.relation_type} />
+                          <span className="text-gray-600 font-medium truncate max-w-[90px]">{f.target_entity_name}</span>
+                        </div>
+                        <p className="text-gray-500 leading-relaxed">"{f.evidence_text}"</p>
+                        <div className="flex items-center gap-2 mt-1 text-gray-300">
+                          <span>置信度 {Math.round(f.confidence * 100)}%</span>
+                          {f.document_url && (
+                            <a href={f.document_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-blue-500 hover:underline">
+                              <ExternalLink className="w-2.5 h-2.5" />原文来源
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           })}

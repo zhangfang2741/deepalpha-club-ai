@@ -1,12 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Upload, X, Check, Loader2, Zap, Search, ClipboardPaste } from 'lucide-react'
+import { Upload, X, Check, Loader2, Zap, Search, ClipboardPaste, Layers } from 'lucide-react'
 import { supplyChainApi, type DocumentType } from '@/lib/api/supply_chain'
 import apiClient from '@/lib/api/client'
 
 // ── 类型 ────────────────────────────────────────
-type Mode = 'quick' | 'url' | 'paste'
+type Mode = 'quick' | 'batch' | 'url' | 'paste'
 
 const DOC_TYPES: { value: DocumentType; label: string }[] = [
   { value: '10-K', label: 'SEC 10-K（年报）' },
@@ -186,6 +186,165 @@ function QuickIngest({ onSuccess }: IngestPanelProps) {
             ? <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
             : <X className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />}
           <span>{result.message}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── 批量摄取（多代码 × 多类型 SEC + 多季度电话会议）──────
+interface BatchResult {
+  label: string
+  success: boolean
+  message: string
+}
+
+const SEC_FORMS = ['10-K', '10-Q', '8-K']
+const EC_YEARS = [2025, 2024, 2023]
+const EC_QUARTERS = [1, 2, 3, 4]
+
+function toggleInSet<T>(set: Set<T>, v: T): Set<T> {
+  const next = new Set(set)
+  next.has(v) ? next.delete(v) : next.add(v)
+  return next
+}
+
+function BatchIngest({ onSuccess }: IngestPanelProps) {
+  const [tickersText, setTickersText] = useState('')
+  const [secForms, setSecForms] = useState<Set<string>>(new Set(['10-K']))
+  const [ecYears, setEcYears] = useState<Set<number>>(new Set())
+  const [ecQuarters, setEcQuarters] = useState<Set<number>>(new Set())
+  const [loading, setLoading] = useState(false)
+  const [results, setResults] = useState<BatchResult[]>([])
+
+  // 支持逗号 / 空格 / 换行分隔，去重并大写
+  const tickers = Array.from(
+    new Set(tickersText.split(/[\s,]+/).map((t) => t.trim().toUpperCase()).filter(Boolean)),
+  )
+
+  // 构建摄取任务清单：代码 ×（所选 SEC 类型 + 所选 年份×季度 电话会议）
+  const buildTasks = (): { label: string; run: () => Promise<{ message: string }> }[] => {
+    const tasks: { label: string; run: () => Promise<{ message: string }> }[] = []
+    for (const ticker of tickers) {
+      for (const form of secForms) {
+        tasks.push({ label: `${ticker} · ${form}`, run: () => supplyChainApi.ingestSec({ ticker, form_type: form }) })
+      }
+      for (const year of ecYears) {
+        for (const q of ecQuarters) {
+          tasks.push({
+            label: `${ticker} · ${year}Q${q} 电话会议`,
+            run: () => supplyChainApi.ingestEarningsCall({ ticker, year, quarter: q }),
+          })
+        }
+      }
+    }
+    return tasks
+  }
+
+  const tasks = buildTasks()
+
+  const handleBatch = async () => {
+    if (tasks.length === 0) return
+    setLoading(true)
+    setResults([])
+    const settled = await Promise.allSettled(tasks.map((t) => t.run()))
+    const next: BatchResult[] = settled.map((r, i) => ({
+      label: tasks[i].label,
+      success: r.status === 'fulfilled',
+      message: r.status === 'fulfilled'
+        ? (r.value.message ?? '已加入队列')
+        : (r.reason instanceof Error ? r.reason.message : '提交失败'),
+    }))
+    setResults(next)
+    setLoading(false)
+    if (next.some((r) => r.success)) onSuccess?.()
+  }
+
+  const chipCls = (active: boolean) =>
+    `px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+      active ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-blue-300'
+    }`
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
+        可同时提取多种文件：勾选多个 SEC 类型（8-K / 10-K / 10-Q）和多个季度的电话会议，对每个代码并发提交。
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-gray-600 block mb-1">股票代码列表 *</label>
+        <textarea
+          value={tickersText}
+          onChange={(e) => setTickersText(e.target.value)}
+          placeholder="例如：NVDA, TSM, AAPL&#10;TSLA AMD MSFT"
+          rows={3}
+          className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y font-mono"
+        />
+        {tickers.length > 0 && (
+          <p className="text-xs text-gray-400 mt-1">已识别 {tickers.length} 个代码：{tickers.join('、')}</p>
+        )}
+      </div>
+
+      {/* SEC 文件类型（多选） */}
+      <div>
+        <label className="text-xs font-medium text-gray-600 block mb-1.5">SEC 文件类型（可多选，取最新一份）</label>
+        <div className="flex flex-wrap gap-1.5">
+          {SEC_FORMS.map((f) => (
+            <button key={f} onClick={() => setSecForms((p) => toggleInSet(p, f))} className={chipCls(secForms.has(f))}>
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 电话会议：年份 × 季度（多选） */}
+      <div>
+        <label className="text-xs font-medium text-gray-600 block mb-1.5">电话会议记录（多选年份 × 季度）</label>
+        <div className="flex flex-wrap gap-1.5 mb-1.5">
+          {EC_YEARS.map((y) => (
+            <button key={y} onClick={() => setEcYears((p) => toggleInSet(p, y))} className={chipCls(ecYears.has(y))}>
+              {y}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {EC_QUARTERS.map((q) => (
+            <button key={q} onClick={() => setEcQuarters((p) => toggleInSet(p, q))} className={chipCls(ecQuarters.has(q))}>
+              Q{q}
+            </button>
+          ))}
+        </div>
+        {ecYears.size > 0 && ecQuarters.size === 0 && (
+          <p className="text-xs text-amber-500 mt-1">已选年份，请再选至少一个季度</p>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between pt-1">
+        <span className="text-xs text-gray-400">共 {tasks.length} 个摄取任务</span>
+        <button
+          onClick={handleBatch}
+          disabled={loading || tasks.length === 0}
+          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white text-xs font-medium rounded-lg transition-colors"
+        >
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />}
+          {loading ? '提交中…' : `批量摄取 (${tasks.length})`}
+        </button>
+      </div>
+
+      {results.length > 0 && (
+        <div className="space-y-1 max-h-60 overflow-y-auto">
+          {results.map((r) => (
+            <div
+              key={r.label}
+              className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs ${
+                r.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+              }`}
+            >
+              {r.success ? <Check className="w-3 h-3 flex-shrink-0" /> : <X className="w-3 h-3 flex-shrink-0" />}
+              <span className="font-medium flex-shrink-0">{r.label}</span>
+              <span className="truncate text-gray-500">{r.message}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -454,6 +613,17 @@ export default function IngestPanel({ onSuccess }: IngestPanelProps) {
           快捷摄取
         </button>
         <button
+          onClick={() => setMode('batch')}
+          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+            mode === 'batch'
+              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Layers className="w-3 h-3 inline mr-1" />
+          批量
+        </button>
+        <button
           onClick={() => setMode('url')}
           className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
             mode === 'url'
@@ -478,6 +648,7 @@ export default function IngestPanel({ onSuccess }: IngestPanelProps) {
       </div>
 
       {mode === 'quick' && <QuickIngest onSuccess={onSuccess} />}
+      {mode === 'batch' && <BatchIngest onSuccess={onSuccess} />}
       {mode === 'url' && <UrlIngest onSuccess={onSuccess} />}
       {mode === 'paste' && <PasteIngest onSuccess={onSuccess} />}
     </div>

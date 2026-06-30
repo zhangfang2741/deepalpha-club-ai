@@ -820,3 +820,31 @@ class TestBottleneckDescription:
             assert "核心瓶颈" in desc          # 3 个约束 → 高度集中的核心瓶颈
             assert "资源" in desc              # 类型中文称谓
             assert "AI Training" in desc       # 受制方
+
+
+class TestFactsDocFilter:
+    def test_filter_facts_by_doc_id(self):
+        import uuid as _uuid
+        from app.api.v1.supply_chain import list_facts
+        from app.models.graph_entity import EntityType, GraphEntity
+        from app.models.graph_fact import GraphFact, RelationType
+
+        with _isolated_session() as s:
+            a = GraphEntity(entity_type=EntityType.COMPANY, name="A")
+            b = GraphEntity(entity_type=EntityType.PRODUCT, name="B")
+            s.add_all([a, b])
+            s.commit()
+            s.refresh(a)
+            s.refresh(b)
+
+            doc1, doc2 = _uuid.uuid4(), _uuid.uuid4()
+            s.add_all([
+                GraphFact(source_entity_id=a.id, target_entity_id=b.id, relation_type=RelationType.HAS_PRODUCT,
+                          evidence_text="from doc1", confidence=0.9, source_doc_id=doc1),
+                GraphFact(source_entity_id=a.id, target_entity_id=b.id, relation_type=RelationType.SUPPLIED_BY,
+                          evidence_text="from doc2", confidence=0.9, source_doc_id=doc2),
+            ])
+            s.commit()
+
+            res = list_facts(relation_type=None, min_confidence=0.0, doc_id=doc1, limit=100, session=s)
+            assert {f.evidence_text for f in res} == {"from doc1"}

@@ -218,13 +218,16 @@ def get_entity_facts_endpoint(
 def list_facts(
     relation_type: Optional[RelationType] = Query(default=None),
     min_confidence: float = Query(default=0.0, ge=0.0, le=1.0),
+    doc_id: Optional[uuid.UUID] = Query(default=None, description="按来源文档 ID 过滤"),
     limit: int = Query(default=100, ge=1, le=500),
     session: Session = Depends(get_sync_session),
 ):
-    """列出知识图谱中的事实关系，支持按类型和置信度过滤。"""
+    """列出知识图谱中的事实关系，支持按类型、置信度和来源文档过滤。"""
     stmt = select(GraphFact)
     if relation_type:
         stmt = stmt.where(GraphFact.relation_type == relation_type)
+    if doc_id:
+        stmt = stmt.where(GraphFact.source_doc_id == doc_id)
     if min_confidence > 0:
         stmt = stmt.where(GraphFact.confidence >= min_confidence)
     stmt = stmt.order_by(GraphFact.ingestion_time.desc()).limit(limit)

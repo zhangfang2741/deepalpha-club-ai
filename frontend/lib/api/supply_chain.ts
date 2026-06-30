@@ -169,6 +169,7 @@ export const supplyChainApi = {
   getFacts: async (params?: {
     relation_type?: RelationType
     min_confidence?: number
+    doc_id?: string
     limit?: number
   }): Promise<Fact[]> => {
     const { data } = await apiClient.get(`${BASE}/facts`, { params })
