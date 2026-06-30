@@ -154,9 +154,10 @@ interface SupplyChainGraphProps {
   graphData: GraphData
   onNodeClick?: (nodeId: string) => void
   onEdgeClick?: (edgeId: string, evidence: string, docUrl?: string | null) => void
+  onIngestClick?: () => void
 }
 
-export default function SupplyChainGraph({ graphData, onNodeClick, onEdgeClick }: SupplyChainGraphProps) {
+export default function SupplyChainGraph({ graphData, onNodeClick, onEdgeClick, onIngestClick }: SupplyChainGraphProps) {
   const initialNodes = useMemo(() => layoutNodes(graphData.nodes), [graphData.nodes])
   const initialEdges = useMemo(() => buildEdges(graphData.edges), [graphData.edges])
 
@@ -200,7 +201,15 @@ export default function SupplyChainGraph({ graphData, onNodeClick, onEdgeClick }
       <div className="flex-1 flex items-center justify-center bg-gray-50 rounded-xl border border-dashed border-gray-300">
         <div className="text-center">
           <p className="text-gray-400 text-sm">图谱暂无数据</p>
-          <p className="text-gray-300 text-xs mt-1">请先摄取 SEC 文件或手动添加实体</p>
+          <p className="text-gray-300 text-xs mt-1">先在第一步导入文档，系统会自动抽取产业链事实</p>
+          {onIngestClick && (
+            <button
+              onClick={onIngestClick}
+              className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors"
+            >
+              前往第一步 · 摄取数据
+            </button>
+          )}
         </div>
       </div>
     )

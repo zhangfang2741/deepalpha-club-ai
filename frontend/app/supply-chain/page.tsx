@@ -1,10 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import {
   Network, RefreshCw, Filter, AlertTriangle, BookOpen,
-  TrendingDown, Plus, Loader2, X, ExternalLink,
+  TrendingDown, Plus, Loader2, X, ExternalLink, ChevronRight,
 } from 'lucide-react'
 
 import DashboardShell from '@/components/layout/DashboardShell'
@@ -31,6 +31,26 @@ const ENTITY_TYPES: EntityType[] = ['Company', 'Product', 'Technology', 'Concept
 const RELATION_TYPES: RelationType[] = ['HAS_PRODUCT', 'SUPPLIED_BY', 'ENABLED_BY', 'CONSTRAINED_BY']
 
 type Tab = 'graph' | 'bottleneck' | 'ingest' | 'facts'
+
+// 把原本并列的四个 Tab 重组为有先后关系的流程步骤，方便用户理解使用顺序。
+const STEPS: { key: Tab; step: number; label: string; icon: React.ElementType; desc: string }[] = [
+  {
+    key: 'ingest', step: 1, label: '摄取数据', icon: BookOpen,
+    desc: '导入 SEC 文件或电话会议记录，系统自动抽取产业链因果事实（也可直接用内置 NVIDIA 演示数据）。',
+  },
+  {
+    key: 'graph', step: 2, label: '因果图谱', icon: Network,
+    desc: '可视化实体与因果关系，点击节点或连线查看关联事实与原文证据。',
+  },
+  {
+    key: 'bottleneck', step: 3, label: '瓶颈分析', icon: TrendingDown,
+    desc: '识别被多个产品 / 概念约束的关键资源，定位产业链瓶颈。',
+  },
+  {
+    key: 'facts', step: 4, label: '事实溯源', icon: Filter,
+    desc: '逐条审阅抽取的事实三元组，核对置信度与原文出处。',
+  },
+]
 
 export default function SupplyChainPage() {
   const [activeTab, setActiveTab] = useState<Tab>('graph')
@@ -157,27 +177,48 @@ export default function SupplyChainPage() {
         </button>
       </div>
 
-      {/* ── Tab 导航 ─────────────────────────── */}
-      <div className="flex gap-1 mb-4 border-b border-gray-200">
-        {([
-          { key: 'graph', label: '图谱视图', icon: Network },
-          { key: 'bottleneck', label: '瓶颈分析', icon: TrendingDown },
-          { key: 'ingest', label: '摄取文档', icon: BookOpen },
-          { key: 'facts', label: '事实列表', icon: Filter },
-        ] as { key: Tab; label: string; icon: React.ElementType }[]).map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            onClick={() => setActiveTab(key)}
-            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === key
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Icon className="w-3.5 h-3.5" />
-            {label}
-          </button>
-        ))}
+      {/* ── 流程步骤导航 ─────────────────────────── */}
+      <div className="mb-4">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          {STEPS.map(({ key, step, label, icon: Icon }, i) => {
+            const active = activeTab === key
+            return (
+              <Fragment key={key}>
+                <button
+                  onClick={() => setActiveTab(key)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border whitespace-nowrap transition-colors ${
+                    active
+                      ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                      : 'bg-white border-gray-200 text-gray-500 hover:border-blue-300 hover:text-gray-700'
+                  }`}
+                >
+                  <span
+                    className={`flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold ${
+                      active ? 'bg-white text-blue-600' : 'bg-gray-100 text-gray-500'
+                    }`}
+                  >
+                    {step}
+                  </span>
+                  <Icon className="w-3.5 h-3.5" />
+                  <span className="text-sm font-medium">{label}</span>
+                </button>
+                {i < STEPS.length - 1 && (
+                  <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                )}
+              </Fragment>
+            )
+          })}
+        </div>
+
+        {/* 当前步骤说明 */}
+        <div className="mt-2 flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2">
+          <span className="flex-shrink-0 text-xs font-semibold text-blue-700">
+            第 {STEPS.find((s) => s.key === activeTab)?.step} 步
+          </span>
+          <span className="text-xs text-blue-700/90 leading-relaxed">
+            {STEPS.find((s) => s.key === activeTab)?.desc}
+          </span>
+        </div>
       </div>
 
       {/* ── 内容区 ───────────────────────────── */}
@@ -242,6 +283,7 @@ export default function SupplyChainPage() {
                 graphData={graphData}
                 onNodeClick={handleNodeClick}
                 onEdgeClick={handleEdgeClick}
+                onIngestClick={() => setActiveTab('ingest')}
               />
             </div>
 
@@ -350,8 +392,15 @@ export default function SupplyChainPage() {
               <Loader2 className="w-6 h-6 animate-spin text-gray-300" />
             </div>
           ) : bottlenecks.length === 0 ? (
-            <div className="text-center py-16 text-gray-400 text-sm">
-              暂无瓶颈数据，请先摄取相关文档
+            <div className="flex flex-col items-center gap-3 py-16">
+              <p className="text-gray-400 text-sm">暂无瓶颈数据</p>
+              <button
+                onClick={() => setActiveTab('ingest')}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                前往第一步 · 摄取数据
+              </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
