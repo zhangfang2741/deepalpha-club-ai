@@ -102,7 +102,11 @@ def generate_buy2_signals(
         post = [s for s in strokes if s.start_time >= pivot.end_time]
         for i in range(len(post) - 1):
             breakout, retrace = post[i], post[i + 1]
-            if breakout.direction != "up" or breakout.end_price <= pivot.zg:
+            # 突破笔必须真正“跨越”中枢上沿（起点≤ZG<终点），
+            # 排除价格已远离中枢后的笔被误判为突破
+            if breakout.direction != "up" or not (
+                breakout.start_price <= pivot.zg < breakout.end_price
+            ):
                 continue
             if retrace.direction != "down":
                 continue
@@ -132,7 +136,11 @@ def generate_sell2_signals(
         post = [s for s in strokes if s.start_time >= pivot.end_time]
         for i in range(len(post) - 1):
             breakout, retrace = post[i], post[i + 1]
-            if breakout.direction != "down" or breakout.end_price >= pivot.zd:
+            # 突破笔必须真正“跨越”中枢下沿（起点≥ZD>终点），
+            # 排除价格已远离中枢后的笔被误判为跌破
+            if breakout.direction != "down" or not (
+                breakout.start_price >= pivot.zd > breakout.end_price
+            ):
                 continue
             if retrace.direction != "up":
                 continue
@@ -165,7 +173,11 @@ def generate_buy3_signals(
         post = [s for s in strokes if s.start_time >= pivot.end_time]
         for i in range(len(post) - 1):
             breakout, retrace = post[i], post[i + 1]
-            if breakout.direction != "up" or breakout.end_price <= pivot.zg:
+            # 突破笔必须真正“跨越”中枢上沿（起点≤ZG<终点），
+            # 排除价格已远离中枢后的笔被误判为突破
+            if breakout.direction != "up" or not (
+                breakout.start_price <= pivot.zg < breakout.end_price
+            ):
                 continue
             if retrace.direction != "down":
                 continue
@@ -195,7 +207,11 @@ def generate_sell3_signals(
         post = [s for s in strokes if s.start_time >= pivot.end_time]
         for i in range(len(post) - 1):
             breakout, retrace = post[i], post[i + 1]
-            if breakout.direction != "down" or breakout.end_price >= pivot.zd:
+            # 突破笔必须真正“跨越”中枢下沿（起点≥ZD>终点），
+            # 排除价格已远离中枢后的笔被误判为跌破
+            if breakout.direction != "down" or not (
+                breakout.start_price >= pivot.zd > breakout.end_price
+            ):
                 continue
             if retrace.direction != "up":
                 continue
@@ -230,4 +246,15 @@ def generate_all_signals(
     signals.extend(generate_sell3_signals(strokes, pivots))
 
     signals.sort(key=lambda s: s.time)
-    return signals
+
+    # 去重：不同中枢（笔级/线段级、或延伸重叠）可能对同一笔对重复触发，
+    # 同一时间 + 同一类型只保留一个
+    seen: set[tuple[str, str]] = set()
+    deduped: list[Signal] = []
+    for s in signals:
+        key = (s.type, s.time)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(s)
+    return deduped
