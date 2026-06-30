@@ -79,6 +79,14 @@ async def get_redis_optional() -> AsyncGenerator[Optional[Redis], None]:
     yield _client
 
 
+def current_redis() -> Optional[Redis]:
+    """返回当前 Redis 客户端（未初始化时为 None）。
+
+    供非 FastAPI 依赖注入场景使用（如 LangGraph 工具），让其也能复用缓存。
+    """
+    return _client
+
+
 async def health_check() -> bool:
     """检查 Redis 连接健康状态。"""
     try:
