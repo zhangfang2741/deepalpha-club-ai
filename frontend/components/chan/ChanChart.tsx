@@ -264,7 +264,7 @@ export function ChanChart({
   return (
     <div className="flex flex-col gap-2 h-full">
       <div className="relative flex-[3] min-h-0">
-        <div className="text-xs text-slate-500 mb-1 flex items-center gap-3">
+        <div className="text-xs text-slate-500 mb-1 flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className="font-semibold text-slate-400 uppercase tracking-wide">K线 · 缠论结构</span>
           {showStrokes && <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-amber-400" />笔</span>}
           {showSegments && <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-emerald-500" />线段</span>}
@@ -279,7 +279,7 @@ export function ChanChart({
       </div>
       {showMacd && data.macd && (
         <div className="relative flex-1 min-h-0">
-          <div className="text-xs text-slate-500 mb-1 flex items-center gap-3">
+          <div className="text-xs text-slate-500 mb-1 flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="font-semibold text-slate-400 uppercase tracking-wide">MACD</span>
             <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-blue-400" />DIF</span>
             <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-orange-400" />DEA</span>
