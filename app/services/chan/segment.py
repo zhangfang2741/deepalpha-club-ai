@@ -85,23 +85,25 @@ def find_segments(strokes: list[Stroke]) -> list[Segment]:
                 continue
             seg = Segment(direction="down", strokes=[s0, s1, s2])
 
-        # 线段延伸：往后看是否有更多笔可以纳入
-        j = i + 3
-        while j < len(strokes) - 1:
-            next_main = strokes[j]       # 同向笔
+        # 线段延伸：从第5笔（i+4）开始，每次跳2看同向笔
+        # j 指向同向笔，j-1 指向其前的回调笔
+        j = i + 4
+        while j < len(strokes):
+            next_main = strokes[j]
+            retrace = strokes[j - 1]
 
             if next_main.direction != direction:
                 break
 
             if direction == "up" and next_main.end_price > seg.end_price:
-                # 上升笔继续创新高，延伸线段
-                retrace_strokes = [strokes[j - 1]] if strokes[j - 1] not in seg.strokes else []
-                seg.strokes.extend(retrace_strokes + [next_main])
+                if retrace not in seg.strokes:
+                    seg.strokes.append(retrace)
+                seg.strokes.append(next_main)
                 j += 2
             elif direction == "down" and next_main.end_price < seg.end_price:
-                # 下降笔继续创新低，延伸线段
-                retrace_strokes = [strokes[j - 1]] if strokes[j - 1] not in seg.strokes else []
-                seg.strokes.extend(retrace_strokes + [next_main])
+                if retrace not in seg.strokes:
+                    seg.strokes.append(retrace)
+                seg.strokes.append(next_main)
                 j += 2
             else:
                 break

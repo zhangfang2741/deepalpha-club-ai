@@ -2,20 +2,11 @@
 from __future__ import annotations
 
 
-from pydantic import BaseModel, Field
-
 from app.core.logging import logger
 from app.services.chan.analyzer import ChanAnalyzer
 from app.services.skills.kline import fetch_kline
 
 _analyzer = ChanAnalyzer()
-
-
-class ChanAnalysisInput(BaseModel):
-    symbol: str = Field(description="股票代码，如 'AAPL'、'NVDA' 或 A 股代码如 'SH600519'")
-    start_date: str = Field(description="分析起始日期，格式 YYYY-MM-DD，建议至少半年数据")
-    end_date: str = Field(description="分析截止日期，格式 YYYY-MM-DD")
-    freq: str = Field(default="daily", description="K线周期：daily（日线）或 weekly（周线）")
 
 
 async def chan_analysis_tool(

@@ -32,12 +32,6 @@ class Signal:
         return self.type.startswith("buy")
 
 
-def _divergence_to_strength(div: DivergenceResult | None) -> Literal["strong", "medium", "weak"]:
-    if div is None or not div.is_diverged:
-        return "weak"
-    return div.strength  # type: ignore[return-value]
-
-
 def generate_buy1_signals(
     strokes: list[Stroke],
     divergences: list[DivergenceResult],
