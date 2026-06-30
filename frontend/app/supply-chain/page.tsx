@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import {
   Network, RefreshCw, Filter, AlertTriangle, BookOpen,
-  TrendingDown, Plus, Loader2, X, ExternalLink, ChevronRight,
+  TrendingDown, Plus, Loader2, X, ExternalLink, ChevronRight, Info,
 } from 'lucide-react'
 
 import DashboardShell from '@/components/layout/DashboardShell'
@@ -69,6 +69,9 @@ export default function SupplyChainPage() {
 
   const [loading, setLoading] = useState(false)
   const [loadingBn, setLoadingBn] = useState(false)
+
+  // 有事实但没有任何来源文档 → 说明当前只是内置演示数据（种子不创建 SourceDocument）
+  const isDemoData = !!stats && stats.total_facts > 0 && stats.documents.total === 0
 
   const fetchGraph = useCallback(async () => {
     setLoading(true)
@@ -221,9 +224,26 @@ export default function SupplyChainPage() {
         </div>
       </div>
 
+      {/* ── 演示数据提示 ─────────────────────────── */}
+      {/* 仅有内置演示数据（有事实但无任何来源文档）时提示，避免投资者误把示例当可溯源结论 */}
+      {isDemoData && (
+        <div className="mb-4 flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5">
+          <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-800 leading-relaxed">
+            <span className="font-semibold">当前为内置 NVIDIA 演示数据</span>
+            ，用于体验功能，<span className="font-semibold">非实时抽取、无原始文档来源，请勿作为投资依据</span>。
+            如需可溯源的真实结论，请在
+            <button onClick={() => setActiveTab('ingest')} className="underline font-medium hover:text-amber-900">
+              第一步 · 摄取数据
+            </button>
+            导入 SEC / 电话会议文档。
+          </div>
+        </div>
+      )}
+
       {/* ── 内容区 ───────────────────────────── */}
       {activeTab === 'graph' && (
-        <div className="grid grid-cols-[1fr_280px] gap-4 h-[calc(100vh-240px)]">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 lg:h-[calc(100vh-240px)]">
           {/* 图谱主区 */}
           <div className="flex flex-col gap-3 min-h-0">
             {/* 过滤控件 */}
@@ -277,8 +297,8 @@ export default function SupplyChainPage() {
               </div>
             </div>
 
-            {/* 图谱画布 */}
-            <div className="flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden min-h-0">
+            {/* 图谱画布（移动端给固定高度，桌面端填满列高） */}
+            <div className="h-[60vh] lg:h-auto lg:flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden min-h-0">
               <SupplyChainGraph
                 graphData={graphData}
                 onNodeClick={handleNodeClick}
