@@ -71,6 +71,14 @@ class SignalOut(BaseModel):
     area_ratio: Optional[float] = None
 
 
+class RecommendationOut(BaseModel):
+    action: str            # buy / sell / hold_bullish / hold_bearish / watch
+    action_label: str      # 中文操作标签
+    bias: str              # bullish / bearish / neutral
+    reasons: list[str]     # 依据（为什么）
+    caveats: list[str]     # 风险提示
+
+
 class ChanAnalysisResponse(BaseModel):
     symbol: str
     bars_count: int
@@ -84,3 +92,4 @@ class ChanAnalysisResponse(BaseModel):
     signals: list[SignalOut]
     current_trend: str
     summary: str
+    recommendation: Optional[RecommendationOut] = None

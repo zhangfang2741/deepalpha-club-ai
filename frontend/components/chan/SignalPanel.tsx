@@ -1,5 +1,5 @@
 'use client'
-import type { Signal, Pivot, ChanAnalysisResult } from '@/lib/api/chan'
+import type { Signal, Pivot, Recommendation, ChanAnalysisResult } from '@/lib/api/chan'
 import { InfoTip } from './InfoTip'
 import {
   CHAN_TERM_MAP,
@@ -91,6 +91,42 @@ function PivotRow({ pivot }: { pivot: Pivot }) {
   )
 }
 
+const BIAS_STYLE: Record<string, { bg: string; text: string; border: string; dot: string }> = {
+  bullish: { bg: 'bg-green-950/40', text: 'text-green-400', border: 'border-green-800', dot: 'bg-green-400' },
+  bearish: { bg: 'bg-red-950/40', text: 'text-red-400', border: 'border-red-800', dot: 'bg-red-400' },
+  neutral: { bg: 'bg-slate-800/60', text: 'text-slate-300', border: 'border-slate-700', dot: 'bg-slate-400' },
+}
+
+function RecommendationCard({ rec }: { rec: Recommendation }) {
+  const s = BIAS_STYLE[rec.bias] ?? BIAS_STYLE.neutral
+  return (
+    <div className={`rounded-lg border p-3 ${s.bg} ${s.border}`}>
+      <div className="flex items-center gap-2 mb-2">
+        <span className={`inline-block w-2 h-2 rounded-full ${s.dot}`} />
+        <span className="text-xs text-slate-500 font-semibold">操作建议</span>
+        <InfoTip
+          content="综合当前趋势、买卖点信号、背驰、价格相对中枢位置与线段方向得出的技术面参考，非投资建议。"
+          side="left"
+        />
+      </div>
+      <div className={`text-base font-bold mb-2 ${s.text}`}>{rec.action_label}</div>
+      <ul className="flex flex-col gap-1">
+        {rec.reasons.map((r, i) => (
+          <li key={i} className="text-xs text-slate-300 flex gap-1.5">
+            <span className="text-slate-500 shrink-0">·</span>
+            <span>{r}</span>
+          </li>
+        ))}
+      </ul>
+      {rec.caveats.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-slate-700/50 text-[11px] text-slate-500 leading-relaxed">
+          {rec.caveats.join('；')}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function SignalPanel({ data }: Props) {
   const recentSignals = [...data.signals].reverse().slice(0, 8)
   const allPivots = [...data.stroke_pivots, ...data.segment_pivots]
@@ -102,6 +138,9 @@ export function SignalPanel({ data }: Props) {
 
   return (
     <div className="flex flex-col gap-4 lg:h-full lg:overflow-y-auto">
+      {/* 操作建议 */}
+      {data.recommendation && <RecommendationCard rec={data.recommendation} />}
+
       {/* 摘要统计 */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-slate-800/60 rounded-lg p-3">

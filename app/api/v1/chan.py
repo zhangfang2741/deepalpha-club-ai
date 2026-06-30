@@ -15,6 +15,7 @@ from app.schemas.chan import (
     MACDOut,
     MergedCandleOut,
     PivotOut,
+    RecommendationOut,
     SegmentOut,
     SignalOut,
     StrokeOut,
@@ -142,4 +143,11 @@ async def chan_analysis(
         ],
         current_trend=result.current_trend,
         summary=result.summary,
+        recommendation=RecommendationOut(
+            action=result.recommendation.action,
+            action_label=result.recommendation.action_label,
+            bias=result.recommendation.bias,
+            reasons=result.recommendation.reasons,
+            caveats=result.recommendation.caveats,
+        ) if result.recommendation else None,
     )
