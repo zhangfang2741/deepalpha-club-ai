@@ -61,16 +61,31 @@ async def _fetch_fmp(symbol: str, start: str, end: str, freq: str) -> list[dict]
     import asyncio
     from concurrent.futures import ThreadPoolExecutor
 
+    if not _FMP_KEY:
+        raise ValueError("数据源未配置：缺少 FMP_API_KEY 环境变量，请联系管理员")
+
     def _sync():
+        # FMP 的 EOD 端点仅提供日线；周线在本地聚合，因此始终拉日线
         resp = httpx.get(
             _FMP_URL,
-            params={"symbol": symbol, "from": start, "to": end,
-                    "apikey": _FMP_KEY, "period": freq},
+            params={"symbol": symbol, "from": start, "to": end, "apikey": _FMP_KEY},
             timeout=30,
         )
+        if resp.status_code == 401:
+            raise ValueError("数据源认证失败：FMP_API_KEY 无效")
+        if resp.status_code == 429:
+            raise ValueError("数据源请求过于频繁，请稍后再试")
         resp.raise_for_status()
         raw = resp.json()
-        records = raw if isinstance(raw, list) else raw.get("historical", [])
+        # FMP 出错时返回 dict（如 {"Error Message": ...}）而非 list
+        if isinstance(raw, dict):
+            err = raw.get("Error Message") or raw.get("error")
+            if err:
+                raise ValueError(f"数据源返回错误：{err}")
+            records = raw.get("historical", [])
+        else:
+            records = raw
+        records = [r for r in records if r.get("date")]
         records.sort(key=lambda r: r["date"])
         return [
             {"time": r["date"], "open": r["open"], "high": r["high"],
@@ -80,7 +95,44 @@ async def _fetch_fmp(symbol: str, start: str, end: str, freq: str) -> list[dict]
 
     loop = asyncio.get_event_loop()
     with ThreadPoolExecutor(max_workers=1) as pool:
-        return await loop.run_in_executor(pool, _sync)
+        daily = await loop.run_in_executor(pool, _sync)
+
+    if freq == "weekly":
+        return _resample_weekly(daily)
+    return daily
+
+
+def _resample_weekly(daily: list[dict]) -> list[dict]:
+    """将日线按 ISO 周聚合为周K线。
+
+    周内：open=首个交易日开盘，close=末个交易日收盘，
+    high=区间最高，low=区间最低，volume=求和；时间取周内最后一个交易日。
+    """
+    from datetime import date
+
+    buckets: dict[tuple[int, int], list[dict]] = {}
+    order: list[tuple[int, int]] = []
+    for bar in daily:
+        d = date.fromisoformat(bar["time"][:10])
+        iso = d.isocalendar()
+        key = (iso[0], iso[1])  # (ISO 年, ISO 周)
+        if key not in buckets:
+            buckets[key] = []
+            order.append(key)
+        buckets[key].append(bar)
+
+    weekly: list[dict] = []
+    for key in order:
+        group = buckets[key]  # daily 已按日期升序，组内同样有序
+        weekly.append({
+            "time": group[-1]["time"],
+            "open": group[0]["open"],
+            "high": max(b["high"] for b in group),
+            "low": min(b["low"] for b in group),
+            "close": group[-1]["close"],
+            "volume": sum(b.get("volume", 0) for b in group),
+        })
+    return weekly
 
 
 async def _fetch_a_share(symbol: str, start: str, end: str, freq: str) -> list[dict]:

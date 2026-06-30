@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 
+from app.cache.client import current_redis
 from app.core.logging import logger
 from app.services.chan.analyzer import ChanAnalyzer
 from app.services.skills.kline import fetch_kline
@@ -29,13 +30,17 @@ async def chan_analysis_tool(
     """
     logger.info("chan_tool_called", symbol=symbol, start=start_date, end=end_date)
 
-    bars = await fetch_kline(
-        user_id=None,
-        symbol=symbol,
-        start_date=start_date,
-        end_date=end_date,
-        freq=freq,
-    )
+    try:
+        bars = await fetch_kline(
+            user_id=None,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            freq=freq,
+            redis=current_redis(),
+        )
+    except ValueError as e:
+        return f"获取 {symbol} 数据失败：{e}"
 
     if not bars:
         return f"未能获取 {symbol} 的K线数据，请检查股票代码和日期范围。"

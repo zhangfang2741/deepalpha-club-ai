@@ -1,9 +1,14 @@
 """缠论分析 API"""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from redis.asyncio import Redis
 
+from app.api.v1.auth import get_current_user
+from app.cache.client import get_redis
+from app.core.limiter import limiter
 from app.core.logging import logger
+from app.models.user import User
 from app.schemas.chan import (
     ChanAnalysisResponse,
     FractalOut,
@@ -22,25 +27,37 @@ _analyzer = ChanAnalyzer()
 
 
 @router.get("/analysis", response_model=ChanAnalysisResponse)
+@limiter.limit("20 per minute")
 async def chan_analysis(
+    request: Request,
     symbol: str = Query(description="股票代码，如 AAPL"),
     start_date: str = Query(description="开始日期，格式 YYYY-MM-DD"),
     end_date: str = Query(description="结束日期，格式 YYYY-MM-DD"),
     freq: str = Query(default="daily", description="K线周期：daily / weekly"),
+    user: User = Depends(get_current_user),
+    redis: Redis = Depends(get_redis),
 ) -> ChanAnalysisResponse:
     """对指定股票进行完整缠论分析。
 
     返回：合并K线、分型、笔、线段、中枢、背驰、买卖点、MACD。
     """
-    logger.info("chan_analysis_request", symbol=symbol, start=start_date, end=end_date)
+    logger.info("chan_analysis_request", user_id=user.id, symbol=symbol, start=start_date, end=end_date)
 
-    bars = await fetch_kline(
-        user_id=None,
-        symbol=symbol,
-        start_date=start_date,
-        end_date=end_date,
-        freq=freq,
-    )
+    try:
+        bars = await fetch_kline(
+            user_id=user.id,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            freq=freq,
+            redis=redis,
+        )
+    except ValueError as e:
+        # 数据源配置错误、认证失败、限流等可读信息直接透传给用户
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("chan_kline_failed", symbol=symbol, error=str(e))
+        raise HTTPException(status_code=502, detail=f"获取 {symbol} 行情数据失败，请稍后再试")
 
     if not bars:
         raise HTTPException(status_code=404, detail=f"未获取到 {symbol} 的K线数据，请检查股票代码或日期范围")

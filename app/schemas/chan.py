@@ -3,14 +3,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
-
-
-class ChanAnalysisRequest(BaseModel):
-    symbol: str = Field(description="股票代码，如 AAPL 或 SH000001")
-    start_date: str = Field(description="开始日期，格式 YYYY-MM-DD")
-    end_date: str = Field(description="结束日期，格式 YYYY-MM-DD")
-    freq: str = Field(default="daily", description="K线周期：daily / weekly")
+from pydantic import BaseModel
 
 
 class MergedCandleOut(BaseModel):
