@@ -6,6 +6,7 @@ import {
   SIGNAL_GLOSSARY,
   PIVOT_FIELD_HINT,
   STRENGTH_HINT,
+  CURRENT_TREND_HINT,
 } from '@/lib/chan-glossary'
 
 interface Props {
@@ -141,7 +142,10 @@ export function SignalPanel({ data }: Props) {
       {/* 当前状态 */}
       {data.current_trend && (
         <div className="bg-slate-800/40 rounded-lg p-3 text-xs text-slate-300">
-          <div className="text-slate-500 mb-1 font-semibold">当前状态</div>
+          <div className="flex items-center gap-1 text-slate-500 mb-1 font-semibold">
+            当前状态
+            <InfoTip title="当前状态" content={CURRENT_TREND_HINT} side="left" />
+          </div>
           {data.current_trend}
         </div>
       )}
