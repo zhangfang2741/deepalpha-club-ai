@@ -1,5 +1,12 @@
 'use client'
 import type { Signal, Pivot, ChanAnalysisResult } from '@/lib/api/chan'
+import { InfoTip } from './InfoTip'
+import {
+  CHAN_TERM_MAP,
+  SIGNAL_GLOSSARY,
+  PIVOT_FIELD_HINT,
+  STRENGTH_HINT,
+} from '@/lib/chan-glossary'
 
 interface Props {
   data: ChanAnalysisResult
@@ -20,14 +27,32 @@ const STRENGTH_LABEL: Record<string, string> = {
   weak: '弱',
 }
 
+// 带问号提示的统计标签
+function TermLabel({ termKey, label }: { termKey: string; label: string }) {
+  const t = CHAN_TERM_MAP[termKey]
+  return (
+    <span className="flex items-center gap-1 text-slate-400">
+      {label}
+      {t && <InfoTip title={t.name} content={t.brief} side="left" />}
+    </span>
+  )
+}
+
 function SignalCard({ sig }: { sig: Signal }) {
   const style = SIGNAL_STYLE[sig.type] ?? { bg: 'bg-slate-800', text: 'text-slate-300', border: 'border-slate-700' }
+  const glossary = SIGNAL_GLOSSARY[sig.type]
   return (
     <div className={`rounded-lg border p-3 ${style.bg} ${style.border}`}>
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
-          <span className={`font-bold text-sm ${style.text}`}>{sig.label}</span>
-          <span className="text-xs text-slate-500">{STRENGTH_LABEL[sig.strength]}强度</span>
+          <span className={`flex items-center gap-1 font-bold text-sm ${style.text}`}>
+            {sig.label}
+            {glossary && <InfoTip title={glossary.name} content={glossary.detail} side="left" />}
+          </span>
+          <span className="flex items-center gap-1 text-xs text-slate-500">
+            {STRENGTH_LABEL[sig.strength]}强度
+            <InfoTip content={STRENGTH_HINT} side="left" />
+          </span>
         </div>
         <span className="text-xs text-slate-400">{sig.time}</span>
       </div>
@@ -81,26 +106,33 @@ export function SignalPanel({ data }: Props) {
         <div className="bg-slate-800/60 rounded-lg p-3">
           <div className="text-xs text-slate-500 mb-1">分析结构</div>
           <div className="grid grid-cols-2 gap-1 text-xs">
-            <span className="text-slate-400">合并K线</span>
+            <TermLabel termKey="merged" label="合并K线" />
             <span className="text-right text-slate-200 font-mono">{data.merged_candles.length}</span>
-            <span className="text-slate-400">分型</span>
+            <TermLabel termKey="fractal" label="分型" />
             <span className="text-right text-slate-200 font-mono">{data.fractals.length}</span>
-            <span className="text-slate-400">笔</span>
+            <TermLabel termKey="stroke" label="笔" />
             <span className="text-right text-slate-200 font-mono">{data.strokes.length}</span>
-            <span className="text-slate-400">线段</span>
+            <TermLabel termKey="segment" label="线段" />
             <span className="text-right text-slate-200 font-mono">{data.segments.length}</span>
           </div>
         </div>
         <div className="bg-slate-800/60 rounded-lg p-3">
-          <div className="text-xs text-slate-500 mb-1">买卖信号</div>
+          <div className="flex items-center gap-1 text-xs text-slate-500 mb-1">
+            买卖信号
+            <InfoTip
+              title="三类买卖点"
+              content="买卖点按出现顺序分一/二/三类，从背驰反转到突破中枢顺势确认，确认度依次增强。"
+              side="left"
+            />
+          </div>
           <div className="grid grid-cols-2 gap-1 text-xs">
             <span className="text-slate-400">买点</span>
             <span className="text-right text-green-400 font-mono">{buyCount}</span>
             <span className="text-slate-400">卖点</span>
             <span className="text-right text-red-400 font-mono">{sellCount}</span>
-            <span className="text-slate-400">笔中枢</span>
+            <TermLabel termKey="pivot" label="笔中枢" />
             <span className="text-right text-blue-400 font-mono">{data.stroke_pivots.length}</span>
-            <span className="text-slate-400">线段中枢</span>
+            <TermLabel termKey="pivot" label="线段中枢" />
             <span className="text-right text-violet-400 font-mono">{data.segment_pivots.length}</span>
           </div>
         </div>
@@ -117,7 +149,10 @@ export function SignalPanel({ data }: Props) {
       {/* 近期中枢 */}
       {allPivots.length > 0 && (
         <div>
-          <div className="text-xs font-semibold text-slate-400 mb-2">近期中枢</div>
+          <div className="flex items-center gap-1 text-xs font-semibold text-slate-400 mb-2">
+            近期中枢
+            <InfoTip content={PIVOT_FIELD_HINT} side="left" />
+          </div>
           <div>
             {allPivots.map((p, i) => (
               <PivotRow key={i} pivot={p} />

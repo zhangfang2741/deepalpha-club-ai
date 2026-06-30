@@ -47,6 +47,7 @@ const STRENGTH_SIZE: Record<string, 'small' | 'normal' | 'large'> = {
 export function ChanChart({
   data,
   showStrokes = true,
+  showSegments = true,
   showPivots = true,
   showSignals = true,
   showMacd = true,
@@ -110,6 +111,26 @@ export function ChanChart({
         .filter((p, i, arr) => arr.findIndex((x) => x.time === p.time) === i)
         .sort((a, b) => (a.time < b.time ? -1 : 1))
       strokeSeries.setData(uniq)
+    }
+
+    // ── 线段（更粗实线，级别高于笔）─────────────────────────────
+    if (showSegments && data.segments.length > 0) {
+      const segSeries = kChart.addSeries(LineSeries, {
+        color: '#10b981',
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      })
+
+      const segPoints: { time: Time; value: number }[] = []
+      for (const seg of data.segments) {
+        segPoints.push({ time: seg.start_time as Time, value: seg.start_price })
+        segPoints.push({ time: seg.end_time as Time, value: seg.end_price })
+      }
+      const uniqSeg = segPoints
+        .filter((p, i, arr) => arr.findIndex((x) => x.time === p.time) === i)
+        .sort((a, b) => (a.time < b.time ? -1 : 1))
+      segSeries.setData(uniqSeg)
     }
 
     // ── 中枢（价格区间矩形，用Band-like方式模拟）───────────────
@@ -234,7 +255,7 @@ export function ChanChart({
       klineChartRef.current = null
       macdChartRef.current = null
     }
-  }, [data, showStrokes, showPivots, showSignals, showMacd])
+  }, [data, showStrokes, showSegments, showPivots, showSignals, showMacd])
 
   return (
     <div className="flex flex-col gap-2 h-full">
@@ -242,6 +263,7 @@ export function ChanChart({
         <div className="text-xs text-slate-500 mb-1 flex items-center gap-3">
           <span className="font-semibold text-slate-400 uppercase tracking-wide">K线 · 缠论结构</span>
           {showStrokes && <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-amber-400" />笔</span>}
+          {showSegments && <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-emerald-500" />线段</span>}
           {showPivots && (
             <>
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-blue-400" />笔级中枢</span>

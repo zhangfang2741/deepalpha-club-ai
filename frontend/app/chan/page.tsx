@@ -4,11 +4,13 @@ import { useState, useCallback } from 'react'
 import { fetchChanAnalysis, type ChanAnalysisResult } from '@/lib/api/chan'
 import { ChanChart } from '@/components/chan/ChanChart'
 import { SignalPanel } from '@/components/chan/SignalPanel'
+import { ConceptGuide } from '@/components/chan/ConceptGuide'
 import DashboardShell from '@/components/layout/DashboardShell'
 
 const DEFAULT_SYMBOL = 'AAPL'
 const TODAY = new Date().toISOString().split('T')[0]
 const SIX_MONTHS_AGO = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+const TWO_YEARS_AGO = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
 function DateInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
@@ -35,9 +37,16 @@ export default function ChanPage() {
 
   // 显示选项
   const [showStrokes, setShowStrokes] = useState(true)
+  const [showSegments, setShowSegments] = useState(true)
   const [showPivots, setShowPivots] = useState(true)
   const [showSignals, setShowSignals] = useState(true)
   const [showMacd, setShowMacd] = useState(true)
+
+  // 切换周期：周线需要更长区间才能识别出结构，自动放宽起始日期
+  const handleFreqChange = (next: 'daily' | 'weekly') => {
+    setFreq(next)
+    if (next === 'weekly' && startDate > TWO_YEARS_AGO) setStartDate(TWO_YEARS_AGO)
+  }
 
   const handleAnalyze = useCallback(async () => {
     if (!symbol.trim()) return
@@ -88,7 +97,7 @@ export default function ChanPage() {
             <label className="text-xs font-medium text-slate-400">周期</label>
             <select
               value={freq}
-              onChange={(e) => setFreq(e.target.value as 'daily' | 'weekly')}
+              onChange={(e) => handleFreqChange(e.target.value as 'daily' | 'weekly')}
               className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="daily">日线</option>
@@ -108,6 +117,7 @@ export default function ChanPage() {
           <div className="flex items-center gap-3 ml-2 border-l border-slate-700 pl-3">
             {[
               { key: 'strokes', label: '笔', value: showStrokes, set: setShowStrokes },
+              { key: 'segments', label: '线段', value: showSegments, set: setShowSegments },
               { key: 'pivots', label: '中枢', value: showPivots, set: setShowPivots },
               { key: 'signals', label: '信号', value: showSignals, set: setShowSignals },
               { key: 'macd', label: 'MACD', value: showMacd, set: setShowMacd },
@@ -124,6 +134,9 @@ export default function ChanPage() {
             ))}
           </div>
         </div>
+
+        {/* 缠论概念科普 */}
+        <ConceptGuide />
 
         {/* 错误提示 */}
         {error && (
@@ -161,6 +174,7 @@ export default function ChanPage() {
               <ChanChart
                 data={result}
                 showStrokes={showStrokes}
+                showSegments={showSegments}
                 showPivots={showPivots}
                 showSignals={showSignals}
                 showMacd={showMacd}
