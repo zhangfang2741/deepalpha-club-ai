@@ -69,7 +69,7 @@ export function ChanChart({
       width: klineRef.current.clientWidth,
       height: klineRef.current.clientHeight,
       timeScale: { rightOffset: 4, barSpacing: 8, fixLeftEdge: true, fixRightEdge: true },
-      rightPriceScale: { scaleMargins: { top: 0.05, bottom: 0.2 } },
+      rightPriceScale: { scaleMargins: { top: 0.05, bottom: 0.2 }, minimumWidth: 64 },
     })
     klineChartRef.current = kChart
 
@@ -197,10 +197,17 @@ export function ChanChart({
         width: macdRef.current.clientWidth,
         height: macdRef.current.clientHeight,
         timeScale: { rightOffset: 4, barSpacing: 8, fixLeftEdge: true, fixRightEdge: true },
+        rightPriceScale: { minimumWidth: 64 },
       })
       macdChartRef.current = macdChart
 
-      const { times, dif, dea, bar } = data.macd
+      // MACD 基于原始K线计算（时间点比合并后的K线多），需对齐到合并K线的时间，
+      // 否则两图 X 轴数据点数量不同，基于索引的联动会错位
+      const macd = data.macd
+      const mergedTimeSet = new Set(data.merged_candles.map((c) => c.time))
+      const aligned = macd.times
+        .map((t, i) => ({ time: t as Time, dif: macd.dif[i], dea: macd.dea[i], bar: macd.bar[i] }))
+        .filter((p) => mergedTimeSet.has(p.time as string))
 
       const difSeries = macdChart.addSeries(LineSeries, {
         color: '#3b82f6',
@@ -219,13 +226,13 @@ export function ChanChart({
         lastValueVisible: false,
       })
 
-      difSeries.setData(times.map((t, i) => ({ time: t as Time, value: dif[i] })))
-      deaSeries.setData(times.map((t, i) => ({ time: t as Time, value: dea[i] })))
+      difSeries.setData(aligned.map((p) => ({ time: p.time, value: p.dif })))
+      deaSeries.setData(aligned.map((p) => ({ time: p.time, value: p.dea })))
       barSeries.setData(
-        times.map((t, i) => ({
-          time: t as Time,
-          value: bar[i],
-          color: bar[i] >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)',
+        aligned.map((p) => ({
+          time: p.time,
+          value: p.bar,
+          color: p.bar >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)',
         })),
       )
 
