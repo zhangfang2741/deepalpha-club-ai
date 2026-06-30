@@ -51,12 +51,13 @@ class ChanAnalysisResult:
 class ChanAnalyzer:
     """缠论分析器"""
 
-    def analyze(self, symbol: str, bars: list[dict]) -> ChanAnalysisResult:
+    def analyze(self, symbol: str, bars: list[dict], *, min_gap: int = 4) -> ChanAnalysisResult:
         """对K线数据执行完整缠论分析。
 
         bars: list of {time, open, high, low, close, volume}
+        min_gap: 笔成立所需的最小分型间隔（合并K线数 - 1），默认 4（缠论新笔标准）
         """
-        logger.info("chan_analysis_start", symbol=symbol, bars=len(bars))
+        logger.info("chan_analysis_start", symbol=symbol, bars=len(bars), min_gap=min_gap)
 
         result = ChanAnalysisResult(symbol=symbol, bars_count=len(bars))
 
@@ -77,7 +78,7 @@ class ChanAnalyzer:
             return result
 
         # 3. 笔识别
-        result.strokes = find_strokes(result.fractals)
+        result.strokes = find_strokes(result.fractals, min_gap=min_gap)
         logger.debug("chan_strokes", count=len(result.strokes))
 
         if len(result.strokes) < 3:
