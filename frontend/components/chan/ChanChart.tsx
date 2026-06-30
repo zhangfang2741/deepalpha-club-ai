@@ -7,6 +7,7 @@ import {
   CandlestickSeries,
   LineSeries,
   HistogramSeries,
+  BaselineSeries,
   type IChartApi,
   type ISeriesApi,
   type Time,
@@ -67,7 +68,7 @@ export function ChanChart({
       crosshair: { mode: CrosshairMode.Normal },
       width: klineRef.current.clientWidth,
       height: klineRef.current.clientHeight,
-      timeScale: { rightOffset: 6, barSpacing: 8 },
+      timeScale: { rightOffset: 4, barSpacing: 8, fixLeftEdge: true, fixRightEdge: true },
       rightPriceScale: { scaleMargins: { top: 0.05, bottom: 0.2 } },
     })
     klineChartRef.current = kChart
@@ -133,40 +134,43 @@ export function ChanChart({
       segSeries.setData(uniqSeg)
     }
 
-    // ── 中枢（价格区间矩形，用Band-like方式模拟）───────────────
+    // ── 中枢（半透明矩形带 + 加粗边框，醒目标识震荡区）───────────
     if (showPivots) {
       const pivots = [...data.stroke_pivots, ...data.segment_pivots]
       for (const pivot of pivots) {
-        const color = pivot.level === 'segment' ? 'rgba(139,92,246,0.15)' : 'rgba(59,130,246,0.12)'
-        const borderColor = pivot.level === 'segment' ? '#8b5cf6' : '#3b82f6'
+        const isSeg = pivot.level === 'segment'
+        const fillColor = isSeg ? 'rgba(168,85,247,0.20)' : 'rgba(59,130,246,0.18)'
+        const borderColor = isSeg ? '#a855f7' : '#3b82f6'
 
-        // 上沿线
-        const zgSeries = kChart.addSeries(LineSeries, {
-          color: borderColor,
-          lineWidth: 1,
-          lineStyle: 1,
+        // 以 zd 为基线、zg 为顶边，填充 zg~zd 之间形成半透明矩形带
+        const bandSeries = kChart.addSeries(BaselineSeries, {
+          baseValue: { type: 'price', price: pivot.zd },
+          topFillColor1: fillColor,
+          topFillColor2: fillColor,
+          topLineColor: borderColor,
+          bottomFillColor1: 'rgba(0,0,0,0)',
+          bottomFillColor2: 'rgba(0,0,0,0)',
+          bottomLineColor: 'rgba(0,0,0,0)',
+          lineWidth: 2,
           priceLineVisible: false,
           lastValueVisible: false,
         })
-        // 下沿线
-        const zdSeries = kChart.addSeries(LineSeries, {
-          color: borderColor,
-          lineWidth: 1,
-          lineStyle: 1,
-          priceLineVisible: false,
-          lastValueVisible: false,
-        })
-
-        const pts = [
+        bandSeries.setData([
           { time: pivot.start_time as Time, value: pivot.zg },
           { time: pivot.end_time as Time, value: pivot.zg },
-        ]
-        const pts2 = [
+        ])
+
+        // 下边框（zd 加粗线）
+        const zdSeries = kChart.addSeries(LineSeries, {
+          color: borderColor,
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        })
+        zdSeries.setData([
           { time: pivot.start_time as Time, value: pivot.zd },
           { time: pivot.end_time as Time, value: pivot.zd },
-        ]
-        zgSeries.setData(pts)
-        zdSeries.setData(pts2)
+        ])
       }
     }
 
@@ -192,7 +196,7 @@ export function ChanChart({
         crosshair: { mode: CrosshairMode.Normal },
         width: macdRef.current.clientWidth,
         height: macdRef.current.clientHeight,
-        timeScale: { rightOffset: 6, barSpacing: 8 },
+        timeScale: { rightOffset: 4, barSpacing: 8, fixLeftEdge: true, fixRightEdge: true },
       })
       macdChartRef.current = macdChart
 
@@ -266,8 +270,8 @@ export function ChanChart({
           {showSegments && <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-emerald-500" />线段</span>}
           {showPivots && (
             <>
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-blue-400" />笔级中枢</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-purple-400" />线段级中枢</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded-sm bg-blue-500/30 border border-blue-400" />笔级中枢</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded-sm bg-purple-500/30 border border-purple-400" />线段级中枢</span>
             </>
           )}
         </div>
