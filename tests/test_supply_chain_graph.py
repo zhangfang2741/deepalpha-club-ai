@@ -582,21 +582,15 @@ class TestSupplyChainAPI:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6. 种子数据集完整性（scripts/seed_supply_chain.py）
+# 6. 种子数据集完整性与注入（app/services/graph/seed.py）
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestSeedDataset:
     """校验种子数据集自洽：类型合法、事实两端实体均已定义、覆盖全部关系。"""
 
     def _load(self):
-        import importlib.util
-        from pathlib import Path
-
-        path = Path(__file__).resolve().parent.parent / "scripts" / "seed_supply_chain.py"
-        spec = importlib.util.spec_from_file_location("seed_supply_chain", path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
+        from app.services.graph import seed
+        return seed
 
     def test_entity_types_valid(self):
         from app.models.graph_entity import EntityType
@@ -628,3 +622,44 @@ class TestSeedDataset:
         mod = self._load()
         for _src, _rel, _tgt, _ev, conf, _t in mod.FACTS:
             assert 0.0 <= conf <= 1.0
+
+    def _fresh_session(self):
+        from app.models.graph_entity import GraphEntity  # noqa: F401
+        from app.models.graph_fact import GraphFact  # noqa: F401
+        from app.models.graph_source import SourceDocument  # noqa: F401
+
+        engine = create_engine("sqlite://", connect_args={"check_same_thread": False})
+        SQLModel.metadata.create_all(engine)
+        return Session(engine)
+
+    def test_seed_inserts_and_is_idempotent(self):
+        from app.models.graph_entity import GraphEntity
+        from app.models.graph_fact import GraphFact
+        from sqlmodel import select
+
+        from app.services.graph.seed import ENTITIES, FACTS, seed_supply_chain_graph
+
+        with self._fresh_session() as session:
+            created_e, created_f = seed_supply_chain_graph(session)
+            assert created_e == len(ENTITIES)
+            assert created_f == len(FACTS)
+
+            # 再次注入（force 跳过空库守卫）不应产生重复
+            again_e, again_f = seed_supply_chain_graph(session, force=True)
+            assert again_e == 0
+            assert again_f == 0
+
+            assert len(session.exec(select(GraphEntity)).all()) == len(ENTITIES)
+            assert len(session.exec(select(GraphFact)).all()) == len(FACTS)
+
+    def test_seed_skips_when_graph_not_empty(self):
+        from app.models.graph_entity import EntityType, GraphEntity
+        from app.services.graph.seed import seed_supply_chain_graph
+
+        with self._fresh_session() as session:
+            session.add(GraphEntity(entity_type=EntityType.COMPANY, name="Preexisting"))
+            session.commit()
+
+            created_e, created_f = seed_supply_chain_graph(session)
+            assert created_e == 0
+            assert created_f == 0

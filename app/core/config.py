@@ -131,6 +131,11 @@ class Settings:
         self.API_V1_STR = os.getenv("API_V1_STR", "/api/v1")
         self.DEBUG = os.getenv("DEBUG", "false").lower() in ("true", "1", "t", "yes")
 
+        # 产业图谱：启动时若图谱为空则自动注入 NVIDIA 产业链种子数据
+        self.SEED_SUPPLY_CHAIN_ON_STARTUP = os.getenv(
+            "SEED_SUPPLY_CHAIN_ON_STARTUP", "true"
+        ).lower() in ("true", "1", "t", "yes")
+
         # CORS Settings
         self.ALLOWED_ORIGINS = parse_list_from_env("ALLOWED_ORIGINS", ["*"])
 

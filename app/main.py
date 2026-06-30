@@ -40,6 +40,17 @@ load_dotenv()
 langfuse_init()
 
 
+def _seed_supply_chain_graph_sync() -> None:
+    """在同步会话中注入产业图谱种子数据（空库时才写入，供 to_thread 调用）."""
+    from sqlmodel import Session
+
+    from app.db.session import sync_engine
+    from app.services.graph.seed import seed_supply_chain_graph
+
+    with Session(sync_engine) as session:
+        seed_supply_chain_graph(session)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle application startup and shutdown events."""
@@ -76,6 +87,14 @@ async def lifespan(app: FastAPI):
         await memory_service.initialize()
     except Exception as e:
         logger.exception("memory_service_pre_warm_failed", error=str(e))
+
+    # 产业图谱：图谱为空时自动注入 NVIDIA 产业链种子数据，避免新部署看到空图谱。
+    # 幂等且仅在空库时执行；失败不阻断启动。可用 SEED_SUPPLY_CHAIN_ON_STARTUP=false 关闭。
+    if settings.SEED_SUPPLY_CHAIN_ON_STARTUP:
+        try:
+            await asyncio.to_thread(_seed_supply_chain_graph_sync)
+        except Exception as e:
+            logger.exception("supply_chain_seed_failed", error=str(e))
 
     yield
 
