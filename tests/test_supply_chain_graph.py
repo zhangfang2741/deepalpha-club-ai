@@ -663,3 +663,128 @@ class TestSeedDataset:
             created_e, created_f = seed_supply_chain_graph(session)
             assert created_e == 0
             assert created_f == 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. 通用化与图谱查询增强（多产业支持 / 时间筛选 / 重要度排序）
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _isolated_session():
+    from app.models.graph_entity import GraphEntity  # noqa: F401
+    from app.models.graph_fact import GraphFact  # noqa: F401
+    from app.models.graph_source import SourceDocument  # noqa: F401
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False})
+    SQLModel.metadata.create_all(engine)
+    return Session(engine)
+
+
+class TestNormalizerGeneralization:
+    def test_word_boundary_avoids_false_substring(self):
+        from app.services.graph.normalizer import normalize_entity_name
+        # "Inteliquent" 含子串 "intel" 但不应被误配为 Intel
+        assert normalize_entity_name("Inteliquent") == "Inteliquent"
+
+    def test_unknown_company_passes_through(self):
+        from app.services.graph.normalizer import normalize_entity_name
+        # 非半导体行业的公司原样返回，证明对任意产业链安全
+        assert normalize_entity_name("Eli Lilly") == "Eli Lilly"
+        assert normalize_entity_name("CATL") == "CATL"
+
+    def test_known_alias_still_normalizes(self):
+        from app.services.graph.normalizer import normalize_entity_name
+        assert normalize_entity_name("nvidia corporation") == "NVIDIA"
+
+
+class TestGraphQuery:
+    def test_since_keeps_recent_and_structural_facts(self):
+        from datetime import datetime
+        from app.models.graph_entity import EntityType, GraphEntity
+        from app.models.graph_fact import GraphFact, RelationType
+        from app.schemas.supply_chain import GraphQueryParams
+        from app.services.graph.query import get_graph_data
+
+        with _isolated_session() as s:
+            a = GraphEntity(entity_type=EntityType.COMPANY, name="A")
+            b = GraphEntity(entity_type=EntityType.PRODUCT, name="B")
+            c = GraphEntity(entity_type=EntityType.RESOURCE, name="C")
+            s.add_all([a, b, c])
+            s.commit()
+            for e in (a, b, c):
+                s.refresh(e)
+
+            s.add_all([
+                GraphFact(source_entity_id=a.id, target_entity_id=b.id, relation_type=RelationType.HAS_PRODUCT,
+                          evidence_text="old", confidence=0.9, event_time=datetime(2020, 1, 1)),
+                GraphFact(source_entity_id=b.id, target_entity_id=c.id, relation_type=RelationType.CONSTRAINED_BY,
+                          evidence_text="recent", confidence=0.9, event_time=datetime(2025, 1, 1)),
+                GraphFact(source_entity_id=a.id, target_entity_id=c.id, relation_type=RelationType.SUPPLIED_BY,
+                          evidence_text="structural", confidence=0.9, event_time=None),
+            ])
+            s.commit()
+
+            data = get_graph_data(s, GraphQueryParams(since=datetime(2024, 1, 1), limit=50))
+            texts = {e.evidence_text for e in data.edges}
+            assert "recent" in texts        # 2025 的事实保留
+            assert "structural" in texts    # 无 event_time 的结构性事实保留
+            assert "old" not in texts        # 2020 的事实被过滤
+
+    def test_degree_ordering_drops_isolated_when_limited(self):
+        from app.models.graph_entity import EntityType, GraphEntity
+        from app.models.graph_fact import GraphFact, RelationType
+        from app.schemas.supply_chain import GraphQueryParams
+        from app.services.graph.query import get_graph_data
+
+        with _isolated_session() as s:
+            hub = GraphEntity(entity_type=EntityType.COMPANY, name="Hub")
+            leaf1 = GraphEntity(entity_type=EntityType.PRODUCT, name="Leaf1")
+            leaf2 = GraphEntity(entity_type=EntityType.PRODUCT, name="Leaf2")
+            lonely = GraphEntity(entity_type=EntityType.CONCEPT, name="Lonely")
+            s.add_all([hub, leaf1, leaf2, lonely])
+            s.commit()
+            for e in (hub, leaf1, leaf2, lonely):
+                s.refresh(e)
+
+            s.add_all([
+                GraphFact(source_entity_id=hub.id, target_entity_id=leaf1.id, relation_type=RelationType.HAS_PRODUCT,
+                          evidence_text="x", confidence=0.9),
+                GraphFact(source_entity_id=hub.id, target_entity_id=leaf2.id, relation_type=RelationType.HAS_PRODUCT,
+                          evidence_text="y", confidence=0.9),
+            ])
+            s.commit()
+
+            # limit=3：按连接度取前 3，孤立实体（度=0）应被排除
+            data = get_graph_data(s, GraphQueryParams(limit=3))
+            names = {n.name for n in data.nodes}
+            assert "Hub" in names
+            assert "Lonely" not in names
+
+
+class TestDemandChain:
+    def test_includes_concept_level_constraint(self):
+        from app.models.graph_entity import EntityType, GraphEntity
+        from app.models.graph_fact import GraphFact, RelationType
+        from app.services.graph.query import get_demand_chain
+
+        with _isolated_session() as s:
+            concept = GraphEntity(entity_type=EntityType.CONCEPT, name="AI Training")
+            tech = GraphEntity(entity_type=EntityType.TECHNOLOGY, name="HBM3E")
+            power = GraphEntity(entity_type=EntityType.RESOURCE, name="Power Capacity")
+            s.add_all([concept, tech, power])
+            s.commit()
+            for e in (concept, tech, power):
+                s.refresh(e)
+
+            s.add_all([
+                GraphFact(source_entity_id=concept.id, target_entity_id=tech.id,
+                          relation_type=RelationType.ENABLED_BY, evidence_text="a", confidence=0.9),
+                # 概念自身的瓶颈，旧逻辑会漏掉
+                GraphFact(source_entity_id=concept.id, target_entity_id=power.id,
+                          relation_type=RelationType.CONSTRAINED_BY, evidence_text="b", confidence=0.9),
+            ])
+            s.commit()
+
+            chain = get_demand_chain(s, "AI Training")
+            assert chain is not None
+            constrained_names = {e.name for e in chain.constrained_resources}
+            assert "Power Capacity" in constrained_names

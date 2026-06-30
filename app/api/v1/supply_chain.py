@@ -320,15 +320,24 @@ def get_graph(
     relation_types: Optional[str] = Query(default=None, description="逗号分隔的关系类型列表"),
     ticker: Optional[str] = Query(default=None),
     min_confidence: float = Query(default=0.0, ge=0.0, le=1.0),
+    since: Optional[str] = Query(default=None, description="仅含事实时间不早于此日期 YYYY-MM-DD"),
     limit: int = Query(default=200, ge=1, le=1000),
     session: Session = Depends(get_sync_session),
 ):
     """返回前端图谱可视化所需的节点与边数据。"""
+    since_dt = None
+    if since:
+        try:
+            since_dt = datetime.strptime(since, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=422, detail="since 日期格式应为 YYYY-MM-DD")
+
     params = GraphQueryParams(
         entity_types=[EntityType(t) for t in entity_types.split(",") if t] if entity_types else None,
         relation_types=[RelationType(r) for r in relation_types.split(",") if r] if relation_types else None,
         ticker=ticker,
         min_confidence=min_confidence,
+        since=since_dt,
         limit=limit,
     )
     return get_graph_data(session, params)

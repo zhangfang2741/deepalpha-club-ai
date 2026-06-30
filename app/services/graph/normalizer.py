@@ -1,8 +1,14 @@
-"""实体规范化服务 — 去重与别名解析。"""
+"""实体规范化服务 — 去重与别名解析。
+
+映射表以 NVIDIA / 半导体生态为种子；对未收录的公司/产业，normalize 会原样
+（Title 化）返回，因此对任意产业链都安全可用，只是无内置别名去重。
+"""
+
+import re
 
 from app.core.logging import logger
 
-# NVIDIA 生态核心实体规范名称映射表
+# 常用实体规范名称映射表（以 NVIDIA / 半导体生态为主，可逐步扩充）
 # key: 小写别名, value: 规范名称
 _CANONICAL_MAP: dict[str, str] = {
     # Companies
@@ -211,9 +217,10 @@ def normalize_entity_name(raw_name: str) -> str:
         canonical = _CANONICAL_MAP[key]
         logger.debug("entity_name_normalized", raw=raw_name, canonical=canonical)
         return canonical
-    # 尝试部分匹配（处理前缀如 "NVIDIA's H100"）
+    # 词边界匹配（处理 "NVIDIA's H100" 这类前后缀），但避免子串误配
+    # （如 "Inteliquent" 不应映射为 Intel）。仅对长度 >= 3 的别名启用。
     for alias, canonical in _CANONICAL_MAP.items():
-        if alias in key:
+        if len(alias) >= 3 and re.search(rf"\b{re.escape(alias)}\b", key):
             return canonical
     return raw_name.strip()
 

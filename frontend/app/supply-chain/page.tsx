@@ -4,7 +4,8 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import {
   Network, RefreshCw, Filter, AlertTriangle, BookOpen,
-  TrendingDown, Plus, Loader2, X, ExternalLink, ChevronRight, Info,
+  TrendingDown, Loader2, X, ExternalLink, ChevronRight, Info,
+  GitBranch, Search, ArrowRight,
 } from 'lucide-react'
 
 import DashboardShell from '@/components/layout/DashboardShell'
@@ -19,6 +20,8 @@ import {
   type BottleneckReport,
   type Fact,
   type Entity,
+  type SourceDoc,
+  type DemandChain,
 } from '@/lib/api/supply_chain'
 
 // SSR 关闭（React Flow 需要 DOM）
@@ -30,27 +33,41 @@ const SupplyChainGraph = dynamic(
 const ENTITY_TYPES: EntityType[] = ['Company', 'Product', 'Technology', 'Concept', 'Resource']
 const RELATION_TYPES: RelationType[] = ['HAS_PRODUCT', 'SUPPLIED_BY', 'ENABLED_BY', 'CONSTRAINED_BY']
 
-type Tab = 'graph' | 'bottleneck' | 'ingest' | 'facts'
+type Tab = 'graph' | 'bottleneck' | 'ingest' | 'facts' | 'demand'
 
-// 把原本并列的四个 Tab 重组为有先后关系的流程步骤，方便用户理解使用顺序。
+// 把原本并列的 Tab 重组为有先后关系的流程步骤，方便用户理解使用顺序。
 const STEPS: { key: Tab; step: number; label: string; icon: React.ElementType; desc: string }[] = [
   {
     key: 'ingest', step: 1, label: '摄取数据', icon: BookOpen,
-    desc: '导入 SEC 文件或电话会议记录，系统自动抽取产业链因果事实（也可直接用内置 NVIDIA 演示数据）。',
+    desc: '导入任意公司 / 行业的 SEC 文件或电话会议记录，系统自动抽取产业链因果事实（也可先用内置演示数据体验）。',
   },
   {
     key: 'graph', step: 2, label: '因果图谱', icon: Network,
-    desc: '可视化实体与因果关系，点击节点或连线查看关联事实与原文证据。',
+    desc: '可视化实体与因果关系，点击节点或连线查看关联事实与原文证据；可按代码、置信度、时间筛选。',
   },
   {
     key: 'bottleneck', step: 3, label: '瓶颈分析', icon: TrendingDown,
     desc: '识别被多个产品 / 概念约束的关键资源，定位产业链瓶颈。',
   },
   {
-    key: 'facts', step: 4, label: '事实溯源', icon: Filter,
+    key: 'demand', step: 4, label: '传导链路', icon: GitBranch,
+    desc: '输入一个需求概念（如 AI Training、电动车），顺藤摸瓜追溯到产品、供应商与瓶颈资源。',
+  },
+  {
+    key: 'facts', step: 5, label: '事实溯源', icon: Filter,
     desc: '逐条审阅抽取的事实三元组，核对置信度与原文出处。',
   },
 ]
+
+// 把时间范围选项换算为 since 日期（ISO，YYYY-MM-DD）；'all' 返回 undefined。
+function sinceFromRange(range: 'all' | '3m' | '1y' | '2y'): string | undefined {
+  if (range === 'all') return undefined
+  const d = new Date()
+  if (range === '3m') d.setMonth(d.getMonth() - 3)
+  else if (range === '1y') d.setFullYear(d.getFullYear() - 1)
+  else d.setFullYear(d.getFullYear() - 2)
+  return d.toISOString().slice(0, 10)
+}
 
 export default function SupplyChainPage() {
   const [activeTab, setActiveTab] = useState<Tab>('graph')
@@ -66,6 +83,7 @@ export default function SupplyChainPage() {
   const [filterRelations, setFilterRelations] = useState<Set<RelationType>>(new Set())
   const [filterTicker, setFilterTicker] = useState('')
   const [minConfidence, setMinConfidence] = useState(0)
+  const [timeRange, setTimeRange] = useState<'all' | '3m' | '1y' | '2y'>('all')
 
   const [loading, setLoading] = useState(false)
   const [loadingBn, setLoadingBn] = useState(false)
@@ -81,6 +99,7 @@ export default function SupplyChainPage() {
         relation_types: filterRelations.size > 0 ? [...filterRelations].join(',') : undefined,
         ticker: filterTicker || undefined,
         min_confidence: minConfidence,
+        since: sinceFromRange(timeRange),
         limit: 300,
       })
       setGraphData(data)
@@ -89,7 +108,7 @@ export default function SupplyChainPage() {
     } finally {
       setLoading(false)
     }
-  }, [filterTypes, filterRelations, filterTicker, minConfidence])
+  }, [filterTypes, filterRelations, filterTicker, minConfidence, timeRange])
 
   const fetchStats = useCallback(async () => {
     try {
@@ -164,7 +183,9 @@ export default function SupplyChainPage() {
             <Network className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">NVIDIA 产业因果图谱</h1>
+            <h1 className="text-xl font-bold text-gray-900">
+              {filterTicker ? `${filterTicker} 产业链图谱` : '产业因果图谱'}
+            </h1>
             <p className="text-xs text-gray-500">
               {stats ? `${stats.total_entities} 个实体 · ${stats.total_facts} 条事实` : '加载中…'}
             </p>
@@ -282,11 +303,36 @@ export default function SupplyChainPage() {
                 </div>
                 <input
                   type="text"
-                  placeholder="代码筛选 NVDA"
+                  placeholder="代码筛选（如 AAPL）"
                   value={filterTicker}
                   onChange={(e) => setFilterTicker(e.target.value.toUpperCase())}
-                  className="w-28 text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-32 text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
+                {/* 时间范围（按事实发生时间） */}
+                <select
+                  value={timeRange}
+                  onChange={(e) => setTimeRange(e.target.value as 'all' | '3m' | '1y' | '2y')}
+                  className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="all">全部时间</option>
+                  <option value="3m">近 3 个月</option>
+                  <option value="1y">近 1 年</option>
+                  <option value="2y">近 2 年</option>
+                </select>
+                {/* 置信度下限 */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-gray-500">置信度≥</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={minConfidence}
+                    onChange={(e) => setMinConfidence(Number(e.target.value))}
+                    className="w-20 accent-blue-600"
+                  />
+                  <span className="text-xs text-gray-600 w-8">{Math.round(minConfidence * 100)}%</span>
+                </div>
                 <button
                   onClick={fetchGraph}
                   disabled={loading}
@@ -461,30 +507,35 @@ export default function SupplyChainPage() {
       )}
 
       {activeTab === 'ingest' && (
-        <div className="max-w-xl">
+        <div className="max-w-2xl space-y-4">
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <div className="flex items-center gap-2 mb-4">
               <BookOpen className="w-4 h-4 text-blue-600" />
               <h2 className="text-sm font-semibold text-gray-800">提交新文档</h2>
             </div>
             <p className="text-xs text-gray-500 mb-4">
-              提交 SEC EDGAR 文档或电话会议记录 URL，系统将自动抓取、切片，并通过 LLM 抽取供应链事实三元组。
+              输入<strong>任意公司</strong>的 SEC 文件、电话会议记录 URL 或文本，系统将自动抓取、切片，
+              并通过 LLM 抽取产业链事实三元组。支持半导体、汽车、医药、能源等各行业。
             </p>
             <IngestPanel onSuccess={() => { fetchGraph(); fetchStats() }} />
           </div>
 
-          <div className="mt-4 bg-blue-50 rounded-xl border border-blue-100 p-4">
-            <p className="text-xs font-semibold text-blue-800 mb-2">优先摄取建议</p>
+          {/* 文档处理状态 — 让用户确认摄取是否成功、抽到多少事实 */}
+          <DocStatusList />
+
+          <div className="bg-blue-50 rounded-xl border border-blue-100 p-4">
+            <p className="text-xs font-semibold text-blue-800 mb-2">摄取建议（任选行业）</p>
             <div className="space-y-1.5 text-xs text-blue-700">
-              <p>• NVIDIA 10-K / 10-Q — 供需紧张、产品路线图、竞争风险</p>
-              <p>• TSMC 电话会议 — CoWoS 产能、HBM 供应节奏</p>
-              <p>• SK Hynix / Micron 10-K — HBM3E 技术成熟度</p>
-              <p>• Microsoft / Meta 8-K — 数据中心资本支出、AI 需求信号</p>
-              <p>• Vertiv 投资者日资料 — 电力基础设施约束</p>
+              <p>• 龙头公司 10-K「Risk Factors / Business」— 供需、产品线、竞争与瓶颈</p>
+              <p>• 季度电话会议记录 — 管理层对产能、需求、供应节奏的最新口径</p>
+              <p>• 关键供应商 / 客户文件 — 补全上下游链路</p>
+              <p>• 例：AAPL、TSLA、PFE、CATL、NVDA …各行业均可</p>
             </div>
           </div>
         </div>
       )}
+
+      {activeTab === 'demand' && <DemandChainPanel onGoIngest={() => setActiveTab('ingest')} />}
 
       {activeTab === 'facts' && (
         <FactsTable />
@@ -600,6 +651,197 @@ function FactsTable() {
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
+
+// ── 文档处理状态列表（P1：摄取反馈闭环）─────────────────
+const DOC_STATUS_META: Record<string, { label: string; cls: string }> = {
+  pending: { label: '排队中', cls: 'bg-gray-100 text-gray-600' },
+  processing: { label: '处理中', cls: 'bg-blue-100 text-blue-700' },
+  done: { label: '完成', cls: 'bg-green-100 text-green-700' },
+  failed: { label: '失败', cls: 'bg-red-100 text-red-700' },
+}
+
+function DocStatusList() {
+  const [docs, setDocs] = useState<SourceDoc[]>([])
+  const [loading, setLoading] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      setDocs(await supplyChainApi.getDocuments({ limit: 20 }))
+    } catch {
+      /* ignore */
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  // 有排队 / 处理中的文档时自动轮询，直到全部完成或失败
+  useEffect(() => {
+    const active = docs.some((d) => d.status === 'pending' || d.status === 'processing')
+    if (!active) return
+    const id = setInterval(load, 5000)
+    return () => clearInterval(id)
+  }, [docs, load])
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-gray-800">摄取记录与状态</h3>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50"
+        >
+          <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+          刷新
+        </button>
+      </div>
+
+      {docs.length === 0 ? (
+        <p className="text-xs text-gray-400 py-4 text-center">
+          还没有摄取记录。提交文档后，这里会显示处理进度与抽取到的事实数。
+        </p>
+      ) : (
+        <div className="space-y-1.5">
+          {docs.map((d) => {
+            const meta = DOC_STATUS_META[d.status] ?? DOC_STATUS_META.pending
+            return (
+              <div key={d.id} className="flex items-center gap-2 text-xs border border-gray-100 rounded-lg px-2.5 py-2">
+                <span className={`flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded font-medium ${meta.cls}`}>
+                  {d.status === 'processing' && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
+                  {meta.label}
+                </span>
+                <span className="flex-1 truncate text-gray-700">
+                  {d.ticker && <span className="font-medium">{d.ticker} · </span>}
+                  {d.document_type}
+                </span>
+                <span className="flex-shrink-0 text-gray-400">
+                  {d.status === 'done' ? `${d.fact_count} 条事实` : d.status === 'failed' ? '可重试' : `${d.chunk_count} 切片`}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── 需求传导链路（P2：把后端 demand-chain 分析暴露到前端）──────
+const DEMAND_EXAMPLES = ['AI Training', 'AI Inference', 'Generative AI', 'Data Center']
+
+function ChainColumn({ title, color, entities, empty }: { title: string; color: string; entities: Entity[]; empty: string }) {
+  return (
+    <div className="flex-1 min-w-[150px]">
+      <p className="text-xs font-semibold mb-2" style={{ color }}>{title}</p>
+      <div className="space-y-1.5">
+        {entities.length === 0 ? (
+          <p className="text-xs text-gray-300">{empty}</p>
+        ) : entities.map((e) => (
+          <div key={e.id} className="bg-white border border-gray-200 rounded-lg px-2 py-1.5">
+            <p className="text-xs font-medium text-gray-800 truncate">{e.name}</p>
+            <EntityTypeBadge type={e.entity_type} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function DemandChainPanel({ onGoIngest }: { onGoIngest: () => void }) {
+  const [concept, setConcept] = useState('')
+  const [chain, setChain] = useState<DemandChain | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [notFound, setNotFound] = useState(false)
+
+  const run = useCallback(async (q: string) => {
+    const query = q.trim()
+    if (!query) return
+    setLoading(true)
+    setNotFound(false)
+    setChain(null)
+    try {
+      const data = await supplyChainApi.getDemandChain(query)
+      setChain(data)
+    } catch {
+      setNotFound(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <input
+              type="text"
+              value={concept}
+              onChange={(e) => setConcept(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') run(concept) }}
+              placeholder="输入需求概念，如 AI Training、电动车、减肥药…"
+              className="w-full text-sm border border-gray-200 rounded-lg pl-8 pr-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <button
+            onClick={() => run(concept)}
+            disabled={loading || !concept.trim()}
+            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitBranch className="w-4 h-4" />}
+            追溯链路
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          <span className="text-xs text-gray-400">试试：</span>
+          {DEMAND_EXAMPLES.map((ex) => (
+            <button
+              key={ex}
+              onClick={() => { setConcept(ex); run(ex) }}
+              className="text-xs px-2 py-0.5 bg-gray-50 text-gray-600 border border-gray-200 rounded hover:border-blue-300"
+            >
+              {ex}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {notFound && (
+        <div className="flex flex-col items-center gap-3 py-12 text-center">
+          <p className="text-sm text-gray-400">未找到该需求概念，或图谱中暂无相关数据</p>
+          <button
+            onClick={onGoIngest}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            前往第一步 · 摄取数据
+          </button>
+        </div>
+      )}
+
+      {chain && (
+        <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-sm font-semibold text-gray-900">{chain.concept.name}</span>
+            <EntityTypeBadge type={chain.concept.entity_type} />
+            <span className="text-xs text-gray-400">的需求传导链路</span>
+          </div>
+          <div className="flex items-start gap-2 overflow-x-auto pb-2">
+            <ChainColumn title="① 依赖产品 / 技术" color="#10B981" entities={chain.enabled_products} empty="无" />
+            <ArrowRight className="w-4 h-4 text-gray-300 flex-shrink-0 mt-7" />
+            <ChainColumn title="② 供应商" color="#3B82F6" entities={chain.supplier_companies} empty="无" />
+            <ArrowRight className="w-4 h-4 text-gray-300 flex-shrink-0 mt-7" />
+            <ChainColumn title="③ 瓶颈资源" color="#EF4444" entities={chain.constrained_resources} empty="无" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

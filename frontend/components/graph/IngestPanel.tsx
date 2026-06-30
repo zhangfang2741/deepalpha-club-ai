@@ -16,7 +16,8 @@ const DOC_TYPES: { value: DocumentType; label: string }[] = [
   { value: 'investor_relations', label: '投资者关系资料' },
 ]
 
-const QUICK_TICKERS = ['NVDA', 'TSMC', 'MU', 'MSFT', 'META', 'VRT', 'AVGO', 'AMD']
+// 覆盖多行业的常用代码，便于快速选择（也可手动输入任意代码）
+const QUICK_TICKERS = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'TSM', 'PFE', 'XOM', 'CAT']
 
 interface Result {
   success: boolean

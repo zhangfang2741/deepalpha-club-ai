@@ -3,7 +3,8 @@
 import uuid
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
+from sqlalchemy import select as sa_select
 from sqlmodel import Session, select
 
 from app.core.logging import logger
@@ -23,13 +24,28 @@ from app.schemas.supply_chain import (
 
 def get_graph_data(session: Session, params: GraphQueryParams) -> GraphData:
     """获取图谱可视化数据（节点 + 边），支持多维过滤。"""
+    # 实体连接度子查询：被多少条事实引用（作为来源或目标）。
+    # 按连接度降序取 Top-N，避免数据量大时展示任意子集导致图谱碎片化。
+    degree_subq = (
+        sa_select(func.count())
+        .select_from(GraphFact)
+        .where(
+            or_(
+                GraphFact.source_entity_id == GraphEntity.id,
+                GraphFact.target_entity_id == GraphEntity.id,
+            )
+        )
+        .correlate(GraphEntity)
+        .scalar_subquery()
+    )
+
     # 构建实体查询
     entity_stmt = select(GraphEntity)
     if params.entity_types:
         entity_stmt = entity_stmt.where(GraphEntity.entity_type.in_(params.entity_types))
     if params.ticker:
         entity_stmt = entity_stmt.where(GraphEntity.ticker == params.ticker.upper())
-    entity_stmt = entity_stmt.limit(params.limit)
+    entity_stmt = entity_stmt.order_by(degree_subq.desc(), GraphEntity.name).limit(params.limit)
 
     entities = session.exec(entity_stmt).all()
     entity_ids = {e.id for e in entities}
@@ -42,6 +58,11 @@ def get_graph_data(session: Session, params: GraphQueryParams) -> GraphData:
     )
     if params.relation_types:
         fact_stmt = fact_stmt.where(GraphFact.relation_type.in_(params.relation_types))
+    # 时间筛选：保留结构性事实（无 event_time）与不早于 since 的有时事实
+    if params.since:
+        fact_stmt = fact_stmt.where(
+            or_(GraphFact.event_time.is_(None), GraphFact.event_time >= params.since)
+        )
     fact_stmt = fact_stmt.limit(params.limit * 5)
 
     facts = session.exec(fact_stmt).all()
@@ -224,12 +245,12 @@ def get_demand_chain(session: Session, concept_name: str) -> Optional[DemandChai
 
     suppliers = [session.get(GraphEntity, sid) for sid in supplier_ids if session.get(GraphEntity, sid)]
 
-    # 瓶颈：CONSTRAINED_BY
+    # 瓶颈：CONSTRAINED_BY —— 同时考虑概念自身与其依赖产品/技术的约束
     constrained_ids: set[uuid.UUID] = set()
-    for prod in enabled_products:
+    for source_id in [concept.id, *(p.id for p in enabled_products)]:
         constraint_facts = session.exec(
             select(GraphFact).where(
-                GraphFact.source_entity_id == prod.id,
+                GraphFact.source_entity_id == source_id,
                 GraphFact.relation_type == RelationType.CONSTRAINED_BY,
             )
         ).all()
