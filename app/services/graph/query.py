@@ -171,6 +171,39 @@ def get_entity_facts(
     return results
 
 
+# 实体类型的中文称谓（用于瓶颈中文描述）
+_ENTITY_TYPE_CN: dict[EntityType, str] = {
+    EntityType.COMPANY: "公司",
+    EntityType.PRODUCT: "产品",
+    EntityType.TECHNOLOGY: "技术",
+    EntityType.CONCEPT: "概念",
+    EntityType.RESOURCE: "资源",
+}
+
+
+def _build_bottleneck_description(
+    resource_name: str,
+    resource_type: EntityType,
+    count: int,
+    entity_names: list[str],
+) -> str:
+    """生成瓶颈的中文解读：严重程度 + 主要受制方。"""
+    if count >= 3:
+        severity = "高度集中的核心瓶颈"
+    elif count == 2:
+        severity = "较重要的瓶颈"
+    else:
+        severity = "潜在瓶颈"
+
+    type_cn = _ENTITY_TYPE_CN.get(resource_type, "资源")
+    shown = "、".join(entity_names[:5])
+    suffix = " 等" if len(entity_names) > 5 else ""
+    return (
+        f"「{resource_name}」（{type_cn}）被 {count} 个产品 / 概念约束，"
+        f"属于{severity}。主要受制方：{shown}{suffix}。"
+    )
+
+
 def get_bottleneck_report(session: Session) -> list[BottleneckReport]:
     """识别产业瓶颈：统计被 CONSTRAINED_BY 指向的 Resource/Technology 实体及约束计数。"""
     constrained_facts = session.exec(
@@ -196,12 +229,16 @@ def get_bottleneck_report(session: Session) -> list[BottleneckReport]:
             if session.get(GraphEntity, eid)
         ]
 
+        entity_names = [e.name for e in constrained_entities]
         reports.append(BottleneckReport(
             resource_name=resource.name,
             resource_type=resource.entity_type,
             constrained_count=len(constrained_ids),
             constrained_entities=constrained_entities,
             evidence_samples=[f.evidence_text[:200] for f in facts[:3]],
+            description=_build_bottleneck_description(
+                resource.name, resource.entity_type, len(constrained_ids), entity_names
+            ),
         ))
 
     return reports

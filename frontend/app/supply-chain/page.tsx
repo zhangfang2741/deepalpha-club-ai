@@ -450,7 +450,7 @@ export default function SupplyChainPage() {
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-red-500" />
-            <p className="text-sm font-medium text-gray-700">识别产业瓶颈 — 被多个产品/概念 CONSTRAINED_BY 的资源或技术</p>
+            <p className="text-sm font-medium text-gray-700">识别产业瓶颈 — 被多个产品 / 概念约束（受限于）的关键资源或技术</p>
           </div>
 
           {loadingBn ? (
@@ -482,6 +482,13 @@ export default function SupplyChainPage() {
                       <p className="text-xs text-gray-400">受约束实体</p>
                     </div>
                   </div>
+                  {/* 中文解读 */}
+                  {bn.description && (
+                    <p className="text-xs text-gray-700 leading-relaxed bg-red-50 rounded-lg px-2.5 py-2 mb-3">
+                      {bn.description}
+                    </p>
+                  )}
+
                   <div className="flex flex-wrap gap-1 mb-3">
                     {bn.constrained_entities.slice(0, 5).map((e) => (
                       <span key={e.id} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
@@ -492,13 +499,16 @@ export default function SupplyChainPage() {
                       <span className="text-xs text-gray-400">+{bn.constrained_entities.length - 5}</span>
                     )}
                   </div>
-                  <div className="space-y-1.5">
-                    {bn.evidence_samples.map((ev, i) => (
-                      <p key={i} className="text-xs text-gray-500 bg-gray-50 rounded px-2 py-1.5 line-clamp-2">
-                        "{ev}"
-                      </p>
-                    ))}
-                  </div>
+                  {bn.evidence_samples.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] font-medium text-gray-400">原文证据</p>
+                      {bn.evidence_samples.map((ev, i) => (
+                        <p key={i} className="text-xs text-gray-500 bg-gray-50 rounded px-2 py-1.5 line-clamp-2">
+                          "{ev}"
+                        </p>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

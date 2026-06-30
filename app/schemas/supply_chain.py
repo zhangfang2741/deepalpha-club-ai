@@ -175,6 +175,7 @@ class BottleneckReport(BaseModel):
     constrained_count: int  # 受约束的实体数量
     constrained_entities: list[EntityOut]
     evidence_samples: list[str]
+    description: str = ""  # 中文解读（严重程度 + 受制方）
 
 
 class DemandChain(BaseModel):

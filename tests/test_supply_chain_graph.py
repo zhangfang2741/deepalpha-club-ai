@@ -788,3 +788,35 @@ class TestDemandChain:
             assert chain is not None
             constrained_names = {e.name for e in chain.constrained_resources}
             assert "Power Capacity" in constrained_names
+
+
+class TestBottleneckDescription:
+    def test_chinese_description_generated(self):
+        from app.models.graph_entity import EntityType, GraphEntity
+        from app.models.graph_fact import GraphFact, RelationType
+        from app.services.graph.query import get_bottleneck_report
+
+        with _isolated_session() as s:
+            power = GraphEntity(entity_type=EntityType.RESOURCE, name="Power Capacity")
+            p1 = GraphEntity(entity_type=EntityType.CONCEPT, name="AI Training")
+            p2 = GraphEntity(entity_type=EntityType.CONCEPT, name="AI Inference")
+            p3 = GraphEntity(entity_type=EntityType.CONCEPT, name="Data Center")
+            s.add_all([power, p1, p2, p3])
+            s.commit()
+            for e in (power, p1, p2, p3):
+                s.refresh(e)
+
+            s.add_all([
+                GraphFact(source_entity_id=p.id, target_entity_id=power.id,
+                          relation_type=RelationType.CONSTRAINED_BY, evidence_text="e", confidence=0.9)
+                for p in (p1, p2, p3)
+            ])
+            s.commit()
+
+            reports = get_bottleneck_report(s)
+            assert len(reports) == 1
+            desc = reports[0].description
+            assert "Power Capacity" in desc
+            assert "核心瓶颈" in desc          # 3 个约束 → 高度集中的核心瓶颈
+            assert "资源" in desc              # 类型中文称谓
+            assert "AI Training" in desc       # 受制方

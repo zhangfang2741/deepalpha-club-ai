@@ -66,6 +66,7 @@ export interface BottleneckReport {
   constrained_count: number
   constrained_entities: Entity[]
   evidence_samples: string[]
+  description: string
 }
 
 export interface DemandChain {
