@@ -13,6 +13,16 @@ from app.services.chan.stroke import Stroke, find_strokes
 
 
 @dataclass
+class Recommendation:
+    """当前操作建议（综合趋势 / 信号 / 背驰 / 中枢位置 / 线段方向）"""
+    action: str          # buy / sell / hold_bullish / hold_bearish / watch
+    action_label: str    # 中文操作标签
+    bias: str            # bullish / bearish / neutral
+    reasons: list[str] = field(default_factory=list)   # 依据（为什么这样建议）
+    caveats: list[str] = field(default_factory=list)   # 风险提示
+
+
+@dataclass
 class ChanAnalysisResult:
     """缠论完整分析结果"""
     symbol: str
@@ -33,6 +43,7 @@ class ChanAnalysisResult:
     current_trend: str = ""
     latest_signal: Signal | None = None
     summary: str = ""
+    recommendation: Recommendation | None = None
 
     @property
     def buy_signals(self) -> list[Signal]:
@@ -120,6 +131,7 @@ class ChanAnalyzer:
         result.current_trend = self._infer_trend_from_strokes(result.strokes)
         result.latest_signal = result.signals[-1] if result.signals else None
         result.summary = self._build_summary(result)
+        result.recommendation = self._build_recommendation(result)
 
         logger.info(
             "chan_analysis_complete",
@@ -137,6 +149,80 @@ class ChanAnalyzer:
         if last.direction == "up":
             return "当前处于上升笔末端"
         return "当前处于下降笔末端"
+
+    def _build_recommendation(self, r: ChanAnalysisResult) -> Recommendation:
+        """综合缠论各维度，给出当前操作建议及依据。
+
+        判断顺序：近期买卖点信号优先；无新鲜信号时看趋势 + 背驰；
+        再以中枢位置、线段方向补充佐证。
+        """
+        reasons: list[str] = []
+        caveats: list[str] = []
+
+        # 最近一个背驰及方向：上升笔背驰=顶背驰，下降笔背驰=底背驰
+        recent_div_dir: str | None = None
+        for st, dv in zip(r.strokes, r.divergences, strict=False):
+            if dv.is_diverged:
+                recent_div_dir = st.direction
+
+        # 信号新鲜度：落在最近两笔区间内的信号才视为当前有效
+        fresh_cutoff = r.strokes[-2].start_time if len(r.strokes) >= 2 else ""
+        latest = r.latest_signal
+        signal_fresh = bool(latest and latest.time >= fresh_cutoff)
+
+        last_price = r.merged_candles[-1].close if r.merged_candles else 0.0
+        trend = r.current_trend
+
+        if signal_fresh and latest is not None:
+            if latest.is_buy:
+                action, label, bias = "buy", "技术面偏多，可关注买入机会", "bullish"
+            else:
+                action, label, bias = "sell", "技术面偏空，可关注卖出/减仓", "bearish"
+            reasons.append(
+                f"最近触发{latest.label}（{latest.strength}强度，{latest.time}）：{latest.description}"
+            )
+        elif "上升笔" in trend:
+            if recent_div_dir == "up":
+                action, label, bias = "hold_bearish", "上涨或近尾声，偏谨慎观望", "bearish"
+                reasons.append("当前处于上升笔末端，且最近出现顶背驰，上涨动能衰竭，警惕回调")
+            else:
+                action, label, bias = "hold_bullish", "趋势向上，持有观望", "bullish"
+                reasons.append("当前处于上升笔末端，暂无顶背驰，上升趋势延续中，留意是否见顶")
+        elif "下降笔" in trend:
+            if recent_div_dir == "down":
+                action, label, bias = "hold_bullish", "下跌或近尾声，关注反弹", "bullish"
+                reasons.append("当前处于下降笔末端，且最近出现底背驰，下跌动能衰竭，可能反弹")
+            else:
+                action, label, bias = "hold_bearish", "趋势向下，谨慎观望", "bearish"
+                reasons.append("当前处于下降笔末端，暂无底背驰，下跌可能延续")
+        else:
+            action, label, bias = "watch", "结构不明，建议观望", "neutral"
+            reasons.append("当前走势结构尚不明确，建议观望等待明确信号")
+
+        # 当前价相对最近中枢的位置
+        if r.stroke_pivots:
+            p = r.stroke_pivots[-1]
+            if last_price > p.zg:
+                reasons.append(f"当前价 {last_price:.2f} 站上最近中枢上沿 ZG（{p.zg:.2f}），多头占优")
+            elif last_price < p.zd:
+                reasons.append(f"当前价 {last_price:.2f} 跌破最近中枢下沿 ZD（{p.zd:.2f}），空头占优")
+            else:
+                reasons.append(
+                    f"当前价 {last_price:.2f} 仍在最近中枢（{p.zd:.2f}–{p.zg:.2f}）内，多空交战、方向待选"
+                )
+
+        # 最近线段方向佐证大级别趋势
+        if r.segments:
+            seg = r.segments[-1]
+            reasons.append(
+                f"最近线段方向{'向上' if seg.direction == 'up' else '向下'}，"
+                f"大级别趋势{'偏多' if seg.direction == 'up' else '偏空'}"
+            )
+
+        caveats.append("缠论分型 / 笔需后续K线确认，信号存在滞后性")
+        caveats.append("本建议为技术面参考，不构成投资建议，请结合基本面与风险自行决策")
+
+        return Recommendation(action=action, action_label=label, bias=bias, reasons=reasons, caveats=caveats)
 
     def _build_summary(self, r: ChanAnalysisResult) -> str:
         parts = [

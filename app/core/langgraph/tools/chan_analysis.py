@@ -94,4 +94,14 @@ async def chan_analysis_tool(
         lines.append(f"\n**最新信号**：{s.label}（{s.strength}强度），{s.time}，价格 {s.price:.2f}")
         lines.append(f"> {s.description}")
 
+    if result.recommendation:
+        rec = result.recommendation
+        lines.append("")
+        lines.append("### 当前操作建议")
+        lines.append(f"**{rec.action_label}**")
+        for reason in rec.reasons:
+            lines.append(f"- {reason}")
+        if rec.caveats:
+            lines.append(f"\n> {'；'.join(rec.caveats)}")
+
     return "\n".join(lines)

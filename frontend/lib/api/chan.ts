@@ -65,6 +65,14 @@ export interface Signal {
   area_ratio: number | null
 }
 
+export interface Recommendation {
+  action: string
+  action_label: string
+  bias: 'bullish' | 'bearish' | 'neutral'
+  reasons: string[]
+  caveats: string[]
+}
+
 export interface ChanAnalysisResult {
   symbol: string
   bars_count: number
@@ -78,6 +86,7 @@ export interface ChanAnalysisResult {
   signals: Signal[]
   current_trend: string
   summary: string
+  recommendation: Recommendation | null
 }
 
 export async function fetchChanAnalysis(
