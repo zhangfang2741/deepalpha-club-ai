@@ -69,7 +69,7 @@ export default function ChanPage() {
 
   return (
     <DashboardShell>
-      <div className="flex flex-col h-full gap-4">
+      <div className="flex flex-col gap-4 lg:h-full">
         {/* 标题 + 控制栏 */}
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-bold text-slate-100">缠论技术分析</h1>
@@ -108,13 +108,13 @@ export default function ChanPage() {
           <button
             onClick={handleAnalyze}
             disabled={loading}
-            className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-400 text-white text-sm font-semibold transition-colors"
+            className="w-full sm:w-auto px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-400 text-white text-sm font-semibold transition-colors"
           >
             {loading ? '分析中...' : '开始分析'}
           </button>
 
           {/* 显示开关 */}
-          <div className="flex items-center gap-3 ml-2 border-l border-slate-700 pl-3">
+          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto lg:ml-2 lg:border-l lg:border-slate-700 lg:pl-3">
             {[
               { key: 'strokes', label: '笔', value: showStrokes, set: setShowStrokes },
               { key: 'segments', label: '线段', value: showSegments, set: setShowSegments },
@@ -147,7 +147,7 @@ export default function ChanPage() {
 
         {/* 加载状态 */}
         {loading && (
-          <div className="flex-1 flex items-center justify-center text-slate-400">
+          <div className="flex-1 min-h-[50vh] flex items-center justify-center text-slate-400">
             <div className="flex flex-col items-center gap-3">
               <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
               <span className="text-sm">正在运行缠论分析，请稍候...</span>
@@ -157,7 +157,7 @@ export default function ChanPage() {
 
         {/* 初始状态 */}
         {!loading && !result && !error && (
-          <div className="flex-1 flex items-center justify-center text-slate-500">
+          <div className="flex-1 min-h-[50vh] flex items-center justify-center text-slate-500">
             <div className="text-center">
               <div className="text-4xl mb-3">📈</div>
               <p className="text-sm">输入股票代码，点击「开始分析」运行缠论</p>
@@ -166,11 +166,11 @@ export default function ChanPage() {
           </div>
         )}
 
-        {/* 主内容区 */}
+        {/* 主内容区：移动端纵向堆叠+整页滚动，lg 及以上固定填满两列 */}
         {!loading && result && (
-          <div className="flex-1 grid grid-cols-[1fr_320px] gap-4 min-h-0">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 lg:flex-1 lg:min-h-0">
             {/* 图表 */}
-            <div className="min-h-0 rounded-xl overflow-hidden bg-slate-900 border border-slate-800 p-3">
+            <div className="h-[70vh] lg:h-auto min-h-0 rounded-xl overflow-hidden bg-slate-900 border border-slate-800 p-3">
               <ChanChart
                 data={result}
                 showStrokes={showStrokes}
@@ -182,7 +182,7 @@ export default function ChanPage() {
             </div>
 
             {/* 信号面板 */}
-            <div className="min-h-0 rounded-xl bg-slate-900 border border-slate-800 p-3 overflow-y-auto">
+            <div className="min-h-0 rounded-xl bg-slate-900 border border-slate-800 p-3 lg:overflow-y-auto">
               <SignalPanel data={result} />
             </div>
           </div>

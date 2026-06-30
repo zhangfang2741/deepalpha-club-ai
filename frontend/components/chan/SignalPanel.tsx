@@ -100,7 +100,7 @@ export function SignalPanel({ data }: Props) {
   const sellCount = data.signals.filter((s) => !s.is_buy).length
 
   return (
-    <div className="flex flex-col gap-4 h-full overflow-y-auto">
+    <div className="flex flex-col gap-4 lg:h-full lg:overflow-y-auto">
       {/* 摘要统计 */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-slate-800/60 rounded-lg p-3">
