@@ -53,9 +53,9 @@ def calc_macd(bars: list[dict], fast: int = 12, slow: int = 26, signal: int = 9)
     ema_fast = calc_ema(closes, fast)
     ema_slow = calc_ema(closes, slow)
 
-    dif = [f - s for f, s in zip(ema_fast, ema_slow)]
+    dif = [f - s for f, s in zip(ema_fast, ema_slow, strict=False)]
     dea = calc_ema(dif, signal)
-    bar = [2 * (d - de) for d, de in zip(dif, dea)]
+    bar = [2 * (d - de) for d, de in zip(dif, dea, strict=False)]
 
     return MACDData(times=times, dif=dif, dea=dea, bar=bar)
 
