@@ -128,6 +128,27 @@ def _save_doc_sync(doc: SourceDocument) -> SourceDocument:
         return doc
 
 
+def _find_cached_done(cache_key: str) -> Optional[tuple[str, int]]:
+    """按 cache_key 查找已完成的文档，命中则返回 (doc_id, fact_count)。
+
+    用于缓存去重：同一份文档（相同 SEC 期次 / 电话会议季度 / URL）已摄取完成时，
+    跳过重复抓取与 LLM 抽取，直接复用结果。
+    """
+    from sqlmodel import select
+
+    with Session(sync_engine) as session:
+        existing = session.exec(
+            select(SourceDocument).where(
+                SourceDocument.cache_key == cache_key,
+                SourceDocument.status == DocumentStatus.DONE,
+            )
+        ).first()
+        if existing:
+            logger.info("ingest_cache_hit", cache_key=cache_key, doc_id=str(existing.id))
+            return str(existing.id), existing.fact_count
+    return None
+
+
 async def ingest_sec_filing(
     ticker: str,
     form_type: str,
@@ -159,6 +180,12 @@ async def ingest_sec_filing(
     filing_date_str = filing_info.get("filing_date", "")
     period_str = filing_info.get("period_of_report", "")
 
+    # 缓存去重：同一 ticker + 文件类型 + 期次已摄取完成则跳过 LLM 抽取
+    cache_key = f"sec:{ticker.upper()}:{form_type}:{period_str or filing_date_str}"
+    cached = _find_cached_done(cache_key)
+    if cached:
+        return cached[1], cached[0]
+
     try:
         filing_date = datetime.strptime(filing_date_str, "%Y-%m-%d") if filing_date_str else None
         period_date = datetime.strptime(period_str, "%Y-%m-%d") if period_str else None
@@ -174,6 +201,7 @@ async def ingest_sec_filing(
         period_of_report=period_date,
         section=section,
         title=f"{ticker} {form_type} {period_str}",
+        cache_key=cache_key,
     )
     doc = _save_doc_sync(doc)
     count = await run_ingest_pipeline(doc, llm_client, raw_text=text)
@@ -192,6 +220,12 @@ async def ingest_earnings_call(
         (存储事实条数, doc_id 字符串) 或 (0, None)
     """
     from app.services.graph.fmp_fetcher import fmp_transcript_fetcher
+
+    # 缓存去重：该季度电话会议已摄取完成则直接跳过下载与抽取
+    cache_key = f"ec:{ticker.upper()}:{year}:{quarter}"
+    cached = _find_cached_done(cache_key)
+    if cached:
+        return cached[1], cached[0]
 
     text = await fmp_transcript_fetcher.get_transcript(ticker, year, quarter)
     if not text:
@@ -216,6 +250,7 @@ async def ingest_earnings_call(
             period_of_report=period_date,
             title=f"{ticker} Earnings Call {year} Q{quarter}",
             section="Full Transcript",
+            cache_key=cache_key,
         )
         doc = _save_doc_sync(doc)
         count = await run_ingest_pipeline(doc, llm_client, raw_text=text)
@@ -234,6 +269,7 @@ async def ingest_earnings_call(
         period_of_report=period_date,
         title=f"{ticker} Earnings Call {year} Q{quarter}",
         section="Full Transcript",
+        cache_key=cache_key,
     )
     doc = _save_doc_sync(doc)
     count = await run_ingest_pipeline(doc, llm_client, raw_text=text)
@@ -326,13 +362,18 @@ async def run_ingest_pipeline(
 
         total_stored = 0
         for i, chunk in enumerate(chunks):
-            if len(chunk.strip()) < 50:  # 跳过过短 chunk
-                continue
-            chunk_id = f"{doc_id}:chunk:{i}"
-            facts = await extract_facts_from_chunk(chunk, source_info, llm_client)
-            if facts:
-                stored = _store_facts_sync(doc, facts, chunk_id)
-                total_stored += stored
+            if len(chunk.strip()) >= 50:  # 过短 chunk 只更新进度、不抽取
+                chunk_id = f"{doc_id}:chunk:{i}"
+                facts = await extract_facts_from_chunk(chunk, source_info, llm_client)
+                if facts:
+                    stored = _store_facts_sync(doc, facts, chunk_id)
+                    total_stored += stored
+
+            # 更新进度（已处理切片数），供前端进度条展示
+            with Session(sync_engine, expire_on_commit=False) as session:
+                doc.processed_chunks = i + 1
+                session.add(doc)
+                session.commit()
 
         # 5. 更新状态为 done
         with Session(sync_engine, expire_on_commit=False) as session:

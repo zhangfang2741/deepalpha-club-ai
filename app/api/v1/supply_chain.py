@@ -71,6 +71,21 @@ async def ingest_document(
 
     文档状态从 pending → processing → done（或 failed）。
     """
+    # 缓存去重：同一 URL 已摄取完成则直接返回缓存结果，不重复抓取/抽取
+    cache_key = f"url:{request.url}"
+    cached = session.exec(
+        select(SourceDocument).where(
+            SourceDocument.cache_key == cache_key,
+            SourceDocument.status == DocumentStatus.DONE,
+        )
+    ).first()
+    if cached:
+        return IngestDocumentResponse(
+            doc_id=cached.id,
+            status="cached",
+            message=f"该文档已摄取（{cached.fact_count} 条事实），返回缓存结果",
+        )
+
     doc = SourceDocument(
         url=request.url,
         document_type=request.document_type,
@@ -81,6 +96,7 @@ async def ingest_document(
         section=request.section,
         title=request.title,
         status=DocumentStatus.PENDING,
+        cache_key=cache_key,
     )
     session.add(doc)
     session.commit()
@@ -126,6 +142,7 @@ def list_documents(
             "company_name": d.company_name,
             "status": d.status.value,
             "chunk_count": d.chunk_count,
+            "processed_chunks": d.processed_chunks,
             "fact_count": d.fact_count,
             "created_at": d.created_at.isoformat(),
             "ingested_at": d.ingested_at.isoformat() if d.ingested_at else None,
@@ -218,13 +235,16 @@ def get_entity_facts_endpoint(
 def list_facts(
     relation_type: Optional[RelationType] = Query(default=None),
     min_confidence: float = Query(default=0.0, ge=0.0, le=1.0),
+    doc_id: Optional[uuid.UUID] = Query(default=None, description="按来源文档 ID 过滤"),
     limit: int = Query(default=100, ge=1, le=500),
     session: Session = Depends(get_sync_session),
 ):
-    """列出知识图谱中的事实关系，支持按类型和置信度过滤。"""
+    """列出知识图谱中的事实关系，支持按类型、置信度和来源文档过滤。"""
     stmt = select(GraphFact)
     if relation_type:
         stmt = stmt.where(GraphFact.relation_type == relation_type)
+    if doc_id:
+        stmt = stmt.where(GraphFact.source_doc_id == doc_id)
     if min_confidence > 0:
         stmt = stmt.where(GraphFact.confidence >= min_confidence)
     stmt = stmt.order_by(GraphFact.ingestion_time.desc()).limit(limit)
@@ -320,15 +340,24 @@ def get_graph(
     relation_types: Optional[str] = Query(default=None, description="逗号分隔的关系类型列表"),
     ticker: Optional[str] = Query(default=None),
     min_confidence: float = Query(default=0.0, ge=0.0, le=1.0),
+    since: Optional[str] = Query(default=None, description="仅含事实时间不早于此日期 YYYY-MM-DD"),
     limit: int = Query(default=200, ge=1, le=1000),
     session: Session = Depends(get_sync_session),
 ):
     """返回前端图谱可视化所需的节点与边数据。"""
+    since_dt = None
+    if since:
+        try:
+            since_dt = datetime.strptime(since, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=422, detail="since 日期格式应为 YYYY-MM-DD")
+
     params = GraphQueryParams(
         entity_types=[EntityType(t) for t in entity_types.split(",") if t] if entity_types else None,
         relation_types=[RelationType(r) for r in relation_types.split(",") if r] if relation_types else None,
         ticker=ticker,
         min_confidence=min_confidence,
+        since=since_dt,
         limit=limit,
     )
     return get_graph_data(session, params)

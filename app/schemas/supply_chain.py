@@ -163,6 +163,7 @@ class GraphQueryParams(BaseModel):
     relation_types: Optional[list[RelationType]] = None
     ticker: Optional[str] = None
     min_confidence: float = 0.0
+    since: Optional[datetime] = None  # 仅保留 event_time 不早于此时间的有时事实
     limit: int = Field(default=200, ge=1, le=1000)
 
 
@@ -174,6 +175,7 @@ class BottleneckReport(BaseModel):
     constrained_count: int  # 受约束的实体数量
     constrained_entities: list[EntityOut]
     evidence_samples: list[str]
+    description: str = ""  # 中文解读（严重程度 + 受制方）
 
 
 class DemandChain(BaseModel):

@@ -66,6 +66,14 @@ export interface BottleneckReport {
   constrained_count: number
   constrained_entities: Entity[]
   evidence_samples: string[]
+  description: string
+}
+
+export interface DemandChain {
+  concept: Entity
+  enabled_products: Entity[]
+  supplier_companies: Entity[]
+  constrained_resources: Entity[]
 }
 
 export interface GraphStats {
@@ -84,6 +92,7 @@ export interface SourceDoc {
   company_name: string | null
   status: DocumentStatus
   chunk_count: number
+  processed_chunks: number
   fact_count: number
   created_at: string
   ingested_at: string | null
@@ -118,6 +127,7 @@ export const supplyChainApi = {
     relation_types?: string
     ticker?: string
     min_confidence?: number
+    since?: string
     limit?: number
   }): Promise<GraphData> => {
     const { data } = await apiClient.get(`${BASE}/graph`, { params })
@@ -160,6 +170,7 @@ export const supplyChainApi = {
   getFacts: async (params?: {
     relation_type?: RelationType
     min_confidence?: number
+    doc_id?: string
     limit?: number
   }): Promise<Fact[]> => {
     const { data } = await apiClient.get(`${BASE}/facts`, { params })
@@ -185,7 +196,7 @@ export const supplyChainApi = {
     return data
   },
 
-  getDemandChain: async (concept: string) => {
+  getDemandChain: async (concept: string): Promise<DemandChain> => {
     const { data } = await apiClient.get(`${BASE}/analysis/demand-chain/${encodeURIComponent(concept)}`)
     return data
   },

@@ -14,41 +14,50 @@ from app.models.graph_entity import EntityType
 from app.models.graph_fact import RelationType
 from app.services.graph.normalizer import guess_entity_type, normalize_entity_name
 
-_SYSTEM_PROMPT = """You are a financial research assistant specialized in extracting structured supply chain facts from SEC filings and earnings call transcripts about the NVIDIA AI infrastructure ecosystem.
+_SYSTEM_PROMPT = """You are a financial research assistant that extracts structured supply chain and value chain facts from SEC filings, earnings call transcripts and investor materials. You work across ANY industry — semiconductors, automobiles, pharmaceuticals, energy, consumer goods, industrials, software, etc. Do NOT assume a particular company or sector.
 
-Extract relationship triples between entities. Focus ONLY on the NVIDIA supply chain ecosystem.
+Extract relationship triples between entities relevant to the company's or industry's value chain.
 
 ## Entity Types
-- Company: Organizations (e.g., NVIDIA, TSMC, Microsoft, SK Hynix, Meta, Vertiv, Broadcom)
-- Product: Specific products or product lines (e.g., H100, A100, HBM3, CoWoS packages, DGX systems)
-- Technology: Technical capabilities (e.g., CUDA, HBM, CoWoS, NVLink, Transformer Engine, InfiniBand)
-- Concept: Demand/market concepts (e.g., AI Training, AI Inference, Generative AI, Large Language Models)
-- Resource: Supply or constraint factors (e.g., Power Capacity, CoWoS Packaging Capacity, HBM Supply, Wafer Capacity)
+- Company: Organizations (suppliers, customers, competitors, partners — e.g., Apple, TSMC, Pfizer, CATL, Boeing, Ford)
+- Product: Specific products or product lines (e.g., iPhone, H100 GPU, Model Y, Ozempic, 737 MAX, LFP battery)
+- Technology: Technical capabilities or processes (e.g., EUV lithography, mRNA platform, CUDA, autonomous driving, 5G)
+- Concept: Demand/market concepts or end markets (e.g., AI Training, Electric Vehicles, GLP-1 weight loss, Cloud Computing, Renewable Energy)
+- Resource: Supply or constraint factors (e.g., Power Capacity, Lithium Supply, Advanced Packaging Capacity, Skilled Labor, Rare Earths)
 
 ## Relationship Types (choose EXACTLY one)
 - HAS_PRODUCT: Company → Product (company owns/defines/manufactures a product)
-- SUPPLIED_BY: Product/Technology/Resource → Company (company supplies or manufactures)
-- ENABLED_BY: Concept/Product → Technology/Resource (requires this capability or resource)
-- CONSTRAINED_BY: Product/Concept/System → Resource/Technology (bottleneck or limitation)
+- SUPPLIED_BY: Product/Technology/Resource → Company (component, material or capability supplied or manufactured by a company)
+- ENABLED_BY: Concept/Product → Technology/Resource (requires this capability or resource to exist)
+- CONSTRAINED_BY: Product/Concept/System → Resource/Technology (bottleneck or limitation that restricts supply/growth)
 
 ## Rules
 1. Extract ONLY facts explicitly stated or strongly implied in the text
 2. Each fact must include the exact evidence sentence from the text
 3. Assign confidence (0.0-1.0) based on how explicitly the fact is stated
 4. Extract event_time (YYYY-MM-DD or YYYY-QN format) only if the text mentions a specific time period
-5. Skip generic/vague statements; focus on concrete supply chain relationships
-6. Return empty facts array if no relevant facts found
+5. Skip generic/vague statements; focus on concrete supply chain / value chain relationships
+6. Use the canonical full name of each entity (e.g., "Taiwan Semiconductor" → "TSMC" if commonly known; otherwise the name as written)
+7. Return empty facts array if no relevant facts found
 
 ## Output Format
 Return ONLY valid JSON (no markdown, no explanation):
 {
   "facts": [
     {
-      "source_entity": {"name": "NVIDIA", "type": "Company"},
+      "source_entity": {"name": "Apple", "type": "Company"},
       "relation": "HAS_PRODUCT",
-      "target_entity": {"name": "H100", "type": "Product"},
-      "evidence": "NVIDIA's H100 Tensor Core GPU is the cornerstone of the company's data center business.",
+      "target_entity": {"name": "iPhone", "type": "Product"},
+      "evidence": "iPhone net sales were $200 billion, the company's largest product category.",
       "confidence": 0.95,
+      "event_time": null
+    },
+    {
+      "source_entity": {"name": "Electric Vehicles", "type": "Concept"},
+      "relation": "CONSTRAINED_BY",
+      "target_entity": {"name": "Lithium Supply", "type": "Resource"},
+      "evidence": "EV production growth remains constrained by tight global lithium supply.",
+      "confidence": 0.9,
       "event_time": null
     }
   ]
@@ -56,15 +65,17 @@ Return ONLY valid JSON (no markdown, no explanation):
 
 
 def _build_user_prompt(chunk_text: str, source_info: str) -> str:
-    """构建用户提示词。"""
-    return f"""Source: {source_info}
+    """构建用户提示词。source_info 携带公司/行业上下文，用于约束抽取焦点。"""
+    return f"""Source / focus: {source_info}
+
+Extract value chain facts centered on the company or industry described in the source above.
 
 Text chunk to analyze:
 ---
 {chunk_text}
 ---
 
-Extract supply chain facts from this text. Return JSON only."""
+Extract supply/value chain facts from this text. Return JSON only."""
 
 
 def _parse_llm_response(response_text: str) -> list[dict[str, Any]]:
