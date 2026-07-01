@@ -39,12 +39,38 @@ def get_graph_data(session: Session, params: GraphQueryParams) -> GraphData:
         .scalar_subquery()
     )
 
-    # 构建实体查询
-    entity_stmt = select(GraphEntity)
+    if params.ticker:
+        # 聚焦某公司：从该 ticker 的公司实体出发，沿事实展开 2 跳邻居，
+        # 得到「这家公司的产业链子图」，而不是只筛出带 ticker 的公司节点。
+        focus = session.exec(
+            select(GraphEntity).where(GraphEntity.ticker == params.ticker.upper())
+        ).all()
+        neighbor_ids: set[uuid.UUID] = {e.id for e in focus}
+        frontier = set(neighbor_ids)
+        for _ in range(2):  # 2 跳邻居
+            if not frontier:
+                break
+            rel_facts = session.exec(
+                select(GraphFact).where(
+                    or_(
+                        GraphFact.source_entity_id.in_(frontier),
+                        GraphFact.target_entity_id.in_(frontier),
+                    )
+                )
+            ).all()
+            reached: set[uuid.UUID] = set()
+            for f in rel_facts:
+                reached.add(f.source_entity_id)
+                reached.add(f.target_entity_id)
+            frontier = reached - neighbor_ids
+            neighbor_ids |= reached
+
+        entity_stmt = select(GraphEntity).where(GraphEntity.id.in_(neighbor_ids))
+    else:
+        entity_stmt = select(GraphEntity)
+
     if params.entity_types:
         entity_stmt = entity_stmt.where(GraphEntity.entity_type.in_(params.entity_types))
-    if params.ticker:
-        entity_stmt = entity_stmt.where(GraphEntity.ticker == params.ticker.upper())
     entity_stmt = entity_stmt.order_by(degree_subq.desc(), GraphEntity.name).limit(params.limit)
 
     entities = session.exec(entity_stmt).all()

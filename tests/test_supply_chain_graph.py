@@ -893,3 +893,36 @@ def test_find_cached_done(test_engine):
 
     assert hit == (did, 7)
     assert miss is None
+
+
+class TestTickerFocus:
+    def test_ticker_returns_2hop_neighborhood(self):
+        from app.models.graph_entity import EntityType, GraphEntity
+        from app.models.graph_fact import GraphFact, RelationType
+        from app.schemas.supply_chain import GraphQueryParams
+        from app.services.graph.query import get_graph_data
+
+        with _isolated_session() as s:
+            nv = GraphEntity(entity_type=EntityType.COMPANY, name="NVIDIA", ticker="NVDA")
+            prod = GraphEntity(entity_type=EntityType.PRODUCT, name="H100")
+            supplier = GraphEntity(entity_type=EntityType.COMPANY, name="TSMC", ticker="TSM")
+            unrelated = GraphEntity(entity_type=EntityType.COMPANY, name="Unrelated", ticker="ZZZZ")
+            s.add_all([nv, prod, supplier, unrelated])
+            s.commit()
+            for e in (nv, prod, supplier, unrelated):
+                s.refresh(e)
+
+            s.add_all([
+                GraphFact(source_entity_id=nv.id, target_entity_id=prod.id, relation_type=RelationType.HAS_PRODUCT,
+                          evidence_text="x", confidence=0.9),
+                GraphFact(source_entity_id=prod.id, target_entity_id=supplier.id, relation_type=RelationType.SUPPLIED_BY,
+                          evidence_text="y", confidence=0.9),
+            ])
+            s.commit()
+
+            data = get_graph_data(s, GraphQueryParams(ticker="NVDA", limit=50))
+            names = {n.name for n in data.nodes}
+            assert "NVIDIA" in names       # 聚焦公司
+            assert "H100" in names          # 1 跳
+            assert "TSMC" in names          # 2 跳
+            assert "Unrelated" not in names  # 无关实体排除
