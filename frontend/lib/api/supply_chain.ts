@@ -92,6 +92,7 @@ export interface SourceDoc {
   company_name: string | null
   status: DocumentStatus
   chunk_count: number
+  processed_chunks: number
   fact_count: number
   created_at: string
   ingested_at: string | null

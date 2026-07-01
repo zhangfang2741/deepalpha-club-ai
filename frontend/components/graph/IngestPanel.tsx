@@ -216,6 +216,7 @@ function BatchIngest({ onSuccess }: IngestPanelProps) {
   const [ecQuarters, setEcQuarters] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<BatchResult[]>([])
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
 
   // 支持逗号 / 空格 / 换行分隔，去重并大写
   const tickers = Array.from(
@@ -243,21 +244,37 @@ function BatchIngest({ onSuccess }: IngestPanelProps) {
 
   const tasks = buildTasks()
 
+  // 限流队列：并发上限 3，逐个完成时实时更新进度与结果
   const handleBatch = async () => {
-    if (tasks.length === 0) return
+    const queue = buildTasks()
+    if (queue.length === 0) return
     setLoading(true)
     setResults([])
-    const settled = await Promise.allSettled(tasks.map((t) => t.run()))
-    const next: BatchResult[] = settled.map((r, i) => ({
-      label: tasks[i].label,
-      success: r.status === 'fulfilled',
-      message: r.status === 'fulfilled'
-        ? (r.value.message ?? '已加入队列')
-        : (r.reason instanceof Error ? r.reason.message : '提交失败'),
-    }))
-    setResults(next)
+    setProgress({ done: 0, total: queue.length })
+
+    const CONCURRENCY = 3
+    const collected: BatchResult[] = []
+    let cursor = 0
+    let done = 0
+
+    const worker = async () => {
+      while (cursor < queue.length) {
+        const task = queue[cursor++]
+        try {
+          const res = await task.run()
+          collected.push({ label: task.label, success: true, message: res.message ?? '已加入队列' })
+        } catch (e) {
+          collected.push({ label: task.label, success: false, message: e instanceof Error ? e.message : '提交失败' })
+        }
+        done += 1
+        setProgress({ done, total: queue.length })
+        setResults([...collected])
+      }
+    }
+
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker))
     setLoading(false)
-    if (next.some((r) => r.success)) onSuccess?.()
+    if (collected.some((r) => r.success)) onSuccess?.()
   }
 
   const chipCls = (active: boolean) =>
@@ -320,7 +337,9 @@ function BatchIngest({ onSuccess }: IngestPanelProps) {
       </div>
 
       <div className="flex items-center justify-between pt-1">
-        <span className="text-xs text-gray-400">共 {tasks.length} 个摄取任务</span>
+        <span className="text-xs text-gray-400">
+          共 {tasks.length} 个摄取任务 · 并发上限 3
+        </span>
         <button
           onClick={handleBatch}
           disabled={loading || tasks.length === 0}
@@ -330,6 +349,22 @@ function BatchIngest({ onSuccess }: IngestPanelProps) {
           {loading ? '提交中…' : `批量摄取 (${tasks.length})`}
         </button>
       </div>
+
+      {/* 提交进度 */}
+      {progress && (
+        <div>
+          <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+            <span>已提交 {progress.done}/{progress.total}</span>
+            <span>{Math.round((progress.done / progress.total) * 100)}%</span>
+          </div>
+          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-blue-500 transition-all"
+              style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {results.length > 0 && (
         <div className="space-y-1 max-h-60 overflow-y-auto">

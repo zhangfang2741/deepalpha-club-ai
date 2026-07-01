@@ -848,3 +848,48 @@ class TestFactsDocFilter:
 
             res = list_facts(relation_type=None, min_confidence=0.0, doc_id=doc1, limit=100, session=s)
             assert {f.evidence_text for f in res} == {"from doc1"}
+
+
+@pytest.mark.asyncio
+async def test_pipeline_tracks_processed_chunks(test_engine):
+    """run_ingest_pipeline 完成后 processed_chunks 应等于 chunk_count（进度到 100%）。"""
+    from app.services.graph.pipeline import run_ingest_pipeline
+    from app.models.graph_source import DocumentType, SourceDocument
+
+    doc = SourceDocument(url="text://prog-test", document_type=DocumentType.EARNINGS_CALL, ticker="PROG")
+    with Session(test_engine) as s:
+        s.add(doc)
+        s.commit()
+        s.refresh(doc)
+
+    llm = _mock_llm(_MOCK_LLM_RESPONSE)
+    with patch("app.services.graph.pipeline.sync_engine", test_engine):
+        await run_ingest_pipeline(doc, llm, raw_text=_SAMPLE_TRANSCRIPT)
+
+    with Session(test_engine) as s:
+        updated = s.get(SourceDocument, doc.id)
+    assert updated.chunk_count > 0
+    assert updated.processed_chunks == updated.chunk_count
+
+
+def test_find_cached_done(test_engine):
+    """缓存去重：按 cache_key 命中已完成文档返回 (id, fact_count)，未命中返回 None。"""
+    from app.services.graph.pipeline import _find_cached_done
+    from app.models.graph_source import DocumentStatus, DocumentType, SourceDocument
+
+    doc = SourceDocument(
+        url="x://cache", document_type=DocumentType.EARNINGS_CALL, ticker="CACHE",
+        status=DocumentStatus.DONE, fact_count=7, cache_key="ec:CACHE:2024:1",
+    )
+    with Session(test_engine) as s:
+        s.add(doc)
+        s.commit()
+        s.refresh(doc)
+        did = str(doc.id)
+
+    with patch("app.services.graph.pipeline.sync_engine", test_engine):
+        hit = _find_cached_done("ec:CACHE:2024:1")
+        miss = _find_cached_done("ec:NOPE:2024:1")
+
+    assert hit == (did, 7)
+    assert miss is None

@@ -71,6 +71,21 @@ async def ingest_document(
 
     文档状态从 pending → processing → done（或 failed）。
     """
+    # 缓存去重：同一 URL 已摄取完成则直接返回缓存结果，不重复抓取/抽取
+    cache_key = f"url:{request.url}"
+    cached = session.exec(
+        select(SourceDocument).where(
+            SourceDocument.cache_key == cache_key,
+            SourceDocument.status == DocumentStatus.DONE,
+        )
+    ).first()
+    if cached:
+        return IngestDocumentResponse(
+            doc_id=cached.id,
+            status="cached",
+            message=f"该文档已摄取（{cached.fact_count} 条事实），返回缓存结果",
+        )
+
     doc = SourceDocument(
         url=request.url,
         document_type=request.document_type,
@@ -81,6 +96,7 @@ async def ingest_document(
         section=request.section,
         title=request.title,
         status=DocumentStatus.PENDING,
+        cache_key=cache_key,
     )
     session.add(doc)
     session.commit()
@@ -126,6 +142,7 @@ def list_documents(
             "company_name": d.company_name,
             "status": d.status.value,
             "chunk_count": d.chunk_count,
+            "processed_chunks": d.processed_chunks,
             "fact_count": d.fact_count,
             "created_at": d.created_at.isoformat(),
             "ingested_at": d.ingested_at.isoformat() if d.ingested_at else None,

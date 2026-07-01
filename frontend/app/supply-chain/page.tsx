@@ -761,9 +761,25 @@ function DocStatusList() {
                     {d.document_type}
                   </span>
                   <span className="flex-shrink-0 text-gray-400">
-                    {d.status === 'done' ? `${d.fact_count} 条原文` : d.status === 'failed' ? '可重试' : `${d.chunk_count} 切片`}
+                    {d.status === 'done'
+                      ? `${d.fact_count} 条原文`
+                      : d.status === 'failed'
+                        ? '可重试'
+                        : d.status === 'processing' && d.chunk_count > 0
+                          ? `${d.processed_chunks}/${d.chunk_count} 切片`
+                          : `${d.chunk_count} 切片`}
                   </span>
                 </button>
+
+                {/* 处理进度条 */}
+                {d.status === 'processing' && d.chunk_count > 0 && (
+                  <div className="h-1 bg-gray-100">
+                    <div
+                      className="h-full bg-blue-500 transition-all"
+                      style={{ width: `${Math.min(100, Math.round((d.processed_chunks / d.chunk_count) * 100))}%` }}
+                    />
+                  </div>
+                )}
 
                 {/* 展开：该文档抽取出的原句 */}
                 {expanded && (

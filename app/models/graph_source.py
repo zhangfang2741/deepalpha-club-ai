@@ -44,9 +44,13 @@ class SourceDocument(UUIDModel, table=True):
 
     # 处理进度
     chunk_count: int = Field(default=0)
+    processed_chunks: int = Field(default=0)  # 已处理切片数，用于进度展示
     fact_count: int = Field(default=0)
     status: DocumentStatus = Field(default=DocumentStatus.PENDING)
     error_message: Optional[str] = Field(default=None)
+
+    # 缓存去重键（deterministic）：命中已完成文档则跳过重复抓取/抽取
+    cache_key: Optional[str] = Field(default=None, index=True)
 
     # 摄取时间
     ingested_at: Optional[datetime] = Field(default=None)
