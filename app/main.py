@@ -40,6 +40,22 @@ load_dotenv()
 langfuse_init()
 
 
+def _run_migrations_sync() -> None:
+    """执行 alembic upgrade head（供 to_thread 调用）.
+
+    作为 Railway release 阶段迁移不可靠时的兜底，确保开始服务前数据库 schema
+    已升级到最新（避免代码已上线但缺列导致 500）。
+    """
+    from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config
+
+    ini_path = Path(__file__).resolve().parents[1] / "alembic.ini"
+    cfg = Config(str(ini_path))
+    command.upgrade(cfg, "head")
+
+
 def _seed_supply_chain_graph_sync() -> None:
     """在同步会话中注入产业图谱种子数据（空库时才写入，供 to_thread 调用）."""
     from sqlmodel import Session
@@ -60,6 +76,15 @@ async def lifespan(app: FastAPI):
         version=settings.VERSION,
         api_prefix=settings.API_V1_STR,
     )
+
+    # 最先执行数据库迁移：确保 schema 升到最新，避免代码已上线但缺列导致 500。
+    # 作为 Railway release 阶段迁移不可靠时的兜底，可用 RUN_DB_MIGRATIONS_ON_STARTUP=false 关闭。
+    if settings.RUN_DB_MIGRATIONS_ON_STARTUP:
+        try:
+            await asyncio.to_thread(_run_migrations_sync)
+            logger.info("db_migrations_applied")
+        except Exception as e:
+            logger.exception("db_migration_failed", error=str(e))
 
     # Initialize cache service (connects to Valkey if configured)
     try:

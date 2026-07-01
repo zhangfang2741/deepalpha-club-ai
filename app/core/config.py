@@ -136,6 +136,11 @@ class Settings:
             "SEED_SUPPLY_CHAIN_ON_STARTUP", "true"
         ).lower() in ("true", "1", "t", "yes")
 
+        # 启动时自动执行 alembic upgrade head（release 阶段迁移不可靠时的兜底）
+        self.RUN_DB_MIGRATIONS_ON_STARTUP = os.getenv(
+            "RUN_DB_MIGRATIONS_ON_STARTUP", "true"
+        ).lower() in ("true", "1", "t", "yes")
+
         # CORS Settings
         self.ALLOWED_ORIGINS = parse_list_from_env("ALLOWED_ORIGINS", ["*"])
 
