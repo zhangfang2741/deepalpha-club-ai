@@ -43,7 +43,7 @@ const STEPS: { key: Tab; step: number; label: string; icon: React.ElementType; d
   },
   {
     key: 'graph', step: 2, label: '因果图谱', icon: Network,
-    desc: '可视化实体与因果关系，点击节点或连线查看关联事实与原文证据；可按代码、置信度、时间筛选。',
+    desc: '默认展示第一步已摄取的全部数据；如需只看某家公司的产业链，在「聚焦公司」填代码即可。点击节点 / 连线查看原文证据。',
   },
   {
     key: 'bottleneck', step: 3, label: '瓶颈分析', icon: TrendingDown,
@@ -301,13 +301,16 @@ export default function SupplyChainPage() {
                     </button>
                   ))}
                 </div>
-                <input
-                  type="text"
-                  placeholder="代码筛选（如 AAPL）"
-                  value={filterTicker}
-                  onChange={(e) => setFilterTicker(e.target.value.toUpperCase())}
-                  className="w-32 text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-gray-500">聚焦公司</span>
+                  <input
+                    type="text"
+                    placeholder="留空看全部"
+                    value={filterTicker}
+                    onChange={(e) => setFilterTicker(e.target.value.toUpperCase())}
+                    className="w-28 text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
                 {/* 时间范围（按事实发生时间） */}
                 <select
                   value={timeRange}
@@ -733,7 +736,7 @@ function DocStatusList() {
 
       {docs.length === 0 ? (
         <p className="text-xs text-gray-400 py-4 text-center">
-          还没有摄取记录。提交文档后，这里会显示处理进度与抽取到的原文。
+          还没有摄取记录（内置演示数据不计入）。在上方提交文档后，这里会显示每份文档的处理进度、状态与抽取到的原文。
         </p>
       ) : (
         <div className="space-y-1.5">

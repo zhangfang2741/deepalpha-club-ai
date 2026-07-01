@@ -128,6 +128,30 @@ def _save_doc_sync(doc: SourceDocument) -> SourceDocument:
         return doc
 
 
+def _mark_doc_failed(doc_id, error_message: str) -> None:
+    """将文档标记为失败并记录原因（用于抓取失败时留痕，便于前端展示）。"""
+    from app.models.graph_source import SourceDocument
+
+    with Session(sync_engine, expire_on_commit=False) as session:
+        doc = session.get(SourceDocument, doc_id)
+        if doc:
+            doc.status = DocumentStatus.FAILED
+            doc.error_message = error_message[:500]
+            session.add(doc)
+            session.commit()
+
+
+def _delete_doc(doc_id) -> None:
+    """删除占位文档记录（用于缓存命中时清理重复任务）。"""
+    from app.models.graph_source import SourceDocument
+
+    with Session(sync_engine) as session:
+        doc = session.get(SourceDocument, doc_id)
+        if doc:
+            session.delete(doc)
+            session.commit()
+
+
 def _find_cached_done(cache_key: str) -> Optional[tuple[str, int]]:
     """按 cache_key 查找已完成的文档，命中则返回 (doc_id, fact_count)。
 
@@ -168,14 +192,33 @@ async def ingest_sec_filing(
     """
     from app.services.graph.sec_fetcher import sec_fetcher
 
-    text, filing_info = await sec_fetcher.fetch_latest_filing_text(
-        ticker=ticker,
-        form_type=form_type,
-        section_hint=section,
-    )
+    doc_type = DocumentType(form_type) if form_type in ("10-K", "10-Q", "8-K") else DocumentType.SEC_10K
+
+    # 先建一条 pending 记录，保证任务一提交就在「摄取记录」中可见（抓取失败也留痕）
+    doc = _save_doc_sync(SourceDocument(
+        url=f"sec-pending://{ticker.upper()}/{form_type}",
+        document_type=doc_type,
+        ticker=ticker.upper(),
+        section=section,
+        title=f"{ticker} {form_type}",
+        status=DocumentStatus.PROCESSING,
+    ))
+
+    try:
+        text, filing_info = await sec_fetcher.fetch_latest_filing_text(
+            ticker=ticker,
+            form_type=form_type,
+            section_hint=section,
+        )
+    except Exception as e:
+        logger.exception("sec_fetch_failed", ticker=ticker, form=form_type, error=str(e))
+        _mark_doc_failed(doc.id, f"抓取 SEC 文件失败：{e}")
+        return 0, str(doc.id)
+
     if not text:
         logger.warning("sec_filing_no_text", ticker=ticker, form=form_type)
-        return 0, None
+        _mark_doc_failed(doc.id, f"未获取到 {ticker} 的 {form_type} 文件文本（可能无网络访问 SEC 或该文件不存在）")
+        return 0, str(doc.id)
 
     filing_date_str = filing_info.get("filing_date", "")
     period_str = filing_info.get("period_of_report", "")
@@ -184,6 +227,7 @@ async def ingest_sec_filing(
     cache_key = f"sec:{ticker.upper()}:{form_type}:{period_str or filing_date_str}"
     cached = _find_cached_done(cache_key)
     if cached:
+        _delete_doc(doc.id)  # 命中缓存：删除占位记录，复用已有结果
         return cached[1], cached[0]
 
     try:
@@ -192,18 +236,13 @@ async def ingest_sec_filing(
     except ValueError:
         filing_date, period_date = None, None
 
-    doc = SourceDocument(
-        url=filing_info.get("doc_url", f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={ticker}"),
-        document_type=DocumentType(form_type) if form_type in ("10-K", "10-Q", "8-K") else DocumentType.SEC_10K,
-        ticker=ticker.upper(),
-        company_name=filing_info.get("entity_name"),
-        filing_date=filing_date,
-        period_of_report=period_date,
-        section=section,
-        title=f"{ticker} {form_type} {period_str}",
-        cache_key=cache_key,
-    )
-    doc = _save_doc_sync(doc)
+    # 用抓取到的真实元信息补全 pending 记录，再跑流水线
+    doc.url = filing_info.get("doc_url", f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={ticker}")
+    doc.company_name = filing_info.get("entity_name")
+    doc.filing_date = filing_date
+    doc.period_of_report = period_date
+    doc.title = f"{ticker} {form_type} {period_str}"
+    doc.cache_key = cache_key
     count = await run_ingest_pipeline(doc, llm_client, raw_text=text)
     return count, str(doc.id)
 
@@ -227,42 +266,14 @@ async def ingest_earnings_call(
     if cached:
         return cached[1], cached[0]
 
-    text = await fmp_transcript_fetcher.get_transcript(ticker, year, quarter)
-    if not text:
-        logger.warning("fmp_transcript_empty", ticker=ticker, year=year, quarter=quarter)
-        # FMP 失败时用多源抓取器兜底
-        from app.services.graph.transcript_scraper import transcript_scraper
-        text = await transcript_scraper.get_transcript(ticker, year, quarter)
-        if not text:
-            logger.warning("all_transcript_sources_failed", ticker=ticker, year=year, quarter=quarter)
-            return 0, None
-
-        try:
-            period_date = datetime(year, (quarter - 1) * 3 + 1, 1)
-        except ValueError:
-            period_date = None
-
-        doc = SourceDocument(
-            url=f"transcript://{ticker}/{year}Q{quarter}",
-            document_type=DocumentType.EARNINGS_CALL,
-            ticker=ticker.upper(),
-            company_name=ticker.upper(),
-            period_of_report=period_date,
-            title=f"{ticker} Earnings Call {year} Q{quarter}",
-            section="Full Transcript",
-            cache_key=cache_key,
-        )
-        doc = _save_doc_sync(doc)
-        count = await run_ingest_pipeline(doc, llm_client, raw_text=text)
-        return count, str(doc.id)
-
     try:
         period_date = datetime(year, (quarter - 1) * 3 + 1, 1)
     except ValueError:
         period_date = None
 
-    doc = SourceDocument(
-        url=f"https://financialmodelingprep.com/financial-summaries/earning-call-transcript/{ticker}",
+    # 先建 pending 记录，保证任务一提交就在「摄取记录」中可见（抓取失败也留痕）
+    doc = _save_doc_sync(SourceDocument(
+        url=f"transcript-pending://{ticker.upper()}/{year}Q{quarter}",
         document_type=DocumentType.EARNINGS_CALL,
         ticker=ticker.upper(),
         company_name=ticker.upper(),
@@ -270,8 +281,29 @@ async def ingest_earnings_call(
         title=f"{ticker} Earnings Call {year} Q{quarter}",
         section="Full Transcript",
         cache_key=cache_key,
-    )
-    doc = _save_doc_sync(doc)
+        status=DocumentStatus.PROCESSING,
+    ))
+
+    # 抓取：FMP 优先，失败时用多源抓取器兜底
+    source_url = f"https://financialmodelingprep.com/financial-summaries/earning-call-transcript/{ticker}"
+    try:
+        text = await fmp_transcript_fetcher.get_transcript(ticker, year, quarter)
+        if not text:
+            logger.warning("fmp_transcript_empty", ticker=ticker, year=year, quarter=quarter)
+            from app.services.graph.transcript_scraper import transcript_scraper
+            text = await transcript_scraper.get_transcript(ticker, year, quarter)
+            source_url = f"transcript://{ticker}/{year}Q{quarter}"
+    except Exception as e:
+        logger.exception("transcript_fetch_failed", ticker=ticker, year=year, quarter=quarter, error=str(e))
+        _mark_doc_failed(doc.id, f"抓取电话会议记录失败：{e}")
+        return 0, str(doc.id)
+
+    if not text:
+        logger.warning("all_transcript_sources_failed", ticker=ticker, year=year, quarter=quarter)
+        _mark_doc_failed(doc.id, f"未获取到 {ticker} {year}Q{quarter} 电话会议文本（可能无 FMP 权限或该季度记录不存在）")
+        return 0, str(doc.id)
+
+    doc.url = source_url
     count = await run_ingest_pipeline(doc, llm_client, raw_text=text)
     return count, str(doc.id)
 
