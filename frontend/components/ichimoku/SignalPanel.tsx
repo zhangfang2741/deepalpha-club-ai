@@ -63,9 +63,14 @@ function StateCard({ state }: { state: IchimokuState }) {
           {POS_LABEL[state.price_vs_cloud]}
         </span>
 
-        <span className="text-slate-400">云的颜色</span>
+        <span className="text-slate-400">所处云颜色</span>
         <span className={`text-right ${state.cloud_color === 'bullish' ? 'text-green-400' : state.cloud_color === 'bearish' ? 'text-red-400' : 'text-slate-400'}`}>
           {COLOR_LABEL[state.cloud_color]}
+        </span>
+
+        <span className="text-slate-400">前方云(未来)</span>
+        <span className={`text-right ${state.future_cloud_color === 'bullish' ? 'text-green-400' : state.future_cloud_color === 'bearish' ? 'text-red-400' : 'text-slate-400'}`}>
+          {COLOR_LABEL[state.future_cloud_color]}
         </span>
 
         <span className="text-slate-400">云区间</span>

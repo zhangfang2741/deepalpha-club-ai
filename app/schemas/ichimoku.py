@@ -33,6 +33,7 @@ class IchimokuStateOut(BaseModel):
     price: float
     price_vs_cloud: Literal["above", "in", "below", "na"]
     cloud_color: Literal["bullish", "bearish", "na"]
+    future_cloud_color: Literal["bullish", "bearish", "na"]
     tk_relation: Literal["tenkan_above", "tenkan_below", "aligned", "na"]
     chikou_relation: Literal["above", "below", "aligned", "na"]
     tenkan: Optional[float] = None

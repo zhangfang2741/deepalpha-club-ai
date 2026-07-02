@@ -109,6 +109,36 @@ def test_chikou_is_shifted_back():
     assert result.chikou[-1].time < result.candles[-1].time
 
 
+def test_future_cloud_color_uses_latest_span_not_current_cloud():
+    """前方云颜色应由最新一根算得（未来 kumo），可与当前所处云颜色不同。
+
+    构造：长期下跌后近期反转拉升。反转后最新先行带 A 上穿 B → 前方云转阳，
+    而价格当前所处的滞后云（26 根前算得）仍可能是阴云。
+    """
+    down = [float(x) for x in range(200, 90, -1)]   # 长期下跌
+    up = [float(x) for x in range(90, 170)]          # 近期强反转
+    bars = _series(down + up)
+    r = IchimokuAnalyzer().analyze("REV", bars)
+    assert r.state is not None
+    # 反转后未来云应转阳
+    assert r.state.future_cloud_color == "bullish"
+    # 前方云颜色是独立字段，不等同于当前所处云字段的取值来源
+    assert hasattr(r.state, "future_cloud_color")
+
+
+def test_na_cloud_recommendation_wording():
+    """K 线在 [27, 78) 之间时无当前云，建议话术应说“数据不足”而非“云层之中”。"""
+    prices = [float(x) for x in range(1, 41)]  # 40 根：够算基准线，但不足以形成当前云
+    bars = _series(prices)
+    r = IchimokuAnalyzer().analyze("NA", bars)
+    assert r.state is not None
+    assert r.state.price_vs_cloud == "na"
+    assert r.recommendation is not None
+    joined = "".join(r.recommendation.reasons)
+    assert "数据不足" in joined
+    assert "云层之中" not in joined
+
+
 def test_tk_cross_signal_generated():
     """构造先跌后涨行情，应至少出现一次 TK 金叉。"""
     down = [float(x) for x in range(90, 40, -1)]

@@ -27,6 +27,7 @@ export interface IchimokuState {
   price: number
   price_vs_cloud: 'above' | 'in' | 'below' | 'na'
   cloud_color: 'bullish' | 'bearish' | 'na'
+  future_cloud_color: 'bullish' | 'bearish' | 'na'
   tk_relation: 'tenkan_above' | 'tenkan_below' | 'aligned' | 'na'
   chikou_relation: 'above' | 'below' | 'aligned' | 'na'
   tenkan: number | null

@@ -60,7 +60,8 @@ async def ichimoku_analysis_tool(
             f"- 最新价：{s.price:.2f}",
             f"- 价格相对云：{_POS_CN.get(s.price_vs_cloud, '')}"
             + (f"（云 {s.cloud_bottom:.2f} ~ {s.cloud_top:.2f}）" if s.cloud_top is not None else ""),
-            f"- 云的颜色：{_COLOR_CN.get(s.cloud_color, '')}",
+            f"- 所处云颜色：{_COLOR_CN.get(s.cloud_color, '')}",
+            f"- 前方云（未来）：{_COLOR_CN.get(s.future_cloud_color, '')}",
             f"- 转换线/基准线：{_fmt(s.tenkan)} / {_fmt(s.kijun)}"
             + ("（转换线在上，短期偏多）" if s.tk_relation == "tenkan_above"
                else "（转换线在下，短期偏空）" if s.tk_relation == "tenkan_below" else ""),

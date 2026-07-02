@@ -35,13 +35,15 @@ class IchimokuState:
 
     price: float
     price_vs_cloud: str      # above / in / below / na
-    cloud_color: str         # bullish（阳云）/ bearish（阴云）/ na
+    cloud_color: str         # 当前价所处云（滞后云）颜色：bullish（阳云）/ bearish（阴云）/ na
     tk_relation: str         # tenkan_above / tenkan_below / aligned / na
     chikou_relation: str     # above / below / na
     tenkan: float | None = None
     kijun: float | None = None
     cloud_top: float | None = None
     cloud_bottom: float | None = None
+    # 前方云（未来 kumo）颜色：由最新一根算得、前移 26 期显示在价格前方，代表未来支撑/压制
+    future_cloud_color: str = "na"   # bullish / bearish / na
 
 
 @dataclass
@@ -250,6 +252,12 @@ class IchimokuAnalyzer:
         else:
             tk_relation = "aligned"
 
+        # 前方云（未来 kumo）：由最新一根算得的先行带 A/B 决定颜色，前移后显示在价格前方
+        future_cloud_color = "na"
+        fa, fb = span_a_raw[i], span_b_raw[i]
+        if fa is not None and fb is not None:
+            future_cloud_color = "bullish" if fa >= fb else "bearish"
+
         # 迟行线：当期收盘 vs displacement 根前的收盘
         chikou_relation = "na"
         if i - d >= 0:
@@ -266,6 +274,7 @@ class IchimokuAnalyzer:
             kijun=kijun,
             cloud_top=cloud_top,
             cloud_bottom=cloud_bottom,
+            future_cloud_color=future_cloud_color,
         )
 
     def _build_recommendation(self, state: IchimokuState) -> Recommendation:
@@ -286,8 +295,10 @@ class IchimokuAnalyzer:
         elif state.price_vs_cloud == "below":
             bear += 1
             reasons.append(f"价格跌破云层下沿（{_fmt(state.cloud_bottom)}），趋势偏空")
-        else:
+        elif state.price_vs_cloud == "in":
             reasons.append("价格位于云层之中，多空交战、方向待选")
+        else:  # na：云层数据不足（K 线不足 52+26 根，无法形成当前云）
+            reasons.append("当前云层数据不足（需 52+26 根以上），暂以转换/基准线与迟行线判断")
 
         if state.tk_relation == "tenkan_above":
             bull += 1
@@ -303,10 +314,10 @@ class IchimokuAnalyzer:
             bear += 1
             reasons.append("迟行线位于价格之下，回看动能确认空头")
 
-        if state.cloud_color == "bullish":
-            reasons.append("前方云为阳云（先行带 A 在 B 之上），未来支撑偏强")
-        elif state.cloud_color == "bearish":
-            reasons.append("前方云为阴云（先行带 A 在 B 之下），未来压制偏强")
+        if state.future_cloud_color == "bullish":
+            reasons.append("前方云为阳云（最新先行带 A 在 B 之上），未来支撑偏强")
+        elif state.future_cloud_color == "bearish":
+            reasons.append("前方云为阴云（最新先行带 A 在 B 之下），未来压制偏强")
 
         if bull == 3:
             action, label, bias = "buy", "三役好转，多头强势，可关注买入", "bullish"
@@ -336,7 +347,7 @@ class IchimokuAnalyzer:
         color_cn = {"bullish": "阳云（看涨）", "bearish": "阴云（看跌）", "na": "未定"}
         parts.append(
             f"当前价 {_fmt(s.price)} 位于{pos_cn.get(s.price_vs_cloud, '')}，"
-            f"前方为{color_cn.get(s.cloud_color, '')}。"
+            f"前方云为{color_cn.get(s.future_cloud_color, '')}。"
         )
         if s.tk_relation == "tenkan_above":
             parts.append("转换线在基准线之上（短期偏多）。")

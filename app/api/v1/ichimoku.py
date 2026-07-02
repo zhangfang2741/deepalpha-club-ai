@@ -97,6 +97,7 @@ async def ichimoku_analysis(
             price=result.state.price,
             price_vs_cloud=result.state.price_vs_cloud,
             cloud_color=result.state.cloud_color,
+            future_cloud_color=result.state.future_cloud_color,
             tk_relation=result.state.tk_relation,
             chikou_relation=result.state.chikou_relation,
             tenkan=result.state.tenkan,
