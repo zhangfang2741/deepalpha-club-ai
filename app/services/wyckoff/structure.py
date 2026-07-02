@@ -153,22 +153,39 @@ def _find_climax(
     return max(valid, key=lambda s: vstats.ratio(s.idx))
 
 
-def _mk_event(code: str, sw: Swing, vstats: VolumeStats, phase: str, extra: str = "") -> WyckoffEvent:
+def _mk_event(
+    code: str, sw: Swing, vstats: VolumeStats, phase: str, extra: str = "", desc: str | None = None,
+) -> WyckoffEvent:
     name, brief = EVENT_META[code]
-    desc = brief + (f"；{extra}" if extra else "")
+    base = desc if desc is not None else brief
+    text = base + (f"；{extra}" if extra else "")
     return WyckoffEvent(
         code=code, name=name, idx=sw.idx, time=sw.time, price=sw.price,
-        volume_ratio=_volume_ratio(vstats, sw.idx), phase=phase, description=desc,
+        volume_ratio=_volume_ratio(vstats, sw.idx), phase=phase, description=text,
     )
+
+
+def _dedup_keep_last(events: list[WyckoffEvent], codes: set[str]) -> list[WyckoffEvent]:
+    """对「最后支撑/供给点」等按定义应唯一的事件，仅保留最后一次出现。"""
+    last_idx: dict[str, int] = {}
+    for i, e in enumerate(events):
+        if e.code in codes:
+            last_idx[e.code] = i
+    return [e for i, e in enumerate(events) if e.code not in codes or last_idx[e.code] == i]
 
 
 def _build_accumulation(
     bars: list[dict], swings: list[Swing], vstats: VolumeStats, sc: Swing, st_tol: float,
 ) -> StructureResult:
-    """以 SC（卖出高潮）为起点构建吸筹结构。"""
+    """以 SC（卖出高潮）为起点构建吸筹结构。
+
+    区间边界锚定：支撑 = SC 低点、阻力 = AR 高点，均不随后续摆动追逐，
+    以保证区间为一条相对狭窄的横盘带，并使向上突破/向下跌破可被正确判定。
+    深度跌破支撑（> fail_tol）不再当作区间内事件，交由阶段判定转为下跌。
+    """
+    fail_tol = 0.08
     events: list[WyckoffEvent] = []
-    support = sc.price
-    resistance = sc.price
+    support = sc.price   # 区间下沿，锚定于 SC 低点
 
     # PS：SC 之前最近一个放量的下降摆动低点
     ps = _find_preliminary(swings, vstats, sc, kind="low")
@@ -180,21 +197,21 @@ def _build_accumulation(
     after = [s for s in swings if s.idx > sc.idx]
     tol = max(support * st_tol, 1e-9)
 
-    # AR：SC 之后第一个摆动高点，界定阻力
+    # AR：SC 之后第一个摆动高点，界定阻力（区间上沿，锚定不追逐）
     ar = next((s for s in after if s.kind == "high"), None)
+    resistance = ar.price if ar is not None else sc.price
     if ar is not None:
-        resistance = ar.price
         events.append(_mk_event("AR", ar, vstats, "A"))
 
-    # 逐个摆动点归类
     spring_done = False
     sos_done = False
     for s in after:
         if ar is not None and s.idx <= ar.idx:
             continue
         if s.kind == "low":
-            if s.price < support - tol and not spring_done:
-                # 跌破支撑后能收回 → Spring
+            undercut = (support - s.price) / support if support else 0.0
+            if 0 < undercut <= fail_tol and not spring_done:
+                # 小幅跌破支撑后收回 → Spring；深跌破视为下跌延续，不在此标注
                 events.append(_mk_event("SPRING", s, vstats, "C",
                                         extra=f"跌破支撑 {support:.2f} 后收回"))
                 spring_done = True
@@ -203,29 +220,32 @@ def _build_accumulation(
             elif sos_done and s.price > support + tol:
                 events.append(_mk_event("LPS", s, vstats, "D",
                                         extra="回踩不创新低，拉升前的支撑"))
-            support = min(support, s.price)
         else:  # high
-            if resistance and s.price >= resistance - tol and vstats.ratio(s.idx) >= 1.2:
+            if s.price >= resistance - tol and vstats.ratio(s.idx) >= 1.2:
                 events.append(_mk_event("SOS", s, vstats, "D",
                                         extra=f"放量逼近/突破阻力 {resistance:.2f}"))
                 sos_done = True
-            resistance = max(resistance, s.price) if resistance else s.price
 
     tr = TradingRange(
-        kind="accumulation", support=support, resistance=resistance or sc.price,
+        kind="accumulation", support=support, resistance=resistance,
         start_idx=sc.idx, start_time=sc.time,
         end_idx=len(bars) - 1, end_time=bars[-1]["time"],
     )
+    events = _dedup_keep_last(events, {"LPS"})
     return StructureResult(context="accumulation", trading_range=tr, events=events, climax_swing=sc)
 
 
 def _build_distribution(
     bars: list[dict], swings: list[Swing], vstats: VolumeStats, bc: Swing, st_tol: float,
 ) -> StructureResult:
-    """以 BC（买入高潮）为起点构建派发结构。"""
+    """以 BC（买入高潮）为起点构建派发结构。
+
+    区间边界锚定：阻力 = BC 高点、支撑 = AR 低点，均不随后续摆动追逐。
+    深度突破阻力（> fail_tol）不再当作区间内事件，交由阶段判定转为拉升。
+    """
+    fail_tol = 0.08
     events: list[WyckoffEvent] = []
-    resistance = bc.price
-    support = bc.price
+    resistance = bc.price   # 区间上沿，锚定于 BC 高点
 
     psy = _find_preliminary(swings, vstats, bc, kind="high")
     if psy is not None:
@@ -236,11 +256,12 @@ def _build_distribution(
     after = [s for s in swings if s.idx > bc.idx]
     tol = max(resistance * st_tol, 1e-9)
 
-    # AR：BC 之后第一个摆动低点，界定支撑
+    # AR：BC 之后第一个摆动低点，界定支撑（区间下沿，锚定不追逐）
     ar = next((s for s in after if s.kind == "low"), None)
+    support = ar.price if ar is not None else bc.price
     if ar is not None:
-        support = ar.price
-        events.append(_mk_event("AR", ar, vstats, "A"))
+        events.append(_mk_event("AR", ar, vstats, "A",
+                                desc="高潮后的自动回落，其低点界定交易区间下沿"))
 
     ut_done = False
     sow_done = False
@@ -248,29 +269,31 @@ def _build_distribution(
         if ar is not None and s.idx <= ar.idx:
             continue
         if s.kind == "high":
-            if s.price > resistance + tol:
+            overshoot = (s.price - resistance) / resistance if resistance else 0.0
+            if 0 < overshoot <= fail_tol:
+                # 小幅冲破阻力后回落 → UT/UTAD；深度突破视为拉升，不在此标注
                 code = "UTAD" if ut_done else "UT"
                 events.append(_mk_event(code, s, vstats, "C",
                                         extra=f"突破阻力 {resistance:.2f} 后回落"))
                 ut_done = True
             elif abs(s.price - resistance) <= tol:
-                events.append(_mk_event("ST", s, vstats, "B"))
+                events.append(_mk_event("ST", s, vstats, "B",
+                                        desc="回测 BC 高点区域，缩量表明买盘减弱"))
             elif sow_done and s.price < resistance - tol:
                 events.append(_mk_event("LPSY", s, vstats, "D",
                                         extra="反弹不创新高，下跌前的供给点"))
-            resistance = max(resistance, s.price)
         else:  # low
-            if support and s.price <= support + tol and vstats.ratio(s.idx) >= 1.2:
+            if s.price <= support + tol and vstats.ratio(s.idx) >= 1.2:
                 events.append(_mk_event("SOW", s, vstats, "D",
                                         extra=f"放量跌破支撑 {support:.2f}"))
                 sow_done = True
-            support = min(support, s.price) if support else s.price
 
     tr = TradingRange(
-        kind="distribution", support=support or bc.price, resistance=resistance,
+        kind="distribution", support=support, resistance=resistance,
         start_idx=bc.idx, start_time=bc.time,
         end_idx=len(bars) - 1, end_time=bars[-1]["time"],
     )
+    events = _dedup_keep_last(events, {"LPSY"})
     return StructureResult(context="distribution", trading_range=tr, events=events, climax_swing=bc)
 
 
