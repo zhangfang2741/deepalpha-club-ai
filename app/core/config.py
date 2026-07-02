@@ -164,6 +164,11 @@ class Settings:
         self.MAX_LLM_CALL_RETRIES = int(os.getenv("MAX_LLM_CALL_RETRIES", "3"))
         self.LLM_TOTAL_TIMEOUT = int(os.getenv("LLM_TOTAL_TIMEOUT", "60"))
 
+        # 图谱抽取模式（FinReflectKG）：single_pass（单次） | reflection（反思智能体）
+        self.GRAPH_EXTRACTION_MODE = os.getenv("GRAPH_EXTRACTION_MODE", "single_pass").lower()
+        # 反思模式最大修正轮数（达到即停，防止无限反思）
+        self.GRAPH_REFLECTION_MAX_ITERS = int(os.getenv("GRAPH_REFLECTION_MAX_ITERS", "2"))
+
         # Long term memory Configuration
         self.LONG_TERM_MEMORY_MODEL = os.getenv("LONG_TERM_MEMORY_MODEL", "gpt-5-nano")
         self.LONG_TERM_MEMORY_EMBEDDER_MODEL = os.getenv("LONG_TERM_MEMORY_EMBEDDER_MODEL", "text-embedding-3-small")

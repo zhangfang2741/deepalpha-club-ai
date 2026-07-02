@@ -895,6 +895,248 @@ def test_find_cached_done(test_engine):
     assert miss is None
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. FinReflectKG 反思式抽取（reflection_graph）
+# ─────────────────────────────────────────────────────────────────────────────
+
+_REFLECT_CHUNK = (
+    "NVIDIA reported record data center revenue driven by strong demand for its H100 GPU. "
+    "TSMC manufactures the H100 using CoWoS advanced packaging technology. "
+    "H100 production remains constrained by CoWoS packaging capacity."
+)
+
+
+class TestCheckRules:
+    """确定性规则检查（对应论文 rule-based compliance policies）。"""
+
+    def test_valid_fact_passes(self):
+        from app.services.graph.reflection_graph import check_fact_rules
+        fact = {
+            "source_entity": {"name": "NVIDIA", "type": "Company"},
+            "relation": "HAS_PRODUCT",
+            "target_entity": {"name": "H100", "type": "Product"},
+            "evidence": "strong demand for its H100 GPU",
+            "confidence": 0.95,
+        }
+        assert check_fact_rules(fact, _REFLECT_CHUNK) == []
+
+    def test_invalid_relation_flagged(self):
+        from app.services.graph.reflection_graph import check_fact_rules
+        fact = {
+            "source_entity": {"name": "NVIDIA", "type": "Company"},
+            "relation": "MADE_UP_RELATION",
+            "target_entity": {"name": "H100", "type": "Product"},
+            "evidence": "strong demand for its H100 GPU",
+            "confidence": 0.9,
+        }
+        violations = check_fact_rules(fact, _REFLECT_CHUNK)
+        assert any("非法关系类型" in v for v in violations)
+
+    def test_type_signature_mismatch_flagged(self):
+        from app.services.graph.reflection_graph import check_fact_rules
+        # HAS_PRODUCT 要求 Company→Product，这里 Product→Company 非法
+        fact = {
+            "source_entity": {"name": "H100", "type": "Product"},
+            "relation": "HAS_PRODUCT",
+            "target_entity": {"name": "NVIDIA", "type": "Company"},
+            "evidence": "strong demand for its H100 GPU",
+            "confidence": 0.9,
+        }
+        violations = check_fact_rules(fact, _REFLECT_CHUNK)
+        assert any("类型组合不合法" in v for v in violations)
+
+    def test_self_loop_flagged(self):
+        from app.services.graph.reflection_graph import check_fact_rules
+        fact = {
+            "source_entity": {"name": "NVIDIA", "type": "Company"},
+            "relation": "HAS_PRODUCT",
+            "target_entity": {"name": "NVIDIA", "type": "Product"},
+            "evidence": "NVIDIA",
+            "confidence": 0.9,
+        }
+        violations = check_fact_rules(fact, _REFLECT_CHUNK)
+        assert any("自环" in v for v in violations)
+
+    def test_ungrounded_evidence_flagged(self):
+        from app.services.graph.reflection_graph import check_fact_rules
+        fact = {
+            "source_entity": {"name": "NVIDIA", "type": "Company"},
+            "relation": "HAS_PRODUCT",
+            "target_entity": {"name": "H100", "type": "Product"},
+            "evidence": "The quarterly dividend was raised amid favorable macroeconomic tailwinds worldwide",
+            "confidence": 0.9,
+        }
+        violations = check_fact_rules(fact, _REFLECT_CHUNK)
+        assert any("证据未接地" in v for v in violations)
+
+    def test_confidence_out_of_range_flagged(self):
+        from app.services.graph.reflection_graph import check_fact_rules
+        fact = {
+            "source_entity": {"name": "NVIDIA", "type": "Company"},
+            "relation": "HAS_PRODUCT",
+            "target_entity": {"name": "H100", "type": "Product"},
+            "evidence": "strong demand for its H100 GPU",
+            "confidence": 1.7,
+        }
+        violations = check_fact_rules(fact, _REFLECT_CHUNK)
+        assert any("越界" in v for v in violations)
+
+    def test_compliance_score_and_filter(self):
+        from app.services.graph.reflection_graph import compliance_score, filter_compliant_facts
+        good = {
+            "source_entity": {"name": "NVIDIA", "type": "Company"},
+            "relation": "HAS_PRODUCT",
+            "target_entity": {"name": "H100", "type": "Product"},
+            "evidence": "strong demand for its H100 GPU",
+            "confidence": 0.95,
+        }
+        bad = {
+            "source_entity": {"name": "NVIDIA", "type": "Company"},
+            "relation": "MADE_UP",
+            "target_entity": {"name": "H100", "type": "Product"},
+            "evidence": "strong demand for its H100 GPU",
+            "confidence": 0.9,
+        }
+        facts = [good, bad]
+        assert compliance_score(facts, _REFLECT_CHUNK) == 0.5
+        clean = filter_compliant_facts(facts, _REFLECT_CHUNK)
+        assert len(clean) == 1
+        assert clean[0]["relation"] == "HAS_PRODUCT"
+
+
+class TestReflectionGraph:
+    """反思图端到端：抽取→评审→修正闭环（mock LLM 按角色返回）。"""
+
+    def _role_llm(self, extract_resp: str, critic_resp: str, refine_resp: str):
+        """按 system prompt 判定角色，返回对应响应的 mock LLM。"""
+        from app.services.graph.reflection_graph import _CRITIC_SYSTEM_PROMPT
+
+        def _dispatch(messages):
+            system_text = messages[0].content
+            user_text = messages[1].content
+            if system_text == _CRITIC_SYSTEM_PROMPT:
+                resp = critic_resp
+            elif "MUST fix" in user_text:
+                resp = refine_resp
+            else:
+                resp = extract_resp
+            m = MagicMock()
+            m.content = resp
+            return m
+
+        llm = MagicMock()
+        llm.ainvoke = AsyncMock(side_effect=_dispatch)
+        return llm
+
+    @pytest.mark.asyncio
+    async def test_approved_first_pass_no_refine(self):
+        """评审通过则不进入修正，直接返回。"""
+        from app.services.graph.reflection_graph import extract_facts_with_reflection
+
+        extract_resp = json.dumps({"facts": [{
+            "source_entity": {"name": "NVIDIA", "type": "Company"},
+            "relation": "HAS_PRODUCT",
+            "target_entity": {"name": "H100", "type": "Product"},
+            "evidence": "strong demand for its H100 GPU",
+            "confidence": 0.95,
+        }]})
+        critic_resp = json.dumps({"approve": True, "issues": [], "missing": []})
+        refine_resp = json.dumps({"facts": []})  # 不应被调用
+
+        llm = self._role_llm(extract_resp, critic_resp, refine_resp)
+        facts = await extract_facts_with_reflection(_REFLECT_CHUNK, "NVIDIA 10-K", llm, max_iterations=2)
+
+        assert len(facts) == 1
+        assert facts[0].source_name == "NVIDIA"
+        assert facts[0].target_name == "H100"
+
+    @pytest.mark.asyncio
+    async def test_reflection_fixes_bad_triple(self):
+        """初次抽取含非法三元组，经评审+修正后得到合规结果。"""
+        from app.services.graph.reflection_graph import extract_facts_with_reflection
+
+        # 初抽取：关系非法（会被规则命中，评审不通过）
+        extract_resp = json.dumps({"facts": [{
+            "source_entity": {"name": "NVIDIA", "type": "Company"},
+            "relation": "MADE_UP_RELATION",
+            "target_entity": {"name": "H100", "type": "Product"},
+            "evidence": "strong demand for its H100 GPU",
+            "confidence": 0.9,
+        }]})
+        critic_resp = json.dumps({"approve": False, "issues": ["triple #0 relation invalid"], "missing": []})
+        # 修正：改为合法关系
+        refine_resp = json.dumps({"facts": [{
+            "source_entity": {"name": "NVIDIA", "type": "Company"},
+            "relation": "HAS_PRODUCT",
+            "target_entity": {"name": "H100", "type": "Product"},
+            "evidence": "strong demand for its H100 GPU",
+            "confidence": 0.9,
+        }]})
+
+        llm = self._role_llm(extract_resp, critic_resp, refine_resp)
+        facts = await extract_facts_with_reflection(_REFLECT_CHUNK, "NVIDIA 10-K", llm, max_iterations=2)
+
+        from app.models.graph_fact import RelationType
+        assert len(facts) == 1
+        assert facts[0].relation == RelationType.HAS_PRODUCT
+
+    @pytest.mark.asyncio
+    async def test_max_iterations_stops_loop(self):
+        """修正始终无法通过时，达到最大轮次即停并做终局兜底过滤。"""
+        from app.services.graph.reflection_graph import extract_facts_with_reflection
+
+        bad = json.dumps({"facts": [{
+            "source_entity": {"name": "NVIDIA", "type": "Company"},
+            "relation": "STILL_BAD",
+            "target_entity": {"name": "H100", "type": "Product"},
+            "evidence": "strong demand for its H100 GPU",
+            "confidence": 0.9,
+        }]})
+        critic_resp = json.dumps({"approve": False, "issues": ["still bad"], "missing": []})
+
+        llm = self._role_llm(bad, critic_resp, bad)
+        facts = await extract_facts_with_reflection(_REFLECT_CHUNK, "NVIDIA 10-K", llm, max_iterations=1)
+
+        # 始终非法 → 终局过滤后为空，且不会死循环
+        assert facts == []
+        # 抽取1 + 评审1 + 修正1 + 评审1 = 4 次调用（max_iterations=1）
+        assert llm.ainvoke.await_count == 4
+
+    @pytest.mark.asyncio
+    async def test_pipeline_reflection_mode(self, test_engine):
+        """流水线在 reflection 模式下调用反思抽取并入库。"""
+        from app.models.graph_source import DocumentStatus, DocumentType, SourceDocument
+        from app.services.graph.pipeline import run_ingest_pipeline
+
+        doc = SourceDocument(
+            url="text://reflect-mode",
+            document_type=DocumentType.EARNINGS_CALL,
+            ticker="NVDA",
+            company_name="NVIDIA",
+            title="Reflect Mode Test",
+        )
+        with Session(test_engine) as s:
+            s.add(doc)
+            s.commit()
+            s.refresh(doc)
+
+        extract_resp = _MOCK_LLM_RESPONSE
+        critic_resp = json.dumps({"approve": True, "issues": [], "missing": []})
+        llm = self._role_llm(extract_resp, critic_resp, "{}")
+
+        with (
+            patch("app.services.graph.pipeline.sync_engine", test_engine),
+            patch("app.services.graph.pipeline.settings.GRAPH_EXTRACTION_MODE", "reflection"),
+            patch("app.services.graph.pipeline.settings.GRAPH_REFLECTION_MAX_ITERS", 1),
+        ):
+            count = await run_ingest_pipeline(doc, llm, raw_text=_SAMPLE_TRANSCRIPT)
+
+        assert count > 0
+        with Session(test_engine) as s:
+            updated = s.get(SourceDocument, doc.id)
+        assert updated.status == DocumentStatus.DONE
+
+
 class TestTickerFocus:
     def test_ticker_returns_2hop_neighborhood(self):
         from app.models.graph_entity import EntityType, GraphEntity

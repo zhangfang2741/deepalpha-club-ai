@@ -10,6 +10,7 @@ from typing import Optional
 import httpx
 from sqlmodel import Session
 
+from app.core.config import settings
 from app.core.logging import logger
 from app.db.session import sync_engine
 from app.models.graph_entity import EntityType, GraphEntity
@@ -17,6 +18,7 @@ from app.models.graph_fact import GraphFact
 from app.models.graph_source import DocumentStatus, DocumentType, SourceDocument
 from app.services.graph.extractor import ExtractedFact, extract_facts_from_chunk
 from app.services.graph.normalizer import normalize_entity_name
+from app.services.graph.reflection_graph import extract_facts_with_reflection
 
 _HEADERS = {
     "User-Agent": "DeepAlpha/1.0 (investment research; mailto:research@deepalpha.ai)",
@@ -345,6 +347,26 @@ async def ingest_raw_text(
     return count, str(doc.id)
 
 
+async def _extract_chunk_facts(
+    chunk: str,
+    source_info: str,
+    llm_client,
+) -> list[ExtractedFact]:
+    """按配置的抽取模式抽取单个 chunk 的事实。
+
+    - ``reflection``：FinReflectKG 反思智能体（抽取→评审→修正闭环），质量优先。
+    - 其他（默认 ``single_pass``）：单次抽取，效率优先。
+    """
+    if settings.GRAPH_EXTRACTION_MODE == "reflection":
+        return await extract_facts_with_reflection(
+            chunk,
+            source_info,
+            llm_client,
+            max_iterations=settings.GRAPH_REFLECTION_MAX_ITERS,
+        )
+    return await extract_facts_from_chunk(chunk, source_info, llm_client)
+
+
 async def run_ingest_pipeline(
     doc: SourceDocument,
     llm_client,
@@ -396,7 +418,7 @@ async def run_ingest_pipeline(
         for i, chunk in enumerate(chunks):
             if len(chunk.strip()) >= 50:  # 过短 chunk 只更新进度、不抽取
                 chunk_id = f"{doc_id}:chunk:{i}"
-                facts = await extract_facts_from_chunk(chunk, source_info, llm_client)
+                facts = await _extract_chunk_facts(chunk, source_info, llm_client)
                 if facts:
                     stored = _store_facts_sync(doc, facts, chunk_id)
                     total_stored += stored
