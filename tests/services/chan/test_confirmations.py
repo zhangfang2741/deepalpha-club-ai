@@ -51,19 +51,25 @@ def test_last_fractal_is_unconfirmed():
         assert last.confirmed == expected
 
 
-def test_last_stroke_and_segment_unconfirmed():
-    """最后一笔与最后一条线段必须为未确认。"""
+def test_last_stroke_unconfirmed():
+    """最后一笔（右侧前沿）必须为未确认，之前的笔已确认。"""
     analyzer = ChanAnalyzer()
     result = analyzer.analyze("TEST", _zigzag_bars())
 
     assert len(result.strokes) >= 3, "构造数据应至少形成3笔"
-    # 最后一笔未确认
     assert result.strokes[-1].confirmed is False
-    # 之前的笔应当已确认
     assert all(s.confirmed for s in result.strokes[:-1])
 
-    if result.segments:
-        assert result.segments[-1].confirmed is False
+
+def test_segment_confirmed_once_left():
+    """线段仅在仍含最后一笔（右侧前沿）时未确认；被后续笔离开后应确认。"""
+    analyzer = ChanAnalyzer()
+    result = analyzer.analyze("TEST", _zigzag_bars())
+
+    last_stroke = result.strokes[-1] if result.strokes else None
+    for seg in result.segments:
+        still_frontier = bool(seg.strokes) and seg.strokes[-1] is last_stroke
+        assert seg.confirmed == (not still_frontier)
 
 
 def test_pivot_confirmed_once_left():
