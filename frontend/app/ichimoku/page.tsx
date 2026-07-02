@@ -32,6 +32,7 @@ export default function IchimokuPage() {
   const [startDate, setStartDate] = useState(ONE_YEAR_AGO)
   const [endDate, setEndDate] = useState(TODAY)
   const [freq, setFreq] = useState<'daily' | 'weekly'>('daily')
+  const [displacement, setDisplacement] = useState<26 | 25>(26)
   const [result, setResult] = useState<IchimokuAnalysisResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,7 +53,7 @@ export default function IchimokuPage() {
     setLoading(true)
     setError(null)
     try {
-      const data = await fetchIchimokuAnalysis(symbol.trim().toUpperCase(), startDate, endDate, freq)
+      const data = await fetchIchimokuAnalysis(symbol.trim().toUpperCase(), startDate, endDate, freq, displacement)
       setResult(data)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '分析失败，请检查股票代码或日期范围'
@@ -60,7 +61,7 @@ export default function IchimokuPage() {
     } finally {
       setLoading(false)
     }
-  }, [symbol, startDate, endDate, freq])
+  }, [symbol, startDate, endDate, freq, displacement])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleAnalyze()
@@ -99,6 +100,17 @@ export default function IchimokuPage() {
             >
               <option value="daily">日线</option>
               <option value="weekly">周线</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-400">平移约定</label>
+            <select
+              value={displacement}
+              onChange={(e) => setDisplacement(Number(e.target.value) as 26 | 25)}
+              className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value={26}>经典 (26)</option>
+              <option value={25}>TradingView (25)</option>
             </select>
           </div>
 

@@ -14,7 +14,7 @@ export interface LinePoint {
 }
 
 export interface IchimokuSignal {
-  type: 'tk_golden' | 'tk_dead' | 'kumo_up' | 'kumo_down'
+  type: 'tk_golden' | 'tk_dead' | 'kumo_up' | 'kumo_down' | 'chikou_bull' | 'chikou_bear'
   label: string
   time: string
   price: number
@@ -68,9 +68,10 @@ export async function fetchIchimokuAnalysis(
   startDate: string,
   endDate: string,
   freq = 'daily',
+  displacement = 26,
 ): Promise<IchimokuAnalysisResult> {
   const res = await apiClient.get<IchimokuAnalysisResult>('/api/v1/ichimoku/analysis', {
-    params: { symbol, start_date: startDate, end_date: endDate, freq },
+    params: { symbol, start_date: startDate, end_date: endDate, freq, displacement },
   })
   return res.data
 }

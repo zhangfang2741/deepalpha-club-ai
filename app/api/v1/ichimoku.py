@@ -21,7 +21,15 @@ from app.services.ichimoku.analyzer import IchimokuAnalyzer
 from app.services.skills.kline import fetch_kline
 
 router = APIRouter()
-_analyzer = IchimokuAnalyzer()
+
+# 按平移周期缓存分析器实例（26=经典/StockCharts，25=TradingView 约定）
+_analyzers: dict[int, IchimokuAnalyzer] = {}
+
+
+def _get_analyzer(displacement: int) -> IchimokuAnalyzer:
+    if displacement not in _analyzers:
+        _analyzers[displacement] = IchimokuAnalyzer(displacement=displacement)
+    return _analyzers[displacement]
 
 
 def _points(points) -> list[LinePointOut]:
@@ -36,6 +44,10 @@ async def ichimoku_analysis(
     start_date: str = Query(description="开始日期，格式 YYYY-MM-DD"),
     end_date: str = Query(description="结束日期，格式 YYYY-MM-DD"),
     freq: str = Query(default="daily", description="K线周期：daily / weekly"),
+    displacement: int = Query(
+        default=26, ge=1, le=52,
+        description="先行带/迟行线平移周期：26=经典约定，25=TradingView 约定",
+    ),
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
 ) -> IchimokuAnalysisResponse:
@@ -63,15 +75,16 @@ async def ichimoku_analysis(
     if not bars:
         raise HTTPException(status_code=404, detail=f"未获取到 {symbol} 的K线数据，请检查股票代码或日期范围")
 
-    result = _analyzer.analyze(symbol, bars)
+    analyzer = _get_analyzer(displacement)
+    result = analyzer.analyze(symbol, bars)
 
     return IchimokuAnalysisResponse(
         symbol=result.symbol,
         bars_count=result.bars_count,
-        conversion_period=_analyzer.conversion_period,
-        base_period=_analyzer.base_period,
-        span_b_period=_analyzer.span_b_period,
-        displacement=_analyzer.displacement,
+        conversion_period=analyzer.conversion_period,
+        base_period=analyzer.base_period,
+        span_b_period=analyzer.span_b_period,
+        displacement=analyzer.displacement,
         candles=[
             CandleOut(time=c.time, open=c.open, high=c.high, low=c.low, close=c.close)
             for c in result.candles

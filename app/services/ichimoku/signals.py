@@ -154,6 +154,53 @@ def generate_signals(
                     )
                 )
 
+        # ── 迟行线交叉（迟行线上/下穿 displacement 期前的价格）──────────
+        # 迟行线 = 当期收盘后移 displacement 期，与彼时价格比较；关系翻转即为交叉。
+        if i - 1 - displacement >= 0:
+            cross_bull = (
+                float(bars[i - 1]["close"]) <= float(bars[i - 1 - displacement]["close"])
+                and close > float(bars[i - displacement]["close"])
+            )
+            cross_bear = (
+                float(bars[i - 1]["close"]) >= float(bars[i - 1 - displacement]["close"])
+                and close < float(bars[i - displacement]["close"])
+            )
+            if cross_bull or cross_bear:
+                cloud = _cloud_at(span_a, span_b, i, displacement)
+                pos = _price_position(close, cloud)
+                if cross_bull:
+                    strength = {"above": "strong", "in": "medium", "below": "weak"}.get(pos, "medium")
+                    signals.append(
+                        IchimokuSignal(
+                            type="chikou_bull",
+                            label="迟行线上穿",
+                            time=time,
+                            price=close,
+                            strength=strength,
+                            is_buy=True,
+                            description=(
+                                f"迟行线上穿 {displacement} 期前价格，回看动能转多；"
+                                f"价格位于{_pos_cn(pos)}"
+                            ),
+                        )
+                    )
+                else:
+                    strength = {"below": "strong", "in": "medium", "above": "weak"}.get(pos, "medium")
+                    signals.append(
+                        IchimokuSignal(
+                            type="chikou_bear",
+                            label="迟行线下穿",
+                            time=time,
+                            price=close,
+                            strength=strength,
+                            is_buy=False,
+                            description=(
+                                f"迟行线下穿 {displacement} 期前价格，回看动能转空；"
+                                f"价格位于{_pos_cn(pos)}"
+                            ),
+                        )
+                    )
+
     return signals
 
 

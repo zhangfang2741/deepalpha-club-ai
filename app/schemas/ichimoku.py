@@ -20,7 +20,7 @@ class LinePointOut(BaseModel):
 
 
 class IchimokuSignalOut(BaseModel):
-    type: Literal["tk_golden", "tk_dead", "kumo_up", "kumo_down"]
+    type: Literal["tk_golden", "tk_dead", "kumo_up", "kumo_down", "chikou_bull", "chikou_bear"]
     label: str
     time: str
     price: float

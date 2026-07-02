@@ -13,8 +13,10 @@ interface Props {
 const SIGNAL_STYLE: Record<string, { bg: string; text: string; border: string }> = {
   tk_golden: { bg: 'bg-green-950/40', text: 'text-green-400', border: 'border-green-800' },
   kumo_up: { bg: 'bg-emerald-950/40', text: 'text-emerald-400', border: 'border-emerald-800' },
+  chikou_bull: { bg: 'bg-teal-950/40', text: 'text-teal-400', border: 'border-teal-800' },
   tk_dead: { bg: 'bg-red-950/40', text: 'text-red-400', border: 'border-red-800' },
   kumo_down: { bg: 'bg-rose-950/40', text: 'text-rose-400', border: 'border-rose-800' },
+  chikou_bear: { bg: 'bg-pink-950/40', text: 'text-pink-400', border: 'border-pink-800' },
 }
 
 const STRENGTH_LABEL: Record<string, string> = { strong: '强', medium: '中', weak: '弱' }

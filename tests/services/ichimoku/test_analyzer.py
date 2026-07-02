@@ -147,6 +147,34 @@ def test_tk_cross_signal_generated():
     result = IchimokuAnalyzer().analyze("CROSS", bars)
 
     assert any(s.type == "tk_golden" for s in result.signals)
+    buy_types = {"tk_golden", "kumo_up", "chikou_bull"}
     for s in result.signals:
         assert s.strength in ("strong", "medium", "weak")
-        assert s.is_buy == (s.type in ("tk_golden", "kumo_up"))
+        assert s.is_buy == (s.type in buy_types)
+
+
+def test_chikou_cross_signal_generated():
+    """先跌后涨：迟行线（当期收盘）应上穿 26 期前价格，产生 chikou_bull。"""
+    down = [float(x) for x in range(120, 60, -1)]
+    up = [float(x) for x in range(60, 130)]
+    bars = _series(down + up)
+    result = IchimokuAnalyzer().analyze("CHK", bars)
+
+    chikou = [s for s in result.signals if s.type in ("chikou_bull", "chikou_bear")]
+    assert any(s.type == "chikou_bull" for s in chikou)
+    for s in chikou:
+        assert s.is_buy == (s.type == "chikou_bull")
+        assert str(26) in s.description or "迟行线" in s.description
+
+
+def test_displacement_shifts_projection_length():
+    """平移周期改为 25（TradingView 约定）应改变先行带/迟行线的平移量。"""
+    prices = [float(x) for x in range(1, 100)]
+    bars = _series(prices)
+    r26 = IchimokuAnalyzer(displacement=26).analyze("D26", bars)
+    r25 = IchimokuAnalyzer(displacement=25).analyze("D25", bars)
+
+    # 迟行线点数 = N - displacement：25 应比 26 多 1 个点
+    assert len(r25.chikou) == len(r26.chikou) + 1
+    # 先行带前移 25 期，未来最后时间应早于前移 26 期
+    assert r25.senkou_a[-1].time < r26.senkou_a[-1].time

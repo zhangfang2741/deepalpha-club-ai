@@ -25,8 +25,10 @@ interface Props {
 const SIGNAL_COLORS: Record<string, string> = {
   tk_golden: '#22c55e',
   kumo_up: '#16a34a',
+  chikou_bull: '#14b8a6',
   tk_dead: '#ef4444',
   kumo_down: '#dc2626',
+  chikou_bear: '#f43f5e',
 }
 
 const STRENGTH_SIZE: Record<string, number> = { strong: 2, medium: 1.5, weak: 1 }
