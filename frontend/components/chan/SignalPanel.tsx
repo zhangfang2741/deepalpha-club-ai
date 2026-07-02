@@ -50,6 +50,15 @@ function SignalCard({ sig }: { sig: Signal }) {
             {sig.label}
             {glossary && <InfoTip title={glossary.name} content={glossary.detail} side="left" />}
           </span>
+          {!sig.confirmed && (
+            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-950/50 text-amber-400 text-[10px] font-medium border border-amber-800/60">
+              ⏳ 待确认
+              <InfoTip
+                content="该信号落在最右侧尚未走完的笔上，属于左侧预判，需后续K线验证，切勿据此重仓。"
+                side="left"
+              />
+            </span>
+          )}
           <span className="flex items-center gap-1 text-xs text-slate-500">
             {STRENGTH_LABEL[sig.strength]}强度
             <InfoTip content={STRENGTH_HINT} side="left" />
@@ -80,6 +89,9 @@ function PivotRow({ pivot }: { pivot: Pivot }) {
         <span className={`px-1.5 py-0.5 rounded text-xs font-mono ${isSegment ? 'bg-violet-900/50' : 'bg-blue-900/50'}`}>
           {isSegment ? '线段级' : '笔级'}
         </span>
+        {!pivot.confirmed && (
+          <span className="px-1 py-0.5 rounded bg-amber-950/50 text-amber-400 text-[10px] border border-amber-800/60">延伸中</span>
+        )}
         <span className="text-slate-400">{pivot.start_time} ~ {pivot.end_time}</span>
       </div>
       <div className="text-right font-mono">
@@ -140,6 +152,28 @@ export function SignalPanel({ data }: Props) {
     <div className="flex flex-col gap-4 lg:h-full lg:overflow-y-auto">
       {/* 操作建议 */}
       {data.recommendation && <RecommendationCard rec={data.recommendation} />}
+
+      {/* 最右侧未确认结构：把缠论右侧滞后的不确定性显式暴露 */}
+      {data.pending_notes.length > 0 && (
+        <div className="rounded-lg border border-amber-800/60 bg-amber-950/20 p-3">
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="text-amber-400">⏳</span>
+            <span className="text-xs font-semibold text-amber-300">最右侧未确认结构</span>
+            <InfoTip
+              content="缠论的分型/笔/线段/中枢都要后续K线走完才成立。最右端的结构随时可能移动、延伸或消失，这里列出的都是尚未定型、需谨慎对待的部分。"
+              side="left"
+            />
+          </div>
+          <ul className="flex flex-col gap-1.5">
+            {data.pending_notes.map((note, i) => (
+              <li key={i} className="text-[11px] text-amber-100/80 leading-relaxed flex gap-1.5">
+                <span className="text-amber-500/70 shrink-0">·</span>
+                <span>{note}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* 摘要统计 */}
       <div className="grid grid-cols-2 gap-3">

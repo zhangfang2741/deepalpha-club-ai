@@ -13,6 +13,8 @@ class Stroke:
     direction: Literal["up", "down"]  # up=上升笔，down=下降笔
     start: Fractal
     end: Fractal
+    # 笔是否已确认：最后一笔的端点可能被后续K线突破/延伸，转折点尚未被反向结构确认
+    confirmed: bool = True
 
     @property
     def start_time(self) -> str:

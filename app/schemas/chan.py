@@ -20,6 +20,7 @@ class FractalOut(BaseModel):
     time: str
     price: float
     idx: int
+    confirmed: bool = True  # 形态是否已被后续K线锁定
 
 
 class StrokeOut(BaseModel):
@@ -30,6 +31,7 @@ class StrokeOut(BaseModel):
     end_price: float
     high: float
     low: float
+    confirmed: bool = True  # 是否已完成确认（最后一笔为 False）
 
 
 class SegmentOut(BaseModel):
@@ -41,6 +43,7 @@ class SegmentOut(BaseModel):
     high: float
     low: float
     stroke_count: int
+    confirmed: bool = True  # 是否已确认结束（最后一条为 False）
 
 
 class PivotOut(BaseModel):
@@ -51,6 +54,7 @@ class PivotOut(BaseModel):
     start_time: str
     end_time: str
     level: Literal["stroke", "segment"]
+    confirmed: bool = True  # 是否已确认（最后一个可能仍在延伸）
 
 
 class MACDOut(BaseModel):
@@ -69,6 +73,7 @@ class SignalOut(BaseModel):
     is_buy: bool
     description: str
     area_ratio: Optional[float] = None
+    confirmed: bool = True  # 是否已确认（落在未确认笔上的信号为 False）
 
 
 class RecommendationOut(BaseModel):
@@ -93,3 +98,4 @@ class ChanAnalysisResponse(BaseModel):
     current_trend: str
     summary: str
     recommendation: Optional[RecommendationOut] = None
+    pending_notes: list[str] = []  # 最右侧未确认结构的提示
