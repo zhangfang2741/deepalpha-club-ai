@@ -11,6 +11,7 @@ from langchain_core.tools.base import BaseTool
 from .ask_human import ask_human
 from .chan_analysis import chan_analysis_tool as _chan_analysis_fn
 from .duckduckgo_search import duckduckgo_search_tool
+from .wyckoff_analysis import wyckoff_analysis_tool as _wyckoff_analysis_fn
 
 
 @tool
@@ -32,4 +33,25 @@ async def chan_analysis(symbol: str, start_date: str, end_date: str, freq: str =
     return await _chan_analysis_fn(symbol, start_date, end_date, freq)
 
 
-tools: list[BaseTool] = [duckduckgo_search_tool, ask_human, chan_analysis]
+@tool
+async def wyckoff_analysis(symbol: str, start_date: str, end_date: str, freq: str = "daily") -> str:
+    """使用威科夫方法论（The Wyckoff Methodology）对股票进行技术分析。
+
+    识别交易区间的支撑/阻力，判定吸筹/拉升/派发/下跌四大阶段及区间内 A–E 子阶段，
+    标记威科夫事件（SC/AR/ST/Spring/SOS/UT/UTAD/SOW/LPS/LPSY 等），
+    并应用三大定律（供求/因果/量价）。
+    适用于美股（使用 FMP 数据）和 A 股（使用 AKShare，代码如 SH600519）。
+
+    Args:
+        symbol: 股票代码，如 'AAPL'、'NVDA' 或 'SH600519'
+        start_date: 分析起始日期，格式 YYYY-MM-DD，建议至少半年数据
+        end_date: 分析截止日期，格式 YYYY-MM-DD
+        freq: K线周期，daily（日线）或 weekly（周线）
+
+    Returns:
+        详细的威科夫方法论分析报告文本
+    """
+    return await _wyckoff_analysis_fn(symbol, start_date, end_date, freq)
+
+
+tools: list[BaseTool] = [duckduckgo_search_tool, ask_human, chan_analysis, wyckoff_analysis]

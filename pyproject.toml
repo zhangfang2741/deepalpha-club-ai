@@ -147,6 +147,10 @@ convention = "google"
 "app/schemas/research.py" = ["D415"]
 "app/services/research.py" = ["D415"]
 "app/api/v1/research.py" = ["D415"]
+"app/services/wyckoff/*.py" = ["D415", "D101"]
+"app/schemas/wyckoff.py" = ["D415", "D101"]
+"app/api/v1/wyckoff.py" = ["D415"]
+"app/core/langgraph/tools/wyckoff_analysis.py" = ["D415"]
 
 [tool.pyright]
 include = ["app", "evals"]
