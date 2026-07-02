@@ -466,18 +466,13 @@ async def _compute_recent_points(
     return sym, pts
 
 
-async def compute_price_target_history(symbol: str) -> PriceTargetHistoryResponse:
-    """拉取个股近 5 年分析师目标价，按月聚合均值."""
-    cutoff = date.today() - timedelta(days=5 * 365)
+def _aggregate_monthly_points(records: list[dict], start: date, end: date) -> list[PriceTargetPoint]:
+    """将逐条目标价记录按月聚合为平均目标价点，仅保留 [start, end] 区间内的记录."""
     monthly: dict[str, list[float]] = defaultdict(list)
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        records = await _fetch_price_target_records(client, symbol)
-
     for rec in records:
         dt = _extract_pt_date(rec)
         pt = _extract_pt_value(rec)
-        if dt is None or pt is None or dt < cutoff:
+        if dt is None or pt is None or dt < start or dt > end:
             continue
         monthly[f"{dt.year}-{dt.month:02d}"].append(pt)
 
@@ -491,7 +486,39 @@ async def compute_price_target_history(symbol: str) -> PriceTargetHistoryRespons
         if vals
     ]
     points.sort(key=lambda p: p.label)
+    return points
+
+
+async def compute_price_target_history(symbol: str) -> PriceTargetHistoryResponse:
+    """拉取个股近 5 年分析师目标价，按月聚合均值."""
+    start = date.today() - timedelta(days=5 * 365)
+    end = date.today()
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        records = await _fetch_price_target_records(client, symbol)
+
+    points = _aggregate_monthly_points(records, start, end)
 
     logger.info("price_target_history_computed", symbol=symbol, months=len(points))
+
+    return PriceTargetHistoryResponse(symbol=symbol.upper(), points=points)
+
+
+async def compute_custom_price_target_history(
+    symbol: str, start: date, end: date
+) -> PriceTargetHistoryResponse:
+    """拉取个股指定时间区间内分析师目标价，按月聚合均值（用于自定义查询）."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        records = await _fetch_price_target_records(client, symbol)
+
+    points = _aggregate_monthly_points(records, start, end)
+
+    logger.info(
+        "custom_price_target_history_computed",
+        symbol=symbol,
+        start=start.isoformat(),
+        end=end.isoformat(),
+        months=len(points),
+    )
 
     return PriceTargetHistoryResponse(symbol=symbol.upper(), points=points)

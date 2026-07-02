@@ -60,3 +60,15 @@ export async function fetchPriceTargetHistory(symbol: string): Promise<PriceTarg
   )
   return res.data
 }
+
+export async function fetchCustomPriceTargetHistory(
+  symbol: string,
+  start: string,
+  end: string,
+): Promise<PriceTargetHistoryResponse> {
+  const res = await apiClient.get<PriceTargetHistoryResponse>(
+    '/api/v1/analyst-upgrades/custom-price-target',
+    { params: { symbol, start, end } },
+  )
+  return res.data
+}

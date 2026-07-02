@@ -2,9 +2,10 @@
 
 import json
 import zlib
+from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from redis.asyncio import Redis
 
 from app.cache.client import get_redis
@@ -14,7 +15,11 @@ from app.schemas.analyst_upgrade import (
     PriceTargetHistoryResponse,
     SP500UpgradesResponse,
 )
-from app.services.analyst_upgrade.nasdaq100 import compute_nasdaq100_upgrades, compute_price_target_history
+from app.services.analyst_upgrade.nasdaq100 import (
+    compute_custom_price_target_history,
+    compute_nasdaq100_upgrades,
+    compute_price_target_history,
+)
 from app.services.analyst_upgrade.sp500 import compute_sp500_upgrades
 
 router = APIRouter()
@@ -28,6 +33,10 @@ _HISTORY_TTL = 43200    # 12h
 
 def _history_cache_key(symbol: str) -> str:
     return f"analyst_upgrade:history:{symbol.upper()}:v1"
+
+
+def _custom_history_cache_key(symbol: str, start: date, end: date) -> str:
+    return f"analyst_upgrade:history:custom:{symbol.upper()}:{start.isoformat()}:{end.isoformat()}:v1"
 
 
 @router.get("/nasdaq100", response_model=Nasdaq100UpgradesResponse)
@@ -118,4 +127,46 @@ async def get_price_target_history(
             pass
 
     logger.info("price_target_history_served", symbol=sym, months=len(data.points))
+    return data
+
+
+@router.get("/custom-price-target", response_model=PriceTargetHistoryResponse)
+async def get_custom_price_target(
+    symbol: Annotated[str, Query(min_length=1, max_length=10, description="美股股票代码，如 AAPL")],
+    start: Annotated[date, Query(description="起始日期（含），格式 YYYY-MM-DD")],
+    end: Annotated[date, Query(description="结束日期（含），格式 YYYY-MM-DD")],
+    redis: Redis = Depends(get_redis),
+    refresh: Annotated[bool, Query(description="为 true 时跳过缓存，强制重新计算")] = False,
+) -> PriceTargetHistoryResponse:
+    """返回个股在自定义时间区间内按月聚合的分析师平均目标价（用于自定义查询 Tab）."""
+    if start > end:
+        raise HTTPException(status_code=400, detail="起始日期不能晚于结束日期")
+
+    sym = symbol.upper()
+    cache_key = _custom_history_cache_key(sym, start, end)
+
+    if not refresh:
+        try:
+            raw = await redis.get(cache_key)
+            if raw:
+                return PriceTargetHistoryResponse(**json.loads(zlib.decompress(raw)))
+        except Exception:
+            pass
+
+    data = await compute_custom_price_target_history(sym, start, end)
+
+    if data.points:
+        try:
+            compressed = zlib.compress(data.model_dump_json().encode())
+            await redis.set(cache_key, compressed, ex=_HISTORY_TTL)
+        except Exception:
+            pass
+
+    logger.info(
+        "custom_price_target_served",
+        symbol=sym,
+        start=start.isoformat(),
+        end=end.isoformat(),
+        months=len(data.points),
+    )
     return data
