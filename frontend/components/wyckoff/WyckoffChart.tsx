@@ -8,11 +8,20 @@ import {
   LineSeries,
   HistogramSeries,
   BaselineSeries,
+  LineStyle,
   type IChartApi,
   type Time,
   type SeriesMarker,
 } from 'lightweight-charts'
 import type { WyckoffAnalysisResult } from '@/lib/api/wyckoff'
+
+// 成交量坐标轴紧凑格式化（避免长数字撑宽坐标轴导致量价不对齐）
+function formatVolume(v: number): string {
+  if (v >= 1e9) return (v / 1e9).toFixed(1) + 'B'
+  if (v >= 1e6) return (v / 1e6).toFixed(0) + 'M'
+  if (v >= 1e3) return (v / 1e3).toFixed(0) + 'K'
+  return String(Math.round(v))
+}
 
 interface Props {
   data: WyckoffAnalysisResult
@@ -119,6 +128,24 @@ export function WyckoffChart({
         { time: startTime, value: tr.support },
         { time: endTime, value: tr.support },
       ])
+
+      // 区间上沿/下沿价格标注，明确「具体是哪个区间」
+      candleSeries.createPriceLine({
+        price: tr.resistance,
+        color: borderColor,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: `区间上沿 ${tr.resistance.toFixed(2)}`,
+      })
+      candleSeries.createPriceLine({
+        price: tr.support,
+        color: borderColor,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: `区间下沿 ${tr.support.toFixed(2)}`,
+      })
     }
 
     // ── 威科夫事件标记 ─────────────────────────────────────────
@@ -130,7 +157,7 @@ export function WyckoffChart({
           position: bearish ? 'aboveBar' : 'belowBar',
           color: EVENT_COLOR[e.code] ?? '#ffffff',
           shape: bearish ? 'arrowDown' : 'arrowUp',
-          text: e.code,
+          text: e.name,
         }
       })
       createSeriesMarkers(candleSeries, markers)
@@ -146,7 +173,9 @@ export function WyckoffChart({
         width: volRef.current.clientWidth,
         height: volRef.current.clientHeight,
         timeScale: { rightOffset: 4, barSpacing: 8, fixLeftEdge: true, fixRightEdge: true },
+        // 与主图价格轴同宽（minimumWidth 一致）+ 紧凑量能格式，保证量价对齐
         rightPriceScale: { minimumWidth: 64 },
+        localization: { priceFormatter: formatVolume },
       })
 
       const volSeries = volChart.addSeries(HistogramSeries, {
@@ -175,6 +204,12 @@ export function WyckoffChart({
     }
 
     kChart.timeScale().fitContent()
+
+    // 初始化时把主图可视区间同步给成交量副图，避免两图起始/结束不一致
+    if (volChart) {
+      const initRange = kChart.timeScale().getVisibleLogicalRange()
+      if (initRange) volChart.timeScale().setVisibleLogicalRange(initRange)
+    }
 
     const ro = new ResizeObserver(() => {
       if (klineRef.current) kChart.applyOptions({ width: klineRef.current.clientWidth, height: klineRef.current.clientHeight })
