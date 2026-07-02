@@ -93,6 +93,50 @@ def test_insufficient_data():
     assert "不足" in result.summary
 
 
+def _make_uptrend_with_volume_pullback() -> list[dict]:
+    """构造带回调的上升趋势，并在某回调低点放巨量。
+
+    该放量低点位于上升趋势中途、其前并无显著下跌，按威科夫方法论
+    不构成卖出高潮（SC），不应被判定为吸筹。
+    """
+    bars: list[dict] = []
+    price = 100.0
+    day = 0
+
+    def add(o, h, low, c, v):
+        nonlocal day
+        day += 1
+        bars.append(_bar(f"2024-{day // 27 + 1:02d}-{day % 27 + 1:02d}", o, h, low, c, v))
+
+    for cycle in range(9):
+        for _ in range(3):  # 上涨 3 根
+            add(price, price + 3.6, price - 0.6, price + 3, 1000)
+            price += 3
+        for k in range(2):  # 回调 2 根
+            v = 9000 if cycle == 4 and k == 1 else 900
+            add(price, price + 0.4, price - 2.1, price - 1.5, v)
+            price -= 1.5
+    return bars
+
+
+def test_uptrend_volume_pullback_not_accumulation():
+    """上升趋势中的放量回调不应被误判为吸筹（缺少前置下跌）。"""
+    analyzer = WyckoffAnalyzer()
+    result = analyzer.analyze("UPTREND", _make_uptrend_with_volume_pullback(), swing_window=2)
+    assert result.context == "undetermined"
+    assert result.trading_range is None
+    assert result.recommendation is not None
+    assert result.recommendation.action == "watch"
+
+
+def test_trading_range_width_positive():
+    """识别出的交易区间宽度必须为正（支撑 < 阻力）。"""
+    bars = _make_accumulation_bars()
+    result = WyckoffAnalyzer().analyze("TEST", bars, swing_window=2)
+    if result.trading_range is not None:
+        assert result.trading_range.resistance > result.trading_range.support
+
+
 def test_markup_after_breakout():
     """向上突破区间后应判定为拉升阶段。"""
     bars = _make_accumulation_bars()

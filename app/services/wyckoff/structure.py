@@ -79,35 +79,78 @@ def detect_structure(
     *,
     climax_vol_ratio: float = 1.6,
     st_tol: float = 0.04,
+    trend_min: float = 0.12,
 ) -> StructureResult:
     """识别交易区间及威科夫事件序列。
 
     climax_vol_ratio：判定量能高潮所需的最小放量倍数。
     st_tol：ST / Spring 判定的价格容差（相对区间宽度或价格的比例）。
+    trend_min：高潮前所需的最小趋势幅度（威科夫核心前提：SC 前必有显著下跌、
+        BC 前必有显著上涨），达不到则视为无清晰吸筹/派发结构。
     """
     if len(swings) < 3:
         return StructureResult(context="undetermined")
 
-    # 1. 定位量能高潮摆动点：放量最显著的摆动极值
-    climax = _find_climax(swings, vstats, climax_vol_ratio)
+    # 1. 定位量能高潮摆动点。威科夫方法论要求高潮出现在一段显著趋势之后，
+    #    且随后出现反向反弹（AR），否则不构成吸筹/派发结构。
+    climax = _find_climax(bars, swings, vstats, climax_vol_ratio, trend_min)
     if climax is None:
         return StructureResult(context="undetermined")
 
     if climax.kind == "low":
-        return _build_accumulation(bars, swings, vstats, climax, st_tol)
-    return _build_distribution(bars, swings, vstats, climax, st_tol)
+        result = _build_accumulation(bars, swings, vstats, climax, st_tol)
+    else:
+        result = _build_distribution(bars, swings, vstats, climax, st_tol)
+
+    # 交易区间宽度必须为正，否则不认为存在有效区间
+    if result.trading_range is not None and result.trading_range.width <= 0:
+        return StructureResult(context="undetermined")
+    return result
 
 
-def _find_climax(swings: list[Swing], vstats: VolumeStats, min_ratio: float) -> Swing | None:
-    """在摆动点中选出量能高潮点。
+def _find_climax(
+    bars: list[dict], swings: list[Swing], vstats: VolumeStats, min_ratio: float, trend_min: float,
+) -> Swing | None:
+    """在摆动点中选出真正的量能高潮点（SC / BC）。
 
-    优先取放量达标者中量比最高的；若无达标者，则退化为整体量比最高的摆动点。
+    合格条件（缺一不可）：
+    1. 放量达标：量比 >= min_ratio；
+    2. 趋势前提：摆动低点前须有 >= trend_min 的下跌（SC），摆动高点前须有
+       >= trend_min 的上涨（BC）——这是区分「高潮」与普通趋势中放量的关键；
+    3. 极值确认：该点为此前价格的最低/最高（含微小容差）；
+    4. 反向反弹：其后至少存在一个反向摆动点（对应 AR 自动反弹/回落）。
+
+    在全部合格点中取量比最高者为最具代表性的高潮。若无合格点，返回 None
+    （表示无清晰的吸筹/派发结构，而非强行判定）。
     """
-    qualified = [s for s in swings if vstats.ratio(s.idx) >= min_ratio]
-    pool = qualified or swings
-    if not pool:
+    extreme_tol = 0.005
+    valid: list[Swing] = []
+    for s in swings:
+        if vstats.ratio(s.idx) < min_ratio:
+            continue
+        # 其后需有反向摆动（AR）
+        if not any(o.kind != s.kind for o in swings if o.idx > s.idx):
+            continue
+        if s.idx <= 0:
+            continue
+        if s.kind == "low":
+            prior_high = max((b["high"] for b in bars[: s.idx]), default=s.price)
+            decline = (prior_high - s.price) / s.price if s.price else 0.0
+            lowest = min(b["low"] for b in bars[: s.idx + 1])
+            is_extreme = s.price <= lowest * (1 + extreme_tol)
+            if decline >= trend_min and is_extreme:
+                valid.append(s)
+        else:  # high
+            prior_low = min((b["low"] for b in bars[: s.idx]), default=s.price)
+            advance = (s.price - prior_low) / prior_low if prior_low else 0.0
+            highest = max(b["high"] for b in bars[: s.idx + 1])
+            is_extreme = s.price >= highest * (1 - extreme_tol)
+            if advance >= trend_min and is_extreme:
+                valid.append(s)
+
+    if not valid:
         return None
-    return max(pool, key=lambda s: vstats.ratio(s.idx))
+    return max(valid, key=lambda s: vstats.ratio(s.idx))
 
 
 def _mk_event(code: str, sw: Swing, vstats: VolumeStats, phase: str, extra: str = "") -> WyckoffEvent:

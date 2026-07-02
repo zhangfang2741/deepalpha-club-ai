@@ -70,12 +70,14 @@ class WyckoffAnalyzer:
         *,
         swing_window: int = 3,
         climax_vol_ratio: float = 1.6,
+        trend_min: float = 0.12,
     ) -> WyckoffAnalysisResult:
         """对 K 线执行完整威科夫分析。
 
         bars: list of {time, open, high, low, close, volume}
         swing_window: 摆动点识别的左右窗口
         climax_vol_ratio: 判定量能高潮所需的最小放量倍数
+        trend_min: 高潮前所需的最小趋势幅度（SC 前下跌 / BC 前上涨）
         """
         logger.info("wyckoff_analysis_start", symbol=symbol, bars=len(bars))
         result = WyckoffAnalysisResult(symbol=symbol, bars_count=len(bars))
@@ -93,7 +95,7 @@ class WyckoffAnalyzer:
             return result
 
         structure: StructureResult = detect_structure(
-            bars, swings, vstats, climax_vol_ratio=climax_vol_ratio
+            bars, swings, vstats, climax_vol_ratio=climax_vol_ratio, trend_min=trend_min
         )
         result.context = structure.context
         result.trading_range = structure.trading_range
