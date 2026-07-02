@@ -176,19 +176,33 @@ class ChanAnalyzer:
             # f.idx 为分型中心K线索引，右侧K线索引 = f.idx + 1
             f.confirmed = (f.idx + 1) < last_mc_idx
 
-        # 笔：最后一笔未确认；端点分型未锁定的笔亦未确认
+        # 统一原则：一个结构只要仍触及“构成它的下层序列”的最右端
+        # （尚无后续下层元素离开/翻转来锁定它），就算未确认。
+
+        # 笔：最后一笔处于右侧前沿（端点可能延伸/反转），未确认；
+        #     端点分型形态未锁定的笔亦未确认。
         for i, s in enumerate(r.strokes):
             is_last = i == len(r.strokes) - 1
             s.confirmed = (not is_last) and s.end.confirmed
 
-        # 线段：最后一条线段未确认（结束需后续笔确认）
-        for i, seg in enumerate(r.segments):
-            seg.confirmed = i != len(r.segments) - 1
+        # 线段：由笔构成，仅当仍含整段笔序列的最末一笔时未确认
+        # （此时尚无后续笔离开以锁定其结束；一旦有笔离开，线段即已确认，
+        #  即便它是最后一条线段）。
+        last_stroke = r.strokes[-1] if r.strokes else None
+        for seg in r.segments:
+            still_frontier = (
+                last_stroke is not None and bool(seg.strokes) and seg.strokes[-1] is last_stroke
+            )
+            seg.confirmed = not still_frontier
 
-        # 中枢：每个级别的最后一个中枢未确认（可能延伸）
-        for pivots in (r.stroke_pivots, r.segment_pivots):
-            for i, p in enumerate(pivots):
-                p.confirmed = i != len(pivots) - 1
+        # 中枢：由笔/线段构成，仅当仍含整段序列的最末元素时未确认。
+        for pivots, elements in ((r.stroke_pivots, r.strokes), (r.segment_pivots, r.segments)):
+            last_elem = elements[-1] if elements else None
+            for p in pivots:
+                still_frontier = (
+                    last_elem is not None and bool(p.elements) and p.elements[-1] is last_elem
+                )
+                p.confirmed = not still_frontier
 
         # 信号：落在未确认笔（端点时间）之上的信号未确认
         unconfirmed_end_times = {s.end_time for s in r.strokes if not s.confirmed}

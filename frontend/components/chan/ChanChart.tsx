@@ -93,8 +93,8 @@ export function ChanChart({
     candleSeries.setData(bars)
 
     // ── 笔（折线标注）───────────────────────────────────────────
-    // 已确认的笔用实线（浅虚线），最后一笔若未确认则单独用醒目虚线 + 半透明色，
-    // 明确提示“最右侧结构尚未走完”。
+    // 已确认的笔用实线（细琥珀色，与更粗的绿色线段靠颜色/粗细区分）；
+    // 最后一笔若未确认则单独用半透明虚线，明确提示“最右侧结构尚未走完”。
     if (showStrokes && data.strokes.length > 0) {
       const confirmedStrokes = data.strokes.filter((s) => s.confirmed)
       const lastStroke = data.strokes[data.strokes.length - 1]
@@ -104,7 +104,7 @@ export function ChanChart({
         const strokeSeries = kChart.addSeries(LineSeries, {
           color: '#f59e0b',
           lineWidth: 1,
-          lineStyle: 2, // dashed
+          lineStyle: 0, // solid = 已确认
           priceLineVisible: false,
           lastValueVisible: false,
         })
@@ -120,11 +120,11 @@ export function ChanChart({
       }
 
       if (lastUnconfirmed) {
-        // 未确认的最后一笔：半透明琥珀色 + 更醒目的点线
+        // 未确认的最后一笔：半透明琥珀色 + 虚线
         const pendingSeries = kChart.addSeries(LineSeries, {
-          color: 'rgba(245,158,11,0.45)',
+          color: 'rgba(245,158,11,0.5)',
           lineWidth: 2,
-          lineStyle: 1, // dotted
+          lineStyle: 2, // dashed = 未确认
           priceLineVisible: false,
           lastValueVisible: false,
         })
