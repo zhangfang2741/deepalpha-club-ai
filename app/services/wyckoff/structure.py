@@ -293,7 +293,7 @@ def _build_distribution(
         start_idx=bc.idx, start_time=bc.time,
         end_idx=len(bars) - 1, end_time=bars[-1]["time"],
     )
-    events = _dedup_keep_last(events, {"LPSY"})
+    events = _dedup_keep_last(events, {"LPSY", "UTAD"})
     return StructureResult(context="distribution", trading_range=tr, events=events, climax_swing=bc)
 
 

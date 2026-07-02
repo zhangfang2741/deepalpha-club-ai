@@ -130,9 +130,9 @@ class WyckoffAnalyzer:
         ]
         # 已突破/跌破区间时，说明结构已演变为拉升或下跌，避免与阶段标签矛盾
         if r.phase and r.phase.breakout == "up":
-            parts.append("价格已向上突破区间，吸筹完成、进入拉升。")
+            parts.append("价格已向上突破区间上沿，进入拉升。")
         elif r.phase and r.phase.breakout == "down":
-            parts.append("价格已向下跌破区间，派发/吸筹失败、进入下跌。")
+            parts.append("价格已向下跌破区间下沿，进入下跌。")
         if r.phase:
             parts.append(f"当前处于{r.phase.stage_label}，{r.phase.phase_label}。")
         if r.position_desc:
