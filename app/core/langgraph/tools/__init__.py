@@ -11,6 +11,7 @@ from langchain_core.tools.base import BaseTool
 from .ask_human import ask_human
 from .chan_analysis import chan_analysis_tool as _chan_analysis_fn
 from .duckduckgo_search import duckduckgo_search_tool
+from .ichimoku_analysis import ichimoku_analysis_tool as _ichimoku_analysis_fn
 from .wyckoff_analysis import wyckoff_analysis_tool as _wyckoff_analysis_fn
 
 
@@ -54,4 +55,30 @@ async def wyckoff_analysis(symbol: str, start_date: str, end_date: str, freq: st
     return await _wyckoff_analysis_fn(symbol, start_date, end_date, freq)
 
 
-tools: list[BaseTool] = [duckduckgo_search_tool, ask_human, chan_analysis, wyckoff_analysis]
+@tool
+async def ichimoku_analysis(symbol: str, start_date: str, end_date: str, freq: str = "daily") -> str:
+    """使用一目均衡表（Ichimoku Kinko Hyo，云图）对股票进行技术分析。
+
+    计算转换线、基准线、先行带 A/B（云 Kumo）、迟行线，判断 TK 交叉、
+    价格相对云的位置、云的多空色与迟行线确认，综合「三役」给出买卖信号与操作建议。
+    适用于美股（使用 FMP 数据）和 A 股（使用 AKShare，代码如 SH600519）。
+
+    Args:
+        symbol: 股票代码，如 'AAPL'、'NVDA' 或 'SH600519'
+        start_date: 分析起始日期，格式 YYYY-MM-DD，建议至少半年数据（云需 52+26 根）
+        end_date: 分析截止日期，格式 YYYY-MM-DD
+        freq: K线周期，daily（日线）或 weekly（周线）
+
+    Returns:
+        详细的一目均衡表分析报告文本
+    """
+    return await _ichimoku_analysis_fn(symbol, start_date, end_date, freq)
+
+
+tools: list[BaseTool] = [
+    duckduckgo_search_tool,
+    ask_human,
+    chan_analysis,
+    wyckoff_analysis,
+    ichimoku_analysis,
+]
