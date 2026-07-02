@@ -9,15 +9,19 @@ import {
   IChartApi,
   ISeriesApi,
 } from 'lightweight-charts'
-import type { PriceTargetPoint } from '@/lib/api/analyst_upgrade'
+import type { PriceTargetPoint, StockPricePoint } from '@/lib/api/analyst_upgrade'
+
+const TARGET_COLOR = '#3b82f6'
+const PRICE_COLOR = '#f59e0b'
 
 interface TooltipState {
   visible: boolean
   x: number
   y: number
   label: string
-  value: number
+  target: number | null
   count: number
+  price: number | null
 }
 
 // 月份标签 "2024-06" → "2024年6月"
@@ -27,19 +31,28 @@ export function formatMonthLabel(label: string): string {
   return `${y}年${parseInt(m)}月`
 }
 
+// 月份标签 "2024-06" → 该月 1 号的 unix 时间戳
+function labelToTs(label: string): number {
+  const [yearStr, monthStr] = label.split('-')
+  return Math.floor(new Date(parseInt(yearStr), parseInt(monthStr) - 1, 1).getTime() / 1000)
+}
+
 interface PriceTargetChartProps {
   points: PriceTargetPoint[]
+  pricePoints?: StockPricePoint[]
   synthetic?: boolean
 }
 
-/** 分析师平均目标价月度走势折线图（复用于弹窗与自定义查询） */
-export default function PriceTargetChart({ points, synthetic = false }: PriceTargetChartProps) {
+/** 分析师平均目标价月度走势折线图，可叠加实际股价（复用于弹窗与自定义查询） */
+export default function PriceTargetChart({ points, pricePoints = [], synthetic = false }: PriceTargetChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
-  const seriesRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const pointsByTime = useRef<Record<number, PriceTargetPoint>>({})
+  const targetSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const priceSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const targetByTime = useRef<Record<number, PriceTargetPoint>>({})
+  const priceByTime = useRef<Record<number, number>>({})
   const [tooltip, setTooltip] = useState<TooltipState>({
-    visible: false, x: 0, y: 0, label: '', value: 0, count: 0,
+    visible: false, x: 0, y: 0, label: '', target: null, count: 0, price: null,
   })
 
   useEffect(() => {
@@ -66,27 +79,48 @@ export default function PriceTargetChart({ points, synthetic = false }: PriceTar
       height: 320,
     })
 
-    const series = chart.addSeries(LineSeries, {
-      color: '#3b82f6',
+    // 目标价折线
+    const targetSeries = chart.addSeries(LineSeries, {
+      color: TARGET_COLOR,
       lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: true,
       crosshairMarkerVisible: true,
       crosshairMarkerRadius: 5,
-      crosshairMarkerBorderColor: '#3b82f6',
+      crosshairMarkerBorderColor: TARGET_COLOR,
       crosshairMarkerBackgroundColor: '#fff',
     })
 
-    // 月份标签 "2024-06" → unix 时间戳
-    pointsByTime.current = {}
-    const data = points.map((p) => {
-      const [yearStr, monthStr] = p.label.split('-')
-      const ts = Math.floor(new Date(parseInt(yearStr), parseInt(monthStr) - 1, 1).getTime() / 1000)
-      pointsByTime.current[ts] = p
+    targetByTime.current = {}
+    const targetData = points.map((p) => {
+      const ts = labelToTs(p.label)
+      targetByTime.current[ts] = p
       return { time: ts as number, value: p.avg_target }
     })
+    targetSeries.setData(targetData as never[])
 
-    series.setData(data as never[])
+    // 股价折线（可选）
+    let priceSeries: ISeriesApi<'Line'> | null = null
+    priceByTime.current = {}
+    if (pricePoints.length > 0) {
+      priceSeries = chart.addSeries(LineSeries, {
+        color: PRICE_COLOR,
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 5,
+        crosshairMarkerBorderColor: PRICE_COLOR,
+        crosshairMarkerBackgroundColor: '#fff',
+      })
+      const priceData = pricePoints.map((p) => {
+        const ts = labelToTs(p.label)
+        priceByTime.current[ts] = p.close
+        return { time: ts as number, value: p.close }
+      })
+      priceSeries.setData(priceData as never[])
+    }
+
     chart.timeScale().fitContent()
 
     chart.subscribeCrosshairMove((param) => {
@@ -94,25 +128,27 @@ export default function PriceTargetChart({ points, synthetic = false }: PriceTar
         setTooltip((t) => ({ ...t, visible: false }))
         return
       }
-      const price = param.seriesData.get(series)
-      if (!price) {
+      const ts = param.time as number
+      const tp = targetByTime.current[ts]
+      const priceVal = priceByTime.current[ts]
+      if (tp === undefined && priceVal === undefined) {
         setTooltip((t) => ({ ...t, visible: false }))
         return
       }
-      const ts = param.time as number
-      const p = pointsByTime.current[ts]
       setTooltip({
         visible: true,
         x: param.point.x,
         y: param.point.y,
-        label: p ? formatMonthLabel(p.label) : '',
-        value: (price as { value: number }).value,
-        count: p?.count ?? 0,
+        label: tp ? formatMonthLabel(tp.label) : formatMonthLabel(labelFromTs(ts, pricePoints)),
+        target: tp ? tp.avg_target : null,
+        count: tp?.count ?? 0,
+        price: priceVal ?? null,
       })
     })
 
     chartRef.current = chart
-    seriesRef.current = series
+    targetSeriesRef.current = targetSeries
+    priceSeriesRef.current = priceSeries
 
     const obs = new ResizeObserver(() => {
       if (containerRef.current && chartRef.current) {
@@ -126,7 +162,7 @@ export default function PriceTargetChart({ points, synthetic = false }: PriceTar
       chart.remove()
       chartRef.current = null
     }
-  }, [points])
+  }, [points, pricePoints])
 
   if (points.length === 0) {
     return (
@@ -145,6 +181,16 @@ export default function PriceTargetChart({ points, synthetic = false }: PriceTar
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-4 text-sm items-center">
+        <span className="flex items-center gap-1.5 text-gray-500">
+          <span className="inline-block w-3 h-0.5" style={{ backgroundColor: TARGET_COLOR }} />
+          目标价
+        </span>
+        {pricePoints.length > 0 && (
+          <span className="flex items-center gap-1.5 text-gray-500">
+            <span className="inline-block w-3 h-0.5" style={{ backgroundColor: PRICE_COLOR }} />
+            股价
+          </span>
+        )}
         <span className="text-gray-500">起点 <span className="font-semibold text-gray-800">${first.avg_target.toFixed(0)}</span> <span className="text-xs text-gray-400">({formatMonthLabel(first.label)})</span></span>
         <span className="text-gray-500">最新 <span className="font-semibold text-gray-800">${last.avg_target.toFixed(0)}</span> <span className="text-xs text-gray-400">({formatMonthLabel(last.label)})</span></span>
         {totalPct && (
@@ -169,7 +215,12 @@ export default function PriceTargetChart({ points, synthetic = false }: PriceTar
             }}
           >
             <div className="font-semibold">{tooltip.label}</div>
-            <div>均值目标价 <span className="text-blue-300">${tooltip.value.toFixed(2)}</span></div>
+            {tooltip.target !== null && (
+              <div>目标价 <span style={{ color: '#93c5fd' }}>${tooltip.target.toFixed(2)}</span></div>
+            )}
+            {tooltip.price !== null && (
+              <div>股价 <span style={{ color: '#fcd34d' }}>${tooltip.price.toFixed(2)}</span></div>
+            )}
             {tooltip.count > 0 && (
               <div className="text-gray-400">{tooltip.count} 份报告</div>
             )}
@@ -178,4 +229,12 @@ export default function PriceTargetChart({ points, synthetic = false }: PriceTar
       </div>
     </div>
   )
+}
+
+// 当某个时间戳只有股价点时，从 pricePoints 反查其月份标签
+function labelFromTs(ts: number, pricePoints: StockPricePoint[]): string {
+  for (const p of pricePoints) {
+    if (labelToTs(p.label) === ts) return p.label
+  }
+  return ''
 }

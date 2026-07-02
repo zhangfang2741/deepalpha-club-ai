@@ -14,6 +14,7 @@ from app.schemas.analyst_upgrade import (
     Nasdaq100UpgradesResponse,
     PriceTargetHistoryResponse,
     PriceTargetPoint,
+    StockPricePoint,
     UpgradeStock,
 )
 
@@ -504,12 +505,65 @@ async def compute_price_target_history(symbol: str) -> PriceTargetHistoryRespons
     return PriceTargetHistoryResponse(symbol=symbol.upper(), points=points)
 
 
+async def _fetch_monthly_prices(
+    client: httpx.AsyncClient, symbol: str, start: date, end: date
+) -> list[StockPricePoint]:
+    """拉取个股日线收盘价，按月聚合为月末收盘价（每月最后一个交易日）."""
+    try:
+        resp = await client.get(
+            f"{_FMP_STABLE}/historical-price-eod/full",
+            params={
+                "symbol": symbol.upper(),
+                "from": start.isoformat(),
+                "to": end.isoformat(),
+                "apikey": settings.FMP_API_KEY,
+            },
+        )
+    except Exception as e:
+        logger.warning("stock_price_fetch_error", symbol=symbol, error=str(e))
+        return []
+
+    if resp.status_code != 200:
+        logger.warning("stock_price_http_error", symbol=symbol, status=resp.status_code)
+        return []
+
+    rows = resp.json()
+    if not isinstance(rows, list) or not rows:
+        return []
+
+    # 每月保留日期最大的一条（月末收盘）
+    monthly: dict[str, tuple[date, float]] = {}
+    for r in rows:
+        raw_date = r.get("date")
+        close = r.get("close")
+        if raw_date is None or close is None:
+            continue
+        try:
+            dt = datetime.fromisoformat(str(raw_date)[:10]).date()
+            close_val = float(close)
+        except (TypeError, ValueError):
+            continue
+        if dt < start or dt > end:
+            continue
+        key = f"{dt.year}-{dt.month:02d}"
+        if key not in monthly or dt > monthly[key][0]:
+            monthly[key] = (dt, close_val)
+
+    return [
+        StockPricePoint(label=label, close=round(price, 2))
+        for label, (_, price) in sorted(monthly.items(), key=lambda kv: kv[0])
+    ]
+
+
 async def compute_custom_price_target_history(
     symbol: str, start: date, end: date
 ) -> PriceTargetHistoryResponse:
-    """拉取个股指定时间区间内分析师目标价，按月聚合均值（用于自定义查询）."""
+    """拉取个股指定时间区间内分析师目标价（按月聚合均值）与月度股价（用于自定义查询）."""
     async with httpx.AsyncClient(timeout=30) as client:
-        records = await _fetch_price_target_records(client, symbol)
+        records, price_points = await asyncio.gather(
+            _fetch_price_target_records(client, symbol),
+            _fetch_monthly_prices(client, symbol, start, end),
+        )
 
     points = _aggregate_monthly_points(records, start, end)
 
@@ -519,6 +573,9 @@ async def compute_custom_price_target_history(
         start=start.isoformat(),
         end=end.isoformat(),
         months=len(points),
+        price_months=len(price_points),
     )
 
-    return PriceTargetHistoryResponse(symbol=symbol.upper(), points=points)
+    return PriceTargetHistoryResponse(
+        symbol=symbol.upper(), points=points, price_points=price_points
+    )
