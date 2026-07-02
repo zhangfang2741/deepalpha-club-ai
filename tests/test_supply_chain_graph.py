@@ -912,17 +912,19 @@ class TestFinReflectOntology:
 
     def test_entity_types_present(self):
         from app.services.graph.finreflect.ontology import ENTITY_TYPES
-        assert len(ENTITY_TYPES) >= 19
+        assert len(ENTITY_TYPES) >= 21
         for name in ("ORG", "COMP", "ORG_GOV", "ORG_REG", "PERSON", "GPE",
-                     "RISK_FACTOR", "FIN_METRIC", "ESG_TOPIC", "MACRO_CONDITION"):
+                     "RISK_FACTOR", "FIN_METRIC", "ESG_TOPIC", "MACRO_CONDITION",
+                     "RAW_MATERIAL", "FIN_MARKET"):
             assert name in ENTITY_TYPES
 
     def test_relation_types_present(self):
         from app.services.graph.finreflect.ontology import RELATION_TYPES
-        assert len(RELATION_TYPES) >= 20
+        assert len(RELATION_TYPES) >= 22
         for name in ("Has_Stake_In", "Operates_In", "Produces", "Discloses",
                      "Depends_On", "Positively_Impacts", "Negatively_Impacts",
-                     "Faces", "Complies_With", "Subject_To", "Related_To"):
+                     "Faces", "Complies_With", "Subject_To", "Related_To",
+                     "Causes_Shortage_Of", "Market_Reacts_To"):
             assert name in RELATION_TYPES
 
     def test_validators(self):

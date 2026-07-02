@@ -1,8 +1,9 @@
 """FinReflectKG 本体注册表 — 论文 Table 1/2 定义的实体与关系类型。
 
 论文完整本体为 24 类实体、29 类关系（面向 SEC 10-K 年报抽取）。
-本注册表当前收录已从公开渠道（论文衍生工作与开源数据集文档）核实的
-19 类实体与 20 类关系；类型名称与论文一致，描述为本项目自行撰写的简述。
+本注册表当前收录已核实的 21 类实体与 22 类关系（来源：论文衍生工作
+FinReflectKG-MultiHop（arXiv:2510.02906）正文/模式示例与开源数据集文档）；
+类型名称与论文一致，描述为本项目自行撰写的简述。
 剩余条目核实后直接在下方两个字典中追加即可（数据驱动，无需改动其他代码）。
 
 三元组格式（论文 5 元组）：
@@ -31,6 +32,8 @@ ENTITY_TYPES: dict[str, str] = {
     "REGULATORY_REQUIREMENT": "Specific regulations or legal frameworks (e.g., Basel III, SEC rules, GDPR)",
     "LITIGATION": "Lawsuits or legal proceedings the company is party to",
     "ACCOUNTING_POLICY": "Accounting standards or policies applied in the filing (e.g., ASC standards, revenue recognition)",
+    "RAW_MATERIAL": "Critical raw materials or commodity inputs the company relies on (e.g., lithium, semiconductors, crude oil)",
+    "FIN_MARKET": "Financial markets or market indices (e.g., S&P 500, bond market, commodity markets)",
 }
 
 # ── 关系类型（Table 2）────────────────────────────────────────────────────────
@@ -55,6 +58,8 @@ RELATION_TYPES: dict[str, str] = {
     "Faces": "Encounters a legal or regulatory challenge (e.g., ORG → LITIGATION)",
     "Complies_With": "Meets a regulatory or policy requirement (e.g., ORG → REGULATORY_REQUIREMENT)",
     "Subject_To": "Is governed or bound by the tail entity (e.g., ORG → ACCOUNTING_POLICY)",
+    "Causes_Shortage_Of": "Triggers a supply shortage of the tail entity (e.g., EVENT → RAW_MATERIAL)",
+    "Market_Reacts_To": "Links a condition or event to a financial market reaction (e.g., MACRO_CONDITION → FIN_MARKET)",
 }
 
 
