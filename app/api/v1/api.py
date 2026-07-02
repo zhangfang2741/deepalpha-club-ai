@@ -9,6 +9,7 @@ from app.api.v1.chan import router as chan_router
 from app.api.v1.chatbot import router as chatbot_router
 from app.api.v1.etf import router as etf_router
 from app.api.v1.fear_greed import router as fear_greed_router
+from app.api.v1.ichimoku import router as ichimoku_router
 from app.api.v1.industry_panic import router as industry_panic_router
 from app.api.v1.research import router as research_router
 from app.api.v1.skills import router as skills_router
@@ -26,6 +27,7 @@ api_router.include_router(chan_router, prefix="/chan", tags=["chan"])
 api_router.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
 api_router.include_router(etf_router, prefix="/etf", tags=["etf"])
 api_router.include_router(fear_greed_router, prefix="/fear-greed", tags=["fear-greed"])
+api_router.include_router(ichimoku_router, prefix="/ichimoku", tags=["ichimoku"])
 api_router.include_router(industry_panic_router, prefix="/industry-panic", tags=["industry-panic"])
 api_router.include_router(research_router, prefix="/research", tags=["research"])
 api_router.include_router(skills_router, prefix="/skills", tags=["skills"])
