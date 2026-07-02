@@ -912,10 +912,10 @@ class TestFinReflectOntology:
 
     def test_entity_types_present(self):
         from app.services.graph.finreflect.ontology import ENTITY_TYPES
-        assert len(ENTITY_TYPES) >= 21
+        assert len(ENTITY_TYPES) >= 22
         for name in ("ORG", "COMP", "ORG_GOV", "ORG_REG", "PERSON", "GPE",
-                     "RISK_FACTOR", "FIN_METRIC", "ESG_TOPIC", "MACRO_CONDITION",
-                     "RAW_MATERIAL", "FIN_MARKET"):
+                     "SEGMENT", "RISK_FACTOR", "FIN_METRIC", "ESG_TOPIC",
+                     "MACRO_CONDITION", "RAW_MATERIAL", "FIN_MARKET"):
             assert name in ENTITY_TYPES
 
     def test_relation_types_present(self):
@@ -942,9 +942,9 @@ class TestFinReflectOntology:
 
 
 class TestTableAwareChunker:
-    """表格感知切片：表格保持原子，普通文本按句切分。"""
+    """表格感知语义切片：表格独立原子块，文本按段落/句子边界切分。"""
 
-    def test_markdown_table_kept_intact(self):
+    def test_markdown_table_standalone_chunk(self):
         from app.services.graph.finreflect.chunker import chunk_document
         prose = "This is a sentence about revenue. " * 30
         table = "\n".join([
@@ -956,13 +956,14 @@ class TestTableAwareChunker:
         ])
         text = prose + "\n" + table + "\n" + prose
         chunks = chunk_document(text, max_tokens=100)
-        assert len(chunks) > 1  # 预算够小，确实发生了切分
+        assert len(chunks) > 1
         containing = [c for c in chunks if "Data Center" in c]
         assert len(containing) == 1
-        # 全部表格行都在同一个 chunk 中
+        # 论文：表格独立保留为单个原子 chunk（不与正文混排）
         assert all(row in containing[0] for row in ("Segment", "Gaming", "Automotive"))
+        assert "sentence about revenue" not in containing[0]
 
-    def test_html_table_kept_intact(self):
+    def test_html_table_standalone_chunk(self):
         from app.services.graph.finreflect.chunker import chunk_document
         table = "<table><tr><td>Net Income</td><td>$10B</td></tr><tr><td>CapEx</td><td>$3B</td></tr></table>"
         text = ("Some prose sentence here. " * 40) + table + (" More prose after table. " * 40)
@@ -970,6 +971,7 @@ class TestTableAwareChunker:
         containing = [c for c in chunks if "Net Income" in c]
         assert len(containing) == 1
         assert "CapEx" in containing[0]
+        assert "prose" not in containing[0]
 
     def test_prose_splits_at_sentence_boundary(self):
         from app.services.graph.finreflect.chunker import chunk_document
@@ -979,13 +981,26 @@ class TestTableAwareChunker:
         for c in chunks:
             assert c.endswith(".")  # 不截断句子
 
+    def test_paragraph_boundary_preferred(self):
+        from app.services.graph.finreflect.chunker import chunk_document
+        para1 = "First topic sentence one. First topic sentence two."
+        para2 = "Second topic sentence one. Second topic sentence two."
+        # 两段合计超预算 → 应在段落边界断开，而非句子中间
+        chunks = chunk_document(para1 + "\n\n" + para2, max_tokens=(len(para1) + 10) // 4)
+        assert chunks[0] == para1
+        assert chunks[1] == para2
+
+    def test_default_chunk_size_is_2048(self):
+        from app.services.graph.finreflect.chunker import CHUNK_SIZE_TOKENS
+        assert CHUNK_SIZE_TOKENS == 2048  # 论文 4.2：CHUNK_SIZE = 2048
+
 
 class TestFinReflectCheckRules:
-    """CheckRules 四条规则化合规策略。"""
+    """CheckRules：论文 5.1 节的四条规则与 CR(t) 得分。"""
 
     def _valid_triple(self):
         return {
-            "head": "NVIDIA", "head_type": "ORG",
+            "head": "NVDA", "head_type": "ORG",
             "relation": "Produces",
             "tail": "H100 GPU", "tail_type": "PRODUCT",
             "evidence": "strong demand for its H100 GPU",
@@ -995,33 +1010,40 @@ class TestFinReflectCheckRules:
         from app.services.graph.finreflect.checkrules import check_triple
         assert check_triple(self._valid_triple(), _FINKG_CHUNK) == []
 
+    def test_abstract_subject_reference_flagged(self):
+        from app.services.graph.finreflect.checkrules import check_triple
+        t = self._valid_triple()
+        t["head"] = "We"  # 论文 R1：抽象指代应规范化为具体实体
+        violations = check_triple(t, _FINKG_CHUNK)
+        assert any("subject_reference" in v for v in violations)
+
+    def test_entity_length_over_5_words_flagged(self):
+        from app.services.graph.finreflect.checkrules import check_triple
+        t = self._valid_triple()
+        t["tail"] = "the newly announced flagship data center accelerator product"
+        violations = check_triple(t, _FINKG_CHUNK)
+        assert any("entity_length" in v for v in violations)
+
     def test_invalid_entity_type_flagged(self):
         from app.services.graph.finreflect.checkrules import check_triple
         t = self._valid_triple()
         t["head_type"] = "Company"  # 旧 schema 类型
         violations = check_triple(t, _FINKG_CHUNK)
-        assert any("entity_type_policy" in v for v in violations)
+        assert any("entity_schema" in v for v in violations)
 
     def test_invalid_relation_flagged(self):
         from app.services.graph.finreflect.checkrules import check_triple
         t = self._valid_triple()
         t["relation"] = "HAS_PRODUCT"  # 旧 schema 关系
         violations = check_triple(t, _FINKG_CHUNK)
-        assert any("relation_policy" in v for v in violations)
+        assert any("relationship_schema" in v for v in violations)
 
-    def test_self_loop_flagged(self):
-        from app.services.graph.finreflect.checkrules import check_triple
-        t = self._valid_triple()
-        t["tail"] = "NVIDIA"
-        violations = check_triple(t, _FINKG_CHUNK)
-        assert any("well_formed_policy" in v and "自环" in v for v in violations)
-
-    def test_ungrounded_evidence_flagged(self):
-        from app.services.graph.finreflect.checkrules import check_triple
-        t = self._valid_triple()
-        t["evidence"] = "The quarterly dividend was raised amid favorable macroeconomic tailwinds worldwide"
-        violations = check_triple(t, _FINKG_CHUNK)
-        assert any("grounding_policy" in v for v in violations)
+    def test_checkrules_score_per_triple(self):
+        from app.services.graph.finreflect.checkrules import checkrules_score
+        assert checkrules_score(self._valid_triple()) == 1.0
+        bad = self._valid_triple()
+        bad["relation"] = "MADE_UP"  # 违反 1/4 条规则 → CR(t) = 0.75
+        assert checkrules_score(bad) == 0.75
 
     def test_compliance_score_and_annotation(self):
         from app.services.graph.finreflect.checkrules import annotate_compliance, compliance_score
@@ -1034,14 +1056,15 @@ class TestFinReflectCheckRules:
         assert annotated[0]["compliant"] is True
         assert annotated[1]["compliant"] is False
         assert annotated[1]["violations"]
+        assert annotated[1]["checkrules_score"] == 0.75
 
 
 class TestFinReflectParsing:
-    """三元组与评审 JSON 解析。"""
+    """三元组与反馈 JSON 解析。"""
 
     def test_parse_triples_fenced_json(self):
         from app.services.graph.finreflect.graph import parse_triples_response
-        raw = '```json\n{"triples": [{"head": "NVIDIA", "head_type": "ORG", "relation": "Produces", "tail": "H100", "tail_type": "PRODUCT", "evidence": "x"}]}\n```'
+        raw = '```json\n{"triples": [{"head": "NVDA", "head_type": "ORG", "relation": "Produces", "tail": "H100", "tail_type": "PRODUCT", "evidence": "x"}]}\n```'
         result = parse_triples_response(raw)
         assert len(result) == 1
         assert result[0]["relation"] == "Produces"
@@ -1050,29 +1073,35 @@ class TestFinReflectParsing:
         from app.services.graph.finreflect.graph import parse_triples_response
         raw = json.dumps({"triples": [
             {"head": "", "relation": "Produces", "tail": "H100"},  # 头为空 → 丢弃
-            {"head": "NVIDIA", "head_type": "ORG", "relation": "Produces", "tail": "H100", "tail_type": "PRODUCT", "evidence": "x"},
+            {"head": "NVDA", "head_type": "ORG", "relation": "Produces", "tail": "H100", "tail_type": "PRODUCT", "evidence": "x"},
         ]})
         assert len(parse_triples_response(raw)) == 1
 
-    def test_parse_critic_failure_defaults_to_approve(self):
-        from app.services.graph.finreflect.graph import parse_critic_response
-        verdict = parse_critic_response("not json at all")
-        assert verdict["approve"] is True
+    def test_parse_feedback_box41_format(self):
+        from app.services.graph.finreflect.graph import parse_feedback_response
+        raw = json.dumps({"feedback": [
+            {"triple_number": "Triple 1",
+             "triple": ["We", "ORG", "Impacted_By", "supply chain disruptions", "RISK_TYPE"],
+             "issue": "Abstract reference; invalid category",
+             "suggestion": "Replace We with NVDA; use RISK_FACTOR"},
+        ]})
+        feedback = parse_feedback_response(raw)
+        assert len(feedback) == 1
+        assert feedback[0]["triple_number"] == "Triple 1"
 
-    def test_merge_triples_dedupes(self):
-        from app.services.graph.finreflect.graph import merge_triples
-        a = {"head": "NVIDIA", "head_type": "ORG", "relation": "Produces", "tail": "H100", "tail_type": "PRODUCT", "evidence": "x"}
-        dup = dict(a, evidence="y")
-        new = dict(a, tail="H200")
-        merged = merge_triples([a], [dup, new])
-        assert len(merged) == 2
+    def test_parse_feedback_empty_means_no_issues(self):
+        from app.services.graph.finreflect.graph import parse_feedback_response
+        assert parse_feedback_response('{"feedback": []}') == []
+        # 解析失败保守视为无反馈（停止条件 F = ∅）
+        assert parse_feedback_response("not json at all") == []
 
 
-def _finkg_llm(extract_resp: str, critic_resp: str = "{}", refine_resp: str = "{}", multipass_resp: str = "{}"):
+def _finkg_llm(extract_resp: str, feedback_resp: str = '{"feedback": []}',
+               refine_resp: str = "{}", normalize_resp: str = "{}"):
     """按提示词标记分派角色的 mock LLM。"""
     from app.services.graph.finreflect.prompts import (
         CORRECTOR_MARKER,
-        MULTIPASS_MARKER,
+        NORMALIZE_MARKER,
         build_critic_system_prompt,
     )
     critic_system = build_critic_system_prompt()
@@ -1081,11 +1110,11 @@ def _finkg_llm(extract_resp: str, critic_resp: str = "{}", refine_resp: str = "{
         system_text = messages[0].content
         user_text = messages[1].content
         if system_text == critic_system:
-            resp = critic_resp
+            resp = feedback_resp
         elif CORRECTOR_MARKER in user_text:
             resp = refine_resp
-        elif MULTIPASS_MARKER in user_text:
-            resp = multipass_resp
+        elif NORMALIZE_MARKER in user_text:
+            resp = normalize_resp
         else:
             resp = extract_resp
         m = MagicMock()
@@ -1098,17 +1127,17 @@ def _finkg_llm(extract_resp: str, critic_resp: str = "{}", refine_resp: str = "{
 
 
 _FINKG_EXTRACT_RESP = json.dumps({"triples": [
-    {"head": "NVIDIA", "head_type": "ORG", "relation": "Produces",
+    {"head": "NVDA", "head_type": "ORG", "relation": "Produces",
      "tail": "H100 GPU", "tail_type": "PRODUCT",
      "evidence": "strong demand for its H100 GPU"},
-    {"head": "NVIDIA", "head_type": "ORG", "relation": "Depends_On",
+    {"head": "NVDA", "head_type": "ORG", "relation": "Depends_On",
      "tail": "TSMC", "tail_type": "COMP",
      "evidence": "TSMC manufactures the H100 using CoWoS advanced packaging technology"},
 ]})
 
 
 class TestFinReflectModes:
-    """三种抽取模式的图路由与行为。"""
+    """三种抽取模式的图路由与行为（论文 4.3 节）。"""
 
     @pytest.mark.asyncio
     async def test_single_pass_one_llm_call(self):
@@ -1120,41 +1149,45 @@ class TestFinReflectModes:
         assert all(t["compliant"] for t in triples)
 
     @pytest.mark.asyncio
-    async def test_multi_pass_merges_and_dedupes(self):
+    async def test_multi_pass_extract_then_normalize(self):
         from app.services.graph.finreflect.graph import extract_triples
-        multipass_resp = json.dumps({"triples": [
-            # 与首轮重复 → 应去重
-            {"head": "NVIDIA", "head_type": "ORG", "relation": "Produces",
+        # 首遍含抽象指代 "We"，规范化遍替换为 ticker（论文 4.3.2 语义）
+        raw_extract = json.dumps({"triples": [
+            {"head": "We", "head_type": "ORG", "relation": "Produces",
              "tail": "H100 GPU", "tail_type": "PRODUCT",
              "evidence": "strong demand for its H100 GPU"},
-            # 新增遗漏事实
-            {"head": "Supply Chain Risk", "head_type": "RISK_FACTOR", "relation": "Negatively_Impacts",
-             "tail": "Gross Margin", "tail_type": "FIN_METRIC",
-             "evidence": "Supply chain risk negatively impacted gross margin during the period"},
         ]})
-        llm = _finkg_llm(_FINKG_EXTRACT_RESP, multipass_resp=multipass_resp)
-        triples = await extract_triples(
-            _FINKG_CHUNK, "NVIDIA 10-K 2024", llm, mode="multi_pass", max_passes=2,
-        )
-        assert llm.ainvoke.await_count == 2  # 首轮 + 补抽轮
-        assert len(triples) == 3  # 2 首轮 + 1 新增（重复被去重）
-        heads = {t["head"] for t in triples}
-        assert "Supply Chain Risk" in heads
+        normalized = json.dumps({"triples": [
+            {"head": "NVDA", "head_type": "ORG", "relation": "Produces",
+             "tail": "H100 GPU", "tail_type": "PRODUCT",
+             "evidence": "strong demand for its H100 GPU"},
+        ]})
+        llm = _finkg_llm(raw_extract, normalize_resp=normalized)
+        triples = await extract_triples(_FINKG_CHUNK, "NVIDIA 10-K 2024", llm, mode="multi_pass")
+        assert llm.ainvoke.await_count == 2  # 抽取遍 + 规范化遍
+        assert len(triples) == 1
+        assert triples[0]["head"] == "NVDA"
+        assert triples[0]["compliant"] is True
 
     @pytest.mark.asyncio
-    async def test_reflection_corrects_bad_relation(self):
+    async def test_reflection_corrects_per_feedback(self):
         from app.services.graph.finreflect.graph import extract_triples
         bad_extract = json.dumps({"triples": [
-            {"head": "NVIDIA", "head_type": "ORG", "relation": "MADE_UP_RELATION",
+            {"head": "NVDA", "head_type": "ORG", "relation": "MADE_UP_RELATION",
              "tail": "H100 GPU", "tail_type": "PRODUCT",
              "evidence": "strong demand for its H100 GPU"},
         ]})
-        critic_resps = iter([
-            json.dumps({"approve": False, "issues": ["triple #0: relation not in schema"], "missing": []}),
-            json.dumps({"approve": True, "issues": [], "missing": []}),
+        feedback_resps = iter([
+            json.dumps({"feedback": [
+                {"triple_number": "Triple 1",
+                 "triple": ["NVDA", "ORG", "MADE_UP_RELATION", "H100 GPU", "PRODUCT"],
+                 "issue": "MADE_UP_RELATION is not a valid preconfigured category",
+                 "suggestion": "Use Produces"},
+            ]}),
+            json.dumps({"feedback": []}),  # 第二次评审：F = ∅ → 停止
         ])
         fixed = json.dumps({"triples": [
-            {"head": "NVIDIA", "head_type": "ORG", "relation": "Produces",
+            {"head": "NVDA", "head_type": "ORG", "relation": "Produces",
              "tail": "H100 GPU", "tail_type": "PRODUCT",
              "evidence": "strong demand for its H100 GPU"},
         ]})
@@ -1165,7 +1198,7 @@ class TestFinReflectModes:
         def _dispatch(messages):
             system_text, user_text = messages[0].content, messages[1].content
             if system_text == critic_system:
-                resp = next(critic_resps)
+                resp = next(feedback_resps)
             elif CORRECTOR_MARKER in user_text:
                 resp = fixed
             else:
@@ -1190,20 +1223,22 @@ class TestFinReflectModes:
     async def test_reflection_max_iterations_stops(self):
         from app.services.graph.finreflect.graph import extract_triples
         bad = json.dumps({"triples": [
-            {"head": "NVIDIA", "head_type": "ORG", "relation": "STILL_BAD",
+            {"head": "NVDA", "head_type": "ORG", "relation": "STILL_BAD",
              "tail": "H100 GPU", "tail_type": "PRODUCT",
              "evidence": "strong demand for its H100 GPU"},
         ]})
-        never_approve = json.dumps({"approve": False, "issues": ["still bad"], "missing": []})
-        llm = _finkg_llm(bad, critic_resp=never_approve, refine_resp=bad)
+        never_empty = json.dumps({"feedback": [
+            {"triple_number": "Triple 1", "issue": "still bad", "suggestion": "fix"},
+        ]})
+        llm = _finkg_llm(bad, feedback_resp=never_empty, refine_resp=bad)
         triples = await extract_triples(
             _FINKG_CHUNK, "NVIDIA 10-K 2024", llm, mode="reflection", max_iterations=1,
         )
-        # 达到最大轮次即停；三元组保留但被 CheckRules 标注为不合规
+        # 达到 n_max 即停；三元组保留但被 CheckRules 标注为不合规
         assert llm.ainvoke.await_count == 4
         assert len(triples) == 1
         assert triples[0]["compliant"] is False
-        assert any("relation_policy" in v for v in triples[0]["violations"])
+        assert any("relationship_schema" in v for v in triples[0]["violations"])
 
 
 @pytest.mark.asyncio
@@ -1226,15 +1261,14 @@ async def test_pipeline_finreflect_mode(test_engine):
         s.refresh(doc)
 
     extract_resp = json.dumps({"triples": [
-        {"head": "NVIDIA", "head_type": "ORG", "relation": "Produces",
+        {"head": "NVDA", "head_type": "ORG", "relation": "Produces",
          "tail": "H100", "tail_type": "PRODUCT",
          "evidence": "driven by strong demand for NVIDIA H100 and H200 GPUs"},
-        {"head": "NVIDIA", "head_type": "ORG", "relation": "Depends_On",
+        {"head": "NVDA", "head_type": "ORG", "relation": "Depends_On",
          "tail": "TSMC", "tail_type": "COMP",
          "evidence": "TSMC manufactures our Blackwell chips using CoWoS advanced packaging technology"},
     ]})
-    approve = json.dumps({"approve": True, "issues": [], "missing": []})
-    llm = _finkg_llm(extract_resp, critic_resp=approve)
+    llm = _finkg_llm(extract_resp)  # 评审默认返回 F = ∅
 
     with (
         patch("app.services.graph.pipeline.sync_engine", test_engine),
@@ -1252,7 +1286,7 @@ async def test_pipeline_finreflect_mode(test_engine):
     assert updated.fact_count > 0
     assert len(rows) > 0
     heads = {r.head for r in rows}
-    assert "NVIDIA" in heads
+    assert "NVDA" in heads
     sample = rows[0]
     assert sample.head_type in ("ORG", "COMP", "PRODUCT", "RISK_FACTOR", "FIN_METRIC")
     assert sample.extraction_mode == "reflection"

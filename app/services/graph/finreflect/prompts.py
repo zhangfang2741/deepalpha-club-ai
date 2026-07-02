@@ -1,4 +1,10 @@
-"""FinReflectKG 提示词 — schema-guided 抽取 / 增量补抽 / 评审 / 修正。
+"""FinReflectKG 提示词 — schema-guided 抽取 / 规范化 / 评审 / 修正。
+
+对应论文 4.3 节三种工作流：
+- single_pass：单一综合提示词一步抽取（式 1）
+- multi_pass：抽取后第二遍以专用规范化提示词精炼（式 2-3）
+- reflection：Feedback LLM 产出逐三元组结构化反馈（Box 4.1 格式），
+  Correction LLM 修订或删除问题三元组（式 4-6）
 
 所有提示词将本体（ontology.py）动态渲染进上下文，
 输出统一为论文 5 元组 + 原文证据的 JSON：
@@ -12,13 +18,13 @@ from typing import Any
 
 from app.services.graph.finreflect.ontology import render_entity_types, render_relation_types
 
-# 修正提示词中的标记短语（测试与调试用，勿随意改动）
-CORRECTOR_MARKER = "You MUST fix every problem listed"
-MULTIPASS_MARKER = "ADDITIONAL triples"
+# 提示词角色标记（测试与调试用，勿随意改动）
+CORRECTOR_MARKER = "You MUST address every feedback item"
+NORMALIZE_MARKER = "normalization pass"
 
 
 def build_extraction_system_prompt() -> str:
-    """schema-guided 抽取系统提示词（本体动态注入）。"""
+    """schema-guided 抽取系统提示词（本体动态注入，论文 4.3.1）。"""
     return f"""You are a financial knowledge-graph extraction agent. You read a chunk of a company's SEC 10-K annual report and extract knowledge triples in the form (head entity, head type, relationship, tail entity, tail type), each backed by a verbatim evidence sentence from the chunk.
 
 ## Entity Types (use EXACTLY these names)
@@ -29,18 +35,19 @@ def build_extraction_system_prompt() -> str:
 
 ## Extraction Rules
 1. The filing company itself must always be typed ORG; every other company is COMP.
-2. Extract only facts stated or strongly implied in the chunk — never invent.
-3. `evidence` must be a verbatim sentence (or minimal span) copied from the chunk.
-4. Use concise canonical entity names, never whole sentences.
-5. Tables are data too: extract metric/segment/geography facts from table rows.
-6. If nothing can be extracted, return an empty triples array.
+2. Normalize entity names: map every company reference to its stock ticker when known (e.g., Apple Inc. -> AAPL). Never output abstract references such as "we", "our", "it", or "the company" — resolve them to the concrete entity.
+3. Keep entity names concise: at most 5 words, never whole sentences.
+4. Extract only facts stated or strongly implied in the chunk — never invent.
+5. `evidence` must be a verbatim sentence (or minimal span) copied from the chunk.
+6. Tables are data too: extract metric/segment/geography facts from table rows.
+7. If nothing can be extracted, return an empty triples array.
 
 ## Output Format
 Return ONLY valid JSON (no markdown, no commentary):
 {{
   "triples": [
     {{
-      "head": "Apple",
+      "head": "AAPL",
       "head_type": "ORG",
       "relation": "Introduces",
       "tail": "Vision Pro",
@@ -63,29 +70,35 @@ Text chunk to analyze:
 Extract all knowledge triples from this chunk. Return JSON only."""
 
 
-def build_multipass_user_prompt(
+def build_normalization_user_prompt(
     chunk_text: str,
     source_info: str,
-    existing_triples: list[dict[str, Any]],
+    triples: list[dict[str, Any]],
 ) -> str:
-    """多轮抽取（multi-pass）提示词：仅要求补充遗漏的三元组。"""
-    existing_json = json.dumps({"triples": existing_triples}, ensure_ascii=False, indent=2)
+    """multi_pass 第二遍规范化提示词（论文 4.3.2 的四项职责）。"""
+    triples_json = json.dumps({"triples": triples}, ensure_ascii=False, indent=2)
     return f"""Filing context: {source_info}
 
-Text chunk to analyze:
+Source chunk:
 ---
 {chunk_text}
 ---
 
-Triples already extracted in previous passes:
-{existing_json}
+Candidate triples extracted in the first pass:
+{triples_json}
 
-Extract ONLY {MULTIPASS_MARKER} that are present in the chunk but missing from the list above. Do not repeat existing triples. If nothing was missed, return an empty triples array. Return JSON only."""
+This is a dedicated {NORMALIZE_MARKER}. Re-ingest the candidate triples together with the source chunk and produce a refined set:
+1. Enforce canonical naming — substitute stock tickers for company references; resolve abstract references ("we", "the company") to the concrete entity.
+2. Filter out triples whose entity or relationship types are not in the schema.
+3. Merge duplicate or redundant entities and relationships.
+4. Validate directionality and head/tail ordering for every relation; remove or correct invalid or ambiguous triples.
+
+Keep the same JSON output format (top-level "triples" array). Return JSON only."""
 
 
 def build_critic_system_prompt() -> str:
-    """评审（Critic）系统提示词：审计三元组并产出结构化反馈。"""
-    return f"""You are a meticulous financial knowledge-graph critic. Given a source chunk from an SEC 10-K filing and a list of extracted triples, audit them and report problems.
+    """评审（Feedback LLM）系统提示词：逐三元组结构化反馈（论文 Box 4.1 格式）。"""
+    return f"""You are the feedback (critic) LLM in a financial knowledge-graph reflection loop. Given a source chunk from an SEC 10-K filing and the current set of extracted triples, audit them and report issues.
 
 The schema the triples must follow:
 
@@ -95,20 +108,25 @@ The schema the triples must follow:
 ## Relationship Types
 {render_relation_types()}
 
-Audit each triple for:
-1. Faithfulness — the fact is actually stated or strongly implied in the chunk (flag hallucinations).
-2. Evidence grounding — `evidence` is copied from the chunk, not invented.
-3. Schema conformance — head_type/tail_type and relation use exactly the names above, and the relation direction makes sense.
-4. Entity quality — concise canonical names, ORG reserved for the filing company, no self-loops.
-5. Comprehensiveness — clearly stated facts in the chunk that were MISSED.
+Your duties:
+1. Verify every entity label and relation assignment against the schema above.
+2. Flag abstract entity references ("we", "our", "the company", "it") that must be normalized to a concrete entity such as the ticker.
+3. Assess business relevance — flag low-value, vague, or contradictory triples.
+4. Note clearly stated facts in the chunk that were MISSED.
 
-Return ONLY valid JSON (no markdown):
+Return ONLY valid JSON (no markdown) — a feedback array with one object per problem found:
 {{
-  "approve": true/false,
-  "issues": ["problem with triple #i ...", ...],
-  "missing": ["clearly-stated fact that should be added ...", ...]
+  "feedback": [
+    {{
+      "triple_number": "Triple 2",
+      "triple": ["We", "ORG", "Impacted_By", "supply chain disruptions", "RISK_TYPE"],
+      "issue": "Abstract reference 'We'; RISK_TYPE is not a valid preconfigured category",
+      "suggestion": "Replace 'We' with the filer ticker; substitute RISK_TYPE with RISK_FACTOR"
+    }}
+  ]
 }}
-Set "approve" to true only when there are no issues and nothing important is missing."""
+If a fact was missed, add a feedback item with "triple_number": "Missing" describing what to add.
+If there are NO issues and nothing is missing, return {{"feedback": []}}."""
 
 
 def build_critic_user_prompt(
@@ -125,20 +143,21 @@ Source chunk:
 {chunk_text}
 ---
 
-Extracted triples to audit:
+Current triples to audit:
 {triples_json}
 
-Audit the triples. Return JSON only."""
+Audit the triples and return the feedback JSON only."""
 
 
 def build_corrector_user_prompt(
     chunk_text: str,
     source_info: str,
     triples: list[dict[str, Any]],
-    critique: str,
+    feedback: list[dict[str, Any]],
 ) -> str:
-    """修正（Corrector）用户提示词：依评审反馈产出修正后的完整三元组集。"""
+    """修正（Correction LLM）用户提示词：依逐条反馈修订或删除问题三元组。"""
     triples_json = json.dumps({"triples": triples}, ensure_ascii=False, indent=2)
+    feedback_json = json.dumps({"feedback": feedback}, ensure_ascii=False, indent=2)
     return f"""Filing context: {source_info}
 
 Source chunk:
@@ -150,10 +169,10 @@ Current triples:
 {triples_json}
 
 Critic feedback — {CORRECTOR_MARKER} below:
-{critique}
+{feedback_json}
 
 Produce the corrected, complete set of triples:
-- Fix or DELETE unfaithful, mis-typed, self-looping, or ungrounded triples.
-- ADD the clearly-stated facts the critic marked as missing.
+- Update or DROP each problematic triple according to its feedback item.
+- ADD the facts marked as "Missing".
 - Keep the same JSON output format (top-level "triples" array).
 Return JSON only."""

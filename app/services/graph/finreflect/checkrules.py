@@ -1,32 +1,44 @@
-"""CheckRules — 规则化合规策略（rule-based policies）。
+"""CheckRules — 论文 5.1 节定义的四条规则化合规检查。
 
-论文评估体系的规则层：用确定性策略批量审计抽取三元组，
-计算合规率（compliance，论文中反思模式达 64.8%）。
-规则检查用于**评估与标注**，不参与反思循环内部（循环内的评审由 Critic LLM 承担）。
+对每条抽取三元组独立评估以下四条规则（论文原版规则集）：
 
-四条策略：
-    P1 entity_type_policy   头/尾实体类型必须属于本体
-    P2 relation_policy      关系类型必须属于本体
-    P3 well_formed_policy   头/尾实体非空、非自环、名称长度合理
-    P4 grounding_policy     证据句非空且能在原文 chunk 中接地
+    R1 subject_reference        头/尾实体不得是缺乏语义指向的抽象指代
+                                （如 "the company" / "we" / "our" / "it"，
+                                应规范化为具体实体，如 "AAPL"）
+    R2 entity_length            实体名不超过 5 个词，防止冗长表述
+    R3 entity_schema            头/尾实体类型必须属于预配置 schema
+    R4 relationship_schema      关系类型必须属于预配置 schema
+
+单条三元组得分 CR(t) = 通过规则数 / 规则总数（论文式 9）；
+合规率 compliance_score = 通过全部四条规则的三元组占比
+（对应论文 Table 4 的 "At least 4 rules"，反思模式为 64.8%）。
+
+规则检查用于评估与标注，不参与反思循环内部（循环内评审由 Critic LLM 承担）。
 """
 
 from typing import Any
 
 from app.services.graph.finreflect.ontology import is_valid_entity_type, is_valid_relation
 
-# 证据接地阈值：证据词与原文词重合比例下限（宽松，容忍轻度改写）
-_GROUNDING_MIN_OVERLAP = 0.5
-_MAX_ENTITY_NAME_LEN = 120
+# R1：抽象指代黑名单（小写精确匹配）
+_ABSTRACT_REFERENCES = {
+    "the company", "company", "we", "our", "us", "it", "its",
+    "the firm", "the registrant", "the issuer",
+}
+
+# R2：实体名最大词数
+_MAX_ENTITY_WORDS = 5
+
+RULE_COUNT = 4
 
 
-def _tokenize(text: str) -> set[str]:
-    """粗粒度分词：小写、按非字母数字切分，用于接地重合度估算。"""
-    return {tok for tok in "".join(c.lower() if c.isalnum() else " " for c in text).split() if len(tok) > 1}
+def check_triple(triple: dict[str, Any], chunk_text: str = "") -> list[str]:
+    """对单条 5 元组执行四条规则，返回违规信息列表（空列表 = 全部通过）。
 
-
-def check_triple(triple: dict[str, Any], chunk_text: str) -> list[str]:
-    """对单条 5 元组执行全部策略，返回违规信息列表（空列表 = 合规）。"""
+    Args:
+        triple: 论文 5 元组 dict（head/head_type/relation/tail/tail_type）。
+        chunk_text: 保留参数（规则集不依赖原文，接口与调用方兼容）。
+    """
     violations: list[str] = []
 
     head = str(triple.get("head", "")).strip()
@@ -34,55 +46,56 @@ def check_triple(triple: dict[str, Any], chunk_text: str) -> list[str]:
     head_type = str(triple.get("head_type", "")).strip()
     tail_type = str(triple.get("tail_type", "")).strip()
     relation = str(triple.get("relation", "")).strip()
-    evidence = str(triple.get("evidence", "")).strip()
 
-    # P3 well_formed_policy
-    if not head or not tail:
-        violations.append("well_formed_policy: 头/尾实体名为空")
-    if head and tail and head.lower() == tail.lower():
-        violations.append(f"well_formed_policy: 自环三元组 '{head}' 指向自身")
-    if len(head) > _MAX_ENTITY_NAME_LEN or len(tail) > _MAX_ENTITY_NAME_LEN:
-        violations.append("well_formed_policy: 实体名称过长，疑似整句被当作实体")
+    # R1 subject_reference：抽象指代（空名称同样无语义指向，一并计入）
+    for label, name in (("头", head), ("尾", tail)):
+        if not name or name.lower() in _ABSTRACT_REFERENCES:
+            violations.append(
+                f"subject_reference: {label}实体 '{name}' 是抽象指代或为空，应规范化为具体实体（如 ticker）"
+            )
 
-    # P1 entity_type_policy
+    # R2 entity_length：不超过 5 个词
+    for label, name in (("头", head), ("尾", tail)):
+        if len(name.split()) > _MAX_ENTITY_WORDS:
+            violations.append(
+                f"entity_length: {label}实体 '{name[:60]}…' 超过 {_MAX_ENTITY_WORDS} 个词"
+            )
+
+    # R3 entity_schema：实体类型 ∈ schema
     if not is_valid_entity_type(head_type):
-        violations.append(f"entity_type_policy: 头实体类型 '{head_type}' 不在本体中")
+        violations.append(f"entity_schema: 头实体类型 '{head_type}' 不在预配置 schema 中")
     if not is_valid_entity_type(tail_type):
-        violations.append(f"entity_type_policy: 尾实体类型 '{tail_type}' 不在本体中")
+        violations.append(f"entity_schema: 尾实体类型 '{tail_type}' 不在预配置 schema 中")
 
-    # P2 relation_policy
+    # R4 relationship_schema：关系 ∈ schema
     if not is_valid_relation(relation):
-        violations.append(f"relation_policy: 关系 '{relation}' 不在本体中")
-
-    # P4 grounding_policy
-    if not evidence:
-        violations.append("grounding_policy: 缺少原文证据句")
-    elif chunk_text:
-        ev_tokens = _tokenize(evidence)
-        if ev_tokens:
-            overlap = len(ev_tokens & _tokenize(chunk_text)) / len(ev_tokens)
-            if overlap < _GROUNDING_MIN_OVERLAP:
-                violations.append(
-                    f"grounding_policy: 证据与原文词重合仅 {overlap:.0%}，疑似臆造"
-                )
+        violations.append(f"relationship_schema: 关系 '{relation}' 不在预配置 schema 中")
 
     return violations
 
 
+def checkrules_score(triple: dict[str, Any]) -> float:
+    """单条三元组的 CheckRules 得分 CR(t) = 通过规则数 / 4（论文式 9）。"""
+    violations = check_triple(triple)
+    violated_rules = {v.split(":", 1)[0] for v in violations}
+    return (RULE_COUNT - len(violated_rules)) / RULE_COUNT
+
+
 def annotate_compliance(
     triples: list[dict[str, Any]],
-    chunk_text: str,
+    chunk_text: str = "",
 ) -> list[dict[str, Any]]:
-    """就地为每条三元组标注 ``compliant`` 与 ``violations`` 字段并返回。"""
+    """就地为每条三元组标注 ``compliant`` / ``violations`` / ``checkrules_score``。"""
     for triple in triples:
         violations = check_triple(triple, chunk_text)
         triple["violations"] = violations
         triple["compliant"] = not violations
+        triple["checkrules_score"] = checkrules_score(triple)
     return triples
 
 
-def compliance_score(triples: list[dict[str, Any]], chunk_text: str) -> float:
-    """合规率：通过全部策略的三元组占比。"""
+def compliance_score(triples: list[dict[str, Any]], chunk_text: str = "") -> float:
+    """合规率：通过全部四条规则的三元组占比（论文 Table 4 口径）。"""
     if not triples:
         return 1.0
     passed = sum(1 for t in triples if not check_triple(t, chunk_text))

@@ -1,24 +1,25 @@
-"""表格感知切片（table-aware chunking）。
+"""表格感知语义切片（论文 4.2 节 Table-Aware Semantic Chunking）。
 
-论文流水线的第一步：智能文档解析后按约定 token 预算切片，
-且**不得截断表格**——10-K 中大量事实（财务指标、分部数据）存在于表格中，
-表格被拦腰切断会导致抽取失真。
-
-实现策略：
-1. 先将文本划分为「表格块」与「普通文本块」：
-   - Markdown 管道表格（连续以 ``|`` 开头/包含 ``|---|`` 分隔行的行）
-   - HTML ``<table>...</table>`` 片段
-2. 普通文本按句子边界累积；表格块视为原子单元整体放入 chunk。
-3. 单个表格超过预算时不切分，独立成一个超额 chunk（保表格完整优先）。
+论文要点：
+- 任何检测到的表格**独立保留为单个原子 chunk**，行列关系与财务数据
+  上下文永不被切断（10-K 的关键量化披露多在表格中）。
+- 普通文本采用 section-aware 切分：优先在段落/小节标题等逻辑边界断开，
+  保持主题连贯；段落过长时退化到句子边界。
+- 单 chunk 上限 CHUNK_SIZE = 2048 tokens。
 """
 
 import re
+
+# 论文 4.2：CHUNK_SIZE = 2048
+CHUNK_SIZE_TOKENS = 2048
 
 # token 数估算：字符数 / 4（与主流水线一致）
 _CHARS_PER_TOKEN = 4
 
 _HTML_TABLE_RE = re.compile(r"<table\b.*?</table>", re.IGNORECASE | re.DOTALL)
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+# 段落/小节边界：空行或 markdown 标题行
+_PARAGRAPH_SPLIT_RE = re.compile(r"\n\s*\n|\n(?=#{1,6}\s)")
 
 
 def _is_md_table_line(line: str) -> bool:
@@ -79,12 +80,29 @@ def _split_blocks(text: str) -> list[tuple[str, bool]]:
     return [(b, t) for b, t in blocks if b]
 
 
-def chunk_document(text: str, max_tokens: int = 1200) -> list[str]:
-    """表格感知切片：普通文本按句子边界切，表格块保持完整。
+def _split_text_units(block: str, char_limit: int) -> list[str]:
+    """将普通文本块切成累积单元：先段落/标题边界，超限段落再退化到句子。"""
+    units: list[str] = []
+    for para in _PARAGRAPH_SPLIT_RE.split(block):
+        para = para.strip()
+        if not para:
+            continue
+        if len(para) <= char_limit:
+            units.append(para)
+        else:
+            units.extend(s for s in _SENTENCE_SPLIT_RE.split(para) if s.strip())
+    return units
+
+
+def chunk_document(text: str, max_tokens: int = CHUNK_SIZE_TOKENS) -> list[str]:
+    """表格感知语义切片。
+
+    表格块独立成 chunk（原子，永不切分）；普通文本在段落/小节边界累积，
+    超长段落退化到句子边界。
 
     Args:
         text: 文档全文（可含 Markdown/HTML 表格）
-        max_tokens: 单 chunk 目标 token 上限（估算值）
+        max_tokens: 单 chunk 目标 token 上限（论文默认 2048）
 
     Returns:
         chunk 文本列表
@@ -101,20 +119,15 @@ def chunk_document(text: str, max_tokens: int = 1200) -> list[str]:
 
     for block, is_table in _split_blocks(text):
         if is_table:
-            # 表格原子放置：放不下当前 chunk 就先落盘，再单独/继续容纳
-            if current and len(current) + len(block) + 1 > char_limit:
-                _flush()
-            current = f"{current}\n{block}".strip() if current else block
-            if len(current) >= char_limit:
-                _flush()
+            # 论文：表格独立保留为单个原子 chunk
+            _flush()
+            chunks.append(block)
             continue
 
-        for sent in _SENTENCE_SPLIT_RE.split(block):
-            if not sent.strip():
-                continue
-            if current and len(current) + len(sent) + 1 > char_limit:
+        for unit in _split_text_units(block, char_limit):
+            if current and len(current) + len(unit) + 1 > char_limit:
                 _flush()
-            current = f"{current} {sent}".strip() if current else sent
+            current = f"{current}\n{unit}".strip() if current else unit
 
     _flush()
     return chunks

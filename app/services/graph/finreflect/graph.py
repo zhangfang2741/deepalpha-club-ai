@@ -1,22 +1,20 @@
-"""FinReflectKG 抽取图 — LangGraph 编排的三种抽取模式。
+"""FinReflectKG 抽取图 — LangGraph 编排的三种抽取模式（论文 4.3 节）。
 
-论文定义的三种模式（效率/质量权衡由用户选择）：
-- single_pass：单次抽取，一个 chunk 一次 LLM 调用。
-- multi_pass：固定多轮抽取，后续轮仅补抽遗漏三元组并去重合并。
-- reflection：反思智能体 —— 抽取 LLM 产出初始三元组，评审 LLM（Critic）
-  产出结构化反馈，修正 LLM（Corrector）依反馈修订，循环直至评审通过
-  或达到最大轮次。
+- single_pass（式 1）：单一综合提示词一步抽取。
+- multi_pass（式 2-3）：第一遍抽取候选三元组，第二遍将自身输出与原文
+  一并重新输入，用专用规范化提示词精炼（规范命名/过滤越界类型/去重/校验方向）。
+- reflection（式 4-6）：反思智能体 —— 抽取 LLM 产出初始三元组，
+  Feedback LLM 产出逐三元组结构化反馈 F（Box 4.1 格式），
+  Correction LLM 修订或删除问题三元组，循环直至 F = ∅ 或达最大步数 n_max。
 
 图结构：
 
-    START → extract ──┬─(single)──────────────────────────→ END
-                      ├─(multi)──→ extract_more ─┐
-                      │               ▲          │(轮次未满)
-                      │               └──────────┘ →(满)──→ END
-                      └─(reflection)→ critique ─(通过/满)─→ END
-                                        ▲   │(有问题)
-                                        │   ▼
-                                        └─ refine
+    START → extract ──┬─(single_pass)─────────────────────→ END
+                      ├─(multi_pass)──→ normalize ─────────→ END
+                      └─(reflection)──→ critique ─(F=∅/满)─→ END
+                                          ▲   │(有反馈)
+                                          │   ▼
+                                          └─ refine
 """
 
 import json
@@ -34,7 +32,7 @@ from app.services.graph.finreflect.prompts import (
     build_critic_user_prompt,
     build_extraction_system_prompt,
     build_extraction_user_prompt,
-    build_multipass_user_prompt,
+    build_normalization_user_prompt,
 )
 
 # 支持的抽取模式
@@ -50,12 +48,9 @@ class FinReflectState(TypedDict):
     source_info: str
     mode: str  # single_pass | multi_pass | reflection
     triples: list[dict[str, Any]]  # 当前工作集（论文 5 元组 + evidence）
-    critique: str  # 最近一次评审反馈（reflection 模式）
-    passed: bool  # 评审是否通过（reflection 模式）
-    iteration: int  # 已完成的修正轮数（reflection 模式）
-    max_iterations: int
-    passes: int  # 已完成的抽取轮数（multi_pass 模式）
-    max_passes: int
+    feedback: list[dict[str, Any]]  # 最近一次评审反馈 F（Box 4.1 条目列表）
+    iteration: int  # 已完成的反思步数 t
+    max_iterations: int  # n_max
 
 
 def _strip_code_fence(text: str) -> str:
@@ -95,48 +90,40 @@ def parse_triples_response(response_text: str) -> list[dict[str, Any]]:
     return triples
 
 
-def parse_critic_response(response_text: str) -> dict[str, Any]:
-    """解析评审 LLM 的 JSON 输出；解析失败保守视为通过，避免无谓循环。"""
+def parse_feedback_response(response_text: str) -> list[dict[str, Any]]:
+    """解析 Feedback LLM 的结构化反馈（Box 4.1 格式）。
+
+    返回反馈条目列表；空列表 = 无问题（停止条件 F = ∅）。
+    解析失败时保守返回空列表，避免无谓反思循环。
+    """
     text = _strip_code_fence(response_text)
+    data: Any = None
     try:
         data = json.loads(text)
-        if isinstance(data, dict):
-            return data
     except json.JSONDecodeError:
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if match:
             try:
-                return json.loads(match.group())
+                data = json.loads(match.group())
             except json.JSONDecodeError:
                 pass
-    logger.warning("finreflect_critic_parse_failed", raw_text=text[:200])
-    return {"approve": True, "issues": [], "missing": []}
+    if data is None:
+        logger.warning("finreflect_feedback_parse_failed", raw_text=text[:200])
+        return []
 
-
-def _dedupe_key(triple: dict[str, Any]) -> tuple[str, str, str]:
-    """去重键：(head, relation, tail) 忽略大小写。"""
-    return (triple["head"].lower(), triple["relation"], triple["tail"].lower())
-
-
-def merge_triples(
-    existing: list[dict[str, Any]],
-    additional: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """合并多轮抽取结果，按 (head, relation, tail) 去重。"""
-    seen = {_dedupe_key(t) for t in existing}
-    merged = list(existing)
-    for triple in additional:
-        key = _dedupe_key(triple)
-        if key not in seen:
-            seen.add(key)
-            merged.append(triple)
-    return merged
+    if isinstance(data, dict):
+        items = data.get("feedback", [])
+    elif isinstance(data, list):
+        items = data
+    else:
+        return []
+    return [item for item in items if isinstance(item, dict)]
 
 
 class FinReflectExtractor:
     """FinReflectKG 抽取器：持有 LLM 客户端与编译后的 LangGraph。
 
-    论文允许同一模型分饰抽取/评审/修正三个角色，故复用单个客户端。
+    论文允许同一模型分饰抽取/规范化/评审/修正角色，故复用单个客户端。
     """
 
     def __init__(self, llm_client: Any):
@@ -158,7 +145,7 @@ class FinReflectExtractor:
     # ── 节点 ──────────────────────────────────────────────────────────────
 
     async def _extract_node(self, state: FinReflectState) -> dict[str, Any]:
-        """首轮抽取：产出初始三元组。"""
+        """首轮抽取（式 1/2/4）：产出初始三元组集 T(1)。"""
         raw = await self._ainvoke_text(
             self._extraction_system,
             build_extraction_user_prompt(state["chunk_text"], state["source_info"]),
@@ -170,64 +157,57 @@ class FinReflectExtractor:
             triple_count=len(triples),
             source=state["source_info"][:80],
         )
-        return {"triples": triples, "passes": 1, "iteration": 0, "passed": False, "critique": ""}
+        return {"triples": triples, "iteration": 0, "feedback": []}
 
-    async def _extract_more_node(self, state: FinReflectState) -> dict[str, Any]:
-        """multi_pass 补抽轮：仅要求遗漏三元组，与既有集合去重合并。"""
-        raw = await self._ainvoke_text(
-            self._extraction_system,
-            build_multipass_user_prompt(state["chunk_text"], state["source_info"], state["triples"]),
-        )
-        additional = parse_triples_response(raw)
-        merged = merge_triples(state["triples"], additional)
-        passes = state["passes"] + 1
-        logger.info(
-            "finreflect_multipass_done",
-            new_triples=len(merged) - len(state["triples"]),
-            total=len(merged),
-            current_pass=passes,
-        )
-        return {"triples": merged, "passes": passes}
+    async def _normalize_node(self, state: FinReflectState) -> dict[str, Any]:
+        """multi_pass 规范化遍（式 3）：模型重读原文与自身输出并精炼 T(2)。"""
+        try:
+            raw = await self._ainvoke_text(
+                self._extraction_system,
+                build_normalization_user_prompt(
+                    state["chunk_text"], state["source_info"], state["triples"]
+                ),
+            )
+            refined = parse_triples_response(raw)
+            # 规范化结果为空视为异常回退，保留首遍集合以免丢失全部结果
+            triples = refined if refined else state["triples"]
+        except Exception as e:
+            logger.warning("finreflect_normalize_failed", error=str(e))
+            triples = state["triples"]
+
+        logger.info("finreflect_normalize_done", triple_count=len(triples))
+        return {"triples": triples}
 
     async def _critique_node(self, state: FinReflectState) -> dict[str, Any]:
-        """Reflection 评审轮：Critic LLM 审计三元组，产出结构化反馈。"""
+        """Reflection 评审步（式 5）：Feedback LLM 产出逐三元组反馈 F(t)。"""
         if not state["triples"]:
-            return {"passed": True, "critique": ""}
+            return {"feedback": []}
 
         try:
             raw = await self._ainvoke_text(
                 self._critic_system,
                 build_critic_user_prompt(state["chunk_text"], state["source_info"], state["triples"]),
             )
-            verdict = parse_critic_response(raw)
+            feedback = parse_feedback_response(raw)
         except Exception as e:
-            # 评审失败不应中断抽取：视为通过，带着当前集合结束
+            # 评审失败不应中断抽取：视为无反馈，带着当前集合结束
             logger.warning("finreflect_critic_failed", error=str(e))
-            verdict = {"approve": True, "issues": [], "missing": []}
-
-        approve = bool(verdict.get("approve", False))
-        issues = [str(x) for x in verdict.get("issues", []) if str(x).strip()]
-        missing = [str(x) for x in verdict.get("missing", []) if str(x).strip()]
-
-        feedback = [f"- {issue}" for issue in issues]
-        feedback += [f"- Missing fact to add: {m}" for m in missing]
+            feedback = []
 
         logger.info(
             "finreflect_critique_done",
-            approve=approve,
-            issues=len(issues),
-            missing=len(missing),
+            feedback_count=len(feedback),
             iteration=state["iteration"],
         )
-        return {"passed": approve and not feedback, "critique": "\n".join(feedback)}
+        return {"feedback": feedback}
 
     async def _refine_node(self, state: FinReflectState) -> dict[str, Any]:
-        """Reflection 修正轮：Corrector LLM 依反馈修订三元组，轮次 +1。"""
+        """Reflection 修正步（式 6）：Correction LLM 修订/删除问题三元组，t + 1。"""
         try:
             raw = await self._ainvoke_text(
                 self._extraction_system,
                 build_corrector_user_prompt(
-                    state["chunk_text"], state["source_info"], state["triples"], state["critique"]
+                    state["chunk_text"], state["source_info"], state["triples"], state["feedback"]
                 ),
             )
             refined = parse_triples_response(raw)
@@ -247,19 +227,13 @@ class FinReflectExtractor:
         """首轮抽取后按模式分派。"""
         if state["mode"] == "reflection":
             return "critique"
-        if state["mode"] == "multi_pass" and state["passes"] < state["max_passes"]:
-            return "extract_more"
-        return END
-
-    def _route_after_extract_more(self, state: FinReflectState) -> str:
-        """multi_pass 轮次控制。"""
-        if state["passes"] < state["max_passes"]:
-            return "extract_more"
+        if state["mode"] == "multi_pass":
+            return "normalize"
         return END
 
     def _route_after_critique(self, state: FinReflectState) -> str:
-        """Reflection 停止条件：评审通过或达到最大修正轮数。"""
-        if state["passed"] or state["iteration"] >= state["max_iterations"]:
+        """Reflection 停止条件：F = ∅（无反馈）或 t = n_max（达最大步数）。"""
+        if not state["feedback"] or state["iteration"] >= state["max_iterations"]:
             return END
         return "refine"
 
@@ -267,7 +241,7 @@ class FinReflectExtractor:
         """构建并编译抽取 StateGraph。"""
         builder = StateGraph(FinReflectState)
         builder.add_node("extract", self._extract_node)
-        builder.add_node("extract_more", self._extract_more_node)
+        builder.add_node("normalize", self._normalize_node)
         builder.add_node("critique", self._critique_node)
         builder.add_node("refine", self._refine_node)
 
@@ -275,13 +249,9 @@ class FinReflectExtractor:
         builder.add_conditional_edges(
             "extract",
             self._route_after_extract,
-            {"critique": "critique", "extract_more": "extract_more", END: END},
+            {"critique": "critique", "normalize": "normalize", END: END},
         )
-        builder.add_conditional_edges(
-            "extract_more",
-            self._route_after_extract_more,
-            {"extract_more": "extract_more", END: END},
-        )
+        builder.add_edge("normalize", END)
         builder.add_conditional_edges(
             "critique",
             self._route_after_critique,
@@ -297,20 +267,16 @@ class FinReflectExtractor:
         source_info: str,
         mode: str,
         max_iterations: int = 2,
-        max_passes: int = 2,
     ) -> list[dict[str, Any]]:
-        """执行抽取，返回带合规标注的三元组列表。"""
+        """执行抽取，返回带 CheckRules 合规标注的三元组列表。"""
         initial: FinReflectState = {
             "chunk_text": chunk_text,
             "source_info": source_info,
             "mode": mode,
             "triples": [],
-            "critique": "",
-            "passed": False,
+            "feedback": [],
             "iteration": 0,
             "max_iterations": max(0, max_iterations),
-            "passes": 0,
-            "max_passes": max(1, max_passes),
         }
         final_state = await self.graph.ainvoke(initial)
         triples = annotate_compliance(final_state.get("triples", []), chunk_text)
@@ -321,7 +287,6 @@ class FinReflectExtractor:
             triple_count=len(triples),
             compliance=round(compliance_score(triples, chunk_text), 3),
             iterations=final_state.get("iteration", 0),
-            passes=final_state.get("passes", 0),
         )
         return triples
 
@@ -332,7 +297,6 @@ async def extract_triples(
     llm_client: Any,
     mode: str = "reflection",
     max_iterations: int = 2,
-    max_passes: int = 2,
 ) -> list[dict[str, Any]]:
     """FinReflectKG 抽取入口。
 
@@ -341,20 +305,18 @@ async def extract_triples(
         source_info: 来源描述（如 "NVIDIA 10-K 2024"）。
         llm_client: LangChain BaseChatModel 实例。
         mode: single_pass | multi_pass | reflection。
-        max_iterations: reflection 模式最大修正轮数。
-        max_passes: multi_pass 模式总抽取轮数。
+        max_iterations: reflection 模式最大反思步数 n_max。
 
     Returns:
-        论文 5 元组 dict 列表，每条带 ``evidence`` / ``compliant`` / ``violations``。
+        论文 5 元组 dict 列表，每条带 ``evidence`` / ``compliant`` /
+        ``violations`` / ``checkrules_score``。
     """
     if mode not in MODES:
         logger.warning("finreflect_unknown_mode", mode=mode)
         mode = "single_pass"
     try:
         extractor = FinReflectExtractor(llm_client)
-        return await extractor.run(
-            chunk_text, source_info, mode, max_iterations=max_iterations, max_passes=max_passes
-        )
+        return await extractor.run(chunk_text, source_info, mode, max_iterations=max_iterations)
     except Exception as e:
         logger.exception("finreflect_extraction_failed", source=source_info[:80], error=str(e))
         return []

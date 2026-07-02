@@ -1,10 +1,14 @@
 """FinReflectKG 本体注册表 — 论文 Table 1/2 定义的实体与关系类型。
 
 论文完整本体为 24 类实体、29 类关系（面向 SEC 10-K 年报抽取）。
-本注册表当前收录已核实的 21 类实体与 22 类关系（来源：论文衍生工作
-FinReflectKG-MultiHop（arXiv:2510.02906）正文/模式示例与开源数据集文档）；
+论文 Table 1/2 本身即为子集展示（标题注明 "Subset of Pre-Configured"）。
+本注册表当前收录已核实的 22 类实体与 22 类关系，来源：
+- 论文原文（arXiv:2508.17906v2）Table 1/2 及正文示例
+- 衍生工作 FinReflectKG-MultiHop（arXiv:2510.02906）Cypher 模式示例
+- 开源数据集文档（HF domyn/FinReflectKG README）公开索引
 类型名称与论文一致，描述为本项目自行撰写的简述。
-剩余条目核实后直接在下方两个字典中追加即可（数据驱动，无需改动其他代码）。
+剩余条目（2 类实体、7 类关系）核实后直接在下方两个字典中追加即可
+（数据驱动，无需改动其他代码；存储列为字符串，无需迁移）。
 
 三元组格式（论文 5 元组）：
     (Head Entity, Head Type, Relationship, Tail Entity, Tail Type) + 原文证据
@@ -21,6 +25,7 @@ ENTITY_TYPES: dict[str, str] = {
     "GPE": "Geopolitical entities: countries, states, or cities tied to operations or risks",
     "SECTOR": "Industries or sectors relevant to the filer or mentioned companies (e.g., Technology, Healthcare)",
     "PRODUCT": "Products or services offered or referenced (e.g., iPhone, AWS)",
+    "SEGMENT": "Internal divisions or business segments of the filer ORG (e.g., Cloud segment, North America retail)",
     "EVENT": "Material events such as M&A deals, pandemics, natural disasters, or product launches",
     "RISK_FACTOR": "Disclosed risks (e.g., market risk, supply chain risk, cybersecurity risk, geopolitical risk)",
     "FIN_METRIC": "Financial metrics or values (e.g., Net Income, EBITDA, Long-Term Debt, CapEx, R&D Expense)",

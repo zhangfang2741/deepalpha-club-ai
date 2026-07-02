@@ -418,7 +418,6 @@ async def _extract_and_store_chunk(
             llm_client,
             mode=mode,
             max_iterations=settings.GRAPH_REFLECTION_MAX_ITERS,
-            max_passes=settings.GRAPH_FINREFLECT_PASSES,
         )
         if not triples:
             return 0
