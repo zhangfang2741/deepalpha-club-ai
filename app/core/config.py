@@ -164,6 +164,15 @@ class Settings:
         self.MAX_LLM_CALL_RETRIES = int(os.getenv("MAX_LLM_CALL_RETRIES", "3"))
         self.LLM_TOTAL_TIMEOUT = int(os.getenv("LLM_TOTAL_TIMEOUT", "60"))
 
+        # 图谱抽取模式：
+        #   single_pass          旧版供应链抽取（现有 5 实体/4 关系 schema，事实入 graph_facts）
+        #   finreflect_single    FinReflectKG 论文本体，单次抽取（5 元组入 finkg_triples）
+        #   finreflect_multi     FinReflectKG 论文本体，两遍抽取（抽取 → 规范化精炼）
+        #   finreflect_reflection FinReflectKG 论文本体，反思智能体（抽取→评审→修正闭环）
+        self.GRAPH_EXTRACTION_MODE = os.getenv("GRAPH_EXTRACTION_MODE", "single_pass").lower()
+        # reflection 模式最大反思步数 n_max（F=∅ 或达到即停）
+        self.GRAPH_REFLECTION_MAX_ITERS = int(os.getenv("GRAPH_REFLECTION_MAX_ITERS", "2"))
+
         # Long term memory Configuration
         self.LONG_TERM_MEMORY_MODEL = os.getenv("LONG_TERM_MEMORY_MODEL", "gpt-5-nano")
         self.LONG_TERM_MEMORY_EMBEDDER_MODEL = os.getenv("LONG_TERM_MEMORY_EMBEDDER_MODEL", "text-embedding-3-small")

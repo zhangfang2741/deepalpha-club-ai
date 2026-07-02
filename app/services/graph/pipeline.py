@@ -10,13 +10,28 @@ from typing import Optional
 import httpx
 from sqlmodel import Session
 
+from app.core.config import settings
 from app.core.logging import logger
 from app.db.session import sync_engine
+from app.models.finkg_triple import FinKGTriple
 from app.models.graph_entity import EntityType, GraphEntity
 from app.models.graph_fact import GraphFact
 from app.models.graph_source import DocumentStatus, DocumentType, SourceDocument
 from app.services.graph.extractor import ExtractedFact, extract_facts_from_chunk
+from app.services.graph.finreflect import chunk_document, extract_triples
 from app.services.graph.normalizer import normalize_entity_name
+
+# FinReflectKG 模式前缀 → 论文抽取模式的映射
+_FINREFLECT_MODES = {
+    "finreflect_single": "single_pass",
+    "finreflect_multi": "multi_pass",
+    "finreflect_reflection": "reflection",
+}
+
+
+def _finreflect_mode() -> Optional[str]:
+    """当前配置若为 FinReflectKG 模式则返回论文模式名，否则 None（走旧版抽取）。"""
+    return _FINREFLECT_MODES.get(settings.GRAPH_EXTRACTION_MODE)
 
 _HEADERS = {
     "User-Agent": "DeepAlpha/1.0 (investment research; mailto:research@deepalpha.ai)",
@@ -345,6 +360,75 @@ async def ingest_raw_text(
     return count, str(doc.id)
 
 
+def _store_finkg_triples_sync(
+    doc: SourceDocument,
+    triples: list[dict],
+    chunk_id: str,
+    mode: str,
+) -> int:
+    """将一批 FinReflectKG 5 元组写入 finkg_triples 表（同步）。返回实际写入条数。"""
+    stored = 0
+    with Session(sync_engine) as session:
+        for triple in triples:
+            try:
+                session.add(FinKGTriple(
+                    head=triple["head"][:300],
+                    head_type=triple["head_type"][:50],
+                    relation=triple["relation"][:50],
+                    tail=triple["tail"][:300],
+                    tail_type=triple["tail_type"][:50],
+                    evidence=triple.get("evidence", ""),
+                    compliant=bool(triple.get("compliant", True)),
+                    violations=triple.get("violations", []),
+                    extraction_mode=mode,
+                    chunk_id=chunk_id,
+                    source_doc_id=doc.id,
+                    document_url=doc.url,
+                    ticker=doc.ticker,
+                ))
+                stored += 1
+            except Exception as e:
+                logger.warning("finkg_triple_store_error", error=str(e), chunk=chunk_id)
+                continue
+
+        doc.fact_count += stored
+        session.add(doc)
+        session.commit()
+
+    return stored
+
+
+async def _extract_and_store_chunk(
+    doc: SourceDocument,
+    chunk: str,
+    chunk_id: str,
+    source_info: str,
+    llm_client,
+) -> int:
+    """按配置的抽取模式处理单个 chunk：抽取并入库，返回存储条数。
+
+    - ``finreflect_*``：FinReflectKG 论文本体（24 实体/29 关系），5 元组入 finkg_triples。
+    - 其他（默认 ``single_pass``）：旧版供应链抽取，事实入 graph_facts。
+    """
+    mode = _finreflect_mode()
+    if mode:
+        triples = await extract_triples(
+            chunk,
+            source_info,
+            llm_client,
+            mode=mode,
+            max_iterations=settings.GRAPH_REFLECTION_MAX_ITERS,
+        )
+        if not triples:
+            return 0
+        return _store_finkg_triples_sync(doc, triples, chunk_id, mode)
+
+    facts = await extract_facts_from_chunk(chunk, source_info, llm_client)
+    if not facts:
+        return 0
+    return _store_facts_sync(doc, facts, chunk_id)
+
+
 async def run_ingest_pipeline(
     doc: SourceDocument,
     llm_client,
@@ -378,8 +462,8 @@ async def run_ingest_pipeline(
             raw_text = await _fetch_text_from_url(doc_url)
         logger.info("document_fetched", doc_id=str(doc_id), text_len=len(raw_text))
 
-        # 3. 切片
-        chunks = _chunk_text(raw_text)
+        # 3. 切片（FinReflectKG 模式用表格感知切片，不截断表格）
+        chunks = chunk_document(raw_text) if _finreflect_mode() else _chunk_text(raw_text)
         logger.info("document_chunked", doc_id=str(doc_id), chunk_count=len(chunks))
 
         with Session(sync_engine, expire_on_commit=False) as session:
@@ -396,10 +480,7 @@ async def run_ingest_pipeline(
         for i, chunk in enumerate(chunks):
             if len(chunk.strip()) >= 50:  # 过短 chunk 只更新进度、不抽取
                 chunk_id = f"{doc_id}:chunk:{i}"
-                facts = await extract_facts_from_chunk(chunk, source_info, llm_client)
-                if facts:
-                    stored = _store_facts_sync(doc, facts, chunk_id)
-                    total_stored += stored
+                total_stored += await _extract_and_store_chunk(doc, chunk, chunk_id, source_info, llm_client)
 
             # 更新进度（已处理切片数），供前端进度条展示
             with Session(sync_engine, expire_on_commit=False) as session:

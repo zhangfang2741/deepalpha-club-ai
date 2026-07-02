@@ -25,6 +25,7 @@ _DB_URL = "sqlite:///file::memory:?cache=shared&uri=true"
 @pytest.fixture(scope="session")
 def test_engine():
     engine = create_engine(_DB_URL, connect_args={"check_same_thread": False})
+    from app.models.finkg_triple import FinKGTriple  # noqa: F401
     from app.models.graph_entity import GraphEntity  # noqa: F401
     from app.models.graph_fact import GraphFact  # noqa: F401
     from app.models.graph_source import SourceDocument  # noqa: F401
@@ -893,6 +894,404 @@ def test_find_cached_done(test_engine):
 
     assert hit == (did, 7)
     assert miss is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. FinReflectKG 严格复刻（app/services/graph/finreflect）
+# ─────────────────────────────────────────────────────────────────────────────
+
+_FINKG_CHUNK = (
+    "NVIDIA reported record data center revenue driven by strong demand for its H100 GPU. "
+    "TSMC manufactures the H100 using CoWoS advanced packaging technology. "
+    "Supply chain risk negatively impacted gross margin during the period."
+)
+
+
+class TestFinReflectOntology:
+    """本体注册表：类型数量、名称与提示词渲染。"""
+
+    def test_entity_types_present(self):
+        from app.services.graph.finreflect.ontology import ENTITY_TYPES
+        assert len(ENTITY_TYPES) >= 22
+        for name in ("ORG", "COMP", "ORG_GOV", "ORG_REG", "PERSON", "GPE",
+                     "SEGMENT", "RISK_FACTOR", "FIN_METRIC", "ESG_TOPIC",
+                     "MACRO_CONDITION", "RAW_MATERIAL", "FIN_MARKET"):
+            assert name in ENTITY_TYPES
+
+    def test_relation_types_present(self):
+        from app.services.graph.finreflect.ontology import RELATION_TYPES
+        assert len(RELATION_TYPES) >= 22
+        for name in ("Has_Stake_In", "Operates_In", "Produces", "Discloses",
+                     "Depends_On", "Positively_Impacts", "Negatively_Impacts",
+                     "Faces", "Complies_With", "Subject_To", "Related_To",
+                     "Causes_Shortage_Of", "Market_Reacts_To"):
+            assert name in RELATION_TYPES
+
+    def test_validators(self):
+        from app.services.graph.finreflect.ontology import is_valid_entity_type, is_valid_relation
+        assert is_valid_entity_type("ORG")
+        assert not is_valid_entity_type("Company")  # 旧 schema 类型不属于论文本体
+        assert is_valid_relation("Negatively_Impacts")
+        assert not is_valid_relation("HAS_PRODUCT")  # 旧 schema 关系不属于论文本体
+
+    def test_prompt_renders_ontology(self):
+        from app.services.graph.finreflect.prompts import build_extraction_system_prompt
+        prompt = build_extraction_system_prompt()
+        assert "ORG" in prompt and "RISK_FACTOR" in prompt
+        assert "Negatively_Impacts" in prompt and "Has_Stake_In" in prompt
+
+
+class TestTableAwareChunker:
+    """表格感知语义切片：表格独立原子块，文本按段落/句子边界切分。"""
+
+    def test_markdown_table_standalone_chunk(self):
+        from app.services.graph.finreflect.chunker import chunk_document
+        prose = "This is a sentence about revenue. " * 30
+        table = "\n".join([
+            "| Segment | Revenue | Margin |",
+            "|---------|---------|--------|",
+            "| Data Center | $30.8B | 75% |",
+            "| Gaming | $2.9B | 60% |",
+            "| Automotive | $0.3B | 45% |",
+        ])
+        text = prose + "\n" + table + "\n" + prose
+        chunks = chunk_document(text, max_tokens=100)
+        assert len(chunks) > 1
+        containing = [c for c in chunks if "Data Center" in c]
+        assert len(containing) == 1
+        # 论文：表格独立保留为单个原子 chunk（不与正文混排）
+        assert all(row in containing[0] for row in ("Segment", "Gaming", "Automotive"))
+        assert "sentence about revenue" not in containing[0]
+
+    def test_html_table_standalone_chunk(self):
+        from app.services.graph.finreflect.chunker import chunk_document
+        table = "<table><tr><td>Net Income</td><td>$10B</td></tr><tr><td>CapEx</td><td>$3B</td></tr></table>"
+        text = ("Some prose sentence here. " * 40) + table + (" More prose after table. " * 40)
+        chunks = chunk_document(text, max_tokens=100)
+        containing = [c for c in chunks if "Net Income" in c]
+        assert len(containing) == 1
+        assert "CapEx" in containing[0]
+        assert "prose" not in containing[0]
+
+    def test_prose_splits_at_sentence_boundary(self):
+        from app.services.graph.finreflect.chunker import chunk_document
+        text = "Revenue grew significantly this year. " * 100
+        chunks = chunk_document(text, max_tokens=100)
+        assert len(chunks) > 1
+        for c in chunks:
+            assert c.endswith(".")  # 不截断句子
+
+    def test_paragraph_boundary_preferred(self):
+        from app.services.graph.finreflect.chunker import chunk_document
+        para1 = "First topic sentence one. First topic sentence two."
+        para2 = "Second topic sentence one. Second topic sentence two."
+        # 两段合计超预算 → 应在段落边界断开，而非句子中间
+        chunks = chunk_document(para1 + "\n\n" + para2, max_tokens=(len(para1) + 10) // 4)
+        assert chunks[0] == para1
+        assert chunks[1] == para2
+
+    def test_default_chunk_size_is_2048(self):
+        from app.services.graph.finreflect.chunker import CHUNK_SIZE_TOKENS
+        assert CHUNK_SIZE_TOKENS == 2048  # 论文 4.2：CHUNK_SIZE = 2048
+
+
+class TestFinReflectCheckRules:
+    """CheckRules：论文 5.1 节的四条规则与 CR(t) 得分。"""
+
+    def _valid_triple(self):
+        return {
+            "head": "NVDA", "head_type": "ORG",
+            "relation": "Produces",
+            "tail": "H100 GPU", "tail_type": "PRODUCT",
+            "evidence": "strong demand for its H100 GPU",
+        }
+
+    def test_valid_triple_passes(self):
+        from app.services.graph.finreflect.checkrules import check_triple
+        assert check_triple(self._valid_triple(), _FINKG_CHUNK) == []
+
+    def test_abstract_subject_reference_flagged(self):
+        from app.services.graph.finreflect.checkrules import check_triple
+        t = self._valid_triple()
+        t["head"] = "We"  # 论文 R1：抽象指代应规范化为具体实体
+        violations = check_triple(t, _FINKG_CHUNK)
+        assert any("subject_reference" in v for v in violations)
+
+    def test_entity_length_over_5_words_flagged(self):
+        from app.services.graph.finreflect.checkrules import check_triple
+        t = self._valid_triple()
+        t["tail"] = "the newly announced flagship data center accelerator product"
+        violations = check_triple(t, _FINKG_CHUNK)
+        assert any("entity_length" in v for v in violations)
+
+    def test_invalid_entity_type_flagged(self):
+        from app.services.graph.finreflect.checkrules import check_triple
+        t = self._valid_triple()
+        t["head_type"] = "Company"  # 旧 schema 类型
+        violations = check_triple(t, _FINKG_CHUNK)
+        assert any("entity_schema" in v for v in violations)
+
+    def test_invalid_relation_flagged(self):
+        from app.services.graph.finreflect.checkrules import check_triple
+        t = self._valid_triple()
+        t["relation"] = "HAS_PRODUCT"  # 旧 schema 关系
+        violations = check_triple(t, _FINKG_CHUNK)
+        assert any("relationship_schema" in v for v in violations)
+
+    def test_checkrules_score_per_triple(self):
+        from app.services.graph.finreflect.checkrules import checkrules_score
+        assert checkrules_score(self._valid_triple()) == 1.0
+        bad = self._valid_triple()
+        bad["relation"] = "MADE_UP"  # 违反 1/4 条规则 → CR(t) = 0.75
+        assert checkrules_score(bad) == 0.75
+
+    def test_compliance_score_and_annotation(self):
+        from app.services.graph.finreflect.checkrules import annotate_compliance, compliance_score
+        good = self._valid_triple()
+        bad = self._valid_triple()
+        bad["relation"] = "MADE_UP"
+        triples = [good, bad]
+        assert compliance_score(triples, _FINKG_CHUNK) == 0.5
+        annotated = annotate_compliance(triples, _FINKG_CHUNK)
+        assert annotated[0]["compliant"] is True
+        assert annotated[1]["compliant"] is False
+        assert annotated[1]["violations"]
+        assert annotated[1]["checkrules_score"] == 0.75
+
+
+class TestFinReflectParsing:
+    """三元组与反馈 JSON 解析。"""
+
+    def test_parse_triples_fenced_json(self):
+        from app.services.graph.finreflect.graph import parse_triples_response
+        raw = '```json\n{"triples": [{"head": "NVDA", "head_type": "ORG", "relation": "Produces", "tail": "H100", "tail_type": "PRODUCT", "evidence": "x"}]}\n```'
+        result = parse_triples_response(raw)
+        assert len(result) == 1
+        assert result[0]["relation"] == "Produces"
+
+    def test_parse_triples_skips_malformed(self):
+        from app.services.graph.finreflect.graph import parse_triples_response
+        raw = json.dumps({"triples": [
+            {"head": "", "relation": "Produces", "tail": "H100"},  # 头为空 → 丢弃
+            {"head": "NVDA", "head_type": "ORG", "relation": "Produces", "tail": "H100", "tail_type": "PRODUCT", "evidence": "x"},
+        ]})
+        assert len(parse_triples_response(raw)) == 1
+
+    def test_parse_feedback_box41_format(self):
+        from app.services.graph.finreflect.graph import parse_feedback_response
+        raw = json.dumps({"feedback": [
+            {"triple_number": "Triple 1",
+             "triple": ["We", "ORG", "Impacted_By", "supply chain disruptions", "RISK_TYPE"],
+             "issue": "Abstract reference; invalid category",
+             "suggestion": "Replace We with NVDA; use RISK_FACTOR"},
+        ]})
+        feedback = parse_feedback_response(raw)
+        assert len(feedback) == 1
+        assert feedback[0]["triple_number"] == "Triple 1"
+
+    def test_parse_feedback_empty_means_no_issues(self):
+        from app.services.graph.finreflect.graph import parse_feedback_response
+        assert parse_feedback_response('{"feedback": []}') == []
+        # 解析失败保守视为无反馈（停止条件 F = ∅）
+        assert parse_feedback_response("not json at all") == []
+
+
+def _finkg_llm(extract_resp: str, feedback_resp: str = '{"feedback": []}',
+               refine_resp: str = "{}", normalize_resp: str = "{}"):
+    """按提示词标记分派角色的 mock LLM。"""
+    from app.services.graph.finreflect.prompts import (
+        CORRECTOR_MARKER,
+        NORMALIZE_MARKER,
+        build_critic_system_prompt,
+    )
+    critic_system = build_critic_system_prompt()
+
+    def _dispatch(messages):
+        system_text = messages[0].content
+        user_text = messages[1].content
+        if system_text == critic_system:
+            resp = feedback_resp
+        elif CORRECTOR_MARKER in user_text:
+            resp = refine_resp
+        elif NORMALIZE_MARKER in user_text:
+            resp = normalize_resp
+        else:
+            resp = extract_resp
+        m = MagicMock()
+        m.content = resp
+        return m
+
+    llm = MagicMock()
+    llm.ainvoke = AsyncMock(side_effect=_dispatch)
+    return llm
+
+
+_FINKG_EXTRACT_RESP = json.dumps({"triples": [
+    {"head": "NVDA", "head_type": "ORG", "relation": "Produces",
+     "tail": "H100 GPU", "tail_type": "PRODUCT",
+     "evidence": "strong demand for its H100 GPU"},
+    {"head": "NVDA", "head_type": "ORG", "relation": "Depends_On",
+     "tail": "TSMC", "tail_type": "COMP",
+     "evidence": "TSMC manufactures the H100 using CoWoS advanced packaging technology"},
+]})
+
+
+class TestFinReflectModes:
+    """三种抽取模式的图路由与行为（论文 4.3 节）。"""
+
+    @pytest.mark.asyncio
+    async def test_single_pass_one_llm_call(self):
+        from app.services.graph.finreflect.graph import extract_triples
+        llm = _finkg_llm(_FINKG_EXTRACT_RESP)
+        triples = await extract_triples(_FINKG_CHUNK, "NVIDIA 10-K 2024", llm, mode="single_pass")
+        assert len(triples) == 2
+        assert llm.ainvoke.await_count == 1
+        assert all(t["compliant"] for t in triples)
+
+    @pytest.mark.asyncio
+    async def test_multi_pass_extract_then_normalize(self):
+        from app.services.graph.finreflect.graph import extract_triples
+        # 首遍含抽象指代 "We"，规范化遍替换为 ticker（论文 4.3.2 语义）
+        raw_extract = json.dumps({"triples": [
+            {"head": "We", "head_type": "ORG", "relation": "Produces",
+             "tail": "H100 GPU", "tail_type": "PRODUCT",
+             "evidence": "strong demand for its H100 GPU"},
+        ]})
+        normalized = json.dumps({"triples": [
+            {"head": "NVDA", "head_type": "ORG", "relation": "Produces",
+             "tail": "H100 GPU", "tail_type": "PRODUCT",
+             "evidence": "strong demand for its H100 GPU"},
+        ]})
+        llm = _finkg_llm(raw_extract, normalize_resp=normalized)
+        triples = await extract_triples(_FINKG_CHUNK, "NVIDIA 10-K 2024", llm, mode="multi_pass")
+        assert llm.ainvoke.await_count == 2  # 抽取遍 + 规范化遍
+        assert len(triples) == 1
+        assert triples[0]["head"] == "NVDA"
+        assert triples[0]["compliant"] is True
+
+    @pytest.mark.asyncio
+    async def test_reflection_corrects_per_feedback(self):
+        from app.services.graph.finreflect.graph import extract_triples
+        bad_extract = json.dumps({"triples": [
+            {"head": "NVDA", "head_type": "ORG", "relation": "MADE_UP_RELATION",
+             "tail": "H100 GPU", "tail_type": "PRODUCT",
+             "evidence": "strong demand for its H100 GPU"},
+        ]})
+        feedback_resps = iter([
+            json.dumps({"feedback": [
+                {"triple_number": "Triple 1",
+                 "triple": ["NVDA", "ORG", "MADE_UP_RELATION", "H100 GPU", "PRODUCT"],
+                 "issue": "MADE_UP_RELATION is not a valid preconfigured category",
+                 "suggestion": "Use Produces"},
+            ]}),
+            json.dumps({"feedback": []}),  # 第二次评审：F = ∅ → 停止
+        ])
+        fixed = json.dumps({"triples": [
+            {"head": "NVDA", "head_type": "ORG", "relation": "Produces",
+             "tail": "H100 GPU", "tail_type": "PRODUCT",
+             "evidence": "strong demand for its H100 GPU"},
+        ]})
+
+        from app.services.graph.finreflect.prompts import CORRECTOR_MARKER, build_critic_system_prompt
+        critic_system = build_critic_system_prompt()
+
+        def _dispatch(messages):
+            system_text, user_text = messages[0].content, messages[1].content
+            if system_text == critic_system:
+                resp = next(feedback_resps)
+            elif CORRECTOR_MARKER in user_text:
+                resp = fixed
+            else:
+                resp = bad_extract
+            m = MagicMock()
+            m.content = resp
+            return m
+
+        llm = MagicMock()
+        llm.ainvoke = AsyncMock(side_effect=_dispatch)
+
+        triples = await extract_triples(
+            _FINKG_CHUNK, "NVIDIA 10-K 2024", llm, mode="reflection", max_iterations=2,
+        )
+        assert len(triples) == 1
+        assert triples[0]["relation"] == "Produces"
+        assert triples[0]["compliant"] is True
+        # 抽取1 + 评审1 + 修正1 + 评审1 = 4 次调用
+        assert llm.ainvoke.await_count == 4
+
+    @pytest.mark.asyncio
+    async def test_reflection_max_iterations_stops(self):
+        from app.services.graph.finreflect.graph import extract_triples
+        bad = json.dumps({"triples": [
+            {"head": "NVDA", "head_type": "ORG", "relation": "STILL_BAD",
+             "tail": "H100 GPU", "tail_type": "PRODUCT",
+             "evidence": "strong demand for its H100 GPU"},
+        ]})
+        never_empty = json.dumps({"feedback": [
+            {"triple_number": "Triple 1", "issue": "still bad", "suggestion": "fix"},
+        ]})
+        llm = _finkg_llm(bad, feedback_resp=never_empty, refine_resp=bad)
+        triples = await extract_triples(
+            _FINKG_CHUNK, "NVIDIA 10-K 2024", llm, mode="reflection", max_iterations=1,
+        )
+        # 达到 n_max 即停；三元组保留但被 CheckRules 标注为不合规
+        assert llm.ainvoke.await_count == 4
+        assert len(triples) == 1
+        assert triples[0]["compliant"] is False
+        assert any("relationship_schema" in v for v in triples[0]["violations"])
+
+
+@pytest.mark.asyncio
+async def test_pipeline_finreflect_mode(test_engine):
+    """流水线在 finreflect_reflection 模式下：论文 5 元组入 finkg_triples 表。"""
+    from app.models.finkg_triple import FinKGTriple
+    from app.models.graph_source import DocumentStatus, DocumentType, SourceDocument
+    from app.services.graph.pipeline import run_ingest_pipeline
+
+    doc = SourceDocument(
+        url="text://finreflect-mode",
+        document_type=DocumentType.SEC_10K,
+        ticker="NVDA",
+        company_name="NVIDIA",
+        title="FinReflect Mode Test",
+    )
+    with Session(test_engine) as s:
+        s.add(doc)
+        s.commit()
+        s.refresh(doc)
+
+    extract_resp = json.dumps({"triples": [
+        {"head": "NVDA", "head_type": "ORG", "relation": "Produces",
+         "tail": "H100", "tail_type": "PRODUCT",
+         "evidence": "driven by strong demand for NVIDIA H100 and H200 GPUs"},
+        {"head": "NVDA", "head_type": "ORG", "relation": "Depends_On",
+         "tail": "TSMC", "tail_type": "COMP",
+         "evidence": "TSMC manufactures our Blackwell chips using CoWoS advanced packaging technology"},
+    ]})
+    llm = _finkg_llm(extract_resp)  # 评审默认返回 F = ∅
+
+    with (
+        patch("app.services.graph.pipeline.sync_engine", test_engine),
+        patch("app.services.graph.pipeline.settings.GRAPH_EXTRACTION_MODE", "finreflect_reflection"),
+    ):
+        count = await run_ingest_pipeline(doc, llm, raw_text=_SAMPLE_TRANSCRIPT)
+
+    assert count > 0
+    from sqlmodel import select
+    with Session(test_engine) as s:
+        rows = s.exec(select(FinKGTriple)).all()
+        updated = s.get(SourceDocument, doc.id)
+
+    assert updated.status == DocumentStatus.DONE
+    assert updated.fact_count > 0
+    assert len(rows) > 0
+    heads = {r.head for r in rows}
+    assert "NVDA" in heads
+    sample = rows[0]
+    assert sample.head_type in ("ORG", "COMP", "PRODUCT", "RISK_FACTOR", "FIN_METRIC")
+    assert sample.extraction_mode == "reflection"
+    assert sample.ticker == "NVDA"
+    assert sample.evidence
 
 
 class TestTickerFocus:

@@ -20,6 +20,7 @@ from app.models.factor_run import FactorRun  # noqa: F401
 from app.models.graph_entity import GraphEntity  # noqa: F401
 from app.models.graph_fact import GraphFact  # noqa: F401
 from app.models.graph_source import SourceDocument  # noqa: F401
+from app.models.finkg_triple import FinKGTriple  # noqa: F401
 
 # Alembic Config object
 config = context.config

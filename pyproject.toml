@@ -135,6 +135,7 @@ convention = "google"
 "__init__.py" = ["E402"]
 "app/models/factor_*.py" = ["D415"]
 "app/models/graph_*.py" = ["D415"]
+"app/models/finkg_triple.py" = ["D415"]
 "app/services/graph/*.py" = ["D415"]
 "app/schemas/supply_chain.py" = ["D415"]
 "app/api/v1/supply_chain.py" = ["D415"]
