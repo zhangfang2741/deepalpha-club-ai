@@ -6,6 +6,11 @@ export interface PriceTargetPoint {
   count: number
 }
 
+export interface StockPricePoint {
+  label: string
+  close: number
+}
+
 export interface UpgradeStock {
   symbol: string
   name: string
@@ -38,6 +43,7 @@ export interface SP500UpgradesResponse {
 export interface PriceTargetHistoryResponse {
   symbol: string
   points: PriceTargetPoint[]
+  price_points: StockPricePoint[]
 }
 
 export async function fetchNasdaq100Upgrades(refresh = false): Promise<Nasdaq100UpgradesResponse> {

@@ -6,7 +6,7 @@ import { TrendingUp, Search, Loader2, Info } from 'lucide-react'
 import DashboardShell from '@/components/layout/DashboardShell'
 import PriceTargetChart from '@/components/analyst_upgrades/PriceTargetChart'
 import { fetchCustomPriceTargetHistory } from '@/lib/api/analyst_upgrade'
-import type { PriceTargetPoint } from '@/lib/api/analyst_upgrade'
+import type { PriceTargetPoint, StockPricePoint } from '@/lib/api/analyst_upgrade'
 
 // 返回 YYYY-MM-DD 格式的本地日期字符串
 function toDateInput(d: Date): string {
@@ -26,6 +26,7 @@ export default function CustomPriceTargetPage() {
   const [start, setStart] = useState(initial.start)
   const [end, setEnd] = useState(initial.end)
   const [points, setPoints] = useState<PriceTargetPoint[] | null>(null)
+  const [pricePoints, setPricePoints] = useState<StockPricePoint[]>([])
   const [queried, setQueried] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -45,6 +46,7 @@ export default function CustomPriceTargetPage() {
     fetchCustomPriceTargetHistory(sym, start, end)
       .then((res) => {
         setPoints(res.points)
+        setPricePoints(res.price_points ?? [])
         setQueried(sym)
       })
       .catch(() => setError('数据加载失败，请检查股票代码是否正确后重试'))
@@ -66,7 +68,7 @@ export default function CustomPriceTargetPage() {
               <h1 className="text-xl font-bold text-gray-900">分析师持续上调</h1>
             </div>
             <p className="text-sm text-gray-500">
-              自定义查询：输入美股股票并选定时间区间，查看每月分析师平均目标价
+              自定义查询：输入美股股票并选定时间区间，查看每月分析师平均目标价与股价走势
             </p>
           </div>
         </div>
@@ -154,11 +156,11 @@ export default function CustomPriceTargetPage() {
             <div className="flex items-center gap-2">
               <span className="text-lg font-bold text-gray-900">{queried}</span>
               <span className="text-xs text-gray-400">
-                {start} ~ {end} · 按月聚合分析师平均目标价
+                {start} ~ {end} · 按月聚合分析师平均目标价与月末股价
               </span>
             </div>
             {points.length > 0 ? (
-              <PriceTargetChart points={points} />
+              <PriceTargetChart points={points} pricePoints={pricePoints} />
             ) : (
               <div className="flex items-center justify-center h-60 text-gray-400 text-sm">
                 该区间内暂无分析师目标价数据
@@ -175,7 +177,8 @@ export default function CustomPriceTargetPage() {
 
         {/* 方法说明 */}
         <div className="text-xs text-gray-400 bg-gray-50 rounded-lg p-4 space-y-1">
-          <p><span className="font-medium text-gray-500">数据含义：</span>所选区间内每个月所有分析师给出目标价的算术平均值</p>
+          <p><span className="font-medium text-gray-500">目标价（蓝）：</span>所选区间内每个月所有分析师给出目标价的算术平均值</p>
+          <p><span className="font-medium text-gray-500">股价（橙）：</span>每月最后一个交易日的收盘价</p>
           <p><span className="font-medium text-gray-500">默认区间：</span>当前时间往前两年</p>
           <p><span className="font-medium text-gray-500">数据源：</span>Financial Modeling Prep (FMP)</p>
         </div>

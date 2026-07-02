@@ -13,6 +13,13 @@ class PriceTargetPoint(BaseResponse):
     count: int
 
 
+class StockPricePoint(BaseResponse):
+    """单月股价（月末收盘价）."""
+
+    label: str = Field(description="月份标签，如 2024-06")
+    close: float
+
+
 class UpgradeStock(BaseResponse):
     """单只满足上调条件的股票数据."""
 
@@ -54,3 +61,5 @@ class PriceTargetHistoryResponse(BaseResponse):
 
     symbol: str
     points: list[PriceTargetPoint]
+    # 对应区间内的月度股价（月末收盘），用于图表叠加对比。为空表示未拉取股价。
+    price_points: list[StockPricePoint] = Field(default_factory=list)
