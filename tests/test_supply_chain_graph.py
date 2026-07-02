@@ -25,6 +25,7 @@ _DB_URL = "sqlite:///file::memory:?cache=shared&uri=true"
 @pytest.fixture(scope="session")
 def test_engine():
     engine = create_engine(_DB_URL, connect_args={"check_same_thread": False})
+    from app.models.finkg_triple import FinKGTriple  # noqa: F401
     from app.models.graph_entity import GraphEntity  # noqa: F401
     from app.models.graph_fact import GraphFact  # noqa: F401
     from app.models.graph_source import SourceDocument  # noqa: F401
@@ -896,245 +897,365 @@ def test_find_cached_done(test_engine):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 8. FinReflectKG 反思式抽取（reflection_graph）
+# 8. FinReflectKG 严格复刻（app/services/graph/finreflect）
 # ─────────────────────────────────────────────────────────────────────────────
 
-_REFLECT_CHUNK = (
+_FINKG_CHUNK = (
     "NVIDIA reported record data center revenue driven by strong demand for its H100 GPU. "
     "TSMC manufactures the H100 using CoWoS advanced packaging technology. "
-    "H100 production remains constrained by CoWoS packaging capacity."
+    "Supply chain risk negatively impacted gross margin during the period."
 )
 
 
-class TestCheckRules:
-    """确定性规则检查（对应论文 rule-based compliance policies）。"""
+class TestFinReflectOntology:
+    """本体注册表：类型数量、名称与提示词渲染。"""
 
-    def test_valid_fact_passes(self):
-        from app.services.graph.reflection_graph import check_fact_rules
-        fact = {
-            "source_entity": {"name": "NVIDIA", "type": "Company"},
-            "relation": "HAS_PRODUCT",
-            "target_entity": {"name": "H100", "type": "Product"},
+    def test_entity_types_present(self):
+        from app.services.graph.finreflect.ontology import ENTITY_TYPES
+        assert len(ENTITY_TYPES) >= 19
+        for name in ("ORG", "COMP", "ORG_GOV", "ORG_REG", "PERSON", "GPE",
+                     "RISK_FACTOR", "FIN_METRIC", "ESG_TOPIC", "MACRO_CONDITION"):
+            assert name in ENTITY_TYPES
+
+    def test_relation_types_present(self):
+        from app.services.graph.finreflect.ontology import RELATION_TYPES
+        assert len(RELATION_TYPES) >= 20
+        for name in ("Has_Stake_In", "Operates_In", "Produces", "Discloses",
+                     "Depends_On", "Positively_Impacts", "Negatively_Impacts",
+                     "Faces", "Complies_With", "Subject_To", "Related_To"):
+            assert name in RELATION_TYPES
+
+    def test_validators(self):
+        from app.services.graph.finreflect.ontology import is_valid_entity_type, is_valid_relation
+        assert is_valid_entity_type("ORG")
+        assert not is_valid_entity_type("Company")  # 旧 schema 类型不属于论文本体
+        assert is_valid_relation("Negatively_Impacts")
+        assert not is_valid_relation("HAS_PRODUCT")  # 旧 schema 关系不属于论文本体
+
+    def test_prompt_renders_ontology(self):
+        from app.services.graph.finreflect.prompts import build_extraction_system_prompt
+        prompt = build_extraction_system_prompt()
+        assert "ORG" in prompt and "RISK_FACTOR" in prompt
+        assert "Negatively_Impacts" in prompt and "Has_Stake_In" in prompt
+
+
+class TestTableAwareChunker:
+    """表格感知切片：表格保持原子，普通文本按句切分。"""
+
+    def test_markdown_table_kept_intact(self):
+        from app.services.graph.finreflect.chunker import chunk_document
+        prose = "This is a sentence about revenue. " * 30
+        table = "\n".join([
+            "| Segment | Revenue | Margin |",
+            "|---------|---------|--------|",
+            "| Data Center | $30.8B | 75% |",
+            "| Gaming | $2.9B | 60% |",
+            "| Automotive | $0.3B | 45% |",
+        ])
+        text = prose + "\n" + table + "\n" + prose
+        chunks = chunk_document(text, max_tokens=100)
+        assert len(chunks) > 1  # 预算够小，确实发生了切分
+        containing = [c for c in chunks if "Data Center" in c]
+        assert len(containing) == 1
+        # 全部表格行都在同一个 chunk 中
+        assert all(row in containing[0] for row in ("Segment", "Gaming", "Automotive"))
+
+    def test_html_table_kept_intact(self):
+        from app.services.graph.finreflect.chunker import chunk_document
+        table = "<table><tr><td>Net Income</td><td>$10B</td></tr><tr><td>CapEx</td><td>$3B</td></tr></table>"
+        text = ("Some prose sentence here. " * 40) + table + (" More prose after table. " * 40)
+        chunks = chunk_document(text, max_tokens=100)
+        containing = [c for c in chunks if "Net Income" in c]
+        assert len(containing) == 1
+        assert "CapEx" in containing[0]
+
+    def test_prose_splits_at_sentence_boundary(self):
+        from app.services.graph.finreflect.chunker import chunk_document
+        text = "Revenue grew significantly this year. " * 100
+        chunks = chunk_document(text, max_tokens=100)
+        assert len(chunks) > 1
+        for c in chunks:
+            assert c.endswith(".")  # 不截断句子
+
+
+class TestFinReflectCheckRules:
+    """CheckRules 四条规则化合规策略。"""
+
+    def _valid_triple(self):
+        return {
+            "head": "NVIDIA", "head_type": "ORG",
+            "relation": "Produces",
+            "tail": "H100 GPU", "tail_type": "PRODUCT",
             "evidence": "strong demand for its H100 GPU",
-            "confidence": 0.95,
         }
-        assert check_fact_rules(fact, _REFLECT_CHUNK) == []
+
+    def test_valid_triple_passes(self):
+        from app.services.graph.finreflect.checkrules import check_triple
+        assert check_triple(self._valid_triple(), _FINKG_CHUNK) == []
+
+    def test_invalid_entity_type_flagged(self):
+        from app.services.graph.finreflect.checkrules import check_triple
+        t = self._valid_triple()
+        t["head_type"] = "Company"  # 旧 schema 类型
+        violations = check_triple(t, _FINKG_CHUNK)
+        assert any("entity_type_policy" in v for v in violations)
 
     def test_invalid_relation_flagged(self):
-        from app.services.graph.reflection_graph import check_fact_rules
-        fact = {
-            "source_entity": {"name": "NVIDIA", "type": "Company"},
-            "relation": "MADE_UP_RELATION",
-            "target_entity": {"name": "H100", "type": "Product"},
-            "evidence": "strong demand for its H100 GPU",
-            "confidence": 0.9,
-        }
-        violations = check_fact_rules(fact, _REFLECT_CHUNK)
-        assert any("非法关系类型" in v for v in violations)
-
-    def test_type_signature_mismatch_flagged(self):
-        from app.services.graph.reflection_graph import check_fact_rules
-        # HAS_PRODUCT 要求 Company→Product，这里 Product→Company 非法
-        fact = {
-            "source_entity": {"name": "H100", "type": "Product"},
-            "relation": "HAS_PRODUCT",
-            "target_entity": {"name": "NVIDIA", "type": "Company"},
-            "evidence": "strong demand for its H100 GPU",
-            "confidence": 0.9,
-        }
-        violations = check_fact_rules(fact, _REFLECT_CHUNK)
-        assert any("类型组合不合法" in v for v in violations)
+        from app.services.graph.finreflect.checkrules import check_triple
+        t = self._valid_triple()
+        t["relation"] = "HAS_PRODUCT"  # 旧 schema 关系
+        violations = check_triple(t, _FINKG_CHUNK)
+        assert any("relation_policy" in v for v in violations)
 
     def test_self_loop_flagged(self):
-        from app.services.graph.reflection_graph import check_fact_rules
-        fact = {
-            "source_entity": {"name": "NVIDIA", "type": "Company"},
-            "relation": "HAS_PRODUCT",
-            "target_entity": {"name": "NVIDIA", "type": "Product"},
-            "evidence": "NVIDIA",
-            "confidence": 0.9,
-        }
-        violations = check_fact_rules(fact, _REFLECT_CHUNK)
-        assert any("自环" in v for v in violations)
+        from app.services.graph.finreflect.checkrules import check_triple
+        t = self._valid_triple()
+        t["tail"] = "NVIDIA"
+        violations = check_triple(t, _FINKG_CHUNK)
+        assert any("well_formed_policy" in v and "自环" in v for v in violations)
 
     def test_ungrounded_evidence_flagged(self):
-        from app.services.graph.reflection_graph import check_fact_rules
-        fact = {
-            "source_entity": {"name": "NVIDIA", "type": "Company"},
-            "relation": "HAS_PRODUCT",
-            "target_entity": {"name": "H100", "type": "Product"},
-            "evidence": "The quarterly dividend was raised amid favorable macroeconomic tailwinds worldwide",
-            "confidence": 0.9,
-        }
-        violations = check_fact_rules(fact, _REFLECT_CHUNK)
-        assert any("证据未接地" in v for v in violations)
+        from app.services.graph.finreflect.checkrules import check_triple
+        t = self._valid_triple()
+        t["evidence"] = "The quarterly dividend was raised amid favorable macroeconomic tailwinds worldwide"
+        violations = check_triple(t, _FINKG_CHUNK)
+        assert any("grounding_policy" in v for v in violations)
 
-    def test_confidence_out_of_range_flagged(self):
-        from app.services.graph.reflection_graph import check_fact_rules
-        fact = {
-            "source_entity": {"name": "NVIDIA", "type": "Company"},
-            "relation": "HAS_PRODUCT",
-            "target_entity": {"name": "H100", "type": "Product"},
-            "evidence": "strong demand for its H100 GPU",
-            "confidence": 1.7,
-        }
-        violations = check_fact_rules(fact, _REFLECT_CHUNK)
-        assert any("越界" in v for v in violations)
-
-    def test_compliance_score_and_filter(self):
-        from app.services.graph.reflection_graph import compliance_score, filter_compliant_facts
-        good = {
-            "source_entity": {"name": "NVIDIA", "type": "Company"},
-            "relation": "HAS_PRODUCT",
-            "target_entity": {"name": "H100", "type": "Product"},
-            "evidence": "strong demand for its H100 GPU",
-            "confidence": 0.95,
-        }
-        bad = {
-            "source_entity": {"name": "NVIDIA", "type": "Company"},
-            "relation": "MADE_UP",
-            "target_entity": {"name": "H100", "type": "Product"},
-            "evidence": "strong demand for its H100 GPU",
-            "confidence": 0.9,
-        }
-        facts = [good, bad]
-        assert compliance_score(facts, _REFLECT_CHUNK) == 0.5
-        clean = filter_compliant_facts(facts, _REFLECT_CHUNK)
-        assert len(clean) == 1
-        assert clean[0]["relation"] == "HAS_PRODUCT"
+    def test_compliance_score_and_annotation(self):
+        from app.services.graph.finreflect.checkrules import annotate_compliance, compliance_score
+        good = self._valid_triple()
+        bad = self._valid_triple()
+        bad["relation"] = "MADE_UP"
+        triples = [good, bad]
+        assert compliance_score(triples, _FINKG_CHUNK) == 0.5
+        annotated = annotate_compliance(triples, _FINKG_CHUNK)
+        assert annotated[0]["compliant"] is True
+        assert annotated[1]["compliant"] is False
+        assert annotated[1]["violations"]
 
 
-class TestReflectionGraph:
-    """反思图端到端：抽取→评审→修正闭环（mock LLM 按角色返回）。"""
+class TestFinReflectParsing:
+    """三元组与评审 JSON 解析。"""
 
-    def _role_llm(self, extract_resp: str, critic_resp: str, refine_resp: str):
-        """按 system prompt 判定角色，返回对应响应的 mock LLM。"""
-        from app.services.graph.reflection_graph import _CRITIC_SYSTEM_PROMPT
+    def test_parse_triples_fenced_json(self):
+        from app.services.graph.finreflect.graph import parse_triples_response
+        raw = '```json\n{"triples": [{"head": "NVIDIA", "head_type": "ORG", "relation": "Produces", "tail": "H100", "tail_type": "PRODUCT", "evidence": "x"}]}\n```'
+        result = parse_triples_response(raw)
+        assert len(result) == 1
+        assert result[0]["relation"] == "Produces"
+
+    def test_parse_triples_skips_malformed(self):
+        from app.services.graph.finreflect.graph import parse_triples_response
+        raw = json.dumps({"triples": [
+            {"head": "", "relation": "Produces", "tail": "H100"},  # 头为空 → 丢弃
+            {"head": "NVIDIA", "head_type": "ORG", "relation": "Produces", "tail": "H100", "tail_type": "PRODUCT", "evidence": "x"},
+        ]})
+        assert len(parse_triples_response(raw)) == 1
+
+    def test_parse_critic_failure_defaults_to_approve(self):
+        from app.services.graph.finreflect.graph import parse_critic_response
+        verdict = parse_critic_response("not json at all")
+        assert verdict["approve"] is True
+
+    def test_merge_triples_dedupes(self):
+        from app.services.graph.finreflect.graph import merge_triples
+        a = {"head": "NVIDIA", "head_type": "ORG", "relation": "Produces", "tail": "H100", "tail_type": "PRODUCT", "evidence": "x"}
+        dup = dict(a, evidence="y")
+        new = dict(a, tail="H200")
+        merged = merge_triples([a], [dup, new])
+        assert len(merged) == 2
+
+
+def _finkg_llm(extract_resp: str, critic_resp: str = "{}", refine_resp: str = "{}", multipass_resp: str = "{}"):
+    """按提示词标记分派角色的 mock LLM。"""
+    from app.services.graph.finreflect.prompts import (
+        CORRECTOR_MARKER,
+        MULTIPASS_MARKER,
+        build_critic_system_prompt,
+    )
+    critic_system = build_critic_system_prompt()
+
+    def _dispatch(messages):
+        system_text = messages[0].content
+        user_text = messages[1].content
+        if system_text == critic_system:
+            resp = critic_resp
+        elif CORRECTOR_MARKER in user_text:
+            resp = refine_resp
+        elif MULTIPASS_MARKER in user_text:
+            resp = multipass_resp
+        else:
+            resp = extract_resp
+        m = MagicMock()
+        m.content = resp
+        return m
+
+    llm = MagicMock()
+    llm.ainvoke = AsyncMock(side_effect=_dispatch)
+    return llm
+
+
+_FINKG_EXTRACT_RESP = json.dumps({"triples": [
+    {"head": "NVIDIA", "head_type": "ORG", "relation": "Produces",
+     "tail": "H100 GPU", "tail_type": "PRODUCT",
+     "evidence": "strong demand for its H100 GPU"},
+    {"head": "NVIDIA", "head_type": "ORG", "relation": "Depends_On",
+     "tail": "TSMC", "tail_type": "COMP",
+     "evidence": "TSMC manufactures the H100 using CoWoS advanced packaging technology"},
+]})
+
+
+class TestFinReflectModes:
+    """三种抽取模式的图路由与行为。"""
+
+    @pytest.mark.asyncio
+    async def test_single_pass_one_llm_call(self):
+        from app.services.graph.finreflect.graph import extract_triples
+        llm = _finkg_llm(_FINKG_EXTRACT_RESP)
+        triples = await extract_triples(_FINKG_CHUNK, "NVIDIA 10-K 2024", llm, mode="single_pass")
+        assert len(triples) == 2
+        assert llm.ainvoke.await_count == 1
+        assert all(t["compliant"] for t in triples)
+
+    @pytest.mark.asyncio
+    async def test_multi_pass_merges_and_dedupes(self):
+        from app.services.graph.finreflect.graph import extract_triples
+        multipass_resp = json.dumps({"triples": [
+            # 与首轮重复 → 应去重
+            {"head": "NVIDIA", "head_type": "ORG", "relation": "Produces",
+             "tail": "H100 GPU", "tail_type": "PRODUCT",
+             "evidence": "strong demand for its H100 GPU"},
+            # 新增遗漏事实
+            {"head": "Supply Chain Risk", "head_type": "RISK_FACTOR", "relation": "Negatively_Impacts",
+             "tail": "Gross Margin", "tail_type": "FIN_METRIC",
+             "evidence": "Supply chain risk negatively impacted gross margin during the period"},
+        ]})
+        llm = _finkg_llm(_FINKG_EXTRACT_RESP, multipass_resp=multipass_resp)
+        triples = await extract_triples(
+            _FINKG_CHUNK, "NVIDIA 10-K 2024", llm, mode="multi_pass", max_passes=2,
+        )
+        assert llm.ainvoke.await_count == 2  # 首轮 + 补抽轮
+        assert len(triples) == 3  # 2 首轮 + 1 新增（重复被去重）
+        heads = {t["head"] for t in triples}
+        assert "Supply Chain Risk" in heads
+
+    @pytest.mark.asyncio
+    async def test_reflection_corrects_bad_relation(self):
+        from app.services.graph.finreflect.graph import extract_triples
+        bad_extract = json.dumps({"triples": [
+            {"head": "NVIDIA", "head_type": "ORG", "relation": "MADE_UP_RELATION",
+             "tail": "H100 GPU", "tail_type": "PRODUCT",
+             "evidence": "strong demand for its H100 GPU"},
+        ]})
+        critic_resps = iter([
+            json.dumps({"approve": False, "issues": ["triple #0: relation not in schema"], "missing": []}),
+            json.dumps({"approve": True, "issues": [], "missing": []}),
+        ])
+        fixed = json.dumps({"triples": [
+            {"head": "NVIDIA", "head_type": "ORG", "relation": "Produces",
+             "tail": "H100 GPU", "tail_type": "PRODUCT",
+             "evidence": "strong demand for its H100 GPU"},
+        ]})
+
+        from app.services.graph.finreflect.prompts import CORRECTOR_MARKER, build_critic_system_prompt
+        critic_system = build_critic_system_prompt()
 
         def _dispatch(messages):
-            system_text = messages[0].content
-            user_text = messages[1].content
-            if system_text == _CRITIC_SYSTEM_PROMPT:
-                resp = critic_resp
-            elif "MUST fix" in user_text:
-                resp = refine_resp
+            system_text, user_text = messages[0].content, messages[1].content
+            if system_text == critic_system:
+                resp = next(critic_resps)
+            elif CORRECTOR_MARKER in user_text:
+                resp = fixed
             else:
-                resp = extract_resp
+                resp = bad_extract
             m = MagicMock()
             m.content = resp
             return m
 
         llm = MagicMock()
         llm.ainvoke = AsyncMock(side_effect=_dispatch)
-        return llm
 
-    @pytest.mark.asyncio
-    async def test_approved_first_pass_no_refine(self):
-        """评审通过则不进入修正，直接返回。"""
-        from app.services.graph.reflection_graph import extract_facts_with_reflection
-
-        extract_resp = json.dumps({"facts": [{
-            "source_entity": {"name": "NVIDIA", "type": "Company"},
-            "relation": "HAS_PRODUCT",
-            "target_entity": {"name": "H100", "type": "Product"},
-            "evidence": "strong demand for its H100 GPU",
-            "confidence": 0.95,
-        }]})
-        critic_resp = json.dumps({"approve": True, "issues": [], "missing": []})
-        refine_resp = json.dumps({"facts": []})  # 不应被调用
-
-        llm = self._role_llm(extract_resp, critic_resp, refine_resp)
-        facts = await extract_facts_with_reflection(_REFLECT_CHUNK, "NVIDIA 10-K", llm, max_iterations=2)
-
-        assert len(facts) == 1
-        assert facts[0].source_name == "NVIDIA"
-        assert facts[0].target_name == "H100"
-
-    @pytest.mark.asyncio
-    async def test_reflection_fixes_bad_triple(self):
-        """初次抽取含非法三元组，经评审+修正后得到合规结果。"""
-        from app.services.graph.reflection_graph import extract_facts_with_reflection
-
-        # 初抽取：关系非法（会被规则命中，评审不通过）
-        extract_resp = json.dumps({"facts": [{
-            "source_entity": {"name": "NVIDIA", "type": "Company"},
-            "relation": "MADE_UP_RELATION",
-            "target_entity": {"name": "H100", "type": "Product"},
-            "evidence": "strong demand for its H100 GPU",
-            "confidence": 0.9,
-        }]})
-        critic_resp = json.dumps({"approve": False, "issues": ["triple #0 relation invalid"], "missing": []})
-        # 修正：改为合法关系
-        refine_resp = json.dumps({"facts": [{
-            "source_entity": {"name": "NVIDIA", "type": "Company"},
-            "relation": "HAS_PRODUCT",
-            "target_entity": {"name": "H100", "type": "Product"},
-            "evidence": "strong demand for its H100 GPU",
-            "confidence": 0.9,
-        }]})
-
-        llm = self._role_llm(extract_resp, critic_resp, refine_resp)
-        facts = await extract_facts_with_reflection(_REFLECT_CHUNK, "NVIDIA 10-K", llm, max_iterations=2)
-
-        from app.models.graph_fact import RelationType
-        assert len(facts) == 1
-        assert facts[0].relation == RelationType.HAS_PRODUCT
-
-    @pytest.mark.asyncio
-    async def test_max_iterations_stops_loop(self):
-        """修正始终无法通过时，达到最大轮次即停并做终局兜底过滤。"""
-        from app.services.graph.reflection_graph import extract_facts_with_reflection
-
-        bad = json.dumps({"facts": [{
-            "source_entity": {"name": "NVIDIA", "type": "Company"},
-            "relation": "STILL_BAD",
-            "target_entity": {"name": "H100", "type": "Product"},
-            "evidence": "strong demand for its H100 GPU",
-            "confidence": 0.9,
-        }]})
-        critic_resp = json.dumps({"approve": False, "issues": ["still bad"], "missing": []})
-
-        llm = self._role_llm(bad, critic_resp, bad)
-        facts = await extract_facts_with_reflection(_REFLECT_CHUNK, "NVIDIA 10-K", llm, max_iterations=1)
-
-        # 始终非法 → 终局过滤后为空，且不会死循环
-        assert facts == []
-        # 抽取1 + 评审1 + 修正1 + 评审1 = 4 次调用（max_iterations=1）
+        triples = await extract_triples(
+            _FINKG_CHUNK, "NVIDIA 10-K 2024", llm, mode="reflection", max_iterations=2,
+        )
+        assert len(triples) == 1
+        assert triples[0]["relation"] == "Produces"
+        assert triples[0]["compliant"] is True
+        # 抽取1 + 评审1 + 修正1 + 评审1 = 4 次调用
         assert llm.ainvoke.await_count == 4
 
     @pytest.mark.asyncio
-    async def test_pipeline_reflection_mode(self, test_engine):
-        """流水线在 reflection 模式下调用反思抽取并入库。"""
-        from app.models.graph_source import DocumentStatus, DocumentType, SourceDocument
-        from app.services.graph.pipeline import run_ingest_pipeline
-
-        doc = SourceDocument(
-            url="text://reflect-mode",
-            document_type=DocumentType.EARNINGS_CALL,
-            ticker="NVDA",
-            company_name="NVIDIA",
-            title="Reflect Mode Test",
+    async def test_reflection_max_iterations_stops(self):
+        from app.services.graph.finreflect.graph import extract_triples
+        bad = json.dumps({"triples": [
+            {"head": "NVIDIA", "head_type": "ORG", "relation": "STILL_BAD",
+             "tail": "H100 GPU", "tail_type": "PRODUCT",
+             "evidence": "strong demand for its H100 GPU"},
+        ]})
+        never_approve = json.dumps({"approve": False, "issues": ["still bad"], "missing": []})
+        llm = _finkg_llm(bad, critic_resp=never_approve, refine_resp=bad)
+        triples = await extract_triples(
+            _FINKG_CHUNK, "NVIDIA 10-K 2024", llm, mode="reflection", max_iterations=1,
         )
-        with Session(test_engine) as s:
-            s.add(doc)
-            s.commit()
-            s.refresh(doc)
+        # 达到最大轮次即停；三元组保留但被 CheckRules 标注为不合规
+        assert llm.ainvoke.await_count == 4
+        assert len(triples) == 1
+        assert triples[0]["compliant"] is False
+        assert any("relation_policy" in v for v in triples[0]["violations"])
 
-        extract_resp = _MOCK_LLM_RESPONSE
-        critic_resp = json.dumps({"approve": True, "issues": [], "missing": []})
-        llm = self._role_llm(extract_resp, critic_resp, "{}")
 
-        with (
-            patch("app.services.graph.pipeline.sync_engine", test_engine),
-            patch("app.services.graph.pipeline.settings.GRAPH_EXTRACTION_MODE", "reflection"),
-            patch("app.services.graph.pipeline.settings.GRAPH_REFLECTION_MAX_ITERS", 1),
-        ):
-            count = await run_ingest_pipeline(doc, llm, raw_text=_SAMPLE_TRANSCRIPT)
+@pytest.mark.asyncio
+async def test_pipeline_finreflect_mode(test_engine):
+    """流水线在 finreflect_reflection 模式下：论文 5 元组入 finkg_triples 表。"""
+    from app.models.finkg_triple import FinKGTriple
+    from app.models.graph_source import DocumentStatus, DocumentType, SourceDocument
+    from app.services.graph.pipeline import run_ingest_pipeline
 
-        assert count > 0
-        with Session(test_engine) as s:
-            updated = s.get(SourceDocument, doc.id)
-        assert updated.status == DocumentStatus.DONE
+    doc = SourceDocument(
+        url="text://finreflect-mode",
+        document_type=DocumentType.SEC_10K,
+        ticker="NVDA",
+        company_name="NVIDIA",
+        title="FinReflect Mode Test",
+    )
+    with Session(test_engine) as s:
+        s.add(doc)
+        s.commit()
+        s.refresh(doc)
+
+    extract_resp = json.dumps({"triples": [
+        {"head": "NVIDIA", "head_type": "ORG", "relation": "Produces",
+         "tail": "H100", "tail_type": "PRODUCT",
+         "evidence": "driven by strong demand for NVIDIA H100 and H200 GPUs"},
+        {"head": "NVIDIA", "head_type": "ORG", "relation": "Depends_On",
+         "tail": "TSMC", "tail_type": "COMP",
+         "evidence": "TSMC manufactures our Blackwell chips using CoWoS advanced packaging technology"},
+    ]})
+    approve = json.dumps({"approve": True, "issues": [], "missing": []})
+    llm = _finkg_llm(extract_resp, critic_resp=approve)
+
+    with (
+        patch("app.services.graph.pipeline.sync_engine", test_engine),
+        patch("app.services.graph.pipeline.settings.GRAPH_EXTRACTION_MODE", "finreflect_reflection"),
+    ):
+        count = await run_ingest_pipeline(doc, llm, raw_text=_SAMPLE_TRANSCRIPT)
+
+    assert count > 0
+    from sqlmodel import select
+    with Session(test_engine) as s:
+        rows = s.exec(select(FinKGTriple)).all()
+        updated = s.get(SourceDocument, doc.id)
+
+    assert updated.status == DocumentStatus.DONE
+    assert updated.fact_count > 0
+    assert len(rows) > 0
+    heads = {r.head for r in rows}
+    assert "NVIDIA" in heads
+    sample = rows[0]
+    assert sample.head_type in ("ORG", "COMP", "PRODUCT", "RISK_FACTOR", "FIN_METRIC")
+    assert sample.extraction_mode == "reflection"
+    assert sample.ticker == "NVDA"
+    assert sample.evidence
 
 
 class TestTickerFocus:
