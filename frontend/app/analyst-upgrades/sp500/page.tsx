@@ -60,6 +60,12 @@ export default function SP500UpgradesPage() {
           <span className="px-4 py-2 text-sm font-medium text-blue-600 border-b-2 border-blue-600 -mb-px">
             标普 500
           </span>
+          <Link
+            href="/analyst-upgrades/custom"
+            className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            自定义
+          </Link>
         </div>
 
         {/* 元信息条 */}
