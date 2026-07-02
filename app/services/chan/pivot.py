@@ -19,6 +19,8 @@ class Pivot:
     end_time: str
     level: Literal["stroke", "segment"]  # 笔级别 or 线段级别
     elements: list  # 构成中枢的笔或线段
+    # 中枢是否已确认：最近的中枢可能仍在延伸，且离开段尚未被确认
+    confirmed: bool = True
 
     @property
     def height(self) -> float:

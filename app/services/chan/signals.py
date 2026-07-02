@@ -18,6 +18,8 @@ class Signal:
     strength: Literal["strong", "medium", "weak"]
     divergence: DivergenceResult | None
     description: str
+    # 信号是否已确认：落在未确认（最后一笔）之上的信号需后续K线验证
+    confirmed: bool = True
 
     @property
     def label(self) -> str:

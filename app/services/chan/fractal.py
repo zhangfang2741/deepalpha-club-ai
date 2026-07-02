@@ -25,6 +25,9 @@ class Fractal:
     candle: MergedCandle
     left: MergedCandle
     right: MergedCandle
+    # 形态是否已锁定：右侧K线不是最后一根合并K线时才成立
+    # （否则后续K线的包含处理仍可能改变右侧K线，进而使分型失效或移动）
+    confirmed: bool = True
 
     @property
     def time(self) -> str:

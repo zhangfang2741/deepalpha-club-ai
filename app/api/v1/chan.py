@@ -80,7 +80,7 @@ async def chan_analysis(
             for mc in result.merged_candles
         ],
         fractals=[
-            FractalOut(type=f.type, time=f.time, price=f.price, idx=f.idx)
+            FractalOut(type=f.type, time=f.time, price=f.price, idx=f.idx, confirmed=f.confirmed)
             for f in result.fractals
         ],
         strokes=[
@@ -92,6 +92,7 @@ async def chan_analysis(
                 end_price=s.end_price,
                 high=s.high,
                 low=s.low,
+                confirmed=s.confirmed,
             )
             for s in result.strokes
         ],
@@ -105,6 +106,7 @@ async def chan_analysis(
                 high=seg.high,
                 low=seg.low,
                 stroke_count=seg.stroke_count,
+                confirmed=seg.confirmed,
             )
             for seg in result.segments
         ],
@@ -112,6 +114,7 @@ async def chan_analysis(
             PivotOut(
                 zg=p.zg, zd=p.zd, gg=p.gg, dd=p.dd,
                 start_time=p.start_time, end_time=p.end_time, level=p.level,
+                confirmed=p.confirmed,
             )
             for p in result.stroke_pivots
         ],
@@ -119,6 +122,7 @@ async def chan_analysis(
             PivotOut(
                 zg=p.zg, zd=p.zd, gg=p.gg, dd=p.dd,
                 start_time=p.start_time, end_time=p.end_time, level=p.level,
+                confirmed=p.confirmed,
             )
             for p in result.segment_pivots
         ],
@@ -138,11 +142,13 @@ async def chan_analysis(
                 is_buy=sig.is_buy,
                 description=sig.description,
                 area_ratio=sig.divergence.area_ratio if sig.divergence else None,
+                confirmed=sig.confirmed,
             )
             for sig in result.signals
         ],
         current_trend=result.current_trend,
         summary=result.summary,
+        pending_notes=result.pending_notes,
         recommendation=RecommendationOut(
             action=result.recommendation.action,
             action_label=result.recommendation.action_label,

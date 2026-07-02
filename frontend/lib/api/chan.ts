@@ -14,6 +14,7 @@ export interface Fractal {
   time: string
   price: number
   idx: number
+  confirmed: boolean
 }
 
 export interface Stroke {
@@ -24,6 +25,7 @@ export interface Stroke {
   end_price: number
   high: number
   low: number
+  confirmed: boolean
 }
 
 export interface Segment {
@@ -35,6 +37,7 @@ export interface Segment {
   high: number
   low: number
   stroke_count: number
+  confirmed: boolean
 }
 
 export interface Pivot {
@@ -45,6 +48,7 @@ export interface Pivot {
   start_time: string
   end_time: string
   level: 'stroke' | 'segment'
+  confirmed: boolean
 }
 
 export interface MACDData {
@@ -63,6 +67,7 @@ export interface Signal {
   is_buy: boolean
   description: string
   area_ratio: number | null
+  confirmed: boolean
 }
 
 export interface Recommendation {
@@ -87,6 +92,7 @@ export interface ChanAnalysisResult {
   current_trend: string
   summary: string
   recommendation: Recommendation | null
+  pending_notes: string[]
 }
 
 export async function fetchChanAnalysis(

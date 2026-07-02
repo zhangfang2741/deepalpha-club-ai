@@ -74,8 +74,9 @@ async def chan_analysis_tool(
         lines.append("### 买卖点信号（按时间）")
         for sig in result.signals[-10:]:
             strength_emoji = {"strong": "🔥", "medium": "⚡", "weak": "💡"}.get(sig.strength, "")
+            pending_tag = "" if sig.confirmed else " ⏳未确认"
             lines.append(
-                f"- **{sig.label}** {strength_emoji} | {sig.time} | 价格={sig.price:.2f} | {sig.description[:80]}"
+                f"- **{sig.label}** {strength_emoji}{pending_tag} | {sig.time} | 价格={sig.price:.2f} | {sig.description[:80]}"
             )
         lines.append("")
 
@@ -84,6 +85,13 @@ async def chan_analysis_tool(
         latest_div = diverged[-1]
         lines.append("### 最近背驰信号")
         lines.append(f"- {latest_div.description}")
+        lines.append("")
+
+    if result.pending_notes:
+        lines.append("### ⏳ 最右侧未确认结构（右侧滞后风险）")
+        lines.append("以下结构位于K线最右端，尚未被后续K线确认，随时可能变化，切勿当作既成事实：")
+        for note in result.pending_notes:
+            lines.append(f"- {note}")
         lines.append("")
 
     lines.append("### 当前状态")

@@ -12,6 +12,8 @@ class Segment:
     """线段：由至少3笔（同向）构成的走势"""
     direction: Literal["up", "down"]
     strokes: list[Stroke] = field(default_factory=list)
+    # 线段是否已确认：最后一条线段的结束需后续笔/特征序列确认
+    confirmed: bool = True
 
     @property
     def start_time(self) -> str:
