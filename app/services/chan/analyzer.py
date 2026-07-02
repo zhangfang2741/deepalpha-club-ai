@@ -185,10 +185,18 @@ class ChanAnalyzer:
         for i, seg in enumerate(r.segments):
             seg.confirmed = i != len(r.segments) - 1
 
-        # 中枢：每个级别的最后一个中枢未确认（可能延伸）
-        for pivots in (r.stroke_pivots, r.segment_pivots):
-            for i, p in enumerate(pivots):
-                p.confirmed = i != len(pivots) - 1
+        # 中枢：只有当中枢的最后一个构成元素仍是整段序列的最末元素时才未确认
+        # （此时还没有“离开中枢”的后续走势来锁定其区间；一旦有走势离开，
+        #  中枢区间即已确定，即便它是最后一个中枢也算已确认）
+        for pivots, elements in ((r.stroke_pivots, r.strokes), (r.segment_pivots, r.segments)):
+            last_elem = elements[-1] if elements else None
+            for p in pivots:
+                still_extending = (
+                    last_elem is not None
+                    and bool(p.elements)
+                    and p.elements[-1] is last_elem
+                )
+                p.confirmed = not still_extending
 
         # 信号：落在未确认笔（端点时间）之上的信号未确认
         unconfirmed_end_times = {s.end_time for s in r.strokes if not s.confirmed}

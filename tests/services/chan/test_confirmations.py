@@ -66,14 +66,15 @@ def test_last_stroke_and_segment_unconfirmed():
         assert result.segments[-1].confirmed is False
 
 
-def test_last_pivot_unconfirmed():
-    """每个级别的最后一个中枢应为未确认。"""
+def test_pivot_confirmed_once_left():
+    """中枢仅在仍含最末元素（还在延伸）时未确认；被后续走势离开后应确认。"""
     analyzer = ChanAnalyzer()
     result = analyzer.analyze("TEST", _zigzag_bars())
 
-    if result.stroke_pivots:
-        assert result.stroke_pivots[-1].confirmed is False
-        assert all(p.confirmed for p in result.stroke_pivots[:-1])
+    last_stroke = result.strokes[-1] if result.strokes else None
+    for p in result.stroke_pivots:
+        still_extending = bool(p.elements) and p.elements[-1] is last_stroke
+        assert p.confirmed == (not still_extending)
 
 
 def test_pending_notes_populated():
