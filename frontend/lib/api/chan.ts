@@ -113,26 +113,36 @@ export interface StructureGapResult {
   caveats: string[]
 }
 
-export async function fetchStructureGap(
+export type GapJobState = 'pending' | 'done' | 'failed'
+
+export interface GapJobStatus {
+  job_id: string
+  status: GapJobState
+  result: StructureGapResult | null
+  error: string | null
+}
+
+/** 提交 GAP 异步任务，立即返回 job_id（分析在后端后台运行）。 */
+export async function submitStructureGap(
   symbol: string,
   startDate: string,
   endDate: string,
   industryView: string,
   freq = 'daily',
-): Promise<StructureGapResult> {
-  // GAP 分析包含一次 LLM 调用（后端 LLM 预算 60s + 重试/fallback），
-  // 远超默认 30s，故对该请求单独放宽超时，避免前端先行放弃。
-  const res = await apiClient.post<StructureGapResult>(
-    '/api/v1/chan/gap',
-    {
-      symbol,
-      start_date: startDate,
-      end_date: endDate,
-      industry_view: industryView,
-      freq,
-    },
-    { timeout: 90000 },
-  )
+): Promise<GapJobStatus> {
+  const res = await apiClient.post<GapJobStatus>('/api/v1/chan/gap', {
+    symbol,
+    start_date: startDate,
+    end_date: endDate,
+    industry_view: industryView,
+    freq,
+  })
+  return res.data
+}
+
+/** 轮询 GAP 任务状态；done 时带 result，failed 时带 error。 */
+export async function getStructureGapStatus(jobId: string): Promise<GapJobStatus> {
+  const res = await apiClient.get<GapJobStatus>(`/api/v1/chan/gap/${jobId}`)
   return res.data
 }
 

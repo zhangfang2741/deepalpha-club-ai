@@ -128,6 +128,27 @@ async def check_rate_limit(redis: Redis, key: str, limit: int, window: int) -> b
     return int(current_count) <= limit
 
 
+# ---------- 异步任务（GAP 分析等慢调用）----------
+
+_GAP_JOB_PREFIX = "gap_job"
+_GAP_JOB_TTL = 600  # 10 分钟，足够前端轮询取回结果
+
+
+async def set_gap_job(redis: Redis, user_id: Any, job_id: str, data: dict, expire: int = _GAP_JOB_TTL) -> None:
+    """存储 GAP 异步任务状态。
+
+    key 格式：gap_job:{user_id}:{job_id}（按用户隔离，避免越权读取他人任务）
+    """
+    key = f"{_GAP_JOB_PREFIX}:{user_id}:{job_id}"
+    await set_json(redis, key, data, expire=expire)
+
+
+async def get_gap_job(redis: Redis, user_id: Any, job_id: str) -> Optional[dict]:
+    """获取 GAP 异步任务状态，不存在或已过期返回 None。"""
+    key = f"{_GAP_JOB_PREFIX}:{user_id}:{job_id}"
+    return await get_json(redis, key)
+
+
 # ---------- 缓存操作 ----------
 
 async def cache_result(redis: Redis, key: str, value: Any, expire: int = 3600) -> None:
