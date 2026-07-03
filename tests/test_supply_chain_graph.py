@@ -301,6 +301,56 @@ class TestTranscriptScraper:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 3b. SEC ticker→CIK 动态解析
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestSecCikResolution:
+    @pytest.mark.asyncio
+    async def test_seed_ticker_resolves_without_network(self):
+        """内置种子表中的代码（如 NVDA）无需联网即可解析。"""
+        from app.services.graph.sec_fetcher import SecEdgarFetcher
+
+        fetcher = SecEdgarFetcher()
+        # 用会抛错的 _get 确保根本没走网络
+        fetcher._get = AsyncMock(side_effect=AssertionError("不应触发网络请求"))
+
+        cik = await fetcher._resolve_cik("NVDA")
+        assert cik == "0001045810"
+
+    @pytest.mark.asyncio
+    async def test_unknown_ticker_resolved_via_full_map(self):
+        """种子表外的代码（如 TSLA / FIG）通过 SEC 全量映射解析。"""
+        from app.services.graph.sec_fetcher import SecEdgarFetcher
+
+        fetcher = SecEdgarFetcher()
+        map_resp = MagicMock()
+        map_resp.json = MagicMock(return_value={
+            "0": {"cik_str": 1318605, "ticker": "TSLA", "title": "Tesla, Inc."},
+            "1": {"cik_str": 1341439, "ticker": "FIG", "title": "Figma, Inc."},
+        })
+        fetcher._get = AsyncMock(return_value=map_resp)
+
+        assert await fetcher._resolve_cik("TSLA") == "0001318605"
+        assert await fetcher._resolve_cik("FIG") == "0001341439"
+        # 全量映射只加载一次
+        fetcher._get.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_truly_unknown_ticker_returns_none(self):
+        """既不在种子表也不在全量映射中的代码返回 None。"""
+        from app.services.graph.sec_fetcher import SecEdgarFetcher
+
+        fetcher = SecEdgarFetcher()
+        map_resp = MagicMock()
+        map_resp.json = MagicMock(return_value={
+            "0": {"cik_str": 1318605, "ticker": "TSLA", "title": "Tesla, Inc."},
+        })
+        fetcher._get = AsyncMock(return_value=map_resp)
+
+        assert await fetcher._resolve_cik("ZZZZ") is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 4. 摄取流水线（SQLite + mock LLM）
 # ─────────────────────────────────────────────────────────────────────────────
 

@@ -23,8 +23,11 @@ _HEADERS = {
 _SEARCH_BASE = "https://efts.sec.gov/LATEST/search-index"
 _SUBMISSIONS_BASE = "https://data.sec.gov/submissions"
 _ARCHIVES_BASE = "https://www.sec.gov/Archives/edgar/data"
+# SEC 官方 ticker → CIK 全量映射文件（覆盖全部美股上市公司）
+_TICKER_MAP_URL = "https://www.sec.gov/files/company_tickers.json"
 
-# CIK 映射表（NVIDIA 生态核心公司）
+# 内置 CIK 种子表（NVIDIA 生态核心公司），作为离线兜底 + 常用代码快速命中。
+# 完整解析改由 SEC company_tickers.json 动态加载，任意美股代码均可解析。
 _TICKER_CIK: dict[str, str] = {
     "NVDA": "0001045810",
     "TSMC": "0001046179",
@@ -91,6 +94,11 @@ class SecEdgarFetcher:
 
     def __init__(self):  # noqa: D107
         self._client: Optional[httpx.AsyncClient] = None
+        # 动态 CIK 缓存：ticker(大写) → 10 位补零 CIK。启动时预置内置种子表，
+        # 首次遇到未命中的代码时懒加载 SEC 全量映射补齐。
+        self._cik_cache: dict[str, str] = dict(_TICKER_CIK)
+        self._full_map_loaded = False
+        self._map_lock = asyncio.Lock()
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -106,9 +114,39 @@ class SecEdgarFetcher:
         await asyncio.sleep(0.12)
         return resp
 
-    def _resolve_cik(self, ticker: str) -> Optional[str]:
-        """从内置映射表查 CIK；找不到返回 None（前端自行输入 CIK）。"""
-        return _TICKER_CIK.get(ticker.upper())
+    async def _load_full_ticker_map(self) -> None:
+        """懒加载 SEC 官方 company_tickers.json，补齐 ticker→CIK 全量映射（仅一次）。"""
+        if self._full_map_loaded:
+            return
+        async with self._map_lock:
+            if self._full_map_loaded:
+                return
+            try:
+                resp = await self._get(_TICKER_MAP_URL)
+                data = resp.json()
+                # 数据形如 {"0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."}, ...}
+                loaded = 0
+                for item in data.values():
+                    tk = str(item.get("ticker", "")).upper()
+                    cik_raw = item.get("cik_str")
+                    if tk and cik_raw is not None:
+                        # setdefault：不覆盖内置种子（种子里的别名/自定义映射优先）
+                        self._cik_cache.setdefault(tk, str(cik_raw).zfill(10))
+                        loaded += 1
+                self._full_map_loaded = True
+                logger.info("sec_ticker_map_loaded", count=loaded)
+            except Exception as e:
+                # 加载失败不致命：仍可依赖内置种子表，下次未命中再重试
+                logger.warning("sec_ticker_map_load_failed", error=str(e))
+
+    async def _resolve_cik(self, ticker: str) -> Optional[str]:
+        """解析 ticker 对应的 CIK：先查缓存（含内置种子），未命中则加载 SEC 全量映射。"""
+        key = ticker.upper()
+        cik = self._cik_cache.get(key)
+        if cik:
+            return cik
+        await self._load_full_ticker_map()
+        return self._cik_cache.get(key)
 
     async def search_filings(
         self,
@@ -239,7 +277,7 @@ class SecEdgarFetcher:
 
     async def get_submissions_meta(self, ticker: str) -> Optional[dict]:
         """通过 submissions API 查找公司最新文件列表（补充 search 的精确度）。"""
-        cik = self._resolve_cik(ticker)
+        cik = await self._resolve_cik(ticker)
         if not cik:
             logger.warning("cik_not_found", ticker=ticker)
             return None
