@@ -120,13 +120,19 @@ export async function fetchStructureGap(
   industryView: string,
   freq = 'daily',
 ): Promise<StructureGapResult> {
-  const res = await apiClient.post<StructureGapResult>('/api/v1/chan/gap', {
-    symbol,
-    start_date: startDate,
-    end_date: endDate,
-    industry_view: industryView,
-    freq,
-  })
+  // GAP 分析包含一次 LLM 调用（后端 LLM 预算 60s + 重试/fallback），
+  // 远超默认 30s，故对该请求单独放宽超时，避免前端先行放弃。
+  const res = await apiClient.post<StructureGapResult>(
+    '/api/v1/chan/gap',
+    {
+      symbol,
+      start_date: startDate,
+      end_date: endDate,
+      industry_view: industryView,
+      freq,
+    },
+    { timeout: 90000 },
+  )
   return res.data
 }
 
