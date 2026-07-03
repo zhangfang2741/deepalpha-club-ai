@@ -1,11 +1,15 @@
 'use client'
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import {
-  fetchStructureGap,
+  submitStructureGap,
+  getStructureGapStatus,
   type StructureGapResult,
   type GapItem,
   type GapDirection,
 } from '@/lib/api/chan'
+
+const POLL_INTERVAL = 2500 // 轮询间隔
+const MAX_WAIT = 120000 // 最长等待，超时提示重试
 
 interface Props {
   symbol: string
@@ -105,23 +109,68 @@ export function GapPanel({ symbol, startDate, endDate, freq }: Props) {
 
   const canRun = composedView.length > 0 && symbol.trim().length > 0
 
+  // 轮询定时器与取消标记：组件卸载或重新提交时清理，避免残留轮询
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelledRef = useRef(false)
+
+  useEffect(() => {
+    return () => {
+      cancelledRef.current = true
+      if (pollRef.current) clearTimeout(pollRef.current)
+    }
+  }, [])
+
   const handleRun = useCallback(async () => {
     if (!canRun) return
+    // 复位上一次可能仍在进行的轮询
+    cancelledRef.current = false
+    if (pollRef.current) clearTimeout(pollRef.current)
     setLoading(true)
     setError(null)
+    setResult(null)
+
     try {
-      const data = await fetchStructureGap(
+      const job = await submitStructureGap(
         symbol.trim().toUpperCase(),
         startDate,
         endDate,
         composedView,
         freq,
       )
-      setResult(data)
+      const startTs = Date.now()
+
+      const poll = async () => {
+        if (cancelledRef.current) return
+        try {
+          const st = await getStructureGapStatus(job.job_id)
+          if (cancelledRef.current) return
+          if (st.status === 'done' && st.result) {
+            setResult(st.result)
+            setLoading(false)
+            return
+          }
+          if (st.status === 'failed') {
+            setError(st.error || '分析失败，请稍后再试')
+            setLoading(false)
+            return
+          }
+          if (Date.now() - startTs > MAX_WAIT) {
+            setError('分析超时，请稍后重试')
+            setLoading(false)
+            return
+          }
+          pollRef.current = setTimeout(poll, POLL_INTERVAL)
+        } catch (err: unknown) {
+          if (cancelledRef.current) return
+          setError(err instanceof Error ? err.message : '获取结果失败，请稍后重试')
+          setLoading(false)
+        }
+      }
+
+      pollRef.current = setTimeout(poll, 2000)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '分析失败，请稍后再试'
+      const msg = err instanceof Error ? err.message : '提交失败，请稍后再试'
       setError(msg)
-    } finally {
       setLoading(false)
     }
   }, [canRun, composedView, symbol, startDate, endDate, freq])

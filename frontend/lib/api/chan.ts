@@ -113,20 +113,36 @@ export interface StructureGapResult {
   caveats: string[]
 }
 
-export async function fetchStructureGap(
+export type GapJobState = 'pending' | 'done' | 'failed'
+
+export interface GapJobStatus {
+  job_id: string
+  status: GapJobState
+  result: StructureGapResult | null
+  error: string | null
+}
+
+/** 提交 GAP 异步任务，立即返回 job_id（分析在后端后台运行）。 */
+export async function submitStructureGap(
   symbol: string,
   startDate: string,
   endDate: string,
   industryView: string,
   freq = 'daily',
-): Promise<StructureGapResult> {
-  const res = await apiClient.post<StructureGapResult>('/api/v1/chan/gap', {
+): Promise<GapJobStatus> {
+  const res = await apiClient.post<GapJobStatus>('/api/v1/chan/gap', {
     symbol,
     start_date: startDate,
     end_date: endDate,
     industry_view: industryView,
     freq,
   })
+  return res.data
+}
+
+/** 轮询 GAP 任务状态；done 时带 result，failed 时带 error。 */
+export async function getStructureGapStatus(jobId: string): Promise<GapJobStatus> {
+  const res = await apiClient.get<GapJobStatus>(`/api/v1/chan/gap/${jobId}`)
   return res.data
 }
 

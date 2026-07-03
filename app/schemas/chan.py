@@ -108,6 +108,14 @@ class StructureGapResponse(BaseModel):
     caveats: list[str]           # 诚实边界
 
 
+class GapJobStatus(BaseModel):
+    """GAP 异步任务状态：提交后返回 pending，轮询取回 done/failed。"""
+    job_id: str
+    status: Literal["pending", "done", "failed"]
+    result: Optional[StructureGapResponse] = None
+    error: Optional[str] = None
+
+
 class ChanAnalysisResponse(BaseModel):
     symbol: str
     bars_count: int

@@ -1,11 +1,15 @@
 """缠论分析 API"""
 from __future__ import annotations
 
+import asyncio
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from redis.asyncio import Redis
 
 from app.api.v1.auth import get_current_user
-from app.cache.client import get_redis
+from app.cache.client import current_redis, get_redis
+from app.cache.operations import get_gap_job, set_gap_job
 from app.core.limiter import limiter
 from app.core.logging import logger
 from app.models.user import User
@@ -13,6 +17,7 @@ from app.schemas.chan import (
     ChanAnalysisResponse,
     FractalOut,
     GapItemOut,
+    GapJobStatus,
     MACDOut,
     MergedCandleOut,
     PivotOut,
@@ -29,6 +34,15 @@ from app.services.skills.kline import fetch_kline
 
 router = APIRouter()
 _analyzer = ChanAnalyzer()
+
+# 保持对后台任务的强引用，避免被 GC 提前回收
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _spawn(coro) -> None:
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 @router.get("/analysis", response_model=ChanAnalysisResponse)
@@ -163,63 +177,109 @@ async def chan_analysis(
     )
 
 
-@router.post("/gap", response_model=StructureGapResponse)
+async def _run_gap_job(job_id: str, user_id: int, body: StructureGapRequest) -> None:
+    """后台执行 GAP 分析（拉K线 + 缠论 + LLM），把结果/错误写回 Redis。"""
+    redis = current_redis()
+    if redis is None:
+        logger.error("chan_gap_job_no_redis", job_id=job_id)
+        return
+
+    async def _store(status: str, *, result: dict | None = None, error: str | None = None) -> None:
+        await set_gap_job(
+            redis, user_id, job_id,
+            {"status": status, "user_id": user_id, "result": result, "error": error},
+        )
+
+    try:
+        try:
+            bars = await fetch_kline(
+                user_id=user_id,
+                symbol=body.symbol,
+                start_date=body.start_date,
+                end_date=body.end_date,
+                freq=body.freq,
+                redis=redis,
+            )
+        except ValueError as e:
+            await _store("failed", error=str(e))
+            return
+
+        if not bars:
+            await _store("failed", error=f"未获取到 {body.symbol} 的K线数据，请检查股票代码或日期范围")
+            return
+
+        result = _analyzer.analyze(body.symbol, bars)
+        analysis = await analyze_structure_gap(result, body.industry_view)
+
+        resp = StructureGapResponse(
+            symbol=body.symbol,
+            aligned=analysis.aligned,
+            gaps=[
+                GapItemOut(
+                    dimension=g.dimension,
+                    market_says=g.market_says,
+                    industry_says=g.industry_says,
+                    direction=g.direction,
+                    interpretation=g.interpretation,
+                )
+                for g in analysis.gaps
+            ],
+            key_question=analysis.key_question,
+            caveats=analysis.caveats,
+        )
+        await _store("done", result=resp.model_dump())
+        logger.info("chan_gap_job_done", job_id=job_id, symbol=body.symbol, gaps=len(analysis.gaps))
+    except Exception as e:
+        logger.exception("chan_gap_job_failed", job_id=job_id, symbol=body.symbol, error=str(e))
+        await _store("failed", error="生成结构 gap 分析失败，请稍后再试")
+
+
+@router.post("/gap", response_model=GapJobStatus)
 @limiter.limit("10 per minute")
-async def chan_structure_gap(
+async def chan_structure_gap_submit(
     request: Request,
     body: StructureGapRequest,
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
-) -> StructureGapResponse:
-    """找出【市场结构（缠论技术面）】与【产业结构（用户判断）】之间的背离。
+) -> GapJobStatus:
+    """提交一个【市场结构 × 产业结构】GAP 分析异步任务，立即返回 job_id。
 
-    先用缠论解读当前市场结构，再与用户提供的产业观点并置，重点输出二者矛盾之处。
-    不预测涨跌、不构成投资建议。
+    分析含 LLM 调用、耗时较长，改为异步：此处仅创建任务并后台执行，
+    前端凭 job_id 轮询 GET /gap/{job_id} 取回结果。不预测涨跌、不构成投资建议。
     """
     if not body.industry_view or not body.industry_view.strip():
         raise HTTPException(status_code=400, detail="请先提供对该标的的产业结构判断")
 
-    logger.info("chan_gap_request", user_id=user.id, symbol=body.symbol)
+    job_id = uuid4().hex
+    await set_gap_job(
+        redis, user.id, job_id,
+        {"status": "pending", "user_id": user.id, "result": None, "error": None},
+    )
+    _spawn(_run_gap_job(job_id, user.id, body))
 
-    try:
-        bars = await fetch_kline(
-            user_id=user.id,
-            symbol=body.symbol,
-            start_date=body.start_date,
-            end_date=body.end_date,
-            freq=body.freq,
-            redis=redis,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.exception("chan_gap_kline_failed", symbol=body.symbol, error=str(e))
-        raise HTTPException(status_code=502, detail=f"获取 {body.symbol} 行情数据失败，请稍后再试")
+    logger.info("chan_gap_submitted", user_id=user.id, symbol=body.symbol, job_id=job_id)
+    return GapJobStatus(job_id=job_id, status="pending")
 
-    if not bars:
-        raise HTTPException(status_code=404, detail=f"未获取到 {body.symbol} 的K线数据，请检查股票代码或日期范围")
 
-    result = _analyzer.analyze(body.symbol, bars)
+@router.get("/gap/{job_id}", response_model=GapJobStatus)
+async def chan_structure_gap_status(
+    request: Request,
+    job_id: str,
+    user: User = Depends(get_current_user),
+    redis: Redis = Depends(get_redis),
+) -> GapJobStatus:
+    """轮询 GAP 异步任务状态；done 时携带结果，failed 时携带错误信息。"""
+    data = await get_gap_job(redis, user.id, job_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="任务不存在或已过期，请重新提交")
 
-    try:
-        analysis = await analyze_structure_gap(result, body.industry_view)
-    except Exception as e:
-        logger.exception("chan_gap_llm_failed", symbol=body.symbol, error=str(e))
-        raise HTTPException(status_code=502, detail="生成结构 gap 分析失败，请稍后再试")
+    result = None
+    if data.get("result"):
+        result = StructureGapResponse(**data["result"])
 
-    return StructureGapResponse(
-        symbol=body.symbol,
-        aligned=analysis.aligned,
-        gaps=[
-            GapItemOut(
-                dimension=g.dimension,
-                market_says=g.market_says,
-                industry_says=g.industry_says,
-                direction=g.direction,
-                interpretation=g.interpretation,
-            )
-            for g in analysis.gaps
-        ],
-        key_question=analysis.key_question,
-        caveats=analysis.caveats,
+    return GapJobStatus(
+        job_id=job_id,
+        status=data.get("status", "pending"),
+        result=result,
+        error=data.get("error"),
     )
