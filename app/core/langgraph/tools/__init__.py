@@ -12,6 +12,7 @@ from .ask_human import ask_human
 from .chan_analysis import chan_analysis_tool as _chan_analysis_fn
 from .duckduckgo_search import duckduckgo_search_tool
 from .ichimoku_analysis import ichimoku_analysis_tool as _ichimoku_analysis_fn
+from .structure_gap import structure_gap_tool as _structure_gap_fn
 from .wyckoff_analysis import wyckoff_analysis_tool as _wyckoff_analysis_fn
 
 
@@ -75,10 +76,38 @@ async def ichimoku_analysis(symbol: str, start_date: str, end_date: str, freq: s
     return await _ichimoku_analysis_fn(symbol, start_date, end_date, freq)
 
 
+@tool
+async def structure_gap_analysis(
+    symbol: str,
+    start_date: str,
+    end_date: str,
+    industry_view: str,
+    freq: str = "daily",
+) -> str:
+    """找出一只股票【市场结构（缠论技术面）】与【产业结构（用户判断）】之间的背离（gap）。
+
+    当用户已有自己的产业/基本面判断，想知道它和当前技术面结构是否一致、在哪里背离时使用。
+    先用缠论解读当前市场结构，再与用户提供的产业观点并置，重点输出二者矛盾之处
+    （技术面滞后于产业=潜在机会 / 价格领先于基本面=潜在风险），不预测涨跌、不构成投资建议。
+
+    Args:
+        symbol: 股票代码，如 'AAPL'、'NVDA' 或 'SH600519'
+        start_date: 分析起始日期，格式 YYYY-MM-DD，建议至少半年数据
+        end_date: 分析截止日期，格式 YYYY-MM-DD
+        industry_view: 用户对该标的产业结构的判断（产业链位置、景气周期、竞争格局、需求趋势等），必填
+        freq: K线周期，daily（日线）或 weekly（周线）
+
+    Returns:
+        技术面与产业面的 gap 分析报告文本
+    """
+    return await _structure_gap_fn(symbol, start_date, end_date, industry_view, freq)
+
+
 tools: list[BaseTool] = [
     duckduckgo_search_tool,
     ask_human,
     chan_analysis,
     wyckoff_analysis,
     ichimoku_analysis,
+    structure_gap_analysis,
 ]

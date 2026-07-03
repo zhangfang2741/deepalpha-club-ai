@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { fetchChanAnalysis, type ChanAnalysisResult } from '@/lib/api/chan'
 import { ChanChart } from '@/components/chan/ChanChart'
 import { SignalPanel } from '@/components/chan/SignalPanel'
+import { GapPanel } from '@/components/chan/GapPanel'
 import { ConceptGuide } from '@/components/chan/ConceptGuide'
 import DashboardShell from '@/components/layout/DashboardShell'
 
@@ -186,6 +187,11 @@ export default function ChanPage() {
               <SignalPanel data={result} />
             </div>
           </div>
+        )}
+
+        {/* 市场结构 × 产业结构 GAP 分析（技术面已分析后可用） */}
+        {!loading && result && (
+          <GapPanel symbol={symbol} startDate={startDate} endDate={endDate} freq={freq} />
         )}
       </div>
     </DashboardShell>

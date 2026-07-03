@@ -84,6 +84,30 @@ class RecommendationOut(BaseModel):
     caveats: list[str]     # 风险提示
 
 
+class StructureGapRequest(BaseModel):
+    symbol: str
+    start_date: str
+    end_date: str
+    industry_view: str   # 用户对该标的产业结构的判断（主观基本面输入）
+    freq: str = "daily"
+
+
+class GapItemOut(BaseModel):
+    dimension: str
+    market_says: str
+    industry_says: str
+    direction: Literal["price_lags_industry", "price_ahead_of_fundamentals", "unclear"]
+    interpretation: str
+
+
+class StructureGapResponse(BaseModel):
+    symbol: str
+    aligned: list[str]           # 技术面与产业面一致处（多已定价）
+    gaps: list[GapItemOut]       # 背离处（重点）
+    key_question: str            # 最值得研究的问题
+    caveats: list[str]           # 诚实边界
+
+
 class ChanAnalysisResponse(BaseModel):
     symbol: str
     bars_count: int
