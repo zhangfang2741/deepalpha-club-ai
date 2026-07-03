@@ -1,5 +1,5 @@
 'use client'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import {
   fetchStructureGap,
   type StructureGapResult,
@@ -13,6 +13,15 @@ interface Props {
   endDate: string
   freq: 'daily' | 'weekly'
 }
+
+// 快选维度：点一下即可给出产业判断的骨架，值直接对应 gap 的比对维度
+const DIMENSIONS: { key: string; label: string; options: string[] }[] = [
+  { key: '景气周期', label: '景气周期', options: ['加速上行', '见顶', '下行', '见底回升'] },
+  { key: '需求趋势', label: '需求趋势', options: ['转强', '平稳', '转弱'] },
+  { key: '竞争格局', label: '竞争格局', options: ['改善', '稳定', '恶化'] },
+  { key: '成本·毛利', label: '成本·毛利', options: ['改善', '平稳', '承压'] },
+  { key: '相对基本面估值', label: '相对估值', options: ['低估', '合理', '高估'] },
+]
 
 const DIRECTION_STYLE: Record<
   GapDirection,
@@ -69,13 +78,35 @@ function GapCard({ gap }: { gap: GapItem }) {
 }
 
 export function GapPanel({ symbol, startDate, endDate, freq }: Props) {
-  const [industryView, setIndustryView] = useState('')
+  const [picks, setPicks] = useState<Record<string, string>>({})
+  const [extra, setExtra] = useState('')
   const [result, setResult] = useState<StructureGapResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // 点击 chip：未选则选中，已选再点则取消（toggle）
+  const togglePick = (key: string, option: string) => {
+    setPicks((prev) => {
+      const next = { ...prev }
+      if (next[key] === option) delete next[key]
+      else next[key] = option
+      return next
+    })
+  }
+
+  // 把快选骨架 + 补充文本拼成发给后端的 industry_view
+  const composedView = useMemo(() => {
+    const struct = DIMENSIONS.filter((d) => picks[d.key])
+      .map((d) => `${d.key}：${picks[d.key]}`)
+      .join('；')
+    const text = extra.trim()
+    return [struct, text ? `补充：${text}` : ''].filter(Boolean).join('\n')
+  }, [picks, extra])
+
+  const canRun = composedView.length > 0 && symbol.trim().length > 0
+
   const handleRun = useCallback(async () => {
-    if (!industryView.trim() || !symbol.trim()) return
+    if (!canRun) return
     setLoading(true)
     setError(null)
     try {
@@ -83,7 +114,7 @@ export function GapPanel({ symbol, startDate, endDate, freq }: Props) {
         symbol.trim().toUpperCase(),
         startDate,
         endDate,
-        industryView.trim(),
+        composedView,
         freq,
       )
       setResult(data)
@@ -93,7 +124,7 @@ export function GapPanel({ symbol, startDate, endDate, freq }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [industryView, symbol, startDate, endDate, freq])
+  }, [canRun, composedView, symbol, startDate, endDate, freq])
 
   return (
     <div className="rounded-xl bg-slate-900 border border-slate-800 p-4 flex flex-col gap-3">
@@ -105,23 +136,52 @@ export function GapPanel({ symbol, startDate, endDate, freq }: Props) {
         </p>
       </div>
 
+      {/* 快选维度：点一下即可，值直接对应 gap 的比对维度 */}
+      <div className="flex flex-col gap-2">
+        {DIMENSIONS.map((d) => (
+          <div key={d.key} className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-slate-400 w-20 shrink-0">{d.label}</span>
+            {d.options.map((opt) => {
+              const active = picks[d.key] === opt
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => togglePick(d.key, opt)}
+                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                    active
+                      ? 'bg-blue-600 border-blue-500 text-white'
+                      : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500'
+                  }`}
+                >
+                  {opt}
+                </button>
+              )
+            })}
+          </div>
+        ))}
+      </div>
+
+      {/* 可选补充：快选覆盖不到的细节 */}
       <textarea
-        value={industryView}
-        onChange={(e) => setIndustryView(e.target.value)}
-        rows={4}
-        placeholder="你对该公司/行业产业结构的判断，例如：所处产业链位置、景气周期、竞争格局、需求趋势、成本变化、订单/库存拐点……"
+        value={extra}
+        onChange={(e) => setExtra(e.target.value)}
+        rows={3}
+        placeholder="可选补充：快选覆盖不到的细节，例如「大客户砍单」「新产能明年投产」「政策补贴退坡」……"
         className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
 
       <div className="flex items-center gap-3">
         <button
           onClick={handleRun}
-          disabled={loading || !industryView.trim()}
+          disabled={loading || !canRun}
           className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-400 text-white text-sm font-semibold transition-colors"
         >
           {loading ? '分析中...' : '找出 GAP'}
         </button>
-        <span className="text-xs text-slate-500">基于 {symbol.toUpperCase()} 当前技术面结构</span>
+        <span className="text-xs text-slate-500">
+          {canRun ? `基于 ${symbol.toUpperCase()} 当前技术面结构` : '至少选一个维度或填写补充'}
+        </span>
       </div>
 
       {error && (
