@@ -95,6 +95,41 @@ export interface ChanAnalysisResult {
   pending_notes: string[]
 }
 
+export type GapDirection = 'price_lags_industry' | 'price_ahead_of_fundamentals' | 'unclear'
+
+export interface GapItem {
+  dimension: string
+  market_says: string
+  industry_says: string
+  direction: GapDirection
+  interpretation: string
+}
+
+export interface StructureGapResult {
+  symbol: string
+  aligned: string[]
+  gaps: GapItem[]
+  key_question: string
+  caveats: string[]
+}
+
+export async function fetchStructureGap(
+  symbol: string,
+  startDate: string,
+  endDate: string,
+  industryView: string,
+  freq = 'daily',
+): Promise<StructureGapResult> {
+  const res = await apiClient.post<StructureGapResult>('/api/v1/chan/gap', {
+    symbol,
+    start_date: startDate,
+    end_date: endDate,
+    industry_view: industryView,
+    freq,
+  })
+  return res.data
+}
+
 export async function fetchChanAnalysis(
   symbol: string,
   startDate: string,
