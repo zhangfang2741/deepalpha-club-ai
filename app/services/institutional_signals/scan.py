@@ -35,6 +35,7 @@ from app.services.institutional_signals.fetchers import (
     fetch_earnings,
     fetch_grades_historical,
     fetch_insider_statistics,
+    fetch_nasdaq100_symbols,
     fetch_price_history,
     fetch_price_target_summary,
     fetch_profile,
@@ -106,8 +107,11 @@ def _rank(entries: list[LeaderboardEntry]) -> list[LeaderboardEntry]:
     )
 
 
-async def scan_leaderboard(limit: int = SCAN_TOP_N) -> LeaderboardResponse:
-    """扫描 universe 并返回机构建仓榜前 N（在后台任务里调用，不阻塞请求）。"""
+async def scan_leaderboard(limit: int = SCAN_TOP_N, universe: str = "sp500") -> LeaderboardResponse:
+    """扫描指定 universe 并返回机构建仓榜前 N（在后台任务里调用，不阻塞请求）。
+
+    universe：sp500（标普 500）| nasdaq100（纳指 100 / QQQ）。
+    """
     now = datetime.datetime.now(datetime.timezone.utc)
     today = now.date()
     from_date = (today - datetime.timedelta(days=_PRICE_LOOKBACK_DAYS)).isoformat()
@@ -115,11 +119,15 @@ async def scan_leaderboard(limit: int = SCAN_TOP_N) -> LeaderboardResponse:
     sem = asyncio.Semaphore(SCAN_CONCURRENCY)
 
     async with httpx.AsyncClient(timeout=15) as client:
-        symbols = await fetch_sp500_symbols(client)
-        source = "sp500"
+        if universe == "nasdaq100":
+            symbols = await fetch_nasdaq100_symbols(client)
+            source = "nasdaq100"
+        else:
+            symbols = await fetch_sp500_symbols(client)
+            source = "sp500"
         if not symbols:
             symbols = list(SCAN_UNIVERSE_FALLBACK)
-            source = "fallback"
+            source = f"{source}-fallback"
 
         results = await asyncio.gather(
             *[_score_symbol(client, s, sem, from_date, to_date) for s in symbols]

@@ -12,6 +12,16 @@ from app.schemas.base import BaseResponse
 DIMENSION_KEYS = ("expectation", "positioning", "participation", "fundamental", "confirmation")
 
 
+class SignalExplanation(BaseResponse):
+    """单条信号的完整解释：原始数据 → 计算式 → 判定规则 → 结论。"""
+
+    inputs: List[str] = Field(default_factory=list, description="原始数据，如 [近月均值=$185.2（41家）, 近季均值=$182.3]")
+    formula: Optional[str] = Field(None, description="计算式，如 (185.2−182.3)/182.3×100 = +1.6%")
+    thresholds: Optional[str] = Field(None, description="判定规则/阈值")
+    conclusion: Optional[str] = Field(None, description="结论：为何是这个方向/是否命中/加减分")
+    source: Optional[str] = Field(None, description="数据来源，如 FMP price-target-summary")
+
+
 class SignalItem(BaseResponse):
     """单条底层信号（如 Relative Volume、Target Price）。"""
 
@@ -20,7 +30,8 @@ class SignalItem(BaseResponse):
     value: Optional[str] = Field(None, description="展示值，如 2.1x / +3.4%")
     direction: str = Field("flat", description="方向：up / down / flat")
     hit: bool = Field(False, description="是否触发（用于状态组合判定）")
-    detail: Optional[str] = Field(None, description="补充说明")
+    detail: Optional[str] = Field(None, description="补充说明（一句话口径）")
+    explain: Optional[SignalExplanation] = Field(None, description="完整解释：原始数据/计算/判定/结论")
 
 
 class DimensionScore(BaseResponse):
@@ -83,5 +94,6 @@ class InstitutionalSignalReport(BaseResponse):
     coverage_total: int = Field(default=5, description="维度总数")
     confidence: str = Field(description="置信度：高 / 中 / 低（由覆盖度决定）")
     headline: str = Field(description="一句话结论")
+    price_history: List[float] = Field(default_factory=list, description="近期收盘价（sparkline 用）")
     dimensions: List[DimensionScore]
     states: List[SignalState]

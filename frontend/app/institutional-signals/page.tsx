@@ -54,23 +54,133 @@ function confidenceStyle(conf: string): string {
   return 'bg-gray-200 text-gray-600'
 }
 
+// 迷你价格走势（近 30 日收盘）
+function Sparkline({ data }: { data: number[] }) {
+  if (!data || data.length < 2) return null
+  const w = 140
+  const h = 40
+  const min = Math.min(...data)
+  const max = Math.max(...data)
+  const span = max - min || 1
+  const pts = data
+    .map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / span) * h}`)
+    .join(' ')
+  const up = data[data.length - 1] >= data[0]
+  const stroke = up ? '#059669' : '#e11d48'
+  const chgPct = ((data[data.length - 1] - data[0]) / data[0]) * 100
+  return (
+    <div className="flex items-center gap-2">
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="overflow-visible">
+        <polyline points={pts} fill="none" stroke={stroke} strokeWidth="1.5"
+          strokeLinejoin="round" strokeLinecap="round" />
+      </svg>
+      <div className="text-right">
+        <div className={`text-sm font-bold tabular-nums ${up ? 'text-emerald-600' : 'text-rose-600'}`}>
+          {chgPct >= 0 ? '+' : ''}{chgPct.toFixed(1)}%
+        </div>
+        <div className="text-[10px] text-gray-400">近 30 日</div>
+      </div>
+    </div>
+  )
+}
+
+// 加载骨架屏
+function SkeletonCard() {
+  return (
+    <div className="animate-pulse rounded-2xl border border-gray-200 bg-white p-5">
+      <div className="h-4 w-16 rounded bg-gray-200" />
+      <div className="mt-2 h-3 w-32 rounded bg-gray-100" />
+      <div className="mt-4 h-1.5 w-full rounded-full bg-gray-100" />
+      <div className="mt-4 space-y-2">
+        <div className="h-3 w-full rounded bg-gray-100" />
+        <div className="h-3 w-2/3 rounded bg-gray-100" />
+      </div>
+    </div>
+  )
+}
+
+// 单条信号：可点开查看「原始数据 → 计算式 → 判定规则 → 结论」
+function SignalRow({ s }: { s: SignalItem }) {
+  const [show, setShow] = useState(false)
+  const { arrow, cls } = dirStyle(s.direction)
+  const hasExplain = !!s.explain
+  return (
+    <li className="text-sm">
+      <button
+        type="button"
+        onClick={() => hasExplain && setShow((v) => !v)}
+        className={`flex w-full items-start justify-between gap-2 text-left ${hasExplain ? 'cursor-pointer' : 'cursor-default'}`}
+      >
+        <div className="min-w-0">
+          <span className="text-gray-700">{s.label}</span>
+          {hasExplain && (
+            <span className="ml-1 text-[10px] text-gray-400">{show ? '收起' : '为什么？'}</span>
+          )}
+          {s.detail && <p className="text-[11px] leading-tight text-gray-400">{s.detail}</p>}
+        </div>
+        <span className={`flex shrink-0 items-center gap-1 font-semibold ${cls}`}>
+          {s.value ?? ''}
+          <span aria-hidden>{arrow}</span>
+          {s.hit && <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-current" />}
+        </span>
+      </button>
+
+      {show && s.explain && (
+        <div className="mt-2 space-y-1.5 rounded-lg bg-gray-50 p-3 text-[11px] leading-relaxed text-gray-600">
+          {s.explain.inputs.length > 0 && (
+            <div>
+              <span className="font-semibold text-gray-500">原始数据</span>
+              <ul className="mt-0.5 list-disc pl-4">
+                {s.explain.inputs.map((x, i) => <li key={i}>{x}</li>)}
+              </ul>
+            </div>
+          )}
+          {s.explain.formula && (
+            <div><span className="font-semibold text-gray-500">计算式　</span><span className="font-mono">{s.explain.formula}</span></div>
+          )}
+          {s.explain.thresholds && (
+            <div><span className="font-semibold text-gray-500">判定规则</span> {s.explain.thresholds}</div>
+          )}
+          {s.explain.conclusion && (
+            <div className="text-gray-800"><span className="font-semibold text-gray-500">结论　　</span>{s.explain.conclusion}</div>
+          )}
+          {s.explain.source && (
+            <div className="text-[10px] text-gray-400">数据来源：{s.explain.source}</div>
+          )}
+        </div>
+      )}
+    </li>
+  )
+}
+
 function DimensionCard({ dim }: { dim: DimensionScore }) {
   const unavailable = dim.status === 'unavailable'
+  const detailSignals = dim.signals.filter((s) => s.value || s.hit)
+  const [open, setOpen] = useState(true)
   return (
     <div
       className={`rounded-2xl border p-5 transition ${
         unavailable ? 'border-gray-100 bg-gray-50/50 opacity-70' : 'border-gray-200 bg-white shadow-sm'
       }`}
     >
-      <div className="flex items-baseline justify-between gap-2">
+      <button
+        type="button"
+        onClick={() => !unavailable && detailSignals.length > 0 && setOpen((v) => !v)}
+        className="flex w-full items-baseline justify-between gap-2 text-left"
+      >
         <div>
           <h3 className="text-base font-bold text-gray-900">{dim.label}</h3>
           <p className="mt-0.5 text-xs text-gray-500">{dim.question}</p>
         </div>
-        <span className={`text-2xl font-extrabold tabular-nums ${scoreColor(dim.score)}`}>
-          {dim.score.toFixed(0)}
-        </span>
-      </div>
+        <div className="flex items-center gap-1.5">
+          <span className={`text-2xl font-extrabold tabular-nums ${scoreColor(dim.score)}`}>
+            {dim.score.toFixed(0)}
+          </span>
+          {!unavailable && detailSignals.length > 0 && (
+            <span className={`text-gray-300 transition ${open ? 'rotate-90' : ''}`} aria-hidden>›</span>
+          )}
+        </div>
+      </button>
 
       {/* 评分条 */}
       <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
@@ -86,29 +196,24 @@ function DimensionCard({ dim }: { dim: DimensionScore }) {
         </p>
       )}
 
-      {/* 信号明细 */}
-      {!unavailable && (
-        <ul className="mt-3 space-y-1.5">
-          {dim.signals
-            .filter((s) => s.value || s.hit)
-            .map((s) => {
-              const { arrow, cls } = dirStyle(s.direction)
-              return (
-                <li key={s.key} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="text-gray-600">{s.label}</span>
-                  <span className={`flex items-center gap-1 font-semibold ${cls}`}>
-                    {s.value ?? ''}
-                    <span aria-hidden>{arrow}</span>
-                    {s.hit && <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-current" />}
-                  </span>
-                </li>
-              )
-            })}
+      {/* 信号明细：每条可点开看完整推导 */}
+      {!unavailable && open && (
+        <ul className="mt-3 space-y-2.5">
+          {detailSignals.map((s) => <SignalRow key={s.key} s={s} />)}
         </ul>
       )}
     </div>
   )
 }
+
+// 榜单状态筛选
+const STATE_FILTERS = [
+  { key: 'all', label: '全部' },
+  { key: 'institution_accumulation', label: '🔥 建仓' },
+  { key: 'fundamental_turn', label: '🌱 基本面' },
+  { key: 'expectation_upgrade', label: '📈 预期' },
+  { key: 'breakout_confirmation', label: '🚀 趋势' },
+] as const
 
 function LeaderboardBoard({ board, onPick }: { board: LeaderboardEntry[]; onPick: (s: string) => void }) {
   return (
@@ -119,22 +224,26 @@ function LeaderboardBoard({ board, onPick }: { board: LeaderboardEntry[]; onPick
           onClick={() => onPick(e.symbol)}
           className="flex w-full items-center gap-3 border-b border-gray-100 px-4 py-3 text-left transition last:border-0 hover:bg-gray-50"
         >
-          <span className="w-6 shrink-0 text-center text-sm font-bold text-gray-400">{i + 1}</span>
-          <div className="w-32 shrink-0">
-            <div className="text-sm font-bold text-gray-900">{e.symbol}</div>
-            <div className="truncate text-xs text-gray-400">{e.name}</div>
+          <span className="w-5 shrink-0 text-center text-sm font-bold text-gray-400">{i + 1}</span>
+          {/* 名称 + 状态：窄屏纵向堆叠，宽屏并排 */}
+          <div className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+            <div className="min-w-0 sm:w-40 sm:shrink-0">
+              <div className="text-sm font-bold text-gray-900">{e.symbol}</div>
+              <div className="truncate text-xs text-gray-400">{e.name}</div>
+            </div>
+            <div className="min-w-0">
+              {e.top_state ? (
+                <span className="inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-800">
+                  <span>{e.top_state.emoji}</span>
+                  <span className="truncate">{e.top_state.label}</span>
+                  <span className="text-amber-400">{'★'.repeat(e.top_state.stars)}</span>
+                </span>
+              ) : (
+                <span className="text-xs text-gray-400">无显著偏多状态</span>
+              )}
+            </div>
           </div>
-          <div className="flex-1">
-            {e.top_state ? (
-              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-800">
-                {e.top_state.emoji} {e.top_state.label}
-                <span className="ml-1 text-amber-400">{'★'.repeat(e.top_state.stars)}</span>
-              </span>
-            ) : (
-              <span className="text-xs text-gray-400">无显著偏多状态</span>
-            )}
-          </div>
-          <div className="w-16 shrink-0 text-right">
+          <div className="w-14 shrink-0 text-right">
             <div className={`text-lg font-extrabold tabular-nums ${scoreColor(e.composite_score)}`}>
               {e.composite_score.toFixed(0)}
             </div>
@@ -155,6 +264,8 @@ export default function InstitutionalSignalsPage() {
   const [boardAsOf, setBoardAsOf] = useState('')
   const [boardLoading, setBoardLoading] = useState(true)
   const [boardComputing, setBoardComputing] = useState(false)
+  const [boardFilter, setBoardFilter] = useState<string>('all')
+  const [universe, setUniverse] = useState<'sp500' | 'nasdaq100'>('sp500')
 
   const load = useCallback((sym: string) => {
     const clean = sym.trim().toUpperCase()
@@ -175,8 +286,11 @@ export default function InstitutionalSignalsPage() {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
     let cancelled = false
+    setBoardLoading(true)
+    setBoardComputing(false)
+    setBoard(null)
     const poll = () => {
-      fetchLeaderboard()
+      fetchLeaderboard(universe)
         .then((res) => {
           if (cancelled) return
           if (res.status === 'computing') {
@@ -196,7 +310,7 @@ export default function InstitutionalSignalsPage() {
     }
     poll()
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [])
+  }, [universe])
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -234,8 +348,11 @@ export default function InstitutionalSignalsPage() {
         </form>
 
         {loading && (
-          <div className="flex justify-center py-20">
-            <Spinner />
+          <div className="space-y-6">
+            <div className="h-28 animate-pulse rounded-2xl bg-gray-100" />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {[0, 1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
+            </div>
           </div>
         )}
 
@@ -252,11 +369,16 @@ export default function InstitutionalSignalsPage() {
             </button>
             {/* 结论横幅 */}
             <div className="rounded-2xl border border-gray-200 bg-gradient-to-br from-gray-50 to-white p-6 shadow-sm">
-              <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <span className="text-xl font-extrabold text-gray-900">{data.symbol}</span>
-                  <span className="ml-2 text-sm text-gray-500">{data.name}</span>
-                  <span className="ml-2 text-xs text-gray-400">· {data.as_of}</span>
+                  <div>
+                    <span className="text-xl font-extrabold text-gray-900">{data.symbol}</span>
+                    <span className="ml-2 text-sm text-gray-500">{data.name}</span>
+                    <span className="ml-2 text-xs text-gray-400">· {data.as_of}</span>
+                  </div>
+                  {data.price_history?.length > 1 && (
+                    <div className="mt-2"><Sparkline data={data.price_history} /></div>
+                  )}
                 </div>
                 <div className="text-right">
                   <div className={`text-3xl font-extrabold tabular-nums ${scoreColor(data.composite_score)}`}>
@@ -271,25 +393,24 @@ export default function InstitutionalSignalsPage() {
                       {data.coverage}/{data.coverage_total} 维
                     </span>
                   </div>
+                  {/* 分数锚点 */}
+                  <div className="mt-1 text-[10px] text-gray-400">≥70 强 · 55–70 偏多 · &lt;45 偏空</div>
                 </div>
               </div>
               <p className="mt-3 text-sm font-medium text-gray-700">{data.headline}</p>
 
-              {/* 状态标签 */}
-              <div className="mt-4 flex flex-wrap gap-2">
+              {/* 状态卡片：含义与证据始终可见（含移动端）*/}
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 {data.states.map((st) => (
-                  <div
-                    key={st.key}
-                    className="group relative rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 shadow-sm"
-                    title={st.meaning}
-                  >
-                    <span className="mr-1">{st.emoji}</span>
-                    {st.label}
-                    <span className="ml-1 text-amber-400">{'★'.repeat(st.stars)}</span>
+                  <div key={st.key} className="rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 shadow-sm">
+                    <div className="flex items-center gap-1.5 text-sm font-bold text-gray-900">
+                      <span>{st.emoji}</span>
+                      <span>{st.label}</span>
+                      <span className="text-amber-400">{'★'.repeat(st.stars)}</span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-gray-500">{st.meaning}</p>
                     {st.evidence.length > 0 && (
-                      <span className="ml-2 hidden text-xs font-normal text-gray-500 sm:inline">
-                        {st.evidence.join(' · ')}
-                      </span>
+                      <p className="mt-1 text-[11px] text-gray-400">证据：{st.evidence.join(' · ')}</p>
                     )}
                   </div>
                 ))}
@@ -312,22 +433,82 @@ export default function InstitutionalSignalsPage() {
 
         {!data && !loading && (
           <div className="space-y-3">
-            <div className="flex items-baseline justify-between">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-lg font-bold text-gray-900">🔥 今日机构建仓榜</h2>
               {boardAsOf && <span className="text-xs text-gray-400">{boardAsOf} · 点击查看完整五维</span>}
             </div>
+
+            {/* universe 切换：标普 500 / 纳指 100（QQQ）*/}
+            <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-0.5">
+              {([['sp500', '标普 500'], ['nasdaq100', '纳指 100 · QQQ']] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setUniverse(key)}
+                  className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+                    universe === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             {boardComputing && (
               <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-gray-200 py-16 text-center">
                 <Spinner />
-                <p className="text-sm text-gray-500">首次扫描 S&P 500 成分股中，约需 1–2 分钟，页面会自动刷新…</p>
+                <p className="text-sm text-gray-500">
+                  首次扫描{universe === 'nasdaq100' ? '纳指 100' : '标普 500'}成分股中，约需 1–2 分钟，页面会自动刷新…
+                </p>
               </div>
             )}
             {!boardComputing && boardLoading && (
-              <div className="flex justify-center py-16"><Spinner /></div>
+              <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="flex items-center gap-3 border-b border-gray-100 px-4 py-3.5 last:border-0">
+                    <div className="h-8 w-8 animate-pulse rounded bg-gray-100" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3 w-24 animate-pulse rounded bg-gray-200" />
+                      <div className="h-2.5 w-40 animate-pulse rounded bg-gray-100" />
+                    </div>
+                    <div className="h-6 w-10 animate-pulse rounded bg-gray-100" />
+                  </div>
+                ))}
+              </div>
             )}
-            {!boardComputing && !boardLoading && board && board.length > 0 && (
-              <LeaderboardBoard board={board} onPick={load} />
-            )}
+            {!boardComputing && !boardLoading && board && board.length > 0 && (() => {
+              const counts: Record<string, number> = { all: board.length }
+              board.forEach((e) => { if (e.top_state) counts[e.top_state.key] = (counts[e.top_state.key] ?? 0) + 1 })
+              const filtered = boardFilter === 'all'
+                ? board
+                : board.filter((e) => e.top_state?.key === boardFilter)
+              return (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    {STATE_FILTERS.map((f) => (
+                      <button
+                        key={f.key}
+                        onClick={() => setBoardFilter(f.key)}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                          boardFilter === f.key
+                            ? 'bg-gray-900 text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {f.label}
+                        <span className="ml-1 opacity-60">{counts[f.key] ?? 0}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {filtered.length > 0 ? (
+                    <LeaderboardBoard board={filtered} onPick={load} />
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-gray-200 py-12 text-center text-sm text-gray-400">
+                      当前筛选下暂无标的
+                    </div>
+                  )}
+                </>
+              )
+            })()}
             {!boardComputing && !boardLoading && (!board || board.length === 0) && (
               <div className="rounded-2xl border border-dashed border-gray-200 py-16 text-center text-sm text-gray-400">
                 榜单暂不可用，可直接在上方输入代码查询
