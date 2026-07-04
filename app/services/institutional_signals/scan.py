@@ -23,9 +23,10 @@ from app.services.institutional_signals.calculator import (
 from app.services.institutional_signals.constants import (
     ENRICH_CONCURRENCY,
     ENRICH_TOP_K,
+    NASDAQ100_FALLBACK,
     SCAN_CONCURRENCY,
     SCAN_TOP_N,
-    SCAN_UNIVERSE_FALLBACK,
+    SP500_FALLBACK,
 )
 from app.services.institutional_signals.dimensions import (
     compute_confirmation,
@@ -144,13 +145,15 @@ async def scan_leaderboard(limit: int = SCAN_TOP_N, universe: str = "sp500") -> 
     async with httpx.AsyncClient(timeout=15) as client:
         if universe == "nasdaq100":
             symbols = await fetch_nasdaq100_symbols(client)
-            source = "nasdaq100"
+            fallback, source = NASDAQ100_FALLBACK, "nasdaq100"
         else:
             symbols = await fetch_sp500_symbols(client)
-            source = "sp500"
+            fallback, source = SP500_FALLBACK, "sp500"
         if not symbols:
-            symbols = list(SCAN_UNIVERSE_FALLBACK)
+            # 动态成分股拉取失败 → 用该 universe 专属兜底名单（两个 universe 不同）
+            symbols = list(fallback)
             source = f"{source}-fallback"
+            logger.warning("scan_universe_fallback", universe=universe, count=len(symbols))
 
         # 第一段：全 universe 4 维评分
         results = await asyncio.gather(

@@ -68,14 +68,41 @@ def _extract_symbols(data) -> list[str]:
     return out
 
 
+_WIKI_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; DeepAlphaBot/1.0)"}
+_WIKI_SP500 = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+_WIKI_NDX100 = "https://en.wikipedia.org/wiki/Nasdaq-100"
+
+
+async def _fetch_wiki_symbols(client: httpx.AsyncClient, url: str) -> list[str]:
+    """从维基百科成分股表格抓取代码（FMP 失败时的动态兜底）。复用 analyst_upgrade 解析器。"""
+    try:
+        resp = await client.get(url, headers=_WIKI_HEADERS, timeout=20, follow_redirects=True)
+        if resp.status_code != 200:
+            return []
+        import asyncio
+
+        from app.services.analyst_upgrade.nasdaq100 import _parse_wiki_html
+        rows = await asyncio.to_thread(_parse_wiki_html, resp.text)
+        return _extract_symbols(rows)
+    except Exception as e:
+        logger.warning("wiki_constituent_fetch_failed", url=url, error=str(e))
+        return []
+
+
 async def fetch_sp500_symbols(client: httpx.AsyncClient) -> list[str]:
-    """S&P 500 成分股代码（动态）。失败返回空 → 由调用方降级到 fallback。"""
-    return _extract_symbols(await _get(client, "sp500-constituent", {}))
+    """S&P 500 成分股代码：FMP → 维基百科 → （调用方硬编码兜底）。"""
+    syms = _extract_symbols(await _get(client, "sp500-constituent", {}))
+    if not syms:
+        syms = await _fetch_wiki_symbols(client, _WIKI_SP500)
+    return syms
 
 
 async def fetch_nasdaq100_symbols(client: httpx.AsyncClient) -> list[str]:
-    """纳斯达克 100（QQQ 成分股）代码（动态）。失败返回空 → 降级到 fallback。"""
-    return _extract_symbols(await _get(client, "nasdaq-constituent", {}))
+    """纳斯达克 100（QQQ）成分股代码：FMP → 维基百科 → （调用方硬编码兜底）。"""
+    syms = _extract_symbols(await _get(client, "nasdaq-constituent", {}))
+    if not syms:
+        syms = await _fetch_wiki_symbols(client, _WIKI_NDX100)
+    return syms
 
 
 async def fetch_analyst_estimate(client: httpx.AsyncClient, symbol: str) -> dict | None:

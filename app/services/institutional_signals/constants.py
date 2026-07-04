@@ -95,19 +95,23 @@ INSIDER_DISTRIB_SALES = 10       # 集中减持的卖出笔数下限
 # universe 动态取自 FMP S&P 500 成分股；拉取失败时降级到下面的 fallback 列表。
 # 扫描阶段只用 4 个 FMP 快接口（跳过期权），排名后由用户点进详情页跑完整五维。
 # 扫描在后台任务里跑（stale-while-revalidate），不阻塞请求，故可覆盖全量成分股。
-SCAN_UNIVERSE_FALLBACK = [
-    # 科技/半导体
+# 标普 500 兜底：广谱，含金融/医疗/工业/能源（与纳指兜底明显不同）
+SP500_FALLBACK = [
     "AAPL", "MSFT", "NVDA", "AVGO", "AMD", "QCOM", "TXN", "MU", "INTC", "ARM",
-    # 软件/互联网
     "GOOGL", "META", "AMZN", "NFLX", "CRM", "ORCL", "ADBE", "NOW", "PLTR", "SNOW",
-    # 消费
     "TSLA", "COST", "NKE", "SBUX", "MCD", "HD",
-    # 金融
-    "JPM", "BAC", "GS", "V", "MA",
-    # 医疗
-    "LLY", "UNH", "JNJ", "ABBV", "MRK",
-    # 工业/能源
-    "CAT", "BA", "GE", "XOM", "CVX",
+    "JPM", "BAC", "GS", "V", "MA",              # 金融（QQQ 没有）
+    "LLY", "UNH", "JNJ", "ABBV", "MRK",         # 医疗（多为 NYSE）
+    "CAT", "BA", "GE", "XOM", "CVX",            # 工业/能源（QQQ 没有）
+]
+# 纳指 100 / QQQ 兜底：纯 Nasdaq 科技成长，不含金融/能源/工业（QQQ 本就没有）
+NASDAQ100_FALLBACK = [
+    "AAPL", "MSFT", "NVDA", "AVGO", "GOOGL", "AMZN", "META", "TSLA", "NFLX", "COST",
+    "AMD", "QCOM", "TXN", "MU", "INTC", "AMAT", "LRCX", "KLAC", "MRVL", "ADI", "ASML", "ARM",
+    "ADBE", "INTU", "PANW", "CRWD", "CDNS", "SNPS", "FTNT",
+    "PEP", "SBUX", "MDLZ", "BKNG", "MELI", "PDD", "ABNB", "MAR", "ORLY", "LULU", "MNST",
+    "AMGN", "GILD", "REGN", "VRTX", "ISRG", "DXCM",   # Nasdaq 医疗
+    "CSCO", "CMCSA", "TMUS", "ADP", "HON", "PYPL",
 ]
 SCAN_CONCURRENCY = 20            # 扫描并发上限（后台任务）
 SCAN_TOP_N = 30                  # 榜单返回条数
