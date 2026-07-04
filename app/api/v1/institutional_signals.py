@@ -20,6 +20,8 @@ router = APIRouter()
 
 CACHE_PREFIX = "institutional_signals"
 CACHE_TTL = 3600  # 1 小时
+# 报告 schema 变更时递增，使旧缓存立即失效（v2：新增 explain 信号解释 + price_history）
+REPORT_CACHE_VERSION = "v2"
 
 # 榜单缓存：stale-while-revalidate（按 universe 分键）
 LB_UNIVERSES = ("sp500", "nasdaq100")
@@ -119,7 +121,7 @@ async def get_institutional_signals(
     if not symbol.isalpha():
         raise HTTPException(status_code=422, detail="股票代码仅允许字母")
 
-    cache_key = f"{CACHE_PREFIX}:{symbol}:v1"
+    cache_key = f"{CACHE_PREFIX}:{symbol}:{REPORT_CACHE_VERSION}"
 
     if redis is not None:
         try:
