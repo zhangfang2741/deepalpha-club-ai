@@ -57,6 +57,18 @@ async def fetch_grades_historical(client: httpx.AsyncClient, symbol: str) -> lis
     return data if isinstance(data, list) else []
 
 
+async def fetch_earnings(client: httpx.AsyncClient, symbol: str) -> list[dict]:
+    """财报日程（含历史 epsActual/epsEstimated 与未来财报日）。"""
+    data = await _get(client, "earnings-calendar", {"symbol": symbol, "limit": 16})
+    return data if isinstance(data, list) else []
+
+
+async def fetch_insider_statistics(client: httpx.AsyncClient, symbol: str) -> list[dict]:
+    """内部人交易季度统计（acquired/disposed、totalPurchases/totalSales）。"""
+    data = await _get(client, "insider-trading/statistics", {"symbol": symbol})
+    return data if isinstance(data, list) else []
+
+
 async def fetch_price_history(client: httpx.AsyncClient, symbol: str, from_: str, to: str) -> list[dict]:
     """日线 EOD，按日期升序，标准化字段。"""
     data = await _get(client, "historical-price-eod/full",

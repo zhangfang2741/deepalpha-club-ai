@@ -1,7 +1,11 @@
 """机构资金信号——维度打分与状态引擎单元测试（纯函数，无网络）。"""
 
+import datetime
+
 from app.services.institutional_signals.dimensions import (
+    compute_confirmation,
     compute_expectation,
+    compute_fundamental,
     compute_participation,
     compute_positioning,
     unavailable_dimension,
@@ -64,16 +68,16 @@ def test_expectation_target_price_up_and_rating_up():
     assert any(s.key == "analyst_rating" and s.hit and s.direction == "up" for s in dim.signals)
 
 
-def test_expectation_no_data_is_partial():
+def test_expectation_no_data_is_unavailable():
     dim = compute_expectation(None, [])
-    assert dim.status == "partial"
+    assert dim.status == "unavailable"
 
 
 def test_expectation_low_analyst_count_ignored():
     pt = {"lastMonthAvgPriceTarget": 120, "lastQuarterAvgPriceTarget": 100, "lastMonthCount": 1}
     dim = compute_expectation(pt, [])
     # 样本不足 + 无评级 → 无有效数据
-    assert dim.status == "partial"
+    assert dim.status == "unavailable"
 
 
 # ── Positioning ─────────────────────────────────────────────────────────────
@@ -103,6 +107,72 @@ def test_positioning_put_heavy_scores_low():
 def test_positioning_no_volume_is_partial():
     dim = compute_positioning({"call_vol": 0, "put_vol": 0, "call_oi": 100, "put_oi": 100, "atm_iv": 0.3})
     assert dim.status == "partial"
+
+
+# ── Fundamental ─────────────────────────────────────────────────────────────
+
+def _earn(date, eps_a, eps_e, rev_a=None, rev_e=None) -> dict:
+    return {"date": date, "epsActual": eps_a, "epsEstimated": eps_e,
+            "revenueActual": rev_a, "revenueEstimated": rev_e}
+
+
+def test_fundamental_consecutive_beats_and_revenue():
+    earnings = [
+        _earn("2026-04-01", 2.1, 1.9, 100e9, 96e9),
+        _earn("2026-01-01", 2.0, 1.8),
+        _earn("2025-10-01", 1.9, 1.7),
+        _earn("2025-07-01", 1.6, 1.5),
+    ]
+    dim = compute_fundamental(earnings)
+    assert dim.status == "ok"
+    assert dim.score >= 70
+    assert any(s.key == "earnings_surprise" and s.hit and s.direction == "up" for s in dim.signals)
+    assert any(s.key == "revenue_surprise" and s.hit and s.direction == "up" for s in dim.signals)
+
+
+def test_fundamental_recent_miss_scores_low():
+    earnings = [_earn("2026-04-01", 1.5, 1.9, 90e9, 96e9)]
+    dim = compute_fundamental(earnings)
+    assert dim.score < 50
+    assert any(s.key == "earnings_surprise" and s.direction == "down" for s in dim.signals)
+
+
+def test_fundamental_no_data_is_unavailable():
+    assert compute_fundamental([]).status == "unavailable"
+
+
+def test_fundamental_earnings_window():
+    soon = (datetime.date.today() + datetime.timedelta(days=10)).isoformat()
+    earnings = [_earn("2026-01-01", 2.0, 1.8), {"date": soon, "epsActual": None, "epsEstimated": 2.2}]
+    dim = compute_fundamental(earnings)
+    assert any(s.key == "earnings_date" and s.hit for s in dim.signals)
+
+
+# ── Confirmation ────────────────────────────────────────────────────────────
+
+def test_confirmation_open_market_purchase():
+    stats = [
+        {"year": 2026, "quarter": 2, "acquiredDisposedRatio": 1.5, "totalPurchases": 3, "totalSales": 0},
+        {"year": 2026, "quarter": 1, "acquiredDisposedRatio": 1.2, "totalPurchases": 1, "totalSales": 0},
+    ]
+    dim = compute_confirmation(stats)
+    assert dim.status == "ok"
+    assert dim.score >= 65
+    assert any(s.key == "insider" and s.hit and s.direction == "up" for s in dim.signals)
+
+
+def test_confirmation_concentrated_selling():
+    stats = [
+        {"year": 2026, "quarter": 2, "acquiredDisposedRatio": 0.15, "totalPurchases": 0, "totalSales": 20},
+        {"year": 2026, "quarter": 1, "acquiredDisposedRatio": 0.2, "totalPurchases": 0, "totalSales": 15},
+    ]
+    dim = compute_confirmation(stats)
+    assert dim.score < 50
+    assert any(s.key == "insider" and s.hit and s.direction == "down" for s in dim.signals)
+
+
+def test_confirmation_no_data_is_unavailable():
+    assert compute_confirmation([]).status == "unavailable"
 
 
 # ── 状态引擎 ────────────────────────────────────────────────────────────────
@@ -149,6 +219,35 @@ def test_states_smart_money_price_not_moved():
     par = compute_participation(_make_prices(25))  # 无突破
     states = derive_states({"positioning": pos, "participation": par})
     assert "smart_money" in {s.key for s in states}
+
+
+def test_states_fundamental_turn():
+    earnings = [
+        _earn("2026-04-01", 2.1, 1.9, 100e9, 96e9),
+        _earn("2026-01-01", 2.0, 1.8),
+    ]
+    fun = compute_fundamental(earnings)
+    pt = {"lastMonthAvgPriceTarget": 120, "lastQuarterAvgPriceTarget": 100, "lastMonthCount": 8}
+    exp = compute_expectation(pt, [])
+    states = derive_states({"fundamental": fun, "expectation": exp})
+    assert "fundamental_turn" in {s.key for s in states}
+
+
+def test_states_distribution():
+    grades = [
+        {"date": "2026-06-01", "analystRatingsStrongBuy": 2, "analystRatingsBuy": 3,
+         "analystRatingsHold": 8, "analystRatingsSell": 5, "analystRatingsStrongSell": 2},
+        {"date": "2026-05-01", "analystRatingsStrongBuy": 8, "analystRatingsBuy": 6,
+         "analystRatingsHold": 4, "analystRatingsSell": 1, "analystRatingsStrongSell": 0},
+    ]
+    exp = compute_expectation(None, grades)
+    stats = [
+        {"year": 2026, "quarter": 2, "acquiredDisposedRatio": 0.15, "totalPurchases": 0, "totalSales": 20},
+        {"year": 2026, "quarter": 1, "acquiredDisposedRatio": 0.2, "totalPurchases": 0, "totalSales": 15},
+    ]
+    con = compute_confirmation(stats)
+    states = derive_states({"expectation": exp, "confirmation": con})
+    assert "distribution" in {s.key for s in states}
 
 
 def test_states_institution_accumulation():

@@ -12,10 +12,15 @@
 | Expectation 预期 | 分析师在重新定价未来吗？ | ✅ 已接入 | FMP |
 | Positioning 仓位 | 资金已经在下注了吗？ | ✅ 已接入（快照） | yfinance 期权 |
 | Participation 参与度 | 其他资金跟了吗？ | ✅ 已接入 | FMP 日线 |
-| Fundamental 基本面 | 经营真的变好了吗？ | ⏳ Phase 3 | FMP 财报/Transcript |
-| Confirmation 确认 | 长期资金确认了吗？ | ⏳ Phase 3 | Insider/13F/ETF |
+| Fundamental 基本面 | 经营真的变好了吗？ | ✅ 已接入 | FMP earnings |
+| Confirmation 确认 | 长期资金确认了吗？ | ✅ 已接入 | FMP insider |
 
 每个维度输出 **0–100 子分**；缺失维度按**中性 50 计入**综合分（不剔除），并计入**覆盖度**与**置信度**。
+
+**维度状态语义**（决定是否计入覆盖度）：
+- `ok`：有真实数据，正常打分。
+- `partial`：有部分数据但不完整（如只有未来财报日、无历史 EPS）。计入覆盖度。
+- `unavailable`：**无可用数据**（拉取失败或该源为空）。**不计入覆盖度**——避免"零数据却显示高置信度"。
 
 ---
 
@@ -71,6 +76,39 @@
 
 ---
 
+## 3b. Fundamental 基本面
+
+**数据源**：FMP `earnings-calendar`（历史 epsActual/epsEstimated/revenueActual/revenueEstimated + 未来财报日）。
+
+**基准分 50**：
+
+| 信号 | 公式 | 阈值 → 加减分 | hit |
+|------|------|---------------|-----|
+| 财报兑现 | 最近若干季 `epsActual > epsEstimated` 的**连续** Beat 数 | 连 ≥3 → +22；连 2 → +14；连 1 → +6；最近一季 Miss → −12 | 连 ≥2 或 Miss 时 |
+| 营收超预期 | `(revenueActual − revenueEstimated)/revenueEstimated`（最近季） | ≥ +2% → +12；≤ −2% → −12 | 幅度达标时 |
+| 财报窗口 | 距下次财报天数 | 0–21 天 → +5 | 在窗口内时 |
+| 指引方向 | — | 需 Transcript NLP（后续） | 恒 false |
+
+> Guidance「比 Beat 更重要」，但方向判定需对 Transcript 做 NLP，暂缺；用「连续兑现」承接基本面强度。
+
+---
+
+## 3c. Confirmation 确认
+
+**数据源**：FMP `insider-trading/statistics`（季度：`totalPurchases` 开放市场买入、`acquiredDisposedRatio` 增/减比、`totalSales`）。聚合最近 **2 季**。
+
+**基准分 50**：
+
+| 信号 | 公式 | 阈值 → 加减分 | hit |
+|------|------|---------------|-----|
+| 内部人交易 | 优先看 `totalPurchases`（真买入）；其次 `acquiredDisposedRatio` | 有开放市场买入 → +20；增/减比 ≥ 1.2 → +8；增/减比 ≤ 0.3 且卖出 ≥ 10 笔 → −12 | 买入 / 集中减持时 |
+| 13F 机构持仓 | — | 需 FMP Ultimate 版（后续） | 恒 false |
+| ETF 资金流 | — | 行业级，复用 ETF 模块（后续） | 恒 false |
+
+> 手册「Insider Sell 参考意义低于买入」——故买入强加分，减持仅在**集中**时才小幅扣分，避免高管常规卖出误报。
+
+---
+
 ## 4. 综合分与置信度（本次修正的核心）
 
 **综合分**（权重）：预期 0.30 · 仓位 0.25 · 参与度 0.20 · 基本面 0.15 · 确认 0.10。
@@ -98,6 +136,7 @@ composite = Σ(维度分 × 权重) / Σ权重
 | 🔥 机构建仓 | 预期分 ≥ 55 **且** Call资金流↑hit **且** IV↑hit **且** 相对成交量↑hit | ★★★★★ |
 | 💰 真资金进入 | Call资金流↑hit **且** IV↑hit **且** 未突破 | ★★★★★ |
 | ⚡ 事件交易 | IV↑hit **且** Call资金流↑hit **且** 预期分 < 55 **且** 未放量 **且** 非机构建仓 | ★★★★ |
+| 🌱 基本面改善 | 营收超预期↑hit **且** 财报兑现↑hit **且** 目标价↑hit | ★★★★★ |
 | ❄ 资金撤退 | 评级共识↓hit **且**（看跌压力↓hit 或 内部减持↓hit） | ★★★★ |
 
 **与手册的一处偏差（如实标注）**：手册用「OI 基本不变」区分「事件交易 vs 真机构」。快照无 OI 变化率，本版改用**「预期与现货是否跟上」**作代理——预期强+放量 → 机构建仓；预期弱+未放量 → 事件交易。等每日快照库上线后可换回真实 OI 变化率。

@@ -43,3 +43,13 @@ IV_ELEVATED = 0.60       # ATM 年化 IV ≥ 60% 视为偏高（事件预期）
 IV_MILD = 0.40
 OPTION_EXPIRY_MAX_DAYS = 45  # 只聚合 45 天内的近月合约
 OPTION_EXPIRY_MIN_COUNT = 2  # 至少聚合最近 2 个到期日
+
+# ── Fundamental 阈值（FMP earnings-calendar）────────────────────────────────
+EARNINGS_LOOKBACK_QUARTERS = 4   # 看最近 4 个财季的兑现历史
+EARNINGS_WINDOW_DAYS = 21        # 距下次财报 ≤ 21 天视为资金布局窗口
+
+# ── Confirmation 阈值（FMP insider-trading/statistics）──────────────────────
+INSIDER_LOOKBACK_QUARTERS = 2    # 聚合最近 2 个季度的内部人交易
+INSIDER_ACCUM_RATIO = 1.2        # acquiredDisposedRatio ≥ 1.2 视为净增持
+INSIDER_DISTRIB_RATIO = 0.3      # ≤ 0.3 且卖出笔数多 视为集中减持
+INSIDER_DISTRIB_SALES = 10       # 集中减持的卖出笔数下限

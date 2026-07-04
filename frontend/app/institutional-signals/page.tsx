@@ -230,8 +230,8 @@ export default function InstitutionalSignalsPage() {
             </div>
 
             <p className="text-center text-xs text-gray-400">
-              基本面 / 确认维度将在后续版本接入（财报超预期·指引、Insider·13F·ETF Flow）；
-              仓位维度基于期权快照，OI 变化率与 IV Rank 待每日快照库
+              五维已全部接入。部分子信号待后续：仓位的 OI 变化率 / IV Rank（每日快照库）、
+              基本面的指引方向（Transcript NLP）、确认的 13F（FMP Ultimate 版）与 ETF 资金流
             </p>
           </div>
         )}

@@ -5,11 +5,19 @@
 from typing import Optional
 
 from app.schemas.institutional_signals import DimensionScore, SignalItem
+import datetime
+
 from app.services.institutional_signals.constants import (
     BUY_RATIO_MAJORITY,
     CALL_VOL_OI_FRESH,
     DIMENSION_META,
+    EARNINGS_LOOKBACK_QUARTERS,
+    EARNINGS_WINDOW_DAYS,
     GAP_PCT,
+    INSIDER_ACCUM_RATIO,
+    INSIDER_DISTRIB_RATIO,
+    INSIDER_DISTRIB_SALES,
+    INSIDER_LOOKBACK_QUARTERS,
     IV_ELEVATED,
     IV_MILD,
     MIN_ANALYST_COUNT,
@@ -57,6 +65,8 @@ def compute_participation(prices: list[dict]) -> DimensionScore:
     label, question = _meta("participation")
     signals: list[SignalItem] = []
 
+    if not prices:
+        return unavailable_dimension("participation", "价格数据不可用")
     if len(prices) < VOLUME_LOOKBACK + 1:
         return DimensionScore(
             key="participation", label=label, question=question,
@@ -203,9 +213,10 @@ def compute_expectation(
         signals.append(SignalItem(key=key, label=lab, direction="flat", hit=False,
                                   detail="待每日快照持久化（Phase 4）"))
 
-    status = "ok" if has_data else "partial"
+    if not has_data:
+        return unavailable_dimension("expectation", "无目标价/评级数据")
     return DimensionScore(key="expectation", label=label, question=question,
-                          score=_clamp(score), status=status, signals=signals)
+                          score=_clamp(score), status="ok", signals=signals)
 
 
 # ── Positioning 仓位（期权快照）─────────────────────────────────────────────
@@ -279,4 +290,161 @@ def compute_positioning(metrics: Optional[dict]) -> DimensionScore:
                               detail="ATM 年化 IV（水平，非 Rank——Rank 待快照库）"))
 
     return DimensionScore(key="positioning", label=label, question=question,
+                          score=_clamp(score), status="ok", signals=signals)
+
+
+# ── Fundamental 基本面 ──────────────────────────────────────────────────────
+
+def _f(v) -> Optional[float]:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def compute_fundamental(earnings: list[dict]) -> DimensionScore:
+    """基于 FMP earnings-calendar：财报兑现历史（连续 Beat/Miss）、营收超预期、布局窗口。
+
+    earnings：每条含 date / epsActual / epsEstimated / revenueActual / revenueEstimated。
+    Guidance（指引方向）需 Transcript NLP，标 pending。
+    """
+    label, question = _meta("fundamental")
+
+    if not earnings:
+        return unavailable_dimension("fundamental", "FMP 未返回财报历史")
+
+    today = datetime.date.today()
+    past, upcoming = [], []
+    for r in earnings:
+        d = r.get("date")
+        eps_actual = _f(r.get("epsActual"))
+        if eps_actual is not None:
+            past.append(r)
+        elif d and str(d) >= today.isoformat():
+            upcoming.append(r)
+    past.sort(key=lambda r: str(r.get("date", "")), reverse=True)
+
+    signals: list[SignalItem] = []
+    score = 50.0
+    has_data = False
+
+    # 连续兑现：最近若干财季 epsActual vs epsEstimated
+    beats = 0
+    for r in past[:EARNINGS_LOOKBACK_QUARTERS]:
+        a, e = _f(r.get("epsActual")), _f(r.get("epsEstimated"))
+        if a is None or e is None:
+            break
+        if a > e:
+            beats += 1
+        else:
+            break
+    if past:
+        has_data = True
+        if beats >= 3:
+            delta, es_dir, es_hit = 22, "up", True
+        elif beats == 2:
+            delta, es_dir, es_hit = 14, "up", True
+        elif beats == 1:
+            delta, es_dir, es_hit = 6, "up", False
+        else:
+            delta, es_dir, es_hit = -12, "down", True  # 最近一季 Miss
+        score += delta
+        beat_label = f"连续 {beats} 季 Beat" if beats else "最近一季 Miss"
+        signals.append(SignalItem(key="earnings_surprise", label="财报兑现",
+                                  value=beat_label, direction=es_dir, hit=es_hit,
+                                  detail="epsActual vs epsEstimated"))
+
+    # 营收超预期：最近一季 revenueActual vs revenueEstimated
+    if past:
+        a, e = _f(past[0].get("revenueActual")), _f(past[0].get("revenueEstimated"))
+        if a is not None and e is not None and e != 0:
+            has_data = True
+            rev_pct = (a - e) / e * 100
+            if rev_pct >= 2:
+                delta, rs_dir, rs_hit = 12, "up", True
+            elif rev_pct <= -2:
+                delta, rs_dir, rs_hit = -12, "down", True
+            else:
+                delta, rs_dir, rs_hit = 0, "flat", False
+            score += delta
+            signals.append(SignalItem(key="revenue_surprise", label="营收超预期",
+                                      value=f"{rev_pct:+.1f}%", direction=rs_dir, hit=rs_hit,
+                                      detail="最近一季 revenueActual vs revenueEstimated"))
+
+    # 布局窗口：距下次财报天数
+    if upcoming:
+        upcoming.sort(key=lambda r: str(r.get("date", "")))
+        try:
+            nd = datetime.date.fromisoformat(str(upcoming[0]["date"])[:10])
+            days = (nd - today).days
+            in_window = 0 <= days <= EARNINGS_WINDOW_DAYS
+            signals.append(SignalItem(key="earnings_date", label="财报窗口",
+                                      value=f"距财报 {days} 天", direction="up" if in_window else "flat",
+                                      hit=in_window, detail="资金布局窗口"))
+            if in_window:
+                score += 5
+        except (ValueError, KeyError):
+            pass
+
+    # Guidance——需 Transcript NLP
+    signals.append(SignalItem(key="guidance", label="指引方向", direction="flat", hit=False,
+                              detail="需 Transcript NLP 抽取（后续）"))
+
+    status = "ok" if has_data else "partial"
+    return DimensionScore(key="fundamental", label=label, question=question,
+                          score=_clamp(score), status=status, signals=signals)
+
+
+# ── Confirmation 确认 ───────────────────────────────────────────────────────
+
+def compute_confirmation(insider_stats: list[dict]) -> DimensionScore:
+    """基于 FMP insider-trading/statistics 的内部人交易（近 2 季）。
+
+    13F 需 FMP Ultimate 版、ETF Flow 为行业级——两者标 pending。
+    """
+    label, question = _meta("confirmation")
+
+    signals: list[SignalItem] = []
+    score = 50.0
+    has_data = False
+
+    if insider_stats:
+        recent = sorted(insider_stats,
+                        key=lambda r: (r.get("year", 0), r.get("quarter", 0)),
+                        reverse=True)[:INSIDER_LOOKBACK_QUARTERS]
+        total_purchases = sum(int(r.get("totalPurchases") or 0) for r in recent)
+        total_sales = sum(int(r.get("totalSales") or 0) for r in recent)
+        ratios = [_f(r.get("acquiredDisposedRatio")) for r in recent]
+        ratios = [x for x in ratios if x is not None]
+        avg_ratio = sum(ratios) / len(ratios) if ratios else 0.0
+
+        if recent:
+            has_data = True
+            if total_purchases > 0:
+                delta, in_dir, in_hit = 20, "up", True
+                detail = f"内部人开放市场买入 {total_purchases} 笔"
+            elif avg_ratio >= INSIDER_ACCUM_RATIO:
+                delta, in_dir, in_hit = 8, "up", False
+                detail = f"净增持（增/减比 {avg_ratio:.2f}）"
+            elif avg_ratio <= INSIDER_DISTRIB_RATIO and total_sales >= INSIDER_DISTRIB_SALES:
+                delta, in_dir, in_hit = -12, "down", True
+                detail = f"集中减持（增/减比 {avg_ratio:.2f}，卖出 {total_sales} 笔）"
+            else:
+                delta, in_dir, in_hit = 0, "flat", False
+                detail = f"常规交易（增/减比 {avg_ratio:.2f}）"
+            score += delta
+            signals.append(SignalItem(key="insider", label="内部人交易",
+                                      value=("买入" if total_purchases > 0 else f"增/减 {avg_ratio:.2f}"),
+                                      direction=in_dir, hit=in_hit, detail=detail))
+
+    if not has_data:
+        return unavailable_dimension("confirmation", "无内部人交易数据")
+
+    # 13F / ETF Flow —— pending
+    signals.append(SignalItem(key="institutional_13f", label="13F 机构持仓",
+                              direction="flat", hit=False, detail="需 FMP Ultimate 版（后续）"))
+    signals.append(SignalItem(key="etf_flow", label="ETF 资金流",
+                              direction="flat", hit=False, detail="行业级，复用 ETF 模块（后续）"))
+
+    return DimensionScore(key="confirmation", label=label, question=question,
                           score=_clamp(score), status="ok", signals=signals)

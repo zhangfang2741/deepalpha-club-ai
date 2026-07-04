@@ -87,7 +87,8 @@ app/schemas/institutional_signals.py  # SignalReport / DimensionScore / SignalSt
   - 测试：`tests/test_institutional_signals.py` 9 项全绿（维度打分 + 状态组合）。
 - **Phase 2 ✅ 已完成**：Positioning——接 yfinance 期权链快照（Put/Call 比、Call 量/仓比、ATM IV），解锁 🔥机构建仓 / 💰真资金进入 / ⚡事件交易。同时修正综合分：缺失维度按中性 50 计入（不剔除），新增覆盖度与置信度。判断逻辑详见 `docs/institutional-signals-logic.md`。
   - ⚠️ 快照限制：真实 OI 变化率 / IV Rank / EPS 修正趋势需每日快照库（`SignalSnapshot`），列为下一步基建。
-- **Phase 3**：Fundamental（earnings surprise + transcript 需求关键词）+ Confirmation（insider + 13F + 复用 ETF flow），补齐 Fundamental Turn / Distribution。
+- **Phase 3 ✅ 已完成**：Fundamental（财报连续 Beat/Miss + 营收超预期 + 布局窗口）+ Confirmation（内部人交易统计），补齐 🌱基本面改善 / ❄资金撤退。同时收紧维度状态语义：无数据 → unavailable（不计入覆盖度），避免"零数据高置信度"。
+  - ⏳ 子信号待接入：指引方向（Transcript NLP）、13F（FMP Ultimate 版）、ETF 资金流（行业级）。
 - **Phase 4**：`SignalSnapshot` 持久化 + 定时任务（真实 EPS/Revenue 修正趋势）+ 每日「五问」Brief 接入 LangGraph Agent / chatbot skill。
 
 ## 六、TDD 与验证

@@ -12,13 +12,16 @@ from app.core.logging import logger
 from app.schemas.institutional_signals import DimensionScore, InstitutionalSignalReport
 from app.services.institutional_signals.constants import DIMENSION_WEIGHTS
 from app.services.institutional_signals.dimensions import (
+    compute_confirmation,
     compute_expectation,
+    compute_fundamental,
     compute_participation,
     compute_positioning,
-    unavailable_dimension,
 )
 from app.services.institutional_signals.fetchers import (
+    fetch_earnings,
     fetch_grades_historical,
+    fetch_insider_statistics,
     fetch_option_metrics,
     fetch_price_history,
     fetch_price_target_summary,
@@ -67,11 +70,13 @@ async def compute_institutional_signals(symbol: str) -> InstitutionalSignalRepor
     to_date = today.isoformat()
 
     async with httpx.AsyncClient(timeout=15) as client:
-        profile, pt_summary, grades, prices = await asyncio.gather(
+        profile, pt_summary, grades, prices, earnings, insider = await asyncio.gather(
             fetch_profile(client, symbol),
             fetch_price_target_summary(client, symbol),
             fetch_grades_historical(client, symbol),
             fetch_price_history(client, symbol, from_date, to_date),
+            fetch_earnings(client, symbol),
+            fetch_insider_statistics(client, symbol),
         )
 
     # 期权仓位需现价定位 ATM——用最近收盘价，yfinance 同步拉取放线程池
@@ -82,8 +87,8 @@ async def compute_institutional_signals(symbol: str) -> InstitutionalSignalRepor
         "expectation": compute_expectation(pt_summary, grades),
         "positioning": compute_positioning(option_metrics),
         "participation": compute_participation(prices),
-        "fundamental": unavailable_dimension("fundamental", "财报超预期/指引待接入 · Phase 3"),
-        "confirmation": unavailable_dimension("confirmation", "Insider/13F/ETF Flow 待接入 · Phase 3"),
+        "fundamental": compute_fundamental(earnings),
+        "confirmation": compute_confirmation(insider),
     }
 
     states = derive_states(dims)

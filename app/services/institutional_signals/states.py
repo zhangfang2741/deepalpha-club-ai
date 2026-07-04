@@ -85,12 +85,13 @@ def derive_states(dims: dict[str, DimensionScore]) -> list[SignalState]:
             evidence=["IV 偏高", "Call 资金流活跃", "预期/现货未确认"],
         ))
 
-    # 🌱 基本面改善：Revenue↑ + Guidance↑ + Transcript 强调需求（需 Fundamental）
-    if _hit(fun, "revenue_surprise") and _hit(fun, "guidance") and _hit(exp, "target_price"):
+    # 🌱 基本面改善：营收超预期 + 连续兑现 + 目标价上调
+    #   （手册原文含 Guidance/Transcript；Guidance 需 NLP，暂用「连续兑现」替代）
+    if _hit(fun, "revenue_surprise") and _hit(fun, "earnings_surprise") and _hit(exp, "target_price"):
         states.append(SignalState(
             key="fundamental_turn", emoji="🌱", label="基本面改善", stars=5,
-            meaning="营收与指引同步上修，企业经营真实转好",
-            evidence=["营收超预期", "指引上调", "目标价上调"],
+            meaning="营收超预期叠加连续兑现与目标价上调，经营真实转好",
+            evidence=["营收超预期", "连续 Beat", "目标价上调"],
         ))
 
     # ❄ 资金撤退：预期↓ + 看跌压力/减持
