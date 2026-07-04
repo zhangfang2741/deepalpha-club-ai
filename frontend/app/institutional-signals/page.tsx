@@ -313,6 +313,7 @@ export default function InstitutionalSignalsPage() {
   const [error, setError] = useState('')
   const [board, setBoard] = useState<LeaderboardEntry[] | null>(null)
   const [boardAsOf, setBoardAsOf] = useState('')
+  const [boardSource, setBoardSource] = useState('')
   const [boardLoading, setBoardLoading] = useState(true)
   const [boardComputing, setBoardComputing] = useState(false)
   const [boardFilter, setBoardFilter] = useState<string>('all')
@@ -351,6 +352,7 @@ export default function InstitutionalSignalsPage() {
             setBoardComputing(false)
             setBoard(res.entries)
             setBoardAsOf(res.as_of)
+            setBoardSource(res.universe_source)
             setBoardLoading(false)
           }
         })
@@ -496,7 +498,14 @@ export default function InstitutionalSignalsPage() {
           <div className="space-y-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-lg font-bold text-gray-900">🔥 今日机构建仓榜</h2>
-              {boardAsOf && <span className="text-xs text-gray-400">{boardAsOf} · 点击查看完整五维</span>}
+              {boardAsOf && (
+                <span className="text-xs text-gray-400">
+                  {boardAsOf} · 点击查看完整五维
+                  {boardSource.includes('fallback') && (
+                    <span className="ml-1 text-amber-500">· 成分股动态获取失败，当前为兜底名单</span>
+                  )}
+                </span>
+              )}
             </div>
 
             {/* universe 切换：标普 500 / 纳指 100（QQQ）*/}
