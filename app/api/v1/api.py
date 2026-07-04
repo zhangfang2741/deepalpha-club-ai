@@ -11,6 +11,7 @@ from app.api.v1.etf import router as etf_router
 from app.api.v1.fear_greed import router as fear_greed_router
 from app.api.v1.ichimoku import router as ichimoku_router
 from app.api.v1.industry_panic import router as industry_panic_router
+from app.api.v1.institutional_signals import router as institutional_signals_router
 from app.api.v1.research import router as research_router
 from app.api.v1.skills import router as skills_router
 from app.api.v1.supply_chain import router as supply_chain_router
@@ -29,6 +30,7 @@ api_router.include_router(etf_router, prefix="/etf", tags=["etf"])
 api_router.include_router(fear_greed_router, prefix="/fear-greed", tags=["fear-greed"])
 api_router.include_router(ichimoku_router, prefix="/ichimoku", tags=["ichimoku"])
 api_router.include_router(industry_panic_router, prefix="/industry-panic", tags=["industry-panic"])
+api_router.include_router(institutional_signals_router, prefix="/institutional-signals", tags=["institutional-signals"])
 api_router.include_router(research_router, prefix="/research", tags=["research"])
 api_router.include_router(skills_router, prefix="/skills", tags=["skills"])
 api_router.include_router(supply_chain_router, prefix="/supply-chain", tags=["supply-chain"])
