@@ -94,6 +94,10 @@ async def _snapshot_deltas(
         "put_vol": (option_metrics or {}).get("put_vol"),
         "atm_iv": (option_metrics or {}).get("atm_iv"),
     }
+    # 全部度量缺失（无效代码 / 数据源全挂）时不写快照，避免污染表
+    if all(v is None for v in metrics.values()):
+        return {}
+
     try:
         await upsert_snapshot(session, symbol, today, metrics)
         history = await get_snapshot_history(session, symbol, _SNAPSHOT_HISTORY_DAYS)
@@ -106,9 +110,10 @@ async def _snapshot_deltas(
     eps_pts = [(s.snapshot_date, s.eps_estimate) for s in history]
     rev_pts = [(s.snapshot_date, s.revenue_estimate) for s in history]
 
+    # OI 窗口短（5 日），容差收紧到 4 天：避免匹配到当天自身或十几天前的点
     return {
         "iv_rank_value": iv_rank(metrics["atm_iv"], iv_hist),
-        "oi_change_pct": pct_change(metrics["call_oi"], value_days_ago(oi_pts, _OI_CHANGE_DAYS)),
+        "oi_change_pct": pct_change(metrics["call_oi"], value_days_ago(oi_pts, _OI_CHANGE_DAYS, tolerance=4)),
         "eps_revision_pct": pct_change(metrics["eps_estimate"], value_days_ago(eps_pts, _REVISION_DAYS)),
         "revenue_revision_pct": pct_change(metrics["revenue_estimate"], value_days_ago(rev_pts, _REVISION_DAYS)),
     }
