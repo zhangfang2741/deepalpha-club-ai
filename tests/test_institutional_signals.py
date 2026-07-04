@@ -212,6 +212,23 @@ def test_states_breakout_confirmation():
     assert "breakout_confirmation" in {s.key for s in states}
 
 
+def test_rank_prefers_bullish_state_then_score():
+    from app.schemas.institutional_signals import LeaderboardEntry, SignalState
+    from app.services.institutional_signals.scan import _rank
+
+    strong = SignalState(key="institution_accumulation", emoji="🔥", label="机构建仓",
+                         stars=5, meaning="", evidence=[])
+    a = LeaderboardEntry(symbol="A", name="A", composite_score=60, coverage=4,
+                         confidence="高", top_state=None)
+    b = LeaderboardEntry(symbol="B", name="B", composite_score=55, coverage=4,
+                         confidence="高", top_state=strong)
+    c = LeaderboardEntry(symbol="C", name="C", composite_score=70, coverage=4,
+                         confidence="高", top_state=None)
+    ranked = _rank([a, b, c])
+    # 有偏多状态的 B 最前；其余按综合分 C > A
+    assert [e.symbol for e in ranked] == ["B", "C", "A"]
+
+
 def test_states_smart_money_price_not_moved():
     # 期权看涨下注 + 高 IV，但价格未突破（平稳窄幅）
     pos = compute_positioning(

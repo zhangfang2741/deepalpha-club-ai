@@ -6,13 +6,48 @@ from redis.asyncio import Redis
 
 from app.cache.client import get_redis_optional
 from app.core.logging import logger
-from app.schemas.institutional_signals import InstitutionalSignalReport
+from app.schemas.institutional_signals import (
+    InstitutionalSignalReport,
+    LeaderboardResponse,
+)
 from app.services.institutional_signals import compute_institutional_signals
+from app.services.institutional_signals.scan import scan_leaderboard
 
 router = APIRouter()
 
 CACHE_PREFIX = "institutional_signals"
 CACHE_TTL = 3600  # 1 小时
+LEADERBOARD_CACHE_KEY = "institutional_signals:leaderboard:v1"
+LEADERBOARD_TTL = 21600  # 6 小时
+
+
+@router.get("/leaderboard", response_model=LeaderboardResponse)
+async def get_leaderboard(
+    redis: Optional[Redis] = Depends(get_redis_optional),
+) -> LeaderboardResponse:
+    """机构建仓榜：扫描 universe，按综合分与偏多状态排名。
+
+    基于 4 个 FMP 维度（不含期权仓位），点进详情页查看完整五维。结果缓存 6 小时。
+    """
+    if redis is not None:
+        try:
+            cached = await redis.get(LEADERBOARD_CACHE_KEY)
+            if cached:
+                logger.info("institutional_signals_leaderboard_cache_hit")
+                return LeaderboardResponse.model_validate_json(cached)
+        except Exception as e:
+            logger.warning("institutional_signals_leaderboard_cache_read_failed", error=str(e))
+
+    logger.info("institutional_signals_leaderboard_cache_miss")
+    result = await scan_leaderboard()
+
+    if redis is not None:
+        try:
+            await redis.set(LEADERBOARD_CACHE_KEY, result.model_dump_json(), ex=LEADERBOARD_TTL)
+        except Exception as e:
+            logger.warning("institutional_signals_leaderboard_cache_write_failed", error=str(e))
+
+    return result
 
 
 @router.get("", response_model=InstitutionalSignalReport)

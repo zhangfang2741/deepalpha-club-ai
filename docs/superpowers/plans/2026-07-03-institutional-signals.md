@@ -89,7 +89,9 @@ app/schemas/institutional_signals.py  # SignalReport / DimensionScore / SignalSt
   - ⚠️ 快照限制：真实 OI 变化率 / IV Rank / EPS 修正趋势需每日快照库（`SignalSnapshot`），列为下一步基建。
 - **Phase 3 ✅ 已完成**：Fundamental（财报连续 Beat/Miss + 营收超预期 + 布局窗口）+ Confirmation（内部人交易统计），补齐 🌱基本面改善 / ❄资金撤退。同时收紧维度状态语义：无数据 → unavailable（不计入覆盖度），避免"零数据高置信度"。
   - ⏳ 子信号待接入：指引方向（Transcript NLP）、13F（FMP Ultimate 版）、ETF 资金流（行业级）。
-- **Phase 4**：`SignalSnapshot` 持久化 + 定时任务（真实 EPS/Revenue 修正趋势）+ 每日「五问」Brief 接入 LangGraph Agent / chatbot skill。
+- **Phase 4a ✅ 已完成（榜单）**：机构建仓榜——扫描精选 universe（~40 大盘股），两段式：榜单只用 4 个 FMP 维度排名（跳过期权），用户点进详情页跑完整五维。`GET /api/v1/institutional-signals/leaderboard`，Redis 缓存 6h；前端落地页即榜单，点行下钻。
+  - `app/services/institutional_signals/scan.py`、`SCAN_UNIVERSE` 常量、`_rank` 纯函数（有单测）。
+- **Phase 4b（待办）**：`SignalSnapshot` 持久化 + 定时任务（真实 EPS/Revenue 修正趋势、期权 OI 变化率/IV Rank）+ 每日「五问」Brief 接入 LangGraph Agent / chatbot skill；榜单扩至 NDX/SPX 全量（后台预热缓存）。
 
 ## 六、TDD 与验证
 

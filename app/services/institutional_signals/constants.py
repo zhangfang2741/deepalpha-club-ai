@@ -53,3 +53,22 @@ INSIDER_LOOKBACK_QUARTERS = 2    # 聚合最近 2 个季度的内部人交易
 INSIDER_ACCUM_RATIO = 1.2        # acquiredDisposedRatio ≥ 1.2 视为净增持
 INSIDER_DISTRIB_RATIO = 0.3      # ≤ 0.3 且卖出笔数多 视为集中减持
 INSIDER_DISTRIB_SALES = 10       # 集中减持的卖出笔数下限
+
+# ── 榜单扫描 universe（精选高流动性大盘股，跨板块；可后续扩至 NDX/SPX 全量）──
+# 扫描阶段只用 4 个 FMP 快接口（跳过期权），排名后由用户点进详情页跑完整五维。
+SCAN_UNIVERSE = [
+    # 科技/半导体
+    "AAPL", "MSFT", "NVDA", "AVGO", "AMD", "QCOM", "TXN", "MU", "INTC", "ARM",
+    # 软件/互联网
+    "GOOGL", "META", "AMZN", "NFLX", "CRM", "ORCL", "ADBE", "NOW", "PLTR", "SNOW",
+    # 消费
+    "TSLA", "COST", "NKE", "SBUX", "MCD", "HD",
+    # 金融
+    "JPM", "BAC", "GS", "V", "MA",
+    # 医疗
+    "LLY", "UNH", "JNJ", "ABBV", "MRK",
+    # 工业/能源
+    "CAT", "BA", "GE", "XOM", "CVX",
+]
+SCAN_CONCURRENCY = 12            # 扫描并发上限
+SCAN_TOP_N = 20                  # 榜单返回条数

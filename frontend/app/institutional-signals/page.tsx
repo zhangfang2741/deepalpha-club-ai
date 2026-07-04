@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useCallback, FormEvent } from 'react'
+import { useState, useCallback, useEffect, FormEvent } from 'react'
 import {
   fetchInstitutionalSignals,
+  fetchLeaderboard,
   type InstitutionalSignalReport,
   type DimensionScore,
   type SignalItem,
+  type LeaderboardEntry,
 } from '@/lib/api/institutional_signals'
 import DashboardShell from '@/components/layout/DashboardShell'
 import Spinner from '@/components/ui/Spinner'
@@ -108,15 +110,55 @@ function DimensionCard({ dim }: { dim: DimensionScore }) {
   )
 }
 
+function LeaderboardBoard({ board, onPick }: { board: LeaderboardEntry[]; onPick: (s: string) => void }) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+      {board.map((e, i) => (
+        <button
+          key={e.symbol}
+          onClick={() => onPick(e.symbol)}
+          className="flex w-full items-center gap-3 border-b border-gray-100 px-4 py-3 text-left transition last:border-0 hover:bg-gray-50"
+        >
+          <span className="w-6 shrink-0 text-center text-sm font-bold text-gray-400">{i + 1}</span>
+          <div className="w-32 shrink-0">
+            <div className="text-sm font-bold text-gray-900">{e.symbol}</div>
+            <div className="truncate text-xs text-gray-400">{e.name}</div>
+          </div>
+          <div className="flex-1">
+            {e.top_state ? (
+              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-800">
+                {e.top_state.emoji} {e.top_state.label}
+                <span className="ml-1 text-amber-400">{'★'.repeat(e.top_state.stars)}</span>
+              </span>
+            ) : (
+              <span className="text-xs text-gray-400">无显著偏多状态</span>
+            )}
+          </div>
+          <div className="w-16 shrink-0 text-right">
+            <div className={`text-lg font-extrabold tabular-nums ${scoreColor(e.composite_score)}`}>
+              {e.composite_score.toFixed(0)}
+            </div>
+            <div className="text-[10px] text-gray-400">{e.coverage}/5 · {e.confidence}</div>
+          </div>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function InstitutionalSignalsPage() {
   const [symbol, setSymbol] = useState('')
   const [data, setData] = useState<InstitutionalSignalReport | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [board, setBoard] = useState<LeaderboardEntry[] | null>(null)
+  const [boardAsOf, setBoardAsOf] = useState('')
+  const [boardLoading, setBoardLoading] = useState(true)
 
   const load = useCallback((sym: string) => {
     const clean = sym.trim().toUpperCase()
     if (!clean) return
+    setSymbol(clean)
     setLoading(true)
     setError('')
     fetchInstitutionalSignals(clean)
@@ -129,10 +171,19 @@ export default function InstitutionalSignalsPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    fetchLeaderboard()
+      .then((res) => { setBoard(res.entries); setBoardAsOf(res.as_of) })
+      .catch((err) => console.error('[leaderboard] fetch error:', err?.response?.status, err?.message))
+      .finally(() => setBoardLoading(false))
+  }, [])
+
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
     load(symbol)
   }
+
+  const backToBoard = () => { setData(null); setError(''); setSymbol('') }
 
   return (
     <DashboardShell>
@@ -176,6 +227,9 @@ export default function InstitutionalSignalsPage() {
 
         {data && !loading && (
           <div className="space-y-6">
+            <button onClick={backToBoard} className="text-sm text-gray-500 transition hover:text-gray-900">
+              ← 返回机构建仓榜
+            </button>
             {/* 结论横幅 */}
             <div className="rounded-2xl border border-gray-200 bg-gradient-to-br from-gray-50 to-white p-6 shadow-sm">
               <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -236,9 +290,23 @@ export default function InstitutionalSignalsPage() {
           </div>
         )}
 
-        {!data && !loading && !error && (
-          <div className="rounded-2xl border border-dashed border-gray-200 py-20 text-center text-sm text-gray-400">
-            输入一个美股代码，查看它的机构资金信号
+        {!data && !loading && (
+          <div className="space-y-3">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-lg font-bold text-gray-900">🔥 今日机构建仓榜</h2>
+              {boardAsOf && <span className="text-xs text-gray-400">{boardAsOf} · 点击查看完整五维</span>}
+            </div>
+            {boardLoading && (
+              <div className="flex justify-center py-16"><Spinner /></div>
+            )}
+            {!boardLoading && board && board.length > 0 && (
+              <LeaderboardBoard board={board} onPick={load} />
+            )}
+            {!boardLoading && (!board || board.length === 0) && (
+              <div className="rounded-2xl border border-dashed border-gray-200 py-16 text-center text-sm text-gray-400">
+                榜单暂不可用，可直接在上方输入代码查询
+              </div>
+            )}
           </div>
         )}
       </div>

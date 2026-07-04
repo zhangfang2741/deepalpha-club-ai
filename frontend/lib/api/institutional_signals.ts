@@ -50,3 +50,31 @@ export async function fetchInstitutionalSignals(
   )
   return data
 }
+
+export interface LeaderboardEntry {
+  symbol: string
+  name: string
+  composite_score: number
+  coverage: number
+  confidence: string
+  top_state: SignalState | null
+  states: SignalState[]
+  dimension_scores: Record<string, number>
+}
+
+export interface LeaderboardResponse {
+  request_id: string
+  as_of: string
+  universe_size: number
+  scanned: number
+  note: string
+  entries: LeaderboardEntry[]
+}
+
+export async function fetchLeaderboard(): Promise<LeaderboardResponse> {
+  const { data } = await apiClient.get<LeaderboardResponse>(
+    '/api/v1/institutional-signals/leaderboard',
+    { timeout: 90000 }, // 首次扫描 universe 较慢，给足 90s
+  )
+  return data
+}

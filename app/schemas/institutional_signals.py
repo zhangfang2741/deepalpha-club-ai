@@ -45,6 +45,29 @@ class SignalState(BaseResponse):
     evidence: List[str] = Field(default_factory=list, description="命中的证据链")
 
 
+class LeaderboardEntry(BaseResponse):
+    """榜单单行：一支标的的扫描摘要（不含期权，点进详情页看完整五维）。"""
+
+    symbol: str
+    name: str
+    composite_score: float = Field(ge=0, le=100)
+    coverage: int = Field(ge=0, le=5)
+    confidence: str
+    top_state: Optional[SignalState] = Field(None, description="最强的非中性状态")
+    states: List[SignalState] = Field(default_factory=list)
+    dimension_scores: dict = Field(default_factory=dict, description="各维度 key → 分数")
+
+
+class LeaderboardResponse(BaseResponse):
+    """GET /api/v1/institutional-signals/leaderboard 响应。"""
+
+    as_of: str
+    universe_size: int = Field(description="扫描的股票总数")
+    scanned: int = Field(description="成功评分的股票数")
+    note: str = Field(description="口径说明")
+    entries: List[LeaderboardEntry]
+
+
 class InstitutionalSignalReport(BaseResponse):
     """GET /api/v1/institutional-signals?symbol= 完整响应。"""
 
