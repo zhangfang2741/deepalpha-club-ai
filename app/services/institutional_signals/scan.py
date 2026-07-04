@@ -22,7 +22,7 @@ from app.services.institutional_signals.calculator import (
 from app.services.institutional_signals.constants import (
     SCAN_CONCURRENCY,
     SCAN_TOP_N,
-    SCAN_UNIVERSE,
+    SCAN_UNIVERSE_FALLBACK,
 )
 from app.services.institutional_signals.dimensions import (
     compute_confirmation,
@@ -38,6 +38,7 @@ from app.services.institutional_signals.fetchers import (
     fetch_price_history,
     fetch_price_target_summary,
     fetch_profile,
+    fetch_sp500_symbols,
 )
 from app.services.institutional_signals.states import derive_states
 
@@ -106,26 +107,36 @@ def _rank(entries: list[LeaderboardEntry]) -> list[LeaderboardEntry]:
 
 
 async def scan_leaderboard(limit: int = SCAN_TOP_N) -> LeaderboardResponse:
-    """扫描 universe 并返回机构建仓榜前 N。"""
-    today = datetime.date.today()
+    """扫描 universe 并返回机构建仓榜前 N（在后台任务里调用，不阻塞请求）。"""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    today = now.date()
     from_date = (today - datetime.timedelta(days=_PRICE_LOOKBACK_DAYS)).isoformat()
     to_date = today.isoformat()
     sem = asyncio.Semaphore(SCAN_CONCURRENCY)
 
     async with httpx.AsyncClient(timeout=15) as client:
+        symbols = await fetch_sp500_symbols(client)
+        source = "sp500"
+        if not symbols:
+            symbols = list(SCAN_UNIVERSE_FALLBACK)
+            source = "fallback"
+
         results = await asyncio.gather(
-            *[_score_symbol(client, s, sem, from_date, to_date) for s in SCAN_UNIVERSE]
+            *[_score_symbol(client, s, sem, from_date, to_date) for s in symbols]
         )
 
     entries = [e for e in results if e is not None]
     ranked = _rank(entries)[:limit]
 
-    logger.info("scan_leaderboard_computed",
-                universe=len(SCAN_UNIVERSE), scanned=len(entries), returned=len(ranked))
+    logger.info("scan_leaderboard_computed", source=source,
+                universe=len(symbols), scanned=len(entries), returned=len(ranked))
 
     return LeaderboardResponse(
+        status="ready",
         as_of=to_date,
-        universe_size=len(SCAN_UNIVERSE),
+        computed_at=now.isoformat(timespec="seconds"),
+        universe_source=source,
+        universe_size=len(symbols),
         scanned=len(entries),
         note="榜单基于 4 个 FMP 维度（不含期权仓位），点进详情页查看完整五维",
         entries=ranked,

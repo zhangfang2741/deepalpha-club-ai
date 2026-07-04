@@ -57,6 +57,19 @@ async def fetch_grades_historical(client: httpx.AsyncClient, symbol: str) -> lis
     return data if isinstance(data, list) else []
 
 
+async def fetch_sp500_symbols(client: httpx.AsyncClient) -> list[str]:
+    """S&P 500 成分股代码（动态）。失败返回空 → 由调用方降级到 fallback。"""
+    data = await _get(client, "sp500-constituent", {})
+    if not isinstance(data, list):
+        return []
+    symbols = []
+    for r in data:
+        sym = (r.get("symbol") or "").strip().upper()
+        if sym and sym.isalpha():  # 过滤含点号的多类股（如 BRK.B）避免期权/接口不一致
+            symbols.append(sym)
+    return symbols
+
+
 async def fetch_earnings(client: httpx.AsyncClient, symbol: str) -> list[dict]:
     """财报日程（含历史 epsActual/epsEstimated 与未来财报日）。"""
     data = await _get(client, "earnings-calendar", {"symbol": symbol, "limit": 16})

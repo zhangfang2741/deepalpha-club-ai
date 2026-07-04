@@ -154,6 +154,7 @@ export default function InstitutionalSignalsPage() {
   const [board, setBoard] = useState<LeaderboardEntry[] | null>(null)
   const [boardAsOf, setBoardAsOf] = useState('')
   const [boardLoading, setBoardLoading] = useState(true)
+  const [boardComputing, setBoardComputing] = useState(false)
 
   const load = useCallback((sym: string) => {
     const clean = sym.trim().toUpperCase()
@@ -172,10 +173,29 @@ export default function InstitutionalSignalsPage() {
   }, [])
 
   useEffect(() => {
-    fetchLeaderboard()
-      .then((res) => { setBoard(res.entries); setBoardAsOf(res.as_of) })
-      .catch((err) => console.error('[leaderboard] fetch error:', err?.response?.status, err?.message))
-      .finally(() => setBoardLoading(false))
+    let timer: ReturnType<typeof setTimeout>
+    let cancelled = false
+    const poll = () => {
+      fetchLeaderboard()
+        .then((res) => {
+          if (cancelled) return
+          if (res.status === 'computing') {
+            setBoardComputing(true)
+            timer = setTimeout(poll, 15000) // 后台扫描中，15s 后重试
+          } else {
+            setBoardComputing(false)
+            setBoard(res.entries)
+            setBoardAsOf(res.as_of)
+            setBoardLoading(false)
+          }
+        })
+        .catch((err) => {
+          console.error('[leaderboard] fetch error:', err?.response?.status, err?.message)
+          if (!cancelled) setBoardLoading(false)
+        })
+    }
+    poll()
+    return () => { cancelled = true; clearTimeout(timer) }
   }, [])
 
   const onSubmit = (e: FormEvent) => {
@@ -296,13 +316,19 @@ export default function InstitutionalSignalsPage() {
               <h2 className="text-lg font-bold text-gray-900">🔥 今日机构建仓榜</h2>
               {boardAsOf && <span className="text-xs text-gray-400">{boardAsOf} · 点击查看完整五维</span>}
             </div>
-            {boardLoading && (
+            {boardComputing && (
+              <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-gray-200 py-16 text-center">
+                <Spinner />
+                <p className="text-sm text-gray-500">首次扫描 S&P 500 成分股中，约需 1–2 分钟，页面会自动刷新…</p>
+              </div>
+            )}
+            {!boardComputing && boardLoading && (
               <div className="flex justify-center py-16"><Spinner /></div>
             )}
-            {!boardLoading && board && board.length > 0 && (
+            {!boardComputing && !boardLoading && board && board.length > 0 && (
               <LeaderboardBoard board={board} onPick={load} />
             )}
-            {!boardLoading && (!board || board.length === 0) && (
+            {!boardComputing && !boardLoading && (!board || board.length === 0) && (
               <div className="rounded-2xl border border-dashed border-gray-200 py-16 text-center text-sm text-gray-400">
                 榜单暂不可用，可直接在上方输入代码查询
               </div>

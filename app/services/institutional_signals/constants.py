@@ -54,9 +54,11 @@ INSIDER_ACCUM_RATIO = 1.2        # acquiredDisposedRatio ≥ 1.2 视为净增持
 INSIDER_DISTRIB_RATIO = 0.3      # ≤ 0.3 且卖出笔数多 视为集中减持
 INSIDER_DISTRIB_SALES = 10       # 集中减持的卖出笔数下限
 
-# ── 榜单扫描 universe（精选高流动性大盘股，跨板块；可后续扩至 NDX/SPX 全量）──
+# ── 榜单扫描 universe ────────────────────────────────────────────────────────
+# universe 动态取自 FMP S&P 500 成分股；拉取失败时降级到下面的 fallback 列表。
 # 扫描阶段只用 4 个 FMP 快接口（跳过期权），排名后由用户点进详情页跑完整五维。
-SCAN_UNIVERSE = [
+# 扫描在后台任务里跑（stale-while-revalidate），不阻塞请求，故可覆盖全量成分股。
+SCAN_UNIVERSE_FALLBACK = [
     # 科技/半导体
     "AAPL", "MSFT", "NVDA", "AVGO", "AMD", "QCOM", "TXN", "MU", "INTC", "ARM",
     # 软件/互联网
@@ -70,5 +72,6 @@ SCAN_UNIVERSE = [
     # 工业/能源
     "CAT", "BA", "GE", "XOM", "CVX",
 ]
-SCAN_CONCURRENCY = 12            # 扫描并发上限
-SCAN_TOP_N = 20                  # 榜单返回条数
+SCAN_CONCURRENCY = 20            # 扫描并发上限（后台任务）
+SCAN_TOP_N = 30                  # 榜单返回条数
+SCAN_FRESH_SECONDS = 21600       # 缓存新鲜期 6h：超过则后台刷新（仍先返回旧数据）

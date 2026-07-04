@@ -61,11 +61,14 @@ class LeaderboardEntry(BaseResponse):
 class LeaderboardResponse(BaseResponse):
     """GET /api/v1/institutional-signals/leaderboard 响应。"""
 
-    as_of: str
-    universe_size: int = Field(description="扫描的股票总数")
-    scanned: int = Field(description="成功评分的股票数")
-    note: str = Field(description="口径说明")
-    entries: List[LeaderboardEntry]
+    status: str = Field(default="ready", description="ready（有数据）/ computing（后台扫描中）")
+    as_of: str = ""
+    computed_at: str = Field(default="", description="扫描完成时间 ISO")
+    universe_source: str = Field(default="", description="universe 来源：sp500 / fallback")
+    universe_size: int = Field(default=0, description="扫描的股票总数")
+    scanned: int = Field(default=0, description="成功评分的股票数")
+    note: str = Field(default="", description="口径说明")
+    entries: List[LeaderboardEntry] = Field(default_factory=list)
 
 
 class InstitutionalSignalReport(BaseResponse):

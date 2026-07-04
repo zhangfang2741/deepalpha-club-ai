@@ -64,7 +64,10 @@ export interface LeaderboardEntry {
 
 export interface LeaderboardResponse {
   request_id: string
+  status: string
   as_of: string
+  computed_at: string
+  universe_source: string
   universe_size: number
   scanned: number
   note: string

@@ -146,12 +146,22 @@ composite = Σ(维度分 × 权重) / Σ权重
 ## 5b. 机构建仓榜（发现型入口）
 
 **两段式**：全 universe 逐支跑完整五维不现实（期权抓取太慢），故：
-- **筛选（榜单）**：扫描 `SCAN_UNIVERSE`（~40 精选大盘股），每支只用 **4 个 FMP 维度**（跳过期权），按综合分排名。
+- **筛选（榜单）**：扫描 universe，每支只用 **4 个 FMP 维度**（跳过期权），按综合分排名。
 - **确认（详情）**：用户点进某支，跑**完整五维**（含 yfinance 期权）。
+
+**universe（动态）**：取自 FMP `sp500-constituent`（S&P 500 全量成分股，过滤含点号多类股）；拉取失败降级到 `SCAN_UNIVERSE_FALLBACK`（~40 精选大盘股）。**不再写死**。
+
+**扫描如何不阻塞请求**：stale-while-revalidate + 后台任务
+- 命中缓存 → 立即返回；
+- 缓存过期（> 6h）→ 先返回旧数据，同时后台 `asyncio` 任务重扫（带 Redis 锁防并发）；
+- 无缓存 → 后台开扫并返回 `status=computing`，前端每 15s 轮询直到 ready。
+- 因扫描在后台，故可覆盖**全量 S&P 500**（并发 20），而非受单次请求耗时限制。
 
 **排序口径**：`(是否有偏多状态, 综合分)` 降序。综合分与详情页一致（缺失维度按中性计入）——仓位对所有被扫股票同权重缺失，不影响相对排序。只有 `institution_accumulation / expectation_upgrade / breakout_confirmation / fundamental_turn / smart_money` 计为"上榜偏多状态"（撤退等看空状态不进建仓榜）。
 
-`GET /api/v1/institutional-signals/leaderboard`，Redis 缓存 6h。
+`GET /api/v1/institutional-signals/leaderboard`。
+
+> ⚠️ 后台任务跑在单 web 进程内——全量扫描会占用该进程数分钟。生产级做法是迁到独立 worker / 定时任务（Celery beat 或外部 cron 命中该端点预热），列为运维项。
 
 ---
 
