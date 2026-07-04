@@ -163,9 +163,14 @@ async def fetch_splits(symbol: str) -> list[dict]:
 
 
 async def fetch_earnings(symbol: str, limit: int = 20) -> list[dict]:
-    """盈利预告/财报日程，返回 date/epsActual/epsSurprise/revenueActual。"""
-    url = f"{_FMP_BASE}/earnings-calendar"
-    rows = await _get(url, {"symbol": symbol, "limit": limit})
+    """某公司历史财报，返回 date/epsActual/epsSurprise/revenueActual。
+
+    必须用公司专属端点 `earnings?symbol=`；`earnings-calendar` 是全市场日历，
+    带 symbol 也不过滤，会混入其它公司当日财报。
+    """
+    rows = await _get(f"{_FMP_BASE}/earnings", {"symbol": symbol, "limit": limit})
+    if not rows:  # 兜底：个别 FMP 版本用 earnings-calendar 承载公司财报
+        rows = await _get(f"{_FMP_BASE}/earnings-calendar", {"symbol": symbol, "limit": limit})
     return [
         {"date": r.get("date"), "epsActual": r.get("epsActual"), "epsSurprise": r.get("epsSurprise"),
          "revenueActual": r.get("revenueActual"), "revenueEstimate": r.get("revenueEstimate")}

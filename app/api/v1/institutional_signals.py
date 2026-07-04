@@ -1,5 +1,7 @@
 """机构资金信号 API 端点。"""
 import asyncio
+import hashlib
+import inspect
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,29 +10,51 @@ from redis.asyncio import Redis
 from app.cache.client import current_redis, get_redis_optional
 from app.core.logging import logger
 from app.db.session import AsyncSessionFactory
+from app.schemas import institutional_signals as _signals_schema
 from app.schemas.institutional_signals import (
     InstitutionalSignalReport,
     LeaderboardResponse,
 )
+from app.services.institutional_signals import calculator as _calc
 from app.services.institutional_signals import compute_institutional_signals
+from app.services.institutional_signals import constants as _const
+from app.services.institutional_signals import deltas as _deltas
+from app.services.institutional_signals import dimensions as _dims
+from app.services.institutional_signals import fetchers as _fetchers
+from app.services.institutional_signals import scan as _scan
+from app.services.institutional_signals import states as _states
 from app.services.institutional_signals.constants import SCAN_FRESH_SECONDS
 from app.services.institutional_signals.scan import scan_leaderboard
+
+
+def _auto_cache_version() -> str:
+    """由影响输出的源码模块自动算哈希——任一改动即使缓存失效，无需手动升版本。
+
+    读不到源码（如纯 .pyc 运行）时回退到固定串，宁可不自动失效也不崩。
+    """
+    mods = [_dims, _states, _calc, _scan, _const, _fetchers, _deltas, _signals_schema]
+    h = hashlib.md5()
+    for m in mods:
+        try:
+            h.update(inspect.getsource(m).encode("utf-8"))
+        except (OSError, TypeError):
+            h.update(m.__name__.encode("utf-8"))
+    return h.hexdigest()[:10]
+
 
 router = APIRouter()
 
 CACHE_PREFIX = "institutional_signals"
 CACHE_TTL = 3600  # 1 小时
-# 报告 schema/内容变更时递增，使旧缓存立即失效
-# v2：explain + price_history；v3：状态更名 + 触发逻辑；v4：修正财报端点（earnings-calendar→earnings）
-REPORT_CACHE_VERSION = "v4"
+# 缓存版本 = 相关源码哈希：状态名/schema/打分/端点任一变更，缓存 key 自动变、旧缓存立即失效
+SIGNALS_CACHE_VERSION = _auto_cache_version()
+REPORT_CACHE_VERSION = SIGNALS_CACHE_VERSION
 
 # 榜单缓存：stale-while-revalidate（按 universe 分键）
 LB_UNIVERSES = ("sp500", "nasdaq100")
 LB_DATA_TTL = 86400   # 数据保留 24h（过期前一直可作为 stale 返回）
 LB_LOCK_TTL = 900     # 扫描锁 15min，防并发重复扫描
-# 榜单产出逻辑/状态名变更时递增，使旧缓存立即失效
-# v3：两段式期权增强 + 状态带买入时机；v4：状态更名；v5：修正财报端点
-LB_CACHE_VERSION = "v5"
+LB_CACHE_VERSION = SIGNALS_CACHE_VERSION
 
 
 def _lb_keys(universe: str) -> tuple[str, str, str]:
