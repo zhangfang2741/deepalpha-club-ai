@@ -86,17 +86,22 @@ function DimensionCard({ dim }: { dim: DimensionScore }) {
         </p>
       )}
 
-      {/* 信号明细 */}
+      {/* 信号明细（含后端计算口径，直接可解释）*/}
       {!unavailable && (
-        <ul className="mt-3 space-y-1.5">
+        <ul className="mt-3 space-y-2">
           {dim.signals
             .filter((s) => s.value || s.hit)
             .map((s) => {
               const { arrow, cls } = dirStyle(s.direction)
               return (
-                <li key={s.key} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="text-gray-600">{s.label}</span>
-                  <span className={`flex items-center gap-1 font-semibold ${cls}`}>
+                <li key={s.key} className="flex items-start justify-between gap-2 text-sm">
+                  <div className="min-w-0">
+                    <span className="text-gray-700">{s.label}</span>
+                    {s.detail && (
+                      <p className="text-[11px] leading-tight text-gray-400">{s.detail}</p>
+                    )}
+                  </div>
+                  <span className={`flex shrink-0 items-center gap-1 font-semibold ${cls}`}>
                     {s.value ?? ''}
                     <span aria-hidden>{arrow}</span>
                     {s.hit && <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-current" />}
@@ -109,6 +114,15 @@ function DimensionCard({ dim }: { dim: DimensionScore }) {
     </div>
   )
 }
+
+// 榜单状态筛选
+const STATE_FILTERS = [
+  { key: 'all', label: '全部' },
+  { key: 'institution_accumulation', label: '🔥 建仓' },
+  { key: 'fundamental_turn', label: '🌱 基本面' },
+  { key: 'expectation_upgrade', label: '📈 预期' },
+  { key: 'breakout_confirmation', label: '🚀 趋势' },
+] as const
 
 function LeaderboardBoard({ board, onPick }: { board: LeaderboardEntry[]; onPick: (s: string) => void }) {
   return (
@@ -155,6 +169,7 @@ export default function InstitutionalSignalsPage() {
   const [boardAsOf, setBoardAsOf] = useState('')
   const [boardLoading, setBoardLoading] = useState(true)
   const [boardComputing, setBoardComputing] = useState(false)
+  const [boardFilter, setBoardFilter] = useState<string>('all')
 
   const load = useCallback((sym: string) => {
     const clean = sym.trim().toUpperCase()
@@ -275,21 +290,18 @@ export default function InstitutionalSignalsPage() {
               </div>
               <p className="mt-3 text-sm font-medium text-gray-700">{data.headline}</p>
 
-              {/* 状态标签 */}
-              <div className="mt-4 flex flex-wrap gap-2">
+              {/* 状态卡片：含义与证据始终可见（含移动端）*/}
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 {data.states.map((st) => (
-                  <div
-                    key={st.key}
-                    className="group relative rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 shadow-sm"
-                    title={st.meaning}
-                  >
-                    <span className="mr-1">{st.emoji}</span>
-                    {st.label}
-                    <span className="ml-1 text-amber-400">{'★'.repeat(st.stars)}</span>
+                  <div key={st.key} className="rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 shadow-sm">
+                    <div className="flex items-center gap-1.5 text-sm font-bold text-gray-900">
+                      <span>{st.emoji}</span>
+                      <span>{st.label}</span>
+                      <span className="text-amber-400">{'★'.repeat(st.stars)}</span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-gray-500">{st.meaning}</p>
                     {st.evidence.length > 0 && (
-                      <span className="ml-2 hidden text-xs font-normal text-gray-500 sm:inline">
-                        {st.evidence.join(' · ')}
-                      </span>
+                      <p className="mt-1 text-[11px] text-gray-400">证据：{st.evidence.join(' · ')}</p>
                     )}
                   </div>
                 ))}
@@ -325,9 +337,40 @@ export default function InstitutionalSignalsPage() {
             {!boardComputing && boardLoading && (
               <div className="flex justify-center py-16"><Spinner /></div>
             )}
-            {!boardComputing && !boardLoading && board && board.length > 0 && (
-              <LeaderboardBoard board={board} onPick={load} />
-            )}
+            {!boardComputing && !boardLoading && board && board.length > 0 && (() => {
+              const counts: Record<string, number> = { all: board.length }
+              board.forEach((e) => { if (e.top_state) counts[e.top_state.key] = (counts[e.top_state.key] ?? 0) + 1 })
+              const filtered = boardFilter === 'all'
+                ? board
+                : board.filter((e) => e.top_state?.key === boardFilter)
+              return (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    {STATE_FILTERS.map((f) => (
+                      <button
+                        key={f.key}
+                        onClick={() => setBoardFilter(f.key)}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                          boardFilter === f.key
+                            ? 'bg-gray-900 text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {f.label}
+                        <span className="ml-1 opacity-60">{counts[f.key] ?? 0}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {filtered.length > 0 ? (
+                    <LeaderboardBoard board={filtered} onPick={load} />
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-gray-200 py-12 text-center text-sm text-gray-400">
+                      当前筛选下暂无标的
+                    </div>
+                  )}
+                </>
+              )
+            })()}
             {!boardComputing && !boardLoading && (!board || board.length === 0) && (
               <div className="rounded-2xl border border-dashed border-gray-200 py-16 text-center text-sm text-gray-400">
                 榜单暂不可用，可直接在上方输入代码查询
