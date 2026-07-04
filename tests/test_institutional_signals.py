@@ -327,7 +327,7 @@ def test_states_smart_money_price_not_moved():
 
 
 def test_states_smart_money_and_event_trading_mutually_exclusive():
-    """无预期背书时只应触发事件交易（投机），不应误判为真资金进入。"""
+    """无预期背书时只应触发事件交易（投机），不应误判为聪明钱。"""
     pos = compute_positioning(
         {"call_vol": 50000, "put_vol": 20000, "call_oi": 80000, "put_oi": 40000, "atm_iv": 0.72})
     par = compute_participation(_make_prices(25))  # 未突破

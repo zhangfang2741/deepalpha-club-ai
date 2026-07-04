@@ -28,7 +28,7 @@ BUY_LADDER_ORDER = ["smart_money", "institution_accumulation", "fundamental_turn
                     "expectation_upgrade", "breakout_confirmation"]
 # 状态 key -> (emoji, 中文名)，供阶梯灰位展示（与 states.py 保持一致）
 STATE_LABELS = {
-    "smart_money": ("💰", "真资金进入"),
+    "smart_money": ("💰", "聪明钱"),
     "institution_accumulation": ("🔥", "机构建仓"),
     "fundamental_turn": ("🌱", "基本面改善"),
     "expectation_upgrade": ("📈", "市场预期提升"),
@@ -101,6 +101,6 @@ SCAN_UNIVERSE_FALLBACK = [
 SCAN_CONCURRENCY = 20            # 扫描并发上限（后台任务）
 SCAN_TOP_N = 30                  # 榜单返回条数
 SCAN_FRESH_SECONDS = 21600       # 缓存新鲜期 6h：超过则后台刷新（仍先返回旧数据）
-# 两段式增强：4 维排名后，对排名靠前的 K 支补抓期权，使 🔥建仓/💰真资金 能上榜
+# 两段式增强：4 维排名后，对排名靠前的 K 支补抓期权，使 🔥建仓/💰聪明钱 能上榜
 ENRICH_TOP_K = 25               # 补抓期权的候选数（只对 top-K，避免扫全量期权）
 ENRICH_CONCURRENCY = 8          # 期权补抓并发（yfinance 较慢）

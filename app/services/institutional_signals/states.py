@@ -74,11 +74,11 @@ def derive_states(dims: dict[str, DimensionScore]) -> list[SignalState]:
             meaning=meaning, evidence=evidence,
         ))
 
-    # 💰 真资金进入：预期背书 + 期权端看涨下注 + IV 抬升，但价格尚未突破
-    #   须有预期背书才算「真资金」，否则与「事件交易（投机）」无法区分。
+    # 💰 聪明钱：预期背书 + 期权端看涨下注 + IV 抬升，但价格尚未突破
+    #   须有预期背书才算「聪明钱」，否则与「事件交易（投机）」无法区分。
     if exp_strong and call_flow_up and iv_up and not _hit(par, "breakout"):
         states.append(SignalState(
-            key="smart_money", emoji="💰", label="真资金进入", stars=5,
+            key="smart_money", emoji="💰", label="聪明钱", stars=5,
             meaning="预期改善 + 期权端资金已下注，但价格尚未反应，最值得研究",
             evidence=["预期偏多", "Call 资金流看涨", "IV 抬升", "价格尚未突破"],
         ))
