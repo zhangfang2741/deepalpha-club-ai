@@ -2,12 +2,14 @@
 
 单源失败返回空/None，不抛异常——由 calculator 决定降级为 partial。
 """
+import asyncio
 import datetime
 
 import httpx
 
 from app.core.config import settings
 from app.core.logging import logger
+from app.services.analyst_upgrade.nasdaq100 import _parse_wiki_html
 from app.services.institutional_signals.constants import (
     OPTION_EXPIRY_MAX_DAYS,
     OPTION_EXPIRY_MIN_COUNT,
@@ -71,21 +73,52 @@ def _extract_symbols(data) -> list[str]:
 _WIKI_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; DeepAlphaBot/1.0)"}
 _WIKI_SP500 = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 _WIKI_NDX100 = "https://en.wikipedia.org/wiki/Nasdaq-100"
+_WIKI_SP500_API = (
+    "https://en.wikipedia.org/w/api.php"
+    "?action=parse&page=List_of_S%26P_500_companies&format=json&prop=text&formatversion=2"
+)
+_WIKI_NDX100_API = (
+    "https://en.wikipedia.org/w/api.php"
+    "?action=parse&page=Nasdaq-100&format=json&prop=text&formatversion=2"
+)
 
 
-async def _fetch_wiki_symbols(client: httpx.AsyncClient, url: str) -> list[str]:
-    """从维基百科成分股表格抓取代码（FMP 失败时的动态兜底）。复用 analyst_upgrade 解析器。"""
+async def _parse_wiki_symbols(html: str) -> list[str]:
+    """从 Wikipedia 渲染 HTML 中解析成分股代码。"""
+    rows = await asyncio.to_thread(_parse_wiki_html, html)
+    return _extract_symbols(rows)
+
+
+async def _fetch_wiki_symbols(
+    client: httpx.AsyncClient,
+    article_url: str,
+    api_url: str,
+) -> list[str]:
+    """从 Wikipedia 成分股表格抓取代码：文章页失败后改用官方 parse API。"""
     try:
-        resp = await client.get(url, headers=_WIKI_HEADERS, timeout=20, follow_redirects=True)
-        if resp.status_code != 200:
-            return []
-        import asyncio
-
-        from app.services.analyst_upgrade.nasdaq100 import _parse_wiki_html
-        rows = await asyncio.to_thread(_parse_wiki_html, resp.text)
-        return _extract_symbols(rows)
+        resp = await client.get(article_url, headers=_WIKI_HEADERS, timeout=20, follow_redirects=True)
+        if resp.status_code == 200:
+            symbols = await _parse_wiki_symbols(resp.text)
+            if symbols:
+                return symbols
+            logger.warning("wiki_constituent_parse_empty", url=article_url)
+        else:
+            logger.warning("wiki_constituent_fetch_non200", url=article_url, status=resp.status_code)
     except Exception as e:
-        logger.warning("wiki_constituent_fetch_failed", url=url, error=str(e))
+        logger.warning("wiki_constituent_fetch_failed", url=article_url, error=str(e))
+
+    try:
+        resp = await client.get(api_url, headers=_WIKI_HEADERS, timeout=20, follow_redirects=True)
+        if resp.status_code != 200:
+            logger.warning("wiki_constituent_api_non200", url=api_url, status=resp.status_code)
+            return []
+        html = resp.json().get("parse", {}).get("text", "")
+        if not html:
+            logger.warning("wiki_constituent_api_empty", url=api_url)
+            return []
+        return await _parse_wiki_symbols(html)
+    except Exception as e:
+        logger.warning("wiki_constituent_api_failed", url=api_url, error=str(e))
         return []
 
 
@@ -93,7 +126,7 @@ async def fetch_sp500_symbols(client: httpx.AsyncClient) -> list[str]:
     """S&P 500 成分股代码：FMP → 维基百科 → （调用方硬编码兜底）。"""
     syms = _extract_symbols(await _get(client, "sp500-constituent", {}))
     if not syms:
-        syms = await _fetch_wiki_symbols(client, _WIKI_SP500)
+        syms = await _fetch_wiki_symbols(client, _WIKI_SP500, _WIKI_SP500_API)
     return syms
 
 
@@ -101,7 +134,7 @@ async def fetch_nasdaq100_symbols(client: httpx.AsyncClient) -> list[str]:
     """纳斯达克 100（QQQ）成分股代码：FMP → 维基百科 → （调用方硬编码兜底）。"""
     syms = _extract_symbols(await _get(client, "nasdaq-constituent", {}))
     if not syms:
-        syms = await _fetch_wiki_symbols(client, _WIKI_NDX100)
+        syms = await _fetch_wiki_symbols(client, _WIKI_NDX100, _WIKI_NDX100_API)
     return syms
 
 

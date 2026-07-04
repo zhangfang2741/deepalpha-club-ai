@@ -1,6 +1,9 @@
 """机构资金信号——维度打分与状态引擎单元测试（纯函数，无网络）。"""
 
 import datetime
+from typing import Any, cast
+
+import pytest
 
 from app.services.institutional_signals.dimensions import (
     compute_confirmation,
@@ -363,6 +366,68 @@ def test_states_distribution():
     con = compute_confirmation(stats)
     states = derive_states({"expectation": exp, "confirmation": con})
     assert "distribution" in {s.key for s in states}
+
+
+class _FakeResponse:
+    def __init__(self, status_code: int, text: str = "", json_data=None):
+        self.status_code = status_code
+        self.text = text
+        self._json_data = json_data
+
+    def json(self):
+        return self._json_data
+
+
+class _FakeWikiClient:
+    def __init__(self, html: str, api_page: str):
+        self.html = html
+        self.api_page = api_page
+        self.urls: list[str] = []
+
+    async def get(self, url: str, **kwargs):
+        self.urls.append(url)
+        if "financialmodelingprep.com" in url:
+            return _FakeResponse(200, json_data=[])
+        if "w/api.php" in url and self.api_page in url:
+            return _FakeResponse(200, json_data={"parse": {"text": self.html}})
+        return _FakeResponse(403)
+
+
+def _wiki_table_html(symbols: list[str]) -> str:
+    rows = "".join(
+        f"<tr><td>{sym}</td><td>{sym} Inc.</td><td>Technology</td></tr>"
+        for sym in symbols
+    )
+    return (
+        "<table><thead><tr><th>Symbol</th><th>Security</th><th>GICS Sector</th></tr></thead>"
+        f"<tbody>{rows}</tbody></table>"
+    )
+
+
+@pytest.mark.asyncio
+async def test_fetch_sp500_symbols_uses_wikipedia_api_when_article_page_fails():
+    from app.services.institutional_signals.fetchers import fetch_sp500_symbols
+
+    symbols = ["AAPL", "MSFT", "NVDA"] + [f"AA{i}" for i in range(90)]
+    client = _FakeWikiClient(_wiki_table_html(symbols), "List_of_S%26P_500_companies")
+
+    result = await fetch_sp500_symbols(cast(Any, client))
+
+    assert result[:3] == ["AAPL", "MSFT", "NVDA"]
+    assert any("w/api.php" in url for url in client.urls)
+
+
+@pytest.mark.asyncio
+async def test_fetch_nasdaq100_symbols_uses_wikipedia_api_when_article_page_fails():
+    from app.services.institutional_signals.fetchers import fetch_nasdaq100_symbols
+
+    symbols = ["AAPL", "MSFT", "NVDA"] + [f"AB{i}" for i in range(90)]
+    client = _FakeWikiClient(_wiki_table_html(symbols), "Nasdaq-100")
+
+    result = await fetch_nasdaq100_symbols(cast(Any, client))
+
+    assert result[:3] == ["AAPL", "MSFT", "NVDA"]
+    assert any("w/api.php" in url for url in client.urls)
 
 
 def test_states_institution_accumulation():
