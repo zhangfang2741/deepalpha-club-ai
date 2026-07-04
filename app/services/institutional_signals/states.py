@@ -5,6 +5,7 @@ Phase 1 仅 Expectation + Participation 可用；依赖 Positioning/Fundamental/
 Confirmation 的状态在数据接入后自动激活。
 """
 from app.schemas.institutional_signals import DimensionScore, SignalState
+from app.services.institutional_signals.constants import STATE_BUY_META
 
 
 def _sig(dim: DimensionScore | None, key: str):
@@ -108,4 +109,10 @@ def derive_states(dims: dict[str, DimensionScore]) -> list[SignalState]:
             meaning="暂无显著机构资金组合信号",
             evidence=[],
         ))
+
+    # 附加买入视角元数据（仅偏多状态）
+    for s in states:
+        meta = STATE_BUY_META.get(s.key)
+        if meta:
+            s.buy_rank, s.buy_timing, s.buy_edge, s.buy_thesis = meta
     return states

@@ -250,6 +250,32 @@ def test_states_expectation_upgrade():
     assert "expectation_upgrade" in keys
 
 
+def test_states_carry_buy_meta():
+    pt = {"lastMonthAvgPriceTarget": 120, "lastQuarterAvgPriceTarget": 100, "lastMonthCount": 8}
+    grades = [
+        {"date": "2026-06-01", "analystRatingsStrongBuy": 10, "analystRatingsBuy": 5,
+         "analystRatingsHold": 3, "analystRatingsSell": 1, "analystRatingsStrongSell": 0},
+        {"date": "2026-05-01", "analystRatingsStrongBuy": 5, "analystRatingsBuy": 5,
+         "analystRatingsHold": 8, "analystRatingsSell": 2, "analystRatingsStrongSell": 0},
+    ]
+    exp = compute_expectation(pt, grades)
+    states = derive_states({"expectation": exp})
+    up = next(s for s in states if s.key == "expectation_upgrade")
+    assert up.buy_rank == 4 and up.buy_timing and up.buy_edge and up.buy_thesis
+
+
+def test_build_buy_view_ladder():
+    from app.services.institutional_signals.calculator import _build_buy_view
+    from app.schemas.institutional_signals import SignalState
+    st = SignalState(key="institution_accumulation", emoji="🔥", label="机构建仓", stars=5,
+                     meaning="", evidence=[], buy_rank=2, buy_timing="早中段",
+                     buy_edge="胜率最高", buy_thesis="多维印证")
+    headline, ladder = _build_buy_view([st])
+    assert len(ladder) == 5
+    assert [r.active for r in ladder] == [False, True, False, False, False]
+    assert "机构建仓" in headline and "胜率最高" in headline
+
+
 def test_states_neutral_fallback():
     dims = {
         "expectation": compute_expectation(None, []),

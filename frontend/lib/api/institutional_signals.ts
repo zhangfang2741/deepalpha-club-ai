@@ -34,6 +34,21 @@ export interface SignalState {
   stars: number
   meaning: string
   evidence: string[]
+  buy_rank: number | null
+  buy_timing: string | null
+  buy_edge: string | null
+  buy_thesis: string | null
+}
+
+export interface BuyStage {
+  key: string
+  emoji: string
+  label: string
+  timing: string
+  edge: string
+  thesis: string
+  rank: number
+  active: boolean
 }
 
 export interface InstitutionalSignalReport {
@@ -46,6 +61,8 @@ export interface InstitutionalSignalReport {
   coverage_total: number
   confidence: string
   headline: string
+  buy_headline: string
+  buy_ladder: BuyStage[]
   price_history: number[]
   dimensions: DimensionScore[]
   states: SignalState[]
