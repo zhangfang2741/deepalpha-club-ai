@@ -133,22 +133,26 @@ function LeaderboardBoard({ board, onPick }: { board: LeaderboardEntry[]; onPick
           onClick={() => onPick(e.symbol)}
           className="flex w-full items-center gap-3 border-b border-gray-100 px-4 py-3 text-left transition last:border-0 hover:bg-gray-50"
         >
-          <span className="w-6 shrink-0 text-center text-sm font-bold text-gray-400">{i + 1}</span>
-          <div className="w-32 shrink-0">
-            <div className="text-sm font-bold text-gray-900">{e.symbol}</div>
-            <div className="truncate text-xs text-gray-400">{e.name}</div>
+          <span className="w-5 shrink-0 text-center text-sm font-bold text-gray-400">{i + 1}</span>
+          {/* 名称 + 状态：窄屏纵向堆叠，宽屏并排 */}
+          <div className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+            <div className="min-w-0 sm:w-40 sm:shrink-0">
+              <div className="text-sm font-bold text-gray-900">{e.symbol}</div>
+              <div className="truncate text-xs text-gray-400">{e.name}</div>
+            </div>
+            <div className="min-w-0">
+              {e.top_state ? (
+                <span className="inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-800">
+                  <span>{e.top_state.emoji}</span>
+                  <span className="truncate">{e.top_state.label}</span>
+                  <span className="text-amber-400">{'★'.repeat(e.top_state.stars)}</span>
+                </span>
+              ) : (
+                <span className="text-xs text-gray-400">无显著偏多状态</span>
+              )}
+            </div>
           </div>
-          <div className="flex-1">
-            {e.top_state ? (
-              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-800">
-                {e.top_state.emoji} {e.top_state.label}
-                <span className="ml-1 text-amber-400">{'★'.repeat(e.top_state.stars)}</span>
-              </span>
-            ) : (
-              <span className="text-xs text-gray-400">无显著偏多状态</span>
-            )}
-          </div>
-          <div className="w-16 shrink-0 text-right">
+          <div className="w-14 shrink-0 text-right">
             <div className={`text-lg font-extrabold tabular-nums ${scoreColor(e.composite_score)}`}>
               {e.composite_score.toFixed(0)}
             </div>
