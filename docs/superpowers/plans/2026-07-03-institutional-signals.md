@@ -81,7 +81,10 @@ app/schemas/institutional_signals.py  # SignalReport / DimensionScore / SignalSt
 ## 五、分期交付
 
 - **Phase 0（半天，spike）**：验证三个数据源真能拿到——yfinance 期权链、FMP grades-historical 时间戳、earnings surprise 历史。产出可弃的验证脚本。
-- **Phase 1（MVP）**：Expectation + Participation 两维（数据最全）+ 状态引擎骨架 + API + 前端卡片。先能对单标的出「预期提升 / 趋势确认 / 中性」三类状态。
+- **Phase 1（MVP）✅ 已完成**：Expectation + Participation 两维（数据最全）+ 状态引擎骨架 + API + 前端卡片。已能对单标的出「预期提升 / 趋势确认 / 中性」三类状态。
+  - 后端：`app/services/institutional_signals/`（constants/dimensions/states/fetchers/calculator）、`GET /api/v1/institutional-signals?symbol=`、Redis 缓存 1h。
+  - 前端：`/institutional-signals` 页面（搜索 + 结论横幅 + 状态标签 + 五维卡片）、TopNav「机构信号」入口。
+  - 测试：`tests/test_institutional_signals.py` 9 项全绿（维度打分 + 状态组合）。
 - **Phase 2**：Positioning——接 yfinance 期权链，算 Call/Put Vol 相对量、OI 变化、IV Rank，解锁 Smart Money / Event Trading / Accumulation 状态。
 - **Phase 3**：Fundamental（earnings surprise + transcript 需求关键词）+ Confirmation（insider + 13F + 复用 ETF flow），补齐 Fundamental Turn / Distribution。
 - **Phase 4**：`SignalSnapshot` 持久化 + 定时任务（真实 EPS/Revenue 修正趋势）+ 每日「五问」Brief 接入 LangGraph Agent / chatbot skill。

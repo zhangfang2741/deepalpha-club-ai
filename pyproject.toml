@@ -158,6 +158,9 @@ convention = "google"
 "app/schemas/chan.py" = ["D415", "D101"]
 "app/api/v1/chan.py" = ["D415"]
 "app/core/langgraph/tools/chan_analysis.py" = ["D415"]
+"app/services/institutional_signals/*.py" = ["D415", "D101", "D104"]
+"app/schemas/institutional_signals.py" = ["D415", "D101"]
+"app/api/v1/institutional_signals.py" = ["D415"]
 
 [tool.pyright]
 include = ["app", "evals"]
