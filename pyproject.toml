@@ -160,6 +160,7 @@ convention = "google"
 "app/core/langgraph/tools/chan_analysis.py" = ["D415"]
 "app/services/institutional_signals/*.py" = ["D415", "D101", "D104"]
 "app/schemas/institutional_signals.py" = ["D415", "D101"]
+"app/models/signal_snapshot.py" = ["D415"]
 "app/api/v1/institutional_signals.py" = ["D415"]
 
 [tool.pyright]

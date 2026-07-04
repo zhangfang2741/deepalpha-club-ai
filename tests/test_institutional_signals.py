@@ -175,6 +175,54 @@ def test_confirmation_no_data_is_unavailable():
     assert compute_confirmation([]).status == "unavailable"
 
 
+# ── 快照衍生的变化率（纯函数）────────────────────────────────────────────────
+
+def test_deltas_pct_change():
+    from app.services.institutional_signals.deltas import pct_change
+    assert pct_change(110, 100) == 10.0
+    assert pct_change(90, 100) == -10.0
+    assert pct_change(100, 0) is None
+    assert pct_change(None, 100) is None
+
+
+def test_deltas_iv_rank():
+    from app.services.institutional_signals.deltas import iv_rank
+    hist = [0.2 + i * 0.01 for i in range(30)]  # 0.20 → 0.49
+    assert iv_rank(0.49, hist) == 100.0
+    assert iv_rank(0.20, hist) == 0.0
+    assert iv_rank(0.35, hist) is not None
+    assert iv_rank(0.4, hist[:5]) is None  # 历史点不足
+
+
+def test_deltas_value_days_ago():
+    import datetime
+    from app.services.institutional_signals.deltas import value_days_ago
+    d90 = (datetime.date.today() - datetime.timedelta(days=90)).isoformat()
+    d5 = (datetime.date.today() - datetime.timedelta(days=200)).isoformat()
+    pts = [(d90, 5.0), (d5, 9.0)]
+    assert value_days_ago(pts, 90) == 5.0
+    assert value_days_ago(pts, 90, tolerance=3) == 5.0
+    assert value_days_ago([(d5, 9.0)], 90) is None  # 超出容差
+
+
+# ── 维度升级：有快照历史时用变化率 ───────────────────────────────────────────
+
+def test_positioning_uses_iv_rank_and_oi_change():
+    metrics = {"call_vol": 50000, "put_vol": 20000, "call_oi": 80000, "put_oi": 40000, "atm_iv": 0.5}
+    dim = compute_positioning(metrics, iv_rank_value=85, oi_change_pct=15)
+    iv = next(s for s in dim.signals if s.key == "iv_level")
+    assert "Rank" in (iv.value or "") and iv.hit
+    oi = next(s for s in dim.signals if s.key == "oi_change")
+    assert oi.hit and oi.direction == "up"
+
+
+def test_expectation_uses_eps_revision():
+    pt = {"lastMonthAvgPriceTarget": 120, "lastQuarterAvgPriceTarget": 100, "lastMonthCount": 8}
+    dim = compute_expectation(pt, [], eps_revision_pct=3.5, revenue_revision_pct=2.0)
+    eps = next(s for s in dim.signals if s.key == "eps_revision")
+    assert eps.hit and eps.direction == "up" and eps.value == "+3.5%"
+
+
 # ── 状态引擎 ────────────────────────────────────────────────────────────────
 
 def test_states_expectation_upgrade():

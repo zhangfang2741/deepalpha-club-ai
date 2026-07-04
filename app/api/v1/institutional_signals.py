@@ -7,6 +7,7 @@ from redis.asyncio import Redis
 
 from app.cache.client import current_redis, get_redis_optional
 from app.core.logging import logger
+from app.db.session import AsyncSessionFactory
 from app.schemas.institutional_signals import (
     InstitutionalSignalReport,
     LeaderboardResponse,
@@ -120,7 +121,12 @@ async def get_institutional_signals(
             logger.warning("institutional_signals_cache_read_failed", symbol=symbol, error=str(e))
 
     logger.info("institutional_signals_cache_miss", symbol=symbol)
-    report = await compute_institutional_signals(symbol)
+    # 每日快照写入 + 变化率信号（best-effort：DB 不可用不影响报告）
+    session = AsyncSessionFactory()
+    try:
+        report = await compute_institutional_signals(symbol, session=session)
+    finally:
+        await session.close()
 
     if redis is not None:
         try:

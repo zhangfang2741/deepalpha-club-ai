@@ -92,7 +92,8 @@ app/schemas/institutional_signals.py  # SignalReport / DimensionScore / SignalSt
 - **Phase 4a ✅ 已完成（榜单）**：机构建仓榜——扫描精选 universe（~40 大盘股），两段式：榜单只用 4 个 FMP 维度排名（跳过期权），用户点进详情页跑完整五维。`GET /api/v1/institutional-signals/leaderboard`，Redis 缓存 6h；前端落地页即榜单，点行下钻。
   - `app/services/institutional_signals/scan.py`、`SCAN_UNIVERSE` 常量、`_rank` 纯函数（有单测）。
 - **Phase 4b · 动态 universe ✅ 已完成**：榜单 universe 改为**动态 S&P 500 成分股**（FMP `sp500-constituent`），写死列表降级为 fallback。扫描改为**后台任务 + stale-while-revalidate 缓存**（Redis 锁防并发），故可覆盖全量成分股而不阻塞请求；前端 computing 态轮询。运维项：全量扫描迁独立 worker/定时任务。
-- **Phase 4b · 剩余（待办）**：`SignalSnapshot` 持久化 + 定时任务（真实 EPS/Revenue 修正趋势、期权 OI 变化率/IV Rank）+ 每日「五问」Brief 接入 LangGraph Agent / chatbot skill。
+- **Phase 4b · 快照库 ✅ 已完成**：`signal_snapshots` 表（UUIDModel + Alembic 迁移，真实 Postgres 验证：建表/可逆/幂等 upsert）。详情页 best-effort 写当日快照，`deltas.py` 从历史算 IV Rank / Call OI 变化 / EPS·营收修正，升级对应信号；历史不足时回退水平口径（向后兼容）。
+  - ⏳ 剩余：定时任务批量预热快照（现为按查询累积）+ 每日「五问」Brief 接入 LangGraph Agent / chatbot skill。
 
 ## 六、TDD 与验证
 

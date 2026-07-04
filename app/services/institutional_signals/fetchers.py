@@ -70,6 +70,14 @@ async def fetch_sp500_symbols(client: httpx.AsyncClient) -> list[str]:
     return symbols
 
 
+async def fetch_analyst_estimate(client: httpx.AsyncClient, symbol: str) -> dict | None:
+    """最新一期分析师一致预期（EPS/营收），用于每日快照记录修正趋势。"""
+    data = await _get(client, "analyst-estimates", {"symbol": symbol, "limit": 1})
+    if isinstance(data, list) and data:
+        return data[0]
+    return None
+
+
 async def fetch_earnings(client: httpx.AsyncClient, symbol: str) -> list[dict]:
     """财报日程（含历史 epsActual/epsEstimated 与未来财报日）。"""
     data = await _get(client, "earnings-calendar", {"symbol": symbol, "limit": 16})

@@ -150,10 +150,13 @@ def _buy_ratio(row: dict) -> Optional[float]:
 def compute_expectation(
     pt_summary: Optional[dict],
     grades_hist: list[dict],
+    eps_revision_pct: Optional[float] = None,
+    revenue_revision_pct: Optional[float] = None,
 ) -> DimensionScore:
     """目标价修正（price-target-summary）+ 评级趋势（grades-historical）。
 
-    EPS/Revenue 修正需每日快照（Phase 4），此处先标 partial。
+    EPS/Revenue 修正来自每日快照库：有历史时传入 *_revision_pct（近 90 天一致预期变化），
+    无历史时为 None → 仍标为待接入。
     """
     label, question = _meta("expectation")
     signals: list[SignalItem] = []
@@ -208,10 +211,25 @@ def compute_expectation(
                                   direction=rt_dir, hit=rt_hit,
                                   detail="强买+买入 / 总评级家数"))
 
-    # EPS / Revenue 修正——待快照持久化（Phase 4）
-    for key, lab in (("eps_revision", "EPS 修正"), ("revenue_revision", "营收修正")):
-        signals.append(SignalItem(key=key, label=lab, direction="flat", hit=False,
-                                  detail="待每日快照持久化（Phase 4）"))
+    # EPS / Revenue 修正——来自每日快照库（近 90 天一致预期变化）
+    for key, lab, pct in (
+        ("eps_revision", "EPS 修正", eps_revision_pct),
+        ("revenue_revision", "营收修正", revenue_revision_pct),
+    ):
+        if pct is None:
+            signals.append(SignalItem(key=key, label=lab, direction="flat", hit=False,
+                                      detail="快照历史不足（需累积 ≥30 天）"))
+            continue
+        has_data = True
+        if pct >= 1.0:
+            delta, rv_dir, rv_hit = 12, "up", True
+        elif pct <= -1.0:
+            delta, rv_dir, rv_hit = -12, "down", True
+        else:
+            delta, rv_dir, rv_hit = 0, "flat", False
+        score += delta
+        signals.append(SignalItem(key=key, label=lab, value=f"{pct:+.1f}%",
+                                  direction=rv_dir, hit=rv_hit, detail="近 90 天一致预期变化"))
 
     if not has_data:
         return unavailable_dimension("expectation", "无目标价/评级数据")
@@ -221,12 +239,17 @@ def compute_expectation(
 
 # ── Positioning 仓位（期权快照）─────────────────────────────────────────────
 
-def compute_positioning(metrics: Optional[dict]) -> DimensionScore:
-    """基于 yfinance 期权快照的 Put/Call 比、Call 量/仓比、ATM IV 水平打分。
+def compute_positioning(
+    metrics: Optional[dict],
+    iv_rank_value: Optional[float] = None,
+    oi_change_pct: Optional[float] = None,
+) -> DimensionScore:
+    """基于 yfinance 期权快照的 Put/Call 比、Call 量/仓比 + 快照库衍生的 IV Rank / OI 变化。
 
     metrics 字段（由 fetchers 聚合近月合约得到）：
         call_vol / put_vol / call_oi / put_oi（整型求和）、atm_iv（年化小数）。
-    快照只能反映「当下」，OI 变化率与 IV Rank 需每日快照库（后续基建）。
+    有快照历史时传入 iv_rank_value（0–100）与 oi_change_pct（Call OI 近 5 日变化）；
+    无历史时为 None → IV 回退到「水平」口径、不显示 OI 变化。
     """
     label, question = _meta("positioning")
 
@@ -277,17 +300,37 @@ def compute_positioning(metrics: Optional[dict]) -> DimensionScore:
                               direction=pp_dir, hit=pp_hit,
                               detail="Put/Call 成交量比与持仓比"))
 
-    # IV 水平（非 Rank）：偏高代表市场预期有事件
-    if atm_iv >= IV_ELEVATED:
-        delta, iv_dir, iv_hit = 6, "up", True
+    # IV：有快照历史用 IV Rank（更可比），否则回退到水平口径
+    if iv_rank_value is not None:
+        if iv_rank_value >= 70:
+            delta, iv_dir, iv_hit = 6, "up", True
+        elif iv_rank_value >= 50:
+            delta, iv_dir, iv_hit = 3, "up", False
+        else:
+            delta, iv_dir, iv_hit = 0, "flat", False
+        iv_value, iv_detail = f"Rank {iv_rank_value:.0f}", "IV Rank（快照历史百分位）"
+    elif atm_iv >= IV_ELEVATED:
+        delta, iv_dir, iv_hit, iv_value, iv_detail = 6, "up", True, f"{atm_iv * 100:.0f}%", "ATM 年化 IV（水平——Rank 待快照累积）"
     elif atm_iv >= IV_MILD:
-        delta, iv_dir, iv_hit = 3, "up", False
+        delta, iv_dir, iv_hit, iv_value, iv_detail = 3, "up", False, f"{atm_iv * 100:.0f}%", "ATM 年化 IV（水平——Rank 待快照累积）"
     else:
-        delta, iv_dir, iv_hit = 0, "flat", False
+        delta, iv_dir, iv_hit, iv_value, iv_detail = 0, "flat", False, f"{atm_iv * 100:.0f}%", "ATM 年化 IV（水平——Rank 待快照累积）"
     score += delta
     signals.append(SignalItem(key="iv_level", label="隐含波动率",
-                              value=f"{atm_iv * 100:.0f}%", direction=iv_dir, hit=iv_hit,
-                              detail="ATM 年化 IV（水平，非 Rank——Rank 待快照库）"))
+                              value=iv_value, direction=iv_dir, hit=iv_hit, detail=iv_detail))
+
+    # Call OI 变化（真·新增仓位）——来自快照库
+    if oi_change_pct is not None:
+        if oi_change_pct >= 10:
+            delta, oi_dir, oi_hit = 8, "up", True
+        elif oi_change_pct <= -10:
+            delta, oi_dir, oi_hit = -8, "down", True
+        else:
+            delta, oi_dir, oi_hit = 0, "flat", False
+        score += delta
+        signals.append(SignalItem(key="oi_change", label="Call OI 变化",
+                                  value=f"{oi_change_pct:+.1f}%", direction=oi_dir, hit=oi_hit,
+                                  detail="近 5 日 Call 未平仓量变化（新增仓位）"))
 
     return DimensionScore(key="positioning", label=label, question=question,
                           score=_clamp(score), status="ok", signals=signals)
