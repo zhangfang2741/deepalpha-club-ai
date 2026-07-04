@@ -33,6 +33,7 @@ export interface SignalState {
   label: string
   stars: number
   meaning: string
+  logic: string | null
   evidence: string[]
   buy_rank: number | null
   buy_timing: string | null

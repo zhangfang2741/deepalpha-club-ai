@@ -460,8 +460,15 @@ export default function InstitutionalSignalsPage() {
                       <span className="text-amber-400">{'★'.repeat(st.stars)}</span>
                     </div>
                     <p className="mt-0.5 text-xs text-gray-500">{st.meaning}</p>
+                    {st.logic && (
+                      <p className="mt-1 text-[11px] text-gray-400">
+                        <span className="font-semibold text-gray-500">触发逻辑：</span>{st.logic}
+                      </p>
+                    )}
                     {st.evidence.length > 0 && (
-                      <p className="mt-1 text-[11px] text-gray-400">证据：{st.evidence.join(' · ')}</p>
+                      <p className="mt-1 text-[11px] text-gray-400">
+                        <span className="font-semibold text-gray-500">已命中：</span>{st.evidence.join(' · ')}
+                      </p>
                     )}
                   </div>
                 ))}

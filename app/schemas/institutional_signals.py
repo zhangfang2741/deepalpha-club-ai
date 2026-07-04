@@ -53,6 +53,7 @@ class SignalState(BaseResponse):
     label: str = Field(description="状态中文名")
     stars: int = Field(ge=1, le=5, description="重要度星级")
     meaning: str = Field(description="一句话含义")
+    logic: Optional[str] = Field(None, description="触发逻辑（判定规则，可展示）")
     evidence: List[str] = Field(default_factory=list, description="命中的证据链")
     # 买入视角元数据（仅偏多状态有值）
     buy_rank: Optional[int] = Field(None, description="买入价值排序，1=最佳入场")

@@ -5,7 +5,7 @@ Phase 1 仅 Expectation + Participation 可用；依赖 Positioning/Fundamental/
 Confirmation 的状态在数据接入后自动激活。
 """
 from app.schemas.institutional_signals import DimensionScore, SignalState
-from app.services.institutional_signals.constants import STATE_BUY_META
+from app.services.institutional_signals.constants import STATE_BUY_META, STATE_LOGIC
 
 
 def _sig(dim: DimensionScore | None, key: str):
@@ -38,10 +38,10 @@ def derive_states(dims: dict[str, DimensionScore]) -> list[SignalState]:
 
     states: list[SignalState] = []
 
-    # 📈 市场预期提升：TP↑ + Rating↑
+    # 📈 预期上修：TP↑ + Rating↑
     if _hit(exp, "target_price") and _hit(exp, "analyst_rating"):
         states.append(SignalState(
-            key="expectation_upgrade", emoji="📈", label="市场预期提升", stars=5,
+            key="expectation_upgrade", emoji="📈", label="预期上修", stars=5,
             meaning="卖方一致开始上修，往往形成中长期趋势",
             evidence=["目标价上调", "评级共识转多"],
         ))
@@ -75,7 +75,7 @@ def derive_states(dims: dict[str, DimensionScore]) -> list[SignalState]:
         ))
 
     # 💰 聪明钱：预期背书 + 期权端看涨下注 + IV 抬升，但价格尚未突破
-    #   须有预期背书才算「聪明钱」，否则与「事件交易（投机）」无法区分。
+    #   须有预期背书才算「聪明钱」，否则与「热钱（投机）」无法区分。
     if exp_strong and call_flow_up and iv_up and not _hit(par, "breakout"):
         states.append(SignalState(
             key="smart_money", emoji="💰", label="聪明钱", stars=5,
@@ -83,11 +83,11 @@ def derive_states(dims: dict[str, DimensionScore]) -> list[SignalState]:
             evidence=["预期偏多", "Call 资金流看涨", "IV 抬升", "价格尚未突破"],
         ))
 
-    # ⚡ 事件交易：IV + Call 齐动，但预期没有背书，多为短线投机
+    # ⚡ 热钱：IV + Call 齐动，但预期没有背书，多为短线投机
     #   （手册原文用「OI 基本不变」区分真机构；快照无 OI 变化率，改用「预期未跟上」代理）
     if iv_up and call_flow_up and not exp_strong:
         states.append(SignalState(
-            key="event_trading", emoji="⚡", label="事件交易", stars=4,
+            key="event_trading", emoji="⚡", label="热钱", stars=4,
             meaning="IV 与 Call 齐动但预期未跟上，多为短线投机而非真机构",
             evidence=["IV 偏高", "Call 资金流活跃", "预期未确认"],
         ))
@@ -106,10 +106,10 @@ def derive_states(dims: dict[str, DimensionScore]) -> list[SignalState]:
             meaning=meaning, evidence=evidence,
         ))
 
-    # ❄ 资金撤退：预期↓ + 看跌压力/减持
+    # ❄ 机构派发：预期↓ + 看跌压力/减持
     if _hit_down(exp, "analyst_rating") and (_hit_down(pos, "put_pressure") or _hit_down(con, "insider")):
         states.append(SignalState(
-            key="distribution", emoji="❄", label="资金撤退", stars=4,
+            key="distribution", emoji="❄", label="机构派发", stars=4,
             meaning="预期下修叠加看跌押注/减持，资金开始离开",
             evidence=["评级下调", "看跌压力/内部减持"],
         ))
@@ -121,8 +121,9 @@ def derive_states(dims: dict[str, DimensionScore]) -> list[SignalState]:
             evidence=[],
         ))
 
-    # 附加买入视角元数据（仅偏多状态）
+    # 附加触发逻辑（可展示）+ 买入视角元数据（仅偏多状态）
     for s in states:
+        s.logic = STATE_LOGIC.get(s.key)
         meta = STATE_BUY_META.get(s.key)
         if meta:
             s.buy_rank, s.buy_timing, s.buy_edge, s.buy_thesis = meta
