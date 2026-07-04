@@ -11,8 +11,13 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import logger
-from app.schemas.institutional_signals import DimensionScore, InstitutionalSignalReport
-from app.services.institutional_signals.constants import DIMENSION_WEIGHTS
+from app.schemas.institutional_signals import BuyStage, DimensionScore, InstitutionalSignalReport
+from app.services.institutional_signals.constants import (
+    BUY_LADDER_ORDER,
+    DIMENSION_WEIGHTS,
+    STATE_BUY_META,
+    STATE_LABELS,
+)
 from app.services.institutional_signals.deltas import iv_rank, pct_change, value_days_ago
 from app.services.institutional_signals.dimensions import (
     compute_confirmation,
@@ -77,6 +82,30 @@ def _headline(composite: float, states: list) -> str:
     if top.key == "neutral":
         return f"综合分 {composite:.0f}：暂无显著机构资金信号，建议观望。"
     return f"综合分 {composite:.0f}：{top.emoji} {top.label}——{top.meaning}。"
+
+
+def _build_buy_view(states: list) -> tuple[str, list[BuyStage]]:
+    """构造买入视角阶梯（早→晚）+ 一句话结论。"""
+    fired = {s.key for s in states}
+    state_by_key = {s.key: s for s in states}
+    ladder = [
+        BuyStage(
+            key=key, emoji=STATE_LABELS[key][0], label=STATE_LABELS[key][1],
+            timing=STATE_BUY_META[key][1], edge=STATE_BUY_META[key][2],
+            thesis=STATE_BUY_META[key][3], rank=STATE_BUY_META[key][0],
+            active=key in fired,
+        )
+        for key in BUY_LADDER_ORDER
+    ]
+    # 主买入信号 = 命中的偏多状态里买入排序最靠前（最佳入场）的那个
+    active_keys = [k for k in BUY_LADDER_ORDER if k in fired]
+    if not active_keys:
+        return "买入视角：当前无明确买入信号，建议观望。", ladder
+    primary = min(active_keys, key=lambda k: STATE_BUY_META[k][0])
+    st = state_by_key[primary]
+    headline = (f"买入视角：当前处于「{st.emoji}{st.label}」（{st.buy_timing} · {st.buy_edge}）"
+                f"——{st.buy_thesis}。")
+    return headline, ladder
 
 
 async def _snapshot_deltas(
@@ -169,6 +198,7 @@ async def compute_institutional_signals(
     composite = _composite_score(dims)
     coverage = _coverage(dims)
     confidence = _confidence(coverage)
+    buy_headline, buy_ladder = _build_buy_view(states)
     name = (profile or {}).get("companyName") or (profile or {}).get("name") or symbol
 
     logger.info("institutional_signals_computed", symbol=symbol, composite=composite,
@@ -182,6 +212,8 @@ async def compute_institutional_signals(
         coverage=coverage,
         confidence=confidence,
         headline=_headline(composite, states),
+        buy_headline=buy_headline,
+        buy_ladder=buy_ladder,
         price_history=[round(p["close"], 2) for p in prices[-30:]],
         dimensions=list(dims.values()),
         states=states,

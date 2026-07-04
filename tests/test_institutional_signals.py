@@ -250,6 +250,32 @@ def test_states_expectation_upgrade():
     assert "expectation_upgrade" in keys
 
 
+def test_states_carry_buy_meta():
+    pt = {"lastMonthAvgPriceTarget": 120, "lastQuarterAvgPriceTarget": 100, "lastMonthCount": 8}
+    grades = [
+        {"date": "2026-06-01", "analystRatingsStrongBuy": 10, "analystRatingsBuy": 5,
+         "analystRatingsHold": 3, "analystRatingsSell": 1, "analystRatingsStrongSell": 0},
+        {"date": "2026-05-01", "analystRatingsStrongBuy": 5, "analystRatingsBuy": 5,
+         "analystRatingsHold": 8, "analystRatingsSell": 2, "analystRatingsStrongSell": 0},
+    ]
+    exp = compute_expectation(pt, grades)
+    states = derive_states({"expectation": exp})
+    up = next(s for s in states if s.key == "expectation_upgrade")
+    assert up.buy_rank == 4 and up.buy_timing and up.buy_edge and up.buy_thesis
+
+
+def test_build_buy_view_ladder():
+    from app.services.institutional_signals.calculator import _build_buy_view
+    from app.schemas.institutional_signals import SignalState
+    st = SignalState(key="institution_accumulation", emoji="🔥", label="机构建仓", stars=5,
+                     meaning="", evidence=[], buy_rank=2, buy_timing="早中段",
+                     buy_edge="胜率最高", buy_thesis="多维印证")
+    headline, ladder = _build_buy_view([st])
+    assert len(ladder) == 5
+    assert [r.active for r in ladder] == [False, True, False, False, False]
+    assert "机构建仓" in headline and "胜率最高" in headline
+
+
 def test_states_neutral_fallback():
     dims = {
         "expectation": compute_expectation(None, []),
@@ -289,12 +315,25 @@ def test_rank_prefers_bullish_state_then_score():
 
 
 def test_states_smart_money_price_not_moved():
-    # 期权看涨下注 + 高 IV，但价格未突破（平稳窄幅）
+    # 预期背书 + 期权看涨下注 + 高 IV，但价格未突破（平稳窄幅）
+    pt = {"lastMonthAvgPriceTarget": 120, "lastQuarterAvgPriceTarget": 100, "lastMonthCount": 8}
+    exp = compute_expectation(pt, [])
     pos = compute_positioning(
         {"call_vol": 50000, "put_vol": 20000, "call_oi": 80000, "put_oi": 40000, "atm_iv": 0.72})
     par = compute_participation(_make_prices(25))  # 无突破
-    states = derive_states({"positioning": pos, "participation": par})
-    assert "smart_money" in {s.key for s in states}
+    states = derive_states({"expectation": exp, "positioning": pos, "participation": par})
+    keys = {s.key for s in states}
+    assert "smart_money" in keys
+
+
+def test_states_smart_money_and_event_trading_mutually_exclusive():
+    """无预期背书时只应触发事件交易（投机），不应误判为真资金进入。"""
+    pos = compute_positioning(
+        {"call_vol": 50000, "put_vol": 20000, "call_oi": 80000, "put_oi": 40000, "atm_iv": 0.72})
+    par = compute_participation(_make_prices(25))  # 未突破
+    states = derive_states({"positioning": pos, "participation": par})  # 无 expectation
+    keys = {s.key for s in states}
+    assert "event_trading" in keys and "smart_money" not in keys
 
 
 def test_states_fundamental_turn():
@@ -342,4 +381,23 @@ def test_states_institution_accumulation():
     prices[-1]["volume"] = 3_000_000  # 放量
     par = compute_participation(prices)
     states = derive_states({"expectation": exp, "positioning": pos, "participation": par})
-    assert "institution_accumulation" in {s.key for s in states}
+    acc = next(s for s in states if s.key == "institution_accumulation")
+    assert "现货放量确认" in acc.evidence
+
+
+def test_states_accumulation_fires_without_volume():
+    """机构「提前」建仓不应被现货放量硬门槛卡住（悄悄吸筹本就不放量）。"""
+    pt = {"lastMonthAvgPriceTarget": 120, "lastQuarterAvgPriceTarget": 100, "lastMonthCount": 8}
+    grades = [
+        {"date": "2026-06-01", "analystRatingsStrongBuy": 10, "analystRatingsBuy": 5,
+         "analystRatingsHold": 3, "analystRatingsSell": 1, "analystRatingsStrongSell": 0},
+        {"date": "2026-05-01", "analystRatingsStrongBuy": 5, "analystRatingsBuy": 5,
+         "analystRatingsHold": 8, "analystRatingsSell": 2, "analystRatingsStrongSell": 0},
+    ]
+    exp = compute_expectation(pt, grades)
+    pos = compute_positioning(
+        {"call_vol": 50000, "put_vol": 20000, "call_oi": 80000, "put_oi": 40000, "atm_iv": 0.72})
+    par = compute_participation(_make_prices(25))  # 平稳、无放量
+    states = derive_states({"expectation": exp, "positioning": pos, "participation": par})
+    acc = next((s for s in states if s.key == "institution_accumulation"), None)
+    assert acc is not None and "现货放量确认" not in acc.evidence

@@ -8,6 +8,7 @@ import {
   type DimensionScore,
   type SignalItem,
   type LeaderboardEntry,
+  type BuyStage,
 } from '@/lib/api/institutional_signals'
 import DashboardShell from '@/components/layout/DashboardShell'
 import Spinner from '@/components/ui/Spinner'
@@ -94,6 +95,49 @@ function SkeletonCard() {
       <div className="mt-4 space-y-2">
         <div className="h-3 w-full rounded bg-gray-100" />
         <div className="h-3 w-2/3 rounded bg-gray-100" />
+      </div>
+    </div>
+  )
+}
+
+// 买入视角阶梯：把状态按买入价值排成「早 → 晚」，高亮当前所处
+function BuyLadder({ headline, ladder }: { headline: string; ladder: BuyStage[] }) {
+  if (!ladder || ladder.length === 0) return null
+  return (
+    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-5">
+      <div className="flex items-center gap-2">
+        <span className="text-base">💡</span>
+        <h3 className="text-sm font-bold text-gray-900">买入视角</h3>
+        <span className="text-[11px] text-gray-400">资金链条：早 → 晚</span>
+      </div>
+      <p className="mt-1.5 text-sm font-medium text-gray-700">{headline}</p>
+
+      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-5">
+        {ladder.map((r, i) => (
+          <div
+            key={r.key}
+            className={`relative rounded-xl border p-3 transition ${
+              r.active
+                ? 'border-indigo-300 bg-white shadow-sm ring-1 ring-indigo-200'
+                : 'border-gray-100 bg-gray-50/60 opacity-60'
+            }`}
+          >
+            <div className="text-[10px] font-semibold text-gray-400">
+              {i === 0 ? '最早' : i === ladder.length - 1 ? '最晚' : `第 ${i + 1} 阶`}
+            </div>
+            <div className="mt-0.5 flex items-center gap-1 text-sm font-bold text-gray-900">
+              <span>{r.emoji}</span>
+              <span className={r.active ? '' : 'text-gray-500'}>{r.label}</span>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-1">
+              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                r.active ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-400'
+              }`}>{r.timing}</span>
+              <span className="text-[10px] text-gray-400">{r.edge}</span>
+            </div>
+            {r.active && <p className="mt-1.5 text-[11px] leading-tight text-gray-500">{r.thesis}</p>}
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -231,13 +275,20 @@ function LeaderboardBoard({ board, onPick }: { board: LeaderboardEntry[]; onPick
               <div className="text-sm font-bold text-gray-900">{e.symbol}</div>
               <div className="truncate text-xs text-gray-400">{e.name}</div>
             </div>
-            <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               {e.top_state ? (
-                <span className="inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-800">
-                  <span>{e.top_state.emoji}</span>
-                  <span className="truncate">{e.top_state.label}</span>
-                  <span className="text-amber-400">{'★'.repeat(e.top_state.stars)}</span>
-                </span>
+                <>
+                  <span className="inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-800">
+                    <span>{e.top_state.emoji}</span>
+                    <span className="truncate">{e.top_state.label}</span>
+                    <span className="text-amber-400">{'★'.repeat(e.top_state.stars)}</span>
+                  </span>
+                  {e.top_state.buy_timing && (
+                    <span className="whitespace-nowrap text-[10px] text-gray-400">
+                      {e.top_state.buy_timing} · {e.top_state.buy_edge}
+                    </span>
+                  )}
+                </>
               ) : (
                 <span className="text-xs text-gray-400">无显著偏多状态</span>
               )}
@@ -416,6 +467,9 @@ export default function InstitutionalSignalsPage() {
                 ))}
               </div>
             </div>
+
+            {/* 买入视角阶梯 */}
+            <BuyLadder headline={data.buy_headline} ladder={data.buy_ladder} />
 
             {/* 五维卡片 */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

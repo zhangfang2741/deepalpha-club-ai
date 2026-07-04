@@ -27,11 +27,13 @@ REPORT_CACHE_VERSION = "v2"
 LB_UNIVERSES = ("sp500", "nasdaq100")
 LB_DATA_TTL = 86400   # 数据保留 24h（过期前一直可作为 stale 返回）
 LB_LOCK_TTL = 900     # 扫描锁 15min，防并发重复扫描
+# 榜单产出逻辑变更时递增（v3：两段式期权增强 + 状态带买入时机），使旧缓存立即失效
+LB_CACHE_VERSION = "v3"
 
 
 def _lb_keys(universe: str) -> tuple[str, str, str]:
     """返回某 universe 的 (数据键, 新鲜标记键, 扫描锁键)。"""
-    base = f"institutional_signals:leaderboard:{universe}:v2"
+    base = f"institutional_signals:leaderboard:{universe}:{LB_CACHE_VERSION}"
     return base, f"{base}:fresh", f"{base}:lock"
 
 # 保持对后台任务的强引用，避免被 GC 回收

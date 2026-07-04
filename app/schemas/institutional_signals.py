@@ -54,6 +54,24 @@ class SignalState(BaseResponse):
     stars: int = Field(ge=1, le=5, description="重要度星级")
     meaning: str = Field(description="一句话含义")
     evidence: List[str] = Field(default_factory=list, description="命中的证据链")
+    # 买入视角元数据（仅偏多状态有值）
+    buy_rank: Optional[int] = Field(None, description="买入价值排序，1=最佳入场")
+    buy_timing: Optional[str] = Field(None, description="时机：启动前 / 早中段 / 中段 / 偏晚")
+    buy_edge: Optional[str] = Field(None, description="优势：赔率最好 / 胜率最高 / 最扛跌 …")
+    buy_thesis: Optional[str] = Field(None, description="买入逻辑一句话")
+
+
+class BuyStage(BaseResponse):
+    """买入视角阶梯的一档（早→晚），active 表示当前是否命中。"""
+
+    key: str
+    emoji: str
+    label: str
+    timing: str
+    edge: str
+    thesis: str
+    rank: int
+    active: bool
 
 
 class LeaderboardEntry(BaseResponse):
@@ -94,6 +112,8 @@ class InstitutionalSignalReport(BaseResponse):
     coverage_total: int = Field(default=5, description="维度总数")
     confidence: str = Field(description="置信度：高 / 中 / 低（由覆盖度决定）")
     headline: str = Field(description="一句话结论")
+    buy_headline: str = Field(default="", description="买入视角一句话结论")
+    buy_ladder: List[BuyStage] = Field(default_factory=list, description="买入视角阶梯（早→晚）")
     price_history: List[float] = Field(default_factory=list, description="近期收盘价（sparkline 用）")
     dimensions: List[DimensionScore]
     states: List[SignalState]

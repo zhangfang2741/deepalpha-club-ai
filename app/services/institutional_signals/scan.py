@@ -1,8 +1,9 @@
-"""机构建仓榜：扫描 universe，用 4 个 FMP 快接口排名（跳过期权）。
+"""机构建仓榜：两段式扫描。
 
-两段式：榜单负责「筛选」（不含仓位/期权），用户点进详情页跑「完整五维」确认。
-排名用与详情页一致的综合分（缺失维度按中性计入）——仓位对所有股票同权重缺失，
-不影响相对排序。
+- 第一段（筛选）：全 universe 用 4 个 FMP 快接口排名（跳过期权）。
+- 第二段（增强）：对排名靠前的 K 支**补抓期权**，重算仓位维度与状态，
+  使 🔥机构建仓 / 💰真资金进入 能在最强的票上真正上榜（否则永远缺失）。
+排名用与详情页一致的综合分（缺失维度按中性计入）。
 """
 import asyncio
 import datetime
@@ -20,6 +21,8 @@ from app.services.institutional_signals.calculator import (
     _coverage,
 )
 from app.services.institutional_signals.constants import (
+    ENRICH_CONCURRENCY,
+    ENRICH_TOP_K,
     SCAN_CONCURRENCY,
     SCAN_TOP_N,
     SCAN_UNIVERSE_FALLBACK,
@@ -29,6 +32,7 @@ from app.services.institutional_signals.dimensions import (
     compute_expectation,
     compute_fundamental,
     compute_participation,
+    compute_positioning,
     unavailable_dimension,
 )
 from app.services.institutional_signals.fetchers import (
@@ -36,6 +40,7 @@ from app.services.institutional_signals.fetchers import (
     fetch_grades_historical,
     fetch_insider_statistics,
     fetch_nasdaq100_symbols,
+    fetch_option_metrics,
     fetch_price_history,
     fetch_price_target_summary,
     fetch_profile,
@@ -51,11 +56,28 @@ _BULLISH_STATES = {
 }
 
 
+def _build_entry(symbol: str, name: str, dims: dict) -> LeaderboardEntry:
+    """由维度字典构造榜单行（综合分/状态/top_state）。"""
+    states = [s for s in derive_states(dims) if s.key != "neutral"]
+    bullish = [s for s in states if s.key in _BULLISH_STATES]
+    top_state = max(bullish, key=lambda s: (s.stars, -(s.buy_rank or 9))) if bullish else None
+    return LeaderboardEntry(
+        symbol=symbol,
+        name=name,
+        composite_score=_composite_score(dims),
+        coverage=_coverage(dims),
+        confidence=_confidence(_coverage(dims)),
+        top_state=top_state,
+        states=states,
+        dimension_scores={k: d.score for k, d in dims.items() if d.status != "unavailable"},
+    )
+
+
 async def _score_symbol(
     client: httpx.AsyncClient, symbol: str, sem: asyncio.Semaphore,
     from_date: str, to_date: str,
-) -> LeaderboardEntry | None:
-    """单支扫描评分（4 个 FMP 维度，仓位置为 unavailable）。"""
+) -> tuple[LeaderboardEntry, dict, float] | None:
+    """第一段评分（4 个 FMP 维度，仓位 unavailable）；返回 (entry, dims, spot)。"""
     async with sem:
         try:
             profile, pt_summary, grades, prices, earnings, insider = await asyncio.gather(
@@ -72,30 +94,31 @@ async def _score_symbol(
 
     dims = {
         "expectation": compute_expectation(pt_summary, grades),
-        "positioning": unavailable_dimension("positioning", "榜单不含期权，点进详情页查看"),
+        "positioning": unavailable_dimension("positioning", "榜单初筛不含期权，补抓中/点进详情查看"),
         "participation": compute_participation(prices),
         "fundamental": compute_fundamental(earnings),
         "confirmation": compute_confirmation(insider),
     }
-    coverage = _coverage(dims)
-    if coverage == 0:
+    if _coverage(dims) == 0:
         return None  # 全无数据，不入榜
 
-    states = [s for s in derive_states(dims) if s.key != "neutral"]
-    bullish = [s for s in states if s.key in _BULLISH_STATES]
-    top_state = max(bullish, key=lambda s: s.stars) if bullish else None
     name = (profile or {}).get("companyName") or (profile or {}).get("name") or symbol
+    spot = prices[-1]["close"] if prices else 0.0
+    return _build_entry(symbol, name, dims), dims, spot
 
-    return LeaderboardEntry(
-        symbol=symbol,
-        name=name,
-        composite_score=_composite_score(dims),
-        coverage=coverage,
-        confidence=_confidence(coverage),
-        top_state=top_state,
-        states=states,
-        dimension_scores={k: d.score for k, d in dims.items() if d.status != "unavailable"},
-    )
+
+async def _enrich_symbol(
+    entry: LeaderboardEntry, dims: dict, spot: float, sem: asyncio.Semaphore,
+) -> LeaderboardEntry:
+    """第二段：补抓期权，重算仓位维度与状态（无快照，用水平口径 IV）。"""
+    if not spot:
+        return entry
+    async with sem:
+        metrics = await asyncio.to_thread(fetch_option_metrics, entry.symbol, spot)
+    if not metrics:
+        return entry
+    dims = {**dims, "positioning": compute_positioning(metrics)}
+    return _build_entry(entry.symbol, entry.name, dims)
 
 
 def _rank(entries: list[LeaderboardEntry]) -> list[LeaderboardEntry]:
@@ -129,15 +152,28 @@ async def scan_leaderboard(limit: int = SCAN_TOP_N, universe: str = "sp500") -> 
             symbols = list(SCAN_UNIVERSE_FALLBACK)
             source = f"{source}-fallback"
 
+        # 第一段：全 universe 4 维评分
         results = await asyncio.gather(
             *[_score_symbol(client, s, sem, from_date, to_date) for s in symbols]
         )
+        scored = [r for r in results if r is not None]  # (entry, dims, spot)
+        scored.sort(key=lambda r: (r[0].top_state is not None, r[0].composite_score), reverse=True)
 
-    entries = [e for e in results if e is not None]
+        # 第二段：对排名靠前的 K 支补抓期权，重算仓位与状态
+        enrich_sem = asyncio.Semaphore(ENRICH_CONCURRENCY)
+        top = scored[:ENRICH_TOP_K]
+        enriched = await asyncio.gather(
+            *[_enrich_symbol(e, d, sp, enrich_sem) for (e, d, sp) in top]
+        )
+
+    entries = list(enriched) + [e for (e, _, _) in scored[ENRICH_TOP_K:]]
     ranked = _rank(entries)[:limit]
+    enriched_states = sum(1 for e in enriched if e.top_state and e.top_state.key in
+                          ("institution_accumulation", "smart_money"))
 
-    logger.info("scan_leaderboard_computed", source=source,
-                universe=len(symbols), scanned=len(entries), returned=len(ranked))
+    logger.info("scan_leaderboard_computed", source=source, universe=len(symbols),
+                scanned=len(entries), enriched=len(top), option_states=enriched_states,
+                returned=len(ranked))
 
     return LeaderboardResponse(
         status="ready",
@@ -146,6 +182,6 @@ async def scan_leaderboard(limit: int = SCAN_TOP_N, universe: str = "sp500") -> 
         universe_source=source,
         universe_size=len(symbols),
         scanned=len(entries),
-        note="榜单基于 4 个 FMP 维度（不含期权仓位），点进详情页查看完整五维",
+        note=f"4 维初筛全 universe，前 {ENRICH_TOP_K} 支补抓期权确认仓位；点进详情看完整五维",
         entries=ranked,
     )
