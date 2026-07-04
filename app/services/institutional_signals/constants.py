@@ -28,11 +28,22 @@ BUY_LADDER_ORDER = ["smart_money", "institution_accumulation", "fundamental_turn
                     "expectation_upgrade", "breakout_confirmation"]
 # 状态 key -> (emoji, 中文名)，供阶梯灰位展示（与 states.py 保持一致）
 STATE_LABELS = {
-    "smart_money": ("💰", "真资金进入"),
+    "smart_money": ("💰", "聪明钱"),
     "institution_accumulation": ("🔥", "机构建仓"),
     "fundamental_turn": ("🌱", "基本面改善"),
-    "expectation_upgrade": ("📈", "市场预期提升"),
+    "expectation_upgrade": ("📈", "预期上修"),
     "breakout_confirmation": ("🚀", "趋势确认"),
+}
+# 状态 key -> 触发逻辑（人话版判定规则，供产品展示；与 states.py 条件一一对应）
+STATE_LOGIC = {
+    "expectation_upgrade": "目标价环比上调 且 评级共识环比转多",
+    "breakout_confirmation": "现货放量(≥1.5x) 且 收盘突破 20 日高 且 预期分 ≥ 55",
+    "institution_accumulation": "预期分 ≥ 55 且 Call 资金流看涨 且 IV 抬升（放量为可选加分，非门槛）",
+    "smart_money": "预期分 ≥ 55 且 Call 资金流看涨 且 IV 抬升 且 价格尚未突破",
+    "event_trading": "Call 资金流看涨 且 IV 抬升，但 预期分 < 55（缺乏基本面背书 → 投机）",
+    "fundamental_turn": "营收超预期 且 连续 Beat（目标价上调为可选确认，非门槛）",
+    "distribution": "评级共识下调 且（看跌压力 或 内部人集中减持）",
+    "neutral": "五维均未形成显著机构资金组合信号",
 }
 
 # 综合分权重（未实现的维度按 unavailable 处理，权重动态归一化）
@@ -101,6 +112,6 @@ SCAN_UNIVERSE_FALLBACK = [
 SCAN_CONCURRENCY = 20            # 扫描并发上限（后台任务）
 SCAN_TOP_N = 30                  # 榜单返回条数
 SCAN_FRESH_SECONDS = 21600       # 缓存新鲜期 6h：超过则后台刷新（仍先返回旧数据）
-# 两段式增强：4 维排名后，对排名靠前的 K 支补抓期权，使 🔥建仓/💰真资金 能上榜
+# 两段式增强：4 维排名后，对排名靠前的 K 支补抓期权，使 🔥建仓/💰聪明钱 能上榜
 ENRICH_TOP_K = 25               # 补抓期权的候选数（只对 top-K，避免扫全量期权）
 ENRICH_CONCURRENCY = 8          # 期权补抓并发（yfinance 较慢）

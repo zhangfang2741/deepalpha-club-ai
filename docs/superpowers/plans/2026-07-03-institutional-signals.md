@@ -68,12 +68,12 @@ app/schemas/institutional_signals.py  # SignalReport / DimensionScore / SignalSt
 | 状态 | 触发条件（简化） | 含义 |
 |------|------------------|------|
 | 🔥 Institution Accumulation | EPS↑ + Call OI↑ + Call Vol↑ + IV↑ | 机构建仓 |
-| 📈 Expectation Upgrade | EPS↑ + TP↑ + Rating 连升 | 市场预期提升 |
+| 📈 Expectation Upgrade | EPS↑ + TP↑ + Rating 连升 | 预期上修 |
 | 🚀 Breakout Confirmation | Relative Vol↑ + 价格突破 + EPS↑ | 趋势确认 |
 | ⚡ Event Trading | IV↑ + Call Vol↑ + OI→ | 短线事件投机（非真机构） |
 | 💰 Smart Money（真资金） | Call Vol↑ + OI↑ + IV↑ + Price→ | 资金已到、价格未动，最值得研究 |
 | 🌱 Fundamental Turn | Revenue Rev↑ + Guidance↑ + Transcript 强调需求 | 基本面真实改善 |
-| ❄ Distribution | Put OI↑ + EPS↓ + Insider Sell + 放量 | 资金撤退 |
+| ❄ Distribution | Put OI↑ + EPS↓ + Insider Sell + 放量 | 机构派发 |
 | ⚪ Neutral | 无显著组合 | 观望 |
 
 每个状态附**证据链**（命中的具体信号），保证可解释、可回溯。
@@ -85,9 +85,9 @@ app/schemas/institutional_signals.py  # SignalReport / DimensionScore / SignalSt
   - 后端：`app/services/institutional_signals/`（constants/dimensions/states/fetchers/calculator）、`GET /api/v1/institutional-signals?symbol=`、Redis 缓存 1h。
   - 前端：`/institutional-signals` 页面（搜索 + 结论横幅 + 状态标签 + 五维卡片）、TopNav「机构信号」入口。
   - 测试：`tests/test_institutional_signals.py` 9 项全绿（维度打分 + 状态组合）。
-- **Phase 2 ✅ 已完成**：Positioning——接 yfinance 期权链快照（Put/Call 比、Call 量/仓比、ATM IV），解锁 🔥机构建仓 / 💰真资金进入 / ⚡事件交易。同时修正综合分：缺失维度按中性 50 计入（不剔除），新增覆盖度与置信度。判断逻辑详见 `docs/institutional-signals-logic.md`。
+- **Phase 2 ✅ 已完成**：Positioning——接 yfinance 期权链快照（Put/Call 比、Call 量/仓比、ATM IV），解锁 🔥机构建仓 / 💰真资金进入 / ⚡热钱。同时修正综合分：缺失维度按中性 50 计入（不剔除），新增覆盖度与置信度。判断逻辑详见 `docs/institutional-signals-logic.md`。
   - ⚠️ 快照限制：真实 OI 变化率 / IV Rank / EPS 修正趋势需每日快照库（`SignalSnapshot`），列为下一步基建。
-- **Phase 3 ✅ 已完成**：Fundamental（财报连续 Beat/Miss + 营收超预期 + 布局窗口）+ Confirmation（内部人交易统计），补齐 🌱基本面改善 / ❄资金撤退。同时收紧维度状态语义：无数据 → unavailable（不计入覆盖度），避免"零数据高置信度"。
+- **Phase 3 ✅ 已完成**：Fundamental（财报连续 Beat/Miss + 营收超预期 + 布局窗口）+ Confirmation（内部人交易统计），补齐 🌱基本面改善 / ❄机构派发。同时收紧维度状态语义：无数据 → unavailable（不计入覆盖度），避免"零数据高置信度"。
   - ⏳ 子信号待接入：指引方向（Transcript NLP）、13F（FMP Ultimate 版）、ETF 资金流（行业级）。
 - **Phase 4a ✅ 已完成（榜单）**：机构建仓榜——扫描精选 universe（~40 大盘股），两段式：榜单只用 4 个 FMP 维度排名（跳过期权），用户点进详情页跑完整五维。`GET /api/v1/institutional-signals/leaderboard`，Redis 缓存 6h；前端落地页即榜单，点行下钻。
   - `app/services/institutional_signals/scan.py`、`SCAN_UNIVERSE` 常量、`_rank` 纯函数（有单测）。
