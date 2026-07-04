@@ -20,15 +20,17 @@ router = APIRouter()
 
 CACHE_PREFIX = "institutional_signals"
 CACHE_TTL = 3600  # 1 小时
-# 报告 schema 变更时递增，使旧缓存立即失效（v2：新增 explain 信号解释 + price_history）
-REPORT_CACHE_VERSION = "v2"
+# 报告 schema/内容变更时递增，使旧缓存立即失效
+# v2：explain 信号解释 + price_history；v3：状态更名（聪明钱/热钱/机构派发/预期上修）+ 触发逻辑
+REPORT_CACHE_VERSION = "v3"
 
 # 榜单缓存：stale-while-revalidate（按 universe 分键）
 LB_UNIVERSES = ("sp500", "nasdaq100")
 LB_DATA_TTL = 86400   # 数据保留 24h（过期前一直可作为 stale 返回）
 LB_LOCK_TTL = 900     # 扫描锁 15min，防并发重复扫描
-# 榜单产出逻辑变更时递增（v3：两段式期权增强 + 状态带买入时机），使旧缓存立即失效
-LB_CACHE_VERSION = "v3"
+# 榜单产出逻辑/状态名变更时递增，使旧缓存立即失效
+# v3：两段式期权增强 + 状态带买入时机；v4：状态更名（聪明钱/预期上修）
+LB_CACHE_VERSION = "v4"
 
 
 def _lb_keys(universe: str) -> tuple[str, str, str]:
