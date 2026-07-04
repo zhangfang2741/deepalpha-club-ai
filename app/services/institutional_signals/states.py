@@ -53,30 +53,36 @@ def derive_states(dims: dict[str, DimensionScore]) -> list[SignalState]:
             evidence=["放量", "收盘创 20 日新高", "预期维度偏多"],
         ))
 
-    # 🔥 机构建仓：EPS/预期↑ + Call OI↑ + Call Vol↑ + IV↑（需 Positioning）
-    if (exp and exp.score >= 55) and _hit(pos, "call_oi") and _hit(pos, "call_volume") and _hit(pos, "iv"):
+    # Positioning 快照信号（key 对齐 compute_positioning）
+    call_flow_up = _hit(pos, "call_flow")   # Put/Call 低 + Call 量/仓高 = 看涨下注
+    iv_up = _hit(pos, "iv_level")           # ATM IV 偏高
+    exp_strong = bool(exp and exp.score >= 55)
+    relvol_up = _hit(par, "relative_volume")
+
+    # 🔥 机构建仓：预期改善 + 期权看涨下注 + IV 抬升 + 现货放量
+    accumulation = exp_strong and call_flow_up and iv_up and relvol_up
+    if accumulation:
         states.append(SignalState(
             key="institution_accumulation", emoji="🔥", label="机构建仓", stars=5,
-            meaning="预期改善叠加期权真金下注，机构提前布局",
-            evidence=["预期偏多", "Call OI 增加", "Call 放量", "IV 抬升"],
+            meaning="预期改善叠加期权看涨下注与现货放量，机构提前布局",
+            evidence=["预期偏多", "Call 资金流看涨", "IV 抬升", "现货放量"],
         ))
 
-    # 💰 真资金进入：Call Vol↑ + OI↑ + IV↑ + 价格未动（需 Positioning）
-    if _hit(pos, "call_volume") and _hit(pos, "call_oi") and _hit(pos, "iv") and not _hit(par, "breakout"):
+    # 💰 真资金进入：期权端看涨下注 + IV 抬升，但价格尚未突破
+    if call_flow_up and iv_up and not _hit(par, "breakout"):
         states.append(SignalState(
             key="smart_money", emoji="💰", label="真资金进入", stars=5,
-            meaning="资金已到、价格未反应，最值得研究",
-            evidence=["Call 放量", "OI 增加", "IV 抬升", "价格尚未突破"],
+            meaning="期权端资金已下注、价格尚未反应，最值得研究",
+            evidence=["Call 资金流看涨", "IV 抬升", "价格尚未突破"],
         ))
 
-    # ⚡ 事件交易：IV↑ + Call Vol↑ + OI 基本不变（需 Positioning）
-    iv = _sig(pos, "iv")
-    oi = _sig(pos, "call_oi")
-    if iv and iv.hit and _hit(pos, "call_volume") and oi and not oi.hit:
+    # ⚡ 事件交易：IV + Call 齐动，但预期/现货未跟上，多为短线投机
+    #   （手册原文用「OI 基本不变」区分真机构；快照无 OI 变化率，改用「预期未跟上」代理）
+    if iv_up and call_flow_up and not exp_strong and not relvol_up and not accumulation:
         states.append(SignalState(
             key="event_trading", emoji="⚡", label="事件交易", stars=4,
-            meaning="IV 与 Call 齐涨但 OI 未增，多为短线投机而非真机构",
-            evidence=["IV 暴涨", "Call 放量", "OI 基本不变"],
+            meaning="IV 与 Call 齐动但预期与现货未跟上，多为短线投机而非真机构",
+            evidence=["IV 偏高", "Call 资金流活跃", "预期/现货未确认"],
         ))
 
     # 🌱 基本面改善：Revenue↑ + Guidance↑ + Transcript 强调需求（需 Fundamental）
@@ -87,12 +93,12 @@ def derive_states(dims: dict[str, DimensionScore]) -> list[SignalState]:
             evidence=["营收超预期", "指引上调", "目标价上调"],
         ))
 
-    # ❄ 资金撤退：EPS/预期↓ + Put OI↑ + Insider Sell + 放量
-    if _hit_down(exp, "analyst_rating") and (_hit(pos, "put_oi") or _hit_down(con, "insider")):
+    # ❄ 资金撤退：预期↓ + 看跌压力/减持
+    if _hit_down(exp, "analyst_rating") and (_hit_down(pos, "put_pressure") or _hit_down(con, "insider")):
         states.append(SignalState(
             key="distribution", emoji="❄", label="资金撤退", stars=4,
-            meaning="预期下修叠加避险/减持，资金开始离开",
-            evidence=["评级下调", "Put/减持信号"],
+            meaning="预期下修叠加看跌押注/减持，资金开始离开",
+            evidence=["评级下调", "看跌压力/内部减持"],
         ))
 
     if not states:

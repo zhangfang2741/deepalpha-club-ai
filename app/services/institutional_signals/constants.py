@@ -31,3 +31,15 @@ TP_STRONG_PCT = 5.0      # 目标价环比涨幅 ≥ 5% 视为强上调
 TP_MILD_PCT = 1.0
 MIN_ANALYST_COUNT = 2    # 目标价样本数下限，低于此不采信
 BUY_RATIO_MAJORITY = 0.6  # 买入评级占比 ≥ 0.6 视为共识偏多
+
+# ── Positioning 阈值（yfinance 期权快照）────────────────────────────────────
+# 快照可算实的量：Put/Call 比、Call 量/仓比、ATM IV 水平。
+# 真正的 OI 变化 / IV Rank 需每日快照库（后续基建）。
+PCR_CALL_HEAVY = 0.7     # Put/Call 成交量比 ≤ 0.7 视为显著看涨下注
+PCR_MILD_CALL = 0.9
+PCR_PUT_HEAVY = 1.3      # ≥ 1.3 视为看跌/避险主导
+CALL_VOL_OI_FRESH = 0.4  # Call 当日成交量 / Call OI ≥ 0.4 视为新增下注活跃
+IV_ELEVATED = 0.60       # ATM 年化 IV ≥ 60% 视为偏高（事件预期）
+IV_MILD = 0.40
+OPTION_EXPIRY_MAX_DAYS = 45  # 只聚合 45 天内的近月合约
+OPTION_EXPIRY_MIN_COUNT = 2  # 至少聚合最近 2 个到期日

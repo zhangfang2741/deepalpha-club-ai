@@ -51,7 +51,11 @@ class InstitutionalSignalReport(BaseResponse):
     symbol: str
     name: str
     as_of: str = Field(description="报告日期 YYYY-MM-DD")
-    composite_score: float = Field(ge=0, le=100, description="五维加权综合分")
+    composite_score: float = Field(ge=0, le=100,
+                                   description="五维加权综合分（缺失维度按中性 50 计入，不剔除）")
+    coverage: int = Field(ge=0, le=5, description="已接入数据的维度数（ok/partial）")
+    coverage_total: int = Field(default=5, description="维度总数")
+    confidence: str = Field(description="置信度：高 / 中 / 低（由覆盖度决定）")
     headline: str = Field(description="一句话结论")
     dimensions: List[DimensionScore]
     states: List[SignalState]

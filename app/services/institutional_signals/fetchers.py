@@ -1,11 +1,17 @@
-"""机构资金信号数据抓取（FMP stable API）。
+"""机构资金信号数据抓取（FMP stable API + yfinance 期权）。
 
 单源失败返回空/None，不抛异常——由 calculator 决定降级为 partial。
 """
+import datetime
+
 import httpx
 
 from app.core.config import settings
 from app.core.logging import logger
+from app.services.institutional_signals.constants import (
+    OPTION_EXPIRY_MAX_DAYS,
+    OPTION_EXPIRY_MIN_COUNT,
+)
 
 _FMP_STABLE = "https://financialmodelingprep.com/stable"
 _TIMEOUT = 15
@@ -63,3 +69,74 @@ async def fetch_price_history(client: httpx.AsyncClient, symbol: str, from_: str
         for r in data if r.get("date")
     ]
     return sorted(rows, key=lambda x: x["date"])
+
+
+# ── 期权（yfinance，同步 → calculator 中用 asyncio.to_thread 调用）──────────
+
+def _atm_iv(df, spot: float) -> float | None:
+    """取行权价最接近现价的合约的隐含波动率。"""
+    if df is None or df.empty or not spot:
+        return None
+    idx = (df["strike"] - spot).abs().idxmin()
+    iv = df.loc[idx, "impliedVolatility"]
+    try:
+        iv = float(iv)
+    except (TypeError, ValueError):
+        return None
+    return iv if iv == iv and iv > 0 else None  # 过滤 NaN 与非正值
+
+
+def fetch_option_metrics(symbol: str, spot: float) -> dict | None:
+    """聚合近月期权链，返回 Call/Put 成交量、OI 与 ATM IV。
+
+    同步函数（yfinance 底层为 requests），calculator 用 asyncio.to_thread 调用。
+    """
+    try:
+        import yfinance as yf
+
+        ticker = yf.Ticker(symbol)
+        expiries = list(getattr(ticker, "options", []) or [])
+        if not expiries:
+            return None
+
+        today = datetime.date.today()
+        dated = []
+        for e in expiries:
+            try:
+                d = datetime.date.fromisoformat(e)
+            except ValueError:
+                continue
+            days = (d - today).days
+            if days >= 0:
+                dated.append((e, days))
+        if not dated:
+            return None
+
+        within = [e for e, days in dated if days <= OPTION_EXPIRY_MAX_DAYS]
+        if len(within) < OPTION_EXPIRY_MIN_COUNT:
+            within = [e for e, _ in dated[:OPTION_EXPIRY_MIN_COUNT]]
+
+        call_vol = put_vol = call_oi = put_oi = 0
+        ivs: list[float] = []
+        for e in within:
+            chain = ticker.option_chain(e)
+            calls, puts = chain.calls, chain.puts
+            call_vol += int(calls["volume"].fillna(0).sum())
+            put_vol += int(puts["volume"].fillna(0).sum())
+            call_oi += int(calls["openInterest"].fillna(0).sum())
+            put_oi += int(puts["openInterest"].fillna(0).sum())
+            for iv in (_atm_iv(calls, spot), _atm_iv(puts, spot)):
+                if iv is not None:
+                    ivs.append(iv)
+
+        return {
+            "call_vol": call_vol,
+            "put_vol": put_vol,
+            "call_oi": call_oi,
+            "put_oi": put_oi,
+            "atm_iv": sum(ivs) / len(ivs) if ivs else 0.0,
+            "expiries_used": within,
+        }
+    except Exception as e:
+        logger.warning("institutional_signals_option_fetch_error", symbol=symbol, error=str(e))
+        return None

@@ -7,9 +7,15 @@ from typing import Optional
 from app.schemas.institutional_signals import DimensionScore, SignalItem
 from app.services.institutional_signals.constants import (
     BUY_RATIO_MAJORITY,
+    CALL_VOL_OI_FRESH,
     DIMENSION_META,
     GAP_PCT,
+    IV_ELEVATED,
+    IV_MILD,
     MIN_ANALYST_COUNT,
+    PCR_CALL_HEAVY,
+    PCR_MILD_CALL,
+    PCR_PUT_HEAVY,
     RELVOL_ELEVATED,
     RELVOL_MILD,
     RELVOL_QUIET,
@@ -200,3 +206,77 @@ def compute_expectation(
     status = "ok" if has_data else "partial"
     return DimensionScore(key="expectation", label=label, question=question,
                           score=_clamp(score), status=status, signals=signals)
+
+
+# ── Positioning 仓位（期权快照）─────────────────────────────────────────────
+
+def compute_positioning(metrics: Optional[dict]) -> DimensionScore:
+    """基于 yfinance 期权快照的 Put/Call 比、Call 量/仓比、ATM IV 水平打分。
+
+    metrics 字段（由 fetchers 聚合近月合约得到）：
+        call_vol / put_vol / call_oi / put_oi（整型求和）、atm_iv（年化小数）。
+    快照只能反映「当下」，OI 变化率与 IV Rank 需每日快照库（后续基建）。
+    """
+    label, question = _meta("positioning")
+
+    if not metrics:
+        return unavailable_dimension("positioning", "期权数据不可用（yfinance 无期权链或拉取失败）")
+
+    call_vol = metrics.get("call_vol") or 0
+    put_vol = metrics.get("put_vol") or 0
+    call_oi = metrics.get("call_oi") or 0
+    put_oi = metrics.get("put_oi") or 0
+    atm_iv = metrics.get("atm_iv") or 0.0
+
+    if call_vol + put_vol == 0:
+        return DimensionScore(
+            key="positioning", label=label, question=question, score=50.0, status="partial",
+            signals=[SignalItem(key="no_option_volume", label="当日期权无成交",
+                                direction="flat", hit=False, detail="非交易时段或流动性极低")],
+        )
+
+    pcr_vol = put_vol / call_vol if call_vol else 99.0
+    pcr_oi = put_oi / call_oi if call_oi else 99.0
+    call_vol_oi = call_vol / call_oi if call_oi else 0.0
+
+    signals: list[SignalItem] = []
+    score = 50.0
+
+    # Call 资金流：看涨下注（Put/Call 低 + 当日 Call 量/仓高）
+    if pcr_vol <= PCR_CALL_HEAVY and call_vol_oi >= CALL_VOL_OI_FRESH:
+        delta, cf_dir, cf_hit = 20, "up", True
+    elif pcr_vol <= PCR_MILD_CALL:
+        delta, cf_dir, cf_hit = 8, "up", False
+    else:
+        delta, cf_dir, cf_hit = 0, "flat", False
+    score += delta
+    signals.append(SignalItem(key="call_flow", label="Call 资金流",
+                              value=f"PCR {pcr_vol:.2f} · 量/仓 {call_vol_oi:.2f}",
+                              direction=cf_dir, hit=cf_hit,
+                              detail="Put/Call 成交量比 + Call 当日量/未平仓量"))
+
+    # 看跌/避险压力：Put 主导
+    if pcr_vol >= PCR_PUT_HEAVY or pcr_oi >= PCR_PUT_HEAVY:
+        score -= 15
+        pp_dir, pp_hit = "down", True
+    else:
+        pp_dir, pp_hit = "flat", False
+    signals.append(SignalItem(key="put_pressure", label="看跌压力",
+                              value=f"量 PCR {pcr_vol:.2f} · 仓 PCR {pcr_oi:.2f}",
+                              direction=pp_dir, hit=pp_hit,
+                              detail="Put/Call 成交量比与持仓比"))
+
+    # IV 水平（非 Rank）：偏高代表市场预期有事件
+    if atm_iv >= IV_ELEVATED:
+        delta, iv_dir, iv_hit = 6, "up", True
+    elif atm_iv >= IV_MILD:
+        delta, iv_dir, iv_hit = 3, "up", False
+    else:
+        delta, iv_dir, iv_hit = 0, "flat", False
+    score += delta
+    signals.append(SignalItem(key="iv_level", label="隐含波动率",
+                              value=f"{atm_iv * 100:.0f}%", direction=iv_dir, hit=iv_hit,
+                              detail="ATM 年化 IV（水平，非 Rank——Rank 待快照库）"))
+
+    return DimensionScore(key="positioning", label=label, question=question,
+                          score=_clamp(score), status="ok", signals=signals)

@@ -33,6 +33,9 @@ export interface InstitutionalSignalReport {
   name: string
   as_of: string
   composite_score: number
+  coverage: number
+  coverage_total: number
+  confidence: string
   headline: string
   dimensions: DimensionScore[]
   states: SignalState[]

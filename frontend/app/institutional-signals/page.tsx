@@ -45,6 +45,13 @@ function scoreBarColor(score: number): string {
   return 'bg-gray-400'
 }
 
+// 置信度徽章配色（由数据覆盖度决定）
+function confidenceStyle(conf: string): string {
+  if (conf === '高') return 'bg-emerald-100 text-emerald-700'
+  if (conf === '中') return 'bg-amber-100 text-amber-700'
+  return 'bg-gray-200 text-gray-600'
+}
+
 function DimensionCard({ dim }: { dim: DimensionScore }) {
   const unavailable = dim.status === 'unavailable'
   return (
@@ -182,6 +189,14 @@ export default function InstitutionalSignalsPage() {
                     {data.composite_score.toFixed(0)}
                   </div>
                   <div className="text-[11px] uppercase tracking-wide text-gray-400">综合分</div>
+                  <div className="mt-1 flex items-center justify-end gap-1.5">
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${confidenceStyle(data.confidence)}`}>
+                      置信度 {data.confidence}
+                    </span>
+                    <span className="text-[11px] text-gray-400">
+                      {data.coverage}/{data.coverage_total} 维
+                    </span>
+                  </div>
                 </div>
               </div>
               <p className="mt-3 text-sm font-medium text-gray-700">{data.headline}</p>
@@ -215,7 +230,8 @@ export default function InstitutionalSignalsPage() {
             </div>
 
             <p className="text-center text-xs text-gray-400">
-              仓位 / 基本面 / 确认维度将在后续版本接入（期权、财报、Insider·13F·ETF Flow）
+              基本面 / 确认维度将在后续版本接入（财报超预期·指引、Insider·13F·ETF Flow）；
+              仓位维度基于期权快照，OI 变化率与 IV Rank 待每日快照库
             </p>
           </div>
         )}
