@@ -182,6 +182,7 @@ async def compute_institutional_signals(
         coverage=coverage,
         confidence=confidence,
         headline=_headline(composite, states),
+        price_history=[round(p["close"], 2) for p in prices[-30:]],
         dimensions=list(dims.values()),
         states=states,
     )

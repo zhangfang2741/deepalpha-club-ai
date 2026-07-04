@@ -83,5 +83,6 @@ class InstitutionalSignalReport(BaseResponse):
     coverage_total: int = Field(default=5, description="维度总数")
     confidence: str = Field(description="置信度：高 / 中 / 低（由覆盖度决定）")
     headline: str = Field(description="一句话结论")
+    price_history: List[float] = Field(default_factory=list, description="近期收盘价（sparkline 用）")
     dimensions: List[DimensionScore]
     states: List[SignalState]
