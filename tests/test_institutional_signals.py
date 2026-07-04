@@ -466,3 +466,27 @@ def test_states_accumulation_fires_without_volume():
     states = derive_states({"expectation": exp, "positioning": pos, "participation": par})
     acc = next((s for s in states if s.key == "institution_accumulation"), None)
     assert acc is not None and "现货放量确认" not in acc.evidence
+
+
+@pytest.mark.asyncio
+async def test_fetch_sp500_symbols_uses_csv_backup(monkeypatch):
+    from app.services.institutional_signals import fetchers
+
+    async def empty_get(_client, _path, _params):
+        return []
+
+    async def empty_wiki(_client, _article_url, _api_url):
+        return []
+
+    class Response:
+        status_code = 200
+        text = "Symbol,Security\nAAPL,Apple Inc.\nMSFT,Microsoft Corp.\nBRK.B,Berkshire Hathaway\n"
+
+    class Client:
+        async def get(self, *args, **kwargs):
+            return Response()
+
+    monkeypatch.setattr(fetchers, "_get", empty_get)
+    monkeypatch.setattr(fetchers, "_fetch_wiki_symbols", empty_wiki)
+
+    assert await fetchers.fetch_sp500_symbols(cast(Any, Client())) == ["AAPL", "MSFT"]

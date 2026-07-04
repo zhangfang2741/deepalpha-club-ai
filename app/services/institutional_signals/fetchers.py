@@ -2,8 +2,11 @@
 
 单源失败返回空/None，不抛异常——由 calculator 决定降级为 partial。
 """
+
 import asyncio
+import csv
 import datetime
+from io import StringIO
 
 import httpx
 
@@ -78,15 +81,33 @@ _WIKI_SP500_API = (
     "?action=parse&page=List_of_S%26P_500_companies&format=json&prop=text&formatversion=2"
 )
 _WIKI_NDX100_API = (
-    "https://en.wikipedia.org/w/api.php"
-    "?action=parse&page=Nasdaq-100&format=json&prop=text&formatversion=2"
+    "https://en.wikipedia.org/w/api.php?action=parse&page=Nasdaq-100&format=json&prop=text&formatversion=2"
 )
+_GITHUB_SP500_CSV = "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/master/data/constituents.csv"
 
 
 async def _parse_wiki_symbols(html: str) -> list[str]:
     """从 Wikipedia 渲染 HTML 中解析成分股代码。"""
     rows = await asyncio.to_thread(_parse_wiki_html, html)
     return _extract_symbols(rows)
+
+
+async def _fetch_csv_symbols(client: httpx.AsyncClient, url: str, symbol_field: str = "Symbol") -> list[str]:
+    """从公开 CSV 备源解析成分股代码。"""
+    try:
+        resp = await client.get(url, headers=_WIKI_HEADERS, timeout=20, follow_redirects=True)
+        if resp.status_code != 200:
+            logger.warning("csv_constituent_fetch_non200", url=url, status=resp.status_code)
+            return []
+        reader = csv.DictReader(StringIO(resp.text))
+        rows = [{"symbol": row.get(symbol_field, "")} for row in reader]
+        symbols = _extract_symbols(rows)
+        if not symbols:
+            logger.warning("csv_constituent_parse_empty", url=url)
+        return symbols
+    except Exception as e:
+        logger.warning("csv_constituent_fetch_failed", url=url, error=str(e))
+        return []
 
 
 async def _fetch_wiki_symbols(
@@ -123,10 +144,12 @@ async def _fetch_wiki_symbols(
 
 
 async def fetch_sp500_symbols(client: httpx.AsyncClient) -> list[str]:
-    """S&P 500 成分股代码：FMP → 维基百科 → （调用方硬编码兜底）。"""
+    """S&P 500 成分股代码：FMP → 维基百科 → GitHub CSV → （调用方硬编码兜底）。"""
     syms = _extract_symbols(await _get(client, "sp500-constituent", {}))
     if not syms:
         syms = await _fetch_wiki_symbols(client, _WIKI_SP500, _WIKI_SP500_API)
+    if not syms:
+        syms = await _fetch_csv_symbols(client, _GITHUB_SP500_CSV)
     return syms
 
 
@@ -168,19 +191,26 @@ async def fetch_insider_statistics(client: httpx.AsyncClient, symbol: str) -> li
 
 async def fetch_price_history(client: httpx.AsyncClient, symbol: str, from_: str, to: str) -> list[dict]:
     """日线 EOD，按日期升序，标准化字段。"""
-    data = await _get(client, "historical-price-eod/full",
-                      {"symbol": symbol, "from": from_, "to": to})
+    data = await _get(client, "historical-price-eod/full", {"symbol": symbol, "from": from_, "to": to})
     if not isinstance(data, list):
         return []
     rows = [
-        {"date": r["date"], "open": r.get("open", 0), "high": r.get("high", 0),
-         "low": r.get("low", 0), "close": r.get("close", 0), "volume": r.get("volume", 0)}
-        for r in data if r.get("date")
+        {
+            "date": r["date"],
+            "open": r.get("open", 0),
+            "high": r.get("high", 0),
+            "low": r.get("low", 0),
+            "close": r.get("close", 0),
+            "volume": r.get("volume", 0),
+        }
+        for r in data
+        if r.get("date")
     ]
     return sorted(rows, key=lambda x: x["date"])
 
 
 # ── 期权（yfinance，同步 → calculator 中用 asyncio.to_thread 调用）──────────
+
 
 def _atm_iv(df, spot: float) -> float | None:
     """取行权价最接近现价的合约的隐含波动率。"""
