@@ -99,6 +99,60 @@ function SkeletonCard() {
   )
 }
 
+// 单条信号：可点开查看「原始数据 → 计算式 → 判定规则 → 结论」
+function SignalRow({ s }: { s: SignalItem }) {
+  const [show, setShow] = useState(false)
+  const { arrow, cls } = dirStyle(s.direction)
+  const hasExplain = !!s.explain
+  return (
+    <li className="text-sm">
+      <button
+        type="button"
+        onClick={() => hasExplain && setShow((v) => !v)}
+        className={`flex w-full items-start justify-between gap-2 text-left ${hasExplain ? 'cursor-pointer' : 'cursor-default'}`}
+      >
+        <div className="min-w-0">
+          <span className="text-gray-700">{s.label}</span>
+          {hasExplain && (
+            <span className="ml-1 text-[10px] text-gray-400">{show ? '收起' : '为什么？'}</span>
+          )}
+          {s.detail && <p className="text-[11px] leading-tight text-gray-400">{s.detail}</p>}
+        </div>
+        <span className={`flex shrink-0 items-center gap-1 font-semibold ${cls}`}>
+          {s.value ?? ''}
+          <span aria-hidden>{arrow}</span>
+          {s.hit && <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-current" />}
+        </span>
+      </button>
+
+      {show && s.explain && (
+        <div className="mt-2 space-y-1.5 rounded-lg bg-gray-50 p-3 text-[11px] leading-relaxed text-gray-600">
+          {s.explain.inputs.length > 0 && (
+            <div>
+              <span className="font-semibold text-gray-500">原始数据</span>
+              <ul className="mt-0.5 list-disc pl-4">
+                {s.explain.inputs.map((x, i) => <li key={i}>{x}</li>)}
+              </ul>
+            </div>
+          )}
+          {s.explain.formula && (
+            <div><span className="font-semibold text-gray-500">计算式　</span><span className="font-mono">{s.explain.formula}</span></div>
+          )}
+          {s.explain.thresholds && (
+            <div><span className="font-semibold text-gray-500">判定规则</span> {s.explain.thresholds}</div>
+          )}
+          {s.explain.conclusion && (
+            <div className="text-gray-800"><span className="font-semibold text-gray-500">结论　　</span>{s.explain.conclusion}</div>
+          )}
+          {s.explain.source && (
+            <div className="text-[10px] text-gray-400">数据来源：{s.explain.source}</div>
+          )}
+        </div>
+      )}
+    </li>
+  )
+}
+
 function DimensionCard({ dim }: { dim: DimensionScore }) {
   const unavailable = dim.status === 'unavailable'
   const detailSignals = dim.signals.filter((s) => s.value || s.hit)
@@ -142,27 +196,10 @@ function DimensionCard({ dim }: { dim: DimensionScore }) {
         </p>
       )}
 
-      {/* 信号明细（含后端计算口径，直接可解释）*/}
+      {/* 信号明细：每条可点开看完整推导 */}
       {!unavailable && open && (
-        <ul className="mt-3 space-y-2">
-          {detailSignals.map((s) => {
-            const { arrow, cls } = dirStyle(s.direction)
-            return (
-              <li key={s.key} className="flex items-start justify-between gap-2 text-sm">
-                <div className="min-w-0">
-                  <span className="text-gray-700">{s.label}</span>
-                  {s.detail && (
-                    <p className="text-[11px] leading-tight text-gray-400">{s.detail}</p>
-                  )}
-                </div>
-                <span className={`flex shrink-0 items-center gap-1 font-semibold ${cls}`}>
-                  {s.value ?? ''}
-                  <span aria-hidden>{arrow}</span>
-                  {s.hit && <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-current" />}
-                </span>
-              </li>
-            )
-          })}
+        <ul className="mt-3 space-y-2.5">
+          {detailSignals.map((s) => <SignalRow key={s.key} s={s} />)}
         </ul>
       )}
     </div>

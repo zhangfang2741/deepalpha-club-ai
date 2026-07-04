@@ -1,5 +1,13 @@
 import apiClient from './client'
 
+export interface SignalExplanation {
+  inputs: string[]
+  formula: string | null
+  thresholds: string | null
+  conclusion: string | null
+  source: string | null
+}
+
 export interface SignalItem {
   key: string
   label: string
@@ -7,6 +15,7 @@ export interface SignalItem {
   direction: 'up' | 'down' | 'flat'
   hit: boolean
   detail: string | null
+  explain: SignalExplanation | null
 }
 
 export interface DimensionScore {

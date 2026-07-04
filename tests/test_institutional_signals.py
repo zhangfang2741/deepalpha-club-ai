@@ -53,6 +53,17 @@ def test_participation_quiet_range_scores_neutral_ish():
 
 # ── Expectation ─────────────────────────────────────────────────────────────
 
+def test_expectation_signal_has_full_explanation():
+    pt = {"lastMonthAvgPriceTarget": 120, "lastQuarterAvgPriceTarget": 100, "lastMonthCount": 8}
+    dim = compute_expectation(pt, [])
+    tp = next(s for s in dim.signals if s.key == "target_price")
+    assert tp.explain is not None
+    assert tp.explain.inputs and tp.explain.formula and tp.explain.conclusion
+    assert tp.explain.source == "FMP price-target-summary"
+    # 原始数据里应能看到近月/近季均值
+    assert any("120" in x for x in tp.explain.inputs)
+
+
 def test_expectation_target_price_up_and_rating_up():
     pt = {"lastMonthAvgPriceTarget": 120, "lastQuarterAvgPriceTarget": 100, "lastMonthCount": 8}
     grades = [
