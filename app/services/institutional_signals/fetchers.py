@@ -87,9 +87,17 @@ async def fetch_analyst_estimate(client: httpx.AsyncClient, symbol: str) -> dict
 
 
 async def fetch_earnings(client: httpx.AsyncClient, symbol: str) -> list[dict]:
-    """财报日程（含历史 epsActual/epsEstimated 与未来财报日）。"""
-    data = await _get(client, "earnings-calendar", {"symbol": symbol, "limit": 16})
-    return data if isinstance(data, list) else []
+    """某公司的历史财报 + 未来财报日（epsActual/epsEstimated/revenue…）。
+
+    必须用公司专属端点 `earnings?symbol=`；`earnings-calendar` 是**全市场日历**，
+    带 symbol 也不过滤，会混入其它公司当日财报（日期连成天、EPS 量级错乱）。
+    """
+    data = await _get(client, "earnings", {"symbol": symbol, "limit": 16})
+    if isinstance(data, list) and data:
+        return data
+    # 兜底：个别 FMP 版本用 earnings-calendar 承载公司财报
+    fallback = await _get(client, "earnings-calendar", {"symbol": symbol, "limit": 16})
+    return fallback if isinstance(fallback, list) else []
 
 
 async def fetch_insider_statistics(client: httpx.AsyncClient, symbol: str) -> list[dict]:
