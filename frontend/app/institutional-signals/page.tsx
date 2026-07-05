@@ -1,5 +1,7 @@
 'use client'
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import { useState, useCallback, useEffect, FormEvent } from 'react'
 import {
   fetchInstitutionalSignals,
@@ -325,11 +327,13 @@ export default function InstitutionalSignalsPage() {
   const [boardComputing, setBoardComputing] = useState(false)
   const [boardFilter, setBoardFilter] = useState<string>('all')
   const [universe, setUniverse] = useState<'sp500' | 'nasdaq100'>('sp500')
+  const [detailTab, setDetailTab] = useState<'signals' | 'research'>('signals')
 
   const load = useCallback((sym: string) => {
     const clean = sym.trim().toUpperCase()
     if (!clean) return
     setSymbol(clean)
+    setDetailTab('signals')
     setLoading(true)
     setError('')
     fetchInstitutionalSignals(clean)
@@ -427,6 +431,34 @@ export default function InstitutionalSignalsPage() {
             <button onClick={backToBoard} className="text-sm text-gray-500 transition hover:text-gray-900">
               ← 返回机构建仓榜
             </button>
+
+            <div className="inline-flex rounded-xl border border-gray-200 bg-white p-1">
+              {[
+                { id: 'signals', label: '机构信号' },
+                { id: 'research', label: '企业研究' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setDetailTab(tab.id as 'signals' | 'research')}
+                  className={`h-9 rounded-lg px-3 text-sm font-semibold transition ${
+                    detailTab === tab.id ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {detailTab === 'research' ? (
+              <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <iframe
+                  src={`/company-research?symbol=${encodeURIComponent(data.symbol)}&embedded=1`}
+                  title={`${data.symbol} 企业研究`}
+                  className="h-[78vh] w-full border-0"
+                />
+              </div>
+            ) : (
+              <>
             {/* 结论横幅 */}
             <div className="rounded-2xl border border-gray-200 bg-gradient-to-br from-gray-50 to-white p-6 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -498,6 +530,8 @@ export default function InstitutionalSignalsPage() {
               五维已全部接入。仓位 OI 变化率 / IV Rank、预期 EPS 修正已接入每日快照库（需累积历史后生效）；
               待后续：指引方向（Transcript NLP）、13F（FMP Ultimate 版）、ETF 资金流
             </p>
+              </>
+            )}
           </div>
         )}
 
