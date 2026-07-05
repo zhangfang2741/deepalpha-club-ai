@@ -1,5 +1,7 @@
 import apiClient from './client'
 
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+
 export interface TranscriptCandidate {
   request_id: string
   title: string
@@ -110,4 +112,62 @@ export async function fetchTranscriptTranslation(
     }
   )
   return response.data
+}
+
+export type TranslationSection = 'prepared_remarks' | 'questions_and_answers'
+
+export interface TranslationStreamEvent {
+  section: TranslationSection | null
+  text: string
+  done: boolean
+  error?: string
+}
+
+export async function* streamTranscriptTranslation(
+  detail: TranscriptDetailResponse,
+  signal?: AbortSignal
+): AsyncGenerator<TranslationStreamEvent> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
+  const resp = await fetch(`${BASE_URL}/api/v1/transcripts/translate/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      ticker: detail.ticker,
+      url: detail.url,
+      prepared_remarks: detail.prepared_remarks,
+      questions_and_answers: detail.questions_and_answers,
+    }),
+    signal,
+  })
+
+  if (!resp.ok) throw new Error(`请求失败 (${resp.status})`)
+
+  const reader = resp.body?.getReader()
+  if (!reader) throw new Error('无法读取响应流')
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        try {
+          yield JSON.parse(line.slice(6)) as TranslationStreamEvent
+        } catch {
+          // 忽略不完整/异常行
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
 }

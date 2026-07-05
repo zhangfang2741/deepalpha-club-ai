@@ -1,9 +1,11 @@
 """Earnings call transcript API endpoints."""
 
+import json
 from typing import Annotated
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 
 from app.core.config import settings
 from app.core.limiter import limiter
@@ -128,3 +130,32 @@ async def translate_transcript(
     except Exception as e:
         logger.exception("transcript_translate_endpoint_failed", ticker=payload.ticker, error=str(e))
         raise HTTPException(status_code=502, detail="Failed to translate transcript")
+
+
+@router.post("/translate/stream")
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["transcripts"][0])
+async def translate_transcript_stream(
+    request: Request,
+    payload: TranscriptTranslationRequest,
+) -> StreamingResponse:
+    """流式翻译逐字稿：按从前到后的顺序，逐段返回中文（SSE）。"""
+    logger.info("transcript_translate_stream_endpoint_called", ticker=payload.ticker, url=payload.url)
+    if not payload.prepared_remarks.strip() and not payload.questions_and_answers.strip():
+        raise HTTPException(status_code=422, detail="transcript content is empty")
+
+    async def event_generator():
+        """逐段产出 SSE 事件。"""
+        try:
+            async for section, text in transcript_ai_service.translate_stream(
+                ticker=payload.ticker,
+                url=payload.url,
+                prepared_remarks=payload.prepared_remarks,
+                questions_and_answers=payload.questions_and_answers,
+            ):
+                yield f"data: {json.dumps({'section': section, 'text': text, 'done': False})}\n\n"
+            yield f"data: {json.dumps({'section': None, 'text': '', 'done': True})}\n\n"
+        except Exception as e:
+            logger.exception("transcript_translate_stream_failed", ticker=payload.ticker, error=str(e))
+            yield f"data: {json.dumps({'error': 'translation failed', 'done': True})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
