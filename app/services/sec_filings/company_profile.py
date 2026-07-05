@@ -15,7 +15,7 @@ from app.schemas.sec_filings import CompanyProfile
 from app.services.llm.service import llm_service
 from app.services.sec_filings.service import sec_filings_service
 
-_CACHE_PREFIX = "sec:profile"
+_CACHE_PREFIX = "sec:profile:v2"
 _CACHE_TTL = 604800  # 7天：公司基本面画像变动很慢
 
 _SYSTEM_PROMPT = """你是一位资深的股票投资研究分析师，擅长用最精炼的语言帮投资者快速建立对一家上市公司的基础认知。
@@ -24,7 +24,9 @@ _SYSTEM_PROMPT = """你是一位资深的股票投资研究分析师，擅长用
 1. 全部用简体中文输出。
 2. 内容客观、精准、不堆砌形容词，聚焦对投资判断有用的信息。
 3. 只依据你对该公司的既有认知作答；对不确定的信息保持克制，不要编造具体数字。
-4. 严格按要求的 JSON 结构输出，不要添加额外字段。"""
+4. 护城河判断参考晨星（Morningstar）式经济护城河框架，但不要声称这是晨星官方评级；需要给出自己的保守判断。
+5. 市占率只能给广泛公开、你有把握的近似范围；不确定时写“未知/未披露”，不要编造精确数字。
+6. 严格按要求的 JSON 结构输出，不要添加额外字段。"""
 
 
 class CompanyProfileService:
@@ -53,7 +55,10 @@ class CompanyProfileService:
 - main_products：主要产品或业务线，3-6 项。每项包含：
   - name：产品名称（简短，几个字到十几个字）。
   - explanation：用大白话解释这个产品到底是干什么用的、它如何与普通人的日常生活挂钩，最好举一个生活化的例子（1-2 句，避免堆砌专业术语）。比如「基带芯片」可以解释为「手机能打电话、上网靠它，没有它手机就连不上移动网络」。
+  - market_share：该产品/业务线的市占率或市场份额估计。可以写“约 20%”“超过 70%”“全球前三”“未知/未披露”等；没有可靠把握时必须写“未知/未披露”。
 - main_customers：主要客户或客户群体，3-6 项，说明产品主要卖给谁（可以是具体大客户，也可以是客户类型，如"中小企业/设计团队/云厂商"）。
+- moat_rating：经济护城河判断，只能从“宽”“中”“窄”“无”四个值中选一个。参考因素包括转换成本、网络效应、规模优势、品牌、专利/监管壁垒、成本优势、数据/生态锁定等。判断要保守。
+- moat_reason：用 1-2 句解释为什么给这个护城河等级。
 - differentiation：在行业中的核心差异化竞争力或护城河，2-3 句，说明它凭什么区别于对手、壁垒在哪。
 - competitors：主要竞争对手，列出 3-6 家公司名（可用中英文常见叫法）。"""
 

@@ -84,6 +84,7 @@ export async function fetchFilingDocuments(
 export interface ProductItem {
   name: string
   explanation: string
+  market_share: string
 }
 
 export interface CompanyProfile {
@@ -92,6 +93,8 @@ export interface CompanyProfile {
   supply_chain_position: string
   main_products: ProductItem[]
   main_customers: string[]
+  moat_rating: '宽' | '中' | '窄' | '无'
+  moat_reason: string
   differentiation: string
   competitors: string[]
 }

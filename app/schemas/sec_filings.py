@@ -1,5 +1,6 @@
 """SEC filing 列表与分类 Pydantic schemas。"""
 
+from typing import Literal
 from typing import List
 
 from pydantic import BaseModel, Field
@@ -71,6 +72,10 @@ class ProductItem(BaseModel):
     explanation: str = Field(
         description="用大白话解释这个产品是干什么用的、它如何与普通人的日常生活挂钩，最好举一个生活化例子（1-2 句）"
     )
+    market_share: str = Field(
+        default="未知/未披露",
+        description="该产品或业务线的市占率/市场份额估计；没有可靠公开认知时写“未知/未披露”",
+    )
 
 
 class CompanyProfile(BaseModel):
@@ -86,6 +91,11 @@ class CompanyProfile(BaseModel):
         default_factory=list, description="主要产品或业务线（3-6 项，每项含名称与通俗拆解）"
     )
     main_customers: List[str] = Field(default_factory=list, description="主要客户或客户群体（3-6 项）")
+    moat_rating: Literal["宽", "中", "窄", "无"] = Field(
+        default="无",
+        description="晨星式经济护城河判断：宽/中/窄/无。无法确认时保守给“无”或“窄”。",
+    )
+    moat_reason: str = Field(default="", description="护城河评级的简短理由（1-2 句）")
     differentiation: str = Field(description="在行业中的核心差异化竞争力/护城河（2-3 句）")
     competitors: List[str] = Field(default_factory=list, description="主要竞争对手（3-6 家，公司名）")
 
