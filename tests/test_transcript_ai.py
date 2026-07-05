@@ -168,9 +168,9 @@ async def test_translate_stream_uses_cache(monkeypatch):
     """流式翻译命中缓存时不再调用 LLM。"""
     cache = _StubCache()
     url = "https://www.fool.com/earnings/call-transcripts/2026/05/28/nvda/"
-    from app.services.transcript_ai import _cache_key
+    from app.services.transcript_ai import _TRANSLATION_CACHE_KIND, _cache_key
 
-    cache.store[_cache_key("translation", url)] = TranscriptTranslationResponse(
+    cache.store[_cache_key(_TRANSLATION_CACHE_KIND, url)] = TranscriptTranslationResponse(
         ticker="NVDA", url=url, prepared_remarks_zh="缓存的管理层发言", questions_and_answers_zh="缓存的问答"
     ).model_dump_json()
     monkeypatch.setattr(transcript_ai, "cache_service", cache)
