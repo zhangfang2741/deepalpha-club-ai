@@ -25,6 +25,11 @@ from app.services.llm import llm_service
 
 # 缓存 7 天：逐字稿一旦发布内容不再变化
 _CACHE_TTL_SECONDS = 7 * 24 * 3600
+# 缓存分类。翻译缓存版本号：v1 曾把 Claude 的 thinking 原文混入译文，
+# 提升到 v2 使旧的 poisoned 缓存整体失效，强制用修复后的逻辑重新生成
+# （旧键随 7 天 TTL 自然过期，无需手动清 Redis）。总结用结构化输出，从未受影响，保持不变。
+_SUMMARY_CACHE_KIND = "summary"
+_TRANSLATION_CACHE_KIND = "translation:v2"
 # 单段翻译输入长度上限（字符）。MAX_TOKENS 默认 2000，控制输入以保证中文输出不被截断
 _TRANSLATE_CHUNK_CHARS = 1600
 # 翻译并发上限，避免瞬时打满上游速率
@@ -145,7 +150,7 @@ class TranscriptAIService:
         questions_and_answers: str,
     ) -> TranscriptSummaryResponse:
         """生成逐字稿的结构化中文摘要（带缓存）。"""
-        cache_hit = await cache_service.get(_cache_key("summary", url)) if url else None
+        cache_hit = await cache_service.get(_cache_key(_SUMMARY_CACHE_KIND, url)) if url else None
         if cache_hit:
             logger.info("transcript_summary_cache_hit", ticker=ticker, url=url)
             summary = TranscriptSummary.model_validate_json(cache_hit)
@@ -162,7 +167,7 @@ class TranscriptAIService:
         )
 
         if url:
-            await cache_service.set(_cache_key("summary", url), summary.model_dump_json(), ttl=_CACHE_TTL_SECONDS)
+            await cache_service.set(_cache_key(_SUMMARY_CACHE_KIND, url), summary.model_dump_json(), ttl=_CACHE_TTL_SECONDS)
         return TranscriptSummaryResponse(ticker=ticker, title=title, url=url, summary=summary)
 
     async def translate(
@@ -173,7 +178,7 @@ class TranscriptAIService:
         questions_and_answers: str,
     ) -> TranscriptTranslationResponse:
         """把逐字稿翻译成中文（分段并发 + 缓存）。"""
-        cache_hit = await cache_service.get(_cache_key("translation", url)) if url else None
+        cache_hit = await cache_service.get(_cache_key(_TRANSLATION_CACHE_KIND, url)) if url else None
         if cache_hit:
             logger.info("transcript_translation_cache_hit", ticker=ticker, url=url)
             return TranscriptTranslationResponse.model_validate_json(cache_hit)
@@ -199,7 +204,7 @@ class TranscriptAIService:
         )
         if url:
             await cache_service.set(
-                _cache_key("translation", url), response.model_dump_json(), ttl=_CACHE_TTL_SECONDS
+                _cache_key(_TRANSLATION_CACHE_KIND, url), response.model_dump_json(), ttl=_CACHE_TTL_SECONDS
             )
         return response
 
@@ -216,7 +221,7 @@ class TranscriptAIService:
         ``questions_and_answers``。片段以并发方式翻译（受信号量限流），但严格按
         原文顺序产出，因此前端可边翻边显示。全部完成后写入缓存。
         """
-        cache_hit = await cache_service.get(_cache_key("translation", url)) if url else None
+        cache_hit = await cache_service.get(_cache_key(_TRANSLATION_CACHE_KIND, url)) if url else None
         if cache_hit:
             logger.info("transcript_translation_cache_hit", ticker=ticker, url=url)
             cached = TranscriptTranslationResponse.model_validate_json(cache_hit)
@@ -265,7 +270,7 @@ class TranscriptAIService:
                 questions_and_answers_zh="\n\n".join(collected["questions_and_answers"]),
             )
             await cache_service.set(
-                _cache_key("translation", url), response.model_dump_json(), ttl=_CACHE_TTL_SECONDS
+                _cache_key(_TRANSLATION_CACHE_KIND, url), response.model_dump_json(), ttl=_CACHE_TTL_SECONDS
             )
 
     def _compose_summary_input(self, title: str, prepared: str, qa: str) -> str:
