@@ -91,7 +91,10 @@ class LeaderboardEntry(BaseResponse):
 class LeaderboardResponse(BaseResponse):
     """GET /api/v1/institutional-signals/leaderboard 响应。"""
 
-    status: str = Field(default="ready", description="ready（有数据）/ computing（后台扫描中）")
+    status: str = Field(
+        default="ready",
+        description="ready（有数据）/ computing（后台扫描中）/ unavailable（数据源整体不可用）",
+    )
     as_of: str = ""
     computed_at: str = Field(default="", description="扫描完成时间 ISO")
     universe_source: str = Field(default="", description="universe 来源：sp500 / fallback")

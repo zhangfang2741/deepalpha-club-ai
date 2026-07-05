@@ -323,6 +323,7 @@ export default function InstitutionalSignalsPage() {
   const [boardSource, setBoardSource] = useState('')
   const [boardLoading, setBoardLoading] = useState(true)
   const [boardComputing, setBoardComputing] = useState(false)
+  const [boardNote, setBoardNote] = useState('')
   const [boardFilter, setBoardFilter] = useState<string>('all')
   const [universe, setUniverse] = useState<'sp500' | 'nasdaq100'>('sp500')
 
@@ -348,6 +349,7 @@ export default function InstitutionalSignalsPage() {
     setBoardLoading(true)
     setBoardComputing(false)
     setBoard(null)
+    setBoardNote('')
     const poll = () => {
       fetchLeaderboard(universe)
         .then((res) => {
@@ -360,6 +362,8 @@ export default function InstitutionalSignalsPage() {
             setBoard(res.entries)
             setBoardAsOf(res.as_of)
             setBoardSource(res.universe_source)
+            // 数据源整体不可用时携带原因，供空态展示（区别于「今日无热门」）
+            setBoardNote(res.status === 'unavailable' ? res.note : '')
             setBoardLoading(false)
           }
         })
@@ -592,8 +596,15 @@ export default function InstitutionalSignalsPage() {
               )
             })()}
             {!boardComputing && !boardLoading && (!board || board.length === 0) && (
-              <div className="rounded-2xl border border-dashed border-gray-200 py-16 text-center text-sm text-gray-400">
-                榜单暂不可用，可直接在上方输入代码查询
+              <div className="rounded-2xl border border-dashed border-gray-200 py-16 text-center text-sm text-gray-400 px-6">
+                {boardNote ? (
+                  <>
+                    <div className="text-gray-500 font-medium mb-1">机构建仓榜暂不可用</div>
+                    <div className="max-w-xl mx-auto leading-relaxed">{boardNote}</div>
+                  </>
+                ) : (
+                  '榜单暂不可用，可直接在上方输入代码查询'
+                )}
               </div>
             )}
           </div>
