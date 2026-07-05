@@ -102,10 +102,13 @@ export interface LeaderboardResponse {
   entries: LeaderboardEntry[]
 }
 
-export async function fetchLeaderboard(universe: string = 'sp500'): Promise<LeaderboardResponse> {
+export async function fetchLeaderboard(
+  universe: string = 'sp500',
+  refresh: boolean = false,
+): Promise<LeaderboardResponse> {
   const { data } = await apiClient.get<LeaderboardResponse>(
     '/api/v1/institutional-signals/leaderboard',
-    { params: { universe }, timeout: 90000 }, // 首次扫描 universe 较慢，给足 90s
+    { params: { universe, ...(refresh ? { refresh: true } : {}) }, timeout: 90000 }, // 首次扫描 universe 较慢，给足 90s
   )
   return data
 }

@@ -2,7 +2,7 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useState, useCallback, useEffect, FormEvent } from 'react'
+import { useState, useCallback, useEffect, useRef, FormEvent } from 'react'
 import {
   fetchInstitutionalSignals,
   fetchLeaderboard,
@@ -347,20 +347,24 @@ export default function InstitutionalSignalsPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>
-    let cancelled = false
+  // 轮询代际：每次重新开轮询自增，旧轮询回调据此自行作废（切换 universe / 手动刷新）
+  const pollGen = useRef(0)
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  const startBoardPoll = useCallback((force: boolean) => {
+    clearTimeout(pollTimer.current)
+    const gen = ++pollGen.current
     setBoardLoading(true)
-    setBoardComputing(false)
+    setBoardComputing(force) // 强制刷新时立刻进入「扫描中」态，避免闪回旧榜
     setBoard(null)
     setBoardNote('')
-    const poll = () => {
-      fetchLeaderboard(universe)
+    const poll = (refresh: boolean) => {
+      fetchLeaderboard(universe, refresh)
         .then((res) => {
-          if (cancelled) return
+          if (gen !== pollGen.current) return // 已被更晚的轮询取代
           if (res.status === 'computing') {
             setBoardComputing(true)
-            timer = setTimeout(poll, 15000) // 后台扫描中，15s 后重试
+            pollTimer.current = setTimeout(() => poll(false), 15000) // 扫描中，15s 后重试
           } else {
             setBoardComputing(false)
             setBoard(res.entries)
@@ -373,12 +377,16 @@ export default function InstitutionalSignalsPage() {
         })
         .catch((err) => {
           console.error('[leaderboard] fetch error:', err?.response?.status, err?.message)
-          if (!cancelled) setBoardLoading(false)
+          if (gen === pollGen.current) setBoardLoading(false)
         })
     }
-    poll()
-    return () => { cancelled = true; clearTimeout(timer) }
+    poll(force)
   }, [universe])
+
+  useEffect(() => {
+    startBoardPoll(false)
+    return () => { pollGen.current++; clearTimeout(pollTimer.current) }
+  }, [startBoardPoll])
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -543,14 +551,26 @@ export default function InstitutionalSignalsPage() {
           <div className="space-y-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-lg font-bold text-gray-900">🔥 今日机构建仓榜</h2>
-              {boardAsOf && (
-                <span className="text-xs text-gray-400">
-                  {boardAsOf} · 点击查看完整五维
-                  {boardSource.includes('fallback') && (
-                    <span className="ml-1 text-amber-500">· 成分股动态获取失败，当前为兜底名单</span>
-                  )}
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {boardAsOf && (
+                  <span className="text-xs text-gray-400">
+                    {boardAsOf} · 点击查看完整五维
+                    {boardSource.includes('fallback') && (
+                      <span className="ml-1 text-amber-500">· 成分股动态获取失败，当前为兜底名单</span>
+                    )}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => startBoardPoll(true)}
+                  disabled={boardComputing}
+                  title="清空缓存并重新扫描当前 universe"
+                  className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-600 transition hover:bg-gray-50 disabled:opacity-40"
+                >
+                  <span aria-hidden className={boardComputing ? 'animate-spin' : ''}>↻</span>
+                  {boardComputing ? '重扫中…' : '刷新'}
+                </button>
+              </div>
             </div>
 
             {/* universe 切换：标普 500 / 纳指 100（QQQ）*/}
