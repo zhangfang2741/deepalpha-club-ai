@@ -82,9 +82,13 @@ class CompanyProfileService:
             try:
                 raw = await redis.get(cache_key)
                 if raw:
+                    cached = json.loads(raw)
+                    # 校验缓存结构与当前 schema 一致（防止旧版本缓存导致响应校验 500）
+                    CompanyProfile.model_validate(cached.get("profile", {}))
                     logger.info("sec_company_profile_cache_hit", cik=cik)
-                    return json.loads(raw)
+                    return cached
             except Exception as e:
+                # 结构不兼容或反序列化失败：忽略缓存，重新生成
                 logger.warning("sec_company_profile_cache_read_error", error=str(e))
 
         # 尽量补全公司名与 SIC（画像质量更高）；失败不阻塞
