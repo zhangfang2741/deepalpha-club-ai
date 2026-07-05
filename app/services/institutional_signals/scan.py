@@ -174,17 +174,26 @@ async def scan_leaderboard(limit: int = SCAN_TOP_N, universe: str = "sp500") -> 
     enriched_states = sum(1 for e in enriched if e.top_state and e.top_state.key in
                           ("institution_accumulation", "smart_money"))
 
+    # 扫了整个 universe 却一支都没评出分 → 不是「今日无热门」，而是行情数据源整体不可用
+    # （FMP key 失效/限流/未生效），据此明确区分，避免前端笼统显示「榜单暂不可用」
+    data_source_down = len(symbols) > 0 and len(entries) == 0
+    if data_source_down:
+        note = (f"机构资金数据源暂不可用：扫描了 {len(symbols)} 支但无一取到数据，"
+                "疑似行情接口未配置/失效/限流，请稍后重试或检查数据源配置。")
+    else:
+        note = f"4 维初筛全 universe，前 {ENRICH_TOP_K} 支补抓期权确认仓位；点进详情看完整五维"
+
     logger.info("scan_leaderboard_computed", source=source, universe=len(symbols),
                 scanned=len(entries), enriched=len(top), option_states=enriched_states,
-                returned=len(ranked))
+                returned=len(ranked), data_source_down=data_source_down)
 
     return LeaderboardResponse(
-        status="ready",
+        status="unavailable" if data_source_down else "ready",
         as_of=to_date,
         computed_at=now.isoformat(timespec="seconds"),
         universe_source=source,
         universe_size=len(symbols),
         scanned=len(entries),
-        note=f"4 维初筛全 universe，前 {ENRICH_TOP_K} 支补抓期权确认仓位；点进详情看完整五维",
+        note=note,
         entries=ranked,
     )

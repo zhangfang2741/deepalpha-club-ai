@@ -418,6 +418,26 @@ def _wiki_table_html(symbols: list[str]) -> str:
 
 
 @pytest.mark.asyncio
+async def test_scan_leaderboard_marks_unavailable_when_all_symbols_have_no_data(monkeypatch):
+    """扫了整个 universe 却一支都没评出分 → status=unavailable 且 note 说明数据源不可用。"""
+    from app.services.institutional_signals import scan
+
+    async def fake_symbols(_client):
+        return ["AAPL", "MSFT", "INTC"]
+
+    async def none_score(_client, _symbol, _sem, _from, _to):
+        return None  # 模拟每支都无数据（coverage=0）
+
+    monkeypatch.setattr(scan, "fetch_sp500_symbols", fake_symbols)
+    monkeypatch.setattr(scan, "_score_symbol", none_score)
+
+    res = await scan.scan_leaderboard(universe="sp500")
+    assert res.status == "unavailable"
+    assert res.entries == []
+    assert "数据源" in res.note
+
+
+@pytest.mark.asyncio
 async def test_fetch_sp500_symbols_uses_wikipedia_api_when_article_page_fails():
     from app.services.institutional_signals.fetchers import fetch_sp500_symbols
 
