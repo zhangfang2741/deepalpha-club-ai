@@ -81,11 +81,16 @@ export async function fetchFilingDocuments(
   return data
 }
 
+export interface ProductItem {
+  name: string
+  explanation: string
+}
+
 export interface CompanyProfile {
   one_liner: string
   industry: string
   supply_chain_position: string
-  main_products: string[]
+  main_products: ProductItem[]
   main_customers: string[]
   differentiation: string
   competitors: string[]
