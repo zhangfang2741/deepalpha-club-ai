@@ -76,6 +76,43 @@ export interface DemandChain {
   constrained_resources: Entity[]
 }
 
+export interface OverviewItem {
+  title: string
+  description: string
+  score: number
+  entities: Entity[]
+  evidence_samples: string[]
+}
+
+export interface IndustryGraphOverview {
+  title: string
+  summary: string
+  focus: string
+  total_entities: number
+  total_facts: number
+  data_mode: 'empty' | 'demo' | 'documented'
+  confidence: number
+  key_companies: OverviewItem[]
+  bottlenecks: OverviewItem[]
+  demand_chains: OverviewItem[]
+  investor_questions: string[]
+  next_actions: string[]
+}
+
+export interface AutoResearchTask {
+  ticker: string
+  task_type: string
+  label: string
+  status: string
+}
+
+export interface AutoResearchResponse {
+  tickers: string[]
+  queued_tasks: AutoResearchTask[]
+  message: string
+  overview: IndustryGraphOverview | null
+}
+
 export interface GraphStats {
   entities: Record<EntityType, number>
   facts: Record<RelationType, number>
@@ -193,6 +230,26 @@ export const supplyChainApi = {
 
   getBottlenecks: async (): Promise<BottleneckReport[]> => {
     const { data } = await apiClient.get(`${BASE}/analysis/bottlenecks`)
+    return data
+  },
+
+  getOverview: async (params?: {
+    ticker?: string
+    min_confidence?: number
+    since?: string
+    limit?: number
+  }): Promise<IndustryGraphOverview> => {
+    const { data } = await apiClient.get(`${BASE}/analysis/overview`, { params })
+    return data
+  },
+
+  runAutomation: async (body: {
+    tickers: string[]
+    sec_forms?: string[]
+    include_earnings?: boolean
+    recent_quarters?: number
+  }): Promise<AutoResearchResponse> => {
+    const { data } = await apiClient.post(`${BASE}/automation/run`, body)
     return data
   },
 

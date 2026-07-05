@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
 
 from sqlmodel import Session, select
@@ -76,6 +77,7 @@ FACTS: list[tuple[str, str, str, str, float, str | None]] = [
     # ── ENABLED_BY：Concept/Product → Technology/Resource ──
     ("H100", "ENABLED_BY", "HBM3E", "High-bandwidth HBM3E memory is essential to feed the H100's compute throughput.", 0.9, None),
     ("H100", "ENABLED_BY", "CoWoS", "The H100 relies on CoWoS packaging to integrate GPU die and HBM stacks.", 0.92, None),
+    ("H200", "ENABLED_BY", "HBM3E", "The H200 GPU is built with larger, faster HBM3E memory to increase accelerator bandwidth.", 0.93, "2023-11-13"),
     ("GB200", "ENABLED_BY", "CoWoS", "GB200 requires advanced CoWoS packaging to assemble its multi-die design.", 0.9, None),
     ("GB200", "ENABLED_BY", "NVLink", "GB200 superchips are interconnected through high-speed NVLink.", 0.9, None),
     ("AI Training", "ENABLED_BY", "CUDA", "Large-scale AI training depends on the CUDA software ecosystem.", 0.88, None),
@@ -112,7 +114,7 @@ def seed_supply_chain_graph(session: Session, *, force: bool = False) -> tuple[i
             return 0, 0
 
     # 1. 幂等创建实体，建立 name -> id 映射
-    name_to_id: dict[str, object] = {}
+    name_to_id: dict[str, uuid.UUID] = {}
     created_entities = 0
     for name, etype, ticker, desc in ENTITIES:
         found = session.exec(

@@ -572,6 +572,36 @@ class TestSupplyChainAPI:
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
 
+    def test_industry_overview(self, api_client):
+        resp = api_client.get("/api/v1/supply-chain/analysis/overview")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "summary" in data
+        assert "key_companies" in data
+        assert "bottlenecks" in data
+        assert "demand_chains" in data
+        assert "investor_questions" in data
+        assert 0 <= data["confidence"] <= 1
+
+    def test_auto_research_queues_tasks_and_normalizes_aliases(self, api_client):
+        async def _noop_auto_task(*_args, **_kwargs):
+            return None
+
+        payload = {
+            "tickers": ["NVDA", "Tesla", "APPLE"],
+            "sec_forms": ["10-K", "10-Q"],
+            "include_earnings": True,
+            "recent_quarters": 1,
+        }
+        with patch("app.api.v1.supply_chain._run_auto_research_tasks", side_effect=_noop_auto_task):
+            resp = api_client.post("/api/v1/supply-chain/automation/run", json=payload)
+
+        assert resp.status_code == 202
+        data = resp.json()
+        assert data["tickers"] == ["NVDA", "TSLA", "AAPL"]
+        assert len(data["queued_tasks"]) == 9
+        assert data["overview"] is None
+
     def test_demand_chain_not_found(self, api_client):
         resp = api_client.get("/api/v1/supply-chain/analysis/demand-chain/NonExistentConcept")
         assert resp.status_code == 404
@@ -789,6 +819,44 @@ class TestDemandChain:
             assert chain is not None
             constrained_names = {e.name for e in chain.constrained_resources}
             assert "Power Capacity" in constrained_names
+
+    def test_traces_hbm_keyword_from_seed_graph(self):
+        from app.services.graph.query import get_demand_chain
+        from app.services.graph.seed import seed_supply_chain_graph
+
+        with _isolated_session() as s:
+            seed_supply_chain_graph(s)
+
+            chain = get_demand_chain(s, "HBM")
+            assert chain is not None
+
+            related_names = {e.name for e in chain.enabled_products}
+            supplier_names = {e.name for e in chain.supplier_companies}
+            constrained_names = {e.name for e in chain.constrained_resources}
+
+            assert chain.concept.name in {"HBM3E", "HBM Supply"}
+            assert {"H100", "H200", "AI Training"}.issubset(related_names)
+            assert {"SK Hynix", "Micron Technology", "Samsung"}.issubset(supplier_names)
+            assert "HBM Supply" in constrained_names
+
+
+class TestIndustryOverview:
+    def test_generates_investor_overview_from_seed_data(self):
+        from app.schemas.supply_chain import GraphQueryParams
+        from app.services.graph.query import get_industry_overview
+        from app.services.graph.seed import seed_supply_chain_graph
+
+        with _isolated_session() as s:
+            seed_supply_chain_graph(s)
+            overview = get_industry_overview(s, GraphQueryParams(ticker="NVDA", limit=80))
+
+            assert overview.focus == "NVIDIA（NVDA）"
+            assert overview.total_entities > 0
+            assert overview.total_facts > 0
+            assert overview.key_companies
+            assert overview.bottlenecks
+            assert overview.demand_chains
+            assert overview.investor_questions
 
 
 class TestBottleneckDescription:

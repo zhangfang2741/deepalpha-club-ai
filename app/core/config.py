@@ -268,10 +268,12 @@ class Settings:
         else:
             self.CORS_ORIGINS = self.ALLOWED_ORIGINS
 
-        if self.ENVIRONMENT in (Environment.DEVELOPMENT, Environment.TEST):
-            for origin in ("http://localhost:3000", "http://127.0.0.1:3000"):
-                if origin not in self.CORS_ORIGINS:
-                    self.CORS_ORIGINS.append(origin)
+        # Always allow local frontend during desktop/dev workflows. Some local
+        # env files intentionally use production-like APP_ENV values while the
+        # browser still runs on localhost:3000.
+        for origin in ("http://localhost:3000", "http://127.0.0.1:3000"):
+            if origin not in self.CORS_ORIGINS:
+                self.CORS_ORIGINS.append(origin)
 
         # HTTP Proxy Configuration
         self.HTTP_PROXY = os.getenv("HTTP_PROXY", os.getenv("http_proxy", ""))

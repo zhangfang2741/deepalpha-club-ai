@@ -1,16 +1,17 @@
 'use client'
 
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+/* eslint-disable react-hooks/set-state-in-effect */
+
+import { useCallback, useEffect, useState, type ElementType } from 'react'
 import dynamic from 'next/dynamic'
 import {
-  Network, RefreshCw, Filter, AlertTriangle, BookOpen,
-  TrendingDown, Loader2, X, ExternalLink, ChevronRight, Info,
-  GitBranch, Search, ArrowRight,
+  Network, RefreshCw, Filter, AlertTriangle,
+  Loader2, X, ExternalLink, Info,
+  GitBranch, Search, ArrowRight, Target, Building2, CircleGauge, Zap,
 } from 'lucide-react'
 
 import DashboardShell from '@/components/layout/DashboardShell'
 import GraphLegend, { EntityTypeBadge, RelationBadge, ENTITY_BG } from '@/components/graph/GraphLegend'
-import IngestPanel from '@/components/graph/IngestPanel'
 import {
   supplyChainApi,
   type EntityType,
@@ -20,8 +21,9 @@ import {
   type BottleneckReport,
   type Fact,
   type Entity,
-  type SourceDoc,
   type DemandChain,
+  type IndustryGraphOverview,
+  type OverviewItem,
 } from '@/lib/api/supply_chain'
 
 // SSR 关闭（React Flow 需要 DOM）
@@ -33,29 +35,20 @@ const SupplyChainGraph = dynamic(
 const ENTITY_TYPES: EntityType[] = ['Company', 'Product', 'Technology', 'Concept', 'Resource']
 const RELATION_TYPES: RelationType[] = ['HAS_PRODUCT', 'SUPPLIED_BY', 'ENABLED_BY', 'CONSTRAINED_BY']
 
-type Tab = 'graph' | 'bottleneck' | 'ingest' | 'facts' | 'demand'
+type Tab = 'overview' | 'graph' | 'insights'
 
-// 把原本并列的 Tab 重组为有先后关系的流程步骤，方便用户理解使用顺序。
-const STEPS: { key: Tab; step: number; label: string; icon: React.ElementType; desc: string }[] = [
+const STEPS: { key: Tab; label: string; icon: ElementType; desc: string }[] = [
   {
-    key: 'ingest', step: 1, label: '摄取数据', icon: BookOpen,
-    desc: '导入任意公司 / 行业的 SEC 文件或电话会议记录，系统自动抽取产业链因果事实（也可先用内置演示数据体验）。',
+    key: 'overview', label: '自动研究', icon: Target,
+    desc: '输入股票代码，自动排队抓取披露材料，并生成可读的投资摘要。',
   },
   {
-    key: 'graph', step: 2, label: '因果图谱', icon: Network,
-    desc: '默认展示第一步已摄取的全部数据；如需只看某家公司的产业链，在「聚焦公司」填代码即可。点击节点 / 连线查看原文证据。',
+    key: 'graph', label: '产业图谱', icon: Network,
+    desc: '查看公司、产品、技术、供应商和瓶颈之间的关系；点击节点或连线看证据。',
   },
   {
-    key: 'bottleneck', step: 3, label: '瓶颈分析', icon: TrendingDown,
-    desc: '识别被多个产品 / 概念约束的关键资源，定位产业链瓶颈。',
-  },
-  {
-    key: 'demand', step: 4, label: '传导链路', icon: GitBranch,
-    desc: '输入一个需求概念（如 AI Training、电动车），顺藤摸瓜追溯到产品、供应商与瓶颈资源。',
-  },
-  {
-    key: 'facts', step: 5, label: '事实溯源', icon: Filter,
-    desc: '逐条审阅抽取的事实三元组，核对置信度与原文出处。',
+    key: 'insights', label: '链路与瓶颈', icon: GitBranch,
+    desc: '输入 HBM、CoWoS、AI Training 这类主题，追到产品、供应商和约束资源。',
   },
 ]
 
@@ -70,9 +63,10 @@ function sinceFromRange(range: 'all' | '3m' | '1y' | '2y'): string | undefined {
 }
 
 export default function SupplyChainPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('graph')
+  const [activeTab, setActiveTab] = useState<Tab>('overview')
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [], total_entities: 0, total_facts: 0 })
   const [stats, setStats] = useState<GraphStats | null>(null)
+  const [overview, setOverview] = useState<IndustryGraphOverview | null>(null)
   const [bottlenecks, setBottlenecks] = useState<BottleneckReport[]>([])
   const [selectedEntityFacts, setSelectedEntityFacts] = useState<Fact[]>([])
   const [selectedEntityName, setSelectedEntityName] = useState<string | null>(null)
@@ -86,6 +80,7 @@ export default function SupplyChainPage() {
   const [timeRange, setTimeRange] = useState<'all' | '3m' | '1y' | '2y'>('all')
 
   const [loading, setLoading] = useState(false)
+  const [loadingOverview, setLoadingOverview] = useState(false)
   const [loadingBn, setLoadingBn] = useState(false)
 
   // 有事实但没有任何来源文档 → 说明当前只是内置演示数据（种子不创建 SourceDocument）
@@ -119,6 +114,23 @@ export default function SupplyChainPage() {
     }
   }, [])
 
+  const fetchOverview = useCallback(async () => {
+    setLoadingOverview(true)
+    try {
+      const data = await supplyChainApi.getOverview({
+        ticker: filterTicker || undefined,
+        min_confidence: minConfidence,
+        since: sinceFromRange(timeRange),
+        limit: 300,
+      })
+      setOverview(data)
+    } catch {
+      setOverview(null)
+    } finally {
+      setLoadingOverview(false)
+    }
+  }, [filterTicker, minConfidence, timeRange])
+
   const fetchBottlenecks = useCallback(async () => {
     setLoadingBn(true)
     try {
@@ -134,10 +146,11 @@ export default function SupplyChainPage() {
   useEffect(() => {
     fetchGraph()
     fetchStats()
-  }, [fetchGraph, fetchStats])
+    fetchOverview()
+  }, [fetchGraph, fetchStats, fetchOverview])
 
   useEffect(() => {
-    if (activeTab === 'bottleneck') fetchBottlenecks()
+    if (activeTab === 'insights') fetchBottlenecks()
   }, [activeTab, fetchBottlenecks])
 
   const handleNodeClick = useCallback(async (nodeId: string) => {
@@ -161,7 +174,8 @@ export default function SupplyChainPage() {
   const toggleEntityType = (t: EntityType) => {
     setFilterTypes((prev) => {
       const next = new Set(prev)
-      next.has(t) ? next.delete(t) : next.add(t)
+      if (next.has(t)) next.delete(t)
+      else next.add(t)
       return next
     })
   }
@@ -169,7 +183,8 @@ export default function SupplyChainPage() {
   const toggleRelation = (r: RelationType) => {
     setFilterRelations((prev) => {
       const next = new Set(prev)
-      next.has(r) ? next.delete(r) : next.add(r)
+      if (next.has(r)) next.delete(r)
+      else next.add(r)
       return next
     })
   }
@@ -192,7 +207,7 @@ export default function SupplyChainPage() {
           </div>
         </div>
         <button
-          onClick={() => { fetchGraph(); fetchStats() }}
+          onClick={() => { fetchGraph(); fetchStats(); fetchOverview() }}
           disabled={loading}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
         >
@@ -203,43 +218,29 @@ export default function SupplyChainPage() {
 
       {/* ── 流程步骤导航 ─────────────────────────── */}
       <div className="mb-4">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-          {STEPS.map(({ key, step, label, icon: Icon }, i) => {
+        <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-gray-200 bg-white p-1">
+          {STEPS.map(({ key, label, icon: Icon }) => {
             const active = activeTab === key
             return (
-              <Fragment key={key}>
-                <button
-                  onClick={() => setActiveTab(key)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border whitespace-nowrap transition-colors ${
-                    active
-                      ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-                      : 'bg-white border-gray-200 text-gray-500 hover:border-blue-300 hover:text-gray-700'
-                  }`}
-                >
-                  <span
-                    className={`flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold ${
-                      active ? 'bg-white text-blue-600' : 'bg-gray-100 text-gray-500'
-                    }`}
-                  >
-                    {step}
-                  </span>
-                  <Icon className="w-3.5 h-3.5" />
-                  <span className="text-sm font-medium">{label}</span>
-                </button>
-                {i < STEPS.length - 1 && (
-                  <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
-                )}
-              </Fragment>
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 whitespace-nowrap transition-colors ${
+                  active
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span className="text-sm font-medium">{label}</span>
+              </button>
             )
           })}
         </div>
 
         {/* 当前步骤说明 */}
-        <div className="mt-2 flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2">
-          <span className="flex-shrink-0 text-xs font-semibold text-blue-700">
-            第 {STEPS.find((s) => s.key === activeTab)?.step} 步
-          </span>
-          <span className="text-xs text-blue-700/90 leading-relaxed">
+        <div className="mt-2 rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+          <span className="text-xs text-gray-600 leading-relaxed">
             {STEPS.find((s) => s.key === activeTab)?.desc}
           </span>
         </div>
@@ -253,16 +254,26 @@ export default function SupplyChainPage() {
           <div className="text-xs text-amber-800 leading-relaxed">
             <span className="font-semibold">当前为内置 NVIDIA 演示数据</span>
             ，用于体验功能，<span className="font-semibold">非实时抽取、无原始文档来源，请勿作为投资依据</span>。
-            如需可溯源的真实结论，请在
-            <button onClick={() => setActiveTab('ingest')} className="underline font-medium hover:text-amber-900">
-              第一步 · 摄取数据
-            </button>
-            导入 SEC / 电话会议文档。
+            输入股票代码启动自动研究后，会逐步替换为可溯源的真实材料。
           </div>
         </div>
       )}
 
       {/* ── 内容区 ───────────────────────────── */}
+      {activeTab === 'overview' && (
+        <OverviewPanel
+          overview={overview}
+          loading={loadingOverview}
+          focusTicker={filterTicker}
+          setFocusTicker={setFilterTicker}
+          setOverview={setOverview}
+          onRefresh={fetchOverview}
+          onRefreshAll={() => { fetchGraph(); fetchStats(); fetchOverview() }}
+          onOpenGraph={() => setActiveTab('graph')}
+          onOpenInsights={() => setActiveTab('insights')}
+        />
+      )}
+
       {activeTab === 'graph' && (
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 lg:h-[calc(100vh-240px)]">
           {/* 图谱主区 */}
@@ -352,7 +363,7 @@ export default function SupplyChainPage() {
                 graphData={graphData}
                 onNodeClick={handleNodeClick}
                 onEdgeClick={handleEdgeClick}
-                onIngestClick={() => setActiveTab('ingest')}
+                onIngestClick={() => setActiveTab('overview')}
               />
             </div>
 
@@ -449,11 +460,14 @@ export default function SupplyChainPage() {
         </div>
       )}
 
-      {activeTab === 'bottleneck' && (
+      {activeTab === 'insights' && (
         <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-red-500" />
-            <p className="text-sm font-medium text-gray-700">识别产业瓶颈 — 被多个产品 / 概念约束（受限于）的关键资源或技术</p>
+          <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-4">
+            <DemandChainPanel />
+            <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white p-4">
+              <AlertTriangle className="w-4 h-4 text-red-500" />
+              <p className="text-sm font-medium text-gray-700">下方是当前图谱识别出的核心瓶颈。</p>
+            </div>
           </div>
 
           {loadingBn ? (
@@ -463,13 +477,6 @@ export default function SupplyChainPage() {
           ) : bottlenecks.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-16">
               <p className="text-gray-400 text-sm">暂无瓶颈数据</p>
-              <button
-                onClick={() => setActiveTab('ingest')}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors"
-              >
-                <BookOpen className="w-3.5 h-3.5" />
-                前往第一步 · 摄取数据
-              </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -507,7 +514,7 @@ export default function SupplyChainPage() {
                       <p className="text-[11px] font-medium text-gray-400">原文证据</p>
                       {bn.evidence_samples.map((ev, i) => (
                         <p key={i} className="text-xs text-gray-500 bg-gray-50 rounded px-2 py-1.5 line-clamp-2">
-                          "{ev}"
+                          “{ev}”
                         </p>
                       ))}
                     </div>
@@ -518,302 +525,352 @@ export default function SupplyChainPage() {
           )}
         </div>
       )}
-
-      {activeTab === 'ingest' && (
-        <div className="max-w-2xl space-y-4">
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <BookOpen className="w-4 h-4 text-blue-600" />
-              <h2 className="text-sm font-semibold text-gray-800">提交新文档</h2>
-            </div>
-            <p className="text-xs text-gray-500 mb-4">
-              输入<strong>任意公司</strong>的 SEC 文件、电话会议记录 URL 或文本，系统将自动抓取、切片，
-              并通过 LLM 抽取产业链事实三元组。支持半导体、汽车、医药、能源等各行业。
-            </p>
-            <IngestPanel onSuccess={() => { fetchGraph(); fetchStats() }} />
-          </div>
-
-          {/* 文档处理状态 — 让用户确认摄取是否成功、抽到多少事实 */}
-          <DocStatusList />
-
-          <div className="bg-blue-50 rounded-xl border border-blue-100 p-4">
-            <p className="text-xs font-semibold text-blue-800 mb-2">摄取建议（任选行业）</p>
-            <div className="space-y-1.5 text-xs text-blue-700">
-              <p>• 龙头公司 10-K「Risk Factors / Business」— 供需、产品线、竞争与瓶颈</p>
-              <p>• 季度电话会议记录 — 管理层对产能、需求、供应节奏的最新口径</p>
-              <p>• 关键供应商 / 客户文件 — 补全上下游链路</p>
-              <p>• 例：AAPL、TSLA、PFE、CATL、NVDA …各行业均可</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'demand' && <DemandChainPanel onGoIngest={() => setActiveTab('ingest')} />}
-
-      {activeTab === 'facts' && (
-        <FactsTable />
-      )}
     </DashboardShell>
   )
 }
 
-function FactsTable() {
-  const [facts, setFacts] = useState<Fact[]>([])
-  const [loading, setLoading] = useState(false)
-  const [relFilter, setRelFilter] = useState<RelationType | ''>('')
+function OverviewMetric({ label, value, hint }: { label: string; value: string; hint: string }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+      <p className="text-xs text-gray-400">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
+      <p className="mt-1 text-xs text-gray-500">{hint}</p>
+    </div>
+  )
+}
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const data = await supplyChainApi.getFacts({
-        relation_type: relFilter || undefined,
-        limit: 200,
-      })
-      setFacts(data)
-    } catch {
-      /* ignore */
-    } finally {
-      setLoading(false)
-    }
-  }, [relFilter])
+function OverviewSection({
+  title,
+  icon: Icon,
+  items,
+  empty,
+}: {
+  title: string
+  icon: ElementType
+  items: OverviewItem[]
+  empty: string
+}) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Icon className="w-4 h-4 text-blue-600" />
+        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-xs text-gray-400 py-6 text-center">{empty}</p>
+      ) : (
+        <div className="space-y-3">
+          {items.map((item) => (
+            <div key={`${title}-${item.title}`} className="border border-gray-100 rounded-lg p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">{item.title}</p>
+                  <p className="mt-1 text-xs text-gray-500 leading-relaxed">{item.description}</p>
+                </div>
+                <span className="flex-shrink-0 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1">
+                  {Math.round(item.score * 100)}
+                </span>
+              </div>
+              {item.entities.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {item.entities.slice(0, 6).map((entity) => (
+                    <span key={entity.id} className="inline-flex items-center gap-1 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-0.5 text-gray-600">
+                      {entity.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {item.evidence_samples.length > 0 && (
+                <p className="mt-2 text-xs text-gray-400 line-clamp-2">
+                  “{item.evidence_samples[0]}”
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
-  useEffect(() => { load() }, [load])
+function OverviewPanel({
+  overview,
+  loading,
+  focusTicker,
+  setFocusTicker,
+  setOverview,
+  onRefresh,
+  onRefreshAll,
+  onOpenGraph,
+  onOpenInsights,
+}: {
+  overview: IndustryGraphOverview | null
+  loading: boolean
+  focusTicker: string
+  setFocusTicker: (value: string) => void
+  setOverview: (value: IndustryGraphOverview | null) => void
+  onRefresh: () => void
+  onRefreshAll: () => void
+  onOpenGraph: () => void
+  onOpenInsights: () => void
+}) {
+  if (loading && !overview) {
+    return (
+      <div className="flex justify-center py-20">
+        <Loader2 className="w-6 h-6 animate-spin text-gray-300" />
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <select
-          value={relFilter}
-          onChange={(e) => setRelFilter(e.target.value as RelationType | '')}
-          className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        >
-          <option value="">所有关系类型</option>
-          {RELATION_TYPES.map((r) => (
-            <option key={r} value={r}>{r}</option>
-          ))}
-        </select>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="flex items-center gap-1 px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50"
-        >
-          <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-          刷新
-        </button>
-        <span className="text-xs text-gray-400">{facts.length} 条</span>
+    <div className="space-y-4">
+      <AutoResearchPanel
+        onStarted={(tickers, nextOverview) => {
+          setFocusTicker(tickers[0] ?? '')
+          if (nextOverview) setOverview(nextOverview)
+          onRefreshAll()
+        }}
+      />
+
+      <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Target className="w-4 h-4 text-blue-600" />
+              <h2 className="text-lg font-bold text-gray-900">{overview?.title ?? '产业图谱总览'}</h2>
+              {overview?.data_mode === 'demo' && (
+                <span className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                  演示数据
+                </span>
+              )}
+            </div>
+            <p className="mt-2 text-sm text-gray-600 leading-relaxed max-w-4xl">
+              {overview?.summary ?? '暂无可用摘要。可以先使用内置演示数据，或摄取目标公司的公开披露材料。'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              value={focusTicker}
+              onChange={(e) => setFocusTicker(e.target.value.toUpperCase())}
+              onKeyDown={(e) => { if (e.key === 'Enter') onRefresh() }}
+              placeholder="聚焦股票"
+              className="w-28 text-xs border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <button
+              onClick={onRefresh}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              更新
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-xs">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium text-gray-500 w-[22%]">来源实体</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-500 w-[16%]">关系</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-500 w-[22%]">目标实体</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-500">原文证据</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-500 w-[8%]">置信度</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-500 w-[10%]">事实时间</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {loading ? (
-              <tr>
-                <td colSpan={6} className="text-center py-8 text-gray-300">
-                  <Loader2 className="w-4 h-4 animate-spin inline" />
-                </td>
-              </tr>
-            ) : facts.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="text-center py-8 text-gray-400">暂无数据</td>
-              </tr>
-            ) : facts.map((f) => (
-              <tr key={f.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-3 py-2">
-                  <div>
-                    <p className="font-medium text-gray-800 truncate max-w-[140px]">{f.source_entity_name}</p>
-                    {f.source_entity_type && <EntityTypeBadge type={f.source_entity_type} />}
-                  </div>
-                </td>
-                <td className="px-3 py-2">
-                  <RelationBadge type={f.relation_type} />
-                </td>
-                <td className="px-3 py-2">
-                  <div>
-                    <p className="font-medium text-gray-800 truncate max-w-[140px]">{f.target_entity_name}</p>
-                    {f.target_entity_type && <EntityTypeBadge type={f.target_entity_type} />}
-                  </div>
-                </td>
-                <td className="px-3 py-2">
-                  <p className="text-gray-500 line-clamp-2 leading-relaxed">{f.evidence_text}</p>
-                  {f.document_url && (
-                    <a
-                      href={f.document_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-0.5 text-blue-500 hover:underline mt-0.5"
-                    >
-                      <ExternalLink className="w-2.5 h-2.5" />
-                      来源
-                    </a>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-gray-500">{Math.round(f.confidence * 100)}%</td>
-                <td className="px-3 py-2 text-gray-400">{f.event_time?.slice(0, 10) ?? '—'}</td>
-              </tr>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <OverviewMetric label="实体规模" value={`${overview?.total_entities ?? 0}`} hint="公司、产品、技术、概念、资源" />
+        <OverviewMetric label="事实数量" value={`${overview?.total_facts ?? 0}`} hint="可点击核对的关系证据" />
+        <OverviewMetric label="平均置信度" value={`${Math.round((overview?.confidence ?? 0) * 100)}%`} hint="来自抽取事实的均值" />
+        <OverviewMetric
+          label="数据状态"
+          value={overview?.data_mode === 'documented' ? '可溯源' : overview?.data_mode === 'demo' ? '演示' : '空'}
+          hint="真实文档优先于演示数据"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <OverviewSection title="关键公司" icon={Building2} items={overview?.key_companies ?? []} empty="暂无关键公司" />
+        <OverviewSection title="核心瓶颈" icon={AlertTriangle} items={overview?.bottlenecks ?? []} empty="暂无瓶颈关系" />
+        <OverviewSection title="需求链路" icon={GitBranch} items={overview?.demand_chains ?? []} empty="暂无需求概念" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <CircleGauge className="w-4 h-4 text-blue-600" />
+            <h3 className="text-sm font-semibold text-gray-900">需要继续验证的问题</h3>
+          </div>
+          <div className="space-y-2">
+            {(overview?.investor_questions ?? []).map((question) => (
+              <p key={question} className="text-xs text-gray-600 leading-relaxed border-l-2 border-blue-100 pl-2">
+                {question}
+              </p>
             ))}
-          </tbody>
-        </table>
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-900">下一步动作</h3>
+          </div>
+          <div className="space-y-2">
+            {(overview?.next_actions ?? []).map((action) => (
+              <p key={action} className="text-xs text-gray-600 leading-relaxed">
+                {action}
+              </p>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <button onClick={onOpenGraph} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700">
+              <Network className="w-3.5 h-3.5" />
+              查看图谱
+            </button>
+            <button onClick={onOpenInsights} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-50">
+              <GitBranch className="w-3.5 h-3.5" />
+              追链路
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
-// ── 文档处理状态列表（P1：摄取反馈闭环）─────────────────
-const DOC_STATUS_META: Record<string, { label: string; cls: string }> = {
-  pending: { label: '排队中', cls: 'bg-gray-100 text-gray-600' },
-  processing: { label: '处理中', cls: 'bg-blue-100 text-blue-700' },
-  done: { label: '完成', cls: 'bg-green-100 text-green-700' },
-  failed: { label: '失败', cls: 'bg-red-100 text-red-700' },
+const AUTO_SEC_FORMS = ['10-K', '10-Q', '8-K']
+
+function parseTickerInput(input: string): string[] {
+  const aliases: Record<string, string> = {
+    APPLE: 'AAPL',
+    TESLA: 'TSLA',
+    NVIDIA: 'NVDA',
+  }
+  const seen = new Set<string>()
+  return input
+    .split(/[\s,，;；]+/)
+    .map((token) => aliases[token.trim().toUpperCase()] ?? token.trim().toUpperCase())
+    .filter(Boolean)
+    .filter((token) => {
+      if (seen.has(token)) return false
+      seen.add(token)
+      return true
+    })
 }
 
-function DocStatusList() {
-  const [docs, setDocs] = useState<SourceDoc[]>([])
+function AutoResearchPanel({
+  onStarted,
+}: {
+  onStarted: (tickers: string[], overview: IndustryGraphOverview | null) => void
+}) {
+  const [tickerText, setTickerText] = useState('NVDA TSLA AAPL')
+  const [secForms, setSecForms] = useState<Set<string>>(new Set(['10-K', '10-Q']))
+  const [includeEarnings, setIncludeEarnings] = useState(true)
+  const [recentQuarters, setRecentQuarters] = useState(1)
   const [loading, setLoading] = useState(false)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [factsByDoc, setFactsByDoc] = useState<Record<string, Fact[]>>({})
-  const [loadingFacts, setLoadingFacts] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; message: string; tasks: string[] } | null>(null)
 
-  const load = useCallback(async () => {
+  const tickers = parseTickerInput(tickerText)
+  const taskCount = tickers.length * (secForms.size + (includeEarnings ? recentQuarters : 0))
+
+  const toggleForm = (form: string) => {
+    setSecForms((prev) => {
+      const next = new Set(prev)
+      if (next.has(form)) next.delete(form)
+      else next.add(form)
+      return next
+    })
+  }
+
+  const run = async () => {
+    if (tickers.length === 0 || taskCount === 0) return
     setLoading(true)
+    setResult(null)
     try {
-      setDocs(await supplyChainApi.getDocuments({ limit: 20 }))
-    } catch {
-      /* ignore */
+      const data = await supplyChainApi.runAutomation({
+        tickers,
+        sec_forms: [...secForms],
+        include_earnings: includeEarnings,
+        recent_quarters: includeEarnings ? recentQuarters : 0,
+      })
+      setResult({
+        ok: true,
+        message: data.message,
+        tasks: data.queued_tasks.map((task) => task.label),
+      })
+      onStarted(data.tickers, data.overview)
+    } catch (e) {
+      setResult({
+        ok: false,
+        message: e instanceof Error ? e.message : '自动研究启动失败',
+        tasks: [],
+      })
     } finally {
       setLoading(false)
     }
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  // 有排队 / 处理中的文档时自动轮询，直到全部完成或失败
-  useEffect(() => {
-    const active = docs.some((d) => d.status === 'pending' || d.status === 'processing')
-    if (!active) return
-    const id = setInterval(load, 5000)
-    return () => clearInterval(id)
-  }, [docs, load])
-
-  const toggleExpand = useCallback(async (id: string) => {
-    if (expandedId === id) { setExpandedId(null); return }
-    setExpandedId(id)
-    if (!factsByDoc[id]) {
-      setLoadingFacts(true)
-      try {
-        const facts = await supplyChainApi.getFacts({ doc_id: id, limit: 200 })
-        setFactsByDoc((prev) => ({ ...prev, [id]: facts }))
-      } catch {
-        setFactsByDoc((prev) => ({ ...prev, [id]: [] }))
-      } finally {
-        setLoadingFacts(false)
-      }
-    }
-  }, [expandedId, factsByDoc])
+  }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-800">摄取记录与状态</h3>
+    <div className="bg-white border border-blue-100 rounded-xl p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-2">
+            <Zap className="w-4 h-4 text-blue-600" />
+            <h3 className="text-sm font-semibold text-gray-900">自动研究入口</h3>
+            <span className="text-xs text-gray-400">常规使用只需要这里</span>
+          </div>
+          <input
+            value={tickerText}
+            onChange={(e) => setTickerText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') run() }}
+            placeholder="输入股票代码，如 NVDA TSLA AAPL"
+            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+          <div className="flex flex-wrap items-center gap-2 mt-2">
+            {AUTO_SEC_FORMS.map((form) => (
+              <button
+                key={form}
+                onClick={() => toggleForm(form)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${
+                  secForms.has(form)
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-gray-50 text-gray-500 border-gray-200'
+                }`}
+              >
+                {form}
+              </button>
+            ))}
+            <label className="inline-flex items-center gap-1.5 text-xs text-gray-600">
+              <input
+                type="checkbox"
+                checked={includeEarnings}
+                onChange={(e) => setIncludeEarnings(e.target.checked)}
+                className="accent-blue-600"
+              />
+              最近电话会议
+            </label>
+            <select
+              value={recentQuarters}
+              disabled={!includeEarnings}
+              onChange={(e) => setRecentQuarters(Number(e.target.value))}
+              className="text-xs border border-gray-200 rounded-lg px-2 py-1 disabled:bg-gray-50 disabled:text-gray-300"
+            >
+              {[1, 2, 3, 4].map((count) => (
+                <option key={count} value={count}>近 {count} 季</option>
+              ))}
+            </select>
+          </div>
+          <p className="mt-2 text-xs text-gray-400">
+            已识别：{tickers.length > 0 ? tickers.join('、') : '无'} · 将自动排队 {taskCount} 个后台任务，下面的图谱、链路和瓶颈会复用同一批结果
+          </p>
+        </div>
         <button
-          onClick={load}
-          disabled={loading}
-          className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50"
+          onClick={run}
+          disabled={loading || tickers.length === 0 || taskCount === 0}
+          className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-lg transition-colors"
         >
-          <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-          刷新
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+          {loading ? '启动中' : '自动生成图谱'}
         </button>
       </div>
 
-      {docs.length === 0 ? (
-        <p className="text-xs text-gray-400 py-4 text-center">
-          还没有摄取记录（内置演示数据不计入）。在上方提交文档后，这里会显示每份文档的处理进度、状态与抽取到的原文。
-        </p>
-      ) : (
-        <div className="space-y-1.5">
-          {docs.map((d) => {
-            const meta = DOC_STATUS_META[d.status] ?? DOC_STATUS_META.pending
-            const expanded = expandedId === d.id
-            const canExpand = d.status === 'done' && d.fact_count > 0
-            const facts = factsByDoc[d.id] ?? []
-            return (
-              <div key={d.id} className="border border-gray-100 rounded-lg overflow-hidden">
-                <button
-                  onClick={() => canExpand && toggleExpand(d.id)}
-                  disabled={!canExpand}
-                  className={`w-full flex items-center gap-2 text-xs px-2.5 py-2 text-left ${canExpand ? 'hover:bg-gray-50 cursor-pointer' : 'cursor-default'}`}
-                >
-                  {canExpand
-                    ? <ChevronRight className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} />
-                    : <span className="w-3.5 flex-shrink-0" />}
-                  <span className={`flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded font-medium ${meta.cls}`}>
-                    {d.status === 'processing' && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
-                    {meta.label}
-                  </span>
-                  <span className="flex-1 truncate text-gray-700">
-                    {d.ticker && <span className="font-medium">{d.ticker} · </span>}
-                    {d.document_type}
-                  </span>
-                  <span className="flex-shrink-0 text-gray-400">
-                    {d.status === 'done'
-                      ? `${d.fact_count} 条原文`
-                      : d.status === 'failed'
-                        ? '可重试'
-                        : d.status === 'processing' && d.chunk_count > 0
-                          ? `${d.processed_chunks}/${d.chunk_count} 切片`
-                          : `${d.chunk_count} 切片`}
-                  </span>
-                </button>
-
-                {/* 处理进度条 */}
-                {d.status === 'processing' && d.chunk_count > 0 && (
-                  <div className="h-1 bg-gray-100">
-                    <div
-                      className="h-full bg-blue-500 transition-all"
-                      style={{ width: `${Math.min(100, Math.round((d.processed_chunks / d.chunk_count) * 100))}%` }}
-                    />
-                  </div>
-                )}
-
-                {/* 展开：该文档抽取出的原句 */}
-                {expanded && (
-                  <div className="border-t border-gray-100 bg-gray-50/60 px-2.5 py-2 space-y-2 max-h-72 overflow-y-auto">
-                    {loadingFacts && !factsByDoc[d.id] ? (
-                      <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-gray-300" /></div>
-                    ) : facts.length === 0 ? (
-                      <p className="text-xs text-gray-400 py-2 text-center">未找到原文</p>
-                    ) : facts.map((f) => (
-                      <div key={f.id} className="text-xs bg-white border border-gray-100 rounded-lg p-2">
-                        <div className="flex items-center gap-1 mb-1 flex-wrap">
-                          <span className="text-gray-600 font-medium truncate max-w-[90px]">{f.source_entity_name}</span>
-                          <RelationBadge type={f.relation_type} />
-                          <span className="text-gray-600 font-medium truncate max-w-[90px]">{f.target_entity_name}</span>
-                        </div>
-                        <p className="text-gray-500 leading-relaxed">"{f.evidence_text}"</p>
-                        <div className="flex items-center gap-2 mt-1 text-gray-300">
-                          <span>置信度 {Math.round(f.confidence * 100)}%</span>
-                          {f.document_url && (
-                            <a href={f.document_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-blue-500 hover:underline">
-                              <ExternalLink className="w-2.5 h-2.5" />原文来源
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+      {result && (
+        <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${result.ok ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+          <p className="font-medium">{result.message}</p>
+          {result.tasks.length > 0 && (
+            <p className="mt-1 text-green-600/80 line-clamp-2">
+              {result.tasks.slice(0, 8).join('、')}{result.tasks.length > 8 ? ` 等 ${result.tasks.length} 个任务` : ''}
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -821,7 +878,7 @@ function DocStatusList() {
 }
 
 // ── 需求传导链路（P2：把后端 demand-chain 分析暴露到前端）──────
-const DEMAND_EXAMPLES = ['AI Training', 'AI Inference', 'Generative AI', 'Data Center']
+const DEMAND_EXAMPLES = ['HBM', 'CoWoS', 'AI Training', 'Data Center']
 
 function ChainColumn({ title, color, entities, empty }: { title: string; color: string; entities: Entity[]; empty: string }) {
   return (
@@ -841,7 +898,7 @@ function ChainColumn({ title, color, entities, empty }: { title: string; color: 
   )
 }
 
-function DemandChainPanel({ onGoIngest }: { onGoIngest: () => void }) {
+function DemandChainPanel() {
   const [concept, setConcept] = useState('')
   const [chain, setChain] = useState<DemandChain | null>(null)
   const [loading, setLoading] = useState(false)
@@ -874,7 +931,7 @@ function DemandChainPanel({ onGoIngest }: { onGoIngest: () => void }) {
               value={concept}
               onChange={(e) => setConcept(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') run(concept) }}
-              placeholder="输入需求概念，如 AI Training、电动车、减肥药…"
+              placeholder="输入主题、技术或资源，如 HBM、CoWoS、AI Training…"
               className="w-full text-sm border border-gray-200 rounded-lg pl-8 pr-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
@@ -902,15 +959,9 @@ function DemandChainPanel({ onGoIngest }: { onGoIngest: () => void }) {
       </div>
 
       {notFound && (
-        <div className="flex flex-col items-center gap-3 py-12 text-center">
-          <p className="text-sm text-gray-400">未找到该需求概念，或图谱中暂无相关数据</p>
-          <button
-            onClick={onGoIngest}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg"
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            前往第一步 · 摄取数据
-          </button>
+        <div className="flex flex-col items-center gap-2 py-10 text-center">
+          <p className="text-sm text-gray-400">未找到该主题，或图谱中暂无相关链路数据</p>
+          <p className="text-xs text-gray-400">可以先回到自动研究，输入目标股票补充基础数据。</p>
         </div>
       )}
 
@@ -919,7 +970,7 @@ function DemandChainPanel({ onGoIngest }: { onGoIngest: () => void }) {
           <div className="flex items-center gap-2 mb-4">
             <span className="text-sm font-semibold text-gray-900">{chain.concept.name}</span>
             <EntityTypeBadge type={chain.concept.entity_type} />
-            <span className="text-xs text-gray-400">的需求传导链路</span>
+            <span className="text-xs text-gray-400">的产业链路</span>
           </div>
           <div className="flex items-start gap-2 overflow-x-auto pb-2">
             <ChainColumn title="① 依赖产品 / 技术" color="#10B981" entities={chain.enabled_products} empty="无" />

@@ -26,7 +26,9 @@ _ARCHIVES_BASE = "https://www.sec.gov/Archives/edgar/data"
 
 # CIK 映射表（NVIDIA 生态核心公司）
 _TICKER_CIK: dict[str, str] = {
+    "AAPL": "0000320193",
     "NVDA": "0001045810",
+    "TSLA": "0001318605",
     "TSMC": "0001046179",
     "MU": "0000723125",
     "MSFT": "0000789019",

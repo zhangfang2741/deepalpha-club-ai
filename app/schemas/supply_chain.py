@@ -49,6 +49,33 @@ class IngestTextRequest(BaseModel):
     title: Optional[str] = Field(default=None)
 
 
+class AutoResearchRequest(BaseModel):
+    """一键产业图谱自动研究请求。"""
+
+    tickers: list[str] = Field(description="股票代码或常见公司名，如 NVDA / TSLA / AAPL", min_length=1, max_length=10)
+    sec_forms: list[str] = Field(default_factory=lambda: ["10-K", "10-Q"], description="自动摄取的 SEC 文件类型")
+    include_earnings: bool = Field(default=True, description="是否自动摄取最近电话会议")
+    recent_quarters: int = Field(default=1, ge=0, le=4, description="每个标的摄取最近几个季度电话会议")
+
+
+class AutoResearchTask(BaseModel):
+    """自动研究任务中的单个后台任务。"""
+
+    ticker: str
+    task_type: str
+    label: str
+    status: str = "queued"
+
+
+class AutoResearchResponse(BaseModel):
+    """一键自动研究响应。"""
+
+    tickers: list[str]
+    queued_tasks: list[AutoResearchTask]
+    message: str
+    overview: Optional["IndustryGraphOverview"] = None
+
+
 # ──────────────────────────────────────────────
 # 实体（Entity）
 # ──────────────────────────────────────────────
@@ -185,3 +212,30 @@ class DemandChain(BaseModel):
     enabled_products: list[EntityOut]
     supplier_companies: list[EntityOut]
     constrained_resources: list[EntityOut]
+
+
+class IndustryOverviewItem(BaseModel):
+    """产业图谱总览中的单项洞察。"""
+
+    title: str
+    description: str
+    score: float = Field(ge=0.0, le=1.0)
+    entities: list[EntityOut] = Field(default_factory=list)
+    evidence_samples: list[str] = Field(default_factory=list)
+
+
+class IndustryGraphOverview(BaseModel):
+    """面向普通投资者的产业图谱总览。"""
+
+    title: str
+    summary: str
+    focus: str
+    total_entities: int
+    total_facts: int
+    data_mode: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    key_companies: list[IndustryOverviewItem]
+    bottlenecks: list[IndustryOverviewItem]
+    demand_chains: list[IndustryOverviewItem]
+    investor_questions: list[str]
+    next_actions: list[str]

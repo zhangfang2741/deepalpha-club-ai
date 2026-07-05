@@ -8,7 +8,8 @@ from datetime import UTC, datetime
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from sqlmodel import Session, select
+from sqlalchemy import func
+from sqlmodel import Session, col, select
 
 from app.core.logging import logger
 from app.db.session import get_sync_session
@@ -16,6 +17,9 @@ from app.models.graph_entity import EntityType, GraphEntity
 from app.models.graph_fact import GraphFact, RelationType
 from app.models.graph_source import DocumentStatus, DocumentType, SourceDocument
 from app.schemas.supply_chain import (
+    AutoResearchRequest,
+    AutoResearchResponse,
+    AutoResearchTask,
     BottleneckReport,
     DemandChain,
     EntityCreate,
@@ -23,6 +27,7 @@ from app.schemas.supply_chain import (
     FactCreate,
     FactOut,
     GraphData,
+    IndustryGraphOverview,
     GraphQueryParams,
     IngestDocumentRequest,
     IngestDocumentResponse,
@@ -39,9 +44,20 @@ from app.services.graph.query import (
     get_demand_chain,
     get_entity_facts,
     get_graph_data,
+    get_industry_overview,
 )
 
 router = APIRouter()
+
+_TICKER_ALIASES = {
+    "APPLE": "AAPL",
+    "APPLE INC": "AAPL",
+    "TESLA": "TSLA",
+    "NVIDIA": "NVDA",
+    "NVIDIA CORP": "NVDA",
+}
+
+_ALLOWED_AUTO_SEC_FORMS = {"10-K", "10-Q", "8-K"}
 
 
 def _get_llm():
@@ -51,9 +67,135 @@ def _get_llm():
     return llm_registry.get_default()
 
 
+def _normalize_auto_tickers(raw_tickers: list[str]) -> list[str]:
+    """规范化自动研究输入，支持少量常见公司名别名。"""
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_tickers:
+        token = raw.strip().upper()
+        if not token:
+            continue
+        ticker = _TICKER_ALIASES.get(token, token)
+        if ticker not in seen:
+            normalized.append(ticker)
+            seen.add(ticker)
+    return normalized
+
+
+def _recent_quarters(count: int) -> list[tuple[int, int]]:
+    """返回最近 count 个季度（year, quarter）。"""
+    if count <= 0:
+        return []
+    now = datetime.now(UTC)
+    year = now.year
+    quarter = (now.month - 1) // 3 + 1
+    items: list[tuple[int, int]] = []
+    for _ in range(count):
+        items.append((year, quarter))
+        quarter -= 1
+        if quarter == 0:
+            quarter = 4
+            year -= 1
+    return items
+
+
+async def _run_auto_research_tasks(
+    tickers: list[str],
+    sec_forms: list[str],
+    earnings_quarters: list[tuple[int, int]],
+) -> None:
+    """后台执行自动研究的文档摄取任务。"""
+    llm = _get_llm()
+    for ticker in tickers:
+        for form in sec_forms:
+            try:
+                await ingest_sec_filing(ticker, form, llm)
+                logger.info("auto_research_sec_done", ticker=ticker, form=form)
+            except Exception as e:
+                logger.exception("auto_research_sec_failed", ticker=ticker, form=form, error=str(e))
+
+        for year, quarter in earnings_quarters:
+            try:
+                await ingest_earnings_call(ticker, year, quarter, llm)
+                logger.info("auto_research_earnings_done", ticker=ticker, year=year, quarter=quarter)
+            except Exception as e:
+                logger.exception(
+                    "auto_research_earnings_failed",
+                    ticker=ticker,
+                    year=year,
+                    quarter=quarter,
+                    error=str(e),
+                )
+
+
 # ──────────────────────────────────────────────
 # 文档摄取
 # ──────────────────────────────────────────────
+
+
+@router.post(
+    "/automation/run",
+    response_model=AutoResearchResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="一键自动构建产业图谱研究",
+)
+async def run_auto_research(
+    request: AutoResearchRequest,
+    background_tasks: BackgroundTasks,
+):
+    """自动排队摄取核心文档，并返回当前已有的投资总览。
+
+    该接口把「摄取数据 → 刷新图谱 → 看瓶颈」合成一个入口：
+    后台继续抓取和抽取文档，前端可轮询文档状态并刷新总览。
+    """
+    tickers = _normalize_auto_tickers(request.tickers)
+    if not tickers:
+        raise HTTPException(status_code=422, detail="至少需要一个有效股票代码")
+
+    sec_forms = []
+    for form in request.sec_forms:
+        form_norm = form.strip().upper()
+        if form_norm in _ALLOWED_AUTO_SEC_FORMS and form_norm not in sec_forms:
+            sec_forms.append(form_norm)
+    if not sec_forms and request.recent_quarters <= 0:
+        raise HTTPException(status_code=422, detail="至少需要选择一种 SEC 文件或一个电话会议季度")
+
+    earnings_quarters = _recent_quarters(request.recent_quarters if request.include_earnings else 0)
+    queued_tasks: list[AutoResearchTask] = []
+    for ticker in tickers:
+        queued_tasks.extend(
+            AutoResearchTask(
+                ticker=ticker,
+                task_type="sec",
+                label=f"{ticker} {form}",
+            )
+            for form in sec_forms
+        )
+        queued_tasks.extend(
+            AutoResearchTask(
+                ticker=ticker,
+                task_type="earnings_call",
+                label=f"{ticker} {year}Q{quarter} 电话会议",
+            )
+            for year, quarter in earnings_quarters
+        )
+
+    background_tasks.add_task(_run_auto_research_tasks, tickers, sec_forms, earnings_quarters)
+
+    logger.info(
+        "auto_research_queued",
+        tickers=tickers,
+        queued_tasks=len(queued_tasks),
+    )
+    return AutoResearchResponse(
+        tickers=tickers,
+        queued_tasks=queued_tasks,
+        message=(
+            f"已为 {len(tickers)} 个标的排队 {len(queued_tasks)} 个自动研究任务。"
+            "后台会继续摄取文档，稍后刷新总览即可看到新事实。"
+        ),
+        overview=None,
+    )
 
 
 @router.post(
@@ -130,7 +272,7 @@ def list_documents(
         stmt = stmt.where(SourceDocument.document_type == document_type)
     if status_filter:
         stmt = stmt.where(SourceDocument.status == status_filter)
-    stmt = stmt.order_by(SourceDocument.created_at.desc()).limit(limit)
+    stmt = stmt.order_by(col(SourceDocument.created_at).desc()).limit(limit)
 
     docs = session.exec(stmt).all()
     return [
@@ -171,8 +313,8 @@ def list_entities(
     if ticker:
         stmt = stmt.where(GraphEntity.ticker == ticker.upper())
     if search:
-        stmt = stmt.where(GraphEntity.name.ilike(f"%{search}%"))
-    stmt = stmt.order_by(GraphEntity.name).limit(limit)
+        stmt = stmt.where(col(GraphEntity.name).ilike(f"%{search}%"))
+    stmt = stmt.order_by(col(GraphEntity.name)).limit(limit)
 
     entities = session.exec(stmt).all()
     return [EntityOut.model_validate(e) for e in entities]
@@ -247,7 +389,7 @@ def list_facts(
         stmt = stmt.where(GraphFact.source_doc_id == doc_id)
     if min_confidence > 0:
         stmt = stmt.where(GraphFact.confidence >= min_confidence)
-    stmt = stmt.order_by(GraphFact.ingestion_time.desc()).limit(limit)
+    stmt = stmt.order_by(col(GraphFact.ingestion_time).desc()).limit(limit)
 
     facts = session.exec(stmt).all()
 
@@ -367,6 +509,33 @@ def get_graph(
 def bottleneck_analysis(session: Session = Depends(get_sync_session)):
     """分析 CONSTRAINED_BY 关系，识别最关键的产业瓶颈资源。"""
     return get_bottleneck_report(session)
+
+
+@router.get("/analysis/overview", response_model=IndustryGraphOverview, summary="产业图谱投资总览")
+def industry_overview(
+    ticker: Optional[str] = Query(default=None, description="聚焦股票代码，如 NVDA"),
+    min_confidence: float = Query(default=0.0, ge=0.0, le=1.0),
+    since: Optional[str] = Query(default=None, description="仅含事实时间不早于此日期 YYYY-MM-DD"),
+    limit: int = Query(default=300, ge=1, le=1000),
+    session: Session = Depends(get_sync_session),
+):
+    """返回面向普通投资者的产业图谱摘要、关键公司、瓶颈和下一步动作。"""
+    since_dt = None
+    if since:
+        try:
+            since_dt = datetime.strptime(since, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=422, detail="since 日期格式应为 YYYY-MM-DD")
+
+    return get_industry_overview(
+        session,
+        GraphQueryParams(
+            ticker=ticker,
+            min_confidence=min_confidence,
+            since=since_dt,
+            limit=limit,
+        ),
+    )
 
 
 @router.get("/analysis/demand-chain/{concept}", response_model=DemandChain, summary="需求传导链路")
@@ -515,21 +684,21 @@ def graph_stats(session: Session = Depends(get_sync_session)):
     entity_by_type = {}
     for et in EntityType:
         count = session.exec(
-            select(GraphEntity).where(GraphEntity.entity_type == et)
-        ).all()
-        entity_by_type[et.value] = len(count)
+            select(func.count()).select_from(GraphEntity).where(GraphEntity.entity_type == et)
+        ).one()
+        entity_by_type[et.value] = count
 
     fact_by_relation = {}
     for rt in RelationType:
         count = session.exec(
-            select(GraphFact).where(GraphFact.relation_type == rt)
-        ).all()
-        fact_by_relation[rt.value] = len(count)
+            select(func.count()).select_from(GraphFact).where(GraphFact.relation_type == rt)
+        ).one()
+        fact_by_relation[rt.value] = count
 
-    total_docs = len(session.exec(select(SourceDocument)).all())
-    done_docs = len(session.exec(
-        select(SourceDocument).where(SourceDocument.status == DocumentStatus.DONE)
-    ).all())
+    total_docs = session.exec(select(func.count()).select_from(SourceDocument)).one()
+    done_docs = session.exec(
+        select(func.count()).select_from(SourceDocument).where(SourceDocument.status == DocumentStatus.DONE)
+    ).one()
 
     return {
         "entities": entity_by_type,
