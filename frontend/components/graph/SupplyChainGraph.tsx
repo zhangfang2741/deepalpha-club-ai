@@ -18,7 +18,9 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
-import type { EntityType, GraphData, GraphEdge, GraphNode, RelationType } from '@/lib/api/supply_chain'
+import dagre from '@dagrejs/dagre'
+
+import type { EntityType, GraphData, GraphEdge, GraphNode } from '@/lib/api/supply_chain'
 import { ENTITY_COLORS, RELATION_COLORS, RELATION_LABELS } from './GraphLegend'
 
 // ── 自定义节点 ──────────────────────────────────
@@ -45,7 +47,7 @@ function EntityNode({ data, selected }: { data: EntityNodeData; selected?: boole
         maxWidth: '160px',
       }}
     >
-      <Handle type="target" position={Position.Top} style={{ background: color, width: 8, height: 8 }} />
+      <Handle type="target" position={Position.Left} style={{ background: color, width: 8, height: 8 }} />
 
       {/* 类型色标 */}
       <div className="rounded-t-lg px-2 py-1 text-white text-center" style={{ backgroundColor: color }}>
@@ -68,55 +70,59 @@ function EntityNode({ data, selected }: { data: EntityNodeData; selected?: boole
         )}
       </div>
 
-      <Handle type="source" position={Position.Bottom} style={{ background: color, width: 8, height: 8 }} />
+      <Handle type="source" position={Position.Right} style={{ background: color, width: 8, height: 8 }} />
     </div>
   )
 }
 
 const nodeTypes: NodeTypes = { entity: EntityNode as NodeTypes['entity'] }
 
-// ── 布局算法（简单分层）──────────────────────────
-const TYPE_LAYER: Record<EntityType, number> = {
-  Concept: 0,
-  Company: 1,
-  Product: 2,
-  Technology: 3,
-  Resource: 4,
-}
+// ── 布局算法（dagre 左右层次布局）──────────────────
+// 节点尺寸估算（与 EntityNode 渲染尺寸一致，供 dagre 计算间距用）
+const NODE_WIDTH = 170
+const NODE_HEIGHT = 96
 
-function layoutNodes(graphNodes: GraphNode[]): Node[] {
-  const byLayer: Record<number, GraphNode[]> = {}
+function layoutNodes(graphNodes: GraphNode[], graphEdges: GraphEdge[]): Node[] {
+  const g = new dagre.graphlib.Graph()
+  g.setGraph({
+    rankdir: 'LR', // 从左到右分层
+    nodesep: 36, // 同层节点间距
+    ranksep: 140, // 层与层间距
+    marginx: 40,
+    marginy: 40,
+  })
+  g.setDefaultEdgeLabel(() => ({}))
+
   for (const n of graphNodes) {
-    const layer = TYPE_LAYER[n.entity_type] ?? 2
-    ;(byLayer[layer] ??= []).push(n)
+    g.setNode(n.id, { width: NODE_WIDTH, height: NODE_HEIGHT })
+  }
+  for (const e of graphEdges) {
+    // 只连接存在于当前节点集合中的边，避免 dagre 报错
+    if (g.hasNode(e.source) && g.hasNode(e.target)) {
+      g.setEdge(e.source, e.target)
+    }
   }
 
-  const nodes: Node[] = []
-  const layerHeight = 200
+  dagre.layout(g)
 
-  for (const [layerStr, items] of Object.entries(byLayer)) {
-    const layer = Number(layerStr)
-    const cols = items.length
-    const colWidth = Math.max(180, Math.min(240, 1400 / Math.max(cols, 1)))
-
-    items.forEach((n, i) => {
-      nodes.push({
-        id: n.id,
-        type: 'entity',
-        position: {
-          x: (i - (cols - 1) / 2) * colWidth + 700,
-          y: layer * layerHeight + 60,
-        },
-        data: {
-          label: n.name,
-          entity_type: n.entity_type,
-          ticker: n.ticker,
-          fact_count: n.fact_count,
-        },
-      })
-    })
-  }
-  return nodes
+  return graphNodes.map((n) => {
+    const pos = g.node(n.id)
+    return {
+      id: n.id,
+      type: 'entity',
+      // dagre 返回节点中心坐标，React Flow 用左上角，需减去半宽高
+      position: {
+        x: (pos?.x ?? 0) - NODE_WIDTH / 2,
+        y: (pos?.y ?? 0) - NODE_HEIGHT / 2,
+      },
+      data: {
+        label: n.name,
+        entity_type: n.entity_type,
+        ticker: n.ticker,
+        fact_count: n.fact_count,
+      },
+    }
+  })
 }
 
 function buildEdges(graphEdges: GraphEdge[]): Edge[] {
@@ -158,7 +164,7 @@ interface SupplyChainGraphProps {
 }
 
 export default function SupplyChainGraph({ graphData, onNodeClick, onEdgeClick, onIngestClick }: SupplyChainGraphProps) {
-  const initialNodes = useMemo(() => layoutNodes(graphData.nodes), [graphData.nodes])
+  const initialNodes = useMemo(() => layoutNodes(graphData.nodes, graphData.edges), [graphData.nodes, graphData.edges])
   const initialEdges = useMemo(() => buildEdges(graphData.edges), [graphData.edges])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
