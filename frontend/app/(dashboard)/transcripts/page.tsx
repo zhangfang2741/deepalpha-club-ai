@@ -7,18 +7,24 @@ import {
   ExternalLink,
   FileSearch,
   FileText,
+  Languages,
   ListChecks,
   MessageSquareText,
   Search,
+  Sparkles,
 } from 'lucide-react'
 import {
   fetchTranscriptDetail,
   fetchTranscriptList,
+  fetchTranscriptSummary,
+  fetchTranscriptTranslation,
   TranscriptCandidate,
   TranscriptDetailResponse,
+  TranscriptSummaryResponse,
+  TranscriptTranslationResponse,
 } from '@/lib/api/transcripts'
 
-type DetailTab = 'prepared' | 'qa' | 'segments'
+type DetailTab = 'summary' | 'translation' | 'qa' | 'prepared' | 'segments'
 
 const POPULAR_TICKERS = ['NVDA', 'AAPL', 'MSFT', 'AMZN', 'META', 'TSLA', 'GOOGL', 'AMD']
 
@@ -54,10 +60,18 @@ export default function TranscriptsPage() {
   const [transcripts, setTranscripts] = useState<TranscriptCandidate[]>([])
   const [selectedUrl, setSelectedUrl] = useState('')
   const [detail, setDetail] = useState<TranscriptDetailResponse | null>(null)
-  const [activeTab, setActiveTab] = useState<DetailTab>('qa')
+  const [activeTab, setActiveTab] = useState<DetailTab>('summary')
   const [listLoading, setListLoading] = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const [summary, setSummary] = useState<TranscriptSummaryResponse | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [summaryError, setSummaryError] = useState('')
+
+  const [translation, setTranslation] = useState<TranscriptTranslationResponse | null>(null)
+  const [translationLoading, setTranslationLoading] = useState(false)
+  const [translationError, setTranslationError] = useState('')
 
   const qaSegments = useMemo(
     () => detail?.segments.filter((segment) => segment.section === 'questions_and_answers') ?? [],
@@ -69,20 +83,68 @@ export default function TranscriptsPage() {
     [detail]
   )
 
+  const resetAiState = () => {
+    setSummary(null)
+    setSummaryLoading(false)
+    setSummaryError('')
+    setTranslation(null)
+    setTranslationLoading(false)
+    setTranslationError('')
+  }
+
   const loadTranscriptDetail = async (symbol: string, transcript: TranscriptCandidate) => {
     setSelectedUrl(transcript.url)
     setDetail(null)
     setDetailLoading(true)
     setError('')
+    resetAiState()
 
     try {
       const result = await fetchTranscriptDetail(symbol, transcript.url)
       setDetail(result)
-      setActiveTab('qa')
+      setActiveTab('summary')
+      loadSummary(result)
     } catch (err) {
       setError(getErrorMessage(err, '逐字稿加载失败'))
     } finally {
       setDetailLoading(false)
+    }
+  }
+
+  const loadSummary = async (target: TranscriptDetailResponse) => {
+    setSummaryLoading(true)
+    setSummaryError('')
+    try {
+      const result = await fetchTranscriptSummary(target)
+      setSummary(result)
+    } catch (err) {
+      setSummaryError(getErrorMessage(err, '总结生成失败'))
+    } finally {
+      setSummaryLoading(false)
+    }
+  }
+
+  const loadTranslation = async (target: TranscriptDetailResponse) => {
+    setTranslationLoading(true)
+    setTranslationError('')
+    try {
+      const result = await fetchTranscriptTranslation(target)
+      setTranslation(result)
+    } catch (err) {
+      setTranslationError(getErrorMessage(err, '翻译生成失败'))
+    } finally {
+      setTranslationLoading(false)
+    }
+  }
+
+  const handleSelectTab = (tab: DetailTab) => {
+    setActiveTab(tab)
+    if (!detail) return
+    if (tab === 'summary' && !summary && !summaryLoading) {
+      loadSummary(detail)
+    }
+    if (tab === 'translation' && !translation && !translationLoading) {
+      loadTranslation(detail)
     }
   }
 
@@ -127,6 +189,46 @@ export default function TranscriptsPage() {
       ))}
     </div>
   )
+
+  const renderAiLoading = (label: string) => (
+    <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-3 text-sm font-medium text-gray-500">
+      <span className="h-6 w-6 rounded-full border-2 border-blue-200 border-t-blue-600 animate-spin" />
+      <span>{label}</span>
+      <span className="text-xs text-gray-400">首次生成需调用 AI，请稍候</span>
+    </div>
+  )
+
+  const renderAiError = (message: string, onRetry: () => void) => (
+    <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+      <div className="flex items-center gap-2 text-sm font-medium text-red-700">
+        <AlertCircle className="h-4 w-4" />
+        <span>{message}</span>
+      </div>
+      <button
+        onClick={onRetry}
+        className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-blue-300 hover:text-blue-700"
+      >
+        重试
+      </button>
+    </div>
+  )
+
+  const renderBulletList = (title: string, items: string[]) => {
+    if (!items || items.length === 0) return null
+    return (
+      <div>
+        <h4 className="mb-2 text-sm font-bold text-gray-900">{title}</h4>
+        <ul className="space-y-2">
+          {items.map((item, index) => (
+            <li key={`${title}-${index}`} className="flex gap-2 text-sm leading-6 text-gray-700">
+              <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-blue-500" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -292,8 +394,10 @@ export default function TranscriptsPage() {
                   </a>
                 </div>
 
-                <div className="mt-5 inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+                <div className="mt-5 inline-flex flex-wrap rounded-lg border border-gray-200 bg-gray-50 p-1">
                   {[
+                    { id: 'summary', label: '总结', icon: Sparkles },
+                    { id: 'translation', label: '中文翻译', icon: Languages },
                     { id: 'qa', label: 'Q&A', icon: MessageSquareText },
                     { id: 'prepared', label: '逐字记录', icon: FileText },
                     { id: 'segments', label: '发言人', icon: ListChecks },
@@ -303,7 +407,7 @@ export default function TranscriptsPage() {
                     return (
                       <button
                         key={tab.id}
-                        onClick={() => setActiveTab(tab.id as DetailTab)}
+                        onClick={() => handleSelectTab(tab.id as DetailTab)}
                         className={`inline-flex h-8 items-center gap-2 rounded-md px-3 text-sm font-semibold transition ${
                           active ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
                         }`}
@@ -317,6 +421,65 @@ export default function TranscriptsPage() {
               </div>
 
               <div className="max-h-[680px] overflow-y-auto p-5">
+                {activeTab === 'summary' && (
+                  <div>
+                    {summaryLoading && renderAiLoading('AI 正在总结电话会议要点...')}
+                    {!summaryLoading && summaryError && renderAiError(summaryError, () => loadSummary(detail))}
+                    {!summaryLoading && !summaryError && summary && (
+                      <div className="space-y-6">
+                        {summary.summary.overview && (
+                          <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+                            <h4 className="mb-2 flex items-center gap-2 text-sm font-bold text-blue-800">
+                              <Sparkles className="h-4 w-4" />
+                              整体概述
+                            </h4>
+                            <p className="text-sm leading-7 text-gray-700">{summary.summary.overview}</p>
+                          </div>
+                        )}
+                        {renderBulletList('核心要点', summary.summary.key_points)}
+                        {renderBulletList('财务亮点', summary.summary.financial_highlights)}
+                        {summary.summary.guidance && (
+                          <div>
+                            <h4 className="mb-2 text-sm font-bold text-gray-900">业绩指引与展望</h4>
+                            <p className="text-sm leading-7 text-gray-700">{summary.summary.guidance}</p>
+                          </div>
+                        )}
+                        {renderBulletList('问答要点', summary.summary.qa_highlights)}
+                        {renderBulletList('风险与挑战', summary.summary.risks)}
+                        <p className="border-t border-gray-100 pt-3 text-xs text-gray-400">
+                          摘要由 AI 生成，仅供参考，请以原始逐字稿为准。
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {activeTab === 'translation' && (
+                  <div>
+                    {translationLoading && renderAiLoading('AI 正在翻译逐字稿...')}
+                    {!translationLoading &&
+                      translationError &&
+                      renderAiError(translationError, () => loadTranslation(detail))}
+                    {!translationLoading && !translationError && translation && (
+                      <div className="space-y-6">
+                        {translation.prepared_remarks_zh && (
+                          <div>
+                            <h4 className="mb-3 text-sm font-bold text-blue-700">管理层发言</h4>
+                            {renderTranscriptText(translation.prepared_remarks_zh)}
+                          </div>
+                        )}
+                        {translation.questions_and_answers_zh && (
+                          <div>
+                            <h4 className="mb-3 text-sm font-bold text-emerald-700">问答环节 Q&amp;A</h4>
+                            {renderTranscriptText(translation.questions_and_answers_zh)}
+                          </div>
+                        )}
+                        <p className="border-t border-gray-100 pt-3 text-xs text-gray-400">
+                          翻译由 AI 生成，专业术语已尽量对齐，重要信息请以英文原文为准。
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {activeTab === 'qa' && renderTranscriptText(detail.questions_and_answers)}
                 {activeTab === 'prepared' && renderTranscriptText(detail.prepared_remarks)}
                 {activeTab === 'segments' && (

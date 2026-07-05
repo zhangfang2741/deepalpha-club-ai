@@ -1,0 +1,127 @@
+"""财报电话会议 AI 总结与翻译服务测试。"""
+
+import pytest
+from langchain_core.messages import AIMessage
+
+from app.schemas.motley_fool import TranscriptSummary
+from app.services import transcript_ai
+from app.services.transcript_ai import (
+    TranscriptAIService,
+    _split_into_chunks,
+    transcript_ai_service,
+)
+
+
+def test_split_into_chunks_respects_max_chars():
+    """按段落切分且每块不超过上限。"""
+    paragraphs = ["段落" * 200 for _ in range(5)]
+    text = "\n\n".join(paragraphs)
+    chunks = _split_into_chunks(text, max_chars=500)
+    assert len(chunks) >= 2
+    assert all(len(chunk) <= 500 or "\n\n" not in chunk for chunk in chunks)
+
+
+def test_split_into_chunks_splits_oversized_paragraph():
+    """单个超长段落会被进一步切分。"""
+    long_paragraph = ". ".join(f"sentence number {i}" for i in range(200))
+    chunks = _split_into_chunks(long_paragraph, max_chars=200)
+    assert len(chunks) >= 2
+    assert all(len(chunk) <= 400 for chunk in chunks)
+
+
+def test_split_into_chunks_empty():
+    """空文本返回空列表。"""
+    assert _split_into_chunks("", max_chars=100) == []
+
+
+class _StubCache:
+    """内存缓存桩，记录 set 调用。"""
+
+    def __init__(self):
+        self.store: dict[str, str] = {}
+
+    async def get(self, key: str):
+        return self.store.get(key)
+
+    async def set(self, key: str, value: str, ttl=None):
+        self.store[key] = value
+
+
+@pytest.mark.asyncio
+async def test_summarize_calls_llm_and_caches(monkeypatch):
+    """总结：调用 LLM 并写入缓存，命中缓存时不再调用 LLM。"""
+    cache = _StubCache()
+    monkeypatch.setattr(transcript_ai, "cache_service", cache)
+
+    call_count = 0
+
+    async def fake_call(messages, response_format=None, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        assert response_format is TranscriptSummary
+        return TranscriptSummary(
+            overview="英伟达本季营收强劲增长",
+            key_points=["数据中心需求旺盛"],
+            financial_highlights=["营收同比增长"],
+            guidance="预计下季继续增长",
+            qa_highlights=["分析师关注供给"],
+            risks=["供应链风险"],
+        )
+
+    monkeypatch.setattr(transcript_ai.llm_service, "call", fake_call)
+
+    service = TranscriptAIService()
+    url = "https://www.fool.com/earnings/call-transcripts/2026/05/28/nvda/"
+    first = await service.summarize("NVDA", "NVDA Q1", url, "prepared text", "qa text")
+    assert first.summary.overview == "英伟达本季营收强劲增长"
+    assert call_count == 1
+
+    # 第二次命中缓存，不再调用 LLM
+    second = await service.summarize("NVDA", "NVDA Q1", url, "prepared text", "qa text")
+    assert second.summary.key_points == ["数据中心需求旺盛"]
+    assert call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_translate_chunks_and_joins(monkeypatch):
+    """翻译：分段翻译后按顺序拼接，并写入缓存。"""
+    cache = _StubCache()
+    monkeypatch.setattr(transcript_ai, "cache_service", cache)
+
+    async def fake_call(messages, **kwargs):
+        # 回显输入内容前加中文标记，验证拼接顺序
+        human = messages[-1].content
+        return AIMessage(content=f"【译】{human[:6]}")
+
+    monkeypatch.setattr(transcript_ai.llm_service, "call", fake_call)
+
+    service = TranscriptAIService()
+    url = "https://www.fool.com/earnings/call-transcripts/2026/05/28/nvda/"
+    prepared = "\n\n".join(f"paragraph {i} " + "x" * 1600 for i in range(3))
+    result = await service.translate("NVDA", url, prepared, "question one")
+
+    assert result.prepared_remarks_zh.count("【译】") >= 3
+    assert result.questions_and_answers_zh.startswith("【译】")
+    # 缓存已写入
+    assert cache.store
+
+
+@pytest.mark.asyncio
+async def test_translate_empty_section(monkeypatch):
+    """空章节翻译返回空字符串，不调用 LLM。"""
+    cache = _StubCache()
+    monkeypatch.setattr(transcript_ai, "cache_service", cache)
+
+    called = False
+
+    async def fake_call(messages, **kwargs):
+        nonlocal called
+        called = True
+        return AIMessage(content="不应被调用")
+
+    monkeypatch.setattr(transcript_ai.llm_service, "call", fake_call)
+
+    result = await transcript_ai_service.translate("NVDA", "", "", "")
+    assert result.prepared_remarks_zh == ""
+    assert result.questions_and_answers_zh == ""
+    assert called is False

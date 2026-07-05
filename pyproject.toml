@@ -165,6 +165,10 @@ convention = "google"
 "app/services/sec_filings/*.py" = ["D415", "D101", "D102", "D104", "D107"]
 "app/schemas/sec_filings.py" = ["D415", "D101"]
 "app/api/v1/sec_filings.py" = ["D415", "D417"]
+"app/services/transcript_ai.py" = ["D415"]
+"app/schemas/motley_fool.py" = ["D415"]
+"app/api/v1/transcripts.py" = ["D415"]
+"tests/test_transcript_ai.py" = ["D415"]
 
 [tool.pyright]
 include = ["app", "evals"]

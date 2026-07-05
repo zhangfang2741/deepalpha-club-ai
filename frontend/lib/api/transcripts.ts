@@ -55,3 +55,59 @@ export async function fetchTranscriptDetail(
   )
   return response.data
 }
+
+export interface TranscriptSummary {
+  overview: string
+  key_points: string[]
+  financial_highlights: string[]
+  guidance: string
+  qa_highlights: string[]
+  risks: string[]
+}
+
+export interface TranscriptSummaryResponse {
+  request_id: string
+  ticker: string
+  title: string
+  url: string
+  summary: TranscriptSummary
+}
+
+export interface TranscriptTranslationResponse {
+  request_id: string
+  ticker: string
+  url: string
+  prepared_remarks_zh: string
+  questions_and_answers_zh: string
+}
+
+export async function fetchTranscriptSummary(
+  detail: TranscriptDetailResponse
+): Promise<TranscriptSummaryResponse> {
+  const response = await apiClient.post<TranscriptSummaryResponse>(
+    '/api/v1/transcripts/summarize',
+    {
+      ticker: detail.ticker,
+      title: detail.title,
+      url: detail.url,
+      prepared_remarks: detail.prepared_remarks,
+      questions_and_answers: detail.questions_and_answers,
+    }
+  )
+  return response.data
+}
+
+export async function fetchTranscriptTranslation(
+  detail: TranscriptDetailResponse
+): Promise<TranscriptTranslationResponse> {
+  const response = await apiClient.post<TranscriptTranslationResponse>(
+    '/api/v1/transcripts/translate',
+    {
+      ticker: detail.ticker,
+      url: detail.url,
+      prepared_remarks: detail.prepared_remarks,
+      questions_and_answers: detail.questions_and_answers,
+    }
+  )
+  return response.data
+}
