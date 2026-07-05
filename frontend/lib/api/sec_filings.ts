@@ -8,6 +8,8 @@ export interface EightKItem {
 
 export interface FilingRecord {
   form: string
+  form_name: string
+  form_desc: string
   category: string
   filing_date: string
   report_date: string

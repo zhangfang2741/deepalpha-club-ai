@@ -14,6 +14,8 @@ class EightKItem(BaseResponse):
 
 class FilingRecord(BaseResponse):
     form: str = Field(description="SEC 表格类型，如 10-K / 8-K / 4")
+    form_name: str = Field("", description="表格中文名，如 年报 / 季报（未知表格为空）")
+    form_desc: str = Field("", description="表格中文解释（未知表格为空）")
     category: str = Field(description="所属分类 key")
     filing_date: str = Field(description="提交日 YYYY-MM-DD")
     report_date: str = Field("", description="报告期日 YYYY-MM-DD（可能与提交日不同，也可能为空）")

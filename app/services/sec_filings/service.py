@@ -22,6 +22,7 @@ from app.services.sec_filings.constants import (
     CATEGORIES,
     classify_form,
     describe_8k_items,
+    describe_form,
 )
 
 _HEADERS = {
@@ -205,8 +206,11 @@ class SecFilingsService:
                 else ""
             )
 
+            form_info = describe_form(form)
             records.append({
                 "form": form,
+                "form_name": form_info["name"],
+                "form_desc": form_info["desc"],
                 "category": classify_form(form),
                 "filing_date": filing_dates[i] if i < len(filing_dates) else "",
                 "report_date": report_dates[i] if i < len(report_dates) else "",
