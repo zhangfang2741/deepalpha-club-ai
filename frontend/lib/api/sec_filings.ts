@@ -139,7 +139,7 @@ export async function fetchCompanyProfile(
 ): Promise<CompanyProfileResponse> {
   const { data } = await apiClient.get<CompanyProfileResponse>('/api/v1/sec/company-profile', {
     params: { query },
-    timeout: 60000, // 大模型生成可能较慢
+    timeout: 120000, // 大模型生成可能较慢
   })
   return data
 }

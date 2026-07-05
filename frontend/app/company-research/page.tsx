@@ -936,7 +936,17 @@ export default function CompanyResearchPage() {
       }
     } catch (error) {
       if ((error as Error).name !== 'AbortError') {
-        setProfileError(getErrorMessage(error, '公司概览生成失败'))
+        try {
+          setProfileProgress({ event: 'generating', message: '连接中断，正在读取生成结果' })
+          const result = await fetchCompanyProfile(symbol)
+          if (profileAbortRef.current === controller) {
+            completed = true
+            setProfile(result.profile)
+            setProfileProgress(null)
+          }
+        } catch (fallbackError) {
+          setProfileError(getErrorMessage(fallbackError, '公司概览生成失败，请稍后重试'))
+        }
       }
     } finally {
       window.clearTimeout(fallbackTimer)

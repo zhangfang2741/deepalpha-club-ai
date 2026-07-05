@@ -5,6 +5,7 @@
 """
 
 import json
+import asyncio
 from collections.abc import AsyncGenerator
 from time import monotonic
 from typing import Optional
@@ -86,7 +87,7 @@ class CompanyProfileService:
         last_error: Exception | None = None
         for attempt in range(1, 3):
             try:
-                return await llm_service.call(messages, response_format=CompanyProfile)
+                return await llm_service.call(messages, response_format=CompanyProfile, timeout=120)
             except Exception as e:
                 last_error = e
                 logger.warning(
@@ -286,7 +287,13 @@ class CompanyProfileService:
         ]
 
         try:
-            profile = await self._generate_profile(messages)
+            task = asyncio.create_task(self._generate_profile(messages))
+            while not task.done():
+                done, _ = await asyncio.wait({task}, timeout=10)
+                if done:
+                    break
+                yield {"event": "generating", "message": "AI 仍在生成画像，请稍候"}
+            profile = await task
         except Exception as e:
             logger.exception("sec_company_profile_stream_llm_failed", cik=cik, error=str(e))
             yield {"event": "error", "message": "公司画像生成失败，请稍后重试", "done": True}
