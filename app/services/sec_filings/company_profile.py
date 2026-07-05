@@ -18,6 +18,10 @@ from app.services.sec_filings.service import sec_filings_service
 _CACHE_PREFIX = "sec:profile"
 _CACHE_TTL = 604800  # 7天：公司基本面画像变动很慢
 
+
+class ProfileGenerationError(Exception):
+    """大模型生成公司画像失败（区别于「公司无法解析」）。"""
+
 _SYSTEM_PROMPT = """你是一位资深的股票投资研究分析师，擅长用最精炼的语言帮投资者快速建立对一家上市公司的基础认知。
 
 要求：
@@ -58,24 +62,40 @@ class CompanyProfileService:
 - competitors：主要竞争对手，列出 3-6 家公司名（可用中英文常见叫法）。"""
 
     async def get_profile(
-        self, query: str, redis: Optional[Redis] = None
+        self,
+        query: str,
+        redis: Optional[Redis] = None,
+        name_hint: str = "",
+        sic_hint: str = "",
     ) -> Optional[dict]:
         """解析 ticker/CIK 并用大模型生成公司画像。
 
         Args:
             query: 股票代码（AAPL）或 CIK（320193）。
             redis: 可选缓存客户端。
+            name_hint: 前端已知的公司名（避免二次回源 SEC）。
+            sic_hint: 前端已知的 SIC 行业描述。
 
         Returns:
-            {cik, name, ticker, sic_description, profile:{...}} 或 None（无法解析公司）。
+            {cik, name, ticker, sic_description, profile:{...}}。
+            无法解析公司时返回 None（对应 404）。
+
+        Raises:
+            ProfileGenerationError: 大模型生成失败（对应 502），与「公司未找到」区分。
         """
         resolved = await sec_filings_service.resolve_cik(query, redis)
         if not resolved:
             return None
 
         cik = resolved["cik"]
-        name = resolved.get("name", "")
+        # 优先用前端传来的公司名/行业，回退到 ticker 映射里的名字；不再重新回源全部 filing
+        name = name_hint or resolved.get("name", "")
         ticker = resolved.get("ticker", "")
+        sic = sic_hint
+
+        if not name and not ticker:
+            logger.warning("sec_company_profile_insufficient_identity", cik=cik)
+            return None
 
         cache_key = f"{_CACHE_PREFIX}:{cik}"
         if redis is not None:
@@ -91,22 +111,6 @@ class CompanyProfileService:
                 # 结构不兼容或反序列化失败：忽略缓存，重新生成
                 logger.warning("sec_company_profile_cache_read_error", error=str(e))
 
-        # 尽量补全公司名与 SIC（画像质量更高）；失败不阻塞
-        sic = ""
-        try:
-            company, _ = await sec_filings_service._fetch_all_filings(cik)
-            name = company.get("name") or name
-            sic = company.get("sic_description", "")
-            tickers = company.get("tickers") or []
-            if not ticker and tickers:
-                ticker = tickers[0]
-        except Exception as e:
-            logger.warning("sec_company_profile_meta_fetch_error", cik=cik, error=str(e))
-
-        if not name and not ticker:
-            logger.warning("sec_company_profile_insufficient_identity", cik=cik)
-            return None
-
         messages = [
             SystemMessage(content=_SYSTEM_PROMPT),
             HumanMessage(content=self._build_prompt(name, ticker, cik, sic)),
@@ -118,7 +122,7 @@ class CompanyProfileService:
             )
         except Exception as e:
             logger.exception("sec_company_profile_llm_failed", cik=cik, error=str(e))
-            return None
+            raise ProfileGenerationError(str(e)) from e
 
         result = {
             "cik": cik,

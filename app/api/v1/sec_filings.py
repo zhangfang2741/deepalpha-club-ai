@@ -13,6 +13,7 @@ from app.schemas.sec_filings import (
     FilingDocumentsResponse,
 )
 from app.services.sec_filings import company_profile_service, sec_filings_service
+from app.services.sec_filings.company_profile import ProfileGenerationError
 
 router = APIRouter()
 
@@ -71,6 +72,8 @@ async def get_company_profile(
         min_length=1,
         max_length=20,
     ),
+    name: str = Query("", description="前端已知的公司名（可选，避免二次回源 SEC）", max_length=200),
+    sic: str = Query("", description="前端已知的 SIC 行业描述（可选）", max_length=200),
     redis: Optional[Redis] = Depends(get_redis_optional),
 ) -> CompanyProfileResponse:
     """用大模型生成公司基础画像：行业、供应链位置、主要产品、核心差异化竞争力、主要竞争对手。
@@ -79,13 +82,25 @@ async def get_company_profile(
 
     Args:
         query: 股票代码（AAPL）或 CIK（320193）。
+        name: 前端已知公司名，作为提示传入以省去回源。
+        sic: 前端已知行业描述。
     """
     logger.info("sec_company_profile_request", query=query)
 
-    result = await company_profile_service.get_profile(query, redis)
+    try:
+        result = await company_profile_service.get_profile(
+            query, redis, name_hint=name, sic_hint=sic
+        )
+    except ProfileGenerationError as e:
+        # 大模型生成失败：与「公司未找到」区分，便于前端展示与排查
+        raise HTTPException(
+            status_code=502,
+            detail="大模型生成公司画像失败，请稍后重试（可能是模型服务暂时不可用或限流）",
+        ) from e
+
     if result is None:
         raise HTTPException(
             status_code=404,
-            detail=f"未能为「{query}」生成公司画像，请确认股票代码/CIK 是否正确",
+            detail=f"未找到「{query}」对应的公司，请确认股票代码/CIK 是否正确",
         )
     return CompanyProfileResponse.model_validate(result)

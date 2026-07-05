@@ -344,34 +344,39 @@ function ProfileBlock({
   )
 }
 
+function profileErrorMessage(e: unknown): string {
+  const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+  return detail || '公司概况生成失败，请稍后重试。'
+}
+
 /** AI 公司速览：行业 / 供应链位置 / 主要产品 / 差异化竞争力 / 竞争对手。 */
-function CompanyProfileCard({ query }: { query: string }) {
+function CompanyProfileCard({ query, name, sic }: { query: string; name?: string; sic?: string }) {
   const [profile, setProfile] = useState<CompanyProfile | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(false)
+  const [error, setError] = useState('')
 
   const load = () => {
     if (!query) return
     setLoading(true)
-    setError(false)
-    fetchCompanyProfile(query)
+    setError('')
+    fetchCompanyProfile(query, { name, sic })
       .then((res) => setProfile(res.profile))
-      .catch(() => setError(true))
+      .catch((e) => setError(profileErrorMessage(e)))
       .finally(() => setLoading(false))
   }
 
   useEffect(() => {
     let alive = true
     setProfile(null)
-    setError(false)
+    setError('')
     if (!query) return
     setLoading(true)
-    fetchCompanyProfile(query)
+    fetchCompanyProfile(query, { name, sic })
       .then((res) => {
         if (alive) setProfile(res.profile)
       })
-      .catch(() => {
-        if (alive) setError(true)
+      .catch((e) => {
+        if (alive) setError(profileErrorMessage(e))
       })
       .finally(() => {
         if (alive) setLoading(false)
@@ -379,7 +384,7 @@ function CompanyProfileCard({ query }: { query: string }) {
     return () => {
       alive = false
     }
-  }, [query])
+  }, [query, name, sic])
 
   return (
     <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50/60 to-white p-5 shadow-sm">
@@ -399,7 +404,7 @@ function CompanyProfileCard({ query }: { query: string }) {
 
       {error && !loading && (
         <div className="flex items-center justify-between gap-3 py-3">
-          <span className="text-sm text-gray-400">公司概况生成失败，请稍后重试。</span>
+          <span className="text-sm text-gray-500">{error}</span>
           <button
             onClick={load}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-blue-600 border border-blue-200 hover:bg-blue-50 transition-colors"
@@ -580,7 +585,11 @@ export default function SecFilingsPage() {
             </div>
 
             {/* AI 公司速览 */}
-            <CompanyProfileCard query={data.company.tickers[0] || data.company.cik} />
+            <CompanyProfileCard
+              query={data.company.tickers[0] || data.company.cik}
+              name={data.company.name}
+              sic={data.company.sic_description}
+            />
 
             {/* 分类筛选 chips */}
             <div className="flex flex-wrap gap-2">

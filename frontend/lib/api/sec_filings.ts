@@ -106,10 +106,11 @@ export interface CompanyProfileResponse {
 }
 
 export async function fetchCompanyProfile(
-  query: string
+  query: string,
+  hints?: { name?: string; sic?: string }
 ): Promise<CompanyProfileResponse> {
   const { data } = await apiClient.get<CompanyProfileResponse>('/api/v1/sec/company-profile', {
-    params: { query },
+    params: { query, name: hints?.name || undefined, sic: hints?.sic || undefined },
     timeout: 60000, // 大模型生成可能较慢
   })
   return data
