@@ -296,7 +296,8 @@ class Settings:
             },
             Environment.PRODUCTION: {
                 "DEBUG": False,
-                "LOG_LEVEL": "WARNING",
+                # INFO 便于线上观测请求/成功日志；如需降噪可用环境变量 LOG_LEVEL=WARNING 覆盖
+                "LOG_LEVEL": "INFO",
                 "RATE_LIMIT_DEFAULT": ["200 per day", "50 per hour"],
             },
             Environment.TEST: {
