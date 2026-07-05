@@ -7,6 +7,7 @@ from app.schemas.motley_fool import TranscriptSummary, TranscriptTranslationResp
 from app.services import transcript_ai
 from app.services.transcript_ai import (
     TranscriptAIService,
+    _extract_message_text,
     _split_into_chunks,
     transcript_ai_service,
 )
@@ -32,6 +33,33 @@ def test_split_into_chunks_splits_oversized_paragraph():
 def test_split_into_chunks_empty():
     """空文本返回空列表。"""
     assert _split_into_chunks("", max_chars=100) == []
+
+
+def test_extract_message_text_plain_string():
+    """字符串内容直接返回。"""
+    assert _extract_message_text("  你好  ") == "你好"
+
+
+def test_extract_message_text_skips_thinking_blocks():
+    """Claude extended thinking：只取 text 块，丢弃 thinking / signature。"""
+    content = [
+        {"type": "thinking", "thinking": "Let me translate...", "signature": "abc123"},
+        {"type": "text", "text": "英伟达本季营收强劲增长。"},
+    ]
+    result = _extract_message_text(content)
+    assert result == "英伟达本季营收强劲增长。"
+    assert "thinking" not in result
+    assert "signature" not in result
+
+
+def test_extract_message_text_joins_multiple_text_blocks():
+    """多个 text 块按顺序拼接。"""
+    content = [
+        {"type": "text", "text": "第一段"},
+        {"type": "reasoning", "text": "内部推理，应丢弃"},
+        {"type": "text", "text": "第二段"},
+    ]
+    assert _extract_message_text(content) == "第一段\n第二段"
 
 
 class _StubCache:
