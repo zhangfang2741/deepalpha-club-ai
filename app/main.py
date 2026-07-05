@@ -1,6 +1,7 @@
 """This file contains the main application entry point."""
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -76,6 +77,12 @@ async def lifespan(app: FastAPI):
         version=settings.VERSION,
         api_prefix=settings.API_V1_STR,
     )
+
+    if os.getenv("SKIP_STARTUP_PREWARM", "false").lower() in ("true", "1", "yes"):
+        logger.warning("startup_prewarm_skipped")
+        yield
+        logger.info("application_shutdown")
+        return
 
     # 最先执行数据库迁移：确保 schema 升到最新，避免代码已上线但缺列导致 500。
     # 作为 Railway release 阶段迁移不可靠时的兜底，可用 RUN_DB_MIGRATIONS_ON_STARTUP=false 关闭。
@@ -196,7 +203,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 # Set up CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

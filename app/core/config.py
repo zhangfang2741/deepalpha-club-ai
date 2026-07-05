@@ -223,7 +223,7 @@ class Settings:
             "login": ["20 per minute"],
             "root": ["10 per minute"],
             "health": ["20 per minute"],
-            "transcripts": ["10 per minute"],
+            "transcripts": ["1000 per minute"],
         }
 
         # Update rate limit endpoints from environment variables
@@ -267,6 +267,11 @@ class Settings:
             self.CORS_ORIGINS = parse_list_from_env("CORS_ORIGINS", ["http://localhost:3000"])
         else:
             self.CORS_ORIGINS = self.ALLOWED_ORIGINS
+
+        if self.ENVIRONMENT in (Environment.DEVELOPMENT, Environment.TEST):
+            for origin in ("http://localhost:3000", "http://127.0.0.1:3000"):
+                if origin not in self.CORS_ORIGINS:
+                    self.CORS_ORIGINS.append(origin)
 
         # HTTP Proxy Configuration
         self.HTTP_PROXY = os.getenv("HTTP_PROXY", os.getenv("http_proxy", ""))
