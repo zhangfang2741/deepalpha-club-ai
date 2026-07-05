@@ -87,6 +87,8 @@ async def test_summarize_calls_llm_and_caches(monkeypatch):
         nonlocal call_count
         call_count += 1
         assert response_format is TranscriptSummary
+        # 总结走放宽的超时预算，避免频繁超时
+        assert kwargs.get("timeout") == transcript_ai._SUMMARY_LLM_TIMEOUT_SECONDS
         return TranscriptSummary(
             overview="英伟达本季营收强劲增长",
             key_points=["数据中心需求旺盛"],
