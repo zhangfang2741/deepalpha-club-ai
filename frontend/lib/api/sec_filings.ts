@@ -80,3 +80,31 @@ export async function fetchFilingDocuments(
   })
   return data
 }
+
+export interface CompanyProfile {
+  one_liner: string
+  industry: string
+  supply_chain_position: string
+  main_products: string[]
+  differentiation: string
+  competitors: string[]
+}
+
+export interface CompanyProfileResponse {
+  request_id: string
+  cik: string
+  name: string
+  ticker: string
+  sic_description: string
+  profile: CompanyProfile
+}
+
+export async function fetchCompanyProfile(
+  query: string
+): Promise<CompanyProfileResponse> {
+  const { data } = await apiClient.get<CompanyProfileResponse>('/api/v1/sec/company-profile', {
+    params: { query },
+    timeout: 60000, // 大模型生成可能较慢
+  })
+  return data
+}

@@ -1,12 +1,30 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, ExternalLink, Building2, Loader2, X, FileText, Info, Star } from 'lucide-react'
+import {
+  Search,
+  ExternalLink,
+  Building2,
+  Loader2,
+  X,
+  FileText,
+  Info,
+  Star,
+  Sparkles,
+  Factory,
+  Network,
+  Package,
+  Shield,
+  Swords,
+  RefreshCw,
+} from 'lucide-react'
 import DashboardShell from '@/components/layout/DashboardShell'
 import {
   fetchCompanyFilings,
   fetchFilingDocuments,
+  fetchCompanyProfile,
   type CompanyFilingsResponse,
+  type CompanyProfile,
   type FilingRecord,
   type FilingDocument,
 } from '@/lib/api/sec_filings'
@@ -266,6 +284,148 @@ function DetailModal({
   )
 }
 
+function ProfileChips({ items, tone }: { items: string[]; tone: 'blue' | 'gray' }) {
+  const cls =
+    tone === 'blue'
+      ? 'bg-blue-50 text-blue-700 border-blue-100'
+      : 'bg-gray-50 text-gray-600 border-gray-200'
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((it) => (
+        <span key={it} className={`px-2.5 py-1 rounded-lg text-xs border ${cls}`}>
+          {it}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function ProfileBlock({
+  icon,
+  title,
+  children,
+}: {
+  icon: React.ReactNode
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500">
+        {icon}
+        {title}
+      </div>
+      <div className="text-sm text-gray-700 leading-relaxed">{children}</div>
+    </div>
+  )
+}
+
+/** AI 公司速览：行业 / 供应链位置 / 主要产品 / 差异化竞争力 / 竞争对手。 */
+function CompanyProfileCard({ query }: { query: string }) {
+  const [profile, setProfile] = useState<CompanyProfile | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(false)
+
+  const load = () => {
+    if (!query) return
+    setLoading(true)
+    setError(false)
+    fetchCompanyProfile(query)
+      .then((res) => setProfile(res.profile))
+      .catch(() => setError(true))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    let alive = true
+    setProfile(null)
+    setError(false)
+    if (!query) return
+    setLoading(true)
+    fetchCompanyProfile(query)
+      .then((res) => {
+        if (alive) setProfile(res.profile)
+      })
+      .catch(() => {
+        if (alive) setError(true)
+      })
+      .finally(() => {
+        if (alive) setLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [query])
+
+  return (
+    <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50/60 to-white p-5 shadow-sm">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2 text-sm font-bold text-blue-700">
+          <Sparkles className="w-4 h-4" />
+          AI 公司速览
+        </div>
+        <span className="text-[11px] text-gray-400">大模型生成，仅供参考</span>
+      </div>
+
+      {loading && (
+        <div className="flex items-center gap-2 text-sm text-gray-400 py-6">
+          <Loader2 className="w-4 h-4 animate-spin" /> 大模型正在总结公司概况…
+        </div>
+      )}
+
+      {error && !loading && (
+        <div className="flex items-center justify-between gap-3 py-3">
+          <span className="text-sm text-gray-400">公司概况生成失败，请稍后重试。</span>
+          <button
+            onClick={load}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-blue-600 border border-blue-200 hover:bg-blue-50 transition-colors"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> 重试
+          </button>
+        </div>
+      )}
+
+      {profile && !loading && (
+        <div className="space-y-4">
+          {profile.one_liner && (
+            <p className="text-[15px] font-medium text-gray-900 leading-relaxed">{profile.one_liner}</p>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            {profile.industry && (
+              <ProfileBlock icon={<Factory className="w-3.5 h-3.5" />} title="所属行业">
+                {profile.industry}
+              </ProfileBlock>
+            )}
+            {profile.supply_chain_position && (
+              <ProfileBlock icon={<Network className="w-3.5 h-3.5" />} title="供应链位置">
+                {profile.supply_chain_position}
+              </ProfileBlock>
+            )}
+            {profile.main_products.length > 0 && (
+              <ProfileBlock icon={<Package className="w-3.5 h-3.5" />} title="主要产品">
+                <ProfileChips items={profile.main_products} tone="blue" />
+              </ProfileBlock>
+            )}
+            {profile.competitors.length > 0 && (
+              <ProfileBlock icon={<Swords className="w-3.5 h-3.5" />} title="主要竞争对手">
+                <ProfileChips items={profile.competitors} tone="gray" />
+              </ProfileBlock>
+            )}
+            {profile.differentiation && (
+              <div className="md:col-span-2">
+                <ProfileBlock icon={<Shield className="w-3.5 h-3.5" />} title="核心差异化竞争力">
+                  {profile.differentiation}
+                </ProfileBlock>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function SecFilingsPage() {
   const [query, setQuery] = useState('')
   const [data, setData] = useState<CompanyFilingsResponse | null>(null)
@@ -382,6 +542,9 @@ export default function SecFilingsPage() {
                 </div>
               </div>
             </div>
+
+            {/* AI 公司速览 */}
+            <CompanyProfileCard query={data.company.tickers[0] || data.company.cik} />
 
             {/* 分类筛选 chips */}
             <div className="flex flex-wrap gap-2">
