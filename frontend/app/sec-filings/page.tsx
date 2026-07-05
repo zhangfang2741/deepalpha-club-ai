@@ -14,6 +14,7 @@ import {
   Factory,
   Network,
   Package,
+  Users,
   Shield,
   Swords,
   RefreshCw,
@@ -405,6 +406,11 @@ function CompanyProfileCard({ query }: { query: string }) {
             {profile.main_products.length > 0 && (
               <ProfileBlock icon={<Package className="w-3.5 h-3.5" />} title="主要产品">
                 <ProfileChips items={profile.main_products} tone="blue" />
+              </ProfileBlock>
+            )}
+            {profile.main_customers.length > 0 && (
+              <ProfileBlock icon={<Users className="w-3.5 h-3.5" />} title="主要客户">
+                <ProfileChips items={profile.main_customers} tone="gray" />
               </ProfileBlock>
             )}
             {profile.competitors.length > 0 && (

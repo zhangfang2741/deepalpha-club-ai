@@ -74,6 +74,7 @@ class CompanyProfile(BaseModel):
     industry: str = Field(description="所属行业及细分赛道，一句话说明")
     supply_chain_position: str = Field(description="在产业链/供应链中的位置（上游/中游/下游），及上下游关系")
     main_products: List[str] = Field(default_factory=list, description="主要产品或业务线（3-6 项，每项简短）")
+    main_customers: List[str] = Field(default_factory=list, description="主要客户或客户群体（3-6 项）")
     differentiation: str = Field(description="在行业中的核心差异化竞争力/护城河（2-3 句）")
     competitors: List[str] = Field(default_factory=list, description="主要竞争对手（3-6 家，公司名）")
 

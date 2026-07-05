@@ -86,6 +86,7 @@ export interface CompanyProfile {
   industry: string
   supply_chain_position: string
   main_products: string[]
+  main_customers: string[]
   differentiation: string
   competitors: string[]
 }
