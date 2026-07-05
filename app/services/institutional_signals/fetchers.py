@@ -73,17 +73,21 @@ def _extract_symbols(data) -> list[str]:
     return out
 
 
-_WIKI_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; DeepAlphaBot/1.0)"}
-_WIKI_SP500 = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-_WIKI_NDX100 = "https://en.wikipedia.org/wiki/Nasdaq-100"
-_WIKI_SP500_API = (
-    "https://en.wikipedia.org/w/api.php"
-    "?action=parse&page=List_of_S%26P_500_companies&format=json&prop=text&formatversion=2"
-)
-_WIKI_NDX100_API = (
-    "https://en.wikipedia.org/w/api.php?action=parse&page=Nasdaq-100&format=json&prop=text&formatversion=2"
-)
-_GITHUB_SP500_CSV = "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/master/data/constituents.csv"
+_WIKI_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; DeepAlphaBot/1.0; +https://deepalpha.club)"}
+# 每个 universe: 维基文章页 URL、维基 API 页名、可选 CSV 备源
+# 抓取顺序：FMP → 维基文章页 → 维基 action=parse API → CSV 备源 →（调用方硬编码兜底）
+_CONSTITUENT_SOURCES = {
+    "sp500": {
+        "article": "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
+        "wiki_page": "List_of_S%26P_500_companies",
+        "csv": "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/master/data/constituents.csv",
+    },
+    "nasdaq100": {
+        "article": "https://en.wikipedia.org/wiki/Nasdaq-100",
+        "wiki_page": "Nasdaq-100",
+        "csv": None,
+    },
+}
 
 
 async def _parse_wiki_symbols(html: str) -> list[str]:
@@ -97,68 +101,85 @@ async def _fetch_csv_symbols(client: httpx.AsyncClient, url: str, symbol_field: 
     try:
         resp = await client.get(url, headers=_WIKI_HEADERS, timeout=20, follow_redirects=True)
         if resp.status_code != 200:
-            logger.warning("csv_constituent_fetch_non200", url=url, status=resp.status_code)
+            logger.warning("csv_constituent_non200", url=url, status=resp.status_code)
             return []
         reader = csv.DictReader(StringIO(resp.text))
         rows = [{"symbol": row.get(symbol_field, "")} for row in reader]
         symbols = _extract_symbols(rows)
         if not symbols:
-            logger.warning("csv_constituent_parse_empty", url=url)
+            logger.warning("csv_constituent_parsed_empty", url=url)
         return symbols
     except Exception as e:
-        logger.warning("csv_constituent_fetch_failed", url=url, error=str(e))
+        logger.warning("csv_constituent_error", url=url, error=str(e))
         return []
 
 
-async def _fetch_wiki_symbols(
-    client: httpx.AsyncClient,
-    article_url: str,
-    api_url: str,
-) -> list[str]:
-    """从 Wikipedia 成分股表格抓取代码：文章页失败后改用官方 parse API。"""
+async def _fetch_wiki_symbols(client: httpx.AsyncClient, universe: str) -> list[str]:
+    """维基百科成分股：先文章页，失败换维基 API；每步都记日志便于定位失败点。"""
+    cfg = _CONSTITUENT_SOURCES[universe]
+    article_url, page = cfg["article"], cfg["wiki_page"]
+    # 1) 文章页
     try:
         resp = await client.get(article_url, headers=_WIKI_HEADERS, timeout=20, follow_redirects=True)
         if resp.status_code == 200:
-            symbols = await _parse_wiki_symbols(resp.text)
-            if symbols:
-                return symbols
-            logger.warning("wiki_constituent_parse_empty", url=article_url)
+            syms = await _parse_wiki_symbols(resp.text)
+            if syms:
+                return syms
+            logger.warning("wiki_article_parsed_empty", universe=universe)
         else:
-            logger.warning("wiki_constituent_fetch_non200", url=article_url, status=resp.status_code)
+            logger.warning("wiki_article_non200", universe=universe, status=resp.status_code)
     except Exception as e:
-        logger.warning("wiki_constituent_fetch_failed", url=article_url, error=str(e))
-
+        logger.warning("wiki_article_error", universe=universe, error=str(e))
+    # 2) 维基 API（action=parse）
+    api_url = (f"https://en.wikipedia.org/w/api.php?action=parse&page={page}"
+               "&format=json&prop=text&formatversion=2")
     try:
         resp = await client.get(api_url, headers=_WIKI_HEADERS, timeout=20, follow_redirects=True)
         if resp.status_code != 200:
-            logger.warning("wiki_constituent_api_non200", url=api_url, status=resp.status_code)
+            logger.warning("wiki_api_non200", universe=universe, status=resp.status_code)
             return []
-        html = resp.json().get("parse", {}).get("text", "")
-        if not html:
-            logger.warning("wiki_constituent_api_empty", url=api_url)
-            return []
-        return await _parse_wiki_symbols(html)
+        html = (resp.json().get("parse") or {}).get("text") or ""
+        syms = await _parse_wiki_symbols(html)
+        if not syms:
+            logger.warning("wiki_api_parsed_empty", universe=universe)
+        return syms
     except Exception as e:
-        logger.warning("wiki_constituent_api_failed", url=api_url, error=str(e))
+        logger.warning("wiki_api_error", universe=universe, error=str(e))
         return []
+
+
+async def _fetch_constituents(client: httpx.AsyncClient, universe: str, fmp_endpoint: str) -> list[str]:
+    """FMP → 维基百科 → CSV 备源，每步记录来源与条数（调用方再降级到硬编码）。"""
+    syms = _extract_symbols(await _get(client, fmp_endpoint, {}))
+    if syms:
+        logger.info("constituents_source", universe=universe, source="fmp", count=len(syms))
+        return syms
+    logger.warning("constituents_fmp_empty", universe=universe, endpoint=fmp_endpoint)
+
+    syms = await _fetch_wiki_symbols(client, universe)
+    if syms:
+        logger.info("constituents_source", universe=universe, source="wiki", count=len(syms))
+        return syms
+
+    csv_url = _CONSTITUENT_SOURCES[universe].get("csv")
+    if csv_url:
+        syms = await _fetch_csv_symbols(client, csv_url)
+        if syms:
+            logger.info("constituents_source", universe=universe, source="csv", count=len(syms))
+            return syms
+
+    logger.warning("constituents_all_sources_empty", universe=universe)
+    return syms
 
 
 async def fetch_sp500_symbols(client: httpx.AsyncClient) -> list[str]:
     """S&P 500 成分股代码：FMP → 维基百科 → GitHub CSV → （调用方硬编码兜底）。"""
-    syms = _extract_symbols(await _get(client, "sp500-constituent", {}))
-    if not syms:
-        syms = await _fetch_wiki_symbols(client, _WIKI_SP500, _WIKI_SP500_API)
-    if not syms:
-        syms = await _fetch_csv_symbols(client, _GITHUB_SP500_CSV)
-    return syms
+    return await _fetch_constituents(client, "sp500", "sp500-constituent")
 
 
 async def fetch_nasdaq100_symbols(client: httpx.AsyncClient) -> list[str]:
     """纳斯达克 100（QQQ）成分股代码：FMP → 维基百科 → （调用方硬编码兜底）。"""
-    syms = _extract_symbols(await _get(client, "nasdaq-constituent", {}))
-    if not syms:
-        syms = await _fetch_wiki_symbols(client, _WIKI_NDX100, _WIKI_NDX100_API)
-    return syms
+    return await _fetch_constituents(client, "nasdaq100", "nasdaq-constituent")
 
 
 async def fetch_analyst_estimate(client: httpx.AsyncClient, symbol: str) -> dict | None:
