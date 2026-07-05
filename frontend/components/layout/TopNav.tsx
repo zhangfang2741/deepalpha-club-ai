@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
 import {
   LogOut, User, LayoutDashboard, TrendingUp, BarChart3,
-  LineChart, MessageSquare, Settings, Menu, X, FlaskConical, Network, ArrowUpRight, Activity, Search, CandlestickChart, Waves, Cloud, Radar,
+  LineChart, MessageSquare, Settings, Menu, X, FlaskConical, Network, ArrowUpRight, Activity, Search, CandlestickChart, Waves, Cloud, Radar, FileText,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { href: '/industry-research',  label: '行业研究', icon: Search },
   { href: '/analyst-upgrades',   label: '分析师上调', icon: ArrowUpRight },
   { href: '/institutional-signals', label: '机构信号', icon: Radar },
+  { href: '/sec-filings',        label: 'SEC 文件', icon: FileText },
   { href: '/supply-chain',       label: '产业图谱', icon: Network },
   { href: '/chat',               label: 'AI 对话',  icon: MessageSquare },
   { href: '/skill-generator',    label: '因子探索', icon: FlaskConical },
