@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from typing import AsyncGenerator
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -173,6 +174,71 @@ class TranscriptAIService:
                 _cache_key("translation", url), response.model_dump_json(), ttl=_CACHE_TTL_SECONDS
             )
         return response
+
+    async def translate_stream(
+        self,
+        ticker: str,
+        url: str,
+        prepared_remarks: str,
+        questions_and_answers: str,
+    ) -> AsyncGenerator[tuple[str, str], None]:
+        """流式翻译：按从前到后的顺序，每译完一段就产出一段。
+
+        产出 ``(section, text)``，section 为 ``prepared_remarks`` 或
+        ``questions_and_answers``。片段以并发方式翻译（受信号量限流），但严格按
+        原文顺序产出，因此前端可边翻边显示。全部完成后写入缓存。
+        """
+        cache_hit = await cache_service.get(_cache_key("translation", url)) if url else None
+        if cache_hit:
+            logger.info("transcript_translation_cache_hit", ticker=ticker, url=url)
+            cached = TranscriptTranslationResponse.model_validate_json(cache_hit)
+            if cached.prepared_remarks_zh:
+                yield ("prepared_remarks", cached.prepared_remarks_zh)
+            if cached.questions_and_answers_zh:
+                yield ("questions_and_answers", cached.questions_and_answers_zh)
+            return
+
+        logger.info(
+            "transcript_translation_stream_start",
+            ticker=ticker,
+            url=url,
+            prepared_chars=len(prepared_remarks),
+            qa_chars=len(questions_and_answers),
+        )
+        semaphore = asyncio.Semaphore(_TRANSLATE_CONCURRENCY)
+        collected: dict[str, list[str]] = {"prepared_remarks": [], "questions_and_answers": []}
+        pending: list[asyncio.Task[str]] = []
+        try:
+            for section_name, text in (
+                ("prepared_remarks", prepared_remarks),
+                ("questions_and_answers", questions_and_answers),
+            ):
+                if not text.strip():
+                    continue
+                chunks = _split_into_chunks(text, _TRANSLATE_CHUNK_CHARS)
+                tasks = [asyncio.create_task(self._translate_chunk(chunk, semaphore)) for chunk in chunks]
+                pending.extend(tasks)
+                for task in tasks:
+                    piece = await task
+                    pending.remove(task)
+                    if piece:
+                        collected[section_name].append(piece)
+                        yield (section_name, piece)
+        finally:
+            for task in pending:
+                if not task.done():
+                    task.cancel()
+
+        if url:
+            response = TranscriptTranslationResponse(
+                ticker=ticker,
+                url=url,
+                prepared_remarks_zh="\n\n".join(collected["prepared_remarks"]),
+                questions_and_answers_zh="\n\n".join(collected["questions_and_answers"]),
+            )
+            await cache_service.set(
+                _cache_key("translation", url), response.model_dump_json(), ttl=_CACHE_TTL_SECONDS
+            )
 
     def _compose_summary_input(self, title: str, prepared: str, qa: str) -> str:
         """拼接送入总结模型的原文，超长时截断 Q&A。"""

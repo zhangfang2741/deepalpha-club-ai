@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   CalendarDays,
@@ -17,11 +17,10 @@ import {
   fetchTranscriptDetail,
   fetchTranscriptList,
   fetchTranscriptSummary,
-  fetchTranscriptTranslation,
+  streamTranscriptTranslation,
   TranscriptCandidate,
   TranscriptDetailResponse,
   TranscriptSummaryResponse,
-  TranscriptTranslationResponse,
 } from '@/lib/api/transcripts'
 import DashboardShell from '@/components/layout/DashboardShell'
 
@@ -70,9 +69,12 @@ export default function TranscriptsPage() {
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [summaryError, setSummaryError] = useState('')
 
-  const [translation, setTranslation] = useState<TranscriptTranslationResponse | null>(null)
+  const [translatedPrepared, setTranslatedPrepared] = useState('')
+  const [translatedQa, setTranslatedQa] = useState('')
+  const [translationStarted, setTranslationStarted] = useState(false)
   const [translationLoading, setTranslationLoading] = useState(false)
   const [translationError, setTranslationError] = useState('')
+  const translationAbortRef = useRef<AbortController | null>(null)
 
   const qaSegments = useMemo(
     () => detail?.segments.filter((segment) => segment.section === 'questions_and_answers') ?? [],
@@ -88,7 +90,11 @@ export default function TranscriptsPage() {
     setSummary(null)
     setSummaryLoading(false)
     setSummaryError('')
-    setTranslation(null)
+    translationAbortRef.current?.abort()
+    translationAbortRef.current = null
+    setTranslatedPrepared('')
+    setTranslatedQa('')
+    setTranslationStarted(false)
     setTranslationLoading(false)
     setTranslationError('')
   }
@@ -126,15 +132,38 @@ export default function TranscriptsPage() {
   }
 
   const loadTranslation = async (target: TranscriptDetailResponse) => {
+    translationAbortRef.current?.abort()
+    const controller = new AbortController()
+    translationAbortRef.current = controller
+
+    setTranslationStarted(true)
     setTranslationLoading(true)
     setTranslationError('')
+    setTranslatedPrepared('')
+    setTranslatedQa('')
+
     try {
-      const result = await fetchTranscriptTranslation(target)
-      setTranslation(result)
+      for await (const evt of streamTranscriptTranslation(target, controller.signal)) {
+        if (evt.error) {
+          setTranslationError('翻译生成失败')
+          break
+        }
+        if (evt.done) break
+        if (evt.section === 'prepared_remarks') {
+          setTranslatedPrepared((prev) => (prev ? `${prev}\n\n${evt.text}` : evt.text))
+        } else if (evt.section === 'questions_and_answers') {
+          setTranslatedQa((prev) => (prev ? `${prev}\n\n${evt.text}` : evt.text))
+        }
+      }
     } catch (err) {
-      setTranslationError(getErrorMessage(err, '翻译生成失败'))
+      if (!controller.signal.aborted) {
+        setTranslationError(getErrorMessage(err, '翻译生成失败'))
+      }
     } finally {
-      setTranslationLoading(false)
+      if (translationAbortRef.current === controller) {
+        setTranslationLoading(false)
+        translationAbortRef.current = null
+      }
     }
   }
 
@@ -144,7 +173,7 @@ export default function TranscriptsPage() {
     if (tab === 'summary' && !summary && !summaryLoading) {
       loadSummary(detail)
     }
-    if (tab === 'translation' && !translation && !translationLoading) {
+    if (tab === 'translation' && !translationStarted) {
       loadTranslation(detail)
     }
   }
@@ -457,27 +486,42 @@ export default function TranscriptsPage() {
                 )}
                 {activeTab === 'translation' && (
                   <div>
-                    {translationLoading && renderAiLoading('AI 正在翻译逐字稿...')}
-                    {!translationLoading &&
-                      translationError &&
+                    {translationLoading &&
+                      !translatedPrepared &&
+                      !translatedQa &&
+                      renderAiLoading('AI 正在翻译逐字稿...')}
+                    {translationError &&
+                      !translatedPrepared &&
+                      !translatedQa &&
                       renderAiError(translationError, () => loadTranslation(detail))}
-                    {!translationLoading && !translationError && translation && (
+                    {(translatedPrepared || translatedQa) && (
                       <div className="space-y-6">
-                        {translation.prepared_remarks_zh && (
+                        {translatedPrepared && (
                           <div>
                             <h4 className="mb-3 text-sm font-bold text-blue-700">管理层发言</h4>
-                            {renderTranscriptText(translation.prepared_remarks_zh)}
+                            {renderTranscriptText(translatedPrepared)}
                           </div>
                         )}
-                        {translation.questions_and_answers_zh && (
+                        {translatedQa && (
                           <div>
                             <h4 className="mb-3 text-sm font-bold text-emerald-700">问答环节 Q&amp;A</h4>
-                            {renderTranscriptText(translation.questions_and_answers_zh)}
+                            {renderTranscriptText(translatedQa)}
                           </div>
                         )}
-                        <p className="border-t border-gray-100 pt-3 text-xs text-gray-400">
-                          翻译由 AI 生成，专业术语已尽量对齐，重要信息请以英文原文为准。
-                        </p>
+                        {translationLoading && (
+                          <div className="flex items-center gap-2 text-xs font-medium text-gray-400">
+                            <span className="h-3.5 w-3.5 rounded-full border-2 border-blue-200 border-t-blue-600 animate-spin" />
+                            正在翻译后续内容...
+                          </div>
+                        )}
+                        {translationError && (
+                          <p className="text-xs font-medium text-red-600">部分内容翻译失败：{translationError}</p>
+                        )}
+                        {!translationLoading && !translationError && (
+                          <p className="border-t border-gray-100 pt-3 text-xs text-gray-400">
+                            翻译由 AI 生成，专业术语已尽量对齐，重要信息请以英文原文为准。
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>

@@ -3,7 +3,7 @@
 import pytest
 from langchain_core.messages import AIMessage
 
-from app.schemas.motley_fool import TranscriptSummary
+from app.schemas.motley_fool import TranscriptSummary, TranscriptTranslationResponse
 from app.services import transcript_ai
 from app.services.transcript_ai import (
     TranscriptAIService,
@@ -104,6 +104,63 @@ async def test_translate_chunks_and_joins(monkeypatch):
     assert result.questions_and_answers_zh.startswith("【译】")
     # 缓存已写入
     assert cache.store
+
+
+@pytest.mark.asyncio
+async def test_translate_stream_yields_in_order_and_caches(monkeypatch):
+    """流式翻译：按 prepared→qa 顺序逐段产出，结束后写缓存。"""
+    cache = _StubCache()
+    monkeypatch.setattr(transcript_ai, "cache_service", cache)
+
+    async def fake_call(messages, **kwargs):
+        human = messages[-1].content
+        return AIMessage(content=f"译:{human[:10]}")
+
+    monkeypatch.setattr(transcript_ai.llm_service, "call", fake_call)
+
+    service = TranscriptAIService()
+    url = "https://www.fool.com/earnings/call-transcripts/2026/05/28/nvda/"
+    prepared = "\n\n".join(f"prep {i} " + "x" * 1600 for i in range(2))
+    qa = "\n\n".join(f"qa {i} " + "y" * 1600 for i in range(2))
+
+    events: list[tuple[str, str]] = []
+    async for section, text in service.translate_stream("NVDA", url, prepared, qa):
+        events.append((section, text))
+
+    sections = [section for section, _ in events]
+    # prepared 段全部先于 qa 段产出
+    assert sections == ["prepared_remarks", "prepared_remarks", "questions_and_answers", "questions_and_answers"]
+    assert all(text.startswith("译:") for _, text in events)
+    # 结束后写入缓存
+    assert cache.store
+
+
+@pytest.mark.asyncio
+async def test_translate_stream_uses_cache(monkeypatch):
+    """流式翻译命中缓存时不再调用 LLM。"""
+    cache = _StubCache()
+    url = "https://www.fool.com/earnings/call-transcripts/2026/05/28/nvda/"
+    from app.services.transcript_ai import _cache_key
+
+    cache.store[_cache_key("translation", url)] = TranscriptTranslationResponse(
+        ticker="NVDA", url=url, prepared_remarks_zh="缓存的管理层发言", questions_and_answers_zh="缓存的问答"
+    ).model_dump_json()
+    monkeypatch.setattr(transcript_ai, "cache_service", cache)
+
+    called = False
+
+    async def fake_call(messages, **kwargs):
+        nonlocal called
+        called = True
+        return AIMessage(content="不应被调用")
+
+    monkeypatch.setattr(transcript_ai.llm_service, "call", fake_call)
+
+    service = TranscriptAIService()
+    events = [item async for item in service.translate_stream("NVDA", url, "prep", "qa")]
+    assert ("prepared_remarks", "缓存的管理层发言") in events
+    assert ("questions_and_answers", "缓存的问答") in events
+    assert called is False
 
 
 @pytest.mark.asyncio
