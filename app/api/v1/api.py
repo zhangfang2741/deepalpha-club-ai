@@ -16,6 +16,7 @@ from app.api.v1.research import router as research_router
 from app.api.v1.sec_filings import router as sec_filings_router
 from app.api.v1.skills import router as skills_router
 from app.api.v1.supply_chain import router as supply_chain_router
+from app.api.v1.transcripts import router as transcripts_router
 from app.api.v1.valuation import router as valuation_router
 from app.api.v1.wyckoff import router as wyckoff_router
 from app.core.logging import logger
@@ -36,6 +37,7 @@ api_router.include_router(research_router, prefix="/research", tags=["research"]
 api_router.include_router(sec_filings_router, prefix="/sec", tags=["sec"])
 api_router.include_router(skills_router, prefix="/skills", tags=["skills"])
 api_router.include_router(supply_chain_router, prefix="/supply-chain", tags=["supply-chain"])
+api_router.include_router(transcripts_router, prefix="/transcripts", tags=["transcripts"])
 api_router.include_router(valuation_router, prefix="/valuation", tags=["valuation"])
 api_router.include_router(wyckoff_router, prefix="/wyckoff", tags=["wyckoff"])
 
