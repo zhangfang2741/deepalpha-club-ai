@@ -475,7 +475,7 @@ async def test_fetch_sp500_symbols_uses_csv_backup(monkeypatch):
     async def empty_get(_client, _path, _params):
         return []
 
-    async def empty_wiki(_client, _article_url, _api_url):
+    async def empty_wiki(_client, _universe):
         return []
 
     class Response:

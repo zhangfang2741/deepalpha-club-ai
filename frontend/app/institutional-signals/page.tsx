@@ -259,10 +259,16 @@ const STATE_FILTERS = [
   { key: 'breakout_confirmation', label: '🚀 趋势' },
 ] as const
 
-function LeaderboardBoard({ board, onPick }: { board: LeaderboardEntry[]; onPick: (s: string) => void }) {
+function LeaderboardBoard(
+  { board, onPick, activeFilter = 'all' }:
+  { board: LeaderboardEntry[]; onPick: (s: string) => void; activeFilter?: string },
+) {
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-      {board.map((e, i) => (
+      {board.map((e, i) => {
+        // 筛选某状态时，行上就显示那个状态（否则只显示 top_state，会看不到筛选命中的状态）
+        const shown = (activeFilter !== 'all' && e.states.find((s) => s.key === activeFilter)) || e.top_state
+        return (
         <button
           key={e.symbol}
           onClick={() => onPick(e.symbol)}
@@ -276,16 +282,16 @@ function LeaderboardBoard({ board, onPick }: { board: LeaderboardEntry[]; onPick
               <div className="truncate text-xs text-gray-400">{e.name}</div>
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-              {e.top_state ? (
+              {shown ? (
                 <>
                   <span className="inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-800">
-                    <span>{e.top_state.emoji}</span>
-                    <span className="truncate">{e.top_state.label}</span>
-                    <span className="text-amber-400">{'★'.repeat(e.top_state.stars)}</span>
+                    <span>{shown.emoji}</span>
+                    <span className="truncate">{shown.label}</span>
+                    <span className="text-amber-400">{'★'.repeat(shown.stars)}</span>
                   </span>
-                  {e.top_state.buy_timing && (
+                  {shown.buy_timing && (
                     <span className="whitespace-nowrap text-[10px] text-gray-400">
-                      {e.top_state.buy_timing} · {e.top_state.buy_edge}
+                      {shown.buy_timing} · {shown.buy_edge}
                     </span>
                   )}
                 </>
@@ -301,7 +307,8 @@ function LeaderboardBoard({ board, onPick }: { board: LeaderboardEntry[]; onPick
             <div className="text-[10px] text-gray-400">{e.coverage}/5 · {e.confidence}</div>
           </div>
         </button>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -546,11 +553,16 @@ export default function InstitutionalSignalsPage() {
               </div>
             )}
             {!boardComputing && !boardLoading && board && board.length > 0 && (() => {
+              // 计数/筛选按「任一命中状态」，而非仅 top_state——否则 4★ 的趋势确认
+              // 总被同票的 5★ 状态盖住，导致筛选几乎为空。
+              const has = (e: LeaderboardEntry, key: string) => e.states.some((s) => s.key === key)
               const counts: Record<string, number> = { all: board.length }
-              board.forEach((e) => { if (e.top_state) counts[e.top_state.key] = (counts[e.top_state.key] ?? 0) + 1 })
+              STATE_FILTERS.forEach((f) => {
+                if (f.key !== 'all') counts[f.key] = board.filter((e) => has(e, f.key)).length
+              })
               const filtered = boardFilter === 'all'
                 ? board
-                : board.filter((e) => e.top_state?.key === boardFilter)
+                : board.filter((e) => has(e, boardFilter))
               return (
                 <>
                   <div className="flex flex-wrap gap-2">
@@ -570,7 +582,7 @@ export default function InstitutionalSignalsPage() {
                     ))}
                   </div>
                   {filtered.length > 0 ? (
-                    <LeaderboardBoard board={filtered} onPick={load} />
+                    <LeaderboardBoard board={filtered} onPick={load} activeFilter={boardFilter} />
                   ) : (
                     <div className="rounded-2xl border border-dashed border-gray-200 py-12 text-center text-sm text-gray-400">
                       当前筛选下暂无标的
