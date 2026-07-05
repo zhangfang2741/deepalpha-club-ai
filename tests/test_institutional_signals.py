@@ -418,6 +418,39 @@ def _wiki_table_html(symbols: list[str]) -> str:
 
 
 @pytest.mark.asyncio
+async def test_refresh_leaderboard_short_caches_unavailable_and_not_fresh(monkeypatch):
+    """数据源不可用的扫描结果只做短缓存、且不标 fresh，避免空榜卡住数小时。"""
+    from app.api.v1 import institutional_signals as api
+    from app.schemas.institutional_signals import LeaderboardResponse
+
+    sets: dict[str, int | None] = {}
+    deleted: list[str] = []
+
+    class FakeRedis:
+        async def set(self, k, v, nx=False, ex=None):
+            sets[k] = ex
+            return True
+
+        async def delete(self, k):
+            deleted.append(k)
+            return 1
+
+    monkeypatch.setattr(api, "current_redis", lambda: FakeRedis())
+
+    async def fake_scan(universe="sp500"):
+        return LeaderboardResponse(status="unavailable", note="数据源暂不可用", entries=[])
+
+    monkeypatch.setattr(api, "scan_leaderboard", fake_scan)
+
+    await api._refresh_leaderboard("sp500")
+
+    data_key, fresh_key, _ = api._lb_keys("sp500")
+    assert sets.get(data_key) == api.FAILED_CACHE_TTL   # 短 TTL，而非 24h
+    assert fresh_key not in sets                          # 未标记 fresh
+    assert fresh_key in deleted                           # 明确清掉旧的 fresh 标记
+
+
+@pytest.mark.asyncio
 async def test_scan_leaderboard_marks_unavailable_when_all_symbols_have_no_data(monkeypatch):
     """扫了整个 universe 却一支都没评出分 → status=unavailable 且 note 说明数据源不可用。"""
     from app.services.institutional_signals import scan
