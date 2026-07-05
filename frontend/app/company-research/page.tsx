@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
+  ArrowRight,
   Building2,
   CalendarDays,
   ExternalLink,
@@ -27,6 +28,7 @@ import DashboardShell from '@/components/layout/DashboardShell'
 import StockAnalysisCard from '@/components/analysis/StockAnalysisCard'
 import { analyzeStock, type AnalysisResponse } from '@/lib/api/analysis'
 import {
+  fetchCompanyProfile,
   fetchCompanyFilings,
   streamCompanyProfile,
   type CompanyFilingsResponse,
@@ -174,6 +176,109 @@ function ProfileBlock({
   )
 }
 
+function splitSupplyChainText(text: string) {
+  const cleaned = text.trim()
+  const upstream = cleaned.match(/上游[：:，,]?\s*([^；;。]+)/)?.[1]?.trim()
+  const midstream = cleaned.match(/中游[：:，,]?\s*([^；;。]+)/)?.[1]?.trim()
+  const downstream = cleaned.match(/下游[：:，,]?\s*([^；;。]+)/)?.[1]?.trim()
+
+  return {
+    upstream: upstream || '关键零部件、原材料、代工/基础设施供应方',
+    midstream: midstream || cleaned,
+    downstream: downstream || '终端客户、渠道、生态伙伴和最终用户',
+  }
+}
+
+function FlowItems({ items }: { items: string[] }) {
+  const visible = items.filter(Boolean).slice(0, 4)
+  if (visible.length === 0) return null
+  return (
+    <div className="mt-3 flex flex-wrap gap-1.5">
+      {visible.map((item, index) => (
+        <span key={`${item}-${index}`} className="rounded-md bg-white/80 px-2 py-1 text-[11px] font-medium text-gray-600">
+          {item}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function SupplyChainFlow({
+  position,
+  products,
+  customers,
+}: {
+  position: string
+  products: ProductItem[]
+  customers: string[]
+}) {
+  const stages = splitSupplyChainText(position)
+  const productNames = products.map((item) => item.name).filter(Boolean)
+
+  const cards = [
+    {
+      key: 'upstream',
+      label: '上游',
+      title: '供应与资源',
+      body: stages.upstream,
+      icon: Factory,
+      tone: 'border-amber-100 bg-amber-50 text-amber-700',
+      items: [],
+    },
+    {
+      key: 'company',
+      label: '公司环节',
+      title: '核心产品 / 平台',
+      body: stages.midstream,
+      icon: Building2,
+      tone: 'border-blue-100 bg-blue-50 text-blue-700',
+      items: productNames,
+    },
+    {
+      key: 'downstream',
+      label: '下游',
+      title: '客户与应用',
+      body: stages.downstream,
+      icon: Users,
+      tone: 'border-emerald-100 bg-emerald-50 text-emerald-700',
+      items: customers,
+    },
+  ]
+
+  return (
+    <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-center gap-2">
+        <Network className="h-4 w-4 text-blue-600" />
+        <h2 className="text-sm font-bold text-gray-900">供应链位置</h2>
+      </div>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto_1fr_auto_1fr] lg:items-stretch">
+        {cards.map((card, index) => {
+          const Icon = card.icon
+          return (
+            <div key={card.key} className="contents">
+              <div className={`rounded-xl border p-4 ${card.tone}`}>
+                <div className="flex items-center gap-2 text-xs font-bold">
+                  <Icon className="h-3.5 w-3.5" />
+                  {card.label}
+                </div>
+                <div className="mt-2 text-sm font-bold text-gray-900">{card.title}</div>
+                <p className="mt-2 text-xs leading-6 text-gray-700">{card.body}</p>
+                <FlowItems items={card.items} />
+              </div>
+              {index < cards.length - 1 && (
+                <div className="flex items-center justify-center text-gray-300">
+                  <ArrowRight className="hidden h-5 w-5 lg:block" />
+                  <div className="h-4 w-px bg-gray-200 lg:hidden" />
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 function CompanyOverviewTab({
   ticker,
   profile,
@@ -289,15 +394,18 @@ function CompanyOverviewTab({
         </div>
       </section>
 
+      {profile.supply_chain_position && (
+        <SupplyChainFlow
+          position={profile.supply_chain_position}
+          products={mainProducts}
+          customers={mainCustomers}
+        />
+      )}
+
       <section className="grid grid-cols-1 gap-4 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm md:grid-cols-2">
         {profile.industry && (
           <ProfileBlock icon={<Factory className="h-3.5 w-3.5" />} title="所属行业">
             {profile.industry}
-          </ProfileBlock>
-        )}
-        {profile.supply_chain_position && (
-          <ProfileBlock icon={<Network className="h-3.5 w-3.5" />} title="供应链位置">
-            {profile.supply_chain_position}
           </ProfileBlock>
         )}
         {mainProducts.length > 0 && (
@@ -788,6 +896,26 @@ export default function CompanyResearchPage() {
     setProfileError('')
     setProfileProgress({ event: 'start', message: '正在解析股票代码' })
     setProfile(null)
+    let completed = false
+    const fallbackTimer = window.setTimeout(async () => {
+      if (completed || controller.signal.aborted) return
+      setProfileProgress({ event: 'generating', message: '生成时间较长，正在读取缓存结果' })
+      try {
+        const result = await fetchCompanyProfile(symbol)
+        if (completed || profileAbortRef.current !== controller) return
+        completed = true
+        setProfile(result.profile)
+        setProfileProgress(null)
+        controller.abort()
+      } catch {
+        // 流式请求仍在继续，兜底失败时不打断主流程。
+      } finally {
+        if (completed && profileAbortRef.current === controller) {
+          setProfileLoading(false)
+        }
+      }
+    }, 35000)
+
     try {
       for await (const event of streamCompanyProfile(symbol, controller.signal)) {
         if (controller.signal.aborted) return
@@ -795,9 +923,10 @@ export default function CompanyResearchPage() {
           throw new Error(event.message)
         }
         if (event.event === 'done') {
+          completed = true
           setProfile(event.data.profile)
           setProfileProgress(null)
-          continue
+          break
         }
         setProfileProgress({
           event: event.event,
@@ -810,6 +939,7 @@ export default function CompanyResearchPage() {
         setProfileError(getErrorMessage(error, '公司概览生成失败'))
       }
     } finally {
+      window.clearTimeout(fallbackTimer)
       if (profileAbortRef.current === controller) {
         setProfileLoading(false)
       }

@@ -183,7 +183,12 @@ export async function* streamCompanyProfile(
         .split('\n')
         .find((line) => line.startsWith('data: '))
       if (!dataLine) continue
-      yield JSON.parse(dataLine.slice(6)) as CompanyProfileStreamEvent
+      const event = JSON.parse(dataLine.slice(6)) as CompanyProfileStreamEvent
+      yield event
+      if (event.done) {
+        await reader.cancel()
+        return
+      }
     }
   }
 
