@@ -64,6 +64,15 @@ class FilingDocumentsResponse(BaseResponse):
     documents: List[FilingDocument] = Field(default_factory=list, description="该 filing 的文档/附件清单")
 
 
+class ProductItem(BaseModel):
+    """单个产品/业务线，含面向普通用户的通俗拆解。"""
+
+    name: str = Field(description="产品或业务线名称（简短）")
+    explanation: str = Field(
+        description="用大白话解释这个产品是干什么用的、它如何与普通人的日常生活挂钩，最好举一个生活化例子（1-2 句）"
+    )
+
+
 class CompanyProfile(BaseModel):
     """大模型生成的公司基础画像（结构化输出用）。
 
@@ -73,7 +82,10 @@ class CompanyProfile(BaseModel):
     one_liner: str = Field(description="一句话概括公司是做什么的（不超过 40 字）")
     industry: str = Field(description="所属行业及细分赛道，一句话说明")
     supply_chain_position: str = Field(description="在产业链/供应链中的位置（上游/中游/下游），及上下游关系")
-    main_products: List[str] = Field(default_factory=list, description="主要产品或业务线（3-6 项，每项简短）")
+    main_products: List[ProductItem] = Field(
+        default_factory=list, description="主要产品或业务线（3-6 项，每项含名称与通俗拆解）"
+    )
+    main_customers: List[str] = Field(default_factory=list, description="主要客户或客户群体（3-6 项）")
     differentiation: str = Field(description="在行业中的核心差异化竞争力/护城河（2-3 句）")
     competitors: List[str] = Field(default_factory=list, description="主要竞争对手（3-6 家，公司名）")
 

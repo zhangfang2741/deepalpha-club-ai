@@ -14,9 +14,11 @@ import {
   Factory,
   Network,
   Package,
+  Users,
   Shield,
   Swords,
   RefreshCw,
+  HelpCircle,
 } from 'lucide-react'
 import DashboardShell from '@/components/layout/DashboardShell'
 import {
@@ -25,6 +27,7 @@ import {
   fetchCompanyProfile,
   type CompanyFilingsResponse,
   type CompanyProfile,
+  type ProductItem,
   type FilingRecord,
   type FilingDocument,
 } from '@/lib/api/sec_filings'
@@ -300,6 +303,27 @@ function ProfileChips({ items, tone }: { items: string[]; tone: 'blue' | 'gray' 
   )
 }
 
+/** 产品标签：悬停显示面向普通用户的通俗拆解/生活化例子。 */
+function ProductChip({ item }: { item: ProductItem }) {
+  return (
+    <span className="group relative inline-block">
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border border-dashed border-blue-200 bg-blue-50 text-blue-700 cursor-help transition-colors group-hover:border-blue-400 group-hover:bg-blue-100">
+        {item.name}
+        {item.explanation && <HelpCircle className="w-3 h-3 text-blue-400" />}
+      </span>
+      {item.explanation && (
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute bottom-full left-0 z-30 mb-2 w-64 rounded-xl bg-gray-900 px-3 py-2 text-xs leading-relaxed text-gray-100 opacity-0 shadow-xl transition-opacity duration-150 group-hover:opacity-100"
+        >
+          {item.explanation}
+          <span className="absolute left-5 top-full -mt-px h-2 w-2 rotate-45 bg-gray-900" />
+        </span>
+      )}
+    </span>
+  )
+}
+
 function ProfileBlock({
   icon,
   title,
@@ -403,8 +427,20 @@ function CompanyProfileCard({ query }: { query: string }) {
               </ProfileBlock>
             )}
             {profile.main_products.length > 0 && (
-              <ProfileBlock icon={<Package className="w-3.5 h-3.5" />} title="主要产品">
-                <ProfileChips items={profile.main_products} tone="blue" />
+              <ProfileBlock
+                icon={<Package className="w-3.5 h-3.5" />}
+                title="主要产品（悬停看它是干什么用的）"
+              >
+                <div className="flex flex-wrap gap-1.5">
+                  {profile.main_products.map((p) => (
+                    <ProductChip key={p.name} item={p} />
+                  ))}
+                </div>
+              </ProfileBlock>
+            )}
+            {profile.main_customers.length > 0 && (
+              <ProfileBlock icon={<Users className="w-3.5 h-3.5" />} title="主要客户">
+                <ProfileChips items={profile.main_customers} tone="gray" />
               </ProfileBlock>
             )}
             {profile.competitors.length > 0 && (
