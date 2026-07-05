@@ -77,14 +77,17 @@ def _confidence(coverage: int) -> str:
     return "低"
 
 
-def _headline(composite: float, states: list) -> str:
+def _headline(composite: float, states: list, coverage: int) -> str:
+    # 五维全部无数据：是数据源不可用，而非「真·中性」，不能给出投资口径结论
+    if coverage == 0:
+        return "机构资金数据源暂不可用，未取到任何维度数据（请稍后重试，或检查行情数据源配置/额度）。"
     top = states[0]
     if top.key == "neutral":
         return f"综合分 {composite:.0f}：暂无显著机构资金信号，建议观望。"
     return f"综合分 {composite:.0f}：{top.emoji} {top.label}——{top.meaning}。"
 
 
-def _build_buy_view(states: list) -> tuple[str, list[BuyStage]]:
+def _build_buy_view(states: list, coverage: int = 1) -> tuple[str, list[BuyStage]]:
     """构造买入视角阶梯（早→晚）+ 一句话结论。"""
     fired = {s.key for s in states}
     state_by_key = {s.key: s for s in states}
@@ -97,6 +100,9 @@ def _build_buy_view(states: list) -> tuple[str, list[BuyStage]]:
         )
         for key in BUY_LADDER_ORDER
     ]
+    # 数据源全挂时不给「观望」这类投资口径结论，明确提示无数据
+    if coverage == 0:
+        return "买入视角：数据源暂不可用，无法评估买入时机。", ladder
     # 主买入信号 = 命中的偏多状态里买入排序最靠前（最佳入场）的那个
     active_keys = [k for k in BUY_LADDER_ORDER if k in fired]
     if not active_keys:
@@ -198,7 +204,7 @@ async def compute_institutional_signals(
     composite = _composite_score(dims)
     coverage = _coverage(dims)
     confidence = _confidence(coverage)
-    buy_headline, buy_ladder = _build_buy_view(states)
+    buy_headline, buy_ladder = _build_buy_view(states, coverage)
     name = (profile or {}).get("companyName") or (profile or {}).get("name") or symbol
 
     logger.info("institutional_signals_computed", symbol=symbol, composite=composite,
@@ -211,7 +217,7 @@ async def compute_institutional_signals(
         composite_score=composite,
         coverage=coverage,
         confidence=confidence,
-        headline=_headline(composite, states),
+        headline=_headline(composite, states, coverage),
         buy_headline=buy_headline,
         buy_ladder=buy_ladder,
         price_history=[round(p["close"], 2) for p in prices[-30:]],
