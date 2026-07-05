@@ -88,6 +88,7 @@ class LLMService:
         messages: LanguageModelInput,
         model_name: Optional[str] = ...,
         response_format: None = ...,
+        timeout: Optional[float] = ...,
         **model_kwargs: Any,
     ) -> BaseMessage: ...
 
@@ -98,6 +99,7 @@ class LLMService:
         model_name: Optional[str] = ...,
         *,
         response_format: Type[T],
+        timeout: Optional[float] = ...,
         **model_kwargs: Any,
     ) -> T: ...
 
@@ -106,6 +108,7 @@ class LLMService:
         messages: LanguageModelInput,
         model_name: Optional[str] = None,
         response_format: Optional[Type[BaseModel]] = None,
+        timeout: Optional[float] = None,
         **model_kwargs: Any,
     ) -> Union[BaseMessage, BaseModel]:
         """Call the LLM with retries and circular fallback.
@@ -117,6 +120,9 @@ class LLMService:
                 provided the call chains ``.with_structured_output(schema)``
                 and returns a validated instance of that schema instead of a
                 raw ``BaseMessage``.
+            timeout: Total timeout budget in seconds for this call. ``None``
+                uses ``settings.LLM_TOTAL_TIMEOUT``. Heavy one-off calls (e.g.
+                summarizing a long transcript) can request a larger budget.
             **model_kwargs: Extra kwargs forwarded to ``LLMRegistry.get`` when
                 constructing a one-off model instance (e.g. ``temperature``,
                 ``max_tokens``, ``reasoning``).
@@ -129,17 +135,18 @@ class LLMService:
             RuntimeError: When all models fail after retries or the total
                 timeout budget is exceeded.
         """
+        total_timeout = timeout if timeout is not None else settings.LLM_TOTAL_TIMEOUT
         try:
             return await asyncio.wait_for(
                 self._call_with_fallback(messages, model_name, response_format, model_kwargs),
-                timeout=settings.LLM_TOTAL_TIMEOUT,
+                timeout=total_timeout,
             )
         except asyncio.TimeoutError:
             logger.exception(
                 "llm_total_timeout_exceeded",
-                timeout_seconds=settings.LLM_TOTAL_TIMEOUT,
+                timeout_seconds=total_timeout,
             )
-            raise RuntimeError(f"llm call timed out after {settings.LLM_TOTAL_TIMEOUT}s total budget")
+            raise RuntimeError(f"llm call timed out after {total_timeout}s total budget")
 
     def get_llm(self) -> Any:
         """Return the current tool-bound default LLM instance.

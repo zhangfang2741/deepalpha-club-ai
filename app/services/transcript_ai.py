@@ -36,6 +36,9 @@ _TRANSLATE_CHUNK_CHARS = 1600
 _TRANSLATE_CONCURRENCY = 4
 # 送入总结的原文长度上限，避免超出上下文
 _SUMMARY_MAX_CHARS = 24000
+# 总结是一次性大调用（长原文 + 结构化输出 + Claude thinking），给更大的超时预算，
+# 避免频繁超时（前端对应放宽超时到 120s）
+_SUMMARY_LLM_TIMEOUT_SECONDS = 100
 
 _SUMMARY_SYSTEM_PROMPT = """你是一名资深的股票研究分析师，擅长解读美股公司的财报电话会议（earnings call）。
 请阅读下面提供的英文财报电话会议逐字稿（含管理层发言与分析师问答），用**简体中文**输出结构化摘要。
@@ -164,6 +167,7 @@ class TranscriptAIService:
                 HumanMessage(content=combined),
             ],
             response_format=TranscriptSummary,
+            timeout=_SUMMARY_LLM_TIMEOUT_SECONDS,
         )
 
         if url:

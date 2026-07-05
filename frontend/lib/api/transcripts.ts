@@ -94,7 +94,10 @@ export async function fetchTranscriptSummary(
       url: detail.url,
       prepared_remarks: detail.prepared_remarks,
       questions_and_answers: detail.questions_and_answers,
-    }
+    },
+    // 总结是一次性大调用（长原文 + 结构化输出 + thinking），后端预算 100s，
+    // 前端需高于后端预算，覆盖默认的 30s，避免前端提前超时
+    { timeout: 120000 }
   )
   return response.data
 }
