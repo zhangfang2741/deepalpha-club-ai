@@ -319,6 +319,7 @@ export default function InstitutionalSignalsPage() {
   const [symbol, setSymbol] = useState('')
   const [data, setData] = useState<InstitutionalSignalReport | null>(null)
   const [loading, setLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
   const [board, setBoard] = useState<LeaderboardEntry[] | null>(null)
   const [boardAsOf, setBoardAsOf] = useState('')
@@ -330,21 +331,26 @@ export default function InstitutionalSignalsPage() {
   const [universe, setUniverse] = useState<'sp500' | 'nasdaq100'>('sp500')
   const [detailTab, setDetailTab] = useState<'signals' | 'research'>('signals')
 
-  const load = useCallback((sym: string) => {
+  const load = useCallback((sym: string, refresh: boolean = false) => {
     const clean = sym.trim().toUpperCase()
     if (!clean) return
     setSymbol(clean)
     setDetailTab('signals')
-    setLoading(true)
+    // 刷新时不清空当前报告，只在按钮上转圈；首次查询走全屏骨架屏
+    if (refresh) setRefreshing(true)
+    else setLoading(true)
     setError('')
-    fetchInstitutionalSignals(clean)
+    fetchInstitutionalSignals(clean, refresh)
       .then((res) => setData(res))
       .catch((err) => {
         console.error('[institutional-signals] fetch error:', err?.response?.status, err?.message)
         setError(getErrorMessage(err))
-        setData(null)
+        if (!refresh) setData(null)
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        setLoading(false)
+        setRefreshing(false)
+      })
   }, [])
 
   // 轮询代际：每次重新开轮询自增，旧轮询回调据此自行作废（切换 universe / 手动刷新）
@@ -475,10 +481,20 @@ export default function InstitutionalSignalsPage() {
             <div className="rounded-2xl border border-gray-200 bg-gradient-to-br from-gray-50 to-white p-6 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <div>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="text-xl font-extrabold text-gray-900">{data.symbol}</span>
-                    <span className="ml-2 text-sm text-gray-500">{data.name}</span>
-                    <span className="ml-2 text-xs text-gray-400">· {data.as_of}</span>
+                    <span className="text-sm text-gray-500">{data.name}</span>
+                    <span className="text-xs text-gray-400">· {data.as_of}</span>
+                    <button
+                      type="button"
+                      onClick={() => load(data.symbol, true)}
+                      disabled={refreshing}
+                      title="清空缓存并强制重新拉取数据源"
+                      className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-0.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-50 disabled:opacity-40"
+                    >
+                      <span aria-hidden className={refreshing ? 'animate-spin' : ''}>↻</span>
+                      {refreshing ? '刷新中…' : '刷新'}
+                    </button>
                   </div>
                   {data.price_history?.length > 1 && (
                     <div className="mt-2"><Sparkline data={data.price_history} /></div>

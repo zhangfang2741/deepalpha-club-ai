@@ -556,3 +556,50 @@ async def test_fetch_sp500_symbols_uses_csv_backup(monkeypatch):
     monkeypatch.setattr(fetchers, "_fetch_wiki_symbols", empty_wiki)
 
     assert await fetchers.fetch_sp500_symbols(cast(Any, Client())) == ["AAPL", "MSFT"]
+
+
+@pytest.mark.asyncio
+async def test_get_signals_refresh_deletes_cache_and_recomputes(monkeypatch):
+    """详情页 refresh=true：先删缓存、不走缓存命中，强制实时重算并回写。"""
+    from app.api.v1 import institutional_signals as api
+    from app.schemas.institutional_signals import InstitutionalSignalReport
+
+    deleted: list[str] = []
+    sets: dict[str, int | None] = {}
+
+    class FakeRedis:
+        async def get(self, k):
+            raise AssertionError("refresh 时不应读缓存")
+
+        async def delete(self, k):
+            deleted.append(k)
+            return 1
+
+        async def set(self, k, v, ex=None):
+            sets[k] = ex
+            return True
+
+    class FakeSession:
+        async def close(self):
+            pass
+
+    monkeypatch.setattr(api, "AsyncSessionFactory", lambda: FakeSession())
+
+    computed: list[str] = []
+
+    async def fake_compute(symbol, session=None):
+        computed.append(symbol)
+        return InstitutionalSignalReport(symbol=symbol, name=symbol, as_of="2026-07-05",
+                                         composite_score=72.0, coverage=5, confidence="高",
+                                         headline="ok", buy_headline="ok", buy_ladder=[],
+                                         price_history=[], dimensions=[], states=[])
+
+    monkeypatch.setattr(api, "compute_institutional_signals", fake_compute)
+
+    report = await api.get_institutional_signals(symbol="AAPL", refresh=True, redis=FakeRedis())
+
+    cache_key = f"{api.CACHE_PREFIX}:AAPL:{api.REPORT_CACHE_VERSION}"
+    assert cache_key in deleted        # 刷新时先清缓存
+    assert computed == ["AAPL"]        # 强制实时重算
+    assert sets.get(cache_key) == api.CACHE_TTL  # coverage>0 回写正常 TTL
+    assert report.composite_score == 72.0

@@ -160,6 +160,7 @@ async def get_leaderboard(
 @router.get("", response_model=InstitutionalSignalReport)
 async def get_institutional_signals(
     symbol: str = Query(..., min_length=1, max_length=10, description="股票代码，如 AAPL"),
+    refresh: bool = Query(False, description="true 时清空该标的缓存并强制实时重算"),
     redis: Optional[Redis] = Depends(get_redis_optional),
 ) -> InstitutionalSignalReport:
     """获取单支标的的机构资金信号报告（五维评分 + 状态标签）。
@@ -167,6 +168,7 @@ async def get_institutional_signals(
     维度：Expectation（预期）/ Positioning（仓位）/ Participation（参与度）/
     Fundamental（基本面）/ Confirmation（确认）。当前 Phase 1 覆盖预期与参与度。
     结果缓存 1 小时；Redis 不可用时降级实时计算。
+    refresh=true：清空该标的缓存并强制实时重算（用于数据源恢复后手动补救残缺报告）。
     """
     symbol = symbol.upper().strip()
     if not symbol.isalpha():
@@ -174,7 +176,14 @@ async def get_institutional_signals(
 
     cache_key = f"{CACHE_PREFIX}:{symbol}:{REPORT_CACHE_VERSION}"
 
-    if redis is not None:
+    if redis is not None and refresh:
+        # 手动刷新：先删缓存，确保下面走实时重算（否则残缺报告会赖到 TTL 过期）
+        try:
+            await redis.delete(cache_key)
+            logger.info("institutional_signals_manual_refresh", symbol=symbol)
+        except Exception as e:
+            logger.warning("institutional_signals_refresh_clear_failed", symbol=symbol, error=str(e))
+    elif redis is not None:
         try:
             cached = await redis.get(cache_key)
             if cached:

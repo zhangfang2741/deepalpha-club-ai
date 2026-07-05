@@ -71,10 +71,11 @@ export interface InstitutionalSignalReport {
 
 export async function fetchInstitutionalSignals(
   symbol: string,
+  refresh: boolean = false,
 ): Promise<InstitutionalSignalReport> {
   const { data } = await apiClient.get<InstitutionalSignalReport>(
     '/api/v1/institutional-signals',
-    { params: { symbol }, timeout: 30000 },
+    { params: { symbol, ...(refresh ? { refresh: true } : {}) }, timeout: 30000 },
   )
   return data
 }
