@@ -86,6 +86,34 @@ def _split_into_chunks(text: str, max_chars: int) -> list[str]:
     return chunks
 
 
+def _extract_message_text(content: object) -> str:
+    """从 LLM 响应中只提取正文文本。
+
+    不同供应商的 ``AIMessage.content`` 形态不同：
+    - OpenAI 等：直接是 ``str``。
+    - Claude（开启 extended thinking）等：是内容块列表，例如
+      ``[{"type": "thinking", ...}, {"type": "text", "text": "..."}]``。
+    直接 ``str(content)`` 会把 thinking / signature 等原始块也当成译文，
+    因此这里只保留 text 块，丢弃 thinking / reasoning 等推理块。
+    """
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                block_type = block.get("type")
+                if block_type in {"thinking", "reasoning", "redacted_thinking"}:
+                    continue
+                text = block.get("text")
+                if isinstance(text, str) and text:
+                    parts.append(text)
+        return "\n".join(parts).strip()
+    return str(content).strip()
+
+
 def _split_oversized_paragraph(paragraph: str, max_chars: int) -> list[str]:
     """把超长段落按句子边界切成多块。"""
     sentences = paragraph.replace(". ", ".\n").split("\n")
@@ -267,8 +295,7 @@ class TranscriptAIService:
                 ],
                 temperature=0.2,
             )
-        content = response.content
-        return content.strip() if isinstance(content, str) else str(content).strip()
+        return _extract_message_text(response.content)
 
 
 transcript_ai_service = TranscriptAIService()
