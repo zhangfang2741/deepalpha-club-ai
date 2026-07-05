@@ -102,6 +102,7 @@ async def _refresh_leaderboard(universe: str) -> None:
 @router.get("/leaderboard", response_model=LeaderboardResponse)
 async def get_leaderboard(
     universe: str = Query("sp500", description="universe：sp500（标普500）| nasdaq100（纳指100/QQQ）"),
+    refresh: bool = Query(False, description="true 时清空该 universe 缓存并强制后台重扫"),
     redis: Optional[Redis] = Depends(get_redis_optional),
 ) -> LeaderboardResponse:
     """机构建仓榜：扫描动态 universe（标普 500 或纳指 100），按综合分与偏多状态排名。
@@ -109,6 +110,7 @@ async def get_leaderboard(
     基于 4 个 FMP 维度（不含期权仓位），点进详情页查看完整五维。
     stale-while-revalidate：命中缓存立即返回；过期则先返回旧数据再后台刷新；
     无缓存则后台开扫并返回 computing，前端稍后重试。
+    refresh=true：手动清空该 universe 的数据/新鲜标记/扫描锁，强制重扫（用于残缺快照补救）。
     """
     if universe not in LB_UNIVERSES:
         raise HTTPException(status_code=422, detail=f"universe 仅支持 {LB_UNIVERSES}")
@@ -117,7 +119,18 @@ async def get_leaderboard(
         # 无缓存无法后台化，返回 computing 提示（详情页查询不受影响）
         return LeaderboardResponse(status="computing", note="缓存不可用，榜单暂不可用")
 
-    data_key, fresh_key, _ = _lb_keys(universe)
+    data_key, fresh_key, lock_key = _lb_keys(universe)
+
+    if refresh:
+        # 清空旧快照 + 锁，确保下面能重新拿到锁并开扫（否则残缺快照会赖到 TTL 过期）
+        try:
+            await redis.delete(data_key, fresh_key, lock_key)
+        except Exception as e:
+            logger.warning("leaderboard_refresh_clear_failed", universe=universe, error=str(e))
+        _spawn(_refresh_leaderboard(universe))
+        logger.info("leaderboard_manual_refresh", universe=universe)
+        return LeaderboardResponse(status="computing", note="已清空缓存，正在后台重扫，请稍后刷新")
+
     try:
         cached = await redis.get(data_key)
         fresh = await redis.exists(fresh_key)
