@@ -401,7 +401,7 @@ export default function TranscriptsPage() {
                     { id: 'summary', label: '总结', icon: Sparkles },
                     { id: 'translation', label: '中文翻译', icon: Languages },
                     { id: 'qa', label: 'Q&A', icon: MessageSquareText },
-                    { id: 'prepared', label: '逐字记录', icon: FileText },
+                    { id: 'prepared', label: '开场陈述/业绩说明', icon: FileText },
                     { id: 'segments', label: '发言人', icon: ListChecks },
                   ].map((tab) => {
                     const Icon = tab.icon
