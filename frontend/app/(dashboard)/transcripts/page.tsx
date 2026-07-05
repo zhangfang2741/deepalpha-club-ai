@@ -23,6 +23,7 @@ import {
   TranscriptSummaryResponse,
   TranscriptTranslationResponse,
 } from '@/lib/api/transcripts'
+import DashboardShell from '@/components/layout/DashboardShell'
 
 type DetailTab = 'summary' | 'translation' | 'qa' | 'prepared' | 'segments'
 
@@ -231,7 +232,8 @@ export default function TranscriptsPage() {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <DashboardShell>
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
@@ -511,6 +513,7 @@ export default function TranscriptsPage() {
           )}
         </section>
       </div>
-    </div>
+      </div>
+    </DashboardShell>
   )
 }
