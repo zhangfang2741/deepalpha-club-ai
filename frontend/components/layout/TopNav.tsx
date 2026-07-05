@@ -34,7 +34,6 @@ const NAV_ENTRIES: NavEntry[] = [
     label: '技术分析',
     icon: LineChart,
     items: [
-      { href: '/analysis', label: '投资评分',   icon: LineChart },
       { href: '/chan',     label: '缠论分析',   icon: CandlestickChart },
       { href: '/wyckoff',  label: '威科夫',     icon: Waves },
       { href: '/ichimoku', label: '一目均衡表', icon: Cloud },
@@ -53,8 +52,7 @@ const NAV_ENTRIES: NavEntry[] = [
     icon: BookOpen,
     items: [
       { href: '/industry-research', label: '行业研究',   icon: Search },
-      { href: '/sec-filings',       label: 'SEC 文件',   icon: FileText },
-      { href: '/transcripts',       label: '财报电话会', icon: FileText },
+      { href: '/company-research',  label: '企业研究',   icon: FileText },
       { href: '/supply-chain',      label: '产业图谱',   icon: Network },
     ],
   },

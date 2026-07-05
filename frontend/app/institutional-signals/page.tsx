@@ -1,5 +1,7 @@
 'use client'
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import { useState, useCallback, useEffect, useRef, FormEvent } from 'react'
 import {
   fetchInstitutionalSignals,
@@ -323,13 +325,16 @@ export default function InstitutionalSignalsPage() {
   const [boardSource, setBoardSource] = useState('')
   const [boardLoading, setBoardLoading] = useState(true)
   const [boardComputing, setBoardComputing] = useState(false)
+  const [boardNote, setBoardNote] = useState('')
   const [boardFilter, setBoardFilter] = useState<string>('all')
   const [universe, setUniverse] = useState<'sp500' | 'nasdaq100'>('sp500')
+  const [detailTab, setDetailTab] = useState<'signals' | 'research'>('signals')
 
   const load = useCallback((sym: string) => {
     const clean = sym.trim().toUpperCase()
     if (!clean) return
     setSymbol(clean)
+    setDetailTab('signals')
     setLoading(true)
     setError('')
     fetchInstitutionalSignals(clean)
@@ -351,7 +356,8 @@ export default function InstitutionalSignalsPage() {
     const gen = ++pollGen.current
     setBoardLoading(true)
     setBoardComputing(force) // 强制刷新时立刻进入「扫描中」态，避免闪回旧榜
-    if (force) setBoard(null)
+    setBoard(null)
+    setBoardNote('')
     const poll = (refresh: boolean) => {
       fetchLeaderboard(universe, refresh)
         .then((res) => {
@@ -364,6 +370,8 @@ export default function InstitutionalSignalsPage() {
             setBoard(res.entries)
             setBoardAsOf(res.as_of)
             setBoardSource(res.universe_source)
+            // 数据源整体不可用时携带原因，供空态展示（区别于「今日无热门」）
+            setBoardNote(res.status === 'unavailable' ? res.note : '')
             setBoardLoading(false)
           }
         })
@@ -435,6 +443,34 @@ export default function InstitutionalSignalsPage() {
             <button onClick={backToBoard} className="text-sm text-gray-500 transition hover:text-gray-900">
               ← 返回机构建仓榜
             </button>
+
+            <div className="inline-flex rounded-xl border border-gray-200 bg-white p-1">
+              {[
+                { id: 'signals', label: '机构信号' },
+                { id: 'research', label: '企业研究' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setDetailTab(tab.id as 'signals' | 'research')}
+                  className={`h-9 rounded-lg px-3 text-sm font-semibold transition ${
+                    detailTab === tab.id ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {detailTab === 'research' ? (
+              <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <iframe
+                  src={`/company-research?symbol=${encodeURIComponent(data.symbol)}&embedded=1`}
+                  title={`${data.symbol} 企业研究`}
+                  className="h-[78vh] w-full border-0"
+                />
+              </div>
+            ) : (
+              <>
             {/* 结论横幅 */}
             <div className="rounded-2xl border border-gray-200 bg-gradient-to-br from-gray-50 to-white p-6 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -506,6 +542,8 @@ export default function InstitutionalSignalsPage() {
               五维已全部接入。仓位 OI 变化率 / IV Rank、预期 EPS 修正已接入每日快照库（需累积历史后生效）；
               待后续：指引方向（Transcript NLP）、13F（FMP Ultimate 版）、ETF 资金流
             </p>
+              </>
+            )}
           </div>
         )}
 
@@ -612,8 +650,15 @@ export default function InstitutionalSignalsPage() {
               )
             })()}
             {!boardComputing && !boardLoading && (!board || board.length === 0) && (
-              <div className="rounded-2xl border border-dashed border-gray-200 py-16 text-center text-sm text-gray-400">
-                榜单暂不可用，可直接在上方输入代码查询
+              <div className="rounded-2xl border border-dashed border-gray-200 py-16 text-center text-sm text-gray-400 px-6">
+                {boardNote ? (
+                  <>
+                    <div className="text-gray-500 font-medium mb-1">机构建仓榜暂不可用</div>
+                    <div className="max-w-xl mx-auto leading-relaxed">{boardNote}</div>
+                  </>
+                ) : (
+                  '榜单暂不可用，可直接在上方输入代码查询'
+                )}
               </div>
             )}
           </div>

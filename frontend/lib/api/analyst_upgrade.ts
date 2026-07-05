@@ -49,6 +49,7 @@ export interface PriceTargetHistoryResponse {
 export async function fetchNasdaq100Upgrades(refresh = false): Promise<Nasdaq100UpgradesResponse> {
   const res = await apiClient.get<Nasdaq100UpgradesResponse>('/api/v1/analyst-upgrades/nasdaq100', {
     params: refresh ? { refresh: true } : undefined,
+    timeout: 90000,
   })
   return res.data
 }
@@ -56,6 +57,7 @@ export async function fetchNasdaq100Upgrades(refresh = false): Promise<Nasdaq100
 export async function fetchSP500Upgrades(refresh = false): Promise<SP500UpgradesResponse> {
   const res = await apiClient.get<SP500UpgradesResponse>('/api/v1/analyst-upgrades/sp500', {
     params: refresh ? { refresh: true } : undefined,
+    timeout: 180000,
   })
   return res.data
 }

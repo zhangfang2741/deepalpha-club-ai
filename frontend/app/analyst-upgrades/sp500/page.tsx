@@ -1,5 +1,7 @@
 'use client'
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { TrendingUp, RefreshCw, Info } from 'lucide-react'
@@ -89,15 +91,21 @@ export default function SP500UpgradesPage() {
           </div>
         )}
 
-        {!loading && error && (
+        {!loading && error && data && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+            本次刷新失败，下面继续展示上一次成功加载的数据。{error}
+          </div>
+        )}
+
+        {!loading && error && !data && (
           <div className="text-center py-16 text-red-500 text-sm">{error}</div>
         )}
 
-        {!loading && !error && data && data.stocks.length === 0 && (
+        {!loading && data && data.stocks.length === 0 && (
           <div className="text-center py-16 text-gray-400 text-sm">暂无满足条件的股票</div>
         )}
 
-        {!loading && !error && data && data.stocks.length > 0 && (
+        {!loading && data && data.stocks.length > 0 && (
           <UpgradeTable stocks={data.stocks} />
         )}
 

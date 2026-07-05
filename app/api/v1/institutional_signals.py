@@ -46,6 +46,9 @@ router = APIRouter()
 
 CACHE_PREFIX = "institutional_signals"
 CACHE_TTL = 3600  # 1 小时
+# 数据全缺（coverage=0，疑似数据源故障）时的短缓存：既节流重复扫描，又能快速自愈，
+# 避免「一次失败缓存 1 小时」把瞬时故障放大成长时间不可用
+FAILED_CACHE_TTL = 120  # 2 分钟
 # 缓存版本 = 相关源码哈希：状态名/schema/打分/端点任一变更，缓存 key 自动变、旧缓存立即失效
 SIGNALS_CACHE_VERSION = _auto_cache_version()
 REPORT_CACHE_VERSION = SIGNALS_CACHE_VERSION
@@ -86,9 +89,16 @@ async def _refresh_leaderboard(universe: str) -> None:
     try:
         result = await scan_leaderboard(universe=universe)
         if redis is not None:
-            await redis.set(data_key, result.model_dump_json(), ex=LB_DATA_TTL)
-            await redis.set(fresh_key, b"1", ex=SCAN_FRESH_SECONDS)
-        logger.info("leaderboard_refreshed", universe=universe, scanned=result.scanned)
+            if result.status == "ready":
+                await redis.set(data_key, result.model_dump_json(), ex=LB_DATA_TTL)
+                await redis.set(fresh_key, b"1", ex=SCAN_FRESH_SECONDS)
+            else:
+                # 数据源不可用：短 TTL 缓存以便前端展示原因，但不标 fresh →
+                # 下次请求即触发后台重扫，避免空榜被「新鲜」标记卡住 6 小时
+                await redis.set(data_key, result.model_dump_json(), ex=FAILED_CACHE_TTL)
+                await redis.delete(fresh_key)
+        logger.info("leaderboard_refreshed", universe=universe,
+                    scanned=result.scanned, status=result.status)
     except Exception:
         logger.exception("leaderboard_refresh_failed", universe=universe)
     finally:
@@ -183,7 +193,9 @@ async def get_institutional_signals(
 
     if redis is not None:
         try:
-            await redis.set(cache_key, report.model_dump_json(), ex=CACHE_TTL)
+            # coverage=0 说明五维全无数据（疑似数据源故障）——只短缓存，避免卡住 1 小时不重试
+            ttl = CACHE_TTL if report.coverage > 0 else FAILED_CACHE_TTL
+            await redis.set(cache_key, report.model_dump_json(), ex=ttl)
         except Exception as e:
             logger.warning("institutional_signals_cache_write_failed", symbol=symbol, error=str(e))
 

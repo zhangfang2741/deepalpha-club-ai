@@ -1,5 +1,7 @@
 'use client'
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import { useEffect, useState } from 'react'
 import { X, Loader2 } from 'lucide-react'
 import PriceTargetChart from './PriceTargetChart'
@@ -33,6 +35,7 @@ export default function PriceTargetModal({ stock, onClose }: Props) {
   const [points, setPoints] = useState<PriceTargetPoint[] | null>(null)
   const [synthetic, setSynthetic] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'target' | 'research'>('target')
 
   useEffect(() => {
     // 优先使用列表响应中嵌入的 recent_points（与 sparkline 阈值一致，同为 >= 3 点）
@@ -72,9 +75,9 @@ export default function PriceTargetModal({ stock, onClose }: Props) {
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* 头部 */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
             <div className="flex items-center gap-2">
               <span className="text-lg font-bold text-gray-900">{stock.symbol}</span>
@@ -90,32 +93,65 @@ export default function PriceTargetModal({ stock, onClose }: Props) {
           </button>
         </div>
 
-        {/* 快速指标 */}
-        <div className="grid grid-cols-4 gap-0 border-b border-gray-100">
-          {[
-            { label: '近月目标价', value: `$${stock.last_month_target.toFixed(0)}`, sub: `月环比 +${stock.month_mom.toFixed(1)}%`, color: 'text-green-600' },
-            { label: '季均目标价', value: `$${stock.last_quarter_target.toFixed(0)}`, sub: `季环比 +${stock.quarter_yoy.toFixed(1)}%`, color: 'text-blue-600' },
-            { label: '年均目标价', value: `$${stock.last_year_target.toFixed(0)}`, sub: `年环比 ${stock.year_vs_all > 0 ? '+' : ''}${stock.year_vs_all.toFixed(1)}%`, color: 'text-purple-600' },
-            { label: '报告机构数', value: `${stock.last_month_count} 家`, sub: '近一个月', color: 'text-gray-600' },
-          ].map((item) => (
-            <div key={item.label} className="px-4 py-3 text-center border-r last:border-r-0 border-gray-100">
-              <div className={`text-base font-bold ${item.color}`}>{item.value}</div>
-              <div className="text-xs text-gray-400 mt-0.5">{item.label}</div>
-              <div className="text-xs text-gray-400">{item.sub}</div>
-            </div>
-          ))}
+        <div className="border-b border-gray-100 px-6 py-2 flex-shrink-0">
+          <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+            {[
+              { id: 'target', label: '目标价' },
+              { id: 'research', label: '企业研究' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as 'target' | 'research')}
+                className={`h-8 rounded-lg px-3 text-sm font-semibold transition ${
+                  activeTab === tab.id ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* 图表区 */}
-        <div className="px-6 py-5">
-          {loading ? (
-            <div className="flex items-center justify-center h-60 gap-2 text-gray-400 text-sm">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              加载历史数据…
-            </div>
-          ) : points !== null ? (
-            <PriceTargetChart points={points} synthetic={synthetic} />
-          ) : null}
+        <div className="overflow-y-auto">
+          {activeTab === 'target' && (
+            <>
+              {/* 快速指标 */}
+              <div className="grid grid-cols-4 gap-0 border-b border-gray-100">
+                {[
+                  { label: '近月目标价', value: `$${stock.last_month_target.toFixed(0)}`, sub: `月环比 +${stock.month_mom.toFixed(1)}%`, color: 'text-green-600' },
+                  { label: '季均目标价', value: `$${stock.last_quarter_target.toFixed(0)}`, sub: `季环比 +${stock.quarter_yoy.toFixed(1)}%`, color: 'text-blue-600' },
+                  { label: '年均目标价', value: `$${stock.last_year_target.toFixed(0)}`, sub: `年环比 ${stock.year_vs_all > 0 ? '+' : ''}${stock.year_vs_all.toFixed(1)}%`, color: 'text-purple-600' },
+                  { label: '报告机构数', value: `${stock.last_month_count} 家`, sub: '近一个月', color: 'text-gray-600' },
+                ].map((item) => (
+                  <div key={item.label} className="px-4 py-3 text-center border-r last:border-r-0 border-gray-100">
+                    <div className={`text-base font-bold ${item.color}`}>{item.value}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">{item.label}</div>
+                    <div className="text-xs text-gray-400">{item.sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* 图表区 */}
+              <div className="px-6 py-5">
+                {loading ? (
+                  <div className="flex items-center justify-center h-60 gap-2 text-gray-400 text-sm">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    加载历史数据…
+                  </div>
+                ) : points !== null ? (
+                  <PriceTargetChart points={points} synthetic={synthetic} />
+                ) : null}
+              </div>
+            </>
+          )}
+
+          {activeTab === 'research' && (
+            <iframe
+              src={`/company-research?symbol=${encodeURIComponent(stock.symbol)}&embedded=1`}
+              title={`${stock.symbol} 企业研究`}
+              className="h-[72vh] w-full border-0"
+            />
+          )}
         </div>
       </div>
     </div>
