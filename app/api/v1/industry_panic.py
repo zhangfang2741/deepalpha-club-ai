@@ -110,10 +110,15 @@ async def get_industry_panic(
         sectors=sectors,
     )
 
-    if redis is not None:
+    # sectors 恒为固定 11 个板块，非空不代表有数据；只要没有任何板块拿到 history，
+    # 就是数据源整体故障，不写缓存，避免把空结果缓存 1 小时反复返回
+    has_data = any(s.history for s in sectors)
+    if redis is not None and has_data:
         try:
             await redis.set(CACHE_KEY, result.model_dump_json(), ex=CACHE_TTL)
             logger.info("industry_panic_cache_set", sector_count=len(sectors))
         except Exception as e:
             logger.warning("industry_panic_cache_write_failed", error=str(e))
+    elif not has_data:
+        logger.warning("industry_panic_all_empty_skip_cache")
     return result
