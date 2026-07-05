@@ -11,6 +11,7 @@
 
 import asyncio
 import json
+import re
 from typing import Optional
 
 import httpx
@@ -22,6 +23,7 @@ from app.services.sec_filings.constants import (
     CATEGORIES,
     classify_form,
     describe_8k_items,
+    describe_exhibit,
     describe_form,
 )
 
@@ -39,6 +41,8 @@ _TICKERS_CACHE_KEY = "sec:tickers_map"
 _TICKERS_TTL = 86400  # 24h：映射表变动极慢
 _SUBMISSIONS_CACHE_PREFIX = "sec:submissions"
 _SUBMISSIONS_TTL = 3600  # 1h
+_DOCS_CACHE_PREFIX = "sec:docs"
+_DOCS_TTL = 86400  # 24h：单份 filing 的文档清单不变
 
 # 拉取历史溢出文件的上限，避免超大公司拖垮响应（每文件约 1000 条）
 _MAX_OVERFLOW_FILES = 4
@@ -70,6 +74,14 @@ class SecFilingsService:
         # SEC 限速 10 req/s，礼貌间隔
         await asyncio.sleep(0.12)
         return resp.json()
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=8))
+    async def _get_text(self, url: str) -> str:
+        client = await self._get_client()
+        resp = await client.get(url)
+        resp.raise_for_status()
+        await asyncio.sleep(0.12)
+        return resp.text
 
     # ---------- ticker -> CIK ----------
 
@@ -221,6 +233,98 @@ class SecFilingsService:
                 "doc_url": doc_url,
             })
         return records
+
+    # ---------- 单份 filing 的文档/附件清单 ----------
+
+    async def get_filing_documents(
+        self, cik: str, accession: str, redis: Optional[Redis] = None
+    ) -> Optional[dict]:
+        """解析一份 filing 的文档表格，返回其全部附件（含类型/中文标签/链接）。
+
+        对 8-K Item 2.02，会把业绩新闻稿（EX-99.1）等标为 highlight。
+
+        Returns:
+            {accession, documents:[{seq, type, label, description, filename, url, highlight}]}
+        """
+        cik_norm = _normalize_cik(cik)
+        acc = accession.strip()
+        acc_nodash = acc.replace("-", "")
+        cik_int = cik_norm.lstrip("0") or "0"
+
+        cache_key = f"{_DOCS_CACHE_PREFIX}:{cik_int}:{acc_nodash}"
+        if redis is not None:
+            try:
+                raw = await redis.get(cache_key)
+                if raw:
+                    return json.loads(raw)
+            except Exception as e:
+                logger.warning("sec_docs_cache_read_error", error=str(e))
+
+        base = f"{_ARCHIVES_BASE}/{cik_int}/{acc_nodash}"
+        index_url = f"{base}/{acc}-index.htm"
+        try:
+            html = await self._get_text(index_url)
+        except Exception as e:
+            logger.warning("sec_filing_index_fetch_error", acc=acc, error=str(e))
+            return None
+
+        documents = self._parse_document_table(html, base)
+        result = {"accession": acc, "index_url": index_url, "documents": documents}
+
+        if redis is not None:
+            try:
+                await redis.set(cache_key, json.dumps(result, ensure_ascii=False), ex=_DOCS_TTL)
+            except Exception as e:
+                logger.warning("sec_docs_cache_write_error", error=str(e))
+
+        logger.info("sec_filing_documents_loaded", acc=acc, count=len(documents))
+        return result
+
+    @staticmethod
+    def _parse_document_table(html: str, base_url: str) -> list[dict]:
+        """解析 EDGAR filing index 页的「Document Format Files」表格。
+
+        表列结构：[序号, 描述, 文档(可能带 iXBRL 标记), 类型, 大小]。
+        隐藏 XBRL/图片等无阅读价值的附件；EX-99.x 标 highlight。
+        """
+        docs: list[dict] = []
+        rows = re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.S | re.I)
+        for row in rows:
+            cells_raw = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S | re.I)
+            if len(cells_raw) < 5:
+                continue
+
+            def _clean(x: str) -> str:
+                x = re.sub(r"<[^>]+>", " ", x)
+                x = x.replace("&nbsp;", " ").replace("&amp;", "&")
+                return re.sub(r"\s+", " ", x).strip()
+
+            seq = _clean(cells_raw[0])
+            description = _clean(cells_raw[1])
+            doc_cell = _clean(cells_raw[2])
+            ex_type = _clean(cells_raw[3])
+
+            # 文档名：去掉「 iXBRL」等尾注，取第一段
+            filename = doc_cell.split(" ")[0] if doc_cell else ""
+            if not filename or not filename.lower().endswith((".htm", ".html", ".txt", ".pdf")):
+                continue
+
+            # 主文件：序号为 1 且类型是表格本身（非 EX-*）
+            is_primary = seq == "1" and not ex_type.upper().startswith("EX-")
+            info = describe_exhibit(ex_type, description, is_primary)
+            if info["skip"]:
+                continue
+
+            docs.append({
+                "seq": seq,
+                "type": ex_type,
+                "label": info["label"],
+                "description": description if description.upper() != ex_type.upper() else "",
+                "filename": filename,
+                "url": f"{base_url}/{filename}",
+                "highlight": info["highlight"],
+            })
+        return docs
 
     # ---------- 对外主入口 ----------
 

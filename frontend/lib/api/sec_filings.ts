@@ -52,3 +52,31 @@ export async function fetchCompanyFilings(
   })
   return data
 }
+
+export interface FilingDocument {
+  seq: string
+  type: string
+  label: string
+  description: string
+  filename: string
+  url: string
+  highlight: boolean
+}
+
+export interface FilingDocumentsResponse {
+  request_id: string
+  accession: string
+  index_url: string
+  documents: FilingDocument[]
+}
+
+export async function fetchFilingDocuments(
+  cik: string,
+  accession: string
+): Promise<FilingDocumentsResponse> {
+  const { data } = await apiClient.get<FilingDocumentsResponse>('/api/v1/sec/filing-documents', {
+    params: { cik, accession },
+    timeout: 30000,
+  })
+  return data
+}

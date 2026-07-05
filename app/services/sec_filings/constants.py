@@ -210,3 +210,66 @@ def describe_form(form: str) -> dict:
             return {"name": name + suffix, "desc": desc}
 
     return {"name": "", "desc": ""}
+
+
+# SEC exhibit 按「编号分组」映射中文（EX-<组号>.<子号>），按组号整数精确匹配。
+_EXHIBIT_GROUP: dict[str, str] = {
+    "1": "承销相关协议",
+    "2": "并购/重组协议",
+    "3": "公司章程 / 细则",
+    "4": "证券持有人权利文件",
+    "5": "法律意见书",
+    "8": "税务意见书",
+    "10": "重大合同",
+    "21": "子公司列表",
+    "22": "债务发行主体",
+    "23": "会计师 / 专家同意书",
+    "24": "授权委托书",
+    "31": "SOX 302 认证（CEO/CFO 签署）",
+    "32": "SOX 906 认证（CEO/CFO 签署）",
+    "95": "矿山安全披露",
+    "97": "高管薪酬追回政策",
+    "99": "新闻稿 / 补充材料",
+}
+# EX-99 子号细分（99.1 通常是业绩新闻稿）
+_EX99_SUB: dict[str, str] = {
+    "99.1": "新闻稿 / 业绩公告（附件 99.1）",
+    "99.2": "补充材料（附件 99.2，常为演示稿/讲评）",
+}
+# 无阅读价值，列表隐藏：XBRL 数据、图片、封面等
+_EXHIBIT_SKIP_GROUPS = {"100", "101", "104"}
+
+
+def describe_exhibit(ex_type: str, description: str, is_primary: bool) -> dict:
+    """返回附件的 {label, highlight, skip}。
+
+    - skip：XBRL/图片/完整提交文本等对用户无价值，前端隐藏
+    - highlight：EX-99.x（新闻稿/业绩材料），前端重点标出
+    - label：中文标签
+    """
+    t = (ex_type or "").strip().upper()
+
+    if is_primary:
+        return {"label": "主文件", "highlight": False, "skip": False}
+
+    # 完整提交合并文本、图片等
+    if "COMPLETE SUBMISSION" in (description or "").upper():
+        return {"label": "", "highlight": False, "skip": True}
+    if t.startswith("GRAPHIC") or t in ("ZIP", "XML", "JSON", "EXCEL", "GRAPHIC"):
+        return {"label": "", "highlight": False, "skip": True}
+
+    if t.startswith("EX-"):
+        num = t[3:].strip()               # 如 "99.1" / "21" / "101.INS"
+        group = num.split(".")[0].split(" ")[0]
+        if group in _EXHIBIT_SKIP_GROUPS:
+            return {"label": "", "highlight": False, "skip": True}
+        if group == "99":
+            label = _EX99_SUB.get(num, f"补充材料（附件 {num}）")
+            return {"label": label, "highlight": True, "skip": False}
+        if group in _EXHIBIT_GROUP:
+            return {"label": f"{_EXHIBIT_GROUP[group]}（附件 {num}）", "highlight": False, "skip": False}
+        return {"label": f"附件 {num}", "highlight": False, "skip": False}
+
+    # 非 EX 类型：用原始描述兜底
+    label = description.strip() if description and description.upper() != t else (t or "附件")
+    return {"label": label, "highlight": False, "skip": False}

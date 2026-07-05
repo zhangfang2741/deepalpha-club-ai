@@ -1,12 +1,14 @@
 'use client'
 
-import { useState } from 'react'
-import { Search, ExternalLink, Building2, Loader2, X, FileText, Info } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Search, ExternalLink, Building2, Loader2, X, FileText, Info, Star } from 'lucide-react'
 import DashboardShell from '@/components/layout/DashboardShell'
 import {
   fetchCompanyFilings,
+  fetchFilingDocuments,
   type CompanyFilingsResponse,
   type FilingRecord,
+  type FilingDocument,
 } from '@/lib/api/sec_filings'
 
 // 分类 key -> 徽章配色（保持与蓝色主题协调）
@@ -84,7 +86,87 @@ function FilingRow({ f, onOpen }: { f: FilingRecord; onOpen: (f: FilingRecord) =
   )
 }
 
-function DetailModal({ f, company, onClose }: { f: FilingRecord; company: string; onClose: () => void }) {
+function DocumentList({ cik, accession }: { cik: string; accession: string }) {
+  const [docs, setDocs] = useState<FilingDocument[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    setError(false)
+    fetchFilingDocuments(cik, accession)
+      .then((res) => {
+        if (alive) setDocs(res.documents)
+      })
+      .catch(() => {
+        if (alive) setError(true)
+      })
+      .finally(() => {
+        if (alive) setLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [cik, accession])
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-gray-400 py-3">
+        <Loader2 className="w-4 h-4 animate-spin" /> 正在读取文件清单…
+      </div>
+    )
+  }
+  if (error || !docs || docs.length === 0) {
+    return <div className="text-sm text-gray-400 py-2">未能读取文件清单，可用下方按钮打开 SEC 目录。</div>
+  }
+
+  return (
+    <div>
+      <div className="text-xs text-gray-400 mb-2">文件清单（★ 为业绩新闻稿/重点材料）</div>
+      <div className="space-y-1.5">
+        {docs.map((d) => (
+          <a
+            key={d.filename}
+            href={d.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-colors ${
+              d.highlight
+                ? 'bg-amber-50 border-amber-200 hover:border-amber-300'
+                : 'bg-white border-gray-100 hover:border-blue-200'
+            }`}
+          >
+            {d.highlight ? (
+              <Star className="w-4 h-4 text-amber-500 flex-shrink-0 fill-amber-400" />
+            ) : (
+              <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className={`text-sm ${d.highlight ? 'text-amber-900 font-medium' : 'text-gray-700'}`}>
+                {d.label || d.type || d.filename}
+              </div>
+              {d.type && <div className="text-[11px] text-gray-400 font-mono">{d.type}</div>}
+            </div>
+            <ExternalLink className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+          </a>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function DetailModal({
+  f,
+  company,
+  cik,
+  onClose,
+}: {
+  f: FilingRecord
+  company: string
+  cik: string
+  onClose: () => void
+}) {
   const color = CATEGORY_COLORS[f.category] ?? CATEGORY_COLORS.other
   return (
     <div
@@ -159,34 +241,24 @@ function DetailModal({ f, company, onClose }: { f: FilingRecord; company: string
             </div>
           )}
 
-          {/* 操作按钮 */}
-          <div className="flex flex-col gap-2 pt-1">
-            {f.index_url && (
-              <a
-                href={f.index_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
-              >
-                <ExternalLink className="w-4 h-4" />
-                在 SEC EDGAR 打开文件目录
-              </a>
-            )}
-            {f.doc_url && (
-              <a
-                href={f.doc_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:border-blue-300 hover:text-blue-600 transition-colors"
-              >
-                <FileText className="w-4 h-4" />
-                打开主文档原文
-              </a>
-            )}
-          </div>
+          {/* 文件清单（懒加载） */}
+          <DocumentList cik={cik} accession={f.accession_number} />
+
+          {/* SEC 目录入口 */}
+          {f.index_url && (
+            <a
+              href={f.index_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+              在 SEC EDGAR 打开完整目录
+            </a>
+          )}
 
           <p className="text-xs text-gray-400 border-t border-gray-100 pt-3">
-            正文抓取与中文翻译将在后续版本提供，当前可点击上方按钮查看 SEC 原文。
+            正文抓取与中文翻译将在后续版本提供，当前可点击文件查看 SEC 原文。财报电话会议逐字记录（Q&A）SEC 不收录，需付费源。
           </p>
         </div>
       </div>
@@ -356,7 +428,12 @@ export default function SecFilingsPage() {
       </div>
 
       {selected && (
-        <DetailModal f={selected} company={data?.company.name ?? ''} onClose={() => setSelected(null)} />
+        <DetailModal
+          f={selected}
+          company={data?.company.name ?? ''}
+          cik={data?.company.cik ?? ''}
+          onClose={() => setSelected(null)}
+        />
       )}
     </DashboardShell>
   )
