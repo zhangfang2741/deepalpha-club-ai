@@ -7,6 +7,7 @@ from app.schemas.motley_fool import TranscriptSummary, TranscriptTranslationResp
 from app.services import transcript_ai
 from app.services.transcript_ai import (
     TranscriptAIService,
+    _contains_cjk,
     _extract_message_text,
     _split_into_chunks,
     transcript_ai_service,
@@ -191,6 +192,56 @@ async def test_translate_stream_uses_cache(monkeypatch):
     assert ("prepared_remarks", "缓存的管理层发言") in events
     assert ("questions_and_answers", "缓存的问答") in events
     assert called is False
+
+
+@pytest.mark.asyncio
+async def test_translate_chunk_retries_when_output_not_chinese(monkeypatch):
+    """模型首次回显英文（无中文）时，用强化指令重试一次并采用中文结果。"""
+    cache = _StubCache()
+    monkeypatch.setattr(transcript_ai, "cache_service", cache)
+
+    calls: list[str] = []
+
+    async def fake_call(messages, **kwargs):
+        human = messages[-1].content
+        calls.append(human)
+        # 第一次直接回显英文原文（未翻译），第二次（含强化前缀）才给中文
+        if human.startswith(transcript_ai._TRANSLATE_REINFORCE_PREFIX):
+            return AIMessage(content="这是翻译后的中文内容。")
+        return AIMessage(content="This is the original English content unchanged.")
+
+    monkeypatch.setattr(transcript_ai.llm_service, "call", fake_call)
+
+    service = TranscriptAIService()
+    url = "https://www.fool.com/earnings/call-transcripts/2026/05/28/nvda/"
+    result = await service.translate("NVDA", url, "This is a long english paragraph to translate.", "")
+
+    assert "这是翻译后的中文内容。" in result.prepared_remarks_zh
+    # 一次原始 + 一次强化重试
+    assert len(calls) == 2
+    assert calls[1].startswith(transcript_ai._TRANSLATE_REINFORCE_PREFIX)
+    # 译文为中文，允许写缓存
+    assert cache.store
+
+
+@pytest.mark.asyncio
+async def test_translate_not_cached_when_still_english(monkeypatch):
+    """模型始终回显英文（重试后仍无中文）时，不写缓存，避免污染 7 天。"""
+    cache = _StubCache()
+    monkeypatch.setattr(transcript_ai, "cache_service", cache)
+
+    async def fake_call(messages, **kwargs):
+        return AIMessage(content="Still english after retry, no chinese at all.")
+
+    monkeypatch.setattr(transcript_ai.llm_service, "call", fake_call)
+
+    service = TranscriptAIService()
+    url = "https://www.fool.com/earnings/call-transcripts/2026/05/28/nvda/"
+    result = await service.translate("NVDA", url, "This is english paragraph to translate now.", "")
+
+    # 全英文结果不写缓存
+    assert cache.store == {}
+    assert not _contains_cjk(result.prepared_remarks_zh)
 
 
 @pytest.mark.asyncio
