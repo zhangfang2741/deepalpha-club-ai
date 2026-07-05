@@ -279,6 +279,19 @@ def test_build_buy_view_ladder():
     assert "机构建仓" in headline and "胜率最高" in headline
 
 
+def test_headline_and_buy_view_data_source_down():
+    """五维全挂（coverage=0）应明示数据源不可用，而非给「建议观望」的投资结论。"""
+    from app.services.institutional_signals.calculator import _build_buy_view, _headline
+    from app.schemas.institutional_signals import SignalState
+    neutral = SignalState(key="neutral", emoji="⚪", label="中性观望", stars=1,
+                          meaning="", evidence=[], buy_rank=99, buy_timing="",
+                          buy_edge="", buy_thesis="")
+    headline = _headline(50.0, [neutral], coverage=0)
+    assert "数据源" in headline and "建议观望" not in headline
+    buy_headline, _ = _build_buy_view([neutral], coverage=0)
+    assert "数据源" in buy_headline
+
+
 def test_states_neutral_fallback():
     dims = {
         "expectation": compute_expectation(None, []),
