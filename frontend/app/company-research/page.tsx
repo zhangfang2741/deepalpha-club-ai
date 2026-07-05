@@ -28,9 +28,10 @@ import StockAnalysisCard from '@/components/analysis/StockAnalysisCard'
 import { analyzeStock, type AnalysisResponse } from '@/lib/api/analysis'
 import {
   fetchCompanyFilings,
-  fetchCompanyProfile,
+  streamCompanyProfile,
   type CompanyFilingsResponse,
   type CompanyProfile,
+  type CompanyProfileResponse,
   type FilingRecord,
   type ProductItem,
 } from '@/lib/api/sec_filings'
@@ -44,6 +45,12 @@ import {
 } from '@/lib/api/transcripts'
 
 type ResearchTab = 'overview' | 'sec' | 'transcripts' | 'score'
+
+type ProfileProgress = {
+  event: 'start' | 'resolved' | 'cache_hit' | 'meta' | 'generating'
+  message: string
+  company?: Partial<CompanyProfileResponse>
+}
 
 const TABS: { id: ResearchTab; label: string; icon: typeof Building2 }[] = [
   { id: 'overview', label: '公司概览', icon: Sparkles },
@@ -171,12 +178,14 @@ function CompanyOverviewTab({
   ticker,
   profile,
   loading,
+  progress,
   error,
   onRetry,
 }: {
   ticker: string
   profile: CompanyProfile | null
   loading: boolean
+  progress: ProfileProgress | null
   error: string
   onRetry: () => void
 }) {
@@ -184,7 +193,63 @@ function CompanyOverviewTab({
     return <EmptyState icon={Building2} text="输入股票代码后查看公司概览" />
   }
   if (loading) {
-    return <LoadingState text="AI 正在生成公司概览..." />
+    const stepOrder: ProfileProgress['event'][] = ['start', 'resolved', 'meta', 'generating']
+    const activeIndex = progress ? Math.max(0, stepOrder.indexOf(progress.event)) : 0
+    const progressWidth = `${((activeIndex + 1) / stepOrder.length) * 100}%`
+    const company = progress?.company
+
+    return (
+      <div className="min-h-[320px] rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-gray-900">{progress?.message || 'AI 正在生成公司概览'}</div>
+            <div className="mt-1 text-xs text-gray-500">解析公司、补全 SEC 信息、生成产品/市占率/护城河判断</div>
+          </div>
+        </div>
+
+        <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-gray-100">
+          <div className="h-full rounded-full bg-blue-600 transition-all duration-500" style={{ width: progressWidth }} />
+        </div>
+
+        {company && (
+          <div className="mt-5 grid grid-cols-1 gap-3 rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm md:grid-cols-3">
+            <div>
+              <div className="text-xs font-semibold text-gray-400">公司</div>
+              <div className="mt-1 font-semibold text-gray-900">{company.name || ticker}</div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-gray-400">代码 / CIK</div>
+              <div className="mt-1 font-semibold text-gray-900">{company.ticker || ticker} · {company.cik || '-'}</div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-gray-400">SEC 行业</div>
+              <div className="mt-1 font-semibold text-gray-900">{company.sic_description || '补全中'}</div>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-5 grid grid-cols-1 gap-2 text-xs text-gray-500 md:grid-cols-4">
+          {[
+            ['start', '解析代码'],
+            ['resolved', '识别公司'],
+            ['meta', '补全行业'],
+            ['generating', '生成画像'],
+          ].map(([id, label], index) => (
+            <div
+              key={id}
+              className={`rounded-lg border px-3 py-2 ${
+                index <= activeIndex ? 'border-blue-100 bg-blue-50 text-blue-700' : 'border-gray-100 bg-gray-50'
+              }`}
+            >
+              {label}
+            </div>
+          ))}
+        </div>
+      </div>
+    )
   }
   if (error) {
     return <ErrorState message={error} onRetry={onRetry} />
@@ -688,10 +753,12 @@ export default function CompanyResearchPage() {
   const [activeTab, setActiveTab] = useState<ResearchTab>('overview')
   const embedded = isEmbeddedCompanyResearch()
   const didInitialLoad = useRef(false)
+  const profileAbortRef = useRef<AbortController | null>(null)
 
   const [profile, setProfile] = useState<CompanyProfile | null>(null)
   const [profileLoading, setProfileLoading] = useState(false)
   const [profileError, setProfileError] = useState('')
+  const [profileProgress, setProfileProgress] = useState<ProfileProgress | null>(null)
 
   const [filings, setFilings] = useState<CompanyFilingsResponse | null>(null)
   const [filingsLoading, setFilingsLoading] = useState(false)
@@ -713,17 +780,44 @@ export default function CompanyResearchPage() {
 
   const loadProfile = useCallback(async (symbol: string) => {
     if (!symbol) return
+    profileAbortRef.current?.abort()
+    const controller = new AbortController()
+    profileAbortRef.current = controller
+
     setProfileLoading(true)
     setProfileError('')
+    setProfileProgress({ event: 'start', message: '正在解析股票代码' })
     setProfile(null)
     try {
-      const result = await fetchCompanyProfile(symbol)
-      setProfile(result.profile)
+      for await (const event of streamCompanyProfile(symbol, controller.signal)) {
+        if (controller.signal.aborted) return
+        if (event.event === 'error') {
+          throw new Error(event.message)
+        }
+        if (event.event === 'done') {
+          setProfile(event.data.profile)
+          setProfileProgress(null)
+          continue
+        }
+        setProfileProgress({
+          event: event.event,
+          message: event.message,
+          company: event.company,
+        })
+      }
     } catch (error) {
-      setProfileError(getErrorMessage(error, '公司概览生成失败'))
+      if ((error as Error).name !== 'AbortError') {
+        setProfileError(getErrorMessage(error, '公司概览生成失败'))
+      }
     } finally {
-      setProfileLoading(false)
+      if (profileAbortRef.current === controller) {
+        setProfileLoading(false)
+      }
     }
+  }, [])
+
+  useEffect(() => {
+    return () => profileAbortRef.current?.abort()
   }, [])
 
   const loadFilings = useCallback(async (symbol: string) => {
@@ -901,6 +995,7 @@ export default function CompanyResearchPage() {
             ticker={ticker}
             profile={profile}
             loading={profileLoading}
+            progress={profileProgress}
             error={profileError}
             onRetry={() => loadProfile(ticker)}
           />

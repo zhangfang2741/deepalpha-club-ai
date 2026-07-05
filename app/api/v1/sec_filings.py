@@ -1,8 +1,10 @@
 """SEC EDGAR filing API 端点。"""
 
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from redis.asyncio import Redis
 
 from app.cache.client import get_redis_optional
@@ -89,3 +91,32 @@ async def get_company_profile(
             detail=f"未能为「{query}」生成公司画像，请确认股票代码/CIK 是否正确",
         )
     return CompanyProfileResponse.model_validate(result)
+
+
+@router.get("/company-profile/stream")
+async def stream_company_profile(
+    query: str = Query(
+        ...,
+        description="股票代码或 CIK，如 AAPL / 320193",
+        min_length=1,
+        max_length=20,
+    ),
+    redis: Optional[Redis] = Depends(get_redis_optional),
+) -> StreamingResponse:
+    """流式返回公司画像生成进度，最终事件携带完整结构化画像。"""
+    logger.info("sec_company_profile_stream_request", query=query)
+
+    async def event_generator():
+        try:
+            async for event in company_profile_service.stream_profile(query, redis):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            logger.exception("sec_company_profile_stream_failed", query=query, error=str(e))
+            payload = {"event": "error", "message": "公司画像生成失败，请稍后重试", "done": True}
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )

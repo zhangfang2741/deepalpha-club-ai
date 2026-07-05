@@ -5,6 +5,8 @@
 """
 
 import json
+from collections.abc import AsyncGenerator
+from time import monotonic
 from typing import Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -17,6 +19,7 @@ from app.services.sec_filings.service import sec_filings_service
 
 _CACHE_PREFIX = "sec:profile:v2"
 _CACHE_TTL = 604800  # 7天：公司基本面画像变动很慢
+_MEMORY_CACHE: dict[str, tuple[float, dict]] = {}
 
 _SYSTEM_PROMPT = """你是一位资深的股票投资研究分析师，擅长用最精炼的语言帮投资者快速建立对一家上市公司的基础认知。
 
@@ -27,6 +30,22 @@ _SYSTEM_PROMPT = """你是一位资深的股票投资研究分析师，擅长用
 4. 护城河判断参考晨星（Morningstar）式经济护城河框架，但不要声称这是晨星官方评级；需要给出自己的保守判断。
 5. 市占率只能给广泛公开、你有把握的近似范围；不确定时写“未知/未披露”，不要编造精确数字。
 6. 严格按要求的 JSON 结构输出，不要添加额外字段。"""
+
+
+def _read_memory_cache(cache_key: str) -> Optional[dict]:
+    cached = _MEMORY_CACHE.get(cache_key)
+    if not cached:
+        return None
+    expires_at, value = cached
+    if expires_at <= monotonic():
+        _MEMORY_CACHE.pop(cache_key, None)
+        return None
+    CompanyProfile.model_validate(value.get("profile", {}))
+    return value
+
+
+def _write_memory_cache(cache_key: str, value: dict) -> None:
+    _MEMORY_CACHE[cache_key] = (monotonic() + _CACHE_TTL, value)
 
 
 class CompanyProfileService:
@@ -60,7 +79,24 @@ class CompanyProfileService:
 - moat_rating：经济护城河判断，只能从“宽”“中”“窄”“无”四个值中选一个。参考因素包括转换成本、网络效应、规模优势、品牌、专利/监管壁垒、成本优势、数据/生态锁定等。判断要保守。
 - moat_reason：用 1-2 句解释为什么给这个护城河等级。
 - differentiation：在行业中的核心差异化竞争力或护城河，2-3 句，说明它凭什么区别于对手、壁垒在哪。
-- competitors：主要竞争对手，列出 3-6 家公司名（可用中英文常见叫法）。"""
+        - competitors：主要竞争对手，列出 3-6 家公司名（可用中英文常见叫法）。"""
+
+    async def _generate_profile(self, messages: list) -> CompanyProfile:
+        """调用 LLM 生成结构化画像；结构化校验偶发失败时轻量重试一次。"""
+        last_error: Exception | None = None
+        for attempt in range(1, 3):
+            try:
+                return await llm_service.call(messages, response_format=CompanyProfile)
+            except Exception as e:
+                last_error = e
+                logger.warning(
+                    "sec_company_profile_structured_output_retry",
+                    attempt=attempt,
+                    error=str(e),
+                )
+        if last_error:
+            raise last_error
+        raise RuntimeError("company profile generation failed")
 
     async def get_profile(
         self, query: str, redis: Optional[Redis] = None
@@ -90,11 +126,19 @@ class CompanyProfileService:
                     cached = json.loads(raw)
                     # 校验缓存结构与当前 schema 一致（防止旧版本缓存导致响应校验 500）
                     CompanyProfile.model_validate(cached.get("profile", {}))
+                    _write_memory_cache(cache_key, cached)
                     logger.info("sec_company_profile_cache_hit", cik=cik)
                     return cached
             except Exception as e:
                 # 结构不兼容或反序列化失败：忽略缓存，重新生成
                 logger.warning("sec_company_profile_cache_read_error", error=str(e))
+        try:
+            cached = _read_memory_cache(cache_key)
+            if cached:
+                logger.info("sec_company_profile_memory_cache_hit", cik=cik)
+                return cached
+        except Exception as e:
+            logger.warning("sec_company_profile_memory_cache_read_error", error=str(e))
 
         # 尽量补全公司名与 SIC（画像质量更高）；失败不阻塞
         sic = ""
@@ -118,9 +162,7 @@ class CompanyProfileService:
         ]
 
         try:
-            profile: CompanyProfile = await llm_service.call(
-                messages, response_format=CompanyProfile
-            )
+            profile = await self._generate_profile(messages)
         except Exception as e:
             logger.exception("sec_company_profile_llm_failed", cik=cik, error=str(e))
             return None
@@ -132,6 +174,7 @@ class CompanyProfileService:
             "sic_description": sic,
             "profile": profile.model_dump(),
         }
+        _write_memory_cache(cache_key, result)
 
         if redis is not None:
             try:
@@ -141,6 +184,131 @@ class CompanyProfileService:
 
         logger.info("sec_company_profile_generated", cik=cik, name=name)
         return result
+
+    async def stream_profile(
+        self, query: str, redis: Optional[Redis] = None
+    ) -> AsyncGenerator[dict, None]:
+        """逐阶段生成公司画像，让前端能实时显示解析、缓存和 LLM 进度。"""
+        yield {"event": "start", "message": "正在解析股票代码"}
+
+        resolved = await sec_filings_service.resolve_cik(query, redis)
+        if not resolved:
+            yield {
+                "event": "error",
+                "message": f"未找到「{query}」对应的公司或 SEC 数据，请确认股票代码/CIK 是否正确",
+                "done": True,
+            }
+            return
+
+        cik = resolved["cik"]
+        name = resolved.get("name", "")
+        ticker = resolved.get("ticker", "")
+        yield {
+            "event": "resolved",
+            "message": "已识别公司",
+            "company": {"cik": cik, "name": name, "ticker": ticker, "sic_description": ""},
+        }
+
+        cache_key = f"{_CACHE_PREFIX}:{cik}"
+        if redis is not None:
+            try:
+                raw = await redis.get(cache_key)
+                if raw:
+                    cached = json.loads(raw)
+                    CompanyProfile.model_validate(cached.get("profile", {}))
+                    _write_memory_cache(cache_key, cached)
+                    logger.info("sec_company_profile_stream_cache_hit", cik=cik)
+                    yield {
+                        "event": "cache_hit",
+                        "message": "已命中缓存",
+                        "company": {
+                            "cik": cached.get("cik", cik),
+                            "name": cached.get("name", name),
+                            "ticker": cached.get("ticker", ticker),
+                            "sic_description": cached.get("sic_description", ""),
+                        },
+                    }
+                    yield {"event": "done", "data": cached, "done": True}
+                    return
+            except Exception as e:
+                logger.warning("sec_company_profile_stream_cache_read_error", error=str(e))
+        try:
+            cached = _read_memory_cache(cache_key)
+            if cached:
+                logger.info("sec_company_profile_stream_memory_cache_hit", cik=cik)
+                yield {
+                    "event": "cache_hit",
+                    "message": "已命中本地缓存",
+                    "company": {
+                        "cik": cached.get("cik", cik),
+                        "name": cached.get("name", name),
+                        "ticker": cached.get("ticker", ticker),
+                        "sic_description": cached.get("sic_description", ""),
+                    },
+                }
+                yield {"event": "done", "data": cached, "done": True}
+                return
+        except Exception as e:
+            logger.warning("sec_company_profile_stream_memory_cache_read_error", error=str(e))
+
+        sic = ""
+        yield {"event": "meta", "message": "正在补全 SEC 行业信息"}
+        try:
+            company, _ = await sec_filings_service._fetch_all_filings(cik)
+            name = company.get("name") or name
+            sic = company.get("sic_description", "")
+            tickers = company.get("tickers") or []
+            if not ticker and tickers:
+                ticker = tickers[0]
+            yield {
+                "event": "meta",
+                "message": "SEC 行业信息已就绪",
+                "company": {
+                    "cik": cik,
+                    "name": name,
+                    "ticker": ticker,
+                    "sic_description": sic,
+                },
+            }
+        except Exception as e:
+            logger.warning("sec_company_profile_stream_meta_fetch_error", cik=cik, error=str(e))
+            yield {"event": "meta", "message": "SEC 行业信息暂不可用，继续生成画像"}
+
+        if not name and not ticker:
+            logger.warning("sec_company_profile_stream_insufficient_identity", cik=cik)
+            yield {"event": "error", "message": "公司身份信息不足，无法生成画像", "done": True}
+            return
+
+        yield {"event": "generating", "message": "AI 正在判断产品、市占率和护城河"}
+        messages = [
+            SystemMessage(content=_SYSTEM_PROMPT),
+            HumanMessage(content=self._build_prompt(name, ticker, cik, sic)),
+        ]
+
+        try:
+            profile = await self._generate_profile(messages)
+        except Exception as e:
+            logger.exception("sec_company_profile_stream_llm_failed", cik=cik, error=str(e))
+            yield {"event": "error", "message": "公司画像生成失败，请稍后重试", "done": True}
+            return
+
+        result = {
+            "cik": cik,
+            "name": name,
+            "ticker": ticker,
+            "sic_description": sic,
+            "profile": profile.model_dump(),
+        }
+        _write_memory_cache(cache_key, result)
+
+        if redis is not None:
+            try:
+                await redis.set(cache_key, json.dumps(result, ensure_ascii=False), ex=_CACHE_TTL)
+            except Exception as e:
+                logger.warning("sec_company_profile_stream_cache_write_error", error=str(e))
+
+        logger.info("sec_company_profile_stream_generated", cik=cik, name=name)
+        yield {"event": "done", "data": result, "done": True}
 
 
 # 单例
