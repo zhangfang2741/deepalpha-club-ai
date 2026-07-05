@@ -7,8 +7,12 @@ from redis.asyncio import Redis
 
 from app.cache.client import get_redis_optional
 from app.core.logging import logger
-from app.schemas.sec_filings import CompanyFilingsResponse, FilingDocumentsResponse
-from app.services.sec_filings import sec_filings_service
+from app.schemas.sec_filings import (
+    CompanyFilingsResponse,
+    CompanyProfileResponse,
+    FilingDocumentsResponse,
+)
+from app.services.sec_filings import company_profile_service, sec_filings_service
 
 router = APIRouter()
 
@@ -57,3 +61,31 @@ async def get_filing_documents(
     if result is None:
         raise HTTPException(status_code=404, detail="未找到该 filing 的文档清单")
     return FilingDocumentsResponse.model_validate(result)
+
+
+@router.get("/company-profile", response_model=CompanyProfileResponse)
+async def get_company_profile(
+    query: str = Query(
+        ...,
+        description="股票代码或 CIK，如 AAPL / 320193",
+        min_length=1,
+        max_length=20,
+    ),
+    redis: Optional[Redis] = Depends(get_redis_optional),
+) -> CompanyProfileResponse:
+    """用大模型生成公司基础画像：行业、供应链位置、主要产品、核心差异化竞争力、主要竞争对手。
+
+    结果按 CIK 缓存 7 天。
+
+    Args:
+        query: 股票代码（AAPL）或 CIK（320193）。
+    """
+    logger.info("sec_company_profile_request", query=query)
+
+    result = await company_profile_service.get_profile(query, redis)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"未能为「{query}」生成公司画像，请确认股票代码/CIK 是否正确",
+        )
+    return CompanyProfileResponse.model_validate(result)

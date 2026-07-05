@@ -2,7 +2,7 @@
 
 from typing import List
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from app.schemas.base import BaseResponse
 
@@ -62,3 +62,25 @@ class FilingDocumentsResponse(BaseResponse):
     accession: str = Field(description="accession number")
     index_url: str = Field(description="filing 目录页链接")
     documents: List[FilingDocument] = Field(default_factory=list, description="该 filing 的文档/附件清单")
+
+
+class CompanyProfile(BaseModel):
+    """大模型生成的公司基础画像（结构化输出用）。
+
+    面向投资者，帮助一眼建立对公司的基础认知与判断。所有内容用中文表述。
+    """
+
+    one_liner: str = Field(description="一句话概括公司是做什么的（不超过 40 字）")
+    industry: str = Field(description="所属行业及细分赛道，一句话说明")
+    supply_chain_position: str = Field(description="在产业链/供应链中的位置（上游/中游/下游），及上下游关系")
+    main_products: List[str] = Field(default_factory=list, description="主要产品或业务线（3-6 项，每项简短）")
+    differentiation: str = Field(description="在行业中的核心差异化竞争力/护城河（2-3 句）")
+    competitors: List[str] = Field(default_factory=list, description="主要竞争对手（3-6 家，公司名）")
+
+
+class CompanyProfileResponse(BaseResponse):
+    cik: str = Field(description="10 位补零 CIK")
+    name: str = Field("", description="公司名称")
+    ticker: str = Field("", description="股票代码")
+    sic_description: str = Field("", description="行业 SIC 描述")
+    profile: CompanyProfile = Field(description="大模型生成的公司基础画像")
