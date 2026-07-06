@@ -261,10 +261,26 @@ const STATE_FILTERS = [
   { key: 'breakout_confirmation', label: '🚀 趋势' },
 ] as const
 
+// 五维中文标签（与 DIMENSION_META 对齐），用于排序按钮与榜单右列
+const DIMENSION_LABELS: Record<string, string> = {
+  expectation: '预期',
+  positioning: '仓位',
+  participation: '参与度',
+  fundamental: '基本面',
+  confirmation: '确认',
+}
+
+// 榜单排序维度：综合分（默认，保留后端「偏多优先」排序）+ 五维分
+const SORT_OPTIONS = [
+  { key: 'composite', label: '综合分' },
+  ...Object.entries(DIMENSION_LABELS).map(([key, label]) => ({ key, label })),
+] as const
+
 function LeaderboardBoard(
-  { board, onPick, activeFilter = 'all' }:
-  { board: LeaderboardEntry[]; onPick: (s: string) => void; activeFilter?: string },
+  { board, onPick, activeFilter = 'all', sortKey = 'composite' }:
+  { board: LeaderboardEntry[]; onPick: (s: string) => void; activeFilter?: string; sortKey?: string },
 ) {
+  const byDimension = sortKey !== 'composite'
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
       {board.map((e, i) => {
@@ -302,11 +318,27 @@ function LeaderboardBoard(
               )}
             </div>
           </div>
-          <div className="w-14 shrink-0 text-right">
-            <div className={`text-lg font-extrabold tabular-nums ${scoreColor(e.composite_score)}`}>
-              {e.composite_score.toFixed(0)}
-            </div>
-            <div className="text-[10px] text-gray-400">{e.coverage}/5 · {e.confidence}</div>
+          <div className="w-20 shrink-0 text-right">
+            {byDimension ? (() => {
+              const dv = e.dimension_scores[sortKey]
+              return (
+                <>
+                  <div className={`text-lg font-extrabold tabular-nums ${dv == null ? 'text-gray-300' : scoreColor(dv)}`}>
+                    {dv == null ? '—' : dv.toFixed(0)}
+                  </div>
+                  <div className="text-[10px] text-gray-400">
+                    {DIMENSION_LABELS[sortKey]} · 综合 {e.composite_score.toFixed(0)}
+                  </div>
+                </>
+              )
+            })() : (
+              <>
+                <div className={`text-lg font-extrabold tabular-nums ${scoreColor(e.composite_score)}`}>
+                  {e.composite_score.toFixed(0)}
+                </div>
+                <div className="text-[10px] text-gray-400">{e.coverage}/5 · {e.confidence}</div>
+              </>
+            )}
           </div>
         </button>
         )
@@ -327,6 +359,7 @@ export default function InstitutionalSignalsPage() {
   const [boardComputing, setBoardComputing] = useState(false)
   const [boardNote, setBoardNote] = useState('')
   const [boardFilter, setBoardFilter] = useState<string>('all')
+  const [boardSort, setBoardSort] = useState<string>('composite')
   const [universe, setUniverse] = useState<'sp500' | 'nasdaq100'>('sp500')
   const [detailTab, setDetailTab] = useState<'signals' | 'research'>('signals')
 
@@ -621,6 +654,17 @@ export default function InstitutionalSignalsPage() {
               const filtered = boardFilter === 'all'
                 ? board
                 : board.filter((e) => has(e, boardFilter))
+              // 排序：综合分保留后端「偏多优先」原序；按维度时降序，缺失该维度的沉底
+              const sorted = boardSort === 'composite'
+                ? filtered
+                : [...filtered].sort((a, b) => {
+                    const av = a.dimension_scores[boardSort]
+                    const bv = b.dimension_scores[boardSort]
+                    if (av == null && bv == null) return 0
+                    if (av == null) return 1
+                    if (bv == null) return -1
+                    return bv - av
+                  })
               return (
                 <>
                   <div className="flex flex-wrap gap-2">
@@ -639,8 +683,25 @@ export default function InstitutionalSignalsPage() {
                       </button>
                     ))}
                   </div>
-                  {filtered.length > 0 ? (
-                    <LeaderboardBoard board={filtered} onPick={load} activeFilter={boardFilter} />
+                  {/* 排序维度：综合分（默认）+ 五维 */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-gray-400">排序</span>
+                    {SORT_OPTIONS.map((o) => (
+                      <button
+                        key={o.key}
+                        onClick={() => setBoardSort(o.key)}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                          boardSort === o.key
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                  {sorted.length > 0 ? (
+                    <LeaderboardBoard board={sorted} onPick={load} activeFilter={boardFilter} sortKey={boardSort} />
                   ) : (
                     <div className="rounded-2xl border border-dashed border-gray-200 py-12 text-center text-sm text-gray-400">
                       当前筛选下暂无标的
