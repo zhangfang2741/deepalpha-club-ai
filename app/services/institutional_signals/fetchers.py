@@ -6,6 +6,7 @@
 import asyncio
 import csv
 import datetime
+import random
 from io import StringIO
 
 import httpx
@@ -21,13 +22,43 @@ from app.services.institutional_signals.constants import (
 _FMP_STABLE = "https://financialmodelingprep.com/stable"
 _TIMEOUT = 15
 
+# 429 限流退避：全 universe 扫描会短时间打出数千次 FMP 请求，极易触发限流。
+# 命中 429 时带抖动指数退避重试（优先遵守 Retry-After），退避封顶避免拖垮整轮扫描。
+_MAX_ATTEMPTS = 3
+_BACKOFF_BASE = 1.0   # 秒
+_BACKOFF_CAP = 8.0    # 单次退避上限（含 Retry-After），防止一支拖慢整轮
+
+
+def _parse_retry_after(value: str | None) -> float | None:
+    """解析 Retry-After（仅支持秒数形式），封顶到退避上限；非法/缺失返回 None。"""
+    if not value:
+        return None
+    try:
+        return min(float(value), _BACKOFF_CAP)
+    except ValueError:
+        return None  # HTTP-date 形式不解析，退回指数退避
+
 
 async def _get(client: httpx.AsyncClient, path: str, params: dict) -> list | dict | None:
-    try:
-        resp = await client.get(
-            f"{_FMP_STABLE}/{path}",
-            params={**params, "apikey": settings.FMP_API_KEY},
-        )
+    url = f"{_FMP_STABLE}/{path}"
+    merged = {**params, "apikey": settings.FMP_API_KEY}
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            resp = await client.get(url, params=merged)
+        except Exception as e:
+            logger.warning("institutional_signals_fetch_error", path=path, error=str(e))
+            return None
+
+        if resp.status_code == 429:
+            if attempt == _MAX_ATTEMPTS - 1:
+                logger.warning("institutional_signals_fetch_rate_limited", path=path, attempts=attempt + 1)
+                return None
+            retry_after = _parse_retry_after(resp.headers.get("Retry-After"))
+            delay = retry_after if retry_after is not None else min(_BACKOFF_BASE * (2 ** attempt), _BACKOFF_CAP)
+            delay += random.uniform(0, 0.5)  # 抖动，避免大量并发请求同时重试再次撞限流
+            await asyncio.sleep(delay)
+            continue
+
         if resp.status_code != 200:
             logger.warning("institutional_signals_fetch_non200", path=path, status=resp.status_code)
             return None
@@ -35,9 +66,7 @@ async def _get(client: httpx.AsyncClient, path: str, params: dict) -> list | dic
         if isinstance(data, dict) and "Error Message" in data:
             return None
         return data
-    except Exception as e:
-        logger.warning("institutional_signals_fetch_error", path=path, error=str(e))
-        return None
+    return None
 
 
 async def fetch_profile(client: httpx.AsyncClient, symbol: str) -> dict | None:

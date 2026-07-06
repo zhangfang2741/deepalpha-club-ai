@@ -99,8 +99,11 @@ def _entry_from_report(report: InstitutionalSignalReport) -> LeaderboardEntry:
 async def _score_symbol(
     client: httpx.AsyncClient, symbol: str, sem: asyncio.Semaphore,
     from_date: str, to_date: str,
-) -> tuple[LeaderboardEntry, dict, float] | None:
-    """初筛评分（4 个 FMP 维度，仓位 unavailable）；返回 (entry, dims, spot)。"""
+) -> tuple[LeaderboardEntry, dict] | None:
+    """初筛评分（4 个 FMP 维度，仓位 unavailable）；返回 (entry, 已抓数据)。
+
+    已抓数据（prefetched）在定榜阶段复用，避免对 top-N 重复抓 FMP、缓解限流。
+    """
     async with sem:
         try:
             profile, pt_summary, grades, prices, earnings, insider = await asyncio.gather(
@@ -126,16 +129,24 @@ async def _score_symbol(
         return None  # 全无数据，不入榜
 
     name = (profile or {}).get("companyName") or (profile or {}).get("name") or symbol
-    spot = prices[-1]["close"] if prices else 0.0
-    return _build_entry(symbol, name, dims), dims, spot
+    prefetched = {
+        "profile": profile, "pt_summary": pt_summary, "grades": grades,
+        "prices": prices, "earnings": earnings, "insider": insider,
+    }
+    return _build_entry(symbol, name, dims), prefetched
 
 
-async def _finalize_symbol(symbol: str, sem: asyncio.Semaphore, version: str) -> LeaderboardEntry | None:
-    """定榜：对单支走完整五维计算（同详情页），并把报告预写进详情缓存。"""
+async def _finalize_symbol(
+    symbol: str, prefetched: dict, sem: asyncio.Semaphore, version: str,
+) -> LeaderboardEntry | None:
+    """定榜：对单支走完整五维计算（同详情页），并把报告预写进详情缓存。
+
+    复用初筛已抓的 FMP 数据，只补抓分析师预期 + 期权，避免重复抓 FMP。
+    """
     async with sem:
         session = AsyncSessionFactory()
         try:
-            report = await compute_institutional_signals(symbol, session=session)
+            report = await compute_institutional_signals(symbol, session=session, prefetched=prefetched)
         except Exception as e:
             logger.warning("leaderboard_finalize_failed", symbol=symbol, error=str(e))
             return None
@@ -194,7 +205,7 @@ async def scan_leaderboard(limit: int = SCAN_TOP_N, universe: str = "sp500") -> 
         results = await asyncio.gather(
             *[_score_symbol(client, s, sem, from_date, to_date) for s in symbols]
         )
-        scored = [r for r in results if r is not None]  # (entry, dims, spot)
+        scored = [r for r in results if r is not None]  # (entry, prefetched)
         scored.sort(key=lambda r: (r[0].top_state is not None, r[0].composite_score), reverse=True)
 
     # 扫了整个 universe 却一支都没评出分 → 不是「今日无热门」，而是行情数据源整体不可用
@@ -213,10 +224,13 @@ async def scan_leaderboard(limit: int = SCAN_TOP_N, universe: str = "sp500") -> 
         )
 
     # 第二段（定榜）：对初筛靠前的 top-N 走完整五维计算（同详情页）并预写详情缓存
-    candidates = [entry.symbol for (entry, _, _) in scored[:limit]]
+    # 复用初筛已抓的 FMP 数据（prefetched），定榜只补抓分析师预期 + 期权
+    candidates = scored[:limit]  # [(entry, prefetched), ...]
     version = report_cache_version()
     fin_sem = asyncio.Semaphore(FINALIZE_CONCURRENCY)
-    finalized = await asyncio.gather(*[_finalize_symbol(s, fin_sem, version) for s in candidates])
+    finalized = await asyncio.gather(
+        *[_finalize_symbol(entry.symbol, prefetched, fin_sem, version) for (entry, prefetched) in candidates]
+    )
     entries = [e for e in finalized if e is not None]
     ranked = _rank(entries)[:limit]
 

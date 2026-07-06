@@ -219,6 +219,81 @@ def test_deltas_value_days_ago():
     assert value_days_ago([(d5, 9.0)], 90) is None  # 超出容差
 
 
+# ── FMP 限流退避 ─────────────────────────────────────────────────────────────
+
+def test_parse_retry_after():
+    from app.services.institutional_signals.fetchers import _BACKOFF_CAP, _parse_retry_after
+    assert _parse_retry_after("3") == 3.0
+    assert _parse_retry_after(None) is None
+    assert _parse_retry_after("Mon, 01 Jan 2030 00:00:00 GMT") is None  # HTTP-date 不解析
+    assert _parse_retry_after("999") == _BACKOFF_CAP  # 封顶
+
+
+class _FakeResp:
+    def __init__(self, status_code: int, payload=None, headers=None):
+        self.status_code = status_code
+        self._payload = payload if payload is not None else []
+        self.headers = headers or {}
+
+    def json(self):
+        return self._payload
+
+
+class _FakeClient:
+    # 按预设序列返回响应，记录调用次数
+    def __init__(self, responses: list):
+        self._responses = responses
+        self.calls = 0
+
+    async def get(self, url, params=None):
+        resp = self._responses[min(self.calls, len(self._responses) - 1)]
+        self.calls += 1
+        return resp
+
+
+@pytest.mark.asyncio
+async def test_get_retries_on_429_then_succeeds(monkeypatch):
+    # 命中 429 时退避重试，后续 200 成功返回数据
+    from typing import cast
+
+    import httpx
+
+    from app.services.institutional_signals import fetchers
+
+    slept: list[float] = []
+
+    async def fake_sleep(d):
+        slept.append(d)
+
+    monkeypatch.setattr(fetchers.asyncio, "sleep", fake_sleep)
+
+    client = _FakeClient([_FakeResp(429), _FakeResp(200, [{"ok": 1}])])
+    data = await fetchers._get(cast(httpx.AsyncClient, client), "profile", {"symbol": "AAPL"})
+    assert data == [{"ok": 1}]
+    assert client.calls == 2          # 重试了一次
+    assert len(slept) == 1            # 退避一次
+
+
+@pytest.mark.asyncio
+async def test_get_gives_up_after_max_attempts_on_429(monkeypatch):
+    # 持续 429（配额耗尽）→ 退避到上限后放弃，返回 None（降级为 unavailable）
+    from typing import cast
+
+    import httpx
+
+    from app.services.institutional_signals import fetchers
+
+    async def fake_sleep(d):
+        pass
+
+    monkeypatch.setattr(fetchers.asyncio, "sleep", fake_sleep)
+
+    client = _FakeClient([_FakeResp(429)])
+    data = await fetchers._get(cast(httpx.AsyncClient, client), "profile", {"symbol": "AAPL"})
+    assert data is None
+    assert client.calls == fetchers._MAX_ATTEMPTS
+
+
 # ── 维度升级：有快照历史时用变化率 ───────────────────────────────────────────
 
 def test_positioning_uses_iv_rank_and_oi_change():
