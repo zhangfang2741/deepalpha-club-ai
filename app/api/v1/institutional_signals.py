@@ -1,7 +1,5 @@
 """机构资金信号 API 端点。"""
 import asyncio
-import hashlib
-import inspect
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,47 +8,23 @@ from redis.asyncio import Redis
 from app.cache.client import current_redis, get_redis_optional
 from app.core.logging import logger
 from app.db.session import AsyncSessionFactory
-from app.schemas import institutional_signals as _signals_schema
 from app.schemas.institutional_signals import (
     InstitutionalSignalReport,
     LeaderboardResponse,
 )
-from app.services.institutional_signals import calculator as _calc
 from app.services.institutional_signals import compute_institutional_signals
-from app.services.institutional_signals import constants as _const
-from app.services.institutional_signals import deltas as _deltas
-from app.services.institutional_signals import dimensions as _dims
-from app.services.institutional_signals import fetchers as _fetchers
-from app.services.institutional_signals import scan as _scan
-from app.services.institutional_signals import states as _states
 from app.services.institutional_signals.constants import SCAN_FRESH_SECONDS
+from app.services.institutional_signals.report_cache import report_cache_key, report_cache_version
 from app.services.institutional_signals.scan import scan_leaderboard
-
-
-def _auto_cache_version() -> str:
-    """由影响输出的源码模块自动算哈希——任一改动即使缓存失效，无需手动升版本。
-
-    读不到源码（如纯 .pyc 运行）时回退到固定串，宁可不自动失效也不崩。
-    """
-    mods = [_dims, _states, _calc, _scan, _const, _fetchers, _deltas, _signals_schema]
-    h = hashlib.md5()
-    for m in mods:
-        try:
-            h.update(inspect.getsource(m).encode("utf-8"))
-        except (OSError, TypeError):
-            h.update(m.__name__.encode("utf-8"))
-    return h.hexdigest()[:10]
-
 
 router = APIRouter()
 
-CACHE_PREFIX = "institutional_signals"
 CACHE_TTL = 3600  # 1 小时
 # 数据全缺（coverage=0，疑似数据源故障）时的短缓存：既节流重复扫描，又能快速自愈，
 # 避免「一次失败缓存 1 小时」把瞬时故障放大成长时间不可用
 FAILED_CACHE_TTL = 120  # 2 分钟
-# 缓存版本 = 相关源码哈希：状态名/schema/打分/端点任一变更，缓存 key 自动变、旧缓存立即失效
-SIGNALS_CACHE_VERSION = _auto_cache_version()
+# 缓存版本 = 相关源码哈希：状态名/schema/打分任一变更，缓存 key 自动变、旧缓存立即失效
+SIGNALS_CACHE_VERSION = report_cache_version()
 REPORT_CACHE_VERSION = SIGNALS_CACHE_VERSION
 
 # 榜单缓存：stale-while-revalidate（按 universe 分键）
@@ -117,7 +91,8 @@ async def get_leaderboard(
 ) -> LeaderboardResponse:
     """机构建仓榜：扫描动态 universe（标普 500 或纳指 100），按综合分与偏多状态排名。
 
-    基于 4 个 FMP 维度（不含期权仓位），点进详情页查看完整五维。
+    初筛（4 个 FMP 维度）挑候选，对展示的 top-N 走完整五维计算（同详情页口径）并预写
+    详情缓存，使点进详情页的分数与榜单一致。
     stale-while-revalidate：命中缓存立即返回；过期则先返回旧数据再后台刷新；
     无缓存则后台开扫并返回 computing，前端稍后重试。
     refresh=true：手动清空该 universe 的数据/新鲜标记/扫描锁，强制重扫（用于残缺快照补救）。
@@ -172,7 +147,7 @@ async def get_institutional_signals(
     if not symbol.isalpha():
         raise HTTPException(status_code=422, detail="股票代码仅允许字母")
 
-    cache_key = f"{CACHE_PREFIX}:{symbol}:{REPORT_CACHE_VERSION}"
+    cache_key = report_cache_key(symbol, REPORT_CACHE_VERSION)
 
     if redis is not None:
         try:

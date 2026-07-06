@@ -116,6 +116,8 @@ NASDAQ100_FALLBACK = [
 SCAN_CONCURRENCY = 20            # 扫描并发上限（后台任务）
 SCAN_TOP_N = 30                  # 榜单返回条数
 SCAN_FRESH_SECONDS = 21600       # 缓存新鲜期 6h：超过则后台刷新（仍先返回旧数据）
-# 两段式增强：4 维排名后，对排名靠前的 K 支补抓期权，使 🔥建仓/💰聪明钱 能上榜
-ENRICH_TOP_K = 25               # 补抓期权的候选数（只对 top-K，避免扫全量期权）
-ENRICH_CONCURRENCY = 8          # 期权补抓并发（yfinance 较慢）
+# 榜单展示的标的走完整五维计算（与详情页同口径），并把报告预写进详情缓存，使点进详情数字一致。
+# 初筛只用来挑候选，避免对全 universe 跑重计算。
+FINALIZE_CONCURRENCY = 8         # 榜单 top-N 完整计算并发（含 yfinance 期权，较慢）
+# 预写的详情缓存 TTL：覆盖榜单最长展示窗口（LB_DATA_TTL=24h），确保 24h 内点进详情与榜单一致
+LEADERBOARD_DETAIL_CACHE_TTL = 86400
