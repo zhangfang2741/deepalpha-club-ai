@@ -252,13 +252,15 @@ function DimensionCard({ dim }: { dim: DimensionScore }) {
   )
 }
 
-// 榜单状态筛选
+// 榜单状态筛选（按买入价值早→晚排序：聪明钱最早/最稀有）
+// 标签须与状态卡/买入视角阶梯（STATE_LABELS）一致，避免「外面简称、里面全称」不一致
 const STATE_FILTERS = [
   { key: 'all', label: '全部' },
-  { key: 'institution_accumulation', label: '🔥 建仓' },
-  { key: 'fundamental_turn', label: '🌱 基本面' },
-  { key: 'expectation_upgrade', label: '📈 预期' },
-  { key: 'breakout_confirmation', label: '🚀 趋势' },
+  { key: 'smart_money', label: '💰 聪明钱' },
+  { key: 'institution_accumulation', label: '🔥 机构建仓' },
+  { key: 'fundamental_turn', label: '🌱 基本面改善' },
+  { key: 'expectation_upgrade', label: '📈 预期上修' },
+  { key: 'breakout_confirmation', label: '🚀 趋势确认' },
 ] as const
 
 // 五维中文标签（与 DIMENSION_META 对齐），用于排序按钮与榜单右列
