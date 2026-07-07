@@ -83,7 +83,7 @@
 - `confidence: int`（0-100，冗余字段便于按阈值查询与索引）
 - `confidence_source: str`（`LLM`/`SEC_VERIFIED`/`MULTI_SOURCE_VERIFIED`/`UNVERIFIED`，索引）—— `UNVERIFIED` 表示 verify 后零证据、仅 LLM 猜测
 - `last_run_id: UUID | None`、`updated_at`
-- 索引：`(dst_node_id)`（按采购方查其供应商）、`confidence`、`confidence_source`、`edge_type`
+- 索引：`(dst_node_id)`（按采购方查其供应商）、`(src_node_id)`（按供应商查其客户 / 多度 BFS 双向，见 §8.3）、`confidence`、`confidence_source`、`edge_type`
 
 **`SupplyChainClue`**（`app/models/supply_chain_clue.py`）—— 线索（带立场证据片段 / 变化标记）
 - `edge_id: str | None`（挂到某条关系；索引）
@@ -305,12 +305,48 @@ Railway 新增 worker 服务（与 web 共享镜像，启动命令不同）。
 - `POST /supply-graph/runs` —— body `{universe}` 触发 batch run
 - `GET /supply-graph/runs` / `GET /supply-graph/runs/{run_id}` —— 运行列表/详情（含 task 列表与进度）
 - `POST /supply-graph/runs/{run_id}/pause` / `/resume` / `/retry-failed` —— 控制（pause=置 `paused`，task 执行前自检熔断；retry-failed=重投 failed 任务）
-- `GET /supply-graph/graph?ticker=&depth=1` —— 取以 `ticker` 为中心、`depth` 度邻域的子图（后端用 `GiraffeGraph.sub_graph(seed_nodes=[company])` 裁剪后 `to_dict()` 输出 camelCase，含 nodes/edges/properties）
-- `GET /supply-graph/graph/expand?from_node_id=&depth=1` —— 漫游：以当前某节点为新焦点增量拉取邻域，前端 merge 进已有图
+- `GET /supply-graph/graph?ticker=&depth=1` —— 取以 `ticker` 为中心、`depth` 度邻域的子图（后端用递归 CTE 一条 SQL 查 N 度，再 `GiraffeGraph` 装载 + `page_rank` 截断，`to_dict()` 输出 camelCase）。`depth ≤ 3` 硬上限（见 §8.3）
+- `GET /supply-graph/graph/expand?from_node_id=&depth=1` —— 漫游：以当前某节点为新焦点增量拉取邻域，前端 merge 进已有图。支持 `direction=upstream|downstream|both`（下游走 `CUSTOMER_OF` 边）、`depth ≤ 3`
 - `GET /supply-graph/edges/{edge_id}/clues` —— 取该关系的线索列表（按 `stance`/`filing_date` 排序）
 - `GET /supply-graph/nodes/{node_id}/detail` —— 节点详情（公司画像 + 入度/出度 + 关键供应关系摘要）
 
 遵循分层规则：路由只做参数解析 + 调 service；service 在 `app/services/supply_chain/`。
+
+### 8.3 多度查询性能策略（A+C 组合，不引入图数据库）
+
+> 关系表存邻接表的通病:多度遍历需递归 JOIN / 多次往返,3-4 度指数级放大。下游扩展受限于①性能②私有节点断链③前端渲染。策略:
+
+**A. 受控扩展 + 重要性截断（应用层）**
+- 后端 BFS 硬上限:`depth ≤ 3`、`max_nodes ≤ 200`、`max_edges ≤ 500`,超限截断并返回 `truncated=true` 标志
+- 遇 `expandable=false` 节点**停止该分支**(私有/境外,无上游可追,不无意义查询)
+- 截断按 importance:用 `GiraffeGraph.page_rank(seed)` 算关键节点,按 `confidence × degree` 排序保留 Top-N 路径,不让长尾节点淹没前端
+- 前端 G6:节点数 > 300 时**折叠聚合**(次要供应商聚成「其它供应商」虚节点),保证渲染流畅
+
+**C. 递归 CTE 单 SQL 多度查询（DB 层）**
+- `app/services/supply_chain/graph_query.py`:用 PostgreSQL **递归 CTE** 一条 SQL 查出 N 度子图,把 N 次往返压成 1 次——3 度查询从秒级降到 100-300ms
+- SQL 草案(`direction=both`,按 `edge_type` 过滤方向):
+  ```sql
+  WITH RECURSIVE bfs AS (
+    SELECT edge_id, src_node_id, dst_node_id, edge_type, 1 AS d
+    FROM supply_chain_edges
+    WHERE dst_node_id = :seed OR src_node_id = :seed
+    UNION ALL
+    SELECT e.edge_id, e.src_node_id, e.dst_node_id, e.edge_type, b.d + 1
+    FROM supply_chain_edges e
+    JOIN bfs b ON e.src_node_id = b.dst_node_id OR e.dst_node_id = b.src_node_id
+    WHERE b.d < :depth
+  )
+  SELECT DISTINCT edge_id, ... FROM bfs;
+  ```
+- 递归 CTE 配合 `(src_node_id)`、`(dst_node_id)` 双向索引(§4.1 已有 `dst_node_id` 索引,补 `src_node_id` 索引)
+- 防环:递归 CTE 用 `UNION`(去重)而非 `UNION ALL`,或在 visited 集合里排除已访问节点
+
+**B. 可选图缓存（Redis，热门公司）**
+- 高频 `(seed_node_id, depth, direction)` 子图序列化为 GiraffeGraph JSON 缓存,TTL 1-7 天
+- 增量更新(run 重跑某 ticker)时失效相关缓存
+- 首次查询仍走 CTE,缓存只加速重复查询
+
+**结果**:3 度任意方向查询稳定 100-300ms、前端流畅、不假装能追到原材料端(断链节点显式停止 + truncated 标志)。4 度不开放(收益递减、性能与渲染都吃紧)。
 
 ### 8.2 前端（Next.js，`TopNav` 注册）
 
@@ -318,10 +354,12 @@ Railway 新增 worker 服务（与 web 共享镜像，启动命令不同）。
 
 > ⚠️ **实施首步必须验证兼容性**：G6 v6（2025 年发布）与 React 19 + Next.js 16 的集成需先跑通一个最小 demo（SSR 关闭、`'use client'`、动态 import）再铺开。本项目 Next.js 版本较新，前端编码前先查 `frontend/node_modules/next/dist/docs/`（见 `frontend/AGENTS.md`）。若 G6 v6 兼容性阻断，回退到 `@antv/g6@^5`。实施阶段涉及视觉细节时用 frontend-design skill 打磨。
 
-**焦点模式：单公司中心 + 可漫游**
+**焦点模式：单公司中心 + 可漫游（支持 3 度上下游）**
 - 默认以某家公司为种子展示其供应商图谱（`depth=1`，即直接上游供应商）；单次数据量小、加载快、贴合「查这家公司供应链」的直觉
 - 双击节点 → 以该节点为新焦点 `expand`，前端按 G6 的 graph data 增量合并（按 `node_id`/`edge_id` 去重）+ `fitView` 聚焦
 - 顶部搜索框：输入 ticker/公司名定位并切换焦点公司
+- **深度/方向控制**：可选 1/2/3 度、上游/下游/双向(下游走 `CUSTOMER_OF`)；4 度不开放(见 §8.3)
+- **truncated 提示**:后端返回 `truncated=true` 时,前端顶部显示「已按重要性截断至 Top-N,完整图过大」徽标
 
 **G6 集成要点**：
 - G6 实例仅在客户端创建（Next 16 SSR 下用 `dynamic(() => import(...), { ssr: false })` 或 `useEffect` 内挂载）
@@ -338,7 +376,7 @@ Railway 新增 worker 服务（与 web 共享镜像，启动命令不同）。
 - `RoamerBreadcrumb.tsx`（漫游路径面包屑，支持回退到上一个焦点）
 
 **UX 增强清单**（实施阶段用 frontend-design skill 打磨视觉）：
-- **节点**：节点大小按「被依赖度」（入度，作为多少家公司的供应商）映射，凸显关键供应商；节点配色按类型（company/supplier）；**私有/境外节点（`expandable=false`）用虚线边框 + 锁标**表明知识边界（硬伤 3）；hover 显示 name/ticker/aliases/description 气泡
+- **节点**：节点大小按「被依赖度」（入度，作为多少家公司的供应商）映射，凸显关键供应商；节点配色按类型（company/supplier）；**私有/境外节点（`expandable=false`）用虚线边框 + 锁标**表明知识边界（硬伤 3）；hover 显示 name/ticker/aliases/description 气泡；**节点数 > 300 时折叠聚合次要供应商为「其它供应商」虚节点**（§8.3 A），保证渲染流畅
 - **边**：粗细与颜色按 `confidence` 分档（<60 黄虚线动画、60-79 蓝、≥80 绿粗实线）；**`confidence_source=UNVERIFIED` 的边灰色 + ❓标**（仅 LLM 猜测无证据，区别于已验证）；`is_single_source=true` 加瓶颈图标；边 label 显示 `product`；hover tooltip 显示 `evidence_summary` + `confidence_source` 徽标；**`changed=true` 的边加「本期变化」脉冲**（变化检测）
 - **线索抽屉**：点击边 → 右侧抽屉列出 `SupplyChainClue`，按 `source_type` 分组（电话会/新闻/SEC/变化），每条带 `stance` 色标（SUPPORT 绿/REFUTE 红/NEUTRAL 灰/CHANGED 紫）、原文 `snippet_text`、`document_url` 跳转、`filing_date`、`section`、`confidence_delta`
 - **过滤**：置信度阈值滑块（实时过滤边，G6 的 `filter` API）、按 `confidence_source` 筛选（LLM/SEC_VERIFIED/UNVERIFIED/全部）、按 `product_category` 筛选、按 `edge_type`（上游/下游）切换、搜索高亮节点
@@ -405,6 +443,7 @@ SUPPLY_CHAIN_PROBE_BACKOFF_SECONDS=60     # 探测退避起始（60→300→900 
 - `test_pipeline.py`：单公司 4 步端到端（mock 全外部依赖）
 - `test_change_detection.py`：重跑 diff 标记新增/消失/置信度剧变关系为 `changed`
 - `test_eval.py`：评估集 precision/recall + 置信度校准曲线（`@pytest.mark.slow`，真实 LLM）
+- `test_graph_query.py`：递归 CTE 多度查询（1/2/3 度）、上下游方向过滤、`depth≤3` 硬上限、`max_nodes/max_edges` 截断返回 `truncated=true`、`expandable=false` 分支停止、防环（§8.3）
 - `test_tasks.py`：task 状态机流转、重试、run 计数
 - `test_quota_recovery.py`：`LLMQuotaExhausted` 识别、单 provider 耗尽时 fallback 到其他 provider（#7）、全 provider 耗尽时 task `paused_quota` 延迟重投、**run 级熔断**（task 执行前检查 `paused_quota` 自我延迟）（#8）、`resume_run_if_quota_recovered` 探测成功/失败两条路径、**探测调用被限流视为未恢复**（#9）、探测退避封顶、`probe_attempts` 超限置 failed
 - 前端：`cd frontend && npx tsc --noEmit` 通过（含 G6 v6 与 React 19/Next 16 集成类型检查）
@@ -426,12 +465,13 @@ SUPPLY_CHAIN_PROBE_BACKOFF_SECONDS=60     # 探测退避起始（60→300→900 
 13. `app/core/celery_app.py` + `app/tasks/supply_chain.py`（含测试）
 13b. `llm_service` 新增 `LLMQuotaExhausted` + 限流识别；`process_company` 配额延迟重投；`resume_run_if_quota_recovered` 探测续跑（含 `test_quota_recovery.py`）
 14. **评估集** `evals/supply_chain/`（~50 条 ground truth）+ `test_eval.py` precision/recall/校准曲线
-15. 后端路由 `/supply-graph`（含测试）
-16. 配置项 + `.env.example`
-17. 前端：**先验证 G6 v6 与 React 19/Next 16 最小集成**（`'use client'` + 动态 import + SSR 关闭 demo），通过后再铺开；若阻断回退 `@antv/g6@^5`
-18. 前端图谱页（G6 canvas + 漫游 + 线索抽屉 + 过滤 + UNVERIFIED/断链/变化标记展示） + 任务看板页（shadcn 表格） + `lib/api/supplyGraph.ts`
-19. `Procfile` worker/beat + 文档（README 补充启动方式）
-20. `make check`（ruff + pyright）+ 前端 `tsc --noEmit` 通过
+15. `graph_query.py` 递归 CTE 多度查询 + 重要性截断 + 方向过滤（含测试，§8.3）
+16. 后端路由 `/supply-graph`（含测试）
+17. 配置项 + `.env.example`
+18. 前端：**先验证 G6 v6 与 React 19/Next 16 最小集成**（`'use client'` + 动态 import + SSR 关闭 demo），通过后再铺开；若阻断回退 `@antv/g6@^5`
+19. 前端图谱页（G6 canvas + 漫游 + 3 度上下游 + 线索抽屉 + 过滤 + UNVERIFIED/断链/变化标记/折叠聚合展示） + 任务看板页（shadcn 表格） + `lib/api/supplyGraph.ts`
+20. `Procfile` worker/beat + 文档（README 补充启动方式）
+21. `make check`（ruff + pyright）+ 前端 `tsc --noEmit` 通过
 
 ## 13. 已知盲区与边界（坦诚声明）
 
