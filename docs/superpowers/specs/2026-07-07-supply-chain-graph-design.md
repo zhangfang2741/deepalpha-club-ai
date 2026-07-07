@@ -96,19 +96,23 @@
 **`SupplyChainRun`**（`app/models/supply_chain_run.py`）—— 一次批次或单次运行
 - `run_type: str`（`single`/`batch`）
 - `universe: str`（`sp500`/`nasdaq100`/`russell1000`/`full`，或单 ticker）
-- `status: str`（`pending`/`running`/`paused`/`done`/`failed`，索引）
+- `status: str`（`pending`/`running`/`paused`/`paused_quota`/`done`/`failed`，索引）—— `paused` 手动暂停，`paused_quota` 配额耗尽自动暂停
 - `total: int`、`completed: int`、`failed: int`
 - `params: JSON`（universe 过滤、模型名、阈值等）
+- `quota_paused_at: datetime | None`、`resume_after: datetime | None`（配额恢复预估时间，见 §7）
+- `probe_attempts: int`（额度探测次数，封顶防无限探测）
 - `started_at`、`finished_at`、`created_at`
 
 **`SupplyChainTask`**（`app/models/supply_chain_task.py`）—— 单公司任务
 - `run_id: UUID`（外键，索引）
 - `ticker: str`（索引）
 - `stage: str`（`DISCOVER`/`RESOLVE`/`SEC_VERIFY`，当前阶段）
-- `status: str`（`queued`/`running`/`success`/`failed`/`retrying`，索引）
+- `status: str`（`queued`/`running`/`success`/`failed`/`retrying`/`paused_quota`，索引）—— `paused_quota` 表示因配额耗尽被延迟重投
 - `retries: int`、`max_retries: int`
+- `quota_retries: int`（配额恢复重投次数，独立计数，不占普通 `retries` 配额）
 - `celery_task_id: str | None`
 - `error: str | None`
+- `resume_after: datetime | None`（该任务延迟重投的预计恢复时间）
 - `result_summary: JSON`（发现的供应商数、验证关系数等）
 - `started_at`、`finished_at`、`created_at`
 
@@ -124,7 +128,7 @@
 `discover_suppliers(ticker: str, llm) -> list[dict]`
 - 一次结构化 LLM 调用，返回 Top 5-10 供应商：`{supplier_name, product_text, rationale, confidence(0-100)}`
 - 用较便宜模型（`DEFAULT_LLM_MODEL` 倾向 haiku/gpt-4o-mini，由 `SUPPLY_CHAIN_DISCOVER_MODEL` 覆盖）
-- 结果按 ticker + 日期缓存（Redis，TTL 见 §8）
+- 结果按 ticker + 日期缓存（Redis，TTL 见 §9）
 
 ### 5.2 resolve —— 名称规范化 + 映射 ticker + upsert
 `resolve_suppliers(ticker, suppliers, session) -> GiraffeGraph`
@@ -190,9 +194,67 @@ beat: /app/.venv/bin/celery -A app.core.celery_app beat --loglevel=info
 ```
 Railway 新增 worker 服务（与 web 共享镜像，启动命令不同）。
 
-## 7. API + 前端
+## 7. 稳定性与限流恢复（MiniMax 5 小时窗口）
 
-### 7.1 后端路由（`app/api/v1/supply_chain_map.py`，前缀 `/supply-graph`）
+> 现有 `llm_service` 的 tenacity 指数退避（2-10s）+ 多模型循环 fallback 针对的是「单次调用瞬时失败」。本节处理另一量级问题：**长时窗配额耗尽（如 MiniMax 5 小时上限）+ 额度恢复后自动续跑**。两层不能混在一起——对 5 小时窗口做 10s 退避重试 3 次必然失败、还会白白耗尽重试配额把任务误标 failed。
+
+### 7.1 LLM 调用层：区分「瞬时限流」与「额度耗尽」
+
+在 `llm_service` 捕获 `RateLimitError` 时解析错误体，区分两种情况：
+
+- **瞬时限流**（窗口秒级滚动）：保留现有指数退避重试（`_invoke_with_retry`）
+- **额度耗尽**（5 小时长窗口）：**不退避重试**，抛新异常 `LLMQuotaExhausted(provider, retry_after_hint)`，交由 Celery 任务层处理「延迟重投」而非「立即失败」
+
+判定逻辑：
+- 优先用 MiniMax 响应里的 `retry_after` / 限流类型字段（按 MiniMax 错误码与响应体解析）
+- 兜底用错误消息关键词（"quota"/"5 小时"/"rate limit window" 等）+ 配置的固定窗口 `SUPPLY_CHAIN_QUOTA_WINDOW_SECONDS`（默认 18000=5h）
+- 解析不出则保守按「额度耗尽」处理（宁可多等，不要误判成瞬时把任务标 failed）
+
+> 改动范围：`app/services/llm/service.py` 新增 `LLMQuotaExhausted` 异常 + 在 `_invoke_with_retry` / `_fallback_loop` 里识别。这是对现有 LLM 服务的**通用增强**，其他模块也受益。
+
+### 7.2 任务层：限流感知的延迟重投
+
+`process_company` 的重试策略分两路：
+
+- **普通异常**（网络/超时/瞬时限流或其他非配额错误）：`autoretry_for`，指数退避，`max_retries` 用普通配额（保持现有 3 次）
+- **`LLMQuotaExhausted`**：走**专门的延迟重投路径**：
+  1. 当前 task 置 `status=paused_quota` + `resume_after = now + 预估恢复时间`，`quota_retries += 1`
+  2. 不计普通 `retries` 配额（额度等待不是「出错」）
+  3. 用 `process_company.apply_async(args=[run_id, ticker], countdown=resume_after - now)` 延迟重投——countdown 可达数小时
+  4. `quota_retries` 上限 `SUPPLY_CHAIN_MAX_QUOTA_RETRIES`（默认 10，封顶防卡死）
+
+### 7.3 批次层：额度恢复后的自动续跑（核心）
+
+`SupplyChainRun` 在配额耗尽时进入 `paused_quota` 状态，并由**延迟续跑任务**在额度恢复窗口到期后自动恢复整批：
+
+1. `process_company` 第一次抛 `LLMQuotaExhausted` 时：
+   - 置 run `status=paused_quota`、`quota_paused_at=now`、`resume_after` 取所有受影响 task 的最早恢复时间
+   - 投延迟任务 `resume_run_if_quota_recovered.apply_async(args=[run_id], countdown=resume_after - now)`
+   - 暂停 `run_supply_chain_batch` 对剩余 ticker 的 `delay` 派发（避免继续撞限流）
+2. `resume_run_if_quota_recovered(run_id)` 在延迟后执行：
+   - 先发**探测调用**（极小 token，如单字 "ping"）验证 MiniMax 是否真有额度
+   - **有额度** → 置 run `running`、`probe_attempts=0`，重新 `delay` 所有 `paused_quota` 的 task 与剩余 queued ticker，**续跑**
+   - **仍未恢复** → `probe_attempts += 1`，再延迟一个探测窗口（指数退避：1 min → 5 min → 15 min，封顶 `SUPPLY_CHAIN_MAX_PROBE_ATTEMPTS=10`），避免无限探测；超过上限则置 run `failed` 并记录原因（需人工介入）
+
+这样即使配额在凌晨 3 点恢复，系统也会自动续跑，无需人工介入。
+
+### 7.4 任务管理 API 对接
+
+`/runs/{run_id}/resume` 手动恢复接口也复用 `resume_run_if_quota_recovered` 的逻辑（强制探测+续跑）。前端任务看板对 `paused_quota` 状态显示「⏸ 配额等待中，预计 HH:MM 恢复」徽标 + 剩余恢复倒计时，并允许「立即重试」。
+
+### 7.5 章节小结：稳定性策略
+
+| 故障类型 | 处理 | 重试上限 |
+|---------|------|---------|
+| 网络超时 / 瞬时 429 | tenacity 指数退避（现有） | `MAX_LLM_CALL_RETRIES=3`（单次调用）|
+| 单模型失败 | 多模型循环 fallback（现有） | registry 长度 |
+| 配额耗尽（5h 窗口） | task `paused_quota` + Celery `countdown` 延迟重投 | `SUPPLY_CHAIN_MAX_QUOTA_RETRIES=10`（按 task）|
+| 额度恢复续跑 | `resume_run_if_quota_recovered` 探测 + 整批恢复 | `SUPPLY_CHAIN_MAX_PROBE_ATTEMPTS=10` |
+| 完全失败 | 标 `failed`，前端可 `retry-failed` 重投 | — |
+
+## 8. API + 前端
+
+### 8.1 后端路由（`app/api/v1/supply_chain_map.py`，前缀 `/supply-graph`）
 > 与现有 `/supply-chain`（FinReflect 图谱）区分，避免冲突。在 `api.py` 注册。
 - `POST /supply-graph/companies/{ticker}/run` —— 单公司按需（创建 single run，触发 `process_company.delay`）
 - `POST /supply-graph/runs` —— body `{universe}` 触发 batch run
@@ -205,7 +267,7 @@ Railway 新增 worker 服务（与 web 共享镜像，启动命令不同）。
 
 遵循分层规则：路由只做参数解析 + 调 service；service 在 `app/services/supply_chain/`。
 
-### 7.2 前端（Next.js，`TopNav` 注册）
+### 8.2 前端（Next.js，`TopNav` 注册）
 
 **技术选型**：采用 **AntV G6 v6**（`@antv/g6@^6`）。G6 是专为关系图谱设计的图分析引擎（区别于 xyflow 的「节点画布」定位），内置力导/层次/辐射/dagre 等多种布局、WebGL 高性能渲染、节点聚合/过滤/图分析算法，更适合供应链图谱「单公司中心 + 可漫游 + 节点边可能上千」的探索体验。现有 `/supply-chain` 页的 `@xyflow/react` 组件保持不变，新页面独立用 G6，两套不互相干扰。
 
@@ -244,7 +306,7 @@ Railway 新增 worker 服务（与 web 共享镜像，启动命令不同）。
 - 操作按钮：暂停（撤回 queued 任务）/ 续跑 / 重试失败 / 删除 run
 - `frontend/lib/api/supplyGraph.ts`（Axios 封装，统一 `lib/api/client.ts`）
 
-## 8. 配置（`app/core/config.py` + `.env.example`）
+## 9. 配置（`app/core/config.py` + `.env.example`）
 
 ```
 # Celery
@@ -261,9 +323,15 @@ SUPPLY_CHAIN_DISCOVER_MODEL=         # 空=用 DEFAULT_LLM_MODEL
 SUPPLY_CHAIN_VERIFY_MODEL=           # 空=用 DEFAULT_LLM_MODEL
 SUPPLY_CHAIN_BEAT_ENABLED=false
 SUPPLY_CHAIN_DISCOVER_CACHE_TTL=86400
+
+# 限流与配额恢复（见 §7）
+SUPPLY_CHAIN_QUOTA_WINDOW_SECONDS=18000   # 5h，MiniMax 窗口兜底
+SUPPLY_CHAIN_MAX_QUOTA_RETRIES=10         # 单 task 配额重投上限
+SUPPLY_CHAIN_MAX_PROBE_ATTEMPTS=10        # 额度探测上限
+SUPPLY_CHAIN_PROBE_BACKOFF_SECONDS=60     # 探测退避起始（60→300→900 封顶）
 ```
 
-## 9. 分阶段上线与成本
+## 10. 分阶段上线与成本
 
 1. **阶段 1（MVP）**：`SUPPLY_CHAIN_UNIVERSE=sp500`，跑通单公司按需 + batch，验证供应商抽取质量与 SEC 验证效果，估算单公司成本（LLM 调用数 + token + SEC 请求数）。
 2. **阶段 2**：放量到 `nasdaq100` 合并去重，再 `russell1000`。
@@ -271,7 +339,7 @@ SUPPLY_CHAIN_DISCOVER_CACHE_TTL=86400
 - 成本控制：discover 结果按 ticker+日期缓存；跳过近期已跑公司；discover 用便宜模型、verify 仅对 <60 分关系触发（多数关系不会进入 verify）。
 - 6000 家 × Top 5-10 供应商，预估 discover LLM 调用 ~6000 次；verify 仅作用于 <60 分子集（按经验 20-40%），SEC 抓取 ~1200-2400 次，可承受。
 
-## 10. 测试（TDD，`tests/services/supply_chain/`）
+## 11. 测试（TDD，`tests/services/supply_chain/`）
 
 `asyncio_mode=auto`，LLM/FMP/SEC 全 mock，`@pytest.mark.slow` 标真实外呼。
 - `test_fmp_universe.py`：名称→ticker 匹配（精确/别名/模糊/未命中）
@@ -282,9 +350,10 @@ SUPPLY_CHAIN_DISCOVER_CACHE_TTL=86400
 - `test_giraffe_graph.py`：摘取后的领域对象核心算法（sub_graph/trim_to_token_limit/to_dict）回归
 - `test_pipeline.py`：单公司 4 步端到端（mock 全外部依赖）
 - `test_tasks.py`：task 状态机流转、重试、run 计数
+- `test_quota_recovery.py`：`LLMQuotaExhausted` 识别、task `paused_quota` 延迟重投、`resume_run_if_quota_recovered` 探测成功/失败两条路径、探测退避封顶、`probe_attempts` 超限置 failed
 - 前端：`cd frontend && npx tsc --noEmit` 通过（含 G6 v6 与 React 19/Next 16 集成类型检查）
 
-## 11. 落地清单（每完成一小步即提交）
+## 12. 落地清单（每完成一小步即提交）
 
 1. 摘取 `giraffe_graph.py` 到 `app/services/supply_chain/domain/`，替换依赖（+ `uv add networkx pandas`）
 2. 五张 SQLModel 表 + alembic 迁移
@@ -295,6 +364,7 @@ SUPPLY_CHAIN_DISCOVER_CACHE_TTL=86400
 7. `verify.py`（含测试）
 8. `pipeline.py` 单公司编排（含测试）
 9. `app/core/celery_app.py` + `app/tasks/supply_chain.py`（含测试）
+9b. `llm_service` 新增 `LLMQuotaExhausted` + 限流识别；`process_company` 配额延迟重投；`resume_run_if_quota_recovered` 探测续跑（含 `test_quota_recovery.py`）
 10. 后端路由 `/supply-graph`（含测试）
 11. 配置项 + `.env.example`
 12. 前端：**先验证 G6 v6 与 React 19/Next 16 最小集成**（`'use client'` + 动态 import + SSR 关闭 demo），通过后再铺开；若阻断回退 `@antv/g6@^5`
@@ -302,7 +372,7 @@ SUPPLY_CHAIN_DISCOVER_CACHE_TTL=86400
 14. `Procfile` worker/beat + 文档（README 补充启动方式）
 15. `make check`（ruff + pyright）+ 前端 `tsc --noEmit` 通过
 
-## 12. 不在本期范围（YAGNI）
+## 13. 不在本期范围（YAGNI）
 
 - 图数据库（Neo4j/AGE）持久化——当前规模 SQLModel + JSON 属性足够
 - 全市场一次性同步跑完——分阶段 + beat 增量
