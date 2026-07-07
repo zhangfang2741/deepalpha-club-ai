@@ -27,7 +27,7 @@
 | 任务管理 | 自建任务表 + API + 前端监控页 |
 | 领域模型 | **复用 `giraffeai` 的 `GiraffeGraph`/`GiraffeNode`/`GiraffeEdge`/`GiraffeProperty`** 属性图领域对象作为计算层 |
 | 持久化 | **方案一**：SQLModel 表持久化，`GiraffeGraph` 做领域/计算层，repository 层双向映射 |
-| 前端图谱 | 复用项目已装的 `@xyflow/react` + `dagre`（不引新库）；单公司中心 + 可漫游焦点模式 |
+| 前端图谱 | **AntV G6 v6**（`@antv/g6@^6`），关系图谱专用引擎；单公司中心 + 可漫游焦点模式 |
 
 ## 3. 领域对象引入（GiraffeGraph）
 
@@ -207,31 +207,38 @@ Railway 新增 worker 服务（与 web 共享镜像，启动命令不同）。
 
 ### 7.2 前端（Next.js，`TopNav` 注册）
 
-**技术选型**：复用项目已装的 `@xyflow/react` 12.x + `@dagrejs/dagre`。现有 `frontend/components/graph/SupplyChainGraph.tsx`（服务于 `/supply-chain`）已验证此套件的可交互图谱模式（自定义节点、dagre 层次布局、MiniMap、边点击），新页面沿用相同技术栈与组件结构，不引入新图表库。
+**技术选型**：采用 **AntV G6 v6**（`@antv/g6@^6`）。G6 是专为关系图谱设计的图分析引擎（区别于 xyflow 的「节点画布」定位），内置力导/层次/辐射/dagre 等多种布局、WebGL 高性能渲染、节点聚合/过滤/图分析算法，更适合供应链图谱「单公司中心 + 可漫游 + 节点边可能上千」的探索体验。现有 `/supply-chain` 页的 `@xyflow/react` 组件保持不变，新页面独立用 G6，两套不互相干扰。
 
-> ⚠️ 本项目 Next.js 版本较新，前端编码前先查 `frontend/node_modules/next/dist/docs/`（见 `frontend/AGENTS.md`）。实施阶段涉及视觉细节时再用 frontend-design skill。
+> ⚠️ **实施首步必须验证兼容性**：G6 v6（2025 年发布）与 React 19 + Next.js 16 的集成需先跑通一个最小 demo（SSR 关闭、`'use client'`、动态 import）再铺开。本项目 Next.js 版本较新，前端编码前先查 `frontend/node_modules/next/dist/docs/`（见 `frontend/AGENTS.md`）。若 G6 v6 兼容性阻断，回退到 `@antv/g6@^5`。实施阶段涉及视觉细节时用 frontend-design skill 打磨。
 
 **焦点模式：单公司中心 + 可漫游**
 - 默认以某家公司为种子展示其供应商图谱（`depth=1`，即直接上游供应商）；单次数据量小、加载快、贴合「查这家公司供应链」的直觉
-- 双击节点 → 以该节点为新焦点 `expand`，前端 `GiraffeGraph.merge` 式合并（去重节点边）+ `fitView` 聚焦
+- 双击节点 → 以该节点为新焦点 `expand`，前端按 G6 的 graph data 增量合并（按 `node_id`/`edge_id` 去重）+ `fitView` 聚焦
 - 顶部搜索框：输入 ticker/公司名定位并切换焦点公司
 
+**G6 集成要点**：
+- G6 实例仅在客户端创建（Next 16 SSR 下用 `dynamic(() => import(...), { ssr: false })` 或 `useEffect` 内挂载）
+- 数据契约对齐 §3 的 `GiraffeGraph.to_dict()`（camelCase：nodes `{id,type,properties}` / edges `{source,target,type,timestamp,properties}`）——后端直接输出该格式，前端 G6 的 `graph.setData()` 直接消费
+- 布局：单公司中心用 **radial（辐射）布局**（焦点公司在中心，供应商放射展开）；漫游切换到 **force（力导）布局** 适合多度子图
+- 节点/边样式用 G6 的 maping（按 `properties.confidence`/`properties.type` 映射颜色与粗细）
+
 **新建组件** `frontend/components/supply_graph/`：
-- `SupplyGraphView.tsx`（主图谱，复刻 `SupplyChainGraph.tsx` 的 ReactFlow 骨架，替换数据契约）
-- `SupplyGraphNode.tsx`（自定义节点）
+- `SupplyGraphCanvas.tsx`（G6 图实例管理：挂载/卸载、布局切换、zoom/pan、fitView）
+- `SupplyGraphAdapter.tsx`（数据契约适配 + 漫游合并逻辑，封装 API 调用与 G6 data 转换）
 - `EdgeClueDrawer.tsx`（边点击 → 右侧抽屉）
 - `NodeDetailPanel.tsx`（节点点击 → 详情面板）
-- `GraphFilters.tsx`（置信度阈值滑块、universe 过滤）
+- `GraphFilters.tsx`（置信度阈值滑块、universe 过滤、来源筛选）
+- `RoamerBreadcrumb.tsx`（漫游路径面包屑，支持回退到上一个焦点）
 
-**UX 增强清单**（在现有图谱组件基础上的体验提升）：
-- **节点**：节点大小按「被依赖度」（入度，作为多少家公司的供应商）缩放，体现关键供应商；节点配色按类型（company/supplier）；hover 显示 name/ticker/aliases/description 气泡
+**UX 增强清单**（实施阶段用 frontend-design skill 打磨视觉）：
+- **节点**：节点大小按「被依赖度」（入度，作为多少家公司的供应商）映射，凸显关键供应商；节点配色按类型（company/supplier）；hover 显示 name/ticker/aliases/description 气泡
 - **边**：粗细与颜色按 `confidence` 分档（<60 黄虚线动画、60-79 蓝、≥80 绿粗实线）；边 label 显示 `product`；hover tooltip 显示 `evidence_summary` + `confidence_source` 徽标（LLM/SEC_VERIFIED）
 - **线索抽屉**：点击边 → 右侧抽屉列出 `SupplyChainClue`，每条带 `stance` 色标（SUPPORT 绿/REFUTE 红/NEUTRAL 灰）、原文 `snippet_text`、SEC `document_url` 跳转、`filing_date`、`section`、`confidence_delta`
-- **过滤**：置信度阈值滑块（实时过滤边）、按 `confidence_source` 筛选（只看 SEC 验证过的）、搜索高亮节点
-- **导航**：MiniMap + Controls（缩放/居中/锁定）+ `fitView`；面包屑记录漫游路径（A → B → C），可回退
-- **状态反馈**：单公司按需 run 时，图谱区显示该 ticker 的 task 进度（DISCOVER→RESOLVE→SEC_VERIFY 阶段条 + 完成后自动刷新图谱）
+- **过滤**：置信度阈值滑块（实时过滤边，G6 的 `filter` API）、按 `confidence_source` 筛选（只看 SEC 验证过的）、搜索高亮节点
+- **导航**：G6 内置 Minimap 插件 + ToolBar 插件（缩放/居中/锁定）；面包屑记录漫游路径（A → B → C），可回退
+- **状态反馈**：单公司按需 run 时，图谱区显示该 ticker 的 task 进度（DISCOVER→RESOLVE→SEC_VERIFY 阶段条 + 完成后自动刷新图谱）；轮询或 SSE 推送进度
 
-**任务看板页** `/supply-graph/tasks`：
+**任务看板页** `/supply-graph/tasks`（G6 之外，用 shadcn/ui 表格）：
 - runs 列表（状态徽标 / 进度条 / completed-failed 计数 / 起止时间）
 - 选中 run → 展开该 run 的 task 表（ticker / stage / status / retries / error），失败行可展开看 error 详情
 - 操作按钮：暂停（撤回 queued 任务）/ 续跑 / 重试失败 / 删除 run
@@ -275,7 +282,7 @@ SUPPLY_CHAIN_DISCOVER_CACHE_TTL=86400
 - `test_giraffe_graph.py`：摘取后的领域对象核心算法（sub_graph/trim_to_token_limit/to_dict）回归
 - `test_pipeline.py`：单公司 4 步端到端（mock 全外部依赖）
 - `test_tasks.py`：task 状态机流转、重试、run 计数
-- 前端：`cd frontend && npx tsc --noEmit` 通过
+- 前端：`cd frontend && npx tsc --noEmit` 通过（含 G6 v6 与 React 19/Next 16 集成类型检查）
 
 ## 11. 落地清单（每完成一小步即提交）
 
@@ -290,9 +297,10 @@ SUPPLY_CHAIN_DISCOVER_CACHE_TTL=86400
 9. `app/core/celery_app.py` + `app/tasks/supply_chain.py`（含测试）
 10. 后端路由 `/supply-graph`（含测试）
 11. 配置项 + `.env.example`
-12. 前端图谱页 + 任务看板页 + `lib/api/supplyGraph.ts`
-13. `Procfile` worker/beat + 文档（README 补充启动方式）
-14. `make check`（ruff + pyright）+ 前端 `tsc --noEmit` 通过
+12. 前端：**先验证 G6 v6 与 React 19/Next 16 最小集成**（`'use client'` + 动态 import + SSR 关闭 demo），通过后再铺开；若阻断回退 `@antv/g6@^5`
+13. 前端图谱页（G6 canvas + 漫游 + 线索抽屉 + 过滤） + 任务看板页（shadcn 表格） + `lib/api/supplyGraph.ts`
+14. `Procfile` worker/beat + 文档（README 补充启动方式）
+15. `make check`（ruff + pyright）+ 前端 `tsc --noEmit` 通过
 
 ## 12. 不在本期范围（YAGNI）
 
