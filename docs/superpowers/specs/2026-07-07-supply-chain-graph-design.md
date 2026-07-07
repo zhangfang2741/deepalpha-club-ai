@@ -27,6 +27,7 @@
 | 任务管理 | 自建任务表 + API + 前端监控页 |
 | 领域模型 | **复用 `giraffeai` 的 `GiraffeGraph`/`GiraffeNode`/`GiraffeEdge`/`GiraffeProperty`** 属性图领域对象作为计算层 |
 | 持久化 | **方案一**：SQLModel 表持久化，`GiraffeGraph` 做领域/计算层，repository 层双向映射 |
+| 前端图谱 | 复用项目已装的 `@xyflow/react` + `dagre`（不引新库）；单公司中心 + 可漫游焦点模式 |
 
 ## 3. 领域对象引入（GiraffeGraph）
 
@@ -197,14 +198,43 @@ Railway 新增 worker 服务（与 web 共享镜像，启动命令不同）。
 - `POST /supply-graph/runs` —— body `{universe}` 触发 batch run
 - `GET /supply-graph/runs` / `GET /runs/{run_id}` —— 运行列表/详情（含 task 列表与进度）
 - `POST /runs/{run_id}/pause` / `/resume` / `/retry-failed` —— 控制（pause=撤回队列中任务，retry-failed=重投 failed 任务）
-- `GET /supply-graph/graph?ticker=&depth=` —— 取节点+边（`GiraffeGraph.to_dict()` 输出 camelCase，便于前端）
-- `GET /supply-graph/edges/{edge_id}/clues` —— 取该关系的线索列表
+- `GET /supply-graph/graph?ticker=&depth=1` —— 取以 `ticker` 为中心、`depth` 度邻域的子图（后端用 `GiraffeGraph.sub_graph(seed_nodes=[company])` 裁剪后 `to_dict()` 输出 camelCase，含 nodes/edges/properties）
+- `GET /supply-graph/graph/expand?from_node_id=&depth=1` —— 漫游：以当前某节点为新焦点增量拉取邻域，前端 merge 进已有图
+- `GET /supply-graph/edges/{edge_id}/clues` —— 取该关系的线索列表（按 `stance`/`filing_date` 排序）
+- `GET /supply-graph/nodes/{node_id}/detail` —— 节点详情（公司画像 + 入度/出度 + 关键供应关系摘要）
 
 遵循分层规则：路由只做参数解析 + 调 service；service 在 `app/services/supply_chain/`。
 
 ### 7.2 前端（Next.js，`TopNav` 注册）
-- `/supply-graph`：图谱可视化（节点=公司/供应商，边按 `confidence` 分档配色：<60 黄、60-79 蓝、≥80 绿），点边 → 右侧线索面板（原文片段、`stance` 标签、SEC 来源链接、`filing_date`）。图表库沿用项目现有 lightweight-charts 或引入轻量关系图组件（实现期决定，倾向用 react-force-graph 或自绘 SVG）
-- `/supply-graph/tasks`：任务看板——runs 列表（状态/进度条/完成数）+ 选中 run 的 task 表（ticker/stage/status/retries/error），支持暂停/续跑/重试失败
+
+**技术选型**：复用项目已装的 `@xyflow/react` 12.x + `@dagrejs/dagre`。现有 `frontend/components/graph/SupplyChainGraph.tsx`（服务于 `/supply-chain`）已验证此套件的可交互图谱模式（自定义节点、dagre 层次布局、MiniMap、边点击），新页面沿用相同技术栈与组件结构，不引入新图表库。
+
+> ⚠️ 本项目 Next.js 版本较新，前端编码前先查 `frontend/node_modules/next/dist/docs/`（见 `frontend/AGENTS.md`）。实施阶段涉及视觉细节时再用 frontend-design skill。
+
+**焦点模式：单公司中心 + 可漫游**
+- 默认以某家公司为种子展示其供应商图谱（`depth=1`，即直接上游供应商）；单次数据量小、加载快、贴合「查这家公司供应链」的直觉
+- 双击节点 → 以该节点为新焦点 `expand`，前端 `GiraffeGraph.merge` 式合并（去重节点边）+ `fitView` 聚焦
+- 顶部搜索框：输入 ticker/公司名定位并切换焦点公司
+
+**新建组件** `frontend/components/supply_graph/`：
+- `SupplyGraphView.tsx`（主图谱，复刻 `SupplyChainGraph.tsx` 的 ReactFlow 骨架，替换数据契约）
+- `SupplyGraphNode.tsx`（自定义节点）
+- `EdgeClueDrawer.tsx`（边点击 → 右侧抽屉）
+- `NodeDetailPanel.tsx`（节点点击 → 详情面板）
+- `GraphFilters.tsx`（置信度阈值滑块、universe 过滤）
+
+**UX 增强清单**（在现有图谱组件基础上的体验提升）：
+- **节点**：节点大小按「被依赖度」（入度，作为多少家公司的供应商）缩放，体现关键供应商；节点配色按类型（company/supplier）；hover 显示 name/ticker/aliases/description 气泡
+- **边**：粗细与颜色按 `confidence` 分档（<60 黄虚线动画、60-79 蓝、≥80 绿粗实线）；边 label 显示 `product`；hover tooltip 显示 `evidence_summary` + `confidence_source` 徽标（LLM/SEC_VERIFIED）
+- **线索抽屉**：点击边 → 右侧抽屉列出 `SupplyChainClue`，每条带 `stance` 色标（SUPPORT 绿/REFUTE 红/NEUTRAL 灰）、原文 `snippet_text`、SEC `document_url` 跳转、`filing_date`、`section`、`confidence_delta`
+- **过滤**：置信度阈值滑块（实时过滤边）、按 `confidence_source` 筛选（只看 SEC 验证过的）、搜索高亮节点
+- **导航**：MiniMap + Controls（缩放/居中/锁定）+ `fitView`；面包屑记录漫游路径（A → B → C），可回退
+- **状态反馈**：单公司按需 run 时，图谱区显示该 ticker 的 task 进度（DISCOVER→RESOLVE→SEC_VERIFY 阶段条 + 完成后自动刷新图谱）
+
+**任务看板页** `/supply-graph/tasks`：
+- runs 列表（状态徽标 / 进度条 / completed-failed 计数 / 起止时间）
+- 选中 run → 展开该 run 的 task 表（ticker / stage / status / retries / error），失败行可展开看 error 详情
+- 操作按钮：暂停（撤回 queued 任务）/ 续跑 / 重试失败 / 删除 run
 - `frontend/lib/api/supplyGraph.ts`（Axios 封装，统一 `lib/api/client.ts`）
 
 ## 8. 配置（`app/core/config.py` + `.env.example`）
