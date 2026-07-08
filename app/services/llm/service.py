@@ -37,6 +37,22 @@ from app.services.llm.registry import llm_registry
 T = TypeVar("T", bound=BaseModel)
 
 
+class LLMQuotaExhausted(OpenAIError):
+    """A provider's long-window quota is exhausted."""
+
+    def __init__(self, provider: str, retry_after_hint: int | None = None) -> None:
+        """Record provider identity and an optional retry window."""
+        self.provider = provider
+        self.retry_after_hint = retry_after_hint
+        super().__init__(f"{provider} quota exhausted")
+
+
+def _is_quota_exhausted(error: RateLimitError) -> bool:
+    message = str(error).lower()
+    keywords = ("quota", "5 hour", "5-hour", "5 小时", "rate limit window", "insufficient_quota")
+    return any(keyword in message for keyword in keywords)
+
+
 class LLMService:
     """Service for managing LLM calls with retries and circular fallback.
 
@@ -199,7 +215,12 @@ class LLMService:
             response = await llm.ainvoke(messages)
             logger.debug("llm_call_successful")
             return response
-        except (RateLimitError, APITimeoutError, APIError) as e:
+        except RateLimitError as e:
+            if _is_quota_exhausted(e):
+                raise LLMQuotaExhausted(settings.LLM_PROVIDER, settings.SUPPLY_CHAIN_QUOTA_WINDOW_SECONDS) from e
+            logger.warning("llm_call_failed_retrying", error_type=type(e).__name__, error=str(e), exc_info=True)
+            raise
+        except (APITimeoutError, APIError) as e:
             logger.warning(
                 "llm_call_failed_retrying",
                 error_type=type(e).__name__,
@@ -319,6 +340,7 @@ class LLMService:
         current = start
         models_tried = 0
         last_error: Optional[Exception] = None
+        quota_errors: list[LLMQuotaExhausted] = []
 
         for models_tried in range(1, total + 1):
             current_name = llm_registry.LLMS[current]["name"]
@@ -326,6 +348,8 @@ class LLMService:
                 return await self._invoke_with_retry(get_target(current), messages)
             except OpenAIError as e:
                 last_error = e
+                if isinstance(e, LLMQuotaExhausted):
+                    quota_errors.append(e)
                 logger.error(
                     "llm_call_failed_after_retries",
                     model=current_name,
@@ -344,6 +368,8 @@ class LLMService:
                     break
                 current = next_idx
 
+        if len(quota_errors) == total:
+            raise quota_errors[-1]
         raise RuntimeError(
             f"failed to get response from llm after trying {models_tried} models. last error: {str(last_error)}"
         )

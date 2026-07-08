@@ -210,6 +210,38 @@ class Settings:
         self.VALKEY_SSL = os.getenv("VALKEY_SSL", "false").lower() in ("true", "1", "yes")
         self.VALKEY_MAX_CONNECTIONS = int(os.getenv("VALKEY_MAX_CONNECTIONS", "20"))
         self.CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "60"))
+        self.RATE_LIMIT_USE_VALKEY = os.getenv("RATE_LIMIT_USE_VALKEY", "true").lower() in ("true", "1", "yes")
+
+        redis_scheme = "rediss" if self.VALKEY_SSL else "redis"
+        redis_auth = f":{self.VALKEY_PASSWORD}@" if self.VALKEY_PASSWORD else ""
+        redis_default = f"{redis_scheme}://{redis_auth}{self.VALKEY_HOST or 'localhost'}:{self.VALKEY_PORT}/{self.VALKEY_DB}"
+        self.CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", redis_default)
+        self.CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", redis_default)
+        if self.CELERY_BROKER_URL.startswith("rediss://") and "ssl_cert_reqs=" not in self.CELERY_BROKER_URL:
+            separator = "&" if "?" in self.CELERY_BROKER_URL else "?"
+            self.CELERY_BROKER_URL = f"{self.CELERY_BROKER_URL}{separator}ssl_cert_reqs=CERT_REQUIRED"
+        if self.CELERY_RESULT_BACKEND.startswith("rediss://") and "ssl_cert_reqs=" not in self.CELERY_RESULT_BACKEND:
+            separator = "&" if "?" in self.CELERY_RESULT_BACKEND else "?"
+            self.CELERY_RESULT_BACKEND = f"{self.CELERY_RESULT_BACKEND}{separator}ssl_cert_reqs=CERT_REQUIRED"
+        self.CELERY_SSL = os.getenv("CELERY_SSL", str(self.VALKEY_SSL)).lower() in ("true", "1", "yes")
+        self.SUPPLY_CHAIN_WORKER_CONCURRENCY = int(os.getenv("SUPPLY_CHAIN_WORKER_CONCURRENCY", "4"))
+        self.SUPPLY_CHAIN_UNIVERSE = os.getenv("SUPPLY_CHAIN_UNIVERSE", "sp500")
+        self.SUPPLY_CHAIN_VERIFY_THRESHOLD = int(os.getenv("SUPPLY_CHAIN_VERIFY_THRESHOLD", "60"))
+        self.SUPPLY_CHAIN_GENERIC_SUPPLIERS = parse_list_from_env(
+            "SUPPLY_CHAIN_GENERIC_SUPPLIERS", ["TSMC", "Samsung", "Intel", "Google Cloud", "AWS"]
+        )
+        self.SUPPLY_CHAIN_SMALLCAP_MARKETCAP = float(os.getenv("SUPPLY_CHAIN_SMALLCAP_MARKETCAP", "2e9"))
+        self.SUPPLY_CHAIN_SKIP_RECENT_DAYS = int(os.getenv("SUPPLY_CHAIN_SKIP_RECENT_DAYS", "7"))
+        self.SUPPLY_CHAIN_DISCOVER_MODEL = os.getenv("SUPPLY_CHAIN_DISCOVER_MODEL", "")
+        self.SUPPLY_CHAIN_VERIFY_MODEL = os.getenv("SUPPLY_CHAIN_VERIFY_MODEL", "")
+        self.SUPPLY_CHAIN_BEAT_ENABLED = os.getenv("SUPPLY_CHAIN_BEAT_ENABLED", "false").lower() in ("true", "1", "yes")
+        self.SUPPLY_CHAIN_DISCOVER_CACHE_TTL = int(os.getenv("SUPPLY_CHAIN_DISCOVER_CACHE_TTL", "604800"))
+        self.SUPPLY_CHAIN_TRANSCRIPT_QUARTERS = int(os.getenv("SUPPLY_CHAIN_TRANSCRIPT_QUARTERS", "4"))
+        self.SUPPLY_CHAIN_NEWS_LOOKBACK_DAYS = int(os.getenv("SUPPLY_CHAIN_NEWS_LOOKBACK_DAYS", "730"))
+        self.SUPPLY_CHAIN_QUOTA_WINDOW_SECONDS = int(os.getenv("SUPPLY_CHAIN_QUOTA_WINDOW_SECONDS", "18000"))
+        self.SUPPLY_CHAIN_MAX_QUOTA_RETRIES = int(os.getenv("SUPPLY_CHAIN_MAX_QUOTA_RETRIES", "10"))
+        self.SUPPLY_CHAIN_MAX_PROBE_ATTEMPTS = int(os.getenv("SUPPLY_CHAIN_MAX_PROBE_ATTEMPTS", "10"))
+        self.SUPPLY_CHAIN_PROBE_BACKOFF_SECONDS = int(os.getenv("SUPPLY_CHAIN_PROBE_BACKOFF_SECONDS", "60"))
 
         # Rate Limiting Configuration
         self.RATE_LIMIT_DEFAULT = parse_list_from_env("RATE_LIMIT_DEFAULT", ["200 per day", "50 per hour"])
