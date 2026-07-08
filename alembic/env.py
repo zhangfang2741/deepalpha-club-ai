@@ -22,6 +22,11 @@ from app.models.graph_fact import GraphFact  # noqa: F401
 from app.models.graph_source import SourceDocument  # noqa: F401
 from app.models.finkg_triple import FinKGTriple  # noqa: F401
 from app.models.signal_snapshot import SignalSnapshot  # noqa: F401
+from app.models.supply_chain_clue import SupplyChainClue  # noqa: F401
+from app.models.supply_chain_edge import SupplyChainEdge  # noqa: F401
+from app.models.supply_chain_node import SupplyChainNode  # noqa: F401
+from app.models.supply_chain_run import SupplyChainRun  # noqa: F401
+from app.models.supply_chain_task import SupplyChainTask  # noqa: F401
 
 # Alembic Config object
 config = context.config

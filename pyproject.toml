@@ -43,10 +43,13 @@ dependencies = [
     "asyncpg>=0.31.0",
     "langchain-anthropic>=1.4.2",
     "langchain-google-genai>=4.2.2",
-    "redis>=7.4.0",
+    "redis>=5.2.1,<6.5",
     "httpx>=0.28.1",
     "yfinance>=1.3.0",
     "akshare>=1.18.60",
+    "celery[redis]>=5.5",
+    "networkx>=3.4",
+    "pandas>=2.2",
 ]
 
 [project.optional-dependencies]
@@ -59,7 +62,7 @@ dev = [
     "pyinstrument>=5.1.2",
 ]
 cache = [
-    "redis>=7.4.0",
+    "redis>=5.2.1,<6.5",
     "valkey[libvalkey]>=6.1.0",
 ]
 
@@ -166,6 +169,10 @@ convention = "google"
 "app/schemas/sec_filings.py" = ["D415", "D101"]
 "app/api/v1/sec_filings.py" = ["D415", "D417"]
 "app/services/transcript_ai.py" = ["D415"]
+"app/services/supply_chain/**/*.py" = ["D102", "D105", "D107"]
+"app/api/v1/supply_chain_map.py" = ["D415"]
+"app/tasks/supply_chain.py" = ["D415"]
+"tests/services/supply_chain/*.py" = ["D102"]
 "app/schemas/motley_fool.py" = ["D415"]
 "app/api/v1/transcripts.py" = ["D415"]
 "tests/test_transcript_ai.py" = ["D415"]

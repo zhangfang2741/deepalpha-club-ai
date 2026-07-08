@@ -54,6 +54,7 @@ const NAV_ENTRIES: NavEntry[] = [
       { href: '/industry-research', label: '行业研究',   icon: Search },
       { href: '/company-research',  label: '企业研究',   icon: FileText },
       { href: '/supply-chain',      label: '产业图谱',   icon: Network },
+      { href: '/supply-graph',      label: '供应链图谱', icon: Network },
     ],
   },
   {

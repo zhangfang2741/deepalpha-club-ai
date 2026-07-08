@@ -16,7 +16,7 @@ from app.core.logging import logger
 
 # Build storage URI for Valkey if configured
 _storage_uri = None
-if settings.VALKEY_HOST:
+if settings.VALKEY_HOST and settings.RATE_LIMIT_USE_VALKEY:
     _password_part = f":{settings.VALKEY_PASSWORD}@" if settings.VALKEY_PASSWORD else ""
     _scheme = "rediss" if settings.VALKEY_SSL else "redis"
     _storage_uri = f"{_scheme}://{_password_part}{settings.VALKEY_HOST}:{settings.VALKEY_PORT}/{settings.VALKEY_DB}"
