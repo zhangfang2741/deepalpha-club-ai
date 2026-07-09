@@ -4,7 +4,9 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import Session, select
 
+from app.core.celery_app import celery_app
 from app.core.limiter import limiter
+from app.core.logging import logger
 from app.db.session import get_sync_session
 from app.models.supply_chain_clue import SupplyChainClue
 from app.models.supply_chain_node import SupplyChainNode
@@ -45,6 +47,23 @@ def create_run(request: Request, body: RunCreate, session: Session = Depends(get
     session.refresh(run)
     run_supply_chain_batch.delay(str(run.id))  # pyright: ignore[reportFunctionMemberAccess]
     return RunCreated(run_id=run.id, status=run.status)
+
+
+@router.get("/worker-status")
+@limiter.limit("60/minute")
+def worker_status(request: Request) -> dict:
+    """Ping Celery workers so the UI can tell online from offline.
+
+    通过 Celery 控制通道广播 ping，只有正在消费队列的 worker 会回应；
+    无回应即视为离线（部署未起 worker / worker 已停）。
+    """
+    try:
+        replies = celery_app.control.ping(timeout=1.0) or []
+    except Exception as exc:
+        logger.warning("supply_chain_worker_ping_failed", error=str(exc))
+        return {"online": False, "count": 0, "workers": [], "error": "broker_unreachable"}
+    workers = [name for reply in replies for name in reply]
+    return {"online": len(workers) > 0, "count": len(workers), "workers": workers}
 
 
 @router.get("/runs")

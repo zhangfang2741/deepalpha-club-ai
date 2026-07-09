@@ -44,6 +44,8 @@ export type SupplyTask = {
 
 export type SupplyRunDetail = { run: SupplyRun; tasks: SupplyTask[] }
 
+export type WorkerStatus = { online: boolean; count: number; workers: string[]; error?: string }
+
 export const supplyGraphApi = {
   graph: async (ticker: string, depth = 1, direction = 'both') =>
     (await apiClient.get<SupplyGraph>('/api/v1/supply-graph/graph', { params: { ticker, depth, direction }, timeout: 30000 })).data,
@@ -52,6 +54,8 @@ export const supplyGraphApi = {
   runCompany: async (ticker: string) => (await apiClient.post(`/api/v1/supply-graph/companies/${ticker}/run`)).data,
   createRun: async (universe: string, params: Record<string, unknown> = {}) =>
     (await apiClient.post('/api/v1/supply-graph/runs', { universe, params })).data,
+  workerStatus: async () =>
+    (await apiClient.get<WorkerStatus>('/api/v1/supply-graph/worker-status', { timeout: 5000 })).data,
   runs: async () => (await apiClient.get<SupplyRun[]>('/api/v1/supply-graph/runs')).data,
   run: async (id: string) => (await apiClient.get<SupplyRunDetail>(`/api/v1/supply-graph/runs/${id}`)).data,
   pauseRun: async (id: string) => (await apiClient.post(`/api/v1/supply-graph/runs/${id}/pause`)).data,

@@ -6,6 +6,7 @@ import {
   supplyGraphApi,
   type SupplyRun,
   type SupplyTask,
+  type WorkerStatus,
 } from '@/lib/api/supplyGraph'
 import { AlertCircle, Loader2, Pause, Play, RefreshCw, RotateCcw, Zap } from 'lucide-react'
 
@@ -129,6 +130,7 @@ export default function SupplyGraphTasksPage() {
   const [tasks, setTasks] = useState<SupplyTask[]>([])
   const [tasksLoading, setTasksLoading] = useState(false)
   const [pendingAction, setPendingAction] = useState<string | null>(null)
+  const [worker, setWorker] = useState<WorkerStatus | null>(null)
   const expandedRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -144,6 +146,14 @@ export default function SupplyGraphTasksPage() {
       setError('加载任务列表失败，请稍后重试。')
     } finally {
       setLoading(false)
+    }
+  }, [])
+
+  const loadWorker = useCallback(async () => {
+    try {
+      setWorker(await supplyGraphApi.workerStatus())
+    } catch {
+      setWorker({ online: false, count: 0, workers: [], error: 'unreachable' })
     }
   }, [])
 
@@ -179,20 +189,29 @@ export default function SupplyGraphTasksPage() {
       .finally(() => {
         if (active) setLoading(false)
       })
+    supplyGraphApi
+      .workerStatus()
+      .then((status) => {
+        if (active) setWorker(status)
+      })
+      .catch(() => {
+        if (active) setWorker({ online: false, count: 0, workers: [], error: 'unreachable' })
+      })
     return () => {
       active = false
     }
   }, [])
 
-  // 自动刷新：列表 + 当前展开批次的子任务
+  // 自动刷新：列表 + worker 状态 + 当前展开批次的子任务
   useEffect(() => {
     if (!autoRefresh) return
     const timer = window.setInterval(() => {
       void loadRuns()
+      void loadWorker()
       if (expandedRef.current) void loadTasks(expandedRef.current)
     }, 5000)
     return () => window.clearInterval(timer)
-  }, [autoRefresh, loadRuns, loadTasks])
+  }, [autoRefresh, loadRuns, loadWorker, loadTasks])
 
   const toggleExpand = useCallback(
     (runId: string) => {
@@ -249,6 +268,24 @@ export default function SupplyGraphTasksPage() {
             <div>
               <h1 className="text-3xl font-bold text-slate-900">供应链任务看板</h1>
               <p className="mt-1 text-slate-500">批次进度、配额等待与失败重试一览，失败任务可一键继续。</p>
+              <div className="mt-2">
+                {worker === null ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
+                    <span className="h-2 w-2 rounded-full bg-slate-300" />
+                    后台 worker：检测中…
+                  </span>
+                ) : worker.online ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    后台 worker：在线（{worker.count}）
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-700">
+                    <span className="h-2 w-2 rounded-full bg-red-500" />
+                    后台 worker：离线
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
@@ -296,17 +333,29 @@ export default function SupplyGraphTasksPage() {
             </div>
           )}
 
-          {runs.some(
-            (r) => ['pending', 'running'].includes(r.status) && r.completed + r.failed === 0,
-          ) && (
-            <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {worker?.online === false && (
+            <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               <p>
-                有任务长时间零进度（0/0 或 0/N）。这通常表示后台 worker 未在运行（Celery worker
-                服务未部署或已停止），队列里的任务没人消费。请确认部署环境的 worker 进程正常，恢复后可点「重新触发」重新入队。
+                后台 worker 处于离线状态{worker.error === 'broker_unreachable' ? '（消息队列不可达）' : ''}
+                ，队列里的任务没人消费，所以一直没有进度。请确认部署环境的 Celery worker 进程正在运行，
+                恢复后对卡住的任务点「重新触发」即可重新入队。
               </p>
             </div>
           )}
+
+          {worker?.online === true &&
+            runs.some(
+              (r) => ['pending', 'running'].includes(r.status) && r.completed + r.failed === 0,
+            ) && (
+              <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <p>
+                  worker 在线但有任务长时间零进度，可能是编排任务出错或被长任务阻塞。可点「重新触发」重新入队，
+                  或展开批次查看具体子任务的错误信息。
+                </p>
+              </div>
+            )}
 
           <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
             <table className="w-full text-left text-sm">
