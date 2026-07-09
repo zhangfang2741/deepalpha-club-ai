@@ -57,5 +57,6 @@ export const supplyGraphApi = {
   pauseRun: async (id: string) => (await apiClient.post(`/api/v1/supply-graph/runs/${id}/pause`)).data,
   resumeRun: async (id: string) => (await apiClient.post(`/api/v1/supply-graph/runs/${id}/resume`)).data,
   retryFailed: async (id: string) => (await apiClient.post(`/api/v1/supply-graph/runs/${id}/retry-failed`)).data,
+  restartRun: async (id: string) => (await apiClient.post(`/api/v1/supply-graph/runs/${id}/restart`)).data,
   clues: async (edgeId: string) => (await apiClient.get(`/api/v1/supply-graph/edges/${edgeId}/clues`)).data,
 }

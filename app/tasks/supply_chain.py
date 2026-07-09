@@ -21,8 +21,26 @@ from app.services.supply_chain.pipeline import run_company_pipeline
 def run_supply_chain_batch(run_id: str) -> dict:
     """Enumerate a configured universe and queue one task per company."""
     run_uuid = uuid.UUID(run_id)
-    universe = FMPUniverse()
-    companies = asyncio.run(universe.load())
+    # 立即标记 running，避免枚举阶段（较慢）期间界面一直显示"待处理"
+    with get_sync_session_cm() as session:
+        run = session.get(SupplyChainRun, run_uuid)
+        if run is None:
+            return {"missing": True}
+        run.status, run.started_at = "running", run.started_at or datetime.now(UTC)
+        session.commit()
+    try:
+        universe = FMPUniverse()
+        companies = asyncio.run(universe.load())
+    except Exception as exc:
+        # 枚举失败（FMP 报错/无 key/网络）时显式置 failed，避免永远静默卡在待处理
+        with get_sync_session_cm() as session:
+            run = session.get(SupplyChainRun, run_uuid)
+            if run is not None:
+                run.status, run.finished_at = "failed", datetime.now(UTC)
+                run.params = {**run.params, "error": str(exc)}
+                session.commit()
+        logger.exception("supply_chain_batch_enumerate_failed", run_id=run_id)
+        return {"failed": True, "error": str(exc)}
     with get_sync_session_cm() as session:
         run = session.get(SupplyChainRun, run_uuid)
         if run is None:
@@ -34,6 +52,12 @@ def run_supply_chain_batch(run_id: str) -> dict:
             symbols = symbols[:500]
         elif run.universe == "russell1000":
             symbols = symbols[:1000]
+        if not symbols:
+            # 成分股为空（多为缺 FMP_API_KEY 或接口异常）——置 failed 并说明，避免误报"已完成"
+            run.status, run.finished_at = "failed", datetime.now(UTC)
+            run.params = {**run.params, "error": "成分股列表为空，请检查 FMP_API_KEY 与行情接口"}
+            session.commit()
+            return {"queued": 0, "empty": True}
         run.total, run.status = len(symbols), "running"
         for ticker in symbols:
             task = SupplyChainTask(run_id=run_uuid, ticker=ticker)
@@ -41,8 +65,6 @@ def run_supply_chain_batch(run_id: str) -> dict:
             session.flush()
             queued = process_company.delay(run_id, ticker)  # pyright: ignore[reportFunctionMemberAccess]
             task.celery_task_id = queued.id
-        if not symbols:
-            run.status, run.finished_at = "done", datetime.now(UTC)
         session.commit()
     return {"queued": len(symbols)}
 

@@ -108,6 +108,42 @@ def retry_failed(request: Request, run_id: uuid.UUID, session: Session = Depends
     return {"requeued": len(tasks)}
 
 
+@router.post("/runs/{run_id}/restart")
+@limiter.limit("20/minute")
+def restart_run(request: Request, run_id: uuid.UUID, session: Session = Depends(get_sync_session)) -> dict:
+    """Re-trigger a stuck run whose orchestration never produced subtasks.
+
+    针对停在"待处理/失败"且未成功枚举的 run：清掉旧子任务后重新入队编排任务
+    （批次）或重新执行单公司任务，让 worker 恢复后能继续。
+    """
+    run = session.get(SupplyChainRun, run_id)
+    if run is None:
+        raise HTTPException(404, "run not found")
+    # 仅拦截"确有进度的运行中"任务；0 进度的卡死任务允许重启
+    if run.status == "running" and run.total > 0 and 0 < run.completed + run.failed < run.total:
+        raise HTTPException(409, "run is progressing; use pause/resume/retry-failed instead")
+    old_tasks = session.exec(select(SupplyChainTask).where(SupplyChainTask.run_id == run_id)).all()
+    for task in old_tasks:
+        session.delete(task)
+    run.status, run.total, run.completed, run.failed = "pending", 0, 0, 0
+    run.started_at = run.finished_at = run.quota_paused_at = run.resume_after = None
+    run.probe_attempts = 0
+    run.params = {key: value for key, value in run.params.items() if key != "error"}
+    session.commit()
+    if run.run_type == "batch":
+        run_supply_chain_batch.delay(str(run_id))  # pyright: ignore[reportFunctionMemberAccess]
+    else:
+        ticker = run.universe.upper()
+        task = SupplyChainTask(run_id=run_id, ticker=ticker)
+        run.total = 1
+        session.add(task)
+        session.commit()
+        result = process_company.delay(str(run_id), ticker)  # pyright: ignore[reportFunctionMemberAccess]
+        task.celery_task_id = result.id
+        session.commit()
+    return {"status": "restarting"}
+
+
 @router.get("/graph")
 @limiter.limit("120/minute")
 def get_graph(request: Request, ticker: str, depth: int = Query(1, ge=1, le=3), direction: str = "both", session: Session = Depends(get_sync_session)) -> dict:

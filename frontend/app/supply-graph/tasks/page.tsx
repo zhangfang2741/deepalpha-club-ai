@@ -7,7 +7,7 @@ import {
   type SupplyRun,
   type SupplyTask,
 } from '@/lib/api/supplyGraph'
-import { AlertCircle, Loader2, Pause, Play, RefreshCw, RotateCcw } from 'lucide-react'
+import { AlertCircle, Loader2, Pause, Play, RefreshCw, RotateCcw, Zap } from 'lucide-react'
 
 const UNIVERSES: { value: string; label: string }[] = [
   { value: 'sp500', label: 'S&P 500' },
@@ -221,11 +221,12 @@ export default function SupplyGraphTasksPage() {
   }, [universe, loadRuns])
 
   const runAction = useCallback(
-    async (runId: string, action: 'pause' | 'resume' | 'retry') => {
+    async (runId: string, action: 'pause' | 'resume' | 'retry' | 'restart') => {
       setPendingAction(`${runId}:${action}`)
       try {
         if (action === 'pause') await supplyGraphApi.pauseRun(runId)
         else if (action === 'resume') await supplyGraphApi.resumeRun(runId)
+        else if (action === 'restart') await supplyGraphApi.restartRun(runId)
         else await supplyGraphApi.retryFailed(runId)
         await loadRuns()
         if (expandedRef.current === runId) await loadTasks(runId)
@@ -295,6 +296,18 @@ export default function SupplyGraphTasksPage() {
             </div>
           )}
 
+          {runs.some(
+            (r) => ['pending', 'running'].includes(r.status) && r.completed + r.failed === 0,
+          ) && (
+            <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <p>
+                有任务长时间零进度（0/0 或 0/N）。这通常表示后台 worker 未在运行（Celery worker
+                服务未部署或已停止），队列里的任务没人消费。请确认部署环境的 worker 进程正常，恢复后可点「重新触发」重新入队。
+              </p>
+            </div>
+          )}
+
           <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-100 text-slate-600">
@@ -321,7 +334,13 @@ export default function SupplyGraphTasksPage() {
                   </tr>
                 ) : (
                   runs.map((run) => {
-                    const canPause = ['running', 'pending'].includes(run.status)
+                    const noProgress = run.completed + run.failed === 0
+                    // 卡死：待处理/失败，或运行中但零进度——可重新触发编排
+                    const canRestart =
+                      run.status === 'pending' ||
+                      run.status === 'failed' ||
+                      (run.status === 'running' && noProgress)
+                    const canPause = ['running', 'pending'].includes(run.status) && !noProgress
                     const canResume = ['paused', 'paused_quota'].includes(run.status)
                     const canRetry = run.failed > 0
                     const expanded = expandedId === run.id
@@ -376,6 +395,16 @@ export default function SupplyGraphTasksPage() {
                                 >
                                   <RotateCcw className="h-3 w-3" aria-hidden="true" />
                                   重试失败
+                                </button>
+                              )}
+                              {canRestart && (
+                                <button
+                                  onClick={() => runAction(run.id, 'restart')}
+                                  disabled={isBusy(run.id, 'restart')}
+                                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-blue-200 px-2.5 py-1 text-xs text-blue-700 transition-colors hover:bg-blue-50 disabled:opacity-50"
+                                >
+                                  <Zap className="h-3 w-3" aria-hidden="true" />
+                                  重新触发
                                 </button>
                               )}
                             </div>
