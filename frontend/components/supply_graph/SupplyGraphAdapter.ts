@@ -36,7 +36,77 @@ export type G6Edge = {
 };
 export type G6Data = { nodes: G6Node[]; edges: G6Edge[] };
 
-const nodeToG6 = (node: SupplyNode, isFocus: boolean): G6Node => {
+export type NodeRole = "focus" | "supplier" | "customer" | "unknown";
+
+// 相对焦点节点计算每个节点的角色：所有边约定 src=上游、dst=下游，
+// 因此从焦点沿「入边」回溯到的是它的供应商（上游），沿「出边」到达的是它的客户（下游）。
+// 这样即便某条边以对方视角存储（如 TER→NVDA 记为「NVDA 是 TER 的客户」），
+// 在以 NVDA 为焦点的图里 TER 仍正确显示为 NVDA 的供应商。
+export const computeNodeRoles = (
+  graph: SupplyGraph,
+  focusId?: string,
+): Map<string, NodeRole> => {
+  const roles = new Map<string, NodeRole>();
+  if (!focusId) {
+    graph.nodes.forEach((node) => roles.set(node.nodeId, "unknown"));
+    return roles;
+  }
+  const incoming = new Map<string, string[]>();
+  const outgoing = new Map<string, string[]>();
+  graph.edges.forEach((edge) => {
+    if (!incoming.has(edge.dstId)) incoming.set(edge.dstId, []);
+    incoming.get(edge.dstId)!.push(edge.srcId);
+    if (!outgoing.has(edge.srcId)) outgoing.set(edge.srcId, []);
+    outgoing.get(edge.srcId)!.push(edge.dstId);
+  });
+  const walk = (adjacency: Map<string, string[]>) => {
+    const reached = new Set<string>();
+    const stack = [focusId];
+    const seen = new Set([focusId]);
+    while (stack.length) {
+      const current = stack.pop()!;
+      for (const next of adjacency.get(current) ?? []) {
+        if (seen.has(next)) continue;
+        seen.add(next);
+        reached.add(next);
+        stack.push(next);
+      }
+    }
+    return reached;
+  };
+  const supplierSide = walk(incoming);
+  const customerSide = walk(outgoing);
+  graph.nodes.forEach((node) => {
+    if (node.nodeId === focusId) roles.set(node.nodeId, "focus");
+    else if (supplierSide.has(node.nodeId)) roles.set(node.nodeId, "supplier");
+    else if (customerSide.has(node.nodeId)) roles.set(node.nodeId, "customer");
+    else roles.set(node.nodeId, "unknown");
+  });
+  return roles;
+};
+
+// 边相对焦点属于「供应链（流向焦点）」还是「客户链（离开焦点）」。
+export const resolveEdgeRole = (
+  edge: SupplyEdge,
+  roles: Map<string, NodeRole>,
+  focusId?: string,
+): "supply" | "customer" => {
+  if (edge.dstId === focusId || roles.get(edge.dstId) === "supplier")
+    return "supply";
+  if (edge.srcId === focusId || roles.get(edge.srcId) === "customer")
+    return "customer";
+  return edge.edgeType === "SUPPLIED_BY" ? "supply" : "customer";
+};
+
+const ROLE_STROKE: Record<NodeRole, string> = {
+  focus: "#f5a623",
+  supplier: "#4f8df7",
+  customer: "#22b983",
+  unknown: "#94a3b8",
+};
+
+const nodeToG6 = (node: SupplyNode, role: NodeRole): G6Node => {
+  const isFocus = role === "focus";
   const data = props(node.properties);
   const name = String(data.name || node.nodeId);
   const nameZh = data.name_zh ? String(data.name_zh) : "";
@@ -64,11 +134,7 @@ const nodeToG6 = (node: SupplyNode, isFocus: boolean): G6Node => {
       labelPlacement: "bottom",
       labelOffsetY: 12,
       fill: isFocus ? "#fff4d6" : "#f7faff",
-      stroke: isFocus
-        ? "#f5a623"
-        : node.nodeType === "supplier"
-          ? "#4f8df7"
-          : "#22b983",
+      stroke: ROLE_STROKE[role],
       lineWidth: isFocus ? 4 : 3,
       size: isFocus ? 72 : 54,
       iconSrc: ticker ? undefined : HOME_ICON,
@@ -91,7 +157,7 @@ const nodeToG6 = (node: SupplyNode, isFocus: boolean): G6Node => {
   };
 };
 
-const edgeToG6 = (edge: SupplyEdge): G6Edge => {
+const edgeToG6 = (edge: SupplyEdge, role: "supply" | "customer"): G6Edge => {
   const data = props(edge.properties);
   const confidence = Number(data.confidence || 0);
   const product = compactProduct(
@@ -113,7 +179,7 @@ const edgeToG6 = (edge: SupplyEdge): G6Edge => {
       labelBackgroundOpacity: 0.9,
       labelBackgroundRadius: 6,
       labelPadding: [5, 8],
-      stroke: edge.edgeType === "SUPPLIED_BY" ? "#66b7f0" : "#65cf98",
+      stroke: role === "supply" ? "#66b7f0" : "#65cf98",
       strokeOpacity: 0.85,
       lineWidth: confidence >= 80 ? 2.5 : 2,
       endArrow: true,
@@ -135,9 +201,14 @@ export const adaptGraph = (
   const focusId =
     preferredFocusId ||
     [...degree.entries()].sort((left, right) => right[1] - left[1])[0]?.[0];
+  const roles = computeNodeRoles(graph, focusId);
   return {
-    nodes: graph.nodes.map((node) => nodeToG6(node, node.nodeId === focusId)),
-    edges: graph.edges.map(edgeToG6),
+    nodes: graph.nodes.map((node) =>
+      nodeToG6(node, roles.get(node.nodeId) ?? "unknown"),
+    ),
+    edges: graph.edges.map((edge) =>
+      edgeToG6(edge, resolveEdgeRole(edge, roles, focusId)),
+    ),
   };
 };
 

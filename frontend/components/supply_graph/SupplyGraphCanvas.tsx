@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SupplyGraph } from "@/lib/api/supplyGraph";
-import { adaptGraph, type G6Node } from "./SupplyGraphAdapter";
+import {
+  adaptGraph,
+  computeNodeRoles,
+  resolveEdgeRole,
+  type G6Node,
+} from "./SupplyGraphAdapter";
 
 type Direction = "upstream" | "downstream" | "both";
 type ContextMenu = { nodeId: string; x: number; y: number } | null;
@@ -103,44 +108,36 @@ export default function SupplyGraphCanvas({
     focusRef.current = focusId;
   });
 
-  // 每个节点/边在当前图例下是否应可见（隐藏只改可见性，不触发重新布局）。
-  const nodeVisible = (nodeType: string | undefined, isFocus: boolean) =>
-    isFocus ||
-    (nodeType === "supplier"
-      ? visibilityRef.current.suppliers
-      : visibilityRef.current.customers);
-
+  // 按「相对焦点角色」判断显隐，与节点/边着色保持一致（隐藏只改可见性，不重排）。
   const applyVisibility = (instance: G6GraphInstance) => {
     const current = graphRef.current;
     const focus = focusRef.current;
-    const typeById = new Map(
-      current.nodes.map((node) => [node.nodeId, node.nodeType]),
-    );
+    const roles = computeNodeRoles(current, focus);
+    const legend = visibilityRef.current;
+    const nodeVisible = (id: string) => {
+      const role = roles.get(id);
+      if (role === "focus" || role === undefined) return true;
+      if (role === "supplier") return legend.suppliers;
+      if (role === "customer") return legend.customers;
+      return true; // unknown 始终显示
+    };
     for (const node of current.nodes) {
-      const visible = nodeVisible(node.nodeType, node.nodeId === focus);
       try {
         instance.setElementVisibility(
           node.nodeId,
-          visible ? "visible" : "hidden",
+          nodeVisible(node.nodeId) ? "visible" : "hidden",
         );
       } catch {
         /* 元素可能尚未渲染，忽略 */
       }
     }
     for (const edge of current.edges) {
-      const srcVisible = nodeVisible(
-        typeById.get(edge.srcId),
-        edge.srcId === focus,
-      );
-      const dstVisible = nodeVisible(
-        typeById.get(edge.dstId),
-        edge.dstId === focus,
-      );
       const typeVisible =
-        edge.edgeType === "SUPPLIED_BY"
-          ? visibilityRef.current.supplierEdges
-          : visibilityRef.current.customerEdges;
-      const visible = typeVisible && srcVisible && dstVisible;
+        resolveEdgeRole(edge, roles, focus) === "supply"
+          ? legend.supplierEdges
+          : legend.customerEdges;
+      const visible =
+        typeVisible && nodeVisible(edge.srcId) && nodeVisible(edge.dstId);
       try {
         instance.setElementVisibility(
           edge.edgeId,
@@ -326,7 +323,6 @@ export default function SupplyGraphCanvas({
     visibilityRef.current = visibility;
     const instance = instanceRef.current;
     if (instance) applyVisibility(instance);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibility]);
 
   // 组件卸载时销毁实例。

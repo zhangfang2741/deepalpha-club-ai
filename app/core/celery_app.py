@@ -15,3 +15,6 @@ celery_app.conf.update(
     worker_concurrency=settings.SUPPLY_CHAIN_WORKER_CONCURRENCY,
     imports=("app.tasks.supply_chain",),
 )
+
+# 注册 worker 心跳信号（worker 进程 import 本模块时生效）。
+from app.services.supply_chain import worker_heartbeat  # noqa: E402,F401
