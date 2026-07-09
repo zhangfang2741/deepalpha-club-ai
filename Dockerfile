@@ -30,7 +30,7 @@ RUN uv venv && . .venv/bin/activate && uv pip install -e .
 COPY . .
 
 # Make entrypoint script executable - do this before changing user
-RUN chmod +x /app/scripts/docker-entrypoint.sh /app/start.sh
+RUN chmod +x /app/scripts/docker-entrypoint.sh /app/start.sh /app/scripts/start_web_with_worker.sh
 
 # Create a non-root user
 RUN useradd -m appuser && chown -R appuser:appuser /app

@@ -552,20 +552,9 @@ export default function SupplyGraphPage() {
       setClues([]);
       setExpanding(true);
       setErrorMessage("");
-      setFeedback(
-        focusTicker
-          ? `正在基于真实环境分析 ${name} 的供应链和大客户…`
-          : `正在同时扩展 ${name} 的供应链和大客户…`,
-      );
+      setFeedback(`正在扩展 ${name} 的供应链和大客户…`);
       setExploring(true);
-      if (focusTicker) {
-        setProgress("DISCOVER");
-        const created = (await supplyGraphApi.runCompany(focusTicker)) as {
-          run_id: string;
-        };
-        await waitForSupplyRun(created.run_id, setProgress);
-      }
-      setFeedback(`正在合并 ${name} 的上下游关系…`);
+      // 直接展开已有图数据，立即出点边；生成新数据请用「生成核心关系」按钮，避免双击被流水线阻塞。
       const expandSeed = focusTicker || id;
       const [upstream, downstream] = await Promise.all([
         supplyGraphApi.expand(expandSeed, 1, "upstream"),
