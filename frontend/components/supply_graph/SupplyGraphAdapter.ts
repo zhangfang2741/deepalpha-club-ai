@@ -49,9 +49,7 @@ const nodeToG6 = (node: SupplyNode, isFocus: boolean): G6Node => {
     : US_TICKER.test(nodeIdTicker)
       ? nodeIdTicker
       : "";
-  const label = [nameZh, name, ticker && ticker !== name ? ticker : ""]
-    .filter(Boolean)
-    .join("\n");
+  const label = nameZh || name;
   return {
     id: String(node.nodeId),
     type: "circle",
@@ -81,14 +79,14 @@ const nodeToG6 = (node: SupplyNode, isFocus: boolean): G6Node => {
       iconFontSize: ticker
         ? ticker.length >= 5
           ? isFocus
-            ? 16
-            : 12
+            ? 14
+            : 10
           : isFocus
-            ? 20
-            : 15
+            ? 18
+            : 13
         : undefined,
-      iconWidth: isFocus ? 34 : 25,
-      iconHeight: isFocus ? 34 : 25,
+      iconWidth: isFocus ? 28 : 20,
+      iconHeight: isFocus ? 28 : 20,
     },
   };
 };
@@ -96,7 +94,6 @@ const nodeToG6 = (node: SupplyNode, isFocus: boolean): G6Node => {
 const edgeToG6 = (edge: SupplyEdge): G6Edge => {
   const data = props(edge.properties);
   const confidence = Number(data.confidence || 0);
-  const unverified = data.confidence_source === "UNVERIFIED";
   const product = compactProduct(
     String(data.product || data.product_text || "产品未披露"),
   );
@@ -116,11 +113,7 @@ const edgeToG6 = (edge: SupplyEdge): G6Edge => {
       labelBackgroundOpacity: 0.9,
       labelBackgroundRadius: 6,
       labelPadding: [5, 8],
-      stroke: unverified
-        ? "#f0b44d"
-        : edge.edgeType === "SUPPLIED_BY"
-          ? "#66b7f0"
-          : "#65cf98",
+      stroke: edge.edgeType === "SUPPLIED_BY" ? "#66b7f0" : "#65cf98",
       strokeOpacity: 0.85,
       lineWidth: confidence >= 80 ? 2.5 : 2,
       endArrow: true,

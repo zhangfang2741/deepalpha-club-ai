@@ -2,7 +2,8 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   AlertCircle,
   ArrowRight,
@@ -72,17 +73,6 @@ const MOAT_BADGE_STYLES: Record<CompanyProfile['moat_rating'], string> = {
 
 function normalizeTicker(value: string) {
   return value.trim().toUpperCase().replace('/', '.')
-}
-
-function getInitialCompanyResearchSymbol() {
-  if (typeof window === 'undefined') return 'NVDA'
-  const params = new URLSearchParams(window.location.search)
-  return normalizeTicker(params.get('symbol') || params.get('ticker') || 'NVDA') || 'NVDA'
-}
-
-function isEmbeddedCompanyResearch() {
-  if (typeof window === 'undefined') return false
-  return new URLSearchParams(window.location.search).get('embedded') === '1'
 }
 
 function formatDate(value: string | null | undefined) {
@@ -855,11 +845,16 @@ function EmptyState({ icon: Icon, text }: { icon: typeof Building2; text: string
   )
 }
 
-export default function CompanyResearchPage() {
-  const [query, setQuery] = useState(getInitialCompanyResearchSymbol)
-  const [ticker, setTicker] = useState(getInitialCompanyResearchSymbol)
+function CompanyResearchContent() {
+  const searchParams = useSearchParams()
+  const initialSymbol = useMemo(
+    () => normalizeTicker(searchParams.get('symbol') || searchParams.get('ticker') || 'NVDA') || 'NVDA',
+    [searchParams],
+  )
+  const [query, setQuery] = useState(initialSymbol)
+  const [ticker, setTicker] = useState(initialSymbol)
   const [activeTab, setActiveTab] = useState<ResearchTab>('overview')
-  const embedded = isEmbeddedCompanyResearch()
+  const embedded = searchParams.get('embedded') === '1'
   const didInitialLoad = useRef(false)
   const profileAbortRef = useRef<AbortController | null>(null)
 
@@ -1071,45 +1066,47 @@ export default function CompanyResearchPage() {
           </div>
         </div>
 
-        <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value.toUpperCase())}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') runSearch(query)
-                }}
-                placeholder="股票代码或 CIK，如 NVDA / AAPL / 320193"
-                className="h-11 w-full rounded-xl border border-gray-200 bg-gray-50 pl-10 pr-3 text-base font-semibold tracking-wide text-gray-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-              />
-            </div>
-            <button
-              onClick={() => runSearch(query)}
-              disabled={profileLoading || filingsLoading || transcriptListLoading}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
-            >
-              {profileLoading || filingsLoading || transcriptListLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Search className="h-4 w-4" />
-              )}
-              查询
-            </button>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {QUICK_TICKERS.map((symbol) => (
+        {!embedded && (
+          <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value.toUpperCase())}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') runSearch(query)
+                  }}
+                  placeholder="股票代码或 CIK，如 NVDA / AAPL / 320193"
+                  className="h-11 w-full rounded-xl border border-gray-200 bg-gray-50 pl-10 pr-3 text-base font-semibold tracking-wide text-gray-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                />
+              </div>
               <button
-                key={symbol}
-                onClick={() => runSearch(symbol)}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 transition hover:border-blue-500 hover:text-blue-700"
+                onClick={() => runSearch(query)}
+                disabled={profileLoading || filingsLoading || transcriptListLoading}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
               >
-                {symbol}
+                {profileLoading || filingsLoading || transcriptListLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+                查询
               </button>
-            ))}
-          </div>
-        </section>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {QUICK_TICKERS.map((symbol) => (
+                <button
+                  key={symbol}
+                  onClick={() => runSearch(symbol)}
+                  className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 transition hover:border-blue-500 hover:text-blue-700"
+                >
+                  {symbol}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
         <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-gray-200 bg-white p-1">
           {TABS.map((tab) => {
@@ -1186,5 +1183,13 @@ export default function CompanyResearchPage() {
     <DashboardShell>
       {content}
     </DashboardShell>
+  )
+}
+
+export default function CompanyResearchPage() {
+  return (
+    <Suspense fallback={<div className="p-4" />}>
+      <CompanyResearchContent />
+    </Suspense>
   )
 }

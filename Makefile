@@ -99,7 +99,7 @@ pre-commit-update:
 	uv run pre-commit autoupdate
 
 # ---------------------------------------------------------------------------
-# Docker — single service (API + DB)
+# Docker — API + background worker + dependencies
 # ---------------------------------------------------------------------------
 docker-build:
 	$(call check_env)
@@ -107,7 +107,7 @@ docker-build:
 
 docker-up:
 	$(call load_env_file)
-	@APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file .env.$(ENV) up -d --build db app
+	@APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file .env.$(ENV) up -d --build db valkey app worker
 
 docker-down:
 	$(call load_env_file)

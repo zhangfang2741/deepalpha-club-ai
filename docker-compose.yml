@@ -66,6 +66,29 @@ services:
     networks:
       - monitoring
 
+  worker:
+    build:
+      context: .
+      args:
+        APP_ENV: ${APP_ENV:-development}
+    command: ["/app/.venv/bin/celery", "-A", "app.core.celery_app.celery_app", "worker", "--loglevel=info", "-Q", "supply_chain"]
+    volumes:
+      - ./app:/app/app
+      - ./logs:/app/logs
+    env_file:
+      - .env.${APP_ENV:-development}
+    environment:
+      - APP_ENV=${APP_ENV:-development}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-supersecretkeythatshouldbechangedforproduction}
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    restart: on-failure
+    networks:
+      - monitoring
+
   # Prometheus
   prometheus:
     image: prom/prometheus:latest
