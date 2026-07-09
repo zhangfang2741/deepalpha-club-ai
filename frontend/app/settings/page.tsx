@@ -1,8 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { ListChecks } from 'lucide-react'
 import { getUserProfile, updateUserProfile, changePassword, type UserProfileResponse } from '@/lib/api/auth'
 import DashboardShell from '@/components/layout/DashboardShell'
+
+// 从 Axios 风格错误中安全提取后端返回的 detail 字段
+const getErrorDetail = (err: unknown): unknown =>
+  (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<UserProfileResponse | null>(null)
@@ -37,7 +43,7 @@ export default function SettingsPage() {
         const data = await getUserProfile()
         setProfile(data)
         setUsername(data.username || '')
-      } catch (err: any) {
+      } catch (err) {
         setError('加载用户资料失败，请刷新页面重试')
         console.error('Failed to load profile:', err)
       } finally {
@@ -59,8 +65,9 @@ export default function SettingsPage() {
       const updated = await updateUserProfile({ username: username || null })
       setProfile(updated)
       setSuccess('个人资料已更新')
-    } catch (err: any) {
-      setError(err.response?.data?.detail || '更新失败，请稍后重试')
+    } catch (err) {
+      const detail = getErrorDetail(err)
+      setError(typeof detail === 'string' ? detail : '更新失败，请稍后重试')
       console.error('Failed to update profile:', err)
     } finally {
       setSaving(false)
@@ -111,12 +118,12 @@ export default function SettingsPage() {
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
-    } catch (err: any) {
-      const detail = err.response?.data?.detail
-      if (typeof detail === 'object' && detail?.message) {
-        setPasswordError(detail.message)
+    } catch (err) {
+      const detail = getErrorDetail(err)
+      if (detail && typeof detail === 'object' && 'message' in detail) {
+        setPasswordError(String((detail as { message: unknown }).message))
       } else {
-        setPasswordError(err.response?.data?.detail || '密码修改失败，请稍后重试')
+        setPasswordError(typeof detail === 'string' ? detail : '密码修改失败，请稍后重试')
       }
       console.error('Failed to change password:', err)
     } finally {
@@ -126,7 +133,7 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div>
+      <DashboardShell>
         <h1 className="text-2xl font-bold text-gray-900 mb-6">个人设置</h1>
         <div className="max-w-xl space-y-6">
           <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -138,7 +145,7 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
-      </div>
+      </DashboardShell>
     )
   }
 
@@ -245,6 +252,27 @@ export default function SettingsPage() {
               {passwordLoading ? '修改中...' : '修改密码'}
             </button>
           </form>
+        </div>
+
+        {/* System / Task Management */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="text-base font-semibold text-gray-900 mb-1">系统管理</h2>
+          <p className="text-sm text-gray-500 mb-4">查看后台批量任务的运行情况，失败任务可在此继续。</p>
+          <Link
+            href="/supply-graph/tasks"
+            className="flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-colors hover:bg-gray-50"
+          >
+            <span className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                <ListChecks className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <span>
+                <span className="block text-sm font-medium text-gray-900">供应链任务看板</span>
+                <span className="block text-xs text-gray-500">批次进度、配额等待与失败重试一览</span>
+              </span>
+            </span>
+            <span className="text-gray-400" aria-hidden="true">›</span>
+          </Link>
         </div>
       </div>
     </DashboardShell>

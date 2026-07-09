@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import DashboardShell from "@/components/layout/DashboardShell";
 import CompanyResearchDrawer from "@/components/supply_graph/CompanyResearchDrawer";
 import EdgeClueDrawer from "@/components/supply_graph/EdgeClueDrawer";
@@ -652,6 +653,13 @@ export default function SupplyGraphPage() {
                 聚焦每家公司的核心供应商与大客户。
               </p>
             </div>
+            <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
+            <Link
+              href="/supply-graph/tasks"
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl border bg-white px-4 py-2 text-slate-600 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              任务看板
+            </Link>
             <form
               onSubmit={submit}
               className="flex w-full min-w-0 gap-2 sm:w-auto"
@@ -682,6 +690,7 @@ export default function SupplyGraphPage() {
                 {loading ? "查询中…" : "查询公司"}
               </button>
             </form>
+            </div>
           </header>
           <div
             aria-live="polite"
