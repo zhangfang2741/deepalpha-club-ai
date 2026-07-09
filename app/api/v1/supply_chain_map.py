@@ -52,18 +52,27 @@ def create_run(request: Request, body: RunCreate, session: Session = Depends(get
 @router.get("/worker-status")
 @limiter.limit("60/minute")
 def worker_status(request: Request) -> dict:
-    """Ping Celery workers so the UI can tell online from offline.
+    """Report whether a Celery worker is consuming the queue.
 
-    通过 Celery 控制通道广播 ping，只有正在消费队列的 worker 会回应；
-    无回应即视为离线（部署未起 worker / worker 已停）。
+    优先读取 worker 主动写入的 Redis 心跳（不受 broker 广播往返延迟影响，最可靠）；
+    心跳缺失时再回退到 control.ping 广播探活（放宽超时到 2.5s，避免云端延迟误报）。
     """
+    from app.services.supply_chain.worker_heartbeat import read_worker_heartbeat
+
+    if read_worker_heartbeat():
+        return {"online": True, "count": 1, "workers": [], "source": "heartbeat"}
     try:
-        replies = celery_app.control.ping(timeout=1.0) or []
+        replies = celery_app.control.ping(timeout=2.5) or []
     except Exception as exc:
         logger.warning("supply_chain_worker_ping_failed", error=str(exc))
         return {"online": False, "count": 0, "workers": [], "error": "broker_unreachable"}
     workers = [name for reply in replies for name in reply]
-    return {"online": len(workers) > 0, "count": len(workers), "workers": workers}
+    return {
+        "online": len(workers) > 0,
+        "count": len(workers),
+        "workers": workers,
+        "source": "ping",
+    }
 
 
 @router.get("/runs")
