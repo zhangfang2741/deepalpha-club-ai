@@ -2,22 +2,21 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SupplyGraph } from "@/lib/api/supplyGraph";
-import { adaptGraph } from "./SupplyGraphAdapter";
+import { adaptGraph, type G6Node } from "./SupplyGraphAdapter";
 
 type Direction = "upstream" | "downstream" | "both";
 type ContextMenu = { nodeId: string; x: number; y: number } | null;
 type LegendKey = "suppliers" | "customers" | "supplierEdges" | "customerEdges";
 type LegendVisibility = Record<LegendKey, boolean>;
-type ViewportState = { position: [number, number]; zoom: number };
 type G6GraphInstance = {
   destroy: () => void;
   draw: () => Promise<void>;
-  getPosition: () => number[];
-  getZoom: () => number;
-  on: (event: string, handler: (event: unknown) => void) => void;
   render: () => Promise<void>;
-  translateTo: (position: [number, number], animation?: boolean) => Promise<void>;
-  zoomTo: (zoom: number, animation?: boolean) => Promise<void>;
+  on: (event: string, handler: (event: unknown) => void) => void;
+  addNodeData: (nodes: G6Node[]) => void;
+  addEdgeData: (edges: ReturnType<typeof adaptGraph>["edges"]) => void;
+  getElementPosition: (id: string) => number[];
+  setElementVisibility: (id: string, visibility: "visible" | "hidden") => void;
 };
 
 type GraphElementEvent = {
@@ -45,6 +44,8 @@ const INITIAL_VISIBILITY: LegendVisibility = {
   customerEdges: true,
 };
 const NODE_CLICK_CONFIRM_DELAY_MS = 320;
+const EXPAND_X_STEP = 210;
+const EXPAND_Y_STEP = 96;
 
 export default function SupplyGraphCanvas({
   graph,
@@ -60,10 +61,16 @@ export default function SupplyGraphCanvas({
   onNodeDoubleClick: (id: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const viewportStateRef = useRef<ViewportState | null>(null);
-  const renderedDataKeyRef = useRef<string>("");
+  const instanceRef = useRef<G6GraphInstance | null>(null);
+  const currentFocusRef = useRef<string | undefined>(undefined);
+  const renderedNodesRef = useRef<Set<string>>(new Set());
+  const renderedEdgesRef = useRef<Set<string>>(new Set());
+  const anchorCountRef = useRef<Map<string, number>>(new Map());
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTapRef = useRef<{ id: string; time: number } | null>(null);
+  const graphRef = useRef<SupplyGraph>(graph);
+  const focusRef = useRef<string | undefined>(undefined);
+  const visibilityRef = useRef<LegendVisibility>(INITIAL_VISIBILITY);
   const [contextMenu, setContextMenu] = useState<ContextMenu>(null);
   const [visibility, setVisibility] =
     useState<LegendVisibility>(INITIAL_VISIBILITY);
@@ -77,51 +84,142 @@ export default function SupplyGraphCanvas({
     [graph],
   );
 
-  const { visibleGraph, focusId } = useMemo(() => {
+  // 焦点：连接度最高的节点。用作 dagre 布局的中心与初次渲染的高亮点。
+  const focusId = useMemo(() => {
     const degree = new Map<string, number>();
     graph.edges.forEach((edge) => {
       degree.set(edge.srcId, (degree.get(edge.srcId) || 0) + 1);
       degree.set(edge.dstId, (degree.get(edge.dstId) || 0) + 1);
     });
-    const focusId = [...degree.entries()].sort(
+    return [...degree.entries()].sort(
       (left, right) => right[1] - left[1],
     )[0]?.[0];
-    const candidateNodes = graph.nodes.filter((node) => {
-      if (node.nodeId === focusId) return true;
-      if (node.nodeType === "supplier") return visibility.suppliers;
-      return visibility.customers;
-    });
-    const candidateNodeIds = new Set(candidateNodes.map((node) => node.nodeId));
-    const edges = graph.edges.filter((edge) => {
-      if (
-        !candidateNodeIds.has(edge.srcId) ||
-        !candidateNodeIds.has(edge.dstId)
-      )
-        return false;
-      if (edge.edgeType === "SUPPLIED_BY") return visibility.supplierEdges;
-      if (edge.edgeType === "CUSTOMER_OF") return visibility.customerEdges;
-      return true;
-    });
-    const connectedNodeIds = new Set<string>(focusId ? [focusId] : []);
-    edges.forEach((edge) => {
-      connectedNodeIds.add(edge.srcId);
-      connectedNodeIds.add(edge.dstId);
-    });
-    const nodes = candidateNodes.filter((node) =>
-      connectedNodeIds.has(node.nodeId),
+  }, [graph]);
+
+  // 同步最新 graph/focus 到 ref，供各 effect（增量放置、可见性）读取最新值。
+  // 声明在主 effect 之前，保证同一次提交里先更新 ref 再运行下面的 effect。
+  useEffect(() => {
+    graphRef.current = graph;
+    focusRef.current = focusId;
+  });
+
+  // 每个节点/边在当前图例下是否应可见（隐藏只改可见性，不触发重新布局）。
+  const nodeVisible = (nodeType: string | undefined, isFocus: boolean) =>
+    isFocus ||
+    (nodeType === "supplier"
+      ? visibilityRef.current.suppliers
+      : visibilityRef.current.customers);
+
+  const applyVisibility = (instance: G6GraphInstance) => {
+    const current = graphRef.current;
+    const focus = focusRef.current;
+    const typeById = new Map(
+      current.nodes.map((node) => [node.nodeId, node.nodeType]),
     );
-    return { visibleGraph: { ...graph, nodes, edges }, focusId };
-  }, [graph, visibility]);
+    for (const node of current.nodes) {
+      const visible = nodeVisible(node.nodeType, node.nodeId === focus);
+      try {
+        instance.setElementVisibility(
+          node.nodeId,
+          visible ? "visible" : "hidden",
+        );
+      } catch {
+        /* 元素可能尚未渲染，忽略 */
+      }
+    }
+    for (const edge of current.edges) {
+      const srcVisible = nodeVisible(
+        typeById.get(edge.srcId),
+        edge.srcId === focus,
+      );
+      const dstVisible = nodeVisible(
+        typeById.get(edge.dstId),
+        edge.dstId === focus,
+      );
+      const typeVisible =
+        edge.edgeType === "SUPPLIED_BY"
+          ? visibilityRef.current.supplierEdges
+          : visibilityRef.current.customerEdges;
+      const visible = typeVisible && srcVisible && dstVisible;
+      try {
+        instance.setElementVisibility(
+          edge.edgeId,
+          visible ? "visible" : "hidden",
+        );
+      } catch {
+        /* 元素可能尚未渲染，忽略 */
+      }
+    }
+  };
+
+  // 为新增节点就近分配坐标（相连的已有节点旁），从而不触发全局重新布局。
+  const placeNode = (instance: G6GraphInstance, node: G6Node) => {
+    const current = graphRef.current;
+    let anchorId: string | undefined;
+    let side = 1;
+    for (const edge of current.edges) {
+      if (edge.srcId === node.id && renderedNodesRef.current.has(edge.dstId)) {
+        anchorId = edge.dstId;
+        side = edge.edgeType === "SUPPLIED_BY" ? -1 : 1;
+        break;
+      }
+      if (edge.dstId === node.id && renderedNodesRef.current.has(edge.srcId)) {
+        anchorId = edge.srcId;
+        side = edge.edgeType === "SUPPLIED_BY" ? 1 : -1;
+        break;
+      }
+    }
+    let baseX = 0;
+    let baseY = 0;
+    if (anchorId) {
+      const [ax = 0, ay = 0] = instance.getElementPosition(anchorId);
+      baseX = ax;
+      baseY = ay;
+    }
+    const count = anchorCountRef.current.get(anchorId ?? node.id) ?? 0;
+    anchorCountRef.current.set(anchorId ?? node.id, count + 1);
+    const offset = Math.ceil((count + 1) / 2) * EXPAND_Y_STEP;
+    node.style.x = baseX + side * EXPAND_X_STEP;
+    node.style.y = baseY + (count % 2 === 0 ? offset : -offset);
+  };
 
   useEffect(() => {
     if (!containerRef.current) return;
     let disposed = false;
-    let instance: G6GraphInstance | undefined;
     void import("@antv/g6").then(({ Graph }) => {
       if (disposed || !containerRef.current) return;
-      const data = adaptGraph(visibleGraph, focusId);
-      const shouldRestoreViewport =
-        renderedDataKeyRef.current === graphDataKey && viewportStateRef.current;
+      const instance = instanceRef.current;
+      const focusChanged = currentFocusRef.current !== focusId;
+      // 若有已渲染节点不在新数据中（如「返回核心关系」收缩），走全量重建。
+      const incomingNodeIds = new Set(graph.nodes.map((node) => node.nodeId));
+      const shrank = [...renderedNodesRef.current].some(
+        (id) => !incomingNodeIds.has(id),
+      );
+
+      if (instance && !focusChanged && !shrank) {
+        // 增量更新：只加入新点边，已有节点位置与视口保持不变。
+        const data = adaptGraph(graph, focusId);
+        const newNodes = data.nodes.filter(
+          (node) => !renderedNodesRef.current.has(node.id),
+        );
+        const newEdges = data.edges.filter(
+          (edge) => !renderedEdgesRef.current.has(edge.id),
+        );
+        if (newNodes.length === 0 && newEdges.length === 0) return;
+        newNodes.forEach((node) => placeNode(instance, node));
+        newNodes.forEach((node) => renderedNodesRef.current.add(node.id));
+        newEdges.forEach((edge) => renderedEdgesRef.current.add(edge.id));
+        if (newNodes.length) instance.addNodeData(newNodes);
+        if (newEdges.length) instance.addEdgeData(newEdges);
+        void instance.draw().then(() => {
+          if (!disposed) applyVisibility(instance);
+        });
+        return;
+      }
+
+      // 首次渲染或切换焦点公司：全量创建并跑一次 dagre 布局。
+      instance?.destroy();
+      const data = adaptGraph(graph, focusId);
       const rendered = new Graph({
         container: containerRef.current,
         autoFit: "view",
@@ -135,9 +233,8 @@ export default function SupplyGraphCanvas({
         },
         behaviors: ["drag-canvas", "zoom-canvas", "drag-element"],
         plugins: [{ type: "minimap", size: [160, 100] }],
-      }) as G6GraphInstance;
-      // 手动检测双击/双击：触屏设备不触发原生 dblclick，统一用「同节点短时间内两次点击」判定，
-      // 这样桌面鼠标双击与手机双击都能触发展开。
+      }) as unknown as G6GraphInstance;
+
       const handleNodeDoubleClick = (nodeId: string) => {
         if (clickTimerRef.current) {
           clearTimeout(clickTimerRef.current);
@@ -146,6 +243,7 @@ export default function SupplyGraphCanvas({
         lastTapRef.current = null;
         onNodeDoubleClick(nodeId);
       };
+      // 手动检测双击：触屏不触发原生 dblclick，统一用「同节点 320ms 内两次点击」判定。
       rendered.on("node:click", (event) => {
         const graphEvent = event as unknown as GraphElementEvent;
         const nodeId = String(graphEvent.target.id);
@@ -199,40 +297,47 @@ export default function SupplyGraphCanvas({
         const rawY = clientY - (bounds?.top ?? 0) + 10;
         const x = Math.max(8, Math.min(rawX, (bounds?.width ?? 170) - 152));
         const y = Math.max(8, Math.min(rawY, (bounds?.height ?? 100) - 90));
-        setContextMenu({
-          nodeId: String(graphEvent.target.id),
-          x,
-          y,
-        });
+        setContextMenu({ nodeId: String(graphEvent.target.id), x, y });
       });
       rendered.on("canvas:click", () => setContextMenu(null));
-      void rendered.render().then(async () => {
+
+      void rendered.render().then(() => {
         if (disposed) return;
-        if (shouldRestoreViewport && viewportStateRef.current) {
-          await rendered.translateTo(viewportStateRef.current.position, false);
-          await rendered.zoomTo(viewportStateRef.current.zoom, false);
-          await rendered.draw();
-        }
-        renderedDataKeyRef.current = graphDataKey;
+        applyVisibility(rendered);
       });
-      instance = rendered;
+      instanceRef.current = rendered;
+      currentFocusRef.current = focusId;
+      renderedNodesRef.current = new Set(
+        graph.nodes.map((node) => node.nodeId),
+      );
+      renderedEdgesRef.current = new Set(
+        graph.edges.map((edge) => edge.edgeId),
+      );
+      anchorCountRef.current = new Map();
     });
     return () => {
       disposed = true;
-      if (clickTimerRef.current) {
-        clearTimeout(clickTimerRef.current);
-        clickTimerRef.current = null;
-      }
-      if (instance) {
-        const [x = 0, y = 0] = instance.getPosition();
-        viewportStateRef.current = {
-          position: [x, y],
-          zoom: instance.getZoom(),
-        };
-      }
-      instance?.destroy();
     };
-  }, [focusId, graphDataKey, visibleGraph, onEdge, onNode, onNodeDoubleClick]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graphDataKey, focusId, onEdge, onNode, onNodeDoubleClick]);
+
+  // 图例显隐：仅切换元素可见性，不改变布局与视口。
+  useEffect(() => {
+    visibilityRef.current = visibility;
+    const instance = instanceRef.current;
+    if (instance) applyVisibility(instance);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibility]);
+
+  // 组件卸载时销毁实例。
+  useEffect(
+    () => () => {
+      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+      instanceRef.current?.destroy();
+      instanceRef.current = null;
+    },
+    [],
+  );
 
   const expand = (direction: Direction) => {
     if (!contextMenu) return;
