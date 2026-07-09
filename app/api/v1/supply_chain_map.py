@@ -4,7 +4,9 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import Session, select
 
+from app.core.celery_app import celery_app
 from app.core.limiter import limiter
+from app.core.logging import logger
 from app.db.session import get_sync_session
 from app.models.supply_chain_clue import SupplyChainClue
 from app.models.supply_chain_node import SupplyChainNode
@@ -47,6 +49,23 @@ def create_run(request: Request, body: RunCreate, session: Session = Depends(get
     return RunCreated(run_id=run.id, status=run.status)
 
 
+@router.get("/worker-status")
+@limiter.limit("60/minute")
+def worker_status(request: Request) -> dict:
+    """Ping Celery workers so the UI can tell online from offline.
+
+    通过 Celery 控制通道广播 ping，只有正在消费队列的 worker 会回应；
+    无回应即视为离线（部署未起 worker / worker 已停）。
+    """
+    try:
+        replies = celery_app.control.ping(timeout=1.0) or []
+    except Exception as exc:
+        logger.warning("supply_chain_worker_ping_failed", error=str(exc))
+        return {"online": False, "count": 0, "workers": [], "error": "broker_unreachable"}
+    workers = [name for reply in replies for name in reply]
+    return {"online": len(workers) > 0, "count": len(workers), "workers": workers}
+
+
 @router.get("/runs")
 @limiter.limit("60/minute")
 def list_runs(request: Request, session: Session = Depends(get_sync_session)) -> list[SupplyChainRun]:
@@ -87,13 +106,21 @@ def resume_run(request: Request, run_id: uuid.UUID, session: Session = Depends(g
         raise HTTPException(404, "run not found")
     if run.status == "paused_quota":
         resume_run_if_quota_recovered.delay(str(run_id))  # pyright: ignore[reportFunctionMemberAccess]
-    else:
-        run.status = "running"
-        tasks = session.exec(select(SupplyChainTask).where(SupplyChainTask.run_id == run_id, SupplyChainTask.status == "queued")).all()
-        for task in tasks:
-            process_company.delay(str(run_id), task.ticker)  # pyright: ignore[reportFunctionMemberAccess]
-        session.commit()
-    return {"status": "resuming"}
+        return {"status": "resuming", "requeued": 0}
+    run.status = "running"
+    # 续跑：重投所有未完成子任务，包含 worker 崩溃遗留的 running/retrying 孤儿；
+    # 已成功的公司（success）跳过不重做，失败的（failed）交给 retry-failed。
+    resumable = {"queued", "running", "retrying", "paused_quota"}
+    tasks = session.exec(select(SupplyChainTask).where(SupplyChainTask.run_id == run_id)).all()
+    requeued = 0
+    for task in tasks:
+        if task.status not in resumable:
+            continue
+        task.status, task.resume_after = "queued", None
+        process_company.delay(str(run_id), task.ticker)  # pyright: ignore[reportFunctionMemberAccess]
+        requeued += 1
+    session.commit()
+    return {"status": "resuming", "requeued": requeued}
 
 
 @router.post("/runs/{run_id}/retry-failed")
@@ -106,6 +133,42 @@ def retry_failed(request: Request, run_id: uuid.UUID, session: Session = Depends
         process_company.delay(str(run_id), task.ticker)  # pyright: ignore[reportFunctionMemberAccess]
     session.commit()
     return {"requeued": len(tasks)}
+
+
+@router.post("/runs/{run_id}/restart")
+@limiter.limit("20/minute")
+def restart_run(request: Request, run_id: uuid.UUID, session: Session = Depends(get_sync_session)) -> dict:
+    """Re-trigger a stuck run whose orchestration never produced subtasks.
+
+    针对停在"待处理/失败"且未成功枚举的 run：清掉旧子任务后重新入队编排任务
+    （批次）或重新执行单公司任务，让 worker 恢复后能继续。
+    """
+    run = session.get(SupplyChainRun, run_id)
+    if run is None:
+        raise HTTPException(404, "run not found")
+    # 仅拦截"确有进度的运行中"任务；0 进度的卡死任务允许重启
+    if run.status == "running" and run.total > 0 and 0 < run.completed + run.failed < run.total:
+        raise HTTPException(409, "run is progressing; use pause/resume/retry-failed instead")
+    old_tasks = session.exec(select(SupplyChainTask).where(SupplyChainTask.run_id == run_id)).all()
+    for task in old_tasks:
+        session.delete(task)
+    run.status, run.total, run.completed, run.failed = "pending", 0, 0, 0
+    run.started_at = run.finished_at = run.quota_paused_at = run.resume_after = None
+    run.probe_attempts = 0
+    run.params = {key: value for key, value in run.params.items() if key != "error"}
+    session.commit()
+    if run.run_type == "batch":
+        run_supply_chain_batch.delay(str(run_id))  # pyright: ignore[reportFunctionMemberAccess]
+    else:
+        ticker = run.universe.upper()
+        task = SupplyChainTask(run_id=run_id, ticker=ticker)
+        run.total = 1
+        session.add(task)
+        session.commit()
+        result = process_company.delay(str(run_id), ticker)  # pyright: ignore[reportFunctionMemberAccess]
+        task.celery_task_id = result.id
+        session.commit()
+    return {"status": "restarting"}
 
 
 @router.get("/graph")

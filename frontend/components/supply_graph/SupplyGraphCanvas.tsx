@@ -63,6 +63,7 @@ export default function SupplyGraphCanvas({
   const viewportStateRef = useRef<ViewportState | null>(null);
   const renderedDataKeyRef = useRef<string>("");
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTapRef = useRef<{ id: string; time: number } | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenu>(null);
   const [visibility, setVisibility] =
     useState<LegendVisibility>(INITIAL_VISIBILITY);
@@ -135,32 +136,37 @@ export default function SupplyGraphCanvas({
         behaviors: ["drag-canvas", "zoom-canvas", "drag-element"],
         plugins: [{ type: "minimap", size: [160, 100] }],
       }) as G6GraphInstance;
-      rendered.on("node:click", (event) => {
-        const graphEvent = event as unknown as GraphElementEvent & {
-          detail?: number;
-          nativeEvent?: { detail?: number };
-        };
-        if ((graphEvent.detail ?? graphEvent.nativeEvent?.detail ?? 1) > 1)
-          return;
-        if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
-        const nodeId = String(graphEvent.target.id);
-        clickTimerRef.current = setTimeout(() => {
-          onNode(nodeId);
-          clickTimerRef.current = null;
-        }, NODE_CLICK_CONFIRM_DELAY_MS);
-      });
-      const handleNodeDoubleClick = (event: unknown) => {
-        const graphEvent = event as GraphElementEvent;
-        graphEvent.preventDefault?.();
-        graphEvent.stopPropagation?.();
+      // 手动检测双击/双击：触屏设备不触发原生 dblclick，统一用「同节点短时间内两次点击」判定，
+      // 这样桌面鼠标双击与手机双击都能触发展开。
+      const handleNodeDoubleClick = (nodeId: string) => {
         if (clickTimerRef.current) {
           clearTimeout(clickTimerRef.current);
           clickTimerRef.current = null;
         }
-        onNodeDoubleClick(String(graphEvent.target.id));
+        lastTapRef.current = null;
+        onNodeDoubleClick(nodeId);
       };
-      rendered.on("node:dblclick", handleNodeDoubleClick);
-      rendered.on("node:doubleclick", handleNodeDoubleClick);
+      rendered.on("node:click", (event) => {
+        const graphEvent = event as unknown as GraphElementEvent;
+        const nodeId = String(graphEvent.target.id);
+        const now = Date.now();
+        const last = lastTapRef.current;
+        if (
+          last &&
+          last.id === nodeId &&
+          now - last.time < NODE_CLICK_CONFIRM_DELAY_MS
+        ) {
+          handleNodeDoubleClick(nodeId);
+          return;
+        }
+        lastTapRef.current = { id: nodeId, time: now };
+        if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+        clickTimerRef.current = setTimeout(() => {
+          onNode(nodeId);
+          clickTimerRef.current = null;
+          lastTapRef.current = null;
+        }, NODE_CLICK_CONFIRM_DELAY_MS);
+      });
       rendered.on("edge:click", (event) =>
         onEdge(
           String((event as unknown as { target: { id: string } }).target.id),
@@ -243,7 +249,7 @@ export default function SupplyGraphCanvas({
     <div className="relative" onContextMenu={(event) => event.preventDefault()}>
       <div
         ref={containerRef}
-        className="h-[640px] w-full rounded-2xl bg-[#edf3ff] shadow-inner ring-1 ring-blue-100"
+        className="h-[640px] w-full touch-manipulation rounded-2xl bg-[#edf3ff] shadow-inner ring-1 ring-blue-100"
       />
       <div className="absolute bottom-4 left-4 z-20 flex max-w-[calc(100%-2rem)] flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs shadow-md backdrop-blur-sm">
         <span className="font-medium text-slate-400">图例:</span>
