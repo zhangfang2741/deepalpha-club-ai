@@ -384,13 +384,17 @@ export default function SupplyGraphTasksPage() {
                 ) : (
                   runs.map((run) => {
                     const noProgress = run.completed + run.failed === 0
+                    const hasRemaining = run.total > 0 && run.completed + run.failed < run.total
                     // 卡死：待处理/失败，或运行中但零进度——可重新触发编排
                     const canRestart =
                       run.status === 'pending' ||
                       run.status === 'failed' ||
                       (run.status === 'running' && noProgress)
                     const canPause = ['running', 'pending'].includes(run.status) && !noProgress
-                    const canResume = ['paused', 'paused_quota'].includes(run.status)
+                    // 续跑：暂停/配额等待，或运行到一半被中断（还有剩余未完成）
+                    const canResume =
+                      ['paused', 'paused_quota'].includes(run.status) ||
+                      (run.status === 'running' && hasRemaining)
                     const canRetry = run.failed > 0
                     const expanded = expandedId === run.id
                     return (
@@ -430,6 +434,7 @@ export default function SupplyGraphTasksPage() {
                                 <button
                                   onClick={() => runAction(run.id, 'resume')}
                                   disabled={isBusy(run.id, 'resume')}
+                                  title="续跑：重投所有未完成公司（含中断遗留的），已完成的跳过不重做"
                                   className="inline-flex cursor-pointer items-center gap-1 rounded-lg border px-2.5 py-1 text-xs text-blue-700 transition-colors hover:bg-blue-50 disabled:opacity-50"
                                 >
                                   <Play className="h-3 w-3" aria-hidden="true" />

@@ -106,13 +106,21 @@ def resume_run(request: Request, run_id: uuid.UUID, session: Session = Depends(g
         raise HTTPException(404, "run not found")
     if run.status == "paused_quota":
         resume_run_if_quota_recovered.delay(str(run_id))  # pyright: ignore[reportFunctionMemberAccess]
-    else:
-        run.status = "running"
-        tasks = session.exec(select(SupplyChainTask).where(SupplyChainTask.run_id == run_id, SupplyChainTask.status == "queued")).all()
-        for task in tasks:
-            process_company.delay(str(run_id), task.ticker)  # pyright: ignore[reportFunctionMemberAccess]
-        session.commit()
-    return {"status": "resuming"}
+        return {"status": "resuming", "requeued": 0}
+    run.status = "running"
+    # 续跑：重投所有未完成子任务，包含 worker 崩溃遗留的 running/retrying 孤儿；
+    # 已成功的公司（success）跳过不重做，失败的（failed）交给 retry-failed。
+    resumable = {"queued", "running", "retrying", "paused_quota"}
+    tasks = session.exec(select(SupplyChainTask).where(SupplyChainTask.run_id == run_id)).all()
+    requeued = 0
+    for task in tasks:
+        if task.status not in resumable:
+            continue
+        task.status, task.resume_after = "queued", None
+        process_company.delay(str(run_id), task.ticker)  # pyright: ignore[reportFunctionMemberAccess]
+        requeued += 1
+    session.commit()
+    return {"status": "resuming", "requeued": requeued}
 
 
 @router.post("/runs/{run_id}/retry-failed")
