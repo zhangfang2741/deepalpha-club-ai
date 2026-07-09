@@ -554,18 +554,34 @@ export default function SupplyGraphPage() {
       setErrorMessage("");
       setFeedback(`正在扩展 ${name} 的供应链和大客户…`);
       setExploring(true);
-      // 直接展开已有图数据，立即出点边；生成新数据请用「生成核心关系」按钮，避免双击被流水线阻塞。
       const expandSeed = focusTicker || id;
-      const [upstream, downstream] = await Promise.all([
-        supplyGraphApi.expand(expandSeed, 1, "upstream"),
-        supplyGraphApi.expand(expandSeed, 1, "downstream"),
-      ]);
-      const incoming = mergeGraphs(upstream, downstream);
       const currentNodeIds = new Set(graph.nodes.map((node) => node.nodeId));
       const currentEdgeIds = new Set(graph.edges.map((edge) => edge.edgeId));
-      const newNodeCount = incoming.nodes.filter(
+      const fetchNeighbors = async () => {
+        const [upstream, downstream] = await Promise.all([
+          supplyGraphApi.expand(expandSeed, 1, "upstream"),
+          supplyGraphApi.expand(expandSeed, 1, "downstream"),
+        ]);
+        return mergeGraphs(upstream, downstream);
+      };
+      // 先展开已有图数据，立即出点边；
+      let incoming = await fetchNeighbors();
+      let newNodeCount = incoming.nodes.filter(
         (node) => !currentNodeIds.has(node.nodeId),
       ).length;
+      // 已有数据里没有可展开的邻居（如叶子公司）→ 触发一次真实生成再展开。
+      if (newNodeCount === 0 && focusTicker) {
+        setFeedback(`正在基于真实环境分析 ${name} 的供应链和大客户…`);
+        setProgress("DISCOVER");
+        const created = (await supplyGraphApi.runCompany(focusTicker)) as {
+          run_id: string;
+        };
+        await waitForSupplyRun(created.run_id, setProgress);
+        incoming = mergeGraphs(incoming, await fetchNeighbors());
+        newNodeCount = incoming.nodes.filter(
+          (node) => !currentNodeIds.has(node.nodeId),
+        ).length;
+      }
       const newEdgeCount = incoming.edges.filter(
         (edge) => !currentEdgeIds.has(edge.edgeId),
       ).length;
