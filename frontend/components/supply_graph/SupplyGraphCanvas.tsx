@@ -8,6 +8,23 @@ type Direction = "upstream" | "downstream" | "both";
 type ContextMenu = { nodeId: string; x: number; y: number } | null;
 type LegendKey = "suppliers" | "customers" | "supplierEdges" | "customerEdges";
 type LegendVisibility = Record<LegendKey, boolean>;
+type ViewportState = { position: [number, number]; zoom: number };
+type G6GraphInstance = {
+  destroy: () => void;
+  draw: () => Promise<void>;
+  getPosition: () => number[];
+  getZoom: () => number;
+  on: (event: string, handler: (event: unknown) => void) => void;
+  render: () => Promise<void>;
+  translateTo: (position: [number, number], animation?: boolean) => Promise<void>;
+  zoomTo: (zoom: number, animation?: boolean) => Promise<void>;
+};
+
+type GraphElementEvent = {
+  target: { id: string };
+  preventDefault?: () => void;
+  stopPropagation?: () => void;
+};
 
 const LEGEND_ITEMS: {
   key: LegendKey;
@@ -27,22 +44,37 @@ const INITIAL_VISIBILITY: LegendVisibility = {
   supplierEdges: true,
   customerEdges: true,
 };
+const NODE_CLICK_CONFIRM_DELAY_MS = 320;
 
 export default function SupplyGraphCanvas({
   graph,
   onNode,
   onEdge,
   onExpand,
+  onNodeDoubleClick,
 }: {
   graph: SupplyGraph;
   onNode: (id: string) => void;
   onEdge: (id: string) => void;
   onExpand: (id: string, direction: Direction) => void;
+  onNodeDoubleClick: (id: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const viewportStateRef = useRef<ViewportState | null>(null);
+  const renderedDataKeyRef = useRef<string>("");
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenu>(null);
   const [visibility, setVisibility] =
     useState<LegendVisibility>(INITIAL_VISIBILITY);
+
+  const graphDataKey = useMemo(
+    () =>
+      [
+        graph.nodes.map((node) => node.nodeId).sort().join("|"),
+        graph.edges.map((edge) => edge.edgeId).sort().join("|"),
+      ].join("::"),
+    [graph],
+  );
 
   const { visibleGraph, focusId } = useMemo(() => {
     const degree = new Map<string, number>();
@@ -83,10 +115,12 @@ export default function SupplyGraphCanvas({
   useEffect(() => {
     if (!containerRef.current) return;
     let disposed = false;
-    let instance: { destroy: () => void } | undefined;
+    let instance: G6GraphInstance | undefined;
     void import("@antv/g6").then(({ Graph }) => {
       if (disposed || !containerRef.current) return;
       const data = adaptGraph(visibleGraph, focusId);
+      const shouldRestoreViewport =
+        renderedDataKeyRef.current === graphDataKey && viewportStateRef.current;
       const rendered = new Graph({
         container: containerRef.current,
         autoFit: "view",
@@ -100,12 +134,33 @@ export default function SupplyGraphCanvas({
         },
         behaviors: ["drag-canvas", "zoom-canvas", "drag-element"],
         plugins: [{ type: "minimap", size: [160, 100] }],
+      }) as G6GraphInstance;
+      rendered.on("node:click", (event) => {
+        const graphEvent = event as unknown as GraphElementEvent & {
+          detail?: number;
+          nativeEvent?: { detail?: number };
+        };
+        if ((graphEvent.detail ?? graphEvent.nativeEvent?.detail ?? 1) > 1)
+          return;
+        if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+        const nodeId = String(graphEvent.target.id);
+        clickTimerRef.current = setTimeout(() => {
+          onNode(nodeId);
+          clickTimerRef.current = null;
+        }, NODE_CLICK_CONFIRM_DELAY_MS);
       });
-      rendered.on("node:click", (event) =>
-        onNode(
-          String((event as unknown as { target: { id: string } }).target.id),
-        ),
-      );
+      const handleNodeDoubleClick = (event: unknown) => {
+        const graphEvent = event as GraphElementEvent;
+        graphEvent.preventDefault?.();
+        graphEvent.stopPropagation?.();
+        if (clickTimerRef.current) {
+          clearTimeout(clickTimerRef.current);
+          clickTimerRef.current = null;
+        }
+        onNodeDoubleClick(String(graphEvent.target.id));
+      };
+      rendered.on("node:dblclick", handleNodeDoubleClick);
+      rendered.on("node:doubleclick", handleNodeDoubleClick);
       rendered.on("edge:click", (event) =>
         onEdge(
           String((event as unknown as { target: { id: string } }).target.id),
@@ -145,14 +200,33 @@ export default function SupplyGraphCanvas({
         });
       });
       rendered.on("canvas:click", () => setContextMenu(null));
-      void rendered.render();
+      void rendered.render().then(async () => {
+        if (disposed) return;
+        if (shouldRestoreViewport && viewportStateRef.current) {
+          await rendered.translateTo(viewportStateRef.current.position, false);
+          await rendered.zoomTo(viewportStateRef.current.zoom, false);
+          await rendered.draw();
+        }
+        renderedDataKeyRef.current = graphDataKey;
+      });
       instance = rendered;
     });
     return () => {
       disposed = true;
+      if (clickTimerRef.current) {
+        clearTimeout(clickTimerRef.current);
+        clickTimerRef.current = null;
+      }
+      if (instance) {
+        const [x = 0, y = 0] = instance.getPosition();
+        viewportStateRef.current = {
+          position: [x, y],
+          zoom: instance.getZoom(),
+        };
+      }
       instance?.destroy();
     };
-  }, [focusId, visibleGraph, onEdge, onNode]);
+  }, [focusId, graphDataKey, visibleGraph, onEdge, onNode, onNodeDoubleClick]);
 
   const expand = (direction: Direction) => {
     if (!contextMenu) return;
@@ -171,7 +245,8 @@ export default function SupplyGraphCanvas({
         ref={containerRef}
         className="h-[640px] w-full rounded-2xl bg-[#edf3ff] shadow-inner ring-1 ring-blue-100"
       />
-      <div className="absolute left-4 top-4 z-20 flex max-w-[calc(100%-2rem)] flex-wrap gap-2 rounded-xl border border-white/80 bg-white/90 p-2 shadow-md backdrop-blur-sm">
+      <div className="absolute bottom-4 left-4 z-20 flex max-w-[calc(100%-2rem)] flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs shadow-md backdrop-blur-sm">
+        <span className="font-medium text-slate-400">图例:</span>
         {LEGEND_ITEMS.map((item) => {
           const visible = visibility[item.key];
           return (
@@ -181,10 +256,10 @@ export default function SupplyGraphCanvas({
               aria-pressed={visible}
               title={`点击${visible ? "隐藏" : "显示"}${item.label}`}
               onClick={() => toggleLegend(item.key)}
-              className={`flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+              className={`flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                 visible
-                  ? "bg-white text-slate-700 hover:bg-slate-50"
-                  : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                  ? "text-slate-500 hover:bg-slate-50"
+                  : "text-slate-300 line-through hover:bg-slate-50"
               }`}
             >
               {item.kind === "node" ? (

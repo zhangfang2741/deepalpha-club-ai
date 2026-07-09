@@ -15,6 +15,34 @@ import {
 import { Loader2, RefreshCw } from "lucide-react";
 
 const EMPTY: SupplyGraph = { nodes: [], edges: [] };
+type SupplyRunTask = {
+  stage?: string;
+  status?: string;
+  error?: string | null;
+};
+type SupplyRunDetail = {
+  tasks?: SupplyRunTask[];
+};
+
+const sleep = (ms: number) =>
+  new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const waitForSupplyRun = async (
+  runId: string,
+  onStage: (stage: string) => void,
+) => {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    await sleep(2000);
+    const detail = (await supplyGraphApi.run(runId)) as SupplyRunDetail;
+    const task = detail.tasks?.[0];
+    if (task?.stage) onStage(task.stage);
+    if (task?.status === "success") return;
+    if (task?.status === "failed")
+      throw new Error(task.error || "任务执行失败");
+  }
+  throw new Error("生成时间较长，请稍后重新加载查看结果");
+};
+
 const DEMO: SupplyGraph = {
   nodes: [
     {
@@ -458,6 +486,35 @@ export default function SupplyGraphPage() {
     (edge) => edge.edgeType === "CUSTOMER_OF",
   ).length;
   const visibleGraph = exploring ? graph : coreGraph;
+  const nodeDisplayName = useCallback(
+    (id: string) => {
+      const node = graph.nodes.find((item) => item.nodeId === id);
+      const values = Object.fromEntries(
+        (node?.properties || []).map((property) => [
+          property.name,
+          property.value,
+        ]),
+      );
+      return String(values.name_zh || values.ticker || values.name || id);
+    },
+    [graph.nodes],
+  );
+  const nodeTicker = useCallback(
+    (id: string) => {
+      const node = graph.nodes.find((item) => item.nodeId === id);
+      const values = Object.fromEntries(
+        (node?.properties || []).map((property) => [
+          property.name,
+          property.value,
+        ]),
+      );
+      const tickerValue = values.ticker || id;
+      const tickerText = String(tickerValue || "").trim().toUpperCase();
+      if (!/^[A-Z][A-Z0-9.-]{0,7}$/.test(tickerText)) return "";
+      return tickerText;
+    },
+    [graph.nodes],
+  );
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setExploring(false);
@@ -469,21 +526,76 @@ export default function SupplyGraphPage() {
   };
   const handleDirectionalExpand = useCallback(
     async (id: string, expandDirection: "upstream" | "downstream" | "both") => {
+      const name = nodeDisplayName(id);
       try {
         setExpanding(true);
-        setFeedback(`正在扩展 ${id}…`);
+        setFeedback(`正在扩展 ${name}…`);
         setExploring(true);
         const next = await supplyGraphApi.expand(id, 1, expandDirection);
         setGraph((current) => mergeGraphs(current, next));
-        setFeedback(`已完成 ${id} 的关系扩展`);
+        setFeedback(`已完成 ${name} 的关系扩展`);
       } catch {
-        setErrorMessage(`无法扩展 ${id}，请稍后重试。`);
+        setErrorMessage(`无法扩展 ${name}，请稍后重试。`);
       } finally {
         setExpanding(false);
       }
     },
-    [],
+    [nodeDisplayName],
   );
+  const handleBidirectionalExpand = useCallback(async (id: string) => {
+    const name = nodeDisplayName(id);
+    const focusTicker = nodeTicker(id);
+    try {
+      setSelectedNode(null);
+      setSelectedEdge(null);
+      setClues([]);
+      setExpanding(true);
+      setErrorMessage("");
+      setFeedback(
+        focusTicker
+          ? `正在基于真实环境分析 ${name} 的供应链和大客户…`
+          : `正在同时扩展 ${name} 的供应链和大客户…`,
+      );
+      setExploring(true);
+      if (focusTicker) {
+        setProgress("DISCOVER");
+        const created = (await supplyGraphApi.runCompany(focusTicker)) as {
+          run_id: string;
+        };
+        await waitForSupplyRun(created.run_id, setProgress);
+      }
+      setFeedback(`正在合并 ${name} 的上下游关系…`);
+      const expandSeed = focusTicker || id;
+      const [upstream, downstream] = await Promise.all([
+        supplyGraphApi.expand(expandSeed, 1, "upstream"),
+        supplyGraphApi.expand(expandSeed, 1, "downstream"),
+      ]);
+      const incoming = mergeGraphs(upstream, downstream);
+      const currentNodeIds = new Set(graph.nodes.map((node) => node.nodeId));
+      const currentEdgeIds = new Set(graph.edges.map((edge) => edge.edgeId));
+      const newNodeCount = incoming.nodes.filter(
+        (node) => !currentNodeIds.has(node.nodeId),
+      ).length;
+      const newEdgeCount = incoming.edges.filter(
+        (edge) => !currentEdgeIds.has(edge.edgeId),
+      ).length;
+      setGraph((current) => mergeGraphs(current, incoming));
+      setFeedback(
+        newNodeCount || newEdgeCount
+          ? `已新增 ${name} 的 ${newNodeCount} 个企业点、${newEdgeCount} 条关系`
+          : `${name} 暂无新增上下游关系`,
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : `无法扩展 ${name} 的上下游关系，请稍后重试。`,
+      );
+    } finally {
+      setExpanding(false);
+      setProgress("");
+    }
+  }, [graph.edges, graph.nodes, nodeDisplayName, nodeTicker]);
   const handleEdge = useCallback(
     async (id: string) => {
       setSelectedNode(null);
@@ -512,20 +624,9 @@ export default function SupplyGraphPage() {
       setProgress("DISCOVER");
       setFeedback(`正在分析 ${ticker} 的核心供应商和大客户…`);
       const created = await supplyGraphApi.runCompany(ticker);
-      for (let attempt = 0; attempt < 60; attempt += 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, 2000));
-        const detail = await supplyGraphApi.run(created.run_id);
-        const task = detail.tasks?.[0];
-        if (task?.stage) setProgress(task.stage);
-        if (task?.status === "success") {
-          setFeedback(`${ticker} 的核心关系已生成`);
-          setRefreshVersion((version) => version + 1);
-          return;
-        }
-        if (task?.status === "failed")
-          throw new Error(task.error || "任务执行失败");
-      }
-      throw new Error("生成时间较长，请稍后重新加载查看结果");
+      await waitForSupplyRun(created.run_id, setProgress);
+      setFeedback(`${ticker} 的核心关系已生成`);
+      setRefreshVersion((version) => version + 1);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "生成失败，请稍后重试。",
@@ -638,6 +739,7 @@ export default function SupplyGraphPage() {
                   onNode={handleNode}
                   onEdge={handleEdge}
                   onExpand={handleDirectionalExpand}
+                  onNodeDoubleClick={handleBidirectionalExpand}
                 />
                 {expanding && (
                   <div

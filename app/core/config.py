@@ -234,7 +234,10 @@ class Settings:
         self.SUPPLY_CHAIN_SKIP_RECENT_DAYS = int(os.getenv("SUPPLY_CHAIN_SKIP_RECENT_DAYS", "7"))
         self.SUPPLY_CHAIN_DISCOVER_MODEL = os.getenv("SUPPLY_CHAIN_DISCOVER_MODEL", "")
         self.SUPPLY_CHAIN_VERIFY_MODEL = os.getenv("SUPPLY_CHAIN_VERIFY_MODEL", "")
-        self.SUPPLY_CHAIN_BEAT_ENABLED = os.getenv("SUPPLY_CHAIN_BEAT_ENABLED", "false").lower() in ("true", "1", "yes")
+        self.SUPPLY_CHAIN_BEAT_ENABLED = os.getenv("SUPPLY_CHAIN_BEAT_ENABLED", "true").lower() in ("true", "1", "yes")
+        self.SUPPLY_CHAIN_WEEKLY_SCHEDULER_INTERVAL_SECONDS = int(
+            os.getenv("SUPPLY_CHAIN_WEEKLY_SCHEDULER_INTERVAL_SECONDS", "3600")
+        )
         self.SUPPLY_CHAIN_DISCOVER_CACHE_TTL = int(os.getenv("SUPPLY_CHAIN_DISCOVER_CACHE_TTL", "604800"))
         self.SUPPLY_CHAIN_TRANSCRIPT_QUARTERS = int(os.getenv("SUPPLY_CHAIN_TRANSCRIPT_QUARTERS", "4"))
         self.SUPPLY_CHAIN_NEWS_LOOKBACK_DAYS = int(os.getenv("SUPPLY_CHAIN_NEWS_LOOKBACK_DAYS", "730"))

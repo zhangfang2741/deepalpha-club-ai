@@ -35,6 +35,7 @@ from app.core.middleware import (
 from app.core.observability import langfuse_init
 from app.services.database import database_service
 from app.services.memory import memory_service
+from app.services.supply_chain.scheduler import run_weekly_supply_chain_scheduler
 
 # Load environment variables
 load_dotenv()
@@ -71,6 +72,7 @@ def _seed_supply_chain_graph_sync() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle application startup and shutdown events."""
+    supply_chain_scheduler_task: asyncio.Task[None] | None = None
     logger.info(
         "application_startup",
         project_name=settings.PROJECT_NAME,
@@ -128,9 +130,23 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.exception("supply_chain_seed_failed", error=str(e))
 
+    if settings.SUPPLY_CHAIN_BEAT_ENABLED:
+        supply_chain_scheduler_task = asyncio.create_task(run_weekly_supply_chain_scheduler())
+        logger.info(
+            "supply_chain_weekly_scheduler_started",
+            universe=settings.SUPPLY_CHAIN_UNIVERSE,
+            interval_seconds=settings.SUPPLY_CHAIN_WEEKLY_SCHEDULER_INTERVAL_SECONDS,
+        )
+
     yield
 
     # Cleanup on shutdown
+    if supply_chain_scheduler_task:
+        supply_chain_scheduler_task.cancel()
+        try:
+            await supply_chain_scheduler_task
+        except asyncio.CancelledError:
+            logger.info("supply_chain_weekly_scheduler_stopped")
     await close_redis()
     await cache_service.close()
     if agent._connection_pool:
