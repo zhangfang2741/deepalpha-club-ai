@@ -58,15 +58,29 @@ def run_supply_chain_batch(run_id: str) -> dict:
             run.params = {**run.params, "error": "成分股列表为空，请检查 FMP_API_KEY 与行情接口"}
             session.commit()
             return {"queued": 0, "empty": True}
+        # 先落库：total + 全部子任务行，一次性提交。
+        # 必须在入队 process_company 之前提交，否则 worker 抢先执行时查不到子任务行（竞态）。
         run.total, run.status = len(symbols), "running"
         for ticker in symbols:
-            task = SupplyChainTask(run_id=run_uuid, ticker=ticker)
-            session.add(task)
-            session.flush()
-            queued = process_company.delay(run_id, ticker)  # pyright: ignore[reportFunctionMemberAccess]
-            task.celery_task_id = queued.id
+            session.add(SupplyChainTask(run_id=run_uuid, ticker=ticker))
         session.commit()
-    return {"queued": len(symbols)}
+    # 子任务行已落库，再逐个入队；单个入队失败不影响其余，未入队的留在 queued，可用「继续」续跑。
+    task_ids: dict[str, str] = {}
+    for ticker in symbols:
+        try:
+            queued = process_company.delay(run_id, ticker)  # pyright: ignore[reportFunctionMemberAccess]
+            task_ids[ticker] = queued.id
+        except Exception as exc:  # noqa: BLE001 - 单个入队失败不应中断整批
+            logger.warning("supply_chain_enqueue_failed", run_id=run_id, ticker=ticker, error=str(exc))
+    # 批量回填 celery_task_id（一次提交，非关键元数据）。
+    if task_ids:
+        with get_sync_session_cm() as session:
+            for task in session.exec(select(SupplyChainTask).where(SupplyChainTask.run_id == run_uuid)):
+                task_id = task_ids.get(task.ticker)
+                if task_id is not None:
+                    task.celery_task_id = task_id
+            session.commit()
+    return {"queued": len(task_ids), "total": len(symbols)}
 
 
 @celery_app.task(name="supply_chain.process_company", bind=True, max_retries=3)

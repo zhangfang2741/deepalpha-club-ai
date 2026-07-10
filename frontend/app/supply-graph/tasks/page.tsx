@@ -85,7 +85,7 @@ function TaskTable({ tasks }: { tasks: SupplyTask[] }) {
         )}
       </div>
       <div className="max-h-80 overflow-auto rounded-lg border">
-        <table className="w-full text-left text-sm">
+        <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500">
             <tr>
               {['公司', '阶段', '状态', '重试', '错误信息', '完成时间'].map((h) => (
@@ -357,8 +357,8 @@ export default function SupplyGraphTasksPage() {
               </div>
             )}
 
-          <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
-            <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
+            <table className="w-full min-w-[760px] text-left text-sm">
               <thead className="bg-slate-100 text-slate-600">
                 <tr>
                   {['范围', '类型', '状态', '进度', '创建时间', '操作'].map((name) => (
