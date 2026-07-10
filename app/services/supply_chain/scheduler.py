@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 
+import redis
 from sqlmodel import select
 
 from app.core.config import settings
@@ -14,6 +15,34 @@ from app.models.supply_chain_run import SupplyChainRun
 from app.tasks.supply_chain import run_supply_chain_batch
 
 SCHEDULE_SOURCE = "weekly_auto_scheduler"
+# 用户删除某周的自动调度任务后，记一个跳过标记，避免调度器把它重建（下周自动恢复）。
+_SKIP_KEY = "supply_chain:weekly_skip:{week_key}"
+_SKIP_TTL_SECONDS = 8 * 24 * 3600
+_skip_client: redis.Redis | None = None
+
+
+def _get_skip_client() -> redis.Redis:
+    global _skip_client
+    if _skip_client is None:
+        _skip_client = redis.Redis.from_url(settings.CELERY_BROKER_URL)
+    return _skip_client
+
+
+def mark_week_skipped(week_key: str) -> None:
+    """标记某周的自动调度任务已被用户删除，调度器本周不再重建."""
+    try:
+        _get_skip_client().set(_SKIP_KEY.format(week_key=week_key), "1", ex=_SKIP_TTL_SECONDS)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("supply_chain_weekly_skip_mark_failed", week_key=week_key, error=str(exc))
+
+
+def is_week_skipped(week_key: str) -> bool:
+    """Return True if the user deleted this week's scheduled run."""
+    try:
+        return _get_skip_client().get(_SKIP_KEY.format(week_key=week_key)) is not None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("supply_chain_weekly_skip_read_failed", week_key=week_key, error=str(exc))
+        return False
 
 
 def current_week_key(now: datetime | None = None) -> str:
@@ -58,6 +87,10 @@ def ensure_weekly_supply_chain_batch_run() -> str | None:
                 week_key=week_key,
                 status=existing.status,
             )
+            return None
+
+        if is_week_skipped(week_key):
+            logger.info("supply_chain_weekly_batch_skipped_user_deleted", universe=universe, week_key=week_key)
             return None
 
         run = SupplyChainRun(
