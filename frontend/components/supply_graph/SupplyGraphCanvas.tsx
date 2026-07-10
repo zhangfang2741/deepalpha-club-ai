@@ -18,10 +18,15 @@ type G6GraphInstance = {
   draw: () => Promise<void>;
   render: () => Promise<void>;
   on: (event: string, handler: (event: unknown) => void) => void;
+  setData: (data: ReturnType<typeof adaptGraph>) => void;
   addNodeData: (nodes: G6Node[]) => void;
   addEdgeData: (edges: ReturnType<typeof adaptGraph>["edges"]) => void;
   getElementPosition: (id: string) => number[];
   setElementVisibility: (id: string, visibility: "visible" | "hidden") => void;
+  getPosition: () => number[];
+  getZoom: () => number;
+  translateTo: (position: [number, number], animation?: boolean) => Promise<void>;
+  zoomTo: (zoom: number, animation?: boolean) => Promise<void>;
 };
 
 type GraphElementEvent = {
@@ -49,8 +54,6 @@ const INITIAL_VISIBILITY: LegendVisibility = {
   customerEdges: true,
 };
 const NODE_CLICK_CONFIRM_DELAY_MS = 320;
-const EXPAND_X_STEP = 210;
-const EXPAND_Y_STEP = 96;
 
 export default function SupplyGraphCanvas({
   graph,
@@ -70,7 +73,6 @@ export default function SupplyGraphCanvas({
   const currentFocusRef = useRef<string | undefined>(undefined);
   const renderedNodesRef = useRef<Set<string>>(new Set());
   const renderedEdgesRef = useRef<Set<string>>(new Set());
-  const anchorCountRef = useRef<Map<string, number>>(new Map());
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTapRef = useRef<{ id: string; time: number } | null>(null);
   const graphRef = useRef<SupplyGraph>(graph);
@@ -149,37 +151,6 @@ export default function SupplyGraphCanvas({
     }
   };
 
-  // 为新增节点就近分配坐标（相连的已有节点旁），从而不触发全局重新布局。
-  const placeNode = (instance: G6GraphInstance, node: G6Node) => {
-    const current = graphRef.current;
-    let anchorId: string | undefined;
-    let side = 1;
-    for (const edge of current.edges) {
-      if (edge.srcId === node.id && renderedNodesRef.current.has(edge.dstId)) {
-        anchorId = edge.dstId;
-        side = edge.edgeType === "SUPPLIED_BY" ? -1 : 1;
-        break;
-      }
-      if (edge.dstId === node.id && renderedNodesRef.current.has(edge.srcId)) {
-        anchorId = edge.srcId;
-        side = edge.edgeType === "SUPPLIED_BY" ? 1 : -1;
-        break;
-      }
-    }
-    let baseX = 0;
-    let baseY = 0;
-    if (anchorId) {
-      const [ax = 0, ay = 0] = instance.getElementPosition(anchorId);
-      baseX = ax;
-      baseY = ay;
-    }
-    const count = anchorCountRef.current.get(anchorId ?? node.id) ?? 0;
-    anchorCountRef.current.set(anchorId ?? node.id, count + 1);
-    const offset = Math.ceil((count + 1) / 2) * EXPAND_Y_STEP;
-    node.style.x = baseX + side * EXPAND_X_STEP;
-    node.style.y = baseY + (count % 2 === 0 ? offset : -offset);
-  };
-
   useEffect(() => {
     if (!containerRef.current) return;
     let disposed = false;
@@ -194,22 +165,23 @@ export default function SupplyGraphCanvas({
       );
 
       if (instance && !focusChanged && !shrank) {
-        // 增量更新：只加入新点边，已有节点位置与视口保持不变。
+        // 数据增长（展开）：重跑 dagre 布局以可靠地摆放新节点，但保留当前视口（缩放/平移），
+        // 避免视图跳回原点。这样新点边一定会出现，同时不会突兀地重置视角。
         const data = adaptGraph(graph, focusId);
-        const newNodes = data.nodes.filter(
-          (node) => !renderedNodesRef.current.has(node.id),
-        );
-        const newEdges = data.edges.filter(
-          (edge) => !renderedEdgesRef.current.has(edge.id),
-        );
-        if (newNodes.length === 0 && newEdges.length === 0) return;
-        newNodes.forEach((node) => placeNode(instance, node));
-        newNodes.forEach((node) => renderedNodesRef.current.add(node.id));
-        newEdges.forEach((edge) => renderedEdgesRef.current.add(edge.id));
-        if (newNodes.length) instance.addNodeData(newNodes);
-        if (newEdges.length) instance.addEdgeData(newEdges);
-        void instance.draw().then(() => {
-          if (!disposed) applyVisibility(instance);
+        const hasNew =
+          data.nodes.some((node) => !renderedNodesRef.current.has(node.id)) ||
+          data.edges.some((edge) => !renderedEdgesRef.current.has(edge.id));
+        if (!hasNew) return;
+        const [vx = 0, vy = 0] = instance.getPosition();
+        const zoom = instance.getZoom();
+        instance.setData(data);
+        void instance.render().then(async () => {
+          if (disposed) return;
+          await instance.translateTo([vx, vy], false);
+          await instance.zoomTo(zoom, false);
+          renderedNodesRef.current = new Set(graph.nodes.map((node) => node.nodeId));
+          renderedEdgesRef.current = new Set(graph.edges.map((edge) => edge.edgeId));
+          applyVisibility(instance);
         });
         return;
       }
@@ -310,7 +282,6 @@ export default function SupplyGraphCanvas({
       renderedEdgesRef.current = new Set(
         graph.edges.map((edge) => edge.edgeId),
       );
-      anchorCountRef.current = new Map();
     });
     return () => {
       disposed = true;
