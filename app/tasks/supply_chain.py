@@ -17,6 +17,34 @@ from app.services.supply_chain.fmp_universe import FMPUniverse
 from app.services.supply_chain.pipeline import run_company_pipeline
 
 
+async def _fetch_universe_symbols(universe: str) -> list[str]:
+    """复用 analyst_upgrade 的 Wikipedia 成分股抓取（含兜底），返回去重后的 symbol 列表。
+
+    sp500 / nasdaq100 走维基（FMP 无成分股权限也可用）；其它 universe 返回空，交由调用方回退。
+    """
+    import httpx
+
+    from app.services.analyst_upgrade.nasdaq100 import _fetch_constituents
+    from app.services.analyst_upgrade.sp500 import _fetch_sp500_constituents
+
+    if universe not in {"sp500", "nasdaq100"}:
+        return []
+    async with httpx.AsyncClient(timeout=30) as client:
+        rows = (
+            await _fetch_sp500_constituents(client)
+            if universe == "sp500"
+            else await _fetch_constituents(client)
+        )
+    symbols: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        symbol = str(row.get("symbol") or "").upper().strip()
+        if symbol and symbol not in seen:
+            seen.add(symbol)
+            symbols.append(symbol)
+    return symbols
+
+
 @celery_app.task(name="supply_chain.run_batch")
 def run_supply_chain_batch(run_id: str) -> dict:
     """Enumerate a configured universe and queue one task per company."""
@@ -41,17 +69,28 @@ def run_supply_chain_batch(run_id: str) -> dict:
                 session.commit()
         logger.exception("supply_chain_batch_enumerate_failed", run_id=run_id)
         return {"failed": True, "error": str(exc)}
+    # 复用 analyst_upgrade 里的 Wikipedia 成分股抓取（带兜底列表），FMP 无成分股权限也能用。
     with get_sync_session_cm() as session:
         run = session.get(SupplyChainRun, run_uuid)
         if run is None:
             return {"missing": True}
-        symbols = [company.symbol for company in companies]
-        if run.universe == "nasdaq100":
-            symbols = [company.symbol for company in companies if company.exchange.upper() == "NASDAQ"][:100]
-        elif run.universe == "sp500":
-            symbols = symbols[:500]
-        elif run.universe == "russell1000":
-            symbols = symbols[:1000]
+        constituents: list[str] = []
+        try:
+            constituents = asyncio.run(_fetch_universe_symbols(run.universe))
+        except Exception as exc:  # noqa: BLE001 - 成分股抓取失败则回退切片
+            logger.warning("supply_chain_constituents_failed", run_id=run_id, universe=run.universe, error=str(exc))
+            constituents = []
+        if constituents:
+            symbols = constituents
+        else:
+            # 无对应成分股来源（如 russell1000）时回退到 stock-list 切片
+            symbols = [company.symbol for company in companies]
+            if run.universe == "nasdaq100":
+                symbols = [company.symbol for company in companies if company.exchange.upper() == "NASDAQ"][:100]
+            elif run.universe == "sp500":
+                symbols = symbols[:500]
+            elif run.universe == "russell1000":
+                symbols = symbols[:1000]
         if not symbols:
             # 成分股为空（多为缺 FMP_API_KEY 或接口异常）——置 failed 并说明，避免误报"已完成"
             run.status, run.finished_at = "failed", datetime.now(UTC)
