@@ -36,10 +36,12 @@ def query_neighborhood(
     edge_ids: set[str] = set()
     for _ in range(depth):
         next_frontier: set[str] = set()
+        # 所有边约定 src=上游、dst=下游，与 edge_type 无关（边可能以任一端视角存储）。
+        # 因此上游=任何 dst 在 frontier 的边，下游=任何 src 在 frontier 的边。
         if direction == "upstream":
-            condition = and_(col(SupplyChainEdge.edge_type) == "SUPPLIED_BY", col(SupplyChainEdge.dst_node_id).in_(frontier))
+            condition = col(SupplyChainEdge.dst_node_id).in_(frontier)
         elif direction == "downstream":
-            condition = and_(col(SupplyChainEdge.edge_type) == "CUSTOMER_OF", col(SupplyChainEdge.src_node_id).in_(frontier))
+            condition = col(SupplyChainEdge.src_node_id).in_(frontier)
         else:
             condition = or_(col(SupplyChainEdge.src_node_id).in_(frontier), col(SupplyChainEdge.dst_node_id).in_(frontier))
         latest = session.exec(
