@@ -144,6 +144,24 @@ def retry_failed(request: Request, run_id: uuid.UUID, session: Session = Depends
     return {"requeued": len(tasks)}
 
 
+@router.delete("/runs/{run_id}")
+@limiter.limit("20/minute")
+def delete_run(request: Request, run_id: uuid.UUID, session: Session = Depends(get_sync_session)) -> dict:
+    """Delete a run and its tasks.
+
+    已入队的 celery 任务无需显式取消：执行时 run 已不存在，process_company 会直接返回 missing。
+    """
+    run = session.get(SupplyChainRun, run_id)
+    if run is None:
+        raise HTTPException(404, "run not found")
+    tasks = session.exec(select(SupplyChainTask).where(SupplyChainTask.run_id == run_id)).all()
+    for task in tasks:
+        session.delete(task)
+    session.delete(run)
+    session.commit()
+    return {"deleted": True, "removed_tasks": len(tasks)}
+
+
 @router.post("/runs/{run_id}/restart")
 @limiter.limit("20/minute")
 def restart_run(request: Request, run_id: uuid.UUID, session: Session = Depends(get_sync_session)) -> dict:

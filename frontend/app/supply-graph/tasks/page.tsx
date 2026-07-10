@@ -8,7 +8,7 @@ import {
   type SupplyTask,
   type WorkerStatus,
 } from '@/lib/api/supplyGraph'
-import { AlertCircle, Loader2, Pause, Play, RefreshCw, RotateCcw, Zap } from 'lucide-react'
+import { AlertCircle, Loader2, Pause, Play, RefreshCw, RotateCcw, Trash2, Zap } from 'lucide-react'
 
 const UNIVERSES: { value: string; label: string }[] = [
   { value: 'sp500', label: 'S&P 500' },
@@ -228,6 +228,8 @@ export default function SupplyGraphTasksPage() {
   )
 
   const createRun = useCallback(async () => {
+    const label = UNIVERSES.find((u) => u.value === universe)?.label ?? universe
+    if (!window.confirm(`确认新建「${label}」批次任务？这会枚举全部成分股并开始逐家分析。`)) return
     setCreating(true)
     try {
       await supplyGraphApi.createRun(universe)
@@ -238,6 +240,26 @@ export default function SupplyGraphTasksPage() {
       setCreating(false)
     }
   }, [universe, loadRuns])
+
+  const deleteRun = useCallback(
+    async (runId: string, label: string) => {
+      if (!window.confirm(`确认删除「${label}」这条任务？该操作不可撤销。`)) return
+      setPendingAction(`${runId}:delete`)
+      try {
+        await supplyGraphApi.deleteRun(runId)
+        if (expandedRef.current === runId) {
+          setExpandedId(null)
+          setTasks([])
+        }
+        await loadRuns()
+      } catch {
+        setError('删除失败，请稍后重试。')
+      } finally {
+        setPendingAction(null)
+      }
+    },
+    [loadRuns],
+  )
 
   const runAction = useCallback(
     async (runId: string, action: 'pause' | 'resume' | 'retry' | 'restart') => {
@@ -461,6 +483,14 @@ export default function SupplyGraphTasksPage() {
                                   重新触发
                                 </button>
                               )}
+                              <button
+                                onClick={() => deleteRun(run.id, run.universe)}
+                                disabled={isBusy(run.id, 'delete')}
+                                className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1 text-xs text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                              >
+                                <Trash2 className="h-3 w-3" aria-hidden="true" />
+                                删除
+                              </button>
                             </div>
                           </td>
                         </tr>
