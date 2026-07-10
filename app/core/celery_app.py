@@ -11,6 +11,8 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     task_default_queue="supply_chain",
+    # 编排任务单独一个队列，避免排在某批次几百个公司任务后面被饿死（worker 对多队列轮询消费）。
+    task_routes={"supply_chain.run_batch": {"queue": "supply_chain_orchestration"}},
     task_default_rate_limit="30/m",
     worker_concurrency=settings.SUPPLY_CHAIN_WORKER_CONCURRENCY,
     imports=("app.tasks.supply_chain",),

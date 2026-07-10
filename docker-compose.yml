@@ -71,7 +71,7 @@ services:
       context: .
       args:
         APP_ENV: ${APP_ENV:-development}
-    command: ["/app/.venv/bin/celery", "-A", "app.core.celery_app.celery_app", "worker", "--loglevel=info", "-Q", "supply_chain"]
+    command: ["/app/.venv/bin/celery", "-A", "app.core.celery_app.celery_app", "worker", "--loglevel=info", "-Q", "supply_chain,supply_chain_orchestration"]
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs

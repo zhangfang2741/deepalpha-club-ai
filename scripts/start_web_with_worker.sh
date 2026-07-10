@@ -21,7 +21,7 @@ if [ "${RUN_SUPPLY_CHAIN_WORKER:-true}" != "true" ]; then
 fi
 
 # 后台启动 worker
-"${VENV}/celery" -A app.core.celery_app worker --loglevel=info -Q supply_chain &
+"${VENV}/celery" -A app.core.celery_app worker --loglevel=info -Q supply_chain,supply_chain_orchestration &
 WORKER_PID=$!
 
 # 前台启动 uvicorn

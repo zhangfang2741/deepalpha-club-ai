@@ -14,6 +14,7 @@ from app.models.supply_chain_run import SupplyChainRun
 from app.models.supply_chain_task import SupplyChainTask
 from app.schemas.supply_chain_map import RunCreate, RunCreated
 from app.services.supply_chain.graph_query import query_neighborhood
+from app.services.supply_chain.scheduler import SCHEDULE_SOURCE, mark_week_skipped
 from app.tasks.supply_chain import process_company, resume_run_if_quota_recovered, run_supply_chain_batch
 
 router = APIRouter()
@@ -154,6 +155,11 @@ def delete_run(request: Request, run_id: uuid.UUID, session: Session = Depends(g
     run = session.get(SupplyChainRun, run_id)
     if run is None:
         raise HTTPException(404, "run not found")
+    # 删除的是每周自动调度任务时，标记本周跳过，避免调度器把它重建（下周自动恢复）。
+    if run.params.get("source") == SCHEDULE_SOURCE:
+        week_key = run.params.get("week_key")
+        if week_key:
+            mark_week_skipped(str(week_key))
     tasks = session.exec(select(SupplyChainTask).where(SupplyChainTask.run_id == run_id)).all()
     for task in tasks:
         session.delete(task)
