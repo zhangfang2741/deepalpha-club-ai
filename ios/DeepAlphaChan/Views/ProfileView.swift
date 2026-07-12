@@ -1,0 +1,77 @@
+import SwiftUI
+
+/// 我的：账号信息、免责声明、登出。
+struct ProfileView: View {
+    @EnvironmentObject var auth: AuthViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var showLogoutAlert = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("账号") {
+                    if let p = auth.profile {
+                        row("邮箱", p.email)
+                        if let name = p.username { row("用户名", name) }
+                    } else {
+                        Text("加载中…").foregroundColor(Theme.textSecondary)
+                    }
+                }
+
+                Section("关于") {
+                    row("版本", appVersion)
+                    Link(destination: URL(string: "https://deepalpha.club/privacy")!) {
+                        Text("隐私政策")
+                    }
+                    Link(destination: URL(string: "https://deepalpha.club/terms")!) {
+                        Text("服务条款")
+                    }
+                }
+
+                Section {
+                    Text("本 App 提供的缠论结构识别、买卖点标注与操作倾向均由算法自动生成，仅供技术研究与学习参考，不构成任何投资建议或买卖要约。证券投资有风险，任何决策请自主判断并自负盈亏。")
+                        .font(.caption).foregroundColor(Theme.textSecondary)
+                } header: {
+                    Text("免责声明")
+                }
+
+                Section {
+                    Button(role: .destructive) {
+                        showLogoutAlert = true
+                    } label: {
+                        Text("退出登录").frame(maxWidth: .infinity)
+                    }
+                }
+            }
+            .navigationTitle("我的")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") { dismiss() }
+                }
+            }
+            .task { if auth.profile == nil { await auth.loadProfile() } }
+            .alert("确认退出登录？", isPresented: $showLogoutAlert) {
+                Button("取消", role: .cancel) {}
+                Button("退出", role: .destructive) {
+                    auth.logout()
+                    dismiss()
+                }
+            }
+        }
+    }
+
+    private func row(_ title: String, _ value: String) -> some View {
+        HStack {
+            Text(title).foregroundColor(Theme.textSecondary)
+            Spacer()
+            Text(value).foregroundColor(Theme.textPrimary)
+        }
+    }
+
+    private var appVersion: String {
+        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        return "\(v) (\(b))"
+    }
+}
