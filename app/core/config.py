@@ -296,6 +296,9 @@ class Settings:
         self.ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
         self.REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
+        # Sign in with Apple：iOS App 的 Bundle ID，用作校验 Apple 身份令牌的 aud
+        self.APPLE_CLIENT_ID = os.getenv("APPLE_CLIENT_ID", "club.deepalpha.chan")
+
         # CORS（别名，兼容 ALLOWED_ORIGINS）
         cors_env = os.getenv("CORS_ORIGINS", "")
         if cors_env:

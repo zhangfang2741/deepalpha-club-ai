@@ -1,6 +1,7 @@
 """认证路由：注册、登录、会话管理。."""
 
 import asyncio
+import secrets
 import uuid
 from typing import List
 
@@ -12,6 +13,7 @@ from app.core.logging import logger
 from app.models.session import Session
 from app.models.user import User
 from app.schemas.auth import (
+    AppleLoginRequest,
     PasswordChange,
     SessionResponse,
     TokenResponse,
@@ -20,6 +22,7 @@ from app.schemas.auth import (
     UserResponse,
     UserUpdate,
 )
+from app.services.apple_auth import AppleAuthError, verify_identity_token
 from app.services.database import database_service
 from app.utils.auth import create_access_token
 from app.utils.sanitization import sanitize_email, sanitize_string, validate_password_strength
@@ -175,6 +178,50 @@ async def login(
     except ValueError as ve:
         logger.exception("login_validation_failed", error=str(ve))
         raise HTTPException(status_code=422, detail={"message": str(ve), "code": "VALIDATION_ERROR"})
+
+
+@router.post("/apple", response_model=TokenResponse)
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["login"][0])
+async def login_with_apple(request: Request, body: AppleLoginRequest):
+    """Sign in with Apple 登录。.
+
+    校验 iOS 端传来的 Apple 身份令牌，按邮箱查找或创建用户，签发本平台 JWT。
+    Apple 用户无需密码：新建时写入随机不可用密码，后续始终经 Apple 验证登录。
+    """
+    try:
+        try:
+            claims = await verify_identity_token(body.identity_token)
+        except AppleAuthError as e:
+            raise HTTPException(
+                status_code=401,
+                detail={"message": str(e), "code": "APPLE_TOKEN_INVALID"},
+            )
+
+        apple_sub = claims["sub"]
+        # Apple 可能返回私密转发邮箱；缺失时用 sub 兜底一个稳定的合成邮箱
+        email = claims.get("email") or f"{apple_sub}@appleid.deepalpha.club"
+        email = sanitize_email(email)
+
+        user = await asyncio.to_thread(database_service.get_user_by_email, email)
+        if user is None:
+            # 生成随机强密码（含各类字符），仅用于占位，用户永远走 Apple 登录
+            random_password = f"Aa1!{secrets.token_urlsafe(24)}"
+            hashed_password = await asyncio.to_thread(User.hash_password, random_password)
+            username = sanitize_string(body.full_name) if body.full_name else None
+            user = await asyncio.to_thread(
+                database_service.create_user, email, hashed_password, username
+            )
+            logger.info("apple_user_created", user_id=user.id)
+        else:
+            logger.info("apple_user_login", user_id=user.id)
+
+        token = create_access_token(str(user.id))
+        return TokenResponse(access_token=token.access_token, token_type="bearer", expires_at=token.expires_at)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("apple_login_failed", error=str(e))
+        raise HTTPException(status_code=500, detail="Apple 登录失败，请稍后再试")
 
 
 @router.post("/session", response_model=SessionResponse)
@@ -370,7 +417,7 @@ async def change_password(
 
 @router.delete("/me", response_model=dict)
 async def delete_current_user(user: User = Depends(get_current_user)):
-    """删除当前登录用户的账号（不可恢复）。
+    """删除当前登录用户的账号（不可恢复）。.
 
     App Store 审核指南 5.1.1(v) 要求：支持账号创建的 App 必须提供账号删除入口。
     删除后该用户的登录凭证立即失效，关联会话一并清除。

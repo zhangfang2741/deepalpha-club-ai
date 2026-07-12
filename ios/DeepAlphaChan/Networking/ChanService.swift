@@ -45,6 +45,27 @@ enum AuthService {
         ])
     }
 
+    /// 注册：JSON，username 可选。密码需含大小写字母+数字+特殊字符，长度 8–64。
+    static func register(email: String, password: String, username: String?) async throws -> RegisterResponse {
+        struct Body: Encodable {
+            let email: String
+            let password: String
+            let username: String?
+        }
+        return try await APIClient.shared.postJSON("/auth/register", body: Body(
+            email: email, password: password, username: username))
+    }
+
+    /// Sign in with Apple：把 Apple 身份令牌换成本平台 token。
+    static func appleLogin(identityToken: String, fullName: String?) async throws -> LoginResponse {
+        struct Body: Encodable {
+            let identity_token: String
+            let full_name: String?
+        }
+        return try await APIClient.shared.postJSON("/auth/apple", body: Body(
+            identity_token: identityToken, full_name: fullName))
+    }
+
     /// 获取当前用户资料。
     static func me() async throws -> UserProfile {
         try await APIClient.shared.get("/auth/me")

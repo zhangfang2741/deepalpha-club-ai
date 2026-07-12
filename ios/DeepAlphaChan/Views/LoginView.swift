@@ -1,10 +1,12 @@
 import SwiftUI
+import AuthenticationServices
 
-/// 登录页。复用后端 JWT 账号密码登录。
+/// 登录页。支持：后端 JWT 账号密码登录、注册、Sign in with Apple。
 struct LoginView: View {
     @EnvironmentObject var auth: AuthViewModel
     @State private var email = ""
     @State private var password = ""
+    @State private var showRegister = false
     @FocusState private var focused: Field?
 
     private enum Field { case email, password }
@@ -63,6 +65,24 @@ struct LoginView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
                     .disabled(auth.isLoading)
+
+                    Button {
+                        auth.errorMessage = nil
+                        showRegister = true
+                    } label: {
+                        Text("没有账号？注册").font(.footnote).foregroundColor(Theme.accent)
+                    }
+
+                    dividerOr
+
+                    SignInWithAppleButton(.signIn) { request in
+                        request.requestedScopes = [.fullName, .email]
+                    } onCompletion: { result in
+                        handleApple(result)
+                    }
+                    .signInWithAppleButtonStyle(.white)
+                    .frame(height: 48)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .padding(20)
                 .background(Theme.surface)
@@ -76,6 +96,37 @@ struct LoginView: View {
                     .foregroundColor(Theme.textSecondary)
             }
             .padding(24)
+        }
+        .sheet(isPresented: $showRegister) { RegisterView() }
+    }
+
+    // MARK: - Sign in with Apple 处理
+
+    private func handleApple(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let authorization):
+            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                  let tokenData = credential.identityToken,
+                  let token = String(data: tokenData, encoding: .utf8) else {
+                auth.errorMessage = "无法获取 Apple 身份令牌"
+                return
+            }
+            let name = [credential.fullName?.givenName, credential.fullName?.familyName]
+                .compactMap { $0 }.joined(separator: " ")
+            Task { await auth.loginWithApple(identityToken: token, fullName: name.isEmpty ? nil : name) }
+        case .failure(let error):
+            // 用户主动取消不提示
+            if (error as NSError).code != ASAuthorizationError.canceled.rawValue {
+                auth.errorMessage = "Apple 登录失败，请重试"
+            }
+        }
+    }
+
+    private var dividerOr: some View {
+        HStack(spacing: 10) {
+            Rectangle().fill(Theme.border).frame(height: 1)
+            Text("或").font(.caption2).foregroundColor(Theme.textSecondary)
+            Rectangle().fill(Theme.border).frame(height: 1)
         }
     }
 

@@ -5,7 +5,8 @@ App 直连线上 API（`https://api.deepalpha.club`）消费现有 `/api/v1/chan
 
 ## 功能
 
-- **登录**：复用后端 JWT 账号密码（`POST /api/v1/auth/login`），token 存 Keychain。
+- **登录 / 注册 / Sign in with Apple**：账号密码登录（`/auth/login`）、应用内注册
+  （`/auth/register`，密码强度实时校验）、Apple 一键登录（`/auth/apple`），token 存 Keychain。
 - **缠论主图**：原生 Canvas 自绘 K 线 + 缠论结构叠加（分型 / 笔 / 线段 / 中枢 / 买卖点），
   支持**双指缩放、单指横向平移、十字光标**看单根 OHLC。
 - **MACD 副图**：与主图 x 轴联动（柱 + DIF/DEA）。
@@ -56,8 +57,9 @@ ios/
 - [ ] 填写 App 名称、副标题、关键词、描述、分类（**财务 / Finance**）。
 - [ ] **App 隐私（Privacy Nutrition Label）**：如实勾选收集的数据
       （本 App 仅收集登录邮箱做账号认证，不做广告追踪）。
-- [ ] 上传 **隐私政策 URL** 与 **服务条款 URL**（我的页已链到 `deepalpha.club/privacy`、
-      `/terms`，需你在官网补上这两个页面）。
+- [x] **隐私政策 / 服务条款页面**：已实现，位于官网 `deepalpha.club/privacy`、`/terms`
+      （前端 `frontend/app/privacy`、`frontend/app/terms`）。上架时把这两个 URL 填入
+      App Store Connect，「我的」页也已链接到它们。
 
 ### C. 素材
 - [ ] App 图标：工程已内置 1024×1024 占位图标（`Assets.xcassets/AppIcon`），
@@ -70,7 +72,10 @@ ios/
 - [x] **删除账号入口**：指南 5.1.1(v) 强制要求。**已实现**：后端 `DELETE /api/v1/auth/me`
       + 「我的」页「删除账号」入口（二次确认，删除后自动登出）。
 - [ ] **测试账号**：提交审核时在「App 审核信息」里填一个可登录看全功能的账号密码。
-- [ ] 若日后接入第三方登录（Google 等），**必须**同时提供 Sign in with Apple（指南 4.8）。
+- [x] **Sign in with Apple**：代码已接入（登录页按钮 + 后端 `/auth/apple` 验签）。
+      ⚠️ 上架前需在 Xcode `Signing & Capabilities → + Capability → Sign in with Apple`
+      启用该能力（会自动生成 entitlement），**此能力要求付费开发者账号，个人免费 team 无法启用**。
+      未启用时按钮可编译、可点击，但认证不会成功。后端 `APPLE_CLIENT_ID` 需与 Bundle ID 一致。
 
 ### E. 构建与提交
 - [ ] Xcode `Product → Archive` → `Distribute App → App Store Connect` 上传。
@@ -79,16 +84,16 @@ ios/
 
 ## 后续 TODO（本 MVP 未含，上架前建议补齐）
 
-1. **注册页**：当前仅登录；可加 `POST /api/v1/auth/register` 对应的注册页。
-2. **Sign in with Apple**：提升转化，若未来加三方登录则为强制项。
-3. **自选股 / 历史记录**：本地收藏常看标的，提升留存。
-4. **图表增强**：成交量副图、更多周期（60min 等，依后端支持）。
+1. **自选股 / 历史记录**：本地收藏常看标的，提升留存。
+2. **图表增强**：成交量副图、更多周期（60min 等，依后端支持）。
 
 ## 与后端的对接契约
 
 | 用途 | 方法 | 路径 |
 |------|------|------|
 | 登录 | POST（form-urlencoded：email/password/grant_type） | `/api/v1/auth/login` |
+| 注册 | POST（JSON：email/password/username?） | `/api/v1/auth/register` |
+| Apple 登录 | POST（JSON：identity_token/full_name?） | `/api/v1/auth/apple` |
 | 当前用户 | GET | `/api/v1/auth/me` |
 | 删除账号 | DELETE | `/api/v1/auth/me` |
 | 缠论分析 | GET（symbol/start_date/end_date/freq） | `/api/v1/chan/analysis` |

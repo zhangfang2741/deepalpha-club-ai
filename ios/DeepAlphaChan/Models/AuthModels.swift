@@ -13,6 +13,14 @@ struct LoginResponse: Codable {
     }
 }
 
+/// 注册响应：对应 `POST /api/v1/auth/register`，含用户信息与嵌套 token。
+struct RegisterResponse: Codable {
+    let id: Int
+    let email: String
+    let username: String?
+    let token: LoginResponse
+}
+
 /// 当前用户资料：对应 `GET /api/v1/auth/me`。
 struct UserProfile: Codable, Identifiable {
     let id: Int
