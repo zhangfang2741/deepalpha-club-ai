@@ -165,9 +165,16 @@ class DatabaseService:
             if not user:
                 return False
 
+            # 先删除该用户的聊天会话，避免外键约束（session.user_id -> user.id）阻止删除
+            chat_sessions = session.exec(
+                select(ChatSession).where(ChatSession.user_id == user.id)
+            ).all()
+            for chat_session in chat_sessions:
+                session.delete(chat_session)
+
             session.delete(user)
             session.commit()
-            logger.info("user_deleted", email=email)
+            logger.info("user_deleted", email=email, sessions_removed=len(chat_sessions))
             return True
 
     def create_session(

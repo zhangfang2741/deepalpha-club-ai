@@ -366,3 +366,24 @@ async def change_password(
     except Exception as e:
         logger.exception("change_password_failed", user_id=user.id, error=str(e))
         raise HTTPException(status_code=500, detail="Failed to change password")
+
+
+@router.delete("/me", response_model=dict)
+async def delete_current_user(user: User = Depends(get_current_user)):
+    """删除当前登录用户的账号（不可恢复）。
+
+    App Store 审核指南 5.1.1(v) 要求：支持账号创建的 App 必须提供账号删除入口。
+    删除后该用户的登录凭证立即失效，关联会话一并清除。
+    """
+    try:
+        deleted = await asyncio.to_thread(database_service.delete_user_by_email, user.email)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="用户不存在")
+
+        logger.info("user_account_deleted", user_id=user.id)
+        return {"message": "账号已删除"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("delete_user_failed", user_id=user.id, error=str(e))
+        raise HTTPException(status_code=500, detail="删除账号失败，请稍后再试")

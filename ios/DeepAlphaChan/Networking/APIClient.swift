@@ -44,6 +44,11 @@ actor APIClient {
         return try await send(req)
     }
 
+    func delete<T: Decodable>(_ path: String) async throws -> T {
+        let req = request(path: path, method: "DELETE")
+        return try await send(req)
+    }
+
     func postForm<T: Decodable>(_ path: String, fields: [String: String]) async throws -> T {
         var req = request(path: path, method: "POST")
         req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")

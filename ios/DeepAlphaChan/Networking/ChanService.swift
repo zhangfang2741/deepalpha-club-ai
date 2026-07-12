@@ -49,4 +49,15 @@ enum AuthService {
     static func me() async throws -> UserProfile {
         try await APIClient.shared.get("/auth/me")
     }
+
+    /// 删除当前账号（不可恢复）。App Store 5.1.1(v) 要求。
+    @discardableResult
+    static func deleteAccount() async throws -> MessageResponse {
+        try await APIClient.shared.delete("/auth/me")
+    }
+}
+
+/// 通用 `{"message": "..."}` 响应。
+struct MessageResponse: Codable {
+    let message: String
 }

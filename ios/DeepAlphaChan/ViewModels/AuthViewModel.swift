@@ -42,4 +42,22 @@ final class AuthViewModel: ObservableObject {
         profile = nil
         isAuthenticated = false
     }
+
+    /// 删除账号：成功后本地登出。
+    func deleteAccount() async -> Bool {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            try await AuthService.deleteAccount()
+            logout()
+            return true
+        } catch let error as APIError {
+            errorMessage = error.message
+            return false
+        } catch {
+            errorMessage = "删除账号失败，请稍后再试"
+            return false
+        }
+    }
 }

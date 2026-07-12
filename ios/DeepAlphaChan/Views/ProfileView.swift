@@ -5,6 +5,7 @@ struct ProfileView: View {
     @EnvironmentObject var auth: AuthViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var showLogoutAlert = false
+    @State private var showDeleteAlert = false
 
     var body: some View {
         NavigationStack {
@@ -42,6 +43,21 @@ struct ProfileView: View {
                         Text("退出登录").frame(maxWidth: .infinity)
                     }
                 }
+
+                Section {
+                    Button(role: .destructive) {
+                        showDeleteAlert = true
+                    } label: {
+                        HStack {
+                            if auth.isLoading { ProgressView() }
+                            Text("删除账号").frame(maxWidth: .infinity)
+                        }
+                    }
+                    .disabled(auth.isLoading)
+                } footer: {
+                    Text("删除账号将永久移除你的账户及关联数据，此操作不可恢复。")
+                        .font(.caption2)
+                }
             }
             .navigationTitle("我的")
             .navigationBarTitleDisplayMode(.inline)
@@ -57,6 +73,17 @@ struct ProfileView: View {
                     auth.logout()
                     dismiss()
                 }
+            }
+            .alert("确认删除账号？", isPresented: $showDeleteAlert) {
+                Button("取消", role: .cancel) {}
+                Button("永久删除", role: .destructive) {
+                    Task {
+                        let ok = await auth.deleteAccount()
+                        if ok { dismiss() }
+                    }
+                }
+            } message: {
+                Text("此操作将永久删除你的账号及关联数据，且不可恢复。")
             }
         }
     }
