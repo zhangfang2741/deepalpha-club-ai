@@ -96,6 +96,18 @@ class UserUpdate(BaseModel):
     username: str | None = Field(default=None, description="New username", max_length=50)
 
 
+class AppleLoginRequest(BaseModel):
+    """Sign in with Apple 登录请求。.
+
+    Attributes:
+        identity_token: iOS 端返回的 Apple 身份令牌（JWT）。
+        full_name: 首次登录时 Apple 提供的姓名（后续为空），用作用户名。
+    """
+
+    identity_token: str = Field(..., description="Apple identity token (JWT)")
+    full_name: str | None = Field(default=None, description="用户姓名（仅首次登录提供）", max_length=100)
+
+
 class PasswordChange(BaseModel):
     """Request model for changing password."""
 
