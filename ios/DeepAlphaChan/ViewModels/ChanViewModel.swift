@@ -62,11 +62,10 @@ final class ChanViewModel: ObservableObject {
                 symbol: sym, startDate: startDateString,
                 endDate: endDateString, freq: freq)
         } catch let error as APIError {
+            // 失败时保留上一次结果，仅提示错误，避免清空已呈现的图表
             errorMessage = error.message
-            analysis = nil
         } catch {
             errorMessage = "分析失败，请稍后再试"
-            analysis = nil
         }
     }
 

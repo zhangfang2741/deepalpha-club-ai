@@ -16,16 +16,20 @@ struct ChanDashboardView: View {
                     if !store.isSubscribed { quotaBanner }
                     DisclaimerBanner()
 
-                    if vm.isLoading {
-                        loadingPlaceholder
-                    } else if let error = vm.errorMessage {
-                        errorView(error)
-                    } else if let analysis = vm.analysis {
+                    if let analysis = vm.analysis {
+                        // 已有结果：始终保留图表；重新分析中显示轻提示，失败用顶部错误条（不清空）
+                        if vm.isLoading { refreshingBar }
+                        if let error = vm.errorMessage, !vm.isLoading { errorBanner(error) }
                         layerToggles
                         ChanChartView(analysis: analysis, vm: vm)
+                        chartHint
                         legend
                         SignalPanelView(analysis: analysis)
                         GapAnalysisView(vm: vm, isSubscribed: store.isSubscribed) { showPaywall = true }
+                    } else if vm.isLoading {
+                        loadingPlaceholder
+                    } else if let error = vm.errorMessage {
+                        errorView(error)
                     } else {
                         emptyState
                     }
@@ -58,16 +62,18 @@ struct ChanDashboardView: View {
 
     // MARK: - 门禁
 
-    /// 分析入口：会员无限次；免费用户走每日额度，用尽弹付费墙。
+    /// 分析入口：会员无限次；免费用户按「不同标的」走每日额度，用尽弹付费墙。
     private func triggerAnalysis() async {
-        if !store.isSubscribed && !usage.canUseFree() {
+        guard !vm.isLoading else { return }  // 防重入：加载中忽略再次触发
+        let symbol = vm.symbol.trimmingCharacters(in: .whitespaces).uppercased()
+        if !store.isSubscribed && !symbol.isEmpty && !usage.canUseFree(symbol: symbol) {
             showPaywall = true
             return
         }
         await vm.runAnalysis()
-        // 分析成功且非会员才记一次额度
+        // 分析成功且非会员才记一次（同标的当天不重复扣）
         if vm.errorMessage == nil && vm.analysis != nil && !store.isSubscribed {
-            usage.recordUse()
+            usage.recordUse(symbol: symbol)
         }
     }
 
@@ -75,7 +81,7 @@ struct ChanDashboardView: View {
         Button { showPaywall = true } label: {
             HStack(spacing: 8) {
                 Image(systemName: "crown.fill").foregroundColor(Theme.segment).font(.caption)
-                Text("今日免费分析剩余 \(usage.remaining)/\(usage.dailyQuota)")
+                Text("今日可分析 \(usage.remaining)/\(usage.dailyQuota) 支股票")
                     .font(.caption).foregroundColor(Theme.textPrimary)
                 Spacer()
                 Text("升级 Pro 无限次 ›").font(.caption.bold()).foregroundColor(Theme.accent)
@@ -85,6 +91,38 @@ struct ChanDashboardView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
+    }
+
+    /// 重新分析中的轻提示（已有图表时用，避免整屏 spinner 覆盖）。
+    private var refreshingBar: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small).tint(Theme.accent)
+            Text("正在更新分析…").font(.caption).foregroundColor(Theme.textSecondary)
+            Spacer()
+        }
+        .padding(.horizontal, 4)
+    }
+
+    /// 分析失败时的顶部错误条（保留下方图表）。
+    private func errorBanner(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.circle.fill").foregroundColor(Theme.down).font(.caption)
+            Text(message).font(.caption).foregroundColor(Theme.textPrimary)
+            Spacer()
+            Button { vm.errorMessage = nil } label: {
+                Image(systemName: "xmark").font(.caption2).foregroundColor(Theme.textSecondary)
+            }
+        }
+        .padding(10)
+        .background(Theme.down.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// 图表手势提示。
+    private var chartHint: some View {
+        Text("双指缩放 · 单指拖动平移 · 纵向拖动看单根 OHLC")
+            .font(.caption2).foregroundColor(Theme.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 
     // MARK: - 查询栏
@@ -121,11 +159,16 @@ struct ChanDashboardView: View {
                 Button {
                     Task { await triggerAnalysis() }
                 } label: {
-                    Text("分析").fontWeight(.semibold)
-                        .padding(.horizontal, 20).padding(.vertical, 8)
-                        .background(Theme.accent).foregroundColor(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    HStack(spacing: 6) {
+                        if vm.isLoading { ProgressView().controlSize(.small).tint(.white) }
+                        Text(vm.isLoading ? "分析中" : "分析").fontWeight(.semibold)
+                    }
+                    .padding(.horizontal, 20).padding(.vertical, 8)
+                    .background(vm.isLoading ? Theme.surfaceAlt : Theme.accent)
+                    .foregroundColor(vm.isLoading ? Theme.textSecondary : .white)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
+                .disabled(vm.isLoading)
             }
         }
         .padding(14)
