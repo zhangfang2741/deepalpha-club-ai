@@ -14,4 +14,12 @@ enum AppConfig {
 
     /// 网络请求超时（秒）。缠论分析含拉行情，放宽一些。
     static let requestTimeout: TimeInterval = 45
+
+    // MARK: - 订阅
+
+    /// 月度订阅商品 ID（需与 App Store Connect / Configuration.storekit 一致）。
+    static let proMonthlyProductID = "club.deepalpha.chan.pro.monthly"
+
+    /// 免费用户每日可用的缠论分析次数（超出需订阅）。
+    static let freeDailyQuota = 3
 }

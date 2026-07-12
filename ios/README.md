@@ -12,7 +12,9 @@ App 直连线上 API（`https://api.deepalpha.club`）消费现有 `/api/v1/chan
 - **MACD 副图**：与主图 x 轴联动（柱 + DIF/DEA）。
 - **图层开关**：分型 / 笔 / 线段 / 中枢 / 买卖点 逐项开关。
 - **结论面板**：当前结构摘要、操作倾向（含依据与风险提示）、买卖点列表、待确认结构。
-- **结构 GAP 分析**：填写产业结构判断 → 异步 LLM 任务（`POST /api/v1/chan/gap` + 轮询）。
+- **结构 GAP 分析**：填写产业结构判断 → 异步 LLM 任务（`POST /api/v1/chan/gap` + 轮询）。会员专属。
+- **订阅（StoreKit 2）**：免费用户每日 `AppConfig.freeDailyQuota`（默认 3）次缠论分析；
+  超出或使用 GAP 需订阅 **Pro**（月度，含 **7 天免费试用**）。端上凭证校验订阅状态。
 - **免责声明**：登录页、主图顶部、我的页均有醒目声明（金融类过审必备）。
 
 ## 目录结构
@@ -29,6 +31,32 @@ ios/
     │   └── Chart/                 # ChanChartView（自绘图表核心）
     └── Resources/                 # Info.plist / Assets（图标、强调色）
 ```
+
+## 订阅 / 内购（StoreKit 2）
+
+- **商品**：自动续订月度订阅，商品 ID `club.deepalpha.chan.pro.monthly`（见 `AppConfig`）。
+- **定价**：$9.9/月（在 App Store Connect 设置确切价格），**7 天免费试用**（引导优惠）。
+- **权益门禁**：
+  - 免费用户每日 `freeDailyQuota`（默认 3）次缠论分析，用尽弹付费墙。
+  - 结构 GAP 分析为**会员专属**。
+  - 会员无限次、解锁全部。
+- **校验方式**：端上 StoreKit 2（`Transaction.currentEntitlements`，Apple 签名 JWS）。
+  > 注意：每日额度计数在端上（UserDefaults），可被重装/改时间绕过。如需严格限制，
+  > 后续可改为后端按用户校验 + App Store Server Notifications（见文末 TODO）。
+
+### 本地测试订阅（无需 App Store Connect）
+
+1. 工程已带 `DeepAlphaChan/Configuration.storekit`（含 Pro 月度 + 7 天试用）。
+2. Xcode 菜单 `Product → Scheme → Edit Scheme → Run → Options`，
+   把 **StoreKit Configuration** 选为 `Configuration.storekit`。
+3. 运行后即可在付费墙里走完整的购买/试用/恢复流程（沙盒模拟，不产生真实扣款）。
+
+### 上架前在 App Store Connect 配置
+
+1. 签署 **Paid Applications Agreement**（协议 → 付费 App），否则内购不可用。
+2. `功能 → 订阅`：新建订阅群组，添加自动续订订阅，**商品 ID 与上面一致**。
+3. 设置价格（$9.9/月）与本地化信息；添加 **入门优惠（Introductory Offer）→ 免费试用 → 1 周**。
+4. 提交订阅供审核（首次随 App 版本一起审）。
 
 ## 本地运行
 
@@ -61,6 +89,11 @@ ios/
       （前端 `frontend/app/privacy`、`frontend/app/terms`）。上架时把这两个 URL 填入
       App Store Connect，「我的」页也已链接到它们。
 
+### B2. 订阅内购
+- [x] **StoreKit 2 订阅**：代码已接入（付费墙、试用、恢复购买、每日额度门禁、GAP 会员专属）。
+- [ ] 签署 Paid Applications Agreement；在 App Store Connect 创建同 ID 的自动续订订阅 + 7 天免费试用。
+- [ ] 付费墙已含苹果要求的价格、试用条款、自动续订披露、恢复购买、服务条款/隐私链接。
+
 ### C. 素材
 - [ ] App 图标：工程已内置 1024×1024 占位图标（`Assets.xcassets/AppIcon`），
       上架前建议替换为正式设计稿。
@@ -84,8 +117,10 @@ ios/
 
 ## 后续 TODO（本 MVP 未含，上架前建议补齐）
 
-1. **自选股 / 历史记录**：本地收藏常看标的，提升留存。
-2. **图表增强**：成交量副图、更多周期（60min 等，依后端支持）。
+1. **订阅服务端加固**：后端接 App Store Server API / Server Notifications，
+   按用户维度校验订阅与每日额度，防止端上绕过。
+2. **自选股 / 历史记录**：本地收藏常看标的，提升留存。
+3. **图表增强**：成交量副图、更多周期（60min 等，依后端支持）。
 
 ## 与后端的对接契约
 

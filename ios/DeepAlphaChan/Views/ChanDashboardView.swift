@@ -3,13 +3,17 @@ import SwiftUI
 /// 缠论主界面。
 struct ChanDashboardView: View {
     @StateObject private var vm = ChanViewModel()
+    @EnvironmentObject private var store: StoreManager
+    @EnvironmentObject private var usage: UsageTracker
     @State private var showSettings = false
+    @State private var showPaywall = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
                     queryBar
+                    if !store.isSubscribed { quotaBanner }
                     DisclaimerBanner()
 
                     if vm.isLoading {
@@ -21,7 +25,7 @@ struct ChanDashboardView: View {
                         ChanChartView(analysis: analysis, vm: vm)
                         legend
                         SignalPanelView(analysis: analysis)
-                        GapAnalysisView(vm: vm)
+                        GapAnalysisView(vm: vm, isSubscribed: store.isSubscribed) { showPaywall = true }
                     } else {
                         emptyState
                     }
@@ -32,6 +36,15 @@ struct ChanDashboardView: View {
             .navigationTitle("缠论分析")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                if !store.isSubscribed {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button { showPaywall = true } label: {
+                            Label("Pro", systemImage: "crown.fill")
+                                .font(.caption.bold())
+                        }
+                        .tint(Theme.segment)
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: {
                         Image(systemName: "person.circle")
@@ -39,10 +52,39 @@ struct ChanDashboardView: View {
                 }
             }
             .sheet(isPresented: $showSettings) { ProfileView() }
+            .sheet(isPresented: $showPaywall) { PaywallView() }
         }
-        .task {
-            if vm.analysis == nil { await vm.runAnalysis() }
+    }
+
+    // MARK: - 门禁
+
+    /// 分析入口：会员无限次；免费用户走每日额度，用尽弹付费墙。
+    private func triggerAnalysis() async {
+        if !store.isSubscribed && !usage.canUseFree() {
+            showPaywall = true
+            return
         }
+        await vm.runAnalysis()
+        // 分析成功且非会员才记一次额度
+        if vm.errorMessage == nil && vm.analysis != nil && !store.isSubscribed {
+            usage.recordUse()
+        }
+    }
+
+    private var quotaBanner: some View {
+        Button { showPaywall = true } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "crown.fill").foregroundColor(Theme.segment).font(.caption)
+                Text("今日免费分析剩余 \(usage.remaining)/\(usage.dailyQuota)")
+                    .font(.caption).foregroundColor(Theme.textPrimary)
+                Spacer()
+                Text("升级 Pro 无限次 ›").font(.caption.bold()).foregroundColor(Theme.accent)
+            }
+            .padding(10)
+            .background(Theme.segment.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - 查询栏
@@ -56,7 +98,7 @@ struct ChanDashboardView: View {
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
                         .foregroundColor(Theme.textPrimary)
-                        .onSubmit { Task { await vm.runAnalysis() } }
+                        .onSubmit { Task { await triggerAnalysis() } }
                 }
                 .padding(10).background(Theme.surfaceAlt)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -77,7 +119,7 @@ struct ChanDashboardView: View {
                     .labelsHidden()
                 Spacer()
                 Button {
-                    Task { await vm.runAnalysis() }
+                    Task { await triggerAnalysis() }
                 } label: {
                     Text("分析").fontWeight(.semibold)
                         .padding(.horizontal, 20).padding(.vertical, 8)
@@ -154,7 +196,7 @@ struct ChanDashboardView: View {
             Image(systemName: "exclamationmark.triangle").font(.largeTitle).foregroundColor(Theme.down)
             Text(message).font(.subheadline).foregroundColor(Theme.textSecondary)
                 .multilineTextAlignment(.center)
-            Button("重试") { Task { await vm.runAnalysis() } }
+            Button("重试") { Task { await triggerAnalysis() } }
                 .buttonStyle(.borderedProminent).tint(Theme.accent)
         }
         .frame(maxWidth: .infinity, minHeight: 200).padding()

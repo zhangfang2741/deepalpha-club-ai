@@ -1,11 +1,15 @@
 import SwiftUI
+import StoreKit
 
-/// 我的：账号信息、免责声明、登出。
+/// 我的：账号信息、订阅、免责声明、登出。
 struct ProfileView: View {
     @EnvironmentObject var auth: AuthViewModel
+    @EnvironmentObject var store: StoreManager
     @Environment(\.dismiss) private var dismiss
     @State private var showLogoutAlert = false
     @State private var showDeleteAlert = false
+    @State private var showPaywall = false
+    @State private var showManageSubscriptions = false
 
     var body: some View {
         NavigationStack {
@@ -17,6 +21,31 @@ struct ProfileView: View {
                     } else {
                         Text("加载中…").foregroundColor(Theme.textSecondary)
                     }
+                }
+
+                Section("订阅") {
+                    HStack {
+                        Text("当前方案").foregroundColor(Theme.textSecondary)
+                        Spacer()
+                        if store.isSubscribed {
+                            Label("Pro 会员", systemImage: "crown.fill")
+                                .font(.subheadline.bold()).foregroundColor(Theme.segment)
+                        } else {
+                            Text("免费版").foregroundColor(Theme.textPrimary)
+                        }
+                    }
+                    if store.isSubscribed {
+                        Button("管理订阅") { showManageSubscriptions = true }
+                    } else {
+                        Button {
+                            showPaywall = true
+                        } label: {
+                            Label("升级 Pro（7 天免费试用）", systemImage: "crown.fill")
+                                .foregroundColor(Theme.segment)
+                        }
+                    }
+                    Button("恢复购买") { Task { await store.restore() } }
+                        .foregroundColor(Theme.accent)
                 }
 
                 Section("关于") {
@@ -74,6 +103,8 @@ struct ProfileView: View {
                     dismiss()
                 }
             }
+            .sheet(isPresented: $showPaywall) { PaywallView() }
+            .manageSubscriptionsSheet(isPresented: $showManageSubscriptions)
             .alert("确认删除账号？", isPresented: $showDeleteAlert) {
                 Button("取消", role: .cancel) {}
                 Button("永久删除", role: .destructive) {

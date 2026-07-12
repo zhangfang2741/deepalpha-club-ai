@@ -1,11 +1,42 @@
 import SwiftUI
 
-/// 市场结构 × 产业结构 GAP 分析（异步 LLM 任务）。
+/// 市场结构 × 产业结构 GAP 分析（异步 LLM 任务，会员专属）。
 struct GapAnalysisView: View {
     @ObservedObject var vm: ChanViewModel
+    let isSubscribed: Bool
+    let onUpgrade: () -> Void
 
     var body: some View {
         SectionCard(title: "结构 GAP 分析", systemImage: "arrow.triangle.branch") {
+            if isSubscribed {
+                unlockedContent
+            } else {
+                lockedContent
+            }
+        }
+    }
+
+    /// 未订阅时的锁定态。
+    private var lockedContent: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "crown.fill").foregroundColor(Theme.segment)
+                Text("会员专属功能").font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+                Spacer()
+            }
+            Text("结构 GAP 用 AI 对比技术面与你的产业判断，找出背离点。开通 Pro 即可解锁。")
+                .font(.caption).foregroundColor(Theme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button(action: onUpgrade) {
+                Text("升级 Pro 解锁").fontWeight(.semibold)
+                    .frame(maxWidth: .infinity).padding(.vertical, 11)
+                    .background(Theme.segment).foregroundColor(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+        }
+    }
+
+    private var unlockedContent: some View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("填写你对该标的的产业结构判断（基本面观点），系统会对比技术面结构，找出背离点。")
                     .font(.caption).foregroundColor(Theme.textSecondary)
@@ -45,7 +76,6 @@ struct GapAnalysisView: View {
 
                 if let result = vm.gapResult { resultView(result) }
             }
-        }
     }
 
     private func resultView(_ r: StructureGapResult) -> some View {

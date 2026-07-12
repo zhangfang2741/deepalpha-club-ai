@@ -1,0 +1,58 @@
+{
+  "identifier" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000001",
+  "nonRenewingSubscriptions" : [],
+  "products" : [],
+  "settings" : {
+    "_applicationInternalID" : "",
+    "_developerTeamID" : "",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 0,
+    "_locale" : "zh_CN",
+    "_storefront" : "USA",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000010",
+      "localizations" : [
+        {
+          "description" : "",
+          "displayName" : "DeepAlpha Pro",
+          "locale" : "zh_CN"
+        }
+      ],
+      "name" : "DeepAlpha Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "9.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000011",
+          "introductoryOffer" : {
+            "internalID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000012",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P1W"
+          },
+          "localizations" : [
+            {
+              "description" : "解锁全部缠论分析与结构 GAP，无每日次数限制",
+              "displayName" : "DeepAlpha Pro 月度会员",
+              "locale" : "zh_CN"
+            }
+          ],
+          "productID" : "club.deepalpha.chan.pro.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Pro Monthly",
+          "subscriptionGroupID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000010",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}
