@@ -295,10 +295,15 @@ class LLMService:
         if model_name or response_format or model_kwargs:
             all_names = llm_registry.get_all_names()
             if model_name and model_name not in all_names:
-                logger.error("requested_model_not_found", model_name=model_name)
-                raise ValueError(
-                    f"model '{model_name}' not found in registry. available models: {', '.join(all_names)}"
+                # 请求的模型未注册（如切到 MiniMax 后仍配着 claude-* 名称）时回退到当前默认模型，
+                # 避免整条生成链路因一个过期模型名而失败。
+                logger.warning(
+                    "requested_model_not_found_falling_back",
+                    requested=model_name,
+                    available=all_names,
+                    using=all_names[self._current_model_index] if all_names else "none",
                 )
+                model_name = None
 
             start = all_names.index(model_name) if model_name else self._current_model_index
             total = len(llm_registry.LLMS)
