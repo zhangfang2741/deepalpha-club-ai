@@ -1,7 +1,9 @@
 """Company-centric supply-chain graph API."""
 
+import json
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
 from app.core.celery_app import celery_app
@@ -14,10 +16,35 @@ from app.models.supply_chain_run import SupplyChainRun
 from app.models.supply_chain_task import SupplyChainTask
 from app.schemas.supply_chain_map import RunCreate, RunCreated
 from app.services.supply_chain.graph_query import query_neighborhood
+from app.services.supply_chain.realtime import stream_realtime_graph
 from app.services.supply_chain.scheduler import SCHEDULE_SOURCE, mark_week_skipped
 from app.tasks.supply_chain import process_company, resume_run_if_quota_recovered, run_supply_chain_batch
 
 router = APIRouter()
+
+
+@router.get("/preview/stream")
+@limiter.limit("10/minute")
+async def preview_graph_stream(
+    request: Request,
+    ticker: str = Query(..., min_length=1, max_length=8, pattern=r"^[A-Za-z][A-Za-z0-9.-]*$"),
+) -> StreamingResponse:
+    """Stream an ephemeral LLM graph without database or Celery access."""
+
+    async def events():
+        try:
+            async for event in stream_realtime_graph(ticker):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except Exception as exc:
+            logger.exception("supply_chain_preview_failed", ticker=ticker.upper(), error=str(exc))
+            payload = {"type": "error", "message": str(exc)}
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/companies/{ticker}/run", response_model=RunCreated)
@@ -137,10 +164,17 @@ def resume_run(request: Request, run_id: uuid.UUID, session: Session = Depends(g
 @limiter.limit("20/minute")
 def retry_failed(request: Request, run_id: uuid.UUID, session: Session = Depends(get_sync_session)) -> dict:
     """Requeue failed company tasks."""
+    run = session.get(SupplyChainRun, run_id)
+    if run is None:
+        raise HTTPException(404, "run not found")
     tasks = session.exec(select(SupplyChainTask).where(SupplyChainTask.run_id == run_id, SupplyChainTask.status == "failed")).all()
     for task in tasks:
-        task.status, task.error = "queued", None
+        task.status, task.error, task.retries = "queued", None, 0
+        task.started_at, task.finished_at, task.resume_after = None, None, None
         process_company.delay(str(run_id), task.ticker)  # pyright: ignore[reportFunctionMemberAccess]
+    if tasks:
+        run.status, run.finished_at = "running", None
+        run.failed = max(0, run.failed - len(tasks))
     session.commit()
     return {"requeued": len(tasks)}
 

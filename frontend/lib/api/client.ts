@@ -1,7 +1,7 @@
 // frontend/lib/api/client.ts
 import axios, { AxiosInstance, AxiosError } from 'axios'
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+export const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,

@@ -1,4 +1,5 @@
 import apiClient from './client'
+import { BASE_URL } from './client'
 
 export type GraphProperty = { name: string; value: unknown }
 export type SupplyNode = { nodeId: string; nodeType: string; properties: GraphProperty[] }
@@ -45,8 +46,44 @@ export type SupplyTask = {
 export type SupplyRunDetail = { run: SupplyRun; tasks: SupplyTask[] }
 
 export type WorkerStatus = { online: boolean; count: number; workers: string[]; error?: string }
+export type PreviewEvent =
+  | { type: 'status'; content: string }
+  | { type: 'delta'; content: string }
+  | { type: 'result'; graph: SupplyGraph }
+  | { type: 'error'; message: string }
+
+const streamPreview = async (
+  ticker: string,
+  onEvent: (event: PreviewEvent) => void,
+  signal?: AbortSignal,
+) => {
+  const token = typeof window === 'undefined' ? null : localStorage.getItem('access_token')
+  const response = await fetch(
+    `${BASE_URL}/api/v1/supply-graph/preview/stream?ticker=${encodeURIComponent(ticker)}`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : undefined, signal },
+  )
+  if (!response.ok || !response.body) throw new Error(`实时分析请求失败（${response.status}）`)
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value, { stream: !done })
+    const frames = buffer.split('\n\n')
+    buffer = frames.pop() || ''
+    for (const frame of frames) {
+      const data = frame
+        .split('\n')
+        .find((line) => line.startsWith('data: '))
+        ?.slice(6)
+      if (data) onEvent(JSON.parse(data) as PreviewEvent)
+    }
+    if (done) break
+  }
+}
 
 export const supplyGraphApi = {
+  previewStream: streamPreview,
   graph: async (ticker: string, depth = 1, direction = 'both') =>
     (await apiClient.get<SupplyGraph>('/api/v1/supply-graph/graph', { params: { ticker, depth, direction }, timeout: 30000 })).data,
   expand: async (nodeId: string, depth = 1, direction = 'both') =>
