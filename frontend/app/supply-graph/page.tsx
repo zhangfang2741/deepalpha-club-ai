@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import DashboardShell from "@/components/layout/DashboardShell";
 import CompanyResearchDrawer from "@/components/supply_graph/CompanyResearchDrawer";
@@ -13,36 +13,9 @@ import {
   type SupplyGraph,
   type SupplyNode,
 } from "@/lib/api/supplyGraph";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, Maximize2, Minimize2, PanelLeftOpen, RefreshCw, X } from "lucide-react";
 
 const EMPTY: SupplyGraph = { nodes: [], edges: [] };
-type SupplyRunTask = {
-  stage?: string;
-  status?: string;
-  error?: string | null;
-};
-type SupplyRunDetail = {
-  tasks?: SupplyRunTask[];
-};
-
-const sleep = (ms: number) =>
-  new Promise((resolve) => window.setTimeout(resolve, ms));
-
-const waitForSupplyRun = async (
-  runId: string,
-  onStage: (stage: string) => void,
-) => {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    await sleep(2000);
-    const detail = (await supplyGraphApi.run(runId)) as SupplyRunDetail;
-    const task = detail.tasks?.[0];
-    if (task?.stage) onStage(task.stage);
-    if (task?.status === "success") return;
-    if (task?.status === "failed")
-      throw new Error(task.error || "任务执行失败");
-  }
-  throw new Error("生成时间较长，请稍后重新加载查看结果");
-};
 
 const DEMO: SupplyGraph = {
   nodes: [
@@ -422,37 +395,93 @@ export default function SupplyGraphPage() {
   const [expanding, setExpanding] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState("");
+  const [llmOutput, setLlmOutput] = useState("");
+  const [outputOpen, setOutputOpen] = useState(true);
+  const [fullscreen, setFullscreen] = useState(false);
   const [feedback, setFeedback] = useState("正在加载核心供应链…");
   const [errorMessage, setErrorMessage] = useState("");
   const [selectedEdge, setSelectedEdge] = useState<SupplyEdge | null>(null);
   const [selectedNode, setSelectedNode] = useState<SupplyNode | null>(null);
   const [clues, setClues] = useState<Record<string, unknown>[]>([]);
+  const workspaceRef = useRef<HTMLElement>(null);
+  const requestPreview = useCallback(
+    async (target: string, signal?: AbortSignal) => {
+      let preview: SupplyGraph | null = null;
+      let streamError = "";
+      let firstDelta = true;
+      await supplyGraphApi.previewStream(
+        target,
+        (event) => {
+          if (signal?.aborted) return;
+          if (event.type === "status") {
+            setOutputOpen(true);
+            setLlmOutput((current) =>
+              firstDelta && current.startsWith("正在请求")
+                ? event.content
+                : `${current}${current ? "\n" : ""}${event.content}`,
+            );
+          } else if (event.type === "delta") {
+            setLlmOutput((current) => {
+              if (firstDelta) {
+                firstDelta = false;
+                return event.content;
+              }
+              return current + event.content;
+            });
+          } else if (event.type === "result") {
+            preview = event.graph;
+            setOutputOpen(false);
+          } else {
+            streamError = event.message;
+          }
+        },
+        signal,
+      );
+      if (streamError) throw new Error(streamError);
+      if (!preview) throw new Error("模型未返回有效图谱");
+      return preview as SupplyGraph;
+    },
+    [],
+  );
   useEffect(() => {
-    let cancelled = false;
-    void supplyGraphApi
-      .graph(ticker, 1, "both")
+    const controller = new AbortController();
+    void requestPreview(ticker, controller.signal)
       .then((data) => {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setGraph(data);
           setFeedback(
-            data.nodes.length ? "图谱已更新" : "暂无已生成的核心关系",
+            data.nodes.length ? `${ticker} 实时图谱已生成` : "模型未发现核心关系",
           );
           setErrorMessage("");
         }
       })
-      .catch(() => {
-        if (!cancelled) {
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
           setGraph(EMPTY);
-          setErrorMessage("图谱加载失败，请点击“重新加载”重试。");
+          setErrorMessage(error instanceof Error ? error.message : "实时图谱生成失败");
         }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       });
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, [ticker, refreshVersion]);
+  }, [ticker, refreshVersion, requestPreview]);
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setFullscreen(document.fullscreenElement === workspaceRef.current);
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+  const toggleFullscreen = async () => {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    } else {
+      await workspaceRef.current?.requestFullscreen();
+    }
+  };
   const coreGraph = useMemo(() => {
     const confidence = (edge: SupplyGraph["edges"][number]) =>
       Number(
@@ -500,22 +529,6 @@ export default function SupplyGraphPage() {
     },
     [graph.nodes],
   );
-  const nodeTicker = useCallback(
-    (id: string) => {
-      const node = graph.nodes.find((item) => item.nodeId === id);
-      const values = Object.fromEntries(
-        (node?.properties || []).map((property) => [
-          property.name,
-          property.value,
-        ]),
-      );
-      const tickerValue = values.ticker || id;
-      const tickerText = String(tickerValue || "").trim().toUpperCase();
-      if (!/^[A-Z][A-Z0-9.-]{0,7}$/.test(tickerText)) return "";
-      return tickerText;
-    },
-    [graph.nodes],
-  );
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setExploring(false);
@@ -530,9 +543,21 @@ export default function SupplyGraphPage() {
       const name = nodeDisplayName(id);
       try {
         setExpanding(true);
-        setFeedback(`正在扩展 ${name}…`);
+        setFeedback(`正在实时分析 ${name}…`);
         setExploring(true);
-        const next = await supplyGraphApi.expand(id, 1, expandDirection);
+        const preview = await requestPreview(id);
+        const edges = preview.edges.filter((edge) =>
+          expandDirection === "upstream"
+            ? edge.dstId === id
+            : expandDirection === "downstream"
+              ? edge.srcId === id
+              : edge.srcId === id || edge.dstId === id,
+        );
+        const nodeIds = new Set([id, ...edges.flatMap((edge) => [edge.srcId, edge.dstId])]);
+        const next = {
+          nodes: preview.nodes.filter((node) => nodeIds.has(node.nodeId)),
+          edges,
+        };
         setGraph((current) => mergeGraphs(current, next));
         setFeedback(`已完成 ${name} 的关系扩展`);
       } catch {
@@ -541,11 +566,10 @@ export default function SupplyGraphPage() {
         setExpanding(false);
       }
     },
-    [nodeDisplayName],
+    [nodeDisplayName, requestPreview],
   );
   const handleBidirectionalExpand = useCallback(async (id: string) => {
     const name = nodeDisplayName(id);
-    const focusTicker = nodeTicker(id);
     try {
       setSelectedNode(null);
       setSelectedEdge(null);
@@ -554,34 +578,12 @@ export default function SupplyGraphPage() {
       setErrorMessage("");
       setFeedback(`正在扩展 ${name} 的供应链和大客户…`);
       setExploring(true);
-      const expandSeed = focusTicker || id;
       const currentNodeIds = new Set(graph.nodes.map((node) => node.nodeId));
       const currentEdgeIds = new Set(graph.edges.map((edge) => edge.edgeId));
-      const fetchNeighbors = async () => {
-        const [upstream, downstream] = await Promise.all([
-          supplyGraphApi.expand(expandSeed, 1, "upstream"),
-          supplyGraphApi.expand(expandSeed, 1, "downstream"),
-        ]);
-        return mergeGraphs(upstream, downstream);
-      };
-      // 先展开已有图数据，立即出点边；
-      let incoming = await fetchNeighbors();
-      let newNodeCount = incoming.nodes.filter(
+      const incoming = await requestPreview(id);
+      const newNodeCount = incoming.nodes.filter(
         (node) => !currentNodeIds.has(node.nodeId),
       ).length;
-      // 已有数据里没有可展开的邻居（如叶子公司）→ 触发一次真实生成再展开。
-      if (newNodeCount === 0 && focusTicker) {
-        setFeedback(`正在基于真实环境分析 ${name} 的供应链和大客户…`);
-        setProgress("DISCOVER");
-        const created = (await supplyGraphApi.runCompany(focusTicker)) as {
-          run_id: string;
-        };
-        await waitForSupplyRun(created.run_id, setProgress);
-        incoming = mergeGraphs(incoming, await fetchNeighbors());
-        newNodeCount = incoming.nodes.filter(
-          (node) => !currentNodeIds.has(node.nodeId),
-        ).length;
-      }
       const newEdgeCount = incoming.edges.filter(
         (edge) => !currentEdgeIds.has(edge.edgeId),
       ).length;
@@ -601,17 +603,12 @@ export default function SupplyGraphPage() {
       setExpanding(false);
       setProgress("");
     }
-  }, [graph.edges, graph.nodes, nodeDisplayName, nodeTicker]);
+  }, [graph.edges, graph.nodes, nodeDisplayName, requestPreview]);
   const handleEdge = useCallback(
-    async (id: string) => {
+    (id: string) => {
       setSelectedNode(null);
       setSelectedEdge(graph.edges.find((edge) => edge.edgeId === id) || null);
       setClues([]);
-      try {
-        setClues(await supplyGraphApi.clues(id));
-      } catch {
-        setClues([]);
-      }
     },
     [graph.edges],
   );
@@ -629,10 +626,9 @@ export default function SupplyGraphPage() {
       setErrorMessage("");
       setProgress("DISCOVER");
       setFeedback(`正在分析 ${ticker} 的核心供应商和大客户…`);
-      const created = await supplyGraphApi.runCompany(ticker);
-      await waitForSupplyRun(created.run_id, setProgress);
+      const preview = await requestPreview(ticker);
+      setGraph(preview);
       setFeedback(`${ticker} 的核心关系已生成`);
-      setRefreshVersion((version) => version + 1);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "生成失败，请稍后重试。",
@@ -645,7 +641,7 @@ export default function SupplyGraphPage() {
   return (
     <DashboardShell>
       <main className="min-h-screen overflow-x-hidden bg-slate-50 p-3 sm:p-6">
-        <div className="mx-auto max-w-[1500px]">
+        <div className="w-full">
           <header className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0">
               <p className="text-sm font-medium text-blue-600">
@@ -706,6 +702,8 @@ export default function SupplyGraphPage() {
               <button
                 onClick={() => {
                   setLoading(true);
+                  setErrorMessage("");
+                  setFeedback(`正在实时分析 ${ticker}…`);
                   setRefreshVersion((version) => version + 1);
                 }}
                 className="inline-flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 font-medium hover:bg-red-100 focus-visible:ring-2 focus-visible:ring-red-500"
@@ -715,8 +713,11 @@ export default function SupplyGraphPage() {
               </button>
             )}
           </div>
-          <section className="relative overflow-hidden rounded-2xl border bg-white p-4 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
+          <section
+            ref={workspaceRef}
+            className={`relative overflow-hidden bg-white shadow-sm ${fullscreen ? "flex h-screen flex-col rounded-none border-0 p-3" : "rounded-2xl border p-4"}`}
+          >
+            <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2 text-sm sm:gap-3">
                 <span className="rounded-full bg-emerald-50 px-3 py-1.5 font-medium text-emerald-700">
                   核心供应商 {supplierCount}
@@ -736,18 +737,68 @@ export default function SupplyGraphPage() {
                   </button>
                 )}
               </div>
-              {graph.truncated && (
-                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-800">
-                  已按重要性截断
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {graph.truncated && (
+                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-800">
+                    已按重要性截断
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void toggleFullscreen()}
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500"
+                >
+                  {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                  {fullscreen ? "退出全屏" : "全屏"}
+                </button>
+              </div>
             </div>
+            <div className={`relative min-h-0 overflow-hidden rounded-xl ${fullscreen ? "flex-1" : "h-[calc(100vh-220px)] min-h-[560px]"}`}>
+              {outputOpen ? (
+              <aside className="absolute inset-y-3 left-3 z-30 flex w-[min(360px,calc(100%-1.5rem))] min-h-0 flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-950/95 text-slate-100 shadow-2xl backdrop-blur-sm">
+                <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+                  <span className="text-sm font-medium">MiniMax 实时输出</span>
+                  <div className="flex items-center gap-2">
+                    {(loading || generating || expanding) && (
+                    <Loader2
+                      aria-hidden="true"
+                      className="h-4 w-4 animate-spin text-blue-400 motion-reduce:animate-none"
+                    />
+                    )}
+                    <button
+                      type="button"
+                      aria-label="折叠 MiniMax 输出"
+                      onClick={() => setOutputOpen(false)}
+                      className="cursor-pointer rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-blue-500"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <pre
+                  aria-live="polite"
+                  className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-4 font-mono text-xs leading-5 text-slate-300"
+                >
+                  {llmOutput || "等待模型输出…"}
+                </pre>
+              </aside>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setOutputOpen(true)}
+                  className="absolute left-3 top-3 z-30 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs font-medium text-slate-600 shadow-md backdrop-blur-sm hover:bg-white focus-visible:ring-2 focus-visible:ring-blue-500"
+                >
+                  <PanelLeftOpen className="h-4 w-4" />
+                  查看 MiniMax 输出
+                </button>
+              )}
+              <div className="h-full min-w-0">
             {loading ? (
-              <div className="flex h-[640px] items-center justify-center text-slate-500">
+              <div className="flex h-full items-center justify-center text-slate-500">
                 正在加载图谱…
               </div>
             ) : visibleGraph.nodes.length ? (
-              <div className="relative">
+              <div className="relative h-full">
                 <SupplyGraphCanvas
                   graph={visibleGraph}
                   onNode={handleNode}
@@ -771,7 +822,7 @@ export default function SupplyGraphPage() {
                 )}
               </div>
             ) : (
-              <div className="flex h-[640px] flex-col items-center justify-center gap-3 text-slate-500">
+              <div className="flex h-full flex-col items-center justify-center gap-3 text-slate-500">
                 <p>该公司暂无图谱数据</p>
                 {generating && (
                   <div className="flex gap-2 text-xs" aria-live="polite">
@@ -800,6 +851,8 @@ export default function SupplyGraphPage() {
                 </button>
               </div>
             )}
+              </div>
+            </div>
             <EdgeClueDrawer
               edge={selectedEdge}
               sourceNode={

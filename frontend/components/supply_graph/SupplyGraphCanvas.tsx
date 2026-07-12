@@ -10,6 +10,7 @@ import {
 } from "./SupplyGraphAdapter";
 
 type Direction = "upstream" | "downstream" | "both";
+type LayoutType = "hierarchy" | "force" | "grid";
 type ContextMenu = { nodeId: string; x: number; y: number } | null;
 type LegendKey = "suppliers" | "customers" | "supplierEdges" | "customerEdges";
 type LegendVisibility = Record<LegendKey, boolean>;
@@ -55,6 +56,38 @@ const INITIAL_VISIBILITY: LegendVisibility = {
 };
 const NODE_CLICK_CONFIRM_DELAY_MS = 320;
 
+const LAYOUT_OPTIONS: { value: LayoutType; label: string }[] = [
+  { value: "hierarchy", label: "层次布局" },
+  { value: "force", label: "力导向布局" },
+  { value: "grid", label: "网格布局" },
+];
+
+const graphLayout = (layout: LayoutType, nodeCount: number) => {
+  if (layout === "force") {
+    return {
+      type: "d3-force",
+      link: { distance: 180, strength: 0.7 },
+      manyBody: { strength: -650 },
+      collide: { radius: 72, strength: 0.9 },
+    };
+  }
+  if (layout === "grid") {
+    return {
+      type: "grid",
+      cols: Math.max(1, Math.ceil(Math.sqrt(nodeCount))),
+      nodeSize: 130,
+      preventOverlap: true,
+    };
+  }
+  return {
+    type: "dagre",
+    rankdir: "LR",
+    nodesep: 54,
+    ranksep: 150,
+    controlPoints: true,
+  };
+};
+
 export default function SupplyGraphCanvas({
   graph,
   onNode,
@@ -71,6 +104,7 @@ export default function SupplyGraphCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<G6GraphInstance | null>(null);
   const currentFocusRef = useRef<string | undefined>(undefined);
+  const currentLayoutRef = useRef<LayoutType>("hierarchy");
   const renderedNodesRef = useRef<Set<string>>(new Set());
   const renderedEdgesRef = useRef<Set<string>>(new Set());
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -79,6 +113,7 @@ export default function SupplyGraphCanvas({
   const focusRef = useRef<string | undefined>(undefined);
   const visibilityRef = useRef<LegendVisibility>(INITIAL_VISIBILITY);
   const [contextMenu, setContextMenu] = useState<ContextMenu>(null);
+  const [layout, setLayout] = useState<LayoutType>("hierarchy");
   const [visibility, setVisibility] =
     useState<LegendVisibility>(INITIAL_VISIBILITY);
 
@@ -158,13 +193,14 @@ export default function SupplyGraphCanvas({
       if (disposed || !containerRef.current) return;
       const instance = instanceRef.current;
       const focusChanged = currentFocusRef.current !== focusId;
+      const layoutChanged = currentLayoutRef.current !== layout;
       // 若有已渲染节点不在新数据中（如「返回核心关系」收缩），走全量重建。
       const incomingNodeIds = new Set(graph.nodes.map((node) => node.nodeId));
       const shrank = [...renderedNodesRef.current].some(
         (id) => !incomingNodeIds.has(id),
       );
 
-      if (instance && !focusChanged && !shrank) {
+      if (instance && !focusChanged && !layoutChanged && !shrank) {
         // 数据增长（展开）：重跑 dagre 布局以可靠地摆放新节点，但保留当前视口（缩放/平移），
         // 避免视图跳回原点。这样新点边一定会出现，同时不会突兀地重置视角。
         const data = adaptGraph(graph, focusId);
@@ -193,13 +229,7 @@ export default function SupplyGraphCanvas({
         container: containerRef.current,
         autoFit: "view",
         data,
-        layout: {
-          type: "dagre",
-          rankdir: "LR",
-          nodesep: 54,
-          ranksep: 150,
-          controlPoints: true,
-        },
+        layout: graphLayout(layout, graph.nodes.length),
         behaviors: ["drag-canvas", "zoom-canvas", "drag-element"],
         plugins: [{ type: "minimap", size: [160, 100] }],
       }) as unknown as G6GraphInstance;
@@ -276,6 +306,7 @@ export default function SupplyGraphCanvas({
       });
       instanceRef.current = rendered;
       currentFocusRef.current = focusId;
+      currentLayoutRef.current = layout;
       renderedNodesRef.current = new Set(
         graph.nodes.map((node) => node.nodeId),
       );
@@ -287,7 +318,7 @@ export default function SupplyGraphCanvas({
       disposed = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graphDataKey, focusId, onEdge, onNode, onNodeDoubleClick]);
+  }, [graphDataKey, focusId, layout, onEdge, onNode, onNodeDoubleClick]);
 
   // 图例显隐：仅切换元素可见性，不改变布局与视口。
   useEffect(() => {
@@ -318,11 +349,29 @@ export default function SupplyGraphCanvas({
   };
 
   return (
-    <div className="relative" onContextMenu={(event) => event.preventDefault()}>
+    <div className="relative h-full" onContextMenu={(event) => event.preventDefault()}>
       <div
         ref={containerRef}
-        className="h-[640px] w-full touch-manipulation rounded-2xl bg-[#edf3ff] shadow-inner ring-1 ring-blue-100"
+        className="h-full min-h-[560px] w-full touch-manipulation rounded-2xl bg-[#edf3ff] shadow-inner ring-1 ring-blue-100"
       />
+      <label className="absolute right-4 top-4 z-20 flex items-center gap-2 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs font-medium text-slate-500 shadow-md backdrop-blur-sm">
+        <span>布局</span>
+        <select
+          aria-label="选择图谱布局"
+          value={layout}
+          onChange={(event) => {
+            setContextMenu(null);
+            setLayout(event.target.value as LayoutType);
+          }}
+          className="cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        >
+          {LAYOUT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <div className="absolute bottom-4 left-4 z-20 flex max-w-[calc(100%-2rem)] flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs shadow-md backdrop-blur-sm">
         <span className="font-medium text-slate-400">图例:</span>
         {LEGEND_ITEMS.map((item) => {

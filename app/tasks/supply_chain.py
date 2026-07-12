@@ -149,7 +149,12 @@ def process_company(self, run_id: str, ticker: str) -> dict:
             return {"paused_quota": True}
         except Exception as exc:
             task.retries += 1
-            task.status, task.error = ("retrying" if task.retries <= task.max_retries else "failed"), str(exc)
+            terminal_failure = task.retries > task.max_retries
+            task.status, task.error = ("failed" if terminal_failure else "retrying"), str(exc)
+            if terminal_failure:
+                run.failed += 1
+                if run.completed + run.failed >= run.total:
+                    run.status, run.finished_at = "done", datetime.now(UTC)
             session.commit()
             logger.exception("supply_chain_company_failed", ticker=ticker, run_id=run_id)
             raise self.retry(exc=exc, countdown=min(600, 2 ** task.retries))

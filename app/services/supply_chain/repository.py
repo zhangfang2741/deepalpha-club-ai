@@ -8,6 +8,7 @@ from sqlmodel import Session, col, select
 from app.models.supply_chain_edge import SupplyChainEdge
 from app.models.supply_chain_node import SupplyChainNode
 from app.services.supply_chain.domain import GiraffeEdge, GiraffeGraph, GiraffeNode, GiraffeProperty
+from app.services.supply_chain.graph_query import invalidate_neighborhood_cache
 
 
 def _properties(value: dict) -> list[GiraffeProperty]:
@@ -50,6 +51,7 @@ class SupplyChainRepository:
                     setattr(row, name, value)
                 row.updated_at = now
         self.session.commit()
+        invalidate_neighborhood_cache()
 
     def load_graph(self, node_ids: set[str] | None = None, edge_ids: set[str] | None = None) -> GiraffeGraph:
         """Load the full graph or a node-filtered slice."""
