@@ -117,8 +117,15 @@ async def discover_suppliers(ticker: str, llm: StructuredLLM) -> DiscoveryResult
         model_name=settings.SUPPLY_CHAIN_DISCOVER_MODEL or None,
         response_format=DiscoveryResult,
     )
-    parsed = result if isinstance(result, DiscoveryResult) else DiscoveryResult.model_validate(result)
-    if parsed.skipped or parsed.suppliers or parsed.customers:
+    # 结构化输出可能返回 None（模型未能产出合规结构，MiniMax 网关下偶发），
+    # 此时不直接 model_validate(None) 崩溃，而是落到下方"再取原始文本手动解析 JSON"的兜底路径。
+    if isinstance(result, DiscoveryResult):
+        parsed = result
+    elif result is not None:
+        parsed = DiscoveryResult.model_validate(result)
+    else:
+        parsed = None
+    if parsed is not None and (parsed.skipped or parsed.suppliers or parsed.customers):
         return parsed
     raw = await llm.call(
         [
