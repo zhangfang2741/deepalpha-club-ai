@@ -193,11 +193,29 @@ class Settings:
         self.PROFILING_THRESHOLD_SECONDS = float(os.getenv("PROFILING_THRESHOLD_SECONDS", "2.0"))
 
         # Postgres Configuration
-        self.POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
-        self.POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
-        self.POSTGRES_DB = os.getenv("POSTGRES_DB", "food_order_db")
-        self.POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
-        self.POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+        # 优先使用显式 POSTGRES_HOST；若未设置，尝试从 DATABASE_URL（Railway 等平台自动注入）
+        # 或 PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE 解析。
+        if os.getenv("POSTGRES_HOST"):
+            self.POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+            self.POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
+            self.POSTGRES_DB = os.getenv("POSTGRES_DB", "food_order_db")
+            self.POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+            self.POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+        else:
+            database_url = os.getenv("DATABASE_URL", "")
+            if database_url:
+                parsed = urlparse(database_url)
+                self.POSTGRES_HOST = parsed.hostname or "localhost"
+                self.POSTGRES_PORT = parsed.port or 5432
+                self.POSTGRES_DB = (parsed.path or "/food_order_db").lstrip("/") or "food_order_db"
+                self.POSTGRES_USER = parsed.username or "postgres"
+                self.POSTGRES_PASSWORD = parsed.password or "postgres"
+            else:
+                self.POSTGRES_HOST = os.getenv("PGHOST", "localhost")
+                self.POSTGRES_PORT = int(os.getenv("PGPORT", "5432"))
+                self.POSTGRES_DB = os.getenv("PGDATABASE", os.getenv("POSTGRES_DB", "food_order_db"))
+                self.POSTGRES_USER = os.getenv("PGUSER", os.getenv("POSTGRES_USER", "postgres"))
+                self.POSTGRES_PASSWORD = os.getenv("PGPASSWORD", os.getenv("POSTGRES_PASSWORD", "postgres"))
         self.POSTGRES_SSL = os.getenv("POSTGRES_SSL", "false").lower() in ("true", "1", "yes")
         self.POSTGRES_POOL_SIZE = int(os.getenv("POSTGRES_POOL_SIZE", "20"))
         self.POSTGRES_MAX_OVERFLOW = int(os.getenv("POSTGRES_MAX_OVERFLOW", "10"))
