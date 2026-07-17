@@ -272,7 +272,9 @@ class Settings:
         self.SUPPLY_CHAIN_SKIP_RECENT_DAYS = int(os.getenv("SUPPLY_CHAIN_SKIP_RECENT_DAYS", "7"))
         self.SUPPLY_CHAIN_DISCOVER_MODEL = os.getenv("SUPPLY_CHAIN_DISCOVER_MODEL", "")
         self.SUPPLY_CHAIN_VERIFY_MODEL = os.getenv("SUPPLY_CHAIN_VERIFY_MODEL", "")
-        self.SUPPLY_CHAIN_BEAT_ENABLED = os.getenv("SUPPLY_CHAIN_BEAT_ENABLED", "true").lower() in ("true", "1", "yes")
+        # 默认关闭：每周全量供应链批处理会遍历整个 universe 逐只调 LLM，
+        # 极易在新部署时无意中耗尽 LLM 额度并刷屏超时日志。需要时显式设为 true。
+        self.SUPPLY_CHAIN_BEAT_ENABLED = os.getenv("SUPPLY_CHAIN_BEAT_ENABLED", "false").lower() in ("true", "1", "yes")
         self.SUPPLY_CHAIN_WEEKLY_SCHEDULER_INTERVAL_SECONDS = int(
             os.getenv("SUPPLY_CHAIN_WEEKLY_SCHEDULER_INTERVAL_SECONDS", "3600")
         )
