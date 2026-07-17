@@ -8,6 +8,7 @@ configuration value parsing.
 import os
 from enum import Enum
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -203,11 +204,30 @@ class Settings:
         self.CHECKPOINT_TABLES = ["checkpoint_blobs", "checkpoint_writes", "checkpoints"]
 
         # Valkey/Redis Cache Configuration (optional — if host is set, caching is enabled)
+        # 优先使用 VALKEY_* 变量；若 VALKEY_HOST 为空，尝试从 REDIS_URL（Railway 等平台自动注入）
+        # 或 REDISHOST 解析。
         self.VALKEY_HOST = os.getenv("VALKEY_HOST", "")
         self.VALKEY_PORT = int(os.getenv("VALKEY_PORT", "6379"))
         self.VALKEY_DB = int(os.getenv("VALKEY_DB", "0"))
         self.VALKEY_PASSWORD = os.getenv("VALKEY_PASSWORD", "")
         self.VALKEY_SSL = os.getenv("VALKEY_SSL", "false").lower() in ("true", "1", "yes")
+
+        if not self.VALKEY_HOST:
+            redis_url = os.getenv("REDIS_URL", "")
+            if redis_url:
+                parsed = urlparse(redis_url)
+                self.VALKEY_HOST = parsed.hostname or ""
+                self.VALKEY_PORT = parsed.port or 6379
+                self.VALKEY_PASSWORD = parsed.password or ""
+                self.VALKEY_DB = int((parsed.path or "/0").lstrip("/") or "0")
+                self.VALKEY_SSL = parsed.scheme == "rediss"
+            else:
+                self.VALKEY_HOST = os.getenv("REDISHOST", "")
+                self.VALKEY_PORT = int(os.getenv("REDISPORT", "6379"))
+                self.VALKEY_PASSWORD = os.getenv("REDISPASSWORD", os.getenv("REDIS_PASSWORD", ""))
+                if self.VALKEY_HOST and not self.VALKEY_SSL:
+                    self.VALKEY_SSL = False
+
         self.VALKEY_MAX_CONNECTIONS = int(os.getenv("VALKEY_MAX_CONNECTIONS", "20"))
         self.CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "60"))
         self.RATE_LIMIT_USE_VALKEY = os.getenv("RATE_LIMIT_USE_VALKEY", "true").lower() in ("true", "1", "yes")
