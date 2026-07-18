@@ -393,6 +393,7 @@ export default function SupplyGraphPage() {
   const [exploring, setExploring] = useState(false);
   const [loading, setLoading] = useState(true);
   const [expanding, setExpanding] = useState(false);
+  const [expandingId, setExpandingId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState("");
   const [llmOutput, setLlmOutput] = useState("");
@@ -556,6 +557,7 @@ export default function SupplyGraphPage() {
       const name = nodeDisplayName(id);
       try {
         setExpanding(true);
+        setExpandingId(id);
         setFeedback(`正在实时分析 ${name}…`);
         setExploring(true);
         const preview = await requestPreview(id);
@@ -577,6 +579,7 @@ export default function SupplyGraphPage() {
         setErrorMessage(`无法扩展 ${name}，请稍后重试。`);
       } finally {
         setExpanding(false);
+        setExpandingId(null);
       }
     },
     [nodeDisplayName, requestPreview],
@@ -588,6 +591,7 @@ export default function SupplyGraphPage() {
       setSelectedEdge(null);
       setClues([]);
       setExpanding(true);
+      setExpandingId(id);
       setErrorMessage("");
       setFeedback(`正在扩展 ${name} 的供应链和大客户…`);
       setExploring(true);
@@ -614,6 +618,7 @@ export default function SupplyGraphPage() {
       );
     } finally {
       setExpanding(false);
+      setExpandingId(null);
       setProgress("");
     }
   }, [graph.edges, graph.nodes, nodeDisplayName, requestPreview]);
@@ -820,21 +825,8 @@ export default function SupplyGraphPage() {
                   onEdge={handleEdge}
                   onExpand={handleDirectionalExpand}
                   onNodeDoubleClick={handleBidirectionalExpand}
+                  expandingId={expandingId}
                 />
-                {expanding && (
-                  <div
-                    className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-slate-950/45 backdrop-blur-[1px]"
-                    aria-live="polite"
-                  >
-                    <div className="flex items-center gap-3 rounded-xl bg-white px-5 py-3 text-sm font-medium text-slate-700 shadow-xl">
-                      <Loader2
-                        aria-hidden="true"
-                        className="h-5 w-5 animate-spin text-blue-600 motion-reduce:animate-none"
-                      />
-                      正在扩展关系…
-                    </div>
-                  </div>
-                )}
               </div>
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-3 text-slate-500">
