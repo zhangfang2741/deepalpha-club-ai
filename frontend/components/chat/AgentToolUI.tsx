@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ComponentPropsWithoutRef } from 'react'
 import { makeAssistantToolUI, type ToolCallMessagePartProps } from '@assistant-ui/react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import {
   ChevronDown,
   Loader2,
@@ -137,22 +139,69 @@ function ArgsView({ args }: { args: unknown }) {
   )
 }
 
-/** 结果区：长文本报告用可读排版呈现，其余回退 JSON。 */
+// 工具结果里的 markdown 元素样式映射（紧凑版，适配卡片内小字号）
+const MD_COMPONENTS = {
+  p: (props: ComponentPropsWithoutRef<'p'>) => <p className="my-1 first:mt-0 last:mb-0" {...props} />,
+  h1: (props: ComponentPropsWithoutRef<'h1'>) => (
+    <h1 className="mb-1 mt-2 text-sm font-bold text-gray-800" {...props} />
+  ),
+  h2: (props: ComponentPropsWithoutRef<'h2'>) => (
+    <h2 className="mb-1 mt-2 text-sm font-semibold text-gray-800" {...props} />
+  ),
+  h3: (props: ComponentPropsWithoutRef<'h3'>) => (
+    <h3 className="mb-1 mt-2 text-xs font-semibold text-gray-800" {...props} />
+  ),
+  ul: (props: ComponentPropsWithoutRef<'ul'>) => (
+    <ul className="my-1 list-disc space-y-0.5 pl-4" {...props} />
+  ),
+  ol: (props: ComponentPropsWithoutRef<'ol'>) => (
+    <ol className="my-1 list-decimal space-y-0.5 pl-4" {...props} />
+  ),
+  li: (props: ComponentPropsWithoutRef<'li'>) => <li className="marker:text-gray-300" {...props} />,
+  strong: (props: ComponentPropsWithoutRef<'strong'>) => (
+    <strong className="font-semibold text-gray-800" {...props} />
+  ),
+  a: (props: ComponentPropsWithoutRef<'a'>) => (
+    <a className="text-indigo-600 underline decoration-indigo-200 underline-offset-2" target="_blank" rel="noreferrer" {...props} />
+  ),
+  code: (props: ComponentPropsWithoutRef<'code'>) => (
+    <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-[11px] text-gray-700" {...props} />
+  ),
+  table: (props: ComponentPropsWithoutRef<'table'>) => (
+    <div className="my-1 overflow-x-auto">
+      <table className="border-collapse text-[11px]" {...props} />
+    </div>
+  ),
+  th: (props: ComponentPropsWithoutRef<'th'>) => (
+    <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left font-medium text-gray-600" {...props} />
+  ),
+  td: (props: ComponentPropsWithoutRef<'td'>) => (
+    <td className="border border-gray-200 px-2 py-1 tabular-nums" {...props} />
+  ),
+  blockquote: (props: ComponentPropsWithoutRef<'blockquote'>) => (
+    <blockquote className="border-l-2 border-gray-200 pl-2 text-gray-500" {...props} />
+  ),
+}
+
+/** 结果区：字符串结果用 markdown 渲染（缠论/威科夫报告、搜索结果等），对象结果回退 JSON。 */
 function ResultView({ result }: { result: unknown }) {
   if (result == null) return null
+  if (typeof result === 'string') {
+    if (!result.trim()) return null
+    return (
+      <div className="max-h-72 overflow-auto rounded-md bg-white p-2.5 text-xs leading-relaxed text-gray-700 ring-1 ring-gray-100">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
+          {result}
+        </ReactMarkdown>
+      </div>
+    )
+  }
   const text = formatValue(result)
   if (!text.trim()) return null
-  const isReport = typeof result === 'string' && text.length > 80
   return (
-    <div
-      className={
-        isReport
-          ? 'max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-white p-2.5 text-xs leading-relaxed text-gray-700 ring-1 ring-gray-100'
-          : 'max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-gray-50 p-2 font-mono text-xs text-gray-600'
-      }
-    >
+    <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-gray-50 p-2 font-mono text-xs text-gray-600">
       {text}
-    </div>
+    </pre>
   )
 }
 
