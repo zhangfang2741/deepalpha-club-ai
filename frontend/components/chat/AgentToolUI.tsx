@@ -46,15 +46,15 @@ const TOOL_LABELS: Record<string, ToolMeta> = {
   edit_file: { label: '编辑文件', Icon: FileText, category: 'file' },
 }
 
-// 分类 → 强调色（图标底色 / 左侧描边），保持与 app 现有 gray/indigo 体系协调
-const CATEGORY_ACCENT: Record<ToolCategory, { chip: string; ring: string }> = {
-  search: { chip: 'bg-sky-50 text-sky-600', ring: 'border-l-sky-300' },
-  analysis: { chip: 'bg-indigo-50 text-indigo-600', ring: 'border-l-indigo-300' },
-  file: { chip: 'bg-slate-100 text-slate-500', ring: 'border-l-slate-300' },
-  human: { chip: 'bg-amber-50 text-amber-600', ring: 'border-l-amber-300' },
-  plan: { chip: 'bg-indigo-50 text-indigo-600', ring: 'border-l-indigo-300' },
-  subagent: { chip: 'bg-violet-50 text-violet-600', ring: 'border-l-violet-300' },
-  generic: { chip: 'bg-gray-100 text-gray-500', ring: 'border-l-gray-300' },
+// 分类 → 图标色（安静风格：只给图标上色，不用底片/描边）
+const CATEGORY_TEXT: Record<ToolCategory, string> = {
+  search: 'text-sky-500',
+  analysis: 'text-indigo-500',
+  file: 'text-slate-400',
+  human: 'text-amber-500',
+  plan: 'text-indigo-500',
+  subagent: 'text-violet-500',
+  generic: 'text-gray-400',
 }
 
 function toolMeta(toolName: string): ToolMeta {
@@ -85,33 +85,20 @@ function isFlatSimple(obj: unknown): obj is Record<string, unknown> {
   )
 }
 
-/** 状态徽标：执行中（脉冲点）/ 已完成（✓）/ 失败（红）。 */
-function StatusBadge({ running, isError }: { running: boolean; isError?: boolean }) {
+/** 紧凑状态指示：执行中（旋转）/ 已完成（✓）/ 失败（红），安静、不抢视线。 */
+function StatusMini({ running, isError }: { running: boolean; isError?: boolean }) {
   if (running) {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-600">
-        <span className="relative flex h-1.5 w-1.5 shrink-0">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75" />
-          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-indigo-500" />
-        </span>
-        执行中
-      </span>
-    )
+    return <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-indigo-400" aria-label="执行中" />
   }
   if (isError) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-600">
-        <AlertTriangle className="h-3 w-3 shrink-0" />
+      <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-[11px] font-medium text-red-500">
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
         失败
       </span>
     )
   }
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-600">
-      <CheckCircle2 className="h-3 w-3 shrink-0" />
-      已完成
-    </span>
-  )
+  return <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-label="已完成" />
 }
 
 /** 参数区：扁平对象渲染成 KV 列表，复杂结构回退到 JSON。 */
@@ -206,53 +193,46 @@ function ResultView({ result }: { result: unknown }) {
   )
 }
 
-/** 通用工具调用卡片：折叠展示参数与结果，带分类强调色与状态徽标。 */
+/** 通用工具调用：紧凑安静的一行（icon + 名称 + 状态），默认收起，点开看参数/结果。 */
 export function ToolFallback({ toolName, args, result, status, isError }: ToolCallMessagePartProps) {
   const [open, setOpen] = useState(false)
   const { label, Icon, category } = toolMeta(toolName)
-  const accent = CATEGORY_ACCENT[category]
   const running = isRunning(status)
   const hasBody =
     (args != null && (!isFlatSimple(args) || Object.keys(args).length > 0)) || result != null
 
   return (
-    <div
-      className={`my-2 overflow-hidden rounded-xl border border-gray-200 border-l-[3px] ${accent.ring} bg-white shadow-sm`}
-    >
+    <div className="my-1 overflow-hidden rounded-lg border border-gray-200/80 bg-gray-50/60">
       <button
         type="button"
         onClick={() => hasBody && setOpen((v) => !v)}
-        className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${
-          hasBody ? 'hover:bg-gray-50' : 'cursor-default'
+        className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left ${
+          hasBody ? 'cursor-pointer hover:bg-gray-100/70' : 'cursor-default'
         }`}
       >
-        <span className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg ${accent.chip}`}>
-          <Icon className="h-4 w-4" />
-        </span>
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800">{label}</span>
-        <span className="flex flex-shrink-0 items-center gap-2">
-          <StatusBadge running={running} isError={isError} />
-          {hasBody && (
-            <ChevronDown
-              className={`h-4 w-4 flex-shrink-0 text-gray-300 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-            />
-          )}
-        </span>
+        <Icon className={`h-4 w-4 flex-shrink-0 ${CATEGORY_TEXT[category]}`} />
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-gray-600">{label}</span>
+        <StatusMini running={running} isError={isError} />
+        {hasBody && (
+          <ChevronDown
+            className={`h-3.5 w-3.5 flex-shrink-0 text-gray-300 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          />
+        )}
       </button>
 
       {/* grid 0fr→1fr 实现平滑高度展开 */}
       <div className={`grid transition-all duration-200 ease-out ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
         <div className="overflow-hidden">
-          <div className="space-y-2.5 border-t border-gray-100 px-3 py-2.5">
+          <div className="space-y-2 border-t border-gray-200/70 px-2.5 py-2">
             {args != null && (
               <div className="space-y-1">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">参数</div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">参数</div>
                 <ArgsView args={args} />
               </div>
             )}
             {result != null && (
               <div className="space-y-1">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">结果</div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">结果</div>
                 <ResultView result={result} />
               </div>
             )}
@@ -275,8 +255,8 @@ export const WriteTodosToolUI = makeAssistantToolUI<{ todos?: TodoItem[] }, unkn
     const todos = args?.todos ?? []
     if (todos.length === 0) {
       return (
-        <div className="my-2 flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50/50 px-3 py-2.5 text-sm text-indigo-600">
-          <Loader2 className="h-4 w-4 animate-spin" />
+        <div className="my-1 flex items-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50/40 px-2.5 py-1.5 text-[13px] text-indigo-500">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
           正在规划任务…
         </div>
       )
@@ -285,17 +265,17 @@ export const WriteTodosToolUI = makeAssistantToolUI<{ todos?: TodoItem[] }, unkn
     const pct = Math.round((done / todos.length) * 100)
 
     return (
-      <div className="my-2 rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50/70 to-white px-3.5 py-3 text-sm shadow-sm">
-        <div className="mb-2.5 flex items-center gap-2">
+      <div className="my-1 rounded-lg border border-indigo-100 bg-indigo-50/40 px-3 py-2.5 text-[13px]">
+        <div className="mb-2 flex items-center gap-2">
           <ListChecks className="h-4 w-4 text-indigo-500" />
-          <span className="font-semibold text-indigo-700">任务规划</span>
-          <span className="ml-auto text-xs font-medium text-indigo-400">
-            {done}/{todos.length} 完成
+          <span className="font-semibold text-indigo-600">任务规划</span>
+          <span className="ml-auto text-[11px] font-medium tabular-nums text-indigo-400">
+            {done}/{todos.length}
           </span>
         </div>
-        <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-indigo-100">
+        <div className="mb-2.5 h-1 w-full overflow-hidden rounded-full bg-indigo-100">
           <div
-            className="h-full rounded-full bg-indigo-500 transition-all duration-500 ease-out"
+            className="h-full rounded-full bg-indigo-400 transition-all duration-500 ease-out"
             style={{ width: `${pct}%` }}
           />
         </div>
@@ -304,16 +284,16 @@ export const WriteTodosToolUI = makeAssistantToolUI<{ todos?: TodoItem[] }, unkn
             const s = todo.status
             const isLast = i === todos.length - 1
             return (
-              <li key={i} className="relative flex gap-2.5 pb-2.5 last:pb-0">
+              <li key={i} className="relative flex gap-2 pb-2 last:pb-0">
                 {/* 连线 */}
-                {!isLast && <span className="absolute left-[7px] top-5 h-full w-px bg-indigo-100" />}
+                {!isLast && <span className="absolute left-[6px] top-4 h-full w-px bg-indigo-100" />}
                 <span className="relative z-10 mt-0.5 flex-shrink-0">
                   {s === 'completed' ? (
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                    <CheckCircle2 className="h-3 w-3 text-emerald-500" />
                   ) : s === 'in_progress' ? (
-                    <CircleDot className="h-3.5 w-3.5 animate-pulse text-indigo-500" />
+                    <CircleDot className="h-3 w-3 animate-pulse text-indigo-500" />
                   ) : (
-                    <Circle className="h-3.5 w-3.5 text-gray-300" />
+                    <Circle className="h-3 w-3 text-gray-300" />
                   )}
                 </span>
                 <span
@@ -321,8 +301,8 @@ export const WriteTodosToolUI = makeAssistantToolUI<{ todos?: TodoItem[] }, unkn
                     s === 'completed'
                       ? 'text-gray-400 line-through'
                       : s === 'in_progress'
-                        ? 'font-medium text-gray-800'
-                        : 'text-gray-600'
+                        ? 'font-medium text-gray-700'
+                        : 'text-gray-500'
                   }
                 >
                   {todo.content}
@@ -345,23 +325,19 @@ export const TaskToolUI = makeAssistantToolUI<
   render: ({ args, result, status }) => {
     const running = isRunning(status)
     return (
-      <div className="my-2 rounded-xl border border-violet-100 border-l-[3px] border-l-violet-300 bg-white px-3.5 py-3 text-sm shadow-sm">
+      <div className="my-1 rounded-lg border border-violet-100 bg-violet-50/40 px-3 py-2.5 text-[13px]">
         <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-600">
-            <Bot className="h-4 w-4" />
-          </span>
-          <span className="font-medium text-gray-800">子任务</span>
+          <Bot className="h-4 w-4 flex-shrink-0 text-violet-500" />
+          <span className="font-semibold text-violet-600">子任务</span>
           {args?.subagent_type && (
-            <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] text-violet-500">
-              {args.subagent_type}
-            </span>
+            <span className="truncate text-[11px] text-violet-400">{args.subagent_type}</span>
           )}
           <span className="ml-auto">
-            <StatusBadge running={running} />
+            <StatusMini running={running} />
           </span>
         </div>
         {args?.description && (
-          <p className="mt-2 whitespace-pre-wrap break-words text-gray-600">{args.description}</p>
+          <p className="mt-1.5 whitespace-pre-wrap break-words text-gray-500">{args.description}</p>
         )}
         {result != null && !running && (
           <div className="mt-2">
