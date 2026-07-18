@@ -8,6 +8,10 @@ struct ChanDashboardView: View {
     @State private var showSettings = false
     @State private var showPaywall = false
 
+    init() {
+        UIScrollView.appearance().bounces = false
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -22,7 +26,6 @@ struct ChanDashboardView: View {
                         if let error = vm.errorMessage, !vm.isLoading { errorBanner(error) }
                         layerToggles
                         ChanChartView(analysis: analysis, vm: vm)
-                        chartHint
                         legend
                         SignalPanelView(analysis: analysis)
                         GapAnalysisView(vm: vm, isSubscribed: store.isSubscribed) { showPaywall = true }
@@ -36,6 +39,7 @@ struct ChanDashboardView: View {
                 }
                 .padding(14)
             }
+            .scrollBounceBehavior(.basedOnSize)
             .background(Theme.background)
             .navigationTitle("缠论分析")
             .navigationBarTitleDisplayMode(.inline)
@@ -118,44 +122,36 @@ struct ChanDashboardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    /// 图表手势提示。
-    private var chartHint: some View {
-        Text("双指缩放 · 单指拖动平移 · 纵向拖动看单根 OHLC")
-            .font(.caption2).foregroundColor(Theme.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .center)
-    }
-
     // MARK: - 查询栏
 
     private var queryBar: some View {
         VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                HStack {
-                    Image(systemName: "magnifyingglass").foregroundColor(Theme.textSecondary)
-                    TextField("股票代码，如 AAPL", text: $vm.symbol)
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                        .foregroundColor(Theme.textPrimary)
-                        .onSubmit { Task { await triggerAnalysis() } }
-                }
-                .padding(10).background(Theme.surfaceAlt)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                Picker("", selection: $vm.freq) {
-                    Text("日线").tag("daily")
-                    Text("周线").tag("weekly")
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 130)
+            // 第一行：搜索框独占一行
+            HStack {
+                Image(systemName: "magnifyingglass").foregroundColor(Theme.textSecondary)
+                TextField("股票代码，如 AAPL", text: $vm.symbol)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .foregroundColor(Theme.textPrimary)
+                    .onSubmit { Task { await triggerAnalysis() } }
             }
+            .padding(10).background(Theme.surfaceAlt)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
 
-            HStack(spacing: 10) {
-                DatePicker("", selection: $vm.startDate, displayedComponents: .date)
-                    .labelsHidden()
-                Text("→").foregroundColor(Theme.textSecondary)
-                DatePicker("", selection: $vm.endDate, displayedComponents: .date)
-                    .labelsHidden()
-                Spacer()
+            // 第二行：日线/周线选择器独占一行
+            Picker("", selection: $vm.freq) {
+                Text("日线").tag("daily")
+                Text("周线").tag("weekly")
+            }
+            .pickerStyle(.segmented)
+
+            // 第三行：日期范围 + 分析按钮
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    DatePicker("起", selection: $vm.startDate, displayedComponents: .date)
+                    DatePicker("止", selection: $vm.endDate, displayedComponents: .date)
+                }
+
                 Button {
                     Task { await triggerAnalysis() }
                 } label: {
@@ -163,7 +159,8 @@ struct ChanDashboardView: View {
                         if vm.isLoading { ProgressView().controlSize(.small).tint(.white) }
                         Text(vm.isLoading ? "分析中" : "分析").fontWeight(.semibold)
                     }
-                    .padding(.horizontal, 20).padding(.vertical, 8)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
                     .background(vm.isLoading ? Theme.surfaceAlt : Theme.accent)
                     .foregroundColor(vm.isLoading ? Theme.textSecondary : .white)
                     .clipShape(RoundedRectangle(cornerRadius: 8))

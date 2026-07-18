@@ -21,7 +21,7 @@ struct SignalPanelView: View {
                     Chip(text: "\(analysis.barsCount) 根K线", color: Theme.textSecondary)
                 }
                 Text(analysis.summary)
-                    .font(.subheadline)
+                    .font(.caption)
                     .foregroundColor(Theme.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
             }
