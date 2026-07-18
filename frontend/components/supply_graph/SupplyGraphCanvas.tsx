@@ -30,6 +30,7 @@ type G6GraphInstance = {
   zoomTo: (zoom: number, animation?: boolean) => Promise<void>;
   resize: () => void;
   fitView: (options?: unknown, animation?: unknown) => Promise<void>;
+  updatePlugin: (plugin: { key: string; [prop: string]: unknown }) => void;
 };
 
 type GraphElementEvent = {
@@ -81,11 +82,14 @@ const graphLayout = (layout: LayoutType, nodeCount: number) => {
       preventOverlap: true,
     };
   }
+  // 节点越多，列间距（ranksep）拉大以清晰区分「供应商列 | 焦点 | 客户列」，
+  // 同列节点间距（nodesep）略收紧以容纳更多节点；rankdir LR 保证供应关系在左、客户关系在右。
+  const dense = nodeCount > 16;
   return {
     type: "dagre",
     rankdir: "LR",
-    nodesep: 54,
-    ranksep: 150,
+    nodesep: dense ? 30 : 50,
+    ranksep: dense ? 200 : 160,
     controlPoints: true,
   };
 };
@@ -153,12 +157,34 @@ export default function SupplyGraphCanvas({
     const focus = focusRef.current;
     const roles = computeNodeRoles(current, focus);
     const legend = visibilityRef.current;
-    const nodeVisible = (id: string) => {
+    // 节点角色开关（焦点/未知恒显示）
+    const roleOn = (id: string) => {
       const role = roles.get(id);
       if (role === "focus" || role === undefined) return true;
       if (role === "supplier") return legend.suppliers;
       if (role === "customer") return legend.customers;
-      return true; // unknown 始终显示
+      return true;
+    };
+    // 边是否可见：类型开关 + 两端角色开关
+    const edgeVisible = (edge: (typeof current.edges)[number]) => {
+      const typeOn =
+        resolveEdgeRole(edge, roles, focus) === "supply"
+          ? legend.supplierEdges
+          : legend.customerEdges;
+      return typeOn && roleOn(edge.srcId) && roleOn(edge.dstId);
+    };
+    // 统计每个节点是否还有可见边，用于隐藏因关闭某类关系而产生的孤立点
+    const hasVisibleEdge = new Set<string>();
+    for (const edge of current.edges) {
+      if (edgeVisible(edge)) {
+        hasVisibleEdge.add(edge.srcId);
+        hasVisibleEdge.add(edge.dstId);
+      }
+    }
+    const nodeVisible = (id: string) => {
+      if (!roleOn(id)) return false;
+      if (roles.get(id) === "focus") return true; // 焦点始终显示
+      return hasVisibleEdge.has(id); // 没有可见边的非焦点节点隐藏，避免孤立点
     };
     for (const node of current.nodes) {
       try {
@@ -171,16 +197,10 @@ export default function SupplyGraphCanvas({
       }
     }
     for (const edge of current.edges) {
-      const typeVisible =
-        resolveEdgeRole(edge, roles, focus) === "supply"
-          ? legend.supplierEdges
-          : legend.customerEdges;
-      const visible =
-        typeVisible && nodeVisible(edge.srcId) && nodeVisible(edge.dstId);
       try {
         instance.setElementVisibility(
           edge.edgeId,
-          visible ? "visible" : "hidden",
+          edgeVisible(edge) ? "visible" : "hidden",
         );
       } catch {
         /* 元素可能尚未渲染，忽略 */
@@ -350,6 +370,8 @@ export default function SupplyGraphCanvas({
         try {
           instance.resize();
           void instance.fitView();
+          // 画布尺寸变化后 minimap 不会自动跟到新角落，强制按右下角重新定位
+          instance.updatePlugin({ key: "minimap", position: "right-bottom" });
         } catch {
           /* 实例可能正在重建，忽略本次 */
         }
