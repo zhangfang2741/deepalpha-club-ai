@@ -121,13 +121,20 @@ class DatabaseService:
             user = session.exec(statement).first()
             return user
 
-    def update_user(self, user_id: int, username: str | None = None, hashed_password: str | None = None) -> User:
+    def update_user(
+        self,
+        user_id: int,
+        username: str | None = None,
+        hashed_password: str | None = None,
+        preferred_model: str | None = None,
+    ) -> User:
         """Update user profile information.
 
         Args:
             user_id: The ID of the user to update
             username: New username (optional)
             hashed_password: New hashed password (optional)
+            preferred_model: New preferred LLM model name (optional); pass "" to clear.
 
         Returns:
             User: The updated user
@@ -144,6 +151,8 @@ class DatabaseService:
                 user.username = username
             if hashed_password is not None:
                 user.hashed_password = hashed_password
+            if preferred_model is not None:
+                user.preferred_model = preferred_model or None
 
             session.add(user)
             session.commit()

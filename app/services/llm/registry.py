@@ -56,19 +56,21 @@ def _build_claude_llms() -> list[dict[str, Any]]:
     if settings.ANTHROPIC_BASE_URL:
         extra["base_url"] = settings.ANTHROPIC_BASE_URL
 
-    # MiniMax Anthropic 兼容接口：base_url 含 "minimax" 时使用 MiniMax 模型名
+    # MiniMax Anthropic 兼容接口：base_url 含 "minimax" 时注册 MINIMAX_CLAUDE_MODELS
+    # 列表中的模型（名称取模型 ID 小写），可通过 SUPPLY_CHAIN_DISCOVER_MODEL 等按名切换。
     if "minimax" in settings.ANTHROPIC_BASE_URL.lower():
         return [
             {
-                "name": "minimax-m2.7",
+                "name": model_id.lower(),
                 "llm": ChatAnthropic(
-                    model="MiniMax-M2.7",
+                    model=model_id,
                     api_key=api_key,
                     max_tokens=settings.MAX_TOKENS,
                     temperature=settings.DEFAULT_LLM_TEMPERATURE,
                     **extra,
                 ),
-            },
+            }
+            for model_id in settings.MINIMAX_CLAUDE_MODELS
         ]
 
     # 官方 Anthropic Claude 模型
@@ -211,6 +213,31 @@ class LLMRegistry:
         if kwargs:
             logger.debug("llm_get_with_kwargs_ignored", model=model_name, kwargs=list(kwargs.keys()))
         return entry["llm"]
+
+    def get_or_default(self, model_name: str | None) -> tuple[BaseChatModel, str]:
+        """按名称获取 LLM，找不到（或名称为空）时回退到默认/第一个模型。
+
+        与 ``get()`` 不同，本方法不会抛错，适用于「模型名来自可变配置、不应
+        因配置漂移而中断请求」的场景（如供应链实时预览）。
+
+        Args:
+            model_name: 期望的模型名称，可为 None 或空串。
+
+        Returns:
+            (BaseChatModel 实例, 实际生效的模型名称) 二元组。
+        """
+        if model_name:
+            entry = next((e for e in self.LLMS if e["name"] == model_name), None)
+            if entry:
+                return entry["llm"], entry["name"]
+            logger.warning(
+                "requested_model_not_found_using_default",
+                requested=model_name,
+                available=[e["name"] for e in self.LLMS],
+            )
+        fallback = settings.DEFAULT_LLM_MODEL
+        entry = next((e for e in self.LLMS if e["name"] == fallback), None) or self.LLMS[0]
+        return entry["llm"], entry["name"]
 
     def get_all_names(self) -> list[str]:
         """返回所有已注册模型名称。"""

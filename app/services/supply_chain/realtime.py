@@ -4,6 +4,7 @@ import asyncio
 import json
 import re
 from collections.abc import AsyncGenerator
+from typing import Any, Optional
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -133,30 +134,42 @@ async def generate_realtime_graph(ticker: str, llm: StructuredLLM) -> GiraffeGra
     return build_realtime_graph(ticker, result)
 
 
-async def stream_realtime_graph(ticker: str) -> AsyncGenerator[dict, None]:
-    """Stream raw model output, followed by one validated graph event."""
+async def stream_realtime_graph(
+    ticker: str, model_name: Optional[str] = None
+) -> AsyncGenerator[dict, None]:
+    """Stream raw model output, followed by one validated graph event.
+
+    model_name 为调用方（按当前用户偏好）解析出的模型名；优先级高于
+    SUPPLY_CHAIN_DISCOVER_MODEL / DEFAULT_LLM_MODEL。
+    """
     normalized_ticker = ticker.upper()
     yield {"type": "status", "content": f"正在请求 MiniMax 分析 {normalized_ticker}…\n"}
-    prompt = f"""Build a concise real-time supply-chain graph for US ticker {normalized_ticker}.
-Return JSON only, without Markdown, using exactly this compact schema:
+    prompt = f"""为美股代码 {normalized_ticker} 构建一份精简的实时供应链图谱。
+
+【语言要求】全程用**简体中文**进行思考（reasoning/thinking）与说明；JSON 中除公司官方英文名
+（*_name 字段）与美股 ticker 代码保持英文外，其余文本字段（product_text、rationale 等）一律用简体中文。
+
+只返回 JSON，不要 Markdown，严格使用如下紧凑结构：
 {{
-  "company_name_zh": "...",
+  "company_name_zh": "公司简体中文名",
   "suppliers": [{{
-    "supplier_name": "official English company name",
+    "supplier_name": "公司官方英文名",
     "supplier_name_zh": "简体中文名",
-    "supplier_ticker": "primary US ticker or null",
-    "product_text": "concise supplied product or service",
-    "rationale": "one concise sentence explaining why this is a core relationship",
+    "supplier_ticker": "主要美股代码或 null",
+    "product_text": "供应的具体产品或服务（简体中文，简洁）",
+    "rationale": "一句话说明为何是核心供应关系（简体中文）",
+    "relationship_description_zh": "两句以内、针对该具体供应商的说明：它向目标公司供应什么、用在何处、为何关键（简体中文，避免套话）",
     "confidence": 0,
     "is_single_source": false,
     "info_year": 2026
   }}],
   "customers": [{{
-    "customer_name": "official English company name",
+    "customer_name": "公司官方英文名",
     "customer_name_zh": "简体中文名",
-    "customer_ticker": "primary US ticker or null",
-    "product_text": "concise purchased product or service",
-    "rationale": "one concise sentence explaining why this is a major customer",
+    "customer_ticker": "主要美股代码或 null",
+    "product_text": "采购的具体产品或服务（简体中文，简洁）",
+    "rationale": "一句话说明为何是主要客户（简体中文）",
+    "relationship_description_zh": "两句以内、针对该具体客户的说明：它向目标公司采购什么、用于什么业务、为何重要（简体中文，避免套话）",
     "confidence": 0,
     "is_single_source": false,
     "info_year": 2026
@@ -164,36 +177,60 @@ Return JSON only, without Markdown, using exactly this compact schema:
   "skipped": false,
   "skip_reason": null
 }}
-Return at most 5 genuinely core direct suppliers and 5 major direct customers. Never pad lists.
-US-listed companies must use their primary NASDAQ/NYSE/AMEX ticker; use null for private, non-US,
-or uncertain listings. Never repeat a ticker. TSMC is TSM, not SMECF. Confidence is factual certainty.
-Keep product_text and rationale short. Do not output products or long descriptions."""
+最多返回 5 个真正核心的直接供应商与 5 个主要直接客户，绝不凑数。
+美股公司必须用其主要 NASDAQ/NYSE/AMEX 代码；私有、非美股或不确定的用 null。不要重复 ticker。
+台积电是 TSM，不是 SMECF。confidence 表示事实确定度。product_text 与 rationale 保持简短，不要输出 products 字段。
+每条关系的 relationship_description_zh 必须**针对该具体公司与产品**、彼此不同，禁止使用「构成两家公司之间的直接业务与供应链联系」这类通用套话。"""
     messages = [
         SystemMessage(content=prompt),
-        HumanMessage(content=f"Generate the real-time supply-chain graph for {normalized_ticker}."),
+        HumanMessage(content=f"请用简体中文思考并生成 {normalized_ticker} 的实时供应链图谱。"),
     ]
     callbacks: list[BaseCallbackHandler] = (
         [langfuse_callback_handler] if settings.LANGFUSE_TRACING_ENABLED else []
     )
     config: RunnableConfig = {"callbacks": callbacks}
     chunks: list[str] = []
-    llm = llm_registry.get(settings.SUPPLY_CHAIN_DISCOVER_MODEL or settings.DEFAULT_LLM_MODEL)
-    queue: asyncio.Queue[str | BaseException | None] = asyncio.Queue()
+    llm, resolved_model = llm_registry.get_or_default(
+        model_name or settings.SUPPLY_CHAIN_DISCOVER_MODEL or settings.DEFAULT_LLM_MODEL
+    )
+    # 队列项：{"kind": "answer"|"thinking", "text": str} | BaseException | None
+    queue: asyncio.Queue[dict[str, str] | BaseException | None] = asyncio.Queue()
+
+    def _split_chunk(chunk: Any) -> tuple[str, str]:
+        """从流式 chunk 中拆出答案文本与思考文本.
+
+        推理型模型（如 MiniMax-M2.7）会先流式输出 thinking/reasoning 块再输出答案；
+        原实现只取 text 块，导致思考阶段几十秒「零输出」。这里同时捕获思考内容。
+        """
+        answer, thinking = "", ""
+        content = chunk.content
+        if isinstance(content, str):
+            answer = content
+        elif isinstance(content, list):
+            for block in content:
+                if not isinstance(block, dict):
+                    answer += str(block)
+                    continue
+                btype = block.get("type")
+                if btype in ("thinking", "reasoning"):
+                    thinking += str(block.get("thinking") or block.get("reasoning") or block.get("text") or "")
+                else:
+                    answer += str(block.get("text", ""))
+        # 兜底：部分实现把推理放在 additional_kwargs.reasoning_content
+        if not thinking:
+            extra = getattr(chunk, "additional_kwargs", None)
+            if isinstance(extra, dict) and isinstance(extra.get("reasoning_content"), str):
+                thinking = extra["reasoning_content"]
+        return answer, thinking
 
     async def produce() -> None:
         try:
             async for chunk in llm.astream(messages, config=config):
-                if isinstance(chunk.content, str):
-                    text = chunk.content
-                elif isinstance(chunk.content, list):
-                    text = "".join(
-                        str(block.get("text", "")) if isinstance(block, dict) else str(block)
-                        for block in chunk.content
-                    )
-                else:
-                    text = ""
-                if text:
-                    await queue.put(text)
+                answer, thinking = _split_chunk(chunk)
+                if thinking:
+                    await queue.put({"kind": "thinking", "text": thinking})
+                if answer:
+                    await queue.put({"kind": "answer", "text": answer})
         except BaseException as error:
             await queue.put(error)
         finally:
@@ -201,13 +238,14 @@ Keep product_text and rationale short. Do not output products or long descriptio
 
     producer = asyncio.create_task(produce())
     waited_seconds = 0
+    received_any = False
     try:
         while True:
             try:
                 item = await asyncio.wait_for(queue.get(), timeout=3)
             except TimeoutError:
                 waited_seconds += 3
-                if not chunks:
+                if not received_any:
                     yield {
                         "type": "status",
                         "content": f"MiniMax 正在分析 {normalized_ticker}，已等待 {waited_seconds} 秒…\n",
@@ -217,8 +255,11 @@ Keep product_text and rationale short. Do not output products or long descriptio
                 break
             if isinstance(item, BaseException):
                 raise item
-            chunks.append(item)
-            yield {"type": "delta", "content": item}
+            received_any = True
+            # 思考内容仅用于实时展示进度，不计入最终 JSON 解析
+            if item["kind"] == "answer":
+                chunks.append(item["text"])
+            yield {"type": "delta", "content": item["text"]}
     finally:
         if not producer.done():
             producer.cancel()
@@ -237,7 +278,7 @@ Keep product_text and rationale short. Do not output products or long descriptio
         }
         repaired = await llm_service.call(
             messages,
-            model_name=settings.SUPPLY_CHAIN_DISCOVER_MODEL or settings.DEFAULT_LLM_MODEL,
+            model_name=resolved_model,
             response_format=DiscoveryResult,
         )
         result = (

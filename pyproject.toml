@@ -50,6 +50,7 @@ dependencies = [
     "celery[redis]>=5.5",
     "networkx>=3.4",
     "pandas>=2.2",
+    "deepagents>=0.6.12",
 ]
 
 [project.optional-dependencies]
@@ -161,6 +162,13 @@ convention = "google"
 "app/schemas/chan.py" = ["D415", "D101"]
 "app/api/v1/chan.py" = ["D415"]
 "app/core/langgraph/tools/chan_analysis.py" = ["D415"]
+"app/core/langgraph/tools/fmp_data.py" = ["D415"]
+"app/core/langgraph/graph.py" = ["D415"]
+"app/core/prompts/__init__.py" = ["D415"]
+"app/api/v1/chatbot.py" = ["D415"]
+"app/schemas/chat.py" = ["D415"]
+"app/api/v1/settings.py" = ["D415"]
+"app/services/model_preference.py" = ["D415"]
 "app/services/institutional_signals/*.py" = ["D415", "D101", "D104"]
 "app/schemas/institutional_signals.py" = ["D415", "D101"]
 "app/models/signal_snapshot.py" = ["D415"]
@@ -176,6 +184,8 @@ convention = "google"
 "app/schemas/motley_fool.py" = ["D415"]
 "app/api/v1/transcripts.py" = ["D415"]
 "tests/test_transcript_ai.py" = ["D415"]
+"tests/core/langgraph/*.py" = ["D415", "D103"]
+"tests/core/langgraph/tools/*.py" = ["D415", "D103"]
 
 [tool.pyright]
 include = ["app", "evals"]

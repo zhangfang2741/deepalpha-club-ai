@@ -35,6 +35,8 @@ class User(BaseModel, table=True):
     email: str = Field(unique=True, index=True)
     hashed_password: str
     username: Optional[str] = Field(default=None, index=False)
+    # 用户偏好的 LLM 模型名（须为当前 provider 已注册的模型名）；为空则用系统默认。
+    preferred_model: Optional[str] = Field(default=None, index=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     sessions: List["Session"] = Relationship(back_populates="user")
 

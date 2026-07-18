@@ -76,11 +76,16 @@ export const computeNodeRoles = (
   };
   const supplierSide = walk(incoming);
   const customerSide = walk(outgoing);
+  // 兜底：既不在焦点上游也不在下游的节点（多为展开非焦点节点带出的二级节点），
+  // 按自身关系上色——作为某条边的上游(src=给别人供货)视为供应商，否则视为客户，
+  // 避免出现突兀的灰色「未知」节点。
+  const isSource = new Set(graph.edges.map((edge) => edge.srcId));
   graph.nodes.forEach((node) => {
     if (node.nodeId === focusId) roles.set(node.nodeId, "focus");
     else if (supplierSide.has(node.nodeId)) roles.set(node.nodeId, "supplier");
     else if (customerSide.has(node.nodeId)) roles.set(node.nodeId, "customer");
-    else roles.set(node.nodeId, "unknown");
+    else if (isSource.has(node.nodeId)) roles.set(node.nodeId, "supplier");
+    else roles.set(node.nodeId, "customer");
   });
   return roles;
 };

@@ -28,6 +28,10 @@ type G6GraphInstance = {
   getZoom: () => number;
   translateTo: (position: [number, number], animation?: boolean) => Promise<void>;
   zoomTo: (zoom: number, animation?: boolean) => Promise<void>;
+  resize: () => void;
+  fitView: (options?: unknown, animation?: unknown) => Promise<void>;
+  updatePlugin: (plugin: { key: string; [prop: string]: unknown }) => void;
+  getClientByCanvas: (point: [number, number]) => { x: number; y: number } | number[];
 };
 
 type GraphElementEvent = {
@@ -79,11 +83,14 @@ const graphLayout = (layout: LayoutType, nodeCount: number) => {
       preventOverlap: true,
     };
   }
+  // 节点越多，列间距（ranksep）拉大以清晰区分「供应商列 | 焦点 | 客户列」，
+  // 同列节点间距（nodesep）略收紧以容纳更多节点；rankdir LR 保证供应关系在左、客户关系在右。
+  const dense = nodeCount > 16;
   return {
     type: "dagre",
     rankdir: "LR",
-    nodesep: 54,
-    ranksep: 150,
+    nodesep: dense ? 30 : 50,
+    ranksep: dense ? 200 : 160,
     controlPoints: true,
   };
 };
@@ -94,14 +101,17 @@ export default function SupplyGraphCanvas({
   onEdge,
   onExpand,
   onNodeDoubleClick,
+  expandingId,
 }: {
   graph: SupplyGraph;
   onNode: (id: string) => void;
   onEdge: (id: string) => void;
   onExpand: (id: string, direction: Direction) => void;
   onNodeDoubleClick: (id: string) => void;
+  expandingId?: string | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [spinnerPos, setSpinnerPos] = useState<{ x: number; y: number } | null>(null);
   const instanceRef = useRef<G6GraphInstance | null>(null);
   const currentFocusRef = useRef<string | undefined>(undefined);
   const currentLayoutRef = useRef<LayoutType>("hierarchy");
@@ -151,12 +161,34 @@ export default function SupplyGraphCanvas({
     const focus = focusRef.current;
     const roles = computeNodeRoles(current, focus);
     const legend = visibilityRef.current;
-    const nodeVisible = (id: string) => {
+    // 节点角色开关（焦点/未知恒显示）
+    const roleOn = (id: string) => {
       const role = roles.get(id);
       if (role === "focus" || role === undefined) return true;
       if (role === "supplier") return legend.suppliers;
       if (role === "customer") return legend.customers;
-      return true; // unknown 始终显示
+      return true;
+    };
+    // 边是否可见：类型开关 + 两端角色开关
+    const edgeVisible = (edge: (typeof current.edges)[number]) => {
+      const typeOn =
+        resolveEdgeRole(edge, roles, focus) === "supply"
+          ? legend.supplierEdges
+          : legend.customerEdges;
+      return typeOn && roleOn(edge.srcId) && roleOn(edge.dstId);
+    };
+    // 统计每个节点是否还有可见边，用于隐藏因关闭某类关系而产生的孤立点
+    const hasVisibleEdge = new Set<string>();
+    for (const edge of current.edges) {
+      if (edgeVisible(edge)) {
+        hasVisibleEdge.add(edge.srcId);
+        hasVisibleEdge.add(edge.dstId);
+      }
+    }
+    const nodeVisible = (id: string) => {
+      if (!roleOn(id)) return false;
+      if (roles.get(id) === "focus") return true; // 焦点始终显示
+      return hasVisibleEdge.has(id); // 没有可见边的非焦点节点隐藏，避免孤立点
     };
     for (const node of current.nodes) {
       try {
@@ -169,16 +201,10 @@ export default function SupplyGraphCanvas({
       }
     }
     for (const edge of current.edges) {
-      const typeVisible =
-        resolveEdgeRole(edge, roles, focus) === "supply"
-          ? legend.supplierEdges
-          : legend.customerEdges;
-      const visible =
-        typeVisible && nodeVisible(edge.srcId) && nodeVisible(edge.dstId);
       try {
         instance.setElementVisibility(
           edge.edgeId,
-          visible ? "visible" : "hidden",
+          edgeVisible(edge) ? "visible" : "hidden",
         );
       } catch {
         /* 元素可能尚未渲染，忽略 */
@@ -201,22 +227,72 @@ export default function SupplyGraphCanvas({
       );
 
       if (instance && !focusChanged && !layoutChanged && !shrank) {
-        // 数据增长（展开）：重跑 dagre 布局以可靠地摆放新节点，但保留当前视口（缩放/平移），
-        // 避免视图跳回原点。这样新点边一定会出现，同时不会突兀地重置视角。
+        // 数据增长（展开某节点上下游）：**只增量添加新点边**，把新节点摆到它所连接的
+        // 已有节点旁边（供应商放左、客户放右），不重跑布局、不移动已有节点、不 refit，
+        // 避免整张图重排、放大或视角跳动。
         const data = adaptGraph(graph, focusId);
-        const hasNew =
-          data.nodes.some((node) => !renderedNodesRef.current.has(node.id)) ||
-          data.edges.some((edge) => !renderedEdgesRef.current.has(edge.id));
-        if (!hasNew) return;
-        const [vx = 0, vy = 0] = instance.getPosition();
-        const zoom = instance.getZoom();
-        instance.setData(data);
-        void instance.render().then(async () => {
+        const newNodes = data.nodes.filter(
+          (node) => !renderedNodesRef.current.has(node.id),
+        );
+        const newEdges = data.edges.filter(
+          (edge) => !renderedEdgesRef.current.has(edge.id),
+        );
+        if (!newNodes.length && !newEdges.length) return;
+
+        const NEW_DX = 220;
+        const NEW_GAP = 92;
+        const byAnchor = new Map<
+          string,
+          { node: (typeof newNodes)[number]; role: "supply" | "customer" }[]
+        >();
+        for (const node of newNodes) {
+          const edge = newEdges.find(
+            (e) => e.source === node.id || e.target === node.id,
+          );
+          if (!edge) continue;
+          const nodeIsSource = edge.source === node.id;
+          const anchorId = nodeIsSource ? edge.target : edge.source;
+          if (!renderedNodesRef.current.has(anchorId)) continue; // 锚点须为已有节点
+          const role: "supply" | "customer" = nodeIsSource ? "supply" : "customer";
+          const list = byAnchor.get(anchorId) ?? [];
+          list.push({ node, role });
+          byAnchor.set(anchorId, list);
+        }
+        for (const [anchorId, list] of byAnchor) {
+          let ax = 0;
+          let ay = 0;
+          try {
+            const pos = instance.getElementPosition(anchorId);
+            ax = pos[0] ?? 0;
+            ay = pos[1] ?? 0;
+          } catch {
+            continue;
+          }
+          const dir = list[0].role === "supply" ? -1 : 1;
+          const total = list.length;
+          list.forEach(({ node }, index) => {
+            node.style = {
+              ...node.style,
+              x: ax + dir * NEW_DX,
+              y: ay + (index - (total - 1) / 2) * NEW_GAP,
+            };
+          });
+        }
+
+        try {
+          if (newNodes.length) instance.addNodeData(newNodes);
+          if (newEdges.length) instance.addEdgeData(newEdges);
+        } catch {
+          /* 忽略：实例可能正在重建 */
+        }
+        void instance.draw().then(() => {
           if (disposed) return;
-          await instance.translateTo([vx, vy], false);
-          await instance.zoomTo(zoom, false);
-          renderedNodesRef.current = new Set(graph.nodes.map((node) => node.nodeId));
-          renderedEdgesRef.current = new Set(graph.edges.map((edge) => edge.edgeId));
+          renderedNodesRef.current = new Set(
+            graph.nodes.map((node) => node.nodeId),
+          );
+          renderedEdgesRef.current = new Set(
+            graph.edges.map((edge) => edge.edgeId),
+          );
           applyVisibility(instance);
         });
         return;
@@ -231,7 +307,7 @@ export default function SupplyGraphCanvas({
         data,
         layout: graphLayout(layout, graph.nodes.length),
         behaviors: ["drag-canvas", "zoom-canvas", "drag-element"],
-        plugins: [{ type: "minimap", size: [160, 100] }],
+        plugins: [{ type: "minimap", key: "minimap", size: [160, 100], position: "right-bottom" }],
       }) as unknown as G6GraphInstance;
 
       const handleNodeDoubleClick = (nodeId: string) => {
@@ -327,6 +403,69 @@ export default function SupplyGraphCanvas({
     if (instance) applyVisibility(instance);
   }, [visibility]);
 
+  // 容器尺寸变化（含进入/退出全屏、窗口缩放）时，同步画布尺寸并重新 fitView，
+  // 避免图谱固定在原尺寸的一角、右侧留大片空白。
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+    let frame = 0;
+    let lastW = container.clientWidth;
+    let lastH = container.clientHeight;
+    const observer = new ResizeObserver(() => {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      if (w === 0 || h === 0 || (w === lastW && h === lastH)) return;
+      lastW = w;
+      lastH = h;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const instance = instanceRef.current;
+        if (!instance) return;
+        try {
+          instance.resize();
+          void instance.fitView();
+          // 画布尺寸变化后 minimap 不会自动跟到新角落，强制按右下角重新定位
+          instance.updatePlugin({ key: "minimap", position: "right-bottom" });
+        } catch {
+          /* 实例可能正在重建，忽略本次 */
+        }
+      });
+    });
+    observer.observe(container);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, []);
+
+  // 扩展某节点上下游时，只在该节点上叠加一个转圈（非阻塞），跟随平移/缩放实时定位。
+  useEffect(() => {
+    if (!expandingId) return;
+    let raf = 0;
+    const track = () => {
+      const instance = instanceRef.current;
+      const container = containerRef.current;
+      if (instance && container) {
+        try {
+          const [nx, ny] = instance.getElementPosition(expandingId);
+          const client = instance.getClientByCanvas([nx ?? 0, ny ?? 0]);
+          const cx = Array.isArray(client) ? (client[0] ?? 0) : client.x;
+          const cy = Array.isArray(client) ? (client[1] ?? 0) : client.y;
+          const rect = container.getBoundingClientRect();
+          setSpinnerPos({ x: cx - rect.left, y: cy - rect.top });
+        } catch {
+          /* 节点可能尚未渲染 */
+        }
+      }
+      raf = requestAnimationFrame(track);
+    };
+    raf = requestAnimationFrame(track);
+    return () => {
+      cancelAnimationFrame(raf);
+      setSpinnerPos(null); // 扩展结束（或切换）时清除旋转环
+    };
+  }, [expandingId]);
+
   // 组件卸载时销毁实例。
   useEffect(
     () => () => {
@@ -354,6 +493,14 @@ export default function SupplyGraphCanvas({
         ref={containerRef}
         className="h-full min-h-[560px] w-full touch-manipulation rounded-2xl bg-[#edf3ff] shadow-inner ring-1 ring-blue-100"
       />
+      {/* 扩展中：仅在该节点上叠加一个旋转环，不遮挡画布、不阻断交互 */}
+      {spinnerPos && (
+        <span
+          className="pointer-events-none absolute z-30 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-blue-500/70 border-t-transparent animate-spin motion-reduce:animate-none"
+          style={{ left: spinnerPos.x, top: spinnerPos.y }}
+          aria-label="正在扩展该节点关系"
+        />
+      )}
       <label className="absolute right-4 top-4 z-20 flex items-center gap-2 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs font-medium text-slate-500 shadow-md backdrop-blur-sm">
         <span>布局</span>
         <select

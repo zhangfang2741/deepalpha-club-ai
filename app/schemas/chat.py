@@ -4,6 +4,8 @@ import re
 from typing import (
     List,
     Literal,
+    Optional,
+    Union,
 )
 
 from pydantic import (
@@ -65,6 +67,35 @@ class ChatRequest(BaseModel):
         description="List of messages in the conversation",
         min_length=1,
     )
+
+
+class LangGraphMessageInput(BaseModel):
+    """assistant-ui useLangGraphRuntime 传入的单条消息（宽松解析）。
+
+    前端 react-langgraph 发送的是 LangChain 风格消息（含 ``type`` 字段），
+    ``content`` 可能是字符串或内容块数组，这里统一宽松接收后在端点里提取文本。
+    """
+
+    model_config = {"extra": "ignore"}
+
+    type: Optional[str] = Field(default=None, description="LangChain 消息类型，如 human/ai")
+    role: Optional[str] = Field(default=None, description="OpenAI 风格角色，作为 type 的回退")
+    content: Union[str, list, None] = Field(default=None, description="消息内容（字符串或内容块数组）")
+
+
+class LangGraphCommand(BaseModel):
+    """中断恢复指令。"""
+
+    resume: Optional[str] = Field(default=None, description="恢复被 ask_human 等中断的图执行时提供的值")
+
+
+class LangGraphChatRequest(BaseModel):
+    """useLangGraphRuntime 的流式请求体。"""
+
+    messages: List[LangGraphMessageInput] = Field(
+        default_factory=list, description="本轮要追加的新消息（通常仅最新一条用户消息）"
+    )
+    command: Optional[LangGraphCommand] = Field(default=None, description="可选的中断恢复指令")
 
 
 class ChatResponse(BaseResponse):

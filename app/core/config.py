@@ -8,6 +8,7 @@ configuration value parsing.
 import os
 from enum import Enum
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -192,22 +193,59 @@ class Settings:
         self.PROFILING_THRESHOLD_SECONDS = float(os.getenv("PROFILING_THRESHOLD_SECONDS", "2.0"))
 
         # Postgres Configuration
-        self.POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
-        self.POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
-        self.POSTGRES_DB = os.getenv("POSTGRES_DB", "food_order_db")
-        self.POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
-        self.POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+        # 优先使用显式 POSTGRES_HOST；若未设置，尝试从 DATABASE_URL（Railway 等平台自动注入）
+        # 或 PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE 解析。
+        if os.getenv("POSTGRES_HOST"):
+            self.POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+            self.POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
+            self.POSTGRES_DB = os.getenv("POSTGRES_DB", "food_order_db")
+            self.POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+            self.POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+        else:
+            database_url = os.getenv("DATABASE_URL", "")
+            if database_url:
+                parsed = urlparse(database_url)
+                self.POSTGRES_HOST = parsed.hostname or "localhost"
+                self.POSTGRES_PORT = parsed.port or 5432
+                self.POSTGRES_DB = (parsed.path or "/food_order_db").lstrip("/") or "food_order_db"
+                self.POSTGRES_USER = parsed.username or "postgres"
+                self.POSTGRES_PASSWORD = parsed.password or "postgres"
+            else:
+                self.POSTGRES_HOST = os.getenv("PGHOST", "localhost")
+                self.POSTGRES_PORT = int(os.getenv("PGPORT", "5432"))
+                self.POSTGRES_DB = os.getenv("PGDATABASE", os.getenv("POSTGRES_DB", "food_order_db"))
+                self.POSTGRES_USER = os.getenv("PGUSER", os.getenv("POSTGRES_USER", "postgres"))
+                self.POSTGRES_PASSWORD = os.getenv("PGPASSWORD", os.getenv("POSTGRES_PASSWORD", "postgres"))
         self.POSTGRES_SSL = os.getenv("POSTGRES_SSL", "false").lower() in ("true", "1", "yes")
         self.POSTGRES_POOL_SIZE = int(os.getenv("POSTGRES_POOL_SIZE", "20"))
         self.POSTGRES_MAX_OVERFLOW = int(os.getenv("POSTGRES_MAX_OVERFLOW", "10"))
         self.CHECKPOINT_TABLES = ["checkpoint_blobs", "checkpoint_writes", "checkpoints"]
 
         # Valkey/Redis Cache Configuration (optional — if host is set, caching is enabled)
+        # 优先使用 VALKEY_* 变量；若 VALKEY_HOST 为空，尝试从 REDIS_URL（Railway 等平台自动注入）
+        # 或 REDISHOST 解析。
         self.VALKEY_HOST = os.getenv("VALKEY_HOST", "")
         self.VALKEY_PORT = int(os.getenv("VALKEY_PORT", "6379"))
         self.VALKEY_DB = int(os.getenv("VALKEY_DB", "0"))
         self.VALKEY_PASSWORD = os.getenv("VALKEY_PASSWORD", "")
         self.VALKEY_SSL = os.getenv("VALKEY_SSL", "false").lower() in ("true", "1", "yes")
+
+        if not self.VALKEY_HOST:
+            redis_url = os.getenv("REDIS_URL", "")
+            if redis_url:
+                parsed = urlparse(redis_url)
+                self.VALKEY_HOST = parsed.hostname or ""
+                self.VALKEY_PORT = parsed.port or 6379
+                self.VALKEY_PASSWORD = parsed.password or ""
+                self.VALKEY_DB = int((parsed.path or "/0").lstrip("/") or "0")
+                self.VALKEY_SSL = parsed.scheme == "rediss"
+            else:
+                self.VALKEY_HOST = os.getenv("REDISHOST", "")
+                self.VALKEY_PORT = int(os.getenv("REDISPORT", "6379"))
+                self.VALKEY_PASSWORD = os.getenv("REDISPASSWORD", os.getenv("REDIS_PASSWORD", ""))
+                if self.VALKEY_HOST and not self.VALKEY_SSL:
+                    self.VALKEY_SSL = False
+
         self.VALKEY_MAX_CONNECTIONS = int(os.getenv("VALKEY_MAX_CONNECTIONS", "20"))
         self.CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "60"))
         self.RATE_LIMIT_USE_VALKEY = os.getenv("RATE_LIMIT_USE_VALKEY", "true").lower() in ("true", "1", "yes")
@@ -234,7 +272,9 @@ class Settings:
         self.SUPPLY_CHAIN_SKIP_RECENT_DAYS = int(os.getenv("SUPPLY_CHAIN_SKIP_RECENT_DAYS", "7"))
         self.SUPPLY_CHAIN_DISCOVER_MODEL = os.getenv("SUPPLY_CHAIN_DISCOVER_MODEL", "")
         self.SUPPLY_CHAIN_VERIFY_MODEL = os.getenv("SUPPLY_CHAIN_VERIFY_MODEL", "")
-        self.SUPPLY_CHAIN_BEAT_ENABLED = os.getenv("SUPPLY_CHAIN_BEAT_ENABLED", "true").lower() in ("true", "1", "yes")
+        # 默认关闭：每周全量供应链批处理会遍历整个 universe 逐只调 LLM，
+        # 极易在新部署时无意中耗尽 LLM 额度并刷屏超时日志。需要时显式设为 true。
+        self.SUPPLY_CHAIN_BEAT_ENABLED = os.getenv("SUPPLY_CHAIN_BEAT_ENABLED", "false").lower() in ("true", "1", "yes")
         self.SUPPLY_CHAIN_WEEKLY_SCHEDULER_INTERVAL_SECONDS = int(
             os.getenv("SUPPLY_CHAIN_WEEKLY_SCHEDULER_INTERVAL_SECONDS", "3600")
         )
@@ -288,6 +328,12 @@ class Settings:
         self.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")  # openai | claude | minimax | gemini
         self.ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
         self.ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "")  # 为空则使用官方地址
+        # 当 ANTHROPIC_BASE_URL 指向 MiniMax 兼容接口时，注册的 MiniMax 模型 ID 列表
+        # （逗号分隔）。列出套餐里真实可用的模型 ID 即可，例如把高速版与推理版并列，
+        # 注册后可用 SUPPLY_CHAIN_DISCOVER_MODEL 或 DEFAULT_LLM_MODEL 按名称（小写）选择。
+        self.MINIMAX_CLAUDE_MODELS = parse_list_from_env(
+            "MINIMAX_CLAUDE_MODELS", default=["MiniMax-M2.7"]
+        )
         self.MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY", "")
         self.MINIMAX_BASE_URL = os.getenv("MINIMAX_BASE_URL", "https://api.minimax.chat/v1")
         self.GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
