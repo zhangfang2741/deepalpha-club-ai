@@ -13,6 +13,8 @@ import {
   getLangGraphHistory,
   clearChatHistory,
   getOrCreateSessionToken,
+  getValidSessionToken,
+  createFreshSessionToken,
   clearStoredSessionToken,
 } from '@/lib/api/chat'
 import { useAuthStore } from '@/lib/store/auth'
@@ -78,39 +80,45 @@ function UserMessageWithAvatar() {
 }
 
 interface ChatRuntimeProps {
-  sessionToken: string
   children: React.ReactNode
 }
 
-function ChatRuntime({ sessionToken, children }: ChatRuntimeProps) {
+function ChatRuntime({ children }: ChatRuntimeProps) {
   const stream = useCallback(
     async (
       messages: LangChainMessage[],
       { command, abortSignal }: { command?: { resume: string }; abortSignal: AbortSignal },
     ) => {
-      const response = await fetch(`${BASE_URL}/api/v1/chatbot/langgraph/stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
-        },
-        body: JSON.stringify({ messages, command }),
-        signal: abortSignal,
-      })
+      const postStream = (token: string) =>
+        fetch(`${BASE_URL}/api/v1/chatbot/langgraph/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ messages, command }),
+          signal: abortSignal,
+        })
+
+      // 用「有效」的 session token（过期会自动重建）；仍 401 时刷新并重试一次
+      let response = await postStream(await getValidSessionToken())
+      if (response.status === 401) {
+        response = await postStream(await createFreshSessionToken())
+      }
       if (!response.ok) throw new Error(`请求失败 (${response.status})`)
       return parseSSEStream(response)
     },
-    [sessionToken],
+    [],
   )
 
   const load = useCallback(async () => {
     try {
-      const messages = await getLangGraphHistory(sessionToken)
+      const messages = await getLangGraphHistory(await getValidSessionToken())
       return { messages: messages as unknown as LangChainMessage[] }
     } catch {
       return { messages: [] as LangChainMessage[] }
     }
-  }, [sessionToken])
+  }, [])
 
   const create = useCallback(async () => ({ externalId: THREAD_ID }), [])
 
@@ -193,7 +201,7 @@ export default function ChatPage() {
               <Spinner className="w-6 h-6 text-gray-400" />
             </div>
           ) : (
-            <ChatRuntime key={chatKey} sessionToken={sessionToken}>
+            <ChatRuntime key={chatKey}>
               <Thread
                 assistantAvatar={{ src: ASSISTANT_AVATAR_SRC, alt: 'DeepAlpha', fallback: 'α' }}
                 assistantMessage={{ components: { Text: MarkdownText, ToolFallback } }}
