@@ -4,7 +4,7 @@ import asyncio
 import json
 import re
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, Optional
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -134,8 +134,14 @@ async def generate_realtime_graph(ticker: str, llm: StructuredLLM) -> GiraffeGra
     return build_realtime_graph(ticker, result)
 
 
-async def stream_realtime_graph(ticker: str) -> AsyncGenerator[dict, None]:
-    """Stream raw model output, followed by one validated graph event."""
+async def stream_realtime_graph(
+    ticker: str, model_name: Optional[str] = None
+) -> AsyncGenerator[dict, None]:
+    """Stream raw model output, followed by one validated graph event.
+
+    model_name 为调用方（按当前用户偏好）解析出的模型名；优先级高于
+    SUPPLY_CHAIN_DISCOVER_MODEL / DEFAULT_LLM_MODEL。
+    """
     normalized_ticker = ticker.upper()
     yield {"type": "status", "content": f"正在请求 MiniMax 分析 {normalized_ticker}…\n"}
     prompt = f"""Build a concise real-time supply-chain graph for US ticker {normalized_ticker}.
@@ -179,7 +185,7 @@ Keep product_text and rationale short. Do not output products or long descriptio
     config: RunnableConfig = {"callbacks": callbacks}
     chunks: list[str] = []
     llm, resolved_model = llm_registry.get_or_default(
-        settings.SUPPLY_CHAIN_DISCOVER_MODEL or settings.DEFAULT_LLM_MODEL
+        model_name or settings.SUPPLY_CHAIN_DISCOVER_MODEL or settings.DEFAULT_LLM_MODEL
     )
     # 队列项：{"kind": "answer"|"thinking", "text": str} | BaseException | None
     queue: asyncio.Queue[dict[str, str] | BaseException | None] = asyncio.Queue()

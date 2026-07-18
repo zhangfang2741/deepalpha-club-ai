@@ -6,10 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
+from app.api.v1.auth.dependencies import get_current_user
 from app.core.celery_app import celery_app
 from app.core.limiter import limiter
 from app.core.logging import logger
 from app.db.session import get_sync_session
+from app.models.user import User
+from app.services.model_preference import resolve_user_model
 from app.models.supply_chain_clue import SupplyChainClue
 from app.models.supply_chain_node import SupplyChainNode
 from app.models.supply_chain_run import SupplyChainRun
@@ -28,12 +31,17 @@ router = APIRouter()
 async def preview_graph_stream(
     request: Request,
     ticker: str = Query(..., min_length=1, max_length=8, pattern=r"^[A-Za-z][A-Za-z0-9.-]*$"),
+    user: User = Depends(get_current_user),
 ) -> StreamingResponse:
-    """Stream an ephemeral LLM graph without database or Celery access."""
+    """Stream an ephemeral LLM graph without database or Celery access.
+
+    使用该用户偏好的模型（未设置/未注册时回退 SUPPLY_CHAIN_DISCOVER_MODEL / 默认）。
+    """
+    model_name = await resolve_user_model(user.id)
 
     async def events():
         try:
-            async for event in stream_realtime_graph(ticker):
+            async for event in stream_realtime_graph(ticker, model_name=model_name):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as exc:
             logger.exception("supply_chain_preview_failed", ticker=ticker.upper(), error=str(exc))
