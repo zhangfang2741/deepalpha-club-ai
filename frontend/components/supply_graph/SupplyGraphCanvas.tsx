@@ -30,6 +30,7 @@ type G6GraphInstance = {
   zoomTo: (zoom: number, animation?: boolean) => Promise<void>;
   resize: () => void;
   fitView: (options?: unknown, animation?: unknown) => Promise<void>;
+  updatePlugin: (plugin: { key: string; [prop: string]: unknown }) => void;
 };
 
 type GraphElementEvent = {
@@ -350,6 +351,8 @@ export default function SupplyGraphCanvas({
         try {
           instance.resize();
           void instance.fitView();
+          // 画布尺寸变化后 minimap 不会自动跟到新角落，强制按右下角重新定位
+          instance.updatePlugin({ key: "minimap", position: "right-bottom" });
         } catch {
           /* 实例可能正在重建，忽略本次 */
         }

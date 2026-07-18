@@ -156,8 +156,9 @@ async def stream_realtime_graph(
     "supplier_name": "公司官方英文名",
     "supplier_name_zh": "简体中文名",
     "supplier_ticker": "主要美股代码或 null",
-    "product_text": "供应的产品或服务（简体中文，简洁）",
+    "product_text": "供应的具体产品或服务（简体中文，简洁）",
     "rationale": "一句话说明为何是核心供应关系（简体中文）",
+    "relationship_description_zh": "两句以内、针对该具体供应商的说明：它向目标公司供应什么、用在何处、为何关键（简体中文，避免套话）",
     "confidence": 0,
     "is_single_source": false,
     "info_year": 2026
@@ -166,8 +167,9 @@ async def stream_realtime_graph(
     "customer_name": "公司官方英文名",
     "customer_name_zh": "简体中文名",
     "customer_ticker": "主要美股代码或 null",
-    "product_text": "采购的产品或服务（简体中文，简洁）",
+    "product_text": "采购的具体产品或服务（简体中文，简洁）",
     "rationale": "一句话说明为何是主要客户（简体中文）",
+    "relationship_description_zh": "两句以内、针对该具体客户的说明：它向目标公司采购什么、用于什么业务、为何重要（简体中文，避免套话）",
     "confidence": 0,
     "is_single_source": false,
     "info_year": 2026
@@ -177,7 +179,8 @@ async def stream_realtime_graph(
 }}
 最多返回 5 个真正核心的直接供应商与 5 个主要直接客户，绝不凑数。
 美股公司必须用其主要 NASDAQ/NYSE/AMEX 代码；私有、非美股或不确定的用 null。不要重复 ticker。
-台积电是 TSM，不是 SMECF。confidence 表示事实确定度。product_text 与 rationale 保持简短，不要输出 products 或长描述。"""
+台积电是 TSM，不是 SMECF。confidence 表示事实确定度。product_text 与 rationale 保持简短，不要输出 products 字段。
+每条关系的 relationship_description_zh 必须**针对该具体公司与产品**、彼此不同，禁止使用「构成两家公司之间的直接业务与供应链联系」这类通用套话。"""
     messages = [
         SystemMessage(content=prompt),
         HumanMessage(content=f"请用简体中文思考并生成 {normalized_ticker} 的实时供应链图谱。"),
