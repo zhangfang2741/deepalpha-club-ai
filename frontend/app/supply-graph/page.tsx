@@ -404,11 +404,24 @@ export default function SupplyGraphPage() {
   const [selectedNode, setSelectedNode] = useState<SupplyNode | null>(null);
   const [clues, setClues] = useState<Record<string, unknown>[]>([]);
   const workspaceRef = useRef<HTMLElement>(null);
+  // MiniMax 实时输出面板：流式追加时自动滚到底（用户往上翻查看历史时不打扰）
+  const outputRef = useRef<HTMLPreElement>(null);
+  const stickToBottomRef = useRef(true);
+  const handleOutputScroll = useCallback(() => {
+    const el = outputRef.current;
+    if (!el) return;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+  }, []);
+  useEffect(() => {
+    const el = outputRef.current;
+    if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [llmOutput, outputOpen]);
   const requestPreview = useCallback(
     async (target: string, signal?: AbortSignal) => {
       let preview: SupplyGraph | null = null;
       let streamError = "";
       let firstDelta = true;
+      stickToBottomRef.current = true; // 新一轮分析：重新贴底
       await supplyGraphApi.previewStream(
         target,
         (event) => {
@@ -776,6 +789,8 @@ export default function SupplyGraphPage() {
                   </div>
                 </div>
                 <pre
+                  ref={outputRef}
+                  onScroll={handleOutputScroll}
                   aria-live="polite"
                   className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-4 font-mono text-xs leading-5 text-slate-300"
                 >
