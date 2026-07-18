@@ -28,6 +28,8 @@ type G6GraphInstance = {
   getZoom: () => number;
   translateTo: (position: [number, number], animation?: boolean) => Promise<void>;
   zoomTo: (zoom: number, animation?: boolean) => Promise<void>;
+  resize: () => void;
+  fitView: (options?: unknown, animation?: unknown) => Promise<void>;
 };
 
 type GraphElementEvent = {
@@ -231,7 +233,7 @@ export default function SupplyGraphCanvas({
         data,
         layout: graphLayout(layout, graph.nodes.length),
         behaviors: ["drag-canvas", "zoom-canvas", "drag-element"],
-        plugins: [{ type: "minimap", size: [160, 100] }],
+        plugins: [{ type: "minimap", key: "minimap", size: [160, 100], position: "right-bottom" }],
       }) as unknown as G6GraphInstance;
 
       const handleNodeDoubleClick = (nodeId: string) => {
@@ -326,6 +328,39 @@ export default function SupplyGraphCanvas({
     const instance = instanceRef.current;
     if (instance) applyVisibility(instance);
   }, [visibility]);
+
+  // 容器尺寸变化（含进入/退出全屏、窗口缩放）时，同步画布尺寸并重新 fitView，
+  // 避免图谱固定在原尺寸的一角、右侧留大片空白。
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+    let frame = 0;
+    let lastW = container.clientWidth;
+    let lastH = container.clientHeight;
+    const observer = new ResizeObserver(() => {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      if (w === 0 || h === 0 || (w === lastW && h === lastH)) return;
+      lastW = w;
+      lastH = h;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const instance = instanceRef.current;
+        if (!instance) return;
+        try {
+          instance.resize();
+          void instance.fitView();
+        } catch {
+          /* 实例可能正在重建，忽略本次 */
+        }
+      });
+    });
+    observer.observe(container);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, []);
 
   // 组件卸载时销毁实例。
   useEffect(
