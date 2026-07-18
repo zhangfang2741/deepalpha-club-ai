@@ -11,6 +11,12 @@ from langchain_core.tools.base import BaseTool
 from .ask_human import ask_human
 from .chan_analysis import chan_analysis_tool as _chan_analysis_fn
 from .duckduckgo_search import duckduckgo_search_tool
+from .fmp_data import (
+    fmp_company_profile,
+    fmp_financial_statement,
+    fmp_key_metrics,
+    fmp_quote,
+)
 from .ichimoku_analysis import ichimoku_analysis_tool as _ichimoku_analysis_fn
 from .structure_gap import structure_gap_tool as _structure_gap_fn
 from .wyckoff_analysis import wyckoff_analysis_tool as _wyckoff_analysis_fn
@@ -106,6 +112,10 @@ async def structure_gap_analysis(
 tools: list[BaseTool] = [
     duckduckgo_search_tool,
     ask_human,
+    fmp_quote,
+    fmp_company_profile,
+    fmp_financial_statement,
+    fmp_key_metrics,
     chan_analysis,
     wyckoff_analysis,
     ichimoku_analysis,
