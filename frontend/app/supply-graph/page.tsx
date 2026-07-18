@@ -13,7 +13,7 @@ import {
   type SupplyGraph,
   type SupplyNode,
 } from "@/lib/api/supplyGraph";
-import { Loader2, Maximize2, Minimize2, PanelLeftOpen, RefreshCw, X } from "lucide-react";
+import { Loader2, Maximize2, Minimize2, Network, PanelLeftOpen, RefreshCw, X } from "lucide-react";
 
 const EMPTY: SupplyGraph = { nodes: [], edges: [] };
 
@@ -386,12 +386,12 @@ export const demoNeighborhood = (
 };
 
 export default function SupplyGraphPage() {
-  const [ticker, setTicker] = useState("NVDA");
-  const [query, setQuery] = useState("NVDA");
+  const [ticker, setTicker] = useState("");
+  const [query, setQuery] = useState("");
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [graph, setGraph] = useState<SupplyGraph>(EMPTY);
   const [exploring, setExploring] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [expanding, setExpanding] = useState(false);
   const [expandingId, setExpandingId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -399,7 +399,7 @@ export default function SupplyGraphPage() {
   const [llmOutput, setLlmOutput] = useState("");
   const [outputOpen, setOutputOpen] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
-  const [feedback, setFeedback] = useState("正在加载核心供应链…");
+  const [feedback, setFeedback] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [selectedEdge, setSelectedEdge] = useState<SupplyEdge | null>(null);
   const [selectedNode, setSelectedNode] = useState<SupplyNode | null>(null);
@@ -458,6 +458,8 @@ export default function SupplyGraphPage() {
     [],
   );
   useEffect(() => {
+    // 首次进入时不自动加载，等用户搜索某个公司再拉取图谱（loading 初始即为 false）
+    if (!ticker) return;
     const controller = new AbortController();
     void requestPreview(ticker, controller.signal)
       .then((data) => {
@@ -545,11 +547,13 @@ export default function SupplyGraphPage() {
   );
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    const next = query.trim().toUpperCase();
+    if (!next) return; // 空输入不查询
     setExploring(false);
     setLoading(true);
-    setFeedback(`正在查询 ${query.trim().toUpperCase()}…`);
+    setFeedback(`正在查询 ${next}…`);
     setErrorMessage("");
-    setTicker(query.trim().toUpperCase());
+    setTicker(next);
     setRefreshVersion((version) => version + 1);
   };
   const handleDirectionalExpand = useCallback(
@@ -827,6 +831,11 @@ export default function SupplyGraphPage() {
                   onNodeDoubleClick={handleBidirectionalExpand}
                   expandingId={expandingId}
                 />
+              </div>
+            ) : !ticker ? (
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-500">
+                <Network className="h-10 w-10 text-slate-300" aria-hidden="true" />
+                <p className="text-sm">在上方搜索一家公司代码（如 NVDA、AAPL），查看其实时供应链图谱</p>
               </div>
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-3 text-slate-500">
