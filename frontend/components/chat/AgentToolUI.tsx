@@ -31,6 +31,7 @@ interface ToolMeta {
 
 // 工具名 → 中文标签 / 图标 / 视觉分类
 const TOOL_LABELS: Record<string, ToolMeta> = {
+  duckduckgo_results_json: { label: '联网搜索', Icon: Search, category: 'search' },
   duckduckgo_search: { label: '联网搜索', Icon: Search, category: 'search' },
   chan_analysis: { label: '缠论分析', Icon: LineChart, category: 'analysis' },
   wyckoff_analysis: { label: '威科夫分析', Icon: LineChart, category: 'analysis' },
@@ -88,8 +89,8 @@ function isFlatSimple(obj: unknown): obj is Record<string, unknown> {
 function StatusBadge({ running, isError }: { running: boolean; isError?: boolean }) {
   if (running) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-600">
-        <span className="relative flex h-1.5 w-1.5">
+      <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-600">
+        <span className="relative flex h-1.5 w-1.5 shrink-0">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75" />
           <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-indigo-500" />
         </span>
@@ -99,15 +100,15 @@ function StatusBadge({ running, isError }: { running: boolean; isError?: boolean
   }
   if (isError) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-600">
-        <AlertTriangle className="h-3 w-3" />
+      <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-600">
+        <AlertTriangle className="h-3 w-3 shrink-0" />
         失败
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-600">
-      <CheckCircle2 className="h-3 w-3" />
+    <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-600">
+      <CheckCircle2 className="h-3 w-3 shrink-0" />
       已完成
     </span>
   )
@@ -228,12 +229,12 @@ export function ToolFallback({ toolName, args, result, status, isError }: ToolCa
         <span className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg ${accent.chip}`}>
           <Icon className="h-4 w-4" />
         </span>
-        <span className="text-sm font-medium text-gray-800">{label}</span>
-        <span className="ml-auto flex items-center gap-2">
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800">{label}</span>
+        <span className="flex flex-shrink-0 items-center gap-2">
           <StatusBadge running={running} isError={isError} />
           {hasBody && (
             <ChevronDown
-              className={`h-4 w-4 text-gray-300 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+              className={`h-4 w-4 flex-shrink-0 text-gray-300 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
             />
           )}
         </span>
