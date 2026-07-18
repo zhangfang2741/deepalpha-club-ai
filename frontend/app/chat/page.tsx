@@ -23,6 +23,10 @@ import { ToolFallback, WriteTodosToolUI, TaskToolUI } from '@/components/chat/Ag
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 const THREAD_ID = 'main'
 
+// 品牌头像：深靛渐变圆角 + 白色斜体 α（DeepAlpha / 金融「超额收益」）
+const ASSISTANT_AVATAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#312e81"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#g)"/><text x="32" y="34" text-anchor="middle" dominant-baseline="central" font-family="Georgia, 'Times New Roman', serif" font-size="34" font-style="italic" font-weight="600" fill="#ffffff">&#945;</text></svg>`
+const ASSISTANT_AVATAR_SRC = `data:image/svg+xml,${encodeURIComponent(ASSISTANT_AVATAR_SVG)}`
+
 const MarkdownText = makeMarkdownText({ remarkPlugins: [remarkGfm] })
 
 /** 解析后端 SSE（每条 `data: {event,data}\n\n`）为 LangGraph 事件异步生成器。 */
@@ -191,7 +195,7 @@ export default function ChatPage() {
           ) : (
             <ChatRuntime key={chatKey} sessionToken={sessionToken}>
               <Thread
-                assistantAvatar={{ fallback: 'DA' }}
+                assistantAvatar={{ src: ASSISTANT_AVATAR_SRC, alt: 'DeepAlpha', fallback: 'α' }}
                 assistantMessage={{ components: { Text: MarkdownText, ToolFallback } }}
                 components={{ UserMessage: UserMessageWithAvatar }}
                 strings={{ composer: { input: { placeholder: '输入你的问题，例如：深度分析一下 NVDA...' } } }}
