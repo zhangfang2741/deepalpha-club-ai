@@ -31,6 +31,7 @@ type G6GraphInstance = {
   resize: () => void;
   fitView: (options?: unknown, animation?: unknown) => Promise<void>;
   updatePlugin: (plugin: { key: string; [prop: string]: unknown }) => void;
+  getClientByCanvas: (point: [number, number]) => { x: number; y: number } | number[];
 };
 
 type GraphElementEvent = {
@@ -100,14 +101,17 @@ export default function SupplyGraphCanvas({
   onEdge,
   onExpand,
   onNodeDoubleClick,
+  expandingId,
 }: {
   graph: SupplyGraph;
   onNode: (id: string) => void;
   onEdge: (id: string) => void;
   onExpand: (id: string, direction: Direction) => void;
   onNodeDoubleClick: (id: string) => void;
+  expandingId?: string | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [spinnerPos, setSpinnerPos] = useState<{ x: number; y: number } | null>(null);
   const instanceRef = useRef<G6GraphInstance | null>(null);
   const currentFocusRef = useRef<string | undefined>(undefined);
   const currentLayoutRef = useRef<LayoutType>("hierarchy");
@@ -223,22 +227,72 @@ export default function SupplyGraphCanvas({
       );
 
       if (instance && !focusChanged && !layoutChanged && !shrank) {
-        // 数据增长（展开）：重跑 dagre 布局以可靠地摆放新节点，但保留当前视口（缩放/平移），
-        // 避免视图跳回原点。这样新点边一定会出现，同时不会突兀地重置视角。
+        // 数据增长（展开某节点上下游）：**只增量添加新点边**，把新节点摆到它所连接的
+        // 已有节点旁边（供应商放左、客户放右），不重跑布局、不移动已有节点、不 refit，
+        // 避免整张图重排、放大或视角跳动。
         const data = adaptGraph(graph, focusId);
-        const hasNew =
-          data.nodes.some((node) => !renderedNodesRef.current.has(node.id)) ||
-          data.edges.some((edge) => !renderedEdgesRef.current.has(edge.id));
-        if (!hasNew) return;
-        const [vx = 0, vy = 0] = instance.getPosition();
-        const zoom = instance.getZoom();
-        instance.setData(data);
-        void instance.render().then(async () => {
+        const newNodes = data.nodes.filter(
+          (node) => !renderedNodesRef.current.has(node.id),
+        );
+        const newEdges = data.edges.filter(
+          (edge) => !renderedEdgesRef.current.has(edge.id),
+        );
+        if (!newNodes.length && !newEdges.length) return;
+
+        const NEW_DX = 220;
+        const NEW_GAP = 92;
+        const byAnchor = new Map<
+          string,
+          { node: (typeof newNodes)[number]; role: "supply" | "customer" }[]
+        >();
+        for (const node of newNodes) {
+          const edge = newEdges.find(
+            (e) => e.source === node.id || e.target === node.id,
+          );
+          if (!edge) continue;
+          const nodeIsSource = edge.source === node.id;
+          const anchorId = nodeIsSource ? edge.target : edge.source;
+          if (!renderedNodesRef.current.has(anchorId)) continue; // 锚点须为已有节点
+          const role: "supply" | "customer" = nodeIsSource ? "supply" : "customer";
+          const list = byAnchor.get(anchorId) ?? [];
+          list.push({ node, role });
+          byAnchor.set(anchorId, list);
+        }
+        for (const [anchorId, list] of byAnchor) {
+          let ax = 0;
+          let ay = 0;
+          try {
+            const pos = instance.getElementPosition(anchorId);
+            ax = pos[0] ?? 0;
+            ay = pos[1] ?? 0;
+          } catch {
+            continue;
+          }
+          const dir = list[0].role === "supply" ? -1 : 1;
+          const total = list.length;
+          list.forEach(({ node }, index) => {
+            node.style = {
+              ...node.style,
+              x: ax + dir * NEW_DX,
+              y: ay + (index - (total - 1) / 2) * NEW_GAP,
+            };
+          });
+        }
+
+        try {
+          if (newNodes.length) instance.addNodeData(newNodes);
+          if (newEdges.length) instance.addEdgeData(newEdges);
+        } catch {
+          /* 忽略：实例可能正在重建 */
+        }
+        void instance.draw().then(() => {
           if (disposed) return;
-          await instance.translateTo([vx, vy], false);
-          await instance.zoomTo(zoom, false);
-          renderedNodesRef.current = new Set(graph.nodes.map((node) => node.nodeId));
-          renderedEdgesRef.current = new Set(graph.edges.map((edge) => edge.edgeId));
+          renderedNodesRef.current = new Set(
+            graph.nodes.map((node) => node.nodeId),
+          );
+          renderedEdgesRef.current = new Set(
+            graph.edges.map((edge) => edge.edgeId),
+          );
           applyVisibility(instance);
         });
         return;
@@ -384,6 +438,34 @@ export default function SupplyGraphCanvas({
     };
   }, []);
 
+  // 扩展某节点上下游时，只在该节点上叠加一个转圈（非阻塞），跟随平移/缩放实时定位。
+  useEffect(() => {
+    if (!expandingId) return;
+    let raf = 0;
+    const track = () => {
+      const instance = instanceRef.current;
+      const container = containerRef.current;
+      if (instance && container) {
+        try {
+          const [nx, ny] = instance.getElementPosition(expandingId);
+          const client = instance.getClientByCanvas([nx ?? 0, ny ?? 0]);
+          const cx = Array.isArray(client) ? (client[0] ?? 0) : client.x;
+          const cy = Array.isArray(client) ? (client[1] ?? 0) : client.y;
+          const rect = container.getBoundingClientRect();
+          setSpinnerPos({ x: cx - rect.left, y: cy - rect.top });
+        } catch {
+          /* 节点可能尚未渲染 */
+        }
+      }
+      raf = requestAnimationFrame(track);
+    };
+    raf = requestAnimationFrame(track);
+    return () => {
+      cancelAnimationFrame(raf);
+      setSpinnerPos(null); // 扩展结束（或切换）时清除旋转环
+    };
+  }, [expandingId]);
+
   // 组件卸载时销毁实例。
   useEffect(
     () => () => {
@@ -411,6 +493,14 @@ export default function SupplyGraphCanvas({
         ref={containerRef}
         className="h-full min-h-[560px] w-full touch-manipulation rounded-2xl bg-[#edf3ff] shadow-inner ring-1 ring-blue-100"
       />
+      {/* 扩展中：仅在该节点上叠加一个旋转环，不遮挡画布、不阻断交互 */}
+      {spinnerPos && (
+        <span
+          className="pointer-events-none absolute z-30 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-blue-500/70 border-t-transparent animate-spin motion-reduce:animate-none"
+          style={{ left: spinnerPos.x, top: spinnerPos.y }}
+          aria-label="正在扩展该节点关系"
+        />
+      )}
       <label className="absolute right-4 top-4 z-20 flex items-center gap-2 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs font-medium text-slate-500 shadow-md backdrop-blur-sm">
         <span>布局</span>
         <select
