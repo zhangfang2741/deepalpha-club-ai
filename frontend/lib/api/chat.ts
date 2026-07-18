@@ -44,3 +44,22 @@ export async function clearChatHistory(sessionToken: string): Promise<void> {
     headers: { Authorization: `Bearer ${sessionToken}` },
   })
 }
+
+// LangChain 风格的历史消息（含工具调用），供 useLangGraphRuntime 的 load 恢复。
+// 结构与 @assistant-ui/react-langgraph 的 LangChainMessage 对齐（type: human/ai/tool）。
+export interface LangChainHistoryMessage {
+  id?: string
+  type: 'human' | 'ai' | 'tool' | 'system'
+  content: unknown
+  [key: string]: unknown
+}
+
+export async function getLangGraphHistory(
+  sessionToken: string,
+): Promise<LangChainHistoryMessage[]> {
+  const { data } = await apiClient.get<{ messages: LangChainHistoryMessage[] }>(
+    '/api/v1/chatbot/langgraph/history',
+    { headers: { Authorization: `Bearer ${sessionToken}` } },
+  )
+  return data.messages ?? []
+}

@@ -259,7 +259,7 @@ Cloudflare 代理状态：三条记录均开启橙色云朵（代理模式），
 1. 前端调用 `POST /api/v1/auth/sessions` 创建 Chat Session，返回 `session.token.access_token`
 2. Session token 存储在 `localStorage`（key：`chat_session_token`）
 3. 后续所有聊天请求携带 `Authorization: Bearer <session_token>`
-4. `ThreadHistoryAdapter.load()` 调用 `GET /api/v1/chatbot/messages` 恢复历史
+4. 聊天走 Deep Agent：前端用 assistant-ui `useLangGraphRuntime`，`stream` 回调 POST `/api/v1/chatbot/langgraph/stream`（SSE 产出 `{event,data}` 结构化事件，渲染流式文本 + 工具调用/规划卡片），`load` 调用 `GET /api/v1/chatbot/langgraph/history` 恢复历史（含工具调用）。旧的纯文本端点 `/api/v1/chatbot/chat[/stream]` 与 `GET /api/v1/chatbot/messages` 保留向后兼容
 5. 清空对话：`DELETE /api/v1/chatbot/messages`，同时清除 localStorage 中的 session token
 
 ### 验证命令

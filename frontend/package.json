@@ -10,9 +10,9 @@
   },
   "dependencies": {
     "@antv/g6": "^5.1.1",
-    "@assistant-ui/react": "^0.14.0",
+    "@assistant-ui/react": "^0.14.27",
     "@assistant-ui/react-langgraph": "^0.14.12",
-    "@assistant-ui/react-markdown": "^0.14.0",
+    "@assistant-ui/react-markdown": "^0.14.6",
     "@assistant-ui/react-ui": "^0.2.1",
     "@base-ui/react": "^1.4.1",
     "@dagrejs/dagre": "^3.0.0",

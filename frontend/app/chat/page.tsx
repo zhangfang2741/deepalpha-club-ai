@@ -1,19 +1,16 @@
 'use client'
 
-import { useMemo, useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { AssistantRuntimeProvider, MessagePrimitive } from '@assistant-ui/react'
 import {
-  AssistantRuntimeProvider,
-  useLocalRuntime,
-  ExportedMessageRepository,
-  MessagePrimitive,
-  type ChatModelAdapter,
-  type ThreadHistoryAdapter,
-  type ExportedMessageRepositoryItem,
-} from '@assistant-ui/react'
+  useLangGraphRuntime,
+  type LangChainMessage,
+  type LangGraphMessagesEvent,
+} from '@assistant-ui/react-langgraph'
 import { Thread, makeMarkdownText } from '@assistant-ui/react-ui'
 import remarkGfm from 'remark-gfm'
 import {
-  getChatHistory,
+  getLangGraphHistory,
   clearChatHistory,
   getOrCreateSessionToken,
   clearStoredSessionToken,
@@ -21,83 +18,41 @@ import {
 import { useAuthStore } from '@/lib/store/auth'
 import Spinner from '@/components/ui/Spinner'
 import DashboardShell from '@/components/layout/DashboardShell'
+import { ToolFallback, WriteTodosToolUI, TaskToolUI } from '@/components/chat/AgentToolUI'
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const THREAD_ID = 'main'
 
 const MarkdownText = makeMarkdownText({ remarkPlugins: [remarkGfm] })
 
-function buildChatAdapter(sessionToken: string): ChatModelAdapter {
-  return {
-    async *run({ messages, abortSignal }) {
-      const lastMsg = messages[messages.length - 1]
-      if (!lastMsg || lastMsg.role !== 'user') return
-
-      const text = lastMsg.content
-        .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
-        .map((part) => part.text)
-        .join('')
-
-      if (!text.trim()) return
-
-      const response = await fetch(`${BASE_URL}/api/v1/chatbot/chat/stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
-        },
-        body: JSON.stringify({ messages: [{ role: 'user', content: text }] }),
-        signal: abortSignal,
-      })
-
-      if (!response.ok) throw new Error(`请求失败 (${response.status})`)
-
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-      if (!reader) throw new Error('无法读取流')
-
-      let fullText = ''
-      let buffer = ''
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() ?? ''
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue
-            try {
-              const json = JSON.parse(line.slice(6))
-              if (json.done) return
-              if (json.content) {
-                fullText += json.content
-                yield { content: [{ type: 'text' as const, text: fullText }] }
-              }
-            } catch { /* ignore malformed */ }
-          }
+/** 解析后端 SSE（每条 `data: {event,data}\n\n`）为 LangGraph 事件异步生成器。 */
+async function* parseSSEStream(
+  response: Response,
+): AsyncGenerator<LangGraphMessagesEvent<LangChainMessage>> {
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error('无法读取流')
+  const decoder = new TextDecoder()
+  let buffer = ''
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const raw = line.slice(6).trim()
+        if (!raw) continue
+        try {
+          yield JSON.parse(raw) as LangGraphMessagesEvent<LangChainMessage>
+        } catch {
+          /* 忽略半包/坏行 */
         }
-      } finally {
-        reader.releaseLock()
       }
-    },
-  }
-}
-
-function buildHistoryAdapter(sessionToken: string): ThreadHistoryAdapter {
-  return {
-    async load() {
-      try {
-        const messages = await getChatHistory(sessionToken)
-        return ExportedMessageRepository.fromArray(
-          messages.map((msg) => ({ role: msg.role, content: msg.content }))
-        )
-      } catch {
-        return { messages: [] }
-      }
-    },
-    // Backend persists messages during streaming; no separate save needed
-    async append(_item: ExportedMessageRepositoryItem) {},
+    }
+  } finally {
+    reader.releaseLock()
   }
 }
 
@@ -124,10 +79,53 @@ interface ChatRuntimeProps {
 }
 
 function ChatRuntime({ sessionToken, children }: ChatRuntimeProps) {
-  const chatAdapter = useMemo(() => buildChatAdapter(sessionToken), [sessionToken])
-  const historyAdapter = useMemo(() => buildHistoryAdapter(sessionToken), [sessionToken])
-  const runtime = useLocalRuntime(chatAdapter, { adapters: { history: historyAdapter } })
-  return <AssistantRuntimeProvider runtime={runtime}>{children}</AssistantRuntimeProvider>
+  const stream = useCallback(
+    async (
+      messages: LangChainMessage[],
+      { command, abortSignal }: { command?: { resume: string }; abortSignal: AbortSignal },
+    ) => {
+      const response = await fetch(`${BASE_URL}/api/v1/chatbot/langgraph/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sessionToken}`,
+        },
+        body: JSON.stringify({ messages, command }),
+        signal: abortSignal,
+      })
+      if (!response.ok) throw new Error(`请求失败 (${response.status})`)
+      return parseSSEStream(response)
+    },
+    [sessionToken],
+  )
+
+  const load = useCallback(async () => {
+    try {
+      const messages = await getLangGraphHistory(sessionToken)
+      return { messages: messages as unknown as LangChainMessage[] }
+    } catch {
+      return { messages: [] as LangChainMessage[] }
+    }
+  }, [sessionToken])
+
+  const create = useCallback(async () => ({ externalId: THREAD_ID }), [])
+
+  const runtime = useLangGraphRuntime({
+    threadId: THREAD_ID,
+    stream,
+    load,
+    create,
+    unstable_allowCancellation: true,
+  })
+
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      {/* 注册 Deep Agent 专用工具 UI */}
+      <WriteTodosToolUI />
+      <TaskToolUI />
+      {children}
+    </AssistantRuntimeProvider>
+  )
 }
 
 export default function ChatPage() {
@@ -138,9 +136,15 @@ export default function ChatPage() {
   useEffect(() => {
     let cancelled = false
     getOrCreateSessionToken()
-      .then((token) => { if (!cancelled) setSessionToken(token) })
-      .catch(() => { if (!cancelled) setError('会话初始化失败，请刷新页面重试') })
-    return () => { cancelled = true }
+      .then((token) => {
+        if (!cancelled) setSessionToken(token)
+      })
+      .catch(() => {
+        if (!cancelled) setError('会话初始化失败，请刷新页面重试')
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const handleClearHistory = useCallback(async () => {
@@ -163,39 +167,42 @@ export default function ChatPage() {
   return (
     <DashboardShell>
       <div className="-mx-6 -my-8 flex flex-col h-full overflow-hidden px-6 py-8">
-      <div className="flex items-center justify-between mb-4 flex-shrink-0">
-        <h1 className="text-2xl font-bold text-gray-900">AI 对话</h1>
-        {sessionToken && (
-          <button
-            type="button"
-            onClick={handleClearHistory}
-            className="text-sm text-gray-400 hover:text-gray-600 px-3 py-1 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            清空对话
-          </button>
-        )}
-      </div>
-      <div className="flex-1 min-h-0 rounded-xl border border-gray-200 overflow-hidden bg-white">
-        {error ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-sm text-red-500">{error}</p>
-          </div>
-        ) : sessionToken === null ? (
-          <div className="flex items-center justify-center h-full">
-            <Spinner className="w-6 h-6 text-gray-400" />
-          </div>
-        ) : (
-          <ChatRuntime key={chatKey} sessionToken={sessionToken}>
-            <Thread
-              assistantAvatar={{ fallback: 'DA' }}
-              assistantMessage={{ components: { Text: MarkdownText } }}
-              components={{ UserMessage: UserMessageWithAvatar }}
-              strings={{ composer: { input: { placeholder: '输入你的问题，例如：分析一下 NVDA...' } } }}
-              welcome={{ message: '你好！我是 DeepAlpha AI 分析师，可以帮你分析美股、ETF 等市场动态。' }}
-            />
-          </ChatRuntime>
-        )}
-      </div>
+        <div className="flex items-center justify-between mb-4 flex-shrink-0">
+          <h1 className="text-2xl font-bold text-gray-900">AI 对话</h1>
+          {sessionToken && (
+            <button
+              type="button"
+              onClick={handleClearHistory}
+              className="text-sm text-gray-400 hover:text-gray-600 px-3 py-1 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              清空对话
+            </button>
+          )}
+        </div>
+        <div className="flex-1 min-h-0 rounded-xl border border-gray-200 overflow-hidden bg-white">
+          {error ? (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-sm text-red-500">{error}</p>
+            </div>
+          ) : sessionToken === null ? (
+            <div className="flex items-center justify-center h-full">
+              <Spinner className="w-6 h-6 text-gray-400" />
+            </div>
+          ) : (
+            <ChatRuntime key={chatKey} sessionToken={sessionToken}>
+              <Thread
+                assistantAvatar={{ fallback: 'DA' }}
+                assistantMessage={{ components: { Text: MarkdownText, ToolFallback } }}
+                components={{ UserMessage: UserMessageWithAvatar }}
+                strings={{ composer: { input: { placeholder: '输入你的问题，例如：深度分析一下 NVDA...' } } }}
+                welcome={{
+                  message:
+                    '你好！我是 DeepAlpha Deep Agent 投研助手，面对复杂问题我会先规划再分步分析，可帮你研究美股、ETF 等市场动态。',
+                }}
+              />
+            </ChatRuntime>
+          )}
+        </div>
       </div>
     </DashboardShell>
   )

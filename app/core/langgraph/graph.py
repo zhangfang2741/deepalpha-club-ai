@@ -341,9 +341,9 @@ class LangGraphAgent:
     ) -> AsyncGenerator[str, None]:
         """面向 assistant-ui ``useLangGraphRuntime`` 的结构化事件流。
 
-        以 SSE 逐条产出 ``{"event": ..., "data": ...}`` 的 JSON 字符串，其中 ``messages``
-        事件的 data 为 ``[序列化消息, metadata]``，可让前端渲染工具调用（含 write_todos
-        规划、task 子智能体、文件系统与投研工具）与流式文本。
+        以 SSE 逐条产出 ``{"event": "messages", "data": [序列化消息, metadata]}`` 的 JSON
+        字符串，可让前端渲染流式文本与工具调用（含 write_todos 规划、task 子智能体、
+        文件系统与投研工具）。中断时以合成 ai 消息呈现问题；异常时产出 error 事件。
 
         Yields:
             str: 形如 data 前缀的 SSE 片段（每条以两个换行结尾）。
@@ -359,17 +359,14 @@ class LangGraphAgent:
                 graph, messages, session_id, user_id, username, resume_value=resume_value
             )
 
-            async for stream_mode, chunk in graph.astream(
-                graph_input, config, context=context, stream_mode=["messages", "updates"]
+            async for message, metadata in graph.astream(
+                graph_input, config, context=context, stream_mode="messages"
             ):
-                if stream_mode == "messages":
-                    message, metadata = chunk
-                    if not isinstance(message, BaseMessage):
-                        continue
-                    yield _sse("messages", [_serialize_message(message), metadata])
-                elif stream_mode == "updates":
-                    # 透出节点状态更新（如 todos 变更），供前端可选地渲染进度面板
-                    yield _sse("updates", chunk)
+                if not isinstance(message, BaseMessage):
+                    continue
+                # write_todos（规划）/ task（子智能体）/ 文件系统 / 投研工具的调用都会以
+                # AIMessageChunk 的 tool_call_chunks 形式流出，前端据此渲染工具卡片。
+                yield _sse("messages", [_serialize_message(message), metadata])
 
             # 流结束后：检查中断或写入长期记忆
             state = await graph.aget_state(config)
