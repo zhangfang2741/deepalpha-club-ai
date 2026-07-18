@@ -62,6 +62,12 @@ const streamPreview = async (
     `${BASE_URL}/api/v1/supply-graph/preview/stream?ticker=${encodeURIComponent(ticker)}`,
     { headers: token ? { Authorization: `Bearer ${token}` } : undefined, signal },
   )
+  // 未登录 / token 失效：与 apiClient 拦截器一致，清除 token 并跳转登录页
+  if ((response.status === 401 || response.status === 403) && typeof window !== 'undefined') {
+    localStorage.removeItem('access_token')
+    window.location.href = '/'
+    throw new Error('登录已失效，请重新登录')
+  }
   if (!response.ok || !response.body) throw new Error(`实时分析请求失败（${response.status}）`)
   const reader = response.body.getReader()
   const decoder = new TextDecoder()

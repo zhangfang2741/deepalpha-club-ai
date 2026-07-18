@@ -144,26 +144,30 @@ async def stream_realtime_graph(
     """
     normalized_ticker = ticker.upper()
     yield {"type": "status", "content": f"正在请求 MiniMax 分析 {normalized_ticker}…\n"}
-    prompt = f"""Build a concise real-time supply-chain graph for US ticker {normalized_ticker}.
-Return JSON only, without Markdown, using exactly this compact schema:
+    prompt = f"""为美股代码 {normalized_ticker} 构建一份精简的实时供应链图谱。
+
+【语言要求】全程用**简体中文**进行思考（reasoning/thinking）与说明；JSON 中除公司官方英文名
+（*_name 字段）与美股 ticker 代码保持英文外，其余文本字段（product_text、rationale 等）一律用简体中文。
+
+只返回 JSON，不要 Markdown，严格使用如下紧凑结构：
 {{
-  "company_name_zh": "...",
+  "company_name_zh": "公司简体中文名",
   "suppliers": [{{
-    "supplier_name": "official English company name",
+    "supplier_name": "公司官方英文名",
     "supplier_name_zh": "简体中文名",
-    "supplier_ticker": "primary US ticker or null",
-    "product_text": "concise supplied product or service",
-    "rationale": "one concise sentence explaining why this is a core relationship",
+    "supplier_ticker": "主要美股代码或 null",
+    "product_text": "供应的产品或服务（简体中文，简洁）",
+    "rationale": "一句话说明为何是核心供应关系（简体中文）",
     "confidence": 0,
     "is_single_source": false,
     "info_year": 2026
   }}],
   "customers": [{{
-    "customer_name": "official English company name",
+    "customer_name": "公司官方英文名",
     "customer_name_zh": "简体中文名",
-    "customer_ticker": "primary US ticker or null",
-    "product_text": "concise purchased product or service",
-    "rationale": "one concise sentence explaining why this is a major customer",
+    "customer_ticker": "主要美股代码或 null",
+    "product_text": "采购的产品或服务（简体中文，简洁）",
+    "rationale": "一句话说明为何是主要客户（简体中文）",
     "confidence": 0,
     "is_single_source": false,
     "info_year": 2026
@@ -171,13 +175,12 @@ Return JSON only, without Markdown, using exactly this compact schema:
   "skipped": false,
   "skip_reason": null
 }}
-Return at most 5 genuinely core direct suppliers and 5 major direct customers. Never pad lists.
-US-listed companies must use their primary NASDAQ/NYSE/AMEX ticker; use null for private, non-US,
-or uncertain listings. Never repeat a ticker. TSMC is TSM, not SMECF. Confidence is factual certainty.
-Keep product_text and rationale short. Do not output products or long descriptions."""
+最多返回 5 个真正核心的直接供应商与 5 个主要直接客户，绝不凑数。
+美股公司必须用其主要 NASDAQ/NYSE/AMEX 代码；私有、非美股或不确定的用 null。不要重复 ticker。
+台积电是 TSM，不是 SMECF。confidence 表示事实确定度。product_text 与 rationale 保持简短，不要输出 products 或长描述。"""
     messages = [
         SystemMessage(content=prompt),
-        HumanMessage(content=f"Generate the real-time supply-chain graph for {normalized_ticker}."),
+        HumanMessage(content=f"请用简体中文思考并生成 {normalized_ticker} 的实时供应链图谱。"),
     ]
     callbacks: list[BaseCallbackHandler] = (
         [langfuse_callback_handler] if settings.LANGFUSE_TRACING_ENABLED else []
