@@ -22,7 +22,7 @@ from typing import (
 )
 from urllib.parse import quote_plus
 
-from langchain.agents.middleware import dynamic_prompt
+from langchain.agents.middleware import dynamic_prompt, wrap_model_call
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import (
     AIMessage,
@@ -78,9 +78,28 @@ class AgentContext(TypedDict, total=False):
 
     Attributes:
         dynamic_context: 当前轮注入的动态文本（用户信息 + 长期记忆 + 当前时间）。
+        model_name: 本轮使用的模型名（用户偏好）；为空则用构建图时的默认模型。
     """
 
     dynamic_context: str
+    model_name: str
+
+
+@wrap_model_call
+async def _apply_model_preference(request: Any, handler: Any) -> Any:
+    """按运行时上下文里的 model_name 覆盖本次调用的模型（实现每用户模型偏好）。
+
+    deep agent 图在构建时绑定了默认模型；这里在每次模型调用前按上下文覆盖，
+    使不同用户可用各自选择的（同一 provider 内已注册的）模型，无需重建图。
+    """
+    ctx = request.runtime.context or {}
+    name = ctx.get("model_name") if isinstance(ctx, dict) else None
+    if name:
+        try:
+            request = request.override(model=llm_registry.get(name))
+        except Exception as e:  # 未注册的模型名：回退默认，不中断对话
+            logger.warning("model_preference_override_failed", model=name, error=str(e))
+    return await handler(request)
 
 
 @dynamic_prompt
@@ -176,7 +195,7 @@ class LangGraphAgent:
                     model=llm_registry.get_default(),
                     tools=self.tools,
                     system_prompt=load_deep_agent_prompt(),
-                    middleware=[_inject_dynamic_context],
+                    middleware=[_apply_model_preference, _inject_dynamic_context],
                     context_schema=AgentContext,
                     checkpointer=checkpointer,
                     name=f"{settings.PROJECT_NAME} Deep Agent ({settings.ENVIRONMENT.value})",
@@ -234,6 +253,7 @@ class LangGraphAgent:
         user_id: Optional[str],
         username: Optional[str],
         resume_value: Optional[str] = None,
+        model_name: Optional[str] = None,
     ) -> tuple[Any, RunnableConfig, AgentContext]:
         """决定本轮的图输入（正常输入 or 中断恢复），并构建运行配置与运行时上下文。"""
         # 检查是否处于中断态 + 并发检索长期记忆
@@ -247,6 +267,8 @@ class LangGraphAgent:
         )
         config = self._build_config(session_id, user_id, username)
         context: AgentContext = {"dynamic_context": dynamic_context}
+        if model_name:
+            context["model_name"] = model_name
 
         if state.next:
             # 图处于中断态：用最新用户输入作为 resume 值恢复
@@ -338,6 +360,7 @@ class LangGraphAgent:
         user_id: Optional[str] = None,
         username: Optional[str] = None,
         resume_value: Optional[str] = None,
+        model_name: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """面向 assistant-ui ``useLangGraphRuntime`` 的结构化事件流。
 
@@ -356,7 +379,8 @@ class LangGraphAgent:
 
         try:
             graph_input, config, context = await self._resolve_input(
-                graph, messages, session_id, user_id, username, resume_value=resume_value
+                graph, messages, session_id, user_id, username,
+                resume_value=resume_value, model_name=model_name,
             )
 
             async for message, metadata in graph.astream(
