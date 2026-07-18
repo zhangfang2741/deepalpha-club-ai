@@ -70,7 +70,7 @@ function UserMessageWithAvatar() {
       <div className="max-w-[75%] bg-gray-900 text-white rounded-2xl rounded-br-sm px-4 py-2.5 text-sm leading-relaxed">
         <MessagePrimitive.Content />
       </div>
-      <div className="w-8 h-8 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-600 to-slate-800 text-white text-xs font-semibold flex items-center justify-center flex-shrink-0 ring-1 ring-slate-900/10 shadow-sm">
         {initials}
       </div>
     </MessagePrimitive.Root>
