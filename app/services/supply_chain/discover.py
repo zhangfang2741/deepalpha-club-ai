@@ -7,6 +7,19 @@ from typing import Any, Protocol
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.config import settings
+from app.services.llm.registry import llm_registry
+
+
+def _safe_discover_model() -> str | None:
+    """返回已注册的发现模型名；配置为空或未注册时返回 None（沿用默认模型）。
+
+    避免 ``SUPPLY_CHAIN_DISCOVER_MODEL`` 配置漂移（如指向未注册的
+    ``claude-sonnet-4-5``）时，llm_service 抛错中断供应链发现。
+    """
+    configured = settings.SUPPLY_CHAIN_DISCOVER_MODEL
+    if configured and configured in llm_registry.get_all_names():
+        return configured
+    return None
 
 
 class ProductDetail(BaseModel):
@@ -114,7 +127,7 @@ async def discover_suppliers(ticker: str, llm: StructuredLLM) -> DiscoveryResult
             {"role": "system", "content": prompt},
             {"role": "user", "content": f"Discover the direct supply-chain relationships for {ticker.upper()}."},
         ],
-        model_name=settings.SUPPLY_CHAIN_DISCOVER_MODEL or None,
+        model_name=_safe_discover_model(),
         response_format=DiscoveryResult,
     )
     parsed = result if isinstance(result, DiscoveryResult) else DiscoveryResult.model_validate(result)
@@ -128,7 +141,7 @@ async def discover_suppliers(ticker: str, llm: StructuredLLM) -> DiscoveryResult
             },
             {"role": "user", "content": f"Return the supply-chain JSON for {ticker.upper()}."},
         ],
-        model_name=settings.SUPPLY_CHAIN_DISCOVER_MODEL or None,
+        model_name=_safe_discover_model(),
     )
     content = raw.content if hasattr(raw, "content") else raw
     if isinstance(content, list):

@@ -177,7 +177,9 @@ Keep product_text and rationale short. Do not output products or long descriptio
     )
     config: RunnableConfig = {"callbacks": callbacks}
     chunks: list[str] = []
-    llm = llm_registry.get(settings.SUPPLY_CHAIN_DISCOVER_MODEL or settings.DEFAULT_LLM_MODEL)
+    llm, resolved_model = llm_registry.get_or_default(
+        settings.SUPPLY_CHAIN_DISCOVER_MODEL or settings.DEFAULT_LLM_MODEL
+    )
     queue: asyncio.Queue[str | BaseException | None] = asyncio.Queue()
 
     async def produce() -> None:
@@ -237,7 +239,7 @@ Keep product_text and rationale short. Do not output products or long descriptio
         }
         repaired = await llm_service.call(
             messages,
-            model_name=settings.SUPPLY_CHAIN_DISCOVER_MODEL or settings.DEFAULT_LLM_MODEL,
+            model_name=resolved_model,
             response_format=DiscoveryResult,
         )
         result = (
