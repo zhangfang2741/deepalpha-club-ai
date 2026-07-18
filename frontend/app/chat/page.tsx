@@ -198,6 +198,12 @@ export default function ChatPage() {
                 welcome={{
                   message:
                     '你好！我是 DeepAlpha Deep Agent 投研助手，面对复杂问题我会先规划再分步分析，可帮你研究美股、ETF 等市场动态。',
+                  suggestions: [
+                    { text: '📊 深度分析 NVDA', prompt: '深度分析一下 NVDA 最近的基本面、股价表现与主要风险' },
+                    { text: '📈 缠论看 TSLA', prompt: '用缠论帮我分析 TSLA 近半年的买卖点与背驰情况' },
+                    { text: '🔥 半导体板块情绪', prompt: '最近半导体板块的资金流向和市场情绪如何？' },
+                    { text: '⚖️ AMD vs INTC', prompt: '对比一下 AMD 和 INTC 当前的投资价值' },
+                  ],
                 }}
               />
             </ChatRuntime>
