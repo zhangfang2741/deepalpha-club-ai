@@ -56,19 +56,21 @@ def _build_claude_llms() -> list[dict[str, Any]]:
     if settings.ANTHROPIC_BASE_URL:
         extra["base_url"] = settings.ANTHROPIC_BASE_URL
 
-    # MiniMax Anthropic 兼容接口：base_url 含 "minimax" 时使用 MiniMax 模型名
+    # MiniMax Anthropic 兼容接口：base_url 含 "minimax" 时注册 MINIMAX_CLAUDE_MODELS
+    # 列表中的模型（名称取模型 ID 小写），可通过 SUPPLY_CHAIN_DISCOVER_MODEL 等按名切换。
     if "minimax" in settings.ANTHROPIC_BASE_URL.lower():
         return [
             {
-                "name": "minimax-m2.7",
+                "name": model_id.lower(),
                 "llm": ChatAnthropic(
-                    model="MiniMax-M2.7",
+                    model=model_id,
                     api_key=api_key,
                     max_tokens=settings.MAX_TOKENS,
                     temperature=settings.DEFAULT_LLM_TEMPERATURE,
                     **extra,
                 ),
-            },
+            }
+            for model_id in settings.MINIMAX_CLAUDE_MODELS
         ]
 
     # 官方 Anthropic Claude 模型

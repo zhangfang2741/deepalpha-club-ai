@@ -328,6 +328,12 @@ class Settings:
         self.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")  # openai | claude | minimax | gemini
         self.ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
         self.ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "")  # 为空则使用官方地址
+        # 当 ANTHROPIC_BASE_URL 指向 MiniMax 兼容接口时，注册的 MiniMax 模型 ID 列表
+        # （逗号分隔）。列出套餐里真实可用的模型 ID 即可，例如把高速版与推理版并列，
+        # 注册后可用 SUPPLY_CHAIN_DISCOVER_MODEL 或 DEFAULT_LLM_MODEL 按名称（小写）选择。
+        self.MINIMAX_CLAUDE_MODELS = parse_list_from_env(
+            "MINIMAX_CLAUDE_MODELS", default=["MiniMax-M2.7"]
+        )
         self.MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY", "")
         self.MINIMAX_BASE_URL = os.getenv("MINIMAX_BASE_URL", "https://api.minimax.chat/v1")
         self.GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")

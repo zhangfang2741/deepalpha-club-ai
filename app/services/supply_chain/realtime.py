@@ -4,6 +4,7 @@ import asyncio
 import json
 import re
 from collections.abc import AsyncGenerator
+from typing import Any, Optional
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -133,8 +134,14 @@ async def generate_realtime_graph(ticker: str, llm: StructuredLLM) -> GiraffeGra
     return build_realtime_graph(ticker, result)
 
 
-async def stream_realtime_graph(ticker: str) -> AsyncGenerator[dict, None]:
-    """Stream raw model output, followed by one validated graph event."""
+async def stream_realtime_graph(
+    ticker: str, model_name: Optional[str] = None
+) -> AsyncGenerator[dict, None]:
+    """Stream raw model output, followed by one validated graph event.
+
+    model_name 为调用方（按当前用户偏好）解析出的模型名；优先级高于
+    SUPPLY_CHAIN_DISCOVER_MODEL / DEFAULT_LLM_MODEL。
+    """
     normalized_ticker = ticker.upper()
     yield {"type": "status", "content": f"正在请求 MiniMax 分析 {normalized_ticker}…\n"}
     prompt = f"""Build a concise real-time supply-chain graph for US ticker {normalized_ticker}.
@@ -178,24 +185,46 @@ Keep product_text and rationale short. Do not output products or long descriptio
     config: RunnableConfig = {"callbacks": callbacks}
     chunks: list[str] = []
     llm, resolved_model = llm_registry.get_or_default(
-        settings.SUPPLY_CHAIN_DISCOVER_MODEL or settings.DEFAULT_LLM_MODEL
+        model_name or settings.SUPPLY_CHAIN_DISCOVER_MODEL or settings.DEFAULT_LLM_MODEL
     )
-    queue: asyncio.Queue[str | BaseException | None] = asyncio.Queue()
+    # 队列项：{"kind": "answer"|"thinking", "text": str} | BaseException | None
+    queue: asyncio.Queue[dict[str, str] | BaseException | None] = asyncio.Queue()
+
+    def _split_chunk(chunk: Any) -> tuple[str, str]:
+        """从流式 chunk 中拆出答案文本与思考文本.
+
+        推理型模型（如 MiniMax-M2.7）会先流式输出 thinking/reasoning 块再输出答案；
+        原实现只取 text 块，导致思考阶段几十秒「零输出」。这里同时捕获思考内容。
+        """
+        answer, thinking = "", ""
+        content = chunk.content
+        if isinstance(content, str):
+            answer = content
+        elif isinstance(content, list):
+            for block in content:
+                if not isinstance(block, dict):
+                    answer += str(block)
+                    continue
+                btype = block.get("type")
+                if btype in ("thinking", "reasoning"):
+                    thinking += str(block.get("thinking") or block.get("reasoning") or block.get("text") or "")
+                else:
+                    answer += str(block.get("text", ""))
+        # 兜底：部分实现把推理放在 additional_kwargs.reasoning_content
+        if not thinking:
+            extra = getattr(chunk, "additional_kwargs", None)
+            if isinstance(extra, dict) and isinstance(extra.get("reasoning_content"), str):
+                thinking = extra["reasoning_content"]
+        return answer, thinking
 
     async def produce() -> None:
         try:
             async for chunk in llm.astream(messages, config=config):
-                if isinstance(chunk.content, str):
-                    text = chunk.content
-                elif isinstance(chunk.content, list):
-                    text = "".join(
-                        str(block.get("text", "")) if isinstance(block, dict) else str(block)
-                        for block in chunk.content
-                    )
-                else:
-                    text = ""
-                if text:
-                    await queue.put(text)
+                answer, thinking = _split_chunk(chunk)
+                if thinking:
+                    await queue.put({"kind": "thinking", "text": thinking})
+                if answer:
+                    await queue.put({"kind": "answer", "text": answer})
         except BaseException as error:
             await queue.put(error)
         finally:
@@ -203,13 +232,14 @@ Keep product_text and rationale short. Do not output products or long descriptio
 
     producer = asyncio.create_task(produce())
     waited_seconds = 0
+    received_any = False
     try:
         while True:
             try:
                 item = await asyncio.wait_for(queue.get(), timeout=3)
             except TimeoutError:
                 waited_seconds += 3
-                if not chunks:
+                if not received_any:
                     yield {
                         "type": "status",
                         "content": f"MiniMax 正在分析 {normalized_ticker}，已等待 {waited_seconds} 秒…\n",
@@ -219,8 +249,11 @@ Keep product_text and rationale short. Do not output products or long descriptio
                 break
             if isinstance(item, BaseException):
                 raise item
-            chunks.append(item)
-            yield {"type": "delta", "content": item}
+            received_any = True
+            # 思考内容仅用于实时展示进度，不计入最终 JSON 解析
+            if item["kind"] == "answer":
+                chunks.append(item["text"])
+            yield {"type": "delta", "content": item["text"]}
     finally:
         if not producer.done():
             producer.cancel()

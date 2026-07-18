@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { ListChecks } from 'lucide-react'
+import { ListChecks, Cpu } from 'lucide-react'
 import { getUserProfile, updateUserProfile, changePassword, type UserProfileResponse } from '@/lib/api/auth'
+import { getModels, setPreferredModel, formatModelLabel, type ModelsResponse } from '@/lib/api/settings'
 import DashboardShell from '@/components/layout/DashboardShell'
 
 // 从 Axios 风格错误中安全提取后端返回的 detail 字段
@@ -26,6 +27,10 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [passwordLoading, setPasswordLoading] = useState(false)
+
+  // AI 模型偏好
+  const [models, setModels] = useState<ModelsResponse | null>(null)
+  const [modelSaving, setModelSaving] = useState(false)
 
   // Format date
   const formatDate = (dateStr: string) => {
@@ -52,7 +57,28 @@ export default function SettingsPage() {
     }
 
     loadProfile()
+    // 模型列表独立加载，失败不阻塞页面
+    getModels()
+      .then(setModels)
+      .catch((err) => console.error('Failed to load models:', err))
   }, [])
+
+  // 切换模型偏好（空串=跟随系统默认）
+  const handleModelChange = async (value: string) => {
+    setError(null)
+    setSuccess(null)
+    setModelSaving(true)
+    try {
+      const updated = await setPreferredModel(value || null)
+      setModels(updated)
+      setSuccess('AI 模型已更新')
+    } catch (err) {
+      const detail = getErrorDetail(err)
+      setError(typeof detail === 'string' ? detail : '模型更新失败，请稍后重试')
+    } finally {
+      setModelSaving(false)
+    }
+  }
 
   // Handle profile update
   const handleProfileSubmit = async (e: React.FormEvent) => {
@@ -252,6 +278,42 @@ export default function SettingsPage() {
               {passwordLoading ? '修改中...' : '修改密码'}
             </button>
           </form>
+        </div>
+
+        {/* AI 模型 */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900 mb-1">
+            <Cpu className="h-4 w-4 text-indigo-500" aria-hidden="true" />
+            AI 模型
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            选择你偏好的模型，应用于你的 AI 对话与投研分析。仅你自己生效，不影响其他人。
+          </p>
+          {models ? (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">对话与分析模型</label>
+              <select
+                value={models.current ?? ''}
+                onChange={(e) => handleModelChange(e.target.value)}
+                disabled={modelSaving}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+              >
+                <option value="">跟随系统默认（{formatModelLabel(models.default)}）</option>
+                {models.available.map((name) => (
+                  <option key={name} value={name}>
+                    {formatModelLabel(name)}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400">
+                当前生效：{formatModelLabel(models.current ?? models.default)}
+                {!models.current && '（系统默认）'} · 供应商 {models.provider}
+                {modelSaving && ' · 保存中…'}
+              </p>
+            </div>
+          ) : (
+            <div className="h-10 rounded-lg bg-gray-100 animate-pulse" />
+          )}
         </div>
 
         {/* System / Task Management */}

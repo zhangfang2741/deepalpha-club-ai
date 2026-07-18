@@ -28,6 +28,7 @@ from app.schemas.chat import (
     StreamResponse,
 )
 from app.schemas.chat import Message as ChatMessage
+from app.services.model_preference import resolve_user_model
 from app.services.session_naming import maybe_name_session
 
 
@@ -218,14 +219,18 @@ async def langgraph_stream(
         if settings.SESSION_NAMING_ENABLED and messages:
             maybe_name_session(session.id, session.name, messages)
 
+        # 解析该用户偏好的模型（未设置/未注册时为 None，Agent 回退默认模型）
+        model_name = await resolve_user_model(session.user_id)
+
         async def event_generator():
-            with llm_stream_duration_seconds.labels(model=settings.DEFAULT_LLM_MODEL).time():
+            with llm_stream_duration_seconds.labels(model=model_name or settings.DEFAULT_LLM_MODEL).time():
                 async for sse_chunk in agent.get_langgraph_stream(
                     messages,
                     session.id,
                     user_id=str(session.user_id),
                     username=session.username,
                     resume_value=resume_value,
+                    model_name=model_name,
                 ):
                     yield sse_chunk
 
