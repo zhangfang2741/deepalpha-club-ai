@@ -1,10 +1,11 @@
 import apiClient from './client'
 import { BASE_URL } from './client'
+import { PREFERRED_MODEL_STORAGE_KEY } from './settings'
 
 export type GraphProperty = { name: string; value: unknown }
 export type SupplyNode = { nodeId: string; nodeType: string; properties: GraphProperty[] }
 export type SupplyEdge = { edgeId: string; srcId: string; dstId: string; edgeType: string; properties: GraphProperty[] }
-export type SupplyGraph = { nodes: SupplyNode[]; edges: SupplyEdge[]; truncated?: boolean }
+export type SupplyGraph = { graphId?: string; nodes: SupplyNode[]; edges: SupplyEdge[]; truncated?: boolean }
 
 export type SupplyRun = {
   id: string
@@ -58,33 +59,58 @@ const streamPreview = async (
   signal?: AbortSignal,
 ) => {
   const token = typeof window === 'undefined' ? null : localStorage.getItem('access_token')
-  const response = await fetch(
-    `${BASE_URL}/api/v1/supply-graph/preview/stream?ticker=${encodeURIComponent(ticker)}`,
-    { headers: token ? { Authorization: `Bearer ${token}` } : undefined, signal },
-  )
-  // 未登录 / token 失效：与 apiClient 拦截器一致，清除 token 并跳转登录页
-  if ((response.status === 401 || response.status === 403) && typeof window !== 'undefined') {
-    localStorage.removeItem('access_token')
-    window.location.href = '/'
-    throw new Error('登录已失效，请重新登录')
-  }
-  if (!response.ok || !response.body) throw new Error(`实时分析请求失败（${response.status}）`)
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  while (true) {
-    const { done, value } = await reader.read()
-    buffer += decoder.decode(value, { stream: !done })
-    const frames = buffer.split('\n\n')
-    buffer = frames.pop() || ''
-    for (const frame of frames) {
-      const data = frame
-        .split('\n')
-        .find((line) => line.startsWith('data: '))
-        ?.slice(6)
-      if (data) onEvent(JSON.parse(data) as PreviewEvent)
+  const preferredModel =
+    typeof window === 'undefined' ? null : localStorage.getItem(PREFERRED_MODEL_STORAGE_KEY)
+  const query = new URLSearchParams({ ticker })
+  if (preferredModel) query.set('model', preferredModel)
+  const requestController = new AbortController()
+  let connectionTimedOut = false
+  const abortRequest = () => requestController.abort(signal?.reason)
+  if (signal?.aborted) abortRequest()
+  else signal?.addEventListener('abort', abortRequest, { once: true })
+  const connectionTimer = window.setTimeout(() => {
+    connectionTimedOut = true
+    requestController.abort()
+  }, 20000)
+  try {
+    const response = await fetch(
+      `${BASE_URL}/api/v1/supply-graph/preview/stream?${query.toString()}`,
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        signal: requestController.signal,
+      },
+    )
+    window.clearTimeout(connectionTimer)
+    // 未登录 / token 失效：与 apiClient 拦截器一致，清除 token 并跳转登录页
+    if ((response.status === 401 || response.status === 403) && typeof window !== 'undefined') {
+      localStorage.removeItem('access_token')
+      window.location.href = '/'
+      throw new Error('登录已失效，请重新登录')
     }
-    if (done) break
+    if (!response.ok || !response.body) throw new Error(`实时分析请求失败（${response.status}）`)
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      buffer += decoder.decode(value, { stream: !done })
+      const frames = buffer.split('\n\n')
+      buffer = frames.pop() || ''
+      for (const frame of frames) {
+        const data = frame
+          .split('\n')
+          .find((line) => line.startsWith('data: '))
+          ?.slice(6)
+        if (data) onEvent(JSON.parse(data) as PreviewEvent)
+      }
+      if (done) break
+    }
+  } catch (error) {
+    if (connectionTimedOut) throw new Error('连接后端超时，请稍后重试')
+    throw error
+  } finally {
+    window.clearTimeout(connectionTimer)
+    signal?.removeEventListener('abort', abortRequest)
   }
 }
 

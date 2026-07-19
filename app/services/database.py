@@ -48,7 +48,13 @@ class DatabaseService:
             
             # Build connect_args for psycopg2/postgres driver options
             # SSL must be passed as connect_args for cloud databases
-            connect_args = {}
+            connect_args = {
+                "connect_timeout": 10,
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 3,
+            }
             if settings.POSTGRES_SSL:
                 connect_args["sslmode"] = "require"
             

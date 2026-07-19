@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// 缠论主图表：K 线 + 缠论结构叠加 + MACD 副图，支持双指缩放、拖动、十字光标。
+/// 缠论主图表：K 线 + 缠论结构叠加 + MACD 副图。
 ///
-/// 采用原生 Canvas 逐帧绘制，保证手势跟手、渲染丝滑。
+/// 采用原生 Canvas 逐帧绘制，固定窗口显示最新数据。
 struct ChanChartView: View {
     let analysis: ChanAnalysis
     @ObservedObject var vm: ChanViewModel
@@ -11,15 +11,19 @@ struct ChanChartView: View {
     @State private var firstVisible: Double = 0
     @State private var visibleCount: Double = 80
 
-    // 缩放/拖动手势的基准值
+    // 拖动手势的基准值
     @State private var dragAnchor: Double? = nil
-    @State private var zoomAnchor: Double? = nil
 
-    // 十字光标选中的下标（nil 表示未选中）
-    @State private var crosshairIndex: Int? = nil
+    // 光标：选中的 K 线索引（nil = 不显示）
+    @State private var cursorIndex: Int? = nil
+    @State private var cursorDragging: Bool = false
+
+    // 双指缩放基准值
+    @State private var zoomAnchor: Double? = nil
 
     private let priceHeight: CGFloat = 300
     private let macdHeight: CGFloat = 110
+    private let timeAxisHeight: CGFloat = 22
     private let rightAxisWidth: CGFloat = 52
 
     private var candles: [MergedCandle] { analysis.mergedCandles }
@@ -31,13 +35,14 @@ struct ChanChartView: View {
                 Divider().background(Theme.border)
                 macdChart
             }
+            Divider().background(Theme.border)
+            timeAxis
         }
         .background(Theme.surface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .onAppear { resetWindowIfNeeded() }
         .onChange(of: analysis.symbol) { _, _ in
             firstVisible = 0
-            crosshairIndex = nil
             resetWindowIfNeeded()
         }
     }
@@ -63,13 +68,26 @@ struct ChanChartView: View {
                     if vm.showFractals { drawFractals(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showSignals { drawSignals(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     drawPriceAxis(ctx, size: size, bounds: priceBounds)
-                    drawCrosshair(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds)
+                    // 十字光标
+                    if let ci = cursorIndex, ci >= range.start, ci < range.end {
+                        drawCursor(ctx, plotWidth: plotW, height: size.height,
+                                   range: range, bounds: priceBounds, index: ci)
+                    }
                 }
-                crosshairInfo
             }
             .contentShape(Rectangle())
-            .gesture(dragGesture(plotWidth: plotWidth))
-            .gesture(magnifyGesture(plotWidth: plotWidth))
+            .gesture(chartGesture(plotWidth: plotWidth))
+            .gesture(magnificationGesture(plotWidth: plotWidth))
+            .overlay(alignment: .topLeading) {
+                if let ci = cursorIndex, ci >= 0, ci < candles.count {
+                    cursorDetail(index: ci)
+                        .padding(6)
+                        .background(Theme.surfaceAlt)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .padding(8)
+                        .allowsHitTesting(false)
+                }
+            }
         }
         .frame(height: priceHeight)
     }
@@ -85,6 +103,48 @@ struct ChanChartView: View {
             }
         }
         .frame(height: macdHeight)
+    }
+
+    // MARK: - 时间轴
+
+    private var timeAxis: some View {
+        GeometryReader { geo in
+            let plotWidth = geo.size.width - rightAxisWidth
+            let range = visibleRange(plotWidth: plotWidth)
+            Canvas { ctx, size in
+                drawTimeAxis(ctx, plotWidth: size.width - rightAxisWidth,
+                             height: size.height, range: range)
+            }
+        }
+        .frame(height: timeAxisHeight)
+    }
+
+    private func drawTimeAxis(_ ctx: GraphicsContext, plotWidth: CGFloat,
+                              height: CGFloat, range: VisibleRange) {
+        let count = range.end - range.start
+        guard count > 0 else { return }
+        // 根据可见根数决定标签数量
+        let labelCount = min(6, count)
+        guard labelCount > 0 else { return }
+        let step = CGFloat(count) / CGFloat(labelCount)
+        for i in 0..<labelCount {
+            let idx = range.start + Int((CGFloat(i) * step).rounded())
+            guard idx >= 0, idx < candles.count else { continue }
+            let cx = x(for: idx, range: range)
+            guard cx >= 0, cx <= plotWidth else { continue }
+            let dateStr = formatTimeLabel(candles[idx].time)
+            let text = Text(dateStr)
+                .font(.system(size: 9))
+                .foregroundColor(Theme.textSecondary)
+            ctx.draw(text, at: CGPoint(x: cx, y: height / 2), anchor: .center)
+        }
+    }
+
+    /// 将 "2026-01-13" 格式化为 "01/13" 短日期标签。
+    private func formatTimeLabel(_ time: String) -> String {
+        let parts = time.split(separator: "-")
+        guard parts.count >= 3 else { return time }
+        return "\(parts[1])/\(parts[2])"
     }
 
     // MARK: - 可见窗口计算
@@ -337,82 +397,128 @@ struct ChanChartView: View {
         ctx.stroke(path, with: .color(color), lineWidth: 1)
     }
 
-    // MARK: - 绘制：十字光标
-
-    private func drawCrosshair(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
-                               range: VisibleRange, bounds: PriceBounds) {
-        guard let idx = crosshairIndex, idx >= range.start, idx < range.end else { return }
-        let cx = x(for: idx, range: range)
-        var v = Path()
-        v.move(to: CGPoint(x: cx, y: 0))
-        v.addLine(to: CGPoint(x: cx, y: height))
-        ctx.stroke(v, with: .color(Theme.textSecondary.opacity(0.6)),
-                   style: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
-    }
-
-    /// 十字光标选中根的信息浮层。
-    private var crosshairInfo: some View {
-        Group {
-            if let idx = crosshairIndex, idx < candles.count {
-                let c = candles[idx]
-                HStack(spacing: 10) {
-                    Text(c.time).foregroundColor(Theme.textSecondary)
-                    label("开", c.open)
-                    label("高", c.high)
-                    label("低", c.low)
-                    label("收", c.close, c.isUp ? Theme.up : Theme.down)
-                }
-                .font(.system(size: 10, design: .monospaced))
-                .padding(.horizontal, 8).padding(.vertical, 4)
-                .background(Theme.surfaceAlt.opacity(0.95))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .padding(6)
-            }
-        }
-    }
-
-    private func label(_ name: String, _ value: Double, _ color: Color = Theme.textPrimary) -> some View {
-        HStack(spacing: 2) {
-            Text(name).foregroundColor(Theme.textSecondary)
-            Text(String(format: "%.2f", value)).foregroundColor(color)
-        }
-    }
-
     // MARK: - 手势
 
-    private func dragGesture(plotWidth: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 2)
+    /// 复合手势：水平拖动 < 8pt 视为点击（显示光标），否则平移图表。
+    private func chartGesture(plotWidth: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
             .onChanged { value in
-                let range = visibleRange(plotWidth: plotWidth)
-                // 纵向拖动优先触发十字光标；横向拖动平移
-                if abs(value.translation.height) > abs(value.translation.width) {
-                    let localX = value.location.x
-                    let idx = Int((localX / range.candleWidth + range.firstVisible).rounded())
-                    crosshairIndex = max(0, min(candles.count - 1, idx))
+                let translation = value.translation
+                if abs(translation.width) < 8 && abs(translation.height) < 8 && !cursorDragging {
+                    // 点击：定位到最近的 K 线
+                    let range = visibleRange(plotWidth: plotWidth)
+                    let tapX = value.location.x
+                    let rel = Double(tapX / range.candleWidth) + range.firstVisible
+                    let idx = max(0, min(candles.count - 1, Int(rel.rounded())))
+                    cursorIndex = idx
                 } else {
+                    // 拖动平移
+                    cursorDragging = true
+                    let range = visibleRange(plotWidth: plotWidth)
                     if dragAnchor == nil { dragAnchor = firstVisible }
-                    let deltaCandles = Double(-value.translation.width / range.candleWidth)
+                    let deltaCandles = Double(-translation.width / range.candleWidth)
                     let count = max(10, min(Double(candles.count), visibleCount))
                     firstVisible = max(0, min((dragAnchor ?? firstVisible) + deltaCandles,
                                               Double(candles.count) - count))
                 }
             }
-            .onEnded { _ in dragAnchor = nil }
+            .onEnded { _ in
+                dragAnchor = nil
+                cursorDragging = false
+            }
     }
 
-    private func magnifyGesture(plotWidth: CGFloat) -> some Gesture {
-        MagnifyGesture()
-            .onChanged { value in
+    /// 将光标移动到指定 zindex 并保留。
+    private func moveCursor(to index: Int) {
+        cursorIndex = max(0, min(candles.count - 1, index))
+    }
+
+    /// 双指缩放：放大=减少可见 K 线数量，缩小=增加。
+    private func magnificationGesture(plotWidth: CGFloat) -> some Gesture {
+        MagnificationGesture()
+            .onChanged { scale in
                 if zoomAnchor == nil { zoomAnchor = visibleCount }
                 let base = zoomAnchor ?? visibleCount
-                let center = firstVisible + base / 2
-                let mag = max(0.2, value.magnification)
-                let newCount = max(20, min(Double(candles.count), base / mag))
+                let newCount = max(15, min(Double(candles.count), base / scale))
+                // 保持视图中心不变
+                let oldCenter = firstVisible + visibleCount / 2
                 visibleCount = newCount
-                firstVisible = max(0, min(center - newCount / 2, Double(candles.count) - newCount))
+                firstVisible = max(0, min(oldCenter - newCount / 2,
+                                          Double(candles.count) - newCount))
             }
             .onEnded { _ in zoomAnchor = nil }
     }
+
+    // MARK: - 光标绘制
+
+    private func drawCursor(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
+                            range: VisibleRange, bounds: PriceBounds, index: Int) {
+        let cx = x(for: index, range: range)
+        guard cx >= 0, cx <= plotWidth else { return }
+        let c = candles[index]
+
+        // 竖线
+        var vLine = Path()
+        vLine.move(to: CGPoint(x: cx, y: 0))
+        vLine.addLine(to: CGPoint(x: cx, y: height))
+        ctx.stroke(vLine, with: .color(Theme.textSecondary.opacity(0.4)), style:StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
+
+        // 横线（在收盘价位置）
+        let cy = y(for: c.close, height: height, bounds: bounds)
+        var hLine = Path()
+        hLine.move(to: CGPoint(x: 0, y: cy))
+        hLine.addLine(to: CGPoint(x: plotWidth, y: cy))
+        ctx.stroke(hLine, with: .color(Theme.textSecondary.opacity(0.4)), style: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
+
+        // 高亮选中 K 线柱体
+        let bodyWidth = max(1, range.candleWidth * 0.6)
+        let rect = CGRect(x: cx - range.candleWidth / 2, y: 0, width: range.candleWidth, height: height)
+        ctx.fill(Path(rect), with: .color(Theme.accent.opacity(0.06)))
+
+        // 价格标签（右侧轴上）
+        let labelText = Text(String(format: "%.2f", c.close))
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(.white)
+        let labelW: CGFloat = 48
+        let labelH: CGFloat = 14
+        let labelRect = CGRect(x: plotWidth + 2, y: cy - labelH / 2, width: labelW, height: labelH)
+        ctx.fill(Path(labelRect), with: .color(Theme.accent))
+        ctx.draw(labelText, at: CGPoint(x: labelRect.midX, y: labelRect.midY), anchor: .center)
+    }
+
+    // MARK: - 光标详情浮层
+
+    private func cursorDetail(index: Int) -> some View {
+        let c = candles[index]
+        let change = c.open > 0 ? (c.close - c.open) / c.open * 100 : 0
+        let changeColor = c.isUp ? Theme.up : Theme.down
+        return VStack(alignment: .leading, spacing: 2) {
+            Text(c.time)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(Theme.textSecondary)
+            HStack(spacing: 8) {
+                infoText("开", String(format: "%.2f", c.open))
+                infoText("高", String(format: "%.2f", c.high))
+                infoText("低", String(format: "%.2f", c.low))
+                infoText("收", String(format: "%.2f", c.close))
+            }
+            .font(.system(size: 10))
+            HStack(spacing: 4) {
+                Text(String(format: "%+.2f%%", change))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(changeColor)
+            }
+        }
+    }
+
+    private func infoText(_ label: String, _ value: String) -> some View {
+        HStack(spacing: 2) {
+            Text(label).foregroundColor(Theme.textSecondary)
+            Text(value).foregroundColor(Theme.textPrimary)
+        }
+    }
+
+    // MARK: - 窗口重置
 
     private func resetWindowIfNeeded() {
         let total = Double(candles.count)

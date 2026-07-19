@@ -29,23 +29,14 @@ export default function CompanyResearchDrawer({
 
   return (
     <aside className="absolute right-0 top-0 z-40 flex h-full w-full flex-col overflow-hidden border-l bg-white shadow-2xl sm:w-[560px]">
-      <div className="flex shrink-0 items-center justify-between border-b px-5 py-4">
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-blue-600">企业研究</p>
-          <h2 className="truncate font-semibold text-slate-900">
-            {companyName}
-            {ticker ? ` · ${ticker}` : ""}
-          </h2>
-        </div>
-        <button
-          type="button"
-          aria-label="关闭企业研究"
-          className="cursor-pointer rounded-lg px-2 py-1 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-blue-500"
-          onClick={onClose}
-        >
-          ✕
-        </button>
-      </div>
+      <button
+        type="button"
+        aria-label="关闭企业研究"
+        className="absolute right-4 top-4 z-10 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white/95 text-lg text-slate-600 shadow-sm backdrop-blur-sm hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500"
+        onClick={onClose}
+      >
+        ✕
+      </button>
       {ticker ? (
         <iframe
           src={`/company-research?symbol=${encodeURIComponent(ticker)}&embedded=1`}

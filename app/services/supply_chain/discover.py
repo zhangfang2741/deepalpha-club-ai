@@ -11,7 +11,7 @@ from app.services.llm.registry import llm_registry
 
 
 def _safe_discover_model() -> str | None:
-    """返回已注册的发现模型名；配置为空或未注册时返回 None（沿用默认模型）。
+    """返回已注册的发现模型名；配置为空或未注册时返回 None（沿用默认模型）.
 
     避免 ``SUPPLY_CHAIN_DISCOVER_MODEL`` 配置漂移（如指向未注册的
     ``claude-sonnet-4-5``）时，llm_service 抛错中断供应链发现。
@@ -72,22 +72,63 @@ class SupplyRelation(BaseModel):
 class DiscoveryResult(BaseModel):
     """Structured discovery output."""
 
+    target_ticker: str | None = None
     suppliers: list[SupplyRelation] = Field(default_factory=list)
     customers: list[SupplyRelation] = Field(default_factory=list)
     company_name_zh: str | None = None
     skipped: bool = False
     skip_reason: str | None = None
 
+    @field_validator("target_ticker")
+    @classmethod
+    def normalize_target_ticker(cls, value: str | None) -> str | None:
+        """Normalize the resolved target company's primary US ticker."""
+        if value is None:
+            return None
+        normalized = value.strip().upper()
+        return normalized if re.fullmatch(r"[A-Z][A-Z0-9.-]{0,7}", normalized) else None
+
     @field_validator("suppliers", "customers")
     @classmethod
     def rank_relations(cls, value: list[SupplyRelation]) -> list[SupplyRelation]:
-        return sorted(value, key=lambda relation: relation.confidence, reverse=True)
+        return sorted(
+            (relation for relation in value if relation.confidence >= 50),
+            key=lambda relation: relation.confidence,
+            reverse=True,
+        )
 
 
 class StructuredLLM(Protocol):
     """Minimal injectable LLM protocol."""
 
     async def call(self, messages: Any, **kwargs: Any) -> Any: ...
+
+
+def parse_discovery_result(value: Any) -> DiscoveryResult | None:
+    """Parse structured, mapping, or text LLM output into a discovery result."""
+    if isinstance(value, DiscoveryResult):
+        return value
+    if isinstance(value, dict):
+        try:
+            return DiscoveryResult.model_validate(value)
+        except ValueError:
+            return None
+
+    content = getattr(value, "content", value)
+    if isinstance(content, list):
+        content = "".join(
+            str(item.get("text", "")) if isinstance(item, dict) else str(item)
+            for item in content
+        )
+    if not isinstance(content, str):
+        return None
+    match = re.search(r"\{.*\}", content, re.DOTALL)
+    if match is None:
+        return None
+    try:
+        return DiscoveryResult.model_validate(json.loads(match.group(0)))
+    except (json.JSONDecodeError, ValueError):
+        return None
 
 
 def discovery_prompt(ticker: str) -> str:
@@ -110,9 +151,12 @@ per relation; keep every description and rationale concise. Chinese fields must 
 Also include a rationale explaining why the relationship is core. Add relationship_description and
 relationship_description_zh with a detailed explanation of how the listed products connect the supplier
 and customer operationally, where they are used, and why the relationship matters to both companies.
-fact-certainty confidence 0-100, single-source status, and information year. Confidence measures
-factual certainty, not commercial importance. Rank each list by importance and evidence strength.
-Also return company_name_zh for the target company, supplier_name_zh for every supplier, and
+fact-certainty confidence as an integer percentage from 50 to 100, single-source status, and information year.
+Never use a 0-1 decimal for confidence (write 85, never 0.85). Relationships below 50 confidence are too
+speculative to include. Confidence measures factual certainty, not commercial importance. Rank each list by
+importance and evidence strength.
+Also return target_ticker with the target company's primary US-listed ticker (resolve a company name or
+incorrect/legacy symbol to its current ticker), company_name_zh for the target company, supplier_name_zh for every supplier, and
 customer_name_zh for every customer. Use the established Simplified Chinese company name when one
 exists; otherwise provide a concise, faithful Chinese translation.
 If no genuinely core relationship is known, return an empty list; if knowledge of the company is
@@ -130,23 +174,20 @@ async def discover_suppliers(ticker: str, llm: StructuredLLM) -> DiscoveryResult
         model_name=_safe_discover_model(),
         response_format=DiscoveryResult,
     )
-    parsed = result if isinstance(result, DiscoveryResult) else DiscoveryResult.model_validate(result)
-    if parsed.skipped or parsed.suppliers or parsed.customers:
+    parsed = parse_discovery_result(result)
+    if parsed and (parsed.skipped or parsed.suppliers or parsed.customers):
         return parsed
     raw = await llm.call(
         [
             {
                 "role": "system",
-                "content": f"{prompt}\nReturn JSON only with keys company_name_zh, suppliers, customers, skipped, skip_reason. Supplier items use supplier_name and supplier_name_zh; customer items use customer_name and customer_name_zh. Every relation includes relationship_description, relationship_description_zh and products with short_name, full_name, full_name_zh, description, description_zh.",
+                "content": f"{prompt}\nReturn JSON only with keys target_ticker, company_name_zh, suppliers, customers, skipped, skip_reason. Supplier items use supplier_name and supplier_name_zh; customer items use customer_name and customer_name_zh. Every relation includes relationship_description, relationship_description_zh and products with short_name, full_name, full_name_zh, description, description_zh.",
             },
             {"role": "user", "content": f"Return the supply-chain JSON for {ticker.upper()}."},
         ],
         model_name=_safe_discover_model(),
     )
-    content = raw.content if hasattr(raw, "content") else raw
-    if isinstance(content, list):
-        content = "".join(str(item.get("text", "")) if isinstance(item, dict) else str(item) for item in content)
-    match = re.search(r"\{.*\}", str(content), re.DOTALL)
-    if match is None:
+    parsed = parse_discovery_result(raw)
+    if parsed is None:
         return DiscoveryResult(skipped=True, skip_reason="model returned no parseable JSON")
-    return DiscoveryResult.model_validate(json.loads(match.group(0)))
+    return parsed

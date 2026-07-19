@@ -113,6 +113,8 @@ const ROLE_STROKE: Record<NodeRole, string> = {
 const nodeToG6 = (node: SupplyNode, role: NodeRole): G6Node => {
   const isFocus = role === "focus";
   const data = props(node.properties);
+  const isGrouped = data.is_grouped === true;
+  const groupCount = Number(data.group_count || 0);
   const name = String(data.name || node.nodeId);
   const nameZh = data.name_zh ? String(data.name_zh) : "";
   const propertyTicker = data.ticker
@@ -125,6 +127,37 @@ const nodeToG6 = (node: SupplyNode, role: NodeRole): G6Node => {
       ? nodeIdTicker
       : "";
   const label = nameZh || name;
+  if (isGrouped) {
+    return {
+      id: String(node.nodeId),
+      type: "rect",
+      data: { ...data, nodeType: node.nodeType },
+      style: {
+        cursor: "pointer",
+        labelText: label,
+        labelFill: "#475569",
+        labelFontSize: 12,
+        labelFontWeight: 700,
+        labelPlacement: "bottom",
+        labelOffsetY: 12,
+        fill: role === "supplier" ? "#eef5ff" : "#ecfdf5",
+        stroke: ROLE_STROKE[role],
+        lineWidth: 2.5,
+        lineDash: [6, 4],
+        radius: 16,
+        size: [94, 56],
+        shadowColor: "rgba(15, 23, 42, 0.16)",
+        shadowBlur: 10,
+        shadowOffsetX: 4,
+        shadowOffsetY: 5,
+        iconText: `+${groupCount}`,
+        iconFill: ROLE_STROKE[role],
+        iconFontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+        iconFontWeight: 800,
+        iconFontSize: 18,
+      },
+    };
+  }
   return {
     id: String(node.nodeId),
     type: "circle",
@@ -164,6 +197,7 @@ const nodeToG6 = (node: SupplyNode, role: NodeRole): G6Node => {
 
 const edgeToG6 = (edge: SupplyEdge, role: "supply" | "customer"): G6Edge => {
   const data = props(edge.properties);
+  const isGrouped = data.is_grouped === true;
   const confidence = Number(data.confidence || 0);
   const product = compactProduct(
     String(data.product || data.product_text || "产品未披露"),
@@ -175,7 +209,9 @@ const edgeToG6 = (edge: SupplyEdge, role: "supply" | "customer"): G6Edge => {
     target: String(edge.dstId),
     data: { ...data, edgeType: edge.edgeType },
     style: {
-      labelText: `${product}\n置信度 ${confidence}%`,
+      labelText: isGrouped
+        ? String(data.group_label || product)
+        : `${product}\n置信度 ${confidence}%`,
       labelFill: "#334155",
       labelFontSize: 11,
       labelLineHeight: 15,
@@ -186,7 +222,8 @@ const edgeToG6 = (edge: SupplyEdge, role: "supply" | "customer"): G6Edge => {
       labelPadding: [5, 8],
       stroke: role === "supply" ? "#66b7f0" : "#65cf98",
       strokeOpacity: 0.85,
-      lineWidth: confidence >= 80 ? 2.5 : 2,
+      lineWidth: isGrouped || confidence >= 80 ? 2.5 : 2,
+      lineDash: isGrouped ? [7, 5] : undefined,
       endArrow: true,
       endArrowSize: 8,
       curveOffset: 18,

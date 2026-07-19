@@ -7,9 +7,9 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from app.models.supply_chain_edge import SupplyChainEdge
 from app.models.supply_chain_node import SupplyChainNode
-from app.services.supply_chain.discover import DiscoveryResult, SupplyRelation
+from app.services.supply_chain.discover import DiscoveryResult, SupplyRelation, discovery_prompt
 from app.services.supply_chain.graph_query import invalidate_neighborhood_cache, query_neighborhood
-from app.services.supply_chain.realtime import build_realtime_graph
+from app.services.supply_chain.realtime import _is_chinese_reasoning, build_realtime_graph
 
 
 def test_neighborhood_combines_relationships_from_different_runs() -> None:
@@ -136,3 +136,47 @@ def test_realtime_graph_uses_ticker_as_unique_node_identity() -> None:
 
     assert [str(node.node_id) for node in graph.nodes].count("TSM") == 1
     assert {str(node.node_id) for node in graph.nodes} == {"NVDA", "TSM"}
+
+
+def test_discovery_normalizes_confidence_and_drops_speculative_relations() -> None:
+    """Core graph output keeps only calibrated relations at or above 50%."""
+    result = DiscoveryResult(
+        suppliers=[
+            SupplyRelation(supplier_name="Strong", confidence=0.85),
+            SupplyRelation(supplier_name="Weak", confidence=0.05),
+        ],
+        customers=[SupplyRelation(customer_name="Borderline", confidence=50)],
+    )
+
+    assert [relation.confidence for relation in result.suppliers] == [85]
+    assert [relation.confidence for relation in result.customers] == [50]
+    assert "write 85, never 0.85" in discovery_prompt("MU")
+
+
+def test_realtime_graph_uses_resolved_target_ticker() -> None:
+    """A company-name query renders the resolved US ticker as its center node."""
+    result = DiscoveryResult(target_ticker="fig", company_name_zh="菲格玛")
+
+    graph = build_realtime_graph("FIGMA", result)
+
+    assert graph.graph_id == "FIG"
+    assert [str(node.node_id) for node in graph.nodes] == ["FIG"]
+
+
+def test_realtime_graph_known_alias_overrides_incorrect_model_ticker() -> None:
+    """Known aliases remain deterministic when the model returns a wrong symbol."""
+    result = DiscoveryResult(target_ticker="FG", company_name_zh="菲格玛")
+
+    graph = build_realtime_graph("FIGMA", result)
+
+    assert graph.graph_id == "FIG"
+    properties = {property_.name: property_.value for property_ in graph.nodes[0].properties}
+    assert properties["name"] == "Figma, Inc."
+    assert properties["name_zh"] == "Figma"
+    assert properties["ticker"] == "FIG"
+
+
+def test_realtime_reasoning_language_filter() -> None:
+    """Only Chinese reasoning should be exposed in the live output panel."""
+    assert _is_chinese_reasoning("正在分析 Figma 的核心云服务供应商和企业客户。") is True
+    assert _is_chinese_reasoning("Now I am reconsidering the supply chain structure.") is False
