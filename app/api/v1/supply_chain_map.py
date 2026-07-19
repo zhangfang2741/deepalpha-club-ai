@@ -6,13 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
-from app.api.v1.auth.dependencies import get_current_user
+from app.api.v1.auth.dependencies import get_verified_user_id
 from app.core.celery_app import celery_app
 from app.core.limiter import limiter
 from app.core.logging import logger
 from app.db.session import get_sync_session
-from app.models.user import User
-from app.services.model_preference import resolve_user_model
+from app.services.model_preference import is_registered_model
 from app.models.supply_chain_clue import SupplyChainClue
 from app.models.supply_chain_node import SupplyChainNode
 from app.models.supply_chain_run import SupplyChainRun
@@ -30,14 +29,15 @@ router = APIRouter()
 @limiter.limit("10/minute")
 async def preview_graph_stream(
     request: Request,
-    ticker: str = Query(..., min_length=1, max_length=8, pattern=r"^[A-Za-z][A-Za-z0-9.-]*$"),
-    user: User = Depends(get_current_user),
+    ticker: str = Query(..., min_length=1, max_length=80, pattern=r"^[A-Za-z][A-Za-z0-9 .&'-]*$"),
+    model: str | None = Query(default=None, max_length=80),
+    _user_id: int = Depends(get_verified_user_id),
 ) -> StreamingResponse:
     """Stream an ephemeral LLM graph without database or Celery access.
 
-    使用该用户偏好的模型（未设置/未注册时回退 SUPPLY_CHAIN_DISCOVER_MODEL / 默认）。
+    使用前端传入且已注册的模型（未设置/未注册时回退发现模型或默认模型）。
     """
-    model_name = await resolve_user_model(user.id)
+    model_name = model if is_registered_model(model) else None
 
     async def events():
         try:

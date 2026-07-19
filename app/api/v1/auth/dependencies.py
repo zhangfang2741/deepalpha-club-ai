@@ -1,4 +1,4 @@
-"""认证依赖项：用于端点的用户和会话验证。"""
+"""认证依赖项：用于端点的用户和会话验证."""
 
 import asyncio
 
@@ -15,10 +15,34 @@ from app.utils.sanitization import sanitize_string
 security = HTTPBearer()
 
 
+async def get_verified_user_id(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> int:
+    """Validate a JWT and return its user ID without a database lookup."""
+    token = sanitize_string(credentials.credentials)
+    user_id = verify_token(token)
+    if user_id is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        user_id_int = int(user_id)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid token format",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+    bind_context(user_id=user_id_int)
+    return user_id_int
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> User:
-    """从 JWT Token 获取当前用户。
+    """从 JWT Token 获取当前用户.
 
     Args:
         credentials: HTTP Authorization header 中的 Bearer token
@@ -65,7 +89,7 @@ async def get_current_user(
 async def get_current_session(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> Session:
-    """从 JWT Token 获取当前会话。
+    """从 JWT Token 获取当前会话.
 
     Args:
         credentials: HTTP Authorization header 中的 Bearer token

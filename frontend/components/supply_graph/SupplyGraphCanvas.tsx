@@ -27,10 +27,13 @@ type G6GraphInstance = {
   getPosition: () => number[];
   getZoom: () => number;
   translateTo: (position: [number, number], animation?: boolean) => Promise<void>;
-  zoomTo: (zoom: number, animation?: boolean) => Promise<void>;
+  zoomTo: (
+    zoom: number,
+    animation?: boolean,
+    origin?: [number, number],
+  ) => Promise<void>;
   resize: () => void;
   fitView: (options?: unknown, animation?: unknown) => Promise<void>;
-  updatePlugin: (plugin: { key: string; [prop: string]: unknown }) => void;
   getClientByCanvas: (point: [number, number]) => { x: number; y: number } | number[];
 };
 
@@ -59,6 +62,7 @@ const INITIAL_VISIBILITY: LegendVisibility = {
   customerEdges: true,
 };
 const NODE_CLICK_CONFIRM_DELAY_MS = 320;
+const GRAPH_VIEW_OCCUPANCY = 0.5;
 
 const LAYOUT_OPTIONS: { value: LayoutType; label: string }[] = [
   { value: "hierarchy", label: "层次布局" },
@@ -95,23 +99,34 @@ const graphLayout = (layout: LayoutType, nodeCount: number) => {
   };
 };
 
+const scaleGraphToTargetOccupancy = async (
+  instance: G6GraphInstance,
+  container: HTMLElement,
+) => {
+  await instance.zoomTo(
+    instance.getZoom() * GRAPH_VIEW_OCCUPANCY,
+    false,
+    [container.clientWidth / 2, container.clientHeight / 2],
+  );
+};
+
 export default function SupplyGraphCanvas({
   graph,
   onNode,
   onEdge,
   onExpand,
   onNodeDoubleClick,
-  expandingId,
+  expandingIds = [],
 }: {
   graph: SupplyGraph;
   onNode: (id: string) => void;
   onEdge: (id: string) => void;
   onExpand: (id: string, direction: Direction) => void;
   onNodeDoubleClick: (id: string) => void;
-  expandingId?: string | null;
+  expandingIds?: string[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [spinnerPos, setSpinnerPos] = useState<{ x: number; y: number } | null>(null);
+  const [spinnerPositions, setSpinnerPositions] = useState<Record<string, { x: number; y: number }>>({});
   const instanceRef = useRef<G6GraphInstance | null>(null);
   const currentFocusRef = useRef<string | undefined>(undefined);
   const currentLayoutRef = useRef<LayoutType>("hierarchy");
@@ -220,7 +235,7 @@ export default function SupplyGraphCanvas({
       const instance = instanceRef.current;
       const focusChanged = currentFocusRef.current !== focusId;
       const layoutChanged = currentLayoutRef.current !== layout;
-      // 若有已渲染节点不在新数据中（如「返回核心关系」收缩），走全量重建。
+      // 若有已渲染节点不在新数据中（图谱发生收缩），走全量重建。
       const incomingNodeIds = new Set(graph.nodes.map((node) => node.nodeId));
       const shrank = [...renderedNodesRef.current].some(
         (id) => !incomingNodeIds.has(id),
@@ -307,7 +322,21 @@ export default function SupplyGraphCanvas({
         data,
         layout: graphLayout(layout, graph.nodes.length),
         behaviors: ["drag-canvas", "zoom-canvas", "drag-element"],
-        plugins: [{ type: "minimap", key: "minimap", size: [160, 100], position: "right-bottom" }],
+        plugins: [{
+          type: "minimap",
+          key: "minimap",
+          size: [160, 100],
+          position: "right-bottom",
+          containerStyle: {
+            left: "auto",
+            top: "auto",
+            right: "16px",
+            bottom: "16px",
+            borderRadius: "8px",
+            overflow: "hidden",
+            boxShadow: "0 4px 16px rgb(15 23 42 / 0.14)",
+          },
+        }],
       }) as unknown as G6GraphInstance;
 
       const handleNodeDoubleClick = (nodeId: string) => {
@@ -376,7 +405,11 @@ export default function SupplyGraphCanvas({
       });
       rendered.on("canvas:click", () => setContextMenu(null));
 
-      void rendered.render().then(() => {
+      void rendered.render().then(async () => {
+        if (disposed) return;
+        const container = containerRef.current;
+        if (!container) return;
+        await scaleGraphToTargetOccupancy(rendered, container);
         if (disposed) return;
         applyVisibility(rendered);
       });
@@ -403,8 +436,8 @@ export default function SupplyGraphCanvas({
     if (instance) applyVisibility(instance);
   }, [visibility]);
 
-  // 容器尺寸变化（含进入/退出全屏、窗口缩放）时，同步画布尺寸并重新 fitView，
-  // 避免图谱固定在原尺寸的一角、右侧留大片空白。
+  // 容器尺寸变化（含进入/退出全屏、窗口缩放）时，同步画布尺寸并按目标占比居中，
+  // 避免图谱固定在原尺寸的一角，同时防止重新铺满整个画布。
   useEffect(() => {
     const container = containerRef.current;
     if (!container || typeof ResizeObserver === "undefined") return;
@@ -423,9 +456,18 @@ export default function SupplyGraphCanvas({
         if (!instance) return;
         try {
           instance.resize();
-          void instance.fitView();
-          // 画布尺寸变化后 minimap 不会自动跟到新角落，强制按右下角重新定位
-          instance.updatePlugin({ key: "minimap", position: "right-bottom" });
+          void instance.fitView().then(() =>
+            scaleGraphToTargetOccupancy(instance, container),
+          );
+          const minimap = container.querySelector<HTMLElement>(".g6-minimap");
+          if (minimap) {
+            Object.assign(minimap.style, {
+              left: "auto",
+              top: "auto",
+              right: "16px",
+              bottom: "16px",
+            });
+          }
         } catch {
           /* 实例可能正在重建，忽略本次 */
         }
@@ -438,33 +480,37 @@ export default function SupplyGraphCanvas({
     };
   }, []);
 
-  // 扩展某节点上下游时，只在该节点上叠加一个转圈（非阻塞），跟随平移/缩放实时定位。
+  // 多节点并行扩展时，在每个节点上叠加独立旋转环，并跟随平移/缩放定位。
   useEffect(() => {
-    if (!expandingId) return;
+    if (!expandingIds.length) return;
     let raf = 0;
     const track = () => {
       const instance = instanceRef.current;
       const container = containerRef.current;
       if (instance && container) {
-        try {
-          const [nx, ny] = instance.getElementPosition(expandingId);
-          const client = instance.getClientByCanvas([nx ?? 0, ny ?? 0]);
-          const cx = Array.isArray(client) ? (client[0] ?? 0) : client.x;
-          const cy = Array.isArray(client) ? (client[1] ?? 0) : client.y;
-          const rect = container.getBoundingClientRect();
-          setSpinnerPos({ x: cx - rect.left, y: cy - rect.top });
-        } catch {
-          /* 节点可能尚未渲染 */
+        const rect = container.getBoundingClientRect();
+        const next: Record<string, { x: number; y: number }> = {};
+        for (const id of expandingIds) {
+          try {
+            const [nx, ny] = instance.getElementPosition(id);
+            const client = instance.getClientByCanvas([nx ?? 0, ny ?? 0]);
+            const cx = Array.isArray(client) ? (client[0] ?? 0) : client.x;
+            const cy = Array.isArray(client) ? (client[1] ?? 0) : client.y;
+            next[id] = { x: cx - rect.left, y: cy - rect.top };
+          } catch {
+            /* 节点可能尚未渲染 */
+          }
         }
+        setSpinnerPositions(next);
       }
       raf = requestAnimationFrame(track);
     };
     raf = requestAnimationFrame(track);
     return () => {
       cancelAnimationFrame(raf);
-      setSpinnerPos(null); // 扩展结束（或切换）时清除旋转环
+      setSpinnerPositions({});
     };
-  }, [expandingId]);
+  }, [expandingIds]);
 
   // 组件卸载时销毁实例。
   useEffect(
@@ -493,14 +539,15 @@ export default function SupplyGraphCanvas({
         ref={containerRef}
         className="h-full min-h-[560px] w-full touch-manipulation rounded-2xl bg-[#edf3ff] shadow-inner ring-1 ring-blue-100"
       />
-      {/* 扩展中：仅在该节点上叠加一个旋转环，不遮挡画布、不阻断交互 */}
-      {spinnerPos && (
+      {/* 扩展中：在每个节点上叠加旋转环，不遮挡画布、不阻断交互 */}
+      {Object.entries(spinnerPositions).map(([id, position]) => (
         <span
+          key={id}
           className="pointer-events-none absolute z-30 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-blue-500/70 border-t-transparent animate-spin motion-reduce:animate-none"
-          style={{ left: spinnerPos.x, top: spinnerPos.y }}
+          style={{ left: position.x, top: position.y }}
           aria-label="正在扩展该节点关系"
         />
-      )}
+      ))}
       <label className="absolute right-4 top-4 z-20 flex items-center gap-2 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs font-medium text-slate-500 shadow-md backdrop-blur-sm">
         <span>布局</span>
         <select

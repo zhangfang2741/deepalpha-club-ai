@@ -1,5 +1,7 @@
 import apiClient from './client'
 
+export const PREFERRED_MODEL_STORAGE_KEY = 'preferred_model'
+
 export interface ModelsResponse {
   provider: string
   default: string
@@ -9,6 +11,10 @@ export interface ModelsResponse {
 
 export async function getModels(): Promise<ModelsResponse> {
   const { data } = await apiClient.get<ModelsResponse>('/api/v1/settings/models')
+  if (typeof window !== 'undefined') {
+    if (data.current) localStorage.setItem(PREFERRED_MODEL_STORAGE_KEY, data.current)
+    else localStorage.removeItem(PREFERRED_MODEL_STORAGE_KEY)
+  }
   return data
 }
 
@@ -17,6 +23,10 @@ export async function setPreferredModel(model: string | null): Promise<ModelsRes
   const { data } = await apiClient.put<ModelsResponse>('/api/v1/settings/preferred-model', {
     model: model || null,
   })
+  if (typeof window !== 'undefined') {
+    if (data.current) localStorage.setItem(PREFERRED_MODEL_STORAGE_KEY, data.current)
+    else localStorage.removeItem(PREFERRED_MODEL_STORAGE_KEY)
+  }
   return data
 }
 
