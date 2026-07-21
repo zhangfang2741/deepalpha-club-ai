@@ -357,14 +357,25 @@ async def compute_nasdaq100_upgrades() -> Nasdaq100UpgradesResponse:
     )
 
 
-# 逐条目标价端点候选：stable price-target-news 为正确历史端点，依次降级 v4 / stable price-target
+# 逐条目标价端点候选：命中即返回，否则依次降级。
+# 首选 TipRanks point-in-time（与富途同源，覆盖全、更新快，尤其对次新股无明显滞后），
+# 需 FMP TipRanks add-on；未订阅时返回非列表结果，自动降级到 price-target-news（TheFly 源）。
 _FMP_PT_URLS = (
+    f"{_FMP_STABLE}/tipranks-pit-by-symbol",
     f"{_FMP_STABLE}/price-target-news",
     "https://financialmodelingprep.com/api/v4/price-target",
     f"{_FMP_STABLE}/price-target",
 )
-# 不同端点/版本的字段名差异，做兼容
-_PT_DATE_FIELDS = ("publishedDate", "date", "published_date", "datePublished", "publishedAt")
+# 不同端点/版本的字段名差异，做兼容（TipRanks 用 ratingDate/ratedOn）
+_PT_DATE_FIELDS = (
+    "publishedDate",
+    "ratingDate",
+    "ratedOn",
+    "date",
+    "published_date",
+    "datePublished",
+    "publishedAt",
+)
 _PT_VALUE_FIELDS = ("priceTarget", "adjPriceTarget", "price_target")
 
 
