@@ -1,5 +1,6 @@
 // ViewModels/WordListViewModel.swift
 import Foundation
+import SwiftUI
 
 @MainActor
 final class WordListViewModel: ObservableObject {
