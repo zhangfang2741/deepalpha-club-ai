@@ -63,6 +63,9 @@ struct ReviewCardView: View {
                             }
                             navButton("下一个", enabled: viewModel.canGoNext) {
                                 viewModel.goToNext()
+                                if let next = viewModel.currentWord {
+                                    Pronouncer.speak(next.word) {}
+                                }
                             }
                         }
                     }

@@ -32,7 +32,10 @@ enum PronunciationAccent: String {
 /// 返回真人/词典级 mp3，重音准确、无需 key。首次播放后把音频缓存到 Caches 目录，
 /// 再次点击直接读本地文件，几乎零延迟。网络失败时回退到系统合成语音，保证离线
 /// 也能出声。
-private enum Pronouncer {
+///
+/// 不标 private：复习卡片切到下一个词时要自动读音，需要在 ReviewCardView 里
+/// 直接调用，不经过 PronounceButton 这个视图。
+enum Pronouncer {
     /// 必须持有强引用，否则 AVAudioPlayer 会被立即释放、还没出声就停了。
     private static var player: AVAudioPlayer?
     /// 网络失败时的离线兜底。
