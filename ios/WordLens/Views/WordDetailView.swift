@@ -66,6 +66,8 @@ struct WordDetailView: View {
         }
         .navigationTitle("单词详情")
         .navigationBarTitleDisplayMode(.inline)
+        // 进入详情时按「自动发音」设置决定是否朗读。
+        .task { Pronouncer.shared.speakIfAutoplayEnabled(word.word) }
         .confirmationDialog("确定删除「\(word.word)」吗？", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("删除", role: .destructive) {
                 Task {

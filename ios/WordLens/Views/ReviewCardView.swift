@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ReviewCardView: View {
     @StateObject private var viewModel = ReviewViewModel()
+    @State private var showPronunciationSettings = false
 
     var body: some View {
         NavigationStack {
@@ -25,10 +26,32 @@ struct ReviewCardView: View {
                     )
                 } else if let word = viewModel.currentWord {
                     cardContent(word)
+                        // 当前词变化时（首次进入、上一个/下一个）按需自动发音；翻卡不改变
+                        // word.id，不会重复触发。task(id:) 天然处理"变化即执行"，是自动
+                        // 发音的唯一入口，受发音设置里的「自动发音」开关控制。
+                        .task(id: word.id) {
+                            Pronouncer.shared.speakIfAutoplayEnabled(word.word)
+                        }
                 }
             }
             .navigationTitle("首页")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showPronunciationSettings = true
+                    } label: {
+                        // 用小喇叭+齿轮语义的图标表意「发音设置」；纯图标按钮补 label 对
+                        // VoiceOver 友好。
+                        Image(systemName: "speaker.wave.2.circle")
+                    }
+                    .tint(Theme.accent)
+                    .accessibilityLabel("发音设置")
+                }
+            }
+            .sheet(isPresented: $showPronunciationSettings) {
+                PronunciationSettingsView()
+            }
             .task { await viewModel.loadQueueIfNeeded() }
             .refreshable { await viewModel.loadQueue() }
         }
@@ -62,10 +85,9 @@ struct ReviewCardView: View {
                                 viewModel.goToPrevious()
                             }
                             navButton("下一个", systemImage: "chevron.right", iconTrailing: true, enabled: viewModel.canGoNext) {
+                                // 自动发音统一由外层 .task(id: word.id) 触发（受开关控制），
+                                // 这里不再单独调 speak，避免同一次切词重复播放。
                                 viewModel.goToNext()
-                                if let next = viewModel.currentWord {
-                                    Pronouncer.shared.speak(next.word)
-                                }
                             }
                         }
                     }
