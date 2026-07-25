@@ -16,7 +16,7 @@ struct LoginView: View {
             VStack(spacing: 24) {
                 Spacer()
                 VStack(spacing: 8) {
-                    Text("鸟语")
+                    Text("鹦鹉单词")
                         .font(.system(size: 32, weight: .bold))
                         .foregroundStyle(Theme.textPrimary)
                     Text("拍照背单词")
