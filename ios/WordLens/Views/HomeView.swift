@@ -28,14 +28,6 @@ struct HomeView: View {
             .padding(.top)
             .background(Theme.background.ignoresSafeArea())
             .navigationTitle("首页")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink(destination: SettingsView()) {
-                        Image(systemName: "gearshape")
-                    }
-                    .accessibilityLabel("设置")
-                }
-            }
             .task { await refreshAll() }
         }
     }

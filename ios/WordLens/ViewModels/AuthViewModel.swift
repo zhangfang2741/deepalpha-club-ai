@@ -9,6 +9,11 @@ final class AuthViewModel: ObservableObject {
 
     init() {
         self.isAuthenticated = KeychainStore.loadToken() != nil
+        Task { [weak self] in
+            for await _ in NotificationCenter.default.notifications(named: .apiUnauthorized) {
+                self?.logout()
+            }
+        }
     }
 
     func register(email: String, password: String) async {

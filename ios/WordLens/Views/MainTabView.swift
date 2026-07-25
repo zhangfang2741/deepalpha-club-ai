@@ -12,6 +12,11 @@ struct MainTabView: View {
 
             HomeView()
                 .tabItem { Label("生词库", systemImage: "book.fill") }
+
+            NavigationStack {
+                SettingsView()
+            }
+            .tabItem { Label("设置", systemImage: "gearshape.fill") }
         }
         .tint(Theme.accent)
     }

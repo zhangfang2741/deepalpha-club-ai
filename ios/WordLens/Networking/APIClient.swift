@@ -10,6 +10,11 @@ struct APIError: LocalizedError {
     var isUnauthorized: Bool { statusCode == 401 }
 }
 
+extension Notification.Name {
+    /// 带 token 的请求收到 401 时广播，AuthViewModel 监听后自动登出、跳回登录页。
+    static let apiUnauthorized = Notification.Name("apiUnauthorized")
+}
+
 /// 统一的 HTTP 客户端：自动带 Bearer token、解析 JSON、透传后端错误 detail。
 actor APIClient {
     static let shared = APIClient()
@@ -78,7 +83,8 @@ actor APIClient {
 
     private func send<T: Decodable>(_ request: URLRequest) async throws -> T {
         var req = request
-        if let token = KeychainStore.loadToken() {
+        let token = KeychainStore.loadToken()
+        if let token {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
@@ -95,8 +101,14 @@ actor APIClient {
         }
 
         guard (200..<300).contains(http.statusCode) else {
-            throw APIError(message: Self.detail(from: data) ?? "请求失败（\(http.statusCode)）",
-                           statusCode: http.statusCode)
+            let error = APIError(message: Self.detail(from: data) ?? "请求失败（\(http.statusCode)）",
+                                  statusCode: http.statusCode)
+            // 只有「带着 token 的请求」被判定未认证才算会话过期——登录/注册本身返回
+            // 401（账号密码错）不该触发登出，那时候根本没带 token。
+            if error.isUnauthorized && token != nil {
+                NotificationCenter.default.post(name: .apiUnauthorized, object: nil)
+            }
+            throw error
         }
 
         do {

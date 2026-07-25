@@ -198,7 +198,9 @@ class LLMRegistry:
 
         Args:
             model_name: 模型名称（需与 LLMS 列表中的 name 一致）
-            **kwargs: 保留参数（当前未使用）
+            **kwargs: 覆盖注册时的构造参数（如 temperature、max_tokens），
+                用 ``model_copy(update=...)`` 生成一个新实例，不影响注册表里
+                的共享单例。仅用于 ``llm_service.call()`` 的一次性调用路径。
 
         Returns:
             对应的 BaseChatModel 实例
@@ -210,9 +212,9 @@ class LLMRegistry:
         if not entry:
             available = ", ".join(e["name"] for e in self.LLMS)
             raise ValueError(f"模型 '{model_name}' 不存在。可用模型：{available}")
-        if kwargs:
-            logger.debug("llm_get_with_kwargs_ignored", model=model_name, kwargs=list(kwargs.keys()))
-        return entry["llm"]
+        if not kwargs:
+            return entry["llm"]
+        return entry["llm"].model_copy(update=kwargs)
 
     def get_or_default(self, model_name: str | None) -> tuple[BaseChatModel, str]:
         """按名称获取 LLM，找不到（或名称为空）时回退到默认/第一个模型。

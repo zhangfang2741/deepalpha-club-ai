@@ -14,21 +14,42 @@ from app.services.llm.service import llm_service
 # 的模型（同一个 Anthropic 兼容接口），所以这里强制指定，不跟随全局默认模型。
 _VISION_MODEL_NAME = "minimax-m3"
 
+# 单独调大这一次调用的输出预算（不影响其它调用方共享的默认 max_tokens）：加了
+# 词根+例句字段后，一张图识别 20+ 个单词时结构化输出比之前长不少。
+_VISION_MAX_TOKENS = 4096
+
+# 实测复现的真实故障：加了词根/例句字段后，图片里单词较多（20+）时 MiniMax-M3
+# 有时会无视 API 层强制的 tool_choice，直接输出一大段 Markdown 文字介绍每个词，
+# 而不调用工具——LangChain 的结构化输出在没有 tool call 时会静默返回 None（不抛
+# 异常），导致后面 `result.words` 直接 AttributeError。在 prompt 里显式重复一遍
+# "只能通过工具调用返回、禁止文字/Markdown 回答" 之后，同一张会稳定复现的测试图
+# 就能稳定拿到正确的结构化结果了（只在 API 参数里设 tool_choice 不够，还得在
+# prompt 正文里再强调一遍）。
 _RECOGNIZE_PROMPT = (
     "你是一个英语学习助手。请识别这张图片中出现的所有英语单词（排除纯虚词，如冠词 "
     "a/an/the、介词、连词），为每个单词提供：国际音标（IPA，不含斜杠）、词性缩写"
     "（如 n./v./adj./adv.）、简洁的中文释义、词根/词缀简析（如没有明显词根可留空）、"
     "一个包含该单词的英文例句（附中文翻译）。如果图片中没有可识别的英语单词，返回空列表。"
+    "必须只通过调用提供的工具返回结果，不要输出任何文字说明或 Markdown 格式的回答。"
 )
+
+_MAX_RECOGNIZE_ATTEMPTS = 2
 
 
 class RecognizedWord(BaseModel):
-    """单个识别出的单词。"""
+    """单个识别出的单词。
+
+    除 word 外全部允许缺省：实测长词表（30+ 词）时 MiniMax-M3 偶尔会漏填某个词
+    的某个字段（如末尾某词漏了 definition_zh），如果这些字段是必填，pydantic
+    校验会让整批结果直接报废——明明其它 29 个词都识别对了，用户却因为其中一个
+    词缺一个字段而拿到「识别失败」。放宽成缺省空字符串后，单个词的字段缺失顶多
+    让那一个词的某个字段是空的，不会拖累整批。
+    """
 
     word: str = Field(..., description="识别出的英语单词原形")
-    phonetic_ipa: str = Field(..., description="国际音标，不含斜杠")
-    part_of_speech: str = Field(..., description="词性缩写")
-    definition_zh: str = Field(..., description="简洁中文释义")
+    phonetic_ipa: str = Field(default="", description="国际音标，不含斜杠")
+    part_of_speech: str = Field(default="", description="词性缩写")
+    definition_zh: str = Field(default="", description="简洁中文释义")
     etymology: str = Field(default="", description="词根/词缀简析，没有明显词根则留空")
     example_sentence: str = Field(default="", description="包含该单词的英文例句，附中文翻译")
 
@@ -63,13 +84,26 @@ async def recognize_words_from_image(image_bytes: bytes, mime_type: str = "image
             {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64_image}"}},
         ]
     )
-    try:
-        result = await llm_service.call(
-            [message], model_name=_VISION_MODEL_NAME, response_format=_RecognizeResult
-        )
-    except Exception as exc:
-        logger.exception("vocabulary_recognize_llm_call_failed")
-        raise RecognitionFailedError("LLM 识别调用失败") from exc
+    for attempt in range(1, _MAX_RECOGNIZE_ATTEMPTS + 1):
+        try:
+            result = await llm_service.call(
+                [message],
+                model_name=_VISION_MODEL_NAME,
+                response_format=_RecognizeResult,
+                max_tokens=_VISION_MAX_TOKENS,
+            )
+        except Exception:
+            logger.exception("vocabulary_recognize_llm_call_failed", attempt=attempt)
+            if attempt == _MAX_RECOGNIZE_ATTEMPTS:
+                raise RecognitionFailedError("LLM 识别调用失败")
+            continue
 
-    logger.info("vocabulary_recognize_succeeded", word_count=len(result.words))
-    return result.words
+        if result is not None:
+            logger.info("vocabulary_recognize_succeeded", word_count=len(result.words), attempt=attempt)
+            return result.words
+
+        # 模型没有调用工具、只回了纯文本（见上面的注释），结构化输出是 None。
+        # 重试一次通常就好——是否触发跟具体这次采样有关，不是稳定必现的。
+        logger.warning("vocabulary_recognize_no_structured_output", attempt=attempt)
+
+    raise RecognitionFailedError("LLM 未按预期格式返回识别结果")

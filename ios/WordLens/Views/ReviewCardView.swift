@@ -44,7 +44,7 @@ struct ReviewCardView: View {
 
             VStack(spacing: 16) {
                 HStack {
-                    Text(word.word).font(.system(size: 36, weight: .bold)).foregroundStyle(Theme.textPrimary)
+                    Text(word.word).font(.largeTitle.bold()).foregroundStyle(Theme.textPrimary)
                     PronounceButton(word: word.word)
                 }
                 Text("/\(word.phoneticIpa)/").foregroundStyle(Theme.textSecondary)

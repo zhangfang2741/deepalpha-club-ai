@@ -76,6 +76,14 @@ struct WordListView: View {
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
+                        // 右侧字母索引条对 VoiceOver 隐藏（连续拖动手势做不出有意义的
+                        // 无障碍交互），改用 Rotor 让 VoiceOver 用户也能快速跳转到某个
+                        // 字母分组，功能上补齐而不是单纯砍掉。
+                        .accessibilityRotor("按字母跳转") {
+                            ForEach(sections, id: \.letter) { section in
+                                AccessibilityRotorEntry(section.letter, id: section.letter)
+                            }
+                        }
                         .refreshable {
                             if let onRefresh {
                                 await onRefresh()
@@ -93,8 +101,8 @@ struct WordListView: View {
     }
 
     /// 右侧字母索引条：拖动时按手指纵向位置换算成字母，滚动列表到对应分组。
-    /// 对 VoiceOver 隐藏——VoiceOver 用户本就是靠逐行滑动浏览列表定位，这种连续
-    /// 拖动手势做不出有意义的无障碍交互，隐藏索引条不影响他们正常浏览生词库。
+    /// 对 VoiceOver 隐藏——这种连续拖动手势做不出有意义的无障碍交互；跳转能力
+    /// 改由上面 List 挂的 accessibilityRotor("按字母跳转") 提供。
     private func indexBar(proxy: ScrollViewProxy) -> some View {
         let letters = sections.map(\.letter)
         return GeometryReader { geo in
