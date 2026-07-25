@@ -60,34 +60,41 @@ class _RecognizeResult(BaseModel):
     words: list[RecognizedWord] = Field(default_factory=list)
 
 
-# 混合识别方案的补释义提示：图片 OCR 已在 iOS 端用 Apple Vision 完成（印刷体
-# 又快又准），后端只拿到抠出来的候选词列表，用纯文本模型补音标/释义即可，不再需要
-# 视觉模型。相比让 LLM 同时做 OCR + 释义，这里质量更稳、更快、也更省成本。
-_ENRICH_PROMPT_TEMPLATE = (
-    "你是一个英语学习助手。下面是从图片 OCR 出来的候选英语单词（可能含变形、"
-    "虚词或少量乱码）。请为其中每个**实义词**补充学习信息，并严格遵守：\n"
-    "1. 排除纯虚词（冠词 a/an/the、介词、连词、常见代词）以及明显的 OCR 噪声"
-    "（乱码、非英文、无意义的单个字母）。\n"
-    "2. 把变形还原成原形（lemma）：复数→单数、过去式/进行时/第三人称→动词原形；"
-    "统一小写（专有名词保留首字母大写）。还原后重复的只保留一个。\n"
-    "3. 为每个词提供：国际音标（IPA，不含斜杠）、词性缩写（n./v./adj./adv. 等）、"
-    "简洁中文释义、词根/词缀简析（没有明显词根可留空）、一个含该词的英文例句"
-    "（附中文翻译）。\n"
-    "4. 必须只通过调用提供的工具返回结果，不要输出任何文字说明或 Markdown。\n\n"
-    "候选单词：{words}"
+# 混合识别方案的 OCR 提示片段：iOS 端 Apple Vision 已对图片做过本地 OCR（印刷体
+# 又快又准），把抠出的候选词作为「参考线索」拼进 prompt，和 LLM 自己看图的识别结果
+# 综合。两个来源互补——Vision 对印刷体召回稳，LLM 能补 Vision 漏掉的艺术字/小字、
+# 也能纠正 OCR 的拼写噪声。让模型取并集，而不是二选一。
+_OCR_HINT_TEMPLATE = (
+    "\n\n另外，这是设备本地 OCR 对同一张图的识别结果（对印刷体较准，供你参考补充，"
+    "但可能含虚词、少量乱码，也可能漏词）：{words}。请把你自己对图片的识别与该列表"
+    "**综合取并集**去重后一并输出，不要因为某个词只在其中一个来源出现就丢弃。"
 )
+
+
+def _build_recognize_prompt(ocr_hint: list[str] | None) -> str:
+    """拼装识别 prompt：基础指令 + 可选的本地 OCR 候选词线索。"""
+    hint_words = [w.strip() for w in (ocr_hint or []) if w.strip()]
+    if not hint_words:
+        return _RECOGNIZE_PROMPT
+    return _RECOGNIZE_PROMPT + _OCR_HINT_TEMPLATE.format(words=", ".join(hint_words))
 
 
 class RecognitionFailedError(Exception):
     """图片识别失败（LLM 调用异常）。"""
 
 
-async def recognize_words_from_image(image_bytes: bytes, mime_type: str = "image/jpeg") -> list[RecognizedWord]:
-    """调用 LLM 识别图片中的英语单词，返回候选词列表。
+async def recognize_words_from_image(
+    image_bytes: bytes,
+    mime_type: str = "image/jpeg",
+    ocr_hint: list[str] | None = None,
+) -> list[RecognizedWord]:
+    """调用视觉 LLM 识别图片中的英语单词，返回候选词列表。
 
     Args:
         image_bytes: 图片原始字节
         mime_type: 图片 MIME 类型
+        ocr_hint: iOS 端 Apple Vision 本地 OCR 抠出的候选词，作为参考线索拼进
+            prompt，与 LLM 自己看图的识别结果综合取并集。为空则退化为纯看图识别。
 
     Returns:
         识别出的候选单词列表（可能为空）
@@ -98,7 +105,7 @@ async def recognize_words_from_image(image_bytes: bytes, mime_type: str = "image
     b64_image = base64.b64encode(image_bytes).decode("ascii")
     message = HumanMessage(
         content=[
-            {"type": "text", "text": _RECOGNIZE_PROMPT},
+            {"type": "text", "text": _build_recognize_prompt(ocr_hint)},
             {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64_image}"}},
         ]
     )
@@ -135,51 +142,3 @@ async def recognize_words_from_image(image_bytes: bytes, mime_type: str = "image
         logger.warning("vocabulary_recognize_no_structured_output", attempt=attempt)
 
     raise RecognitionFailedError("LLM 未按预期格式返回识别结果")
-
-
-async def enrich_words(words: list[str]) -> list[RecognizedWord]:
-    """给定 OCR 抠出的候选词列表，用纯文本 LLM 补音标/词性/释义/词根/例句。
-
-    与 ``recognize_words_from_image`` 的区别：这里不做图片 OCR（已由 iOS 端
-    Apple Vision 完成），只做释义补全，因此走默认文本模型、无需视觉能力。
-
-    Args:
-        words: OCR 得到的候选英语单词（可含变形、虚词、少量噪声）。
-
-    Returns:
-        补全后的候选单词列表（已过滤虚词/噪声、还原原形，可能为空）。
-
-    Raises:
-        RecognitionFailedError: LLM 调用失败或未按预期格式返回。
-    """
-    cleaned = [w.strip() for w in words if w.strip()]
-    if not cleaned:
-        return []
-
-    message = HumanMessage(content=_ENRICH_PROMPT_TEMPLATE.format(words=", ".join(cleaned)))
-    for attempt in range(1, _MAX_RECOGNIZE_ATTEMPTS + 1):
-        try:
-            result = await llm_service.call(
-                [message],
-                response_format=_RecognizeResult,
-                max_tokens=_VISION_MAX_TOKENS,
-            )
-        except Exception:
-            logger.exception("vocabulary_enrich_llm_call_failed", attempt=attempt)
-            if attempt == _MAX_RECOGNIZE_ATTEMPTS:
-                raise RecognitionFailedError("LLM 释义调用失败")
-            continue
-
-        if result is not None:
-            enriched = [w for w in result.words if w.word.strip()]
-            logger.info(
-                "vocabulary_enrich_succeeded",
-                input_count=len(cleaned),
-                output_count=len(enriched),
-                attempt=attempt,
-            )
-            return enriched
-
-        logger.warning("vocabulary_enrich_no_structured_output", attempt=attempt)
-
-    raise RecognitionFailedError("LLM 未按预期格式返回释义结果")

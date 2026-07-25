@@ -54,14 +54,29 @@ actor APIClient {
         return try await send(req)
     }
 
-    /// 上传图片（multipart/form-data，字段名固定为 "image"，匹配后端 `UploadFile = File(...)` 的参数名）。
-    func postMultipartImage<T: Decodable>(_ path: String, imageData: Data, filename: String = "photo.jpg") async throws -> T {
+    /// 上传图片（multipart/form-data，图片字段名固定为 "image"，匹配后端
+    /// `UploadFile = File(...)` 的参数名）。
+    ///
+    /// - Parameter textFields: 附带的文本表单字段（名称, 值），可重复同名（如把
+    ///   OCR 候选词逐个作为同名 `ocr_words` 字段发出，后端按 `list[str]` 接收）。
+    func postMultipartImage<T: Decodable>(
+        _ path: String,
+        imageData: Data,
+        filename: String = "photo.jpg",
+        textFields: [(name: String, value: String)] = []
+    ) async throws -> T {
         var req = request(path: path, method: "POST")
         let boundary = "Boundary-\(UUID().uuidString)"
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         req.timeoutInterval = AppConfig.recognizeTimeout
 
         var body = Data()
+        for field in textFields {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"\(field.name)\"\r\n\r\n".data(using: .utf8)!)
+            body.append(field.value.data(using: .utf8)!)
+            body.append("\r\n".data(using: .utf8)!)
+        }
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"image\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)

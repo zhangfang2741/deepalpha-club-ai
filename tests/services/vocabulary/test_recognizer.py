@@ -6,8 +6,8 @@ import pytest
 from app.services.vocabulary.recognizer import (
     RecognitionFailedError,
     RecognizedWord,
+    _build_recognize_prompt,
     _RecognizeResult,
-    enrich_words,
     recognize_words_from_image,
 )
 
@@ -54,40 +54,29 @@ async def test_recognize_words_raises_on_llm_failure():
             await recognize_words_from_image(b"fake-image-bytes")
 
 
-async def test_enrich_words_returns_parsed_candidates():
-    mock_result = _RecognizeResult(
-        words=[
-            RecognizedWord(
-                word="resilient",
-                phonetic_ipa="rɪˈzɪliənt",
-                part_of_speech="adj.",
-                definition_zh="有韧性的",
-            )
-        ]
-    )
+def test_build_recognize_prompt_without_hint_is_base_prompt():
+    from app.services.vocabulary.recognizer import _RECOGNIZE_PROMPT
+
+    # 无 OCR 线索（None / 空 / 全空白）时退化为纯看图识别的基础 prompt。
+    assert _build_recognize_prompt(None) == _RECOGNIZE_PROMPT
+    assert _build_recognize_prompt([]) == _RECOGNIZE_PROMPT
+    assert _build_recognize_prompt(["", "  "]) == _RECOGNIZE_PROMPT
+
+
+def test_build_recognize_prompt_appends_hint_words():
+    prompt = _build_recognize_prompt(["resilient", " ", "serendipity"])
+    # 过滤空白后把候选词拼进去，并保留「综合取并集」的指令。
+    assert "resilient, serendipity" in prompt
+    assert "综合取并集" in prompt
+
+
+async def test_recognize_passes_ocr_hint_into_prompt():
+    mock_result = _RecognizeResult(words=[RecognizedWord(word="resilient")])
     call = AsyncMock(return_value=mock_result)
     with patch("app.services.vocabulary.recognizer.llm_service.call", new=call):
-        words = await enrich_words(["resilient", "the"])
+        await recognize_words_from_image(b"fake-image-bytes", ocr_hint=["serendipity"])
 
-    assert len(words) == 1
-    assert words[0].word == "resilient"
-    # 补释义走纯文本模型（不指定 model_name），不应带图片视觉参数。
-    assert call.await_args.kwargs.get("model_name") is None
-
-
-async def test_enrich_words_returns_empty_without_calling_llm_when_no_words():
-    call = AsyncMock()
-    with patch("app.services.vocabulary.recognizer.llm_service.call", new=call):
-        words = await enrich_words(["", "   "])
-
-    assert words == []
-    call.assert_not_awaited()
-
-
-async def test_enrich_words_raises_on_llm_failure():
-    with patch(
-        "app.services.vocabulary.recognizer.llm_service.call",
-        new=AsyncMock(side_effect=RuntimeError("llm down")),
-    ):
-        with pytest.raises(RecognitionFailedError):
-            await enrich_words(["resilient"])
+    # OCR 候选词应出现在发给 LLM 的图文消息的文本块里。
+    sent_message = call.await_args.args[0][0]
+    text_block = next(part["text"] for part in sent_message.content if part["type"] == "text")
+    assert "serendipity" in text_block

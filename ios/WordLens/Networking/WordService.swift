@@ -3,14 +3,11 @@ import Foundation
 
 /// 拍照识别 + 生词库 + 复习，对应后端 /vocabulary/{recognize,words,review}。
 enum WordService {
-    static func recognize(imageData: Data) async throws -> RecognizeResponse {
-        try await APIClient.shared.postMultipartImage("/recognize", imageData: imageData)
-    }
-
-    /// 混合识别：把 iOS 端 Apple Vision OCR 抠出的候选词交后端补音标/释义。
-    static func enrich(words: [String]) async throws -> RecognizeResponse {
-        struct Body: Encodable { let words: [String] }
-        return try await APIClient.shared.postJSON("/enrich", body: Body(words: words))
+    /// 拍照识别：上传图片，并把本地 Apple Vision OCR 抠出的候选词一并带上，
+    /// 让后端视觉 LLM 综合看图识别与 OCR 结果取并集。ocrWords 为空则纯看图识别。
+    static func recognize(imageData: Data, ocrWords: [String] = []) async throws -> RecognizeResponse {
+        let textFields = ocrWords.map { (name: "ocr_words", value: $0) }
+        return try await APIClient.shared.postMultipartImage("/recognize", imageData: imageData, textFields: textFields)
     }
 
     static func addWordsBatch(_ words: [VocabularyWordCreate]) async throws -> WordsBatchCreateResponse {

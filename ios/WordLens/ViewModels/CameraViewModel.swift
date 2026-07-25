@@ -18,13 +18,11 @@ final class CameraViewModel: ObservableObject {
         errorMessage = nil
         defer { isRecognizing = false }
         do {
-            // 先本地 Apple Vision OCR（印刷体又快又准、免流量），只把抠出的词交
-            // 后端补音标/释义；OCR 抠不到词时（模糊/手写等 Vision 不擅长的场景）
-            // 回退到让 LLM 直接看图识别，保证不漏。
+            // 先本地 Apple Vision OCR（印刷体又快又准、免流量），把抠出的候选词连同
+            // 图片一起发给后端：视觉 LLM 既自己看图识别、又参考 OCR 列表，综合取并集，
+            // 两个来源互补以提高召回。OCR 抠不到词时就退化为纯看图识别。
             let ocrWords = await TextRecognizer.recognizeWords(from: imageData)
-            let resp = ocrWords.isEmpty
-                ? try await WordService.recognize(imageData: imageData)
-                : try await WordService.enrich(words: ocrWords)
+            let resp = try await WordService.recognize(imageData: imageData, ocrWords: ocrWords)
             candidates = resp.candidates
             // 已在生词库中的默认不勾选，其余默认全选
             selectedWords = Set(resp.candidates.filter { !$0.alreadyInLibrary }.map { $0.word })

@@ -10,7 +10,7 @@
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +20,6 @@ from app.core.logging import logger
 from app.db.session import get_db
 from app.models.vocabulary import VocabularyUser
 from app.schemas.vocabulary import (
-    EnrichWordsRequest,
     RecognizedWordSchema,
     RecognizeResponse,
     ReviewQueueResponse,
@@ -32,11 +31,7 @@ from app.schemas.vocabulary import (
     WordsBatchCreateResponse,
 )
 from app.services.vocabulary import words as word_service
-from app.services.vocabulary.recognizer import (
-    RecognitionFailedError,
-    enrich_words,
-    recognize_words_from_image,
-)
+from app.services.vocabulary.recognizer import RecognitionFailedError, recognize_words_from_image
 
 from .dependencies import get_current_vocab_user
 
@@ -54,10 +49,15 @@ _MAX_IMAGE_BYTES = 800 * 1024  # 800KB，对齐边缘代理的实际限制
 async def recognize(
     request: Request,
     image: UploadFile = File(...),
+    ocr_words: list[str] = Form(default=[]),
     user: VocabularyUser = Depends(get_current_vocab_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """上传图片，识别出候选英语单词（不落库、不存图）。"""
+    """上传图片，识别出候选英语单词（不落库、不存图）。
+
+    ocr_words 是 iOS 端 Apple Vision 本地 OCR 抠出的候选词，作为参考线索传给视觉
+    LLM，与模型自己看图的识别结果综合取并集，提高召回；为空则退化为纯看图识别。
+    """
     image_bytes = await image.read()
     if not image_bytes:
         raise HTTPException(status_code=422, detail="图片为空")
@@ -65,44 +65,9 @@ async def recognize(
         raise HTTPException(status_code=413, detail="图片过大，请控制在 10MB 以内")
 
     try:
-        recognized = await recognize_words_from_image(image_bytes, image.content_type or "image/jpeg")
-    except RecognitionFailedError as exc:
-        raise HTTPException(status_code=502, detail="识别失败，请重新拍摄") from exc
-
-    existing = await word_service.get_existing_words(db, user.id)
-    new_words = word_service.filter_new_words(existing, [w.word for w in recognized])
-    new_words_lower = {w.lower() for w in new_words}
-
-    candidates = [
-        RecognizedWordSchema(
-            word=w.word,
-            phonetic_ipa=w.phonetic_ipa,
-            part_of_speech=w.part_of_speech,
-            definition_zh=w.definition_zh,
-            etymology=w.etymology,
-            example_sentence=w.example_sentence,
-            already_in_library=w.word.lower() not in new_words_lower,
+        recognized = await recognize_words_from_image(
+            image_bytes, image.content_type or "image/jpeg", ocr_hint=ocr_words
         )
-        for w in recognized
-    ]
-    return RecognizeResponse(candidates=candidates)
-
-
-@router.post("/enrich", response_model=RecognizeResponse)
-@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["vocabulary_recognize"][0])
-async def enrich(
-    request: Request,
-    payload: EnrichWordsRequest,
-    user: VocabularyUser = Depends(get_current_vocab_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """混合识别：接收 iOS 端 Apple Vision OCR 抠出的候选词，补音标/释义后返回。
-
-    图片 OCR 在客户端完成（印刷体又快又准、免流量），这里只用纯文本 LLM 补全，
-    比让模型同时做 OCR + 释义更稳更快。响应结构与 /recognize 一致，前端可复用。
-    """
-    try:
-        recognized = await enrich_words(payload.words)
     except RecognitionFailedError as exc:
         raise HTTPException(status_code=502, detail="识别失败，请重新拍摄") from exc
 
