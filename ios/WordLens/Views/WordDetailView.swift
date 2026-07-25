@@ -27,7 +27,7 @@ struct WordDetailView: View {
                     detailRow("状态", statusLabel)
                     detailRow("连续认识次数", "\(word.repetitionCount)")
                     detailRow("复习间隔", "\(word.intervalDays) 天")
-                    detailRow("下次复习", word.nextReviewAt)
+                    detailRow("下次复习", nextReviewLabel)
                 }
                 .padding()
                 .background(Theme.surface)
@@ -67,6 +67,31 @@ struct WordDetailView: View {
         case "fuzzy": return "模糊"
         default: return "不认识"
         }
+    }
+
+    /// 后端返回的是不带时区的 ISO 8601 字符串（naive UTC，如
+    /// "2026-07-26T08:09:11.390968"），直接显示对用户不友好，这里解析成
+    /// Date 后按本地时区格式化。微秒为 0 时 Python 的 isoformat() 会省略
+    /// 小数部分，所以两种格式都要能解析。
+    private var nextReviewLabel: String {
+        guard let date = Self.parseBackendDate(word.nextReviewAt) else { return word.nextReviewAt }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "M月d日 HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private static func parseBackendDate(_ raw: String) -> Date? {
+        for format in ["yyyy-MM-dd'T'HH:mm:ss.SSSSSS", "yyyy-MM-dd'T'HH:mm:ss"] {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(identifier: "UTC")
+            formatter.dateFormat = format
+            if let date = formatter.date(from: raw) {
+                return date
+            }
+        }
+        return nil
     }
 
     private func detailRow(_ label: String, _ value: String) -> some View {
