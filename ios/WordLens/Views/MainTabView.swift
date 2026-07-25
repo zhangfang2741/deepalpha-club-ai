@@ -5,7 +5,7 @@ struct MainTabView: View {
     var body: some View {
         TabView {
             ReviewCardView()
-                .tabItem { Label("首页", systemImage: "arrow.triangle.2.circlepath") }
+                .tabItem { Label("首页", systemImage: "house.fill") }
 
             CameraCaptureView()
                 .tabItem { Label("拍照", systemImage: "camera.fill") }

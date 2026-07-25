@@ -18,6 +18,24 @@ final class ReviewViewModel: ObservableObject {
 
     var isFinished: Bool { !queue.isEmpty && currentIndex >= queue.count }
 
+    /// 「上一个/下一个」只是浏览，不提交评分——跟 submit() 的自动前进是两码事。
+    /// canGoNext 卡在 queue.count - 1，不让浏览走到"今日复习完成"那一屏，
+    /// 那个只应该由实际提交评分触发。
+    var canGoPrevious: Bool { currentIndex > 0 }
+    var canGoNext: Bool { currentIndex < queue.count - 1 }
+
+    func goToPrevious() {
+        guard canGoPrevious else { return }
+        currentIndex -= 1
+        isFlipped = false
+    }
+
+    func goToNext() {
+        guard canGoNext else { return }
+        currentIndex += 1
+        isFlipped = false
+    }
+
     func loadQueue() async {
         isLoading = true
         errorMessage = nil

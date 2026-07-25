@@ -36,9 +36,20 @@ struct ReviewCardView: View {
 
     private func cardContent(_ word: VocabularyWord) -> some View {
         VStack(spacing: 24) {
-            Text("\(viewModel.currentIndex + 1) / \(viewModel.totalCount)")
-                .font(.caption)
-                .foregroundStyle(Theme.textSecondary)
+            HStack {
+                navButton(systemImage: "chevron.left.circle.fill", label: "上一个", enabled: viewModel.canGoPrevious) {
+                    viewModel.goToPrevious()
+                }
+                Spacer()
+                Text("\(viewModel.currentIndex + 1) / \(viewModel.totalCount)")
+                    .font(.caption)
+                    .foregroundStyle(Theme.textSecondary)
+                Spacer()
+                navButton(systemImage: "chevron.right.circle.fill", label: "下一个", enabled: viewModel.canGoNext) {
+                    viewModel.goToNext()
+                }
+            }
+            .padding(.horizontal)
 
             Spacer()
 
@@ -89,6 +100,16 @@ struct ReviewCardView: View {
                 .padding(.bottom, 24)
             }
         }
+    }
+
+    private func navButton(systemImage: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(label, systemImage: systemImage, action: action)
+            .labelStyle(.iconOnly)
+            .font(.title2)
+            .foregroundStyle(enabled ? Theme.accent : Theme.textSecondary.opacity(0.3))
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(.rect)
+            .disabled(!enabled)
     }
 
     private func ratingButton(_ label: String, _ color: Color, _ rating: ReviewRating) -> some View {
