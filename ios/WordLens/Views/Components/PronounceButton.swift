@@ -26,6 +26,65 @@ enum PronunciationAccent: String {
     var youdaoType: Int { self == .uk ? 1 : 2 }
 }
 
+/// 发音语速偏好（存 UserDefaults，设置页可切换）。
+///
+/// 有道音频用 `AVAudioPlayer` 的倍速播放实现，不必按语速重新拉流、也不影响缓存
+/// （同一份 mp3 变速播放即可）；系统合成语音兜底时换算成对应的 utterance rate。
+enum PronunciationRate: String, CaseIterable {
+    case slow
+    case normal
+    case fast
+
+    static var current: PronunciationRate {
+        get {
+            let raw = UserDefaults.standard.string(forKey: "pronunciation_rate") ?? normal.rawValue
+            return PronunciationRate(rawValue: raw) ?? .normal
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: "pronunciation_rate")
+        }
+    }
+
+    /// `AVAudioPlayer.rate` 倍速（有效范围约 0.5–2.0）。
+    var playbackRate: Float {
+        switch self {
+        case .slow: return 0.75
+        case .normal: return 1.0
+        case .fast: return 1.35
+        }
+    }
+
+    /// 系统合成语音兜底时的 `utterance.rate`（0…1，默认约 0.5），按同样的快慢
+    /// 换算并夹紧到系统允许区间。
+    var synthesizerRate: Float {
+        let base = AVSpeechUtteranceDefaultSpeechRate
+        let scaled: Float
+        switch self {
+        case .slow: scaled = base * 0.7
+        case .normal: scaled = base
+        case .fast: scaled = base * 1.3
+        }
+        return min(max(scaled, AVSpeechUtteranceMinimumSpeechRate), AVSpeechUtteranceMaximumSpeechRate)
+    }
+}
+
+/// 是否在复习卡 / 单词详情出现时自动发音（存 UserDefaults，设置页可切换）。
+///
+/// 默认开：此前 master 已上线「点下一个自动读音」的无条件行为，把它统一收敛到这个
+/// 开关后，默认保持原有体验，用户可在发音设置里关掉。
+enum PronunciationAutoplay {
+    private static let key = "pronunciation_autoplay"
+
+    static var isEnabled: Bool {
+        // 未设置过时返回 true（默认开）；设置过后按存的值。
+        get {
+            if UserDefaults.standard.object(forKey: key) == nil { return true }
+            return UserDefaults.standard.bool(forKey: key)
+        }
+        set { UserDefaults.standard.set(newValue, forKey: key) }
+    }
+}
+
 /// 单词发音播放器（单例）。
 ///
 /// 数据源是有道词典发音接口 `https://dict.youdao.com/dictvoice?audio=<词>&type=<1|2>`，
@@ -60,6 +119,12 @@ final class Pronouncer: ObservableObject {
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
         try? AVAudioSession.sharedInstance().setActive(true)
     }()
+
+    /// 仅当用户开启了「自动发音」时才朗读，供复习卡/单词详情出现时调用。
+    func speakIfAutoplayEnabled(_ word: String) {
+        guard PronunciationAutoplay.isEnabled else { return }
+        speak(word)
+    }
 
     func speak(_ word: String) {
         _ = configured
@@ -114,6 +179,9 @@ final class Pronouncer: ObservableObject {
         do {
             let newPlayer = try AVAudioPlayer(data: data)
             newPlayer.delegate = delegate
+            // enableRate 必须在 play() 前打开，rate 才会生效（同一份 mp3 变速播放）。
+            newPlayer.enableRate = true
+            newPlayer.rate = PronunciationRate.current.playbackRate
             player = newPlayer
             newPlayer.play()
         } catch {
@@ -126,7 +194,7 @@ final class Pronouncer: ObservableObject {
         let utterance = AVSpeechUtterance(string: word)
         let target = PronunciationAccent.current == .uk ? "en-GB" : "en-US"
         utterance.voice = AVSpeechSynthesisVoice(language: target)
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        utterance.rate = PronunciationRate.current.synthesizerRate
         synthesizer.delegate = delegate
         synthesizer.stopSpeaking(at: .immediate)
         synthesizer.speak(utterance)
