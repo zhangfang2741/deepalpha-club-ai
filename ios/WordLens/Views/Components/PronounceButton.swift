@@ -33,40 +33,43 @@ enum PronunciationAccent: String {
 /// 再次点击直接读本地文件，几乎零延迟。网络失败时回退到系统合成语音，保证离线
 /// 也能出声。
 ///
-/// 不标 private：复习卡片切到下一个词时要自动读音，需要在 ReviewCardView 里
-/// 直接调用，不经过 PronounceButton 这个视图。
-enum Pronouncer {
-    /// 必须持有强引用，否则 AVAudioPlayer 会被立即释放、还没出声就停了。
-    private static var player: AVAudioPlayer?
-    /// 网络失败时的离线兜底。
-    private static let synthesizer = AVSpeechSynthesizer()
-    private static let session = URLSession(configuration: .default)
-    private static let delegate = PlaybackDelegate()
+/// 做成 ObservableObject（而不是之前的纯静态方法集合）：正在播放哪个词要是一份
+/// 全局共享状态，不能只存在触发播放的那个 PronounceButton 自己的本地 @State 里。
+/// 否则像"点下一个自动读音"这种不经过某个具体按钮点击的播放，画面上所有按钮的
+/// 波纹动效都不会跟着动——它们各自的 isPlaying 压根不知道外面有播放发生。
+@MainActor
+final class Pronouncer: ObservableObject {
+    static let shared = Pronouncer()
+    private init() {}
 
-    /// 当前这次播放结束（或被下一次播放打断）时要调用的回调，驱动按钮的播放态动画。
-    /// 被新的 speak() 打断时会先把这个回调补发一次，保证上一个按钮的动效立刻停下，
-    /// 不会一直转到——它对应的音频其实早就被换掉了。
-    private static var onFinish: (() -> Void)?
+    /// 当前正在播放的词（小写，跟 cacheURL 的 key 对齐），没有播放时为 nil。
+    /// PronounceButton 拿自己的词（同样小写后）跟这个比较，决定要不要播波纹动效——
+    /// 不管这次播放是被哪个按钮点出来的，还是像"下一个"那样代码直接触发的。
+    @Published private(set) var playingWord: String?
+
+    /// 必须持有强引用，否则 AVAudioPlayer 会被立即释放、还没出声就停了。
+    private var player: AVAudioPlayer?
+    /// 网络失败时的离线兜底。
+    private let synthesizer = AVSpeechSynthesizer()
+    private let session = URLSession(configuration: .default)
+    private lazy var delegate = PlaybackDelegate(owner: self)
 
     /// 不配置 AVAudioSession 的话，手机静音开关打开时会完全不出声——这是点小喇叭
     /// 没反应最常见的原因。用 `.playback` 类别让发音像音乐/视频一样忽略静音开关。
-    /// `static let` 保证只在首次用到时配置一次。
-    private static let configured: Void = {
+    private lazy var configured: Void = {
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
         try? AVAudioSession.sharedInstance().setActive(true)
     }()
 
-    static func speak(_ word: String, onFinish: @escaping () -> Void) {
+    func speak(_ word: String) {
         _ = configured
-        finishCurrent()
-        Self.onFinish = onFinish
-
         let accent = PronunciationAccent.current
         let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            finishCurrent()
+            playingWord = nil
             return
         }
+        playingWord = trimmed.lowercased()
 
         if let data = cachedAudio(for: trimmed, accent: accent) {
             play(data, fallbackWord: trimmed)
@@ -77,26 +80,27 @@ enum Pronouncer {
             return
         }
 
-        session.dataTask(with: url) { data, response, _ in
+        session.dataTask(with: url) { [weak self] data, response, _ in
             let http = response as? HTTPURLResponse
             // 有道对查不到的词可能返回 200 但空 body，用非空 + 2xx 双重判断。
             guard let data, !data.isEmpty, (200..<300).contains(http?.statusCode ?? 0) else {
-                DispatchQueue.main.async { speakWithSynthesizer(trimmed) }
+                Task { @MainActor in self?.speakWithSynthesizer(trimmed) }
                 return
             }
-            cacheAudio(data, for: trimmed, accent: accent)
-            DispatchQueue.main.async { play(data, fallbackWord: trimmed) }
+            self?.cacheAudio(data, for: trimmed, accent: accent)
+            Task { @MainActor in self?.play(data, fallbackWord: trimmed) }
         }.resume()
     }
 
-    /// 触发并清空当前的完成回调，重复调用是安全的（第二次起 onFinish 已是 nil）。
-    fileprivate static func finishCurrent() {
-        let callback = onFinish
-        onFinish = nil
-        callback?()
+    /// 播放真正结束（AVAudioPlayerDelegate / AVSpeechSynthesizerDelegate 回调）时清空
+    /// playingWord，波纹动效跟着停。不在这里做"打断上一个"的特殊处理——播放新词前
+    /// player?.stop()/synthesizer.stopSpeaking() 已经会触发旧 delegate 回调，自然把
+    /// playingWord 清成 nil，再被下面 speak() 里设的新值覆盖，顺序上没有竞态。
+    fileprivate func handleFinished() {
+        playingWord = nil
     }
 
-    private static func remoteURL(for word: String, accent: PronunciationAccent) -> URL? {
+    private func remoteURL(for word: String, accent: PronunciationAccent) -> URL? {
         var components = URLComponents(string: "https://dict.youdao.com/dictvoice")
         components?.queryItems = [
             URLQueryItem(name: "audio", value: word),
@@ -105,7 +109,7 @@ enum Pronouncer {
         return components?.url
     }
 
-    private static func play(_ data: Data, fallbackWord: String) {
+    private func play(_ data: Data, fallbackWord: String) {
         player?.stop()
         do {
             let newPlayer = try AVAudioPlayer(data: data)
@@ -118,7 +122,7 @@ enum Pronouncer {
         }
     }
 
-    private static func speakWithSynthesizer(_ word: String) {
+    private func speakWithSynthesizer(_ word: String) {
         let utterance = AVSpeechUtterance(string: word)
         let target = PronunciationAccent.current == .uk ? "en-GB" : "en-US"
         utterance.voice = AVSpeechSynthesisVoice(language: target)
@@ -130,7 +134,7 @@ enum Pronouncer {
 
     // MARK: - 本地缓存
 
-    private static var cacheDirectory: URL? {
+    private var cacheDirectory: URL? {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
         guard let dir = base?.appendingPathComponent("word_pronunciation", isDirectory: true) else { return nil }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -138,47 +142,54 @@ enum Pronouncer {
     }
 
     /// 缓存文件名按「词 + 口音」区分，大小写不敏感（避免 Apple / apple 各存一份）。
-    private static func cacheURL(for word: String, accent: PronunciationAccent) -> URL? {
+    private func cacheURL(for word: String, accent: PronunciationAccent) -> URL? {
         let key = "\(word.lowercased())_\(accent.rawValue)"
         let safe = key.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? key
         return cacheDirectory?.appendingPathComponent("\(safe).mp3")
     }
 
-    private static func cachedAudio(for word: String, accent: PronunciationAccent) -> Data? {
+    private func cachedAudio(for word: String, accent: PronunciationAccent) -> Data? {
         guard let url = cacheURL(for: word, accent: accent) else { return nil }
         return try? Data(contentsOf: url)
     }
 
-    private static func cacheAudio(_ data: Data, for word: String, accent: PronunciationAccent) {
+    private func cacheAudio(_ data: Data, for word: String, accent: PronunciationAccent) {
         guard let url = cacheURL(for: word, accent: accent) else { return }
         try? data.write(to: url, options: .atomic)
     }
 }
 
-/// 桥接 AVAudioPlayer / AVSpeechSynthesizer 的播放结束回调到 Pronouncer.finishCurrent()，
+/// 桥接 AVAudioPlayer / AVSpeechSynthesizer 的播放结束回调到 Pronouncer.handleFinished()，
 /// 驱动按钮的播放态动画在音频真正读完时才停，而不是猜一个固定时长。
 private final class PlaybackDelegate: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
+    private weak var owner: Pronouncer?
+    init(owner: Pronouncer) { self.owner = owner }
+
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        DispatchQueue.main.async { Pronouncer.finishCurrent() }
+        Task { @MainActor [owner] in owner?.handleFinished() }
     }
 
     func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
-        DispatchQueue.main.async { Pronouncer.finishCurrent() }
+        Task { @MainActor [owner] in owner?.handleFinished() }
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        DispatchQueue.main.async { Pronouncer.finishCurrent() }
+        Task { @MainActor [owner] in owner?.handleFinished() }
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        DispatchQueue.main.async { Pronouncer.finishCurrent() }
+        Task { @MainActor [owner] in owner?.handleFinished() }
     }
 }
 
 struct PronounceButton: View {
     let word: String
-    @State private var isPlaying = false
+    @ObservedObject private var pronouncer = Pronouncer.shared
     @State private var tapPulse = false
+
+    private var isPlaying: Bool {
+        pronouncer.playingWord == word.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
 
     var body: some View {
         // 图标按钮必须带文本标签才对 VoiceOver 友好，.labelStyle(.iconOnly) 保留视觉上
@@ -188,12 +199,12 @@ struct PronounceButton: View {
             // 点击瞬间的回弹反馈，跟"是否正在播放"的波纹动效是两回事——不管这次播放
             // 最终成不成功，点下去那一下都应该有反馈。
             tapPulse = true
-            isPlaying = true
-            Pronouncer.speak(word) { isPlaying = false }
+            pronouncer.speak(word)
         }
         .labelStyle(.iconOnly)
-        // 播放时喇叭波纹用系统内置的 variableColor 动效，跟着 isPlaying 自动开关，
-        // 音频读多久动效就播多久（由上面的 delegate 回调驱动），不是瞎猜一个固定时长。
+        // 播放时喇叭波纹用系统内置的 variableColor 动效，跟着共享的 playingWord 状态
+        // 自动开关——不管这次播放是点这个按钮触发的，还是别处代码直接调 speak() 触发的
+        // （比如复习卡片切到下一个词自动读音），只要词对得上就会动。
         .symbolEffect(.variableColor.iterative, isActive: isPlaying)
         .scaleEffect(tapPulse ? 1.25 : 1.0)
         .foregroundStyle(Theme.accent)
