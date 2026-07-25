@@ -172,6 +172,7 @@ convention = "google"
 "app/services/institutional_signals/*.py" = ["D415", "D101", "D104"]
 "app/schemas/institutional_signals.py" = ["D415", "D101"]
 "app/models/signal_snapshot.py" = ["D415"]
+"app/models/vocabulary.py" = ["D415"]
 "app/api/v1/institutional_signals.py" = ["D415"]
 "app/services/sec_filings/*.py" = ["D415", "D101", "D102", "D104", "D107"]
 "app/schemas/sec_filings.py" = ["D415", "D101"]
