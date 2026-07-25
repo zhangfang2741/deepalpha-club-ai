@@ -38,6 +38,12 @@ private enum Pronouncer {
     /// 网络失败时的离线兜底。
     private static let synthesizer = AVSpeechSynthesizer()
     private static let session = URLSession(configuration: .default)
+    private static let delegate = PlaybackDelegate()
+
+    /// 当前这次播放结束（或被下一次播放打断）时要调用的回调，驱动按钮的播放态动画。
+    /// 被新的 speak() 打断时会先把这个回调补发一次，保证上一个按钮的动效立刻停下，
+    /// 不会一直转到——它对应的音频其实早就被换掉了。
+    private static var onFinish: (() -> Void)?
 
     /// 不配置 AVAudioSession 的话，手机静音开关打开时会完全不出声——这是点小喇叭
     /// 没反应最常见的原因。用 `.playback` 类别让发音像音乐/视频一样忽略静音开关。
@@ -47,11 +53,17 @@ private enum Pronouncer {
         try? AVAudioSession.sharedInstance().setActive(true)
     }()
 
-    static func speak(_ word: String) {
+    static func speak(_ word: String, onFinish: @escaping () -> Void) {
         _ = configured
+        finishCurrent()
+        Self.onFinish = onFinish
+
         let accent = PronunciationAccent.current
         let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else {
+            finishCurrent()
+            return
+        }
 
         if let data = cachedAudio(for: trimmed, accent: accent) {
             play(data, fallbackWord: trimmed)
@@ -74,6 +86,13 @@ private enum Pronouncer {
         }.resume()
     }
 
+    /// 触发并清空当前的完成回调，重复调用是安全的（第二次起 onFinish 已是 nil）。
+    fileprivate static func finishCurrent() {
+        let callback = onFinish
+        onFinish = nil
+        callback?()
+    }
+
     private static func remoteURL(for word: String, accent: PronunciationAccent) -> URL? {
         var components = URLComponents(string: "https://dict.youdao.com/dictvoice")
         components?.queryItems = [
@@ -87,6 +106,7 @@ private enum Pronouncer {
         player?.stop()
         do {
             let newPlayer = try AVAudioPlayer(data: data)
+            newPlayer.delegate = delegate
             player = newPlayer
             newPlayer.play()
         } catch {
@@ -100,6 +120,7 @@ private enum Pronouncer {
         let target = PronunciationAccent.current == .uk ? "en-GB" : "en-US"
         utterance.voice = AVSpeechSynthesisVoice(language: target)
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        synthesizer.delegate = delegate
         synthesizer.stopSpeaking(at: .immediate)
         synthesizer.speak(utterance)
     }
@@ -131,20 +152,58 @@ private enum Pronouncer {
     }
 }
 
+/// 桥接 AVAudioPlayer / AVSpeechSynthesizer 的播放结束回调到 Pronouncer.finishCurrent()，
+/// 驱动按钮的播放态动画在音频真正读完时才停，而不是猜一个固定时长。
+private final class PlaybackDelegate: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        DispatchQueue.main.async { Pronouncer.finishCurrent() }
+    }
+
+    func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+        DispatchQueue.main.async { Pronouncer.finishCurrent() }
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        DispatchQueue.main.async { Pronouncer.finishCurrent() }
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        DispatchQueue.main.async { Pronouncer.finishCurrent() }
+    }
+}
+
 struct PronounceButton: View {
     let word: String
+    @State private var isPlaying = false
+    @State private var tapPulse = false
 
     var body: some View {
         // 图标按钮必须带文本标签才对 VoiceOver 友好，.labelStyle(.iconOnly) 保留视觉上
         // 只显示图标，但 VoiceOver 仍能读出"发音"。frame 保证达到 44x44 的最小点按区域
         // （生词库/复习卡片里这个按钮经常挨着别的文字，图标本身远小于 44pt）。
         Button("发音", systemImage: "speaker.wave.2.fill") {
-            Pronouncer.speak(word)
+            // 点击瞬间的回弹反馈，跟"是否正在播放"的波纹动效是两回事——不管这次播放
+            // 最终成不成功，点下去那一下都应该有反馈。
+            tapPulse = true
+            isPlaying = true
+            Pronouncer.speak(word) { isPlaying = false }
         }
         .labelStyle(.iconOnly)
+        // 播放时喇叭波纹用系统内置的 variableColor 动效，跟着 isPlaying 自动开关，
+        // 音频读多久动效就播多久（由上面的 delegate 回调驱动），不是瞎猜一个固定时长。
+        .symbolEffect(.variableColor.iterative, isActive: isPlaying)
+        .scaleEffect(tapPulse ? 1.25 : 1.0)
         .foregroundStyle(Theme.accent)
         .frame(minWidth: 44, minHeight: 44)
         .contentShape(.rect)
         .buttonStyle(.plain)
+        .animation(.spring(response: 0.2, dampingFraction: 0.4), value: tapPulse)
+        .onChange(of: tapPulse) { _, newValue in
+            guard newValue else { return }
+            Task {
+                try? await Task.sleep(for: .milliseconds(150))
+                tapPulse = false
+            }
+        }
     }
 }
