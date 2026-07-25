@@ -99,8 +99,18 @@ async def recognize_words_from_image(image_bytes: bytes, mime_type: str = "image
             continue
 
         if result is not None:
-            logger.info("vocabulary_recognize_succeeded", word_count=len(result.words), attempt=attempt)
-            return result.words
+            # 长词表时模型偶尔会把某个词的 word 字段本身也吐成空字符串（不是缺失
+            # 这个 key，是给了个 ""，pydantic 校验挡不住）——加入生词库后这种词
+            # 在列表里就是一整行空白，只有一个描边、点不出内容。这里直接过滤掉，
+            # 这种词本身没有实际信息，展示出来也没意义。
+            words = [w for w in result.words if w.word.strip()]
+            logger.info(
+                "vocabulary_recognize_succeeded",
+                word_count=len(words),
+                dropped_blank=len(result.words) - len(words),
+                attempt=attempt,
+            )
+            return words
 
         # 模型没有调用工具、只回了纯文本（见上面的注释），结构化输出是 None。
         # 重试一次通常就好——是否触发跟具体这次采样有关，不是稳定必现的。

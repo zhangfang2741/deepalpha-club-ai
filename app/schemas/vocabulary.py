@@ -70,7 +70,7 @@ class RecognizeResponse(BaseResponse):
 class VocabularyWordCreate(BaseModel):
     """批量加入生词库时的单个词。"""
 
-    word: str = Field(..., max_length=100)
+    word: str = Field(..., min_length=1, max_length=100)
     phonetic_ipa: str = Field(..., max_length=100)
     part_of_speech: str = Field(..., max_length=20)
     definition_zh: str = Field(..., max_length=500)
