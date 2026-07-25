@@ -1,20 +1,14 @@
+// App/AppConfig.swift
 import Foundation
 
 /// 全局配置：后端地址等。
-///
-/// 默认直连生产环境（Railway）。
-/// 本地联调时把 `baseURL` 改为 `http://localhost:8000`，
-/// 并在 Info.plist 里为 localhost 放开 ATS（工程已配置）。
 enum AppConfig {
-    /// 后端 API 根地址（不含 `/api/v1` 前缀）。
-    static let baseURL = URL(string: "https://web-production-b1596.up.railway.app")!
-
-    /// 所有业务接口的公共前缀。
+    /// 手机和 Mac 同一 WiFi 下，指向 Mac 的局域网 IP（`make dev` 起的后端，监听 0.0.0.0:8000）。
+    /// 这个 IP 是路由器 DHCP 分配的，可能会变——连不上时先在 Mac 终端跑
+    /// `ipconfig getifaddr en0` 确认当前 IP，变了就改这里。
+    static let baseURL = URL(string: "http://192.168.1.7:8000")!
     static let apiPrefix = "/api/v1/vocabulary"
-
-    /// 网络请求超时（秒）。
     static let requestTimeout: TimeInterval = 30
-
-    /// 拍照识别超时（秒）。图像上传和后端推理可能较慢，放宽一些。
+    /// 拍照识别调 LLM，比普通请求慢很多，单独给更长超时。
     static let recognizeTimeout: TimeInterval = 60
 }
