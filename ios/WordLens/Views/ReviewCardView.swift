@@ -27,7 +27,7 @@ struct ReviewCardView: View {
                     cardContent(word)
                 }
             }
-            .navigationTitle("复习")
+            .navigationTitle("首页")
             .navigationBarTitleDisplayMode(.inline)
             .task { await viewModel.loadQueue() }
             .refreshable { await viewModel.loadQueue() }

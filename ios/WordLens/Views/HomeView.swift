@@ -27,7 +27,7 @@ struct HomeView: View {
             .padding(.horizontal)
             .padding(.top)
             .background(Theme.background.ignoresSafeArea())
-            .navigationTitle("首页")
+            .navigationTitle("生词库")
             .task { await refreshAll() }
         }
     }
