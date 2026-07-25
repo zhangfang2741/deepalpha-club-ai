@@ -10,7 +10,7 @@
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,10 +49,15 @@ _MAX_IMAGE_BYTES = 800 * 1024  # 800KB，对齐边缘代理的实际限制
 async def recognize(
     request: Request,
     image: UploadFile = File(...),
+    ocr_words: list[str] = Form(default=[]),
     user: VocabularyUser = Depends(get_current_vocab_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """上传图片，识别出候选英语单词（不落库、不存图）。"""
+    """上传图片，识别出候选英语单词（不落库、不存图）。
+
+    ocr_words 是 iOS 端 Apple Vision 本地 OCR 抠出的候选词，作为参考线索传给视觉
+    LLM，与模型自己看图的识别结果综合取并集，提高召回；为空则退化为纯看图识别。
+    """
     image_bytes = await image.read()
     if not image_bytes:
         raise HTTPException(status_code=422, detail="图片为空")
@@ -60,7 +65,9 @@ async def recognize(
         raise HTTPException(status_code=413, detail="图片过大，请控制在 10MB 以内")
 
     try:
-        recognized = await recognize_words_from_image(image_bytes, image.content_type or "image/jpeg")
+        recognized = await recognize_words_from_image(
+            image_bytes, image.content_type or "image/jpeg", ocr_hint=ocr_words
+        )
     except RecognitionFailedError as exc:
         raise HTTPException(status_code=502, detail="识别失败，请重新拍摄") from exc
 

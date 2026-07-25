@@ -26,11 +26,20 @@ _VISION_MAX_TOKENS = 4096
 # 就能稳定拿到正确的结构化结果了（只在 API 参数里设 tool_choice 不够，还得在
 # prompt 正文里再强调一遍）。
 _RECOGNIZE_PROMPT = (
-    "你是一个英语学习助手。请识别这张图片中出现的所有英语单词（排除纯虚词，如冠词 "
-    "a/an/the、介词、连词），为每个单词提供：国际音标（IPA，不含斜杠）、词性缩写"
-    "（如 n./v./adj./adv.）、简洁的中文释义、词根/词缀简析（如没有明显词根可留空）、"
-    "一个包含该单词的英文例句（附中文翻译）。如果图片中没有可识别的英语单词，返回空列表。"
-    "必须只通过调用提供的工具返回结果，不要输出任何文字说明或 Markdown 格式的回答。"
+    "你是一个英语学习助手。请识别这张图片中出现的所有值得学习的英语单词，并严格遵守：\n"
+    "1. 排除纯虚词（冠词 a/an/the、介词、连词、常见代词）。\n"
+    "2. 排除专有名词（品牌、产品、公司、人名、地名，如 Google、TikTok）——它们不是"
+    "通用词汇，不必收录。\n"
+    "3. 词组处理：用连字符连接的复合词（如 e-commerce、self-sufficient、after-sales、"
+    "live-stream）视为**一个词**整体收录，不要拆开；空格分隔的词组/搭配（如 "
+    "search engine、information source）请拆成其中各自的**实义词**分别收录。\n"
+    "4. 把变形还原成原形（复数→单数、过去式/进行时/第三人称→动词原形），并纠正明显的"
+    "拼写错误。\n"
+    "5. 为每个词提供：国际音标（IPA，不含斜杠）、词性缩写（如 n./v./adj./adv.）、简洁"
+    "的中文释义、词根/词缀简析（如没有明显词根可留空）、一个包含该单词的英文例句"
+    "（附中文翻译）。\n"
+    "6. 如果图片中没有可识别的英语单词，返回空列表。\n"
+    "7. 必须只通过调用提供的工具返回结果，不要输出任何文字说明或 Markdown 格式的回答。"
 )
 
 _MAX_RECOGNIZE_ATTEMPTS = 2
@@ -60,16 +69,43 @@ class _RecognizeResult(BaseModel):
     words: list[RecognizedWord] = Field(default_factory=list)
 
 
+# 混合识别方案的 OCR 提示片段：iOS 端 Apple Vision 已对图片做过本地 OCR（印刷体
+# 又快又准），把抠出的候选词作为「参考线索」拼进 prompt，和 LLM 自己看图的识别结果
+# 综合。两个来源互补——Vision 对印刷体召回稳，LLM 能补 Vision 漏掉的艺术字/小字、
+# 也能纠正 OCR 的拼写噪声。让模型取并集，而不是二选一。
+_OCR_HINT_TEMPLATE = (
+    "\n\n另外，这是设备本地 OCR 对同一张图的识别结果（对印刷体较准，供你参考补充，"
+    "但可能含虚词、专有名词、少量乱码，也可能漏词）：{words}。请把你自己对图片的识别"
+    "与该列表**综合取并集**去重后一并输出，不要因为某个词只在其中一个来源出现就丢弃；"
+    "但上述排除与词组处理规则（虚词、专有名词、乱码噪声、复合词/搭配拆分）对合并后的"
+    "结果同样适用。"
+)
+
+
+def _build_recognize_prompt(ocr_hint: list[str] | None) -> str:
+    """拼装识别 prompt：基础指令 + 可选的本地 OCR 候选词线索。"""
+    hint_words = [w.strip() for w in (ocr_hint or []) if w.strip()]
+    if not hint_words:
+        return _RECOGNIZE_PROMPT
+    return _RECOGNIZE_PROMPT + _OCR_HINT_TEMPLATE.format(words=", ".join(hint_words))
+
+
 class RecognitionFailedError(Exception):
     """图片识别失败（LLM 调用异常）。"""
 
 
-async def recognize_words_from_image(image_bytes: bytes, mime_type: str = "image/jpeg") -> list[RecognizedWord]:
-    """调用 LLM 识别图片中的英语单词，返回候选词列表。
+async def recognize_words_from_image(
+    image_bytes: bytes,
+    mime_type: str = "image/jpeg",
+    ocr_hint: list[str] | None = None,
+) -> list[RecognizedWord]:
+    """调用视觉 LLM 识别图片中的英语单词，返回候选词列表。
 
     Args:
         image_bytes: 图片原始字节
         mime_type: 图片 MIME 类型
+        ocr_hint: iOS 端 Apple Vision 本地 OCR 抠出的候选词，作为参考线索拼进
+            prompt，与 LLM 自己看图的识别结果综合取并集。为空则退化为纯看图识别。
 
     Returns:
         识别出的候选单词列表（可能为空）
@@ -80,7 +116,7 @@ async def recognize_words_from_image(image_bytes: bytes, mime_type: str = "image
     b64_image = base64.b64encode(image_bytes).decode("ascii")
     message = HumanMessage(
         content=[
-            {"type": "text", "text": _RECOGNIZE_PROMPT},
+            {"type": "text", "text": _build_recognize_prompt(ocr_hint)},
             {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64_image}"}},
         ]
     )
