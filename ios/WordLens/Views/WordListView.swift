@@ -53,6 +53,13 @@ struct WordListView: View {
                                     .listRowBackground(Color.clear)
                                     .listRowSeparator(.hidden)
                                     .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                                    // 删除时让行带 0.35s 的滑出+淡出过渡，配合
+                                    // ViewModel 里 withAnimation 一起给用户"按了有反应"
+                                    // 的反馈，而不是数据被硬切走。
+                                    .transition(.asymmetric(
+                                        insertion: .opacity,
+                                        removal: .move(edge: .leading).combined(with: .opacity)
+                                    ))
                                 }
                             } header: {
                                 Text(section.letter)
@@ -65,6 +72,9 @@ struct WordListView: View {
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
+                    // 监听 allWords 的删除触发 List 自带的删除动画；
+                    // 0.35s 的 duration 和 viewRow 上 transition 的 timing 对齐。
+                    .animation(.easeInOut(duration: 0.35), value: viewModel.allWords.map(\.id))
                     .refreshable {
                         if let onRefresh {
                             await onRefresh()
@@ -111,6 +121,25 @@ struct WordListView: View {
             }
         }
         .toolbar {
+            // 选择模式下左侧给"全选"按钮，三态：未全选→全选；全选→全不选；
+            // 部分选→全选（最常见的 UX，避免点了全选还得再点一次反选）。
+            if viewModel.isSelecting {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        viewModel.toggleSelectAll()
+                    } label: {
+                        if viewModel.isAllSelected {
+                            // 全选状态下显示"全不选"，语义更明确
+                            Text("全不选").fontWeight(.semibold)
+                        } else if viewModel.isPartiallySelected {
+                            Text("全选").fontWeight(.semibold)
+                        } else {
+                            Text("全选")
+                        }
+                    }
+                    .disabled(viewModel.words.isEmpty)
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button(viewModel.isSelecting ? "完成" : "选择") {
                     viewModel.toggleSelecting()
