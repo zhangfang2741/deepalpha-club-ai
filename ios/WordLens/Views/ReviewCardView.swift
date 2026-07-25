@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ReviewCardView: View {
     @StateObject private var viewModel = ReviewViewModel()
+    @EnvironmentObject var nav: AppNavigationState
     @State private var showPronunciationSettings = false
 
     var body: some View {
@@ -53,6 +54,9 @@ struct ReviewCardView: View {
                 PronunciationSettingsView()
             }
             .task { await viewModel.loadQueueIfNeeded() }
+            .onChange(of: nav.vocabularyDataVersion) { _, _ in
+                Task { await viewModel.loadQueue() }
+            }
             .refreshable { await viewModel.loadQueue() }
         }
     }

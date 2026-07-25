@@ -13,7 +13,7 @@ final class CameraViewModel: ObservableObject {
     /// 识别中展示的扫描态背景图，跟压缩后实际上传的 Data 无关，只用于 UI 反馈。
     @Published var capturedImage: UIImage?
 
-    func recognize(imageData: Data) async {
+    func recognize(imageData: Data, ocrWords: [String]? = nil) async {
         isRecognizing = true
         errorMessage = nil
         // 识别是本地 OCR + 视觉 LLM（还带重试）的耗时操作，等待期间如果屏幕自动
@@ -48,8 +48,13 @@ final class CameraViewModel: ObservableObject {
             // 先本地 Apple Vision OCR（印刷体又快又准、免流量），把抠出的候选词连同
             // 图片一起发给后端：视觉 LLM 既自己看图识别、又参考 OCR 列表，综合取并集，
             // 两个来源互补以提高召回。OCR 抠不到词时就退化为纯看图识别。
-            let ocrWords = await TextRecognizer.recognizeWords(from: imageData)
-            let resp = try await WordService.recognize(imageData: imageData, ocrWords: ocrWords)
+            let localOCRWords: [String]
+            if let ocrWords {
+                localOCRWords = ocrWords
+            } else {
+                localOCRWords = await TextRecognizer.recognizeWords(from: imageData)
+            }
+            let resp = try await WordService.recognize(imageData: imageData, ocrWords: localOCRWords)
             candidates = resp.candidates
             // 已在生词库中的默认不勾选，其余默认全选
             selectedWords = Set(resp.candidates.filter { !$0.alreadyInLibrary }.map { $0.word })

@@ -23,6 +23,8 @@ struct WordListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            selectionBar
+
             if viewModel.isLoading && viewModel.words.isEmpty {
                 // 只在完全没数据时显示占位 loading；已有数据时的后台刷新
                 // 不能让列表内容被替换掉，否则从详情页返回时滚动位置会被重置到顶部。
@@ -113,43 +115,53 @@ struct WordListView: View {
                         titleVisibility: .visible
                     ) {
                         Button("删除", role: .destructive) {
-                            Task { await viewModel.deleteSelected() }
+                            Task {
+                                nav.beginBlockingOperation("正在删除生词...")
+                                defer { nav.endBlockingOperation() }
+                                if await viewModel.deleteSelected() {
+                                    nav.notifyVocabularyDataChanged()
+                                }
+                            }
                         }
                         Button("取消", role: .cancel) {}
                     }
+                    .disabled(viewModel.isDeletingSelected)
                 }
-            }
-        }
-        .toolbar {
-            // 选择模式下左侧给"全选"按钮，三态：未全选→全选；全选→全不选；
-            // 部分选→全选（最常见的 UX，避免点了全选还得再点一次反选）。
-            if viewModel.isSelecting {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        viewModel.toggleSelectAll()
-                    } label: {
-                        if viewModel.isAllSelected {
-                            // 全选状态下显示"全不选"，语义更明确
-                            Text("全不选").fontWeight(.semibold)
-                        } else if viewModel.isPartiallySelected {
-                            Text("全选").fontWeight(.semibold)
-                        } else {
-                            Text("全选")
-                        }
-                    }
-                    .disabled(viewModel.words.isEmpty)
-                }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(viewModel.isSelecting ? "完成" : "选择") {
-                    viewModel.toggleSelecting()
-                }
-                .disabled(viewModel.words.isEmpty)
             }
         }
         .navigationDestination(item: $selectedWord) { word in
             WordDetailView(word: word, listViewModel: viewModel)
         }
+    }
+
+    private var selectionBar: some View {
+        HStack {
+            if viewModel.isSelecting {
+                Button {
+                    viewModel.toggleSelectAll()
+                } label: {
+                    Text(selectAllTitle)
+                        .font(.subheadline.weight(viewModel.isAllSelected ? .semibold : .regular))
+                }
+                .disabled(viewModel.words.isEmpty)
+            }
+
+            Spacer()
+
+            Button(viewModel.isSelecting ? "完成" : "选择") {
+                viewModel.toggleSelecting()
+            }
+            .font(.subheadline.weight(.semibold))
+            .disabled(viewModel.words.isEmpty)
+        }
+        .frame(height: 32)
+    }
+
+    private var selectAllTitle: String {
+        if viewModel.isAllSelected {
+            return "全不选"
+        }
+        return "全选"
     }
 
     private func scrollToHighlightedIfNeeded(proxy: ScrollViewProxy) {

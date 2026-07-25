@@ -9,6 +9,8 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 16) {
+                statsRow
+
                 TextField("搜索单词", text: $listVM.searchQuery)
                     .padding(10)
                     .background(Theme.surface)
@@ -26,17 +28,19 @@ struct HomeView: View {
                 .background(Theme.surface)
                 .clipShape(.rect(cornerRadius: 12))
 
-                statsRow
-
                 // 生词库列表按字母分 Section 展示，需要用 List 自己独立滚动，
                 // 不能再跟上面的卡片一起塞进一个大 ScrollView。
                 WordListView(viewModel: listVM, onRefresh: refreshAll)
             }
             .padding(.horizontal)
             .padding(.top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Theme.background.ignoresSafeArea())
             .navigationTitle("生词库")
             .task { await refreshAll() }
+            .onChange(of: nav.vocabularyDataVersion) { _, _ in
+                Task { await refreshAll() }
+            }
             .onChange(of: nav.highlightedWordIDs) { _, ids in
                 guard !ids.isEmpty else { return }
                 // 从拍照页跳过来时新词肯定是"不认识"状态，之前如果筛选停在别的状态

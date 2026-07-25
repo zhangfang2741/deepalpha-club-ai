@@ -115,7 +115,19 @@ actor APIClient {
             // 会用文件后缀识别 .bin——明确指定 Content-Type 避免歧义。
             let (data, response) = try await session.upload(for: req, fromFile: tempURL)
             try? FileManager.default.removeItem(at: tempURL)
+            if let http = response as? HTTPURLResponse,
+               (200..<300).contains(http.statusCode),
+               http.value(forHTTPHeaderField: "Content-Type")?.contains("application/x-ndjson") == true {
+                do {
+                    return try NDJSONStreamDecoder.decode(T.self, from: data)
+                } catch let error as NDJSONStreamDecodeError {
+                    throw APIError(message: error.errorDescription ?? "识别失败，请重试", statusCode: nil)
+                }
+            }
             return try Self.process(data: data, response: response, sentToken: token)
+        } catch let apiError as APIError {
+            try? FileManager.default.removeItem(at: tempURL)
+            throw apiError
         } catch {
             try? FileManager.default.removeItem(at: tempURL)
             // URLSession 把 -1005 这类底层错误包装成 URLError，统一映射成对用户

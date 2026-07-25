@@ -69,15 +69,19 @@ struct CameraCaptureView: View {
                         // （尤其真机原图有几千万像素）。先立刻显示识别中状态，压缩本身丢到
                         // Task.detached 的后台线程池执行，避免阻塞 UI。
                         viewModel.isRecognizing = true
-                        let (thumbnail, data) = await Task.detached(priority: .userInitiated) {
-                            (Self.resizedImage(from: image, maxDimension: 600), Self.compressedJPEGData(from: image))
+                        let (thumbnail, data, ocrWords) = await Task.detached(priority: .userInitiated) {
+                            (
+                                Self.resizedImage(from: image, maxDimension: 600),
+                                Self.compressedJPEGData(from: image),
+                                await TextRecognizer.recognizeWords(from: image)
+                            )
                         }.value
                         viewModel.capturedImage = thumbnail
                         guard let data else {
                             viewModel.isRecognizing = false
                             return
                         }
-                        await viewModel.recognize(imageData: data)
+                        await viewModel.recognize(imageData: data, ocrWords: ocrWords)
                     }
                 }
                 .ignoresSafeArea()
@@ -91,16 +95,20 @@ struct CameraCaptureView: View {
                         return
                     }
                     photoPickerItem = nil
-                    let (thumbnail, data) = await Task.detached(priority: .userInitiated) { () -> (UIImage?, Data?) in
-                        guard let image = UIImage(data: rawData) else { return (nil, nil) }
-                        return (Self.resizedImage(from: image, maxDimension: 600), Self.compressedJPEGData(from: image))
+                    let (thumbnail, data, ocrWords) = await Task.detached(priority: .userInitiated) { () -> (UIImage?, Data?, [String]) in
+                        guard let image = UIImage(data: rawData) else { return (nil, nil, []) }
+                        return (
+                            Self.resizedImage(from: image, maxDimension: 600),
+                            Self.compressedJPEGData(from: image),
+                            await TextRecognizer.recognizeWords(from: image)
+                        )
                     }.value
                     viewModel.capturedImage = thumbnail
                     guard let data else {
                         viewModel.isRecognizing = false
                         return
                     }
-                    await viewModel.recognize(imageData: data)
+                    await viewModel.recognize(imageData: data, ocrWords: ocrWords)
                 }
             }
             .sheet(isPresented: $viewModel.showResult) {
