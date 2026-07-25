@@ -38,23 +38,24 @@ final class CameraViewModel: ObservableObject {
         }
     }
 
-    func addSelectedToLibrary() async -> (added: Int, skipped: [String]) {
+    /// 返回新建的单词行（而不只是数量），调用方要用 id 去生词库页做高亮定位。
+    func addSelectedToLibrary() async -> (added: [VocabularyWord], skipped: [String]) {
         let toAdd = candidates
             .filter { selectedWords.contains($0.word) }
             .map { VocabularyWordCreate(word: $0.word, phoneticIpa: $0.phoneticIpa,
                                         partOfSpeech: $0.partOfSpeech, definitionZh: $0.definitionZh,
                                         etymology: $0.etymology, exampleSentence: $0.exampleSentence) }
-        guard !toAdd.isEmpty else { return (0, []) }
+        guard !toAdd.isEmpty else { return ([], []) }
         do {
             let resp = try await WordService.addWordsBatch(toAdd)
             reset()
-            return (resp.created.count, resp.skippedExisting)
+            return (resp.created, resp.skippedExisting)
         } catch let error as APIError {
             errorMessage = error.message
-            return (0, [])
+            return ([], [])
         } catch {
             errorMessage = "加入生词库失败"
-            return (0, [])
+            return ([], [])
         }
     }
 

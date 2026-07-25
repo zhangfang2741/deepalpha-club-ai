@@ -3,6 +3,7 @@ import SwiftUI
 
 struct HomeView: View {
     @StateObject private var listVM = WordListViewModel()
+    @EnvironmentObject var nav: AppNavigationState
     @State private var reviewDueCount = 0
 
     var body: some View {
@@ -27,8 +28,8 @@ struct HomeView: View {
 
                 statsRow
 
-                // 生词库自身带字母索引条，需要用 List 独立滚动，所以不能再跟上面的
-                // 卡片一起塞进一个大 ScrollView——那样索引条拖动定位的是整页而不是词表。
+                // 生词库列表按字母分 Section 展示，需要用 List 自己独立滚动，
+                // 不能再跟上面的卡片一起塞进一个大 ScrollView。
                 WordListView(viewModel: listVM, onRefresh: refreshAll)
             }
             .padding(.horizontal)
@@ -36,6 +37,18 @@ struct HomeView: View {
             .background(Theme.background.ignoresSafeArea())
             .navigationTitle("生词库")
             .task { await refreshAll() }
+            .onChange(of: nav.highlightedWordIDs) { _, ids in
+                guard !ids.isEmpty else { return }
+                // 从拍照页跳过来时新词肯定是"不认识"状态，之前如果筛选停在别的状态
+                // 上会把新词全部挡住，先清掉筛选保证能看见；listVM 是这个 view 自己
+                // 的实例，跟拍照页那边完全独立，得重新拉一次才能看到刚加的词。
+                listVM.filterStatus = nil
+                Task {
+                    await refreshAll()
+                    try? await Task.sleep(for: .seconds(2.5))
+                    withAnimation { nav.clearHighlight() }
+                }
+            }
         }
     }
 

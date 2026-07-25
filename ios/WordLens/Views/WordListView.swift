@@ -3,9 +3,11 @@ import SwiftUI
 
 struct WordListView: View {
     @ObservedObject var viewModel: WordListViewModel
+    @EnvironmentObject var nav: AppNavigationState
     var onRefresh: (() async -> Void)?
 
-    /// 按单词首字母分组，供右侧字母索引条定位（类似系统通讯录）。非字母开头统一归到 "#"。
+    /// 按单词首字母分组，用 Section 标题做 A/B/C 分组展示（不再提供右侧可拖动的
+    /// 跳转条，那个反而挡内容）。非字母开头统一归到 "#"。
     private var sections: [(letter: String, words: [VocabularyWord])] {
         let grouped = Dictionary(grouping: viewModel.words) { indexLetter(for: $0.word) }
         return grouped.keys.sorted().map { letter in
@@ -28,84 +30,55 @@ struct WordListView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollViewReader { proxy in
-                    ZStack(alignment: .trailing) {
-                        List {
-                            ForEach(sections, id: \.letter) { section in
-                                Section {
-                                    ForEach(section.words) { word in
-                                        NavigationLink(destination: WordDetailView(word: word, listViewModel: viewModel)) {
-                                            wordRow(word)
-                                        }
-                                        .buttonStyle(.plain)
-                                        .listRowBackground(Color.clear)
-                                        .listRowSeparator(.hidden)
-                                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                    List {
+                        ForEach(sections, id: \.letter) { section in
+                            Section {
+                                ForEach(section.words) { word in
+                                    NavigationLink(destination: WordDetailView(word: word, listViewModel: viewModel)) {
+                                        wordRow(word)
                                     }
-                                } header: {
-                                    Text(section.letter)
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(Theme.textSecondary)
-                                        .textCase(nil)
+                                    .buttonStyle(.plain)
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
+                                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                                 }
-                                .id(section.letter)
+                            } header: {
+                                Text(section.letter)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Theme.textSecondary)
+                                    .textCase(nil)
                             }
+                            .id(section.letter)
                         }
-                        .listStyle(.plain)
-                        .scrollContentBackground(.hidden)
-                        // 右侧字母索引条对 VoiceOver 隐藏（连续拖动手势做不出有意义的
-                        // 无障碍交互），改用 Rotor 让 VoiceOver 用户也能快速跳转到某个
-                        // 字母分组，功能上补齐而不是单纯砍掉。
-                        .accessibilityRotor("按字母跳转") {
-                            ForEach(sections, id: \.letter) { section in
-                                AccessibilityRotorEntry(section.letter, id: section.letter)
-                            }
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .refreshable {
+                        if let onRefresh {
+                            await onRefresh()
+                        } else {
+                            await viewModel.load()
                         }
-                        .refreshable {
-                            if let onRefresh {
-                                await onRefresh()
-                            } else {
-                                await viewModel.load()
-                            }
-                        }
-                        .padding(.trailing, 18)
-
-                        indexBar(proxy: proxy)
+                    }
+                    // 拍照识别加入生词库后会跳到这个 tab 并高亮新词，滚到新词所在的
+                    // 字母分组，不然高亮的词可能在屏幕外，用户根本看不到高亮在哪。
+                    // allWords 的变化在 highlightedWordIDs 之后才到（跳转时先设置高亮，
+                    // 列表要另外刷新才会真的包含新词），两个都要监听，谁后到用谁触发。
+                    .onChange(of: nav.highlightedWordIDs) { _, _ in
+                        scrollToHighlightedIfNeeded(proxy: proxy)
+                    }
+                    .onChange(of: viewModel.allWords.count) { _, _ in
+                        scrollToHighlightedIfNeeded(proxy: proxy)
                     }
                 }
             }
         }
     }
 
-    /// 右侧字母索引条：拖动时按手指纵向位置换算成字母，滚动列表到对应分组。
-    /// 对 VoiceOver 隐藏——这种连续拖动手势做不出有意义的无障碍交互；跳转能力
-    /// 改由上面 List 挂的 accessibilityRotor("按字母跳转") 提供。
-    private func indexBar(proxy: ScrollViewProxy) -> some View {
-        let letters = sections.map(\.letter)
-        return GeometryReader { geo in
-            VStack(spacing: 0) {
-                ForEach(letters, id: \.self) { letter in
-                    Text(letter)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Theme.accent)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-            .frame(width: geo.size.width, height: geo.size.height)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        guard !letters.isEmpty else { return }
-                        let rowHeight = geo.size.height / CGFloat(letters.count)
-                        let index = min(letters.count - 1, max(0, Int(value.location.y / rowHeight)))
-                        proxy.scrollTo(letters[index], anchor: .top)
-                    }
-            )
-        }
-        .frame(width: 18)
-        .frame(maxHeight: .infinity)
-        .padding(.vertical, 8)
-        .accessibilityHidden(true)
+    private func scrollToHighlightedIfNeeded(proxy: ScrollViewProxy) {
+        guard let firstID = nav.highlightedWordIDs.first,
+              let word = viewModel.words.first(where: { $0.id == firstID }) else { return }
+        withAnimation { proxy.scrollTo(indexLetter(for: word.word), anchor: .top) }
     }
 
     private func indexLetter(for word: String) -> String {
@@ -114,7 +87,8 @@ struct WordListView: View {
     }
 
     private func wordRow(_ word: VocabularyWord) -> some View {
-        HStack {
+        let isHighlighted = nav.highlightedWordIDs.contains(word.id)
+        return HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(word.word).fontWeight(.semibold).foregroundStyle(Theme.textPrimary)
                 Text("/\(word.phoneticIpa)/ \(word.definitionZh)")
@@ -126,8 +100,14 @@ struct WordListView: View {
             statusDot(word.status)
         }
         .padding()
-        .background(Theme.surface)
+        .background(isHighlighted ? Theme.accent.opacity(0.25) : Theme.surface)
         .clipShape(.rect(cornerRadius: 10))
+        .overlay {
+            if isHighlighted {
+                RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.accent, lineWidth: 1.5)
+            }
+        }
+        .animation(.easeOut(duration: 0.6), value: isHighlighted)
     }
 
     private func statusDot(_ status: String) -> some View {

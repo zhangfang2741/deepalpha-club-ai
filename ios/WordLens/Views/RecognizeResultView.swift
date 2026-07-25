@@ -3,6 +3,7 @@ import SwiftUI
 
 struct RecognizeResultView: View {
     @ObservedObject var viewModel: CameraViewModel
+    @EnvironmentObject var nav: AppNavigationState
     @Environment(\.dismiss) private var dismiss
     @State private var isSubmitting = false
     @State private var resultMessage: String?
@@ -53,9 +54,14 @@ struct RecognizeResultView: View {
                             isSubmitting = true
                             let (added, skipped) = await viewModel.addSelectedToLibrary()
                             isSubmitting = false
-                            if added > 0 || !skipped.isEmpty {
-                                resultMessage = "加入 \(added) 个单词" + (skipped.isEmpty ? "" : "，\(skipped.count) 个已存在")
+                            if !added.isEmpty || !skipped.isEmpty {
+                                resultMessage = "加入 \(added.count) 个单词" + (skipped.isEmpty ? "" : "，\(skipped.count) 个已存在")
                                 try? await Task.sleep(for: .seconds(1.2))
+                                if !added.isEmpty {
+                                    // 跳到生词库 tab 并高亮刚加入的词，而不是留在拍照页——
+                                    // 加完词之后更想看到"加进去了什么"，不是继续对着相机页发呆。
+                                    nav.showNewlyAddedWords(added.map(\.id))
+                                }
                                 dismiss()
                             }
                         }
