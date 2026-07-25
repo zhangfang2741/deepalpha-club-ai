@@ -31,20 +31,20 @@ struct RegisterView: View {
                             .autocorrectionDisabled()
                             .padding()
                             .background(Theme.surface)
-                            .foregroundColor(Theme.textPrimary)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .foregroundStyle(Theme.textPrimary)
+                            .clipShape(.rect(cornerRadius: 10))
 
                         SecureField("密码", text: $password)
                             .padding()
                             .background(Theme.surface)
-                            .foregroundColor(Theme.textPrimary)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .foregroundStyle(Theme.textPrimary)
+                            .clipShape(.rect(cornerRadius: 10))
 
                         SecureField("确认密码", text: $confirmPassword)
                             .padding()
                             .background(Theme.surface)
-                            .foregroundColor(Theme.textPrimary)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .foregroundStyle(Theme.textPrimary)
+                            .clipShape(.rect(cornerRadius: 10))
 
                         VStack(alignment: .leading, spacing: 6) {
                             checklistRow("至少 8 个字符", longEnough)
@@ -59,7 +59,7 @@ struct RegisterView: View {
                         if let errorMessage = auth.errorMessage {
                             Text(errorMessage)
                                 .font(.footnote)
-                                .foregroundColor(Theme.unknown)
+                                .foregroundStyle(Theme.unknown)
                         }
 
                         Button {
@@ -75,8 +75,8 @@ struct RegisterView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
                             .background(canSubmit ? Theme.accent : Theme.surfaceAlt)
-                            .foregroundColor(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .foregroundStyle(.white)
+                            .clipShape(.rect(cornerRadius: 12))
                         }
                         .disabled(!canSubmit || auth.isLoading)
                     }
@@ -90,11 +90,16 @@ struct RegisterView: View {
 
     private func checklistRow(_ text: String, _ satisfied: Bool) -> some View {
         HStack(spacing: 6) {
+            // 图标是文字状态的视觉复述，对 VoiceOver 隐藏，避免"勾选，至少8个字符"这种
+            // 冗余读法；改成把满足状态并进这一行的组合 label 里一次性读出。
             Image(systemName: satisfied ? "checkmark.circle.fill" : "circle")
-                .foregroundColor(satisfied ? Theme.known : Theme.textSecondary)
+                .foregroundStyle(satisfied ? Theme.known : Theme.textSecondary)
+                .accessibilityHidden(true)
             Text(text)
                 .font(.caption)
-                .foregroundColor(Theme.textSecondary)
+                .foregroundStyle(Theme.textSecondary)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(text)，\(satisfied ? "已满足" : "未满足")")
     }
 }

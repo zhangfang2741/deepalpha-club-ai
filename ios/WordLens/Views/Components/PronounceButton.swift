@@ -40,13 +40,15 @@ struct PronounceButton: View {
     let word: String
 
     var body: some View {
-        Button {
-            speak()
-        } label: {
-            Image(systemName: "speaker.wave.2.fill")
-                .foregroundColor(Theme.accent)
-        }
-        .buttonStyle(.plain)
+        // 图标按钮必须带文本标签才对 VoiceOver 友好，.labelStyle(.iconOnly) 保留视觉上
+        // 只显示图标，但 VoiceOver 仍能读出"发音"。frame 保证达到 44x44 的最小点按区域
+        // （生词库/复习卡片里这个按钮经常挨着别的文字，图标本身远小于 44pt）。
+        Button("发音", systemImage: "speaker.wave.2.fill", action: speak)
+            .labelStyle(.iconOnly)
+            .foregroundStyle(Theme.accent)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(.rect)
+            .buttonStyle(.plain)
     }
 
     private func speak() {

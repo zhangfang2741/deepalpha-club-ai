@@ -13,12 +13,12 @@ struct WordDetailView: View {
             VStack(spacing: 20) {
                 VStack(spacing: 8) {
                     HStack {
-                        Text(word.word).font(.largeTitle.bold()).foregroundColor(Theme.textPrimary)
+                        Text(word.word).font(.largeTitle.bold()).foregroundStyle(Theme.textPrimary)
                         PronounceButton(word: word.word)
                     }
-                    Text("/\(word.phoneticIpa)/").foregroundColor(Theme.textSecondary)
+                    Text("/\(word.phoneticIpa)/").foregroundStyle(Theme.textSecondary)
                     Text("\(word.partOfSpeech) \(word.definitionZh)")
-                        .foregroundColor(Theme.textPrimary)
+                        .foregroundStyle(Theme.textPrimary)
                         .multilineTextAlignment(.center)
                 }
                 .padding()
@@ -31,7 +31,7 @@ struct WordDetailView: View {
                 }
                 .padding()
                 .background(Theme.surface)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(.rect(cornerRadius: 12))
 
                 Spacer()
 
@@ -42,8 +42,8 @@ struct WordDetailView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(Theme.surface)
-                        .foregroundColor(Theme.unknown)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(Theme.unknown)
+                        .clipShape(.rect(cornerRadius: 12))
                 }
             }
             .padding()
@@ -96,9 +96,9 @@ struct WordDetailView: View {
 
     private func detailRow(_ label: String, _ value: String) -> some View {
         HStack {
-            Text(label).foregroundColor(Theme.textSecondary)
+            Text(label).foregroundStyle(Theme.textSecondary)
             Spacer()
-            Text(value).foregroundColor(Theme.textPrimary)
+            Text(value).foregroundStyle(Theme.textPrimary)
         }
         .font(.subheadline)
     }

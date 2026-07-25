@@ -18,10 +18,10 @@ struct LoginView: View {
                 VStack(spacing: 8) {
                     Text("鸟语")
                         .font(.system(size: 32, weight: .bold))
-                        .foregroundColor(Theme.textPrimary)
+                        .foregroundStyle(Theme.textPrimary)
                     Text("拍照背单词")
                         .font(.subheadline)
-                        .foregroundColor(Theme.textSecondary)
+                        .foregroundStyle(Theme.textSecondary)
                 }
 
                 VStack(spacing: 12) {
@@ -34,7 +34,7 @@ struct LoginView: View {
                 if let errorMessage = auth.errorMessage {
                     Text(errorMessage)
                         .font(.footnote)
-                        .foregroundColor(Theme.unknown)
+                        .foregroundStyle(Theme.unknown)
                 }
 
                 Button {
@@ -48,14 +48,14 @@ struct LoginView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(Theme.accent)
-                    .foregroundColor(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .foregroundStyle(.white)
+                    .clipShape(.rect(cornerRadius: 12))
                 }
                 .disabled(auth.isLoading)
 
                 Button("还没有账号？去注册") { showRegister = true }
                     .font(.footnote)
-                    .foregroundColor(Theme.textSecondary)
+                    .foregroundStyle(Theme.textSecondary)
 
                 Spacer()
                 Spacer()
@@ -72,15 +72,15 @@ struct LoginView: View {
             .autocorrectionDisabled()
             .padding()
             .background(Theme.surface)
-            .foregroundColor(Theme.textPrimary)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .foregroundStyle(Theme.textPrimary)
+            .clipShape(.rect(cornerRadius: 10))
     }
 
     private func secureField(_ placeholder: String, text: Binding<String>) -> some View {
         SecureField(placeholder, text: text)
             .padding()
             .background(Theme.surface)
-            .foregroundColor(Theme.textPrimary)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .foregroundStyle(Theme.textPrimary)
+            .clipShape(.rect(cornerRadius: 10))
     }
 }

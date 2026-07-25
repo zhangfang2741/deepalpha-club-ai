@@ -11,15 +11,15 @@ struct WordListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("生词库").font(.headline).foregroundColor(Theme.textPrimary)
+                Text("生词库").font(.headline).foregroundStyle(Theme.textPrimary)
                 Spacer()
             }
 
             TextField("搜索单词", text: $viewModel.searchQuery)
                 .padding(10)
                 .background(Theme.surface)
-                .foregroundColor(Theme.textPrimary)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .foregroundStyle(Theme.textPrimary)
+                .clipShape(.rect(cornerRadius: 8))
                 .onSubmit { Task { await viewModel.load() } }
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -33,7 +33,11 @@ struct WordListView: View {
             if viewModel.isLoading {
                 ProgressView().tint(Theme.accent).frame(maxWidth: .infinity)
             } else if viewModel.words.isEmpty {
-                Text("暂无生词，去拍照识别一些吧").font(.caption).foregroundColor(Theme.textSecondary)
+                ContentUnavailableView(
+                    "暂无生词",
+                    systemImage: "book.closed",
+                    description: Text("去拍照识别一些新单词吧")
+                )
             } else {
                 ForEach(viewModel.words) { word in
                     NavigationLink(destination: WordDetailView(word: word, listViewModel: viewModel)) {
@@ -55,7 +59,7 @@ struct WordListView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(viewModel.filterStatus == value ? Theme.accent : Theme.surface)
-                .foregroundColor(viewModel.filterStatus == value ? .white : Theme.textSecondary)
+                .foregroundStyle(viewModel.filterStatus == value ? .white : Theme.textSecondary)
                 .clipShape(Capsule())
         }
     }
@@ -63,10 +67,10 @@ struct WordListView: View {
     private func wordRow(_ word: VocabularyWord) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text(word.word).fontWeight(.semibold).foregroundColor(Theme.textPrimary)
+                Text(word.word).fontWeight(.semibold).foregroundStyle(Theme.textPrimary)
                 Text("/\(word.phoneticIpa)/ \(word.definitionZh)")
                     .font(.caption)
-                    .foregroundColor(Theme.textSecondary)
+                    .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
             }
             Spacer()
@@ -74,7 +78,7 @@ struct WordListView: View {
         }
         .padding()
         .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .clipShape(.rect(cornerRadius: 10))
     }
 
     private func statusDot(_ status: String) -> some View {
@@ -87,7 +91,7 @@ struct WordListView: View {
         }()
         return HStack(spacing: 4) {
             Circle().fill(color).frame(width: 8, height: 8)
-            Text(label).font(.caption2).foregroundColor(Theme.textSecondary)
+            Text(label).font(.caption2).foregroundStyle(Theme.textSecondary)
         }
     }
 }

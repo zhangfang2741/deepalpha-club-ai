@@ -12,13 +12,11 @@ struct RecognizeResultView: View {
             ZStack {
                 Theme.background.ignoresSafeArea()
                 if viewModel.candidates.isEmpty {
-                    VStack(spacing: 12) {
-                        Text("未识别到英语单词")
-                            .foregroundColor(Theme.textSecondary)
-                        Text("请重新拍摄，确保文字清晰")
-                            .font(.caption)
-                            .foregroundColor(Theme.textSecondary)
-                    }
+                    ContentUnavailableView(
+                        "未识别到英语单词",
+                        systemImage: "text.viewfinder",
+                        description: Text("请重新拍摄，确保文字清晰")
+                    )
                 } else {
                     List(viewModel.candidates) { candidate in
                         candidateRow(candidate)
@@ -32,8 +30,8 @@ struct RecognizeResultView: View {
                         Text(resultMessage)
                             .padding()
                             .background(Theme.surfaceAlt)
-                            .foregroundColor(Theme.textPrimary)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .foregroundStyle(Theme.textPrimary)
+                            .clipShape(.rect(cornerRadius: 10))
                             .padding(.bottom, 100)
                     }
                 }
@@ -70,8 +68,8 @@ struct RecognizeResultView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(viewModel.selectedWords.isEmpty ? Theme.surfaceAlt : Theme.accent)
-                        .foregroundColor(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.white)
+                        .clipShape(.rect(cornerRadius: 12))
                     }
                     .disabled(viewModel.selectedWords.isEmpty || isSubmitting)
                     .padding()
@@ -82,14 +80,17 @@ struct RecognizeResultView: View {
     }
 
     private func candidateRow(_ candidate: RecognizedWord) -> some View {
-        HStack {
-            Button {
+        let isSelected = viewModel.selectedWords.contains(candidate.word)
+        return HStack {
+            Button("加入生词库", systemImage: isSelected ? "checkmark.square.fill" : "square") {
                 viewModel.toggle(candidate.word)
-            } label: {
-                Image(systemName: viewModel.selectedWords.contains(candidate.word) ? "checkmark.square.fill" : "square")
-                    .foregroundColor(viewModel.selectedWords.contains(candidate.word) ? Theme.accent : Theme.textSecondary)
             }
+            .labelStyle(.iconOnly)
+            .foregroundStyle(isSelected ? Theme.accent : Theme.textSecondary)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(.rect)
             .buttonStyle(.plain)
+            .accessibilityValue(isSelected ? "已选中" : "未选中")
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
@@ -97,20 +98,20 @@ struct RecognizeResultView: View {
                     PronounceButton(word: candidate.word)
                     Text("/\(candidate.phoneticIpa)/")
                         .font(.caption)
-                        .foregroundColor(Theme.textSecondary)
+                        .foregroundStyle(Theme.textSecondary)
                 }
                 Text("\(candidate.partOfSpeech) \(candidate.definitionZh)")
                     .font(.caption)
-                    .foregroundColor(Theme.textSecondary)
+                    .foregroundStyle(Theme.textSecondary)
                 if candidate.alreadyInLibrary {
                     Text("已在生词库中")
                         .font(.caption2)
-                        .foregroundColor(Theme.textSecondary)
+                        .foregroundStyle(Theme.textSecondary)
                 }
             }
             Spacer()
         }
         .listRowBackground(Theme.surface)
-        .foregroundColor(Theme.textPrimary)
+        .foregroundStyle(Theme.textPrimary)
     }
 }

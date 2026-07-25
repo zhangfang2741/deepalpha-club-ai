@@ -18,19 +18,19 @@ struct CameraCaptureView: View {
                     if viewModel.isRecognizing {
                         ProgressView("正在识别单词…")
                             .tint(Theme.accent)
-                            .foregroundColor(Theme.textPrimary)
+                            .foregroundStyle(Theme.textPrimary)
                     } else {
                         Image(systemName: "camera.viewfinder")
                             .font(.system(size: 64))
-                            .foregroundColor(Theme.textSecondary)
+                            .foregroundStyle(Theme.textSecondary)
                         Text("拍摄或选择含英语单词的图片")
-                            .foregroundColor(Theme.textSecondary)
+                            .foregroundStyle(Theme.textSecondary)
                     }
 
                     if let errorMessage = viewModel.errorMessage {
                         Text(errorMessage)
                             .font(.footnote)
-                            .foregroundColor(Theme.unknown)
+                            .foregroundStyle(Theme.unknown)
                     }
 
                     VStack(spacing: 12) {
@@ -41,8 +41,8 @@ struct CameraCaptureView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
                                 .background(Theme.accent)
-                                .foregroundColor(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .foregroundStyle(.white)
+                                .clipShape(.rect(cornerRadius: 12))
                         }
                         .disabled(viewModel.isRecognizing)
 
@@ -51,8 +51,8 @@ struct CameraCaptureView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
                                 .background(Theme.surface)
-                                .foregroundColor(Theme.textPrimary)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .foregroundStyle(Theme.textPrimary)
+                                .clipShape(.rect(cornerRadius: 12))
                         }
                         .disabled(viewModel.isRecognizing)
                     }

@@ -14,12 +14,12 @@ struct HomeView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("今日待复习：\(reviewDueCount) 个")
                                 .font(.headline)
-                                .foregroundColor(Theme.textPrimary)
+                                .foregroundStyle(Theme.textPrimary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
                         .background(Theme.surface)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .clipShape(.rect(cornerRadius: 12))
 
                         statsRow
 
@@ -34,6 +34,7 @@ struct HomeView: View {
                     NavigationLink(destination: SettingsView()) {
                         Image(systemName: "gearshape")
                     }
+                    .accessibilityLabel("设置")
                 }
             }
             .task {
@@ -63,14 +64,14 @@ struct HomeView: View {
         VStack(spacing: 4) {
             Text("\(count)")
                 .font(.title2.bold())
-                .foregroundColor(color)
+                .foregroundStyle(color)
             Text(label)
                 .font(.caption)
-                .foregroundColor(Theme.textSecondary)
+                .foregroundStyle(Theme.textSecondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
         .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .clipShape(.rect(cornerRadius: 10))
     }
 }
