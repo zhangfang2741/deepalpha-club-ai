@@ -4,7 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var auth: AuthViewModel
     @StateObject private var viewModel = SettingsViewModel()
-    @State private var voiceGender: PronunciationVoiceGender = PronunciationVoiceGender.current
+    @State private var accent: PronunciationAccent = PronunciationAccent.current
 
     @State private var oldPassword = ""
     @State private var newPassword = ""
@@ -34,14 +34,14 @@ struct SettingsView: View {
                 }
                 .listRowBackground(Theme.surface)
 
-                Section("发音音色") {
-                    Picker("音色", selection: $voiceGender) {
-                        Text("女声").tag(PronunciationVoiceGender.female)
-                        Text("男声").tag(PronunciationVoiceGender.male)
+                Section("发音口音") {
+                    Picker("口音", selection: $accent) {
+                        Text("美音").tag(PronunciationAccent.us)
+                        Text("英音").tag(PronunciationAccent.uk)
                     }
                     .pickerStyle(.segmented)
-                    .onChange(of: voiceGender) { _, newValue in
-                        PronunciationVoiceGender.current = newValue
+                    .onChange(of: accent) { _, newValue in
+                        PronunciationAccent.current = newValue
                     }
                 }
                 .listRowBackground(Theme.surface)
