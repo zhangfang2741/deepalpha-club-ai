@@ -36,42 +36,51 @@ struct ReviewCardView: View {
 
     /// 翻到背面后卡片会变高（多了释义+词根+例句），评分按钮也跟着冒出来——固定
     /// VStack 用 Spacer 撑开在内容变高时会把上一个/下一个按钮直接挤没（Spacer
-    /// 被压到 0 也不够，内容超出屏幕高度后中间这段就没地方待了）。改成 ScrollView
-    /// 才能保证内容再多也是往下滚而不是被挤消失。
+    /// 被压到 0 也不够，内容超出屏幕高度后中间这段就没地方待了）。用 ScrollView +
+    /// GeometryReader 撑出至少一屏高：内容没塞满屏幕时两个 Spacer 会把卡片顶到
+    /// 正中间（跟之前视觉效果一样），内容超出屏幕高度时 Spacer 压到 0，改成正常
+    /// 往下滚，不会再被挤没。
     private func cardContent(_ word: VocabularyWord) -> some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                Text("\(viewModel.currentIndex + 1) / \(viewModel.totalCount)")
-                    .font(.caption)
-                    .foregroundStyle(Theme.textSecondary)
+        GeometryReader { geo in
+            ScrollView {
+                VStack(spacing: 24) {
+                    Text("\(viewModel.currentIndex + 1) / \(viewModel.totalCount)")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textSecondary)
 
-                flipCard(word)
-                    .padding(.horizontal)
+                    Spacer(minLength: 0)
 
-                HStack(spacing: 16) {
-                    navButton("上一个", enabled: viewModel.canGoPrevious) {
-                        viewModel.goToPrevious()
+                    flipCard(word)
+                        .padding(.horizontal)
+
+                    HStack(spacing: 16) {
+                        navButton("上一个", enabled: viewModel.canGoPrevious) {
+                            viewModel.goToPrevious()
+                        }
+                        navButton("下一个", enabled: viewModel.canGoNext) {
+                            viewModel.goToNext()
+                        }
                     }
-                    navButton("下一个", enabled: viewModel.canGoNext) {
-                        viewModel.goToNext()
+
+                    Spacer(minLength: 0)
+
+                    if let errorMessage = viewModel.errorMessage {
+                        Text(errorMessage).font(.footnote).foregroundStyle(Theme.unknown)
+                    }
+
+                    if viewModel.isFlipped {
+                        HStack(spacing: 12) {
+                            ratingButton("😵 不认识", Theme.unknown, .unknown)
+                            ratingButton("😐 模糊", Theme.fuzzy, .fuzzy)
+                            ratingButton("😊 认识", Theme.known, .known)
+                        }
+                        .padding(.horizontal)
+                        .padding(.bottom, 24)
                     }
                 }
-
-                if let errorMessage = viewModel.errorMessage {
-                    Text(errorMessage).font(.footnote).foregroundStyle(Theme.unknown)
-                }
-
-                if viewModel.isFlipped {
-                    HStack(spacing: 12) {
-                        ratingButton("😵 不认识", Theme.unknown, .unknown)
-                        ratingButton("😐 模糊", Theme.fuzzy, .fuzzy)
-                        ratingButton("😊 认识", Theme.known, .known)
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 24)
-                }
+                .padding(.top, 16)
+                .frame(minHeight: geo.size.height)
             }
-            .padding(.top, 32)
         }
     }
 
