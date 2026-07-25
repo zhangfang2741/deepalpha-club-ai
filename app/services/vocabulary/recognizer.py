@@ -9,6 +9,11 @@ from pydantic import BaseModel, Field
 from app.core.logging import logger
 from app.services.llm.service import llm_service
 
+# MiniMax-M2.7（本项目当前的默认模型）是纯文本模型，不支持图片输入——实测会直接
+# 忽略请求里的图片内容，模型自己都会说"没看到图片"。MiniMax-M3 才是真正支持视觉
+# 的模型（同一个 Anthropic 兼容接口），所以这里强制指定，不跟随全局默认模型。
+_VISION_MODEL_NAME = "minimax-m3"
+
 _RECOGNIZE_PROMPT = (
     "你是一个英语学习助手。请识别这张图片中出现的所有英语单词（排除纯虚词，如冠词 "
     "a/an/the、介词、连词），为每个单词提供：国际音标（IPA，不含斜杠）、词性缩写"
@@ -56,7 +61,9 @@ async def recognize_words_from_image(image_bytes: bytes, mime_type: str = "image
         ]
     )
     try:
-        result = await llm_service.call([message], response_format=_RecognizeResult)
+        result = await llm_service.call(
+            [message], model_name=_VISION_MODEL_NAME, response_format=_RecognizeResult
+        )
     except Exception as exc:
         logger.exception("vocabulary_recognize_llm_call_failed")
         raise RecognitionFailedError("LLM 识别调用失败") from exc

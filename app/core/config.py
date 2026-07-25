@@ -333,7 +333,7 @@ class Settings:
         # （逗号分隔）。列出套餐里真实可用的模型 ID 即可，例如把高速版与推理版并列，
         # 注册后可用 SUPPLY_CHAIN_DISCOVER_MODEL 或 DEFAULT_LLM_MODEL 按名称（小写）选择。
         self.MINIMAX_CLAUDE_MODELS = parse_list_from_env(
-            "MINIMAX_CLAUDE_MODELS", default=["MiniMax-M2.7"]
+            "MINIMAX_CLAUDE_MODELS", default=["MiniMax-M2.7", "MiniMax-M3"]
         )
         self.MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY", "")
         self.MINIMAX_BASE_URL = os.getenv("MINIMAX_BASE_URL", "https://api.minimax.chat/v1")
