@@ -118,7 +118,8 @@ struct WordListView: View {
                     }
             )
         }
-        .frame(width: 18, maxHeight: .infinity)
+        .frame(width: 18)
+        .frame(maxHeight: .infinity)
         .padding(.vertical, 8)
         .accessibilityHidden(true)
     }
