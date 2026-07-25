@@ -23,7 +23,11 @@ async def get_current_vocab_user(
 ) -> VocabularyUser:
     """从 JWT 解析并返回当前 WordLens 用户。"""
     token = sanitize_string(credentials.credentials)
-    raw_user_id = verify_token(token)
+    try:
+        raw_user_id = verify_token(token)
+    except ValueError as exc:
+        # verify_token 对不满足 JWT 三段式格式的 token 直接抛 ValueError（而不是返回 None）
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials") from exc
     if raw_user_id is None:
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
     try:

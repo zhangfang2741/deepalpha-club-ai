@@ -1,12 +1,21 @@
 # app/api/v1/vocabulary/words.py
-"""WordLens 拍照识别 + 生词库 + 复习 API。"""
-from __future__ import annotations
+"""WordLens 拍照识别 + 生词库 + 复习 API。
+
+不用 `from __future__ import annotations`：`recognize` 挂了 slowapi 的
+@limiter.limit() 装饰器，它会让 FastAPI 把 body/表单参数的类型注解解析成未展开
+的 ForwardRef，导致参数被误判成 query 参数（详见 app/api/v1/vocabulary/auth.py
+顶部同样的说明）。
+"""
 
 import uuid
+from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
+from app.core.limiter import limiter
 from app.core.logging import logger
 from app.db.session import get_db
 from app.models.vocabulary import VocabularyUser
@@ -28,9 +37,13 @@ from .dependencies import get_current_vocab_user
 
 router = APIRouter()
 
+_MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10MB，避免超大图片占满内存/被刷成本
+
 
 @router.post("/recognize", response_model=RecognizeResponse)
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["vocabulary_recognize"][0])
 async def recognize(
+    request: Request,
     image: UploadFile = File(...),
     user: VocabularyUser = Depends(get_current_vocab_user),
     db: AsyncSession = Depends(get_db),
@@ -39,6 +52,8 @@ async def recognize(
     image_bytes = await image.read()
     if not image_bytes:
         raise HTTPException(status_code=422, detail="图片为空")
+    if len(image_bytes) > _MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="图片过大，请控制在 10MB 以内")
 
     try:
         recognized = await recognize_words_from_image(image_bytes, image.content_type or "image/jpeg")
@@ -69,9 +84,15 @@ async def add_words_batch(
     db: AsyncSession = Depends(get_db),
 ):
     """批量加入生词库，自动按大小写不敏感去重。"""
-    created_rows, skipped = await word_service.add_words_with_dedup(
-        db, user.id, [w.model_dump() for w in payload.words]
-    )
+    try:
+        created_rows, skipped = await word_service.add_words_with_dedup(
+            db, user.id, [w.model_dump() for w in payload.words]
+        )
+    except IntegrityError as exc:
+        # 并发请求提交完全相同的词时，应用层去重之间会有竞态窗口，唯一约束兜底拦截，
+        # 转成友好提示而不是让请求 500——重新拉取生词库即可看到最新状态。
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="部分单词提交冲突，请刷新生词库后重试") from exc
     return WordsBatchCreateResponse(
         created=[VocabularyWordResponse.model_validate(r) for r in created_rows],
         skipped_existing=skipped,
@@ -80,7 +101,7 @@ async def add_words_batch(
 
 @router.get("/words", response_model=VocabularyWordListResponse)
 async def list_words_endpoint(
-    status: str | None = Query(default=None),
+    status: Literal["new", "fuzzy", "known"] | None = Query(default=None),
     q: str | None = Query(default=None),
     user: VocabularyUser = Depends(get_current_vocab_user),
     db: AsyncSession = Depends(get_db),

@@ -1,10 +1,16 @@
 # app/api/v1/vocabulary/auth.py
-"""WordLens 独立注册/登录路由（不复用主站 /auth）。"""
-from __future__ import annotations
+"""WordLens 独立注册/登录路由（不复用主站 /auth）。
 
-from fastapi import APIRouter, Depends, HTTPException
+不用 `from __future__ import annotations`：slowapi 的 @limiter.limit() 装饰器会
+让 FastAPI 把 body 参数的类型注解解析成未展开的 ForwardRef，body 会被误判成
+query 参数，导致 422（这个文件的每个路由都挂了限流装饰器）。
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
+from app.core.limiter import limiter
 from app.core.logging import logger
 from app.db.session import get_db
 from app.models.vocabulary import VocabularyUser
@@ -21,11 +27,15 @@ router = APIRouter()
 
 
 @router.post("/register", response_model=VocabularyTokenResponse)
-async def register(payload: VocabularyUserCreate, db: AsyncSession = Depends(get_db)):
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["register"][0])
+async def register(request: Request, payload: VocabularyUserCreate, db: AsyncSession = Depends(get_db)):
     """注册新 WordLens 账号。"""
-    email = sanitize_email(payload.email)
-    password = payload.password.get_secret_value()
-    validate_password_strength(password)
+    try:
+        email = sanitize_email(payload.email)
+        password = payload.password.get_secret_value()
+        validate_password_strength(password)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     existing = await user_service.get_user_by_email(db, email)
     if existing is not None:
@@ -39,9 +49,14 @@ async def register(payload: VocabularyUserCreate, db: AsyncSession = Depends(get
 
 
 @router.post("/login", response_model=VocabularyTokenResponse)
-async def login(payload: VocabularyLoginRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["login"][0])
+async def login(request: Request, payload: VocabularyLoginRequest, db: AsyncSession = Depends(get_db)):
     """WordLens 账号登录。"""
-    email = sanitize_email(payload.email)
+    try:
+        email = sanitize_email(payload.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     user = await user_service.get_user_by_email(db, email)
     if user is None or not user.verify_password(payload.password.get_secret_value()):
         raise HTTPException(status_code=401, detail="邮箱或密码错误")
