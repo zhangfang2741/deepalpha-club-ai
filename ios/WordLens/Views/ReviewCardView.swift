@@ -58,10 +58,10 @@ struct ReviewCardView: View {
                     // 不认识评分，不能既看了答案又假装没看直接跳走。
                     if !viewModel.isFlipped {
                         HStack(spacing: 16) {
-                            navButton("上一个", enabled: viewModel.canGoPrevious) {
+                            navButton("上一个", systemImage: "chevron.left", enabled: viewModel.canGoPrevious) {
                                 viewModel.goToPrevious()
                             }
-                            navButton("下一个", enabled: viewModel.canGoNext) {
+                            navButton("下一个", systemImage: "chevron.right", iconTrailing: true, enabled: viewModel.canGoNext) {
                                 viewModel.goToNext()
                                 if let next = viewModel.currentWord {
                                     Pronouncer.shared.speak(next.word)
@@ -155,15 +155,31 @@ struct ReviewCardView: View {
         .clipShape(.rect(cornerRadius: 16))
     }
 
-    private func navButton(_ label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(label, action: action)
+    /// 用带方向箭头的胶囊按钮代替之前纯文字的灰色方块——加了图标更有"往哪边翻"
+    /// 的方向感，胶囊形状 + 强调色描边/浅色底也更像一个真正可点的控件，而不是
+    /// 一块跟卡片背景差不多的灰色矩形。
+    private func navButton(
+        _ label: String, systemImage: String, iconTrailing: Bool = false,
+        enabled: Bool, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if !iconTrailing { Image(systemName: systemImage) }
+                Text(label)
+                if iconTrailing { Image(systemName: systemImage) }
+            }
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(enabled ? Theme.accent : Theme.textSecondary.opacity(0.3))
-            .frame(minWidth: 88, minHeight: 44)
-            .background(Theme.surface)
-            .clipShape(.rect(cornerRadius: 10))
-            .buttonStyle(.pressable)
-            .disabled(!enabled)
+        }
+        .foregroundStyle(enabled ? Theme.accent : Theme.textSecondary.opacity(0.35))
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+        .background(enabled ? Theme.accent.opacity(0.12) : Theme.surface)
+        .clipShape(.capsule)
+        .overlay {
+            Capsule().strokeBorder(enabled ? Theme.accent.opacity(0.3) : .clear, lineWidth: 1)
+        }
+        .buttonStyle(.pressable)
+        .disabled(!enabled)
     }
 
     private func ratingButton(_ label: String, _ color: Color, _ rating: ReviewRating) -> some View {
