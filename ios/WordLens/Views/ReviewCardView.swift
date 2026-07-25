@@ -177,28 +177,31 @@ struct ReviewCardView: View {
         .clipShape(.rect(cornerRadius: 16))
     }
 
-    /// 用带方向箭头的胶囊按钮代替之前纯文字的灰色方块——加了图标更有"往哪边翻"
-    /// 的方向感，胶囊形状 + 强调色描边/浅色底也更像一个真正可点的控件，而不是
-    /// 一块跟卡片背景差不多的灰色矩形。
+    /// 拍照页那个主 CTA 按钮是实色填充 + 白字 + 圆角的视觉重量，复习卡片原先的
+    /// "胶囊 + 12% 浅底"看起来太轻、像次要操作，跟"翻到下一个单词"这件事的重要
+    /// 程度不匹配——切换单词是复习时最频繁的动作之一，应该跟拍照主按钮一样显眼。
+    /// 这里照搬拍照按钮的实色填充 / 圆角 / 字号 / padding，唯一区别是 HStack
+    /// 里并排两个时不能用 maxWidth: infinity 让它们填满整行（会把卡片挤窄），所以
+    /// 保留自然宽度、外加 .frame(maxWidth: .infinity) 让两个按钮在 HStack 里等宽
+    /// 分摊水平空间。
     private func navButton(
         _ label: String, systemImage: String, iconTrailing: Bool = false,
         enabled: Bool, action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
+        Button {
+            action()
+        } label: {
             HStack(spacing: 6) {
                 if !iconTrailing { Image(systemName: systemImage) }
                 Text(label)
                 if iconTrailing { Image(systemName: systemImage) }
             }
             .font(.subheadline.weight(.semibold))
-        }
-        .foregroundStyle(enabled ? Theme.accent : Theme.textSecondary.opacity(0.35))
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .background(enabled ? Theme.accent.opacity(0.12) : Theme.surface)
-        .clipShape(.capsule)
-        .overlay {
-            Capsule().strokeBorder(enabled ? Theme.accent.opacity(0.3) : .clear, lineWidth: 1)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(enabled ? Theme.accent : Theme.accent.opacity(0.35))
+            .foregroundStyle(.white)
+            .clipShape(.rect(cornerRadius: 12))
         }
         .buttonStyle(.pressable)
         .disabled(!enabled)
