@@ -7,6 +7,8 @@ struct RecognizedWord: Codable, Identifiable {
     let phoneticIpa: String
     let partOfSpeech: String
     let definitionZh: String
+    let etymology: String
+    let exampleSentence: String
     let alreadyInLibrary: Bool
 
     var id: String { word }
@@ -16,6 +18,8 @@ struct RecognizedWord: Codable, Identifiable {
         case phoneticIpa = "phonetic_ipa"
         case partOfSpeech = "part_of_speech"
         case definitionZh = "definition_zh"
+        case etymology
+        case exampleSentence = "example_sentence"
         case alreadyInLibrary = "already_in_library"
     }
 }
@@ -32,6 +36,8 @@ struct VocabularyWord: Codable, Identifiable {
     let phoneticIpa: String
     let partOfSpeech: String
     let definitionZh: String
+    let etymology: String
+    let exampleSentence: String
     let status: String
     let repetitionCount: Int
     let easinessFactor: Double
@@ -45,6 +51,8 @@ struct VocabularyWord: Codable, Identifiable {
         case phoneticIpa = "phonetic_ipa"
         case partOfSpeech = "part_of_speech"
         case definitionZh = "definition_zh"
+        case etymology
+        case exampleSentence = "example_sentence"
         case repetitionCount = "repetition_count"
         case easinessFactor = "easiness_factor"
         case intervalDays = "interval_days"
@@ -60,12 +68,16 @@ struct VocabularyWordCreate: Codable {
     let phoneticIpa: String
     let partOfSpeech: String
     let definitionZh: String
+    let etymology: String
+    let exampleSentence: String
 
     enum CodingKeys: String, CodingKey {
         case word
         case phoneticIpa = "phonetic_ipa"
         case partOfSpeech = "part_of_speech"
         case definitionZh = "definition_zh"
+        case etymology
+        case exampleSentence = "example_sentence"
     }
 }
 

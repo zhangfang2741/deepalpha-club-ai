@@ -2,19 +2,34 @@
 import SwiftUI
 import AVFoundation
 
-/// 发音偏好（存 UserDefaults，设置页可切换）。
-enum PronunciationAccent: String {
-    case american = "en-US"
-    case british = "en-GB"
+/// 发音音色偏好（存 UserDefaults，设置页可切换）。
+///
+/// 之前是英式/美式选项，但音标是拍照识别时 LLM 一次性生成的，跟这个选项完全
+/// 无关（详见 app/services/vocabulary/recognizer.py 的 prompt，没有区分口音），
+/// 选它只会让用户误以为音标也会跟着变。系统 TTS 唯一真正受选项影响的是发音，
+/// 所以换成男声/女声更符合实际效果。
+enum PronunciationVoiceGender: String {
+    case female
+    case male
 
-    static var current: PronunciationAccent {
+    static var current: PronunciationVoiceGender {
         get {
-            let raw = UserDefaults.standard.string(forKey: "pronunciation_accent") ?? american.rawValue
-            return PronunciationAccent(rawValue: raw) ?? .american
+            let raw = UserDefaults.standard.string(forKey: "pronunciation_voice_gender") ?? female.rawValue
+            return PronunciationVoiceGender(rawValue: raw) ?? .female
         }
         set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: "pronunciation_accent")
+            UserDefaults.standard.set(newValue.rawValue, forKey: "pronunciation_voice_gender")
         }
+    }
+
+    /// 优先选英式/美式英语里性别匹配的语音，找不到就退回系统默认 en-US 语音。
+    var voice: AVSpeechSynthesisVoice? {
+        let targetGender: AVSpeechSynthesisVoiceGender = self == .male ? .male : .female
+        let candidates = AVSpeechSynthesisVoice.speechVoices().filter {
+            $0.language.hasPrefix("en") && $0.gender == targetGender
+        }
+        return candidates.first { $0.language == "en-US" } ?? candidates.first
+            ?? AVSpeechSynthesisVoice(language: "en-US")
     }
 }
 
@@ -54,7 +69,7 @@ struct PronounceButton: View {
     private func speak() {
         Speaker.ensureConfigured()
         let utterance = AVSpeechUtterance(string: word)
-        utterance.voice = AVSpeechSynthesisVoice(language: PronunciationAccent.current.rawValue)
+        utterance.voice = PronunciationVoiceGender.current.voice
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
         Speaker.synthesizer.stopSpeaking(at: .immediate)
         Speaker.synthesizer.speak(utterance)

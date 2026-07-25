@@ -39,7 +39,8 @@ final class CameraViewModel: ObservableObject {
         let toAdd = candidates
             .filter { selectedWords.contains($0.word) }
             .map { VocabularyWordCreate(word: $0.word, phoneticIpa: $0.phoneticIpa,
-                                        partOfSpeech: $0.partOfSpeech, definitionZh: $0.definitionZh) }
+                                        partOfSpeech: $0.partOfSpeech, definitionZh: $0.definitionZh,
+                                        etymology: $0.etymology, exampleSentence: $0.exampleSentence) }
         guard !toAdd.isEmpty else { return (0, []) }
         do {
             let resp = try await WordService.addWordsBatch(toAdd)

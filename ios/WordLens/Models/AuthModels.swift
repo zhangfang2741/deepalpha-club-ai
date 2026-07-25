@@ -13,3 +13,20 @@ struct AuthTokenResponse: Codable {
         case expiresAt = "expires_at"
     }
 }
+
+/// 对应后端 VocabularyUserResponse（当前用户个人信息）。
+struct UserProfile: Codable {
+    let id: String
+    let email: String
+    let createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, email
+        case createdAt = "created_at"
+    }
+}
+
+/// 对应后端 /auth/change-password 响应（{"changed": true}）。
+struct ChangePasswordResponse: Codable {
+    let changed: Bool
+}

@@ -3,21 +3,87 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var auth: AuthViewModel
-    @State private var accent: PronunciationAccent = PronunciationAccent.current
+    @StateObject private var viewModel = SettingsViewModel()
+    @State private var voiceGender: PronunciationVoiceGender = PronunciationVoiceGender.current
+
+    @State private var oldPassword = ""
+    @State private var newPassword = ""
+    @State private var confirmPassword = ""
+
+    private var hasUpper: Bool { newPassword.contains { $0.isUppercase } }
+    private var hasLower: Bool { newPassword.contains { $0.isLowercase } }
+    private var hasDigit: Bool { newPassword.contains { $0.isNumber } }
+    private var hasSpecial: Bool { newPassword.contains { "!@#$%^&*()_+-=[]{}|;:,.<>?".contains($0) } }
+    private var longEnough: Bool { newPassword.count >= 8 }
+    private var matched: Bool { !newPassword.isEmpty && newPassword == confirmPassword }
+
+    private var canSubmitPasswordChange: Bool {
+        !oldPassword.isEmpty && hasUpper && hasLower && hasDigit && hasSpecial && longEnough && matched
+    }
 
     var body: some View {
         ZStack {
             Theme.background.ignoresSafeArea()
             Form {
-                Section("发音口音") {
-                    Picker("口音", selection: $accent) {
-                        Text("美式").tag(PronunciationAccent.american)
-                        Text("英式").tag(PronunciationAccent.british)
+                Section("个人信息") {
+                    if let profile = viewModel.profile {
+                        LabeledContent("邮箱", value: profile.email)
+                        LabeledContent("注册时间", value: Self.formattedDate(profile.createdAt))
+                    } else if viewModel.isLoadingProfile {
+                        ProgressView()
+                    }
+                }
+                .listRowBackground(Theme.surface)
+
+                Section("发音音色") {
+                    Picker("音色", selection: $voiceGender) {
+                        Text("女声").tag(PronunciationVoiceGender.female)
+                        Text("男声").tag(PronunciationVoiceGender.male)
                     }
                     .pickerStyle(.segmented)
-                    .onChange(of: accent) { _, newValue in
-                        PronunciationAccent.current = newValue
+                    .onChange(of: voiceGender) { _, newValue in
+                        PronunciationVoiceGender.current = newValue
                     }
+                }
+                .listRowBackground(Theme.surface)
+
+                Section("修改密码") {
+                    SecureField("原密码", text: $oldPassword)
+                    SecureField("新密码", text: $newPassword)
+                    SecureField("确认新密码", text: $confirmPassword)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        checklistRow("至少 8 个字符", longEnough)
+                        checklistRow("包含大写字母", hasUpper)
+                        checklistRow("包含小写字母", hasLower)
+                        checklistRow("包含数字", hasDigit)
+                        checklistRow("包含特殊字符（如 !@#$%）", hasSpecial)
+                        checklistRow("两次密码一致", matched)
+                    }
+
+                    if let errorMessage = viewModel.passwordErrorMessage {
+                        Text(errorMessage).font(.footnote).foregroundStyle(Theme.unknown)
+                    }
+                    if let successMessage = viewModel.passwordSuccessMessage {
+                        Text(successMessage).font(.footnote).foregroundStyle(Theme.known)
+                    }
+
+                    Button {
+                        Task {
+                            let ok = await viewModel.changePassword(oldPassword: oldPassword, newPassword: newPassword)
+                            if ok {
+                                oldPassword = ""
+                                newPassword = ""
+                                confirmPassword = ""
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            if viewModel.isChangingPassword { ProgressView() }
+                            Text(viewModel.isChangingPassword ? "提交中…" : "确认修改")
+                        }
+                    }
+                    .disabled(!canSubmitPasswordChange || viewModel.isChangingPassword)
                 }
                 .listRowBackground(Theme.surface)
 
@@ -32,5 +98,36 @@ struct SettingsView: View {
         }
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
+        .task { await viewModel.loadProfile() }
+    }
+
+    private func checklistRow(_ text: String, _ satisfied: Bool) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: satisfied ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(satisfied ? Theme.known : Theme.textSecondary)
+                .accessibilityHidden(true)
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(Theme.textSecondary)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(text)，\(satisfied ? "已满足" : "未满足")")
+    }
+
+    /// 后端返回不带时区的 ISO 8601 字符串（naive UTC），解析后按本地时区格式化。
+    private static func formattedDate(_ raw: String) -> String {
+        for format in ["yyyy-MM-dd'T'HH:mm:ss.SSSSSS", "yyyy-MM-dd'T'HH:mm:ss"] {
+            let parser = DateFormatter()
+            parser.locale = Locale(identifier: "en_US_POSIX")
+            parser.timeZone = TimeZone(identifier: "UTC")
+            parser.dateFormat = format
+            if let date = parser.date(from: raw) {
+                let formatter = DateFormatter()
+                formatter.locale = Locale(identifier: "zh_CN")
+                formatter.dateFormat = "yyyy年M月d日"
+                return formatter.string(from: date)
+            }
+        }
+        return raw
     }
 }

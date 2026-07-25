@@ -33,6 +33,21 @@ struct WordDetailView: View {
                 .background(Theme.surface)
                 .clipShape(.rect(cornerRadius: 12))
 
+                if !word.etymology.isEmpty || !word.exampleSentence.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if !word.etymology.isEmpty {
+                            detailBlock("词根", word.etymology)
+                        }
+                        if !word.exampleSentence.isEmpty {
+                            detailBlock("例句", word.exampleSentence)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(Theme.surface)
+                    .clipShape(.rect(cornerRadius: 12))
+                }
+
                 Spacer()
 
                 Button(role: .destructive) {
@@ -73,8 +88,13 @@ struct WordDetailView: View {
     /// "2026-07-26T08:09:11.390968"），直接显示对用户不友好，这里解析成
     /// Date 后按本地时区格式化。微秒为 0 时 Python 的 isoformat() 会省略
     /// 小数部分，所以两种格式都要能解析。
+    ///
+    /// 新加入的单词 next_review_at 后端直接设成创建时间（意为"立刻可复习"），
+    /// 到期未复习的单词同理会停留在过去，这两种情况都按日期显示会显得像是
+    /// "过期出错"，所以已到期一律显示「待复习」。
     private var nextReviewLabel: String {
         guard let date = Self.parseBackendDate(word.nextReviewAt) else { return word.nextReviewAt }
+        if date <= Date() { return "待复习" }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.dateFormat = "M月d日 HH:mm"
@@ -101,5 +121,12 @@ struct WordDetailView: View {
             Text(value).foregroundStyle(Theme.textPrimary)
         }
         .font(.subheadline)
+    }
+
+    private func detailBlock(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.subheadline).foregroundStyle(Theme.textSecondary)
+            Text(value).font(.subheadline).foregroundStyle(Theme.textPrimary)
+        }
     }
 }

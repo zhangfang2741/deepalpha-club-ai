@@ -7,27 +7,26 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Theme.background.ignoresSafeArea()
-                ScrollView {
-                    VStack(spacing: 20) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("今日待复习：\(reviewDueCount) 个")
-                                .font(.headline)
-                                .foregroundStyle(Theme.textPrimary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                        .background(Theme.surface)
-                        .clipShape(.rect(cornerRadius: 12))
-
-                        statsRow
-
-                        WordListView(viewModel: listVM)
-                    }
-                    .padding()
+            VStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("今日待复习：\(reviewDueCount) 个")
+                        .font(.headline)
+                        .foregroundStyle(Theme.textPrimary)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(Theme.surface)
+                .clipShape(.rect(cornerRadius: 12))
+
+                statsRow
+
+                // 生词库自身带字母索引条，需要用 List 独立滚动，所以不能再跟上面的
+                // 卡片一起塞进一个大 ScrollView——那样索引条拖动定位的是整页而不是词表。
+                WordListView(viewModel: listVM, onRefresh: refreshAll)
             }
+            .padding(.horizontal)
+            .padding(.top)
+            .background(Theme.background.ignoresSafeArea())
             .navigationTitle("首页")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -37,15 +36,13 @@ struct HomeView: View {
                     .accessibilityLabel("设置")
                 }
             }
-            .task {
-                await listVM.load()
-                reviewDueCount = (try? await WordService.reviewQueue().count) ?? 0
-            }
-            .refreshable {
-                await listVM.load()
-                reviewDueCount = (try? await WordService.reviewQueue().count) ?? 0
-            }
+            .task { await refreshAll() }
         }
+    }
+
+    private func refreshAll() async {
+        await listVM.load()
+        reviewDueCount = (try? await WordService.reviewQueue().count) ?? 0
     }
 
     private var statsRow: some View {
