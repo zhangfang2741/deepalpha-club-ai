@@ -53,12 +53,17 @@ struct ReviewCardView: View {
                     flipCard(word)
                         .padding(.horizontal)
 
-                    HStack(spacing: 16) {
-                        navButton("上一个", enabled: viewModel.canGoPrevious) {
-                            viewModel.goToPrevious()
-                        }
-                        navButton("下一个", enabled: viewModel.canGoNext) {
-                            viewModel.goToNext()
+                    // 上一个/下一个只在还没翻卡（回忆阶段）时出现，是给"跳过这个词，
+                    // 先去看别的"用的；一旦翻到背面看了释义，就应该老老实实点认识/模糊/
+                    // 不认识评分，不能既看了答案又假装没看直接跳走。
+                    if !viewModel.isFlipped {
+                        HStack(spacing: 16) {
+                            navButton("上一个", enabled: viewModel.canGoPrevious) {
+                                viewModel.goToPrevious()
+                            }
+                            navButton("下一个", enabled: viewModel.canGoNext) {
+                                viewModel.goToNext()
+                            }
                         }
                     }
 
