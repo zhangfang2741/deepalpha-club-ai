@@ -5,10 +5,6 @@ struct WordListView: View {
     @ObservedObject var viewModel: WordListViewModel
     var onRefresh: (() async -> Void)?
 
-    private let filters: [(label: String, value: String?)] = [
-        ("全部", nil), ("不认识", "new"), ("模糊", "fuzzy"), ("认识", "known"),
-    ]
-
     /// 按单词首字母分组，供右侧字母索引条定位（类似系统通讯录）。非字母开头统一归到 "#"。
     private var sections: [(letter: String, words: [VocabularyWord])] {
         let grouped = Dictionary(grouping: viewModel.words) { indexLetter(for: $0.word) }
@@ -19,26 +15,6 @@ struct WordListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("生词库").font(.headline).foregroundStyle(Theme.textPrimary)
-                Spacer()
-            }
-
-            TextField("搜索单词", text: $viewModel.searchQuery)
-                .padding(10)
-                .background(Theme.surface)
-                .foregroundStyle(Theme.textPrimary)
-                .clipShape(.rect(cornerRadius: 8))
-                .onSubmit { Task { await viewModel.load() } }
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(filters, id: \.label) { filter in
-                        filterChip(filter.label, filter.value)
-                    }
-                }
-            }
-
             if viewModel.isLoading && viewModel.words.isEmpty {
                 // 只在完全没数据时显示占位 loading；已有数据时的后台刷新
                 // 不能让列表内容被替换掉，否则从详情页返回时滚动位置会被重置到顶部。
@@ -135,21 +111,6 @@ struct WordListView: View {
     private func indexLetter(for word: String) -> String {
         guard let first = word.uppercased().first, first.isLetter else { return "#" }
         return String(first)
-    }
-
-    private func filterChip(_ label: String, _ value: String?) -> some View {
-        Button {
-            viewModel.filterStatus = value
-            Task { await viewModel.load() }
-        } label: {
-            Text(label)
-                .font(.caption)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(viewModel.filterStatus == value ? Theme.accent : Theme.surface)
-                .foregroundStyle(viewModel.filterStatus == value ? .white : Theme.textSecondary)
-                .clipShape(Capsule())
-        }
     }
 
     private func wordRow(_ word: VocabularyWord) -> some View {
