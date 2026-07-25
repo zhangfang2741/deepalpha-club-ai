@@ -65,18 +65,39 @@ struct CameraCaptureView: View {
             .navigationTitle("拍照识词")
             .sheet(isPresented: $showCameraSheet) {
                 CameraPicker { image in
-                    guard let data = Self.compressedJPEGData(from: image) else { return }
-                    Task { await viewModel.recognize(imageData: data) }
+                    Task {
+                        // 缩放+压缩是 CPU 密集操作，放主线程做会在点「使用照片」的瞬间卡一下
+                        // （尤其真机原图有几千万像素）。先立刻显示识别中状态，压缩本身丢到
+                        // Task.detached 的后台线程池执行，避免阻塞 UI。
+                        viewModel.isRecognizing = true
+                        let data = await Task.detached(priority: .userInitiated) {
+                            Self.compressedJPEGData(from: image)
+                        }.value
+                        guard let data else {
+                            viewModel.isRecognizing = false
+                            return
+                        }
+                        await viewModel.recognize(imageData: data)
+                    }
                 }
                 .ignoresSafeArea()
             }
             .onChange(of: photoPickerItem) { _, newItem in
                 guard let newItem else { return }
                 Task {
-                    guard let rawData = try? await newItem.loadTransferable(type: Data.self),
-                          let uiImage = UIImage(data: rawData),
-                          let data = Self.compressedJPEGData(from: uiImage) else { return }
+                    viewModel.isRecognizing = true
+                    guard let rawData = try? await newItem.loadTransferable(type: Data.self) else {
+                        viewModel.isRecognizing = false
+                        return
+                    }
                     photoPickerItem = nil
+                    let data = await Task.detached(priority: .userInitiated) {
+                        UIImage(data: rawData).flatMap { Self.compressedJPEGData(from: $0) }
+                    }.value
+                    guard let data else {
+                        viewModel.isRecognizing = false
+                        return
+                    }
                     await viewModel.recognize(imageData: data)
                 }
             }
@@ -93,7 +114,10 @@ struct CameraCaptureView: View {
     /// 500（这是实测出来的：700KB 能过，900KB 必定 500）。这里先把最长边缩到
     /// 1600px（对识别文档里的英语单词完全够用），再用递减的 JPEG 质量压到
     /// 700KB 以内，留出安全余量。
-    private static func compressedJPEGData(
+    /// 显式标 nonisolated：`CameraCaptureView` 遵循 `View`，成员默认可能被隐式
+    /// 归到 MainActor，如果这个函数被隐式 MainActor 隔离，Task.detached 里
+    /// `await` 调用它反而会跳回主线程执行，压缩计算还是卡主线程，等于白改。
+    private nonisolated static func compressedJPEGData(
         from image: UIImage, maxDimension: CGFloat = 1600, maxBytes: Int = 700_000
     ) -> Data? {
         let size = image.size

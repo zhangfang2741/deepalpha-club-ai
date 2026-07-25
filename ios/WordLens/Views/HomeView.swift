@@ -28,7 +28,7 @@ struct HomeView: View {
                     .padding()
                 }
             }
-            .navigationTitle("WordLens")
+            .navigationTitle("首页")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink(destination: SettingsView()) {
