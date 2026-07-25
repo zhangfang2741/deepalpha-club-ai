@@ -74,6 +74,8 @@ async def recognize(
             phonetic_ipa=w.phonetic_ipa,
             part_of_speech=w.part_of_speech,
             definition_zh=w.definition_zh,
+            etymology=w.etymology,
+            example_sentence=w.example_sentence,
             already_in_library=w.word.lower() not in new_words_lower,
         )
         for w in recognized

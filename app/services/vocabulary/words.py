@@ -62,6 +62,8 @@ async def create_words_batch(
             phonetic_ipa=w["phonetic_ipa"],
             part_of_speech=w["part_of_speech"],
             definition_zh=w["definition_zh"],
+            etymology=w.get("etymology", ""),
+            example_sentence=w.get("example_sentence", ""),
             status="new",
             next_review_at=now,
         )

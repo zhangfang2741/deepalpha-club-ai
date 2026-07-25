@@ -300,6 +300,7 @@ class Settings:
             "health": ["20 per minute"],
             "transcripts": ["1000 per minute"],
             "vocabulary_recognize": ["20 per hour"],
+            "vocabulary_change_password": ["10 per hour"],
         }
 
         # Update rate limit endpoints from environment variables

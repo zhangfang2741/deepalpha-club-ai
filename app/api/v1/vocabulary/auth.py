@@ -15,13 +15,17 @@ from app.core.logging import logger
 from app.db.session import get_db
 from app.models.vocabulary import VocabularyUser
 from app.schemas.vocabulary import (
+    ChangePasswordRequest,
     VocabularyLoginRequest,
     VocabularyTokenResponse,
     VocabularyUserCreate,
+    VocabularyUserResponse,
 )
 from app.services.vocabulary import users as user_service
 from app.utils.auth import create_access_token
 from app.utils.sanitization import sanitize_email, validate_password_strength
+
+from .dependencies import get_current_vocab_user
 
 router = APIRouter()
 
@@ -64,3 +68,30 @@ async def login(request: Request, payload: VocabularyLoginRequest, db: AsyncSess
     token = create_access_token(str(user.id))
     logger.info("vocabulary_user_logged_in", user_id=str(user.id))
     return VocabularyTokenResponse(access_token=token.access_token, expires_at=token.expires_at)
+
+
+@router.get("/me", response_model=VocabularyUserResponse)
+async def get_me(user: VocabularyUser = Depends(get_current_vocab_user)):
+    """当前登录用户的个人信息。"""
+    return VocabularyUserResponse.model_validate(user)
+
+
+@router.post("/change-password")
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["vocabulary_change_password"][0])
+async def change_password(
+    request: Request,
+    payload: ChangePasswordRequest,
+    user: VocabularyUser = Depends(get_current_vocab_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """修改当前用户密码，需校验旧密码。"""
+    if not user.verify_password(payload.old_password.get_secret_value()):
+        raise HTTPException(status_code=401, detail="原密码不正确")
+    try:
+        validate_password_strength(payload.new_password.get_secret_value())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    await user_service.change_password(db, user, payload.new_password.get_secret_value())
+    logger.info("vocabulary_password_changed", user_id=str(user.id))
+    return {"changed": True}

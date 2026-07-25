@@ -17,7 +17,8 @@ _VISION_MODEL_NAME = "minimax-m3"
 _RECOGNIZE_PROMPT = (
     "你是一个英语学习助手。请识别这张图片中出现的所有英语单词（排除纯虚词，如冠词 "
     "a/an/the、介词、连词），为每个单词提供：国际音标（IPA，不含斜杠）、词性缩写"
-    "（如 n./v./adj./adv.）、简洁的中文释义。如果图片中没有可识别的英语单词，返回空列表。"
+    "（如 n./v./adj./adv.）、简洁的中文释义、词根/词缀简析（如没有明显词根可留空）、"
+    "一个包含该单词的英文例句（附中文翻译）。如果图片中没有可识别的英语单词，返回空列表。"
 )
 
 
@@ -28,6 +29,8 @@ class RecognizedWord(BaseModel):
     phonetic_ipa: str = Field(..., description="国际音标，不含斜杠")
     part_of_speech: str = Field(..., description="词性缩写")
     definition_zh: str = Field(..., description="简洁中文释义")
+    etymology: str = Field(default="", description="词根/词缀简析，没有明显词根则留空")
+    example_sentence: str = Field(default="", description="包含该单词的英文例句，附中文翻译")
 
 
 class _RecognizeResult(BaseModel):

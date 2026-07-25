@@ -32,6 +32,23 @@ class VocabularyTokenResponse(BaseResponse):
     expires_at: datetime
 
 
+class VocabularyUserResponse(BaseResponse):
+    """当前用户个人信息。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    email: str
+    created_at: datetime
+
+
+class ChangePasswordRequest(BaseModel):
+    """修改密码请求。"""
+
+    old_password: SecretStr
+    new_password: SecretStr = Field(..., min_length=8, max_length=64)
+
+
 class RecognizedWordSchema(BaseModel):
     """识别出的单个候选词。"""
 
@@ -39,6 +56,8 @@ class RecognizedWordSchema(BaseModel):
     phonetic_ipa: str
     part_of_speech: str
     definition_zh: str
+    etymology: str = ""
+    example_sentence: str = ""
     already_in_library: bool = False
 
 
@@ -55,6 +74,8 @@ class VocabularyWordCreate(BaseModel):
     phonetic_ipa: str = Field(..., max_length=100)
     part_of_speech: str = Field(..., max_length=20)
     definition_zh: str = Field(..., max_length=500)
+    etymology: str = Field(default="", max_length=500)
+    example_sentence: str = Field(default="", max_length=1000)
 
 
 class WordsBatchCreateRequest(BaseModel):
@@ -73,6 +94,8 @@ class VocabularyWordResponse(BaseModel):
     phonetic_ipa: str
     part_of_speech: str
     definition_zh: str
+    etymology: str
+    example_sentence: str
     status: str
     repetition_count: int
     easiness_factor: float

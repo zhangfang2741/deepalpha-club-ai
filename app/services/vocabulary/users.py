@@ -29,3 +29,10 @@ async def create_user(session: AsyncSession, email: str, hashed_password: str) -
     await session.commit()
     await session.refresh(user)
     return user
+
+
+async def change_password(session: AsyncSession, user: VocabularyUser, new_password: str) -> None:
+    """更新用户密码（调用方已校验旧密码）。"""
+    user.hashed_password = VocabularyUser.hash_password(new_password)
+    session.add(user)
+    await session.commit()

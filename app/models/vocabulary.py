@@ -70,6 +70,8 @@ class VocabularyWord(_NaiveTimestampModel, table=True):
     phonetic_ipa: str = Field(..., max_length=100)
     part_of_speech: str = Field(..., max_length=20)
     definition_zh: str = Field(..., max_length=500)
+    etymology: str = Field(default="", max_length=500)
+    example_sentence: str = Field(default="", max_length=1000)
 
     # new：从未标记为「认识」过；fuzzy：标记过认识但复习间隔还不够长；known：间隔达标
     status: str = Field(default="new", max_length=10, index=True)
