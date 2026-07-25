@@ -3,6 +3,8 @@
 from fastapi import APIRouter
 
 from .auth import router as auth_router
+from .words import router as words_router
 
 router = APIRouter()
 router.include_router(auth_router, prefix="/auth", tags=["vocabulary-auth"])
+router.include_router(words_router, tags=["vocabulary-words"])

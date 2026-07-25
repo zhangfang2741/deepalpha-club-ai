@@ -20,6 +20,7 @@ from app.api.v1.supply_chain import router as supply_chain_router
 from app.api.v1.supply_chain_map import router as supply_chain_map_router
 from app.api.v1.transcripts import router as transcripts_router
 from app.api.v1.valuation import router as valuation_router
+from app.api.v1.vocabulary import router as vocabulary_router
 from app.api.v1.wyckoff import router as wyckoff_router
 from app.core.logging import logger
 
@@ -43,6 +44,7 @@ api_router.include_router(supply_chain_router, prefix="/supply-chain", tags=["su
 api_router.include_router(supply_chain_map_router, prefix="/supply-graph", tags=["supply-graph"])
 api_router.include_router(transcripts_router, prefix="/transcripts", tags=["transcripts"])
 api_router.include_router(valuation_router, prefix="/valuation", tags=["valuation"])
+api_router.include_router(vocabulary_router, prefix="/vocabulary", tags=["vocabulary"])
 api_router.include_router(wyckoff_router, prefix="/wyckoff", tags=["wyckoff"])
 
 
