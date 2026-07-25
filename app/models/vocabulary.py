@@ -7,7 +7,7 @@ app/models/user.py 的 User 表，账户体系完全隔离。
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import bcrypt
 from sqlalchemy import UniqueConstraint
@@ -16,7 +16,28 @@ from sqlmodel import Field
 from app.db.base import UUIDModel
 
 
-class VocabularyUser(UUIDModel, table=True):
+def _naive_utc_now() -> datetime:
+    """返回不带时区的 UTC 当前时间，匹配 naive 的 TIMESTAMP 列类型。
+
+    UUIDModel 的 created_at/updated_at 默认用带时区的 datetime，但这几张表的列是
+    TIMESTAMP WITHOUT TIME ZONE：同步驱动 psycopg2 会静默丢弃 tzinfo，asyncpg 不会，
+    写入时直接报 DataError。这里覆盖成 naive UTC，和列类型对齐。
+    """
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+class _NaiveTimestampModel(UUIDModel):
+    """WordLens 三张表的公共基类：created_at/updated_at 用 naive UTC 覆盖 UUIDModel 默认值。"""
+
+    created_at: datetime = Field(default_factory=_naive_utc_now, nullable=False)
+    updated_at: datetime = Field(
+        default_factory=_naive_utc_now,
+        nullable=False,
+        sa_column_kwargs={"onupdate": _naive_utc_now},
+    )
+
+
+class VocabularyUser(_NaiveTimestampModel, table=True):
     """WordLens 独立账户。"""
 
     __tablename__ = "vocabulary_users"
@@ -34,7 +55,7 @@ class VocabularyUser(UUIDModel, table=True):
         return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
-class VocabularyWord(UUIDModel, table=True):
+class VocabularyWord(_NaiveTimestampModel, table=True):
     """生词库条目，含 SM-2 间隔重复算法状态。
 
     (user_id, word) 加数据库唯一约束作为兜底；应用层在写入前已用大小写不敏感
@@ -60,7 +81,7 @@ class VocabularyWord(UUIDModel, table=True):
     last_reviewed_at: datetime | None = Field(default=None)
 
 
-class VocabularyReviewLog(UUIDModel, table=True):
+class VocabularyReviewLog(_NaiveTimestampModel, table=True):
     """每次复习的历史记录，用于统计和排查 SM-2 算法问题。"""
 
     __tablename__ = "vocabulary_review_logs"

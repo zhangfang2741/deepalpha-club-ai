@@ -34,15 +34,17 @@ sync_engine = create_engine(
     connect_args={"sslmode": "require"} if settings.POSTGRES_SSL else {},
 )
 
-# 异步引擎（FastAPI 异步端点用）
+# 异步引擎（FastAPI 异步端点用）。asyncpg 驱动不认 psycopg2 风格的 sslmode（无论是作为
+# connect_args 还是 URL query 参数传入都会被当成 connect() 的未知 kwarg 报错），
+# 需要用 asyncpg 自己的 ssl 参数。
 async_engine = create_async_engine(
-    f"postgresql+asyncpg://{_PG_BASE}{_PG_SSL_QUERY}",
+    f"postgresql+asyncpg://{_PG_BASE}",
     pool_pre_ping=True,
     pool_size=settings.POSTGRES_POOL_SIZE,
     max_overflow=settings.POSTGRES_MAX_OVERFLOW,
     pool_timeout=30,
     pool_recycle=1800,
-    connect_args={"sslmode": "require"} if settings.POSTGRES_SSL else {},
+    connect_args={"ssl": "require"} if settings.POSTGRES_SSL else {},
 )
 
 # 异步 session 工厂

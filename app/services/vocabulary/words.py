@@ -5,11 +5,20 @@ from __future__ import annotations
 import datetime
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.vocabulary import VocabularyReviewLog, VocabularyWord
 from app.services.vocabulary import sm2
+
+
+def _naive_utc_now() -> datetime.datetime:
+    """返回不带时区的 UTC 当前时间，匹配 naive 的 TIMESTAMP 列类型。
+
+    vocabulary_words/vocabulary_review_logs 的时间列是 TIMESTAMP WITHOUT TIME ZONE，
+    asyncpg 对带时区的 datetime 会直接报 DataError，这里统一转成 naive UTC 再落库/比较。
+    """
+    return datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
 
 
 def filter_new_words(existing_words: set[str], candidates: list[str]) -> list[str]:
@@ -45,7 +54,7 @@ async def create_words_batch(
     session: AsyncSession, user_id: uuid.UUID, words: list[dict]
 ) -> list[VocabularyWord]:
     """批量插入生词（调用方已去重）。"""
-    now = datetime.datetime.now(datetime.UTC)
+    now = _naive_utc_now()
     rows = [
         VocabularyWord(
             user_id=user_id,
@@ -111,10 +120,15 @@ async def get_word(session: AsyncSession, user_id: uuid.UUID, word_id: uuid.UUID
 
 
 async def delete_word(session: AsyncSession, user_id: uuid.UUID, word_id: uuid.UUID) -> bool:
-    """删除单词，成功返回 True，不存在返回 False。"""
+    """删除单词，成功返回 True，不存在返回 False。
+
+    先删除该单词的复习历史（VocabularyReviewLog 无 ON DELETE CASCADE），
+    否则一旦复习过一次就会因外键约束删不掉。
+    """
     word = await get_word(session, user_id, word_id)
     if word is None:
         return False
+    await session.execute(delete(VocabularyReviewLog).where(VocabularyReviewLog.word_id == word_id))
     await session.delete(word)
     await session.commit()
     return True
@@ -122,7 +136,7 @@ async def delete_word(session: AsyncSession, user_id: uuid.UUID, word_id: uuid.U
 
 async def get_review_queue(session: AsyncSession, user_id: uuid.UUID) -> list[VocabularyWord]:
     """待复习队列：next_review_at <= now，按到期时间升序。"""
-    now = datetime.datetime.now(datetime.UTC)
+    now = _naive_utc_now()
     stmt = (
         select(VocabularyWord)
         .where(VocabularyWord.user_id == user_id, VocabularyWord.next_review_at <= now)
@@ -146,7 +160,7 @@ async def submit_review(
         easiness_factor=word.easiness_factor,
         interval_days=word.interval_days,
     )
-    reviewed_at = datetime.datetime.now(datetime.UTC)
+    reviewed_at = _naive_utc_now()
     log = VocabularyReviewLog(
         word_id=word.id,
         rating=rating,
@@ -157,7 +171,8 @@ async def submit_review(
     word.repetition_count = result.repetition_count
     word.easiness_factor = result.easiness_factor
     word.interval_days = result.interval_days
-    word.next_review_at = result.next_review_at
+    # sm2.apply_review 返回带时区的 next_review_at，这里的列是 naive UTC，落库前去掉 tzinfo
+    word.next_review_at = result.next_review_at.replace(tzinfo=None)
     word.last_reviewed_at = reviewed_at
     word.status = result.status
 
