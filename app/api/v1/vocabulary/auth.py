@@ -23,7 +23,7 @@ from app.schemas.vocabulary import (
 )
 from app.services.vocabulary import users as user_service
 from app.utils.auth import create_access_token
-from app.utils.sanitization import sanitize_email, validate_password_strength
+from app.utils.sanitization import sanitize_email, validate_vocabulary_password_strength
 
 from .dependencies import get_current_vocab_user
 
@@ -37,7 +37,7 @@ async def register(request: Request, payload: VocabularyUserCreate, db: AsyncSes
     try:
         email = sanitize_email(payload.email)
         password = payload.password.get_secret_value()
-        validate_password_strength(password)
+        validate_vocabulary_password_strength(password)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -88,7 +88,7 @@ async def change_password(
     if not user.verify_password(payload.old_password.get_secret_value()):
         raise HTTPException(status_code=401, detail="原密码不正确")
     try:
-        validate_password_strength(payload.new_password.get_secret_value())
+        validate_vocabulary_password_strength(payload.new_password.get_secret_value())
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
