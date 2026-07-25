@@ -14,6 +14,9 @@ final class WordListViewModel: ObservableObject {
     @Published var filterStatus: String?
     @Published var searchQuery = ""
 
+    @Published var isSelecting = false
+    @Published var selectedIDs: Set<String> = []
+
     var words: [VocabularyWord] {
         guard let filterStatus else { return allWords }
         return allWords.filter { $0.status == filterStatus }
@@ -41,5 +44,30 @@ final class WordListViewModel: ObservableObject {
         } catch {
             errorMessage = "删除失败"
         }
+    }
+
+    func toggleSelecting() {
+        isSelecting.toggle()
+        if !isSelecting { selectedIDs.removeAll() }
+    }
+
+    func toggleSelection(_ word: VocabularyWord) {
+        if selectedIDs.contains(word.id) {
+            selectedIDs.remove(word.id)
+        } else {
+            selectedIDs.insert(word.id)
+        }
+    }
+
+    /// 后端没有批量删除接口，逐个调用单删；个人生词库量级不大，串行足够，
+    /// 也顺带避免并发请求打满限流。任何一个失败都不影响其它词继续删。
+    func deleteSelected() async {
+        let ids = selectedIDs
+        for id in ids {
+            try? await WordService.deleteWord(id: id)
+        }
+        allWords.removeAll { ids.contains($0.id) }
+        selectedIDs.removeAll()
+        isSelecting = false
     }
 }

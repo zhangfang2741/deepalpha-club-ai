@@ -30,7 +30,9 @@ struct RecognizeResponse: Codable {
 }
 
 /// 生词库条目，对应后端 VocabularyWordResponse。
-struct VocabularyWord: Codable, Identifiable {
+/// Hashable：WordListView 用 .navigationDestination(item:) 代替 NavigationLink
+/// 去掉行右侧的箭头指示器，item-based 导航要求绑定的值类型是 Hashable。
+struct VocabularyWord: Codable, Identifiable, Hashable {
     let id: String
     let word: String
     let phoneticIpa: String
