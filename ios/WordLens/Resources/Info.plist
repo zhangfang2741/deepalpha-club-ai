@@ -32,13 +32,5 @@
 	<string>需要访问相机拍摄含英语单词的文档或书页，用于识别生词</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>需要访问相册选择含英语单词的图片，用于识别生词</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>需要连接同一 WiFi 下的开发服务器进行本地调试</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<!-- 生产应改为 HTTPS；MVP 阶段手机连 Mac 本机局域网 IP 走明文 HTTP 调试 -->
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
 </dict>
 </plist>
