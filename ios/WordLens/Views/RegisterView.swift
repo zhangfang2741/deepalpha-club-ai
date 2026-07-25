@@ -76,6 +76,7 @@ struct RegisterView: View {
                             .foregroundStyle(.white)
                             .clipShape(.rect(cornerRadius: 12))
                         }
+                        .buttonStyle(.pressable)
                         .disabled(!canSubmit || auth.isLoading)
                     }
                     .padding(24)

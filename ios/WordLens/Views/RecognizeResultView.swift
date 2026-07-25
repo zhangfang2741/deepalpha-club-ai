@@ -77,6 +77,7 @@ struct RecognizeResultView: View {
                         .foregroundStyle(.white)
                         .clipShape(.rect(cornerRadius: 12))
                     }
+                    .buttonStyle(.pressable)
                     .disabled(viewModel.selectedWords.isEmpty || isSubmitting)
                     .padding()
                     .background(Theme.background)
@@ -95,7 +96,7 @@ struct RecognizeResultView: View {
             .foregroundStyle(isSelected ? Theme.accent : Theme.textSecondary)
             .frame(minWidth: 44, minHeight: 44)
             .contentShape(.rect)
-            .buttonStyle(.plain)
+            .buttonStyle(.pressable)
             .accessibilityValue(isSelected ? "已选中" : "未选中")
 
             VStack(alignment: .leading, spacing: 4) {

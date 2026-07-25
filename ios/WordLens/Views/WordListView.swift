@@ -37,7 +37,7 @@ struct WordListView: View {
                                     NavigationLink(destination: WordDetailView(word: word, listViewModel: viewModel)) {
                                         wordRow(word)
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(.pressable)
                                     .listRowBackground(Color.clear)
                                     .listRowSeparator(.hidden)
                                     .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))

@@ -60,6 +60,7 @@ struct WordDetailView: View {
                         .foregroundStyle(Theme.unknown)
                         .clipShape(.rect(cornerRadius: 12))
                 }
+                .buttonStyle(.pressable)
             }
             .padding()
         }

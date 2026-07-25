@@ -11,6 +11,13 @@ final class ReviewViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var totalCount = 0
 
+    /// TabView 切走再切回来会让这个 tab 重新走一遍 appear，.task 也会跟着重新
+    /// 触发；如果每次都无条件调 loadQueue()（会把 currentIndex 清零），用户刚
+    /// 翻到第 5 个词，切一下 tab 回来就被打回第一个。用这个标记让 .task 只在
+    /// 本次进程里真正加载一次，后续切 tab 回来不再重置进度；下拉刷新走的还是
+    /// loadQueue()，仍然是一次完整重置，语义上也说得通（用户主动要求刷新）。
+    private var hasLoadedOnce = false
+
     var currentWord: VocabularyWord? {
         guard currentIndex < queue.count else { return nil }
         return queue[currentIndex]
@@ -34,6 +41,14 @@ final class ReviewViewModel: ObservableObject {
         guard canGoNext else { return }
         currentIndex += 1
         isFlipped = false
+    }
+
+    /// 给 .task 用：本次进程只真正加载一次，切 tab 回来时是空操作，不打断
+    /// 用户当前翻到哪个词的进度。
+    func loadQueueIfNeeded() async {
+        guard !hasLoadedOnce else { return }
+        hasLoadedOnce = true
+        await loadQueue()
     }
 
     func loadQueue() async {

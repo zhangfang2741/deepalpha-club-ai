@@ -101,7 +101,7 @@ struct HomeView: View {
                 }
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
         .accessibilityLabel("\(label)，\(count) 个")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }

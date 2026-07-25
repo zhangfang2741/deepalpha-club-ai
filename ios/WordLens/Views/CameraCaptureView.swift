@@ -42,6 +42,7 @@ struct CameraCaptureView: View {
                                 .foregroundStyle(.white)
                                 .clipShape(.rect(cornerRadius: 12))
                         }
+                        .buttonStyle(.pressable)
                         .disabled(viewModel.isRecognizing)
 
                         PhotosPicker(selection: $photoPickerItem, matching: .images) {

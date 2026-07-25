@@ -29,7 +29,7 @@ struct ReviewCardView: View {
             }
             .navigationTitle("首页")
             .navigationBarTitleDisplayMode(.inline)
-            .task { await viewModel.loadQueue() }
+            .task { await viewModel.loadQueueIfNeeded() }
             .refreshable { await viewModel.loadQueue() }
         }
     }
@@ -159,6 +159,7 @@ struct ReviewCardView: View {
             .frame(minWidth: 88, minHeight: 44)
             .background(Theme.surface)
             .clipShape(.rect(cornerRadius: 10))
+            .buttonStyle(.pressable)
             .disabled(!enabled)
     }
 
@@ -174,6 +175,7 @@ struct ReviewCardView: View {
                 .foregroundStyle(color)
                 .clipShape(.rect(cornerRadius: 10))
         }
+        .buttonStyle(.pressable)
         .disabled(viewModel.isSubmitting)
     }
 }

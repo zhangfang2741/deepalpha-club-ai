@@ -51,11 +51,13 @@ struct LoginView: View {
                     .foregroundStyle(.white)
                     .clipShape(.rect(cornerRadius: 12))
                 }
+                .buttonStyle(.pressable)
                 .disabled(auth.isLoading)
 
                 Button("还没有账号？去注册") { showRegister = true }
                     .font(.footnote)
                     .foregroundStyle(Theme.textSecondary)
+                    .buttonStyle(.pressable)
 
                 Spacer()
                 Spacer()
