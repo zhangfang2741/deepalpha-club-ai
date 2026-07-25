@@ -68,10 +68,10 @@ struct CameraCaptureView: View {
                         // （尤其真机原图有几千万像素）。先立刻显示识别中状态，压缩本身丢到
                         // Task.detached 的后台线程池执行，避免阻塞 UI。
                         viewModel.isRecognizing = true
-                        viewModel.capturedImage = image
-                        let data = await Task.detached(priority: .userInitiated) {
-                            Self.compressedJPEGData(from: image)
+                        let (thumbnail, data) = await Task.detached(priority: .userInitiated) {
+                            (Self.resizedImage(from: image, maxDimension: 600), Self.compressedJPEGData(from: image))
                         }.value
+                        viewModel.capturedImage = thumbnail
                         guard let data else {
                             viewModel.isRecognizing = false
                             return
@@ -90,11 +90,11 @@ struct CameraCaptureView: View {
                         return
                     }
                     photoPickerItem = nil
-                    let (image, data) = await Task.detached(priority: .userInitiated) { () -> (UIImage?, Data?) in
+                    let (thumbnail, data) = await Task.detached(priority: .userInitiated) { () -> (UIImage?, Data?) in
                         guard let image = UIImage(data: rawData) else { return (nil, nil) }
-                        return (image, Self.compressedJPEGData(from: image))
+                        return (Self.resizedImage(from: image, maxDimension: 600), Self.compressedJPEGData(from: image))
                     }.value
-                    viewModel.capturedImage = image
+                    viewModel.capturedImage = thumbnail
                     guard let data else {
                         viewModel.isRecognizing = false
                         return
@@ -108,6 +108,25 @@ struct CameraCaptureView: View {
         }
     }
 
+    /// 等比缩放到最长边不超过 maxDimension。真机原图解码成 UIImage 后在内存里可能
+    /// 有几十上百 MB（几千万像素 × 4 字节/像素），拍完照如果直接把这张原图存进
+    /// @Published 属性给 SwiftUI 长期持有/渲染（比如扫描动画背景），加上其它状态
+    /// 一起很容易把 App 撑到被系统内存看门狗直接 SIGKILL 杀掉（实测复现过）。
+    /// 所以无论是给后端上传压缩，还是给 UI 当缩略图显示，都要先经过这一步缩小，
+    /// 不能碰原图本体。
+    /// 显式标 nonisolated：`CameraCaptureView` 遵循 `View`，成员默认可能被隐式
+    /// 归到 MainActor，如果这个函数被隐式 MainActor 隔离，Task.detached 里
+    /// `await` 调用它反而会跳回主线程执行，还是卡主线程，等于白改。
+    private nonisolated static func resizedImage(from image: UIImage, maxDimension: CGFloat) -> UIImage {
+        let size = image.size
+        let longestSide = max(size.width, size.height)
+        guard longestSide > maxDimension else { return image }
+        let scale = maxDimension / longestSide
+        let targetSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        return renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: targetSize)) }
+    }
+
     /// 把图片压缩到安全体积以内。
     ///
     /// 真机拍照原图常有 2-8MB，而 Railway 的边缘代理对请求体有约 1MB 的硬限制——
@@ -115,25 +134,10 @@ struct CameraCaptureView: View {
     /// 500（这是实测出来的：700KB 能过，900KB 必定 500）。这里先把最长边缩到
     /// 1600px（对识别文档里的英语单词完全够用），再用递减的 JPEG 质量压到
     /// 700KB 以内，留出安全余量。
-    /// 显式标 nonisolated：`CameraCaptureView` 遵循 `View`，成员默认可能被隐式
-    /// 归到 MainActor，如果这个函数被隐式 MainActor 隔离，Task.detached 里
-    /// `await` 调用它反而会跳回主线程执行，压缩计算还是卡主线程，等于白改。
     private nonisolated static func compressedJPEGData(
         from image: UIImage, maxDimension: CGFloat = 1600, maxBytes: Int = 700_000
     ) -> Data? {
-        let size = image.size
-        let longestSide = max(size.width, size.height)
-        let scale = longestSide > maxDimension ? maxDimension / longestSide : 1.0
-        let targetSize = CGSize(width: size.width * scale, height: size.height * scale)
-
-        let resized: UIImage
-        if scale < 1.0 {
-            let renderer = UIGraphicsImageRenderer(size: targetSize)
-            resized = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: targetSize)) }
-        } else {
-            resized = image
-        }
-
+        let resized = resizedImage(from: image, maxDimension: maxDimension)
         var quality: CGFloat = 0.7
         var data = resized.jpegData(compressionQuality: quality)
         while let currentData = data, currentData.count > maxBytes, quality > 0.2 {
