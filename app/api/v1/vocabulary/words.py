@@ -37,7 +37,11 @@ from .dependencies import get_current_vocab_user
 
 router = APIRouter()
 
-_MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10MB，避免超大图片占满内存/被刷成本
+# 实测 Railway 边缘代理对请求体有约 1MB 的硬限制：超过会在到达这里之前就被
+# 拒绝，返回一个我们的错误处理捕获不到的裸 500（700KB 能过，900KB 必 500）。
+# 这个校验对走边缘代理的正常请求基本不会触发（客户端应该在上传前就把图片
+# 压缩到安全体积），留着是给绕过边缘直连本服务的调用方一个干净的错误提示。
+_MAX_IMAGE_BYTES = 800 * 1024  # 800KB，对齐边缘代理的实际限制
 
 
 @router.post("/recognize", response_model=RecognizeResponse)

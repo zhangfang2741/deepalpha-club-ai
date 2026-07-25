@@ -65,7 +65,7 @@ struct CameraCaptureView: View {
             .navigationTitle("拍照识词")
             .sheet(isPresented: $showCameraSheet) {
                 CameraPicker { image in
-                    guard let data = image.jpegData(compressionQuality: 0.8) else { return }
+                    guard let data = Self.compressedJPEGData(from: image) else { return }
                     Task { await viewModel.recognize(imageData: data) }
                 }
                 .ignoresSafeArea()
@@ -73,7 +73,9 @@ struct CameraCaptureView: View {
             .onChange(of: photoPickerItem) { _, newItem in
                 guard let newItem else { return }
                 Task {
-                    guard let data = try? await newItem.loadTransferable(type: Data.self) else { return }
+                    guard let rawData = try? await newItem.loadTransferable(type: Data.self),
+                          let uiImage = UIImage(data: rawData),
+                          let data = Self.compressedJPEGData(from: uiImage) else { return }
                     photoPickerItem = nil
                     await viewModel.recognize(imageData: data)
                 }
@@ -82,6 +84,38 @@ struct CameraCaptureView: View {
                 RecognizeResultView(viewModel: viewModel)
             }
         }
+    }
+
+    /// 把图片压缩到安全体积以内。
+    ///
+    /// 真机拍照原图常有 2-8MB，而 Railway 的边缘代理对请求体有约 1MB 的硬限制——
+    /// 超过会在到达后端代码之前就被拒绝，返回一个无法被我们的错误处理捕获的裸
+    /// 500（这是实测出来的：700KB 能过，900KB 必定 500）。这里先把最长边缩到
+    /// 1600px（对识别文档里的英语单词完全够用），再用递减的 JPEG 质量压到
+    /// 700KB 以内，留出安全余量。
+    private static func compressedJPEGData(
+        from image: UIImage, maxDimension: CGFloat = 1600, maxBytes: Int = 700_000
+    ) -> Data? {
+        let size = image.size
+        let longestSide = max(size.width, size.height)
+        let scale = longestSide > maxDimension ? maxDimension / longestSide : 1.0
+        let targetSize = CGSize(width: size.width * scale, height: size.height * scale)
+
+        let resized: UIImage
+        if scale < 1.0 {
+            let renderer = UIGraphicsImageRenderer(size: targetSize)
+            resized = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: targetSize)) }
+        } else {
+            resized = image
+        }
+
+        var quality: CGFloat = 0.7
+        var data = resized.jpegData(compressionQuality: quality)
+        while let currentData = data, currentData.count > maxBytes, quality > 0.2 {
+            quality -= 0.15
+            data = resized.jpegData(compressionQuality: quality)
+        }
+        return data
     }
 }
 
