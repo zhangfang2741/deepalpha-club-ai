@@ -1,6 +1,7 @@
 // ViewModels/CameraViewModel.swift
 import Foundation
 import SwiftUI
+import UIKit
 
 @MainActor
 final class CameraViewModel: ObservableObject {
@@ -9,6 +10,8 @@ final class CameraViewModel: ObservableObject {
     @Published var candidates: [RecognizedWord] = []
     @Published var selectedWords: Set<String> = []
     @Published var showResult = false
+    /// 识别中展示的扫描态背景图，跟压缩后实际上传的 Data 无关，只用于 UI 反馈。
+    @Published var capturedImage: UIImage?
 
     func recognize(imageData: Data) async {
         isRecognizing = true
@@ -59,5 +62,6 @@ final class CameraViewModel: ObservableObject {
         candidates = []
         selectedWords = []
         showResult = false
+        capturedImage = nil
     }
 }

@@ -16,9 +16,7 @@ struct CameraCaptureView: View {
                     Spacer()
 
                     if viewModel.isRecognizing {
-                        ProgressView("正在识别单词…")
-                            .tint(Theme.accent)
-                            .foregroundStyle(Theme.textPrimary)
+                        ScanningOverlay(image: viewModel.capturedImage)
                     } else {
                         Image(systemName: "camera.viewfinder")
                             .font(.system(size: 64))
@@ -70,6 +68,7 @@ struct CameraCaptureView: View {
                         // （尤其真机原图有几千万像素）。先立刻显示识别中状态，压缩本身丢到
                         // Task.detached 的后台线程池执行，避免阻塞 UI。
                         viewModel.isRecognizing = true
+                        viewModel.capturedImage = image
                         let data = await Task.detached(priority: .userInitiated) {
                             Self.compressedJPEGData(from: image)
                         }.value
@@ -91,9 +90,11 @@ struct CameraCaptureView: View {
                         return
                     }
                     photoPickerItem = nil
-                    let data = await Task.detached(priority: .userInitiated) {
-                        UIImage(data: rawData).flatMap { Self.compressedJPEGData(from: $0) }
+                    let (image, data) = await Task.detached(priority: .userInitiated) { () -> (UIImage?, Data?) in
+                        guard let image = UIImage(data: rawData) else { return (nil, nil) }
+                        return (image, Self.compressedJPEGData(from: image))
                     }.value
+                    viewModel.capturedImage = image
                     guard let data else {
                         viewModel.isRecognizing = false
                         return
