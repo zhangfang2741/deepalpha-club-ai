@@ -109,4 +109,13 @@ final class WordListViewModel: ObservableObject {
             selectedIDs = Set(words.map(\.id))
         }
     }
+
+    /// 详情页提交评分后，后端会返回更新后的词（含新 status / nextReviewAt 等），
+    /// 用它原地替换 allWords 里对应那一行——保证返回列表时筛选数字、状态点都
+    /// 跟实际一致（点"认识"再回来，状态点应从"不认识"变成"认识"）。
+    func updateWord(_ updated: VocabularyWord) {
+        if let idx = allWords.firstIndex(where: { $0.id == updated.id }) {
+            allWords[idx] = updated
+        }
+    }
 }

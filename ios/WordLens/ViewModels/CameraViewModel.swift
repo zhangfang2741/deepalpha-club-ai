@@ -30,7 +30,8 @@ final class CameraViewModel: ObservableObject {
         let taskBox = BackgroundTaskBox()
         taskBox.id = UIApplication.shared.beginBackgroundTask(withName: "vocabulary_recognize") {
             // 系统给的 ~30s 快到了，主动结束 task，让进程干净退到后台而不是被强杀。
-            if let id = taskBox.id, id != .invalid {
+            let id = taskBox.id
+            if id != .invalid {
                 UIApplication.shared.endBackgroundTask(id)
                 taskBox.id = .invalid
             }
@@ -38,7 +39,8 @@ final class CameraViewModel: ObservableObject {
         defer {
             isRecognizing = false
             UIApplication.shared.isIdleTimerDisabled = false
-            if let id = taskBox.id, id != .invalid {
+            let id = taskBox.id
+            if id != .invalid {
                 UIApplication.shared.endBackgroundTask(id)
             }
         }
