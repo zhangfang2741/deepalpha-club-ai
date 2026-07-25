@@ -46,10 +46,10 @@ struct ReviewCardView: View {
                 .padding(.horizontal)
 
             HStack(spacing: 16) {
-                navButton("上一个", systemImage: "chevron.left.circle.fill", enabled: viewModel.canGoPrevious) {
+                navButton("上一个", enabled: viewModel.canGoPrevious) {
                     viewModel.goToPrevious()
                 }
-                navButton("下一个", systemImage: "chevron.right.circle.fill", enabled: viewModel.canGoNext) {
+                navButton("下一个", enabled: viewModel.canGoNext) {
                     viewModel.goToNext()
                 }
             }
@@ -135,13 +135,13 @@ struct ReviewCardView: View {
         .clipShape(.rect(cornerRadius: 16))
     }
 
-    private func navButton(_ label: String, systemImage: String, enabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(label, systemImage: systemImage, action: action)
-            .labelStyle(.iconOnly)
-            .font(.title2)
+    private func navButton(_ label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(label, action: action)
+            .font(.subheadline.weight(.semibold))
             .foregroundStyle(enabled ? Theme.accent : Theme.textSecondary.opacity(0.3))
-            .frame(minWidth: 44, minHeight: 44)
-            .contentShape(.rect)
+            .frame(minWidth: 88, minHeight: 44)
+            .background(Theme.surface)
+            .clipShape(.rect(cornerRadius: 10))
             .disabled(!enabled)
     }
 
