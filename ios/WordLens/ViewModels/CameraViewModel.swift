@@ -16,7 +16,14 @@ final class CameraViewModel: ObservableObject {
     func recognize(imageData: Data) async {
         isRecognizing = true
         errorMessage = nil
-        defer { isRecognizing = false }
+        // 识别是本地 OCR + 视觉 LLM（还带重试）的耗时操作，等待期间如果屏幕自动
+        // 锁屏，系统会挂起/限流后台网络活动，很容易把正在进行的上传请求直接掐断
+        // （实测复现：NSURLErrorNetworkConnectionLost -1005）。识别期间禁止息屏。
+        UIApplication.shared.isIdleTimerDisabled = true
+        defer {
+            isRecognizing = false
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
         do {
             // 先本地 Apple Vision OCR（印刷体又快又准、免流量），把抠出的候选词连同
             // 图片一起发给后端：视觉 LLM 既自己看图识别、又参考 OCR 列表，综合取并集，
