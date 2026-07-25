@@ -10,15 +10,14 @@ struct SettingsView: View {
     @State private var newPassword = ""
     @State private var confirmPassword = ""
 
-    private var hasUpper: Bool { newPassword.contains { $0.isUppercase } }
-    private var hasLower: Bool { newPassword.contains { $0.isLowercase } }
+    // 后端 validate_vocabulary_password_strength() 只要求字母+数字。
+    private var hasLetter: Bool { newPassword.contains { $0.isLetter } }
     private var hasDigit: Bool { newPassword.contains { $0.isNumber } }
-    private var hasSpecial: Bool { newPassword.contains { "!@#$%^&*()_+-=[]{}|;:,.<>?".contains($0) } }
     private var longEnough: Bool { newPassword.count >= 8 }
     private var matched: Bool { !newPassword.isEmpty && newPassword == confirmPassword }
 
     private var canSubmitPasswordChange: Bool {
-        !oldPassword.isEmpty && hasUpper && hasLower && hasDigit && hasSpecial && longEnough && matched
+        !oldPassword.isEmpty && hasLetter && hasDigit && longEnough && matched
     }
 
     var body: some View {
@@ -54,10 +53,8 @@ struct SettingsView: View {
 
                     VStack(alignment: .leading, spacing: 6) {
                         checklistRow("至少 8 个字符", longEnough)
-                        checklistRow("包含大写字母", hasUpper)
-                        checklistRow("包含小写字母", hasLower)
+                        checklistRow("包含英文字母", hasLetter)
                         checklistRow("包含数字", hasDigit)
-                        checklistRow("包含特殊字符（如 !@#$%）", hasSpecial)
                         checklistRow("两次密码一致", matched)
                     }
 

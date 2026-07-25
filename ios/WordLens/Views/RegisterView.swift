@@ -8,15 +8,15 @@ struct RegisterView: View {
     @State private var password = ""
     @State private var confirmPassword = ""
 
-    private var hasUpper: Bool { password.contains { $0.isUppercase } }
-    private var hasLower: Bool { password.contains { $0.isLowercase } }
+    // 后端 validate_vocabulary_password_strength() 只要求字母+数字（不要求大小写
+    // 混合、不要求特殊字符）——WordLens 是个人背单词场景，主站那套复杂度要求太重了。
+    private var hasLetter: Bool { password.contains { $0.isLetter } }
     private var hasDigit: Bool { password.contains { $0.isNumber } }
-    private var hasSpecial: Bool { password.contains { "!@#$%^&*()_+-=[]{}|;:,.<>?".contains($0) } }
     private var longEnough: Bool { password.count >= 8 }
     private var matched: Bool { !password.isEmpty && password == confirmPassword }
 
     private var canSubmit: Bool {
-        !email.isEmpty && hasUpper && hasLower && hasDigit && hasSpecial && longEnough && matched
+        !email.isEmpty && hasLetter && hasDigit && longEnough && matched
     }
 
     var body: some View {
@@ -48,10 +48,8 @@ struct RegisterView: View {
 
                         VStack(alignment: .leading, spacing: 6) {
                             checklistRow("至少 8 个字符", longEnough)
-                            checklistRow("包含大写字母", hasUpper)
-                            checklistRow("包含小写字母", hasLower)
+                            checklistRow("包含英文字母", hasLetter)
                             checklistRow("包含数字", hasDigit)
-                            checklistRow("包含特殊字符（如 !@#$%）", hasSpecial)
                             checklistRow("两次密码一致", matched)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
