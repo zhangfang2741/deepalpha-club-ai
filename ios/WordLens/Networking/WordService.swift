@@ -7,6 +7,12 @@ enum WordService {
         try await APIClient.shared.postMultipartImage("/recognize", imageData: imageData)
     }
 
+    /// 混合识别：把 iOS 端 Apple Vision OCR 抠出的候选词交后端补音标/释义。
+    static func enrich(words: [String]) async throws -> RecognizeResponse {
+        struct Body: Encodable { let words: [String] }
+        return try await APIClient.shared.postJSON("/enrich", body: Body(words: words))
+    }
+
     static func addWordsBatch(_ words: [VocabularyWordCreate]) async throws -> WordsBatchCreateResponse {
         struct Body: Encodable { let words: [VocabularyWordCreate] }
         return try await APIClient.shared.postJSON("/words/batch", body: Body(words: words))

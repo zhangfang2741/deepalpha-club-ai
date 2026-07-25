@@ -20,6 +20,7 @@ from app.core.logging import logger
 from app.db.session import get_db
 from app.models.vocabulary import VocabularyUser
 from app.schemas.vocabulary import (
+    EnrichWordsRequest,
     RecognizedWordSchema,
     RecognizeResponse,
     ReviewQueueResponse,
@@ -31,7 +32,11 @@ from app.schemas.vocabulary import (
     WordsBatchCreateResponse,
 )
 from app.services.vocabulary import words as word_service
-from app.services.vocabulary.recognizer import RecognitionFailedError, recognize_words_from_image
+from app.services.vocabulary.recognizer import (
+    RecognitionFailedError,
+    enrich_words,
+    recognize_words_from_image,
+)
 
 from .dependencies import get_current_vocab_user
 
@@ -61,6 +66,43 @@ async def recognize(
 
     try:
         recognized = await recognize_words_from_image(image_bytes, image.content_type or "image/jpeg")
+    except RecognitionFailedError as exc:
+        raise HTTPException(status_code=502, detail="识别失败，请重新拍摄") from exc
+
+    existing = await word_service.get_existing_words(db, user.id)
+    new_words = word_service.filter_new_words(existing, [w.word for w in recognized])
+    new_words_lower = {w.lower() for w in new_words}
+
+    candidates = [
+        RecognizedWordSchema(
+            word=w.word,
+            phonetic_ipa=w.phonetic_ipa,
+            part_of_speech=w.part_of_speech,
+            definition_zh=w.definition_zh,
+            etymology=w.etymology,
+            example_sentence=w.example_sentence,
+            already_in_library=w.word.lower() not in new_words_lower,
+        )
+        for w in recognized
+    ]
+    return RecognizeResponse(candidates=candidates)
+
+
+@router.post("/enrich", response_model=RecognizeResponse)
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["vocabulary_recognize"][0])
+async def enrich(
+    request: Request,
+    payload: EnrichWordsRequest,
+    user: VocabularyUser = Depends(get_current_vocab_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """混合识别：接收 iOS 端 Apple Vision OCR 抠出的候选词，补音标/释义后返回。
+
+    图片 OCR 在客户端完成（印刷体又快又准、免流量），这里只用纯文本 LLM 补全，
+    比让模型同时做 OCR + 释义更稳更快。响应结构与 /recognize 一致，前端可复用。
+    """
+    try:
+        recognized = await enrich_words(payload.words)
     except RecognitionFailedError as exc:
         raise HTTPException(status_code=502, detail="识别失败，请重新拍摄") from exc
 

@@ -67,6 +67,13 @@ class RecognizeResponse(BaseResponse):
     candidates: list[RecognizedWordSchema]
 
 
+class EnrichWordsRequest(BaseModel):
+    """混合识别：iOS 端 Apple Vision OCR 抠出的候选词列表，交后端补释义。"""
+
+    # 单张图 OCR 出来的词一般几十个封顶，设上限防滥用/超长请求。
+    words: list[str] = Field(..., min_length=1, max_length=100)
+
+
 class VocabularyWordCreate(BaseModel):
     """批量加入生词库时的单个词。"""
 
