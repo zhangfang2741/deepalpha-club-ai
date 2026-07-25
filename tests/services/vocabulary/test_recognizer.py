@@ -70,6 +70,23 @@ def test_build_recognize_prompt_appends_hint_words():
     assert "综合取并集" in prompt
 
 
+def test_recognize_prompt_states_proper_noun_and_compound_rules():
+    prompt = _build_recognize_prompt(None)
+    # 专有名词排除规则。
+    assert "专有名词" in prompt
+    assert "Google" in prompt and "TikTok" in prompt
+    # 连字符复合词整体收录、空格词组拆成实义词。
+    assert "e-commerce" in prompt
+    assert "拆" in prompt
+
+
+def test_ocr_hint_reasserts_exclusion_rules_after_union():
+    prompt = _build_recognize_prompt(["Google", "the", "engine"])
+    # 并集之后，排除规则（含专有名词）仍然适用，避免 OCR 线索把 Google 强行带回。
+    assert "综合取并集" in prompt
+    assert "专有名词" in prompt
+
+
 async def test_recognize_passes_ocr_hint_into_prompt():
     mock_result = _RecognizeResult(words=[RecognizedWord(word="resilient")])
     call = AsyncMock(return_value=mock_result)
