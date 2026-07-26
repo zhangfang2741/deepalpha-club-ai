@@ -28,6 +28,37 @@ struct RecognizeResultView: View {
                     .scrollContentBackground(.hidden)
                 }
 
+                // 顶部错误条：addSelectedToLibrary 失败时把错误写进 viewModel.errorMessage
+                // —— 必须在 sheet 上把这个状态显示给用户, 否则表现就是「按钮转一下
+                // 就停了但什么都没发生」, 让人以为是 bug. 成功提交后 (reset() 会把
+                // errorMessage 清空) 这个 VStack 自动消失.
+                if let error = viewModel.errorMessage {
+                    VStack {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(Theme.unknown)
+                            Text(error)
+                                .font(.footnote)
+                                .foregroundStyle(Theme.textPrimary)
+                                .lineLimit(2)
+                            Spacer()
+                            Button("重试") {
+                                viewModel.errorMessage = nil
+                                Task { await submitAsync() }
+                            }
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Theme.accent)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(Theme.surface)
+                        .clipShape(.rect(cornerRadius: 10))
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                        Spacer()
+                    }
+                }
+
                 if let resultMessage {
                     VStack {
                         Spacer()
@@ -74,21 +105,7 @@ struct RecognizeResultView: View {
                     VStack(spacing: 6) {
                         summaryLine
                         Button {
-                            Task {
-                                isSubmitting = true
-                                let (added, skipped) = await viewModel.addSelectedToLibrary()
-                                isSubmitting = false
-                                if !added.isEmpty || !skipped.isEmpty {
-                                    resultMessage = "加入 \(added.count) 个单词" + (skipped.isEmpty ? "" : "，\(skipped.count) 个已存在")
-                                    try? await Task.sleep(for: .seconds(1.2))
-                                    if !added.isEmpty {
-                                        // 跳到生词库 tab 并高亮刚加入的词，而不是留在拍照页——
-                                        // 加完词之后更想看到"加进去了什么"，不是继续对着相机页发呆。
-                                        nav.showNewlyAddedWords(added.map(\.id))
-                                    }
-                                    dismiss()
-                                }
-                            }
+                            Task { await submitAsync() }
                         } label: {
                             HStack {
                                 if isSubmitting { ProgressView().tint(.white) }
@@ -178,5 +195,31 @@ struct RecognizeResultView: View {
         .font(.caption)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("已识别 \(total) 个，其中 \(inLibrary) 个已在生词库内，已勾选 \(selected) 个准备加入")
+    }
+
+    /// 把「点底部加入按钮」和「点错误条上的重试」收敛到同一个提交逻辑里。
+    /// 区别只在进入时是否需要先清错误状态——重试按钮自己已经清过了。
+    ///
+    /// 失败处理的关键：addSelectedToLibrary 把错误写到 viewModel.errorMessage
+    /// 但不抛, 也不会让 (added, skipped) 非空. 老代码就靠这点返回空来判断"成功
+    /// 还是失败"——错误成功都走完一遍, 用户点击只看到 spinner 闪一下, 完全
+    /// 不知道发生了什么. 把这条修成: 失败时 (added.isEmpty && skipped.isEmpty)
+    /// 也不再 dismiss, 让 sheet 留着, 让错误条自动浮起来.
+    private func submitAsync() async {
+        isSubmitting = true
+        defer { isSubmitting = false }
+        let (added, skipped) = await viewModel.addSelectedToLibrary()
+        guard viewModel.errorMessage == nil else {
+            // 提交失败——错误条已经显示, sheet 不关, 让用户选择重试 / 取消
+            return
+        }
+        resultMessage = "加入 \(added.count) 个单词" + (skipped.isEmpty ? "" : "，\(skipped.count) 个已存在")
+        try? await Task.sleep(for: .seconds(1.2))
+        if !added.isEmpty {
+            // 跳到生词库 tab 并高亮刚加入的词，而不是留在拍照页——
+            // 加完词之后更想看到"加进去了什么"，不是继续对着相机页发呆。
+            nav.showNewlyAddedWords(added.map(\.id))
+        }
+        dismiss()
     }
 }
