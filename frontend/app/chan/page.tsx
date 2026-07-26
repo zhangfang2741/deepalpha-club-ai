@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { fetchChanAnalysis, type ChanAnalysisResult } from '@/lib/api/chan'
+import { getApiErrorMessage } from '@/lib/api/client'
 import { ChanChart } from '@/components/chan/ChanChart'
 import { SignalPanel } from '@/components/chan/SignalPanel'
 import { GapPanel } from '@/components/chan/GapPanel'
@@ -57,8 +58,7 @@ export default function ChanPage() {
       const data = await fetchChanAnalysis(symbol.trim().toUpperCase(), startDate, endDate, freq)
       setResult(data)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '分析失败，请检查股票代码或日期范围'
-      setError(msg)
+      setError(getApiErrorMessage(err, '分析失败，请检查股票代码或日期范围'))
     } finally {
       setLoading(false)
     }
