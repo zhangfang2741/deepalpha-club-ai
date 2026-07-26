@@ -26,23 +26,13 @@ struct ReviewCardView: View {
                     )
                 } else if let word = viewModel.currentWord {
                     cardContent(word)
-                        // word.id 变化时（首次进入、上一个/下一个、评分切到下一张）触发
-                        // .task 发音；自动播放期间让状态机自己发 3 遍，这里跳过避免抢
-                        // 节奏。task(id:) 的"变化即执行"正好对应卡片内容切换的瞬间，
-                        // 视觉上的滑入动画和听感上的发音可以同步出现。
-                        .task(id: word.id) {
-                            guard !viewModel.suppressCardAutoSpeak else { return }
-                            Pronouncer.shared.speakIfAutoplayEnabled(word.word)
-                        }
-                        // 切词动画：旧卡按 transitionDirection 方向滑出，新卡从对侧滑入。
-                        // .id(word.id) 是关键——没有 id 时 SwiftUI 会复用 view hierarchy，
-                        // transition 不触发。transitionDirection 在 goTo/submit 那一瞬
-                        // 间就被 set 好，渲染这一刻读到的值就是这一笔的出/入方向。
-                        //
-                        // 注意：自动播放 FAB 不放进 cardContent、不挂 .id/.transition——
-                        // 那样切词时 FAB 会跟着 re-attach + 一起滑入/滑出 "乱动一下"。
-                        // FAB 在 body 外层 VStack 里另外渲染，始终保持自己的 identity，
-                        // 切词动画只影响 cardContent，不会影响 FAB 位置。
+                        // 切词动画：旧卡按 transitionDirection 方向滑出，新卡从对侧
+                        // 滑入。.id + .transition 是触发"remove 旧卡 + insert 新卡"
+                        // 的标准组合；.task(id:) 不要挂在和 .id/.transition 同一层——
+                        // SwiftUI 在 transition 复用阶段会抛 "invalid reuse after
+                        // initialization failure" 崩溃（曾实测复现）。发音功能已经
+                        // 搬到 cardContent 内部 ScrollView 的 .task(id:) 上，这里
+                        // 只负责切词动画。
                         .id(word.id)
                         .transition(.asymmetric(
                             insertion: viewModel.transitionDirection >= 0
@@ -89,7 +79,10 @@ struct ReviewCardView: View {
     private func cardContent(_ word: VocabularyWord) -> some View {
         ScrollView {
             VStack(spacing: 20) {
-                // 进度行：始终显示「X / Y」，自动播放时再追加「第 N / 3 遍」
+                // 进度行：始终显示「X / Y」，自动播放时再追加「第 N / 3 遍」。
+                // 同时挂 .task(id:) 触发发音——这是 child of ScrollView，不在
+                // 外层 .id + .transition 那条路径上，避免 SwiftUI 在 transition
+                // 复用阶段抛 "invalid reuse after initialization failure"。
                 HStack(spacing: 8) {
                     Text("\(viewModel.currentIndex + 1) / \(viewModel.totalCount)")
                         .font(.caption.weight(.medium))
@@ -109,6 +102,14 @@ struct ReviewCardView: View {
                     }
                 }
                 .padding(.top, 8)
+                // word.id 变化时（首次进入、上一个/下一个、评分切到下一张）触发
+                // 发音。挂在这里而不是 outer .id + .transition 同一层，避免 SwiftUI
+                // 在 transition 复用阶段抛 "invalid reuse after initialization
+                // failure"。自动播放期间状态机自己发 3 遍，这里跳过避免抢节奏。
+                .task(id: word.id) {
+                    guard !viewModel.suppressCardAutoSpeak else { return }
+                    Pronouncer.shared.speakIfAutoplayEnabled(word.word)
+                }
 
                 Spacer(minLength: 0)
 
