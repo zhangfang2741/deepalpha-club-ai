@@ -12,24 +12,28 @@ struct ReviewCardView: View {
 
                 if viewModel.isLoading {
                     ProgressView().tint(Theme.accent)
+                } else if viewModel.isFinished {
+                    // 评分会即时从队列移除词，评完最后一个 queue 就空了——所以"完成"
+                    // 必须在"队列空"之前判断，否则会错显示成"今天没有待复习"。
+                    ContentUnavailableView(
+                        "今日复习完成 🎉",
+                        systemImage: "star.fill",
+                        description: Text("共复习了 \(viewModel.reviewedCount) 个单词")
+                    )
                 } else if viewModel.queue.isEmpty {
                     ContentUnavailableView(
                         "今天没有待复习的单词",
                         systemImage: "checkmark.circle",
                         description: Text("去拍照识别一些新单词吧")
                     )
-                } else if viewModel.isFinished {
-                    ContentUnavailableView(
-                        "今日复习完成 🎉",
-                        systemImage: "star.fill",
-                        description: Text("共复习了 \(viewModel.totalCount) 个单词")
-                    )
                 } else if let word = viewModel.currentWord {
                     cardContent(word)
                         .id(word.id)
                         .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                        // 评分后 currentIndex 常常不变（删掉当前词、后一个顶上来），
+                        // 靠 word.id 变化来触发切词动画，比盯 currentIndex 更准。
                         .animation(.spring(response: 0.45, dampingFraction: 0.85),
-                                   value: viewModel.currentIndex)
+                                   value: viewModel.currentWord?.id)
                 }
             }
             .navigationTitle("")
@@ -78,6 +82,9 @@ struct ReviewCardView: View {
             .safeAreaInset(edge: .top, alignment: .center, spacing: 0) {
                 progressBar
                     .padding(.vertical, 8)
+                    // 没有正在复习的卡片时（加载中/无待复习/已完成）隐藏进度，避免
+                    // 显示成 "N/0" 这类无意义数字。
+                    .opacity(viewModel.currentWord != nil ? 1 : 0)
             }
         }
     }
@@ -147,7 +154,9 @@ struct ReviewCardView: View {
     /// 改变、不闪动。
     private var progressBar: some View {
         HStack(spacing: 8) {
-            Text("\(viewModel.currentIndex + 1) / \(viewModel.totalCount)")
+            // 分子 = 已评分数 + 当前在剩余队列里的位置：评过的词已从队列移除，
+            // reviewedCount 记着删了几个，加上当前位置就是这张卡在原始队列里的序号。
+            Text("\(viewModel.reviewedCount + viewModel.currentIndex + 1) / \(viewModel.totalCount)")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(Theme.textSecondary)
             if viewModel.isAutoplay {
