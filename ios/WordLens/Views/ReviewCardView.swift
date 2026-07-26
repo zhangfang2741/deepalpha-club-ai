@@ -54,6 +54,17 @@ struct ReviewCardView: View {
                     .allowsHitTesting(viewModel.currentWord != nil)
                     .background(Color.clear)
             }
+            // 进度行也提到 outer 用 safeAreaInset(edge: .top) 钉死——
+            // 之前进度行写在 cardContent 内, 跟 .id(word.id) +
+            // .transition(.opacity + .scale) 同一条 view tree, 切词时
+            // SwiftUI 把它视为"remove 旧卡 + insert 新卡"的一部分一起
+            // 过渡, 数字"1/5 → 2/5"那一帧就会跟卡片一起淡入淡出闪一下.
+            // 提出来独立成 stable 节点, 切词时只 diff Text 里的数字, 位
+            // 置永远不动, 不闪.
+            .safeAreaInset(edge: .top, alignment: .center, spacing: 0) {
+                progressBar
+                    .padding(.vertical, 8)
+            }
         }
     }
 
@@ -67,42 +78,18 @@ struct ReviewCardView: View {
     private func cardContent(_ word: VocabularyWord) -> some View {
         ScrollView {
             VStack(spacing: 20) {
-                // 进度行：始终显示「X / Y」，自动播放时再追加「第 N / 3 遍」。
-                // 同时挂 .task(id:) 触发发音——这是 child of ScrollView，不在
-                // 外层 .id + .transition 那条路径上，避免 SwiftUI 在 transition
-                // 复用阶段抛 "invalid reuse after initialization failure"。
-                HStack(spacing: 8) {
-                    Text("\(viewModel.currentIndex + 1) / \(viewModel.totalCount)")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(Theme.textSecondary)
-
-                    if viewModel.isAutoplay {
-                        Text("·")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(Theme.textSecondary)
-                        HStack(spacing: 4) {
-                            Image(systemName: "speaker.wave.2.fill")
-                                .font(.caption2)
-                            Text("第 \(viewModel.autoplayPassIndex + 1) / 3 遍")
-                        }
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Theme.accent)
-                    }
-                }
-                .padding(.top, 8)
-                // word.id 变化时（首次进入、上一个/下一个、评分切到下一张）触发
-                // 发音。挂在这里而不是 outer .id + .transition 同一层，避免 SwiftUI
-                // 在 transition 复用阶段抛 "invalid reuse after initialization
-                // failure"。自动播放期间状态机自己发 3 遍，这里跳过避免抢节奏。
-                .task(id: word.id) {
-                    guard !viewModel.suppressCardAutoSpeak else { return }
-                    Pronouncer.shared.speakIfAutoplayEnabled(word.word)
-                }
-
+                // 进度行已经从 cardContent 抽出去, 在 outer 用 safeAreaInset
+                // 钉死——这里只剩 flipCard + 上下 Spacer + 底部按钮.
                 Spacer(minLength: 0)
 
                 flipCard(word)
                     .padding(.horizontal)
+                    // word.id 变化时（首次进入、上一个/下一个、评分切到下一张）
+                    // 触发发音——挂在 flipCard 上不参与 outer transition.
+                    .task(id: word.id) {
+                        guard !viewModel.suppressCardAutoSpeak else { return }
+                        Pronouncer.shared.speakIfAutoplayEnabled(word.word)
+                    }
 
                 Spacer(minLength: 24)
 
@@ -136,6 +123,30 @@ struct ReviewCardView: View {
                     Text(errorMessage).font(.footnote).foregroundStyle(Theme.unknown)
                         .padding(.bottom, 4)
                 }
+            }
+        }
+    }
+
+    /// 进度行：从 cardContent 抽出来作为独立的 outer 节点，通过 safeAreaInset
+    /// 钉死位置，不会参与切词 transition，每次 currentIndex / autoplayPassIndex
+    /// 变化只 diff 内部 Text 数字，不会有 fade/scale 入场动画，肉眼看就是纯数字
+    /// 改变、不闪动。
+    private var progressBar: some View {
+        HStack(spacing: 8) {
+            Text("\(viewModel.currentIndex + 1) / \(viewModel.totalCount)")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Theme.textSecondary)
+            if viewModel.isAutoplay {
+                Text("·")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Theme.textSecondary)
+                HStack(spacing: 4) {
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.caption2)
+                    Text("第 \(viewModel.autoplayPassIndex + 1) / 3 遍")
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.accent)
             }
         }
     }
