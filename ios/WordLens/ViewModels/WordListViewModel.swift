@@ -1,5 +1,6 @@
 // ViewModels/WordListViewModel.swift
 import Foundation
+import SwiftUI
 
 @MainActor
 final class WordListViewModel: ObservableObject {
@@ -16,6 +17,7 @@ final class WordListViewModel: ObservableObject {
 
     @Published var isSelecting = false
     @Published var selectedIDs: Set<String> = []
+    @Published var isDeletingSelected = false
 
     var words: [VocabularyWord] {
         guard let filterStatus else { return allWords }
@@ -35,15 +37,18 @@ final class WordListViewModel: ObservableObject {
         }
     }
 
-    func delete(_ word: VocabularyWord) async {
+    @discardableResult
+    func delete(_ word: VocabularyWord) async -> Bool {
         do {
             try await WordService.deleteWord(id: word.id)
             allWords.removeAll { $0.id == word.id }
+            return true
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
             errorMessage = "删除失败"
         }
+        return false
     }
 
     func toggleSelecting() {
@@ -60,14 +65,70 @@ final class WordListViewModel: ObservableObject {
     }
 
     /// 后端没有批量删除接口，逐个调用单删；个人生词库量级不大，串行足够，
-    /// 也顺带避免并发请求打满限流。任何一个失败都不影响其它词继续删。
-    func deleteSelected() async {
-        let ids = selectedIDs
-        for id in ids {
-            try? await WordService.deleteWord(id: id)
+    /// 也顺带避免并发请求打满限流。删除以服务端成功为准，成功删掉哪些词，
+    /// 本地列表就移除哪些词；失败项留在选择态里并提示用户重试。
+    @discardableResult
+    func deleteSelected() async -> Bool {
+        let idsToDelete = selectedIDs
+        guard !idsToDelete.isEmpty else { return false }
+
+        isDeletingSelected = true
+        errorMessage = nil
+        defer { isDeletingSelected = false }
+
+        var deletedIDs: Set<String> = []
+        var failedCount = 0
+        for id in idsToDelete {
+            do {
+                try await WordService.deleteWord(id: id)
+                deletedIDs.insert(id)
+            } catch {
+                failedCount += 1
+            }
         }
-        allWords.removeAll { ids.contains($0.id) }
-        selectedIDs.removeAll()
-        isSelecting = false
+
+        if !deletedIDs.isEmpty {
+            withAnimation(.easeInOut(duration: 0.35)) {
+                allWords.removeAll { deletedIDs.contains($0.id) }
+            }
+        }
+
+        selectedIDs.subtract(deletedIDs)
+        if failedCount > 0 {
+            errorMessage = "有 \(failedCount) 个单词删除失败，请稍后重试"
+        }
+
+        if selectedIDs.isEmpty {
+            isSelecting = false
+        }
+        return !deletedIDs.isEmpty
+    }
+
+    /// 三态全选：未全选 → 全选；当前全选 → 全不选；部分选 → 选完所有可见的。
+    /// 选的是当前 `words`（已应用 status 筛选和搜索），不是 allWords——避免
+    /// "点全选后切到筛选状态发现没选"的违和感。
+    var isAllSelected: Bool {
+        !words.isEmpty && selectedIDs.count == words.count
+    }
+
+    var isPartiallySelected: Bool {
+        !selectedIDs.isEmpty && !isAllSelected
+    }
+
+    func toggleSelectAll() {
+        if isAllSelected {
+            selectedIDs.removeAll()
+        } else {
+            selectedIDs = Set(words.map(\.id))
+        }
+    }
+
+    /// 详情页提交评分后，后端会返回更新后的词（含新 status / nextReviewAt 等），
+    /// 用它原地替换 allWords 里对应那一行——保证返回列表时筛选数字、状态点都
+    /// 跟实际一致（点"认识"再回来，状态点应从"不认识"变成"认识"）。
+    func updateWord(_ updated: VocabularyWord) {
+        if let idx = allWords.firstIndex(where: { $0.id == updated.id }) {
+            allWords[idx] = updated
+        }
     }
 }

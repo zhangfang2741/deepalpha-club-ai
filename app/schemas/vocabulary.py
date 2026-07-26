@@ -1,9 +1,11 @@
 # app/schemas/vocabulary.py
 """背单词 App（WordLens）请求/响应 schema。"""
+
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr
 
@@ -65,6 +67,15 @@ class RecognizeResponse(BaseResponse):
     """拍照识别响应。"""
 
     candidates: list[RecognizedWordSchema]
+
+
+class RecognizeStreamEvent(BaseModel):
+    """拍照识别 NDJSON 流中的单条事件。"""
+
+    type: Literal["heartbeat", "result", "error"]
+    stage: Literal["recognizing"] | None = None
+    data: RecognizeResponse | None = None
+    message: str | None = None
 
 
 class VocabularyWordCreate(BaseModel):

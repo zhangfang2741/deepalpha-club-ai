@@ -7,10 +7,14 @@
 顶部同样的说明）。
 """
 
+import asyncio
 import uuid
-from typing import Literal
+from collections.abc import AsyncIterator, Coroutine
+from contextlib import suppress
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +26,7 @@ from app.models.vocabulary import VocabularyUser
 from app.schemas.vocabulary import (
     RecognizedWordSchema,
     RecognizeResponse,
+    RecognizeStreamEvent,
     ReviewQueueResponse,
     ReviewSubmitRequest,
     ReviewSubmitResponse,
@@ -31,7 +36,11 @@ from app.schemas.vocabulary import (
     WordsBatchCreateResponse,
 )
 from app.services.vocabulary import words as word_service
-from app.services.vocabulary.recognizer import RecognitionFailedError, recognize_words_from_image
+from app.services.vocabulary.recognizer import (
+    RecognitionFailedError,
+    RecognizedWord,
+    recognize_words_from_image,
+)
 from app.services.vocabulary.tts import (
     TTSNotConfiguredError,
     TTSSynthesisError,
@@ -47,6 +56,68 @@ router = APIRouter()
 # 这个校验对走边缘代理的正常请求基本不会触发（客户端应该在上传前就把图片
 # 压缩到安全体积），留着是给绕过边缘直连本服务的调用方一个干净的错误提示。
 _MAX_IMAGE_BYTES = 800 * 1024  # 800KB，对齐边缘代理的实际限制
+_RECOGNIZE_HEARTBEAT_SECONDS = 5.0
+
+
+def _build_recognize_response(recognized: list[RecognizedWord], existing_words: set[str]) -> RecognizeResponse:
+    """把识别服务结果转换成 API 响应，并标记已存在的生词。"""
+    new_words = word_service.filter_new_words(existing_words, [w.word for w in recognized])
+    new_words_lower = {w.lower() for w in new_words}
+    candidates = [
+        RecognizedWordSchema(
+            word=w.word,
+            phonetic_ipa=w.phonetic_ipa,
+            part_of_speech=w.part_of_speech,
+            definition_zh=w.definition_zh,
+            etymology=w.etymology,
+            example_sentence=w.example_sentence,
+            already_in_library=w.word.lower() not in new_words_lower,
+        )
+        for w in recognized
+    ]
+    return RecognizeResponse(candidates=candidates)
+
+
+async def _stream_recognition_events(
+    recognition: Coroutine[Any, Any, list[RecognizedWord]],
+    existing_words: set[str],
+    heartbeat_interval: float = _RECOGNIZE_HEARTBEAT_SECONDS,
+) -> AsyncIterator[str]:
+    """在识别任务运行期间输出 NDJSON 心跳，完成后输出最终结果。"""
+    task = asyncio.create_task(recognition)
+    try:
+        yield RecognizeStreamEvent(type="heartbeat", stage="recognizing").model_dump_json(exclude_none=True) + "\n"
+
+        while True:
+            try:
+                recognized = await asyncio.wait_for(asyncio.shield(task), timeout=heartbeat_interval)
+                break
+            except TimeoutError:
+                yield (
+                    RecognizeStreamEvent(type="heartbeat", stage="recognizing").model_dump_json(exclude_none=True)
+                    + "\n"
+                )
+
+        response = _build_recognize_response(recognized, existing_words)
+        yield RecognizeStreamEvent(type="result", data=response).model_dump_json(exclude_none=True) + "\n"
+    except RecognitionFailedError:
+        yield (
+            RecognizeStreamEvent(type="error", message="识别失败，请重新拍摄").model_dump_json(exclude_none=True)
+            + "\n"
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception("vocabulary_recognize_stream_failed")
+        yield (
+            RecognizeStreamEvent(type="error", message="识别失败，请稍后重试").model_dump_json(exclude_none=True)
+            + "\n"
+        )
+    finally:
+        if not task.done():
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
 
 @router.post("/recognize", response_model=RecognizeResponse)
@@ -77,22 +148,42 @@ async def recognize(
         raise HTTPException(status_code=502, detail="识别失败，请重新拍摄") from exc
 
     existing = await word_service.get_existing_words(db, user.id)
-    new_words = word_service.filter_new_words(existing, [w.word for w in recognized])
-    new_words_lower = {w.lower() for w in new_words}
+    return _build_recognize_response(recognized, existing)
 
-    candidates = [
-        RecognizedWordSchema(
-            word=w.word,
-            phonetic_ipa=w.phonetic_ipa,
-            part_of_speech=w.part_of_speech,
-            definition_zh=w.definition_zh,
-            etymology=w.etymology,
-            example_sentence=w.example_sentence,
-            already_in_library=w.word.lower() not in new_words_lower,
-        )
-        for w in recognized
-    ]
-    return RecognizeResponse(candidates=candidates)
+
+@router.post("/recognize/stream", response_class=StreamingResponse)
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["vocabulary_recognize"][0])
+async def recognize_stream(
+    request: Request,
+    image: UploadFile = File(...),
+    ocr_words: list[str] = Form(default=[]),
+    user: VocabularyUser = Depends(get_current_vocab_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """上传图片并用 NDJSON 心跳保持长时间识别连接活跃。"""
+    image_bytes = await image.read()
+    if not image_bytes:
+        raise HTTPException(status_code=422, detail="图片为空")
+    if len(image_bytes) > _MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="图片过大，请控制在 10MB 以内")
+
+    existing = await word_service.get_existing_words(db, user.id)
+    events = _stream_recognition_events(
+        recognize_words_from_image(
+            image_bytes,
+            image.content_type or "image/jpeg",
+            ocr_hint=ocr_words,
+        ),
+        existing_words=existing,
+    )
+    return StreamingResponse(
+        events,
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/tts")

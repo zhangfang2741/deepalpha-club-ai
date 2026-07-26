@@ -13,10 +13,25 @@ enum MainTab: Hashable {
 final class AppNavigationState: ObservableObject {
     @Published var selectedTab: MainTab = .review
     @Published var highlightedWordIDs: Set<String> = []
+    @Published var vocabularyDataVersion = 0
+    @Published var blockingOperationMessage: String?
 
     func showNewlyAddedWords(_ ids: [String]) {
+        notifyVocabularyDataChanged()
         selectedTab = .vocabulary
         highlightedWordIDs = Set(ids)
+    }
+
+    func notifyVocabularyDataChanged() {
+        vocabularyDataVersion += 1
+    }
+
+    func beginBlockingOperation(_ message: String) {
+        blockingOperationMessage = message
+    }
+
+    func endBlockingOperation() {
+        blockingOperationMessage = nil
     }
 
     /// 高亮是一次性提示，不需要用户手动清除；生词库页出现后过一段时间自动褪去。

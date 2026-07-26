@@ -5,25 +5,59 @@ struct MainTabView: View {
     @EnvironmentObject var nav: AppNavigationState
 
     var body: some View {
-        TabView(selection: $nav.selectedTab) {
-            ReviewCardView()
-                .tabItem { Label("首页", systemImage: "house.fill") }
-                .tag(MainTab.review)
+        ZStack {
+            TabView(selection: $nav.selectedTab) {
+                ReviewCardView()
+                    .tabItem { Label("首页", systemImage: "house.fill") }
+                    .tag(MainTab.review)
 
-            CameraCaptureView()
-                .tabItem { Label("拍照", systemImage: "camera.fill") }
-                .tag(MainTab.camera)
+                CameraCaptureView()
+                    .tabItem { Label("拍照", systemImage: "camera.fill") }
+                    .tag(MainTab.camera)
 
-            HomeView()
-                .tabItem { Label("生词库", systemImage: "book.fill") }
-                .tag(MainTab.vocabulary)
+                HomeView()
+                    .tabItem { Label("生词库", systemImage: "book.fill") }
+                    .tag(MainTab.vocabulary)
 
-            NavigationStack {
-                SettingsView()
+                NavigationStack {
+                    SettingsView()
+                }
+                .tabItem { Label("设置", systemImage: "gearshape.fill") }
+                .tag(MainTab.settings)
             }
-            .tabItem { Label("设置", systemImage: "gearshape.fill") }
-            .tag(MainTab.settings)
+            .tint(Theme.accent)
+            .disabled(nav.blockingOperationMessage != nil)
+
+            if let message = nav.blockingOperationMessage {
+                blockingOverlay(message)
+            }
         }
-        .tint(Theme.accent)
+    }
+
+    private func blockingOverlay(_ message: String) -> some View {
+        ZStack {
+            Color.black.opacity(0.32)
+                .ignoresSafeArea()
+
+            VStack(spacing: 14) {
+                ProgressView()
+                    .tint(Theme.accent)
+                    .scaleEffect(1.15)
+                Text(message)
+                    .font(.headline)
+                    .foregroundStyle(Theme.textPrimary)
+                Text("请稍等，不要关闭应用")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            .padding(22)
+            .frame(maxWidth: 260)
+            .background(Theme.surface)
+            .clipShape(.rect(cornerRadius: 14))
+        }
+        .transition(.opacity)
+        .zIndex(10)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isModal)
     }
 }

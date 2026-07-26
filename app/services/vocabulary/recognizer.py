@@ -1,7 +1,25 @@
-"""拍照识别英语单词：调用 LLM 做图片 OCR + 音标 + 释义生成。"""
+"""拍照识别英语单词：调用 LLM 做图片 OCR + 音标 + 释义生成。
+
+两阶段流程（而不是一次视觉调用里把"看图识词"和"逐词配 IPA/释义/词根/例句"全干
+了）：
+  1. 识别阶段：一次视觉 LLM 调用，只产出单词列表（不带任何附加字段），输出量
+     跟词数近似线性但系数很小，100+ 词也不会撑爆 max_tokens。
+  2. 丰富阶段：把识别出的词表切成小批，并发跑多个纯文本 LLM 调用（不用再看
+     图），每批给 IPA/词性/释义/词根/例句。小批意味着单次调用的输出量可控，
+     不会被截断；纯文本任务也比"看图识词+配释义"一把梭更容易稳定遵守工具
+     调用格式。
+  3. 漏词重试：首轮丰富后若仍有词 definition_zh 为空（模型对太简单的词会
+     "觉得不用管"系统跳过），把没填上的词再跑一轮。两轮封顶。
+
+这是为了解决实测复现的问题：一张图 100+ 个词时，一次性视觉调用在 max_tokens
+预算耗尽后被硬截断，只能拿到前 30 出头个词（最后一个词的字段还是半截的）；
+分批+重试两件事加起来，既保证了识别总量，也兜住了简单词被模型跳过的尾巴。
+"""
 from __future__ import annotations
 
+import asyncio
 import base64
+from typing import TypeVar
 
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
@@ -9,23 +27,30 @@ from pydantic import BaseModel, Field
 from app.core.logging import logger
 from app.services.llm.service import llm_service
 
+_T = TypeVar("_T", bound=BaseModel)
+
 # MiniMax-M2.7（本项目当前的默认模型）是纯文本模型，不支持图片输入——实测会直接
 # 忽略请求里的图片内容，模型自己都会说"没看到图片"。MiniMax-M3 才是真正支持视觉
 # 的模型（同一个 Anthropic 兼容接口），所以这里强制指定，不跟随全局默认模型。
+# 丰富阶段虽然不需要看图，但沿用同一个模型：这是唯一经过反复实测验证过结构化
+# 输出稳定的模型，换模型是另一个不确定性来源，没有足够收益去冒这个险。
 _VISION_MODEL_NAME = "minimax-m3"
 
-# 单独调大这一次调用的输出预算（不影响其它调用方共享的默认 max_tokens）：加了
-# 词根+例句字段后，一张图识别 20+ 个单词时结构化输出比之前长不少。
-_VISION_MAX_TOKENS = 4096
+_MAX_TOKENS = 4096
+_MAX_ATTEMPTS = 2
 
-# 实测复现的真实故障：加了词根/例句字段后，图片里单词较多（20+）时 MiniMax-M3
-# 有时会无视 API 层强制的 tool_choice，直接输出一大段 Markdown 文字介绍每个词，
-# 而不调用工具——LangChain 的结构化输出在没有 tool call 时会静默返回 None（不抛
-# 异常），导致后面 `result.words` 直接 AttributeError。在 prompt 里显式重复一遍
-# "只能通过工具调用返回、禁止文字/Markdown 回答" 之后，同一张会稳定复现的测试图
-# 就能稳定拿到正确的结构化结果了（只在 API 参数里设 tool_choice 不够，还得在
-# prompt 正文里再强调一遍）。
-_RECOGNIZE_PROMPT = (
+# 丰富阶段每批词数：120 词整图实测复现过，一次性丰富到「service」这个词时
+# example_sentence 字段被硬截断成空——4096 tokens 撑不住太多词。15 词一批
+# （每词约 100~150 tokens 输出）留了足够余量，不会重蹈覆辙。
+_ENRICH_CHUNK_SIZE = 8
+# 并发跑几批丰富请求；太高容易把下游 LLM API 的速率限制打爆，4 是经验值。
+_ENRICH_MAX_CONCURRENCY = 4
+# 重试漏词轮数上限：首轮丰富后若仍有词 definition_zh 为空（模型对太简单的词
+# 会"觉得不用管"系统跳过），把没填上的词再跑一轮。两轮是经验值——再多也没用，
+# 同样的词模型还是会照样跳过，只是白白消耗 token+延迟。
+_ENRICH_MAX_RETRIES = 2
+
+_IDENTIFY_PROMPT = (
     "你是一个英语学习助手。请识别这张图片中出现的所有值得学习的英语单词，并严格遵守：\n"
     "1. 排除纯虚词（冠词 a/an/the、介词、连词、常见代词）。\n"
     "2. 排除专有名词（品牌、产品、公司、人名、地名，如 Google、TikTok）——它们不是"
@@ -35,39 +60,10 @@ _RECOGNIZE_PROMPT = (
     "search engine、information source）请拆成其中各自的**实义词**分别收录。\n"
     "4. 把变形还原成原形（复数→单数、过去式/进行时/第三人称→动词原形），并纠正明显的"
     "拼写错误。\n"
-    "5. 为每个词提供：国际音标（IPA，不含斜杠）、词性缩写（如 n./v./adj./adv.）、简洁"
-    "的中文释义、词根/词缀简析（如没有明显词根可留空）、一个包含该单词的英文例句"
-    "（附中文翻译）。\n"
-    "6. 如果图片中没有可识别的英语单词，返回空列表。\n"
-    "7. 必须只通过调用提供的工具返回结果，不要输出任何文字说明或 Markdown 格式的回答。"
+    "5. 如果图片中没有可识别的英语单词，返回空列表。\n"
+    "6. 必须只通过调用提供的工具返回单词列表，不要输出任何文字说明或 Markdown 格式的"
+    "回答，也不要为每个词附加音标/释义等信息——这一步只要词本身。"
 )
-
-_MAX_RECOGNIZE_ATTEMPTS = 2
-
-
-class RecognizedWord(BaseModel):
-    """单个识别出的单词。
-
-    除 word 外全部允许缺省：实测长词表（30+ 词）时 MiniMax-M3 偶尔会漏填某个词
-    的某个字段（如末尾某词漏了 definition_zh），如果这些字段是必填，pydantic
-    校验会让整批结果直接报废——明明其它 29 个词都识别对了，用户却因为其中一个
-    词缺一个字段而拿到「识别失败」。放宽成缺省空字符串后，单个词的字段缺失顶多
-    让那一个词的某个字段是空的，不会拖累整批。
-    """
-
-    word: str = Field(..., description="识别出的英语单词原形")
-    phonetic_ipa: str = Field(default="", description="国际音标，不含斜杠")
-    part_of_speech: str = Field(default="", description="词性缩写")
-    definition_zh: str = Field(default="", description="简洁中文释义")
-    etymology: str = Field(default="", description="词根/词缀简析，没有明显词根则留空")
-    example_sentence: str = Field(default="", description="包含该单词的英文例句，附中文翻译")
-
-
-class _RecognizeResult(BaseModel):
-    """LLM 结构化输出的顶层容器。"""
-
-    words: list[RecognizedWord] = Field(default_factory=list)
-
 
 # 混合识别方案的 OCR 提示片段：iOS 端 Apple Vision 已对图片做过本地 OCR（印刷体
 # 又快又准），把抠出的候选词作为「参考线索」拼进 prompt，和 LLM 自己看图的识别结果
@@ -81,17 +77,136 @@ _OCR_HINT_TEMPLATE = (
     "结果同样适用。"
 )
 
+# 逗号顿号连接成一句话时实测会漏答（哪怕明确要求"有几个词就必须返回几个词"，
+# 常见短词如 idea/world/third 这种模型会觉得"太简单不用管"，一批 8 个都能漏 3、
+# 5 个）。改成逐行编号后再重复一遍数量，把"这是一份需要逐条处理的清单"这个信号
+# 做得更明确，用编号任务清单的提示模式换更高的枚举覆盖率。
+_ENRICH_PROMPT_TEMPLATE = (
+    "你是一个英语学习助手。以下是一批已经确定要收录的英语单词原形，逐行编号：\n"
+    "{numbered_words}\n"
+    "请为列表中**每一个编号对应的词**都提供：国际音标（IPA，不含斜杠）、词性缩写"
+    "（如 n./v./adj./adv.）、简洁的中文释义、词根/词缀简析（没有明显词根可留空）、"
+    "一个包含该单词的英文例句（附中文翻译）。\n"
+    "上面一共有 {count} 个词，你的回答也必须正好包含这 {count} 个词，逐一对应，"
+    "不能因为某个词看起来简单常见就跳过不答，也不能额外添加列表之外的词。\n"
+    "必须只通过调用提供的工具返回结果，不要输出任何文字说明或 Markdown 格式的回答。"
+)
 
-def _build_recognize_prompt(ocr_hint: list[str] | None) -> str:
+
+def _build_identify_prompt(ocr_hint: list[str] | None) -> str:
     """拼装识别 prompt：基础指令 + 可选的本地 OCR 候选词线索。"""
     hint_words = [w.strip() for w in (ocr_hint or []) if w.strip()]
     if not hint_words:
-        return _RECOGNIZE_PROMPT
-    return _RECOGNIZE_PROMPT + _OCR_HINT_TEMPLATE.format(words=", ".join(hint_words))
+        return _IDENTIFY_PROMPT
+    return _IDENTIFY_PROMPT + _OCR_HINT_TEMPLATE.format(words=", ".join(hint_words))
+
+
+class RecognizedWord(BaseModel):
+    """单个识别出的单词。
+
+    除 word 外全部允许缺省：丰富阶段某一批调用即使彻底失败，也会用只有 word
+    字段的兜底实例填回去（见 _enrich_chunk），保证这个词不会从结果里消失，
+    顶多是音标/释义等字段暂时是空的。
+    """
+
+    word: str = Field(..., description="识别出的英语单词原形")
+    phonetic_ipa: str = Field(default="", description="国际音标，不含斜杠")
+    part_of_speech: str = Field(default="", description="词性缩写")
+    definition_zh: str = Field(default="", description="简洁中文释义")
+    etymology: str = Field(default="", description="词根/词缀简析，没有明显词根则留空")
+    example_sentence: str = Field(default="", description="包含该单词的英文例句，附中文翻译")
+
+
+class _IdentifyResult(BaseModel):
+    """识别阶段的结构化输出：只有单词列表。"""
+
+    words: list[str] = Field(default_factory=list)
+
+
+class _RecognizeResult(BaseModel):
+    """丰富阶段的结构化输出：带完整字段的单词列表。"""
+
+    words: list[RecognizedWord] = Field(default_factory=list)
 
 
 class RecognitionFailedError(Exception):
     """图片识别失败（LLM 调用异常）。"""
+
+
+async def _call_with_retry(message: HumanMessage, response_format: type[_T]) -> _T:
+    """带重试的结构化输出调用：处理"异常"和"模型没走工具调用返回 None"两种失败。
+
+    Raises:
+        RecognitionFailedError: 重试耗尽仍未拿到结果。
+    """
+    for attempt in range(1, _MAX_ATTEMPTS + 1):
+        try:
+            result = await llm_service.call(
+                [message],
+                model_name=_VISION_MODEL_NAME,
+                response_format=response_format,
+                max_tokens=_MAX_TOKENS,
+            )
+        except Exception as exc:
+            logger.exception("vocabulary_recognize_llm_call_failed", attempt=attempt)
+            if attempt == _MAX_ATTEMPTS:
+                raise RecognitionFailedError("LLM 识别调用失败") from exc
+            continue
+
+        if result is not None:
+            return result
+
+        # 模型没有调用工具、只回了纯文本，结构化输出是 None。重试一次通常就好——
+        # 是否触发跟具体这次采样有关，不是稳定必现的。
+        logger.warning("vocabulary_recognize_no_structured_output", attempt=attempt)
+
+    raise RecognitionFailedError("LLM 未按预期格式返回识别结果")
+
+
+async def _identify_words(image_bytes: bytes, mime_type: str, ocr_hint: list[str] | None) -> list[str]:
+    """识别阶段：看图 + OCR 线索，只产出去重去噪后的单词列表。"""
+    b64_image = base64.b64encode(image_bytes).decode("ascii")
+    message = HumanMessage(
+        content=[
+            {"type": "text", "text": _build_identify_prompt(ocr_hint)},
+            {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64_image}"}},
+        ]
+    )
+    result: _IdentifyResult = await _call_with_retry(message, _IdentifyResult)
+    # 大小写不敏感去重，保留首次出现的大小写。
+    seen: set[str] = set()
+    words: list[str] = []
+    for w in result.words:
+        stripped = w.strip()
+        if not stripped or stripped.lower() in seen:
+            continue
+        seen.add(stripped.lower())
+        words.append(stripped)
+    return words
+
+
+async def _enrich_chunk(words: list[str], semaphore: asyncio.Semaphore) -> list[RecognizedWord]:
+    """丰富阶段的一批：给这批词配 IPA/释义/词根/例句。
+
+    这批调用整体失败，或者返回结果里缺了某几个词，都用只有 word 字段的兜底
+    实例填回去——保证调用方传进来的每一个词都会出现在返回结果里。
+    """
+    numbered = "\n".join(f"{i}. {w}" for i, w in enumerate(words, start=1))
+    message = HumanMessage(
+        content=_ENRICH_PROMPT_TEMPLATE.format(numbered_words=numbered, count=len(words))
+    )
+    async with semaphore:
+        try:
+            result: _RecognizeResult = await _call_with_retry(message, _RecognizeResult)
+        except RecognitionFailedError:
+            logger.warning("vocabulary_enrich_chunk_failed_fallback_bare", word_count=len(words))
+            return [RecognizedWord(word=w) for w in words]
+
+    enriched_by_lower = {w.word.strip().lower(): w for w in result.words if w.word.strip()}
+    missing = [w for w in words if w.lower() not in enriched_by_lower]
+    if missing:
+        logger.warning("vocabulary_enrich_chunk_missing_words", requested=len(words), missing=missing)
+    return [enriched_by_lower.get(w.lower(), RecognizedWord(word=w)) for w in words]
 
 
 async def recognize_words_from_image(
@@ -99,57 +214,69 @@ async def recognize_words_from_image(
     mime_type: str = "image/jpeg",
     ocr_hint: list[str] | None = None,
 ) -> list[RecognizedWord]:
-    """调用视觉 LLM 识别图片中的英语单词，返回候选词列表。
+    """识别图片中的英语单词并逐个配上音标/释义等信息。
 
     Args:
         image_bytes: 图片原始字节
         mime_type: 图片 MIME 类型
         ocr_hint: iOS 端 Apple Vision 本地 OCR 抠出的候选词，作为参考线索拼进
-            prompt，与 LLM 自己看图的识别结果综合取并集。为空则退化为纯看图识别。
+            识别阶段的 prompt，与 LLM 自己看图的识别结果综合取并集。为空则
+            退化为纯看图识别。
 
     Returns:
         识别出的候选单词列表（可能为空）
 
     Raises:
-        RecognitionFailedError: LLM 调用失败
+        RecognitionFailedError: 识别阶段的 LLM 调用失败（丰富阶段单批失败不会
+            让整体报错，会退化成该批词只有 word 字段）
     """
-    b64_image = base64.b64encode(image_bytes).decode("ascii")
-    message = HumanMessage(
-        content=[
-            {"type": "text", "text": _build_recognize_prompt(ocr_hint)},
-            {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64_image}"}},
+    words = await _identify_words(image_bytes, mime_type, ocr_hint)
+    if not words:
+        logger.info("vocabulary_recognize_succeeded", word_count=0)
+        return []
+
+    chunks = [words[i : i + _ENRICH_CHUNK_SIZE] for i in range(0, len(words), _ENRICH_CHUNK_SIZE)]
+    semaphore = asyncio.Semaphore(_ENRICH_MAX_CONCURRENCY)
+    chunk_results = await asyncio.gather(*(_enrich_chunk(chunk, semaphore) for chunk in chunks))
+
+    # 按小写合并回单条索引，便于后续按 word 原地覆盖重试结果。
+    enriched_by_lower: dict[str, RecognizedWord] = {
+        w.word.strip().lower(): w for w in (item for chunk in chunk_results for item in chunk)
+    }
+
+    # 首轮丰富后 definition_zh 为空的词（典型表现：模型觉得"idea / world / Tuesday
+    # 这种太简单不用写"系统跳过），把它们单独再跑一轮——换个批次的"上下文压力"，
+    # 大概率能把空字段补上。两轮封顶，避免无限循环/白白烧 token。
+    for attempt in range(1, _ENRICH_MAX_RETRIES + 1):
+        missing = [rw.word for _, rw in enriched_by_lower.items() if not rw.definition_zh]
+        if not missing:
+            break
+        retry_chunks = [
+            missing[i : i + _ENRICH_CHUNK_SIZE] for i in range(0, len(missing), _ENRICH_CHUNK_SIZE)
         ]
+        retry_results = await asyncio.gather(
+            *(_enrich_chunk(chunk, semaphore) for chunk in retry_chunks)
+        )
+        # 覆盖式合并：重试里 definition_zh 仍是空的，按原样保留（无进展时不浪费后续调用）。
+        for chunk in retry_results:
+            for w in chunk:
+                key = w.word.strip().lower()
+                if not key:
+                    continue
+                if w.definition_zh or key not in enriched_by_lower:
+                    enriched_by_lower[key] = w
+        logger.info(
+            "vocabulary_enrich_retry_done",
+            attempt=attempt,
+            retried=len(missing),
+            still_missing=sum(1 for rw in enriched_by_lower.values() if not rw.definition_zh),
+        )
+
+    enriched = list(enriched_by_lower.values())
+    logger.info(
+        "vocabulary_recognize_succeeded",
+        word_count=len(enriched),
+        identified_count=len(words),
+        chunk_count=len(chunks),
     )
-    for attempt in range(1, _MAX_RECOGNIZE_ATTEMPTS + 1):
-        try:
-            result = await llm_service.call(
-                [message],
-                model_name=_VISION_MODEL_NAME,
-                response_format=_RecognizeResult,
-                max_tokens=_VISION_MAX_TOKENS,
-            )
-        except Exception:
-            logger.exception("vocabulary_recognize_llm_call_failed", attempt=attempt)
-            if attempt == _MAX_RECOGNIZE_ATTEMPTS:
-                raise RecognitionFailedError("LLM 识别调用失败")
-            continue
-
-        if result is not None:
-            # 长词表时模型偶尔会把某个词的 word 字段本身也吐成空字符串（不是缺失
-            # 这个 key，是给了个 ""，pydantic 校验挡不住）——加入生词库后这种词
-            # 在列表里就是一整行空白，只有一个描边、点不出内容。这里直接过滤掉，
-            # 这种词本身没有实际信息，展示出来也没意义。
-            words = [w for w in result.words if w.word.strip()]
-            logger.info(
-                "vocabulary_recognize_succeeded",
-                word_count=len(words),
-                dropped_blank=len(result.words) - len(words),
-                attempt=attempt,
-            )
-            return words
-
-        # 模型没有调用工具、只回了纯文本（见上面的注释），结构化输出是 None。
-        # 重试一次通常就好——是否触发跟具体这次采样有关，不是稳定必现的。
-        logger.warning("vocabulary_recognize_no_structured_output", attempt=attempt)
-
-    raise RecognitionFailedError("LLM 未按预期格式返回识别结果")
+    return enriched

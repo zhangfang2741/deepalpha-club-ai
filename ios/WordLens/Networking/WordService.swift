@@ -7,7 +7,11 @@ enum WordService {
     /// 让后端视觉 LLM 综合看图识别与 OCR 结果取并集。ocrWords 为空则纯看图识别。
     static func recognize(imageData: Data, ocrWords: [String] = []) async throws -> RecognizeResponse {
         let textFields = ocrWords.map { (name: "ocr_words", value: $0) }
-        return try await APIClient.shared.postMultipartImage("/recognize", imageData: imageData, textFields: textFields)
+        return try await APIClient.shared.postMultipartImage(
+            "/recognize/stream",
+            imageData: imageData,
+            textFields: textFields
+        )
     }
 
     static func addWordsBatch(_ words: [VocabularyWordCreate]) async throws -> WordsBatchCreateResponse {

@@ -23,6 +23,8 @@ struct WordListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            selectionBar
+
             if viewModel.isLoading && viewModel.words.isEmpty {
                 // 只在完全没数据时显示占位 loading；已有数据时的后台刷新
                 // 不能让列表内容被替换掉，否则从详情页返回时滚动位置会被重置到顶部。
@@ -53,6 +55,13 @@ struct WordListView: View {
                                     .listRowBackground(Color.clear)
                                     .listRowSeparator(.hidden)
                                     .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                                    // 删除时让行带 0.35s 的滑出+淡出过渡，配合
+                                    // ViewModel 里 withAnimation 一起给用户"按了有反应"
+                                    // 的反馈，而不是数据被硬切走。
+                                    .transition(.asymmetric(
+                                        insertion: .opacity,
+                                        removal: .move(edge: .leading).combined(with: .opacity)
+                                    ))
                                 }
                             } header: {
                                 Text(section.letter)
@@ -65,6 +74,9 @@ struct WordListView: View {
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
+                    // 监听 allWords 的删除触发 List 自带的删除动画；
+                    // 0.35s 的 duration 和 viewRow 上 transition 的 timing 对齐。
+                    .animation(.easeInOut(duration: 0.35), value: viewModel.allWords.map(\.id))
                     .refreshable {
                         if let onRefresh {
                             await onRefresh()
@@ -103,24 +115,53 @@ struct WordListView: View {
                         titleVisibility: .visible
                     ) {
                         Button("删除", role: .destructive) {
-                            Task { await viewModel.deleteSelected() }
+                            Task {
+                                nav.beginBlockingOperation("正在删除生词...")
+                                defer { nav.endBlockingOperation() }
+                                if await viewModel.deleteSelected() {
+                                    nav.notifyVocabularyDataChanged()
+                                }
+                            }
                         }
                         Button("取消", role: .cancel) {}
                     }
+                    .disabled(viewModel.isDeletingSelected)
                 }
-            }
-        }
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(viewModel.isSelecting ? "完成" : "选择") {
-                    viewModel.toggleSelecting()
-                }
-                .disabled(viewModel.words.isEmpty)
             }
         }
         .navigationDestination(item: $selectedWord) { word in
             WordDetailView(word: word, listViewModel: viewModel)
         }
+    }
+
+    private var selectionBar: some View {
+        HStack {
+            if viewModel.isSelecting {
+                Button {
+                    viewModel.toggleSelectAll()
+                } label: {
+                    Text(selectAllTitle)
+                        .font(.subheadline.weight(viewModel.isAllSelected ? .semibold : .regular))
+                }
+                .disabled(viewModel.words.isEmpty)
+            }
+
+            Spacer()
+
+            Button(viewModel.isSelecting ? "完成" : "选择") {
+                viewModel.toggleSelecting()
+            }
+            .font(.subheadline.weight(.semibold))
+            .disabled(viewModel.words.isEmpty)
+        }
+        .frame(height: 32)
+    }
+
+    private var selectAllTitle: String {
+        if viewModel.isAllSelected {
+            return "全不选"
+        }
+        return "全选"
     }
 
     private func scrollToHighlightedIfNeeded(proxy: ScrollViewProxy) {
