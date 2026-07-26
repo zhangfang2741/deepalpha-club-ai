@@ -7,6 +7,11 @@ struct WordDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var isSubmitting = false
     @State private var submitError: String?
+    /// 详情页没有"下一张卡"的概念，跟首页复习卡片（评完自动翻到下一词，同一个
+    /// 词天然只能评一次）不一样——如果不额外拦一道，用户能在同一个词上反复点
+    /// 评分按钮，每次都是一次真实的 SM-2 提交，复习间隔/连续次数/下次复习时间
+    /// 会被无限次推进。这次页面会话里成功提交过一次就锁住，避免误连点。
+    @State private var hasSubmittedThisSession = false
     /// 提交评分后用后端返回的最新词刷新详情，避免看到的还是点按钮之前的 status。
     @State private var currentWord: VocabularyWord
 
@@ -63,6 +68,12 @@ struct WordDetailView: View {
                             .font(.footnote)
                             .foregroundStyle(Theme.unknown)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    if hasSubmittedThisSession {
+                        Text("本次已提交评分，重新进入详情页可再次评估")
+                            .font(.footnote)
+                            .foregroundStyle(Theme.textSecondary)
                     }
 
                     // 三档评分按钮直接提交到后端 review 接口（和首页复习卡片背面的评分
@@ -155,11 +166,12 @@ struct WordDetailView: View {
                 .clipShape(.rect(cornerRadius: 10))
         }
         .buttonStyle(.pressable)
-        .disabled(isSubmitting)
+        .disabled(isSubmitting || hasSubmittedThisSession)
     }
 
     /// 提交评分：成功后用后端返回的最新词刷新详情 + 同步给列表 viewModel，
-    /// 让用户返回列表时状态点、筛选数字都对得上。
+    /// 让用户返回列表时状态点、筛选数字都对得上；同时锁住评分按钮，防止在
+    /// 同一次页面停留里反复提交、把 SM-2 状态越点越远。
     private func submit(_ rating: ReviewRating) async {
         isSubmitting = true
         submitError = nil
@@ -168,6 +180,7 @@ struct WordDetailView: View {
             let updated = try await WordService.submitReview(wordId: currentWord.id, rating: rating)
             currentWord = updated
             listViewModel.updateWord(updated)
+            hasSubmittedThisSession = true
         } catch let error as APIError {
             submitError = error.message
         } catch {
