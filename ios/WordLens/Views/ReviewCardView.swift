@@ -4,16 +4,6 @@ import SwiftUI
 struct ReviewCardView: View {
     @StateObject private var viewModel = ReviewViewModel()
     @EnvironmentObject var nav: AppNavigationState
-    @State private var showPronunciationSettings = false
-
-    /// 自动播放 FAB 的位置偏移（pt）。默认值 bottom=20、trailing=20 是 iOS FAB
-    /// 通用位置，但实际用起来 FAB 会压在评分按钮上——用户拖一次就能挪开，位
-    /// 置会存到 UserDefaults，下次进来直接恢复。
-    @State private var fabOffsetX: CGFloat = 20
-    @State private var fabOffsetY: CGFloat = 140
-    /// 拖动期间留个临时的"正在拖"标志，用来抑制 onTap 误触发（按下后手指移
-    /// 动会被 DragGesture 消费，但有时 SwiftUI 会先发一次 tap 再识别 drag）。
-    @State private var fabIsDragging = false
 
     var body: some View {
         NavigationStack {
@@ -62,253 +52,116 @@ struct ReviewCardView: View {
                 }
             }
             .navigationTitle("首页")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                // toolbar 上只留发音设置——自动播放按钮改到卡片右下角做浮动大按钮，
-                // 那里视觉重量更足、单手握持时拇指也更容易够到。
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showPronunciationSettings = true
-                    } label: {
-                        Image(systemName: "speaker.wave.2.circle")
-                    }
-                    .tint(Theme.accent)
-                    .accessibilityLabel("发音设置")
-                }
-            }
-            .sheet(isPresented: $showPronunciationSettings) {
-                PronunciationSettingsView()
-            }
             .task { await viewModel.loadQueueIfNeeded() }
             .onChange(of: nav.vocabularyDataVersion) { _, _ in
                 Task { await viewModel.loadQueue() }
             }
             .refreshable { await viewModel.loadQueue() }
-            // 进入页面时读出之前用户拖到的位置。
-            .onAppear { restoreFabPosition() }
         }
-    }
-
-    /// UserDefaults key 和读写逻辑：x/y 分开存，方便 default 值独立更新而不
-    /// 影响老用户（直接存 CGPoint 的 Data 解析麻烦，且老数据迁移风险大）。
-    private enum FabPositionStore {
-        static let xKey = "review_fab_offset_x"
-        static let yKey = "review_fab_offset_y"
-
-        static func load() -> (x: CGFloat, y: CGFloat) {
-            let x = UserDefaults.standard.object(forKey: xKey) as? CGFloat
-            let y = UserDefaults.standard.object(forKey: yKey) as? CGFloat
-            return (x ?? 20, y ?? 140)
-        }
-
-        static func save(x: CGFloat, y: CGFloat) {
-            UserDefaults.standard.set(x, forKey: xKey)
-            UserDefaults.standard.set(y, forKey: yKey)
-        }
-    }
-
-    private func restoreFabPosition() {
-        let pos = FabPositionStore.load()
-        fabOffsetX = pos.x
-        fabOffsetY = pos.y
     }
 
     /// 布局要点：
-    /// 1. 卡片居中（GeometryReader + ScrollView 让短/长内容都不会挤没按钮）；
+    /// 1. 卡片居中（ScrollView 让短/长内容都不会挤出按钮）；
     /// 2. 卡片下方一行紧凑胶囊：回忆阶段是「‹ 上一」+「下一个 ›」，自然宽度
     ///    居中、左右各留空白；翻卡后整行替换成三档评分按钮；
-    /// 3. 自动播放按钮做成卡片右下角的圆形 FAB（64pt），跟卡片有视觉层级——
-    ///    播放中是红色 + 停止图标，停止时是主题色 + 播放图标，64pt 比 toolbar
-    ///    的 22pt 图标大一倍多、单手拇指更容易够到；
+    /// 3. 自动播放按钮单独一行（64pt 圆形），放在所有动作按钮下方居中——
+    ///    不再浮动、不拖动，位置永远稳定，不会跟任何按钮撞车；
     /// 4. 进度条（X/Y + 第 N/3 遍）始终在卡片上方，跟 FAB 不抢位置。
     private func cardContent(_ word: VocabularyWord) -> some View {
-        GeometryReader { geo in
-            ZStack(alignment: .bottom) {
-                ScrollView {
-                    VStack(spacing: 20) {
-                        // 进度行：始终显示「X / Y」，自动播放时再追加「第 N / 3 遍」
-                        HStack(spacing: 8) {
-                            Text("\(viewModel.currentIndex + 1) / \(viewModel.totalCount)")
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(Theme.textSecondary)
+        ScrollView {
+            VStack(spacing: 20) {
+                // 进度行：始终显示「X / Y」，自动播放时再追加「第 N / 3 遍」
+                HStack(spacing: 8) {
+                    Text("\(viewModel.currentIndex + 1) / \(viewModel.totalCount)")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Theme.textSecondary)
 
-                            if viewModel.isAutoplay {
-                                Text("·")
-                                    .font(.caption.weight(.medium))
-                                    .foregroundStyle(Theme.textSecondary)
-                                HStack(spacing: 4) {
-                                    Image(systemName: "speaker.wave.2.fill")
-                                        .font(.caption2)
-                                    Text("第 \(viewModel.autoplayPassIndex + 1) / 3 遍")
-                                }
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(Theme.accent)
-                            }
+                    if viewModel.isAutoplay {
+                        Text("·")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Theme.textSecondary)
+                        HStack(spacing: 4) {
+                            Image(systemName: "speaker.wave.2.fill")
+                                .font(.caption2)
+                            Text("第 \(viewModel.autoplayPassIndex + 1) / 3 遍")
                         }
-                        .padding(.top, 8)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                    }
+                }
+                .padding(.top, 8)
 
-                        Spacer(minLength: 0)
+                Spacer(minLength: 0)
 
-                        flipCard(word)
-                            .padding(.horizontal)
+                flipCard(word)
+                    .padding(.horizontal)
 
-                        Spacer(minLength: 24)
+                Spacer(minLength: 24)
 
-                        // 底部动作条：回忆阶段是上一/下一（紧凑胶囊，自然宽度，
-                        // 居中），翻卡后是评分三档；两者都用 HStack 但不带
-                        // .frame(maxWidth: .infinity)，避免拉满整行的"占满感"。
-                        if !viewModel.isFlipped {
-                            HStack(spacing: 12) {
-                                prevNextButton("上一个", systemImage: "chevron.left",
-                                               enabled: viewModel.canGoPrevious) {
-                                    viewModel.goToPrevious()
-                                }
-                                prevNextButton("下一个", systemImage: "chevron.right",
-                                               iconTrailing: true,
-                                               enabled: viewModel.canGoNext) {
-                                    viewModel.goToNext()
-                                }
-                            }
-                            .padding(.bottom, 8)
-                        } else {
-                            HStack(spacing: 10) {
-                                ratingButton("😵 不认识", Theme.unknown, .unknown)
-                                ratingButton("😐 模糊", Theme.fuzzy, .fuzzy)
-                                ratingButton("😊 认识", Theme.known, .known)
-                            }
-                            .padding(.horizontal)
-                            .padding(.bottom, 8)
+                // 底部动作条：回忆阶段是上一/下一（紧凑胶囊，自然宽度，
+                // 居中），翻卡后是评分三档；两者都用 HStack 但不带
+                // .frame(maxWidth: .infinity)，避免拉满整行的"占满感"。
+                if !viewModel.isFlipped {
+                    HStack(spacing: 12) {
+                        prevNextButton("上一个", systemImage: "chevron.left",
+                                       enabled: viewModel.canGoPrevious) {
+                            viewModel.goToPrevious()
                         }
-
-                        if let errorMessage = viewModel.errorMessage {
-                            Text(errorMessage).font(.footnote).foregroundStyle(Theme.unknown)
-                                .padding(.bottom, 4)
+                        prevNextButton("下一个", systemImage: "chevron.right",
+                                       iconTrailing: true,
+                                       enabled: viewModel.canGoNext) {
+                            viewModel.goToNext()
                         }
                     }
-                    .frame(minHeight: geo.size.height)
+                    .padding(.bottom, 4)
+                } else {
+                    HStack(spacing: 10) {
+                        ratingButton("😵 不认识", Theme.unknown, .unknown)
+                        ratingButton("😐 模糊", Theme.fuzzy, .fuzzy)
+                        ratingButton("😊 认识", Theme.known, .known)
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 4)
                 }
 
-                // 浮动播放按钮（FAB）：默认右下角偏上（offsetX=20, offsetY=140），
-                // 比之前直接贴角的位置高出一截，不会和"认识"按钮撞在一起。
-                // 用户可以长按拖到任意位置，位置存到 UserDefaults，下次恢复。
-                //
-                // simultaneousGesture 而不是 .gesture：FAB 自身已经挂了 .onTapGesture
-                // 处理单击，drag 必须和它同时收到事件才能不被 tap 吞掉。
-                autoplayFAB
-                    .offset(x: -fabOffsetX, y: -fabOffsetY)
-                    .simultaneousGesture(fabDragGesture(in: geo.size))
-                    .animation(fabIsDragging ? nil : .spring(response: 0.3, dampingFraction: 0.8),
-                               value: fabOffsetX)
-                    .animation(fabIsDragging ? nil : .spring(response: 0.3, dampingFraction: 0.8),
-                               value: fabOffsetY)
+                // 自动播放大按钮：64pt 圆形，居中。颜色随播放状态切换——
+                // 停止时主题色 + 播放图标，播放中红色 + 停止图标，远距离也能
+                // 识别当前状态。
+                autoplayButton
+
+                if let errorMessage = viewModel.errorMessage {
+                    Text(errorMessage).font(.footnote).foregroundStyle(Theme.unknown)
+                        .padding(.bottom, 4)
+                }
             }
         }
     }
 
-    /// FAB 拖动手势：每次 onChanged 累加 translation。10pt 位移阈值用来区分
-    /// tap / drag——onChanged 一旦累计位移 >= 10pt 就置 fabIsDragging=true
-    /// （fabTapSurface 里的 onTapGesture 会忽略这次的 tap 候选），onEnded
-    /// 再根据 fabIsDragging 决定落盘还是完全回滚。
-    ///
-    /// 安全区：FAB 不能拖到屏幕外（要保证 64pt 圆形至少有 32pt 在屏幕内），
-    /// 也不能盖住卡片顶部的进度文字——顶部留 80pt 不让进，底部要预留 80pt 给
-    /// 评分/上一下一按钮的命中区域。
-    private func fabDragGesture(in containerSize: CGSize) -> some Gesture {
-        let fabSize: CGFloat = 64
-        let safeInsets = fabSize / 2 + 8   // FAB 中心至少离边 8pt
-        let topReserve: CGFloat = 80         // 顶部进度条不让进
-        let bottomReserve: CGFloat = 80      // 底部按钮不让进
-        let dragActivationDistance: CGFloat = 10
-
-        // 记录本次手势的"起点 offset"和"是否被判定为 drag"——这两个值在
-        // onChanged/onEnded 之间需要跨闭包共享，用本地 closure 捕获（不是
-        // @State 字段，避免和 SwiftUI view diffing 干扰）。
-        var startX: CGFloat = 0
-        var startY: CGFloat = 0
-        var activatedDrag = false
-
-        return DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                if !activatedDrag {
-                    let dx = value.translation.width
-                    let dy = value.translation.height
-                    if hypot(dx, dy) < dragActivationDistance {
-                        // 位移太小，保留 tap 候选，不动 offset、不置 fabIsDragging
-                        return
-                    }
-                    // 第一次越过阈值：锁定起点，进入 drag 模式
-                    activatedDrag = true
-                    startX = fabOffsetX
-                    startY = fabOffsetY
-                    fabIsDragging = true
-                }
-                let proposedX = startX - value.translation.width
-                let proposedY = startY - value.translation.height
-                let centerX = containerSize.width - proposedX
-                let centerY = containerSize.height - proposedY
-                let minX = safeInsets
-                let maxX = containerSize.width - safeInsets
-                let minY = topReserve
-                let maxY = containerSize.height - bottomReserve
-                let clampedX = min(max(centerX, minX), maxX)
-                let clampedY = min(max(centerY, minY), maxY)
-                fabOffsetX = containerSize.width - clampedX
-                fabOffsetY = containerSize.height - clampedY
+    /// 自动播放按钮：圆 + 图标 + 阴影，包在 Button 里复用 .pressable 样式
+    /// （按压有缩放反馈，跟评分按钮手感一致）。之前的 drag 逻辑整段移除——
+    /// 浮动 + 长按拖动的定位在滑动列表里 coordinateSpace 容易错乱，用户反馈
+    /// "拖动一下乱跑"，干脆不做浮动、不写位置，固定放在卡片下方居中。
+    private var autoplayButton: some View {
+        Button {
+            if viewModel.isAutoplay {
+                viewModel.stopAutoplay()
+            } else {
+                viewModel.startAutoplay()
             }
-            .onEnded { _ in
-                if activatedDrag {
-                    fabIsDragging = false
-                    FabPositionStore.save(x: fabOffsetX, y: fabOffsetY)
-                }
-                activatedDrag = false
-            }
-    }
-
-    /// 浮动播放按钮：64pt 圆形，跟卡片有阴影分层。颜色随播放状态切换：停止时
-    /// 用主题色 + 播放图标，播放中用红色 + 停止图标，让用户远距离也能识别当前
-    /// 状态。
-    ///
-    /// 点击/拖动的判定：用 `.onTapGesture` + `.simultaneousGesture(DragGesture)`
-    /// 自己分流——之前的 Button + .gesture(DragGesture) 写法 Button 会吞掉所有
-    /// 事件、drag.onChanged 根本收不到；改用 onTapGesture + simultaneousGesture
-    /// 后两者都能拿到事件，再用「手指累计位移 < 10pt → 算 tap」的阈值判定。
-    /// 视觉效果保持不变（按压 scale + 阴影），行为上单击/拖动都灵敏。
-    private var autoplayFAB: some View {
-        fabTapSurface
-    }
-
-    /// FAB 视觉主体：圆形 + 图标 + 阴影。点击和拖动的事件都在外层包装。
-    private var fabVisual: some View {
-        Image(systemName: viewModel.isAutoplay ? "stop.fill" : "play.fill")
-            .font(.title2.weight(.bold))
-            .foregroundStyle(.white)
-            .frame(width: 64, height: 64)
-            .background(
-                Circle().fill(viewModel.isAutoplay ? Theme.unknown : Theme.accent)
-            )
-            .shadow(color: (viewModel.isAutoplay ? Theme.unknown : Theme.accent).opacity(0.4),
-                    radius: 8, x: 0, y: 4)
-            .scaleEffect(fabIsDragging ? 1.08 : 1.0)
-            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: fabIsDragging)
-    }
-
-    /// 把"点击区域"和"视觉主体"合并的容器层——所有手势都挂在这里而不是内层，
-    /// 这样 64pt 圆形整体都是可点击 / 可拖动区域，不会被圆形视觉边界限制。
-    private var fabTapSurface: some View {
-        fabVisual
-            .contentShape(.rect)
-            .onTapGesture {
-                // 拖动中的 tap 是误触，忽略掉
-                guard !fabIsDragging else { return }
-                if viewModel.isAutoplay {
-                    viewModel.stopAutoplay()
-                } else {
-                    viewModel.startAutoplay()
-                }
-            }
-            .accessibilityLabel(viewModel.isAutoplay ? "停止自动播放" : "开始自动播放")
-            .accessibilityHint("长按拖动调整位置")
-            .accessibilityAddTraits(.isButton)
+        } label: {
+            Image(systemName: viewModel.isAutoplay ? "stop.fill" : "play.fill")
+                .font(.title2.weight(.bold))
+                .foregroundStyle(.white)
+                .frame(width: 64, height: 64)
+                .background(
+                    Circle().fill(viewModel.isAutoplay ? Theme.unknown : Theme.accent)
+                )
+                .shadow(color: (viewModel.isAutoplay ? Theme.unknown : Theme.accent).opacity(0.4),
+                        radius: 8, x: 0, y: 4)
+        }
+        .buttonStyle(.pressable)
+        .accessibilityLabel(viewModel.isAutoplay ? "停止自动播放" : "开始自动播放")
+        .accessibilityAddTraits(.isButton)
     }
 
     /// 卡片翻转用两层叠放 + 各自反向补偿旋转，而不是单层直接转 180°：单层转到
