@@ -4,6 +4,7 @@
 并发丰富出 IPA/释义/词根/例句（_RecognizeResult）。mock 按 response_format
 分流，模拟这两个阶段各自的行为。
 """
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -215,12 +216,44 @@ async def test_retry_fills_in_words_skipped_by_first_pass():
     assert by_word["world"].definition_zh == "世界"
 
 
-async def test_on_partial_called_after_first_enrich_pass_and_after_retry():
-    """on_partial 应该在首轮 enrich 合并完成后回调一次（哪怕后面还有重试轮）。
+async def test_on_partial_called_once_per_chunk_as_it_completes():
+    """on_partial 应该在每个 enrich chunk 完成时就回调一次，而不是等首轮全部跑完。
 
-    重试结束后再回调一次带最终结果——这是给 NDJSON 流式端点用的进度信号，
-    让前端不用等整个识别+重试流程跑完才看到词。
+    这是修复"124 词的图，第一批进度要等 50+ 秒才出现"这个体验问题的核心行为：
+    124 词按 8 一批要分 16 批，并发上限 4，等*全部*批次跑完往往要几十秒；改成
+    每批一跑完就报进度，用户几秒钟就能看到数字往上跳，不用干等一整轮。
     """
+    identified = [f"word{i}" for i in range(_ENRICH_CHUNK_SIZE * 2)]  # 两个首轮 chunk
+    chunk1 = set(identified[:_ENRICH_CHUNK_SIZE])
+    chunk2 = set(identified[_ENRICH_CHUNK_SIZE:])
+
+    async def _call(*args, response_format=None, **kwargs):
+        if response_format is _IdentifyResult:
+            return _IdentifyResult(words=identified)
+        messages = args[0]
+        text = messages[0].content if isinstance(messages[0].content, str) else ""
+        batch_words = {line.split(". ", 1)[1] for line in text.splitlines() if ". " in line}
+        if batch_words == chunk2:
+            # chunk2 故意慢一点跑完，让 chunk1 的回调先发生，测试断言才有确定的顺序。
+            await asyncio.sleep(0.02)
+        return _RecognizeResult(words=[RecognizedWord(word=w, definition_zh=f"释义:{w}") for w in batch_words])
+
+    call = AsyncMock(side_effect=_call)
+    snapshots: list[list[RecognizedWord]] = []
+    with patch("app.services.vocabulary.recognizer.llm_service.call", new=call):
+        words = await recognize_words_from_image(b"fake-image-bytes", on_partial=snapshots.append)
+
+    # chunk1 完成时只应该看到 chunk1 的 8 个词；chunk2 完成时（累积）应该看到全部 16 个；
+    # 最后再补一次跟最终结果一致的收尾回调。
+    assert len(snapshots) == 3
+    assert {w.word for w in snapshots[0]} == chunk1
+    assert {w.word for w in snapshots[1]} == chunk1 | chunk2
+    assert {w.word for w in snapshots[2]} == chunk1 | chunk2
+    assert {w.word for w in words} == chunk1 | chunk2
+
+
+async def test_on_partial_called_per_retry_chunk_too():
+    """漏词重试阶段也要按 chunk 逐个回调进度，不是等整轮重试跑完才报一次。"""
     identified = ["idea", "world"]
 
     async def _call(*args, response_format=None, **kwargs):
@@ -244,10 +277,13 @@ async def test_on_partial_called_after_first_enrich_pass_and_after_retry():
     with patch("app.services.vocabulary.recognizer.llm_service.call", new=call):
         words = await recognize_words_from_image(b"fake-image-bytes", on_partial=snapshots.append)
 
-    assert len(snapshots) == 2
+    # 首轮 1 个 chunk 完成一次 + 重试 1 个 chunk 完成一次 + 最终收尾一次 = 3 次
+    assert len(snapshots) == 3
     first_pass_words = {w.word: w.definition_zh for w in snapshots[0]}
     assert first_pass_words == {"idea": "想法", "world": ""}
-    final_words = {w.word: w.definition_zh for w in snapshots[1]}
+    after_retry_words = {w.word: w.definition_zh for w in snapshots[1]}
+    assert after_retry_words == {"idea": "想法", "world": "世界"}
+    final_words = {w.word: w.definition_zh for w in snapshots[2]}
     assert final_words == {"idea": "想法", "world": "世界"}
     assert {w.word: w.definition_zh for w in words} == final_words
 

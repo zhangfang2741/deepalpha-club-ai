@@ -224,11 +224,14 @@ async def recognize_words_from_image(
         ocr_hint: iOS 端 Apple Vision 本地 OCR 抠出的候选词，作为参考线索拼进
             识别阶段的 prompt，与 LLM 自己看图的识别结果综合取并集。为空则
             退化为纯看图识别。
-        on_partial: 可选回调，在首轮 enrich 合并完成后、以及重试补全结束后
-            各调用一次，参数是当前已识别出的 RecognizedWord 列表。用来给
-            NDJSON 流式端点推进 partial 事件——避免用户在识别+重试的几秒
-            里看到的是"屏幕空转"。回调是同步调用（不 await），上层若要跨
-            协程消费需要自己用队列包一层。
+        on_partial: 可选回调，在每个 enrich chunk（首轮或重试轮）一完成时就
+            调用一次，参数是当前累积的 RecognizedWord 列表；结尾再收尾调用
+            一次确保拿到的是最终态。用来给 NDJSON 流式端点推进 partial 事件。
+            按 chunk 逐个上报而不是等一整轮全部跑完才报一次——124 词分 16 批、
+            并发上限 4，等全部跑完可能要几十秒，逐 chunk 上报能把第一次进度
+            提前到第一批完成的时候，避免用户在这几十秒里看到的是"屏幕空转"。
+            回调是同步调用（不 await），上层若要跨协程消费需要自己用队列包
+            一层。
 
     Returns:
         识别出的候选单词列表（可能为空）
@@ -246,17 +249,33 @@ async def recognize_words_from_image(
 
     chunks = [words[i : i + _ENRICH_CHUNK_SIZE] for i in range(0, len(words), _ENRICH_CHUNK_SIZE)]
     semaphore = asyncio.Semaphore(_ENRICH_MAX_CONCURRENCY)
-    chunk_results = await asyncio.gather(*(_enrich_chunk(chunk, semaphore) for chunk in chunks))
+    # 按小写合并回单条索引，便于后续按 word 原地覆盖重试结果；下面两个内嵌协程
+    # 并发跑的时候都会各自 mutate 它——asyncio 单线程协作式调度，await 之间不会
+    # 被抢占，多个 chunk 同时改这个 dict 不存在竞态。
+    enriched_by_lower: dict[str, RecognizedWord] = {}
 
-    # 按小写合并回单条索引，便于后续按 word 原地覆盖重试结果。
-    enriched_by_lower: dict[str, RecognizedWord] = {
-        w.word.strip().lower(): w for w in (item for chunk in chunk_results for item in chunk)
-    }
+    async def _run_first_pass_chunk(chunk: list[str]) -> None:
+        result = await _enrich_chunk(chunk, semaphore)
+        for w in result:
+            key = w.word.strip().lower()
+            if key:
+                enriched_by_lower[key] = w
+        if on_partial is not None:
+            on_partial(list(enriched_by_lower.values()))
 
-    # 首轮 enrich 合并完成就回调一次：让 NDJSON 流式端点能立刻推一批词给前端，
-    # 不用等后面的漏词重试轮（可能还要再跑几秒）。
-    if on_partial is not None:
-        on_partial(list(enriched_by_lower.values()))
+    await asyncio.gather(*(_run_first_pass_chunk(chunk) for chunk in chunks))
+
+    async def _run_retry_chunk(chunk: list[str]) -> None:
+        result = await _enrich_chunk(chunk, semaphore)
+        # 覆盖式合并：重试里 definition_zh 仍是空的，按原样保留（无进展时不浪费后续调用）。
+        for w in result:
+            key = w.word.strip().lower()
+            if not key:
+                continue
+            if w.definition_zh or key not in enriched_by_lower:
+                enriched_by_lower[key] = w
+        if on_partial is not None:
+            on_partial(list(enriched_by_lower.values()))
 
     # 首轮丰富后 definition_zh 为空的词（典型表现：模型觉得"idea / world / Tuesday
     # 这种太简单不用写"系统跳过），把它们单独再跑一轮——换个批次的"上下文压力"，
@@ -268,17 +287,7 @@ async def recognize_words_from_image(
         retry_chunks = [
             missing[i : i + _ENRICH_CHUNK_SIZE] for i in range(0, len(missing), _ENRICH_CHUNK_SIZE)
         ]
-        retry_results = await asyncio.gather(
-            *(_enrich_chunk(chunk, semaphore) for chunk in retry_chunks)
-        )
-        # 覆盖式合并：重试里 definition_zh 仍是空的，按原样保留（无进展时不浪费后续调用）。
-        for chunk in retry_results:
-            for w in chunk:
-                key = w.word.strip().lower()
-                if not key:
-                    continue
-                if w.definition_zh or key not in enriched_by_lower:
-                    enriched_by_lower[key] = w
+        await asyncio.gather(*(_run_retry_chunk(chunk) for chunk in retry_chunks))
         logger.info(
             "vocabulary_enrich_retry_done",
             attempt=attempt,
