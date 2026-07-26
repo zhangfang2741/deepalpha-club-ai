@@ -64,36 +64,47 @@ struct RecognizeResultView: View {
             }
             .safeAreaInset(edge: .bottom) {
                 if !viewModel.candidates.isEmpty {
-                    Button {
-                        Task {
-                            isSubmitting = true
-                            let (added, skipped) = await viewModel.addSelectedToLibrary()
-                            isSubmitting = false
-                            if !added.isEmpty || !skipped.isEmpty {
-                                resultMessage = "加入 \(added.count) 个单词" + (skipped.isEmpty ? "" : "，\(skipped.count) 个已存在")
-                                try? await Task.sleep(for: .seconds(1.2))
-                                if !added.isEmpty {
-                                    // 跳到生词库 tab 并高亮刚加入的词，而不是留在拍照页——
-                                    // 加完词之后更想看到"加进去了什么"，不是继续对着相机页发呆。
-                                    nav.showNewlyAddedWords(added.map(\.id))
+                    // 三个数字的口径不一样，原来看板上"已识别 N 个"和按钮上的
+                    // "加入生词库 (M)"摆在一起很容易被当成"对不上"：
+                    //   - 已识别 N 个 = 全部候选词（识别阶段从后端推过来的总数）
+                    //   - M 个已在库内 = N 里面已经收过的，默认不勾选，也不是新词
+                    //   - K 个待加入 = 用户实际勾选、且不在库内的，会被加进去
+                    // 按钮上 K 一直在变（M 固定），用同一行三段式说明把这层关系
+                    // 讲清楚，"对不上"的感觉就消失了。
+                    VStack(spacing: 6) {
+                        summaryLine
+                        Button {
+                            Task {
+                                isSubmitting = true
+                                let (added, skipped) = await viewModel.addSelectedToLibrary()
+                                isSubmitting = false
+                                if !added.isEmpty || !skipped.isEmpty {
+                                    resultMessage = "加入 \(added.count) 个单词" + (skipped.isEmpty ? "" : "，\(skipped.count) 个已存在")
+                                    try? await Task.sleep(for: .seconds(1.2))
+                                    if !added.isEmpty {
+                                        // 跳到生词库 tab 并高亮刚加入的词，而不是留在拍照页——
+                                        // 加完词之后更想看到"加进去了什么"，不是继续对着相机页发呆。
+                                        nav.showNewlyAddedWords(added.map(\.id))
+                                    }
+                                    dismiss()
                                 }
-                                dismiss()
                             }
+                        } label: {
+                            HStack {
+                                if isSubmitting { ProgressView().tint(.white) }
+                                Text("加入生词库 (\(viewModel.selectedWords.count))")
+                                    .fontWeight(.semibold)
+                                    .monospacedDigit()
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(viewModel.selectedWords.isEmpty ? Theme.surfaceAlt : Theme.accent)
+                            .foregroundStyle(.white)
+                            .clipShape(.rect(cornerRadius: 12))
                         }
-                    } label: {
-                        HStack {
-                            if isSubmitting { ProgressView().tint(.white) }
-                            Text("加入生词库 (\(viewModel.selectedWords.count))")
-                                .fontWeight(.semibold)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(viewModel.selectedWords.isEmpty ? Theme.surfaceAlt : Theme.accent)
-                        .foregroundStyle(.white)
-                        .clipShape(.rect(cornerRadius: 12))
+                        .buttonStyle(.pressable)
+                        .disabled(viewModel.selectedWords.isEmpty || isSubmitting)
                     }
-                    .buttonStyle(.pressable)
-                    .disabled(viewModel.selectedWords.isEmpty || isSubmitting)
                     .padding()
                     .background(Theme.background)
                 }
@@ -135,5 +146,37 @@ struct RecognizeResultView: View {
         }
         .listRowBackground(Theme.surface)
         .foregroundStyle(Theme.textPrimary)
+    }
+
+    /// 按钮上方那行小字：把"全部候选 / 已在库内 / 实际待加入"三件事讲清楚，
+    /// 避免"已识别 N 个"和"加入生词库 (M)"看起来对不上。
+    private var summaryLine: some View {
+        let total = viewModel.candidates.count
+        let inLibrary = viewModel.candidates.filter(\.alreadyInLibrary).count
+        let selected = viewModel.selectedWords.count
+        let parts: [(String, Int)] = [
+            ("已识别", total),
+            ("在库内", inLibrary),
+            ("勾选", selected),
+        ]
+        return HStack(spacing: 12) {
+            ForEach(parts.indices, id: \.self) { idx in
+                let (label, value) = parts[idx]
+                HStack(spacing: 4) {
+                    Text(label).foregroundStyle(Theme.textSecondary)
+                    Text("\(value)")
+                        .monospacedDigit()
+                        .foregroundStyle(idx == 2 ? Theme.accent : Theme.textPrimary)
+                        .fontWeight(idx == 2 ? .semibold : .regular)
+                }
+                if idx < parts.count - 1 {
+                    Text("·").foregroundStyle(Theme.textSecondary)
+                }
+            }
+            Spacer()
+        }
+        .font(.caption)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("已识别 \(total) 个，其中 \(inLibrary) 个已在生词库内，已勾选 \(selected) 个准备加入")
     }
 }

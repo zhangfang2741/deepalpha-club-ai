@@ -117,6 +117,12 @@ struct CameraCaptureView: View {
             }
             .sheet(isPresented: $viewModel.showResult) {
                 RecognizeResultView(viewModel: viewModel)
+                    // 用户在结果列表里向下滑动，本意非常可能就是想看下面的识别结果，
+                    // 但 iOS 13+ 的 sheet 默认把整张页面的下滑手势接管成"下拉关闭"，
+                    // 结果就是识别完一抬手什么都没了，整批识别结果丢掉。
+                    // 取消按钮（左上）已经走 confirmationDialog 二次确认，关闭入口
+                    // 不缺这一个，这里只禁掉手势关掉，让下拉真回到它该干的事（滚动）。
+                    .interactiveDismissDisabled(true)
             }
         }
     }
