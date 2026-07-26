@@ -26,22 +26,15 @@ struct ReviewCardView: View {
                     )
                 } else if let word = viewModel.currentWord {
                     cardContent(word)
-                        // 切词动画：旧卡按 transitionDirection 方向滑出，新卡从对侧
-                        // 滑入。.id + .transition 是触发"remove 旧卡 + insert 新卡"
-                        // 的标准组合；.task(id:) 不要挂在和 .id/.transition 同一层——
-                        // SwiftUI 在 transition 复用阶段会抛 "invalid reuse after
-                        // initialization failure" 崩溃（曾实测复现）。发音功能已经
-                        // 搬到 cardContent 内部 ScrollView 的 .task(id:) 上，这里
-                        // 只负责切词动画。
+                        // 切词淡入淡出：transition 必须用静态 transition（编译
+                        // 期常量）——之前 .transition(.asymmetric(...)) 的
+                        // insertion/removal 表达式读 viewModel.transitionDirection,
+                        // SwiftUI 在 Prepare build 阶段预渲染 view tree 时会去
+                        // 访问 @Published, 触发 "invalid reuse after initialization
+                        // failure" 崩溃。改成静态 .opacity + .scale: 不依赖 viewModel
+                        // 任何运行时状态, FAB / 卡片的切换仍走 .animation。
                         .id(word.id)
-                        .transition(.asymmetric(
-                            insertion: viewModel.transitionDirection >= 0
-                                ? .move(edge: .trailing).combined(with: .opacity)
-                                : .move(edge: .leading).combined(with: .opacity),
-                            removal:   viewModel.transitionDirection >= 0
-                                ? .move(edge: .leading).combined(with: .opacity)
-                                : .move(edge: .trailing).combined(with: .opacity)
-                        ))
+                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
                         .animation(.spring(response: 0.45, dampingFraction: 0.85),
                                    value: viewModel.currentIndex)
                 }
