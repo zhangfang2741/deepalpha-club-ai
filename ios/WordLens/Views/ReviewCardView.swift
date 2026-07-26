@@ -32,7 +32,21 @@ struct ReviewCardView: View {
                                    value: viewModel.currentIndex)
                 }
             }
-            .navigationTitle("首页")
+            .navigationTitle("")
+            // Toolbar-managed title: 用 ToolbarItem(placement: .principal)
+            // 自己渲染"首页"文字. NavigationStack 内置的 .navigationTitle
+            // 会随 content subtree 的 .id + .transition 重布局, 切词时肉眼
+            // 看像 title "闪一下"; 放到 toolbar layer 后, title 由
+            // NavigationStack 的 chrome 单独管理, 不跟 cardContent 的
+            // transition 一起 fade, 静止不动.
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("首页")
+                        .font(.largeTitle.bold())
+                        .foregroundStyle(Theme.textPrimary)
+                        .accessibilityAddTraits(.isHeader)
+                }
+            }
             .task { await viewModel.loadQueueIfNeeded() }
             .onChange(of: nav.vocabularyDataVersion) { _, _ in
                 Task { await viewModel.loadQueue() }
