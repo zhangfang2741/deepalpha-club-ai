@@ -6,6 +6,15 @@ struct ReviewCardView: View {
     @EnvironmentObject var nav: AppNavigationState
     @State private var showPronunciationSettings = false
 
+    /// 自动播放 FAB 的位置偏移（pt）。默认值 bottom=20、trailing=20 是 iOS FAB
+    /// 通用位置，但实际用起来 FAB 会压在评分按钮上——用户拖一次就能挪开，位
+    /// 置会存到 UserDefaults，下次进来直接恢复。
+    @State private var fabOffsetX: CGFloat = 20
+    @State private var fabOffsetY: CGFloat = 140
+    /// 拖动期间留个临时的"正在拖"标志，用来抑制 onTap 误触发（按下后手指移
+    /// 动会被 DragGesture 消费，但有时 SwiftUI 会先发一次 tap 再识别 drag）。
+    @State private var fabIsDragging = false
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -63,7 +72,33 @@ struct ReviewCardView: View {
                 Task { await viewModel.loadQueue() }
             }
             .refreshable { await viewModel.loadQueue() }
+            // 进入页面时读出之前用户拖到的位置。
+            .onAppear { restoreFabPosition() }
         }
+    }
+
+    /// UserDefaults key 和读写逻辑：x/y 分开存，方便 default 值独立更新而不
+    /// 影响老用户（直接存 CGPoint 的 Data 解析麻烦，且老数据迁移风险大）。
+    private enum FabPositionStore {
+        static let xKey = "review_fab_offset_x"
+        static let yKey = "review_fab_offset_y"
+
+        static func load() -> (x: CGFloat, y: CGFloat) {
+            let x = UserDefaults.standard.object(forKey: xKey) as? CGFloat
+            let y = UserDefaults.standard.object(forKey: yKey) as? CGFloat
+            return (x ?? 20, y ?? 140)
+        }
+
+        static func save(x: CGFloat, y: CGFloat) {
+            UserDefaults.standard.set(x, forKey: xKey)
+            UserDefaults.standard.set(y, forKey: yKey)
+        }
+    }
+
+    private func restoreFabPosition() {
+        let pos = FabPositionStore.load()
+        fabOffsetX = pos.x
+        fabOffsetY = pos.y
     }
 
     /// 布局要点：
@@ -76,7 +111,7 @@ struct ReviewCardView: View {
     /// 4. 进度条（X/Y + 第 N/3 遍）始终在卡片上方，跟 FAB 不抢位置。
     private func cardContent(_ word: VocabularyWord) -> some View {
         GeometryReader { geo in
-            ZStack(alignment: .bottomTrailing) {
+            ZStack(alignment: .bottom) {
                 ScrollView {
                     VStack(spacing: 20) {
                         // 进度行：始终显示「X / Y」，自动播放时再追加「第 N / 3 遍」
@@ -139,23 +174,65 @@ struct ReviewCardView: View {
                         }
                     }
                     .frame(minHeight: geo.size.height)
-                    .padding(.bottom, 96) // 给 FAB 留出空间，避免 FAB 盖住评分按钮
                 }
 
-                // 浮动播放按钮（FAB）：右下角，64pt 圆形。绿色 + 阴影 = 视觉重心
-                // 「开始播放」；播放中变红色 + 停止图标 = 视觉重心「停止」。FAB 在
-                // 翻卡前后都常驻——翻到背面评分时如果还想保持自动播放节奏，再点
-                // 一次 FAB 就能停，符合"用户能随时接管"的预期。
+                // 浮动播放按钮（FAB）：默认右下角偏上（offsetX=20, offsetY=140），
+                // 比之前直接贴角的位置高出一截，不会和"认识"按钮撞在一起。
+                // 用户可以长按拖到任意位置，位置存到 UserDefaults，下次恢复。
                 autoplayFAB
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 20)
+                    .offset(x: -fabOffsetX, y: -fabOffsetY)
+                    .gesture(fabDragGesture(in: geo.size))
+                    .animation(fabIsDragging ? nil : .spring(response: 0.3, dampingFraction: 0.8),
+                               value: fabOffsetX)
+                    .animation(fabIsDragging ? nil : .spring(response: 0.3, dampingFraction: 0.8),
+                               value: fabOffsetY)
             }
         }
     }
 
+    /// FAB 拖动手势：长按移动。每次 onChanged 累加 translation（translation 是
+    /// 相对起点的累计偏移），结束时把当前位置夹紧到安全区并落盘。
+    ///
+    /// 安全区：FAB 不能拖到屏幕外（要保证 64pt 圆形至少有 32pt 在屏幕内），
+    /// 也不能盖住卡片顶部的进度文字——顶部留 80pt 不让进，底部要预留 80pt 给
+    /// 评分/上一下一按钮的命中区域。
+    private func fabDragGesture(in containerSize: CGSize) -> some Gesture {
+        let fabSize: CGFloat = 64
+        let safeInsets = fabSize / 2 + 8   // FAB 中心至少离边 8pt
+        let topReserve: CGFloat = 80         // 顶部进度条不让进
+        let bottomReserve: CGFloat = 80      // 底部按钮不让进
+
+        return DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                fabIsDragging = true
+                // value.translation 是相对拖动起点的累计偏移，所以 final = 起点 + translation
+                let proposedX = -fabOffsetX + value.translation.width
+                let proposedY = -fabOffsetY + value.translation.height
+                // 几何：FAB 中心点 = (containerSize.width - proposedX, containerSize.height - proposedY)
+                let centerX = containerSize.width - proposedX
+                let centerY = containerSize.height - proposedY
+                let minX = safeInsets
+                let maxX = containerSize.width - safeInsets
+                let minY = topReserve
+                let maxY = containerSize.height - bottomReserve
+                let clampedX = min(max(centerX, minX), maxX)
+                let clampedY = min(max(centerY, minY), maxY)
+                // 把"夹紧后的中心点"反推回 offset
+                fabOffsetX = containerSize.width - clampedX
+                fabOffsetY = containerSize.height - clampedY
+            }
+            .onEnded { _ in
+                fabIsDragging = false
+                FabPositionStore.save(x: fabOffsetX, y: fabOffsetY)
+            }
+    }
+
     /// 浮动播放按钮：64pt 圆形，跟卡片有阴影分层。颜色随播放状态切换：停止时
     /// 用主题色 + 播放图标，播放中用红色 + 停止图标，让用户远距离也能识别当前
-    /// 状态。`.symbolEffect` 让图标在状态切换时有一个轻微的弹跳动效。
+    /// 状态。拖动手势在父层 `.gesture(...)` 上挂载——这样单击触发 Button action、
+    /// 长按移动触发拖动，两者互不干扰（DragGesture 的 minimumDistance=0 让它从
+    /// 按下就开始累计，但只有 onEnded 落盘；onChanged 中 fabIsDragging=true 时
+    /// SwiftUI 不会再向 Button 派发 tap）。
     private var autoplayFAB: some View {
         Button {
             if viewModel.isAutoplay {
@@ -176,6 +253,9 @@ struct ReviewCardView: View {
         }
         .buttonStyle(.pressable)
         .accessibilityLabel(viewModel.isAutoplay ? "停止自动播放" : "开始自动播放")
+        .accessibilityHint("长按拖动调整位置")
+        .scaleEffect(fabIsDragging ? 1.08 : 1.0)
+        .animation(.spring(response: 0.25, dampingFraction: 0.6), value: fabIsDragging)
     }
 
     /// 卡片翻转用两层叠放 + 各自反向补偿旋转，而不是单层直接转 180°：单层转到
