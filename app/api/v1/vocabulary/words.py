@@ -10,7 +10,7 @@
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +32,11 @@ from app.schemas.vocabulary import (
 )
 from app.services.vocabulary import words as word_service
 from app.services.vocabulary.recognizer import RecognitionFailedError, recognize_words_from_image
+from app.services.vocabulary.tts import (
+    TTSNotConfiguredError,
+    TTSSynthesisError,
+    synthesize_word,
+)
 
 from .dependencies import get_current_vocab_user
 
@@ -88,6 +93,34 @@ async def recognize(
         for w in recognized
     ]
     return RecognizeResponse(candidates=candidates)
+
+
+@router.get("/tts")
+@limiter.limit("60/minute")
+async def tts(
+    request: Request,
+    word: str = Query(..., min_length=1, max_length=100),
+    accent: Literal["us", "uk"] = Query(default="us"),
+    user: VocabularyUser = Depends(get_current_vocab_user),
+):
+    """「高清」发音源：用 Azure 神经 TTS 合成单词发音，返回 mp3。
+
+    仅登录用户可用；Azure key 只在后端，不下发客户端。未配置时返回 503，客户端
+    据此回退到其它发音源/系统合成音。限流防止对按字符计费的 Azure 滥用。
+    """
+    try:
+        audio = await synthesize_word(word, accent)
+    except TTSNotConfiguredError as exc:
+        raise HTTPException(status_code=503, detail="高清发音暂不可用") from exc
+    except TTSSynthesisError as exc:
+        raise HTTPException(status_code=502, detail="发音生成失败，请稍后再试") from exc
+
+    # 同一个词的发音是稳定的，允许客户端/边缘缓存一周，进一步省 Azure 调用。
+    return Response(
+        content=audio,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "public, max-age=604800"},
+    )
 
 
 @router.post("/words/batch", response_model=WordsBatchCreateResponse)

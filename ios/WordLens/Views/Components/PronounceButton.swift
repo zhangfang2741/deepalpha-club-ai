@@ -92,10 +92,13 @@ enum PronunciationAutoplay {
 /// - `google`：Google 翻译 TTS，神经网络合成，咬字清晰、任意词都有、风格统一。
 /// - `system`：Apple 系统语音，优先选已安装的「优质/增强」神经语音，完全离线、最自然，
 ///   但若系统里没下载优质语音会退化成默认合成音（需到系统设置里下载）。
+/// - `azure`：高清——Azure 神经 TTS，经后端中转（key 只在服务端）。质量稳定地高一档、
+///   词句通吃；后端未配置 Azure key 时会 503，客户端回退到系统合成音。
 enum PronunciationSource: String, CaseIterable {
     case youdao
     case google
     case system
+    case azure
 
     static var current: PronunciationSource {
         get {
@@ -109,6 +112,9 @@ enum PronunciationSource: String, CaseIterable {
 
     /// 是否走本地系统合成（不联网、不缓存 mp3）。
     var isSystem: Bool { self == .system }
+
+    /// 是否走本项目后端（需带登录 token）。目前只有 azure「高清」源。
+    var usesBackend: Bool { self == .azure }
 }
 
 /// 单词发音播放器（单例）。
@@ -202,8 +208,12 @@ final class Pronouncer: ObservableObject {
     private func remoteRequest(for word: String, source: PronunciationSource, accent: PronunciationAccent) -> URLRequest? {
         guard let url = remoteURL(for: word, source: source, accent: accent) else { return nil }
         var request = URLRequest(url: url)
-        // Google TTS 不带常见 UA 时可能 403；统一带一个桌面 UA，对有道无害。
+        // Google TTS 不带常见 UA 时可能 403；统一带一个桌面 UA，对其它源无害。
         request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+        // 走后端的源（azure「高清」）需要登录 token。
+        if source.usesBackend, let token = KeychainStore.loadToken() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         return request
     }
 
@@ -224,6 +234,15 @@ final class Pronouncer: ObservableObject {
                 URLQueryItem(name: "client", value: "tw-ob"),
                 URLQueryItem(name: "tl", value: accent == .uk ? "en-gb" : "en"),
                 URLQueryItem(name: "q", value: word),
+            ]
+            return components?.url
+        case .azure:
+            // 走本项目后端 /vocabulary/tts，由服务端调 Azure（key 不下发到 App）。
+            let base = AppConfig.baseURL.appendingPathComponent(AppConfig.apiPrefix + "/tts")
+            var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
+            components?.queryItems = [
+                URLQueryItem(name: "word", value: word),
+                URLQueryItem(name: "accent", value: accent == .uk ? "uk" : "us"),
             ]
             return components?.url
         case .system:

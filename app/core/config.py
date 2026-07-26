@@ -326,6 +326,13 @@ class Settings:
         # News API Key
         self.NEWS_API_KEY: str = os.getenv("NEWS_API_KEY", "")
 
+        # Azure 语音服务（WordLens「高清」神经 TTS 发音源，走后端中转，key 不下发到 App）。
+        # 未配置 key/region 时该发音源不可用，客户端会回退到其它源/系统合成音。
+        self.AZURE_SPEECH_KEY: str = os.getenv("AZURE_SPEECH_KEY", "")
+        self.AZURE_SPEECH_REGION: str = os.getenv("AZURE_SPEECH_REGION", "")
+        self.AZURE_TTS_VOICE_US: str = os.getenv("AZURE_TTS_VOICE_US", "en-US-AriaNeural")
+        self.AZURE_TTS_VOICE_UK: str = os.getenv("AZURE_TTS_VOICE_UK", "en-GB-SoniaNeural")
+
         # LLM 供应商配置
         self.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")  # openai | claude | minimax | gemini
         self.ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")

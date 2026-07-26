@@ -23,16 +23,16 @@ struct PronunciationSettingsView: View {
                         Picker("发音源", selection: $source) {
                             Text("有道").tag(PronunciationSource.youdao)
                             Text("Google").tag(PronunciationSource.google)
-                            Text("系统").tag(PronunciationSource.system)
+                            Text("系统语音").tag(PronunciationSource.system)
+                            Text("高清（Azure）").tag(PronunciationSource.azure)
                         }
-                        .pickerStyle(.segmented)
                         .onChange(of: source) { _, newValue in
                             PronunciationSource.current = newValue
                         }
                     } header: {
                         Text("发音源")
                     } footer: {
-                        Text("有道：常见词真人录音；Google：神经网络合成，咬字清晰、覆盖全；系统：Apple 离线语音，最自然，需先在「设置 › 辅助功能 › 朗读内容 › 声音」里下载优质英语语音。")
+                        Text("有道：常见词真人录音；Google：神经网络合成，咬字清晰、覆盖全；系统语音：Apple 离线合成，需先在「设置 › 辅助功能 › 朗读内容 › 声音」里下载优质英语语音；高清：Azure 神经语音，质量最稳定、词句通吃（联网）。")
                             .foregroundStyle(Theme.textSecondary)
                     }
                     .listRowBackground(Theme.surface)
