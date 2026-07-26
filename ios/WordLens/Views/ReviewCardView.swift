@@ -43,27 +43,12 @@ struct ReviewCardView: View {
             .navigationTitle("首页")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                // 自动播放：开启后从当前词连播 3 遍、切下一个词、词间停顿。点
-                // "下一个/上一个/评分/停止"任意一个都会中断——避免用户错过评分。
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        if viewModel.isAutoplay {
-                            viewModel.stopAutoplay()
-                        } else {
-                            viewModel.startAutoplay()
-                        }
-                    } label: {
-                        Image(systemName: viewModel.isAutoplay ? "stop.circle.fill" : "play.circle.fill")
-                    }
-                    .tint(viewModel.isAutoplay ? Theme.unknown : Theme.accent)
-                    .accessibilityLabel(viewModel.isAutoplay ? "停止自动播放" : "开始自动播放")
-                }
+                // toolbar 上只留发音设置——自动播放按钮改到卡片右下角做浮动大按钮，
+                // 那里视觉重量更足、单手握持时拇指也更容易够到。
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showPronunciationSettings = true
                     } label: {
-                        // 用小喇叭+齿轮语义的图标表意「发音设置」；纯图标按钮补 label 对
-                        // VoiceOver 友好。
                         Image(systemName: "speaker.wave.2.circle")
                     }
                     .tint(Theme.accent)
@@ -81,77 +66,116 @@ struct ReviewCardView: View {
         }
     }
 
-    /// 翻到背面后卡片会变高（多了释义+词根+例句），评分按钮也跟着冒出来——固定
-    /// VStack 用 Spacer 撑开在内容变高时会把上一个/下一个按钮直接挤没（Spacer
-    /// 被压到 0 也不够，内容超出屏幕高度后中间这段就没地方待了）。用 ScrollView +
-    /// GeometryReader 撑出至少一屏高：内容没塞满屏幕时两个 Spacer 会把卡片顶到
-    /// 正中间（跟之前视觉效果一样），内容超出屏幕高度时 Spacer 压到 0，改成正常
-    /// 往下滚，不会再被挤没。
+    /// 布局要点：
+    /// 1. 卡片居中（GeometryReader + ScrollView 让短/长内容都不会挤没按钮）；
+    /// 2. 卡片下方一行紧凑胶囊：回忆阶段是「‹ 上一」+「下一个 ›」，自然宽度
+    ///    居中、左右各留空白；翻卡后整行替换成三档评分按钮；
+    /// 3. 自动播放按钮做成卡片右下角的圆形 FAB（64pt），跟卡片有视觉层级——
+    ///    播放中是红色 + 停止图标，停止时是主题色 + 播放图标，64pt 比 toolbar
+    ///    的 22pt 图标大一倍多、单手拇指更容易够到；
+    /// 4. 进度条（X/Y + 第 N/3 遍）始终在卡片上方，跟 FAB 不抢位置。
     private func cardContent(_ word: VocabularyWord) -> some View {
         GeometryReader { geo in
-            ScrollView {
-                VStack(spacing: 24) {
-                    Text("\(viewModel.currentIndex + 1) / \(viewModel.totalCount)")
-                        .font(.caption)
-                        .foregroundStyle(Theme.textSecondary)
+            ZStack(alignment: .bottomTrailing) {
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // 进度行：始终显示「X / Y」，自动播放时再追加「第 N / 3 遍」
+                        HStack(spacing: 8) {
+                            Text("\(viewModel.currentIndex + 1) / \(viewModel.totalCount)")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(Theme.textSecondary)
 
-                    // 自动播放时显示"正在读第 N / 3 遍"和"X / Y 个词"，让用户清楚
-                    // 当前在哪个节奏上；不自动播放时这段隐藏，不抢视觉重点。
-                    if viewModel.isAutoplay {
-                        HStack(spacing: 12) {
-                            Label {
-                                Text("第 \(viewModel.autoplayPassIndex + 1) / 3 遍")
-                            } icon: {
-                                Image(systemName: "speaker.wave.2.fill")
-                            }
-                            Text("·")
-                            Text("\(viewModel.autoplayWordIndex + 1) / \(viewModel.totalCount)")
-                        }
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(Theme.accent)
-                    }
-
-                    Spacer(minLength: 0)
-
-                    flipCard(word)
-                        .padding(.horizontal)
-
-                    // 上一个/下一个只在还没翻卡（回忆阶段）时出现，是给"跳过这个词，
-                    // 先去看别的"用的；一旦翻到背面看了释义，就应该老老实实点认识/模糊/
-                    // 不认识评分，不能既看了答案又假装没看直接跳走。
-                    if !viewModel.isFlipped {
-                        HStack(spacing: 16) {
-                            navButton("上一个", systemImage: "chevron.left", enabled: viewModel.canGoPrevious) {
-                                viewModel.goToPrevious()
-                            }
-                            navButton("下一个", systemImage: "chevron.right", iconTrailing: true, enabled: viewModel.canGoNext) {
-                                // 自动发音统一由外层 .task(id: word.id) 触发（受开关控制），
-                                // 这里不再单独调 speak，避免同一次切词重复播放。
-                                viewModel.goToNext()
+                            if viewModel.isAutoplay {
+                                Text("·")
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(Theme.textSecondary)
+                                HStack(spacing: 4) {
+                                    Image(systemName: "speaker.wave.2.fill")
+                                        .font(.caption2)
+                                    Text("第 \(viewModel.autoplayPassIndex + 1) / 3 遍")
+                                }
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Theme.accent)
                             }
                         }
-                    }
+                        .padding(.top, 8)
 
-                    Spacer(minLength: 0)
+                        Spacer(minLength: 0)
 
-                    if let errorMessage = viewModel.errorMessage {
-                        Text(errorMessage).font(.footnote).foregroundStyle(Theme.unknown)
-                    }
+                        flipCard(word)
+                            .padding(.horizontal)
 
-                    if viewModel.isFlipped {
-                        HStack(spacing: 12) {
-                            ratingButton("😵 不认识", Theme.unknown, .unknown)
-                            ratingButton("😐 模糊", Theme.fuzzy, .fuzzy)
-                            ratingButton("😊 认识", Theme.known, .known)
+                        Spacer(minLength: 24)
+
+                        // 底部动作条：回忆阶段是上一/下一（紧凑胶囊，自然宽度，
+                        // 居中），翻卡后是评分三档；两者都用 HStack 但不带
+                        // .frame(maxWidth: .infinity)，避免拉满整行的"占满感"。
+                        if !viewModel.isFlipped {
+                            HStack(spacing: 12) {
+                                prevNextButton("上一个", systemImage: "chevron.left",
+                                               enabled: viewModel.canGoPrevious) {
+                                    viewModel.goToPrevious()
+                                }
+                                prevNextButton("下一个", systemImage: "chevron.right",
+                                               iconTrailing: true,
+                                               enabled: viewModel.canGoNext) {
+                                    viewModel.goToNext()
+                                }
+                            }
+                            .padding(.bottom, 8)
+                        } else {
+                            HStack(spacing: 10) {
+                                ratingButton("😵 不认识", Theme.unknown, .unknown)
+                                ratingButton("😐 模糊", Theme.fuzzy, .fuzzy)
+                                ratingButton("😊 认识", Theme.known, .known)
+                            }
+                            .padding(.horizontal)
+                            .padding(.bottom, 8)
                         }
-                        .padding(.horizontal)
-                        .padding(.bottom, 24)
+
+                        if let errorMessage = viewModel.errorMessage {
+                            Text(errorMessage).font(.footnote).foregroundStyle(Theme.unknown)
+                                .padding(.bottom, 4)
+                        }
                     }
+                    .frame(minHeight: geo.size.height)
+                    .padding(.bottom, 96) // 给 FAB 留出空间，避免 FAB 盖住评分按钮
                 }
-                .padding(.top, 16)
-                .frame(minHeight: geo.size.height)
+
+                // 浮动播放按钮（FAB）：右下角，64pt 圆形。绿色 + 阴影 = 视觉重心
+                // 「开始播放」；播放中变红色 + 停止图标 = 视觉重心「停止」。FAB 在
+                // 翻卡前后都常驻——翻到背面评分时如果还想保持自动播放节奏，再点
+                // 一次 FAB 就能停，符合"用户能随时接管"的预期。
+                autoplayFAB
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 20)
             }
         }
+    }
+
+    /// 浮动播放按钮：64pt 圆形，跟卡片有阴影分层。颜色随播放状态切换：停止时
+    /// 用主题色 + 播放图标，播放中用红色 + 停止图标，让用户远距离也能识别当前
+    /// 状态。`.symbolEffect` 让图标在状态切换时有一个轻微的弹跳动效。
+    private var autoplayFAB: some View {
+        Button {
+            if viewModel.isAutoplay {
+                viewModel.stopAutoplay()
+            } else {
+                viewModel.startAutoplay()
+            }
+        } label: {
+            Image(systemName: viewModel.isAutoplay ? "stop.fill" : "play.fill")
+                .font(.title2.weight(.bold))
+                .foregroundStyle(.white)
+                .frame(width: 64, height: 64)
+                .background(
+                    Circle().fill(viewModel.isAutoplay ? Theme.unknown : Theme.accent)
+                )
+                .shadow(color: (viewModel.isAutoplay ? Theme.unknown : Theme.accent).opacity(0.4),
+                        radius: 8, x: 0, y: 4)
+        }
+        .buttonStyle(.pressable)
+        .accessibilityLabel(viewModel.isAutoplay ? "停止自动播放" : "开始自动播放")
     }
 
     /// 卡片翻转用两层叠放 + 各自反向补偿旋转，而不是单层直接转 180°：单层转到
@@ -217,14 +241,11 @@ struct ReviewCardView: View {
         .clipShape(.rect(cornerRadius: 16))
     }
 
-    /// 拍照页那个主 CTA 按钮是实色填充 + 白字 + 圆角的视觉重量，复习卡片原先的
-    /// "胶囊 + 12% 浅底"看起来太轻、像次要操作，跟"翻到下一个单词"这件事的重要
-    /// 程度不匹配——切换单词是复习时最频繁的动作之一，应该跟拍照主按钮一样显眼。
-    /// 这里照搬拍照按钮的实色填充 / 圆角 / 字号 / padding，唯一区别是 HStack
-    /// 里并排两个时不能用 maxWidth: infinity 让它们填满整行（会把卡片挤窄），所以
-    /// 保留自然宽度、外加 .frame(maxWidth: .infinity) 让两个按钮在 HStack 里等宽
-    /// 分摊水平空间。
-    private func navButton(
+    /// 紧凑胶囊按钮：上一/下一自然宽度（按内容自适应），不再 .frame(maxWidth:
+    /// .infinity) 拉满整行——之前的"实色填充 + 拉满"看着像表单提交按钮，跟卡片
+    /// 视觉重量不平衡、也显得"占满"。胶囊 + 半透明主题色底 + 加粗字重更有
+    /// "控件"的克制感。padding 比评分按钮大一圈，因为切词是复习最高频的操作。
+    private func prevNextButton(
         _ label: String, systemImage: String, iconTrailing: Bool = false,
         enabled: Bool, action: @escaping () -> Void
     ) -> some View {
@@ -237,11 +258,17 @@ struct ReviewCardView: View {
                 if iconTrailing { Image(systemName: systemImage) }
             }
             .font(.subheadline.weight(.semibold))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(enabled ? Theme.accent : Theme.accent.opacity(0.35))
-            .foregroundStyle(.white)
-            .clipShape(.rect(cornerRadius: 12))
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .background(enabled ? Theme.accent.opacity(0.15) : Theme.surface)
+            .foregroundStyle(enabled ? Theme.accent : Theme.textSecondary.opacity(0.5))
+            .clipShape(.capsule)
+            .overlay {
+                Capsule().strokeBorder(
+                    enabled ? Theme.accent.opacity(0.3) : .clear,
+                    lineWidth: 1
+                )
+            }
         }
         .buttonStyle(.pressable)
         .disabled(!enabled)
