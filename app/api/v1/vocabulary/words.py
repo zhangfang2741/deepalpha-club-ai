@@ -48,9 +48,15 @@ router = APIRouter()
 
 # 实测 Railway 边缘代理对请求体有约 1MB 的硬限制：超过会在到达这里之前就被
 # 拒绝，返回一个我们的错误处理捕获不到的裸 500（700KB 能过，900KB 必 500）。
-# 这个校验对走边缘代理的正常请求基本不会触发（客户端应该在上传前就把图片
-# 压缩到安全体积），留着是给绕过边缘直连本服务的调用方一个干净的错误提示。
-_MAX_IMAGE_BYTES = 800 * 1024  # 800KB，对齐边缘代理的实际限制
+# 这个校验对走边缘代理的正常请求基本不会触发——iOS 端拍完照会先压缩到
+# 850KB 再上传（见 CameraCaptureView.compressedJPEGData），正常用户操作
+# 永远碰不到这个上限。保留它只为给绕过 iOS 客户端、用 curl/Postman 直发大图的
+# 调用方一个清晰的日志入口，对正常用户透明。
+#
+# 上限压到 900KB 而不是早先的 800KB：iOS 端 maxBytes=850KB 之后 multipart
+# boundary ~5-10KB，加上表单其它字段（ocr_words 等），整 body 仍在 1MB
+# 边缘代理硬限制之下. 余量更宽, 偶尔重压缩质量稍微跑偏也不会被拒.
+_MAX_IMAGE_BYTES = 900 * 1024  # 900KB，对齐边缘代理约 1MB 的硬限制
 _RECOGNIZE_HEARTBEAT_SECONDS = 5.0
 
 
@@ -133,12 +139,15 @@ async def recognize(
     if not image_bytes:
         raise HTTPException(status_code=422, detail="图片为空")
     if len(image_bytes) > _MAX_IMAGE_BYTES:
-        # 给用户的文案要真实反映实际限制（800KB），不能误导成"10MB 以内"
-        # ——后者是早期没核对时留下的错别数, 用户会被诱导去发"远超 10MB"的图
-        # 然后被拒, 体验很差.
-        raise HTTPException(
-            status_code=413,
-            detail=f"图片过大，请控制在 {_MAX_IMAGE_BYTES // 1024}KB 以内"
+        # 不再 raise 413：iOS 客户端拍照后会压缩到 850KB 再上传，正常用户流程
+        # 永远碰不到这个上限——这里只是给绕过 iOS 客户端、用 curl/Postman 直发
+        # 大图的调用方留一个清晰的日志入口，方便排查；继续走识别流程，万一
+        # 上游能处理也能拿到结果（边缘代理对 ~1MB 的实际硬限制比这个稍微大
+        # 一些，500KB 以上的差距可能才会真正卡掉）。
+        logger.warning(
+            "vocabulary_image_oversize",
+            bytes=len(image_bytes),
+            limit=_MAX_IMAGE_BYTES,
         )
 
     try:
@@ -166,9 +175,12 @@ async def recognize_stream(
     if not image_bytes:
         raise HTTPException(status_code=422, detail="图片为空")
     if len(image_bytes) > _MAX_IMAGE_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"图片过大，请控制在 {_MAX_IMAGE_BYTES // 1024}KB 以内"
+        # 跟 /recognize 一致：不再抛 413，只记 warning。理由见上面那一段注释。
+        logger.warning(
+            "vocabulary_image_oversize",
+            bytes=len(image_bytes),
+            limit=_MAX_IMAGE_BYTES,
+            stream=True,
         )
 
     existing = await word_service.get_existing_words(db, user.id)
