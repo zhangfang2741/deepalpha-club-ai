@@ -5,75 +5,76 @@ struct SettingsView: View {
     @EnvironmentObject var auth: AuthViewModel
     @StateObject private var viewModel = SettingsViewModel()
 
-    @State private var oldPassword = ""
-    @State private var newPassword = ""
-    @State private var confirmPassword = ""
-
-    // 后端 validate_vocabulary_password_strength() 只要求字母+数字。
-    private var hasLetter: Bool { newPassword.contains { $0.isLetter } }
-    private var hasDigit: Bool { newPassword.contains { $0.isNumber } }
-    private var longEnough: Bool { newPassword.count >= 8 }
-    private var matched: Bool { !newPassword.isEmpty && newPassword == confirmPassword }
-
-    private var canSubmitPasswordChange: Bool {
-        !oldPassword.isEmpty && hasLetter && hasDigit && longEnough && matched
-    }
-
     var body: some View {
         ZStack {
             Theme.background.ignoresSafeArea()
             Form {
-                Section("个人信息") {
+                Section("账户概览") {
                     if let profile = viewModel.profile {
-                        LabeledContent("邮箱", value: profile.email)
-                        LabeledContent("注册时间", value: Self.formattedDate(profile.createdAt))
+                        HStack(spacing: 14) {
+                            Image(systemName: "person.crop.circle.fill")
+                                .font(.system(size: 42))
+                                .foregroundStyle(Theme.accent)
+                                .accessibilityHidden(true)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(profile.email)
+                                    .font(.body.weight(.medium))
+                                    .foregroundStyle(Theme.textPrimary)
+                                    .lineLimit(2)
+                                    .textSelection(.enabled)
+                                Text("注册于 \(Self.formattedDate(profile.createdAt))")
+                                    .font(.footnote)
+                                    .foregroundStyle(Theme.textSecondary)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                        .accessibilityElement(children: .combine)
                     } else if viewModel.isLoadingProfile {
-                        ProgressView()
+                        HStack(spacing: 12) {
+                            ProgressView()
+                                .tint(Theme.accent)
+                            Text("正在加载账户信息")
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                        .frame(minHeight: 50)
+                    } else if let errorMessage = viewModel.profileErrorMessage {
+                        HStack {
+                            Label(errorMessage, systemImage: "exclamationmark.circle")
+                                .foregroundStyle(Theme.textSecondary)
+                            Spacer()
+                            Button("重试") {
+                                Task { await viewModel.loadProfile() }
+                            }
+                        }
                     }
                 }
                 .listRowBackground(Theme.surface)
 
-                Section("修改密码") {
-                    SecureField("原密码", text: $oldPassword)
-                    SecureField("新密码", text: $newPassword)
-                    SecureField("确认新密码", text: $confirmPassword)
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        checklistRow("至少 8 个字符", longEnough)
-                        checklistRow("包含英文字母", hasLetter)
-                        checklistRow("包含数字", hasDigit)
-                        checklistRow("两次密码一致", matched)
-                    }
-
-                    if let errorMessage = viewModel.passwordErrorMessage {
-                        Text(errorMessage).font(.footnote).foregroundStyle(Theme.unknown)
-                    }
-                    if let successMessage = viewModel.passwordSuccessMessage {
-                        Text(successMessage).font(.footnote).foregroundStyle(Theme.known)
-                    }
-
-                    Button {
-                        Task {
-                            let ok = await viewModel.changePassword(oldPassword: oldPassword, newPassword: newPassword)
-                            if ok {
-                                oldPassword = ""
-                                newPassword = ""
-                                confirmPassword = ""
-                            }
-                        }
+                Section("偏好设置") {
+                    NavigationLink {
+                        PronunciationSettingsView()
                     } label: {
-                        HStack {
-                            if viewModel.isChangingPassword { ProgressView() }
-                            Text(viewModel.isChangingPassword ? "提交中…" : "确认修改")
-                        }
+                        Label("发音设置", systemImage: "speaker.wave.2")
                     }
-                    .disabled(!canSubmitPasswordChange || viewModel.isChangingPassword)
+                }
+                .listRowBackground(Theme.surface)
+
+                Section("账户") {
+                    NavigationLink {
+                        AccountSecurityView(viewModel: viewModel)
+                    } label: {
+                        Label("账户与安全", systemImage: "lock.shield")
+                    }
                 }
                 .listRowBackground(Theme.surface)
 
                 Section {
-                    Button("退出登录", role: .destructive) {
+                    Button(role: .destructive) {
                         auth.logout()
+                    } label: {
+                        Label("退出登录", systemImage: "rectangle.portrait.and.arrow.right")
+                            .font(.subheadline)
                     }
                 }
                 .listRowBackground(Theme.surface)
@@ -83,19 +84,6 @@ struct SettingsView: View {
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
         .task { await viewModel.loadProfile() }
-    }
-
-    private func checklistRow(_ text: String, _ satisfied: Bool) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: satisfied ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(satisfied ? Theme.known : Theme.textSecondary)
-                .accessibilityHidden(true)
-            Text(text)
-                .font(.caption)
-                .foregroundStyle(Theme.textSecondary)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(text)，\(satisfied ? "已满足" : "未满足")")
     }
 
     /// 后端返回不带时区的 ISO 8601 字符串（naive UTC），解析后按本地时区格式化。

@@ -5,6 +5,7 @@ import Foundation
 final class SettingsViewModel: ObservableObject {
     @Published var profile: UserProfile?
     @Published var isLoadingProfile = false
+    @Published var profileErrorMessage: String?
 
     @Published var isChangingPassword = false
     @Published var passwordErrorMessage: String?
@@ -12,8 +13,13 @@ final class SettingsViewModel: ObservableObject {
 
     func loadProfile() async {
         isLoadingProfile = true
+        profileErrorMessage = nil
         defer { isLoadingProfile = false }
-        profile = try? await AuthService.me()
+        do {
+            profile = try await AuthService.me()
+        } catch {
+            profileErrorMessage = "账户信息加载失败"
+        }
     }
 
     func changePassword(oldPassword: String, newPassword: String) async -> Bool {
