@@ -7,6 +7,7 @@ import {
   type GapItem,
   type GapDirection,
 } from '@/lib/api/chan'
+import { getApiErrorMessage } from '@/lib/api/client'
 
 const POLL_INTERVAL = 2500 // 轮询间隔
 const MAX_WAIT = 120000 // 最长等待，超时提示重试
@@ -162,15 +163,14 @@ export function GapPanel({ symbol, startDate, endDate, freq }: Props) {
           pollRef.current = setTimeout(poll, POLL_INTERVAL)
         } catch (err: unknown) {
           if (cancelledRef.current) return
-          setError(err instanceof Error ? err.message : '获取结果失败，请稍后重试')
+          setError(getApiErrorMessage(err, '获取结果失败，请稍后重试'))
           setLoading(false)
         }
       }
 
       pollRef.current = setTimeout(poll, 2000)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '提交失败，请稍后再试'
-      setError(msg)
+      setError(getApiErrorMessage(err, '提交失败，请稍后再试'))
       setLoading(false)
     }
   }, [canRun, composedView, symbol, startDate, endDate, freq])
