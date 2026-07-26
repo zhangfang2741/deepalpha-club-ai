@@ -7,9 +7,12 @@ import UIKit
 final class CameraViewModel: ObservableObject {
     @Published var isRecognizing = false
     @Published var errorMessage: String?
-    /// 识别还没跑完时，后端已经识别出的候选词数量——用来在 ScanningOverlay 上
-    /// 展示"已识别到 N 个词"这种真实进度，而不是纯靠轮播文案硬撑等待感。
+    /// 识别还没跑完时，后端已经识别出的候选词总数。看图识别（identify）一完成
+    /// 后端就会推一次，所以这个数在整段等待的早期就能拿到并稳定下来。
     @Published var partialWordCount = 0
+    /// 上面这些词里已经配好中文释义的数量。后端每跑完一批 enrich 就推一次，
+    /// 这个数会持续往上走到跟 partialWordCount 相等——真正"在动"的是它。
+    @Published var partialEnrichedCount = 0
     @Published var candidates: [RecognizedWord] = []
     @Published var selectedWords: Set<String> = []
     @Published var showResult = false
@@ -20,6 +23,7 @@ final class CameraViewModel: ObservableObject {
         isRecognizing = true
         errorMessage = nil
         partialWordCount = 0
+        partialEnrichedCount = 0
         // 识别是本地 OCR + 视觉 LLM（还带重试）的耗时操作，等待期间如果屏幕自动
         // 锁屏，系统会挂起/限流后台网络活动，很容易把正在进行的上传请求直接掐断
         // （实测复现：NSURLErrorNetworkConnectionLost -1005）。识别期间禁止息屏。
@@ -61,8 +65,11 @@ final class CameraViewModel: ObservableObject {
             let resp = try await WordService.recognize(imageData: imageData, ocrWords: localOCRWords) { [weak self] partial in
                 // 回调来自 NDJSONStreamUploader 的 delegate 队列（后台线程），
                 // 跳回 MainActor 才能碰 @Published 属性。
+                let total = partial.candidates.count
+                let enriched = partial.candidates.filter { !$0.definitionZh.isEmpty }.count
                 Task { @MainActor in
-                    self?.partialWordCount = partial.candidates.count
+                    self?.partialWordCount = total
+                    self?.partialEnrichedCount = enriched
                 }
             }
             candidates = resp.candidates
@@ -111,6 +118,7 @@ final class CameraViewModel: ObservableObject {
         showResult = false
         capturedImage = nil
         partialWordCount = 0
+        partialEnrichedCount = 0
     }
 }
 

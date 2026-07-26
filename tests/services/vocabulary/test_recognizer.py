@@ -216,6 +216,38 @@ async def test_retry_fills_in_words_skipped_by_first_pass():
     assert by_word["world"].definition_zh == "世界"
 
 
+async def test_on_partial_emits_identified_words_before_enrich_starts():
+    """看图识别一完成就先推一次裸词表（词全在、还没配释义）。
+
+    实测 identify 这一次视觉调用要 15~50 秒，期间前端一个信号都收不到，等到
+    第一个 enrich chunk 完成才有第一次进度——用户看到的就是长时间"屏幕空转"。
+    先把识别出的词表推出去，前端立刻能显示总词数，后续 chunk 再让"已配释义
+    的词数"往上走。
+    """
+    identified = ["idea", "world", "serendipity"]
+
+    async def _call(*args, response_format=None, **kwargs):
+        if response_format is _IdentifyResult:
+            return _IdentifyResult(words=identified)
+        messages = args[0]
+        text = messages[0].content if isinstance(messages[0].content, str) else ""
+        batch_words = [line.split(". ", 1)[1] for line in text.splitlines() if ". " in line]
+        return _RecognizeResult(
+            words=[RecognizedWord(word=w, definition_zh=f"释义:{w}") for w in batch_words]
+        )
+
+    call = AsyncMock(side_effect=_call)
+    snapshots: list[list[RecognizedWord]] = []
+    with patch("app.services.vocabulary.recognizer.llm_service.call", new=call):
+        await recognize_words_from_image(b"fake-image-bytes", on_partial=snapshots.append)
+
+    # 第一次快照就该是 identify 的产物：词一个不少，但都还没有释义。
+    assert [w.word for w in snapshots[0]] == identified
+    assert all(not w.definition_zh for w in snapshots[0])
+    # 后续快照才逐步把释义填上，最后一次是全部填满的。
+    assert all(w.definition_zh for w in snapshots[-1])
+
+
 async def test_on_partial_called_once_per_chunk_as_it_completes():
     """on_partial 应该在每个 enrich chunk 完成时就回调一次，而不是等首轮全部跑完。
 
@@ -243,12 +275,15 @@ async def test_on_partial_called_once_per_chunk_as_it_completes():
     with patch("app.services.vocabulary.recognizer.llm_service.call", new=call):
         words = await recognize_words_from_image(b"fake-image-bytes", on_partial=snapshots.append)
 
-    # chunk1 完成时只应该看到 chunk1 的 8 个词；chunk2 完成时（累积）应该看到全部 16 个；
-    # 最后再补一次跟最终结果一致的收尾回调。
-    assert len(snapshots) == 3
-    assert {w.word for w in snapshots[0]} == chunk1
-    assert {w.word for w in snapshots[1]} == chunk1 | chunk2
-    assert {w.word for w in snapshots[2]} == chunk1 | chunk2
+    # snapshots[0] 是 identify 推的裸词表（全部 16 个词，都还没释义）；
+    # chunk1 完成时能看到 chunk1 的 8 个词配上了释义；chunk2 完成时（累积）
+    # 16 个全配上；最后再补一次跟最终结果一致的收尾回调。
+    assert len(snapshots) == 4
+    assert {w.word for w in snapshots[0]} == chunk1 | chunk2
+    assert all(not w.definition_zh for w in snapshots[0])
+    assert {w.word for w in snapshots[1] if w.definition_zh} == chunk1
+    assert {w.word for w in snapshots[2] if w.definition_zh} == chunk1 | chunk2
+    assert {w.word for w in snapshots[3]} == chunk1 | chunk2
     assert {w.word for w in words} == chunk1 | chunk2
 
 
@@ -277,13 +312,15 @@ async def test_on_partial_called_per_retry_chunk_too():
     with patch("app.services.vocabulary.recognizer.llm_service.call", new=call):
         words = await recognize_words_from_image(b"fake-image-bytes", on_partial=snapshots.append)
 
-    # 首轮 1 个 chunk 完成一次 + 重试 1 个 chunk 完成一次 + 最终收尾一次 = 3 次
-    assert len(snapshots) == 3
-    first_pass_words = {w.word: w.definition_zh for w in snapshots[0]}
+    # identify 一次 + 首轮 1 个 chunk 一次 + 重试 1 个 chunk 一次 + 收尾一次 = 4 次
+    assert len(snapshots) == 4
+    identified_words = {w.word: w.definition_zh for w in snapshots[0]}
+    assert identified_words == {"idea": "", "world": ""}
+    first_pass_words = {w.word: w.definition_zh for w in snapshots[1]}
     assert first_pass_words == {"idea": "想法", "world": ""}
-    after_retry_words = {w.word: w.definition_zh for w in snapshots[1]}
+    after_retry_words = {w.word: w.definition_zh for w in snapshots[2]}
     assert after_retry_words == {"idea": "想法", "world": "世界"}
-    final_words = {w.word: w.definition_zh for w in snapshots[2]}
+    final_words = {w.word: w.definition_zh for w in snapshots[3]}
     assert final_words == {"idea": "想法", "world": "世界"}
     assert {w.word: w.definition_zh for w in words} == final_words
 

@@ -252,7 +252,21 @@ async def recognize_words_from_image(
     # 按小写合并回单条索引，便于后续按 word 原地覆盖重试结果；下面两个内嵌协程
     # 并发跑的时候都会各自 mutate 它——asyncio 单线程协作式调度，await 之间不会
     # 被抢占，多个 chunk 同时改这个 dict 不存在竞态。
-    enriched_by_lower: dict[str, RecognizedWord] = {}
+    #
+    # 先用只有 word 字段的裸实例把全部识别结果占好位，而不是从空 dict 逐个 chunk
+    # 累加：这样每次 on_partial 推出去的词表总数从头到尾都是稳定的，只有"已配上
+    # 释义"的数量在涨。若从空开始累加，前端看到的总数会先跳到全量、再掉回第一批
+    # 的 8 个，数字来回倒退。
+    enriched_by_lower: dict[str, RecognizedWord] = {
+        w.strip().lower(): RecognizedWord(word=w) for w in words
+    }
+
+    # identify 一完成就先推一次。这一步是单次视觉 LLM 调用，实测要 15~50 秒，
+    # 期间前端除了心跳收不到任何信号；如果等到第一个 enrich chunk 完成才推第一次
+    # 进度，用户在最长的那段等待里看到的只能是"屏幕空转"。先把词表推出去，前端
+    # 立刻能显示总词数，后面每个 chunk 再让"已配释义的词数"往上走。
+    if on_partial is not None:
+        on_partial(list(enriched_by_lower.values()))
 
     async def _run_first_pass_chunk(chunk: list[str]) -> None:
         result = await _enrich_chunk(chunk, semaphore)

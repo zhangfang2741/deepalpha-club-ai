@@ -16,7 +16,11 @@ struct CameraCaptureView: View {
                     Spacer()
 
                     if viewModel.isRecognizing {
-                        ScanningOverlay(image: viewModel.capturedImage, partialWordCount: viewModel.partialWordCount)
+                        ScanningOverlay(
+                            image: viewModel.capturedImage,
+                            partialWordCount: viewModel.partialWordCount,
+                            enrichedWordCount: viewModel.partialEnrichedCount
+                        )
                     } else {
                         Image(systemName: "camera.viewfinder")
                             .font(.system(size: 64))

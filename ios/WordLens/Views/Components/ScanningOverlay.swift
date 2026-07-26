@@ -10,7 +10,10 @@ import UIKit
 /// 轮播文案兜底，避免裸转圈让人怀疑卡死。
 struct ScanningOverlay: View {
     let image: UIImage?
+    /// 看图识别阶段产出的候选词总数（identify 一完成就有，之后不再变）。
     var partialWordCount: Int = 0
+    /// 其中已经配好音标释义的数量，每跑完一批就往上走。
+    var enrichedWordCount: Int = 0
 
     @State private var scanDown = false
     @State private var messageIndex = 0
@@ -59,7 +62,7 @@ struct ScanningOverlay: View {
             // 否则"已识别到 N 个词，正在整理释义…"跟轮播里的"正在整理释义与
             // 例句…"长得太像，数字在跳也容易被当成没变化。
             if partialWordCount > 0 {
-                VStack(spacing: 4) {
+                VStack(spacing: 8) {
                     HStack(spacing: 6) {
                         Image(systemName: "text.badge.checkmark")
                         // monospacedDigit：数字位宽固定，快速跳动时不会左右抖。
@@ -69,13 +72,16 @@ struct ScanningOverlay: View {
                     .font(.title3.weight(.bold))
                     .foregroundStyle(Theme.accent)
 
-                    Text("正在整理音标与释义…")
+                    // 真正会持续往上走的是这一行：总数在看图识别完就定下来了，
+                    // 之后几十秒里配释义的进度才是"还在动"的证据。
+                    ProgressView(value: Double(enrichedWordCount), total: Double(partialWordCount))
+                        .tint(Theme.accent)
+                        .frame(maxWidth: 220)
+
+                    Text("正在生成音标释义 \(enrichedWordCount) / \(partialWordCount)")
                         .font(.caption)
+                        .monospacedDigit()
                         .foregroundStyle(Theme.textSecondary)
-                }
-                .onChange(of: partialWordCount) { _, newValue in
-                    // 临时探针：用来区分"视图没收到更新"和"收到了但没渲染出来"。
-                    print("[ScanningOverlay] rendered partialWordCount = \(newValue)")
                 }
             } else {
                 Text(messages[messageIndex])
@@ -93,7 +99,7 @@ struct ScanningOverlay: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             partialWordCount > 0
-                ? "已识别到 \(partialWordCount) 个单词，正在整理释义"
+                ? "已识别到 \(partialWordCount) 个单词，正在生成释义，已完成 \(enrichedWordCount) 个"
                 : "正在识别图片中的单词，请稍候"
         )
     }
