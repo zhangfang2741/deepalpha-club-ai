@@ -29,14 +29,14 @@ def test_known_rating_first_repetition_sets_interval_to_one_day():
     assert result.repetition_count == 1
     assert result.interval_days == 1
     assert result.easiness_factor == pytest.approx(2.6)
-    assert result.status == "fuzzy"  # 未达 21 天阈值
+    assert result.status == "known"
 
 
 def test_known_rating_second_repetition_sets_interval_to_six_days():
     result = apply_review(rating=2, repetition_count=1, easiness_factor=2.6, interval_days=1, now=FIXED_NOW)
     assert result.repetition_count == 2
     assert result.interval_days == 6
-    assert result.status == "fuzzy"
+    assert result.status == "known"
 
 
 def test_known_rating_third_repetition_multiplies_interval_by_ef():
@@ -44,10 +44,10 @@ def test_known_rating_third_repetition_multiplies_interval_by_ef():
     assert result.repetition_count == 3
     assert result.easiness_factor == pytest.approx(2.7)
     assert result.interval_days == 16  # round(6 * 2.7) = 16
-    assert result.status == "fuzzy"  # 16 天未过 21 天阈值
+    assert result.status == "known"
 
 
-def test_known_status_reached_when_interval_exceeds_threshold():
+def test_known_rating_fourth_repetition_multiplies_interval_by_ef():
     result = apply_review(rating=2, repetition_count=3, easiness_factor=2.7, interval_days=16, now=FIXED_NOW)
     assert result.repetition_count == 4
     assert result.interval_days == 45  # round(16 * 2.8) = 45

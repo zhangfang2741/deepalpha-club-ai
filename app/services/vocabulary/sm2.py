@@ -7,7 +7,6 @@ from datetime import UTC, datetime, timedelta
 MIN_EASINESS_FACTOR = 2.13
 FUZZY_INTERVAL_DAYS = 1
 UNKNOWN_INTERVAL_DAYS = 1
-KNOWN_STATUS_INTERVAL_THRESHOLD_DAYS = 21
 
 
 @dataclass
@@ -68,7 +67,11 @@ def apply_review(
             new_interval = 6
         else:
             new_interval = round(interval_days * new_ef)
-        status = "known" if new_interval >= KNOWN_STATUS_INTERVAL_THRESHOLD_DAYS else "fuzzy"
+        # status 直接反映用户最近一次评分意图——rating=2 就是"认识"。之前曾用
+        # 21 天阈值把"认识"延迟到间隔≥21天才标记，等于用户得连点 4 次「认识」
+        # 才能在「认识」筛选里看到自己刚标过的词，违反直觉。SM-2 调度本身（间隔
+        # /重复次数/难度系数）跟 UI 状态解耦，阈值没有意义了。
+        status = "known"
 
     next_review_at = current_time + timedelta(days=new_interval)
 
