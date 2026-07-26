@@ -61,41 +61,47 @@ struct ScanningOverlay: View {
             // 视觉上也刻意跟灰色轮播文案拉开（主题色 + 加粗 + 大一号字），
             // 否则"已识别到 N 个词，正在整理释义…"跟轮播里的"正在整理释义与
             // 例句…"长得太像，数字在跳也容易被当成没变化。
-            if partialWordCount > 0 {
-                VStack(spacing: 8) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "text.badge.checkmark")
-                        // monospacedDigit：数字位宽固定，快速跳动时不会左右抖。
-                        Text("已识别 \(partialWordCount) 个词")
-                            .monospacedDigit()
-                    }
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(Theme.accent)
-
-                    // 真正会持续往上走的是这一行：总数在看图识别完就定下来了，
-                    // 之后几十秒里配释义的进度才是"还在动"的证据。
-                    ProgressView(value: Double(enrichedWordCount), total: Double(partialWordCount))
-                        .tint(Theme.accent)
-                        .frame(maxWidth: 220)
-
-                    Text("正在生成音标释义 \(enrichedWordCount) / \(partialWordCount)")
-                        .font(.caption)
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.textSecondary)
-                }
-            } else {
-                Text(messages[messageIndex])
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.textSecondary)
-                    .task {
-                        while !Task.isCancelled {
-                            try? await Task.sleep(for: .seconds(1.8))
-                            withAnimation { messageIndex = (messageIndex + 1) % messages.count }
+            // 状态区单独包一层再挂 .animation：这个修饰符会作用到整个子树，
+            // 之前挂在最外层 VStack 上时，分支切换那一下创建的 0.25s 事务会把
+            // 上面扫描线的 repeatForever 动画一起接管掉，扫描效果就此停住。
+            // 收窄到这里，扫描线不再受影响。
+            Group {
+                if partialWordCount > 0 {
+                    VStack(spacing: 8) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "text.badge.checkmark")
+                            // monospacedDigit：数字位宽固定，快速跳动时不会左右抖。
+                            Text("已识别 \(partialWordCount) 个词")
+                                .monospacedDigit()
                         }
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(Theme.accent)
+
+                        // 真正会持续往上走的是这一行：总数在看图识别完就定下来了，
+                        // 之后几十秒里配释义的进度才是"还在动"的证据。
+                        ProgressView(value: Double(enrichedWordCount), total: Double(partialWordCount))
+                            .tint(Theme.accent)
+                            .frame(maxWidth: 220)
+
+                        Text("正在生成音标释义 \(enrichedWordCount) / \(partialWordCount)")
+                            .font(.caption)
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.textSecondary)
                     }
+                } else {
+                    Text(messages[messageIndex])
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.textSecondary)
+                        .task {
+                            while !Task.isCancelled {
+                                try? await Task.sleep(for: .seconds(1.8))
+                                withAnimation { messageIndex = (messageIndex + 1) % messages.count }
+                            }
+                        }
+                }
             }
+            .animation(.easeInOut(duration: 0.25), value: partialWordCount > 0)
         }
-        .animation(.easeInOut(duration: 0.25), value: partialWordCount > 0)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             partialWordCount > 0

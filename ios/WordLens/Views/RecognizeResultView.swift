@@ -7,6 +7,9 @@ struct RecognizeResultView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var isSubmitting = false
     @State private var resultMessage: String?
+    /// 取消 = 丢弃整批识别结果，而且识别本身要等几十秒、烧 LLM 调用，误触的代价
+    /// 很高（只能重拍重跑），所以加一道确认。
+    @State private var showCancelConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -42,10 +45,22 @@ struct RecognizeResultView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("取消") {
-                        viewModel.reset()
-                        dismiss()
+                        showCancelConfirmation = true
                     }
                 }
+            }
+            .confirmationDialog(
+                "放弃这次识别结果？",
+                isPresented: $showCancelConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("放弃", role: .destructive) {
+                    viewModel.reset()
+                    dismiss()
+                }
+                Button("继续挑选", role: .cancel) {}
+            } message: {
+                Text("识别出的 \(viewModel.candidates.count) 个单词都不会保存，需要重新拍照才能再次识别。")
             }
             .safeAreaInset(edge: .bottom) {
                 if !viewModel.candidates.isEmpty {
