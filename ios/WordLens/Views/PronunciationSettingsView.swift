@@ -9,6 +9,7 @@ import SwiftUI
 struct PronunciationSettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
+    @State private var source: PronunciationSource = PronunciationSource.current
     @State private var accent: PronunciationAccent = PronunciationAccent.current
     @State private var rate: PronunciationRate = PronunciationRate.current
     @State private var autoplay: Bool = PronunciationAutoplay.isEnabled
@@ -18,6 +19,24 @@ struct PronunciationSettingsView: View {
             ZStack {
                 Theme.background.ignoresSafeArea()
                 Form {
+                    Section {
+                        Picker("发音源", selection: $source) {
+                            Text("有道").tag(PronunciationSource.youdao)
+                            Text("Google").tag(PronunciationSource.google)
+                            Text("系统语音").tag(PronunciationSource.system)
+                            Text("高清（Azure）").tag(PronunciationSource.azure)
+                        }
+                        .onChange(of: source) { _, newValue in
+                            PronunciationSource.current = newValue
+                        }
+                    } header: {
+                        Text("发音源")
+                    } footer: {
+                        Text("有道：常见词真人录音；Google：神经网络合成，咬字清晰、覆盖全；系统语音：Apple 离线合成，需先在「设置 › 辅助功能 › 朗读内容 › 声音」里下载优质英语语音；高清：Azure 神经语音，质量最稳定、词句通吃（联网）。")
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    .listRowBackground(Theme.surface)
+
                     Section("口音") {
                         Picker("口音", selection: $accent) {
                             Text("美音").tag(PronunciationAccent.us)

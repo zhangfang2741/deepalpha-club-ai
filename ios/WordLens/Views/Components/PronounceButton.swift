@@ -85,6 +85,38 @@ enum PronunciationAutoplay {
     }
 }
 
+/// 发音源偏好（存 UserDefaults，设置页可切换）。
+///
+/// 不同来源音质/风格不同，用户可按喜好选：
+/// - `youdao`：有道词典音，常见词是真人录音、生僻词退化成合成（"不正宗"多来自这些）。
+/// - `google`：Google 翻译 TTS，神经网络合成，咬字清晰、任意词都有、风格统一。
+/// - `system`：Apple 系统语音，优先选已安装的「优质/增强」神经语音，完全离线、最自然，
+///   但若系统里没下载优质语音会退化成默认合成音（需到系统设置里下载）。
+/// - `azure`：高清——Azure 神经 TTS，经后端中转（key 只在服务端）。质量稳定地高一档、
+///   词句通吃；后端未配置 Azure key 时会 503，客户端回退到系统合成音。
+enum PronunciationSource: String, CaseIterable {
+    case youdao
+    case google
+    case system
+    case azure
+
+    static var current: PronunciationSource {
+        get {
+            let raw = UserDefaults.standard.string(forKey: "pronunciation_source") ?? youdao.rawValue
+            return PronunciationSource(rawValue: raw) ?? .youdao
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: "pronunciation_source")
+        }
+    }
+
+    /// 是否走本地系统合成（不联网、不缓存 mp3）。
+    var isSystem: Bool { self == .system }
+
+    /// 是否走本项目后端（需带登录 token）。目前只有 azure「高清」源。
+    var usesBackend: Bool { self == .azure }
+}
+
 /// 单词发音播放器（单例）。
 ///
 /// 数据源是有道词典发音接口 `https://dict.youdao.com/dictvoice?audio=<词>&type=<1|2>`，
@@ -128,6 +160,7 @@ final class Pronouncer: ObservableObject {
 
     func speak(_ word: String) {
         _ = configured
+        let source = PronunciationSource.current
         let accent = PronunciationAccent.current
         let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -136,23 +169,30 @@ final class Pronouncer: ObservableObject {
         }
         playingWord = trimmed.lowercased()
 
-        if let data = cachedAudio(for: trimmed, accent: accent) {
-            play(data, fallbackWord: trimmed)
-            return
-        }
-        guard let url = remoteURL(for: trimmed, accent: accent) else {
+        // 系统优质语音：本地合成，不联网、不缓存 mp3。
+        if source.isSystem {
             speakWithSynthesizer(trimmed)
             return
         }
 
-        session.dataTask(with: url) { [weak self] data, response, _ in
+        if let data = cachedAudio(for: trimmed, source: source, accent: accent) {
+            play(data, fallbackWord: trimmed)
+            return
+        }
+        guard let request = remoteRequest(for: trimmed, source: source, accent: accent) else {
+            speakWithSynthesizer(trimmed)
+            return
+        }
+
+        session.dataTask(with: request) { [weak self] data, response, _ in
             let http = response as? HTTPURLResponse
-            // 有道对查不到的词可能返回 200 但空 body，用非空 + 2xx 双重判断。
+            // 查不到的词部分源会返回 200 但空 body / 非音频，用非空 + 2xx 双重判断，
+            // 失败一律回退系统合成音，保证点了一定有声。
             guard let data, !data.isEmpty, (200..<300).contains(http?.statusCode ?? 0) else {
                 Task { @MainActor in self?.speakWithSynthesizer(trimmed) }
                 return
             }
-            self?.cacheAudio(data, for: trimmed, accent: accent)
+            self?.cacheAudio(data, for: trimmed, source: source, accent: accent)
             Task { @MainActor in self?.play(data, fallbackWord: trimmed) }
         }.resume()
     }
@@ -165,13 +205,49 @@ final class Pronouncer: ObservableObject {
         playingWord = nil
     }
 
-    private func remoteURL(for word: String, accent: PronunciationAccent) -> URL? {
-        var components = URLComponents(string: "https://dict.youdao.com/dictvoice")
-        components?.queryItems = [
-            URLQueryItem(name: "audio", value: word),
-            URLQueryItem(name: "type", value: String(accent.youdaoType)),
-        ]
-        return components?.url
+    private func remoteRequest(for word: String, source: PronunciationSource, accent: PronunciationAccent) -> URLRequest? {
+        guard let url = remoteURL(for: word, source: source, accent: accent) else { return nil }
+        var request = URLRequest(url: url)
+        // Google TTS 不带常见 UA 时可能 403；统一带一个桌面 UA，对其它源无害。
+        request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+        // 走后端的源（azure「高清」）需要登录 token。
+        if source.usesBackend, let token = KeychainStore.loadToken() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        return request
+    }
+
+    private func remoteURL(for word: String, source: PronunciationSource, accent: PronunciationAccent) -> URL? {
+        switch source {
+        case .youdao:
+            var components = URLComponents(string: "https://dict.youdao.com/dictvoice")
+            components?.queryItems = [
+                URLQueryItem(name: "audio", value: word),
+                URLQueryItem(name: "type", value: String(accent.youdaoType)),
+            ]
+            return components?.url
+        case .google:
+            // client=tw-ob 免 token；tl 指定语言，英音传 en-gb，其余用 en（偏美音）。
+            var components = URLComponents(string: "https://translate.google.com/translate_tts")
+            components?.queryItems = [
+                URLQueryItem(name: "ie", value: "UTF-8"),
+                URLQueryItem(name: "client", value: "tw-ob"),
+                URLQueryItem(name: "tl", value: accent == .uk ? "en-gb" : "en"),
+                URLQueryItem(name: "q", value: word),
+            ]
+            return components?.url
+        case .azure:
+            // 走本项目后端 /vocabulary/tts，由服务端调 Azure（key 不下发到 App）。
+            let base = AppConfig.baseURL.appendingPathComponent(AppConfig.apiPrefix + "/tts")
+            var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
+            components?.queryItems = [
+                URLQueryItem(name: "word", value: word),
+                URLQueryItem(name: "accent", value: accent == .uk ? "uk" : "us"),
+            ]
+            return components?.url
+        case .system:
+            return nil  // 系统语音走本地合成，不联网
+        }
     }
 
     private func play(_ data: Data, fallbackWord: String) {
@@ -192,12 +268,23 @@ final class Pronouncer: ObservableObject {
 
     private func speakWithSynthesizer(_ word: String) {
         let utterance = AVSpeechUtterance(string: word)
-        let target = PronunciationAccent.current == .uk ? "en-GB" : "en-US"
-        utterance.voice = AVSpeechSynthesisVoice(language: target)
+        utterance.voice = bestEnglishVoice(PronunciationAccent.current)
         utterance.rate = PronunciationRate.current.synthesizerRate
         synthesizer.delegate = delegate
         synthesizer.stopSpeaking(at: .immediate)
         synthesizer.speak(utterance)
+    }
+
+    /// 选目标口音下音质最好的英语语音：优先「优质(premium)」，其次「增强(enhanced)」，
+    /// 再退回默认。系统语音源和联网失败兜底都用它，尽量自然。用户在系统设置里下载了
+    /// 优质/增强英语语音后，这里会自动用上。
+    private func bestEnglishVoice(_ accent: PronunciationAccent) -> AVSpeechSynthesisVoice? {
+        let lang = accent == .uk ? "en-GB" : "en-US"
+        let candidates = AVSpeechSynthesisVoice.speechVoices().filter { $0.language == lang }
+        return candidates.first { $0.quality == .premium }
+            ?? candidates.first { $0.quality == .enhanced }
+            ?? candidates.first
+            ?? AVSpeechSynthesisVoice(language: lang)
     }
 
     // MARK: - 本地缓存
@@ -209,20 +296,21 @@ final class Pronouncer: ObservableObject {
         return dir
     }
 
-    /// 缓存文件名按「词 + 口音」区分，大小写不敏感（避免 Apple / apple 各存一份）。
-    private func cacheURL(for word: String, accent: PronunciationAccent) -> URL? {
-        let key = "\(word.lowercased())_\(accent.rawValue)"
+    /// 缓存文件名按「词 + 发音源 + 口音」区分，大小写不敏感（避免 Apple / apple 各存
+    /// 一份，也避免不同源/口音的音频互相覆盖）。
+    private func cacheURL(for word: String, source: PronunciationSource, accent: PronunciationAccent) -> URL? {
+        let key = "\(word.lowercased())_\(source.rawValue)_\(accent.rawValue)"
         let safe = key.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? key
         return cacheDirectory?.appendingPathComponent("\(safe).mp3")
     }
 
-    private func cachedAudio(for word: String, accent: PronunciationAccent) -> Data? {
-        guard let url = cacheURL(for: word, accent: accent) else { return nil }
+    private func cachedAudio(for word: String, source: PronunciationSource, accent: PronunciationAccent) -> Data? {
+        guard let url = cacheURL(for: word, source: source, accent: accent) else { return nil }
         return try? Data(contentsOf: url)
     }
 
-    private func cacheAudio(_ data: Data, for word: String, accent: PronunciationAccent) {
-        guard let url = cacheURL(for: word, accent: accent) else { return }
+    private func cacheAudio(_ data: Data, for word: String, source: PronunciationSource, accent: PronunciationAccent) {
+        guard let url = cacheURL(for: word, source: source, accent: accent) else { return }
         try? data.write(to: url, options: .atomic)
     }
 }
