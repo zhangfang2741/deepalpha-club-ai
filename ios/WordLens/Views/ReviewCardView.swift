@@ -38,6 +38,11 @@ struct ReviewCardView: View {
                         // .id(word.id) 是关键——没有 id 时 SwiftUI 会复用 view hierarchy，
                         // transition 不触发。transitionDirection 在 goTo/submit 那一瞬
                         // 间就被 set 好，渲染这一刻读到的值就是这一笔的出/入方向。
+                        //
+                        // 注意：自动播放 FAB 不放进 cardContent、不挂 .id/.transition——
+                        // 那样切词时 FAB 会跟着 re-attach + 一起滑入/滑出 "乱动一下"。
+                        // FAB 在 body 外层 VStack 里另外渲染，始终保持自己的 identity，
+                        // 切词动画只影响 cardContent，不会影响 FAB 位置。
                         .id(word.id)
                         .transition(.asymmetric(
                             insertion: viewModel.transitionDirection >= 0
@@ -50,6 +55,20 @@ struct ReviewCardView: View {
                         .animation(.spring(response: 0.45, dampingFraction: 0.85),
                                    value: viewModel.currentIndex)
                 }
+
+                // 自动播放按钮：放在 body ZStack 里渲染，跟 cardContent 平级、不
+                // 参与切词的 transition。VStack 上方用 Spacer 把按钮顶到屏幕底
+                // 安全区上方固定位置，不随卡片高度变化而抖动；颜色按播放状态切
+                // 换，停止时主题色 + 播放图标，播放中红色 + 停止图标。
+                VStack {
+                    Spacer(minLength: 0)
+                    autoplayButton
+                        .padding(.bottom, 24)
+                }
+                // 让 FAB 不参与切词过渡——只在播放/暂停状态切换时播放动画，
+                // 不在切换卡片时跟着滑。
+                .animation(nil, value: viewModel.currentIndex)
+                .allowsHitTesting(viewModel.currentWord != nil)
             }
             .navigationTitle("首页")
             .task { await viewModel.loadQueueIfNeeded() }
@@ -123,11 +142,6 @@ struct ReviewCardView: View {
                     .padding(.horizontal)
                     .padding(.bottom, 4)
                 }
-
-                // 自动播放大按钮：64pt 圆形，居中。颜色随播放状态切换——
-                // 停止时主题色 + 播放图标，播放中红色 + 停止图标，远距离也能
-                // 识别当前状态。
-                autoplayButton
 
                 if let errorMessage = viewModel.errorMessage {
                     Text(errorMessage).font(.footnote).foregroundStyle(Theme.unknown)
