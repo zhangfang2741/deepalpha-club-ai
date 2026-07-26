@@ -11,6 +11,9 @@ final class ReviewViewModel: ObservableObject {
     @Published var isSubmitting = false
     @Published var errorMessage: String?
     @Published var totalCount = 0
+    /// 本次已评分（提交成功）的词数。评过分的词会从 queue 里移除，所以用它而不是
+    /// queue.count 来算进度和"复习完成"。
+    @Published private(set) var reviewedCount = 0
 
     /// 自动播放状态机：开启后从当前词开始，每个词朗读 3 遍（遍间 0.6s 停顿），
     /// 切下一个词前等 2s。手动打断（点喇叭 / 切词 / 评分）会自动退出。
@@ -54,7 +57,9 @@ final class ReviewViewModel: ObservableObject {
         return queue[currentIndex]
     }
 
-    var isFinished: Bool { !queue.isEmpty && currentIndex >= queue.count }
+    /// 评过分的词会即时从 queue 移除，所以"复习完成"= 队列已空且这次至少评过一个。
+    /// （队列一开始就空是"今天没有待复习"，不是"完成"，靠 reviewedCount 区分。）
+    var isFinished: Bool { queue.isEmpty && reviewedCount > 0 }
 
     /// 「上一个/下一个」只是浏览，不提交评分——跟 submit() 的自动前进是两码事。
     /// canGoNext 卡在 queue.count - 1，不让浏览走到"今日复习完成"那一屏，
@@ -91,6 +96,7 @@ final class ReviewViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         currentIndex = 0
+        reviewedCount = 0
         isFlipped = false
         transitionDirection = 1
         stopAutoplay()
@@ -115,8 +121,16 @@ final class ReviewViewModel: ObservableObject {
         defer { isSubmitting = false }
         do {
             _ = try await WordService.submitReview(wordId: word.id, rating: rating)
+            reviewedCount += 1
+            // 评过分的词直接从队列移除——它今天已经不该再出现（后端也把
+            // next_review_at 排到了明天），这样"上一个"退不回去、也不会重复评分。
+            // 删除后同一个 currentIndex 天然指向原来的下一个词，不再自增；只有删掉的
+            // 是队尾时才会越界，clamp 回最后一个（队列空则 0，配合 isFinished 显示完成）。
+            queue.remove(at: currentIndex)
+            if currentIndex >= queue.count {
+                currentIndex = max(0, queue.count - 1)
+            }
             transitionDirection = 1
-            currentIndex += 1
             isFlipped = false
             // 评分完自动停止连播——进入下一个词后由用户决定要不要继续播
             stopAutoplay()
