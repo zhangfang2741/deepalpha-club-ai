@@ -30,7 +30,12 @@ struct ReviewCardView: View {
                         // 当前词变化时（首次进入、上一个/下一个）按需自动发音；翻卡不改变
                         // word.id，不会重复触发。task(id:) 天然处理"变化即执行"，是自动
                         // 发音的唯一入口，受发音设置里的「自动发音」开关控制。
+                        //
+                        // 自动播放期间 suppressCardAutoSpeak 会被 ReviewViewModel 置
+                        // true——状态机会自己发 3 遍，这次 speak 会跟状态机抢节奏导致
+                        // 漏一遍，所以这里跳过。
                         .task(id: word.id) {
+                            guard !viewModel.suppressCardAutoSpeak else { return }
                             Pronouncer.shared.speakIfAutoplayEnabled(word.word)
                         }
                 }
@@ -38,6 +43,21 @@ struct ReviewCardView: View {
             .navigationTitle("首页")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // 自动播放：开启后从当前词连播 3 遍、切下一个词、词间停顿。点
+                // "下一个/上一个/评分/停止"任意一个都会中断——避免用户错过评分。
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        if viewModel.isAutoplay {
+                            viewModel.stopAutoplay()
+                        } else {
+                            viewModel.startAutoplay()
+                        }
+                    } label: {
+                        Image(systemName: viewModel.isAutoplay ? "stop.circle.fill" : "play.circle.fill")
+                    }
+                    .tint(viewModel.isAutoplay ? Theme.unknown : Theme.accent)
+                    .accessibilityLabel(viewModel.isAutoplay ? "停止自动播放" : "开始自动播放")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showPronunciationSettings = true
@@ -74,6 +94,22 @@ struct ReviewCardView: View {
                     Text("\(viewModel.currentIndex + 1) / \(viewModel.totalCount)")
                         .font(.caption)
                         .foregroundStyle(Theme.textSecondary)
+
+                    // 自动播放时显示"正在读第 N / 3 遍"和"X / Y 个词"，让用户清楚
+                    // 当前在哪个节奏上；不自动播放时这段隐藏，不抢视觉重点。
+                    if viewModel.isAutoplay {
+                        HStack(spacing: 12) {
+                            Label {
+                                Text("第 \(viewModel.autoplayPassIndex + 1) / 3 遍")
+                            } icon: {
+                                Image(systemName: "speaker.wave.2.fill")
+                            }
+                            Text("·")
+                            Text("\(viewModel.autoplayWordIndex + 1) / \(viewModel.totalCount)")
+                        }
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Theme.accent)
+                    }
 
                     Spacer(minLength: 0)
 

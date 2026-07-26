@@ -161,6 +161,10 @@ final class Pronouncer: ObservableObject {
     /// playingWord，波纹动效跟着停。不在这里做"打断上一个"的特殊处理——播放新词前
     /// player?.stop()/synthesizer.stopSpeaking() 已经会触发旧 delegate 回调，自然把
     /// playingWord 清成 nil，再被下面 speak() 里设的新值覆盖，顺序上没有竞态。
+    ///
+    /// 自动播放状态机（ReviewViewModel.runAutoplayLoop）通过 polling
+    /// `Pronouncer.shared.playingWord` 探测音频结束，不在这里挂回调——保持
+    /// Pronouncer 不依赖具体业务（它本来就不该知道什么是"复习"）。
     fileprivate func handleFinished() {
         playingWord = nil
     }
