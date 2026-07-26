@@ -133,7 +133,13 @@ async def recognize(
     if not image_bytes:
         raise HTTPException(status_code=422, detail="图片为空")
     if len(image_bytes) > _MAX_IMAGE_BYTES:
-        raise HTTPException(status_code=413, detail="图片过大，请控制在 10MB 以内")
+        # 给用户的文案要真实反映实际限制（800KB），不能误导成"10MB 以内"
+        # ——后者是早期没核对时留下的错别数, 用户会被诱导去发"远超 10MB"的图
+        # 然后被拒, 体验很差.
+        raise HTTPException(
+            status_code=413,
+            detail=f"图片过大，请控制在 {_MAX_IMAGE_BYTES // 1024}KB 以内"
+        )
 
     try:
         recognized = await recognize_words_from_image(
@@ -160,7 +166,10 @@ async def recognize_stream(
     if not image_bytes:
         raise HTTPException(status_code=422, detail="图片为空")
     if len(image_bytes) > _MAX_IMAGE_BYTES:
-        raise HTTPException(status_code=413, detail="图片过大，请控制在 10MB 以内")
+        raise HTTPException(
+            status_code=413,
+            detail=f"图片过大，请控制在 {_MAX_IMAGE_BYTES // 1024}KB 以内"
+        )
 
     existing = await word_service.get_existing_words(db, user.id)
     events = _stream_recognition_events(
