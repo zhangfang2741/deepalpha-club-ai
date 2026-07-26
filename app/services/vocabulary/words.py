@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import uuid
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.vocabulary import VocabularyReviewLog, VocabularyWord
@@ -53,27 +53,38 @@ async def get_existing_words(session: AsyncSession, user_id: uuid.UUID) -> set[s
 async def create_words_batch(
     session: AsyncSession, user_id: uuid.UUID, words: list[dict]
 ) -> list[VocabularyWord]:
-    """批量插入生词（调用方已去重）。"""
+    """批量插入生词（调用方已去重）。
+
+    INSERT ... RETURNING 一次性把刚写入的行回填到 ORM 对象，避免以前那种
+    `for row in rows: await session.refresh(row)` 的 N 次串行 SELECT：100 个
+    词要 100 次往返 DB，HTTP keep-alive 通道在这段时间里几乎没有 payload
+    反向回压，Railway 边缘代理经常把这条连接 RST 掉（实测 -1005 "网络连
+    接已中断"）。改 RETURNING 后所有回表压力压缩到 1 次往返，下游
+    `VocabularyWordResponse.model_validate(r)` 访问字段不会再触发隐式
+    refresh——行实例本身就是 RETURNING 拿回来的新鲜数据，不在 session
+    expire-on-commit 的过期名单里。
+    """
     now = _naive_utc_now()
-    rows = [
-        VocabularyWord(
-            user_id=user_id,
-            word=w["word"],
-            phonetic_ipa=w["phonetic_ipa"],
-            part_of_speech=w["part_of_speech"],
-            definition_zh=w["definition_zh"],
-            etymology=w.get("etymology", ""),
-            example_sentence=w.get("example_sentence", ""),
-            status="new",
-            next_review_at=now,
-        )
+    values = [
+        {
+            "user_id": user_id,
+            "word": w["word"],
+            "phonetic_ipa": w["phonetic_ipa"],
+            "part_of_speech": w["part_of_speech"],
+            "definition_zh": w["definition_zh"],
+            "etymology": w.get("etymology", ""),
+            "example_sentence": w.get("example_sentence", ""),
+            "status": "new",
+            "next_review_at": now,
+        }
         for w in words
     ]
-    session.add_all(rows)
+    if not values:
+        return []
+    stmt = insert(VocabularyWord).values(values).returning(VocabularyWord)
+    result = await session.execute(stmt)
     await session.commit()
-    for row in rows:
-        await session.refresh(row)
-    return rows
+    return list(result.scalars())
 
 
 async def add_words_with_dedup(

@@ -32,6 +32,29 @@ actor APIClient {
         self.session = URLSession(configuration: config)
     }
 
+    // MARK: - Retry helper
+
+    /// 把一次网络调用包成"URLError.networkConnectionLost 自动重试一次"。
+    ///
+    /// Railway / Cloudflare 这类边缘代理在 keep-alive 连接 idle 一段时间后，
+    /// 会把通道 RST 掉——CFNetwork 把它报告成 -1005 (networkConnectionLost)。
+    /// 移动网络下偶发，重试一次成功率非常高。但重试不能无限次（体感延迟
+    /// + 用户已经看到 spinner 在转），只重试一次；其它 URLError（如
+    /// `.notConnectedToInternet` 没 Wi-Fi / 信号、`.timedOut` 服务器卡）
+    /// 不重试，直接抛出去让上层显示对应文案——避免无意义地掩盖真正的
+    /// 网络问题。
+    private static func attemptWithRetry<T>(_ body: () async throws -> T) async throws -> T {
+        do {
+            return try await body()
+        } catch let error as URLError where error.code == .networkConnectionLost {
+            // 一次 300ms 退避：代理层通常就能完成 internal connection re-establish，
+            // 体感上还停留在 spinner 阶段。重试如果还是 -1005, 把第二次的原始错误
+            // 原样抛出去（不再重试），让上层进入正常错误处理路径。
+            try? await Task.sleep(for: .milliseconds(300))
+            return try await body()
+        }
+    }
+
     // MARK: - 公开方法
 
     func get<T: Decodable>(_ path: String, query: [String: String] = [:]) async throws -> T {
@@ -122,10 +145,17 @@ actor APIClient {
             let data: Data
             let response: URLResponse
             if let onPartial {
+                // NDJSONStreamUploader 自己消费了字节流，半路挂掉的状态难恢复——上层
+                // onPartial 失败就该直接 user-visible 报错, 不在底层做 retry.
                 (data, response) = try await NDJSONStreamUploader(onPartial: onPartial)
                     .upload(request: req, fromFile: tempURL, configuration: session.configuration)
             } else {
-                (data, response) = try await session.upload(for: req, fromFile: tempURL)
+                // 普通 upload: -1005 自动重试一次, 加入生词库的批量上传能扛一截
+                // Railway 边缘代理 RST. retry 直接复用同一个临时文件 (fromFile),
+                // 不会把图片重新编码 / 重拼 multipart boundary.
+                (data, response) = try await Self.attemptWithRetry {
+                    try await session.upload(for: req, fromFile: tempURL)
+                }
             }
             try? FileManager.default.removeItem(at: tempURL)
             if let http = response as? HTTPURLResponse,
@@ -171,7 +201,9 @@ actor APIClient {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: req)
+            (data, response) = try await Self.attemptWithRetry {
+                try await session.data(for: req)
+            }
         } catch let urlError as URLError {
             throw APIError(message: Self.friendlyMessage(for: urlError), statusCode: nil)
         } catch {
