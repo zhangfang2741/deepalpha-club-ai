@@ -100,15 +100,26 @@ struct WordListView: View {
                     Button(role: .destructive) {
                         showDeleteConfirm = true
                     } label: {
-                        Text("删除所选 (\(viewModel.selectedIDs.count))")
-                            .font(.subheadline.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Theme.unknown.opacity(0.15))
-                            .foregroundStyle(Theme.unknown)
-                            .clipShape(.rect(cornerRadius: 10))
+                        // 删除中显示进度 X/Y; 否则显示静态"删除所选 (N)".
+                        // 用户能直观看到 100 词批量删除推进到第几个——
+                        // 100 词并发 3 秒内结束, 进度数字会从 0/100 滚到 100/100,
+                        // 比 beginBlockingOperation 的固定文案更清晰.
+                        Group {
+                            if let progress = viewModel.deletionProgress {
+                                Text("正在删除 \(progress.completed) / \(progress.total)")
+                            } else {
+                                Text("删除所选 (\(viewModel.selectedIDs.count))")
+                            }
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Theme.unknown.opacity(viewModel.isDeletingSelected ? 0.25 : 0.15))
+                        .foregroundStyle(Theme.unknown)
+                        .clipShape(.rect(cornerRadius: 10))
                     }
                     .buttonStyle(.pressable)
+                    .disabled(viewModel.isDeletingSelected)
                     .confirmationDialog(
                         "确定删除选中的 \(viewModel.selectedIDs.count) 个单词吗？",
                         isPresented: $showDeleteConfirm,
@@ -125,7 +136,6 @@ struct WordListView: View {
                         }
                         Button("取消", role: .cancel) {}
                     }
-                    .disabled(viewModel.isDeletingSelected)
                 }
             }
         }

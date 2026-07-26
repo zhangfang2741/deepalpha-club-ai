@@ -18,6 +18,10 @@ final class WordListViewModel: ObservableObject {
     @Published var isSelecting = false
     @Published var selectedIDs: Set<String> = []
     @Published var isDeletingSelected = false
+    /// 删除进度：`completed` 是已经完成 (成功或失败) 的数量，`total` 是这一批
+    /// 开始时的总数。在 deleteSelected 进入时锁定 total, 过程中持续更新
+    /// completed, UI 显示 "正在删除 20 / 104". 完成时置 nil.
+    @Published var deletionProgress: (completed: Int, total: Int)?
 
     var words: [VocabularyWord] {
         guard let filterStatus else { return allWords }
@@ -74,16 +78,32 @@ final class WordListViewModel: ObservableObject {
     ///
     /// 删除以服务端成功为准：成功的 id 进 deletedIDs 用于本地移出，失败的
     /// 留在 selectedIDs 提示用户重试。
+    ///
+    /// 进度展示：进入时锁定 `total`，过程中每完成一个 word 累加
+    /// `completed`，UI 显示 "正在删除 X / Y"。完成时 `deletionProgress`
+    /// 置 nil。
     @discardableResult
     func deleteSelected() async -> Bool {
         let idsToDelete = selectedIDs
         guard !idsToDelete.isEmpty else { return false }
 
         isDeletingSelected = true
+        deletionProgress = (completed: 0, total: idsToDelete.count)
         errorMessage = nil
-        defer { isDeletingSelected = false }
+        defer {
+            isDeletingSelected = false
+            deletionProgress = nil
+        }
 
-        let deletedIDs = await deleteWithConcurrency(idsToDelete, maxConcurrent: 6)
+        let deletedIDs = await deleteWithConcurrency(
+            idsToDelete,
+            maxConcurrent: 6,
+            total: idsToDelete.count
+        ) { completed, _ in
+            // 任务完成回调: 推进 UI 进度。@MainActor 的 ViewModel 直接更新
+            // @Published, UI 立刻收到.
+            self.deletionProgress = (completed: completed, total: idsToDelete.count)
+        }
         let failedCount = idsToDelete.count - deletedIDs.count
 
         if !deletedIDs.isEmpty {
@@ -103,13 +123,19 @@ final class WordListViewModel: ObservableObject {
         return !deletedIDs.isEmpty
     }
 
-    /// 通用并发删除：传入一组 id 列表 + 上限并发数，返回成功删除的子集。
-    /// 抽出来便于复用 / 测试，单测也好 mock WordService。
+    /// 通用并发删除：传入一组 id 列表 + 上限并发数 + 进度回调, 返回成功删除的
+    /// 子集. onProgress 在每个 word 完成时调用 (成功或失败都算一次完成),
+    /// 第一个参数是已完成数量, 第二个是总数 —— 调用方用它更新 UI.
     ///
     /// asyncSemaphore 的 wait/signal 都用 await 显式调用——不能 defer 在
     /// actor-isolated 方法上 (Swift 不允许从非 actor context sync 调 actor
     /// 方法). 异常路径也要手动 signal, 不能用 defer 兜底.
-    private func deleteWithConcurrency(_ ids: Set<String>, maxConcurrent: Int) async -> Set<String> {
+    private func deleteWithConcurrency(
+        _ ids: Set<String>,
+        maxConcurrent: Int,
+        total: Int,
+        onProgress: @MainActor (Int, Int) -> Void
+    ) async -> Set<String> {
         let semaphore = AsyncSemaphore(value: maxConcurrent)
         let idsArray = Array(ids)
         return await withTaskGroup(of: (String, Bool).self) { group in
@@ -128,8 +154,14 @@ final class WordListViewModel: ObservableObject {
                 }
             }
             var deleted: Set<String> = []
+            var completed = 0
             for await (id, ok) in group {
+                completed += 1
                 if ok { deleted.insert(id) }
+                // onProgress 是 @MainActor — 调用点在 await 上下文, 这里
+                // TaskGroup 的 outer await 自动在 await 时让 actor 切换
+                // 满足 Swift 6 严格隔离规则.
+                await onProgress(completed, total)
             }
             return deleted
         }
