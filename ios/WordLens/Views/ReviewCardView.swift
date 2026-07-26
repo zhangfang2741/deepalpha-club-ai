@@ -36,17 +36,29 @@ struct ReviewCardView: View {
                     )
                 } else if let word = viewModel.currentWord {
                     cardContent(word)
-                        // 当前词变化时（首次进入、上一个/下一个）按需自动发音；翻卡不改变
-                        // word.id，不会重复触发。task(id:) 天然处理"变化即执行"，是自动
-                        // 发音的唯一入口，受发音设置里的「自动发音」开关控制。
-                        //
-                        // 自动播放期间 suppressCardAutoSpeak 会被 ReviewViewModel 置
-                        // true——状态机会自己发 3 遍，这次 speak 会跟状态机抢节奏导致
-                        // 漏一遍，所以这里跳过。
+                        // word.id 变化时（首次进入、上一个/下一个、评分切到下一张）触发
+                        // .task 发音；自动播放期间让状态机自己发 3 遍，这里跳过避免抢
+                        // 节奏。task(id:) 的"变化即执行"正好对应卡片内容切换的瞬间，
+                        // 视觉上的滑入动画和听感上的发音可以同步出现。
                         .task(id: word.id) {
                             guard !viewModel.suppressCardAutoSpeak else { return }
                             Pronouncer.shared.speakIfAutoplayEnabled(word.word)
                         }
+                        // 切词动画：旧卡按 transitionDirection 方向滑出，新卡从对侧滑入。
+                        // .id(word.id) 是关键——没有 id 时 SwiftUI 会复用 view hierarchy，
+                        // transition 不触发。transitionDirection 在 goTo/submit 那一瞬
+                        // 间就被 set 好，渲染这一刻读到的值就是这一笔的出/入方向。
+                        .id(word.id)
+                        .transition(.asymmetric(
+                            insertion: viewModel.transitionDirection >= 0
+                                ? .move(edge: .trailing).combined(with: .opacity)
+                                : .move(edge: .leading).combined(with: .opacity),
+                            removal:   viewModel.transitionDirection >= 0
+                                ? .move(edge: .leading).combined(with: .opacity)
+                                : .move(edge: .trailing).combined(with: .opacity)
+                        ))
+                        .animation(.spring(response: 0.45, dampingFraction: 0.85),
+                                   value: viewModel.currentIndex)
                 }
             }
             .navigationTitle("首页")
@@ -179,9 +191,12 @@ struct ReviewCardView: View {
                 // 浮动播放按钮（FAB）：默认右下角偏上（offsetX=20, offsetY=140），
                 // 比之前直接贴角的位置高出一截，不会和"认识"按钮撞在一起。
                 // 用户可以长按拖到任意位置，位置存到 UserDefaults，下次恢复。
+                //
+                // simultaneousGesture 而不是 .gesture：FAB 自身已经挂了 .onTapGesture
+                // 处理单击，drag 必须和它同时收到事件才能不被 tap 吞掉。
                 autoplayFAB
                     .offset(x: -fabOffsetX, y: -fabOffsetY)
-                    .gesture(fabDragGesture(in: geo.size))
+                    .simultaneousGesture(fabDragGesture(in: geo.size))
                     .animation(fabIsDragging ? nil : .spring(response: 0.3, dampingFraction: 0.8),
                                value: fabOffsetX)
                     .animation(fabIsDragging ? nil : .spring(response: 0.3, dampingFraction: 0.8),
@@ -190,8 +205,10 @@ struct ReviewCardView: View {
         }
     }
 
-    /// FAB 拖动手势：长按移动。每次 onChanged 累加 translation（translation 是
-    /// 相对起点的累计偏移），结束时把当前位置夹紧到安全区并落盘。
+    /// FAB 拖动手势：每次 onChanged 累加 translation。10pt 位移阈值用来区分
+    /// tap / drag——onChanged 一旦累计位移 >= 10pt 就置 fabIsDragging=true
+    /// （fabTapSurface 里的 onTapGesture 会忽略这次的 tap 候选），onEnded
+    /// 再根据 fabIsDragging 决定落盘还是完全回滚。
     ///
     /// 安全区：FAB 不能拖到屏幕外（要保证 64pt 圆形至少有 32pt 在屏幕内），
     /// 也不能盖住卡片顶部的进度文字——顶部留 80pt 不让进，底部要预留 80pt 给
@@ -201,14 +218,32 @@ struct ReviewCardView: View {
         let safeInsets = fabSize / 2 + 8   // FAB 中心至少离边 8pt
         let topReserve: CGFloat = 80         // 顶部进度条不让进
         let bottomReserve: CGFloat = 80      // 底部按钮不让进
+        let dragActivationDistance: CGFloat = 10
+
+        // 记录本次手势的"起点 offset"和"是否被判定为 drag"——这两个值在
+        // onChanged/onEnded 之间需要跨闭包共享，用本地 closure 捕获（不是
+        // @State 字段，避免和 SwiftUI view diffing 干扰）。
+        var startX: CGFloat = 0
+        var startY: CGFloat = 0
+        var activatedDrag = false
 
         return DragGesture(minimumDistance: 0)
             .onChanged { value in
-                fabIsDragging = true
-                // value.translation 是相对拖动起点的累计偏移，所以 final = 起点 + translation
-                let proposedX = -fabOffsetX + value.translation.width
-                let proposedY = -fabOffsetY + value.translation.height
-                // 几何：FAB 中心点 = (containerSize.width - proposedX, containerSize.height - proposedY)
+                if !activatedDrag {
+                    let dx = value.translation.width
+                    let dy = value.translation.height
+                    if hypot(dx, dy) < dragActivationDistance {
+                        // 位移太小，保留 tap 候选，不动 offset、不置 fabIsDragging
+                        return
+                    }
+                    // 第一次越过阈值：锁定起点，进入 drag 模式
+                    activatedDrag = true
+                    startX = fabOffsetX
+                    startY = fabOffsetY
+                    fabIsDragging = true
+                }
+                let proposedX = startX - value.translation.width
+                let proposedY = startY - value.translation.height
                 let centerX = containerSize.width - proposedX
                 let centerY = containerSize.height - proposedY
                 let minX = safeInsets
@@ -217,45 +252,63 @@ struct ReviewCardView: View {
                 let maxY = containerSize.height - bottomReserve
                 let clampedX = min(max(centerX, minX), maxX)
                 let clampedY = min(max(centerY, minY), maxY)
-                // 把"夹紧后的中心点"反推回 offset
                 fabOffsetX = containerSize.width - clampedX
                 fabOffsetY = containerSize.height - clampedY
             }
             .onEnded { _ in
-                fabIsDragging = false
-                FabPositionStore.save(x: fabOffsetX, y: fabOffsetY)
+                if activatedDrag {
+                    fabIsDragging = false
+                    FabPositionStore.save(x: fabOffsetX, y: fabOffsetY)
+                }
+                activatedDrag = false
             }
     }
 
     /// 浮动播放按钮：64pt 圆形，跟卡片有阴影分层。颜色随播放状态切换：停止时
     /// 用主题色 + 播放图标，播放中用红色 + 停止图标，让用户远距离也能识别当前
-    /// 状态。拖动手势在父层 `.gesture(...)` 上挂载——这样单击触发 Button action、
-    /// 长按移动触发拖动，两者互不干扰（DragGesture 的 minimumDistance=0 让它从
-    /// 按下就开始累计，但只有 onEnded 落盘；onChanged 中 fabIsDragging=true 时
-    /// SwiftUI 不会再向 Button 派发 tap）。
+    /// 状态。
+    ///
+    /// 点击/拖动的判定：用 `.onTapGesture` + `.simultaneousGesture(DragGesture)`
+    /// 自己分流——之前的 Button + .gesture(DragGesture) 写法 Button 会吞掉所有
+    /// 事件、drag.onChanged 根本收不到；改用 onTapGesture + simultaneousGesture
+    /// 后两者都能拿到事件，再用「手指累计位移 < 10pt → 算 tap」的阈值判定。
+    /// 视觉效果保持不变（按压 scale + 阴影），行为上单击/拖动都灵敏。
     private var autoplayFAB: some View {
-        Button {
-            if viewModel.isAutoplay {
-                viewModel.stopAutoplay()
-            } else {
-                viewModel.startAutoplay()
+        fabTapSurface
+    }
+
+    /// FAB 视觉主体：圆形 + 图标 + 阴影。点击和拖动的事件都在外层包装。
+    private var fabVisual: some View {
+        Image(systemName: viewModel.isAutoplay ? "stop.fill" : "play.fill")
+            .font(.title2.weight(.bold))
+            .foregroundStyle(.white)
+            .frame(width: 64, height: 64)
+            .background(
+                Circle().fill(viewModel.isAutoplay ? Theme.unknown : Theme.accent)
+            )
+            .shadow(color: (viewModel.isAutoplay ? Theme.unknown : Theme.accent).opacity(0.4),
+                    radius: 8, x: 0, y: 4)
+            .scaleEffect(fabIsDragging ? 1.08 : 1.0)
+            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: fabIsDragging)
+    }
+
+    /// 把"点击区域"和"视觉主体"合并的容器层——所有手势都挂在这里而不是内层，
+    /// 这样 64pt 圆形整体都是可点击 / 可拖动区域，不会被圆形视觉边界限制。
+    private var fabTapSurface: some View {
+        fabVisual
+            .contentShape(.rect)
+            .onTapGesture {
+                // 拖动中的 tap 是误触，忽略掉
+                guard !fabIsDragging else { return }
+                if viewModel.isAutoplay {
+                    viewModel.stopAutoplay()
+                } else {
+                    viewModel.startAutoplay()
+                }
             }
-        } label: {
-            Image(systemName: viewModel.isAutoplay ? "stop.fill" : "play.fill")
-                .font(.title2.weight(.bold))
-                .foregroundStyle(.white)
-                .frame(width: 64, height: 64)
-                .background(
-                    Circle().fill(viewModel.isAutoplay ? Theme.unknown : Theme.accent)
-                )
-                .shadow(color: (viewModel.isAutoplay ? Theme.unknown : Theme.accent).opacity(0.4),
-                        radius: 8, x: 0, y: 4)
-        }
-        .buttonStyle(.pressable)
-        .accessibilityLabel(viewModel.isAutoplay ? "停止自动播放" : "开始自动播放")
-        .accessibilityHint("长按拖动调整位置")
-        .scaleEffect(fabIsDragging ? 1.08 : 1.0)
-        .animation(.spring(response: 0.25, dampingFraction: 0.6), value: fabIsDragging)
+            .accessibilityLabel(viewModel.isAutoplay ? "停止自动播放" : "开始自动播放")
+            .accessibilityHint("长按拖动调整位置")
+            .accessibilityAddTraits(.isButton)
     }
 
     /// 卡片翻转用两层叠放 + 各自反向补偿旋转，而不是单层直接转 180°：单层转到

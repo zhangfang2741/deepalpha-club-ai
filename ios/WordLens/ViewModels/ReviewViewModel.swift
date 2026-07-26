@@ -33,6 +33,11 @@ final class ReviewViewModel: ObservableObject {
     /// 用 published 是为了 UI 能显示"第 N 遍"提示词。
     @Published private(set) var autoplayPassIndex = 0
 
+    /// 切换卡片的滑动方向：-1 = 下一个往右滑出（"上一步"）、+1 = 下一个往左
+    /// 滑出（"下一步"）。每次 goTo/goToNext/submit 都改一次，UI 的 .transition
+    /// 据此决定入场方向；idempotent 的 onAppear 加载不会动它。
+    @Published private(set) var transitionDirection: Int = 1
+
     /// 自动播放的停顿节奏（秒）。这些是经过手感调整的经验值——播 1 遍约 0.8s，
     /// 遍间 0.6s 让听者跟上节奏、词间 2s 给思考时间。
     private static let betweenPassesDelay: TimeInterval = 0.6
@@ -58,6 +63,7 @@ final class ReviewViewModel: ObservableObject {
 
     func goToPrevious() {
         guard canGoPrevious else { return }
+        transitionDirection = -1
         currentIndex -= 1
         isFlipped = false
         // 用户主动切词时停掉自动播放——让用户接管节奏
@@ -66,6 +72,7 @@ final class ReviewViewModel: ObservableObject {
 
     func goToNext() {
         guard canGoNext else { return }
+        transitionDirection = 1
         currentIndex += 1
         isFlipped = false
         stopAutoplay()
@@ -84,6 +91,7 @@ final class ReviewViewModel: ObservableObject {
         errorMessage = nil
         currentIndex = 0
         isFlipped = false
+        transitionDirection = 1
         stopAutoplay()
         defer { isLoading = false }
         do {
@@ -106,6 +114,7 @@ final class ReviewViewModel: ObservableObject {
         defer { isSubmitting = false }
         do {
             _ = try await WordService.submitReview(wordId: word.id, rating: rating)
+            transitionDirection = 1
             currentIndex += 1
             isFlipped = false
             // 评分完自动停止连播——进入下一个词后由用户决定要不要继续播
@@ -168,6 +177,7 @@ final class ReviewViewModel: ObservableObject {
             try? await Task.sleep(for: .seconds(Self.betweenWordsDelay))
             // 推进到下一个词；如果已经到队列尾就停
             if currentIndex < queue.count - 1 {
+                transitionDirection = 1
                 currentIndex += 1
                 isFlipped = false
             } else {
