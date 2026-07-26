@@ -41,6 +41,14 @@ struct HomeView: View {
             .onChange(of: nav.vocabularyDataVersion) { _, _ in
                 Task { await refreshAll() }
             }
+            // 切回「生词库」tab 时刷新统计：首页复习卡评分走的是独立的
+            // ReviewViewModel，不会碰这里的 listVM、也不适合 bump
+            // vocabularyDataVersion（那会连带把复习卡的队列进度重置）。所以
+            // 靠"切回本 tab 就重拉一次"来保证顶部各状态数字跟最新复习结果一致。
+            .onChange(of: nav.selectedTab) { _, newTab in
+                guard newTab == .vocabulary else { return }
+                Task { await refreshAll() }
+            }
             .onChange(of: nav.highlightedWordIDs) { _, ids in
                 guard !ids.isEmpty else { return }
                 // 从拍照页跳过来时新词肯定是"不认识"状态，之前如果筛选停在别的状态
