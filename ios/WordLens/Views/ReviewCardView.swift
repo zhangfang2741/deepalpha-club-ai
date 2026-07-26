@@ -5,9 +5,15 @@ struct ReviewCardView: View {
     @StateObject private var viewModel = ReviewViewModel()
     @EnvironmentObject var nav: AppNavigationState
 
+    /// 评分后顶部浮出的确认 toast：「✓ 已标记为认识」之类，1.2s 自动消失。
+    /// 切下一张卡（currentIndex 推进）也能继续显示——给用户一个明确的"刚才那个动作
+    /// 已经被接住"的视觉信号，避免连点三档按钮后回不过神来自己评了什么。
+    @State private var confirmationMessage: String?
+    @State private var confirmationColor: Color = .clear
+
     var body: some View {
         NavigationStack {
-            ZStack {
+            ZStack(alignment: .top) {
                 Theme.background.ignoresSafeArea()
 
                 if viewModel.isLoading {
@@ -35,6 +41,16 @@ struct ReviewCardView: View {
                         .animation(.spring(response: 0.45, dampingFraction: 0.85),
                                    value: viewModel.currentWord?.id)
                 }
+
+                // 顶部确认 toast：放在最外层 ZStack 里、走 own alignment(.top)，
+                // 不参与 cardContent 的 transition，切词/翻卡时不会被一起淡掉。
+                // safeAreaInset 会让 toast 跟着 navbar/progressBar 一起被挤进
+                // navigation chrome，而我们要的是覆盖在内容上的浮层，所以走
+                // overlay 而不是 safeAreaInset。
+                confirmationToast
+                    .padding(.top, 8)
+                    .allowsHitTesting(false)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
             .navigationTitle("")
             // Toolbar-managed title: 用 ToolbarItem(placement: .principal)
@@ -299,6 +315,11 @@ struct ReviewCardView: View {
 
     private func ratingButton(_ label: String, _ color: Color, _ rating: ReviewRating) -> some View {
         Button {
+            // 1) 立刻震一下——按下瞬间就能感觉到反馈，不用等网络回来。
+            // 2) 顶部 toast 提示评分结果，1.2s 自动消失。
+            // 3) 异步提交评分（成功后会自动切下一个词）。
+            Haptics.rating(rating)
+            showConfirmation(label: label, color: color)
             Task { await viewModel.submit(rating) }
         } label: {
             Text(label)
@@ -311,5 +332,43 @@ struct ReviewCardView: View {
         }
         .buttonStyle(.pressable)
         .disabled(viewModel.isSubmitting)
+    }
+
+    /// 弹出顶部 toast：emoji + "已标记为 X"。emoji 是从按钮 label 里抠出来的（按钮
+    /// 上是「😊 认识」格式），避免再维护一份 i18n 映射表。Task.sleep 兜底——视图
+    /// 卸载时 task 自动取消，confirmationMessage 留着不影响后续显示。
+    private func showConfirmation(label: String, color: Color) {
+        let stripped = label
+            .replacingOccurrences(of: "😵 ", with: "")
+            .replacingOccurrences(of: "😐 ", with: "")
+            .replacingOccurrences(of: "😊 ", with: "")
+        confirmationMessage = "已标记为\(stripped)"
+        confirmationColor = color
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.2))
+            if confirmationMessage == "已标记为\(stripped)" {
+                confirmationMessage = nil
+            }
+        }
+    }
+
+    private var confirmationToast: some View {
+        Group {
+            if let message = confirmationMessage {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text(message)
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(confirmationColor)
+                .clipShape(.capsule)
+                .shadow(color: confirmationColor.opacity(0.35), radius: 8, x: 0, y: 3)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: confirmationMessage)
     }
 }

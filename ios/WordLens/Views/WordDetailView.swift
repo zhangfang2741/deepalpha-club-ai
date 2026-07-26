@@ -14,6 +14,11 @@ struct WordDetailView: View {
     @State private var hasSubmittedThisSession = false
     /// 提交评分后用后端返回的最新词刷新详情，避免看到的还是点按钮之前的 status。
     @State private var currentWord: VocabularyWord
+    /// 评分后顶部 toast 提示（1.2s 自动消失）——按下立刻给反馈，不等网络回来。
+    /// 跟"本次已提交评分，重新进入详情页可再次评估"那条持久文案并存：toast 是
+    /// 即时确认（你刚才评了什么），那条是状态提示（这个 session 内不能再评）。
+    @State private var confirmationMessage: String?
+    @State private var confirmationColor: Color = .clear
 
     init(word: VocabularyWord, listViewModel: WordListViewModel) {
         self.word = word
@@ -22,7 +27,7 @@ struct WordDetailView: View {
     }
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
             Theme.background.ignoresSafeArea()
             ScrollView {
                 VStack(spacing: 20) {
@@ -90,6 +95,14 @@ struct WordDetailView: View {
                 }
                 .padding()
             }
+
+            // 顶部确认 toast：覆盖在 ScrollView 上，跟外层 ZStack 对齐 .top，
+            // 不参与 ScrollView 内容布局。让 Toast 不被滚动遮挡、也不会
+            // 跟评分按钮位置冲突（按钮在底部，toast 在顶部）。
+            confirmationToast
+                .padding(.top, 8)
+                .allowsHitTesting(false)
+                .frame(maxWidth: .infinity, alignment: .center)
         }
         .navigationTitle("单词详情")
         .navigationBarTitleDisplayMode(.inline)
@@ -155,6 +168,12 @@ struct WordDetailView: View {
     /// 平分 HStack 水平空间，按下用统一的 .pressable 反馈样式。
     private func ratingButton(_ label: String, _ color: Color, _ rating: ReviewRating) -> some View {
         Button {
+            // 1) 立刻震一下——按下瞬间的触觉反馈，不用等网络回来。
+            // 2) 立刻浮 toast 告诉用户"已标记为 X"，不等后端确认。提交后端
+            //    成功还有"本次已提交评分"持久文案接管，toast 是即时确认。
+            // 3) 异步提交评分（按钮也会被 disable 走 progress 视觉反馈）。
+            Haptics.rating(rating)
+            showConfirmation(label: label, color: color)
             Task { await submit(rating) }
         } label: {
             Text(label)
@@ -167,6 +186,45 @@ struct WordDetailView: View {
         }
         .buttonStyle(.pressable)
         .disabled(isSubmitting || hasSubmittedThisSession)
+    }
+
+    /// 弹出顶部 toast：emoji + "已标记为 X"。emoji 从按钮 label 里抠，避免再
+    /// 维护一份 i18n 映射表。1.2s 后自动清掉；只在 confirmationMessage 还是
+    /// 自己设的那条时才清（防止快速连评两档时第一条把第二条刚设的清掉）。
+    private func showConfirmation(label: String, color: Color) {
+        let stripped = label
+            .replacingOccurrences(of: "😵 ", with: "")
+            .replacingOccurrences(of: "😐 ", with: "")
+            .replacingOccurrences(of: "😊 ", with: "")
+        let message = "已标记为\(stripped)"
+        confirmationMessage = message
+        confirmationColor = color
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.2))
+            if confirmationMessage == message {
+                confirmationMessage = nil
+            }
+        }
+    }
+
+    private var confirmationToast: some View {
+        Group {
+            if let message = confirmationMessage {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text(message)
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(confirmationColor)
+                .clipShape(.capsule)
+                .shadow(color: confirmationColor.opacity(0.35), radius: 8, x: 0, y: 3)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: confirmationMessage)
     }
 
     /// 提交评分：成功后用后端返回的最新词刷新详情 + 同步给列表 viewModel，
