@@ -1,5 +1,6 @@
 // ViewModels/ReviewViewModel.swift
 import Foundation
+import UIKit
 
 @MainActor
 final class ReviewViewModel: ObservableObject {
@@ -159,7 +160,33 @@ final class ReviewViewModel: ObservableObject {
     /// 自动播放主循环：每个词 3 遍 + 词间停顿。用 await Pronouncer.shared.speak()
     /// 的串行调用推进——Pronouncer 自己有"播完回调"但不暴露 async API，所以这里
     /// 用"播完回调 + 短 sleep"的轮询模式等音频结束。
+    ///
+    /// 后台运行：自动播放期间（无论是 App 退到后台还是屏幕息屏）需要保持状态
+    /// 机不被 iOS 挂起。三道保险同时到位才能稳：
+    ///   1. Info.plist 声明 UIBackgroundModes=audio（系统允许后台音频）
+    ///   2. Pronouncer 配 AVAudioSession .playback（音频本身继续播）
+    ///   3. beginBackgroundTask 抓住系统给的额外 ~30s 给词间 / 遍间停顿，期间
+    ///      iOS 不会把 App 的 Task 杀掉。AVAudioPlayer 本身在 .playback 类别
+    ///      下能继续发声, 但 Task.sleep 那些停顿时间系统照样会挂起 —— 需要
+    ///      后台时间来撑过这些停顿。
     private func runAutoplayLoop() async {
+        // 整个 autoplay 期间持续持有 backgroundTask, 退出时 (Task 结束) 释放.
+        // BackgroundTaskBox 是 class, 闭包和主函数共享同一个 id.
+        let bgBox = BackgroundTaskBox()
+        bgBox.id = UIApplication.shared.beginBackgroundTask(withName: "review_autoplay") {
+            // 系统给的 ~30s 用完 (极少触发, 因为每遍 ~1s + 间隔 ~3s, 30s 内能
+            // 跑大约 7-8 遍, 用户手动 stop 的话会被 stopAutoplay 主动 end).
+            if bgBox.id != .invalid {
+                UIApplication.shared.endBackgroundTask(bgBox.id)
+                bgBox.id = .invalid
+            }
+        }
+        defer {
+            if bgBox.id != .invalid {
+                UIApplication.shared.endBackgroundTask(bgBox.id)
+                bgBox.id = .invalid
+            }
+        }
         while isAutoplay, currentIndex < queue.count, !Task.isCancelled {
             autoplayWordIndex = currentIndex
             let word = queue[currentIndex]
@@ -200,4 +227,40 @@ final class ReviewViewModel: ObservableObject {
             try? await Task.sleep(for: .milliseconds(80))
         }
     }
+
+    // MARK: - 锁屏/控制中心 远程命令
+
+    // Pronouncer 的 MPRemoteCommandCenter 把锁屏的播放/暂停按钮转成两个
+    // Notification（.pronouncerRemotePlay / .pronouncerRemotePause）广播出来,
+    // 这里 init 时挂监听, 让 ReviewViewModel 自己响应. 不依赖 import
+    // Pronouncer 的实现细节.
+    init() {
+        NotificationCenter.default.addObserver(
+            forName: .pronouncerRemotePlay,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            // 锁屏点"播放" → 启动自动播放（如果还没在播）
+            self?.startAutoplay()
+        }
+        NotificationCenter.default.addObserver(
+            forName: .pronouncerRemotePause,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            // 锁屏点"暂停" → 停自动播放（如果正在播）
+            self?.stopAutoplay()
+        }
+    }
+}
+
+extension Notification.Name {
+    static let pronouncerRemotePlay = Notification.Name("pronouncerRemotePlay")
+    static let pronouncerRemotePause = Notification.Name("pronouncerRemotePause")
+}
+
+/// 让后台任务 ID 能在 beginBackgroundTask 的 expirationHandler 闭包和主函数
+/// 之间共享——Swift 的局部 `var` 不能被 @escaping 闭包 mutate，必须用引用类型。
+private final class BackgroundTaskBox: @unchecked Sendable {
+    var id: UIBackgroundTaskIdentifier = .invalid
 }

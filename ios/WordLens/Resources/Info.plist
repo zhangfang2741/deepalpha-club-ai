@@ -32,5 +32,13 @@
 	<string>需要访问相机拍摄含英语单词的文档或书页，用于识别生词</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>需要访问相册选择含英语单词的图片，用于识别生词</string>
+	<!-- 自动播放复习单词时支持后台/息屏继续朗读: iOS 要求显式声明 audio
+	     后台能力, 没有这一条 AVAudioSession 配 .playback 也会被系统默默
+	     切回前台 session, App 退后台立刻停. .playback 类别 + UIBackgroundModes
+	     audio 是 Apple 官方后台音频的标准组合. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 </dict>
 </plist>

@@ -1,5 +1,7 @@
 // Views/Components/PronounceButton.swift
 import AVFoundation
+import Combine
+import MediaPlayer
 import SwiftUI
 
 /// 发音口音偏好（存 UserDefaults，设置页可切换）。
@@ -114,11 +116,81 @@ final class Pronouncer: ObservableObject {
     private lazy var delegate = PlaybackDelegate(owner: self)
 
     /// 不配置 AVAudioSession 的话，手机静音开关打开时会完全不出声——这是点小喇叭
-    /// 没反应最常见的原因。用 `.playback` 类别让发音像音乐/视频一样忽略静音开关。
+    /// 没反应最常见的原因。用 `.playback` 类别让发音像音乐/视频一样忽略静音开关；
+    /// mode 用 `.spokenAudio` 让系统知道这是"短停顿 + 持续朗读"模式，在自动播放
+    /// 词间 2s 暂停时不会被其他 app 的音频提示"插队"; options 不加 .mixWithOthers，
+    /// 这样复习期间不要和别的音频混着。
+    ///
+    /// .playback 也支持后台/息屏继续播放——前提是 Info.plist 的
+    /// UIBackgroundModes 声明 audio。两件事必须同时到位，缺一不可。
     private lazy var configured: Void = {
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
-        try? AVAudioSession.sharedInstance().setActive(true)
+        try? AVAudioSession.sharedInstance().setCategory(
+            .playback, mode: .spokenAudio, options: []
+        )
+        try? AVAudioSession.sharedInstance().setActive(true, options: [])
+        setupRemoteCommandCenter()
+        setupNowPlayingObserver()
     }()
+
+    /// 自动播放时让锁屏能看到"正在复习单词 X"。用一个长生命周期 Task
+    /// 监听 `objectWillChange`，每次变化重新 emit 当前 `playingWord`，
+    /// 由调用方（配置初始化时启动）去更新 nowPlayingInfo。
+    private func setupNowPlayingObserver() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            var lastWord: String?
+            for await _ in self.objectWillChangeStream() {
+                let current = self.playingWord
+                if current != lastWord {
+                    lastWord = current
+                    self.updateNowPlayingInfo(for: current)
+                }
+            }
+        }
+    }
+
+    /// `objectWillChange` 的 AsyncStream 包装：SwiftUI 的 ObservableObject
+    /// 在每次 @Published 即将变化时发送一次 `willChange` 通知，Combine
+    /// sink 转 AsyncStream 即可。
+    private func objectWillChangeStream() -> AsyncStream<Void> {
+        AsyncStream { continuation in
+            let cancellable = self.objectWillChange.sink { _ in
+                continuation.yield(())
+            }
+            continuation.onTermination = { _ in
+                cancellable.cancel()
+            }
+        }
+    }
+
+    private func setupRemoteCommandCenter() {
+        let center = MPRemoteCommandCenter.shared()
+        // 锁屏"播放/暂停/上一首/下一首"按钮 ——
+        // 锁屏点击转发成调用方对应的 stopAutoplay/startAutoplay；
+        // 这里不直接 import ReviewViewModel, 而是发 Notification 让
+        // ReviewViewModel 自己去响应。这样 Pronouncer 不反向依赖具体业务。
+        center.playCommand.addTarget { _ in
+            NotificationCenter.default.post(name: .pronouncerRemotePlay, object: nil)
+            return .success
+        }
+        center.pauseCommand.addTarget { _ in
+            NotificationCenter.default.post(name: .pronouncerRemotePause, object: nil)
+            return .success
+        }
+    }
+
+    /// 更新锁屏/控制中心显示当前播放的单词。题目自动播放复习单词,
+    /// 没有 artwork, 用系统默认占位即可。
+    private func updateNowPlayingInfo(for word: String?) {
+        var info: [String: Any] = [:]
+        if let word {
+            info[MPMediaItemPropertyTitle] = word
+            info[MPMediaItemPropertyArtist] = "鹦鹉学舌 · 自动复习"
+            info[MPNowPlayingInfoPropertyIsLiveStream] = false
+            info[MPNowPlayingInfoPropertyPlaybackRate] = 1.0
+        }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info.isEmpty ? nil : info
+    }
 
     /// 仅当用户开启了「自动发音」时才朗读，供复习卡/单词详情出现时调用。
     func speakIfAutoplayEnabled(_ word: String) {
