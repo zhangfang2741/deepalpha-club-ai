@@ -26,32 +26,11 @@ struct ReviewCardView: View {
                     )
                 } else if let word = viewModel.currentWord {
                     cardContent(word)
-                        // 切词淡入淡出：transition 必须用静态 transition（编译
-                        // 期常量）——之前 .transition(.asymmetric(...)) 的
-                        // insertion/removal 表达式读 viewModel.transitionDirection,
-                        // SwiftUI 在 Prepare build 阶段预渲染 view tree 时会去
-                        // 访问 @Published, 触发 "invalid reuse after initialization
-                        // failure" 崩溃。改成静态 .opacity + .scale: 不依赖 viewModel
-                        // 任何运行时状态, FAB / 卡片的切换仍走 .animation。
                         .id(word.id)
                         .transition(.opacity.combined(with: .scale(scale: 0.96)))
                         .animation(.spring(response: 0.45, dampingFraction: 0.85),
                                    value: viewModel.currentIndex)
                 }
-
-                // 自动播放按钮：放在 body ZStack 里渲染，跟 cardContent 平级、不
-                // 参与切词的 transition。VStack 上方用 Spacer 把按钮顶到屏幕底
-                // 安全区上方固定位置，不随卡片高度变化而抖动；颜色按播放状态切
-                // 换，停止时主题色 + 播放图标，播放中红色 + 停止图标。
-                VStack {
-                    Spacer(minLength: 0)
-                    autoplayButton
-                        .padding(.bottom, 24)
-                }
-                // 让 FAB 不参与切词过渡——只在播放/暂停状态切换时播放动画，
-                // 不在切换卡片时跟着滑。
-                .animation(nil, value: viewModel.currentIndex)
-                .allowsHitTesting(viewModel.currentWord != nil)
             }
             .navigationTitle("首页")
             .task { await viewModel.loadQueueIfNeeded() }
@@ -59,6 +38,22 @@ struct ReviewCardView: View {
                 Task { await viewModel.loadQueue() }
             }
             .refreshable { await viewModel.loadQueue() }
+            // 自动播放 FAB 用 .safeAreaInset 钉在 NavigationStack 底部 ——
+            // 之前放在 body ZStack 里 + Theme.background.ignoresSafeArea() 共存时,
+            // SwiftUI 在 Prepare build 阶段预渲染 view tree 时, FAB 的
+            // .allowsHitTesting(viewModel.currentWord != nil) 让 FAB 跟导航栏
+            // 安全区 navigate 同时被纳入 preflight, 触发 "invalid reuse after
+            // initialization failure" 崩溃。
+            // .safeAreaInset 把 FAB 推到 NavigationStack 的底部工具栏区,
+            // 跟主 view tree 完全分离 — preflight 阶段 FAB 不会被
+            // 跟 cardContent 的 transition 一起处理, crash 来源被消除。
+            .safeAreaInset(edge: .bottom, alignment: .center, spacing: 0) {
+                autoplayButton
+                    .padding(.bottom, 16)
+                    .opacity(viewModel.currentWord != nil ? 1 : 0)
+                    .allowsHitTesting(viewModel.currentWord != nil)
+                    .background(Color.clear)
+            }
         }
     }
 
