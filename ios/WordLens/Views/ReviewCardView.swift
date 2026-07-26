@@ -66,6 +66,26 @@ struct ReviewCardView: View {
                         .foregroundStyle(Theme.textPrimary)
                         .accessibilityAddTraits(.isHeader)
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        // 学习模式只改队列排序，不动 SM-2 调度；切换即时重排剩余队列。
+                        ForEach(ReviewMode.allCases, id: \.self) { m in
+                            Button {
+                                viewModel.changeMode(m)
+                            } label: {
+                                if viewModel.mode == m {
+                                    Label(m.label, systemImage: "checkmark")
+                                } else {
+                                    Text(m.label)
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                    }
+                    .tint(Theme.accent)
+                    .accessibilityLabel("学习模式")
+                }
             }
             .task { await viewModel.loadQueueIfNeeded() }
             .onChange(of: nav.vocabularyDataVersion) { _, _ in

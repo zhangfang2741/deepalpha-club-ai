@@ -2,6 +2,59 @@
 import Foundation
 import UIKit
 
+/// 复习学习模式（存 UserDefaults，首页可切换）。只影响待复习队列的排序/打乱，
+/// 不改后端的 SM-2 调度——评分怎么算下次复习时间始终按 SM-2 来。
+enum ReviewMode: String, CaseIterable {
+    case smart       // 智能复习：按到期时间（SM-2 默认）
+    case random      // 随机乱序
+    case hardFirst   // 难词优先：不认识 → 模糊 → 认识
+    case sequential  // 加入顺序：按加入时间正序
+
+    static var current: ReviewMode {
+        get {
+            let raw = UserDefaults.standard.string(forKey: "review_mode") ?? smart.rawValue
+            return ReviewMode(rawValue: raw) ?? .smart
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "review_mode") }
+    }
+
+    var label: String {
+        switch self {
+        case .smart: return "智能复习"
+        case .random: return "随机乱序"
+        case .hardFirst: return "难词优先"
+        case .sequential: return "加入顺序"
+        }
+    }
+
+    /// 难词优先的状态权重：不认识最靠前。
+    private static func statusRank(_ status: String) -> Int {
+        switch status {
+        case "new": return 0
+        case "fuzzy": return 1
+        default: return 2  // known
+        }
+    }
+
+    /// 按当前模式对队列重排。ISO8601 时间字符串按字典序即等价于按时间先后。
+    func ordered(_ words: [VocabularyWord]) -> [VocabularyWord] {
+        switch self {
+        case .smart:
+            return words.sorted { $0.nextReviewAt < $1.nextReviewAt }
+        case .random:
+            return words.shuffled()
+        case .hardFirst:
+            // 先按状态权重，同状态内再按到期时间，保证稳定可预期。
+            return words.sorted {
+                let l = ReviewMode.statusRank($0.status), r = ReviewMode.statusRank($1.status)
+                return l != r ? l < r : $0.nextReviewAt < $1.nextReviewAt
+            }
+        case .sequential:
+            return words.sorted { $0.createdAt < $1.createdAt }
+        }
+    }
+}
+
 @MainActor
 final class ReviewViewModel: ObservableObject {
     @Published var queue: [VocabularyWord] = []
@@ -14,6 +67,9 @@ final class ReviewViewModel: ObservableObject {
     /// 本次已评分（提交成功）的词数。评过分的词会从 queue 里移除，所以用它而不是
     /// queue.count 来算进度和"复习完成"。
     @Published private(set) var reviewedCount = 0
+
+    /// 当前学习模式（只影响队列排序，不改 SM-2 调度）。
+    @Published private(set) var mode: ReviewMode = ReviewMode.current
 
     /// 自动播放状态机：开启后从当前词开始，每个词朗读 3 遍（遍间 0.6s 停顿），
     /// 切下一个词前等 2s。手动打断（点喇叭 / 切词 / 评分）会自动退出。
@@ -102,7 +158,7 @@ final class ReviewViewModel: ObservableObject {
         stopAutoplay()
         defer { isLoading = false }
         do {
-            queue = try await WordService.reviewQueue()
+            queue = mode.ordered(try await WordService.reviewQueue())
             totalCount = queue.count
         } catch let error as APIError {
             errorMessage = error.message
@@ -113,6 +169,19 @@ final class ReviewViewModel: ObservableObject {
 
     func flip() {
         isFlipped.toggle()
+    }
+
+    /// 切换学习模式：把剩余（未评分）的队列按新模式重排，并从头开始。已评分的词
+    /// 早就移出队列，不受影响；不重新请求后端。
+    func changeMode(_ newMode: ReviewMode) {
+        guard newMode != mode else { return }
+        mode = newMode
+        ReviewMode.current = newMode
+        stopAutoplay()
+        queue = newMode.ordered(queue)
+        currentIndex = 0
+        isFlipped = false
+        transitionDirection = 1
     }
 
     func submit(_ rating: ReviewRating) async {
