@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from collections.abc import Callable
 from typing import TypeVar
 
 from langchain_core.messages import HumanMessage
@@ -213,6 +214,7 @@ async def recognize_words_from_image(
     image_bytes: bytes,
     mime_type: str = "image/jpeg",
     ocr_hint: list[str] | None = None,
+    on_partial: Callable[[list[RecognizedWord]], None] | None = None,
 ) -> list[RecognizedWord]:
     """识别图片中的英语单词并逐个配上音标/释义等信息。
 
@@ -222,6 +224,11 @@ async def recognize_words_from_image(
         ocr_hint: iOS 端 Apple Vision 本地 OCR 抠出的候选词，作为参考线索拼进
             识别阶段的 prompt，与 LLM 自己看图的识别结果综合取并集。为空则
             退化为纯看图识别。
+        on_partial: 可选回调，在首轮 enrich 合并完成后、以及重试补全结束后
+            各调用一次，参数是当前已识别出的 RecognizedWord 列表。用来给
+            NDJSON 流式端点推进 partial 事件——避免用户在识别+重试的几秒
+            里看到的是"屏幕空转"。回调是同步调用（不 await），上层若要跨
+            协程消费需要自己用队列包一层。
 
     Returns:
         识别出的候选单词列表（可能为空）
@@ -233,6 +240,8 @@ async def recognize_words_from_image(
     words = await _identify_words(image_bytes, mime_type, ocr_hint)
     if not words:
         logger.info("vocabulary_recognize_succeeded", word_count=0)
+        if on_partial is not None:
+            on_partial([])
         return []
 
     chunks = [words[i : i + _ENRICH_CHUNK_SIZE] for i in range(0, len(words), _ENRICH_CHUNK_SIZE)]
@@ -243,6 +252,11 @@ async def recognize_words_from_image(
     enriched_by_lower: dict[str, RecognizedWord] = {
         w.word.strip().lower(): w for w in (item for chunk in chunk_results for item in chunk)
     }
+
+    # 首轮 enrich 合并完成就回调一次：让 NDJSON 流式端点能立刻推一批词给前端，
+    # 不用等后面的漏词重试轮（可能还要再跑几秒）。
+    if on_partial is not None:
+        on_partial(list(enriched_by_lower.values()))
 
     # 首轮丰富后 definition_zh 为空的词（典型表现：模型觉得"idea / world / Tuesday
     # 这种太简单不用写"系统跳过），把它们单独再跑一轮——换个批次的"上下文压力"，
@@ -273,6 +287,8 @@ async def recognize_words_from_image(
         )
 
     enriched = list(enriched_by_lower.values())
+    if on_partial is not None:
+        on_partial(enriched)
     logger.info(
         "vocabulary_recognize_succeeded",
         word_count=len(enriched),

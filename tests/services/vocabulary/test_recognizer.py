@@ -215,6 +215,52 @@ async def test_retry_fills_in_words_skipped_by_first_pass():
     assert by_word["world"].definition_zh == "世界"
 
 
+async def test_on_partial_called_after_first_enrich_pass_and_after_retry():
+    """on_partial 应该在首轮 enrich 合并完成后回调一次（哪怕后面还有重试轮）。
+
+    重试结束后再回调一次带最终结果——这是给 NDJSON 流式端点用的进度信号，
+    让前端不用等整个识别+重试流程跑完才看到词。
+    """
+    identified = ["idea", "world"]
+
+    async def _call(*args, response_format=None, **kwargs):
+        if response_format is _IdentifyResult:
+            return _IdentifyResult(words=identified)
+        # 首轮把 world 留空，触发一轮重试；重试轮把 world 填上。
+        messages = args[0]
+        text = messages[0].content if isinstance(messages[0].content, str) else ""
+        batch_words = [line.split(". ", 1)[1] for line in text.splitlines() if ". " in line]
+        if batch_words == ["world"]:
+            return _RecognizeResult(words=[RecognizedWord(word="world", definition_zh="世界")])
+        return _RecognizeResult(
+            words=[
+                RecognizedWord(word="idea", definition_zh="想法"),
+                RecognizedWord(word="world"),
+            ]
+        )
+
+    call = AsyncMock(side_effect=_call)
+    snapshots: list[list[RecognizedWord]] = []
+    with patch("app.services.vocabulary.recognizer.llm_service.call", new=call):
+        words = await recognize_words_from_image(b"fake-image-bytes", on_partial=snapshots.append)
+
+    assert len(snapshots) == 2
+    first_pass_words = {w.word: w.definition_zh for w in snapshots[0]}
+    assert first_pass_words == {"idea": "想法", "world": ""}
+    final_words = {w.word: w.definition_zh for w in snapshots[1]}
+    assert final_words == {"idea": "想法", "world": "世界"}
+    assert {w.word: w.definition_zh for w in words} == final_words
+
+
+async def test_on_partial_called_once_with_empty_list_when_no_words_found():
+    call = _mock_llm_call([])
+    snapshots: list[list[RecognizedWord]] = []
+    with patch("app.services.vocabulary.recognizer.llm_service.call", new=call):
+        await recognize_words_from_image(b"fake-image-bytes", on_partial=snapshots.append)
+
+    assert snapshots == [[]]
+
+
 async def test_retry_skipped_when_first_pass_fills_all_words():
     """首轮丰富就全部填满了，就不应该再发重试请求。"""
     identified = ["idea", "world"]

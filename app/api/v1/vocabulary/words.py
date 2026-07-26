@@ -9,7 +9,7 @@
 
 import asyncio
 import uuid
-from collections.abc import AsyncIterator, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import suppress
 from typing import Any, Literal
 
@@ -85,26 +85,60 @@ def _build_recognize_response(recognized: list[RecognizedWord], existing_words: 
 
 
 async def _stream_recognition_events(
-    recognition: Coroutine[Any, Any, list[RecognizedWord]],
+    recognition_factory: Callable[
+        [Callable[[list[RecognizedWord]], None]], Coroutine[Any, Any, list[RecognizedWord]]
+    ],
     existing_words: set[str],
     heartbeat_interval: float = _RECOGNIZE_HEARTBEAT_SECONDS,
 ) -> AsyncIterator[str]:
-    """在识别任务运行期间输出 NDJSON 心跳，完成后输出最终结果。"""
-    task = asyncio.create_task(recognition)
+    """在识别任务运行期间输出 NDJSON 心跳 + partial 进度，完成后输出最终结果。
+
+    recognition_factory 接收一个 on_partial 回调、返回真正的识别 coroutine——
+    这个回调把每次进度快照塞进本函数持有的队列（`partial_queue`），本函数
+    一边跟原来一样等心跳超时、一边用 `asyncio.wait` 顺带消费队列，一有新快照
+    就立刻转发成 partial 事件，不用等到识别 + 漏词重试全部跑完。
+    """
+    partial_queue: asyncio.Queue[list[RecognizedWord]] = asyncio.Queue()
+    task = asyncio.create_task(recognition_factory(partial_queue.put_nowait))
     try:
         yield RecognizeStreamEvent(type="heartbeat", stage="recognizing").model_dump_json(exclude_none=True) + "\n"
 
-        while True:
-            try:
-                recognized = await asyncio.wait_for(asyncio.shield(task), timeout=heartbeat_interval)
-                break
-            except TimeoutError:
+        while not task.done():
+            get_task = asyncio.ensure_future(partial_queue.get())
+            done, _pending = await asyncio.wait(
+                {task, get_task}, timeout=heartbeat_interval, return_when=asyncio.FIRST_COMPLETED
+            )
+            if get_task in done:
+                yield (
+                    RecognizeStreamEvent(
+                        type="partial", data=_build_recognize_response(get_task.result(), existing_words)
+                    ).model_dump_json(exclude_none=True)
+                    + "\n"
+                )
+                continue
+            get_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await get_task
+            if not task.done():
                 yield (
                     RecognizeStreamEvent(type="heartbeat", stage="recognizing").model_dump_json(exclude_none=True)
                     + "\n"
                 )
 
-        response = _build_recognize_response(recognized, existing_words)
+        # task 完成前最后一次 on_partial 和 task 本身的 return 可能落在同一个
+        # event loop tick 里，上面的 asyncio.wait 不保证一定先取到它——收尾时
+        # 把队列剩余的快照排空，避免最后一批词丢事件（不会重复：每条只会被
+        # 循环里的 get_task 或者这里的 drain 之一消费一次）。
+        while not partial_queue.empty():
+            yield (
+                RecognizeStreamEvent(
+                    type="partial",
+                    data=_build_recognize_response(partial_queue.get_nowait(), existing_words),
+                ).model_dump_json(exclude_none=True)
+                + "\n"
+            )
+
+        response = _build_recognize_response(task.result(), existing_words)
         yield RecognizeStreamEvent(type="result", data=response).model_dump_json(exclude_none=True) + "\n"
     except RecognitionFailedError:
         yield (
@@ -190,10 +224,11 @@ async def recognize_stream(
 
     existing = await word_service.get_existing_words(db, user.id)
     events = _stream_recognition_events(
-        recognize_words_from_image(
+        lambda on_partial: recognize_words_from_image(
             image_bytes,
             image.content_type or "image/jpeg",
             ocr_hint=ocr_words,
+            on_partial=on_partial,
         ),
         existing_words=existing,
     )

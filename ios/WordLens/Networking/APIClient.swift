@@ -68,13 +68,19 @@ actor APIClient {
     /// reset（NSURLErrorNetworkConnectionLost -1005）。uploadTask 内部用临时
     /// 文件做流式上传，写过程持续触发 TCP ACK，能稳定避开 idle reset。
     ///
-    /// - Parameter textFields: 附带的文本表单字段（名称, 值），可重复同名（如把
-    ///   OCR 候选词逐个作为同名 `ocr_words` 字段发出，后端按 `list[str]` 接收）。
+    /// - Parameters:
+    ///   - textFields: 附带的文本表单字段（名称, 值），可重复同名（如把
+    ///     OCR 候选词逐个作为同名 `ocr_words` 字段发出，后端按 `list[str]` 接收）。
+    ///   - onPartial: 可选，NDJSON 响应流里每出现一条 `partial` 事件就回调一次
+    ///     （用 `NDJSONStreamUploader` 边收边解析响应体，而不是等整条流收完）。
+    ///     传 nil 时退化为原来的行为：`session.upload(for:fromFile:)` 拿到完整
+    ///     响应体后再一次性解码。
     func postMultipartImage<T: Decodable>(
         _ path: String,
         imageData: Data,
         filename: String = "photo.jpg",
-        textFields: [(name: String, value: String)] = []
+        textFields: [(name: String, value: String)] = [],
+        onPartial: (@Sendable (RecognizeResponse) -> Void)? = nil
     ) async throws -> T {
         var req = request(path: path, method: "POST")
         let boundary = "Boundary-\(UUID().uuidString)"
@@ -113,7 +119,14 @@ actor APIClient {
             }
             // uploadTask 默认走 application/octet-stream，但 httpBody 留空时它
             // 会用文件后缀识别 .bin——明确指定 Content-Type 避免歧义。
-            let (data, response) = try await session.upload(for: req, fromFile: tempURL)
+            let data: Data
+            let response: URLResponse
+            if let onPartial {
+                (data, response) = try await NDJSONStreamUploader(onPartial: onPartial)
+                    .upload(request: req, fromFile: tempURL, configuration: session.configuration)
+            } else {
+                (data, response) = try await session.upload(for: req, fromFile: tempURL)
+            }
             try? FileManager.default.removeItem(at: tempURL)
             if let http = response as? HTTPURLResponse,
                (200..<300).contains(http.statusCode),

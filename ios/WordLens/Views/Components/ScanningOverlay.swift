@@ -2,13 +2,15 @@
 import SwiftUI
 import UIKit
 
-/// 拍照识别中的扫描态：叠加扫描线动画 + 轮播状态文案。
+/// 拍照识别中的扫描态：叠加扫描线动画 + 状态文案。
 ///
-/// 识别是一次性 LLM 请求，没有真实的分阶段进度可以展示；裸转圈在等待较久时
-/// （长词表偶尔要重试）容易让人怀疑卡死了。用扫描线 + 轮播文案做"感知进度"，
-/// 让用户知道系统还在动，不代表精确的完成百分比。
+/// 后端识别流会在半途推送已识别出的候选词数量（`partialWordCount`），拿到
+/// 第一批之后就展示真实的"已识别到 N 个词"，比一直轮播猜测性文案更能让人
+/// 安心；在还没收到任何 partial 之前（纯看图识别阶段，通常 1~2 秒）仍然用
+/// 轮播文案兜底，避免裸转圈让人怀疑卡死。
 struct ScanningOverlay: View {
     let image: UIImage?
+    var partialWordCount: Int = 0
 
     @State private var scanDown = false
     @State private var messageIndex = 0
@@ -48,10 +50,11 @@ struct ScanningOverlay: View {
             .frame(height: 280)
             .padding(.horizontal)
 
-            Text(messages[messageIndex])
+            Text(partialWordCount > 0 ? "已识别到 \(partialWordCount) 个词，正在整理释义…" : messages[messageIndex])
                 .font(.subheadline)
                 .foregroundStyle(Theme.textSecondary)
                 .contentTransition(.opacity)
+                .animation(.easeInOut, value: partialWordCount)
                 .task {
                     while !Task.isCancelled {
                         try? await Task.sleep(for: .seconds(1.8))

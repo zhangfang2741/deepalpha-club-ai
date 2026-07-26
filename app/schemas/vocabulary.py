@@ -70,9 +70,16 @@ class RecognizeResponse(BaseResponse):
 
 
 class RecognizeStreamEvent(BaseModel):
-    """拍照识别 NDJSON 流中的单条事件。"""
+    """拍照识别 NDJSON 流中的单条事件。
 
-    type: Literal["heartbeat", "result", "error"]
+    事件顺序：heartbeat（每 ~5s 一次，保活）与 partial（首轮 enrich 合并后、
+    以及漏词重试补全后各推一次当前已识别出的候选词）交替出现，最后以
+    result（最终完整结果）或 error（识别失败）结束。
+    - partial：目前已识别出的候选词快照，后续 partial/result 会整体覆盖它
+      （不是增量 diff），前端直接用最新一条替换展示即可。
+    """
+
+    type: Literal["heartbeat", "partial", "result", "error"]
     stage: Literal["recognizing"] | None = None
     data: RecognizeResponse | None = None
     message: str | None = None

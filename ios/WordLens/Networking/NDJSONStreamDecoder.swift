@@ -46,7 +46,9 @@ enum NDJSONStreamDecoder {
     }
 }
 
-private struct NDJSONStreamEvent<T: Decodable>: Decodable {
+/// 不再 private：`NDJSONStreamUploader` 边收边解析响应体时也要按同样的结构
+/// 拆 NDJSON 行，两处共用一份事件形状定义。
+struct NDJSONStreamEvent<T: Decodable>: Decodable {
     let type: String
     let data: T?
     let message: String?

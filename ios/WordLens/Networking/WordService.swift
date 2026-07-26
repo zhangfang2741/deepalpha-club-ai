@@ -5,12 +5,20 @@ import Foundation
 enum WordService {
     /// 拍照识别：上传图片，并把本地 Apple Vision OCR 抠出的候选词一并带上，
     /// 让后端视觉 LLM 综合看图识别与 OCR 结果取并集。ocrWords 为空则纯看图识别。
-    static func recognize(imageData: Data, ocrWords: [String] = []) async throws -> RecognizeResponse {
+    ///
+    /// onPartial：识别还没跑完时，后端每推一批已识别出的候选词就回调一次，
+    /// 用来在 UI 上展示实时进度（而不是等 5~15 秒才看到任何结果）。
+    static func recognize(
+        imageData: Data,
+        ocrWords: [String] = [],
+        onPartial: (@Sendable (RecognizeResponse) -> Void)? = nil
+    ) async throws -> RecognizeResponse {
         let textFields = ocrWords.map { (name: "ocr_words", value: $0) }
         return try await APIClient.shared.postMultipartImage(
             "/recognize/stream",
             imageData: imageData,
-            textFields: textFields
+            textFields: textFields,
+            onPartial: onPartial
         )
     }
 
