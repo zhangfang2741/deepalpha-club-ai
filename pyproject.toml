@@ -191,6 +191,11 @@ convention = "google"
 "tests/test_transcript_ai.py" = ["D415"]
 "tests/core/langgraph/*.py" = ["D415", "D103"]
 "tests/core/langgraph/tools/*.py" = ["D415", "D103"]
+"app/services/regime/*.py" = ["D415", "D101", "D104"]
+"app/models/regime_features.py" = ["D415"]
+"app/schemas/regime.py" = ["D415", "D101"]
+"app/api/v1/regime.py" = ["D415"]
+"tests/services/regime/*.py" = ["D415", "D103", "D104"]
 
 [tool.pyright]
 include = ["app", "evals"]
