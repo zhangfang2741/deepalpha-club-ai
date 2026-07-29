@@ -16,9 +16,12 @@ from datetime import date
 import numpy as np
 
 from app.services.regime.constants import (
+    COVAR_SHRINKAGE,
+    MAX_SELF_TRANSITION,
     MIN_FIT_HISTORY,
     N_STATES,
     PERSIST_N_DAYS,
+    POSTERIOR_TEMPERATURE,
     STATE_LABELS,
 )
 from app.services.regime.features import (
@@ -108,6 +111,9 @@ def run_walk_forward(
     min_history: int = MIN_FIT_HISTORY,
     persist_n: int = PERSIST_N_DAYS,
     seed: int = 42,
+    covar_shrinkage: float = COVAR_SHRINKAGE,
+    max_self_transition: float = MAX_SELF_TRANSITION,
+    temperature: float = POSTERIOR_TEMPERATURE,
 ) -> RegimeResult:
     """走-前向拟合并产出逐日滤波后验。
 
@@ -119,6 +125,9 @@ def run_walk_forward(
         min_history: 首次拟合所需最小可用历史天数。
         persist_n: 「持续 N 日」确认所需连续天数。
         seed: HMM 初始化随机种子。
+        covar_shrinkage: 协方差向池化方差收缩系数（抑制后验饱和）。
+        max_self_transition: 自转移概率上限（掐断逐日复利式钉死）。
+        temperature: 发射对数似然退火温度（软化后验为可用软概率）。
     """
     t = len(dates)
     features = np.asarray(features, dtype=float)
@@ -145,7 +154,13 @@ def run_walk_forward(
         mean, std = _fit_scaler(x_hist)
         x_std = (x_hist - mean) / std
         try:
-            params = fit_gaussian_hmm(x_std, n_states=n_states, seed=seed)
+            params = fit_gaussian_hmm(
+                x_std,
+                n_states=n_states,
+                seed=seed,
+                covar_shrinkage=covar_shrinkage,
+                max_self_transition=max_self_transition,
+            )
         except ValueError:
             continue
         label_map = _label_mapping(params)
@@ -170,7 +185,7 @@ def run_walk_forward(
         upto = seg_days[-1]
         hist_rows = valid_idx[valid_idx <= upto]
         x_std = (features[hist_rows] - mean) / std
-        post = filter_posteriors(params, x_std)
+        post = filter_posteriors(params, x_std, temperature=temperature)
         # hist_rows 全局索引 → 在 post 中的行位置
         pos_of = {gi: p for p, gi in enumerate(hist_rows)}
         for gi in seg_days:

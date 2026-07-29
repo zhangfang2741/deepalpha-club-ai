@@ -61,6 +61,49 @@ def test_compute_regime_produces_records():
     assert records[0].params_version is None
 
 
+def test_softening_reduces_posterior_saturation():
+    # 机制测试：退火（协方差收缩+转移封顶+温度）应显著软化后验，
+    # 而非在人为可分的合成数据上强求某个绝对软度阈值。
+    import numpy as np
+
+    from app.services.regime.constants import (
+        COVAR_SHRINKAGE,
+        MAX_SELF_TRANSITION,
+        POSTERIOR_TEMPERATURE,
+    )
+    from app.services.regime.engine import run_walk_forward
+    from app.services.regime.features import build_feature_series, stack_features
+
+    data = _make_market(700)
+    series = build_feature_series(
+        data.qqq_close, data.vix_close, data.offense_prices,
+        data.defense_prices, data.cash_prices,
+    )
+    feats = stack_features(series)
+    valid = np.asarray(~np.isnan(feats).any(axis=1), dtype=bool)
+
+    def maxpost_stats(**kw) -> tuple[float, float]:
+        res = run_walk_forward(data.dates, feats, valid, **kw)
+        mx = np.array([
+            max(d.posteriors.values())
+            for d in res.daily
+            if d.params_version is not None
+        ])
+        return float(mx.mean()), float((mx < 0.95).mean())  # 均值, 软占比
+
+    raw_mean, raw_soft = maxpost_stats(
+        covar_shrinkage=0.0, max_self_transition=1.0, temperature=1.0
+    )
+    soft_mean, soft_soft = maxpost_stats(
+        covar_shrinkage=COVAR_SHRINKAGE,
+        max_self_transition=MAX_SELF_TRANSITION,
+        temperature=POSTERIOR_TEMPERATURE,
+    )
+    # 退火后：平均 max 后验更低、软后验（<0.95）占比更高
+    assert soft_mean < raw_mean - 0.01
+    assert soft_soft > raw_soft * 1.5
+
+
 def test_records_are_date_sorted_and_unique():
     data = _make_market(400)
     records = compute_regime_from_market(data)

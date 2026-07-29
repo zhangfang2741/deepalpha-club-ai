@@ -30,14 +30,61 @@ function labelZh(label: string | null): string {
   return REGIME_LABEL_ZH[label] ?? label
 }
 
-// ── 内联 SVG 折线图 ──────────────────────────────────────────────
+// 年份分界的索引（用于 X 轴网格线）
+function yearBoundaries(dates: string[]): number[] {
+  const out: number[] = []
+  let lastYear = ''
+  dates.forEach((d, i) => {
+    const y = d.slice(0, 4)
+    if (y !== lastYear) {
+      if (lastYear !== '') out.push(i)
+      lastYear = y
+    }
+  })
+  return out
+}
+
+// X 轴时间刻度（等距 5 个，含年份网格标注）
+function TimeAxis({ dates }: { dates: string[] }) {
+  if (dates.length < 2) return null
+  const n = dates.length
+  const ticks = 5
+  const idxs = Array.from({ length: ticks }, (_, k) => Math.round((k / (ticks - 1)) * (n - 1)))
+  return (
+    <div className="relative h-4 mt-1.5 select-none">
+      {idxs.map((i, k) => {
+        const pct = (i / (n - 1)) * 100
+        const lbl = dates[i].slice(0, 7) // YYYY-MM
+        const style: React.CSSProperties =
+          k === 0
+            ? { left: '0%' }
+            : k === ticks - 1
+            ? { right: '0%' }
+            : { left: `${pct}%`, transform: 'translateX(-50%)' }
+        return (
+          <span
+            key={i}
+            className="absolute top-0 text-[10px] text-gray-400 font-mono tabular-nums whitespace-nowrap"
+            style={style}
+          >
+            {lbl}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── 内联 SVG 折线图（带 X 时间轴） ──────────────────────────────
 function Sparkline({
   values,
+  dates,
   color,
   height = 48,
   zeroLine = false,
 }: {
   values: (number | null)[]
+  dates: string[]
   color: string
   height?: number
   zeroLine?: boolean
@@ -59,17 +106,29 @@ function Sparkline({
     d += d === '' ? `M ${p.x} ${p.y}` : ` L ${p.x} ${p.y}`
   })
   const zeroY = zeroLine && min < 0 && max > 0 ? height - ((0 - min) / span) * height : null
+  const lastPt = [...pts].reverse().find((p) => p.y !== null)
+  const years = yearBoundaries(dates)
   return (
-    <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" className="w-full" style={{ height }}>
-      {zeroY !== null && (
-        <line x1={0} y1={zeroY} x2={w} y2={zeroY} stroke="#cbd5e1" strokeWidth={0.5} strokeDasharray="2 2" />
-      )}
-      <path d={d} fill="none" stroke={color} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
-    </svg>
+    <>
+      <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" className="w-full" style={{ height }}>
+        {years.map((i) => {
+          const x = (i / (values.length - 1)) * w
+          return <line key={i} x1={x} y1={0} x2={x} y2={height} stroke="currentColor" className="text-gray-200" strokeWidth={0.5} />
+        })}
+        {zeroY !== null && (
+          <line x1={0} y1={zeroY} x2={w} y2={zeroY} stroke="#cbd5e1" strokeWidth={0.5} strokeDasharray="2 2" />
+        )}
+        <path d={d} fill="none" stroke={color} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+        {lastPt && lastPt.y !== null && (
+          <circle cx={lastPt.x} cy={lastPt.y} r={1.6} fill={color} vectorEffect="non-scaling-stroke" />
+        )}
+      </svg>
+      <TimeAxis dates={dates} />
+    </>
   )
 }
 
-// 后验堆叠面积图（逐利/观望/避险）
+// 后验堆叠面积图（逐利/观望/避险，带 X 时间轴）
 function PosteriorStack({ history }: { history: RegimePoint[] }) {
   const rows = history.filter((p) => p.p_risk_off !== null)
   if (rows.length < 2) {
@@ -78,6 +137,7 @@ function PosteriorStack({ history }: { history: RegimePoint[] }) {
   const w = 100
   const h = 120
   const n = rows.length
+  const dates = rows.map((p) => p.trade_date)
   // 每天从下往上堆叠 risk_off / neutral / risk_on
   const buildArea = (getBottom: (p: RegimePoint) => number, getTop: (p: RegimePoint) => number) => {
     const top = rows.map((p, i) => `${(i / (n - 1)) * w},${h - getTop(p) * h}`)
@@ -89,12 +149,20 @@ function PosteriorStack({ history }: { history: RegimePoint[] }) {
   const off = (p: RegimePoint) => p.p_risk_off ?? 0
   const neu = (p: RegimePoint) => (p.p_risk_off ?? 0) + (p.p_neutral ?? 0)
   const on = () => 1
+  const years = yearBoundaries(dates)
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full" style={{ height: 160 }}>
-      <path d={buildArea(() => 0, off)} fill={LABEL_COLOR.risk_off} opacity={0.85} />
-      <path d={buildArea(off, neu)} fill={LABEL_COLOR.neutral} opacity={0.85} />
-      <path d={buildArea(neu, on)} fill={LABEL_COLOR.risk_on} opacity={0.85} />
-    </svg>
+    <>
+      <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full" style={{ height: 160 }}>
+        <path d={buildArea(() => 0, off)} fill={LABEL_COLOR.risk_off} opacity={0.85} />
+        <path d={buildArea(off, neu)} fill={LABEL_COLOR.neutral} opacity={0.85} />
+        <path d={buildArea(neu, on)} fill={LABEL_COLOR.risk_on} opacity={0.85} />
+        {years.map((i) => {
+          const x = (i / (n - 1)) * w
+          return <line key={i} x1={x} y1={0} x2={x} y2={h} stroke="#ffffff" strokeOpacity={0.35} strokeWidth={0.5} />
+        })}
+      </svg>
+      <TimeAxis dates={dates} />
+    </>
   )
 }
 
@@ -262,16 +330,16 @@ export default function RegimePage() {
               </div>
 
               <ChartCard title="ODS（进攻−防御）" color="#7c3aed">
-                <Sparkline values={data.history.map((p) => p.ods)} color="#7c3aed" zeroLine />
+                <Sparkline values={data.history.map((p) => p.ods)} dates={data.history.map((p) => p.trade_date)} color="#7c3aed" zeroLine />
               </ChartCard>
               <ChartCard title="CF（现金−风险资产）" color="#0891b2">
-                <Sparkline values={data.history.map((p) => p.cf)} color="#0891b2" zeroLine />
+                <Sparkline values={data.history.map((p) => p.cf)} dates={data.history.map((p) => p.trade_date)} color="#0891b2" zeroLine />
               </ChartCard>
               <ChartCard title="VIX" color="#dc2626">
-                <Sparkline values={data.history.map((p) => p.vix)} color="#dc2626" />
+                <Sparkline values={data.history.map((p) => p.vix)} dates={data.history.map((p) => p.trade_date)} color="#dc2626" />
               </ChartCard>
               <ChartCard title="CMF（量价）" color="#16a34a">
-                <Sparkline values={data.history.map((p) => p.cmf)} color="#16a34a" zeroLine />
+                <Sparkline values={data.history.map((p) => p.cmf)} dates={data.history.map((p) => p.trade_date)} color="#16a34a" zeroLine />
               </ChartCard>
             </div>
           )}
