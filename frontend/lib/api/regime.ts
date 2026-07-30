@@ -64,6 +64,8 @@ export interface SectorRegimePoint {
   trade_date: string
   sector: string
   sector_name: string
+  parent: string | null
+  has_children: boolean
   sector_ret: number | null
   sector_vol: number | null
   vix: number | null
@@ -94,5 +96,18 @@ export async function triggerSectorStage(lookbackDays = 1400): Promise<{ sectors
     params: { lookback_days: lookbackDays },
     timeout: 180000,
   })
+  return data
+}
+
+export interface SectorChildrenResponse {
+  request_id: string
+  parent: string
+  parent_name: string
+  trade_date: string | null
+  children: SectorRegimePoint[]
+}
+
+export async function fetchSectorChildren(sector: string): Promise<SectorChildrenResponse> {
+  const { data } = await apiClient.get<SectorChildrenResponse>(`/api/v1/regime/sectors/${sector}/children`)
   return data
 }

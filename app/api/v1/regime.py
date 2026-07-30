@@ -14,12 +14,13 @@ from app.schemas.regime import (
     RegimePoint,
     RegimeResponse,
     RegimeStageResult,
+    SectorChildrenResponse,
     SectorRegimeHistory,
     SectorRegimeLatest,
     SectorRegimePoint,
     SectorStageResult,
 )
-from app.services.regime.constants import SECTOR_NAME_ZH
+from app.services.regime.constants import SECTOR_CHILDREN, SECTOR_NAME_ZH
 
 router = APIRouter()
 
@@ -29,6 +30,8 @@ def _to_sector_point(row: RegimeSectorFeatures) -> SectorRegimePoint:
         trade_date=row.trade_date,
         sector=row.sector,
         sector_name=SECTOR_NAME_ZH.get(row.sector, row.sector),
+        parent=row.parent,
+        has_children=bool(SECTOR_CHILDREN.get(row.sector)),
         sector_ret=row.sector_ret,
         sector_vol=row.sector_vol,
         vix=row.vix,
@@ -126,7 +129,8 @@ async def get_sector_regimes() -> SectorRegimeLatest:
                 return []
             rows = session.exec(
                 select(RegimeSectorFeatures).where(
-                    RegimeSectorFeatures.trade_date == latest_date
+                    RegimeSectorFeatures.trade_date == latest_date,
+                    col(RegimeSectorFeatures.parent).is_(None),  # 仅一级行业
                 )
             ).all()
             return list(rows)
@@ -138,6 +142,40 @@ async def get_sector_regimes() -> SectorRegimeLatest:
     latest_date = points[0].trade_date if points else None
     logger.info("regime_sectors_request", sectors=len(points))
     return SectorRegimeLatest(trade_date=latest_date, sectors=points)
+
+
+@router.get("/sectors/{sector}/children", response_model=SectorChildrenResponse)
+async def get_sector_children(sector: str) -> SectorChildrenResponse:
+    """某一级行业下各子行业的最新状态（下钻）。"""
+    from app.db.session import get_sync_session_cm
+
+    def _load() -> list[RegimeSectorFeatures]:
+        with get_sync_session_cm() as session:
+            latest_date = session.exec(
+                select(RegimeSectorFeatures.trade_date)
+                .where(RegimeSectorFeatures.parent == sector)
+                .order_by(col(RegimeSectorFeatures.trade_date).desc())
+                .limit(1)
+            ).first()
+            if latest_date is None:
+                return []
+            rows = session.exec(
+                select(RegimeSectorFeatures).where(
+                    RegimeSectorFeatures.trade_date == latest_date,
+                    RegimeSectorFeatures.parent == sector,
+                )
+            ).all()
+            return list(rows)
+
+    rows = await run_in_threadpool(_load)
+    points = [_to_sector_point(r) for r in rows]
+    points.sort(key=lambda p: (p.factor_weight is None, -(p.factor_weight or 0)))
+    return SectorChildrenResponse(
+        parent=sector,
+        parent_name=SECTOR_NAME_ZH.get(sector, sector),
+        trade_date=points[0].trade_date if points else None,
+        children=points,
+    )
 
 
 @router.get("/sectors/{sector}", response_model=SectorRegimeHistory)

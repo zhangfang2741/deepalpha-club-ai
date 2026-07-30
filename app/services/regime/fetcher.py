@@ -18,12 +18,12 @@ import numpy as np
 from app.core.config import settings
 from app.core.logging import logger
 from app.services.regime.constants import (
+    ALL_SECTOR_ENTRIES,
     CASH_BASKET,
     DEFENSE_BASKET,
     MARKET_SYMBOL,
     NASDAQ_SYMBOL,
     OFFENSE_BASKET,
-    SECTORS,
     VIX_SYMBOL,
 )
 
@@ -153,54 +153,57 @@ class SectorMarketData:
 
 
 def align_sector_data(bars_by_symbol: dict[str, list[dict]]) -> SectorMarketData:
-    """把大盘/VIX/各板块 ETF 对齐到共同交易日（纯函数，便于测试）。"""
-    required = [MARKET_SYMBOL, VIX_SYMBOL, *[s["symbol"] for s in SECTORS]]
-    by_symbol: dict[str, dict[str, dict]] = {}
-    for sym in required:
-        rows = bars_by_symbol.get(sym) or []
-        by_symbol[sym] = {r["date"]: r for r in rows}
+    """对齐大盘/VIX/各行业(含子行业) ETF（纯函数，便于测试）。
 
-    if not by_symbol[MARKET_SYMBOL] or not by_symbol[VIX_SYMBOL]:
+    时间轴 = 大盘(SPY) ∩ VIX 的交易日（两者均为长历史流动品种）。每个行业/子行业
+    ETF 按该时间轴 reindex，自身无数据的日期（如成立前）置 NaN，由下游 valid_mask
+    自动跳过——这样短历史的细分 ETF 不会截断其它标的的历史。
+    """
+    def to_map(sym: str) -> dict[str, dict]:
+        return {r["date"]: r for r in (bars_by_symbol.get(sym) or [])}
+
+    market_map = to_map(MARKET_SYMBOL)
+    vix_map = to_map(VIX_SYMBOL)
+    if not market_map or not vix_map:
         raise RuntimeError("缺少大盘或 VIX 行情，无法计算板块状态")
 
-    # 至少要有一个板块有数据；共同交易日 = 大盘 ∩ VIX ∩ 有数据的板块
-    usable_sectors = [s for s in SECTORS if by_symbol[s["symbol"]]]
-    if not usable_sectors:
-        raise RuntimeError("所有板块行情缺失，无法计算板块状态")
+    spine = sorted(set(market_map.keys()) & set(vix_map.keys()))
+    if not spine:
+        raise RuntimeError("大盘与 VIX 无共同交易日，无法对齐")
+    dates = [date.fromisoformat(d) for d in spine]
 
-    common = set(by_symbol[MARKET_SYMBOL].keys()) & set(by_symbol[VIX_SYMBOL].keys())
-    for s in usable_sectors:
-        common &= set(by_symbol[s["symbol"]].keys())
-    if not common:
-        raise RuntimeError("各标的无共同交易日，无法对齐板块数据")
+    def spine_field(m: dict[str, dict], key: str) -> np.ndarray:
+        return np.array([m[d][key] for d in spine], dtype=float)
 
-    day_strs = sorted(common)
-    dates = [date.fromisoformat(d) for d in day_strs]
-
-    def field(sym: str, key: str) -> np.ndarray:
-        return np.array([by_symbol[sym][d][key] for d in day_strs], dtype=float)
+    def reindex_field(m: dict[str, dict], key: str) -> np.ndarray:
+        # 时间轴上无数据置 NaN
+        return np.array([m[d][key] if d in m else np.nan for d in spine], dtype=float)
 
     sectors: dict[str, dict[str, np.ndarray]] = {}
-    for s in usable_sectors:
-        sym = s["symbol"]
-        sectors[s["key"]] = {
-            "close": field(sym, "close"),
-            "high": field(sym, "high"),
-            "low": field(sym, "low"),
-            "volume": field(sym, "volume"),
+    for entry in ALL_SECTOR_ENTRIES:
+        emap = to_map(str(entry["symbol"]))
+        if not emap:
+            continue  # 整只缺失则跳过该行业
+        sectors[str(entry["key"])] = {
+            "close": reindex_field(emap, "close"),
+            "high": reindex_field(emap, "high"),
+            "low": reindex_field(emap, "low"),
+            "volume": reindex_field(emap, "volume"),
         }
+    if not sectors:
+        raise RuntimeError("所有行业行情缺失，无法计算板块状态")
 
     return SectorMarketData(
         dates=dates,
-        vix_close=field(VIX_SYMBOL, "close"),
-        market_close=field(MARKET_SYMBOL, "close"),
+        vix_close=spine_field(vix_map, "close"),
+        market_close=spine_field(market_map, "close"),
         sectors=sectors,
     )
 
 
 def fetch_sector_market_data(lookback_days: int = 1400) -> SectorMarketData:
-    """抓取并对齐行业级 regime 所需的全部行情（大盘 + VIX + 各板块 ETF）。"""
-    symbols = [MARKET_SYMBOL, VIX_SYMBOL, *[s["symbol"] for s in SECTORS]]
+    """抓取并对齐行业级 regime 所需的全部行情（大盘 + VIX + 各行业/子行业 ETF）。"""
+    symbols = [MARKET_SYMBOL, VIX_SYMBOL, *[str(e["symbol"]) for e in ALL_SECTOR_ENTRIES]]
     seen: set[str] = set()
     uniq = [s for s in symbols if not (s in seen or seen.add(s))]
 

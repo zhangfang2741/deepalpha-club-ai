@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 
 from app.core.logging import logger
 from app.models.regime_sector_features import RegimeSectorFeatures
-from app.services.regime.constants import LABEL_RISK_OFF
+from app.services.regime.constants import LABEL_RISK_OFF, SECTOR_PARENT
 from app.services.regime.engine import run_walk_forward
 from app.services.regime.fetcher import SectorMarketData, fetch_sector_market_data
 from app.services.regime.sector_features import (
@@ -24,6 +24,7 @@ class SectorRegimeRecord:
 
     trade_date: str
     sector: str
+    parent: str | None
     sector_ret: float | None
     sector_vol: float | None
     vix: float | None
@@ -68,6 +69,7 @@ def compute_sector_regimes(data: SectorMarketData) -> dict[str, list[SectorRegim
                 SectorRegimeRecord(
                     trade_date=dr.date.isoformat(),
                     sector=sector_key,
+                    parent=SECTOR_PARENT.get(sector_key),
                     sector_ret=_n(series["sector_ret"][i]),
                     sector_vol=_n(series["sector_vol"][i]),
                     vix=_n(series["vix"][i]),
@@ -101,6 +103,7 @@ def persist_sector_records(
             if row is None:
                 row = RegimeSectorFeatures(trade_date=rec.trade_date, sector=rec.sector)
                 session.add(row)
+            row.parent = rec.parent
             row.sector_ret = rec.sector_ret
             row.sector_vol = rec.sector_vol
             row.vix = rec.vix

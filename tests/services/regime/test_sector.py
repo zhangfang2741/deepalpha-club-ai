@@ -31,16 +31,27 @@ def test_sector_label_weights_shape():
     assert SECTOR_LABEL_WEIGHTS.shape == (5,)
 
 
-def test_align_sector_intersects_and_skips_missing_sector():
+def test_align_sector_spine_and_skips_missing_sector():
     dates = ["2024-01-02", "2024-01-03", "2024-01-04"]
     bars = _sector_bars(dates)
-    # 某板块整只缺失 → 应被跳过，其余仍对齐
+    # 某板块整只缺失 → 应被跳过；时间轴由 SPY∩VIX 决定，不受影响
     bars[SECTORS[0]["symbol"]] = []
     md = align_sector_data(bars)
     assert SECTORS[0]["key"] not in md.sectors
-    assert len(md.sectors) == len(SECTORS) - 1
     assert md.dates == [date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 4)]
     assert md.market_close.shape == (3,)
+
+
+def test_align_sector_short_etf_reindexed_with_nan():
+    # 子行业/短历史 ETF 缺前几天 → 时间轴不缩短，缺失日期置 NaN
+    dates = ["2024-01-02", "2024-01-03", "2024-01-04"]
+    bars = _sector_bars(dates)
+    sym = SECTORS[1]["symbol"]
+    bars[sym] = bars[sym][2:]  # 只有最后一天有数据
+    md = align_sector_data(bars)
+    assert md.dates == [date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 4)]  # 时间轴不缩短
+    close = md.sectors[SECTORS[1]["key"]]["close"]
+    assert np.isnan(close[0]) and np.isnan(close[1]) and not np.isnan(close[2])
 
 
 def test_align_sector_missing_market_raises():
@@ -89,6 +100,29 @@ def _make_sector_market(t: int = 640):
         market_close=market,
         sectors=sectors,
     )
+
+
+def test_subindustry_gets_parent_and_handles_nan_history():
+    from app.services.regime.fetcher import SectorMarketData
+
+    rng = np.random.default_rng(4)
+    t = 640
+    dates = [date(2021, 1, 1) + timedelta(days=i) for i in range(t)]
+    mkt = np.cumprod(1 + rng.normal(0.0003, 0.01, t)) * 100
+    tech = np.cumprod(1 + rng.normal(0.001, 0.012, t)) * 100
+    sw = np.cumprod(1 + rng.normal(0.0012, 0.014, t)) * 100
+    sw[:300] = np.nan  # 子行业前 300 天无数据
+    sectors = {
+        "technology": {"close": tech, "high": tech * 1.01, "low": tech * 0.99, "volume": np.abs(rng.normal(1e6, 1e5, t))},
+        "tech_software": {"close": sw, "high": sw * 1.01, "low": sw * 0.99, "volume": np.abs(rng.normal(1e6, 1e5, t))},
+    }
+    data = SectorMarketData(dates=dates, vix_close=np.abs(rng.normal(18, 3, t)), market_close=mkt, sectors=sectors)
+    by = compute_sector_regimes(data)
+    assert by["technology"][0].parent is None
+    assert by["tech_software"][0].parent == "technology"
+    # 子行业 NaN 段无后验，但仍有部分已拟合日
+    fitted = [r for r in by["tech_software"] if r.p_risk_off is not None]
+    assert 0 < len(fitted) < len([r for r in by["technology"] if r.p_risk_off is not None])
 
 
 def test_compute_sector_regimes_produces_per_sector_records():

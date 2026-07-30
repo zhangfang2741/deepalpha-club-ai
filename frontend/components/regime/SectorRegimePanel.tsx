@@ -6,14 +6,25 @@ import { LABEL_COLOR, labelZh, colorOf } from '@/components/regime/common'
 import { useSectorRegimeStore } from '@/lib/store/regime_sector'
 import { type SectorRegimePoint } from '@/lib/api/regime'
 
-function SectorTile({ s }: { s: SectorRegimePoint }) {
+function SectorTile({ s, onClick }: { s: SectorRegimePoint; onClick?: () => void }) {
   const lab = s.confirmed_label ?? s.regime_label
   const c = colorOf(lab)
   const rs = s.rs_vs_market
+  const clickable = s.has_children && !!onClick
   return (
-    <div className="rounded-xl p-4 flex flex-col gap-1.5 border" style={{ background: `${c}0f`, borderColor: `${c}33` }}>
+    <div
+      onClick={clickable ? onClick : undefined}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick?.() } : undefined}
+      className={`rounded-xl p-4 flex flex-col gap-1.5 border transition-all ${clickable ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5' : ''}`}
+      style={{ background: `${c}0f`, borderColor: `${c}33` }}
+    >
       <div className="flex items-center justify-between">
-        <span className="text-sm font-bold text-gray-800">{s.sector_name}</span>
+        <span className="text-sm font-bold text-gray-800 flex items-center gap-1">
+          {s.sector_name}
+          {clickable && <span className="text-gray-400 text-xs">›</span>}
+        </span>
         <span className="text-xs font-bold px-2 py-0.5 rounded-md" style={{ color: c, background: `${c}1f` }}>
           {labelZh(lab)}
         </span>
@@ -30,6 +41,43 @@ function SectorTile({ s }: { s: SectorRegimePoint }) {
           <span className="text-lg font-black font-mono tabular-nums text-gray-800">{s.factor_weight === null ? '—' : s.factor_weight.toFixed(2)}</span>
         </div>
       </div>
+      {clickable && <span className="text-[10px] text-gray-400 font-medium">点击查看子行业 →</span>}
+    </div>
+  )
+}
+
+// 子行业下钻抽屉
+function SubIndustryDrawer() {
+  const { openSector, childrenCache, childrenLoading, closeChildren } = useSectorRegimeStore()
+  if (!openSector) return null
+  const children = childrenCache[openSector] ?? []
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={closeChildren}>
+      <div className="absolute inset-0 bg-black/40" />
+      <div
+        className="relative bg-white w-full sm:max-w-3xl max-h-[80vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl animate-in slide-in-from-bottom-4 duration-300"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-lg font-extrabold text-gray-900">子行业状态</h3>
+          <button onClick={closeChildren} className="text-gray-400 hover:text-gray-700 text-xl font-bold px-2" aria-label="关闭">×</button>
+        </div>
+        <p className="text-xs text-gray-400 mb-4">
+          该一级行业下各细分 ETF 单独拟合 HMM，按逐利程度排序
+          {children[0]?.trade_date && <span className="font-mono ml-2">{children[0].trade_date}</span>}
+        </p>
+        {childrenLoading ? (
+          <div className="flex items-center justify-center h-[160px]"><Spinner size={36} /></div>
+        ) : children.length === 0 ? (
+          <div className="text-sm text-gray-400 py-10 text-center">该行业暂无子行业数据（可能细分 ETF 无数据，或尚未计算）</div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {children.map((c) => (
+              <SectorTile key={c.sector} s={c} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -38,7 +86,7 @@ function SectorTile({ s }: { s: SectorRegimePoint }) {
  * 板块状态面板（行业级 regime）：可嵌入行业恐慌页作为一个 Tab。
  */
 export default function SectorRegimePanel() {
-  const { sectors, tradeDate, loading, running, error, load, run } = useSectorRegimeStore()
+  const { sectors, tradeDate, loading, running, error, load, run, openChildren } = useSectorRegimeStore()
 
   useEffect(() => {
     // 只在首次（未加载过）拉取；切回 Tab 用缓存，不再 spin
@@ -82,10 +130,12 @@ export default function SectorRegimePanel() {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {sectors.map((s) => (
-            <SectorTile key={s.sector} s={s} />
+            <SectorTile key={s.sector} s={s} onClick={() => openChildren(s.sector)} />
           ))}
         </div>
       )}
+
+      <SubIndustryDrawer />
     </div>
   )
 }
