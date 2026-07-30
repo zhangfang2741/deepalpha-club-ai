@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -79,6 +80,15 @@ def _fmp_eod(symbol: str, from_: str, to: str) -> list[dict]:
     ]
 
 
+def _fetch_bars_parallel(symbols: list[str], from_: str, to: str, max_workers: int = 12) -> dict[str, list[dict]]:
+    """并发抓取多个 symbol 的 EOD（sync httpx + 线程池），大幅缩短 I/O 墙钟时间。"""
+    seen: set[str] = set()
+    uniq = [s for s in symbols if not (s in seen or seen.add(s))]
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        results = pool.map(lambda s: (s, _fmp_eod(s, from_, to)), uniq)
+    return dict(results)
+
+
 def align_market_data(bars_by_symbol: dict[str, list[dict]]) -> RegimeMarketData:
     """把各标的的 EOD 列表对齐到共同交易日，构造 RegimeMarketData（纯函数，便于测试）。
 
@@ -128,14 +138,9 @@ def fetch_regime_market_data(lookback_days: int = 1400) -> RegimeMarketData:
         lookback_days: 日历回看天数，默认约 4 年（覆盖 MIN_FIT_HISTORY + 富余）。
     """
     symbols = [NASDAQ_SYMBOL, VIX_SYMBOL, *OFFENSE_BASKET, *DEFENSE_BASKET, *CASH_BASKET]
-    seen: set[str] = set()
-    uniq = [s for s in symbols if not (s in seen or seen.add(s))]
-
     end = date.today()
     start = end - timedelta(days=lookback_days)
-    from_, to = start.isoformat(), end.isoformat()
-
-    bars_by_symbol = {sym: _fmp_eod(sym, from_, to) for sym in uniq}
+    bars_by_symbol = _fetch_bars_parallel(symbols, start.isoformat(), end.isoformat())
     empty = [s for s, rows in bars_by_symbol.items() if not rows]
     if empty:
         logger.warning("regime_market_symbols_empty", symbols=empty)
@@ -204,14 +209,9 @@ def align_sector_data(bars_by_symbol: dict[str, list[dict]]) -> SectorMarketData
 def fetch_sector_market_data(lookback_days: int = 1400) -> SectorMarketData:
     """抓取并对齐行业级 regime 所需的全部行情（大盘 + VIX + 各行业/子行业 ETF）。"""
     symbols = [MARKET_SYMBOL, VIX_SYMBOL, *[str(e["symbol"]) for e in ALL_SECTOR_ENTRIES]]
-    seen: set[str] = set()
-    uniq = [s for s in symbols if not (s in seen or seen.add(s))]
-
     end = date.today()
     start = end - timedelta(days=lookback_days)
-    from_, to = start.isoformat(), end.isoformat()
-
-    bars_by_symbol = {sym: _fmp_eod(sym, from_, to) for sym in uniq}
+    bars_by_symbol = _fetch_bars_parallel(symbols, start.isoformat(), end.isoformat())
     empty = [s for s, rows in bars_by_symbol.items() if not rows]
     if empty:
         logger.warning("regime_sector_symbols_empty", symbols=empty)

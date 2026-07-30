@@ -6,6 +6,18 @@ import {
   type SectorRegimePoint,
 } from '@/lib/api/regime'
 
+// 把 axios 错误翻成能区分原因的中文（登录 / 超时 / 服务端错误）
+function runErrorMessage(err: unknown): string {
+  const e = err as { response?: { status?: number }; code?: string }
+  const status = e?.response?.status
+  if (status === 401 || status === 403) return '请先登录后再重新计算'
+  if (e?.code === 'ECONNABORTED') return '计算超时：板块+子行业共 39 只 ETF，同步计算较慢，建议改后台调度'
+  if (status === 502 || status === 504) return '计算超时（网关 502/504）：数据量大，建议改后台调度'
+  if (status && status >= 500) return `服务器错误（${status}），请稍后重试`
+  if (status) return `重新计算失败（${status}）`
+  return '重新计算失败：网络错误或行情不可用'
+}
+
 /**
  * 板块状态（行业级 regime）全局 store。
  *
@@ -62,8 +74,8 @@ export const useSectorRegimeStore = create<SectorRegimeState>((set, get) => ({
       await triggerSectorStage()
       const resp = await fetchSectorRegimes()
       set({ sectors: resp.sectors, tradeDate: resp.trade_date, running: false, loaded: true })
-    } catch {
-      set({ error: '重新计算失败（需登录且行情可用）', running: false })
+    } catch (err) {
+      set({ error: runErrorMessage(err), running: false })
     }
   },
 
