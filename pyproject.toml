@@ -193,6 +193,7 @@ convention = "google"
 "tests/core/langgraph/tools/*.py" = ["D415", "D103"]
 "app/services/regime/*.py" = ["D415", "D101", "D104"]
 "app/models/regime_features.py" = ["D415"]
+"app/models/regime_sector_features.py" = ["D415"]
 "app/schemas/regime.py" = ["D415", "D101"]
 "app/api/v1/regime.py" = ["D415"]
 "tests/services/regime/*.py" = ["D415", "D103", "D104"]

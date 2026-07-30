@@ -20,8 +20,10 @@ from app.core.logging import logger
 from app.services.regime.constants import (
     CASH_BASKET,
     DEFENSE_BASKET,
+    MARKET_SYMBOL,
     NASDAQ_SYMBOL,
     OFFENSE_BASKET,
+    SECTORS,
     VIX_SYMBOL,
 )
 
@@ -138,3 +140,76 @@ def fetch_regime_market_data(lookback_days: int = 1400) -> RegimeMarketData:
     if empty:
         logger.warning("regime_market_symbols_empty", symbols=empty)
     return align_market_data(bars_by_symbol)
+
+
+@dataclass
+class SectorMarketData:
+    """行业级对齐数据：共享 dates/VIX/大盘，加每个板块的 OHLCV。"""
+
+    dates: list[date]
+    vix_close: np.ndarray
+    market_close: np.ndarray  # SPY
+    sectors: dict[str, dict[str, np.ndarray]]  # key -> {close/high/low/volume}
+
+
+def align_sector_data(bars_by_symbol: dict[str, list[dict]]) -> SectorMarketData:
+    """把大盘/VIX/各板块 ETF 对齐到共同交易日（纯函数，便于测试）。"""
+    required = [MARKET_SYMBOL, VIX_SYMBOL, *[s["symbol"] for s in SECTORS]]
+    by_symbol: dict[str, dict[str, dict]] = {}
+    for sym in required:
+        rows = bars_by_symbol.get(sym) or []
+        by_symbol[sym] = {r["date"]: r for r in rows}
+
+    if not by_symbol[MARKET_SYMBOL] or not by_symbol[VIX_SYMBOL]:
+        raise RuntimeError("缺少大盘或 VIX 行情，无法计算板块状态")
+
+    # 至少要有一个板块有数据；共同交易日 = 大盘 ∩ VIX ∩ 有数据的板块
+    usable_sectors = [s for s in SECTORS if by_symbol[s["symbol"]]]
+    if not usable_sectors:
+        raise RuntimeError("所有板块行情缺失，无法计算板块状态")
+
+    common = set(by_symbol[MARKET_SYMBOL].keys()) & set(by_symbol[VIX_SYMBOL].keys())
+    for s in usable_sectors:
+        common &= set(by_symbol[s["symbol"]].keys())
+    if not common:
+        raise RuntimeError("各标的无共同交易日，无法对齐板块数据")
+
+    day_strs = sorted(common)
+    dates = [date.fromisoformat(d) for d in day_strs]
+
+    def field(sym: str, key: str) -> np.ndarray:
+        return np.array([by_symbol[sym][d][key] for d in day_strs], dtype=float)
+
+    sectors: dict[str, dict[str, np.ndarray]] = {}
+    for s in usable_sectors:
+        sym = s["symbol"]
+        sectors[s["key"]] = {
+            "close": field(sym, "close"),
+            "high": field(sym, "high"),
+            "low": field(sym, "low"),
+            "volume": field(sym, "volume"),
+        }
+
+    return SectorMarketData(
+        dates=dates,
+        vix_close=field(VIX_SYMBOL, "close"),
+        market_close=field(MARKET_SYMBOL, "close"),
+        sectors=sectors,
+    )
+
+
+def fetch_sector_market_data(lookback_days: int = 1400) -> SectorMarketData:
+    """抓取并对齐行业级 regime 所需的全部行情（大盘 + VIX + 各板块 ETF）。"""
+    symbols = [MARKET_SYMBOL, VIX_SYMBOL, *[s["symbol"] for s in SECTORS]]
+    seen: set[str] = set()
+    uniq = [s for s in symbols if not (s in seen or seen.add(s))]
+
+    end = date.today()
+    start = end - timedelta(days=lookback_days)
+    from_, to = start.isoformat(), end.isoformat()
+
+    bars_by_symbol = {sym: _fmp_eod(sym, from_, to) for sym in uniq}
+    empty = [s for s, rows in bars_by_symbol.items() if not rows]
+    if empty:
+        logger.warning("regime_sector_symbols_empty", symbols=empty)
+    return align_sector_data(bars_by_symbol)

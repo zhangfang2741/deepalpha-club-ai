@@ -38,6 +38,29 @@ LABEL_ZH = {
     LABEL_RISK_OFF: "避险",
 }
 
+# ── 行业（板块）级 regime ──────────────────────────────────────
+# 市场基准（板块相对强弱 RS 的对标）
+MARKET_SYMBOL = "SPY"
+
+# 11 个 GICS 行业 SPDR ETF：key（英文标识）/ symbol / 中文名
+SECTORS: list[dict[str, str]] = [
+    {"key": "technology", "symbol": "XLK", "name": "科技"},
+    {"key": "semiconductors", "symbol": "SMH", "name": "半导体"},
+    {"key": "discretionary", "symbol": "XLY", "name": "可选消费"},
+    {"key": "communication", "symbol": "XLC", "name": "通讯服务"},
+    {"key": "financials", "symbol": "XLF", "name": "金融"},
+    {"key": "industrials", "symbol": "XLI", "name": "工业"},
+    {"key": "energy", "symbol": "XLE", "name": "能源"},
+    {"key": "materials", "symbol": "XLB", "name": "材料"},
+    {"key": "healthcare", "symbol": "XLV", "name": "医疗"},
+    {"key": "staples", "symbol": "XLP", "name": "必需消费"},
+    {"key": "utilities", "symbol": "XLU", "name": "公用事业"},
+    {"key": "realestate", "symbol": "XLRE", "name": "房地产"},
+]
+
+SECTOR_NAME_ZH: dict[str, str] = {s["key"]: s["name"] for s in SECTORS}
+SECTOR_SYMBOL: dict[str, str] = {s["key"]: s["symbol"] for s in SECTORS}
+
 # 拟合所需最小历史（交易日）——不足则不产出状态标签，避免小样本乱拟合
 MIN_FIT_HISTORY = 252
 

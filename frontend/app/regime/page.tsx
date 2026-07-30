@@ -6,9 +6,11 @@ import Spinner from '@/components/ui/Spinner'
 import {
   fetchRegime,
   triggerRegimeStage,
+  fetchSectorRegimes,
   REGIME_LABEL_ZH,
   type RegimePoint,
   type RegimeResponse,
+  type SectorRegimePoint,
 } from '@/lib/api/regime'
 
 const RANGE_OPTIONS = [
@@ -265,8 +267,46 @@ function PosteriorStack({ history }: { history: RegimePoint[] }) {
   )
 }
 
+// ── 板块状态热力网格 ───────────────────────────────────────────
+function SectorGrid({ sectors }: { sectors: SectorRegimePoint[] }) {
+  if (sectors.length === 0) {
+    return <div className="text-sm text-gray-400 py-6 text-center">暂无板块数据，点右上「重新计算」触发行业级计算</div>
+  }
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      {sectors.map((s) => {
+        const lab = s.confirmed_label ?? s.regime_label
+        const c = colorOf(lab)
+        return (
+          <div key={s.sector} className="rounded-xl p-4 flex flex-col gap-1.5 border" style={{ background: `${c}0f`, borderColor: `${c}33` }}>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-bold text-gray-800">{s.sector_name}</span>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-md" style={{ color: c, background: `${c}1f` }}>
+                {labelZh(lab)}
+              </span>
+            </div>
+            <div className="flex items-end justify-between">
+              <div className="flex flex-col">
+                <span className="text-[10px] text-gray-400 font-semibold">相对大盘</span>
+                <span className="text-sm font-bold font-mono tabular-nums" style={{ color: (s.rs_vs_market ?? 0) >= 0 ? LABEL_COLOR.risk_on : LABEL_COLOR.risk_off }}>
+                  {s.rs_vs_market === null ? '—' : `${s.rs_vs_market >= 0 ? '+' : ''}${(s.rs_vs_market * 100).toFixed(1)}%`}
+                </span>
+              </div>
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] text-gray-400 font-semibold">仓位系数</span>
+                <span className="text-lg font-black font-mono tabular-nums text-gray-800">{s.factor_weight === null ? '—' : s.factor_weight.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function RegimePage() {
   const [data, setData] = useState<RegimeResponse | null>(null)
+  const [sectors, setSectors] = useState<SectorRegimePoint[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
@@ -286,16 +326,29 @@ export default function RegimePage() {
     }
   }, [])
 
+  const loadSectors = useCallback(async () => {
+    try {
+      const resp = await fetchSectorRegimes()
+      setSectors(resp.sectors)
+    } catch {
+      // 板块数据可选，失败不阻塞主面板
+    }
+  }, [])
+
   useEffect(() => {
     load(limit)
   }, [load, limit])
+
+  useEffect(() => {
+    loadSectors()
+  }, [loadSectors])
 
   const handleRun = async () => {
     setRunning(true)
     setError(null)
     try {
       await triggerRegimeStage()
-      await load(limit)
+      await Promise.all([load(limit), loadSectors()])
     } catch {
       setError('重新计算失败（需登录且行情可用）')
     } finally {
@@ -412,6 +465,17 @@ export default function RegimePage() {
               <SignalRow name="现金 vs 风险资产（CF）" meaning="资金是否整体撤向现金" value={fmt(latest.cf, 3)} verdict={cfVerdict(latest.cf)} />
               <SignalRow name="市场情绪（VIX）" meaning="隐含波动率，越高越恐慌" value={fmt(latest.vix, 1)} verdict={vixVerdict(latest.vix)} />
               <SignalRow name="资金进出（CMF）" meaning="纳指的量价资金流向" value={fmt(latest.cmf, 3)} verdict={cmfVerdict(latest.cmf)} />
+            </div>
+          )}
+
+          {/* ── 板块状态：每个行业单独的 regime ─────────── */}
+          {sectors.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+              <div className="flex items-baseline justify-between mb-2 flex-wrap gap-2">
+                <h2 className="text-base font-bold text-gray-800">板块状态</h2>
+                <span className="text-xs text-gray-400">每个行业单独拟合 HMM，按逐利程度排序 · <span className="text-red-600 font-semibold">红=逐利</span> <span className="text-amber-600 font-semibold">橙=观望</span> <span className="text-green-600 font-semibold">绿=避险</span></span>
+              </div>
+              <SectorGrid sectors={sectors} />
             </div>
           )}
 

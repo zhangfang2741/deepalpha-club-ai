@@ -66,21 +66,23 @@ def _fit_scaler(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return mean, std
 
 
-def _label_mapping(params: GaussianHMMParams) -> list[str]:
+# 市场级默认标签打分权重（对应特征顺序 [纳指收益, 波动, VIX, ODS, CF]）：
+# +收益 −波动 −VIX +ODS −CF，得分越高越像 risk_on。
+MARKET_LABEL_WEIGHTS: np.ndarray = np.zeros(5)
+MARKET_LABEL_WEIGHTS[IDX_QQQ_RET] = 1.0
+MARKET_LABEL_WEIGHTS[IDX_VOL] = -1.0
+MARKET_LABEL_WEIGHTS[IDX_VIX] = -1.0
+MARKET_LABEL_WEIGHTS[IDX_ODS] = 1.0
+MARKET_LABEL_WEIGHTS[IDX_CF] = -1.0
+
+
+def _label_mapping(params: GaussianHMMParams, weights: np.ndarray) -> list[str]:
     """把隐状态按「风险偏好得分」排序，映射到 逐利/观望/避险。
 
-    得分（标准化空间的 means）：+纳指收益 −波动 −VIX +ODS −CF。
-    得分最高→risk_on，最低→risk_off，中间→neutral。
-    返回 state_index -> label 的列表。
+    得分 = 标准化 means · weights（weights 逐特征给正负号，正=越大越 risk_on）。
+    得分最高→risk_on，最低→risk_off，中间→neutral。返回 state_index -> label。
     """
-    m = params.means
-    score = (
-        m[:, IDX_QQQ_RET]
-        - m[:, IDX_VOL]
-        - m[:, IDX_VIX]
-        + m[:, IDX_ODS]
-        - m[:, IDX_CF]
-    )
+    score = params.means @ np.asarray(weights, dtype=float)
     order = np.argsort(-score)  # 得分降序：第0名最像 risk_on
     mapping = [""] * params.n_states
     for rank, state_idx in enumerate(order):
@@ -114,6 +116,7 @@ def run_walk_forward(
     covar_shrinkage: float = COVAR_SHRINKAGE,
     max_self_transition: float = MAX_SELF_TRANSITION,
     temperature: float = POSTERIOR_TEMPERATURE,
+    label_weights: np.ndarray | None = None,
 ) -> RegimeResult:
     """走-前向拟合并产出逐日滤波后验。
 
@@ -128,9 +131,12 @@ def run_walk_forward(
         covar_shrinkage: 协方差向池化方差收缩系数（抑制后验饱和）。
         max_self_transition: 自转移概率上限（掐断逐日复利式钉死）。
         temperature: 发射对数似然退火温度（软化后验为可用软概率）。
+        label_weights: 标签打分权重向量（逐特征正负号）；None 用市场级默认。
     """
     t = len(dates)
     features = np.asarray(features, dtype=float)
+    if label_weights is None:
+        label_weights = MARKET_LABEL_WEIGHTS
 
     # 只用可用行参与拟合/滤波；其余行输出 None
     valid_idx = np.where(valid_mask)[0]
@@ -163,7 +169,7 @@ def run_walk_forward(
             )
         except ValueError:
             continue
-        label_map = _label_mapping(params)
+        label_map = _label_mapping(params, label_weights)
         version = dates[me].isoformat()
         frozen.append((params, mean, std, label_map, version))
         frozen_endpos.append(me)
