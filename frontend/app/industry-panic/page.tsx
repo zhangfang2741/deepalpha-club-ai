@@ -8,13 +8,15 @@ import Spinner from '@/components/ui/Spinner'
 import IndustryPanicChart from '@/components/industry_panic/IndustryPanicChart'
 import SectorPanicBar from '@/components/industry_panic/SectorPanicBar'
 import SectorValuationGrid from '@/components/valuation/SectorValuationGrid'
+import SectorRegimePanel from '@/components/regime/SectorRegimePanel'
 import { getRsiColor, getRsiLevel } from '@/lib/constants/industryPanic'
 
-type ActiveTab = 'panic' | 'valuation'
+type ActiveTab = 'panic' | 'valuation' | 'regime'
 
 const TAB_LABELS: Record<ActiveTab, string> = {
   panic: '行业 RSI 情绪',
   valuation: '行业估值分析',
+  regime: '板块状态',
 }
 
 function getErrorMessage(err: unknown): string {
@@ -76,7 +78,7 @@ export default function IndustryPanicPage() {
 
         {/* 标签切换 */}
         <div className="flex gap-1 border-b border-gray-200">
-          {(['panic', 'valuation'] as const).map((tab) => (
+          {(['panic', 'valuation', 'regime'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -274,6 +276,13 @@ export default function IndustryPanicPage() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* 板块状态 Tab（行业级 regime）*/}
+        {activeTab === 'regime' && (
+          <div>
+            <SectorRegimePanel />
           </div>
         )}
       </div>

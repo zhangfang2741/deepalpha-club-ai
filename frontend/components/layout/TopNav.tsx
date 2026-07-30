@@ -8,7 +8,7 @@ import {
   LogOut, User, LayoutDashboard, TrendingUp, BarChart3,
   LineChart, MessageSquare, Settings, Menu, X, FlaskConical, Network,
   ArrowUpRight, Activity, Search, CandlestickChart, Waves, Cloud, Radar,
-  FileText, ChevronDown, Gauge, Landmark, BookOpen, Sparkles, Compass,
+  FileText, ChevronDown, Gauge, Landmark, BookOpen, Sparkles,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -25,7 +25,6 @@ const NAV_ENTRIES: NavEntry[] = [
     label: '市场情绪',
     icon: Gauge,
     items: [
-      { href: '/regime',         label: '市场状态',   icon: Compass },
       { href: '/fear-greed',     label: '恐慌指数',   icon: TrendingUp },
       { href: '/industry-panic', label: '行业恐慌',   icon: Activity },
       { href: '/etf',            label: 'ETF 资金流', icon: BarChart3 },

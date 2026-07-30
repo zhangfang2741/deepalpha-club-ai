@@ -38,8 +38,39 @@ LABEL_ZH = {
     LABEL_RISK_OFF: "避险",
 }
 
+# ── 行业（板块）级 regime ──────────────────────────────────────
+# 市场基准（板块相对强弱 RS 的对标）
+MARKET_SYMBOL = "SPY"
+
+# 11 个 GICS 行业 SPDR ETF：key（英文标识）/ symbol / 中文名
+SECTORS: list[dict[str, str]] = [
+    {"key": "technology", "symbol": "XLK", "name": "科技"},
+    {"key": "semiconductors", "symbol": "SMH", "name": "半导体"},
+    {"key": "discretionary", "symbol": "XLY", "name": "可选消费"},
+    {"key": "communication", "symbol": "XLC", "name": "通讯服务"},
+    {"key": "financials", "symbol": "XLF", "name": "金融"},
+    {"key": "industrials", "symbol": "XLI", "name": "工业"},
+    {"key": "energy", "symbol": "XLE", "name": "能源"},
+    {"key": "materials", "symbol": "XLB", "name": "材料"},
+    {"key": "healthcare", "symbol": "XLV", "name": "医疗"},
+    {"key": "staples", "symbol": "XLP", "name": "必需消费"},
+    {"key": "utilities", "symbol": "XLU", "name": "公用事业"},
+    {"key": "realestate", "symbol": "XLRE", "name": "房地产"},
+]
+
+SECTOR_NAME_ZH: dict[str, str] = {s["key"]: s["name"] for s in SECTORS}
+SECTOR_SYMBOL: dict[str, str] = {s["key"]: s["symbol"] for s in SECTORS}
+
 # 拟合所需最小历史（交易日）——不足则不产出状态标签，避免小样本乱拟合
 MIN_FIT_HISTORY = 252
 
 # 「持续 N 日」标签：连续处于同一 regime 达到该天数才算确认
 PERSIST_N_DAYS = 3
+
+# 后验退火参数：抑制高斯 HMM 滤波后验饱和成硬 0/1，让 factor_weight 成为平滑旋钮。
+# 直觉：对角高斯假设 5 个特征相互独立，但 ODS/波动/VIX 日频高度自相关，
+# 5 维似然连乘会把「其实约 1 份独立证据」当成 5 份，后验被压成硬 0/1。
+# 温度 T 把每日发射证据退火回约 1 维量级，收缩+转移封顶进一步抑制过度自信。
+COVAR_SHRINKAGE = 0.35  # 协方差向池化方差收缩系数 λ
+MAX_SELF_TRANSITION = 0.90  # 自转移概率上限，掐断逐日复利式钉死
+POSTERIOR_TEMPERATURE = 6.0  # 发射对数似然退火温度 T（≥1）

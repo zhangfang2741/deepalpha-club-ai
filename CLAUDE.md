@@ -129,9 +129,9 @@ deepalpha-club-ai/
 | 认证 | `/auth` | `/`（登录） | JWT 登录 + Chat session token |
 | AI 对话 | `/chatbot` | `/chat` | LangGraph 流式聊天 Agent |
 | 因子探索 | `/skills` | `/skill-generator` | LLM 生成因子代码 → 沙箱执行 |
-| 市场状态 | `/regime` | `/regime` | 三篮子 ODS/CF + HMM 逐利/观望/避险后验，写因子表 |
-| 恐慌指数 | `/fear-greed` | `/fear-greed` | 市场恐慌贪婪指数 |
-| 行业恐慌 | `/industry-panic` | `/industry-panic` | 各 GICS 行业 ETF 的 RSI 情绪 |
+| 市场状态 | `/regime` | 并入恐慌指数页(大盘) + 行业恐慌页(板块) | 三篮子 ODS/CF + HMM 逐利/观望/避险后验，写因子表；大盘级与行业级各一套 |
+| 恐慌指数 | `/fear-greed` | `/fear-greed` | 市场恐慌贪婪指数 + 大盘市场状态(regime) |
+| 行业恐慌 | `/industry-panic` | `/industry-panic` | 各 GICS 行业 ETF 的 RSI 情绪 + 估值 + 板块状态(行业级 regime) |
 | ETF 资金流 | `/etf` | `/etf` | 资金流热力图 + 偏离度 |
 | 行业估值 | `/valuation` | （并入行业恐慌页） | GICS 行业 PE z-score |
 | 缠论 | `/chan` | `/chan` | 缠论分笔/中枢/背驰 |

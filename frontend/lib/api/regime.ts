@@ -58,3 +58,41 @@ export async function triggerRegimeStage(
   )
   return data
 }
+
+// ── 行业（板块）级 regime ──────────────────────────────────────
+export interface SectorRegimePoint {
+  trade_date: string
+  sector: string
+  sector_name: string
+  sector_ret: number | null
+  sector_vol: number | null
+  vix: number | null
+  rs_vs_market: number | null
+  sector_cmf: number | null
+  p_risk_on: number | null
+  p_neutral: number | null
+  p_risk_off: number | null
+  regime_label: string | null
+  confirmed_label: string | null
+  params_version: string | null
+  factor_weight: number | null
+}
+
+export interface SectorRegimeLatest {
+  request_id: string
+  trade_date: string | null
+  sectors: SectorRegimePoint[]
+}
+
+export async function fetchSectorRegimes(): Promise<SectorRegimeLatest> {
+  const { data } = await apiClient.get<SectorRegimeLatest>('/api/v1/regime/sectors')
+  return data
+}
+
+export async function triggerSectorStage(lookbackDays = 1400): Promise<{ sectors: number; written: number }> {
+  const { data } = await apiClient.post('/api/v1/regime/sectors/run', null, {
+    params: { lookback_days: lookbackDays },
+    timeout: 180000,
+  })
+  return data
+}

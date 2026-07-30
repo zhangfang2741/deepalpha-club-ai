@@ -43,3 +43,45 @@ class RegimeStageResult(BaseResponse):
     latest_date: Optional[str] = None
     latest_label: Optional[str] = None
     latest_factor_weight: Optional[float] = None
+
+
+class SectorRegimePoint(BaseResponse):
+    """单个板块单交易日的状态记录。"""
+
+    trade_date: str
+    sector: str = Field(description="板块 key，如 technology")
+    sector_name: str = Field(description="板块中文名，如 科技")
+    sector_ret: Optional[float] = None
+    sector_vol: Optional[float] = None
+    vix: Optional[float] = None
+    rs_vs_market: Optional[float] = Field(None, description="相对大盘滚动强弱")
+    sector_cmf: Optional[float] = None
+    p_risk_on: Optional[float] = None
+    p_neutral: Optional[float] = None
+    p_risk_off: Optional[float] = None
+    regime_label: Optional[str] = None
+    confirmed_label: Optional[str] = None
+    params_version: Optional[str] = None
+    factor_weight: Optional[float] = None
+
+
+class SectorRegimeLatest(BaseResponse):
+    """GET /api/v1/regime/sectors：各板块最新状态 + 可选历史。"""
+
+    trade_date: Optional[str] = None
+    sectors: List[SectorRegimePoint] = Field(default_factory=list)
+
+
+class SectorRegimeHistory(BaseResponse):
+    """GET /api/v1/regime/sectors/{sector}：单板块历史序列。"""
+
+    sector: str
+    sector_name: str
+    history: List[SectorRegimePoint] = Field(default_factory=list)
+
+
+class SectorStageResult(BaseResponse):
+    """POST /api/v1/regime/sectors/run 结果。"""
+
+    sectors: int
+    written: int

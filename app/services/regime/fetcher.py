@@ -1,25 +1,33 @@
-"""市场状态所需行情抓取与对齐（yfinance）。
+"""市场状态所需行情抓取与对齐（Financial Modeling Prep，走代理）。
 
-抓取纳指、VIX、三篮子全部成分的日线，并对齐到共同交易日索引，
+从 FMP 拉取纳指、VIX、三篮子全部成分的日线，对齐到共同交易日索引，
 输出供 features/engine 使用的对齐矩阵。
+
+数据源选择 FMP 而非 yfinance：FMP 走仓库统一的 httpx + 代理链路（与 ETF/skills
+模块一致），生产 Railway 直连、沙箱走 agent 代理均可；yfinance 的 curl_cffi
+直连不经代理，在受控网络下会被拦截。
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+import httpx
 import numpy as np
-import pandas as pd
-import yfinance as yf
 
+from app.core.config import settings
 from app.core.logging import logger
 from app.services.regime.constants import (
     CASH_BASKET,
     DEFENSE_BASKET,
+    MARKET_SYMBOL,
     NASDAQ_SYMBOL,
     OFFENSE_BASKET,
+    SECTORS,
     VIX_SYMBOL,
 )
+
+_FMP_BASE = "https://financialmodelingprep.com/stable"
 
 
 @dataclass
@@ -37,28 +45,80 @@ class RegimeMarketData:
     cash_prices: np.ndarray  # (T, n_cash)
 
 
-def _download(symbols: list[str], start: date, end: date) -> pd.DataFrame:
-    """下载多 symbol 日线，返回 auto_adjust 后的 DataFrame。"""
-    df = yf.download(
-        symbols,
-        start=start.isoformat(),
-        end=end.isoformat(),
-        auto_adjust=True,
-        progress=False,
-        threads=False,
+def _fmp_eod(symbol: str, from_: str, to: str) -> list[dict]:
+    """抓取单只标的的日线 EOD（date/open/high/low/close/volume），失败返回空。"""
+    url = f"{_FMP_BASE}/historical-price-eod/full"
+    params = {"symbol": symbol, "from": from_, "to": to, "apikey": settings.FMP_API_KEY}
+    try:
+        resp = httpx.get(
+            url,
+            params=params,
+            timeout=30,
+            proxy=settings.HTTP_PROXY or settings.HTTPS_PROXY or None,
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        if isinstance(body, dict) and "Error Message" in body:
+            logger.warning("regime_fmp_error", symbol=symbol, detail=body.get("Error Message"))
+            return []
+        rows = body if isinstance(body, list) else body.get("historical", [])
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("regime_fmp_fetch_failed", symbol=symbol, error=str(exc))
+        return []
+    return [
+        {
+            "date": r["date"][:10],
+            "open": float(r.get("open") or 0.0),
+            "high": float(r.get("high") or 0.0),
+            "low": float(r.get("low") or 0.0),
+            "close": float(r["close"]),
+            "volume": float(r.get("volume") or 0.0),
+        }
+        for r in rows
+        if r.get("close") is not None
+    ]
+
+
+def align_market_data(bars_by_symbol: dict[str, list[dict]]) -> RegimeMarketData:
+    """把各标的的 EOD 列表对齐到共同交易日，构造 RegimeMarketData（纯函数，便于测试）。
+
+    共同交易日 = 所有必需标的都有收盘价的日期交集，升序。
+    """
+    required = [NASDAQ_SYMBOL, VIX_SYMBOL, *OFFENSE_BASKET, *DEFENSE_BASKET, *CASH_BASKET]
+    by_symbol: dict[str, dict[str, dict]] = {}
+    for sym in required:
+        rows = bars_by_symbol.get(sym) or []
+        by_symbol[sym] = {r["date"]: r for r in rows}
+        if not by_symbol[sym]:
+            raise RuntimeError(f"缺少 {sym} 的行情，无法计算市场状态")
+
+    common = set(by_symbol[NASDAQ_SYMBOL].keys())
+    for sym in required:
+        common &= set(by_symbol[sym].keys())
+    if not common:
+        raise RuntimeError("各标的无共同交易日，无法对齐")
+
+    day_strs = sorted(common)
+    dates = [date.fromisoformat(d) for d in day_strs]
+
+    def close_vec(sym: str) -> np.ndarray:
+        return np.array([by_symbol[sym][d]["close"] for d in day_strs], dtype=float)
+
+    def matrix(syms: list[str]) -> np.ndarray:
+        return np.column_stack([close_vec(s) for s in syms])
+
+    qqq = by_symbol[NASDAQ_SYMBOL]
+    return RegimeMarketData(
+        dates=dates,
+        qqq_close=close_vec(NASDAQ_SYMBOL),
+        qqq_high=np.array([qqq[d]["high"] for d in day_strs], dtype=float),
+        qqq_low=np.array([qqq[d]["low"] for d in day_strs], dtype=float),
+        qqq_volume=np.array([qqq[d]["volume"] for d in day_strs], dtype=float),
+        vix_close=close_vec(VIX_SYMBOL),
+        offense_prices=matrix(OFFENSE_BASKET),
+        defense_prices=matrix(DEFENSE_BASKET),
+        cash_prices=matrix(CASH_BASKET),
     )
-    return df if df is not None else pd.DataFrame()
-
-
-def _field_frame(df: pd.DataFrame, field: str, symbols: list[str]) -> pd.DataFrame:
-    """从 yfinance（可能 MultiIndex）中取出某字段的 (index=date, columns=symbols) 表。"""
-    if hasattr(df.columns, "levels"):
-        sub = df[field]
-    else:
-        # 单 symbol 情形
-        sub = df[[field]]
-        sub.columns = symbols
-    return pd.DataFrame(sub)
 
 
 def fetch_regime_market_data(lookback_days: int = 1400) -> RegimeMarketData:
@@ -67,46 +127,89 @@ def fetch_regime_market_data(lookback_days: int = 1400) -> RegimeMarketData:
     Args:
         lookback_days: 日历回看天数，默认约 4 年（覆盖 MIN_FIT_HISTORY + 富余）。
     """
-    all_symbols = [NASDAQ_SYMBOL, VIX_SYMBOL, *OFFENSE_BASKET, *DEFENSE_BASKET, *CASH_BASKET]
-    # 去重且保序
+    symbols = [NASDAQ_SYMBOL, VIX_SYMBOL, *OFFENSE_BASKET, *DEFENSE_BASKET, *CASH_BASKET]
     seen: set[str] = set()
-    uniq = [s for s in all_symbols if not (s in seen or seen.add(s))]
+    uniq = [s for s in symbols if not (s in seen or seen.add(s))]
 
     end = date.today()
     start = end - timedelta(days=lookback_days)
-    df = _download(uniq, start, end)
-    if df is None or df.empty:
-        logger.warning("regime_market_download_empty")
-        raise RuntimeError("行情下载为空，无法计算市场状态")
+    from_, to = start.isoformat(), end.isoformat()
 
-    close = _field_frame(df, "Close", uniq)
-    high = _field_frame(df, "High", uniq)
-    low = _field_frame(df, "Low", uniq)
-    volume = _field_frame(df, "Volume", uniq)
+    bars_by_symbol = {sym: _fmp_eod(sym, from_, to) for sym in uniq}
+    empty = [s for s, rows in bars_by_symbol.items() if not rows]
+    if empty:
+        logger.warning("regime_market_symbols_empty", symbols=empty)
+    return align_market_data(bars_by_symbol)
 
-    # 以纳指非缺失日为基准，dropna 对齐所有 symbol 收盘价
-    close = close.dropna(how="any")
-    common_index = close.index
-    high = high.reindex(common_index)
-    low = low.reindex(common_index)
-    volume = volume.reindex(common_index)
 
-    dates = [idx.date() for idx in common_index]
+@dataclass
+class SectorMarketData:
+    """行业级对齐数据：共享 dates/VIX/大盘，加每个板块的 OHLCV。"""
 
-    def col(frame: pd.DataFrame, sym: str) -> np.ndarray:
-        return frame[sym].to_numpy(dtype=float)
+    dates: list[date]
+    vix_close: np.ndarray
+    market_close: np.ndarray  # SPY
+    sectors: dict[str, dict[str, np.ndarray]]  # key -> {close/high/low/volume}
 
-    def matrix(frame: pd.DataFrame, syms: list[str]) -> np.ndarray:
-        return np.column_stack([col(frame, s) for s in syms])
 
-    return RegimeMarketData(
+def align_sector_data(bars_by_symbol: dict[str, list[dict]]) -> SectorMarketData:
+    """把大盘/VIX/各板块 ETF 对齐到共同交易日（纯函数，便于测试）。"""
+    required = [MARKET_SYMBOL, VIX_SYMBOL, *[s["symbol"] for s in SECTORS]]
+    by_symbol: dict[str, dict[str, dict]] = {}
+    for sym in required:
+        rows = bars_by_symbol.get(sym) or []
+        by_symbol[sym] = {r["date"]: r for r in rows}
+
+    if not by_symbol[MARKET_SYMBOL] or not by_symbol[VIX_SYMBOL]:
+        raise RuntimeError("缺少大盘或 VIX 行情，无法计算板块状态")
+
+    # 至少要有一个板块有数据；共同交易日 = 大盘 ∩ VIX ∩ 有数据的板块
+    usable_sectors = [s for s in SECTORS if by_symbol[s["symbol"]]]
+    if not usable_sectors:
+        raise RuntimeError("所有板块行情缺失，无法计算板块状态")
+
+    common = set(by_symbol[MARKET_SYMBOL].keys()) & set(by_symbol[VIX_SYMBOL].keys())
+    for s in usable_sectors:
+        common &= set(by_symbol[s["symbol"]].keys())
+    if not common:
+        raise RuntimeError("各标的无共同交易日，无法对齐板块数据")
+
+    day_strs = sorted(common)
+    dates = [date.fromisoformat(d) for d in day_strs]
+
+    def field(sym: str, key: str) -> np.ndarray:
+        return np.array([by_symbol[sym][d][key] for d in day_strs], dtype=float)
+
+    sectors: dict[str, dict[str, np.ndarray]] = {}
+    for s in usable_sectors:
+        sym = s["symbol"]
+        sectors[s["key"]] = {
+            "close": field(sym, "close"),
+            "high": field(sym, "high"),
+            "low": field(sym, "low"),
+            "volume": field(sym, "volume"),
+        }
+
+    return SectorMarketData(
         dates=dates,
-        qqq_close=col(close, NASDAQ_SYMBOL),
-        qqq_high=col(high, NASDAQ_SYMBOL),
-        qqq_low=col(low, NASDAQ_SYMBOL),
-        qqq_volume=col(volume, NASDAQ_SYMBOL),
-        vix_close=col(close, VIX_SYMBOL),
-        offense_prices=matrix(close, OFFENSE_BASKET),
-        defense_prices=matrix(close, DEFENSE_BASKET),
-        cash_prices=matrix(close, CASH_BASKET),
+        vix_close=field(VIX_SYMBOL, "close"),
+        market_close=field(MARKET_SYMBOL, "close"),
+        sectors=sectors,
     )
+
+
+def fetch_sector_market_data(lookback_days: int = 1400) -> SectorMarketData:
+    """抓取并对齐行业级 regime 所需的全部行情（大盘 + VIX + 各板块 ETF）。"""
+    symbols = [MARKET_SYMBOL, VIX_SYMBOL, *[s["symbol"] for s in SECTORS]]
+    seen: set[str] = set()
+    uniq = [s for s in symbols if not (s in seen or seen.add(s))]
+
+    end = date.today()
+    start = end - timedelta(days=lookback_days)
+    from_, to = start.isoformat(), end.isoformat()
+
+    bars_by_symbol = {sym: _fmp_eod(sym, from_, to) for sym in uniq}
+    empty = [s for s, rows in bars_by_symbol.items() if not rows]
+    if empty:
+        logger.warning("regime_sector_symbols_empty", symbols=empty)
+    return align_sector_data(bars_by_symbol)

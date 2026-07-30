@@ -154,12 +154,39 @@ def _forward_backward(
     return log_alpha, log_beta, log_xi_sum, float(loglik)
 
 
+def _apply_transition_cap(transmat: np.ndarray, max_self: float) -> np.ndarray:
+    """把自转移概率封顶到 max_self，超出部分按比例分给其它状态。
+
+    掐断「一旦进某状态就被逐日复利钉死」的过度粘性，避免滤波后验饱和成硬 0/1。
+    """
+    if max_self >= 1.0:
+        return transmat
+    out = transmat.copy()
+    k = out.shape[0]
+    for i in range(k):
+        diag = out[i, i]
+        if diag > max_self:
+            off = out[i].copy()
+            off[i] = 0.0
+            off_sum = off.sum()
+            if off_sum > 0:
+                off = off / off_sum * (1.0 - max_self)
+            else:
+                off = np.full(k, (1.0 - max_self) / (k - 1))
+                off[i] = 0.0
+            out[i] = off
+            out[i, i] = max_self
+    return out
+
+
 def fit_gaussian_hmm(
     x: np.ndarray,
     n_states: int = 3,
     n_iter: int = 100,
     tol: float = 1e-4,
     seed: int = 42,
+    covar_shrinkage: float = 0.0,
+    max_self_transition: float = 1.0,
 ) -> GaussianHMMParams:
     """用 Baum-Welch 拟合高斯 HMM。
 
@@ -169,6 +196,9 @@ def fit_gaussian_hmm(
         n_iter: 最大 EM 迭代
         tol: 收敛阈值（相邻迭代 loglik 增量）
         seed: 初始化随机种子，保证可复现
+        covar_shrinkage: 协方差向池化方差收缩的系数 λ∈[0,1)，>0 让各状态发射分布
+            重叠更多、抑制过度自信（否则 5 维似然连乘会把后验压成硬 0/1）。
+        max_self_transition: 自转移概率上限，掐断逐日复利式的置信钉死。
     """
     x = np.asarray(x, dtype=float)
     if x.ndim != 2:
@@ -199,6 +229,7 @@ def fit_gaussian_hmm(
         xi_sum = np.exp(log_xi_sum)
         transmat = xi_sum + 1e-12
         transmat /= transmat.sum(axis=1, keepdims=True)
+        transmat = _apply_transition_cap(transmat, max_self_transition)
 
         weights = gamma.sum(axis=0)  # (K,)
         means = (gamma.T @ x) / weights[:, None]
@@ -207,6 +238,11 @@ def fit_gaussian_hmm(
             diff = x - means[k]
             covars[k] = (gamma[:, k][:, None] * diff**2).sum(axis=0) / weights[k]
         covars = np.maximum(covars, _MIN_VAR)
+        # 协方差收缩：向按权重池化的共享方差 shrink，抑制过窄分布导致的后验饱和
+        if covar_shrinkage > 0.0:
+            pooled = (weights[:, None] * covars).sum(axis=0) / weights.sum()
+            covars = (1.0 - covar_shrinkage) * covars + covar_shrinkage * pooled[None, :]
+            covars = np.maximum(covars, _MIN_VAR)
 
         params = GaussianHMMParams(
             startprob, transmat, means, covars, n_states, x.shape[1]
@@ -219,17 +255,27 @@ def fit_gaussian_hmm(
     return params
 
 
-def filter_posteriors(params: GaussianHMMParams, x: np.ndarray) -> np.ndarray:
+def filter_posteriors(
+    params: GaussianHMMParams, x: np.ndarray, temperature: float = 1.0
+) -> np.ndarray:
     """前向滤波后验 P(state_t | x_1..x_t)（**不回改**：只看当天及之前）。
 
     这是对外用于给每日打标签的后验：第 t 行只依赖前 t 个观测，
     追加未来数据不会改写历史行，满足「状态序列不回改」。
+
+    Args:
+        params: 冻结的 HMM 参数。
+        x: (T, D) 标准化特征。
+        temperature: 温度 T≥1，对发射对数似然除以 T 做退火，把过硬的 0/1
+            后验软化成可用的软概率（供 factor_weight 平滑加权）。T=1 即不退火。
 
     Returns:
         (T, K) 每天的滤波后验（每行和为 1）
     """
     x = np.asarray(x, dtype=float)
     framelogprob = _log_gaussian(x, params.means, params.covars)
+    if temperature and temperature != 1.0:
+        framelogprob = framelogprob / temperature
     log_startprob = np.log(np.clip(params.startprob, 1e-12, None))
     log_transmat = np.log(np.clip(params.transmat, 1e-12, None))
 

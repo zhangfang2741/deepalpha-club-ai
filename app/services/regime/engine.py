@@ -16,9 +16,12 @@ from datetime import date
 import numpy as np
 
 from app.services.regime.constants import (
+    COVAR_SHRINKAGE,
+    MAX_SELF_TRANSITION,
     MIN_FIT_HISTORY,
     N_STATES,
     PERSIST_N_DAYS,
+    POSTERIOR_TEMPERATURE,
     STATE_LABELS,
 )
 from app.services.regime.features import (
@@ -63,21 +66,23 @@ def _fit_scaler(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return mean, std
 
 
-def _label_mapping(params: GaussianHMMParams) -> list[str]:
+# 市场级默认标签打分权重（对应特征顺序 [纳指收益, 波动, VIX, ODS, CF]）：
+# +收益 −波动 −VIX +ODS −CF，得分越高越像 risk_on。
+MARKET_LABEL_WEIGHTS: np.ndarray = np.zeros(5)
+MARKET_LABEL_WEIGHTS[IDX_QQQ_RET] = 1.0
+MARKET_LABEL_WEIGHTS[IDX_VOL] = -1.0
+MARKET_LABEL_WEIGHTS[IDX_VIX] = -1.0
+MARKET_LABEL_WEIGHTS[IDX_ODS] = 1.0
+MARKET_LABEL_WEIGHTS[IDX_CF] = -1.0
+
+
+def _label_mapping(params: GaussianHMMParams, weights: np.ndarray) -> list[str]:
     """把隐状态按「风险偏好得分」排序，映射到 逐利/观望/避险。
 
-    得分（标准化空间的 means）：+纳指收益 −波动 −VIX +ODS −CF。
-    得分最高→risk_on，最低→risk_off，中间→neutral。
-    返回 state_index -> label 的列表。
+    得分 = 标准化 means · weights（weights 逐特征给正负号，正=越大越 risk_on）。
+    得分最高→risk_on，最低→risk_off，中间→neutral。返回 state_index -> label。
     """
-    m = params.means
-    score = (
-        m[:, IDX_QQQ_RET]
-        - m[:, IDX_VOL]
-        - m[:, IDX_VIX]
-        + m[:, IDX_ODS]
-        - m[:, IDX_CF]
-    )
+    score = params.means @ np.asarray(weights, dtype=float)
     order = np.argsort(-score)  # 得分降序：第0名最像 risk_on
     mapping = [""] * params.n_states
     for rank, state_idx in enumerate(order):
@@ -108,6 +113,10 @@ def run_walk_forward(
     min_history: int = MIN_FIT_HISTORY,
     persist_n: int = PERSIST_N_DAYS,
     seed: int = 42,
+    covar_shrinkage: float = COVAR_SHRINKAGE,
+    max_self_transition: float = MAX_SELF_TRANSITION,
+    temperature: float = POSTERIOR_TEMPERATURE,
+    label_weights: np.ndarray | None = None,
 ) -> RegimeResult:
     """走-前向拟合并产出逐日滤波后验。
 
@@ -119,9 +128,15 @@ def run_walk_forward(
         min_history: 首次拟合所需最小可用历史天数。
         persist_n: 「持续 N 日」确认所需连续天数。
         seed: HMM 初始化随机种子。
+        covar_shrinkage: 协方差向池化方差收缩系数（抑制后验饱和）。
+        max_self_transition: 自转移概率上限（掐断逐日复利式钉死）。
+        temperature: 发射对数似然退火温度（软化后验为可用软概率）。
+        label_weights: 标签打分权重向量（逐特征正负号）；None 用市场级默认。
     """
     t = len(dates)
     features = np.asarray(features, dtype=float)
+    if label_weights is None:
+        label_weights = MARKET_LABEL_WEIGHTS
 
     # 只用可用行参与拟合/滤波；其余行输出 None
     valid_idx = np.where(valid_mask)[0]
@@ -145,10 +160,16 @@ def run_walk_forward(
         mean, std = _fit_scaler(x_hist)
         x_std = (x_hist - mean) / std
         try:
-            params = fit_gaussian_hmm(x_std, n_states=n_states, seed=seed)
+            params = fit_gaussian_hmm(
+                x_std,
+                n_states=n_states,
+                seed=seed,
+                covar_shrinkage=covar_shrinkage,
+                max_self_transition=max_self_transition,
+            )
         except ValueError:
             continue
-        label_map = _label_mapping(params)
+        label_map = _label_mapping(params, label_weights)
         version = dates[me].isoformat()
         frozen.append((params, mean, std, label_map, version))
         frozen_endpos.append(me)
@@ -170,7 +191,7 @@ def run_walk_forward(
         upto = seg_days[-1]
         hist_rows = valid_idx[valid_idx <= upto]
         x_std = (features[hist_rows] - mean) / std
-        post = filter_posteriors(params, x_std)
+        post = filter_posteriors(params, x_std, temperature=temperature)
         # hist_rows 全局索引 → 在 post 中的行位置
         pos_of = {gi: p for p, gi in enumerate(hist_rows)}
         for gi in seg_days:

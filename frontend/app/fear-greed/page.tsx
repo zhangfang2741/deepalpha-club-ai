@@ -7,6 +7,7 @@ import { FearGreedSnapshot } from '@/lib/api/fear_greed'
 import Spinner from '@/components/ui/Spinner'
 import { getRatingColor, getRatingLabel } from '@/lib/constants/fearGreed'
 import DashboardShell from '@/components/layout/DashboardShell'
+import MarketRegimePanel from '@/components/regime/MarketRegimePanel'
 
 // Time range options
 const TIME_RANGES = [
@@ -104,6 +105,12 @@ export default function FearGreedPage() {
             <span className="text-xs text-gray-400 font-bold uppercase tracking-widest">每小时自动更新</span>
           </div>
         </div>
+
+        {/* 大盘市场状态（regime）*/}
+        <section className="bg-white/80 backdrop-blur-md rounded-2xl border border-blue-50 shadow-sm p-6 sm:p-8">
+          <h2 className="text-xl font-extrabold text-gray-900 tracking-tight mb-4">大盘市场状态</h2>
+          <MarketRegimePanel />
+        </section>
 
         {/* Chart Section */}
         <div className="bg-white/80 backdrop-blur-md rounded-2xl border border-blue-50 shadow-sm p-8">
