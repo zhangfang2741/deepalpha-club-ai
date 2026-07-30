@@ -96,3 +96,11 @@ class SectorStageResult(BaseResponse):
 
     sectors: int
     written: int
+
+
+class SubIndustryStageResult(BaseResponse):
+    """POST /api/v1/regime/sectors/{sector}/children/run 结果。"""
+
+    parent: str
+    sectors: int
+    written: int

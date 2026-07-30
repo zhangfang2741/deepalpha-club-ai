@@ -102,18 +102,25 @@ SUB_INDUSTRIES: list[dict[str, str]] = [
     {"key": "re_mortgage", "symbol": "REM", "name": "抵押REIT", "parent": "realestate"},
 ]
 
-# 所有可跑 regime 的条目（一级行业 parent=None + 子行业 parent=<sector.key>）
-ALL_SECTOR_ENTRIES: list[dict[str, str | None]] = [
+# 一级行业条目（parent=None）
+TOP_LEVEL_ENTRIES: list[dict[str, str | None]] = [
     {"key": s["key"], "symbol": s["symbol"], "name": s["name"], "parent": None}
     for s in SECTORS
-] + [dict(s) for s in SUB_INDUSTRIES]  # type: ignore[list-item]
+]
+
+# 所有可跑 regime 的条目（一级行业 + 子行业）
+ALL_SECTOR_ENTRIES: list[dict[str, str | None]] = TOP_LEVEL_ENTRIES + [
+    dict(s) for s in SUB_INDUSTRIES  # type: ignore[misc]
+]
 
 SECTOR_NAME_ZH.update({s["key"]: s["name"] for s in SUB_INDUSTRIES})
 SECTOR_PARENT: dict[str, str] = {s["key"]: s["parent"] for s in SUB_INDUSTRIES}
-# 每个一级行业有哪些子行业 key
+# 每个一级行业有哪些子行业 key / 子行业条目
 SECTOR_CHILDREN: dict[str, list[str]] = {}
+SUBINDUSTRY_BY_PARENT: dict[str, list[dict[str, str | None]]] = {}
 for _s in SUB_INDUSTRIES:
     SECTOR_CHILDREN.setdefault(_s["parent"], []).append(_s["key"])
+    SUBINDUSTRY_BY_PARENT.setdefault(_s["parent"], []).append(dict(_s))  # type: ignore[arg-type]
 
 # 拟合所需最小历史（交易日）——不足则不产出状态标签，避免小样本乱拟合
 MIN_FIT_HISTORY = 252

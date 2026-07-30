@@ -8,7 +8,12 @@ from sqlmodel import Session, select
 
 from app.core.logging import logger
 from app.models.regime_sector_features import RegimeSectorFeatures
-from app.services.regime.constants import LABEL_RISK_OFF, SECTOR_PARENT
+from app.services.regime.constants import (
+    LABEL_RISK_OFF,
+    SECTOR_PARENT,
+    SUBINDUSTRY_BY_PARENT,
+    TOP_LEVEL_ENTRIES,
+)
 from app.services.regime.engine import run_walk_forward
 from app.services.regime.fetcher import SectorMarketData, fetch_sector_market_data
 from app.services.regime.sector_features import (
@@ -122,20 +127,23 @@ def persist_sector_records(
 
 
 def run_sector_regime_stage(session: Session, lookback_days: int = 1400) -> dict:
-    """执行行业级 pipeline 阶段：抓数→逐板块算状态→落库，返回摘要。"""
+    """执行「一级行业」pipeline：只算 12 个一级行业（轻，避免超时）。"""
     logger.info("regime_sector_stage_start", lookback_days=lookback_days)
-    data = fetch_sector_market_data(lookback_days=lookback_days)
+    data = fetch_sector_market_data(lookback_days=lookback_days, entries=TOP_LEVEL_ENTRIES)
     by_sector = compute_sector_regimes(data)
     written = persist_sector_records(session, by_sector)
-    latest = {
-        key: (recs[-1].confirmed_label if recs else None)
-        for key, recs in by_sector.items()
-    }
-    logger.info(
-        "regime_sector_stage_done", sectors=len(by_sector), written=written
-    )
-    return {
-        "sectors": len(by_sector),
-        "written": written,
-        "latest_labels": latest,
-    }
+    logger.info("regime_sector_stage_done", sectors=len(by_sector), written=written)
+    return {"sectors": len(by_sector), "written": written}
+
+
+def run_subindustry_stage(session: Session, parent: str, lookback_days: int = 1400) -> dict:
+    """按需算「某一级行业的子行业」pipeline：只抓算该父行业下的细分 ETF。"""
+    entries = SUBINDUSTRY_BY_PARENT.get(parent, [])
+    if not entries:
+        return {"parent": parent, "sectors": 0, "written": 0}
+    logger.info("regime_subindustry_stage_start", parent=parent, n=len(entries))
+    data = fetch_sector_market_data(lookback_days=lookback_days, entries=entries)
+    by_sector = compute_sector_regimes(data)
+    written = persist_sector_records(session, by_sector)
+    logger.info("regime_subindustry_stage_done", parent=parent, sectors=len(by_sector), written=written)
+    return {"parent": parent, "sectors": len(by_sector), "written": written}

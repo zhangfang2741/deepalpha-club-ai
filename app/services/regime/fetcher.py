@@ -157,13 +157,21 @@ class SectorMarketData:
     sectors: dict[str, dict[str, np.ndarray]]  # key -> {close/high/low/volume}
 
 
-def align_sector_data(bars_by_symbol: dict[str, list[dict]]) -> SectorMarketData:
-    """对齐大盘/VIX/各行业(含子行业) ETF（纯函数，便于测试）。
+def align_sector_data(
+    bars_by_symbol: dict[str, list[dict]],
+    entries: list[dict[str, str | None]] | None = None,
+) -> SectorMarketData:
+    """对齐大盘/VIX/给定行业条目 ETF（纯函数，便于测试）。
 
     时间轴 = 大盘(SPY) ∩ VIX 的交易日（两者均为长历史流动品种）。每个行业/子行业
     ETF 按该时间轴 reindex，自身无数据的日期（如成立前）置 NaN，由下游 valid_mask
     自动跳过——这样短历史的细分 ETF 不会截断其它标的的历史。
+
+    Args:
+        bars_by_symbol: symbol -> EOD 列表。
+        entries: 要对齐的行业条目（默认全部一级行业 + 子行业）。
     """
+    entries = entries if entries is not None else ALL_SECTOR_ENTRIES
     def to_map(sym: str) -> dict[str, dict]:
         return {r["date"]: r for r in (bars_by_symbol.get(sym) or [])}
 
@@ -185,7 +193,7 @@ def align_sector_data(bars_by_symbol: dict[str, list[dict]]) -> SectorMarketData
         return np.array([m[d][key] if d in m else np.nan for d in spine], dtype=float)
 
     sectors: dict[str, dict[str, np.ndarray]] = {}
-    for entry in ALL_SECTOR_ENTRIES:
+    for entry in entries:
         emap = to_map(str(entry["symbol"]))
         if not emap:
             continue  # 整只缺失则跳过该行业
@@ -206,13 +214,20 @@ def align_sector_data(bars_by_symbol: dict[str, list[dict]]) -> SectorMarketData
     )
 
 
-def fetch_sector_market_data(lookback_days: int = 1400) -> SectorMarketData:
-    """抓取并对齐行业级 regime 所需的全部行情（大盘 + VIX + 各行业/子行业 ETF）。"""
-    symbols = [MARKET_SYMBOL, VIX_SYMBOL, *[str(e["symbol"]) for e in ALL_SECTOR_ENTRIES]]
+def fetch_sector_market_data(
+    lookback_days: int = 1400,
+    entries: list[dict[str, str | None]] | None = None,
+) -> SectorMarketData:
+    """抓取并对齐行业级 regime 行情（大盘 + VIX + 给定行业条目 ETF）。
+
+    entries 默认全部；分层懒算时可只传一级行业或某父行业的子行业，减少抓取量。
+    """
+    entries = entries if entries is not None else ALL_SECTOR_ENTRIES
+    symbols = [MARKET_SYMBOL, VIX_SYMBOL, *[str(e["symbol"]) for e in entries]]
     end = date.today()
     start = end - timedelta(days=lookback_days)
     bars_by_symbol = _fetch_bars_parallel(symbols, start.isoformat(), end.isoformat())
     empty = [s for s, rows in bars_by_symbol.items() if not rows]
     if empty:
         logger.warning("regime_sector_symbols_empty", symbols=empty)
-    return align_sector_data(bars_by_symbol)
+    return align_sector_data(bars_by_symbol, entries)

@@ -54,6 +54,19 @@ def test_align_sector_short_etf_reindexed_with_nan():
     assert np.isnan(close[0]) and np.isnan(close[1]) and not np.isnan(close[2])
 
 
+def test_align_sector_entries_scopes_computation():
+    # 传 entries 只对齐这些条目（分层懒算：只算某父行业的子行业）
+    dates = ["2024-01-02", "2024-01-03"]
+    entries = [{"key": "tech_software", "symbol": "IGV", "name": "软件", "parent": "technology"}]
+    bars = {
+        MARKET_SYMBOL: [_bar(d, 100.0 + i) for i, d in enumerate(dates)],
+        VIX_SYMBOL: [_bar(d, 15.0) for d in dates],
+        "IGV": [_bar(d, 200.0 + i) for i, d in enumerate(dates)],
+    }
+    md = align_sector_data(bars, entries)
+    assert set(md.sectors.keys()) == {"tech_software"}
+
+
 def test_align_sector_missing_market_raises():
     bars = _sector_bars(["2024-01-02", "2024-01-03"])
     bars[MARKET_SYMBOL] = []

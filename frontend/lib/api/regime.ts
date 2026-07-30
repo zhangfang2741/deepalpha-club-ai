@@ -111,3 +111,11 @@ export async function fetchSectorChildren(sector: string): Promise<SectorChildre
   const { data } = await apiClient.get<SectorChildrenResponse>(`/api/v1/regime/sectors/${sector}/children`)
   return data
 }
+
+export async function triggerSubIndustryStage(sector: string, lookbackDays = 1400): Promise<{ parent: string; sectors: number; written: number }> {
+  const { data } = await apiClient.post(`/api/v1/regime/sectors/${sector}/children/run`, null, {
+    params: { lookback_days: lookbackDays },
+    timeout: 120000,
+  })
+  return data
+}

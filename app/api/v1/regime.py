@@ -19,6 +19,7 @@ from app.schemas.regime import (
     SectorRegimeLatest,
     SectorRegimePoint,
     SectorStageResult,
+    SubIndustryStageResult,
 )
 from app.services.regime.constants import SECTOR_CHILDREN, SECTOR_NAME_ZH
 
@@ -210,7 +211,7 @@ async def trigger_sector_stage(
     lookback_days: int = Query(1400, ge=400, le=4000),
     user: User = Depends(get_current_user),
 ) -> SectorStageResult:
-    """触发行业级 pipeline 阶段：逐板块算状态→落库。"""
+    """触发「一级行业」计算：只算 12 个一级行业（轻，避免超时）。"""
     from app.db.session import get_sync_session_cm
     from app.services.regime.sector_pipeline import run_sector_regime_stage
 
@@ -225,3 +226,28 @@ async def trigger_sector_stage(
         raise HTTPException(status_code=502, detail=f"板块状态执行失败: {exc}") from exc
 
     return SectorStageResult(sectors=summary["sectors"], written=summary["written"])
+
+
+@router.post("/sectors/{sector}/children/run", response_model=SubIndustryStageResult)
+async def trigger_subindustry_stage(
+    sector: str,
+    lookback_days: int = Query(1400, ge=400, le=4000),
+    user: User = Depends(get_current_user),
+) -> SubIndustryStageResult:
+    """按需计算某一级行业的子行业（点进去才算，只抓算该父行业的细分 ETF）。"""
+    from app.db.session import get_sync_session_cm
+    from app.services.regime.sector_pipeline import run_subindustry_stage
+
+    def _run() -> dict:
+        with get_sync_session_cm() as session:
+            return run_subindustry_stage(session, parent=sector, lookback_days=lookback_days)
+
+    try:
+        summary = await run_in_threadpool(_run)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("regime_subindustry_stage_failed", parent=sector, error=str(exc))
+        raise HTTPException(status_code=502, detail=f"子行业计算失败: {exc}") from exc
+
+    return SubIndustryStageResult(
+        parent=sector, sectors=summary["sectors"], written=summary["written"]
+    )

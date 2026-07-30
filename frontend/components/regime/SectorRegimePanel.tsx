@@ -48,9 +48,11 @@ function SectorTile({ s, onClick }: { s: SectorRegimePoint; onClick?: () => void
 
 // 子行业下钻抽屉
 function SubIndustryDrawer() {
-  const { openSector, childrenCache, childrenLoading, closeChildren } = useSectorRegimeStore()
+  const { openSector, childrenCache, childrenLoading, childrenRunning, childrenError, computeChildren, closeChildren } = useSectorRegimeStore()
   if (!openSector) return null
-  const children = childrenCache[openSector] ?? []
+  const sector = openSector
+  const children = childrenCache[sector] ?? []
+  const busy = childrenLoading || childrenRunning
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={closeChildren}>
       <div className="absolute inset-0 bg-black/40" />
@@ -66,10 +68,26 @@ function SubIndustryDrawer() {
           该一级行业下各细分 ETF 单独拟合 HMM，按逐利程度排序
           {children[0]?.trade_date && <span className="font-mono ml-2">{children[0].trade_date}</span>}
         </p>
-        {childrenLoading ? (
-          <div className="flex items-center justify-center h-[160px]"><Spinner size={36} /></div>
+
+        {childrenError && (
+          <div className="px-4 py-2.5 mb-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm font-medium flex items-center justify-between gap-2">
+            <span>{childrenError}</span>
+            <button onClick={() => computeChildren(sector)} className="text-xs font-bold text-red-700 border border-red-300 rounded-lg px-2.5 py-1 hover:bg-red-100">重试</button>
+          </div>
+        )}
+
+        {busy ? (
+          <div className="flex flex-col items-center justify-center h-[180px] gap-3 text-gray-500">
+            <Spinner size={36} />
+            <span className="text-sm font-medium">{childrenRunning ? '首次进入，正在计算该行业的子行业…' : '加载中…'}</span>
+          </div>
         ) : children.length === 0 ? (
-          <div className="text-sm text-gray-400 py-10 text-center">该行业暂无子行业数据（可能细分 ETF 无数据，或尚未计算）</div>
+          <div className="text-sm text-gray-400 py-8 text-center">
+            该行业暂无子行业数据
+            <div className="mt-3">
+              <button onClick={() => computeChildren(sector)} className="px-4 py-2 rounded-xl bg-gray-900 text-white text-sm font-bold hover:bg-gray-800">计算子行业</button>
+            </div>
+          </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {children.map((c) => (
@@ -115,7 +133,7 @@ export default function SectorRegimePanel() {
       {running && (
         <div className="px-4 py-2.5 rounded-xl bg-blue-50 border border-blue-100 text-blue-700 text-sm font-medium flex items-center gap-2">
           <Spinner size={16} />
-          板块状态计算较慢（约十几秒），可切到其它 Tab，算完会自动更新。
+          正在计算 12 个一级行业，可切到其它 Tab，算完会自动更新。子行业点进去时按需计算。
         </div>
       )}
 
