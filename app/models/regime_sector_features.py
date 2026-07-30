@@ -20,6 +20,8 @@ class RegimeSectorFeatures(UUIDModel, table=True):
 
     trade_date: str = Field(..., max_length=10, index=True, nullable=False)
     sector: str = Field(..., max_length=30, index=True, nullable=False)
+    # 一级行业 parent=None；子行业 parent=<一级行业 key>
+    parent: str | None = Field(default=None, max_length=30, index=True)
 
     # 信号层特征
     sector_ret: float | None = Field(default=None)

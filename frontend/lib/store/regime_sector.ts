@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import {
   fetchSectorRegimes,
+  fetchSectorChildren,
   triggerSectorStage,
   type SectorRegimePoint,
 } from '@/lib/api/regime'
@@ -20,8 +21,14 @@ interface SectorRegimeState {
   running: boolean
   error: string | null
   loaded: boolean
+  // 下钻：当前展开的一级行业 + 其子行业缓存
+  openSector: string | null
+  childrenCache: Record<string, SectorRegimePoint[]>
+  childrenLoading: boolean
   load: (force?: boolean) => Promise<void>
   run: () => Promise<void>
+  openChildren: (sector: string) => Promise<void>
+  closeChildren: () => void
 }
 
 export const useSectorRegimeStore = create<SectorRegimeState>((set, get) => ({
@@ -31,6 +38,9 @@ export const useSectorRegimeStore = create<SectorRegimeState>((set, get) => ({
   running: false,
   error: null,
   loaded: false,
+  openSector: null,
+  childrenCache: {},
+  childrenLoading: false,
 
   load: async (force = false) => {
     // 已加载过且非强制、且不在加载中 → 直接用缓存，避免切回 Tab 闪一下 loading
@@ -56,4 +66,21 @@ export const useSectorRegimeStore = create<SectorRegimeState>((set, get) => ({
       set({ error: '重新计算失败（需登录且行情可用）', running: false })
     }
   },
+
+  openChildren: async (sector: string) => {
+    set({ openSector: sector })
+    if (get().childrenCache[sector]) return // 命中缓存不再拉
+    set({ childrenLoading: true })
+    try {
+      const resp = await fetchSectorChildren(sector)
+      set((s) => ({
+        childrenCache: { ...s.childrenCache, [sector]: resp.children },
+        childrenLoading: false,
+      }))
+    } catch {
+      set({ childrenLoading: false })
+    }
+  },
+
+  closeChildren: () => set({ openSector: null }),
 }))

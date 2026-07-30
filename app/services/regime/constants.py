@@ -61,6 +61,60 @@ SECTORS: list[dict[str, str]] = [
 SECTOR_NAME_ZH: dict[str, str] = {s["key"]: s["name"] for s in SECTORS}
 SECTOR_SYMBOL: dict[str, str] = {s["key"]: s["symbol"] for s in SECTORS}
 
+# 子行业（细分）ETF：仅在有干净流动品种的一级行业下挂细分。parent 指向 SECTORS.key。
+# 半导体/必需消费/公用事业无合适细分 ETF，故不挂子行业。
+SUB_INDUSTRIES: list[dict[str, str]] = [
+    # 科技
+    {"key": "tech_software", "symbol": "IGV", "name": "软件", "parent": "technology"},
+    {"key": "tech_cyber", "symbol": "CIBR", "name": "网络安全", "parent": "technology"},
+    {"key": "tech_cloud", "symbol": "SKYY", "name": "云计算", "parent": "technology"},
+    {"key": "tech_semis", "symbol": "SOXX", "name": "半导体", "parent": "technology"},
+    # 可选消费
+    {"key": "disc_retail", "symbol": "XRT", "name": "零售", "parent": "discretionary"},
+    {"key": "disc_homebuild", "symbol": "ITB", "name": "住宅建筑", "parent": "discretionary"},
+    {"key": "disc_leisure", "symbol": "PEJ", "name": "休闲娱乐", "parent": "discretionary"},
+    # 通讯服务
+    {"key": "comm_social", "symbol": "SOCL", "name": "社交媒体", "parent": "communication"},
+    {"key": "comm_gaming", "symbol": "ESPO", "name": "游戏电竞", "parent": "communication"},
+    {"key": "comm_internet", "symbol": "FDN", "name": "互联网", "parent": "communication"},
+    # 金融
+    {"key": "fin_banks", "symbol": "KBE", "name": "银行", "parent": "financials"},
+    {"key": "fin_regional", "symbol": "KRE", "name": "区域银行", "parent": "financials"},
+    {"key": "fin_insurance", "symbol": "KIE", "name": "保险", "parent": "financials"},
+    {"key": "fin_brokers", "symbol": "IAI", "name": "券商资管", "parent": "financials"},
+    # 工业
+    {"key": "ind_defense", "symbol": "ITA", "name": "航空国防", "parent": "industrials"},
+    {"key": "ind_transport", "symbol": "IYT", "name": "运输", "parent": "industrials"},
+    # 能源
+    {"key": "energy_ep", "symbol": "XOP", "name": "油气开采", "parent": "energy"},
+    {"key": "energy_services", "symbol": "OIH", "name": "油服", "parent": "energy"},
+    {"key": "energy_clean", "symbol": "ICLN", "name": "清洁能源", "parent": "energy"},
+    # 材料
+    {"key": "mat_metals", "symbol": "XME", "name": "金属矿业", "parent": "materials"},
+    {"key": "mat_gold", "symbol": "GDX", "name": "黄金矿业", "parent": "materials"},
+    {"key": "mat_lithium", "symbol": "LIT", "name": "锂电", "parent": "materials"},
+    # 医疗
+    {"key": "hc_biotech", "symbol": "XBI", "name": "生物科技", "parent": "healthcare"},
+    {"key": "hc_devices", "symbol": "IHI", "name": "医疗器械", "parent": "healthcare"},
+    {"key": "hc_pharma", "symbol": "PPH", "name": "制药", "parent": "healthcare"},
+    # 房地产
+    {"key": "re_residential", "symbol": "REZ", "name": "住宅REIT", "parent": "realestate"},
+    {"key": "re_mortgage", "symbol": "REM", "name": "抵押REIT", "parent": "realestate"},
+]
+
+# 所有可跑 regime 的条目（一级行业 parent=None + 子行业 parent=<sector.key>）
+ALL_SECTOR_ENTRIES: list[dict[str, str | None]] = [
+    {"key": s["key"], "symbol": s["symbol"], "name": s["name"], "parent": None}
+    for s in SECTORS
+] + [dict(s) for s in SUB_INDUSTRIES]  # type: ignore[list-item]
+
+SECTOR_NAME_ZH.update({s["key"]: s["name"] for s in SUB_INDUSTRIES})
+SECTOR_PARENT: dict[str, str] = {s["key"]: s["parent"] for s in SUB_INDUSTRIES}
+# 每个一级行业有哪些子行业 key
+SECTOR_CHILDREN: dict[str, list[str]] = {}
+for _s in SUB_INDUSTRIES:
+    SECTOR_CHILDREN.setdefault(_s["parent"], []).append(_s["key"])
+
 # 拟合所需最小历史（交易日）——不足则不产出状态标签，避免小样本乱拟合
 MIN_FIT_HISTORY = 252
 

@@ -51,6 +51,8 @@ class SectorRegimePoint(BaseResponse):
     trade_date: str
     sector: str = Field(description="板块 key，如 technology")
     sector_name: str = Field(description="板块中文名，如 科技")
+    parent: Optional[str] = Field(None, description="子行业的一级行业 key；一级行业为 None")
+    has_children: bool = Field(False, description="是否有可下钻的子行业")
     sector_ret: Optional[float] = None
     sector_vol: Optional[float] = None
     vix: Optional[float] = None
@@ -78,6 +80,15 @@ class SectorRegimeHistory(BaseResponse):
     sector: str
     sector_name: str
     history: List[SectorRegimePoint] = Field(default_factory=list)
+
+
+class SectorChildrenResponse(BaseResponse):
+    """GET /api/v1/regime/sectors/{sector}/children：某一级行业的子行业最新状态。"""
+
+    parent: str
+    parent_name: str
+    trade_date: Optional[str] = None
+    children: List[SectorRegimePoint] = Field(default_factory=list)
 
 
 class SectorStageResult(BaseResponse):
