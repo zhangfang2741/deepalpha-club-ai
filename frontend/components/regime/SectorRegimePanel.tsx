@@ -1,13 +1,10 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect } from 'react'
 import Spinner from '@/components/ui/Spinner'
 import { LABEL_COLOR, labelZh, colorOf } from '@/components/regime/common'
-import {
-  fetchSectorRegimes,
-  triggerSectorStage,
-  type SectorRegimePoint,
-} from '@/lib/api/regime'
+import { useSectorRegimeStore } from '@/lib/store/regime_sector'
+import { type SectorRegimePoint } from '@/lib/api/regime'
 
 function SectorTile({ s }: { s: SectorRegimePoint }) {
   const lab = s.confirmed_label ?? s.regime_label
@@ -41,41 +38,12 @@ function SectorTile({ s }: { s: SectorRegimePoint }) {
  * 板块状态面板（行业级 regime）：可嵌入行业恐慌页作为一个 Tab。
  */
 export default function SectorRegimePanel() {
-  const [sectors, setSectors] = useState<SectorRegimePoint[]>([])
-  const [loading, setLoading] = useState(true)
-  const [running, setRunning] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const resp = await fetchSectorRegimes()
-      setSectors(resp.sectors)
-    } catch {
-      setError('加载板块状态失败')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const { sectors, tradeDate, loading, running, error, load, run } = useSectorRegimeStore()
 
   useEffect(() => {
+    // 只在首次（未加载过）拉取；切回 Tab 用缓存，不再 spin
     load()
   }, [load])
-
-  const handleRun = async () => {
-    setRunning(true)
-    setError(null)
-    try {
-      await triggerSectorStage()
-      await load()
-    } catch {
-      setError('重新计算失败（需登录且行情可用）')
-    } finally {
-      setRunning(false)
-    }
-  }
-
-  const tradeDate = sectors[0]?.trade_date ?? null
 
   return (
     <div className="space-y-4">
@@ -88,7 +56,7 @@ export default function SectorRegimePanel() {
           {tradeDate && <span className="text-gray-400 font-mono ml-2">{tradeDate}</span>}
         </p>
         <button
-          onClick={handleRun}
+          onClick={() => run()}
           disabled={running}
           className="px-4 py-2 rounded-xl bg-gray-900 text-white text-sm font-bold hover:bg-gray-800 disabled:opacity-50 transition-all whitespace-nowrap"
         >
@@ -96,9 +64,16 @@ export default function SectorRegimePanel() {
         </button>
       </div>
 
+      {running && (
+        <div className="px-4 py-2.5 rounded-xl bg-blue-50 border border-blue-100 text-blue-700 text-sm font-medium flex items-center gap-2">
+          <Spinner size={16} />
+          板块状态计算较慢（约十几秒），可切到其它 Tab，算完会自动更新。
+        </div>
+      )}
+
       {error && <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm font-medium">{error}</div>}
 
-      {loading ? (
+      {loading && sectors.length === 0 ? (
         <div className="flex items-center justify-center h-[200px]">
           <Spinner size={40} />
         </div>
