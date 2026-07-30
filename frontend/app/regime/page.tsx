@@ -18,11 +18,11 @@ const RANGE_OPTIONS = [
   { label: '2年', limit: 500 },
 ]
 
-// 状态配色
+// 状态配色（A 股约定：红=贪婪/逐利，绿=恐慌/避险，与全站恐慌指数一致）
 const LABEL_COLOR: Record<string, string> = {
-  risk_on: '#16a34a', // 逐利 绿
+  risk_on: '#dc2626', // 逐利 红（贪婪）
   neutral: '#d97706', // 观望 橙
-  risk_off: '#dc2626', // 避险 红
+  risk_off: '#16a34a', // 避险 绿（恐慌）
 }
 const NEUTRAL_COLOR = '#64748b'
 
@@ -45,15 +45,16 @@ function colorOf(label: string | null): string {
 // factor_weight → 给下游动量类因子的建议动作
 function weightAdvice(fw: number | null): { text: string; tone: Tone } {
   if (fw === null) return { text: '历史不足，暂不给出建议', tone: 'neutral' }
-  if (fw >= 0.7) return { text: '进攻 / 动量类因子可正常持有', tone: 'good' }
+  if (fw >= 0.7) return { text: '进攻 / 动量类因子可正常持有', tone: 'riskon' }
   if (fw >= 0.4) return { text: '建议对动量类因子适度降权', tone: 'warn' }
-  return { text: '建议显著降低动量 / 成长类仓位', tone: 'bad' }
+  return { text: '建议显著降低动量 / 成长类仓位', tone: 'riskoff' }
 }
 
-type Tone = 'good' | 'bad' | 'warn' | 'neutral'
+// tone 按风险方向着色：riskon=红（贪婪/进攻），riskoff=绿（恐慌/避险）
+type Tone = 'riskon' | 'riskoff' | 'warn' | 'neutral'
 const TONE_COLOR: Record<Tone, string> = {
-  good: '#16a34a',
-  bad: '#dc2626',
+  riskon: '#dc2626',
+  riskoff: '#16a34a',
   warn: '#d97706',
   neutral: '#64748b',
 }
@@ -62,26 +63,26 @@ const TONE_COLOR: Record<Tone, string> = {
 type Verdict = { text: string; tone: Tone }
 function odsVerdict(v: number | null): Verdict {
   if (v === null) return { text: '—', tone: 'neutral' }
-  if (v > 0.02) return { text: '进攻占优', tone: 'good' }
-  if (v < -0.02) return { text: '防御占优', tone: 'bad' }
+  if (v > 0.02) return { text: '进攻占优', tone: 'riskon' }
+  if (v < -0.02) return { text: '防御占优', tone: 'riskoff' }
   return { text: '大致均衡', tone: 'neutral' }
 }
 function cfVerdict(v: number | null): Verdict {
   if (v === null) return { text: '—', tone: 'neutral' }
-  if (v > 0.01) return { text: '资金离场', tone: 'bad' }
-  if (v < -0.01) return { text: '留在风险资产', tone: 'good' }
+  if (v > 0.01) return { text: '资金离场', tone: 'riskoff' }
+  if (v < -0.01) return { text: '留在风险资产', tone: 'riskon' }
   return { text: '大致均衡', tone: 'neutral' }
 }
 function vixVerdict(v: number | null): Verdict {
   if (v === null) return { text: '—', tone: 'neutral' }
-  if (v < 16) return { text: '情绪平静', tone: 'good' }
-  if (v > 24) return { text: '情绪紧张', tone: 'bad' }
+  if (v < 16) return { text: '情绪平静', tone: 'riskon' }
+  if (v > 24) return { text: '情绪紧张', tone: 'riskoff' }
   return { text: '情绪中性', tone: 'warn' }
 }
 function cmfVerdict(v: number | null): Verdict {
   if (v === null) return { text: '—', tone: 'neutral' }
-  if (v > 0.02) return { text: '资金流入', tone: 'good' }
-  if (v < -0.02) return { text: '资金流出', tone: 'bad' }
+  if (v > 0.02) return { text: '资金流入', tone: 'riskon' }
+  if (v < -0.02) return { text: '资金流出', tone: 'riskoff' }
   return { text: '进出均衡', tone: 'neutral' }
 }
 
@@ -332,9 +333,9 @@ export default function RegimePage() {
             <div className="flex flex-col gap-1.5">
               <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">市场状态监控</h1>
               <p className="text-sm text-gray-500 max-w-2xl leading-relaxed">
-                判断当下市场是<span className="font-semibold text-green-600">逐利</span>、
+                判断当下市场是<span className="font-semibold text-red-600">逐利</span>、
                 <span className="font-semibold text-amber-600">观望</span>还是
-                <span className="font-semibold text-red-600">避险</span>，并给出对动量类因子的仓位建议。
+                <span className="font-semibold text-green-600">避险</span>，并给出对动量类因子的仓位建议。
               </p>
             </div>
             <button
