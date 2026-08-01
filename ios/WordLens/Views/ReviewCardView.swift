@@ -390,9 +390,6 @@ struct ReviewCardView: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                Image(systemName: "play.fill")
-                    .font(.caption2)
-                    .foregroundStyle(Theme.accent.opacity(0.7))
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
