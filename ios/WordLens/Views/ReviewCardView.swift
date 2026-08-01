@@ -164,7 +164,7 @@ struct ReviewCardView: View {
         }
         // 往上抬一截：贴着 tab bar 时播放键跟系统那排图标挤在一起，既容易误触
         // 也显得整个页面被压到底。
-        .padding(.bottom, 36)
+        .padding(.bottom, 72)
         .animation(.easeInOut(duration: 0.2), value: viewModel.isFlipped)
     }
 
