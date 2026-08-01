@@ -51,11 +51,11 @@ struct NowPlayingView: View {
                 Theme.background.ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    header
                     chipRow
                     Divider().overlay(Theme.border)
                     wordList
                 }
+                .padding(.top, 8)
             }
             // 确认条钉在底部：切分组这个动作必须显式点一下，不会因为点了标签
             // 就悄悄发生。
@@ -136,48 +136,6 @@ struct NowPlayingView: View {
         }
     }
 
-    // MARK: - 头部
-
-    /// 头部标题跟着「正在看的那一组」走：预览别的分组时显示「预览」而不是
-    /// 「正在播放」，避免让人以为已经切过去了。
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(isPreviewingOther ? "预览" : "正在播放")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(isPreviewingOther ? Theme.fuzzy : Theme.textSecondary)
-                .textCase(.uppercase)
-                .tracking(1.2)
-
-            Text(shownName)
-                .font(.largeTitle.bold())
-                .foregroundStyle(Theme.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-
-            HStack(spacing: 6) {
-                Text("\(shownWords.count) 个词")
-                if !isPreviewingOther, reviewVM.reviewedCount > 0 {
-                    Text("·")
-                    Text("已过 \(reviewVM.reviewedCount)")
-                }
-                if !isPreviewingOther, reviewVM.autoplay.isPlaying {
-                    Text("·")
-                    Label("连播中", systemImage: "speaker.wave.2.fill")
-                        .foregroundStyle(Theme.accent)
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(Theme.textSecondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 20)
-        .padding(.bottom, 14)
-    }
-
-    private var shownName: String {
-        isPreviewingOther ? shown.displayName(playlists: playlistVM.playlists) : reviewVM.selectionName
-    }
-
     /// 展示用词表：看正在播的那组就用实时队列（能高亮当前词、能点词跳转），
     /// 预览别的组则用单独拉的 previewWords。
     private var shownWords: [VocabularyWord] {
@@ -245,40 +203,25 @@ struct NowPlayingView: View {
 
     // MARK: - 底部确认条
 
-    /// 切分组必须显式确认。预览别的分组时给两个选择：只切过去、或者切过去并
-    /// 立刻开播；看的就是正在播的那组时，这里退化成连播的开关。
+    /// 切分组必须显式确认：点标签只是翻着看，真正切过去要按这里。
+    /// 看的就是正在播的那组时，这里退化成连播的开关。
     @ViewBuilder
     private var confirmBar: some View {
         VStack(spacing: 10) {
             if isPreviewingOther {
-                HStack(spacing: 10) {
-                    Button {
-                        commitPreview(play: false)
-                    } label: {
-                        Text("切换到这一组")
-                            .font(.subheadline.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(Theme.surfaceAlt)
-                            .foregroundStyle(Theme.textPrimary)
-                            .clipShape(.rect(cornerRadius: 12))
-                    }
-                    .buttonStyle(.pressable)
-
-                    Button {
-                        commitPreview(play: true)
-                    } label: {
-                        Label("切换并播放", systemImage: "play.fill")
-                            .font(.subheadline.weight(.bold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(Theme.accent)
-                            .foregroundStyle(.white)
-                            .clipShape(.rect(cornerRadius: 12))
-                    }
-                    .buttonStyle(.pressable)
-                    .disabled(playlistVM.previewWords.isEmpty)
+                Button {
+                    commitPreview()
+                } label: {
+                    Label("播放这一组", systemImage: "play.fill")
+                        .font(.subheadline.weight(.bold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Theme.accent)
+                        .foregroundStyle(.white)
+                        .clipShape(.rect(cornerRadius: 12))
                 }
+                .buttonStyle(.pressable)
+                .disabled(playlistVM.previewWords.isEmpty)
             } else {
                 Button {
                     reviewVM.autoplay.toggle()
@@ -304,12 +247,13 @@ struct NowPlayingView: View {
         .background(.ultraThinMaterial)
     }
 
-    private func commitPreview(play: Bool) {
+    /// 确认切换到预览中的分组并开始连播，然后收起本页回到卡片。
+    private func commitPreview() {
         guard let selection = previewing else { return }
-        onSelect(selection, selection.displayName(playlists: playlistVM.playlists), play)
+        onSelect(selection, selection.displayName(playlists: playlistVM.playlists), true)
         previewing = nil
         playlistVM.clearPreview()
-        if play { dismiss() }
+        dismiss()
     }
 
     // MARK: - 单词列表
@@ -339,10 +283,25 @@ struct NowPlayingView: View {
                                 .id(word.id)
                         }
                     } header: {
-                        Text(isPreviewingOther ? "这一组的单词" : "接下来")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Theme.textSecondary)
-                            .textCase(nil)
+                        // 大标题那一块整个去掉了——分组标签本身就标着选中态和
+                        // 计数，再来一遍只是占地方。进度这些信息压缩成这一行小字。
+                        HStack(spacing: 6) {
+                            Text(isPreviewingOther ? "这一组的单词" : "接下来")
+                            Text("·")
+                            Text("\(shownWords.count) 个")
+                            if !isPreviewingOther, reviewVM.reviewedCount > 0 {
+                                Text("·")
+                                Text("已过 \(reviewVM.reviewedCount)")
+                            }
+                            if !isPreviewingOther, reviewVM.autoplay.isPlaying {
+                                Text("·")
+                                Label("连播中", systemImage: "speaker.wave.2.fill")
+                                    .foregroundStyle(Theme.accent)
+                            }
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                        .textCase(nil)
                     }
                 }
                 .listStyle(.plain)
