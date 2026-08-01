@@ -46,6 +46,17 @@ struct NowPlayingView: View {
         playlistVM.playlists.map { (.custom($0.id), $0.name, nil) }
     }
 
+    /// 当前正在看的那一组，如果它是自定义分组的话——编辑/删除都针对它。
+    private var shownCustomPlaylist: Playlist? {
+        guard case .custom(let id) = shown else { return nil }
+        return playlistVM.playlists.first { $0.id == id }
+    }
+
+    private func playlist(for selection: PlaylistSelection) -> Playlist? {
+        guard case .custom(let id) = selection else { return nil }
+        return playlistVM.playlists.first { $0.id == id }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -82,8 +93,10 @@ struct NowPlayingView: View {
                         } label: {
                             Label("新建自定义分组", systemImage: "plus")
                         }
-                        if case .custom(let id) = current,
-                           let playlist = playlistVM.playlists.first(where: { $0.id == id }) {
+                        // 用 shown 而不是 current：这里该操作的是「你正在看的那一组」。
+                        // 之前判断的是正在播的那组，于是点开别的自定义分组预览时，
+                        // 菜单里压根不出现它的编辑/删除，看着像没这个功能。
+                        if let playlist = shownCustomPlaylist {
                             Button {
                                 editingPlaylist = playlist
                             } label: {
@@ -163,7 +176,7 @@ struct NowPlayingView: View {
         VStack(alignment: .leading, spacing: 12) {
             chipGroup("生词库分组", chips: builtinChips)
             if !customChips.isEmpty {
-                chipGroup("自定义", chips: customChips)
+                chipGroup("自定义", chips: customChips, showsEditActions: true)
             }
         }
         .padding(.horizontal, 20)
@@ -171,12 +184,39 @@ struct NowPlayingView: View {
     }
 
     private func chipGroup(
-        _ title: String, chips: [(selection: PlaylistSelection, label: String, dot: Color?)]
+        _ title: String, chips: [(selection: PlaylistSelection, label: String, dot: Color?)],
+        showsEditActions: Bool = false
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(Theme.textSecondary)
+            HStack(spacing: 12) {
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Theme.textSecondary)
+
+                Spacer()
+
+                // 改名/删分组的入口以前只藏在右上角的 ⋯ 菜单里，而且判断条件还写错了
+                // （见 shownCustomPlaylist 那段注释），基本等于没有。放到「自定义」
+                // 这一行的行尾：只在你正看着某个自定义分组时出现，指向明确。
+                if showsEditActions, let playlist = shownCustomPlaylist {
+                    Button {
+                        editingPlaylist = playlist
+                    } label: {
+                        Label("编辑", systemImage: "pencil")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .tint(Theme.accent)
+
+                    Button(role: .destructive) {
+                        playlistPendingDeletion = playlist
+                    } label: {
+                        Label("删除", systemImage: "trash")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .tint(Theme.unknown)
+                }
+            }
+
             FlowLayout(spacing: 8, lineSpacing: 8) {
                 ForEach(chips, id: \.selection) { chip in
                     chipButton(chip.selection, label: chip.label, dot: chip.dot)
@@ -231,6 +271,21 @@ struct NowPlayingView: View {
             }
         }
         .buttonStyle(.pressable)
+        // 长按自定义分组直接改名/删除，不用先选中它——iOS 上标签类元素的常规手势。
+        .contextMenu {
+            if let playlist = playlist(for: selection) {
+                Button {
+                    editingPlaylist = playlist
+                } label: {
+                    Label("编辑「\(playlist.name)」", systemImage: "pencil")
+                }
+                Button(role: .destructive) {
+                    playlistPendingDeletion = playlist
+                } label: {
+                    Label("删除「\(playlist.name)」", systemImage: "trash")
+                }
+            }
+        }
         .accessibilityLabel("\(label)，\(count) 个\(isCurrent ? "，正在播放" : "")")
         .accessibilityAddTraits(isShown ? [.isButton, .isSelected] : .isButton)
     }

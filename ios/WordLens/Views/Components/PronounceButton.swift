@@ -285,25 +285,54 @@ final class Pronouncer: ObservableObject {
             return
         }
 
-        if let data = cachedAudio(for: trimmed, source: source, accent: accent) {
-            play(data, fallbackWord: trimmed)
+        fetchAndPlay(trimmed, chain: Self.fallbackChain(startingAt: source), accent: accent)
+    }
+
+    /// 发音源的降级链：首选源拉不到时，按顺序往后试，全都不行才用系统合成兜底。
+    ///
+    /// 之所以需要这个链条：有道 `dictvoice` 对**带连字符的复合词**（如
+    /// `modern-innovation` / `purchase-power`）直接返回 500，而这类词在拍照识别
+    /// 的结果里相当常见。老实现是"一失败就跳系统合成"，于是同一个队列里常见词
+    /// 是有道真人女声、复合词是系统合成音，连播时音色一个词一变。
+    ///
+    /// Google TTS 对任意字符串都能合成、音色稳定，插在中间能接住绝大多数漏网词，
+    /// 系统合成退化为最后一道保险（真·断网时还能出声）。
+    private static func fallbackChain(startingAt source: PronunciationSource) -> [PronunciationSource] {
+        switch source {
+        case .youdao: return [.youdao, .google]
+        case .google: return [.google]
+        // 高清（Azure）走自家后端，未配置 key 时返回 503，用 Google 接住。
+        case .azure: return [.azure, .google]
+        case .system: return []
+        }
+    }
+
+    /// 沿着降级链依次尝试；链走完仍失败则用系统合成兜底。
+    private func fetchAndPlay(_ word: String, chain: [PronunciationSource], accent: PronunciationAccent) {
+        guard let source = chain.first else {
+            speakWithSynthesizer(word)
             return
         }
-        guard let request = remoteRequest(for: trimmed, source: source, accent: accent) else {
-            speakWithSynthesizer(trimmed)
+        let rest = Array(chain.dropFirst())
+
+        if let data = cachedAudio(for: word, source: source, accent: accent) {
+            play(data, fallbackWord: word)
+            return
+        }
+        guard let request = remoteRequest(for: word, source: source, accent: accent) else {
+            fetchAndPlay(word, chain: rest, accent: accent)
             return
         }
 
         session.dataTask(with: request) { [weak self] data, response, _ in
             let http = response as? HTTPURLResponse
-            // 查不到的词部分源会返回 200 但空 body / 非音频，用非空 + 2xx 双重判断，
-            // 失败一律回退系统合成音，保证点了一定有声。
+            // 查不到的词部分源会返回 200 但空 body / 非音频，用非空 + 2xx 双重判断。
             guard let data, !data.isEmpty, (200..<300).contains(http?.statusCode ?? 0) else {
-                Task { @MainActor in self?.speakWithSynthesizer(trimmed) }
+                Task { @MainActor in self?.fetchAndPlay(word, chain: rest, accent: accent) }
                 return
             }
-            self?.cacheAudio(data, for: trimmed, source: source, accent: accent)
-            Task { @MainActor in self?.play(data, fallbackWord: trimmed) }
+            self?.cacheAudio(data, for: word, source: source, accent: accent)
+            Task { @MainActor in self?.play(data, fallbackWord: word) }
         }.resume()
     }
 
@@ -389,15 +418,29 @@ final class Pronouncer: ObservableObject {
         synthesizer.speak(utterance)
     }
 
-    /// 选目标口音下音质最好的英语语音：优先「优质(premium)」，其次「增强(enhanced)」，
-    /// 再退回默认。系统语音源和联网失败兜底都用它，尽量自然。用户在系统设置里下载了
-    /// 优质/增强英语语音后，这里会自动用上。
+    /// 选目标口音下音质最好的**女声**英语语音：先按性别筛，再在里面挑音质。
+    ///
+    /// 性别筛选是这里的关键：老实现最后一档是 `candidates.first`，取的是系统语音
+    /// 列表里碰巧排第一个的那个，性别完全看运气——没下载「优质/增强」语音的机器
+    /// 上，兜底发音会随机变成男声，跟有道那边的女声真人录音接不上。
+    ///
+    /// 统一挑女声是为了跟主力发音源（有道 / Google 默认都是女声）对齐，让偶尔走到
+    /// 兜底的词听起来不至于突兀。`.unspecified` 也纳入候选：部分老语音没标性别，
+    /// 总比一个词都挑不出来强。用户在系统设置里下载了优质/增强语音后自动用上。
     private func bestEnglishVoice(_ accent: PronunciationAccent) -> AVSpeechSynthesisVoice? {
         let lang = accent == .uk ? "en-GB" : "en-US"
-        let candidates = AVSpeechSynthesisVoice.speechVoices().filter { $0.language == lang }
-        return candidates.first { $0.quality == .premium }
-            ?? candidates.first { $0.quality == .enhanced }
-            ?? candidates.first
+        let all = AVSpeechSynthesisVoice.speechVoices().filter { $0.language == lang }
+        let preferred = all.filter { $0.gender == .female }
+        let candidates = preferred.isEmpty ? all.filter { $0.gender == .unspecified } : preferred
+
+        func best(_ voices: [AVSpeechSynthesisVoice]) -> AVSpeechSynthesisVoice? {
+            voices.first { $0.quality == .premium }
+                ?? voices.first { $0.quality == .enhanced }
+                ?? voices.first
+        }
+        return best(candidates)
+            // 连女声/未标注的都没有时才退回全体，此时至少音质仍按 premium 优先。
+            ?? best(all)
             ?? AVSpeechSynthesisVoice(language: lang)
     }
 
