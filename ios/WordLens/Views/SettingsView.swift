@@ -51,12 +51,9 @@ struct SettingsView: View {
                 }
                 .listRowBackground(Theme.surface)
 
+                // 学习模式已挪到首页左上角的下拉框里：它跟「当前在播哪一组」
+                // 是同一件事的两个侧面，放一起才成套。
                 Section("偏好设置") {
-                    NavigationLink {
-                        ReviewModeSettingsView()
-                    } label: {
-                        Label("学习模式", systemImage: "slider.horizontal.3")
-                    }
                     NavigationLink {
                         PronunciationSettingsView()
                     } label: {

@@ -89,12 +89,6 @@ struct ReviewCardView: View {
                     await playlistVM.load()
                 }
             }
-            // 学习模式挪到设置页之后，改动发生在别的 tab 上。切回首页时对一下
-            // UserDefaults，不一致就按新模式重排剩余队列。
-            .onChange(of: nav.selectedTab) { _, newTab in
-                guard newTab == .review else { return }
-                viewModel.changeMode(ReviewMode.current)
-            }
             .refreshable { await viewModel.loadQueue() }
             // 全屏「切换分组」页：只管挑分组（词表纯展示）。要跳到某个具体的词
             // 走顶部标题的播放队列下拉框，两件事分开。
@@ -316,7 +310,11 @@ struct ReviewCardView: View {
                 .buttonStyle(.pressable)
                 .padding(.horizontal, 10)
                 .padding(.top, 10)
-                .padding(.bottom, 4)
+                .padding(.bottom, 8)
+
+                modeRow
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 8)
 
                 HStack(spacing: 6) {
                     Text("播放队列")
@@ -361,6 +359,48 @@ struct ReviewCardView: View {
             .padding(.horizontal, 12)
             .transition(.move(edge: .top).combined(with: .opacity))
         }
+    }
+
+    /// 学习模式（队列排序方式）。
+    ///
+    /// 从设置页搬回这里：它跟「当前在播哪一组、按什么顺序播」是同一件事的两个
+    /// 侧面，放在同一个下拉框里才成套；埋在设置里既要多跳两层，也跟当前队列
+    /// 脱节（改完还得切回首页才生效）。这里改完立刻重排剩余队列。
+    private var modeRow: some View {
+        Menu {
+            ForEach(ReviewMode.allCases, id: \.self) { mode in
+                Button {
+                    viewModel.changeMode(mode)
+                } label: {
+                    if viewModel.mode == mode {
+                        Label(mode.label, systemImage: "checkmark")
+                    } else {
+                        Text(mode.label)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.subheadline)
+                Text("学习模式")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(viewModel.mode.label)
+                    .font(.caption)
+                    .foregroundStyle(Theme.textSecondary)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            .foregroundStyle(Theme.textPrimary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(Theme.surfaceAlt)
+            .clipShape(.rect(cornerRadius: 12))
+            .contentShape(.rect)
+        }
+        .accessibilityLabel("学习模式，当前 \(viewModel.mode.label)")
     }
 
     private func queueRow(_ word: VocabularyWord, index: Int) -> some View {
