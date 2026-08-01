@@ -20,8 +20,10 @@ struct QueueDrawerView: View {
     @Namespace private var scrollSpace
 
     var body: some View {
+        // fullScreenCover 默认整个画布是黑底，这里自己画一个半透明遮罩 + 右抽屉。
+        // 绕开了系统 sheet 的关闭手势——列表滚动完全归 ScrollView，不再被
+        // 解读成"关闭抽屉"。
         ZStack(alignment: .leading) {
-            // 半透明遮罩，alpha 跟着拖动手势变化。点空白处收起。
             Color.black.opacity(0.45)
                 .ignoresSafeArea()
                 .onTapGesture { onDismiss() }
@@ -33,6 +35,7 @@ struct QueueDrawerView: View {
                 .clipShape(.rect(cornerRadius: 0))
                 .shadow(color: .black.opacity(0.5), radius: 20, x: -4, y: 0)
         }
+        .preferredColorScheme(.dark)
     }
 
     private var drawer: some View {

@@ -95,10 +95,11 @@ struct ReviewCardView: View {
             }
             .refreshable { await viewModel.loadQueue() }
             // 队列面板：自实现"从右侧滑出"的全高抽屉。
-            // 系统 .sheet 走的是底部弹起的卡片过渡，方向跟"右侧按钮唤起"对不上，
-            // 用户容易觉得是系统弹窗而不是页面内的抽屉。QueueDrawerView 自己画
-            // 一个全高右抽屉，遮罩点击 / 关闭按钮都能收。
-            .sheet(isPresented: $showQueueSheet) {
+            // 用 fullScreenCover 而不是 .sheet：iOS 26 的 sheet 在长列表里向下滑
+            // 会被系统识别成"关闭抽屉"——翻队列时一滑动整个面板就没了。绕开
+            // 系统 sheet 的关闭手势，让 ScrollView 自己吃滚动事件，关面板只能用
+            // 点遮罩或点关闭按钮（关闭按钮在最顶部、跟工具栏放在一起）。
+            .fullScreenCover(isPresented: $showQueueSheet) {
                 QueueDrawerView(
                     words: viewModel.queue,
                     currentWordID: viewModel.currentWord?.id,
@@ -108,8 +109,6 @@ struct ReviewCardView: View {
                     },
                     onDismiss: { showQueueSheet = false }
                 )
-                .presentationDetents([.large])
-                .presentationBackgroundInteraction(.disabled)
             }
             // 自动播放 FAB 用 .safeAreaInset 钉在 NavigationStack 底部 ——
             // 之前放在 body ZStack 里 + Theme.background.ignoresSafeArea() 共存时,
