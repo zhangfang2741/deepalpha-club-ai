@@ -235,7 +235,7 @@ struct ReviewCardView: View {
     private var topBar: some View {
         ZStack(alignment: .center) {
             // 分组名和播放信息组成居中的两行；左右预留空间，长分组名不会压到开关。
-            VStack(spacing: 7) {
+            VStack(spacing: 2) {
                 // 顶部分组选择器：居中、放小三角标记可展开。整块可点，三角跟着
                 // 展开状态转 180°。
                 Button {
@@ -518,22 +518,11 @@ struct ReviewCardView: View {
                 }
             }
         } label: {
-            Group {
-                if viewModel.mode == .sequential {
-                    // 两条同向、互不交叉的箭头，与随机乱序的 shuffle 形成对照。
-                    VStack(spacing: -3) {
-                        Image(systemName: "arrow.right")
-                        Image(systemName: "arrow.right")
-                    }
-                    .font(.system(size: 10, weight: .bold))
-                } else {
-                    Image(systemName: viewModel.mode.systemImage)
-                        .font(.system(size: 18, weight: .semibold))
-                }
-            }
-            .foregroundStyle(viewModel.mode == .smart ? Theme.textSecondary : Theme.accent)
-            .frame(width: 44, height: 44)
-            .contentShape(.rect)
+            Image(systemName: viewModel.mode.systemImage)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(viewModel.mode == .smart ? Theme.textSecondary : Theme.accent)
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
         }
         .accessibilityLabel("播放顺序，当前\(viewModel.mode.label)")
     }
