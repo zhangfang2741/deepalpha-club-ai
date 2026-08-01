@@ -31,16 +31,19 @@ struct NowPlayingView: View {
     /// 是否处于「看的不是正在播的那组」的状态。
     private var isPreviewingOther: Bool { previewing != nil && previewing != current }
 
-    /// chip 顺序：待复习 → 三个状态 → 自定义歌单。内置的在前，用户自己的在后。
-    private var chips: [(selection: PlaylistSelection, label: String, color: Color)] {
-        var items: [(PlaylistSelection, String, Color)] = [
-            (.dueReview, "待复习", Theme.accent),
+    /// 内置分组：待复习 + 三个状态。`dot` 是标签前那个小圆点的颜色，nil 表示不画。
+    private var builtinChips: [(selection: PlaylistSelection, label: String, dot: Color?)] {
+        [
+            (.dueReview, "待复习", nil),
             (.status("new"), "不认识", Theme.unknown),
             (.status("fuzzy"), "模糊", Theme.fuzzy),
             (.status("known"), "认识", Theme.known),
         ]
-        items += playlistVM.playlists.map { (.custom($0.id), $0.name, Theme.textPrimary) }
-        return items.map { (selection: $0.0, label: $0.1, color: $0.2) }
+    }
+
+    /// 用户自建的分组。
+    private var customChips: [(selection: PlaylistSelection, label: String, dot: Color?)] {
+        playlistVM.playlists.map { (.custom($0.id), $0.name, nil) }
     }
 
     var body: some View {
@@ -153,17 +156,42 @@ struct NowPlayingView: View {
 
     /// 用流式布局自动换行，所有分组一次铺开、位置固定——之前是横向 ScrollView，
     /// 分组一多就得左右滑才看得全。
+    ///
+    /// 内置分组和自定义分组分成两组、各带一行小标题：之前它们混在一片标签里，
+    /// 「不认识」和用户自己起名的分组看着是同一类东西，其实完全不是。
     private var chipRow: some View {
-        FlowLayout(spacing: 8, lineSpacing: 8) {
-            ForEach(chips, id: \.selection) { chip in
-                chipButton(chip.selection, label: chip.label, color: chip.color)
+        VStack(alignment: .leading, spacing: 12) {
+            chipGroup("生词库分组", chips: builtinChips)
+            if !customChips.isEmpty {
+                chipGroup("自定义", chips: customChips)
             }
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 14)
     }
 
-    private func chipButton(_ selection: PlaylistSelection, label: String, color: Color) -> some View {
+    private func chipGroup(
+        _ title: String, chips: [(selection: PlaylistSelection, label: String, dot: Color?)]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Theme.textSecondary)
+            FlowLayout(spacing: 8, lineSpacing: 8) {
+                ForEach(chips, id: \.selection) { chip in
+                    chipButton(chip.selection, label: chip.label, dot: chip.dot)
+                }
+            }
+        }
+    }
+
+    /// 标签只有一套配色，颜色只用来表达「选中」这一件事。
+    ///
+    /// 之前每个分组各用各的主题色（蓝/红/橙/绿）当文字色和描边色，计数还各自
+    /// 套一个彩色胶囊，选中态又换成白底——五个标签五种颜色互相打架，看着很乱。
+    /// 现在统一成深色底 + 细描边，只有选中的那个填成主题蓝；状态色降级成标签
+    /// 前面一个小圆点，信息还在但不再抢戏。
+    private func chipButton(_ selection: PlaylistSelection, label: String, dot: Color?) -> some View {
         // 选中态跟着「正在看的那一组」走；正在播的那一组额外带个小喇叭，
         // 这样"我在看哪组"和"实际在播哪组"一眼能分开。
         let isShown = selection == shown
@@ -181,26 +209,25 @@ struct NowPlayingView: View {
                 if isCurrent {
                     Image(systemName: "speaker.wave.2.fill")
                         .font(.caption2)
+                        .foregroundStyle(isShown ? .white : Theme.accent)
+                } else if let dot {
+                    Circle()
+                        .fill(dot)
+                        .frame(width: 6, height: 6)
                 }
                 Text(label)
-                    .font(.subheadline.weight(isShown ? .bold : .medium))
+                    .font(.subheadline.weight(isShown ? .semibold : .regular))
+                    .foregroundStyle(isShown ? .white : Theme.textPrimary)
                 Text("\(count)")
-                    .font(.caption2.weight(.semibold))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(isShown ? Color.white.opacity(0.22) : Theme.surfaceAlt)
-                    .clipShape(.capsule)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(isShown ? Color.white.opacity(0.75) : Theme.textSecondary)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
-            .foregroundStyle(isShown ? .white : color)
-            .background(isShown ? color : Theme.surface)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 8)
+            .background(isShown ? Theme.accent : Theme.surface)
             .clipShape(.capsule)
             .overlay {
-                Capsule().strokeBorder(
-                    isShown ? .clear : (isCurrent ? color.opacity(0.7) : Theme.border),
-                    lineWidth: isCurrent && !isShown ? 1.5 : 1
-                )
+                Capsule().strokeBorder(isShown ? .clear : Theme.border, lineWidth: 1)
             }
         }
         .buttonStyle(.pressable)
