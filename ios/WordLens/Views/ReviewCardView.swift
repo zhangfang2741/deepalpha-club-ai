@@ -20,7 +20,7 @@ struct ReviewCardView: View {
     @FocusState private var isDictationFieldFocused: Bool
 
     /// 顶部标题两侧为右上角模式控件预留的空间，保证分组名以屏幕为基准居中。
-    private static let headerTitleSideClearance: CGFloat = 108
+    private static let headerTitleSideClearance: CGFloat = 96
     /// 分组标题与进度状态之间的层级间距。
     private static let headerStatusSpacing: CGFloat = 14
 
@@ -99,25 +99,20 @@ struct ReviewCardView: View {
                 }
             }
             .refreshable { await viewModel.loadQueue() }
-            // 队列面板：自实现"从右侧滑出"的全高抽屉。
-            // 用 fullScreenCover 而不是 .sheet：iOS 26 的 sheet 在长列表里向下滑
-            // 会被系统识别成"关闭抽屉"——翻队列时一滑动整个面板就没了。绕开
-            // 系统 sheet 的关闭手势，让 ScrollView 自己吃滚动事件，关面板只能用
-            // 点遮罩或点关闭按钮（关闭按钮在最顶部、跟工具栏放在一起）。
+            // 队列面板：fullScreenCover 只负责盖住 tab bar，系统转场由
+            // presentQueue / dismissQueue 关闭；实际的右侧滑入动画由抽屉自身完成。
             .fullScreenCover(isPresented: $showQueueSheet) {
                 QueueDrawerView(
                     words: viewModel.queue,
                     currentWordID: viewModel.currentWord?.id,
                     onSelect: { word in
-                        showQueueSheet = false
+                        dismissQueue()
                         viewModel.jump(to: word, play: true)
                     },
-                    onDismiss: { showQueueSheet = false },
-                    // 抽屉打开前强制收键盘：上一轮自动聚焦让 TextField 成了 first
-                    // responder，fullScreenCover 不会自动 dismissKeyboard，键盘就
-                    // 一直挂着、在列表里滑动时还能感觉到软键盘在响应。
-                    onAppear: { isDictationFieldFocused = false }
+                    onDismiss: dismissQueue
                 )
+                .presentationBackground(.clear)
+                .interactiveDismissDisabled()
             }
             // 自动播放 FAB 用 .safeAreaInset 钉在 NavigationStack 底部 ——
             // 之前放在 body ZStack 里 + Theme.background.ignoresSafeArea() 共存时,
@@ -282,10 +277,9 @@ struct ReviewCardView: View {
         .padding(.bottom, 14)
     }
 
-    /// 右上角的学习方式分段器：两个选项始终可见，当前项用主题色填充。
-    /// 比把两个小图标塞进拨片更直观，也能直接点目标模式，不需要猜开关方向。
+    /// 右上角的学习方式分段器：视觉上保持紧凑，但每个选项仍有 44pt 点击区域。
     private var studyModeToggle: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 0) {
             ForEach(StudyMode.allCases, id: \.self) { mode in
                 let isSelected = viewModel.studyMode == mode
                 Button {
@@ -294,25 +288,31 @@ struct ReviewCardView: View {
                     }
                 } label: {
                     Text(mode.label)
-                        .font(.subheadline.bold())
+                        .font(.caption.bold())
                         .foregroundStyle(isSelected ? .white : Theme.textSecondary)
-                        .padding(.horizontal, 8)
-                        .frame(minHeight: 34)
-                        .background(
-                            Capsule().fill(isSelected ? Theme.accent : .clear)
-                        )
+                        .frame(width: 44, height: 44)
+                        .background {
+                            Capsule()
+                                .fill(isSelected ? Theme.accent : .clear)
+                                .frame(width: 40, height: 28)
+                        }
+                        .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(mode.label)
                 .accessibilityAddTraits(isSelected ? [.isSelected] : [])
             }
         }
-        .padding(3)
-        .frame(minHeight: 44)
-        .background(Theme.surface)
-        .clipShape(.capsule)
+        .frame(height: 44)
+        .background {
+            Capsule()
+                .fill(Theme.surface)
+                .frame(height: 32)
+        }
         .overlay {
-            Capsule().strokeBorder(Theme.border, lineWidth: 1)
+            Capsule()
+                .strokeBorder(Theme.border, lineWidth: 1)
+                .frame(height: 32)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("学习方式")
@@ -539,8 +539,7 @@ struct ReviewCardView: View {
                 }
             }
         } label: {
-            Image(systemName: viewModel.mode.systemImage)
-                .font(.system(size: 18, weight: .semibold))
+            ReviewModeIcon(mode: viewModel.mode)
                 .foregroundStyle(viewModel.mode == .smart ? Theme.textSecondary : Theme.accent)
                 .frame(width: 44, height: 44)
                 .contentShape(.rect)
@@ -550,9 +549,7 @@ struct ReviewCardView: View {
 
     /// 播放条最右：看当前分组的完整队列。
     private var queueButton: some View {
-        Button {
-            showQueueSheet = true
-        } label: {
+        Button(action: presentQueue) {
             Image(systemName: "list.bullet")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Theme.textSecondary)
@@ -562,6 +559,24 @@ struct ReviewCardView: View {
         .buttonStyle(.pressable)
         .disabled(viewModel.queue.isEmpty)
         .accessibilityLabel("播放队列")
+    }
+
+    private func presentQueue() {
+        // 先收听写键盘，再无系统动画地挂载全屏容器；抽屉会在下一帧从右侧滑入。
+        isDictationFieldFocused = false
+        setQueuePresented(true)
+    }
+
+    private func dismissQueue() {
+        setQueuePresented(false)
+    }
+
+    private func setQueuePresented(_ isPresented: Bool) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            showQueueSheet = isPresented
+        }
     }
 
     // MARK: - 播放条

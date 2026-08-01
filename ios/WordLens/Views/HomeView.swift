@@ -143,22 +143,22 @@ struct HomeView: View {
 
     /// 状态磁贴：认识/模糊/不认识三个，「全部」也是筛选入口。
     ///
-    /// 「全部」是个复位键——点一下就把状态筛选清掉。它本身**不**显示"被默认选
-    /// 中"的高亮态（不像旧版那样 `isSelected: filterStatus == nil`）：没选状态时
-    /// 它就是默认态的样式，不跟 chips 抢"被默认选中"的视觉语义。
+    /// 「全部」**只在两组筛选都未选**时显示选中态——它代表的是"什么筛选都没开"
+    /// 这个状态，不是"被默认选中"。只要 chips 选中或状态选中，「全部」就
+    /// 退化成普通按钮，不再让人误读为"分组 + 全部"两个都在筛。
     ///
-    /// 计数永远按全量 allWords 算，跟 chips 互不联动——状态和自定义分组是两种
+    /// 计数永远按全量 allWords 算，跟 chips 互不联动。状态和自定义分组是两种
     /// 正交过滤维度，互斥：选一边就把另一边清掉。
     private var statsRow: some View {
         let words = listVM.allWords
         let unknownCount = words.filter { $0.status == "new" }.count
         let fuzzyCount = words.filter { $0.status == "fuzzy" }.count
         let knownCount = words.filter { $0.status == "known" }.count
+        // 三个具体状态磁贴任一被选、或自定义分组被选，「全部」都不应被画上高亮——
+        // 它的"选中"语义是"无筛选"，跟具体筛选互斥。
+        let isAllHighlighted = listVM.filterStatus == nil && listVM.filterPlaylistID == nil
         return HStack(spacing: 12) {
-            // 「全部」磁贴永远不显示选中态——它只承担"重置"动作，不跟具体状态
-            // 抢"被选中"的位置。否则用户点 chips 时它跟着亮起来，会被误读为
-            // "分组 + 全部"两个都在筛。
-            statTile("全部", words.count, Theme.textPrimary, isSelected: false) {
+            statTile("全部", words.count, Theme.textPrimary, isSelected: isAllHighlighted) {
                 listVM.filterStatus = nil
                 listVM.clearPlaylistFilter()
             }

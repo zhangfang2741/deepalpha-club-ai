@@ -5,41 +5,50 @@ import SwiftUI
 ///
 /// 用 NavigationStack + 自定义工具栏实现：原生 sheet 在 iOS 26 上的过渡是底部
 /// 弹起的"卡片"，跟「点的是右侧按钮、看的是右侧抽屉」空间感对不上，用户左右
-/// 行为不连贯。从右侧滑入、点击空白处或拖动右侧把手收起的体验更像音乐 App。
+/// 行为不连贯。从右侧滑入、点击空白处或关闭按钮收起的体验更像音乐 App。
 ///
-/// 列表行加按压反馈：行内 `.pressable` 自带轻量缩放 + 高亮，配合
-/// `simultaneousGesture` 让轻扫不被吞掉（原来只用 button 时没法同时识别
-/// scroll 的滑动手势）。
+/// 列表行使用专门的按钮样式提供轻量按压反馈，滚动手势仍由 ScrollView 管理。
 struct QueueDrawerView: View {
     let words: [VocabularyWord]
     let currentWordID: String?
     let onSelect: (VocabularyWord) -> Void
     let onDismiss: () -> Void
-    /// 抽屉即将出现时调用——用来强制收掉上一页面的键盘（见 ReviewCardView
-    /// .fullScreenCover 处的注释）。不给 onAppear 因为 body 里的 Color 在
-    /// SwiftUI 看来才是根；用 task 在第一帧异步触发一次更稳。
-    var onAppear: (() -> Void)? = nil
 
-    @Environment(\.dismiss) private var dismiss
-    @Namespace private var scrollSpace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isVisible = false
+    @State private var scrollPosition: String?
 
     var body: some View {
-        // fullScreenCover 默认整个画布是黑底，这里自己画一个半透明遮罩 + 右抽屉。
-        // 绕开了系统 sheet 的关闭手势——列表滚动完全归 ScrollView，不再被
-        // 解读成"关闭抽屉"。
-        ZStack(alignment: .leading) {
-            Color.black.opacity(0.45)
-                .ignoresSafeArea()
-                .onTapGesture { onDismiss() }
+        GeometryReader { geometry in
+            let drawerWidth = min(geometry.size.width * 0.88, 380)
 
-            drawer
-                .frame(maxWidth: 380)
-                .frame(maxHeight: .infinity, alignment: .top)
-                .background(Theme.surface)
-                .clipShape(.rect(cornerRadius: 0))
-                .shadow(color: .black.opacity(0.5), radius: 20, x: -4, y: 0)
+            ZStack(alignment: .trailing) {
+                Button(action: dismissDrawer) {
+                    Color.black.opacity(isVisible ? 0.45 : 0)
+                        .ignoresSafeArea()
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("关闭播放队列")
+
+                drawer
+                    .frame(width: drawerWidth)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .background(Theme.surface)
+                    .shadow(color: .black.opacity(0.5), radius: 20, x: -4, y: 0)
+                    .offset(x: reduceMotion || isVisible ? 0 : drawerWidth)
+                    .opacity(reduceMotion && !isVisible ? 0 : 1)
+            }
+            .ignoresSafeArea()
         }
         .preferredColorScheme(.dark)
+        .task {
+            // 等 fullScreenCover 的透明承载层先挂载，再执行自己的右侧入场动画。
+            await Task.yield()
+            withAnimation(presentationAnimation) {
+                isVisible = true
+            }
+        }
+        .accessibilityAction(.escape, dismissDrawer)
     }
 
     private var drawer: some View {
@@ -53,38 +62,35 @@ struct QueueDrawerView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(spacing: 0) {
-                                ForEach(Array(words.enumerated()), id: \.element.id) { index, word in
-                                    QueueDrawerRow(
-                                        word: word,
-                                        index: index,
-                                        isCurrent: word.id == currentWordID
-                                    ) {
-                                        onSelect(word)
-                                    }
-                                    .id(word.id)
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(words.enumerated()), id: \.element.id) { index, word in
+                                QueueDrawerRow(
+                                    word: word,
+                                    index: index,
+                                    isCurrent: word.id == currentWordID
+                                ) {
+                                    select(word)
                                 }
+                                .id(word.id)
                             }
-                            .padding(.vertical, 4)
                         }
-                        .scrollIndicators(.hidden)
-                        // 列表一出现就停在当前词那一行，不用等 onAppear 手动滚。
-                        // 队列可能几百个词，从头滚到当前很慢；defaultScrollAnchor
-                        // 用 proxy 一次性定位。如果用户先已经自己滚到别处再重新
-                        // 打开抽屉（覆盖路径），这个值会再次触发，也合理。
-                        .defaultScrollAnchor(.center)
-                        .onAppear {
-                            guard let currentID = currentWordID else { return }
-                            proxy.scrollTo(currentID, anchor: .center)
-                        }
-                        // 当前词变了跟一次，自动滚到视野中央——连播推进时能看得到。
-                        .onChange(of: currentWordID) { _, newID in
-                            guard let newID else { return }
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                proxy.scrollTo(newID, anchor: .center)
-                            }
+                        .scrollTargetLayout()
+                        .padding(.vertical, 4)
+                    }
+                    .scrollIndicators(.hidden)
+                    .scrollPosition(id: $scrollPosition, anchor: .center)
+                    .task {
+                        // LazyVStack 建立滚动目标后再绑定当前词，首次打开即可直接
+                        // 落在正在播放/听写的行，而不是先显示列表开头。
+                        await Task.yield()
+                        scrollPosition = currentWordID
+                    }
+                    // 抽屉打开期间连播推进时，继续把新当前词带到视野中央。
+                    .onChange(of: currentWordID) { _, newID in
+                        guard let newID else { return }
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            scrollPosition = newID
                         }
                     }
                 }
@@ -109,10 +115,33 @@ struct QueueDrawerView: View {
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("关闭") { onDismiss() }
+                    Button("关闭", action: dismissDrawer)
                         .tint(Theme.accent)
                 }
             }
+        }
+    }
+
+    private var presentationAnimation: Animation {
+        reduceMotion ? .easeOut(duration: 0.15) : .easeOut(duration: 0.28)
+    }
+
+    private func dismissDrawer() {
+        dismissDrawer(completion: onDismiss)
+    }
+
+    private func select(_ word: VocabularyWord) {
+        dismissDrawer {
+            onSelect(word)
+        }
+    }
+
+    private func dismissDrawer(completion: @escaping () -> Void) {
+        guard isVisible else { return }
+        withAnimation(presentationAnimation) {
+            isVisible = false
+        } completion: {
+            completion()
         }
     }
 }
@@ -151,7 +180,7 @@ private struct QueueDrawerRow: View {
                         .font(.body.weight(isCurrent ? .bold : .medium))
                         .foregroundStyle(isCurrent ? Theme.accent : Theme.textPrimary)
                     Text(word.definitionZh)
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(Theme.textSecondary)
                         .lineLimit(1)
                 }
@@ -168,11 +197,12 @@ private struct QueueDrawerRow: View {
         .buttonStyle(QueueRowButtonStyle(isPressed: $isPressed))
         .accessibilityLabel("\(word.word)，\(word.definitionZh)\(isCurrent ? "，正在播放" : "")")
         .accessibilityHint("双击从这个单词开始播放")
+        .accessibilityAddTraits(isCurrent ? [.isSelected] : [])
     }
 
     /// 行底色：当前词用 surfaceAlt 高亮，按压时叠一层主题色 alpha。
     private var rowBackground: some View {
-        Theme.surface
+        (isCurrent ? Theme.surfaceAlt : Theme.surface)
             .overlay(isPressed ? Theme.accent.opacity(0.15) : .clear)
     }
 

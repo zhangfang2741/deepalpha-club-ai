@@ -37,7 +37,8 @@ enum ReviewMode: String, CaseIterable {
         case .smart: return "sparkles"
         case .random: return "shuffle"
         case .hardFirst: return "exclamationmark.triangle.fill"
-        case .sequential: return "chevron.right.2"
+        // 播放条会把两枚 arrow.right 上下并排；这里保留单枚箭头作为系统图标后备。
+        case .sequential: return "arrow.right"
         }
     }
 
