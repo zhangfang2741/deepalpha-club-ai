@@ -75,6 +75,13 @@ actor APIClient {
         return try await send(req)
     }
 
+    func patchJSON<T: Decodable>(_ path: String, body: Encodable) async throws -> T {
+        var req = request(path: path, method: "PATCH")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(AnyEncodable(body))
+        return try await send(req)
+    }
+
     func delete<T: Decodable>(_ path: String) async throws -> T {
         let req = request(path: path, method: "DELETE")
         return try await send(req)

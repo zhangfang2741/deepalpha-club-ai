@@ -30,6 +30,7 @@ from app.schemas.vocabulary import (
     ReviewQueueResponse,
     ReviewSubmitRequest,
     ReviewSubmitResponse,
+    VocabularyStatsResponse,
     VocabularyWordListResponse,
     VocabularyWordResponse,
     WordsBatchCreateRequest,
@@ -328,6 +329,26 @@ async def delete_word_endpoint(
     if not ok:
         raise HTTPException(status_code=404, detail="单词不存在")
     return {"deleted": True}
+
+
+@router.get("/stats", response_model=VocabularyStatsResponse)
+async def vocabulary_stats(
+    user: VocabularyUser = Depends(get_current_vocab_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """生词库计数汇总：待复习数 + 三个状态各多少 + 总数。
+
+    iOS 的播放列表面板要在每个分组旁显示词数，靠这个接口一次拿全，不用把整个
+    生词库拉下来自己数。
+    """
+    stats = await word_service.get_stats(db, user.id)
+    return VocabularyStatsResponse(
+        due_count=stats["due_count"],
+        new_count=stats["new_count"],
+        fuzzy_count=stats["fuzzy_count"],
+        known_count=stats["known_count"],
+        total_count=stats["total_count"],
+    )
 
 
 @router.get("/review/queue", response_model=ReviewQueueResponse)

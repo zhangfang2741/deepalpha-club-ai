@@ -5,10 +5,10 @@ from __future__ import annotations
 import datetime
 import uuid
 
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.vocabulary import VocabularyReviewLog, VocabularyWord
+from app.models.vocabulary import VocabularyPlaylistItem, VocabularyReviewLog, VocabularyWord
 from app.services.vocabulary import sm2
 
 
@@ -135,13 +135,15 @@ async def get_word(session: AsyncSession, user_id: uuid.UUID, word_id: uuid.UUID
 async def delete_word(session: AsyncSession, user_id: uuid.UUID, word_id: uuid.UUID) -> bool:
     """删除单词，成功返回 True，不存在返回 False。
 
-    先删除该单词的复习历史（VocabularyReviewLog 无 ON DELETE CASCADE），
-    否则一旦复习过一次就会因外键约束删不掉。
+    先删除该单词的复习历史和歌单归属（VocabularyReviewLog /
+    VocabularyPlaylistItem 都没有 ON DELETE CASCADE），否则一旦复习过一次、
+    或者被加进过任何一个歌单，就会因外键约束删不掉。
     """
     word = await get_word(session, user_id, word_id)
     if word is None:
         return False
     await session.execute(delete(VocabularyReviewLog).where(VocabularyReviewLog.word_id == word_id))
+    await session.execute(delete(VocabularyPlaylistItem).where(VocabularyPlaylistItem.word_id == word_id))
     await session.delete(word)
     await session.commit()
     return True
@@ -157,6 +159,38 @@ async def get_review_queue(session: AsyncSession, user_id: uuid.UUID) -> list[Vo
     )
     res = await session.execute(stmt)
     return list(res.scalars().all())
+
+
+async def get_stats(session: AsyncSession, user_id: uuid.UUID) -> dict[str, int]:
+    """生词库各分组计数：待复习数 + 三个状态各多少 + 总数。
+
+    两条聚合查询搞定，不把词表本身拉下来——iOS 的播放列表面板每次打开都要这几个
+    数字，传几百条完整词条只为显示四个数太浪费。
+
+    Returns:
+        含 due_count / new_count / fuzzy_count / known_count / total_count 的 dict
+    """
+    now = _naive_utc_now()
+    status_stmt = (
+        select(VocabularyWord.status, func.count(VocabularyWord.id))
+        .where(VocabularyWord.user_id == user_id)
+        .group_by(VocabularyWord.status)
+    )
+    status_res = await session.execute(status_stmt)
+    by_status = {status: count for status, count in status_res.all()}
+
+    due_stmt = select(func.count(VocabularyWord.id)).where(
+        VocabularyWord.user_id == user_id, VocabularyWord.next_review_at <= now
+    )
+    due_res = await session.execute(due_stmt)
+
+    return {
+        "due_count": due_res.scalar_one(),
+        "new_count": by_status.get("new", 0),
+        "fuzzy_count": by_status.get("fuzzy", 0),
+        "known_count": by_status.get("known", 0),
+        "total_count": sum(by_status.values()),
+    }
 
 
 async def submit_review(

@@ -93,3 +93,33 @@ class VocabularyReviewLog(_NaiveTimestampModel, table=True):
     reviewed_at: datetime
     interval_before: int
     interval_after: int
+
+
+class VocabularyPlaylist(_NaiveTimestampModel, table=True):
+    """用户自定义的单词播放列表（「歌单」）。
+
+    首页复习卡的自动播放不再只能播「今日待复习」队列：内置分组（待复习 / 不认识 /
+    模糊 / 认识）由既有查询直接算出来，不落库；只有用户手挑单词攒出来的歌单需要
+    持久化，就是这张表。歌单名在单个用户下唯一，避免出现两个同名歌单分不清。
+    """
+
+    __tablename__ = "vocabulary_playlists"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_vocabulary_playlist_user_name"),)
+
+    user_id: uuid.UUID = Field(..., foreign_key="vocabulary_users.id", index=True)
+    name: str = Field(..., max_length=50)
+
+
+class VocabularyPlaylistItem(_NaiveTimestampModel, table=True):
+    """歌单与单词的关联，position 保存用户在歌单里的手动顺序。
+
+    (playlist_id, word_id) 唯一：同一个词在一个歌单里只该出现一次。position 从 0
+    起连续递增，整体替换词表时按传入数组的下标重写，读取时按它排序。
+    """
+
+    __tablename__ = "vocabulary_playlist_items"
+    __table_args__ = (UniqueConstraint("playlist_id", "word_id", name="uq_vocabulary_playlist_item"),)
+
+    playlist_id: uuid.UUID = Field(..., foreign_key="vocabulary_playlists.id", index=True)
+    word_id: uuid.UUID = Field(..., foreign_key="vocabulary_words.id", index=True)
+    position: int = Field(default=0)

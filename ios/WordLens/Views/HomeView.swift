@@ -4,7 +4,6 @@ import SwiftUI
 struct HomeView: View {
     @StateObject private var listVM = WordListViewModel()
     @EnvironmentObject var nav: AppNavigationState
-    @State private var reviewDueCount = 0
 
     var body: some View {
         NavigationStack {
@@ -18,15 +17,9 @@ struct HomeView: View {
                     .clipShape(.rect(cornerRadius: 8))
                     .onSubmit { Task { await listVM.load() } }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("今日待复习：\(reviewDueCount) 个")
-                        .font(.headline)
-                        .foregroundStyle(Theme.textPrimary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
-                .background(Theme.surface)
-                .clipShape(.rect(cornerRadius: 12))
+                // 「今日待复习：N 个」已移除：这个数字在首页的播放列表面板里
+                // 就有（默认那一行），生词库页只管生词本身，不再重复一份。
+                // 顺带省掉了这个页面每次刷新都要多打的一次 /review/queue。
 
                 // 生词库列表按字母分 Section 展示，需要用 List 自己独立滚动，
                 // 不能再跟上面的卡片一起塞进一个大 ScrollView。
@@ -66,7 +59,6 @@ struct HomeView: View {
 
     private func refreshAll() async {
         await listVM.load()
-        reviewDueCount = (try? await WordService.reviewQueue().count) ?? 0
     }
 
     /// 统计数字本身就是筛选入口——点一个状态直接筛列表，不再跟 WordListView 里
