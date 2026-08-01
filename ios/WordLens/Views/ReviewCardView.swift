@@ -2,9 +2,7 @@
 import SwiftUI
 
 struct ReviewCardView: View {
-    /// 由 MainTabView 持有并注入：tab bar 中间的连播键要操作同一个队列，
-    /// 两边各自 new 一个 ReviewViewModel 会变成两套互不相干的状态。
-    @ObservedObject var viewModel: ReviewViewModel
+    @StateObject private var viewModel = ReviewViewModel()
     @StateObject private var playlistVM = PlaylistViewModel()
     @EnvironmentObject var nav: AppNavigationState
 
@@ -155,10 +153,6 @@ struct ReviewCardView: View {
                         .font(.title3.bold())
                         .foregroundStyle(Theme.textPrimary)
                         .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(Theme.textSecondary)
-                        .rotationEffect(.degrees(showQueueDropdown ? 180 : 0))
                 }
                 .contentShape(.rect)
             }
@@ -202,31 +196,21 @@ struct ReviewCardView: View {
 
                 Spacer(minLength: 24)
 
-                // 底部动作条：回忆阶段是上一/下一（紧凑胶囊，自然宽度，
-                // 居中），翻卡后是评分三档；两者都用 HStack 但不带
-                // .frame(maxWidth: .infinity)，避免拉满整行的"占满感"。
-                if !viewModel.isFlipped {
-                    HStack(spacing: 12) {
-                        prevNextButton("上一个", systemImage: "chevron.left",
-                                       enabled: viewModel.canGoPrevious) {
-                            viewModel.goToPrevious()
-                        }
-                        prevNextButton("下一个", systemImage: "chevron.right",
-                                       iconTrailing: true,
-                                       enabled: viewModel.canGoNext) {
-                            viewModel.goToNext()
-                        }
-                    }
-                    .padding(.bottom, 4)
-                } else {
+                // 翻卡后才出现评分三档，放在播放条上方。
+                if viewModel.isFlipped {
                     HStack(spacing: 10) {
                         ratingButton("😵 不认识", Theme.unknown, .unknown)
                         ratingButton("😐 模糊", Theme.fuzzy, .fuzzy)
                         ratingButton("😊 认识", Theme.known, .known)
                     }
                     .padding(.horizontal)
-                    .padding(.bottom, 4)
                 }
+
+                // 播放条常驻：不管翻没翻卡，上一个/连播/下一个都在同一个位置，
+                // 手指不用重新找。之前是「未翻卡显示上一/下一、翻卡后被评分按钮
+                // 整行替换掉」，连播键还单独浮在别处。
+                transportBar
+                    .padding(.bottom, 4)
 
                 if let errorMessage = viewModel.errorMessage {
                     Text(errorMessage).font(.footnote).foregroundStyle(Theme.unknown)
@@ -284,31 +268,41 @@ struct ReviewCardView: View {
                 }
 
             VStack(spacing: 0) {
-                // 「切换分组」放在下拉框顶部：☰ 是唯一入口，先看到当前队列，
-                // 想换组再往上一层走，层级关系跟用户的心智一致。
+                // 「切换分组」做成实心主题色大按钮：之前是一行淡蓝小字，混在
+                // 下拉框的文字里根本注意不到。这是本下拉框里唯一的"去别处"操作，
+                // 值得用最重的视觉权重，跟下面一列单词明确分层。
                 Button {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                         showQueueDropdown = false
                     }
                     showPlaylistSheet = true
                 } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "square.grid.2x2")
-                            .font(.subheadline)
-                        Text("切换分组")
-                            .font(.subheadline.weight(.semibold))
+                    HStack(spacing: 10) {
+                        Image(systemName: "square.grid.2x2.fill")
+                            .font(.headline)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("切换分组")
+                                .font(.subheadline.weight(.bold))
+                            Text("当前：\(viewModel.selectionName)")
+                                .font(.caption2)
+                                .opacity(0.85)
+                        }
                         Spacer()
                         Image(systemName: "chevron.right")
-                            .font(.caption.weight(.bold))
+                            .font(.footnote.weight(.bold))
                     }
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(.white)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
+                    .background(Theme.accent)
+                    .clipShape(.rect(cornerRadius: 12))
+                    .shadow(color: Theme.accent.opacity(0.35), radius: 6, x: 0, y: 3)
                     .contentShape(.rect)
                 }
-                .buttonStyle(.plain)
-
-                Divider().overlay(Theme.border)
+                .buttonStyle(.pressable)
+                .padding(.horizontal, 10)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
 
                 HStack(spacing: 6) {
                     Text("播放队列")
@@ -401,6 +395,78 @@ struct ReviewCardView: View {
         .accessibilityHint("双击从这个单词开始播放")
     }
 
+    // MARK: - 播放条
+
+    /// 上一个 / 连播 / 下一个 三件一组，做成播放器那样的一整块控件。
+    ///
+    /// 之前这三个是散的：上一/下一是两颗胶囊按钮、还会在翻卡后被评分按钮整行
+    /// 顶掉，连播键则单独浮在别的地方。合成一条常驻的播放条之后，位置永远固定，
+    /// 手指不用每次重新找，跟"这是个播放器"的心智也对得上。
+    private var transportBar: some View {
+        HStack(spacing: 30) {
+            transportButton(
+                "backward.end.fill",
+                label: "上一个",
+                enabled: viewModel.canGoPrevious
+            ) {
+                viewModel.goToPrevious()
+            }
+
+            playCircle
+
+            transportButton(
+                "forward.end.fill",
+                label: "下一个",
+                enabled: viewModel.canGoNext
+            ) {
+                viewModel.goToNext()
+            }
+        }
+        .padding(.horizontal, 26)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
+        .clipShape(.rect(cornerRadius: 26))
+        .overlay {
+            RoundedRectangle(cornerRadius: 26).strokeBorder(Theme.border.opacity(0.6), lineWidth: 1)
+        }
+    }
+
+    /// 中间的连播键：圆底衬一层浅色，播放中换成暂停图标并填成主题色。
+    private var playCircle: some View {
+        let isPlaying = viewModel.autoplay.isPlaying
+        return Button {
+            viewModel.autoplay.toggle()
+        } label: {
+            Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(isPlaying ? .white : Theme.textPrimary)
+                .frame(width: 58, height: 58)
+                .background(
+                    Circle().fill(isPlaying ? Theme.accent : Color.white.opacity(0.14))
+                )
+                .shadow(color: isPlaying ? Theme.accent.opacity(0.4) : .clear, radius: 8, x: 0, y: 3)
+        }
+        .buttonStyle(.pressable)
+        .disabled(viewModel.queue.isEmpty)
+        .accessibilityLabel(isPlaying ? "暂停连播" : "开始连播")
+    }
+
+    private func transportButton(
+        _ systemImage: String, label: String, enabled: Bool, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(enabled ? Theme.textPrimary : Theme.textSecondary.opacity(0.4))
+                // 图标本身远小于 44pt，撑开点按区域到最小可点尺寸。
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.pressable)
+        .disabled(!enabled)
+        .accessibilityLabel(label)
+    }
+
     /// 卡片翻转用两层叠放 + 各自反向补偿旋转，而不是单层直接转 180°：单层转到
     /// 180° 时背面内容会呈现镜像（左右翻转、文字读不出来）。背面预先转 180°
     /// 抵消一次，外层再转 180° 时正好抵消回正常朝向，静止两端（0°/180°）都是
@@ -464,38 +530,6 @@ struct ReviewCardView: View {
         .clipShape(.rect(cornerRadius: 16))
     }
 
-    /// 紧凑胶囊按钮：上一/下一自然宽度（按内容自适应），不再 .frame(maxWidth:
-    /// .infinity) 拉满整行——之前的"实色填充 + 拉满"看着像表单提交按钮，跟卡片
-    /// 视觉重量不平衡、也显得"占满"。胶囊 + 半透明主题色底 + 加粗字重更有
-    /// "控件"的克制感。padding 比评分按钮大一圈，因为切词是复习最高频的操作。
-    private func prevNextButton(
-        _ label: String, systemImage: String, iconTrailing: Bool = false,
-        enabled: Bool, action: @escaping () -> Void
-    ) -> some View {
-        Button {
-            action()
-        } label: {
-            HStack(spacing: 6) {
-                if !iconTrailing { Image(systemName: systemImage) }
-                Text(label)
-                if iconTrailing { Image(systemName: systemImage) }
-            }
-            .font(.subheadline.weight(.semibold))
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
-            .background(enabled ? Theme.accent.opacity(0.15) : Theme.surface)
-            .foregroundStyle(enabled ? Theme.accent : Theme.textSecondary.opacity(0.5))
-            .clipShape(.capsule)
-            .overlay {
-                Capsule().strokeBorder(
-                    enabled ? Theme.accent.opacity(0.3) : .clear,
-                    lineWidth: 1
-                )
-            }
-        }
-        .buttonStyle(.pressable)
-        .disabled(!enabled)
-    }
 
     private func ratingButton(_ label: String, _ color: Color, _ rating: ReviewRating) -> some View {
         Button {
