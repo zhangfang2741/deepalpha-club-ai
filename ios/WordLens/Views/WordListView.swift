@@ -14,6 +14,8 @@ struct WordListView: View {
     /// 多选后「加入歌单」用：面板里挑一个已有歌单，把选中的词并进去。
     @StateObject private var playlistVM = PlaylistViewModel()
     @State private var showPlaylistPicker = false
+    /// 加入分组的结果提示（成功/失败都给一句话），nil 表示不弹。
+    @State private var playlistFeedback: String?
 
     /// 按单词首字母分组，用 Section 标题做 A/B/C 分组展示（不再提供右侧可拖动的
     /// 跳转条，那个反而挡内容）。非字母开头统一归到 "#"。
@@ -162,14 +164,31 @@ struct WordListView: View {
             WordDetailView(word: word, listViewModel: viewModel)
         }
         .sheet(isPresented: $showPlaylistPicker) {
-            PlaylistPickerView(viewModel: playlistVM) { playlistID in
+            PlaylistPickerView(viewModel: playlistVM) { playlist in
                 Task {
                     let wordIDs = Array(viewModel.selectedIDs)
-                    if await playlistVM.addWords(to: playlistID, wordIDs: wordIDs) {
+                    if await playlistVM.addWords(to: playlist.id, wordIDs: wordIDs) {
                         viewModel.toggleSelecting()  // 加完退出多选，跟删除后的行为一致
+                        // 必须广播数据变更：首页那边是另一套 ReviewViewModel /
+                        // PlaylistViewModel 实例，不发通知的话它手里还是加词之前
+                        // 的队列和计数——用户切到这个分组会发现新加的词没出现。
+                        nav.notifyVocabularyDataChanged()
+                        playlistFeedback = "已把 \(wordIDs.count) 个单词加入「\(playlist.name)」"
+                    } else {
+                        // 之前这里失败是完全静默的：既不退出多选也不提示，用户
+                        // 只会觉得"点了没反应"。
+                        playlistFeedback = playlistVM.errorMessage ?? "加入分组失败，请稍后重试"
                     }
                 }
             }
+        }
+        .alert("加入分组", isPresented: Binding(
+            get: { playlistFeedback != nil },
+            set: { if !$0 { playlistFeedback = nil } }
+        )) {
+            Button("好", role: .cancel) { playlistFeedback = nil }
+        } message: {
+            Text(playlistFeedback ?? "")
         }
     }
 

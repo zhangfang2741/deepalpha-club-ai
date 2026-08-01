@@ -1,19 +1,17 @@
 // Views/NowPlayingView.swift
 import SwiftUI
 
-/// 全屏「正在播放」页：顶部横向 chip 切分组，下面直接列出该组的全部单词。
+/// 全屏「切换分组」页：上面是所有分组的标签，下面列出选中那一组有哪些词。
 ///
-/// 之前这里是个底部半屏 sheet，只能选组、看不到组里有什么词。参考音乐 App 的
-/// 正在播放页重做：一屏之内既能换组、也能看到完整队列、还能点任意一个词直接
-/// 跳过去——不用二级跳转。
+/// 这里的词表是**纯展示**——点词不会跳转、也不会开始播放。这一页只干「挑分组」
+/// 一件事，挑完按底部按钮才生效。要跳到某个具体的词，走首页顶部的播放队列下拉
+/// 框（那里才是「当前正在播的队列」）。两件事分开，点错的代价就小。
 struct NowPlayingView: View {
     @ObservedObject var playlistVM: PlaylistViewModel
     @ObservedObject var reviewVM: ReviewViewModel
 
     /// 切换分组：(选中的组, 显示名, 是否立即播放)
     let onSelect: (PlaylistSelection, String, Bool) -> Void
-    /// 点击列表里的某个词，跳到它。
-    let onJump: (VocabularyWord) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var editingPlaylist: Playlist?
@@ -102,7 +100,16 @@ struct NowPlayingView: View {
                 }
             }
             .task { await playlistVM.load() }
-            .refreshable { await playlistVM.load() }
+            .refreshable {
+                await playlistVM.load()
+                // 计数和词表要一起刷：只刷计数会出现「标签写着 5 个、下面列表还是
+                // 空的」这种自相矛盾的状态（在别处往这个分组加过词时就会这样）。
+                if isPreviewingOther, let previewing {
+                    await playlistVM.loadPreview(previewing)
+                } else {
+                    await reviewVM.loadQueue()
+                }
+            }
             .sheet(isPresented: $isCreating) {
                 PlaylistEditorView(playlist: nil, viewModel: playlistVM)
             }
@@ -320,13 +327,10 @@ struct NowPlayingView: View {
     }
 
     private func wordRow(_ word: VocabularyWord, index: Int) -> some View {
-        // 预览别的分组时列表里没有「正在播的词」，也不能点词跳转——那一组还没
-        // 被选定，跳过去无从谈起。想跳先按底部的「切换到这一组」。
+        // 这一页的词表是纯展示，一律不可点：这里的任务只是「挑分组」。跳到某个
+        // 具体的词属于「操作当前队列」，走首页顶部的播放队列下拉框。
         let isCurrent = !isPreviewingOther && word.id == reviewVM.currentWord?.id
-        return Button {
-            guard !isPreviewingOther else { return }
-            onJump(word)
-        } label: {
+        return Group {
             HStack(spacing: 12) {
                 // 正在播的词用声波图标顶替序号，跟音乐 App 一致。
                 Group {
@@ -366,13 +370,11 @@ struct NowPlayingView: View {
                 }
             }
         }
-        .buttonStyle(.pressable)
-        .allowsHitTesting(!isPreviewingOther)
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 3, leading: 20, bottom: 3, trailing: 20))
+        .accessibilityElement(children: .combine)
         .accessibilityLabel("\(word.word)，\(word.definitionZh)\(isCurrent ? "，正在播放" : "")")
-        .accessibilityHint(isPreviewingOther ? "先切换到这一组才能跳转" : "双击跳到这个单词")
     }
 
     private func statusDot(_ status: String) -> some View {

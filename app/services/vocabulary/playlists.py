@@ -160,7 +160,11 @@ async def add_words_to_playlist(
         VocabularyPlaylistItem.playlist_id == playlist_id
     )
     max_res = await session.execute(max_stmt)
-    next_position = (max_res.scalar_one_or_none() or -1) + 1
+    # 空歌单时 max() 返回 NULL，从 0 开始排。这里必须显式判 None 而不是写
+    # `or -1`：已有一个词时 max 就是 0，`0 or -1` 会取到 -1，新词又从 0 开始，
+    # 于是两个词挤在同一个 position 上、顺序变得不确定。
+    max_position = max_res.scalar_one_or_none()
+    next_position = 0 if max_position is None else max_position + 1
 
     for word_id in candidates:
         if word_id in existing_ids:

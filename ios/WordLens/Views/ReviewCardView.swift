@@ -12,6 +12,8 @@ struct ReviewCardView: View {
     @State private var confirmationMessage: String?
     @State private var confirmationColor: Color = .clear
     @State private var showPlaylistSheet = false
+    /// 顶部标题点开的「当前播放队列」下拉框。
+    @State private var showQueueDropdown = false
 
     var body: some View {
         NavigationStack {
@@ -55,6 +57,13 @@ struct ReviewCardView: View {
                     .padding(.top, 8)
                     .allowsHitTesting(false)
                     .frame(maxWidth: .infinity, alignment: .center)
+
+                // 当前播放队列的下拉框：点顶部标题展开，盖在卡片上方。
+                // 放在同一个 top-aligned ZStack 里，位置紧贴导航栏下沿。
+                if showQueueDropdown {
+                    queueDropdown
+                        .zIndex(20)
+                }
             }
             .navigationTitle("")
             // Toolbar-managed title: 用 ToolbarItem(placement: .principal)
@@ -65,14 +74,27 @@ struct ReviewCardView: View {
             // transition 一起 fade, 静止不动.
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    // 标题即「正在播放来自…」：随时能看出当前在背哪一组。
-                    VStack(spacing: 0) {
-                        Text(viewModel.selectionName)
-                            .font(.title2.bold())
-                            .foregroundStyle(Theme.textPrimary)
-                            .lineLimit(1)
-                            .accessibilityAddTraits(.isHeader)
+                    // 标题兼当前播放队列的下拉入口：点一下展开这一组的全部单词，
+                    // 可以直接挑一个从那里开始播。分组名本身也就是「正在播放来自…」。
+                    Button {
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+                            showQueueDropdown.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(viewModel.selectionName)
+                                .font(.title3.bold())
+                                .foregroundStyle(Theme.textPrimary)
+                                .lineLimit(1)
+                            Image(systemName: "chevron.down")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(Theme.accent)
+                                .rotationEffect(.degrees(showQueueDropdown ? 180 : 0))
+                        }
                     }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.queue.isEmpty)
+                    .accessibilityLabel("当前分组 \(viewModel.selectionName)，展开播放队列")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -109,8 +131,8 @@ struct ReviewCardView: View {
                 }
             }
             .refreshable { await viewModel.loadQueue() }
-            // 全屏「正在播放」页而不是半屏 sheet：一屏之内既能换组、也能看到
-            // 当前组的完整词表、还能点任意一个词跳过去。
+            // 全屏「切换分组」页：只管挑分组（词表纯展示）。要跳到某个具体的词
+            // 走顶部标题的播放队列下拉框，两件事分开。
             .fullScreenCover(isPresented: $showPlaylistSheet) {
                 NowPlayingView(
                     playlistVM: playlistVM,
@@ -120,10 +142,6 @@ struct ReviewCardView: View {
                             await viewModel.switchPlaylist(selection, name: name)
                             if playImmediately { viewModel.autoplay.start() }
                         }
-                    },
-                    onJump: { word in
-                        viewModel.jump(to: word)
-                        showPlaylistSheet = false
                     }
                 )
             }
@@ -247,6 +265,115 @@ struct ReviewCardView: View {
     /// （按压有缩放反馈，跟评分按钮手感一致）。之前的 drag 逻辑整段移除——
     /// 浮动 + 长按拖动的定位在滑动列表里 coordinateSpace 容易错乱，用户反馈
     /// "拖动一下乱跑"，干脆不做浮动、不写位置，固定放在卡片下方居中。
+    // MARK: - 播放队列下拉框
+
+    /// 当前分组的完整队列，点任意一个词从那里开始播。
+    ///
+    /// 跟「切换分组」页的职责分开：那一页只管挑分组、词表纯展示；这里才是在操作
+    /// **当前正在播的队列**，所以点词直接生效（跳过去 + 开播），不需要二次确认。
+    private var queueDropdown: some View {
+        ZStack(alignment: .top) {
+            // 点空白处收起。压在面板下面，所以不会挡住面板自己的点击。
+            Color.black.opacity(0.35)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        showQueueDropdown = false
+                    }
+                }
+
+            VStack(spacing: 0) {
+                HStack(spacing: 6) {
+                    Text("播放队列")
+                        .font(.caption.weight(.semibold))
+                    Text("·")
+                    Text("\(viewModel.queue.count) 个")
+                    Spacer()
+                    Text("点单词从那里开始播")
+                        .font(.caption2)
+                }
+                .font(.caption)
+                .foregroundStyle(Theme.textSecondary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+
+                Divider().overlay(Theme.border)
+
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 2) {
+                            ForEach(Array(viewModel.queue.enumerated()), id: \.element.id) { index, word in
+                                queueRow(word, index: index).id(word.id)
+                            }
+                        }
+                        .padding(.vertical, 6)
+                    }
+                    // 队列可能有几百个词，展开时先滚到正在播的那个，省得自己找。
+                    .onAppear {
+                        guard let currentID = viewModel.currentWord?.id else { return }
+                        proxy.scrollTo(currentID, anchor: .center)
+                    }
+                }
+                // 上限约半屏：再高就把卡片整个盖住了，下拉框应当还看得见下面的内容。
+                .frame(maxHeight: 320)
+            }
+            .background(Theme.surface)
+            .clipShape(.rect(cornerRadius: 14))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.border, lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.35), radius: 16, x: 0, y: 8)
+            .padding(.horizontal, 12)
+            .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+
+    private func queueRow(_ word: VocabularyWord, index: Int) -> some View {
+        let isCurrent = word.id == viewModel.currentWord?.id
+        return Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                showQueueDropdown = false
+            }
+            viewModel.jump(to: word, play: true)
+        } label: {
+            HStack(spacing: 10) {
+                Group {
+                    if isCurrent {
+                        Image(systemName: "speaker.wave.2.fill")
+                            .foregroundStyle(Theme.accent)
+                            .symbolEffect(.variableColor.iterative, isActive: viewModel.autoplay.isPlaying)
+                    } else {
+                        Text("\(index + 1)")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
+                .frame(width: 22)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(word.word)
+                        .font(.subheadline.weight(isCurrent ? .bold : .semibold))
+                        .foregroundStyle(isCurrent ? Theme.accent : Theme.textPrimary)
+                    Text(word.definitionZh)
+                        .font(.caption2)
+                        .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Image(systemName: "play.fill")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.accent.opacity(0.7))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(isCurrent ? Theme.surfaceAlt : Color.clear)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(word.word)，\(word.definitionZh)\(isCurrent ? "，正在播放" : "")")
+        .accessibilityHint("双击从这个单词开始播放")
+    }
+
     /// 底部操作条：播放按钮居中不动，分组入口钉在同一行的最左侧。
     ///
     /// 分组入口原来在导航栏左上角，拇指够不着——这一页所有高频操作（切词、评分、

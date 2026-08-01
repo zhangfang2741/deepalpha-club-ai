@@ -153,15 +153,22 @@ final class ReviewViewModel: ObservableObject {
         autoplay.stop()
     }
 
-    /// 从「正在播放」页点某个词直接跳过去。方向按前后关系推，让切卡动画的
-    /// 入场方向跟用户的直觉一致（跳到靠后的词 = 往前走）。
-    /// 跳转视为用户接管节奏，跟手动切词一样停掉连播。
-    func jump(to word: VocabularyWord) {
-        guard let index = queue.firstIndex(where: { $0.id == word.id }), index != currentIndex else { return }
-        transitionDirection = index > currentIndex ? 1 : -1
-        currentIndex = index
-        isFlipped = false
+    /// 跳到队列里的某个词。方向按前后关系推，让切卡动画的入场方向跟用户的直觉
+    /// 一致（跳到靠后的词 = 往前走）。
+    ///
+    /// - Parameter play: true 表示「从这个词开始播」——首页顶部的播放队列下拉框
+    ///   点词就是这个语义。false 只是把卡片翻到那个词。
+    func jump(to word: VocabularyWord, play: Bool = false) {
+        guard let index = queue.firstIndex(where: { $0.id == word.id }) else { return }
+        if index != currentIndex {
+            transitionDirection = index > currentIndex ? 1 : -1
+            currentIndex = index
+            isFlipped = false
+        }
+        // 先停再起：连播状态机正卡在上一个词的某一遍上，不停掉的话新词要等它
+        // 把当前这轮走完才轮得到。
         autoplay.stop()
+        if play { autoplay.start() }
     }
 
     /// 给 .task 用：本次进程只真正加载一次，切 tab 回来时是空操作，不打断

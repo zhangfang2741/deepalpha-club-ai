@@ -7,7 +7,8 @@ import SwiftUI
 /// 时给一个直接新建的入口，免得用户被卡在一个空列表前面。
 struct PlaylistPickerView: View {
     @ObservedObject var viewModel: PlaylistViewModel
-    let onPick: (String) -> Void
+    /// 回传整个 Playlist 而不只是 id：调用方要拿分组名做「已加入「xxx」」的提示。
+    let onPick: (Playlist) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var isCreating = false
@@ -30,7 +31,7 @@ struct PlaylistPickerView: View {
                 } else {
                     List(viewModel.playlists) { playlist in
                         Button {
-                            onPick(playlist.id)
+                            onPick(playlist)
                             dismiss()
                         } label: {
                             HStack {
