@@ -159,48 +159,90 @@ final class Pronouncer: ObservableObject {
         try? AVAudioSession.sharedInstance().setCategory(
             .playback, mode: .spokenAudio, options: []
         )
-        try? AVAudioSession.sharedInstance().setActive(true, options: [])
         setupRemoteCommandCenter()
-        setupNowPlayingObserver()
     }()
 
-    /// 自动播放时让锁屏能看到"正在复习单词 X"。用一个长生命周期 Task
-    /// 监听 `objectWillChange`，每次变化重新 emit 当前 `playingWord`，
-    /// 由调用方（配置初始化时启动）去更新 nowPlayingInfo。
-    private func setupNowPlayingObserver() {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            var lastWord: String?
-            for await _ in self.objectWillChangeStream() {
-                let current = self.playingWord
-                if current != lastWord {
-                    lastWord = current
-                    self.updateNowPlayingInfo(for: current)
-                }
-            }
-        }
+    /// 每次真正要出声之前调一下：category 只需配置一次（`configured`），但
+    /// **激活状态**不是一次性的——`endNowPlayingSession()` 会主动 setActive(false)
+    /// 把音频焦点还给别的 App，之后再点小喇叭就得重新激活，否则静音开关打开时
+    /// 又会没声音。setActive(true) 本身很便宜，重复调用无副作用。
+    private func activateSessionIfNeeded() {
+        _ = configured
+        try? AVAudioSession.sharedInstance().setActive(true, options: [])
     }
 
-    /// `objectWillChange` 的 AsyncStream 包装：SwiftUI 的 ObservableObject
-    /// 在每次 @Published 即将变化时发送一次 `willChange` 通知，Combine
-    /// sink 转 AsyncStream 即可。
-    private func objectWillChangeStream() -> AsyncStream<Void> {
-        AsyncStream { continuation in
-            let cancellable = self.objectWillChange.sink { _ in
-                continuation.yield(())
-            }
-            continuation.onTermination = { _ in
-                cancellable.cancel()
-            }
-        }
+    // MARK: - 锁屏 / 控制中心（Now Playing 会话）
+
+    /// Now Playing 的生命周期跟「一次自动播放会话」绑定，**不是**跟单次音频绑定。
+    ///
+    /// 之前这里挂的是一个监听 `objectWillChange` 的长生命周期 Task：`playingWord`
+    /// 一变就重设 nowPlayingInfo，每个词播完 `playingWord` 变 nil 就把 info 置成
+    /// nil。自动播放每约 1 秒走一轮这个循环，系统于是反复判定「停播 → 又开始播」，
+    /// 锁屏那个播放按钮就在播放/暂停两个图标之间来回闪。
+    ///
+    /// 现在改成显式的三个动作：会话开始建一次、切词只改标题、会话结束才清掉。
+    /// 中间那些「一个词读完了」的空隙对系统完全不可见，按钮自然就稳住了。
+    ///
+    /// 另外，手动点小喇叭发音不会建立会话——单读一个词不该在锁屏留下媒体卡片。
+    private var hasNowPlayingSession = false
+
+    /// 开始一次自动播放会话：锁屏出现媒体卡片，播放键稳定显示为「暂停」。
+    /// - Parameters:
+    ///   - title: 当前单词
+    ///   - subtitle: 播放列表名，让用户在锁屏也知道在播哪一组
+    func beginNowPlayingSession(title: String, subtitle: String) {
+        activateSessionIfNeeded()
+        hasNowPlayingSession = true
+        setRemoteCommandsEnabled(true)
+        var info: [String: Any] = [:]
+        info[MPMediaItemPropertyTitle] = title
+        info[MPMediaItemPropertyArtist] = subtitle
+        // 自动播放没有可 seek 的时间轴（每个词都是独立的短音频），声明成 live
+        // 流，系统就不画进度条、也不会因为 elapsedTime 不推进而判定播放卡住。
+        info[MPNowPlayingInfoPropertyIsLiveStream] = true
+        info[MPNowPlayingInfoPropertyPlaybackRate] = 1.0
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        MPNowPlayingInfoCenter.default().playbackState = .playing
     }
 
+    /// 切到下一个词：只改标题，`playbackState` 原样不动。
+    /// 这是「不闪」的关键——任何对 playbackState 的重设都会让锁屏按钮抖一下。
+    func updateNowPlayingTitle(_ title: String) {
+        guard hasNowPlayingSession else { return }
+        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+        info[MPMediaItemPropertyTitle] = title
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    /// 结束会话：锁屏媒体卡片消失，音频焦点还给别的 App。
+    func endNowPlayingSession() {
+        guard hasNowPlayingSession else { return }
+        hasNowPlayingSession = false
+        setRemoteCommandsEnabled(false)
+        MPNowPlayingInfoCenter.default().playbackState = .stopped
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        // 会话期间独占了音频（category 没开 .mixWithOthers），停下来就该让出去，
+        // 否则用户切回音乐 App 会发现被我们压着。
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    /// 远程命令只在自动播放会话期间可用：常驻 enabled 的话，App 一启动锁屏就
+    /// 可能出现一个什么都控制不了的媒体控件。
+    private func setRemoteCommandsEnabled(_ enabled: Bool) {
+        let center = MPRemoteCommandCenter.shared()
+        center.playCommand.isEnabled = enabled
+        center.pauseCommand.isEnabled = enabled
+        center.nextTrackCommand.isEnabled = enabled
+        center.previousTrackCommand.isEnabled = enabled
+    }
+
+    /// 注册锁屏「播放 / 暂停 / 上一首 / 下一首」的 target（只注册一次，启用与否
+    /// 由 setRemoteCommandsEnabled 控制）。
+    ///
+    /// 这里不直接 import AutoplayController，而是发 Notification 让它自己去响应——
+    /// Pronouncer 是个纯发音器，不该知道什么是「复习」「播放列表」。
     private func setupRemoteCommandCenter() {
         let center = MPRemoteCommandCenter.shared()
-        // 锁屏"播放/暂停/上一首/下一首"按钮 ——
-        // 锁屏点击转发成调用方对应的 stopAutoplay/startAutoplay；
-        // 这里不直接 import ReviewViewModel, 而是发 Notification 让
-        // ReviewViewModel 自己去响应。这样 Pronouncer 不反向依赖具体业务。
         center.playCommand.addTarget { _ in
             NotificationCenter.default.post(name: .pronouncerRemotePlay, object: nil)
             return .success
@@ -209,19 +251,15 @@ final class Pronouncer: ObservableObject {
             NotificationCenter.default.post(name: .pronouncerRemotePause, object: nil)
             return .success
         }
-    }
-
-    /// 更新锁屏/控制中心显示当前播放的单词。题目自动播放复习单词,
-    /// 没有 artwork, 用系统默认占位即可。
-    private func updateNowPlayingInfo(for word: String?) {
-        var info: [String: Any] = [:]
-        if let word {
-            info[MPMediaItemPropertyTitle] = word
-            info[MPMediaItemPropertyArtist] = "鹦鹉学舌 · 自动复习"
-            info[MPNowPlayingInfoPropertyIsLiveStream] = false
-            info[MPNowPlayingInfoPropertyPlaybackRate] = 1.0
+        center.nextTrackCommand.addTarget { _ in
+            NotificationCenter.default.post(name: .pronouncerRemoteNext, object: nil)
+            return .success
         }
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info.isEmpty ? nil : info
+        center.previousTrackCommand.addTarget { _ in
+            NotificationCenter.default.post(name: .pronouncerRemotePrevious, object: nil)
+            return .success
+        }
+        setRemoteCommandsEnabled(false)
     }
 
     /// 仅当用户开启了「自动发音」时才朗读，供复习卡/单词详情出现时调用。
@@ -231,7 +269,7 @@ final class Pronouncer: ObservableObject {
     }
 
     func speak(_ word: String) {
-        _ = configured
+        activateSessionIfNeeded()
         let source = PronunciationSource.current
         let accent = PronunciationAccent.current
         let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)

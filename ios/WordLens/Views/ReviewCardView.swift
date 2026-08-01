@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ReviewCardView: View {
     @StateObject private var viewModel = ReviewViewModel()
+    @StateObject private var playlistVM = PlaylistViewModel()
     @EnvironmentObject var nav: AppNavigationState
 
     /// 评分后顶部浮出的确认 toast：「✓ 已标记为认识」之类，1.2s 自动消失。
@@ -10,6 +11,7 @@ struct ReviewCardView: View {
     /// 已经被接住"的视觉信号，避免连点三档按钮后回不过神来自己评了什么。
     @State private var confirmationMessage: String?
     @State private var confirmationColor: Color = .clear
+    @State private var showPlaylistSheet = false
 
     var body: some View {
         NavigationStack {
@@ -20,17 +22,19 @@ struct ReviewCardView: View {
                     ProgressView().tint(Theme.accent)
                 } else if viewModel.isFinished {
                     // 评分会即时从队列移除词，评完最后一个 queue 就空了——所以"完成"
-                    // 必须在"队列空"之前判断，否则会错显示成"今天没有待复习"。
+                    // 必须在"队列空"之前判断，否则会错显示成"这一组没有词"。
                     ContentUnavailableView(
-                        "今日复习完成 🎉",
+                        viewModel.selection.finishedTitle,
                         systemImage: "star.fill",
                         description: Text("共复习了 \(viewModel.reviewedCount) 个单词")
                     )
                 } else if viewModel.queue.isEmpty {
+                    // 文案跟着当前播放列表走：「今天没有待复习」和「这个歌单还没有
+                    // 单词」是两回事，用同一句会让用户以为哪里出错了。
                     ContentUnavailableView(
-                        "今天没有待复习的单词",
+                        viewModel.selection.emptyTitle,
                         systemImage: "checkmark.circle",
-                        description: Text("去拍照识别一些新单词吧")
+                        description: Text(viewModel.selection.emptyDescription)
                     )
                 } else if let word = viewModel.currentWord {
                     cardContent(word)
@@ -60,11 +64,25 @@ struct ReviewCardView: View {
             // NavigationStack 的 chrome 单独管理, 不跟 cardContent 的
             // transition 一起 fade, 静止不动.
             .toolbar {
+                // 左上角唤出播放列表面板——像音乐 App 的「播放队列」入口。
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showPlaylistSheet = true
+                    } label: {
+                        Image(systemName: "list.bullet")
+                    }
+                    .tint(Theme.accent)
+                    .accessibilityLabel("播放列表")
+                }
                 ToolbarItem(placement: .principal) {
-                    Text("首页")
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(Theme.textPrimary)
-                        .accessibilityAddTraits(.isHeader)
+                    // 标题即「正在播放来自…」：随时能看出当前在背哪一组。
+                    VStack(spacing: 0) {
+                        Text(viewModel.selectionName)
+                            .font(.title2.bold())
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(1)
+                            .accessibilityAddTraits(.isHeader)
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -88,10 +106,30 @@ struct ReviewCardView: View {
                 }
             }
             .task { await viewModel.loadQueueIfNeeded() }
+            .task {
+                // 面板里的歌单名要在首屏就能用（标题显示的是当前组的名字，如果当前
+                // 组是个自定义歌单，名字只能从歌单列表里查）。
+                await playlistVM.load()
+                viewModel.selectionName = playlistVM.name(for: viewModel.selection)
+            }
             .onChange(of: nav.vocabularyDataVersion) { _, _ in
-                Task { await viewModel.loadQueue() }
+                Task {
+                    await viewModel.loadQueue()
+                    await playlistVM.load()
+                }
             }
             .refreshable { await viewModel.loadQueue() }
+            .sheet(isPresented: $showPlaylistSheet) {
+                PlaylistSheetView(
+                    viewModel: playlistVM,
+                    current: viewModel.selection
+                ) { selection, name, playImmediately in
+                    Task {
+                        await viewModel.switchPlaylist(selection, name: name)
+                        if playImmediately { viewModel.autoplay.start() }
+                    }
+                }
+            }
             // 自动播放 FAB 用 .safeAreaInset 钉在 NavigationStack 底部 ——
             // 之前放在 body ZStack 里 + Theme.background.ignoresSafeArea() 共存时,
             // SwiftUI 在 Prepare build 阶段预渲染 view tree 时, FAB 的
@@ -185,7 +223,7 @@ struct ReviewCardView: View {
     }
 
     /// 进度行：从 cardContent 抽出来作为独立的 outer 节点，通过 safeAreaInset
-    /// 钉死位置，不会参与切词 transition，每次 currentIndex / autoplayPassIndex
+    /// 钉死位置，不会参与切词 transition，每次 currentIndex / passIndex
     /// 变化只 diff 内部 Text 数字，不会有 fade/scale 入场动画，肉眼看就是纯数字
     /// 改变、不闪动。
     private var progressBar: some View {
@@ -195,14 +233,14 @@ struct ReviewCardView: View {
             Text("\(viewModel.reviewedCount + viewModel.currentIndex + 1) / \(viewModel.totalCount)")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(Theme.textSecondary)
-            if viewModel.isAutoplay {
+            if viewModel.autoplay.isPlaying {
                 Text("·")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(Theme.textSecondary)
                 HStack(spacing: 4) {
                     Image(systemName: "speaker.wave.2.fill")
                         .font(.caption2)
-                    Text("第 \(viewModel.autoplayPassIndex + 1) / 3 遍")
+                    Text("第 \(viewModel.autoplay.passIndex + 1) / \(AutoplayController.passCount) 遍")
                 }
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Theme.accent)
@@ -215,25 +253,22 @@ struct ReviewCardView: View {
     /// 浮动 + 长按拖动的定位在滑动列表里 coordinateSpace 容易错乱，用户反馈
     /// "拖动一下乱跑"，干脆不做浮动、不写位置，固定放在卡片下方居中。
     private var autoplayButton: some View {
-        Button {
-            if viewModel.isAutoplay {
-                viewModel.stopAutoplay()
-            } else {
-                viewModel.startAutoplay()
-            }
+        let isPlaying = viewModel.autoplay.isPlaying
+        return Button {
+            viewModel.autoplay.toggle()
         } label: {
-            Image(systemName: viewModel.isAutoplay ? "stop.fill" : "play.fill")
+            Image(systemName: isPlaying ? "stop.fill" : "play.fill")
                 .font(.title2.weight(.bold))
                 .foregroundStyle(.white)
                 .frame(width: 64, height: 64)
                 .background(
-                    Circle().fill(viewModel.isAutoplay ? Theme.unknown : Theme.accent)
+                    Circle().fill(isPlaying ? Theme.unknown : Theme.accent)
                 )
-                .shadow(color: (viewModel.isAutoplay ? Theme.unknown : Theme.accent).opacity(0.4),
+                .shadow(color: (isPlaying ? Theme.unknown : Theme.accent).opacity(0.4),
                         radius: 8, x: 0, y: 4)
         }
         .buttonStyle(.pressable)
-        .accessibilityLabel(viewModel.isAutoplay ? "停止自动播放" : "开始自动播放")
+        .accessibilityLabel(isPlaying ? "停止自动播放" : "开始自动播放")
         .accessibilityAddTraits(.isButton)
     }
 

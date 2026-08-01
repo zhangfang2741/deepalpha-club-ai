@@ -11,6 +11,9 @@ struct WordListView: View {
     /// statusDot 挤在一起显得乱，改成手动导航就没有这个箭头。
     @State private var selectedWord: VocabularyWord?
     @State private var showDeleteConfirm = false
+    /// 多选后「加入歌单」用：面板里挑一个已有歌单，把选中的词并进去。
+    @StateObject private var playlistVM = PlaylistViewModel()
+    @State private var showPlaylistPicker = false
 
     /// 按单词首字母分组，用 Section 标题做 A/B/C 分组展示（不再提供右侧可拖动的
     /// 跳转条，那个反而挡内容）。非字母开头统一归到 "#"。
@@ -97,6 +100,22 @@ struct WordListView: View {
                 }
 
                 if viewModel.isSelecting && !viewModel.selectedIDs.isEmpty {
+                    // 复用已有的多选基建（isSelecting / selectedIDs），
+                    // 只是多给一个去处：除了删除，也能把选中的词并进歌单。
+                    Button {
+                        showPlaylistPicker = true
+                    } label: {
+                        Label("加入歌单 (\(viewModel.selectedIDs.count))", systemImage: "text.badge.plus")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Theme.accent.opacity(0.15))
+                            .foregroundStyle(Theme.accent)
+                            .clipShape(.rect(cornerRadius: 10))
+                    }
+                    .buttonStyle(.pressable)
+                    .disabled(viewModel.isDeletingSelected)
+
                     Button(role: .destructive) {
                         showDeleteConfirm = true
                     } label: {
@@ -141,6 +160,16 @@ struct WordListView: View {
         }
         .navigationDestination(item: $selectedWord) { word in
             WordDetailView(word: word, listViewModel: viewModel)
+        }
+        .sheet(isPresented: $showPlaylistPicker) {
+            PlaylistPickerView(viewModel: playlistVM) { playlistID in
+                Task {
+                    let wordIDs = Array(viewModel.selectedIDs)
+                    if await playlistVM.addWords(to: playlistID, wordIDs: wordIDs) {
+                        viewModel.toggleSelecting()  // 加完退出多选，跟删除后的行为一致
+                    }
+                }
+            }
         }
     }
 

@@ -30,6 +30,8 @@ from app.models.supply_chain_node import SupplyChainNode  # noqa: F401
 from app.models.supply_chain_run import SupplyChainRun  # noqa: F401
 from app.models.supply_chain_task import SupplyChainTask  # noqa: F401
 from app.models.vocabulary import (  # noqa: F401
+    VocabularyPlaylist,
+    VocabularyPlaylistItem,
     VocabularyReviewLog,
     VocabularyUser,
     VocabularyWord,

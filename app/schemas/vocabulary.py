@@ -152,3 +152,52 @@ class ReviewSubmitResponse(BaseResponse):
     """提交复习结果后的最新单词状态。"""
 
     word: VocabularyWordResponse
+
+
+class VocabularyStatsResponse(BaseResponse):
+    """生词库计数汇总，供 iOS 播放列表面板一次性展示各分组的词数。
+
+    没有它的话客户端得把整个生词库拉下来自己数，播放列表面板每次打开都要传
+    几百条词的完整 payload 只为了显示四个数字。
+    """
+
+    due_count: int
+    new_count: int
+    fuzzy_count: int
+    known_count: int
+    total_count: int
+
+
+class PlaylistResponse(BaseResponse):
+    """自定义歌单（含词数）。"""
+
+    id: uuid.UUID
+    name: str
+    word_count: int
+    created_at: datetime
+
+
+class PlaylistListResponse(BaseResponse):
+    """歌单列表。"""
+
+    playlists: list[PlaylistResponse]
+
+
+class PlaylistCreateRequest(BaseModel):
+    """新建歌单。word_ids 可以为空，先建空歌单再往里加词也是合理流程。"""
+
+    name: str = Field(..., min_length=1, max_length=50)
+    word_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
+class PlaylistUpdateRequest(BaseModel):
+    """改名 / 整体替换词表。两个字段都可选，传 None 表示这一项不动。"""
+
+    name: str | None = Field(default=None, min_length=1, max_length=50)
+    word_ids: list[uuid.UUID] | None = Field(default=None)
+
+
+class PlaylistAddWordsRequest(BaseModel):
+    """把一批词并入歌单末尾（生词库多选「加入歌单」用）。"""
+
+    word_ids: list[uuid.UUID] = Field(..., min_length=1)
