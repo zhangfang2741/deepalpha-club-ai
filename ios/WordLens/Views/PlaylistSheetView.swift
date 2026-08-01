@@ -40,7 +40,7 @@ struct PlaylistSheetView: View {
                     }
                 }
 
-                Section("我的歌单") {
+                Section("自定义") {
                     ForEach(viewModel.playlists) { playlist in
                         row(.custom(playlist.id), label: playlist.name, color: Theme.textPrimary)
                             .swipeActions(edge: .trailing) {
