@@ -26,7 +26,7 @@ from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 
 from app.core.logging import logger
-from app.services.llm.service import llm_service
+from app.services.llm.service import LLMQuotaExhausted, llm_service
 
 _T = TypeVar("_T", bound=BaseModel)
 
@@ -134,10 +134,20 @@ class RecognitionFailedError(Exception):
     """图片识别失败（LLM 调用异常）。"""
 
 
+class RecognitionQuotaExhaustedError(RecognitionFailedError):
+    """LLM 账号额度用尽。
+
+    单独成一类，是因为它和其它识别失败在「用户该怎么办」上完全不同：重拍、
+    换图、稍后重试都没有用，只有补额度才行。做成 `RecognitionFailedError`
+    的子类，既有的兜底捕获不会漏接。
+    """
+
+
 async def _call_with_retry(message: HumanMessage, response_format: type[_T]) -> _T:
     """带重试的结构化输出调用：处理"异常"和"模型没走工具调用返回 None"两种失败。
 
     Raises:
+        RecognitionQuotaExhaustedError: 账号额度用尽，不重试。
         RecognitionFailedError: 重试耗尽仍未拿到结果。
     """
     for attempt in range(1, _MAX_ATTEMPTS + 1):
@@ -148,6 +158,10 @@ async def _call_with_retry(message: HumanMessage, response_format: type[_T]) -> 
                 response_format=response_format,
                 max_tokens=_MAX_TOKENS,
             )
+        except LLMQuotaExhausted as exc:
+            # 额度用尽是终态：再跑一轮只会让用户多等十几秒，仍旧失败。
+            logger.error("vocabulary_recognize_quota_exhausted", attempt=attempt)
+            raise RecognitionQuotaExhaustedError("LLM 账号额度已用尽") from exc
         except Exception as exc:
             logger.exception("vocabulary_recognize_llm_call_failed", attempt=attempt)
             if attempt == _MAX_ATTEMPTS:

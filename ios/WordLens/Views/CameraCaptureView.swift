@@ -70,25 +70,7 @@ struct CameraCaptureView: View {
             .navigationTitle("拍照录入")
             .sheet(isPresented: $showCameraSheet) {
                 CameraPicker { image in
-                    Task {
-                        // 缩放+压缩是 CPU 密集操作，放主线程做会在点「使用照片」的瞬间卡一下
-                        // （尤其真机原图有几千万像素）。先立刻显示识别中状态，压缩本身丢到
-                        // Task.detached 的后台线程池执行，避免阻塞 UI。
-                        viewModel.isRecognizing = true
-                        let (thumbnail, data, ocrWords) = await Task.detached(priority: .userInitiated) {
-                            (
-                                Self.resizedImage(from: image, maxDimension: 600),
-                                Self.compressedJPEGData(from: image),
-                                await TextRecognizer.recognizeWords(from: image)
-                            )
-                        }.value
-                        viewModel.capturedImage = thumbnail
-                        guard let data else {
-                            viewModel.isRecognizing = false
-                            return
-                        }
-                        await viewModel.recognize(imageData: data, ocrWords: ocrWords)
-                    }
+                    Task { await process(image) }
                 }
                 .ignoresSafeArea()
             }
@@ -96,25 +78,14 @@ struct CameraCaptureView: View {
                 guard let newItem else { return }
                 Task {
                     viewModel.isRecognizing = true
-                    guard let rawData = try? await newItem.loadTransferable(type: Data.self) else {
+                    guard let rawData = try? await newItem.loadTransferable(type: Data.self),
+                          let image = UIImage(data: rawData)
+                    else {
                         viewModel.isRecognizing = false
                         return
                     }
                     photoPickerItem = nil
-                    let (thumbnail, data, ocrWords) = await Task.detached(priority: .userInitiated) { () -> (UIImage?, Data?, [String]) in
-                        guard let image = UIImage(data: rawData) else { return (nil, nil, []) }
-                        return (
-                            Self.resizedImage(from: image, maxDimension: 600),
-                            Self.compressedJPEGData(from: image),
-                            await TextRecognizer.recognizeWords(from: image)
-                        )
-                    }.value
-                    viewModel.capturedImage = thumbnail
-                    guard let data else {
-                        viewModel.isRecognizing = false
-                        return
-                    }
-                    await viewModel.recognize(imageData: data, ocrWords: ocrWords)
+                    await process(image)
                 }
             }
             .sheet(isPresented: $viewModel.showResult) {
@@ -127,6 +98,37 @@ struct CameraCaptureView: View {
                     .interactiveDismissDisabled(true)
             }
         }
+    }
+
+    /// 拍照/选图共用的预处理 + 识别入口。
+    ///
+    /// 缩放、压缩、OCR 都是 CPU 密集操作，放主线程做会在点「使用照片」的瞬间卡
+    /// 一下（真机原图几千万像素）。先立刻切到识别中状态，重活丢到 Task.detached
+    /// 的后台线程池，避免阻塞 UI。
+    private func process(_ image: UIImage) async {
+        viewModel.isRecognizing = true
+        let (thumbnail, data, ocrWords) = await Task.detached(priority: .userInitiated) {
+            () -> (UIImage?, Data?, [String]) in
+            // 只对原图解码/重绘一次，之后所有派生物都基于这张 1600px 的图。
+            // 之前缩略图、上传图、OCR 各自从原图重绘一遍，同一时刻内存里会有三份
+            // 大位图——注释里提过的内存看门狗 SIGKILL 就是这么来的。
+            let uploadImage = Self.resizedImage(from: image, maxDimension: 1600)
+            return (
+                Self.resizedImage(from: uploadImage, maxDimension: 600),
+                Self.compressedJPEGData(from: uploadImage),
+                // OCR 也喂这张 1600px 的图而不是原图：后端视觉模型看到的就是它，
+                // 两边输入一致；印刷体英文单词在 1600px 下完全够认，而 .accurate
+                // 级别的耗时和内存都随像素数增长，原图纯属白烧。
+                await TextRecognizer.recognizeWords(from: uploadImage)
+            )
+        }.value
+        viewModel.capturedImage = thumbnail
+        guard let data else {
+            viewModel.isRecognizing = false
+            viewModel.errorMessage = "照片处理失败，请重新拍摄"
+            return
+        }
+        await viewModel.recognize(imageData: data, ocrWords: ocrWords)
     }
 
     /// 等比缩放到最长边不超过 maxDimension。真机原图解码成 UIImage 后在内存里可能

@@ -15,42 +15,36 @@ from typing import (
 
 from langchain_core.language_models import LanguageModelInput
 from langchain_core.messages import BaseMessage
-from openai import (
-    APIError,
-    APITimeoutError,
-    OpenAIError,
-    RateLimitError,
-)
+from openai import OpenAIError
 from pydantic import BaseModel
 from tenacity import (
     before_sleep_log,
     retry,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
 
 from app.core.config import settings
 from app.core.logging import logger
+from app.services.llm.errors import is_provider_error, is_quota_exhausted, is_retryable
 from app.services.llm.registry import llm_registry
 
 T = TypeVar("T", bound=BaseModel)
 
 
 class LLMQuotaExhausted(OpenAIError):
-    """A provider's long-window quota is exhausted."""
+    """A provider's long-window quota is exhausted.
+
+    保持继承 ``OpenAIError`` 以兼容既有调用方（``app/tasks/supply_chain.py``），
+    但判定本身已经与供应商 SDK 解耦——见 ``app.services.llm.errors``。
+    """
 
     def __init__(self, provider: str, retry_after_hint: int | None = None) -> None:
         """Record provider identity and an optional retry window."""
         self.provider = provider
         self.retry_after_hint = retry_after_hint
         super().__init__(f"{provider} quota exhausted")
-
-
-def _is_quota_exhausted(error: RateLimitError) -> bool:
-    message = str(error).lower()
-    keywords = ("quota", "5 hour", "5-hour", "5 小时", "rate limit window", "insufficient_quota")
-    return any(keyword in message for keyword in keywords)
 
 
 class LLMService:
@@ -194,7 +188,10 @@ class LLMService:
     @retry(
         stop=stop_after_attempt(settings.MAX_LLM_CALL_RETRIES),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((RateLimitError, APITimeoutError, APIError)),
+        # 按「行为」而不是「异常类型」决定是否重试。用 retry_if_exception_type 挂
+        # 具体 SDK 的类，换供应商后会静默失效——实测 LLM_PROVIDER=claude 时
+        # anthropic 的异常一个都匹配不上，重试与 fallback 全成了死代码。
+        retry=retry_if_exception(is_retryable),
         before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
@@ -209,31 +206,38 @@ class LLMService:
             The runnable's response (``BaseMessage`` or a ``BaseModel`` instance).
 
         Raises:
-            OpenAIError: Propagated after all retry attempts are exhausted.
+            LLMQuotaExhausted: 账号额度用尽——重试与换模型都救不了，立刻抛出。
+            Exception: 其余供应商错误在重试耗尽后原样向上传。
         """
         try:
             response = await llm.ainvoke(messages)
             logger.debug("llm_call_successful")
             return response
-        except RateLimitError as e:
-            if _is_quota_exhausted(e):
-                raise LLMQuotaExhausted(settings.LLM_PROVIDER, settings.SUPPLY_CHAIN_QUOTA_WINDOW_SECONDS) from e
-            logger.warning("llm_call_failed_retrying", error_type=type(e).__name__, error=str(e), exc_info=True)
-            raise
-        except (APITimeoutError, APIError) as e:
-            logger.warning(
-                "llm_call_failed_retrying",
-                error_type=type(e).__name__,
-                error=str(e),
-                exc_info=True,
-            )
-            raise
-        except OpenAIError as e:
-            logger.error(
-                "llm_call_failed",
-                error_type=type(e).__name__,
-                error=str(e),
-            )
+        except Exception as e:
+            if is_quota_exhausted(e):
+                # 额度用尽是终态：继续重试只会让调用方多等几十秒，再收到一句
+                # 语焉不详的失败。转成带类型的异常，让上层能如实告诉用户。
+                logger.error(
+                    "llm_quota_exhausted",
+                    provider=settings.LLM_PROVIDER,
+                    error=str(e),
+                )
+                raise LLMQuotaExhausted(
+                    settings.LLM_PROVIDER, settings.SUPPLY_CHAIN_QUOTA_WINDOW_SECONDS
+                ) from e
+            if is_retryable(e):
+                logger.warning(
+                    "llm_call_failed_retrying",
+                    error_type=type(e).__name__,
+                    error=str(e),
+                    exc_info=True,
+                )
+            else:
+                logger.error(
+                    "llm_call_failed",
+                    error_type=type(e).__name__,
+                    error=str(e),
+                )
             raise
 
     def _switch_to_next_model(self) -> bool:
@@ -340,16 +344,27 @@ class LLMService:
         current = start
         models_tried = 0
         last_error: Optional[Exception] = None
-        quota_errors: list[LLMQuotaExhausted] = []
 
         for models_tried in range(1, total + 1):
             current_name = llm_registry.LLMS[current]["name"]
             try:
                 return await self._invoke_with_retry(get_target(current), messages)
-            except OpenAIError as e:
+            except LLMQuotaExhausted:
+                # 额度是账号级的，注册表里的模型共用同一个 key——换模型同样会被
+                # 拒。立刻抛出，别让调用方为一个注定失败的轮换白等一轮。
+                logger.error(
+                    "llm_quota_exhausted_aborting_fallback",
+                    model=current_name,
+                    models_tried=models_tried,
+                    total_models=total,
+                )
+                raise
+            except Exception as e:
+                if not is_provider_error(e):
+                    # 我们自己的代码 bug（如模型名拼错）不该被 fallback 吞掉，
+                    # 换个模型重试只会把真正的错误藏得更深。
+                    raise
                 last_error = e
-                if isinstance(e, LLMQuotaExhausted):
-                    quota_errors.append(e)
                 logger.error(
                     "llm_call_failed_after_retries",
                     model=current_name,
@@ -368,8 +383,6 @@ class LLMService:
                     break
                 current = next_idx
 
-        if len(quota_errors) == total:
-            raise quota_errors[-1]
         raise RuntimeError(
             f"failed to get response from llm after trying {models_tried} models. last error: {str(last_error)}"
         )

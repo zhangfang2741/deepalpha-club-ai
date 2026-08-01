@@ -46,16 +46,16 @@ enum PronunciationRate: String, CaseIterable {
     /// `AVAudioPlayer.rate` 倍速（有效范围约 0.5–2.0）。
     ///
     /// MiniMax 的 fluent 整句在原始 1.0 倍下比有道词典音更紧凑，因此例句使用
-    /// 独立校准后的倍率。“正常”降到 0.88，既保留自然连读，也更适合学习时跟读；
+    /// 独立校准后的倍率。“正常”使用 0.85，既保留自然连读，也更适合学习时跟读；
     /// 该调整发生在播放端，已经缓存的例句同样生效，不会重新消耗合成额度。
     func playbackRate(for purpose: PronunciationPurpose) -> Float {
         switch (purpose, self) {
         case (.word, .slow): return 0.75
         case (.word, .normal): return 1.0
         case (.word, .fast): return 1.35
-        case (.sentence, .slow): return 0.70
-        case (.sentence, .normal): return 0.88
-        case (.sentence, .fast): return 1.15
+        case (.sentence, .slow): return 0.60
+        case (.sentence, .normal): return 0.85
+        case (.sentence, .fast): return 1.0
         }
     }
 }
@@ -502,11 +502,20 @@ final class Pronouncer: ObservableObject {
         do {
             let newPlayer = try AVAudioPlayer(data: data)
             newPlayer.delegate = delegate
-            // enableRate 必须在 play() 前打开，rate 才会生效（同一份 mp3 变速播放）。
+            // Apple 要求 enableRate 必须在 prepareToPlay() 前打开。显式预缓冲后
+            // 再设置 rate，避免由 play() 隐式准备时难以判断倍率是否真正进入播放器。
             newPlayer.enableRate = true
+            guard newPlayer.prepareToPlay() else {
+                handleFinished()
+                return
+            }
             newPlayer.rate = PronunciationRate.current.playbackRate(for: purpose)
             player = newPlayer
-            newPlayer.play()
+            guard newPlayer.play() else {
+                player = nil
+                handleFinished()
+                return
+            }
         } catch {
             // 缓存损坏或响应并非有效音频时结束本次播放；不再回退到已删除的系统语音。
             handleFinished()

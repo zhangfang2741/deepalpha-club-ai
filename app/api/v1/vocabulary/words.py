@@ -41,6 +41,7 @@ from app.schemas.vocabulary import (
 from app.services.vocabulary import words as word_service
 from app.services.vocabulary.recognizer import (
     RecognitionFailedError,
+    RecognitionQuotaExhaustedError,
     RecognizedWord,
     recognize_words_from_image,
 )
@@ -66,6 +67,10 @@ router = APIRouter()
 # 边缘代理硬限制之下. 余量更宽, 偶尔重压缩质量稍微跑偏也不会被拒.
 _MAX_IMAGE_BYTES = 900 * 1024  # 900KB，对齐边缘代理约 1MB 的硬限制
 _RECOGNIZE_HEARTBEAT_SECONDS = 5.0
+
+# 额度用尽时的用户文案。刻意不写「请重新拍摄」——重拍、换图、稍后再试都救不了，
+# 只有补额度才行。说清楚才不会让用户对着同一张图反复试到失去耐心。
+_QUOTA_ERROR_MESSAGE = "AI 识别额度已用完，请补充额度后再试"
 
 
 def _build_recognize_response(recognized: list[RecognizedWord], existing_words: set[str]) -> RecognizeResponse:
@@ -141,6 +146,14 @@ async def _stream_recognition_events(
 
         response = _build_recognize_response(task.result(), existing_words)
         yield RecognizeStreamEvent(type="result", data=response).model_dump_json(exclude_none=True) + "\n"
+    except RecognitionQuotaExhaustedError:
+        # 必须排在 RecognitionFailedError 之前（它是子类）。额度问题重拍没有用，
+        # 文案要说清楚，别让用户对着同一张图反复重试。
+        logger.error("vocabulary_recognize_quota_exhausted_stream")
+        yield (
+            RecognizeStreamEvent(type="error", message=_QUOTA_ERROR_MESSAGE).model_dump_json(exclude_none=True)
+            + "\n"
+        )
     except RecognitionFailedError:
         yield (
             RecognizeStreamEvent(type="error", message="识别失败，请重新拍摄").model_dump_json(exclude_none=True)
@@ -194,6 +207,10 @@ async def recognize(
         recognized = await recognize_words_from_image(
             image_bytes, image.content_type or "image/jpeg", ocr_hint=ocr_words
         )
+    except RecognitionQuotaExhaustedError as exc:
+        # 503 而不是 502：这不是上游坏了，而是我们这边的额度用完了，语义上更接近
+        # 「服务暂时不可用」。必须排在 RecognitionFailedError 之前（它是子类）。
+        raise HTTPException(status_code=503, detail=_QUOTA_ERROR_MESSAGE) from exc
     except RecognitionFailedError as exc:
         raise HTTPException(status_code=502, detail="识别失败，请重新拍摄") from exc
 

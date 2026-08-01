@@ -14,19 +14,31 @@ enum TextRecognizer {
     ///
     /// OCR 抠不到任何词时返回空数组，调用方据此回退到「让 LLM 直接看图识别」，
     /// 保证模糊/手写等 Vision 不擅长的场景不漏。
+    /// OCR 的兜底超时。Vision 正常几百毫秒就返回，超过这个时间基本可以认定
+    /// 它卡住了——而 OCR 只是"锦上添花"的参考线索，超时就交空数组给后端退化成
+    /// 纯看图识别，识别质量略降但流程不断。
+    ///
+    /// 没有这道兜底时的实际后果：调用方已经把 `isRecognizing` 置成 true，扫描
+    /// 动画在转，但请求还没发出去——Vision 一卡就是"一直转、没进度、没结果、
+    /// 也不报错"，用户完全看不出发生了什么。
+    static let ocrTimeout: TimeInterval = 8
+
     static func recognizeWords(from imageData: Data) async -> [String] {
         guard let image = UIImage(data: imageData) else { return [] }
         return await recognizeWords(from: image)
     }
 
-    static func recognizeWords(from image: UIImage) async -> [String] {
+    static func recognizeWords(from image: UIImage, timeout: TimeInterval = ocrTimeout) async -> [String] {
         guard let cgImage = image.cgImage else { return [] }
         let orientation = CGImagePropertyOrientation(image.imageOrientation)
         let lines: [String] = await withCheckedContinuation { continuation in
+            // 三个来源（识别完成 / perform 抛错 / 超时）竞争同一个 continuation，
+            // 谁先到谁算数。多次 resume 是 Swift 运行时的致命错误，必须加锁去重。
+            let resumer = SingleResumer(continuation)
+
             let request = VNRecognizeTextRequest { request, _ in
                 let observations = request.results as? [VNRecognizedTextObservation] ?? []
-                let texts = observations.flatMap { $0.topCandidates(3).map(\.string) }
-                continuation.resume(returning: texts)
+                resumer.resume(with: observations.flatMap { $0.topCandidates(3).map(\.string) })
             }
             // .accurate 对印刷体识别率最高；开启语言纠正减少 OCR 拼写噪声。
             request.recognitionLevel = .accurate
@@ -39,8 +51,14 @@ enum TextRecognizer {
                 do {
                     try handler.perform([request])
                 } catch {
-                    continuation.resume(returning: [])
+                    resumer.resume(with: [])
                 }
+            }
+
+            // 超时兜底。Vision 的 perform 不响应取消，超时后它那条后台线程还会
+            // 跑完，但结果会被 SingleResumer 丢弃，不影响已经继续往下走的主流程。
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + timeout) {
+                resumer.resume(with: [])
             }
         }
 
@@ -68,6 +86,28 @@ enum TextRecognizer {
             }
         }
         return result
+    }
+}
+
+/// 保证 `CheckedContinuation` 只被 resume 一次。
+///
+/// Vision 的完成回调、`perform` 的抛错分支和超时定时器分别跑在不同线程上，都
+/// 可能先到；`CheckedContinuation` 被 resume 第二次会直接 crash，所以用锁 +
+/// 标志位做一次性闸门。
+private final class SingleResumer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<[String], Never>?
+
+    init(_ continuation: CheckedContinuation<[String], Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(with value: [String]) {
+        lock.lock()
+        let pending = continuation
+        continuation = nil
+        lock.unlock()
+        pending?.resume(returning: value)
     }
 }
 
