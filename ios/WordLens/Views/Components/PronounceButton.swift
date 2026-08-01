@@ -119,6 +119,8 @@ final class Pronouncer: ObservableObject {
     /// 必须持有强引用，否则 AVAudioPlayer 会被立即释放、还没出声就停了。
     private var player: AVAudioPlayer?
     private let session = URLSession(configuration: .default)
+    private var requestTask: URLSessionDataTask?
+    private var playbackRequestID = UUID()
     private lazy var delegate = PlaybackDelegate(owner: self)
 
     /// 不配置 AVAudioSession 的话，手机静音开关打开时会完全不出声——这是点小喇叭
@@ -258,6 +260,7 @@ final class Pronouncer: ObservableObject {
     /// 「正在播音频」：音频一停 iOS 立刻挂起它，卡片也没了，用户看到的就是
     /// 「点了暂停整个 App 就退出了」。
     func pauseNowPlayingSession() {
+        stopCurrentPlayback()
         guard hasNowPlayingSession else { return }
         var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
         info[MPNowPlayingInfoPropertyPlaybackRate] = 0.0
@@ -279,6 +282,7 @@ final class Pronouncer: ObservableObject {
 
     /// 结束会话：锁屏媒体卡片消失，音频焦点还给别的 App。
     func endNowPlayingSession() {
+        stopCurrentPlayback()
         guard hasNowPlayingSession else { return }
         hasNowPlayingSession = false
         stopKeepAlive()
@@ -341,13 +345,17 @@ final class Pronouncer: ObservableObject {
             playingWord = nil
             return
         }
+        stopCurrentPlayback()
+        let requestID = UUID()
+        playbackRequestID = requestID
         playingWord = trimmed.lowercased()
 
         fetchAndPlay(
             trimmed,
             chain: Self.fallbackChain(startingAt: source),
             accent: accent,
-            purpose: "word"
+            purpose: "word",
+            requestID: requestID
         )
     }
 
@@ -360,12 +368,16 @@ final class Pronouncer: ObservableObject {
             playingWord = nil
             return
         }
+        stopCurrentPlayback()
+        let requestID = UUID()
+        playbackRequestID = requestID
         playingWord = trimmed.lowercased()
         fetchAndPlay(
             trimmed,
             chain: [.minimax],
             accent: PronunciationAccent.current,
-            purpose: "sentence"
+            purpose: "sentence",
+            requestID: requestID
         )
     }
 
@@ -382,8 +394,10 @@ final class Pronouncer: ObservableObject {
         _ word: String,
         chain: [PronunciationSource],
         accent: PronunciationAccent,
-        purpose: String
+        purpose: String,
+        requestID: UUID
     ) {
+        guard playbackRequestID == requestID else { return }
         guard let source = chain.first else {
             handleFinished()
             return
@@ -395,25 +409,41 @@ final class Pronouncer: ObservableObject {
             return
         }
         guard let request = remoteRequest(for: word, source: source, accent: accent) else {
-            fetchAndPlay(word, chain: rest, accent: accent, purpose: purpose)
+            fetchAndPlay(
+                word,
+                chain: rest,
+                accent: accent,
+                purpose: purpose,
+                requestID: requestID
+            )
             return
         }
 
-        session.dataTask(with: request) { [weak self] data, response, _ in
+        let task = session.dataTask(with: request) { [weak self] data, response, error in
+            if (error as? URLError)?.code == .cancelled { return }
             let http = response as? HTTPURLResponse
             // 查不到的词部分源会返回 200 但空 body / 非音频，用非空 + 2xx 双重判断。
             guard let data, !data.isEmpty, (200..<300).contains(http?.statusCode ?? 0) else {
                 Task { @MainActor in
-                    self?.fetchAndPlay(word, chain: rest, accent: accent, purpose: purpose)
+                    guard let self, self.playbackRequestID == requestID else { return }
+                    self.fetchAndPlay(
+                        word,
+                        chain: rest,
+                        accent: accent,
+                        purpose: purpose,
+                        requestID: requestID
+                    )
                 }
                 return
             }
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, self.playbackRequestID == requestID else { return }
                 self.cacheAudio(data, for: word, source: source, accent: accent, purpose: purpose)
                 self.play(data)
             }
-        }.resume()
+        }
+        requestTask = task
+        task.resume()
     }
 
     /// 播放真正结束或所有远程源均失败时清空 playingWord，波纹动效跟着停止。
@@ -422,6 +452,17 @@ final class Pronouncer: ObservableObject {
     /// `Pronouncer.shared.playingWord` 探测音频结束，不在这里挂回调——保持
     /// Pronouncer 不依赖具体业务（它本来就不该知道什么是"复习"）。
     fileprivate func handleFinished() {
+        playingWord = nil
+    }
+
+    /// 停止当前发音并取消尚未完成的远程音频请求。Tab 切换时必须同时取消请求，
+    /// 否则页面虽然已经离开，旧请求返回后仍会延迟开始播放。
+    func stopCurrentPlayback() {
+        playbackRequestID = UUID()
+        requestTask?.cancel()
+        requestTask = nil
+        player?.stop()
+        player = nil
         playingWord = nil
     }
 
@@ -468,6 +509,7 @@ final class Pronouncer: ObservableObject {
     }
 
     private func play(_ data: Data) {
+        requestTask = nil
         player?.stop()
         do {
             let newPlayer = try AVAudioPlayer(data: data)

@@ -106,6 +106,12 @@ struct ReviewCardView: View {
                     await playlistVM.load()
                 }
             }
+            .onChange(of: nav.selectedTab) { oldTab, newTab in
+                guard oldTab == .study, newTab != .study else { return }
+                isDictationFieldFocused = false
+                showGroupDropdown = false
+                viewModel.autoplay.stop()
+            }
             .refreshable { await viewModel.loadQueue() }
             // 队列面板：fullScreenCover 只负责盖住 tab bar，系统转场由
             // presentQueue / dismissQueue 关闭；实际的右侧滑入动画由抽屉自身完成。
@@ -350,6 +356,7 @@ struct ReviewCardView: View {
                 // word.id 变化时（首次进入、上一个/下一个、评分切到下一张）
                 // 触发发音——挂在卡片上不参与 outer transition.
                 .task(id: word.id) {
+                    guard nav.selectedTab == .study else { return }
                     guard !viewModel.suppressCardAutoSpeak else { return }
                     Pronouncer.shared.speakIfAutoplayEnabled(word.word)
                 }
