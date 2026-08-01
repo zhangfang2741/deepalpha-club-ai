@@ -299,6 +299,11 @@ struct ReviewCardView: View {
                                 .opacity(0.85)
                         }
                         Spacer()
+                        // 这里的箭头是导航语义（点进去是另一个页面），不是装饰——
+                        // 跟之前从列表行、标题旁去掉的那些纯装饰小三角不是一回事。
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.bold))
+                            .opacity(0.9)
                     }
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14)
