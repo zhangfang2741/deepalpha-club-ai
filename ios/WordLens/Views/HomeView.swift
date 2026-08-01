@@ -37,17 +37,6 @@ struct HomeView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Theme.background.ignoresSafeArea())
             .navigationTitle("生词库")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showPlaylistManager = true
-                    } label: {
-                        Image(systemName: "folder")
-                    }
-                    .tint(Theme.accent)
-                    .accessibilityLabel("分组管理")
-                }
-            }
             .sheet(isPresented: $showPlaylistManager) {
                 PlaylistManagerView(viewModel: playlistVM)
             }
@@ -83,15 +72,12 @@ struct HomeView: View {
         await playlistVM.load()
     }
 
-    /// 自定义分组的筛选 chips。跟状态磁贴用法一致：再点一次取消筛选。
-    /// 跟状态磁贴的视觉权重保持一致——chips 用表面色底、不用主题色填充，避免
-    /// 跟状态磁贴抢视线。
+    /// 自定义分组的筛选 chips + 「全部」reset + 「分组管理」入口。
+    ///
+    /// 全部的"清除筛选"已经写在顶部第一个状态磁贴里（全量）——chips 这行不需要
+    /// 再重复一个"全部"。只在最右放「分组管理」，引导用户去编辑分组。
     private var playlistFilterChips: some View {
         FlowLayout(spacing: 8, lineSpacing: 8) {
-            playlistChip(label: "全部", count: listVM.allWords.count,
-                         isSelected: listVM.filterPlaylistID == nil) {
-                listVM.filterPlaylistID = nil
-            }
             ForEach(playlistVM.playlists) { playlist in
                 playlistChip(label: playlist.name, count: playlist.wordCount,
                              isSelected: listVM.filterPlaylistID == playlist.id) {
@@ -100,7 +86,31 @@ struct HomeView: View {
                     Task { await listVM.loadPlaylistWords(id: next) }
                 }
             }
+            manageChip
         }
+    }
+
+    private var manageChip: some View {
+        Button {
+            showPlaylistManager = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "folder")
+                    .font(.caption.weight(.bold))
+                Text("分组管理")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .foregroundStyle(Theme.textSecondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Theme.surface)
+            .clipShape(.capsule)
+            .overlay {
+                Capsule().strokeBorder(Theme.border, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.pressable)
+        .accessibilityLabel("分组管理")
     }
 
     private func playlistChip(label: String, count: Int, isSelected: Bool, action: @escaping () -> Void) -> some View {
@@ -127,11 +137,13 @@ struct HomeView: View {
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
-    /// 统计数字本身就是筛选入口——点一个状态直接筛列表，不再跟 WordListView 里
-    /// 单独一套筛选 chip 重复；数字永远按全量 allWords 算，不会因为当前选中了
-    /// 某个筛选状态就把其它状态的数字显示成 0。
+    /// 统计数字本身就是筛选入口。
+    ///
+    /// 计数跟随当前自定义分组筛选：选了某个分组后，状态磁贴显示的是"这个分
+    /// 组里各状态有多少词"。这样「不认识」选了之后显示 0，用户就知道"这个分
+    /// 组里没有不认识的词"，而不是"筛坏了"。分组筛选清掉后回到全量计数。
     private var statsRow: some View {
-        let words = listVM.allWords
+        let words = filteredByPlaylist  // 跟着当前 chips 走
         let unknownCount = words.filter { $0.status == "new" }.count
         let fuzzyCount = words.filter { $0.status == "fuzzy" }.count
         let knownCount = words.filter { $0.status == "known" }.count
@@ -149,6 +161,14 @@ struct HomeView: View {
                 listVM.filterStatus = listVM.filterStatus == "known" ? nil : "known"
             }
         }
+    }
+
+    /// 按自定义分组筛选后的词集——状态磁贴计数、chips 计数都基于它。
+    /// 状态筛选仍然作用在列表层（WordListViewModel.words），但计数预览这里先
+    /// 套一层分组筛选，避免两个筛选叠在一起时空列表让用户摸不着头脑。
+    private var filteredByPlaylist: [VocabularyWord] {
+        guard let id = listVM.filterPlaylistID else { return listVM.allWords }
+        return listVM.allWords.filter { listVM.playlistWords.contains($0.id) }
     }
 
     private func statTile(_ label: String, _ count: Int, _ color: Color, isSelected: Bool, action: @escaping () -> Void) -> some View {

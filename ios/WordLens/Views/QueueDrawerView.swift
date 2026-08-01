@@ -15,6 +15,10 @@ struct QueueDrawerView: View {
     let currentWordID: String?
     let onSelect: (VocabularyWord) -> Void
     let onDismiss: () -> Void
+    /// 抽屉即将出现时调用——用来强制收掉上一页面的键盘（见 ReviewCardView
+    /// .fullScreenCover 处的注释）。不给 onAppear 因为 body 里的 Color 在
+    /// SwiftUI 看来才是根；用 task 在第一帧异步触发一次更稳。
+    var onAppear: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @Namespace private var scrollSpace
@@ -66,7 +70,11 @@ struct QueueDrawerView: View {
                             .padding(.vertical, 4)
                         }
                         .scrollIndicators(.hidden)
-                        // 队列可能有几百个词，打开时先滚到正在播的那个，省得自己找。
+                        // 列表一出现就停在当前词那一行，不用等 onAppear 手动滚。
+                        // 队列可能几百个词，从头滚到当前很慢；defaultScrollAnchor
+                        // 用 proxy 一次性定位。如果用户先已经自己滚到别处再重新
+                        // 打开抽屉（覆盖路径），这个值会再次触发，也合理。
+                        .defaultScrollAnchor(.center)
                         .onAppear {
                             guard let currentID = currentWordID else { return }
                             proxy.scrollTo(currentID, anchor: .center)

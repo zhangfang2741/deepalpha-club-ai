@@ -107,7 +107,11 @@ struct ReviewCardView: View {
                         showQueueSheet = false
                         viewModel.jump(to: word, play: true)
                     },
-                    onDismiss: { showQueueSheet = false }
+                    onDismiss: { showQueueSheet = false },
+                    // 抽屉打开前强制收键盘：上一轮自动聚焦让 TextField 成了 first
+                    // responder，fullScreenCover 不会自动 dismissKeyboard，键盘就
+                    // 一直挂着、在列表里滑动时还能感觉到软键盘在响应。
+                    onAppear: { isDictationFieldFocused = false }
                 )
             }
             // 自动播放 FAB 用 .safeAreaInset 钉在 NavigationStack 底部 ——
@@ -193,9 +197,17 @@ struct ReviewCardView: View {
         .animation(.easeInOut(duration: 0.2), value: viewModel.dictationPhase)
     }
 
-    /// 听写的「确定」：空输入也允许提交（等于承认不会，判不认识），所以不禁用。
+    /// 听写的「确定」：空输入禁止提交。
+    ///
+    /// 「空输入等于不认识」原来也是设计上的一种可能——但用户习惯性点完才发现
+    /// 自己被判成不认识，体验不友好：让它必须显式打点什么才算提交，听写语义才
+    /// 站得住（"我至少要试着拼一下"）。
+    ///
+    /// 键盘回车（TextField.onSubmit）也走同样的判断。
     private var confirmDictationButton: some View {
-        Button {
+        let canSubmit = !viewModel.dictationInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !viewModel.isSubmitting
+        return Button {
             isDictationFieldFocused = false
             Task { await viewModel.submitDictation() }
         } label: {
@@ -203,81 +215,113 @@ struct ReviewCardView: View {
                 .font(.subheadline.weight(.bold))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(Theme.accent)
-                .foregroundStyle(.white)
+                .background(canSubmit ? Theme.accent : Theme.surface)
+                .foregroundStyle(canSubmit ? .white : Theme.textSecondary.opacity(0.5))
                 .clipShape(.rect(cornerRadius: 12))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12).strokeBorder(
+                        canSubmit ? .clear : Theme.border, lineWidth: 1
+                    )
+                }
         }
         .buttonStyle(.pressable)
-        .disabled(viewModel.isSubmitting)
+        .disabled(!canSubmit)
     }
 
-    /// 顶部一行：「分组名 ▾」+ 只听/听写开关 + 进度。
+    /// 顶部固定区：左侧是「只听/听写」开关，正中是分组名和它下面的播放进度。
     ///
     /// 整行走 safeAreaInset 钉死，跟卡片的 .id + .transition 完全分离——切词时
     /// 只 diff 里面的文字，位置不动、不跟着淡入淡出。
     private var topBar: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Button {
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
-                    showGroupDropdown.toggle()
+        ZStack(alignment: .center) {
+            // 分组名和播放信息组成居中的两行；左右预留空间，长分组名不会压到开关。
+            VStack(spacing: 2) {
+                // 顶部分组选择器：居中、放小三角标记可展开。整块可点，三角跟着
+                // 展开状态转 180°。
+                Button {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+                        showGroupDropdown.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(viewModel.selectionName)
+                            .font(.title3.bold())
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Theme.accent)
+                            .rotationEffect(.degrees(showGroupDropdown ? 180 : 0))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .contentShape(.rect)
                 }
-            } label: {
-                HStack(spacing: 6) {
-                    Text(viewModel.selectionName)
-                        .font(.title3.bold())
-                        .foregroundStyle(Theme.textPrimary)
-                        .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(Theme.accent)
-                        .rotationEffect(.degrees(showGroupDropdown ? 180 : 0))
+                .buttonStyle(.plain)
+                .accessibilityLabel("当前分组 \(viewModel.selectionName)，展开分组列表")
+
+                // 没有正在复习的卡片时（加载中/无待复习/已完成）隐藏进度，避免
+                // 显示成 "N/0" 这类无意义数字。
+                if viewModel.currentWord != nil {
+                    progressBar
                 }
-                .contentShape(.rect)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("当前分组 \(viewModel.selectionName)，展开分组列表")
+            .padding(.horizontal, 72)
+            .frame(maxWidth: .infinity)
 
-            Spacer(minLength: 8)
-
-            studyModeToggle
-
-            // 没有正在复习的卡片时（加载中/无待复习/已完成）隐藏进度，避免
-            // 显示成 "N/0" 这类无意义数字。
-            progressBar
-                .opacity(viewModel.currentWord != nil ? 1 : 0)
+            HStack {
+                studyModeToggle
+                Spacer()
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 6)
         .padding(.bottom, 10)
     }
 
-    /// 只听 / 听写：点一下切到另一种，本身显示当前处于哪个模式。
-    /// 听写态点亮成主题色——那是更严格的模式，值得一眼看出来。
+    /// 左上角的「只听 / 听写」开关：点一下就切到另一种，开关样式本身说明这是个
+    /// 切换器，不靠文字提示。听写态点亮成主题色——那是更严格的模式。
     private var studyModeToggle: some View {
-        let mode = viewModel.studyMode
-        let isDictation = mode == .dictation
+        let isDictation = viewModel.isDictation
         return Button {
             withAnimation(.easeInOut(duration: 0.2)) {
                 viewModel.toggleStudyMode()
             }
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: mode.systemImage)
-                    .font(.caption2.weight(.bold))
-                Text(mode.label)
-                    .font(.caption.weight(.semibold))
+            ZStack {
+                Capsule()
+                    .fill(isDictation ? Theme.accent : Theme.surface)
+                    .overlay {
+                        Capsule().strokeBorder(
+                            isDictation ? .clear : Theme.border, lineWidth: 1
+                        )
+                    }
+                    .frame(width: 56, height: 30)
+                // 拨片：iOS 系统的 UISwitch 就是一颗胶囊里的小白点，照搬
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    Circle()
+                        .fill(.white)
+                        .frame(width: 24, height: 24)
+                        .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
+                        .padding(.leading, isDictation ? 26 : 2)
+                        .padding(.trailing, isDictation ? 2 : 26)
+                }
+                .frame(width: 56, height: 30)
+                Image(systemName: "headphones")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(isDictation ? Theme.textSecondary : .white)
+                    .offset(x: isDictation ? 18 : -18)
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(isDictation ? .white : Theme.textSecondary)
+                    .offset(x: isDictation ? -18 : 18)
             }
-            .foregroundStyle(isDictation ? .white : Theme.textSecondary)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background(isDictation ? Theme.accent : Theme.surface)
-            .clipShape(.capsule)
-            .overlay {
-                Capsule().strokeBorder(isDictation ? .clear : Theme.border, lineWidth: 1)
-            }
+            .animation(.easeInOut(duration: 0.2), value: isDictation)
         }
-        .buttonStyle(.pressable)
-        .accessibilityLabel("学习方式，当前\(mode.label)，双击切换")
+        .buttonStyle(.plain)
+        .accessibilityLabel("学习方式，当前\(isDictation ? "听写" : "只听")，双击切换")
+        .accessibilityAddTraits([.isButton])
     }
 
     /// 卡片区：只剩卡片本身，垂直居中。

@@ -45,11 +45,18 @@ final class WordListViewModel: ObservableObject {
 
     /// 加载某分组对应的词表 id 集合，结果缓存到 `playlistWords`。
     /// 切换分组筛选时调用；筛选回 nil 时清空缓存。
+    ///
+    /// **关键**：必须先同步清空 `playlistWords`，再去网络拉新值。中间那一帧如果
+    /// 拿着旧分组的 id 集合去判断新分组的过滤，新老分组的交集几乎肯定是空，
+    /// 列表就会闪一下"啥都没有"。UI 层面没法察觉是数据还没就位，看着像坏了。
     func loadPlaylistWords(id: String?) async {
         guard let id else {
             playlistWords = []
             return
         }
+        // 立刻清掉旧集合：这一刻筛选会先把所有词挡掉，等新集合加载回来再放行。
+        // 跟加载到一半的"老 id 误判新分组"相比，这种"先空再满"更接近真实进度。
+        playlistWords = []
         isLoadingPlaylist = true
         defer { isLoadingPlaylist = false }
         do {

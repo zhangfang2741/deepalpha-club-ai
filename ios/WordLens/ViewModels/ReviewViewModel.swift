@@ -30,15 +30,14 @@ enum ReviewMode: String, CaseIterable {
         }
     }
 
-    /// 播放条那颗键用的图标，跟着当前模式变。`.smart` 用 `circle.dashed` 表示
-    /// 「按某种顺序」——中性色，不抢眼，因为它就是默认；其它三种是用户主动
-    /// 切的，用主题色高亮一下让"现在没按默认走"这件事可见。
+    /// 播放条那颗键用的图标，跟着当前模式变。每种图标都直接表达排序语义，
+    /// 避免用户还要结合菜单文案猜当前播放方式。
     var systemImage: String {
         switch self {
-        case .smart: return "circle.dashed"
+        case .smart: return "sparkles"
         case .random: return "shuffle"
         case .hardFirst: return "exclamationmark.triangle.fill"
-        case .sequential: return "arrow.up.arrow.down"
+        case .sequential: return "chevron.right.2"
         }
     }
 
@@ -138,7 +137,10 @@ final class ReviewViewModel: ObservableObject {
     /// 时间里连播状态机正卡在「等当前词换掉」的轮询上，不会抢跑。
     func submitDictation() async {
         guard isDictation, dictationPhase.isInput, let word = currentWord else { return }
-        let typed = dictationInput
+        // 空输入禁止提交——「确定」按钮已经替用户挡住了，但键盘回车（TextField
+        // 的 onSubmit）会绕过按钮直接进这里，所以再补一道。两道屏障一道语义。
+        let typed = dictationInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !typed.isEmpty else { return }
         let rating = DictationJudge.judge(input: typed, answer: word.word)
         // 把词和输入一起快照进相位——亮答案期间界面只认这份快照，不会因为队列
         // 在提交时前进而闪出下一个词的拼写。
