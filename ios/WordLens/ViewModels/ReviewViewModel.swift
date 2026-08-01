@@ -30,6 +30,18 @@ enum ReviewMode: String, CaseIterable {
         }
     }
 
+    /// 播放条那颗键用的图标，跟着当前模式变。`.smart` 用 `circle.dashed` 表示
+    /// 「按某种顺序」——中性色，不抢眼，因为它就是默认；其它三种是用户主动
+    /// 切的，用主题色高亮一下让"现在没按默认走"这件事可见。
+    var systemImage: String {
+        switch self {
+        case .smart: return "circle.dashed"
+        case .random: return "shuffle"
+        case .hardFirst: return "exclamationmark.triangle.fill"
+        case .sequential: return "arrow.up.arrow.down"
+        }
+    }
+
     /// 难词优先的状态权重：不认识最靠前。
     private static func statusRank(_ status: String) -> Int {
         switch status {

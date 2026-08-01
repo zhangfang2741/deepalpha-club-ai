@@ -15,16 +15,18 @@ struct HomeView: View {
             VStack(spacing: 16) {
                 statsRow
 
+                // 自定义分组筛选：跟状态磁贴同级，用户点 chips 跟点状态磁贴是
+                // 同一类动作（筛选）。chips 用流式排版避免多了挤换行。
+                if !playlistVM.playlists.isEmpty {
+                    playlistFilterChips
+                }
+
                 TextField("搜索单词", text: $listVM.searchQuery)
                     .padding(10)
                     .background(Theme.surface)
                     .foregroundStyle(Theme.textPrimary)
                     .clipShape(.rect(cornerRadius: 8))
                     .onSubmit { Task { await listVM.load() } }
-
-                // 「今日待复习：N 个」已移除：这个数字在首页的播放列表面板里
-                // 就有（默认那一行），生词库页只管生词本身，不再重复一份。
-                // 顺带省掉了这个页面每次刷新都要多打的一次 /review/queue。
 
                 // 生词库列表按字母分 Section 展示，需要用 List 自己独立滚动，
                 // 不能再跟上面的卡片一起塞进一个大 ScrollView。
@@ -78,6 +80,51 @@ struct HomeView: View {
 
     private func refreshAll() async {
         await listVM.load()
+        await playlistVM.load()
+    }
+
+    /// 自定义分组的筛选 chips。跟状态磁贴用法一致：再点一次取消筛选。
+    /// 跟状态磁贴的视觉权重保持一致——chips 用表面色底、不用主题色填充，避免
+    /// 跟状态磁贴抢视线。
+    private var playlistFilterChips: some View {
+        FlowLayout(spacing: 8, lineSpacing: 8) {
+            playlistChip(label: "全部", count: listVM.allWords.count,
+                         isSelected: listVM.filterPlaylistID == nil) {
+                listVM.filterPlaylistID = nil
+            }
+            ForEach(playlistVM.playlists) { playlist in
+                playlistChip(label: playlist.name, count: playlist.wordCount,
+                             isSelected: listVM.filterPlaylistID == playlist.id) {
+                    let next: String? = listVM.filterPlaylistID == playlist.id ? nil : playlist.id
+                    listVM.filterPlaylistID = next
+                    Task { await listVM.loadPlaylistWords(id: next) }
+                }
+            }
+        }
+    }
+
+    private func playlistChip(label: String, count: Int, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Text(label)
+                    .font(.subheadline.weight(isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? Theme.accent : Theme.textPrimary)
+                    .lineLimit(1)
+                Text("\(count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(isSelected ? Theme.surfaceAlt : Theme.surface)
+            .clipShape(.capsule)
+            .overlay {
+                Capsule().strokeBorder(isSelected ? Theme.accent : Theme.border, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.pressable)
+        .accessibilityLabel("\(label)，\(count) 个")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     /// 统计数字本身就是筛选入口——点一个状态直接筛列表，不再跟 WordListView 里

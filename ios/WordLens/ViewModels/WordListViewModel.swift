@@ -23,9 +23,41 @@ final class WordListViewModel: ObservableObject {
     /// completed, UI 显示 "正在删除 20 / 104". 完成时置 nil.
     @Published var deletionProgress: (completed: Int, total: Int)?
 
+    /// 自定义分组筛选：只在生词库查到的词里筛选，所以状态保持 "无分组筛选" 即可。
+    /// nil 表示不过滤，显示全部。
+    @Published var filterPlaylistID: String?
+
     var words: [VocabularyWord] {
-        guard let filterStatus else { return allWords }
-        return allWords.filter { $0.status == filterStatus }
+        let statusFiltered = allWords.filter { word in
+            guard let filterStatus else { return true }
+            return word.status == filterStatus
+        }
+        guard let filterPlaylistID else { return statusFiltered }
+        return statusFiltered.filter { word in
+            // 第一次按需加载这个分组的词集，后续命中缓存
+            playlistWords.contains(word.id)
+        }
+    }
+
+    /// 选中分组的词 id 集合。需要按需加载，附在 allWords 上更省心。
+    @Published private(set) var playlistWords: Set<String> = []
+    @Published private(set) var isLoadingPlaylist = false
+
+    /// 加载某分组对应的词表 id 集合，结果缓存到 `playlistWords`。
+    /// 切换分组筛选时调用；筛选回 nil 时清空缓存。
+    func loadPlaylistWords(id: String?) async {
+        guard let id else {
+            playlistWords = []
+            return
+        }
+        isLoadingPlaylist = true
+        defer { isLoadingPlaylist = false }
+        do {
+            let words = try await WordService.playlistWords(id: id)
+            playlistWords = Set(words.map(\.id))
+        } catch {
+            playlistWords = []
+        }
     }
 
     func load() async {
