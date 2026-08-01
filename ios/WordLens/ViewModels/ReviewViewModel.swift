@@ -120,8 +120,9 @@ final class ReviewViewModel: ObservableObject {
 
     var isDictation: Bool { studyMode == .dictation }
 
-    func toggleStudyMode() {
-        studyMode = studyMode.toggled
+    func changeStudyMode(to mode: StudyMode) {
+        guard mode != studyMode else { return }
+        studyMode = mode
         StudyMode.current = studyMode
         resetDictation()
     }

@@ -139,11 +139,12 @@ struct HomeView: View {
 
     /// 统计数字本身就是筛选入口。
     ///
-    /// 计数跟随当前自定义分组筛选：选了某个分组后，状态磁贴显示的是"这个分
-    /// 组里各状态有多少词"。这样「不认识」选了之后显示 0，用户就知道"这个分
-    /// 组里没有不认识的词"，而不是"筛坏了"。分组筛选清掉后回到全量计数。
+    /// 计数永远按全量 allWords 算，跟自定义分组的 chips **互不联动**——
+    /// 状态磁贴、分组 chips、列表过滤三者各自独立，状态切换不影响 chips 上的
+    /// 数字，反过来也是。用户看到的数字始终是"我生词库里的真实分布"，不会
+    /// 被某一个筛选条件牵着走。
     private var statsRow: some View {
-        let words = filteredByPlaylist  // 跟着当前 chips 走
+        let words = listVM.allWords
         let unknownCount = words.filter { $0.status == "new" }.count
         let fuzzyCount = words.filter { $0.status == "fuzzy" }.count
         let knownCount = words.filter { $0.status == "known" }.count
@@ -161,14 +162,6 @@ struct HomeView: View {
                 listVM.filterStatus = listVM.filterStatus == "known" ? nil : "known"
             }
         }
-    }
-
-    /// 按自定义分组筛选后的词集——状态磁贴计数、chips 计数都基于它。
-    /// 状态筛选仍然作用在列表层（WordListViewModel.words），但计数预览这里先
-    /// 套一层分组筛选，避免两个筛选叠在一起时空列表让用户摸不着头脑。
-    private var filteredByPlaylist: [VocabularyWord] {
-        guard let id = listVM.filterPlaylistID else { return listVM.allWords }
-        return listVM.allWords.filter { listVM.playlistWords.contains($0.id) }
     }
 
     private func statTile(_ label: String, _ count: Int, _ color: Color, isSelected: Bool, action: @escaping () -> Void) -> some View {

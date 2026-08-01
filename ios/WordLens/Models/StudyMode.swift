@@ -37,10 +37,6 @@ enum StudyMode: String, CaseIterable {
         case .dictation: return "square.and.pencil"
         }
     }
-
-    var toggled: StudyMode {
-        self == .listenOnly ? .dictation : .listenOnly
-    }
 }
 
 /// 听写模式下每个词经历的两个相位。

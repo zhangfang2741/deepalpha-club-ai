@@ -228,7 +228,7 @@ struct ReviewCardView: View {
         .disabled(!canSubmit)
     }
 
-    /// 顶部固定区：左侧是「只听/听写」开关，正中是分组名和它下面的播放进度。
+    /// 顶部固定区：右侧是「只听/听写」开关，正中是分组名和它下面的播放进度。
     ///
     /// 整行走 safeAreaInset 钉死，跟卡片的 .id + .transition 完全分离——切词时
     /// 只 diff 里面的文字，位置不动、不跟着淡入淡出。
@@ -259,6 +259,7 @@ struct ReviewCardView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("当前分组 \(viewModel.selectionName)，展开分组列表")
+                .padding(.horizontal, 108)
 
                 // 没有正在复习的卡片时（加载中/无待复习/已完成）隐藏进度，避免
                 // 显示成 "N/0" 这类无意义数字。
@@ -266,12 +267,11 @@ struct ReviewCardView: View {
                     progressBar
                 }
             }
-            .padding(.horizontal, 72)
             .frame(maxWidth: .infinity)
 
             HStack {
-                studyModeToggle
                 Spacer()
+                studyModeToggle
             }
         }
         .padding(.horizontal, 20)
@@ -279,49 +279,40 @@ struct ReviewCardView: View {
         .padding(.bottom, 10)
     }
 
-    /// 左上角的「只听 / 听写」开关：点一下就切到另一种，开关样式本身说明这是个
-    /// 切换器，不靠文字提示。听写态点亮成主题色——那是更严格的模式。
+    /// 右上角的学习方式分段器：两个选项始终可见，当前项用主题色填充。
+    /// 比把两个小图标塞进拨片更直观，也能直接点目标模式，不需要猜开关方向。
     private var studyModeToggle: some View {
-        let isDictation = viewModel.isDictation
-        return Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                viewModel.toggleStudyMode()
-            }
-        } label: {
-            ZStack {
-                Capsule()
-                    .fill(isDictation ? Theme.accent : Theme.surface)
-                    .overlay {
-                        Capsule().strokeBorder(
-                            isDictation ? .clear : Theme.border, lineWidth: 1
-                        )
+        HStack(spacing: 2) {
+            ForEach(StudyMode.allCases, id: \.self) { mode in
+                let isSelected = viewModel.studyMode == mode
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        viewModel.changeStudyMode(to: mode)
                     }
-                    .frame(width: 56, height: 30)
-                // 拨片：iOS 系统的 UISwitch 就是一颗胶囊里的小白点，照搬
-                HStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    Circle()
-                        .fill(.white)
-                        .frame(width: 24, height: 24)
-                        .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
-                        .padding(.leading, isDictation ? 26 : 2)
-                        .padding(.trailing, isDictation ? 2 : 26)
+                } label: {
+                    Text(mode.label)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(isSelected ? .white : Theme.textSecondary)
+                        .padding(.horizontal, 8)
+                        .frame(minHeight: 34)
+                        .background(
+                            Capsule().fill(isSelected ? Theme.accent : .clear)
+                        )
                 }
-                .frame(width: 56, height: 30)
-                Image(systemName: "headphones")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(isDictation ? Theme.textSecondary : .white)
-                    .offset(x: isDictation ? 18 : -18)
-                Image(systemName: "square.and.pencil")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(isDictation ? .white : Theme.textSecondary)
-                    .offset(x: isDictation ? -18 : 18)
+                .buttonStyle(.plain)
+                .accessibilityLabel(mode.label)
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
             }
-            .animation(.easeInOut(duration: 0.2), value: isDictation)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("学习方式，当前\(isDictation ? "听写" : "只听")，双击切换")
-        .accessibilityAddTraits([.isButton])
+        .padding(3)
+        .frame(minHeight: 44)
+        .background(Theme.surface)
+        .clipShape(.capsule)
+        .overlay {
+            Capsule().strokeBorder(Theme.border, lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("学习方式")
     }
 
     /// 卡片区：只剩卡片本身，垂直居中。
