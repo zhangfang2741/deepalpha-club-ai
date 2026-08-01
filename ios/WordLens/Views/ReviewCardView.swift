@@ -14,6 +14,8 @@ struct ReviewCardView: View {
     @State private var showPlaylistSheet = false
     /// 顶部标题点开的「当前播放队列」下拉框。
     @State private var showQueueDropdown = false
+    /// 播放条右侧按钮唤出的「当前播放队列」半屏面板。
+    @State private var showQueueSheet = false
     /// 听写输入框的焦点。连播读完 3 遍后自动聚焦，用户不用再点一下。
     @FocusState private var isDictationFieldFocused: Bool
 
@@ -97,14 +99,13 @@ struct ReviewCardView: View {
             .fullScreenCover(isPresented: $showPlaylistSheet) {
                 NowPlayingView(
                     playlistVM: playlistVM,
-                    reviewVM: viewModel,
-                    onSelect: { selection, name, playImmediately in
-                        Task {
-                            await viewModel.switchPlaylist(selection, name: name)
-                            if playImmediately { viewModel.autoplay.start() }
-                        }
-                    }
-                )
+                    reviewVM: viewModel
+                ) { selection, name in
+                    Task { await viewModel.switchPlaylist(selection, name: name) }
+                }
+            }
+            .sheet(isPresented: $showQueueSheet) {
+                queueSheet
             }
             // 自动播放 FAB 用 .safeAreaInset 钉在 NavigationStack 底部 ——
             // 之前放在 body ZStack 里 + Theme.background.ignoresSafeArea() 共存时,
@@ -232,9 +233,7 @@ struct ReviewCardView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("当前分组 \(viewModel.selectionName)，展开播放队列")
 
-            Spacer(minLength: 8)
-
-            studyModeToggle
+            Spacer(minLength: 12)
 
             // 没有正在复习的卡片时（加载中/无待复习/已完成）隐藏进度，避免
             // 显示成 "N/0" 这类无意义数字。
@@ -368,41 +367,8 @@ struct ReviewCardView: View {
 
                 modeRow
                     .padding(.horizontal, 10)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, 10)
 
-                HStack(spacing: 6) {
-                    Text("播放队列")
-                        .font(.caption.weight(.semibold))
-                    Text("·")
-                    Text("\(viewModel.queue.count) 个")
-                    Spacer()
-                    Text("点单词从那里开始播")
-                        .font(.caption2)
-                }
-                .font(.caption)
-                .foregroundStyle(Theme.textSecondary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-
-                Divider().overlay(Theme.border)
-
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 2) {
-                            ForEach(Array(viewModel.queue.enumerated()), id: \.element.id) { index, word in
-                                queueRow(word, index: index).id(word.id)
-                            }
-                        }
-                        .padding(.vertical, 6)
-                    }
-                    // 队列可能有几百个词，展开时先滚到正在播的那个，省得自己找。
-                    .onAppear {
-                        guard let currentID = viewModel.currentWord?.id else { return }
-                        proxy.scrollTo(currentID, anchor: .center)
-                    }
-                }
-                // 上限约半屏：再高就把卡片整个盖住了，下拉框应当还看得见下面的内容。
-                .frame(maxHeight: 320)
             }
             .background(Theme.surface)
             .clipShape(.rect(cornerRadius: 14))
@@ -415,9 +381,11 @@ struct ReviewCardView: View {
         }
     }
 
-    /// 只听 / 听写 的切换胶囊：点一下就切，本身显示当前处于哪个模式。
-    /// 听写态用主题色填充——那是"更严格"的模式，值得一眼看出来。
-    private var studyModeToggle: some View {
+    /// 播放条最左：只听 / 听写，点一下就切到另一种。
+    ///
+    /// 跟播放器上「循环/随机」那颗键同一个位置、同一个语义——它不是一次导航，
+    /// 而是当场改变"接下来怎么过词"。听写态点亮成主题色，一眼看得出在哪个模式。
+    private var studyModeButton: some View {
         let mode = viewModel.studyMode
         let isDictation = mode == .dictation
         return Button {
@@ -425,30 +393,36 @@ struct ReviewCardView: View {
                 viewModel.toggleStudyMode()
             }
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: mode.systemImage)
-                    .font(.caption2.weight(.bold))
-                Text(mode.label)
-                    .font(.caption.weight(.semibold))
-            }
-            .foregroundStyle(isDictation ? .white : Theme.textSecondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(isDictation ? Theme.accent : Theme.surface)
-            .clipShape(.capsule)
-            .overlay {
-                Capsule().strokeBorder(isDictation ? .clear : Theme.border, lineWidth: 1)
-            }
+            Image(systemName: mode.systemImage)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(isDictation ? Theme.accent : Theme.textSecondary)
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
         }
         .buttonStyle(.pressable)
         .accessibilityLabel("学习方式，当前\(mode.label)，双击切换")
     }
 
-    /// 学习模式（队列排序方式）。
+    /// 播放条最右：看当前分组的完整队列。
+    private var queueButton: some View {
+        Button {
+            showQueueSheet = true
+        } label: {
+            Image(systemName: "list.bullet")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Theme.textSecondary)
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.pressable)
+        .disabled(viewModel.queue.isEmpty)
+        .accessibilityLabel("播放队列")
+    }
+
+    /// 播放顺序（队列排序方式，对应 ReviewMode）。
     ///
-    /// 从设置页搬回这里：它跟「当前在播哪一组、按什么顺序播」是同一件事的两个
-    /// 侧面，放在同一个下拉框里才成套；埋在设置里既要多跳两层，也跟当前队列
-    /// 脱节（改完还得切回首页才生效）。这里改完立刻重排剩余队列。
+    /// UI 上从「学习模式」改叫「播放顺序」：只听/听写那个开关用户也叫"学习模式"，
+    /// 两个名字撞在一起分不清。它管的本来就是"按什么顺序过这些词"。
     private var modeRow: some View {
         Menu {
             ForEach(ReviewMode.allCases, id: \.self) { mode in
@@ -466,7 +440,7 @@ struct ReviewCardView: View {
             HStack(spacing: 10) {
                 Image(systemName: "arrow.up.arrow.down")
                     .font(.subheadline)
-                Text("学习模式")
+                Text("播放顺序")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
                 Text(viewModel.mode.label)
@@ -483,15 +457,56 @@ struct ReviewCardView: View {
             .clipShape(.rect(cornerRadius: 12))
             .contentShape(.rect)
         }
-        .accessibilityLabel("学习模式，当前 \(viewModel.mode.label)")
+        .accessibilityLabel("播放顺序，当前 \(viewModel.mode.label)")
+    }
+
+    /// 当前分组的完整队列，点任意一个词从那里开始播。
+    ///
+    /// 从左上角的下拉框挪到播放条右侧：它操作的是「当前正在播的队列」，跟播放
+    /// 控制是一回事，理应和播放键在一起；左上角那个下拉框留给"换组、改顺序"
+    /// 这类设定性的东西。
+    private var queueSheet: some View {
+        NavigationStack {
+            ZStack {
+                Theme.background.ignoresSafeArea()
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 2) {
+                            ForEach(Array(viewModel.queue.enumerated()), id: \.element.id) { index, word in
+                                queueRow(word, index: index).id(word.id)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    // 队列可能有几百个词，打开时先滚到正在播的那个，省得自己找。
+                    .onAppear {
+                        guard let currentID = viewModel.currentWord?.id else { return }
+                        proxy.scrollTo(currentID, anchor: .center)
+                    }
+                }
+            }
+            .navigationTitle("播放队列")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Text("\(viewModel.queue.count) 个")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") { showQueueSheet = false }
+                        .tint(Theme.accent)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 
     private func queueRow(_ word: VocabularyWord, index: Int) -> some View {
         let isCurrent = word.id == viewModel.currentWord?.id
         return Button {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                showQueueDropdown = false
-            }
+            showQueueSheet = false
             viewModel.jump(to: word, play: true)
         } label: {
             HStack(spacing: 10) {
@@ -537,7 +552,9 @@ struct ReviewCardView: View {
     /// 顶掉，连播键则单独浮在别的地方。合成一条常驻的播放条之后，位置永远固定，
     /// 手指不用每次重新找，跟"这是个播放器"的心智也对得上。
     private var transportBar: some View {
-        HStack(spacing: 30) {
+        HStack(spacing: 18) {
+            studyModeButton
+
             transportButton(
                 "backward.end.fill",
                 label: "上一个",
@@ -555,6 +572,8 @@ struct ReviewCardView: View {
             ) {
                 viewModel.goToNext()
             }
+
+            queueButton
         }
         // 不加面板底色：这一条就浮在页面背景上，跟卡片各自独立。加了毛玻璃面板
         // 反而在深色背景上糊成一块灰，抢卡片的视觉重量。

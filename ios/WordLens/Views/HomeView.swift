@@ -3,6 +3,11 @@ import SwiftUI
 
 struct HomeView: View {
     @StateObject private var listVM = WordListViewModel()
+    /// 分组管理：新建/改名/改词表/删除。放在生词库而不是首页的切换分组页——
+    /// 换组是一秒钟的高频动作，管理是低频的编辑动作，混在一起互相干扰；而且
+    /// 「往分组里放哪些词」本来就是在生词库里挑词，跟这里同源。
+    @StateObject private var playlistVM = PlaylistViewModel()
+    @State private var showPlaylistManager = false
     @EnvironmentObject var nav: AppNavigationState
 
     var body: some View {
@@ -30,6 +35,20 @@ struct HomeView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Theme.background.ignoresSafeArea())
             .navigationTitle("生词库")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showPlaylistManager = true
+                    } label: {
+                        Image(systemName: "folder")
+                    }
+                    .tint(Theme.accent)
+                    .accessibilityLabel("分组管理")
+                }
+            }
+            .sheet(isPresented: $showPlaylistManager) {
+                PlaylistManagerView(viewModel: playlistVM)
+            }
             .task { await refreshAll() }
             .onChange(of: nav.vocabularyDataVersion) { _, _ in
                 Task { await refreshAll() }
