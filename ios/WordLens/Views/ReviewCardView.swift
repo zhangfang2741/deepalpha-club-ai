@@ -131,7 +131,39 @@ struct ReviewCardView: View {
             .safeAreaInset(edge: .top, alignment: .center, spacing: 0) {
                 topBar
             }
+            // 评分 + 播放条钉死在底部：跟卡片彻底分离，卡片正反面高度不一样时
+            // 它们也纹丝不动。跟 topBar 是同一个套路。
+            .safeAreaInset(edge: .bottom, alignment: .center, spacing: 0) {
+                bottomControls
+                    .opacity(viewModel.currentWord != nil ? 1 : 0)
+                    .allowsHitTesting(viewModel.currentWord != nil)
+            }
         }
+    }
+
+    /// 底部固定区：翻卡后多出评分三档，播放条常驻在最下面。
+    private var bottomControls: some View {
+        VStack(spacing: 14) {
+            if viewModel.isFlipped {
+                HStack(spacing: 10) {
+                    ratingButton("😵 不认识", Theme.unknown, .unknown)
+                    ratingButton("😐 模糊", Theme.fuzzy, .fuzzy)
+                    ratingButton("😊 认识", Theme.known, .known)
+                }
+                .padding(.horizontal)
+                .transition(.opacity)
+            }
+
+            if let errorMessage = viewModel.errorMessage {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.unknown)
+            }
+
+            transportBar
+        }
+        .padding(.bottom, 10)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.isFlipped)
     }
 
     /// 顶部一行：左边「☰ 分组名」，右边进度。
@@ -171,20 +203,18 @@ struct ReviewCardView: View {
         .padding(.bottom, 10)
     }
 
-    /// 布局要点：
-    /// 1. 卡片居中（ScrollView 让短/长内容都不会挤出按钮）；
-    /// 2. 卡片下方一行紧凑胶囊：回忆阶段是「‹ 上一」+「下一个 ›」，自然宽度
-    ///    居中、左右各留空白；翻卡后整行替换成三档评分按钮；
-    /// 3. 自动播放按钮单独一行（64pt 圆形），放在所有动作按钮下方居中——
-    ///    不再浮动、不拖动，位置永远稳定，不会跟任何按钮撞车；
-    /// 4. 进度条（X/Y + 第 N/3 遍）始终在卡片上方，跟 FAB 不抢位置。
+    /// 卡片区：只剩卡片本身，垂直居中。
+    ///
+    /// 评分按钮和播放条都搬到了 outer 的 safeAreaInset(edge: .bottom)——它们
+    /// 原先跟卡片同在一个 VStack 里，卡片一高一矮（正面只有单词、背面还有释义
+    /// 词根例句）整排按钮就跟着上下窜。
+    ///
+    /// 用 GeometryReader 撑一个 minHeight 而不是直接去掉 ScrollView：短内容时
+    /// `alignment: .center` 把卡片顶到正中间，长内容（释义/例句很长）超过一屏
+    /// 时又还能滚动，两头都不塌。
     private func cardContent(_ word: VocabularyWord) -> some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // 进度行已经从 cardContent 抽出去, 在 outer 用 safeAreaInset
-                // 钉死——这里只剩 flipCard + 上下 Spacer + 底部按钮.
-                Spacer(minLength: 0)
-
+        GeometryReader { geo in
+            ScrollView {
                 flipCard(word)
                     .padding(.horizontal)
                     // word.id 变化时（首次进入、上一个/下一个、评分切到下一张）
@@ -193,29 +223,8 @@ struct ReviewCardView: View {
                         guard !viewModel.suppressCardAutoSpeak else { return }
                         Pronouncer.shared.speakIfAutoplayEnabled(word.word)
                     }
-
-                Spacer(minLength: 24)
-
-                // 翻卡后才出现评分三档，放在播放条上方。
-                if viewModel.isFlipped {
-                    HStack(spacing: 10) {
-                        ratingButton("😵 不认识", Theme.unknown, .unknown)
-                        ratingButton("😐 模糊", Theme.fuzzy, .fuzzy)
-                        ratingButton("😊 认识", Theme.known, .known)
-                    }
-                    .padding(.horizontal)
-                }
-
-                // 播放条常驻：不管翻没翻卡，上一个/连播/下一个都在同一个位置，
-                // 手指不用重新找。之前是「未翻卡显示上一/下一、翻卡后被评分按钮
-                // 整行替换掉」，连播键还单独浮在别处。
-                transportBar
-                    .padding(.bottom, 4)
-
-                if let errorMessage = viewModel.errorMessage {
-                    Text(errorMessage).font(.footnote).foregroundStyle(Theme.unknown)
-                        .padding(.bottom, 4)
-                }
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: geo.size.height, alignment: .center)
             }
         }
     }
@@ -422,13 +431,9 @@ struct ReviewCardView: View {
                 viewModel.goToNext()
             }
         }
-        .padding(.horizontal, 26)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
-        .clipShape(.rect(cornerRadius: 26))
-        .overlay {
-            RoundedRectangle(cornerRadius: 26).strokeBorder(Theme.border.opacity(0.6), lineWidth: 1)
-        }
+        // 不加面板底色：这一条就浮在页面背景上，跟卡片各自独立。加了毛玻璃面板
+        // 反而在深色背景上糊成一块灰，抢卡片的视觉重量。
+        .padding(.vertical, 4)
     }
 
     /// 中间的连播键：圆底衬一层浅色，播放中换成暂停图标并填成主题色。
