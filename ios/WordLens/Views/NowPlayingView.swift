@@ -20,7 +20,18 @@ struct NowPlayingView: View {
     @State private var isCreating = false
     @State private var playlistPendingDeletion: Playlist?
 
+    /// 正在「看」的分组，跟正在「播」的分组是两回事。
+    ///
+    /// 点分组标签只改这个值（翻着看看那一组有哪些词），不会动当前队列；真正切
+    /// 过去要再点底部的「切换到这一组」。之前点一下标签就直接把队列换掉，很容易
+    /// 手一滑就把正在背的进度冲掉。
+    @State private var previewing: PlaylistSelection?
+
     private var current: PlaylistSelection { reviewVM.selection }
+    /// 界面上正在展示的是哪一组（没在预览时就是正在播的那组）。
+    private var shown: PlaylistSelection { previewing ?? current }
+    /// 是否处于「看的不是正在播的那组」的状态。
+    private var isPreviewingOther: Bool { previewing != nil && previewing != current }
 
     /// chip 顺序：待复习 → 三个状态 → 自定义歌单。内置的在前，用户自己的在后。
     private var chips: [(selection: PlaylistSelection, label: String, color: Color)] {
@@ -45,6 +56,11 @@ struct NowPlayingView: View {
                     Divider().overlay(Theme.border)
                     wordList
                 }
+            }
+            // 确认条钉在底部：切分组这个动作必须显式点一下，不会因为点了标签
+            // 就悄悄发生。
+            .safeAreaInset(edge: .bottom) {
+                confirmBar
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -122,28 +138,29 @@ struct NowPlayingView: View {
 
     // MARK: - 头部
 
-    /// 「正在播放 / 组名 / N 个词 · 已过 M」——一眼看清在哪一组、进度到哪。
+    /// 头部标题跟着「正在看的那一组」走：预览别的分组时显示「预览」而不是
+    /// 「正在播放」，避免让人以为已经切过去了。
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("正在播放")
+            Text(isPreviewingOther ? "预览" : "正在播放")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.textSecondary)
+                .foregroundStyle(isPreviewingOther ? Theme.fuzzy : Theme.textSecondary)
                 .textCase(.uppercase)
                 .tracking(1.2)
 
-            Text(reviewVM.selectionName)
+            Text(shownName)
                 .font(.largeTitle.bold())
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
 
             HStack(spacing: 6) {
-                Text("\(reviewVM.totalCount) 个词")
-                if reviewVM.reviewedCount > 0 {
+                Text("\(shownWords.count) 个词")
+                if !isPreviewingOther, reviewVM.reviewedCount > 0 {
                     Text("·")
                     Text("已过 \(reviewVM.reviewedCount)")
                 }
-                if reviewVM.autoplay.isPlaying {
+                if !isPreviewingOther, reviewVM.autoplay.isPlaying {
                     Text("·")
                     Label("连播中", systemImage: "speaker.wave.2.fill")
                         .foregroundStyle(Theme.accent)
@@ -157,67 +174,158 @@ struct NowPlayingView: View {
         .padding(.bottom, 14)
     }
 
+    private var shownName: String {
+        isPreviewingOther ? shown.displayName(playlists: playlistVM.playlists) : reviewVM.selectionName
+    }
+
+    /// 展示用词表：看正在播的那组就用实时队列（能高亮当前词、能点词跳转），
+    /// 预览别的组则用单独拉的 previewWords。
+    private var shownWords: [VocabularyWord] {
+        isPreviewingOther ? playlistVM.previewWords : reviewVM.queue
+    }
+
     // MARK: - 分组 chip
 
+    /// 用流式布局自动换行，所有分组一次铺开、位置固定——之前是横向 ScrollView，
+    /// 分组一多就得左右滑才看得全。
     private var chipRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(chips, id: \.selection) { chip in
-                    chipButton(chip.selection, label: chip.label, color: chip.color)
-                }
+        FlowLayout(spacing: 8, lineSpacing: 8) {
+            ForEach(chips, id: \.selection) { chip in
+                chipButton(chip.selection, label: chip.label, color: chip.color)
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 14)
         }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 14)
     }
 
     private func chipButton(_ selection: PlaylistSelection, label: String, color: Color) -> some View {
+        // 选中态跟着「正在看的那一组」走；正在播的那一组额外带个小喇叭，
+        // 这样"我在看哪组"和"实际在播哪组"一眼能分开。
+        let isShown = selection == shown
         let isCurrent = selection == current
         let count = playlistVM.count(for: selection)
         return Button {
-            guard !isCurrent else { return }
-            onSelect(selection, label, false)
+            guard !isShown else { return }
+            previewing = selection
+            // 切回正在播的那组不用重新拉，直接用实时队列。
+            if selection != current {
+                Task { await playlistVM.loadPreview(selection) }
+            }
         } label: {
             HStack(spacing: 6) {
+                if isCurrent {
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.caption2)
+                }
                 Text(label)
-                    .font(.subheadline.weight(isCurrent ? .bold : .medium))
+                    .font(.subheadline.weight(isShown ? .bold : .medium))
                 Text("\(count)")
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(isCurrent ? Color.white.opacity(0.22) : Theme.surfaceAlt)
+                    .background(isShown ? Color.white.opacity(0.22) : Theme.surfaceAlt)
                     .clipShape(.capsule)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
-            .foregroundStyle(isCurrent ? .white : color)
-            .background(isCurrent ? color : Theme.surface)
+            .foregroundStyle(isShown ? .white : color)
+            .background(isShown ? color : Theme.surface)
             .clipShape(.capsule)
             .overlay {
                 Capsule().strokeBorder(
-                    isCurrent ? .clear : Theme.border, lineWidth: 1
+                    isShown ? .clear : (isCurrent ? color.opacity(0.7) : Theme.border),
+                    lineWidth: isCurrent && !isShown ? 1.5 : 1
                 )
             }
         }
         .buttonStyle(.pressable)
-        .accessibilityLabel("\(label)，\(count) 个")
-        .accessibilityAddTraits(isCurrent ? [.isButton, .isSelected] : .isButton)
+        .accessibilityLabel("\(label)，\(count) 个\(isCurrent ? "，正在播放" : "")")
+        .accessibilityAddTraits(isShown ? [.isButton, .isSelected] : .isButton)
+    }
+
+    // MARK: - 底部确认条
+
+    /// 切分组必须显式确认。预览别的分组时给两个选择：只切过去、或者切过去并
+    /// 立刻开播；看的就是正在播的那组时，这里退化成连播的开关。
+    @ViewBuilder
+    private var confirmBar: some View {
+        VStack(spacing: 10) {
+            if isPreviewingOther {
+                HStack(spacing: 10) {
+                    Button {
+                        commitPreview(play: false)
+                    } label: {
+                        Text("切换到这一组")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Theme.surfaceAlt)
+                            .foregroundStyle(Theme.textPrimary)
+                            .clipShape(.rect(cornerRadius: 12))
+                    }
+                    .buttonStyle(.pressable)
+
+                    Button {
+                        commitPreview(play: true)
+                    } label: {
+                        Label("切换并播放", systemImage: "play.fill")
+                            .font(.subheadline.weight(.bold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Theme.accent)
+                            .foregroundStyle(.white)
+                            .clipShape(.rect(cornerRadius: 12))
+                    }
+                    .buttonStyle(.pressable)
+                    .disabled(playlistVM.previewWords.isEmpty)
+                }
+            } else {
+                Button {
+                    reviewVM.autoplay.toggle()
+                } label: {
+                    Label(
+                        reviewVM.autoplay.isPlaying ? "停止连播" : "开始连播",
+                        systemImage: reviewVM.autoplay.isPlaying ? "stop.fill" : "play.fill"
+                    )
+                    .font(.subheadline.weight(.bold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(reviewVM.autoplay.isPlaying ? Theme.unknown : Theme.accent)
+                    .foregroundStyle(.white)
+                    .clipShape(.rect(cornerRadius: 12))
+                }
+                .buttonStyle(.pressable)
+                .disabled(reviewVM.queue.isEmpty)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background(.ultraThinMaterial)
+    }
+
+    private func commitPreview(play: Bool) {
+        guard let selection = previewing else { return }
+        onSelect(selection, selection.displayName(playlists: playlistVM.playlists), play)
+        previewing = nil
+        playlistVM.clearPreview()
+        if play { dismiss() }
     }
 
     // MARK: - 单词列表
 
     @ViewBuilder
     private var wordList: some View {
-        if reviewVM.isLoading {
+        if isPreviewingOther ? playlistVM.isLoadingPreview : reviewVM.isLoading {
             Spacer()
             ProgressView().tint(Theme.accent)
             Spacer()
-        } else if reviewVM.queue.isEmpty {
+        } else if shownWords.isEmpty {
             Spacer()
             ContentUnavailableView(
-                current.emptyTitle,
+                shown.emptyTitle,
                 systemImage: "music.note.list",
-                description: Text(current.emptyDescription)
+                description: Text(shown.emptyDescription)
             )
             Spacer()
         } else {
@@ -226,12 +334,12 @@ struct NowPlayingView: View {
             ScrollViewReader { proxy in
                 List {
                     Section {
-                        ForEach(Array(reviewVM.queue.enumerated()), id: \.element.id) { index, word in
+                        ForEach(Array(shownWords.enumerated()), id: \.element.id) { index, word in
                             wordRow(word, index: index)
                                 .id(word.id)
                         }
                     } header: {
-                        Text("接下来")
+                        Text(isPreviewingOther ? "这一组的单词" : "接下来")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Theme.textSecondary)
                             .textCase(nil)
@@ -253,8 +361,11 @@ struct NowPlayingView: View {
     }
 
     private func wordRow(_ word: VocabularyWord, index: Int) -> some View {
-        let isCurrent = word.id == reviewVM.currentWord?.id
+        // 预览别的分组时列表里没有「正在播的词」，也不能点词跳转——那一组还没
+        // 被选定，跳过去无从谈起。想跳先按底部的「切换到这一组」。
+        let isCurrent = !isPreviewingOther && word.id == reviewVM.currentWord?.id
         return Button {
+            guard !isPreviewingOther else { return }
             onJump(word)
         } label: {
             HStack(spacing: 12) {
@@ -297,11 +408,12 @@ struct NowPlayingView: View {
             }
         }
         .buttonStyle(.pressable)
+        .allowsHitTesting(!isPreviewingOther)
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 3, leading: 20, bottom: 3, trailing: 20))
         .accessibilityLabel("\(word.word)，\(word.definitionZh)\(isCurrent ? "，正在播放" : "")")
-        .accessibilityHint("双击跳到这个单词")
+        .accessibilityHint(isPreviewingOther ? "先切换到这一组才能跳转" : "双击跳到这个单词")
     }
 
     private func statusDot(_ status: String) -> some View {

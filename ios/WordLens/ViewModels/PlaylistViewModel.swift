@@ -12,6 +12,31 @@ final class PlaylistViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
 
+    /// 预览某个分组的词表：用户在正在播放页点了别的分组标签，先把那一组的词
+    /// 拉出来给他看，**但不动当前正在播的队列**——真正切过去要他再点一次
+    /// 「切换到这一组」。这样点标签只是"翻着看看"，不会误操作把正在背的
+    /// 队列冲掉。
+    @Published private(set) var previewWords: [VocabularyWord] = []
+    @Published private(set) var isLoadingPreview = false
+    /// 当前 previewWords 属于哪个分组，避免请求乱序时把上一组的结果显示上去。
+    private var previewToken: PlaylistSelection?
+
+    func loadPreview(_ selection: PlaylistSelection) async {
+        previewToken = selection
+        isLoadingPreview = true
+        previewWords = []
+        defer { isLoadingPreview = false }
+        let words = (try? await PlaylistQueueSource.load(selection)) ?? []
+        // 请求回来时用户可能已经点到别的分组了，只认最后一次的结果。
+        guard previewToken == selection else { return }
+        previewWords = words
+    }
+
+    func clearPreview() {
+        previewToken = nil
+        previewWords = []
+    }
+
     func load() async {
         isLoading = true
         errorMessage = nil

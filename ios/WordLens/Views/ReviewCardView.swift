@@ -64,16 +64,6 @@ struct ReviewCardView: View {
             // NavigationStack 的 chrome 单独管理, 不跟 cardContent 的
             // transition 一起 fade, 静止不动.
             .toolbar {
-                // 左上角唤出播放列表面板——像音乐 App 的「播放队列」入口。
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        showPlaylistSheet = true
-                    } label: {
-                        Image(systemName: "list.bullet")
-                    }
-                    .tint(Theme.accent)
-                    .accessibilityLabel("播放列表")
-                }
                 ToolbarItem(placement: .principal) {
                     // 标题即「正在播放来自…」：随时能看出当前在背哪一组。
                     VStack(spacing: 0) {
@@ -147,10 +137,8 @@ struct ReviewCardView: View {
             // 跟主 view tree 完全分离 — preflight 阶段 FAB 不会被
             // 跟 cardContent 的 transition 一起处理, crash 来源被消除。
             .safeAreaInset(edge: .bottom, alignment: .center, spacing: 0) {
-                autoplayButton
+                bottomBar
                     .padding(.bottom, 16)
-                    .opacity(viewModel.currentWord != nil ? 1 : 0)
-                    .allowsHitTesting(viewModel.currentWord != nil)
                     .background(Color.clear)
             }
             // 进度行也提到 outer 用 safeAreaInset(edge: .top) 钉死——
@@ -259,6 +247,42 @@ struct ReviewCardView: View {
     /// （按压有缩放反馈，跟评分按钮手感一致）。之前的 drag 逻辑整段移除——
     /// 浮动 + 长按拖动的定位在滑动列表里 coordinateSpace 容易错乱，用户反馈
     /// "拖动一下乱跑"，干脆不做浮动、不写位置，固定放在卡片下方居中。
+    /// 底部操作条：播放按钮居中不动，分组入口钉在同一行的最左侧。
+    ///
+    /// 分组入口原来在导航栏左上角，拇指够不着——这一页所有高频操作（切词、评分、
+    /// 连播）都在下半屏，只有它一个人在顶上。用 ZStack 而不是 HStack + Spacer：
+    /// 播放按钮要的是「相对整屏居中」，跟左边那个按钮多宽无关。
+    private var bottomBar: some View {
+        ZStack {
+            autoplayButton
+                .opacity(viewModel.currentWord != nil ? 1 : 0)
+                .allowsHitTesting(viewModel.currentWord != nil)
+
+            HStack {
+                playlistButton
+                Spacer()
+            }
+            .padding(.horizontal, 28)
+        }
+    }
+
+    /// 分组（播放列表）入口：比播放按钮小一圈、用描边而非实心，视觉上分出主次——
+    /// 主操作是连播，切分组是次操作。
+    private var playlistButton: some View {
+        Button {
+            showPlaylistSheet = true
+        } label: {
+            Image(systemName: "list.bullet")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Theme.accent)
+                .frame(width: 48, height: 48)
+                .background(Circle().fill(Theme.surface))
+                .overlay(Circle().strokeBorder(Theme.accent.opacity(0.35), lineWidth: 1))
+        }
+        .buttonStyle(.pressable)
+        .accessibilityLabel("播放列表，当前 \(viewModel.selectionName)")
+    }
+
     private var autoplayButton: some View {
         let isPlaying = viewModel.autoplay.isPlaying
         return Button {
