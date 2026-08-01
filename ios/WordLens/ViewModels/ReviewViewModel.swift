@@ -37,7 +37,7 @@ enum ReviewMode: String, CaseIterable {
         case .smart: return "sparkles"
         case .random: return "shuffle"
         case .hardFirst: return "exclamationmark.triangle.fill"
-        case .sequential: return "chevron.right.2"
+        case .sequential: return "arrow.right"
         }
     }
 
