@@ -62,6 +62,28 @@ struct QueueDrawerView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
+                    HStack(spacing: 8) {
+                        Text("\(words.count) 个单词")
+                            .foregroundStyle(Theme.textSecondary)
+
+                        Spacer()
+
+                        if let currentID = currentWordID,
+                           let index = words.firstIndex(where: { $0.id == currentID }) {
+                            Label("正在第 \(index + 1) 个", systemImage: "speaker.wave.2.fill")
+                                .foregroundStyle(Theme.accent)
+                        }
+                    }
+                    .font(.caption.weight(.medium))
+                    .monospacedDigit()
+                    .padding(.horizontal, 18)
+                    .frame(minHeight: 44)
+                    .background(Theme.surface)
+                    .accessibilityElement(children: .combine)
+
+                    Divider()
+                        .overlay(Theme.border)
+
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             ForEach(Array(words.enumerated()), id: \.element.id) { index, word in
@@ -98,22 +120,6 @@ struct QueueDrawerView: View {
             .navigationTitle("播放队列")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    HStack(spacing: 6) {
-                        Text("\(words.count) 个")
-                            .font(.caption)
-                            .foregroundStyle(Theme.textSecondary)
-                        if let currentID = currentWordID,
-                           let idx = words.firstIndex(where: { $0.id == currentID }) {
-                            Text("·")
-                                .font(.caption)
-                                .foregroundStyle(Theme.textSecondary)
-                            Text("正在第 \(idx + 1) 个")
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(Theme.accent)
-                        }
-                    }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("关闭", action: dismissDrawer)
                         .tint(Theme.accent)
