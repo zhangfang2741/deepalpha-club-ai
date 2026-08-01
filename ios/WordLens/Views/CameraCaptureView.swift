@@ -65,7 +65,7 @@ struct CameraCaptureView: View {
                     Spacer()
                 }
             }
-            .navigationTitle("拍照识词")
+            .navigationTitle("拍照录入")
             .sheet(isPresented: $showCameraSheet) {
                 CameraPicker { image in
                     Task {

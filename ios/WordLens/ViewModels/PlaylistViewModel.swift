@@ -12,6 +12,10 @@ final class PlaylistViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
 
+    /// 当前正在删除的分组 ID——行内 UI 拿来降透明 + 禁用按钮，避免用户在
+    /// 删除请求飞行期间又去操作这一行。`load()` 完成后会自动清掉。
+    @Published private(set) var deletingPlaylistID: String?
+
 
     func load() async {
         isLoading = true
@@ -93,7 +97,15 @@ final class PlaylistViewModel: ObservableObject {
 
     @discardableResult
     func deletePlaylist(id: String) async -> Bool {
+        // 立刻标记「正在删」——行 UI 拿到这个状态立刻降透明 + 禁用点按，用户
+        // 看到「真在删」而不是以为还没动手。同时避免用户在请求飞行期间重复点。
         errorMessage = nil
+        deletingPlaylistID = id
+        defer {
+            // 无论成功失败都要清掉，load() 之前就清也是对的（成功后 load 会重置
+            // 整个 playlists；失败后这一行依然存在，需要恢复可点状态）。
+            deletingPlaylistID = nil
+        }
         do {
             try await WordService.deletePlaylist(id: id)
             await load()

@@ -11,7 +11,7 @@ enum MainTab: Hashable {
 /// EnvironmentObject 广播。
 @MainActor
 final class AppNavigationState: ObservableObject {
-    @Published var selectedTab: MainTab = .home
+    @Published var selectedTab: MainTab = .study
     @Published var highlightedWordIDs: Set<String> = []
     @Published var vocabularyDataVersion = 0
     @Published var blockingOperationMessage: String?

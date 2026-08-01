@@ -34,6 +34,7 @@ struct PlaylistManagerView: View {
                 } else {
                     List {
                         ForEach(viewModel.playlists) { playlist in
+                            let isDeleting = viewModel.deletingPlaylistID == playlist.id
                             Button {
                                 editingPlaylist = playlist
                             } label: {
@@ -42,18 +43,27 @@ struct PlaylistManagerView: View {
                                         Text(playlist.name)
                                             .font(.body.weight(.medium))
                                             .foregroundStyle(Theme.textPrimary)
-                                        Text("\(playlist.wordCount) 个单词")
+                                        Text(isDeleting ? "删除中…" : "\(playlist.wordCount) 个单词")
                                             .font(.caption)
                                             .foregroundStyle(Theme.textSecondary)
                                     }
                                     Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(Theme.textSecondary)
+                                    if isDeleting {
+                                        ProgressView()
+                                            .tint(Theme.unknown)
+                                    } else {
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption.weight(.bold))
+                                            .foregroundStyle(Theme.textSecondary)
+                                    }
                                 }
                                 .contentShape(.rect)
                             }
                             .buttonStyle(.plain)
+                            // 删除中：整行降透明，禁用按钮和左滑——避免用户在请求
+                            // 飞行期间又点这一行或左滑出别的动作造成状态混乱。
+                            .disabled(isDeleting)
+                            .opacity(isDeleting ? 0.5 : 1.0)
                             .listRowBackground(Theme.surface)
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
@@ -62,6 +72,7 @@ struct PlaylistManagerView: View {
                                     Label("删除", systemImage: "trash")
                                 }
                                 .tint(Theme.unknown)
+                                .disabled(isDeleting)
                             }
                         }
 
@@ -109,6 +120,8 @@ struct PlaylistManagerView: View {
                 Button("删除分组", role: .destructive) {
                     guard let playlist = pendingDeletion else { return }
                     pendingDeletion = nil
+                    // deletePlaylist 内部会把 deletingPlaylistID 置上、再走网络
+                    // 请求——行立刻灰掉并显示「删除中…」加载状态，完成后自动恢复。
                     Task { await viewModel.deletePlaylist(id: playlist.id) }
                 }
                 Button("取消", role: .cancel) { pendingDeletion = nil }
