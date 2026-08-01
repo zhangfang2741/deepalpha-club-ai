@@ -238,11 +238,9 @@ struct ReviewCardView: View {
     /// 整行走 safeAreaInset 钉死，跟卡片的 .id + .transition 完全分离——切词时
     /// 只 diff 里面的文字，位置不动、不跟着淡入淡出。
     private var topBar: some View {
-        ZStack(alignment: .center) {
-            // 分组名和播放信息组成居中的两行；左右预留空间，长分组名不会压到开关。
-            VStack(spacing: 2) {
-                // 顶部分组选择器：居中、放小三角标记可展开。整块可点，三角跟着
-                // 展开状态转 180°。
+        VStack(spacing: 0) {
+            // 第一层只负责标题和模式选择，让两者共享一条稳定的垂直基线。
+            ZStack(alignment: .center) {
                 Button {
                     withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
                         showGroupDropdown.toggle()
@@ -259,29 +257,29 @@ struct ReviewCardView: View {
                             .rotationEffect(.degrees(showGroupDropdown ? 180 : 0))
                     }
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
+                    .frame(minHeight: 44)
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("当前分组 \(viewModel.selectionName)，展开分组列表")
-                .padding(.horizontal, 108)
+                .padding(.horizontal, Self.headerTitleSideClearance)
 
-                // 没有正在复习的卡片时（加载中/无待复习/已完成）隐藏进度，避免
-                // 显示成 "N/0" 这类无意义数字。
-                if viewModel.currentWord != nil {
-                    progressBar
+                HStack {
+                    Spacer()
+                    studyModeToggle
                 }
             }
-            .frame(maxWidth: .infinity)
 
-            HStack {
-                Spacer()
-                studyModeToggle
+            // 第二层是独立状态胶囊。和标题拉开距离后，不会再挤在标题基线上。
+            // 没有卡片时直接移除，避免出现 "N/0" 这类无意义数字。
+            if viewModel.currentWord != nil {
+                progressBar
+                    .padding(.top, Self.headerStatusSpacing)
             }
         }
         .padding(.horizontal, 20)
         .padding(.top, 6)
-        .padding(.bottom, 10)
+        .padding(.bottom, 14)
     }
 
     /// 右上角的学习方式分段器：两个选项始终可见，当前项用主题色填充。
@@ -358,25 +356,43 @@ struct ReviewCardView: View {
     /// 变化只 diff 内部 Text 数字，不会有 fade/scale 入场动画，肉眼看就是纯数字
     /// 改变、不闪动。
     private var progressBar: some View {
-        HStack(spacing: 8) {
+        let current = viewModel.reviewedCount + viewModel.currentIndex + 1
+        return HStack(spacing: 8) {
             // 分子 = 已评分数 + 当前在剩余队列里的位置：评过的词已从队列移除，
             // reviewedCount 记着删了几个，加上当前位置就是这张卡在原始队列里的序号。
-            Text("\(viewModel.reviewedCount + viewModel.currentIndex + 1) / \(viewModel.totalCount)")
+            Text("\(current) / \(viewModel.totalCount)")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(Theme.textSecondary)
             if viewModel.autoplay.isPlaying {
-                Text("·")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Theme.textSecondary)
-                HStack(spacing: 4) {
-                    Image(systemName: "speaker.wave.2.fill")
-                        .font(.caption2)
-                    Text("第 \(viewModel.autoplay.passIndex + 1) / \(AutoplayController.passCount) 遍")
-                }
+                Divider()
+                    .frame(height: 12)
+                Label(
+                    "第 \(viewModel.autoplay.passIndex + 1) / \(AutoplayController.passCount) 遍",
+                    systemImage: "speaker.wave.2.fill"
+                )
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Theme.accent)
             }
         }
+        .monospacedDigit()
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Theme.surface)
+        .clipShape(.capsule)
+        .overlay {
+            Capsule().strokeBorder(Theme.border, lineWidth: 1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("学习进度")
+        .accessibilityValue(progressAccessibilityValue)
+    }
+
+    private var progressAccessibilityValue: String {
+        let current = viewModel.reviewedCount + viewModel.currentIndex + 1
+        let progress = "第 \(current) 个，共 \(viewModel.totalCount) 个"
+        guard viewModel.autoplay.isPlaying else { return progress }
+        return "\(progress)，正在播放第 \(viewModel.autoplay.passIndex + 1) 遍，"
+            + "共 \(AutoplayController.passCount) 遍"
     }
 
     /// 自动播放按钮：圆 + 图标 + 阴影，包在 Button 里复用 .pressable 样式

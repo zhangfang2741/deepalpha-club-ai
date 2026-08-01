@@ -141,25 +141,29 @@ struct HomeView: View {
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
-    /// 统计数字本身就是筛选入口。
+    /// 状态磁贴：认识/模糊/不认识三个，「全部」也是筛选入口。
     ///
-    /// 计数永远按全量 allWords 算——磁贴上的数字始终是"我生词库里的真实分
-    /// 布"，跟 chips 互不联动。点状态磁贴会清掉 chips 选择，反之亦然，两
-    /// 种过滤维度互斥。
+    /// 「全部」是个复位键——点一下就把状态筛选清掉。它本身**不**显示"被默认选
+    /// 中"的高亮态（不像旧版那样 `isSelected: filterStatus == nil`）：没选状态时
+    /// 它就是默认态的样式，不跟 chips 抢"被默认选中"的视觉语义。
+    ///
+    /// 计数永远按全量 allWords 算，跟 chips 互不联动——状态和自定义分组是两种
+    /// 正交过滤维度，互斥：选一边就把另一边清掉。
     private var statsRow: some View {
         let words = listVM.allWords
         let unknownCount = words.filter { $0.status == "new" }.count
         let fuzzyCount = words.filter { $0.status == "fuzzy" }.count
         let knownCount = words.filter { $0.status == "known" }.count
         return HStack(spacing: 12) {
-            statTile("全部", words.count, Theme.textPrimary, isSelected: listVM.filterStatus == nil) {
+            // 「全部」磁贴永远不显示选中态——它只承担"重置"动作，不跟具体状态
+            // 抢"被选中"的位置。否则用户点 chips 时它跟着亮起来，会被误读为
+            // "分组 + 全部"两个都在筛。
+            statTile("全部", words.count, Theme.textPrimary, isSelected: false) {
                 listVM.filterStatus = nil
-                // 状态回到「全部」时同步清掉 chips，让"全部"作为唯一归零路径
                 listVM.clearPlaylistFilter()
             }
             statTile("不认识", unknownCount, Theme.unknown, isSelected: listVM.filterStatus == "new") {
                 listVM.filterStatus = listVM.filterStatus == "new" ? nil : "new"
-                // 选了具体状态时同步清掉 chips，互斥
                 if listVM.filterStatus != nil { listVM.clearPlaylistFilter() }
             }
             statTile("模糊", fuzzyCount, Theme.fuzzy, isSelected: listVM.filterStatus == "fuzzy") {
