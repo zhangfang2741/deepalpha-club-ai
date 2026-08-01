@@ -15,11 +15,9 @@ struct HomeView: View {
             VStack(spacing: 16) {
                 statsRow
 
-                // 自定义分组筛选：跟状态磁贴同级，用户点 chips 跟点状态磁贴是
-                // 同一类动作（筛选）。chips 用流式排版避免多了挤换行。
-                if !playlistVM.playlists.isEmpty {
-                    playlistFilterChips
-                }
+                // 自定义分组筛选：已有分组时显示筛选 chips；「分组管理」始终保留，
+                // 否则新用户正因为没有分组，反而看不到创建第一个分组的入口。
+                playlistFilterChips
 
                 TextField("搜索单词", text: $listVM.searchQuery)
                     .padding(10)
