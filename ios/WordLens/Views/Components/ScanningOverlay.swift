@@ -61,10 +61,9 @@ struct ScanningOverlay: View {
             // 视觉上也刻意跟灰色轮播文案拉开（主题色 + 加粗 + 大一号字），
             // 否则"已识别到 N 个词，正在整理释义…"跟轮播里的"正在整理释义与
             // 例句…"长得太像，数字在跳也容易被当成没变化。
-            // 状态区单独包一层再挂 .animation：这个修饰符会作用到整个子树，
-            // 之前挂在最外层 VStack 上时，分支切换那一下创建的 0.25s 事务会把
-            // 上面扫描线的 repeatForever 动画一起接管掉，扫描效果就此停住。
-            // 收窄到这里，扫描线不再受影响。
+            // 状态切换不要使用隐式动画。轮播文案和进度区高度不同，动画会让新旧
+            // 分支在布局过渡期间同时存在，旁边还有其它控件时就容易出现重复文案
+            // 或控件插入状态区的问题；直接替换能保证任何时刻只有一个状态来源。
             Group {
                 if partialWordCount > 0 {
                     VStack(spacing: 8) {
@@ -100,7 +99,6 @@ struct ScanningOverlay: View {
                         }
                 }
             }
-            .animation(.easeInOut(duration: 0.25), value: partialWordCount > 0)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(

@@ -35,31 +35,33 @@ struct CameraCaptureView: View {
                             .foregroundStyle(Theme.unknown)
                     }
 
-                    VStack(spacing: 12) {
-                        Button {
-                            showCameraSheet = true
-                        } label: {
-                            Label("拍照", systemImage: "camera.fill")
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(Theme.accent)
-                                .foregroundStyle(.white)
-                                .clipShape(.rect(cornerRadius: 12))
-                        }
-                        .buttonStyle(.pressable)
-                        .disabled(viewModel.isRecognizing)
+                    // 识别期间只保留扫描图和进度反馈。原来这里只禁用按钮，按钮仍会
+                    // 占据布局空间，并在进度状态切换时插到两段状态文案之间。
+                    if !viewModel.isRecognizing {
+                        VStack(spacing: 12) {
+                            Button {
+                                showCameraSheet = true
+                            } label: {
+                                Label("拍照", systemImage: "camera.fill")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(Theme.accent)
+                                    .foregroundStyle(.white)
+                                    .clipShape(.rect(cornerRadius: 12))
+                            }
+                            .buttonStyle(.pressable)
 
-                        PhotosPicker(selection: $photoPickerItem, matching: .images) {
-                            Label("从相册选择", systemImage: "photo.on.rectangle")
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(Theme.surface)
-                                .foregroundStyle(Theme.textPrimary)
-                                .clipShape(.rect(cornerRadius: 12))
+                            PhotosPicker(selection: $photoPickerItem, matching: .images) {
+                                Label("从相册选择", systemImage: "photo.on.rectangle")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(Theme.surface)
+                                    .foregroundStyle(Theme.textPrimary)
+                                    .clipShape(.rect(cornerRadius: 12))
+                            }
                         }
-                        .disabled(viewModel.isRecognizing)
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
 
                     Spacer()
                     Spacer()

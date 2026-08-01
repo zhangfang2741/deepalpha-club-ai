@@ -23,6 +23,14 @@ struct ReviewCardView: View {
     private static let headerTitleSideClearance: CGFloat = 96
     /// 分组标题与进度状态之间的层级间距。
     private static let headerStatusSpacing: CGFloat = 14
+    /// 单词卡、评分区和播放区共用同一条内容边界。
+    private static let contentHorizontalPadding: CGFloat = 16
+    /// 播放区在横向拉宽后，按钮和图标同步放大，避免控件显得过于稀疏。
+    private static let transportTapSize: CGFloat = 48
+    private static let transportIconSize: CGFloat = 24
+    private static let transportUtilityIconSize: CGFloat = 20
+    private static let playCircleSize: CGFloat = 64
+    private static let playIconSize: CGFloat = 26
 
     var body: some View {
         NavigationStack {
@@ -169,7 +177,7 @@ struct ReviewCardView: View {
             if viewModel.isDictation {
                 if viewModel.dictationPhase.isInput {
                     confirmDictationButton
-                        .padding(.horizontal)
+                        .padding(.horizontal, Self.contentHorizontalPadding)
                         .transition(.opacity)
                 }
             } else if viewModel.isFlipped {
@@ -178,7 +186,7 @@ struct ReviewCardView: View {
                     ratingButton("😐 模糊", Theme.fuzzy, .fuzzy)
                     ratingButton("😊 认识", Theme.known, .known)
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, Self.contentHorizontalPadding)
                 .transition(.opacity)
             }
 
@@ -338,7 +346,7 @@ struct ReviewCardView: View {
                         flipCard(word)
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, Self.contentHorizontalPadding)
                 // word.id 变化时（首次进入、上一个/下一个、评分切到下一张）
                 // 触发发音——挂在卡片上不参与 outer transition.
                 .task(id: word.id) {
@@ -366,10 +374,16 @@ struct ReviewCardView: View {
             if viewModel.autoplay.isPlaying {
                 Divider()
                     .frame(height: 12)
-                Label(
-                    "第 \(viewModel.autoplay.passIndex + 1) / \(AutoplayController.passCount) 遍",
-                    systemImage: "speaker.wave.2.fill"
-                )
+                Label {
+                    Text(
+                        viewModel.autoplay.isReadingExample
+                            ? "正在读例句"
+                            : "第 \(viewModel.autoplay.passIndex + 1) / \(AutoplayController.passCount) 遍"
+                    )
+                } icon: {
+                    Image(systemName: viewModel.autoplay.isReadingExample
+                          ? "quote.bubble.fill" : "speaker.wave.2.fill")
+                }
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Theme.accent)
             }
@@ -391,6 +405,9 @@ struct ReviewCardView: View {
         let current = viewModel.reviewedCount + viewModel.currentIndex + 1
         let progress = "第 \(current) 个，共 \(viewModel.totalCount) 个"
         guard viewModel.autoplay.isPlaying else { return progress }
+        if viewModel.autoplay.isReadingExample {
+            return "\(progress)，正在朗读英文例句"
+        }
         return "\(progress)，正在播放第 \(viewModel.autoplay.passIndex + 1) 遍，"
             + "共 \(AutoplayController.passCount) 遍"
     }
@@ -415,11 +432,21 @@ struct ReviewCardView: View {
             VStack(spacing: 0) {
                 ScrollView {
                     LazyVStack(spacing: 2) {
+                        // “待复习”是按 next_review_at 动态计算的跨状态队列，不是
+                        // “不认识 / 模糊 / 认识”的父级总数，单独放在系统根节点下，
+                        // 避免用户把它误解成下面三个状态数量之和。
+                        GroupSectionHeader(
+                            title: "系统复习",
+                            systemImage: "calendar.badge.clock"
+                        )
+                        groupRow(.dueReview, label: "待复习", dot: nil)
+
                         GroupSectionHeader(
                             title: "生词库分组",
-                            systemImage: "tray.full.fill"
+                            systemImage: "tray.full.fill",
+                            separatesPreviousSection: true
                         )
-                        ForEach(builtinGroups, id: \.selection) { group in
+                        ForEach(statusGroups, id: \.selection) { group in
                             groupRow(group.selection, label: group.label, dot: group.dot)
                         }
 
@@ -463,9 +490,8 @@ struct ReviewCardView: View {
         }
     }
 
-    private var builtinGroups: [(selection: PlaylistSelection, label: String, dot: Color?)] {
+    private var statusGroups: [(selection: PlaylistSelection, label: String, dot: Color?)] {
         [
-            (.dueReview, "待复习", nil),
             (.status("new"), "不认识", Theme.unknown),
             (.status("fuzzy"), "模糊", Theme.fuzzy),
             (.status("known"), "认识", Theme.known),
@@ -539,8 +565,9 @@ struct ReviewCardView: View {
             }
         } label: {
             ReviewModeIcon(mode: viewModel.mode)
-                .foregroundStyle(viewModel.mode == .smart ? Theme.textSecondary : Theme.accent)
-                .frame(width: 44, height: 44)
+                // 按钮始终展示“当前生效的播放模式”，四种模式应使用相同的激活色。
+                .foregroundStyle(Theme.accent)
+                .frame(width: Self.transportTapSize, height: Self.transportTapSize)
                 .contentShape(.rect)
         }
         .accessibilityLabel("播放顺序，当前\(viewModel.mode.label)")
@@ -550,9 +577,9 @@ struct ReviewCardView: View {
     private var queueButton: some View {
         Button(action: presentQueue) {
             Image(systemName: "list.bullet")
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: Self.transportUtilityIconSize, weight: .semibold))
                 .foregroundStyle(Theme.textSecondary)
-                .frame(width: 44, height: 44)
+                .frame(width: Self.transportTapSize, height: Self.transportTapSize)
                 .contentShape(.rect)
         }
         .buttonStyle(.pressable)
@@ -561,8 +588,11 @@ struct ReviewCardView: View {
     }
 
     private func presentQueue() {
-        // 先收听写键盘，再无系统动画地挂载全屏容器；抽屉会在下一帧从右侧滑入。
+        // 播放队列与分组下拉框是互斥的覆盖层。先立即收起分组，避免队列从右侧
+        // 滑入后下拉框仍留在底层，并在关闭队列时重新露出来。
         isDictationFieldFocused = false
+        showGroupDropdown = false
+        // 再无系统动画地挂载全屏容器；抽屉会在下一帧从右侧滑入。
         setQueuePresented(true)
     }
 
@@ -586,8 +616,9 @@ struct ReviewCardView: View {
     /// 顶掉，连播键则单独浮在别的地方。合成一条常驻的播放条之后，位置永远固定，
     /// 手指不用每次重新找，跟"这是个播放器"的心智也对得上。
     private var transportBar: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 0) {
             playOrderButton
+            Spacer(minLength: 8)
 
             transportButton(
                 "backward.end.fill",
@@ -596,8 +627,10 @@ struct ReviewCardView: View {
             ) {
                 viewModel.goToPrevious()
             }
+            Spacer(minLength: 8)
 
             playCircle
+            Spacer(minLength: 8)
 
             transportButton(
                 "forward.end.fill",
@@ -606,11 +639,14 @@ struct ReviewCardView: View {
             ) {
                 viewModel.goToNext()
             }
+            Spacer(minLength: 8)
 
             queueButton
         }
         // 不加面板底色：这一条就浮在页面背景上，跟卡片各自独立。加了毛玻璃面板
         // 反而在深色背景上糊成一块灰，抢卡片的视觉重量。
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, Self.contentHorizontalPadding)
         .padding(.vertical, 4)
     }
 
@@ -621,9 +657,9 @@ struct ReviewCardView: View {
             viewModel.autoplay.toggle()
         } label: {
             Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                .font(.system(size: 24, weight: .bold))
+                .font(.system(size: Self.playIconSize, weight: .bold))
                 .foregroundStyle(isPlaying ? .white : Theme.textPrimary)
-                .frame(width: 58, height: 58)
+                .frame(width: Self.playCircleSize, height: Self.playCircleSize)
                 .background(
                     Circle().fill(isPlaying ? Theme.accent : Color.white.opacity(0.14))
                 )
@@ -639,10 +675,10 @@ struct ReviewCardView: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 22, weight: .medium))
+                .font(.system(size: Self.transportIconSize, weight: .medium))
                 .foregroundStyle(enabled ? Theme.textPrimary : Theme.textSecondary.opacity(0.4))
                 // 图标本身远小于 44pt，撑开点按区域到最小可点尺寸。
-                .frame(width: 44, height: 44)
+                .frame(width: Self.transportTapSize, height: Self.transportTapSize)
                 .contentShape(.rect)
         }
         .buttonStyle(.pressable)

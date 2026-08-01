@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 发音设置页面（从设置页进入）。
 ///
-/// 把发音相关的所有偏好集中在一处：发音源（有道/Google/系统/Azure）、口音（英/美）、
+/// 把发音相关的所有偏好集中在一处：发音源（有道/MiniMax）、口音（英/美）、
 /// 语速、自动发音。偏好本身仍存在 UserDefaults（见 PronounceButton.swift 里的
 /// PronunciationSource / PronunciationAccent / PronunciationRate / PronunciationAutoplay），
 /// 这里只是统一的可视化入口。
@@ -19,9 +19,7 @@ struct PronunciationSettingsView: View {
                 Section {
                     Picker("发音源", selection: $source) {
                         Text("有道").tag(PronunciationSource.youdao)
-                        Text("Google").tag(PronunciationSource.google)
-                        Text("系统语音").tag(PronunciationSource.system)
-                        Text("高清（Azure）").tag(PronunciationSource.azure)
+                        Text("MiniMax Speech HD").tag(PronunciationSource.minimax)
                     }
                     .onChange(of: source) { _, newValue in
                         PronunciationSource.current = newValue
@@ -29,7 +27,7 @@ struct PronunciationSettingsView: View {
                 } header: {
                     Text("发音源")
                 } footer: {
-                    Text("有道：常见词真人录音；Google：神经网络合成，咬字清晰、覆盖全；系统语音：Apple 离线合成，需先在「设置 › 辅助功能 › 朗读内容 › 声音」里下载优质英语语音；高清：Azure 神经语音，质量最稳定、词句通吃（联网）。")
+                    Text("有道适合常见单词的词典发音；MiniMax Speech HD 使用高清 AI 语音，支持单词和完整例句，需要联网。")
                         .foregroundStyle(Theme.textSecondary)
                 }
                 .listRowBackground(Theme.surface)

@@ -6,10 +6,7 @@ import SwiftUI
 
 /// 发音口音偏好（存 UserDefaults，设置页可切换）。
 ///
-/// 之前这里是「男声/女声」，因为老实现用系统合成语音 `AVSpeechSynthesizer`，
-/// 发音本身不准、而且和拍照识别时 LLM 生成的音标（不区分口音）对不上，选英/美
-/// 口音只会误导用户。现在改成拉取有道词典的真人发音音频（`dictvoice`），口音是
-/// 音频文件里实打实的区别，所以把选项换回**英音/美音**才真正有意义。
+/// 有道通过 type 参数区分英/美音；MiniMax 通过服务端配置的两套 voice ID 区分。
 enum PronunciationAccent: String {
     case us
     case uk
@@ -30,8 +27,7 @@ enum PronunciationAccent: String {
 
 /// 发音语速偏好（存 UserDefaults，设置页可切换）。
 ///
-/// 有道音频用 `AVAudioPlayer` 的倍速播放实现，不必按语速重新拉流、也不影响缓存
-/// （同一份 mp3 变速播放即可）；系统合成语音兜底时换算成对应的 utterance rate。
+/// 有道和 MiniMax 音频都用 `AVAudioPlayer` 倍速播放，不必按语速重复生成和缓存。
 enum PronunciationRate: String, CaseIterable {
     case slow
     case normal
@@ -56,18 +52,6 @@ enum PronunciationRate: String, CaseIterable {
         }
     }
 
-    /// 系统合成语音兜底时的 `utterance.rate`（0…1，默认约 0.5），按同样的快慢
-    /// 换算并夹紧到系统允许区间。
-    var synthesizerRate: Float {
-        let base = AVSpeechUtteranceDefaultSpeechRate
-        let scaled: Float
-        switch self {
-        case .slow: scaled = base * 0.7
-        case .normal: scaled = base
-        case .fast: scaled = base * 1.3
-        }
-        return min(max(scaled, AVSpeechUtteranceMinimumSpeechRate), AVSpeechUtteranceMaximumSpeechRate)
-    }
 }
 
 /// 是否在复习卡 / 单词详情出现时自动发音（存 UserDefaults，设置页可切换）。
@@ -89,42 +73,34 @@ enum PronunciationAutoplay {
 
 /// 发音源偏好（存 UserDefaults，设置页可切换）。
 ///
-/// 不同来源音质/风格不同，用户可按喜好选：
-/// - `youdao`：有道词典音，常见词是真人录音、生僻词退化成合成（"不正宗"多来自这些）。
-/// - `google`：Google 翻译 TTS，神经网络合成，咬字清晰、任意词都有、风格统一。
-/// - `system`：Apple 系统语音，优先选已安装的「优质/增强」神经语音，完全离线、最自然，
-///   但若系统里没下载优质语音会退化成默认合成音（需到系统设置里下载）。
-/// - `azure`：高清——Azure 神经 TTS，经后端中转（key 只在服务端）。质量稳定地高一档、
-///   词句通吃；后端未配置 Azure key 时会 503，客户端回退到系统合成音。
+/// 只保留中国大陆可用的两个来源：有道词典音，以及经自家后端中转的 MiniMax Speech。
 enum PronunciationSource: String, CaseIterable {
     case youdao
-    case google
-    case system
-    case azure
+    case minimax
 
     static var current: PronunciationSource {
         get {
             let raw = UserDefaults.standard.string(forKey: "pronunciation_source") ?? youdao.rawValue
-            return PronunciationSource(rawValue: raw) ?? .youdao
+            guard let source = PronunciationSource(rawValue: raw) else {
+                // 旧版本可能保存了 google/system/azure，升级后统一迁移回有道。
+                UserDefaults.standard.set(youdao.rawValue, forKey: "pronunciation_source")
+                return .youdao
+            }
+            return source
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: "pronunciation_source")
         }
     }
 
-    /// 是否走本地系统合成（不联网、不缓存 mp3）。
-    var isSystem: Bool { self == .system }
-
-    /// 是否走本项目后端（需带登录 token）。目前只有 azure「高清」源。
-    var usesBackend: Bool { self == .azure }
+    /// MiniMax 走本项目后端，登录 token 随请求发送，供应商密钥不会下发到 App。
+    var usesBackend: Bool { self == .minimax }
 }
 
 /// 单词发音播放器（单例）。
 ///
-/// 数据源是有道词典发音接口 `https://dict.youdao.com/dictvoice?audio=<词>&type=<1|2>`，
-/// 返回真人/词典级 mp3，重音准确、无需 key。首次播放后把音频缓存到 Caches 目录，
-/// 再次点击直接读本地文件，几乎零延迟。网络失败时回退到系统合成语音，保证离线
-/// 也能出声。
+/// 有道直接请求词典音；MiniMax 经自家后端生成高清 MP3。首次播放后统一缓存到
+/// Caches 目录，再次播放直接读取本地文件。
 ///
 /// 做成 ObservableObject（而不是之前的纯静态方法集合）：正在播放哪个词要是一份
 /// 全局共享状态，不能只存在触发播放的那个 PronounceButton 自己的本地 @State 里。
@@ -142,8 +118,6 @@ final class Pronouncer: ObservableObject {
 
     /// 必须持有强引用，否则 AVAudioPlayer 会被立即释放、还没出声就停了。
     private var player: AVAudioPlayer?
-    /// 网络失败时的离线兜底。
-    private let synthesizer = AVSpeechSynthesizer()
     private let session = URLSession(configuration: .default)
     private lazy var delegate = PlaybackDelegate(owner: self)
 
@@ -369,48 +343,59 @@ final class Pronouncer: ObservableObject {
         }
         playingWord = trimmed.lowercased()
 
-        // 系统优质语音：本地合成，不联网、不缓存 mp3。
-        if source.isSystem {
-            speakWithSynthesizer(trimmed)
+        fetchAndPlay(
+            trimmed,
+            chain: Self.fallbackChain(startingAt: source),
+            accent: accent,
+            purpose: "word"
+        )
+    }
+
+    /// 自动播放专用的整句发音。例句始终使用 MiniMax 整句 TTS，才能保留自然的
+    /// 连读、停顿和重音；有道的 dictvoice 不支持完整句子。
+    func speakExampleSentence(_ sentence: String) {
+        activateSessionIfNeeded()
+        let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            playingWord = nil
             return
         }
-
-        fetchAndPlay(trimmed, chain: Self.fallbackChain(startingAt: source), accent: accent)
+        playingWord = trimmed.lowercased()
+        fetchAndPlay(
+            trimmed,
+            chain: [.minimax],
+            accent: PronunciationAccent.current,
+            purpose: "sentence"
+        )
     }
 
-    /// 发音源的降级链：首选源拉不到时，按顺序往后试，全都不行才用系统合成兜底。
-    ///
-    /// 之所以需要这个链条：有道 `dictvoice` 对**带连字符的复合词**（如
-    /// `modern-innovation` / `purchase-power`）直接返回 500，而这类词在拍照识别
-    /// 的结果里相当常见。老实现是"一失败就跳系统合成"，于是同一个队列里常见词
-    /// 是有道真人女声、复合词是系统合成音，连播时音色一个词一变。
-    ///
-    /// Google TTS 对任意字符串都能合成、音色稳定，插在中间能接住绝大多数漏网词，
-    /// 系统合成退化为最后一道保险（真·断网时还能出声）。
+    /// 单词首选源失败时只在有道与 MiniMax 之间降级，不再接入其它第三方或系统语音。
     private static func fallbackChain(startingAt source: PronunciationSource) -> [PronunciationSource] {
         switch source {
-        case .youdao: return [.youdao, .google]
-        case .google: return [.google]
-        // 高清（Azure）走自家后端，未配置 key 时返回 503，用 Google 接住。
-        case .azure: return [.azure, .google]
-        case .system: return []
+        case .youdao: return [.youdao, .minimax]
+        case .minimax: return [.minimax, .youdao]
         }
     }
 
-    /// 沿着降级链依次尝试；链走完仍失败则用系统合成兜底。
-    private func fetchAndPlay(_ word: String, chain: [PronunciationSource], accent: PronunciationAccent) {
+    /// 沿降级链依次尝试；全部失败时结束本次播放，让自动播放可以继续往下走。
+    private func fetchAndPlay(
+        _ word: String,
+        chain: [PronunciationSource],
+        accent: PronunciationAccent,
+        purpose: String
+    ) {
         guard let source = chain.first else {
-            speakWithSynthesizer(word)
+            handleFinished()
             return
         }
         let rest = Array(chain.dropFirst())
 
-        if let data = cachedAudio(for: word, source: source, accent: accent) {
-            play(data, fallbackWord: word)
+        if let data = cachedAudio(for: word, source: source, accent: accent, purpose: purpose) {
+            play(data)
             return
         }
         guard let request = remoteRequest(for: word, source: source, accent: accent) else {
-            fetchAndPlay(word, chain: rest, accent: accent)
+            fetchAndPlay(word, chain: rest, accent: accent, purpose: purpose)
             return
         }
 
@@ -418,18 +403,20 @@ final class Pronouncer: ObservableObject {
             let http = response as? HTTPURLResponse
             // 查不到的词部分源会返回 200 但空 body / 非音频，用非空 + 2xx 双重判断。
             guard let data, !data.isEmpty, (200..<300).contains(http?.statusCode ?? 0) else {
-                Task { @MainActor in self?.fetchAndPlay(word, chain: rest, accent: accent) }
+                Task { @MainActor in
+                    self?.fetchAndPlay(word, chain: rest, accent: accent, purpose: purpose)
+                }
                 return
             }
-            self?.cacheAudio(data, for: word, source: source, accent: accent)
-            Task { @MainActor in self?.play(data, fallbackWord: word) }
+            Task { @MainActor in
+                guard let self else { return }
+                self.cacheAudio(data, for: word, source: source, accent: accent, purpose: purpose)
+                self.play(data)
+            }
         }.resume()
     }
 
-    /// 播放真正结束（AVAudioPlayerDelegate / AVSpeechSynthesizerDelegate 回调）时清空
-    /// playingWord，波纹动效跟着停。不在这里做"打断上一个"的特殊处理——播放新词前
-    /// player?.stop()/synthesizer.stopSpeaking() 已经会触发旧 delegate 回调，自然把
-    /// playingWord 清成 nil，再被下面 speak() 里设的新值覆盖，顺序上没有竞态。
+    /// 播放真正结束或所有远程源均失败时清空 playingWord，波纹动效跟着停止。
     ///
     /// 自动播放状态机（ReviewViewModel.runAutoplayLoop）通过 polling
     /// `Pronouncer.shared.playingWord` 探测音频结束，不在这里挂回调——保持
@@ -438,19 +425,26 @@ final class Pronouncer: ObservableObject {
         playingWord = nil
     }
 
-    private func remoteRequest(for word: String, source: PronunciationSource, accent: PronunciationAccent) -> URLRequest? {
+    private func remoteRequest(
+        for word: String,
+        source: PronunciationSource,
+        accent: PronunciationAccent
+    ) -> URLRequest? {
         guard let url = remoteURL(for: word, source: source, accent: accent) else { return nil }
         var request = URLRequest(url: url)
-        // Google TTS 不带常见 UA 时可能 403；统一带一个桌面 UA，对其它源无害。
-        request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
-        // 走后端的源（azure「高清」）需要登录 token。
+        request.setValue("audio/mpeg", forHTTPHeaderField: "Accept")
+        // 走后端的 MiniMax 源需要登录 token。
         if source.usesBackend, let token = KeychainStore.loadToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         return request
     }
 
-    private func remoteURL(for word: String, source: PronunciationSource, accent: PronunciationAccent) -> URL? {
+    private func remoteURL(
+        for word: String,
+        source: PronunciationSource,
+        accent: PronunciationAccent
+    ) -> URL? {
         switch source {
         case .youdao:
             var components = URLComponents(string: "https://dict.youdao.com/dictvoice")
@@ -459,31 +453,21 @@ final class Pronouncer: ObservableObject {
                 URLQueryItem(name: "type", value: String(accent.youdaoType)),
             ]
             return components?.url
-        case .google:
-            // client=tw-ob 免 token；tl 指定语言，英音传 en-gb，其余用 en（偏美音）。
-            var components = URLComponents(string: "https://translate.google.com/translate_tts")
-            components?.queryItems = [
-                URLQueryItem(name: "ie", value: "UTF-8"),
-                URLQueryItem(name: "client", value: "tw-ob"),
-                URLQueryItem(name: "tl", value: accent == .uk ? "en-gb" : "en"),
-                URLQueryItem(name: "q", value: word),
-            ]
-            return components?.url
-        case .azure:
-            // 走本项目后端 /vocabulary/tts，由服务端调 Azure（key 不下发到 App）。
+        case .minimax:
+            // 走本项目后端 /vocabulary/tts，由服务端调用 MiniMax（key 不下发到 App）。
             let base = AppConfig.baseURL.appendingPathComponent(AppConfig.apiPrefix + "/tts")
             var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
             components?.queryItems = [
                 URLQueryItem(name: "word", value: word),
                 URLQueryItem(name: "accent", value: accent == .uk ? "uk" : "us"),
+                // 服务端/CDN 缓存按 URL 区分；升级音色配置时递增版本，避免命中旧音色。
+                URLQueryItem(name: "voice_profile", value: "us-trustworthy_uk-graceful-v1"),
             ]
             return components?.url
-        case .system:
-            return nil  // 系统语音走本地合成，不联网
         }
     }
 
-    private func play(_ data: Data, fallbackWord: String) {
+    private func play(_ data: Data) {
         player?.stop()
         do {
             let newPlayer = try AVAudioPlayer(data: data)
@@ -494,44 +478,9 @@ final class Pronouncer: ObservableObject {
             player = newPlayer
             newPlayer.play()
         } catch {
-            // 缓存文件损坏或格式异常时兜底，保证点了小喇叭一定有声音。
-            speakWithSynthesizer(fallbackWord)
+            // 缓存损坏或响应并非有效音频时结束本次播放；不再回退到已删除的系统语音。
+            handleFinished()
         }
-    }
-
-    private func speakWithSynthesizer(_ word: String) {
-        let utterance = AVSpeechUtterance(string: word)
-        utterance.voice = bestEnglishVoice(PronunciationAccent.current)
-        utterance.rate = PronunciationRate.current.synthesizerRate
-        synthesizer.delegate = delegate
-        synthesizer.stopSpeaking(at: .immediate)
-        synthesizer.speak(utterance)
-    }
-
-    /// 选目标口音下音质最好的**女声**英语语音：先按性别筛，再在里面挑音质。
-    ///
-    /// 性别筛选是这里的关键：老实现最后一档是 `candidates.first`，取的是系统语音
-    /// 列表里碰巧排第一个的那个，性别完全看运气——没下载「优质/增强」语音的机器
-    /// 上，兜底发音会随机变成男声，跟有道那边的女声真人录音接不上。
-    ///
-    /// 统一挑女声是为了跟主力发音源（有道 / Google 默认都是女声）对齐，让偶尔走到
-    /// 兜底的词听起来不至于突兀。`.unspecified` 也纳入候选：部分老语音没标性别，
-    /// 总比一个词都挑不出来强。用户在系统设置里下载了优质/增强语音后自动用上。
-    private func bestEnglishVoice(_ accent: PronunciationAccent) -> AVSpeechSynthesisVoice? {
-        let lang = accent == .uk ? "en-GB" : "en-US"
-        let all = AVSpeechSynthesisVoice.speechVoices().filter { $0.language == lang }
-        let preferred = all.filter { $0.gender == .female }
-        let candidates = preferred.isEmpty ? all.filter { $0.gender == .unspecified } : preferred
-
-        func best(_ voices: [AVSpeechSynthesisVoice]) -> AVSpeechSynthesisVoice? {
-            voices.first { $0.quality == .premium }
-                ?? voices.first { $0.quality == .enhanced }
-                ?? voices.first
-        }
-        return best(candidates)
-            // 连女声/未标注的都没有时才退回全体，此时至少音质仍按 premium 优先。
-            ?? best(all)
-            ?? AVSpeechSynthesisVoice(language: lang)
     }
 
     // MARK: - 本地缓存
@@ -545,26 +494,51 @@ final class Pronouncer: ObservableObject {
 
     /// 缓存文件名按「词 + 发音源 + 口音」区分，大小写不敏感（避免 Apple / apple 各存
     /// 一份，也避免不同源/口音的音频互相覆盖）。
-    private func cacheURL(for word: String, source: PronunciationSource, accent: PronunciationAccent) -> URL? {
-        let key = "\(word.lowercased())_\(source.rawValue)_\(accent.rawValue)"
+    private func cacheURL(
+        for word: String,
+        source: PronunciationSource,
+        accent: PronunciationAccent,
+        purpose: String
+    ) -> URL? {
+        // 保留旧的单词缓存 key；只有例句增加命名空间，升级后不需要重下全部单词音频。
+        let namespace = purpose == "sentence" ? "sentence_" : ""
+        // MiniMax 的默认英美音色已分离；加入配置版本以淘汰升级前两种口音共用
+        // Graceful Lady 的本地缓存。有道音频没有变化，继续复用原缓存。
+        let sourceVersion = source == .minimax ? "_voice2" : ""
+        let key = "\(namespace)\(word.lowercased())_\(source.rawValue)\(sourceVersion)_\(accent.rawValue)"
         let safe = key.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? key
         return cacheDirectory?.appendingPathComponent("\(safe).mp3")
     }
 
-    private func cachedAudio(for word: String, source: PronunciationSource, accent: PronunciationAccent) -> Data? {
-        guard let url = cacheURL(for: word, source: source, accent: accent) else { return nil }
+    private func cachedAudio(
+        for word: String,
+        source: PronunciationSource,
+        accent: PronunciationAccent,
+        purpose: String
+    ) -> Data? {
+        guard let url = cacheURL(
+            for: word, source: source, accent: accent, purpose: purpose
+        ) else { return nil }
         return try? Data(contentsOf: url)
     }
 
-    private func cacheAudio(_ data: Data, for word: String, source: PronunciationSource, accent: PronunciationAccent) {
-        guard let url = cacheURL(for: word, source: source, accent: accent) else { return }
+    private func cacheAudio(
+        _ data: Data,
+        for word: String,
+        source: PronunciationSource,
+        accent: PronunciationAccent,
+        purpose: String
+    ) {
+        guard let url = cacheURL(
+            for: word, source: source, accent: accent, purpose: purpose
+        ) else { return }
         try? data.write(to: url, options: .atomic)
     }
 }
 
-/// 桥接 AVAudioPlayer / AVSpeechSynthesizer 的播放结束回调到 Pronouncer.handleFinished()，
+/// 桥接 AVAudioPlayer 的播放结束回调到 Pronouncer.handleFinished()，
 /// 驱动按钮的播放态动画在音频真正读完时才停，而不是猜一个固定时长。
-private final class PlaybackDelegate: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
+private final class PlaybackDelegate: NSObject, AVAudioPlayerDelegate {
     private weak var owner: Pronouncer?
     init(owner: Pronouncer) { self.owner = owner }
 
@@ -573,14 +547,6 @@ private final class PlaybackDelegate: NSObject, AVAudioPlayerDelegate, AVSpeechS
     }
 
     func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
-        Task { @MainActor [owner] in owner?.handleFinished() }
-    }
-
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        Task { @MainActor [owner] in owner?.handleFinished() }
-    }
-
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
         Task { @MainActor [owner] in owner?.handleFinished() }
     }
 }

@@ -9,7 +9,7 @@ extension Notification.Name {
     static let pronouncerRemotePrevious = Notification.Name("pronouncerRemotePrevious")
 }
 
-/// 自动播放要读哪个词、能不能往前/往后走，由队列的持有者（ReviewViewModel）回答。
+/// 自动播放要读哪个词和例句、能不能往前/往后走，由队列持有者回答。
 ///
 /// 用协议而不是让 AutoplayController 直接持有队列：控制器只关心「当前词是什么」
 /// 「还有没有下一个」，不该知道什么是复习队列、什么是评分。这样它既能被单独
@@ -21,6 +21,8 @@ protocol AutoplayDataSource: AnyObject {
     /// 当前词的唯一标识。用它而不是词本身判断"换词了没"——同一个分组里可能有
     /// 拼写相同的两条记录，比字符串会误判成没换。
     var autoplayCurrentWordID: String? { get }
+    /// 当前词的英文例句；nil 表示没有可朗读的例句。
+    var autoplayCurrentExampleSentence: String? { get }
     var autoplayHasNext: Bool { get }
     var autoplayHasPrevious: Bool { get }
     /// 锁屏副标题，通常是当前播放列表的名字。
@@ -31,7 +33,7 @@ protocol AutoplayDataSource: AnyObject {
     func autoplayGoBack()
 }
 
-/// 自动连播的状态机：每个词读 N 遍，遍间短停顿、词间长停顿，读完自动切下一个。
+/// 自动连播的状态机：每个词读 N 遍，再读英文例句，最后自动切到下一个。
 ///
 /// 从 ReviewViewModel 里整段抽出来的——原先它和「队列 + 评分」挤在同一个类里，
 /// 后台任务、锁屏远程命令、播放节奏三件事互相缠着，改一处要通读全文件。现在
@@ -42,12 +44,15 @@ final class AutoplayController: ObservableObject {
     @Published private(set) var isPlaying = false
     /// 当前词读到第几遍（0 起），UI 显示「第 N / 3 遍」。
     @Published private(set) var passIndex = 0
+    /// 单词三遍结束后正在朗读例句，供顶部进度状态同步展示。
+    @Published private(set) var isReadingExample = false
 
     weak var dataSource: AutoplayDataSource?
 
     /// 播放节奏（秒）。经验值：播 1 遍约 0.8s，遍间 0.6s 让听者跟上节奏、
     /// 词间 2s 给思考时间。
     private static let betweenPassesDelay: TimeInterval = 0.6
+    private static let beforeExampleDelay: TimeInterval = 0.65
     private static let betweenWordsDelay: TimeInterval = 2.0
     static let passCount = 3
 
@@ -99,6 +104,7 @@ final class AutoplayController: ObservableObject {
         guard !isPlaying, let word = dataSource?.autoplayCurrentWord else { return }
         isPlaying = true
         passIndex = 0
+        isReadingExample = false
         if Pronouncer.shared.isNowPlayingSessionActive {
             Pronouncer.shared.resumeNowPlayingSession()
             Pronouncer.shared.updateNowPlayingTitle(word)
@@ -125,6 +131,7 @@ final class AutoplayController: ObservableObject {
         guard isPlaying else { return }
         isPlaying = false
         passIndex = 0
+        isReadingExample = false
         Pronouncer.shared.pauseNowPlayingSession()
     }
 
@@ -136,6 +143,7 @@ final class AutoplayController: ObservableObject {
         task = nil
         isPlaying = false
         passIndex = 0
+        isReadingExample = false
         Pronouncer.shared.endNowPlayingSession()
     }
 
@@ -163,6 +171,7 @@ final class AutoplayController: ObservableObject {
         task?.cancel()
         move(dataSource)
         passIndex = 0
+        isReadingExample = false
         if let word = dataSource.autoplayCurrentWord {
             Pronouncer.shared.updateNowPlayingTitle(word)
         }
@@ -204,6 +213,19 @@ final class AutoplayController: ObservableObject {
             }
 
             if Task.isCancelled || !isPlaying { return }
+
+            // 单词读完三遍后，把例句的英文部分作为完整句子一次合成、一次播放。
+            // 不拆词，TTS 才能根据整句上下文生成自然的停顿、连读和重音。
+            if let example = dataSource?.autoplayCurrentExampleSentence {
+                try? await Task.sleep(for: .seconds(Self.beforeExampleDelay))
+                if Task.isCancelled || !isPlaying { return }
+                isReadingExample = true
+                Pronouncer.shared.updateNowPlayingTitle("例句 · \(word)")
+                await speakAndWait(example, isExample: true)
+                isReadingExample = false
+                Pronouncer.shared.updateNowPlayingTitle(word)
+                if Task.isCancelled || !isPlaying { return }
+            }
 
             // 听写模式：读完就停在这个词，等用户写完提交，不自己往下走。
             if dataSource?.autoplayWaitsForInput == true {
@@ -248,12 +270,18 @@ final class AutoplayController: ObservableObject {
     ///
     /// Pronouncer 用 `playingWord` 变 nil（AVAudioPlayerDelegate didFinish）表示
     /// 「读完了」，但没暴露 async API，所以这里轮询它。4s 兜底避免极端情况挂死。
-    private func speakAndWait(_ word: String) async {
-        let targetWord = word.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        Pronouncer.shared.speak(word)
-        let deadline = Date().addingTimeInterval(4.0)
-        while Pronouncer.shared.playingWord == targetWord,
-              Date() < deadline, !Task.isCancelled {
+    private func speakAndWait(_ text: String, isExample: Bool = false) async {
+        let targetText = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if isExample {
+            Pronouncer.shared.speakExampleSentence(text)
+        } else {
+            Pronouncer.shared.speak(text)
+        }
+        // 单词通常不到 2 秒；例句还包含远程合成耗时和完整句长，给足 30 秒避免
+        // 句子没读完就被下一个词打断。超时仍会继续队列，防止异常音频永久挂住。
+        let deadline = Date.now.addingTimeInterval(isExample ? 30.0 : 6.0)
+        while Pronouncer.shared.playingWord == targetText,
+              Date.now < deadline, !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(80))
         }
     }

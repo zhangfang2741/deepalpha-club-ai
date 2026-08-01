@@ -326,13 +326,6 @@ class Settings:
         # News API Key
         self.NEWS_API_KEY: str = os.getenv("NEWS_API_KEY", "")
 
-        # Azure 语音服务（WordLens「高清」神经 TTS 发音源，走后端中转，key 不下发到 App）。
-        # 未配置 key/region 时该发音源不可用，客户端会回退到其它源/系统合成音。
-        self.AZURE_SPEECH_KEY: str = os.getenv("AZURE_SPEECH_KEY", "")
-        self.AZURE_SPEECH_REGION: str = os.getenv("AZURE_SPEECH_REGION", "")
-        self.AZURE_TTS_VOICE_US: str = os.getenv("AZURE_TTS_VOICE_US", "en-US-AriaNeural")
-        self.AZURE_TTS_VOICE_UK: str = os.getenv("AZURE_TTS_VOICE_UK", "en-GB-SoniaNeural")
-
         # LLM 供应商配置
         self.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")  # openai | claude | minimax | gemini
         self.ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
@@ -345,6 +338,27 @@ class Settings:
         )
         self.MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY", "")
         self.MINIMAX_BASE_URL = os.getenv("MINIMAX_BASE_URL", "https://api.minimax.chat/v1")
+        # WordLens 单词与英文例句 TTS。支持按优先级配置多个 Key；未配置列表时，
+        # 兼容原有单 Key，并最终复用 MiniMax 的通用 API Key。
+        self.MINIMAX_TTS_API_KEY = os.getenv("MINIMAX_TTS_API_KEY", "") or self.MINIMAX_API_KEY
+        configured_tts_keys = parse_list_from_env("MINIMAX_TTS_API_KEYS")
+        if not configured_tts_keys and self.MINIMAX_TTS_API_KEY:
+            configured_tts_keys = [self.MINIMAX_TTS_API_KEY]
+        self.MINIMAX_TTS_API_KEYS = list(dict.fromkeys(configured_tts_keys))
+        self.MINIMAX_TTS_BASE_URL = os.getenv(
+            "MINIMAX_TTS_BASE_URL", "https://api.minimaxi.com/v1"
+        ).rstrip("/")
+        self.MINIMAX_TTS_MODEL = os.getenv("MINIMAX_TTS_MODEL", "speech-2.8-hd")
+        self.MINIMAX_TTS_KEY_COOLDOWN_SECONDS = int(
+            os.getenv("MINIMAX_TTS_KEY_COOLDOWN_SECONDS", "1800")
+        )
+        # 官方音色描述：Trustworthy Man 为通用美式口音，Graceful Lady 为经典英式口音。
+        self.MINIMAX_TTS_VOICE_US = os.getenv(
+            "MINIMAX_TTS_VOICE_US", "English_Trustworthy_Man"
+        )
+        self.MINIMAX_TTS_VOICE_UK = os.getenv(
+            "MINIMAX_TTS_VOICE_UK", "English_Graceful_Lady"
+        )
         self.GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 
         # JWT 补充配置（与现有 JWT_ACCESS_TOKEN_EXPIRE_DAYS 对齐）

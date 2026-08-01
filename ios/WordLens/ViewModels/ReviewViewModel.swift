@@ -334,6 +334,7 @@ final class ReviewViewModel: ObservableObject {
 extension ReviewViewModel: AutoplayDataSource {
     var autoplayCurrentWord: String? { currentWord?.word }
     var autoplayCurrentWordID: String? { currentWord?.id }
+    var autoplayCurrentExampleSentence: String? { currentWord?.englishExampleSentence }
     var autoplayHasNext: Bool { canGoNext }
     var autoplayHasPrevious: Bool { canGoPrevious }
     var autoplaySubtitle: String { selectionName }

@@ -48,6 +48,30 @@ struct VocabularyWord: Codable, Identifiable, Hashable {
     let lastReviewedAt: String?
     let createdAt: String
 
+    /// 例句字段由识别服务按「英文例句 + 中文翻译」生成。自动播放只朗读第一个汉字
+    /// 之前的英文部分，避免把翻译也交给英语音色念出来；只有英文、没有翻译的旧数据
+    /// 同样可以直接使用。
+    var englishExampleSentence: String? {
+        let trimmed = exampleSentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let englishSlice: Substring
+        if let scalarIndex = trimmed.unicodeScalars.firstIndex(where: Self.isCJK),
+           let stringIndex = scalarIndex.samePosition(in: trimmed) {
+            englishSlice = trimmed[..<stringIndex]
+        } else {
+            englishSlice = trimmed[...]
+        }
+
+        // 中文翻译常用括号、破折号或斜杠隔开，把这些残留分隔符从英文结尾去掉。
+        let separators = CharacterSet.whitespacesAndNewlines.union(
+            CharacterSet(charactersIn: "（([【—–-:：/|")
+        )
+        let english = String(englishSlice).trimmingCharacters(in: separators)
+        guard english.rangeOfCharacter(from: .letters) != nil else { return nil }
+        return english
+    }
+
     enum CodingKeys: String, CodingKey {
         case id, word, status
         case phoneticIpa = "phonetic_ipa"
@@ -61,6 +85,16 @@ struct VocabularyWord: Codable, Identifiable, Hashable {
         case nextReviewAt = "next_review_at"
         case lastReviewedAt = "last_reviewed_at"
         case createdAt = "created_at"
+    }
+
+    private static func isCJK(_ scalar: UnicodeScalar) -> Bool {
+        switch scalar.value {
+        case 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF,
+             0x20000...0x2FA1F:
+            return true
+        default:
+            return false
+        }
     }
 }
 

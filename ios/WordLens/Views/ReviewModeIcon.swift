@@ -10,14 +10,14 @@ struct ReviewModeIcon: View {
             if mode == .sequential {
                 ZStack {
                     Image(systemName: "arrow.right")
-                        .offset(y: -4)
+                        .offset(y: -4.5)
                     Image(systemName: "arrow.right")
-                        .offset(y: 4)
+                        .offset(y: 4.5)
                 }
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
             } else {
                 Image(systemName: mode.systemImage)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 20, weight: .semibold))
             }
         }
         .accessibilityHidden(true)
