@@ -19,6 +19,11 @@ struct ReviewCardView: View {
     /// 听写输入框的焦点。连播读完 3 遍后自动聚焦，用户不用再点一下。
     @FocusState private var isDictationFieldFocused: Bool
 
+    /// 顶部标题两侧为右上角模式控件预留的空间，保证分组名以屏幕为基准居中。
+    private static let headerTitleSideClearance: CGFloat = 108
+    /// 分组标题与进度状态之间的层级间距。
+    private static let headerStatusSpacing: CGFloat = 14
+
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {

@@ -58,6 +58,7 @@ struct HomeView: View {
                 // 上会把新词全部挡住，先清掉筛选保证能看见；listVM 是这个 view 自己
                 // 的实例，跟拍照页那边完全独立，得重新拉一次才能看到刚加的词。
                 listVM.filterStatus = nil
+                listVM.clearPlaylistFilter()
                 Task {
                     await refreshAll()
                     try? await Task.sleep(for: .seconds(2.5))
@@ -72,10 +73,11 @@ struct HomeView: View {
         await playlistVM.load()
     }
 
-    /// 自定义分组的筛选 chips + 「全部」reset + 「分组管理」入口。
+    /// 自定义分组的筛选 chips + 「分组管理」入口。
     ///
-    /// 全部的"清除筛选"已经写在顶部第一个状态磁贴里（全量）——chips 这行不需要
-    /// 再重复一个"全部"。只在最右放「分组管理」，引导用户去编辑分组。
+    /// 跟状态磁贴**互斥**：状态（不认识/模糊/认识）和自定义分组是两种正交
+    /// 过滤维度，叠加没产品意义。点 chips 之前如果选了状态，先清掉，免得两边
+    /// 都生效、列表按交集过滤。
     private var playlistFilterChips: some View {
         FlowLayout(spacing: 8, lineSpacing: 8) {
             ForEach(playlistVM.playlists) { playlist in
@@ -83,6 +85,8 @@ struct HomeView: View {
                              isSelected: listVM.filterPlaylistID == playlist.id) {
                     let next: String? = listVM.filterPlaylistID == playlist.id ? nil : playlist.id
                     listVM.filterPlaylistID = next
+                    // 互斥：选了自定义分组就把状态让位
+                    if next != nil { listVM.filterStatus = nil }
                     Task { await listVM.loadPlaylistWords(id: next) }
                 }
             }
@@ -139,10 +143,9 @@ struct HomeView: View {
 
     /// 统计数字本身就是筛选入口。
     ///
-    /// 计数永远按全量 allWords 算，跟自定义分组的 chips **互不联动**——
-    /// 状态磁贴、分组 chips、列表过滤三者各自独立，状态切换不影响 chips 上的
-    /// 数字，反过来也是。用户看到的数字始终是"我生词库里的真实分布"，不会
-    /// 被某一个筛选条件牵着走。
+    /// 计数永远按全量 allWords 算——磁贴上的数字始终是"我生词库里的真实分
+    /// 布"，跟 chips 互不联动。点状态磁贴会清掉 chips 选择，反之亦然，两
+    /// 种过滤维度互斥。
     private var statsRow: some View {
         let words = listVM.allWords
         let unknownCount = words.filter { $0.status == "new" }.count
@@ -151,15 +154,21 @@ struct HomeView: View {
         return HStack(spacing: 12) {
             statTile("全部", words.count, Theme.textPrimary, isSelected: listVM.filterStatus == nil) {
                 listVM.filterStatus = nil
+                // 状态回到「全部」时同步清掉 chips，让"全部"作为唯一归零路径
+                listVM.clearPlaylistFilter()
             }
             statTile("不认识", unknownCount, Theme.unknown, isSelected: listVM.filterStatus == "new") {
                 listVM.filterStatus = listVM.filterStatus == "new" ? nil : "new"
+                // 选了具体状态时同步清掉 chips，互斥
+                if listVM.filterStatus != nil { listVM.clearPlaylistFilter() }
             }
             statTile("模糊", fuzzyCount, Theme.fuzzy, isSelected: listVM.filterStatus == "fuzzy") {
                 listVM.filterStatus = listVM.filterStatus == "fuzzy" ? nil : "fuzzy"
+                if listVM.filterStatus != nil { listVM.clearPlaylistFilter() }
             }
             statTile("认识", knownCount, Theme.known, isSelected: listVM.filterStatus == "known") {
                 listVM.filterStatus = listVM.filterStatus == "known" ? nil : "known"
+                if listVM.filterStatus != nil { listVM.clearPlaylistFilter() }
             }
         }
     }

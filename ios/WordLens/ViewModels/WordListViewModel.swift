@@ -43,6 +43,13 @@ final class WordListViewModel: ObservableObject {
     @Published private(set) var playlistWords: Set<String> = []
     @Published private(set) var isLoadingPlaylist = false
 
+    /// 外部让出 chips 的便捷通道：清掉筛选 ID + 缓存。状态磁贴互斥逻辑
+    /// 调它，避免外部直接 set 一个 private(set) 的属性。
+    func clearPlaylistFilter() {
+        filterPlaylistID = nil
+        playlistWords = []
+    }
+
     /// 加载某分组对应的词表 id 集合，结果缓存到 `playlistWords`。
     /// 切换分组筛选时调用；筛选回 nil 时清空缓存。
     ///
