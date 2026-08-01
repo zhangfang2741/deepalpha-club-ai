@@ -162,7 +162,9 @@ struct ReviewCardView: View {
 
             transportBar
         }
-        .padding(.bottom, 10)
+        // 往上抬一截：贴着 tab bar 时播放键跟系统那排图标挤在一起，既容易误触
+        // 也显得整个页面被压到底。
+        .padding(.bottom, 36)
         .animation(.easeInOut(duration: 0.2), value: viewModel.isFlipped)
     }
 
@@ -297,8 +299,6 @@ struct ReviewCardView: View {
                                 .opacity(0.85)
                         }
                         Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.footnote.weight(.bold))
                     }
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14)
