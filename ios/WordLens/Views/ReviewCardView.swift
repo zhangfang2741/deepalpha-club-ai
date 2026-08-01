@@ -14,6 +14,8 @@ struct ReviewCardView: View {
     @State private var showPlaylistSheet = false
     /// 顶部标题点开的「当前播放队列」下拉框。
     @State private var showQueueDropdown = false
+    /// 听写输入框的焦点。连播读完 3 遍后自动聚焦，用户不用再点一下。
+    @FocusState private var isDictationFieldFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -125,6 +127,21 @@ struct ReviewCardView: View {
             .safeAreaInset(edge: .top, alignment: .center, spacing: 0) {
                 topBar
             }
+            // 听写模式下连播读完 3 遍会停在这个词等输入，这时自动把键盘唤起来，
+            // 用户不用再多点一下输入框。passIndex 走到最后一遍即认为读完。
+            .onChange(of: viewModel.autoplay.passIndex) { _, newValue in
+                guard viewModel.isDictation, viewModel.dictationPhase.isInput else { return }
+                guard newValue == AutoplayController.passCount - 1 else { return }
+                isDictationFieldFocused = true
+            }
+            // 判定结果用既有的顶部 toast 浮一下。
+            .onChange(of: viewModel.dictationPhase) { _, phase in
+                guard let rating = phase.rating else { return }
+                showConfirmation(
+                    label: Self.ratingLabel(rating),
+                    color: Self.ratingColor(rating)
+                )
+            }
             // 评分 + 播放条钉死在底部：跟卡片彻底分离，卡片正反面高度不一样时
             // 它们也纹丝不动。跟 topBar 是同一个套路。
             .safeAreaInset(edge: .bottom, alignment: .center, spacing: 0) {
@@ -135,10 +152,19 @@ struct ReviewCardView: View {
         }
     }
 
-    /// 底部固定区：翻卡后多出评分三档，播放条常驻在最下面。
+    /// 底部固定区：
+    /// - 只听模式：翻卡后多出评分三档
+    /// - 听写模式：等输入时是「确定」，判定后什么都不出（自动前进）
+    /// 播放条两种模式下都常驻在最下面。
     private var bottomControls: some View {
         VStack(spacing: 14) {
-            if viewModel.isFlipped {
+            if viewModel.isDictation {
+                if viewModel.dictationPhase.isInput {
+                    confirmDictationButton
+                        .padding(.horizontal)
+                        .transition(.opacity)
+                }
+            } else if viewModel.isFlipped {
                 HStack(spacing: 10) {
                     ratingButton("😵 不认识", Theme.unknown, .unknown)
                     ratingButton("😐 模糊", Theme.fuzzy, .fuzzy)
@@ -160,6 +186,25 @@ struct ReviewCardView: View {
         // 也显得整个页面被压到底。
         .padding(.bottom, 72)
         .animation(.easeInOut(duration: 0.2), value: viewModel.isFlipped)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.dictationPhase)
+    }
+
+    /// 听写的「确定」：空输入也允许提交（等于承认不会，判不认识），所以不禁用。
+    private var confirmDictationButton: some View {
+        Button {
+            isDictationFieldFocused = false
+            Task { await viewModel.submitDictation() }
+        } label: {
+            Text("确定")
+                .font(.subheadline.weight(.bold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(Theme.accent)
+                .foregroundStyle(.white)
+                .clipShape(.rect(cornerRadius: 12))
+        }
+        .buttonStyle(.pressable)
+        .disabled(viewModel.isSubmitting)
     }
 
     /// 顶部一行：左边「☰ 分组名」，右边进度。
@@ -187,7 +232,9 @@ struct ReviewCardView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("当前分组 \(viewModel.selectionName)，展开播放队列")
 
-            Spacer(minLength: 12)
+            Spacer(minLength: 8)
+
+            studyModeToggle
 
             // 没有正在复习的卡片时（加载中/无待复习/已完成）隐藏进度，避免
             // 显示成 "N/0" 这类无意义数字。
@@ -211,16 +258,23 @@ struct ReviewCardView: View {
     private func cardContent(_ word: VocabularyWord) -> some View {
         GeometryReader { geo in
             ScrollView {
-                flipCard(word)
-                    .padding(.horizontal)
-                    // word.id 变化时（首次进入、上一个/下一个、评分切到下一张）
-                    // 触发发音——挂在 flipCard 上不参与 outer transition.
-                    .task(id: word.id) {
-                        guard !viewModel.suppressCardAutoSpeak else { return }
-                        Pronouncer.shared.speakIfAutoplayEnabled(word.word)
+                Group {
+                    // 听写模式不走翻卡——正面本来就没东西可藏，翻卡在这里没有意义。
+                    if viewModel.isDictation {
+                        dictationCard(word)
+                    } else {
+                        flipCard(word)
                     }
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: geo.size.height, alignment: .center)
+                }
+                .padding(.horizontal)
+                // word.id 变化时（首次进入、上一个/下一个、评分切到下一张）
+                // 触发发音——挂在卡片上不参与 outer transition.
+                .task(id: word.id) {
+                    guard !viewModel.suppressCardAutoSpeak else { return }
+                    Pronouncer.shared.speakIfAutoplayEnabled(word.word)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: geo.size.height, alignment: .center)
             }
         }
     }
@@ -359,6 +413,35 @@ struct ReviewCardView: View {
             .padding(.horizontal, 12)
             .transition(.move(edge: .top).combined(with: .opacity))
         }
+    }
+
+    /// 只听 / 听写 的切换胶囊：点一下就切，本身显示当前处于哪个模式。
+    /// 听写态用主题色填充——那是"更严格"的模式，值得一眼看出来。
+    private var studyModeToggle: some View {
+        let mode = viewModel.studyMode
+        let isDictation = mode == .dictation
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                viewModel.toggleStudyMode()
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: mode.systemImage)
+                    .font(.caption2.weight(.bold))
+                Text(mode.label)
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(isDictation ? .white : Theme.textSecondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(isDictation ? Theme.accent : Theme.surface)
+            .clipShape(.capsule)
+            .overlay {
+                Capsule().strokeBorder(isDictation ? .clear : Theme.border, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.pressable)
+        .accessibilityLabel("学习方式，当前\(mode.label)，双击切换")
     }
 
     /// 学习模式（队列排序方式）。
@@ -512,6 +595,111 @@ struct ReviewCardView: View {
         .buttonStyle(.pressable)
         .disabled(!enabled)
         .accessibilityLabel(label)
+    }
+
+    // MARK: - 听写卡片
+
+    /// 听写模式的卡片：等输入时它**就是**填写框，判定后翻出答案。
+    @ViewBuilder
+    private func dictationCard(_ word: VocabularyWord) -> some View {
+        switch viewModel.dictationPhase {
+        case .input:
+            dictationInputCard
+        case .revealed(let answered, let typed, let rating):
+            // 用相位里快照下来的词和输入，而不是 currentWord / dictationInput：
+            // 提交评分会让队列前进，读实时值会闪出下一个词的拼写。
+            dictationRevealCard(answered, typed: typed, rating: rating)
+        }
+    }
+
+    private var dictationInputCard: some View {
+        VStack(spacing: 18) {
+            Label("听音写词", systemImage: "speaker.wave.2.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Theme.textSecondary)
+
+            TextField("", text: $viewModel.dictationInput)
+                .textFieldStyle(.plain)
+                .font(.title.bold())
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Theme.textPrimary)
+                // 这四个必须全关：只要系统插手自动大写/纠错/联想，它会替用户把词
+                // 拼对，听写就白做了。
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+                .keyboardType(.asciiCapable)
+                .submitLabel(.done)
+                .focused($isDictationFieldFocused)
+                .onSubmit { Task { await viewModel.submitDictation() } }
+                .padding(.vertical, 10)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Theme.accent.opacity(0.6))
+                        .frame(height: 2)
+                }
+                .padding(.horizontal, 24)
+
+            Text("写完点下面的「确定」，或键盘上敲回车")
+                .font(.caption2)
+                .foregroundStyle(Theme.textSecondary.opacity(0.8))
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 220)
+        .background(Theme.surface)
+        .clipShape(.rect(cornerRadius: 16))
+        // 点卡片空白处也能唤起键盘，不用非得戳中那一行输入框。
+        .contentShape(.rect)
+        .onTapGesture { isDictationFieldFocused = true }
+    }
+
+    private func dictationRevealCard(
+        _ word: VocabularyWord, typed: String, rating: ReviewRating
+    ) -> some View {
+        let color = Self.ratingColor(rating)
+        return VStack(spacing: 14) {
+            HStack {
+                Text(word.word).font(.largeTitle.bold()).foregroundStyle(Theme.textPrimary)
+                PronounceButton(word: word.word)
+            }
+            Text("/\(word.phoneticIpa)/").foregroundStyle(Theme.textSecondary)
+
+            // 写对了就不必再把用户写的重复一遍；写错才需要对照着看差在哪。
+            if rating != .known {
+                Text("你写的：\(typed.trimmingCharacters(in: .whitespaces).isEmpty ? "（没写）" : typed)")
+                    .font(.subheadline)
+                    .foregroundStyle(color)
+            }
+
+            Text("\(word.partOfSpeech) \(word.definitionZh)")
+                .font(.title3)
+                .foregroundStyle(Theme.textPrimary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 220)
+        .background(Theme.surface)
+        .clipShape(.rect(cornerRadius: 16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16).strokeBorder(color.opacity(0.7), lineWidth: 2)
+        }
+    }
+
+    private static func ratingColor(_ rating: ReviewRating) -> Color {
+        switch rating {
+        case .known: return Theme.known
+        case .fuzzy: return Theme.fuzzy
+        case .unknown: return Theme.unknown
+        }
+    }
+
+    private static func ratingLabel(_ rating: ReviewRating) -> String {
+        switch rating {
+        case .known: return "认识"
+        case .fuzzy: return "模糊"
+        case .unknown: return "不认识"
+        }
     }
 
     /// 卡片翻转用两层叠放 + 各自反向补偿旋转，而不是单层直接转 180°：单层转到

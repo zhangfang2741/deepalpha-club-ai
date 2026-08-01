@@ -43,12 +43,20 @@ enum DictationJudge {
 |------|------|
 | 输入为空 | 不认识 |
 | 归一化后完全一致 | 认识 |
-| 编辑距离 ≤ 2 **且** 距离 < 答案长度 / 2 | 模糊 |
+| 编辑距离在该长度允许范围内 | 模糊 |
 | 其余 | 不认识 |
 
-第二个条件是必需的边界：只看绝对距离的话，`it` 和 `at`（距离 1）会被判成"模糊"，
-显然不合理。加上"距离必须小于答案长度一半"之后，`boundary`（8 字母）容 2 个错，
-而 `it`（2 字母）一个错都不容。
+「允许范围」按答案长度分档（`maxFuzzyDistance(forAnswerLength:)`）：
+
+| 答案长度 | 最多容错 |
+|----------|----------|
+| 1–4 | 0（错一个就是另一个词） |
+| 5–7 | 1 |
+| ≥8 | 2 |
+
+**实施中修正**：初稿写的是"编辑距离 ≤ 2 且距离 < 答案长度/2"。写完测试立刻被打脸——
+`cat` 写成 `cot`（3 字母、距离 1）按那条规则会判"模糊"，可这俩是彻头彻尾的两个词。
+分档阈值更贴合直觉，也更好读：`card`/`cart` 判不认识，`hous`/`house` 判模糊。
 
 ## 二、模式偏好 `Models/StudyMode.swift`（新）
 
@@ -71,12 +79,17 @@ enum + 静态 current + UserDefaults 读写）。默认 `listenOnly`，保持老
 
 ```swift
 enum DictationPhase: Equatable {
-    case input                    // 卡片是填写框，等用户写
-    case revealed(ReviewRating)   // 亮答案 + 判定结果，1.5s 后自动走
+    case input
+    case revealed(word: VocabularyWord, input: String, rating: ReviewRating)
 }
 ```
 
 切词时重置为 `.input` 并清空输入框。
+
+**实施中修正**：初稿的 `.revealed` 只带 rating，界面从 `currentWord` / `dictationInput`
+读实时值。这有泄题风险——提交评分会把当前词移出队列、`currentWord` 立刻指向**下一个**词，
+两者之间只要有一次调度让位，亮答案的卡片就会闪出下一个词的正确拼写。改成把被判定的词和
+用户输入一起快照进相位，显示内容跟队列时序彻底脱钩。
 
 ### 与连播的握手
 
@@ -85,7 +98,8 @@ enum DictationPhase: Equatable {
 ```swift
 protocol AutoplayDataSource {
     // ...既有成员
-    var autoplayWaitsForInput: Bool { get }   // 听写模式下为 true
+    var autoplayCurrentWordID: String? { get }  // 判断"换词了没"用它
+    var autoplayWaitsForInput: Bool { get }     // 听写模式下为 true
 }
 ```
 
@@ -95,11 +109,13 @@ protocol AutoplayDataSource {
 - **听写模式**：不停 2 秒、不主动前进，而是**轮询等到当前词发生变化**：
 
 ```swift
-let answered = word
-while isPlaying, !Task.isCancelled, dataSource?.autoplayCurrentWord == answered {
+let original = dataSource?.autoplayCurrentWordID
+while isPlaying, !Task.isCancelled, dataSource?.autoplayCurrentWordID == original {
     try? await Task.sleep(for: .milliseconds(120))
 }
 ```
+
+比的是 id 而不是词本身：同一个分组里可能有拼写相同的两条记录，比字符串会误判成没换。
 
 用"当前词变了"而不是"相位变了"作为退出条件，是因为相位在 `.revealed` 的 1.5 秒里
 队列**还没**前进——若按相位退出，循环会在亮答案期间把同一个词又读一遍。等词真正
@@ -109,21 +125,24 @@ while isPlaying, !Task.isCancelled, dataSource?.autoplayCurrentWord == answered 
 `Pronouncer.playingWord` 的写法，保持一致；也避免 continuation 必须恰好 resume 一次
 的生命周期坑。
 
-队列播完时 `autoplayCurrentWord` 变 nil，同样 ≠ `answered`，循环退出后由既有的
+队列播完时 `autoplayCurrentWordID` 变 nil，同样 ≠ 原值，循环退出后由既有的
 空值检查收尾。
 
 ### 提交
 
 ```swift
 func submitDictation() async {
-    guard studyMode == .dictation, dictationPhase == .input, let word = currentWord else { return }
-    let rating = DictationJudge.judge(input: dictationInput, answer: word.word)
-    dictationPhase = .revealed(rating)
+    guard isDictation, dictationPhase.isInput, let word = currentWord else { return }
+    let typed = dictationInput
+    let rating = DictationJudge.judge(input: typed, answer: word.word)
+    dictationPhase = .revealed(word: word, input: typed, rating: rating)
     Haptics.rating(rating)
+
     try? await Task.sleep(for: .seconds(1.5))
+    // 停留期间用户可能已手动切词/停播，确认还停在同一个词才提交
+    guard currentWord?.id == word.id, case .revealed = dictationPhase else { return }
     await submit(rating, keepAutoplay: true)
-    dictationInput = ""
-    dictationPhase = .input
+    resetDictation()
 }
 ```
 
@@ -166,13 +185,14 @@ func submitDictation() async {
 风险与收益不成比例。改为用 `swiftc` 直接编译**真实源文件**跑断言：
 
 ```bash
-swiftc ios/WordLens/Services/DictationJudge.swift \
-       ios/WordLens/Models/WordModels.swift \
-       /tmp/judge_test.swift -o /tmp/judgetest && /tmp/judgetest
+./ios/Tests/run-dictation-judge-tests.sh
 ```
 
-覆盖：完全一致、大小写、连字符/空格三种写法、错 1 字母、错 2 字母、短词严格性
-（`it` vs `at` 必须判不认识）、空输入、完全不同的词。
+脚本落在 `ios/Tests/`（在 Xcode 同步组 `WordLens` 之外，不会被拉进 App target），
+入口 `ios/Tests/run-dictation-judge-tests.sh`，共 30 条断言，覆盖：完全一致、大小写、
+连字符/空格三种写法、错 1 字母、错 2 字母、各长度档的边界（`it`/`cat`/`card` 必须判
+不认识，`hous`/`boundry` 判模糊）、空输入、完全不同的词、`normalize` 与 `levenshtein`
+本身。
 
 **端到端**：Xcode 构建 + 真机手测：
 1. 顶部开关切到听写 → 卡片变成填写框，看不到单词

@@ -110,7 +110,7 @@ struct ReviewSubmitResponse: Codable {
 }
 
 /// 三档复习评分，对应后端 rating 字段（0/1/2）。
-enum ReviewRating: Int {
+enum ReviewRating: Int, Equatable {
     case unknown = 0
     case fuzzy = 1
     case known = 2

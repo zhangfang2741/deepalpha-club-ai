@@ -18,10 +18,15 @@ extension Notification.Name {
 protocol AutoplayDataSource: AnyObject {
     /// 当前该读的词；nil 表示队列空了，播放应当停止。
     var autoplayCurrentWord: String? { get }
+    /// 当前词的唯一标识。用它而不是词本身判断"换词了没"——同一个分组里可能有
+    /// 拼写相同的两条记录，比字符串会误判成没换。
+    var autoplayCurrentWordID: String? { get }
     var autoplayHasNext: Bool { get }
     var autoplayHasPrevious: Bool { get }
     /// 锁屏副标题，通常是当前播放列表的名字。
     var autoplaySubtitle: String { get }
+    /// 读完规定遍数后是否要停下等用户操作（听写模式）。
+    var autoplayWaitsForInput: Bool { get }
     func autoplayAdvance()
     func autoplayGoBack()
 }
@@ -199,6 +204,18 @@ final class AutoplayController: ObservableObject {
             }
 
             if Task.isCancelled || !isPlaying { return }
+
+            // 听写模式：读完就停在这个词，等用户写完提交，不自己往下走。
+            if dataSource?.autoplayWaitsForInput == true {
+                await waitUntilWordChanges()
+                if Task.isCancelled || !isPlaying { return }
+                guard dataSource?.autoplayCurrentWord != nil else {
+                    stop()
+                    return
+                }
+                continue
+            }
+
             try? await Task.sleep(for: .seconds(Self.betweenWordsDelay))
             if Task.isCancelled || !isPlaying { return }
 
@@ -207,6 +224,23 @@ final class AutoplayController: ObservableObject {
                 return
             }
             dataSource?.autoplayAdvance()
+        }
+    }
+
+    /// 挂起到「当前词换掉」为止。
+    ///
+    /// 退出条件用的是词变了，而不是「用户提交了」：提交之后还有 1.5 秒亮答案的
+    /// 停留期，那段时间里队列**还没**前进——若按提交与否退出，循环会在亮答案
+    /// 期间把同一个词又读一遍。等词真正换掉，天然覆盖「输入 + 亮答案 + 提交」
+    /// 整段。队列播完时当前词变 nil，同样 ≠ 原值，也能正常退出。
+    ///
+    /// 用轮询而不是 continuation：本文件的 speakAndWait 已经是轮询
+    /// Pronouncer 状态的写法，保持一致；也免掉 continuation 必须恰好 resume
+    /// 一次的生命周期坑（用户中途停播、切词的路径太多）。
+    private func waitUntilWordChanges() async {
+        let original = dataSource?.autoplayCurrentWordID
+        while isPlaying, !Task.isCancelled, dataSource?.autoplayCurrentWordID == original {
+            try? await Task.sleep(for: .milliseconds(120))
         }
     }
 

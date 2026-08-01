@@ -96,6 +96,51 @@ final class ReviewViewModel: ObservableObject {
     /// 自动播放期间由状态机统一掌控节奏，卡片再抢发一次会变成听到 4 遍且节奏错乱。
     var suppressCardAutoSpeak: Bool { autoplay.isPlaying }
 
+    // MARK: - 听写
+
+    /// 学习方式：只听 / 听写。切换即时生效，并把当前词的听写相位重置。
+    @Published private(set) var studyMode: StudyMode = StudyMode.current
+
+    /// 听写相位：等输入 / 已判定。切词时重置回 .input。
+    @Published private(set) var dictationPhase: DictationPhase = .input
+
+    /// 输入框里的内容。
+    @Published var dictationInput: String = ""
+
+    var isDictation: Bool { studyMode == .dictation }
+
+    func toggleStudyMode() {
+        studyMode = studyMode.toggled
+        StudyMode.current = studyMode
+        resetDictation()
+    }
+
+    private func resetDictation() {
+        dictationInput = ""
+        dictationPhase = .input
+    }
+
+    /// 判定这一次听写并提交。
+    ///
+    /// 亮答案停 1.5 秒再提交，是为了让用户看清正确拼写和自己写的差在哪；这段
+    /// 时间里连播状态机正卡在「等当前词换掉」的轮询上，不会抢跑。
+    func submitDictation() async {
+        guard isDictation, dictationPhase.isInput, let word = currentWord else { return }
+        let typed = dictationInput
+        let rating = DictationJudge.judge(input: typed, answer: word.word)
+        // 把词和输入一起快照进相位——亮答案期间界面只认这份快照，不会因为队列
+        // 在提交时前进而闪出下一个词的拼写。
+        dictationPhase = .revealed(word: word, input: typed, rating: rating)
+        Haptics.rating(rating)
+
+        try? await Task.sleep(for: .seconds(1.5))
+        // 停留期间用户可能已经手动切词/停播了，确认还停在同一个词才提交。
+        guard currentWord?.id == word.id, case .revealed = dictationPhase else { return }
+        // keepAutoplay: 听写模式下评分是流程的一环，不该像手点评分那样打断连播。
+        await submit(rating, keepAutoplay: true)
+        resetDictation()
+    }
+
     /// TabView 切走再切回来会让这个 tab 重新走一遍 appear，.task 也会跟着重新
     /// 触发；如果每次都无条件调 loadQueue()（会把 currentIndex 清零），用户刚
     /// 翻到第 5 个词，切一下 tab 回来就被打回第一个。用这个标记让 .task 只在
@@ -141,6 +186,7 @@ final class ReviewViewModel: ObservableObject {
         transitionDirection = -1
         currentIndex -= 1
         isFlipped = false
+        resetDictation()
         // 用户主动切词时停掉自动播放——让用户接管节奏
         autoplay.stop()
     }
@@ -150,6 +196,7 @@ final class ReviewViewModel: ObservableObject {
         transitionDirection = 1
         currentIndex += 1
         isFlipped = false
+        resetDictation()
         autoplay.stop()
     }
 
@@ -164,6 +211,7 @@ final class ReviewViewModel: ObservableObject {
             transitionDirection = index > currentIndex ? 1 : -1
             currentIndex = index
             isFlipped = false
+            resetDictation()
         }
         // 先停再起：连播状态机正卡在上一个词的某一遍上，不停掉的话新词要等它
         // 把当前这轮走完才轮得到。
@@ -186,6 +234,7 @@ final class ReviewViewModel: ObservableObject {
         reviewedCount = 0
         isFlipped = false
         transitionDirection = 1
+        resetDictation()
         autoplay.stop()
         defer { isLoading = false }
         do {
@@ -227,10 +276,15 @@ final class ReviewViewModel: ObservableObject {
         queue = newMode.ordered(queue, for: selection)
         currentIndex = 0
         isFlipped = false
+        resetDictation()
         transitionDirection = 1
     }
 
-    func submit(_ rating: ReviewRating) async {
+    /// 提交一次评分。
+    ///
+    /// - Parameter keepAutoplay: 默认 false——手点三档评分意味着用户要接管节奏，
+    ///   评完就该停下。听写模式传 true：那里评分是自动流程的一环，停了连播就断了。
+    func submit(_ rating: ReviewRating, keepAutoplay: Bool = false) async {
         guard let word = currentWord else { return }
         isSubmitting = true
         defer { isSubmitting = false }
@@ -247,8 +301,10 @@ final class ReviewViewModel: ObservableObject {
             }
             transitionDirection = 1
             isFlipped = false
-            // 评分完自动停止连播——进入下一个词后由用户决定要不要继续播
-            autoplay.stop()
+            if !keepAutoplay {
+                // 评分完自动停止连播——进入下一个词后由用户决定要不要继续播
+                autoplay.stop()
+            }
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
@@ -261,15 +317,19 @@ final class ReviewViewModel: ObservableObject {
 
 extension ReviewViewModel: AutoplayDataSource {
     var autoplayCurrentWord: String? { currentWord?.word }
+    var autoplayCurrentWordID: String? { currentWord?.id }
     var autoplayHasNext: Bool { canGoNext }
     var autoplayHasPrevious: Bool { canGoPrevious }
     var autoplaySubtitle: String { selectionName }
+    /// 听写模式下读完 3 遍不能自动往下走，得停在这个词等用户写完。
+    var autoplayWaitsForInput: Bool { isDictation }
 
     func autoplayAdvance() {
         guard canGoNext else { return }
         transitionDirection = 1
         currentIndex += 1
         isFlipped = false
+        resetDictation()
     }
 
     func autoplayGoBack() {
@@ -277,5 +337,6 @@ extension ReviewViewModel: AutoplayDataSource {
         transitionDirection = -1
         currentIndex -= 1
         isFlipped = false
+        resetDictation()
     }
 }
