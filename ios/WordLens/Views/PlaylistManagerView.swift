@@ -25,7 +25,7 @@ struct PlaylistManagerView: View {
                     ContentUnavailableView {
                         Label("还没有自定义分组", systemImage: "folder.badge.plus")
                     } description: {
-                        Text("把常背的词攒成一组，首页就能单独播这一组")
+                        Text("把常背的词攒成一组，学习页就能单独播这一组")
                     } actions: {
                         Button("新建分组") { isCreating = true }
                             .buttonStyle(.borderedProminent)
@@ -61,6 +61,7 @@ struct PlaylistManagerView: View {
                                 } label: {
                                     Label("删除", systemImage: "trash")
                                 }
+                                .tint(Theme.unknown)
                             }
                         }
 

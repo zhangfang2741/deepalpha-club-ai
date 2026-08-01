@@ -415,18 +415,26 @@ struct ReviewCardView: View {
             VStack(spacing: 0) {
                 ScrollView {
                     LazyVStack(spacing: 2) {
-                        groupSectionHeader("生词库分组")
+                        GroupSectionHeader(
+                            title: "生词库分组",
+                            systemImage: "tray.full.fill"
+                        )
                         ForEach(builtinGroups, id: \.selection) { group in
                             groupRow(group.selection, label: group.label, dot: group.dot)
                         }
 
-                        groupSectionHeader("自定义")
+                        GroupSectionHeader(
+                            title: "自定义",
+                            systemImage: "folder.fill",
+                            separatesPreviousSection: true
+                        )
                         if customGroups.isEmpty {
                             Text("还没有自定义分组，去「生词库 › 分组管理」新建")
                                 .font(.caption)
                                 .foregroundStyle(Theme.textSecondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 16)
+                                .padding(.leading, 24)
+                                .padding(.trailing, 16)
                                 .padding(.vertical, 10)
                         } else {
                             ForEach(customGroups, id: \.selection) { group in
@@ -468,16 +476,6 @@ struct ReviewCardView: View {
         playlistVM.playlists.map { (.custom($0.id), $0.name, nil) }
     }
 
-    private func groupSectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(Theme.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
-    }
-
     private func groupRow(
         _ selection: PlaylistSelection, label: String, dot: Color?
     ) -> some View {
@@ -511,7 +509,8 @@ struct ReviewCardView: View {
                         .foregroundStyle(Theme.accent)
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.leading, 24)
+            .padding(.trailing, 16)
             .padding(.vertical, 11)
             .background(isCurrent ? Theme.surfaceAlt : Color.clear)
             .contentShape(.rect)

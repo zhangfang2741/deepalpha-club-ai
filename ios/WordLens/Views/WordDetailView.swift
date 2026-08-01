@@ -56,7 +56,7 @@ struct WordDetailView: View {
                         .clipShape(.rect(cornerRadius: 12))
                     }
 
-                    Text("想复习这个词就去首页，评分只在那里进行")
+                    Text("想复习这个词就去学习页，评分只在那里进行")
                         .font(.footnote)
                         .foregroundStyle(Theme.textSecondary)
                         .padding(.top, 4)

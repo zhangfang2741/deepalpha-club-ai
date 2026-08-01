@@ -6,16 +6,16 @@ struct MainTabView: View {
 
     var body: some View {
         ZStack {
-            // 连播键回到首页内部（见 ReviewCardView.transportBar）之后，这里
+            // 连播键回到学习页内部（见 ReviewCardView.transportBar）之后，这里
             // 没有再往 tab bar 中间塞按钮的需求，用回系统 TabView 就够了。
             TabView(selection: $nav.selectedTab) {
-                ReviewCardView()
-                    .tabItem { Label("首页", systemImage: "house.fill") }
-                    .tag(MainTab.review)
-
                 CameraCaptureView()
-                    .tabItem { Label("拍照", systemImage: "camera.fill") }
-                    .tag(MainTab.camera)
+                    .tabItem { Label("首页", systemImage: "house.fill") }
+                    .tag(MainTab.home)
+
+                ReviewCardView()
+                    .tabItem { Label("学习", systemImage: "graduationcap.fill") }
+                    .tag(MainTab.study)
 
                 HomeView()
                     .tabItem { Label("生词库", systemImage: "book.fill") }

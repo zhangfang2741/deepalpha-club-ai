@@ -2,7 +2,7 @@
 import Foundation
 
 enum MainTab: Hashable {
-    case review, camera, vocabulary, settings
+    case home, study, vocabulary, settings
 }
 
 /// 跨 tab 的导航/高亮状态。拍照识别加入生词库后要跳到"生词库" tab 并高亮
@@ -11,7 +11,7 @@ enum MainTab: Hashable {
 /// EnvironmentObject 广播。
 @MainActor
 final class AppNavigationState: ObservableObject {
-    @Published var selectedTab: MainTab = .review
+    @Published var selectedTab: MainTab = .home
     @Published var highlightedWordIDs: Set<String> = []
     @Published var vocabularyDataVersion = 0
     @Published var blockingOperationMessage: String?
