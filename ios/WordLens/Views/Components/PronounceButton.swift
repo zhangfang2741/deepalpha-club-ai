@@ -276,6 +276,33 @@ final class Pronouncer: ObservableObject {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
+    /// 暂停：**只翻状态，不拆会话**。
+    ///
+    /// 锁屏媒体卡片、远程命令、静音保活轨全部保留——这三样东西留着，App 才能在
+    /// 锁屏下继续存活、用户才点得到「继续播」。之前锁屏按暂停直接走的是
+    /// `endNowPlayingSession()`，把音频整个停掉，而 App 在后台唯一的存活理由就是
+    /// 「正在播音频」：音频一停 iOS 立刻挂起它，卡片也没了，用户看到的就是
+    /// 「点了暂停整个 App 就退出了」。
+    func pauseNowPlayingSession() {
+        guard hasNowPlayingSession else { return }
+        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+        info[MPNowPlayingInfoPropertyPlaybackRate] = 0.0
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        MPNowPlayingInfoCenter.default().playbackState = .paused
+    }
+
+    /// 从暂停恢复：同样只翻状态。
+    func resumeNowPlayingSession() {
+        guard hasNowPlayingSession else { return }
+        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+        info[MPNowPlayingInfoPropertyPlaybackRate] = 1.0
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        MPNowPlayingInfoCenter.default().playbackState = .playing
+    }
+
+    /// 会话是否还在（暂停时仍为 true，只有真正结束才 false）。
+    var isNowPlayingSessionActive: Bool { hasNowPlayingSession }
+
     /// 结束会话：锁屏媒体卡片消失，音频焦点还给别的 App。
     func endNowPlayingSession() {
         guard hasNowPlayingSession else { return }

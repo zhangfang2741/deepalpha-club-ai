@@ -55,7 +55,9 @@ final class AutoplayController: ObservableObject {
         // 锁屏 / 控制中心的播放键由 Pronouncer 转成通知广播，这里接住。
         // Pronouncer 因此不用反向依赖任何业务类型。
         observe(.pronouncerRemotePlay) { $0.start() }
-        observe(.pronouncerRemotePause) { $0.stop() }
+        // 锁屏按暂停走 pause() 而不是 stop()：见 pause() 的注释，拆会话会让
+        // App 在锁屏下直接被系统挂起。
+        observe(.pronouncerRemotePause) { $0.pause() }
         observe(.pronouncerRemoteNext) { $0.skipToNext() }
         observe(.pronouncerRemotePrevious) { $0.skipToPrevious() }
     }
@@ -68,11 +70,16 @@ final class AutoplayController: ObservableObject {
         }
     }
 
+    /// 远程命令的回调线程由 MediaPlayer 决定，不保证是主线程。
+    ///
+    /// 这里**不能**用 `MainActor.assumeIsolated`：它在断言不成立时是直接
+    /// `fatalError`，等于给一条本来只需要切线程的路径埋了个崩溃点。用
+    /// `Task { @MainActor in }` 显式切过去，怎么调都不会 trap。
     private func observe(_ name: Notification.Name, action: @escaping @MainActor (AutoplayController) -> Void) {
         let observer = NotificationCenter.default.addObserver(
             forName: name, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated {
+            Task { @MainActor in
                 guard let self else { return }
                 action(self)
             }
@@ -82,25 +89,46 @@ final class AutoplayController: ObservableObject {
 
     // MARK: - 控制
 
+    /// 开始或从暂停恢复。会话还在（暂停态）时只翻状态、重开循环，不重建会话。
     func start() {
         guard !isPlaying, let word = dataSource?.autoplayCurrentWord else { return }
         isPlaying = true
         passIndex = 0
-        Pronouncer.shared.beginNowPlayingSession(
-            title: word, subtitle: "鹦鹉学舌 · \(dataSource?.autoplaySubtitle ?? "复习")"
-        )
+        if Pronouncer.shared.isNowPlayingSessionActive {
+            Pronouncer.shared.resumeNowPlayingSession()
+            Pronouncer.shared.updateNowPlayingTitle(word)
+        } else {
+            Pronouncer.shared.beginNowPlayingSession(
+                title: word, subtitle: "鹦鹉学舌 · \(dataSource?.autoplaySubtitle ?? "复习")"
+            )
+        }
         task?.cancel()
         task = Task { [weak self] in
             await self?.runLoop()
         }
     }
 
-    /// 停掉自动播放。当前正在响的那一声不会被立刻掐断（AVAudioPlayer 没有
-    /// cancel-and-silence 的 API），但状态机的下一次推进会被 guard 拦下来。
-    func stop() {
+    /// 暂停：停止读词，但**保留整个会话**（锁屏卡片、远程命令、静音保活轨都还在）。
+    ///
+    /// 这三样东西留着，App 才能在锁屏下继续存活、用户才点得到「继续播」。锁屏的
+    /// 暂停键走这里而不是 stop()——走 stop() 会把音频整个停掉，而 App 在后台唯一
+    /// 的存活理由就是「正在播音频」，音频一停 iOS 立刻挂起它，卡片也没了，用户
+    /// 看到的就是「点了暂停整个 App 就退出了」。
+    func pause() {
         task?.cancel()
         task = nil
         guard isPlaying else { return }
+        isPlaying = false
+        passIndex = 0
+        Pronouncer.shared.pauseNowPlayingSession()
+    }
+
+    /// 彻底结束：连锁屏卡片一起收掉，音频焦点还给别的 App。
+    /// 用在 App 内主动停止、换分组、评分、队列播完这些场景——那时用户人就在
+    /// 前台，不存在"被系统挂起"的问题。
+    func stop() {
+        task?.cancel()
+        task = nil
         isPlaying = false
         passIndex = 0
         Pronouncer.shared.endNowPlayingSession()
