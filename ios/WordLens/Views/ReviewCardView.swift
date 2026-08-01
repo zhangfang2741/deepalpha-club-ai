@@ -2,7 +2,9 @@
 import SwiftUI
 
 struct ReviewCardView: View {
-    @StateObject private var viewModel = ReviewViewModel()
+    /// 由 MainTabView 持有并注入：tab bar 中间的连播键要操作同一个队列，
+    /// 两边各自 new 一个 ReviewViewModel 会变成两套互不相干的状态。
+    @ObservedObject var viewModel: ReviewViewModel
     @StateObject private var playlistVM = PlaylistViewModel()
     @EnvironmentObject var nav: AppNavigationState
 
@@ -72,51 +74,10 @@ struct ReviewCardView: View {
             // 看像 title "闪一下"; 放到 toolbar layer 后, title 由
             // NavigationStack 的 chrome 单独管理, 不跟 cardContent 的
             // transition 一起 fade, 静止不动.
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    // 标题兼当前播放队列的下拉入口：点一下展开这一组的全部单词，
-                    // 可以直接挑一个从那里开始播。分组名本身也就是「正在播放来自…」。
-                    Button {
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
-                            showQueueDropdown.toggle()
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(viewModel.selectionName)
-                                .font(.title3.bold())
-                                .foregroundStyle(Theme.textPrimary)
-                                .lineLimit(1)
-                            Image(systemName: "chevron.down")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(Theme.accent)
-                                .rotationEffect(.degrees(showQueueDropdown ? 180 : 0))
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(viewModel.queue.isEmpty)
-                    .accessibilityLabel("当前分组 \(viewModel.selectionName)，展开播放队列")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        // 学习模式只改队列排序，不动 SM-2 调度；切换即时重排剩余队列。
-                        ForEach(ReviewMode.allCases, id: \.self) { m in
-                            Button {
-                                viewModel.changeMode(m)
-                            } label: {
-                                if viewModel.mode == m {
-                                    Label(m.label, systemImage: "checkmark")
-                                } else {
-                                    Text(m.label)
-                                }
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "slider.horizontal.3")
-                    }
-                    .tint(Theme.accent)
-                    .accessibilityLabel("学习模式")
-                }
-            }
+            // 导航栏整个藏掉：现在它已经没有任何内容了，而「☰ 分组名」放进
+            // toolbar 会被 iOS 26 的玻璃控件按固定尺寸裁掉文字，只剩一个圆图标。
+            // 自己在内容区画这一行，宽度、字号才完全可控。
+            .toolbar(.hidden, for: .navigationBar)
             .task { await viewModel.loadQueueIfNeeded() }
             .task {
                 // 面板里的歌单名要在首屏就能用（标题显示的是当前组的名字，如果当前
@@ -129,6 +90,12 @@ struct ReviewCardView: View {
                     await viewModel.loadQueue()
                     await playlistVM.load()
                 }
+            }
+            // 学习模式挪到设置页之后，改动发生在别的 tab 上。切回首页时对一下
+            // UserDefaults，不一致就按新模式重排剩余队列。
+            .onChange(of: nav.selectedTab) { _, newTab in
+                guard newTab == .review else { return }
+                viewModel.changeMode(ReviewMode.current)
             }
             .refreshable { await viewModel.loadQueue() }
             // 全屏「切换分组」页：只管挑分组（词表纯展示）。要跳到某个具体的词
@@ -154,11 +121,8 @@ struct ReviewCardView: View {
             // .safeAreaInset 把 FAB 推到 NavigationStack 的底部工具栏区,
             // 跟主 view tree 完全分离 — preflight 阶段 FAB 不会被
             // 跟 cardContent 的 transition 一起处理, crash 来源被消除。
-            .safeAreaInset(edge: .bottom, alignment: .center, spacing: 0) {
-                bottomBar
-                    .padding(.bottom, 16)
-                    .background(Color.clear)
-            }
+            // 底部不再有任何浮动按钮：连播键已经嵌进 tab bar 正中间（见
+            // MainTabView.playButton），分组入口挪到了左上角的 ☰。
             // 进度行也提到 outer 用 safeAreaInset(edge: .top) 钉死——
             // 之前进度行写在 cardContent 内, 跟 .id(word.id) +
             // .transition(.opacity + .scale) 同一条 view tree, 切词时
@@ -167,13 +131,50 @@ struct ReviewCardView: View {
             // 提出来独立成 stable 节点, 切词时只 diff Text 里的数字, 位
             // 置永远不动, 不闪.
             .safeAreaInset(edge: .top, alignment: .center, spacing: 0) {
-                progressBar
-                    .padding(.vertical, 8)
-                    // 没有正在复习的卡片时（加载中/无待复习/已完成）隐藏进度，避免
-                    // 显示成 "N/0" 这类无意义数字。
-                    .opacity(viewModel.currentWord != nil ? 1 : 0)
+                topBar
             }
         }
+    }
+
+    /// 顶部一行：左边「☰ 分组名」，右边进度。
+    ///
+    /// 整行走 safeAreaInset 钉死，跟卡片的 .id + .transition 完全分离——切词时
+    /// 只 diff 里面的文字，位置不动、不跟着淡入淡出。
+    private var topBar: some View {
+        HStack(alignment: .center) {
+            Button {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+                    showQueueDropdown.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                    Text(viewModel.selectionName)
+                        .font(.title3.bold())
+                        .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Theme.textSecondary)
+                        .rotationEffect(.degrees(showQueueDropdown ? 180 : 0))
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("当前分组 \(viewModel.selectionName)，展开播放队列")
+
+            Spacer(minLength: 12)
+
+            // 没有正在复习的卡片时（加载中/无待复习/已完成）隐藏进度，避免
+            // 显示成 "N/0" 这类无意义数字。
+            progressBar
+                .opacity(viewModel.currentWord != nil ? 1 : 0)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 6)
+        .padding(.bottom, 10)
     }
 
     /// 布局要点：
@@ -283,6 +284,32 @@ struct ReviewCardView: View {
                 }
 
             VStack(spacing: 0) {
+                // 「切换分组」放在下拉框顶部：☰ 是唯一入口，先看到当前队列，
+                // 想换组再往上一层走，层级关系跟用户的心智一致。
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        showQueueDropdown = false
+                    }
+                    showPlaylistSheet = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "square.grid.2x2")
+                            .font(.subheadline)
+                        Text("切换分组")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.bold))
+                    }
+                    .foregroundStyle(Theme.accent)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+
+                Divider().overlay(Theme.border)
+
                 HStack(spacing: 6) {
                     Text("播放队列")
                         .font(.caption.weight(.semibold))
@@ -372,62 +399,6 @@ struct ReviewCardView: View {
         .buttonStyle(.plain)
         .accessibilityLabel("\(word.word)，\(word.definitionZh)\(isCurrent ? "，正在播放" : "")")
         .accessibilityHint("双击从这个单词开始播放")
-    }
-
-    /// 底部操作条：播放按钮居中不动，分组入口钉在同一行的最左侧。
-    ///
-    /// 分组入口原来在导航栏左上角，拇指够不着——这一页所有高频操作（切词、评分、
-    /// 连播）都在下半屏，只有它一个人在顶上。用 ZStack 而不是 HStack + Spacer：
-    /// 播放按钮要的是「相对整屏居中」，跟左边那个按钮多宽无关。
-    private var bottomBar: some View {
-        ZStack {
-            autoplayButton
-                .opacity(viewModel.currentWord != nil ? 1 : 0)
-                .allowsHitTesting(viewModel.currentWord != nil)
-
-            HStack {
-                playlistButton
-                Spacer()
-            }
-            .padding(.horizontal, 28)
-        }
-    }
-
-    /// 分组（播放列表）入口：比播放按钮小一圈、用描边而非实心，视觉上分出主次——
-    /// 主操作是连播，切分组是次操作。
-    private var playlistButton: some View {
-        Button {
-            showPlaylistSheet = true
-        } label: {
-            Image(systemName: "list.bullet")
-                .font(.body.weight(.semibold))
-                .foregroundStyle(Theme.accent)
-                .frame(width: 48, height: 48)
-                .background(Circle().fill(Theme.surface))
-                .overlay(Circle().strokeBorder(Theme.accent.opacity(0.35), lineWidth: 1))
-        }
-        .buttonStyle(.pressable)
-        .accessibilityLabel("播放列表，当前 \(viewModel.selectionName)")
-    }
-
-    private var autoplayButton: some View {
-        let isPlaying = viewModel.autoplay.isPlaying
-        return Button {
-            viewModel.autoplay.toggle()
-        } label: {
-            Image(systemName: isPlaying ? "stop.fill" : "play.fill")
-                .font(.title2.weight(.bold))
-                .foregroundStyle(.white)
-                .frame(width: 64, height: 64)
-                .background(
-                    Circle().fill(isPlaying ? Theme.unknown : Theme.accent)
-                )
-                .shadow(color: (isPlaying ? Theme.unknown : Theme.accent).opacity(0.4),
-                        radius: 8, x: 0, y: 4)
-        }
-        .buttonStyle(.pressable)
-        .accessibilityLabel(isPlaying ? "停止自动播放" : "开始自动播放")
-        .accessibilityAddTraits(.isButton)
     }
 
     /// 卡片翻转用两层叠放 + 各自反向补偿旋转，而不是单层直接转 180°：单层转到

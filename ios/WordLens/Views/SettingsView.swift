@@ -53,6 +53,11 @@ struct SettingsView: View {
 
                 Section("偏好设置") {
                     NavigationLink {
+                        ReviewModeSettingsView()
+                    } label: {
+                        Label("学习模式", systemImage: "slider.horizontal.3")
+                    }
+                    NavigationLink {
                         PronunciationSettingsView()
                     } label: {
                         Label("发音设置", systemImage: "speaker.wave.2")
