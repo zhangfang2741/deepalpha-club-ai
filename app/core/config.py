@@ -338,7 +338,7 @@ class Settings:
         )
         self.MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY", "")
         self.MINIMAX_BASE_URL = os.getenv("MINIMAX_BASE_URL", "https://api.minimax.chat/v1")
-        # WordLens 单词与英文例句 TTS。支持按优先级配置多个 Key；未配置列表时，
+        # WordLens 英文例句 TTS。支持按优先级配置多个 Key；未配置列表时，
         # 兼容原有单 Key，并最终复用 MiniMax 的通用 API Key。
         self.MINIMAX_TTS_API_KEY = os.getenv("MINIMAX_TTS_API_KEY", "") or self.MINIMAX_API_KEY
         configured_tts_keys = parse_list_from_env("MINIMAX_TTS_API_KEYS")

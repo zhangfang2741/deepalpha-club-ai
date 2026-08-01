@@ -251,10 +251,10 @@ async def tts(
     accent: Literal["us", "uk"] = Query(default="us"),
     user: VocabularyUser = Depends(get_current_vocab_user),
 ):
-    """使用 MiniMax Speech HD 返回单词或完整英文例句的高质量 MP3。
+    """使用 MiniMax Speech HD 返回完整英文例句的高质量 MP3。
 
-    仅登录用户可用，供应商密钥不会下发客户端。未配置时返回 503；客户端播放
-    单词时可继续回退到有道，例句则跳过本次播放。
+    仅登录用户可用，供应商密钥不会下发客户端。未配置时返回 503，客户端会跳过
+    本次例句并继续播放后续内容。
     """
     try:
         audio = await synthesize_speech(word, accent)

@@ -71,27 +71,11 @@ enum PronunciationAutoplay {
     }
 }
 
-/// 发音源偏好（存 UserDefaults，设置页可切换）。
-///
-/// 只保留中国大陆可用的两个来源：有道词典音，以及经自家后端中转的 MiniMax Speech。
-enum PronunciationSource: String, CaseIterable {
+/// 内部发音源。用户无需手动选择：单词固定使用有道词典音，完整例句固定使用
+/// 经自家后端中转的 MiniMax Speech HD。
+enum PronunciationSource: String {
     case youdao
     case minimax
-
-    static var current: PronunciationSource {
-        get {
-            let raw = UserDefaults.standard.string(forKey: "pronunciation_source") ?? youdao.rawValue
-            guard let source = PronunciationSource(rawValue: raw) else {
-                // 旧版本可能保存了 google/system/azure，升级后统一迁移回有道。
-                UserDefaults.standard.set(youdao.rawValue, forKey: "pronunciation_source")
-                return .youdao
-            }
-            return source
-        }
-        set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: "pronunciation_source")
-        }
-    }
 
     /// MiniMax 走本项目后端，登录 token 随请求发送，供应商密钥不会下发到 App。
     var usesBackend: Bool { self == .minimax }
@@ -99,8 +83,9 @@ enum PronunciationSource: String, CaseIterable {
 
 /// 单词发音播放器（单例）。
 ///
-/// 有道直接请求词典音；MiniMax 经自家后端生成高清 MP3。首次播放后统一缓存到
-/// Caches 目录，再次播放直接读取本地文件。
+/// 单词由有道提供词典音，完整例句由 MiniMax 生成高清 MP3。首次播放后统一缓存到
+/// Caches 目录，再次播放直接读取本地文件。这样既保留单词发音的准确性，也让例句
+/// 具备自然的连读、停顿和重音。
 ///
 /// 做成 ObservableObject（而不是之前的纯静态方法集合）：正在播放哪个词要是一份
 /// 全局共享状态，不能只存在触发播放的那个 PronounceButton 自己的本地 @State 里。
@@ -338,7 +323,6 @@ final class Pronouncer: ObservableObject {
 
     func speak(_ word: String) {
         activateSessionIfNeeded()
-        let source = PronunciationSource.current
         let accent = PronunciationAccent.current
         let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -352,7 +336,7 @@ final class Pronouncer: ObservableObject {
 
         fetchAndPlay(
             trimmed,
-            chain: Self.fallbackChain(startingAt: source),
+            chain: [.youdao],
             accent: accent,
             purpose: "word",
             requestID: requestID
@@ -379,14 +363,6 @@ final class Pronouncer: ObservableObject {
             purpose: "sentence",
             requestID: requestID
         )
-    }
-
-    /// 单词首选源失败时只在有道与 MiniMax 之间降级，不再接入其它第三方或系统语音。
-    private static func fallbackChain(startingAt source: PronunciationSource) -> [PronunciationSource] {
-        switch source {
-        case .youdao: return [.youdao, .minimax]
-        case .minimax: return [.minimax, .youdao]
-        }
     }
 
     /// 沿降级链依次尝试；全部失败时结束本次播放，让自动播放可以继续往下走。
@@ -501,8 +477,9 @@ final class Pronouncer: ObservableObject {
             components?.queryItems = [
                 URLQueryItem(name: "word", value: word),
                 URLQueryItem(name: "accent", value: accent == .uk ? "uk" : "us"),
-                // 服务端/CDN 缓存按 URL 区分；升级音色配置时递增版本，避免命中旧音色。
-                URLQueryItem(name: "voice_profile", value: "us-trustworthy_uk-graceful-v1"),
+                // 服务端/CDN 缓存按 URL 区分；升级到 44.1kHz / 256kbps + fluent 后
+                // 更新版本，避免命中旧的低码率例句音频。
+                URLQueryItem(name: "voice_profile", value: "sentence-hq-fluent-v2"),
             ]
             return components?.url
         }
@@ -544,9 +521,9 @@ final class Pronouncer: ObservableObject {
     ) -> URL? {
         // 保留旧的单词缓存 key；只有例句增加命名空间，升级后不需要重下全部单词音频。
         let namespace = purpose == "sentence" ? "sentence_" : ""
-        // MiniMax 的默认英美音色已分离；加入配置版本以淘汰升级前两种口音共用
-        // Graceful Lady 的本地缓存。有道音频没有变化，继续复用原缓存。
-        let sourceVersion = source == .minimax ? "_voice2" : ""
+        // MiniMax 例句已升级到 44.1kHz / 256kbps + fluent；缓存版本同步递增，
+        // 防止升级后继续播放本地旧的低码率文件。有道单词音频继续复用原缓存。
+        let sourceVersion = source == .minimax ? "_sentence_hq_fluent_v2" : ""
         let key = "\(namespace)\(word.lowercased())_\(source.rawValue)\(sourceVersion)_\(accent.rawValue)"
         let safe = key.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? key
         return cacheDirectory?.appendingPathComponent("\(safe).mp3")

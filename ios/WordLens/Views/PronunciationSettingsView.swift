@@ -2,12 +2,9 @@ import SwiftUI
 
 /// 发音设置页面（从设置页进入）。
 ///
-/// 把发音相关的所有偏好集中在一处：发音源（有道/MiniMax）、口音（英/美）、
-/// 语速、自动发音。偏好本身仍存在 UserDefaults（见 PronounceButton.swift 里的
-/// PronunciationSource / PronunciationAccent / PronunciationRate / PronunciationAutoplay），
-/// 这里只是统一的可视化入口。
+/// 把发音相关的所有偏好集中在一处。发音源采用自动方案：单词使用有道词典音，
+/// 完整例句使用 MiniMax Speech HD；用户只需选择口音、语速和是否自动发音。
 struct PronunciationSettingsView: View {
-    @State private var source: PronunciationSource = PronunciationSource.current
     @State private var accent: PronunciationAccent = PronunciationAccent.current
     @State private var rate: PronunciationRate = PronunciationRate.current
     @State private var autoplay: Bool = PronunciationAutoplay.isEnabled
@@ -17,17 +14,18 @@ struct PronunciationSettingsView: View {
             Theme.background.ignoresSafeArea()
             Form {
                 Section {
-                    Picker("发音源", selection: $source) {
-                        Text("有道").tag(PronunciationSource.youdao)
-                        Text("MiniMax Speech HD").tag(PronunciationSource.minimax)
+                    LabeledContent("单词") {
+                        Text("有道词典音")
+                            .foregroundStyle(Theme.textSecondary)
                     }
-                    .onChange(of: source) { _, newValue in
-                        PronunciationSource.current = newValue
+                    LabeledContent("例句") {
+                        Text("MiniMax Speech HD")
+                            .foregroundStyle(Theme.textSecondary)
                     }
                 } header: {
-                    Text("发音源")
+                    Text("发音方案")
                 } footer: {
-                    Text("有道适合常见单词的词典发音；MiniMax Speech HD 使用高清 AI 语音，支持单词和完整例句，需要联网。")
+                    Text("自动为内容选择更合适的发音源：单词侧重词典发音准确性，例句侧重自然连读和语调。")
                         .foregroundStyle(Theme.textSecondary)
                 }
                 .listRowBackground(Theme.surface)

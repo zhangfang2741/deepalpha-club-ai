@@ -1,4 +1,4 @@
-"""MiniMax Speech HD：为 WordLens 合成高清单词和英文例句发音。
+"""MiniMax Speech HD：为 WordLens 合成高清英文例句发音。
 
 所有请求都经服务端中转，MiniMax API Key 不下发到客户端。返回统一的 MP3 音频，
 iOS 使用 AVAudioPlayer 播放并按文本、口音和用途缓存。
@@ -14,6 +14,9 @@ from app.core.logging import logger
 _TIMEOUT_SECONDS = 20.0
 _CIRCUIT_BREAKER_PROVIDER_CODES = {2056}
 _CIRCUIT_BREAKER_HTTP_STATUSES = {401, 403, 429}
+_SAMPLE_RATE = 44_100
+_BITRATE = 256_000
+_SENTENCE_EMOTION = "fluent"
 
 
 class TTSNotConfiguredError(Exception):
@@ -61,7 +64,7 @@ async def _open_key_circuit(api_key: str, reason: str) -> None:
 
 
 async def synthesize_speech(text: str, accent: str = "us") -> bytes:
-    """使用 MiniMax Speech HD 合成单词或完整英文例句，返回 MP3 字节。"""
+    """使用 MiniMax Speech HD 合成完整英文例句，返回高码率 MP3 字节。"""
     api_keys = _configured_api_keys()
     if not api_keys:
         raise TTSNotConfiguredError("MiniMax Speech 未配置")
@@ -79,10 +82,11 @@ async def synthesize_speech(text: str, accent: str = "us") -> bytes:
             "speed": 1.0,
             "vol": 1.0,
             "pitch": 0,
+            "emotion": _SENTENCE_EMOTION,
         },
         "audio_setting": {
-            "sample_rate": 32000,
-            "bitrate": 128000,
+            "sample_rate": _SAMPLE_RATE,
+            "bitrate": _BITRATE,
             "format": "mp3",
             "channel": 1,
         },

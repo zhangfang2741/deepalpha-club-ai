@@ -110,7 +110,6 @@ struct ReviewCardView: View {
                 guard oldTab == .study, newTab != .study else { return }
                 isDictationFieldFocused = false
                 showGroupDropdown = false
-                viewModel.autoplay.stop()
             }
             .refreshable { await viewModel.loadQueue() }
             // 队列面板：fullScreenCover 只负责盖住 tab bar，系统转场由

@@ -122,8 +122,9 @@ async def test_synthesize_speech_returns_hd_audio_and_expected_payload(monkeypat
     assert kwargs["json"]["model"] == "speech-2.8-hd"
     assert kwargs["json"]["language_boost"] == "English"
     assert kwargs["json"]["voice_setting"]["voice_id"] == "English_Trustworthy_Man"
-    assert kwargs["json"]["audio_setting"]["sample_rate"] == 32000
-    assert kwargs["json"]["audio_setting"]["bitrate"] == 128000
+    assert kwargs["json"]["voice_setting"]["emotion"] == "fluent"
+    assert kwargs["json"]["audio_setting"]["sample_rate"] == 44100
+    assert kwargs["json"]["audio_setting"]["bitrate"] == 256000
 
 
 async def test_synthesize_speech_rejects_provider_error(monkeypatch):
