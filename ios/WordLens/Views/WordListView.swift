@@ -161,7 +161,7 @@ struct WordListView: View {
             }
         }
         .navigationDestination(item: $selectedWord) { word in
-            WordDetailView(word: word, listViewModel: viewModel)
+            WordDetailView(word: word)
         }
         .sheet(isPresented: $showPlaylistPicker) {
             PlaylistPickerView(viewModel: playlistVM) { playlist in
