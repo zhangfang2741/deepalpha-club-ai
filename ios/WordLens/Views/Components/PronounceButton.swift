@@ -193,6 +193,7 @@ final class Pronouncer: ObservableObject {
     func beginNowPlayingSession(title: String, subtitle: String) {
         activateSessionIfNeeded()
         hasNowPlayingSession = true
+        startKeepAlive()
         setRemoteCommandsEnabled(true)
         var info: [String: Any] = [:]
         info[MPMediaItemPropertyTitle] = title
@@ -203,6 +204,67 @@ final class Pronouncer: ObservableObject {
         info[MPNowPlayingInfoPropertyPlaybackRate] = 1.0
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
         MPNowPlayingInfoCenter.default().playbackState = .playing
+    }
+
+    // MARK: - 静音保活
+
+    /// 连播期间循环播放的静音音频，作用是让音频引擎**一刻不停**。
+    ///
+    /// 只设 `playbackState = .playing` 是不够的：iOS 判断"这个 App 是不是在放
+    /// 音频"最终看的是它有没有真的在出声。我们的音频是一个词一个 AVAudioPlayer，
+    /// 词间还有 0.6～2 秒的静默空档——每个词播完那一刻音频就断了，系统据此把锁屏
+    /// 按钮翻回"播放"，下一个词开始又翻成"暂停"，于是一个词闪一次。
+    ///
+    /// 垫一条无限循环的静音轨之后，整个会话期间音频引擎连续运转，系统看到的就是
+    /// 一段不间断的播放，按钮稳定停在"暂停"。附带好处：`audio` 后台模式下持续
+    /// 出声的 App 不会被挂起，词间那些 Task.sleep 不再依赖 beginBackgroundTask
+    /// 那 ~30 秒的额度。
+    private var keepAlivePlayer: AVAudioPlayer?
+
+    private func startKeepAlive() {
+        guard keepAlivePlayer == nil, let data = Self.silentWAVData(seconds: 1) else { return }
+        guard let player = try? AVAudioPlayer(data: data) else { return }
+        player.numberOfLoops = -1  // 无限循环
+        player.volume = 1.0        // 音频数据本身就是静音，不靠调音量
+        player.play()
+        keepAlivePlayer = player
+    }
+
+    private func stopKeepAlive() {
+        keepAlivePlayer?.stop()
+        keepAlivePlayer = nil
+    }
+
+    /// 生成一段纯静音的 PCM WAV（16 bit / 单声道 / 44.1kHz）。
+    /// AVAudioPlayer 需要一份完整的音频文件数据，直接在内存里拼一个最小 WAV
+    /// 就够了，不用往 bundle 里塞一个静音 mp3。
+    private static func silentWAVData(seconds: Int) -> Data? {
+        let sampleRate = 44_100
+        let channels = 1
+        let bitsPerSample = 16
+        let byteRate = sampleRate * channels * bitsPerSample / 8
+        let blockAlign = channels * bitsPerSample / 8
+        let dataSize = byteRate * seconds
+
+        var data = Data()
+        func appendUInt32(_ value: UInt32) { withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
+        func appendUInt16(_ value: UInt16) { withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
+
+        data.append(contentsOf: Array("RIFF".utf8))
+        appendUInt32(UInt32(36 + dataSize))
+        data.append(contentsOf: Array("WAVE".utf8))
+        data.append(contentsOf: Array("fmt ".utf8))
+        appendUInt32(16)                       // fmt chunk 长度
+        appendUInt16(1)                        // PCM
+        appendUInt16(UInt16(channels))
+        appendUInt32(UInt32(sampleRate))
+        appendUInt32(UInt32(byteRate))
+        appendUInt16(UInt16(blockAlign))
+        appendUInt16(UInt16(bitsPerSample))
+        data.append(contentsOf: Array("data".utf8))
+        appendUInt32(UInt32(dataSize))
+        data.append(Data(count: dataSize))     // 全 0 即静音
+        return data
     }
 
     /// 切到下一个词：只改标题，`playbackState` 原样不动。
@@ -218,6 +280,7 @@ final class Pronouncer: ObservableObject {
     func endNowPlayingSession() {
         guard hasNowPlayingSession else { return }
         hasNowPlayingSession = false
+        stopKeepAlive()
         setRemoteCommandsEnabled(false)
         MPNowPlayingInfoCenter.default().playbackState = .stopped
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
