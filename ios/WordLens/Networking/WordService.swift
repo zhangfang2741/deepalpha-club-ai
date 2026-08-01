@@ -44,6 +44,24 @@ enum WordService {
         let _: DeleteResponse = try await APIClient.shared.delete("/words/\(id)")
     }
 
+    /// 服务端在一个事务里清理单词、复习日志和分组关联。调用方每批最多传 5000 个，
+    /// 避免过去那种“选中多少词就发多少 HTTP 请求”的长时间阻塞。
+    static func deleteWordsBatch(ids: [String]) async throws -> Int {
+        struct Body: Encodable {
+            let wordIds: [String]
+            enum CodingKeys: String, CodingKey { case wordIds = "word_ids" }
+        }
+        struct Response: Decodable {
+            let deletedCount: Int
+            enum CodingKeys: String, CodingKey { case deletedCount = "deleted_count" }
+        }
+        let response: Response = try await APIClient.shared.postJSON(
+            "/words/batch-delete",
+            body: Body(wordIds: ids)
+        )
+        return response.deletedCount
+    }
+
     static func reviewQueue() async throws -> [VocabularyWord] {
         let resp: ReviewQueueResponse = try await APIClient.shared.get("/review/queue")
         return resp.words

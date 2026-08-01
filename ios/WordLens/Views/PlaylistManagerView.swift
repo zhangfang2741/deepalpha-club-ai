@@ -19,7 +19,7 @@ struct PlaylistManagerView: View {
             ZStack {
                 Theme.background.ignoresSafeArea()
 
-                if viewModel.isLoading && viewModel.playlists.isEmpty {
+                if viewModel.isLoadingPlaylists && viewModel.playlists.isEmpty {
                     ProgressView().tint(Theme.accent)
                 } else if viewModel.playlists.isEmpty {
                     ContentUnavailableView {
@@ -101,8 +101,10 @@ struct PlaylistManagerView: View {
                     .accessibilityLabel("新建分组")
                 }
             }
-            .task { await viewModel.load() }
-            .refreshable { await viewModel.load() }
+            // 管理页只展示自定义分组，不再等待与它无关的生词统计接口。已有缓存
+            // 会立即展示；下拉刷新才强制请求最新列表。
+            .task { await viewModel.loadPlaylists() }
+            .refreshable { await viewModel.loadPlaylists(force: true) }
             .sheet(isPresented: $isCreating) {
                 PlaylistEditorView(playlist: nil, viewModel: viewModel)
             }

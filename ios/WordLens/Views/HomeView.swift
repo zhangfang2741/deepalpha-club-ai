@@ -28,7 +28,9 @@ struct HomeView: View {
 
                 // 生词库列表按字母分 Section 展示，需要用 List 自己独立滚动，
                 // 不能再跟上面的卡片一起塞进一个大 ScrollView。
-                WordListView(viewModel: listVM, onRefresh: refreshAll)
+                WordListView(viewModel: listVM) {
+                    await refreshAll(forcePlaylists: true)
+                }
             }
             .padding(.horizontal)
             .padding(.top)
@@ -40,7 +42,7 @@ struct HomeView: View {
             }
             .task { await refreshAll() }
             .onChange(of: nav.vocabularyDataVersion) { _, _ in
-                Task { await refreshAll() }
+                Task { await refreshAll(forcePlaylists: true) }
             }
             // 切回「生词库」tab 时刷新统计：首页复习卡评分走的是独立的
             // ReviewViewModel，不会碰这里的 listVM、也不适合 bump
@@ -66,9 +68,12 @@ struct HomeView: View {
         }
     }
 
-    private func refreshAll() async {
-        await listVM.load()
-        await playlistVM.load()
+    private func refreshAll(forcePlaylists: Bool = false) async {
+        // 生词列表、统计和自定义分组没有依赖关系，并行加载。分组不再排在完整
+        // 生词列表之后，打开管理页时通常已经有缓存可直接展示。
+        async let wordsLoad: Void = listVM.load()
+        async let playlistLoad: Void = playlistVM.load(forcePlaylists: forcePlaylists)
+        _ = await (wordsLoad, playlistLoad)
     }
 
     /// 自定义分组的筛选 chips + 「分组管理」入口。

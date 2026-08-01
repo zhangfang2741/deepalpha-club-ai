@@ -30,6 +30,11 @@ final class AppNavigationState: ObservableObject {
         blockingOperationMessage = message
     }
 
+    func updateBlockingOperation(_ message: String) {
+        guard blockingOperationMessage != nil else { return }
+        blockingOperationMessage = message
+    }
+
     func endBlockingOperation() {
         blockingOperationMessage = nil
     }

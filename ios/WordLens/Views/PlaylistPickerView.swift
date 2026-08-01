@@ -16,7 +16,7 @@ struct PlaylistPickerView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if viewModel.isLoading && viewModel.playlists.isEmpty {
+                if viewModel.isLoadingPlaylists && viewModel.playlists.isEmpty {
                     ProgressView().tint(Theme.accent)
                 } else if viewModel.playlists.isEmpty {
                     ContentUnavailableView {
@@ -68,7 +68,8 @@ struct PlaylistPickerView: View {
                     .accessibilityLabel("新建分组")
                 }
             }
-            .task { await viewModel.load() }
+            // 这里只展示自定义分组，不等待与页面无关的生词统计。
+            .task { await viewModel.loadPlaylists() }
             .sheet(isPresented: $isCreating) {
                 PlaylistEditorView(playlist: nil, viewModel: viewModel)
             }

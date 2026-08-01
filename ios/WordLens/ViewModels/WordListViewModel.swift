@@ -4,6 +4,8 @@ import SwiftUI
 
 @MainActor
 final class WordListViewModel: ObservableObject {
+    private static let deleteBatchSize = 5000
+
     /// 服务端只按 searchQuery 过滤，不按 status 过滤——status 过滤在客户端做（见
     /// `words`），这样切换"不认识/模糊/认识"是纯本地筛选、不用等网络请求，而且
     /// 统计数字（每个状态各多少个）能一直按全量数据算，不会被当前选中的筛选
@@ -32,7 +34,7 @@ final class WordListViewModel: ObservableObject {
             guard let filterStatus else { return true }
             return word.status == filterStatus
         }
-        guard let filterPlaylistID else { return statusFiltered }
+        guard filterPlaylistID != nil else { return statusFiltered }
         return statusFiltered.filter { word in
             // 第一次按需加载这个分组的词集，后续命中缓存
             playlistWords.contains(word.id)
@@ -114,13 +116,8 @@ final class WordListViewModel: ObservableObject {
         }
     }
 
-    /// 批量删除：用 TaskGroup 并发调用 WordService.deleteWord（后端没批量
-    /// 删接口，单删拼起来）。单词量级到 100 个时串行要 30 秒+，并发后基本
-    /// 一个 RTT（300ms 内）就能搞定——用户感受是"立刻消失"。
-    ///
-    /// 并发度上限 6：Railway / Supabase 连接池容量有限，全开并发容易把后端
-    /// 打回 429。6 个并发实测在 100 词批量时把端到端时间从 ~30s 压到 ~3s，
-    /// 又不会触发限流。
+    /// 批量删除：每 5000 个 ID 发一次请求，由服务端在单个事务中集合删除。
+    /// 例如 3220 个词只需 1 次请求，不再创建 3220 个 Task 和 HTTP 连接。
     ///
     /// 删除以服务端成功为准：成功的 id 进 deletedIDs 用于本地移出，失败的
     /// 留在 selectedIDs 提示用户重试。
@@ -129,7 +126,9 @@ final class WordListViewModel: ObservableObject {
     /// `completed`，UI 显示 "正在删除 X / Y"。完成时 `deletionProgress`
     /// 置 nil。
     @discardableResult
-    func deleteSelected() async -> Bool {
+    func deleteSelected(
+        onProgress: @MainActor (Int, Int) -> Void = { _, _ in }
+    ) async -> Bool {
         let idsToDelete = selectedIDs
         guard !idsToDelete.isEmpty else { return false }
 
@@ -141,24 +140,41 @@ final class WordListViewModel: ObservableObject {
             deletionProgress = nil
         }
 
-        let deletedIDs = await deleteWithConcurrency(
-            idsToDelete,
-            maxConcurrent: 6,
-            total: idsToDelete.count
-        ) { completed, _ in
-            // 任务完成回调: 推进 UI 进度。@MainActor 的 ViewModel 直接更新
-            // @Published, UI 立刻收到.
-            self.deletionProgress = (completed: completed, total: idsToDelete.count)
-        }
-        let failedCount = idsToDelete.count - deletedIDs.count
+        let idArray = Array(idsToDelete)
+        var succeededIDs: Set<String> = []
+        var completed = 0
 
-        if !deletedIDs.isEmpty {
-            withAnimation(.easeInOut(duration: 0.35)) {
-                allWords.removeAll { deletedIDs.contains($0.id) }
+        for start in stride(from: 0, to: idArray.count, by: Self.deleteBatchSize) {
+            if Task.isCancelled { break }
+            let end = min(start + Self.deleteBatchSize, idArray.count)
+            let batch = Array(idArray[start..<end])
+            do {
+                _ = try await WordService.deleteWordsBatch(ids: batch)
+                // 接口是幂等的：请求成功即代表这些 ID 在服务端已经不存在，包含
+                // 被另一台设备提前删除的条目，因此整批都可以从本地安全移除。
+                succeededIDs.formUnion(batch)
+            } catch {
+                // 单批失败不阻断后续批次；失败 ID 保持选中，用户可以直接重试。
+            }
+            completed += batch.count
+            deletionProgress = (completed: completed, total: idsToDelete.count)
+            onProgress(completed, idsToDelete.count)
+        }
+        let failedCount = idsToDelete.count - succeededIDs.count
+
+        if !succeededIDs.isEmpty {
+            if succeededIDs.count <= 100 {
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    allWords.removeAll { succeededIDs.contains($0.id) }
+                }
+            } else {
+                // 数千行同时执行退场动画会让 SwiftUI 主线程再次卡住，大批量删除
+                // 直接更新数据；进度条已经提供了明确的操作反馈。
+                allWords.removeAll { succeededIDs.contains($0.id) }
             }
         }
 
-        selectedIDs.subtract(deletedIDs)
+        selectedIDs.subtract(succeededIDs)
         if failedCount > 0 {
             errorMessage = "有 \(failedCount) 个单词删除失败，请稍后重试"
         }
@@ -166,51 +182,7 @@ final class WordListViewModel: ObservableObject {
         if selectedIDs.isEmpty {
             isSelecting = false
         }
-        return !deletedIDs.isEmpty
-    }
-
-    /// 通用并发删除：传入一组 id 列表 + 上限并发数 + 进度回调, 返回成功删除的
-    /// 子集. onProgress 在每个 word 完成时调用 (成功或失败都算一次完成),
-    /// 第一个参数是已完成数量, 第二个是总数 —— 调用方用它更新 UI.
-    ///
-    /// asyncSemaphore 的 wait/signal 都用 await 显式调用——不能 defer 在
-    /// actor-isolated 方法上 (Swift 不允许从非 actor context sync 调 actor
-    /// 方法). 异常路径也要手动 signal, 不能用 defer 兜底.
-    private func deleteWithConcurrency(
-        _ ids: Set<String>,
-        maxConcurrent: Int,
-        total: Int,
-        onProgress: @MainActor (Int, Int) -> Void
-    ) async -> Set<String> {
-        let semaphore = AsyncSemaphore(value: maxConcurrent)
-        let idsArray = Array(ids)
-        return await withTaskGroup(of: (String, Bool).self) { group in
-            for id in idsArray {
-                group.addTask {
-                    await semaphore.wait()
-                    var ok = false
-                    do {
-                        try await WordService.deleteWord(id: id)
-                        ok = true
-                    } catch {
-                        ok = false
-                    }
-                    await semaphore.signal()
-                    return (id, ok)
-                }
-            }
-            var deleted: Set<String> = []
-            var completed = 0
-            for await (id, ok) in group {
-                completed += 1
-                if ok { deleted.insert(id) }
-                // onProgress 是 @MainActor — 调用点在 await 上下文, 这里
-                // TaskGroup 的 outer await 自动在 await 时让 actor 切换
-                // 满足 Swift 6 严格隔离规则.
-                await onProgress(completed, total)
-            }
-            return deleted
-        }
+        return !succeededIDs.isEmpty
     }
 
     /// 三态全选：未全选 → 全选；当前全选 → 全不选；部分选 → 选完所有可见的。
@@ -232,34 +204,4 @@ final class WordListViewModel: ObservableObject {
         }
     }
 
-}
-
-/// 极简 AsyncSemaphore：await-wait / signal 模式，配合 TaskGroup 限并发。
-/// 比直接 spawn N 个 Task 更稳——不会一次性把后端打挂。之前 recognizer.py
-/// 里的 `_enrich_semaphore` 也是同样的并发控制思路, iOS 这边理应也能
-/// 用同样的 atomic counter。
-actor AsyncSemaphore {
-    private var available: Int
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    init(value: Int) { self.available = value }
-
-    func wait() async {
-        if available > 0 {
-            available -= 1
-            return
-        }
-        await withCheckedContinuation { continuation in
-            waiters.append(continuation)
-        }
-    }
-
-    func signal() {
-        if let next = waiters.first {
-            waiters.removeFirst()
-            next.resume()
-        } else {
-            available += 1
-        }
-    }
 }

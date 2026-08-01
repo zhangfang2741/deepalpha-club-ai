@@ -7,30 +7,105 @@ import Foundation
 /// 的事。两者通过一个 PlaylistSelection 值对接。
 @MainActor
 final class PlaylistViewModel: ObservableObject {
+    private static let playlistCacheTTL: TimeInterval = 30
+
     @Published private(set) var stats: VocabularyStats = .empty
     @Published private(set) var playlists: [Playlist] = []
-    @Published private(set) var isLoading = false
+    @Published private(set) var isLoadingPlaylists = false
+    @Published private(set) var isLoadingStats = false
     @Published var errorMessage: String?
 
     /// 当前正在删除的分组 ID——行内 UI 拿来降透明 + 禁用按钮，避免用户在
-    /// 删除请求飞行期间又去操作这一行。`load()` 完成后会自动清掉。
+    /// 删除请求飞行期间又去操作这一行。删除请求结束后会自动清掉。
     @Published private(set) var deletingPlaylistID: String?
 
+    private var playlistsLoadedAt: Date?
+    private var playlistsLoadTask: Task<[Playlist], Error>?
+    private var playlistsLoadID: UUID?
+    private var statsLoadTask: Task<VocabularyStats, Error>?
+    private var statsLoadID: UUID?
 
-    func load() async {
-        isLoading = true
+    var isLoading: Bool { isLoadingPlaylists || isLoadingStats }
+
+    /// 同时刷新统计和自定义分组。两个接口互不依赖，并行请求；分组列表一返回就
+    /// 立即写入，不再被较慢的统计接口挡住。
+    func load(forcePlaylists: Bool = false) async {
         errorMessage = nil
-        defer { isLoading = false }
+        async let statsLoad: Void = loadStats()
+        async let playlistsLoad: Void = loadPlaylists(force: forcePlaylists)
+        _ = await (statsLoad, playlistsLoad)
+    }
+
+    /// 只加载自定义分组。30 秒内复用已有结果；空列表也会缓存，因此新用户反复
+    /// 打开分组管理不会每次都重新等待网络。并发调用会共用同一个 Task。
+    func loadPlaylists(force: Bool = false) async {
+        if !force,
+           let playlistsLoadedAt,
+           Date.now.timeIntervalSince(playlistsLoadedAt) < Self.playlistCacheTTL {
+            return
+        }
+
+        let loadID: UUID
+        let task: Task<[Playlist], Error>
+        if let existingTask = playlistsLoadTask, let existingID = playlistsLoadID {
+            loadID = existingID
+            task = existingTask
+        } else {
+            loadID = UUID()
+            task = Task { try await WordService.listPlaylists() }
+            playlistsLoadID = loadID
+            playlistsLoadTask = task
+            isLoadingPlaylists = true
+            errorMessage = nil
+        }
+
+        defer {
+            if playlistsLoadID == loadID {
+                playlistsLoadID = nil
+                playlistsLoadTask = nil
+                isLoadingPlaylists = false
+            }
+        }
+
         do {
-            // 两个请求互不依赖，并发拿，面板打开就不用等两个 RTT。
-            async let statsTask = WordService.stats()
-            async let playlistsTask = WordService.listPlaylists()
-            stats = try await statsTask
-            playlists = try await playlistsTask
+            playlists = try await task.value
+            playlistsLoadedAt = .now
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "加载播放列表失败"
+            errorMessage = "加载分组失败"
+        }
+    }
+
+    /// 统计供学习页和生词库状态区域使用，分组管理页不依赖它。
+    func loadStats() async {
+        let loadID: UUID
+        let task: Task<VocabularyStats, Error>
+        if let existingTask = statsLoadTask, let existingID = statsLoadID {
+            loadID = existingID
+            task = existingTask
+        } else {
+            loadID = UUID()
+            task = Task { try await WordService.stats() }
+            statsLoadID = loadID
+            statsLoadTask = task
+            isLoadingStats = true
+        }
+
+        defer {
+            if statsLoadID == loadID {
+                statsLoadID = nil
+                statsLoadTask = nil
+                isLoadingStats = false
+            }
+        }
+
+        do {
+            stats = try await task.value
+        } catch let error as APIError {
+            errorMessage = error.message
+        } catch {
+            errorMessage = "加载分组统计失败"
         }
     }
 
@@ -55,7 +130,7 @@ final class PlaylistViewModel: ObservableObject {
         errorMessage = nil
         do {
             let playlist = try await WordService.createPlaylist(name: name, wordIDs: wordIDs)
-            await load()
+            store(playlist)
             return playlist
         } catch let error as APIError {
             errorMessage = error.message
@@ -69,8 +144,8 @@ final class PlaylistViewModel: ObservableObject {
     func updatePlaylist(id: String, name: String? = nil, wordIDs: [String]? = nil) async -> Bool {
         errorMessage = nil
         do {
-            _ = try await WordService.updatePlaylist(id: id, name: name, wordIDs: wordIDs)
-            await load()
+            let playlist = try await WordService.updatePlaylist(id: id, name: name, wordIDs: wordIDs)
+            store(playlist)
             return true
         } catch let error as APIError {
             errorMessage = error.message
@@ -84,8 +159,8 @@ final class PlaylistViewModel: ObservableObject {
     func addWords(to playlistID: String, wordIDs: [String]) async -> Bool {
         errorMessage = nil
         do {
-            _ = try await WordService.addWordsToPlaylist(id: playlistID, wordIDs: wordIDs)
-            await load()
+            let playlist = try await WordService.addWordsToPlaylist(id: playlistID, wordIDs: wordIDs)
+            store(playlist)
             return true
         } catch let error as APIError {
             errorMessage = error.message
@@ -102,13 +177,13 @@ final class PlaylistViewModel: ObservableObject {
         errorMessage = nil
         deletingPlaylistID = id
         defer {
-            // 无论成功失败都要清掉，load() 之前就清也是对的（成功后 load 会重置
-            // 整个 playlists；失败后这一行依然存在，需要恢复可点状态）。
+            // 无论成功失败都要恢复这一行的可操作状态。
             deletingPlaylistID = nil
         }
         do {
             try await WordService.deletePlaylist(id: id)
-            await load()
+            playlists.removeAll { $0.id == id }
+            playlistsLoadedAt = .now
             return true
         } catch let error as APIError {
             errorMessage = error.message
@@ -116,5 +191,14 @@ final class PlaylistViewModel: ObservableObject {
             errorMessage = "删除分组失败"
         }
         return false
+    }
+
+    private func store(_ playlist: Playlist) {
+        if let index = playlists.firstIndex(where: { $0.id == playlist.id }) {
+            playlists[index] = playlist
+        } else {
+            playlists.insert(playlist, at: 0)
+        }
+        playlistsLoadedAt = .now
     }
 }

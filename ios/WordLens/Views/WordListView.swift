@@ -81,7 +81,12 @@ struct WordListView: View {
                     .scrollContentBackground(.hidden)
                     // 监听 allWords 的删除触发 List 自带的删除动画；
                     // 0.35s 的 duration 和 viewRow 上 transition 的 timing 对齐。
-                    .animation(.easeInOut(duration: 0.35), value: viewModel.allWords.map(\.id))
+                    // 小批量保留退场动画；大批量删除期间禁用隐式动画，避免数千行
+                    // 同时做 transition 把主线程卡住。
+                    .animation(
+                        viewModel.isDeletingSelected ? nil : .easeInOut(duration: 0.35),
+                        value: viewModel.allWords.map(\.id)
+                    )
                     .refreshable {
                         if let onRefresh {
                             await onRefresh()
@@ -148,9 +153,12 @@ struct WordListView: View {
                     ) {
                         Button("删除", role: .destructive) {
                             Task {
-                                nav.beginBlockingOperation("正在删除生词...")
+                                let total = viewModel.selectedIDs.count
+                                nav.beginBlockingOperation("正在删除生词 0 / \(total)")
                                 defer { nav.endBlockingOperation() }
-                                if await viewModel.deleteSelected() {
+                                if await viewModel.deleteSelected(onProgress: { completed, total in
+                                    nav.updateBlockingOperation("正在删除生词 \(completed) / \(total)")
+                                }) {
                                     nav.notifyVocabularyDataChanged()
                                 }
                             }

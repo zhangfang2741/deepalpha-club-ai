@@ -44,14 +44,25 @@ enum PronunciationRate: String, CaseIterable {
     }
 
     /// `AVAudioPlayer.rate` 倍速（有效范围约 0.5–2.0）。
-    var playbackRate: Float {
-        switch self {
-        case .slow: return 0.75
-        case .normal: return 1.0
-        case .fast: return 1.35
+    ///
+    /// MiniMax 的 fluent 整句在原始 1.0 倍下比有道词典音更紧凑，因此例句使用
+    /// 独立校准后的倍率。“正常”降到 0.88，既保留自然连读，也更适合学习时跟读；
+    /// 该调整发生在播放端，已经缓存的例句同样生效，不会重新消耗合成额度。
+    func playbackRate(for purpose: PronunciationPurpose) -> Float {
+        switch (purpose, self) {
+        case (.word, .slow): return 0.75
+        case (.word, .normal): return 1.0
+        case (.word, .fast): return 1.35
+        case (.sentence, .slow): return 0.70
+        case (.sentence, .normal): return 0.88
+        case (.sentence, .fast): return 1.15
         }
     }
+}
 
+enum PronunciationPurpose: String {
+    case word
+    case sentence
 }
 
 /// 是否在复习卡 / 单词详情出现时自动发音（存 UserDefaults，设置页可切换）。
@@ -338,7 +349,7 @@ final class Pronouncer: ObservableObject {
             trimmed,
             chain: [.youdao],
             accent: accent,
-            purpose: "word",
+            purpose: .word,
             requestID: requestID
         )
     }
@@ -360,7 +371,7 @@ final class Pronouncer: ObservableObject {
             trimmed,
             chain: [.minimax],
             accent: PronunciationAccent.current,
-            purpose: "sentence",
+            purpose: .sentence,
             requestID: requestID
         )
     }
@@ -370,7 +381,7 @@ final class Pronouncer: ObservableObject {
         _ word: String,
         chain: [PronunciationSource],
         accent: PronunciationAccent,
-        purpose: String,
+        purpose: PronunciationPurpose,
         requestID: UUID
     ) {
         guard playbackRequestID == requestID else { return }
@@ -381,7 +392,7 @@ final class Pronouncer: ObservableObject {
         let rest = Array(chain.dropFirst())
 
         if let data = cachedAudio(for: word, source: source, accent: accent, purpose: purpose) {
-            play(data)
+            play(data, purpose: purpose)
             return
         }
         guard let request = remoteRequest(for: word, source: source, accent: accent) else {
@@ -415,7 +426,7 @@ final class Pronouncer: ObservableObject {
             Task { @MainActor in
                 guard let self, self.playbackRequestID == requestID else { return }
                 self.cacheAudio(data, for: word, source: source, accent: accent, purpose: purpose)
-                self.play(data)
+                self.play(data, purpose: purpose)
             }
         }
         requestTask = task
@@ -485,7 +496,7 @@ final class Pronouncer: ObservableObject {
         }
     }
 
-    private func play(_ data: Data) {
+    private func play(_ data: Data, purpose: PronunciationPurpose) {
         requestTask = nil
         player?.stop()
         do {
@@ -493,7 +504,7 @@ final class Pronouncer: ObservableObject {
             newPlayer.delegate = delegate
             // enableRate 必须在 play() 前打开，rate 才会生效（同一份 mp3 变速播放）。
             newPlayer.enableRate = true
-            newPlayer.rate = PronunciationRate.current.playbackRate
+            newPlayer.rate = PronunciationRate.current.playbackRate(for: purpose)
             player = newPlayer
             newPlayer.play()
         } catch {
@@ -517,10 +528,10 @@ final class Pronouncer: ObservableObject {
         for word: String,
         source: PronunciationSource,
         accent: PronunciationAccent,
-        purpose: String
+        purpose: PronunciationPurpose
     ) -> URL? {
         // 保留旧的单词缓存 key；只有例句增加命名空间，升级后不需要重下全部单词音频。
-        let namespace = purpose == "sentence" ? "sentence_" : ""
+        let namespace = purpose == .sentence ? "sentence_" : ""
         // MiniMax 例句已升级到 44.1kHz / 256kbps + fluent；缓存版本同步递增，
         // 防止升级后继续播放本地旧的低码率文件。有道单词音频继续复用原缓存。
         let sourceVersion = source == .minimax ? "_sentence_hq_fluent_v2" : ""
@@ -533,7 +544,7 @@ final class Pronouncer: ObservableObject {
         for word: String,
         source: PronunciationSource,
         accent: PronunciationAccent,
-        purpose: String
+        purpose: PronunciationPurpose
     ) -> Data? {
         guard let url = cacheURL(
             for: word, source: source, accent: accent, purpose: purpose
@@ -546,7 +557,7 @@ final class Pronouncer: ObservableObject {
         for word: String,
         source: PronunciationSource,
         accent: PronunciationAccent,
-        purpose: String
+        purpose: PronunciationPurpose
     ) {
         guard let url = cacheURL(
             for: word, source: source, accent: accent, purpose: purpose

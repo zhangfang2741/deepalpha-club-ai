@@ -1,5 +1,6 @@
 # app/services/vocabulary/words.py
 """生词库 CRUD 与去重逻辑。"""
+
 from __future__ import annotations
 
 import datetime
@@ -7,6 +8,7 @@ import uuid
 
 from sqlalchemy import delete, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col
 
 from app.models.vocabulary import VocabularyPlaylistItem, VocabularyReviewLog, VocabularyWord
 from app.services.vocabulary import sm2
@@ -50,9 +52,7 @@ async def get_existing_words(session: AsyncSession, user_id: uuid.UUID) -> set[s
     return set(res.scalars().all())
 
 
-async def create_words_batch(
-    session: AsyncSession, user_id: uuid.UUID, words: list[dict]
-) -> list[VocabularyWord]:
+async def create_words_batch(session: AsyncSession, user_id: uuid.UUID, words: list[dict]) -> list[VocabularyWord]:
     """批量插入生词（调用方已去重）。
 
     INSERT ... RETURNING 一次性把刚写入的行回填到 ORM 对象，避免以前那种
@@ -147,6 +147,37 @@ async def delete_word(session: AsyncSession, user_id: uuid.UUID, word_id: uuid.U
     await session.delete(word)
     await session.commit()
     return True
+
+
+async def delete_words_batch(session: AsyncSession, user_id: uuid.UUID, word_ids: list[uuid.UUID]) -> int:
+    """在一个事务中批量删除当前用户的生词及其关联记录。
+
+    先筛出确实属于当前用户的 ID，再用集合 DELETE 清理复习日志、分组关联和
+    单词本身。无效、重复或已被另一端删除的 ID 会被忽略，因此接口可安全重试。
+    """
+    unique_ids = list(dict.fromkeys(word_ids))
+    if not unique_ids:
+        return 0
+
+    owned_stmt = select(col(VocabularyWord.id)).where(
+        col(VocabularyWord.user_id) == user_id,
+        col(VocabularyWord.id).in_(unique_ids),
+    )
+    owned_res = await session.execute(owned_stmt)
+    owned_ids = list(owned_res.scalars().all())
+    if not owned_ids:
+        return 0
+
+    await session.execute(delete(VocabularyReviewLog).where(col(VocabularyReviewLog.word_id).in_(owned_ids)))
+    await session.execute(delete(VocabularyPlaylistItem).where(col(VocabularyPlaylistItem.word_id).in_(owned_ids)))
+    await session.execute(
+        delete(VocabularyWord).where(
+            col(VocabularyWord.user_id) == user_id,
+            col(VocabularyWord.id).in_(owned_ids),
+        )
+    )
+    await session.commit()
+    return len(owned_ids)
 
 
 async def get_review_queue(session: AsyncSession, user_id: uuid.UUID) -> list[VocabularyWord]:

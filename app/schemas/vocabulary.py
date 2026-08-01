@@ -130,6 +130,18 @@ class WordsBatchCreateResponse(BaseResponse):
     skipped_existing: list[str]
 
 
+class WordsBatchDeleteRequest(BaseModel):
+    """批量删除生词请求；限制单批规模，避免数据库参数和事务无限膨胀。"""
+
+    word_ids: list[uuid.UUID] = Field(..., min_length=1, max_length=5000)
+
+
+class WordsBatchDeleteResponse(BaseResponse):
+    """批量删除结果；不存在或已被删除的 ID 按幂等成功处理。"""
+
+    deleted_count: int
+
+
 class VocabularyWordListResponse(BaseResponse):
     """生词库列表。"""
 

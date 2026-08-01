@@ -35,6 +35,8 @@ from app.schemas.vocabulary import (
     VocabularyWordResponse,
     WordsBatchCreateRequest,
     WordsBatchCreateResponse,
+    WordsBatchDeleteRequest,
+    WordsBatchDeleteResponse,
 )
 from app.services.vocabulary import words as word_service
 from app.services.vocabulary.recognizer import (
@@ -86,9 +88,7 @@ def _build_recognize_response(recognized: list[RecognizedWord], existing_words: 
 
 
 async def _stream_recognition_events(
-    recognition_factory: Callable[
-        [Callable[[list[RecognizedWord]], None]], Coroutine[Any, Any, list[RecognizedWord]]
-    ],
+    recognition_factory: Callable[[Callable[[list[RecognizedWord]], None]], Coroutine[Any, Any, list[RecognizedWord]]],
     existing_words: set[str],
     heartbeat_interval: float = _RECOGNIZE_HEARTBEAT_SECONDS,
 ) -> AsyncIterator[str]:
@@ -303,6 +303,24 @@ async def list_words_endpoint(
     """生词库列表，支持按状态筛选和关键词搜索。"""
     rows = await word_service.list_words(db, user.id, status=status, query=q)
     return VocabularyWordListResponse(words=[VocabularyWordResponse.model_validate(r) for r in rows])
+
+
+@router.post("/words/batch-delete", response_model=WordsBatchDeleteResponse)
+@limiter.limit("30/minute")
+async def delete_words_batch_endpoint(
+    request: Request,
+    payload: WordsBatchDeleteRequest,
+    user: VocabularyUser = Depends(get_current_vocab_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """批量删除生词；一次事务最多处理 5000 个 ID，可安全重复提交。"""
+    deleted_count = await word_service.delete_words_batch(db, user.id, payload.word_ids)
+    logger.info(
+        "vocabulary_words_batch_deleted",
+        requested_count=len(payload.word_ids),
+        deleted_count=deleted_count,
+    )
+    return WordsBatchDeleteResponse(deleted_count=deleted_count)
 
 
 @router.get("/words/{word_id}", response_model=VocabularyWordResponse)
