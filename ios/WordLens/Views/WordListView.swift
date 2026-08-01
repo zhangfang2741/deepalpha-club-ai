@@ -105,7 +105,7 @@ struct WordListView: View {
                     Button {
                         showPlaylistPicker = true
                     } label: {
-                        Label("加入歌单 (\(viewModel.selectedIDs.count))", systemImage: "text.badge.plus")
+                        Label("加入分组 (\(viewModel.selectedIDs.count))", systemImage: "text.badge.plus")
                             .font(.subheadline.weight(.semibold))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)

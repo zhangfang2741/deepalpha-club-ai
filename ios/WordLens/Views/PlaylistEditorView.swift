@@ -34,7 +34,7 @@ struct PlaylistEditorView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
-                TextField("歌单名称", text: $name)
+                TextField("分组名称", text: $name)
                     .padding(10)
                     .background(Theme.surface)
                     .foregroundStyle(Theme.textPrimary)
@@ -64,7 +64,7 @@ struct PlaylistEditorView: View {
                     ContentUnavailableView(
                         "生词库还是空的",
                         systemImage: "book.closed",
-                        description: Text("先去拍照识别一些单词，再来建歌单")
+                        description: Text("先去拍照识别一些单词，再来建分组")
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -86,7 +86,7 @@ struct PlaylistEditorView: View {
             .padding(.horizontal)
             .padding(.top)
             .background(Theme.background.ignoresSafeArea())
-            .navigationTitle(isNew ? "新建歌单" : "编辑歌单")
+            .navigationTitle(isNew ? "新建分组" : "编辑分组")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

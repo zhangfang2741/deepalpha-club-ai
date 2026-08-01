@@ -55,7 +55,7 @@ final class PlaylistViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "创建歌单失败"
+            errorMessage = "创建分组失败"
         }
         return nil
     }
@@ -70,7 +70,7 @@ final class PlaylistViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "保存歌单失败"
+            errorMessage = "保存分组失败"
         }
         return false
     }
@@ -85,7 +85,7 @@ final class PlaylistViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "加入歌单失败"
+            errorMessage = "加入分组失败"
         }
         return false
     }
@@ -100,7 +100,7 @@ final class PlaylistViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "删除歌单失败"
+            errorMessage = "删除分组失败"
         }
         return false
     }

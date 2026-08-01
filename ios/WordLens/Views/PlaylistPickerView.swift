@@ -19,11 +19,11 @@ struct PlaylistPickerView: View {
                     ProgressView().tint(Theme.accent)
                 } else if viewModel.playlists.isEmpty {
                     ContentUnavailableView {
-                        Label("还没有歌单", systemImage: "music.note.list")
+                        Label("还没有自定义分组", systemImage: "music.note.list")
                     } description: {
-                        Text("先建一个歌单，再把选中的单词加进去")
+                        Text("先建一个分组，再把选中的单词加进去")
                     } actions: {
-                        Button("新建歌单") { isCreating = true }
+                        Button("新建分组") { isCreating = true }
                             .buttonStyle(.borderedProminent)
                             .tint(Theme.accent)
                     }
@@ -53,7 +53,7 @@ struct PlaylistPickerView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.background.ignoresSafeArea())
-            .navigationTitle("加入歌单")
+            .navigationTitle("加入分组")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -64,7 +64,7 @@ struct PlaylistPickerView: View {
                         Image(systemName: "plus")
                     }
                     .tint(Theme.accent)
-                    .accessibilityLabel("新建歌单")
+                    .accessibilityLabel("新建分组")
                 }
             }
             .task { await viewModel.load() }

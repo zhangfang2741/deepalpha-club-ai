@@ -119,16 +119,23 @@ struct ReviewCardView: View {
                 }
             }
             .refreshable { await viewModel.loadQueue() }
-            .sheet(isPresented: $showPlaylistSheet) {
-                PlaylistSheetView(
-                    viewModel: playlistVM,
-                    current: viewModel.selection
-                ) { selection, name, playImmediately in
-                    Task {
-                        await viewModel.switchPlaylist(selection, name: name)
-                        if playImmediately { viewModel.autoplay.start() }
+            // 全屏「正在播放」页而不是半屏 sheet：一屏之内既能换组、也能看到
+            // 当前组的完整词表、还能点任意一个词跳过去。
+            .fullScreenCover(isPresented: $showPlaylistSheet) {
+                NowPlayingView(
+                    playlistVM: playlistVM,
+                    reviewVM: viewModel,
+                    onSelect: { selection, name, playImmediately in
+                        Task {
+                            await viewModel.switchPlaylist(selection, name: name)
+                            if playImmediately { viewModel.autoplay.start() }
+                        }
+                    },
+                    onJump: { word in
+                        viewModel.jump(to: word)
+                        showPlaylistSheet = false
                     }
-                }
+                )
             }
             // 自动播放 FAB 用 .safeAreaInset 钉在 NavigationStack 底部 ——
             // 之前放在 body ZStack 里 + Theme.background.ignoresSafeArea() 共存时,

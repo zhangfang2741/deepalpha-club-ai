@@ -88,7 +88,7 @@ enum PlaylistSelection: Hashable, Codable {
     func displayName(playlists: [Playlist] = []) -> String {
         if let builtinName { return builtinName }
         if case .custom(let id) = self {
-            return playlists.first { $0.id == id }?.name ?? "歌单"
+            return playlists.first { $0.id == id }?.name ?? "自定义分组"
         }
         return "生词"
     }
@@ -98,14 +98,14 @@ enum PlaylistSelection: Hashable, Codable {
         switch self {
         case .dueReview: return "今天没有待复习的单词"
         case .status: return "这个分组里还没有单词"
-        case .custom: return "这个歌单还没有单词"
+        case .custom: return "这个分组还没有单词"
         }
     }
 
     var emptyDescription: String {
         switch self {
         case .dueReview, .status: return "去拍照识别一些新单词吧"
-        case .custom: return "在播放列表里编辑歌单，把想背的词加进来"
+        case .custom: return "在正在播放页编辑这个分组，把想背的词加进来"
         }
     }
 
