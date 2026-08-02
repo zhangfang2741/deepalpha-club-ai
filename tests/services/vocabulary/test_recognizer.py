@@ -21,6 +21,24 @@ from app.services.vocabulary.recognizer import (
 )
 
 
+def _full(word: str, **overrides) -> RecognizedWord:
+    """构造一个所有必需字段都填齐的 RecognizedWord（音标/词性/释义/例句）。
+
+    新的完整性校验（_is_incomplete）把 example_sentence 也纳入必填，只填 definition_zh
+    的词会被判为不完整而触发重试。测试里凡是要模拟「这个词已成功丰富、不该再重试」
+    的场景，都用这个 helper 把必需字段一次填齐。
+    """
+    data = {
+        "word": word,
+        "phonetic_ipa": f"ipa:{word}",
+        "part_of_speech": "n.",
+        "definition_zh": f"释义:{word}",
+        "example_sentence": f"This is {word}. 这是{word}。",
+    }
+    data.update(overrides)
+    return RecognizedWord(**data)
+
+
 def _mock_llm_call(identify_words: list[str], enrich_words: list[RecognizedWord] | None = None) -> AsyncMock:
     """构造一个按 response_format 分流的 mock。
 
@@ -54,6 +72,54 @@ async def test_recognize_words_returns_parsed_candidates():
     assert words[0].word == "resilient"
     assert words[0].phonetic_ipa == "rɪˈzɪliənt"
     assert words[0].part_of_speech == "adj."
+
+
+async def test_retry_fills_in_missing_example_sentence_even_when_definition_present():
+    """有释义但缺例句的词也要触发重试补齐例句（用户反馈"很多词没有例句"的根因）。
+
+    旧逻辑只校验 definition_zh，所以"有释义、无例句"的词永远进不了重试队列。新的
+    完整性校验把 example_sentence 纳入必填，这类词应被重试并补上例句。
+    """
+    call_count = {"enrich": 0}
+
+    async def _call(*args, response_format=None, **_kwargs):
+        if response_format is _IdentifyResult:
+            return _IdentifyResult(words=["world"])
+        call_count["enrich"] += 1
+        if call_count["enrich"] == 1:
+            # 首轮：给了释义和音标词性，但故意漏掉例句
+            return _RecognizeResult(
+                words=[
+                    RecognizedWord(
+                        word="world",
+                        phonetic_ipa="wɜːld",
+                        part_of_speech="n.",
+                        definition_zh="世界",
+                        example_sentence="",
+                    )
+                ]
+            )
+        # 重试：补上例句
+        return _RecognizeResult(
+            words=[
+                RecognizedWord(
+                    word="world",
+                    definition_zh="世界",
+                    example_sentence="The world is big. 世界很大。",
+                )
+            ]
+        )
+
+    call = AsyncMock(side_effect=_call)
+    with patch("app.services.vocabulary.recognizer.llm_service.call", new=call):
+        words = await recognize_words_from_image(b"fake-image-bytes")
+
+    assert len(words) == 1
+    # 释义没被重试冲掉，例句被补上（逐字段填空合并）
+    assert words[0].definition_zh == "世界"
+    assert words[0].example_sentence == "The world is big. 世界很大。"
+    # 确实发生了重试（首轮 + 至少一轮重试）
+    assert call_count["enrich"] >= 2
 
 
 async def test_recognize_words_returns_empty_list_when_no_words_found():
@@ -196,12 +262,12 @@ async def test_retry_fills_in_words_skipped_by_first_pass():
             batch_words = [line.split(". ", 1)[1] for line in text.splitlines() if ". " in line]
             # 重试批次（只剩漏的词）
             if set(batch_words) == {"world"}:
-                return _RecognizeResult(words=[RecognizedWord(word="world", definition_zh="世界")])
-            # 首轮：只填两个，故意把 world 留空模拟模型跳过
+                return _RecognizeResult(words=[_full("world", definition_zh="世界")])
+            # 首轮：只填两个（字段填齐 → 完整不重试），故意把 world 整个留空模拟模型跳过
             return _RecognizeResult(
                 words=[
-                    RecognizedWord(word="idea", definition_zh="想法"),
-                    RecognizedWord(word="serendipity", definition_zh="意外的好运"),
+                    _full("idea", definition_zh="想法"),
+                    _full("serendipity", definition_zh="意外的好运"),
                 ]
             )
 
@@ -214,6 +280,7 @@ async def test_retry_fills_in_words_skipped_by_first_pass():
     assert by_word["serendipity"].definition_zh == "意外的好运"
     # 重试后被跳过的 world 也应被补上
     assert by_word["world"].definition_zh == "世界"
+    assert by_word["world"].example_sentence  # 例句也补上了
 
 
 async def test_on_partial_emits_identified_words_before_enrich_starts():
@@ -268,7 +335,8 @@ async def test_on_partial_called_once_per_chunk_as_it_completes():
         if batch_words == chunk2:
             # chunk2 故意慢一点跑完，让 chunk1 的回调先发生，测试断言才有确定的顺序。
             await asyncio.sleep(0.02)
-        return _RecognizeResult(words=[RecognizedWord(word=w, definition_zh=f"释义:{w}") for w in batch_words])
+        # 字段填齐 → 首轮即完整、不触发重试，快照数才是确定的 4 次。
+        return _RecognizeResult(words=[_full(w) for w in batch_words])
 
     call = AsyncMock(side_effect=_call)
     snapshots: list[list[RecognizedWord]] = []
@@ -299,10 +367,11 @@ async def test_on_partial_called_per_retry_chunk_too():
         text = messages[0].content if isinstance(messages[0].content, str) else ""
         batch_words = [line.split(". ", 1)[1] for line in text.splitlines() if ". " in line]
         if batch_words == ["world"]:
-            return _RecognizeResult(words=[RecognizedWord(word="world", definition_zh="世界")])
+            return _RecognizeResult(words=[_full("world", definition_zh="世界")])
+        # 首轮：idea 字段填齐（完整），world 整个留空（不完整，触发一轮重试）
         return _RecognizeResult(
             words=[
-                RecognizedWord(word="idea", definition_zh="想法"),
+                _full("idea", definition_zh="想法"),
                 RecognizedWord(word="world"),
             ]
         )
@@ -341,10 +410,11 @@ async def test_retry_skipped_when_first_pass_fills_all_words():
     async def _call(*args, response_format=None, **kwargs):
         if response_format is _IdentifyResult:
             return _IdentifyResult(words=identified)
+        # 字段一次填齐 → 首轮即完整，不该再触发重试
         return _RecognizeResult(
             words=[
-                RecognizedWord(word="idea", definition_zh="想法"),
-                RecognizedWord(word="world", definition_zh="世界"),
+                _full("idea", definition_zh="想法"),
+                _full("world", definition_zh="世界"),
             ]
         )
 
@@ -404,16 +474,11 @@ async def test_120_word_ielts_table_end_to_end_with_retry_recovers_skipped_words
         # 重试批次的特征：本批里所有词都是之前跳过的——重试只针对漏词；
         # 首轮包含全部词。
         if batch_set and batch_set <= skipped:
-            # 重试：模拟模型这次"心情好了"全填上
-            return _RecognizeResult(
-                words=[RecognizedWord(word=w, definition_zh=f"释义:{w}") for w in batch_words]
-            )
-        # 首轮：跳过集留空，其它词填上
+            # 重试：模拟模型这次"心情好了"字段全填齐
+            return _RecognizeResult(words=[_full(w) for w in batch_words])
+        # 首轮：跳过集整个留空（模拟连例句带释义一起漏），其它词字段填齐
         return _RecognizeResult(
-            words=[
-                RecognizedWord(word=w, definition_zh="" if w in skipped else f"释义:{w}")
-                for w in batch_words
-            ]
+            words=[RecognizedWord(word=w) if w in skipped else _full(w) for w in batch_words]
         )
 
     call = AsyncMock(side_effect=_call)
@@ -423,6 +488,8 @@ async def test_120_word_ielts_table_end_to_end_with_retry_recovers_skipped_words
     by_word = {w.word: w for w in words}
     # 120 个词一个都不能丢
     assert len(by_word) == 120
-    # 重试后所有词的 definition_zh 都应被补齐
-    empty = [w for w, rw in by_word.items() if not rw.definition_zh]
-    assert empty == [], f"重试后仍有 {len(empty)} 个词释义为空: {empty[:5]}"
+    # 重试后所有词的释义和例句都应被补齐（例句是本次强化校验的重点）
+    no_def = [w for w, rw in by_word.items() if not rw.definition_zh]
+    no_example = [w for w, rw in by_word.items() if not rw.example_sentence]
+    assert no_def == [], f"重试后仍有 {len(no_def)} 个词释义为空: {no_def[:5]}"
+    assert no_example == [], f"重试后仍有 {len(no_example)} 个词例句为空: {no_example[:5]}"

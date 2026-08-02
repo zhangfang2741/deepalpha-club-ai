@@ -92,10 +92,38 @@ _ENRICH_PROMPT_TEMPLATE = (
     "请为列表中**每一个编号对应的词**都提供：国际音标（IPA，不含斜杠）、词性缩写"
     "（如 n./v./adj./adv.）、简洁的中文释义、词根/词缀简析（没有明显词根可留空）、"
     "一个包含该单词的英文例句（附中文翻译）。\n"
+    "**例句是必填项**：每一个词都必须给出一个完整的英文例句和它的中文翻译，"
+    "再简单常见的词（如 idea、world、Tuesday）也要造句，绝对不能把例句留空。\n"
     "上面一共有 {count} 个词，你的回答也必须正好包含这 {count} 个词，逐一对应，"
     "不能因为某个词看起来简单常见就跳过不答，也不能额外添加列表之外的词。\n"
     "必须只通过调用提供的工具返回结果，不要输出任何文字说明或 Markdown 格式的回答。"
 )
+
+# 一个词算「已丰富完整」需要填齐的字段。etymology 允许合法留空（很多词没有明显
+# 词根），不列入；其余四项是学习卡片的核心信息，缺任一就要进重试队列补齐——尤其
+# example_sentence，之前只校验 definition_zh 导致「有释义但没例句」的词从不重试。
+_REQUIRED_ENRICH_FIELDS = ("phonetic_ipa", "part_of_speech", "definition_zh", "example_sentence")
+
+
+def _is_incomplete(rw: RecognizedWord) -> bool:
+    """是否还有必需字段为空（据此判定该词要不要再跑一轮重试补齐）。"""
+    return any(not getattr(rw, field).strip() for field in _REQUIRED_ENRICH_FIELDS)
+
+
+def _merge_fill(existing: RecognizedWord, new: RecognizedWord) -> RecognizedWord:
+    """用 new 的非空字段补 existing 的空字段，逐字段填空、不覆盖 existing 已有内容。
+
+    重试合并用：existing 是上一轮的结果（可能部分字段已填好），new 是本轮重试的
+    结果。只把 existing 里仍为空的字段用 new 的非空值补上，避免重试反而把已经配好
+    的字段冲掉（模型重答时并不保证每个字段都跟上一轮一样好）。
+    """
+    data = existing.model_dump()
+    for field, value in new.model_dump().items():
+        if field == "word":
+            continue
+        if isinstance(value, str) and value.strip() and not str(data.get(field, "")).strip():
+            data[field] = value
+    return RecognizedWord(**data)
 
 
 def _build_identify_prompt(ocr_hint: list[str] | None) -> str:
@@ -284,21 +312,26 @@ async def recognize_words_from_image(
 
     async def _run_retry_chunk(chunk: list[str]) -> None:
         result = await _enrich_chunk(chunk, semaphore)
-        # 覆盖式合并：重试里 definition_zh 仍是空的，按原样保留（无进展时不浪费后续调用）。
+        # 逐字段填空合并：只用重试结果的非空字段补已有结果的空字段，不覆盖已配好的
+        # 内容（模型重答不保证每个字段都跟上一轮一样好）；这样多轮重试是单调补齐，
+        # 已有的释义/例句不会被后一轮弄丢。
         for w in result:
             key = w.word.strip().lower()
             if not key:
                 continue
-            if w.definition_zh or key not in enriched_by_lower:
+            if key in enriched_by_lower:
+                enriched_by_lower[key] = _merge_fill(enriched_by_lower[key], w)
+            else:
                 enriched_by_lower[key] = w
         if on_partial is not None:
             on_partial(list(enriched_by_lower.values()))
 
-    # 首轮丰富后 definition_zh 为空的词（典型表现：模型觉得"idea / world / Tuesday
-    # 这种太简单不用写"系统跳过），把它们单独再跑一轮——换个批次的"上下文压力"，
-    # 大概率能把空字段补上。两轮封顶，避免无限循环/白白烧 token。
+    # 首轮丰富后仍有必需字段（音标/词性/释义/例句）为空的词，把它们单独再跑一轮——
+    # 典型表现：模型对简单词"系统跳过"释义，或给了释义却漏了例句（用户反馈的主要
+    # 问题）。换个批次的"上下文压力"大概率能把空字段补上。两轮封顶，避免无限循环/
+    # 白白烧 token。
     for attempt in range(1, _ENRICH_MAX_RETRIES + 1):
-        missing = [rw.word for _, rw in enriched_by_lower.items() if not rw.definition_zh]
+        missing = [rw.word for rw in enriched_by_lower.values() if _is_incomplete(rw)]
         if not missing:
             break
         retry_chunks = [
@@ -309,7 +342,7 @@ async def recognize_words_from_image(
             "vocabulary_enrich_retry_done",
             attempt=attempt,
             retried=len(missing),
-            still_missing=sum(1 for rw in enriched_by_lower.values() if not rw.definition_zh),
+            still_missing=sum(1 for rw in enriched_by_lower.values() if _is_incomplete(rw)),
         )
 
     enriched = list(enriched_by_lower.values())
