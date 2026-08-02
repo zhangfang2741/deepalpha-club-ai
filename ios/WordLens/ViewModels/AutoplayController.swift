@@ -201,6 +201,13 @@ final class AutoplayController: ObservableObject {
             }
             Pronouncer.shared.updateNowPlayingTitle(word)
 
+            // 读单词的同时就并行把例句音频预取缓存好（MiniMax 后端合成要几秒）。
+            // 等三遍单词读完轮到例句时，直接命中缓存秒播，消掉「单词读完到句子出声」
+            // 中间那段串行等待的长空档。预取是独立请求，不打断正在读的单词。
+            if let example = dataSource?.autoplayCurrentExampleSentence {
+                Pronouncer.shared.prefetchExampleSentence(example)
+            }
+
             for pass in 0..<Self.passCount {
                 if Task.isCancelled || !isPlaying { return }
                 passIndex = pass
