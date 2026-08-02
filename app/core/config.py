@@ -361,6 +361,22 @@ class Settings:
         )
         self.GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 
+        # 拍照识别单词（vocabulary/recognizer）专用视觉模型配置。
+        # 独立于全局 LLM_PROVIDER：识别是一次性的看图任务，需要一个又快又准的视觉
+        # 模型，默认选 Gemini Flash（多语言 OCR 强、秒级延迟、成本低），不跟随聊天/
+        # 其它模块的默认 provider。registry.build_vision_llm() 会按下面的 provider/model
+        # 独立构建并追加进注册表，复用对应供应商已有的 API key。
+        # 默认用 gemini-flash-latest（自动跟随当前最新 Flash 的稳定别名），而不是钉死
+        # 某个具体版本——实测具体版本号（如 gemini-2.5-flash）会被 Google 对新账号停用
+        # 直接 404，用 latest 别名可避免再次踩坑。想固定版本可改成 gemini-3.5-flash 等。
+        # VOCAB_VISION_PROVIDER 可选 gemini、openai、claude(anthropic)；VOCAB_VISION_MODEL
+        # 填对应 provider 下的真实模型 ID。换模型只改这两个环境变量即可，无需动代码。
+        self.VOCAB_VISION_PROVIDER = os.getenv("VOCAB_VISION_PROVIDER", "gemini")
+        self.VOCAB_VISION_MODEL = os.getenv("VOCAB_VISION_MODEL", "gemini-flash-latest")
+        # 视觉模型单次调用的最大输出 token；识别阶段词数近似线性、丰富阶段按 8 词一批，
+        # 4096 是实测不被截断的余量值（见 recognizer 里的说明）。
+        self.VOCAB_VISION_MAX_TOKENS = int(os.getenv("VOCAB_VISION_MAX_TOKENS", "4096"))
+
         # JWT 补充配置（与现有 JWT_ACCESS_TOKEN_EXPIRE_DAYS 对齐）
         self.ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
         self.REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
