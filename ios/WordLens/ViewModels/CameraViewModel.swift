@@ -19,12 +19,12 @@ final class CameraViewModel: ObservableObject {
     /// 识别中展示的扫描态背景图，跟压缩后实际上传的 Data 无关，只用于 UI 反馈。
     @Published var capturedImage: UIImage?
 
-    func recognize(imageData: Data, ocrWords: [String]? = nil) async {
+    func recognize(imageData: Data) async {
         isRecognizing = true
         errorMessage = nil
         partialWordCount = 0
         partialEnrichedCount = 0
-        // 识别是本地 OCR + 视觉 LLM（还带重试）的耗时操作，等待期间如果屏幕自动
+        // 识别是视觉 LLM（还带重试）的耗时操作，等待期间如果屏幕自动
         // 锁屏，系统会挂起/限流后台网络活动，很容易把正在进行的上传请求直接掐断
         // （实测复现：NSURLErrorNetworkConnectionLost -1005）。识别期间禁止息屏。
         UIApplication.shared.isIdleTimerDisabled = true
@@ -53,16 +53,9 @@ final class CameraViewModel: ObservableObject {
             }
         }
         do {
-            // 先本地 Apple Vision OCR（印刷体又快又准、免流量），把抠出的候选词连同
-            // 图片一起发给后端：视觉 LLM 既自己看图识别、又参考 OCR 列表，综合取并集，
-            // 两个来源互补以提高召回。OCR 抠不到词时就退化为纯看图识别。
-            let localOCRWords: [String]
-            if let ocrWords {
-                localOCRWords = ocrWords
-            } else {
-                localOCRWords = await TextRecognizer.recognizeWords(from: imageData)
-            }
-            let resp = try await WordService.recognize(imageData: imageData, ocrWords: localOCRWords) { [weak self] partial in
+            // 识别完全交给后端视觉模型：端上不再跑 Apple Vision OCR（印刷体识别效果
+            // 有限、且要跨端到安卓），只把图片发过去，视觉 LLM 看图识别。
+            let resp = try await WordService.recognize(imageData: imageData) { [weak self] partial in
                 // 回调来自 NDJSONStreamUploader 的 delegate 队列（后台线程），
                 // 跳回 MainActor 才能碰 @Published 属性。
                 let total = partial.candidates.count

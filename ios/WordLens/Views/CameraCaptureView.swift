@@ -104,36 +104,32 @@ struct CameraCaptureView: View {
     ///
     /// 顺序是关键（解决"拍完要等几秒才出现扫描效果"）：扫描背景图 `capturedImage`
     /// 只需要一张 600px 缩略图，先把它算出来并**立刻**赋值，扫描效果连同用户照片
-    /// 马上出现；较重的压缩 + 本地 OCR 再在后台跑，此时扫描动画已经在转，用户无感。
-    /// 旧写法把缩略图、压缩、OCR 塞进同一个顺序元组一起等，最慢的 OCR（几秒）把
-    /// 缩略图也一起拖住，照片+扫描线要等 OCR 跑完才显示。
+    /// 马上出现；较重的压缩再在后台跑，此时扫描动画已经在转，用户无感。
     ///
-    /// 内存：只对原图解码/重绘一次到 1600px（`uploadImage`），缩略图、压缩、OCR
-    /// 都基于这张图派生，避免同一时刻内存里有多份大位图触发内存看门狗 SIGKILL。
+    /// 内存：只对原图解码/重绘一次到 1600px（`uploadImage`），缩略图、压缩都基于
+    /// 这张图派生，避免同一时刻内存里有多份大位图触发内存看门狗 SIGKILL。
+    ///
+    /// 识别不再跑端上 Apple Vision OCR：印刷体识别效果有限、且要跨端到安卓，识别
+    /// 统一交给后端视觉模型，客户端只负责把图片压好上传。
     private func process(_ image: UIImage) async {
         viewModel.isRecognizing = true
-        // 第一步：解码到 1600px 并派生缩略图，立刻显示——扫描效果秒出，不被压缩/OCR 拖住。
+        // 第一步：解码到 1600px 并派生缩略图，立刻显示——扫描效果秒出，不被压缩拖住。
         let (uploadImage, thumbnail) = await Task.detached(priority: .userInitiated) {
             () -> (UIImage, UIImage) in
             let uploadImage = Self.resizedImage(from: image, maxDimension: 1600)
             return (uploadImage, Self.resizedImage(from: uploadImage, maxDimension: 600))
         }.value
         viewModel.capturedImage = thumbnail
-        // 第二步：压缩 + 本地 OCR 放后台。OCR 也喂这张 1600px 图（跟后端视觉模型输入
-        // 一致；印刷体在 1600px 下完全够认，喂原图只是白烧耗时/内存）。
-        let (data, ocrWords) = await Task.detached(priority: .userInitiated) {
-            () -> (Data?, [String]) in
-            (
-                Self.compressedJPEGData(from: uploadImage),
-                await TextRecognizer.recognizeWords(from: uploadImage)
-            )
+        // 第二步：压缩放后台，此时扫描动画已经在转，用户无感。
+        let data = await Task.detached(priority: .userInitiated) {
+            Self.compressedJPEGData(from: uploadImage)
         }.value
         guard let data else {
             viewModel.isRecognizing = false
             viewModel.errorMessage = "照片处理失败，请重新拍摄"
             return
         }
-        await viewModel.recognize(imageData: data, ocrWords: ocrWords)
+        await viewModel.recognize(imageData: data)
     }
 
     /// 等比缩放到最长边不超过 maxDimension。真机原图解码成 UIImage 后在内存里可能

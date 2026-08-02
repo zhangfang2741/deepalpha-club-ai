@@ -99,8 +99,8 @@ actor APIClient {
     /// 文件做流式上传，写过程持续触发 TCP ACK，能稳定避开 idle reset。
     ///
     /// - Parameters:
-    ///   - textFields: 附带的文本表单字段（名称, 值），可重复同名（如把
-    ///     OCR 候选词逐个作为同名 `ocr_words` 字段发出，后端按 `list[str]` 接收）。
+    ///   - textFields: 附带的文本表单字段（名称, 值），可重复同名（同名多值时
+    ///     后端按 `list[str]` 接收）。识别接口目前不带任何附加字段，留作通用能力。
     ///   - onPartial: 可选，NDJSON 响应流里每出现一条 `partial` 事件就回调一次
     ///     （用 `NDJSONStreamUploader` 边收边解析响应体，而不是等整条流收完）。
     ///     传 nil 时退化为原来的行为：`session.upload(for:fromFile:)` 拿到完整
