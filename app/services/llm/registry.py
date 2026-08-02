@@ -169,6 +169,80 @@ _BUILDERS = {
 }
 
 
+def build_vision_llm() -> dict[str, Any] | None:
+    """构建拍照识别（vocabulary/recognizer）专用的视觉模型，独立于全局 LLM_PROVIDER。
+
+    识别是一次性看图任务，需要一个又快又准的视觉模型，与聊天/其它模块的默认
+    provider 解耦。由 ``VOCAB_VISION_PROVIDER`` / ``VOCAB_VISION_MODEL`` 配置，
+    换模型只改环境变量、不动代码。token 预算在构造时按各供应商正确的参数名烘焙
+    进模型（Gemini 用 ``max_output_tokens``、OpenAI 用 ``max_completion_tokens``、
+    Anthropic 用 ``max_tokens``），调用方无需再传 max_tokens。
+
+    Returns:
+        ``{"name": model_id, "llm": BaseChatModel}`` 条目；对应供应商的 API key
+        未配置时返回 ``None``（调用方据此决定是否追加进注册表）。
+    """
+    provider = settings.VOCAB_VISION_PROVIDER.lower()
+    model_id = settings.VOCAB_VISION_MODEL
+    max_tokens = settings.VOCAB_VISION_MAX_TOKENS
+    temperature = settings.DEFAULT_LLM_TEMPERATURE
+
+    if provider == "gemini":
+        if not settings.GOOGLE_API_KEY:
+            logger.warning("vision_llm_skipped_missing_key", provider=provider, model=model_id)
+            return None
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        return {
+            "name": model_id,
+            "llm": ChatGoogleGenerativeAI(
+                model=model_id,
+                google_api_key=settings.GOOGLE_API_KEY,
+                max_output_tokens=max_tokens,
+                temperature=temperature,
+            ),
+        }
+
+    if provider == "openai":
+        if not settings.OPENAI_API_KEY:
+            logger.warning("vision_llm_skipped_missing_key", provider=provider, model=model_id)
+            return None
+        from langchain_openai import ChatOpenAI
+
+        return {
+            "name": model_id,
+            "llm": ChatOpenAI(
+                model=model_id,
+                api_key=SecretStr(settings.OPENAI_API_KEY),
+                model_kwargs={"max_completion_tokens": max_tokens},
+                temperature=temperature,
+            ),
+        }
+
+    if provider in ("claude", "anthropic"):
+        if not settings.ANTHROPIC_API_KEY:
+            logger.warning("vision_llm_skipped_missing_key", provider=provider, model=model_id)
+            return None
+        from langchain_anthropic import ChatAnthropic
+
+        extra: dict[str, Any] = {}
+        if settings.ANTHROPIC_BASE_URL:
+            extra["base_url"] = settings.ANTHROPIC_BASE_URL
+        return {
+            "name": model_id,
+            "llm": ChatAnthropic(
+                model=model_id,
+                api_key=SecretStr(settings.ANTHROPIC_API_KEY),
+                max_tokens=max_tokens,
+                temperature=temperature,
+                **extra,
+            ),
+        }
+
+    logger.warning("vision_llm_unknown_provider", provider=provider, model=model_id)
+    return None
+
+
 class LLMRegistry:
     """按 LLM_PROVIDER 动态构建模型注册表。
 
@@ -187,6 +261,18 @@ class LLMRegistry:
                 f"不支持的 LLM_PROVIDER: '{provider}'。可选值：{list(_BUILDERS.keys())}"
             )
         self.LLMS: list[dict[str, Any]] = builder()
+
+        # 追加拍照识别专用的视觉模型（独立于 LLM_PROVIDER）。同名已存在则不重复追加
+        # ——例如全局 provider 恰好就是该视觉模型所属供应商时，builder 里可能已注册。
+        vision_entry = build_vision_llm()
+        if vision_entry and not any(e["name"] == vision_entry["name"] for e in self.LLMS):
+            self.LLMS.append(vision_entry)
+            logger.info(
+                "vision_llm_registered",
+                provider=settings.VOCAB_VISION_PROVIDER,
+                model=vision_entry["name"],
+            )
+
         logger.info(
             "llm_registry_initialized",
             provider=provider,

@@ -182,6 +182,7 @@ convention = "google"
 "app/schemas/sec_filings.py" = ["D415", "D101"]
 "app/api/v1/sec_filings.py" = ["D415", "D417"]
 "app/services/transcript_ai.py" = ["D415"]
+"app/services/llm/registry.py" = ["D415", "D107"]
 "app/services/supply_chain/**/*.py" = ["D102", "D105", "D107"]
 "app/api/v1/supply_chain_map.py" = ["D415"]
 "app/tasks/supply_chain.py" = ["D415"]

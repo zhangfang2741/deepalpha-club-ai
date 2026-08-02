@@ -25,19 +25,23 @@ from typing import TypeVar
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 
+from app.core.config import settings
 from app.core.logging import logger
 from app.services.llm.service import llm_service
 
 _T = TypeVar("_T", bound=BaseModel)
 
-# MiniMax-M2.7（本项目当前的默认模型）是纯文本模型，不支持图片输入——实测会直接
-# 忽略请求里的图片内容，模型自己都会说"没看到图片"。MiniMax-M3 才是真正支持视觉
-# 的模型（同一个 Anthropic 兼容接口），所以这里强制指定，不跟随全局默认模型。
-# 丰富阶段虽然不需要看图，但沿用同一个模型：这是唯一经过反复实测验证过结构化
-# 输出稳定的模型，换模型是另一个不确定性来源，没有足够收益去冒这个险。
-_VISION_MODEL_NAME = "minimax-m3"
+# 拍照识别专用的视觉模型：不跟随全局默认模型（聊天用的 MiniMax-M2.7 等纯文本模型
+# 不支持图片输入，实测会直接忽略图片说"没看到图片"）。改由 VOCAB_VISION_PROVIDER /
+# VOCAB_VISION_MODEL 配置，默认 Gemini 2.5 Flash（多语言 OCR 强、秒级延迟、成本低）。
+# registry.build_vision_llm() 会按配置独立构建该模型并追加进注册表，这里按名取用。
+# 丰富阶段虽不需要看图，但沿用同一模型：少一个不确定性来源，Gemini Flash 处理纯文本
+# 结构化输出同样又快又稳。
+def _vision_model_name() -> str:
+    """当前配置的视觉模型名（= registry 中追加的视觉模型条目名）。"""
+    return settings.VOCAB_VISION_MODEL
 
-_MAX_TOKENS = 4096
+
 _MAX_ATTEMPTS = 2
 
 # 丰富阶段每批词数：120 词整图实测复现过，一次性丰富到「service」这个词时
@@ -144,9 +148,8 @@ async def _call_with_retry(message: HumanMessage, response_format: type[_T]) -> 
         try:
             result = await llm_service.call(
                 [message],
-                model_name=_VISION_MODEL_NAME,
+                model_name=_vision_model_name(),
                 response_format=response_format,
-                max_tokens=_MAX_TOKENS,
             )
         except Exception as exc:
             logger.exception("vocabulary_recognize_llm_call_failed", attempt=attempt)
