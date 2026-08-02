@@ -390,6 +390,35 @@ final class Pronouncer: ObservableObject {
         )
     }
 
+    /// 预取例句音频：只下载并写入缓存，**不播放、不碰任何当前播放状态**。
+    ///
+    /// 自动播放里单词先读 3 遍（有道，首次后本地缓存），读完才轮到例句。例句走
+    /// MiniMax 后端合成，首播要等合成+下载几秒——串行等待就是单词读完到句子出声
+    /// 中间那段长空档。改成读单词时就并行把例句预取好：到 speakExampleSentence 时
+    /// fetchAndPlay 直接命中缓存秒播。
+    ///
+    /// 用一个**独立的、不存进 requestTask 的** dataTask：既不会被 stopCurrentPlayback
+    /// 取消（那是给当前播放用的），也不会覆盖正在读单词的请求。已缓存则直接跳过。
+    func prefetchExampleSentence(_ sentence: String) {
+        let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let accent = PronunciationAccent.current
+        // 命名/大小写都对齐 speakExampleSentence → fetchAndPlay 的取用方式，保证
+        // 预取写入的缓存键与之后播放时查的键一致。
+        if cachedAudio(for: trimmed, source: .minimax, accent: accent, purpose: .sentence) != nil {
+            return
+        }
+        guard let request = remoteRequest(for: trimmed, source: .minimax, accent: accent) else { return }
+        let task = session.dataTask(with: request) { [weak self] data, response, error in
+            let http = response as? HTTPURLResponse
+            guard let data, !data.isEmpty, (200..<300).contains(http?.statusCode ?? 0) else { return }
+            Task { @MainActor in
+                self?.cacheAudio(data, for: trimmed, source: .minimax, accent: accent, purpose: .sentence)
+            }
+        }
+        task.resume()
+    }
+
     /// 沿降级链依次尝试；全部失败时结束本次播放，让自动播放可以继续往下走。
     private func fetchAndPlay(
         _ word: String,
