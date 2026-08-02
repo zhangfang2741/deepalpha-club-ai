@@ -380,6 +380,11 @@ class Settings:
         # 视觉模型单次调用的最大输出 token；识别阶段词数近似线性、丰富阶段按 8 词一批，
         # 4096 是实测不被截断的余量值（见 recognizer 里的说明）。
         self.VOCAB_VISION_MAX_TOKENS = int(os.getenv("VOCAB_VISION_MAX_TOKENS", "4096"))
+        # 丰富阶段（配音标/释义/例句）并发批数上限。词多的图分成多批并发跑，这个值越
+        # 大墙钟越短，但越容易撞下游 LLM 的速率限制。默认 8（Gemini flash-lite 限额较
+        # 宽，8 并发下 100+ 词的整图能把等待砍到 2 波左右）。撞限流就调小，额度富裕
+        # 可再调大——改环境变量即可，无需动代码。
+        self.VOCAB_ENRICH_CONCURRENCY = int(os.getenv("VOCAB_ENRICH_CONCURRENCY", "8"))
 
         # JWT 补充配置（与现有 JWT_ACCESS_TOKEN_EXPIRE_DAYS 对齐）
         self.ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
