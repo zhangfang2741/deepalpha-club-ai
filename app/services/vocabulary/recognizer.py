@@ -48,8 +48,8 @@ _MAX_ATTEMPTS = 2
 # example_sentence 字段被硬截断成空——4096 tokens 撑不住太多词。15 词一批
 # （每词约 100~150 tokens 输出）留了足够余量，不会重蹈覆辙。
 _ENRICH_CHUNK_SIZE = 8
-# 并发跑几批丰富请求；太高容易把下游 LLM API 的速率限制打爆，4 是经验值。
-_ENRICH_MAX_CONCURRENCY = 4
+# 并发跑几批丰富请求由 settings.VOCAB_ENRICH_CONCURRENCY 控制（默认 8）：值越大墙钟
+# 越短，太高会撞下游 LLM 的速率限制。放到配置里便于按供应商额度不重新部署就微调。
 # 重试漏词轮数上限：首轮丰富后若仍有词 definition_zh 为空（模型对太简单的词
 # 会"觉得不用管"系统跳过），把没填上的词再跑一轮。两轮是经验值——再多也没用，
 # 同样的词模型还是会照样跳过，只是白白消耗 token+延迟。
@@ -293,7 +293,7 @@ async def recognize_words_from_image(
         return []
 
     chunks = [words[i : i + _ENRICH_CHUNK_SIZE] for i in range(0, len(words), _ENRICH_CHUNK_SIZE)]
-    semaphore = asyncio.Semaphore(_ENRICH_MAX_CONCURRENCY)
+    semaphore = asyncio.Semaphore(max(1, settings.VOCAB_ENRICH_CONCURRENCY))
     # 按小写合并回单条索引，便于后续按 word 原地覆盖重试结果；下面两个内嵌协程
     # 并发跑的时候都会各自 mutate 它——asyncio 单线程协作式调度，await 之间不会
     # 被抢占，多个 chunk 同时改这个 dict 不存在竞态。
