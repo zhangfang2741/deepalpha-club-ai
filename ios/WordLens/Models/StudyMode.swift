@@ -11,7 +11,7 @@ import Foundation
 enum StudyMode: String, CaseIterable {
     /// 只听：卡片正面显示单词，翻卡看释义再评分——现有行为。
     case listenOnly
-    /// 听写：单词藏起来，卡片本身是填写框，写完自动判定并评分。
+    /// 听写：单词藏起来，写完自动判定；右滑接受结论，左滑重新听写。
     case dictation
 
     private static let key = "study_mode"
@@ -42,14 +42,12 @@ enum StudyMode: String, CaseIterable {
 /// 听写模式下每个词经历的两个相位。
 ///
 /// `.revealed` 把「被判定的那个词」和「用户当时写的内容」一起快照进来，而不是
-/// 让界面去读 `currentWord` / `dictationInput`：提交评分会把当前词移出队列、
-/// currentWord 立刻指向下一个词，界面若跟着读实时值，就会在切换的缝隙里闪出
-/// **下一个词**的正确拼写——听写模式下这等于提前泄题。快照之后，亮答案期间
-/// 显示什么完全跟队列的时序无关。
+/// 让界面去读 `currentWord` / `dictationInput`。系统判定后先停在结果页，右滑接受
+/// 才提交并切词，左滑则丢弃结论重新听写；快照保证整个决策期间展示内容稳定。
 enum DictationPhase: Equatable {
     /// 卡片是填写框，等用户写。
     case input
-    /// 已判定：亮出正确答案 + 结果，短暂停留后自动进下一词。
+    /// 已判定：亮出正确答案 + 结果，等待用户右滑接受或左滑重新听写。
     case revealed(word: VocabularyWord, input: String, rating: ReviewRating)
 
     var isInput: Bool {

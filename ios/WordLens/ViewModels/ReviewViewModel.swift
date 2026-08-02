@@ -120,6 +120,7 @@ final class ReviewViewModel: ObservableObject {
     @Published var dictationInput: String = ""
 
     var isDictation: Bool { studyMode == .dictation }
+    var isAwaitingDictationDecision: Bool { !dictationPhase.isInput }
 
     func changeStudyMode(to mode: StudyMode) {
         guard mode != studyMode else { return }
@@ -133,11 +134,11 @@ final class ReviewViewModel: ObservableObject {
         dictationPhase = .input
     }
 
-    /// 判定这一次听写并提交。
+    /// 判定这一次听写，但先不写入复习结果。
     ///
-    /// 亮答案停 1.5 秒再提交，是为了让用户看清正确拼写和自己写的差在哪；这段
-    /// 时间里连播状态机正卡在「等当前词换掉」的轮询上，不会抢跑。
-    func submitDictation() async {
+    /// 正确答案、用户输入和系统结论一起暂存在 `.revealed`。用户右滑接受后才提交
+    /// 到服务端；左滑则丢弃本次结论，当前词重新听写。
+    func submitDictation() {
         guard isDictation, dictationPhase.isInput, let word = currentWord else { return }
         // 空输入禁止提交——「确定」按钮已经替用户挡住了，但键盘回车（TextField
         // 的 onSubmit）会绕过按钮直接进这里，所以再补一道。两道屏障一道语义。
@@ -148,13 +149,43 @@ final class ReviewViewModel: ObservableObject {
         // 在提交时前进而闪出下一个词的拼写。
         dictationPhase = .revealed(word: word, input: typed, rating: rating)
         Haptics.rating(rating)
+    }
 
-        try? await Task.sleep(for: .seconds(1.5))
-        // 停留期间用户可能已经手动切词/停播了，确认还停在同一个词才提交。
-        guard currentWord?.id == word.id, case .revealed = dictationPhase else { return }
-        // keepAutoplay: 听写模式下评分是流程的一环，不该像手点评分那样打断连播。
-        await submit(rating, keepAutoplay: true)
+    /// 右滑接受系统结论：评分成功写入后移除当前词，并让连播从下一词重新开始。
+    @discardableResult
+    func acceptDictationResult() async -> Bool {
+        guard isDictation,
+              !isSubmitting,
+              case .revealed(let word, _, let rating) = dictationPhase,
+              currentWord?.id == word.id else { return false }
+
+        let shouldContinueAutoplay = autoplay.isPlaying
+        guard await submit(rating, keepAutoplay: true) else { return false }
         resetDictation()
+
+        // 接受时旧循环可能正在等当前词变化，也可能还在读旧词。统一取消并从新的
+        // currentWord 起一轮，避免旧循环把下一词误当成“仍在等待输入”的词。
+        if shouldContinueAutoplay {
+            autoplay.restartCurrent()
+        }
+        return true
+    }
+
+    /// 左滑重新听写：不调用评分接口，清空输入并重播当前词。
+    func retryDictation() {
+        guard isDictation,
+              !isSubmitting,
+              case .revealed(let word, _, _) = dictationPhase,
+              currentWord?.id == word.id else { return }
+
+        errorMessage = nil
+        resetDictation()
+        if autoplay.isPlaying {
+            autoplay.restartCurrent()
+        } else {
+            // 这是用户明确触发的“重新听写”，不受自动发音开关限制。
+            Pronouncer.shared.speak(word.word)
+        }
     }
 
     /// TabView 切走再切回来会让这个 tab 重新走一遍 appear，.task 也会跟着重新
@@ -300,9 +331,11 @@ final class ReviewViewModel: ObservableObject {
     ///
     /// - Parameter keepAutoplay: 默认 false——手点三档评分意味着用户要接管节奏，
     ///   评完就该停下。听写模式传 true：那里评分是自动流程的一环，停了连播就断了。
-    func submit(_ rating: ReviewRating, keepAutoplay: Bool = false) async {
-        guard let word = currentWord else { return }
+    @discardableResult
+    func submit(_ rating: ReviewRating, keepAutoplay: Bool = false) async -> Bool {
+        guard !isSubmitting, let word = currentWord else { return false }
         isSubmitting = true
+        errorMessage = nil
         defer { isSubmitting = false }
         do {
             _ = try await WordService.submitReview(wordId: word.id, rating: rating)
@@ -321,11 +354,13 @@ final class ReviewViewModel: ObservableObject {
                 // 评分完自动停止连播——进入下一个词后由用户决定要不要继续播
                 autoplay.stop()
             }
+            return true
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
             errorMessage = "提交复习结果失败"
         }
+        return false
     }
 }
 

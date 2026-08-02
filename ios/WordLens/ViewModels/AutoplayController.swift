@@ -151,6 +151,24 @@ final class AutoplayController: ObservableObject {
         isPlaying ? stop() : start()
     }
 
+    /// 听写重新作答或接受结果后，从当前词的第 1 遍重新启动循环。
+    /// 保留现有 Now Playing 会话，只取消旧任务和当前短音频，避免锁屏控件闪烁。
+    func restartCurrent() {
+        guard isPlaying else { return }
+        task?.cancel()
+        Pronouncer.shared.stopCurrentPlayback()
+        guard let word = dataSource?.autoplayCurrentWord else {
+            stop()
+            return
+        }
+        passIndex = 0
+        isReadingExample = false
+        Pronouncer.shared.updateNowPlayingTitle(word)
+        task = Task { [weak self] in
+            await self?.runLoop()
+        }
+    }
+
     /// 锁屏「下一首」：像切歌一样跳到下一个词，继续播。没在播的时候不响应——
     /// 那种情况下远程命令本来就是禁用的。
     func skipToNext() {
@@ -258,10 +276,10 @@ final class AutoplayController: ObservableObject {
 
     /// 挂起到「当前词换掉」为止。
     ///
-    /// 退出条件用的是词变了，而不是「用户提交了」：提交之后还有 1.5 秒亮答案的
-    /// 停留期，那段时间里队列**还没**前进——若按提交与否退出，循环会在亮答案
-    /// 期间把同一个词又读一遍。等词真正换掉，天然覆盖「输入 + 亮答案 + 提交」
-    /// 整段。队列播完时当前词变 nil，同样 ≠ 原值，也能正常退出。
+    /// 退出条件用的是词变了，而不是「用户确认输入了」：确认后只展示系统判断，
+    /// 队列并未前进；用户右滑接受、评分成功并切到下一词后才退出等待。左滑重听
+    /// 则由 restartCurrent() 取消旧循环，从当前词第 1 遍重新开始。队列播完时
+    /// 当前词变 nil，同样 ≠ 原值，也能正常退出。
     ///
     /// 用轮询而不是 continuation：本文件的 speakAndWait 已经是轮询
     /// Pronouncer 状态的写法，保持一致；也免掉 continuation 必须恰好 resume

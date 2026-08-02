@@ -16,6 +16,8 @@ struct ReviewCardView: View {
     @State private var showGroupDropdown = false
     /// 播放条右侧按钮唤出的「当前播放队列」半屏面板。
     @State private var showQueueSheet = false
+    /// 听写判定后轻点结果卡进入详情；返回时仍停留在当前判定阶段。
+    @State private var detailWord: VocabularyWord?
     /// 听写输入框的焦点。连播读完 3 遍后自动聚焦，用户不用再点一下。
     @FocusState private var isDictationFieldFocused: Bool
 
@@ -127,6 +129,11 @@ struct ReviewCardView: View {
                 .presentationBackground(.clear)
                 .interactiveDismissDisabled()
             }
+            .navigationDestination(item: $detailWord) { word in
+                WordDetailView(word: word)
+                    // 学习页本身隐藏了导航栏；进入详情后恢复导航栏，提供返回按钮。
+                    .toolbar(.visible, for: .navigationBar)
+            }
             // 自动播放 FAB 用 .safeAreaInset 钉在 NavigationStack 底部 ——
             // 之前放在 body ZStack 里 + Theme.background.ignoresSafeArea() 共存时,
             // SwiftUI 在 Prepare build 阶段预渲染 view tree 时, FAB 的
@@ -155,14 +162,6 @@ struct ReviewCardView: View {
                 guard newValue == AutoplayController.passCount - 1 else { return }
                 isDictationFieldFocused = true
             }
-            // 判定结果用既有的顶部 toast 浮一下。
-            .onChange(of: viewModel.dictationPhase) { _, phase in
-                guard let rating = phase.rating else { return }
-                showConfirmation(
-                    label: Self.ratingLabel(rating),
-                    color: Self.ratingColor(rating)
-                )
-            }
             // 评分 + 播放条钉死在底部：跟卡片彻底分离，卡片正反面高度不一样时
             // 它们也纹丝不动。跟 topBar 是同一个套路。
             .safeAreaInset(edge: .bottom, alignment: .center, spacing: 0) {
@@ -175,7 +174,7 @@ struct ReviewCardView: View {
 
     /// 底部固定区：
     /// - 只听模式：翻卡后多出评分三档
-    /// - 听写模式：等输入时是「确定」，判定后什么都不出（自动前进）
+    /// - 听写模式：等输入时是「确定」，判定后由卡片上的左右滑手势决策
     /// 播放条两种模式下都常驻在最下面。
     private var bottomControls: some View {
         VStack(spacing: 14) {
@@ -220,10 +219,7 @@ struct ReviewCardView: View {
     private var confirmDictationButton: some View {
         let canSubmit = !viewModel.dictationInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !viewModel.isSubmitting
-        return Button {
-            isDictationFieldFocused = false
-            Task { await viewModel.submitDictation() }
-        } label: {
+        return Button(action: confirmDictation) {
             Text("确定")
                 .font(.subheadline.weight(.bold))
                 .frame(maxWidth: .infinity)
@@ -239,6 +235,33 @@ struct ReviewCardView: View {
         }
         .buttonStyle(.pressable)
         .disabled(!canSubmit)
+    }
+
+    private func confirmDictation() {
+        let typed = viewModel.dictationInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !typed.isEmpty, !viewModel.isSubmitting else { return }
+        isDictationFieldFocused = false
+        viewModel.submitDictation()
+    }
+
+    private func acceptDictationResult() {
+        guard viewModel.isAwaitingDictationDecision else { return }
+        confirmationMessage = nil
+        isDictationFieldFocused = false
+        Task {
+            _ = await viewModel.acceptDictationResult()
+        }
+    }
+
+    private func retryDictation() {
+        confirmationMessage = nil
+        viewModel.retryDictation()
+        // phase 切回 .input 后 TextField 要到下一轮视图更新才存在，yield 一帧再聚焦。
+        Task { @MainActor in
+            await Task.yield()
+            guard viewModel.isDictation, viewModel.dictationPhase.isInput else { return }
+            isDictationFieldFocused = true
+        }
     }
 
     /// 顶部固定区：右侧是「只听/听写」开关，正中是分组名和它下面的播放进度。
@@ -362,6 +385,9 @@ struct ReviewCardView: View {
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: geo.size.height, alignment: .center)
             }
+            // 结果卡等待左右决策时，锁住父级纵向滚动。否则卡片虽然只设置了 x
+            // 偏移，手指的 y 分量仍会驱动 ScrollView，看起来像卡片还能上下移动。
+            .scrollDisabled(viewModel.isAwaitingDictationDecision)
         }
     }
 
@@ -589,7 +615,7 @@ struct ReviewCardView: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.pressable)
-        .disabled(viewModel.queue.isEmpty)
+        .disabled(viewModel.queue.isEmpty || viewModel.isAwaitingDictationDecision)
         .accessibilityLabel("播放队列")
     }
 
@@ -629,7 +655,7 @@ struct ReviewCardView: View {
             transportButton(
                 "backward.end.fill",
                 label: "上一个",
-                enabled: viewModel.canGoPrevious
+                enabled: viewModel.canGoPrevious && !viewModel.isAwaitingDictationDecision
             ) {
                 viewModel.goToPrevious()
             }
@@ -641,7 +667,7 @@ struct ReviewCardView: View {
             transportButton(
                 "forward.end.fill",
                 label: "下一个",
-                enabled: viewModel.canGoNext
+                enabled: viewModel.canGoNext && !viewModel.isAwaitingDictationDecision
             ) {
                 viewModel.goToNext()
             }
@@ -701,9 +727,18 @@ struct ReviewCardView: View {
         case .input:
             dictationInputCard
         case .revealed(let answered, let typed, let rating):
-            // 用相位里快照下来的词和输入，而不是 currentWord / dictationInput：
-            // 提交评分会让队列前进，读实时值会闪出下一个词的拼写。
-            dictationRevealCard(answered, typed: typed, rating: rating)
+            DictationResultCard(
+                word: answered,
+                typed: typed,
+                resultLabel: Self.dictationResultLabel(rating),
+                resultColor: Self.ratingColor(rating),
+                resultSurfaceColor: Self.dictationResultSurface(rating),
+                showsTypedInput: rating != .known,
+                isSubmitting: viewModel.isSubmitting,
+                onOpenDetail: { detailWord = answered },
+                onAccept: acceptDictationResult,
+                onRetry: retryDictation
+            )
         }
     }
 
@@ -725,7 +760,7 @@ struct ReviewCardView: View {
                 .keyboardType(.asciiCapable)
                 .submitLabel(.done)
                 .focused($isDictationFieldFocused)
-                .onSubmit { Task { await viewModel.submitDictation() } }
+                .onSubmit { confirmDictation() }
                 .padding(.vertical, 10)
                 .overlay(alignment: .bottom) {
                     Rectangle()
@@ -748,39 +783,6 @@ struct ReviewCardView: View {
         .onTapGesture { isDictationFieldFocused = true }
     }
 
-    private func dictationRevealCard(
-        _ word: VocabularyWord, typed: String, rating: ReviewRating
-    ) -> some View {
-        let color = Self.ratingColor(rating)
-        return VStack(spacing: 14) {
-            HStack {
-                Text(word.word).font(.largeTitle.bold()).foregroundStyle(Theme.textPrimary)
-                PronounceButton(word: word.word)
-            }
-            Text("/\(word.phoneticIpa)/").foregroundStyle(Theme.textSecondary)
-
-            // 写对了就不必再把用户写的重复一遍；写错才需要对照着看差在哪。
-            if rating != .known {
-                Text("你写的：\(typed.trimmingCharacters(in: .whitespaces).isEmpty ? "（没写）" : typed)")
-                    .font(.subheadline)
-                    .foregroundStyle(color)
-            }
-
-            Text("\(word.partOfSpeech) \(word.definitionZh)")
-                .font(.title3)
-                .foregroundStyle(Theme.textPrimary)
-                .multilineTextAlignment(.center)
-        }
-        .padding()
-        .frame(maxWidth: .infinity)
-        .frame(minHeight: 220)
-        .background(Theme.surface)
-        .clipShape(.rect(cornerRadius: 16))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16).strokeBorder(color.opacity(0.7), lineWidth: 2)
-        }
-    }
-
     private static func ratingColor(_ rating: ReviewRating) -> Color {
         switch rating {
         case .known: return Theme.known
@@ -794,6 +796,22 @@ struct ReviewCardView: View {
         case .known: return "认识"
         case .fuzzy: return "模糊"
         case .unknown: return "不认识"
+        }
+    }
+
+    private static func dictationResultLabel(_ rating: ReviewRating) -> String {
+        switch rating {
+        case .known: return "记住了"
+        case .fuzzy: return "模糊"
+        case .unknown: return "没记住"
+        }
+    }
+
+    private static func dictationResultSurface(_ rating: ReviewRating) -> Color {
+        switch rating {
+        case .known: return Theme.dictationKnownSurface
+        case .fuzzy: return Theme.dictationFuzzySurface
+        case .unknown: return Theme.dictationUnknownSurface
         }
     }
 
@@ -890,11 +908,15 @@ struct ReviewCardView: View {
             .replacingOccurrences(of: "😵 ", with: "")
             .replacingOccurrences(of: "😐 ", with: "")
             .replacingOccurrences(of: "😊 ", with: "")
-        confirmationMessage = "已标记为\(stripped)"
+        showToast("已标记为\(stripped)", color: color)
+    }
+
+    private func showToast(_ message: String, color: Color) {
+        confirmationMessage = message
         confirmationColor = color
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(1.2))
-            if confirmationMessage == "已标记为\(stripped)" {
+            if confirmationMessage == message {
                 confirmationMessage = nil
             }
         }
