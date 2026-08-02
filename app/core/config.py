@@ -366,13 +366,17 @@ class Settings:
         # 模型，默认选 Gemini Flash（多语言 OCR 强、秒级延迟、成本低），不跟随聊天/
         # 其它模块的默认 provider。registry.build_vision_llm() 会按下面的 provider/model
         # 独立构建并追加进注册表，复用对应供应商已有的 API key。
-        # 默认用 gemini-flash-latest（自动跟随当前最新 Flash 的稳定别名），而不是钉死
-        # 某个具体版本——实测具体版本号（如 gemini-2.5-flash）会被 Google 对新账号停用
-        # 直接 404，用 latest 别名可避免再次踩坑。想固定版本可改成 gemini-3.5-flash 等。
+        # 默认用 gemini-flash-lite-latest：flash-lite 是 Flash 家族里的轻量档，实测
+        # 同一张图识别质量（词表/音标/释义/例句、复合词与变形处理）与标准 Flash 一致，
+        # 但端到端快 2~3 倍（24 词整图约 5s vs 标准 Flash 的 12~17s）——拍照识别对延迟
+        # 敏感，速度收益远大于那点质量差异。用 -latest 别名而不是钉死具体版本号，是因为
+        # 实测具体版本（如 gemini-2.5-flash）会被 Google 对新账号停用直接 404，latest
+        # 别名自动跟随当前版本可避免再次踩坑。想固定版本可改成 gemini-3.5-flash-lite 等；
+        # 若追求更高识别质量、不在意慢一点可用 gemini-3.5-flash。
         # VOCAB_VISION_PROVIDER 可选 gemini、openai、claude(anthropic)；VOCAB_VISION_MODEL
         # 填对应 provider 下的真实模型 ID。换模型只改这两个环境变量即可，无需动代码。
         self.VOCAB_VISION_PROVIDER = os.getenv("VOCAB_VISION_PROVIDER", "gemini")
-        self.VOCAB_VISION_MODEL = os.getenv("VOCAB_VISION_MODEL", "gemini-flash-latest")
+        self.VOCAB_VISION_MODEL = os.getenv("VOCAB_VISION_MODEL", "gemini-flash-lite-latest")
         # 视觉模型单次调用的最大输出 token；识别阶段词数近似线性、丰富阶段按 8 词一批，
         # 4096 是实测不被截断的余量值（见 recognizer 里的说明）。
         self.VOCAB_VISION_MAX_TOKENS = int(os.getenv("VOCAB_VISION_MAX_TOKENS", "4096"))
