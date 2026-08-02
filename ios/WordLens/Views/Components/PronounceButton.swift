@@ -343,15 +343,29 @@ final class Pronouncer: ObservableObject {
         stopCurrentPlayback()
         let requestID = UUID()
         playbackRequestID = requestID
+        // playingWord 保留完整词条（含斜杠），波纹动效仍跟按钮传入的原词对得上；
+        // 真正拿去发音的是取过主词的版本（见下）。
         playingWord = trimmed.lowercased()
 
         fetchAndPlay(
-            trimmed,
+            Self.primaryPronounceableTerm(trimmed),
             chain: [.youdao],
             accent: accent,
             purpose: .word,
             requestID: requestID
         )
+    }
+
+    /// 从一个可能是「并列写法」的词条里取出真正拿去发音的主词。
+    ///
+    /// 短语整体收录后，生词库里会出现斜杠并列/异体写法的词条（如 layover/stopover、
+    /// booklet/pamphlet/brochure、harbour/harbor、direct/non-stop flight）。有道
+    /// dictvoice 收到整串带斜杠的文本读不出来，取第一个并列项（斜杠前的部分）发音即可
+    /// ——显示层仍展示完整词条，只有发音用主词。斜杠前为空时回退到原词条兜底。
+    static func primaryPronounceableTerm(_ term: String) -> String {
+        guard let slashIndex = term.firstIndex(of: "/") else { return term }
+        let head = term[..<slashIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+        return head.isEmpty ? term : head
     }
 
     /// 自动播放专用的整句发音。例句始终使用 MiniMax 整句 TTS，才能保留自然的
