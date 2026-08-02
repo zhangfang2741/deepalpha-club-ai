@@ -102,27 +102,32 @@ struct CameraCaptureView: View {
 
     /// 拍照/选图共用的预处理 + 识别入口。
     ///
-    /// 缩放、压缩、OCR 都是 CPU 密集操作，放主线程做会在点「使用照片」的瞬间卡
-    /// 一下（真机原图几千万像素）。先立刻切到识别中状态，重活丢到 Task.detached
-    /// 的后台线程池，避免阻塞 UI。
+    /// 顺序是关键（解决"拍完要等几秒才出现扫描效果"）：扫描背景图 `capturedImage`
+    /// 只需要一张 600px 缩略图，先把它算出来并**立刻**赋值，扫描效果连同用户照片
+    /// 马上出现；较重的压缩 + 本地 OCR 再在后台跑，此时扫描动画已经在转，用户无感。
+    /// 旧写法把缩略图、压缩、OCR 塞进同一个顺序元组一起等，最慢的 OCR（几秒）把
+    /// 缩略图也一起拖住，照片+扫描线要等 OCR 跑完才显示。
+    ///
+    /// 内存：只对原图解码/重绘一次到 1600px（`uploadImage`），缩略图、压缩、OCR
+    /// 都基于这张图派生，避免同一时刻内存里有多份大位图触发内存看门狗 SIGKILL。
     private func process(_ image: UIImage) async {
         viewModel.isRecognizing = true
-        let (thumbnail, data, ocrWords) = await Task.detached(priority: .userInitiated) {
-            () -> (UIImage?, Data?, [String]) in
-            // 只对原图解码/重绘一次，之后所有派生物都基于这张 1600px 的图。
-            // 之前缩略图、上传图、OCR 各自从原图重绘一遍，同一时刻内存里会有三份
-            // 大位图——注释里提过的内存看门狗 SIGKILL 就是这么来的。
+        // 第一步：解码到 1600px 并派生缩略图，立刻显示——扫描效果秒出，不被压缩/OCR 拖住。
+        let (uploadImage, thumbnail) = await Task.detached(priority: .userInitiated) {
+            () -> (UIImage, UIImage) in
             let uploadImage = Self.resizedImage(from: image, maxDimension: 1600)
-            return (
-                Self.resizedImage(from: uploadImage, maxDimension: 600),
+            return (uploadImage, Self.resizedImage(from: uploadImage, maxDimension: 600))
+        }.value
+        viewModel.capturedImage = thumbnail
+        // 第二步：压缩 + 本地 OCR 放后台。OCR 也喂这张 1600px 图（跟后端视觉模型输入
+        // 一致；印刷体在 1600px 下完全够认，喂原图只是白烧耗时/内存）。
+        let (data, ocrWords) = await Task.detached(priority: .userInitiated) {
+            () -> (Data?, [String]) in
+            (
                 Self.compressedJPEGData(from: uploadImage),
-                // OCR 也喂这张 1600px 的图而不是原图：后端视觉模型看到的就是它，
-                // 两边输入一致；印刷体英文单词在 1600px 下完全够认，而 .accurate
-                // 级别的耗时和内存都随像素数增长，原图纯属白烧。
                 await TextRecognizer.recognizeWords(from: uploadImage)
             )
         }.value
-        viewModel.capturedImage = thumbnail
         guard let data else {
             viewModel.isRecognizing = false
             viewModel.errorMessage = "照片处理失败，请重新拍摄"
