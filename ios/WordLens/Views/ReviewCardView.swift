@@ -20,6 +20,8 @@ struct ReviewCardView: View {
     @State private var detailWord: VocabularyWord?
     /// 听写输入框的焦点。连播读完 3 遍后自动聚焦，用户不用再点一下。
     @FocusState private var isDictationFieldFocused: Bool
+    /// 语音听写：点麦克风说单词，识别结果实时写进 dictationInput，判定沿用打字那套。
+    @StateObject private var speech = SpeechRecognizer()
 
     /// 顶部标题两侧为右上角模式控件预留的空间，保证分组名以屏幕为基准居中。
     private static let headerTitleSideClearance: CGFloat = 96
@@ -769,8 +771,11 @@ struct ReviewCardView: View {
                 }
                 .padding(.horizontal, 24)
 
-            Text("写完点下面的「确定」，或键盘上敲回车")
+            voiceDictationControl
+
+            Text("打字或点麦克风说出这个词，写完点「确定」或敲回车")
                 .font(.caption2)
+                .multilineTextAlignment(.center)
                 .foregroundStyle(Theme.textSecondary.opacity(0.8))
         }
         .padding()
@@ -781,6 +786,48 @@ struct ReviewCardView: View {
         // 点卡片空白处也能唤起键盘，不用非得戳中那一行输入框。
         .contentShape(.rect)
         .onTapGesture { isDictationFieldFocused = true }
+        // 识别到的文字实时写进听写输入框，后续确认/判定完全复用打字那套。
+        .onChange(of: speech.transcript) { _, text in
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            viewModel.dictationInput = trimmed
+        }
+        // 相位切到「已判定」或卡片消失时，确保麦克风关掉、音频会话还给发音。
+        .onChange(of: viewModel.dictationPhase) { _, phase in
+            if !phase.isInput { speech.stop() }
+        }
+        .onDisappear { speech.stop() }
+    }
+
+    /// 语音听写控件：麦克风按钮 + 状态提示。点一下开始听，说完再点一下停（拿到
+    /// final 结果也会自动停）。录音时先收起键盘，避免键盘挡住卡片、也避免抢焦点。
+    private var voiceDictationControl: some View {
+        VStack(spacing: 6) {
+            Button {
+                if speech.isListening {
+                    speech.stop()
+                } else {
+                    isDictationFieldFocused = false
+                    Task { await speech.start() }
+                }
+            } label: {
+                Image(systemName: speech.isListening ? "waveform.circle.fill" : "mic.circle.fill")
+                    .font(.system(size: 44))
+                    .foregroundStyle(speech.isListening ? Theme.unknown : Theme.accent)
+                    .symbolEffect(.variableColor.iterative, isActive: speech.isListening)
+            }
+            .buttonStyle(.plain)
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel(speech.isListening ? "停止语音听写" : "开始语音听写")
+
+            if let error = speech.errorMessage {
+                Text(error).font(.caption2).foregroundStyle(Theme.unknown).multilineTextAlignment(.center)
+            } else {
+                Text(speech.isListening ? "正在听，说出这个单词…" : "点麦克风说单词")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+        }
     }
 
     private static func ratingColor(_ rating: ReviewRating) -> Color {
