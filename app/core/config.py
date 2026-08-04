@@ -380,6 +380,10 @@ class Settings:
         # 视觉模型单次调用的最大输出 token；识别阶段词数近似线性、丰富阶段按 8 词一批，
         # 4096 是实测不被截断的余量值（见 recognizer 里的说明）。
         self.VOCAB_VISION_MAX_TOKENS = int(os.getenv("VOCAB_VISION_MAX_TOKENS", "4096"))
+        # 拍照识别专用温度：识别是「看图抠词」的确定性任务，温度非 0 会带来采样随机性
+        # ——实测同一张图（尤其专有名词多、边界模糊的截图）在 0.2 下识别结果在「8 词」
+        # 和「30 词」之间来回跳，甚至偶尔不遵守专有名词排除。固定 0.0 追求可复现的结果。
+        self.VOCAB_VISION_TEMPERATURE = float(os.getenv("VOCAB_VISION_TEMPERATURE", "0.0"))
         # 丰富阶段（配音标/释义/例句）并发批数上限。词多的图分成多批并发跑，这个值越
         # 大墙钟越短，但越容易撞下游 LLM 的速率限制。默认 8（Gemini flash-lite 限额较
         # 宽，8 并发下 100+ 词的整图能把等待砍到 2 波左右）。撞限流就调小，额度富裕

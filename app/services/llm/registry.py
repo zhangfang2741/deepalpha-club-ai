@@ -185,7 +185,9 @@ def build_vision_llm() -> dict[str, Any] | None:
     provider = settings.VOCAB_VISION_PROVIDER.lower()
     model_id = settings.VOCAB_VISION_MODEL
     max_tokens = settings.VOCAB_VISION_MAX_TOKENS
-    temperature = settings.DEFAULT_LLM_TEMPERATURE
+    # 温度固定为 VOCAB_VISION_TEMPERATURE（默认 0.0），不跟随全局 DEFAULT_LLM_TEMPERATURE：
+    # 识别是确定性任务，温度非 0 会让同一张图每次识别结果不一样。
+    temperature = settings.VOCAB_VISION_TEMPERATURE
 
     if provider == "gemini":
         if not settings.GOOGLE_API_KEY:
