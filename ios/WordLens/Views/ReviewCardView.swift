@@ -734,7 +734,6 @@ struct ReviewCardView: View {
                 typed: typed,
                 resultLabel: Self.dictationResultLabel(rating),
                 resultColor: Self.ratingColor(rating),
-                resultSurfaceColor: Self.dictationResultSurface(rating),
                 showsTypedInput: rating != .known,
                 isSubmitting: viewModel.isSubmitting,
                 onOpenDetail: { detailWord = answered },
@@ -750,30 +749,37 @@ struct ReviewCardView: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Theme.textSecondary)
 
-            TextField("", text: $viewModel.dictationInput)
-                .textFieldStyle(.plain)
-                .font(.title.bold())
-                .multilineTextAlignment(.center)
-                .foregroundStyle(Theme.textPrimary)
-                // 这四个必须全关：只要系统插手自动大写/纠错/联想，它会替用户把词
-                // 拼对，听写就白做了。
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-                .keyboardType(.asciiCapable)
-                .submitLabel(.done)
-                .focused($isDictationFieldFocused)
-                .onSubmit { confirmDictation() }
-                .padding(.vertical, 10)
-                .overlay(alignment: .bottom) {
-                    Rectangle()
-                        .fill(Theme.accent.opacity(0.6))
-                        .frame(height: 2)
-                }
-                .padding(.horizontal, 24)
+            HStack(spacing: 0) {
+                // 左侧留一块和麦克风等宽的透明占位，输入的词才是真正居中的。
+                Color.clear.frame(width: 44, height: 44)
 
-            voiceDictationControl
+                TextField("", text: $viewModel.dictationInput)
+                    .textFieldStyle(.plain)
+                    .font(.title.bold())
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Theme.textPrimary)
+                    // 这四个必须全关：只要系统插手自动大写/纠错/联想，它会替用户把词
+                    // 拼对，听写就白做了。
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+                    .keyboardType(.asciiCapable)
+                    .submitLabel(.done)
+                    .focused($isDictationFieldFocused)
+                    .onSubmit { confirmDictation() }
+                    .padding(.vertical, 10)
 
-            Text("打字或点麦克风说出这个词，写完点「确定」或敲回车")
+                voiceDictationButton
+            }
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(Theme.accent.opacity(0.6))
+                    .frame(height: 2)
+            }
+            .padding(.horizontal, 24)
+
+            voiceDictationHint
+
+            Text("打字，或点麦克风逐个字母拼读（A-P-P-L-E），写完点「确定」或敲回车")
                 .font(.caption2)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(Theme.textSecondary.opacity(0.8))
@@ -786,11 +792,12 @@ struct ReviewCardView: View {
         // 点卡片空白处也能唤起键盘，不用非得戳中那一行输入框。
         .contentShape(.rect)
         .onTapGesture { isDictationFieldFocused = true }
-        // 识别到的文字实时写进听写输入框，后续确认/判定完全复用打字那套。
+        // 识别到的文字先过一遍拼读还原（A-P-P-L-E → apple），再写进听写输入框，
+        // 后续确认/判定完全复用打字那套。
         .onChange(of: speech.transcript) { _, text in
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return }
-            viewModel.dictationInput = trimmed
+            let parsed = SpellingParser.parse(text)
+            guard !parsed.isEmpty else { return }
+            viewModel.dictationInput = parsed
         }
         // 相位切到「已判定」或卡片消失时，确保麦克风关掉、音频会话还给发音。
         .onChange(of: viewModel.dictationPhase) { _, phase in
@@ -799,34 +806,44 @@ struct ReviewCardView: View {
         .onDisappear { speech.stop() }
     }
 
-    /// 语音听写控件：麦克风按钮 + 状态提示。点一下开始听，说完再点一下停（拿到
-    /// final 结果也会自动停）。录音时先收起键盘，避免键盘挡住卡片、也避免抢焦点。
-    private var voiceDictationControl: some View {
-        VStack(spacing: 6) {
-            Button {
-                if speech.isListening {
-                    speech.stop()
-                } else {
-                    isDictationFieldFocused = false
-                    Task { await speech.start() }
-                }
-            } label: {
-                Image(systemName: speech.isListening ? "waveform.circle.fill" : "mic.circle.fill")
-                    .font(.system(size: 44))
-                    .foregroundStyle(speech.isListening ? Theme.unknown : Theme.accent)
-                    .symbolEffect(.variableColor.iterative, isActive: speech.isListening)
-            }
-            .buttonStyle(.plain)
-            .frame(minWidth: 44, minHeight: 44)
-            .accessibilityLabel(speech.isListening ? "停止语音听写" : "开始语音听写")
-
-            if let error = speech.errorMessage {
-                Text(error).font(.caption2).foregroundStyle(Theme.unknown).multilineTextAlignment(.center)
+    /// 麦克风按钮：贴在输入框右侧，点一下开始听，说完再点一下停（拿到 final 结果
+    /// 也会自动停）。录音时先收起键盘，避免键盘挡住卡片、也避免抢焦点。
+    private var voiceDictationButton: some View {
+        Button {
+            if speech.isListening {
+                speech.stop()
             } else {
-                Text(speech.isListening ? "正在听，说出这个单词…" : "点麦克风说单词")
-                    .font(.caption2)
-                    .foregroundStyle(Theme.textSecondary)
+                isDictationFieldFocused = false
+                // 再点一次就是「重说一遍」：先清空上一次的结果，免得这次没识别出
+                // 东西时框里还留着上一遍的词。
+                viewModel.dictationInput = ""
+                Task { await speech.start() }
             }
+        } label: {
+            Image(systemName: speech.isListening ? "waveform.circle.fill" : "mic.circle.fill")
+                .font(.system(size: 26))
+                .foregroundStyle(speech.isListening ? Theme.unknown : Theme.accent)
+                .symbolEffect(.variableColor.iterative, isActive: speech.isListening)
+                // 图标只有 26pt，但点击热区仍撑满 44×44 的最小可点面积。
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(speech.isListening ? "停止语音听写" : "开始语音听写")
+    }
+
+    /// 麦克风的状态提示（报错优先）。
+    @ViewBuilder
+    private var voiceDictationHint: some View {
+        if let error = speech.errorMessage {
+            Text(error)
+                .font(.caption2)
+                .foregroundStyle(Theme.unknown)
+                .multilineTextAlignment(.center)
+        } else if speech.isListening {
+            Text("正在听，一个字母一个字母地念…")
+                .font(.caption2)
+                .foregroundStyle(Theme.textSecondary)
         }
     }
 
@@ -851,14 +868,6 @@ struct ReviewCardView: View {
         case .known: return "记住了"
         case .fuzzy: return "模糊"
         case .unknown: return "没记住"
-        }
-    }
-
-    private static func dictationResultSurface(_ rating: ReviewRating) -> Color {
-        switch rating {
-        case .known: return Theme.dictationKnownSurface
-        case .fuzzy: return Theme.dictationFuzzySurface
-        case .unknown: return Theme.dictationUnknownSurface
         }
     }
 

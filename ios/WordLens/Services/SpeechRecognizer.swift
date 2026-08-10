@@ -27,6 +27,25 @@ final class SpeechRecognizer: ObservableObject {
     private let audioEngine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
+    /// 是否已经在 inputNode 上装过 tap。启动中途抛错时也要能准确拆掉，
+    /// 否则下次 start 会重复安装 tap 直接崩。
+    private var hasTap = false
+
+    /// 识别时提示「会出现孤立字母」的上下文词表，只有 A–Z。
+    private static let letterContext: [String] = (UnicodeScalar("A").value...UnicodeScalar("Z").value)
+        .compactMap { UnicodeScalar($0).map { String(Character($0)) } }
+
+    /// 停止说话后多久自动收音。流式识别的 isFinal 往往要等 endAudio 才来，
+    /// 光靠它按钮会一直停在「正在听」，所以自己做静音判定。
+    ///
+    /// 2 秒是为拼读留的余量：逐个字母念时字母之间本来就有停顿，卡到 1.5 秒会在
+    /// 用户还没拼完时就把麦克风关了。
+    private static let silenceTimeout: Duration = .seconds(2)
+    /// 全程一个字都没识别到时的兜底上限，避免麦克风无限开着。
+    private static let maxListeningDuration: Duration = .seconds(15)
+
+    private var silenceTask: Task<Void, Never>?
+    private var timeoutTask: Task<Void, Never>?
 
     /// 识别器当前是否可用（网络/语言包等原因可能暂时不可用）。
     var isAvailable: Bool { recognizer?.isAvailable ?? false }
@@ -44,7 +63,10 @@ final class SpeechRecognizer: ObservableObject {
 
     /// 开始一次语音听写：申请权限 → 配录音会话 → 启动引擎与识别任务。
     /// 识别结果（含中途 partial）实时写进 transcript；拿到 final 或出错自动停止。
-    func start() async {
+    ///
+    /// - Parameter forceOnDevice: 强制走本地模型。正常路径优先用云端（准确率明显更高），
+    ///   只有云端识别失败（多半是断网）时才由内部回退调用一次，带上 true。
+    func start(forceOnDevice: Bool = false) async {
         guard !isListening else { return }
         errorMessage = nil
         transcript = ""
@@ -63,15 +85,24 @@ final class SpeechRecognizer: ObservableObject {
 
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker])
+            // 用 .default 而不是 .measurement：.measurement 会关掉系统的输入信号处理
+            // （增益、降噪），手机拿在手上说话时录到的信号偏弱，识别准确率反而更差。
+            try session.setCategory(.playAndRecord, mode: .default, options: [.duckOthers, .defaultToSpeaker])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
 
             let request = SFSpeechAudioBufferRecognitionRequest()
             request.shouldReportPartialResults = true
             // 听写只要词本身，别让系统自动加标点。
             if #available(iOS 16.0, *) { request.addsPunctuation = false }
-            // 有本地识别能力就用本地：更快、离线、不上传音频。
-            if recognizer.supportsOnDeviceRecognition { request.requiresOnDeviceRecognition = true }
+            // 关键：告诉识别器这是「一个短词」而不是「一段口述」。默认的 .unspecified
+            // 会套用连续语流的语言模型，把孤立的单词硬拗成通顺的句子片段
+            // （说 E 出来 he、说 bit 出来 be it），.search 面向短查询词，最贴近听写。
+            request.taskHint = .search
+            // 告诉识别器「这里会出现孤立的字母」。注意这里喂的只有 A–Z，不含任何
+            // 待听写的单词——它提升的是字母识别率，不泄露答案，听写该错还是错。
+            request.contextualStrings = Self.letterContext
+            // 云端模型比本地模型准得多，默认走云端；只有云端失败才回退本地。
+            request.requiresOnDeviceRecognition = forceOnDevice && recognizer.supportsOnDeviceRecognition
             self.request = request
 
             let inputNode = audioEngine.inputNode
@@ -79,18 +110,41 @@ final class SpeechRecognizer: ObservableObject {
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak request] buffer, _ in
                 request?.append(buffer)
             }
+            hasTap = true
             audioEngine.prepare()
             try audioEngine.start()
             isListening = true
+
+            // 兜底：一直没说话（或识别不出）也要自己关掉。
+            timeoutTask = Task { [weak self] in
+                try? await Task.sleep(for: Self.maxListeningDuration)
+                guard !Task.isCancelled else { return }
+                self?.stop()
+            }
 
             task = recognizer.recognitionTask(with: request) { [weak self] result, error in
                 Task { @MainActor in
                     guard let self else { return }
                     if let result {
-                        self.transcript = result.bestTranscription.formattedString
-                        if result.isFinal { self.stop() }
+                        self.transcript = Self.sanitize(result.bestTranscription.formattedString)
+                        if result.isFinal {
+                            self.stop()
+                        } else {
+                            // 每来一段新识别就把静音计时器往后推，直到用户真的说完。
+                            self.scheduleSilenceStop()
+                        }
                     }
-                    if error != nil { self.stop() }
+                    if error != nil {
+                        // isListening 已经是 false，说明是用户/静音判定主动停的，
+                        // cancel 带出来的这个 error 不是真故障，别当失败处理。
+                        guard self.isListening else { return }
+                        self.stop()
+                        // 云端识别失败（常见于断网）时，退到本地模型重试一次。
+                        if !forceOnDevice, self.transcript.isEmpty,
+                           self.recognizer?.supportsOnDeviceRecognition == true {
+                            Task { await self.start(forceOnDevice: true) }
+                        }
+                    }
                 }
             }
         } catch {
@@ -99,12 +153,40 @@ final class SpeechRecognizer: ObservableObject {
         }
     }
 
+    /// 清掉识别结果里的标点和多余空白：即使关了 addsPunctuation，云端偶尔还是会
+    /// 带出 "E." "apple," 这种尾巴，直接进判定就成了拼写错误。只保留字母、连字符、
+    /// 撇号和词间空格（复合词要用）。
+    static func sanitize(_ text: String) -> String {
+        let kept = text.map { ch -> Character in
+            (ch.isLetter || ch == "-" || ch == "'") ? ch : " "
+        }
+        return String(kept)
+            .split(separator: " ")
+            .joined(separator: " ")
+    }
+
+    /// 静音 N 秒后自动收音；期间每来一次新的识别结果都会重置这个计时。
+    private func scheduleSilenceStop() {
+        silenceTask?.cancel()
+        silenceTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.silenceTimeout)
+            guard !Task.isCancelled else { return }
+            self?.stop()
+        }
+    }
+
     /// 停止录音与识别，并把音频会话切回 .playback 还给发音播放器。
-    /// 可重复调用（识别 final 回调和用户手动点按可能都会触发）。
+    /// 可重复调用（静音自动停、识别 final 回调、用户手动点按都会触发）。
     func stop() {
-        if audioEngine.isRunning {
-            audioEngine.stop()
+        silenceTask?.cancel()
+        silenceTask = nil
+        timeoutTask?.cancel()
+        timeoutTask = nil
+
+        if audioEngine.isRunning { audioEngine.stop() }
+        if hasTap {
             audioEngine.inputNode.removeTap(onBus: 0)
+            hasTap = false
         }
         request?.endAudio()
         task?.cancel()

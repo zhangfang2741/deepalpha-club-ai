@@ -9,6 +9,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT=$(mktemp -d)/judgetest
 swiftc -O \
   "$ROOT/ios/WordLens/Services/DictationJudge.swift" \
+  "$ROOT/ios/WordLens/Services/SpellingParser.swift" \
   "$ROOT/ios/WordLens/Models/WordModels.swift" \
   "$ROOT/ios/Tests/main.swift" \
   -o "$OUT"
