@@ -303,6 +303,11 @@ class Settings:
             "vocabulary_change_password": ["10 per hour"],
             # 删号要验密码，限流同时兜住暴力试密码
             "vocabulary_delete_account": ["5 per hour"],
+            # 发验证码要花真金白银，且会打扰用户邮箱，按 IP 卡死
+            "vocabulary_password_reset_request": ["5 per hour"],
+            # 校验侧再兜一层：单个邮箱的错误次数由 Redis 计数管，这里防的是
+            # 换着邮箱大批量撞码
+            "vocabulary_password_reset_confirm": ["20 per hour"],
         }
 
         # Update rate limit endpoints from environment variables
@@ -391,6 +396,22 @@ class Settings:
         # 宽，8 并发下 100+ 词的整图能把等待砍到 2 波左右）。撞限流就调小，额度富裕
         # 可再调大——改环境变量即可，无需动代码。
         self.VOCAB_ENRICH_CONCURRENCY = int(os.getenv("VOCAB_ENRICH_CONCURRENCY", "8"))
+
+        # 邮件发送（阿里云邮件推送的 SMTP 接入）。
+        # 用 SMTP 而不是阿里云 SDK：只发验证码这一种简单邮件，标准库 smtplib 就够，
+        # 没必要为此引入一整套 SDK 依赖。凭据留空时发信服务视为未配置，
+        # 找回密码接口会明确报错而不是静默失败。
+        self.SMTP_HOST = os.getenv("SMTP_HOST", "smtpdm.aliyun.com")
+        self.SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))  # 465=SSL，Railway 出网不封
+        self.SMTP_USER = os.getenv("SMTP_USER", "")  # 阿里云控制台里的「发信地址」
+        self.SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")  # 该发信地址的 SMTP 密码
+        self.SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "鹦鹉背单词")
+        self.SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT_SECONDS", "15"))
+
+        # 找回密码验证码策略
+        self.PASSWORD_RESET_CODE_TTL = int(os.getenv("PASSWORD_RESET_CODE_TTL", "600"))  # 10 分钟
+        self.PASSWORD_RESET_RESEND_COOLDOWN = int(os.getenv("PASSWORD_RESET_RESEND_COOLDOWN", "60"))
+        self.PASSWORD_RESET_MAX_ATTEMPTS = int(os.getenv("PASSWORD_RESET_MAX_ATTEMPTS", "5"))
 
         # JWT 补充配置（与现有 JWT_ACCESS_TOKEN_EXPIRE_DAYS 对齐）
         self.ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))

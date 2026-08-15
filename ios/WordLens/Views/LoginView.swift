@@ -6,6 +6,7 @@ struct LoginView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var showRegister = false
+    @State private var showForgotPassword = false
     @FocusState private var focused: Field?
 
     private enum Field { case email, password }
@@ -61,12 +62,19 @@ struct LoginView: View {
                     .foregroundStyle(Theme.textSecondary)
                     .buttonStyle(.pressable)
 
+                Button("忘记密码？") { showForgotPassword = true }
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textSecondary)
+                    .buttonStyle(.pressable)
+
                 Spacer()
                 Spacer()
             }
             .padding(24)
         }
         .sheet(isPresented: $showRegister) { RegisterView() }
+        // 把已填的邮箱带过去，用户不用再输一遍——他多半就是在这一栏卡住的。
+        .sheet(isPresented: $showForgotPassword) { ForgotPasswordView(initialEmail: email) }
     }
 
     private func field(_ placeholder: String, text: Binding<String>, keyboard: UIKeyboardType) -> some View {

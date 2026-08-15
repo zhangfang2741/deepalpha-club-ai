@@ -51,6 +51,20 @@ class ChangePasswordRequest(BaseModel):
     new_password: SecretStr = Field(..., min_length=6, max_length=64)
 
 
+class PasswordResetRequest(BaseModel):
+    """请求发送找回密码的验证码。"""
+
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    """凭验证码设置新密码。"""
+
+    email: EmailStr
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+    new_password: SecretStr = Field(..., min_length=6, max_length=64)
+
+
 class DeleteAccountRequest(BaseModel):
     """删除账号请求：必须带当前密码二次确认。
 

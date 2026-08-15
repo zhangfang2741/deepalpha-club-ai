@@ -43,12 +43,17 @@ export default function WordLensSupportPage() {
         <div className="mt-12 space-y-8 text-[15px] leading-7">
           <Section title="忘记密码了怎么办？">
             <p>
-              当前版本<strong>暂不支持自助重置密码</strong>。如果你忘记了密码，
-              请用<strong>注册时使用的邮箱</strong>给我们发邮件，说明需要重置密码，
-              我们会协助你处理。
+              在登录页点<strong>「忘记密码？」</strong>，填写注册时使用的邮箱，
+              我们会给这个邮箱发一个 6 位验证码。在 App 里输入验证码，就能直接设置新密码。
             </p>
+            <ul className="mt-3 list-disc space-y-2 pl-5">
+              <li>验证码 <strong>10 分钟</strong>内有效</li>
+              <li>两次发送之间需间隔 60 秒</li>
+              <li>连续输错 5 次，验证码会立即失效，需要重新获取</li>
+              <li>没收到邮件请先<strong>检查垃圾邮件文件夹</strong></li>
+            </ul>
             <p className="mt-3">
-              我们正在开发自助重置功能，会在后续版本中提供。给你带来的不便，我们很抱歉。
+              如果邮箱已经无法接收邮件（比如注册时填错了），请通过上方邮箱联系我们协助处理。
             </p>
           </Section>
 
