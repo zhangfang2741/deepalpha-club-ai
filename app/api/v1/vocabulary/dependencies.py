@@ -37,5 +37,9 @@ async def get_current_vocab_user(
 
     user = await user_service.get_user_by_id(db, user_id)
     if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+        # 签名有效但用户不存在（最常见的是账号已被删除）属于认证失败，必须是 401
+        # 而不是 404：iOS 端 APIClient 只在 401 时广播 .apiUnauthorized 触发自动
+        # 登出，返回 404 会让「在另一台设备上删了号」的客户端卡在每页报错、又回
+        # 不到登录页的死胡同里。
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
     return user
