@@ -31,8 +31,11 @@ export default function WordLensPrivacyPage() {
           <Section title="一、我们收集并保存的信息">
             <ul className="list-disc space-y-2 pl-5">
               <li>
-                <strong>账号信息：</strong>你注册时填写的电子邮箱，以及经 bcrypt
-                单向哈希处理后的密码。我们<strong>不保存也无法还原</strong>你的明文密码。
+                <strong>账号信息：</strong>你注册时填写的<strong>电子邮箱或手机号</strong>
+                （两种注册方式任选其一），以及经 bcrypt 单向哈希处理后的密码。
+                我们<strong>不保存也无法还原</strong>你的明文密码。手机号统一以
+                国际格式存储，仅用于登录识别、发送验证码和找回密码，
+                <strong>不会用于营销推送，也不会提供给任何第三方用于其他用途</strong>。
               </li>
               <li>
                 <strong>学习数据：</strong>你加入生词库的单词，及其音标、词性、中文释义、
@@ -63,7 +66,8 @@ export default function WordLensPrivacyPage() {
               </li>
             </ul>
             <p className="mt-3">
-              我们<strong>不收集</strong>：你的位置、通讯录、日历、健康数据、设备标识符
+              我们<strong>不收集</strong>：你的位置、通讯录（不会读取你手机里的联系人）、
+              日历、健康数据、设备标识符
               （IDFA/IDFV）、相册中你未主动选择的其他照片。本应用<strong>不含任何广告
               SDK，不做跨应用或跨网站的用户追踪</strong>，因此也不会向你弹出
               App 追踪透明度（ATT）授权请求。
@@ -92,8 +96,17 @@ export default function WordLensPrivacyPage() {
                 你的任何身份信息。
               </li>
               <li>
+                <strong>阿里云 —— 验证码发送：</strong>注册和找回密码时，
+                我们会把你的<strong>邮箱或手机号</strong>发送给阿里云的邮件推送 /
+                短信认证服务，用于投递验证码。短信验证码由阿里云生成与核验，
+                我们不接触其明文。发送内容仅含验证码本身，不含你的其他任何信息。
+                <br />
+                注意：受运营商政策限制，短信签名显示为服务商提供的
+                <strong>【恒创联众】</strong>而非本应用名称。
+              </li>
+              <li>
                 <strong>基础设施：</strong>服务器、数据库与缓存由 Railway 提供，
-                域名解析与传输加速由 Cloudflare 提供。
+                域名解析由 Cloudflare 提供。
               </li>
             </ul>
             <p className="mt-3">
@@ -137,7 +150,7 @@ export default function WordLensPrivacyPage() {
             </p>
             <p className="mt-3">删除后，以下数据将被<strong>立即永久清除且无法恢复</strong>：</p>
             <ul className="mt-3 list-disc space-y-2 pl-5">
-              <li>你的账号与登录凭证</li>
+              <li>你的账号与登录凭证（含邮箱或手机号）</li>
               <li>全部生词及其音标、释义、词源、例句</li>
               <li>全部复习进度与复习历史记录</li>
               <li>全部自建歌单</li>

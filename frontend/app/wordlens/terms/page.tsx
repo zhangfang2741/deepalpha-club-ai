@@ -50,7 +50,7 @@ export default function WordLensTermsPage() {
 
           <Section title="三、账号">
             <ul className="list-disc space-y-2 pl-5">
-              <li>你需提供有效的电子邮箱注册账号，并对账号下的一切活动负责。</li>
+              <li>你需提供有效的电子邮箱或手机号注册账号，并对账号下的一切活动负责。</li>
               <li>请妥善保管密码。如发现账号被盗用，请立即修改密码并联系我们。</li>
               <li>
                 你可随时在应用内「设置 → 删除账号」自助删除账号。删除后全部数据将被

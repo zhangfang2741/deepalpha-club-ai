@@ -31,7 +31,7 @@ export default function WordLensSupportPage() {
             {CONTACT}
           </a>
           <p className="mt-4 text-sm text-muted-foreground">
-            为了更快定位问题，邮件里麻烦附上：你的注册邮箱、iPhone 型号与 iOS 版本、
+            为了更快定位问题，邮件里麻烦附上：你的注册邮箱或手机号、iPhone 型号与 iOS 版本、
             App 版本号（在「设置 → 关于 → 版本」可以看到），以及问题的截图。
           </p>
         </div>
@@ -64,8 +64,9 @@ export default function WordLensSupportPage() {
 
           <Section title="忘记密码了怎么办？">
             <p>
-              在登录页点<strong>「忘记密码？」</strong>，填写注册时使用的邮箱，
-              我们会给这个邮箱发一个 6 位验证码。在 App 里输入验证码，就能直接设置新密码。
+              在登录页点<strong>「忘记密码？」</strong>，填写注册时使用的邮箱或手机号，
+              我们会发一个 6 位验证码过去。在 App 里输入验证码，就能直接设置新密码。
+              用哪种方式注册的，就用哪种方式找回。
             </p>
             <ul className="mt-3 list-disc space-y-2 pl-5">
               <li>验证码 <strong>10 分钟</strong>内有效</li>
@@ -74,7 +75,8 @@ export default function WordLensSupportPage() {
               <li>没收到邮件请先<strong>检查垃圾邮件文件夹</strong></li>
             </ul>
             <p className="mt-3">
-              如果邮箱已经无法接收邮件（比如注册时填错了），请通过上方邮箱联系我们协助处理。
+              如果邮箱或手机号已经无法接收（比如注册时填错了、手机号已停用），
+              请通过上方邮箱联系我们协助处理。
             </p>
           </Section>
 
@@ -173,7 +175,7 @@ export default function WordLensSupportPage() {
           <Section title="换手机后数据还在吗？">
             <p>
               在。生词库、复习进度和歌单都存在服务器上，与你的账号绑定。
-              在新设备上用同一个邮箱登录即可看到全部数据。
+              在新设备上用同一个邮箱或手机号登录即可看到全部数据。
             </p>
             <p className="mt-3">
               发音口音、语速、自动发音开关这类偏好设置保存在设备本地，换设备后需要重新设置。
