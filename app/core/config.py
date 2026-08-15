@@ -304,6 +304,7 @@ class Settings:
             # 删号要验密码，限流同时兜住暴力试密码
             "vocabulary_delete_account": ["5 per hour"],
             # 发验证码要花真金白银，且会打扰用户邮箱，按 IP 卡死
+            "vocabulary_register_request_code": ["5 per hour"],
             "vocabulary_password_reset_request": ["5 per hour"],
             # 校验侧再兜一层：单个邮箱的错误次数由 Redis 计数管，这里防的是
             # 换着邮箱大批量撞码
@@ -408,10 +409,17 @@ class Settings:
         self.SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "鹦鹉背单词")
         self.SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT_SECONDS", "15"))
 
-        # 找回密码验证码策略
-        self.PASSWORD_RESET_CODE_TTL = int(os.getenv("PASSWORD_RESET_CODE_TTL", "600"))  # 10 分钟
-        self.PASSWORD_RESET_RESEND_COOLDOWN = int(os.getenv("PASSWORD_RESET_RESEND_COOLDOWN", "60"))
-        self.PASSWORD_RESET_MAX_ATTEMPTS = int(os.getenv("PASSWORD_RESET_MAX_ATTEMPTS", "5"))
+        # 邮箱验证码策略（注册与找回密码共用同一套参数）。
+        # 兼容旧的 PASSWORD_RESET_* 变量名：线上已经配过的话不用改环境变量。
+        self.EMAIL_CODE_TTL = int(
+            os.getenv("EMAIL_CODE_TTL", os.getenv("PASSWORD_RESET_CODE_TTL", "600"))
+        )  # 10 分钟
+        self.EMAIL_CODE_RESEND_COOLDOWN = int(
+            os.getenv("EMAIL_CODE_RESEND_COOLDOWN", os.getenv("PASSWORD_RESET_RESEND_COOLDOWN", "60"))
+        )
+        self.EMAIL_CODE_MAX_ATTEMPTS = int(
+            os.getenv("EMAIL_CODE_MAX_ATTEMPTS", os.getenv("PASSWORD_RESET_MAX_ATTEMPTS", "5"))
+        )
 
         # JWT 补充配置（与现有 JWT_ACCESS_TOKEN_EXPIRE_DAYS 对齐）
         self.ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))

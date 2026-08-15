@@ -41,6 +41,19 @@ export default function WordLensSupportPage() {
         </div>
 
         <div className="mt-12 space-y-8 text-[15px] leading-7">
+          <Section title="注册时收不到验证码？">
+            <p>
+              注册需要验证邮箱：填写邮箱后点「发送验证码」，我们会发一个 6 位验证码到该邮箱，
+              输入后才会创建账号。这样能避免因为邮箱填错，导致以后无法找回密码。
+            </p>
+            <ul className="mt-3 list-disc space-y-2 pl-5">
+              <li>先<strong>检查垃圾邮件文件夹</strong>，这是最常见的原因</li>
+              <li>确认邮箱地址没有拼错（多打一个字母、`.com` 写成 `.con` 都很常见）</li>
+              <li>验证码 <strong>10 分钟</strong>内有效，两次发送需间隔 60 秒</li>
+              <li>提示「该邮箱已被注册」说明你之前注册过，请直接登录或使用「忘记密码」</li>
+            </ul>
+          </Section>
+
           <Section title="忘记密码了怎么办？">
             <p>
               在登录页点<strong>「忘记密码？」</strong>，填写注册时使用的邮箱，

@@ -13,10 +13,11 @@ from app.schemas.base import BaseResponse
 
 
 class VocabularyUserCreate(BaseModel):
-    """注册请求。"""
+    """注册请求。code 是 /register/request-code 发到邮箱的验证码。"""
 
     email: EmailStr
     password: SecretStr = Field(..., min_length=6, max_length=64)
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
 
 
 class VocabularyLoginRequest(BaseModel):
@@ -49,6 +50,12 @@ class ChangePasswordRequest(BaseModel):
 
     old_password: SecretStr
     new_password: SecretStr = Field(..., min_length=6, max_length=64)
+
+
+class RegisterCodeRequest(BaseModel):
+    """请求给待注册邮箱发验证码。"""
+
+    email: EmailStr
 
 
 class PasswordResetRequest(BaseModel):
