@@ -1,4 +1,5 @@
 // Views/CameraCaptureView.swift
+import AVFoundation
 import SwiftUI
 import PhotosUI
 import UIKit
@@ -7,6 +8,8 @@ struct CameraCaptureView: View {
     @StateObject private var viewModel = CameraViewModel()
     @State private var photoPickerItem: PhotosPickerItem?
     @State private var showCameraSheet = false
+    /// 相机不可用时的提示（权限被拒 / 设备没有相机），nil 表示不弹。
+    @State private var cameraBlockedReason: CameraBlockedReason?
 
     var body: some View {
         NavigationStack {
@@ -40,7 +43,7 @@ struct CameraCaptureView: View {
                     if !viewModel.isRecognizing {
                         VStack(spacing: 12) {
                             Button {
-                                showCameraSheet = true
+                                Task { await presentCameraIfAllowed() }
                             } label: {
                                 Label("拍照", systemImage: "camera.fill")
                                     .frame(maxWidth: .infinity)
@@ -74,6 +77,25 @@ struct CameraCaptureView: View {
                 }
                 .ignoresSafeArea()
             }
+            .alert(
+                cameraBlockedReason?.title ?? "",
+                isPresented: Binding(
+                    get: { cameraBlockedReason != nil },
+                    set: { if !$0 { cameraBlockedReason = nil } }
+                ),
+                presenting: cameraBlockedReason
+            ) { reason in
+                if reason == .permissionDenied {
+                    Button("去设置") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                }
+                Button("好", role: .cancel) {}
+            } message: { reason in
+                Text(reason.message)
+            }
             .onChange(of: photoPickerItem) { _, newItem in
                 guard let newItem else { return }
                 Task {
@@ -97,6 +119,65 @@ struct CameraCaptureView: View {
                     // 不缺这一个，这里只禁掉手势关掉，让下拉真回到它该干的事（滚动）。
                     .interactiveDismissDisabled(true)
             }
+        }
+    }
+
+    /// 相机不可用的两种原因，决定弹窗文案和是否给「去设置」。
+    enum CameraBlockedReason: Identifiable {
+        /// 用户拒绝过相机权限，可以引导去系统设置改。
+        case permissionDenied
+        /// 设备根本没有可用相机，去设置也没用。
+        case noCameraOnDevice
+
+        var id: Self { self }
+
+        var title: String {
+            switch self {
+            case .permissionDenied: "无法使用相机"
+            case .noCameraOnDevice: "此设备没有可用的相机"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .permissionDenied:
+                "需要相机权限才能拍摄单词。你可以在「设置 → 鹦鹉背单词 → 相机」中开启，或改用「从相册选择」。"
+            case .noCameraOnDevice:
+                "请改用「从相册选择」导入含英语单词的图片。"
+            }
+        }
+    }
+
+    /// 只有在相机确实可用且已授权时才弹出拍照界面。
+    ///
+    /// 不做这层检查的话有两个坑，都是审核高频拒因：
+    /// 1. 用户拒过相机权限后再点「拍照」，`UIImagePickerController` 会弹出一个纯黑
+    ///    的界面，没有任何说明也没有去设置的入口——审核员的标准动作就是先拒绝所有
+    ///    权限再点一遍每个按钮，这里正好是核心入口。
+    /// 2. Apple 文档明确要求把 sourceType 设为 .camera 前必须先用
+    ///    `isSourceTypeAvailable(_:)` 确认，否则行为未定义。
+    @MainActor
+    private func presentCameraIfAllowed() async {
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            cameraBlockedReason = .noCameraOnDevice
+            return
+        }
+
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            showCameraSheet = true
+        case .notDetermined:
+            // 第一次点「拍照」时才申请，符合「用到才要权限」的惯例，
+            // 系统弹窗里显示的就是 Info.plist 的 NSCameraUsageDescription。
+            if await AVCaptureDevice.requestAccess(for: .video) {
+                showCameraSheet = true
+            } else {
+                cameraBlockedReason = .permissionDenied
+            }
+        case .denied, .restricted:
+            cameraBlockedReason = .permissionDenied
+        @unknown default:
+            cameraBlockedReason = .permissionDenied
         }
     }
 
