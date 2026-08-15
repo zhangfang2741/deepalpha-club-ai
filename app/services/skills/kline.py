@@ -6,6 +6,7 @@ import re
 
 import httpx
 from redis.asyncio import Redis
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.cache.operations import get_json, set_json
 from app.core.logging import logger
@@ -13,6 +14,10 @@ from app.core.logging import logger
 _FMP_KEY = os.environ.get("FMP_API_KEY", "")
 _FMP_URL = "https://financialmodelingprep.com/stable/historical-price-eod/full"
 _CACHE_TTL = 3600 * 24  # 24h
+
+
+class _RateLimitError(Exception):
+    """FMP 返回 429 时抛出的可重试异常（内部使用，不透传给用户）。"""
 
 
 def _cache_key(user_id: int | None, symbol: str, start: str, end: str, freq: str) -> str:
@@ -64,6 +69,13 @@ async def _fetch_fmp(symbol: str, start: str, end: str, freq: str) -> list[dict]
     if not _FMP_KEY:
         raise ValueError("数据源未配置：缺少 FMP_API_KEY 环境变量，请联系管理员")
 
+    # 429 / 网络抖动时指数退避重试（2s、4s、最多 8s），避免偶发限流直接失败
+    @retry(
+        retry=retry_if_exception_type((_RateLimitError, httpx.TransportError)),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=8),
+        reraise=True,
+    )
     def _sync():
         # FMP 的 EOD 端点仅提供日线；周线在本地聚合，因此始终拉日线
         resp = httpx.get(
@@ -74,7 +86,8 @@ async def _fetch_fmp(symbol: str, start: str, end: str, freq: str) -> list[dict]
         if resp.status_code == 401:
             raise ValueError("数据源认证失败：FMP_API_KEY 无效")
         if resp.status_code == 429:
-            raise ValueError("数据源请求过于频繁，请稍后再试")
+            # 交给 tenacity 重试；用尽后在下方转换为可读错误
+            raise _RateLimitError
         resp.raise_for_status()
         raw = resp.json()
         # FMP 出错时返回 dict（如 {"Error Message": ...}）而非 list
@@ -94,8 +107,12 @@ async def _fetch_fmp(symbol: str, start: str, end: str, freq: str) -> list[dict]
         ]
 
     loop = asyncio.get_event_loop()
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        daily = await loop.run_in_executor(pool, _sync)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            daily = await loop.run_in_executor(pool, _sync)
+    except _RateLimitError:
+        # 多次重试仍被限流，透传可读信息给用户
+        raise ValueError("数据源请求过于频繁，请稍后再试")
 
     if freq == "weekly":
         return _resample_weekly(daily)
