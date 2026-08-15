@@ -10,7 +10,7 @@ import uuid
 from datetime import UTC, datetime
 
 import bcrypt
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import CheckConstraint, UniqueConstraint
 from sqlmodel import Field
 
 from app.db.base import UUIDModel
@@ -38,11 +38,26 @@ class _NaiveTimestampModel(UUIDModel):
 
 
 class VocabularyUser(_NaiveTimestampModel, table=True):
-    """WordLens 独立账户。"""
+    """WordLens 独立账户。
+
+    邮箱和手机号都可以作为登录标识，两者至少有一个、也可以都有（同一账号先用
+    邮箱注册、之后绑定手机号）。所以两列都可空、都唯一，由数据库的 CHECK 约束
+    保证不会出现两者皆空的孤儿账号。
+
+    手机号统一以 E.164 存储（如 +8613800138000）：同一个号码用户可能写成
+    13800138000、+86 138-0013-8000 等好几种形式，不归一化就会注册出多个账号。
+    """
 
     __tablename__ = "vocabulary_users"
+    __table_args__ = (
+        CheckConstraint(
+            "email IS NOT NULL OR phone IS NOT NULL",
+            name="ck_vocabulary_user_has_identifier",
+        ),
+    )
 
-    email: str = Field(..., unique=True, index=True, max_length=255)
+    email: str | None = Field(default=None, unique=True, index=True, max_length=255)
+    phone: str | None = Field(default=None, unique=True, index=True, max_length=20)
     hashed_password: str
 
     def verify_password(self, password: str) -> bool:

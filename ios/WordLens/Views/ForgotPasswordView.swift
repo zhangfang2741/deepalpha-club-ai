@@ -7,18 +7,19 @@ import SwiftUI
 /// 容易忘了自己填的是哪个邮箱；留在同一页上，邮箱始终可见，也方便发现填错了。
 struct ForgotPasswordView: View {
     /// 从登录页带过来，省得用户再输一遍。
-    let initialEmail: String
+    let initialAccount: String
+    let method: LoginView.LoginMethod
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel = ForgotPasswordViewModel()
 
-    @State private var email = ""
+    @State private var account = ""
     @State private var code = ""
     @State private var newPassword = ""
 
     private static let passwordMinLength = 6
 
-    private var canSend: Bool { email.contains("@") && !viewModel.isSending }
+    private var canSend: Bool { (method == .phone ? account.count >= 6 : account.contains("@")) && !viewModel.isSending }
     private var canSubmit: Bool {
         code.count == 6 && newPassword.count >= Self.passwordMinLength && !viewModel.isSubmitting
     }
@@ -30,15 +31,15 @@ struct ForgotPasswordView: View {
 
                 Form {
                     Section {
-                        TextField("注册时使用的邮箱", text: $email)
+                        TextField(method == .phone ? "注册时使用的手机号" : "注册时使用的邮箱", text: $account)
                             .textContentType(.username)
-                            .keyboardType(.emailAddress)
+                            .keyboardType(method == .phone ? .phonePad : .emailAddress)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .disabled(viewModel.hasSentCode)
 
                         Button {
-                            Task { await viewModel.sendCode(email: email) }
+                            Task { await viewModel.sendCode(account: account, method: method) }
                         } label: {
                             HStack(spacing: 10) {
                                 if viewModel.isSending { ProgressView().tint(Theme.accent) }
@@ -53,7 +54,9 @@ struct ForgotPasswordView: View {
                         if viewModel.hasSentCode {
                             // 后端对未注册邮箱也返回成功（防账号枚举），文案必须跟着含糊，
                             // 不能写成「验证码已发送」那样暗示邮箱一定存在。
-                            Text("如果该邮箱已注册，验证码已发出，10 分钟内有效。没收到请检查垃圾邮件。")
+                            Text(method == .phone
+                                ? "如果该手机号已注册，验证码已发出，10 分钟内有效。"
+                                : "如果该邮箱已注册，验证码已发出，10 分钟内有效。没收到请检查垃圾邮件。")
                         }
                     }
                     .listRowBackground(Theme.surface)
@@ -91,7 +94,8 @@ struct ForgotPasswordView: View {
                             Button {
                                 Task {
                                     let ok = await viewModel.resetPassword(
-                                        email: email, code: code, newPassword: newPassword
+                                        account: account, code: code,
+                                        newPassword: newPassword, method: method
                                     )
                                     if ok { dismiss() }
                                 }
@@ -117,7 +121,7 @@ struct ForgotPasswordView: View {
                     Button("取消") { dismiss() }
                 }
             }
-            .onAppear { if email.isEmpty { email = initialEmail } }
+            .onAppear { if account.isEmpty { account = initialAccount } }
         }
     }
 
@@ -138,12 +142,15 @@ final class ForgotPasswordViewModel: ObservableObject {
 
     private var cooldownTask: Task<Void, Never>?
 
-    func sendCode(email: String) async {
+    func sendCode(account: String, method: LoginView.LoginMethod) async {
         isSending = true
         errorMessage = nil
         defer { isSending = false }
         do {
-            try await AuthService.requestPasswordReset(email: email)
+            switch method {
+            case .phone: try await AuthService.requestPhonePasswordReset(phone: account)
+            case .email: try await AuthService.requestPasswordReset(email: account)
+            }
             hasSentCode = true
             startCooldown()
         } catch let error as APIError {
@@ -153,14 +160,23 @@ final class ForgotPasswordViewModel: ObservableObject {
         }
     }
 
-    func resetPassword(email: String, code: String, newPassword: String) async -> Bool {
+    func resetPassword(
+        account: String, code: String, newPassword: String, method: LoginView.LoginMethod
+    ) async -> Bool {
         isSubmitting = true
         errorMessage = nil
         defer { isSubmitting = false }
         do {
-            try await AuthService.confirmPasswordReset(
-                email: email, code: code, newPassword: newPassword
-            )
+            switch method {
+            case .phone:
+                try await AuthService.confirmPhonePasswordReset(
+                    phone: account, code: code, newPassword: newPassword
+                )
+            case .email:
+                try await AuthService.confirmPasswordReset(
+                    email: account, code: code, newPassword: newPassword
+                )
+            }
             return true
         } catch let error as APIError {
             errorMessage = error.message

@@ -305,6 +305,8 @@ class Settings:
             "vocabulary_delete_account": ["5 per hour"],
             # 发验证码要花真金白银，且会打扰用户邮箱，按 IP 卡死
             "vocabulary_register_request_code": ["5 per hour"],
+            # 短信按条计费且会实际打扰用户，比邮件收得更紧
+            "vocabulary_phone_request_code": ["5 per hour"],
             "vocabulary_password_reset_request": ["5 per hour"],
             # 校验侧再兜一层：单个邮箱的错误次数由 Redis 计数管，这里防的是
             # 换着邮箱大批量撞码
@@ -408,6 +410,20 @@ class Settings:
         self.SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")  # 该发信地址的 SMTP 密码
         self.SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "鹦鹉背单词")
         self.SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT_SECONDS", "15"))
+
+        # 短信发送（阿里云短信服务）。
+        # 与邮件不同，短信在国内是强监管业务：SignName（签名）和 TemplateCode（模板）
+        # 都必须先在控制台提交审核、通过后才能用。凭据留空则视为未配置，手机号相关
+        # 接口返回 503，邮箱注册/登录不受影响。
+        self.ALIYUN_SMS_ACCESS_KEY_ID = os.getenv("ALIYUN_SMS_ACCESS_KEY_ID", "")
+        self.ALIYUN_SMS_ACCESS_KEY_SECRET = os.getenv("ALIYUN_SMS_ACCESS_KEY_SECRET", "")
+        self.ALIYUN_SMS_SIGN_NAME = os.getenv("ALIYUN_SMS_SIGN_NAME", "")
+        self.ALIYUN_SMS_TEMPLATE_CODE = os.getenv("ALIYUN_SMS_TEMPLATE_CODE", "")
+        self.ALIYUN_SMS_ENDPOINT = os.getenv("ALIYUN_SMS_ENDPOINT", "https://dysmsapi.aliyuncs.com/")
+        self.ALIYUN_SMS_REGION = os.getenv("ALIYUN_SMS_REGION", "cn-hangzhou")
+        self.SMS_TIMEOUT_SECONDS = int(os.getenv("SMS_TIMEOUT_SECONDS", "10"))
+        # 默认国家码：用户只填 11 位手机号时按这个补全成 E.164
+        self.DEFAULT_PHONE_COUNTRY_CODE = os.getenv("DEFAULT_PHONE_COUNTRY_CODE", "86")
 
         # 邮箱验证码策略（注册与找回密码共用同一套参数）。
         # 兼容旧的 PASSWORD_RESET_* 变量名：线上已经配过的话不用改环境变量。
