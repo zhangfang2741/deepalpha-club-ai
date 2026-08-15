@@ -140,9 +140,13 @@ async def request_password_reset(
         try:
             await email_service.send_email(email, subject, html, text)
         except email_service.EmailNotConfiguredError:
+            # 邮件没发出去就不能留着冷却锁，否则用户被一次配置问题锁在门外 60 秒，
+            # 而且那 60 秒里怎么点都没用。
+            await password_reset.discard_code(redis, email)
             logger.error("password_reset_email_not_configured")
             raise HTTPException(status_code=503, detail="邮件服务暂不可用，请稍后再试") from None
         except email_service.EmailSendError:
+            await password_reset.discard_code(redis, email)
             raise HTTPException(status_code=502, detail="验证码发送失败，请稍后再试") from None
 
         logger.info("password_reset_code_sent", user_id=str(user.id))

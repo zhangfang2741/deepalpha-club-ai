@@ -109,6 +109,17 @@ async def verify_code(redis: Redis, email: str, code: str) -> bool:
     return False
 
 
+async def discard_code(redis: Redis, email: str) -> None:
+    """作废刚签发的验证码，并解除冷却。
+
+    发信失败时调用。冷却标记的意义是「已经给你发过一封了，别再刷」，可信没发出去
+    的时候它就纯属误伤——用户会被一次临时故障锁在门外 60 秒，而且那 60 秒里
+    他做什么都没用。既然没发成，就当这次请求没发生过。
+    """
+    await _clear(redis, email)
+    await cache.delete(redis, _cooldown_key(email))
+
+
 async def _clear(redis: Redis, email: str) -> None:
     """清掉验证码与计数。冷却标记保留，让它自己过期，避免被用来刷发信。"""
     await cache.delete(redis, _code_key(email))
