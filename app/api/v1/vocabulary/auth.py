@@ -19,6 +19,7 @@ from app.models.vocabulary import VocabularyUser
 from app.schemas.vocabulary import (
     ChangePasswordRequest,
     DeleteAccountRequest,
+    RegisterCodeRequest,
     PasswordResetConfirm,
     PasswordResetRequest,
     VocabularyLoginRequest,
@@ -27,7 +28,7 @@ from app.schemas.vocabulary import (
     VocabularyUserResponse,
 )
 from app.services import email as email_service
-from app.services.vocabulary import password_reset
+from app.services.vocabulary import email_code
 from app.services.vocabulary import users as user_service
 from app.utils.auth import create_access_token
 from app.utils.sanitization import sanitize_email, validate_vocabulary_password_strength
@@ -37,10 +38,73 @@ from .dependencies import get_current_vocab_user
 router = APIRouter()
 
 
+async def _issue_and_send(
+    redis: Redis, purpose: email_code.Purpose, email: str, render
+) -> None:
+    """签发验证码并发信。失败时回滚，让用户可以立刻重试。"""
+    try:
+        code = await email_code.issue_code(redis, purpose, email)
+    except email_code.ResendTooSoonError:
+        raise HTTPException(
+            status_code=429,
+            detail=f"验证码已发送，请 {settings.EMAIL_CODE_RESEND_COOLDOWN} 秒后再试",
+        ) from None
+
+    subject, html, text = render(code, settings.EMAIL_CODE_TTL // 60)
+    try:
+        await email_service.send_email(email, subject, html, text)
+    except email_service.EmailNotConfiguredError:
+        # 邮件没发出去就不能留着冷却锁，否则用户被一次配置问题锁在门外 60 秒，
+        # 而且那 60 秒里怎么点都没用。
+        await email_code.discard_code(redis, purpose, email)
+        logger.error("email_code_not_configured", purpose=purpose.value)
+        raise HTTPException(status_code=503, detail="邮件服务暂不可用，请稍后再试") from None
+    except email_service.EmailSendError:
+        await email_code.discard_code(redis, purpose, email)
+        raise HTTPException(status_code=502, detail="验证码发送失败，请稍后再试") from None
+
+
+@router.post("/register/request-code")
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["vocabulary_register_request_code"][0])
+async def request_register_code(
+    request: Request,
+    payload: RegisterCodeRequest,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+):
+    """给待注册的邮箱发验证码。
+
+    这里对「邮箱已注册」明确报错，而不像找回密码那样含糊其辞。看起来像账号枚举，
+    但 /register 本身就必须在邮箱重复时报错（否则用户不知道为什么注册不了），
+    枚举面本来就存在，在这一步含糊只会让用户白等一封永远不会来的邮件。
+    """
+    try:
+        email = sanitize_email(payload.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if await user_service.get_user_by_email(db, email) is not None:
+        raise HTTPException(status_code=400, detail="该邮箱已被注册，请直接登录")
+
+    await _issue_and_send(redis, email_code.Purpose.REGISTER, email, email_service.render_register)
+    logger.info("register_code_sent")
+    return {"sent": True}
+
+
 @router.post("/register", response_model=VocabularyTokenResponse)
 @limiter.limit(settings.RATE_LIMIT_ENDPOINTS["register"][0])
-async def register(request: Request, payload: VocabularyUserCreate, db: AsyncSession = Depends(get_db)):
-    """注册新 WordLens 账号。"""
+async def register(
+    request: Request,
+    payload: VocabularyUserCreate,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+):
+    """校验邮箱验证码并创建账号。
+
+    先验码再建号，而不是「先建号后验证」：邮箱填错时根本不该产生账号。否则
+    数据库里会攒下一堆永远无法登录、也无法找回密码的僵尸账号，还白占了邮箱
+    唯一索引——真正的主人以后想用这个邮箱注册都注册不了。
+    """
     try:
         email = sanitize_email(payload.email)
         password = payload.password.get_secret_value()
@@ -48,6 +112,16 @@ async def register(request: Request, payload: VocabularyUserCreate, db: AsyncSes
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    try:
+        ok = await email_code.verify_code(redis, email_code.Purpose.REGISTER, email, payload.code)
+    except email_code.TooManyAttemptsError:
+        raise HTTPException(
+            status_code=429, detail="验证码错误次数过多，已失效，请重新获取"
+        ) from None
+    if not ok:
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+
+    # 验码通过后再查重：这中间的窗口极小，但同一邮箱并发注册时唯一索引会兜底。
     existing = await user_service.get_user_by_email(db, email)
     if existing is not None:
         raise HTTPException(status_code=400, detail="该邮箱已被注册")
@@ -124,31 +198,9 @@ async def request_password_reset(
 
     user = await user_service.get_user_by_email(db, email)
     if user is not None:
-        try:
-            code = await password_reset.issue_code(redis, email)
-        except password_reset.ResendTooSoonError:
-            # 冷却期内重复点「发送」。这个提示对未注册邮箱不会出现，但它泄露的
-            # 只是「你刚刚请求过」——用户自己知道，不构成账号枚举。
-            raise HTTPException(
-                status_code=429,
-                detail=f"验证码已发送，请 {settings.PASSWORD_RESET_RESEND_COOLDOWN} 秒后再试",
-            ) from None
-
-        subject, html, text = email_service.render_password_reset(
-            code, settings.PASSWORD_RESET_CODE_TTL // 60
+        await _issue_and_send(
+            redis, email_code.Purpose.PASSWORD_RESET, email, email_service.render_password_reset
         )
-        try:
-            await email_service.send_email(email, subject, html, text)
-        except email_service.EmailNotConfiguredError:
-            # 邮件没发出去就不能留着冷却锁，否则用户被一次配置问题锁在门外 60 秒，
-            # 而且那 60 秒里怎么点都没用。
-            await password_reset.discard_code(redis, email)
-            logger.error("password_reset_email_not_configured")
-            raise HTTPException(status_code=503, detail="邮件服务暂不可用，请稍后再试") from None
-        except email_service.EmailSendError:
-            await password_reset.discard_code(redis, email)
-            raise HTTPException(status_code=502, detail="验证码发送失败，请稍后再试") from None
-
         logger.info("password_reset_code_sent", user_id=str(user.id))
     else:
         logger.info("password_reset_requested_for_unknown_email")
@@ -173,8 +225,8 @@ async def confirm_password_reset(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
-        ok = await password_reset.verify_code(redis, email, payload.code)
-    except password_reset.TooManyAttemptsError:
+        ok = await email_code.verify_code(redis, email_code.Purpose.PASSWORD_RESET, email, payload.code)
+    except email_code.TooManyAttemptsError:
         raise HTTPException(
             status_code=429, detail="验证码错误次数过多，已失效，请重新获取"
         ) from None

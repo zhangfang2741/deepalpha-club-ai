@@ -90,20 +90,18 @@ async def send_email(to: str, subject: str, html: str, text: str) -> None:
     logger.info("email_sent", to_domain=to.rsplit("@", 1)[-1] if "@" in to else "unknown")
 
 
-def render_password_reset(code: str, ttl_minutes: int) -> tuple[str, str, str]:
-    """渲染找回密码邮件，返回 (主题, HTML, 纯文本)。
+def _render_code_email(
+    code: str, ttl_minutes: int, heading: str, lead: str, footer_note: str
+) -> tuple[str, str, str]:
+    """渲染一封验证码邮件，返回 (主题, HTML, 纯文本)。
 
     刻意做得朴素：验证码类邮件带一堆图片和外链，反垃圾系统更容易判成垃圾邮件，
     而且用户其实只想找那 6 个数字。
     """
-    subject = f"{settings.SMTP_FROM_NAME} 密码重置验证码：{code}"
+    brand = settings.SMTP_FROM_NAME
+    subject = f"{brand} {heading}验证码：{code}"
 
-    text = (
-        f"你正在重置「{settings.SMTP_FROM_NAME}」账号的密码。\n\n"
-        f"验证码：{code}\n\n"
-        f"验证码 {ttl_minutes} 分钟内有效，请勿转发给他人。\n"
-        f"如果这不是你本人的操作，忽略这封邮件即可，你的密码不会有任何变化。\n"
-    )
+    text = f"{lead}\n\n验证码：{code}\n\n验证码 {ttl_minutes} 分钟内有效，请勿转发给他人。\n{footer_note}\n"
 
     html = f"""\
 <!DOCTYPE html>
@@ -111,20 +109,41 @@ def render_password_reset(code: str, ttl_minutes: int) -> tuple[str, str, str]:
 <body style="margin:0;padding:24px;background:#f5f6f8;
              font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;">
   <div style="max-width:440px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;">
-    <p style="margin:0 0 8px;font-size:16px;color:#111;">重置密码</p>
-    <p style="margin:0 0 24px;font-size:14px;color:#666;line-height:1.6;">
-      你正在重置「{settings.SMTP_FROM_NAME}」账号的密码，请在 App 中输入以下验证码：
-    </p>
+    <p style="margin:0 0 8px;font-size:16px;color:#111;">{heading}</p>
+    <p style="margin:0 0 24px;font-size:14px;color:#666;line-height:1.6;">{lead}</p>
     <div style="font-size:34px;font-weight:700;letter-spacing:8px;color:#111;
                 text-align:center;padding:18px;background:#f5f6f8;border-radius:8px;">
       {code}
     </div>
     <p style="margin:24px 0 0;font-size:13px;color:#888;line-height:1.6;">
-      验证码 {ttl_minutes} 分钟内有效，请勿转发给他人。<br>
-      如果这不是你本人的操作，忽略这封邮件即可，你的密码不会有任何变化。
+      验证码 {ttl_minutes} 分钟内有效，请勿转发给他人。<br>{footer_note}
     </p>
   </div>
 </body>
 </html>"""
 
     return subject, html, text
+
+
+def render_password_reset(code: str, ttl_minutes: int) -> tuple[str, str, str]:
+    """渲染找回密码邮件。"""
+    brand = settings.SMTP_FROM_NAME
+    return _render_code_email(
+        code,
+        ttl_minutes,
+        heading="重置密码",
+        lead=f"你正在重置「{brand}」账号的密码，请在 App 中输入以下验证码：",
+        footer_note="如果这不是你本人的操作，忽略这封邮件即可，你的密码不会有任何变化。",
+    )
+
+
+def render_register(code: str, ttl_minutes: int) -> tuple[str, str, str]:
+    """渲染注册验证邮件。"""
+    brand = settings.SMTP_FROM_NAME
+    return _render_code_email(
+        code,
+        ttl_minutes,
+        heading="验证邮箱",
+        lead=f"你正在注册「{brand}」账号，请在 App 中输入以下验证码完成注册：",
+        footer_note="如果这不是你本人的操作，忽略这封邮件即可，不会有账号被创建。",
+    )
