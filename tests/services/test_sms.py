@@ -87,11 +87,10 @@ class TestConfiguration:
         assert sms.is_configured() is False
 
     def test_not_configured_when_sign_name_missing(self, monkeypatch):
-        """签名和模板必须先过审，缺任何一个都发不出短信。"""
+        """赠送签名有好几个，阿里云不知道该用哪个，必须显式配置。"""
         monkeypatch.setattr(sms.settings, "ALIYUN_SMS_ACCESS_KEY_ID", "id")
         monkeypatch.setattr(sms.settings, "ALIYUN_SMS_ACCESS_KEY_SECRET", "secret")
         monkeypatch.setattr(sms.settings, "ALIYUN_SMS_SIGN_NAME", "")
-        monkeypatch.setattr(sms.settings, "ALIYUN_SMS_TEMPLATE_CODE", "SMS_1")
         assert sms.is_configured() is False
 
     def test_configured_when_all_present(self, monkeypatch):
@@ -99,7 +98,6 @@ class TestConfiguration:
             ("ALIYUN_SMS_ACCESS_KEY_ID", "id"),
             ("ALIYUN_SMS_ACCESS_KEY_SECRET", "secret"),
             ("ALIYUN_SMS_SIGN_NAME", "鹦鹉背单词"),
-            ("ALIYUN_SMS_TEMPLATE_CODE", "SMS_1"),
         ]:
             monkeypatch.setattr(sms.settings, key, value)
         assert sms.is_configured() is True
@@ -107,7 +105,7 @@ class TestConfiguration:
     async def test_send_raises_when_not_configured(self, monkeypatch):
         monkeypatch.setattr(sms.settings, "ALIYUN_SMS_ACCESS_KEY_ID", "")
         with pytest.raises(sms.SMSNotConfiguredError):
-            await sms.send_verification_code("13800138000", "123456")
+            await sms.send_verification_code("13800138000", "100001")
 
 
 class TestSendParams:
@@ -116,30 +114,38 @@ class TestSendParams:
         for key, value in [
             ("ALIYUN_SMS_ACCESS_KEY_ID", "id"),
             ("ALIYUN_SMS_SIGN_NAME", "sign"),
-            ("ALIYUN_SMS_TEMPLATE_CODE", "SMS_1"),
             ("ALIYUN_SMS_REGION", "cn-hangzhou"),
         ]:
             monkeypatch.setattr(sms.settings, key, value)
 
     def test_template_param_is_compact_json(self):
         """必须是紧凑 JSON：json.dumps 默认的 ", " 分隔符会让签名与实际内容不一致。"""
-        params = sms.build_send_params("13800138000", "86")
+        params = sms.build_send_params("13800138000", "86", "100001")
         assert ", " not in params["TemplateParam"]
 
     def test_code_placeholder_lets_aliyun_generate(self):
         """用 ##code## 占位，验证码由阿里云生成，我们不接触明文。"""
-        params = sms.build_send_params("13800138000", "86")
+        params = sms.build_send_params("13800138000", "86", "100001")
         assert "##code##" in params["TemplateParam"]
 
     def test_duplicate_policy_overwrites_old_code(self):
         """默认允许多码并存，等于把爆破空间放大数倍，必须设成覆盖。"""
-        assert sms.build_send_params("13800138000", "86")["DuplicatePolicy"] == "1"
+        assert sms.build_send_params("13800138000", "86", "100001")["DuplicatePolicy"] == "1"
 
     def test_uses_six_digit_code(self):
-        assert sms.build_send_params("13800138000", "86")["CodeLength"] == "6"
+        assert sms.build_send_params("13800138000", "86", "100001")["CodeLength"] == "6"
+
+    def test_template_variables_match_system_template(self):
+        """系统模板的变量名就是 code 和 min，对不上会发出字面写着 ${code} 的短信。"""
+        param = sms.build_send_params("13800138000", "86", "100001")["TemplateParam"]
+        assert '"code"' in param and '"min"' in param
+
+    def test_template_code_is_passed_through(self):
+        """按用途选模板：注册用 100001、重置密码用 100003。"""
+        assert sms.build_send_params("1", "86", "100003")["TemplateCode"] == "100003"
 
     def test_action_and_version(self):
-        params = sms.build_send_params("13800138000", "86")
+        params = sms.build_send_params("13800138000", "86", "100001")
         assert params["Action"] == "SendSmsVerifyCode"
         assert params["Version"] == "2017-05-25"
 
@@ -150,8 +156,8 @@ class TestSendParams:
 
     def test_nonce_differs_between_calls(self):
         """Nonce 用于防重放，两次调用必须不同。"""
-        a = sms.build_send_params("13800138000", "86")["SignatureNonce"]
-        b = sms.build_send_params("13800138000", "86")["SignatureNonce"]
+        a = sms.build_send_params("13800138000", "86", "100001")["SignatureNonce"]
+        b = sms.build_send_params("13800138000", "86", "100001")["SignatureNonce"]
         assert a != b
 
 
@@ -164,7 +170,6 @@ class TestCheckResult:
             ("ALIYUN_SMS_ACCESS_KEY_ID", "id"),
             ("ALIYUN_SMS_ACCESS_KEY_SECRET", "secret"),
             ("ALIYUN_SMS_SIGN_NAME", "sign"),
-            ("ALIYUN_SMS_TEMPLATE_CODE", "SMS_1"),
         ]:
             monkeypatch.setattr(sms.settings, key, value)
 
@@ -201,11 +206,11 @@ class TestSchemeName:
 
     def test_scheme_included_in_both_when_configured(self, monkeypatch):
         monkeypatch.setattr(sms.settings, "ALIYUN_SMS_SCHEME_NAME", "wordlens")
-        assert sms.build_send_params("13800138000", "86")["SchemeName"] == "wordlens"
+        assert sms.build_send_params("13800138000", "86", "100001")["SchemeName"] == "wordlens"
         assert sms.build_check_params("13800138000", "1", "86")["SchemeName"] == "wordlens"
 
     def test_scheme_omitted_when_blank(self, monkeypatch):
         """留空时不传该参数，让阿里云用默认方案；传空串会被判成非法方案名。"""
         monkeypatch.setattr(sms.settings, "ALIYUN_SMS_SCHEME_NAME", "")
-        assert "SchemeName" not in sms.build_send_params("13800138000", "86")
+        assert "SchemeName" not in sms.build_send_params("13800138000", "86", "100001")
         assert "SchemeName" not in sms.build_check_params("13800138000", "1", "86")

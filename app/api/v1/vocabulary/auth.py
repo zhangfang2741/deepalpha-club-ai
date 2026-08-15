@@ -290,6 +290,14 @@ def _normalized_phone(raw: str) -> str:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+# 用途 → 系统模板。注册用「登录/注册」模板，重置密码用「重置密码」模板，
+# 文案会写明用户正在做什么。
+_SMS_TEMPLATES = {
+    vercode.Purpose.PHONE_REGISTER: lambda: settings.ALIYUN_SMS_TEMPLATE_REGISTER,
+    vercode.Purpose.PHONE_PASSWORD_RESET: lambda: settings.ALIYUN_SMS_TEMPLATE_PASSWORD_RESET,
+}
+
+
 async def _send_sms_code(redis: Redis, purpose: vercode.Purpose, phone: str) -> None:
     """让阿里云发一条验证码短信。
 
@@ -304,7 +312,9 @@ async def _send_sms_code(redis: Redis, purpose: vercode.Purpose, phone: str) -> 
         )
 
     try:
-        await sms_service.send_verification_code(to_aliyun_format(phone))
+        await sms_service.send_verification_code(
+            to_aliyun_format(phone), _SMS_TEMPLATES[purpose]()
+        )
     except sms_service.SMSNotConfiguredError:
         logger.error("sms_not_configured", purpose=purpose.value)
         raise HTTPException(status_code=503, detail="短信服务暂不可用，请稍后再试") from None

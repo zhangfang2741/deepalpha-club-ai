@@ -418,7 +418,13 @@ class Settings:
         self.ALIYUN_SMS_ACCESS_KEY_ID = os.getenv("ALIYUN_SMS_ACCESS_KEY_ID", "")
         self.ALIYUN_SMS_ACCESS_KEY_SECRET = os.getenv("ALIYUN_SMS_ACCESS_KEY_SECRET", "")
         self.ALIYUN_SMS_SIGN_NAME = os.getenv("ALIYUN_SMS_SIGN_NAME", "")
-        self.ALIYUN_SMS_TEMPLATE_CODE = os.getenv("ALIYUN_SMS_TEMPLATE_CODE", "")
+        # 按用途选模板。系统赠送模板里 100001 是「登录/注册」、100003 是「重置密码」，
+        # 文案会明确写出用户正在做什么——场景和内容对上，用户判断是不是钓鱼短信时
+        # 更有依据，也符合运营商对验证码短信的内容要求。
+        self.ALIYUN_SMS_TEMPLATE_REGISTER = os.getenv("ALIYUN_SMS_TEMPLATE_REGISTER", "100001")
+        self.ALIYUN_SMS_TEMPLATE_PASSWORD_RESET = os.getenv(
+            "ALIYUN_SMS_TEMPLATE_PASSWORD_RESET", "100003"
+        )
         # 控制台「号码认证方案管理」里创建的方案名称。发码和核验必须用同一个，
         # 不填则走阿里云的「默认方案」。
         self.ALIYUN_SMS_SCHEME_NAME = os.getenv("ALIYUN_SMS_SCHEME_NAME", "")

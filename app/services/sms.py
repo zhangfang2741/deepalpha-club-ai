@@ -43,14 +43,13 @@ class SMSResendTooSoonError(Exception):
 def is_configured() -> bool:
     """凭据与签名/模板是否齐全。
 
-    签名和模板虽然免申请，但仍要在控制台选定后填进来——阿里云需要知道
-    用哪一套系统模板发信。
+    模板 CODE 有内置默认值（系统赠送模板），签名必须显式配置——赠送签名有好几个，
+    阿里云不知道该用哪一个。
     """
     return bool(
         settings.ALIYUN_SMS_ACCESS_KEY_ID
         and settings.ALIYUN_SMS_ACCESS_KEY_SECRET
         and settings.ALIYUN_SMS_SIGN_NAME
-        and settings.ALIYUN_SMS_TEMPLATE_CODE
     )
 
 
@@ -107,7 +106,7 @@ def _apply_scheme(params: dict[str, str]) -> None:
         params["SchemeName"] = settings.ALIYUN_SMS_SCHEME_NAME
 
 
-def build_send_params(phone: str, country_code: str) -> dict[str, str]:
+def build_send_params(phone: str, country_code: str, template_code: str) -> dict[str, str]:
     """组装 SendSmsVerifyCode 的参数（不含 Signature）。"""
     params = _common_params("SendSmsVerifyCode")
     params.update(
@@ -115,9 +114,10 @@ def build_send_params(phone: str, country_code: str) -> dict[str, str]:
             "PhoneNumber": phone,
             "CountryCode": country_code,
             "SignName": settings.ALIYUN_SMS_SIGN_NAME,
-            "TemplateCode": settings.ALIYUN_SMS_TEMPLATE_CODE,
-            # ##code## 是占位符，让阿里云按 CodeLength/CodeType 自动生成验证码
-            # 并填进模板。我们全程不接触明文验证码。
+            "TemplateCode": template_code,
+            # 系统模板的两个变量就叫 code 和 min（「您的验证码为${code}。以上
+            # 验证码${min}分钟内有效」）。##code## 是占位符，让阿里云按
+            # CodeLength 自动生成验证码填进去，我们全程不接触明文。
             "TemplateParam": json.dumps(
                 {"code": "##code##", "min": str(settings.EMAIL_CODE_TTL // 60)},
                 ensure_ascii=False,
@@ -161,8 +161,15 @@ async def _call(params: dict[str, str]) -> dict:
         raise SMSSendError from exc
 
 
-async def send_verification_code(phone: str, country_code: str = "86") -> None:
+async def send_verification_code(
+    phone: str, template_code: str, country_code: str = "86"
+) -> None:
     """让阿里云生成并发送一条验证码短信。
+
+    Args:
+        phone: 阿里云格式的手机号（国内 11 位裸号 / 国际 00 开头）。
+        template_code: 按用途选定的系统模板，见 settings.ALIYUN_SMS_TEMPLATE_*。
+        country_code: 国家码。
 
     Raises:
         SMSNotConfiguredError: 未配置凭据。
@@ -172,7 +179,7 @@ async def send_verification_code(phone: str, country_code: str = "86") -> None:
     if not is_configured():
         raise SMSNotConfiguredError
 
-    body = await _call(build_send_params(phone, country_code))
+    body = await _call(build_send_params(phone, country_code, template_code))
 
     if body.get("Code") != "OK":
         code = str(body.get("Code", ""))
