@@ -132,3 +132,22 @@ async def test_keys_are_namespaced_and_do_not_leak_email():
         key = call.args[0]
         assert key.startswith("vocab:pwreset:")
         assert EMAIL not in key
+
+
+# ---------- 发信失败的回滚 ----------
+
+
+async def test_discard_code_also_clears_cooldown():
+    """发信失败时必须连冷却一起解除。
+
+    回归用例：上线首测时发现，SMTP 未配置导致 503，但冷却锁已经先上了，
+    用户被一次配置问题锁在门外 60 秒，期间怎么点都没用。既然邮件没发出去，
+    就该当这次请求没发生过。
+    """
+    redis = _redis()
+    await pr.discard_code(redis, EMAIL)
+
+    deleted = [c.args[0] for c in redis.delete.await_args_list]
+    assert any("cooldown" in k for k in deleted), "没有解除冷却"
+    assert any("code" in k for k in deleted), "没有作废验证码"
+    assert any("attempts" in k for k in deleted), "没有清除错误计数"
