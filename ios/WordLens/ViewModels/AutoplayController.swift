@@ -110,7 +110,7 @@ final class AutoplayController: ObservableObject {
             Pronouncer.shared.updateNowPlayingTitle(word)
         } else {
             Pronouncer.shared.beginNowPlayingSession(
-                title: word, subtitle: "鹦鹉学舌 · \(dataSource?.autoplaySubtitle ?? "复习")"
+                title: word, subtitle: "\(AppConfig.displayName) · \(dataSource?.autoplaySubtitle ?? "复习")"
             )
         }
         task?.cancel()

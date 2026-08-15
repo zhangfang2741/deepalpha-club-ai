@@ -67,17 +67,16 @@ enum PronunciationPurpose: String {
 
 /// 是否在复习卡 / 单词详情出现时自动发音（存 UserDefaults，设置页可切换）。
 ///
-/// 默认开：此前 master 已上线「点下一个自动读音」的无条件行为，把它统一收敛到这个
-/// 开关后，默认保持原有体验，用户可在发音设置里关掉。
+/// 默认关。App 一打开就自己出声是很冒犯的默认值——用户可能在教室、地铁、
+/// 会议里，或者正连着蓝牙音箱。发声这种带外部效果的行为应当由用户主动开启，
+/// 而不是让他先被吓一跳再去设置里找开关。想要的人在「设置 → 发音设置」里
+/// 一键打开即可。
 enum PronunciationAutoplay {
     private static let key = "pronunciation_autoplay"
 
     static var isEnabled: Bool {
-        // 未设置过时返回 true（默认开）；设置过后按存的值。
-        get {
-            if UserDefaults.standard.object(forKey: key) == nil { return true }
-            return UserDefaults.standard.bool(forKey: key)
-        }
+        // 未设置过时返回 false（默认关）；设置过后按存的值。
+        get { UserDefaults.standard.bool(forKey: key) }
         set { UserDefaults.standard.set(newValue, forKey: key) }
     }
 }
