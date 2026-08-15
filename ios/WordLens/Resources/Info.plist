@@ -33,7 +33,7 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>需要访问麦克风，用于语音听写时录下你说的单词</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>需要使用语音识别，把你说出的单词转成文字以判定听写是否正确</string>
+	<string>需要使用语音识别，把你说出的单词转成文字以判定听写是否正确。录音会发送至 Apple 的语音识别服务处理</string>
 	<!-- 自动播放复习单词时支持后台/息屏继续朗读: iOS 要求显式声明 audio
 	     后台能力, 没有这一条 AVAudioSession 配 .playback 也会被系统默默
 	     切回前台 session, App 退后台立刻停. .playback 类别 + UIBackgroundModes

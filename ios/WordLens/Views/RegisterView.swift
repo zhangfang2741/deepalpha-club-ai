@@ -76,6 +76,11 @@ struct RegisterView: View {
                         }
                         .buttonStyle(.pressable)
                         .disabled(!canSubmit || auth.isLoading)
+
+                        // 用户在这一步才第一次交出邮箱和密码，法务文本必须在
+                        // 提交之前就够得着。设置页那两个入口要登录后才能进，
+                        // 覆盖不到注册这个真正的收集时点。
+                        legalConsentNotice
                     }
                     .padding(24)
                 }
@@ -83,6 +88,25 @@ struct RegisterView: View {
             .navigationTitle("注册")
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+
+    /// 注册按钮下方的条款告知。用 Text 拼接而不是三段 HStack：中文换行位置
+    /// 由系统决定，硬拼会在窄屏和大字号下断得很难看。
+    private var legalConsentNotice: some View {
+        VStack(spacing: 6) {
+            Text("点击「注册」即表示你已阅读并同意")
+            HStack(spacing: 4) {
+                Link("《服务条款》", destination: AppConfig.termsOfServiceURL)
+                Text("和")
+                Link("《隐私政策》", destination: AppConfig.privacyPolicyURL)
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(Theme.textSecondary)
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 4)
+        .accessibilityElement(children: .combine)
     }
 
     private func checklistRow(_ text: String, _ satisfied: Bool) -> some View {

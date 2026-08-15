@@ -21,6 +21,41 @@ final class SpeechRecognizer: ObservableObject {
     @Published private(set) var transcript = ""
     /// 出错或权限被拒时的提示，供 UI 展示。
     @Published private(set) var errorMessage: String?
+    /// 当前卡在哪项权限上。非 nil 时 UI 会在提示旁给出「去设置」入口。
+    @Published private(set) var permissionBlocker: PermissionBlocker?
+
+    /// 语音听写需要麦克风 + 语音识别两项权限，任一缺失都用不了。
+    ///
+    /// 必须区分是哪一项、以及是「拒绝」还是「受限」：这三种情况用户要去做的事
+    /// 完全不同，笼统提示一句「需要权限」等于没说。尤其是被拒之后系统不会再弹
+    /// 授权框，用户在 App 里怎么点都没反应，必须给一条通往系统设置的明路。
+    enum PermissionBlocker {
+        /// 用户拒绝了语音识别。
+        case speechDenied
+        /// 语音识别被系统策略限制（屏幕使用时间、MDM 描述文件等）。
+        case speechRestricted
+        /// 用户拒绝了麦克风。
+        case microphoneDenied
+
+        var message: String {
+            switch self {
+            case .speechDenied:
+                "语音识别权限已被拒绝，可在系统设置中开启；也可以直接打字听写"
+            case .speechRestricted:
+                "语音识别被系统限制（如「屏幕使用时间」），无法开启；请改用打字听写"
+            case .microphoneDenied:
+                "麦克风权限已被拒绝，可在系统设置中开启；也可以直接打字听写"
+            }
+        }
+
+        /// 受限是系统策略造成的，跳到本 App 的设置页也找不到开关，不给「去设置」。
+        var isFixableInSettings: Bool {
+            switch self {
+            case .speechDenied, .microphoneDenied: true
+            case .speechRestricted: false
+            }
+        }
+    }
 
     /// 英文听写固定用 en-US。识别器在部分机型/语言包缺失时可能为 nil。
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
@@ -50,15 +85,29 @@ final class SpeechRecognizer: ObservableObject {
     /// 识别器当前是否可用（网络/语言包等原因可能暂时不可用）。
     var isAvailable: Bool { recognizer?.isAvailable ?? false }
 
-    /// 请求语音识别 + 麦克风两项权限，任一被拒都算失败。
-    private func requestAuthorization() async -> Bool {
+    /// 请求语音识别 + 麦克风两项权限。返回 nil 表示两项都拿到了，否则返回卡在哪一项。
+    ///
+    /// 两个 request 方法在权限已被拒时会立刻返回当前状态、不再弹窗，所以这里
+    /// 既是「首次申请」也是「复查状态」的入口，调用方不用分两条路径。
+    private func requestAuthorization() async -> PermissionBlocker? {
         let speechStatus = await withCheckedContinuation { cont in
             SFSpeechRecognizer.requestAuthorization { cont.resume(returning: $0) }
         }
-        guard speechStatus == .authorized else { return false }
-        return await withCheckedContinuation { cont in
+        switch speechStatus {
+        case .authorized:
+            break
+        case .restricted:
+            return .speechRestricted
+        case .denied, .notDetermined:
+            return .speechDenied
+        @unknown default:
+            return .speechDenied
+        }
+
+        let micGranted = await withCheckedContinuation { cont in
             AVAudioApplication.requestRecordPermission { cont.resume(returning: $0) }
         }
+        return micGranted ? nil : .microphoneDenied
     }
 
     /// 开始一次语音听写：申请权限 → 配录音会话 → 启动引擎与识别任务。
@@ -68,10 +117,12 @@ final class SpeechRecognizer: ObservableObject {
         errorMessage = nil
         transcript = ""
 
-        guard await requestAuthorization() else {
-            errorMessage = "需要麦克风和语音识别权限，可在系统设置里开启"
+        if let blocker = await requestAuthorization() {
+            permissionBlocker = blocker
+            errorMessage = blocker.message
             return
         }
+        permissionBlocker = nil
         guard let recognizer, recognizer.isAvailable else {
             errorMessage = "语音识别暂不可用，请稍后再试"
             return
