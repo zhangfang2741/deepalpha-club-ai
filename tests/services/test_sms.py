@@ -214,3 +214,42 @@ class TestSchemeName:
         monkeypatch.setattr(sms.settings, "ALIYUN_SMS_SCHEME_NAME", "")
         assert "SchemeName" not in sms.build_send_params("13800138000", "86", "100001")
         assert "SchemeName" not in sms.build_check_params("13800138000", "1", "86")
+
+
+class TestCheckErrorClassification:
+    """区分「验证码不对」和「系统故障」。
+
+    两者对用户的含义完全不同：前者该提示「验证码错误」让他重输，后者该提示
+    「稍后再试」。混为一谈的话，输错验证码的用户会看到「请稍后再试」，
+    再试一百次也没用——问题出在他输错了。
+    """
+
+    @pytest.fixture(autouse=True)
+    def _creds(self, monkeypatch):
+        for key, value in [
+            ("ALIYUN_SMS_ACCESS_KEY_ID", "id"),
+            ("ALIYUN_SMS_ACCESS_KEY_SECRET", "secret"),
+            ("ALIYUN_SMS_SIGN_NAME", "sign"),
+        ]:
+            monkeypatch.setattr(sms.settings, key, value)
+
+    async def _check(self, monkeypatch, body: dict):
+        async def fake_call(params):
+            return body
+
+        monkeypatch.setattr(sms, "_call", fake_call)
+        return await sms.check_verification_code("13800138000", "123456")
+
+    async def test_isv_error_is_treated_as_wrong_code(self, monkeypatch):
+        """带 isv. 前缀的是阿里云业务层失败，对用户就是「验证码错误」。"""
+        with pytest.raises(sms.SMSCodeInvalidError):
+            await self._check(monkeypatch, {"Code": "isv.SMS_VERIFY_CODE_NOT_EXIST"})
+
+    async def test_auth_error_is_treated_as_system_failure(self, monkeypatch):
+        """鉴权/配置错误不能伪装成「验证码错误」，否则配置问题会被永远掩盖。"""
+        with pytest.raises(sms.SMSSendError):
+            await self._check(monkeypatch, {"Code": "InvalidAccessKeyId"})
+
+    async def test_signature_error_is_system_failure(self, monkeypatch):
+        with pytest.raises(sms.SMSSendError):
+            await self._check(monkeypatch, {"Code": "SignatureDoesNotMatch"})
