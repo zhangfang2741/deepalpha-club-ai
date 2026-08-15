@@ -144,3 +144,56 @@ async def _clear(redis: Redis, purpose: Purpose, identifier: str) -> None:
     """清掉验证码与计数。冷却标记保留，让它自己过期，避免被用来刷发信。"""
     await cache.delete(redis, _code_key(purpose, identifier))
     await cache.delete(redis, _attempts_key(purpose, identifier))
+
+
+# ---------------------------------------------------------------------------
+# 「码由外部服务保管」模式下的辅助函数
+#
+# 阿里云号码认证服务自己生成、保管和核验短信验证码，我们拿不到明文，
+# 上面那套 issue_code / verify_code 用不上。但有两件事仍然必须自己做：
+#   1. 冷却：省掉一次注定被拒的 API 调用（按次计费），并给出清楚的中文提示；
+#   2. 错误次数：阿里云不暴露「错几次就作废」，而 6 位数字只有 100 万种可能，
+#      有效期内不限次数猜是能撞开的，每次猜还只是一次廉价的 API 调用。
+# ---------------------------------------------------------------------------
+
+
+async def is_cooling_down(redis: Redis, purpose: Purpose, identifier: str) -> bool:
+    """距上次发送是否还在冷却期内。"""
+    return await cache.exists(redis, _cooldown_key(purpose, identifier))
+
+
+async def start_cooldown(redis: Redis, purpose: Purpose, identifier: str) -> None:
+    """标记「刚发过一次」，并重置错误计数。
+
+    重置计数是必要的：上一轮攒下的错误次数不该算到新验证码头上，否则用户
+    重新获取验证码后可能一次都还没输就被判「错误次数过多」。
+    """
+    await cache.set(
+        redis,
+        _cooldown_key(purpose, identifier),
+        1,
+        expire=settings.EMAIL_CODE_RESEND_COOLDOWN,
+    )
+    await cache.set(
+        redis, _attempts_key(purpose, identifier), 0, expire=settings.EMAIL_CODE_TTL
+    )
+
+
+async def assert_attempts_left(redis: Redis, purpose: Purpose, identifier: str) -> None:
+    """错误次数已用尽时抛 TooManyAttemptsError。"""
+    raw = await cache.get(redis, _attempts_key(purpose, identifier))
+    if raw is not None and int(raw) >= settings.EMAIL_CODE_MAX_ATTEMPTS:
+        raise TooManyAttemptsError
+
+
+async def record_failed_attempt(redis: Redis, purpose: Purpose, identifier: str) -> None:
+    """记一次校验失败。"""
+    key = _attempts_key(purpose, identifier)
+    await redis.incr(key)
+    # incr 对不存在的 key 会新建且不带 TTL，补一个过期时间，避免留下永不过期的 key。
+    await redis.expire(key, settings.EMAIL_CODE_TTL)
+
+
+async def clear_attempts(redis: Redis, purpose: Purpose, identifier: str) -> None:
+    """校验通过后清掉计数。"""
+    await cache.delete(redis, _attempts_key(purpose, identifier))

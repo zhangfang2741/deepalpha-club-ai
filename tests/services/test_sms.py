@@ -1,7 +1,11 @@
-"""阿里云短信 RPC 签名测试。
+"""阿里云号码认证服务（PNVS）短信验证码测试。
 
-签名算错的话线上表现是「一直 SignatureDoesNotMatch，但看不出哪里错」，
-而且拿不到凭据就没法端到端验证。这组用例把规范里几条容易写错的规则钉死。
+两块重点：
+1. RPC 签名。算错的线上表现是「一直 SignatureDoesNotMatch，但看不出哪里错」，
+   而且拿不到凭据就没法端到端验证，只能靠单测钉住规范里几条易错规则。
+2. 核验结果的判定。阿里云文档明确写了「接口调用成功不代表验证码核验成功」，
+   只看 Code == "OK" 的话任何验证码都会被判通过——这是整个接入里后果最严重
+   的一个坑，单独测。
 """
 
 import pytest
@@ -106,9 +110,9 @@ class TestConfiguration:
             await sms.send_verification_code("13800138000", "123456")
 
 
-class TestTemplateParam:
-    def test_template_param_is_compact_json(self, monkeypatch):
-        """必须是紧凑 JSON：json.dumps 默认的 ", " 分隔符会让签名与实际内容不一致。"""
+class TestSendParams:
+    @pytest.fixture(autouse=True)
+    def _creds(self, monkeypatch):
         for key, value in [
             ("ALIYUN_SMS_ACCESS_KEY_ID", "id"),
             ("ALIYUN_SMS_SIGN_NAME", "sign"),
@@ -116,6 +120,77 @@ class TestTemplateParam:
             ("ALIYUN_SMS_REGION", "cn-hangzhou"),
         ]:
             monkeypatch.setattr(sms.settings, key, value)
-        params = sms._build_params("13800138000", {"code": "123456"})
-        assert params["TemplateParam"] == '{"code":"123456"}'
+
+    def test_template_param_is_compact_json(self):
+        """必须是紧凑 JSON：json.dumps 默认的 ", " 分隔符会让签名与实际内容不一致。"""
+        params = sms.build_send_params("13800138000", "86")
         assert ", " not in params["TemplateParam"]
+
+    def test_code_placeholder_lets_aliyun_generate(self):
+        """用 ##code## 占位，验证码由阿里云生成，我们不接触明文。"""
+        params = sms.build_send_params("13800138000", "86")
+        assert "##code##" in params["TemplateParam"]
+
+    def test_duplicate_policy_overwrites_old_code(self):
+        """默认允许多码并存，等于把爆破空间放大数倍，必须设成覆盖。"""
+        assert sms.build_send_params("13800138000", "86")["DuplicatePolicy"] == "1"
+
+    def test_uses_six_digit_code(self):
+        assert sms.build_send_params("13800138000", "86")["CodeLength"] == "6"
+
+    def test_action_and_version(self):
+        params = sms.build_send_params("13800138000", "86")
+        assert params["Action"] == "SendSmsVerifyCode"
+        assert params["Version"] == "2017-05-25"
+
+    def test_check_params_carry_code(self):
+        params = sms.build_check_params("13800138000", "123456", "86")
+        assert params["Action"] == "CheckSmsVerifyCode"
+        assert params["VerifyCode"] == "123456"
+
+    def test_nonce_differs_between_calls(self):
+        """Nonce 用于防重放，两次调用必须不同。"""
+        a = sms.build_send_params("13800138000", "86")["SignatureNonce"]
+        b = sms.build_send_params("13800138000", "86")["SignatureNonce"]
+        assert a != b
+
+
+class TestCheckResult:
+    """核验结果只认 Model.VerifyResult，不能只看 Code。"""
+
+    @pytest.fixture(autouse=True)
+    def _creds(self, monkeypatch):
+        for key, value in [
+            ("ALIYUN_SMS_ACCESS_KEY_ID", "id"),
+            ("ALIYUN_SMS_ACCESS_KEY_SECRET", "secret"),
+            ("ALIYUN_SMS_SIGN_NAME", "sign"),
+            ("ALIYUN_SMS_TEMPLATE_CODE", "SMS_1"),
+        ]:
+            monkeypatch.setattr(sms.settings, key, value)
+
+    async def _check_with(self, monkeypatch, body: dict) -> bool:
+        async def fake_call(params):
+            return body
+
+        monkeypatch.setattr(sms, "_call", fake_call)
+        return await sms.check_verification_code("13800138000", "123456")
+
+    async def test_pass_means_success(self, monkeypatch):
+        assert await self._check_with(
+            monkeypatch, {"Code": "OK", "Model": {"VerifyResult": "PASS"}}
+        ) is True
+
+    async def test_unknown_means_failure(self, monkeypatch):
+        """Code 是 OK 但 VerifyResult 不是 PASS —— 必须判为失败。"""
+        assert await self._check_with(
+            monkeypatch, {"Code": "OK", "Model": {"VerifyResult": "UNKNOWN"}}
+        ) is False
+
+    async def test_missing_model_means_failure(self, monkeypatch):
+        """响应缺 Model 时不能默认放行。"""
+        assert await self._check_with(monkeypatch, {"Code": "OK"}) is False
+
+    async def test_api_error_raises_not_returns_false(self, monkeypatch):
+        """请求本身失败要区别于「验证码不对」，否则会误扣用户的错误次数。"""
+        with pytest.raises(sms.SMSSendError):
+            await self._check_with(monkeypatch, {"Code": "InvalidAccessKeyId"})

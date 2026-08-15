@@ -290,25 +290,60 @@ def _normalized_phone(raw: str) -> str:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-async def _issue_and_send_sms(redis: Redis, purpose: vercode.Purpose, phone: str) -> None:
-    """签发验证码并发短信。失败时回滚，让用户可以立刻重试。"""
-    try:
-        code = await vercode.issue_code(redis, purpose, phone)
-    except vercode.ResendTooSoonError:
+async def _send_sms_code(redis: Redis, purpose: vercode.Purpose, phone: str) -> None:
+    """让阿里云发一条验证码短信。
+
+    与邮箱链路不同：验证码由阿里云生成、保管、核验，我们不签发也不存储明文。
+    Redis 这边只留一个本地冷却标记——省掉一次注定被阿里云拒掉的 API 调用
+    （按次计费），也能给出比透传阿里云错误码更清楚的中文提示。
+    """
+    if await vercode.is_cooling_down(redis, purpose, phone):
         raise HTTPException(
             status_code=429,
             detail=f"验证码已发送，请 {settings.EMAIL_CODE_RESEND_COOLDOWN} 秒后再试",
+        )
+
+    try:
+        await sms_service.send_verification_code(to_aliyun_format(phone))
+    except sms_service.SMSNotConfiguredError:
+        logger.error("sms_not_configured", purpose=purpose.value)
+        raise HTTPException(status_code=503, detail="短信服务暂不可用，请稍后再试") from None
+    except sms_service.SMSResendTooSoonError:
+        raise HTTPException(status_code=429, detail="验证码发送过于频繁，请稍后再试") from None
+    except sms_service.SMSSendError:
+        raise HTTPException(status_code=502, detail="验证码发送失败，请稍后再试") from None
+
+    # 发成功才上冷却和重置错误计数——发失败还锁着用户，会把一次临时故障
+    # 变成 60 秒的干等（这个坑在邮件链路上真踩过一次）。
+    await vercode.start_cooldown(redis, purpose, phone)
+
+
+async def _check_sms_code(redis: Redis, purpose: vercode.Purpose, phone: str, code: str) -> None:
+    """核验短信验证码，不通过则抛 HTTPException。
+
+    阿里云不暴露「错几次就作废」这个控制，所以在本地补一个计数器：6 位数字
+    只有 100 万种可能，有效期内不限次数猜是能撞开的，而每次猜都只是一次
+    廉价的 API 调用。
+    """
+    try:
+        await vercode.assert_attempts_left(redis, purpose, phone)
+    except vercode.TooManyAttemptsError:
+        raise HTTPException(
+            status_code=429, detail="验证码错误次数过多，请重新获取"
         ) from None
 
     try:
-        await sms_service.send_verification_code(to_aliyun_format(phone), code)
+        passed = await sms_service.check_verification_code(to_aliyun_format(phone), code)
     except sms_service.SMSNotConfiguredError:
-        await vercode.discard_code(redis, purpose, phone)
-        logger.error("sms_not_configured", purpose=purpose.value)
         raise HTTPException(status_code=503, detail="短信服务暂不可用，请稍后再试") from None
     except sms_service.SMSSendError:
-        await vercode.discard_code(redis, purpose, phone)
-        raise HTTPException(status_code=502, detail="验证码发送失败，请稍后再试") from None
+        raise HTTPException(status_code=502, detail="验证码校验失败，请稍后再试") from None
+
+    if not passed:
+        await vercode.record_failed_attempt(redis, purpose, phone)
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+
+    await vercode.clear_attempts(redis, purpose, phone)
 
 
 @router.post("/phone/register/request-code")
@@ -324,7 +359,7 @@ async def request_phone_register_code(
     if await user_service.get_user_by_phone(db, phone) is not None:
         raise HTTPException(status_code=400, detail="该手机号已被注册，请直接登录")
 
-    await _issue_and_send_sms(redis, vercode.Purpose.PHONE_REGISTER, phone)
+    await _send_sms_code(redis, vercode.Purpose.PHONE_REGISTER, phone)
     logger.info("phone_register_code_sent")
     return {"sent": True}
 
@@ -345,12 +380,7 @@ async def register_by_phone(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    try:
-        ok = await vercode.verify_code(redis, vercode.Purpose.PHONE_REGISTER, phone, payload.code)
-    except vercode.TooManyAttemptsError:
-        raise HTTPException(status_code=429, detail="验证码错误次数过多，已失效，请重新获取") from None
-    if not ok:
-        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+    await _check_sms_code(redis, vercode.Purpose.PHONE_REGISTER, phone, payload.code)
 
     if await user_service.get_user_by_phone(db, phone) is not None:
         raise HTTPException(status_code=400, detail="该手机号已被注册")
@@ -395,7 +425,7 @@ async def request_phone_password_reset(
     """
     phone = _normalized_phone(payload.phone)
     if await user_service.get_user_by_phone(db, phone) is not None:
-        await _issue_and_send_sms(redis, vercode.Purpose.PHONE_PASSWORD_RESET, phone)
+        await _send_sms_code(redis, vercode.Purpose.PHONE_PASSWORD_RESET, phone)
         logger.info("phone_password_reset_code_sent")
     else:
         logger.info("phone_password_reset_requested_for_unknown_phone")
@@ -418,14 +448,7 @@ async def confirm_phone_password_reset(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    try:
-        ok = await vercode.verify_code(
-            redis, vercode.Purpose.PHONE_PASSWORD_RESET, phone, payload.code
-        )
-    except vercode.TooManyAttemptsError:
-        raise HTTPException(status_code=429, detail="验证码错误次数过多，已失效，请重新获取") from None
-    if not ok:
-        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+    await _check_sms_code(redis, vercode.Purpose.PHONE_PASSWORD_RESET, phone, payload.code)
 
     user = await user_service.get_user_by_phone(db, phone)
     if user is None:

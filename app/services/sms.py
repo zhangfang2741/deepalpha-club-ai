@@ -1,14 +1,16 @@
-"""短信发送（阿里云短信服务 SendSms）。
+"""短信验证码（阿里云号码认证服务 PNVS / Dypnsapi）。
 
-用标准库自己算 RPC 签名，不引入 aliyun-python-sdk-core：
-- 只需要 SendSms 这一个接口，为它拉进一整套 SDK（及其对 python-dateutil、
-  jmespath 等的传递依赖）不划算；
-- 签名算法是公开且稳定的 RPC v1.0 规范，用 hmac + urllib 三十行就能实现；
-- 和 app/services/email.py 用 smtplib 而不是阿里云 SDK 是同一个取舍。
+用的是「短信认证服务」而不是通用短信服务（dysmsapi），差别很实质：
+- 免自建签名和模板的审核，用系统提供的签名模板，开通即可用；
+- **验证码由阿里云生成、保管和核验**，我们不接触明文，也不自己存。
 
-⚠️ 与邮件不同，短信在国内是强监管业务：签名（SignName）和模板（TemplateCode）
-都必须先在控制台申请并通过审核才能使用，审核不通过时接口会返回业务错误码而不是
-HTTP 错误。凭据留空时视为未配置，调用方应据此降级。
+因此手机号这条链路和邮箱不同：邮箱是「本地生成码 → 存 Redis 哈希 → 本地比对」，
+手机号是「调 SendSmsVerifyCode → 调 CheckSmsVerifyCode」，两次 API 调用。
+Redis 这边只保留一个错误次数计数器（见下方 verify_code 的说明）。
+
+签名算法仍是阿里云通用的 RPC v1.0，与 dysmsapi 完全一致，所以 build_signature
+可以复用。用标准库自己实现而不引 aliyun SDK，理由同 app/services/email.py
+用 smtplib：只需要两个接口，签名算法公开且稳定。
 """
 from __future__ import annotations
 
@@ -27,15 +29,23 @@ from app.core.logging import logger
 
 
 class SMSNotConfiguredError(Exception):
-    """未配置阿里云短信凭据。"""
+    """未配置阿里云短信认证凭据。"""
 
 
 class SMSSendError(Exception):
     """短信发送失败。"""
 
 
+class SMSResendTooSoonError(Exception):
+    """阿里云侧判定重发过于频繁。"""
+
+
 def is_configured() -> bool:
-    """短信凭据与签名/模板是否齐全。"""
+    """凭据与签名/模板是否齐全。
+
+    签名和模板虽然免申请，但仍要在控制台选定后填进来——阿里云需要知道
+    用哪一套系统模板发信。
+    """
     return bool(
         settings.ALIYUN_SMS_ACCESS_KEY_ID
         and settings.ALIYUN_SMS_ACCESS_KEY_SECRET
@@ -71,12 +81,11 @@ def build_signature(params: dict[str, str], secret: str, method: str = "GET") ->
     return base64.b64encode(digest).decode("utf-8")
 
 
-def _build_params(phone: str, template_param: dict[str, str]) -> dict[str, str]:
-    """组装 SendSms 的公共参数与业务参数（不含 Signature）。"""
+def _common_params(action: str) -> dict[str, str]:
+    """RPC 公共参数。"""
     return {
-        # 公共参数
         "AccessKeyId": settings.ALIYUN_SMS_ACCESS_KEY_ID,
-        "Action": "SendSms",
+        "Action": action,
         "Format": "JSON",
         "RegionId": settings.ALIYUN_SMS_REGION,
         "SignatureMethod": "HMAC-SHA1",
@@ -85,61 +94,129 @@ def _build_params(phone: str, template_param: dict[str, str]) -> dict[str, str]:
         "SignatureVersion": "1.0",
         "Timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "Version": "2017-05-25",
-        # 业务参数
-        "PhoneNumbers": phone,
-        "SignName": settings.ALIYUN_SMS_SIGN_NAME,
-        "TemplateCode": settings.ALIYUN_SMS_TEMPLATE_CODE,
-        # 模板变量必须是紧凑 JSON：阿里云按字符串原样参与签名，
-        # json.dumps 默认的 ", " 分隔符会让签名与实际发送内容不一致。
-        "TemplateParam": json.dumps(template_param, ensure_ascii=False, separators=(",", ":")),
     }
 
 
-async def send_verification_code(phone: str, code: str) -> None:
-    """给手机号发送验证码短信。
+def build_send_params(phone: str, country_code: str) -> dict[str, str]:
+    """组装 SendSmsVerifyCode 的参数（不含 Signature）。"""
+    params = _common_params("SendSmsVerifyCode")
+    params.update(
+        {
+            "PhoneNumber": phone,
+            "CountryCode": country_code,
+            "SignName": settings.ALIYUN_SMS_SIGN_NAME,
+            "TemplateCode": settings.ALIYUN_SMS_TEMPLATE_CODE,
+            # ##code## 是占位符，让阿里云按 CodeLength/CodeType 自动生成验证码
+            # 并填进模板。我们全程不接触明文验证码。
+            "TemplateParam": json.dumps(
+                {"code": "##code##", "min": str(settings.EMAIL_CODE_TTL // 60)},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            "CodeLength": "6",
+            "ValidTime": str(settings.EMAIL_CODE_TTL),
+            "Interval": str(settings.EMAIL_CODE_RESEND_COOLDOWN),
+            # 1 = 新码覆盖旧码。默认允许多个码同时有效，那意味着用户连点三次
+            # 之后三个码都能用，等于把爆破空间放大了三倍。
+            "DuplicatePolicy": "1",
+        }
+    )
+    return params
 
-    Args:
-        phone: E.164 或国内 11 位手机号。国际号码阿里云要求 00 开头的格式，
-            由调用方在 to_aliyun_format 里转换。
-        code: 6 位验证码，会填进模板的 ${code} 变量。
+
+def build_check_params(phone: str, code: str, country_code: str) -> dict[str, str]:
+    """组装 CheckSmsVerifyCode 的参数（不含 Signature）。"""
+    params = _common_params("CheckSmsVerifyCode")
+    params.update(
+        {
+            "PhoneNumber": phone,
+            "VerifyCode": code,
+            "CountryCode": country_code,
+        }
+    )
+    return params
+
+
+async def _call(params: dict[str, str]) -> dict:
+    """签名并调用阿里云接口，返回解析后的响应体。"""
+    params["Signature"] = build_signature(params, settings.ALIYUN_SMS_ACCESS_KEY_SECRET)
+    try:
+        async with httpx.AsyncClient(timeout=settings.SMS_TIMEOUT_SECONDS) as client:
+            resp = await client.get(settings.ALIYUN_SMS_ENDPOINT, params=params)
+        return resp.json()
+    except Exception as exc:
+        logger.exception("sms_request_failed", action=params.get("Action"), error=str(exc))
+        raise SMSSendError from exc
+
+
+async def send_verification_code(phone: str, country_code: str = "86") -> None:
+    """让阿里云生成并发送一条验证码短信。
 
     Raises:
-        SMSNotConfiguredError: 未配置凭据/签名/模板。
-        SMSSendError: 网络异常或阿里云返回业务错误。
+        SMSNotConfiguredError: 未配置凭据。
+        SMSResendTooSoonError: 阿里云侧判定重发过于频繁。
+        SMSSendError: 其它失败。
     """
     if not is_configured():
         raise SMSNotConfiguredError
 
-    params = _build_params(phone, {"code": code})
-    params["Signature"] = build_signature(params, settings.ALIYUN_SMS_ACCESS_KEY_SECRET)
+    body = await _call(build_send_params(phone, country_code))
 
-    try:
-        async with httpx.AsyncClient(timeout=settings.SMS_TIMEOUT_SECONDS) as client:
-            resp = await client.get(settings.ALIYUN_SMS_ENDPOINT, params=params)
-        body = resp.json()
-    except Exception as exc:
-        logger.exception("sms_send_request_failed", error=str(exc))
-        raise SMSSendError from exc
-
-    # 阿里云对业务失败也返回 HTTP 200，必须看 Code 字段。
     if body.get("Code") != "OK":
-        # 手机号属于个人信息，日志里只留后四位，够定位「某号段整体失败」
-        # 这类问题，又不至于把用户手机号写满日志。
+        code = str(body.get("Code", ""))
+        # 手机号属于个人信息，日志里只留后四位。
         logger.error(
             "sms_send_rejected",
+            code=code,
+            message=body.get("Message"),
+            phone_suffix=phone[-4:],
+        )
+        # 阿里云对「发得太频繁」有专门的错误码，转成独立异常让上层给出
+        # 「请稍后再试」而不是笼统的「发送失败」。
+        if "FREQUENCY" in code.upper() or "LIMIT" in code.upper():
+            raise SMSResendTooSoonError(body.get("Message") or code)
+        raise SMSSendError(body.get("Message") or code)
+
+    logger.info("sms_sent", phone_suffix=phone[-4:])
+
+
+async def check_verification_code(phone: str, code: str, country_code: str = "86") -> bool:
+    """向阿里云核验验证码，正确返回 True。
+
+    ⚠️ 阿里云文档明确写了「接口调用成功不代表短信验证码核验成功」：请求本身
+    成功时 Code 也是 OK，真正的结果在 Model.VerifyResult 里（PASS 才算通过）。
+    只看 Code 的话任何验证码都能过——这是这个接口最容易写错的地方。
+
+    Raises:
+        SMSNotConfiguredError: 未配置凭据。
+        SMSSendError: 请求失败（区别于「验证码不对」）。
+    """
+    if not is_configured():
+        raise SMSNotConfiguredError
+
+    body = await _call(build_check_params(phone, code, country_code))
+
+    if body.get("Code") != "OK":
+        logger.error(
+            "sms_check_failed",
             code=body.get("Code"),
             message=body.get("Message"),
             phone_suffix=phone[-4:],
         )
         raise SMSSendError(body.get("Message") or body.get("Code"))
 
-    logger.info("sms_sent", phone_suffix=phone[-4:])
+    result = (body.get("Model") or {}).get("VerifyResult")
+    return result == "PASS"
 
 
 __all__ = [
     "SMSNotConfiguredError",
+    "SMSResendTooSoonError",
     "SMSSendError",
+    "build_check_params",
+    "build_send_params",
     "build_signature",
+    "check_verification_code",
     "is_configured",
     "send_verification_code",
 ]

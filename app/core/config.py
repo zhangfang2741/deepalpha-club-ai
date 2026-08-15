@@ -411,15 +411,15 @@ class Settings:
         self.SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "鹦鹉背单词")
         self.SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT_SECONDS", "15"))
 
-        # 短信发送（阿里云短信服务）。
-        # 与邮件不同，短信在国内是强监管业务：SignName（签名）和 TemplateCode（模板）
-        # 都必须先在控制台提交审核、通过后才能用。凭据留空则视为未配置，手机号相关
-        # 接口返回 503，邮箱注册/登录不受影响。
+        # 短信验证码（阿里云号码认证服务 PNVS / Dypnsapi 的「短信认证服务」）。
+        # 用这个而不是通用短信服务 dysmsapi：免自建签名和模板的审核，用系统提供的
+        # 签名模板开通即用；验证码由阿里云生成、保管和核验，我们不接触明文。
+        # 凭据留空则视为未配置，手机号相关接口返回 503，邮箱注册/登录不受影响。
         self.ALIYUN_SMS_ACCESS_KEY_ID = os.getenv("ALIYUN_SMS_ACCESS_KEY_ID", "")
         self.ALIYUN_SMS_ACCESS_KEY_SECRET = os.getenv("ALIYUN_SMS_ACCESS_KEY_SECRET", "")
         self.ALIYUN_SMS_SIGN_NAME = os.getenv("ALIYUN_SMS_SIGN_NAME", "")
         self.ALIYUN_SMS_TEMPLATE_CODE = os.getenv("ALIYUN_SMS_TEMPLATE_CODE", "")
-        self.ALIYUN_SMS_ENDPOINT = os.getenv("ALIYUN_SMS_ENDPOINT", "https://dysmsapi.aliyuncs.com/")
+        self.ALIYUN_SMS_ENDPOINT = os.getenv("ALIYUN_SMS_ENDPOINT", "https://dypnsapi.aliyuncs.com/")
         self.ALIYUN_SMS_REGION = os.getenv("ALIYUN_SMS_REGION", "cn-hangzhou")
         self.SMS_TIMEOUT_SECONDS = int(os.getenv("SMS_TIMEOUT_SECONDS", "10"))
         # 默认国家码：用户只填 11 位手机号时按这个补全成 E.164
