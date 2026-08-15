@@ -4,6 +4,15 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var auth: AuthViewModel
     @StateObject private var viewModel = SettingsViewModel()
+    @State private var isDeleteAccountPresented = false
+
+    /// 「1.0 (1)」：MARKETING_VERSION + CURRENT_PROJECT_VERSION，报障时好定位。
+    private static var appVersion: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info?["CFBundleVersion"] as? String ?? "—"
+        return "\(short) (\(build))"
+    }
 
     var body: some View {
         ZStack {
@@ -71,6 +80,23 @@ struct SettingsView: View {
                 }
                 .listRowBackground(Theme.surface)
 
+                // 隐私政策 / 服务条款：App Store Connect 要求填隐私政策 URL，
+                // 审核员也会检查 App 内可达。
+                Section("关于") {
+                    Link(destination: AppConfig.privacyPolicyURL) {
+                        Label("隐私政策", systemImage: "hand.raised")
+                    }
+                    Link(destination: AppConfig.termsOfServiceURL) {
+                        Label("服务条款", systemImage: "doc.text")
+                    }
+                    LabeledContent {
+                        Text(Self.appVersion).foregroundStyle(Theme.textSecondary)
+                    } label: {
+                        Label("版本", systemImage: "info.circle")
+                    }
+                }
+                .listRowBackground(Theme.surface)
+
                 Section {
                     Button(role: .destructive) {
                         auth.logout()
@@ -80,12 +106,32 @@ struct SettingsView: View {
                     }
                 }
                 .listRowBackground(Theme.surface)
+
+                // 删除账号：指南 5.1.1(v) 强制要求，单独成组和「退出登录」拉开
+                // 距离，避免误点。
+                Section {
+                    Button(role: .destructive) {
+                        isDeleteAccountPresented = true
+                    } label: {
+                        Label("删除账号", systemImage: "trash")
+                            .font(.subheadline)
+                    }
+                } footer: {
+                    Text("删除后账号与全部生词、复习进度将被永久清除，无法恢复。")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .listRowBackground(Theme.surface)
             }
             .scrollContentBackground(.hidden)
         }
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
         .task { await viewModel.loadProfile() }
+        .sheet(isPresented: $isDeleteAccountPresented) {
+            // 账号已在服务端删除，本地 token 也就作废了，直接登出跳回登录页。
+            DeleteAccountView(viewModel: viewModel) { auth.logout() }
+        }
     }
 
     /// 后端返回不带时区的 ISO 8601 字符串（naive UTC），解析后按本地时区格式化。

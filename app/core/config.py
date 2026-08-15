@@ -301,6 +301,8 @@ class Settings:
             "transcripts": ["1000 per minute"],
             "vocabulary_recognize": ["20 per hour"],
             "vocabulary_change_password": ["10 per hour"],
+            # 删号要验密码，限流同时兜住暴力试密码
+            "vocabulary_delete_account": ["5 per hour"],
         }
 
         # Update rate limit endpoints from environment variables

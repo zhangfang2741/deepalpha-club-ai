@@ -51,6 +51,16 @@ class ChangePasswordRequest(BaseModel):
     new_password: SecretStr = Field(..., min_length=8, max_length=64)
 
 
+class DeleteAccountRequest(BaseModel):
+    """删除账号请求：必须带当前密码二次确认。
+
+    光凭 token 就能删号太危险（手机丢了、token 被拿走都会造成不可恢复的数据
+    丢失），要求重新输一次密码。
+    """
+
+    password: SecretStr
+
+
 class RecognizedWordSchema(BaseModel):
     """识别出的单个候选词。"""
 

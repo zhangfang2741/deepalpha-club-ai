@@ -11,6 +11,12 @@ enum AppConfig {
     /// 后端换平台也只需改一条 DNS 记录。
     static let baseURL = URL(string: "https://api.deepalpha.club")!
     static let apiPrefix = "/api/v1/vocabulary"
+
+    /// 隐私政策 / 服务条款。App Store Connect 必填隐私政策 URL，审核员也会
+    /// 检查 App 内可达（设置页「关于」分组）。
+    static let privacyPolicyURL = URL(string: "https://deepalpha.club/wordlens/privacy")!
+    static let termsOfServiceURL = URL(string: "https://deepalpha.club/wordlens/terms")!
+
     static let requestTimeout: TimeInterval = 30
     /// 拍照识别调 LLM，比普通请求慢很多，单独给更长超时。
     ///
