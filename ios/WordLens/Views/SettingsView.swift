@@ -5,6 +5,7 @@ struct SettingsView: View {
     @EnvironmentObject var auth: AuthViewModel
     @StateObject private var viewModel = SettingsViewModel()
     @State private var isDeleteAccountPresented = false
+    @State private var isLogoutConfirmPresented = false
 
     /// 「1.0 (1)」：MARKETING_VERSION + CURRENT_PROJECT_VERSION，报障时好定位。
     private static var appVersion: String {
@@ -99,7 +100,7 @@ struct SettingsView: View {
 
                 Section {
                     Button(role: .destructive) {
-                        auth.logout()
+                        isLogoutConfirmPresented = true
                     } label: {
                         Label("退出登录", systemImage: "rectangle.portrait.and.arrow.right")
                             .font(.subheadline)
@@ -128,6 +129,19 @@ struct SettingsView: View {
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
         .task { await viewModel.loadProfile() }
+        // 退出登录本身可逆（重新登录即可），但手机号/邮箱用户未必记得住密码，
+        // 误触后要走一遍找回密码才能回来。用 confirmationDialog 而不是 alert：
+        // 前者从底部升起，破坏性操作用它是 iOS 的惯例。
+        .confirmationDialog(
+            "确定要退出登录吗？",
+            isPresented: $isLogoutConfirmPresented,
+            titleVisibility: .visible
+        ) {
+            Button("退出登录", role: .destructive) { auth.logout() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("退出后需要重新输入账号和密码才能登录。你的生词和复习进度都保存在云端，不会丢失。")
+        }
         .sheet(isPresented: $isDeleteAccountPresented) {
             // 账号已在服务端删除，本地 token 也就作废了，直接登出跳回登录页。
             DeleteAccountView(viewModel: viewModel) { auth.logout() }

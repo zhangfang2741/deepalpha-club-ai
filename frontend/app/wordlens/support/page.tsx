@@ -13,10 +13,6 @@ export default function WordLensSupportPage() {
   return (
     <main className="bg-background text-foreground min-h-screen">
       <div className="mx-auto max-w-3xl px-6 py-16">
-        <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
-          ← 返回首页
-        </Link>
-
         <h1 className="mt-6 text-3xl font-bold tracking-tight">支持与帮助</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           「鹦鹉背单词」iOS 应用 · 最后更新：{UPDATED}
@@ -55,7 +51,11 @@ export default function WordLensSupportPage() {
             </p>
             <ul className="mt-3 list-disc space-y-2 pl-5">
               <li>用邮箱注册时，先<strong>检查垃圾邮件文件夹</strong>，这是最常见的原因</li>
-              <li>用手机号注册时，检查是否被手机管家或运营商拦截了短信</li>
+              <li>
+                用手机号注册时，验证码短信的签名是<strong>【恒创联众】</strong>而非
+                「鹦鹉背单词」——这是短信服务商提供的通用签名，请不要当成垃圾短信忽略
+              </li>
+              <li>检查短信是否被手机管家或运营商拦截</li>
               <li>确认邮箱地址没有拼错（多打一个字母、`.com` 写成 `.con` 都很常见）</li>
               <li>验证码 <strong>10 分钟</strong>内有效，两次发送需间隔 60 秒</li>
               <li>提示「该邮箱已被注册」说明你之前注册过，请直接登录或使用「忘记密码」</li>

@@ -38,10 +38,11 @@ struct LoginView: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
 
-                Picker("登录方式", selection: $method) {
-                    ForEach(LoginMethod.allCases, id: \.self) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
+                SegmentedToggle(
+                    options: LoginMethod.allCases,
+                    label: \.label,
+                    selection: $method
+                )
                 .onChange(of: method) { _, _ in
                     account = ""
                     auth.clearError()

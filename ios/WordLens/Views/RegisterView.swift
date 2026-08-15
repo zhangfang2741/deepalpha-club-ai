@@ -31,8 +31,10 @@ struct RegisterView: View {
     }
 
     private var codeHintText: String {
+        // 短信签名是服务商提供的【恒创联众】而不是 App 名——不提前说明的话，
+        // 用户很容易把这条来自陌生公司的短信当成垃圾短信忽略掉。
         method == .phone
-            ? "验证码已发往 \(email)，10 分钟内有效。"
+            ? "验证码已发往 \(email)，10 分钟内有效。短信签名为【恒创联众】，请注意查收。"
             : "验证码已发往 \(email)，10 分钟内有效。没收到请检查垃圾邮件。"
     }
 
@@ -59,13 +61,14 @@ struct RegisterView: View {
                 Theme.background.ignoresSafeArea()
                 ScrollView {
                     VStack(spacing: 16) {
-                        Picker("注册方式", selection: $method) {
-                            ForEach(LoginView.LoginMethod.allCases, id: \.self) {
-                                Text($0.label).tag($0)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .disabled(hasSentCode)   // 发过码后再切会让已发的码作废
+                        SegmentedToggle(
+                            options: LoginView.LoginMethod.allCases,
+                            label: \.label,
+                            selection: $method
+                        )
+                        // 发过码后再切会让已发的码作废，直接禁用并压暗
+                        .disabled(hasSentCode)
+                        .opacity(hasSentCode ? 0.5 : 1)
                         .onChange(of: method) { _, _ in
                             email = ""
                             code = ""
