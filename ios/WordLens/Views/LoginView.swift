@@ -6,6 +6,7 @@ struct LoginView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var showRegister = false
+    @State private var showForgotPassword = false
     @FocusState private var focused: Field?
 
     private enum Field { case email, password }
@@ -16,7 +17,9 @@ struct LoginView: View {
             VStack(spacing: 24) {
                 Spacer()
                 VStack(spacing: 8) {
-                    Text("鹦鹉单词")
+                    // 从 Info.plist 读，别硬编码：登录页标题、桌面图标名、App Store
+                    // 商店名三者必须一致（指南 2.3.8），硬编码过一次就漏过一次。
+                    Text(AppConfig.displayName)
                         .font(.system(size: 32, weight: .bold))
                         .foregroundStyle(Theme.textPrimary)
                     Text("拍照背单词")
@@ -59,12 +62,19 @@ struct LoginView: View {
                     .foregroundStyle(Theme.textSecondary)
                     .buttonStyle(.pressable)
 
+                Button("忘记密码？") { showForgotPassword = true }
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textSecondary)
+                    .buttonStyle(.pressable)
+
                 Spacer()
                 Spacer()
             }
             .padding(24)
         }
         .sheet(isPresented: $showRegister) { RegisterView() }
+        // 把已填的邮箱带过去，用户不用再输一遍——他多半就是在这一栏卡住的。
+        .sheet(isPresented: $showForgotPassword) { ForgotPasswordView(initialEmail: email) }
     }
 
     private func field(_ placeholder: String, text: Binding<String>, keyboard: UIKeyboardType) -> some View {

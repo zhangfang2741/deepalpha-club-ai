@@ -35,3 +35,13 @@ struct ChangePasswordResponse: Codable {
 struct DeleteAccountResponse: Codable {
     let deleted: Bool
 }
+
+/// 对应后端 /auth/password-reset/request 响应（{"sent": true}）。
+struct PasswordResetSentResponse: Codable {
+    let sent: Bool
+}
+
+/// 对应后端 /auth/password-reset/confirm 响应（{"reset": true}）。
+struct PasswordResetDoneResponse: Codable {
+    let reset: Bool
+}

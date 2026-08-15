@@ -177,6 +177,7 @@ convention = "google"
 "app/models/vocabulary.py" = ["D415"]
 "app/schemas/vocabulary.py" = ["D415"]
 "app/services/vocabulary/*.py" = ["D415", "D104"]
+"app/services/email.py" = ["D415"]
 "app/api/v1/vocabulary/*.py" = ["D415", "D104"]
 "tests/services/vocabulary/*.py" = ["D415", "D103", "D104"]
 "tests/utils/*.py" = ["D415", "D103", "D104"]
