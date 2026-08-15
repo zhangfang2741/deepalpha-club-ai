@@ -4,7 +4,12 @@ import Foundation
 /// 全局配置：后端地址等。
 enum AppConfig {
     /// 生产环境（Railway，与 DeepAlphaChan 共用同一个后端服务）。
-    static let baseURL = URL(string: "https://web-production-b1596.up.railway.app")!
+    ///
+    /// 必须用自有域名，不能用 Railway 分配的 `*.up.railway.app`：后者是平台临时
+    /// 域名，重建服务时会变，而 App Store 上的二进制改不了硬编码 URL——域名一变
+    /// 线上所有用户直接全挂，只能重新提交审核等一两天。自有域名走 Cloudflare，
+    /// 后端换平台也只需改一条 DNS 记录。
+    static let baseURL = URL(string: "https://api.deepalpha.club")!
     static let apiPrefix = "/api/v1/vocabulary"
     static let requestTimeout: TimeInterval = 30
     /// 拍照识别调 LLM，比普通请求慢很多，单独给更长超时。
