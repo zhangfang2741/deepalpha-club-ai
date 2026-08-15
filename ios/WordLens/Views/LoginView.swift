@@ -16,7 +16,9 @@ struct LoginView: View {
             VStack(spacing: 24) {
                 Spacer()
                 VStack(spacing: 8) {
-                    Text("鹦鹉单词")
+                    // 从 Info.plist 读，别硬编码：登录页标题、桌面图标名、App Store
+                    // 商店名三者必须一致（指南 2.3.8），硬编码过一次就漏过一次。
+                    Text(AppConfig.displayName)
                         .font(.system(size: 32, weight: .bold))
                         .foregroundStyle(Theme.textPrimary)
                     Text("拍照背单词")
