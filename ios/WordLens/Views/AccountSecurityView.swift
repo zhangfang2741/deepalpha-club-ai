@@ -7,14 +7,14 @@ struct AccountSecurityView: View {
     @State private var newPassword = ""
     @State private var confirmPassword = ""
 
-    // 后端密码规则只要求长度、字母和数字。
-    private var hasLetter: Bool { newPassword.contains { $0.isLetter } }
-    private var hasDigit: Bool { newPassword.contains { $0.isNumber } }
-    private var longEnough: Bool { newPassword.count >= 8 }
+    // 与后端 VOCABULARY_PASSWORD_MIN_LENGTH 保持一致：只校验长度，不做字符组合要求。
+    private static let passwordMinLength = 6
+
+    private var longEnough: Bool { newPassword.count >= Self.passwordMinLength }
     private var matched: Bool { !newPassword.isEmpty && newPassword == confirmPassword }
 
     private var canSubmit: Bool {
-        !oldPassword.isEmpty && hasLetter && hasDigit && longEnough && matched
+        !oldPassword.isEmpty && longEnough && matched
     }
 
     var body: some View {
@@ -33,9 +33,7 @@ struct AccountSecurityView: View {
                     Text("修改密码")
                 } footer: {
                     VStack(alignment: .leading, spacing: 8) {
-                        requirementRow("至少 8 个字符", isSatisfied: longEnough)
-                        requirementRow("包含英文字母", isSatisfied: hasLetter)
-                        requirementRow("包含数字", isSatisfied: hasDigit)
+                        requirementRow("至少 \(Self.passwordMinLength) 个字符", isSatisfied: longEnough)
                         requirementRow("两次密码一致", isSatisfied: matched)
                     }
                     .padding(.top, 4)

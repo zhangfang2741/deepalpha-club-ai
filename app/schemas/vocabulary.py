@@ -16,7 +16,7 @@ class VocabularyUserCreate(BaseModel):
     """注册请求。"""
 
     email: EmailStr
-    password: SecretStr = Field(..., min_length=8, max_length=64)
+    password: SecretStr = Field(..., min_length=6, max_length=64)
 
 
 class VocabularyLoginRequest(BaseModel):
@@ -48,7 +48,7 @@ class ChangePasswordRequest(BaseModel):
     """修改密码请求。"""
 
     old_password: SecretStr
-    new_password: SecretStr = Field(..., min_length=8, max_length=64)
+    new_password: SecretStr = Field(..., min_length=6, max_length=64)
 
 
 class DeleteAccountRequest(BaseModel):

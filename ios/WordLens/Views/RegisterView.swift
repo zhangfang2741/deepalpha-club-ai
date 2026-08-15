@@ -8,15 +8,15 @@ struct RegisterView: View {
     @State private var password = ""
     @State private var confirmPassword = ""
 
-    // 后端 validate_vocabulary_password_strength() 只要求字母+数字（不要求大小写
-    // 混合、不要求特殊字符）——WordLens 是个人背单词场景，主站那套复杂度要求太重了。
-    private var hasLetter: Bool { password.contains { $0.isLetter } }
-    private var hasDigit: Bool { password.contains { $0.isNumber } }
-    private var longEnough: Bool { password.count >= 8 }
+    // 与后端 VOCABULARY_PASSWORD_MIN_LENGTH 保持一致：只校验长度，不做字符组合
+    // 要求（NIST SP 800-63B 建议废弃组合规则，它不提升实际强度还抬高注册流失）。
+    private var longEnough: Bool { password.count >= Self.passwordMinLength }
     private var matched: Bool { !password.isEmpty && password == confirmPassword }
 
+    private static let passwordMinLength = 6
+
     private var canSubmit: Bool {
-        !email.isEmpty && hasLetter && hasDigit && longEnough && matched
+        !email.isEmpty && longEnough && matched
     }
 
     var body: some View {
@@ -47,9 +47,7 @@ struct RegisterView: View {
                             .clipShape(.rect(cornerRadius: 10))
 
                         VStack(alignment: .leading, spacing: 6) {
-                            checklistRow("至少 8 个字符", longEnough)
-                            checklistRow("包含英文字母", hasLetter)
-                            checklistRow("包含数字", hasDigit)
+                            checklistRow("至少 \(Self.passwordMinLength) 个字符", longEnough)
                             checklistRow("两次密码一致", matched)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
