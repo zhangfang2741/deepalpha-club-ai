@@ -97,6 +97,16 @@ def _common_params(action: str) -> dict[str, str]:
     }
 
 
+def _apply_scheme(params: dict[str, str]) -> None:
+    """带上认证方案名。
+
+    发码和核验必须用同一个 SchemeName，否则阿里云找不到对应的验证码记录，
+    核验会一直返回 UNKNOWN。留空时不传该参数，走阿里云的「默认方案」。
+    """
+    if settings.ALIYUN_SMS_SCHEME_NAME:
+        params["SchemeName"] = settings.ALIYUN_SMS_SCHEME_NAME
+
+
 def build_send_params(phone: str, country_code: str) -> dict[str, str]:
     """组装 SendSmsVerifyCode 的参数（不含 Signature）。"""
     params = _common_params("SendSmsVerifyCode")
@@ -121,6 +131,7 @@ def build_send_params(phone: str, country_code: str) -> dict[str, str]:
             "DuplicatePolicy": "1",
         }
     )
+    _apply_scheme(params)
     return params
 
 
@@ -134,6 +145,7 @@ def build_check_params(phone: str, code: str, country_code: str) -> dict[str, st
             "CountryCode": country_code,
         }
     )
+    _apply_scheme(params)
     return params
 
 

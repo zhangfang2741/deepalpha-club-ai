@@ -194,3 +194,18 @@ class TestCheckResult:
         """请求本身失败要区别于「验证码不对」，否则会误扣用户的错误次数。"""
         with pytest.raises(sms.SMSSendError):
             await self._check_with(monkeypatch, {"Code": "InvalidAccessKeyId"})
+
+
+class TestSchemeName:
+    """发码和核验必须带同一个方案名，否则核验永远返回 UNKNOWN。"""
+
+    def test_scheme_included_in_both_when_configured(self, monkeypatch):
+        monkeypatch.setattr(sms.settings, "ALIYUN_SMS_SCHEME_NAME", "wordlens")
+        assert sms.build_send_params("13800138000", "86")["SchemeName"] == "wordlens"
+        assert sms.build_check_params("13800138000", "1", "86")["SchemeName"] == "wordlens"
+
+    def test_scheme_omitted_when_blank(self, monkeypatch):
+        """留空时不传该参数，让阿里云用默认方案；传空串会被判成非法方案名。"""
+        monkeypatch.setattr(sms.settings, "ALIYUN_SMS_SCHEME_NAME", "")
+        assert "SchemeName" not in sms.build_send_params("13800138000", "86")
+        assert "SchemeName" not in sms.build_check_params("13800138000", "1", "86")
