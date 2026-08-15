@@ -45,9 +45,25 @@ def _send_sync(to: str, subject: str, html: str, text: str) -> None:
     msg.attach(MIMEText(text, "plain", "utf-8"))
     msg.attach(MIMEText(html, "html", "utf-8"))
 
-    with smtplib.SMTP_SSL(
-        settings.SMTP_HOST, settings.SMTP_PORT, timeout=settings.SMTP_TIMEOUT_SECONDS
-    ) as server:
+    # 465 是隐式 SSL；25/80 是明文端口，连上后用 STARTTLS 升级。
+    #
+    # 为什么要支持 80：不少 PaaS（含 Railway）为防垃圾邮件滥用会封禁出站 25/465，
+    # 且是静默丢包而不是拒绝连接，表现为一直挂到超时。阿里云邮件推送正是为此
+    # 额外提供了 80 端口。凭据和协议都不变，只是走一个不会被封的端口。
+    if settings.SMTP_PORT == 465:
+        server = smtplib.SMTP_SSL(
+            settings.SMTP_HOST, settings.SMTP_PORT, timeout=settings.SMTP_TIMEOUT_SECONDS
+        )
+    else:
+        server = smtplib.SMTP(
+            settings.SMTP_HOST, settings.SMTP_PORT, timeout=settings.SMTP_TIMEOUT_SECONDS
+        )
+
+    with server:
+        if settings.SMTP_PORT != 465:
+            # 明文端口上必须升级到 TLS 再登录，否则 SMTP 密码是明文过网的。
+            server.starttls()
+            server.ehlo()
         server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
         server.sendmail(settings.SMTP_USER, [to], msg.as_string())
 
