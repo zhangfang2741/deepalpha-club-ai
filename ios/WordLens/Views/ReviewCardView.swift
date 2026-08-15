@@ -836,10 +836,26 @@ struct ReviewCardView: View {
     @ViewBuilder
     private var voiceDictationHint: some View {
         if let error = speech.errorMessage {
-            Text(error)
-                .font(.caption2)
-                .foregroundStyle(Theme.unknown)
-                .multilineTextAlignment(.center)
+            VStack(spacing: 4) {
+                Text(error)
+                    .font(.caption2)
+                    .foregroundStyle(Theme.unknown)
+                    .multilineTextAlignment(.center)
+
+                // 权限被拒后系统不会再弹授权框，在 App 里怎么点麦克风都没反应。
+                // 必须给一条通往系统设置的明路，否则用户只能自己去翻设置，
+                // 或者以为功能坏了。受限（屏幕使用时间等）跳过去也没有开关，
+                // 所以那种情况不显示这个按钮。
+                if speech.permissionBlocker?.isFixableInSettings == true {
+                    Button("去设置") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Theme.accent)
+                }
+            }
         } else if speech.isListening {
             Text("正在听，一个字母一个字母地念…")
                 .font(.caption2)
