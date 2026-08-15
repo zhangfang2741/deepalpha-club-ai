@@ -16,11 +16,8 @@ enum Theme {
     static let fuzzy = Color(hex: 0xF59E0B)
     static let known = Color(hex: 0x22C55E)
 
-    /// 听写结果滑动操作使用实色底板，避免用低透明度状态色叠加出“蒙层感”。
-    static let dictationKnownSurface = Color(hex: 0x14532D)
-    static let dictationFuzzySurface = Color(hex: 0x78350F)
-    static let dictationUnknownSurface = Color(hex: 0x7F1D1D)
-    static let dictationRetrySurface = Color(hex: 0x1E3A5F)
+    // 说明：听写结果卡原来用四块实色底板（dictation*Surface）铺满整张卡表达滑动方向，
+    // 已改成用状态色做跟手的渐变，那四个常量随之删除。
 }
 
 extension Color {

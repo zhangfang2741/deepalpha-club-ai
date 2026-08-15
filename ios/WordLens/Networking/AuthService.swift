@@ -25,4 +25,15 @@ enum AuthService {
             "/auth/change-password", body: Body(oldPassword: oldPassword, newPassword: newPassword)
         )
     }
+
+    /// 彻底删除账号及全部数据，需带当前密码二次确认。不可恢复。
+    ///
+    /// 用 POST 而不是 DELETE：带 body 的 DELETE 语义未定义，部分代理会丢掉 body，
+    /// 而这里必须把密码传给后端校验。
+    static func deleteAccount(password: String) async throws {
+        struct Body: Encodable { let password: String }
+        let _: DeleteAccountResponse = try await APIClient.shared.postJSON(
+            "/auth/delete-account", body: Body(password: password)
+        )
+    }
 }

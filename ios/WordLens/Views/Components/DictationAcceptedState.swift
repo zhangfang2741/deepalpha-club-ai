@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 右滑确认后的短暂保存状态。以系统结论为视觉主体，网络保存只作为次级进度，
+/// 右滑确认后的短暂保存状态。以刚刚采纳的结论为视觉主体，网络保存只作为次级进度，
 /// 避免把一个临时加载提示孤零零地放在卡片中央。
 struct DictationAcceptedState: View {
     let resultLabel: String

@@ -30,3 +30,8 @@ struct UserProfile: Codable {
 struct ChangePasswordResponse: Codable {
     let changed: Bool
 }
+
+/// 对应后端 /auth/delete-account 响应（{"deleted": true}）。
+struct DeleteAccountResponse: Codable {
+    let deleted: Bool
+}

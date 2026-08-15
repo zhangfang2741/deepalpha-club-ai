@@ -16,6 +16,7 @@ from app.db.session import get_db
 from app.models.vocabulary import VocabularyUser
 from app.schemas.vocabulary import (
     ChangePasswordRequest,
+    DeleteAccountRequest,
     VocabularyLoginRequest,
     VocabularyTokenResponse,
     VocabularyUserCreate,
@@ -95,3 +96,29 @@ async def change_password(
     await user_service.change_password(db, user, payload.new_password.get_secret_value())
     logger.info("vocabulary_password_changed", user_id=str(user.id))
     return {"changed": True}
+
+
+@router.post("/delete-account")
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["vocabulary_delete_account"][0])
+async def delete_account(
+    request: Request,
+    payload: DeleteAccountRequest,
+    user: VocabularyUser = Depends(get_current_vocab_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """彻底删除当前账号及其全部数据，需校验密码。不可恢复。
+
+    App Store 审核指南 5.1.1(v) 强制要求：有注册功能的 App 必须提供 App 内
+    自助删除账号的入口。
+
+    用 POST 而不是 `DELETE /me`：带 body 的 DELETE 在 RFC 9110 里语义未定义，
+    部分代理会把 body 丢掉，而这里必须带密码做二次确认。同时也和已有的
+    change-password 保持一致的调用风格。
+    """
+    if not user.verify_password(payload.password.get_secret_value()):
+        raise HTTPException(status_code=401, detail="密码不正确")
+
+    user_id = str(user.id)
+    await user_service.delete_user(db, user.id)
+    logger.info("vocabulary_user_deleted", user_id=user_id)
+    return {"deleted": True}

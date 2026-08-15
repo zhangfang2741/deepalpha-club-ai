@@ -11,6 +11,9 @@ final class SettingsViewModel: ObservableObject {
     @Published var passwordErrorMessage: String?
     @Published var passwordSuccessMessage: String?
 
+    @Published var isDeletingAccount = false
+    @Published var deleteErrorMessage: String?
+
     func loadProfile() async {
         isLoadingProfile = true
         profileErrorMessage = nil
@@ -36,6 +39,26 @@ final class SettingsViewModel: ObservableObject {
             return false
         } catch {
             passwordErrorMessage = "修改密码失败，请稍后再试"
+            return false
+        }
+    }
+
+    /// 删除账号。成功返回 true，由调用方负责登出跳回登录页。
+    ///
+    /// 失败不登出：密码输错、断网都该留在原地让用户重试，把人踢回登录页
+    /// 反而会让人以为「是不是已经删了」。
+    func deleteAccount(password: String) async -> Bool {
+        isDeletingAccount = true
+        deleteErrorMessage = nil
+        defer { isDeletingAccount = false }
+        do {
+            try await AuthService.deleteAccount(password: password)
+            return true
+        } catch let error as APIError {
+            deleteErrorMessage = error.message
+            return false
+        } catch {
+            deleteErrorMessage = "删除账号失败，请稍后再试"
             return false
         }
     }

@@ -127,11 +127,20 @@ def validate_password_strength(password: str) -> bool:
     return True
 
 
+#: WordLens 密码最短长度。改这里要同步 app/schemas/vocabulary.py 的 min_length
+#: 和 iOS 端 RegisterView / AccountSecurityView 的提示文案。
+VOCABULARY_PASSWORD_MIN_LENGTH = 6
+
+
 def validate_vocabulary_password_strength(password: str) -> bool:
-    """校验 WordLens（背单词 App）密码强度：只要求字母+数字，不要求大小写混合或特殊字符。
+    """校验 WordLens（背单词 App）密码强度：只看长度，不做字符组合要求。
 
     WordLens 账号体系跟主站完全独立（见 app/models/vocabulary.py），面向个人背单词
-    场景，主站 validate_password_strength() 的复杂度要求对这个场景太重，单独放宽。
+    场景，主站 validate_password_strength() 的复杂度要求对这个场景太重。
+
+    这里刻意不要求「必须含字母/数字/特殊字符」：NIST SP 800-63B 明确建议废弃组合
+    规则，理由是它并不提升实际强度，反而把用户推向 `Password1` `abc12345` 这类高度
+    可预测的模式，同时显著抬高注册流失。长度才是真正有效的强度来源。
 
     Args:
         password: 待校验的明文密码
@@ -142,13 +151,7 @@ def validate_vocabulary_password_strength(password: str) -> bool:
     Raises:
         ValueError: 密码强度不够时，附带具体原因
     """
-    if len(password) < 8:
-        raise ValueError("密码至少需要 8 个字符")
-
-    if not re.search(r"[A-Za-z]", password):
-        raise ValueError("密码需要包含至少一个英文字母")
-
-    if not re.search(r"[0-9]", password):
-        raise ValueError("密码需要包含至少一个数字")
+    if len(password) < VOCABULARY_PASSWORD_MIN_LENGTH:
+        raise ValueError(f"密码至少需要 {VOCABULARY_PASSWORD_MIN_LENGTH} 个字符")
 
     return True

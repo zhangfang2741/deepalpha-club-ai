@@ -45,6 +45,32 @@ check("hoosr", "house", .unknown, "5 字母差 2 个：超出该长度的容忍�
 check("boundari", "boundary", .fuzzy, "8 字母差 1 个")
 check("bounderi", "boundary", .fuzzy, "8 字母差 2 个")
 
+print("\n=== 拼读还原（SpellingParser）===")
+func checkSpell(_ transcript: String, _ expected: String, _ note: String) {
+    let got = SpellingParser.parse(transcript)
+    let ok = got == expected
+    if !ok { failures += 1 }
+    print("\(ok ? "PASS" : "FAIL")  识别「\(transcript)」→「\(got)」  期望「\(expected)」   \(note)")
+}
+
+// 逐字母拼读的各种识别形态，最终都要折回同一个词
+checkSpell("a p p l e", "apple", "标准单字母")
+checkSpell("A P P L E", "apple", "大写单字母")
+checkSpell("eh pee pee el ee", "apple", "全是字母名的同音写法")
+checkSpell("see a tea", "cat", "c-a-t 被听成 see a tea")
+checkSpell("bee eye tea", "bit", "b-i-t")
+checkSpell("aitch o u ess ee", "house", "h-o-u-s-e，aitch 是 H 的标准读法")
+checkSpell("double u eye en", "win", "double u 要合成 W")
+checkSpell("a p p l he", "appl" + "he", "个别字母听错时保留原样，不猜")
+
+// 不是拼读的输入必须原样放行
+checkSpell("apple", "apple", "识别器把整串并成一个词")
+checkSpell("bee", "bee", "单个 token 即便是字母名，也当整词——bee 本身就是单词")
+checkSpell("AP PLE", "apple", "识别器把字母并成了块")
+checkSpell("online shopping", "onlineshopping", "两个真词，不能把 sea/see 类同音字母化")
+checkSpell("sea food", "seafood", "只有一半 token 像字母，不进拼读模式")
+checkSpell("", "", "空输入")
+
 print("\n=== 归一化本身 ===")
 print(DictationJudge.normalize("  Online-Shopping ") == "onlineshopping" ? "PASS  normalize" : "FAIL  normalize")
 print(DictationJudge.levenshtein(Array("kitten"), Array("sitting")) == 3 ? "PASS  levenshtein(kitten,sitting)=3" : "FAIL  levenshtein")
