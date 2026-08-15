@@ -40,6 +40,10 @@ class SMSResendTooSoonError(Exception):
     """阿里云侧判定重发过于频繁。"""
 
 
+class SMSCodeInvalidError(Exception):
+    """验证码不存在、已过期或不匹配（业务层面的失败，不是系统故障）。"""
+
+
 def is_configured() -> bool:
     """凭据与签名/模板是否齐全。
 
@@ -208,7 +212,8 @@ async def check_verification_code(phone: str, code: str, country_code: str = "86
 
     Raises:
         SMSNotConfiguredError: 未配置凭据。
-        SMSSendError: 请求失败（区别于「验证码不对」）。
+        SMSCodeInvalidError: 验证码不存在/已过期（业务失败）。
+        SMSSendError: 系统故障（鉴权失败、网络异常等）。
     """
     if not is_configured():
         raise SMSNotConfiguredError
@@ -216,19 +221,27 @@ async def check_verification_code(phone: str, code: str, country_code: str = "86
     body = await _call(build_check_params(phone, code, country_code))
 
     if body.get("Code") != "OK":
-        logger.error(
-            "sms_check_failed",
-            code=body.get("Code"),
+        err = str(body.get("Code", ""))
+        logger.warning(
+            "sms_check_rejected",
+            code=err,
             message=body.get("Message"),
             phone_suffix=phone[-4:],
         )
-        raise SMSSendError(body.get("Message") or body.get("Code"))
+        # 阿里云用 isv. 前缀区分「业务层面的失败」和「系统/鉴权错误」。
+        # 验证码不存在、已过期、不匹配都属于前者，对用户来说就是「验证码错误」，
+        # 该返回 400；把它和 InvalidAccessKeyId 这类混为一谈会让用户看到
+        # 「请稍后再试」——他再试一百次也没用，问题出在他输错了。
+        if err.startswith("isv."):
+            raise SMSCodeInvalidError(err)
+        raise SMSSendError(body.get("Message") or err)
 
     result = (body.get("Model") or {}).get("VerifyResult")
     return result == "PASS"
 
 
 __all__ = [
+    "SMSCodeInvalidError",
     "SMSNotConfiguredError",
     "SMSResendTooSoonError",
     "SMSSendError",

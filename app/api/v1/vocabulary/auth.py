@@ -346,6 +346,10 @@ async def _check_sms_code(redis: Redis, purpose: vercode.Purpose, phone: str, co
         passed = await sms_service.check_verification_code(to_aliyun_format(phone), code)
     except sms_service.SMSNotConfiguredError:
         raise HTTPException(status_code=503, detail="短信服务暂不可用，请稍后再试") from None
+    except sms_service.SMSCodeInvalidError:
+        # 验证码不存在/已过期，走和「验证码不对」完全相同的路径：计一次错误、
+        # 返回 400。对用户来说这两种情况没有区别。
+        passed = False
     except sms_service.SMSSendError:
         raise HTTPException(status_code=502, detail="验证码校验失败，请稍后再试") from None
 
