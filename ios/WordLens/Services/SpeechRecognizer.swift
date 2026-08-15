@@ -63,10 +63,7 @@ final class SpeechRecognizer: ObservableObject {
 
     /// 开始一次语音听写：申请权限 → 配录音会话 → 启动引擎与识别任务。
     /// 识别结果（含中途 partial）实时写进 transcript；拿到 final 或出错自动停止。
-    ///
-    /// - Parameter forceOnDevice: 强制走本地模型。正常路径优先用云端（准确率明显更高），
-    ///   只有云端识别失败（多半是断网）时才由内部回退调用一次，带上 true。
-    func start(forceOnDevice: Bool = false) async {
+    func start() async {
         guard !isListening else { return }
         errorMessage = nil
         transcript = ""
@@ -101,8 +98,11 @@ final class SpeechRecognizer: ObservableObject {
             // 告诉识别器「这里会出现孤立的字母」。注意这里喂的只有 A–Z，不含任何
             // 待听写的单词——它提升的是字母识别率，不泄露答案，听写该错还是错。
             request.contextualStrings = Self.letterContext
-            // 云端模型比本地模型准得多，默认走云端；只有云端失败才回退本地。
-            request.requiresOnDeviceRecognition = forceOnDevice && recognizer.supportsOnDeviceRecognition
+            // 固定走云端识别，不回退本地模型。听写是「判对错」的场景，本地模型
+            // 准确率明显更低，一次误识别就会把用户说对的单词判成错——这比直接
+            // 告诉用户「识别失败」要糟得多（用户会以为是自己念错了）。断网时
+            // 宁可报错让用户重试，也不拿一个不可信的结果去参与判定。
+            request.requiresOnDeviceRecognition = false
             self.request = request
 
             let inputNode = audioEngine.inputNode
@@ -139,10 +139,10 @@ final class SpeechRecognizer: ObservableObject {
                         // cancel 带出来的这个 error 不是真故障，别当失败处理。
                         guard self.isListening else { return }
                         self.stop()
-                        // 云端识别失败（常见于断网）时，退到本地模型重试一次。
-                        if !forceOnDevice, self.transcript.isEmpty,
-                           self.recognizer?.supportsOnDeviceRecognition == true {
-                            Task { await self.start(forceOnDevice: true) }
+                        // 一个字都没识别到才算真失败。已经识别出内容再报错（比如
+                        // 收尾阶段的网络抖动）不该盖掉已有结果，让判定照常走。
+                        if self.transcript.isEmpty {
+                            self.errorMessage = "语音识别失败，请检查网络后重试"
                         }
                     }
                 }
