@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.services.vocabulary import email_code as ec
+from app.services.vocabulary import verification_code as ec
 
 EMAIL = "someone@example.com"
 PURPOSE = ec.Purpose.PASSWORD_RESET
@@ -131,7 +131,7 @@ async def test_keys_are_namespaced_and_do_not_leak_email():
 
     for call in redis.set.await_args_list:
         key = call.args[0]
-        assert key.startswith("vocab:emailcode:")
+        assert key.startswith("vocab:vercode:")
         assert EMAIL not in key
 
 

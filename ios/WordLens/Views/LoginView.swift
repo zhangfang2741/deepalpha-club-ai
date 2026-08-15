@@ -3,13 +3,24 @@ import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject var auth: AuthViewModel
-    @State private var email = ""
+    @State private var account = ""
     @State private var password = ""
     @State private var showRegister = false
     @State private var showForgotPassword = false
+    /// 默认手机号：国内用户手机号比邮箱好记，也是更普遍的习惯。
+    @State private var method: LoginMethod = .phone
     @FocusState private var focused: Field?
 
-    private enum Field { case email, password }
+    private enum Field { case account, password }
+
+    /// 登录方式。切换时清空账号栏——手机号和邮箱互相不是有效输入，
+    /// 留着上一个只会让用户对着一条格式错误发懵。
+    enum LoginMethod: String, CaseIterable {
+        case phone, email
+
+        var label: String { self == .phone ? "手机号" : "邮箱" }
+        var placeholder: String { self == .phone ? "手机号" : "邮箱" }
+    }
 
     var body: some View {
         ZStack {
@@ -27,9 +38,22 @@ struct LoginView: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
 
+                Picker("登录方式", selection: $method) {
+                    ForEach(LoginMethod.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: method) { _, _ in
+                    account = ""
+                    auth.clearError()
+                }
+
                 VStack(spacing: 12) {
-                    field("邮箱", text: $email, keyboard: .emailAddress)
-                        .focused($focused, equals: .email)
+                    field(
+                        method.placeholder,
+                        text: $account,
+                        keyboard: method == .phone ? .phonePad : .emailAddress
+                    )
+                    .focused($focused, equals: .account)
                     secureField("密码", text: $password)
                         .focused($focused, equals: .password)
                 }
@@ -42,7 +66,12 @@ struct LoginView: View {
 
                 Button {
                     focused = nil
-                    Task { await auth.login(email: email, password: password) }
+                    Task {
+                        switch method {
+                        case .phone: await auth.loginByPhone(phone: account, password: password)
+                        case .email: await auth.login(email: account, password: password)
+                        }
+                    }
                 } label: {
                     HStack {
                         if auth.isLoading { ProgressView().tint(.white) }
@@ -72,9 +101,9 @@ struct LoginView: View {
             }
             .padding(24)
         }
-        .sheet(isPresented: $showRegister) { RegisterView() }
+        .sheet(isPresented: $showRegister) { RegisterView(initialMethod: method) }
         // 把已填的邮箱带过去，用户不用再输一遍——他多半就是在这一栏卡住的。
-        .sheet(isPresented: $showForgotPassword) { ForgotPasswordView(initialEmail: email) }
+        .sheet(isPresented: $showForgotPassword) { ForgotPasswordView(initialAccount: account, method: method) }
     }
 
     private func field(_ placeholder: String, text: Binding<String>, keyboard: UIKeyboardType) -> some View {

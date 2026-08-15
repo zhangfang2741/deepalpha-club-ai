@@ -41,7 +41,8 @@ class VocabularyUserResponse(BaseResponse):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    email: str
+    email: str | None = None
+    phone: str | None = None
     created_at: datetime
 
 
@@ -49,6 +50,35 @@ class ChangePasswordRequest(BaseModel):
     """修改密码请求。"""
 
     old_password: SecretStr
+    new_password: SecretStr = Field(..., min_length=6, max_length=64)
+
+
+class PhoneCodeRequest(BaseModel):
+    """请求给手机号发验证码。号码在服务端归一化，前端不必自己处理格式。"""
+
+    phone: str = Field(..., min_length=6, max_length=24)
+
+
+class PhoneRegisterRequest(BaseModel):
+    """手机号注册。"""
+
+    phone: str = Field(..., min_length=6, max_length=24)
+    password: SecretStr = Field(..., min_length=6, max_length=64)
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class PhoneLoginRequest(BaseModel):
+    """手机号 + 密码登录。"""
+
+    phone: str = Field(..., min_length=6, max_length=24)
+    password: SecretStr
+
+
+class PhonePasswordResetConfirm(BaseModel):
+    """凭手机验证码设置新密码。"""
+
+    phone: str = Field(..., min_length=6, max_length=24)
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
     new_password: SecretStr = Field(..., min_length=6, max_length=64)
 
 

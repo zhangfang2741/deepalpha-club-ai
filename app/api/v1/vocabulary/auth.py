@@ -19,6 +19,10 @@ from app.models.vocabulary import VocabularyUser
 from app.schemas.vocabulary import (
     ChangePasswordRequest,
     DeleteAccountRequest,
+    PhoneCodeRequest,
+    PhoneLoginRequest,
+    PhonePasswordResetConfirm,
+    PhoneRegisterRequest,
     RegisterCodeRequest,
     PasswordResetConfirm,
     PasswordResetRequest,
@@ -28,9 +32,11 @@ from app.schemas.vocabulary import (
     VocabularyUserResponse,
 )
 from app.services import email as email_service
-from app.services.vocabulary import email_code
+from app.services import sms as sms_service
+from app.services.vocabulary import verification_code as vercode
 from app.services.vocabulary import users as user_service
 from app.utils.auth import create_access_token
+from app.utils.phone import InvalidPhoneError, normalize_phone, to_aliyun_format
 from app.utils.sanitization import sanitize_email, validate_vocabulary_password_strength
 
 from .dependencies import get_current_vocab_user
@@ -39,12 +45,12 @@ router = APIRouter()
 
 
 async def _issue_and_send(
-    redis: Redis, purpose: email_code.Purpose, email: str, render
+    redis: Redis, purpose: vercode.Purpose, email: str, render
 ) -> None:
     """签发验证码并发信。失败时回滚，让用户可以立刻重试。"""
     try:
-        code = await email_code.issue_code(redis, purpose, email)
-    except email_code.ResendTooSoonError:
+        code = await vercode.issue_code(redis, purpose, email)
+    except vercode.ResendTooSoonError:
         raise HTTPException(
             status_code=429,
             detail=f"验证码已发送，请 {settings.EMAIL_CODE_RESEND_COOLDOWN} 秒后再试",
@@ -56,11 +62,11 @@ async def _issue_and_send(
     except email_service.EmailNotConfiguredError:
         # 邮件没发出去就不能留着冷却锁，否则用户被一次配置问题锁在门外 60 秒，
         # 而且那 60 秒里怎么点都没用。
-        await email_code.discard_code(redis, purpose, email)
+        await vercode.discard_code(redis, purpose, email)
         logger.error("email_code_not_configured", purpose=purpose.value)
         raise HTTPException(status_code=503, detail="邮件服务暂不可用，请稍后再试") from None
     except email_service.EmailSendError:
-        await email_code.discard_code(redis, purpose, email)
+        await vercode.discard_code(redis, purpose, email)
         raise HTTPException(status_code=502, detail="验证码发送失败，请稍后再试") from None
 
 
@@ -86,7 +92,7 @@ async def request_register_code(
     if await user_service.get_user_by_email(db, email) is not None:
         raise HTTPException(status_code=400, detail="该邮箱已被注册，请直接登录")
 
-    await _issue_and_send(redis, email_code.Purpose.REGISTER, email, email_service.render_register)
+    await _issue_and_send(redis, vercode.Purpose.REGISTER, email, email_service.render_register)
     logger.info("register_code_sent")
     return {"sent": True}
 
@@ -113,8 +119,8 @@ async def register(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
-        ok = await email_code.verify_code(redis, email_code.Purpose.REGISTER, email, payload.code)
-    except email_code.TooManyAttemptsError:
+        ok = await vercode.verify_code(redis, vercode.Purpose.REGISTER, email, payload.code)
+    except vercode.TooManyAttemptsError:
         raise HTTPException(
             status_code=429, detail="验证码错误次数过多，已失效，请重新获取"
         ) from None
@@ -127,7 +133,7 @@ async def register(
         raise HTTPException(status_code=400, detail="该邮箱已被注册")
 
     hashed = VocabularyUser.hash_password(password)
-    user = await user_service.create_user(db, email, hashed)
+    user = await user_service.create_user(db, hashed, email=email)
     token = create_access_token(str(user.id))
     logger.info("vocabulary_user_registered", user_id=str(user.id))
     return VocabularyTokenResponse(access_token=token.access_token, expires_at=token.expires_at)
@@ -199,7 +205,7 @@ async def request_password_reset(
     user = await user_service.get_user_by_email(db, email)
     if user is not None:
         await _issue_and_send(
-            redis, email_code.Purpose.PASSWORD_RESET, email, email_service.render_password_reset
+            redis, vercode.Purpose.PASSWORD_RESET, email, email_service.render_password_reset
         )
         logger.info("password_reset_code_sent", user_id=str(user.id))
     else:
@@ -225,8 +231,8 @@ async def confirm_password_reset(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
-        ok = await email_code.verify_code(redis, email_code.Purpose.PASSWORD_RESET, email, payload.code)
-    except email_code.TooManyAttemptsError:
+        ok = await vercode.verify_code(redis, vercode.Purpose.PASSWORD_RESET, email, payload.code)
+    except vercode.TooManyAttemptsError:
         raise HTTPException(
             status_code=429, detail="验证码错误次数过多，已失效，请重新获取"
         ) from None
@@ -268,3 +274,196 @@ async def delete_account(
     await user_service.delete_user(db, user.id)
     logger.info("vocabulary_user_deleted", user_id=user_id)
     return {"deleted": True}
+
+
+# ============================ 手机号 ============================
+#
+# 与邮箱那套完全平行：发码 → 验码 → 建号 / 重置。复用同一个验证码模块，
+# 只是 Purpose 不同、送达渠道换成短信。
+
+
+def _normalized_phone(raw: str) -> str:
+    """归一化手机号，失败时转成 422。"""
+    try:
+        return normalize_phone(raw)
+    except InvalidPhoneError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+# 用途 → 系统模板。注册用「登录/注册」模板，重置密码用「重置密码」模板，
+# 文案会写明用户正在做什么。
+_SMS_TEMPLATES = {
+    vercode.Purpose.PHONE_REGISTER: lambda: settings.ALIYUN_SMS_TEMPLATE_REGISTER,
+    vercode.Purpose.PHONE_PASSWORD_RESET: lambda: settings.ALIYUN_SMS_TEMPLATE_PASSWORD_RESET,
+}
+
+
+async def _send_sms_code(redis: Redis, purpose: vercode.Purpose, phone: str) -> None:
+    """让阿里云发一条验证码短信。
+
+    与邮箱链路不同：验证码由阿里云生成、保管、核验，我们不签发也不存储明文。
+    Redis 这边只留一个本地冷却标记——省掉一次注定被阿里云拒掉的 API 调用
+    （按次计费），也能给出比透传阿里云错误码更清楚的中文提示。
+    """
+    if await vercode.is_cooling_down(redis, purpose, phone):
+        raise HTTPException(
+            status_code=429,
+            detail=f"验证码已发送，请 {settings.EMAIL_CODE_RESEND_COOLDOWN} 秒后再试",
+        )
+
+    try:
+        await sms_service.send_verification_code(
+            to_aliyun_format(phone), _SMS_TEMPLATES[purpose]()
+        )
+    except sms_service.SMSNotConfiguredError:
+        logger.error("sms_not_configured", purpose=purpose.value)
+        raise HTTPException(status_code=503, detail="短信服务暂不可用，请稍后再试") from None
+    except sms_service.SMSResendTooSoonError:
+        raise HTTPException(status_code=429, detail="验证码发送过于频繁，请稍后再试") from None
+    except sms_service.SMSSendError:
+        raise HTTPException(status_code=502, detail="验证码发送失败，请稍后再试") from None
+
+    # 发成功才上冷却和重置错误计数——发失败还锁着用户，会把一次临时故障
+    # 变成 60 秒的干等（这个坑在邮件链路上真踩过一次）。
+    await vercode.start_cooldown(redis, purpose, phone)
+
+
+async def _check_sms_code(redis: Redis, purpose: vercode.Purpose, phone: str, code: str) -> None:
+    """核验短信验证码，不通过则抛 HTTPException。
+
+    阿里云不暴露「错几次就作废」这个控制，所以在本地补一个计数器：6 位数字
+    只有 100 万种可能，有效期内不限次数猜是能撞开的，而每次猜都只是一次
+    廉价的 API 调用。
+    """
+    try:
+        await vercode.assert_attempts_left(redis, purpose, phone)
+    except vercode.TooManyAttemptsError:
+        raise HTTPException(
+            status_code=429, detail="验证码错误次数过多，请重新获取"
+        ) from None
+
+    try:
+        passed = await sms_service.check_verification_code(to_aliyun_format(phone), code)
+    except sms_service.SMSNotConfiguredError:
+        raise HTTPException(status_code=503, detail="短信服务暂不可用，请稍后再试") from None
+    except sms_service.SMSSendError:
+        raise HTTPException(status_code=502, detail="验证码校验失败，请稍后再试") from None
+
+    if not passed:
+        await vercode.record_failed_attempt(redis, purpose, phone)
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+
+    await vercode.clear_attempts(redis, purpose, phone)
+
+
+@router.post("/phone/register/request-code")
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["vocabulary_phone_request_code"][0])
+async def request_phone_register_code(
+    request: Request,
+    payload: PhoneCodeRequest,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+):
+    """给待注册的手机号发验证码。"""
+    phone = _normalized_phone(payload.phone)
+    if await user_service.get_user_by_phone(db, phone) is not None:
+        raise HTTPException(status_code=400, detail="该手机号已被注册，请直接登录")
+
+    await _send_sms_code(redis, vercode.Purpose.PHONE_REGISTER, phone)
+    logger.info("phone_register_code_sent")
+    return {"sent": True}
+
+
+@router.post("/phone/register", response_model=VocabularyTokenResponse)
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["register"][0])
+async def register_by_phone(
+    request: Request,
+    payload: PhoneRegisterRequest,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+):
+    """校验短信验证码并创建账号。与邮箱注册一样，先验码再建号。"""
+    phone = _normalized_phone(payload.phone)
+    password = payload.password.get_secret_value()
+    try:
+        validate_vocabulary_password_strength(password)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    await _check_sms_code(redis, vercode.Purpose.PHONE_REGISTER, phone, payload.code)
+
+    if await user_service.get_user_by_phone(db, phone) is not None:
+        raise HTTPException(status_code=400, detail="该手机号已被注册")
+
+    hashed = VocabularyUser.hash_password(password)
+    user = await user_service.create_user(db, hashed, phone=phone)
+    token = create_access_token(str(user.id))
+    logger.info("vocabulary_user_registered_by_phone", user_id=str(user.id))
+    return VocabularyTokenResponse(access_token=token.access_token, expires_at=token.expires_at)
+
+
+@router.post("/phone/login", response_model=VocabularyTokenResponse)
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["login"][0])
+async def login_by_phone(
+    request: Request,
+    payload: PhoneLoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """手机号 + 密码登录。"""
+    phone = _normalized_phone(payload.phone)
+    user = await user_service.get_user_by_phone(db, phone)
+    if user is None or not user.verify_password(payload.password.get_secret_value()):
+        raise HTTPException(status_code=401, detail="手机号或密码错误")
+
+    token = create_access_token(str(user.id))
+    logger.info("vocabulary_user_logged_in_by_phone", user_id=str(user.id))
+    return VocabularyTokenResponse(access_token=token.access_token, expires_at=token.expires_at)
+
+
+@router.post("/phone/password-reset/request")
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["vocabulary_phone_request_code"][0])
+async def request_phone_password_reset(
+    request: Request,
+    payload: PhoneCodeRequest,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+):
+    """给手机号发找回密码验证码。
+
+    和邮箱那条一样：无论号码是否注册过都返回成功，避免这个接口变成
+    「查某个手机号有没有在本站注册」的探测器。
+    """
+    phone = _normalized_phone(payload.phone)
+    if await user_service.get_user_by_phone(db, phone) is not None:
+        await _send_sms_code(redis, vercode.Purpose.PHONE_PASSWORD_RESET, phone)
+        logger.info("phone_password_reset_code_sent")
+    else:
+        logger.info("phone_password_reset_requested_for_unknown_phone")
+    return {"sent": True}
+
+
+@router.post("/phone/password-reset/confirm")
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["vocabulary_password_reset_confirm"][0])
+async def confirm_phone_password_reset(
+    request: Request,
+    payload: PhonePasswordResetConfirm,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+):
+    """校验短信验证码并设置新密码。"""
+    phone = _normalized_phone(payload.phone)
+    new_password = payload.new_password.get_secret_value()
+    try:
+        validate_vocabulary_password_strength(new_password)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    await _check_sms_code(redis, vercode.Purpose.PHONE_PASSWORD_RESET, phone, payload.code)
+
+    user = await user_service.get_user_by_phone(db, phone)
+    if user is None:
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+
+    await user_service.change_password(db, user, new_password)
+    logger.info("phone_password_reset_completed", user_id=str(user.id))
+    return {"reset": True}

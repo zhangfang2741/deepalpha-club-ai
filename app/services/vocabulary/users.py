@@ -24,14 +24,29 @@ async def get_user_by_email(session: AsyncSession, email: str) -> VocabularyUser
     return res.scalar_one_or_none()
 
 
+async def get_user_by_phone(session: AsyncSession, phone: str) -> VocabularyUser | None:
+    """按手机号查找用户。phone 必须已归一化为 E.164。"""
+    stmt = select(VocabularyUser).where(col(VocabularyUser.phone) == phone)
+    res = await session.execute(stmt)
+    return res.scalar_one_or_none()
+
+
 async def get_user_by_id(session: AsyncSession, user_id: uuid.UUID) -> VocabularyUser | None:
     """按 id 查找用户。"""
     return await session.get(VocabularyUser, user_id)
 
 
-async def create_user(session: AsyncSession, email: str, hashed_password: str) -> VocabularyUser:
-    """创建新用户。"""
-    user = VocabularyUser(email=email, hashed_password=hashed_password)
+async def create_user(
+    session: AsyncSession,
+    hashed_password: str,
+    *,
+    email: str | None = None,
+    phone: str | None = None,
+) -> VocabularyUser:
+    """创建新用户。email 和 phone 至少要有一个（数据库 CHECK 约束也会兜底）。"""
+    if not email and not phone:
+        raise ValueError("email 和 phone 至少要提供一个")
+    user = VocabularyUser(email=email, phone=phone, hashed_password=hashed_password)
     session.add(user)
     await session.commit()
     await session.refresh(user)

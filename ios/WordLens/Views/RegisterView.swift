@@ -2,11 +2,20 @@
 import SwiftUI
 
 struct RegisterView: View {
+    /// 从登录页带过来，保持用户刚才选的方式，不用再切一次。
+    let initialMethod: LoginView.LoginMethod
+
     @EnvironmentObject var auth: AuthViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var method: LoginView.LoginMethod = .phone
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
+    @State private var code = ""
+    /// 是否已经发过验证码。控制第二段（验证码栏 + 重发按钮）的出现。
+    @State private var hasSentCode = false
+    @State private var cooldown = 0
+    @State private var cooldownTask: Task<Void, Never>?
 
     // 与后端 VOCABULARY_PASSWORD_MIN_LENGTH 保持一致：只校验长度，不做字符组合
     // 要求（NIST SP 800-63B 建议废弃组合规则，它不提升实际强度还抬高注册流失）。
@@ -15,8 +24,33 @@ struct RegisterView: View {
 
     private static let passwordMinLength = 6
 
+    /// 第一段只要求邮箱和密码填好；第二段还要求验证码填满 6 位。
     private var canSubmit: Bool {
-        !email.isEmpty && longEnough && matched
+        guard !email.isEmpty, longEnough, matched else { return false }
+        return hasSentCode ? code.count == 6 : true
+    }
+
+    private var codeHintText: String {
+        method == .phone
+            ? "验证码已发往 \(email)，10 分钟内有效。"
+            : "验证码已发往 \(email)，10 分钟内有效。没收到请检查垃圾邮件。"
+    }
+
+    private var primaryButtonTitle: String {
+        if auth.isLoading { return hasSentCode ? "注册中…" : "发送中…" }
+        return hasSentCode ? "完成注册" : "发送验证码"
+    }
+
+    private func startCooldown() {
+        cooldownTask?.cancel()
+        cooldown = 60
+        cooldownTask = Task { @MainActor in
+            while cooldown > 0 {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                cooldown -= 1
+            }
+        }
     }
 
     var body: some View {
@@ -25,8 +59,21 @@ struct RegisterView: View {
                 Theme.background.ignoresSafeArea()
                 ScrollView {
                     VStack(spacing: 16) {
-                        TextField("邮箱", text: $email)
-                            .keyboardType(.emailAddress)
+                        Picker("注册方式", selection: $method) {
+                            ForEach(LoginView.LoginMethod.allCases, id: \.self) {
+                                Text($0.label).tag($0)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .disabled(hasSentCode)   // 发过码后再切会让已发的码作废
+                        .onChange(of: method) { _, _ in
+                            email = ""
+                            code = ""
+                            auth.clearError()
+                        }
+
+                        TextField(method.placeholder, text: $email)
+                            .keyboardType(method == .phone ? .phonePad : .emailAddress)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .padding()
@@ -52,6 +99,26 @@ struct RegisterView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
 
+                        // 验证码栏只在发过码之后出现：一上来就摆一个空的验证码框，
+                        // 用户会以为要先去别处找码。
+                        if hasSentCode {
+                            TextField(method == .phone ? "短信收到的 6 位验证码" : "邮箱收到的 6 位验证码", text: $code)
+                                .keyboardType(.numberPad)
+                                .textContentType(.oneTimeCode)
+                                .onChange(of: code) { _, new in
+                                    code = String(new.filter(\.isNumber).prefix(6))
+                                }
+                                .padding()
+                                .background(Theme.surface)
+                                .foregroundStyle(Theme.textPrimary)
+                                .clipShape(.rect(cornerRadius: 10))
+
+                            Text(codeHintText)
+                                .font(.caption)
+                                .foregroundStyle(Theme.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
                         if let errorMessage = auth.errorMessage {
                             Text(errorMessage)
                                 .font(.footnote)
@@ -60,13 +127,28 @@ struct RegisterView: View {
 
                         Button {
                             Task {
-                                await auth.register(email: email, password: password)
-                                if auth.isAuthenticated { dismiss() }
+                                if hasSentCode {
+                                    switch method {
+                                    case .phone:
+                                        await auth.registerByPhone(phone: email, password: password, code: code)
+                                    case .email:
+                                        await auth.register(email: email, password: password, code: code)
+                                    }
+                                    if auth.isAuthenticated { dismiss() }
+                                } else {
+                                    let sent = method == .phone
+                                        ? await auth.requestPhoneRegisterCode(phone: email)
+                                        : await auth.requestRegisterCode(email: email)
+                                    if sent {
+                                        hasSentCode = true
+                                        startCooldown()
+                                    }
+                                }
                             }
                         } label: {
                             HStack {
                                 if auth.isLoading { ProgressView().tint(.white) }
-                                Text(auth.isLoading ? "注册中…" : "注册").fontWeight(.semibold)
+                                Text(primaryButtonTitle).fontWeight(.semibold)
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
@@ -77,6 +159,20 @@ struct RegisterView: View {
                         .buttonStyle(.pressable)
                         .disabled(!canSubmit || auth.isLoading)
 
+                        if hasSentCode {
+                            Button(cooldown > 0 ? "重新发送（\(cooldown)s）" : "重新发送验证码") {
+                                Task {
+                                    let sent = method == .phone
+                                        ? await auth.requestPhoneRegisterCode(phone: email)
+                                        : await auth.requestRegisterCode(email: email)
+                                    if sent { startCooldown() }
+                                }
+                            }
+                            .font(.footnote)
+                            .foregroundStyle(cooldown > 0 ? Theme.textSecondary : Theme.accent)
+                            .disabled(cooldown > 0 || auth.isLoading)
+                        }
+
                         // 用户在这一步才第一次交出邮箱和密码，法务文本必须在
                         // 提交之前就够得着。设置页那两个入口要登录后才能进，
                         // 覆盖不到注册这个真正的收集时点。
@@ -86,6 +182,7 @@ struct RegisterView: View {
                 }
             }
             .navigationTitle("注册")
+            .onAppear { method = initialMethod }
             .navigationBarTitleDisplayMode(.inline)
         }
     }

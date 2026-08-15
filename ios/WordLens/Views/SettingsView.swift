@@ -27,7 +27,7 @@ struct SettingsView: View {
                                 .accessibilityHidden(true)
 
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(profile.email)
+                                Text(profile.displayIdentifier)
                                     .font(.body.weight(.medium))
                                     .foregroundStyle(Theme.textPrimary)
                                     .lineLimit(2)
