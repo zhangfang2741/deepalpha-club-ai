@@ -13,10 +13,6 @@ export default function WordLensTermsPage() {
   return (
     <main className="bg-background text-foreground min-h-screen">
       <div className="mx-auto max-w-3xl px-6 py-16">
-        <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
-          ← 返回首页
-        </Link>
-
         <h1 className="mt-6 text-3xl font-bold tracking-tight">服务条款</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           适用于「鹦鹉背单词」iOS 应用 · 最后更新：{UPDATED}

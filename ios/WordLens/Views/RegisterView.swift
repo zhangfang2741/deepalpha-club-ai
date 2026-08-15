@@ -59,13 +59,14 @@ struct RegisterView: View {
                 Theme.background.ignoresSafeArea()
                 ScrollView {
                     VStack(spacing: 16) {
-                        Picker("注册方式", selection: $method) {
-                            ForEach(LoginView.LoginMethod.allCases, id: \.self) {
-                                Text($0.label).tag($0)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .disabled(hasSentCode)   // 发过码后再切会让已发的码作废
+                        SegmentedToggle(
+                            options: LoginView.LoginMethod.allCases,
+                            label: \.label,
+                            selection: $method
+                        )
+                        // 发过码后再切会让已发的码作废，直接禁用并压暗
+                        .disabled(hasSentCode)
+                        .opacity(hasSentCode ? 0.5 : 1)
                         .onChange(of: method) { _, _ in
                             email = ""
                             code = ""

@@ -13,10 +13,6 @@ export default function WordLensPrivacyPage() {
   return (
     <main className="bg-background text-foreground min-h-screen">
       <div className="mx-auto max-w-3xl px-6 py-16">
-        <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
-          ← 返回首页
-        </Link>
-
         <h1 className="mt-6 text-3xl font-bold tracking-tight">隐私政策</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           适用于「鹦鹉背单词」iOS 应用 · 最后更新：{UPDATED}
@@ -29,13 +25,6 @@ export default function WordLensPrivacyPage() {
               你拍下含英语单词的书页或文档，应用识别出其中的生词并配上音标、释义与例句，
               再通过间隔重复帮你复习。本政策说明本应用收集哪些信息、如何使用、与谁共享，
               以及你享有的权利。使用本应用即表示你已阅读并同意本政策。
-            </p>
-            <p className="mt-3">
-              本政策仅适用于「鹦鹉背单词」iOS 应用。DeepAlpha 投研平台另有
-              <Link href="/privacy" className="text-primary underline underline-offset-4">
-                {' '}独立的隐私政策
-              </Link>
-              ，两者账号体系互相独立、数据互不相通。
             </p>
           </section>
 
