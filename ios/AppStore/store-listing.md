@@ -313,11 +313,64 @@ uv run --with pillow --no-project python ios/AppStore/make_captioned.py
 
 ---
 
-## 提交前最后检查
+## 提交清单（按顺序执行）
 
-- [ ] Xcode `Product → Archive`，确认 Team 是 `L565U2X5NL`（qiaoli chen）
-- [ ] 上传后在 ASC 选择构建版本
-- [ ] 隐私营养标签已按上表填写
-- [ ] 审核备注已粘贴（**后台音频那段不能省**）
-- [ ] 测试账号可正常登录
-- [ ] 两个法务页面线上可访问（已验证 200）
+### 第一步：合并 PR 并部署
+
+- [ ] 合并 `chore/wordlens-appstore-prep` 到 master
+- [ ] 确认 Vercel 部署完成（前端）
+- [ ] 确认 Railway 部署完成（后端）
+
+⚠️ **这一步不能跳过。** 隐私政策 URL 会被审核员打开检查，而线上目前还是不含手机号
+的旧版。App 能用手机号注册、隐私政策却没提手机号，是直接的驳回理由。
+
+验证（三页都应含「手机号」）：
+
+```bash
+for p in privacy terms support; do
+  curl -s https://deepalpha.club/wordlens/$p | grep -c 手机号
+done
+```
+
+### 第二步：App Store Connect 填写
+
+- [ ] **App 信息**：名称「鹦鹉背单词」、副标题、主要类别「教育」
+- [ ] **App 隐私**：按上方表格勾选，**「电话号码」别漏**
+- [ ] **年龄分级**：全选「无」，得到 4+
+- [ ] **价格与销售范围**：免费
+- [ ] **支持网址**：`https://deepalpha.club/wordlens/support`
+- [ ] **隐私政策网址**：`https://deepalpha.club/wordlens/privacy`
+- [ ] **支持的区域（geojson）**：留空跳过
+- [ ] 截图：上传 `screenshots-6.5-captioned/` 里的 6 张，按上表顺序
+- [ ] 推广文本、描述：复制上方内容
+
+### 第三步：构建版本
+
+- [ ] Xcode `Product → Archive`
+- [ ] 确认 Team 是 `L565U2X5NL`（qiaoli chen）
+- [ ] `Distribute App → App Store Connect` 上传
+- [ ] 在 ASC 版本页选择该构建版本
+
+### 第四步：审核信息
+
+- [ ] 登录账号：`appreview@deepalpha.club` / `AppReview2026`
+- [ ] 备注：粘贴上方全文。**三段都不能省**：
+  - 「请使用邮箱方式登录」（审核员在美国，收不到国内短信）
+  - 后台音频的验证步骤（否则按 2.5.4 质疑滥用后台权限）
+  - 相机权限被拒时可用「从相册选择」
+- [ ] 联系人姓名、电话、邮箱
+
+### 第五步：提交
+
+- [ ] 点「添加以供审核」→「提交以供审核」
+- [ ] 首审通常 24~48 小时
+
+---
+
+## 提交后仍待办（不阻塞）
+
+- [ ] **重置 SMTP 密码** —— 当前 `DeepAlpha123` 过弱，且已出现在开发对话记录中
+- [ ] 让国内用户实测灰云切换后的速度，决定是否保留
+- [ ] 考虑独立域名：隐私政策 URL 会公开显示在商品页，
+      `deepalpha.club` 根域即投研平台，砍 URL 就能看到
+- [ ] 有营业执照后申请自有短信签名，替换【恒创联众】
