@@ -31,8 +31,10 @@ struct RegisterView: View {
     }
 
     private var codeHintText: String {
+        // 短信签名是服务商提供的【恒创联众】而不是 App 名——不提前说明的话，
+        // 用户很容易把这条来自陌生公司的短信当成垃圾短信忽略掉。
         method == .phone
-            ? "验证码已发往 \(email)，10 分钟内有效。"
+            ? "验证码已发往 \(email)，10 分钟内有效。短信签名为【恒创联众】，请注意查收。"
             : "验证码已发往 \(email)，10 分钟内有效。没收到请检查垃圾邮件。"
     }
 
