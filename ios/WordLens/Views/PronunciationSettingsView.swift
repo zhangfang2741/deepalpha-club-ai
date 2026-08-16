@@ -2,8 +2,8 @@ import SwiftUI
 
 /// 发音设置页面（从设置页进入）。
 ///
-/// 把发音相关的所有偏好集中在一处。发音源采用自动方案：单词使用有道词典音，
-/// 完整例句使用 MiniMax Speech HD；用户只需选择口音、语速和是否自动发音。
+/// 把发音相关的所有偏好集中在一处。单词与例句统一使用 MiniMax Speech HD，
+/// 用户只需选择口音、语速和是否自动发音。
 struct PronunciationSettingsView: View {
     @State private var accent: PronunciationAccent = PronunciationAccent.current
     @State private var rate: PronunciationRate = PronunciationRate.current
@@ -13,19 +13,17 @@ struct PronunciationSettingsView: View {
         ZStack {
             Theme.background.ignoresSafeArea()
             Form {
+                // 单词和例句现在是同一个引擎，没必要再分两行列出来——
+                // 那会让用户以为有两种可选方案，实际并没有得选。
                 Section {
-                    LabeledContent("单词") {
-                        Text("有道词典音")
-                            .foregroundStyle(Theme.textSecondary)
-                    }
-                    LabeledContent("例句") {
+                    LabeledContent("发音引擎") {
                         Text("MiniMax Speech HD")
                             .foregroundStyle(Theme.textSecondary)
                     }
                 } header: {
                     Text("发音方案")
                 } footer: {
-                    Text("自动为内容选择更合适的发音源：单词侧重词典发音准确性，例句侧重自然连读和语调。")
+                    Text("单词与例句均使用高清语音合成，保留自然的连读、停顿和重音。")
                         .foregroundStyle(Theme.textSecondary)
                 }
                 .listRowBackground(Theme.surface)
