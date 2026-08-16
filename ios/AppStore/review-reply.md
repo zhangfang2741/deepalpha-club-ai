@@ -7,8 +7,8 @@ Apple 要求补充 7 项材料。
   在「解决方案中心」回复时贴上，同时建议一并填进「App 审核信息 → 备注」，
   供后续版本复用。
 
-⚠️ 只有两处需要你填：中英文版本里的机型和系统版本
-（`iPhone <你的机型>, iOS <你的系统版本>`）。
+⚠️ 只剩系统版本需要你填（中英文版本各一处）。查看方式：
+iPhone「设置 → 通用 → 关于本机 → 系统版本」，填写形如 `iOS 26.5` 的值。
 
 ---
 
@@ -30,7 +30,7 @@ Apple 要求补充 7 项材料。
 ────────────────────────────────────────
 2. 测试过的设备与系统版本
 ────────────────────────────────────────
-- iPhone <你的机型>，iOS <你的系统版本>（真机）
+- iPhone 14 Pro，iOS <你的系统版本>（真机）
 - iPhone 11 Pro Max 模拟器，iOS 26.5（仅用于界面核对）
 
 提交前已在真机上完整验证过：注册、登录、拍照识别、复习、听写、删除账号。
@@ -171,7 +171,7 @@ Thank you for reviewing our app. Please find the requested information below.
 ────────────────────────────────────────
 2. DEVICES AND OS VERSIONS TESTED
 ────────────────────────────────────────
-- iPhone <你的机型>, iOS <你的系统版本>  (physical device)
+- iPhone 14 Pro, iOS <你的系统版本>  (physical device)
 - iPhone 11 Pro Max simulator, iOS 26.5  (UI verification only)
 
 All core flows (registration, login, photo recognition, review, dictation,
