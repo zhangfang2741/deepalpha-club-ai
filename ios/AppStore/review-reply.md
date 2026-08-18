@@ -29,10 +29,12 @@ Apple 要求补充 7 项材料。
 ────────────────────────────────────────
 2. 测试过的设备与系统版本
 ────────────────────────────────────────
-- iPhone 16 Pro，iOS 26.6（真机，录像即在此设备上录制）
-- iPhone 11 Pro Max 模拟器，iOS 26.5（仅用于界面核对）
+- iPhone 16 Pro，iOS 26.6（真机）
 
-提交前已在真机上完整验证过：注册、登录、拍照识别、复习、听写、删除账号。
+录像即在该设备上录制。提交前已在这台真机上完整验证过：注册、登录、拍照识别、
+复习、听写、后台朗读、删除账号——录像中均有呈现。
+
+App 的 deployment target 为 iOS 17.6。
 
 ────────────────────────────────────────
 3. App 功能与目标用户
@@ -162,19 +164,59 @@ App 的功能与内容在所有地区完全一致，仅注册方式有一处差�
 
 ---
 
-## 回复文本 · 英文版（含全部 2~7 项，推荐使用）
+## 回复文本 · 英文版（含全部 1~7 项，推荐使用）
+
+> 直接整段复制到解决方案中心，视频作为附件一起上传（`wordlens-review-demo.mp4`，7.7 MB）。
+> 时间戳已按实际录像逐帧核对过，审核员可据此直接跳转。
 
 ```
-Thank you for reviewing our app. Please find the requested information below.
+Thank you for reviewing our app. Please find all requested information below.
+
+────────────────────────────────────────
+1. SCREEN RECORDING
+────────────────────────────────────────
+The screen recording is attached to this message (wordlens-review-demo.mp4).
+Captured on a physical iPhone 16 Pro running iOS 26.6 (the current release).
+Duration 4:31. The recording begins with launching the app from the Home Screen.
+
+Timestamps for the flows you asked about:
+
+  0:00  App launched from the Home Screen
+  0:04  Account registration begins (phone number method)
+  0:32  SMS verification code received on-device and entered
+  0:36  Registration complete, signed in
+  0:40  Sign out (with confirmation dialog)
+  0:48  Sign in with the demo account (email method)
+  1:20  ** Camera permission prompt **
+  1:28  Photo of a printed page captured; recognition in progress (~20 s)
+  1:44  Recognition results; words added to the vocabulary list
+  1:56  Vocabulary list: status filters, search, and two custom playlists
+  2:00  Review: card flip to reveal the definition, swipe to rate recall
+  2:28  Dictation mode
+  2:30  ** Speech recognition permission prompt **
+  2:31  ** Microphone permission prompt **
+  2:33  Spelling a word aloud letter by letter; result graded
+  3:08  Background audio: screen locked, playback continues, Lock Screen shows
+        the current word
+  3:44  Signed back in with the phone account created at 0:04
+  4:04  Account deletion: warning list, password confirmation, permanent delete
+  4:24  Returned to the sign-in screen; the account no longer exists
+
+All three permission prompts (camera, microphone, speech recognition) are shown
+being requested and granted. The app has no paid content, no subscriptions, and
+no user-generated content shared between users, so those flows do not apply.
 
 ────────────────────────────────────────
 2. DEVICES AND OS VERSIONS TESTED
 ────────────────────────────────────────
-- iPhone 16 Pro, iOS 26.6  (physical device; the screen recording was captured on this device)
-- iPhone 11 Pro Max simulator, iOS 26.5  (UI verification only)
+- iPhone 16 Pro, iOS 26.6  (physical device)
 
-All core flows (registration, login, photo recognition, review, dictation,
-account deletion) were verified on the physical device before submission.
+The screen recording above was captured on this device. All core flows —
+registration, sign-in, photo recognition, review, dictation, background playback,
+and account deletion — were verified on it before submission, as shown in the
+recording.
+
+The app's deployment target is iOS 17.6.
 
 ────────────────────────────────────────
 3. APP FUNCTION AND TARGET AUDIENCE
@@ -182,155 +224,162 @@ account deletion) were verified on the physical device before submission.
 "鹦鹉背单词" (Parrot Vocabulary) is an English vocabulary learning tool for
 Chinese-speaking learners.
 
-Problem it solves:
-When reading English textbooks, exam papers, or magazines, learners find
-unfamiliar words and must look each one up in a dictionary, then manually copy
-it into a notebook. This is slow and interrupts reading.
+The problem it solves:
+When reading English textbooks, exam papers, or magazines, a learner encounters
+unfamiliar words and must look each one up in a dictionary and copy it into a
+notebook by hand. This is slow and repeatedly interrupts reading.
 
 How it works:
-The user photographs a page containing English words. The app recognizes all
-unfamiliar words in the image at once and automatically attaches the IPA
-pronunciation, part of speech, Chinese definition, etymology, and an example
-sentence. Words are saved to a personal vocabulary list and scheduled for
-review using the SM-2 spaced repetition algorithm.
+The user photographs a page containing English words. The app recognizes all of
+the words in the image at once and automatically attaches the IPA transcription,
+part of speech, Chinese definition, etymology, and an example sentence. Words are
+saved to a personal vocabulary list and scheduled for review using the SM-2
+spaced repetition algorithm. Words can also be reviewed by listening, including
+while the screen is locked.
 
 Target audience:
-- Students preparing for CET-4/6, postgraduate entrance exams, IELTS, TOEFL
+- Students preparing for CET-4/6, postgraduate entrance exams, IELTS, or TOEFL
 - Readers of English books, magazines, and academic papers
 - Commuters who want to review vocabulary by listening
 
-The app is free, contains no advertising, and has no in-app purchases or
-subscriptions.
+The app is free. It has no advertising, no in-app purchases, and no subscriptions.
 
 ────────────────────────────────────────
 4. SETUP AND ACCESS INSTRUCTIONS
 ────────────────────────────────────────
-DEMO ACCOUNT (please use the EMAIL login method):
+DEMO ACCOUNT — please sign in with the EMAIL method:
+
   Email:    appreview@deepalpha.club
   Password: AppReview2026
 
-IMPORTANT — HOW TO LOG IN:
-The login screen offers two methods via a toggle at the top: "手机号" (phone)
-and "邮箱" (email). Phone verification codes are delivered by a mainland-China
-SMS provider and CANNOT be received by non-Chinese phone numbers. Please tap
-"邮箱" (email) and sign in with the demo account above.
+IMPORTANT: The sign-in screen has a segmented control at the top offering
+"手机号" (phone) and "邮箱" (email). Phone verification codes are delivered by a
+mainland-China SMS provider and cannot be received by non-Chinese phone numbers.
+Please tap "邮箱" (email) and use the credentials above. This is demonstrated in
+the recording at 0:48.
 
-The demo account is pre-populated with 18 vocabulary words, 2 custom playlists,
-and words in all three review states, so every feature can be exercised
-immediately without adding data.
+The demo account is pre-populated with vocabulary words in all three review
+states and two custom playlists, so every feature can be exercised immediately
+without adding any data.
 
-MAIN FEATURES AND HOW TO ACCESS THEM:
+MAIN FEATURES AND WHERE TO FIND THEM:
 
-a) Photo recognition — Tab 1 "首页"
-   Tap "拍照" to use the camera, or "从相册选择" to import an existing image.
-   Any page containing English words works.
-   NOTE: Recognition calls a vision model and typically takes 15-50 seconds.
-   A scanning animation with a running word count is shown while it works.
-   NOTE: If camera permission is denied, "从相册选择" still works and requires
-   no permissions at all.
+a) Photo recognition — tab 1 "首页"
+   "拍照" opens the camera; "从相册选择" imports an existing image. Any page
+   containing English words works.
+   Recognition calls a vision model and typically takes 15-50 seconds. A scanning
+   animation with a running word count is displayed while it works.
+   If camera permission is denied, "从相册选择" still works and requires no
+   permissions at all.
 
-b) Review — Tab 2 "学习"
-   Tap the card to flip it and reveal the definition. Swipe left/right to rate
-   your recall. The rating adjusts the next review interval (SM-2 algorithm).
+b) Review — tab 2 "学习"
+   Tap the card to flip it and reveal the definition; swipe to rate recall. The
+   rating adjusts the next review interval (SM-2).
 
-c) Dictation — Tab 2 "学习", toggle "听写" at the top right
+c) Dictation — tab 2 "学习", switch to "听写" at the top right
    Type the word, or tap the microphone and spell it out letter by letter
-   (e.g. "A-P-P-L-E"). Typing works without any permission; the microphone is
-   optional.
+   (e.g. "A-P-P-L-E"). Typing requires no permissions; the microphone is optional.
 
-d) Vocabulary list — Tab 3 "生词库"
-   Filter by status (不认识 / 模糊 / 认识), search, and manage playlists.
+d) Vocabulary list — tab 3 "生词库"
+   Filter by status, search, and manage playlists.
 
-e) Settings — Tab 4 "设置"
-   Pronunciation preferences, privacy policy, terms of service, account
-   deletion.
+e) Settings — tab 4 "设置"
+   Pronunciation preferences, privacy policy, terms of service, account deletion.
 
 BACKGROUND AUDIO (UIBackgroundModes: audio) — HOW TO VERIFY:
-Listening to vocabulary while commuting is a core use case of this app.
-  1. Go to 设置 → 发音设置 and turn ON "自动发音".
-     (This is OFF by default out of respect for users who may be in a
-     classroom, meeting, or on public transport.)
+Reviewing vocabulary by listening while commuting is a core use case.
+  1. 设置 → 发音设置, turn ON "自动发音".
+     This is OFF by default, because the user may be in a classroom, a meeting,
+     or on public transport and should not be surprised by sound.
   2. Return to tab "学习" and tap the play button in the center.
   3. The app reads each word and its example sentence continuously.
-  4. Lock the screen or switch to another app — playback continues and the
-     Lock Screen shows the current word.
-Background audio is used solely for this playback; the app performs no other
-background activity.
+  4. Lock the screen or switch to another app — playback continues and the Lock
+     Screen shows the current word.
+This is shown in the recording at 3:08. Background audio is used solely for this
+playback; the app performs no other background activity.
 
 ACCOUNT DELETION:
-设置 → 删除账号. Requires re-entering the password. Deletion is immediate and
-permanent — the account, all vocabulary, review history, and playlists are
-erased with no recovery period.
-(Please avoid running this on the demo account; if it is deleted, the same
-email can be registered again.)
+设置 → 删除账号, then re-enter the password. Deletion is immediate and permanent:
+the account, all vocabulary, review history, and playlists are erased, with no
+recovery period. Shown in the recording at 4:04.
+(Please avoid running this on the demo account. If it is deleted, the same email
+can simply be registered again.)
 
 ────────────────────────────────────────
 5. EXTERNAL SERVICES USED
 ────────────────────────────────────────
-- Google Gemini (vision model)
-  Recognizes English words in the user's photo and generates the IPA,
-  definition, etymology, and example sentence. The image is transmitted for
-  real-time processing only; it is never written to our database or disk and
-  is released from memory as soon as the request completes. No user identity
-  is sent with the image.
+- Google Gemini (vision and language model)
+  Recognizes English words in the user's photo and generates the IPA
+  transcription, definition, etymology, and example sentence. The image is
+  transmitted for real-time processing only; it is never written to our database
+  or to disk, and is released from memory as soon as the request completes. No
+  user identity is sent with the image.
 
 - Apple SFSpeechRecognizer (system framework)
-  Converts the user's spoken letters to text for dictation grading. Audio is
+  Converts the letters the user speaks into text for dictation grading. Audio is
   handled entirely by iOS and never reaches our servers.
 
 - MiniMax (text-to-speech)
-  Generates audio for example sentences. Only the sentence text is sent; no
-  user identity is included.
+  Synthesizes the pronunciation audio for both words and example sentences. Only
+  the text is sent; no user identity is included. Requests are proxied through
+  our own backend so that the provider key is never shipped in the app.
 
-- Alibaba Cloud DirectMail (email delivery)
-  Sends the 6-digit verification code for email registration and password
+- Alibaba Cloud DirectMail (transactional email)
+  Delivers the 6-digit verification code for email registration and password
   reset.
 
 - Alibaba Cloud Number Verification Service (SMS)
-  Sends and verifies the 6-digit code for phone registration and password
-  reset. The code is generated and validated by Alibaba Cloud; we never see it
+  Delivers and validates the 6-digit code for phone registration and password
+  reset. The code is generated and verified by Alibaba Cloud; we never handle it
   in plaintext.
+  Note: China's carrier regulations do not permit custom SMS sender signatures
+  for our account tier, so the verification SMS is sent under the provider's
+  generic signature 【恒创联众】 rather than the app name. This is visible in the
+  recording at 0:32. The app's registration screen tells the user which signature
+  to expect so the message is not mistaken for spam.
 
 - Railway (application hosting and database)
 - Cloudflare (DNS)
 
-The app contains NO advertising SDKs, NO analytics SDKs, and performs no
-cross-app or cross-website tracking. It therefore does not request App
-Tracking Transparency authorization.
+The app contains NO advertising SDKs and NO analytics SDKs, and performs no
+cross-app or cross-website tracking. It therefore does not request App Tracking
+Transparency authorization.
 
 ────────────────────────────────────────
 6. REGIONAL DIFFERENCES
 ────────────────────────────────────────
-The app's features and content are identical in all regions, with one
-exception related to account registration:
+The app's features and content are identical in every region, with one exception
+that concerns account creation only:
 
-- EMAIL registration and login: available worldwide.
-- PHONE NUMBER registration and login: the SMS verification code is delivered
+- EMAIL registration and sign-in: available worldwide.
+- PHONE NUMBER registration and sign-in: the SMS verification code is delivered
   through a mainland-China SMS provider. Users with non-Chinese phone numbers
-  will not receive the code and should use email registration instead.
+  will not receive it and should register with an email address instead.
 
-Both methods create the same type of account with identical functionality.
-The login screen lets the user switch between them at any time.
+Both methods create the same kind of account with identical functionality, and
+the sign-in screen lets the user switch between them at any time.
 
-All learning features (photo recognition, review, dictation, playlists,
-pronunciation) work identically worldwide.
+All learning features — photo recognition, review, dictation, playlists, and
+pronunciation — behave identically in all regions.
 
 ────────────────────────────────────────
 7. REGULATED INDUSTRY / PROTECTED THIRD-PARTY MATERIAL
 ────────────────────────────────────────
-The app does not operate in a regulated industry and does not include any
-protected third-party material.
+The app does not operate in a regulated industry and does not include, display,
+or access any protected third-party material.
 
-All word definitions, IPA transcriptions, etymologies, and example sentences
-are generated by Google's Gemini model at the time of recognition; they are not
-copied from any dictionary or other copyrighted source.
+- Definitions, IPA transcriptions, etymologies, and example sentences are
+  generated by Google's Gemini model at the moment of recognition. They are not
+  copied from any dictionary or other copyrighted source.
+- All pronunciation audio, for both words and example sentences, is synthesized
+  by MiniMax text-to-speech, a commercial service we subscribe to, and is
+  requested through our own backend.
+- The images the user photographs are their own material and are not retained.
 
-All pronunciation audio (both words and example sentences) is synthesized by
-MiniMax text-to-speech, a commercial service we subscribe to, and is requested
-through our own backend.
+The app bundles no licensed dictionary content, no audio recordings, and no other
+third-party protected works.
 
-The app does not bundle, display, or access any licensed dictionary content,
-audio recordings, or other third-party protected works.
+Thank you for your time. Please let us know if anything else would be helpful.
 ```
 
 ---
