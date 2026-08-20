@@ -72,7 +72,7 @@ final class CameraViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "识别失败，请重新拍摄"
+            errorMessage = L("识别失败，请重新拍摄")
         }
     }
 
@@ -100,7 +100,7 @@ final class CameraViewModel: ObservableObject {
             errorMessage = error.message
             return ([], [])
         } catch {
-            errorMessage = "加入生词库失败"
+            errorMessage = L("加入生词库失败")
             return ([], [])
         }
     }

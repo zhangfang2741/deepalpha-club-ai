@@ -88,10 +88,10 @@ struct WordDetailView: View {
     /// "过期出错"，所以已到期一律显示「待复习」。
     private var nextReviewLabel: String {
         guard let date = Self.parseBackendDate(word.nextReviewAt) else { return word.nextReviewAt }
-        if date <= Date() { return "待复习" }
+        if date <= Date() { return L("待复习") }
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月d日 HH:mm"
+        formatter.locale = Locale(identifier: Localized.language().localeIdentifier)
+        formatter.dateFormat = L("M月d日 HH:mm")
         return formatter.string(from: date)
     }
 

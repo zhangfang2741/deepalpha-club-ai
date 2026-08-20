@@ -1,0 +1,5 @@
+/* WordLens — English Info.plist strings */
+"CFBundleDisplayName" = "WordLens";
+"NSCameraUsageDescription" = "Camera access is needed to photograph documents or book pages with English words, to recognize new vocabulary.";
+"NSMicrophoneUsageDescription" = "Microphone access is needed to record the words you say during spelling dictation.";
+"NSSpeechRecognitionUsageDescription" = "Speech recognition is used to turn the words you say into text to check your dictation. Audio is sent to Apple's speech recognition service for processing.";

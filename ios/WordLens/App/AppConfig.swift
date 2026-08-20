@@ -15,7 +15,7 @@ enum AppConfig {
     /// App 显示名。锁屏「正在播放」等处需要用到，从 Info.plist 读而不是硬编码，
     /// 避免改名时漏掉某处（上次「鹦鹉学舌」→「鹦鹉背单词」就在这里留了个残留）。
     static let displayName: String =
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "鹦鹉背单词"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? L("鹦鹉背单词")
 
     /// 隐私政策 / 服务条款。App Store Connect 必填隐私政策 URL，审核员也会
     /// 检查 App 内可达（设置页「关于」分组）。

@@ -154,10 +154,10 @@ struct WordListView: View {
                         Button("删除", role: .destructive) {
                             Task {
                                 let total = viewModel.selectedIDs.count
-                                nav.beginBlockingOperation("正在删除生词 0 / \(total)")
+                                nav.beginBlockingOperation(L("正在删除生词 %lld / %lld", 0, total))
                                 defer { nav.endBlockingOperation() }
                                 if await viewModel.deleteSelected(onProgress: { completed, total in
-                                    nav.updateBlockingOperation("正在删除生词 \(completed) / \(total)")
+                                    nav.updateBlockingOperation(L("正在删除生词 %lld / %lld", completed, total))
                                 }) {
                                     nav.notifyVocabularyDataChanged()
                                 }
@@ -181,11 +181,11 @@ struct WordListView: View {
                         // PlaylistViewModel 实例，不发通知的话它手里还是加词之前
                         // 的队列和计数——用户切到这个分组会发现新加的词没出现。
                         nav.notifyVocabularyDataChanged()
-                        playlistFeedback = "已把 \(wordIDs.count) 个单词加入「\(playlist.name)」"
+                        playlistFeedback = L("已把 %lld 个单词加入「%@」", wordIDs.count, playlist.name)
                     } else {
                         // 之前这里失败是完全静默的：既不退出多选也不提示，用户
                         // 只会觉得"点了没反应"。
-                        playlistFeedback = playlistVM.errorMessage ?? "加入分组失败，请稍后重试"
+                        playlistFeedback = playlistVM.errorMessage ?? L("加入分组失败，请稍后重试")
                     }
                 }
             }

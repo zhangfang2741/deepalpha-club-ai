@@ -74,11 +74,11 @@ enum PlaylistSelection: Hashable, Codable {
     /// nil，由 `displayName(playlists:)` 补上。
     private var builtinName: String? {
         switch self {
-        case .dueReview: return "待复习"
-        case .status("new"): return "不认识"
-        case .status("fuzzy"): return "模糊"
-        case .status("known"): return "认识"
-        case .status: return "生词"
+        case .dueReview: return L("待复习")
+        case .status("new"): return L("不认识")
+        case .status("fuzzy"): return L("模糊")
+        case .status("known"): return L("认识")
+        case .status: return L("生词")
         case .custom: return nil
         }
     }
@@ -88,32 +88,32 @@ enum PlaylistSelection: Hashable, Codable {
     func displayName(playlists: [Playlist] = []) -> String {
         if let builtinName { return builtinName }
         if case .custom(let id) = self {
-            return playlists.first { $0.id == id }?.name ?? "自定义分组"
+            return playlists.first { $0.id == id }?.name ?? L("自定义分组")
         }
-        return "生词"
+        return L("生词")
     }
 
     /// 队列为空时的提示文案 —— 待复习和其它分组的「空」含义完全不同。
     var emptyTitle: String {
         switch self {
-        case .dueReview: return "今天没有待复习的单词"
-        case .status: return "这个分组里还没有单词"
-        case .custom: return "这个分组还没有单词"
+        case .dueReview: return L("今天没有待复习的单词")
+        case .status: return L("这个分组里还没有单词")
+        case .custom: return L("这个分组还没有单词")
         }
     }
 
     var emptyDescription: String {
         switch self {
-        case .dueReview, .status: return "去拍照识别一些新单词吧"
-        case .custom: return "在正在播放页编辑这个分组，把想背的词加进来"
+        case .dueReview, .status: return L("去拍照识别一些新单词吧")
+        case .custom: return L("在正在播放页编辑这个分组，把想背的词加进来")
         }
     }
 
     /// 全部评分完的提示文案。
     var finishedTitle: String {
         switch self {
-        case .dueReview: return "今日复习完成 🎉"
-        case .status, .custom: return "这一组过完了 🎉"
+        case .dueReview: return L("今日复习完成 🎉")
+        case .status, .custom: return L("这一组过完了 🎉")
         }
     }
 

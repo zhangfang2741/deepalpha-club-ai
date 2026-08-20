@@ -245,7 +245,7 @@ final class AutoplayController: ObservableObject {
                 try? await Task.sleep(for: .seconds(Self.beforeExampleDelay))
                 if Task.isCancelled || !isPlaying { return }
                 isReadingExample = true
-                Pronouncer.shared.updateNowPlayingTitle("例句 · \(word)")
+                Pronouncer.shared.updateNowPlayingTitle(L("例句 · %@", word))
                 await speakAndWait(example, isExample: true)
                 isReadingExample = false
                 Pronouncer.shared.updateNowPlayingTitle(word)

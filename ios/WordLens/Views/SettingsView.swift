@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var auth: AuthViewModel
+    @EnvironmentObject var localization: LocalizationManager
     @StateObject private var viewModel = SettingsViewModel()
     @State private var isDeleteAccountPresented = false
     @State private var isLogoutConfirmPresented = false
@@ -63,7 +64,27 @@ struct SettingsView: View {
 
                 // 学习模式已挪到首页左上角的下拉框里：它跟「当前在播哪一组」
                 // 是同一件事的两个侧面，放一起才成套。
-                Section("偏好设置") {
+                Section {
+                    // 语言切换：跟随系统（按地区自动）/ 中文 / English。
+                    // 选完立刻生效——LocalizationManager 改 @Published，App 根视图
+                    // 换 locale 并靠 .id 重建，无需重启。
+                    Picker(selection: $localization.preference) {
+                        Text("跟随系统").tag(LanguagePreference.system)
+                        Text(AppLanguage.chinese.nativeName).tag(LanguagePreference.chinese)
+                        Text(AppLanguage.english.nativeName).tag(LanguagePreference.english)
+                    } label: {
+                        Label("语言", systemImage: "globe")
+                    }
+                } header: {
+                    Text("偏好设置")
+                } footer: {
+                    Text("选择界面语言。默认根据所在地区自动判断：中国大陆显示中文，其它地区显示英文。")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .listRowBackground(Theme.surface)
+
+                Section {
                     NavigationLink {
                         PronunciationSettingsView()
                     } label: {
@@ -157,8 +178,8 @@ struct SettingsView: View {
             parser.dateFormat = format
             if let date = parser.date(from: raw) {
                 let formatter = DateFormatter()
-                formatter.locale = Locale(identifier: "zh_CN")
-                formatter.dateFormat = "yyyy年M月d日"
+                formatter.locale = Locale(identifier: Localized.language().localeIdentifier)
+                formatter.dateFormat = L("yyyy年M月d日")
                 return formatter.string(from: date)
             }
         }

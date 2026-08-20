@@ -213,7 +213,7 @@ struct RecognizeResultView: View {
             // 提交失败——错误条已经显示, sheet 不关, 让用户选择重试 / 取消
             return
         }
-        resultMessage = "加入 \(added.count) 个单词" + (skipped.isEmpty ? "" : "，\(skipped.count) 个已存在")
+        resultMessage = L("加入 %lld 个单词", added.count) + (skipped.isEmpty ? "" : L("，%lld 个已存在", skipped.count))
         try? await Task.sleep(for: .seconds(1.2))
         if !added.isEmpty {
             // 跳到生词库 tab 并高亮刚加入的词，而不是留在拍照页——

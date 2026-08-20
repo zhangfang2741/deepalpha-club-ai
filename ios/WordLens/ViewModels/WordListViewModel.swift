@@ -85,7 +85,7 @@ final class WordListViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "加载生词库失败"
+            errorMessage = L("加载生词库失败")
         }
     }
 
@@ -98,7 +98,7 @@ final class WordListViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "删除失败"
+            errorMessage = L("删除失败")
         }
         return false
     }
@@ -176,7 +176,7 @@ final class WordListViewModel: ObservableObject {
 
         selectedIDs.subtract(succeededIDs)
         if failedCount > 0 {
-            errorMessage = "有 \(failedCount) 个单词删除失败，请稍后重试"
+            errorMessage = L("有 %lld 个单词删除失败，请稍后重试", failedCount)
         }
 
         if selectedIDs.isEmpty {

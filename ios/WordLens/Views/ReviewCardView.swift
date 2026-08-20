@@ -437,13 +437,13 @@ struct ReviewCardView: View {
 
     private var progressAccessibilityValue: String {
         let current = viewModel.reviewedCount + viewModel.currentIndex + 1
-        let progress = "第 \(current) 个，共 \(viewModel.totalCount) 个"
+        let progress = L("第 %lld 个，共 %lld 个", current, viewModel.totalCount)
         guard viewModel.autoplay.isPlaying else { return progress }
         if viewModel.autoplay.isReadingExample {
-            return "\(progress)，正在朗读英文例句"
+            return L("%@，正在朗读英文例句", progress)
         }
-        return "\(progress)，正在播放第 \(viewModel.autoplay.passIndex + 1) 遍，"
-            + "共 \(AutoplayController.passCount) 遍"
+        return L("%@，正在播放第 %lld 遍，共 %lld 遍",
+                 progress, viewModel.autoplay.passIndex + 1, AutoplayController.passCount)
     }
 
     /// 自动播放按钮：圆 + 图标 + 阴影，包在 Button 里复用 .pressable 样式
@@ -576,7 +576,7 @@ struct ReviewCardView: View {
             .contentShape(.rect)
         }
         .buttonStyle(.pressable)
-        .accessibilityLabel("\(label)，\(count) 个\(isCurrent ? "，当前分组" : "")")
+        .accessibilityLabel(L("%@，%lld 个%@", label, count, isCurrent ? L("，当前分组") : ""))
     }
 
     /// 播放条最左：播放顺序（对应 ReviewMode），跟播放器上「循环/随机」那颗键
@@ -980,7 +980,7 @@ struct ReviewCardView: View {
             .replacingOccurrences(of: "😵 ", with: "")
             .replacingOccurrences(of: "😐 ", with: "")
             .replacingOccurrences(of: "😊 ", with: "")
-        showToast("已标记为\(stripped)", color: color)
+        showToast(L("已标记为%@", stripped), color: color)
     }
 
     private func showToast(_ message: String, color: Color) {
