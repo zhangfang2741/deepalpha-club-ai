@@ -22,6 +22,21 @@ enum AppConfig {
     static let privacyPolicyURL = URL(string: "https://deepalpha.club/wordlens/privacy")!
     static let termsOfServiceURL = URL(string: "https://deepalpha.club/wordlens/terms")!
 
+    // MARK: - 订阅与免费额度
+
+    /// 月度订阅商品 ID（需与 App Store Connect / Products.storekit 一致）。
+    /// 价格在 App Store Connect 里设为约 ¥29/月的价格档，其它地区由 Apple 按档位
+    /// 自动换算，端上只读 `product.displayPrice` 展示本地化价格，不硬编码金额。
+    static let proMonthlyProductID = "club.deepalpha.wordlens.pro.monthly"
+
+    /// 免费用户每日可拍照识别的张数（超出需订阅）。
+    static let freeDailyPhotoLimit = 3
+
+    /// 免费用户每日可学习的新单词数（超出需订阅）。
+    /// 「学习」= 在学习页把一个单词完整播放一遍；当天已学过的词可无限次重复，
+    /// 只有当天学第 N+1 个「新」词时才受限。
+    static let freeDailyWordLimit = 20
+
     static let requestTimeout: TimeInterval = 30
     /// 拍照识别调 LLM，比普通请求慢很多，单独给更长超时。
     ///

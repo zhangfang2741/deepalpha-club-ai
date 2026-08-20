@@ -6,10 +6,17 @@ import UIKit
 
 struct CameraCaptureView: View {
     @StateObject private var viewModel = CameraViewModel()
+    @EnvironmentObject var store: StoreManager
+    @EnvironmentObject var usage: UsageTracker
     @State private var photoPickerItem: PhotosPickerItem?
     @State private var showCameraSheet = false
     /// 相机不可用时的提示（权限被拒 / 设备没有相机），nil 表示不弹。
     @State private var cameraBlockedReason: CameraBlockedReason?
+    /// 当日拍照识别额度用尽时弹出的订阅墙。
+    @State private var showPaywall = false
+
+    /// 今天还能不能拍照识别：订阅用户不限；免费用户按当日额度判定。
+    private var photoAllowed: Bool { store.isSubscribed || usage.canTakePhoto() }
 
     var body: some View {
         NavigationStack {
@@ -43,6 +50,8 @@ struct CameraCaptureView: View {
                     if !viewModel.isRecognizing {
                         VStack(spacing: 12) {
                             Button {
+                                // 先查额度，用尽直接弹订阅墙，不让用户白拍一张再被拦。
+                                guard photoAllowed else { showPaywall = true; return }
                                 Task { await presentCameraIfAllowed() }
                             } label: {
                                 Label(L("拍照"), systemImage: "camera.fill")
@@ -98,6 +107,12 @@ struct CameraCaptureView: View {
             }
             .onChange(of: photoPickerItem) { _, newItem in
                 guard let newItem else { return }
+                // 相册选图同样走额度：用尽则弹墙，不进识别。
+                guard photoAllowed else {
+                    photoPickerItem = nil
+                    showPaywall = true
+                    return
+                }
                 Task {
                     viewModel.isRecognizing = true
                     guard let rawData = try? await newItem.loadTransferable(type: Data.self),
@@ -119,6 +134,7 @@ struct CameraCaptureView: View {
                     // 不缺这一个，这里只禁掉手势关掉，让下拉真回到它该干的事（滚动）。
                     .interactiveDismissDisabled(true)
             }
+            .sheet(isPresented: $showPaywall) { PaywallView() }
         }
     }
 
@@ -193,6 +209,12 @@ struct CameraCaptureView: View {
     /// 识别不再跑端上 Apple Vision OCR：印刷体识别效果有限、且要跨端到安卓，识别
     /// 统一交给后端视觉模型，客户端只负责把图片压好上传。
     private func process(_ image: UIImage) async {
+        // 兜底闸门（入口按钮已先查过一次，这里防其它调用路径绕过）。
+        guard photoAllowed else {
+            viewModel.isRecognizing = false
+            showPaywall = true
+            return
+        }
         viewModel.isRecognizing = true
         // 第一步：解码到 1600px 并派生缩略图，立刻显示——扫描效果秒出，不被压缩拖住。
         let (uploadImage, thumbnail) = await Task.detached(priority: .userInitiated) {
@@ -211,6 +233,10 @@ struct CameraCaptureView: View {
             return
         }
         await viewModel.recognize(imageData: data)
+        // 识别成功（无错误）才计一次额度：网络失败/无识别结果不该扣次数。
+        if viewModel.errorMessage == nil {
+            usage.recordPhoto()
+        }
     }
 
     /// 等比缩放到最长边不超过 maxDimension。真机原图解码成 UIImage 后在内存里可能

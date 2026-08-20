@@ -4,9 +4,15 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var auth: AuthViewModel
     @EnvironmentObject var localization: LocalizationManager
+    @EnvironmentObject var store: StoreManager
+    @EnvironmentObject var usage: UsageTracker
     @StateObject private var viewModel = SettingsViewModel()
     @State private var isDeleteAccountPresented = false
     @State private var isLogoutConfirmPresented = false
+    @State private var showPaywall = false
+
+    /// App Store 订阅管理页（用户在这里取消/改套餐）。
+    private static let manageSubscriptionsURL = URL(string: "https://apps.apple.com/account/subscriptions")!
 
     /// 「1.0 (1)」：MARKETING_VERSION + CURRENT_PROJECT_VERSION，报障时好定位。
     private static var appVersion: String {
@@ -59,6 +65,49 @@ struct SettingsView: View {
                             }
                         }
                     }
+                }
+                .listRowBackground(Theme.surface)
+
+                // 订阅：会员显示状态 + 管理入口；免费用户显示今日剩余额度 +
+                // 升级/恢复入口（App Store 审核要求 App 内可见订阅状态与恢复购买）。
+                Section {
+                    if store.isSubscribed {
+                        HStack(spacing: 12) {
+                            Image(systemName: "crown.fill")
+                                .foregroundStyle(Theme.fuzzy)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(L("Pro 会员")).foregroundStyle(Theme.textPrimary)
+                                Text(L("已解锁无限拍照与学习"))
+                                    .font(.caption).foregroundStyle(Theme.textSecondary)
+                            }
+                        }
+                        Link(destination: Self.manageSubscriptionsURL) {
+                            Label(L("管理订阅"), systemImage: "gearshape")
+                        }
+                    } else {
+                        Button {
+                            showPaywall = true
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "crown.fill").foregroundStyle(Theme.fuzzy)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(L("升级 Pro")).foregroundStyle(Theme.textPrimary)
+                                    Text(L("今日剩余拍照 %lld 次 · 学习 %lld 个", usage.photosRemaining, usage.wordsRemaining))
+                                        .font(.caption).foregroundStyle(Theme.textSecondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption).foregroundStyle(Theme.textSecondary)
+                            }
+                        }
+                        Button {
+                            Task { await store.restore() }
+                        } label: {
+                            Label(L("恢复购买"), systemImage: "arrow.clockwise")
+                        }
+                    }
+                } header: {
+                    Text(L("订阅"))
                 }
                 .listRowBackground(Theme.surface)
 
@@ -170,6 +219,7 @@ struct SettingsView: View {
             // 账号已在服务端删除，本地 token 也就作废了，直接登出跳回登录页。
             DeleteAccountView(viewModel: viewModel) { auth.logout() }
         }
+        .sheet(isPresented: $showPaywall) { PaywallView() }
     }
 
     /// 后端返回不带时区的 ISO 8601 字符串（naive UTC），解析后按本地时区格式化。

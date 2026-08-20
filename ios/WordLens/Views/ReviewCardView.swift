@@ -5,6 +5,10 @@ struct ReviewCardView: View {
     @StateObject private var viewModel = ReviewViewModel()
     @StateObject private var playlistVM = PlaylistViewModel()
     @EnvironmentObject var nav: AppNavigationState
+    @EnvironmentObject var store: StoreManager
+    @EnvironmentObject var usage: UsageTracker
+    /// 学习额度用尽时弹出的订阅墙。
+    @State private var showPaywall = false
 
     /// 评分后顶部浮出的确认 toast：「✓ 已标记为认识」之类，1.2s 自动消失。
     /// 切下一张卡（currentIndex 推进）也能继续显示——给用户一个明确的"刚才那个动作
@@ -98,6 +102,18 @@ struct ReviewCardView: View {
             // 自己在内容区画这一行，宽度、字号才完全可控。
             .toolbar(.hidden, for: .navigationBar)
             .task { await viewModel.loadQueueIfNeeded() }
+            // 接线学习额度闸门：订阅用户直接放行；免费用户按 UsageTracker 判定。
+            // 放 .task 里而不是 init，因为 store/usage 是环境对象，且切语言/重建时
+            // 需要重新绑定当前实例。
+            .task {
+                viewModel.autoplay.learningGate = { [store, usage] wordID in
+                    store.isSubscribed || usage.canLearn(wordID: wordID)
+                }
+                viewModel.autoplay.onWordLearned = { [usage] wordID in
+                    usage.recordLearned(wordID: wordID)
+                }
+                viewModel.autoplay.onLearningBlocked = { showPaywall = true }
+            }
             .task {
                 // 面板里的歌单名要在首屏就能用（标题显示的是当前组的名字，如果当前
                 // 组是个自定义歌单，名字只能从歌单列表里查）。
@@ -171,6 +187,7 @@ struct ReviewCardView: View {
                     .opacity(viewModel.currentWord != nil ? 1 : 0)
                     .allowsHitTesting(viewModel.currentWord != nil)
             }
+            .sheet(isPresented: $showPaywall) { PaywallView() }
         }
     }
 
