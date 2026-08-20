@@ -32,10 +32,10 @@ struct WordDetailView: View {
                     .padding()
 
                     VStack(alignment: .leading, spacing: 8) {
-                        detailRow("状态", statusLabel)
-                        detailRow("连续认识次数", "\(word.repetitionCount)")
-                        detailRow("复习间隔", "\(word.intervalDays) 天")
-                        detailRow("下次复习", nextReviewLabel)
+                        detailRow(L("状态"), statusLabel)
+                        detailRow(L("连续认识次数"), "\(word.repetitionCount)")
+                        detailRow(L("复习间隔"), L("%lld 天", word.intervalDays))
+                        detailRow(L("下次复习"), nextReviewLabel)
                     }
                     .padding()
                     .background(Theme.surface)
@@ -44,10 +44,10 @@ struct WordDetailView: View {
                     if !word.etymology.isEmpty || !word.exampleSentence.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
                             if !word.etymology.isEmpty {
-                                detailBlock("词根", word.etymology)
+                                detailBlock(L("词根"), word.etymology)
                             }
                             if !word.exampleSentence.isEmpty {
-                                detailBlock("例句", word.exampleSentence)
+                                detailBlock(L("例句"), word.exampleSentence)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -56,7 +56,7 @@ struct WordDetailView: View {
                         .clipShape(.rect(cornerRadius: 12))
                     }
 
-                    Text("想复习这个词就去学习页，评分只在那里进行")
+                    Text(L("想复习这个词就去学习页，评分只在那里进行"))
                         .font(.footnote)
                         .foregroundStyle(Theme.textSecondary)
                         .padding(.top, 4)
@@ -64,7 +64,7 @@ struct WordDetailView: View {
                 .padding()
             }
         }
-        .navigationTitle("单词详情")
+        .navigationTitle(L("单词详情"))
         .navigationBarTitleDisplayMode(.inline)
         // 进入详情时按「自动发音」设置决定是否朗读。
         .task { Pronouncer.shared.speakIfAutoplayEnabled(word.word) }
@@ -72,9 +72,9 @@ struct WordDetailView: View {
 
     private var statusLabel: String {
         switch word.status {
-        case "known": return "认识"
-        case "fuzzy": return "模糊"
-        default: return "不认识"
+        case "known": return L("认识")
+        case "fuzzy": return L("模糊")
+        default: return L("不认识")
         }
     }
 

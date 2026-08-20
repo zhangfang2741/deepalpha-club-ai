@@ -25,19 +25,19 @@ struct DeleteAccountView: View {
                 Form {
                     Section {
                         VStack(alignment: .leading, spacing: 12) {
-                            Label("此操作不可恢复", systemImage: "exclamationmark.triangle.fill")
+                            Label(L("此操作不可恢复"), systemImage: "exclamationmark.triangle.fill")
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(Theme.unknown)
 
-                            Text("删除后，以下数据会被永久清除，无法找回：")
+                            Text(L("删除后，以下数据会被永久清除，无法找回："))
                                 .font(.footnote)
                                 .foregroundStyle(Theme.textSecondary)
 
                             VStack(alignment: .leading, spacing: 6) {
-                                deletedItemRow("你的账号与登录信息")
-                                deletedItemRow("全部生词及其释义、例句")
-                                deletedItemRow("所有复习进度与历史记录")
-                                deletedItemRow("所有自建歌单")
+                                deletedItemRow(L("你的账号与登录信息"))
+                                deletedItemRow(L("全部生词及其释义、例句"))
+                                deletedItemRow(L("所有复习进度与历史记录"))
+                                deletedItemRow(L("所有自建歌单"))
                             }
                         }
                         .padding(.vertical, 4)
@@ -45,12 +45,12 @@ struct DeleteAccountView: View {
                     .listRowBackground(Theme.surface)
 
                     Section {
-                        SecureField("当前密码", text: $password)
+                        SecureField(L("当前密码"), text: $password)
                             .textContentType(.password)
                     } header: {
-                        Text("输入密码确认身份")
+                        Text(L("输入密码确认身份"))
                     } footer: {
-                        Text("为防止误删，需要重新输入一次密码。")
+                        Text(L("为防止误删，需要重新输入一次密码。"))
                             .font(.caption)
                             .foregroundStyle(Theme.textSecondary)
                     }
@@ -73,7 +73,7 @@ struct DeleteAccountView: View {
                                 if viewModel.isDeletingAccount {
                                     ProgressView().tint(Theme.unknown)
                                 }
-                                Text(viewModel.isDeletingAccount ? "正在删除..." : "永久删除账号")
+                                Text(viewModel.isDeletingAccount ? L("正在删除...") : L("永久删除账号"))
                                     .frame(maxWidth: .infinity)
                             }
                         }
@@ -83,26 +83,26 @@ struct DeleteAccountView: View {
                 }
                 .scrollContentBackground(.hidden)
             }
-            .navigationTitle("删除账号")
+            .navigationTitle(L("删除账号"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button(L("取消")) { dismiss() }
                         .disabled(viewModel.isDeletingAccount)
                 }
             }
             .interactiveDismissDisabled(viewModel.isDeletingAccount)
             .confirmationDialog(
-                "确定要永久删除账号吗？",
+                L("确定要永久删除账号吗？"),
                 isPresented: $isConfirmDialogPresented,
                 titleVisibility: .visible
             ) {
-                Button("永久删除", role: .destructive) {
+                Button(L("永久删除"), role: .destructive) {
                     Task { await submit() }
                 }
-                Button("再想想", role: .cancel) {}
+                Button(L("再想想"), role: .cancel) {}
             } message: {
-                Text("你的生词库和复习进度都会被清空，且无法恢复。")
+                Text(L("你的生词库和复习进度都会被清空，且无法恢复。"))
             }
         }
     }

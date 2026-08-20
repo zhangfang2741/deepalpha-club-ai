@@ -28,7 +28,7 @@ struct CameraCaptureView: View {
                         Image(systemName: "camera.viewfinder")
                             .font(.system(size: 64))
                             .foregroundStyle(Theme.textSecondary)
-                        Text("拍摄或选择含英语单词的图片")
+                        Text(L("拍摄或选择含英语单词的图片"))
                             .foregroundStyle(Theme.textSecondary)
                     }
 
@@ -45,7 +45,7 @@ struct CameraCaptureView: View {
                             Button {
                                 Task { await presentCameraIfAllowed() }
                             } label: {
-                                Label("拍照", systemImage: "camera.fill")
+                                Label(L("拍照"), systemImage: "camera.fill")
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 14)
                                     .background(Theme.accent)
@@ -55,7 +55,7 @@ struct CameraCaptureView: View {
                             .buttonStyle(.pressable)
 
                             PhotosPicker(selection: $photoPickerItem, matching: .images) {
-                                Label("从相册选择", systemImage: "photo.on.rectangle")
+                                Label(L("从相册选择"), systemImage: "photo.on.rectangle")
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 14)
                                     .background(Theme.surface)
@@ -70,7 +70,7 @@ struct CameraCaptureView: View {
                     Spacer()
                 }
             }
-            .navigationTitle("拍照录入")
+            .navigationTitle(L("拍照录入"))
             .sheet(isPresented: $showCameraSheet) {
                 CameraPicker { image in
                     Task { await process(image) }
@@ -86,13 +86,13 @@ struct CameraCaptureView: View {
                 presenting: cameraBlockedReason
             ) { reason in
                 if reason == .permissionDenied {
-                    Button("去设置") {
+                    Button(L("去设置")) {
                         if let url = URL(string: UIApplication.openSettingsURLString) {
                             UIApplication.shared.open(url)
                         }
                     }
                 }
-                Button("好", role: .cancel) {}
+                Button(L("好"), role: .cancel) {}
             } message: { reason in
                 Text(reason.message)
             }
@@ -133,17 +133,17 @@ struct CameraCaptureView: View {
 
         var title: String {
             switch self {
-            case .permissionDenied: "无法使用相机"
-            case .noCameraOnDevice: "此设备没有可用的相机"
+            case .permissionDenied: L("无法使用相机")
+            case .noCameraOnDevice: L("此设备没有可用的相机")
             }
         }
 
         var message: String {
             switch self {
             case .permissionDenied:
-                "需要相机权限才能拍摄单词。你可以在「设置 → 鹦鹉背单词 → 相机」中开启，或改用「从相册选择」。"
+                L("需要相机权限才能拍摄单词。你可以在「设置 → 鹦鹉背单词 → 相机」中开启，或改用「从相册选择」。")
             case .noCameraOnDevice:
-                "请改用「从相册选择」导入含英语单词的图片。"
+                L("请改用「从相册选择」导入含英语单词的图片。")
             }
         }
     }
@@ -207,7 +207,7 @@ struct CameraCaptureView: View {
         }.value
         guard let data else {
             viewModel.isRecognizing = false
-            viewModel.errorMessage = "照片处理失败，请重新拍摄"
+            viewModel.errorMessage = L("照片处理失败，请重新拍摄")
             return
         }
         await viewModel.recognize(imageData: data)

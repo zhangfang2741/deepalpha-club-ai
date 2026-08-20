@@ -2,20 +2,25 @@
 import Foundation
 import SwiftUI
 
-/// App 实际使用的界面语言（只有中文 / 英文两种）。
-///
-/// 和 `LanguagePreference` 区分开：偏好里还有「跟随系统」这个选项，最终会被
-/// `LocalizationManager` 解析成这里的某一种具体语言。
-enum AppLanguage: String, CaseIterable, Identifiable {
+// MARK: - 如何新增一门语言（扩展指南）
+//
+// 本地化被设计成「加一门语言只改一处枚举 + 加一个 .lproj」：
+//   1. 在 `AppLanguage` 里加一个 case（rawValue = 对应 .lproj 目录名，如 "ja"）。
+//   2. 在 `nativeName` 里补上它的母语名字（如 "日本語"）。
+//   3. 在 Resources 下新建 `<code>.lproj/Localizable.strings` 与 `InfoPlist.strings`，
+//      key 沿用中文原文（缺翻译会自动退回中文，不会露出 raw key）。
+//   4. 如需让某些地区默认用这门语言，在 `regionLanguageMap` 里加地区→语言映射。
+// 设置页的语言选择器、环境 locale 注入都会自动带上新语言，无需再改 UI。
+
+/// App 支持的界面语言。rawValue 必须与 `Resources/<rawValue>.lproj` 目录名一致。
+enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
     case chinese = "zh-Hans"
     case english = "en"
 
     var id: String { rawValue }
-
-    /// SwiftUI `.environment(\.locale, …)` 和 `.lproj` 目录名都用这个标识符。
     var localeIdentifier: String { rawValue }
 
-    /// 在设置页里给这门语言起的名字，用它自己的文字写（母语原则）。
+    /// 用该语言自己的文字书写的名字（母语原则），在任何界面语言下都原样显示。
     var nativeName: String {
         switch self {
         case .chinese: return "中文"
@@ -24,84 +29,92 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     }
 }
 
-/// 用户在设置里选的语言偏好。`system` 表示「跟随系统/地区自动判断」。
-enum LanguagePreference: String, CaseIterable, Identifiable {
-    case system
-    case chinese = "zh-Hans"
-    case english = "en"
+/// 无持久化选择时的兜底语言（新地区默认走这个）。
+private let fallbackLanguage: AppLanguage = .english
 
-    var id: String { rawValue }
-}
+/// 地区 → 默认语言的映射。只列「非兜底」的地区即可。
+/// 需求：中国大陆用中文，其它地区用英文——所以这里只放 CN。
+private let regionLanguageMap: [String: AppLanguage] = [
+    "CN": .chinese,
+]
 
 /// 语言解析与字符串查表的无状态入口。
 ///
-/// 之所以不直接用 `LocalizationManager.shared`：网络层、语音识别等非 `@MainActor`
-/// 的代码也要取本地化文案，从这里读 `UserDefaults`（线程安全）避免跨 actor 访问
-/// `@Published` 状态。UI 的实时刷新交给 `LocalizationManager`。
+/// 网络层、语音识别等非 `@MainActor` 代码也要取文案，从这里读 `UserDefaults`
+/// （线程安全）避免跨 actor 访问 `@Published` 状态；UI 的实时刷新交给
+/// `LocalizationManager`。两者共用同一套解析逻辑。
 enum Localized {
     static let preferenceKey = "app_language_preference"
+    /// 「跟随系统」在 UserDefaults 里的存储值（区别于具体语言的 rawValue）。
+    static let systemValue = "system"
 
-    /// 没有任何持久化选择时，按地区自动决定：中国大陆 → 中文，其它 → 英文。
+    /// 按地区自动决定语言。命中 `regionLanguageMap` 用映射，否则用兜底语言。
     static func regionDefault() -> AppLanguage {
         let region = Locale.current.region?.identifier ?? ""
-        return region == "CN" ? .chinese : .english
+        return regionLanguageMap[region] ?? fallbackLanguage
     }
 
-    static func preference() -> LanguagePreference {
-        let raw = UserDefaults.standard.string(forKey: preferenceKey)
-        return LanguagePreference(rawValue: raw ?? "") ?? .system
+    /// 读取持久化的偏好。返回 nil 表示「跟随系统」。
+    static func preference() -> AppLanguage? {
+        guard let raw = UserDefaults.standard.string(forKey: preferenceKey),
+              raw != systemValue else { return nil }
+        return AppLanguage(rawValue: raw)
     }
 
-    /// 当前生效的具体语言（把「跟随系统」解析成中文或英文）。
+    /// 当前生效的具体语言（把「跟随系统」解析成某门语言）。
     static func language() -> AppLanguage {
-        switch preference() {
-        case .system: return regionDefault()
-        case .chinese: return .chinese
-        case .english: return .english
+        preference() ?? regionDefault()
+    }
+
+    // 每次查表都新建 Bundle 会有开销（列表滚动时 L() 调用非常频繁），
+    // 按语言缓存已加载的 .lproj bundle。
+    private static var bundleCache: [String: Bundle] = [:]
+    private static let cacheLock = NSLock()
+
+    private static func bundle(for lang: AppLanguage) -> Bundle {
+        cacheLock.lock(); defer { cacheLock.unlock() }
+        if let cached = bundleCache[lang.rawValue] { return cached }
+        let resolved: Bundle
+        if let path = Bundle.main.path(forResource: lang.rawValue, ofType: "lproj"),
+           let b = Bundle(path: path) {
+            resolved = b
+        } else {
+            resolved = .main
         }
+        bundleCache[lang.rawValue] = resolved
+        return resolved
     }
 
-    /// 当前语言对应的 `.lproj` bundle；找不到就退回主 bundle（会走 key 兜底）。
-    static func bundle() -> Bundle {
-        let lang = language()
-        guard let path = Bundle.main.path(forResource: lang.localeIdentifier, ofType: "lproj"),
-              let bundle = Bundle(path: path)
-        else { return .main }
-        return bundle
-    }
-
-    /// 查表；查不到时返回 key 本身。因为所有 key 都是中文原文，缺翻译时会自然
-    /// 退回中文，绝不会给用户看到一串 raw key。
+    /// 查表；查不到返回 key 本身。所有 key 都是中文原文，缺翻译会自然退回中文，
+    /// 绝不会给用户看到 raw key。
     static func string(_ key: String) -> String {
-        bundle().localizedString(forKey: key, value: key, table: nil)
+        bundle(for: language()).localizedString(forKey: key, value: key, table: nil)
     }
 
-    /// 带格式参数的查表。key 里用 `%@` / `%d` 等占位符，缺翻译时退回中文 key
-    /// 再做 `String(format:)`，参数照样能填进去。
+    /// 带格式参数的查表（key 里用 %@ / %lld 等占位符）。
     static func string(_ key: String, _ args: [CVarArg]) -> String {
-        let format = bundle().localizedString(forKey: key, value: key, table: nil)
-        return String(format: format, locale: Locale(identifier: language().localeIdentifier), arguments: args)
+        let lang = language()
+        let format = bundle(for: lang).localizedString(forKey: key, value: key, table: nil)
+        return String(format: format, locale: Locale(identifier: lang.localeIdentifier), arguments: args)
     }
 }
 
-/// 命令式代码（ViewModel / Service / 模型 label）取文案用的全局快捷函数。
-///
-/// SwiftUI 的 `Text("中文")` 会自动走 `.environment(\.locale)` + `Localizable.strings`，
-/// 不需要改；但存进 `String` 属性的文案（如报错信息、模型 `label`）不吃环境 locale，
-/// 必须显式用 `L(...)`。
+/// 全局取文案快捷函数。所有对用户可见的中文字面量都应走它，
+/// 这样界面在任何上下文（Text / String 属性 / 拼接）下都不会漏出中文。
 func L(_ key: String) -> String { Localized.string(key) }
 func L(_ key: String, _ args: CVarArg...) -> String { Localized.string(key, args) }
 
 /// 驱动界面在切换语言时实时刷新的可观察状态。
-///
-/// 只保存「偏好」；具体解析成哪门语言交给 `Localized`，两边共用同一套逻辑。
+/// 只保存偏好（nil = 跟随系统），具体解析交给 `Localized`。
 @MainActor
 final class LocalizationManager: ObservableObject {
     static let shared = LocalizationManager()
 
-    @Published var preference: LanguagePreference {
+    /// nil 表示「跟随系统/地区自动」。
+    @Published var preference: AppLanguage? {
         didSet {
-            UserDefaults.standard.set(preference.rawValue, forKey: Localized.preferenceKey)
+            UserDefaults.standard.set(preference?.rawValue ?? Localized.systemValue,
+                                      forKey: Localized.preferenceKey)
         }
     }
 
@@ -109,15 +122,9 @@ final class LocalizationManager: ObservableObject {
         preference = Localized.preference()
     }
 
-    /// 当前生效语言。切「跟随系统」时也会随地区解析。
-    var language: AppLanguage {
-        switch preference {
-        case .system: return Localized.regionDefault()
-        case .chinese: return .chinese
-        case .english: return .english
-        }
-    }
+    /// 当前生效语言。
+    var language: AppLanguage { preference ?? Localized.regionDefault() }
 
-    /// 注入到 SwiftUI 环境，让所有 `Text` 字面量按此语言查 `Localizable.strings`。
+    /// 注入 SwiftUI 环境，用于日期/数字等系统格式化按语言走。
     var locale: Locale { Locale(identifier: language.localeIdentifier) }
 }

@@ -23,11 +23,11 @@ struct PlaylistManagerView: View {
                     ProgressView().tint(Theme.accent)
                 } else if viewModel.playlists.isEmpty {
                     ContentUnavailableView {
-                        Label("还没有自定义分组", systemImage: "folder.badge.plus")
+                        Label(L("还没有自定义分组"), systemImage: "folder.badge.plus")
                     } description: {
-                        Text("把常背的词攒成一组，学习页就能单独播这一组")
+                        Text(L("把常背的词攒成一组，学习页就能单独播这一组"))
                     } actions: {
-                        Button("新建分组") { isCreating = true }
+                        Button(L("新建分组")) { isCreating = true }
                             .buttonStyle(.borderedProminent)
                             .tint(Theme.accent)
                     }
@@ -43,7 +43,7 @@ struct PlaylistManagerView: View {
                                         Text(playlist.name)
                                             .font(.body.weight(.medium))
                                             .foregroundStyle(Theme.textPrimary)
-                                        Text(isDeleting ? "删除中…" : "\(playlist.wordCount) 个单词")
+                                        Text(isDeleting ? L("删除中…") : L("%lld 个单词", playlist.wordCount))
                                             .font(.caption)
                                             .foregroundStyle(Theme.textSecondary)
                                     }
@@ -69,7 +69,7 @@ struct PlaylistManagerView: View {
                                 Button(role: .destructive) {
                                     pendingDeletion = playlist
                                 } label: {
-                                    Label("删除", systemImage: "trash")
+                                    Label(L("删除"), systemImage: "trash")
                                 }
                                 .tint(Theme.unknown)
                                 .disabled(isDeleting)
@@ -87,18 +87,18 @@ struct PlaylistManagerView: View {
                     .scrollContentBackground(.hidden)
                 }
             }
-            .navigationTitle("分组管理")
+            .navigationTitle(L("分组管理"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("完成") { dismiss() }.tint(Theme.textSecondary)
+                    Button(L("完成")) { dismiss() }.tint(Theme.textSecondary)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { isCreating = true } label: {
                         Image(systemName: "plus")
                     }
                     .tint(Theme.accent)
-                    .accessibilityLabel("新建分组")
+                    .accessibilityLabel(L("新建分组"))
                 }
             }
             // 管理页只展示自定义分组，不再等待与它无关的生词统计接口。已有缓存
@@ -112,23 +112,23 @@ struct PlaylistManagerView: View {
                 PlaylistEditorView(playlist: playlist, viewModel: viewModel)
             }
             .confirmationDialog(
-                "删除「\(pendingDeletion?.name ?? "")」？",
+                L("删除「%@」？", pendingDeletion?.name ?? ""),
                 isPresented: Binding(
                     get: { pendingDeletion != nil },
                     set: { if !$0 { pendingDeletion = nil } }
                 ),
                 titleVisibility: .visible
             ) {
-                Button("删除分组", role: .destructive) {
+                Button(L("删除分组"), role: .destructive) {
                     guard let playlist = pendingDeletion else { return }
                     pendingDeletion = nil
                     // deletePlaylist 内部会把 deletingPlaylistID 置上、再走网络
                     // 请求——行立刻灰掉并显示「删除中…」加载状态，完成后自动恢复。
                     Task { await viewModel.deletePlaylist(id: playlist.id) }
                 }
-                Button("取消", role: .cancel) { pendingDeletion = nil }
+                Button(L("取消"), role: .cancel) { pendingDeletion = nil }
             } message: {
-                Text("只删分组，里面的单词仍然留在生词库")
+                Text(L("只删分组，里面的单词仍然留在生词库"))
             }
         }
     }

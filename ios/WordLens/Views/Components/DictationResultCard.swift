@@ -95,7 +95,7 @@ struct DictationResultCard: View {
                     if isSubmitting {
                         HStack(spacing: 8) {
                             ProgressView().tint(resultColor)
-                            Text("正在保存并进入下一个…")
+                            Text(L("正在保存并进入下一个…"))
                         }
                         .font(.caption.weight(.medium))
                         .foregroundStyle(Theme.textSecondary)
@@ -153,13 +153,13 @@ struct DictationResultCard: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isButton)
-        .accessibilityHint("双击查看单词详情，右滑接受系统判断并进入下一个，左滑重新听写当前单词")
+        .accessibilityHint(L("双击查看单词详情，右滑接受系统判断并进入下一个，左滑重新听写当前单词"))
         .accessibilityAction { onOpenDetail() }
-        .accessibilityAction(named: "接受系统判断并进入下一个") {
+        .accessibilityAction(named: L("接受系统判断并进入下一个")) {
             guard !isSubmitting else { return }
             onAccept()
         }
-        .accessibilityAction(named: "重新听写当前单词") {
+        .accessibilityAction(named: L("重新听写当前单词")) {
             guard !isSubmitting else { return }
             onRetry()
         }
@@ -185,7 +185,7 @@ struct DictationResultCard: View {
             // 基线上才像一句话。
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 // 「你写的」是标签，压小半号的次级灰；写错的那版才是主角。
-                Text("你写的：")
+                Text(L("你写的："))
                     .font(.subheadline)
                     .foregroundStyle(Theme.textSecondary)
                 Text(typed.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -212,14 +212,14 @@ struct DictationResultCard: View {
             HStack {
                 // 提示语的浓度跟着底色一起走：底色淡的时候文字也别抢戏。
                 // 用 forward 而不是 right：它在从右到左的语言环境下会自动镜像。
-                Label("继续", systemImage: "arrow.forward.circle.fill")
+                Label(L("继续"), systemImage: "arrow.forward.circle.fill")
                     .foregroundStyle(.white)
                     .opacity(activeDirection == 1 ? dragProgress : 0)
                     .scaleEffect(activeDirection == 1 ? 0.9 + dragProgress * 0.1 : 0.9)
 
                 Spacer()
 
-                Label("再来一次", systemImage: "arrow.counterclockwise.circle.fill")
+                Label(L("再来一次"), systemImage: "arrow.counterclockwise.circle.fill")
                     .foregroundStyle(.white)
                     .opacity(activeDirection == -1 ? dragProgress : 0)
                     .scaleEffect(activeDirection == -1 ? 0.9 + dragProgress * 0.1 : 0.9)

@@ -49,7 +49,7 @@ struct ReviewCardView: View {
                     ContentUnavailableView(
                         viewModel.selection.finishedTitle,
                         systemImage: "star.fill",
-                        description: Text("共复习了 \(viewModel.reviewedCount) 个单词")
+                        description: Text(L("共复习了 %lld 个单词", viewModel.reviewedCount))
                     )
                 } else if viewModel.queue.isEmpty {
                     // 文案跟着当前播放列表走：「今天没有待复习」和「这个歌单还没有
@@ -188,9 +188,9 @@ struct ReviewCardView: View {
                 }
             } else if viewModel.isFlipped {
                 HStack(spacing: 10) {
-                    ratingButton("😵 不认识", Theme.unknown, .unknown)
-                    ratingButton("😐 模糊", Theme.fuzzy, .fuzzy)
-                    ratingButton("😊 认识", Theme.known, .known)
+                    ratingButton(L("😵 不认识"), Theme.unknown, .unknown)
+                    ratingButton(L("😐 模糊"), Theme.fuzzy, .fuzzy)
+                    ratingButton(L("😊 认识"), Theme.known, .known)
                 }
                 .padding(.horizontal, Self.contentHorizontalPadding)
                 .transition(.opacity)
@@ -222,7 +222,7 @@ struct ReviewCardView: View {
         let canSubmit = !viewModel.dictationInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !viewModel.isSubmitting
         return Button(action: confirmDictation) {
-            Text("确定")
+            Text(L("确定"))
                 .font(.subheadline.weight(.bold))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
@@ -294,7 +294,7 @@ struct ReviewCardView: View {
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("当前分组 \(viewModel.selectionName)，展开分组列表")
+                .accessibilityLabel(L("当前分组 %@，展开分组列表", viewModel.selectionName))
                 .padding(.horizontal, Self.headerTitleSideClearance)
 
                 HStack {
@@ -353,7 +353,7 @@ struct ReviewCardView: View {
                 .frame(height: 32)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("学习方式")
+        .accessibilityLabel(L("学习方式"))
     }
 
     /// 卡片区：只剩卡片本身，垂直居中。
@@ -411,8 +411,8 @@ struct ReviewCardView: View {
                 Label {
                     Text(
                         viewModel.autoplay.isReadingExample
-                            ? "正在读例句"
-                            : "第 \(viewModel.autoplay.passIndex + 1) / \(AutoplayController.passCount) 遍"
+                            ? L("正在读例句")
+                            : L("第 %lld / %lld 遍", viewModel.autoplay.passIndex + 1, AutoplayController.passCount)
                     )
                 } icon: {
                     Image(systemName: viewModel.autoplay.isReadingExample
@@ -431,7 +431,7 @@ struct ReviewCardView: View {
             Capsule().strokeBorder(Theme.border, lineWidth: 1)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("学习进度")
+        .accessibilityLabel(L("学习进度"))
         .accessibilityValue(progressAccessibilityValue)
     }
 
@@ -470,13 +470,13 @@ struct ReviewCardView: View {
                         // “不认识 / 模糊 / 认识”的父级总数，单独放在系统根节点下，
                         // 避免用户把它误解成下面三个状态数量之和。
                         GroupSectionHeader(
-                            title: "系统复习",
+                            title: L("系统复习"),
                             systemImage: "calendar.badge.clock"
                         )
-                        groupRow(.dueReview, label: "待复习", dot: nil)
+                        groupRow(.dueReview, label: L("待复习"), dot: nil)
 
                         GroupSectionHeader(
-                            title: "生词库分组",
+                            title: L("生词库分组"),
                             systemImage: "tray.full.fill",
                             separatesPreviousSection: true
                         )
@@ -485,12 +485,12 @@ struct ReviewCardView: View {
                         }
 
                         GroupSectionHeader(
-                            title: "自定义",
+                            title: L("自定义"),
                             systemImage: "folder.fill",
                             separatesPreviousSection: true
                         )
                         if customGroups.isEmpty {
-                            Text("还没有自定义分组，去「生词库 › 分组管理」新建")
+                            Text(L("还没有自定义分组，去「生词库 › 分组管理」新建"))
                                 .font(.caption)
                                 .foregroundStyle(Theme.textSecondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -526,9 +526,9 @@ struct ReviewCardView: View {
 
     private var statusGroups: [(selection: PlaylistSelection, label: String, dot: Color?)] {
         [
-            (.status("new"), "不认识", Theme.unknown),
-            (.status("fuzzy"), "模糊", Theme.fuzzy),
-            (.status("known"), "认识", Theme.known),
+            (.status("new"), L("不认识"), Theme.unknown),
+            (.status("fuzzy"), L("模糊"), Theme.fuzzy),
+            (.status("known"), L("认识"), Theme.known),
         ]
     }
 
@@ -604,7 +604,7 @@ struct ReviewCardView: View {
                 .frame(width: Self.transportTapSize, height: Self.transportTapSize)
                 .contentShape(.rect)
         }
-        .accessibilityLabel("播放顺序，当前\(viewModel.mode.label)")
+        .accessibilityLabel(L("播放顺序，当前%@", viewModel.mode.label))
     }
 
     /// 播放条最右：看当前分组的完整队列。
@@ -618,7 +618,7 @@ struct ReviewCardView: View {
         }
         .buttonStyle(.pressable)
         .disabled(viewModel.queue.isEmpty || viewModel.isAwaitingDictationDecision)
-        .accessibilityLabel("播放队列")
+        .accessibilityLabel(L("播放队列"))
     }
 
     private func presentQueue() {
@@ -656,7 +656,7 @@ struct ReviewCardView: View {
 
             transportButton(
                 "backward.end.fill",
-                label: "上一个",
+                label: L("上一个"),
                 enabled: viewModel.canGoPrevious && !viewModel.isAwaitingDictationDecision
             ) {
                 viewModel.goToPrevious()
@@ -668,7 +668,7 @@ struct ReviewCardView: View {
 
             transportButton(
                 "forward.end.fill",
-                label: "下一个",
+                label: L("下一个"),
                 enabled: viewModel.canGoNext && !viewModel.isAwaitingDictationDecision
             ) {
                 viewModel.goToNext()
@@ -701,7 +701,7 @@ struct ReviewCardView: View {
         }
         .buttonStyle(.pressable)
         .disabled(viewModel.queue.isEmpty)
-        .accessibilityLabel(isPlaying ? "暂停连播" : "开始连播")
+        .accessibilityLabel(isPlaying ? L("暂停连播") : L("开始连播"))
     }
 
     private func transportButton(
@@ -745,7 +745,7 @@ struct ReviewCardView: View {
 
     private var dictationInputCard: some View {
         VStack(spacing: 18) {
-            Label("听音写词", systemImage: "speaker.wave.2.fill")
+            Label(L("听音写词"), systemImage: "speaker.wave.2.fill")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Theme.textSecondary)
 
@@ -779,7 +779,7 @@ struct ReviewCardView: View {
 
             voiceDictationHint
 
-            Text("打字，或点麦克风逐个字母拼读（A-P-P-L-E），写完点「确定」或敲回车")
+            Text(L("打字，或点麦克风逐个字母拼读（A-P-P-L-E），写完点「确定」或敲回车"))
                 .font(.caption2)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(Theme.textSecondary.opacity(0.8))
@@ -829,7 +829,7 @@ struct ReviewCardView: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(speech.isListening ? "停止语音听写" : "开始语音听写")
+        .accessibilityLabel(speech.isListening ? L("停止语音听写") : L("开始语音听写"))
     }
 
     /// 麦克风的状态提示（报错优先）。
@@ -847,7 +847,7 @@ struct ReviewCardView: View {
                 // 或者以为功能坏了。受限（屏幕使用时间等）跳过去也没有开关，
                 // 所以那种情况不显示这个按钮。
                 if speech.permissionBlocker?.isFixableInSettings == true {
-                    Button("去设置") {
+                    Button(L("去设置")) {
                         if let url = URL(string: UIApplication.openSettingsURLString) {
                             UIApplication.shared.open(url)
                         }
@@ -857,7 +857,7 @@ struct ReviewCardView: View {
                 }
             }
         } else if speech.isListening {
-            Text("正在听，一个字母一个字母地念…")
+            Text(L("正在听，一个字母一个字母地念…"))
                 .font(.caption2)
                 .foregroundStyle(Theme.textSecondary)
         }
@@ -873,17 +873,17 @@ struct ReviewCardView: View {
 
     private static func ratingLabel(_ rating: ReviewRating) -> String {
         switch rating {
-        case .known: return "认识"
-        case .fuzzy: return "模糊"
-        case .unknown: return "不认识"
+        case .known: return L("认识")
+        case .fuzzy: return L("模糊")
+        case .unknown: return L("不认识")
         }
     }
 
     private static func dictationResultLabel(_ rating: ReviewRating) -> String {
         switch rating {
-        case .known: return "记住了"
-        case .fuzzy: return "模糊"
-        case .unknown: return "没记住"
+        case .known: return L("记住了")
+        case .fuzzy: return L("模糊")
+        case .unknown: return L("没记住")
         }
     }
 
@@ -907,7 +907,7 @@ struct ReviewCardView: View {
         // 明确的 label/hint，双击手势才能触发翻卡片。
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(word.word)
-        .accessibilityHint(viewModel.isFlipped ? "已展开释义，双击收起" : "双击查看释义")
+        .accessibilityHint(viewModel.isFlipped ? L("已展开释义，双击收起") : L("双击查看释义"))
     }
 
     private func cardFace(_ word: VocabularyWord, isBack: Bool) -> some View {
@@ -926,7 +926,7 @@ struct ReviewCardView: View {
                     .padding(.top, 8)
 
                 if !word.etymology.isEmpty {
-                    Text("词根：\(word.etymology)")
+                    Text(L("词根：%@", word.etymology))
                         .font(.caption)
                         .foregroundStyle(Theme.textSecondary)
                         .multilineTextAlignment(.center)
@@ -938,7 +938,7 @@ struct ReviewCardView: View {
                         .multilineTextAlignment(.center)
                 }
             } else {
-                Text("点击翻转看释义")
+                Text(L("点击翻转看释义"))
                     .font(.caption)
                     .foregroundStyle(Theme.textSecondary)
             }

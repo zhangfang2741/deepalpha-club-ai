@@ -28,7 +28,7 @@ struct QueueDrawerView: View {
                         .ignoresSafeArea()
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("关闭播放队列")
+                .accessibilityLabel(L("关闭播放队列"))
 
                 drawer
                     .frame(width: drawerWidth)
@@ -56,21 +56,21 @@ struct QueueDrawerView: View {
             VStack(spacing: 0) {
                 if words.isEmpty {
                     ContentUnavailableView(
-                        "这一组还没词",
+                        L("这一组还没词"),
                         systemImage: "music.note.list",
-                        description: Text("先去拍照识别一些单词")
+                        description: Text(L("先去拍照识别一些单词"))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     HStack(spacing: 8) {
-                        Text("\(words.count) 个单词")
+                        Text(L("%lld 个单词", words.count))
                             .foregroundStyle(Theme.textSecondary)
 
                         Spacer()
 
                         if let currentID = currentWordID,
                            let index = words.firstIndex(where: { $0.id == currentID }) {
-                            Label("正在第 \(index + 1) 个", systemImage: "speaker.wave.2.fill")
+                            Label(L("正在第 %lld 个", index + 1), systemImage: "speaker.wave.2.fill")
                                 .foregroundStyle(Theme.accent)
                         }
                     }
@@ -117,11 +117,11 @@ struct QueueDrawerView: View {
                     }
                 }
             }
-            .navigationTitle("播放队列")
+            .navigationTitle(L("播放队列"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("关闭", action: dismissDrawer)
+                    Button(L("关闭"), action: dismissDrawer)
                         .tint(Theme.accent)
                 }
             }
@@ -202,7 +202,7 @@ private struct QueueDrawerRow: View {
         }
         .buttonStyle(QueueRowButtonStyle(isPressed: $isPressed))
         .accessibilityLabel("\(word.word)，\(word.definitionZh)\(isCurrent ? "，正在播放" : "")")
-        .accessibilityHint("双击从这个单词开始播放")
+        .accessibilityHint(L("双击从这个单词开始播放"))
         .accessibilityAddTraits(isCurrent ? [.isSelected] : [])
     }
 

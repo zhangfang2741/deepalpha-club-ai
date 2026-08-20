@@ -23,18 +23,18 @@ struct AccountSecurityView: View {
 
             Form {
                 Section {
-                    SecureField("原密码", text: $oldPassword)
+                    SecureField(L("原密码"), text: $oldPassword)
                         .textContentType(.password)
-                    SecureField("新密码", text: $newPassword)
+                    SecureField(L("新密码"), text: $newPassword)
                         .textContentType(.newPassword)
-                    SecureField("确认新密码", text: $confirmPassword)
+                    SecureField(L("确认新密码"), text: $confirmPassword)
                         .textContentType(.newPassword)
                 } header: {
-                    Text("修改密码")
+                    Text(L("修改密码"))
                 } footer: {
                     VStack(alignment: .leading, spacing: 8) {
-                        requirementRow("至少 \(Self.passwordMinLength) 个字符", isSatisfied: longEnough)
-                        requirementRow("两次密码一致", isSatisfied: matched)
+                        requirementRow(L("至少 %lld 个字符", Self.passwordMinLength), isSatisfied: longEnough)
+                        requirementRow(L("两次密码一致"), isSatisfied: matched)
                     }
                     .padding(.top, 4)
                 }
@@ -67,7 +67,7 @@ struct AccountSecurityView: View {
                                 ProgressView()
                                     .tint(Theme.textPrimary)
                             }
-                            Text(viewModel.isChangingPassword ? "提交中..." : "确认修改")
+                            Text(viewModel.isChangingPassword ? L("提交中...") : L("确认修改"))
                                 .frame(maxWidth: .infinity)
                         }
                         .foregroundStyle(Theme.accent)
@@ -79,7 +79,7 @@ struct AccountSecurityView: View {
             .disabled(viewModel.isChangingPassword)
             .scrollContentBackground(.hidden)
         }
-        .navigationTitle("账户与安全")
+        .navigationTitle(L("账户与安全"))
         .navigationBarTitleDisplayMode(.inline)
     }
 

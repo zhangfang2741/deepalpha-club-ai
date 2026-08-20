@@ -7,14 +7,14 @@ import SwiftUI
 
 private let mockWord = VocabularyWord(
     id: "preview", word: "ephemeral", phoneticIpa: "ɪˈfemərəl", partOfSpeech: "adj.",
-    definitionZh: "短暂的，转瞬即逝的", etymology: "", exampleSentence: "", status: "new",
+    definitionZh: L("短暂的，转瞬即逝的"), etymology: "", exampleSentence: "", status: "new",
     repetitionCount: 0, easinessFactor: 2.5, intervalDays: 1,
     nextReviewAt: "", lastReviewedAt: nil, createdAt: ""
 )
 
 private func ratingRow(visible: Bool) -> some View {
     HStack(spacing: 12) {
-        ForEach([("😵 不认识", Theme.unknown), ("😐 模糊", Theme.fuzzy), ("😊 认识", Theme.known)], id: \.0) { label, color in
+        ForEach([(L("😵 不认识"), Theme.unknown), (L("😐 模糊"), Theme.fuzzy), (L("😊 认识"), Theme.known)], id: \.0) { label, color in
             Text(label)
                 .font(.footnote.weight(.semibold))
                 .frame(maxWidth: .infinity)
@@ -51,7 +51,7 @@ private struct FadeFlipCard: View {
                         .padding(.top, 8)
                         .transition(.opacity.combined(with: .scale(scale: 0.95)))
                 } else {
-                    Text("点击翻转看释义")
+                    Text(L("点击翻转看释义"))
                         .font(.caption)
                         .foregroundStyle(Theme.textSecondary)
                 }
@@ -70,7 +70,7 @@ private struct FadeFlipCard: View {
     }
 }
 
-#Preview("翻卡动效 A - 淡入淡出") {
+#Preview(L("翻卡动效 A - 淡入淡出")) {
     ZStack { Theme.background.ignoresSafeArea(); FadeFlipCard(word: mockWord) }
 }
 
@@ -111,7 +111,7 @@ private struct Flip3DCard: View {
                     PronounceButton(word: word.word)
                 }
                 Text("/\(word.phoneticIpa)/").foregroundStyle(Theme.textSecondary)
-                Text("点击翻转看释义").font(.caption).foregroundStyle(Theme.textSecondary)
+                Text(L("点击翻转看释义")).font(.caption).foregroundStyle(Theme.textSecondary)
             } else {
                 Text("\(word.partOfSpeech) \(word.definitionZh)")
                     .font(.title3)
@@ -122,7 +122,7 @@ private struct Flip3DCard: View {
     }
 }
 
-#Preview("翻卡动效 B - 3D 翻转") {
+#Preview(L("翻卡动效 B - 3D 翻转")) {
     ZStack { Theme.background.ignoresSafeArea(); Flip3DCard(word: mockWord) }
 }
 
@@ -149,7 +149,7 @@ private struct ScaleBounceCard: View {
                         .padding(.top, 8)
                         .transition(.scale(scale: 0.8).combined(with: .opacity))
                 } else {
-                    Text("点击翻转看释义")
+                    Text(L("点击翻转看释义"))
                         .font(.caption)
                         .foregroundStyle(Theme.textSecondary)
                 }
@@ -168,6 +168,6 @@ private struct ScaleBounceCard: View {
     }
 }
 
-#Preview("翻卡动效 C - 缩放弹跳") {
+#Preview(L("翻卡动效 C - 缩放弹跳")) {
     ZStack { Theme.background.ignoresSafeArea(); ScaleBounceCard(word: mockWord) }
 }

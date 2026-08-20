@@ -18,7 +18,7 @@ struct ScanningOverlay: View {
     @State private var scanDown = false
     @State private var messageIndex = 0
 
-    private let messages = ["正在识别文字…", "正在生成音标…", "正在整理释义与例句…", "快好了…"]
+    private let messages = [L("正在识别文字…"), L("正在生成音标…"), L("正在整理释义与例句…"), L("快好了…")]
 
     var body: some View {
         VStack(spacing: 20) {
@@ -70,7 +70,7 @@ struct ScanningOverlay: View {
                         HStack(spacing: 6) {
                             Image(systemName: "text.badge.checkmark")
                             // monospacedDigit：数字位宽固定，快速跳动时不会左右抖。
-                            Text("已识别 \(partialWordCount) 个词")
+                            Text(L("已识别 %lld 个词", partialWordCount))
                                 .monospacedDigit()
                         }
                         .font(.title3.weight(.bold))
@@ -82,7 +82,7 @@ struct ScanningOverlay: View {
                             .tint(Theme.accent)
                             .frame(maxWidth: 220)
 
-                        Text("正在生成音标释义 \(enrichedWordCount) / \(partialWordCount)")
+                        Text(L("正在生成音标释义 %lld / %lld", enrichedWordCount, partialWordCount))
                             .font(.caption)
                             .monospacedDigit()
                             .foregroundStyle(Theme.textSecondary)
@@ -103,8 +103,8 @@ struct ScanningOverlay: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             partialWordCount > 0
-                ? "已识别到 \(partialWordCount) 个单词，正在生成释义，已完成 \(enrichedWordCount) 个"
-                : "正在识别图片中的单词，请稍候"
+                ? L("已识别到 %lld 个单词，正在生成释义，已完成 %lld 个", partialWordCount, enrichedWordCount)
+                : L("正在识别图片中的单词，请稍候")
         )
     }
 }
