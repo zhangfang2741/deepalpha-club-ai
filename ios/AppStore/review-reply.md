@@ -180,6 +180,8 @@ App 的全部功能对免费用户开放，仅对每日用量设限：每天可�
 学习 20 个新单词，已学过的单词不限次数复习。
 
 · 商品：WordLens Pro 月度会员（club.deepalpha.wordlens.pro.monthly），¥38/月
+· 当日用量在拍照页与学习页实时显示（如「今日拍照 1/3」），额度不是隐藏条件；
+  剩最后一次时变色预警，用尽后该提示变为「升级 Pro」并可直接点开订阅页
 · 触发路径：用尽任一每日额度时自动弹出订阅页；也可从「设置 → 升级 Pro」
   直接进入，无需先耗尽额度
 · 订阅页包含价格、订阅时长、自动续订披露、恢复购买按钮，以及服务条款与
@@ -419,6 +421,9 @@ can run 3 photo recognitions and study 20 new words per day. Words already
 studied can be reviewed without limit.
 
 - Product: WordLens Pro Monthly (club.deepalpha.wordlens.pro.monthly), CNY 38/month
+- Remaining quota is shown live on the capture and study screens (e.g. "Photos
+  today 1/3"), so the limit is never a hidden condition. The badge turns amber on
+  the last remaining use and becomes a tappable "Upgrade to Pro" once spent.
 - How to reach the paywall: it appears automatically when either daily limit is
   reached, and it can also be opened directly from Settings > Upgrade to Pro
   without exhausting the limits first.
