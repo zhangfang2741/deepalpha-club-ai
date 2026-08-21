@@ -979,6 +979,10 @@ struct ReviewCardView: View {
         } label: {
             Text(label)
                 .font(.footnote.weight(.semibold))
+                // 三档按钮等宽，英文（如「😵 Don't know」）比中文长，限定单行并允许
+                // 缩放，避免其中一个换行变高、三个按钮高度参差。
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .background(color.opacity(0.2))
