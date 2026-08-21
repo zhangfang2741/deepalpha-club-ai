@@ -323,8 +323,23 @@ struct ReviewCardView: View {
             // 第二层是独立状态胶囊。和标题拉开距离后，不会再挤在标题基线上。
             // 没有卡片时直接移除，避免出现 "N/0" 这类无意义数字。
             if viewModel.currentWord != nil {
-                progressBar
-                    .padding(.top, Self.headerStatusSpacing)
+                // 队列进度是"这一组还剩几个"，额度是"今天还能学几个新词"，两件事
+                // 都影响用户接下来怎么安排，默认并排放在同一条基线上。
+                //
+                // 用 ViewThatFits 而不是直接 HStack：播放时进度胶囊会变长
+                // （多出「第 1 / 3 遍」），窄机型上两个胶囊并排会挤到文字截断。
+                // 放不下就自动竖排，任何屏宽都不会出现 "今日新..." 这种半截文案。
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        progressBar
+                        FreeQuotaBadge(kind: .word, style: .compact) { showPaywall = true }
+                    }
+                    VStack(spacing: 6) {
+                        progressBar
+                        FreeQuotaBadge(kind: .word, style: .compact) { showPaywall = true }
+                    }
+                }
+                .padding(.top, Self.headerStatusSpacing)
             }
         }
         .padding(.horizontal, 20)
