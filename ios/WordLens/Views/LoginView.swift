@@ -18,8 +18,8 @@ struct LoginView: View {
     enum LoginMethod: String, CaseIterable {
         case phone, email
 
-        var label: String { self == .phone ? "手机号" : "邮箱" }
-        var placeholder: String { self == .phone ? "手机号" : "邮箱" }
+        var label: String { self == .phone ? L("手机号") : L("邮箱") }
+        var placeholder: String { self == .phone ? L("手机号") : L("邮箱") }
     }
 
     var body: some View {
@@ -33,7 +33,7 @@ struct LoginView: View {
                     Text(AppConfig.displayName)
                         .font(.system(size: 32, weight: .bold))
                         .foregroundStyle(Theme.textPrimary)
-                    Text("拍照背单词")
+                    Text(L("拍照背单词"))
                         .font(.subheadline)
                         .foregroundStyle(Theme.textSecondary)
                 }
@@ -55,7 +55,7 @@ struct LoginView: View {
                         keyboard: method == .phone ? .phonePad : .emailAddress
                     )
                     .focused($focused, equals: .account)
-                    secureField("密码", text: $password)
+                    secureField(L("密码"), text: $password)
                         .focused($focused, equals: .password)
                 }
 
@@ -76,7 +76,7 @@ struct LoginView: View {
                 } label: {
                     HStack {
                         if auth.isLoading { ProgressView().tint(.white) }
-                        Text(auth.isLoading ? "登录中…" : "登录").fontWeight(.semibold)
+                        Text(auth.isLoading ? L("登录中…") : L("登录")).fontWeight(.semibold)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
@@ -87,12 +87,12 @@ struct LoginView: View {
                 .buttonStyle(.pressable)
                 .disabled(auth.isLoading)
 
-                Button("还没有账号？去注册") { showRegister = true }
+                Button(L("还没有账号？去注册")) { showRegister = true }
                     .font(.footnote)
                     .foregroundStyle(Theme.textSecondary)
                     .buttonStyle(.pressable)
 
-                Button("忘记密码？") { showForgotPassword = true }
+                Button(L("忘记密码？")) { showForgotPassword = true }
                     .font(.footnote)
                     .foregroundStyle(Theme.textSecondary)
                     .buttonStyle(.pressable)

@@ -10,21 +10,21 @@ struct MainTabView: View {
             // 没有再往 tab bar 中间塞按钮的需求，用回系统 TabView 就够了。
             TabView(selection: $nav.selectedTab) {
                 CameraCaptureView()
-                    .tabItem { Label("首页", systemImage: "house.fill") }
+                    .tabItem { Label(L("首页"), systemImage: "house.fill") }
                     .tag(MainTab.home)
 
                 ReviewCardView()
-                    .tabItem { Label("学习", systemImage: "graduationcap.fill") }
+                    .tabItem { Label(L("学习"), systemImage: "graduationcap.fill") }
                     .tag(MainTab.study)
 
                 HomeView()
-                    .tabItem { Label("生词库", systemImage: "book.fill") }
+                    .tabItem { Label(L("生词库"), systemImage: "book.fill") }
                     .tag(MainTab.vocabulary)
 
                 NavigationStack {
                     SettingsView()
                 }
-                .tabItem { Label("设置", systemImage: "gearshape.fill") }
+                .tabItem { Label(L("设置"), systemImage: "gearshape.fill") }
                 .tag(MainTab.settings)
             }
             .tint(Theme.accent)
@@ -48,7 +48,7 @@ struct MainTabView: View {
                 Text(message)
                     .font(.headline)
                     .foregroundStyle(Theme.textPrimary)
-                Text("请稍等，不要关闭应用")
+                Text(L("请稍等，不要关闭应用"))
                     .font(.footnote)
                     .foregroundStyle(Theme.textSecondary)
             }

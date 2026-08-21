@@ -36,9 +36,9 @@ struct WordListView: View {
                 ProgressView().tint(Theme.accent).frame(maxWidth: .infinity)
             } else if viewModel.words.isEmpty {
                 ContentUnavailableView(
-                    "暂无生词",
+                    L("暂无生词"),
                     systemImage: "book.closed",
-                    description: Text("去拍照识别一些新单词吧")
+                    description: Text(L("去拍照识别一些新单词吧"))
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -112,7 +112,7 @@ struct WordListView: View {
                     Button {
                         showPlaylistPicker = true
                     } label: {
-                        Label("加入分组 (\(viewModel.selectedIDs.count))", systemImage: "text.badge.plus")
+                        Label(L("加入分组 (%lld)", viewModel.selectedIDs.count), systemImage: "text.badge.plus")
                             .font(.subheadline.weight(.semibold))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
@@ -132,9 +132,9 @@ struct WordListView: View {
                         // 比 beginBlockingOperation 的固定文案更清晰.
                         Group {
                             if let progress = viewModel.deletionProgress {
-                                Text("正在删除 \(progress.completed) / \(progress.total)")
+                                Text(L("正在删除 %lld / %lld", progress.completed, progress.total))
                             } else {
-                                Text("删除所选 (\(viewModel.selectedIDs.count))")
+                                Text(L("删除所选 (%lld)", viewModel.selectedIDs.count))
                             }
                         }
                         .font(.subheadline.weight(.semibold))
@@ -147,23 +147,23 @@ struct WordListView: View {
                     .buttonStyle(.pressable)
                     .disabled(viewModel.isDeletingSelected)
                     .confirmationDialog(
-                        "确定删除选中的 \(viewModel.selectedIDs.count) 个单词吗？",
+                        L("确定删除选中的 %lld 个单词吗？", viewModel.selectedIDs.count),
                         isPresented: $showDeleteConfirm,
                         titleVisibility: .visible
                     ) {
-                        Button("删除", role: .destructive) {
+                        Button(L("删除"), role: .destructive) {
                             Task {
                                 let total = viewModel.selectedIDs.count
-                                nav.beginBlockingOperation("正在删除生词 0 / \(total)")
+                                nav.beginBlockingOperation(L("正在删除生词 %lld / %lld", 0, total))
                                 defer { nav.endBlockingOperation() }
                                 if await viewModel.deleteSelected(onProgress: { completed, total in
-                                    nav.updateBlockingOperation("正在删除生词 \(completed) / \(total)")
+                                    nav.updateBlockingOperation(L("正在删除生词 %lld / %lld", completed, total))
                                 }) {
                                     nav.notifyVocabularyDataChanged()
                                 }
                             }
                         }
-                        Button("取消", role: .cancel) {}
+                        Button(L("取消"), role: .cancel) {}
                     }
                 }
             }
@@ -181,20 +181,20 @@ struct WordListView: View {
                         // PlaylistViewModel 实例，不发通知的话它手里还是加词之前
                         // 的队列和计数——用户切到这个分组会发现新加的词没出现。
                         nav.notifyVocabularyDataChanged()
-                        playlistFeedback = "已把 \(wordIDs.count) 个单词加入「\(playlist.name)」"
+                        playlistFeedback = L("已把 %lld 个单词加入「%@」", wordIDs.count, playlist.name)
                     } else {
                         // 之前这里失败是完全静默的：既不退出多选也不提示，用户
                         // 只会觉得"点了没反应"。
-                        playlistFeedback = playlistVM.errorMessage ?? "加入分组失败，请稍后重试"
+                        playlistFeedback = playlistVM.errorMessage ?? L("加入分组失败，请稍后重试")
                     }
                 }
             }
         }
-        .alert("加入分组", isPresented: Binding(
+        .alert(L("加入分组"), isPresented: Binding(
             get: { playlistFeedback != nil },
             set: { if !$0 { playlistFeedback = nil } }
         )) {
-            Button("好", role: .cancel) { playlistFeedback = nil }
+            Button(L("好"), role: .cancel) { playlistFeedback = nil }
         } message: {
             Text(playlistFeedback ?? "")
         }
@@ -214,7 +214,7 @@ struct WordListView: View {
 
             Spacer()
 
-            Button(viewModel.isSelecting ? "完成" : "选择") {
+            Button(viewModel.isSelecting ? L("完成") : L("选择")) {
                 viewModel.toggleSelecting()
             }
             .font(.subheadline.weight(.semibold))
@@ -225,9 +225,9 @@ struct WordListView: View {
 
     private var selectAllTitle: String {
         if viewModel.isAllSelected {
-            return "全不选"
+            return L("全不选")
         }
-        return "全选"
+        return L("全选")
     }
 
     private func scrollToHighlightedIfNeeded(proxy: ScrollViewProxy) {
@@ -274,9 +274,9 @@ struct WordListView: View {
     private func statusDot(_ status: String) -> some View {
         let (color, label): (Color, String) = {
             switch status {
-            case "known": return (Theme.known, "认识")
-            case "fuzzy": return (Theme.fuzzy, "模糊")
-            default: return (Theme.unknown, "不认识")
+            case "known": return (Theme.known, L("认识"))
+            case "fuzzy": return (Theme.fuzzy, L("模糊"))
+            default: return (Theme.unknown, L("不认识"))
             }
         }()
         return HStack(spacing: 4) {

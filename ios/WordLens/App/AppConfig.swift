@@ -15,12 +15,27 @@ enum AppConfig {
     /// App 显示名。锁屏「正在播放」等处需要用到，从 Info.plist 读而不是硬编码，
     /// 避免改名时漏掉某处（上次「鹦鹉学舌」→「鹦鹉背单词」就在这里留了个残留）。
     static let displayName: String =
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "鹦鹉背单词"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? L("鹦鹉背单词")
 
     /// 隐私政策 / 服务条款。App Store Connect 必填隐私政策 URL，审核员也会
     /// 检查 App 内可达（设置页「关于」分组）。
     static let privacyPolicyURL = URL(string: "https://deepalpha.club/wordlens/privacy")!
     static let termsOfServiceURL = URL(string: "https://deepalpha.club/wordlens/terms")!
+
+    // MARK: - 订阅与免费额度
+
+    /// 月度订阅商品 ID（需与 App Store Connect / Products.storekit 一致）。
+    /// 价格在 App Store Connect 里设为约 ¥29/月的价格档，其它地区由 Apple 按档位
+    /// 自动换算，端上只读 `product.displayPrice` 展示本地化价格，不硬编码金额。
+    static let proMonthlyProductID = "club.deepalpha.wordlens.pro.monthly"
+
+    /// 免费用户每日可拍照识别的张数（超出需订阅）。
+    static let freeDailyPhotoLimit = 3
+
+    /// 免费用户每日可学习的新单词数（超出需订阅）。
+    /// 「学习」= 在学习页把一个单词完整播放一遍；当天已学过的词可无限次重复，
+    /// 只有当天学第 N+1 个「新」词时才受限。
+    static let freeDailyWordLimit = 20
 
     static let requestTimeout: TimeInterval = 30
     /// 拍照识别调 LLM，比普通请求慢很多，单独给更长超时。

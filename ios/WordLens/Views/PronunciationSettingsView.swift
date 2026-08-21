@@ -14,26 +14,26 @@ struct PronunciationSettingsView: View {
             Theme.background.ignoresSafeArea()
             Form {
                 Section {
-                    LabeledContent("单词") {
-                        Text("有道词典音")
+                    LabeledContent(L("单词")) {
+                        Text(L("有道词典音"))
                             .foregroundStyle(Theme.textSecondary)
                     }
-                    LabeledContent("例句") {
+                    LabeledContent(L("例句")) {
                         Text("MiniMax Speech HD")
                             .foregroundStyle(Theme.textSecondary)
                     }
                 } header: {
-                    Text("发音方案")
+                    Text(L("发音方案"))
                 } footer: {
-                    Text("自动为内容选择更合适的发音源：单词侧重词典发音准确性，例句侧重自然连读和语调。")
+                    Text(L("自动为内容选择更合适的发音源：单词侧重词典发音准确性，例句侧重自然连读和语调。"))
                         .foregroundStyle(Theme.textSecondary)
                 }
                 .listRowBackground(Theme.surface)
 
-                Section("口音") {
-                    Picker("口音", selection: $accent) {
-                        Text("美音").tag(PronunciationAccent.us)
-                        Text("英音").tag(PronunciationAccent.uk)
+                Section(L("口音")) {
+                    Picker(L("口音"), selection: $accent) {
+                        Text(L("美音")).tag(PronunciationAccent.us)
+                        Text(L("英音")).tag(PronunciationAccent.uk)
                     }
                     .pickerStyle(.segmented)
                     .onChange(of: accent) { _, newValue in
@@ -42,11 +42,11 @@ struct PronunciationSettingsView: View {
                 }
                 .listRowBackground(Theme.surface)
 
-                Section("语速") {
-                    Picker("语速", selection: $rate) {
-                        Text("慢速").tag(PronunciationRate.slow)
-                        Text("正常").tag(PronunciationRate.normal)
-                        Text("快速").tag(PronunciationRate.fast)
+                Section(L("语速")) {
+                    Picker(L("语速"), selection: $rate) {
+                        Text(L("慢速")).tag(PronunciationRate.slow)
+                        Text(L("正常")).tag(PronunciationRate.normal)
+                        Text(L("快速")).tag(PronunciationRate.fast)
                     }
                     .pickerStyle(.segmented)
                     .onChange(of: rate) { _, newValue in
@@ -56,20 +56,20 @@ struct PronunciationSettingsView: View {
                 .listRowBackground(Theme.surface)
 
                 Section {
-                    Toggle("自动发音", isOn: $autoplay)
+                    Toggle(L("自动发音"), isOn: $autoplay)
                         .tint(Theme.accent)
                         .onChange(of: autoplay) { _, newValue in
                             PronunciationAutoplay.isEnabled = newValue
                         }
                 } footer: {
-                    Text("开启后，复习和查看单词详情时会自动朗读。")
+                    Text(L("开启后，复习和查看单词详情时会自动朗读。"))
                         .foregroundStyle(Theme.textSecondary)
                 }
                 .listRowBackground(Theme.surface)
             }
             .scrollContentBackground(.hidden)
         }
-        .navigationTitle("发音设置")
+        .navigationTitle(L("发音设置"))
         .navigationBarTitleDisplayMode(.inline)
     }
 }

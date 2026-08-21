@@ -17,9 +17,9 @@ struct RecognizeResultView: View {
                 Theme.background.ignoresSafeArea()
                 if viewModel.candidates.isEmpty {
                     ContentUnavailableView(
-                        "未识别到英语单词",
+                        L("未识别到英语单词"),
                         systemImage: "text.viewfinder",
-                        description: Text("请重新拍摄，确保文字清晰")
+                        description: Text(L("请重新拍摄，确保文字清晰"))
                     )
                 } else {
                     List(viewModel.candidates) { candidate in
@@ -42,7 +42,7 @@ struct RecognizeResultView: View {
                                 .foregroundStyle(Theme.textPrimary)
                                 .lineLimit(2)
                             Spacer()
-                            Button("重试") {
+                            Button(L("重试")) {
                                 viewModel.errorMessage = nil
                                 Task { await submitAsync() }
                             }
@@ -71,27 +71,27 @@ struct RecognizeResultView: View {
                     }
                 }
             }
-            .navigationTitle("识别结果")
+            .navigationTitle(L("识别结果"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") {
+                    Button(L("取消")) {
                         showCancelConfirmation = true
                     }
                 }
             }
             .confirmationDialog(
-                "放弃这次识别结果？",
+                L("放弃这次识别结果？"),
                 isPresented: $showCancelConfirmation,
                 titleVisibility: .visible
             ) {
-                Button("放弃", role: .destructive) {
+                Button(L("放弃"), role: .destructive) {
                     viewModel.reset()
                     dismiss()
                 }
-                Button("继续挑选", role: .cancel) {}
+                Button(L("继续挑选"), role: .cancel) {}
             } message: {
-                Text("识别出的 \(viewModel.candidates.count) 个单词都不会保存，需要重新拍照才能再次识别。")
+                Text(L("识别出的 %lld 个单词都不会保存，需要重新拍照才能再次识别。", viewModel.candidates.count))
             }
             .safeAreaInset(edge: .bottom) {
                 if !viewModel.candidates.isEmpty {
@@ -109,7 +109,7 @@ struct RecognizeResultView: View {
                         } label: {
                             HStack {
                                 if isSubmitting { ProgressView().tint(.white) }
-                                Text("加入生词库 (\(viewModel.selectedWords.count))")
+                                Text(L("加入生词库 (%lld)", viewModel.selectedWords.count))
                                     .fontWeight(.semibold)
                                     .monospacedDigit()
                             }
@@ -132,7 +132,7 @@ struct RecognizeResultView: View {
     private func candidateRow(_ candidate: RecognizedWord) -> some View {
         let isSelected = viewModel.selectedWords.contains(candidate.word)
         return HStack {
-            Button("加入生词库", systemImage: isSelected ? "checkmark.square.fill" : "square") {
+            Button(L("加入生词库"), systemImage: isSelected ? "checkmark.square.fill" : "square") {
                 viewModel.toggle(candidate.word)
             }
             .labelStyle(.iconOnly)
@@ -140,7 +140,7 @@ struct RecognizeResultView: View {
             .frame(minWidth: 44, minHeight: 44)
             .contentShape(.rect)
             .buttonStyle(.pressable)
-            .accessibilityValue(isSelected ? "已选中" : "未选中")
+            .accessibilityValue(isSelected ? L("已选中") : L("未选中"))
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
@@ -154,7 +154,7 @@ struct RecognizeResultView: View {
                     .font(.caption)
                     .foregroundStyle(Theme.textSecondary)
                 if candidate.alreadyInLibrary {
-                    Text("已在生词库中")
+                    Text(L("已在生词库中"))
                         .font(.caption2)
                         .foregroundStyle(Theme.textSecondary)
                 }
@@ -172,9 +172,9 @@ struct RecognizeResultView: View {
         let inLibrary = viewModel.candidates.filter(\.alreadyInLibrary).count
         let selected = viewModel.selectedWords.count
         let parts: [(String, Int)] = [
-            ("已识别", total),
-            ("在库内", inLibrary),
-            ("勾选", selected),
+            (L("已识别"), total),
+            (L("在库内"), inLibrary),
+            (L("勾选"), selected),
         ]
         return HStack(spacing: 12) {
             ForEach(parts.indices, id: \.self) { idx in
@@ -194,7 +194,7 @@ struct RecognizeResultView: View {
         }
         .font(.caption)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("已识别 \(total) 个，其中 \(inLibrary) 个已在生词库内，已勾选 \(selected) 个准备加入")
+        .accessibilityLabel(L("已识别 %lld 个，其中 %lld 个已在生词库内，已勾选 %lld 个准备加入", total, inLibrary, selected))
     }
 
     /// 把「点底部加入按钮」和「点错误条上的重试」收敛到同一个提交逻辑里。
@@ -213,7 +213,7 @@ struct RecognizeResultView: View {
             // 提交失败——错误条已经显示, sheet 不关, 让用户选择重试 / 取消
             return
         }
-        resultMessage = "加入 \(added.count) 个单词" + (skipped.isEmpty ? "" : "，\(skipped.count) 个已存在")
+        resultMessage = L("加入 %lld 个单词", added.count) + (skipped.isEmpty ? "" : L("，%lld 个已存在", skipped.count))
         try? await Task.sleep(for: .seconds(1.2))
         if !added.isEmpty {
             // 跳到生词库 tab 并高亮刚加入的词，而不是留在拍照页——

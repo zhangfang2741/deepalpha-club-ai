@@ -19,7 +19,7 @@ struct HomeView: View {
                 // 否则新用户正因为没有分组，反而看不到创建第一个分组的入口。
                 playlistFilterChips
 
-                TextField("搜索单词", text: $listVM.searchQuery)
+                TextField(L("搜索单词"), text: $listVM.searchQuery)
                     .padding(10)
                     .background(Theme.surface)
                     .foregroundStyle(Theme.textPrimary)
@@ -36,7 +36,7 @@ struct HomeView: View {
             .padding(.top)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Theme.background.ignoresSafeArea())
-            .navigationTitle("生词库")
+            .navigationTitle(L("生词库"))
             .sheet(isPresented: $showPlaylistManager) {
                 PlaylistManagerView(viewModel: playlistVM)
             }
@@ -104,7 +104,7 @@ struct HomeView: View {
             HStack(spacing: 4) {
                 Image(systemName: "folder")
                     .font(.caption.weight(.bold))
-                Text("分组管理")
+                Text(L("分组管理"))
                     .font(.subheadline.weight(.semibold))
             }
             .foregroundStyle(Theme.textSecondary)
@@ -117,7 +117,7 @@ struct HomeView: View {
             }
         }
         .buttonStyle(.pressable)
-        .accessibilityLabel("分组管理")
+        .accessibilityLabel(L("分组管理"))
     }
 
     private func playlistChip(label: String, count: Int, isSelected: Bool, action: @escaping () -> Void) -> some View {
@@ -140,7 +140,7 @@ struct HomeView: View {
             }
         }
         .buttonStyle(.pressable)
-        .accessibilityLabel("\(label)，\(count) 个")
+        .accessibilityLabel(L("%@，%lld 个", label, count))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
@@ -161,19 +161,19 @@ struct HomeView: View {
         // 它的"选中"语义是"无筛选"，跟具体筛选互斥。
         let isAllHighlighted = listVM.filterStatus == nil && listVM.filterPlaylistID == nil
         return HStack(spacing: 12) {
-            statTile("全部", words.count, Theme.textPrimary, isSelected: isAllHighlighted) {
+            statTile(L("全部"), words.count, Theme.textPrimary, isSelected: isAllHighlighted) {
                 listVM.filterStatus = nil
                 listVM.clearPlaylistFilter()
             }
-            statTile("不认识", unknownCount, Theme.unknown, isSelected: listVM.filterStatus == "new") {
+            statTile(L("不认识"), unknownCount, Theme.unknown, isSelected: listVM.filterStatus == "new") {
                 listVM.filterStatus = listVM.filterStatus == "new" ? nil : "new"
                 if listVM.filterStatus != nil { listVM.clearPlaylistFilter() }
             }
-            statTile("模糊", fuzzyCount, Theme.fuzzy, isSelected: listVM.filterStatus == "fuzzy") {
+            statTile(L("模糊"), fuzzyCount, Theme.fuzzy, isSelected: listVM.filterStatus == "fuzzy") {
                 listVM.filterStatus = listVM.filterStatus == "fuzzy" ? nil : "fuzzy"
                 if listVM.filterStatus != nil { listVM.clearPlaylistFilter() }
             }
-            statTile("认识", knownCount, Theme.known, isSelected: listVM.filterStatus == "known") {
+            statTile(L("认识"), knownCount, Theme.known, isSelected: listVM.filterStatus == "known") {
                 listVM.filterStatus = listVM.filterStatus == "known" ? nil : "known"
                 if listVM.filterStatus != nil { listVM.clearPlaylistFilter() }
             }
@@ -201,7 +201,7 @@ struct HomeView: View {
             }
         }
         .buttonStyle(.pressable)
-        .accessibilityLabel("\(label)，\(count) 个")
+        .accessibilityLabel(L("%@，%lld 个", label, count))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }

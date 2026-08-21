@@ -31,7 +31,7 @@ struct ForgotPasswordView: View {
 
                 Form {
                     Section {
-                        TextField(method == .phone ? "注册时使用的手机号" : "注册时使用的邮箱", text: $account)
+                        TextField(method == .phone ? L("注册时使用的手机号") : L("注册时使用的邮箱"), text: $account)
                             .textContentType(.username)
                             .keyboardType(method == .phone ? .phonePad : .emailAddress)
                             .textInputAutocapitalization(.never)
@@ -49,33 +49,33 @@ struct ForgotPasswordView: View {
                         }
                         .disabled(!canSend || viewModel.cooldown > 0)
                     } header: {
-                        Text("第一步：获取验证码")
+                        Text(L("第一步：获取验证码"))
                     } footer: {
                         if viewModel.hasSentCode {
                             // 后端对未注册邮箱也返回成功（防账号枚举），文案必须跟着含糊，
                             // 不能写成「验证码已发送」那样暗示邮箱一定存在。
                             Text(method == .phone
-                                ? "如果该手机号已注册，验证码已发出，10 分钟内有效。"
-                                : "如果该邮箱已注册，验证码已发出，10 分钟内有效。没收到请检查垃圾邮件。")
+                                ? L("如果该手机号已注册，验证码已发出，10 分钟内有效。")
+                                : L("如果该邮箱已注册，验证码已发出，10 分钟内有效。没收到请检查垃圾邮件。"))
                         }
                     }
                     .listRowBackground(Theme.surface)
 
                     if viewModel.hasSentCode {
                         Section {
-                            TextField("6 位验证码", text: $code)
+                            TextField(L("6 位验证码"), text: $code)
                                 .keyboardType(.numberPad)
                                 .textContentType(.oneTimeCode)
                                 .onChange(of: code) { _, new in
                                     code = String(new.filter(\.isNumber).prefix(6))
                                 }
 
-                            SecureField("新密码", text: $newPassword)
+                            SecureField(L("新密码"), text: $newPassword)
                                 .textContentType(.newPassword)
                         } header: {
-                            Text("第二步：设置新密码")
+                            Text(L("第二步：设置新密码"))
                         } footer: {
-                            Text("新密码至少 \(Self.passwordMinLength) 个字符")
+                            Text(L("新密码至少 %lld 个字符", Self.passwordMinLength))
                         }
                         .listRowBackground(Theme.surface)
                     }
@@ -102,7 +102,7 @@ struct ForgotPasswordView: View {
                             } label: {
                                 HStack(spacing: 10) {
                                     if viewModel.isSubmitting { ProgressView().tint(Theme.accent) }
-                                    Text(viewModel.isSubmitting ? "提交中..." : "重置密码")
+                                    Text(viewModel.isSubmitting ? L("提交中...") : L("重置密码"))
                                         .frame(maxWidth: .infinity)
                                 }
                                 .foregroundStyle(Theme.accent)
@@ -114,11 +114,11 @@ struct ForgotPasswordView: View {
                 }
                 .scrollContentBackground(.hidden)
             }
-            .navigationTitle("找回密码")
+            .navigationTitle(L("找回密码"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button(L("取消")) { dismiss() }
                 }
             }
             .onAppear { if account.isEmpty { account = initialAccount } }
@@ -126,8 +126,8 @@ struct ForgotPasswordView: View {
     }
 
     private var sendButtonTitle: String {
-        if viewModel.cooldown > 0 { return "重新发送（\(viewModel.cooldown)s）" }
-        return viewModel.hasSentCode ? "重新发送验证码" : "发送验证码"
+        if viewModel.cooldown > 0 { return L("重新发送（%llds）", viewModel.cooldown) }
+        return viewModel.hasSentCode ? L("重新发送验证码") : L("发送验证码")
     }
 }
 
@@ -156,7 +156,7 @@ final class ForgotPasswordViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "发送失败，请检查网络后重试"
+            errorMessage = L("发送失败，请检查网络后重试")
         }
     }
 
@@ -182,7 +182,7 @@ final class ForgotPasswordViewModel: ObservableObject {
             errorMessage = error.message
             return false
         } catch {
-            errorMessage = "重置失败，请稍后再试"
+            errorMessage = L("重置失败，请稍后再试")
             return false
         }
     }

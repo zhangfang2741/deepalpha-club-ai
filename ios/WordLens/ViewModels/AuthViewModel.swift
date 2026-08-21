@@ -23,29 +23,29 @@ final class AuthViewModel: ObservableObject {
 
     /// 给待注册手机号发验证码。成功返回 true，调用方据此进入第二步。
     func requestPhoneRegisterCode(phone: String) async -> Bool {
-        await runCodeRequest(empty: phone.isEmpty, emptyMessage: "请输入手机号") {
+        await runCodeRequest(empty: phone.isEmpty, emptyMessage: L("请输入手机号")) {
             try await AuthService.requestPhoneRegisterCode(phone: phone)
         }
     }
 
     func registerByPhone(phone: String, password: String, code: String) async {
-        await runAuth(fallback: "注册失败，请稍后再试") {
+        await runAuth(fallback: L("注册失败，请稍后再试")) {
             try await AuthService.registerByPhone(phone: phone, password: password, code: code)
         }
     }
 
     func loginByPhone(phone: String, password: String) async {
         guard !phone.isEmpty, !password.isEmpty else {
-            errorMessage = "请输入手机号和密码"
+            errorMessage = L("请输入手机号和密码")
             return
         }
-        await runAuth(fallback: "登录失败，请稍后再试") {
+        await runAuth(fallback: L("登录失败，请稍后再试")) {
             try await AuthService.loginByPhone(phone: phone, password: password)
         }
     }
 
     func requestPhonePasswordReset(phone: String) async -> Bool {
-        await runCodeRequest(empty: phone.isEmpty, emptyMessage: "请输入手机号") {
+        await runCodeRequest(empty: phone.isEmpty, emptyMessage: L("请输入手机号")) {
             try await AuthService.requestPhonePasswordReset(phone: phone)
         }
     }
@@ -95,7 +95,7 @@ final class AuthViewModel: ObservableObject {
             errorMessage = error.message
             return false
         } catch {
-            errorMessage = "操作失败，请检查网络后重试"
+            errorMessage = L("操作失败，请检查网络后重试")
             return false
         }
     }
@@ -105,7 +105,7 @@ final class AuthViewModel: ObservableObject {
     /// 给待注册邮箱发验证码。成功返回 true，调用方据此进入第二步。
     func requestRegisterCode(email: String) async -> Bool {
         guard !email.isEmpty else {
-            errorMessage = "请输入邮箱"
+            errorMessage = L("请输入邮箱")
             return false
         }
         isLoading = true
@@ -118,14 +118,14 @@ final class AuthViewModel: ObservableObject {
             errorMessage = error.message
             return false
         } catch {
-            errorMessage = "验证码发送失败，请稍后再试"
+            errorMessage = L("验证码发送失败，请稍后再试")
             return false
         }
     }
 
     func register(email: String, password: String, code: String) async {
         guard !email.isEmpty, !password.isEmpty else {
-            errorMessage = "请输入邮箱和密码"
+            errorMessage = L("请输入邮箱和密码")
             return
         }
         isLoading = true
@@ -138,13 +138,13 @@ final class AuthViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "注册失败，请稍后再试"
+            errorMessage = L("注册失败，请稍后再试")
         }
     }
 
     func login(email: String, password: String) async {
         guard !email.isEmpty, !password.isEmpty else {
-            errorMessage = "请输入邮箱和密码"
+            errorMessage = L("请输入邮箱和密码")
             return
         }
         isLoading = true
@@ -157,7 +157,7 @@ final class AuthViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "登录失败，请稍后再试"
+            errorMessage = L("登录失败，请稍后再试")
         }
     }
 

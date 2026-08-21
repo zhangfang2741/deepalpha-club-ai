@@ -23,10 +23,10 @@ enum ReviewMode: String, CaseIterable {
 
     var label: String {
         switch self {
-        case .smart: return "智能复习"
-        case .random: return "随机乱序"
-        case .hardFirst: return "难词优先"
-        case .sequential: return "加入顺序"
+        case .smart: return L("智能复习")
+        case .random: return L("随机乱序")
+        case .hardFirst: return L("难词优先")
+        case .sequential: return L("加入顺序")
         }
     }
 
@@ -296,7 +296,7 @@ final class ReviewViewModel: ObservableObject {
                 await switchPlaylist(.dueReview, name: PlaylistSelection.dueReview.displayName())
             }
         } catch {
-            errorMessage = "加载单词列表失败"
+            errorMessage = L("加载单词列表失败")
         }
     }
 
@@ -358,7 +358,7 @@ final class ReviewViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "提交复习结果失败"
+            errorMessage = L("提交复习结果失败")
         }
         return false
     }

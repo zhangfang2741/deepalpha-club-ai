@@ -21,7 +21,7 @@ final class SettingsViewModel: ObservableObject {
         do {
             profile = try await AuthService.me()
         } catch {
-            profileErrorMessage = "账户信息加载失败"
+            profileErrorMessage = L("账户信息加载失败")
         }
     }
 
@@ -32,13 +32,13 @@ final class SettingsViewModel: ObservableObject {
         defer { isChangingPassword = false }
         do {
             try await AuthService.changePassword(oldPassword: oldPassword, newPassword: newPassword)
-            passwordSuccessMessage = "密码修改成功"
+            passwordSuccessMessage = L("密码修改成功")
             return true
         } catch let error as APIError {
             passwordErrorMessage = error.message
             return false
         } catch {
-            passwordErrorMessage = "修改密码失败，请稍后再试"
+            passwordErrorMessage = L("修改密码失败，请稍后再试")
             return false
         }
     }
@@ -58,7 +58,7 @@ final class SettingsViewModel: ObservableObject {
             deleteErrorMessage = error.message
             return false
         } catch {
-            deleteErrorMessage = "删除账号失败，请稍后再试"
+            deleteErrorMessage = L("删除账号失败，请稍后再试")
             return false
         }
     }

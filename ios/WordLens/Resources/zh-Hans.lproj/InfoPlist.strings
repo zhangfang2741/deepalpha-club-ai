@@ -1,0 +1,5 @@
+/* WordLens — 简体中文 Info.plist strings */
+"CFBundleDisplayName" = "鹦鹉背单词";
+"NSCameraUsageDescription" = "需要访问相机拍摄含英语单词的文档或书页，用于识别生词";
+"NSMicrophoneUsageDescription" = "需要访问麦克风，用于语音听写时录下你说的单词";
+"NSSpeechRecognitionUsageDescription" = "需要使用语音识别，把你说出的单词转成文字以判定听写是否正确。录音会发送至 Apple 的语音识别服务处理";
