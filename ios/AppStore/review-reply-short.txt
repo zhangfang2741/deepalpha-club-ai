@@ -1,33 +1,36 @@
 1. SCREEN RECORDING
-Attached: wordlens-review-demo.mp4 (4:31), on a physical iPhone 16 Pro / iOS 26.6, starting from launching the app on the Home Screen.
-0:00 launch | 0:04 registration (phone), SMS code received on-device | 0:36 signed in | 0:40 sign out | 0:48 sign in with demo account (email) | 1:20 CAMERA prompt | 1:28 photo taken, recognition ~20s | 1:44 results saved | 1:56 vocabulary list: filters, search, playlists | 2:00 review: flip card, rate recall | 2:28 dictation | 2:30 SPEECH RECOGNITION prompt | 2:31 MICROPHONE prompt | 2:33 spelling aloud, graded | 3:08 background audio: locked screen, playback continues, Lock Screen shows current word | 4:04 account deletion (warning, password, permanent) | 4:24 back at sign-in
-No paid content, subscriptions, or shared user-generated content.
+Attached: wordlens-review-demo.mp4, physical iPhone 16 Pro / iOS 26.6, starting from the Home Screen.
+0:00 launch | 0:04 phone registration, SMS code on-device | 0:36 signed in | 0:40 sign out | 0:48 sign in with demo account (email) | 1:20 CAMERA prompt | 1:28 photo, recognition ~20s | 1:56 vocabulary list | 2:28 dictation | 2:30 SPEECH RECOGNITION prompt | 2:31 MICROPHONE prompt | 2:33 spelling aloud, graded | 3:08 background audio: screen locked, playback continues, Lock Screen shows current word | X:XX paywall (price, auto-renewal terms), sandbox purchase, Restore Purchases | 4:04 account deletion (warning, password, permanent) | 4:24 back at sign-in
+No shared user-generated content; one auto-renewable subscription (section 8).
 
 2. DEVICES
-iPhone 16 Pro, iOS 26.6 (physical device). Deployment target iOS 17.6.
+iPhone 16 Pro, iOS 26.6 (physical). Deployment target iOS 17.6.
 
 3. FUNCTION / AUDIENCE
-An English vocabulary tool for Chinese-speaking learners. Looking words up while reading and copying them into a notebook is slow. The user photographs a page; the app recognizes every English word in it, attaches IPA, part of speech, Chinese definition, etymology and an example sentence, and schedules review with SM-2 spaced repetition. Words can also be reviewed by listening, even while the screen is locked.
-Audience: students preparing for CET-4/6, postgraduate exams, IELTS or TOEFL; readers of English books; commuters. Free, no ads, no IAP.
+An English vocabulary tool for Chinese-speaking learners. The user photographs a page; the app recognizes every English word in it, attaches IPA, part of speech, Chinese definition, etymology and an example sentence, then schedules review with SM-2 spaced repetition. Words can also be reviewed by listening, screen locked.
+Audience: students preparing for CET-4/6, IELTS or TOEFL; readers of English books; commuters. No ads.
 
 4. ACCESS
 Demo account, please use the EMAIL method:
 appreview@deepalpha.club / AppReview2026
-The sign-in screen has a phone/email toggle at the top. Phone codes come from a mainland-China SMS provider and cannot reach non-Chinese numbers, so please tap "email" (see 0:48). The account is pre-populated with words in all review states and two playlists.
-Tab 1 photo capture (recognition takes 15-50s; if camera access is denied, "choose from album" still works and needs no permission); tab 2 review and dictation (typing needs no permission, microphone optional); tab 3 vocabulary; tab 4 settings.
-Background audio (UIBackgroundModes: audio): Settings > Pronunciation > enable "auto play" (off by default so users are not surprised by sound), return to tab 2, press play, lock the screen - playback continues and the Lock Screen shows the current word (3:08). No other background activity.
+The sign-in screen has a phone/email toggle at the top. Phone codes come from a mainland-China SMS provider and cannot reach non-Chinese numbers, so please tap "email" (0:48). The account is pre-populated with words in all review states and two playlists.
+Photo recognition takes 15-50s; if camera access is denied, "choose from album" still works, no permission needed. Dictation accepts typing or the microphone.
+Background audio (UIBackgroundModes: audio): Settings > Pronunciation > enable "auto play" (off by default), open the review tab, press play, lock the screen - playback continues and the Lock Screen shows the current word (3:08). No other background activity.
 Account deletion: Settings > Delete account, re-enter password; immediate and permanent (4:04).
 
 5. EXTERNAL SERVICES
-- Google Gemini: recognizes words in the photo and generates the definitions. The image is sent for real-time processing only, never stored on disk or in our database, and carries no user identity.
+- Google Gemini: recognizes the words and generates the definitions. The image is processed in real time, never written to disk or to our database, and carries no user identity.
 - Apple SFSpeechRecognizer: dictation grading; audio is handled by iOS, never reaching our servers.
-- MiniMax text-to-speech: pronunciation audio, proxied through our backend so the provider key never ships in the app.
-- Alibaba Cloud DirectMail / Number Verification: delivers email and SMS codes. Carrier rules bar a custom SMS signature at our tier, so the message carries the provider's generic signature rather than the app name (see 0:32); the registration screen tells users to expect this, so it is not mistaken for spam.
-- Railway (hosting/database), Cloudflare (DNS).
+- MiniMax text-to-speech: pronunciation audio, proxied through our backend.
+- Alibaba Cloud: email and SMS codes. At our tier the carrier allows no custom SMS signature, so the code arrives under the provider's generic one (0:32); the registration screen warns users.
+- Railway (hosting/DB), Cloudflare (DNS).
 No advertising or analytics SDKs and no cross-app tracking, so no ATT prompt.
 
 6. REGIONAL DIFFERENCES
-Features and content are identical everywhere. Only account creation differs: email registration works worldwide, while phone registration relies on a mainland-China SMS provider, so non-Chinese numbers cannot receive the code and should use email. Both create the same account type.
+Features and content are identical everywhere. Only account creation differs: email works worldwide, while phone registration uses a mainland-China SMS provider (see section 4).
 
 7. PROTECTED MATERIAL
-Not a regulated industry; no protected third-party material. Definitions, IPA, etymologies and example sentences are generated by Gemini at recognition time, not copied from any dictionary. All pronunciation audio is synthesized by MiniMax, a commercial service we subscribe to. No licensed dictionary content or recordings are bundled.
+Not a regulated industry; no protected third-party material. Definitions, IPA, etymologies and examples are generated by Gemini at recognition time, not copied from any dictionary. All pronunciation audio is synthesized by MiniMax, a commercial service we subscribe to.
+
+8. IN-APP SUBSCRIPTION (new in this build)
+Every feature is free; only daily volume is capped - 3 photo recognitions and 20 new words per day, with unlimited review of words already studied. WordLens Pro Monthly (club.deepalpha.wordlens.pro.monthly, CNY 29/month, auto-renewable) lifts both caps. The paywall opens when either cap is reached, and any time from Settings > Upgrade to Pro. It states the price, the term, the auto-renewal disclosure and a Restore Purchases button, and links to our Terms and Privacy Policy. It funds recurring per-call costs: vision recognition and speech synthesis. The demo account is free, so the flow is reproducible.
