@@ -10,9 +10,9 @@ enum NDJSONStreamDecodeError: LocalizedError {
         case .server(let message):
             message
         case .invalidResponse:
-            "识别响应格式异常，请重试"
+            L("识别响应格式异常，请重试")
         case .missingResult:
-            "识别连接提前结束，请重试"
+            L("识别连接提前结束，请重试")
         }
     }
 }
@@ -36,7 +36,7 @@ enum NDJSONStreamDecoder {
                 }
                 return result
             case "error":
-                throw NDJSONStreamDecodeError.server(event.message ?? "识别失败，请重试")
+                throw NDJSONStreamDecodeError.server(event.message ?? L("识别失败，请重试"))
             default:
                 continue
             }

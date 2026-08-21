@@ -6,10 +6,17 @@ import UIKit
 
 struct CameraCaptureView: View {
     @StateObject private var viewModel = CameraViewModel()
+    @EnvironmentObject var store: StoreManager
+    @EnvironmentObject var usage: UsageTracker
     @State private var photoPickerItem: PhotosPickerItem?
     @State private var showCameraSheet = false
     /// 相机不可用时的提示（权限被拒 / 设备没有相机），nil 表示不弹。
     @State private var cameraBlockedReason: CameraBlockedReason?
+    /// 当日拍照识别额度用尽时弹出的订阅墙。
+    @State private var showPaywall = false
+
+    /// 今天还能不能拍照识别：订阅用户不限；免费用户按当日额度判定。
+    private var photoAllowed: Bool { store.isSubscribed || usage.canTakePhoto() }
 
     var body: some View {
         NavigationStack {
@@ -28,7 +35,7 @@ struct CameraCaptureView: View {
                         Image(systemName: "camera.viewfinder")
                             .font(.system(size: 64))
                             .foregroundStyle(Theme.textSecondary)
-                        Text("拍摄或选择含英语单词的图片")
+                        Text(L("拍摄或选择含英语单词的图片"))
                             .foregroundStyle(Theme.textSecondary)
                     }
 
@@ -43,9 +50,11 @@ struct CameraCaptureView: View {
                     if !viewModel.isRecognizing {
                         VStack(spacing: 12) {
                             Button {
+                                // 先查额度，用尽直接弹订阅墙，不让用户白拍一张再被拦。
+                                guard photoAllowed else { showPaywall = true; return }
                                 Task { await presentCameraIfAllowed() }
                             } label: {
-                                Label("拍照", systemImage: "camera.fill")
+                                Label(L("拍照"), systemImage: "camera.fill")
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 14)
                                     .background(Theme.accent)
@@ -55,7 +64,7 @@ struct CameraCaptureView: View {
                             .buttonStyle(.pressable)
 
                             PhotosPicker(selection: $photoPickerItem, matching: .images) {
-                                Label("从相册选择", systemImage: "photo.on.rectangle")
+                                Label(L("从相册选择"), systemImage: "photo.on.rectangle")
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 14)
                                     .background(Theme.surface)
@@ -70,7 +79,7 @@ struct CameraCaptureView: View {
                     Spacer()
                 }
             }
-            .navigationTitle("拍照录入")
+            .navigationTitle(L("拍照录入"))
             .sheet(isPresented: $showCameraSheet) {
                 CameraPicker { image in
                     Task { await process(image) }
@@ -86,18 +95,24 @@ struct CameraCaptureView: View {
                 presenting: cameraBlockedReason
             ) { reason in
                 if reason == .permissionDenied {
-                    Button("去设置") {
+                    Button(L("去设置")) {
                         if let url = URL(string: UIApplication.openSettingsURLString) {
                             UIApplication.shared.open(url)
                         }
                     }
                 }
-                Button("好", role: .cancel) {}
+                Button(L("好"), role: .cancel) {}
             } message: { reason in
                 Text(reason.message)
             }
             .onChange(of: photoPickerItem) { _, newItem in
                 guard let newItem else { return }
+                // 相册选图同样走额度：用尽则弹墙，不进识别。
+                guard photoAllowed else {
+                    photoPickerItem = nil
+                    showPaywall = true
+                    return
+                }
                 Task {
                     viewModel.isRecognizing = true
                     guard let rawData = try? await newItem.loadTransferable(type: Data.self),
@@ -119,6 +134,7 @@ struct CameraCaptureView: View {
                     // 不缺这一个，这里只禁掉手势关掉，让下拉真回到它该干的事（滚动）。
                     .interactiveDismissDisabled(true)
             }
+            .sheet(isPresented: $showPaywall) { PaywallView() }
         }
     }
 
@@ -133,17 +149,17 @@ struct CameraCaptureView: View {
 
         var title: String {
             switch self {
-            case .permissionDenied: "无法使用相机"
-            case .noCameraOnDevice: "此设备没有可用的相机"
+            case .permissionDenied: L("无法使用相机")
+            case .noCameraOnDevice: L("此设备没有可用的相机")
             }
         }
 
         var message: String {
             switch self {
             case .permissionDenied:
-                "需要相机权限才能拍摄单词。你可以在「设置 → 鹦鹉背单词 → 相机」中开启，或改用「从相册选择」。"
+                L("需要相机权限才能拍摄单词。你可以在「设置 → 鹦鹉背单词 → 相机」中开启，或改用「从相册选择」。")
             case .noCameraOnDevice:
-                "请改用「从相册选择」导入含英语单词的图片。"
+                L("请改用「从相册选择」导入含英语单词的图片。")
             }
         }
     }
@@ -193,6 +209,12 @@ struct CameraCaptureView: View {
     /// 识别不再跑端上 Apple Vision OCR：印刷体识别效果有限、且要跨端到安卓，识别
     /// 统一交给后端视觉模型，客户端只负责把图片压好上传。
     private func process(_ image: UIImage) async {
+        // 兜底闸门（入口按钮已先查过一次，这里防其它调用路径绕过）。
+        guard photoAllowed else {
+            viewModel.isRecognizing = false
+            showPaywall = true
+            return
+        }
         viewModel.isRecognizing = true
         // 第一步：解码到 1600px 并派生缩略图，立刻显示——扫描效果秒出，不被压缩拖住。
         let (uploadImage, thumbnail) = await Task.detached(priority: .userInitiated) {
@@ -207,10 +229,14 @@ struct CameraCaptureView: View {
         }.value
         guard let data else {
             viewModel.isRecognizing = false
-            viewModel.errorMessage = "照片处理失败，请重新拍摄"
+            viewModel.errorMessage = L("照片处理失败，请重新拍摄")
             return
         }
         await viewModel.recognize(imageData: data)
+        // 识别成功（无错误）才计一次额度：网络失败/无识别结果不该扣次数。
+        if viewModel.errorMessage == nil {
+            usage.recordPhoto()
+        }
     }
 
     /// 等比缩放到最长边不超过 maxDimension。真机原图解码成 UIImage 后在内存里可能

@@ -640,7 +640,7 @@ struct PronounceButton: View {
         // 图标按钮必须带文本标签才对 VoiceOver 友好，.labelStyle(.iconOnly) 保留视觉上
         // 只显示图标，但 VoiceOver 仍能读出"发音"。frame 保证达到 44x44 的最小点按区域
         // （生词库/复习卡片里这个按钮经常挨着别的文字，图标本身远小于 44pt）。
-        Button("发音", systemImage: "speaker.wave.2.fill") {
+        Button(L("发音"), systemImage: "speaker.wave.2.fill") {
             // 点击瞬间的回弹反馈，跟"是否正在播放"的波纹动效是两回事——不管这次播放
             // 最终成不成功，点下去那一下都应该有反馈。
             tapPulse = true

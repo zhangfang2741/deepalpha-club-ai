@@ -34,25 +34,25 @@ struct PlaylistEditorView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
-                TextField("分组名称", text: $name)
+                TextField(L("分组名称"), text: $name)
                     .padding(10)
                     .background(Theme.surface)
                     .foregroundStyle(Theme.textPrimary)
                     .clipShape(.rect(cornerRadius: 8))
 
                 HStack {
-                    Text("已选 \(selectedIDs.count) 个")
+                    Text(L("已选 %lld 个", selectedIDs.count))
                         .font(.caption)
                         .foregroundStyle(Theme.textSecondary)
                     Spacer()
                     if !selectedIDs.isEmpty {
-                        Button("清空选择") { selectedIDs.removeAll() }
+                        Button(L("清空选择")) { selectedIDs.removeAll() }
                             .font(.caption)
                             .tint(Theme.accent)
                     }
                 }
 
-                TextField("搜索单词", text: $searchText)
+                TextField(L("搜索单词"), text: $searchText)
                     .padding(10)
                     .background(Theme.surface)
                     .foregroundStyle(Theme.textPrimary)
@@ -62,9 +62,9 @@ struct PlaylistEditorView: View {
                     ProgressView().tint(Theme.accent).frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if wordList.allWords.isEmpty {
                     ContentUnavailableView(
-                        "生词库还是空的",
+                        L("生词库还是空的"),
                         systemImage: "book.closed",
-                        description: Text("先去拍照识别一些单词，再来建分组")
+                        description: Text(L("先去拍照识别一些单词，再来建分组"))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -86,14 +86,14 @@ struct PlaylistEditorView: View {
             .padding(.horizontal)
             .padding(.top)
             .background(Theme.background.ignoresSafeArea())
-            .navigationTitle(isNew ? "新建分组" : "编辑分组")
+            .navigationTitle(isNew ? L("新建分组") : L("编辑分组"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }.tint(Theme.textSecondary)
+                    Button(L("取消")) { dismiss() }.tint(Theme.textSecondary)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(isSaving ? "保存中…" : "保存") { Task { await save() } }
+                    Button(isSaving ? L("保存中…") : L("保存")) { Task { await save() } }
                         .tint(Theme.accent)
                         .disabled(isSaving || name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }

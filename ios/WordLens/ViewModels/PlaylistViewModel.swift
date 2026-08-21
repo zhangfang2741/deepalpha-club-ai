@@ -73,7 +73,7 @@ final class PlaylistViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "加载分组失败"
+            errorMessage = L("加载分组失败")
         }
     }
 
@@ -105,7 +105,7 @@ final class PlaylistViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "加载分组统计失败"
+            errorMessage = L("加载分组统计失败")
         }
     }
 
@@ -135,7 +135,7 @@ final class PlaylistViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "创建分组失败"
+            errorMessage = L("创建分组失败")
         }
         return nil
     }
@@ -150,7 +150,7 @@ final class PlaylistViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "保存分组失败"
+            errorMessage = L("保存分组失败")
         }
         return false
     }
@@ -165,7 +165,7 @@ final class PlaylistViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "加入分组失败"
+            errorMessage = L("加入分组失败")
         }
         return false
     }
@@ -188,7 +188,7 @@ final class PlaylistViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "删除分组失败"
+            errorMessage = L("删除分组失败")
         }
         return false
     }

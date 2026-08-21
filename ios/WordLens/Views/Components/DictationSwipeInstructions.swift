@@ -9,13 +9,13 @@ struct DictationSwipeInstructions: View {
         HStack(spacing: 0) {
             HStack(spacing: 8) {
                 DirectionalChevronMotion(pointsRight: false, color: Theme.accent)
-                Text("重来")
+                Text(L("重来"))
             }
 
             Spacer(minLength: 72)
 
             HStack(spacing: 8) {
-                Text("下一个")
+                Text(L("下一个"))
                 DirectionalChevronMotion(pointsRight: true, color: Theme.accent)
             }
         }
@@ -27,6 +27,6 @@ struct DictationSwipeInstructions: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .padding(.horizontal, 14)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("左滑重来，右滑下一个")
+        .accessibilityLabel(L("左滑重来，右滑下一个"))
     }
 }

@@ -20,13 +20,13 @@ struct DictationAcceptedState: View {
                 ProgressView()
                     .controlSize(.small)
                     .tint(.white)
-                Text("保存后进入下一个")
+                Text(L("保存后进入下一个"))
             }
             .font(.footnote)
             .foregroundStyle(.white)
         }
         .multilineTextAlignment(.center)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(resultLabel)，保存后进入下一个单词")
+        .accessibilityLabel(L("%@，保存后进入下一个单词", resultLabel))
     }
 }

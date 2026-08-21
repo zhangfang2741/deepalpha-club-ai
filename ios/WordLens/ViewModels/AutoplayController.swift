@@ -49,6 +49,21 @@ final class AutoplayController: ObservableObject {
 
     weak var dataSource: AutoplayDataSource?
 
+    // MARK: - 学习额度闸门（免费用户每日限学 N 个新词）
+    //
+    // AutoplayController 本身不认识订阅/额度，靠这三个闭包把判断留给上层
+    // （ReviewCardView 用 StoreManager + UsageTracker 接线）。不接线时闭包为
+    // nil，行为与原来完全一致——保持控制器可独立测试。
+
+    /// 换到某个词开始播之前问一次「这个新词能不能学」。返回 false 表示达到免费
+    /// 上限、需要订阅：播放会停下并回调 `onLearningBlocked`。
+    /// 标 @MainActor：闭包里要读 StoreManager / UsageTracker 这些主 actor 状态。
+    var learningGate: (@MainActor (_ wordID: String) -> Bool)?
+    /// 一个词完整读完（三遍）后回调，用来记「今日已学」。
+    var onWordLearned: (@MainActor (_ wordID: String) -> Void)?
+    /// 因额度用尽被拦截时回调（供 UI 弹订阅墙）。
+    var onLearningBlocked: (@MainActor () -> Void)?
+
     /// 播放节奏（秒）。经验值：播 1 遍约 0.8s，遍间 0.6s 让听者跟上节奏、
     /// 词间 2s 给思考时间。
     private static let betweenPassesDelay: TimeInterval = 0.6
@@ -217,6 +232,16 @@ final class AutoplayController: ObservableObject {
                 stop()
                 return
             }
+
+            // 学习额度闸门：这个新词能不能学？达到免费上限就停播 + 弹订阅墙。
+            // 已学过的词 gate 会放行（不重复计数），所以复习旧词不受影响。
+            let currentID = dataSource?.autoplayCurrentWordID
+            if let currentID, let learningGate, !learningGate(currentID) {
+                onLearningBlocked?()
+                stop()
+                return
+            }
+
             Pronouncer.shared.updateNowPlayingTitle(word)
 
             // 读单词的同时就并行把例句音频预取缓存好（MiniMax 后端合成要几秒）。
@@ -239,13 +264,16 @@ final class AutoplayController: ObservableObject {
 
             if Task.isCancelled || !isPlaying { return }
 
+            // 单词三遍读完 = 完整学过一遍：记一次「今日已学」（同词重复无副作用）。
+            if let currentID { onWordLearned?(currentID) }
+
             // 单词读完三遍后，把例句的英文部分作为完整句子一次合成、一次播放。
             // 不拆词，TTS 才能根据整句上下文生成自然的停顿、连读和重音。
             if let example = dataSource?.autoplayCurrentExampleSentence {
                 try? await Task.sleep(for: .seconds(Self.beforeExampleDelay))
                 if Task.isCancelled || !isPlaying { return }
                 isReadingExample = true
-                Pronouncer.shared.updateNowPlayingTitle("例句 · \(word)")
+                Pronouncer.shared.updateNowPlayingTitle(L("例句 · %@", word))
                 await speakAndWait(example, isExample: true)
                 isReadingExample = false
                 Pronouncer.shared.updateNowPlayingTitle(word)

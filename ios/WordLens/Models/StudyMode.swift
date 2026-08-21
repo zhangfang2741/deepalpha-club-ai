@@ -26,8 +26,8 @@ enum StudyMode: String, CaseIterable {
 
     var label: String {
         switch self {
-        case .listenOnly: return "只听"
-        case .dictation: return "听写"
+        case .listenOnly: return L("只听")
+        case .dictation: return L("听写")
         }
     }
 

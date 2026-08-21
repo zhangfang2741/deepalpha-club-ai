@@ -40,11 +40,11 @@ final class SpeechRecognizer: ObservableObject {
         var message: String {
             switch self {
             case .speechDenied:
-                "语音识别权限已被拒绝，可在系统设置中开启；也可以直接打字听写"
+                L("语音识别权限已被拒绝，可在系统设置中开启；也可以直接打字听写")
             case .speechRestricted:
-                "语音识别被系统限制（如「屏幕使用时间」），无法开启；请改用打字听写"
+                L("语音识别被系统限制（如「屏幕使用时间」），无法开启；请改用打字听写")
             case .microphoneDenied:
-                "麦克风权限已被拒绝，可在系统设置中开启；也可以直接打字听写"
+                L("麦克风权限已被拒绝，可在系统设置中开启；也可以直接打字听写")
             }
         }
 
@@ -124,7 +124,7 @@ final class SpeechRecognizer: ObservableObject {
         }
         permissionBlocker = nil
         guard let recognizer, recognizer.isAvailable else {
-            errorMessage = "语音识别暂不可用，请稍后再试"
+            errorMessage = L("语音识别暂不可用，请稍后再试")
             return
         }
 
@@ -193,13 +193,13 @@ final class SpeechRecognizer: ObservableObject {
                         // 一个字都没识别到才算真失败。已经识别出内容再报错（比如
                         // 收尾阶段的网络抖动）不该盖掉已有结果，让判定照常走。
                         if self.transcript.isEmpty {
-                            self.errorMessage = "语音识别失败，请检查网络后重试"
+                            self.errorMessage = L("语音识别失败，请检查网络后重试")
                         }
                     }
                 }
             }
         } catch {
-            errorMessage = "无法启动录音，请重试"
+            errorMessage = L("无法启动录音，请重试")
             stop()
         }
     }

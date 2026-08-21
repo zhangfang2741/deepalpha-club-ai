@@ -139,7 +139,7 @@ actor APIClient {
         do {
             try bodyData.write(to: tempURL)
         } catch {
-            throw APIError(message: "上传准备失败", statusCode: nil)
+            throw APIError(message: L("上传准备失败"), statusCode: nil)
         }
 
         do {
@@ -171,7 +171,7 @@ actor APIClient {
                 do {
                     return try NDJSONStreamDecoder.decode(T.self, from: data)
                 } catch let error as NDJSONStreamDecodeError {
-                    throw APIError(message: error.errorDescription ?? "识别失败，请重试", statusCode: nil)
+                    throw APIError(message: error.errorDescription ?? L("识别失败，请重试"), statusCode: nil)
                 }
             }
             return try Self.process(data: data, response: response, sentToken: token)
@@ -185,7 +185,7 @@ actor APIClient {
             if let urlError = error as? URLError {
                 throw APIError(message: Self.friendlyMessage(for: urlError), statusCode: nil)
             }
-            throw APIError(message: "网络连接失败，请检查网络后重试", statusCode: nil)
+            throw APIError(message: L("网络连接失败，请检查网络后重试"), statusCode: nil)
         }
     }
 
@@ -214,7 +214,7 @@ actor APIClient {
         } catch let urlError as URLError {
             throw APIError(message: Self.friendlyMessage(for: urlError), statusCode: nil)
         } catch {
-            throw APIError(message: "网络连接失败，请检查网络后重试", statusCode: nil)
+            throw APIError(message: L("网络连接失败，请检查网络后重试"), statusCode: nil)
         }
         return try Self.process(data: data, response: response, sentToken: token)
     }
@@ -223,11 +223,11 @@ actor APIClient {
     /// 后都走这里，集中状态码 / 401 / JSON 解码的逻辑。
     private static func process<T: Decodable>(data: Data, response: URLResponse, sentToken: String?) throws -> T {
         guard let http = response as? HTTPURLResponse else {
-            throw APIError(message: "服务器响应异常", statusCode: nil)
+            throw APIError(message: L("服务器响应异常"), statusCode: nil)
         }
 
         guard (200..<300).contains(http.statusCode) else {
-            let error = APIError(message: detail(from: data) ?? "请求失败（\(http.statusCode)）",
+            let error = APIError(message: detail(from: data) ?? L("请求失败（%lld）", http.statusCode),
                                   statusCode: http.statusCode)
             // 只有「带着 token 的请求」被判定未认证才算会话过期——登录/注册本身返回
             // 401（账号密码错）不该触发登出，那时候根本没带 token。
@@ -240,7 +240,7 @@ actor APIClient {
         do {
             return try JSONDecoder().decode(T.self, from: data)
         } catch {
-            throw APIError(message: "数据解析失败，请稍后再试", statusCode: http.statusCode)
+            throw APIError(message: L("数据解析失败，请稍后再试"), statusCode: http.statusCode)
         }
     }
 
@@ -250,15 +250,15 @@ actor APIClient {
     private static func friendlyMessage(for error: URLError) -> String {
         switch error.code {
         case .networkConnectionLost, .notConnectedToInternet:
-            return "网络连接已中断，请检查 Wi-Fi 或移动网络后重试"
+            return L("网络连接已中断，请检查 Wi-Fi 或移动网络后重试")
         case .timedOut:
-            return "识别超时，请稍后再试（拍照时网络可能不稳定）"
+            return L("识别超时，请稍后再试（拍照时网络可能不稳定）")
         case .cannotFindHost, .cannotConnectToHost:
-            return "无法连接到服务器，请检查网络"
+            return L("无法连接到服务器，请检查网络")
         case .secureConnectionFailed, .serverCertificateUntrusted:
-            return "安全连接失败，请稍后再试"
+            return L("安全连接失败，请稍后再试")
         default:
-            return "网络连接失败，请检查网络后重试"
+            return L("网络连接失败，请检查网络后重试")
         }
     }
 

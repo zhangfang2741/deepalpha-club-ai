@@ -15,6 +15,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Resources/Info.plist,
+				Resources/Products.storekit,
 			);
 			target = 200000000000000000000A5 /* WordLens */;
 		};

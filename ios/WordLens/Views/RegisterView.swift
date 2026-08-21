@@ -34,13 +34,13 @@ struct RegisterView: View {
         // 短信签名是服务商提供的【恒创联众】而不是 App 名——不提前说明的话，
         // 用户很容易把这条来自陌生公司的短信当成垃圾短信忽略掉。
         method == .phone
-            ? "验证码已发往 \(email)，10 分钟内有效。短信签名为【恒创联众】，请注意查收。"
-            : "验证码已发往 \(email)，10 分钟内有效。没收到请检查垃圾邮件。"
+            ? L("验证码已发往 %@，10 分钟内有效。短信签名为【恒创联众】，请注意查收。", email)
+            : L("验证码已发往 %@，10 分钟内有效。没收到请检查垃圾邮件。", email)
     }
 
     private var primaryButtonTitle: String {
-        if auth.isLoading { return hasSentCode ? "注册中…" : "发送中…" }
-        return hasSentCode ? "完成注册" : "发送验证码"
+        if auth.isLoading { return hasSentCode ? L("注册中…") : L("发送中…") }
+        return hasSentCode ? L("完成注册") : L("发送验证码")
     }
 
     private func startCooldown() {
@@ -84,28 +84,28 @@ struct RegisterView: View {
                             .foregroundStyle(Theme.textPrimary)
                             .clipShape(.rect(cornerRadius: 10))
 
-                        SecureField("密码", text: $password)
+                        SecureField(L("密码"), text: $password)
                             .padding()
                             .background(Theme.surface)
                             .foregroundStyle(Theme.textPrimary)
                             .clipShape(.rect(cornerRadius: 10))
 
-                        SecureField("确认密码", text: $confirmPassword)
+                        SecureField(L("确认密码"), text: $confirmPassword)
                             .padding()
                             .background(Theme.surface)
                             .foregroundStyle(Theme.textPrimary)
                             .clipShape(.rect(cornerRadius: 10))
 
                         VStack(alignment: .leading, spacing: 6) {
-                            checklistRow("至少 \(Self.passwordMinLength) 个字符", longEnough)
-                            checklistRow("两次密码一致", matched)
+                            checklistRow(L("至少 %lld 个字符", Self.passwordMinLength), longEnough)
+                            checklistRow(L("两次密码一致"), matched)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                         // 验证码栏只在发过码之后出现：一上来就摆一个空的验证码框，
                         // 用户会以为要先去别处找码。
                         if hasSentCode {
-                            TextField(method == .phone ? "短信收到的 6 位验证码" : "邮箱收到的 6 位验证码", text: $code)
+                            TextField(method == .phone ? L("短信收到的 6 位验证码") : L("邮箱收到的 6 位验证码"), text: $code)
                                 .keyboardType(.numberPad)
                                 .textContentType(.oneTimeCode)
                                 .onChange(of: code) { _, new in
@@ -163,7 +163,7 @@ struct RegisterView: View {
                         .disabled(!canSubmit || auth.isLoading)
 
                         if hasSentCode {
-                            Button(cooldown > 0 ? "重新发送（\(cooldown)s）" : "重新发送验证码") {
+                            Button(cooldown > 0 ? L("重新发送（%llds）", cooldown) : L("重新发送验证码")) {
                                 Task {
                                     let sent = method == .phone
                                         ? await auth.requestPhoneRegisterCode(phone: email)
@@ -184,7 +184,7 @@ struct RegisterView: View {
                     .padding(24)
                 }
             }
-            .navigationTitle("注册")
+            .navigationTitle(L("注册"))
             .onAppear { method = initialMethod }
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -194,11 +194,11 @@ struct RegisterView: View {
     /// 由系统决定，硬拼会在窄屏和大字号下断得很难看。
     private var legalConsentNotice: some View {
         VStack(spacing: 6) {
-            Text("点击「注册」即表示你已阅读并同意")
+            Text(L("点击「注册」即表示你已阅读并同意"))
             HStack(spacing: 4) {
-                Link("《服务条款》", destination: AppConfig.termsOfServiceURL)
-                Text("和")
-                Link("《隐私政策》", destination: AppConfig.privacyPolicyURL)
+                Link(L("《服务条款》"), destination: AppConfig.termsOfServiceURL)
+                Text(L("和"))
+                Link(L("《隐私政策》"), destination: AppConfig.privacyPolicyURL)
             }
         }
         .font(.caption)

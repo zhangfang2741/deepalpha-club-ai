@@ -20,11 +20,11 @@ struct PlaylistPickerView: View {
                     ProgressView().tint(Theme.accent)
                 } else if viewModel.playlists.isEmpty {
                     ContentUnavailableView {
-                        Label("还没有自定义分组", systemImage: "music.note.list")
+                        Label(L("还没有自定义分组"), systemImage: "music.note.list")
                     } description: {
-                        Text("先建一个分组，再把选中的单词加进去")
+                        Text(L("先建一个分组，再把选中的单词加进去"))
                     } actions: {
-                        Button("新建分组") { isCreating = true }
+                        Button(L("新建分组")) { isCreating = true }
                             .buttonStyle(.borderedProminent)
                             .tint(Theme.accent)
                     }
@@ -39,7 +39,7 @@ struct PlaylistPickerView: View {
                                     .font(.subheadline.weight(.medium))
                                     .foregroundStyle(Theme.textPrimary)
                                 Spacer()
-                                Text("\(playlist.wordCount) 个")
+                                Text(L("%lld 个", playlist.wordCount))
                                     .font(.caption)
                                     .foregroundStyle(Theme.textSecondary)
                             }
@@ -54,18 +54,18 @@ struct PlaylistPickerView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.background.ignoresSafeArea())
-            .navigationTitle("加入分组")
+            .navigationTitle(L("加入分组"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }.tint(Theme.textSecondary)
+                    Button(L("取消")) { dismiss() }.tint(Theme.textSecondary)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { isCreating = true } label: {
                         Image(systemName: "plus")
                     }
                     .tint(Theme.accent)
-                    .accessibilityLabel("新建分组")
+                    .accessibilityLabel(L("新建分组"))
                 }
             }
             // 这里只展示自定义分组，不等待与页面无关的生词统计。
