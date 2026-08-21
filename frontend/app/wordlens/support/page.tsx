@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: '鹦鹉背单词（WordLens）iOS 应用的使用帮助、常见问题与联系方式',
 }
 
-const UPDATED = '2026 年 8 月 15 日'
+const UPDATED = '2026 年 8 月 21 日'
 const CONTACT = 'zfleo.sg@gmail.com'
 
 export default function WordLensSupportPage() {
@@ -184,8 +184,18 @@ export default function WordLensSupportPage() {
 
           <Section title="收费吗？">
             <p>
-              当前完全免费，没有广告，也没有内购。若未来推出付费功能，
-              我们会提前在 App 内明确告知，不会影响你已有数据的访问。
+              全部功能都能免费用，没有广告。免费额度是<strong>每天拍照识别 3 次、
+              学习 20 个新单词</strong>，已经学过的词不限次数复习——正常节奏背单词
+              基本用不完。
+            </p>
+            <p className="mt-3">
+              想解除每日限制可以订阅「WordLens Pro 月度会员」，每月 29 元，自动续订，
+              随时可以在「设置 → Apple 账户 → 订阅」里取消。取消后当月剩余时间仍然
+              可用，到期回到免费额度，数据不受任何影响。
+            </p>
+            <p className="mt-3">
+              为什么按月收费而不是买断：拍照识别用的是服务端视觉模型，例句发音用的是
+              云端语音合成，这两项都按调用次数向我们计费，是持续产生的成本。
             </p>
           </Section>
 

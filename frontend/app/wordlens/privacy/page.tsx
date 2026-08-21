@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: '鹦鹉背单词（WordLens）iOS 应用隐私政策',
 }
 
-const UPDATED = '2026 年 8 月 15 日'
+const UPDATED = '2026 年 8 月 21 日'
 const CONTACT = 'zfleo.sg@gmail.com'
 
 export default function WordLensPrivacyPage() {
@@ -71,6 +71,12 @@ export default function WordLensPrivacyPage() {
               （IDFA/IDFV）、相册中你未主动选择的其他照片。本应用<strong>不含任何广告
               SDK，不做跨应用或跨网站的用户追踪</strong>，因此也不会向你弹出
               App 追踪透明度（ATT）授权请求。
+            </p>
+            <p className="mt-3">
+              <strong>关于订阅：</strong>Pro 会员的购买与续订全程由 Apple 的 App Store
+              处理。我们<strong>不接触也不存储你的支付方式、银行卡号或 Apple 账户信息</strong>，
+              仅通过 iOS 系统提供的、经 Apple 签名的交易凭证判断当前订阅是否有效。该凭证
+              不含你的姓名、邮箱或支付信息。
             </p>
           </Section>
 
