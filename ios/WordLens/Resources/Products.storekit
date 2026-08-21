@@ -1,53 +1,64 @@
 {
-  "identifier" : "B7F0A1C2-0001-4A00-9000-WORDLENSPRO01",
-  "nonRenewingSubscriptions" : [],
-  "products" : [],
-  "settings" : {
-    "_applicationInternalID" : "",
-    "_developerTeamID" : "",
-    "_failTransactionsEnabled" : false,
-    "_lastSynchronizedDate" : 0,
-    "_locale" : "zh_CN",
-    "_storefront" : "CHN",
-    "_storeKitErrors" : []
+  "identifier": "B7F0A1C2-0001-4A00-9000-A1B2C3D4E5F6",
+  "nonRenewingSubscriptions": [],
+  "products": [],
+  "settings": {
+    "_applicationInternalID": "",
+    "_developerTeamID": "L565U2X5NL",
+    "_failTransactionsEnabled": false,
+    "_lastSynchronizedDate": 0,
+    "_locale": "zh_CN",
+    "_storefront": "CHN",
+    "_storeKitErrors": []
   },
-  "subscriptionGroups" : [
+  "subscriptionGroups": [
     {
-      "id" : "20000000-0000-0000-0000-000000000001",
-      "localizations" : [],
-      "name" : "WordLens Pro",
-      "subscriptions" : [
+      "id": "20000000-0000-0000-0000-000000000001",
+      "localizations": [
         {
-          "adHocOffers" : [],
-          "codeOffers" : [],
-          "displayPrice" : "29.00",
-          "familyShareable" : false,
-          "groupNumber" : 1,
-          "internalID" : "30000000-0000-0000-0000-000000000001",
-          "introductoryOffer" : null,
-          "localizations" : [
+          "description": "",
+          "displayName": "WordLens Pro",
+          "locale": "zh_CN"
+        },
+        {
+          "description": "",
+          "displayName": "WordLens Pro",
+          "locale": "en_US"
+        }
+      ],
+      "name": "WordLens Pro",
+      "subscriptions": [
+        {
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "38.00",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "30000000-0000-0000-0000-000000000001",
+          "introductoryOffer": null,
+          "localizations": [
             {
-              "description" : "无限拍照识别与学习",
-              "displayName" : "WordLens Pro 月度会员",
-              "locale" : "zh_CN"
+              "description": "无限拍照识别与学习",
+              "displayName": "WordLens Pro 月度会员",
+              "locale": "zh_CN"
             },
             {
-              "description" : "Unlimited photo recognition and study",
-              "displayName" : "WordLens Pro Monthly",
-              "locale" : "en_US"
+              "description": "Unlimited photo recognition and study",
+              "displayName": "WordLens Pro Monthly",
+              "locale": "en_US"
             }
           ],
-          "productID" : "club.deepalpha.wordlens.pro.monthly",
-          "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "Pro Monthly",
-          "subscriptionGroupID" : "20000000-0000-0000-0000-000000000001",
-          "type" : "RecurringSubscription"
+          "productID": "club.deepalpha.wordlens.pro.monthly",
+          "recurringSubscriptionPeriod": "P1M",
+          "referenceName": "Pro Monthly",
+          "subscriptionGroupID": "20000000-0000-0000-0000-000000000001",
+          "type": "RecurringSubscription"
         }
       ]
     }
   ],
-  "version" : {
-    "major" : 3,
-    "minor" : 0
+  "version": {
+    "major": 3,
+    "minor": 0
   }
 }

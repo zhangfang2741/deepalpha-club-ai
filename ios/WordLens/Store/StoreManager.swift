@@ -1,6 +1,12 @@
 // Store/StoreManager.swift
 import Foundation
+import OSLog
 import StoreKit
+
+private let storeLog = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "club.deepalpha.wordlens",
+    category: "storekit"
+)
 
 /// 订阅管理：基于 StoreKit 2，端上用加密签名凭证判断订阅状态。
 ///
@@ -42,7 +48,21 @@ final class StoreManager: ObservableObject {
             let items = try await Product.products(for: [AppConfig.proMonthlyProductID])
             products = items
             loadFailed = items.isEmpty
+            // 空数组是最难查的一种失败：StoreKit 不抛错，只是什么都没返回，
+            // 界面直接显示「暂时无法加载订阅信息」而没有任何线索。把已知的
+            // 几个成因写进日志，省得下次又从零排查。
+            if items.isEmpty {
+                storeLog.error("""
+                    商品列表为空（未抛错）。依次检查：\
+                    ①App Store Connect 的付费应用协议是否为「生效中」；\
+                    ②ASC 里的产品 ID 是否与 \(AppConfig.proMonthlyProductID, privacy: .public) 完全一致；\
+                    ③订阅是否已提交审核并处于可售状态；\
+                    ④本地调试时 Scheme 是否挂了 Products.storekit（该文件里的 identifier \
+                    必须是合法 UUID，否则 Xcode 会静默忽略整个配置）
+                    """)
+            }
         } catch {
+            storeLog.error("商品加载失败: \(error.localizedDescription, privacy: .public)")
             loadFailed = true
         }
     }

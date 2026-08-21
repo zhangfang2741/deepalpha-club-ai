@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: '鹦鹉背单词（WordLens）iOS 应用服务条款',
 }
 
-const UPDATED = '2026 年 8 月 15 日'
+const UPDATED = '2026 年 8 月 21 日'
 const CONTACT = 'zfleo.sg@gmail.com'
 
 export default function WordLensTermsPage() {
@@ -111,10 +111,42 @@ export default function WordLensTermsPage() {
             </p>
           </Section>
 
-          <Section title="八、费用">
+          <Section title="八、费用与订阅">
             <p>
-              本应用当前免费提供。若未来推出付费功能或订阅，我们会提前在应用内明确告知
-              价格与条款，付费与否由你自主选择，不影响你已有数据的访问与导出。
+              本应用的全部功能均可免费使用，仅对每日用量设有上限：免费用户每天可拍照
+              识别 3 次、学习 20 个新单词；已学过的单词不限次数复习。不订阅也不影响你
+              对已有数据的访问与导出。
+            </p>
+            <p className="mt-3">
+              如需解除上述每日限制，可订阅「WordLens Pro 月度会员」：
+            </p>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              <li>订阅周期为 1 个月，自动续订。</li>
+              <li>
+                价格以应用内显示为准（中国区为每月 38 元），其他国家和地区由 Apple 按
+                当地货币折算。
+              </li>
+              <li>
+                付款在你确认购买时从 Apple 账户扣除。除非在当前订阅周期结束前至少 24
+                小时关闭自动续订，否则订阅将自动续期，续订费用在当前周期结束前 24
+                小时内扣除。
+              </li>
+              <li>
+                你可随时在 iOS 的「设置 → Apple 账户 → 订阅」中管理或取消订阅。取消后
+                当前订阅周期内仍可继续使用会员权益，到期后自动回到免费额度。
+              </li>
+              <li>
+                订阅由 Apple 代为收款，退款请求需向 Apple 提出，适用 Apple 的退款政策；
+                我们无法直接为通过 App Store 完成的交易退款。
+              </li>
+              <li>
+                若价格调整，我们会在生效前通过应用内提示告知；按 App Store 规则，涨价
+                在你明确同意前不会自动生效。
+              </li>
+            </ul>
+            <p className="mt-3">
+              订阅覆盖的是持续产生成本的服务——拍照识别依赖服务端视觉模型、例句发音
+              依赖云端语音合成，两者均按调用量计费，因此采用按月订阅而非一次性买断。
             </p>
           </Section>
 

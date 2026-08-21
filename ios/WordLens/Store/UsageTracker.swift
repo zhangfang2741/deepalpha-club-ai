@@ -32,6 +32,11 @@ final class UsageTracker: ObservableObject {
 
     init() { rolloverIfNeeded() }
 
+    /// 供 UI 主动对齐日期：额度判定本身会在 `canTakePhoto()` / `canLearn()` 里
+    /// rollover，但那要等用户先动手。展示用量的视图出现时调一次，避免 App 跨过
+    /// 午夜仍停在前台时显示昨天的数字。
+    func refresh() { rolloverIfNeeded() }
+
     private var todayString: String {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"

@@ -25,7 +25,7 @@ enum AppConfig {
     // MARK: - 订阅与免费额度
 
     /// 月度订阅商品 ID（需与 App Store Connect / Products.storekit 一致）。
-    /// 价格在 App Store Connect 里设为约 ¥29/月的价格档，其它地区由 Apple 按档位
+    /// 价格在 App Store Connect 里设为¥38/月的价格档，其它地区由 Apple 按档位
     /// 自动换算，端上只读 `product.displayPrice` 展示本地化价格，不硬编码金额。
     static let proMonthlyProductID = "club.deepalpha.wordlens.pro.monthly"
 

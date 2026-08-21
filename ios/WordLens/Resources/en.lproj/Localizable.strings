@@ -72,10 +72,10 @@
 "请改用「从相册选择」导入含英语单词的图片。" = "Please use \"Choose from album\" to import a photo with English words.";
 "照片处理失败，请重新拍摄" = "Failed to process photo, please retake";
 "单词" = "Word";
-"有道词典音" = "Youdao dictionary";
+"发音引擎" = "Engine";
 "例句" = "Example";
 "发音方案" = "Pronunciation source";
-"自动为内容选择更合适的发音源：单词侧重词典发音准确性，例句侧重自然连读和语调。" = "Automatically picks a better source: dictionary accuracy for words, natural liaison and intonation for example sentences.";
+"单词与例句均使用高清语音合成，保留自然的连读、停顿和重音。" = "Words and example sentences both use HD speech synthesis, preserving natural liaison, pauses and stress.";
 "口音" = "Accent";
 "美音" = "US";
 "英音" = "UK";
@@ -328,3 +328,13 @@
 "试用结束后 %@ / 月，可随时取消" = "Then %@/month after the trial, cancel anytime";
 "%@ / 月" = "%@/month";
 "今日剩余拍照 %lld 次 · 学习 %lld 个" = "Today: %lld photos · %lld words left";
+
+/* 免费额度提示 */
+"今日拍照 %lld/%lld" = "Photos today %lld/%lld";
+"今日新词 %lld/%lld" = "New words today %lld/%lld";
+"今日免费拍照额度已用完，共 %lld 次。轻点升级 Pro" = "Daily free photo limit reached (%lld). Tap to upgrade to Pro";
+"今日已用拍照 %lld 次，共 %lld 次" = "%lld of %lld photos used today";
+"今日免费学习额度已用完，共 %lld 个新词。轻点升级 Pro" = "Daily free limit of %lld new words reached. Tap to upgrade to Pro";
+"今日已学 %lld 个新词，共 %lld 个" = "%lld of %lld new words studied today";
+"拍照 %lld/%lld" = "Photos %lld/%lld";
+"新词 %lld/%lld" = "New %lld/%lld";

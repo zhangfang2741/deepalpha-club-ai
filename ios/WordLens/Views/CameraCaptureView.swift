@@ -71,6 +71,11 @@ struct CameraCaptureView: View {
                                     .foregroundStyle(Theme.textPrimary)
                                     .clipShape(.rect(cornerRadius: 12))
                             }
+
+                            // 免费额度就摆在按钮下面：让用户在按下去之前知道这是
+                            // 今天第几张，而不是拍完才被拦。
+                            FreeQuotaBadge(kind: .photo) { showPaywall = true }
+                                .padding(.top, 2)
                         }
                         .padding(.horizontal)
                     }

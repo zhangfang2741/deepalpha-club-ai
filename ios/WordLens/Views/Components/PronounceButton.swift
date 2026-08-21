@@ -6,7 +6,7 @@ import SwiftUI
 
 /// 发音口音偏好（存 UserDefaults，设置页可切换）。
 ///
-/// 有道通过 type 参数区分英/美音；MiniMax 通过服务端配置的两套 voice ID 区分。
+/// MiniMax 通过服务端配置的两套 voice ID 区分英/美音。
 enum PronunciationAccent: String {
     case us
     case uk
@@ -21,13 +21,11 @@ enum PronunciationAccent: String {
         }
     }
 
-    /// 有道 `dictvoice` 的 type 参数：2=美音，1=英音。
-    var youdaoType: Int { self == .uk ? 1 : 2 }
 }
 
 /// 发音语速偏好（存 UserDefaults，设置页可切换）。
 ///
-/// 有道和 MiniMax 音频都用 `AVAudioPlayer` 倍速播放，不必按语速重复生成和缓存。
+/// 音频统一用 `AVAudioPlayer` 倍速播放，不必按语速重复生成和缓存。
 enum PronunciationRate: String, CaseIterable {
     case slow
     case normal
@@ -45,7 +43,7 @@ enum PronunciationRate: String, CaseIterable {
 
     /// `AVAudioPlayer.rate` 倍速（有效范围约 0.5–2.0）。
     ///
-    /// MiniMax 的 fluent 整句在原始 1.0 倍下比有道词典音更紧凑，因此例句使用
+    /// fluent 整句在原始 1.0 倍下比单词音更紧凑，因此例句使用
     /// 独立校准后的倍率。“正常”使用 0.85，既保留自然连读，也更适合学习时跟读；
     /// 该调整发生在播放端，已经缓存的例句同样生效，不会重新消耗合成额度。
     func playbackRate(for purpose: PronunciationPurpose) -> Float {
@@ -81,21 +79,25 @@ enum PronunciationAutoplay {
     }
 }
 
-/// 内部发音源。用户无需手动选择：单词固定使用有道词典音，完整例句固定使用
-/// 经自家后端中转的 MiniMax Speech HD。
+/// 内部发音源。单词和例句都走本项目后端中转的 MiniMax Speech HD。
+///
+/// 曾经单词用有道词典音（dict.youdao.com/dictvoice）。移除原因有两条，任一条
+/// 都足以：
+/// 1. 那是未公开授权的第三方受版权材料，我们拿不出授权文件；
+/// 2. 那是个无文档、无 SLA 的非公开接口，有道随时可以加校验或封禁，届时
+///    线上所有用户的单词发音同时失效，而 App Store 上的二进制改不了。
+/// 换成自己付费的服务后两个问题一起消失。
 enum PronunciationSource: String {
-    case youdao
     case minimax
 
     /// MiniMax 走本项目后端，登录 token 随请求发送，供应商密钥不会下发到 App。
-    var usesBackend: Bool { self == .minimax }
+    var usesBackend: Bool { true }
 }
 
 /// 单词发音播放器（单例）。
 ///
-/// 单词由有道提供词典音，完整例句由 MiniMax 生成高清 MP3。首次播放后统一缓存到
-/// Caches 目录，再次播放直接读取本地文件。这样既保留单词发音的准确性，也让例句
-/// 具备自然的连读、停顿和重音。
+/// 单词和例句都由 MiniMax 生成高清 MP3（经自家后端中转）。首次播放后统一缓存到
+/// Caches 目录，再次播放直接读取本地文件，既省合成额度也让重复播放没有延迟。
 ///
 /// 做成 ObservableObject（而不是之前的纯静态方法集合）：正在播放哪个词要是一份
 /// 全局共享状态，不能只存在触发播放的那个 PronounceButton 自己的本地 @State 里。
@@ -348,7 +350,7 @@ final class Pronouncer: ObservableObject {
 
         fetchAndPlay(
             Self.primaryPronounceableTerm(trimmed),
-            chain: [.youdao],
+            chain: [.minimax],
             accent: accent,
             purpose: .word,
             requestID: requestID
@@ -358,8 +360,8 @@ final class Pronouncer: ObservableObject {
     /// 从一个可能是「并列写法」的词条里取出真正拿去发音的主词。
     ///
     /// 短语整体收录后，生词库里会出现斜杠并列/异体写法的词条（如 layover/stopover、
-    /// booklet/pamphlet/brochure、harbour/harbor、direct/non-stop flight）。有道
-    /// dictvoice 收到整串带斜杠的文本读不出来，取第一个并列项（斜杠前的部分）发音即可
+    /// booklet/pamphlet/brochure、harbour/harbor、direct/non-stop flight）。TTS
+    /// 收到整串带斜杠的文本会把斜杠也读出来，取第一个并列项（斜杠前的部分）发音即可
     /// ——显示层仍展示完整词条，只有发音用主词。斜杠前为空时回退到原词条兜底。
     static func primaryPronounceableTerm(_ term: String) -> String {
         guard let slashIndex = term.firstIndex(of: "/") else { return term }
@@ -368,7 +370,7 @@ final class Pronouncer: ObservableObject {
     }
 
     /// 自动播放专用的整句发音。例句始终使用 MiniMax 整句 TTS，才能保留自然的
-    /// 连读、停顿和重音；有道的 dictvoice 不支持完整句子。
+    /// 连读、停顿和重音。
     func speakExampleSentence(_ sentence: String) {
         activateSessionIfNeeded()
         let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -391,7 +393,7 @@ final class Pronouncer: ObservableObject {
 
     /// 预取例句音频：只下载并写入缓存，**不播放、不碰任何当前播放状态**。
     ///
-    /// 自动播放里单词先读 3 遍（有道，首次后本地缓存），读完才轮到例句。例句走
+    /// 自动播放里单词先读 3 遍（首次后本地缓存），读完才轮到例句。例句走
     /// MiniMax 后端合成，首播要等合成+下载几秒——串行等待就是单词读完到句子出声
     /// 中间那段长空档。改成读单词时就并行把例句预取好：到 speakExampleSentence 时
     /// fetchAndPlay 直接命中缓存秒播。
@@ -516,13 +518,6 @@ final class Pronouncer: ObservableObject {
         accent: PronunciationAccent
     ) -> URL? {
         switch source {
-        case .youdao:
-            var components = URLComponents(string: "https://dict.youdao.com/dictvoice")
-            components?.queryItems = [
-                URLQueryItem(name: "audio", value: word),
-                URLQueryItem(name: "type", value: String(accent.youdaoType)),
-            ]
-            return components?.url
         case .minimax:
             // 走本项目后端 /vocabulary/tts，由服务端调用 MiniMax（key 不下发到 App）。
             let base = AppConfig.baseURL.appendingPathComponent(AppConfig.apiPrefix + "/tts")
@@ -584,7 +579,7 @@ final class Pronouncer: ObservableObject {
         // 保留旧的单词缓存 key；只有例句增加命名空间，升级后不需要重下全部单词音频。
         let namespace = purpose == .sentence ? "sentence_" : ""
         // MiniMax 例句已升级到 44.1kHz / 256kbps + fluent；缓存版本同步递增，
-        // 防止升级后继续播放本地旧的低码率文件。有道单词音频继续复用原缓存。
+        // 防止升级后继续播放本地旧的低码率文件。
         let sourceVersion = source == .minimax ? "_sentence_hq_fluent_v2" : ""
         let key = "\(namespace)\(word.lowercased())_\(source.rawValue)\(sourceVersion)_\(accent.rawValue)"
         let safe = key.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? key
