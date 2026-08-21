@@ -63,7 +63,8 @@ App 的 deployment target 为 iOS 17.6。
 - 阅读英文原版书、外刊、论文的读者
 - 想利用通勤时间听着复习单词的上班族
 
-App 完全免费，无广告，无内购，无订阅。
+App 无广告。全部功能免费可用，仅对每日用量设限（每天拍照识别 3 次、学习 20 个新词），
+解除限制需订阅 Pro 会员，详见文末「本版本新增的 App 内订阅」。
 
 ────────────────────────────────────────
 4. 设置与访问说明
@@ -178,7 +179,7 @@ App 的功能与内容在所有地区完全一致，仅注册方式有一处差�
 App 的全部功能对免费用户开放，仅对每日用量设限：每天可拍照识别 3 次、
 学习 20 个新单词，已学过的单词不限次数复习。
 
-· 商品：WordLens Pro 月度会员（club.deepalpha.wordlens.pro.monthly），¥29/月
+· 商品：WordLens Pro 月度会员（club.deepalpha.wordlens.pro.monthly），¥38/月
 · 触发路径：用尽任一每日额度时自动弹出订阅页；也可从「设置 → 升级 Pro」
   直接进入，无需先耗尽额度
 · 订阅页包含价格、订阅时长、自动续订披露、恢复购买按钮，以及服务条款与
@@ -230,8 +231,9 @@ Timestamps for the flows you asked about:
   4:24  Returned to the sign-in screen; the account no longer exists
 
 All three permission prompts (camera, microphone, speech recognition) are shown
-being requested and granted. The app has no paid content, no subscriptions, and
-no user-generated content shared between users, so those flows do not apply.
+being requested and granted. The app has no user-generated content shared between
+users, so that flow does not apply. The in-app subscription added in this build is
+described in the final section.
 
 ────────────────────────────────────────
 2. DEVICES AND OS VERSIONS TESTED
@@ -269,7 +271,8 @@ Target audience:
 - Readers of English books, magazines, and academic papers
 - Commuters who want to review vocabulary by listening
 
-The app is free. It has no advertising, no in-app purchases, and no subscriptions.
+The app has no advertising. Every feature is free, with only a daily usage cap;
+lifting the cap requires the Pro subscription described in the final section.
 
 ────────────────────────────────────────
 4. SETUP AND ACCESS INSTRUCTIONS
@@ -415,7 +418,7 @@ Every feature is available to free users; only daily usage is capped. Free users
 can run 3 photo recognitions and study 20 new words per day. Words already
 studied can be reviewed without limit.
 
-- Product: WordLens Pro Monthly (club.deepalpha.wordlens.pro.monthly), CNY 29/month
+- Product: WordLens Pro Monthly (club.deepalpha.wordlens.pro.monthly), CNY 38/month
 - How to reach the paywall: it appears automatically when either daily limit is
   reached, and it can also be opened directly from Settings > Upgrade to Pro
   without exhausting the limits first.
@@ -523,7 +526,7 @@ Apple 第 7 条问的是「受监管行业或包含受保护的第三方材料�
 | # | 动作 | 要点 |
 |---|------|------|
 | 17a | 「设置」标签，停在「订阅」分组 2 秒 | 展示「升级 Pro · 今日剩余拍照 N 次 · 学习 N 个」和「恢复购买」 |
-| 17b | 点「升级 Pro」进入订阅页 | ⚠️ **价格必须显示出来**（¥29/月），显示「暂时无法加载订阅信息」说明付费协议没生效或商品没过审，此时别录 |
+| 17b | 点「升级 Pro」进入订阅页 | ⚠️ **价格必须显示出来**（¥38/月），显示「暂时无法加载订阅信息」说明付费协议没生效或商品没过审，此时别录 |
 | 17c | 缓慢下滑订阅页到底 | 让自动续订披露文字和「服务条款 / 隐私政策」两个链接完整入镜，各停 2 秒 |
 | 17d | 点「订阅 Pro」，走沙盒购买 | 用沙盒账号，弹出的确认弹窗写着「沙盒环境」，不会真扣款 |
 | 17e | 购买成功后返回设置页 | 展示「Pro 会员 · 已解锁无限拍照与学习」和「管理订阅」 |

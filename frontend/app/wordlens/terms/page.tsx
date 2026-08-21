@@ -123,7 +123,7 @@ export default function WordLensTermsPage() {
             <ul className="mt-2 list-disc space-y-1 pl-5">
               <li>订阅周期为 1 个月，自动续订。</li>
               <li>
-                价格以应用内显示为准（中国区为每月 29 元），其他国家和地区由 Apple 按
+                价格以应用内显示为准（中国区为每月 38 元），其他国家和地区由 Apple 按
                 当地货币折算。
               </li>
               <li>

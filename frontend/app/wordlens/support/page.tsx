@@ -189,7 +189,7 @@ export default function WordLensSupportPage() {
               基本用不完。
             </p>
             <p className="mt-3">
-              想解除每日限制可以订阅「WordLens Pro 月度会员」，每月 29 元，自动续订，
+              想解除每日限制可以订阅「WordLens Pro 月度会员」，每月 38 元，自动续订，
               随时可以在「设置 → Apple 账户 → 订阅」里取消。取消后当月剩余时间仍然
               可用，到期回到免费额度，数据不受任何影响。
             </p>
