@@ -84,6 +84,14 @@ class RecommendationOut(BaseModel):
     caveats: list[str]     # 风险提示
 
 
+class MarketNarrativeOut(BaseModel):
+    """大白话形态解读。"""
+    phase: str            # 阶段代码
+    phase_label: str      # 阶段中文标签
+    headline: str         # 一句话形态概括
+    details: list[str]    # 分条解读（趋势 / 位置 / 量价 / 动能）
+
+
 class StructureGapRequest(BaseModel):
     symbol: str
     start_date: str
@@ -130,4 +138,5 @@ class ChanAnalysisResponse(BaseModel):
     current_trend: str
     summary: str
     recommendation: Optional[RecommendationOut] = None
+    narrative: Optional[MarketNarrativeOut] = None  # 大白话形态解读
     pending_notes: list[str] = []  # 最右侧未确认结构的提示

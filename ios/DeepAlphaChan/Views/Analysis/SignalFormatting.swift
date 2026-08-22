@@ -54,6 +54,15 @@ enum SignalFormatting {
         case .weak: return Theme.textSecondary
         }
     }
+
+    /// 形态阶段的配色：偏多用涨色、偏空用跌色、需警惕/中性用橙色。
+    static func phaseColor(_ phase: String) -> Color {
+        switch phase {
+        case "breakout", "uptrend", "range_strong": return Theme.up
+        case "breakdown", "downtrend": return Theme.down
+        default: return Theme.segment  // topping / bottoming / range / unclear：警示或中性
+        }
+    }
 }
 
 /// 结论区统一的字号层级。

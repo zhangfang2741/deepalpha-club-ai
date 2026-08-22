@@ -8,8 +8,9 @@ struct ChanChartView: View {
     @ObservedObject var vm: ChanViewModel
 
     // 可见窗口：起始下标（可为小数）与可见根数。
+    // 默认少显示一些根数，让单根蜡烛更宽、更接近富途那种清晰的看盘密度。
     @State private var firstVisible: Double = 0
-    @State private var visibleCount: Double = 80
+    @State private var visibleCount: Double = 60
 
     // 拖动手势的基准值
     @State private var dragAnchor: Double? = nil
@@ -23,8 +24,8 @@ struct ChanChartView: View {
 
     /// 主图与副图高度。全屏页要把图撑满整屏，所以做成可传入的参数；
     /// 写死 300 的时候点全屏只是换了个黑底，图一样大，等于没有全屏。
-    var priceHeight: CGFloat = 300
-    var macdHeight: CGFloat = 110
+    var priceHeight: CGFloat = 360
+    var macdHeight: CGFloat = 96
     private let timeAxisHeight: CGFloat = 22
     private let rightAxisWidth: CGFloat = 52
 
@@ -70,6 +71,10 @@ struct ChanChartView: View {
                     if vm.showFractals { drawFractals(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showSignals { drawSignals(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     drawPriceAxis(ctx, size: size, bounds: priceBounds)
+                    // 末价参考线（光标激活时让位给光标价签，避免右轴两个标签叠一起）
+                    if cursorIndex == nil {
+                        drawLastPrice(ctx, plotWidth: plotW, height: size.height, bounds: priceBounds)
+                    }
                     // 十字光标
                     if let ci = cursorIndex, ci >= range.start, ci < range.end {
                         drawCursor(ctx, plotWidth: plotW, height: size.height,
@@ -202,14 +207,43 @@ struct ChanChartView: View {
     // MARK: - 绘制：网格与坐标轴
 
     private func drawGrid(_ ctx: GraphicsContext, size: CGSize, bounds: PriceBounds) {
+        // 更淡的虚线网格：起分隔作用但不与蜡烛争视线（富途也是这种若隐若现的横线）
         let lines = 4
         for i in 0...lines {
             let yPos = size.height / CGFloat(lines) * CGFloat(i)
             var path = Path()
             path.move(to: CGPoint(x: 0, y: yPos))
             path.addLine(to: CGPoint(x: size.width, y: yPos))
-            ctx.stroke(path, with: .color(Theme.border.opacity(0.4)), lineWidth: 0.5)
+            ctx.stroke(path, with: .color(Theme.border.opacity(0.28)),
+                       style: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
         }
+    }
+
+    // MARK: - 绘制：末价参考线
+
+    /// 最新收盘价的贯穿横线 + 右轴价签，颜色随当日涨跌。
+    /// 富途最显眼的一条线，随时知道"现在多少钱、相对可视区在什么位置"。
+    private func drawLastPrice(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
+                              bounds: PriceBounds) {
+        guard let last = candles.last else { return }
+        let cy = y(for: last.close, height: height, bounds: bounds)
+        guard cy >= 0, cy <= height else { return }  // 末价被滚出可视价格区间时不画
+        let color = last.isUp ? Theme.up : Theme.down
+
+        var line = Path()
+        line.move(to: CGPoint(x: 0, y: cy))
+        line.addLine(to: CGPoint(x: plotWidth, y: cy))
+        ctx.stroke(line, with: .color(color.opacity(0.6)),
+                   style: StrokeStyle(lineWidth: 0.8, dash: [4, 3]))
+
+        // 右轴价签
+        let labelH: CGFloat = 15
+        let labelRect = CGRect(x: plotWidth + 1, y: clampY(cy, height) - labelH / 2,
+                               width: rightAxisWidth - 2, height: labelH)
+        ctx.fill(Path(roundedRect: labelRect, cornerRadius: 3), with: .color(color))
+        ctx.draw(Text(String(format: "%.2f", last.close))
+                    .font(.system(size: 10, weight: .semibold)).foregroundColor(.white),
+                 at: CGPoint(x: labelRect.midX, y: labelRect.midY), anchor: .center)
     }
 
     private func drawPriceAxis(_ ctx: GraphicsContext, size: CGSize, bounds: PriceBounds) {
@@ -231,7 +265,9 @@ struct ChanChartView: View {
 
     private func drawCandles(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
                              range: VisibleRange, bounds: PriceBounds) {
-        let bodyWidth = max(1, range.candleWidth * 0.6)
+        // 实体占列宽 ~72%，两侧留出细缝；影线随列宽收放但始终保持发丝级。
+        let bodyWidth = max(1, range.candleWidth * 0.72)
+        let wickWidth = max(0.8, min(1.4, range.candleWidth * 0.12))
         for i in range.start..<min(range.end, candles.count) {
             let c = candles[i]
             let cx = x(for: i, range: range)
@@ -241,14 +277,15 @@ struct ChanChartView: View {
             var wick = Path()
             wick.move(to: CGPoint(x: cx, y: y(for: c.high, height: height, bounds: bounds)))
             wick.addLine(to: CGPoint(x: cx, y: y(for: c.low, height: height, bounds: bounds)))
-            ctx.stroke(wick, with: .color(color), lineWidth: 1)
-            // 实体
+            ctx.stroke(wick, with: .color(color), lineWidth: wickWidth)
+            // 实体：十字星（开≈收）时至少给 1pt 高度，否则整根蜡烛只剩影线
             let openY = y(for: c.open, height: height, bounds: bounds)
             let closeY = y(for: c.close, height: height, bounds: bounds)
             let top = min(openY, closeY)
             let bodyH = max(1, abs(openY - closeY))
             let rect = CGRect(x: cx - bodyWidth / 2, y: top, width: bodyWidth, height: bodyH)
-            ctx.fill(Path(rect), with: .color(color))
+            ctx.fill(Path(roundedRect: rect, cornerSize: CGSize(width: 1, height: 1)),
+                     with: .color(color))
         }
     }
 
@@ -333,29 +370,61 @@ struct ChanChartView: View {
 
     private func drawSignals(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
                              range: VisibleRange, bounds: PriceBounds) {
-        for sig in analysis.signals {
-            guard let idx = timeIndex[sig.time], idx >= range.start, idx < range.end else { continue }
-            let cx = x(for: idx, range: range)
+        // 只取可见区内的信号，按 x 排序，用「相邻信号最小间距」判断是否会挤。
+        // 用间距而非列宽：信号通常稀疏，60 根默认视图里也多半放得下完整标签；
+        // 只有当两个信号靠得太近（< 完整药丸宽 ~28pt）才整体降级成数字徽标。
+        let visible = analysis.signals
+            .compactMap { sig -> (Signal, CGFloat)? in
+                guard let idx = timeIndex[sig.time], idx >= range.start, idx < range.end else { return nil }
+                return (sig, x(for: idx, range: range))
+            }
+            .sorted { $0.1 < $1.1 }
+        var minGap = CGFloat.greatestFiniteMagnitude
+        for i in 1..<max(1, visible.count) {
+            minGap = min(minGap, visible[i].1 - visible[i - 1].1)
+        }
+        // 密度自适应：够宽时用完整术语（一买/三卖…），太挤时缩成「买1/卖3」这种
+        // 自解释短标签——比完整术语窄，又不用猜数字含义；完整解读仍在「买卖点」列表。
+        let compact = minGap < 28
+
+        for (sig, cx) in visible {
             let cy = y(for: sig.price, height: height, bounds: bounds)
             let color = sig.isBuy ? Theme.up : Theme.down
-            // 三角标记：买点朝上，卖点朝下，卖点画在价格上方
+            let alpha: Double = sig.confirmed ? 1.0 : 0.5
+            // 买点朝上画在价格下方，卖点朝下画在价格上方
             let dir: CGFloat = sig.isBuy ? 1 : -1
-            // 三角(6) + 间距 + 标签(约 10) 合计需要约 30pt 纵向空间。价格贴近
-            // 可视区上下沿时（比如卖点正好在最高点），不夹住就会被画到画布外，
-            // 用户只看到半个三角甚至什么都看不到。
-            let markerSpan: CGFloat = 30
-            let baseY = min(max(cy + dir * 14, markerSpan), height - markerSpan)
-            var tri = Path()
-            let s: CGFloat = 6
-            tri.move(to: CGPoint(x: cx, y: baseY - dir * s))
-            tri.addLine(to: CGPoint(x: cx - s, y: baseY + dir * s))
-            tri.addLine(to: CGPoint(x: cx + s, y: baseY + dir * s))
-            tri.closeSubpath()
-            ctx.fill(tri, with: .color(sig.confirmed ? color : color.opacity(0.45)))
-            // 标签
-            let label = Text(sig.label).font(.system(size: 8, weight: .bold)).foregroundColor(.white)
-            let labelY = baseY + dir * 16
-            ctx.draw(label, at: CGPoint(x: cx, y: labelY), anchor: .center)
+
+            // 徽标文字：紧凑态用「买1/卖3」（买卖+类型末位数字），完整态用中文标签
+            let text = compact
+                ? (sig.isBuy ? "买" : "卖") + String(sig.type.rawValue.suffix(1))
+                : sig.label
+            let resolved = ctx.resolve(
+                Text(text).font(.system(size: 9, weight: .bold)).foregroundColor(.white))
+            let textSize = resolved.measure(in: CGSize(width: 200, height: 40))
+            // 药丸随文字自适应宽度（紧凑态因文字更短自然更窄）
+            let padH: CGFloat = 5, padV: CGFloat = 2.5
+            let badgeH = textSize.height + padV * 2
+            let badgeW = textSize.width + padH * 2
+            let tri: CGFloat = 4  // 指向蜡烛的小三角高度
+
+            // 版面：蜡烛 →(间距7)→ 三角 →(贴着)→ 徽标。整体夹在可视区内。
+            let gap: CGFloat = 7
+            let span = gap + tri + badgeH
+            let midY = min(max(cy + dir * (gap + tri + badgeH / 2), span), height - span)
+            let badgeRect = CGRect(x: cx - badgeW / 2, y: midY - badgeH / 2, width: badgeW, height: badgeH)
+
+            // 小三角（徽标朝蜡烛的一侧）
+            let triBase = midY - dir * badgeH / 2
+            var arrow = Path()
+            arrow.move(to: CGPoint(x: cx, y: triBase - dir * tri))
+            arrow.addLine(to: CGPoint(x: cx - tri, y: triBase))
+            arrow.addLine(to: CGPoint(x: cx + tri, y: triBase))
+            arrow.closeSubpath()
+            ctx.fill(arrow, with: .color(color.opacity(alpha)))
+
+            ctx.fill(Path(roundedRect: badgeRect, cornerRadius: badgeH / 2),
+                     with: .color(color.opacity(alpha)))
+            ctx.draw(resolved, at: CGPoint(x: badgeRect.midX, y: badgeRect.midY), anchor: .center)
         }
     }
 
@@ -530,7 +599,8 @@ struct ChanChartView: View {
 
     private func resetWindowIfNeeded() {
         let total = Double(candles.count)
-        visibleCount = min(90, max(20, total))
+        // 默认约 60 根：蜡烛宽度适中、结构看得清，又不至于太少看不出趋势
+        visibleCount = min(60, max(20, total))
         firstVisible = max(0, total - visibleCount)  // 默认显示最新
     }
 }

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from app.core.logging import logger
 from app.services.chan.divergence import DivergenceResult, MACDData, calc_macd, find_stroke_divergences
 from app.services.chan.fractal import Fractal, MergedCandle, find_fractals, merge_candles
+from app.services.chan.narrative import MarketNarrative, build_narrative
 from app.services.chan.pivot import Pivot, find_segment_pivots, find_stroke_pivots
 from app.services.chan.segment import Segment, find_segments
 from app.services.chan.signals import Signal, generate_all_signals
@@ -44,6 +45,8 @@ class ChanAnalysisResult:
     latest_signal: Signal | None = None
     summary: str = ""
     recommendation: Recommendation | None = None
+    # 大白话形态解读（趋势 / 位置 / 量价 / 动能），供普通用户理解当前市场在做什么
+    narrative: MarketNarrative | None = None
 
     # 最右侧未确认结构的提示（把缠论的右侧滞后不确定性显式暴露出来）
     pending_notes: list[str] = field(default_factory=list)
@@ -144,6 +147,8 @@ class ChanAnalyzer:
         result.latest_signal = result.signals[-1] if result.signals else None
         result.summary = self._build_summary(result)
         result.recommendation = self._build_recommendation(result)
+        # 量价需要原始 bars（合并K线不含 volume），故在此传入
+        result.narrative = build_narrative(result, bars)
 
         logger.info(
             "chan_analysis_complete",

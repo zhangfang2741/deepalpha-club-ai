@@ -144,6 +144,19 @@ struct Recommendation: Codable {
     }
 }
 
+/// 大白话形态解读（对应后端 MarketNarrativeOut）。
+struct MarketNarrative: Codable {
+    let phase: String          // 阶段代码
+    let phaseLabel: String     // 阶段中文标签
+    let headline: String       // 一句话形态概括
+    let details: [String]      // 分条解读（趋势 / 位置 / 量价 / 动能）
+
+    enum CodingKeys: String, CodingKey {
+        case phase, headline, details
+        case phaseLabel = "phase_label"
+    }
+}
+
 /// 完整缠论分析结果。
 struct ChanAnalysis: Codable {
     let symbol: String
@@ -159,10 +172,11 @@ struct ChanAnalysis: Codable {
     let currentTrend: String
     let summary: String
     let recommendation: Recommendation?
+    let narrative: MarketNarrative?
     let pendingNotes: [String]
 
     enum CodingKeys: String, CodingKey {
-        case symbol, fractals, strokes, segments, macd, signals, summary, recommendation
+        case symbol, fractals, strokes, segments, macd, signals, summary, recommendation, narrative
         case barsCount = "bars_count"
         case mergedCandles = "merged_candles"
         case strokePivots = "stroke_pivots"

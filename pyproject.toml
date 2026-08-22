@@ -162,6 +162,7 @@ convention = "google"
 "app/schemas/chan.py" = ["D415", "D101"]
 "app/services/skills/kline.py" = ["D415"]
 "tests/services/skills/test_kline_fetch.py" = ["D415"]
+"tests/services/chan/*.py" = ["D415", "D101", "D102", "D103", "D104"]
 "app/api/v1/chan.py" = ["D415"]
 "app/core/langgraph/tools/chan_analysis.py" = ["D415"]
 "app/core/langgraph/tools/fmp_data.py" = ["D415"]

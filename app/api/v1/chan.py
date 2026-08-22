@@ -19,6 +19,7 @@ from app.schemas.chan import (
     GapItemOut,
     GapJobStatus,
     MACDOut,
+    MarketNarrativeOut,
     MergedCandleOut,
     PivotOut,
     RecommendationOut,
@@ -166,6 +167,12 @@ async def chan_analysis(
         ],
         current_trend=result.current_trend,
         summary=result.summary,
+        narrative=MarketNarrativeOut(
+            phase=result.narrative.phase,
+            phase_label=result.narrative.phase_label,
+            headline=result.narrative.headline,
+            details=result.narrative.details,
+        ) if result.narrative else None,
         pending_notes=result.pending_notes,
         recommendation=RecommendationOut(
             action=result.recommendation.action,
