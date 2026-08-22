@@ -33,7 +33,7 @@ struct AnalysisTabView: View {
                         if let error = vm.errorMessage, !vm.isLoading { errorBanner(error) }
 
                         ChartSection(analysis: analysis, vm: vm,
-                                     showsFullscreen: $showFullscreenChart)
+                                     onFullscreen: openFullscreen)
 
                         ResultSegments(analysis: analysis, vm: vm,
                                        isSubscribed: store.isSubscribed) {
@@ -67,6 +67,7 @@ struct AnalysisTabView: View {
                 }
             }
             .sheet(isPresented: $showPaywall) { PaywallView() }
+            // 关闭时同样不要滑落动画，避免退出时再看到一次两层叠加
             .fullScreenCover(isPresented: $showFullscreenChart) {
                 if let analysis = vm.analysis {
                     ChartFullscreenView(analysis: analysis, vm: vm)
@@ -74,6 +75,22 @@ struct AnalysisTabView: View {
                 }
             }
         }
+    }
+
+    /// 打开全屏图表。
+    ///
+    /// 转屏与呈现同时发生，且**关掉呈现动画**。
+    ///
+    /// 试过两种都不行：在全屏页 onAppear 里转屏，会先看到一帧竖屏的全屏页再整体
+    /// 转过去；先转屏、延迟 0.3s 再呈现，则先看到主页转成横屏（第一层），全屏页
+    /// 再从下面滑上来（第二层），像是叠了两层。
+    ///
+    /// 关掉动画后全屏页瞬间就位，只剩系统那一次旋转动画，看起来就是「转过去」。
+    private func openFullscreen() {
+        orientation.enterLandscape()
+        var tx = Transaction()
+        tx.disablesAnimations = true
+        withTransaction(tx) { showFullscreenChart = true }
     }
 
     // MARK: - 门禁

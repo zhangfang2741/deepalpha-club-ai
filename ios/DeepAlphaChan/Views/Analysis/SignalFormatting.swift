@@ -56,6 +56,20 @@ enum SignalFormatting {
     }
 }
 
+/// 结论区统一的字号层级。
+///
+/// 改造前这块混用了 12/13/15/20 四种字号，而且「依据」这类小标题(12pt)比它
+/// 统领的正文(13pt)还小，层级是倒的。现在收成三级：
+///
+/// - 卡片标题 17pt semibold（SectionCard 自带）
+/// - 正文 15pt regular，行距 5——这是真正要读的内容，不该比标题挤
+/// - 段内小标题 13pt semibold + 字距，小而重才像标签而不像正文
+enum ConclusionType {
+    static let body = Font.system(size: 15)
+    static let label = Font.system(size: 13, weight: .semibold)
+    static let bodyLineSpacing: CGFloat = 5
+}
+
 /// 带标题的项目符号列表。结论段的「依据」和「风险提示」共用。
 struct BulletList: View {
     let title: String
@@ -63,12 +77,24 @@ struct BulletList: View {
     let color: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.caption.bold()).foregroundColor(Theme.textSecondary)
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(ConclusionType.label)
+                .tracking(0.5)
+                .foregroundColor(Theme.textSecondary)
+
             ForEach(items, id: \.self) { item in
-                HStack(alignment: .top, spacing: 6) {
-                    Text("•").foregroundColor(color)
-                    Text(item).font(.caption).foregroundColor(color)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    // 圆点比正文暗一档并固定宽度，多行时缩进才对得齐
+                    Circle()
+                        .fill(color.opacity(0.55))
+                        .frame(width: 4, height: 4)
+                        .frame(width: 6, alignment: .center)
+                        .offset(y: -4)
+                    Text(item)
+                        .font(ConclusionType.body)
+                        .foregroundColor(color)
+                        .lineSpacing(ConclusionType.bodyLineSpacing)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

@@ -4,7 +4,8 @@ import SwiftUI
 struct ChartSection: View {
     let analysis: ChanAnalysis
     @ObservedObject var vm: ChanViewModel
-    @Binding var showsFullscreen: Bool
+    /// 点全屏。编排（先转屏再呈现）在调用方，这里只管发信号。
+    let onFullscreen: () -> Void
 
     var body: some View {
         VStack(spacing: 10) {
@@ -23,9 +24,7 @@ struct ChartSection: View {
     }
 
     private var fullscreenButton: some View {
-        Button {
-            showsFullscreen = true
-        } label: {
+        Button(action: onFullscreen) {
             Image(systemName: "arrow.up.left.and.arrow.down.right")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(Theme.accent)

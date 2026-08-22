@@ -21,8 +21,10 @@ struct ChanChartView: View {
     // 双指缩放基准值
     @State private var zoomAnchor: Double? = nil
 
-    private let priceHeight: CGFloat = 300
-    private let macdHeight: CGFloat = 110
+    /// 主图与副图高度。全屏页要把图撑满整屏，所以做成可传入的参数；
+    /// 写死 300 的时候点全屏只是换了个黑底，图一样大，等于没有全屏。
+    var priceHeight: CGFloat = 300
+    var macdHeight: CGFloat = 110
     private let timeAxisHeight: CGFloat = 22
     private let rightAxisWidth: CGFloat = 52
 
@@ -179,7 +181,9 @@ struct ChanChartView: View {
             hi = max(hi, candles[i].high)
         }
         if lo > hi { return PriceBounds(minP: 0, maxP: 1) }
-        let pad = (hi - lo) * 0.08
+        // 12% 而不是 8%：买卖点标记要在价格上下各占约 30pt，留白太少会顶到边缘。
+        // 夹取逻辑（drawSignals）是兜底，这里先给出自然的呼吸空间。
+        let pad = (hi - lo) * 0.12
         return PriceBounds(minP: lo - pad, maxP: hi + pad)
     }
 
@@ -336,7 +340,11 @@ struct ChanChartView: View {
             let color = sig.isBuy ? Theme.up : Theme.down
             // 三角标记：买点朝上，卖点朝下，卖点画在价格上方
             let dir: CGFloat = sig.isBuy ? 1 : -1
-            let baseY = cy + dir * 14
+            // 三角(6) + 间距 + 标签(约 10) 合计需要约 30pt 纵向空间。价格贴近
+            // 可视区上下沿时（比如卖点正好在最高点），不夹住就会被画到画布外，
+            // 用户只看到半个三角甚至什么都看不到。
+            let markerSpan: CGFloat = 30
+            let baseY = min(max(cy + dir * 14, markerSpan), height - markerSpan)
             var tri = Path()
             let s: CGFloat = 6
             tri.move(to: CGPoint(x: cx, y: baseY - dir * s))

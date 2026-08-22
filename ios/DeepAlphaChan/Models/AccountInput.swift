@@ -77,3 +77,40 @@ struct PasswordRules {
 
     var allSatisfied: Bool { hasLetter && hasDigit && longEnough }
 }
+
+/// 标的所属市场。与后端 app/utils/market.py 的规则保持一致。
+enum StockMarket: String, CaseIterable, Identifiable {
+    case us, cn, hk
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .us: return "美股"
+        case .cn: return "A 股"
+        case .hk: return "港股"
+        }
+    }
+
+    var placeholder: String {
+        switch self {
+        case .us: return "代码，如 AAPL"
+        case .cn: return "6 位代码，如 600519"
+        case .hk: return "4–5 位代码，如 0700"
+        }
+    }
+
+    /// 该市场的代码格式是否合法。规则与后端 market.py 一致。
+    func isValidSymbol(_ raw: String) -> Bool {
+        let text = raw.trimmingCharacters(in: .whitespaces).uppercased()
+        guard !text.isEmpty else { return false }
+        switch self {
+        case .us:
+            return text.range(of: "^[A-Z][A-Z.\\-]{0,9}$", options: .regularExpression) != nil
+        case .cn:
+            return text.range(of: "^\\d{6}$", options: .regularExpression) != nil
+        case .hk:
+            return text.range(of: "^\\d{4,5}$", options: .regularExpression) != nil
+        }
+    }
+}

@@ -7,6 +7,12 @@ import SwiftUI
 struct SignalListSection: View {
     let analysis: ChanAnalysis
 
+    /// 按时间升序。后端返回的顺序不保证有序，而买卖点是随时间推进的，
+    /// 乱序列出来读者建立不起先后关系。
+    private var sortedSignals: [Signal] {
+        analysis.signals.sorted { $0.time < $1.time }
+    }
+
     var body: some View {
         VStack(spacing: 12) {
             SectionCard(title: "买卖点", systemImage: "flag.fill") {
@@ -14,7 +20,7 @@ struct SignalListSection: View {
                     emptyHint
                 } else {
                     VStack(spacing: 8) {
-                        ForEach(analysis.signals) { sig in signalRow(sig) }
+                        ForEach(sortedSignals) { sig in signalRow(sig) }
                     }
                 }
             }
@@ -26,9 +32,10 @@ struct SignalListSection: View {
     private var emptyHint: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("当前区间未识别到明确买卖点")
-                .font(.subheadline).foregroundColor(Theme.textSecondary)
+                .font(ConclusionType.body).foregroundColor(Theme.textPrimary)
             Text("可以试试换个时间范围，或切到周线看更大级别的结构。")
-                .font(.caption).foregroundColor(Theme.textSecondary)
+                .font(.footnote).foregroundColor(Theme.textSecondary)
+                .lineSpacing(3)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -60,7 +67,11 @@ struct SignalListSection: View {
                     Spacer()
                     Text(sig.time).font(.caption).foregroundColor(Theme.textSecondary)
                 }
-                Text(sig.description).font(.caption).foregroundColor(Theme.textSecondary)
+                // 与结论段同一套字号，两段来回切时不该有字号跳变
+                Text(sig.description)
+                    .font(ConclusionType.body)
+                    .foregroundColor(Theme.textSecondary)
+                    .lineSpacing(ConclusionType.bodyLineSpacing)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 12) {
                     Text("价位 \(String(format: "%.2f", sig.price))")

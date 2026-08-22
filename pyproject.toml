@@ -188,6 +188,7 @@ convention = "google"
 "app/services/email.py" = ["D415"]
 "app/services/sms.py" = ["D415"]
 "app/utils/phone.py" = ["D415"]
+"app/utils/market.py" = ["D415"]
 "tests/services/test_sms.py" = ["D415", "D101", "D102", "D103"]
 "tests/utils/*.py" = ["D415", "D101", "D102", "D103", "D104"]
 "app/api/v1/vocabulary/*.py" = ["D415", "D104"]
