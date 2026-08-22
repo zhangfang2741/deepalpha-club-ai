@@ -110,3 +110,77 @@ def test_password_reset_request_hides_whether_email_exists(client):
     assert resp.status_code == 200
     assert resp.json() == {"sent": True}
     assert send.await_count == 0, "不该给未注册邮箱真的发信"
+
+
+# ---------- 手机通道 ----------
+
+
+def test_request_phone_code_normalizes_number(client, no_existing_user):
+    with patch.object(codes, "send_sms_code", AsyncMock()) as send:
+        resp = client.post(
+            "/api/v1/auth/phone/register/request-code", json={"phone": PHONE_RAW}
+        )
+
+    assert resp.status_code == 200
+    assert send.await_args.args[2] == PHONE_E164, "手机号没有归一化成 E.164"
+
+
+def test_request_phone_code_rejects_bad_number(client, no_existing_user):
+    resp = client.post(
+        "/api/v1/auth/phone/register/request-code", json={"phone": "12800138000"}
+    )
+
+    assert resp.status_code == 422
+
+
+def test_request_phone_code_rejects_registered_number(client):
+    existing = MagicMock(id=1, phone=PHONE_E164)
+    with patch(
+        "app.api.v1.auth.routes.database_service.get_user_by_phone",
+        MagicMock(return_value=existing),
+    ):
+        resp = client.post(
+            "/api/v1/auth/phone/register/request-code", json={"phone": PHONE_RAW}
+        )
+
+    assert resp.status_code == 400
+
+
+def test_phone_register_creates_user_with_null_email(client, no_existing_user):
+    """手机号注册的用户没有邮箱，email 必须能是 None。"""
+    created = MagicMock(id=43, email=None, phone=PHONE_E164, username=None)
+    with patch.object(codes, "verify_sms_code", AsyncMock()), patch(
+        "app.api.v1.auth.routes.database_service.create_user", MagicMock(return_value=created)
+    ) as create:
+        resp = client.post(
+            "/api/v1/auth/phone/register",
+            json={"phone": PHONE_RAW, "code": "123456", "password": STRONG_PASSWORD},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["email"] is None
+    assert resp.json()["phone"] == PHONE_E164
+    assert create.call_args.args[0] is None, "email 应为 None"
+    assert create.call_args.args[3] == PHONE_E164, "phone 没传进去"
+
+
+def test_phone_register_rejects_exhausted_attempts(client, no_existing_user):
+    from app.services.verification_code import TooManyAttemptsError
+
+    with patch.object(codes, "verify_sms_code", AsyncMock(side_effect=TooManyAttemptsError)):
+        resp = client.post(
+            "/api/v1/auth/phone/register",
+            json={"phone": PHONE_RAW, "code": "000000", "password": STRONG_PASSWORD},
+        )
+
+    assert resp.status_code == 429
+
+
+def test_phone_password_reset_request_hides_whether_phone_exists(client, no_existing_user):
+    with patch.object(codes, "send_sms_code", AsyncMock()) as send:
+        resp = client.post(
+            "/api/v1/auth/phone/password-reset/request", json={"phone": PHONE_RAW}
+        )
+
+    assert resp.status_code == 200
+    assert send.await_count == 0, "不该给未注册手机号真的发短信"

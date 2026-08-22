@@ -20,6 +20,9 @@ from app.schemas.auth import (
     EmailPasswordResetConfirm,
     EmailRegisterRequest,
     PasswordChange,
+    PhoneCodeRequest,
+    PhonePasswordResetConfirm,
+    PhoneRegisterRequest,
     SessionResponse,
     TokenResponse,
     UserCreate,
@@ -630,4 +633,134 @@ async def confirm_email_password_reset(
         database_service.update_user, user_id=user.id, hashed_password=hashed
     )
     logger.info("chan_password_reset_done", user_id=user.id)
+    return {"reset": True}
+
+
+# ---------------------------------------------------------------------------
+# 手机通道：与邮箱那套完全平行。
+#
+# 唯一的实质差别是验证码由阿里云生成保管核验，我们拿不到明文——这个不对称由
+# 外部服务的形态决定，已经封装在 services/account/codes.py 里，路由层无感。
+# ---------------------------------------------------------------------------
+
+
+@router.post("/phone/register/request-code")
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["chan_phone_request_code"][0])
+async def request_phone_register_code(
+    request: Request,
+    payload: PhoneCodeRequest,
+    redis: Redis = Depends(get_redis),
+):
+    """Send a registration code to the given phone number."""
+    phone = _normalized_phone(payload.phone)
+
+    existing = await asyncio.to_thread(database_service.get_user_by_phone, phone)
+    if existing:
+        raise HTTPException(status_code=400, detail="该手机号已被注册，请直接登录")
+
+    try:
+        await codes.send_sms_code(redis, Purpose.PHONE_REGISTER, phone)
+    except Exception as exc:
+        _raise_for_delivery(exc)
+
+    logger.info("chan_phone_register_code_sent")
+    return {"sent": True}
+
+
+@router.post("/phone/register", response_model=UserResponse)
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["register"][0])
+async def register_with_phone_code(
+    request: Request,
+    payload: PhoneRegisterRequest,
+    redis: Redis = Depends(get_redis),
+):
+    """Verify the SMS code and create the account.
+
+    手机号注册的用户 email 为 None。
+    """
+    phone = _normalized_phone(payload.phone)
+    try:
+        password = payload.password.get_secret_value()
+        validate_password_strength(password)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    try:
+        await codes.verify_sms_code(redis, Purpose.PHONE_REGISTER, phone, payload.code)
+    except Exception as exc:
+        _raise_for_delivery(exc)
+
+    existing = await asyncio.to_thread(database_service.get_user_by_phone, phone)
+    if existing:
+        raise HTTPException(status_code=400, detail="该手机号已被注册")
+
+    username = sanitize_string(payload.username) if payload.username else None
+    hashed = await asyncio.to_thread(User.hash_password, password)
+    user = await asyncio.to_thread(
+        database_service.create_user, None, hashed, username, phone
+    )
+
+    token = create_access_token(str(user.id))
+    logger.info("chan_user_registered_by_phone", user_id=user.id)
+    return UserResponse(
+        id=user.id, email=user.email, phone=user.phone, username=user.username, token=token
+    )
+
+
+@router.post("/phone/password-reset/request")
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["chan_phone_request_code"][0])
+async def request_phone_password_reset(
+    request: Request,
+    payload: PhoneCodeRequest,
+    redis: Redis = Depends(get_redis),
+):
+    """Send a password-reset code to the given phone number.
+
+    号码是否注册过都返回成功，避免这个接口变成账号探测器。
+    """
+    phone = _normalized_phone(payload.phone)
+
+    existing = await asyncio.to_thread(database_service.get_user_by_phone, phone)
+    if existing:
+        try:
+            await codes.send_sms_code(redis, Purpose.PHONE_PASSWORD_RESET, phone)
+        except Exception as exc:
+            _raise_for_delivery(exc)
+        logger.info("chan_phone_password_reset_code_sent")
+    else:
+        logger.info("chan_phone_password_reset_requested_for_unknown_phone")
+
+    return {"sent": True}
+
+
+@router.post("/phone/password-reset/confirm")
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["chan_code_verify"][0])
+async def confirm_phone_password_reset(
+    request: Request,
+    payload: PhonePasswordResetConfirm,
+    redis: Redis = Depends(get_redis),
+):
+    """Verify the SMS code and set a new password."""
+    phone = _normalized_phone(payload.phone)
+    try:
+        new_password = payload.new_password.get_secret_value()
+        validate_password_strength(new_password)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    try:
+        await codes.verify_sms_code(redis, Purpose.PHONE_PASSWORD_RESET, phone, payload.code)
+    except Exception as exc:
+        _raise_for_delivery(exc)
+
+    user = await asyncio.to_thread(database_service.get_user_by_phone, phone)
+    if user is None:
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+
+    hashed = await asyncio.to_thread(User.hash_password, new_password)
+    # 复用既有的 update_user，change_password 端点走的也是它，不要另加一个改密方法。
+    await asyncio.to_thread(
+        database_service.update_user, user_id=user.id, hashed_password=hashed
+    )
+    logger.info("chan_phone_password_reset_done", user_id=user.id)
     return {"reset": True}
