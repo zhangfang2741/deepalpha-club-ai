@@ -16,7 +16,7 @@ struct ProfileView: View {
             List {
                 Section("账号") {
                     if let p = auth.profile {
-                        row("邮箱", p.email)
+                        row("账号", p.displayAccount)
                         if let name = p.username { row("用户名", name) }
                     } else {
                         Text("加载中…").foregroundColor(Theme.textSecondary)
