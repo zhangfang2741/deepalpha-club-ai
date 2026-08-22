@@ -15,6 +15,7 @@ from app.core.logging import logger
 from app.models.session import Session
 from app.models.user import User
 from app.schemas.auth import (
+    AccountLoginRequest,
     AppleLoginRequest,
     EmailCodeRequest,
     EmailPasswordResetConfirm,
@@ -32,6 +33,7 @@ from app.schemas.auth import (
 )
 from app.services import email as email_service
 from app.services.account import codes
+from app.services.account.accounts import AccountKind, resolve_account
 from app.services.apple_auth import AppleAuthError, verify_identity_token
 from app.services.database import database_service
 from app.services.verification_code import (
@@ -764,3 +766,48 @@ async def confirm_phone_password_reset(
     )
     logger.info("chan_phone_password_reset_done", user_id=user.id)
     return {"reset": True}
+
+
+# ---------------------------------------------------------------------------
+# 统一登录
+#
+# 与文件上方那个 Form 形态的 POST /login 并存。不改那一个而是新增，是因为它的
+# 字段名是 email、内容类型是 form-urlencoded，已上架的旧版 App 和 Web 都在用；
+# 同一路径同一方法也没法挂两个签名。
+# ---------------------------------------------------------------------------
+
+
+@router.post("/login/account", response_model=TokenResponse)
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["login"][0])
+async def login_by_account(request: Request, payload: AccountLoginRequest):
+    """Log in with either a phone number or an email address.
+
+    类型由服务端判别，前端只给一个输入框。
+    """
+    try:
+        kind, value = resolve_account(payload.account)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if kind is AccountKind.PHONE:
+        user = await asyncio.to_thread(database_service.get_user_by_phone, value)
+    else:
+        user = await asyncio.to_thread(database_service.get_user_by_email, value)
+
+    # 「账号不存在」和「密码错误」必须返回完全相同的响应，否则这个接口就是
+    # 一个账号枚举器。
+    password = payload.password.get_secret_value()
+    if user is None or not await asyncio.to_thread(user.verify_password, password):
+        logger.warning("chan_login_failed", kind=kind.value)
+        raise HTTPException(
+            status_code=401,
+            detail={"message": "账号或密码错误", "code": "INVALID_CREDENTIALS"},
+        )
+
+    token = create_access_token(str(user.id))
+    logger.info("chan_login_successful", user_id=user.id, kind=kind.value)
+    return TokenResponse(
+        access_token=token.access_token,
+        token_type=token.token_type,
+        expires_at=token.expires_at,
+    )

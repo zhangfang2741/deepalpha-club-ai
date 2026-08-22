@@ -184,3 +184,89 @@ def test_phone_password_reset_request_hides_whether_phone_exists(client, no_exis
 
     assert resp.status_code == 200
     assert send.await_count == 0, "不该给未注册手机号真的发短信"
+
+
+# ---------- 统一登录 ----------
+
+
+def test_login_by_email(client):
+    user = MagicMock(id=1, email=EMAIL, phone=None)
+    user.verify_password.return_value = True
+    with patch(
+        "app.api.v1.auth.routes.database_service.get_user_by_email",
+        MagicMock(return_value=user),
+    ):
+        resp = client.post(
+            "/api/v1/auth/login/account", json={"account": EMAIL, "password": STRONG_PASSWORD}
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["access_token"]
+
+
+def test_login_by_phone_looks_up_normalized_number(client):
+    user = MagicMock(id=2, email=None, phone=PHONE_E164)
+    user.verify_password.return_value = True
+    lookup = MagicMock(return_value=user)
+    with patch("app.api.v1.auth.routes.database_service.get_user_by_phone", lookup):
+        resp = client.post(
+            "/api/v1/auth/login/account",
+            json={"account": PHONE_RAW, "password": STRONG_PASSWORD},
+        )
+
+    assert resp.status_code == 200
+    assert lookup.call_args.args[0] == PHONE_E164
+
+
+def test_login_with_unknown_account_returns_401(client, no_existing_user):
+    resp = client.post(
+        "/api/v1/auth/login/account", json={"account": EMAIL, "password": STRONG_PASSWORD}
+    )
+
+    assert resp.status_code == 401
+
+
+def test_login_with_wrong_password_returns_401(client):
+    user = MagicMock(id=1, email=EMAIL, phone=None)
+    user.verify_password.return_value = False
+    with patch(
+        "app.api.v1.auth.routes.database_service.get_user_by_email",
+        MagicMock(return_value=user),
+    ):
+        resp = client.post(
+            "/api/v1/auth/login/account", json={"account": EMAIL, "password": "Wrong123!"}
+        )
+
+    assert resp.status_code == 401
+
+
+def test_login_error_does_not_distinguish_unknown_account_from_bad_password(client):
+    """两种失败必须返回一模一样的响应，否则接口能被用来枚举账号。"""
+    user = MagicMock(id=1, email=EMAIL, phone=None)
+    user.verify_password.return_value = False
+    with patch(
+        "app.api.v1.auth.routes.database_service.get_user_by_email",
+        MagicMock(return_value=user),
+    ):
+        bad_pw = client.post(
+            "/api/v1/auth/login/account", json={"account": EMAIL, "password": "Wrong123!"}
+        )
+    with patch(
+        "app.api.v1.auth.routes.database_service.get_user_by_email",
+        MagicMock(return_value=None),
+    ):
+        unknown = client.post(
+            "/api/v1/auth/login/account", json={"account": EMAIL, "password": "Wrong123!"}
+        )
+
+    assert bad_pw.status_code == unknown.status_code
+    assert bad_pw.json() == unknown.json()
+
+
+def test_login_rejects_garbage_account(client):
+    resp = client.post(
+        "/api/v1/auth/login/account",
+        json={"account": "not-an-account", "password": STRONG_PASSWORD},
+    )
+
+    assert resp.status_code == 422
