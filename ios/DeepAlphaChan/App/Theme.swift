@@ -11,9 +11,11 @@ enum Theme {
     static let textPrimary = Color(hex: 0xE6EDF3)
     static let textSecondary = Color(hex: 0x8B98A9)
 
-    // 涨跌色（美股惯例：绿涨红跌）
-    static let up = Color(hex: 0x22C55E)
-    static let down = Color(hex: 0xEF4444)
+    // 涨跌色（全局统一为中国惯例：红涨绿跌）。
+    // 语义按「涨/跌」而非固定红绿，全 App 引用 Theme.up/down，翻转只需改这两行：
+    // K 线、MACD 柱、趋势/偏向配色都会随之一致翻转。
+    static let up = Color(hex: 0xF6465D)   // 涨=红
+    static let down = Color(hex: 0x2EBD85) // 跌=绿
 
     // 缠论结构叠加色
     static let stroke = Color(hex: 0x60A5FA)       // 笔
