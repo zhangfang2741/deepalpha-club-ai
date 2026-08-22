@@ -370,32 +370,49 @@ struct ChanChartView: View {
 
     private func drawSignals(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
                              range: VisibleRange, bounds: PriceBounds) {
-        for sig in analysis.signals {
-            guard let idx = timeIndex[sig.time], idx >= range.start, idx < range.end else { continue }
-            let cx = x(for: idx, range: range)
+        // 只取可见区内的信号，按 x 排序，用「相邻信号最小间距」判断是否会挤。
+        // 用间距而非列宽：信号通常稀疏，60 根默认视图里也多半放得下完整标签；
+        // 只有当两个信号靠得太近（< 完整药丸宽 ~28pt）才整体降级成数字徽标。
+        let visible = analysis.signals
+            .compactMap { sig -> (Signal, CGFloat)? in
+                guard let idx = timeIndex[sig.time], idx >= range.start, idx < range.end else { return nil }
+                return (sig, x(for: idx, range: range))
+            }
+            .sorted { $0.1 < $1.1 }
+        var minGap = CGFloat.greatestFiniteMagnitude
+        for i in 1..<max(1, visible.count) {
+            minGap = min(minGap, visible[i].1 - visible[i - 1].1)
+        }
+        // 密度自适应：够宽时完整语义药丸（一买/三卖…），太挤时缩成数字徽标
+        // （1/2/3，靠红绿区分买卖），保留缠论分类又不糊成一团；完整解读在「买卖点」列表。
+        let compact = minGap < 28
+
+        for (sig, cx) in visible {
             let cy = y(for: sig.price, height: height, bounds: bounds)
             let color = sig.isBuy ? Theme.up : Theme.down
             let alpha: Double = sig.confirmed ? 1.0 : 0.5
             // 买点朝上画在价格下方，卖点朝下画在价格上方
             let dir: CGFloat = sig.isBuy ? 1 : -1
 
-            // 药丸标签（带底色，叠在蜡烛上仍清晰）+ 指向蜡烛的小三角
+            // 徽标文字：紧凑态取类型末位数字（buy1→"1"），完整态用中文标签
+            let text = compact ? String(sig.type.rawValue.suffix(1)) : sig.label
             let resolved = ctx.resolve(
-                Text(sig.label).font(.system(size: 9, weight: .bold)).foregroundColor(.white))
+                Text(text).font(.system(size: 9, weight: .bold)).foregroundColor(.white))
             let textSize = resolved.measure(in: CGSize(width: 200, height: 40))
+            // 紧凑态强制成正圆徽标；完整态是自适应宽度的药丸
             let padH: CGFloat = 5, padV: CGFloat = 2.5
-            let pillW = textSize.width + padH * 2
-            let pillH = textSize.height + padV * 2
+            let badgeH = textSize.height + padV * 2
+            let badgeW = compact ? badgeH : textSize.width + padH * 2
             let tri: CGFloat = 4  // 指向蜡烛的小三角高度
 
-            // 版面：蜡烛 →(间距7)→ 三角 →(贴着)→ 药丸。整体夹在可视区内。
+            // 版面：蜡烛 →(间距7)→ 三角 →(贴着)→ 徽标。整体夹在可视区内。
             let gap: CGFloat = 7
-            let span = gap + tri + pillH
-            let pillMidY = min(max(cy + dir * (gap + tri + pillH / 2), span), height - span)
-            let pillRect = CGRect(x: cx - pillW / 2, y: pillMidY - pillH / 2, width: pillW, height: pillH)
+            let span = gap + tri + badgeH
+            let midY = min(max(cy + dir * (gap + tri + badgeH / 2), span), height - span)
+            let badgeRect = CGRect(x: cx - badgeW / 2, y: midY - badgeH / 2, width: badgeW, height: badgeH)
 
-            // 小三角（药丸朝蜡烛的一侧）
-            let triBase = pillMidY - dir * pillH / 2
+            // 小三角（徽标朝蜡烛的一侧）
+            let triBase = midY - dir * badgeH / 2
             var arrow = Path()
             arrow.move(to: CGPoint(x: cx, y: triBase - dir * tri))
             arrow.addLine(to: CGPoint(x: cx - tri, y: triBase))
@@ -403,9 +420,9 @@ struct ChanChartView: View {
             arrow.closeSubpath()
             ctx.fill(arrow, with: .color(color.opacity(alpha)))
 
-            ctx.fill(Path(roundedRect: pillRect, cornerRadius: pillH / 2),
+            ctx.fill(Path(roundedRect: badgeRect, cornerRadius: badgeH / 2),
                      with: .color(color.opacity(alpha)))
-            ctx.draw(resolved, at: CGPoint(x: pillRect.midX, y: pillRect.midY), anchor: .center)
+            ctx.draw(resolved, at: CGPoint(x: badgeRect.midX, y: badgeRect.midY), anchor: .center)
         }
     }
 
