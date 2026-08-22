@@ -23,6 +23,7 @@ struct PaywallView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { dismiss() } label: { Image(systemName: "xmark").font(.footnote.bold()) }
+                        .accessibilityLabel("关闭")
                         .tint(Theme.textSecondary)
                 }
             }
