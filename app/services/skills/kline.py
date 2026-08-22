@@ -9,7 +9,19 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 from app.cache.operations import get_json, set_json
 from app.core.logging import logger
-from app.utils.market import Market, normalize as normalize_symbol
+from app.utils.market import (
+    Market,
+    eastmoney_secid,
+    fmp_symbol,
+    normalize as normalize_symbol,
+)
+
+class _PremiumRequiredError(Exception):
+    """FMP 返回 402：该标的不在当前套餐内。"""
+
+
+_EASTMONEY_URL = "https://33.push2his.eastmoney.com/api/qt/stock/kline/get"
+
 
 _FMP_KEY = os.environ.get("FMP_API_KEY", "")
 _FMP_URL = "https://financialmodelingprep.com/stable/historical-price-eod/full"
@@ -51,13 +63,18 @@ async def fetch_kline(
 
     logger.info("kline_fetch_start", symbol=symbol, start=start_date, end=end_date)
 
-    # A 股与港股用 akshare，美股用 FMP
-    if market is Market.CN:
-        bars = await _fetch_a_share(clean_symbol, start_date, end_date, freq)
-    elif market is Market.HK:
-        bars = await _fetch_hk_share(clean_symbol, start_date, end_date, freq)
+    # 美股走 FMP，A 股与港股走东方财富。
+    #
+    # 为什么不统一用 FMP：实测当前 key 的套餐只含美股，A 股 600519.SS 和
+    # 港股 0700.HK 的历史行情端点都返回 402（"not available under your current
+    # subscription"）。代码格式没错——search-symbol 能查到这两个标的。
+    #
+    # 为什么不用 akshare：它的港股接口请求同一个东方财富后端时会被断连，
+    # 而自己直接请求是通的。少一层猜不透的封装，也少一个重依赖。
+    if market is Market.US:
+        bars = await _fetch_fmp(fmp_symbol(symbol), start_date, end_date, freq)
     else:
-        bars = await _fetch_fmp(clean_symbol, start_date, end_date, freq)
+        bars = await _fetch_eastmoney(eastmoney_secid(symbol), start_date, end_date, freq)
 
     if redis and bars:
         await set_json(redis, cache_key, bars, expire=_CACHE_TTL)
@@ -88,6 +105,9 @@ async def _fetch_fmp(symbol: str, start: str, end: str, freq: str) -> list[dict]
         )
         if resp.status_code == 401:
             raise ValueError("数据源认证失败：FMP_API_KEY 无效")
+        if resp.status_code == 402:
+            # 非美股标的在免费/低档套餐下会走到这里，交给上层决定兜底还是报错
+            raise _PremiumRequiredError
         if resp.status_code == 429:
             # 交给 tenacity 重试；用尽后在下方转换为可读错误
             raise _RateLimitError
@@ -155,32 +175,71 @@ def _resample_weekly(daily: list[dict]) -> list[dict]:
     return weekly
 
 
-async def _fetch_a_share(symbol: str, start: str, end: str, freq: str) -> list[dict]:
+async def _fetch_eastmoney(secid: str, start: str, end: str, freq: str) -> list[dict]:
+    """A 股与港股 K 线，直连东方财富行情接口。
+
+    两个市场共用一个接口，只有 secid 的市场前缀不同（1=沪 0=深 116=港），
+    所以不必像原来那样为 A 股和港股各写一份。
+
+    数据源与 akshare 的港股/A 股接口相同，区别只是少了一层封装。
+    """
+    # klt: 101=日线 102=周线；fqt: 1=前复权，与原 akshare 链路的 adjust="qfq" 一致
+    params = {
+        "secid": secid,
+        "fields1": "f1,f2,f3,f4,f5,f6",
+        # 依次为：日期、开盘、收盘、最高、最低、成交量、成交额
+        "fields2": "f51,f52,f53,f54,f55,f56,f57",
+        "klt": "101" if freq == "daily" else "102",
+        "fqt": "1",
+        "beg": start.replace("-", ""),
+        "end": end.replace("-", ""),
+    }
+
+    @retry(
+        retry=retry_if_exception_type(httpx.TransportError),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=6),
+        reraise=True,
+    )
+    def _sync() -> list[dict]:
+        # trust_env=False：.env 里的 HTTP_PROXY/HTTPS_PROXY 是给境外 LLM API 用的，
+        # 拿它去访问东方财富只会被代理断连（本地实测 RemoteProtocolError）。
+        # 这个接口不需要代理，直连即可。
+        resp = httpx.get(_EASTMONEY_URL, params=params, timeout=30, trust_env=False)
+        resp.raise_for_status()
+        data = (resp.json() or {}).get("data")
+        if not data or not data.get("klines"):
+            raise ValueError("未获取到该标的的 K 线数据，请检查代码与日期范围")
+
+        bars: list[dict] = []
+        for line in data["klines"]:
+            parts = line.split(",")
+            if len(parts) < 6:
+                continue
+            bars.append({
+                "time": parts[0],
+                "open": float(parts[1]),
+                "close": float(parts[2]),
+                "high": float(parts[3]),
+                "low": float(parts[4]),
+                "volume": float(parts[5]),
+            })
+        return bars
+
     import asyncio
     from concurrent.futures import ThreadPoolExecutor
 
-    def _sync():
-        import akshare as ak  # noqa: PLC0415
-        # symbol 已由 normalize_symbol 归一化成 6 位裸号
-        period = "daily" if freq == "daily" else "weekly"
-        df = ak.stock_zh_a_hist(
-            symbol=symbol, period=period,
-            start_date=start.replace("-", ""), end_date=end.replace("-", ""),
-            adjust="qfq",
-        )
-        df = df.rename(columns={"日期": "date", "开盘": "open", "收盘": "close",
-                                 "最高": "high", "最低": "low", "成交量": "volume"})
-        df["date"] = df["date"].astype(str)
-        return [
-            {"time": row["date"], "open": float(row["open"]), "high": float(row["high"]),
-             "low": float(row["low"]), "close": float(row["close"]),
-             "volume": float(row.get("volume", 0))}
-            for _, row in df.iterrows()
-        ]
-
     loop = asyncio.get_event_loop()
     with ThreadPoolExecutor(max_workers=1) as pool:
-        return await loop.run_in_executor(pool, _sync)
+        try:
+            return await loop.run_in_executor(pool, _sync)
+        except (httpx.RemoteProtocolError, httpx.TransportError) as exc:
+            # 东方财富对高频请求会直接断连并封一段时间的 IP（实测十几次连续
+            # 请求即触发）。裸异常抛给用户没有任何信息量，转成能看懂的话。
+            logger.warning("eastmoney_unavailable", secid=secid, error=str(exc))
+            raise ValueError(
+                "行情数据源暂时不可用（可能被限流），请稍后重试"
+            ) from exc
 
 
 def bars_to_price_records(bars: list[dict]) -> list[dict]:
@@ -190,35 +249,3 @@ def bars_to_price_records(bars: list[dict]) -> list[dict]:
          "low": b["low"], "close": b["close"], "volume": b["volume"]}
         for b in bars
     ]
-
-
-async def _fetch_hk_share(symbol: str, start: str, end: str, freq: str) -> list[dict]:
-    """港股 K 线。
-
-    走 akshare 而不是 FMP：FMP 的港股覆盖不全且要 0700.HK 形态，
-    akshare 的 stock_hk_hist 直接吃 5 位代码，与 A 股链路形态一致。
-    """
-    import asyncio
-    from concurrent.futures import ThreadPoolExecutor
-
-    def _sync():
-        import akshare as ak  # noqa: PLC0415
-        period = "daily" if freq == "daily" else "weekly"
-        df = ak.stock_hk_hist(
-            symbol=symbol, period=period,
-            start_date=start.replace("-", ""), end_date=end.replace("-", ""),
-            adjust="qfq",
-        )
-        df = df.rename(columns={"日期": "date", "开盘": "open", "收盘": "close",
-                                 "最高": "high", "最低": "low", "成交量": "volume"})
-        df["date"] = df["date"].astype(str)
-        return [
-            {"time": row["date"], "open": float(row["open"]), "high": float(row["high"]),
-             "low": float(row["low"]), "close": float(row["close"]),
-             "volume": float(row.get("volume", 0))}
-            for _, row in df.iterrows()
-        ]
-
-    loop = asyncio.get_event_loop()
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        return await loop.run_in_executor(pool, _sync)

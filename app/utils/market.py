@@ -93,3 +93,41 @@ def normalize(symbol: str) -> tuple[Market, str]:
         return market, clean.zfill(5)
 
     return market, upper
+
+
+def fmp_symbol(symbol: str) -> str:
+    """转成 FMP 要的代码形态。
+
+    - 美股：原样大写（AAPL）
+    - A 股：6 开头沪市 → .SS，0/3 开头深市 → .SZ（600519.SS / 000001.SZ）
+    - 港股：去掉前导零到 4 位再加 .HK（00700 → 0700.HK）
+      FMP 的 search-symbol 返回的就是 0700.HK 这个形态，补成 5 位查不到。
+
+    Raises:
+        InvalidSymbolError: 格式无法识别。
+    """
+    market, clean = normalize(symbol)
+    if market is Market.US:
+        return clean
+    if market is Market.CN:
+        # 6/9 开头是沪市，0/3 开头是深市
+        suffix = ".SS" if clean[0] in "69" else ".SZ"
+        return f"{clean}{suffix}"
+    return f"{clean.lstrip('0').zfill(4)}.HK"
+
+
+def eastmoney_secid(symbol: str) -> str:
+    """转成东方财富行情接口的 secid。
+
+    市场前缀：1=沪市，0=深市，116=港股。
+
+    Raises:
+        InvalidSymbolError: 格式无法识别，或传入的是美股。
+    """
+    market, clean = normalize(symbol)
+    if market is Market.US:
+        raise InvalidSymbolError("美股不走东方财富，请用 FMP")
+    if market is Market.CN:
+        # 6/9 开头是沪市，0/3 开头是深市
+        return f"{'1' if clean[0] in '69' else '0'}.{clean}"
+    return f"116.{clean}"
