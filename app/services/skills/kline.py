@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-import re
 
 import httpx
 from redis.asyncio import Redis
@@ -10,6 +9,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 from app.cache.operations import get_json, set_json
 from app.core.logging import logger
+from app.utils.market import Market, normalize as normalize_symbol
 
 _FMP_KEY = os.environ.get("FMP_API_KEY", "")
 _FMP_URL = "https://financialmodelingprep.com/stable/historical-price-eod/full"
@@ -25,9 +25,8 @@ def _cache_key(user_id: int | None, symbol: str, start: str, end: str, freq: str
     return f"skill_kline:{prefix}:{symbol}:{start}:{end}:{freq}"
 
 
-def _is_a_share(symbol: str) -> bool:
-    clean = re.sub(r"^(SH|SZ|sh|sz)", "", symbol).strip()
-    return bool(re.match(r"^\d{6}$", clean))
+# 市场判别已提升到 app/utils/market.py：这里原本只区分「6 位数字 = A 股，
+# 其余 = 美股」，加了港股之后三个市场的规则放在一处才好维护。
 
 
 async def fetch_kline(
@@ -40,7 +39,9 @@ async def fetch_kline(
     redis: Redis | None = None,
 ) -> list[dict]:
     """获取 K 线数据（Redis 优先），返回 list[{time, open, high, low, close, volume}]。"""
-    cache_key = _cache_key(user_id, symbol, start_date, end_date, freq)
+    # 先归一化再算缓存键：否则 0700 / 00700 / 0700.HK 是同一支股票却各存一份
+    market, clean_symbol = normalize_symbol(symbol)
+    cache_key = _cache_key(user_id, clean_symbol, start_date, end_date, freq)
 
     if redis:
         cached = await get_json(redis, cache_key)
@@ -50,11 +51,13 @@ async def fetch_kline(
 
     logger.info("kline_fetch_start", symbol=symbol, start=start_date, end=end_date)
 
-    # A 股用 akshare，美股用 FMP
-    if _is_a_share(symbol):
-        bars = await _fetch_a_share(symbol, start_date, end_date, freq)
+    # A 股与港股用 akshare，美股用 FMP
+    if market is Market.CN:
+        bars = await _fetch_a_share(clean_symbol, start_date, end_date, freq)
+    elif market is Market.HK:
+        bars = await _fetch_hk_share(clean_symbol, start_date, end_date, freq)
     else:
-        bars = await _fetch_fmp(symbol, start_date, end_date, freq)
+        bars = await _fetch_fmp(clean_symbol, start_date, end_date, freq)
 
     if redis and bars:
         await set_json(redis, cache_key, bars, expire=_CACHE_TTL)
@@ -158,10 +161,10 @@ async def _fetch_a_share(symbol: str, start: str, end: str, freq: str) -> list[d
 
     def _sync():
         import akshare as ak  # noqa: PLC0415
-        clean = re.sub(r"^(SH|SZ|sh|sz)", "", symbol).strip()
+        # symbol 已由 normalize_symbol 归一化成 6 位裸号
         period = "daily" if freq == "daily" else "weekly"
         df = ak.stock_zh_a_hist(
-            symbol=clean, period=period,
+            symbol=symbol, period=period,
             start_date=start.replace("-", ""), end_date=end.replace("-", ""),
             adjust="qfq",
         )
@@ -187,3 +190,35 @@ def bars_to_price_records(bars: list[dict]) -> list[dict]:
          "low": b["low"], "close": b["close"], "volume": b["volume"]}
         for b in bars
     ]
+
+
+async def _fetch_hk_share(symbol: str, start: str, end: str, freq: str) -> list[dict]:
+    """港股 K 线。
+
+    走 akshare 而不是 FMP：FMP 的港股覆盖不全且要 0700.HK 形态，
+    akshare 的 stock_hk_hist 直接吃 5 位代码，与 A 股链路形态一致。
+    """
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _sync():
+        import akshare as ak  # noqa: PLC0415
+        period = "daily" if freq == "daily" else "weekly"
+        df = ak.stock_hk_hist(
+            symbol=symbol, period=period,
+            start_date=start.replace("-", ""), end_date=end.replace("-", ""),
+            adjust="qfq",
+        )
+        df = df.rename(columns={"日期": "date", "开盘": "open", "收盘": "close",
+                                 "最高": "high", "最低": "low", "成交量": "volume"})
+        df["date"] = df["date"].astype(str)
+        return [
+            {"time": row["date"], "open": float(row["open"]), "high": float(row["high"]),
+             "low": float(row["low"]), "close": float(row["close"]),
+             "volume": float(row.get("volume", 0))}
+            for _, row in df.iterrows()
+        ]
+
+    loop = asyncio.get_event_loop()
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        return await loop.run_in_executor(pool, _sync)

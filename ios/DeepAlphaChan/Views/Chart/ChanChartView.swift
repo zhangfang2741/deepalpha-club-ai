@@ -21,8 +21,10 @@ struct ChanChartView: View {
     // 双指缩放基准值
     @State private var zoomAnchor: Double? = nil
 
-    private let priceHeight: CGFloat = 300
-    private let macdHeight: CGFloat = 110
+    /// 主图与副图高度。全屏页要把图撑满整屏，所以做成可传入的参数；
+    /// 写死 300 的时候点全屏只是换了个黑底，图一样大，等于没有全屏。
+    var priceHeight: CGFloat = 300
+    var macdHeight: CGFloat = 110
     private let timeAxisHeight: CGFloat = 22
     private let rightAxisWidth: CGFloat = 52
 

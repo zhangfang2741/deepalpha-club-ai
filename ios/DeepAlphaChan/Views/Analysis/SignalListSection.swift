@@ -26,9 +26,10 @@ struct SignalListSection: View {
     private var emptyHint: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("当前区间未识别到明确买卖点")
-                .font(.subheadline).foregroundColor(Theme.textSecondary)
+                .font(ConclusionType.body).foregroundColor(Theme.textPrimary)
             Text("可以试试换个时间范围，或切到周线看更大级别的结构。")
-                .font(.caption).foregroundColor(Theme.textSecondary)
+                .font(.footnote).foregroundColor(Theme.textSecondary)
+                .lineSpacing(3)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -60,7 +61,11 @@ struct SignalListSection: View {
                     Spacer()
                     Text(sig.time).font(.caption).foregroundColor(Theme.textSecondary)
                 }
-                Text(sig.description).font(.caption).foregroundColor(Theme.textSecondary)
+                // 与结论段同一套字号，两段来回切时不该有字号跳变
+                Text(sig.description)
+                    .font(ConclusionType.body)
+                    .foregroundColor(Theme.textSecondary)
+                    .lineSpacing(ConclusionType.bodyLineSpacing)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 12) {
                     Text("价位 \(String(format: "%.2f", sig.price))")

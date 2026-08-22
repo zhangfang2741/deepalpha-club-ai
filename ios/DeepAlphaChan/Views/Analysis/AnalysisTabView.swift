@@ -33,7 +33,7 @@ struct AnalysisTabView: View {
                         if let error = vm.errorMessage, !vm.isLoading { errorBanner(error) }
 
                         ChartSection(analysis: analysis, vm: vm,
-                                     showsFullscreen: $showFullscreenChart)
+                                     onFullscreen: openFullscreen)
 
                         ResultSegments(analysis: analysis, vm: vm,
                                        isSubscribed: store.isSubscribed) {
@@ -73,6 +73,18 @@ struct AnalysisTabView: View {
                         .environmentObject(orientation)
                 }
             }
+        }
+    }
+
+    /// 打开全屏图表。
+    ///
+    /// 顺序很关键：先请求转屏，等转完再呈现。反过来的话（在全屏页的 onAppear
+    /// 里转屏）用户会先看到一帧竖屏的全屏页，然后整个页面再转过去，很跳。
+    private func openFullscreen() {
+        orientation.enterLandscape()
+        // 系统转屏动画约 0.25s，等它转完再弹，弹出来就已经是横的
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            showFullscreenChart = true
         }
     }
 

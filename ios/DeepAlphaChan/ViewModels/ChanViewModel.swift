@@ -6,7 +6,21 @@ import SwiftUI
 final class ChanViewModel: ObservableObject {
     // 查询参数
     @Published var symbol: String = "AAPL"
+    /// 用户显式选择的市场。不靠代码形态猜——猜是能猜对，但 4~6 位数字在
+    /// A 股和港股之间有歧义时，用户没有办法纠正。选了就以选的为准。
+    @Published var market: StockMarket = .us
     @Published var freq: String = "daily"       // daily / weekly
+
+    /// 发给后端的代码：带上市场后缀，让服务端不必再猜。
+    var requestSymbol: String {
+        let raw = symbol.trimmingCharacters(in: .whitespaces).uppercased()
+        guard !raw.isEmpty else { return raw }
+        switch market {
+        case .us: return raw
+        case .cn: return raw.hasSuffix(".SS") || raw.hasSuffix(".SZ") ? raw : "\(raw).SS"
+        case .hk: return raw.hasSuffix(".HK") ? raw : "\(raw).HK"
+        }
+    }
     @Published var startDate: Date
     @Published var endDate: Date
 
@@ -49,7 +63,7 @@ final class ChanViewModel: ObservableObject {
     // MARK: - 缠论分析
 
     func runAnalysis() async {
-        let sym = symbol.trimmingCharacters(in: .whitespaces)
+        let sym = requestSymbol
         guard !sym.isEmpty else {
             errorMessage = "请输入股票代码"
             return
@@ -83,7 +97,7 @@ final class ChanViewModel: ObservableObject {
         defer { gapLoading = false }
         do {
             let submitted = try await ChanService.submitGap(
-                symbol: symbol, startDate: startDateString,
+                symbol: requestSymbol, startDate: startDateString,
                 endDate: endDateString, industryView: view, freq: freq)
             try await pollGap(jobId: submitted.jobId)
         } catch let error as APIError {

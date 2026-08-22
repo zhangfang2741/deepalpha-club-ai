@@ -33,6 +33,16 @@ struct LessonDetailView: View {
                     .background(Theme.surface)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
 
+                // 示意图放在摘要之后、正文之前：先看图建立直观印象，再读定义。
+                if let spec = LessonDiagrams.spec(for: article.id) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        LessonDiagram(spec: spec)
+                        Text("示意图，与分析页使用同一套配色")
+                            .font(.caption2)
+                            .foregroundColor(Theme.textSecondary)
+                    }
+                }
+
                 // 按空行切段落分别渲染，而不是把整篇丢给一个 Text：
                 // AttributedString 的 Markdown 解析默认会把换行折叠掉，
                 // 整篇渲染出来会是没有段落的一大坨。

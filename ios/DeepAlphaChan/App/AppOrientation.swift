@@ -12,13 +12,17 @@ final class AppOrientation: ObservableObject {
     /// 当前允许的方向。AppDelegate 每次被系统询问时读它。
     @Published private(set) var mask: UIInterfaceOrientationMask = .portrait
 
-    /// 允许横屏（进入全屏图表时调用）。
-    func allowLandscape() {
-        mask = .allButUpsideDown
+    /// 进入全屏图表：允许横屏，并主动转过去。
+    ///
+    /// 只放开不主动转的话，用户得自己把手机横过来才有意义，而多数人开着方向锁
+    /// 根本转不了。全屏就是为了横着看更多 K 线，那就直接转。
+    func enterLandscape() {
+        mask = .landscape
         notifySystem()
+        requestGeometry(.landscapeRight)
     }
 
-    /// 锁回竖屏，并把当前界面转回竖屏。
+    /// 退出全屏：锁回竖屏并转回去。
     ///
     /// 退出全屏时必须无条件调用，不能依赖任何成功回调——漏了的话用户从横屏
     /// 退出后整个 App 会卡在横屏，只能杀进程。
