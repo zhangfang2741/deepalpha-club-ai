@@ -63,19 +63,17 @@ enum AccountInput {
     }
 }
 
-/// 密码强度规则。与后端 validate_password_strength 对齐：8–64 位，
-/// 含大小写字母、数字、特殊字符。抽出来是因为注册页和找回密码页都要用，
-/// 原本只在 RegisterView 里以私有计算属性存在。
+/// 密码强度规则。与后端 validate_password_strength 对齐：8–64 位，含字母和数字。
+/// 抽出来是因为注册页和找回密码页都要用，原本只在 RegisterView 里以私有计算属性存在。
+///
+/// 前端比后端更严会让用户卡在一个后端本可接受的密码上，更松则是白跑一趟网络请求，
+/// 所以这里必须跟后端一字不差。
 struct PasswordRules {
     let password: String
 
-    var hasUpper: Bool { password.range(of: "[A-Z]", options: .regularExpression) != nil }
-    var hasLower: Bool { password.range(of: "[a-z]", options: .regularExpression) != nil }
+    var hasLetter: Bool { password.range(of: "[A-Za-z]", options: .regularExpression) != nil }
     var hasDigit: Bool { password.range(of: "[0-9]", options: .regularExpression) != nil }
-    var hasSpecial: Bool {
-        password.range(of: "[!@#$%^&*(),.?\":{}|<>]", options: .regularExpression) != nil
-    }
     var longEnough: Bool { password.count >= 8 && password.count <= 64 }
 
-    var allSatisfied: Bool { hasUpper && hasLower && hasDigit && hasSpecial && longEnough }
+    var allSatisfied: Bool { hasLetter && hasDigit && longEnough }
 }

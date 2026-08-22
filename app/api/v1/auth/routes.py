@@ -127,18 +127,14 @@ async def register_user(request: Request, user_data: UserCreate):
         field = "password"
         code = "VALIDATION_ERROR"
         
-        if "uppercase" in error_msg.lower():
-            message = "密码必须包含至少一个大写字母"
-            code = "PASSWORD_NO_UPPERCASE"
-        elif "lowercase" in error_msg.lower():
-            message = "密码必须包含至少一个小写字母"
-            code = "PASSWORD_NO_LOWERCASE"
+        # 分支要与 validate_password_strength 抛出的文案一一对应，漏一个
+        # 就会把英文原文直接吐给用户。
+        if "letter" in error_msg.lower():
+            message = "密码必须包含至少一个字母"
+            code = "PASSWORD_NO_LETTER"
         elif "number" in error_msg.lower():
             message = "密码必须包含至少一个数字"
             code = "PASSWORD_NO_NUMBER"
-        elif "special" in error_msg.lower():
-            message = "密码必须包含至少一个特殊字符（如 !@#$%^&*）"
-            code = "PASSWORD_NO_SPECIAL"
         elif "8 characters" in error_msg.lower() or "8位" in error_msg:
             message = "密码长度至少需要 8 个字符"
             code = "PASSWORD_TOO_SHORT"
@@ -449,14 +445,10 @@ async def change_password(
         logger.exception("password_validation_failed", user_id=user.id, error=str(ve))
         error_msg = str(ve)
         
-        if "uppercase" in error_msg.lower():
-            message = "新密码必须包含至少一个大写字母"
-        elif "lowercase" in error_msg.lower():
-            message = "新密码必须包含至少一个小写字母"
+        if "letter" in error_msg.lower():
+            message = "新密码必须包含至少一个字母"
         elif "number" in error_msg.lower():
             message = "新密码必须包含至少一个数字"
-        elif "special" in error_msg.lower():
-            message = "新密码必须包含至少一个特殊字符（如 !@#$%^&*）"
         elif "8 characters" in error_msg.lower() or "8位" in error_msg:
             message = "新密码长度至少需要 8 个字符"
         else:

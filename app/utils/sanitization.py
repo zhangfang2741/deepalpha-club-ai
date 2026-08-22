@@ -98,7 +98,14 @@ def sanitize_list(data: List[Any]) -> List[Any]:
 
 
 def validate_password_strength(password: str) -> bool:
-    """Validate password strength.
+    """Validate password strength: at least 8 characters, with letters and digits.
+
+    这是主站密码规则的**唯一**实现，schemas/auth.py 里的两个 validator 都委托
+    到这里。曾经三处各写一份，改一处会漏另外两处。
+
+    不再要求大小写区分和特殊字符：那套规则（8 位 + 大写 + 小写 + 数字 + 特殊
+    字符）对普通用户太苛刻，实际效果是逼人用 `Password1!` 这类既难记又没多少
+    熵的密码，安全收益并不比「字母 + 数字 + 足够长」高。
 
     Args:
         password: The password to validate
@@ -112,17 +119,11 @@ def validate_password_strength(password: str) -> bool:
     if len(password) < 8:
         raise ValueError("Password must be at least 8 characters long")
 
-    if not re.search(r"[A-Z]", password):
-        raise ValueError("Password must contain at least one uppercase letter")
-
-    if not re.search(r"[a-z]", password):
-        raise ValueError("Password must contain at least one lowercase letter")
+    if not re.search(r"[A-Za-z]", password):
+        raise ValueError("Password must contain at least one letter")
 
     if not re.search(r"[0-9]", password):
         raise ValueError("Password must contain at least one number")
-
-    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
-        raise ValueError("Password must contain at least one special character")
 
     return True
 

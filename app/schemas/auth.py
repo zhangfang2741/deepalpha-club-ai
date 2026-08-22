@@ -69,24 +69,14 @@ class UserCreate(BaseModel):
         Raises:
             ValueError: If the password is not strong enough
         """
-        password = v.get_secret_value()
+        # 委托给唯一实现，不在这里复制规则——曾经三处各写一份，
+        # 改一处会漏另外两处。
+        #
+        # 延迟导入：app.utils 的 __init__ 会拉起 app.utils.graph，后者反过来
+        # 依赖 app.schemas，模块级导入会成环。
+        from app.utils.sanitization import validate_password_strength
 
-        # Check for common password requirements
-        if len(password) < 8:
-            raise ValueError("Password must be at least 8 characters long")
-
-        if not re.search(r"[A-Z]", password):
-            raise ValueError("Password must contain at least one uppercase letter")
-
-        if not re.search(r"[a-z]", password):
-            raise ValueError("Password must contain at least one lowercase letter")
-
-        if not re.search(r"[0-9]", password):
-            raise ValueError("Password must contain at least one number")
-
-        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
-            raise ValueError("Password must contain at least one special character")
-
+        validate_password_strength(v.get_secret_value())
         return v
 
 
@@ -128,24 +118,14 @@ class PasswordChange(BaseModel):
         Raises:
             ValueError: If the password is not strong enough
         """
-        password = v.get_secret_value()
+        # 委托给唯一实现，不在这里复制规则——曾经三处各写一份，
+        # 改一处会漏另外两处。
+        #
+        # 延迟导入：app.utils 的 __init__ 会拉起 app.utils.graph，后者反过来
+        # 依赖 app.schemas，模块级导入会成环。
+        from app.utils.sanitization import validate_password_strength
 
-        # Check for common password requirements
-        if len(password) < 8:
-            raise ValueError("Password must be at least 8 characters long")
-
-        if not re.search(r"[A-Z]", password):
-            raise ValueError("Password must contain at least one uppercase letter")
-
-        if not re.search(r"[a-z]", password):
-            raise ValueError("Password must contain at least one lowercase letter")
-
-        if not re.search(r"[0-9]", password):
-            raise ValueError("Password must contain at least one number")
-
-        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
-            raise ValueError("Password must contain at least one special character")
-
+        validate_password_strength(v.get_secret_value())
         return v
 
 
@@ -209,8 +189,8 @@ class SessionResponse(BaseResponse):
 # ---------------------------------------------------------------------------
 # 双通道注册/登录/找回密码
 #
-# 密码下限跟随主站既有的 validate_password_strength（8–64 位，含大小写、数字、
-# 特殊字符），比 WordLens 那套 6 位下限严格，不要照抄 vocabulary 的 min_length。
+# 密码下限跟随主站既有的 validate_password_strength（8–64 位，含字母和数字），
+# 比 WordLens 那套 6 位下限严格，不要照抄 vocabulary 的 min_length。
 # ---------------------------------------------------------------------------
 
 

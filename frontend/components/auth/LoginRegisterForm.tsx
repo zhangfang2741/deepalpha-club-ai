@@ -47,7 +47,7 @@ function getErrorMessage(err: unknown): string {
             else if (msg.includes('uppercase')) msg = '需包含大写字母'
             else if (msg.includes('lowercase')) msg = '需包含小写字母'
             else if (msg.includes('number')) msg = '需包含数字'
-            else if (msg.includes('special character')) msg = '需包含特殊字符'
+            else if (msg.includes('letter')) msg = '需包含字母'
 
             const fieldMap: Record<string, string> = {
               email: '邮箱',
@@ -75,7 +75,7 @@ function getErrorMessage(err: unknown): string {
             else if (message.includes('uppercase')) message = '需包含大写字母'
             else if (message.includes('lowercase')) message = '需包含小写字母'
             else if (message.includes('number')) message = '需包含数字'
-            else if (message.includes('special character')) message = '需包含特殊字符'
+            else if (message.includes('letter')) message = '需包含字母'
 
             const fieldMap: Record<string, string> = {
               email: '邮箱',
@@ -277,7 +277,7 @@ export default function LoginRegisterForm() {
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="至少8位，含大小写字母、数字、特殊字符"
+              placeholder="至少8位，含字母和数字"
               className={inputClass}
             />
           </div>

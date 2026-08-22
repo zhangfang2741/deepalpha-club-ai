@@ -102,29 +102,23 @@ export function isValidCode(raw: string): boolean {
   return /^\d{6}$/.test(raw)
 }
 
-/** 密码规则，与后端 validate_password_strength 对齐：8–64 位，含大小写、数字、特殊字符。 */
+/** 密码规则，与后端 validate_password_strength 对齐：8–64 位，含字母和数字。 */
 export interface PasswordRuleState {
   longEnough: boolean
-  hasUpper: boolean
-  hasLower: boolean
+  hasLetter: boolean
   hasDigit: boolean
-  hasSpecial: boolean
   allSatisfied: boolean
 }
 
 export function checkPassword(password: string): PasswordRuleState {
   const longEnough = password.length >= 8 && password.length <= 64
-  const hasUpper = /[A-Z]/.test(password)
-  const hasLower = /[a-z]/.test(password)
+  const hasLetter = /[A-Za-z]/.test(password)
   const hasDigit = /[0-9]/.test(password)
-  const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password)
   return {
     longEnough,
-    hasUpper,
-    hasLower,
+    hasLetter,
     hasDigit,
-    hasSpecial,
-    allSatisfied: longEnough && hasUpper && hasLower && hasDigit && hasSpecial,
+    allSatisfied: longEnough && hasLetter && hasDigit,
   }
 }
 
@@ -246,11 +240,12 @@ function translateMessage(raw: string): string {
   const msg = raw.toLowerCase()
   if (msg.includes('value is not a valid email address')) return '邮箱格式不正确'
   if (msg.includes('field required') || msg.includes('missing')) return '必填'
-  if (msg.includes('at least') || msg.includes('too_short')) return '长度不足'
-  if (msg.includes('uppercase')) return '需包含大写字母'
-  if (msg.includes('lowercase')) return '需包含小写字母'
+  // letter/number 必须排在 'at least' 前面：后端的
+  // 「Password must contain at least one letter」也含 at least，
+  // 顺序反了会被误翻成「长度不足」。
+  if (msg.includes('letter')) return '需包含字母'
   if (msg.includes('number')) return '需包含数字'
-  if (msg.includes('special character')) return '需包含特殊字符'
+  if (msg.includes('at least') || msg.includes('too_short')) return '长度不足'
   if (msg.includes('string should match pattern')) return '格式不正确'
   return raw
 }
@@ -1080,7 +1075,7 @@ export default function RegisterForm() {
           autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="至少8位，含大小写字母、数字、特殊字符"
+          placeholder="至少8位，含字母和数字"
           className={inputClass}
         />
         {password && <PasswordRules rules={rules} />}
@@ -1116,10 +1111,8 @@ interface Props {
 export default function PasswordRules({ rules }: Props) {
   const items: Array<[string, boolean]> = [
     ['8–64 位长度', rules.longEnough],
-    ['含大写字母', rules.hasUpper],
-    ['含小写字母', rules.hasLower],
+    ['含字母', rules.hasLetter],
     ['含数字', rules.hasDigit],
-    ['含特殊字符（如 !@#$%^&*）', rules.hasSpecial],
   ]
 
   return (
@@ -1245,7 +1238,7 @@ export default function ForgotPasswordForm({ onDone }: Props) {
           autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="至少8位，含大小写字母、数字、特殊字符"
+          placeholder="至少8位，含字母和数字"
           className={inputClass}
         />
         {password && <PasswordRules rules={rules} />}

@@ -1,0 +1,72 @@
+import SwiftUI
+
+/// 词条详情。既作为学习页的下钻目标，也作为术语点击后弹出的 sheet。
+struct LessonDetailView: View {
+    let article: LessonArticle
+    /// 以 sheet 形式弹出时显示关闭按钮；从列表 push 进来时不需要。
+    var showsCloseButton = false
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        content
+            .background(Theme.background)
+            .navigationTitle(article.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if showsCloseButton {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("完成") { dismiss() }
+                    }
+                }
+            }
+    }
+
+    private var content: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                Text(article.summary)
+                    .font(.subheadline)
+                    .foregroundColor(Theme.textSecondary)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                // 按空行切段落分别渲染，而不是把整篇丢给一个 Text：
+                // AttributedString 的 Markdown 解析默认会把换行折叠掉，
+                // 整篇渲染出来会是没有段落的一大坨。
+                ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                    Text(markdown(paragraph))
+                        .font(.system(size: 15))
+                        .foregroundColor(Theme.textPrimary)
+                        .lineSpacing(6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+
+                Text("以上为缠论的通行解读，仅供学习参考，不构成投资建议。")
+                    .font(.caption2)
+                    .foregroundColor(Theme.textSecondary)
+                    .padding(.top, 8)
+            }
+            .padding(18)
+        }
+    }
+
+    private var paragraphs: [String] {
+        article.body
+            .components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// 解析行内 Markdown。解析失败就退回纯文本，不能因为一个星号没配对就丢内容。
+    private func markdown(_ text: String) -> AttributedString {
+        // .inlineOnlyPreservingWhitespace 保留段落内的单换行（项目符号列表靠它分行）
+        (try? AttributedString(
+            markdown: text,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(text)
+    }
+}
