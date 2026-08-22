@@ -411,6 +411,11 @@ class Settings:
         self.SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "鹦鹉背单词")
         self.SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT_SECONDS", "15"))
 
+        # 缠论 App 的邮件署名。与 WordLens 共用一套 SMTP 发信，但落款必须各是各的，
+        # 否则缠论用户会收到署名「鹦鹉背单词」的验证码邮件，很容易被当成钓鱼邮件。
+        # 短信侧不需要这样拆：阿里云号码认证用的是赠送签名，落款本来就不是 App 名。
+        self.CHAN_BRAND_NAME = os.getenv("CHAN_BRAND_NAME", "DeepAlpha 缠论")
+
         # 短信验证码（阿里云号码认证服务 PNVS / Dypnsapi 的「短信认证服务」）。
         # 用这个而不是通用短信服务 dysmsapi：免自建签名和模板的审核，用系统提供的
         # 签名模板开通即用；验证码由阿里云生成、保管和核验，我们不接触明文。

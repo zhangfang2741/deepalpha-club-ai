@@ -33,12 +33,12 @@ def is_configured() -> bool:
     return bool(settings.SMTP_USER and settings.SMTP_PASSWORD)
 
 
-def _send_sync(to: str, subject: str, html: str, text: str) -> None:
+def _send_sync(to: str, subject: str, html: str, text: str, from_name: str) -> None:
     """同步发信。由 send_email 放进线程执行。"""
     msg = MIMEMultipart("alternative")
     msg["Subject"] = Header(subject, "utf-8").encode()
     # formataddr 会正确处理中文发件人名的编码，手拼字符串容易发出乱码。
-    msg["From"] = formataddr((str(Header(settings.SMTP_FROM_NAME, "utf-8")), settings.SMTP_USER))
+    msg["From"] = formataddr((str(Header(from_name, "utf-8")), settings.SMTP_USER))
     msg["To"] = to
     # 同时带纯文本和 HTML：部分邮件客户端（尤其国内的）默认不渲染 HTML，
     # 也有反垃圾策略会给纯 HTML 的邮件降权。
@@ -68,7 +68,9 @@ def _send_sync(to: str, subject: str, html: str, text: str) -> None:
         server.sendmail(settings.SMTP_USER, [to], msg.as_string())
 
 
-async def send_email(to: str, subject: str, html: str, text: str) -> None:
+async def send_email(
+    to: str, subject: str, html: str, text: str, from_name: str | None = None
+) -> None:
     """发送一封邮件。
 
     Raises:
@@ -79,7 +81,9 @@ async def send_email(to: str, subject: str, html: str, text: str) -> None:
         raise EmailNotConfiguredError
 
     try:
-        await asyncio.to_thread(_send_sync, to, subject, html, text)
+        await asyncio.to_thread(
+            _send_sync, to, subject, html, text, from_name or settings.SMTP_FROM_NAME
+        )
     except Exception as exc:
         # 收件地址属于个人信息，日志里只留域名部分，够定位「某个邮箱域整体投递失败」
         # 这类问题，又不至于把用户邮箱写满日志。
@@ -91,14 +95,16 @@ async def send_email(to: str, subject: str, html: str, text: str) -> None:
 
 
 def _render_code_email(
-    code: str, ttl_minutes: int, heading: str, lead: str, footer_note: str
+    code: str, ttl_minutes: int, heading: str, lead: str, footer_note: str, brand: str
 ) -> tuple[str, str, str]:
     """渲染一封验证码邮件，返回 (主题, HTML, 纯文本)。
 
     刻意做得朴素：验证码类邮件带一堆图片和外链，反垃圾系统更容易判成垃圾邮件，
     而且用户其实只想找那 6 个数字。
+
+    brand 由调用方传入而不是在这里读配置：同一套 SMTP 服务于多个 App，
+    署名得跟着 App 走。
     """
-    brand = settings.SMTP_FROM_NAME
     subject = f"{brand} {heading}验证码：{code}"
 
     text = f"{lead}\n\n验证码：{code}\n\n验证码 {ttl_minutes} 分钟内有效，请勿转发给他人。\n{footer_note}\n"
@@ -125,25 +131,31 @@ def _render_code_email(
     return subject, html, text
 
 
-def render_password_reset(code: str, ttl_minutes: int) -> tuple[str, str, str]:
-    """渲染找回密码邮件。"""
-    brand = settings.SMTP_FROM_NAME
+def render_password_reset(
+    code: str, ttl_minutes: int, brand: str | None = None
+) -> tuple[str, str, str]:
+    """渲染找回密码邮件。brand 为 None 时用默认发信名，保持既有调用方行为不变。"""
+    brand = brand or settings.SMTP_FROM_NAME
     return _render_code_email(
         code,
         ttl_minutes,
         heading="重置密码",
         lead=f"你正在重置「{brand}」账号的密码，请在 App 中输入以下验证码：",
         footer_note="如果这不是你本人的操作，忽略这封邮件即可，你的密码不会有任何变化。",
+        brand=brand,
     )
 
 
-def render_register(code: str, ttl_minutes: int) -> tuple[str, str, str]:
-    """渲染注册验证邮件。"""
-    brand = settings.SMTP_FROM_NAME
+def render_register(
+    code: str, ttl_minutes: int, brand: str | None = None
+) -> tuple[str, str, str]:
+    """渲染注册验证邮件。brand 为 None 时用默认发信名。"""
+    brand = brand or settings.SMTP_FROM_NAME
     return _render_code_email(
         code,
         ttl_minutes,
         heading="验证邮箱",
         lead=f"你正在注册「{brand}」账号，请在 App 中输入以下验证码完成注册：",
         footer_note="如果这不是你本人的操作，忽略这封邮件即可，不会有账号被创建。",
+        brand=brand,
     )
