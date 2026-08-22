@@ -1,46 +1,43 @@
 import SwiftUI
 import AuthenticationServices
 
-/// 登录页。支持：后端 JWT 账号密码登录、注册、Sign in with Apple。
+/// 登录页。支持：手机号/邮箱 + 密码登录、注册、找回密码、Sign in with Apple。
 struct LoginView: View {
     @EnvironmentObject var auth: AuthViewModel
-    @State private var email = ""
+    @State private var channel: AccountChannel = .phone
+    @State private var account = ""
     @State private var password = ""
     @State private var showRegister = false
+    @State private var showForgotPassword = false
     @FocusState private var focused: Field?
 
-    private enum Field { case email, password }
+    private enum Field { case account, password }
+
+    private var canSubmit: Bool {
+        AccountInput.isValid(account, channel: channel) && !password.isEmpty
+    }
 
     var body: some View {
         ZStack {
             Theme.background.ignoresSafeArea()
             VStack(spacing: 24) {
                 Spacer()
-                VStack(spacing: 8) {
-                    Image(systemName: "waveform.path.ecg")
-                        .font(.system(size: 44))
-                        .foregroundStyle(Theme.accent)
-                    Text("DeepAlpha 缠论")
-                        .font(.title.bold())
-                        .foregroundColor(Theme.textPrimary)
-                    Text("结构化技术分析")
-                        .font(.subheadline)
-                        .foregroundColor(Theme.textSecondary)
-                }
+                header
 
                 VStack(spacing: 14) {
-                    field(icon: "envelope", placeholder: "邮箱", text: $email)
-                        .keyboardType(.emailAddress)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .focused($focused, equals: .email)
+                    AccountChannelPicker(channel: $channel)
+
+                    AccountField(channel: channel, text: $account)
+                        .focused($focused, equals: .account)
                         .submitLabel(.next)
                         .onSubmit { focused = .password }
 
-                    secureField(icon: "lock", placeholder: "密码", text: $password)
+                    AuthSecureField(icon: "lock", placeholder: "密码", text: $password)
                         .focused($focused, equals: .password)
                         .submitLabel(.go)
-                        .onSubmit { Task { await auth.login(email: email, password: password) } }
+                        .onSubmit { submit() }
+
+                    rememberAndForgot
 
                     if let error = auth.errorMessage {
                         Text(error)
@@ -50,8 +47,7 @@ struct LoginView: View {
                     }
 
                     Button {
-                        focused = nil
-                        Task { await auth.login(email: email, password: password) }
+                        submit()
                     } label: {
                         HStack {
                             if auth.isLoading { ProgressView().tint(.white) }
@@ -60,11 +56,11 @@ struct LoginView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Theme.accent)
-                        .foregroundColor(.white)
+                        .background(canSubmit ? Theme.accent : Theme.surfaceAlt)
+                        .foregroundColor(canSubmit ? .white : Theme.textSecondary)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
-                    .disabled(auth.isLoading)
+                    .disabled(!canSubmit || auth.isLoading)
 
                     Button {
                         auth.errorMessage = nil
@@ -98,6 +94,52 @@ struct LoginView: View {
             .padding(24)
         }
         .sheet(isPresented: $showRegister) { RegisterView() }
+        .sheet(isPresented: $showForgotPassword) { ForgotPasswordView(channel: channel) }
+        .onChange(of: channel) { _, _ in
+            // 切换通道时清空输入，否则手机号会留在邮箱框里显得莫名其妙
+            account = ""
+            auth.errorMessage = nil
+        }
+    }
+
+    private func submit() {
+        focused = nil
+        Task { await auth.login(account: account, password: password) }
+    }
+
+    private var header: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "waveform.path.ecg")
+                .font(.system(size: 44))
+                .foregroundStyle(Theme.accent)
+            Text("DeepAlpha 缠论")
+                .font(.title.bold())
+                .foregroundColor(Theme.textPrimary)
+            Text("结构化技术分析")
+                .font(.subheadline)
+                .foregroundColor(Theme.textSecondary)
+        }
+    }
+
+    private var rememberAndForgot: some View {
+        HStack {
+            Button {
+                auth.rememberMe.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: auth.rememberMe ? "checkmark.square.fill" : "square")
+                        .foregroundColor(auth.rememberMe ? Theme.accent : Theme.textSecondary)
+                    Text("保持登录").font(.footnote).foregroundColor(Theme.textSecondary)
+                }
+            }
+            Spacer()
+            Button {
+                auth.errorMessage = nil
+                showForgotPassword = true
+            } label: {
+                Text("忘记密码？").font(.footnote).foregroundColor(Theme.accent)
+            }
+        }
     }
 
     // MARK: - Sign in with Apple 处理
@@ -128,27 +170,5 @@ struct LoginView: View {
             Text("或").font(.caption2).foregroundColor(Theme.textSecondary)
             Rectangle().fill(Theme.border).frame(height: 1)
         }
-    }
-
-    private func field(icon: String, placeholder: String, text: Binding<String>) -> some View {
-        HStack {
-            Image(systemName: icon).foregroundColor(Theme.textSecondary).frame(width: 20)
-            TextField(placeholder, text: text)
-                .foregroundColor(Theme.textPrimary)
-        }
-        .padding(12)
-        .background(Theme.surfaceAlt)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
-
-    private func secureField(icon: String, placeholder: String, text: Binding<String>) -> some View {
-        HStack {
-            Image(systemName: icon).foregroundColor(Theme.textSecondary).frame(width: 20)
-            SecureField(placeholder, text: text)
-                .foregroundColor(Theme.textPrimary)
-        }
-        .padding(12)
-        .background(Theme.surfaceAlt)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
