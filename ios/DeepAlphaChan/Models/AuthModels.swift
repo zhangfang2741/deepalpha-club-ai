@@ -65,3 +65,8 @@ struct SentResponse: Codable {
 struct ResetResponse: Codable {
     let reset: Bool
 }
+
+/// 通用 `{"message": "..."}` 响应。
+struct MessageResponse: Codable {
+    let message: String
+}
