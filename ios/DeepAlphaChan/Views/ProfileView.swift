@@ -5,7 +5,6 @@ import StoreKit
 struct ProfileView: View {
     @EnvironmentObject var auth: AuthViewModel
     @EnvironmentObject var store: StoreManager
-    @Environment(\.dismiss) private var dismiss
     @State private var showLogoutAlert = false
     @State private var showDeleteAlert = false
     @State private var showPaywall = false
@@ -90,17 +89,12 @@ struct ProfileView: View {
             }
             .navigationTitle("我的")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") { dismiss() }
-                }
-            }
             .task { if auth.profile == nil { await auth.loadProfile() } }
             .alert("确认退出登录？", isPresented: $showLogoutAlert) {
                 Button("取消", role: .cancel) {}
                 Button("退出", role: .destructive) {
+                    // 不需要 dismiss：登出后 RootView 会切回登录页
                     auth.logout()
-                    dismiss()
                 }
             }
             .sheet(isPresented: $showPaywall) { PaywallView() }
@@ -108,10 +102,8 @@ struct ProfileView: View {
             .alert("确认删除账号？", isPresented: $showDeleteAlert) {
                 Button("取消", role: .cancel) {}
                 Button("永久删除", role: .destructive) {
-                    Task {
-                        let ok = await auth.deleteAccount()
-                        if ok { dismiss() }
-                    }
+                    // deleteAccount 成功后内部会 logout，RootView 自动切回登录页
+                    Task { _ = await auth.deleteAccount() }
                 }
             } message: {
                 Text("此操作将永久删除你的账号及关联数据，且不可恢复。")

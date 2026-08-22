@@ -22,9 +22,14 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>UILaunchScreen</key>
 	<dict/>
+	<!-- 放开横屏是为了全屏图表。其余页面由 AppOrientation 在运行时锁死竖屏，
+	     见 App/AppOrientation.swift —— 只改这里不加运行时约束，登录页和表单
+	     也会跟着转。 -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
