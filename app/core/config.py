@@ -311,6 +311,11 @@ class Settings:
             # 校验侧再兜一层：单个邮箱的错误次数由 Redis 计数管，这里防的是
             # 换着邮箱大批量撞码
             "vocabulary_password_reset_confirm": ["20 per hour"],
+            # 缠论：发码要花钱且会打扰用户，按 IP 卡死，额度与 WordLens 同类端点对齐
+            "chan_email_request_code": ["5 per hour"],
+            "chan_phone_request_code": ["5 per hour"],
+            # 校验侧防的是换着账号大批量撞码；单账号的错误次数由 Redis 计数管
+            "chan_code_verify": ["20 per hour"],
         }
 
         # Update rate limit endpoints from environment variables
