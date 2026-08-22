@@ -57,7 +57,10 @@ struct ChartFullscreenView: View {
             Spacer()
 
             Button {
-                dismiss()
+                // 与打开时对称：关掉滑落动画，退出时只剩系统那一次旋转
+                var tx = Transaction()
+                tx.disablesAnimations = true
+                withTransaction(tx) { dismiss() }
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title3)

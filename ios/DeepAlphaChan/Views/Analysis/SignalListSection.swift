@@ -7,6 +7,12 @@ import SwiftUI
 struct SignalListSection: View {
     let analysis: ChanAnalysis
 
+    /// 按时间升序。后端返回的顺序不保证有序，而买卖点是随时间推进的，
+    /// 乱序列出来读者建立不起先后关系。
+    private var sortedSignals: [Signal] {
+        analysis.signals.sorted { $0.time < $1.time }
+    }
+
     var body: some View {
         VStack(spacing: 12) {
             SectionCard(title: "买卖点", systemImage: "flag.fill") {
@@ -14,7 +20,7 @@ struct SignalListSection: View {
                     emptyHint
                 } else {
                     VStack(spacing: 8) {
-                        ForEach(analysis.signals) { sig in signalRow(sig) }
+                        ForEach(sortedSignals) { sig in signalRow(sig) }
                     }
                 }
             }
