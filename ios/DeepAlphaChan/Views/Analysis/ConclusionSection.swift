@@ -12,9 +12,46 @@ struct ConclusionSection: View {
 
     var body: some View {
         VStack(spacing: 12) {
+            if let narrative = analysis.narrative { narrativeCard(narrative) }
             summaryCard
             if let rec = analysis.recommendation { recommendationCard(rec) }
             if !analysis.pendingNotes.isEmpty { pendingCard }
+        }
+    }
+
+    /// 大白话形态解读：把缠论结构翻译成「市场此刻在做什么」，放在最前面，
+    /// 让看不懂笔/中枢/背驰的普通用户也能先读懂一句话结论。
+    private func narrativeCard(_ n: MarketNarrative) -> some View {
+        SectionCard(title: "形态解读", systemImage: "text.magnifyingglass") {
+            VStack(alignment: .leading, spacing: 10) {
+                Chip(text: n.phaseLabel, color: SignalFormatting.phaseColor(n.phase))
+
+                Text(n.headline)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(Theme.textPrimary)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !n.details.isEmpty {
+                    Divider().overlay(Theme.border)
+                    VStack(alignment: .leading, spacing: 7) {
+                        ForEach(n.details, id: \.self) { line in
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Circle()
+                                    .fill(Theme.textSecondary.opacity(0.55))
+                                    .frame(width: 4, height: 4)
+                                    .frame(width: 6, alignment: .center)
+                                    .offset(y: -4)
+                                Text(line)
+                                    .font(ConclusionType.body)
+                                    .foregroundColor(Theme.textSecondary)
+                                    .lineSpacing(ConclusionType.bodyLineSpacing)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
