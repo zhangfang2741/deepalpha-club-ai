@@ -1,14 +1,25 @@
 import SwiftUI
 
-/// 注册页。对齐后端密码强度要求：8–64 位，含大小写字母、数字、特殊字符。
+/// 注册页。手机号或邮箱 + 验证码 + 密码。
+/// 密码规则对齐后端 validate_password_strength：8–64 位，含大小写字母、数字、特殊字符。
 struct RegisterView: View {
     @EnvironmentObject var auth: AuthViewModel
     @Environment(\.dismiss) private var dismiss
 
-    @State private var email = ""
+    @State private var channel: AccountChannel = .phone
+    @State private var account = ""
+    @State private var code = ""
     @State private var username = ""
     @State private var password = ""
     @State private var confirm = ""
+
+    private var rules: PasswordRules { PasswordRules(password: password) }
+    private var matched: Bool { !confirm.isEmpty && password == confirm }
+    private var accountValid: Bool { AccountInput.isValid(account, channel: channel) }
+
+    private var canSubmit: Bool {
+        accountValid && AccountInput.isValidCode(code) && rules.allSatisfied && matched
+    }
 
     var body: some View {
         NavigationStack {
@@ -16,16 +27,19 @@ struct RegisterView: View {
                 Theme.background.ignoresSafeArea()
                 ScrollView {
                     VStack(spacing: 14) {
-                        field(icon: "envelope", placeholder: "邮箱", text: $email)
-                            .keyboardType(.emailAddress)
-                            .textInputAutocapitalization(.never)
+                        AccountChannelPicker(channel: $channel)
+
+                        AccountField(channel: channel, text: $account)
+
+                        VerificationCodeField(code: $code, canRequest: accountValid) {
+                            await auth.requestRegisterCode(account: account, channel: channel)
+                        }
+
+                        AuthTextField(icon: "person", placeholder: "用户名（可选）", text: $username)
                             .autocorrectionDisabled()
 
-                        field(icon: "person", placeholder: "用户名（可选）", text: $username)
-                            .autocorrectionDisabled()
-
-                        secureField(icon: "lock", placeholder: "密码", text: $password)
-                        secureField(icon: "lock.rotation", placeholder: "确认密码", text: $confirm)
+                        AuthSecureField(icon: "lock", placeholder: "密码", text: $password)
+                        AuthSecureField(icon: "lock.rotation", placeholder: "确认密码", text: $confirm)
 
                         rulesChecklist
 
@@ -36,8 +50,9 @@ struct RegisterView: View {
 
                         Button {
                             Task {
-                                await auth.register(email: email, password: password,
-                                                    username: username)
+                                await auth.register(
+                                    account: account, channel: channel, code: code,
+                                    password: password, username: username)
                                 if auth.isAuthenticated { dismiss() }
                             }
                         } label: {
@@ -62,29 +77,22 @@ struct RegisterView: View {
                     Button("取消") { auth.errorMessage = nil; dismiss() }
                 }
             }
+            .onChange(of: channel) { _, _ in
+                // 切换通道时清空账号和验证码：验证码是绑在具体账号上的，留着只会误导
+                account = ""
+                code = ""
+                auth.errorMessage = nil
+            }
         }
-    }
-
-    // MARK: - 校验
-
-    private var hasUpper: Bool { password.range(of: "[A-Z]", options: .regularExpression) != nil }
-    private var hasLower: Bool { password.range(of: "[a-z]", options: .regularExpression) != nil }
-    private var hasDigit: Bool { password.range(of: "[0-9]", options: .regularExpression) != nil }
-    private var hasSpecial: Bool { password.range(of: "[!@#$%^&*(),.?\":{}|<>]", options: .regularExpression) != nil }
-    private var longEnough: Bool { password.count >= 8 && password.count <= 64 }
-    private var matched: Bool { !confirm.isEmpty && password == confirm }
-
-    private var canSubmit: Bool {
-        !email.isEmpty && hasUpper && hasLower && hasDigit && hasSpecial && longEnough && matched
     }
 
     private var rulesChecklist: some View {
         VStack(alignment: .leading, spacing: 6) {
-            rule("8–64 位长度", longEnough)
-            rule("含大写字母", hasUpper)
-            rule("含小写字母", hasLower)
-            rule("含数字", hasDigit)
-            rule("含特殊字符（如 !@#$%^&*）", hasSpecial)
+            rule("8–64 位长度", rules.longEnough)
+            rule("含大写字母", rules.hasUpper)
+            rule("含小写字母", rules.hasLower)
+            rule("含数字", rules.hasDigit)
+            rule("含特殊字符（如 !@#$%^&*）", rules.hasSpecial)
             rule("两次密码一致", matched)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -99,23 +107,5 @@ struct RegisterView: View {
                 .font(.caption).foregroundColor(ok ? Theme.up : Theme.textSecondary)
             Text(text).font(.caption).foregroundColor(ok ? Theme.textPrimary : Theme.textSecondary)
         }
-    }
-
-    private func field(icon: String, placeholder: String, text: Binding<String>) -> some View {
-        HStack {
-            Image(systemName: icon).foregroundColor(Theme.textSecondary).frame(width: 20)
-            TextField(placeholder, text: text).foregroundColor(Theme.textPrimary)
-        }
-        .padding(12).background(Theme.surfaceAlt)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
-
-    private func secureField(icon: String, placeholder: String, text: Binding<String>) -> some View {
-        HStack {
-            Image(systemName: icon).foregroundColor(Theme.textSecondary).frame(width: 20)
-            SecureField(placeholder, text: text).foregroundColor(Theme.textPrimary)
-        }
-        .padding(12).background(Theme.surfaceAlt)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
