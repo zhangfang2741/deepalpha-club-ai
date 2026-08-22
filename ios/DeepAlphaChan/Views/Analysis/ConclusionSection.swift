@@ -28,7 +28,9 @@ struct ConclusionSection: View {
                 }
                 Text(analysis.summary)
                     .font(ConclusionType.body)
-                    .foregroundColor(Theme.textPrimary)
+                    // 与「待确认结构」正文同为 textSecondary：都是详情正文，
+                    // 统一成次要色，把 textPrimary 留给标题/结论那一层。
+                    .foregroundColor(Theme.textSecondary)
                     .lineSpacing(ConclusionType.bodyLineSpacing)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -54,7 +56,8 @@ struct ConclusionSection: View {
                 }
 
                 if !rec.reasons.isEmpty {
-                    BulletList(title: "依据", items: rec.reasons, color: Theme.textPrimary)
+                    // 依据是详情正文，与「待确认结构」一致用 textSecondary
+                    BulletList(title: "依据", items: rec.reasons, color: Theme.textSecondary)
                 }
                 if !rec.caveats.isEmpty {
                     BulletList(title: "风险提示", items: rec.caveats, color: Theme.segment)
