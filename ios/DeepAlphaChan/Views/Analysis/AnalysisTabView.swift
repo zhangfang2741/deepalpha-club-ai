@@ -149,6 +149,7 @@ struct AnalysisTabView: View {
             Button { vm.errorMessage = nil } label: {
                 Image(systemName: "xmark").font(.caption2).foregroundColor(Theme.textSecondary)
             }
+            .accessibilityLabel("忽略此错误提示")
         }
         .padding(10)
         .background(Theme.down.opacity(0.1))

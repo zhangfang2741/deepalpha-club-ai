@@ -7,7 +7,9 @@ import Foundation
 /// 并在 Info.plist 里为 localhost 放开 ATS（工程已配置）。
 enum AppConfig {
     /// 后端 API 根地址（不含 `/api/v1` 前缀）。
-    static let baseURL = URL(string: "https://web-production-b1596.up.railway.app")!
+    // 用自定义域名而不是 Railway 的 web-production-*.up.railway.app：
+    // 那个域名是平台分配的，重建服务就会变，一变线上 App 直接全挂。
+    static let baseURL = URL(string: "https://api.deepalpha.club")!
 
     /// 所有业务接口的公共前缀。
     static let apiPrefix = "/api/v1"

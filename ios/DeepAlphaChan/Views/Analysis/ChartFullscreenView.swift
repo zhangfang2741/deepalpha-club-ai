@@ -66,6 +66,7 @@ struct ChartFullscreenView: View {
                     .font(.title3)
                     .foregroundColor(Theme.textSecondary)
             }
+            .accessibilityLabel("退出全屏")
         }
         .padding(.horizontal, 14)
     }
