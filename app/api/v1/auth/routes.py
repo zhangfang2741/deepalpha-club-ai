@@ -6,7 +6,9 @@ import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from redis.asyncio import Redis
 
+from app.cache.client import get_redis
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.logging import logger
@@ -14,6 +16,9 @@ from app.models.session import Session
 from app.models.user import User
 from app.schemas.auth import (
     AppleLoginRequest,
+    EmailCodeRequest,
+    EmailPasswordResetConfirm,
+    EmailRegisterRequest,
     PasswordChange,
     SessionResponse,
     TokenResponse,
@@ -22,14 +27,52 @@ from app.schemas.auth import (
     UserResponse,
     UserUpdate,
 )
+from app.services import email as email_service
+from app.services.account import codes
 from app.services.apple_auth import AppleAuthError, verify_identity_token
 from app.services.database import database_service
+from app.services.verification_code import (
+    Purpose,
+    ResendTooSoonError,
+    TooManyAttemptsError,
+)
 from app.utils.auth import create_access_token
+from app.utils.phone import InvalidPhoneError, normalize_phone
 from app.utils.sanitization import sanitize_email, sanitize_string, validate_password_strength
 
 from .dependencies import get_current_session, get_current_user
 
 router = APIRouter()
+
+
+def _raise_for_delivery(exc: Exception) -> None:
+    """Translate codes-layer exceptions into HTTP responses.
+
+    服务层不认识 HTTP 状态码，翻译集中在这里一处，避免九个端点各写一遍
+    try/except 金字塔。
+    """
+    if isinstance(exc, ResendTooSoonError):
+        raise HTTPException(
+            status_code=429,
+            detail=f"验证码已发送，请 {settings.EMAIL_CODE_RESEND_COOLDOWN} 秒后再试",
+        ) from None
+    if isinstance(exc, codes.CodeChannelUnavailableError):
+        raise HTTPException(status_code=503, detail="验证码服务暂不可用，请稍后再试") from None
+    if isinstance(exc, codes.CodeDeliveryError):
+        raise HTTPException(status_code=502, detail="验证码发送失败，请稍后再试") from None
+    if isinstance(exc, TooManyAttemptsError):
+        raise HTTPException(status_code=429, detail="验证码错误次数过多，请重新获取") from None
+    if isinstance(exc, codes.CodeRejectedError):
+        raise HTTPException(status_code=400, detail="验证码错误或已过期") from None
+    raise exc
+
+
+def _normalized_phone(raw: str) -> str:
+    """Normalize a phone number, turning failures into HTTP 422."""
+    try:
+        return normalize_phone(raw)
+    except InvalidPhoneError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/register", response_model=UserResponse)
@@ -440,3 +483,151 @@ async def delete_current_user(user: User = Depends(get_current_user)):
     except Exception as e:
         logger.exception("delete_user_failed", user_id=user.id, error=str(e))
         raise HTTPException(status_code=500, detail="删除账号失败，请稍后再试")
+
+
+# ---------------------------------------------------------------------------
+# 邮箱通道：验证码注册 + 找回密码
+#
+# 与文件上方那个 legacy 的 POST /register（无验证码）并存。legacy 端点保留是
+# 因为已上架的旧版 App 仍在调用，待版本淘汰后再移除。新端点因此只能叫
+# /register/verify——/register 这个路径被占了。
+# ---------------------------------------------------------------------------
+
+
+@router.post("/register/request-code")
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["chan_email_request_code"][0])
+async def request_email_register_code(
+    request: Request,
+    payload: EmailCodeRequest,
+    redis: Redis = Depends(get_redis),
+):
+    """Send a registration code to the given email.
+
+    对「邮箱已注册」明确报错而不含糊：/register/verify 本身就必须在邮箱重复时
+    报错，枚举面本来就存在，在这一步含糊只会让用户白等一封永远不会来的邮件。
+    """
+    try:
+        email = sanitize_email(payload.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    existing = await asyncio.to_thread(database_service.get_user_by_email, email)
+    if existing:
+        raise HTTPException(status_code=400, detail="该邮箱已被注册，请直接登录")
+
+    try:
+        await codes.send_email_code(
+            redis, Purpose.REGISTER, email, email_service.render_register
+        )
+    except Exception as exc:
+        _raise_for_delivery(exc)
+
+    logger.info("chan_register_code_sent")
+    return {"sent": True}
+
+
+@router.post("/register/verify", response_model=UserResponse)
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["register"][0])
+async def register_with_email_code(
+    request: Request,
+    payload: EmailRegisterRequest,
+    redis: Redis = Depends(get_redis),
+):
+    """Verify the email code and create the account.
+
+    先验码再建号：邮箱填错时根本不该产生账号。
+    """
+    try:
+        email = sanitize_email(payload.email)
+        password = payload.password.get_secret_value()
+        validate_password_strength(password)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    try:
+        await codes.verify_email_code(redis, Purpose.REGISTER, email, payload.code)
+    except Exception as exc:
+        _raise_for_delivery(exc)
+
+    existing = await asyncio.to_thread(database_service.get_user_by_email, email)
+    if existing:
+        raise HTTPException(status_code=400, detail="该邮箱已被注册")
+
+    username = sanitize_string(payload.username) if payload.username else None
+    hashed = await asyncio.to_thread(User.hash_password, password)
+    user = await asyncio.to_thread(
+        database_service.create_user, email, hashed, username, None
+    )
+
+    token = create_access_token(str(user.id))
+    logger.info("chan_user_registered_by_email", user_id=user.id)
+    return UserResponse(
+        id=user.id, email=user.email, phone=user.phone, username=user.username, token=token
+    )
+
+
+@router.post("/password-reset/request")
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["chan_email_request_code"][0])
+async def request_email_password_reset(
+    request: Request,
+    payload: EmailCodeRequest,
+    redis: Redis = Depends(get_redis),
+):
+    """Send a password-reset code to the given email.
+
+    无论邮箱是否注册过都返回成功，避免这个接口变成「查某个邮箱有没有在本站
+    注册」的探测器。与注册发码那条的取舍不同：注册流程后面必然会因重复而
+    报错，这里没有这个约束。
+    """
+    try:
+        email = sanitize_email(payload.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    existing = await asyncio.to_thread(database_service.get_user_by_email, email)
+    if existing:
+        try:
+            await codes.send_email_code(
+                redis, Purpose.PASSWORD_RESET, email, email_service.render_password_reset
+            )
+        except Exception as exc:
+            _raise_for_delivery(exc)
+        logger.info("chan_password_reset_code_sent")
+    else:
+        logger.info("chan_password_reset_requested_for_unknown_email")
+
+    return {"sent": True}
+
+
+@router.post("/password-reset/confirm")
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["chan_code_verify"][0])
+async def confirm_email_password_reset(
+    request: Request,
+    payload: EmailPasswordResetConfirm,
+    redis: Redis = Depends(get_redis),
+):
+    """Verify the email code and set a new password."""
+    try:
+        email = sanitize_email(payload.email)
+        new_password = payload.new_password.get_secret_value()
+        validate_password_strength(new_password)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    try:
+        await codes.verify_email_code(redis, Purpose.PASSWORD_RESET, email, payload.code)
+    except Exception as exc:
+        _raise_for_delivery(exc)
+
+    user = await asyncio.to_thread(database_service.get_user_by_email, email)
+    if user is None:
+        # 走到这里说明码验过了但账号没了（并发删号）。不透露具体原因。
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+
+    hashed = await asyncio.to_thread(User.hash_password, new_password)
+    # 复用既有的 update_user，change_password 端点走的也是它，不要另加一个改密方法。
+    await asyncio.to_thread(
+        database_service.update_user, user_id=user.id, hashed_password=hashed
+    )
+    logger.info("chan_password_reset_done", user_id=user.id)
+    return {"reset": True}
