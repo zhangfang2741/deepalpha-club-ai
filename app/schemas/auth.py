@@ -153,7 +153,9 @@ class UserProfileResponse(BaseResponse):
     """Response model for user profile."""
 
     id: int = Field(..., description="User's ID")
-    email: str = Field(..., description="User's email address")
+    # email 与 phone 都可空：手机号注册的用户没有邮箱，反之亦然。
+    email: str | None = Field(default=None, description="User's email address")
+    phone: str | None = Field(default=None, description="User's phone in E.164")
     username: str | None = Field(default=None, description="User's display name")
     created_at: datetime = Field(..., description="Account creation timestamp")
 
@@ -169,7 +171,8 @@ class UserResponse(BaseResponse):
     """
 
     id: int = Field(..., description="User's ID")
-    email: str = Field(..., description="User's email address")
+    email: str | None = Field(default=None, description="User's email address")
+    phone: str | None = Field(default=None, description="User's phone in E.164")
     username: str | None = Field(default=None, description="Optional display name")
     token: Token = Field(..., description="Authentication token")
 

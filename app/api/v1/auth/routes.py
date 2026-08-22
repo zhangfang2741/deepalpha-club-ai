@@ -66,7 +66,10 @@ async def register_user(request: Request, user_data: UserCreate):
         )
 
         token = create_access_token(str(user.id))
-        return UserResponse(id=user.id, email=user.email, username=user.username, token=token)
+        return UserResponse(
+            id=user.id, email=user.email, phone=user.phone,
+            username=user.username, token=token,
+        )
     except HTTPException:
         raise
     except ValueError as ve:
@@ -316,6 +319,7 @@ async def get_current_user_profile(user: User = Depends(get_current_user)):
         return UserProfileResponse(
             id=user.id,
             email=user.email,
+            phone=user.phone,
             username=user.username,
             created_at=user.created_at,
         )
@@ -344,6 +348,7 @@ async def update_user_profile(
         return UserProfileResponse(
             id=updated_user.id,
             email=updated_user.email,
+            phone=updated_user.phone,
             username=updated_user.username,
             created_at=updated_user.created_at,
         )
@@ -423,7 +428,8 @@ async def delete_current_user(user: User = Depends(get_current_user)):
     删除后该用户的登录凭证立即失效，关联会话一并清除。
     """
     try:
-        deleted = await asyncio.to_thread(database_service.delete_user_by_email, user.email)
+        # 按 id 删除：手机号注册的用户没有邮箱，按 email 删会漏掉他们。
+        deleted = await asyncio.to_thread(database_service.delete_user_by_id, user.id)
         if not deleted:
             raise HTTPException(status_code=404, detail="用户不存在")
 
