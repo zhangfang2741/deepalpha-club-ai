@@ -20,7 +20,12 @@ class _PremiumRequiredError(Exception):
     """FMP 返回 402：该标的不在当前套餐内。"""
 
 
+class _DataSourceUnavailable(Exception):
+    """行情源网络不可达（可回退到备用源），内部使用，不直接透传给用户。"""
+
+
 _EASTMONEY_URL = "https://33.push2his.eastmoney.com/api/qt/stock/kline/get"
+_YAHOO_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 
 
 _FMP_KEY = os.environ.get("FMP_API_KEY", "")
@@ -63,18 +68,22 @@ async def fetch_kline(
 
     logger.info("kline_fetch_start", symbol=symbol, start=start_date, end=end_date)
 
-    # 美股走 FMP，A 股与港股走东方财富。
+    # 美股走 FMP，A 股与港股走 Yahoo（东方财富做回退）。
     #
     # 为什么不统一用 FMP：实测当前 key 的套餐只含美股，A 股 600519.SS 和
     # 港股 0700.HK 的历史行情端点都返回 402（"not available under your current
     # subscription"）。代码格式没错——search-symbol 能查到这两个标的。
     #
-    # 为什么不用 akshare：它的港股接口请求同一个东方财富后端时会被断连，
-    # 而自己直接请求是通的。少一层猜不透的封装，也少一个重依赖。
+    # 为什么港股/A 股优先 Yahoo 而不是东方财富：东方财富的行情接口只在中国大陆
+    # 网络下可靠，部署到海外（Railway 在美国）时会被直接断连（RemoteProtocolError /
+    # Connection reset），导致港股、A 股一律报「行情数据源暂时不可用」。Yahoo 的
+    # chart 接口海外可达，且同样覆盖港股（0700.HK）与 A 股（600519.SS/000001.SZ），
+    # 代码形态与 fmp_symbol() 一致。东方财富保留为回退，供中国大陆部署/开发时兜底
+    # （彼时 Yahoo 可能被墙）。
     if market is Market.US:
         bars = await _fetch_fmp(fmp_symbol(symbol), start_date, end_date, freq)
     else:
-        bars = await _fetch_eastmoney(eastmoney_secid(symbol), start_date, end_date, freq)
+        bars = await _fetch_cn_hk(symbol, start_date, end_date, freq)
 
     if redis and bars:
         await set_json(redis, cache_key, bars, expire=_CACHE_TTL)
@@ -173,6 +182,100 @@ def _resample_weekly(daily: list[dict]) -> list[dict]:
             "volume": sum(b.get("volume", 0) for b in group),
         })
     return weekly
+
+
+async def _fetch_cn_hk(symbol: str, start: str, end: str, freq: str) -> list[dict]:
+    """港股 / A 股 K 线：优先 Yahoo（海外可达），网络不可达时回退东方财富。
+
+    Yahoo 与 FMP 的港股/A 股代码形态一致（0700.HK、600519.SS、000001.SZ），
+    直接复用 fmp_symbol()。仅当 Yahoo 网络不可达（而非「查无此标的」）时才回退，
+    避免把 Yahoo 权威返回的空结果误判成故障。
+    """
+    try:
+        return await _fetch_yahoo(fmp_symbol(symbol), start, end, freq)
+    except _DataSourceUnavailable as exc:
+        logger.warning("yahoo_unavailable_fallback_eastmoney", symbol=symbol, error=str(exc))
+        return await _fetch_eastmoney(eastmoney_secid(symbol), start, end, freq)
+
+
+async def _fetch_yahoo(symbol: str, start: str, end: str, freq: str) -> list[dict]:
+    """Yahoo Finance chart 接口拉日线（周线本地聚合，与 FMP 链路一致）。
+
+    网络不可达时抛 _DataSourceUnavailable 供上层回退；HTTP 200 但无该标的数据时
+    返回空列表（视为「查无此标的」，由上层转 404）。
+    """
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    from datetime import datetime, timezone
+
+    def _to_ts(d: str, *, end_of_day: bool = False) -> int:
+        dt = datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        if end_of_day:
+            dt = dt.replace(hour=23, minute=59, second=59)
+        return int(dt.timestamp())
+
+    @retry(
+        retry=retry_if_exception_type(httpx.TransportError),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=6),
+        reraise=True,
+    )
+    def _sync() -> list[dict]:
+        # 始终拉日线；Yahoo 虽支持 1wk，但周线统一在本地聚合以与 FMP 口径一致。
+        # 带 UA：Yahoo 对无 User-Agent 的请求可能返回 429/403。
+        resp = httpx.get(
+            _YAHOO_URL.format(symbol=symbol),
+            params={
+                "period1": _to_ts(start),
+                "period2": _to_ts(end, end_of_day=True),
+                "interval": "1d",
+            },
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            # 429/5xx 等一律视为源不可用，交给上层回退东方财富
+            raise _DataSourceUnavailable(f"yahoo http {resp.status_code}")
+
+        chart = (resp.json() or {}).get("chart") or {}
+        results = chart.get("result")
+        if not results:
+            return []
+        r0 = results[0]
+        timestamps = r0.get("timestamp") or []
+        quote = ((r0.get("indicators") or {}).get("quote") or [{}])[0]
+        opens = quote.get("open") or []
+        highs = quote.get("high") or []
+        lows = quote.get("low") or []
+        closes = quote.get("close") or []
+        volumes = quote.get("volume") or []
+
+        bars: list[dict] = []
+        for i, ts in enumerate(timestamps):
+            o, h, low_, c = opens[i], highs[i], lows[i], closes[i]
+            # 停牌/无成交日 Yahoo 会给 null，跳过以免污染缠论结构
+            if None in (o, h, low_, c):
+                continue
+            # 港股/A 股开盘时段换算成 UTC 仍是同一自然日，取 UTC 日期即可
+            day = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+            vol = volumes[i] if i < len(volumes) and volumes[i] is not None else 0
+            bars.append({
+                "time": day, "open": float(o), "high": float(h),
+                "low": float(low_), "close": float(c), "volume": float(vol),
+            })
+        bars.sort(key=lambda b: b["time"])
+        return bars
+
+    loop = asyncio.get_event_loop()
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        try:
+            daily = await loop.run_in_executor(pool, _sync)
+        except httpx.TransportError as exc:
+            raise _DataSourceUnavailable(str(exc)) from exc
+
+    if freq == "weekly":
+        return _resample_weekly(daily)
+    return daily
 
 
 async def _fetch_eastmoney(secid: str, start: str, end: str, freq: str) -> list[dict]:

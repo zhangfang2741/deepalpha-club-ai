@@ -9,6 +9,16 @@ struct QueryBar: View {
     @Binding var isExpanded: Bool
     let onSubmit: () async -> Void
 
+    /// 代码输入框的焦点。点「分析」或回车前先收起键盘——港股/A 股用的是
+    /// numberPad，没有回车键，不主动 resign 的话键盘会一直杵着挡住结果和「重试」。
+    @FocusState private var symbolFocused: Bool
+
+    /// 收起键盘并触发分析。
+    private func submit() {
+        symbolFocused = false
+        Task { await onSubmit() }
+    }
+
     var body: some View {
         if isExpanded {
             expandedForm
@@ -126,7 +136,9 @@ struct QueryBar: View {
                         .autocorrectionDisabled()
                         .keyboardType(vm.market == .us ? .asciiCapable : .numberPad)
                         .foregroundColor(Theme.textPrimary)
-                        .onSubmit { Task { await onSubmit() } }
+                        .focused($symbolFocused)
+                        .submitLabel(.search)
+                        .onSubmit { submit() }
                     // 已有结果时给个收起入口，避免用户点开改参数后无路可退
                     if vm.analysis != nil {
                         Button {
@@ -156,7 +168,7 @@ struct QueryBar: View {
                 }
 
                 Button {
-                    Task { await onSubmit() }
+                    submit()
                 } label: {
                     HStack(spacing: 6) {
                         if vm.isLoading { ProgressView().controlSize(.small).tint(.white) }
