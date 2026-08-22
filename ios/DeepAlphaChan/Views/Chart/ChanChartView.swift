@@ -383,8 +383,8 @@ struct ChanChartView: View {
         for i in 1..<max(1, visible.count) {
             minGap = min(minGap, visible[i].1 - visible[i - 1].1)
         }
-        // 密度自适应：够宽时完整语义药丸（一买/三卖…），太挤时缩成数字徽标
-        // （1/2/3，靠红绿区分买卖），保留缠论分类又不糊成一团；完整解读在「买卖点」列表。
+        // 密度自适应：够宽时用完整术语（一买/三卖…），太挤时缩成「买1/卖3」这种
+        // 自解释短标签——比完整术语窄，又不用猜数字含义；完整解读仍在「买卖点」列表。
         let compact = minGap < 28
 
         for (sig, cx) in visible {
@@ -394,15 +394,17 @@ struct ChanChartView: View {
             // 买点朝上画在价格下方，卖点朝下画在价格上方
             let dir: CGFloat = sig.isBuy ? 1 : -1
 
-            // 徽标文字：紧凑态取类型末位数字（buy1→"1"），完整态用中文标签
-            let text = compact ? String(sig.type.rawValue.suffix(1)) : sig.label
+            // 徽标文字：紧凑态用「买1/卖3」（买卖+类型末位数字），完整态用中文标签
+            let text = compact
+                ? (sig.isBuy ? "买" : "卖") + String(sig.type.rawValue.suffix(1))
+                : sig.label
             let resolved = ctx.resolve(
                 Text(text).font(.system(size: 9, weight: .bold)).foregroundColor(.white))
             let textSize = resolved.measure(in: CGSize(width: 200, height: 40))
-            // 紧凑态强制成正圆徽标；完整态是自适应宽度的药丸
+            // 药丸随文字自适应宽度（紧凑态因文字更短自然更窄）
             let padH: CGFloat = 5, padV: CGFloat = 2.5
             let badgeH = textSize.height + padV * 2
-            let badgeW = compact ? badgeH : textSize.width + padH * 2
+            let badgeW = textSize.width + padH * 2
             let tri: CGFloat = 4  // 指向蜡烛的小三角高度
 
             // 版面：蜡烛 →(间距7)→ 三角 →(贴着)→ 徽标。整体夹在可视区内。
