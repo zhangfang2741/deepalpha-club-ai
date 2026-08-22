@@ -111,25 +111,18 @@ export default function SettingsPage() {
       return
     }
 
-    // Validate password requirements
+    // 与后端 validate_password_strength 对齐：8 位以上，含字母和数字。
+    // 前端比后端严会把后端本可接受的密码拦下，必须一字不差。
     if (newPassword.length < 8) {
       setPasswordError('密码长度至少8位')
       return
     }
-    if (!/[A-Z]/.test(newPassword)) {
-      setPasswordError('密码必须包含至少一个大写字母')
-      return
-    }
-    if (!/[a-z]/.test(newPassword)) {
-      setPasswordError('密码必须包含至少一个小写字母')
+    if (!/[A-Za-z]/.test(newPassword)) {
+      setPasswordError('密码必须包含至少一个字母')
       return
     }
     if (!/[0-9]/.test(newPassword)) {
       setPasswordError('密码必须包含至少一个数字')
-      return
-    }
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) {
-      setPasswordError('密码必须包含至少一个特殊字符')
       return
     }
 
@@ -256,7 +249,7 @@ export default function SettingsPage() {
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="至少8位，含大小写字母、数字、特殊字符"
+                placeholder="至少8位，含字母和数字"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>

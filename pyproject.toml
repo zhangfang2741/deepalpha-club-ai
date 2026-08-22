@@ -184,6 +184,7 @@ convention = "google"
 "app/services/account/*.py" = ["D415", "D104"]
 "tests/services/account/*.py" = ["D415", "D103", "D104"]
 "tests/api/*.py" = ["D415", "D103", "D104"]
+"tests/utils/test_password_strength.py" = ["D415"]
 "app/services/email.py" = ["D415"]
 "app/services/sms.py" = ["D415"]
 "app/utils/phone.py" = ["D415"]

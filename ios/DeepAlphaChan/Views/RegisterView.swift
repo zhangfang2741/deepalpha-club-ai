@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// 注册页。手机号或邮箱 + 验证码 + 密码。
-/// 密码规则对齐后端 validate_password_strength：8–64 位，含大小写字母、数字、特殊字符。
+/// 密码规则对齐后端 validate_password_strength：8–64 位，含字母和数字。
 struct RegisterView: View {
     @EnvironmentObject var auth: AuthViewModel
     @Environment(\.dismiss) private var dismiss
@@ -89,10 +89,8 @@ struct RegisterView: View {
     private var rulesChecklist: some View {
         VStack(alignment: .leading, spacing: 6) {
             rule("8–64 位长度", rules.longEnough)
-            rule("含大写字母", rules.hasUpper)
-            rule("含小写字母", rules.hasLower)
+            rule("含字母", rules.hasLetter)
             rule("含数字", rules.hasDigit)
-            rule("含特殊字符（如 !@#$%^&*）", rules.hasSpecial)
             rule("两次密码一致", matched)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

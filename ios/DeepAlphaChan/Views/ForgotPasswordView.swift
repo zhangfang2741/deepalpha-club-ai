@@ -103,10 +103,8 @@ struct ForgotPasswordView: View {
     private var rulesChecklist: some View {
         VStack(alignment: .leading, spacing: 6) {
             rule("8–64 位长度", rules.longEnough)
-            rule("含大写字母", rules.hasUpper)
-            rule("含小写字母", rules.hasLower)
+            rule("含字母", rules.hasLetter)
             rule("含数字", rules.hasDigit)
-            rule("含特殊字符（如 !@#$%^&*）", rules.hasSpecial)
             rule("两次密码一致", matched)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
