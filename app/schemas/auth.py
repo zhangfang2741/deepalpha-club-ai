@@ -153,7 +153,9 @@ class UserProfileResponse(BaseResponse):
     """Response model for user profile."""
 
     id: int = Field(..., description="User's ID")
-    email: str = Field(..., description="User's email address")
+    # email 与 phone 都可空：手机号注册的用户没有邮箱，反之亦然。
+    email: str | None = Field(default=None, description="User's email address")
+    phone: str | None = Field(default=None, description="User's phone in E.164")
     username: str | None = Field(default=None, description="User's display name")
     created_at: datetime = Field(..., description="Account creation timestamp")
 
@@ -169,7 +171,8 @@ class UserResponse(BaseResponse):
     """
 
     id: int = Field(..., description="User's ID")
-    email: str = Field(..., description="User's email address")
+    email: str | None = Field(default=None, description="User's email address")
+    phone: str | None = Field(default=None, description="User's phone in E.164")
     username: str | None = Field(default=None, description="Optional display name")
     token: Token = Field(..., description="Authentication token")
 
@@ -201,3 +204,70 @@ class SessionResponse(BaseResponse):
         # Remove any potentially harmful characters
         sanitized = re.sub(r'[<>{}[\]()\'"`]', "", v)
         return sanitized
+
+
+# ---------------------------------------------------------------------------
+# 双通道注册/登录/找回密码
+#
+# 密码下限跟随主站既有的 validate_password_strength（8–64 位，含大小写、数字、
+# 特殊字符），比 WordLens 那套 6 位下限严格，不要照抄 vocabulary 的 min_length。
+# ---------------------------------------------------------------------------
+
+
+class EmailCodeRequest(BaseModel):
+    """Request a verification code by email (registration or password reset)."""
+
+    email: EmailStr
+
+
+class EmailRegisterRequest(BaseModel):
+    """Register with email and verification code."""
+
+    email: EmailStr
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+    password: SecretStr = Field(..., min_length=8, max_length=64)
+    username: str | None = Field(default=None, max_length=50)
+
+
+class EmailPasswordResetConfirm(BaseModel):
+    """Reset the password with an email verification code."""
+
+    email: EmailStr
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+    new_password: SecretStr = Field(..., min_length=8, max_length=64)
+
+
+class PhoneCodeRequest(BaseModel):
+    """Request a verification code by SMS.
+
+    号码在服务端归一化，前端不必自己处理格式。
+    """
+
+    phone: str = Field(..., min_length=6, max_length=24)
+
+
+class PhoneRegisterRequest(BaseModel):
+    """Register with phone number and verification code."""
+
+    phone: str = Field(..., min_length=6, max_length=24)
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+    password: SecretStr = Field(..., min_length=8, max_length=64)
+    username: str | None = Field(default=None, max_length=50)
+
+
+class PhonePasswordResetConfirm(BaseModel):
+    """Reset the password with an SMS verification code."""
+
+    phone: str = Field(..., min_length=6, max_length=24)
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+    new_password: SecretStr = Field(..., min_length=8, max_length=64)
+
+
+class AccountLoginRequest(BaseModel):
+    """Unified login.
+
+    account 可以是手机号或邮箱，由服务端判别。
+    """
+
+    account: str = Field(..., min_length=3, max_length=255)
+    password: SecretStr

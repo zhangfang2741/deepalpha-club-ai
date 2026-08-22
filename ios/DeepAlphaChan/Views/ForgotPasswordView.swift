@@ -1,17 +1,25 @@
 import SwiftUI
 
-/// 注册页。手机号或邮箱 + 验证码 + 密码。
-/// 密码规则对齐后端 validate_password_strength：8–64 位，含大小写字母、数字、特殊字符。
-struct RegisterView: View {
+/// 找回密码页。手机号或邮箱 + 验证码 + 新密码。
+///
+/// 注意：服务端对未注册的账号也返回「已发送」（防账号枚举），所以这里不能
+/// 因为发码成功就提示「账号已找到」——用户输错账号时会一直收不到码，这是
+/// 有意为之的取舍。
+struct ForgotPasswordView: View {
     @EnvironmentObject var auth: AuthViewModel
     @Environment(\.dismiss) private var dismiss
 
-    @State private var channel: AccountChannel = .phone
+    @State private var channel: AccountChannel
     @State private var account = ""
     @State private var code = ""
-    @State private var username = ""
     @State private var password = ""
     @State private var confirm = ""
+    @State private var done = false
+
+    /// 从登录页带过来当前选中的通道，省得用户再切一次。
+    init(channel: AccountChannel = .phone) {
+        _channel = State(initialValue: channel)
+    }
 
     private var rules: PasswordRules { PasswordRules(password: password) }
     private var matched: Bool { !confirm.isEmpty && password == confirm }
@@ -32,14 +40,11 @@ struct RegisterView: View {
                         AccountField(channel: channel, text: $account)
 
                         VerificationCodeField(code: $code, canRequest: accountValid) {
-                            await auth.requestRegisterCode(account: account, channel: channel)
+                            await auth.requestPasswordResetCode(account: account, channel: channel)
                         }
 
-                        AuthTextField(icon: "person", placeholder: "用户名（可选）", text: $username)
-                            .autocorrectionDisabled()
-
-                        AuthSecureField(icon: "lock", placeholder: "密码", text: $password)
-                        AuthSecureField(icon: "lock.rotation", placeholder: "确认密码", text: $confirm)
+                        AuthSecureField(icon: "lock", placeholder: "新密码", text: $password)
+                        AuthSecureField(icon: "lock.rotation", placeholder: "确认新密码", text: $confirm)
 
                         rulesChecklist
 
@@ -48,17 +53,27 @@ struct RegisterView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
+                        if done {
+                            Text("密码已重置，请用新密码登录")
+                                .font(.footnote).foregroundColor(Theme.up)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
                         Button {
                             Task {
-                                await auth.register(
-                                    account: account, channel: channel, code: code,
-                                    password: password, username: username)
-                                if auth.isAuthenticated { dismiss() }
+                                let ok = await auth.resetPassword(
+                                    account: account, channel: channel,
+                                    code: code, newPassword: password)
+                                if ok {
+                                    done = true
+                                    try? await Task.sleep(for: .seconds(1))
+                                    dismiss()
+                                }
                             }
                         } label: {
                             HStack {
                                 if auth.isLoading { ProgressView().tint(.white) }
-                                Text(auth.isLoading ? "注册中…" : "注册并登录").fontWeight(.semibold)
+                                Text(auth.isLoading ? "提交中…" : "重置密码").fontWeight(.semibold)
                             }
                             .frame(maxWidth: .infinity).padding(.vertical, 14)
                             .background(canSubmit ? Theme.accent : Theme.surfaceAlt)
@@ -70,7 +85,7 @@ struct RegisterView: View {
                     .padding(20)
                 }
             }
-            .navigationTitle("注册")
+            .navigationTitle("找回密码")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -78,7 +93,6 @@ struct RegisterView: View {
                 }
             }
             .onChange(of: channel) { _, _ in
-                // 切换通道时清空账号和验证码：验证码是绑在具体账号上的，留着只会误导
                 account = ""
                 code = ""
                 auth.errorMessage = nil

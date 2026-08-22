@@ -24,7 +24,8 @@ class User(BaseModel, table=True):
 
     Attributes:
         id: The primary key
-        email: User's email (unique)
+        email: User's email (可空唯一；手机号注册的用户没有邮箱)
+        phone: E.164 格式手机号（可空唯一；邮箱注册的用户没有手机号）
         hashed_password: Bcrypt hashed password
         username: Optional display name for the user
         created_at: When the user was created
@@ -32,7 +33,10 @@ class User(BaseModel, table=True):
     """
 
     id: int = Field(default=None, primary_key=True)
-    email: str = Field(unique=True, index=True)
+    # email 与 phone 都可空，但应用层保证至少有一个：手机号注册的用户没有邮箱，
+    # 反之亦然。Postgres 的 unique 约束允许多行 NULL，两列同时可空唯一是安全的。
+    email: Optional[str] = Field(default=None, unique=True, index=True)
+    phone: Optional[str] = Field(default=None, unique=True, index=True, max_length=20)
     hashed_password: str
     username: Optional[str] = Field(default=None, index=False)
     # 用户偏好的 LLM 模型名（须为当前 provider 已注册的模型名）；为空则用系统默认。

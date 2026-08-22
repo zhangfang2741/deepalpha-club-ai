@@ -311,6 +311,11 @@ class Settings:
             # 校验侧再兜一层：单个邮箱的错误次数由 Redis 计数管，这里防的是
             # 换着邮箱大批量撞码
             "vocabulary_password_reset_confirm": ["20 per hour"],
+            # 缠论：发码要花钱且会打扰用户，按 IP 卡死，额度与 WordLens 同类端点对齐
+            "chan_email_request_code": ["5 per hour"],
+            "chan_phone_request_code": ["5 per hour"],
+            # 校验侧防的是换着账号大批量撞码；单账号的错误次数由 Redis 计数管
+            "chan_code_verify": ["20 per hour"],
         }
 
         # Update rate limit endpoints from environment variables
@@ -410,6 +415,11 @@ class Settings:
         self.SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")  # 该发信地址的 SMTP 密码
         self.SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "鹦鹉背单词")
         self.SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT_SECONDS", "15"))
+
+        # 缠论 App 的邮件署名。与 WordLens 共用一套 SMTP 发信，但落款必须各是各的，
+        # 否则缠论用户会收到署名「鹦鹉背单词」的验证码邮件，很容易被当成钓鱼邮件。
+        # 短信侧不需要这样拆：阿里云号码认证用的是赠送签名，落款本来就不是 App 名。
+        self.CHAN_BRAND_NAME = os.getenv("CHAN_BRAND_NAME", "DeepAlpha 缠论")
 
         # 短信验证码（阿里云号码认证服务 PNVS / Dypnsapi 的「短信认证服务」）。
         # 用这个而不是通用短信服务 dysmsapi：免自建签名和模板的审核，用系统提供的

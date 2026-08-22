@@ -81,23 +81,33 @@ class DatabaseService:
             if settings.ENVIRONMENT != Environment.PRODUCTION:
                 raise
 
-    def create_user(self, email: str, password: str, username: str | None = None) -> User:
+    def create_user(
+        self,
+        email: str | None,
+        password: str,
+        username: str | None = None,
+        phone: str | None = None,
+    ) -> User:
         """Create a new user.
 
         Args:
-            email: User's email address
+            email: User's email address（手机号注册时为 None）
             password: Hashed password
             username: Optional display name
+            phone: E.164 格式手机号（邮箱注册时为 None）
 
         Returns:
             User: The created user
         """
         with Session(self.engine) as session:
-            user = User(email=email, hashed_password=password, username=username)
+            user = User(
+                email=email, hashed_password=password, username=username, phone=phone
+            )
             session.add(user)
             session.commit()
             session.refresh(user)
-            logger.info("user_created", email=email)
+            # 邮箱和手机号都属于个人信息，日志里只记 id，不记标识符本身。
+            logger.info("user_created", user_id=user.id)
             return user
 
     def get_user(self, user_id: int) -> Optional[User]:
@@ -124,6 +134,20 @@ class DatabaseService:
         """
         with Session(self.engine) as session:
             statement = select(User).where(User.email == email)
+            user = session.exec(statement).first()
+            return user
+
+    def get_user_by_phone(self, phone: str) -> Optional[User]:
+        """Get a user by phone (E.164).
+
+        Args:
+            phone: E.164 格式手机号
+
+        Returns:
+            Optional[User]: The user if found, None otherwise
+        """
+        with Session(self.engine) as session:
+            statement = select(User).where(User.phone == phone)
             user = session.exec(statement).first()
             return user
 
@@ -166,17 +190,20 @@ class DatabaseService:
             logger.info("user_updated", user_id=user_id)
             return user
 
-    def delete_user_by_email(self, email: str) -> bool:
-        """Delete a user by email.
+    def delete_user_by_id(self, user_id: int) -> bool:
+        """Delete a user by primary key.
+
+        按 id 而不是 email 删除：手机号注册的用户 email 为 None，按 email 删会
+        直接失效——而账号删除是 App Store 5.1.1(v) 的硬性要求，不能有通道盲区。
 
         Args:
-            email: The email of the user to delete
+            user_id: The ID of the user to delete
 
         Returns:
             bool: True if deletion was successful, False if user not found
         """
         with Session(self.engine) as session:
-            user = session.exec(select(User).where(User.email == email)).first()
+            user = session.get(User, user_id)
             if not user:
                 return False
 
@@ -189,8 +216,24 @@ class DatabaseService:
 
             session.delete(user)
             session.commit()
-            logger.info("user_deleted", email=email, sessions_removed=len(chat_sessions))
+            logger.info("user_deleted", user_id=user_id, sessions_removed=len(chat_sessions))
             return True
+
+    def delete_user_by_email(self, email: str) -> bool:
+        """Delete a user by email (kept for existing callers; delegates to delete_user_by_id).
+
+        Args:
+            email: The email of the user to delete
+
+        Returns:
+            bool: True if deletion was successful, False if user not found
+        """
+        with Session(self.engine) as session:
+            user = session.exec(select(User).where(User.email == email)).first()
+            if not user:
+                return False
+            user_id = user.id
+        return self.delete_user_by_id(user_id)
 
     def create_session(
         self, session_id: str, user_id: int, name: str = "", username: str | None = None
