@@ -2,7 +2,7 @@ import SwiftUI
 
 // 教程示意图。
 //
-// 刻意复用 ChanChartView 的视觉语言：涨绿跌红的蜡烛、Theme.stroke 画笔、
+// 刻意复用 ChanChartView 的视觉语言：红涨绿跌的蜡烛（Theme.up/down）、Theme.stroke 画笔、
 // Theme.segment 画线段、Theme.pivotFill 填中枢。教程里看到的样子和分析页上
 // 看到的必须是同一套，否则学完了对不上图，白学。
 //
@@ -29,6 +29,14 @@ struct DiagramSpec {
     var labels: [Mark] = []
     /// 强调框，用来圈出「这两根是包含关系」这类局部。
     var emphases: [Box] = []
+    /// MACD 副图的柱值（正负均可，会按最大绝对值归一化）。
+    /// 有值时图分成上下两块，画法与分析页的 MACD 副图一致。
+    var macdBars: [Double] = []
+    /// DIF / DEA 曲线，与 macdBars 同一坐标系。留空则只画柱。
+    var macdDIF: [Double] = []
+    var macdDEA: [Double] = []
+    /// MACD 副图上的标注，坐标独立于主图。
+    var macdLabels: [Mark] = []
 
     struct Conn {
         let from: Int
@@ -83,7 +91,11 @@ struct DiagramSpec {
         pivots: [Box] = [],
         fractals: [Dot] = [],
         labels: [Mark] = [],
-        emphases: [Box] = []
+        emphases: [Box] = [],
+        macdBars: [Double] = [],
+        macdDIF: [Double] = [],
+        macdDEA: [Double] = [],
+        macdLabels: [Mark] = []
     ) -> DiagramSpec {
         let candles = path.indices.map { i -> DiagramCandle in
             let close = path[i]
@@ -96,7 +108,8 @@ struct DiagramSpec {
         }
         return DiagramSpec(candles: candles, strokes: strokes, segments: segments,
                            pivots: pivots, fractals: fractals, labels: labels,
-                           emphases: emphases)
+                           emphases: emphases, macdBars: macdBars,
+                           macdDIF: macdDIF, macdDEA: macdDEA, macdLabels: macdLabels)
     }
 }
 
@@ -107,19 +120,87 @@ struct LessonDiagram: View {
 
     var body: some View {
         Canvas { ctx, size in
-            let geo = Geometry(size: size, count: spec.candles.count)
-            drawGrid(ctx, size: size)
+            // 有 MACD 时按 2.6:1 上下分区，与分析页主图/副图的比例接近
+            let macdH: CGFloat = spec.macdBars.isEmpty ? 0 : size.height / 3.6
+            let priceSize = CGSize(width: size.width, height: size.height - macdH)
+            let geo = Geometry(size: priceSize, count: spec.candles.count)
+
+            drawGrid(ctx, size: priceSize)
             drawBoxes(ctx, geo: geo, boxes: spec.pivots)
             drawBoxes(ctx, geo: geo, boxes: spec.emphases)
             drawCandles(ctx, geo: geo)
             drawConns(ctx, geo: geo, conns: spec.segments, color: Theme.segment, width: 2.4)
             drawConns(ctx, geo: geo, conns: spec.strokes, color: Theme.stroke, width: 1.4)
             drawFractals(ctx, geo: geo)
-            drawLabels(ctx, geo: geo, size: size)
+            drawLabels(ctx, geo: geo, size: priceSize)
+
+            if !spec.macdBars.isEmpty {
+                drawMACD(ctx, size: size, macdHeight: macdH, priceGeo: geo)
+            }
         }
-        .frame(height: height)
+        .frame(height: spec.macdBars.isEmpty ? height : height * 1.35)
         .background(Theme.surfaceAlt)
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// MACD 副图。画法与分析页一致：柱子正绿负红，零轴一条细线。
+    ///
+    /// 教程里必须能画 MACD——这个 App 判定背驰靠的就是 MACD 面积比，
+    /// 只画价格不画 MACD，等于把背驰最关键的那一半藏起来了。
+    private func drawMACD(_ ctx: GraphicsContext, size: CGSize,
+                          macdHeight: CGFloat, priceGeo: Geometry) {
+        let top = size.height - macdHeight
+        let padY: CGFloat = 14
+        let usable = macdHeight - padY * 2
+        let maxAbs = max(spec.macdBars.map(abs).max() ?? 1, 0.0001)
+        let zeroY = top + padY + usable / 2
+
+        // 零轴
+        var axis = Path()
+        axis.move(to: CGPoint(x: 0, y: zeroY))
+        axis.addLine(to: CGPoint(x: size.width, y: zeroY))
+        ctx.stroke(axis, with: .color(Theme.border.opacity(0.6)), lineWidth: 0.5)
+
+        let bw = max(2, min(10, priceGeo.step * 0.5))
+        for (i, v) in spec.macdBars.enumerated() {
+            let cx = priceGeo.x(i)
+            let h = CGFloat(abs(v) / maxAbs) * (usable / 2)
+            let color = v >= 0 ? Theme.up : Theme.down
+            let rect = CGRect(x: cx - bw / 2,
+                              y: v >= 0 ? zeroY - h : zeroY,
+                              width: bw, height: max(1, h))
+            ctx.fill(Path(rect), with: .color(color.opacity(0.7)))
+        }
+
+        // DIF / DEA：与分析页一致，DIF 用 Theme.stroke（蓝），DEA 用 Theme.segment（橙）
+        func line(_ values: [Double], _ color: Color) {
+            guard values.count > 1 else { return }
+            var path = Path()
+            for (i, v) in values.enumerated() {
+                let pt = CGPoint(x: priceGeo.x(i),
+                                 y: zeroY - CGFloat(v / maxAbs) * (usable / 2))
+                if i == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
+            }
+            ctx.stroke(path, with: .color(color), lineWidth: 1.2)
+        }
+        line(spec.macdDIF, Theme.stroke)
+        line(spec.macdDEA, Theme.segment)
+
+        let tag = Text("MACD").font(.system(size: 8)).foregroundColor(Theme.textSecondary)
+        ctx.draw(ctx.resolve(tag), at: CGPoint(x: 8, y: top + 8), anchor: .leading)
+
+        // 副图标注：y 用 -1…1（相对零轴），x 仍是蜡烛序号
+        for m in spec.macdLabels {
+            let resolved = ctx.resolve(
+                Text(m.text).font(.system(size: 10, weight: .medium)).foregroundColor(m.color)
+            )
+            let tw = resolved.measure(in: size).width / 2
+            let value: Double
+            if case .value(let v) = m.anchor { value = v } else { value = 0 }
+            let x = min(max(priceGeo.x(m.at), tw + 4), size.width - tw - 4)
+            let y = zeroY - CGFloat(value) * (usable / 2) + (m.above ? -12 : 12)
+            ctx.draw(resolved, at: CGPoint(x: x, y: y), anchor: .center)
+        }
     }
 
     // MARK: - 坐标换算

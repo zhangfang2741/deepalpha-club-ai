@@ -14,6 +14,7 @@ enum LessonDiagrams {
         case "segment":      return segment
         case "pivot":        return pivot
         case "divergence":   return divergence
+        case "macd":         return macd
         case "trade-points": return tradePoints
         case "level":        return level
         default:             return nil
@@ -122,17 +123,46 @@ enum LessonDiagrams {
         )
     }
 
-    /// 背驰：后一段创新高，但斜率明显平缓，力度衰竭。
+    /// 背驰：价格创新高，但 MACD 柱面积明显缩小。
+    ///
+    /// 必须画 MACD。这个 App 判定背驰用的就是 MACD 面积比，只画两段斜率不同的
+    /// 价格线，展示的是「斜率变缓」而不是背驰的定义——学的人对不上买卖点卡片里
+    /// 那个「面积比 0.58」是怎么来的。
     private static var divergence: DiagramSpec {
         .fromPath(
-            [0.14, 0.30, 0.56, 0.70, 0.50, 0.44, 0.56, 0.68, 0.78],
+            [0.16, 0.34, 0.58, 0.72, 0.52, 0.44, 0.58, 0.72, 0.82],
             segments: [
                 .init(from: 0, to: 3, fromEdge: .low, toEdge: .high),
                 .init(from: 5, to: 8, fromEdge: .low, toEdge: .high),
             ],
             labels: [
-                .init(at: 1, anchor: .value(0.14), text: "力度强", color: Theme.up, above: false),
-                .init(at: 7, anchor: .value(0.90), text: "创新高但更平 → 背驰", color: Theme.down),
+                .init(at: 3, anchor: .high, text: "前高", color: Theme.textSecondary),
+                .init(at: 8, anchor: .high, text: "创新高", color: Theme.textPrimary),
+            ],
+            // 前一段柱子又高又密，后一段明显矮一截——面积比 < 1 就是背驰
+            macdBars: [0.30, 0.72, 0.95, 0.80, 0.20, -0.35, 0.28, 0.42, 0.36],
+            macdLabels: [
+                .init(at: 2, anchor: .value(0.95), text: "面积大", color: Theme.up),
+                .init(at: 7, anchor: .value(0.42), text: "面积明显缩小 → 背驰", color: Theme.down),
+            ]
+        )
+    }
+
+    /// MACD：柱、DIF/DEA，以及本 App 用来量化背驰的「面积比」。
+    private static var macd: DiagramSpec {
+        .fromPath(
+            [0.20, 0.36, 0.54, 0.70, 0.78, 0.62, 0.48, 0.40, 0.52],
+            labels: [
+                .init(at: 4, anchor: .high, text: "价格见顶回落", color: Theme.textSecondary),
+            ],
+            macdBars: [0.25, 0.60, 0.88, 0.95, 0.55, 0.10, -0.40, -0.72, -0.50],
+            // DIF 在 DEA 上方时柱为正，交叉下穿后柱翻负——三者的关系要能对上
+            macdDIF: [0.20, 0.55, 0.85, 0.92, 0.62, 0.18, -0.30, -0.65, -0.48],
+            macdDEA: [0.10, 0.28, 0.50, 0.68, 0.70, 0.55, 0.20, -0.15, -0.38],
+            macdLabels: [
+                .init(at: 3, anchor: .value(0.95), text: "红柱放大 = 多方占优", color: Theme.up),
+                // 锚在 -0.4 而不是最低的 -0.72，否则标注会贴到卡片底边
+                .init(at: 7, anchor: .value(-0.40), text: "翻绿 = 空方占优", color: Theme.down, above: false),
             ]
         )
     }
