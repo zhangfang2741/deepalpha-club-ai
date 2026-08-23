@@ -49,7 +49,10 @@ struct PaywallView: View {
     private var featureList: some View {
         VStack(alignment: .leading, spacing: 12) {
             feature("infinity", L("无限次缠论分析"), L("不再受每日次数限制"))
-            feature("arrow.triangle.branch", L("结构 GAP 分析"), L("市场结构 × 产业结构的 AI 背离洞察"))
+            // 原来这里写的是「结构 GAP 分析」，但该功能已在 5b6b35d 移除，
+            // GapAnalysisView 现在是无人引用的死代码。付费墙不能卖一个 App 里
+            // 找不到的功能——既是 App Store 2.3.1 的拒因，也是消费欺诈。
+            feature("globe.asia.australia.fill", L("美股 / A 股 / 港股"), L("三个市场统一的缠论结构分析"))
             feature("flag.fill", L("全部买卖点与操作倾向"), L("一二三类买卖点、背驰与依据"))
             feature("bolt.fill", L("优先体验新功能"), L("后续模块优先向会员开放"))
         }
