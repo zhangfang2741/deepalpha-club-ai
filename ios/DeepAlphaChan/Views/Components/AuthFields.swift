@@ -86,7 +86,7 @@ struct VerificationCodeField: View {
         HStack(spacing: 10) {
             HStack {
                 Image(systemName: "number").foregroundColor(Theme.textSecondary).frame(width: 20)
-                TextField("6 位验证码", text: $code)
+                TextField(L("6 位验证码"), text: $code)
                     .keyboardType(.numberPad)
                     .foregroundColor(Theme.textPrimary)
                     .onChange(of: code) { _, newValue in
@@ -111,7 +111,7 @@ struct VerificationCodeField: View {
                     if isRequesting {
                         ProgressView().tint(Theme.accent)
                     } else {
-                        Text(remaining > 0 ? "\(remaining)s" : "获取验证码")
+                        Text(remaining > 0 ? "\(remaining)s" : L("获取验证码"))
                             .font(.footnote)
                     }
                 }

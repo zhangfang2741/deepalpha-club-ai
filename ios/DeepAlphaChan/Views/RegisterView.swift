@@ -35,11 +35,11 @@ struct RegisterView: View {
                             await auth.requestRegisterCode(account: account, channel: channel)
                         }
 
-                        AuthTextField(icon: "person", placeholder: "用户名（可选）", text: $username)
+                        AuthTextField(icon: "person", placeholder: L("用户名（可选）"), text: $username)
                             .autocorrectionDisabled()
 
-                        AuthSecureField(icon: "lock", placeholder: "密码", text: $password)
-                        AuthSecureField(icon: "lock.rotation", placeholder: "确认密码", text: $confirm)
+                        AuthSecureField(icon: "lock", placeholder: L("密码"), text: $password)
+                        AuthSecureField(icon: "lock.rotation", placeholder: L("确认密码"), text: $confirm)
 
                         rulesChecklist
 
@@ -58,7 +58,7 @@ struct RegisterView: View {
                         } label: {
                             HStack {
                                 if auth.isLoading { ProgressView().tint(.white) }
-                                Text(auth.isLoading ? "注册中…" : "注册并登录").fontWeight(.semibold)
+                                Text(auth.isLoading ? L("注册中…") : L("注册并登录")).fontWeight(.semibold)
                             }
                             .frame(maxWidth: .infinity).padding(.vertical, 14)
                             .background(canSubmit ? Theme.accent : Theme.surfaceAlt)
@@ -70,11 +70,11 @@ struct RegisterView: View {
                     .padding(20)
                 }
             }
-            .navigationTitle("注册")
+            .navigationTitle(L("注册"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { auth.errorMessage = nil; dismiss() }
+                    Button(L("取消")) { auth.errorMessage = nil; dismiss() }
                 }
             }
             .onChange(of: channel) { _, _ in
@@ -88,10 +88,10 @@ struct RegisterView: View {
 
     private var rulesChecklist: some View {
         VStack(alignment: .leading, spacing: 6) {
-            rule("8–64 位长度", rules.longEnough)
-            rule("含字母", rules.hasLetter)
-            rule("含数字", rules.hasDigit)
-            rule("两次密码一致", matched)
+            rule(L("8–64 位长度"), rules.longEnough)
+            rule(L("含字母"), rules.hasLetter)
+            rule(L("含数字"), rules.hasDigit)
+            rule(L("两次密码一致"), matched)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)

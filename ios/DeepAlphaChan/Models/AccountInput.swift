@@ -9,15 +9,15 @@ enum AccountChannel: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .phone: return "手机号"
-        case .email: return "邮箱"
+        case .phone: return L("手机号")
+        case .email: return L("邮箱")
         }
     }
 
     var placeholder: String {
         switch self {
-        case .phone: return "手机号"
-        case .email: return "邮箱"
+        case .phone: return L("手机号")
+        case .email: return L("邮箱")
         }
     }
 

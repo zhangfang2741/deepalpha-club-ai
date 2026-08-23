@@ -43,8 +43,8 @@ struct ForgotPasswordView: View {
                             await auth.requestPasswordResetCode(account: account, channel: channel)
                         }
 
-                        AuthSecureField(icon: "lock", placeholder: "新密码", text: $password)
-                        AuthSecureField(icon: "lock.rotation", placeholder: "确认新密码", text: $confirm)
+                        AuthSecureField(icon: "lock", placeholder: L("新密码"), text: $password)
+                        AuthSecureField(icon: "lock.rotation", placeholder: L("确认新密码"), text: $confirm)
 
                         rulesChecklist
 
@@ -54,7 +54,7 @@ struct ForgotPasswordView: View {
                         }
 
                         if done {
-                            Text("密码已重置，请用新密码登录")
+                            Text(L("密码已重置，请用新密码登录"))
                                 .font(.footnote).foregroundColor(Theme.up)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -73,7 +73,7 @@ struct ForgotPasswordView: View {
                         } label: {
                             HStack {
                                 if auth.isLoading { ProgressView().tint(.white) }
-                                Text(auth.isLoading ? "提交中…" : "重置密码").fontWeight(.semibold)
+                                Text(auth.isLoading ? L("提交中…") : L("重置密码")).fontWeight(.semibold)
                             }
                             .frame(maxWidth: .infinity).padding(.vertical, 14)
                             .background(canSubmit ? Theme.accent : Theme.surfaceAlt)
@@ -85,11 +85,11 @@ struct ForgotPasswordView: View {
                     .padding(20)
                 }
             }
-            .navigationTitle("找回密码")
+            .navigationTitle(L("找回密码"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { auth.errorMessage = nil; dismiss() }
+                    Button(L("取消")) { auth.errorMessage = nil; dismiss() }
                 }
             }
             .onChange(of: channel) { _, _ in
@@ -102,10 +102,10 @@ struct ForgotPasswordView: View {
 
     private var rulesChecklist: some View {
         VStack(alignment: .leading, spacing: 6) {
-            rule("8–64 位长度", rules.longEnough)
-            rule("含字母", rules.hasLetter)
-            rule("含数字", rules.hasDigit)
-            rule("两次密码一致", matched)
+            rule(L("8–64 位长度"), rules.longEnough)
+            rule(L("含字母"), rules.hasLetter)
+            rule(L("含数字"), rules.hasDigit)
+            rule(L("两次密码一致"), matched)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
