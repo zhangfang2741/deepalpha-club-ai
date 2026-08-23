@@ -208,3 +208,7 @@
 "翻绿 = 空方占优" = "turns green = bears ahead";
 "面积大" = "large area";
 "面积明显缩小 → 背驰" = "area shrinks sharply → divergence";
+
+/* Chart interaction */
+"退出查看" = "Exit inspect";
+"点按查看K线数据" = "Tap to inspect candles";
