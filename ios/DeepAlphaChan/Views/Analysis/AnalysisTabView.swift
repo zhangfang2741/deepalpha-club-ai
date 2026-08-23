@@ -1,10 +1,9 @@
 import SwiftUI
 
-/// 分析 Tab：查询 → 图表 → 结论。
+/// 分析 Tab —— 条件页（第一页）。
 ///
-/// 由原来的 ChanDashboardView 重构而来。原版把查询表单、图层开关、图例、
-/// 三种状态视图和门禁逻辑全塞在一个 253 行的文件里，页面本身也是一条从查询
-/// 一直堆到 GAP 分析的长滚动流。现在编排留在这里，各部分拆成独立视图。
+/// 只负责录入查询条件与风险提示；分析成功后 push 到 ResultDetailView 看结果。
+/// 条件与结果分成两页：录入时不被长长的结果流干扰，看结果时也不被表单占屏。
 struct AnalysisTabView: View {
     @StateObject private var vm = ChanViewModel()
     @EnvironmentObject private var store: StoreManager
@@ -12,36 +11,20 @@ struct AnalysisTabView: View {
     @EnvironmentObject private var orientation: AppOrientation
 
     @State private var showPaywall = false
-    @State private var showFullscreenChart = false
-    /// 查询条是否展开。未分析时展开，分析成功后自动折叠把空间让给图表。
-    @State private var isQueryExpanded = true
+    /// 分析成功后置 true，push 到详情页；用户返回时自动复位。
+    @State private var showResults = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
-                    QueryBar(vm: vm, isExpanded: $isQueryExpanded) {
-                        await triggerAnalysis()
-                    }
+                    QueryBar(vm: vm) { await triggerAnalysis() }
 
                     if !store.isSubscribed { quotaBanner }
 
-                    if let analysis = vm.analysis {
-                        // 已有结果时保留图表：重新分析用轻提示，失败用顶部错误条，
-                        // 都不清空已有内容——分析一次要等好几秒，清掉太浪费。
-                        if vm.isLoading { refreshingBar }
-                        if let error = vm.errorMessage, !vm.isLoading { errorBanner(error) }
+                    riskNotice
 
-                        ChartSection(analysis: analysis, vm: vm,
-                                     onFullscreen: openFullscreen)
-
-                        ResultSegments(analysis: analysis, vm: vm,
-                                       isSubscribed: store.isSubscribed) {
-                            showPaywall = true
-                        }
-
-                        compactDisclaimer
-                    } else if vm.isLoading {
+                    if vm.isLoading {
                         loadingPlaceholder
                     } else if let error = vm.errorMessage {
                         errorView(error)
@@ -59,45 +42,28 @@ struct AnalysisTabView: View {
                 if !store.isSubscribed {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button { showPaywall = true } label: {
-                            Label("Pro", systemImage: "crown.fill")
-                                .font(.caption.bold())
+                            Label("Pro", systemImage: "crown.fill").font(.caption.bold())
                         }
                         .tint(Theme.segment)
                     }
                 }
             }
             .sheet(isPresented: $showPaywall) { PaywallView() }
-            // 关闭时同样不要滑落动画，避免退出时再看到一次两层叠加
-            .fullScreenCover(isPresented: $showFullscreenChart) {
+            .navigationDestination(isPresented: $showResults) {
                 if let analysis = vm.analysis {
-                    ChartFullscreenView(analysis: analysis, vm: vm)
+                    ResultDetailView(analysis: analysis, vm: vm, isSubscribed: store.isSubscribed)
                         .environmentObject(orientation)
                 }
             }
         }
     }
 
-    /// 打开全屏图表。
-    ///
-    /// 转屏与呈现同时发生，且**关掉呈现动画**。
-    ///
-    /// 试过两种都不行：在全屏页 onAppear 里转屏，会先看到一帧竖屏的全屏页再整体
-    /// 转过去；先转屏、延迟 0.3s 再呈现，则先看到主页转成横屏（第一层），全屏页
-    /// 再从下面滑上来（第二层），像是叠了两层。
-    ///
-    /// 关掉动画后全屏页瞬间就位，只剩系统那一次旋转动画，看起来就是「转过去」。
-    private func openFullscreen() {
-        orientation.enterLandscape()
-        var tx = Transaction()
-        tx.disablesAnimations = true
-        withTransaction(tx) { showFullscreenChart = true }
-    }
-
-    // MARK: - 门禁
+    // MARK: - 门禁 + 跳转
 
     /// 分析入口：会员无限次；免费用户按「不同标的」走每日额度，用尽弹付费墙。
+    /// 成功后跳转到详情页。
     private func triggerAnalysis() async {
-        guard !vm.isLoading else { return }  // 防重入：加载中忽略再次触发
+        guard !vm.isLoading else { return }  // 防重入
         let symbol = vm.symbol.trimmingCharacters(in: .whitespaces).uppercased()
         if !store.isSubscribed && !symbol.isEmpty && !usage.canUseFree(symbol: symbol) {
             showPaywall = true
@@ -106,15 +72,39 @@ struct AnalysisTabView: View {
         await vm.runAnalysis()
 
         if vm.errorMessage == nil && vm.analysis != nil {
-            // 分析成功才折叠查询条：失败时用户多半要改参数重试，收起来反而碍事
-            withAnimation(.easeInOut(duration: 0.25)) { isQueryExpanded = false }
-            if !store.isSubscribed {
-                usage.recordUse(symbol: symbol)
-            }
+            if !store.isSubscribed { usage.recordUse(symbol: symbol) }
+            showResults = true
         }
     }
 
-    // MARK: - 提示条
+    // MARK: - 风险提示
+
+    /// 条件页的核心风险提示：提醒用户缠论只是技术信号，别把「技术买点」当「值得买」。
+    private var riskNotice: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(Theme.segment).font(.subheadline)
+                Text("不要只看技术信号")
+                    .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+            }
+            Text("缠论主要观察价格走势与市场结构。投资决策还应结合基本面、成长性、估值、盈利预期和市场环境综合判断。")
+                .font(.footnote).foregroundColor(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("技术上的「买点」，不等于投资上的「值得买」。")
+                .font(.footnote.weight(.medium)).foregroundColor(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.segment.opacity(0.08))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12).stroke(Theme.segment.opacity(0.3), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    // MARK: - 提示条与状态视图
 
     private var quotaBanner: some View {
         Button { showPaywall = true } label: {
@@ -132,48 +122,13 @@ struct AnalysisTabView: View {
         .buttonStyle(.plain)
     }
 
-    private var refreshingBar: some View {
-        HStack(spacing: 8) {
-            ProgressView().controlSize(.small).tint(Theme.accent)
-            Text("正在更新分析…").font(.caption).foregroundColor(Theme.textSecondary)
-            Spacer()
-        }
-        .padding(.horizontal, 4)
-    }
-
-    private func errorBanner(_ message: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.circle.fill").foregroundColor(Theme.down).font(.caption)
-            Text(message).font(.caption).foregroundColor(Theme.textPrimary)
-            Spacer()
-            Button { vm.errorMessage = nil } label: {
-                Image(systemName: "xmark").font(.caption2).foregroundColor(Theme.textSecondary)
-            }
-        }
-        .padding(10)
-        .background(Theme.down.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-
-    /// 压缩版免责声明。完整版在「我的」页——App Store 要求这个可见，不能删，
-    /// 但也不该在每次看图时都占掉一整块。
-    private var compactDisclaimer: some View {
-        Text("算法自动生成，仅供技术研究，不构成投资建议。")
-            .font(.caption2)
-            .foregroundColor(Theme.textSecondary)
-            .frame(maxWidth: .infinity)
-            .padding(.top, 4)
-    }
-
-    // MARK: - 状态视图
-
     private var loadingPlaceholder: some View {
         VStack(spacing: 12) {
             ProgressView().tint(Theme.accent)
             Text("正在拉取行情并计算缠论结构…")
                 .font(.subheadline).foregroundColor(Theme.textSecondary)
         }
-        .frame(maxWidth: .infinity, minHeight: 240)
+        .frame(maxWidth: .infinity, minHeight: 200)
     }
 
     private func errorView(_ message: String) -> some View {
@@ -184,7 +139,7 @@ struct AnalysisTabView: View {
             Button("重试") { Task { await triggerAnalysis() } }
                 .buttonStyle(.borderedProminent).tint(Theme.accent)
         }
-        .frame(maxWidth: .infinity, minHeight: 240).padding()
+        .frame(maxWidth: .infinity, minHeight: 200).padding()
     }
 
     /// 空状态顺带做新手引导：直接给几个能点的示例代码，比让人对着空输入框强。
@@ -198,6 +153,7 @@ struct AnalysisTabView: View {
             HStack(spacing: 8) {
                 ForEach(["AAPL", "NVDA", "TSLA"], id: \.self) { symbol in
                     Button {
+                        vm.market = .us
                         vm.symbol = symbol
                         Task { await triggerAnalysis() }
                     } label: {
@@ -215,6 +171,6 @@ struct AnalysisTabView: View {
                 .font(.caption2).foregroundColor(Theme.textSecondary)
                 .padding(.top, 4)
         }
-        .frame(maxWidth: .infinity, minHeight: 240)
+        .frame(maxWidth: .infinity, minHeight: 200)
     }
 }

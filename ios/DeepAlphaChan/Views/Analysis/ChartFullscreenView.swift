@@ -37,7 +37,7 @@ struct ChartFullscreenView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .background(Theme.background.ignoresSafeArea())
-        // 转屏由调用方在呈现前完成（见 AnalysisTabView.openFullscreen）。
+        // 转屏由调用方在呈现前完成（见 ResultDetailView.openFullscreen）。
         // 还原必须无条件做，漏了的话用户退出后整个 App 会卡在横屏。
         .onDisappear { orientation.lockPortrait() }
     }
