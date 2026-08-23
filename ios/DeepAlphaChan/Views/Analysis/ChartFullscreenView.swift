@@ -27,9 +27,14 @@ struct ChartFullscreenView: View {
                 LayerToggles(vm: vm)
                     .padding(.horizontal, 12)
 
+                // 实参顺序必须与 ChanChartView 的属性声明一致：
+                // requiresActivation 声明在 priceHeight 之前。
+                //
+                // requiresActivation: false —— 全屏页整屏就是图表，没有外层竖向
+                // 滚动要让位，进来就该能直接拖动缩放，不必先点一下激活。
                 ChanChartView(analysis: analysis, vm: vm,
-                              priceHeight: priceH, macdHeight: macdH,
-                              requiresActivation: false)
+                              requiresActivation: false,
+                              priceHeight: priceH, macdHeight: macdH)
 
                 ChartLegend()
                     .padding(.bottom, 2)

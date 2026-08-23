@@ -14,8 +14,8 @@
 		100000000000000000000AA /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Resources/Info.plist,
 				Configuration.storekit,
+				Resources/Info.plist,
 			);
 			target = 100000000000000000000A5 /* DeepAlphaChan */;
 		};
