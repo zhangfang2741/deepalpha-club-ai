@@ -21,23 +21,33 @@ struct LessonArticle: Identifiable, Codable, Hashable {
 ///
 /// 内容是静态的，启动时读一次就够，没必要做成 ObservableObject。
 enum LessonStore {
+    // 按当前界面语言从对应 .lproj 加载 lessons.json，并按语言缓存。
+    // 用户在运行时切换语言后，RootView 靠 .id(language) 重建视图树，会重新读取
+    // `all`，从而拿到目标语言的课文（缓存避免重复解析）。
+    private static var cache: [String: [LessonArticle]] = [:]
+
     /// 全部词条，按 JSON 里的顺序（顺序是有意义的：从 K 线处理递进到级别）。
-    static let all: [LessonArticle] = load()
-
-    private static let byID: [String: LessonArticle] = Dictionary(
-        uniqueKeysWithValues: all.map { ($0.id, $0) }
-    )
-
-    static func article(id: String) -> LessonArticle? {
-        byID[id]
+    static var all: [LessonArticle] {
+        let lang = Localized.language().rawValue
+        if let cached = cache[lang] { return cached }
+        let loaded = load()
+        cache[lang] = loaded
+        return loaded
     }
 
-    /// 读 Bundle 里的 lessons.json。
+    static func article(id: String) -> LessonArticle? {
+        all.first { $0.id == id }
+    }
+
+    /// 读当前语言 .lproj 里的 lessons.json（缺失回退主 Bundle）。
     ///
     /// 失败时返回空数组而不是崩溃：教程加载不了是内容问题，不该让整个 App 起不来。
     /// 学习页会显示加载失败提示，其余功能照常。
     private static func load() -> [LessonArticle] {
-        guard let url = Bundle.main.url(forResource: "lessons", withExtension: "json") else {
+        let bundle = Localized.resourceBundle()
+        let url = bundle.url(forResource: "lessons", withExtension: "json")
+            ?? Bundle.main.url(forResource: "lessons", withExtension: "json")
+        guard let url else {
             print("[LessonStore] lessons.json 不在 Bundle 里，检查是否被打进 Copy Bundle Resources")
             return []
         }
@@ -80,6 +90,13 @@ enum GlossaryIndex {
         "三卖": "trade-points",
         "级别": "level",
         "走势级别": "level",
+        // 英文界面下后端返回的买卖点 label 也要能点开对应词条
+        "1st Buy": "trade-points",
+        "2nd Buy": "trade-points",
+        "3rd Buy": "trade-points",
+        "1st Sell": "trade-points",
+        "2nd Sell": "trade-points",
+        "3rd Sell": "trade-points",
     ]
 
     /// 术语对应的词条，查不到返回 nil。

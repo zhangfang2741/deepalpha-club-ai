@@ -41,8 +41,8 @@ enum LessonDiagrams {
                 .init(open: 0.34, high: 0.72, low: 0.30, close: 0.66),
             ],
             labels: [
-                .init(at: 2, anchor: .value(0.72), text: "后一根被完全包住", color: Theme.segment),
-                .init(at: 5, anchor: .value(0.72), text: "合并为一根", color: Theme.textPrimary),
+                .init(at: 2, anchor: .value(0.72), text: L("后一根被完全包住"), color: Theme.segment),
+                .init(at: 5, anchor: .value(0.72), text: L("合并为一根"), color: Theme.textPrimary),
                 .init(at: 4, anchor: .value(0.50), text: "⟹", color: Theme.textSecondary),
             ],
             emphases: [
@@ -61,8 +61,8 @@ enum LessonDiagrams {
                 .init(at: 5, isTop: false),
             ],
             labels: [
-                .init(at: 2, anchor: .high, text: "顶分型", color: Theme.topFractal, extraOffset: 10),
-                .init(at: 5, anchor: .low, text: "底分型", color: Theme.bottomFractal, above: false, extraOffset: 10),
+                .init(at: 2, anchor: .high, text: L("顶分型"), color: Theme.topFractal, extraOffset: 10),
+                .init(at: 5, anchor: .low, text: L("底分型"), color: Theme.bottomFractal, above: false, extraOffset: 10),
             ]
         )
     }
@@ -77,9 +77,9 @@ enum LessonDiagrams {
                 .init(at: 5, isTop: true),
             ],
             labels: [
-                .init(at: 3, anchor: .value(0.40), text: "一笔", color: Theme.stroke, above: false),
-                .init(at: 1, anchor: .low, text: "底分型", color: Theme.bottomFractal, above: false, extraOffset: 10),
-                .init(at: 5, anchor: .high, text: "顶分型", color: Theme.topFractal, extraOffset: 10),
+                .init(at: 3, anchor: .value(0.40), text: L("一笔"), color: Theme.stroke, above: false),
+                .init(at: 1, anchor: .low, text: L("底分型"), color: Theme.bottomFractal, above: false, extraOffset: 10),
+                .init(at: 5, anchor: .high, text: L("顶分型"), color: Theme.topFractal, extraOffset: 10),
             ]
         )
     }
@@ -97,8 +97,8 @@ enum LessonDiagrams {
             ],
             segments: [.init(from: 0, to: 7, fromEdge: .low, toEdge: .high)],
             labels: [
-                .init(at: 3, anchor: .value(0.92), text: "线段 = 至少三笔", color: Theme.segment),
-                .init(at: 2, anchor: .value(0.60), text: "笔", color: Theme.stroke),
+                .init(at: 3, anchor: .value(0.92), text: L("线段 = 至少三笔"), color: Theme.segment),
+                .init(at: 2, anchor: .value(0.60), text: L("笔"), color: Theme.stroke),
             ]
         )
     }
@@ -117,8 +117,8 @@ enum LessonDiagrams {
             ],
             pivots: [.init(from: 2, to: 6, top: 0.66, bottom: 0.44)],
             labels: [
-                .init(at: 4, anchor: .value(0.30), text: "中枢 = 三段重叠区", color: Theme.pivotFill, above: false),
-                .init(at: 7, anchor: .value(0.94), text: "离开中枢", color: Theme.up),
+                .init(at: 4, anchor: .value(0.30), text: L("中枢 = 三段重叠区"), color: Theme.pivotFill, above: false),
+                .init(at: 7, anchor: .value(0.94), text: L("离开中枢"), color: Theme.up),
             ]
         )
     }
@@ -136,14 +136,14 @@ enum LessonDiagrams {
                 .init(from: 5, to: 8, fromEdge: .low, toEdge: .high),
             ],
             labels: [
-                .init(at: 3, anchor: .high, text: "前高", color: Theme.textSecondary),
-                .init(at: 8, anchor: .high, text: "创新高", color: Theme.textPrimary),
+                .init(at: 3, anchor: .high, text: L("前高"), color: Theme.textSecondary),
+                .init(at: 8, anchor: .high, text: L("创新高"), color: Theme.textPrimary),
             ],
             // 前一段柱子又高又密，后一段明显矮一截——面积比 < 1 就是背驰
             macdBars: [0.30, 0.72, 0.95, 0.80, 0.20, -0.35, 0.28, 0.42, 0.36],
             macdLabels: [
-                .init(at: 2, anchor: .value(0.95), text: "面积大", color: Theme.up),
-                .init(at: 7, anchor: .value(0.42), text: "面积明显缩小 → 背驰", color: Theme.down),
+                .init(at: 2, anchor: .value(0.95), text: L("面积大"), color: Theme.up),
+                .init(at: 7, anchor: .value(0.42), text: L("面积明显缩小 → 背驰"), color: Theme.down),
             ]
         )
     }
@@ -153,16 +153,16 @@ enum LessonDiagrams {
         .fromPath(
             [0.20, 0.36, 0.54, 0.70, 0.78, 0.62, 0.48, 0.40, 0.52],
             labels: [
-                .init(at: 4, anchor: .high, text: "价格见顶回落", color: Theme.textSecondary),
+                .init(at: 4, anchor: .high, text: L("价格见顶回落"), color: Theme.textSecondary),
             ],
             macdBars: [0.25, 0.60, 0.88, 0.95, 0.55, 0.10, -0.40, -0.72, -0.50],
             // DIF 在 DEA 上方时柱为正，交叉下穿后柱翻负——三者的关系要能对上
             macdDIF: [0.20, 0.55, 0.85, 0.92, 0.62, 0.18, -0.30, -0.65, -0.48],
             macdDEA: [0.10, 0.28, 0.50, 0.68, 0.70, 0.55, 0.20, -0.15, -0.38],
             macdLabels: [
-                .init(at: 3, anchor: .value(0.95), text: "红柱放大 = 多方占优", color: Theme.up),
+                .init(at: 3, anchor: .value(0.95), text: L("红柱放大 = 多方占优"), color: Theme.up),
                 // 锚在 -0.4 而不是最低的 -0.72，否则标注会贴到卡片底边
-                .init(at: 7, anchor: .value(-0.40), text: "翻绿 = 空方占优", color: Theme.down, above: false),
+                .init(at: 7, anchor: .value(-0.40), text: L("翻绿 = 空方占优"), color: Theme.down, above: false),
             ]
         )
     }
@@ -180,10 +180,10 @@ enum LessonDiagrams {
             ],
             pivots: [.init(from: 3, to: 6, top: 0.46, bottom: 0.24)],
             labels: [
-                .init(at: 2, anchor: .value(0.08), text: "一买", color: Theme.up, above: false),
-                .init(at: 4, anchor: .value(0.14), text: "二买", color: Theme.up, above: false),
-                .init(at: 8, anchor: .value(0.46), text: "三买", color: Theme.up, above: false),
-                .init(at: 5, anchor: .value(0.52), text: "中枢", color: Theme.pivotFill),
+                .init(at: 2, anchor: .value(0.08), text: L("一买"), color: Theme.up, above: false),
+                .init(at: 4, anchor: .value(0.14), text: L("二买"), color: Theme.up, above: false),
+                .init(at: 8, anchor: .value(0.46), text: L("三买"), color: Theme.up, above: false),
+                .init(at: 5, anchor: .value(0.52), text: L("中枢"), color: Theme.pivotFill),
             ]
         )
     }
@@ -198,9 +198,9 @@ enum LessonDiagrams {
                 .init(from: 1, to: 9, top: 0.78, bottom: 0.22, alpha: 0.10),
             ],
             labels: [
-                .init(at: 2, anchor: .value(0.18), text: "小级别", color: Theme.textSecondary, above: false),
-                .init(at: 8, anchor: .value(0.48), text: "小级别", color: Theme.textSecondary, above: false),
-                .init(at: 5, anchor: .value(0.86), text: "两者共同构成更高级别", color: Theme.pivotFill),
+                .init(at: 2, anchor: .value(0.18), text: L("小级别"), color: Theme.textSecondary, above: false),
+                .init(at: 8, anchor: .value(0.48), text: L("小级别"), color: Theme.textSecondary, above: false),
+                .init(at: 5, anchor: .value(0.86), text: L("两者共同构成更高级别"), color: Theme.pivotFill),
             ]
         )
     }
