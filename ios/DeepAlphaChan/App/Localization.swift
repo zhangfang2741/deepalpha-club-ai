@@ -83,6 +83,11 @@ enum Localized {
         return resolved
     }
 
+    /// 当前语言对应的 .lproj 资源包（供加载 lessons.json 等本地化资源用）。
+    static func resourceBundle() -> Bundle {
+        bundle(for: language())
+    }
+
     /// 查表；查不到返回 key 本身。所有 key 都是中文原文，缺翻译会自然退回中文，
     /// 绝不会给用户看到 raw key。
     static func string(_ key: String) -> String {

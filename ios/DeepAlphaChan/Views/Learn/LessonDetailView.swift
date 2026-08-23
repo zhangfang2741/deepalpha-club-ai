@@ -16,7 +16,7 @@ struct LessonDetailView: View {
             .toolbar {
                 if showsCloseButton {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("完成") { dismiss() }
+                        Button(L("完成")) { dismiss() }
                     }
                 }
             }
@@ -37,7 +37,7 @@ struct LessonDetailView: View {
                 if let spec = LessonDiagrams.spec(for: article.id) {
                     VStack(alignment: .leading, spacing: 6) {
                         LessonDiagram(spec: spec)
-                        Text("示意图，与分析页使用同一套配色")
+                        Text(L("示意图，与分析页使用同一套配色"))
                             .font(.caption2)
                             .foregroundColor(Theme.textSecondary)
                     }
@@ -55,7 +55,7 @@ struct LessonDetailView: View {
                         .textSelection(.enabled)
                 }
 
-                Text("以上为缠论的通行解读，仅供学习参考，不构成投资建议。")
+                Text(L("以上为缠论的通行解读，仅供学习参考，不构成投资建议。"))
                     .font(.caption2)
                     .foregroundColor(Theme.textSecondary)
                     .padding(.top, 8)

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from app.core.logging import logger
 from app.services.chan.divergence import DivergenceResult, MACDData, calc_macd, find_stroke_divergences
 from app.services.chan.fractal import Fractal, MergedCandle, find_fractals, merge_candles
+from app.services.chan.i18n import is_en, pick
 from app.services.chan.narrative import MarketNarrative, build_narrative
 from app.services.chan.pivot import Pivot, find_segment_pivots, find_stroke_pivots
 from app.services.chan.segment import Segment, find_segments
@@ -77,18 +78,22 @@ class ChanAnalysisResult:
 class ChanAnalyzer:
     """缠论分析器"""
 
-    def analyze(self, symbol: str, bars: list[dict], *, min_gap: int = 4) -> ChanAnalysisResult:
+    def analyze(
+        self, symbol: str, bars: list[dict], *, min_gap: int = 4, lang: str = "zh"
+    ) -> ChanAnalysisResult:
         """对K线数据执行完整缠论分析。
 
         bars: list of {time, open, high, low, close, volume}
         min_gap: 笔成立所需的最小分型间隔（合并K线数 - 1），默认 4（缠论新笔标准）
+        lang: 输出文案语言（zh / en）
         """
         logger.info("chan_analysis_start", symbol=symbol, bars=len(bars), min_gap=min_gap)
 
         result = ChanAnalysisResult(symbol=symbol, bars_count=len(bars))
 
         if len(bars) < 10:
-            result.summary = "K线数据不足（最少需要10根），无法进行缠论分析"
+            result.summary = pick(lang, "K线数据不足（最少需要10根），无法进行缠论分析",
+                                  "Not enough candles (at least 10 required) for Chan analysis")
             return result
 
         # 1. 包含关系处理
@@ -100,7 +105,11 @@ class ChanAnalyzer:
         logger.debug("chan_fractals", count=len(result.fractals))
 
         if len(result.fractals) < 2:
-            result.summary = f"分型不足（仅{len(result.fractals)}个），行情可能处于单边走势"
+            result.summary = pick(
+                lang,
+                f"分型不足（仅{len(result.fractals)}个），行情可能处于单边走势",
+                f"Too few fractals (only {len(result.fractals)}); the market may be in a one-way move",
+            )
             return result
 
         # 3. 笔识别
@@ -108,8 +117,12 @@ class ChanAnalyzer:
         logger.debug("chan_strokes", count=len(result.strokes))
 
         if len(result.strokes) < 3:
-            result.summary = f"笔数量不足（仅{len(result.strokes)}笔），无法识别线段和中枢"
-            result.current_trend = self._infer_trend_from_strokes(result.strokes)
+            result.summary = pick(
+                lang,
+                f"笔数量不足（仅{len(result.strokes)}笔），无法识别线段和中枢",
+                f"Too few strokes (only {len(result.strokes)}) to identify segments and pivots",
+            )
+            result.current_trend = self._infer_trend_from_strokes(result.strokes, lang)
             return result
 
         # 4. 线段识别
@@ -132,27 +145,27 @@ class ChanAnalyzer:
         result.macd = calc_macd(bars)
 
         # 7. 背驰判断
-        result.divergences = find_stroke_divergences(result.strokes, result.macd)
+        result.divergences = find_stroke_divergences(result.strokes, result.macd, lang)
         diverged_count = sum(1 for d in result.divergences if d.is_diverged)
         logger.debug("chan_divergences", total=len(result.divergences), diverged=diverged_count)
 
         # 8. 买卖点生成（使用笔级别中枢）
         all_pivots = result.stroke_pivots + result.segment_pivots
         all_pivots.sort(key=lambda p: p.start_time)
-        result.signals = generate_all_signals(result.strokes, result.divergences, all_pivots)
+        result.signals = generate_all_signals(result.strokes, result.divergences, all_pivots, lang)
         logger.debug("chan_signals", count=len(result.signals))
 
         # 9. 标注最右侧未确认结构（右侧滞后不确定性）
         self._mark_confirmations(result)
-        result.pending_notes = self._build_pending_notes(result)
+        result.pending_notes = self._build_pending_notes(result, lang)
 
         # 10. 当前状态摘要
-        result.current_trend = self._infer_trend_from_strokes(result.strokes)
+        result.current_trend = self._infer_trend_from_strokes(result.strokes, lang)
         result.latest_signal = result.signals[-1] if result.signals else None
-        result.summary = self._build_summary(result)
-        result.recommendation = self._build_recommendation(result)
+        result.summary = self._build_summary(result, lang)
+        result.recommendation = self._build_recommendation(result, lang)
         # 量价需要原始 bars（合并K线不含 volume），故在此传入
-        result.narrative = build_narrative(result, bars)
+        result.narrative = build_narrative(result, bars, lang)
 
         logger.info(
             "chan_analysis_complete",
@@ -163,13 +176,13 @@ class ChanAnalyzer:
         )
         return result
 
-    def _infer_trend_from_strokes(self, strokes: list[Stroke]) -> str:
+    def _infer_trend_from_strokes(self, strokes: list[Stroke], lang: str = "zh") -> str:
         if not strokes:
-            return "数据不足"
+            return pick(lang, "数据不足", "Not enough data")
         last = strokes[-1]
         if last.direction == "up":
-            return "当前处于上升笔末端"
-        return "当前处于下降笔末端"
+            return pick(lang, "当前处于上升笔末端", "At the end of a rising leg (up-leg)")
+        return pick(lang, "当前处于下降笔末端", "At the end of a falling leg (down-leg)")
 
     def _mark_confirmations(self, r: ChanAnalysisResult) -> None:
         """标注各层结构是否已确认。
@@ -218,60 +231,100 @@ class ChanAnalyzer:
         for sig in r.signals:
             sig.confirmed = sig.time not in unconfirmed_end_times
 
-    def _build_pending_notes(self, r: ChanAnalysisResult) -> list[str]:
+    def _build_pending_notes(self, r: ChanAnalysisResult, lang: str = "zh") -> list[str]:
         """汇总最右侧未确认结构，生成人类可读的提示。"""
         notes: list[str] = []
+        en = is_en(lang)
 
         if r.fractals and not r.fractals[-1].confirmed:
             f = r.fractals[-1]
-            kind = "顶分型" if f.type == "top" else "底分型"
-            notes.append(
-                f"最新{kind}（{f.time}，{f.price:.2f}）尚未被后续K线确认，"
-                f"新K线可能使其移动或消失"
-            )
+            if en:
+                kind = "top fractal" if f.type == "top" else "bottom fractal"
+                notes.append(
+                    f"The latest {kind} ({f.time}, {f.price:.2f}) is not yet confirmed by later "
+                    f"candles and may move or disappear"
+                )
+            else:
+                kind = "顶分型" if f.type == "top" else "底分型"
+                notes.append(
+                    f"最新{kind}（{f.time}，{f.price:.2f}）尚未被后续K线确认，"
+                    f"新K线可能使其移动或消失"
+                )
 
         if r.strokes and not r.strokes[-1].confirmed:
             s = r.strokes[-1]
-            dir_name = "上升" if s.direction == "up" else "下降"
-            notes.append(
-                f"最后一笔（{dir_name}笔，起于 {s.start_time}）尚未完成，"
-                f"端点 {s.end_price:.2f} 可能被后续K线突破而延伸"
-            )
+            if en:
+                dir_name = "rising" if s.direction == "up" else "falling"
+                notes.append(
+                    f"The last stroke ({dir_name}, since {s.start_time}) is unfinished; its endpoint "
+                    f"{s.end_price:.2f} may be broken and extended by later candles"
+                )
+            else:
+                dir_name = "上升" if s.direction == "up" else "下降"
+                notes.append(
+                    f"最后一笔（{dir_name}笔，起于 {s.start_time}）尚未完成，"
+                    f"端点 {s.end_price:.2f} 可能被后续K线突破而延伸"
+                )
 
         if r.segments and not r.segments[-1].confirmed:
             seg = r.segments[-1]
-            dir_name = "上升" if seg.direction == "up" else "下降"
-            notes.append(
-                f"最后一条线段（{dir_name}，起于 {seg.start_time}）尚未确认结束，"
-                f"方向可能反复"
-            )
+            if en:
+                dir_name = "rising" if seg.direction == "up" else "falling"
+                notes.append(
+                    f"The last segment ({dir_name}, since {seg.start_time}) hasn't confirmed its end; "
+                    f"direction may still swing"
+                )
+            else:
+                dir_name = "上升" if seg.direction == "up" else "下降"
+                notes.append(
+                    f"最后一条线段（{dir_name}，起于 {seg.start_time}）尚未确认结束，"
+                    f"方向可能反复"
+                )
 
-        for pivots, name in ((r.stroke_pivots, "笔级中枢"), (r.segment_pivots, "线段级中枢")):
+        pivot_names = (
+            (r.stroke_pivots, pick(lang, "笔级中枢", "stroke-level pivot")),
+            (r.segment_pivots, pick(lang, "线段级中枢", "segment-level pivot")),
+        )
+        for pivots, name in pivot_names:
             if pivots and not pivots[-1].confirmed:
                 p = pivots[-1]
-                notes.append(
-                    f"最近{name}（{p.zd:.2f}–{p.zg:.2f}）可能仍在延伸，"
-                    f"上下沿与离开方向尚未最终确认"
-                )
+                if en:
+                    notes.append(
+                        f"The latest {name} ({p.zd:.2f}–{p.zg:.2f}) may still be extending; its bounds "
+                        f"and exit direction aren't finalized"
+                    )
+                else:
+                    notes.append(
+                        f"最近{name}（{p.zd:.2f}–{p.zg:.2f}）可能仍在延伸，"
+                        f"上下沿与离开方向尚未最终确认"
+                    )
 
         pending_signals = [s for s in r.signals if not s.confirmed]
         if pending_signals:
-            labels = "、".join(dict.fromkeys(s.label for s in pending_signals))
-            notes.append(
-                f"最新的 {labels} 信号位于未确认笔上，属于左侧预判，"
-                f"需后续K线验证，切勿据此重仓"
-            )
+            if en:
+                labels = ", ".join(dict.fromkeys(s.label for s in pending_signals))
+                notes.append(
+                    f"The latest {labels} signal(s) sit on an unconfirmed stroke — a left-side "
+                    f"anticipation that needs later candles to verify; don't size up on it"
+                )
+            else:
+                labels = "、".join(dict.fromkeys(s.label for s in pending_signals))
+                notes.append(
+                    f"最新的 {labels} 信号位于未确认笔上，属于左侧预判，"
+                    f"需后续K线验证，切勿据此重仓"
+                )
 
         return notes
 
-    def _build_recommendation(self, r: ChanAnalysisResult) -> Recommendation:
+    def _build_recommendation(self, r: ChanAnalysisResult, lang: str = "zh") -> Recommendation:
         """综合缠论各维度，描述当前技术形态倾向及依据（不构成操作建议）。
 
         判断顺序：近期买卖点信号优先；无新鲜信号时看趋势 + 背驰；
-        再以中枢位置、线段方向补充佐证。
+        再以中枢位置、线段方向补充佐证。措辞只描述技术形态，不含操作动词。
         """
         reasons: list[str] = []
         caveats: list[str] = []
+        en = is_en(lang)
 
         # 最近一个背驰及方向：上升笔背驰=顶背驰，下降笔背驰=底背驰
         recent_div_dir: str | None = None
@@ -285,71 +338,139 @@ class ChanAnalyzer:
         signal_fresh = bool(latest and latest.time >= fresh_cutoff)
 
         last_price = r.merged_candles[-1].close if r.merged_candles else 0.0
-        trend = r.current_trend
+        # 趋势方向从最后一笔取，避免解析已本地化的 current_trend 文本
+        last_dir = r.strokes[-1].direction if r.strokes else None
 
-        # 措辞一律「描述技术形态」而非「给操作建议」：避免被认定为荐股/投资咨询。
-        # 只讲多空强弱与动能，不出现「买入/卖出/减仓/关注/持有」等操作动词。
         if signal_fresh and latest is not None:
             if latest.is_buy:
-                action, label, bias = "buy", "技术形态转强（仅技术面）", "bullish"
+                action, bias = "buy", "bullish"
+                label = pick(lang, "技术形态转强（仅技术面）", "Technicals strengthening (technical only)")
             else:
-                action, label, bias = "sell", "技术形态转弱（仅技术面）", "bearish"
-            fresh_tag = "" if latest.confirmed else "（该信号所在笔未确认，为左侧预判）"
-            reasons.append(
-                f"最近出现{latest.label}（{latest.strength}强度，{latest.time}）{fresh_tag}："
-                f"{latest.description}"
-            )
-            if not latest.confirmed:
-                label = f"{label}（待确认）"
-        elif "上升笔" in trend:
+                action, bias = "sell", "bearish"
+                label = pick(lang, "技术形态转弱（仅技术面）", "Technicals weakening (technical only)")
+            if en:
+                fresh_tag = "" if latest.confirmed else " (on an unconfirmed stroke, a left-side call)"
+                reasons.append(
+                    f"Recent {latest.label} ({latest.strength} strength, {latest.time}){fresh_tag}: "
+                    f"{latest.description}"
+                )
+                if not latest.confirmed:
+                    label = f"{label} (unconfirmed)"
+            else:
+                fresh_tag = "" if latest.confirmed else "（该信号所在笔未确认，为左侧预判）"
+                reasons.append(
+                    f"最近出现{latest.label}（{latest.strength}强度，{latest.time}）{fresh_tag}："
+                    f"{latest.description}"
+                )
+                if not latest.confirmed:
+                    label = f"{label}（待确认）"
+        elif last_dir == "up":
             if recent_div_dir == "up":
-                action, label, bias = "hold_bearish", "上涨动能减弱（技术面）", "bearish"
-                reasons.append("当前处于上升笔末端，且最近出现顶背驰，上涨动能衰竭，需留意回调")
+                action, bias = "hold_bearish", "bearish"
+                label = pick(lang, "上涨动能减弱（技术面）", "Upside momentum fading (technical)")
+                reasons.append(pick(lang,
+                    "当前处于上升笔末端，且最近出现顶背驰，上涨动能衰竭，需留意回调",
+                    "At the end of a rising leg with a recent top divergence; upside momentum is "
+                    "exhausting — watch for a pullback"))
             else:
-                action, label, bias = "hold_bullish", "上升趋势延续（技术面）", "bullish"
-                reasons.append("当前处于上升笔末端，暂无顶背驰，上升趋势延续中，留意是否见顶")
-        elif "下降笔" in trend:
+                action, bias = "hold_bullish", "bullish"
+                label = pick(lang, "上升趋势延续（技术面）", "Uptrend continuing (technical)")
+                reasons.append(pick(lang,
+                    "当前处于上升笔末端，暂无顶背驰，上升趋势延续中，留意是否见顶",
+                    "At the end of a rising leg with no top divergence yet; the uptrend continues — "
+                    "watch for a possible top"))
+        elif last_dir == "down":
             if recent_div_dir == "down":
-                action, label, bias = "hold_bullish", "下跌动能减弱（技术面）", "bullish"
-                reasons.append("当前处于下降笔末端，且最近出现底背驰，下跌动能衰竭，或有企稳")
+                action, bias = "hold_bullish", "bullish"
+                label = pick(lang, "下跌动能减弱（技术面）", "Downside momentum fading (technical)")
+                reasons.append(pick(lang,
+                    "当前处于下降笔末端，且最近出现底背驰，下跌动能衰竭，或有企稳",
+                    "At the end of a falling leg with a recent bottom divergence; downside momentum is "
+                    "exhausting — may stabilize"))
             else:
-                action, label, bias = "hold_bearish", "下降趋势延续（技术面）", "bearish"
-                reasons.append("当前处于下降笔末端，暂无底背驰，下跌可能延续")
+                action, bias = "hold_bearish", "bearish"
+                label = pick(lang, "下降趋势延续（技术面）", "Downtrend continuing (technical)")
+                reasons.append(pick(lang,
+                    "当前处于下降笔末端，暂无底背驰，下跌可能延续",
+                    "At the end of a falling leg with no bottom divergence yet; the decline may continue"))
         else:
-            action, label, bias = "watch", "技术结构不明", "neutral"
-            reasons.append("当前走势结构尚不明确，方向有待后续K线确认")
+            action, bias = "watch", "neutral"
+            label = pick(lang, "技术结构不明", "Structure unclear")
+            reasons.append(pick(lang, "当前走势结构尚不明确，方向有待后续K线确认",
+                                "The structure isn't clear yet; direction awaits later candles"))
 
         # 当前价相对最近中枢的位置
         if r.stroke_pivots:
             p = r.stroke_pivots[-1]
             if last_price > p.zg:
-                reasons.append(f"当前价 {last_price:.2f} 站上最近中枢上沿 ZG（{p.zg:.2f}），多头占优")
+                reasons.append(pick(lang,
+                    f"当前价 {last_price:.2f} 站上最近中枢上沿 ZG（{p.zg:.2f}），多头占优",
+                    f"Price {last_price:.2f} is above the latest pivot's upper bound ZG ({p.zg:.2f}); "
+                    f"bulls have the edge"))
             elif last_price < p.zd:
-                reasons.append(f"当前价 {last_price:.2f} 跌破最近中枢下沿 ZD（{p.zd:.2f}），空头占优")
+                reasons.append(pick(lang,
+                    f"当前价 {last_price:.2f} 跌破最近中枢下沿 ZD（{p.zd:.2f}），空头占优",
+                    f"Price {last_price:.2f} is below the latest pivot's lower bound ZD ({p.zd:.2f}); "
+                    f"bears have the edge"))
             else:
-                reasons.append(
-                    f"当前价 {last_price:.2f} 仍在最近中枢（{p.zd:.2f}–{p.zg:.2f}）内，多空交战、方向待选"
-                )
+                reasons.append(pick(lang,
+                    f"当前价 {last_price:.2f} 仍在最近中枢（{p.zd:.2f}–{p.zg:.2f}）内，多空交战、方向待选",
+                    f"Price {last_price:.2f} is still inside the latest pivot ({p.zd:.2f}–{p.zg:.2f}); "
+                    f"a stand-off with direction undecided"))
 
         # 最近线段方向佐证大级别趋势
         if r.segments:
             seg = r.segments[-1]
-            reasons.append(
-                f"最近线段方向{'向上' if seg.direction == 'up' else '向下'}，"
-                f"大级别趋势{'偏多' if seg.direction == 'up' else '偏空'}"
-            )
+            if en:
+                reasons.append(
+                    f"The latest segment points {'up' if seg.direction == 'up' else 'down'}, so the "
+                    f"larger-degree trend leans {'bullish' if seg.direction == 'up' else 'bearish'}")
+            else:
+                reasons.append(
+                    f"最近线段方向{'向上' if seg.direction == 'up' else '向下'}，"
+                    f"大级别趋势{'偏多' if seg.direction == 'up' else '偏空'}")
 
         # 把最右侧未确认结构作为具体风险提示暴露出来
         caveats.extend(r.pending_notes)
-        caveats.append("缠论分型 / 笔需后续K线确认，信号存在滞后性")
-        caveats.append(
+        caveats.append(pick(lang,
+            "缠论分型 / 笔需后续K线确认，信号存在滞后性",
+            "Chan fractals/strokes need later candles to confirm; signals are inherently lagging"))
+        caveats.append(pick(lang,
             "以上均为缠论技术形态的客观描述，不构成任何投资建议；"
-            "技术上的“买点”不等于投资上“值得买”，请结合基本面、估值与风险自主决策"
-        )
+            "技术上的“买点”不等于投资上“值得买”，请结合基本面、估值与风险自主决策",
+            "All of the above objectively describes Chan technical structure and is not investment "
+            "advice; a technical \"buy point\" is not the same as being \"worth buying\" — decide for "
+            "yourself, weighing fundamentals, valuation and risk"))
 
         return Recommendation(action=action, action_label=label, bias=bias, reasons=reasons, caveats=caveats)
 
-    def _build_summary(self, r: ChanAnalysisResult) -> str:
+    def _build_summary(self, r: ChanAnalysisResult, lang: str = "zh") -> str:
+        en = is_en(lang)
+        buy_signals = [s for s in r.signals if s.is_buy]
+        sell_signals = [s for s in r.signals if not s.is_buy]
+
+        if en:
+            parts = [
+                f"Identified {len(r.merged_candles)} merged candles, {len(r.fractals)} fractals, "
+                f"{len(r.strokes)} strokes, {len(r.segments)} segments, "
+                f"{len(r.stroke_pivots)} stroke-level pivots, "
+                f"{len(r.segment_pivots)} segment-level pivots. "
+            ]
+            if r.current_trend:
+                parts.append(r.current_trend + ". ")
+            if r.signals:
+                parts.append(
+                    f"Found {len(buy_signals)} buy signal(s) and {len(sell_signals)} sell signal(s). ")
+            if r.latest_signal:
+                s = r.latest_signal
+                tag = "" if s.confirmed else " (unconfirmed, needs later candles)"
+                parts.append(
+                    f"Latest signal: {s.label} ({s.strength} strength), time={s.time}, "
+                    f"price={s.price:.2f}{tag}. ")
+            if r.pending_notes:
+                parts.append("[Unconfirmed at the right edge] " + "; ".join(r.pending_notes) + ".")
+            return "".join(parts)
+
         parts = [
             f"共识别 {len(r.merged_candles)} 根合并K线，"
             f"{len(r.fractals)} 个分型，{len(r.strokes)} 笔，"
@@ -357,25 +478,18 @@ class ChanAnalyzer:
             f"{len(r.stroke_pivots)} 个笔级中枢，"
             f"{len(r.segment_pivots)} 个线段级中枢。",
         ]
-
         if r.current_trend:
             parts.append(r.current_trend + "。")
-
-        buy_signals = [s for s in r.signals if s.is_buy]
-        sell_signals = [s for s in r.signals if not s.is_buy]
         if r.signals:
             parts.append(
                 f"共发现 {len(buy_signals)} 个买点信号、{len(sell_signals)} 个卖点信号。"
             )
-
         if r.latest_signal:
             s = r.latest_signal
             parts.append(
                 f"最近信号：{s.label}（{s.strength}强度），时间={s.time}，价格={s.price:.2f}"
                 f"{'' if s.confirmed else '（未确认，需后续K线验证）'}。"
             )
-
         if r.pending_notes:
             parts.append("【最右侧未确认】" + "；".join(r.pending_notes) + "。")
-
         return "".join(parts)

@@ -179,3 +179,36 @@
 "全屏查看图表" = "View chart full screen";
 "横屏显示，可看到更多 K 线" = "Landscape view shows more candles";
 "关闭" = "Close";
+
+/* Learn (lessons chrome & diagram labels) */
+"缠论入门" = "Chan Basics";
+"按顺序读下来，就能看懂分析页上画的每一条线。" = "Read them in order and you'll understand every line drawn on the analysis page.";
+"教程内容加载失败" = "Failed to load lessons";
+"请重装 App 或联系我们" = "Please reinstall the app or contact us";
+"完成" = "Done";
+"示意图，与分析页使用同一套配色" = "Diagram — same colors as the analysis page";
+"以上为缠论的通行解读，仅供学习参考，不构成投资建议。" = "The above is the common interpretation of Chan, for learning only and not investment advice.";
+"顶分型" = "Top fractal";
+"底分型" = "Bottom fractal";
+"一买" = "1st buy";
+"二买" = "2nd buy";
+"三买" = "3rd buy";
+"一笔" = "one stroke";
+"两者共同构成更高级别" = "together they form a higher degree";
+"中枢 = 三段重叠区" = "Pivot = overlap of 3 legs";
+"价格见顶回落" = "price tops and falls";
+"创新高" = "new high";
+"前高" = "prior high";
+"合并为一根" = "merged into one";
+"后一根被完全包住" = "later bar fully engulfed";
+"小级别" = "small degree";
+"离开中枢" = "leaves the pivot";
+"红柱放大 = 多方占优" = "red bars grow = bulls ahead";
+"线段 = 至少三笔" = "Segment = 3+ strokes";
+"翻绿 = 空方占优" = "turns green = bears ahead";
+"面积大" = "large area";
+"面积明显缩小 → 背驰" = "area shrinks sharply → divergence";
+
+/* Chart interaction */
+"退出查看" = "Exit inspect";
+"点按查看K线数据" = "Tap to inspect candles";

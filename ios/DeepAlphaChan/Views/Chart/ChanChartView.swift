@@ -22,6 +22,18 @@ struct ChanChartView: View {
     // 双指缩放基准值
     @State private var zoomAnchor: Double? = nil
 
+    /// 图表是否已进入交互态。在详情页里，图表嵌在竖向 ScrollView 中，默认**不**拦截
+    /// 手势——上下滑动直接滚页面，只有点按一下才进入交互态，之后才能拖动/缩放/看
+    /// 十字光标。全屏页不需要这层门禁（见 requiresActivation）。
+    @State private var interactive = false
+
+    /// 是否需要「先点按激活」。详情页需要（避免抢竖向滚动）；全屏页整屏就是图表，
+    /// 没有滚动冲突，直接可交互。
+    var requiresActivation: Bool = true
+
+    /// 手势是否生效：已激活，或本就不需要激活（全屏）。
+    private var chartInteractive: Bool { interactive || !requiresActivation }
+
     /// 主图与副图高度。全屏页要把图撑满整屏，所以做成可传入的参数；
     /// 写死 300 的时候点全屏只是换了个黑底，图一样大，等于没有全屏。
     // 主图偏矮，整体呈横向长方形（宽 ≈ 屏宽，明显大于高），看盘视觉更舒展
@@ -48,6 +60,10 @@ struct ChanChartView: View {
         .onChange(of: analysis.symbol) { _, _ in
             firstVisible = 0
             resetWindowIfNeeded()
+            // 换标的后回到未激活态，避免残留光标 + 继续拦截滚动
+            interactive = false
+            cursorIndex = nil
+            cursorDragging = false
         }
     }
 
@@ -84,8 +100,14 @@ struct ChanChartView: View {
                 }
             }
             .contentShape(Rectangle())
-            .gesture(chartGesture(plotWidth: plotWidth))
-            .gesture(magnificationGesture(plotWidth: plotWidth))
+            // 点按永远可用：用来「激活」图表并把光标落到点按处。tap 不会拦截 ScrollView 滚动。
+            .simultaneousGesture(activationTap(plotWidth: plotWidth))
+            // 拖动平移 / 双指缩放只在激活后生效；未激活时 .none 让手势不参与，
+            // 竖向滑动直接交给外层 ScrollView。
+            .gesture(chartGesture(plotWidth: plotWidth),
+                     including: chartInteractive ? .all : .none)
+            .gesture(magnificationGesture(plotWidth: plotWidth),
+                     including: chartInteractive ? .all : .none)
             .overlay(alignment: .topLeading) {
                 if let ci = cursorIndex, ci >= 0, ci < candles.count {
                     cursorDetail(index: ci)
@@ -93,6 +115,38 @@ struct ChanChartView: View {
                         .background(Theme.surfaceAlt)
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                         .padding(8)
+                        .allowsHitTesting(false)
+                }
+            }
+            // 交互态退出入口（仅详情页需要）：点它收起光标、把滑动还给页面
+            .overlay(alignment: .topTrailing) {
+                if requiresActivation && interactive {
+                    Button {
+                        interactive = false
+                        cursorIndex = nil
+                        cursorDragging = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(Theme.textSecondary)
+                            .padding(7)
+                            .background(Theme.surfaceAlt)
+                            .clipShape(Circle())
+                    }
+                    .padding(8)
+                    .accessibilityLabel(L("退出查看"))
+                }
+            }
+            // 未激活时给个轻提示，告诉用户点一下可看数据；不拦截手势
+            .overlay(alignment: .bottom) {
+                if requiresActivation && !interactive {
+                    Text(L("点按查看K线数据"))
+                        .font(.system(size: 10))
+                        .foregroundColor(Theme.textSecondary)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Theme.surfaceAlt.opacity(0.85))
+                        .clipShape(Capsule())
+                        .padding(.bottom, 6)
                         .allowsHitTesting(false)
                 }
             }
@@ -476,6 +530,17 @@ struct ChanChartView: View {
     }
 
     // MARK: - 手势
+
+    /// 点按激活：进入交互态并把十字光标落到点按处。始终生效，且不拦截外层滚动。
+    private func activationTap(plotWidth: CGFloat) -> some Gesture {
+        SpatialTapGesture()
+            .onEnded { value in
+                interactive = true
+                let range = visibleRange(plotWidth: plotWidth)
+                let rel = Double(value.location.x / range.candleWidth) + range.firstVisible
+                cursorIndex = max(0, min(candles.count - 1, Int(rel.rounded())))
+            }
+    }
 
     /// 复合手势：水平拖动 < 8pt 视为点击（显示光标），否则平移图表。
     private func chartGesture(plotWidth: CGFloat) -> some Gesture {

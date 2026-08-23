@@ -54,6 +54,7 @@ async def chan_analysis(
     start_date: str = Query(description="开始日期，格式 YYYY-MM-DD"),
     end_date: str = Query(description="结束日期，格式 YYYY-MM-DD"),
     freq: str = Query(default="daily", description="K线周期：daily / weekly"),
+    lang: str = Query(default="zh", description="分析文案语言：zh / en"),
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
 ) -> ChanAnalysisResponse:
@@ -82,7 +83,7 @@ async def chan_analysis(
     if not bars:
         raise HTTPException(status_code=404, detail=f"未获取到 {symbol} 的K线数据，请检查股票代码或日期范围")
 
-    result = _analyzer.analyze(symbol, bars)
+    result = _analyzer.analyze(symbol, bars, lang=lang)
 
     return ChanAnalysisResponse(
         symbol=result.symbol,

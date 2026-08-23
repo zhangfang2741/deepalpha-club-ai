@@ -102,10 +102,11 @@ struct ChartLegend: View {
     }
 
     private func item(_ color: Color, _ term: String) -> some View {
+        // term 为中文规范词（术语表按中文键查），显示走 L() 本地化
         GlossaryLink(term: term) {
             HStack(spacing: 4) {
                 RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 12, height: 3)
-                Text(term)
+                Text(L(term))
                     .font(.caption2)
                     .foregroundColor(GlossaryIndex.hasEntry(for: term)
                                      ? Theme.textPrimary : Theme.textSecondary)

@@ -14,7 +14,7 @@ struct LearnTabView: View {
                 }
             }
             .background(Theme.background)
-            .navigationTitle("缠论入门")
+            .navigationTitle(L("缠论入门"))
         }
     }
 
@@ -39,7 +39,7 @@ struct LearnTabView: View {
     }
 
     private var intro: some View {
-        Text("按顺序读下来，就能看懂分析页上画的每一条线。")
+        Text(L("按顺序读下来，就能看懂分析页上画的每一条线。"))
             .font(.footnote)
             .foregroundColor(Theme.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -83,10 +83,10 @@ struct LearnTabView: View {
             Image(systemName: "book.closed")
                 .font(.largeTitle)
                 .foregroundColor(Theme.textSecondary)
-            Text("教程内容加载失败")
+            Text(L("教程内容加载失败"))
                 .font(.subheadline)
                 .foregroundColor(Theme.textPrimary)
-            Text("请重装 App 或联系我们")
+            Text(L("请重装 App 或联系我们"))
                 .font(.caption)
                 .foregroundColor(Theme.textSecondary)
         }

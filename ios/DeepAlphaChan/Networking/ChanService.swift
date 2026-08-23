@@ -10,6 +10,8 @@ enum ChanService {
             "start_date": startDate,
             "end_date": endDate,
             "freq": freq,
+            // 让后端按当前界面语言返回分析正文（趋势/形态解读/依据/买卖点描述）
+            "lang": Localized.language() == .english ? "en" : "zh",
         ])
     }
 
