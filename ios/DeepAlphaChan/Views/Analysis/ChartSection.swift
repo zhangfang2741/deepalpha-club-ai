@@ -80,13 +80,14 @@ struct ChartLegend: View {
     var body: some View {
         VStack(spacing: 6) {
             ScrollView(.horizontal, showsIndicators: false) {
+                // 图例形状与图上一致：笔/线段=实线，中枢=方框，分型=圆点，未确认=灰色虚线
                 HStack(spacing: 14) {
-                    item(Theme.stroke, "笔")
-                    item(Theme.segment, "线段")
-                    item(Theme.pivotFill, "中枢")
-                    item(Theme.topFractal, "顶分型")
-                    item(Theme.bottomFractal, "底分型")
-                    Text(L("虚线=未确认")).font(.caption2).foregroundColor(Theme.textSecondary)
+                    labeled("笔") { lineGlyph(Theme.stroke, width: 2) }
+                    labeled("线段") { lineGlyph(Theme.segment, width: 2.6) }
+                    labeled("中枢") { boxGlyph(Theme.pivotFill) }
+                    labeled("顶分型") { dotGlyph(Theme.topFractal) }
+                    labeled("底分型") { dotGlyph(Theme.bottomFractal) }
+                    labeled("未确认") { dashGlyph() }
                 }
                 .padding(.horizontal, 4)
             }
@@ -101,16 +102,50 @@ struct ChartLegend: View {
         }
     }
 
-    private func item(_ color: Color, _ term: String) -> some View {
-        // term 为中文规范词（术语表按中文键查），显示走 L() 本地化
+    /// 一条图例项：图形 + 本地化术语。可点的（有词条）显示白字并跳词条，否则灰字。
+    private func labeled<G: View>(_ term: String, @ViewBuilder glyph: () -> G) -> some View {
         GlossaryLink(term: term) {
             HStack(spacing: 4) {
-                RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 12, height: 3)
+                glyph()
                 Text(L(term))
                     .font(.caption2)
                     .foregroundColor(GlossaryIndex.hasEntry(for: term)
                                      ? Theme.textPrimary : Theme.textSecondary)
             }
         }
+    }
+
+    // MARK: 图例图形
+
+    /// 实线（笔 / 线段）
+    private func lineGlyph(_ color: Color, width: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: width / 2)
+            .fill(color)
+            .frame(width: 14, height: width)
+    }
+
+    /// 方框（中枢）：描边 + 淡填充，对应图上的中枢矩形
+    private func boxGlyph(_ color: Color) -> some View {
+        RoundedRectangle(cornerRadius: 2)
+            .fill(color.opacity(0.18))
+            .overlay(RoundedRectangle(cornerRadius: 2).stroke(color, lineWidth: 1))
+            .frame(width: 14, height: 10)
+    }
+
+    /// 圆点（顶 / 底分型），对应图上的分型标记
+    private func dotGlyph(_ color: Color) -> some View {
+        Circle().fill(color).frame(width: 7, height: 7)
+    }
+
+    /// 灰色虚线（未确认），对应图上未确认结构的虚线画法
+    private func dashGlyph() -> some View {
+        Canvas { ctx, size in
+            var p = Path()
+            p.move(to: CGPoint(x: 0, y: size.height / 2))
+            p.addLine(to: CGPoint(x: size.width, y: size.height / 2))
+            ctx.stroke(p, with: .color(Theme.textSecondary),
+                       style: StrokeStyle(lineWidth: 1.5, dash: [3, 2]))
+        }
+        .frame(width: 16, height: 4)
     }
 }
