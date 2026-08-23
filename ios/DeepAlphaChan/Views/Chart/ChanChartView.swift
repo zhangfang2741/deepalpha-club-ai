@@ -24,8 +24,9 @@ struct ChanChartView: View {
 
     /// 主图与副图高度。全屏页要把图撑满整屏，所以做成可传入的参数；
     /// 写死 300 的时候点全屏只是换了个黑底，图一样大，等于没有全屏。
-    var priceHeight: CGFloat = 360
-    var macdHeight: CGFloat = 96
+    // 主图偏矮，整体呈横向长方形（宽 ≈ 屏宽，明显大于高），看盘视觉更舒展
+    var priceHeight: CGFloat = 240
+    var macdHeight: CGFloat = 78
     private let timeAxisHeight: CGFloat = 22
     private let rightAxisWidth: CGFloat = 52
 

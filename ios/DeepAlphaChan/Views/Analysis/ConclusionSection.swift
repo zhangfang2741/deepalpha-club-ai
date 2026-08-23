@@ -22,10 +22,9 @@ struct ConclusionSection: View {
     /// 大白话形态解读：把缠论结构翻译成「市场此刻在做什么」，放在最前面，
     /// 让看不懂笔/中枢/背驰的普通用户也能先读懂一句话结论。
     private func narrativeCard(_ n: MarketNarrative) -> some View {
-        SectionCard(title: "形态解读", systemImage: "text.magnifyingglass") {
+        CollapsibleCard(title: "形态解读", systemImage: "text.magnifyingglass",
+                        accessoryChip: (n.phaseLabel, SignalFormatting.phaseColor(n.phase))) {
             VStack(alignment: .leading, spacing: 10) {
-                Chip(text: n.phaseLabel, color: SignalFormatting.phaseColor(n.phase))
-
                 Text(n.headline)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(Theme.textPrimary)
@@ -56,13 +55,11 @@ struct ConclusionSection: View {
     }
 
     private var summaryCard: some View {
-        SectionCard(title: "当前结构", systemImage: "chart.xyaxis.line") {
+        CollapsibleCard(title: "当前结构", systemImage: "chart.xyaxis.line",
+                        accessoryChip: (SignalFormatting.trendLabel(analysis.currentTrend),
+                                        SignalFormatting.trendColor(analysis.currentTrend))) {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    Chip(text: SignalFormatting.trendLabel(analysis.currentTrend),
-                         color: SignalFormatting.trendColor(analysis.currentTrend))
-                    Chip(text: "\(analysis.barsCount) 根 K 线", color: Theme.textSecondary)
-                }
+                Chip(text: "\(analysis.barsCount) 根 K 线", color: Theme.textSecondary)
                 Text(analysis.summary)
                     .font(ConclusionType.body)
                     // 与「待确认结构」正文同为 textSecondary：都是详情正文，
@@ -75,18 +72,16 @@ struct ConclusionSection: View {
     }
 
     private func recommendationCard(_ rec: Recommendation) -> some View {
-        SectionCard(title: "操作倾向", systemImage: "target") {
+        CollapsibleCard(title: "操作倾向", systemImage: "target",
+                        accessoryChip: (SignalFormatting.biasLabel(rec.bias),
+                                        SignalFormatting.biasColor(rec.bias))) {
             VStack(alignment: .leading, spacing: 14) {
-                // 结论本身单独一行并加分隔线：它是这张卡的答案，
-                // 和下面的「依据/风险提示」是两个层次，挨着排会混成一团。
-                HStack(alignment: .firstTextBaseline) {
-                    Text(rec.actionLabel)
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundColor(SignalFormatting.biasColor(rec.bias))
-                    Spacer()
-                    Chip(text: SignalFormatting.biasLabel(rec.bias),
-                         color: SignalFormatting.biasColor(rec.bias))
-                }
+                // 结论本身单独一行：它是这张卡的答案，和下面的「依据/风险提示」
+                // 是两个层次，挨着排会混成一团。
+                Text(rec.actionLabel)
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(SignalFormatting.biasColor(rec.bias))
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if !rec.reasons.isEmpty || !rec.caveats.isEmpty {
                     Divider().overlay(Theme.border)
@@ -104,7 +99,8 @@ struct ConclusionSection: View {
     }
 
     private var pendingCard: some View {
-        SectionCard(title: "待确认结构", systemImage: "hourglass") {
+        CollapsibleCard(title: "待确认结构", systemImage: "hourglass",
+                        accessoryChip: ("\(analysis.pendingNotes.count) 项", Theme.segment)) {
             VStack(alignment: .leading, spacing: 7) {
                 ForEach(analysis.pendingNotes, id: \.self) { note in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
