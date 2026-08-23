@@ -74,8 +74,11 @@ enum SignalFormatting {
 /// - 正文 15pt regular，行距 5——这是真正要读的内容，不该比标题挤
 /// - 段内小标题 13pt semibold + 字距，小而重才像标签而不像正文
 enum ConclusionType {
-    static let body = Font.system(size: 15)
-    static let label = Font.system(size: 13, weight: .semibold)
+    // 用文本样式而不是固定 size：.system(size:) 不跟随系统的「文字大小」设置，
+    // 调大字号的用户看到的还是 15pt。subheadline 本身就是 15pt，footnote 13pt，
+    // 视觉不变但会随动态字体缩放。
+    static let body = Font.subheadline
+    static let label = Font.footnote.weight(.semibold)
     static let bodyLineSpacing: CGFloat = 5
 }
 

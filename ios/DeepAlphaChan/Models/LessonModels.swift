@@ -66,7 +66,11 @@ enum GlossaryIndex {
         "线段": "segment",
         "中枢": "pivot",
         "背驰": "divergence",
-        "面积比": "divergence",
+        // 面积比指向 MACD 词条：那篇才讲了它是怎么算出来的
+        "面积比": "macd",
+        "MACD": "macd",
+        "DIF": "macd",
+        "DEA": "macd",
         "买卖点": "trade-points",
         "一买": "trade-points",
         "二买": "trade-points",

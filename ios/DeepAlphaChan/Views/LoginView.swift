@@ -9,6 +9,7 @@ struct LoginView: View {
     @State private var password = ""
     @State private var showRegister = false
     @State private var showForgotPassword = false
+    @State private var showLearn = false
     @FocusState private var focused: Field?
 
     private enum Field { case account, password }
@@ -69,6 +70,17 @@ struct LoginView: View {
                         Text(L("没有账号？注册")).font(.footnote).foregroundColor(Theme.accent)
                     }
 
+                    // 不登录也能看教程。App Store 审核指南 5.1.1(i) 不希望 App
+                    // 把所有内容都锁在注册墙后面；这里也确实没必要——教程是静态
+                    // 内容，看不看得到跟有没有账号无关。
+                    Button {
+                        showLearn = true
+                    } label: {
+                        Label("先看看缠论入门", systemImage: "book")
+                            .font(.footnote)
+                            .foregroundColor(Theme.textSecondary)
+                    }
+
                     dividerOr
 
                     SignInWithAppleButton(.signIn) { request in
@@ -95,6 +107,7 @@ struct LoginView: View {
         }
         .sheet(isPresented: $showRegister) { RegisterView() }
         .sheet(isPresented: $showForgotPassword) { ForgotPasswordView(channel: channel) }
+        .sheet(isPresented: $showLearn) { LearnTabView() }
         .onChange(of: channel) { _, _ in
             // 切换通道时清空输入，否则手机号会留在邮箱框里显得莫名其妙
             account = ""
