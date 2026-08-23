@@ -71,7 +71,7 @@ struct ConclusionSection: View {
     }
 
     private func recommendationCard(_ rec: Recommendation) -> some View {
-        CollapsibleCard(title: "操作倾向", systemImage: "target",
+        CollapsibleCard(title: "技术形态倾向", systemImage: "target",
                         accessoryChip: (SignalFormatting.biasLabel(rec.bias),
                                         SignalFormatting.biasColor(rec.bias))) {
             VStack(alignment: .leading, spacing: 14) {

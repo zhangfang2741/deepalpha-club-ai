@@ -19,7 +19,12 @@ struct SignalListSection: View {
                 if analysis.signals.isEmpty {
                     emptyHint
                 } else {
-                    VStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        // 常驻说明：明确「买卖点」是缠论的技术信号名词，不是操作指令
+                        Text("「买卖点」是缠论对价格结构的技术信号命名，非买入/卖出操作建议。")
+                            .font(.caption2)
+                            .foregroundColor(Theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                         ForEach(sortedSignals) { sig in signalRow(sig) }
                     }
                 }
