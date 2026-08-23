@@ -8,9 +8,9 @@ enum SignalFormatting {
 
     static func trendLabel(_ trend: String) -> String {
         switch trend {
-        case "up": return "上涨趋势"
-        case "down": return "下跌趋势"
-        case "oscillation", "range": return "震荡整理"
+        case "up": return L("上涨趋势")
+        case "down": return L("下跌趋势")
+        case "oscillation", "range": return L("震荡整理")
         default: return trend
         }
     }
@@ -25,9 +25,9 @@ enum SignalFormatting {
 
     static func biasLabel(_ bias: String) -> String {
         switch bias {
-        case "bullish": return "偏多"
-        case "bearish": return "偏空"
-        default: return "中性"
+        case "bullish": return L("偏多")
+        case "bearish": return L("偏空")
+        default: return L("中性")
         }
     }
 
@@ -41,9 +41,9 @@ enum SignalFormatting {
 
     static func strengthLabel(_ strength: Signal.Strength) -> String {
         switch strength {
-        case .strong: return "强"
-        case .medium: return "中"
-        case .weak: return "弱"
+        case .strong: return L("强")
+        case .medium: return L("中")
+        case .weak: return L("弱")
         }
     }
 

@@ -1,26 +1,21 @@
 import SwiftUI
 
-/// 图表下方的分段内容：结论 / 买卖点 / GAP。
+/// 图表下方的分段内容：结论 / 买卖点。
 ///
-/// 改造前这三块首尾相连堆在一条滚动流里，读任何一项都要长距离滚动，而它们
-/// 的用途其实互不相干——结论是快速判断，买卖点是逐条明细，GAP 是要动手输入
-/// 产业观点的深度分析。
+/// 结论是快速判断、买卖点是逐条明细，两者读法不同故分段。
+/// （原先还有 GAP 段，需手动输入产业观点做深度分析，已从此处移除。）
 struct ResultSegments: View {
     let analysis: ChanAnalysis
-    @ObservedObject var vm: ChanViewModel
-    let isSubscribed: Bool
-    let onUpgrade: () -> Void
 
     @State private var segment: Segment = .conclusion
 
     enum Segment: String, CaseIterable, Identifiable {
-        case conclusion, signals, gap
+        case conclusion, signals
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .conclusion: return "结论"
-            case .signals: return "买卖点"
-            case .gap: return "GAP"
+            case .conclusion: return L("结论")
+            case .signals: return L("买卖点")
             }
         }
     }
@@ -39,8 +34,6 @@ struct ResultSegments: View {
                 ConclusionSection(analysis: analysis)
             case .signals:
                 SignalListSection(analysis: analysis)
-            case .gap:
-                GapAnalysisView(vm: vm, isSubscribed: isSubscribed, onUpgrade: onUpgrade)
             }
         }
     }

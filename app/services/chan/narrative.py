@@ -150,7 +150,7 @@ def build_narrative(result: ChanAnalysisResult, bars: list[dict]) -> MarketNarra
         headline = "股价整体震荡向下，空方目前占据主动。"
     else:
         phase, label = "unclear", "方向不明"
-        headline = "当前结构还不清晰，多空力量接近，建议观望等待方向明朗。"
+        headline = "当前结构还不清晰，多空力量接近，方向有待后续K线明朗。"
 
     # ---- 分条解读 ----
     details: list[str] = []

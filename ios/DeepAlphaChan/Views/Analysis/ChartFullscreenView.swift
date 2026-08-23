@@ -37,7 +37,7 @@ struct ChartFullscreenView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .background(Theme.background.ignoresSafeArea())
-        // 转屏由调用方在呈现前完成（见 AnalysisTabView.openFullscreen）。
+        // 转屏由调用方在呈现前完成（见 ResultDetailView.openFullscreen）。
         // 还原必须无条件做，漏了的话用户退出后整个 App 会卡在横屏。
         .onDisappear { orientation.lockPortrait() }
     }
@@ -47,7 +47,7 @@ struct ChartFullscreenView: View {
             Text(vm.symbol.uppercased())
                 .font(.subheadline.bold())
                 .foregroundColor(Theme.textPrimary)
-            Text(vm.freq == "weekly" ? "周线" : "日线")
+            Text(vm.freq == "weekly" ? L("周线") : L("日线"))
                 .font(.caption)
                 .foregroundColor(Theme.accent)
                 .padding(.horizontal, 6).padding(.vertical, 2)
@@ -66,7 +66,7 @@ struct ChartFullscreenView: View {
                     .font(.title3)
                     .foregroundColor(Theme.textSecondary)
             }
-            .accessibilityLabel("退出全屏")
+            .accessibilityLabel(L("退出全屏"))
         }
         .padding(.horizontal, 14)
     }

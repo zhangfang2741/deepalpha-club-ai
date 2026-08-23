@@ -105,7 +105,7 @@ async def chan_analysis_tool(
     if result.recommendation:
         rec = result.recommendation
         lines.append("")
-        lines.append("### 当前操作建议")
+        lines.append("### 当前技术形态倾向（非操作建议）")
         lines.append(f"**{rec.action_label}**")
         for reason in rec.reasons:
             lines.append(f"- {reason}")

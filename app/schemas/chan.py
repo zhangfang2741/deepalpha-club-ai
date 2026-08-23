@@ -78,7 +78,7 @@ class SignalOut(BaseModel):
 
 class RecommendationOut(BaseModel):
     action: str            # buy / sell / hold_bullish / hold_bearish / watch
-    action_label: str      # 中文操作标签
+    action_label: str      # 中文技术形态标签（描述技术面强弱，非操作建议）
     bias: str              # bullish / bearish / neutral
     reasons: list[str]     # 依据（为什么）
     caveats: list[str]     # 风险提示

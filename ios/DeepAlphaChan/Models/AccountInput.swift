@@ -9,15 +9,15 @@ enum AccountChannel: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .phone: return "手机号"
-        case .email: return "邮箱"
+        case .phone: return L("手机号")
+        case .email: return L("邮箱")
         }
     }
 
     var placeholder: String {
         switch self {
-        case .phone: return "手机号"
-        case .email: return "邮箱"
+        case .phone: return L("手机号")
+        case .email: return L("邮箱")
         }
     }
 
@@ -86,17 +86,17 @@ enum StockMarket: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .us: return "美股"
-        case .cn: return "A 股"
-        case .hk: return "港股"
+        case .us: return L("美股")
+        case .cn: return L("A 股")
+        case .hk: return L("港股")
         }
     }
 
     var placeholder: String {
         switch self {
-        case .us: return "代码，如 AAPL"
-        case .cn: return "6 位代码，如 600519"
-        case .hk: return "4–5 位代码，如 0700"
+        case .us: return L("代码，如 AAPL")
+        case .cn: return L("6 位代码，如 600519")
+        case .hk: return L("4–5 位代码，如 0700")
         }
     }
 

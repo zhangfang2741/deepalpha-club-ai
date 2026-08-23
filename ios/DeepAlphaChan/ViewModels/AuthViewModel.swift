@@ -34,10 +34,10 @@ final class AuthViewModel: ObservableObject {
 
     func login(account: String, password: String) async {
         guard !account.isEmpty, !password.isEmpty else {
-            errorMessage = "请输入账号和密码"
+            errorMessage = L("请输入账号和密码")
             return
         }
-        await perform(fallback: "登录失败，请稍后再试") {
+        await perform(fallback: L("登录失败，请稍后再试")) {
             let resp = try await AuthService.login(account: account, password: password)
             self.finishAuth(token: resp.accessToken)
         }
@@ -45,7 +45,7 @@ final class AuthViewModel: ObservableObject {
 
     /// Sign in with Apple：用 Apple 身份令牌登录。
     func loginWithApple(identityToken: String, fullName: String?) async {
-        await perform(fallback: "Apple 登录失败，请稍后再试") {
+        await perform(fallback: L("Apple 登录失败，请稍后再试")) {
             let resp = try await AuthService.appleLogin(
                 identityToken: identityToken, fullName: fullName)
             self.finishAuth(token: resp.accessToken)
@@ -56,7 +56,7 @@ final class AuthViewModel: ObservableObject {
 
     /// 请求注册验证码。成功返回 true，供界面启动倒计时。
     func requestRegisterCode(account: String, channel: AccountChannel) async -> Bool {
-        await performBool(fallback: "验证码发送失败，请稍后再试") {
+        await performBool(fallback: L("验证码发送失败，请稍后再试")) {
             try await AuthService.requestRegisterCode(account: account, channel: channel)
         }
     }
@@ -65,7 +65,7 @@ final class AuthViewModel: ObservableObject {
         account: String, channel: AccountChannel, code: String,
         password: String, username: String?
     ) async {
-        await perform(fallback: "注册失败，请稍后再试") {
+        await perform(fallback: L("注册失败，请稍后再试")) {
             let resp = try await AuthService.register(
                 account: account, channel: channel, code: code,
                 password: password,
@@ -77,7 +77,7 @@ final class AuthViewModel: ObservableObject {
     // MARK: - 找回密码
 
     func requestPasswordResetCode(account: String, channel: AccountChannel) async -> Bool {
-        await performBool(fallback: "验证码发送失败，请稍后再试") {
+        await performBool(fallback: L("验证码发送失败，请稍后再试")) {
             try await AuthService.requestPasswordResetCode(account: account, channel: channel)
         }
     }
@@ -86,7 +86,7 @@ final class AuthViewModel: ObservableObject {
     func resetPassword(
         account: String, channel: AccountChannel, code: String, newPassword: String
     ) async -> Bool {
-        await performBool(fallback: "重置密码失败，请稍后再试") {
+        await performBool(fallback: L("重置密码失败，请稍后再试")) {
             try await AuthService.confirmPasswordReset(
                 account: account, channel: channel, code: code, newPassword: newPassword)
         }
@@ -106,7 +106,7 @@ final class AuthViewModel: ObservableObject {
 
     /// 删除账号：成功后本地登出。
     func deleteAccount() async -> Bool {
-        await performBool(fallback: "删除账号失败，请稍后再试") {
+        await performBool(fallback: L("删除账号失败，请稍后再试")) {
             try await AuthService.deleteAccount()
             self.logout()
         }

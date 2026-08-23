@@ -15,9 +15,13 @@ from app.services.chan.stroke import Stroke, find_strokes
 
 @dataclass
 class Recommendation:
-    """当前操作建议（综合趋势 / 信号 / 背驰 / 中枢位置 / 线段方向）"""
-    action: str          # buy / sell / hold_bullish / hold_bearish / watch
-    action_label: str    # 中文操作标签
+    """当前技术形态倾向（综合趋势 / 信号 / 背驰 / 中枢位置 / 线段方向）。
+
+    仅描述技术面强弱，不含操作建议——措辞刻意避开「买入/卖出」等动作词，
+    以免被认定为荐股 / 投资咨询。
+    """
+    action: str          # buy / sell / hold_bullish / hold_bearish / watch（内部用，不展示）
+    action_label: str    # 中文技术形态标签（对外展示）
     bias: str            # bullish / bearish / neutral
     reasons: list[str] = field(default_factory=list)   # 依据（为什么这样建议）
     caveats: list[str] = field(default_factory=list)   # 风险提示
@@ -261,7 +265,7 @@ class ChanAnalyzer:
         return notes
 
     def _build_recommendation(self, r: ChanAnalysisResult) -> Recommendation:
-        """综合缠论各维度，给出当前操作建议及依据。
+        """综合缠论各维度，描述当前技术形态倾向及依据（不构成操作建议）。
 
         判断顺序：近期买卖点信号优先；无新鲜信号时看趋势 + 背驰；
         再以中枢位置、线段方向补充佐证。
@@ -283,35 +287,37 @@ class ChanAnalyzer:
         last_price = r.merged_candles[-1].close if r.merged_candles else 0.0
         trend = r.current_trend
 
+        # 措辞一律「描述技术形态」而非「给操作建议」：避免被认定为荐股/投资咨询。
+        # 只讲多空强弱与动能，不出现「买入/卖出/减仓/关注/持有」等操作动词。
         if signal_fresh and latest is not None:
             if latest.is_buy:
-                action, label, bias = "buy", "技术面偏多，可关注买入机会", "bullish"
+                action, label, bias = "buy", "技术形态转强（仅技术面）", "bullish"
             else:
-                action, label, bias = "sell", "技术面偏空，可关注卖出/减仓", "bearish"
+                action, label, bias = "sell", "技术形态转弱（仅技术面）", "bearish"
             fresh_tag = "" if latest.confirmed else "（该信号所在笔未确认，为左侧预判）"
             reasons.append(
-                f"最近触发{latest.label}（{latest.strength}强度，{latest.time}）{fresh_tag}："
+                f"最近出现{latest.label}（{latest.strength}强度，{latest.time}）{fresh_tag}："
                 f"{latest.description}"
             )
             if not latest.confirmed:
-                label = f"{label}（信号待确认）"
+                label = f"{label}（待确认）"
         elif "上升笔" in trend:
             if recent_div_dir == "up":
-                action, label, bias = "hold_bearish", "上涨或近尾声，偏谨慎观望", "bearish"
-                reasons.append("当前处于上升笔末端，且最近出现顶背驰，上涨动能衰竭，警惕回调")
+                action, label, bias = "hold_bearish", "上涨动能减弱（技术面）", "bearish"
+                reasons.append("当前处于上升笔末端，且最近出现顶背驰，上涨动能衰竭，需留意回调")
             else:
-                action, label, bias = "hold_bullish", "趋势向上，持有观望", "bullish"
+                action, label, bias = "hold_bullish", "上升趋势延续（技术面）", "bullish"
                 reasons.append("当前处于上升笔末端，暂无顶背驰，上升趋势延续中，留意是否见顶")
         elif "下降笔" in trend:
             if recent_div_dir == "down":
-                action, label, bias = "hold_bullish", "下跌或近尾声，关注反弹", "bullish"
-                reasons.append("当前处于下降笔末端，且最近出现底背驰，下跌动能衰竭，可能反弹")
+                action, label, bias = "hold_bullish", "下跌动能减弱（技术面）", "bullish"
+                reasons.append("当前处于下降笔末端，且最近出现底背驰，下跌动能衰竭，或有企稳")
             else:
-                action, label, bias = "hold_bearish", "趋势向下，谨慎观望", "bearish"
+                action, label, bias = "hold_bearish", "下降趋势延续（技术面）", "bearish"
                 reasons.append("当前处于下降笔末端，暂无底背驰，下跌可能延续")
         else:
-            action, label, bias = "watch", "结构不明，建议观望", "neutral"
-            reasons.append("当前走势结构尚不明确，建议观望等待明确信号")
+            action, label, bias = "watch", "技术结构不明", "neutral"
+            reasons.append("当前走势结构尚不明确，方向有待后续K线确认")
 
         # 当前价相对最近中枢的位置
         if r.stroke_pivots:
@@ -336,7 +342,10 @@ class ChanAnalyzer:
         # 把最右侧未确认结构作为具体风险提示暴露出来
         caveats.extend(r.pending_notes)
         caveats.append("缠论分型 / 笔需后续K线确认，信号存在滞后性")
-        caveats.append("本建议为技术面参考，不构成投资建议，请结合基本面与风险自行决策")
+        caveats.append(
+            "以上均为缠论技术形态的客观描述，不构成任何投资建议；"
+            "技术上的“买点”不等于投资上“值得买”，请结合基本面、估值与风险自主决策"
+        )
 
         return Recommendation(action=action, action_label=label, bias=bias, reasons=reasons, caveats=caveats)
 

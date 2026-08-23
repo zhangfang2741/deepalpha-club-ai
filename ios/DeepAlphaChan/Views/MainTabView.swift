@@ -9,13 +9,13 @@ struct MainTabView: View {
     var body: some View {
         TabView {
             AnalysisTabView()
-                .tabItem { Label("分析", systemImage: "chart.xyaxis.line") }
+                .tabItem { Label(L("分析"), systemImage: "chart.xyaxis.line") }
 
             LearnTabView()
-                .tabItem { Label("学习", systemImage: "book") }
+                .tabItem { Label(L("学习"), systemImage: "book") }
 
             ProfileView()
-                .tabItem { Label("我的", systemImage: "person.circle") }
+                .tabItem { Label(L("我的"), systemImage: "person.circle") }
         }
     }
 }
