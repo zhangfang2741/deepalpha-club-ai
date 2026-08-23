@@ -173,3 +173,9 @@
 "订阅 Pro" = "Subscribe to Pro";
 "恢复中…" = "Restoring…";
 "订阅为自动续订。免费试用结束后将按上述价格自动扣款，除非在当前订阅周期结束前至少 24 小时取消。你可随时在 App Store 账户设置中管理或取消订阅。" = "Subscription auto-renews. After the free trial you'll be charged the price above unless you cancel at least 24 hours before the current period ends. Manage or cancel anytime in your App Store account settings.";
+
+/* Accessibility */
+"退出全屏" = "Exit full screen";
+"全屏查看图表" = "View chart full screen";
+"横屏显示，可看到更多 K 线" = "Landscape view shows more candles";
+"关闭" = "Close";

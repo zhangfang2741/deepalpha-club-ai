@@ -33,8 +33,8 @@ struct ChartSection: View {
                 .clipShape(Capsule())
         }
         // 纯图标按钮必须给 label，否则 VoiceOver 只会念出「按钮」
-        .accessibilityLabel("全屏查看图表")
-        .accessibilityHint("横屏显示，可看到更多 K 线")
+        .accessibilityLabel(L("全屏查看图表"))
+        .accessibilityHint(L("横屏显示，可看到更多 K 线"))
     }
 }
 
