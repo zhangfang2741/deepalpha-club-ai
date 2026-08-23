@@ -22,22 +22,22 @@ class TestVolumeReadout:
     def test_放量上涨(self):
         closes = [10.0] * 30 + [10.5, 11.0, 11.5, 12.0, 12.5]  # 近端明显上涨
         vols = [100.0] * 30 + [300.0] * 5                       # 近端放量
-        label, sentence = _volume_readout(_bars(closes, vols))
+        label, sentence = _volume_readout(_bars(closes, vols), "zh")
         assert label == "放量"
         assert "放量上涨" in sentence
 
     def test_缩量下跌(self):
         closes = [12.0] * 30 + [11.5, 11.0, 10.5, 10.0, 9.5]
         vols = [200.0] * 30 + [40.0] * 5                        # 近端缩量
-        label, sentence = _volume_readout(_bars(closes, vols))
+        label, sentence = _volume_readout(_bars(closes, vols), "zh")
         assert label == "缩量"
         assert "抛压趋缓" in sentence or "缩量下跌" in sentence
 
     def test_数据不足返回None(self):
-        assert _volume_readout(_bars([10.0] * 5, [100.0] * 5)) is None
+        assert _volume_readout(_bars([10.0] * 5, [100.0] * 5), "zh") is None
 
     def test_全零成交量返回None(self):
-        assert _volume_readout(_bars([10.0] * 20, [0.0] * 20)) is None
+        assert _volume_readout(_bars([10.0] * 20, [0.0] * 20), "zh") is None
 
 
 class TestBuildNarrative:
@@ -61,3 +61,19 @@ class TestBuildNarrative:
         assert n.details  # 至少有趋势/位置/量价之一
         # 解读里应包含量价这一维度
         assert any("量" in d for d in n.details)
+
+    def test_英文输出(self):
+        """lang=en：解读/趋势/建议应输出英文（无中文字符）。"""
+        closes = [20.0 + i * 0.15 + math.sin(i / 3) * 2 for i in range(120)]
+        vols = [100.0 + (i % 7) * 20 for i in range(120)]
+        result = ChanAnalyzer().analyze("TEST", _bars(closes, vols), lang="en")
+
+        def _has_cjk(s: str) -> bool:
+            return any("一" <= ch <= "鿿" for ch in s)
+
+        assert result.narrative is not None
+        assert not _has_cjk(result.narrative.headline)
+        assert not _has_cjk(result.current_trend)
+        assert not _has_cjk(result.recommendation.action_label)
+        for line in result.narrative.details + result.recommendation.reasons + result.recommendation.caveats:
+            assert not _has_cjk(line), line

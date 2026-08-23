@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from app.services.chan.i18n import is_en, pick
 from app.services.chan.stroke import Stroke
 
 
@@ -92,6 +93,7 @@ def check_divergence(
     compare_stroke: Stroke,
     macd: MACDData,
     in_consolidation: bool = False,
+    lang: str = "zh",
 ) -> DivergenceResult:
     """比较两笔的MACD面积，判断是否背驰。
 
@@ -108,7 +110,8 @@ def check_divergence(
             type="none",
             strength="none",
             area_ratio=1.0,
-            description="对比段MACD面积为0，无法判断背驰",
+            description=pick(lang, "对比段MACD面积为0，无法判断背驰",
+                             "Reference-leg MACD area is 0; divergence cannot be assessed"),
         )
 
     ratio = current_area / compare_area
@@ -122,20 +125,29 @@ def check_divergence(
             type="none",
             strength="none",
             area_ratio=ratio,
-            description=f"MACD面积未缩小（比值={ratio:.2f}），未见背驰",
+            description=pick(lang, f"MACD面积未缩小（比值={ratio:.2f}），未见背驰",
+                             f"MACD area did not shrink (ratio={ratio:.2f}); no divergence"),
         )
 
     div_type = "consolidation" if in_consolidation else "trend"
     strength = _classify_strength(ratio)
 
-    type_name = "盘整背驰" if div_type == "consolidation" else "趋势背驰"
-    dir_name = "上涨" if current_stroke.direction == "up" else "下跌"
-    strength_name = {"strong": "强", "medium": "中", "weak": "弱"}.get(strength, "")
-
-    description = (
-        f"{dir_name}段出现{strength_name}{type_name}：MACD面积比值={ratio:.2f}，"
-        f"当前段={current_area:.2f}，对比段={compare_area:.2f}"
-    )
+    if is_en(lang):
+        type_name = "consolidation divergence" if div_type == "consolidation" else "trend divergence"
+        dir_name = "up-leg" if current_stroke.direction == "up" else "down-leg"
+        strength_name = {"strong": "strong", "medium": "moderate", "weak": "weak"}.get(strength, "")
+        description = (
+            f"{strength_name} {type_name} on the {dir_name}: MACD area ratio={ratio:.2f}, "
+            f"current={current_area:.2f}, reference={compare_area:.2f}"
+        )
+    else:
+        type_name = "盘整背驰" if div_type == "consolidation" else "趋势背驰"
+        dir_name = "上涨" if current_stroke.direction == "up" else "下跌"
+        strength_name = {"strong": "强", "medium": "中", "weak": "弱"}.get(strength, "")
+        description = (
+            f"{dir_name}段出现{strength_name}{type_name}：MACD面积比值={ratio:.2f}，"
+            f"当前段={current_area:.2f}，对比段={compare_area:.2f}"
+        )
 
     return DivergenceResult(
         is_diverged=True,
@@ -146,7 +158,9 @@ def check_divergence(
     )
 
 
-def find_stroke_divergences(strokes: list[Stroke], macd: MACDData) -> list[DivergenceResult]:
+def find_stroke_divergences(
+    strokes: list[Stroke], macd: MACDData, lang: str = "zh"
+) -> list[DivergenceResult]:
     """批量检测所有笔的背驰情况。
     每笔与前一个同向笔对比。
     """
@@ -175,7 +189,7 @@ def find_stroke_divergences(strokes: list[Stroke], macd: MACDData) -> list[Diver
             results.append(none_result)
             continue
 
-        result = check_divergence(stroke, prev_same, macd)
+        result = check_divergence(stroke, prev_same, macd, lang=lang)
         results.append(result)
 
     return results

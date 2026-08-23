@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.services.chan.divergence import DivergenceResult
+from app.services.chan.i18n import is_en
 from app.services.chan.pivot import Pivot
 from app.services.chan.stroke import Stroke
 
@@ -20,9 +21,17 @@ class Signal:
     description: str
     # 信号是否已确认：落在未确认（最后一笔）之上的信号需后续K线验证
     confirmed: bool = True
+    # 输出语言（由 generate_all_signals 统一注入），驱动 label 的中英
+    lang: str = "zh"
 
     @property
     def label(self) -> str:
+        if is_en(self.lang):
+            labels_en = {
+                "buy1": "1st Buy", "buy2": "2nd Buy", "buy3": "3rd Buy",
+                "sell1": "1st Sell", "sell2": "2nd Sell", "sell3": "3rd Sell",
+            }
+            return labels_en.get(self.type, self.type)
         labels = {
             "buy1": "一买", "buy2": "二买", "buy3": "三买",
             "sell1": "一卖", "sell2": "二卖", "sell3": "三卖",
@@ -37,6 +46,7 @@ class Signal:
 def generate_buy1_signals(
     strokes: list[Stroke],
     divergences: list[DivergenceResult],
+    lang: str = "zh",
 ) -> list[Signal]:
     """一类买点：下降笔末端出现底背驰。
     价格创新低，但MACD动量衰减（面积背驰），形成最强买点。
@@ -56,6 +66,10 @@ def generate_buy1_signals(
             strength=strength,
             divergence=div,
             description=(
+                f"Type-1 buy: down-leg formed a "
+                f"{'trend' if div.type == 'trend' else 'consolidation'} bottom divergence at "
+                f"{stroke.end_time}, MACD area ratio={div.area_ratio:.2f}. {div.description}"
+                if is_en(lang) else
                 f"一类买点：下降笔在 {stroke.end_time} 出现{div.type == 'trend' and '趋势' or '盘整'}底背驰，"
                 f"MACD面积比值={div.area_ratio:.2f}，{div.description}"
             ),
@@ -66,6 +80,7 @@ def generate_buy1_signals(
 def generate_sell1_signals(
     strokes: list[Stroke],
     divergences: list[DivergenceResult],
+    lang: str = "zh",
 ) -> list[Signal]:
     """一类卖点：上升笔末端出现顶背驰。
     """
@@ -84,6 +99,10 @@ def generate_sell1_signals(
             strength=strength,
             divergence=div,
             description=(
+                f"Type-1 sell: up-leg formed a "
+                f"{'trend' if div.type == 'trend' else 'consolidation'} top divergence at "
+                f"{stroke.end_time}, MACD area ratio={div.area_ratio:.2f}. {div.description}"
+                if is_en(lang) else
                 f"一类卖点：上升笔在 {stroke.end_time} 出现{div.type == 'trend' and '趋势' or '盘整'}顶背驰，"
                 f"MACD面积比值={div.area_ratio:.2f}，{div.description}"
             ),
@@ -94,6 +113,7 @@ def generate_sell1_signals(
 def generate_buy2_signals(
     strokes: list[Stroke],
     pivots: list[Pivot],
+    lang: str = "zh",
 ) -> list[Signal]:
     """二类买点：中枢向上突破后，回踩进入中枢区间但不破下沿ZD。
 
@@ -121,6 +141,10 @@ def generate_buy2_signals(
                     strength="medium",
                     divergence=None,
                     description=(
+                        f"Type-2 buy: at {retrace.end_time}, after breaking above the pivot "
+                        f"({pivot.zd:.2f}-{pivot.zg:.2f}), price pulled back to {retrace.end_price:.2f}, "
+                        f"staying inside the pivot without breaking ZD ({pivot.zd:.2f}) — confirms a type-2 buy"
+                        if is_en(lang) else
                         f"二类买点：{retrace.end_time} 中枢({pivot.zd:.2f}-{pivot.zg:.2f})向上突破后"
                         f"回踩至{retrace.end_price:.2f}，落在中枢内未破ZD({pivot.zd:.2f})，确认二买"
                     ),
@@ -131,6 +155,7 @@ def generate_buy2_signals(
 def generate_sell2_signals(
     strokes: list[Stroke],
     pivots: list[Pivot],
+    lang: str = "zh",
 ) -> list[Signal]:
     """二类卖点：中枢向下跌破后，反抽进入中枢区间但不过上沿ZG。"""
     signals: list[Signal] = []
@@ -155,6 +180,10 @@ def generate_sell2_signals(
                     strength="medium",
                     divergence=None,
                     description=(
+                        f"Type-2 sell: at {retrace.end_time}, after breaking below the pivot "
+                        f"({pivot.zd:.2f}-{pivot.zg:.2f}), price bounced to {retrace.end_price:.2f}, "
+                        f"staying inside the pivot without exceeding ZG ({pivot.zg:.2f}) — confirms a type-2 sell"
+                        if is_en(lang) else
                         f"二类卖点：{retrace.end_time} 中枢({pivot.zd:.2f}-{pivot.zg:.2f})向下跌破后"
                         f"反抽至{retrace.end_price:.2f}，落在中枢内未过ZG({pivot.zg:.2f})，确认二卖"
                     ),
@@ -165,6 +194,7 @@ def generate_sell2_signals(
 def generate_buy3_signals(
     strokes: list[Stroke],
     pivots: list[Pivot],
+    lang: str = "zh",
 ) -> list[Signal]:
     """三类买点：中枢向上突破后，回踩不回中枢（回调低点高于上沿ZG）。
 
@@ -192,6 +222,10 @@ def generate_buy3_signals(
                     strength="strong",
                     divergence=None,
                     description=(
+                        f"Type-3 buy: at {retrace.end_time}, after breaking above the pivot "
+                        f"({pivot.zd:.2f}-{pivot.zg:.2f}), price pulled back to {retrace.end_price:.2f}, "
+                        f"holding above ZG ({pivot.zg:.2f}) without re-entering — confirms a type-3 buy"
+                        if is_en(lang) else
                         f"三类买点：{retrace.end_time} 突破中枢({pivot.zd:.2f}-{pivot.zg:.2f})后"
                         f"回踩至{retrace.end_price:.2f}，高于ZG({pivot.zg:.2f})未回中枢，确认三买"
                     ),
@@ -202,6 +236,7 @@ def generate_buy3_signals(
 def generate_sell3_signals(
     strokes: list[Stroke],
     pivots: list[Pivot],
+    lang: str = "zh",
 ) -> list[Signal]:
     """三类卖点：中枢向下跌破后，反抽不回中枢（反弹高点低于下沿ZD）。"""
     signals: list[Signal] = []
@@ -226,6 +261,10 @@ def generate_sell3_signals(
                     strength="strong",
                     divergence=None,
                     description=(
+                        f"Type-3 sell: at {retrace.end_time}, after breaking below the pivot "
+                        f"({pivot.zd:.2f}-{pivot.zg:.2f}), price bounced to {retrace.end_price:.2f}, "
+                        f"staying below ZD ({pivot.zd:.2f}) without re-entering — confirms a type-3 sell"
+                        if is_en(lang) else
                         f"三类卖点：{retrace.end_time} 跌破中枢({pivot.zd:.2f}-{pivot.zg:.2f})后"
                         f"反抽至{retrace.end_price:.2f}，低于ZD({pivot.zd:.2f})未回中枢，确认三卖"
                     ),
@@ -237,15 +276,16 @@ def generate_all_signals(
     strokes: list[Stroke],
     divergences: list[DivergenceResult],
     pivots: list[Pivot],
+    lang: str = "zh",
 ) -> list[Signal]:
     """生成所有买卖点信号，按时间排序"""
     signals: list[Signal] = []
-    signals.extend(generate_buy1_signals(strokes, divergences))
-    signals.extend(generate_sell1_signals(strokes, divergences))
-    signals.extend(generate_buy2_signals(strokes, pivots))
-    signals.extend(generate_sell2_signals(strokes, pivots))
-    signals.extend(generate_buy3_signals(strokes, pivots))
-    signals.extend(generate_sell3_signals(strokes, pivots))
+    signals.extend(generate_buy1_signals(strokes, divergences, lang))
+    signals.extend(generate_sell1_signals(strokes, divergences, lang))
+    signals.extend(generate_buy2_signals(strokes, pivots, lang))
+    signals.extend(generate_sell2_signals(strokes, pivots, lang))
+    signals.extend(generate_buy3_signals(strokes, pivots, lang))
+    signals.extend(generate_sell3_signals(strokes, pivots, lang))
 
     signals.sort(key=lambda s: s.time)
 
@@ -259,4 +299,6 @@ def generate_all_signals(
             continue
         seen.add(key)
         deduped.append(s)
+    for sig in deduped:
+        sig.lang = lang
     return deduped
