@@ -51,7 +51,7 @@ struct AnalysisTabView: View {
             .sheet(isPresented: $showPaywall) { PaywallView() }
             .navigationDestination(isPresented: $showResults) {
                 if let analysis = vm.analysis {
-                    ResultDetailView(analysis: analysis, vm: vm, isSubscribed: store.isSubscribed)
+                    ResultDetailView(analysis: analysis, vm: vm)
                         .environmentObject(orientation)
                 }
             }

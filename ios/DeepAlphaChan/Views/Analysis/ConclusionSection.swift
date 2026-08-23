@@ -1,71 +1,70 @@
 import SwiftUI
 
-/// 分段控件的「结论」段：当前结构 + 操作倾向 + 待确认结构。
+/// 分段控件的「结论」段。
 ///
-/// 从 SignalPanelView 拆出。买卖点单独成段，因为它是逐条明细，和这里的
-/// 总体判断读法不同——混在一起时用户要滚过一长串信号才能看到风险提示。
+/// 精简为两张卡：
+/// - 形态解读：大白话讲当前市场在做什么，末尾并入一行精简的结构统计（原「当前结构」
+///   那段冗长的技术描述被这行取代）；
+/// - 操作倾向：操作结论 + 依据 + 风险提示（后端 caveats 已含「待确认结构」，故不再
+///   单列一张待确认卡，避免重复）。
 ///
-/// 字号统一走 ConclusionType 的三级（标题 17 / 正文 15 / 段内标签 13 加重），
-/// 见 SignalFormatting.swift 里的说明。
+/// 字号统一走 ConclusionType 的三级（见 SignalFormatting.swift）。
 struct ConclusionSection: View {
     let analysis: ChanAnalysis
 
     var body: some View {
         VStack(spacing: 12) {
-            if let narrative = analysis.narrative { narrativeCard(narrative) }
-            summaryCard
+            formCard
             if let rec = analysis.recommendation { recommendationCard(rec) }
-            if !analysis.pendingNotes.isEmpty { pendingCard }
         }
     }
 
-    /// 大白话形态解读：把缠论结构翻译成「市场此刻在做什么」，放在最前面，
-    /// 让看不懂笔/中枢/背驰的普通用户也能先读懂一句话结论。
-    private func narrativeCard(_ n: MarketNarrative) -> some View {
-        CollapsibleCard(title: "形态解读", systemImage: "text.magnifyingglass",
-                        accessoryChip: (n.phaseLabel, SignalFormatting.phaseColor(n.phase))) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(n.headline)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(Theme.textPrimary)
-                    .lineSpacing(4)
-                    .fixedSize(horizontal: false, vertical: true)
+    /// 一行精简结构统计，取代原「当前结构」那段长技术描述。
+    private var structureStats: String {
+        let pivots = analysis.strokePivots.count + analysis.segmentPivots.count
+        return "\(analysis.barsCount) 根K线 · \(analysis.strokes.count) 笔 · "
+            + "\(analysis.segments.count) 线段 · \(pivots) 中枢 · \(analysis.signals.count) 买卖点"
+    }
 
-                if !n.details.isEmpty {
-                    Divider().overlay(Theme.border)
-                    VStack(alignment: .leading, spacing: 7) {
-                        ForEach(n.details, id: \.self) { line in
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Circle()
-                                    .fill(Theme.textSecondary.opacity(0.55))
-                                    .frame(width: 4, height: 4)
-                                    .frame(width: 6, alignment: .center)
-                                    .offset(y: -4)
-                                Text(line)
-                                    .font(ConclusionType.body)
-                                    .foregroundColor(Theme.textSecondary)
-                                    .lineSpacing(ConclusionType.bodyLineSpacing)
-                                    .fixedSize(horizontal: false, vertical: true)
+    /// 形态解读（含结构统计）。默认展开——它是这张页面最该先读的一句话结论。
+    private var formCard: some View {
+        let n = analysis.narrative
+        let chip: (String, Color) = n != nil
+            ? (n!.phaseLabel, SignalFormatting.phaseColor(n!.phase))
+            : (SignalFormatting.trendLabel(analysis.currentTrend),
+               SignalFormatting.trendColor(analysis.currentTrend))
+
+        return CollapsibleCard(title: "形态解读", systemImage: "text.magnifyingglass",
+                               accessoryChip: chip, defaultExpanded: true) {
+            VStack(alignment: .leading, spacing: 10) {
+                if let n {
+                    Text(n.headline)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(Theme.textPrimary)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if !n.details.isEmpty {
+                        Divider().overlay(Theme.border)
+                        VStack(alignment: .leading, spacing: 7) {
+                            ForEach(n.details, id: \.self) { line in
+                                bullet(line, color: Theme.textSecondary)
                             }
                         }
                     }
+                } else {
+                    // 结构没成形（笔太少）时没有大白话解读，退回后端摘要
+                    Text(analysis.summary)
+                        .font(ConclusionType.body)
+                        .foregroundColor(Theme.textSecondary)
+                        .lineSpacing(ConclusionType.bodyLineSpacing)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-            }
-        }
-    }
 
-    private var summaryCard: some View {
-        CollapsibleCard(title: "当前结构", systemImage: "chart.xyaxis.line",
-                        accessoryChip: (SignalFormatting.trendLabel(analysis.currentTrend),
-                                        SignalFormatting.trendColor(analysis.currentTrend))) {
-            VStack(alignment: .leading, spacing: 10) {
-                Chip(text: "\(analysis.barsCount) 根 K 线", color: Theme.textSecondary)
-                Text(analysis.summary)
-                    .font(ConclusionType.body)
-                    // 与「待确认结构」正文同为 textSecondary：都是详情正文，
-                    // 统一成次要色，把 textPrimary 留给标题/结论那一层。
+                Divider().overlay(Theme.border)
+                Text(structureStats)
+                    .font(.caption)
                     .foregroundColor(Theme.textSecondary)
-                    .lineSpacing(ConclusionType.bodyLineSpacing)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -88,35 +87,29 @@ struct ConclusionSection: View {
                 }
 
                 if !rec.reasons.isEmpty {
-                    // 依据是详情正文，与「待确认结构」一致用 textSecondary
                     BulletList(title: "依据", items: rec.reasons, color: Theme.textSecondary)
                 }
                 if !rec.caveats.isEmpty {
+                    // 风险提示已包含「待确认结构」（后端 caveats.extend(pending_notes)）
                     BulletList(title: "风险提示", items: rec.caveats, color: Theme.segment)
                 }
             }
         }
     }
 
-    private var pendingCard: some View {
-        CollapsibleCard(title: "待确认结构", systemImage: "hourglass",
-                        accessoryChip: ("\(analysis.pendingNotes.count) 项", Theme.segment)) {
-            VStack(alignment: .leading, spacing: 7) {
-                ForEach(analysis.pendingNotes, id: \.self) { note in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Circle()
-                            .fill(Theme.textSecondary.opacity(0.55))
-                            .frame(width: 4, height: 4)
-                            .frame(width: 6, alignment: .center)
-                            .offset(y: -4)
-                        Text(note)
-                            .font(ConclusionType.body)
-                            .foregroundColor(Theme.textSecondary)
-                            .lineSpacing(ConclusionType.bodyLineSpacing)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
+    /// 项目符号一行（与 BulletList 内部样式一致，供 details 复用）。
+    private func bullet(_ text: String, color: Color) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Circle()
+                .fill(color.opacity(0.55))
+                .frame(width: 4, height: 4)
+                .frame(width: 6, alignment: .center)
+                .offset(y: -4)
+            Text(text)
+                .font(ConclusionType.body)
+                .foregroundColor(color)
+                .lineSpacing(ConclusionType.bodyLineSpacing)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

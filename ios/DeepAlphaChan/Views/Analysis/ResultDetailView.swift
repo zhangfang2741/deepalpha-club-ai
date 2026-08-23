@@ -7,11 +7,9 @@ import SwiftUI
 struct ResultDetailView: View {
     let analysis: ChanAnalysis
     @ObservedObject var vm: ChanViewModel
-    let isSubscribed: Bool
 
     @EnvironmentObject private var orientation: AppOrientation
 
-    @State private var showPaywall = false
     @State private var showFullscreenChart = false
 
     var body: some View {
@@ -19,9 +17,7 @@ struct ResultDetailView: View {
             VStack(spacing: 14) {
                 ChartSection(analysis: analysis, vm: vm, onFullscreen: openFullscreen)
 
-                ResultSegments(analysis: analysis, vm: vm, isSubscribed: isSubscribed) {
-                    showPaywall = true
-                }
+                ResultSegments(analysis: analysis)
 
                 compactDisclaimer
             }
@@ -31,7 +27,6 @@ struct ResultDetailView: View {
         .background(Theme.background)
         .navigationTitle(navTitle)
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showPaywall) { PaywallView() }
         .fullScreenCover(isPresented: $showFullscreenChart) {
             ChartFullscreenView(analysis: analysis, vm: vm)
                 .environmentObject(orientation)
