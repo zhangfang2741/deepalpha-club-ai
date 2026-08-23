@@ -9,6 +9,7 @@ struct DeepAlphaChanApp: App {
     @StateObject private var store = StoreManager()
     @StateObject private var usage = UsageTracker()
     @StateObject private var orientation = AppOrientation()
+    @StateObject private var localization = LocalizationManager.shared
 
     var body: some Scene {
         WindowGroup {
@@ -17,6 +18,11 @@ struct DeepAlphaChanApp: App {
                 .environmentObject(store)
                 .environmentObject(usage)
                 .environmentObject(orientation)
+                .environmentObject(localization)
+                // 切换语言时把新 locale 注入环境，所有系统格式化随之走对应语言；
+                // 再用 .id 强制整棵视图树重建，确保缓存了旧语言的视图也刷新。
+                .environment(\.locale, localization.locale)
+                .id(localization.language)
                 .tint(Theme.accent)
                 .preferredColorScheme(.dark)
                 // AppDelegate 是 UIKit 侧的，拿不到 SwiftUI 的 @StateObject，

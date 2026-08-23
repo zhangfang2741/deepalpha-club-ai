@@ -575,10 +575,10 @@ struct ChanChartView: View {
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(Theme.textSecondary)
             HStack(spacing: 8) {
-                infoText("开", String(format: "%.2f", c.open))
-                infoText("高", String(format: "%.2f", c.high))
-                infoText("低", String(format: "%.2f", c.low))
-                infoText("收", String(format: "%.2f", c.close))
+                infoText(L("开"), String(format: "%.2f", c.open))
+                infoText(L("高"), String(format: "%.2f", c.high))
+                infoText(L("低"), String(format: "%.2f", c.low))
+                infoText(L("收"), String(format: "%.2f", c.close))
             }
             .font(.system(size: 10))
             HStack(spacing: 4) {

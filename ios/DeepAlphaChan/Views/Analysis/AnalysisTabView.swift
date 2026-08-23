@@ -36,7 +36,7 @@ struct AnalysisTabView: View {
             }
             .scrollBounceBehavior(.basedOnSize)
             .background(Theme.background)
-            .navigationTitle("缠论分析")
+            .navigationTitle(L("缠论分析"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if !store.isSubscribed {
@@ -85,13 +85,13 @@ struct AnalysisTabView: View {
             HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(Theme.segment).font(.subheadline)
-                Text("不要只看技术信号")
+                Text(L("不要只看技术信号"))
                     .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
             }
-            Text("缠论主要观察价格走势与市场结构。投资决策还应结合基本面、成长性、估值、盈利预期和市场环境综合判断。")
+            Text(L("缠论主要观察价格走势与市场结构。投资决策还应结合基本面、成长性、估值、盈利预期和市场环境综合判断。"))
                 .font(.footnote).foregroundColor(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("技术上的「买点」，不等于投资上的「值得买」。")
+            Text(L("技术上的「买点」，不等于投资上的「值得买」。"))
                 .font(.footnote.weight(.medium)).foregroundColor(Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -110,10 +110,10 @@ struct AnalysisTabView: View {
         Button { showPaywall = true } label: {
             HStack(spacing: 8) {
                 Image(systemName: "crown.fill").foregroundColor(Theme.segment).font(.caption)
-                Text("今日可分析 \(usage.remaining)/\(usage.dailyQuota) 支股票")
+                Text(L("今日可分析 %lld/%lld 支股票", usage.remaining, usage.dailyQuota))
                     .font(.caption).foregroundColor(Theme.textPrimary)
                 Spacer()
-                Text("升级 Pro 无限次 ›").font(.caption.bold()).foregroundColor(Theme.accent)
+                Text(L("升级 Pro 无限次 ›")).font(.caption.bold()).foregroundColor(Theme.accent)
             }
             .padding(10)
             .background(Theme.segment.opacity(0.08))
@@ -125,7 +125,7 @@ struct AnalysisTabView: View {
     private var loadingPlaceholder: some View {
         VStack(spacing: 12) {
             ProgressView().tint(Theme.accent)
-            Text("正在拉取行情并计算缠论结构…")
+            Text(L("正在拉取行情并计算缠论结构…"))
                 .font(.subheadline).foregroundColor(Theme.textSecondary)
         }
         .frame(maxWidth: .infinity, minHeight: 200)
@@ -136,7 +136,7 @@ struct AnalysisTabView: View {
             Image(systemName: "exclamationmark.triangle").font(.largeTitle).foregroundColor(Theme.down)
             Text(message).font(.subheadline).foregroundColor(Theme.textSecondary)
                 .multilineTextAlignment(.center)
-            Button("重试") { Task { await triggerAnalysis() } }
+            Button(L("重试")) { Task { await triggerAnalysis() } }
                 .buttonStyle(.borderedProminent).tint(Theme.accent)
         }
         .frame(maxWidth: .infinity, minHeight: 200).padding()
@@ -147,7 +147,7 @@ struct AnalysisTabView: View {
         VStack(spacing: 16) {
             Image(systemName: "chart.bar.xaxis")
                 .font(.system(size: 40)).foregroundColor(Theme.textSecondary)
-            Text("输入股票代码，开始缠论分析")
+            Text(L("输入股票代码，开始缠论分析"))
                 .font(.subheadline).foregroundColor(Theme.textSecondary)
 
             HStack(spacing: 8) {
@@ -167,7 +167,7 @@ struct AnalysisTabView: View {
                 }
             }
 
-            Text("看不懂图上的线？先去「学习」页读两分钟。")
+            Text(L("看不懂图上的线？先去「学习」页读两分钟。"))
                 .font(.caption2).foregroundColor(Theme.textSecondary)
                 .padding(.top, 4)
         }

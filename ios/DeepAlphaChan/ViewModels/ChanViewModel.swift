@@ -65,7 +65,7 @@ final class ChanViewModel: ObservableObject {
     func runAnalysis() async {
         let sym = requestSymbol
         guard !sym.isEmpty else {
-            errorMessage = "请输入股票代码"
+            errorMessage = L("请输入股票代码")
             return
         }
         isLoading = true
@@ -79,7 +79,7 @@ final class ChanViewModel: ObservableObject {
             // 失败时保留上一次结果，仅提示错误，避免清空已呈现的图表
             errorMessage = error.message
         } catch {
-            errorMessage = "分析失败，请稍后再试"
+            errorMessage = L("分析失败，请稍后再试")
         }
     }
 

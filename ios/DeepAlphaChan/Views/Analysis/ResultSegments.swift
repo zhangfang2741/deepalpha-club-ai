@@ -14,8 +14,8 @@ struct ResultSegments: View {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .conclusion: return "结论"
-            case .signals: return "买卖点"
+            case .conclusion: return L("结论")
+            case .signals: return L("买卖点")
             }
         }
     }

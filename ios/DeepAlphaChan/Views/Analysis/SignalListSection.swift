@@ -15,13 +15,13 @@ struct SignalListSection: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            SectionCard(title: "买卖点", systemImage: "flag.fill") {
+            SectionCard(title: L("买卖点"), systemImage: "flag.fill") {
                 if analysis.signals.isEmpty {
                     emptyHint
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
                         // 常驻说明：明确「买卖点」是缠论的技术信号名词，不是操作指令
-                        Text("「买卖点」是缠论对价格结构的技术信号命名，非买入/卖出操作建议。")
+                        Text(L("「买卖点」是缠论对价格结构的技术信号命名，非买入/卖出操作建议。"))
                             .font(.caption2)
                             .foregroundColor(Theme.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -36,9 +36,9 @@ struct SignalListSection: View {
 
     private var emptyHint: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("当前区间未识别到明确买卖点")
+            Text(L("当前区间未识别到明确买卖点"))
                 .font(ConclusionType.body).foregroundColor(Theme.textPrimary)
-            Text("可以试试换个时间范围，或切到周线看更大级别的结构。")
+            Text(L("可以试试换个时间范围，或切到周线看更大级别的结构。"))
                 .font(.footnote).foregroundColor(Theme.textSecondary)
                 .lineSpacing(3)
         }
@@ -68,7 +68,7 @@ struct SignalListSection: View {
                     }
                     Chip(text: SignalFormatting.strengthLabel(sig.strength),
                          color: SignalFormatting.strengthColor(sig.strength))
-                    if !sig.confirmed { Chip(text: "未确认", color: Theme.textSecondary) }
+                    if !sig.confirmed { Chip(text: L("未确认"), color: Theme.textSecondary) }
                     Spacer()
                     Text(sig.time).font(.caption).foregroundColor(Theme.textSecondary)
                 }
@@ -79,12 +79,12 @@ struct SignalListSection: View {
                     .lineSpacing(ConclusionType.bodyLineSpacing)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 12) {
-                    Text("价位 \(String(format: "%.2f", sig.price))")
+                    Text(L("价位 %@", String(format: "%.2f", sig.price)))
                         .font(.caption2).foregroundColor(Theme.textSecondary)
                     if let ar = sig.areaRatio {
                         GlossaryLink(term: "面积比") {
                             HStack(spacing: 2) {
-                                Text("面积比 \(String(format: "%.2f", ar))")
+                                Text(L("面积比 %@", String(format: "%.2f", ar)))
                                     .font(.caption2)
                                     .foregroundColor(Theme.textSecondary)
                                 Image(systemName: "questionmark.circle")
@@ -107,7 +107,7 @@ struct SignalListSection: View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: "info.circle")
                 .font(.caption2).foregroundColor(Theme.textSecondary)
-            Text("以上为结构识别结果，不构成投资建议。信号需与你的持仓周期匹配，参见学习页「走势级别」。")
+            Text(L("以上为结构识别结果，不构成投资建议。信号需与你的持仓周期匹配，参见学习页「走势级别」。"))
                 .font(.caption2).foregroundColor(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

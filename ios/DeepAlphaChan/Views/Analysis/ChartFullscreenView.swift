@@ -47,7 +47,7 @@ struct ChartFullscreenView: View {
             Text(vm.symbol.uppercased())
                 .font(.subheadline.bold())
                 .foregroundColor(Theme.textPrimary)
-            Text(vm.freq == "weekly" ? "周线" : "日线")
+            Text(vm.freq == "weekly" ? L("周线") : L("日线"))
                 .font(.caption)
                 .foregroundColor(Theme.accent)
                 .padding(.horizontal, 6).padding(.vertical, 2)

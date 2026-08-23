@@ -34,7 +34,7 @@ struct ResultDetailView: View {
     }
 
     private var navTitle: String {
-        let freq = vm.freq == "weekly" ? "周线" : "日线"
+        let freq = vm.freq == "weekly" ? L("周线") : L("日线")
         return "\(vm.symbol.uppercased()) · \(freq)"
     }
 
@@ -48,7 +48,7 @@ struct ResultDetailView: View {
 
     /// 压缩版免责声明。完整版在「我的」页——App Store 要求这个可见，不能删。
     private var compactDisclaimer: some View {
-        Text("算法自动生成，仅供技术研究，不构成投资建议。")
+        Text(L("算法自动生成，仅供技术研究，不构成投资建议。"))
             .font(.caption2)
             .foregroundColor(Theme.textSecondary)
             .frame(maxWidth: .infinity)

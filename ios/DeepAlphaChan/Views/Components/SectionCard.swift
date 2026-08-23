@@ -87,7 +87,7 @@ struct DisclaimerBanner: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundColor(Theme.segment)
                 .font(.caption)
-            Text("以下缠论结构、买卖点及建议均由算法自动生成，仅供技术研究参考，不构成投资建议。投资有风险，决策需自主判断。")
+            Text(L("以下缠论结构、买卖点及建议均由算法自动生成，仅供技术研究参考，不构成投资建议。投资有风险，决策需自主判断。"))
                 .font(.caption2)
                 .foregroundColor(Theme.textSecondary)
         }

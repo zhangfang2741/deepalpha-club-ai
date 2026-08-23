@@ -1,10 +1,11 @@
 import SwiftUI
 import StoreKit
 
-/// 我的：账号信息、订阅、免责声明、登出。
+/// 我的：账号信息、语言、订阅、免责声明、登出。
 struct ProfileView: View {
     @EnvironmentObject var auth: AuthViewModel
     @EnvironmentObject var store: StoreManager
+    @EnvironmentObject var localization: LocalizationManager
     @State private var showLogoutAlert = false
     @State private var showDeleteAlert = false
     @State private var showPaywall = false
@@ -13,62 +14,74 @@ struct ProfileView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("账号") {
+                Section(L("账号")) {
                     if let p = auth.profile {
-                        row("账号", p.displayAccount)
-                        if let name = p.username { row("用户名", name) }
+                        row(L("账号"), p.displayAccount)
+                        if let name = p.username { row(L("用户名"), name) }
                     } else {
-                        Text("加载中…").foregroundColor(Theme.textSecondary)
+                        Text(L("加载中…")).foregroundColor(Theme.textSecondary)
                     }
                 }
 
-                Section("订阅") {
+                Section(L("偏好设置")) {
+                    // 语言切换：跟随系统（按地区自动）/ 中文 / English。选完立刻生效。
+                    Picker(selection: $localization.preference) {
+                        Text(L("跟随系统")).tag(AppLanguage?.none)
+                        ForEach(AppLanguage.allCases) { lang in
+                            Text(lang.nativeName).tag(AppLanguage?.some(lang))
+                        }
+                    } label: {
+                        Label(L("语言"), systemImage: "globe")
+                    }
+                }
+
+                Section(L("订阅")) {
                     HStack {
-                        Text("当前方案").foregroundColor(Theme.textSecondary)
+                        Text(L("当前方案")).foregroundColor(Theme.textSecondary)
                         Spacer()
                         if store.isSubscribed {
-                            Label("Pro 会员", systemImage: "crown.fill")
+                            Label(L("Pro 会员"), systemImage: "crown.fill")
                                 .font(.subheadline.bold()).foregroundColor(Theme.segment)
                         } else {
-                            Text("免费版").foregroundColor(Theme.textPrimary)
+                            Text(L("免费版")).foregroundColor(Theme.textPrimary)
                         }
                     }
                     if store.isSubscribed {
-                        Button("管理订阅") { showManageSubscriptions = true }
+                        Button(L("管理订阅")) { showManageSubscriptions = true }
                     } else {
                         Button {
                             showPaywall = true
                         } label: {
-                            Label("升级 Pro（7 天免费试用）", systemImage: "crown.fill")
+                            Label(L("升级 Pro（7 天免费试用）"), systemImage: "crown.fill")
                                 .foregroundColor(Theme.segment)
                         }
                     }
-                    Button("恢复购买") { Task { await store.restore() } }
+                    Button(L("恢复购买")) { Task { await store.restore() } }
                         .foregroundColor(Theme.accent)
                 }
 
-                Section("关于") {
-                    row("版本", appVersion)
+                Section(L("关于")) {
+                    row(L("版本"), appVersion)
                     Link(destination: URL(string: "https://deepalpha.club/privacy")!) {
-                        Text("隐私政策")
+                        Text(L("隐私政策"))
                     }
                     Link(destination: URL(string: "https://deepalpha.club/terms")!) {
-                        Text("服务条款")
+                        Text(L("服务条款"))
                     }
                 }
 
                 Section {
-                    Text("本 App 提供的缠论结构识别、买卖点标注与操作倾向均由算法自动生成，仅供技术研究与学习参考，不构成任何投资建议或买卖要约。证券投资有风险，任何决策请自主判断并自负盈亏。")
+                    Text(L("本 App 提供的缠论结构识别、买卖点标注与操作倾向均由算法自动生成，仅供技术研究与学习参考，不构成任何投资建议或买卖要约。证券投资有风险，任何决策请自主判断并自负盈亏。"))
                         .font(.caption).foregroundColor(Theme.textSecondary)
                 } header: {
-                    Text("免责声明")
+                    Text(L("免责声明"))
                 }
 
                 Section {
                     Button(role: .destructive) {
                         showLogoutAlert = true
                     } label: {
-                        Text("退出登录").frame(maxWidth: .infinity)
+                        Text(L("退出登录")).frame(maxWidth: .infinity)
                     }
                 }
 
@@ -78,35 +91,35 @@ struct ProfileView: View {
                     } label: {
                         HStack {
                             if auth.isLoading { ProgressView() }
-                            Text("删除账号").frame(maxWidth: .infinity)
+                            Text(L("删除账号")).frame(maxWidth: .infinity)
                         }
                     }
                     .disabled(auth.isLoading)
                 } footer: {
-                    Text("删除账号将永久移除你的账户及关联数据，此操作不可恢复。")
+                    Text(L("删除账号将永久移除你的账户及关联数据，此操作不可恢复。"))
                         .font(.caption2)
                 }
             }
-            .navigationTitle("我的")
+            .navigationTitle(L("我的"))
             .navigationBarTitleDisplayMode(.inline)
             .task { if auth.profile == nil { await auth.loadProfile() } }
-            .alert("确认退出登录？", isPresented: $showLogoutAlert) {
-                Button("取消", role: .cancel) {}
-                Button("退出", role: .destructive) {
+            .alert(L("确认退出登录？"), isPresented: $showLogoutAlert) {
+                Button(L("取消"), role: .cancel) {}
+                Button(L("退出"), role: .destructive) {
                     // 不需要 dismiss：登出后 RootView 会切回登录页
                     auth.logout()
                 }
             }
             .sheet(isPresented: $showPaywall) { PaywallView() }
             .manageSubscriptionsSheet(isPresented: $showManageSubscriptions)
-            .alert("确认删除账号？", isPresented: $showDeleteAlert) {
-                Button("取消", role: .cancel) {}
-                Button("永久删除", role: .destructive) {
+            .alert(L("确认删除账号？"), isPresented: $showDeleteAlert) {
+                Button(L("取消"), role: .cancel) {}
+                Button(L("永久删除"), role: .destructive) {
                     // deleteAccount 成功后内部会 logout，RootView 自动切回登录页
                     Task { _ = await auth.deleteAccount() }
                 }
             } message: {
-                Text("此操作将永久删除你的账号及关联数据，且不可恢复。")
+                Text(L("此操作将永久删除你的账号及关联数据，且不可恢复。"))
             }
         }
     }

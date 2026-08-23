@@ -42,11 +42,11 @@ struct LayerToggles: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                chip("分型", isOn: $vm.showFractals)
-                chip("笔", isOn: $vm.showStrokes)
-                chip("线段", isOn: $vm.showSegments)
-                chip("中枢", isOn: $vm.showPivots)
-                chip("买卖点", isOn: $vm.showSignals)
+                chip(L("分型"), isOn: $vm.showFractals)
+                chip(L("笔"), isOn: $vm.showStrokes)
+                chip(L("线段"), isOn: $vm.showSegments)
+                chip(L("中枢"), isOn: $vm.showPivots)
+                chip(L("买卖点"), isOn: $vm.showSignals)
             }
             .padding(.horizontal, 2)
         }
@@ -83,14 +83,14 @@ struct ChartLegend: View {
                     item(Theme.pivotFill, "中枢")
                     item(Theme.topFractal, "顶分型")
                     item(Theme.bottomFractal, "底分型")
-                    Text("虚线=未确认").font(.caption2).foregroundColor(Theme.textSecondary)
+                    Text(L("虚线=未确认")).font(.caption2).foregroundColor(Theme.textSecondary)
                 }
                 .padding(.horizontal, 4)
             }
 
             HStack(spacing: 3) {
                 Image(systemName: "hand.tap").font(.system(size: 9))
-                Text("点术语可查看解释").font(.caption2)
+                Text(L("点术语可查看解释")).font(.caption2)
             }
             .foregroundColor(Theme.accent.opacity(0.75))
             .frame(maxWidth: .infinity, alignment: .leading)

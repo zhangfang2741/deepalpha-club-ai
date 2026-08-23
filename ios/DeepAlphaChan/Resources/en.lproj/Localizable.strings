@@ -1,0 +1,119 @@
+/* DeepAlphaChan localized strings — English. Keys are the Chinese source text. */
+
+/* Tab bar */
+"分析" = "Analyze";
+"学习" = "Learn";
+"我的" = "Me";
+
+/* Analysis — conditions page */
+"缠论分析" = "Chan Analysis";
+"不要只看技术信号" = "Don't rely on technical signals alone";
+"缠论主要观察价格走势与市场结构。投资决策还应结合基本面、成长性、估值、盈利预期和市场环境综合判断。" = "Chan theory focuses on price action and market structure. Investment decisions should also weigh fundamentals, growth, valuation, earnings expectations and the overall market environment.";
+"技术上的「买点」，不等于投资上的「值得买」。" = "A technical \"buy point\" is not the same as being \"worth buying\" as an investment.";
+"今日可分析 %lld/%lld 支股票" = "%lld/%lld analyses left today";
+"升级 Pro 无限次 ›" = "Upgrade to Pro for unlimited ›";
+"正在拉取行情并计算缠论结构…" = "Fetching prices and computing Chan structure…";
+"重试" = "Retry";
+"输入股票代码，开始缠论分析" = "Enter a ticker to start Chan analysis";
+"看不懂图上的线？先去「学习」页读两分钟。" = "Not sure what the lines mean? Spend two minutes on the Learn tab first.";
+
+/* Market picker */
+"美股" = "US";
+"A 股" = "A-Share";
+"港股" = "HK";
+"代码，如 AAPL" = "Ticker, e.g. AAPL";
+"6 位代码，如 600519" = "6-digit code, e.g. 600519";
+"4–5 位代码，如 0700" = "4–5 digit code, e.g. 0700";
+
+/* Query bar */
+"日线" = "Daily";
+"周线" = "Weekly";
+"起始" = "From";
+"截止" = "To";
+"分析中" = "Analyzing";
+"分析" = "Analyze";
+
+/* Result detail */
+"算法自动生成，仅供技术研究，不构成投资建议。" = "Auto-generated for technical research only; not investment advice.";
+
+/* Segments */
+"结论" = "Summary";
+"买卖点" = "Signals";
+
+/* Conclusion */
+"%lld 根K线 · %lld 笔 · %lld 线段 · %lld 中枢 · %lld 买卖点" = "%lld bars · %lld strokes · %lld segments · %lld pivots · %lld signals";
+"形态解读" = "Pattern Read";
+"技术形态倾向" = "Technical Bias";
+"依据" = "Basis";
+"风险提示" = "Risk Notes";
+
+/* Trend / bias / strength labels */
+"上涨趋势" = "Uptrend";
+"下跌趋势" = "Downtrend";
+"震荡整理" = "Range-bound";
+"偏多" = "Bullish";
+"偏空" = "Bearish";
+"中性" = "Neutral";
+"强" = "Strong";
+"中" = "Medium";
+"弱" = "Weak";
+
+/* Disclaimers */
+"以下缠论结构、买卖点及建议均由算法自动生成，仅供技术研究参考，不构成投资建议。投资有风险，决策需自主判断。" = "The Chan structure, signals and readings below are auto-generated for technical research only, and are not investment advice. Investing carries risk; decide for yourself.";
+"「买卖点」是缠论对价格结构的技术信号命名，非买入/卖出操作建议。" = "\"Signals\" are Chan's names for technical price-structure patterns, not buy/sell recommendations.";
+"以上为结构识别结果，不构成投资建议。信号需与你的持仓周期匹配，参见学习页「走势级别」。" = "The above are structure-detection results, not investment advice. Match signals to your holding horizon — see \"Trend Levels\" on the Learn tab.";
+
+/* Signal list */
+"未确认" = "Unconfirmed";
+"价位 %@" = "Price %@";
+"面积比 %@" = "Area ratio %@";
+"当前区间未识别到明确买卖点" = "No clear signals in the current range";
+"可以试试换个时间范围，或切到周线看更大级别的结构。" = "Try a different date range, or switch to weekly for higher-level structure.";
+
+/* Chart legend / toggles */
+"分型" = "Fractals";
+"笔" = "Strokes";
+"线段" = "Segments";
+"中枢" = "Pivots";
+"虚线=未确认" = "Dashed = unconfirmed";
+"点术语可查看解释" = "Tap a term for its definition";
+
+/* Cursor OHLC */
+"开" = "O";
+"高" = "H";
+"低" = "L";
+"收" = "C";
+
+/* ViewModel errors */
+"请输入股票代码" = "Please enter a ticker";
+"分析失败，请稍后再试" = "Analysis failed, please try again later";
+
+/* Profile */
+"账号" = "Account";
+"用户名" = "Username";
+"加载中…" = "Loading…";
+"偏好设置" = "Preferences";
+"跟随系统" = "Follow system";
+"语言" = "Language";
+"订阅" = "Subscription";
+"当前方案" = "Current plan";
+"Pro 会员" = "Pro member";
+"免费版" = "Free";
+"管理订阅" = "Manage subscription";
+"升级 Pro（7 天免费试用）" = "Upgrade to Pro (7-day free trial)";
+"恢复购买" = "Restore purchases";
+"关于" = "About";
+"版本" = "Version";
+"隐私政策" = "Privacy Policy";
+"服务条款" = "Terms of Service";
+"本 App 提供的缠论结构识别、买卖点标注与操作倾向均由算法自动生成，仅供技术研究与学习参考，不构成任何投资建议或买卖要约。证券投资有风险，任何决策请自主判断并自负盈亏。" = "The Chan structure detection, signal labels and technical bias in this app are auto-generated for technical research and learning only, and do not constitute investment advice or any offer to buy or sell. Securities investing carries risk; make your own decisions and bear your own gains and losses.";
+"免责声明" = "Disclaimer";
+"退出登录" = "Sign out";
+"删除账号" = "Delete account";
+"删除账号将永久移除你的账户及关联数据，此操作不可恢复。" = "Deleting your account permanently removes your account and associated data. This cannot be undone.";
+"确认退出登录？" = "Sign out?";
+"取消" = "Cancel";
+"退出" = "Sign out";
+"确认删除账号？" = "Delete account?";
+"永久删除" = "Delete permanently";
+"此操作将永久删除你的账号及关联数据，且不可恢复。" = "This will permanently delete your account and associated data, and cannot be undone.";

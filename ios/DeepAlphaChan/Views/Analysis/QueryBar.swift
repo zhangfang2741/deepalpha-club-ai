@@ -44,8 +44,8 @@ struct QueryBar: View {
             }
 
             Picker("", selection: $vm.freq) {
-                Text("日线").tag("daily")
-                Text("周线").tag("weekly")
+                Text(L("日线")).tag("daily")
+                Text(L("周线")).tag("weekly")
             }
             .pickerStyle(.segmented)
 
@@ -53,8 +53,8 @@ struct QueryBar: View {
                 // DatePicker 自带的 label 在两列并排时宽度不够会被截断，
                 // 改成 labelsHidden + 外置文字标签。
                 HStack(spacing: 10) {
-                    dateField("起始", selection: $vm.startDate)
-                    dateField("截止", selection: $vm.endDate)
+                    dateField(L("起始"), selection: $vm.startDate)
+                    dateField(L("截止"), selection: $vm.endDate)
                 }
 
                 Button {
@@ -62,7 +62,7 @@ struct QueryBar: View {
                 } label: {
                     HStack(spacing: 6) {
                         if vm.isLoading { ProgressView().controlSize(.small).tint(.white) }
-                        Text(vm.isLoading ? "分析中" : "分析").fontWeight(.semibold)
+                        Text(vm.isLoading ? L("分析中") : L("分析")).fontWeight(.semibold)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
