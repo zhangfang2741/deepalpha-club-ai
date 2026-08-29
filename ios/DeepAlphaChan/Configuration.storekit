@@ -37,7 +37,7 @@
           },
           "localizations" : [
             {
-              "description" : "解锁全部缠论分析与结构 GAP，无每日次数限制",
+              "description" : "解锁全部缠论分析，不受每日 3 支标的限制",
               "displayName" : "DeepAlpha Pro 月度会员",
               "locale" : "zh_CN"
             }
