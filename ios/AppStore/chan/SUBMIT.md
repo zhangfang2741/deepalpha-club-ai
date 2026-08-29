@@ -45,8 +45,15 @@ club.deepalpha.chan.pro.monthly
 |----|-----|
 | 产品 ID | `club.deepalpha.chan.pro.monthly` |
 | 周期 | 1 个月（P1M） |
-| 本地测试价 | 9.99（ASC 里按你实际定价填，人民币区注意换算） |
+| 本地测试价 | ¥9.90（storefront 设为 CHN；ASC 里要挑一个真实存在的价格档位） |
 | 免费试用 | 有（付费墙文案写的是「7 天免费试用」，ASC 里要配成 **7 天**，否则文案与实际不符会被拒） |
+
+**各地区货币无需在代码里处理。** 付费墙显示的是 `product.displayPrice`，StoreKit 会按用户
+账号所在 storefront 返回本地化的货币符号与格式（美区自动是 `$X.XX` + 英文 `%@/month`）。
+ASC 里选定基准价后，Apple 会按它的定价档位表自动生成其余地区价格，可在「所有市场价格」里逐区覆盖。
+
+`Configuration.storekit` 里的 `_storefront` / `displayPrice` **只对 Xcode 本地调试生效**，
+真机、TestFlight、线上都不读它。要本地验证某个区的那一屏，临时改这两个字段即可（一次只能模拟一个区）。
 
 - 填写订阅群组、显示名称、描述
 - 上传审核截图（用付费墙那一屏，可真机截）

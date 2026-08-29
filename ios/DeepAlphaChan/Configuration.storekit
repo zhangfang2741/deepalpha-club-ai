@@ -8,7 +8,7 @@
     "_failTransactionsEnabled" : false,
     "_lastSynchronizedDate" : 0,
     "_locale" : "zh_CN",
-    "_storefront" : "USA",
+    "_storefront" : "CHN",
     "_storeKitErrors" : []
   },
   "subscriptionGroups" : [
@@ -26,7 +26,7 @@
         {
           "adHocOffers" : [],
           "codeOffers" : [],
-          "displayPrice" : "9.99",
+          "displayPrice" : "9.90",
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000011",
