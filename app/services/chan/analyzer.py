@@ -4,10 +4,21 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.core.logging import logger
+from app.services.chan.bias import (
+    DIVERGENCE_WEIGHT,
+    PIVOT_WEIGHT,
+    SEGMENT_WEIGHT,
+    SIGNAL_WEIGHT,
+    STRONG_BIAS_THRESHOLD,
+    STROKE_WEIGHT,
+    UNCONFIRMED_DISCOUNT,
+    BiasFactor,
+    score_to_bias,
+)
 from app.services.chan.divergence import DivergenceResult, MACDData, calc_macd, find_stroke_divergences
 from app.services.chan.fractal import Fractal, MergedCandle, find_fractals, merge_candles
 from app.services.chan.i18n import is_en, pick
-from app.services.chan.narrative import MarketNarrative, build_narrative
+from app.services.chan.narrative import MarketNarrative, _volume_readout, build_narrative
 from app.services.chan.pivot import Pivot, find_segment_pivots, find_stroke_pivots
 from app.services.chan.segment import Segment, find_segments
 from app.services.chan.signals import Signal, generate_all_signals
@@ -26,6 +37,10 @@ class Recommendation:
     bias: str            # bullish / bearish / neutral
     reasons: list[str] = field(default_factory=list)   # 依据（为什么这样建议）
     caveats: list[str] = field(default_factory=list)   # 风险提示
+    # 加权明细：bias 由 factors 加总得出。不进 API schema，仅供测试与排查——
+    # 结论和依据一旦对不上，看这两个字段就能定位是哪一项权重出了问题。
+    score: float = 0.0
+    factors: list[BiasFactor] = field(default_factory=list)
 
 
 @dataclass
@@ -163,8 +178,8 @@ class ChanAnalyzer:
         result.current_trend = self._infer_trend_from_strokes(result.strokes, lang)
         result.latest_signal = result.signals[-1] if result.signals else None
         result.summary = self._build_summary(result, lang)
-        result.recommendation = self._build_recommendation(result, lang)
-        # 量价需要原始 bars（合并K线不含 volume），故在此传入
+        # 量价需要原始 bars（合并K线不含 volume），故两处都在此传入
+        result.recommendation = self._build_recommendation(result, bars, lang)
         result.narrative = build_narrative(result, bars, lang)
 
         logger.info(
@@ -316,15 +331,21 @@ class ChanAnalyzer:
 
         return notes
 
-    def _build_recommendation(self, r: ChanAnalysisResult, lang: str = "zh") -> Recommendation:
-        """综合缠论各维度，描述当前技术形态倾向及依据（不构成操作建议）。
+    def _build_recommendation(
+        self, r: ChanAnalysisResult, bars: list[dict] | None = None, lang: str = "zh"
+    ) -> Recommendation:
+        """综合缠论各维度加权，描述当前技术形态倾向及依据（不构成操作建议）。
 
-        判断顺序：近期买卖点信号优先；无新鲜信号时看趋势 + 背驰；
-        再以中枢位置、线段方向补充佐证。措辞只描述技术形态，不含操作动词。
+        每个维度（最近信号 / 末笔 / 线段 / 中枢位置 / 背驰 / 量价）折算成一个带符号
+        的分数，加总后才定多空。改造前 bias 只由「末笔方向 × 背驰」单独决定，
+        结论会和自己列出的依据打架——顶背驰时判「偏空」，可下面挂着「多头占优、
+        大级别趋势偏多」。现在背驰只是一个扣分项，不再单独掀翻方向。
+
+        措辞只描述技术形态，不含操作动词。
         """
-        reasons: list[str] = []
         caveats: list[str] = []
         en = is_en(lang)
+        factors: list[BiasFactor] = []
 
         # 最近一个背驰及方向：上升笔背驰=顶背驰，下降笔背驰=底背驰
         recent_div_dir: str | None = None
@@ -341,94 +362,99 @@ class ChanAnalyzer:
         # 趋势方向从最后一笔取，避免解析已本地化的 current_trend 文本
         last_dir = r.strokes[-1].direction if r.strokes else None
 
+        # ---- 因子 1：最近的买卖点信号 ----
         if signal_fresh and latest is not None:
-            if latest.is_buy:
-                action, bias = "buy", "bullish"
-                label = pick(lang, "技术形态转强（仅技术面）", "Technicals strengthening (technical only)")
-            else:
-                action, bias = "sell", "bearish"
-                label = pick(lang, "技术形态转弱（仅技术面）", "Technicals weakening (technical only)")
+            weight = SIGNAL_WEIGHT[latest.strength]
+            if not latest.confirmed:
+                weight *= UNCONFIRMED_DISCOUNT
             if en:
-                fresh_tag = "" if latest.confirmed else " (on an unconfirmed stroke, a left-side call)"
-                reasons.append(
-                    f"Recent {latest.label} ({latest.strength} strength, {latest.time}){fresh_tag}: "
-                    f"{latest.description}"
-                )
-                if not latest.confirmed:
-                    label = f"{label} (unconfirmed)"
+                tag = "" if latest.confirmed else " (on an unconfirmed stroke, a left-side call)"
+                text = (f"Recent {latest.label} ({latest.strength} strength, {latest.time}){tag}: "
+                        f"{latest.description}")
             else:
-                fresh_tag = "" if latest.confirmed else "（该信号所在笔未确认，为左侧预判）"
-                reasons.append(
-                    f"最近出现{latest.label}（{latest.strength}强度，{latest.time}）{fresh_tag}："
-                    f"{latest.description}"
-                )
-                if not latest.confirmed:
-                    label = f"{label}（待确认）"
-        elif last_dir == "up":
-            if recent_div_dir == "up":
-                action, bias = "hold_bearish", "bearish"
-                label = pick(lang, "上涨动能减弱（技术面）", "Upside momentum fading (technical)")
-                reasons.append(pick(lang,
-                    "当前处于上升笔末端，且最近出现顶背驰，上涨动能衰竭，需留意回调",
-                    "At the end of a rising leg with a recent top divergence; upside momentum is "
-                    "exhausting — watch for a pullback"))
-            else:
-                action, bias = "hold_bullish", "bullish"
-                label = pick(lang, "上升趋势延续（技术面）", "Uptrend continuing (technical)")
-                reasons.append(pick(lang,
-                    "当前处于上升笔末端，暂无顶背驰，上升趋势延续中，留意是否见顶",
-                    "At the end of a rising leg with no top divergence yet; the uptrend continues — "
-                    "watch for a possible top"))
-        elif last_dir == "down":
-            if recent_div_dir == "down":
-                action, bias = "hold_bullish", "bullish"
-                label = pick(lang, "下跌动能减弱（技术面）", "Downside momentum fading (technical)")
-                reasons.append(pick(lang,
-                    "当前处于下降笔末端，且最近出现底背驰，下跌动能衰竭，或有企稳",
-                    "At the end of a falling leg with a recent bottom divergence; downside momentum is "
-                    "exhausting — may stabilize"))
-            else:
-                action, bias = "hold_bearish", "bearish"
-                label = pick(lang, "下降趋势延续（技术面）", "Downtrend continuing (technical)")
-                reasons.append(pick(lang,
-                    "当前处于下降笔末端，暂无底背驰，下跌可能延续",
-                    "At the end of a falling leg with no bottom divergence yet; the decline may continue"))
-        else:
-            action, bias = "watch", "neutral"
-            label = pick(lang, "技术结构不明", "Structure unclear")
-            reasons.append(pick(lang, "当前走势结构尚不明确，方向有待后续K线确认",
-                                "The structure isn't clear yet; direction awaits later candles"))
+                tag = "" if latest.confirmed else "（该信号所在笔未确认，为左侧预判）"
+                strength_cn = {"strong": "强", "medium": "中", "weak": "弱"}[latest.strength]
+                text = (f"最近出现{latest.label}（{strength_cn}强度，{latest.time}）{tag}："
+                        f"{latest.description}")
+            factors.append(BiasFactor(text, weight if latest.is_buy else -weight))
 
-        # 当前价相对最近中枢的位置
+        # ---- 因子 2：末笔方向（短期节奏）----
+        if last_dir == "up":
+            factors.append(BiasFactor(pick(lang,
+                "当前处于上升笔末端，短期节奏向上",
+                "At the end of a rising leg — the short-term rhythm points up"), STROKE_WEIGHT))
+        elif last_dir == "down":
+            factors.append(BiasFactor(pick(lang,
+                "当前处于下降笔末端，短期节奏向下",
+                "At the end of a falling leg — the short-term rhythm points down"), -STROKE_WEIGHT))
+
+        # ---- 因子 3：线段方向（大级别趋势，权重高于笔）----
+        if r.segments:
+            up = r.segments[-1].direction == "up"
+            if en:
+                text = (f"The latest segment points {'up' if up else 'down'}, so the larger-degree "
+                        f"trend leans {'bullish' if up else 'bearish'}")
+            else:
+                text = (f"最近线段方向{'向上' if up else '向下'}，"
+                        f"大级别趋势{'偏多' if up else '偏空'}")
+            factors.append(BiasFactor(text, SEGMENT_WEIGHT if up else -SEGMENT_WEIGHT))
+
+        # ---- 因子 4：当前价相对最近中枢的位置 ----
         if r.stroke_pivots:
             p = r.stroke_pivots[-1]
             if last_price > p.zg:
-                reasons.append(pick(lang,
+                factors.append(BiasFactor(pick(lang,
                     f"当前价 {last_price:.2f} 站上最近中枢上沿 ZG（{p.zg:.2f}），多头占优",
                     f"Price {last_price:.2f} is above the latest pivot's upper bound ZG ({p.zg:.2f}); "
-                    f"bulls have the edge"))
+                    f"bulls have the edge"), PIVOT_WEIGHT))
             elif last_price < p.zd:
-                reasons.append(pick(lang,
+                factors.append(BiasFactor(pick(lang,
                     f"当前价 {last_price:.2f} 跌破最近中枢下沿 ZD（{p.zd:.2f}），空头占优",
                     f"Price {last_price:.2f} is below the latest pivot's lower bound ZD ({p.zd:.2f}); "
-                    f"bears have the edge"))
+                    f"bears have the edge"), -PIVOT_WEIGHT))
             else:
-                reasons.append(pick(lang,
+                factors.append(BiasFactor(pick(lang,
                     f"当前价 {last_price:.2f} 仍在最近中枢（{p.zd:.2f}–{p.zg:.2f}）内，多空交战、方向待选",
                     f"Price {last_price:.2f} is still inside the latest pivot ({p.zd:.2f}–{p.zg:.2f}); "
-                    f"a stand-off with direction undecided"))
+                    f"a stand-off with direction undecided"), 0.0))
 
-        # 最近线段方向佐证大级别趋势
-        if r.segments:
-            seg = r.segments[-1]
-            if en:
-                reasons.append(
-                    f"The latest segment points {'up' if seg.direction == 'up' else 'down'}, so the "
-                    f"larger-degree trend leans {'bullish' if seg.direction == 'up' else 'bearish'}")
-            else:
-                reasons.append(
-                    f"最近线段方向{'向上' if seg.direction == 'up' else '向下'}，"
-                    f"大级别趋势{'偏多' if seg.direction == 'up' else '偏空'}")
+        # ---- 因子 5：背驰（只削弱当前方向的力度）----
+        if recent_div_dir == "up":
+            factors.append(BiasFactor(pick(lang,
+                "上涨过程中出现顶背驰：价格创新高但动能没跟上，上涨力度在衰减",
+                "A top divergence appeared during the advance: price made new highs but momentum "
+                "didn't follow — the push is decaying"), -DIVERGENCE_WEIGHT))
+        elif recent_div_dir == "down":
+            factors.append(BiasFactor(pick(lang,
+                "下跌过程中出现底背驰：价格创新低但动能在减弱，下跌力度在衰减",
+                "A bottom divergence appeared during the decline: price made new lows but momentum "
+                "weakened — the selling is decaying"), DIVERGENCE_WEIGHT))
+
+        # ---- 因子 6：量价配合 ----
+        if bars:
+            vol = _volume_readout(bars, lang)
+            if vol:
+                factors.append(BiasFactor(vol[1], vol[2]))
+
+        # ---- 加权定调 ----
+        score = sum(f.score for f in factors)
+        bias = score_to_bias(score)
+        label = self._bias_label(score, bias, recent_div_dir, lang)
+
+        if signal_fresh and latest is not None and latest.is_buy == (bias == "bullish"):
+            action = "buy" if latest.is_buy else "sell"
+        elif bias == "bullish":
+            action = "hold_bullish"
+        elif bias == "bearish":
+            action = "hold_bearish"
+        else:
+            action = "watch"
+
+        # 汇总句打头：先说清结论是加权净值，下面单条依据与结论反向才不像自相矛盾
+        reasons = [self._factor_summary(factors, lang)] + [f.text for f in factors]
+        if not factors:
+            reasons.append(pick(lang, "当前走势结构尚不明确，方向有待后续K线确认",
+                                "The structure isn't clear yet; direction awaits later candles"))
 
         # 把最右侧未确认结构作为具体风险提示暴露出来
         caveats.extend(r.pending_notes)
@@ -442,7 +468,47 @@ class ChanAnalyzer:
             "advice; a technical \"buy point\" is not the same as being \"worth buying\" — decide for "
             "yourself, weighing fundamentals, valuation and risk"))
 
-        return Recommendation(action=action, action_label=label, bias=bias, reasons=reasons, caveats=caveats)
+        return Recommendation(action=action, action_label=label, bias=bias, reasons=reasons,
+                              caveats=caveats, score=score, factors=factors)
+
+    def _bias_label(
+        self, score: float, bias: str, div_dir: str | None, lang: str = "zh"
+    ) -> str:
+        """把加权分数说成人话：强弱程度 + 动能是否在衰减。
+
+        动能衰减降级为后缀而不是主语——它描述的是力度的二阶变化（还在涨、只是
+        变慢），跟「多空方向」不是一回事，写成主语就会和 chip 上的倾向打架。
+        """
+        strong = abs(score) >= STRONG_BIAS_THRESHOLD
+        if bias == "bullish":
+            label = pick(lang, "技术面偏强" if strong else "技术面略偏强",
+                         "Technicals firm" if strong else "Technicals mildly firm")
+        elif bias == "bearish":
+            label = pick(lang, "技术面偏弱" if strong else "技术面略偏弱",
+                         "Technicals soft" if strong else "Technicals mildly soft")
+        else:
+            label = pick(lang, "技术面多空僵持", "Technicals balanced")
+
+        if div_dir == "up":
+            label += pick(lang, "，上涨动能转弱", ", upside momentum fading")
+        elif div_dir == "down":
+            label += pick(lang, "，下跌动能转弱", ", downside momentum fading")
+        return label
+
+    def _factor_summary(self, factors: list[BiasFactor], lang: str = "zh") -> str:
+        """依据列表的开场白：说明结论是这些因子的加权净值。
+
+        没有这一句，用户看到「偏多」下面挂着一条「空头占优」，只会觉得是 bug。
+        """
+        bull = sum(1 for f in factors if f.score > 0)
+        bear = sum(1 for f in factors if f.score < 0)
+        flat = len(factors) - bull - bear
+        if is_en(lang):
+            return (f"Weighing {len(factors)} technical factors: {bull} bullish, {bear} bearish, "
+                    f"{flat} neutral. The bias above is their weighted net, so individual lines "
+                    f"below may point the other way")
+        return (f"综合 {len(factors)} 项技术因子加权：{bull} 项偏多、{bear} 项偏空、{flat} 项中性。"
+                f"上方倾向是加权净值，故下列单条依据可能与结论方向相反")
 
     def _build_summary(self, r: ChanAnalysisResult, lang: str = "zh") -> str:
         en = is_en(lang)

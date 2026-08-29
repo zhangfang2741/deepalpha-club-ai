@@ -22,14 +22,18 @@ class TestVolumeReadout:
     def test_放量上涨(self):
         closes = [10.0] * 30 + [10.5, 11.0, 11.5, 12.0, 12.5]  # 近端明显上涨
         vols = [100.0] * 30 + [300.0] * 5                       # 近端放量
-        label, sentence = _volume_readout(_bars(closes, vols), "zh")
+        out = _volume_readout(_bars(closes, vols), "zh")
+        assert out is not None
+        label, sentence, _score = out
         assert label == "放量"
         assert "放量上涨" in sentence
 
     def test_缩量下跌(self):
         closes = [12.0] * 30 + [11.5, 11.0, 10.5, 10.0, 9.5]
         vols = [200.0] * 30 + [40.0] * 5                        # 近端缩量
-        label, sentence = _volume_readout(_bars(closes, vols), "zh")
+        out = _volume_readout(_bars(closes, vols), "zh")
+        assert out is not None
+        label, sentence, _score = out
         assert label == "缩量"
         assert "抛压趋缓" in sentence or "缩量下跌" in sentence
 

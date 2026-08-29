@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from app.services.chan.bias import VOLUME_WEIGHT
 from app.services.chan.i18n import is_en, pick
 
 if TYPE_CHECKING:
@@ -36,11 +37,13 @@ def _recent_divergence_dir(result: ChanAnalysisResult) -> str | None:
     return direction
 
 
-def _volume_readout(bars: list[dict], lang: str) -> tuple[str, str] | None:
+def _volume_readout(bars: list[dict], lang: str) -> tuple[str, str, float] | None:
     """量价配合解读。
 
     Returns:
-        (量能标签, 大白话句子)，数据不足时 None。
+        (量能标签, 大白话句子, 多空分数)，数据不足时 None。
+        分数正=偏多、负=偏空，供 analyzer 的多因子加权直接取用——量价的
+        方向判断只该有一处，否则两边口径迟早漂移。
     """
     vols = [float(b.get("volume") or 0) for b in bars]
     closes = [float(b["close"]) for b in bars]
@@ -72,28 +75,34 @@ def _volume_readout(bars: list[dict], lang: str) -> tuple[str, str] | None:
         sentence = pick(lang,
             "近期放量上涨，成交明显放大、资金愿意追，上涨相对健康。",
             "Recent gains came on rising volume — turnover expanded and buyers followed through, a relatively healthy advance.")
+        score = VOLUME_WEIGHT
     elif rising and ratio <= 0.7:
         sentence = pick(lang,
             "近期缩量上涨，涨归涨但成交在萎缩，追涨动能不足，需防冲高回落。",
             "Recent gains came on shrinking volume — price rose but turnover faded, momentum is thin, watch for a pullback after spikes.")
+        score = -VOLUME_WEIGHT
     elif falling and ratio >= 1.3:
         sentence = pick(lang,
             "近期放量下跌，抛压较重，通常是恐慌或资金离场的信号。",
             "Recent declines came on rising volume — heavy selling pressure, often a sign of panic or money leaving.")
+        score = -VOLUME_WEIGHT
     elif falling and ratio <= 0.7:
         sentence = pick(lang,
             "近期缩量下跌，跌势中成交在收敛，抛压趋缓，往往是企稳的前奏。",
             "Recent declines came on shrinking volume — selling pressure is easing, often a prelude to stabilizing.")
+        score = VOLUME_WEIGHT
     elif ratio <= 0.7:
         sentence = pick(lang,
             "近期缩量整理，多空都在观望，量能不足以打破当前格局。",
             "Recent consolidation on light volume — both sides are waiting; turnover isn't enough to break the range.")
+        score = 0.0
     else:
         sentence = pick(lang,
             "近期量能平稳，价格与成交没有明显背离。",
             "Volume has been steady lately, with no clear divergence between price and turnover.")
+        score = 0.0
 
-    return vol_label, sentence
+    return vol_label, sentence, score
 
 
 def _position_readout(result: ChanAnalysisResult, lang: str) -> tuple[str, str] | None:
