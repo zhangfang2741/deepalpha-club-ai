@@ -118,13 +118,34 @@ def build(p: Preset, name: str, title: str, sub: str, accent: tuple[int, int, in
     shot = Image.open(SRC / name).convert("RGB")
     s = p.scale
     font_title, font_sub = p.font_title, p.font_sub
+    landscape = shot.width > shot.height
 
-    # 机身宽度定在 62%：留足顶部空间放两行大标题，同时底部不贴边。
-    # 高度按**源图**比例算，所以换画布尺寸不会把截图拉变形。
-    dev_w = round(818 * s)
+    # 竖版：机身宽度 62%，贴着画布底部，上方留给两行大标题。
+    # 横版（全屏图表那张）：机身放宽到 92%，否则一条又矮又窄的图什么都看不清；
+    # 因为它很矮，贴底会在标题和机身之间留一大片空，改成在下半区居中。
+    # 两种情况下高度都按**源图**比例算，所以换画布尺寸不会把截图拉变形。
+    dev_w = round((1214 if landscape else 818) * s)
     dev_h = round(dev_w * shot.height / shot.width)
     dev_x = (p.w - dev_w) // 2
-    dev_y = p.h - dev_h - round(102 * s)
+
+    # 标题排版度量。横版要先知道标题块多高才能定机身位置，所以提前算。
+    lines = title.split("\n")
+    lh = round(110 * s)
+    block_h = lh * len(lines)
+    sub_gap = round(28 * s)
+    title_h = block_h + sub_gap + round(45 * s)
+
+    if landscape:
+        # 横版机身只有画布高度的两成，贴底或居中都会在某一侧空出一大片。
+        # 把「标题块 + 机身」当成一个整体在画布里垂直居中，上下留白才对称。
+        gap = round(150 * s)
+        top = (p.h - (title_h + gap + dev_h)) // 2
+        ty = top
+        dev_y = top + title_h + gap
+    else:
+        dev_y = p.h - dev_h - round(102 * s)
+        # 竖版：标题块在机身上方的空间里居中，不同长度的标题不会跳
+        ty = (dev_y - round(128 * s) - block_h) // 2 + round(42 * s)
 
     canvas = gradient(p, accent)
     glow(p, canvas, accent, p.w // 2, dev_y + dev_h // 3, round(595 * s))
@@ -141,17 +162,13 @@ def build(p: Preset, name: str, title: str, sub: str, accent: tuple[int, int, in
 
     draw = ImageDraw.Draw(canvas)
 
-    # 标题：两行，行距 1.18；整体按可用高度垂直居中，不同长度的标题不会跳。
-    lines = title.split("\n")
-    lh = round(110 * s)
-    block_h = lh * len(lines)
-    ty = (dev_y - round(128 * s) - block_h) // 2 + round(42 * s)
+    # 标题：每行行距 1.18，居中排版；位置 ty 在上面按版式算好了。
     for i, line in enumerate(lines):
         w = draw.textlength(line, font=font_title)
         draw.text(((p.w - w) / 2, ty + i * lh), line, font=font_title, fill=INK)
 
     sw = draw.textlength(sub, font=font_sub)
-    draw.text(((p.w - sw) / 2, ty + block_h + round(28 * s)), sub, font=font_sub, fill=MUTED)
+    draw.text(((p.w - sw) / 2, ty + block_h + sub_gap), sub, font=font_sub, fill=MUTED)
 
     out_dir = BASE / p.out
     out_dir.mkdir(exist_ok=True)
