@@ -139,3 +139,63 @@ curl -s -X POST https://api.deepalpha.club/api/v1/auth/login/account \
 - [ ] 内购产品在 ASC 里状态为「准备提交」，且已随本版本一起提交
 - [ ] 真机沙盒账号完整走一遍：订阅购买 → 恢复购买
 - [ ] 真机验证全屏图表转横屏后退出能正常回到竖屏
+
+---
+
+## 附：订阅项的审核备注（ASC → App 内购买项目 → 审核信息）
+
+这段和上面的 App 审核备注是**两个地方**：这里填的是给审核「订阅项」的人看的。
+本 App 必须登录才能进主界面，不给账号他连付费墙都打不开，所以演示账号要
+在这里再给一遍——订阅项审核未必和 App 审核是同一个人、同一个界面。
+
+可直接粘贴：
+
+```
+DeepAlpha Pro 是本 App 唯一的订阅项，按月自动续订，含 7 天免费试用。
+
+【订阅权益】
+免费用户每天可分析 3 支不同标的（同一标的当天重复分析不额外计次；
+额度用尽后，当天已分析过的标的仍可继续查看）。订阅后解除该次数限制。
+订阅不解锁任何额外的功能模块，仅解除次数限制。
+
+【如何找到付费墙】
+App 需要先登录。演示账号：
+  appreview@deepalpha.club / AppReview2026
+登录后两个入口任选其一：
+  1) 「分析」标签页右上角的皇冠图标
+  2) 「我的」标签页 →「升级 Pro」
+付费墙内含：7 天免费试用说明、试用结束后的价格、自动续订披露、
+服务条款与隐私政策链接、恢复购买按钮。
+
+【测试提示】
+使用沙盒 Apple 账号即可完成购买与「恢复购买」。
+本 App 通过后端接口获取行情数据，请确保测试设备可正常联网。
+
+---
+
+DeepAlpha Pro is the only subscription in this app: auto-renewing monthly,
+with a 7-day free trial.
+
+WHAT IT UNLOCKS
+Free users can analyse 3 distinct tickers per day (re-analysing a ticker
+already used that day does not count again; once the quota is used up,
+tickers already analysed that day remain viewable). The subscription removes
+this limit. It does not unlock any additional feature modules.
+
+HOW TO REACH THE PAYWALL
+Sign-in is required. Demo account:
+  appreview@deepalpha.club / AppReview2026
+After signing in, either entry works:
+  1) Crown icon at the top-right of the "Analysis" tab
+  2) "Profile" tab -> "Upgrade to Pro"
+The paywall shows the 7-day trial, the post-trial price, the auto-renewal
+disclosure, Terms/Privacy links and a Restore Purchases button.
+
+TESTING
+A sandbox Apple ID is enough to complete purchase and Restore Purchases.
+The app fetches market data from our backend, so the test device needs
+network access.
+```
+
+**「订阅不解锁任何额外功能模块」这句要留着**：付费墙上「优先体验新功能」那条
+容易让人以为订阅捆绑了尚未上线的功能，先划清边界省得来回问。
