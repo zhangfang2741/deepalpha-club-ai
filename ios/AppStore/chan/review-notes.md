@@ -46,6 +46,9 @@
 图表上标注的「一买 / 二买 / 三买」等是缠论理论中对走势结构位置的
 固定命名（第一类买点 / 第二类买点 / 第三类买点），是结构识别结果的
 标签，不是操作建议。
+「形态分析」栏给出的「技术面偏强 / 偏弱 / 多空僵持」是对已发生结构的
+客观描述，由末笔方向、线段方向、中枢位置、背驰、量价等因子加权得出，
+每一项依据都逐条列出供核对；它描述现状，不预测涨跌，也不含操作动词。
 免责声明在登录页、分析结果页、买卖点列表和每篇教程末尾均有展示。
 
 四、订阅说明
@@ -74,7 +77,7 @@ Please switch to the "Email" tab on the sign-in screen.
 - The result screen draws fractals, strokes, segments, pivots and buy/sell
   points on the chart, with a MACD subchart below. Tap the icon at the top
   right for fullscreen.
-- The "Conclusion" and "Signals" tabs below describe the detected structure.
+- The "Analysis" and "Signals" tabs below describe the detected structure.
 - The Learn tab contains nine lessons, each with a diagram. Terms in the chart
   legend and on signal labels are tappable and open the matching lesson.
 - Content is also viewable WITHOUT an account: tap "Browse the Chan primer"
@@ -87,6 +90,12 @@ securities, issue trade instructions, or promise returns.
 Labels such as "Buy 1 / Buy 2 / Buy 3" are the standard terminology of Chan
 theory for structural positions (first/second/third-class buy point). They name
 a detected chart structure; they are not recommendations to trade.
+The "Analysis" tab reports a technical read such as "firm / soft / balanced".
+This is an objective description of structure that has already formed, derived
+by weighting the last stroke, segment direction, position relative to the latest
+pivot, divergence and volume; every contributing factor is listed so the reader
+can check it. It describes the present state, makes no forecast, and contains no
+action verbs.
 A disclaimer is shown on the sign-in screen, on the analysis result screen, in
 the signal list, and at the end of every lesson.
 

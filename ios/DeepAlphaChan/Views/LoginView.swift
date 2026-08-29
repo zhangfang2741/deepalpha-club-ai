@@ -76,7 +76,7 @@ struct LoginView: View {
                     Button {
                         showLearn = true
                     } label: {
-                        Label("先看看缠论入门", systemImage: "book")
+                        Label(L("先看看缠论入门"), systemImage: "book")
                             .font(.footnote)
                             .foregroundColor(Theme.textSecondary)
                     }
@@ -125,7 +125,8 @@ struct LoginView: View {
             Image(systemName: "waveform.path.ecg")
                 .font(.system(size: 44))
                 .foregroundStyle(Theme.accent)
-            Text("DeepAlpha 缠论")
+            // App 名称也要本地化：英文区显示的应该是 App Store 上的英文名
+            Text(L("DeepAlpha 缠论"))
                 .font(.title.bold())
                 .foregroundColor(Theme.textPrimary)
             Text(L("结构化技术分析"))
