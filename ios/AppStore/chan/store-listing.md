@@ -184,7 +184,7 @@ Automatic Chan structure on candlestick charts, with nine illustrated lessons. U
 
 | 顺序 | 文件 | 展示内容 |
 |------|------|----------|
-| 1 | `01_analysis_us.png` | 美股完整分析：结构标注 + MACD + 形态分析 |
+| 1 | `01_analysis_us.png` | 美股完整分析：结构标注 + MACD + 形态分析（TSLA） |
 | 2 | `06_fullscreen.png` | 全屏大图，结构与买卖点一览 |
 | 3 | `02_analysis_hk.png` | 港股分析，证明多市场支持 |
 | 4 | `03_learn.png` | 9 篇入门词条列表 |

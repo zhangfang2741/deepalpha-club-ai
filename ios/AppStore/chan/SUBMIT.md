@@ -20,7 +20,7 @@
 | 动态字体 | 结论区已支持缩放 |
 | 付费墙宣传已删除的 GAP 功能 | **已修**，改为「美股/A股/港股」 |
 | 设备族改为仅 iPhone | 已改，因此不需要 iPad 截图 |
-| 6.9 英寸截图 ×6（真实数据） | 已生成于 `screenshots-6.9/`，但 **3 张需重截**，见第 0 步 |
+| 6.9 英寸截图 ×6（真实数据） | 改版后已全部重截；**上传带标题版** `screenshots-6.9-captioned/` |
 | 审核演示账号 | 已在生产创建并验证 |
 | Archive 归档 | 已验证 `ARCHIVE SUCCEEDED`（形态分析改版后重验过） |
 | 四处免责声明 | 登录页 / 结果页 / 买卖点列表 / 教程末尾，均常驻可见（风险提示折叠卡不算这一项） |
@@ -30,29 +30,34 @@
 
 ---
 
-## 第 0 步：重截 3 张截图 ⚠️ 阻塞项
+## 第 0 步：截图 ✅ 已完成
 
-「结论」段改名为「形态分析」、两张卡合并为一张、风险提示独立折叠、
-容器边距收窄之后，下面 3 张截图已经和 App 对不上了。Apple 要求截图
-反映实际界面（2.3.3），**提交前必须重截**：
+「形态分析」改版后已用 iPhone 17 Pro Max 模拟器（1320×2868，6.9 英寸标准尺寸）
+全部重截，真实数据、状态栏统一为 9:41 / 满电 / 满信号。
 
-| 截图 | 为什么要重截 |
-|------|------|
-| `01_analysis_us.png` | 分段写「结论」、卡片写「形态解读」+ 橙色 chip「上涨动能减弱」，全变了 |
-| `02_analysis_hk.png` | 同上，结果页结构已改 |
-| `05_query.png` | 额度条写「今日可分析 1/3 支股票」，文案已改 |
+**上传 `screenshots-6.9-captioned/` 里的 6 张**（带标题版），不是 `screenshots-6.9/`
+里的原图。前者是后者加了标题文案后的成品，顺序见 `store-listing.md` 第七节。
 
-`03_learn` / `04_lesson_detail` 只差 6pt 边距，肉眼看不出，不用重截。
-`06_fullscreen` 全屏图表没动，可直接用。
+重跑截图的工具链（都在本目录）：
 
-截 `05_query` 前**先删 App 重装**：空状态现在只在没有分析历史时才显示
-AAPL/NVDA/TSLA 示例，跑过分析后那一屏会变成「最近分析过」，与
-`store-listing.md` 里「查询条件与风险提示」的描述对不上。
+```bash
+# 1. 起模拟器、锁状态栏、装 App
+xcrun simctl boot "iPhone 17 Pro Max"
+xcrun simctl status_bar "iPhone 17 Pro Max" override \
+  --time "09:41" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
 
-其余要求同原来：真机、6.9 英寸、真实数据、状态栏统一为 9:41 / 满电 / 满信号。
+# 2. 按归一化坐标点击 / 输入（Simulator 不吃 AppleScript 合成点击，故走 Quartz）
+uv run --with pyobjc-framework-Quartz --no-project python ios/AppStore/chan/simtap.py tap 0.5 0.33
+uv run --with pyobjc-framework-Quartz --no-project python ios/AppStore/chan/simtap.py type 0700
 
-**验收**：新截图里第 1 张的分段是「形态分析」，卡片标题也是「形态分析」，
-标题右侧 chip 显示「偏多」/「偏空」/「中性」而不是「上涨动能减弱」。
+# 3. 截图存到 screenshots-6.9/，再加标题
+xcrun simctl io "iPhone 17 Pro Max" screenshot ios/AppStore/chan/screenshots-6.9/01_analysis_us.png
+uv run --with pillow --no-project python ios/AppStore/chan/make_captioned.py
+```
+
+⚠️ 截 `05_query` 要在**没有分析历史**时截：空状态只在无历史时显示
+AAPL/NVDA/TSLA 起步示例，跑过分析后会变成「最近分析过」。先
+`xcrun simctl uninstall "iPhone 17 Pro Max" club.deepalpha.chan` 再装。
 
 ---
 
