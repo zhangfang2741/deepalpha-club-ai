@@ -1,20 +1,20 @@
 import SwiftUI
 
-/// 图表下方的分段内容：结论 / 买卖点。
+/// 图表下方的分段内容：形态分析 / 买卖点。
 ///
-/// 结论是快速判断、买卖点是逐条明细，两者读法不同故分段。
+/// 形态分析是整体读法、买卖点是逐条明细，两者读法不同故分段。
 /// （原先还有 GAP 段，需手动输入产业观点做深度分析，已从此处移除。）
 struct ResultSegments: View {
     let analysis: ChanAnalysis
 
-    @State private var segment: Segment = .conclusion
+    @State private var segment: Segment = .analysis
 
     enum Segment: String, CaseIterable, Identifiable {
-        case conclusion, signals
+        case analysis, signals
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .conclusion: return L("结论")
+            case .analysis: return L("形态分析")
             case .signals: return L("买卖点")
             }
         }
@@ -30,8 +30,8 @@ struct ResultSegments: View {
             .pickerStyle(.segmented)
 
             switch segment {
-            case .conclusion:
-                ConclusionSection(analysis: analysis)
+            case .analysis:
+                AnalysisSection(analysis: analysis)
             case .signals:
                 SignalListSection(analysis: analysis)
             }

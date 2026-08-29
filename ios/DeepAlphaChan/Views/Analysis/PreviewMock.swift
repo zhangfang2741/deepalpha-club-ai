@@ -86,8 +86,8 @@ enum PreviewMock {
 // Xcode 画布预览。分析结果态是这个 App 最复杂的界面，没有这些预览就只能
 // 靠「起后端 → 登录 → 输代码 → 等分析」才能看一眼布局。
 
-#Preview("结论") {
-    ScrollView { ConclusionSection(analysis: PreviewMock.analysis).padding(14) }
+#Preview("形态分析") {
+    ScrollView { AnalysisSection(analysis: PreviewMock.analysis).padding(Theme.contentHInset) }
         .background(Theme.background)
         .preferredColorScheme(.dark)
 }

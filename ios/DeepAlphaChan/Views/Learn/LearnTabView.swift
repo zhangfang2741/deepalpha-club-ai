@@ -34,7 +34,8 @@ struct LearnTabView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(14)
+            .padding(.horizontal, Theme.contentHInset)
+            .padding(.vertical, Theme.contentVInset)
         }
     }
 
@@ -43,7 +44,8 @@ struct LearnTabView: View {
             .font(.footnote)
             .foregroundColor(Theme.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 4)
+            // 裸文本，补回卡片那一层内边距，才和下方卡片里的文字对齐
+            .padding(.horizontal, 8)
             .padding(.bottom, 4)
     }
 

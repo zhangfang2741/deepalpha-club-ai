@@ -60,6 +60,8 @@ struct LessonDetailView: View {
                     .foregroundColor(Theme.textSecondary)
                     .padding(.top, 8)
             }
+            // 这一页正文是裸 Text（没有卡片背景兜底），水平边距不跟着列表页收窄，
+            // 否则文字会直接贴到屏幕边上。
             .padding(18)
         }
     }

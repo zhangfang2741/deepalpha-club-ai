@@ -23,9 +23,8 @@ struct SectionCard<Content: View>: View {
 
 /// 可折叠卡片：标题行可点开/收起，默认收起。
 ///
-/// 结论页子章节多（形态解读 / 当前结构 / 操作倾向 / 待确认结构），全展开要长距离
-/// 滚动。折叠后一屏能看到全部标题，按需展开自己关心的那块。
-/// 收起态可在标题右侧带一个摘要 chip（如形态阶段、操作偏向），不展开也能瞄一眼结论。
+/// 分析段的内容一路展开会很长，折叠后一屏能看到标题，按需展开自己关心的那块。
+/// 收起态可在标题右侧带一个摘要 chip（如多空倾向、风险条数），不展开也能瞄一眼。
 struct CollapsibleCard<Content: View>: View {
     let title: String
     var systemImage: String? = nil

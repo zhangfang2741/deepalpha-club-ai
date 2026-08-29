@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 分析结果的文案与配色映射。
 ///
-/// 从 SignalPanelView 抽出来：结论段和买卖点段拆开后，两边都要用这套映射，
+/// 从 SignalPanelView 抽出来：形态分析段和买卖点段拆开后，两边都要用这套映射，
 /// 留在任何一边都会让另一边去引用一个「看起来不相干」的视图。
 enum SignalFormatting {
 
@@ -65,7 +65,7 @@ enum SignalFormatting {
     }
 }
 
-/// 结论区统一的字号层级。
+/// 分析区统一的字号层级。
 ///
 /// 改造前这块混用了 12/13/15/20 四种字号，而且「依据」这类小标题(12pt)比它
 /// 统领的正文(13pt)还小，层级是倒的。现在收成三级：
@@ -73,7 +73,7 @@ enum SignalFormatting {
 /// - 卡片标题 17pt semibold（SectionCard 自带）
 /// - 正文 15pt regular，行距 5——这是真正要读的内容，不该比标题挤
 /// - 段内小标题 13pt semibold + 字距，小而重才像标签而不像正文
-enum ConclusionType {
+enum AnalysisType {
     // 用文本样式而不是固定 size：.system(size:) 不跟随系统的「文字大小」设置，
     // 调大字号的用户看到的还是 15pt。subheadline 本身就是 15pt，footnote 13pt，
     // 视觉不变但会随动态字体缩放。
@@ -82,18 +82,21 @@ enum ConclusionType {
     static let bodyLineSpacing: CGFloat = 5
 }
 
-/// 带标题的项目符号列表。结论段的「依据」和「风险提示」共用。
+/// 项目符号列表。标题可省——风险提示自己就是一张卡，卡标题之下再来个同名
+/// 小标题只是重复。
 struct BulletList: View {
-    let title: String
+    var title: String? = nil
     let items: [String]
     let color: Color
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text(title)
-                .font(ConclusionType.label)
-                .tracking(0.5)
-                .foregroundColor(Theme.textSecondary)
+            if let title {
+                Text(title)
+                    .font(AnalysisType.label)
+                    .tracking(0.5)
+                    .foregroundColor(Theme.textSecondary)
+            }
 
             ForEach(items, id: \.self) { item in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -104,9 +107,9 @@ struct BulletList: View {
                         .frame(width: 6, alignment: .center)
                         .offset(y: -4)
                     Text(item)
-                        .font(ConclusionType.body)
+                        .font(AnalysisType.body)
                         .foregroundColor(color)
-                        .lineSpacing(ConclusionType.bodyLineSpacing)
+                        .lineSpacing(AnalysisType.bodyLineSpacing)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

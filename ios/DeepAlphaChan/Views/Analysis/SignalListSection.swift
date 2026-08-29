@@ -7,10 +7,10 @@ import SwiftUI
 struct SignalListSection: View {
     let analysis: ChanAnalysis
 
-    /// 按时间升序。后端返回的顺序不保证有序，而买卖点是随时间推进的，
-    /// 乱序列出来读者建立不起先后关系。
+    /// 按时间倒序（最新在最上）。后端返回的顺序不保证有序；而用户翻到这一段
+    /// 最想先看「最近发生了什么」，最新信号不该被压在长列表的底部。
     private var sortedSignals: [Signal] {
-        analysis.signals.sorted { $0.time < $1.time }
+        analysis.signals.sorted { $0.time > $1.time }
     }
 
     var body: some View {
@@ -37,7 +37,7 @@ struct SignalListSection: View {
     private var emptyHint: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(L("当前区间未识别到明确买卖点"))
-                .font(ConclusionType.body).foregroundColor(Theme.textPrimary)
+                .font(AnalysisType.body).foregroundColor(Theme.textPrimary)
             Text(L("可以试试换个时间范围，或切到周线看更大级别的结构。"))
                 .font(.footnote).foregroundColor(Theme.textSecondary)
                 .lineSpacing(3)
@@ -72,11 +72,11 @@ struct SignalListSection: View {
                     Spacer()
                     Text(sig.time).font(.caption).foregroundColor(Theme.textSecondary)
                 }
-                // 与结论段同一套字号，两段来回切时不该有字号跳变
+                // 与形态分析段同一套字号，两段来回切时不该有字号跳变
                 Text(sig.description)
-                    .font(ConclusionType.body)
+                    .font(AnalysisType.body)
                     .foregroundColor(Theme.textSecondary)
-                    .lineSpacing(ConclusionType.bodyLineSpacing)
+                    .lineSpacing(AnalysisType.bodyLineSpacing)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 12) {
                     Text(L("价位 %@", String(format: "%.2f", sig.price)))
@@ -111,6 +111,7 @@ struct SignalListSection: View {
                 .font(.caption2).foregroundColor(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 4)
+        // 补回卡片那一层内边距，脚注才和卡片里的文字左对齐
+        .padding(.horizontal, 8)
     }
 }

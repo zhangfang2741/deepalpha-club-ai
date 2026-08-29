@@ -100,6 +100,17 @@ enum StockMarket: String, CaseIterable, Identifiable {
         }
     }
 
+    /// 混排列表里用的极短市场标记。美股是字母代码本来就认得出，不加标记；
+    /// A 股和港股都是数字，不标就分不清 0700 到底该查哪个市场。
+    /// 用通用金融缩写，中英文都通，故不走本地化。
+    var shortTag: String? {
+        switch self {
+        case .us: return nil
+        case .cn: return "A"
+        case .hk: return "HK"
+        }
+    }
+
     /// 该市场的代码格式是否合法。规则与后端 market.py 一致。
     func isValidSymbol(_ raw: String) -> Bool {
         let text = raw.trimmingCharacters(in: .whitespaces).uppercased()

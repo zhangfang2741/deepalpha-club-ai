@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 分析结果详情页（第二页）。
 ///
-/// 由「条件页」在分析成功后 push 进来。只负责呈现结果：图表 + 结论/买卖点/GAP。
+/// 由「条件页」在分析成功后 push 进来。只负责呈现结果：图表 + 形态分析/买卖点。
 /// 改条件请返回上一页——条件与结果分离，各自专注一件事。
 struct ResultDetailView: View {
     let analysis: ChanAnalysis
@@ -21,7 +21,8 @@ struct ResultDetailView: View {
 
                 compactDisclaimer
             }
-            .padding(14)
+            .padding(.horizontal, Theme.contentHInset)
+            .padding(.vertical, Theme.contentVInset)
         }
         .scrollBounceBehavior(.basedOnSize)
         .background(Theme.background)

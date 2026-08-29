@@ -10,11 +10,15 @@
 "不要只看技术信号" = "Don't rely on technical signals alone";
 "缠论主要观察价格走势与市场结构。投资决策还应结合基本面、成长性、估值、盈利预期和市场环境综合判断。" = "Chan theory focuses on price action and market structure. Investment decisions should also weigh fundamentals, growth, valuation, earnings expectations and the overall market environment.";
 "技术上的「买点」，不等于投资上的「值得买」。" = "A technical \"buy point\" is not the same as being \"worth buying\" as an investment.";
-"今日可分析 %lld/%lld 支股票" = "%lld/%lld analyses left today";
+"今日还可分析 %lld 支新股票" = "%lld more new stocks today";
+"今日 %lld 支新股票的免费额度已用完" = "Daily free limit reached (%lld new stocks)";
+"今天已分析过的股票仍可继续查看" = "Stocks you already analyzed today are still available";
 "升级 Pro 无限次 ›" = "Upgrade to Pro for unlimited ›";
+"开通 Pro 继续 ›" = "Get Pro to continue ›";
 "正在拉取行情并计算缠论结构…" = "Fetching prices and computing Chan structure…";
 "重试" = "Retry";
 "输入股票代码，开始缠论分析" = "Enter a ticker to start Chan analysis";
+"最近分析过" = "Recently analyzed";
 "看不懂图上的线？先去「学习」页读两分钟。" = "Not sure what the lines mean? Spend two minutes on the Learn tab first.";
 
 /* Market picker */
@@ -37,13 +41,12 @@
 "算法自动生成，仅供技术研究，不构成投资建议。" = "Auto-generated for technical research only; not investment advice.";
 
 /* Segments */
-"结论" = "Summary";
+"形态分析" = "Analysis";
 "买卖点" = "Signals";
+"%lld 条" = "%lld";
 
 /* Conclusion */
 "%lld 根K线 · %lld 笔 · %lld 线段 · %lld 中枢 · %lld 买卖点" = "%lld bars · %lld strokes · %lld segments · %lld pivots · %lld signals";
-"形态解读" = "Pattern Read";
-"技术形态倾向" = "Technical Bias";
 "依据" = "Basis";
 "风险提示" = "Risk Notes";
 

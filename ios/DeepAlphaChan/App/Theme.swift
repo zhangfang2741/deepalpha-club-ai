@@ -23,6 +23,17 @@ enum Theme {
     static let pivotFill = Color(hex: 0x8B5CF6)    // 中枢
     static let topFractal = Color(hex: 0xEF4444)   // 顶分型
     static let bottomFractal = Color(hex: 0x22C55E)// 底分型
+
+    // MARK: - 内容容器边距
+
+    /// 滚动内容容器的水平内边距。
+    ///
+    /// 卡片自带 16pt 内边距，容器原本再给 14pt，文字离屏幕边就有 30pt——一眼看去
+    /// 两侧空荡荡像没铺满。收到 8pt 后卡片接近贴边，文字距边 24pt 仍然够透气，
+    /// 图表也多出 12pt 可用宽度。
+    static let contentHInset: CGFloat = 8
+    /// 滚动内容容器的垂直内边距（首尾留白，与卡片间距一致）。
+    static let contentVInset: CGFloat = 14
 }
 
 extension Color {
