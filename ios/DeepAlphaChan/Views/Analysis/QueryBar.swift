@@ -78,11 +78,29 @@ struct QueryBar: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
-    /// 市场下拉框。切换市场时清空代码——A 股代码留在港股框里没有意义，
-    /// 而且会让人以为能直接分析。
+    /// 市场选择的绑定。清空代码这件事绑在**这个控件的交互**上，而不是绑在
+    /// `vm.market` 的数据变化上。
+    ///
+    /// 原来写的是 `.onChange(of: vm.market) { vm.symbol = "" }`，它分不清
+    /// 「用户手动切市场」和「程序恢复一条历史」，而且是在视图更新周期里才触发：
+    /// 点历史里的 AAPL 时，先设 market 再设 symbol 都完成了，随后 onChange
+    /// 才把 symbol 清成空串，runAnalysis 于是拿着空代码去请求，直接报错。
+    private var marketBinding: Binding<StockMarket> {
+        Binding(
+            get: { vm.market },
+            set: { newValue in
+                guard newValue != vm.market else { return }
+                vm.market = newValue
+                // A 股代码留在港股框里没有意义，还会让人以为能直接分析
+                vm.symbol = ""
+            }
+        )
+    }
+
+    /// 市场下拉框。
     private var marketPicker: some View {
         Menu {
-            Picker("", selection: $vm.market) {
+            Picker("", selection: marketBinding) {
                 ForEach(StockMarket.allCases, id: \.self) { m in
                     Text(m.title).tag(m)
                 }
@@ -99,7 +117,6 @@ struct QueryBar: View {
             .background(Theme.accent.opacity(0.12))
             .clipShape(RoundedRectangle(cornerRadius: 10))
         }
-        .onChange(of: vm.market) { _, _ in vm.symbol = "" }
     }
 
     private func dateField(_ title: String, selection: Binding<Date>) -> some View {

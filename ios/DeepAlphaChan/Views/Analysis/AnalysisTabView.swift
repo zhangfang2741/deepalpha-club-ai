@@ -188,10 +188,8 @@ struct AnalysisTabView: View {
             if recent.entries.isEmpty {
                 HStack(spacing: 8) {
                     ForEach(starterSymbols, id: \.self) { symbol in
-                        symbolChip(text: symbol) {
-                            vm.market = .us
-                            vm.symbol = symbol
-                        }
+                        // 示例都是美股：当前选着 A 股时点 AAPL 也要切回美股
+                        symbolChip(text: symbol) { vm.apply(market: .us, symbol: symbol) }
                     }
                 }
             } else {
@@ -199,8 +197,7 @@ struct AnalysisTabView: View {
                 FlowLayout(spacing: 8) {
                     ForEach(recent.entries) { entry in
                         symbolChip(text: entry.display) {
-                            vm.market = entry.market
-                            vm.symbol = entry.symbol
+                            vm.apply(market: entry.market, symbol: entry.symbol)
                         }
                     }
                 }

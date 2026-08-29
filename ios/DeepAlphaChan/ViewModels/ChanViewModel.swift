@@ -60,6 +60,17 @@ final class ChanViewModel: ObservableObject {
     var startDateString: String { dateFormatter.string(from: startDate) }
     var endDateString: String { dateFormatter.string(from: endDate) }
 
+    /// 一次套用一组查询条件，供「最近分析过」「起步示例」这类快捷入口使用。
+    ///
+    /// 市场和代码必须一起设：只改代码不改市场，点历史里的 AAPL 时会拿着当前
+    /// 选中的 A 股去查一个美股代码。同理，任何「市场变了就清空代码」的联动都
+    /// 不能挂在 `market` 的数据变化上，否则会把这里刚设好的代码清掉
+    /// （见 QueryBar.marketBinding）。
+    func apply(market: StockMarket, symbol: String) {
+        self.market = market
+        self.symbol = symbol.trimmingCharacters(in: .whitespaces).uppercased()
+    }
+
     // MARK: - 缠论分析
 
     func runAnalysis() async {
