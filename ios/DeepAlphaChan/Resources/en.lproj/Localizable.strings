@@ -109,7 +109,7 @@
 "版本" = "Version";
 "隐私政策" = "Privacy Policy";
 "服务条款" = "Terms of Service";
-"本 App 提供的缠论结构识别、买卖点标注与操作倾向均由算法自动生成，仅供技术研究与学习参考，不构成任何投资建议或买卖要约。证券投资有风险，任何决策请自主判断并自负盈亏。" = "The Chan structure detection, signal labels and technical bias in this app are auto-generated for technical research and learning only, and do not constitute investment advice or any offer to buy or sell. Securities investing carries risk; make your own decisions and bear your own gains and losses.";
+"本 App 提供的缠论结构识别、买卖点标注与形态分析均由算法自动生成，仅供技术研究与学习参考，不构成任何投资建议或买卖要约。证券投资有风险，任何决策请自主判断并自负盈亏。" = "The Chan structure detection, signal labels and pattern analysis in this app are auto-generated for technical research and learning only, and do not constitute investment advice or any offer to buy or sell. Securities investing carries risk; make your own decisions and bear your own gains and losses.";
 "免责声明" = "Disclaimer";
 "退出登录" = "Sign out";
 "删除账号" = "Delete account";
@@ -163,8 +163,8 @@
 "不再受每日次数限制" = "No more daily limit";
 "结构 GAP 分析" = "Structure GAP analysis";
 "市场结构 × 产业结构的 AI 背离洞察" = "AI divergence insights: market structure × industry structure";
-"全部买卖点与操作倾向" = "All signals and technical bias";
-"一二三类买卖点、背驰与依据" = "First/second/third buy & sell points, divergence and rationale";
+"全部买卖点与形态分析" = "All signals and pattern analysis";
+"一二三类买卖点、背驰与加权依据" = "All three signal classes, divergence and weighted reasons";
 "优先体验新功能" = "Early access to new features";
 "后续模块优先向会员开放" = "New modules roll out to members first";
 "暂时无法加载订阅信息" = "Unable to load subscription info right now";

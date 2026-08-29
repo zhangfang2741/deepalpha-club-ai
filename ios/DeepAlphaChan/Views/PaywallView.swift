@@ -53,7 +53,9 @@ struct PaywallView: View {
             // GapAnalysisView 现在是无人引用的死代码。付费墙不能卖一个 App 里
             // 找不到的功能——既是 App Store 2.3.1 的拒因，也是消费欺诈。
             feature("globe.asia.australia.fill", L("美股 / A 股 / 港股"), L("三个市场统一的缠论结构分析"))
-            feature("flag.fill", L("全部买卖点与操作倾向"), L("一二三类买卖点、背驰与依据"))
+            // 不写「操作倾向」：付费墙是宣传语境，这四个字等于在卖操作建议，
+            // 正踩 3.1.1 / 5.2.5。口径与 App 内的「形态分析」保持一致。
+            feature("flag.fill", L("全部买卖点与形态分析"), L("一二三类买卖点、背驰与加权依据"))
             feature("bolt.fill", L("优先体验新功能"), L("后续模块优先向会员开放"))
         }
         .padding(16)

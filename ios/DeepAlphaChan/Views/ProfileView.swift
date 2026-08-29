@@ -71,7 +71,7 @@ struct ProfileView: View {
                 }
 
                 Section {
-                    Text(L("本 App 提供的缠论结构识别、买卖点标注与操作倾向均由算法自动生成，仅供技术研究与学习参考，不构成任何投资建议或买卖要约。证券投资有风险，任何决策请自主判断并自负盈亏。"))
+                    Text(L("本 App 提供的缠论结构识别、买卖点标注与形态分析均由算法自动生成，仅供技术研究与学习参考，不构成任何投资建议或买卖要约。证券投资有风险，任何决策请自主判断并自负盈亏。"))
                         .font(.caption).foregroundColor(Theme.textSecondary)
                 } header: {
                     Text(L("免责声明"))
