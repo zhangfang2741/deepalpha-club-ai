@@ -39,13 +39,19 @@ router = APIRouter()
 def get_engine() -> TradingEngine:
     """按配置选择引擎。
 
-    第一期只有 MockEngine 可用；TradingAgentsEngine 在计划三接入。做成
-    依赖注入是为了让测试可以覆盖，也让换引擎不必改端点代码。
+    接入策略：
+      - ``mock`` → MockEngine（固定剧本，无需 LLM）。
+      - ``tradingagents`` → TradingAgentsEngine（真实多 Agent 图，checkpointer
+        与 results_dir 在引擎内按 settings 懒构造）。
+      - 其它或缺配置 → MockEngine 并警告（保留默认行为不让生产翻车）。
     """
+    if settings.TRADING_DESK_ENGINE == "tradingagents":
+        from app.services.trading_desk.engines.tradingagents import TradingAgentsEngine
+        return TradingAgentsEngine()
     if settings.TRADING_DESK_ENGINE == "mock":
         return MockEngine()
     logger.warning(
-        "trading_desk_engine_not_available_yet",
+        "trading_desk_engine_unknown_value",
         requested=settings.TRADING_DESK_ENGINE,
         fallback="mock",
     )
