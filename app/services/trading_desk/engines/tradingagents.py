@@ -48,6 +48,7 @@ from tradingagents.graph.setup import (
 )
 
 from app.core.config import settings
+from app.core.logging import logger
 from app.schemas.trading_desk import (
     ConsensusData,
     EngineCapabilities,
@@ -184,6 +185,8 @@ class TradingAgentsEngine:
             checkpointer=self._checkpointer,  # type: ignore[arg-type]
             interrupt_before=list(stage_map.AGENT_NODES),
         )
+        # 暴露给同进程测试快速校验终态；生产路径不需要
+        self._compiled = compiled
 
         cfg: dict[str, Any] = {"configurable": {"thread_id": ctx.run_id}, "recursion_limit": 100}
         init = ta.propagator.create_initial_state(ctx.ticker, ctx.trade_date)
@@ -388,19 +391,44 @@ class TradingAgentsEngine:
         state: Any,
         ctx: RunContext,
     ) -> AsyncIterator[TradingDeskEvent]:
-        """把积压意见嫁接到引擎 state：交易员前 → news_report；之后 → trader_investment_plan。"""
+        """把积压意见嫁接到引擎 state。
+
+        注入窗口（spec §5.3）：
+          - ``news_report`` 必须等 News Analyst 跑过以后再写：再早会被该
+            节点自身的 report 覆盖。
+          - ``trader_investment_plan`` 必须等 Trader 跑过以后再写：再早
+            同理。
+          注入窗口不到的 note 留到下一轮再判，drained 但不写也不发事件——
+          避免用户以为写了其实被覆盖的迷惑。
+        """
         order = list(stage_map.AGENT_NODES)
+        news_idx = order.index("News Analyst")
         trader_idx = order.index("Trader")
 
         notes = await ctx.control.drain_notes()
-        for note in notes:
-            next_node = state.next[0] if state.next else None
-            try:
-                next_idx = order.index(next_node) if next_node in order else trader_idx
-            except ValueError:
-                next_idx = trader_idx
-            field = _PRE_TRADER_FIELD if next_idx <= trader_idx else _POST_TRADER_FIELD
+        if not notes:
+            return
 
+        next_node = state.next[0] if state.next else None
+        next_idx = order.index(next_node) if next_node in order else trader_idx + 1
+
+        # 决定目标字段。窗口不到时 notes 留到下轮再判（不发事件，避免误导）。
+        field: str | None = None
+        if next_idx > trader_idx:
+            field = _POST_TRADER_FIELD
+        elif next_idx > news_idx:
+            field = _PRE_TRADER_FIELD
+
+        if field is None:
+            logger.info(
+                "trading_desk_inject_deferred",
+                run_id=ctx.run_id,
+                count=len(notes),
+                at_node=next_node,
+            )
+            return
+
+        for note in notes:
             values = state.values if isinstance(state.values, dict) else dict(vars(state.values))
             current = str(values.get(field, "") or "")
             await compiled.aupdate_state(cfg, {field: f"{current}\n\n---\n【人工补充意见】{note}"})  # type: ignore[arg-type]
