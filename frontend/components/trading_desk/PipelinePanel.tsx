@@ -10,7 +10,7 @@ export default function PipelinePanel() {
   const stageSignal = useTradingDeskStore((s) => s.stageSignal)
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-4">
+    <div className="min-w-0 rounded-2xl border border-gray-200 bg-white p-4">
       <div className="mb-3 font-mono text-[11px] font-bold uppercase tracking-wider text-gray-400">
         交易台成员
       </div>
@@ -18,15 +18,16 @@ export default function PipelinePanel() {
       {stages.length === 0 ? (
         <p className="py-6 text-center text-xs text-gray-400">开始分析后显示阵容</p>
       ) : (
-        // 窄屏横向滚动、桌面端纵向列表
-        <div className="flex gap-2 overflow-x-auto sm:block sm:overflow-visible">
+        // 纵向 block 列表：min-w-0 防 grid 子项被 chip content 撑破父列导致
+        // 左半边文字被裁。所有 item 各占一行，文本 truncate，chip 允许换行。
+        <div className="block space-y-1">
           {stages.map((stage) => {
             const status = stageStatus[stage.id] ?? 'pending'
             const signal = stageSignal[stage.id]
             return (
               <div
                 key={stage.id}
-                className={`flex w-44 flex-none gap-2.5 rounded-lg p-2 transition-colors sm:w-auto ${
+                className={`flex min-w-0 gap-2.5 rounded-lg p-2 transition-colors ${
                   status === 'active' ? 'bg-blue-50' : ''
                 }`}
               >
@@ -51,7 +52,7 @@ export default function PipelinePanel() {
                   </div>
                   <div className="truncate font-mono text-[10px] text-gray-400">{stage.role}</div>
                   {signal && (
-                    <div className="mt-1.5">
+                    <div className="mt-1.5 flex flex-wrap">
                       <SignalChip dir={signal.dir} conf={signal.conf} />
                     </div>
                   )}
