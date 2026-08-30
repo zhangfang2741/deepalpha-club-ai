@@ -17,7 +17,7 @@ public final class HistoryListViewModel {
     }
 
     public func refresh(ticker: String?) async {
-        error = nil
+        self.error = nil
         loading = true
         defer { loading = false }
         // 1) 本地缓存先出（离线可用）
@@ -35,9 +35,9 @@ public final class HistoryListViewModel {
                 try? await cache.upsert(resp.runs)
             }
         } catch let e as APIError {
-            error = e.message
+            self.error = e.message
         } catch {
-            error = "拉取失败：\(error.localizedDescription)"
+            self.error = "拉取失败：\(error.localizedDescription)"
         }
     }
 }

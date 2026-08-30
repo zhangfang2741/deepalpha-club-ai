@@ -19,7 +19,7 @@ public final class RunReplayViewModel {
     public var verdict: VerdictData? { detail?.verdict }
 
     public func load(runId: String) async {
-        error = nil
+        self.error = nil
         loading = true
         defer { loading = false }
         do {
@@ -30,9 +30,9 @@ public final class RunReplayViewModel {
                 SignalRow(name: $0.name, dir: $0.dir, conf: $0.conf, extracted: $0.extracted)
             }
         } catch let e as APIError {
-            error = e.message
+            self.error = e.message
         } catch {
-            error = "载入失败：\(error.localizedDescription)"
+            self.error = "载入失败：\(error.localizedDescription)"
         }
     }
 }
