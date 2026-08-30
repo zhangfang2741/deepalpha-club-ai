@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { buildAuditChain, useTradingDeskStore } from '@/lib/store/trading_desk'
 
@@ -10,29 +10,38 @@ const ACTION: Record<string, { label: string; color: string }> = {
   HOLD: { label: '观望', color: 'text-amber-600' },
 }
 
-/** 置信度数字滚动到目标值。尊重 prefers-reduced-motion：直接显示终值。 */
+/**
+ * 置信度数字滚动到目标值。
+ *
+ * 初值直接在渲染时算（reduced-motion 或无动画需求时不进 effect），
+ * 动画路径只通过 setInterval 的函数式更新推进——effect 体内不出现
+ * 同步 setState（React 19 的 react-hooks/set-state-in-effect 规则）。
+ */
 function useCountUp(target: number | null): number {
-  const [value, setValue] = useState(0)
+  const prefersReduced = useMemo(
+    () =>
+      typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    [],
+  )
+  const [animated, setAnimated] = useState(0)
 
   useEffect(() => {
-    if (target === null) {
-      setValue(0)
-      return
-    }
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setValue(target)
-      return
-    }
-    let current = 0
+    if (target === null || prefersReduced) return
+
     const timer = window.setInterval(() => {
-      current = Math.min(current + 2, target)
-      setValue(current)
-      if (current >= target) window.clearInterval(timer)
+      setAnimated((current) => {
+        const next = Math.min(current + 2, target)
+        if (next >= target) window.clearInterval(timer)
+        return next
+      })
     }, 18)
     return () => window.clearInterval(timer)
-  }, [target])
+  }, [target, prefersReduced])
 
-  return value
+  if (target === null) return 0
+  if (prefersReduced) return target
+  // 动画起点是 0；interval 里单调爬升到 target
+  return animated
 }
 
 export default function VerdictCard() {
