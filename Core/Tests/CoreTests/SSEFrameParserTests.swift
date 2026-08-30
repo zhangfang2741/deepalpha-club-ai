@@ -1,5 +1,5 @@
 import Testing
-@testable import Core
+@testable import DeepAlphaCore
 
 @Test("标准帧：id + data 各一行")
 func standard() throws {

@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import SwiftData
-@testable import Core
+@testable import DeepAlphaCore
 
 func summary(_ runId: String, ticker: String = "NVDA", date: Date = .distantPast,
              signal: VerdictSignal? = nil) -> RunSummary {

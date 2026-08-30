@@ -1,5 +1,5 @@
 import Testing
-@testable import Core
+@testable import DeepAlphaCore
 
 /// 测试辅助：构造事件。
 func ev(_ type: EventType, seq: Int, data: JSONValue? = .object([:])) -> TradingDeskEvent {

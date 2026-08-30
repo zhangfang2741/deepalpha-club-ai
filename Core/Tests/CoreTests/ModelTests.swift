@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import Core
+@testable import DeepAlphaCore
 
 /// 测试端便捷构造 JSONValue 字面量。
 func jobj(_ dict: [String: JSONValue]) -> JSONValue { .object(dict) }

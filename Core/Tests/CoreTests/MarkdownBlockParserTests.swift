@@ -1,5 +1,5 @@
 import Testing
-@testable import Core
+@testable import DeepAlphaCore
 
 @Suite("MarkdownBlockParser")
 struct MarkdownBlockParserTests {

@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import SwiftData
-@testable import Core
+@testable import DeepAlphaCore
 
 @MainActor
 @Suite("HistoryListViewModel")

@@ -1,7 +1,7 @@
 import Foundation
 import os
 import Testing
-@testable import Core
+@testable import DeepAlphaCore
 
 // MARK: - 测试基建
 

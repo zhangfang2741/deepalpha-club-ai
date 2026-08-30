@@ -1,5 +1,5 @@
 import Testing
-@testable import Core
+@testable import DeepAlphaCore
 
 @Test("US 市场不加后缀")
 func us() {

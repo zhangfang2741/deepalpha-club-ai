@@ -1,19 +1,20 @@
 import Foundation
 import Testing
-@testable import Core
+@testable import DeepAlphaCore
 
 @MainActor
 struct APIClientTests {
-    func makeClient(token: String? = "tok") -> APIClient {
+    func makeClient(_ mock: MockServer, token: String? = "tok") -> APIClient {
         APIClient(baseURL: URL(string: "https://api.example.com")!,
-                  session: MockURLProtocol.makeSession(),
+                  session: mock.session,
                   tokenProvider: { token })
     }
 
-    @Test("GET：带 Authorization 头 + 解析响应", .resetMock)
+    @Test("GET：带 Authorization 头 + 解析响应")
     func getWithAuth() async throws {
+        let mock = MockServer()
         let captured = LockedRequestBox()
-        MockURLProtocol.handler = { req in
+        mock.handler = { req in
             captured.set(req)
             let resp = HTTPURLResponse(url: req.url!, statusCode: 200,
                                        httpVersion: nil, headerFields: nil)!
@@ -23,7 +24,7 @@ struct APIClientTests {
         struct CreateRunResponse: Decodable { let runId: String
             enum CodingKeys: String, CodingKey { case runId = "run_id" } }
 
-        let client = makeClient()
+        let client = makeClient(mock)
         let resp: CreateRunResponse = try await client.get("/a")
         #expect(resp.runId == "r1")
         let req = try #require(captured.get())
@@ -31,25 +32,27 @@ struct APIClientTests {
         #expect(req.url?.absoluteString == "https://api.example.com/a")
     }
 
-    @Test("GET query：参数排序拼接", .resetMock)
+    @Test("GET query：参数排序拼接")
     func getQuery() async throws {
+        let mock = MockServer()
         let captured = LockedRequestBox()
-        MockURLProtocol.handler = { req in
+        mock.handler = { req in
             captured.set(req)
             return (HTTPURLResponse(url: req.url!, statusCode: 200,
                                     httpVersion: nil, headerFields: nil)!,
                      Data(#"{"runs":[]}"#.utf8))
         }
-        let client = makeClient()
+        let client = makeClient(mock)
         let _: RunListResponse = try await client.get("/runs", query: ["limit": "50", "offset": "0"])
         let req = try #require(captured.get())
         #expect(req.url?.query == "limit=50&offset=0")
     }
 
-    @Test("POST JSON：Content-Type 与 body", .resetMock)
+    @Test("POST JSON：Content-Type 与 body")
     func postJson() async throws {
+        let mock = MockServer()
         let captured = LockedRequestBox()
-        MockURLProtocol.handler = { req in
+        mock.handler = { req in
             captured.set(req)
             return (HTTPURLResponse(url: req.url!, statusCode: 200,
                                     httpVersion: nil, headerFields: nil)!,
@@ -58,7 +61,7 @@ struct APIClientTests {
         struct ControlResponse: Decodable { let accepted: Bool }
         struct Body: Encodable { let action: String; let text: String? }
 
-        let client = makeClient(token: nil)
+        let client = makeClient(mock, token: nil)
         let resp: ControlResponse = try await client.post(
             "/api/v1/trading-desk/runs/r1/control", json: Body(action: "pause", text: nil))
         #expect(resp.accepted)
@@ -70,10 +73,11 @@ struct APIClientTests {
         #expect(req.value(forHTTPHeaderField: "Authorization") == nil)
     }
 
-    @Test("POST form-urlencoded（登录）", .resetMock)
+    @Test("POST form-urlencoded（登录）")
     func postForm() async throws {
+        let mock = MockServer()
         let captured = LockedRequestBox()
-        MockURLProtocol.handler = { req in
+        mock.handler = { req in
             captured.set(req)
             return (HTTPURLResponse(url: req.url!, statusCode: 200,
                                     httpVersion: nil, headerFields: nil)!,
@@ -82,7 +86,7 @@ struct APIClientTests {
         struct LoginResponse: Decodable { let accessToken: String
             enum CodingKeys: String, CodingKey { case accessToken = "access_token" } }
 
-        let client = makeClient(token: nil)
+        let client = makeClient(mock, token: nil)
         let resp: LoginResponse = try await client.postForm(
             "/api/v1/auth/login",
             fields: ["email": "a@b.c", "password": "p w+d", "grant_type": "password"])
@@ -95,9 +99,10 @@ struct APIClientTests {
                 == "email=a%40b.c&grant_type=password&password=p%20w%2Bd")
     }
 
-    @Test("401 → .unauthorized；404 → .notFound；detail 消息透出", .resetMock)
+    @Test("401 → .unauthorized；404 → .notFound；detail 消息透出")
     func errorMapping() async {
-        MockURLProtocol.handler = { req in
+        let mock = MockServer()
+        mock.handler = { req in
             let code = Int(req.url!.lastPathComponent) ?? 500
             let resp = HTTPURLResponse(url: req.url!, statusCode: code,
                                        httpVersion: nil, headerFields: nil)!
@@ -105,7 +110,7 @@ struct APIClientTests {
             return (resp, body)
         }
         struct Empty: Decodable {}
-        let client = makeClient()
+        let client = makeClient(mock)
         await #expect(throws: APIError.unauthorized) {
             let _: Empty = try await client.get("/e/401")
         }
@@ -123,12 +128,13 @@ struct APIClientTests {
         }
     }
 
-    @Test("连接层错误 → .network", .resetMock)
+    @Test("连接层错误 → .network")
     func networkError() async {
+        let mock = MockServer()
         struct Boom: Error {}
-        MockURLProtocol.handler = { _ in throw Boom() }
+        mock.handler = { _ in throw Boom() }
         struct Empty: Decodable {}
-        let client = makeClient()
+        let client = makeClient(mock)
         await #expect(throws: APIError.network) {
             let _: Empty = try await client.get("/x")
         }

@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import Core
+@testable import DeepAlphaCore
 
 struct MockAuth: AuthServiceProtocol, Sendable {
     var result: Result<String, Error>

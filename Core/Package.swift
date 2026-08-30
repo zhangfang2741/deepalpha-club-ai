@@ -5,16 +5,18 @@ let package = Package(
     name: "DeepAlphaCore",
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
-        .library(name: "DeepAlphaCore", targets: ["Core"]),
+        .library(name: "DeepAlphaCore", targets: ["DeepAlphaCore"]),
     ],
     targets: [
         .target(
-            name: "Core",
+            name: "DeepAlphaCore",
+            path: "Sources/Core",
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
             name: "CoreTests",
-            dependencies: ["Core"],
+            dependencies: ["DeepAlphaCore"],
+            path: "Tests/CoreTests",
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]
