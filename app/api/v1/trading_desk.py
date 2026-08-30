@@ -79,13 +79,9 @@ async def create_run(
         )
 
     trade_date = payload.trade_date or datetime.now(UTC).strftime("%Y-%m-%d")
-    try:
-        run_id = await runner.start_run(
-            redis, user_id=user.id, ticker=ticker, trade_date=trade_date, engine=engine,
-        )
-    except Exception as e:
-        logger.exception("trading_desk_start_run_failed")
-        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}") from e
+    run_id = await runner.start_run(
+        redis, user_id=user.id, ticker=ticker, trade_date=trade_date, engine=engine,
+    )
     return CreateRunResponse(run_id=run_id)
 
 
