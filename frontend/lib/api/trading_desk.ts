@@ -103,6 +103,71 @@ export interface RunFinishedData {
   duration_ms: number
 }
 
+// ── 历史回放（持久化层） ──────────────────────────────────────────────
+
+/** 历史列表里的一条 run：够打开详情页即可；turns/signals 全文走详情接口。 */
+export interface RunSummary {
+  run_id: string
+  ticker: string
+  trade_date: string
+  engine: string
+  status: 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted'
+  duration_ms: number
+  created_at: string
+  finished_at: string | null
+  verdict_signal: 'BUY' | 'SELL' | 'HOLD' | null
+  verdict_confidence: number | null
+  turns_count: number
+  signals_count: number
+}
+
+export interface RunListResponse {
+  runs: RunSummary[]
+}
+
+/** 详情页 payload：turns/signals 是 schema 里的 dict 列表，原样渲染。 */
+export interface TurnRecord {
+  turn_id: string
+  stage_id: string
+  name: string
+  role: string
+  avatar: string
+  text: string
+  tool_calls: string[]
+  debate:
+    | {
+        debate_id: string
+        side: string
+        side_label: string
+        polarity: Polarity
+        round: number
+      }
+    | null
+}
+
+export interface SignalRecord {
+  stage_id: string
+  name: string
+  dir: Polarity
+  conf: number
+  turn_id: string | null
+  extracted: boolean
+}
+
+export interface RunDetailResponse {
+  run_id: string
+  ticker: string
+  trade_date: string
+  engine: string
+  status: 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted'
+  duration_ms: number
+  created_at: string
+  finished_at: string | null
+  verdict: VerdictData | null
+  signals: SignalRecord[]
+  turns: TurnRecord[]
+}
+
 /** SSE 事件信封。data 的具体形状由 type 决定，消费处窄化。 */
 export interface TradingDeskEvent {
   type: EventType
@@ -128,6 +193,26 @@ export async function controlRun(
   text?: string,
 ): Promise<void> {
   await apiClient.post(`/api/v1/trading-desk/runs/${runId}/control`, { action, text: text ?? null })
+}
+
+/** 列历史 run。ticker 过滤可选；limit / offset 服务端分页。 */
+export async function listRuns(
+  opts: { ticker?: string; limit?: number; offset?: number } = {},
+): Promise<RunListResponse> {
+  const { data } = await apiClient.get<RunListResponse>('/api/v1/trading-desk/runs', {
+    params: {
+      ticker: opts.ticker?.trim().toUpperCase() || undefined,
+      limit: opts.limit ?? 20,
+      offset: opts.offset ?? 0,
+    },
+  })
+  return data
+}
+
+/** 单条详情：含 turns/signals/verdict 全文。越权/不存在走 404。 */
+export async function getRun(runId: string): Promise<RunDetailResponse> {
+  const { data } = await apiClient.get<RunDetailResponse>(`/api/v1/trading-desk/runs/${runId}`)
+  return data
 }
 
 /** 一条已解析的 SSE 帧：id 用于断线续读，event 是载荷。 */

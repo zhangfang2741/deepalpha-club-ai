@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
+import { History } from 'lucide-react'
 import DashboardShell from '@/components/layout/DashboardShell'
 import DecisionPanel from '@/components/trading_desk/DecisionPanel'
 import PipelinePanel from '@/components/trading_desk/PipelinePanel'
@@ -117,6 +119,16 @@ export default function TradingDeskPage() {
       <p className="mt-6 border-t border-gray-200 pt-4 text-center font-mono text-[11px] text-gray-400">
         研究 / 分析用途，非投资建议，不执行真实交易。agent 观点带置信度，不代表事实。
       </p>
+
+      <div className="mt-3 flex justify-center">
+        <Link
+          href="/trading-desk/history"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-[13px] font-medium text-gray-600 transition hover:border-blue-300 hover:text-blue-600"
+        >
+          <History className="h-4 w-4" />
+          查看历史运行
+        </Link>
+      </div>
     </DashboardShell>
   )
 }

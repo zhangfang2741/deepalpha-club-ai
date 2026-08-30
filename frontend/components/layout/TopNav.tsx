@@ -8,7 +8,7 @@ import {
   LogOut, User, LayoutDashboard, TrendingUp, BarChart3,
   LineChart, MessageSquare, Settings, Menu, X, FlaskConical, Network,
   ArrowUpRight, Activity, Search, CandlestickChart, Waves, Cloud, Radar,
-  FileText, ChevronDown, Gauge, Landmark, BookOpen, Sparkles, Gavel,
+  FileText, ChevronDown, Gauge, Landmark, BookOpen, Sparkles, Gavel, History,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -61,9 +61,10 @@ const NAV_ENTRIES: NavEntry[] = [
     label: 'AI 工具',
     icon: Sparkles,
     items: [
-      { href: '/trading-desk',    label: '交易台',   icon: Gavel },
-      { href: '/chat',            label: 'AI 对话', icon: MessageSquare },
-      { href: '/skill-generator', label: '因子探索', icon: FlaskConical },
+      { href: '/trading-desk',           label: '交易台',   icon: Gavel },
+      { href: '/trading-desk/history',   label: '交易台历史', icon: History },
+      { href: '/chat',                   label: 'AI 对话',  icon: MessageSquare },
+      { href: '/skill-generator',        label: '因子探索',  icon: FlaskConical },
     ],
   },
   { href: '/settings', label: '设置', icon: Settings },
