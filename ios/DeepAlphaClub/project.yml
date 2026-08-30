@@ -1,0 +1,47 @@
+name: DeepAlphaClub
+options:
+  bundleIdPrefix: club.deepalpha
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+packages:
+  DeepAlphaCore:
+    path: Core
+
+targets:
+  DeepAlphaClub:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    dependencies:
+      - package: DeepAlphaCore
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: 交易台
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: club.deepalpha.ios
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+
+schemes:
+  DeepAlphaClub:
+    build:
+      targets:
+        DeepAlphaClub: all
+    run:
+      config: Debug
+    archive:
+      config: Release
