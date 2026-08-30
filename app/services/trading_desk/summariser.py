@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
+from app.core.logging import logger
 from app.schemas.trading_desk import (
     DebateTurnData,
     EventType,
@@ -67,10 +68,20 @@ def summarise(events: Iterable[TradingDeskEvent]) -> tuple[dict[str, Any] | None
             turn_id = str(data.get("turn_id", ""))
             if turn_id in open_turns:
                 open_turns[turn_id]["text"] += str(data.get("text", ""))
+            else:
+                logger.warning(
+                    "trading_desk_summariser_orphan_event",
+                    event_type=t.value, turn_id=turn_id, run_id=event.run_id,
+                )
         elif t is EventType.AGENT_TOOL_CALL:
             turn_id = str(data.get("turn_id", ""))
             if turn_id in open_turns:
                 open_turns[turn_id]["tool_calls"].append(str(data.get("tool", "")))
+            else:
+                logger.warning(
+                    "trading_desk_summariser_orphan_event",
+                    event_type=t.value, turn_id=turn_id, run_id=event.run_id,
+                )
         elif t is EventType.DEBATE_TURN:
             payload = DebateTurnData.model_validate(data)
             if payload.turn_id in open_turns:
@@ -81,15 +92,31 @@ def summarise(events: Iterable[TradingDeskEvent]) -> tuple[dict[str, Any] | None
                     "polarity": payload.polarity,
                     "round": payload.round,
                 }
+            else:
+                logger.warning(
+                    "trading_desk_summariser_orphan_event",
+                    event_type=t.value, turn_id=payload.turn_id, run_id=event.run_id,
+                )
         elif t is EventType.TURN_DONE:
             turn_id = str(data.get("turn_id", ""))
             if turn_id in open_turns:
                 done_turns.append(open_turns.pop(turn_id))
+            else:
+                logger.warning(
+                    "trading_desk_summariser_orphan_event",
+                    event_type=t.value, turn_id=turn_id, run_id=event.run_id,
+                )
         elif t is EventType.AGENT_SIGNAL:
             signals.append(SignalData.model_validate(data).model_dump(mode="json"))
         elif t is EventType.VERDICT:
             verdict = VerdictData.model_validate(data).model_dump(mode="json")
-        # 其余事件（STAGE_*/CONSENSUS/HUMAN_NOTE/RUN_*/ERROR）不进摘要
+        else:
+            # 未分支的 EventType（STAGE_*/CONSENSUS/HUMAN_NOTE/RUN_*/ERROR 等）：
+            # 当前设计不纳入摘要，但记一条 warning，方便后续扩展时定位遗漏。
+            logger.warning(
+                "trading_desk_summariser_unhandled_event",
+                event_type=t.value, run_id=event.run_id,
+            )
 
     # 兜底：被 RUN_FINISHED 截断时，仍把没收尾的 turn 也纳入（避免回放空白）
     for leftover in open_turns.values():

@@ -157,3 +157,88 @@ def test_summarise_status_picks_finished_when_no_verdict_or_fatal() -> None:
 
 def test_summarise_status_defaults_to_interrupted_for_empty() -> None:
     assert summarise_status([]) == "interrupted"
+
+
+def test_summarise_silently_drops_orphan_token_tool_debate_done(monkeypatch) -> None:
+    """TURN_STARTED 缺失时，token / tool_call / debate / done 折叠路径不抛异常。
+
+    现实触发场景:Redis Stream 从中间 last_id 重放、前置 TURN_STARTED 还没到；
+    summariser 必须容错(仅 warning),保证回放页不空白。
+    """
+    from app.services.trading_desk import summariser
+
+    calls: list[tuple[str, dict]] = []
+
+    class _Spy:
+        def warning(self, event_name: str, **kw):
+            calls.append((event_name, kw))
+
+        def error(self, event_name: str, **kw):
+            calls.append((event_name, kw))
+
+        # 其他方法原样保留
+        def __getattr__(self, name):
+            return lambda *a, **kw: None
+
+    monkeypatch.setattr(summariser, "logger", _Spy())
+
+    rid = "r"
+    events = [
+        _ev(rid, EventType.AGENT_TOKEN, TokenData(turn_id="missing", text="leak")),
+        _ev(rid, EventType.AGENT_TOOL_CALL, ToolCallData(turn_id="missing", tool="x", args=None)),
+        _ev(rid, EventType.DEBATE_TURN, DebateTurnData(
+            turn_id="missing", debate_id="d", stage_id="s0",
+            side="bull", side_label="多方",
+            polarity="bull", round=1, text="leak",
+        )),
+        _ev(rid, EventType.TURN_DONE, TurnDoneData(turn_id="missing", text="leak")),
+        _ev(rid, EventType.TURN_STARTED, TurnStartedData(
+            turn_id="t1", stage_id="s1", name="Agent", role="analyst", avatar="A",
+        )),
+        _ev(rid, EventType.AGENT_TOKEN, TokenData(turn_id="t1", text="hello")),
+        _ev(rid, EventType.TURN_DONE, TurnDoneData(turn_id="t1", text="hello")),
+    ]
+    v, s, t = summarise(events)
+    assert v is None
+    assert s == []
+    assert [turn["turn_id"] for turn in t] == ["t1"]
+    assert t[0]["text"] == "hello"
+    orphan_calls = [c for c in calls if c[0] == "trading_desk_summariser_orphan_event"]
+    assert len(orphan_calls) == 4
+
+
+def test_summarise_warns_on_unhandled_event_type(monkeypatch) -> None:
+    """未分支的 EventType 不会让 summarise 抛错。
+
+    折叠过程继续推进,已有的 turn/signals/verdict 仍保留,并产 unhandled warning。
+    """
+    from app.services.trading_desk import summariser
+
+    calls: list[tuple[str, dict]] = []
+
+    class _Spy:
+        def warning(self, event_name: str, **kw):
+            calls.append((event_name, kw))
+
+        def __getattr__(self, name):
+            return lambda *a, **kw: None
+
+    monkeypatch.setattr(summariser, "logger", _Spy())
+
+    rid = "r"
+    events = [
+        _ev(rid, EventType.TURN_STARTED, TurnStartedData(
+            turn_id="t1", stage_id="s1", name="A", role="r", avatar="A",
+        )),
+        _ev(rid, EventType.AGENT_SIGNAL, SignalData(
+            stage_id="s1", name="A", dir="bull", conf=1, extracted=True,
+        )),
+        # RUN_PAUSED 当前不在 summarise 折叠路径里，应被忽略
+        _ev(rid, EventType.RUN_PAUSED, None),  # type: ignore[arg-type]
+    ]
+    v, s, t = summarise(events)
+    assert v is None
+    assert len(t) == 1
+    assert len(s) == 1
+    unhandled = [c for c in calls if c[0] == "trading_desk_summariser_unhandled_event"]
+    assert len(unhandled) == 1

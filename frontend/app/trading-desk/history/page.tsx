@@ -170,7 +170,7 @@ export default function TradingDeskHistoryPage() {
                     <div className="hidden flex-1 items-center gap-4 text-xs text-gray-500 sm:flex">
                       <span className="inline-flex items-center gap-1">
                         <Clock className="h-3.5 w-3.5" />
-                        {formatDuration(r.duration_ms)}
+                        {r.status === 'running' ? '—' : formatDuration(r.duration_ms)}
                       </span>
                       <span>{r.signals_count} 信号</span>
                       <span>{r.turns_count} 卡片</span>

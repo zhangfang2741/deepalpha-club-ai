@@ -105,6 +105,24 @@ class BoomEngine:
         yield  # pragma: no cover —— 让本函数成为异步生成器
 
 
+class SlowEngine:
+    """不主动产任何 turn，单纯轮询取消标志。被取消前不会结束。"""
+
+    name = "slow"
+
+    def describe(self):
+        return MockEngine().describe()
+
+    async def astream(self, ctx: RunContext) -> AsyncIterator[TradingDeskEvent]:
+        # 等取消：每隔 ~5ms 检查一次，最多等 2s
+        for _ in range(400):
+            if await ctx.control.is_cancelled():
+                return
+            await asyncio.sleep(0.005)
+        # 超时也直接结束（避免测试挂死）
+        yield  # pragma: no cover —— 让本函数成为异步生成器
+
+
 @pytest.fixture
 def redis() -> FakeRedisAll:
     return FakeRedisAll()
@@ -333,3 +351,19 @@ async def test_failed_run_persists_failed_status(redis: FakeRedisAll, db: FakeDb
     row = db.rows[run_id]
     assert row["status"] == "failed"
     assert row["verdict"] is None  # 没跑到 verdict 阶段
+
+
+async def test_cancelled_run_persists_cancelled_status(redis: FakeRedisAll, db: FakeDb) -> None:
+    """中途调 cancel() → 行被 finalize 成 cancelled，duration_ms >= 0。"""
+    run_id = await runner.start_run(
+        redis, user_id=1, ticker="NVDA", trade_date="2026-08-30", engine=SlowEngine(),
+    )
+    # 给背景任务一拍进入 astream，再发取消
+    await asyncio.sleep(0.02)
+    await runner.cancel(redis, run_id)
+    await runner.wait_for(run_id)
+
+    row = db.rows[run_id]
+    assert row["status"] == "cancelled"
+    assert row["finished_at"] is not None
+    assert int(row["duration_ms"]) >= 0  # type: ignore[arg-type]

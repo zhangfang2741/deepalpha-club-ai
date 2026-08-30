@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { use } from 'react'
+import { isAxiosError } from 'axios'
 import {
   AlertTriangle, ArrowLeft, Calendar, Clock, Gavel, History,
   Loader2, RefreshCcw,
@@ -71,12 +72,11 @@ export default function TradingDeskRunReplayPage({
       const data = await getRun(run_id)
       setDetail(data)
     } catch (err) {
-      const msg = getApiErrorMessage(err)
-      // 404 是越权或不存在的统一反馈，不算错
-      if (msg.includes('404') || msg.includes('运行不存在')) {
+      // 走 HTTP 语义判断 404：detail 文案可能在未来重写
+      if (isAxiosError(err) && err.response?.status === 404) {
         setNotFound(true)
       } else {
-        setError(msg)
+        setError(getApiErrorMessage(err))
       }
     } finally {
       setLoading(false)
@@ -219,7 +219,8 @@ function RunMetaCard({ detail }: { detail: RunDetailResponse }) {
           label="耗时"
           value={
             <span className="inline-flex items-center gap-1 font-mono text-[12px]">
-              <Clock className="h-3.5 w-3.5 text-gray-400" /> {formatDuration(detail.duration_ms)}
+              <Clock className="h-3.5 w-3.5 text-gray-400" />
+              {detail.status === 'running' ? '—' : formatDuration(detail.duration_ms)}
             </span>
           }
         />

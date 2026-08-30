@@ -178,8 +178,22 @@ async def _execute(
             RunFinishedData(status=status, duration_ms=duration_ms),
         )
         events.append(finished_event)
-        await event_bus.publish(redis, run_id, finished_event)
-        await tdc.clear_control(redis, run_id)
+        # finally 段四件事分头 try：保证 RUN_FINISHED 一定先发出去，
+        # 然后清控制位、落库各走各路。一处失败不应牵连其它步骤。
+        try:
+            await event_bus.publish(redis, run_id, finished_event)
+        except Exception:
+            logger.exception(
+                "trading_desk_publish_finished_failed",
+                run_id=run_id, status=status,
+            )
+        try:
+            await tdc.clear_control(redis, run_id)
+        except Exception:
+            logger.exception(
+                "trading_desk_clear_control_failed",
+                run_id=run_id, status=status,
+            )
 
         # 落库：摘要 + 状态。落库失败不应让前端看不见 RUN_FINISHED —— log 后继续。
         verdict, signals, turns = summariser.summarise(events)
