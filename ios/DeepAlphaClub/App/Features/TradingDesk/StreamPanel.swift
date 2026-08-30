@@ -33,7 +33,7 @@ struct StreamPanel: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color(.secondarySystemBackground),
+        .background(Theme.surface,
                     in: RoundedRectangle(cornerRadius: 14))
     }
 
@@ -85,10 +85,10 @@ struct StreamPanel: View {
         VStack(spacing: 8) {
             Text("交易台还很安静。")
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
             Text("输入标的、点「开始分析」。\n看每个 agent 实时推理、辩论、给出结论。")
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Theme.textTertiary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -8,11 +8,11 @@ struct ConsensusMeter: View {
     var body: some View {
         VStack(spacing: 6) {
             HStack {
-                Text("共识").font(.caption2.monospaced()).foregroundStyle(.secondary)
+                Text("共识").font(.caption2.monospaced()).foregroundStyle(Theme.textSecondary)
                 Spacer()
                 Text(consensus.map { "多\($0.bull) 中\($0.neutral) 空\($0.bear) · \($0.lean)" } ?? "—")
                     .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
@@ -21,16 +21,16 @@ struct ConsensusMeter: View {
                     if let c = consensus {
                         let total = max(c.bull + c.neutral + c.bear, 1)
                         Rectangle()
-                            .fill(.green)
+                            .fill(Theme.bull)
                             .frame(width: geo.size.width * CGFloat(c.bull) / CGFloat(total))
                         Rectangle()
-                            .fill(.orange)
+                            .fill(Theme.neutral)
                             .frame(width: geo.size.width * CGFloat(c.neutral) / CGFloat(total))
                         Rectangle()
-                            .fill(.red)
+                            .fill(Theme.bear)
                             .frame(width: geo.size.width * CGFloat(c.bear) / CGFloat(total))
                     } else {
-                        Rectangle().fill(.quaternary)
+                        Rectangle().fill(Theme.surfaceAlt)
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 2))

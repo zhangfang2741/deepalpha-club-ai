@@ -15,6 +15,7 @@ struct RunReplayView: View {
                 ProgressView("载入中").padding(40)
             }
         }
+        .themedBackground()
         .navigationTitle("回放")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: runId) {
@@ -49,12 +50,12 @@ struct RunReplayView: View {
     private func header(_ d: RunDetailResponse) -> some View {
         HStack(spacing: 8) {
             Text(d.ticker).font(.headline.monospaced())
-            Text(d.tradeDate).font(.caption.monospaced()).foregroundStyle(.tertiary)
+            Text(d.tradeDate).font(.caption.monospaced()).foregroundStyle(Theme.textTertiary)
             StatusBadge(status: d.status)
             Spacer(minLength: 4)
             Text(RunRow.duration(d.durationMs))
                 .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
         }
     }
 }

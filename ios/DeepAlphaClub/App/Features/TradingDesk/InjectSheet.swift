@@ -21,6 +21,8 @@ struct InjectSheet: View {
                     Text("意见会在下一个节点边界注入引擎状态，作为人工上下文参与后续推理。")
                 }
             }
+            .scrollContentBackground(.hidden)
+            .themedBackground()
             .navigationTitle("注入意见")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

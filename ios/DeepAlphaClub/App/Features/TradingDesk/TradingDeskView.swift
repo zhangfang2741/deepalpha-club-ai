@@ -48,7 +48,7 @@ struct TradingDeskView: View {
 
             // 登录态没能写进 Keychain：不是错误（本次会话能用），但下次要重登
             if let warn = appState.persistenceWarning {
-                ErrorBanner(message: warn, tint: .orange, icon: "exclamationmark.circle.fill") {
+                ErrorBanner(message: warn, tint: Theme.warning, icon: "exclamationmark.circle.fill") {
                     appState.persistenceWarning = nil
                 }
             }
@@ -68,10 +68,11 @@ struct TradingDeskView: View {
 
             Text("研究 / 分析用途，非投资建议，不执行真实交易。agent 观点带置信度，不代表事实。")
                 .font(.caption2.monospaced())
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Theme.textTertiary)
                 .multilineTextAlignment(.center)
         }
         .padding(14)
+        .themedBackground()
     }
 
     private var wideLayout: some View {

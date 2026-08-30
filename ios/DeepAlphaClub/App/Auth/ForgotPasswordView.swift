@@ -50,14 +50,14 @@ struct ForgotPasswordView: View {
                     if let error = appState.authError {
                         Text(error)
                             .font(.footnote)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Theme.danger)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     if done {
                         Text("密码已重置，请用新密码登录")
                             .font(.footnote)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(Theme.success)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
@@ -77,7 +77,8 @@ struct ForgotPasswordView: View {
                 }
                 .padding(20)
             }
-            .scrollDismissesKeyboard(.interactively)
+            .themedBackground()
+        .scrollDismissesKeyboard(.interactively)
             .navigationTitle("找回密码")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

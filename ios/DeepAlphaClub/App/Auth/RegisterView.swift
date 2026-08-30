@@ -46,7 +46,7 @@ struct RegisterView: View {
                     if let error = appState.authError {
                         Text(error)
                             .font(.footnote)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Theme.danger)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
@@ -62,7 +62,8 @@ struct RegisterView: View {
                 }
                 .padding(20)
             }
-            .scrollDismissesKeyboard(.interactively)
+            .themedBackground()
+        .scrollDismissesKeyboard(.interactively)
             .navigationTitle("注册")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

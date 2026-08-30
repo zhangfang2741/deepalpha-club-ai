@@ -3,7 +3,7 @@ import SwiftUI
 /// 顶部提示条 + 关闭。默认红色报错；tint 换成橙色即为警告。
 struct ErrorBanner: View {
     let message: String
-    var tint: Color = .red
+    var tint: Color = Theme.danger
     var icon: String = "exclamationmark.triangle.fill"
     let onClose: () -> Void
 

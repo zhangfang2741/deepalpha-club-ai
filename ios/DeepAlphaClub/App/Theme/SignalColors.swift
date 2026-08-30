@@ -1,13 +1,13 @@
 import SwiftUI
 import DeepAlphaCore
 
-/// polarity → 颜色（系统色自动适配暗黑模式，对齐 web 的 green/red/amber/blue）。
+/// polarity → 颜色。语义见 Theme 里的说明：绿=看多、红=看空（对齐 web 版交易台）。
 extension Polarity {
     var tint: Color {
         switch self {
-        case .bull: .green
-        case .bear: .red
-        case .neutral: .orange
+        case .bull: Theme.bull
+        case .bear: Theme.bear
+        case .neutral: Theme.neutral
         }
     }
     var label: String {
@@ -29,9 +29,9 @@ extension VerdictSignal {
     }
     var tint: Color {
         switch self {
-        case .buy: .green
-        case .sell: .red
-        case .hold: .orange
+        case .buy: Theme.bull
+        case .sell: Theme.bear
+        case .hold: Theme.neutral
         }
     }
 }
@@ -50,11 +50,11 @@ extension RunStatus {
     }
     var tint: Color {
         switch self {
-        case .idle, .cancelled: .gray
-        case .running: .blue
-        case .paused, .interrupted: .orange
-        case .completed: .green
-        case .failed: .red
+        case .idle, .cancelled: Theme.textSecondary
+        case .running: Theme.accent
+        case .paused, .interrupted: Theme.warning
+        case .completed: Theme.success
+        case .failed: Theme.danger
         }
     }
 }

@@ -21,11 +21,11 @@ struct VerdictCard: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(verdict?.signal.label ?? "—")
                     .font(.title2.weight(.heavy))
-                    .foregroundStyle(verdict?.signal.tint ?? Color.secondary)
+                    .foregroundStyle(verdict?.signal.tint ?? Theme.textSecondary)
                 Spacer()
                 Text("置信度")
                     .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
                 Text(confPct.map { "\($0)%" } ?? "—")
                     .font(.callout.monospaced().weight(.semibold))
             }
@@ -48,16 +48,16 @@ struct VerdictCard: View {
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill")
                 }
-                .foregroundStyle(.orange)
+                .foregroundStyle(Theme.warning)
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                .background(Theme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
             }
 
             if let rationale = verdict?.rationale, !rationale.isEmpty {
                 Text(rationale)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
                     .padding(.top, 4)
             }
 
@@ -68,7 +68,7 @@ struct VerdictCard: View {
                         ForEach(Array(audit.enumerated()), id: \.offset) { i, entry in
                             Text("\(entry.who) —— \(entry.excerpt)")
                                 .font(.caption2)
-                                .foregroundStyle(entry.human ? .blue : .secondary)
+                                .foregroundStyle(entry.human ? Theme.human : Theme.textSecondary)
                                 .lineLimit(2)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             if i < audit.count - 1 { Divider() }
@@ -78,23 +78,23 @@ struct VerdictCard: View {
                 } label: {
                     Text("审计链（\(audit.count) 步）")
                         .font(.caption2.monospaced())
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Theme.accent)
                 }
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.tertiarySystemBackground),
+        .background(Theme.surfaceAlt,
                     in: RoundedRectangle(cornerRadius: 12))
         .opacity(verdict == nil ? 0.6 : 1)
     }
 
     private func field(_ label: String, _ value: String?) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label).font(.caption2).foregroundStyle(.tertiary)
+            Text(label).font(.caption2).foregroundStyle(Theme.textTertiary)
             Text(value ?? "—")
                 .font(.callout.monospaced().weight(.semibold))
-                .foregroundStyle(value == nil ? Color.secondary : Color.primary)
+                .foregroundStyle(value == nil ? Theme.textSecondary : Theme.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }

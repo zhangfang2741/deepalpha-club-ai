@@ -19,7 +19,7 @@ struct DecisionPanel: View {
                             HStack(spacing: 8) {
                                 Text(s.name)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Theme.textSecondary)
                                     .lineLimit(1)
                                 Spacer(minLength: 4)
                                 SignalChip(dir: s.dir, conf: s.conf, extracted: s.extracted)
@@ -32,7 +32,7 @@ struct DecisionPanel: View {
             .padding(14)
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(Color(.secondarySystemBackground),
+        .background(Theme.surface,
                     in: RoundedRectangle(cornerRadius: 14))
     }
 }

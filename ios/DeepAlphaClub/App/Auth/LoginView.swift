@@ -42,7 +42,7 @@ struct LoginView: View {
                     if let error = appState.authError {
                         Text(error)
                             .font(.footnote)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Theme.danger)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
@@ -59,16 +59,17 @@ struct LoginView: View {
                     }
                 }
                 .padding(20)
-                .background(Color(.secondarySystemBackground),
+                .background(Theme.surface,
                             in: RoundedRectangle(cornerRadius: 16))
 
                 Text("研究 / 分析用途，非投资建议，不执行真实交易。")
                     .font(.caption2)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Theme.textTertiary)
             }
             .padding(24)
         }
+        .themedBackground()
         .scrollDismissesKeyboard(.interactively)
         .sheet(isPresented: $showRegister) { RegisterView() }
         .sheet(isPresented: $showForgotPassword) { ForgotPasswordView(channel: channel) }
@@ -88,12 +89,12 @@ struct LoginView: View {
         VStack(spacing: 8) {
             Image(systemName: "chart.line.uptrend.xyaxis")
                 .font(.system(size: 48))
-                .foregroundStyle(.blue)
+                .foregroundStyle(Theme.accent)
             Text("交易台")
                 .font(.title.bold())
             Text("多智能体分析")
                 .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
         }
         .padding(.top, 40)
     }
@@ -105,8 +106,8 @@ struct LoginView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: rememberMe ? "checkmark.square.fill" : "square")
-                        .foregroundStyle(rememberMe ? Color.accentColor : Color.secondary)
-                    Text("保持登录").font(.footnote).foregroundStyle(.secondary)
+                        .foregroundStyle(rememberMe ? Theme.accent : Theme.textSecondary)
+                    Text("保持登录").font(.footnote).foregroundStyle(Theme.textSecondary)
                 }
             }
             Spacer()

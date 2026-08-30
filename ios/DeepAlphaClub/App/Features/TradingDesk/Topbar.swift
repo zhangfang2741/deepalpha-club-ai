@@ -23,7 +23,7 @@ struct Topbar: View {
                     Text("交易台").font(.headline)
                     Text("多智能体分析")
                         .font(.caption2.monospaced())
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Theme.textTertiary)
                 }
                 Spacer()
                 StatusDot(status: state.status)
@@ -39,7 +39,7 @@ struct Topbar: View {
 
             HStack(spacing: 8) {
                 HStack(spacing: 2) {
-                    Text("$").font(.caption.monospaced()).foregroundStyle(.tertiary)
+                    Text("$").font(.caption.monospaced()).foregroundStyle(Theme.textTertiary)
                     TextField(market.placeholder, text: $ticker)
                         .font(.subheadline.monospaced().weight(.semibold))
                         .textInputAutocapitalization(.characters)
@@ -49,7 +49,7 @@ struct Topbar: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
-                .background(Color(.secondarySystemBackground),
+                .background(Theme.surface,
                             in: RoundedRectangle(cornerRadius: 8))
                 .disabled(live)
 
@@ -117,7 +117,7 @@ struct StatusDot: View {
                 .frame(width: 6, height: 6)
             Text(status.label)
                 .font(.caption2.monospaced())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
         }
     }
 }

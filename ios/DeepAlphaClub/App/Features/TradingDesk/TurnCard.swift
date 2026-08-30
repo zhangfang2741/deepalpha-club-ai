@@ -7,8 +7,8 @@ struct TurnCard: View {
     var streaming = false
 
     private var tint: Color {
-        if turn.human { return .blue }
-        return turn.debate?.polarity.tint ?? Color(.systemGray)
+        if turn.human { return Theme.human }
+        return turn.debate?.polarity.tint ?? Theme.textSecondary
     }
 
     var body: some View {
@@ -59,7 +59,7 @@ struct TurnCard: View {
             if !turn.role.isEmpty {
                 Text(turn.role)
                     .font(.caption2.monospaced())
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Theme.textTertiary)
                     .lineLimit(1)
             }
         }
@@ -73,9 +73,9 @@ struct TurnCard: View {
             Label("推理过程", systemImage: "brain")
                 .font(.caption2.monospaced().weight(.semibold))
         }
-        .tint(.purple)
+        .tint(Theme.accent)
         .padding(10)
-        .background(Color.purple.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+        .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -84,7 +84,7 @@ struct StreamingCursor: View {
     @State private var on = true
     var body: some View {
         RoundedRectangle(cornerRadius: 1)
-            .fill(.blue)
+            .fill(Theme.accent)
             .frame(width: 3, height: 14)
             .opacity(on ? 1 : 0.2)
             .onAppear {
@@ -101,10 +101,10 @@ struct ToolChips: View {
             ForEach(items, id: \.self) { item in
                 Text("⚙ \(item)")
                     .font(.caption2.monospaced())
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Theme.accent)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Color.blue.opacity(0.08),
+                    .background(Theme.accent.opacity(0.08),
                                 in: RoundedRectangle(cornerRadius: 5))
             }
         }
@@ -138,8 +138,8 @@ struct MarkdownText: View {
             VStack(alignment: .leading, spacing: 3) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text("•").foregroundStyle(.tertiary)
-                        Text(inline(item)).foregroundStyle(.secondary)
+                        Text("•").foregroundStyle(Theme.textTertiary)
+                        Text(inline(item)).foregroundStyle(Theme.textSecondary)
                         Spacer(minLength: 0)
                     }
                 }
@@ -148,8 +148,8 @@ struct MarkdownText: View {
             VStack(alignment: .leading, spacing: 3) {
                 ForEach(Array(items.enumerated()), id: \.offset) { i, item in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text("\(i + 1).").monospacedDigit().foregroundStyle(.tertiary)
-                        Text(inline(item)).foregroundStyle(.secondary)
+                        Text("\(i + 1).").monospacedDigit().foregroundStyle(Theme.textTertiary)
+                        Text(inline(item)).foregroundStyle(Theme.textSecondary)
                         Spacer(minLength: 0)
                     }
                 }
@@ -158,14 +158,14 @@ struct MarkdownText: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(code)
                     .font(.caption.monospaced())
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Theme.textPrimary)
                     .padding(8)
             }
-            .background(Color(.tertiarySystemBackground),
+            .background(Theme.surfaceAlt,
                         in: RoundedRectangle(cornerRadius: 8))
         case .paragraph(let text):
             Text(inline(text))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }

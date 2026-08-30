@@ -12,12 +12,12 @@ struct AuthTextField: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
                 .frame(width: 20)
             TextField(placeholder, text: $text)
         }
         .padding(12)
-        .background(Color(.secondarySystemBackground),
+        .background(Theme.surface,
                     in: RoundedRectangle(cornerRadius: 10))
     }
 }
@@ -31,12 +31,12 @@ struct AuthSecureField: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
                 .frame(width: 20)
             SecureField(placeholder, text: $text)
         }
         .padding(12)
-        .background(Color(.secondarySystemBackground),
+        .background(Theme.surface,
                     in: RoundedRectangle(cornerRadius: 10))
     }
 }
@@ -89,7 +89,7 @@ struct VerificationCodeField: View {
         HStack(spacing: 10) {
             HStack(spacing: 10) {
                 Image(systemName: "number")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
                     .frame(width: 20)
                 TextField("6 位验证码", text: $code)
                     .keyboardType(.numberPad)
@@ -101,7 +101,7 @@ struct VerificationCodeField: View {
                     }
             }
             .padding(12)
-            .background(Color(.secondarySystemBackground),
+            .background(Theme.surface,
                         in: RoundedRectangle(cornerRadius: 10))
 
             Button {
@@ -122,7 +122,7 @@ struct VerificationCodeField: View {
                 }
                 .frame(width: 88)
                 .padding(.vertical, 14)
-                .background(Color(.secondarySystemBackground),
+                .background(Theme.surface,
                             in: RoundedRectangle(cornerRadius: 10))
             }
             .disabled(!buttonEnabled)
@@ -158,7 +158,7 @@ struct PasswordRulesChecklist: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color(.tertiarySystemBackground),
+        .background(Theme.surfaceAlt,
                     in: RoundedRectangle(cornerRadius: 10))
     }
 
@@ -166,10 +166,10 @@ struct PasswordRulesChecklist: View {
         HStack(spacing: 6) {
             Image(systemName: ok ? "checkmark.circle.fill" : "circle")
                 .font(.caption)
-                .foregroundStyle(ok ? Color.green : Color.secondary)
+                .foregroundStyle(ok ? Theme.success : Theme.textSecondary)
             Text(text)
                 .font(.caption)
-                .foregroundStyle(ok ? Color.primary : Color.secondary)
+                .foregroundStyle(ok ? Theme.textPrimary : Theme.textSecondary)
         }
     }
 }
@@ -190,9 +190,9 @@ struct AuthPrimaryButton: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(enabled ? Color.accentColor : Color(.secondarySystemBackground),
+            .background(enabled ? Theme.accent : Theme.surface,
                         in: RoundedRectangle(cornerRadius: 12))
-            .foregroundStyle(enabled ? Color.white : Color.secondary)
+            .foregroundStyle(enabled ? Color.white : Theme.textSecondary)
         }
         .disabled(!enabled || loading)
     }

@@ -14,7 +14,7 @@ struct PipelinePanel: View {
                 if stages.isEmpty {
                     Text("开始分析后显示阵容")
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Theme.textTertiary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 24)
                 } else {
@@ -26,7 +26,7 @@ struct PipelinePanel: View {
             .padding(14)
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(Color(.secondarySystemBackground),
+        .background(Theme.surface,
                     in: RoundedRectangle(cornerRadius: 14))
     }
 
@@ -38,11 +38,11 @@ struct PipelinePanel: View {
                 switch status {
                 case .done:
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Theme.success)
                 case .active:
                     ProgressView().controlSize(.small)
                 case .pending:
-                    Circle().strokeBorder(.tertiary, lineWidth: 1.5)
+                    Circle().strokeBorder(Theme.textTertiary, lineWidth: 1.5)
                 }
             }
             .font(.footnote)
@@ -52,13 +52,12 @@ struct PipelinePanel: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(stage.name)
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(status == .pending ? AnyShapeStyle(.tertiary)
-                                                        : AnyShapeStyle(.primary))
+                    .foregroundStyle(status == .pending ? Theme.textTertiary : Theme.textPrimary)
                     .lineLimit(1)
                 if !stage.role.isEmpty {
                     Text(stage.role)
                         .font(.caption2.monospaced())
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Theme.textTertiary)
                         .lineLimit(1)
                 }
                 if let signal = stageSignal[stage.id] {
@@ -71,7 +70,7 @@ struct PipelinePanel: View {
         .padding(.horizontal, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            status == .active ? Color.blue.opacity(0.07) : Color.clear,
+            status == .active ? Theme.accent.opacity(0.07) : Color.clear,
             in: RoundedRectangle(cornerRadius: 8))
     }
 }

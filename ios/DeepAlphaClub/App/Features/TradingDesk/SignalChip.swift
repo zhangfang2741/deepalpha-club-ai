@@ -31,5 +31,5 @@ func panelHeader(_ text: String) -> some View {
     Text(text)
         .font(.caption2.monospaced().weight(.bold))
         .tracking(1.2)
-        .foregroundStyle(.tertiary)
+        .foregroundStyle(Theme.textTertiary)
 }

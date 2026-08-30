@@ -22,19 +22,22 @@ struct HistoryListView: View {
                 if vm.loading && vm.runs.isEmpty {
                     HStack(spacing: 8) {
                         ProgressView()
-                        Text("正在拉取").foregroundStyle(.secondary)
+                        Text("正在拉取").foregroundStyle(Theme.textSecondary)
                     }
                 }
                 if vm.runs.isEmpty && !vm.loading {
                     Text("暂无历史运行 —— 到交易台跑一次吧。")
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Theme.textTertiary)
                 }
                 ForEach(vm.runs) { run in
                     NavigationLink(value: run.runId) {
                         RunRow(run: run)
                     }
+                    .listRowBackground(Theme.surface)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .themedBackground()
             .navigationTitle("历史运行")
             .navigationDestination(for: String.self) { runId in
                 RunReplayView(runId: runId)
@@ -75,17 +78,17 @@ struct RunRow: View {
                 if let signal = run.verdictSignal {
                     VerdictBadge(signal: signal, confidence: run.verdictConfidence)
                 } else {
-                    Text("未出裁决").font(.caption2).foregroundStyle(.tertiary)
+                    Text("未出裁决").font(.caption2).foregroundStyle(Theme.textTertiary)
                 }
                 StatusBadge(status: run.status)
                 Spacer(minLength: 4)
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(Self.timestamp(run.finishedAt ?? run.createdAt))
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Theme.textTertiary)
                     Text(run.tradeDate)
                         .font(.caption2.monospaced())
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Theme.textTertiary)
                 }
             }
             HStack(spacing: 12) {
@@ -96,7 +99,7 @@ struct RunRow: View {
                 Text(run.engine).font(.caption2.monospaced())
             }
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Theme.textSecondary)
         }
         .padding(.vertical, 4)
     }
@@ -144,11 +147,11 @@ struct StatusBadge: View {
 
     private var style: (text: String, color: Color) {
         switch status {
-        case .running: ("运行中", .blue)
-        case .completed: ("已完成", .green)
-        case .cancelled: ("已取消", .gray)
-        case .failed: ("失败", .red)
-        case .interrupted: ("中断", .orange)
+        case .running: ("运行中", Theme.accent)
+        case .completed: ("已完成", Theme.success)
+        case .cancelled: ("已取消", Theme.textSecondary)
+        case .failed: ("失败", Theme.danger)
+        case .interrupted: ("中断", Theme.warning)
         }
     }
 

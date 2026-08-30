@@ -17,6 +17,7 @@
 		639888FA927B0EFA295BF785 /* TradingDeskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B4E66E6D8FEB52BD02DA8BC /* TradingDeskView.swift */; };
 		74FC0265866C004AFF378BA6 /* DeepAlphaClubApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F718E462ADE96EA7695E9CE7 /* DeepAlphaClubApp.swift */; };
 		78CE239D9F28A6C7AE8A1D6A /* VerdictCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 211DCF3A1ABB90C8559AAA4B /* VerdictCard.swift */; };
+		803C449AE08E12EF788235F3 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED6FDF48F365512FAB35AEEC /* Theme.swift */; };
 		8090AA9B9BDA1A46524D753D /* ErrorBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF37691DCA7AC79F446543C6 /* ErrorBanner.swift */; };
 		83427D36E2056695FA79C76A /* CompositionRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE65FC0C82F27F59813A029 /* CompositionRoot.swift */; };
 		90AE268DB904492396549A68 /* SignalColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 679B2E95C74EC33A6660E2AE /* SignalColors.swift */; };
@@ -56,6 +57,7 @@
 		D83D84303CC6C16D77206BBF /* Topbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Topbar.swift; sourceTree = "<group>"; };
 		DC2B81F3F5B15D10F53EDB8F /* SignalChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalChip.swift; sourceTree = "<group>"; };
 		E510E159F414F4995E9B4767 /* DeepAlphaClub.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DeepAlphaClub.entitlements; sourceTree = "<group>"; };
+		ED6FDF48F365512FAB35AEEC /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		F718E462ADE96EA7695E9CE7 /* DeepAlphaClubApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepAlphaClubApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -146,6 +148,7 @@
 			isa = PBXGroup;
 			children = (
 				679B2E95C74EC33A6660E2AE /* SignalColors.swift */,
+				ED6FDF48F365512FAB35AEEC /* Theme.swift */,
 			);
 			path = Theme;
 			sourceTree = "<group>";
@@ -246,6 +249,7 @@
 				A523A58043F22941DD690364 /* SignalChip.swift in Sources */,
 				90AE268DB904492396549A68 /* SignalColors.swift in Sources */,
 				027A7DC15D5015B16861BAF6 /* StreamPanel.swift in Sources */,
+				803C449AE08E12EF788235F3 /* Theme.swift in Sources */,
 				021DA9BC134CB71FC99D3E33 /* Topbar.swift in Sources */,
 				639888FA927B0EFA295BF785 /* TradingDeskView.swift in Sources */,
 				B55A3D046DE82C3F0EB6505A /* TurnCard.swift in Sources */,

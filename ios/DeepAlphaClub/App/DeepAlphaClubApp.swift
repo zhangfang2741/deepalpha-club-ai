@@ -9,6 +9,8 @@ struct DeepAlphaClubApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .tint(Theme.accent)
+                .preferredColorScheme(.dark)
                 .environment(\.compositionRoot, root)
                 .environment(root.appState)
                 .environment(root.deskVM)
