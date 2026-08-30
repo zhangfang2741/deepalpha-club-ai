@@ -43,7 +43,9 @@ struct TradingDeskServiceTests {
         let req = try #require(captured.get())
         #expect(req.url?.path == "/api/v1/trading-desk/runs/run-1/control")
         let body = try #require(req.httpBody ?? req.httpBodyStreamData)
-        #expect(String(data: body, encoding: .utf8) == #"{"action":"inject","text":"注意风险"}"#)
+        // JSON 键顺序无语义，解析后比较
+        let decoded = try #require(try JSONSerialization.jsonObject(with: body) as? [String: String])
+        #expect(decoded == ["action": "inject", "text": "注意风险"])
     }
 
     @Test("listRuns：query 参数 ticker/limit/offset", .resetMock)
