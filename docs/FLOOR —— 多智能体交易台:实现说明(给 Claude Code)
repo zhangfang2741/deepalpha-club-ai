@@ -1,0 +1,205 @@
+# FLOOR —— 多智能体交易台:实现说明(给 Claude Code)
+
+> 你要把一个已经验证过交互的前端原型,做成一个前后端分离、可接真实 LLM agent 的多智能体交易分析系统。原型文件是 `floor-prototype-cn.html`(纯前端、写死 mock、无真实模型/行情)。它已经定义了目标交互体感,请把它当作产品需求文档来读,而不是要照抄的代码。
+
+---
+
+## 0. 背景与目标
+
+现有开源项目(TradingAgents、ai-hedge-fund)的 agent 逻辑不错,但交互体验很差:CLI 跑一遍、黑盒等很久、最后吐一大坨文本,看不到过程、无法介入。
+
+我们要做的是一个**体验优先**的多智能体交易台,核心价值就是把 TradingAgents 缺的那几块补上:
+
+1. **Token 级流式推理** —— 每个 agent 的思考实时逐字推给前端,而不是等结果。
+2. **多空辩论可视化** —— 研究员的对辩分轮次、分左右呈现,谁在反驳谁一目了然。
+3. **决策逐步组装** —— 各 agent 的信号实时汇入共识条,最终裁决卡带完整审计链。
+4. **人在环(HITL)** —— 运行中可暂停、可注入人工意见到共享上下文,下游 agent 会纳入。
+
+**非目标(第一期明确不做):** 真实下单/券商对接、实盘资金、回测引擎、用户系统与鉴权、移动端专门优化(响应式够用即可)。这是研究/分析工具,不碰真实交易。
+
+---
+
+## 1. 技术选型
+
+- **前端:** React + TypeScript + Vite。样式用原型里那套设计 token(见 §5),不引入重型 UI 库。状态管理用 zustand 或 React 自带即可。
+- **后端:** Python + FastAPI。用 **SSE(Server-Sent Events)** 把事件流推给前端(比 WebSocket 简单,单向流足够;若后续要前端主动打断再升级 WS)。
+- **Agent 编排:** 自研轻量 DAG orchestrator(见 §3),不强绑某个框架。第一期可直接**包装 TradingAgents 或 ai-hedge-fund 的 agent 逻辑**作为引擎,把它们的中间输出映射成我们的事件协议(见 §4)。
+- **LLM 调用:** 通过一个 provider 抽象层,支持 Anthropic / OpenAI / DeepSeek 等,用流式接口(stream=True)。
+- **行情/基本面数据:** 先用一个 `DataProvider` 接口封装,第一期可接 Financial Datasets API 或 akshare(A 股)/ yfinance,允许 mock fallback。
+
+---
+
+## 2. 分阶段任务(建议按此顺序提交)
+
+**阶段 A —— 前端骨架 + mock 事件流(先复刻原型的体感)**
+- 用 React 重建原型的三栏布局:左「交易台成员」流程、中「实时推理流」、右「决策」面板。
+- 定义前端事件消费层:一个 `useEventStream` hook,先接一个**本地 mock 事件源**(把原型里那段脚本转成符合 §4 协议的事件序列)。
+- 实现打字机流式渲染、辩论左右分栏、信号 chip、共识条动画、裁决卡组装、审计链展开。
+- 实现暂停/继续、注入意见(注入的意见先只在前端插入事件流,后端对接在阶段 C)。
+- **验收:** 纯前端跑起来,交互与 `floor-prototype-cn.html` 等价甚至更好。
+
+**阶段 B —— 后端编排 + SSE + 真实 LLM(单 agent 打通)**
+- 搭 FastAPI,`POST /api/run` 启动一次分析,`GET /api/stream/{run_id}` 用 SSE 推事件。
+- 实现 DAG orchestrator 与事件总线(§3),先只跑**一个** agent(基本面分析师),用真实 LLM 流式输出,映射成 `agent.token` 事件。
+- 前端 `useEventStream` 从 mock 切到真实 SSE。
+- **验收:** 前端能看到一个真实 agent 的 token 流式打出来 + 结构化信号。
+
+**阶段 C —— 全部 agent + 辩论 + HITL**
+- 补齐全部 7 个节点(§3.1),实现多空研究员的**多轮辩论**(把上一轮对方发言作为下一轮输入)。
+- 实现风控约束、PM 汇总裁决(结构化输出:action/conf/size/stop/horizon/rationale)。
+- 实现 HITL:前端注入意见 → 后端 `POST /api/run/{run_id}/inject` → 加入共享上下文/黑板,下游 agent 的 prompt 带上它;暂停 → 后端在下一个节点边界挂起。
+- **验收:** 完整跑一遍真实分析,过程可看、可暂停、可注入。
+
+**阶段 D —— 接真实数据 + 打磨**
+- 把 `DataProvider` 接上真实行情/基本面/新闻源,让分析师的工具调用是真的。
+- 错误处理、超时、断线重连(SSE `Last-Event-ID`)、成本/延迟展示。
+
+> 每个阶段结束请自测并写简短说明,再进入下一阶段。不要一次性写完所有东西。
+
+---
+
+## 3. 架构
+
+### 3.1 交易台节点(DAG)
+
+```
+[基本面分析师] ┐
+[技术面分析师] ┼─→ [研究员辩论: 多头 ⇄ 空头 (N 轮)] ─→ [交易员] ─→ [风控委员会] ─→ [投资组合经理/裁决]
+[消息与情绪]   ┘
+```
+
+- 前三个分析师**并行**,各自产出一段推理 + 一个结构化信号 `{dir: bull|bear|neutral, conf: 0-100}`。
+- 辩论节点:多头/空头研究员交替发言 N 轮(默认 2),每轮能看到前面所有分析师结论 + 对方上一轮发言。可各自在末轮给出信号。
+- 交易员:综合上游,给出建仓思路(建议动作 + 入场逻辑)。
+- 风控:给出约束(仓位上限、止损、事件风险),可否决/降级。
+- PM:输出最终结构化裁决。
+
+节点定义建议抽象成:
+
+```python
+class Agent(Protocol):
+    id: str
+    name: str
+    async def run(self, ctx: RunContext) -> AsyncIterator[Event]: ...
+```
+
+`RunContext` 里有:标的、上游各节点的产出(黑板/blackboard)、人工注入的意见列表、DataProvider、LLM client。
+
+### 3.2 事件总线
+
+- Orchestrator 按 DAG 拓扑执行,每个 agent 产出的 `Event` 写入一个 `asyncio.Queue`(每个 run 一个)。
+- SSE 端点从 queue 消费并推给前端。
+- 支持中途 `inject`(把人工意见追加进 blackboard 的 `human_notes`)和 `pause`(orchestrator 在节点边界检查 flag)。
+
+---
+
+## 4. 事件协议(前后端契约 —— 最重要的部分)
+
+后端通过 SSE 推送 JSON 事件。前端只认这套 schema,后端引擎无论是自研还是包 TradingAgents,都要映射成这些事件。**这层抽象是"前端壳可复用、后端可替换"的关键。**
+
+```jsonc
+// 通用信封
+{ "type": "<event_type>", "run_id": "...", "seq": 12, "ts": 1730000000, "data": { ... } }
+```
+
+事件类型:
+
+| type | data 字段 | 说明 |
+|---|---|---|
+| `run.started` | `{ ticker, agents: [{id,name,role}] }` | 初始化 pipeline |
+| `stage.active` | `{ stage_id }` | 某节点开始 |
+| `stage.done` | `{ stage_id }` | 某节点完成 |
+| `agent.tool_call` | `{ stage_id, tool, args? }` | agent 调用工具(前端显示 ⚙ chip) |
+| `agent.token` | `{ stage_id, text }` | 流式 token 片段(增量追加) |
+| `agent.signal` | `{ stage_id, name, dir, conf }` | agent 产出结构化信号 |
+| `debate.turn` | `{ side: "bull"\|"bear", round, name }` | 辩论开始一轮发言(之后跟 agent.token) |
+| `human.note` | `{ text }` | 人工注入的意见(前端插入 human 卡片) |
+| `consensus.update` | `{ bull, neutral, bear, lean }` | 共识计数更新(也可前端自算) |
+| `verdict` | `{ action, sub?, conf, size, stop, horizon, reassess, rationale }` | 最终裁决 |
+| `run.finished` | `{}` | 结束 |
+| `error` | `{ stage_id?, message }` | 错误 |
+
+要点:
+- `agent.token` 是**增量**,前端按 `stage_id` 累加到对应卡片。
+- 辩论:先 `debate.turn` 建一张左/右卡片,随后的 `agent.token` 归到当前轮。
+- `verdict.action` 用枚举值 `买入|卖出|观望`(或英文 BUY/SELL/HOLD,前端做映射)。
+- 每个事件带单调递增 `seq`,支持断线重连去重。
+
+---
+
+## 5. 设计规范(沿用原型,请照此实现)
+
+**配色(暗色、暖中性,刻意避开"黑底荧光绿终端"套路):**
+```
+--bg:#14151A  --bg2:#1A1C22  --bg3:#22242C
+--line:#2E313B  --line2:#3A3E4A
+--ink:#ECEAE4  --ink-dim:#9A9DA8  --ink-faint:#646773
+--bull:#5BBE86  --bear:#DE7B7B  --neutral:#E4AC5E
+--accent:#8891E8  (系统/PM/高亮,periwinkle)
+```
+**字体:** 正文 `system-ui, "PingFang SC", "Microsoft YaHei"`;标签/代码/信号用等宽 `"SF Mono", ui-monospace`。等宽只用在数据和标签上,别全局用(否则又变终端脸)。
+
+**交互细节(从原型继承,勿丢):**
+- 流式打字带闪烁光标;标点处停顿更长一点,更像"在思考"。
+- 分析师节点转圈(active)→ 打勾(done)并挂上该节点信号 chip。
+- 多空辩论左右错位、绿/红分色。
+- 共识条三色按比例填充,带过渡动画。
+- 裁决卡置信度数字滚动到目标值。
+- 人工意见卡片用 accent 色,和 agent 卡片区分。
+- 尊重 `prefers-reduced-motion`:关掉打字动画直接出全文。
+- 响应式:窄屏三栏堆叠,流程变横向滚动条。
+
+**文案原则:** 界面用中文,按钮说清楚点了会发生什么(「开始分析」「暂停/继续」「注入意见」)。空态、错误态给方向,别只报错。
+
+---
+
+## 6. 目录结构建议
+
+```
+floor/
+  backend/
+    app/
+      main.py            # FastAPI 入口, /api/run, /api/stream, /api/inject
+      orchestrator.py    # DAG 执行 + 事件总线 + pause/inject
+      events.py          # 事件 schema (pydantic)
+      agents/            # 各节点 agent 实现
+        base.py
+        analysts.py
+        debate.py
+        trader.py risk.py pm.py
+      llm/               # provider 抽象 + 流式封装
+      data/              # DataProvider 接口 + 各数据源实现 + mock
+      engines/           # 可选: 包装 TradingAgents / ai-hedge-fund 的适配层
+  frontend/
+    src/
+      components/        # Topbar, Pipeline, Stream, Turn, DecisionPanel, Verdict...
+      hooks/useEventStream.ts
+      store.ts
+      types.ts           # 与后端 events.py 对齐的 TS 类型
+      theme.css          # §5 的 token
+      mock/              # 阶段 A 的本地 mock 事件源
+```
+
+---
+
+## 7. 重要约束与提醒
+
+- **免责声明常驻:** 界面底部保留"模拟/研究用途,非投资建议,不执行真实交易"。
+- **不要把 LLM 信号当成投资建议**在代码注释或 UI 里表述;它是"agent 观点",带置信度。
+- **成本意识:** 每次完整分析会有很多次 LLM 调用(参考 TradingAgents 的量级),给节点级的 token/耗时统计,方便调优。
+- **可测试:** orchestrator 和事件映射要能脱离真实 LLM 用 mock 跑通(阶段 A/单测)。
+- **密钥:** 用环境变量/本地 .env,别硬编码,别提交。
+- **先跑通再优化:** 严格按阶段 A→D,每阶段可运行、可演示,再往下。
+
+---
+
+## 8. 第一步请你做什么
+
+从**阶段 A** 开始:
+1. 初始化 `frontend/`(Vite + React + TS),铺好 §5 的 theme。
+2. 定义 `types.ts`(§4 事件协议的 TS 版)。
+3. 把 `floor-prototype-cn.html` 里的脚本内容转成一份符合协议的 mock 事件序列,放 `mock/`。
+4. 实现三栏 UI + `useEventStream`(先接 mock)+ 全部流式/辩论/决策/HITL 交互。
+5. 跑起来给我看,确认体感对齐原型后,再进入阶段 B 搭后端。
+
+开始吧。有架构上的取舍不确定时,先说明你的选择和理由,再往下写。

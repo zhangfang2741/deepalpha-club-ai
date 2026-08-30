@@ -1,0 +1,477 @@
+<!--
+  交易台 FLOOR — 多智能体交易台(交互原型)
+  模拟演示:无真实模型、无真实行情。推理内容为演示用途,仅用于打磨交互。
+-->
+<style>
+  :root{
+    --bg:#14151A; --bg2:#1A1C22; --bg3:#22242C;
+    --line:#2E313B; --line2:#3A3E4A;
+    --ink:#ECEAE4; --ink-dim:#9A9DA8; --ink-faint:#646773;
+    --bull:#5BBE86; --bear:#DE7B7B; --neutral:#E4AC5E;
+    --accent:#8891E8; --accent-dim:rgba(136,145,232,.14);
+    --bull-dim:rgba(91,190,134,.13); --bear-dim:rgba(222,123,123,.13); --neutral-dim:rgba(228,172,94,.13);
+    --sans:system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Segoe UI",Roboto,sans-serif;
+    --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  .floor{
+    background:var(--bg); color:var(--ink); font-family:var(--sans);
+    min-height:100%; padding:18px; -webkit-font-smoothing:antialiased;
+    font-size:14px; line-height:1.6;
+  }
+  .floor button{font-family:inherit; cursor:pointer}
+
+  /* ---- 顶栏 ---- */
+  .topbar{
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding-bottom:16px; border-bottom:1px solid var(--line); margin-bottom:16px;
+  }
+  .brand{display:flex; align-items:baseline; gap:9px}
+  .brand .mark{
+    font-family:var(--mono); font-weight:700; letter-spacing:.14em; font-size:15px; color:var(--ink);
+  }
+  .brand .mark b{color:var(--accent)}
+  .brand .tag{font-size:11px; color:var(--ink-faint); letter-spacing:.02em}
+  .spacer{flex:1}
+  .ticker-in{
+    display:flex; align-items:center; gap:0; background:var(--bg2);
+    border:1px solid var(--line2); border-radius:8px; overflow:hidden;
+  }
+  .ticker-in span{padding:0 4px 0 11px; color:var(--ink-faint); font-family:var(--mono); font-size:12px}
+  .ticker-in input{
+    background:transparent; border:0; outline:0; color:var(--ink);
+    font-family:var(--mono); font-weight:600; font-size:14px; letter-spacing:.06em;
+    width:74px; padding:9px 11px 9px 2px; text-transform:uppercase;
+  }
+  .btn{
+    border:1px solid var(--line2); background:var(--bg2); color:var(--ink);
+    padding:9px 15px; border-radius:8px; font-size:13px; font-weight:600;
+    transition:border-color .15s, background .15s, opacity .15s;
+  }
+  .btn:hover{border-color:var(--accent); background:var(--bg3)}
+  .btn:disabled{opacity:.4; cursor:not-allowed; border-color:var(--line2); background:var(--bg2)}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:#12131A}
+  .btn.primary:hover{background:#9aa2ee}
+  .btn.ghost{background:transparent}
+  .status{
+    font-family:var(--mono); font-size:12px; color:var(--ink-dim);
+    display:flex; align-items:center; gap:8px; min-width:0;
+  }
+  .status .dot{width:7px; height:7px; border-radius:50%; background:var(--ink-faint); flex:none}
+  .status.live .dot{background:var(--accent); animation:pulse 1.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(136,145,232,.5)}70%{box-shadow:0 0 0 7px rgba(136,145,232,0)}100%{box-shadow:0 0 0 0 rgba(136,145,232,0)}}
+
+  /* ---- 布局 ---- */
+  .grid{display:grid; grid-template-columns:236px 1fr 300px; gap:16px; align-items:start}
+  .panel{background:var(--bg2); border:1px solid var(--line); border-radius:12px}
+  .panel-h{
+    font-size:12px; font-weight:700; letter-spacing:.08em;
+    color:var(--ink-faint); padding:14px 16px 10px;
+  }
+
+  /* ---- 左:流程 ---- */
+  .pipe{padding:0 10px 12px}
+  .stage{display:flex; gap:11px; padding:11px 10px; border-radius:9px; position:relative; transition:background .2s}
+  .stage .rail{width:2px; background:var(--line2); border-radius:2px; margin:2px 0 -22px 8px; flex:none}
+  .stage:last-child .rail{display:none}
+  .stage .node{
+    width:18px; height:18px; border-radius:50%; border:2px solid var(--line2);
+    flex:none; display:grid; place-items:center; background:var(--bg2);
+    font-size:10px; color:var(--ink-faint); font-family:var(--mono); transition:all .25s; margin-top:1px;
+  }
+  .stage .body{min-width:0; flex:1}
+  .stage .name{font-size:13px; font-weight:600; color:var(--ink-dim); transition:color .2s}
+  .stage .role{font-size:11px; color:var(--ink-faint); font-family:var(--mono)}
+  .stage .sig{margin-top:6px}
+  .stage.active{background:var(--accent-dim)}
+  .stage.active .node{border-color:var(--accent); color:var(--accent); animation:spin 1.1s linear infinite}
+  .stage.active .name{color:var(--ink)}
+  .stage.done .node{border-color:var(--bull); background:var(--bull); color:#12131A}
+  .stage.done .name{color:var(--ink)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---- 中:推理流 ---- */
+  .stream-wrap{min-height:420px}
+  .stream{padding:6px 16px 18px; display:flex; flex-direction:column; gap:12px}
+  .empty{color:var(--ink-faint); text-align:center; padding:70px 20px; font-size:13px; line-height:2}
+  .empty b{color:var(--ink-dim); display:block; font-size:14px; margin-bottom:6px}
+  .turn{border:1px solid var(--line); border-radius:11px; padding:13px 15px; background:var(--bg); animation:rise .35s ease both}
+  @keyframes rise{from{opacity:0; transform:translateY(7px)}to{opacity:1; transform:none}}
+  .turn .who{display:flex; align-items:center; gap:9px; margin-bottom:8px}
+  .turn .av{
+    width:26px; height:26px; border-radius:7px; flex:none; display:grid; place-items:center;
+    font-family:var(--mono); font-size:11px; font-weight:700;
+    background:var(--bg3); color:var(--ink-dim); border:1px solid var(--line2);
+  }
+  .turn .wn{font-size:13px; font-weight:600}
+  .turn .wr{font-size:11px; color:var(--ink-faint); font-family:var(--mono); margin-left:auto}
+  .turn .txt{font-size:14px; color:var(--ink); line-height:1.75}
+  .turn .txt .tool{
+    display:inline-block; font-family:var(--mono); font-size:11px; color:var(--accent);
+    background:var(--accent-dim); padding:1px 7px; border-radius:5px; margin:3px 4px 3px 0;
+  }
+  .caret{display:inline-block; width:7px; height:15px; background:var(--accent); margin-left:1px; vertical-align:-2px; animation:blink 1s steps(2) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .turn.bull{border-color:rgba(91,190,134,.4); background:linear-gradient(var(--bull-dim),transparent 60%)}
+  .turn.bull .av{color:var(--bull); border-color:rgba(91,190,134,.5)}
+  .turn.bull .wn{color:var(--bull)}
+  .turn.bear{border-color:rgba(222,123,123,.4); background:linear-gradient(var(--bear-dim),transparent 60%); margin-left:20px}
+  .turn.bear .av{color:var(--bear); border-color:rgba(222,123,123,.5)}
+  .turn.bear .wn{color:var(--bear)}
+  .turn.human{border-color:var(--accent); background:var(--accent-dim)}
+  .turn.human .av{color:var(--accent); border-color:var(--accent)}
+  .turn.human .wn{color:var(--accent)}
+  .sysline{font-family:var(--mono); font-size:11.5px; color:var(--ink-faint); text-align:center; padding:2px 0}
+  .sysline b{color:var(--accent); font-weight:600}
+
+  .chip{
+    display:inline-flex; align-items:center; gap:7px; font-family:var(--mono); font-size:11px;
+    font-weight:600; padding:3px 9px; border-radius:6px; letter-spacing:.02em; animation:rise .3s ease both;
+  }
+  .chip .d{width:6px; height:6px; border-radius:50%; flex:none}
+  .chip.bull{background:var(--bull-dim); color:var(--bull)} .chip.bull .d{background:var(--bull)}
+  .chip.bear{background:var(--bear-dim); color:var(--bear)} .chip.bear .d{background:var(--bear)}
+  .chip.neutral{background:var(--neutral-dim); color:var(--neutral)} .chip.neutral .d{background:var(--neutral)}
+
+  /* ---- 右:决策 ---- */
+  .dec{padding:6px 16px 16px; display:flex; flex-direction:column; gap:16px}
+  .meter-lab{display:flex; justify-content:space-between; font-family:var(--mono); font-size:11px; color:var(--ink-faint); margin-bottom:6px}
+  .meter{height:8px; border-radius:5px; background:var(--bg3); overflow:hidden; display:flex}
+  .meter i{height:100%; width:0; transition:width .6s ease}
+  .meter .mb{background:var(--bull)} .meter .mn{background:var(--neutral)} .meter .mr{background:var(--bear)}
+  .sig-grid{display:flex; flex-direction:column; gap:8px}
+  .sig-row{display:flex; align-items:center; justify-content:space-between; gap:8px}
+  .sig-row .rn{font-size:12px; color:var(--ink-dim)}
+  .verdict{border:1px solid var(--line2); border-radius:11px; padding:16px; background:var(--bg3); position:relative; overflow:hidden}
+  .verdict.pending{opacity:.5}
+  .verdict .vtop{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:12px}
+  .verdict .action{font-size:24px; font-weight:800; letter-spacing:.01em}
+  .verdict.buy .action{color:var(--bull)} .verdict.sell .action{color:var(--bear)} .verdict.hold .action{color:var(--neutral)}
+  .verdict .conf{font-family:var(--mono); font-size:13px; color:var(--ink-dim)}
+  .verdict .conf b{color:var(--ink); font-size:16px}
+  .kv{display:grid; grid-template-columns:1fr 1fr; gap:9px 12px; margin-top:4px}
+  .kv .k{font-size:11px; color:var(--ink-faint); letter-spacing:.02em}
+  .kv .v{font-family:var(--mono); font-size:13px; color:var(--ink); font-weight:600; margin-top:2px}
+  .verdict .rationale{font-size:12.5px; color:var(--ink-dim); line-height:1.7; margin-top:13px; padding-top:13px; border-top:1px solid var(--line2)}
+  .audit{margin-top:2px}
+  .audit summary{font-family:var(--mono); font-size:11px; color:var(--ink-faint); cursor:pointer; list-style:none; padding:4px 0}
+  .audit summary::-webkit-details-marker{display:none}
+  .audit summary:hover{color:var(--accent)}
+  .audit ol{margin:6px 0 0; padding-left:20px; color:var(--ink-faint); font-size:11.5px; line-height:1.8}
+  .audit ol b{color:var(--ink-dim); font-weight:600}
+
+  .foot{margin-top:16px; padding-top:12px; border-top:1px solid var(--line); font-family:var(--mono); font-size:11px; color:var(--ink-faint); text-align:center}
+
+  .inject{display:none; gap:8px; margin-top:10px}
+  .inject.open{display:flex}
+  .inject input{flex:1; background:var(--bg); border:1px solid var(--accent); border-radius:8px; color:var(--ink); padding:9px 12px; font-family:var(--sans); font-size:13px; outline:0}
+  .inject input::placeholder{color:var(--ink-faint)}
+
+  @media(max-width:900px){
+    .grid{grid-template-columns:1fr}
+    .pipe{display:flex; overflow-x:auto; gap:8px; padding:0 12px 14px}
+    .stage{flex:0 0 auto; width:172px; background:var(--bg); border:1px solid var(--line)}
+    .stage .rail{display:none}
+    .turn.bear{margin-left:0}
+  }
+  @media(prefers-reduced-motion:reduce){
+    *{animation-duration:.001s !important; transition-duration:.001s !important}
+  }
+</style>
+
+<div class="floor">
+  <div class="topbar">
+    <div class="brand">
+      <span class="mark">FL<b>OO</b>R</span>
+      <span class="tag">多智能体交易台 · 原型</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="ticker-in"><span>$</span><input id="ticker" value="NVDA" maxlength="5" spellcheck="false"></div>
+    <button class="btn primary" id="run">开始分析</button>
+    <button class="btn ghost" id="pause" disabled>暂停</button>
+    <button class="btn ghost" id="injectBtn" disabled>注入意见</button>
+    <div class="status" id="status"><span class="dot"></span><span id="statusTxt">空闲</span></div>
+  </div>
+
+  <div class="inject" id="injectBar">
+    <input id="injectInput" placeholder="给交易台补一条上下文 —— 例如「把出口管制风险的权重调高」">
+    <button class="btn primary" id="injectSend">加入</button>
+    <button class="btn ghost" id="injectCancel">取消</button>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="panel-h">交易台成员</div>
+      <div class="pipe" id="pipe"></div>
+    </div>
+
+    <div class="panel stream-wrap">
+      <div class="panel-h">实时推理</div>
+      <div class="stream" id="stream">
+        <div class="empty" id="empty">
+          <b>交易台还很安静。</b>
+          输入标的、点「开始分析」。<br>看每个 agent 实时推理、辩论、给出结论。
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h">决策</div>
+      <div class="dec">
+        <div>
+          <div class="meter-lab"><span>共识</span><span id="consensusTxt">—</span></div>
+          <div class="meter"><i class="mb" id="mBull"></i><i class="mn" id="mNeu"></i><i class="mr" id="mBear"></i></div>
+        </div>
+        <div class="sig-grid" id="sigGrid"></div>
+        <div class="verdict pending" id="verdict">
+          <div class="vtop">
+            <div class="action" id="vAction">—</div>
+            <div class="conf">置信度 <b id="vConf">—</b></div>
+          </div>
+          <div class="kv">
+            <div><div class="k">仓位</div><div class="v" id="vSize">—</div></div>
+            <div><div class="k">止损</div><div class="v" id="vStop">—</div></div>
+            <div><div class="k">周期</div><div class="v" id="vHorizon">—</div></div>
+            <div><div class="k">复评</div><div class="v" id="vReassess">—</div></div>
+          </div>
+          <div class="rationale" id="vRationale" style="display:none"></div>
+          <details class="audit" id="auditBox" style="display:none">
+            <summary>▸ 审计链</summary>
+            <ol id="auditList"></ol>
+          </details>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">模拟演示 —— 无真实模型、无真实行情。推理内容仅用于打磨交互。</div>
+</div>
+
+<script>
+(function(){
+  const reduce = window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const $ = id => document.getElementById(id);
+
+  const stages = [
+    {id:'fund', name:'基本面分析师', role:'价值'},
+    {id:'tech', name:'技术面分析师', role:'价格行为'},
+    {id:'news', name:'消息与情绪', role:'资讯流'},
+    {id:'debate', name:'研究员辩论', role:'多空对辩'},
+    {id:'trader', name:'交易员', role:'综合'},
+    {id:'risk', name:'风控委员会', role:'约束'},
+    {id:'pm', name:'投资组合经理', role:'裁决'},
+  ];
+
+  const script = [
+    {stage:'fund', who:'基本面分析师', av:'FA', wr:'价值',
+     tools:['financials.get','earnings.get'],
+     text:`数据中心营收仍在复合增长,但同比增速已在高基数上放缓。毛利率依旧优秀(约 73%)。前瞻市盈率约 35 倍,已经把「持续统治」定价进去了——公司质地一流,但安全边际很薄。`,
+     sig:{dir:'neutral', conf:55}},
+
+    {stage:'tech', who:'技术面分析师', av:'TA', wr:'价格行为',
+     tools:['ohlcv.get','indicators.calc'],
+     text:`回调后重新站上 50 日均线,更高低点的结构完好。RSI 61,有动能但还没超买。上涨日成交量配合。下方支撑清晰,前高是头顶的阻力位。`,
+     sig:{dir:'bull', conf:64}},
+
+    {stage:'news', who:'消息与情绪', av:'NA', wr:'资讯流',
+     tools:['news.search','sentiment.score'],
+     text:`消息面喜忧参半:超大规模厂商资本开支指引强劲是顺风,但出口管制的噪音、以及大客户自研芯片的动作是压制项。近期净情绪:谨慎偏正面。`,
+     sig:{dir:'bull', conf:58}},
+
+    {stage:'debate', side:'bull', who:'多头研究员', av:'BR', wr:'第 1 轮',
+     text:`这不是一个季度的故事。前四大云厂商的资本开支承诺是多年期的,当下也没有能规模化替代的方案。就算从纪录高基数上放缓,那也还是 40%+ 的增速。`},
+    {stage:'debate', side:'bear', who:'空头研究员', av:'BE', wr:'第 1 轮',
+     text:`那正是「一致预期交易」——这本身就是风险,所有人都持有。只要出现一个消化资本开支的季度、或一个可信的竞争者,在这种估值下就会被狠狠杀跌。集中度风险是实打实的。`},
+    {stage:'debate', side:'bull', who:'多头研究员', av:'BR', wr:'第 2 轮',
+     text:`估值确实贵,我认。但你买的是这场仍处早期的淘金热里唯一的「铲子」。CUDA 生态的锁定效应被低估了——护城河不只是硅片本身。`,
+     sig:{dir:'bull', conf:70}},
+    {stage:'debate', side:'bear', who:'空头研究员', av:'BE', wr:'第 2 轮',
+     text:`锁定是真的,但不是永久的——大客户砸钱要绕开的恰恰就是它。我不做空,我是说:按「一条消息就能跳空 15%」的仓位来管理它。`,
+     sig:{dir:'bear', conf:60}},
+
+    {stage:'trader', who:'交易员', av:'TR', wr:'综合',
+     text:`结论:逻辑成立,但这个估值下入场点很关键。建议先建底仓,回调到支撑再加——现在不上满仓。`},
+
+    {stage:'risk', who:'风控委员会', av:'RC', wr:'约束',
+     text:`标记:单一标的集中度,以及约 3 周后财报的事件风险。初始仓位上限 4%,硬止损 -8%,财报前不加仓。带约束批准。`},
+
+    {stage:'pm', who:'投资组合经理', av:'PM', wr:'最终决策',
+     text:`决策:买入,底仓。需求的持续性 + 技术结构盖过估值风险——但要在缩小仓位、并锁进风控约束的前提下执行。`,
+     verdict:{action:'买入', sub:'底仓', conf:66, size:'占组合 4%', stop:'-8%', horizon:'2–4 周', reassess:'财报后',
+       rationale:`多头共识(5 个信号中 3 个偏多)被高估值和事件风险抵消。小仓位入场,回调加仓,财报后重新评估。`}},
+  ];
+
+  const pipeEl = $('pipe');
+  stages.forEach(s=>{
+    const el=document.createElement('div');
+    el.className='stage'; el.id='st-'+s.id;
+    el.innerHTML=`<div style="display:flex;flex-direction:column;align-items:center">
+        <div class="node">•</div><div class="rail"></div></div>
+      <div class="body"><div class="name">${s.name}</div><div class="role">${s.role}</div>
+      <div class="sig" id="sig-${s.id}"></div></div>`;
+    pipeEl.appendChild(el);
+  });
+
+  let running=false, paused=false, injectQueue=[], audit=[];
+  const signals=[];
+
+  const sleep = ms => new Promise(r=>setTimeout(r, reduce?Math.min(ms,60):ms));
+  async function gate(){ while(paused){ await sleep(80); } }
+
+  function chipHTML(dir,conf){
+    const lab = dir==='bull'?'看多':dir==='bear'?'看空':'中性';
+    return `<span class="chip ${dir}"><span class="d"></span>${lab} · ${conf}</span>`;
+  }
+  function setStage(id, cls){
+    const el=$('st-'+id); if(!el) return;
+    el.classList.remove('active','done'); if(cls) el.classList.add(cls);
+    if(cls==='active') el.scrollIntoView({block:'nearest', behavior:reduce?'auto':'smooth'});
+  }
+  async function typeInto(el, text){
+    if(reduce){ el.textContent=text; return; }
+    const caret=document.createElement('span'); caret.className='caret';
+    el.textContent=''; el.parentNode.appendChild(caret);
+    for(let i=0;i<text.length;i++){
+      await gate(); el.textContent += text[i];
+      const ch=text[i];
+      const d = (ch==='。'||ch==='，'||ch==='——'||ch==='、'||ch==='：'||ch===';')?95 : 30;
+      await sleep(d);
+    }
+    caret.remove();
+  }
+  function addSignal(name, sig){
+    signals.push({name, ...sig});
+    const row=document.createElement('div'); row.className='sig-row';
+    row.innerHTML=`<span class="rn">${name}</span>${chipHTML(sig.dir,sig.conf)}`;
+    $('sigGrid').appendChild(row);
+    updateConsensus();
+  }
+  function updateConsensus(){
+    const n=signals.length; if(!n) return;
+    const b=signals.filter(s=>s.dir==='bull').length;
+    const u=signals.filter(s=>s.dir==='neutral').length;
+    const r=signals.filter(s=>s.dir==='bear').length;
+    $('mBull').style.width=(b/n*100)+'%';
+    $('mNeu').style.width=(u/n*100)+'%';
+    $('mBear').style.width=(r/n*100)+'%';
+    const lean = b>r? (b>=n*0.6?'明显偏多':'略偏多') : r>b?'偏空':'分歧';
+    $('consensusTxt').textContent=`多${b} 中${u} 空${r} · ${lean}`;
+  }
+  function renderTurn(step){
+    const wrap=document.createElement('div');
+    let cls='turn';
+    if(step.stage==='debate') cls+=' '+step.side;
+    if(step.human) cls+=' human';
+    wrap.className=cls;
+    wrap.innerHTML=`<div class="who"><div class="av">${step.av}</div>
+        <div class="wn">${step.who}</div><div class="wr">${step.wr||''}</div></div>
+      <div class="txt"></div>`;
+    $('stream').appendChild(wrap);
+    wrap.scrollIntoView({block:'nearest', behavior:reduce?'auto':'smooth'});
+    return wrap.querySelector('.txt');
+  }
+  async function playStep(step){
+    setStage(step.stage,'active');
+    const txtEl=renderTurn(step);
+    if(step.tools){
+      for(const t of step.tools){
+        await gate();
+        const tg=document.createElement('span'); tg.className='tool'; tg.textContent='⚙ '+t;
+        txtEl.appendChild(tg); await sleep(reduce?30:260);
+      }
+      const br=document.createElement('div'); br.style.height='6px'; txtEl.appendChild(br);
+      const span=document.createElement('span'); txtEl.appendChild(span);
+      await typeInto(span, step.text);
+    } else { await typeInto(txtEl, step.text); }
+    if(step.sig){
+      await sleep(reduce?30:200);
+      const sc=document.createElement('div'); sc.style.marginTop='9px';
+      sc.innerHTML=chipHTML(step.sig.dir, step.sig.conf); txtEl.appendChild(sc);
+      const nm = step.stage==='debate' ? step.who : step.who;
+      addSignal(nm, step.sig);
+      $('sig-'+step.stage).innerHTML = step.stage==='debate' ? '' : chipHTML(step.sig.dir,step.sig.conf);
+    }
+    audit.push(`<b>${step.who}</b> —— ${step.text.slice(0,30)}…`);
+    if(step.verdict){ await revealVerdict(step.verdict); }
+  }
+  async function revealVerdict(v){
+    const el=$('verdict');
+    const map={'买入':'buy','卖出':'sell','观望':'hold'};
+    el.classList.remove('pending'); el.classList.add(map[v.action]||'buy');
+    $('vAction').textContent=v.action+(v.sub?'  · '+v.sub:'');
+    $('vSize').textContent=v.size; $('vStop').textContent=v.stop;
+    $('vHorizon').textContent=v.horizon; $('vReassess').textContent=v.reassess;
+    let c=0; const target=v.conf; const cEl=$('vConf');
+    if(reduce){ cEl.textContent=target+'%'; }
+    else { while(c<target){ c+=2; if(c>target)c=target; cEl.textContent=c+'%'; await sleep(18);} }
+    const rEl=$('vRationale'); rEl.style.display='block'; rEl.textContent=v.rationale;
+    const aBox=$('auditBox'); aBox.style.display='block';
+    $('auditList').innerHTML=audit.map(a=>`<li>${a}</li>`).join('');
+  }
+  function sysLine(html){
+    const d=document.createElement('div'); d.className='sysline'; d.innerHTML=html;
+    $('stream').appendChild(d); d.scrollIntoView({block:'nearest', behavior:'smooth'});
+  }
+
+  async function run(){
+    if(running) return;
+    running=true; paused=false;
+    const tk=($('ticker').value||'NVDA').toUpperCase();
+    $('stream').innerHTML=''; $('sigGrid').innerHTML=''; signals.length=0; audit.length=0; injectQueue.length=0;
+    stages.forEach(s=>{ setStage(s.id,''); $('sig-'+s.id).innerHTML=''; });
+    const vd=$('verdict'); vd.className='verdict pending';
+    $('vAction').textContent='—'; $('vConf').textContent='—';
+    ['vSize','vStop','vHorizon','vReassess'].forEach(id=>$(id).textContent='—');
+    $('vRationale').style.display='none'; $('auditBox').style.display='none';
+    $('mBull').style.width=$('mNeu').style.width=$('mBear').style.width='0';
+    $('consensusTxt').textContent='—';
+
+    $('run').disabled=true; $('pause').disabled=false; $('injectBtn').disabled=false;
+    $('status').classList.add('live'); $('statusTxt').textContent=`分析 ${tk} 中`;
+    sysLine(`交易台就 <b>$${tk}</b> 开会 · 7 个 agent · 3 位分析师 → 辩论 → 交易员 → 风控 → PM`);
+
+    let lastStage=null;
+    for(let i=0;i<script.length;i++){
+      await gate();
+      while(injectQueue.length){
+        const note=injectQueue.shift();
+        renderTurn({who:'你', av:'你', wr:'人工意见', human:true}).textContent=note;
+        sysLine(`<b>意见已加入共享上下文</b> —— 下游 agent 会纳入考量`);
+        audit.push(`<b>你</b> —— ${note.slice(0,30)}`);
+        await sleep(400);
+      }
+      const step=script[i];
+      if(step.stage!==lastStage && lastStage){ setStage(lastStage,'done'); }
+      if(step.stage==='debate' && lastStage!=='debate'){ sysLine('研究员辩论 —— 多头 vs 空头'); }
+      lastStage=step.stage;
+      $('statusTxt').textContent=`${tk} · ${step.who} · ${i+1}/${script.length}`;
+      await playStep(step);
+      await sleep(reduce?40:320);
+    }
+    setStage(lastStage,'done');
+
+    $('status').classList.remove('live'); $('statusTxt').textContent='已完成';
+    $('run').disabled=false; $('pause').disabled=true; $('injectBtn').disabled=true;
+    $('injectBar').classList.remove('open');
+    $('run').textContent='重新分析';
+    running=false;
+  }
+
+  $('run').onclick=run;
+  $('pause').onclick=()=>{
+    paused=!paused;
+    $('pause').textContent=paused?'继续':'暂停';
+    $('statusTxt').textContent=paused?'已暂停':'运行中';
+    $('status').classList.toggle('live',!paused);
+  };
+  $('injectBtn').onclick=()=>{ $('injectBar').classList.add('open'); $('injectInput').focus(); };
+  $('injectCancel').onclick=()=>{ $('injectBar').classList.remove('open'); $('injectInput').value=''; };
+  $('injectSend').onclick=()=>{
+    const v=$('injectInput').value.trim(); if(!v) return;
+    injectQueue.push(v); $('injectInput').value=''; $('injectBar').classList.remove('open');
+    $('statusTxt').textContent='意见已排队';
+  };
+  $('injectInput').addEventListener('keydown',e=>{ if(e.key==='Enter') $('injectSend').click(); });
+  $('ticker').addEventListener('keydown',e=>{ if(e.key==='Enter') run(); });
+})();
+</script>
