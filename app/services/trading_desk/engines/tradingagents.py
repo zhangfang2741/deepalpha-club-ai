@@ -140,13 +140,47 @@ class TradingAgentsEngine:
 
     async def astream(self, ctx: RunContext) -> AsyncIterator[TradingDeskEvent]:
         """产出事件异步流；run.started/run.finished 由 runner 包裹。"""
+        # TradingAgents 上游 prompts 模块按 BCP 47 简写（"zh-CN"）拼
+        # "Please respond in {language}"，但 Claude/GPT 把 BCP 47 当字面
+        # 字符串而非 locale 名——LLM 实际仍输出英文。在引擎启动时把
+        # prompts._language_instruction 替换为返回完整 locale 名 + 中文
+        # locale 名，并附明确指令，强制 LLM 用中文输出。BUY/SELL/HOLD
+        # 按 tradingagents 上游约定保持英文，避免下游 signal 抽取 regex
+        # 失配。
+        from tradingagents.agents import prompts as _ta_prompts
+
+        _LANGUAGE_NAMES: dict[str, tuple[str, str]] = {
+            "zh-CN": ("Simplified Chinese", "简体中文"),
+            "zh-TW": ("Traditional Chinese", "繁體中文"),
+            "en-US": ("English (United States)", ""),
+            "ja-JP": ("Japanese", "日本語"),
+            "ko-KR": ("Korean", "한국어"),
+            "de-DE": ("German", "Deutsch"),
+        }
+
+        def _localized_language_instruction() -> str:
+            tag = settings.TRADING_DESK_RESPONSE_LANGUAGE.strip() or "zh-CN"
+            en_name, native_name = _LANGUAGE_NAMES.get(tag, ("English (United States)", ""))
+            if native_name:
+                return (
+                    f"\n\n请用 {native_name}（{en_name}，BCP 47: {tag}）回复正文。"
+                    "专有名词、指标符号、信号标签 BUY/SELL/HOLD 保持英文——"
+                    "下游工具用 regex 抽取这些 token。"
+                )
+            return (
+                f"\n\nPlease respond in {en_name} ({tag}). "
+                "Keep `BUY`, `SELL`, or `HOLD` in English for downstream tooling."
+            )
+
+        _ta_prompts._language_instruction = _localized_language_instruction  # type: ignore[attr-defined]
+
         results_dir = self._results_dir or Path(tempfile.gettempdir()) / "trading_desk"
         config = TradingAgentsConfig(
             results_dir=results_dir,
             llm_provider="openai",  # 注入 LLM 后这里只是元数据日志
             deep_think_llm=settings.TRADING_DESK_DEEP_MODEL or "platform-default",
             quick_think_llm=settings.TRADING_DESK_QUICK_MODEL or "platform-default",
-            response_language="zh-CN",
+            response_language=settings.TRADING_DESK_RESPONSE_LANGUAGE or "zh-CN",  # type: ignore[arg-type]
             max_debate_rounds=settings.TRADING_DESK_MAX_DEBATE_ROUNDS,
             max_risk_discuss_rounds=settings.TRADING_DESK_MAX_RISK_ROUNDS,
             max_recur_limit=100,

@@ -302,6 +302,11 @@ class Settings:
         # 仅对 claude-3-7+ / sonnet-4+ / opus-4+ 起效，其他供应商 / 模型自动跳过。
         self.TRADING_DESK_ENABLE_THINKING = os.getenv("TRADING_DESK_ENABLE_THINKING", "false").lower() in ("true", "1", "yes")
         self.TRADING_DESK_THINK_BUDGET = int(os.getenv("TRADING_DESK_THINK_BUDGET", "2048"))
+        # LLM 回复语言。BCP 47 标签。引擎把 BCP 47 翻译成完整 locale 名 +
+        # 中文 locale 名（如「请用简体中文（Simplified Chinese, BCP 47: zh-CN）回复」）
+        # 拼到 tradingagents 系统提示末尾，强制 LLM 用中文输出。
+        # BUY/SELL/HOLD 信号 token 按上游约定保持英文。
+        self.TRADING_DESK_RESPONSE_LANGUAGE = os.getenv("TRADING_DESK_RESPONSE_LANGUAGE", "zh-CN")
 
         # Rate Limiting Configuration
         self.RATE_LIMIT_DEFAULT = parse_list_from_env("RATE_LIMIT_DEFAULT", ["200 per day", "50 per hour"])

@@ -1,4 +1,6 @@
 import type { Turn } from '@/lib/store/trading_desk'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import SignalChip from './SignalChip'
 
 /**
@@ -46,6 +48,76 @@ function toneOf(turn: Turn): { card: string; avatar: string; name: string; inden
   }
 }
 
+const markdownComponents = {
+  h1: ({ children }: { children?: React.ReactNode }) => (
+    <h1 className="mt-3 mb-1 text-[15px] font-bold text-gray-900">{children}</h1>
+  ),
+  h2: ({ children }: { children?: React.ReactNode }) => (
+    <h2 className="mt-3 mb-1 text-[14.5px] font-bold text-gray-900">{children}</h2>
+  ),
+  h3: ({ children }: { children?: React.ReactNode }) => (
+    <h3 className="mt-2.5 mb-1 text-[14px] font-semibold text-gray-900">{children}</h3>
+  ),
+  h4: ({ children }: { children?: React.ReactNode }) => (
+    <h4 className="mt-2 mb-0.5 text-[13.5px] font-semibold text-gray-800">{children}</h4>
+  ),
+  p: ({ children }: { children?: React.ReactNode }) => (
+    <p className="my-1.5 text-[13.5px] leading-relaxed text-gray-700">{children}</p>
+  ),
+  ul: ({ children }: { children?: React.ReactNode }) => (
+    <ul className="my-1.5 ml-5 list-disc text-[13.5px] leading-relaxed text-gray-700">{children}</ul>
+  ),
+  ol: ({ children }: { children?: React.ReactNode }) => (
+    <ol className="my-1.5 ml-5 list-decimal text-[13.5px] leading-relaxed text-gray-700">{children}</ol>
+  ),
+  li: ({ children }: { children?: React.ReactNode }) => (
+    <li className="my-0.5">{children}</li>
+  ),
+  strong: ({ children }: { children?: React.ReactNode }) => (
+    <strong className="font-semibold text-gray-900">{children}</strong>
+  ),
+  em: ({ children }: { children?: React.ReactNode }) => (
+    <em className="italic">{children}</em>
+  ),
+  code: ({ children }: { children?: React.ReactNode }) => (
+    <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-[12px] text-gray-800">{children}</code>
+  ),
+  pre: ({ children }: { children?: React.ReactNode }) => (
+    <pre className="my-2 overflow-x-auto rounded-md bg-gray-900 px-3 py-2 font-mono text-[12px] leading-relaxed text-gray-100">
+      {children}
+    </pre>
+  ),
+  blockquote: ({ children }: { children?: React.ReactNode }) => (
+    <blockquote className="my-2 border-l-2 border-gray-300 pl-3 text-[13px] italic text-gray-600">
+      {children}
+    </blockquote>
+  ),
+  hr: () => <hr className="my-2 border-gray-200" />,
+  a: ({ children, href }: { children?: React.ReactNode; href?: string }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-600 underline hover:text-blue-800"
+    >
+      {children}
+    </a>
+  ),
+  table: ({ children }: { children?: React.ReactNode }) => (
+    <div className="my-2 overflow-x-auto">
+      <table className="min-w-full border-collapse text-[12.5px]">{children}</table>
+    </div>
+  ),
+  th: ({ children }: { children?: React.ReactNode }) => (
+    <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left font-semibold text-gray-800">
+      {children}
+    </th>
+  ),
+  td: ({ children }: { children?: React.ReactNode }) => (
+    <td className="border border-gray-200 px-2 py-1 text-gray-700">{children}</td>
+  ),
+}
+
 export default function TurnCard({ turn, streaming }: { turn: Turn; streaming: boolean }) {
   const tone = toneOf(turn)
 
@@ -74,20 +146,26 @@ export default function TurnCard({ turn, streaming }: { turn: Turn; streaming: b
         </div>
       )}
 
-      <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-gray-700">
-        {turn.text}
+      <div className="text-[13.5px] leading-relaxed text-gray-700">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+          {turn.text}
+        </ReactMarkdown>
         {streaming && (
           // 打字光标：只在当前流式输出的卡片末尾显示
           <span className="ml-0.5 inline-block h-3.5 w-[3px] translate-y-[2px] bg-blue-600 motion-safe:animate-pulse" />
         )}
-      </p>
+      </div>
 
       {turn.thinking && (
         <details className="mt-2 rounded-md border border-violet-200 bg-violet-50/60 px-3 py-2 text-[12px] leading-relaxed text-violet-900">
           <summary className="cursor-pointer font-mono text-[11px] font-semibold uppercase tracking-wider text-violet-700">
             推理过程
           </summary>
-          <p className="mt-2 whitespace-pre-wrap">{turn.thinking}</p>
+          <div className="mt-2">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+              {turn.thinking}
+            </ReactMarkdown>
+          </div>
         </details>
       )}
 
