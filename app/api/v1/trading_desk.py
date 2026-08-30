@@ -9,6 +9,7 @@ Stream ID）。前端断线重连时把它放进 Last-Event-ID 请求头即可�
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Annotated, Any
@@ -41,18 +42,70 @@ from app.services.trading_desk.engines.mock import MockEngine
 router = APIRouter()
 
 
-def get_engine() -> TradingEngine:
-    """按配置选择引擎。
+_tradingagents_engine: TradingEngine | None = None
+_tradingagents_lock = asyncio.Lock()
+
+
+async def _build_tradingagents_engine() -> TradingEngine:
+    """进程级单例的 TradingAgentsEngine。
+
+    checkpointer 必须显式传入 AsyncPostgresSaver（生产）——LangGraph 要求
+    interrupt_before 与 checkpointer 配套使用，否则 compile() 抛
+    "No checkpointer set"。
+
+    连接池从 graph.py 的 LangGraph 同款 PostgreSQL 设置搭出来，避免再开
+    一个数据库连接池。
+    """
+    from urllib.parse import quote_plus
+
+    from psycopg import AsyncConnection
+    from psycopg.rows import DictRow
+    from psycopg_pool import AsyncConnectionPool
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+    from app.services.trading_desk.engines.tradingagents import TradingAgentsEngine
+
+    connection_url = (
+        "postgresql://"
+        f"{quote_plus(settings.POSTGRES_USER)}:{quote_plus(settings.POSTGRES_PASSWORD)}"
+        f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+    )
+    checkpointer = None
+    try:
+        pool: AsyncConnectionPool[AsyncConnection[DictRow]] = AsyncConnectionPool(
+            connection_url,
+            open=False,
+            max_size=settings.POSTGRES_POOL_SIZE,
+            kwargs={"autocommit": True, "connect_timeout": 5, "sslmode": "require" if settings.POSTGRES_SSL else "disable"},
+        )
+        await pool.open()
+        checkpointer = AsyncPostgresSaver(pool)  # type: ignore[arg-type]
+        await checkpointer.setup()
+    except Exception:
+        logger.exception("trading_desk_checkpointer_init_failed")
+        # Postgres 不可用时降级用 InMemorySaver：同进程能跑，重启即丢状态
+        checkpointer = InMemorySaver()
+
+    return TradingAgentsEngine(checkpointer=checkpointer)
+
+
+async def get_engine() -> TradingEngine:
+    """按配置选择引擎（async：tradingagents 引擎需要异步构造 checkpointer）。
 
     接入策略：
       - ``mock`` → MockEngine（固定剧本，无需 LLM）。
       - ``tradingagents`` → TradingAgentsEngine（真实多 Agent 图，checkpointer
-        与 results_dir 在引擎内按 settings 懒构造）。
+        进程内单例,避免每次请求重建连接池）。
       - 其它或缺配置 → MockEngine 并警告（保留默认行为不让生产翻车）。
     """
     if settings.TRADING_DESK_ENGINE == "tradingagents":
-        from app.services.trading_desk.engines.tradingagents import TradingAgentsEngine
-        return TradingAgentsEngine()
+        global _tradingagents_engine
+        if _tradingagents_engine is None:
+            async with _tradingagents_lock:
+                if _tradingagents_engine is None:
+                    _tradingagents_engine = await _build_tradingagents_engine()
+        return _tradingagents_engine
     if settings.TRADING_DESK_ENGINE == "mock":
         return MockEngine()
     logger.warning(

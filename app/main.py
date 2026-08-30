@@ -21,6 +21,7 @@ from asgi_correlation_id import CorrelationIdMiddleware
 
 from app.api.v1.api import api_router
 from app.api.v1.chatbot import agent
+from app.api.v1.trading_desk import get_engine as get_trading_desk_engine
 from app.cache.client import close_redis, init_redis
 from app.core.cache import cache_service
 from app.core.config import settings
@@ -114,6 +115,17 @@ async def lifespan(app: FastAPI):
         logger.info("graph_pre_warmed")
     except Exception as e:
         logger.exception("graph_pre_warm_failed", error=str(e))
+
+    # Pre-warm the trading-desk engine: build checkpointer + compile the
+    # LangGraph workflow once at startup. 生产 engine 用 tradingagents
+    # 时,POST /runs 首次请求会触发同步建连接池+compile,延迟高且
+    # 一旦 checkpointer=None 会让 compile() 抛 "No checkpointer set"。
+    if settings.TRADING_DESK_ENGINE == "tradingagents":
+        try:
+            await get_trading_desk_engine()
+            logger.info("trading_desk_engine_pre_warmed")
+        except Exception as e:
+            logger.exception("trading_desk_engine_pre_warm_failed", error=str(e))
 
     # Pre-warm mem0 AsyncMemory: initializes pgvector connection and schema check
     # so the first search() cache miss or add() doesn't pay the ~130ms cold-init cost
