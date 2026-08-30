@@ -8,6 +8,7 @@ import DeepAlphaCore
 /// 同时把纵向空间全留给内容。
 struct TradingDeskView: View {
     @Environment(TradingDeskViewModel.self) private var vm
+    @Environment(AppState.self) private var appState
     @Environment(\.horizontalSizeClass) private var hSize
 
     @State private var ticker = "NVDA"
@@ -44,6 +45,13 @@ struct TradingDeskView: View {
                 onControl: { action, text in
                     Task { await vm.control(action, text: text) }
                 })
+
+            // 登录态没能写进 Keychain：不是错误（本次会话能用），但下次要重登
+            if let warn = appState.persistenceWarning {
+                ErrorBanner(message: warn, tint: .orange, icon: "exclamationmark.circle.fill") {
+                    appState.persistenceWarning = nil
+                }
+            }
 
             if let err = vm.pageError ?? vm.state.error {
                 ErrorBanner(message: err) {

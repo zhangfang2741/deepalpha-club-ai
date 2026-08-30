@@ -39,7 +39,7 @@ public final class TradingDeskViewModel {
             state.status = .running
             consume(runId: runId)
         } catch let e as APIError {
-            if e == .unauthorized { lastAuthError = .unauthorized }
+            if e.isUnauthorized { lastAuthError = e }
             pageError = e.message
         } catch {
             pageError = "启动失败：\(error.localizedDescription)"
@@ -53,7 +53,7 @@ public final class TradingDeskViewModel {
         do {
             try await service.control(runId: runId, action: action, text: text)
         } catch let e as APIError {
-            if e == .unauthorized { lastAuthError = .unauthorized }
+            if e.isUnauthorized { lastAuthError = e }
             pageError = e.message
         } catch {
             pageError = error.localizedDescription

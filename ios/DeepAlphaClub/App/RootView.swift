@@ -16,7 +16,7 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: appState.isLoggedIn)
         .onChange(of: deskVM.lastAuthError) { _, err in
-            if err == .unauthorized { appState.handleUnauthorized() }
+            if err?.isUnauthorized == true { appState.handleUnauthorized() }
         }
     }
 }

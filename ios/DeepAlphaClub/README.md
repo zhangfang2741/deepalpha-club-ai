@@ -16,7 +16,7 @@ open DeepAlphaClub.xcodeproj   # Xcode 里 Cmd+R 跑模拟器
 
 ```bash
 xcodebuild -project DeepAlphaClub.xcodeproj -scheme DeepAlphaClub \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
 ```
 
 ## 结构
@@ -25,20 +25,38 @@ xcodebuild -project DeepAlphaClub.xcodeproj -scheme DeepAlphaClub \
 - `App/` — SwiftUI 视图层（xcodegen target）
 - 协议契约见仓库根的 `app/schemas/trading_desk.py`
 
-## 无账号时看界面
+## 认证
 
-DEBUG 构建支持跳过登录页，直接进主界面看布局（假 token 对后端无效，任何请求都会报错）：
+手机号 / 邮箱 + 密码登录，服务端判别账号类型（`POST /auth/login/account`）。
+注册与找回密码都是双通道（邮箱验证码 / 短信验证码），密码规则与后端
+`validate_password_strength` 对齐：8–64 位、含字母和数字。
+
+token 存 Keychain。「保持登录」默认开；关掉后下次启动会清 token。
+
+> Keychain 需要 `keychain-access-groups` entitlement（`App/DeepAlphaClub.entitlements`，
+> 由 project.yml 生成）。缺了它 `SecItemAdd` 会返回 -34018，模拟器上必现。
+> 构建时**不要**加 `CODE_SIGNING_ALLOWED=NO`，否则 entitlement 不会被注入。
+
+### 冒烟时跳过手工登录
+
+DEBUG 构建支持用环境变量自动登录（Release 恒不生效，凭据不进二进制）：
 
 ```bash
-SIMCTL_CHILD_DEBUG_FAKE_LOGIN=1 xcrun simctl launch booted club.deepalpha.ios
+SIMCTL_CHILD_DEBUG_ACCOUNT=you@example.com \
+SIMCTL_CHILD_DEBUG_PASSWORD=yourpassword \
+  xcrun simctl launch booted club.deepalpha.ios
 ```
 
 ## 自测清单（v0.1.0 验收）
 
-Core 层逻辑已由 82 个单测覆盖（reducer / SSE / API / 重连 / 缓存 / VM），
+Core 层逻辑已由 104 个单测覆盖（认证 / reducer / SSE / API / 重连 / 缓存 / VM），
 UI 与真实后端的联调需要账号，下列项目请登录后手动过一遍：
 
-- [ ] 登录 → 杀进程重开（token 从 Keychain 恢复，不用重登）
+- [x] 登录 → 杀进程重开（token 从 Keychain 恢复，不用重登）
+- [ ] 注册：邮箱收验证码 → 注册即登录
+- [ ] 注册：手机号收短信验证码 → 注册即登录
+- [ ] 找回密码：验证码 → 设新密码 → 用新密码登录
+- [ ] 关掉「保持登录」→ 杀进程重开需要重新登录
 - [ ] 输入 ticker + 选市场 → 开始分析 → SSE 实时输出
 - [ ] 流程条状态推进（待办 / 进行中 / 完成）+ 每阶段信号 chip
 - [ ] 暂停 / 继续 / 注入意见 / 停止

@@ -111,8 +111,15 @@ struct APIClientTests {
         }
         struct Empty: Decodable {}
         let client = makeClient(mock)
-        await #expect(throws: APIError.unauthorized) {
+        do {
             let _: Empty = try await client.get("/e/401")
+            Issue.record("应抛 unauthorized")
+        } catch let e as APIError {
+            #expect(e.isUnauthorized)
+            // 401 的 detail 是字符串时也应透出，而不是被固定文案盖掉
+            #expect(e.message == "运行不存在")
+        } catch {
+            Issue.record("错误类型不对：\(error)")
         }
         do {
             let _: Empty = try await client.get("/e/404")
@@ -125,6 +132,49 @@ struct APIClientTests {
         }
         await #expect(throws: APIError.self) {
             let _: Empty = try await client.get("/e/500")
+        }
+    }
+
+    @Test("401 的 dict detail：登录接口的「账号或密码错误」要原样透出")
+    func unauthorizedDictDetail() async {
+        let mock = MockServer()
+        mock.handler = { req in
+            let resp = HTTPURLResponse(url: req.url!, statusCode: 401,
+                                       httpVersion: nil, headerFields: nil)!
+            // /auth/login/account 的真实响应形状
+            let body = #"{"detail":{"message":"账号或密码错误","code":"INVALID_CREDENTIALS"}}"#
+            return (resp, Data(body.utf8))
+        }
+        struct Empty: Decodable {}
+        let client = makeClient(mock)
+        do {
+            let _: Empty = try await client.get("/auth/login/account")
+            Issue.record("应抛 unauthorized")
+        } catch let e as APIError {
+            #expect(e.isUnauthorized)
+            #expect(e.message == "账号或密码错误")
+        } catch {
+            Issue.record("错误类型不对：\(error)")
+        }
+    }
+
+    @Test("401 无 body：回落到通用过期文案")
+    func unauthorizedNoBody() async {
+        let mock = MockServer()
+        mock.handler = { req in
+            (HTTPURLResponse(url: req.url!, statusCode: 401,
+                             httpVersion: nil, headerFields: nil)!, Data())
+        }
+        struct Empty: Decodable {}
+        let client = makeClient(mock)
+        do {
+            let _: Empty = try await client.get("/x")
+            Issue.record("应抛 unauthorized")
+        } catch let e as APIError {
+            #expect(e.isUnauthorized)
+            #expect(e.message == "登录已过期，请重新登录")
+        } catch {
+            Issue.record("错误类型不对：\(error)")
         }
     }
 

@@ -237,10 +237,10 @@ struct TradingDeskViewModelTests {
     @Test("401 → lastAuthError 置位（App 层据此清 token）")
     func unauthorizedSurfaces() async throws {
         let service = MockDeskService()
-        service.createRunError = APIError.unauthorized
+        service.createRunError = APIError.unauthorized(nil)
         let vm = makeVM(service)
         await vm.startRun(ticker: "NVDA", market: .US)
-        #expect(vm.lastAuthError == .unauthorized)
+        #expect(vm.lastAuthError?.isUnauthorized == true)
     }
 
     @Test("重连退避倍增：800ms → 1.6s（sleeper 收到递增时长）")

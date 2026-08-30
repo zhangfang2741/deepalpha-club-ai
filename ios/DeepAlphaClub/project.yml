@@ -17,6 +17,13 @@ targets:
       - path: App
     dependencies:
       - package: DeepAlphaCore
+    # Keychain 需要 entitlement：缺了 SecItemAdd 会返回 -34018，
+    # 模拟器上必现（真机走描述文件时也依赖它）。
+    entitlements:
+      path: App/DeepAlphaClub.entitlements
+      properties:
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)club.deepalpha.ios
     info:
       path: App/Info.plist
       properties:

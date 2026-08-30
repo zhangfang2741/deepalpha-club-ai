@@ -10,8 +10,10 @@
 		021DA9BC134CB71FC99D3E33 /* Topbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D83D84303CC6C16D77206BBF /* Topbar.swift */; };
 		0234F2C79E87D080DDC1976F /* PipelinePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8825A47D1902E00E263C8FE /* PipelinePanel.swift */; };
 		027A7DC15D5015B16861BAF6 /* StreamPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AC4932BBC87805E9351E29C /* StreamPanel.swift */; };
+		2457F20BE860A3C178AA745D /* ForgotPasswordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66FDE9937E9B9BA82D263F7B /* ForgotPasswordView.swift */; };
 		3A12D8A26ED24EC6CF4D4EE5 /* HistoryListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6CCF25943483C6B22B4648E /* HistoryListView.swift */; };
 		3FC93C57B540B1AC7035DFC6 /* DeepAlphaCore in Frameworks */ = {isa = PBXBuildFile; productRef = 724DC702516AB02FE68B55C8 /* DeepAlphaCore */; };
+		4E21F39AD100D1A50C01AFB8 /* RegisterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C68D99BE2A69AF96D2CC645F /* RegisterView.swift */; };
 		639888FA927B0EFA295BF785 /* TradingDeskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B4E66E6D8FEB52BD02DA8BC /* TradingDeskView.swift */; };
 		74FC0265866C004AFF378BA6 /* DeepAlphaClubApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F718E462ADE96EA7695E9CE7 /* DeepAlphaClubApp.swift */; };
 		78CE239D9F28A6C7AE8A1D6A /* VerdictCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 211DCF3A1ABB90C8559AAA4B /* VerdictCard.swift */; };
@@ -21,6 +23,7 @@
 		962F2BAD28F6108C9D0AC068 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11C9482CB7FC8D9FE0B7ADD6 /* LoginView.swift */; };
 		A523A58043F22941DD690364 /* SignalChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC2B81F3F5B15D10F53EDB8F /* SignalChip.swift */; };
 		A7888A3C397218AAD0374300 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D4B576094422B0D804452F9 /* RootView.swift */; };
+		B09E5B1C0ED6F7E93B3300A1 /* AuthFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D3D0D5C6BAD3FB8E003C5AD /* AuthFields.swift */; };
 		B55A3D046DE82C3F0EB6505A /* TurnCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD1D9226B8A42CACE0B73A43 /* TurnCard.swift */; };
 		BD8D14C0186CBCDEBBE03DD2 /* DecisionPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C06B11BB75E70F5B074ACF6 /* DecisionPanel.swift */; };
 		C4371B77C22D927841388422 /* InjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E1DA0E443F0327336711DDA /* InjectSheet.swift */; };
@@ -30,10 +33,12 @@
 
 /* Begin PBXFileReference section */
 		068A47CD2C9064B10B5B68BD /* DeepAlphaClub.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = DeepAlphaClub.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0D3D0D5C6BAD3FB8E003C5AD /* AuthFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthFields.swift; sourceTree = "<group>"; };
 		1018937C70DE29FF910AF039 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		11C9482CB7FC8D9FE0B7ADD6 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		211DCF3A1ABB90C8559AAA4B /* VerdictCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerdictCard.swift; sourceTree = "<group>"; };
 		3B4E66E6D8FEB52BD02DA8BC /* TradingDeskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TradingDeskView.swift; sourceTree = "<group>"; };
+		66FDE9937E9B9BA82D263F7B /* ForgotPasswordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgotPasswordView.swift; sourceTree = "<group>"; };
 		679B2E95C74EC33A6660E2AE /* SignalColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalColors.swift; sourceTree = "<group>"; };
 		6E1DA0E443F0327336711DDA /* InjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InjectSheet.swift; sourceTree = "<group>"; };
 		7BED22B41E149165085B8EA5 /* ConsensusMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsensusMeter.swift; sourceTree = "<group>"; };
@@ -43,12 +48,14 @@
 		9C06B11BB75E70F5B074ACF6 /* DecisionPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionPanel.swift; sourceTree = "<group>"; };
 		B59659D031F65049E4B6584C /* Core */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Core; path = Core; sourceTree = SOURCE_ROOT; };
 		BDE65FC0C82F27F59813A029 /* CompositionRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositionRoot.swift; sourceTree = "<group>"; };
+		C68D99BE2A69AF96D2CC645F /* RegisterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegisterView.swift; sourceTree = "<group>"; };
 		C8825A47D1902E00E263C8FE /* PipelinePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelinePanel.swift; sourceTree = "<group>"; };
 		CD1D9226B8A42CACE0B73A43 /* TurnCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurnCard.swift; sourceTree = "<group>"; };
 		CF37691DCA7AC79F446543C6 /* ErrorBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBanner.swift; sourceTree = "<group>"; };
 		D6CCF25943483C6B22B4648E /* HistoryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryListView.swift; sourceTree = "<group>"; };
 		D83D84303CC6C16D77206BBF /* Topbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Topbar.swift; sourceTree = "<group>"; };
 		DC2B81F3F5B15D10F53EDB8F /* SignalChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalChip.swift; sourceTree = "<group>"; };
+		E510E159F414F4995E9B4767 /* DeepAlphaClub.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DeepAlphaClub.entitlements; sourceTree = "<group>"; };
 		F718E462ADE96EA7695E9CE7 /* DeepAlphaClubApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepAlphaClubApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -84,7 +91,10 @@
 		574B82E377B76B7F1A461220 /* Auth */ = {
 			isa = PBXGroup;
 			children = (
+				0D3D0D5C6BAD3FB8E003C5AD /* AuthFields.swift */,
+				66FDE9937E9B9BA82D263F7B /* ForgotPasswordView.swift */,
 				11C9482CB7FC8D9FE0B7ADD6 /* LoginView.swift */,
+				C68D99BE2A69AF96D2CC645F /* RegisterView.swift */,
 			);
 			path = Auth;
 			sourceTree = "<group>";
@@ -144,6 +154,7 @@
 			isa = PBXGroup;
 			children = (
 				BDE65FC0C82F27F59813A029 /* CompositionRoot.swift */,
+				E510E159F414F4995E9B4767 /* DeepAlphaClub.entitlements */,
 				F718E462ADE96EA7695E9CE7 /* DeepAlphaClubApp.swift */,
 				CF37691DCA7AC79F446543C6 /* ErrorBanner.swift */,
 				1018937C70DE29FF910AF039 /* Info.plist */,
@@ -218,15 +229,18 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B09E5B1C0ED6F7E93B3300A1 /* AuthFields.swift in Sources */,
 				83427D36E2056695FA79C76A /* CompositionRoot.swift in Sources */,
 				C8C3692D3CF832C0B8B9F0E0 /* ConsensusMeter.swift in Sources */,
 				BD8D14C0186CBCDEBBE03DD2 /* DecisionPanel.swift in Sources */,
 				74FC0265866C004AFF378BA6 /* DeepAlphaClubApp.swift in Sources */,
 				8090AA9B9BDA1A46524D753D /* ErrorBanner.swift in Sources */,
+				2457F20BE860A3C178AA745D /* ForgotPasswordView.swift in Sources */,
 				3A12D8A26ED24EC6CF4D4EE5 /* HistoryListView.swift in Sources */,
 				C4371B77C22D927841388422 /* InjectSheet.swift in Sources */,
 				962F2BAD28F6108C9D0AC068 /* LoginView.swift in Sources */,
 				0234F2C79E87D080DDC1976F /* PipelinePanel.swift in Sources */,
+				4E21F39AD100D1A50C01AFB8 /* RegisterView.swift in Sources */,
 				A7888A3C397218AAD0374300 /* RootView.swift in Sources */,
 				D06EF1936A5061BDD1BE1CB3 /* RunReplayView.swift in Sources */,
 				A523A58043F22941DD690364 /* SignalChip.swift in Sources */,
@@ -246,6 +260,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/DeepAlphaClub.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				INFOPLIST_FILE = App/Info.plist;
@@ -383,6 +398,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/DeepAlphaClub.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				INFOPLIST_FILE = App/Info.plist;

@@ -35,18 +35,22 @@ final class CompositionRoot {
         self.replayFactory = { RunReplayViewModel(service: service) }
     }
 
-    /// 正常走真 Keychain。DEBUG 且带环境变量 `DEBUG_FAKE_LOGIN=1` 时改用内存实现并预置
-    /// 一个假 token —— 只为在没有账号的机器上冒烟验证登录后的布局，
-    /// 假 token 对后端无效（任何请求都会 401），也不落盘。
     private static func makeKeychain() -> any KeychainStoring {
+        KeychainStore()
+    }
+
+    /// DEBUG 下从环境变量取自动登录凭据，供模拟器冒烟用（见 README）：
+    /// `SIMCTL_CHILD_DEBUG_ACCOUNT=… SIMCTL_CHILD_DEBUG_PASSWORD=… xcrun simctl launch …`
+    /// Release 构建恒为 nil，凭据不会进二进制。
+    static var debugCredentials: (account: String, password: String)? {
         #if DEBUG
-        if ProcessInfo.processInfo.environment["DEBUG_FAKE_LOGIN"] == "1" {
-            let memory = InMemoryKeychain()
-            try? memory.saveToken("debug-fake-token")
-            return memory
-        }
+        let env = ProcessInfo.processInfo.environment
+        guard let account = env["DEBUG_ACCOUNT"], let password = env["DEBUG_PASSWORD"],
+              !account.isEmpty, !password.isEmpty else { return nil }
+        return (account, password)
+        #else
+        return nil
         #endif
-        return KeychainStore()
     }
 }
 
