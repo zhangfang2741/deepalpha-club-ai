@@ -128,4 +128,27 @@
   html {
     @apply font-sans;
   }
+
+  /* 自定义滚动条：细但可点。给流式输出容器用，避免用户误以为没有滚动条。 */
+  .stream-scrollable {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.78 0 0) transparent;
+  }
+  .stream-scrollable::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .stream-scrollable::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .stream-scrollable::-webkit-scrollbar-thumb {
+    background: oklch(0.78 0 0);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .stream-scrollable::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.55 0 0);
+    background-clip: padding-box;
+  }
 }

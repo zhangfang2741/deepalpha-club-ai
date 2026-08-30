@@ -4,19 +4,43 @@ import { useEffect, useRef } from 'react'
 import { useTradingDeskStore } from '@/lib/store/trading_desk'
 import TurnCard from './TurnCard'
 
+// 距底部 ≤ 阈值视为"贴底"：只有用户已贴底才跟随流式追加，否则保留
+// 用户当前阅读点。用户主动上滑查看历史时不会被强制拉回底部。
+const STICK_THRESHOLD = 40
+
 export default function StreamPanel() {
   const turns = useTradingDeskStore((s) => s.turns)
+  const runId = useTradingDeskStore((s) => s.runId)
   const status = useTradingDeskStore((s) => s.status)
+  const scrollerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  // 初始 true：第一次进入页面时滚到底，符合"实时推理"预期
+  const stickyRef = useRef(true)
 
-  // 跟随最新内容滚动。依赖 turns 长度与最后一张卡片的文本长度，
-  // 这样流式追加 token 时也会持续跟随。
+  // 监听用户滚动 → 更新贴底状态
+  useEffect(() => {
+    const el = scrollerRef.current
+    if (!el) return
+    const onScroll = () => {
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+      stickyRef.current = distance <= STICK_THRESHOLD
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
+
+  // 新一轮 run 开始 → 强制贴底：用户开新分析时希望看到最新输出
+  useEffect(() => {
+    stickyRef.current = true
+  }, [runId])
+
+  // 流式追加 → 仅在贴底时跟随
   const tail = turns.length > 0 ? turns[turns.length - 1].text.length : 0
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    if (!stickyRef.current) return
+    bottomRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
   }, [turns.length, tail])
 
-  // 正在流式输出的卡片：第一张尚未 turn.done 的
   const streamingId =
     status === 'running' ? (turns.find((t) => !t.done)?.turnId ?? null) : null
 
@@ -38,7 +62,10 @@ export default function StreamPanel() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto">
+        <div
+          ref={scrollerRef}
+          className="stream-scrollable flex flex-1 flex-col gap-2.5 overflow-y-auto"
+        >
           {turns.map((turn) => (
             <TurnCard key={turn.turnId} turn={turn} streaming={turn.turnId === streamingId} />
           ))}
