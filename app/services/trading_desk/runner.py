@@ -6,9 +6,13 @@
     为每个引擎写特例。
   - 运行跑在后台 asyncio 任务里，HTTP 请求立即返回 run_id；SSE 端点是
     独立的消费者，断开不影响运行。
+  - 收尾时把整次事件流折叠成 (verdict, signals, turns) 落 TradingDeskRun
+    表（plan §6 持久化层）。Redis Stream 留给断线续读与重放；历史列表 /
+    详情只查表，避免依赖短 TTL 的缓存。
 
 已知取舍：web 进程重启会中断在跑的 run（spec §11）。研究工具可接受，
-且事件流已落 Redis，partial 结果仍可见。
+且事件流已落 Redis，partial 结果仍可见。进程崩溃导致 _execute 没跑到
+finally 时，占位行会留在 status="running" —— 历史列表单独标出来即可。
 """
 
 from __future__ import annotations
@@ -16,12 +20,12 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from typing import Literal
 
 from redis.asyncio import Redis
 
 from app.cache import trading_desk_cache as tdc
 from app.core.logging import logger
+from app.db.session import AsyncSessionFactory
 from app.schemas.trading_desk import (
     ErrorData,
     EventType,
@@ -29,27 +33,34 @@ from app.schemas.trading_desk import (
     RunStartedData,
     TradingDeskEvent,
 )
-from app.services.trading_desk import event_bus
+from app.services.trading_desk import event_bus, persistence, summariser
 from app.services.trading_desk.engine_base import ControlHandle, RunContext, TradingEngine
-
-RunStatus = Literal["completed", "cancelled", "failed", "interrupted"]
 
 # run_id -> 后台任务。仅用于同进程内的 wait_for / 观测；
 # 控制信号一律走 Redis，不依赖这个字典（进程重启后它会空掉）。
 _TASKS: dict[str, asyncio.Task[None]] = {}
 
+# 进程级 DB 会话工厂：默认走 AsyncSessionFactory，测试用 monkeypatch 替换。
+# 这样 runner 的 start_run / _execute 不被 caller 的 session 生命周期绑死。
+SessionFactory = AsyncSessionFactory
+
 
 async def start_run(
     redis: Redis,
     *,
+    user_id: int,
     ticker: str,
     trade_date: str,
     engine: TradingEngine,
 ) -> str:
     """创建一次运行并立即返回 run_id，实际执行在后台进行。
 
-    run.started 在这里**同步**发出，而不是留给后台任务：否则调用方拿到
-    run_id 后立刻订阅，会撞上「事件流尚不存在」的竞态。
+    三件同步事：
+      1. 初始化 Redis 控制位
+      2. 同步发出 run.started —— 否则调用方拿到 run_id 后立刻订阅会撞上
+         「事件流尚不存在」的竞态
+      3. 同步写入 status=running 的占位行 —— 否则历史列表请求会比
+         run.started 早到，看到「这个 run 不存在」
     """
     run_id = uuid.uuid4().hex
     await tdc.init_control(redis, run_id)
@@ -70,12 +81,30 @@ async def start_run(
             ),
         ),
     )
+    try:
+        async with SessionFactory() as db:
+            await persistence.init_run(
+                db,
+                run_id=run_id,
+                user_id=user_id,
+                ticker=ticker,
+                trade_date=trade_date,
+                engine=descriptor.engine,
+            )
+    except Exception:
+        # 落库失败：把 run_id 上面的流清掉，避免留下一个永远空跑的幽灵 run。
+        logger.exception("trading_desk_init_persist_failed", run_id=run_id)
+        await tdc.clear_control(redis, run_id)
+        raise
 
-    task = asyncio.create_task(_execute(redis, run_id, ticker, trade_date, engine))
+    task = asyncio.create_task(_execute(redis, run_id, ticker, trade_date, engine, user_id))
     _TASKS[run_id] = task
     task.add_done_callback(lambda _: _TASKS.pop(run_id, None))
 
-    logger.info("trading_desk_run_started", run_id=run_id, ticker=ticker, engine=engine.name)
+    logger.info(
+        "trading_desk_run_started", run_id=run_id, ticker=ticker,
+        engine=engine.name, user_id=user_id,
+    )
     return run_id
 
 
@@ -85,14 +114,17 @@ async def _execute(
     ticker: str,
     trade_date: str,
     engine: TradingEngine,
+    user_id: int,
 ) -> None:
-    """在后台执行一次运行，把引擎事件流包进统一的生命周期事件里。
+    """在后台执行一次运行。
 
-    run.started 已由 start_run 同步发出，这里只负责中间事件与收尾。
+    收集所有引擎事件用于收尾折叠（verdict / signals / turns）。事件本身
+    早已通过 event_bus.publish 写到 Redis Stream，in-memory 列表只是
+    本进程 fast-path。
     """
     started_at = time.monotonic()
-    status: RunStatus = "completed"
-    # 上一次观察到的暂停态，用于只在翻转时发 run.paused / run.resumed
+    status = "completed"
+    events: list[TradingDeskEvent] = []
     was_paused = False
 
     async def is_paused() -> bool:
@@ -122,6 +154,7 @@ async def _execute(
 
     try:
         async for event in engine.astream(ctx):
+            events.append(event)
             await event_bus.publish(redis, run_id, event)
 
         if await tdc.is_cancelled(redis, run_id):
@@ -132,26 +165,42 @@ async def _execute(
     except Exception as exc:  # noqa: BLE001 —— 任何引擎异常都要变成前端可见的事件
         status = "failed"
         logger.exception("trading_desk_run_failed", run_id=run_id, ticker=ticker)
-        await event_bus.publish(
-            redis,
-            run_id,
-            TradingDeskEvent.of(run_id, EventType.ERROR, ErrorData(message=str(exc), fatal=True)),
+        fatal_event = TradingDeskEvent.of(
+            run_id, EventType.ERROR, ErrorData(message=str(exc), fatal=True),
         )
+        events.append(fatal_event)
+        await event_bus.publish(redis, run_id, fatal_event)
     finally:
-        await event_bus.publish(
-            redis,
+        duration_ms = int((time.monotonic() - started_at) * 1000)
+        finished_event = TradingDeskEvent.of(
             run_id,
-            TradingDeskEvent.of(
-                run_id,
-                EventType.RUN_FINISHED,
-                RunFinishedData(
-                    status=status,
-                    duration_ms=int((time.monotonic() - started_at) * 1000),
-                ),
-            ),
+            EventType.RUN_FINISHED,
+            RunFinishedData(status=status, duration_ms=duration_ms),
         )
+        events.append(finished_event)
+        await event_bus.publish(redis, run_id, finished_event)
         await tdc.clear_control(redis, run_id)
-        logger.info("trading_desk_run_finished", run_id=run_id, status=status)
+
+        # 落库：摘要 + 状态。落库失败不应让前端看不见 RUN_FINISHED —— log 后继续。
+        verdict, signals, turns = summariser.summarise(events)
+        try:
+            async with SessionFactory() as db:
+                await persistence.finalize_run(
+                    db,
+                    run_id=run_id,
+                    status=status,
+                    duration_ms=duration_ms,
+                    verdict=verdict,
+                    signals=signals,
+                    turns=turns,
+                )
+        except Exception:
+            logger.exception("trading_desk_persist_failed", run_id=run_id, status=status)
+
+        logger.info(
+            "trading_desk_run_finished", run_id=run_id, status=status,
+            duration_ms=duration_ms, user_id=user_id,
+        )
 
 
 async def pause(redis: Redis, run_id: str) -> None:

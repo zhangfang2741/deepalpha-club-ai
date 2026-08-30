@@ -245,3 +245,52 @@ class ControlRequest(BaseModel):
 
 class ControlResponse(BaseResponse):
     accepted: bool
+
+
+# ── 历史回放（持久化层） ──────────────────────────────────────────────
+
+
+class RunSummary(BaseModel):
+    """历史列表里的一条 run：够前端打开详情页即可。
+
+    故意不带 turns/signals —— 详情页才查详情接口，避免列表查询把 JSON 列
+    全部读出来。
+    """
+
+    run_id: str
+    ticker: str
+    trade_date: str
+    engine: str
+    status: str
+    duration_ms: int
+    created_at: str  # ISO 8601；序列化成字符串便于前端解析
+    finished_at: str | None = None
+
+    # verdict 的最小子集：列表卡片上展示结论（BUY/SELL/HOLD + 信心）。
+    verdict_signal: str | None = None
+    verdict_confidence: float | None = None
+
+    # 列表卡片上的计数：每个分析师 / 辩论 / 工具调用一次折叠即可。
+    turns_count: int = 0
+    signals_count: int = 0
+
+
+class RunListResponse(BaseResponse):
+    runs: list[RunSummary]
+
+
+class RunDetailResponse(BaseResponse):
+    """单条 run 详情：包含全部 turns / signals / verdict，回放页面的全部食粮。"""
+
+    run_id: str
+    ticker: str
+    trade_date: str
+    engine: str
+    status: str
+    duration_ms: int
+    created_at: str
+    finished_at: str | None = None
+
+    verdict: dict[str, Any] | None = None
+    signals: list[dict[str, Any]] = Field(default_factory=list)
+    turns: list[dict[str, Any]] = Field(default_factory=list)

@@ -31,6 +31,67 @@ class FakeRedisAll(FakeRedis, FakeStreamRedis):
         return True
 
 
+class _Row:
+    """带 __dict__ 的最小 row 替身：runner 既要 add 又要给属性赋值。
+
+    同时支持 ``row["field"]`` 写法，方便测试直接断言落库字段。
+    """
+
+    def __init__(self, src: object) -> None:
+        for k, v in vars(src).items():
+            if not k.startswith("_"):
+                setattr(self, k, v)
+
+    def __getitem__(self, key: str) -> object:
+        return getattr(self, key)
+
+
+class FakeDb:
+    """最简 async session 替身：runner 只调 init_run + finalize_run 的 commit。"""
+
+    def __init__(self) -> None:
+        self.rows: dict[str, _Row] = {}
+
+    async def commit(self) -> None:
+        return None
+
+    async def get(self, _model: type, run_id: str) -> _Row | None:
+        return self.rows.get(run_id)
+
+    def add(self, obj: object) -> None:
+        d = vars(obj)
+        run_id = str(d["id"])
+        if run_id in self.rows:
+            # finalize_run：把字段拷回已存在 row 上（覆盖式更新）
+            row = self.rows[run_id]
+            for k, v in d.items():
+                if not k.startswith("_"):
+                    setattr(row, k, v)
+        else:
+            # init_run：新建 row
+            self.rows[run_id] = _Row(obj)
+
+
+class _FakeDbCM:
+    """把 FakeDb 包成 async session context manager。"""
+
+    def __init__(self, db: FakeDb) -> None:
+        self._db = db
+
+    async def __aenter__(self) -> FakeDb:
+        return self._db
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+
+def _fake_session_factory(db: FakeDb):  # type: ignore[no-untyped-def]
+    """生成一个可 monkeypatch 到 runner.SessionFactory 的可调用对象。"""
+    def factory() -> _FakeDbCM:
+        return _FakeDbCM(db)
+    return factory
+
+
 class BoomEngine:
     """一开跑就抛异常，用于验证失败路径。"""
 
@@ -49,13 +110,21 @@ def redis() -> FakeRedisAll:
     return FakeRedisAll()
 
 
+@pytest.fixture
+def db(monkeypatch: pytest.MonkeyPatch) -> FakeDb:
+    """提供 FakeDb 并把它塞进 runner.SessionFactory，runner 整段链路都走它。"""
+    fake = FakeDb()
+    monkeypatch.setattr(runner, "SessionFactory", _fake_session_factory(fake))
+    return fake
+
+
 async def _drain(redis: FakeRedisAll, run_id: str) -> list[TradingDeskEvent]:
     return [ev async for _, ev in event_bus.subscribe(redis, run_id, poll_interval=0)]
 
 
-async def test_run_wraps_engine_stream_with_lifecycle_events(redis: FakeRedisAll) -> None:
+async def test_run_wraps_engine_stream_with_lifecycle_events(redis: FakeRedisAll, db: FakeDb) -> None:
     run_id = await runner.start_run(
-        redis, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0)
+        redis, user_id=1, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0)
     )
     await runner.wait_for(run_id)
 
@@ -68,13 +137,13 @@ async def test_run_wraps_engine_stream_with_lifecycle_events(redis: FakeRedisAll
     assert events[-1].data["status"] == "completed"
 
 
-async def test_event_stream_exists_the_moment_start_run_returns(redis: FakeRedisAll) -> None:
+async def test_event_stream_exists_the_moment_start_run_returns(redis: FakeRedisAll, db: FakeDb) -> None:
     """start_run 一返回，事件流就必须已经存在。
 
     否则调用方拿到 run_id 后立刻订阅会撞上竞态，SSE 端点会误报 404。
     """
     run_id = await runner.start_run(
-        redis, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0)
+        redis, user_id=1, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0)
     )
 
     assert await event_bus.exists(redis, run_id) is True
@@ -86,13 +155,13 @@ async def test_event_stream_exists_the_moment_start_run_returns(redis: FakeRedis
     await runner.wait_for(run_id)
 
 
-async def test_exists_is_false_for_unknown_run(redis: FakeRedisAll) -> None:
+async def test_exists_is_false_for_unknown_run(redis: FakeRedisAll, db: FakeDb) -> None:
     assert await event_bus.exists(redis, "no-such-run") is False
 
 
-async def test_verdict_precedes_run_finished(redis: FakeRedisAll) -> None:
+async def test_verdict_precedes_run_finished(redis: FakeRedisAll, db: FakeDb) -> None:
     run_id = await runner.start_run(
-        redis, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0)
+        redis, user_id=1, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0)
     )
     await runner.wait_for(run_id)
 
@@ -101,9 +170,9 @@ async def test_verdict_precedes_run_finished(redis: FakeRedisAll) -> None:
     assert types.index(EventType.VERDICT) < types.index(EventType.RUN_FINISHED)
 
 
-async def test_seq_is_monotonic_across_whole_run(redis: FakeRedisAll) -> None:
+async def test_seq_is_monotonic_across_whole_run(redis: FakeRedisAll, db: FakeDb) -> None:
     run_id = await runner.start_run(
-        redis, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0)
+        redis, user_id=1, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0)
     )
     await runner.wait_for(run_id)
 
@@ -112,8 +181,8 @@ async def test_seq_is_monotonic_across_whole_run(redis: FakeRedisAll) -> None:
     assert seqs == list(range(1, len(seqs) + 1))
 
 
-async def test_engine_failure_emits_fatal_error_then_finished(redis: FakeRedisAll) -> None:
-    run_id = await runner.start_run(redis, ticker="NVDA", trade_date="2026-08-30", engine=BoomEngine())
+async def test_engine_failure_emits_fatal_error_then_finished(redis: FakeRedisAll, db: FakeDb) -> None:
+    run_id = await runner.start_run(redis, user_id=1, ticker="NVDA", trade_date="2026-08-30", engine=BoomEngine())
     await runner.wait_for(run_id)
 
     # 致命 error 是终止事件，subscribe 会停在它那里；直接读原始流看全貌
@@ -128,9 +197,9 @@ async def test_engine_failure_emits_fatal_error_then_finished(redis: FakeRedisAl
     assert events[-1].data["status"] == "failed"
 
 
-async def test_cancel_ends_run_as_cancelled(redis: FakeRedisAll) -> None:
+async def test_cancel_ends_run_as_cancelled(redis: FakeRedisAll, db: FakeDb) -> None:
     run_id = await runner.start_run(
-        redis, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0.01)
+        redis, user_id=1, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0.01)
     )
     await asyncio.sleep(0.05)
     await runner.cancel(redis, run_id)
@@ -153,9 +222,9 @@ async def _wait_for_event(redis: FakeRedisAll, run_id: str, want: EventType, tim
     return False
 
 
-async def test_pause_emits_paused_event_and_resume_continues(redis: FakeRedisAll) -> None:
+async def test_pause_emits_paused_event_and_resume_continues(redis: FakeRedisAll, db: FakeDb) -> None:
     run_id = await runner.start_run(
-        redis, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0.001)
+        redis, user_id=1, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0.001)
     )
     await runner.pause(redis, run_id)
 
@@ -172,14 +241,14 @@ async def test_pause_emits_paused_event_and_resume_continues(redis: FakeRedisAll
     assert types[-1] is EventType.RUN_FINISHED
 
 
-async def test_pause_takes_effect_only_at_node_boundaries(redis: FakeRedisAll) -> None:
+async def test_pause_takes_effect_only_at_node_boundaries(redis: FakeRedisAll, db: FakeDb) -> None:
     """暂停不会把一张卡片的推理拦腰截断：停下时该 turn 一定已经 turn.done。
 
     这是 spec §5.2 的核心承诺——若暂停能落在 token 中间，用户会看到半句话
     悬在那里，而下游 agent 拿到的也是半截上下文。
     """
     run_id = await runner.start_run(
-        redis, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0.001)
+        redis, user_id=1, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0.001)
     )
     await runner.pause(redis, run_id)
     assert await _wait_for_event(redis, run_id, EventType.RUN_PAUSED)
@@ -200,9 +269,9 @@ async def test_pause_takes_effect_only_at_node_boundaries(redis: FakeRedisAll) -
     await runner.wait_for(run_id)
 
 
-async def test_injected_note_surfaces_as_human_note(redis: FakeRedisAll) -> None:
+async def test_injected_note_surfaces_as_human_note(redis: FakeRedisAll, db: FakeDb) -> None:
     run_id = await runner.start_run(
-        redis, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0.01)
+        redis, user_id=1, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0.01)
     )
     await runner.inject(redis, run_id, "把出口管制风险的权重调高")
     await runner.wait_for(run_id)
@@ -213,12 +282,54 @@ async def test_injected_note_surfaces_as_human_note(redis: FakeRedisAll) -> None
     assert notes[0].data["text"] == "把出口管制风险的权重调高"
 
 
-async def test_control_keys_are_cleaned_up_after_run(redis: FakeRedisAll) -> None:
+async def test_control_keys_are_cleaned_up_after_run(redis: FakeRedisAll, db: FakeDb) -> None:
     run_id = await runner.start_run(
-        redis, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0)
+        redis, user_id=1, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0)
     )
     await runner.wait_for(run_id)
 
     assert tdc.control_key(run_id) not in redis.hashes
     # 事件流保留，供断线重连与回看
     assert event_bus.stream_key(run_id) in redis.streams
+
+
+async def test_run_persists_row_with_status_and_summary(redis: FakeRedisAll, db: FakeDb) -> None:
+    """一次正常跑完之后，TradingDeskRun 行要被 finalize 成 completed 且含 verdict/turns。
+
+    验证 runner 的持久化集成：init_run（占位） + finalize_run（收尾摘要）。
+    FakeDb 用 dict 替身承载，便于直接断言落库字段。
+    """
+    run_id = await runner.start_run(
+        redis, user_id=42, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0)
+    )
+    # init_run 已经写过一行：status=running、engine=mock/1
+    assert run_id in db.rows
+    assert db.rows[run_id]["status"] == "running"
+    assert db.rows[run_id]["engine"] == "mock/1"
+    assert db.rows[run_id]["user_id"] == 42
+
+    await runner.wait_for(run_id)
+
+    row = db.rows[run_id]
+    assert row["status"] == "completed"
+    assert int(row["duration_ms"]) >= 0  # type: ignore[arg-type]
+    assert row["finished_at"] is not None
+    # verdict/turns 由 summarise() 折叠出来
+    verdict = row["verdict"]
+    assert isinstance(verdict, dict) and verdict["signal"] == "BUY"  # type: ignore[index]
+    turns = row["turns"]
+    assert isinstance(turns, list) and len(turns) > 0  # type: ignore[arg-type]
+    signals = row["signals"]
+    assert isinstance(signals, list) and len(signals) > 0  # type: ignore[arg-type]
+
+
+async def test_failed_run_persists_failed_status(redis: FakeRedisAll, db: FakeDb) -> None:
+    """引擎抛致命异常 → 行被 finalize 成 failed，verdict/turns 允许为空。"""
+    run_id = await runner.start_run(
+        redis, user_id=1, ticker="NVDA", trade_date="2026-08-30", engine=BoomEngine()
+    )
+    await runner.wait_for(run_id)
+
+    row = db.rows[run_id]
+    assert row["status"] == "failed"
+    assert row["verdict"] is None  # 没跑到 verdict 阶段
