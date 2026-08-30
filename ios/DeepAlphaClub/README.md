@@ -1,7 +1,7 @@
 # DeepAlphaClub iOS
 
 交易台（TradingDesk）自用 App：多智能体分析 / SSE 流式 / 控制 / 历史回放。
-后端复用 [deepalpha-club-ai](../deepalpha-club-ai)（`https://api.deepalpha.club`），零改动。
+后端复用本仓库的 FastAPI 服务（`https://api.deepalpha.club`），零改动。
 
 ## 开发
 
@@ -13,6 +13,7 @@ open DeepAlphaClub.xcodeproj   # Xcode 里 Cmd+R 跑模拟器
 ```
 
 命令行编译 App：
+
 ```bash
 xcodebuild -project DeepAlphaClub.xcodeproj -scheme DeepAlphaClub \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build
@@ -22,4 +23,4 @@ xcodebuild -project DeepAlphaClub.xcodeproj -scheme DeepAlphaClub \
 
 - `Core/` — 本地 SPM 包 `DeepAlphaCore`，全部业务逻辑（可 macOS 测试）
 - `App/` — SwiftUI 视图层（xcodegen target）
-- 协议契约见主仓库 `app/schemas/trading_desk.py`
+- 协议契约见仓库根的 `app/schemas/trading_desk.py`

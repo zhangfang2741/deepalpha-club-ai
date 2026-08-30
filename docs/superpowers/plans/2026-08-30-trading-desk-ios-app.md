@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在独立仓库 `~/deepalpha-club-ios` 从零搭建 SwiftUI 交易台 App（iOS 17+ / Swift 6），复用线上 FastAPI 后端（零改动），实现登录、启动分析、SSE 流式渲染、暂停/注入/取消控制、历史回放。
+**Goal:** 在主仓库子目录 `ios/DeepAlphaClub`（与既有 `ios/DeepAlphaChan`、`ios/WordLens` 并列）从零搭建 SwiftUI 交易台 App（iOS 17+ / Swift 6），复用线上 FastAPI 后端（零改动），实现登录、启动分析、SSE 流式渲染、暂停/注入/取消控制、历史回放。
 
 **Architecture:** 核心逻辑（模型/状态机/SSE/API/ViewModel/SwiftData 缓存）放 SPM package `DeepAlphaCore`（macOS 可 `swift test` 秒级跑，TDD 主战场）；SwiftUI 视图层放 App target，由 xcodegen 生成工程引用本地 package。MVVM + @Observable。
 
@@ -37,7 +37,7 @@
 
 - Xcode 26.5（Build 17F42）、Swift 6.3.2、iOS 26.5 模拟器（iPhone 17 Pro 等）可用。
 - `xcodegen` **未安装**，Task 15 先 `brew install xcodegen`。
-- 跑包内测试：`cd ~/deepalpha-club-ios && swift test`（macOS destination，秒级）。
+- 跑包内测试：`cd ios/DeepAlphaClub/Core && swift test`（macOS destination，秒级）。
 - 跑 App 编译：`xcodebuild -project DeepAlphaClub.xcodeproj -scheme DeepAlphaClub -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build`。
 
 ### 范围裁剪（相对 spec）
@@ -49,10 +49,11 @@
 ## 文件结构
 
 ```
-~/deepalpha-club-ios/               # 独立 git 仓库（不在 deepalpha-club-ai 内）
+ios/DeepAlphaClub/                  # 主仓库子目录（自包含：SPM 包 + App + xcodegen）
 ├── project.yml                     # xcodegen 描述（Task 15）
-├── Package.swift                   # SPM：DeepAlphaCore（iOS 17 / macOS 14）
-├── Sources/Core/
+├── Core/                           # 本地 SPM 包 DeepAlphaCore（iOS 17 / macOS 14）
+│   └── Package.swift
+├── Core/Sources/Core/              # 模块名 DeepAlphaCore，target 路径 Sources/Core
 │   ├── Models/JSONValue.swift      # 弱类型 JSON 树 + literal 便捷构造（Task 2）
 │   ├── Models/TradingDeskModels.swift  # 事件信封/EventType/payload structs（Task 2）
 │   ├── Models/RunModels.swift      # RunSummary/RunDetail/TurnRecord/SignalRecord（Task 2）
@@ -75,7 +76,7 @@
 │       ├── TradingDeskViewModel.swift  # startRun/control/consume 重连（Task 10）
 │       ├── HistoryListViewModel.swift  # 本地缓存 + 远端刷新（Task 14）
 │       └── RunReplayViewModel.swift    # getRun → Turn 数组（Task 14）
-├── Tests/CoreTests/                # 每任务镜像一个测试文件
+├── Core/Tests/CoreTests/           # 每任务镜像一个测试文件
 │   ├── MockURLProtocol.swift       # URLProtocol mock（Task 5 建，SSE 复用）
 │   ├── ...
 ├── App/                            # xcodegen target（Task 15+）
@@ -102,24 +103,25 @@
 └── README.md
 ```
 
-**提交约定**：新仓库，中文提交信息 `feat/fix/test(scope): 描述`，与主仓库一致。每 Task 结束提交一次。
+**提交约定**：主仓库中文提交信息 `feat/fix/test(scope): 描述`。每 Task 结束提交一次。
+（Task 1–15 原在独立仓库 `~/deepalpha-club-ios` 开发，已用 `git subtree add --prefix=ios/DeepAlphaClub` 连同 16 条提交历史并入主仓库。）
 
 ---
 
 ## Task 1: 仓库脚手架（git init + SPM 包 + 空测试）
 
 **Files:**
-- Create: `~/deepalpha-club-ios/.gitignore`
-- Create: `~/deepalpha-club-ios/Package.swift`
-- Create: `~/deepalpha-club-ios/Sources/Core/Placeholder.swift`（临占位，Task 2 删除）
-- Create: `~/deepalpha-club-ios/Tests/CoreTests/SmokeTests.swift`
-- Create: `~/deepalpha-club-ios/README.md`
+- Create: `ios/DeepAlphaClub/.gitignore`
+- Create: `ios/DeepAlphaClub/Core/Package.swift`
+- Create: `ios/DeepAlphaClub/Core/Sources/Core/Placeholder.swift`（临占位，Task 2 删除）
+- Create: `ios/DeepAlphaClub/Core/Tests/CoreTests/SmokeTests.swift`
+- Create: `ios/DeepAlphaClub/README.md`
 
 - [x] **Step 1: 建目录 + git init**
 
 ```bash
-mkdir -p ~/deepalpha-club-ios/Sources/Core ~/deepalpha-club-ios/Tests/CoreTests
-cd ~/deepalpha-club-ios && git init
+mkdir -p ios/DeepAlphaClub/Core/Sources/Core ios/DeepAlphaClub/Core/Tests/CoreTests
+cd ios/DeepAlphaClub && git init
 ```
 
 - [x] **Step 2: 写 .gitignore**
@@ -162,7 +164,7 @@ let package = Package(
 
 - [x] **Step 4: 写占位与冒烟测试**
 
-`Sources/Core/Placeholder.swift`:
+`Core/Sources/Core/Placeholder.swift`:
 
 ```swift
 /// 占位：Task 2 建立真实模型后删除。
@@ -171,7 +173,7 @@ public enum CorePlaceholder {
 }
 ```
 
-`Tests/CoreTests/SmokeTests.swift`:
+`Core/Tests/CoreTests/SmokeTests.swift`:
 
 ```swift
 import Testing
@@ -188,7 +190,7 @@ func smoke() {
 - [x] **Step 5: 跑测试确认绿**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | tail -5
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | tail -5
 ```
 
 期望：`Test run with 1 test passed`（或 `✔ Test "包能被导入" passed`）。
@@ -226,7 +228,7 @@ xcodebuild -project DeepAlphaClub.xcodeproj -scheme DeepAlphaClub \
 ```
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "chore: 仓库脚手架（SPM 包 + swift-testing 冒烟）"
+git add ios/DeepAlphaClub && git commit -m "chore: 仓库脚手架（SPM 包 + swift-testing 冒烟）"
 ```
 
 ---
@@ -234,15 +236,15 @@ cd ~/deepalpha-club-ios && git add -A && git commit -m "chore: 仓库脚手架�
 ## Task 2: JSONValue + 事件与响应模型
 
 **Files:**
-- Create: `Sources/Core/Models/JSONValue.swift`
-- Create: `Sources/Core/Models/TradingDeskModels.swift`
-- Create: `Sources/Core/Models/RunModels.swift`
-- Delete: `Sources/Core/Placeholder.swift`
-- Test: `Tests/CoreTests/ModelTests.swift`
+- Create: `Core/Sources/Core/Models/JSONValue.swift`
+- Create: `Core/Sources/Core/Models/TradingDeskModels.swift`
+- Create: `Core/Sources/Core/Models/RunModels.swift`
+- Delete: `Core/Sources/Core/Placeholder.swift`
+- Test: `Core/Tests/CoreTests/ModelTests.swift`
 
 - [x] **Step 1: 写失败测试**
 
-`Tests/CoreTests/ModelTests.swift`:
+`Core/Tests/CoreTests/ModelTests.swift`:
 
 ```swift
 import Testing
@@ -350,14 +352,14 @@ func runDetailVerdict() throws {
 - [x] **Step 2: 跑测试确认失败**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | grep -E "error|failed" | head -5
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | grep -E "error|failed" | head -5
 ```
 
 期望：编译错误 `cannot find 'JSONValue' in scope` 等。
 
 - [x] **Step 3: 实现 JSONValue**
 
-`Sources/Core/Models/JSONValue.swift`:
+`Core/Sources/Core/Models/JSONValue.swift`:
 
 ```swift
 import Foundation
@@ -450,7 +452,7 @@ extension JSONValue: ExpressibleByStringLiteral, ExpressibleByIntegerLiteral,
 
 - [x] **Step 4: 实现事件模型**
 
-`Sources/Core/Models/TradingDeskModels.swift`:
+`Core/Sources/Core/Models/TradingDeskModels.swift`:
 
 ```swift
 import Foundation
@@ -636,7 +638,7 @@ public struct RunFinishedData: Codable, Sendable, Equatable {
 
 - [x] **Step 5: 实现历史模型**
 
-`Sources/Core/Models/RunModels.swift`:
+`Core/Sources/Core/Models/RunModels.swift`:
 
 ```swift
 import Foundation
@@ -753,10 +755,10 @@ public struct RunDetailResponse: Codable, Sendable, Equatable {
 
 - [x] **Step 6: 删除占位、改冒烟测试、跑绿**
 
-删除 `Sources/Core/Placeholder.swift` 与 `Tests/CoreTests/SmokeTests.swift`。
+删除 `Core/Sources/Core/Placeholder.swift` 与 `Core/Tests/CoreTests/SmokeTests.swift`。
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | tail -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | tail -3
 ```
 
 期望：`Test run with 6 tests passed`。
@@ -764,7 +766,7 @@ cd ~/deepalpha-club-ios && swift test 2>&1 | tail -3
 - [x] **Step 7: 提交**
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(models): JSONValue + 事件信封/payload/历史模型（镜像后端 schemas）"
+git add ios/DeepAlphaClub && git commit -m "feat(models): JSONValue + 事件信封/payload/历史模型（镜像后端 schemas）"
 ```
 
 ---
@@ -772,12 +774,12 @@ cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(models): JSONValue 
 ## Task 3: TickerResolver（市场后缀规则）
 
 **Files:**
-- Create: `Sources/Core/TickerResolver.swift`
-- Test: `Tests/CoreTests/TickerResolverTests.swift`
+- Create: `Core/Sources/Core/TickerResolver.swift`
+- Test: `Core/Tests/CoreTests/TickerResolverTests.swift`
 
 - [x] **Step 1: 写失败测试**
 
-`Tests/CoreTests/TickerResolverTests.swift`:
+`Core/Tests/CoreTests/TickerResolverTests.swift`:
 
 ```swift
 import Testing
@@ -835,14 +837,14 @@ func marketMeta() {
 - [x] **Step 2: 跑测试确认失败**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | grep "error:" | head -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | grep "error:" | head -3
 ```
 
 期望：`cannot find 'TickerResolver' in scope`。
 
 - [x] **Step 3: 实现**
 
-`Sources/Core/TickerResolver.swift`:
+`Core/Sources/Core/TickerResolver.swift`:
 
 ```swift
 import Foundation
@@ -901,7 +903,7 @@ public enum TickerResolver {
 - [x] **Step 4: 跑测试通过**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | tail -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | tail -3
 ```
 
 期望：全部通过（累计 14 个测试）。
@@ -909,7 +911,7 @@ cd ~/deepalpha-club-ios && swift test 2>&1 | tail -3
 - [x] **Step 5: 提交**
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(ticker): 四市场 resolveTicker 规则（HK strip 前导零）"
+git add ios/DeepAlphaClub && git commit -m "feat(ticker): 四市场 resolveTicker 规则（HK strip 前导零）"
 ```
 
 ---
@@ -917,12 +919,12 @@ cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(ticker): 四市场 
 ## Task 4: SSEFrameParser（帧解析纯函数）
 
 **Files:**
-- Create: `Sources/Core/SSEFrameParser.swift`
-- Test: `Tests/CoreTests/SSEFrameParserTests.swift`
+- Create: `Core/Sources/Core/SSEFrameParser.swift`
+- Test: `Core/Tests/CoreTests/SSEFrameParserTests.swift`
 
 - [x] **Step 1: 写失败测试**
 
-`Tests/CoreTests/SSEFrameParserTests.swift`:
+`Core/Tests/CoreTests/SSEFrameParserTests.swift`:
 
 ```swift
 import Testing
@@ -973,14 +975,14 @@ func commentLine() throws {
 - [x] **Step 2: 跑测试确认失败**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | grep "error:" | head -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | grep "error:" | head -3
 ```
 
 期望：`cannot find 'SSEFrameParser' in scope`。
 
 - [x] **Step 3: 实现**
 
-`Sources/Core/SSEFrameParser.swift`:
+`Core/Sources/Core/SSEFrameParser.swift`:
 
 ```swift
 import Foundation
@@ -1025,13 +1027,13 @@ public enum SSEFrameParser {
 - [x] **Step 4: 跑测试通过**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | tail -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | tail -3
 ```
 
 - [x] **Step 5: 提交**
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(sse): SSE 帧解析纯函数（id/data/多行/坏行丢弃）"
+git add ios/DeepAlphaClub && git commit -m "feat(sse): SSE 帧解析纯函数（id/data/多行/坏行丢弃）"
 ```
 
 ---
@@ -1039,14 +1041,14 @@ cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(sse): SSE 帧解析
 ## Task 5: APIError + APIClient（URLProtocol mock 测试）
 
 **Files:**
-- Create: `Sources/Core/APIError.swift`
-- Create: `Sources/Core/APIClient.swift`
-- Create: `Tests/CoreTests/MockURLProtocol.swift`
-- Test: `Tests/CoreTests/APIClientTests.swift`
+- Create: `Core/Sources/Core/APIError.swift`
+- Create: `Core/Sources/Core/APIClient.swift`
+- Create: `Core/Tests/CoreTests/MockURLProtocol.swift`
+- Test: `Core/Tests/CoreTests/APIClientTests.swift`
 
 - [x] **Step 1: 写 URLProtocol mock（测试基建）**
 
-`Tests/CoreTests/MockURLProtocol.swift`:
+`Core/Tests/CoreTests/MockURLProtocol.swift`:
 
 ```swift
 import Foundation
@@ -1101,7 +1103,7 @@ extension TestTrait where Self == ResetMock {
 
 - [x] **Step 2: 写失败测试**
 
-`Tests/CoreTests/APIClientTests.swift`:
+`Core/Tests/CoreTests/APIClientTests.swift`:
 
 ```swift
 import Foundation
@@ -1264,14 +1266,14 @@ extension URLRequest {
 - [x] **Step 3: 跑测试确认失败**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | grep "error:" | head -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | grep "error:" | head -3
 ```
 
 期望：`cannot find 'APIClient' in scope`。
 
 - [x] **Step 4: 实现 APIError**
 
-`Sources/Core/APIError.swift`:
+`Core/Sources/Core/APIError.swift`:
 
 ```swift
 import Foundation
@@ -1332,7 +1334,7 @@ public enum APIError: Error, Sendable, Equatable {
 
 - [x] **Step 5: 实现 APIClient**
 
-`Sources/Core/APIClient.swift`:
+`Core/Sources/Core/APIClient.swift`:
 
 ```swift
 import Foundation
@@ -1421,13 +1423,13 @@ public struct APIClient: Sendable {
 - [x] **Step 6: 跑测试通过**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | tail -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | tail -3
 ```
 
 - [x] **Step 7: 提交**
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(api): APIClient（token 注入/form 编码/typed 错误映射）+ URLProtocol mock"
+git add ios/DeepAlphaClub && git commit -m "feat(api): APIClient（token 注入/form 编码/typed 错误映射）+ URLProtocol mock"
 ```
 
 ---
@@ -1435,14 +1437,14 @@ cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(api): APIClient（t
 ## Task 6: KeychainStore + AuthService（登录）
 
 **Files:**
-- Create: `Sources/Core/KeychainStore.swift`
-- Create: `Sources/Core/AuthService.swift`
-- Create: `Sources/Core/Models/AuthModels.swift`
-- Test: `Tests/CoreTests/AuthServiceTests.swift`
+- Create: `Core/Sources/Core/KeychainStore.swift`
+- Create: `Core/Sources/Core/AuthService.swift`
+- Create: `Core/Sources/Core/Models/AuthModels.swift`
+- Test: `Core/Tests/CoreTests/AuthServiceTests.swift`
 
 - [x] **Step 1: 写失败测试**
 
-`Tests/CoreTests/AuthServiceTests.swift`:
+`Core/Tests/CoreTests/AuthServiceTests.swift`:
 
 ```swift
 import Foundation
@@ -1509,12 +1511,12 @@ struct AuthServiceTests {
 - [x] **Step 2: 跑测试确认失败**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | grep "error:" | head -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | grep "error:" | head -3
 ```
 
 - [x] **Step 3: 实现**
 
-`Sources/Core/Models/AuthModels.swift`:
+`Core/Sources/Core/Models/AuthModels.swift`:
 
 ```swift
 import Foundation
@@ -1526,7 +1528,7 @@ public struct LoginResponse: Codable, Sendable, Equatable {
 }
 ```
 
-`Sources/Core/KeychainStore.swift`:
+`Core/Sources/Core/KeychainStore.swift`:
 
 ```swift
 import Foundation
@@ -1601,7 +1603,7 @@ public final class InMemoryKeychain: KeychainStoring, @unchecked Sendable {
 }
 ```
 
-`Sources/Core/AuthService.swift`:
+`Core/Sources/Core/AuthService.swift`:
 
 ```swift
 import Foundation
@@ -1624,13 +1626,13 @@ public struct AuthService: Sendable {
 - [x] **Step 4: 跑测试通过**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | tail -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | tail -3
 ```
 
 - [x] **Step 5: 提交**
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(auth): 登录（form-urlencoded）+ Keychain 存取（真实现 + 内存 mock）"
+git add ios/DeepAlphaClub && git commit -m "feat(auth): 登录（form-urlencoded）+ Keychain 存取（真实现 + 内存 mock）"
 ```
 
 ---
@@ -1638,15 +1640,15 @@ cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(auth): 登录（for
 ## Task 7: TradingDeskState + Reducer（状态机移植）
 
 **Files:**
-- Create: `Sources/Core/State/TradingDeskState.swift`
-- Create: `Sources/Core/State/TradingDeskReducer.swift`
-- Test: `Tests/CoreTests/TradingDeskReducerTests.swift`
+- Create: `Core/Sources/Core/State/TradingDeskState.swift`
+- Create: `Core/Sources/Core/State/TradingDeskReducer.swift`
+- Test: `Core/Tests/CoreTests/TradingDeskReducerTests.swift`
 
 这是全 App 的心脏：把 SSE 事件流折叠成 UI 状态的纯函数，逐事件移植 web `frontend/lib/store/trading_desk.ts` 的 `reduceEvent`。
 
 - [x] **Step 1: 写失败测试**
 
-`Tests/CoreTests/TradingDeskReducerTests.swift`:
+`Core/Tests/CoreTests/TradingDeskReducerTests.swift`:
 
 ```swift
 import Testing
@@ -1826,12 +1828,12 @@ struct TradingDeskReducerTests {
 - [x] **Step 2: 跑测试确认失败**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | grep "error:" | head -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | grep "error:" | head -3
 ```
 
 - [x] **Step 3: 实现 State 值类型**
 
-`Sources/Core/State/TradingDeskState.swift`:
+`Core/Sources/Core/State/TradingDeskState.swift`:
 
 ```swift
 import Foundation
@@ -1947,7 +1949,7 @@ public struct TradingDeskState: Sendable, Equatable {
 
 - [x] **Step 4: 实现 Reducer**
 
-`Sources/Core/State/TradingDeskReducer.swift`:
+`Core/Sources/Core/State/TradingDeskReducer.swift`:
 
 ```swift
 import Foundation
@@ -2100,7 +2102,7 @@ extension Array where Element == Turn {
 - [x] **Step 5: 跑测试通过**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | tail -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | tail -3
 ```
 
 期望：reducer 套件 11 个测试全绿。
@@ -2108,7 +2110,7 @@ cd ~/deepalpha-club-ios && swift test 2>&1 | tail -3
 - [x] **Step 6: 提交**
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(state): 事件→状态 reducer 移植（17 种事件 + 审计链派生）"
+git add ios/DeepAlphaClub && git commit -m "feat(state): 事件→状态 reducer 移植（17 种事件 + 审计链派生）"
 ```
 
 ---
@@ -2116,12 +2118,12 @@ cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(state): 事件→�
 ## Task 8: SSEClient（URLSession.bytes 流式订阅）
 
 **Files:**
-- Create: `Sources/Core/SSEClient.swift`
-- Test: `Tests/CoreTests/SSEClientTests.swift`
+- Create: `Core/Sources/Core/SSEClient.swift`
+- Test: `Core/Tests/CoreTests/SSEClientTests.swift`
 
 - [x] **Step 1: 写失败测试**
 
-`Tests/CoreTests/SSEClientTests.swift`:
+`Core/Tests/CoreTests/SSEClientTests.swift`:
 
 ```swift
 import Foundation
@@ -2234,12 +2236,12 @@ struct SSEClientTests {
 - [x] **Step 2: 跑测试确认失败**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | grep "error:" | head -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | grep "error:" | head -3
 ```
 
 - [x] **Step 3: 实现**
 
-`Sources/Core/SSEClient.swift`:
+`Core/Sources/Core/SSEClient.swift`:
 
 ```swift
 import Foundation
@@ -2321,13 +2323,13 @@ public struct SSEClient: Sendable {
 - [x] **Step 4: 跑测试通过**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | tail -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | tail -3
 ```
 
 - [x] **Step 5: 提交**
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(sse): SSEClient（Last-Event-ID 续读 / 心跳忽略 / 残帧刷出）"
+git add ios/DeepAlphaClub && git commit -m "feat(sse): SSEClient（Last-Event-ID 续读 / 心跳忽略 / 残帧刷出）"
 ```
 
 ---
@@ -2335,12 +2337,12 @@ cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(sse): SSEClient（L
 ## Task 9: TradingDeskServicing 协议 + 线上实现
 
 **Files:**
-- Create: `Sources/Core/TradingDeskService.swift`
-- Test: `Tests/CoreTests/TradingDeskServiceTests.swift`
+- Create: `Core/Sources/Core/TradingDeskService.swift`
+- Test: `Core/Tests/CoreTests/TradingDeskServiceTests.swift`
 
 - [x] **Step 1: 写失败测试**
 
-`Tests/CoreTests/TradingDeskServiceTests.swift`:
+`Core/Tests/CoreTests/TradingDeskServiceTests.swift`:
 
 ```swift
 import Foundation
@@ -2455,12 +2457,12 @@ struct TradingDeskServiceTests {
 - [x] **Step 2: 跑测试确认失败**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | grep "error:" | head -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | grep "error:" | head -3
 ```
 
 - [x] **Step 3: 实现**
 
-`Sources/Core/TradingDeskService.swift`:
+`Core/Sources/Core/TradingDeskService.swift`:
 
 ```swift
 import Foundation
@@ -2528,13 +2530,13 @@ public struct TradingDeskService: TradingDeskServicing {
 - [x] **Step 4: 跑测试通过**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | tail -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | tail -3
 ```
 
 - [x] **Step 5: 提交**
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(service): 业务端点封装（createRun/control/listRuns/getRun/stream）"
+git add ios/DeepAlphaClub && git commit -m "feat(service): 业务端点封装（createRun/control/listRuns/getRun/stream）"
 ```
 
 ---
@@ -2542,12 +2544,12 @@ cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(service): 业务端
 ## Task 10: TradingDeskViewModel（状态机 + 无限重连）
 
 **Files:**
-- Create: `Sources/Core/ViewModels/TradingDeskViewModel.swift`
-- Test: `Tests/CoreTests/TradingDeskViewModelTests.swift`
+- Create: `Core/Sources/Core/ViewModels/TradingDeskViewModel.swift`
+- Test: `Core/Tests/CoreTests/TradingDeskViewModelTests.swift`
 
 - [x] **Step 1: 写失败测试**
 
-`Tests/CoreTests/TradingDeskViewModelTests.swift`:
+`Core/Tests/CoreTests/TradingDeskViewModelTests.swift`:
 
 ```swift
 import Foundation
@@ -2826,12 +2828,12 @@ extension MockDeskService {
 - [x] **Step 2: 跑测试确认失败**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | grep "error:" | head -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | grep "error:" | head -3
 ```
 
 - [x] **Step 3: 实现**
 
-`Sources/Core/ViewModels/TradingDeskViewModel.swift`:
+`Core/Sources/Core/ViewModels/TradingDeskViewModel.swift`:
 
 ```swift
 import Foundation
@@ -2956,7 +2958,7 @@ public final class TradingDeskViewModel {
 - [x] **Step 4: 跑测试通过**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | tail -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | tail -3
 ```
 
 若 `scenePhaseHandling` 或 `noReconnectAfterTerminal` 偶发不过：runLoop 是后台 Task，`startRun` 返回时可能尚未消费完——这是异步竞争。修法：测试在断言前 `await vm.drainOnce()`（实现一个 `func drainOnce() async { await consumeTask?.value }`，并把 consumeTask 的 Task 存为可等待）。实现时直接把 `consumeTask` 声明为 `Task<Void, Never>?`（已如此），测试里 `await vm.consumeTaskValue`：
@@ -2986,7 +2988,7 @@ func waitUntil(_ condition: @MainActor () -> Bool,
 - [x] **Step 5: 提交**
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(vm): TradingDeskViewModel（startRun/control/无限重连/seq 去重/前后台）"
+git add ios/DeepAlphaClub && git commit -m "feat(vm): TradingDeskViewModel（startRun/control/无限重连/seq 去重/前后台）"
 ```
 
 ---
@@ -2994,12 +2996,12 @@ cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(vm): TradingDeskVie
 ## Task 11: AppState（登录态）
 
 **Files:**
-- Create: `Sources/Core/ViewModels/AppState.swift`
-- Test: `Tests/CoreTests/AppStateTests.swift`
+- Create: `Core/Sources/Core/ViewModels/AppState.swift`
+- Test: `Core/Tests/CoreTests/AppStateTests.swift`
 
 - [x] **Step 1: 写失败测试**
 
-`Tests/CoreTests/AppStateTests.swift`:
+`Core/Tests/CoreTests/AppStateTests.swift`:
 
 ```swift
 import Foundation
@@ -3085,12 +3087,12 @@ struct AppStateTests {
 - [x] **Step 2: 跑测试确认失败**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | grep "error:" | head -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | grep "error:" | head -3
 ```
 
 - [x] **Step 3: 实现**
 
-先给 AuthService 补协议（`Sources/Core/AuthService.swift` 追加）：
+先给 AuthService 补协议（`Core/Sources/Core/AuthService.swift` 追加）：
 
 ```swift
 /// 登录抽象（测试 mock）。真实现是上面的 AuthService struct。
@@ -3101,7 +3103,7 @@ public protocol AuthServiceProtocol: Sendable {
 extension AuthService: AuthServiceProtocol {}
 ```
 
-`Sources/Core/ViewModels/AppState.swift`:
+`Core/Sources/Core/ViewModels/AppState.swift`:
 
 ```swift
 import Foundation
@@ -3167,13 +3169,13 @@ public final class AppState {
 - [x] **Step 4: 跑测试通过**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | tail -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | tail -3
 ```
 
 - [x] **Step 5: 提交**
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(app-state): 登录态（Keychain 恢复/401 清除/登出）"
+git add ios/DeepAlphaClub && git commit -m "feat(app-state): 登录态（Keychain 恢复/401 清除/登出）"
 ```
 
 ---
@@ -3181,14 +3183,14 @@ cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(app-state): 登录�
 ## Task 12: MarkdownBlockParser（TurnCard 的轻量 markdown）
 
 **Files:**
-- Create: `Sources/Core/MarkdownBlockParser.swift`
-- Test: `Tests/CoreTests/MarkdownBlockParserTests.swift`
+- Create: `Core/Sources/Core/MarkdownBlockParser.swift`
+- Test: `Core/Tests/CoreTests/MarkdownBlockParserTests.swift`
 
 `AttributedString(markdown:)` 只支持 inline 样式；LLM 输出大量 `###` 标题 / `-` 列表 / 代码块。这里做一个行级块解析（不做完整 CommonMark），块内 inline 交给 AttributedString。
 
 - [x] **Step 1: 写失败测试**
 
-`Tests/CoreTests/MarkdownBlockParserTests.swift`:
+`Core/Tests/CoreTests/MarkdownBlockParserTests.swift`:
 
 ```swift
 import Testing
@@ -3257,12 +3259,12 @@ struct MarkdownBlockParserTests {
 - [x] **Step 2: 跑测试确认失败**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | grep "error:" | head -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | grep "error:" | head -3
 ```
 
 - [x] **Step 3: 实现**
 
-`Sources/Core/MarkdownBlockParser.swift`:
+`Core/Sources/Core/MarkdownBlockParser.swift`:
 
 ```swift
 import Foundation
@@ -3367,13 +3369,13 @@ public enum MarkdownBlockParser {
 - [x] **Step 4: 跑测试通过**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | tail -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | tail -3
 ```
 
 - [x] **Step 5: 提交**
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(markdown): 行级块解析（标题/列表/代码块/表格降级）"
+git add ios/DeepAlphaClub && git commit -m "feat(markdown): 行级块解析（标题/列表/代码块/表格降级）"
 ```
 
 ---
@@ -3381,13 +3383,13 @@ cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(markdown): 行级�
 ## Task 13: SwiftData 历史缓存（CachedRun + RunCache）
 
 **Files:**
-- Create: `Sources/Core/Persistence/CachedRun.swift`
-- Create: `Sources/Core/Persistence/RunCache.swift`
-- Test: `Tests/CoreTests/RunCacheTests.swift`
+- Create: `Core/Sources/Core/Persistence/CachedRun.swift`
+- Create: `Core/Sources/Core/Persistence/RunCache.swift`
+- Test: `Core/Tests/CoreTests/RunCacheTests.swift`
 
 - [x] **Step 1: 写失败测试**
 
-`Tests/CoreTests/RunCacheTests.swift`:
+`Core/Tests/CoreTests/RunCacheTests.swift`:
 
 ```swift
 import Foundation
@@ -3469,12 +3471,12 @@ struct RunCacheTests {
 - [x] **Step 2: 跑测试确认失败**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | grep "error:" | head -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | grep "error:" | head -3
 ```
 
 - [x] **Step 3: 实现**
 
-`Sources/Core/Persistence/CachedRun.swift`:
+`Core/Sources/Core/Persistence/CachedRun.swift`:
 
 ```swift
 import Foundation
@@ -3512,7 +3514,7 @@ public final class CachedRun {
 }
 ```
 
-`Sources/Core/Persistence/RunCache.swift`:
+`Core/Sources/Core/Persistence/RunCache.swift`:
 
 ```swift
 import Foundation
@@ -3613,13 +3615,13 @@ public actor RunCache {
 - [x] **Step 4: 跑测试通过**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | tail -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | tail -3
 ```
 
 - [x] **Step 5: 提交**
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(cache): SwiftData 历史缓存（upsert/过滤/50 条淘汰）"
+git add ios/DeepAlphaClub && git commit -m "feat(cache): SwiftData 历史缓存（upsert/过滤/50 条淘汰）"
 ```
 
 ---
@@ -3627,13 +3629,13 @@ cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(cache): SwiftData �
 ## Task 14: HistoryListViewModel + RunReplayViewModel
 
 **Files:**
-- Create: `Sources/Core/ViewModels/HistoryListViewModel.swift`
-- Create: `Sources/Core/ViewModels/RunReplayViewModel.swift`
-- Test: `Tests/CoreTests/HistoryViewModelsTests.swift`
+- Create: `Core/Sources/Core/ViewModels/HistoryListViewModel.swift`
+- Create: `Core/Sources/Core/ViewModels/RunReplayViewModel.swift`
+- Test: `Core/Tests/CoreTests/HistoryViewModelsTests.swift`
 
 - [x] **Step 1: 写失败测试**
 
-`Tests/CoreTests/HistoryViewModelsTests.swift`:
+`Core/Tests/CoreTests/HistoryViewModelsTests.swift`:
 
 ```swift
 import Foundation
@@ -3735,12 +3737,12 @@ struct RunReplayViewModelTests {
 - [x] **Step 2: 跑测试确认失败**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | grep "error:" | head -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | grep "error:" | head -3
 ```
 
 - [x] **Step 3: 实现**
 
-`Sources/Core/ViewModels/HistoryListViewModel.swift`:
+`Core/Sources/Core/ViewModels/HistoryListViewModel.swift`:
 
 ```swift
 import Foundation
@@ -3788,7 +3790,7 @@ public final class HistoryListViewModel {
 }
 ```
 
-`Sources/Core/ViewModels/RunReplayViewModel.swift`:
+`Core/Sources/Core/ViewModels/RunReplayViewModel.swift`:
 
 ```swift
 import Foundation
@@ -3840,7 +3842,7 @@ extension TurnRecord {
 }
 ```
 
-同时给 `MockDeskService` 扩充（`Tests/CoreTests/TradingDeskViewModelTests.swift` 内）：
+同时给 `MockDeskService` 扩充（`Core/Tests/CoreTests/TradingDeskViewModelTests.swift` 内）：
 
 ```swift
 // MockDeskService 增加字段与方法实现替换
@@ -3863,13 +3865,13 @@ func getRun(runId: String) async throws -> RunDetailResponse {
 - [x] **Step 4: 跑测试通过**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | tail -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | tail -3
 ```
 
 - [x] **Step 5: 提交**
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(history-vm): 历史列表（缓存先出+远端替换）与回放 VM"
+git add ios/DeepAlphaClub && git commit -m "feat(history-vm): 历史列表（缓存先出+远端替换）与回放 VM"
 ```
 
 ---
@@ -3877,7 +3879,7 @@ cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(history-vm): 历史
 ## Task 15: xcodegen 工程 + App 入口 + 登录
 
 **Files:**
-- Create: `~/deepalpha-club-ios/project.yml`
+- Create: `ios/DeepAlphaClub/project.yml`
 - Create: `App/DeepAlphaClubApp.swift`
 - Create: `App/CompositionRoot.swift`
 - Create: `App/RootView.swift`
@@ -3985,7 +3987,7 @@ struct CompositionRoot {
 }
 ```
 
-注意 `RunCacheDefault.make()` 是一个工厂（容错版 init）——在 `Sources/Core/Persistence/RunCache.swift` 追加：
+注意 `RunCacheDefault.make()` 是一个工厂（容错版 init）——在 `Core/Sources/Core/Persistence/RunCache.swift` 追加：
 
 ```swift
 /// 默认磁盘容器的工厂：失败（磁盘满/迁移冲突）返回 nil，App 降级为无缓存运行。
@@ -4181,7 +4183,7 @@ struct LoginView: View {
 - [x] **Step 6: 生成工程 + 编译**
 
 ```bash
-cd ~/deepalpha-club-ios && xcodegen generate && \
+cd ios/DeepAlphaClub && xcodegen generate && \
 xcodebuild -project DeepAlphaClub.xcodeproj -scheme DeepAlphaClub \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   CODE_SIGNING_ALLOWED=NO build 2>&1 | tail -3
@@ -4192,7 +4194,7 @@ xcodebuild -project DeepAlphaClub.xcodeproj -scheme DeepAlphaClub \
 - [x] **Step 7: 提交**
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(app): xcodegen 工程 + 组合根 + 登录页 + 登录态路由"
+git add ios/DeepAlphaClub && git commit -m "feat(app): xcodegen 工程 + 组合根 + 登录页 + 登录态路由"
 ```
 
 ---
@@ -5199,7 +5201,7 @@ struct ErrorBanner: View {
 - [ ] **Step 9: 编译验证**
 
 ```bash
-cd ~/deepalpha-club-ios && xcodegen generate && \
+cd ios/DeepAlphaClub && xcodegen generate && \
 xcodebuild -project DeepAlphaClub.xcodeproj -scheme DeepAlphaClub \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   CODE_SIGNING_ALLOWED=NO build 2>&1 | grep -E "error|BUILD" | head -10
@@ -5225,7 +5227,7 @@ sleep 3 && xcrun simctl io booted screenshot /tmp/td-login.png
 - [ ] **Step 11: 提交**
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(ui): 交易台主界面（三栏/TabView 自适应 + 智能滚动 + 注入 sheet）"
+git add ios/DeepAlphaClub && git commit -m "feat(ui): 交易台主界面（三栏/TabView 自适应 + 智能滚动 + 注入 sheet）"
 ```
 
 ---
@@ -5531,7 +5533,7 @@ RootView()
 - [ ] **Step 3: 编译 + 冒烟**
 
 ```bash
-cd ~/deepalpha-club-ios && xcodegen generate && \
+cd ios/DeepAlphaClub && xcodegen generate && \
 xcodebuild -project DeepAlphaClub.xcodeproj -scheme DeepAlphaClub \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   CODE_SIGNING_ALLOWED=NO build 2>&1 | grep -E "error|BUILD" | head -10
@@ -5542,7 +5544,7 @@ xcodebuild -project DeepAlphaClub.xcodeproj -scheme DeepAlphaClub \
 - [ ] **Step 4: 提交**
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(history): 历史列表（过滤/徽标）+ 回放全文直出"
+git add ios/DeepAlphaClub && git commit -m "feat(history): 历史列表（过滤/徽标）+ 回放全文直出"
 ```
 
 ---
@@ -5552,7 +5554,7 @@ cd ~/deepalpha-club-ios && git add -A && git commit -m "feat(history): 历史列
 - [ ] **Step 1: 全量测试 + 双目标编译**
 
 ```bash
-cd ~/deepalpha-club-ios && swift test 2>&1 | tail -3
+cd ios/DeepAlphaClub/Core && swift test 2>&1 | tail -3
 xcodegen generate && \
 xcodebuild -project DeepAlphaClub.xcodeproj -scheme DeepAlphaClub \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
@@ -5610,7 +5612,7 @@ README.md 追加：
 ```
 
 ```bash
-cd ~/deepalpha-club-ios && git add -A && git commit -m "docs: 自测清单 + v0.1.0 收尾"
+git add ios/DeepAlphaClub && git commit -m "docs: 自测清单 + v0.1.0 收尾"
 ```
 
 - [ ] **Step 5: 回主仓库提交计划与进度**
