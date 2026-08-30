@@ -51,6 +51,7 @@ dependencies = [
     "networkx>=3.4",
     "pandas>=2.2",
     "deepagents>=0.6.12",
+    "tradingagents==0.7.0",
 ]
 
 [project.optional-dependencies]
@@ -76,6 +77,19 @@ dev = [
     "ruff>=0.11.4",
 ]
 test = ["httpx>=0.28.1", "pytest>=8.3.5"]
+
+
+[tool.uv]
+# TradingAgents 的依赖元数据与本项目冲突，但都是虚假冲突，故覆盖：
+#   redis>=7.4.0  —— 幽灵依赖，其源码从未 import redis；而本项目的
+#                    celery[redis] -> kombu 把 redis 锁在 <6.5，不能让步。
+#   pandas>=3.0.2 —— 约束过紧，其实际用法只有 pd.Timestamp / bdate_range /
+#                    to_datetime 与基础 DataFrame 索引，pandas 2.x 足够。
+# 升级 tradingagents 版本时必须重新核查这两条是否仍然成立。
+override-dependencies = [
+    "redis>=5.2.1,<6.5",
+    "pandas>=2.2,<3",
+]
 
 
 [tool.pytest.ini_options]
