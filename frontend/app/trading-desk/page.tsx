@@ -34,7 +34,16 @@ function resolveTicker(raw: string, market: Market): string {
   if (!cleaned) return cleaned
   // 用户手动输了完整带后缀格式（如 AAPL / 0700.HK / 600519.SS）— 保留
   if (cleaned.includes('.')) return cleaned
-  return cleaned + MARKET_SUFFIX[market]
+
+  // HK market 代码前导零是 padding，yfinance 不接受 03887.HK 但接受 3887.HK。
+  // 这里 strip 后再拼后缀，让工具能解析到正确的 ticker。
+  // A 股代码前导零是有效位（002415 海康 / 000001 平安），不动。
+  let code = cleaned
+  if (market === 'HK') {
+    const stripped = code.replace(/^0+/, '')
+    code = stripped === '' ? code : stripped
+  }
+  return code + MARKET_SUFFIX[market]
 }
 
 export default function TradingDeskPage() {
