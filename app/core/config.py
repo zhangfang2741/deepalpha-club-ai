@@ -286,6 +286,18 @@ class Settings:
         self.SUPPLY_CHAIN_MAX_PROBE_ATTEMPTS = int(os.getenv("SUPPLY_CHAIN_MAX_PROBE_ATTEMPTS", "10"))
         self.SUPPLY_CHAIN_PROBE_BACKOFF_SECONDS = int(os.getenv("SUPPLY_CHAIN_PROBE_BACKOFF_SECONDS", "60"))
 
+        # 交易台（多智能体分析）
+        # LLM 复用平台统一配置：LLM_PROVIDER / *_API_KEY / MAX_TOKENS /
+        # DEFAULT_LLM_TEMPERATURE 一律沿用，此处不引入第二套供应商配置。
+        # 下面两个是注册表里的「模型名」（非供应商模型 ID），沿用
+        # SUPPLY_CHAIN_DISCOVER_MODEL 的先例，留空回落 DEFAULT_LLM_MODEL。
+        self.TRADING_DESK_ENGINE = os.getenv("TRADING_DESK_ENGINE", "tradingagents")
+        self.TRADING_DESK_DEEP_MODEL = os.getenv("TRADING_DESK_DEEP_MODEL", "")
+        self.TRADING_DESK_QUICK_MODEL = os.getenv("TRADING_DESK_QUICK_MODEL", "")
+        self.TRADING_DESK_MAX_DEBATE_ROUNDS = int(os.getenv("TRADING_DESK_MAX_DEBATE_ROUNDS", "2"))
+        self.TRADING_DESK_MAX_RISK_ROUNDS = int(os.getenv("TRADING_DESK_MAX_RISK_ROUNDS", "1"))
+        self.TRADING_DESK_EVENT_TTL_SECONDS = int(os.getenv("TRADING_DESK_EVENT_TTL_SECONDS", "604800"))
+
         # Rate Limiting Configuration
         self.RATE_LIMIT_DEFAULT = parse_list_from_env("RATE_LIMIT_DEFAULT", ["200 per day", "50 per hour"])
 
