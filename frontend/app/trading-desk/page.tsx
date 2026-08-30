@@ -12,8 +12,34 @@ import { getApiErrorMessage } from '@/lib/api/client'
 import { controlRun, createRun, streamRun, type ControlAction } from '@/lib/api/trading_desk'
 import { useTradingDeskStore } from '@/lib/store/trading_desk'
 
+type Market = 'US' | 'HK' | 'SH' | 'SZ'
+
+const MARKET_SUFFIX: Record<Market, string> = {
+  US: '',
+  HK: '.HK',
+  SH: '.SS',
+  SZ: '.SZ',
+}
+
+const MARKET_PLACEHOLDER: Record<Market, string> = {
+  US: 'NVDA',
+  HK: '0700',
+  SH: '600519',
+  SZ: '000001',
+}
+
+function resolveTicker(raw: string, market: Market): string {
+  // 根据市场自动追加 yfinance 后缀；已带后缀则保留防重复拼。
+  const cleaned = raw.trim().toUpperCase()
+  if (!cleaned) return cleaned
+  // 用户手动输了完整带后缀格式（如 AAPL / 0700.HK / 600519.SS）— 保留
+  if (cleaned.includes('.')) return cleaned
+  return cleaned + MARKET_SUFFIX[market]
+}
+
 export default function TradingDeskPage() {
   const [ticker, setTicker] = useState('NVDA')
+  const [market, setMarket] = useState<Market>('US')
   const [busy, setBusy] = useState(false)
   const [pageError, setPageError] = useState<string | null>(null)
 
@@ -57,7 +83,7 @@ export default function TradingDeskPage() {
   )
 
   const handleStart = useCallback(async () => {
-    const symbol = ticker.trim().toUpperCase()
+    const symbol = resolveTicker(ticker, market)
     if (!symbol) return
 
     abortRef.current?.abort()
@@ -72,7 +98,7 @@ export default function TradingDeskPage() {
     } finally {
       setBusy(false)
     }
-  }, [ticker, consume, startRunInStore])
+  }, [ticker, market, consume, startRunInStore])
 
   const control = useCallback(
     async (action: ControlAction, text?: string) => {
@@ -96,6 +122,8 @@ export default function TradingDeskPage() {
       <TradingDeskTopbar
         ticker={ticker}
         onTickerChange={setTicker}
+        market={market}
+        onMarketChange={setMarket}
         onStart={() => void handleStart()}
         onPause={() => void control('pause')}
         onResume={() => void control('resume')}

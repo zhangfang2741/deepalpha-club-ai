@@ -4,6 +4,8 @@ import { useState, type FormEvent } from 'react'
 import { MessageSquarePlus, Pause, Play, Square } from 'lucide-react'
 import { useTradingDeskStore } from '@/lib/store/trading_desk'
 
+type Market = 'US' | 'HK' | 'SH' | 'SZ'
+
 const STATUS_TEXT: Record<string, string> = {
   idle: '空闲',
   running: '运行中',
@@ -13,9 +15,18 @@ const STATUS_TEXT: Record<string, string> = {
   failed: '已失败',
 }
 
+const MARKET_OPTIONS: { value: Market; label: string; placeholder: string }[] = [
+  { value: 'US', label: '美股', placeholder: 'NVDA' },
+  { value: 'HK', label: '港股', placeholder: '0700' },
+  { value: 'SH', label: '沪 A', placeholder: '600519' },
+  { value: 'SZ', label: '深 A', placeholder: '000001' },
+]
+
 export default function TradingDeskTopbar({
   ticker,
   onTickerChange,
+  market,
+  onMarketChange,
   onStart,
   onPause,
   onResume,
@@ -25,6 +36,8 @@ export default function TradingDeskTopbar({
 }: {
   ticker: string
   onTickerChange: (v: string) => void
+  market: Market
+  onMarketChange: (m: Market) => void
   onStart: () => void
   onPause: () => void
   onResume: () => void
@@ -38,6 +51,7 @@ export default function TradingDeskTopbar({
   const [note, setNote] = useState('')
 
   const live = status === 'running' || status === 'paused'
+  const placeholder = MARKET_OPTIONS.find((o) => o.value === market)?.placeholder ?? 'NVDA'
 
   const submitNote = (e: FormEvent) => {
     e.preventDefault()
@@ -57,6 +71,33 @@ export default function TradingDeskTopbar({
         </div>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div
+            className="flex overflow-hidden rounded-lg border border-gray-300 bg-white"
+            role="radiogroup"
+            aria-label="市场"
+          >
+            {MARKET_OPTIONS.map((opt) => {
+              const active = opt.value === market
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  disabled={live}
+                  onClick={() => onMarketChange(opt.value)}
+                  className={`px-2.5 py-2 font-mono text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    active
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+
           <div className="flex items-center overflow-hidden rounded-lg border border-gray-300 bg-white">
             <span className="pl-3 font-mono text-xs text-gray-400">$</span>
             <input
@@ -68,7 +109,7 @@ export default function TradingDeskTopbar({
               maxLength={10}
               spellCheck={false}
               disabled={live}
-              placeholder="NVDA"
+              placeholder={placeholder}
               className="w-24 bg-transparent px-2 py-2 font-mono text-sm font-semibold uppercase text-gray-900 outline-none disabled:text-gray-400"
             />
           </div>
