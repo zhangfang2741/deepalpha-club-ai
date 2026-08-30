@@ -155,12 +155,46 @@ async def stream_run(
         )
 
     async def event_generator() -> AsyncIterator[str]:
+        r"""事件流：业务事件从 Redis Stream 消费，空闲期发 SSE 注释行保活。
+
+        Cloudflare/Railway 等代理空闲 60-100s 会切断无字节的连接——TradingAgents
+        单次 LLM 调用或工具执行中可能十几秒没新 token。pump task 持续消费
+        Redis Stream 并把事件塞进 queue，generator 每 15s 取一次：拿到就
+        yield 真实事件，超时就 yield SSE 注释行 ":\n\n"，客户端 EventSource
+        会自动忽略注释行。
+        """
+        queue: asyncio.Queue[tuple[str, Any] | None] = asyncio.Queue()
+
+        async def _pump() -> None:
+            try:
+                async for stream_id, event in event_bus.subscribe(
+                    redis, run_id, last_id=last_event_id,
+                ):
+                    await queue.put((stream_id, event))
+            except Exception:
+                logger.exception("trading_desk_stream_pump_failed", run_id=run_id)
+            finally:
+                await queue.put(None)  # 终止信号
+
+        pump_task = asyncio.create_task(_pump())
         try:
-            async for stream_id, event in event_bus.subscribe(redis, run_id, last_id=last_event_id):
+            while True:
+                try:
+                    item = await asyncio.wait_for(queue.get(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    # SSE 注释行：EventSource 解析为心跳，前端 store 不会触发事件
+                    yield ":\n\n"
+                    continue
+                if item is None:  # pump task 退出
+                    return
+                stream_id, event = item
                 yield f"id: {stream_id}\ndata: {event.model_dump_json()}\n\n"
-        except Exception:
-            logger.exception("trading_desk_stream_failed", run_id=run_id)
-            raise
+        finally:
+            pump_task.cancel()
+            try:
+                await pump_task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
 
     return StreamingResponse(
         event_generator(),

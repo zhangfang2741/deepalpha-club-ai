@@ -18,6 +18,7 @@ from app.schemas.trading_desk import (
     DebateTurnData,
     EventType,
     StageData,
+    ThinkTokenData,
     ToolCallData,
     TokenData,
     TradingDeskEvent,
@@ -47,6 +48,7 @@ class StreamTranslator:
         self.events: list[TradingDeskEvent] = []
         self._current_turn: dict[str, str] = {}      # node -> turn_id（本轮未完结的）
         self._turn_text: dict[str, list[str]] = {}   # turn_id -> token 片段
+        self._turn_thinking: dict[str, list[str]] = {}  # turn_id -> thinking 片段（Anthropic extended thinking）
         self._node_runs: dict[str, int] = {}         # node -> 完成次数
         self._last_turns: dict[str, str] = {}        # node -> 最近收尾的 turn_id
         self._active_stage_id: str | None = None     # 当前 active 的 stage_id
@@ -75,6 +77,10 @@ class StreamTranslator:
     def text_of(self, turn_id: str) -> str:
         """某张卡片累积的完整文本。"""
         return "".join(self._turn_text.get(turn_id, []))
+
+    def think_of(self, turn_id: str) -> str:
+        """某张卡片累积的 extended thinking 文本（仅 Anthropic 启用时非空）。"""
+        return "".join(self._turn_thinking.get(turn_id, []))
 
     def pending_reports(self) -> list[tuple[str, str, str]]:
         """取走（并清空）待抽取信号的分析师报告。"""
@@ -123,10 +129,39 @@ class StreamTranslator:
 
         content = message.content
         if isinstance(content, str) and content:
+            # 普通模式：content 是 str 增量
             self._turn_text[turn_id].append(content)
             produced.append(
                 self._emit(EventType.AGENT_TOKEN, TokenData(turn_id=turn_id, text=content))
             )
+        elif isinstance(content, list):
+            # Extended thinking：content 是 block 列表，每项 {type, ...}。
+            # 逐块分流：thinking -> AGENT_THINK，text -> AGENT_TOKEN，
+            # tool_use 由 tool_call_chunks 处理（不在 content 列表里时）。
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                kind = block.get("type")
+                if kind == "thinking":
+                    text = block.get("thinking") or ""
+                    if text:
+                        self._turn_thinking.setdefault(turn_id, []).append(text)
+                        produced.append(
+                            self._emit(
+                                EventType.AGENT_THINK,
+                                ThinkTokenData(turn_id=turn_id, text=text),
+                            )
+                        )
+                elif kind == "text":
+                    text = block.get("text") or ""
+                    if text:
+                        self._turn_text[turn_id].append(text)
+                        produced.append(
+                            self._emit(
+                                EventType.AGENT_TOKEN,
+                                TokenData(turn_id=turn_id, text=text),
+                            )
+                        )
 
         return produced
 

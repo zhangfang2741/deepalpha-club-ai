@@ -82,6 +82,15 @@ export default function TurnCard({ turn, streaming }: { turn: Turn; streaming: b
         )}
       </p>
 
+      {turn.thinking && (
+        <details className="mt-2 rounded-md border border-violet-200 bg-violet-50/60 px-3 py-2 text-[12px] leading-relaxed text-violet-900">
+          <summary className="cursor-pointer font-mono text-[11px] font-semibold uppercase tracking-wider text-violet-700">
+            推理过程
+          </summary>
+          <p className="mt-2 whitespace-pre-wrap">{turn.thinking}</p>
+        </details>
+      )}
+
       {turn.signal && (
         <div className="mt-2">
           <SignalChip dir={turn.signal.dir} conf={turn.signal.conf} extracted={turn.signal.extracted} />

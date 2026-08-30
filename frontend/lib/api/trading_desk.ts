@@ -19,6 +19,7 @@ export type EventType =
   | 'turn.started'
   | 'agent.tool_call'
   | 'agent.token'
+  | 'agent.think'
   | 'turn.done'
   | 'agent.signal'
   | 'debate.turn'

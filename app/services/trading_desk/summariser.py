@@ -61,6 +61,7 @@ def summarise(events: Iterable[TradingDeskEvent]) -> tuple[dict[str, Any] | None
                 "role": payload.role,
                 "avatar": payload.avatar,
                 "text": "",
+                "thinking": "",
                 "tool_calls": [],
                 "debate": None,
             }
@@ -68,6 +69,15 @@ def summarise(events: Iterable[TradingDeskEvent]) -> tuple[dict[str, Any] | None
             turn_id = str(data.get("turn_id", ""))
             if turn_id in open_turns:
                 open_turns[turn_id]["text"] += str(data.get("text", ""))
+            else:
+                logger.warning(
+                    "trading_desk_summariser_orphan_event",
+                    event_type=t.value, turn_id=turn_id, run_id=event.run_id,
+                )
+        elif t is EventType.AGENT_THINK:
+            turn_id = str(data.get("turn_id", ""))
+            if turn_id in open_turns:
+                open_turns[turn_id]["thinking"] += str(data.get("text", ""))
             else:
                 logger.warning(
                     "trading_desk_summariser_orphan_event",

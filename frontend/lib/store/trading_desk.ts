@@ -29,6 +29,8 @@ export interface Turn {
   role: string
   avatar: string
   text: string
+  /** Anthropic extended thinking 推理链片段折叠。仅启用 thinking 时非空。 */
+  thinking?: string
   tools: string[]
   done: boolean
   /** 人工意见卡片，与 agent 卡片区分渲染 */
@@ -184,6 +186,15 @@ export function reduceEvent(
       return {
         turns: state.turns.map((t) =>
           t.turnId === event.data.turn_id ? { ...t, text: t.text + (event.data.text as string) } : t,
+        ),
+      }
+
+    case 'agent.think':
+      return {
+        turns: state.turns.map((t) =>
+          t.turnId === event.data.turn_id
+            ? { ...t, thinking: (t.thinking ?? '') + (event.data.text as string) }
+            : t,
         ),
       }
 

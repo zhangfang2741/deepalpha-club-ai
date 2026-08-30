@@ -297,6 +297,11 @@ class Settings:
         self.TRADING_DESK_MAX_DEBATE_ROUNDS = int(os.getenv("TRADING_DESK_MAX_DEBATE_ROUNDS", "2"))
         self.TRADING_DESK_MAX_RISK_ROUNDS = int(os.getenv("TRADING_DESK_MAX_RISK_ROUNDS", "1"))
         self.TRADING_DESK_EVENT_TTL_SECONDS = int(os.getenv("TRADING_DESK_EVENT_TTL_SECONDS", "604800"))
+        # Anthropic extended thinking。开启后 LangChain ChatAnthropic 会下发
+        # thinking blocks，前端可看到 agent 推理链（不仅结论）。
+        # 仅对 claude-3-7+ / sonnet-4+ / opus-4+ 起效，其他供应商 / 模型自动跳过。
+        self.TRADING_DESK_ENABLE_THINKING = os.getenv("TRADING_DESK_ENABLE_THINKING", "false").lower() in ("true", "1", "yes")
+        self.TRADING_DESK_THINK_BUDGET = int(os.getenv("TRADING_DESK_THINK_BUDGET", "2048"))
 
         # Rate Limiting Configuration
         self.RATE_LIMIT_DEFAULT = parse_list_from_env("RATE_LIMIT_DEFAULT", ["200 per day", "50 per hour"])

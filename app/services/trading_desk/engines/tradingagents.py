@@ -170,6 +170,28 @@ class TradingAgentsEngine:
             deep, _ = llm_registry.get_or_default(settings.TRADING_DESK_DEEP_MODEL or None)
             quick, _ = llm_registry.get_or_default(settings.TRADING_DESK_QUICK_MODEL or None)
 
+            # Anthropic extended thinking：给 LLM 加 thinking 参数，让 agent 把
+            # 推理链作为独立 content block 流出来。仅对 claude-3-7+ / 4.x 生效；
+            # 非 Anthropic 模型的构造参数里没有 thinking，model_copy(update=...)
+            # 会沿用其他 init 字段，对 gpt / gemini 无副作用。
+            if settings.TRADING_DESK_ENABLE_THINKING:
+                deep = deep.model_copy(
+                    update={
+                        "thinking": {
+                            "type": "enabled",
+                            "budget_tokens": settings.TRADING_DESK_THINK_BUDGET,
+                        },
+                    },
+                )
+                quick = quick.model_copy(
+                    update={
+                        "thinking": {
+                            "type": "enabled",
+                            "budget_tokens": settings.TRADING_DESK_THINK_BUDGET,
+                        },
+                    },
+                )
+
         graph_setup = GraphSetup(
             quick_thinking_llm=quick,  # type: ignore[arg-type]
             deep_thinking_llm=deep,  # type: ignore[arg-type]

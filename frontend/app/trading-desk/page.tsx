@@ -31,8 +31,11 @@ export default function TradingDeskPage() {
 
   const consume = useCallback(
     async (id: string) => {
-      // 断线自动重连：用 store 里的 lastEventId 续读，不漏也不重
-      for (let attempt = 0; attempt < 3; attempt += 1) {
+      // 无限重连：每次失败指数退避（cap 30s），run 进入终态时退出。
+      // 后端 SSE 每 15s 发注释行保活，断线通常来自网络抖动或代理切断；
+      // 静默退避恢复后用 store 里的 lastEventId 续读，不漏也不重。
+      let backoffMs = 800
+      while (true) {
         const controller = new AbortController()
         abortRef.current = controller
         try {
@@ -45,11 +48,8 @@ export default function TradingDeskPage() {
           if (controller.signal.aborted) return
           const status = useTradingDeskStore.getState().status
           if (status !== 'running' && status !== 'paused') return
-          if (attempt === 2) {
-            setPageError(`事件流中断：${getApiErrorMessage(err)}`)
-            return
-          }
-          await new Promise((r) => setTimeout(r, 800 * (attempt + 1)))
+          await new Promise((r) => setTimeout(r, backoffMs))
+          backoffMs = Math.min(backoffMs * 2, 30_000)
         }
       }
     },

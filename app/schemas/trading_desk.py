@@ -34,6 +34,9 @@ class EventType(StrEnum):
     TURN_STARTED = "turn.started"
     AGENT_TOOL_CALL = "agent.tool_call"
     AGENT_TOKEN = "agent.token"
+    # Extended thinking：Anthropic 启用 thinking 后推理链作为独立 content block。
+    # 折叠入对应 turn.thinking 字段，前端 TurnCard 折叠区展示。
+    AGENT_THINK = "agent.think"
     TURN_DONE = "turn.done"
     AGENT_SIGNAL = "agent.signal"
     DEBATE_TURN = "debate.turn"
@@ -105,6 +108,17 @@ class ToolCallData(BaseModel):
 
 
 class TokenData(BaseModel):
+    turn_id: str
+    text: str
+
+
+class ThinkTokenData(BaseModel):
+    """Anthropic extended thinking 的推理链片段。
+
+    与 TokenData 同构但语义不同——折叠时落到 turn.thinking 字段，前端
+    折叠区展示，区别于最终结论 turn.text。
+    """
+
     turn_id: str
     text: str
 
