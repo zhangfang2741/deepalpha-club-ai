@@ -24,6 +24,7 @@ from app.models.finkg_triple import FinKGTriple  # noqa: F401
 from app.models.regime_features import RegimeFeatures  # noqa: F401
 from app.models.regime_sector_features import RegimeSectorFeatures  # noqa: F401
 from app.models.signal_snapshot import SignalSnapshot  # noqa: F401
+from app.models.trading_desk_run import TradingDeskRun  # noqa: F401
 from app.models.supply_chain_clue import SupplyChainClue  # noqa: F401
 from app.models.supply_chain_edge import SupplyChainEdge  # noqa: F401
 from app.models.supply_chain_node import SupplyChainNode  # noqa: F401
