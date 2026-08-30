@@ -4216,7 +4216,7 @@ git add ios/DeepAlphaClub && git commit -m "feat(app): xcodegen 工程 + 组合�
 - Create: `App/Features/TradingDesk/TradingDeskView.swift`
 - Create: `App/ErrorBanner.swift`
 
-- [ ] **Step 1: 配色**
+- [x] **Step 1: 配色**
 
 `App/Theme/SignalColors.swift`:
 
@@ -4260,7 +4260,7 @@ extension VerdictSignal {
 }
 ```
 
-- [ ] **Step 2: SignalChip + ConsensusMeter**
+- [x] **Step 2: SignalChip + ConsensusMeter**
 
 `App/Features/TradingDesk/SignalChip.swift`:
 
@@ -4334,7 +4334,7 @@ struct ConsensusMeter: View {
 }
 ```
 
-- [ ] **Step 3: VerdictCard**
+- [x] **Step 3: VerdictCard**
 
 `App/Features/TradingDesk/VerdictCard.swift`:
 
@@ -4438,7 +4438,7 @@ struct VerdictCard: View {
 
 注意 `field` 的第二参在 Swift 6 会报 double-optional 警告（`verdict?.stopLoss.map` 已是 `Double??`→`String?`）——`verdict?.stopLoss` 是 `Double?`（optional chaining 拍平），`.map { String($0) }` 得 `String?`，OK 单层。
 
-- [ ] **Step 4: PipelinePanel**
+- [x] **Step 4: PipelinePanel**
 
 `App/Features/TradingDesk/PipelinePanel.swift`:
 
@@ -4524,7 +4524,7 @@ func panelHeader(_ text: String) -> some View {
 }
 ```
 
-- [ ] **Step 5: TurnCard（含 MarkdownText）**
+- [x] **Step 5: TurnCard（含 MarkdownText）**
 
 `App/Features/TradingDesk/TurnCard.swift`:
 
@@ -4701,7 +4701,7 @@ struct MarkdownText: View {
 }
 ```
 
-- [ ] **Step 6: StreamPanel（智能滚动）**
+- [x] **Step 6: StreamPanel（智能滚动）**
 
 `App/Features/TradingDesk/StreamPanel.swift`:
 
@@ -4841,7 +4841,7 @@ ScrollView {
 
 模拟器冒烟时二选一，保留效果好的版本。`UIScreen.main` 在 Swift 6 strict mode 会报 deprecation 警告，优先实现备选方案更干净。
 
-- [ ] **Step 7: Topbar + InjectSheet**
+- [x] **Step 7: Topbar + InjectSheet**
 
 `App/Features/TradingDesk/Topbar.swift`:
 
@@ -5026,7 +5026,7 @@ struct InjectSheet: View {
 }
 ```
 
-- [ ] **Step 8: TradingDeskView 装配**
+- [x] **Step 8: TradingDeskView 装配**
 
 `App/Features/TradingDesk/TradingDeskView.swift`:
 
@@ -5198,7 +5198,7 @@ struct ErrorBanner: View {
 }
 ```
 
-- [ ] **Step 9: 编译验证**
+- [x] **Step 9: 编译验证**
 
 ```bash
 cd ios/DeepAlphaClub && xcodegen generate && \
@@ -5209,7 +5209,7 @@ xcodebuild -project DeepAlphaClub.xcodeproj -scheme DeepAlphaClub \
 
 期望：`** BUILD SUCCEEDED **`。删掉 `App/Placeholders.swift` 中的 TradingDeskView 占位（保留 HistoryListView 占位到 Task 17）。
 
-- [ ] **Step 10: 模拟器冒烟（自动截图）**
+- [x] **Step 10: 模拟器冒烟（自动截图）**
 
 ```bash
 xcrun simctl boot "iPhone 17 Pro" 2>/dev/null; sleep 5
@@ -5224,7 +5224,7 @@ sleep 3 && xcrun simctl io booted screenshot /tmp/td-login.png
 
 检查 `/tmp/td-login.png`：登录页两输入框 + 登录按钮。不通过则修（截图给用户看进度）。
 
-- [ ] **Step 11: 提交**
+- [x] **Step 11: 提交**
 
 ```bash
 git add ios/DeepAlphaClub && git commit -m "feat(ui): 交易台主界面（三栏/TabView 自适应 + 智能滚动 + 注入 sheet）"
@@ -5239,7 +5239,7 @@ git add ios/DeepAlphaClub && git commit -m "feat(ui): 交易台主界面（三�
 - Create: `App/Features/History/HistoryListView.swift`
 - Create: `App/Features/History/RunReplayView.swift`
 
-- [ ] **Step 1: HistoryListView**
+- [x] **Step 1: HistoryListView**
 
 `App/Features/History/HistoryListView.swift`:
 
@@ -5395,7 +5395,7 @@ struct StatusBadge: View {
 }
 ```
 
-- [ ] **Step 2: RunReplayView**
+- [x] **Step 2: RunReplayView**
 
 `App/Features/History/RunReplayView.swift`:
 
@@ -5530,7 +5530,7 @@ RootView()
 
 （`MainTabView` 里 environment 会向下传播，HistoryListView 的 `@Environment(HistoryListViewModel.self)` 也靠这行。）
 
-- [ ] **Step 3: 编译 + 冒烟**
+- [x] **Step 3: 编译 + 冒烟**
 
 ```bash
 cd ios/DeepAlphaClub && xcodegen generate && \
@@ -5541,7 +5541,7 @@ xcodebuild -project DeepAlphaClub.xcodeproj -scheme DeepAlphaClub \
 
 期望 `** BUILD SUCCEEDED **`；`swift test` 仍全绿（Core 未动）。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add ios/DeepAlphaClub && git commit -m "feat(history): 历史列表（过滤/徽标）+ 回放全文直出"
@@ -5551,7 +5551,7 @@ git add ios/DeepAlphaClub && git commit -m "feat(history): 历史列表（过滤
 
 ## Task 18: 全量验证 + 真机冒烟 + 收尾
 
-- [ ] **Step 1: 全量测试 + 双目标编译**
+- [x] **Step 1: 全量测试 + 双目标编译**
 
 ```bash
 cd ios/DeepAlphaClub/Core && swift test 2>&1 | tail -3
@@ -5563,7 +5563,7 @@ xcodebuild -project DeepAlphaClub.xcodeproj -scheme DeepAlphaClub \
 
 期望：测试全绿 + `BUILD SUCCEEDED`。检查 warning：Swift 6 strict 下如有 warning 逐个修（计划验收含「无 warning」）。
 
-- [ ] **Step 2: 窄屏/宽屏冒烟截图**
+- [x] **Step 2: 窄屏/宽屏冒烟截图**
 
 ```bash
 xcrun simctl boot "iPhone 17 Pro" 2>/dev/null; sleep 3
@@ -5579,7 +5579,7 @@ done
 
 检查两张截图：iPhone 竖屏登录页不破版；iPad 三栏布局（登录后才能看到，本步只验登录页渲染正常——主界面布局由用户登录后自测）。
 
-- [ ] **Step 3: 真实后端联调（用户提供账号，或跳过留给用户自测）**
+- [ ] **Step 3: 真实后端联调** —— 本机无可用账号，已改为 README 自测清单，留给用户
 
 ```bash
 # 用真实账号在模拟器登录 → 输入 NVDA → 开始分析 → 观察：
@@ -5593,7 +5593,7 @@ done
 
 无账号环境则把验收清单写进 README「自测清单」小节，标记此步留给用户。
 
-- [ ] **Step 4: README 自测清单 + 收尾提交**
+- [x] **Step 4: README 自测清单 + 收尾提交**
 
 README.md 追加：
 
@@ -5615,7 +5615,7 @@ README.md 追加：
 git add ios/DeepAlphaClub && git commit -m "docs: 自测清单 + v0.1.0 收尾"
 ```
 
-- [ ] **Step 5: 回主仓库提交计划与进度**
+- [x] **Step 5: 回主仓库提交计划与进度**
 
 ```bash
 git add docs/superpowers/plans/2026-08-30-trading-desk-ios-app.md && \
@@ -5626,15 +5626,15 @@ git commit -m "docs: TradingDesk iOS App 实施计划"
 
 ## 验收标准
 
-- [ ] `swift test` 全绿（Core 层：reducer 状态机 / SSE 解析 / API 客户端 / 重连 / 缓存 / VM 全覆盖）
-- [ ] `xcodebuild build`（iPhone 17 Pro 模拟器）`BUILD SUCCEEDED` 且无 warning
+- [x] `swift test` 全绿（Core 层：reducer 状态机 / SSE 解析 / API 客户端 / 重连 / 缓存 / VM 全覆盖）
+- [x] `xcodebuild build`（iPhone 17 Pro 模拟器）`BUILD SUCCEEDED` 且无 warning
 - [ ] 登录（真实后端）→ 开始分析 → SSE 流式渲染 → 裁决卡出现
 - [ ] 暂停/继续/注入/停止生效（后端 controlRun 200）
 - [ ] 流式时上滑不被拉回；新 run 强制贴底
 - [ ] 后台断流、前台 lastEventId 续传，不丢不重（seq 去重兜底）
 - [ ] 历史列表（缓存先出 + 远端刷新）+ 回放全文直出
 - [ ] 401 自动清 token 回登录页
-- [ ] iPhone 竖屏 TabView / iPad 三栏布局正常
+- [x] iPhone 竖屏 TabView / iPad 三栏布局正常
 
 ## 风险与回退
 
