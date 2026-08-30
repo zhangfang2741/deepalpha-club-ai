@@ -10,6 +10,7 @@
 		021DA9BC134CB71FC99D3E33 /* Topbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D83D84303CC6C16D77206BBF /* Topbar.swift */; };
 		0234F2C79E87D080DDC1976F /* PipelinePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8825A47D1902E00E263C8FE /* PipelinePanel.swift */; };
 		027A7DC15D5015B16861BAF6 /* StreamPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AC4932BBC87805E9351E29C /* StreamPanel.swift */; };
+		3A12D8A26ED24EC6CF4D4EE5 /* HistoryListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6CCF25943483C6B22B4648E /* HistoryListView.swift */; };
 		3FC93C57B540B1AC7035DFC6 /* DeepAlphaCore in Frameworks */ = {isa = PBXBuildFile; productRef = 724DC702516AB02FE68B55C8 /* DeepAlphaCore */; };
 		639888FA927B0EFA295BF785 /* TradingDeskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B4E66E6D8FEB52BD02DA8BC /* TradingDeskView.swift */; };
 		74FC0265866C004AFF378BA6 /* DeepAlphaClubApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F718E462ADE96EA7695E9CE7 /* DeepAlphaClubApp.swift */; };
@@ -24,7 +25,7 @@
 		BD8D14C0186CBCDEBBE03DD2 /* DecisionPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C06B11BB75E70F5B074ACF6 /* DecisionPanel.swift */; };
 		C4371B77C22D927841388422 /* InjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E1DA0E443F0327336711DDA /* InjectSheet.swift */; };
 		C8C3692D3CF832C0B8B9F0E0 /* ConsensusMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BED22B41E149165085B8EA5 /* ConsensusMeter.swift */; };
-		DBD14E28CCBD73ECC218AE9E /* Placeholders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90380342D142BE47B7D77756 /* Placeholders.swift */; };
+		D06EF1936A5061BDD1BE1CB3 /* RunReplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81405A91C2C8ECE2BD3C3DC9 /* RunReplayView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,15 +37,16 @@
 		679B2E95C74EC33A6660E2AE /* SignalColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalColors.swift; sourceTree = "<group>"; };
 		6E1DA0E443F0327336711DDA /* InjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InjectSheet.swift; sourceTree = "<group>"; };
 		7BED22B41E149165085B8EA5 /* ConsensusMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsensusMeter.swift; sourceTree = "<group>"; };
+		81405A91C2C8ECE2BD3C3DC9 /* RunReplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunReplayView.swift; sourceTree = "<group>"; };
 		8AC4932BBC87805E9351E29C /* StreamPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamPanel.swift; sourceTree = "<group>"; };
 		8D4B576094422B0D804452F9 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
-		90380342D142BE47B7D77756 /* Placeholders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Placeholders.swift; sourceTree = "<group>"; };
 		9C06B11BB75E70F5B074ACF6 /* DecisionPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionPanel.swift; sourceTree = "<group>"; };
 		B59659D031F65049E4B6584C /* Core */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Core; path = Core; sourceTree = SOURCE_ROOT; };
 		BDE65FC0C82F27F59813A029 /* CompositionRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositionRoot.swift; sourceTree = "<group>"; };
 		C8825A47D1902E00E263C8FE /* PipelinePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelinePanel.swift; sourceTree = "<group>"; };
 		CD1D9226B8A42CACE0B73A43 /* TurnCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurnCard.swift; sourceTree = "<group>"; };
 		CF37691DCA7AC79F446543C6 /* ErrorBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBanner.swift; sourceTree = "<group>"; };
+		D6CCF25943483C6B22B4648E /* HistoryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryListView.swift; sourceTree = "<group>"; };
 		D83D84303CC6C16D77206BBF /* Topbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Topbar.swift; sourceTree = "<group>"; };
 		DC2B81F3F5B15D10F53EDB8F /* SignalChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalChip.swift; sourceTree = "<group>"; };
 		F718E462ADE96EA7695E9CE7 /* DeepAlphaClubApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepAlphaClubApp.swift; sourceTree = "<group>"; };
@@ -90,9 +92,19 @@
 		643670DD034C8DD9D0645787 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				8C6987F5F911AEF754669C2E /* History */,
 				BB4D065699075897513FAEF5 /* TradingDesk */,
 			);
 			path = Features;
+			sourceTree = "<group>";
+		};
+		8C6987F5F911AEF754669C2E /* History */ = {
+			isa = PBXGroup;
+			children = (
+				D6CCF25943483C6B22B4648E /* HistoryListView.swift */,
+				81405A91C2C8ECE2BD3C3DC9 /* RunReplayView.swift */,
+			);
+			path = History;
 			sourceTree = "<group>";
 		};
 		BB4D065699075897513FAEF5 /* TradingDesk */ = {
@@ -135,7 +147,6 @@
 				F718E462ADE96EA7695E9CE7 /* DeepAlphaClubApp.swift */,
 				CF37691DCA7AC79F446543C6 /* ErrorBanner.swift */,
 				1018937C70DE29FF910AF039 /* Info.plist */,
-				90380342D142BE47B7D77756 /* Placeholders.swift */,
 				8D4B576094422B0D804452F9 /* RootView.swift */,
 				574B82E377B76B7F1A461220 /* Auth */,
 				643670DD034C8DD9D0645787 /* Features */,
@@ -212,11 +223,12 @@
 				BD8D14C0186CBCDEBBE03DD2 /* DecisionPanel.swift in Sources */,
 				74FC0265866C004AFF378BA6 /* DeepAlphaClubApp.swift in Sources */,
 				8090AA9B9BDA1A46524D753D /* ErrorBanner.swift in Sources */,
+				3A12D8A26ED24EC6CF4D4EE5 /* HistoryListView.swift in Sources */,
 				C4371B77C22D927841388422 /* InjectSheet.swift in Sources */,
 				962F2BAD28F6108C9D0AC068 /* LoginView.swift in Sources */,
 				0234F2C79E87D080DDC1976F /* PipelinePanel.swift in Sources */,
-				DBD14E28CCBD73ECC218AE9E /* Placeholders.swift in Sources */,
 				A7888A3C397218AAD0374300 /* RootView.swift in Sources */,
+				D06EF1936A5061BDD1BE1CB3 /* RunReplayView.swift in Sources */,
 				A523A58043F22941DD690364 /* SignalChip.swift in Sources */,
 				90AE268DB904492396549A68 /* SignalColors.swift in Sources */,
 				027A7DC15D5015B16861BAF6 /* StreamPanel.swift in Sources */,
