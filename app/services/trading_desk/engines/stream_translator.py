@@ -47,9 +47,9 @@ class StreamTranslator:
         self.events: list[TradingDeskEvent] = []
         self._current_turn: dict[str, str] = {}      # node -> turn_id（本轮未完结的）
         self._turn_text: dict[str, list[str]] = {}   # turn_id -> token 片段
-        self._stage_opened: set[str] = set()         # 已 active 的 stage_id
         self._node_runs: dict[str, int] = {}         # node -> 完成次数
         self._last_turns: dict[str, str] = {}        # node -> 最近收尾的 turn_id
+        self._active_stage_id: str | None = None     # 当前 active 的 stage_id
         self._reports: list[tuple[str, str, str]] = []
         self._verdict: str | None = None
 
@@ -85,6 +85,18 @@ class StreamTranslator:
         """取走（并清空）待解析的裁决原始文本。"""
         text, self._verdict = self._verdict, None
         return text
+
+    def flush_stage(self) -> list[TradingDeskEvent]:
+        """收尾最后未收尾的 stage（如 risk_judge 之后不再有节点更新）。
+
+        引擎在 astream 收尾时调用，避免「最后阶段 done 不发」。
+        """
+        if self._active_stage_id is None:
+            return []
+        ev = self._emit(EventType.STAGE_DONE, StageData(stage_id=self._active_stage_id))
+        self._active_stage_id = None
+        self.events.append(ev)
+        return [ev]
 
     # ── messages 模式 ────────────────────────────────────
 
@@ -133,16 +145,21 @@ class StreamTranslator:
             if stage is None:
                 continue
 
-            # 同一节点第二次执行：若上一轮 turn 尚未收尾（updates 缺失的极端情况），先收掉
+            # stage 生命周期：跨 stage 切换时上一阶段先收尾，再开新阶段
+            if self._active_stage_id and self._active_stage_id != stage.id:
+                produced.append(
+                    self._emit(EventType.STAGE_DONE, StageData(stage_id=self._active_stage_id))
+                )
+                self._active_stage_id = None
+            if stage.id != self._active_stage_id:
+                self._active_stage_id = stage.id
+                produced.append(self._emit(EventType.STAGE_ACTIVE, StageData(stage_id=stage.id)))
+
+            # 节点重入的极端情况：上一轮 turn 没收尾，先收
             if node in self._current_turn:
                 produced.extend(self._close_turn(node))
 
             self._node_runs[node] = self._node_runs.get(node, 0) + 1
-
-            # stage 生命周期：该 stage 的第一个节点执行时开 stage
-            if stage.id not in self._stage_opened:
-                self._stage_opened.add(stage.id)
-                produced.append(self._emit(EventType.STAGE_ACTIVE, StageData(stage_id=stage.id)))
 
             # 本轮发言的 turn 收尾（token 已在 messages 模式里流出去）
             produced.extend(self._close_turn(node))
@@ -172,8 +189,6 @@ class StreamTranslator:
 
             if update.get("final_trade_decision"):
                 self._verdict = str(update["final_trade_decision"])
-
-            produced.append(self._emit(EventType.STAGE_DONE, StageData(stage_id=stage.id)))
 
         return produced
 

@@ -54,7 +54,8 @@ def test_tool_call_chunk_becomes_agent_tool_call() -> None:
     assert tc.data["tool"] == "get_stock_data"
 
 
-def test_node_update_closes_turn_and_stage() -> None:
+def test_node_update_closes_turn_and_opens_stage() -> None:
+    """单个节点 update：开 active、收 turn；但 stage.done 只在切换或 flush 时发。"""
     tr = st.StreamTranslator(run_id="r1")
     tr.feed(_token_chunk("Market Analyst", "文本"))
     events = tr.feed(("updates", {"Market Analyst": {"messages": None, "market_report": "报告"}}))
@@ -62,7 +63,31 @@ def test_node_update_closes_turn_and_stage() -> None:
     types = [e.type for e in events]
     assert EventType.STAGE_ACTIVE in types
     assert EventType.TURN_DONE in types
-    assert EventType.STAGE_DONE in types
+    assert EventType.STAGE_DONE not in types  # 单节点不会自动 done
+
+
+def test_flush_stage_emits_done_for_last_stage() -> None:
+    """flush_stage 收尾未关闭的 stage（防止最末阶段漏 done）。"""
+    tr = st.StreamTranslator(run_id="r1")
+    tr.feed(_token_chunk("Risk Judge", "裁决"))
+    tr.feed(("updates", {"Risk Judge": {"final_trade_decision": "BUY"}}))
+
+    done_events = tr.flush_stage()
+    assert [e.type for e in done_events] == [EventType.STAGE_DONE]
+    assert done_events[0].data["stage_id"] == "risk_judge"
+    assert tr.flush_stage() == []  # 多次调用幂等
+
+
+def test_stage_done_fires_on_transition() -> None:
+    """阶段切换：上一个 stage.done 在新 stage.active 之前发出。"""
+    tr = st.StreamTranslator(run_id="r1")
+    tr.feed(("updates", {"Market Analyst": {"market_report": "r1"}}))
+    events = tr.feed(("updates", {"Social Analyst": {"sentiment_report": "r2"}}))
+
+    stage_events = [e for e in events if e.type in (EventType.STAGE_DONE, EventType.STAGE_ACTIVE)]
+    assert [e.type for e in stage_events] == [EventType.STAGE_DONE, EventType.STAGE_ACTIVE]
+    assert stage_events[0].data["stage_id"] == "market_analyst"
+    assert stage_events[1].data["stage_id"] == "social_analyst"
 
 
 def test_report_completion_marks_extractable_signal() -> None:
