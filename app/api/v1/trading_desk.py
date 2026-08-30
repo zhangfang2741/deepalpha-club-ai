@@ -184,16 +184,9 @@ async def list_runs(
     只返回摘要字段（不含 turns/signals 全文），保持列表查询快、传输小；
     详情请走 GET /runs/{run_id}。
     """
-    try:
-        rows = await persistence.list_runs(
-            db, user_id=user.id, ticker=ticker, limit=limit, offset=offset
-        )
-    except Exception as e:
-        logger.exception("trading_desk_list_failed")
-        raise HTTPException(
-            status_code=500,
-            detail=f"{type(e).__name__}: {e}",
-        ) from e
+    rows = await persistence.list_runs(
+        db, user_id=user.id, ticker=ticker, limit=limit, offset=offset
+    )
     return RunListResponse(runs=[_to_summary(r) for r in rows])
 
 

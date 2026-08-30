@@ -103,8 +103,8 @@ async def list_runs(
         TradingDeskRun.finished_at.desc().nulls_last(),  # type: ignore[union-attr]
         TradingDeskRun.created_at.desc(),
     ).offset(offset).limit(limit)
-    result = await db.exec(stmt)
-    return list(result.all())
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
 
 async def get_run(db: AsyncSession, *, run_id: str, user_id: int) -> TradingDeskRun | None:
