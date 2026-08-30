@@ -230,7 +230,7 @@ convention = "google"
 "app/api/v1/regime.py" = ["D415"]
 "tests/services/regime/*.py" = ["D415", "D103", "D104"]
 # 交易台：中文 docstring 以「。」结尾，D415 不适用
-"app/services/trading_desk/*.py" = ["D415", "D104"]
+"app/services/trading_desk/*.py" = ["D415", "D101", "D102", "D104"]
 "app/services/trading_desk/engines/*.py" = ["D415", "D101", "D102", "D104"]
 "app/schemas/trading_desk.py" = ["D415", "D101"]
 "app/api/v1/trading_desk.py" = ["D415"]
