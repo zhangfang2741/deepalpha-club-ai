@@ -9,6 +9,7 @@ from app.services.trading_desk.engines.mock import MockEngine
 
 def _ctx(
     *,
+    ticker: str = "NVDA",
     notes: list[str] | None = None,
     cancelled: bool = False,
 ) -> RunContext:
@@ -27,7 +28,7 @@ def _ctx(
 
     return RunContext(
         run_id="r1",
-        ticker="NVDA",
+        ticker=ticker,
         trade_date="2026-08-30",
         control=ControlHandle(is_paused=is_paused, is_cancelled=is_cancelled, drain_notes=drain_notes),
     )
@@ -108,3 +109,17 @@ async def test_cancel_stops_the_stream_early() -> None:
 
     assert all(e.type is not EventType.VERDICT for e in events)
     assert len(events) < 10
+
+
+async def test_script_text_is_parameterised_by_ticker() -> None:
+    """剧本按 ticker 参数化：输入 FIG 就该看到 FIG，不该看到写死的标的叙事。"""
+    events_fig = await _collect(MockEngine(tick_seconds=0), _ctx(ticker="FIG"))
+    fig_tokens = "".join(e.data["text"] for e in events_fig if e.type is EventType.AGENT_TOKEN)
+
+    assert "FIG" in fig_tokens
+    assert "NVDA" not in fig_tokens, "剧本里出现了写死的标的代码"
+
+    events_aapl = await _collect(MockEngine(tick_seconds=0), _ctx(ticker="AAPL"))
+    aapl_tokens_text = "".join(e.data["text"] for e in events_aapl if e.type is EventType.AGENT_TOKEN)
+    assert "AAPL" in aapl_tokens_text
+    assert fig_tokens != aapl_tokens_text, "不同标的应产出不同文本"

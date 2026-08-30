@@ -80,7 +80,7 @@ _SCRIPT: tuple[_Beat, ...] = (
         avatar="FA",
         tools=("financials.get", "earnings.get"),
         text=(
-            "数据中心营收仍在复合增长，但同比增速已在高基数上放缓。毛利率依旧优秀（约 73%）。"
+            "{ticker} 的核心业务营收仍在复合增长，但同比增速已在高基数上放缓。毛利率依旧优秀（约 73%）。"
             "前瞻市盈率约 35 倍，已经把「持续统治」定价进去了——公司质地一流，但安全边际很薄。"
         ),
         signal=("neutral", 55),
@@ -106,8 +106,8 @@ _SCRIPT: tuple[_Beat, ...] = (
         avatar="NA",
         tools=("news.search", "sentiment.score"),
         text=(
-            "消息面喜忧参半：超大规模厂商资本开支指引强劲是顺风，但出口管制的噪音、"
-            "以及大客户自研芯片的动作是压制项。近期净情绪：谨慎偏正面。"
+            "消息面喜忧参半：下游大客户的资本开支指引强劲是顺风，但出口管制的噪音、"
+            "以及关键客户培育第二供应源的动作是压制项。近期净情绪：谨慎偏正面。"
         ),
         signal=("bull", 58),
     ),
@@ -119,7 +119,7 @@ _SCRIPT: tuple[_Beat, ...] = (
         avatar="BR",
         debate=_DebateMeta("research", "bull", "多头研究员", "bull", 1),
         text=(
-            "这不是一个季度的故事。前四大云厂商的资本开支承诺是多年期的，当下也没有能规模化"
+            "这不是一个季度的故事。前几大客户的资本开支承诺是多年期的，当下也没有能规模化"
             "替代的方案。就算从纪录高基数上放缓，那也还是 40%+ 的增速。"
         ),
     ),
@@ -144,7 +144,7 @@ _SCRIPT: tuple[_Beat, ...] = (
         debate=_DebateMeta("research", "bull", "多头研究员", "bull", 2),
         text=(
             "估值确实贵，我认。但你买的是这场仍处早期的淘金热里唯一的「铲子」。"
-            "CUDA 生态的锁定效应被低估了——护城河不只是硅片本身。"
+            "{ticker} 生态与软件栈的锁定效应被低估了——护城河不只是硬件本身。"
         ),
         signal=("bull", 70),
     ),
@@ -167,7 +167,7 @@ _SCRIPT: tuple[_Beat, ...] = (
         name="交易员",
         role="综合",
         avatar="TR",
-        text="结论：逻辑成立，但这个估值下入场点很关键。建议先建底仓，回调到支撑再加——现在不上满仓。",
+        text="结论：{ticker} 逻辑成立，但这个估值下入场点很关键。建议先建底仓，回调到支撑再加——现在不上满仓。",
     ),
     _Beat(
         stage_id="risk",
@@ -187,7 +187,7 @@ _SCRIPT: tuple[_Beat, ...] = (
         role="最终决策",
         avatar="PM",
         text=(
-            "决策：买入，底仓。需求的持续性 + 技术结构盖过估值风险——"
+            "决策：买入 {ticker}，底仓。需求的持续性 + 技术结构盖过估值风险——"
             "但要在缩小仓位、并锁进风控约束的前提下执行。"
         ),
     ),
@@ -298,11 +298,12 @@ class MockEngine:
                 )
                 await asyncio.sleep(self._tick)
 
-            for i in range(0, len(beat.text), _CHUNK):
+            text = beat.text.format(ticker=ctx.ticker)
+            for i in range(0, len(text), _CHUNK):
                 yield TradingDeskEvent.of(
                     run_id,
                     EventType.AGENT_TOKEN,
-                    TokenData(turn_id=beat.turn_id, text=beat.text[i : i + _CHUNK]),
+                    TokenData(turn_id=beat.turn_id, text=text[i : i + _CHUNK]),
                 )
                 await asyncio.sleep(self._tick)
 
