@@ -31,7 +31,7 @@ struct MarkdownBlockParserTests {
         let blocks = MarkdownBlockParser.parse(md)
         #expect(blocks.count == 2)
         #expect(blocks[0] == .paragraph("说明"))
-        #expect(blocks[1] == .code("print(1)\nprint(2)"))
+        #expect(blocks[1] == .code(language: "python", text: "print(1)\nprint(2)"))
     }
 
     @Test("空行分段、多空行不产生空段")
@@ -46,11 +46,44 @@ struct MarkdownBlockParserTests {
         #expect(blocks == [.paragraph("这是 **加粗** 与 `code`")])
     }
 
-    @Test("表格行降级为代码块显示（等宽对齐）")
-    func tableFallback() {
-        let blocks = MarkdownBlockParser.parse("| a | b |\n|---|---|\n| 1 | 2 |")
+    @Test("表格解析成结构化行列（分隔行不算数据）")
+    func table() {
+        let blocks = MarkdownBlockParser.parse("| 指标 | 值 |\n|---|---|\n| PE | 38x |\n| PB | 12x |")
         #expect(blocks.count == 1)
-        guard case .code = blocks[0] else { Issue.record("应为 code"); return }
+        guard case .table(let header, let rows) = blocks[0] else {
+            Issue.record("应为 table"); return
+        }
+        #expect(header == ["指标", "值"])
+        #expect(rows == [["PE", "38x"], ["PB", "12x"]])
+    }
+
+    @Test("表格：无分隔行时首行仍当表头，缺列补空")
+    func tableRagged() {
+        let blocks = MarkdownBlockParser.parse("| a | b | c |\n| 1 | 2 |")
+        guard case .table(let header, let rows) = blocks[0] else {
+            Issue.record("应为 table"); return
+        }
+        #expect(header == ["a", "b", "c"])
+        #expect(rows == [["1", "2", ""]])
+    }
+
+    @Test("引用块：> 前缀聚合，符号不带进内容")
+    func quote() {
+        let blocks = MarkdownBlockParser.parse("正文\n\n> 注意：数据来自财报\n> 仅供参考")
+        #expect(blocks.count == 2)
+        #expect(blocks[0] == .paragraph("正文"))
+        #expect(blocks[1] == .quote("注意：数据来自财报\n仅供参考"))
+    }
+
+    @Test("引用块：> 后无空格也认")
+    func quoteNoSpace() {
+        #expect(MarkdownBlockParser.parse(">紧凑引用") == [.quote("紧凑引用")])
+    }
+
+    @Test("代码块保留语言标记，供视图层展示")
+    func codeLanguage() {
+        let blocks = MarkdownBlockParser.parse("```python\nprint(1)\n```")
+        #expect(blocks == [.code(language: "python", text: "print(1)")])
     }
 
     @Test("空串 → 空数组")
@@ -62,6 +95,6 @@ struct MarkdownBlockParserTests {
     @Test("未闭合代码块收尾也产出")
     func unclosedFence() {
         let blocks = MarkdownBlockParser.parse("```\nabc")
-        #expect(blocks == [.code("abc")])
+        #expect(blocks == [.code(language: nil, text: "abc")])
     }
 }

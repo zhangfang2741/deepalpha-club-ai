@@ -11,6 +11,7 @@
 		0234F2C79E87D080DDC1976F /* PipelinePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8825A47D1902E00E263C8FE /* PipelinePanel.swift */; };
 		027A7DC15D5015B16861BAF6 /* StreamPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AC4932BBC87805E9351E29C /* StreamPanel.swift */; };
 		2457F20BE860A3C178AA745D /* ForgotPasswordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66FDE9937E9B9BA82D263F7B /* ForgotPasswordView.swift */; };
+		297D1179B24F790143467CFA /* MarkdownText.swift in Sources */ = {isa = PBXBuildFile; fileRef = E841CC5191C4FCA6BFAB3C55 /* MarkdownText.swift */; };
 		3A12D8A26ED24EC6CF4D4EE5 /* HistoryListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6CCF25943483C6B22B4648E /* HistoryListView.swift */; };
 		3FC93C57B540B1AC7035DFC6 /* DeepAlphaCore in Frameworks */ = {isa = PBXBuildFile; productRef = 724DC702516AB02FE68B55C8 /* DeepAlphaCore */; };
 		4E21F39AD100D1A50C01AFB8 /* RegisterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C68D99BE2A69AF96D2CC645F /* RegisterView.swift */; };
@@ -57,6 +58,7 @@
 		D83D84303CC6C16D77206BBF /* Topbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Topbar.swift; sourceTree = "<group>"; };
 		DC2B81F3F5B15D10F53EDB8F /* SignalChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalChip.swift; sourceTree = "<group>"; };
 		E510E159F414F4995E9B4767 /* DeepAlphaClub.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DeepAlphaClub.entitlements; sourceTree = "<group>"; };
+		E841CC5191C4FCA6BFAB3C55 /* MarkdownText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownText.swift; sourceTree = "<group>"; };
 		ED6FDF48F365512FAB35AEEC /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		F718E462ADE96EA7695E9CE7 /* DeepAlphaClubApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepAlphaClubApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -80,6 +82,14 @@
 				53B5F710D3076D3011A58256 /* Packages */,
 				BEF9FFB4FB6AF659B796EAD3 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		43EF389C23766CD5D259FAEE /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				E841CC5191C4FCA6BFAB3C55 /* MarkdownText.swift */,
+			);
+			path = Components;
 			sourceTree = "<group>";
 		};
 		53B5F710D3076D3011A58256 /* Packages */ = {
@@ -163,6 +173,7 @@
 				1018937C70DE29FF910AF039 /* Info.plist */,
 				8D4B576094422B0D804452F9 /* RootView.swift */,
 				574B82E377B76B7F1A461220 /* Auth */,
+				43EF389C23766CD5D259FAEE /* Components */,
 				643670DD034C8DD9D0645787 /* Features */,
 				CA15781D888C7A88AAD80996 /* Theme */,
 			);
@@ -242,6 +253,7 @@
 				3A12D8A26ED24EC6CF4D4EE5 /* HistoryListView.swift in Sources */,
 				C4371B77C22D927841388422 /* InjectSheet.swift in Sources */,
 				962F2BAD28F6108C9D0AC068 /* LoginView.swift in Sources */,
+				297D1179B24F790143467CFA /* MarkdownText.swift in Sources */,
 				0234F2C79E87D080DDC1976F /* PipelinePanel.swift in Sources */,
 				4E21F39AD100D1A50C01AFB8 /* RegisterView.swift in Sources */,
 				A7888A3C397218AAD0374300 /* RootView.swift in Sources */,
