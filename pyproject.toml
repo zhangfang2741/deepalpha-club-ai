@@ -229,6 +229,13 @@ convention = "google"
 "app/schemas/regime.py" = ["D415", "D101"]
 "app/api/v1/regime.py" = ["D415"]
 "tests/services/regime/*.py" = ["D415", "D103", "D104"]
+# 交易台：中文 docstring 以「。」结尾，D415 不适用
+"app/services/trading_desk/*.py" = ["D415", "D104"]
+"app/services/trading_desk/engines/*.py" = ["D415", "D101", "D102", "D104"]
+"app/schemas/trading_desk.py" = ["D415", "D101"]
+"app/api/v1/trading_desk.py" = ["D415"]
+"app/cache/trading_desk_cache.py" = ["D415", "D103"]
+"tests/services/trading_desk/*.py" = ["D415", "D101", "D102", "D103", "D104"]
 "app/services/llm/errors.py" = ["D415"]
 # D403：docstring 里以 anthropic / openai 等包名开头，首字母大写反而是错的。
 "tests/services/llm/*.py" = ["D415", "D103", "D104", "D403"]
