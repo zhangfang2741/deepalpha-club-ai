@@ -17,6 +17,15 @@ public enum APIError: Error, Sendable, Equatable {
         return false
     }
 
+    /// 重试是否可能成功。401 要换 token、404 的资源不存在、422 是入参不合法，
+    /// 这三类重试多少次结果都一样，SSE 重连循环必须据此停手。
+    public var isRetryable: Bool {
+        switch self {
+        case .unauthorized, .notFound, .validation: false
+        case .server, .network, .decoding: true
+        }
+    }
+
     /// 用户可读消息（对齐 web getApiErrorMessage 的角色）。
     public var message: String {
         switch self {

@@ -59,6 +59,7 @@ struct AccountChannelPicker: View {
 struct AccountField: View {
     let channel: AccountChannel
     @Binding var text: String
+    @FocusState private var focused: Bool
 
     var body: some View {
         AuthTextField(icon: channel.icon, placeholder: channel.placeholder, text: $text)
@@ -66,6 +67,23 @@ struct AccountField: View {
             .textContentType(channel == .phone ? .telephoneNumber : .emailAddress)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
+            .focused($focused)
+            .dismissKeyboardToolbar(focused: $focused)
+    }
+}
+
+extension View {
+    /// 给数字键盘补一个「完成」。`.numberPad` 没有 return 键，
+    /// 不给收起入口的话，用户输完手机号/验证码就被键盘卡住——
+    /// 提交按钮恰好在键盘下面。
+    func dismissKeyboardToolbar(focused: FocusState<Bool>.Binding) -> some View {
+        toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("完成") { focused.wrappedValue = false }
+                    .fontWeight(.semibold)
+            }
+        }
     }
 }
 
@@ -82,6 +100,7 @@ struct VerificationCodeField: View {
 
     @State private var remaining = 0
     @State private var isRequesting = false
+    @FocusState private var focused: Bool
 
     private let cooldown = 60
 
@@ -94,6 +113,8 @@ struct VerificationCodeField: View {
                 TextField("6 位验证码", text: $code)
                     .keyboardType(.numberPad)
                     .textContentType(.oneTimeCode)
+                    .focused($focused)
+                    .dismissKeyboardToolbar(focused: $focused)
                     .onChange(of: code) { _, newValue in
                         // 只留数字并截断，避免粘贴进来一串带空格的内容
                         let digits = String(newValue.filter(\.isNumber).prefix(6))

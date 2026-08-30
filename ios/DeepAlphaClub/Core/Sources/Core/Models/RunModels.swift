@@ -66,6 +66,16 @@ public struct DebateInfo: Codable, Sendable, Equatable {
     public var sideLabel: String
     public var polarity: Polarity
     public var round: Int
+
+    public init(debateId: String, side: String, sideLabel: String,
+                polarity: Polarity, round: Int) {
+        self.debateId = debateId
+        self.side = side
+        self.sideLabel = sideLabel
+        self.polarity = polarity
+        self.round = round
+    }
+
     enum CodingKeys: String, CodingKey {
         case side, polarity, round
         case debateId = "debate_id"

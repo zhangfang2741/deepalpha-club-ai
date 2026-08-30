@@ -39,7 +39,29 @@ struct StreamPanel: View {
 
     private var stream: some View {
         scrollBody
-            .defaultScrollAnchor(.bottom)
+            // 上滑看历史后，想回到最新只能一路滑回去——给个一键回底
+            .overlay(alignment: .bottom) {
+                if !stickToBottom {
+                    Button {
+                        stickToBottom = true
+                        scrollToBottom()
+                    } label: {
+                        Label("回到最新", systemImage: "arrow.down")
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Theme.surfaceAlt, in: Capsule())
+                            .overlay(Capsule().strokeBorder(Theme.border, lineWidth: 1))
+                            .foregroundStyle(Theme.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 8)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeOut(duration: 0.18), value: stickToBottom)
+            // 不用 defaultScrollAnchor(.bottom)：内容不足一屏时它会把几张卡片
+            // 顶到底部，上方留一大片空白。贴底交给下面的 onChange 触发滚动即可。
             .scrollPosition(id: $scrolledID, anchor: .bottom)
             .onChange(of: scrolledID) { _, new in
                 // 滚动落点在哨兵上才继续跟随（nil = 尚未产生位置信息）

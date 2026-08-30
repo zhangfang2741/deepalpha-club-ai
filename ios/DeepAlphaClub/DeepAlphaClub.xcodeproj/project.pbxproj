@@ -31,6 +31,7 @@
 		C4371B77C22D927841388422 /* InjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E1DA0E443F0327336711DDA /* InjectSheet.swift */; };
 		C8C3692D3CF832C0B8B9F0E0 /* ConsensusMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BED22B41E149165085B8EA5 /* ConsensusMeter.swift */; };
 		D06EF1936A5061BDD1BE1CB3 /* RunReplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81405A91C2C8ECE2BD3C3DC9 /* RunReplayView.swift */; };
+		DDB7CF85D350C113DC11D5A9 /* PaneSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 737B8A679AC69B3D523D04DA /* PaneSelector.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -43,6 +44,7 @@
 		66FDE9937E9B9BA82D263F7B /* ForgotPasswordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgotPasswordView.swift; sourceTree = "<group>"; };
 		679B2E95C74EC33A6660E2AE /* SignalColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalColors.swift; sourceTree = "<group>"; };
 		6E1DA0E443F0327336711DDA /* InjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InjectSheet.swift; sourceTree = "<group>"; };
+		737B8A679AC69B3D523D04DA /* PaneSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSelector.swift; sourceTree = "<group>"; };
 		7BED22B41E149165085B8EA5 /* ConsensusMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsensusMeter.swift; sourceTree = "<group>"; };
 		81405A91C2C8ECE2BD3C3DC9 /* RunReplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunReplayView.swift; sourceTree = "<group>"; };
 		8AC4932BBC87805E9351E29C /* StreamPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamPanel.swift; sourceTree = "<group>"; };
@@ -135,6 +137,7 @@
 				7BED22B41E149165085B8EA5 /* ConsensusMeter.swift */,
 				9C06B11BB75E70F5B074ACF6 /* DecisionPanel.swift */,
 				6E1DA0E443F0327336711DDA /* InjectSheet.swift */,
+				737B8A679AC69B3D523D04DA /* PaneSelector.swift */,
 				C8825A47D1902E00E263C8FE /* PipelinePanel.swift */,
 				DC2B81F3F5B15D10F53EDB8F /* SignalChip.swift */,
 				8AC4932BBC87805E9351E29C /* StreamPanel.swift */,
@@ -254,6 +257,7 @@
 				C4371B77C22D927841388422 /* InjectSheet.swift in Sources */,
 				962F2BAD28F6108C9D0AC068 /* LoginView.swift in Sources */,
 				297D1179B24F790143467CFA /* MarkdownText.swift in Sources */,
+				DDB7CF85D350C113DC11D5A9 /* PaneSelector.swift in Sources */,
 				0234F2C79E87D080DDC1976F /* PipelinePanel.swift in Sources */,
 				4E21F39AD100D1A50C01AFB8 /* RegisterView.swift in Sources */,
 				A7888A3C397218AAD0374300 /* RootView.swift in Sources */,

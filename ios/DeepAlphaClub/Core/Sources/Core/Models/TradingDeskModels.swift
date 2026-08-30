@@ -144,6 +144,14 @@ public struct ConsensusData: Codable, Sendable, Equatable {
     public var neutral: Int
     public var bear: Int
     public var lean: String
+
+    // 生产路径都是 JSON 解码来的，但 SwiftUI 预览和测试要能直接构造
+    public init(bull: Int, neutral: Int, bear: Int, lean: String) {
+        self.bull = bull
+        self.neutral = neutral
+        self.bear = bear
+        self.lean = lean
+    }
 }
 
 public struct VerdictData: Codable, Sendable, Equatable {

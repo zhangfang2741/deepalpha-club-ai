@@ -262,6 +262,105 @@ struct TradingDeskViewModelTests {
         #expect(recorded.all[0] == .milliseconds(800))
         #expect(recorded.all[1] == .milliseconds(1600))
     }
+
+    @Test("重连成功后退避重置：第二次断线仍从 800ms 起，不是继续翻倍")
+    func backoffResetsAfterSuccess() async throws {
+        let service = MockDeskService()
+        let recorded = LockedDurations()
+        // 断 → 断 → 通(有帧但没结束) → 断 → 通(结束)
+        service.streamScripts = [
+            { _ in failingStream() },
+            { _ in failingStream() },
+            { _ in
+                AsyncThrowingStream { cont in
+                    cont.yield(SseFrame(id: "id-1", event: startedEvent(1)))
+                    cont.finish(throwing: URLError(.networkConnectionLost))
+                }
+            },
+            { _ in frames([ev(.runFinished, seq: 9, data: ["status": "completed",
+                                                            "duration_ms": 0])]) },
+        ]
+        let vm = TradingDeskViewModel(service: service)
+        vm.sleeper = { d in recorded.append(d) }
+        await vm.startRun(ticker: "NVDA", market: .US)
+        #expect(await waitUntil { vm.state.status == .completed })
+
+        // 前两次翻倍；第三次连上过（收到帧），所以第四次应重新从 800ms 起
+        #expect(recorded.all.count == 3)
+        #expect(recorded.all[0] == .milliseconds(800))
+        #expect(recorded.all[1] == .milliseconds(1600))
+        #expect(recorded.all[2] == .milliseconds(800))
+    }
+
+    @Test("连接状态：断线时 reconnecting，收到帧回到 connected，终态回 idle")
+    func connectionStateTransitions() async throws {
+        let service = MockDeskService()
+        service.streamScripts = [
+            { _ in failingStream() },
+            { _ in frames([startedEvent(1)]) },   // 连上但流自然结束
+        ]
+        let vm = TradingDeskViewModel(service: service)
+        // 卡在重连等待里，好观察 reconnecting 状态
+        vm.sleeper = { _ in try await Task.sleep(for: .milliseconds(120)) }
+
+        await vm.startRun(ticker: "NVDA", market: .US)
+        #expect(await waitUntil { vm.connection.isReconnecting })
+
+        // 重连成功收到帧 → connected；流结束后回 idle
+        #expect(await waitUntil { vm.connection == .idle })
+        #expect(vm.state.ticker == "NVDA")
+    }
+
+    @Test("401 不重连：重连一百次也换不来新 token，应停下并上报认证错误")
+    func doesNotRetryOnUnauthorized() async throws {
+        let service = MockDeskService()
+        service.streamScripts = [{ _ in
+            AsyncThrowingStream { $0.finish(throwing: APIError.unauthorized(nil)) }
+        }]
+        let vm = makeVM(service)
+        await vm.startRun(ticker: "NVDA", market: .US)
+
+        // 不能等 connection == .idle：它初始就是 idle，会在流启动前就通过
+        #expect(await waitUntil { vm.lastAuthError != nil })
+        #expect(vm.lastAuthError?.isUnauthorized == true)
+        #expect(vm.connection == .idle)
+        #expect(service.streamCallCount == 1)   // 只订阅了一次，没有重试
+    }
+
+    @Test("404 不重连：run 不存在，重试没有意义，转成页面错误")
+    func doesNotRetryOnNotFound() async throws {
+        let service = MockDeskService()
+        service.streamScripts = [{ _ in
+            AsyncThrowingStream { $0.finish(throwing: APIError.notFound) }
+        }]
+        let vm = makeVM(service)
+        await vm.startRun(ticker: "NVDA", market: .US)
+
+        #expect(await waitUntil { vm.pageError != nil })
+        #expect(vm.connection == .idle)
+        #expect(service.streamCallCount == 1)
+    }
+
+    @Test("网络错误照常重连（区别于 401/404）")
+    func retriesOnNetworkError() async throws {
+        let service = MockDeskService()
+        service.streamScripts = [
+            { _ in failingStream() },
+            { _ in frames([ev(.runFinished, seq: 1, data: ["status": "completed",
+                                                            "duration_ms": 0])]) },
+        ]
+        let vm = makeVM(service)
+        await vm.startRun(ticker: "NVDA", market: .US)
+        #expect(await waitUntil { vm.state.status == .completed })
+        #expect(service.streamCallCount == 2)   // 重试过一次
+    }
+
+    @Test("连接状态：run 未开始时是 idle")
+    func connectionIdleInitially() {
+        let vm = makeVM(MockDeskService())
+        #expect(vm.connection == .idle)
+        #expect(!vm.connection.isReconnecting)
+    }
 }
 
 /// 跨闭包记录 sleeper 时长的线程安全盒子（async 上下文安全锁）。

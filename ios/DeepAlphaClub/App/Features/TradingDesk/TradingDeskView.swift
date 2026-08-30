@@ -14,8 +14,11 @@ struct TradingDeskView: View {
     @State private var ticker = "NVDA"
     @State private var market: Market = .US
     @State private var pane: Pane = .stream
+    /// 用户看过决策页时的信号条数与裁决状态，用来判断「有没有新东西」
+    @State private var seenSignalCount = 0
+    @State private var seenVerdict = false
 
-    enum Pane: String, CaseIterable, Identifiable {
+    enum Pane: String, CaseIterable, Identifiable, Hashable {
         case pipeline, stream, decision
         var id: String { rawValue }
         var label: String {
@@ -25,6 +28,21 @@ struct TradingDeskView: View {
             case .decision: "决策"
             }
         }
+    }
+
+    /// 决策页有未读内容：裁决刚出，或又多了几条分析师信号。
+    /// 窄屏一次只显示一个面板，不标出来的话裁决出来了也没人知道。
+    private var badgedPanes: Set<Pane> {
+        var badges: Set<Pane> = []
+        let hasNewVerdict = vm.state.verdict != nil && !seenVerdict
+        let hasNewSignals = vm.state.signals.count > seenSignalCount
+        if hasNewVerdict || hasNewSignals { badges.insert(.decision) }
+        return badges
+    }
+
+    private func markDecisionSeen() {
+        seenSignalCount = vm.state.signals.count
+        seenVerdict = vm.state.verdict != nil
     }
 
     /// 正在流式输出的那张卡（未 done 的第一张，仅 running 时显示光标）。
@@ -40,6 +58,7 @@ struct TradingDeskView: View {
                 ticker: $ticker,
                 market: $market,
                 state: vm.state,
+                connection: vm.connection,
                 busy: vm.busy,
                 onStart: { Task { await vm.startRun(ticker: ticker, market: market) } },
                 onControl: { action, text in
@@ -66,10 +85,12 @@ struct TradingDeskView: View {
                 narrowLayout
             }
 
-            Text("研究 / 分析用途，非投资建议，不执行真实交易。agent 观点带置信度，不代表事实。")
-                .font(.caption2.monospaced())
-                .foregroundStyle(Theme.textTertiary)
-                .multilineTextAlignment(.center)
+            if !vm.live {
+                Text("研究 / 分析用途，非投资建议，不执行真实交易。agent 观点带置信度，不代表事实。")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(Theme.textTertiary)
+                    .multilineTextAlignment(.center)
+            }
         }
         .padding(14)
         .themedBackground()
@@ -85,18 +106,28 @@ struct TradingDeskView: View {
 
     private var narrowLayout: some View {
         VStack(spacing: 10) {
-            Picker("面板", selection: $pane) {
-                ForEach(Pane.allCases) { p in
-                    Text(p.label).tag(p)
-                }
-            }
-            .pickerStyle(.segmented)
+            PaneSelector(panes: Pane.allCases, selection: $pane,
+                         badged: badgedPanes) { $0.label }
 
             switch pane {
             case .pipeline: pipelinePanel
             case .stream: streamPanel
             case .decision: decisionPanel
             }
+        }
+        .onChange(of: pane) { _, newPane in
+            if newPane == .decision { markDecisionSeen() }
+        }
+        .onChange(of: vm.state.signals.count) { _, _ in
+            if pane == .decision { markDecisionSeen() }
+        }
+        .onChange(of: vm.state.verdict != nil) { _, _ in
+            if pane == .decision { markDecisionSeen() }
+        }
+        .onChange(of: vm.state.runId) { _, _ in
+            // 新一轮分析重新计数，否则上一轮的已读会把新裁决的角标吃掉
+            seenSignalCount = 0
+            seenVerdict = false
         }
     }
 
