@@ -52,6 +52,9 @@ class FakeStreamRedis:
             entries = [e for e in entries if _id_tuple(e[0]) <= high]
         return entries[:count] if count else entries
 
+    async def exists(self, *keys: str) -> int:
+        return sum(1 for k in keys if self.streams.get(k) or self.counters.get(k) is not None)
+
     async def incr(self, key: str) -> int:
         self.counters[key] = self.counters.get(key, 0) + 1
         return self.counters[key]

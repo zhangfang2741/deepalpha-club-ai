@@ -42,6 +42,15 @@ def _decode(value: bytes | str) -> str:
     return value.decode() if isinstance(value, bytes) else str(value)
 
 
+async def exists(redis: Redis, run_id: str) -> bool:
+    """事件流是否存在。
+
+    用于在订阅前区分「run 不存在 / 已过期」与「run 存在但还没产出事件」——
+    否则订阅一个不存在的 run_id 会一直轮询到空闲超时，白占一条连接。
+    """
+    return bool(await redis.exists(stream_key(run_id)))
+
+
 async def publish(redis: Redis, run_id: str, event: TradingDeskEvent) -> str:
     """写入一条事件，回填 seq，返回 Redis Stream ID。"""
     ttl = settings.TRADING_DESK_EVENT_TTL_SECONDS

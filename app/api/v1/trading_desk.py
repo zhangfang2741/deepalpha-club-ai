@@ -80,6 +80,13 @@ async def stream_run(
     last_event_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
 ) -> StreamingResponse:
     """以 SSE 推送事件流，支持 Last-Event-ID 断线续读。"""
+    # 先确认 run 存在：否则订阅会一路轮询到空闲超时（默认 5 分钟），
+    # 白占一条连接，前端也拿不到任何反馈。
+    if not await event_bus.exists(redis, run_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="运行不存在或事件流已过期",
+        )
 
     async def event_generator() -> AsyncIterator[str]:
         try:

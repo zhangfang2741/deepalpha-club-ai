@@ -68,6 +68,28 @@ async def test_run_wraps_engine_stream_with_lifecycle_events(redis: FakeRedisAll
     assert events[-1].data["status"] == "completed"
 
 
+async def test_event_stream_exists_the_moment_start_run_returns(redis: FakeRedisAll) -> None:
+    """start_run 一返回，事件流就必须已经存在。
+
+    否则调用方拿到 run_id 后立刻订阅会撞上竞态，SSE 端点会误报 404。
+    """
+    run_id = await runner.start_run(
+        redis, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0)
+    )
+
+    assert await event_bus.exists(redis, run_id) is True
+
+    entries = await redis.xrange(event_bus.stream_key(run_id))
+    first = TradingDeskEvent.model_validate_json(entries[0][1][b"e"])
+    assert first.type is EventType.RUN_STARTED
+
+    await runner.wait_for(run_id)
+
+
+async def test_exists_is_false_for_unknown_run(redis: FakeRedisAll) -> None:
+    assert await event_bus.exists(redis, "no-such-run") is False
+
+
 async def test_verdict_precedes_run_finished(redis: FakeRedisAll) -> None:
     run_id = await runner.start_run(
         redis, ticker="NVDA", trade_date="2026-08-30", engine=MockEngine(tick_seconds=0)

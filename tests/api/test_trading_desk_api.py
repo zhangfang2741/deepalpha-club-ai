@@ -120,6 +120,24 @@ async def test_stream_resumes_from_last_event_id(client: AsyncClient) -> None:
     assert resumed_ids == all_ids[3:]
 
 
+async def test_stream_of_unknown_run_returns_404_promptly(client: AsyncClient) -> None:
+    """不存在的 run_id 必须立刻 404，而不是把连接挂到空闲超时。"""
+    resp = await client.get("/api/v1/trading-desk/runs/no-such-run/stream")
+
+    assert resp.status_code == 404
+
+
+async def test_stream_is_subscribable_immediately_after_create(client: AsyncClient) -> None:
+    """创建后立刻订阅不能撞上竞态——run.started 是同步发出的。"""
+    run_id = await _create_run(client)
+
+    async with client.stream("GET", f"/api/v1/trading-desk/runs/{run_id}/stream") as resp:
+        assert resp.status_code == 200
+        body = "".join([chunk async for chunk in resp.aiter_text()])
+
+    assert _parse_sse(body)[0]["type"] == "run.started"
+
+
 async def test_inject_requires_text(client: AsyncClient) -> None:
     run_id = await _create_run(client)
 

@@ -46,29 +46,15 @@ async def start_run(
     trade_date: str,
     engine: TradingEngine,
 ) -> str:
-    """创建一次运行并立即返回 run_id，实际执行在后台进行。"""
+    """创建一次运行并立即返回 run_id，实际执行在后台进行。
+
+    run.started 在这里**同步**发出，而不是留给后台任务：否则调用方拿到
+    run_id 后立刻订阅，会撞上「事件流尚不存在」的竞态。
+    """
     run_id = uuid.uuid4().hex
     await tdc.init_control(redis, run_id)
 
-    task = asyncio.create_task(_execute(redis, run_id, ticker, trade_date, engine))
-    _TASKS[run_id] = task
-    task.add_done_callback(lambda _: _TASKS.pop(run_id, None))
-
-    logger.info("trading_desk_run_started", run_id=run_id, ticker=ticker, engine=engine.name)
-    return run_id
-
-
-async def _execute(
-    redis: Redis,
-    run_id: str,
-    ticker: str,
-    trade_date: str,
-    engine: TradingEngine,
-) -> None:
-    """在后台执行一次运行，把引擎事件流包进统一的生命周期事件里。"""
-    started_at = time.monotonic()
     descriptor = engine.describe()
-
     await event_bus.publish(
         redis,
         run_id,
@@ -85,6 +71,26 @@ async def _execute(
         ),
     )
 
+    task = asyncio.create_task(_execute(redis, run_id, ticker, trade_date, engine))
+    _TASKS[run_id] = task
+    task.add_done_callback(lambda _: _TASKS.pop(run_id, None))
+
+    logger.info("trading_desk_run_started", run_id=run_id, ticker=ticker, engine=engine.name)
+    return run_id
+
+
+async def _execute(
+    redis: Redis,
+    run_id: str,
+    ticker: str,
+    trade_date: str,
+    engine: TradingEngine,
+) -> None:
+    """在后台执行一次运行，把引擎事件流包进统一的生命周期事件里。
+
+    run.started 已由 start_run 同步发出，这里只负责中间事件与收尾。
+    """
+    started_at = time.monotonic()
     status: RunStatus = "completed"
     # 上一次观察到的暂停态，用于只在翻转时发 run.paused / run.resumed
     was_paused = False
