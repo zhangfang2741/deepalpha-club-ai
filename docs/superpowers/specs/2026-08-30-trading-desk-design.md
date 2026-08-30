@@ -51,6 +51,7 @@
 | 分析师信号 `{dir, conf}` | ❌ 不产出，只有大段文字 report | **需自建** `signal_extract.py`（见 §4） |
 | HITL 暂停/注入 | ❌ `workflow.compile()` 裸编译，无 checkpointer、无 interrupt | **需自建**，见 §5 |
 | 中文输出 | ✅ `TradingAgentsConfig.response_language` | 直接配置为中文 |
+| LLM 构造 | 自带 `build_chat_model`，会绕开平台注册表与密钥管理 | 预置 `__dict__` 注入平台 `llm_registry` 实例（见 §7.4，已实跑验证） |
 | 辩论轮数 | ✅ `max_debate_rounds` / `max_risk_discuss_rounds` | 暴露为配置项 |
 | 数据源 | yfinance（行情+基本面）+ Google News RSS。无 FinnHub、无 Reddit | 第一期直接用，**不需要新增任何 API key** |
 | 工具可替换性 | `ANALYST_TOOL_REGISTRY` 是模块级 dict，14 个 tool 可整体替换 | 为二期 FMP 替换预留 |
@@ -184,7 +185,7 @@ FLOOR 文档的 `side` 只有 `bull|bear`，但 TradingAgents 有**两场**辩�
 
 TradingAgents 的分析师不产出 `{dir, conf}`，只产出大段文字 report。而共识条与流程条上的信号 chip 全靠它。
 
-`signal_extract.py`：每份 report 完成时，用 `llm_registry` 的快模型（haiku / gpt-4o-mini）做一次结构化抽取，产出 `{dir, conf}` 并发 `agent.signal`（`extracted: true`）。
+`signal_extract.py`：每份 report 完成时，用 `TRADING_DESK_QUICK_MODEL`（同分析师节点那档，经 `llm_registry` 取）做一次结构化抽取，产出 `{dir, conf}` 并发 `agent.signal`（`extracted: true`）。调用走 `llm_service.call()`，自带重试与 fallback。
 
 约束：
 - 额外 LLM 调用约 +6 次/run，计入成本预期
@@ -309,17 +310,20 @@ frontend/lib/store/trading_desk.ts      Zustand，事件 reducer
 
 ### 7.3 配置项（同步更新 `.env.example` 与 `app/core/config.py`）
 
+**LLM 配置完全复用平台统一那套，交易台不新增任何供应商或密钥变量。** `LLM_PROVIDER`、各 `*_API_KEY`、`MAX_TOKENS`、`DEFAULT_LLM_TEMPERATURE`、`DEFAULT_LLM_MODEL` 一律沿用。
+
+模块专属变量只有这些：
+
 ```
-TRADING_DESK_ENGINE=tradingagents             # 引擎选择
-TRADING_DESK_LLM_PROVIDER=anthropic           # 传给 TradingAgentsConfig.llm_provider
-TRADING_DESK_DEEP_MODEL=claude-sonnet-4-5     # 研究主管/交易员/风控裁决等深度节点
-TRADING_DESK_QUICK_MODEL=claude-haiku-4-5     # 分析师节点 + 信号抽取
+TRADING_DESK_ENGINE=tradingagents        # 引擎选择，留给二期换引擎
+TRADING_DESK_DEEP_MODEL=                 # 空则回落 DEFAULT_LLM_MODEL
+TRADING_DESK_QUICK_MODEL=                # 空则回落 DEFAULT_LLM_MODEL
 TRADING_DESK_MAX_DEBATE_ROUNDS=2
 TRADING_DESK_MAX_RISK_ROUNDS=1
 TRADING_DESK_EVENT_TTL_SECONDS=604800
 ```
 
-模型默认值遵循平台既有约定（生产用 Claude Sonnet，轻量节点用 Haiku）。注意 TradingAgents 的 `llm_provider` 是 LangChain `init_chat_model` 的 provider key，与平台 `LLM_PROVIDER` 的取值空间不同，两者独立配置，不复用同一个变量。
+两个模型变量是**注册表里的模型名**，不是供应商模型 ID，遵循 `SUPPLY_CHAIN_DISCOVER_MODEL` 的既有先例，经 `llm_registry.get_or_default(name)` 取实例。深/快两档分别对应「研究主管/交易员/风控裁决」与「分析师节点 + 信号抽取」；留空则两档都用默认模型。
 
 `pyproject.toml` 需新增：
 
@@ -329,6 +333,24 @@ override-dependencies = ["redis>=5.2.1,<6.5", "pandas>=2.2,<3"]
 ```
 
 并在该段加注释说明原因（TradingAgents 的 redis 依赖为幽灵依赖、pandas 3 约束过紧），避免后人误删。
+
+### 7.4 LLM 实例注入机制
+
+TradingAgents 默认用自己的 `build_chat_model(config.llm_provider, model, ...)` 构造 LLM，会绕开平台的注册表、密钥管理、温度与 token 上限、以及 Langfuse 可观测性。为避免出现第二套 LLM 配置，改为**注入平台实例**：
+
+```python
+graph = TradingAgentsGraph(config=ta_config, ...)
+deep, _ = llm_registry.get_or_default(settings.TRADING_DESK_DEEP_MODEL or None)
+quick, _ = llm_registry.get_or_default(settings.TRADING_DESK_QUICK_MODEL or None)
+graph.__dict__["deep_thinking_llm"] = deep
+graph.__dict__["quick_thinking_llm"] = quick
+```
+
+`deep_thinking_llm` / `quick_thinking_llm` 是 pydantic 的 `@computed_field @cached_property`，**预置 `__dict__` 可完全绕过构造**（已实跑验证：注入后 `_create_llm` 不会被调用）。核查过源码：除 `backtest.py`（回测是非目标）外，`config.llm_provider` / `deep_think_llm` / `quick_think_llm` 这三个字段仅被 `_create_llm` 消费；它们是 `TradingAgentsConfig` 的必填字段，仍需赋值，但赋值后即为惰性元数据，填平台的模型名以便日志对得上。
+
+这样 MiniMax 兼容接口路由、`MAX_TOKENS`、温度、重试与 fallback 策略全部自动生效，与平台其余模块保持一致。
+
+代价：依赖了 TradingAgents 的内部实现细节（属性名与 cached_property 语义）。以一个断言注入生效的单元测试作为回归防线，升级其版本时会立刻暴露。
 
 ## 8. 前端设计
 
@@ -377,7 +399,7 @@ override-dependencies = ["redis>=5.2.1,<6.5", "pandas>=2.2,<3"]
 
 | 阶段 | 内容 | 验收 |
 |---|---|---|
-| 0 | 依赖落地（`override-dependencies` + `uv add tradingagents`）；**HITL 注入前置验证**（§5.3） | `make check` 通过；注入验证测试通过。**此步不过则停止**，需回到设计层重找嫁接点 |
+| 0 | 依赖落地（`override-dependencies` + `uv add tradingagents`）；LLM 实例注入（§7.4）；**HITL 注入前置验证**（§5.3） | `make check` 通过；LLM 注入生效断言通过；HITL 注入验证测试通过。**HITL 那步不过则停止**，需回到设计层重找嫁接点 |
 | 1 | 事件协议（`events.py` / `schemas`）+ `MockEngine` + `event_bus` + `runner` + SSE 端点 | MockEngine 驱动的集成测试跑通完整事件序列，含 pause/inject |
 | 2 | 前端三栏 UI + Zustand 事件 reducer，接 MockEngine | 交互体感对齐原型：流式打字、辩论分栏、共识条、裁决卡、审计链、暂停/注入 |
 | 3 | `TradingAgentsEngine` + `signal_extract` | 真实标的跑通一次完整分析，过程可看、可暂停、可注入 |
@@ -392,6 +414,7 @@ override-dependencies = ["redis>=5.2.1,<6.5", "pandas>=2.2,<3"]
 | 依赖覆盖绕过了 TradingAgents 声明的约束 | 已源码核查 redis 未被 import、pandas 用法为基础 API；`pyproject.toml` 中加注释；升级 tradingagents 版本时需重新核查 |
 | 多装约 100 个包（huggingface 等），镜像变大 | 接受。源于 `tradingagents/llm.py` 的无条件 import，非我方可控 |
 | 注入嫁接点依赖 TradingAgents 内部字段语义 | 升级其版本时可能失效。以 §5.3 的前置验证测试作为回归防线 |
+| LLM 实例注入依赖其 `cached_property` 内部实现 | 同上，以 §7.4 的注入生效断言测试作为回归防线；升级版本时会立刻暴露而非静默退回它自建的 LLM |
 | 信号抽取是额外 LLM 调用，可能出错 | 失败降级为 `neutral` 并标注「未能判读」，事件中以 `extracted` 字段标明来源 |
 | 一次完整分析成本较高（数十次 LLM 调用 + 6 次抽取） | 第一期不做成本面板（推迟二期），但 `TradingDeskRun` 记录 `duration_ms`，为二期留数据 |
 | web 进程重启会中断在跑的 run | 接受。run 落库为 `interrupted` 状态，partial 结果可见；续跑推迟二期 |
