@@ -23,6 +23,10 @@ xcodebuild -project DeepAlphaClub.xcodeproj -scheme DeepAlphaClub \
 
 - `Core/` — 本地 SPM 包 `DeepAlphaCore`，全部业务逻辑（可 macOS 测试）
 - `App/` — SwiftUI 视图层（xcodegen target）
+- `Tools/make_icon.py` — App 图标是代码画的（三路观点汇聚成一条裁决），
+  改设计后重跑：`uv run --with pillow python Tools/make_icon.py`，
+  再把 `/tmp/iconwork/icon-1024.png`、`icon-tinted.png` 拷回
+  `App/Assets.xcassets/AppIcon.appiconset/`
 - 协议契约见仓库根的 `app/schemas/trading_desk.py`
 
 ## 认证

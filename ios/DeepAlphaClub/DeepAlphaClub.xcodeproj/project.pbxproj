@@ -16,6 +16,7 @@
 		3FC93C57B540B1AC7035DFC6 /* DeepAlphaCore in Frameworks */ = {isa = PBXBuildFile; productRef = 724DC702516AB02FE68B55C8 /* DeepAlphaCore */; };
 		4E21F39AD100D1A50C01AFB8 /* RegisterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C68D99BE2A69AF96D2CC645F /* RegisterView.swift */; };
 		639888FA927B0EFA295BF785 /* TradingDeskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B4E66E6D8FEB52BD02DA8BC /* TradingDeskView.swift */; };
+		71F42AE2F609EA02FC8B45C2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8639A6E68EDC5008FDF04DE1 /* Assets.xcassets */; };
 		74FC0265866C004AFF378BA6 /* DeepAlphaClubApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F718E462ADE96EA7695E9CE7 /* DeepAlphaClubApp.swift */; };
 		78CE239D9F28A6C7AE8A1D6A /* VerdictCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 211DCF3A1ABB90C8559AAA4B /* VerdictCard.swift */; };
 		803C449AE08E12EF788235F3 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED6FDF48F365512FAB35AEEC /* Theme.swift */; };
@@ -47,6 +48,7 @@
 		737B8A679AC69B3D523D04DA /* PaneSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSelector.swift; sourceTree = "<group>"; };
 		7BED22B41E149165085B8EA5 /* ConsensusMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsensusMeter.swift; sourceTree = "<group>"; };
 		81405A91C2C8ECE2BD3C3DC9 /* RunReplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunReplayView.swift; sourceTree = "<group>"; };
+		8639A6E68EDC5008FDF04DE1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		8AC4932BBC87805E9351E29C /* StreamPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamPanel.swift; sourceTree = "<group>"; };
 		8D4B576094422B0D804452F9 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		9C06B11BB75E70F5B074ACF6 /* DecisionPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionPanel.swift; sourceTree = "<group>"; };
@@ -169,6 +171,7 @@
 		CD5533BF64E26CB9C5D7E88F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				8639A6E68EDC5008FDF04DE1 /* Assets.xcassets */,
 				BDE65FC0C82F27F59813A029 /* CompositionRoot.swift */,
 				E510E159F414F4995E9B4767 /* DeepAlphaClub.entitlements */,
 				F718E462ADE96EA7695E9CE7 /* DeepAlphaClubApp.swift */,
@@ -191,6 +194,7 @@
 			buildConfigurationList = D62585479BC6F8F20A0C7FA6 /* Build configuration list for PBXNativeTarget "DeepAlphaClub" */;
 			buildPhases = (
 				7A031C0A3658B514DBD1429B /* Sources */,
+				BAD3ACE1AEF781996D5B419D /* Resources */,
 				C21392E0D1E24B29A15F23EA /* Frameworks */,
 			);
 			buildRules = (
@@ -240,6 +244,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		BAD3ACE1AEF781996D5B419D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				71F42AE2F609EA02FC8B45C2 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		7A031C0A3658B514DBD1429B /* Sources */ = {
