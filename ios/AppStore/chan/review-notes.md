@@ -135,10 +135,49 @@ curl -s -X POST https://api.deepalpha.club/api/v1/auth/login/account \
   -d '{"account":"appreview@deepalpha.club","password":"AppReview2026"}'
 ```
 
-**3. Guideline 3.1.2 — 订阅信息展示不全**
+**3. Guideline 3.1.2 — 订阅信息展示不全 ← 2026-08-31 实际被拒于此**
 
-付费墙已含自动续订说明、条款与隐私链接、恢复购买。若被指出，
-截付费墙的图回复即可。
+付费墙内的自动续订说明、条款/隐私链接、恢复购买一直都有，
+但 **App Store 商品页描述**里少了 EULA 链接，被自动检测打回。
+修复见 `store-listing.md` 第八节与 `SUBMIT.md` 顶部的红色区块，
+回复话术见下。
+
+---
+
+## EULA 被拒的回复话术（2026-08-31，可直接粘贴到 App Review 消息框）
+
+```
+Hello,
+
+Thank you for the review.
+
+We have updated the App Description metadata for both localizations
+(Simplified Chinese and English) to include a link to the Terms of Use (EULA).
+We are using the standard Apple Terms of Use, and the description now ends with:
+
+Terms of Use (EULA):
+https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+Privacy Policy: https://deepalpha.club/privacy
+
+The License Agreement in App Store Connect remains the standard Apple EULA.
+
+In the same update we expanded the subscription disclosure in the description
+to state the subscription length (1 month), the 7-day free trial, that payment
+is charged to the Apple Account at confirmation of purchase, the 24-hour
+auto-renewal rule, and how to turn off auto-renew in App Store account settings.
+
+For reference, the in-app paywall already contains the auto-renewal disclosure,
+the Terms of Use and Privacy Policy links, and a Restore Purchases button. It
+can be reached after signing in with the demo account
+(appreview@deepalpha.club / AppReview2026) via the crown icon at the top right
+of the Analysis tab, or via Profile -> Upgrade to Pro.
+
+No binary change was required, so the build is unchanged. Please let us know if
+anything further is needed.
+
+Best regards,
+DeepAlpha
+```
 
 ---
 

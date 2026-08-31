@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: 'DeepAlpha 缠论与投研平台服务条款',
 }
 
-const UPDATED = '2025 年 7 月 12 日'
+const UPDATED = '2026 年 8 月 31 日'
 const CONTACT = 'zfleo.sg@gmail.com'
 
 export default function TermsPage() {
@@ -47,7 +47,62 @@ export default function TermsPage() {
             </ul>
           </Section>
 
-          <Section title="三、可接受使用">
+          <Section title="三、订阅与付费（DeepAlpha Pro）">
+            <p>
+              iOS 应用「DeepAlpha 缠论」提供免费额度与付费订阅。免费用户每日可分析 3 支不同标的；
+              DeepAlpha Pro 解除该次数限制，不额外解锁其它功能模块。
+            </p>
+            <ul className="mt-3 list-disc space-y-2 pl-5">
+              <li>
+                <strong>订阅形式</strong>：自动续订订阅，周期为 1 个月，含 7 天免费试用。
+                价格随地区不同，以 App 内付费墙与 App Store 显示的金额为准。
+              </li>
+              <li>
+                <strong>扣费</strong>：付款在你确认购买时从 Apple 账户扣除。
+                若在当前周期结束前 24 小时内未关闭自动续订，订阅将自动续期并按同样价格扣费。
+              </li>
+              <li>
+                <strong>管理与取消</strong>：在 iOS「设置 → Apple 账户 → 订阅」中随时管理或关闭
+                自动续订。取消在当前已付费周期结束时生效，此前仍可正常使用。
+              </li>
+              <li>
+                <strong>免费试用</strong>：在试用结束前 24 小时以上关闭自动续订则不会产生费用。
+                按 Apple 规则，若你在试用期内购买订阅，试用期剩余未使用的部分将作废。
+              </li>
+              <li>
+                <strong>退款</strong>：通过 App Store 购买的订阅由 Apple 收款，退款亦由 Apple 处理，
+                我们无法直接为你退款。请通过{' '}
+                <a
+                  href="https://reportaproblem.apple.com"
+                  className="text-primary underline underline-offset-4"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  reportaproblem.apple.com
+                </a>{' '}
+                提交申请。
+              </li>
+              <li>
+                <strong>适用协议</strong>：通过 App Store 购买的订阅同时受 Apple《Apple 媒体服务条款与条件》
+                及其标准最终用户许可协议（
+                <a
+                  href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
+                  className="text-primary underline underline-offset-4"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Apple 标准 EULA
+                </a>
+                ）约束。
+              </li>
+            </ul>
+            <p className="mt-3">
+              订阅不改变本条款第一节的免责声明：付费解除的是使用次数限制，
+              不代表分析结果构成投资建议或具备预测能力。
+            </p>
+          </Section>
+
+          <Section title="四、可接受使用">
             <p>你同意不将本平台用于任何非法用途，且不得：</p>
             <ul className="mt-3 list-disc space-y-2 pl-5">
               <li>试图未经授权访问系统、干扰或破坏服务；</li>
@@ -56,21 +111,21 @@ export default function TermsPage() {
             </ul>
           </Section>
 
-          <Section title="四、数据来源与准确性">
+          <Section title="五、数据来源与准确性">
             <p>
               本平台的行情与财务数据来自第三方数据源，我们尽力保证其可用性，但不对数据的
               准确性、完整性或及时性作出保证。数据可能存在延迟、错漏或中断。
             </p>
           </Section>
 
-          <Section title="五、知识产权">
+          <Section title="六、知识产权">
             <p>
               本平台的软件、界面、算法实现及相关内容归我们或相应权利人所有，受法律保护。
               未经许可，不得复制、修改或用于商业用途。
             </p>
           </Section>
 
-          <Section title="六、责任限制">
+          <Section title="七、责任限制">
             <p>
               在适用法律允许的最大范围内，对于因使用或无法使用本平台、或依据本平台内容作出的
               任何决策而导致的直接、间接、偶发或后果性损失（包括但不限于投资损失、利润损失、
@@ -78,18 +133,18 @@ export default function TermsPage() {
             </p>
           </Section>
 
-          <Section title="七、服务变更与终止">
+          <Section title="八、服务变更与终止">
             <p>
               我们可能随时调整、暂停或终止部分或全部服务，恕不另行个别通知。若你违反本条款，
               我们有权暂停或终止你的账号。
             </p>
           </Section>
 
-          <Section title="八、条款更新">
+          <Section title="九、条款更新">
             <p>我们可能不时更新本条款，更新后将在本页标注“最后更新”日期。继续使用即视为接受更新。</p>
           </Section>
 
-          <Section title="九、联系我们">
+          <Section title="十、联系我们">
             <p>
               如对本条款有任何疑问，请联系：
               <a href={`mailto:${CONTACT}`} className="text-primary underline underline-offset-4">

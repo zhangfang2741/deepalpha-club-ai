@@ -75,7 +75,13 @@ DeepAlpha 缠论把 K 线图上的结构自动标出来，让你看懂行情在�
 
 关于订阅
 免费用户每日可分析 3 支不同标的。DeepAlpha Pro 解除次数限制。
-订阅为自动续订，可随时在 App Store 账户设置中管理或取消。
+DeepAlpha Pro 为自动续订订阅，按月计费，含 7 天免费试用。
+付款在确认购买时从你的 Apple 账户扣除。若在当前周期结束前 24 小时内
+未关闭自动续订，订阅将自动续期并按同样价格扣费。购买后可在
+App Store 账户设置中管理或关闭自动续订。
+
+使用条款（EULA）：https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+隐私政策：https://deepalpha.club/privacy
 
 免责声明
 本 App 提供的全部内容均由算法基于公开行情数据自动生成，属于技术分析
@@ -118,8 +124,15 @@ current structure indicates and what to watch out for.
 
 ABOUT SUBSCRIPTION
 Free users can analyse 3 distinct tickers per day. DeepAlpha Pro removes the
-daily limit. Subscriptions renew automatically and can be managed or cancelled
-at any time in your App Store account settings.
+daily limit. DeepAlpha Pro is an auto-renewing monthly subscription with a
+7-day free trial. Payment is charged to your Apple Account at confirmation of
+purchase. The subscription renews automatically at the same price unless
+auto-renew is turned off at least 24 hours before the end of the current
+period. You can manage or turn off auto-renew in your App Store account
+settings after purchase.
+
+Terms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+Privacy Policy: https://deepalpha.club/privacy
 
 DISCLAIMER
 All content is generated automatically by algorithms from public market data
@@ -198,3 +211,50 @@ Automatic Chan structure on candlestick charts, with nine illustrated lessons. U
 > iPad 若不在支持设备列表内则无需 iPad 截图；本 App 的
 > `TARGETED_DEVICE_FAMILY` 含 iPad，**若不打算支持 iPad，
 > 提交前需在 ASC 的「支持设备」里取消勾选**，否则必须提供 iPad 截图。
+
+---
+
+## 八、EULA 链接（2026-08-31 被拒后新增，必须保留）
+
+### 拒因原文
+
+> The submission offers auto-renewable subscriptions but does not include a
+> functional link to the Terms of Use (EULA) in the app metadata that appears
+> on the app's App Store product page.
+
+翻译：卖自动续订订阅，但**商品页元数据**（= App 描述）里没有可用的
+使用条款（EULA）链接。这是纯元数据问题，**不需要重新打包上传构建版本**。
+
+### 为什么会漏
+
+App 内付费墙一直有「服务条款 / 隐私政策」两个链接
+（`ios/DeepAlphaChan/Views/PaywallView.swift:147-148`），
+但那是 App **内部**；Apple 这条查的是 **App Store 商品页**上的描述文本。
+两处都要有，缺一不可。
+
+### 采用的方案：Apple 标准 EULA
+
+Apple 给了两条路，我们走第一条：
+
+| 方案 | 做法 | 取舍 |
+|------|------|------|
+| **标准 EULA（已采用）** | 描述里写上 Apple 官方 EULA 链接 | 链接是 apple.com 自家域名，永远可访问，审核不可能再挑；无需在 ASC 粘贴协议文本 |
+| 自定义 EULA | ASC →「App 信息 → 许可协议」粘贴自定义协议全文 | 品牌统一，但要自己维护法务文本，且协议内容本身会被审 |
+
+已写进第三节（中文）和第四节（英文）描述末尾的两行：
+
+```
+使用条款（EULA）：https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+隐私政策：https://deepalpha.club/privacy
+```
+
+⚠️ **两个语言版本都要填**（zh-Hans 和 en-US），只改一个照样被拒。
+
+⚠️ 描述里的 URL 在 App Store 上显示为纯文本（描述字段本来就不支持超链接），
+这是全行业标准做法，Apple 审的是「URL 文本存在且能访问」，不是「可点击」。
+
+### 同时补上的自动续订披露
+
+Apple 3.1.2 要求订阅的「时长 + 价格 + 自动续订机制」在商品页也要写清楚。
+原描述只有一句「可随时取消」，这次一并补成完整披露（周期、试用、
+扣费时点、24 小时续期规则、如何关闭），省得下一轮再被打回。
