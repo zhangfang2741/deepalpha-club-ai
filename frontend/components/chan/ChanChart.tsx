@@ -3,7 +3,6 @@ import { useEffect, useRef } from 'react'
 import {
   createChart,
   createSeriesMarkers,
-  ColorType,
   CrosshairMode,
   CandlestickSeries,
   LineSeries,
@@ -64,16 +63,13 @@ export function ChanChart({
 
     // ── 主图 ──────────────────────────────────────────────────
     const kChart = createChart(klineRef.current, {
-      // 背景透明 → 价格刻度所在的右侧列不再用实色覆盖 K 线，刻度文字直接浮在图上
-      layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#94a3b8' },
+      layout: { background: { color: '#0f172a' }, textColor: '#94a3b8' },
       grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
       crosshair: { mode: CrosshairMode.Normal },
       width: klineRef.current.clientWidth,
       height: klineRef.current.clientHeight,
-      // rightOffset:0 去掉右侧留白；两侧 border 去掉，让图表贴满左右边
-      timeScale: { rightOffset: 0, barSpacing: 8, fixLeftEdge: true, fixRightEdge: true, borderVisible: false },
-      // borderVisible:false 去掉刻度与 K 线之间的分隔线；ticksVisible:false 去掉小横线；minimumWidth:0 不预留固定右边距
-      rightPriceScale: { scaleMargins: { top: 0.05, bottom: 0.2 }, borderVisible: false, ticksVisible: false, minimumWidth: 0 },
+      timeScale: { rightOffset: 4, barSpacing: 8, fixLeftEdge: true, fixRightEdge: true },
+      rightPriceScale: { scaleMargins: { top: 0.05, bottom: 0.2 }, minimumWidth: 64 },
     })
     klineChartRef.current = kChart
 
@@ -247,13 +243,13 @@ export function ChanChart({
     let macdChart: IChartApi | null = null
     if (showMacd && data.macd && macdRef.current) {
       macdChart = createChart(macdRef.current, {
-        layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#94a3b8' },
+        layout: { background: { color: '#0f172a' }, textColor: '#94a3b8' },
         grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
         crosshair: { mode: CrosshairMode.Normal },
         width: macdRef.current.clientWidth,
         height: macdRef.current.clientHeight,
-        timeScale: { rightOffset: 0, barSpacing: 8, fixLeftEdge: true, fixRightEdge: true, borderVisible: false },
-        rightPriceScale: { borderVisible: false, ticksVisible: false, minimumWidth: 0 },
+        timeScale: { rightOffset: 4, barSpacing: 8, fixLeftEdge: true, fixRightEdge: true },
+        rightPriceScale: { minimumWidth: 64 },
       })
       macdChartRef.current = macdChart
 
@@ -339,7 +335,7 @@ export function ChanChart({
           )}
           <span className="flex items-center gap-1 text-slate-500"><span className="inline-block w-3 border-b border-dashed border-slate-400" />虚线/带 ? = 最右侧未确认</span>
         </div>
-        <div ref={klineRef} className="w-full h-[calc(100%-1.5rem)] rounded-lg overflow-hidden bg-[#0f172a]" />
+        <div ref={klineRef} className="w-full h-[calc(100%-1.5rem)] rounded-lg overflow-hidden" />
       </div>
       {showMacd && data.macd && (
         <div className="relative flex-1 min-h-0">
@@ -348,7 +344,7 @@ export function ChanChart({
             <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-blue-400" />DIF</span>
             <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-orange-400" />DEA</span>
           </div>
-          <div ref={macdRef} className="w-full h-[calc(100%-1.5rem)] rounded-lg overflow-hidden bg-[#0f172a]" />
+          <div ref={macdRef} className="w-full h-[calc(100%-1.5rem)] rounded-lg overflow-hidden" />
         </div>
       )}
     </div>
