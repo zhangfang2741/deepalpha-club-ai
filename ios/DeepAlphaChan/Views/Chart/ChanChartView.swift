@@ -31,6 +31,9 @@ struct ChanChartView: View {
     @State private var rubberOffset: CGFloat = 0
     @State private var rubberTimer: Timer? = nil
 
+    /// 惯性滑动（甩动）：松手后按系统预测落点继续减速平移，撞边界转橡皮筋回弹。
+    @State private var momentumTimer: Timer? = nil
+
     /// 主图与副图高度。全屏页要把图撑满整屏，所以做成可传入的参数；
     /// 写死 300 的时候点全屏只是换了个黑底，图一样大，等于没有全屏。
     // 主图偏矮，整体呈横向长方形（宽 ≈ 屏宽，明显大于高），看盘视觉更舒展
@@ -64,6 +67,7 @@ struct ChanChartView: View {
             cursorIndex = nil
             cursorDragging = false
             rubberTimer?.invalidate()
+            momentumTimer?.invalidate()
             rubberOffset = 0
         }
     }
@@ -544,6 +548,39 @@ struct ChanChartView: View {
         }
     }
 
+    /// 惯性滑动：松手后由 `deltaCandles`（系统预测还会滑过的 K 线数）驱动，
+    /// easeOut 减速到落点；中途撞到边界则按撞击速度甩出一段橡皮筋再回弹。
+    private func startMomentum(deltaCandles: Double, plotWidth: CGFloat) {
+        momentumTimer?.invalidate()
+        let count = max(10, min(Double(candles.count), visibleCount))
+        let maxFirst = max(0, Double(candles.count) - count)
+        let start = firstVisible
+        let target = start + deltaCandles
+        let cw = visibleRange(plotWidth: plotWidth).candleWidth
+        // 时长随甩动距离，夹在 0.25~0.7s
+        let dur = min(0.7, max(0.25, abs(deltaCandles) / 45.0 + 0.2))
+        let startTime = Date()
+        var lastPos = start
+        momentumTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { t in
+            let p = min(1, Date().timeIntervalSince(startTime) / dur)
+            let e = 1 - pow(1 - p, 3)          // easeOutCubic 减速
+            let pos = start + (target - start) * e
+            let clamped = min(max(pos, 0), maxFirst)
+            firstVisible = clamped
+            if pos != clamped {
+                // 撞边界：按撞击速度甩出一段橡皮筋，随后回弹
+                let speed = abs(pos - lastPos)                 // 每帧 K 线数
+                let kick = min(plotWidth * 0.5, CGFloat(speed) * cw * 6)
+                rubberOffset = rubberband(pos < 0 ? kick : -kick, dimension: plotWidth)
+                t.invalidate(); momentumTimer = nil
+                settleRubberBand()
+                return
+            }
+            lastPos = pos
+            if p >= 1 { t.invalidate(); momentumTimer = nil }
+        }
+    }
+
     /// 横向拖动平移图表；纵向拖动放行给页面滚动。
     ///
     /// 用 simultaneousGesture + 首次移动定方向：第一帧就判定主方向，横向才平移、
@@ -567,6 +604,7 @@ struct ChanChartView: View {
                 // 否则：平移图表，滑到头进入橡皮筋
                 cursorDragging = true
                 rubberTimer?.invalidate()
+                momentumTimer?.invalidate()   // 新的拖动打断上一次惯性滑动
                 let range = visibleRange(plotWidth: plotWidth)
                 if dragAnchor == nil { dragAnchor = firstVisible }
                 let count = max(10, min(Double(candles.count), visibleCount))
@@ -580,11 +618,24 @@ struct ChanChartView: View {
                 rubberOffset = over == 0 ? 0
                     : rubberband(-CGFloat(over) * range.candleWidth, dimension: plotWidth)
             }
-            .onEnded { _ in
+            .onEnded { value in
                 dragAnchor = nil
                 cursorDragging = false
+                let wasHorizontal = panIsHorizontal == true
                 panIsHorizontal = nil
-                settleRubberBand()
+                // 光标态 / 非横向：不做惯性
+                guard cursorIndex == nil, wasHorizontal else { settleRubberBand(); return }
+                // 已在橡皮筋越界中：直接回弹，不叠加惯性
+                if abs(rubberOffset) > 1 { settleRubberBand(); return }
+                // 用系统预测落点得到「还会再滑过多少根 K 线」，据此做惯性减速
+                let cw = visibleRange(plotWidth: plotWidth).candleWidth
+                let predictedExtra = value.predictedEndTranslation.width - value.translation.width
+                let extraCandles = Double(-predictedExtra / cw)
+                if abs(extraCandles) > 0.8 {
+                    startMomentum(deltaCandles: extraCandles, plotWidth: plotWidth)
+                } else {
+                    settleRubberBand()
+                }
             }
     }
 
@@ -592,7 +643,7 @@ struct ChanChartView: View {
     private func magnificationGesture(plotWidth: CGFloat) -> some Gesture {
         MagnificationGesture()
             .onChanged { scale in
-                if zoomAnchor == nil { zoomAnchor = visibleCount }
+                if zoomAnchor == nil { zoomAnchor = visibleCount; momentumTimer?.invalidate(); rubberTimer?.invalidate(); rubberOffset = 0 }
                 let base = zoomAnchor ?? visibleCount
                 let newCount = max(15, min(Double(candles.count), base / scale))
                 // 保持视图中心不变
