@@ -32,7 +32,10 @@ struct ChanChartView: View {
     var priceHeight: CGFloat = 240
     var macdHeight: CGFloat = 78
     private let timeAxisHeight: CGFloat = 22
-    private let rightAxisWidth: CGFloat = 52
+    // 右轴不再预留固定列：K 线铺满整宽，价格刻度以透明浮层画在右边缘、不遮挡蜡烛。
+    private let rightAxisWidth: CGFloat = 0
+    // 浮层价签宽度（末价/光标价签贴右边缘绘制时用）。
+    private let priceTagWidth: CGFloat = 46
 
     private var candles: [MergedCandle] { analysis.mergedCandles }
 
@@ -248,10 +251,10 @@ struct ChanChartView: View {
         ctx.stroke(line, with: .color(color.opacity(0.6)),
                    style: StrokeStyle(lineWidth: 0.8, dash: [4, 3]))
 
-        // 右轴价签
+        // 末价价签：贴右边缘浮在 K 线之上（右轴已无预留列）
         let labelH: CGFloat = 15
-        let labelRect = CGRect(x: plotWidth + 1, y: clampY(cy, height) - labelH / 2,
-                               width: rightAxisWidth - 2, height: labelH)
+        let labelRect = CGRect(x: plotWidth - priceTagWidth, y: clampY(cy, height) - labelH / 2,
+                               width: priceTagWidth, height: labelH)
         ctx.fill(Path(roundedRect: labelRect, cornerRadius: 3), with: .color(color))
         ctx.draw(Text(String(format: "%.2f", last.close))
                     .font(.system(size: 10, weight: .semibold)).foregroundColor(.white),
@@ -260,14 +263,15 @@ struct ChanChartView: View {
 
     private func drawPriceAxis(_ ctx: GraphicsContext, size: CGSize, bounds: PriceBounds) {
         let lines = 4
-        let axisX = size.width - rightAxisWidth + 4
+        // 透明浮层：刻度文字右对齐贴右边缘，直接浮在 K 线之上、不占用横向空间。
+        let axisX = size.width - 3
         for i in 0...lines {
             let price = bounds.maxP - (bounds.maxP - bounds.minP) / Double(lines) * Double(i)
             let yPos = size.height / CGFloat(lines) * CGFloat(i)
             let text = Text(String(format: "%.2f", price))
                 .font(.system(size: 9))
                 .foregroundColor(Theme.textSecondary)
-            ctx.draw(text, at: CGPoint(x: axisX, y: clampY(yPos, size.height)), anchor: .leading)
+            ctx.draw(text, at: CGPoint(x: axisX, y: clampY(yPos, size.height)), anchor: .trailing)
         }
     }
 
@@ -567,13 +571,13 @@ struct ChanChartView: View {
         let rect = CGRect(x: cx - range.candleWidth / 2, y: 0, width: range.candleWidth, height: height)
         ctx.fill(Path(rect), with: .color(Theme.accent.opacity(0.06)))
 
-        // 价格标签（右侧轴上）
+        // 价格标签：贴右边缘浮在 K 线之上（右轴已无预留列）
         let labelText = Text(String(format: "%.2f", c.close))
             .font(.system(size: 10, weight: .semibold))
             .foregroundColor(.white)
-        let labelW: CGFloat = 48
+        let labelW: CGFloat = priceTagWidth
         let labelH: CGFloat = 14
-        let labelRect = CGRect(x: plotWidth + 2, y: cy - labelH / 2, width: labelW, height: labelH)
+        let labelRect = CGRect(x: plotWidth - labelW, y: clampY(cy, height) - labelH / 2, width: labelW, height: labelH)
         ctx.fill(Path(labelRect), with: .color(Theme.accent))
         ctx.draw(labelText, at: CGPoint(x: labelRect.midX, y: labelRect.midY), anchor: .center)
     }
