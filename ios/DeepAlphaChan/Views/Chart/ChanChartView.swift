@@ -26,6 +26,11 @@ struct ChanChartView: View {
     /// 避免拖到一半在平移和滚动之间来回横跳。nil = 尚未判定。
     @State private var panIsHorizontal: Bool? = nil
 
+    /// 橡皮筋：滑到头后继续拖时，内容跟手位移的像素量（带阻尼），松手回弹到 0。
+    /// 只作用于按时间定位的内容（蜡烛/笔/中枢/信号/时间轴），右轴刻度与价签不跟随。
+    @State private var rubberOffset: CGFloat = 0
+    @State private var rubberTimer: Timer? = nil
+
     /// 主图与副图高度。全屏页要把图撑满整屏，所以做成可传入的参数；
     /// 写死 300 的时候点全屏只是换了个黑底，图一样大，等于没有全屏。
     // 主图偏矮，整体呈横向长方形（宽 ≈ 屏宽，明显大于高），看盘视觉更舒展
@@ -55,9 +60,11 @@ struct ChanChartView: View {
         .onChange(of: analysis.symbol) { _, _ in
             firstVisible = 0
             resetWindowIfNeeded()
-            // 换标的后清掉残留光标
+            // 换标的后清掉残留光标与橡皮筋
             cursorIndex = nil
             cursorDragging = false
+            rubberTimer?.invalidate()
+            rubberOffset = 0
         }
     }
 
@@ -188,7 +195,8 @@ struct ChanChartView: View {
     }
 
     private func x(for index: Int, range: VisibleRange) -> CGFloat {
-        (CGFloat(index) - CGFloat(range.firstVisible)) * range.candleWidth + range.candleWidth / 2
+        // 叠加橡皮筋位移：滑到头继续拖时内容整体跟手偏移，松手回弹。
+        (CGFloat(index) - CGFloat(range.firstVisible)) * range.candleWidth + range.candleWidth / 2 + rubberOffset
     }
 
     private struct PriceBounds { let minP: Double; let maxP: Double }
@@ -493,13 +501,47 @@ struct ChanChartView: View {
     // MARK: - 手势
 
     /// 点按看十字光标。tap 不会拦截外层 ScrollView 的滚动。
+    /// 再次点中当前已选中的那根 K 线 → 收起光标（自然的开/关切换）。
     private func inspectTap(plotWidth: CGFloat) -> some Gesture {
         SpatialTapGesture()
             .onEnded { value in
                 let range = visibleRange(plotWidth: plotWidth)
                 let rel = Double(value.location.x / range.candleWidth) + range.firstVisible
-                cursorIndex = max(0, min(candles.count - 1, Int(rel.rounded())))
+                let idx = max(0, min(candles.count - 1, Int(rel.rounded())))
+                cursorIndex = (cursorIndex == idx) ? nil : idx
             }
+    }
+
+    /// 把手指横坐标换算成 K 线下标（光标定位/滑动共用）。
+    private func candleIndex(atX locationX: CGFloat, plotWidth: CGFloat) -> Int {
+        let range = visibleRange(plotWidth: plotWidth)
+        let rel = Double((locationX - rubberOffset) / range.candleWidth) + range.firstVisible
+        return max(0, min(candles.count - 1, Int(rel.rounded())))
+    }
+
+    /// iOS 风格橡皮筋阻尼：位移越大，跟手比例越小，越界感受得到「拉不动」的张力。
+    private func rubberband(_ offset: CGFloat, dimension: CGFloat) -> CGFloat {
+        guard dimension > 0 else { return 0 }
+        let c: CGFloat = 0.55
+        let sign: CGFloat = offset < 0 ? -1 : 1
+        let x = abs(offset)
+        return sign * (1 - 1 / (x / dimension * c + 1)) * dimension
+    }
+
+    /// 松手后把橡皮筋位移用 easeOut 在 ~0.3s 内衰减回 0。
+    /// Canvas 是过程式绘制，withAnimation 不会给它补间，所以用定时器逐帧回弹。
+    private func settleRubberBand() {
+        rubberTimer?.invalidate()
+        let start = rubberOffset
+        guard abs(start) > 0.5 else { rubberOffset = 0; return }
+        let startTime = Date()
+        let duration = 0.3
+        rubberTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { t in
+            let p = min(1, Date().timeIntervalSince(startTime) / duration)
+            let e = 1 - pow(1 - p, 3)          // easeOutCubic
+            rubberOffset = start * CGFloat(1 - e)
+            if p >= 1 { rubberOffset = 0; t.invalidate() }
+        }
     }
 
     /// 横向拖动平移图表；纵向拖动放行给页面滚动。
@@ -514,18 +556,35 @@ struct ChanChartView: View {
                     panIsHorizontal = abs(value.translation.width) > abs(value.translation.height)
                 }
                 guard panIsHorizontal == true else { return }  // 纵向：交给页面滚动
+
+                // 光标已激活：横向拖动 = 移动光标到手指所在的 K 线（不再平移图表）
+                if cursorIndex != nil {
+                    cursorDragging = true
+                    cursorIndex = candleIndex(atX: value.location.x, plotWidth: plotWidth)
+                    return
+                }
+
+                // 否则：平移图表，滑到头进入橡皮筋
                 cursorDragging = true
+                rubberTimer?.invalidate()
                 let range = visibleRange(plotWidth: plotWidth)
                 if dragAnchor == nil { dragAnchor = firstVisible }
-                let deltaCandles = Double(-value.translation.width / range.candleWidth)
                 let count = max(10, min(Double(candles.count), visibleCount))
-                firstVisible = max(0, min((dragAnchor ?? firstVisible) + deltaCandles,
-                                          Double(candles.count) - count))
+                let maxFirst = max(0, Double(candles.count) - count)
+                let deltaCandles = Double(-value.translation.width / range.candleWidth)
+                let target = (dragAnchor ?? firstVisible) + deltaCandles
+                let clamped = min(max(target, 0), maxFirst)
+                firstVisible = clamped
+                // 越界量（K 线单位）转成像素并加阻尼；越左 target<0 → 内容右移露白，反之亦然。
+                let over = target - clamped
+                rubberOffset = over == 0 ? 0
+                    : rubberband(-CGFloat(over) * range.candleWidth, dimension: plotWidth)
             }
             .onEnded { _ in
                 dragAnchor = nil
                 cursorDragging = false
                 panIsHorizontal = nil
+                settleRubberBand()
             }
     }
 
