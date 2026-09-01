@@ -1,11 +1,57 @@
 import SwiftUI
 
+/// 图表当前可见的那一段 K 线。
+///
+/// 本来是 `ChanChartView` 内部的两个 @State，分享功能逼着把它显式化：
+/// 分享图要复现「用户此刻看到的那一段」，离屏渲染的新实例必须能被告知窗口，
+/// 否则出来的永远是默认的最新 60 根，跟他拖到的位置对不上。
+struct ChartWindow: Equatable {
+    /// 窗口左边缘的 K 线下标（可为小数，平移时连续变化）。
+    var firstVisible: Double
+    /// 窗口内可见的 K 线根数。
+    var visibleCount: Double
+}
+
 /// 缠论主图表：K 线 + 缠论结构叠加 + MACD 副图。
 ///
 /// 采用原生 Canvas 逐帧绘制，固定窗口显示最新数据。
 struct ChanChartView: View {
     let analysis: ChanAnalysis
     @ObservedObject var vm: ChanViewModel
+
+    /// 初始可见窗口。nil = 用默认值（最新约 60 根）。分享渲染时由调用方传入当前窗口。
+    var initialWindow: ChartWindow? = nil
+
+    /// 是否响应手势。分享卡里的图表设为 false：不挂手势、不画十字光标，
+    /// 免得导出的图上留着一根光标线。
+    var interactive: Bool = true
+
+    /// 窗口变化时回调（平移/缩放结束时触发一次，不在 onChanged 里刷）。
+    /// 调用方存住它，分享时原样传回来。
+    var onWindowChange: ((ChartWindow) -> Void)? = nil
+
+    /// 显式 init 只为一件事：把 `initialWindow` 灌进 @State 的**初始值**。
+    ///
+    /// 光靠 onAppear 里赋值不够——`ImageRenderer` 离屏渲染不保证触发 onAppear，
+    /// 那样分享图会停在 @State 的字面初始值（firstVisible = 0，即最老的 60 根），
+    /// 跟用户看的那一段正好差到另一头。
+    init(analysis: ChanAnalysis,
+         vm: ChanViewModel,
+         initialWindow: ChartWindow? = nil,
+         interactive: Bool = true,
+         priceHeight: CGFloat = 240,
+         macdHeight: CGFloat = 78,
+         onWindowChange: ((ChartWindow) -> Void)? = nil) {
+        self.analysis = analysis
+        _vm = ObservedObject(wrappedValue: vm)
+        self.initialWindow = initialWindow
+        self.interactive = interactive
+        self.priceHeight = priceHeight
+        self.macdHeight = macdHeight
+        self.onWindowChange = onWindowChange
+        _firstVisible = State(initialValue: initialWindow?.firstVisible ?? 0)
+        _visibleCount = State(initialValue: initialWindow?.visibleCount ?? 60)
+    }
 
     // 可见窗口：起始下标（可为小数）与可见根数。
     // 默认少显示一些根数，让单根蜡烛更宽、更接近富途那种清晰的看盘密度。
@@ -51,13 +97,18 @@ struct ChanChartView: View {
         }
         .background(Theme.surface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .onAppear { resetWindowIfNeeded() }
+        .onAppear {
+            resetWindow(honoringInitial: true)
+            onWindowChange?(currentWindow)
+        }
         .onChange(of: analysis.symbol) { _, _ in
             firstVisible = 0
-            resetWindowIfNeeded()
+            // 换标的时忽略 initialWindow：那是上一个标的的窗口，套到新数据上没有意义
+            resetWindow(honoringInitial: false)
             // 换标的后清掉残留光标
             cursorIndex = nil
             cursorDragging = false
+            onWindowChange?(currentWindow)
         }
     }
 
@@ -97,9 +148,10 @@ struct ChanChartView: View {
             // 全部用 simultaneousGesture：与外层 ScrollView 并存，互不抢占。
             // 横向拖动平移图表、纵向留给页面滚动、点按看十字光标、双指缩放；
             // 左边缘的系统「右滑返回」起点在图表左侧之外，不受影响。
-            .simultaneousGesture(inspectTap(plotWidth: plotWidth))
-            .simultaneousGesture(panGesture(plotWidth: plotWidth))
-            .simultaneousGesture(magnificationGesture(plotWidth: plotWidth))
+            // including: 而不是 isEnabled:——后者是 iOS 18 才有的重载，本工程部署目标 17.0。
+            .simultaneousGesture(inspectTap(plotWidth: plotWidth), including: gestureMask)
+            .simultaneousGesture(panGesture(plotWidth: plotWidth), including: gestureMask)
+            .simultaneousGesture(magnificationGesture(plotWidth: plotWidth), including: gestureMask)
             .overlay(alignment: .topLeading) {
                 if let ci = cursorIndex, ci >= 0, ci < candles.count {
                     cursorDetail(index: ci)
@@ -526,6 +578,7 @@ struct ChanChartView: View {
                 dragAnchor = nil
                 cursorDragging = false
                 panIsHorizontal = nil
+                onWindowChange?(currentWindow)
             }
     }
 
@@ -542,7 +595,10 @@ struct ChanChartView: View {
                 firstVisible = max(0, min(oldCenter - newCount / 2,
                                           Double(candles.count) - newCount))
             }
-            .onEnded { _ in zoomAnchor = nil }
+            .onEnded { _ in
+                zoomAnchor = nil
+                onWindowChange?(currentWindow)
+            }
     }
 
     // MARK: - 光标绘制
@@ -616,7 +672,21 @@ struct ChanChartView: View {
 
     // MARK: - 窗口重置
 
-    private func resetWindowIfNeeded() {
+    /// 手势开关。非交互模式（分享渲染）下整体屏蔽，光标也不会被点出来。
+    private var gestureMask: GestureMask { interactive ? .all : .none }
+
+    /// 当前窗口快照，回调给调用方保存。
+    private var currentWindow: ChartWindow {
+        ChartWindow(firstVisible: firstVisible, visibleCount: visibleCount)
+    }
+
+    private func resetWindow(honoringInitial: Bool) {
+        // 调用方指定了窗口（分享渲染要复现用户看到的那一段）就用它，不要重置成最新
+        if honoringInitial, let w = initialWindow {
+            visibleCount = w.visibleCount
+            firstVisible = w.firstVisible
+            return
+        }
         let total = Double(candles.count)
         // 默认约 60 根：蜡烛宽度适中、结构看得清，又不至于太少看不出趋势
         visibleCount = min(60, max(20, total))

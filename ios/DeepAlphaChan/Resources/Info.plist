@@ -33,5 +33,9 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- 分享面板里的「存储图像」会写相册。缺这个键点下去直接崩溃，
+	     而不是弹权限框——分享功能必须带上它。 -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>保存分析图到你的相册</string>
 </dict>
 </plist>

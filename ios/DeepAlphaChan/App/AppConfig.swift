@@ -24,4 +24,13 @@ enum AppConfig {
 
     /// 免费用户每日可用的缠论分析次数（超出需订阅）。
     static let freeDailyQuota = 3
+
+    // MARK: - 分享
+
+    /// 分享图二维码指向的下载中转页。
+    ///
+    /// 刻意不直接写 App Store 商品页链接：那个链接依赖 App Store ID，而二维码一旦
+    /// 印进用户分享出去的图里就再也改不了。中转页由自家网站控制，iOS 访问自动跳
+    /// App Store，上架前后都能用，换链接只需改网页、不用发新版本。
+    static let downloadPageURL = "https://deepalpha.club/app"
 }
