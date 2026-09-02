@@ -487,6 +487,15 @@ class Settings:
             os.getenv("EMAIL_CODE_MAX_ATTEMPTS", os.getenv("PASSWORD_RESET_MAX_ATTEMPTS", "5"))
         )
 
+        # 短信成本闸（只对短信生效，邮箱不花钱不受限）。60 秒冷却挡的是「连点重发」，
+        # 挡不住「同一个号一天被发几十次」或「换 IP 轰炸大量不同号码」——后者才是真正
+        # 烧钱的短信 pumping 攻击。这里加两道按天的闸：
+        #   - 单号每日上限：一个号码 24 小时内最多发几条，正常用户一两条就够了。
+        #   - 全局每日预算：全站一天的短信总条数硬上限，相当于一个熔断，防止被刷爆账单。
+        # 触发任一都返回 429，让用户/攻击者明确知道被限了，而不是静默吞掉。
+        self.SMS_PER_PHONE_DAILY_LIMIT = int(os.getenv("SMS_PER_PHONE_DAILY_LIMIT", "10"))
+        self.SMS_GLOBAL_DAILY_LIMIT = int(os.getenv("SMS_GLOBAL_DAILY_LIMIT", "300"))
+
         # JWT 补充配置（与现有 JWT_ACCESS_TOKEN_EXPIRE_DAYS 对齐）
         self.ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
         self.REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))

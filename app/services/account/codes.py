@@ -19,6 +19,8 @@ from app.services import email as email_service
 from app.services import sms as sms_service
 from app.services.verification_code import (
     CodeStore,
+    DailySendLimitError,
+    GlobalSendLimitError,
     Purpose,
     ResendTooSoonError,
     TooManyAttemptsError,
@@ -107,11 +109,17 @@ async def send_sms_code(redis: Redis, purpose: Purpose, phone: str) -> None:
 
     Raises:
         ResendTooSoonError: 还在冷却期。
+        DailySendLimitError: 该号码当日发送已达上限（成本闸）。
+        GlobalSendLimitError: 全站当日短信预算已用尽（熔断）。
         CodeChannelUnavailableError: 短信未配置。
         CodeDeliveryError: 发送失败。
     """
     if await store.is_cooling_down(redis, purpose, phone):
         raise ResendTooSoonError
+
+    # 成本闸：短信按条计费，冷却之外再按天卡单号上限和全站预算，挡住短信轰炸。
+    # 放在冷却之后、真正发送之前——超限就不该产生这次 API 调用。
+    await store.assert_sms_budget(redis, phone)
 
     country_code, national = split_e164(phone)
     try:
@@ -126,9 +134,10 @@ async def send_sms_code(redis: Redis, purpose: Purpose, phone: str) -> None:
     except sms_service.SMSSendError:
         raise CodeDeliveryError from None
 
-    # 发成功才上冷却和重置错误计数——发失败还锁着用户，会把一次临时故障
-    # 变成 60 秒的干等（这个坑在邮件链路上真踩过一次）。
+    # 发成功才上冷却和计入配额——发失败还锁着用户会把一次临时故障变成 60 秒的
+    # 干等（邮件链路上真踩过一次），也不该白占当日配额。
     await store.start_cooldown(redis, purpose, phone)
+    await store.record_sms_sent(redis, phone)
 
 
 async def verify_sms_code(redis: Redis, purpose: Purpose, phone: str, code: str) -> None:
@@ -166,6 +175,8 @@ __all__ = [
     "CodeChannelUnavailableError",
     "CodeDeliveryError",
     "CodeRejectedError",
+    "DailySendLimitError",
+    "GlobalSendLimitError",
     "Purpose",
     "ResendTooSoonError",
     "TooManyAttemptsError",
