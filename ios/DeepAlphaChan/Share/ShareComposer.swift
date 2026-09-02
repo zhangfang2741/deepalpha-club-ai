@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// 把截图拼成最终分享图：品牌头 + 原截图 + 免责条。
+/// 把截图拼成最终分享图：截图卡片在上，品牌脚 + 免责条在下。
 ///
 /// 位置全部由 `ShareLayout` 算好，这里只负责画。分工是为了让几何部分能在
 /// 没有 UIKit 的命令行测试里跑（见 ShareLayout.swift 注释）。
@@ -15,12 +15,12 @@ enum ShareComposer {
     static func compose(screenshot: UIImage) -> UIImage? {
         let layout = ShareLayout.compute(screenshotSize: screenshot.size)
 
-        // 品牌头/免责条按截图自身的 scale 渲染，而不是 UIScreen.main.scale：
+        // 品牌脚/免责条按截图自身的 scale 渲染，而不是 UIScreen.main.scale：
         // 最终画布（下方 format.scale）也取 screenshot.scale，三块内容像素密度
         // 对齐才不会一块清晰一块糊；用截图自带的 scale 还省得依赖已在 iOS 16
         // 弃用、且在多屏/无主屏场景下不可靠的 UIScreen.main。
-        guard let banner = render(ShareBanner(width: layout.bannerRect.width),
-                                  size: layout.bannerRect.size,
+        guard let footer = render(ShareFooter(width: layout.footerRect.width),
+                                  size: layout.footerRect.size,
                                   scale: screenshot.scale),
               let disclaimer = render(ShareDisclaimer(width: layout.disclaimerRect.width),
                                       size: layout.disclaimerRect.size,
@@ -33,16 +33,16 @@ enum ShareComposer {
         let renderer = UIGraphicsImageRenderer(size: layout.totalSize, format: format)
 
         return renderer.image { ctx in
-            // 先铺满底色再画三块。加了留白后画布四周和两条 gap 会露出来，
+            // 先铺满底色再画三块。留白与 gap 会露出画布，
             // 不填的话那些像素是透明的，分享到微信时 PNG 会被转成 JPEG，
             // 透明通道按黑或白展平，出来就是几道突兀的色带。
             UIColor(Theme.background).setFill()
             ctx.fill(CGRect(origin: .zero, size: layout.totalSize))
 
-            banner.draw(in: layout.bannerRect)
+            footer.draw(in: layout.footerRect)
 
             // 截图按圆角裁剪，看起来像被托住的一张卡片。裁剪区会一直作用到
-            // context 结束，必须存档/还原，否则下方免责条也会被这块路径裁掉。
+            // context 结束，必须存档/还原，否则下方的品牌脚/免责条也会被裁掉。
             ctx.cgContext.saveGState()
             UIBezierPath(roundedRect: layout.screenshotRect,
                          cornerRadius: ShareLayout.screenshotCornerRadius).addClip()

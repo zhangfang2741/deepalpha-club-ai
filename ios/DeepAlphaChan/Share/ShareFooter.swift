@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// 分享图顶部的品牌头：图标 + 名称 + slogan + 下载二维码。
+/// 分享图底部的品牌脚：图标 + 名称 + slogan + 下载二维码。
 ///
-/// 高度固定为 `ShareLayout.bannerHeight`，宽度由外部按截图宽度给定 ——
-/// 全屏图表页是横屏，截出来是横图，写死宽度会错位。
-struct ShareBanner: View {
+/// 放在截图下方而非上方（用户明确要求）：内容是主体、品牌是署名；长图场景下
+/// 品牌在顶部会随滚动消失，在底部则始终收尾。高度固定为 `ShareLayout.footerHeight`，
+/// 宽度由外部按截图宽度给定 —— 全屏图表页是横屏，截出来是横图，写死宽度会错位。
+struct ShareFooter: View {
     let width: CGFloat
 
     var body: some View {
@@ -20,7 +21,7 @@ struct ShareBanner: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 // 锁一行并允许适度缩字：本视图声明「宽度由外部给定」，就得能扛住窄宽度。
-                // 换行会撑破下方固定的 bannerHeight，离屏渲染时半行字被裁掉，
+                // 换行会撑破下方固定的 footerHeight，离屏渲染时半行字被裁掉，
                 // 而几何层的测试只覆盖 CoreGraphics 矩形，结构性地拦不住这类问题。
                 Text("DeepAlpha \(L("缠论"))")
                     .font(.system(size: 17, weight: .bold))
@@ -41,7 +42,7 @@ struct ShareBanner: View {
             qrCode
         }
         .padding(.horizontal, 16)
-        .frame(width: width, height: ShareLayout.bannerHeight)
+        .frame(width: width, height: ShareLayout.footerHeight)
         .background(Theme.surface)
     }
 
@@ -59,7 +60,7 @@ struct ShareBanner: View {
     }
 }
 
-/// 分享图底部的免责条。
+/// 品牌脚之下的免责条，紧贴收边。
 ///
 /// 这行字不可省。分享图会脱离 App 语境传播，被当成荐股截图转发时，它是唯一还跟着图走的
 /// 风险说明。用户截屏时未必滚动到了结果页底部那行 compactDisclaimer，所以由品牌层无条件补上。
@@ -80,12 +81,22 @@ struct ShareDisclaimer: View {
 }
 
 #if DEBUG
-#Preview("品牌头与免责条") {
+#Preview("截图卡片与品牌脚") {
     VStack(spacing: 0) {
-        ShareBanner(width: 390)
-        Rectangle().fill(Theme.background).frame(width: 390, height: 200)
-            .overlay(Text("（此处为用户界面截图）").foregroundColor(Theme.textSecondary))
-        ShareDisclaimer(width: 390)
+        Rectangle().fill(Theme.background)
+            .frame(width: 390 + ShareLayout.outerPadding * 2,
+                   height: 200 + ShareLayout.outerPadding)
+            .overlay(
+                RoundedRectangle(cornerRadius: ShareLayout.screenshotCornerRadius)
+                    .fill(Theme.surface)
+                    .frame(width: 390, height: 200)
+                    .overlay(Text("（此处为用户界面截图）").foregroundColor(Theme.textSecondary)),
+                alignment: .bottom
+            )
+            .padding(.horizontal, -ShareLayout.outerPadding)
+        ShareFooter(width: 390 + ShareLayout.outerPadding * 2)
+            .padding(.top, ShareLayout.gap)
+        ShareDisclaimer(width: 390 + ShareLayout.outerPadding * 2)
     }
     .preferredColorScheme(.dark)
 }
