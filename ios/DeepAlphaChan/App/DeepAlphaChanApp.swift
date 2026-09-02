@@ -27,37 +27,11 @@ struct DeepAlphaChanApp: App {
                 .preferredColorScheme(.dark)
                 // AppDelegate 是 UIKit 侧的，拿不到 SwiftUI 的 @StateObject，
                 // 用一个静态引用把同一个实例递过去。
-                .onAppear {
-                    AppDelegate.orientation = orientation
-                    #if DEBUG
-                    ShareCardSelfTest.runIfRequested()
-                    #endif
-                }
+                .onAppear { AppDelegate.orientation = orientation }
         }
     }
 }
 
-#if DEBUG
-/// 分享卡渲染自检（仅 DEBUG）。
-///
-/// 带 `-shareCardSelfTest` 启动参数时，用假数据渲染一张分享卡写进 Documents，
-/// 便于在模拟器上直接验证离屏渲染管线，不必先登录再跑一遍分析。
-enum ShareCardSelfTest {
-    @MainActor
-    static func runIfRequested() {
-        guard ProcessInfo.processInfo.arguments.contains("-shareCardSelfTest") else { return }
-        let vm = ChanViewModel()
-        guard let image = ShareCardRenderer.render(analysis: PreviewMock.analysis,
-                                                   vm: vm,
-                                                   window: nil),
-              let data = image.pngData() else {
-            print("[selftest] 渲染失败")
-            return
-        }
-        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("share-card.png")
-        try? data.write(to: url)
-        print("[selftest] 已写入 \(url.path) 尺寸 \(image.size)")
-    }
-}
-#endif
+// 原先这里有个 ShareCardSelfTest：带 -shareCardSelfTest 启动参数就用假数据渲染一张
+// 精排分享卡写进 Documents。随精排卡一并删除 —— 新方案截的是真实屏幕，脱离运行中的
+// 界面就无从自检，假数据也构造不出来。
