@@ -13,6 +13,8 @@ struct SharePreviewSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showShareSheet = false
     @State private var saveResult: SaveResult?
+    /// 保存进行中。双击会往相册写两张一模一样的图，还把状态提示搅乱。
+    @State private var isSaving = false
 
     var body: some View {
         VStack(spacing: 16) {
@@ -33,6 +35,8 @@ struct SharePreviewSheet: View {
 
             HStack(spacing: 12) {
                 Button(action: saveToAlbum) {
+                    // 保存进行中转菊花并禁用，防止双击写两张重复图进相册
+                    if isSaving { ProgressView() } else { Text(L("保存到相册")) }
                     Text(L("保存到相册"))
                         .font(.system(size: 16, weight: .medium))
                         .frame(maxWidth: .infinity, minHeight: 48)
@@ -40,6 +44,7 @@ struct SharePreviewSheet: View {
                         .foregroundColor(Theme.textPrimary)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
+                .disabled(isSaving)
                 Button { showShareSheet = true } label: {
                     Text(L("分享"))
                         .font(.system(size: 16, weight: .semibold))
@@ -100,7 +105,10 @@ struct SharePreviewSheet: View {
     /// `NSPhotoLibraryAddUsageDescription`），不用 `.readWrite`：分享图只需要「写进去」，
     /// 没有理由申请读取用户整个相册的权限，那是过度索权，也会被 App Store 审核质疑。
     private func saveToAlbum() {
+        guard !isSaving else { return }
+        isSaving = true
         Task {
+            defer { isSaving = false }
             let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
             switch status {
             case .authorized, .limited:
@@ -123,6 +131,10 @@ struct SharePreviewSheet: View {
                 PHAssetChangeRequest.creationRequestForAsset(from: image)
             }
             saveResult = .success
+            // 成功后自动关掉：保存目的已达成，留着弹窗只会挡住下面的 App 内容。
+            // 延迟半秒让用户看到「已保存到相册」的提示再落下去。
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            dismiss()
         } catch {
             saveResult = .failure
         }
