@@ -22,15 +22,24 @@ struct OnScreenshotCapture: ViewModifier {
     /// 上次响应截图的时间，用于防抖。
     @State private var lastFired = Date.distantPast
 
+    /// 本页面当前是否在屏上。
+    ///
+    /// 截图通知是全 App 广播的，而 TabView 会把访问过的 Tab 一直留在视图树里 ——
+    /// 不加这道门，在「分析」Tab 截图会连带触发「学习」Tab 的监听，两个页面各自
+    /// 弹一个 sheet，系统只认第一个，另一个报「已在呈现」后丢失。
+    @State private var isVisible = false
+
     func body(content: Content) -> some View {
         content
+            .onAppear { isVisible = true }
+            .onDisappear { isVisible = false }
             .onReceive(NotificationCenter.default.publisher(
                 for: UIApplication.userDidTakeScreenshotNotification)
             ) { _ in handleScreenshot() }
     }
 
     private func handleScreenshot() {
-        guard isEnabled else { return }
+        guard isEnabled, isVisible else { return }
         // 系统偶尔会连发通知，0.5 秒内的重复忽略
         guard Date().timeIntervalSince(lastFired) > 0.5 else { return }
         lastFired = Date()

@@ -37,8 +37,12 @@ struct ResultDetailView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { shareButton }
         }
-        // 预览已经开着时不再响应截图：用户在预览里截图不该再套一层
-        .onScreenshot(isEnabled: previewItem == nil) { previewItem = SharePreviewItem(image: $0) }
+        // 预览已经开着时不再响应截图：用户在预览里截图不该再套一层。
+        // 全屏图表也要排除：它是盖在本页上的 fullScreenCover，SwiftUI 不会给呈现方发
+        // onDisappear，本页监听仍然活着，会和全屏页的监听同时弹 sheet，撞掉一个。
+        .onScreenshot(isEnabled: previewItem == nil && !showFullscreenChart) {
+            previewItem = SharePreviewItem(image: $0)
+        }
         .sheet(item: $previewItem) { item in
             SharePreviewSheet(image: item.image,
                               text: ShareCardRenderer.shareText(analysis: analysis, vm: vm))
