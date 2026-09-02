@@ -219,3 +219,11 @@
 "三个市场统一的缠论结构分析" = "Unified Chan analysis across three markets";
 "先看看缠论入门" = "Browse the Chan primer";
 "DeepAlpha 缠论" = "DeepAlpha Chan";
+
+/* Share preview */
+"保存到相册" = "Save to Photos";
+"分享" = "Share";
+"已保存到相册" = "Saved to Photos";
+"相册权限未开启，无法保存" = "Can't save — Photos access is off";
+"前往设置" = "Open Settings";
+"保存失败，请重试" = "Save failed, please try again";
