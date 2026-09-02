@@ -228,8 +228,8 @@ enum WindowCapture {
 
 - [ ] **Step 2: 确认能编译**
 
-在 Xcode 打开 `ios/DeepAlphaChan.xcodeproj`，`Cmd+B`。
-Expected: Build Succeeded，无警告
+Run: `./ios/Tests/build-check.sh`
+Expected: 末行 `** BUILD SUCCEEDED **`，退出码 0
 
 - [ ] **Step 3: 提交**
 
@@ -333,10 +333,12 @@ struct ShareDisclaimer: View {
 #endif
 ```
 
-- [ ] **Step 2: Xcode Preview 目视确认**
+- [ ] **Step 2: 确认能编译**
 
-打开 `ShareBanner.swift`，`Cmd+Option+Enter` 开 Preview canvas。
-Expected: 品牌头左侧图标+名称+slogan，右侧白底二维码；底部一行灰色免责声明
+Run: `./ios/Tests/build-check.sh`
+Expected: 末行 `** BUILD SUCCEEDED **`，退出码 0
+
+（`#Preview` 的目视确认需要 Xcode GUI，无法在命令行完成，归入 Task 8 真机验证。）
 
 - [ ] **Step 3: 提交**
 
@@ -404,8 +406,8 @@ enum ShareComposer {
 
 - [ ] **Step 2: 确认能编译**
 
-Xcode `Cmd+B`。
-Expected: Build Succeeded
+Run: `./ios/Tests/build-check.sh`
+Expected: 末行 `** BUILD SUCCEEDED **`，退出码 0
 
 - [ ] **Step 3: 提交**
 
@@ -501,8 +503,8 @@ Expected: 有输出（Task 7 才会把它挪走，此刻仍在原处）
 
 - [ ] **Step 3: 确认能编译**
 
-Xcode `Cmd+B`。
-Expected: Build Succeeded
+Run: `./ios/Tests/build-check.sh`
+Expected: 末行 `** BUILD SUCCEEDED **`，退出码 0
 
 - [ ] **Step 4: 提交**
 
@@ -579,8 +581,8 @@ extension View {
 
 - [ ] **Step 2: 确认能编译**
 
-Xcode `Cmd+B`。
-Expected: Build Succeeded
+Run: `./ios/Tests/build-check.sh`
+Expected: 末行 `** BUILD SUCCEEDED **`，退出码 0
 
 - [ ] **Step 3: 提交**
 
@@ -751,8 +753,8 @@ Expected: 全部 PASS，退出码 0
 
 - [ ] **Step 8: 确认能编译**
 
-Xcode `Cmd+B`。
-Expected: Build Succeeded
+Run: `./ios/Tests/build-check.sh`
+Expected: 末行 `** BUILD SUCCEEDED **`，退出码 0
 
 - [ ] **Step 9: 提交**
 
