@@ -58,12 +58,13 @@ struct ResultDetailView: View {
     ///
     /// 抽成一个方法让屏幕显示与离屏长图复用同一棵视图树，修饰符与顺序保持
     /// 一致——改这里会同时改变页面显示与分享图，两处永不走样。
-    /// 唯一的差别是 ResultSegments：屏幕上用切换器交互，长图用静态全铺
-    /// （分段控件是 UIKit 桥接，ImageRenderer 拍不平，见 ResultSegments.isStatic）。
+    /// 差别只在两处「屏幕上能滚/能切、离屏渲染却拍不出来」的控件，都由 isStatic 分流：
+    /// ResultSegments 的分段切换器（UIKit 桥接，ImageRenderer 拍不平）和
+    /// ChartSection 里图层开关的横向 ScrollView（在 ImageRenderer 下高度塌成 0）。
     private func pageContent(isStatic: Bool) -> some View {
         VStack(spacing: 14) {
             ChartSection(analysis: analysis, vm: vm,
-                         onFullscreen: openFullscreen)
+                         onFullscreen: openFullscreen, isStatic: isStatic)
 
             ResultSegments(analysis: analysis, isStatic: isStatic)
 
