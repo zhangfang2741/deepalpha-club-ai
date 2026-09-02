@@ -66,6 +66,53 @@ struct AccountField: View {
     }
 }
 
+/// 手机号输入框：左侧一个区号下拉，右侧填国内号。
+///
+/// 用户只填国内号，国家码由下拉选定；提交前由调用方拼成 E.164（见 PhoneCountry.e164）。
+/// 拆成独立组件而不改 AccountField，是因为登录/找回密码页暂不带区号选择，共用一个
+/// 组件会把它们也一起改动。
+struct PhoneNumberField: View {
+    @Binding var country: PhoneCountry
+    @Binding var national: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Menu {
+                ForEach(PhoneCountry.all) { c in
+                    Button(c.label) { country = c }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text("\(country.flag) +\(country.dialCode)")
+                        .foregroundColor(Theme.textPrimary)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2).foregroundColor(Theme.textSecondary)
+                }
+                .padding(12)
+                .background(Theme.surfaceAlt)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+
+            HStack {
+                Image(systemName: "iphone").foregroundColor(Theme.textSecondary).frame(width: 20)
+                TextField(L("手机号"), text: $national)
+                    .keyboardType(.numberPad)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .foregroundColor(Theme.textPrimary)
+                    .onChange(of: national) { _, newValue in
+                        // 只留数字，防止粘贴进来带空格/连字符的内容。
+                        let digits = newValue.filter(\.isNumber)
+                        if digits != newValue { national = digits }
+                    }
+            }
+            .padding(12)
+            .background(Theme.surfaceAlt)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+    }
+}
+
 /// 验证码输入框 + 获取按钮（带倒计时）。
 ///
 /// 倒计时秒数与后端 EMAIL_CODE_RESEND_COOLDOWN 对齐（60 秒）。这只是个体验优化，

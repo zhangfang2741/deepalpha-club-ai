@@ -23,7 +23,7 @@ from app.services.verification_code import (
     ResendTooSoonError,
     TooManyAttemptsError,
 )
-from app.utils.phone import to_aliyun_format
+from app.utils.phone import is_domestic, split_e164
 
 # 与 WordLens 的 vocab:vercode 物理隔离：同一个手机号在两个 App 里各有各的码。
 store = CodeStore("chan:vercode")
@@ -41,12 +41,24 @@ class CodeRejectedError(Exception):
     """验证码错误或已过期。"""
 
 
-# 用途 → 阿里云系统模板。注册用「登录/注册」模板，重置密码用「重置密码」模板，
-# 文案会写明用户正在做什么。
+# 用途 →（国内模板, 国际模板）。注册用「登录/注册」模板，重置密码用「重置密码」
+# 模板，文案会写明用户正在做什么。国际号走独立的模板/签名（见 config 说明）。
 _SMS_TEMPLATES = {
-    Purpose.PHONE_REGISTER: lambda: settings.ALIYUN_SMS_TEMPLATE_REGISTER,
-    Purpose.PHONE_PASSWORD_RESET: lambda: settings.ALIYUN_SMS_TEMPLATE_PASSWORD_RESET,
+    Purpose.PHONE_REGISTER: lambda: (
+        settings.ALIYUN_SMS_TEMPLATE_REGISTER,
+        settings.ALIYUN_SMS_TEMPLATE_REGISTER_INTL,
+    ),
+    Purpose.PHONE_PASSWORD_RESET: lambda: (
+        settings.ALIYUN_SMS_TEMPLATE_PASSWORD_RESET,
+        settings.ALIYUN_SMS_TEMPLATE_PASSWORD_RESET_INTL,
+    ),
 }
+
+
+def _template_for(purpose: Purpose, phone: str) -> str:
+    """按用途和号码归属地（国内/国际）选模板。"""
+    domestic_tpl, intl_tpl = _SMS_TEMPLATES[purpose]()
+    return domestic_tpl if is_domestic(phone) else intl_tpl
 
 
 async def send_email_code(
@@ -101,9 +113,10 @@ async def send_sms_code(redis: Redis, purpose: Purpose, phone: str) -> None:
     if await store.is_cooling_down(redis, purpose, phone):
         raise ResendTooSoonError
 
+    country_code, national = split_e164(phone)
     try:
         await sms_service.send_verification_code(
-            to_aliyun_format(phone), _SMS_TEMPLATES[purpose]()
+            national, _template_for(purpose, phone), country_code
         )
     except sms_service.SMSNotConfiguredError:
         logger.error("chan_sms_not_configured", purpose=purpose.value)
@@ -131,8 +144,9 @@ async def verify_sms_code(redis: Redis, purpose: Purpose, phone: str, code: str)
     # 有效期内不限次数猜是能撞开的，而每次猜只是一次廉价的 API 调用。
     await store.assert_attempts_left(redis, purpose, phone)
 
+    country_code, national = split_e164(phone)
     try:
-        passed = await sms_service.check_verification_code(to_aliyun_format(phone), code)
+        passed = await sms_service.check_verification_code(national, code, country_code)
     except sms_service.SMSNotConfiguredError:
         raise CodeChannelUnavailableError from None
     except sms_service.SMSCodeInvalidError:

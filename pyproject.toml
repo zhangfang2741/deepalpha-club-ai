@@ -52,6 +52,7 @@ dependencies = [
     "pandas>=2.2",
     "deepagents>=0.6.12",
     "tradingagents==0.7.0",
+    "phonenumbers>=9.0.38",
 ]
 
 [project.optional-dependencies]
