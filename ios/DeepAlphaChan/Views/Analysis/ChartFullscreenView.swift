@@ -11,8 +11,10 @@ struct ChartFullscreenView: View {
     @EnvironmentObject private var orientation: AppOrientation
     @Environment(\.dismiss) private var dismiss
 
-    /// 顶栏 + 图层开关 + 图例 + 上下留白占掉的高度，剩下的全给图表。
-    private let chromeHeight: CGFloat = 132
+    /// 顶栏 + 图例 + 上下留白占掉的高度，剩下的全给图表。
+    /// 图层开关已移除 —— 全屏的用途是尽可能大地看图，开关占的 42pt 还给图表。
+    /// 图层状态沿用进入全屏前在竖屏结果页的设置。
+    private let chromeHeight: CGFloat = 90
     /// 主图与 MACD 的高度配比。副图给太多会挤掉主图，2.8 : 1 接近常规看盘软件。
     private let macdRatio: CGFloat = 1 / 3.8
 
@@ -24,8 +26,6 @@ struct ChartFullscreenView: View {
 
             VStack(spacing: 8) {
                 header
-                LayerToggles(vm: vm)
-                    .padding(.horizontal, 12)
 
                 ChanChartView(analysis: analysis, vm: vm,
                               priceHeight: priceH, macdHeight: macdH)
@@ -37,6 +37,11 @@ struct ChartFullscreenView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .background(Theme.background.ignoresSafeArea())
+        // 全屏页没有别的 sheet，直接用自带预览的便捷版。
+        // 这里拿不到 analysis 的推荐方向，文案只标的与周期，格式对齐 ShareCardRenderer.shareText。
+        .shareOnScreenshot(text: "\(vm.symbol.uppercased()) · "
+                           + (vm.freq == "weekly" ? L("周线") : L("日线"))
+                           + " | DeepAlpha \(L("缠论"))")
         // 转屏由调用方在呈现前完成（见 ResultDetailView.openFullscreen）。
         // 还原必须无条件做，漏了的话用户退出后整个 App 会卡在横屏。
         .onDisappear { orientation.lockPortrait() }

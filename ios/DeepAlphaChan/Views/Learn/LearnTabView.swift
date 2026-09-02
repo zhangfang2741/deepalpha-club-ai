@@ -16,6 +16,8 @@ struct LearnTabView: View {
             .background(Theme.background)
             .navigationTitle(L("缠论入门"))
         }
+        // 挂在 NavigationStack 外面：挂里面的话预览弹窗会被导航层裁切
+        .shareOnScreenshot(text: "DeepAlpha \(L("缠论")) · \(L("缠论入门"))")
     }
 
     private var list: some View {
