@@ -8,7 +8,8 @@ import SwiftUI
 //   2. 在 `nativeName` 里补上它的母语名字（如 "日本語"）。
 //   3. 在 Resources 下新建 `<code>.lproj/Localizable.strings`（key 沿用中文原文，
 //      缺翻译会自动退回中文，不会露出 raw key）。
-//   4. 如需让某些地区默认用这门语言，在 `regionLanguageMap` 里加地区→语言映射。
+//   4. 可选：若某些地区要无视系统语言、一律用这门语言，在 `regionLanguageMap` 加映射。
+//      不加也没关系——系统语言是这门语言的用户会被 `systemLanguage()` 自动匹配上。
 // 设置页的语言选择器、环境 locale 注入都会自动带上新语言，无需再改 UI。
 //
 // 实现与鹦鹉背单词（WordLens）保持一致，便于两 App 共同维护。
@@ -30,10 +31,11 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// 无持久化选择时的兜底语言（新地区默认走这个）。
+/// 地区没命中、系统语言也不支持时的最终兜底。
 private let fallbackLanguage: AppLanguage = .english
 
-/// 地区 → 默认语言的映射。只列「非兜底」的地区即可：中国大陆用中文，其它地区用英文。
+/// 地区 → 强制语言的映射。命中的地区不再看系统语言，直接用映射值。
+/// 只列需要「按地区一刀切」的地区，其余地区交给系统语言判断。
 private let regionLanguageMap: [String: AppLanguage] = [
     "CN": .chinese,
 ]
@@ -47,10 +49,34 @@ enum Localized {
     /// 「跟随系统」在 UserDefaults 里的存储值（区别于具体语言的 rawValue）。
     static let systemValue = "system"
 
-    /// 按地区自动决定语言。命中 `regionLanguageMap` 用映射，否则用兜底语言。
-    static func regionDefault() -> AppLanguage {
+    /// 「跟随系统」时的自动语言，三级判断：
+    ///   1. 地区命中 `regionLanguageMap`（中国大陆）→ 直接用映射值；
+    ///   2. 否则看系统偏好语言，取第一门 App 支持的；
+    ///   3. 都不中（如泰语系统 + 泰国地区）→ `fallbackLanguage`。
+    ///
+    /// 第 2 步是关键：出国旅居把地区改成 TH/SG 的中文用户，系统语言仍是中文，
+    /// 只按地区判断会把他们甩到英文界面。
+    static func autoDefault() -> AppLanguage {
         let region = Locale.current.region?.identifier ?? ""
-        return regionLanguageMap[region] ?? fallbackLanguage
+        if let mapped = regionLanguageMap[region] { return mapped }
+        return systemLanguage() ?? fallbackLanguage
+    }
+
+    /// 从系统偏好语言列表里找第一门 App 支持的语言，找不到返回 nil。
+    ///
+    /// 只比语言代码、忽略地区与字形后缀：`zh-Hant-TW`、`zh-Hans-SG` 都会归到
+    /// `zh-Hans`——目前没有繁体资源，给繁体用户简体也比甩英文近。
+    /// 遍历 `allCases` 而非写死判断，新增语言时这里自动生效。
+    private static func systemLanguage() -> AppLanguage? {
+        let supported = AppLanguage.allCases.map {
+            ($0, Locale(identifier: $0.rawValue).language.languageCode?.identifier)
+        }
+        for identifier in Locale.preferredLanguages {
+            guard let code = Locale(identifier: identifier).language.languageCode?.identifier
+            else { continue }
+            if let match = supported.first(where: { $0.1 == code })?.0 { return match }
+        }
+        return nil
     }
 
     /// 读取持久化的偏好。返回 nil 表示「跟随系统」。
@@ -62,7 +88,7 @@ enum Localized {
 
     /// 当前生效的具体语言（把「跟随系统」解析成某门语言）。
     static func language() -> AppLanguage {
-        preference() ?? regionDefault()
+        preference() ?? autoDefault()
     }
 
     // 每次查表都新建 Bundle 会有开销，按语言缓存已加载的 .lproj bundle。
@@ -125,7 +151,7 @@ final class LocalizationManager: ObservableObject {
     }
 
     /// 当前生效语言。
-    var language: AppLanguage { preference ?? Localized.regionDefault() }
+    var language: AppLanguage { preference ?? Localized.autoDefault() }
 
     /// 注入 SwiftUI 环境，用于日期/数字等系统格式化按语言走。
     var locale: Locale { Locale(identifier: language.localeIdentifier) }

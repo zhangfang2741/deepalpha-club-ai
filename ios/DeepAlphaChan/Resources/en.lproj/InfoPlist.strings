@@ -1,5 +1,4 @@
+/* 与 Info.plist 的默认值相同（开发区域已是 en），显式写出来是为了让两门语言的
+   Info.plist 文案并排可读——改英文文案时别只改 Info.plist 而漏了这里。 */
 "CFBundleDisplayName" = "DeepAlpha";
-
-/* 系统相册授权弹窗。Info.plist 里的默认值是中文，这里覆盖成英文——
-   「保存到相册」是分享预览页的一等按钮，英文用户会高频触发这个弹窗。 */
 "NSPhotoLibraryAddUsageDescription" = "Save analysis images to your photo library";

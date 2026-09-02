@@ -1,1 +1,5 @@
 "CFBundleDisplayName" = "缠论";
+
+/* 系统相册授权弹窗。Info.plist 的默认值是英文（开发区域为 en），
+   中文用户的文案由这里提供——漏了这条，中文系统会看到英文弹窗。 */
+"NSPhotoLibraryAddUsageDescription" = "保存分析图到你的相册";

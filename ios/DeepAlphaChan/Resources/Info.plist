@@ -2,10 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- 系统语言不在 knownRegions（en / zh-Hans）里时——比如泰语、日语设备——
+	     iOS 拿这个值挑 .lproj。设成 en 才能让这类用户的图标名和权限弹窗走英文，
+	     和 App 内 Localized.autoDefault() 的兜底语言保持一致。
+	     这里改了，下面几个键的默认值就必须是英文，中文由 zh-Hans.lproj 覆盖。 -->
 	<key>CFBundleDevelopmentRegion</key>
-	<string>zh_CN</string>
+	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>缠论</string>
+	<string>DeepAlpha</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -36,6 +40,6 @@
 	<!-- 分享面板里的「存储图像」会写相册。缺这个键点下去直接崩溃，
 	     而不是弹权限框——分享功能必须带上它。 -->
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>保存分析图到你的相册</string>
+	<string>Save analysis images to your photo library</string>
 </dict>
 </plist>
