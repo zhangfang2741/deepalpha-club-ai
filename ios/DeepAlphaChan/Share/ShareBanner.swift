@@ -19,14 +19,21 @@ struct ShareBanner: View {
                 .clipShape(RoundedRectangle(cornerRadius: 9))
 
             VStack(alignment: .leading, spacing: 3) {
+                // 锁一行并允许适度缩字：本视图声明「宽度由外部给定」，就得能扛住窄宽度。
+                // 换行会撑破下方固定的 bannerHeight，离屏渲染时半行字被裁掉，
+                // 而几何层的测试只覆盖 CoreGraphics 矩形，结构性地拦不住这类问题。
                 Text("DeepAlpha \(L("缠论"))")
                     .font(.system(size: 17, weight: .bold))
                     .foregroundColor(Theme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 // 只陈述功能。分享图会脱离 App 语境传播，不能出现「先机」「收益」
                 // 这类暗示性措辞。
                 Text(L("缠论结构 自动标注"))
                     .font(.system(size: 12))
                     .foregroundColor(Theme.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
 
             Spacer(minLength: 0)
@@ -60,9 +67,13 @@ struct ShareDisclaimer: View {
     let width: CGFloat
 
     var body: some View {
+        // 同样锁一行。这行是合规文案，宁可缩字也不能换行后被固定高度裁掉半句 ——
+        // 截成「…仅供技术研」会让风险提示失去意义。
         Text(L("算法自动生成，仅供技术研究，不构成投资建议。"))
             .font(.system(size: 10))
             .foregroundColor(Theme.textSecondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
             .frame(width: width, height: ShareLayout.disclaimerHeight)
             .background(Theme.surface)
     }
