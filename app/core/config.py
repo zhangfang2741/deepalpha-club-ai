@@ -338,6 +338,8 @@ class Settings:
             "chan_phone_request_code": ["5 per hour"],
             # 校验侧防的是换着账号大批量撞码；单账号的错误次数由 Redis 计数管
             "chan_code_verify": ["20 per hour"],
+            # 一键登录：每次调用 GetMobile 也按次计费，且能直接建号/登录，按 IP 收紧
+            "chan_phone_one_tap": ["10 per hour"],
         }
 
         # Update rate limit endpoints from environment variables

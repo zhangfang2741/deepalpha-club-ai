@@ -44,6 +44,10 @@ class SMSCodeInvalidError(Exception):
     """验证码不存在、已过期或不匹配（业务层面的失败，不是系统故障）。"""
 
 
+class OneTapTokenError(Exception):
+    """一键登录 token 无效/过期，或阿里云没能取回号码（业务失败，返回 401）。"""
+
+
 def is_configured() -> bool:
     """凭据与签名/模板是否齐全。
 
@@ -153,6 +157,48 @@ def build_check_params(phone: str, code: str, country_code: str) -> dict[str, st
     return params
 
 
+def build_get_mobile_params(access_token: str) -> dict[str, str]:
+    """组装 GetMobile 的参数（不含 Signature）。
+
+    一键登录的流程：iOS 端阿里云 AuthSDK 通过运营商数据网络拿到一个一次性
+    AccessToken（App 全程接触不到号码明文），传给后端；后端拿 token 调 GetMobile
+    向阿里云换回真实手机号。号码校验发生在运营商侧，可信度等同于短信验证码，
+    因此换到号码即可直接登录/注册，无需再发一条短信。
+    """
+    params = _common_params("GetMobile")
+    params["AccessToken"] = access_token
+    return params
+
+
+async def get_mobile_by_token(access_token: str) -> str:
+    """用一键登录 token 向阿里云换回手机号（国内号，11 位裸号）。
+
+    Raises:
+        SMSNotConfiguredError: 未配置凭据。
+        OneTapTokenError: token 无效/过期，或响应里没有号码（业务失败）。
+        SMSSendError: 系统故障（鉴权失败、网络异常等）。
+    """
+    if not (settings.ALIYUN_SMS_ACCESS_KEY_ID and settings.ALIYUN_SMS_ACCESS_KEY_SECRET):
+        raise SMSNotConfiguredError
+
+    body = await _call(build_get_mobile_params(access_token))
+
+    if body.get("Code") != "OK":
+        err = str(body.get("Code", ""))
+        logger.warning("one_tap_get_mobile_rejected", code=err, message=body.get("Message"))
+        # isv. 前缀是阿里云业务层失败（token 过期/非法），对用户就是「这次一键登录没成」，
+        # 该走回退（短信/密码），返回 401；鉴权/系统错误另算。
+        if err.startswith("isv."):
+            raise OneTapTokenError(err)
+        raise SMSSendError(body.get("Message") or err)
+
+    mobile = (body.get("GetMobileResultDTO") or {}).get("Mobile")
+    if not mobile:
+        # Code=OK 但没号码：当作 token 失效处理，不能凭空建号。
+        raise OneTapTokenError("mobile_missing")
+    return str(mobile)
+
+
 async def _call(params: dict[str, str]) -> dict:
     """签名并调用阿里云接口，返回解析后的响应体。"""
     params["Signature"] = build_signature(params, settings.ALIYUN_SMS_ACCESS_KEY_SECRET)
@@ -241,14 +287,17 @@ async def check_verification_code(phone: str, code: str, country_code: str = "86
 
 
 __all__ = [
+    "OneTapTokenError",
     "SMSCodeInvalidError",
     "SMSNotConfiguredError",
     "SMSResendTooSoonError",
     "SMSSendError",
     "build_check_params",
+    "build_get_mobile_params",
     "build_send_params",
     "build_signature",
     "check_verification_code",
+    "get_mobile_by_token",
     "is_configured",
     "send_verification_code",
 ]

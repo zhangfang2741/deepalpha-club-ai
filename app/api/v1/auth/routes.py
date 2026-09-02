@@ -22,6 +22,7 @@ from app.schemas.auth import (
     EmailRegisterRequest,
     PasswordChange,
     PhoneCodeRequest,
+    PhoneOneTapRequest,
     PhonePasswordResetConfirm,
     PhoneRegisterRequest,
     SessionResponse,
@@ -32,6 +33,7 @@ from app.schemas.auth import (
     UserUpdate,
 )
 from app.services import email as email_service
+from app.services import sms as sms_service
 from app.services.account import codes
 from app.services.account.accounts import AccountKind, resolve_account
 from app.services.apple_auth import AppleAuthError, verify_identity_token
@@ -763,6 +765,56 @@ async def confirm_phone_password_reset(
     )
     logger.info("chan_phone_password_reset_done", user_id=user.id)
     return {"reset": True}
+
+
+# ---------------------------------------------------------------------------
+# 一键登录（运营商本机号码校验）
+#
+# iOS 端阿里云 AuthSDK 通过运营商数据网络拿到一次性 token（App 接触不到号码明文），
+# 后端拿 token 调 GetMobile 换回号码。号码在运营商侧已校验，可信度等同短信验证码，
+# 因此换到号码即可直接登录/注册，无需再发短信。号码不存在则建号（随机占位密码，
+# 后续走一键登录或「忘记密码」设密码），存在则登录——一个入口同时覆盖注册和登录。
+# ---------------------------------------------------------------------------
+
+
+@router.post("/phone/one-tap", response_model=TokenResponse)
+@limiter.limit(settings.RATE_LIMIT_ENDPOINTS["chan_phone_one_tap"][0])
+async def login_with_phone_one_tap(request: Request, payload: PhoneOneTapRequest):
+    """运营商一键登录：token 换号码，直接登录或注册。."""
+    try:
+        raw_mobile = await sms_service.get_mobile_by_token(payload.token)
+    except sms_service.SMSNotConfiguredError:
+        raise HTTPException(status_code=503, detail="一键登录服务暂不可用，请改用验证码登录") from None
+    except sms_service.OneTapTokenError:
+        raise HTTPException(
+            status_code=401,
+            detail={"message": "一键登录失败，请改用验证码或密码登录", "code": "ONE_TAP_TOKEN_INVALID"},
+        ) from None
+    except sms_service.SMSSendError:
+        raise HTTPException(status_code=502, detail="一键登录服务异常，请稍后再试") from None
+
+    # 阿里云返回的是 11 位裸号，归一成 E.164 与其它通道对齐。
+    phone = _normalized_phone(raw_mobile)
+
+    user = await asyncio.to_thread(database_service.get_user_by_phone, phone)
+    if user is None:
+        # 一键登录用户没设过密码，写入随机占位密码，与 Apple 登录同一处理。
+        random_password = f"Aa1!{secrets.token_urlsafe(24)}"
+        hashed = await asyncio.to_thread(User.hash_password, random_password)
+        username = sanitize_string(payload.username) if payload.username else None
+        user = await asyncio.to_thread(
+            database_service.create_user, None, hashed, username, phone
+        )
+        logger.info("chan_one_tap_user_created", user_id=user.id)
+    else:
+        logger.info("chan_one_tap_user_login", user_id=user.id)
+
+    token = create_access_token(str(user.id))
+    return TokenResponse(
+        access_token=token.access_token,
+        token_type=token.token_type,
+        expires_at=token.expires_at,
+    )
 
 
 # ---------------------------------------------------------------------------
