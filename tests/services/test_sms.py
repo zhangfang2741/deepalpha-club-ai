@@ -201,56 +201,6 @@ class TestCheckResult:
             await self._check_with(monkeypatch, {"Code": "InvalidAccessKeyId"})
 
 
-class TestGetMobileOneTap:
-    """一键登录：token 换号码。只看 GetMobileResultDTO.Mobile，别的都算失败。"""
-
-    @pytest.fixture(autouse=True)
-    def _creds(self, monkeypatch):
-        for key, value in [
-            ("ALIYUN_SMS_ACCESS_KEY_ID", "id"),
-            ("ALIYUN_SMS_ACCESS_KEY_SECRET", "secret"),
-        ]:
-            monkeypatch.setattr(sms.settings, key, value)
-
-    async def _get_mobile_with(self, monkeypatch, body: dict) -> str:
-        async def fake_call(params):
-            return body
-
-        monkeypatch.setattr(sms, "_call", fake_call)
-        return await sms.get_mobile_by_token("tok")
-
-    async def test_returns_mobile_on_success(self, monkeypatch):
-        mobile = await self._get_mobile_with(
-            monkeypatch, {"Code": "OK", "GetMobileResultDTO": {"Mobile": "13800138000"}}
-        )
-        assert mobile == "13800138000"
-
-    async def test_missing_mobile_raises_token_error(self, monkeypatch):
-        """Code=OK 但没号码，绝不能凭空建号，按 token 失效处理。"""
-        with pytest.raises(sms.OneTapTokenError):
-            await self._get_mobile_with(monkeypatch, {"Code": "OK"})
-
-    async def test_isv_error_is_token_error(self, monkeypatch):
-        """凭证过期/非法是业务失败，走回退，返回 401。"""
-        with pytest.raises(sms.OneTapTokenError):
-            await self._get_mobile_with(monkeypatch, {"Code": "isv.INVALID_ACCESS_TOKEN"})
-
-    async def test_auth_error_is_system_failure(self, monkeypatch):
-        """鉴权/系统错误不能伪装成 token 失效，否则配置问题被永远掩盖。"""
-        with pytest.raises(sms.SMSSendError):
-            await self._get_mobile_with(monkeypatch, {"Code": "InvalidAccessKeyId"})
-
-    async def test_raises_when_not_configured(self, monkeypatch):
-        monkeypatch.setattr(sms.settings, "ALIYUN_SMS_ACCESS_KEY_ID", "")
-        with pytest.raises(sms.SMSNotConfiguredError):
-            await sms.get_mobile_by_token("tok")
-
-    def test_get_mobile_params_carry_token_and_action(self):
-        params = sms.build_get_mobile_params("tok123")
-        assert params["Action"] == "GetMobile"
-        assert params["AccessToken"] == "tok123"
-
-
 class TestSchemeName:
     """发码和核验必须带同一个方案名，否则核验永远返回 UNKNOWN。"""
 

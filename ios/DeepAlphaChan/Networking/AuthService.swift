@@ -18,20 +18,6 @@ enum AuthService {
             "/auth/login/account", body: Body(account: account, password: password))
     }
 
-    /// 运营商一键登录：把阿里云 AuthSDK 拿到的一次性 token 换成本平台 token。
-    ///
-    /// token 来自阿里云号码认证 SDK（通过运营商数据网络校验本机号码，App 全程接触
-    /// 不到号码明文）。号码不存在则后端自动建号，存在则直接登录——一个入口同时
-    /// 覆盖注册和登录。SDK 集成见 docs/superpowers/plans 里的一键登录说明。
-    static func oneTapLogin(token: String, username: String? = nil) async throws -> LoginResponse {
-        struct Body: Encodable {
-            let token: String
-            let username: String?
-        }
-        return try await APIClient.shared.postJSON(
-            "/auth/phone/one-tap", body: Body(token: token, username: username))
-    }
-
     /// Sign in with Apple：把 Apple 身份令牌换成本平台 token。
     static func appleLogin(identityToken: String, fullName: String?) async throws -> LoginResponse {
         struct Body: Encodable {

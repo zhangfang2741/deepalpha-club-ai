@@ -243,17 +243,6 @@ class PhonePasswordResetConfirm(BaseModel):
     new_password: SecretStr = Field(..., min_length=8, max_length=64)
 
 
-class PhoneOneTapRequest(BaseModel):
-    """运营商一键登录：用阿里云 AuthSDK 拿到的 token 直接登录/注册。.
-
-    token 由 iOS 端阿里云号码认证 SDK 通过运营商网络下发，App 接触不到号码明文，
-    后端拿 token 向阿里云换回真实手机号。
-    """
-
-    token: str = Field(..., min_length=1, max_length=4096)
-    username: str | None = Field(default=None, max_length=50)
-
-
 class AccountLoginRequest(BaseModel):
     """Unified login.
 
