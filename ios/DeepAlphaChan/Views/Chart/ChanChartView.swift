@@ -474,10 +474,13 @@ struct ChanChartView: View {
             // 买点朝上画在价格下方，卖点朝下画在价格上方
             let dir: CGFloat = sig.isBuy ? 1 : -1
 
-            // 徽标文字：紧凑态用「买1/卖3」（买卖+类型末位数字），完整态用中文标签
-            let text = compact
-                ? (sig.isBuy ? "买" : "卖") + String(sig.type.rawValue.suffix(1))
-                : sig.label
+            // 徽标文字：紧凑态用「买卖+类型末位数字」并跟随界面语言（中文买1/卖3、英文 B1/S3），
+            // 完整态用后端已本地化的 label
+            let n = String(sig.type.rawValue.suffix(1))
+            let compactPrefix = Localized.language() == .english
+                ? (sig.isBuy ? "B" : "S")
+                : (sig.isBuy ? "买" : "卖")
+            let text = compact ? compactPrefix + n : sig.label
             let resolved = ctx.resolve(
                 Text(text).font(.system(size: 9, weight: .bold)).foregroundColor(.white))
             let textSize = resolved.measure(in: CGSize(width: 200, height: 40))
