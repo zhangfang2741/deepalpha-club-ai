@@ -1,15 +1,15 @@
 import SwiftUI
 import UIKit
 
-/// 分享文案。
-///
-/// 原先这里还有一个 `render(analysis:vm:window:)`，把图表和统计重新排版成一张
-/// 375pt 固定宽的「精排卡」。已删除：那张图与用户屏幕上看到的不是一回事，
-/// 现在改为截屏所见即所得（WindowCapture + ShareComposer）。
+/// 分享面板附带的文字。
 @MainActor
-enum ShareCardRenderer {
-    /// 分享面板附带的一句话文案（微信等会把它作为消息文字）。
-    static func shareText(analysis: ChanAnalysis, vm: ChanViewModel) -> String {
+enum ShareText {
+    /// 一句话文案（微信等会把它作为消息文字）。
+    ///
+    /// 末尾必须带免责语：`UIActivityViewController` 同时传图和文时，很多目标 App
+    /// （含微信）只取其一 —— 落到只有文字的那一侧，这行不带风险说明的
+    /// 「AAPL · 日线 | 看多」就是唯一传出去的内容。图里的免责条管不到这半边。
+    static func share(analysis: ChanAnalysis, vm: ChanViewModel) -> String {
         let freq = vm.freq == "weekly" ? L("周线") : L("日线")
         let bias: String
         if let rec = analysis.recommendation {
@@ -18,6 +18,7 @@ enum ShareCardRenderer {
             bias = SignalFormatting.trendLabel(analysis.currentTrend)
         }
         return "\(analysis.symbol.uppercased()) · \(freq) | \(bias) | DeepAlpha \(L("缠论"))"
+            + " | \(L("仅供技术研究，不构成投资建议"))"
     }
 }
 

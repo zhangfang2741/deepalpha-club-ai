@@ -36,7 +36,7 @@ struct ResultDetailView: View {
         }
         .sheet(item: $previewItem) { item in
             SharePreviewSheet(image: item.image,
-                              text: ShareCardRenderer.shareText(analysis: analysis, vm: vm))
+                              text: ShareText.share(analysis: analysis, vm: vm))
         }
         .alert(L("生成分享图失败"), isPresented: $showShareError) {
             Button(L("好"), role: .cancel) {}

@@ -40,7 +40,7 @@ struct ChartFullscreenView: View {
         // 全屏页没有别的 sheet，直接用自带预览的便捷版。
         // 文案复用 shareText：本页持有 analysis，没理由手拼一个缺买卖方向的版本，
         // 分叉出去两处文案迟早会不一致。
-        .shareOnScreenshot(text: ShareCardRenderer.shareText(analysis: analysis, vm: vm))
+        .shareOnScreenshot(text: ShareText.share(analysis: analysis, vm: vm))
         // 转屏由调用方在呈现前完成（见 ResultDetailView.openFullscreen）。
         // 还原必须无条件做，漏了的话用户退出后整个 App 会卡在横屏。
         .onDisappear { orientation.lockPortrait() }

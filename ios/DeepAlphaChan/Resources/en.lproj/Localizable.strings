@@ -230,3 +230,6 @@
 "相册权限未开启，无法保存" = "Can't save — Photos access is off";
 "前往设置" = "Open Settings";
 "保存失败，请重试" = "Save failed, please try again";
+
+/* Share text */
+"仅供技术研究，不构成投资建议" = "For technical research only, not investment advice";
