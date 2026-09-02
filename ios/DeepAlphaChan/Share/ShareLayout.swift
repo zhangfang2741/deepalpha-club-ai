@@ -10,6 +10,12 @@ enum ShareLayout {
     static let bannerHeight: CGFloat = 88
     /// 免责条高度。一行小字，够用即可。
     static let disclaimerHeight: CGFloat = 24
+    /// 截图卡片左右两侧的留白。
+    static let outerPadding: CGFloat = 12
+    /// 品牌头↔截图、截图↔免责条之间的间距。
+    static let gap: CGFloat = 12
+    /// 截图卡片的圆角。
+    static let screenshotCornerRadius: CGFloat = 10
 
     /// 一张分享图里三块内容的位置。
     ///
@@ -25,16 +31,21 @@ enum ShareLayout {
     /// 按截图尺寸算出整图布局。
     ///
     /// 宽度完全跟随截图，不写死 375：全屏图表页是横屏，截出来是横图。
+    ///
+    /// 截图被当成一张「卡片」内嵌：左右缩进 `outerPadding`、上下各留 `gap`，
+    /// 品牌头与免责条则通栏。三块紧贴时品牌头(#141A24)与截图顶部导航栏(#0B0E14)
+    /// 色差太小会糊成一片，靠留白把边界显式画出来。
     static func compute(screenshotSize: CGSize) -> Metrics {
         let w = screenshotSize.width
         let h = screenshotSize.height
+        let totalWidth = w + outerPadding * 2
 
-        let banner = CGRect(x: 0, y: 0, width: w, height: bannerHeight)
-        let shot = CGRect(x: 0, y: bannerHeight, width: w, height: h)
-        let disclaimer = CGRect(x: 0, y: bannerHeight + h, width: w, height: disclaimerHeight)
+        let banner = CGRect(x: 0, y: 0, width: totalWidth, height: bannerHeight)
+        let shot = CGRect(x: outerPadding, y: bannerHeight + gap, width: w, height: h)
+        let disclaimer = CGRect(x: 0, y: shot.maxY + gap, width: totalWidth, height: disclaimerHeight)
 
         return Metrics(
-            totalSize: CGSize(width: w, height: bannerHeight + h + disclaimerHeight),
+            totalSize: CGSize(width: totalWidth, height: disclaimer.maxY),
             bannerRect: banner,
             screenshotRect: shot,
             disclaimerRect: disclaimer

@@ -32,9 +32,23 @@ enum ShareComposer {
         format.scale = screenshot.scale
         let renderer = UIGraphicsImageRenderer(size: layout.totalSize, format: format)
 
-        return renderer.image { _ in
+        return renderer.image { ctx in
+            // 先铺满底色再画三块。加了留白后画布四周和两条 gap 会露出来，
+            // 不填的话那些像素是透明的，分享到微信时 PNG 会被转成 JPEG，
+            // 透明通道按黑或白展平，出来就是几道突兀的色带。
+            UIColor(Theme.background).setFill()
+            ctx.fill(CGRect(origin: .zero, size: layout.totalSize))
+
             banner.draw(in: layout.bannerRect)
+
+            // 截图按圆角裁剪，看起来像被托住的一张卡片。裁剪区会一直作用到
+            // context 结束，必须存档/还原，否则下方免责条也会被这块路径裁掉。
+            ctx.cgContext.saveGState()
+            UIBezierPath(roundedRect: layout.screenshotRect,
+                         cornerRadius: ShareLayout.screenshotCornerRadius).addClip()
             screenshot.draw(in: layout.screenshotRect)
+            ctx.cgContext.restoreGState()
+
             disclaimer.draw(in: layout.disclaimerRect)
         }
     }
