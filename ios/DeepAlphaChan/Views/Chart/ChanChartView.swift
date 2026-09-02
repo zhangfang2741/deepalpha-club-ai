@@ -184,6 +184,17 @@ struct ChanChartView: View {
             Canvas { ctx, size in
                 drawMACD(ctx, plotWidth: size.width - rightAxisWidth, height: size.height, range: range)
             }
+            // 副图与主图共用同一个可视窗口，手势也必须是同一套：手指落在 MACD 上
+            // 拖不动、捏不动，用户会以为图卡住了（副图占了图表近三分之一高度，
+            // 全屏页尤其容易落指在这里）。
+            // 平移/缩放改的是 firstVisible / visibleCount，主副图同时跟着变；
+            // 橡皮筋位移也已包含在共用的 x(for:range:) 里，两图不会错开。
+            // contentShape 不能省：Canvas 只在绘制到的像素上响应命中，
+            // 柱子之间的空隙会漏掉触摸。
+            .contentShape(Rectangle())
+            .simultaneousGesture(inspectTap(plotWidth: plotWidth), including: gestureMask)
+            .simultaneousGesture(panGesture(plotWidth: plotWidth), including: gestureMask)
+            .simultaneousGesture(magnificationGesture(plotWidth: plotWidth), including: gestureMask)
         }
         .frame(height: macdHeight)
     }
@@ -538,6 +549,20 @@ struct ChanChartView: View {
         // DIF / DEA 线
         drawLineSeries(ctx, values: macd.dif, range: range, plotWidth: plotWidth, yv: yv, color: Theme.stroke)
         drawLineSeries(ctx, values: macd.dea, range: range, plotWidth: plotWidth, yv: yv, color: Theme.segment)
+        // 光标竖线，与主图同一根 K 线对齐。样式跟 drawCursor 保持一致。
+        // 只画竖线不画横线/价签：横线的纵坐标在主图是收盘价，在副图没有对应含义，
+        // 数值统一由主图左上的详情框给出。
+        if let ci = cursorIndex, ci >= range.start, ci < range.end {
+            let cx = x(for: ci, range: range)
+            if cx >= 0, cx <= plotWidth {
+                var vLine = Path()
+                vLine.move(to: CGPoint(x: cx, y: 0))
+                vLine.addLine(to: CGPoint(x: cx, y: height))
+                ctx.stroke(vLine, with: .color(Theme.textSecondary.opacity(0.4)),
+                           style: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
+            }
+        }
+
         // 标签
         let tag = Text("MACD").font(.system(size: 8)).foregroundColor(Theme.textSecondary)
         ctx.draw(tag, at: CGPoint(x: 6, y: 8), anchor: .leading)
