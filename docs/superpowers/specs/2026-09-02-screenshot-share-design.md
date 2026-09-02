@@ -46,7 +46,8 @@
 | `Share/ScreenshotDetector.swift` | 新增 | 监听截图通知 + 防抖，暴露 `.shareOnScreenshot()` modifier |
 | `Share/WindowCapture.swift` | 新增 | 截当前 keyWindow 成 `UIImage` |
 | `Share/ShareBanner.swift` | 新增 | 品牌头与免责条两个 SwiftUI 视图 |
-| `Share/ShareComposer.swift` | 新增 | 品牌头 + 截图 + 免责条拼成最终图 |
+| `Share/ShareLayout.swift` | 新增 | 纯几何计算，不依赖 UIKit，唯一可自动化测试的一层 |
+| `Share/ShareComposer.swift` | 新增 | 按 `ShareLayout` 的矩形把三块绘成最终图 |
 | `Share/SharePreviewSheet.swift` | 新增 | 底部预览弹窗 |
 | `Share/ShareCardView.swift` | 删除 | 精排卡路线废弃 |
 | `Share/ShareCardRenderer.swift` | 瘦身 | 仅保留 `shareText` 与 `ShareSheet` |
@@ -63,6 +64,8 @@
 截图通知 / 分享按钮
       ↓
 WindowCapture.capture() -> UIImage?
+      ↓
+ShareLayout.compute(screenshotSize:) -> 各部分矩形（纯几何，可测）
       ↓
 ShareComposer.compose(screenshot:) -> UIImage
       ↓
@@ -127,9 +130,17 @@ UIApplication.shared.connectedScenes
 
 **自动化**（`ios/Tests/`）：
 
-- `ShareComposer` 尺寸计算：输出宽度等于截图宽度；输出高度 = 品牌头 + 截图 + 免责条。
+本工程没有 XCTest target —— 工程用 `PBXFileSystemSynchronizedRootGroup` 组织，
+手工改 `project.pbxproj` 加 target 风险大于收益（见 `run-dictation-judge-tests.sh` 注释）。
+既有做法是用 `swiftc` 直接编译真实源文件 + 断言脚本，本设计沿用。
+
+该模式在 macOS 命令行下编译，**UIKit 不可用**。因此把尺寸计算抽成独立的
+`ShareLayout`：纯函数，只依赖 CoreGraphics 的 `CGSize`/`CGRect`，不碰 UIKit。
+可测的是它，`ShareComposer` 只负责按 `ShareLayout` 给出的矩形实际绘制。
+
+- 输出宽度等于截图宽度；输出高度 = 品牌头 + 截图 + 免责条。
 - 横图（横屏截图）与竖图各跑一次，确认品牌头随宽度自适应而非写死 375。
-- `QRCode.image(for:side:)` 在品牌头所用的 64pt 下返回非 nil。
+- 截图极窄或极宽时各部分矩形不重叠、不出现负高度。
 
 **SwiftUI Preview**：`ShareBanner` 与 `SharePreviewSheet` 喂一张假截图目视确认排版。
 
@@ -144,7 +155,8 @@ UIApplication.shared.connectedScenes
 
 - **截图失败**：静默放弃，不打扰用户。
 - **超长页面**：只截当前可视区域，不做滚动长截图。用户看到什么就分享什么，与所见即所得的前提一致。
-- **深色/浅色主题**：品牌头与免责条用 `Theme` 色值，跟随 App 主题；二维码固定白底黑码，
+- **主题**：App 强制深色（`DeepAlphaChanApp.swift` 的 `.preferredColorScheme(.dark)`），
+  品牌头与免责条直接用 `Theme` 深色值，不需要处理浅色分支。二维码固定白底黑码，
   识别率优先（见 `QRCode.swift` 注释）。
 - **预览弹窗展示时再次截图**：防抖逻辑拦截，不套娃。
 - **相册权限**：「保存到相册」首次触发系统授权；拒绝后提示一次，不反复弹。
