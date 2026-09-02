@@ -7,6 +7,12 @@ import SwiftUI
 struct ResultSegments: View {
     let analysis: ChanAnalysis
 
+    /// 渲染进分享长图时传 true：静态图里没有切换交互，且分段控件背后的
+    /// UISegmentedControl 是 UIKit 桥接，ImageRenderer 拍不平它（运行时日志报
+    /// "Unable to render flattened version"），图上只会留一块空白。
+    /// 所以长图不走切换器，两段上下全铺，各带小标题 —— 长图要的就是完整内容。
+    var isStatic = false
+
     @State private var segment: Segment = .analysis
 
     enum Segment: String, CaseIterable, Identifiable {
@@ -22,6 +28,16 @@ struct ResultSegments: View {
 
     var body: some View {
         VStack(spacing: 12) {
+            if isStatic {
+                staticSections
+            } else {
+                interactiveSections
+            }
+        }
+    }
+
+    private var interactiveSections: some View {
+        VStack(spacing: 12) {
             Picker("", selection: $segment) {
                 ForEach(Segment.allCases) { s in
                     Text(title(for: s)).tag(s)
@@ -36,6 +52,23 @@ struct ResultSegments: View {
                 SignalListSection(analysis: analysis)
             }
         }
+    }
+
+    /// 长图布局：两段全铺，标题复用交互态的文案（买卖点带数量）。
+    private var staticSections: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(L("形态分析"))
+            AnalysisSection(analysis: analysis)
+
+            sectionHeader(title(for: .signals))
+            SignalListSection(analysis: analysis)
+        }
+    }
+
+    private func sectionHeader(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundColor(Theme.textSecondary)
     }
 
     /// 买卖点段带上数量，不用切过去就知道有没有东西。
