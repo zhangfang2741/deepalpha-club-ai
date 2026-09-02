@@ -6,8 +6,6 @@ struct ChartSection: View {
     @ObservedObject var vm: ChanViewModel
     /// 点全屏。编排（先转屏再呈现）在调用方，这里只管发信号。
     let onFullscreen: () -> Void
-    /// 图表平移/缩放后上报当前窗口。分享时要用它复现用户看到的那一段。
-    var onWindowChange: ((ChartWindow) -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 10) {
@@ -19,7 +17,7 @@ struct ChartSection: View {
                 fullscreenButton
             }
 
-            ChanChartView(analysis: analysis, vm: vm, onWindowChange: onWindowChange)
+            ChanChartView(analysis: analysis, vm: vm)
 
             ChartLegend()
         }
