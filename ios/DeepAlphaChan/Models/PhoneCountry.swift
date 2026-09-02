@@ -51,18 +51,13 @@ struct PhoneCountry: Identifiable, Hashable {
 }
 
 extension PhoneCountry {
-    /// 精选支持列表。默认第一个（中国大陆）。
+    /// 下拉里可选的国家/地区。国际短信暂未开通，目前只放中国大陆——将来开通后，
+    /// 把下面这些补回列表即可（isSupported 的判断、后端 CN-only 闸也要一并放开）：
+    ///   +852 中国香港 8 位、+853 中国澳门 8 位、+886 中国台湾 9 位、
+    ///   +1 美国/加拿大 10 位、+65 新加坡 8 位、+44 英国 9~10 位、
+    ///   +61 澳大利亚 9 位、+81 日本 10~11 位、+82 韩国 9~10 位。
     static let all: [PhoneCountry] = [
         PhoneCountry(dialCode: "86", name: L("中国大陆"), flag: "🇨🇳", nationalDigits: 11...11),
-        PhoneCountry(dialCode: "852", name: L("中国香港"), flag: "🇭🇰", nationalDigits: 8...8),
-        PhoneCountry(dialCode: "853", name: L("中国澳门"), flag: "🇲🇴", nationalDigits: 8...8),
-        PhoneCountry(dialCode: "886", name: L("中国台湾"), flag: "🇹🇼", nationalDigits: 9...9),
-        PhoneCountry(dialCode: "1", name: L("美国/加拿大"), flag: "🇺🇸", nationalDigits: 10...10),
-        PhoneCountry(dialCode: "65", name: L("新加坡"), flag: "🇸🇬", nationalDigits: 8...8),
-        PhoneCountry(dialCode: "44", name: L("英国"), flag: "🇬🇧", nationalDigits: 9...10),
-        PhoneCountry(dialCode: "61", name: L("澳大利亚"), flag: "🇦🇺", nationalDigits: 9...9),
-        PhoneCountry(dialCode: "81", name: L("日本"), flag: "🇯🇵", nationalDigits: 10...11),
-        PhoneCountry(dialCode: "82", name: L("韩国"), flag: "🇰🇷", nationalDigits: 9...10),
     ]
 
     static let `default` = all[0]
