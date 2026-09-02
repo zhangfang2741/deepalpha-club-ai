@@ -26,9 +26,10 @@ struct PhoneCountry: Identifiable, Hashable {
     /// 本地预校验：国内号位数落在区间内即可。
     func isValidNational(_ raw: String) -> Bool {
         let digits = raw.filter(\.isNumber)
-        // 中国大陆再严一档：号段固定（1 开头，第二位 3-9），避免明显打错的号发出去。
+        // 中国大陆再严一档：号段固定（1 开头，第二位 3-9）。复用 AccountInput 里
+        // 已有的号段规则，避免两处各写一份正则走偏。
         if dialCode == "86" {
-            return digits.range(of: "^1[3-9]\\d{9}$", options: .regularExpression) != nil
+            return AccountInput.isValidCNMobile(digits)
         }
         return nationalDigits.contains(digits.count)
     }
