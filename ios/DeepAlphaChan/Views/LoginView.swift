@@ -107,12 +107,16 @@ struct LoginView: View {
         }
         .sheet(isPresented: $showRegister) { RegisterView() }
         .sheet(isPresented: $showForgotPassword) { ForgotPasswordView(channel: channel) }
-        .sheet(isPresented: $showLearn) { LearnTabView() }
+        // 登录流程是隐私场景：从这里弹出的学习预览也不参与截图分享
+        .sheet(isPresented: $showLearn) { LearnTabView(enablesScreenshotShare: false) }
         .onChange(of: channel) { _, _ in
             // 切换通道时清空输入，否则手机号会留在邮箱框里显得莫名其妙
             account = ""
             auth.errorMessage = nil
         }
+        // 隐私页显式声明不参与截图分享：账号密码输入在这里可见。
+        // 不依赖「别的页面 onDisappear」这类间接推断 —— 弹层盖住时推断会失灵。
+        .suppressScreenshotShare()
     }
 
     private func submit() {

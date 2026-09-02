@@ -84,6 +84,8 @@ struct RegisterView: View {
                 auth.errorMessage = nil
             }
         }
+        // 隐私页显式声明不参与截图分享：账号与验证码输入在这里可见。
+        .suppressScreenshotShare()
     }
 
     private var rulesChecklist: some View {

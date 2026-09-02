@@ -4,7 +4,21 @@ import SwiftUI
 struct LearnTabView: View {
     private let articles = LessonStore.all
 
+    /// 以登录页 sheet 形式弹出时传 false：登录流程是隐私场景，不参与截图分享。
+    /// 主 Tab 里的学习页不传，默认启用。
+    var enablesScreenshotShare = true
+
     var body: some View {
+        if enablesScreenshotShare {
+            content
+                // 挂在 NavigationStack 外面：挂里面的话预览弹窗会被导航层裁切
+                .shareOnScreenshot(text: "DeepAlpha \(L("缠论")) · \(L("缠论入门"))")
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
         NavigationStack {
             Group {
                 if articles.isEmpty {
@@ -16,8 +30,6 @@ struct LearnTabView: View {
             .background(Theme.background)
             .navigationTitle(L("缠论入门"))
         }
-        // 挂在 NavigationStack 外面：挂里面的话预览弹窗会被导航层裁切
-        .shareOnScreenshot(text: "DeepAlpha \(L("缠论")) · \(L("缠论入门"))")
     }
 
     private var list: some View {

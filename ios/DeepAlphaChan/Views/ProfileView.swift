@@ -122,6 +122,9 @@ struct ProfileView: View {
                 Text(L("此操作将永久删除你的账号及关联数据，且不可恢复。"))
             }
         }
+        // 隐私页显式声明不参与截图分享：账号在这里可见，不该被拼进分享图。
+        // 不依赖「别的页面 onDisappear」这类间接推断 —— 弹层盖住时推断会失灵。
+        .suppressScreenshotShare()
     }
 
     private func row(_ title: String, _ value: String) -> some View {

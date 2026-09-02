@@ -31,6 +31,9 @@ struct PaywallView: View {
                 if subscribed { dismiss() }
             }
         }
+        // 付费墙不参与截图分享：订阅价格与权益文案带法务口径，截出去容易被
+        // 脱离上下文传播；且它常从「我的」页弹出，抑制声明与呈现路径无关才可靠。
+        .suppressScreenshotShare()
     }
 
     private var header: some View {
