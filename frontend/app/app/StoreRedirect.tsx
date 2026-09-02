@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 
 /** App Store 商品页链接。App 未上架时留空，页面会显示「即将上架」。 */
-export const APP_STORE_ID = ''
+export const APP_STORE_ID = '6806500280'
 
 /**
  * iOS 设备自动跳转 App Store。
