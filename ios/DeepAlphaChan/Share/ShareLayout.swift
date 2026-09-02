@@ -13,7 +13,7 @@ enum ShareLayout {
     static let footerHeight: CGFloat = 88
     /// 免责条高度。一行小字，紧贴品牌脚底部，够用即可。
     static let disclaimerHeight: CGFloat = 24
-    /// 截图卡片外围留白（上、左、右；底部由免责条收边）。
+    /// 分享图四周的留白。截图卡片与品牌卡片都缩进这么多，两者左右边缘对齐。
     static let outerPadding: CGFloat = 12
     /// 截图卡片与品牌脚之间的间距。
     ///
@@ -38,22 +38,23 @@ enum ShareLayout {
     ///
     /// 宽度完全跟随截图，不写死 375：全屏图表页是横屏，截出来是横图。
     ///
-    /// 截图被当成一张「卡片」内嵌：左右及顶部留 `outerPadding`、圆角，品牌脚与
-    /// 免责条通栏。三块紧贴时截图边缘与相邻深色块色差太小会糊成一片，
-    /// 留白把边界显式画出来。
+    /// 截图与品牌区是**两张等宽卡片**，都缩进 `outerPadding`、左右边缘对齐。
+    /// 早先品牌脚通栏、截图缩进，两者宽度差了 `outerPadding * 2`，成图上是一道
+    /// 明显的错位台阶（用户反馈）。四周留白一致才像同一张卡片的上下两部分。
     static func compute(screenshotSize: CGSize) -> Metrics {
         let w = screenshotSize.width
         let h = screenshotSize.height
         let totalWidth = w + outerPadding * 2
 
         let shot = CGRect(x: outerPadding, y: outerPadding, width: w, height: h)
-        let footer = CGRect(x: 0, y: shot.maxY + gap, width: totalWidth, height: footerHeight)
+        let footer = CGRect(x: outerPadding, y: shot.maxY + gap, width: w, height: footerHeight)
         // 免责条紧贴品牌脚：同属「图之后的说明区」，中间再塞间距会把责任声明
-        // 从署名区里孤立出去。
-        let disclaimer = CGRect(x: 0, y: footer.maxY, width: totalWidth, height: disclaimerHeight)
+        // 从署名区里孤立出去。两者合起来被 ShareComposer 当一张卡片裁圆角。
+        let disclaimer = CGRect(x: outerPadding, y: footer.maxY, width: w, height: disclaimerHeight)
 
         return Metrics(
-            totalSize: CGSize(width: totalWidth, height: disclaimer.maxY),
+            // 底部同样收 outerPadding，四周留白才对称
+            totalSize: CGSize(width: totalWidth, height: disclaimer.maxY + outerPadding),
             screenshotRect: shot,
             footerRect: footer,
             disclaimerRect: disclaimer

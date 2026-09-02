@@ -39,8 +39,6 @@ enum ShareComposer {
             UIColor(Theme.background).setFill()
             ctx.fill(CGRect(origin: .zero, size: layout.totalSize))
 
-            footer.draw(in: layout.footerRect)
-
             // 截图按圆角裁剪，看起来像被托住的一张卡片。裁剪区会一直作用到
             // context 结束，必须存档/还原，否则下方的品牌脚/免责条也会被裁掉。
             ctx.cgContext.saveGState()
@@ -49,7 +47,14 @@ enum ShareComposer {
             screenshot.draw(in: layout.screenshotRect)
             ctx.cgContext.restoreGState()
 
+            // 品牌脚与免责条合起来当第二张卡片：与截图等宽、同圆角。
+            // 分开各画各的会在两者之间露出直角，看着像两个拼歪的色块。
+            ctx.cgContext.saveGState()
+            UIBezierPath(roundedRect: layout.footerRect.union(layout.disclaimerRect),
+                         cornerRadius: ShareLayout.screenshotCornerRadius).addClip()
+            footer.draw(in: layout.footerRect)
             disclaimer.draw(in: layout.disclaimerRect)
+            ctx.cgContext.restoreGState()
         }
     }
 

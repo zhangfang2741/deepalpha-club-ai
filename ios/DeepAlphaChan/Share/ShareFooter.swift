@@ -81,23 +81,23 @@ struct ShareDisclaimer: View {
 }
 
 #if DEBUG
-#Preview("截图卡片与品牌脚") {
-    VStack(spacing: 0) {
-        Rectangle().fill(Theme.background)
-            .frame(width: 390 + ShareLayout.outerPadding * 2,
-                   height: 200 + ShareLayout.outerPadding)
-            .overlay(
-                RoundedRectangle(cornerRadius: ShareLayout.screenshotCornerRadius)
-                    .fill(Theme.surface)
-                    .frame(width: 390, height: 200)
-                    .overlay(Text("（此处为用户界面截图）").foregroundColor(Theme.textSecondary)),
-                alignment: .bottom
-            )
-            .padding(.horizontal, -ShareLayout.outerPadding)
-        ShareFooter(width: 390 + ShareLayout.outerPadding * 2)
-            .padding(.top, ShareLayout.gap)
-        ShareDisclaimer(width: 390 + ShareLayout.outerPadding * 2)
+/// 与 ShareComposer 的画法对齐：两张等宽卡片各自裁圆角，四周留白一致。
+/// 宽度不一致过一次（品牌脚通栏、截图缩进），Preview 跟着实际布局走才拦得住第二次。
+#Preview("截图卡片与品牌卡片") {
+    VStack(spacing: ShareLayout.gap) {
+        RoundedRectangle(cornerRadius: ShareLayout.screenshotCornerRadius)
+            .fill(Theme.surface)
+            .frame(width: 390, height: 200)
+            .overlay(Text("（此处为用户界面截图）").foregroundColor(Theme.textSecondary))
+
+        VStack(spacing: 0) {
+            ShareFooter(width: 390)
+            ShareDisclaimer(width: 390)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: ShareLayout.screenshotCornerRadius))
     }
+    .padding(ShareLayout.outerPadding)
+    .background(Theme.background)
     .preferredColorScheme(.dark)
 }
 #endif

@@ -27,33 +27,37 @@ struct ShareLayoutTestsMain {
         let portrait = ShareLayout.compute(screenshotSize: CGSize(width: 390, height: 844))
         expect(portrait.totalSize.width, 390 + pad * 2, "总宽 = 截图宽 + 左右留白")
         expect(portrait.totalSize.height,
-               pad + 844 + gap + ShareLayout.footerHeight + ShareLayout.disclaimerHeight,
-               "总高 = 顶部留白 + 截图高 + 间距 + 品牌脚 + 免责条")
+               pad + 844 + gap + ShareLayout.footerHeight + ShareLayout.disclaimerHeight + pad,
+               "总高 = 上下留白 + 截图高 + 间距 + 品牌脚 + 免责条")
         expect(portrait.screenshotRect.origin.y, pad, "截图在最上，顶部有外围留白")
         expect(portrait.footerRect.origin.y, pad + 844 + gap,
                "品牌脚紧接截图下方，只隔一个收窄的 gap")
         expect(portrait.disclaimerRect.origin.y, portrait.footerRect.maxY,
                "免责条紧贴品牌脚底部，中间不再塞间距")
-        expect(portrait.footerRect.width, 390 + pad * 2, "品牌脚通栏，不是写死 375")
+        expect(portrait.footerRect.width, 390, "品牌脚与截图等宽，不是通栏、也不是写死 375")
         expect(portrait.screenshotRect.width, 390, "截图区宽度 = 原截图宽")
 
         print("\n=== 横屏截图（全屏图表，844x390）===")
         let landscape = ShareLayout.compute(screenshotSize: CGSize(width: 844, height: 390))
         expect(landscape.totalSize.width, 844 + pad * 2, "横图总宽 = 截图宽 + 左右留白")
-        expect(landscape.footerRect.width, 844 + pad * 2, "品牌脚随横图变宽")
+        expect(landscape.footerRect.width, 844, "品牌脚随横图变宽，仍与截图等宽")
         expect(landscape.totalSize.height,
-               pad + 390 + gap + ShareLayout.footerHeight + ShareLayout.disclaimerHeight,
+               pad + 390 + gap + ShareLayout.footerHeight + ShareLayout.disclaimerHeight + pad,
                "横图总高")
 
-        print("\n=== 截图内嵌为卡片，品牌脚在图下（左右留白 + 通栏脚）===")
+        print("\n=== 截图与品牌区是两张等宽卡片，四周留白一致 ===")
         for (name, l) in [("竖图", portrait), ("横图", landscape)] {
             expect(l.screenshotRect.minX, pad, "\(name)：截图卡片左侧留白")
             expect(l.screenshotRect.maxX, l.totalSize.width - pad, "\(name)：截图卡片右侧留白")
             expect(l.screenshotRect.minY, pad, "\(name)：截图卡片顶部留白")
-            expect(l.footerRect.width, l.totalSize.width, "\(name)：品牌脚通栏")
-            expect(l.disclaimerRect.width, l.totalSize.width, "\(name)：免责条通栏")
-            expect(l.footerRect.minX, 0, "\(name)：品牌脚从最左开始")
-            expect(l.disclaimerRect.minX, 0, "\(name)：免责条从最左开始")
+            // 宽度错位是用户能一眼看出的成图缺陷，这里逐条钉死左右边缘对齐
+            expect(l.footerRect.width, l.screenshotRect.width, "\(name)：品牌脚与截图等宽")
+            expect(l.disclaimerRect.width, l.screenshotRect.width, "\(name)：免责条与截图等宽")
+            expect(l.footerRect.minX, l.screenshotRect.minX, "\(name)：品牌脚与截图左对齐")
+            expect(l.disclaimerRect.minX, l.screenshotRect.minX, "\(name)：免责条与截图左对齐")
+            expect(l.footerRect.maxX, l.screenshotRect.maxX, "\(name)：品牌脚与截图右对齐")
+            expect(l.disclaimerRect.maxX, l.screenshotRect.maxX, "\(name)：免责条与截图右对齐")
+            expect(l.totalSize.height - l.disclaimerRect.maxY, pad, "\(name)：底部留白与顶部一致")
             expect(l.footerRect.minY - l.screenshotRect.maxY, gap,
                    "\(name)：品牌脚与截图之间恰好一个 gap")
             expect(l.disclaimerRect.minY - l.footerRect.maxY, 0,
