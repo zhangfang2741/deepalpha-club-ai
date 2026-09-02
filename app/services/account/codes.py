@@ -19,11 +19,12 @@ from app.services import email as email_service
 from app.services import sms as sms_service
 from app.services.verification_code import (
     CodeStore,
+    DailySendLimitError,
     Purpose,
     ResendTooSoonError,
     TooManyAttemptsError,
 )
-from app.utils.phone import to_aliyun_format
+from app.utils.phone import is_domestic, split_e164
 
 # 与 WordLens 的 vocab:vercode 物理隔离：同一个手机号在两个 App 里各有各的码。
 store = CodeStore("chan:vercode")
@@ -37,12 +38,17 @@ class CodeChannelUnavailableError(Exception):
     """渠道未配置，服务端问题。"""
 
 
+class CountryNotSupportedError(Exception):
+    """该国家/地区暂不支持短信（目前只支持中国大陆），应引导改用邮箱/Apple。"""
+
+
 class CodeRejectedError(Exception):
     """验证码错误或已过期。"""
 
 
 # 用途 → 阿里云系统模板。注册用「登录/注册」模板，重置密码用「重置密码」模板，
-# 文案会写明用户正在做什么。
+# 文案会写明用户正在做什么。目前只发国内号（见 send_sms_code 的 CN-only 闸），
+# 所以不再区分国际模板。
 _SMS_TEMPLATES = {
     Purpose.PHONE_REGISTER: lambda: settings.ALIYUN_SMS_TEMPLATE_REGISTER,
     Purpose.PHONE_PASSWORD_RESET: lambda: settings.ALIYUN_SMS_TEMPLATE_PASSWORD_RESET,
@@ -94,16 +100,28 @@ async def send_sms_code(redis: Redis, purpose: Purpose, phone: str) -> None:
     """让阿里云发一条验证码短信。
 
     Raises:
+        CountryNotSupportedError: 非中国大陆号码（目前只支持 +86）。
         ResendTooSoonError: 还在冷却期。
+        DailySendLimitError: 该号码当日发送已达上限（成本闸）。
         CodeChannelUnavailableError: 短信未配置。
         CodeDeliveryError: 发送失败。
     """
+    # CN-only 闸：国际短信涉及阿里云单独开通/资费，暂不支持，只放行中国大陆号。
+    # 前端的国家选择器仍保留，非中国大陆会在 UI 上提示改用邮箱/Apple，这里是权威兜底。
+    if not is_domestic(phone):
+        raise CountryNotSupportedError
+
     if await store.is_cooling_down(redis, purpose, phone):
         raise ResendTooSoonError
 
+    # 成本闸：短信按条计费，冷却之外再按天卡单号上限。放在冷却之后、真正发送之前
+    # ——超限就不该产生这次 API 调用。
+    await store.assert_sms_budget(redis, phone)
+
+    country_code, national = split_e164(phone)
     try:
         await sms_service.send_verification_code(
-            to_aliyun_format(phone), _SMS_TEMPLATES[purpose]()
+            national, _SMS_TEMPLATES[purpose](), country_code
         )
     except sms_service.SMSNotConfiguredError:
         logger.error("chan_sms_not_configured", purpose=purpose.value)
@@ -113,9 +131,10 @@ async def send_sms_code(redis: Redis, purpose: Purpose, phone: str) -> None:
     except sms_service.SMSSendError:
         raise CodeDeliveryError from None
 
-    # 发成功才上冷却和重置错误计数——发失败还锁着用户，会把一次临时故障
-    # 变成 60 秒的干等（这个坑在邮件链路上真踩过一次）。
+    # 发成功才上冷却和计入配额——发失败还锁着用户会把一次临时故障变成 60 秒的
+    # 干等（邮件链路上真踩过一次），也不该白占当日配额。
     await store.start_cooldown(redis, purpose, phone)
+    await store.record_sms_sent(redis, phone)
 
 
 async def verify_sms_code(redis: Redis, purpose: Purpose, phone: str, code: str) -> None:
@@ -131,8 +150,9 @@ async def verify_sms_code(redis: Redis, purpose: Purpose, phone: str, code: str)
     # 有效期内不限次数猜是能撞开的，而每次猜只是一次廉价的 API 调用。
     await store.assert_attempts_left(redis, purpose, phone)
 
+    country_code, national = split_e164(phone)
     try:
-        passed = await sms_service.check_verification_code(to_aliyun_format(phone), code)
+        passed = await sms_service.check_verification_code(national, code, country_code)
     except sms_service.SMSNotConfiguredError:
         raise CodeChannelUnavailableError from None
     except sms_service.SMSCodeInvalidError:
@@ -152,6 +172,8 @@ __all__ = [
     "CodeChannelUnavailableError",
     "CodeDeliveryError",
     "CodeRejectedError",
+    "CountryNotSupportedError",
+    "DailySendLimitError",
     "Purpose",
     "ResendTooSoonError",
     "TooManyAttemptsError",

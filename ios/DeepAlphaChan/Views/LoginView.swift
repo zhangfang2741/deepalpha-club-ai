@@ -6,6 +6,7 @@ struct LoginView: View {
     @EnvironmentObject var auth: AuthViewModel
     @State private var channel: AccountChannel = .phone
     @State private var account = ""
+    @State private var country: PhoneCountry = .default
     @State private var password = ""
     @State private var showRegister = false
     @State private var showForgotPassword = false
@@ -14,8 +15,21 @@ struct LoginView: View {
 
     private enum Field { case account, password }
 
+    /// 手机号通道下按选定国家的位数预校验，邮箱走邮箱格式校验。
+    private var accountValid: Bool {
+        switch channel {
+        case .phone: return country.isSupported && country.isValidNational(account)
+        case .email: return AccountInput.isValidEmail(account)
+        }
+    }
+
+    /// 提交给后端的账号：手机号拼成 E.164，邮箱原样。
+    private var submittedAccount: String {
+        channel == .phone ? country.e164(national: account) : account
+    }
+
     private var canSubmit: Bool {
-        AccountInput.isValid(account, channel: channel) && !password.isEmpty
+        accountValid && !password.isEmpty
     }
 
     var body: some View {
@@ -28,10 +42,15 @@ struct LoginView: View {
                 VStack(spacing: 14) {
                     AccountChannelPicker(channel: $channel)
 
-                    AccountField(channel: channel, text: $account)
-                        .focused($focused, equals: .account)
-                        .submitLabel(.next)
-                        .onSubmit { focused = .password }
+                    if channel == .phone {
+                        // 数字键盘没有 next 键，不做焦点链；邮箱那条仍保留。
+                        PhoneNumberField(country: $country, national: $account)
+                    } else {
+                        AccountField(channel: channel, text: $account)
+                            .focused($focused, equals: .account)
+                            .submitLabel(.next)
+                            .onSubmit { focused = .password }
+                    }
 
                     AuthSecureField(icon: "lock", placeholder: L("密码"), text: $password)
                         .focused($focused, equals: .password)
@@ -106,7 +125,7 @@ struct LoginView: View {
             .padding(24)
         }
         .sheet(isPresented: $showRegister) { RegisterView() }
-        .sheet(isPresented: $showForgotPassword) { ForgotPasswordView(channel: channel) }
+        .sheet(isPresented: $showForgotPassword) { ForgotPasswordView(channel: channel, country: country) }
         .sheet(isPresented: $showLearn) { LearnTabView() }
         .onChange(of: channel) { _, _ in
             // 切换通道时清空输入，否则手机号会留在邮箱框里显得莫名其妙
@@ -117,7 +136,7 @@ struct LoginView: View {
 
     private func submit() {
         focused = nil
-        Task { await auth.login(account: account, password: password) }
+        Task { await auth.login(account: submittedAccount, password: password) }
     }
 
     private var header: some View {

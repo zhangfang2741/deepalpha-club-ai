@@ -11,19 +11,33 @@ struct ForgotPasswordView: View {
 
     @State private var channel: AccountChannel
     @State private var account = ""
+    @State private var country: PhoneCountry
     @State private var code = ""
     @State private var password = ""
     @State private var confirm = ""
     @State private var done = false
 
-    /// 从登录页带过来当前选中的通道，省得用户再切一次。
-    init(channel: AccountChannel = .phone) {
+    /// 从登录页带过来当前选中的通道和区号，省得用户再选一次。
+    init(channel: AccountChannel = .phone, country: PhoneCountry = .default) {
         _channel = State(initialValue: channel)
+        _country = State(initialValue: country)
     }
 
     private var rules: PasswordRules { PasswordRules(password: password) }
     private var matched: Bool { !confirm.isEmpty && password == confirm }
-    private var accountValid: Bool { AccountInput.isValid(account, channel: channel) }
+
+    /// 手机号通道下按选定国家的位数预校验，邮箱走邮箱格式校验。
+    private var accountValid: Bool {
+        switch channel {
+        case .phone: return country.isSupported && country.isValidNational(account)
+        case .email: return AccountInput.isValidEmail(account)
+        }
+    }
+
+    /// 提交给后端的账号：手机号拼成 E.164，邮箱原样。
+    private var submittedAccount: String {
+        channel == .phone ? country.e164(national: account) : account
+    }
 
     private var canSubmit: Bool {
         accountValid && AccountInput.isValidCode(code) && rules.allSatisfied && matched
@@ -37,10 +51,14 @@ struct ForgotPasswordView: View {
                     VStack(spacing: 14) {
                         AccountChannelPicker(channel: $channel)
 
-                        AccountField(channel: channel, text: $account)
+                        if channel == .phone {
+                            PhoneNumberField(country: $country, national: $account)
+                        } else {
+                            AccountField(channel: channel, text: $account)
+                        }
 
                         VerificationCodeField(code: $code, canRequest: accountValid) {
-                            await auth.requestPasswordResetCode(account: account, channel: channel)
+                            await auth.requestPasswordResetCode(account: submittedAccount, channel: channel)
                         }
 
                         AuthSecureField(icon: "lock", placeholder: L("新密码"), text: $password)
@@ -62,7 +80,7 @@ struct ForgotPasswordView: View {
                         Button {
                             Task {
                                 let ok = await auth.resetPassword(
-                                    account: account, channel: channel,
+                                    account: submittedAccount, channel: channel,
                                     code: code, newPassword: password)
                                 if ok {
                                     done = true
