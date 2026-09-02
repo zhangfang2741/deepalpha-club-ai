@@ -19,16 +19,7 @@ struct ResultDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 14) {
-                ChartSection(analysis: analysis, vm: vm,
-                             onFullscreen: openFullscreen)
-
-                ResultSegments(analysis: analysis)
-
-                compactDisclaimer
-            }
-            .padding(.horizontal, Theme.contentHInset)
-            .padding(.vertical, Theme.contentVInset)
+            pageContent
         }
         .scrollBounceBehavior(.basedOnSize)
         .background(Theme.background)
@@ -63,6 +54,23 @@ struct ResultDetailView: View {
         return "\(vm.symbol.uppercased()) · \(freq)"
     }
 
+    /// ScrollView 的完整内容，同时是分享长图的渲染源（PageSnapshot.render）。
+    ///
+    /// 抽成计算属性只为让屏幕显示与离屏长图复用同一棵视图树，修饰符与顺序
+    /// 和抽取前保持一致——改这里会同时改变页面显示与分享图，两处永不走样。
+    private var pageContent: some View {
+        VStack(spacing: 14) {
+            ChartSection(analysis: analysis, vm: vm,
+                         onFullscreen: openFullscreen)
+
+            ResultSegments(analysis: analysis)
+
+            compactDisclaimer
+        }
+        .padding(.horizontal, Theme.contentHInset)
+        .padding(.vertical, Theme.contentVInset)
+    }
+
     /// 打开全屏图表（转屏 + 关呈现动画，逻辑同条件页原实现）。
     private func openFullscreen() {
         orientation.enterLandscape()
@@ -81,12 +89,13 @@ struct ResultDetailView: View {
         .accessibilityHint(L("生成一张带二维码的分析图并打开预览"))
     }
 
-    /// 点按钮走的路径与截图完全一致：截当前屏 → 拼品牌头与免责条 → 弹预览。
+    /// 分享按钮路径：渲染整页长图（完整内容）→ 拼品牌头与免责条 → 弹预览。
     ///
-    /// 不再离屏重排一张「精排卡」：那张图与用户屏幕上看到的不是一回事，用户拖到哪、
-    /// 开了哪些图层都不体现，发出去才发现不对。截屏所见即所得。
+    /// 与截图入口刻意不同：截图给「用户看到的窗口」（所见即所得），这里给
+    /// 「整个页面的内容」——不含导航栏/TabBar，没滚到的部分也在图里。
+    /// 长图通过 PageSnapshot 离屏渲染内容视图得到，两者最终走同一个 ShareComposer。
     private func share() {
-        guard let shot = WindowCapture.capture(),
+        guard let shot = PageSnapshot.render(pageContent),
               let composed = ShareComposer.compose(screenshot: shot) else {
             // 与截图入口不同，这里是用户主动点的，静默失败等于点了没反应，必须报错
             showShareError = true
