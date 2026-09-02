@@ -38,28 +38,21 @@ class CodeChannelUnavailableError(Exception):
     """渠道未配置，服务端问题。"""
 
 
+class CountryNotSupportedError(Exception):
+    """该国家/地区暂不支持短信（目前只支持中国大陆），应引导改用邮箱/Apple。"""
+
+
 class CodeRejectedError(Exception):
     """验证码错误或已过期。"""
 
 
-# 用途 →（国内模板, 国际模板）。注册用「登录/注册」模板，重置密码用「重置密码」
-# 模板，文案会写明用户正在做什么。国际号走独立的模板/签名（见 config 说明）。
+# 用途 → 阿里云系统模板。注册用「登录/注册」模板，重置密码用「重置密码」模板，
+# 文案会写明用户正在做什么。目前只发国内号（见 send_sms_code 的 CN-only 闸），
+# 所以不再区分国际模板。
 _SMS_TEMPLATES = {
-    Purpose.PHONE_REGISTER: lambda: (
-        settings.ALIYUN_SMS_TEMPLATE_REGISTER,
-        settings.ALIYUN_SMS_TEMPLATE_REGISTER_INTL,
-    ),
-    Purpose.PHONE_PASSWORD_RESET: lambda: (
-        settings.ALIYUN_SMS_TEMPLATE_PASSWORD_RESET,
-        settings.ALIYUN_SMS_TEMPLATE_PASSWORD_RESET_INTL,
-    ),
+    Purpose.PHONE_REGISTER: lambda: settings.ALIYUN_SMS_TEMPLATE_REGISTER,
+    Purpose.PHONE_PASSWORD_RESET: lambda: settings.ALIYUN_SMS_TEMPLATE_PASSWORD_RESET,
 }
-
-
-def _template_for(purpose: Purpose, phone: str) -> str:
-    """按用途和号码归属地（国内/国际）选模板。"""
-    domestic_tpl, intl_tpl = _SMS_TEMPLATES[purpose]()
-    return domestic_tpl if is_domestic(phone) else intl_tpl
 
 
 async def send_email_code(
@@ -107,11 +100,17 @@ async def send_sms_code(redis: Redis, purpose: Purpose, phone: str) -> None:
     """让阿里云发一条验证码短信。
 
     Raises:
+        CountryNotSupportedError: 非中国大陆号码（目前只支持 +86）。
         ResendTooSoonError: 还在冷却期。
         DailySendLimitError: 该号码当日发送已达上限（成本闸）。
         CodeChannelUnavailableError: 短信未配置。
         CodeDeliveryError: 发送失败。
     """
+    # CN-only 闸：国际短信涉及阿里云单独开通/资费，暂不支持，只放行中国大陆号。
+    # 前端的国家选择器仍保留，非中国大陆会在 UI 上提示改用邮箱/Apple，这里是权威兜底。
+    if not is_domestic(phone):
+        raise CountryNotSupportedError
+
     if await store.is_cooling_down(redis, purpose, phone):
         raise ResendTooSoonError
 
@@ -122,7 +121,7 @@ async def send_sms_code(redis: Redis, purpose: Purpose, phone: str) -> None:
     country_code, national = split_e164(phone)
     try:
         await sms_service.send_verification_code(
-            national, _template_for(purpose, phone), country_code
+            national, _SMS_TEMPLATES[purpose](), country_code
         )
     except sms_service.SMSNotConfiguredError:
         logger.error("chan_sms_not_configured", purpose=purpose.value)
@@ -173,6 +172,7 @@ __all__ = [
     "CodeChannelUnavailableError",
     "CodeDeliveryError",
     "CodeRejectedError",
+    "CountryNotSupportedError",
     "DailySendLimitError",
     "Purpose",
     "ResendTooSoonError",

@@ -76,39 +76,50 @@ struct PhoneNumberField: View {
     @Binding var national: String
 
     var body: some View {
-        HStack(spacing: 10) {
-            Menu {
-                ForEach(PhoneCountry.all) { c in
-                    Button(c.label) { country = c }
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Menu {
+                    ForEach(PhoneCountry.all) { c in
+                        Button(c.label) { country = c }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("\(country.flag) +\(country.dialCode)")
+                            .foregroundColor(Theme.textPrimary)
+                        Image(systemName: "chevron.down")
+                            .font(.caption2).foregroundColor(Theme.textSecondary)
+                    }
+                    .padding(12)
+                    .background(Theme.surfaceAlt)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
-            } label: {
-                HStack(spacing: 4) {
-                    Text("\(country.flag) +\(country.dialCode)")
+
+                HStack {
+                    Image(systemName: "iphone").foregroundColor(Theme.textSecondary).frame(width: 20)
+                    TextField(L("手机号"), text: $national)
+                        .keyboardType(.numberPad)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                         .foregroundColor(Theme.textPrimary)
-                    Image(systemName: "chevron.down")
-                        .font(.caption2).foregroundColor(Theme.textSecondary)
+                        .onChange(of: national) { _, newValue in
+                            // 只留数字，防止粘贴进来带空格/连字符的内容。
+                            let digits = newValue.filter(\.isNumber)
+                            if digits != newValue { national = digits }
+                        }
                 }
                 .padding(12)
                 .background(Theme.surfaceAlt)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
             }
 
-            HStack {
-                Image(systemName: "iphone").foregroundColor(Theme.textSecondary).frame(width: 20)
-                TextField(L("手机号"), text: $national)
-                    .keyboardType(.numberPad)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .foregroundColor(Theme.textPrimary)
-                    .onChange(of: national) { _, newValue in
-                        // 只留数字，防止粘贴进来带空格/连字符的内容。
-                        let digits = newValue.filter(\.isNumber)
-                        if digits != newValue { national = digits }
-                    }
+            // 国际短信暂未开通：选到非中国大陆时明确告知改用其它方式，而不是让用户
+            // 点了「获取验证码」才收到一句发送失败。
+            if !country.isSupported {
+                Text(L("该地区暂不支持短信验证码，请改用邮箱或 Apple 登录"))
+                    .font(.caption)
+                    .foregroundColor(Theme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(12)
-            .background(Theme.surfaceAlt)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
         }
     }
 }

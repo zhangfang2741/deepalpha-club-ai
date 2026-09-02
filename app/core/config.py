@@ -457,15 +457,6 @@ class Settings:
         self.ALIYUN_SMS_TEMPLATE_PASSWORD_RESET = os.getenv(
             "ALIYUN_SMS_TEMPLATE_PASSWORD_RESET", "100003"
         )
-        # 国际/港澳台短信模板。阿里云的国际短信走独立的模板和签名审核，国内的
-        # 系统赠送模板（100001/100003）发不到境外号码，必须单独申请。留空则回退到
-        # 上面的国内模板——发不出去时会在 codes 层报「渠道不可用」，而不是静默失败。
-        self.ALIYUN_SMS_TEMPLATE_REGISTER_INTL = os.getenv(
-            "ALIYUN_SMS_TEMPLATE_REGISTER_INTL", ""
-        ) or self.ALIYUN_SMS_TEMPLATE_REGISTER
-        self.ALIYUN_SMS_TEMPLATE_PASSWORD_RESET_INTL = os.getenv(
-            "ALIYUN_SMS_TEMPLATE_PASSWORD_RESET_INTL", ""
-        ) or self.ALIYUN_SMS_TEMPLATE_PASSWORD_RESET
         # 控制台「号码认证方案管理」里创建的方案名称。发码和核验必须用同一个，
         # 不填则走阿里云的「默认方案」。
         self.ALIYUN_SMS_SCHEME_NAME = os.getenv("ALIYUN_SMS_SCHEME_NAME", "")

@@ -20,7 +20,7 @@ struct RegisterView: View {
     /// 手机号通道下，账号是否合法按选定国家的位数预校验。
     private var accountValid: Bool {
         switch channel {
-        case .phone: return country.isValidNational(account)
+        case .phone: return country.isSupported && country.isValidNational(account)
         case .email: return AccountInput.isValidEmail(account)
         }
     }

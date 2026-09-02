@@ -18,7 +18,7 @@ struct LoginView: View {
     /// 手机号通道下按选定国家的位数预校验，邮箱走邮箱格式校验。
     private var accountValid: Bool {
         switch channel {
-        case .phone: return country.isValidNational(account)
+        case .phone: return country.isSupported && country.isValidNational(account)
         case .email: return AccountInput.isValidEmail(account)
         }
     }

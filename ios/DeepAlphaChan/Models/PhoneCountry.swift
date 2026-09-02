@@ -23,6 +23,10 @@ struct PhoneCountry: Identifiable, Hashable {
     /// 下拉里显示的一行：🇨🇳 中国大陆 +86
     var label: String { "\(flag) \(name) +\(dialCode)" }
 
+    /// 当前是否支持短信验证码。国际短信暂未开通，只支持中国大陆；选到其它地区时
+    /// UI 会提示改用邮箱/Apple 登录（后端也会拦截，见 codes.send_sms_code 的 CN-only 闸）。
+    var isSupported: Bool { dialCode == "86" }
+
     /// 本地预校验：国内号位数落在区间内即可。
     func isValidNational(_ raw: String) -> Bool {
         let digits = raw.filter(\.isNumber)

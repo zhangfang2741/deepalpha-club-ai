@@ -110,6 +110,19 @@ async def test_sms_blocked_when_phone_daily_limit_reached():
     assert send.await_count == 0, "超过单号上限还调了短信接口"
 
 
+async def test_sms_rejects_non_china_number():
+    """目前只支持中国大陆号，国际号在发送前就被拦下，不调阿里云。"""
+    from app.services import sms as sms_service
+
+    redis = _redis()
+    send = AsyncMock()
+    with patch.object(sms_service, "send_verification_code", send):
+        with pytest.raises(codes.CountryNotSupportedError):
+            await codes.send_sms_code(redis, Purpose.PHONE_REGISTER, "+14155552671")
+
+    assert send.await_count == 0, "国际号不该真的发短信"
+
+
 async def test_sms_counts_toward_quota_only_after_successful_send():
     """发送成功才计入单号当日配额。"""
     from app.services import sms as sms_service

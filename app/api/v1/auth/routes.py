@@ -61,6 +61,11 @@ def _raise_for_delivery(exc: Exception) -> None:
             status_code=429,
             detail=f"验证码已发送，请 {settings.EMAIL_CODE_RESEND_COOLDOWN} 秒后再试",
         ) from None
+    if isinstance(exc, codes.CountryNotSupportedError):
+        raise HTTPException(
+            status_code=400,
+            detail="该地区暂不支持短信验证码，请改用邮箱或 Apple 登录",
+        ) from None
     if isinstance(exc, codes.DailySendLimitError):
         raise HTTPException(
             status_code=429,
