@@ -12,7 +12,10 @@ enum ShareLayout {
     static let disclaimerHeight: CGFloat = 24
 
     /// 一张分享图里三块内容的位置。
-    struct Result {
+    ///
+    /// 不叫 `Result`：那会遮蔽标准库的 `Result<Success, Failure>`，本文件日后若出现
+    /// 未加限定的 `Result` 就会被这个嵌套类型截获，类型对不上时很难一眼看出原因。
+    struct Metrics {
         let totalSize: CGSize
         let bannerRect: CGRect
         let screenshotRect: CGRect
@@ -22,7 +25,7 @@ enum ShareLayout {
     /// 按截图尺寸算出整图布局。
     ///
     /// 宽度完全跟随截图，不写死 375：全屏图表页是横屏，截出来是横图。
-    static func compute(screenshotSize: CGSize) -> Result {
+    static func compute(screenshotSize: CGSize) -> Metrics {
         let w = screenshotSize.width
         let h = screenshotSize.height
 
@@ -30,7 +33,7 @@ enum ShareLayout {
         let shot = CGRect(x: 0, y: bannerHeight, width: w, height: h)
         let disclaimer = CGRect(x: 0, y: bannerHeight + h, width: w, height: disclaimerHeight)
 
-        return Result(
+        return Metrics(
             totalSize: CGSize(width: w, height: bannerHeight + h + disclaimerHeight),
             bannerRect: banner,
             screenshotRect: shot,

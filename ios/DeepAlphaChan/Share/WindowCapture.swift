@@ -11,17 +11,20 @@ enum WindowCapture {
     static func capture() -> UIImage? {
         guard let window = foregroundWindow() else { return nil }
 
-        let renderer = UIGraphicsImageRenderer(bounds: window.bounds)
-        let image = renderer.image { ctx in
-            // drawHierarchy 取的是已渲染内容，比 layer.render 更贴近用户看到的画面。
-            // afterScreenUpdates: false —— 通知回调里不该再触发一次重排。
-            if !window.drawHierarchy(in: window.bounds, afterScreenUpdates: false) {
-                // 某些图层（Metal、部分系统模糊）drawHierarchy 会返回 false 且画不出来，
-                // 降级走 layer 渲染。两者都不行就得到一张空图，由调用方判空。
-                window.layer.render(in: ctx.cgContext)
-            }
+        // drawHierarchy 取的是已渲染内容，比 layer.render 更贴近用户看到的画面。
+        // afterScreenUpdates: false —— 通知回调里不该再触发一次重排。
+        var succeeded = false
+        let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+            succeeded = window.drawHierarchy(in: window.bounds, afterScreenUpdates: false)
         }
-        return image
+        if succeeded { return image }
+
+        // 某些图层（Metal、部分系统模糊）drawHierarchy 会返回 false。此时**另起**一个
+        // renderer 而不是接着往上一个 context 里画：返回 false 只表示「没能完整渲染」，
+        // 并不保证它一笔都没画过，在同一张画布上叠加 layer.render 可能糊出重影。
+        return UIGraphicsImageRenderer(bounds: window.bounds).image { ctx in
+            window.layer.render(in: ctx.cgContext)
+        }
     }
 
     private static func foregroundWindow() -> UIWindow? {
