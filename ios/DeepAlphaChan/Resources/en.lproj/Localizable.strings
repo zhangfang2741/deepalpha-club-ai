@@ -220,6 +220,9 @@
 "先看看缠论入门" = "Browse the Chan primer";
 "DeepAlpha 缠论" = "DeepAlpha Chan";
 
+/* Share banner —— 印在分享图上随图传播，缺翻译时英文用户会看到中文 */
+"缠论结构 自动标注" = "Chan structure, auto-detected";
+
 /* Share preview */
 "保存到相册" = "Save to Photos";
 "分享" = "Share";
