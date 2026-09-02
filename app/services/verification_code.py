@@ -56,10 +56,6 @@ class DailySendLimitError(Exception):
     """单个号码当日发送次数已达上限（成本闸）。"""
 
 
-class GlobalSendLimitError(Exception):
-    """全站当日短信总量已达预算上限（熔断，服务端侧问题）。"""
-
-
 def generate_code() -> str:
     """生成 6 位数字验证码。
 
@@ -214,10 +210,9 @@ class CodeStore:
         await cache.delete(redis, self._attempts_key(purpose, identifier))
 
     # -----------------------------------------------------------------------
-    # 短信成本闸：按天限量。
+    # 短信成本闸：单号按天限量。
     #
-    # 60 秒冷却只挡「连点重发」；这两道闸挡的是把账单刷爆的两种方式——同一个号
-    # 一天被发几十条，以及换 IP 轰炸大量不同号码（短信 pumping）。计数按天，
+    # 60 秒冷却只挡「连点重发」；这道闸挡的是同一个号一天被发几十条。计数按天，
     # 跨注册/找回密码所有短信用途合并统计：对成本来说，是发给谁、为什么发都一样花钱。
     # -----------------------------------------------------------------------
 
@@ -225,30 +220,18 @@ class CodeStore:
         # 不含 purpose：单号上限跨所有短信用途合并计。
         return f"{self._prefix}:sms_daily:{_slug(identifier)}"
 
-    def _global_daily_key(self) -> str:
-        # 按 UTC 自然日分桶，key 自带日期，天然随天滚动。
-        from datetime import datetime, timezone
-
-        day = datetime.now(timezone.utc).strftime("%Y%m%d")
-        return f"{self._prefix}:sms_global:{day}"
-
     async def assert_sms_budget(self, redis: Redis, identifier: str) -> None:
-        """发短信前检查单号当日上限与全站当日预算，超限抛异常。
+        """发短信前检查单号当日上限，超限抛异常。
 
         Raises:
             DailySendLimitError: 该号码当日发送已达上限。
-            GlobalSendLimitError: 全站当日短信总量已达预算上限。
         """
         raw = await cache.get(redis, self._daily_send_key(identifier))
         if raw is not None and int(raw) >= settings.SMS_PER_PHONE_DAILY_LIMIT:
             raise DailySendLimitError
 
-        raw_global = await cache.get(redis, self._global_daily_key())
-        if raw_global is not None and int(raw_global) >= settings.SMS_GLOBAL_DAILY_LIMIT:
-            raise GlobalSendLimitError
-
     async def record_sms_sent(self, redis: Redis, identifier: str) -> None:
-        """发送成功后各计一条（单号计数 + 全站计数）。
+        """发送成功后计一条单号当日计数。
 
         只在真正发出去后调用——和冷却一样，没发成就不该占用配额。检查在发送前、
         计数在发送后，并发下可能轻微超出上限，但对成本控制来说完全够用，不值得为此
@@ -258,8 +241,3 @@ class CodeStore:
         phone_key = self._daily_send_key(identifier)
         await redis.incr(phone_key)
         await redis.expire(phone_key, 86400)
-
-        # 全站计数：按自然日 key，留 48 小时 TTL 让隔日的桶自动清理。
-        global_key = self._global_daily_key()
-        await redis.incr(global_key)
-        await redis.expire(global_key, 172800)

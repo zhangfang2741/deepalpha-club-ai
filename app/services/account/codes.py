@@ -20,7 +20,6 @@ from app.services import sms as sms_service
 from app.services.verification_code import (
     CodeStore,
     DailySendLimitError,
-    GlobalSendLimitError,
     Purpose,
     ResendTooSoonError,
     TooManyAttemptsError,
@@ -110,15 +109,14 @@ async def send_sms_code(redis: Redis, purpose: Purpose, phone: str) -> None:
     Raises:
         ResendTooSoonError: 还在冷却期。
         DailySendLimitError: 该号码当日发送已达上限（成本闸）。
-        GlobalSendLimitError: 全站当日短信预算已用尽（熔断）。
         CodeChannelUnavailableError: 短信未配置。
         CodeDeliveryError: 发送失败。
     """
     if await store.is_cooling_down(redis, purpose, phone):
         raise ResendTooSoonError
 
-    # 成本闸：短信按条计费，冷却之外再按天卡单号上限和全站预算，挡住短信轰炸。
-    # 放在冷却之后、真正发送之前——超限就不该产生这次 API 调用。
+    # 成本闸：短信按条计费，冷却之外再按天卡单号上限。放在冷却之后、真正发送之前
+    # ——超限就不该产生这次 API 调用。
     await store.assert_sms_budget(redis, phone)
 
     country_code, national = split_e164(phone)
@@ -176,7 +174,6 @@ __all__ = [
     "CodeDeliveryError",
     "CodeRejectedError",
     "DailySendLimitError",
-    "GlobalSendLimitError",
     "Purpose",
     "ResendTooSoonError",
     "TooManyAttemptsError",
