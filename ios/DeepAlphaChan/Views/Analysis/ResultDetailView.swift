@@ -19,7 +19,7 @@ struct ResultDetailView: View {
 
     var body: some View {
         ScrollView {
-            pageContent
+            pageContent(isStatic: false)
         }
         .scrollBounceBehavior(.basedOnSize)
         .background(Theme.background)
@@ -56,14 +56,16 @@ struct ResultDetailView: View {
 
     /// ScrollView 的完整内容，同时是分享长图的渲染源（PageSnapshot.render）。
     ///
-    /// 抽成计算属性只为让屏幕显示与离屏长图复用同一棵视图树，修饰符与顺序
-    /// 和抽取前保持一致——改这里会同时改变页面显示与分享图，两处永不走样。
-    private var pageContent: some View {
+    /// 抽成一个方法让屏幕显示与离屏长图复用同一棵视图树，修饰符与顺序保持
+    /// 一致——改这里会同时改变页面显示与分享图，两处永不走样。
+    /// 唯一的差别是 ResultSegments：屏幕上用切换器交互，长图用静态全铺
+    /// （分段控件是 UIKit 桥接，ImageRenderer 拍不平，见 ResultSegments.isStatic）。
+    private func pageContent(isStatic: Bool) -> some View {
         VStack(spacing: 14) {
             ChartSection(analysis: analysis, vm: vm,
                          onFullscreen: openFullscreen)
 
-            ResultSegments(analysis: analysis)
+            ResultSegments(analysis: analysis, isStatic: isStatic)
 
             compactDisclaimer
         }
@@ -95,7 +97,7 @@ struct ResultDetailView: View {
     /// 「整个页面的内容」——不含导航栏/TabBar，没滚到的部分也在图里。
     /// 长图通过 PageSnapshot 离屏渲染内容视图得到，两者最终走同一个 ShareComposer。
     private func share() {
-        guard let shot = PageSnapshot.render(pageContent),
+        guard let shot = PageSnapshot.render(pageContent(isStatic: true)),
               let composed = ShareComposer.compose(screenshot: shot) else {
             // 与截图入口不同，这里是用户主动点的，静默失败等于点了没反应，必须报错
             showShareError = true

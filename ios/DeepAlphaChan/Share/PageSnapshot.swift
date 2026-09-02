@@ -29,27 +29,21 @@ enum PageSnapshot {
                 .environment(\.colorScheme, .dark)
         }
 
-        // 先用 1/4 倍率量内容高度再定档：布局按 pt 算、与 scale 无关（实测 0.25x
-        // 下 point 高度精确），位图只有几十 KB。若直接按 @3x 渲染 4000pt 长的页面，
-        // 会先画出 ~58MB 的位图才知道尺寸，老设备上有内存压力。
+        // 先用 1/4 像素密度量内容高度再定渲染倍率：布局按 pt 算、与 scale 无关
+        // （实测 0.25x 下 point 高度精确），位图只有几十 KB。若直接按 @3x 渲染
+        // 4000pt 长的页面，会先画出 ~58MB 的位图才知道尺寸，老设备上有内存压力。
         let measurer = ImageRenderer(content: snapshot())
         measurer.scale = 0.25
         guard let probe = measurer.uiImage else { return nil }
-        let height = probe.size.height
 
-        // 按「单张位图峰值不超过 ~35MB」定档：档内能开 3x 就开 3x（与屏幕同清晰度，
-        // 品牌头二维码像素最多），超长页降 2x/1.5x，肉眼几乎无差。
-        // 实测（iPhone 17 Pro 模拟器，宽 402pt）：
-        //   h=2000pt @3x → 1206×6000px ≈ 29MB；h=4000pt @2x → 804×8000px ≈ 26MB；
-        //   h=8000pt @1.5x → 603×12000px ≈ 29MB。均远低于直接 @3x 渲染 4000pt 的 58MB。
-        let scale: CGFloat
-        if height <= 2400 {
-            scale = 3
-        } else if height <= 5200 {
-            scale = 2
-        } else {
-            scale = 1.5
-        }
+        // 倍率按「单张位图峰值 ≤ ~35MB」反推（35MB ≈ 875 万像素 × 4B），上限 3x
+        // 与屏幕同清晰度，下限 1x 再低字就看不清了。连续公式而不是离散档位：
+        // 页面高度连续变化时倍率平滑下降，不会在档位边界跳变。
+        // 实测（iPhone 17 Pro 模拟器，宽 402pt）：844pt 页 → 3x、1206×3614px
+        // ≈ 17MB；4244pt 页 → ~2.3x、~26MB；8916pt 页 → ~1.6x、~31MB。
+        let height = probe.size.height
+        let pixelBudget: CGFloat = 8_750_000
+        let scale = min(3, max(1, (pixelBudget / (width * height)).squareRoot()))
 
         let renderer = ImageRenderer(content: snapshot())
         renderer.scale = scale
