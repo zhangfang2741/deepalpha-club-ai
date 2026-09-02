@@ -233,3 +233,16 @@
 
 /* Share text */
 "仅供技术研究，不构成投资建议" = "For technical research only, not investment advice";
+/* 品牌名后缀，用在 "DeepAlpha \(L("缠论"))" 里，与 "DeepAlpha 缠论" 的译法保持一致 */
+"缠论" = "Chan";
+
+/* Share entry & errors */
+"分享分析图" = "Share analysis image";
+"生成一张带二维码的分析图并打开预览" = "Creates an analysis image with a QR code and opens the preview";
+"生成分享图失败" = "Couldn't create the share image";
+"好" = "OK";
+"请稍后重试。" = "Please try again later.";
+
+/* Auth */
+"Apple 登录失败，请稍后再试" = "Sign in with Apple failed. Please try again later.";
+"中国大陆" = "Chinese Mainland";
