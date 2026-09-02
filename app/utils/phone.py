@@ -1,15 +1,19 @@
-"""手机号归一化。
+"""手机号归一化与国家码拆分。
 
 统一存 E.164（+国家码+号码）。同一个号码用户可能写成 13800138000、
 +86 138-0013-8000、086-13800138000 等多种形式，不归一化会有两个后果：
 库里注册出多个账号，以及「换个写法就能绕过已注册检查」。
 
-不引 phonenumbers 库：它有 2MB 的全球号码元数据，而这里只需要支持中国大陆号
-加上「显式带国家码的国际号原样保留」。真要做全球号码校验时再换不迟。
+多国支持：国际号码的号段规则（长度、前缀）各国不同，手写正则维护不了，改用
+`phonenumbers`（Google libphonenumber 的 Python 移植）做权威校验。中国大陆的
+若干便捷写法（裸 11 位、全角数字、086 前缀）在进 phonenumbers 之前先本地归一，
+既保留老版本 App「只填 11 位」的向后兼容，也省掉 default_region 的猜测。
 """
 from __future__ import annotations
 
 import re
+
+import phonenumbers
 
 from app.core.config import settings
 
@@ -20,8 +24,6 @@ class InvalidPhoneError(ValueError):
 
 # 中国大陆手机号：1 开头，第二位 3-9，共 11 位。
 _CN_MOBILE = re.compile(r"^1[3-9]\d{9}$")
-# E.164 上限 15 位数字，国家码至少 1 位。
-_E164 = re.compile(r"^\+[1-9]\d{6,14}$")
 
 
 def _to_halfwidth(text: str) -> str:
@@ -31,11 +33,10 @@ def _to_halfwidth(text: str) -> str:
     )
 
 
-def normalize_phone(raw: str) -> str:
-    """把各种写法的手机号归一化成 E.164。
+def _to_e164_candidate(raw: str) -> str:
+    """把各种写法清洗成一个「带 + 的候选 E.164 串」，交给 phonenumbers 做权威校验。
 
-    Raises:
-        InvalidPhoneError: 格式不合法。
+    只负责补出国家码前缀，不做号段合法性判断——那是 phonenumbers 的职责。
     """
     if not raw:
         raise InvalidPhoneError("请输入手机号")
@@ -50,42 +51,79 @@ def normalize_phone(raw: str) -> str:
         raise InvalidPhoneError("手机号格式不正确")
 
     if text.startswith("+"):
-        candidate = "+" + text[1:]
-    elif text.startswith("00"):
+        return text
+    if text.startswith("00"):
         # 00 是国际直拨前缀，等价于 +
-        candidate = "+" + text[2:]
-    elif text.startswith("086") and _CN_MOBILE.match(text[3:]):
+        return "+" + text[2:]
+    if text.startswith("086") and _CN_MOBILE.match(text[3:]):
         # 「086-13800138000」严格说不规范（国际前缀是 00 不是 0），但国内用户
         # 写得很多，且 0 + 86 + 合法手机号没有别的解释，按 +86 处理。
-        candidate = "+" + text[1:]
-    else:
-        digits = text
-        if not digits.isdigit():
-            raise InvalidPhoneError("手机号格式不正确")
-        if _CN_MOBILE.match(digits):
-            candidate = f"+{settings.DEFAULT_PHONE_COUNTRY_CODE}{digits}"
-        elif digits.startswith("86") and _CN_MOBILE.match(digits[2:]):
-            # 用户写了 8613800138000 这种不带 + 的形式
-            candidate = f"+{digits}"
-        else:
-            raise InvalidPhoneError("手机号格式不正确")
+        return "+" + text[1:]
 
-    if not _E164.match(candidate):
+    if not text.isdigit():
+        raise InvalidPhoneError("手机号格式不正确")
+    if _CN_MOBILE.match(text):
+        # 裸 11 位手机号按默认国家码补全（老版本 App 只填 11 位，保持兼容）。
+        return f"+{settings.DEFAULT_PHONE_COUNTRY_CODE}{text}"
+    if text.startswith(settings.DEFAULT_PHONE_COUNTRY_CODE) and _CN_MOBILE.match(
+        text[len(settings.DEFAULT_PHONE_COUNTRY_CODE):]
+    ):
+        # 用户写了 8613800138000 这种不带 + 的形式
+        return f"+{text}"
+
+    # 其它裸数字无法确定国家码，明确拒绝，不要瞎猜（猜错会把号发去别的国家）。
+    raise InvalidPhoneError("手机号格式不正确")
+
+
+def normalize_phone(raw: str) -> str:
+    """把各种写法的手机号归一化成 E.164。
+
+    Raises:
+        InvalidPhoneError: 格式不合法或号段不存在。
+    """
+    candidate = _to_e164_candidate(raw)
+
+    try:
+        parsed = phonenumbers.parse(candidate, None)
+    except phonenumbers.NumberParseException as exc:
+        raise InvalidPhoneError("手机号格式不正确") from exc
+
+    # is_valid_number 做的是「这个号段在该国真实存在」的校验，比单纯的位数校验强得多：
+    # +8612345、+1 后面跟一个不存在的区号，都能被这一步挡下。
+    if not phonenumbers.is_valid_number(parsed):
         raise InvalidPhoneError("手机号格式不正确")
 
-    # 国内号再走一遍号段校验：+86 后面必须是合法的 11 位手机号，
-    # 否则 +8612345 这种也会因为满足 E.164 而蒙混过关。
-    if candidate.startswith("+86") and not _CN_MOBILE.match(candidate[3:]):
-        raise InvalidPhoneError("手机号格式不正确")
+    return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
 
-    return candidate
+
+def split_e164(e164: str) -> tuple[str, str]:
+    """E.164 → (国家码, 国内号码)，都是纯数字串。
+
+    阿里云号码认证服务的 SendSmsVerifyCode / CheckSmsVerifyCode 要求把国家码
+    （CountryCode）和号码（PhoneNumber，不含国家码的国内号）分开传：国内号
+    CountryCode=86、PhoneNumber 是 11 位裸号；国际号同理，各自的国家码 + 国内号。
+    统一按 phonenumbers 拆，避免对 +86 特判、对其它国家又走另一套逻辑。
+    """
+    parsed = phonenumbers.parse(e164, None)
+    country_code = str(parsed.country_code)
+    # 直接从 E.164 去掉「+国家码」拿国内号，而不是走 NATIONAL 格式化：后者会带上
+    # 国内长途前缀（如英国的前导 0）和分隔符，阿里云都不认。这样得到的纯数字串
+    # 也总能和国家码拼回原始 E.164。
+    national = e164.lstrip("+")[len(country_code):]
+    return country_code, national
+
+
+def is_domestic(e164: str) -> bool:
+    """是否为默认国家（中国大陆）号码。用于在国内/国际短信模板间分流。"""
+    return e164.startswith(f"+{settings.DEFAULT_PHONE_COUNTRY_CODE}")
 
 
 def to_aliyun_format(e164: str) -> str:
     """E.164 → 阿里云 SendSms 要求的 PhoneNumbers 格式。
 
-    阿里云对两类号码要求不同：国内号要 11 位裸号（带 +86 会被拒），
-    国际号要 00 开头而不是 +。
+    ⚠️ 缠论 App 已改用 split_e164（国家码与号码分开传，见 services/account/codes.py），
+    这个函数仅为 WordLens（背单词）保留：它对国内号要 11 位裸号（带 +86 会被拒），
+    对国际号要 00 开头而不是 +。
     """
     if e164.startswith("+86"):
         return e164[3:]

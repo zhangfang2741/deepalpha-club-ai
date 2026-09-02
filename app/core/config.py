@@ -478,6 +478,11 @@ class Settings:
             os.getenv("EMAIL_CODE_MAX_ATTEMPTS", os.getenv("PASSWORD_RESET_MAX_ATTEMPTS", "5"))
         )
 
+        # 短信成本闸（只对短信生效，邮箱不花钱不受限）。60 秒冷却挡的是「连点重发」，
+        # 挡不住「同一个号一天被发几十次」，这里按天再卡一道单号上限：一个号码 24 小时内
+        # 最多发几条，正常用户一两条就够了。超限返回 429。
+        self.SMS_PER_PHONE_DAILY_LIMIT = int(os.getenv("SMS_PER_PHONE_DAILY_LIMIT", "10"))
+
         # JWT 补充配置（与现有 JWT_ACCESS_TOKEN_EXPIRE_DAYS 对齐）
         self.ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
         self.REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))

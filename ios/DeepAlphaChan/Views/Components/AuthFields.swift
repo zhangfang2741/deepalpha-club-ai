@@ -66,6 +66,43 @@ struct AccountField: View {
     }
 }
 
+/// 手机号输入框：左侧固定 +86 前缀，右侧填国内号。
+///
+/// 目前只支持中国大陆，区号是固定的、不可选（国际短信未开通）。保留 country 绑定
+/// 与拼 E.164 的路径，将来开通国际短信时把这里换回下拉即可，调用方无需改动。
+/// 拆成独立组件而不改 AccountField，是因为登录/找回密码页共用同一套手机号输入。
+struct PhoneNumberField: View {
+    @Binding var country: PhoneCountry
+    @Binding var national: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text("\(country.flag) +\(country.dialCode)")
+                .foregroundColor(Theme.textPrimary)
+                .padding(12)
+                .background(Theme.surfaceAlt)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+
+            HStack {
+                Image(systemName: "iphone").foregroundColor(Theme.textSecondary).frame(width: 20)
+                TextField(L("手机号"), text: $national)
+                    .keyboardType(.numberPad)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .foregroundColor(Theme.textPrimary)
+                    .onChange(of: national) { _, newValue in
+                        // 只留数字，防止粘贴进来带空格/连字符的内容。
+                        let digits = newValue.filter(\.isNumber)
+                        if digits != newValue { national = digits }
+                    }
+            }
+            .padding(12)
+            .background(Theme.surfaceAlt)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+    }
+}
+
 /// 验证码输入框 + 获取按钮（带倒计时）。
 ///
 /// 倒计时秒数与后端 EMAIL_CODE_RESEND_COOLDOWN 对齐（60 秒）。这只是个体验优化，

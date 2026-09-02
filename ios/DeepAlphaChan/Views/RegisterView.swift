@@ -8,6 +8,7 @@ struct RegisterView: View {
 
     @State private var channel: AccountChannel = .phone
     @State private var account = ""
+    @State private var country: PhoneCountry = .default
     @State private var code = ""
     @State private var username = ""
     @State private var password = ""
@@ -15,7 +16,19 @@ struct RegisterView: View {
 
     private var rules: PasswordRules { PasswordRules(password: password) }
     private var matched: Bool { !confirm.isEmpty && password == confirm }
-    private var accountValid: Bool { AccountInput.isValid(account, channel: channel) }
+
+    /// 手机号通道下，账号是否合法按选定国家的位数预校验。
+    private var accountValid: Bool {
+        switch channel {
+        case .phone: return country.isSupported && country.isValidNational(account)
+        case .email: return AccountInput.isValidEmail(account)
+        }
+    }
+
+    /// 提交给后端的账号：手机号拼成 E.164（+国家码+号码），邮箱原样。
+    private var submittedAccount: String {
+        channel == .phone ? country.e164(national: account) : account
+    }
 
     private var canSubmit: Bool {
         accountValid && AccountInput.isValidCode(code) && rules.allSatisfied && matched
@@ -29,10 +42,14 @@ struct RegisterView: View {
                     VStack(spacing: 14) {
                         AccountChannelPicker(channel: $channel)
 
-                        AccountField(channel: channel, text: $account)
+                        if channel == .phone {
+                            PhoneNumberField(country: $country, national: $account)
+                        } else {
+                            AccountField(channel: channel, text: $account)
+                        }
 
                         VerificationCodeField(code: $code, canRequest: accountValid) {
-                            await auth.requestRegisterCode(account: account, channel: channel)
+                            await auth.requestRegisterCode(account: submittedAccount, channel: channel)
                         }
 
                         AuthTextField(icon: "person", placeholder: L("用户名（可选）"), text: $username)
@@ -51,7 +68,7 @@ struct RegisterView: View {
                         Button {
                             Task {
                                 await auth.register(
-                                    account: account, channel: channel, code: code,
+                                    account: submittedAccount, channel: channel, code: code,
                                     password: password, username: username)
                                 if auth.isAuthenticated { dismiss() }
                             }

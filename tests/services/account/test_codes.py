@@ -89,6 +89,52 @@ async def test_sms_cooldown_only_starts_after_successful_send():
     assert not cooldown_writes, "短信没发成却上了冷却"
 
 
+async def test_sms_blocked_when_phone_daily_limit_reached():
+    """单号当日发送到上限后，直接拦下，不再调阿里云（省钱）。"""
+    from app.core.config import settings
+    from app.services import sms as sms_service
+
+    redis = _redis()
+
+    def _get(key: str):
+        # 单号计数已达上限，其它 key（冷却/全站）当作不存在。
+        return str(settings.SMS_PER_PHONE_DAILY_LIMIT) if "sms_daily" in key else None
+
+    redis.get.side_effect = _get
+
+    send = AsyncMock()
+    with patch.object(sms_service, "send_verification_code", send):
+        with pytest.raises(codes.DailySendLimitError):
+            await codes.send_sms_code(redis, Purpose.PHONE_REGISTER, PHONE)
+
+    assert send.await_count == 0, "超过单号上限还调了短信接口"
+
+
+async def test_sms_rejects_non_china_number():
+    """目前只支持中国大陆号，国际号在发送前就被拦下，不调阿里云。"""
+    from app.services import sms as sms_service
+
+    redis = _redis()
+    send = AsyncMock()
+    with patch.object(sms_service, "send_verification_code", send):
+        with pytest.raises(codes.CountryNotSupportedError):
+            await codes.send_sms_code(redis, Purpose.PHONE_REGISTER, "+14155552671")
+
+    assert send.await_count == 0, "国际号不该真的发短信"
+
+
+async def test_sms_counts_toward_quota_only_after_successful_send():
+    """发送成功才计入单号当日配额。"""
+    from app.services import sms as sms_service
+
+    redis = _redis()  # get 恒返回 None → 未触限
+    with patch.object(sms_service, "send_verification_code", AsyncMock()):
+        await codes.send_sms_code(redis, Purpose.PHONE_REGISTER, PHONE)
+
+    incr_keys = [c.args[0] for c in redis.incr.await_args_list]
+    assert any("sms_daily" in k for k in incr_keys), "没有累计单号计数"
+
+
 async def test_sms_verify_records_failed_attempt_on_wrong_code():
     """验错要计数，否则 6 位数字可以无限次猜。"""
     from app.services import sms as sms_service
