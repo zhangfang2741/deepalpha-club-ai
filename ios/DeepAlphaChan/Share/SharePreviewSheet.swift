@@ -35,14 +35,22 @@ struct SharePreviewSheet: View {
 
             HStack(spacing: 12) {
                 Button(action: saveToAlbum) {
-                    // 保存进行中转菊花并禁用，防止双击写两张重复图进相册
-                    if isSaving { ProgressView() } else { Text(L("保存到相册")) }
-                    Text(L("保存到相册"))
-                        .font(.system(size: 16, weight: .medium))
-                        .frame(maxWidth: .infinity, minHeight: 48)
-                        .background(Theme.surfaceAlt)
-                        .foregroundColor(Theme.textPrimary)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    // 保存进行中转菊花并禁用，防止双击写两张重复图进相册。
+                    // 菊花与文字必须包在同一个 Group 里共用下面这套容器样式：
+                    // 写成两个并列的视图会被 ViewBuilder 排成一行，按钮左边就会
+                    // 多出一段没有背景和内边距的裸文字。
+                    Group {
+                        if isSaving {
+                            ProgressView().tint(Theme.textPrimary)
+                        } else {
+                            Text(L("保存到相册"))
+                        }
+                    }
+                    .font(.system(size: 16, weight: .medium))
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .background(Theme.surfaceAlt)
+                    .foregroundColor(Theme.textPrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .disabled(isSaving)
                 Button { showShareSheet = true } label: {
