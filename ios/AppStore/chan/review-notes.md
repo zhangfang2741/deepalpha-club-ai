@@ -59,8 +59,19 @@
 「我的」页底部有「删除账号」入口，二次确认后永久删除账号及关联数据。
 
 六、数据来源
-行情数据来自公开的第三方行情接口。App 不采集任何位置、通讯录、
-相册或健康数据，不使用广告追踪。
+行情数据来自公开的第三方行情接口。App 不采集位置、通讯录或健康数据，
+不读取相册，不使用广告追踪。相册权限仅用于把用户主动生成的分析图
+写入相册（add-only），详见第七节。
+
+七、本版新增（1.1）
+1. 分享分析图：结果页右上角的分享按钮会把整页分析导出为一张长图
+   （含品牌与下载二维码）；在 App 内截屏也会自动弹出同一个分享预览。
+2. 相册权限（本版新增）：预览页的「保存到相册」会申请相册写入权限
+   （PHAccessLevel.addOnly，只写不读）。App 不读取、不浏览、不上传
+   用户相册中的任何内容；不点「保存到相册」就完全不会触发该权限。
+   复现路径：分析任意标的 → 结果页右上角分享按钮 → 保存到相册。
+3. MACD 副图现在与主图一样支持左右平移与双指缩放。
+4. 新增手机号注册与登录（中国大陆 +86）。
 
 ---
 
@@ -110,7 +121,24 @@ deletes the account and associated data.
 
 6. DATA SOURCES
 Market data comes from public third-party market-data APIs. The app collects no
-location, contacts, photos or health data, and uses no advertising tracking.
+location, contacts or health data, does not read the photo library, and uses no
+advertising tracking. Photo-library access is write-only and is used solely to
+save an image the user explicitly generated — see section 7.
+
+7. NEW IN THIS VERSION (1.1)
+- Share analysis image: the share button at the top right of the result screen
+  exports the whole analysis page as one tall image (with branding and a
+  download QR code). Taking a screenshot inside the app opens the same share
+  preview.
+- Photo library permission (new in this version): "Save to Photos" in the
+  preview requests write-only access (PHAccessLevel.addOnly). The app never
+  reads, browses or uploads anything from the user's photo library, and the
+  permission is never requested unless the user taps Save to Photos.
+  Steps to reproduce: analyse any ticker -> share icon at top right ->
+  Save to Photos.
+- The MACD subchart now supports the same pan and pinch-to-zoom gestures as the
+  main chart.
+- Phone-number sign-up and sign-in (mainland China, +86).
 ```
 
 ---
