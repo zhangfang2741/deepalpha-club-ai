@@ -145,7 +145,44 @@ consequences are your own.
 
 ---
 
-## 五、本版更新说明（首次提交）
+## 五、本版更新说明
+
+### 1.1（本版，2026-09）
+
+> 更新说明只讲功能变化，不重复描述里的免责声明；也不写「买卖点更准」这类
+> 效果承诺——那是 3.1.1/5.2.5 的高风险措辞。
+
+中文：
+
+```
+新增分享，图表操作更跟手。
+
+• 分析结果一键生成长图，带品牌与下载二维码
+• 在 App 内截屏会自动弹出分享预览，可存相册或直接分享
+• 图表平移支持惯性滑动，滑到边缘有回弹
+• MACD 副图也能左右平移与缩放，与主图联动
+• 点选 K 线后可滑动移动十字光标
+• 支持手机号注册与登录
+• 补全英文界面，海外地区按系统语言显示
+```
+
+英文：
+
+```
+Sharing is here, and the chart feels more responsive.
+
+• Turn any analysis into a long image with branding and a download QR code
+• Take a screenshot in the app to get a share preview — save to Photos or share directly
+• Chart panning now has inertia, with a rubber-band bounce at the edges
+• The MACD subchart pans and zooms too, in sync with the main chart
+• Tap a candle, then drag to move the crosshair
+• Sign up and sign in with a phone number
+• Completed English localization; outside mainland China the language follows your system setting
+```
+
+---
+
+### 1.0（首次提交，历史留档）
 
 中文：
 
