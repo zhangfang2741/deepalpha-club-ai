@@ -1,8 +1,10 @@
 """八字 AI 解读：daily(免费今日运势) / deep(付费深度解读) 两档文案生成。"""
 
+from datetime import date
 from typing import Literal, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from lunar_python import Solar
 
 from app.core.prompts.bazi import DAILY_PROMPT, DEEP_PROMPT
 from app.schemas.bazi import (
@@ -26,6 +28,12 @@ def _describe_pillar(name: str, pillar: Optional[Pillar]) -> str:
     return f"{name}：{pillar.gan}{pillar.zhi}（纳音：{pillar.na_yin}，十神：{pillar.shi_shen_gan}/{shi_shen_zhi}）"
 
 
+def _today_liu_ri_gan_zhi() -> str:
+    """计算今天的流日干支，供"今日运势"分析使用。"""
+    today = date.today()
+    return Solar.fromYmd(today.year, today.month, today.day).getLunar().getDayInGanZhi()
+
+
 def _describe_chart(chart: BaziChartResponse, gender: Literal["male", "female"]) -> str:
     wu_xing_line = "、".join(f"{k}{v}" for k, v in chart.wu_xing_distribution.items())
     da_yun_line = "、".join(f"{d.gan_zhi}({d.start_age}-{d.end_age}岁)" for d in chart.da_yun)
@@ -41,6 +49,7 @@ def _describe_chart(chart: BaziChartResponse, gender: Literal["male", "female"])
             f"五行分布：{wu_xing_line}",
             f"大运：{da_yun_line}",
             f"今年流年：{chart.liu_nian_gan_zhi}",
+            f"今天日期：{date.today().isoformat()}，今日流日：{_today_liu_ri_gan_zhi()}",
         ]
     )
 
