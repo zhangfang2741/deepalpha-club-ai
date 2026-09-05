@@ -19,3 +19,11 @@ def test_correct_birth_datetime_unknown_city_returns_original():
     corrected, applied = correct_birth_datetime(dt, "东京")
     assert applied is False
     assert corrected == dt
+
+
+def test_correct_birth_datetime_strips_whitespace_in_city_name():
+    """城市名带首尾空格时，去除空格后仍应命中经度表并完成校正。"""
+    dt = datetime(1990, 5, 15, 14, 30, 0)
+    corrected, applied = correct_birth_datetime(dt, " 北京 ")
+    assert applied is True
+    assert corrected == datetime(1990, 5, 15, 14, 16, 0)

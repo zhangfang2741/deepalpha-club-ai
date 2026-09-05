@@ -26,7 +26,7 @@ def correct_birth_datetime(dt: datetime, city: str) -> Tuple[datetime, bool]:
     Returns:
         (校正后的时间, 是否命中经度表并完成校正)。命中不到时原样返回 dt。
     """
-    longitude = _CITY_LONGITUDE.get(city)
+    longitude = _CITY_LONGITUDE.get(city.strip())
     if longitude is None:
         return dt, False
     offset_minutes = round((longitude - _REFERENCE_LONGITUDE) * 4)
