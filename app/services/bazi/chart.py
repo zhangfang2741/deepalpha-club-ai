@@ -23,12 +23,19 @@ def _tally_wu_xing(wu_xing_strings: List[str]) -> Dict[str, int]:
     return counts
 
 
+def _non_null(value: str | None) -> str:
+    """lunar-python 的部分 getter 被推断为 Optional[str]，但排盘成功后实际必返回字符串。"""
+    assert value is not None
+    return value
+
+
 def build_bazi_chart(request: BaziChartRequest) -> BaziChartResponse:
     """根据生辰信息计算八字排盘（四柱/五行/十神/大运/流年）。"""
     hour_known = request.birth_time is not None
-    naive_dt = datetime.combine(
-        request.birth_date, request.birth_time if hour_known else _UNKNOWN_HOUR_PLACEHOLDER
-    )
+    if request.birth_time is not None:
+        naive_dt = datetime.combine(request.birth_date, request.birth_time)
+    else:
+        naive_dt = datetime.combine(request.birth_date, _UNKNOWN_HOUR_PLACEHOLDER)
 
     true_solar_time: datetime | None = None
     true_solar_time_applied = False
@@ -46,22 +53,22 @@ def build_bazi_chart(request: BaziChartRequest) -> BaziChartResponse:
     year_pillar = Pillar(
         gan=ec.getYearGan(),
         zhi=ec.getYearZhi(),
-        na_yin=ec.getYearNaYin(),
-        shi_shen_gan=ec.getYearShiShenGan(),
+        na_yin=_non_null(ec.getYearNaYin()),
+        shi_shen_gan=_non_null(ec.getYearShiShenGan()),
         shi_shen_zhi=ec.getYearShiShenZhi(),
     )
     month_pillar = Pillar(
         gan=ec.getMonthGan(),
         zhi=ec.getMonthZhi(),
-        na_yin=ec.getMonthNaYin(),
-        shi_shen_gan=ec.getMonthShiShenGan(),
+        na_yin=_non_null(ec.getMonthNaYin()),
+        shi_shen_gan=_non_null(ec.getMonthShiShenGan()),
         shi_shen_zhi=ec.getMonthShiShenZhi(),
     )
     day_pillar = Pillar(
         gan=ec.getDayGan(),
         zhi=ec.getDayZhi(),
-        na_yin=ec.getDayNaYin(),
-        shi_shen_gan=ec.getDayShiShenGan(),
+        na_yin=_non_null(ec.getDayNaYin()),
+        shi_shen_gan=_non_null(ec.getDayShiShenGan()),
         shi_shen_zhi=ec.getDayShiShenZhi(),
     )
 
@@ -72,8 +79,8 @@ def build_bazi_chart(request: BaziChartRequest) -> BaziChartResponse:
         time_pillar = Pillar(
             gan=ec.getTimeGan(),
             zhi=ec.getTimeZhi(),
-            na_yin=ec.getTimeNaYin(),
-            shi_shen_gan=ec.getTimeShiShenGan(),
+            na_yin=_non_null(ec.getTimeNaYin()),
+            shi_shen_gan=_non_null(ec.getTimeShiShenGan()),
             shi_shen_zhi=ec.getTimeShiShenZhi(),
         )
         wu_xing_sources.append(ec.getTimeWuXing())

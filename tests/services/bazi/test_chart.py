@@ -24,6 +24,7 @@ def test_build_bazi_chart_hour_known_applies_true_solar_time():
 
     assert result.hour_known is True
     assert result.true_solar_time_applied is True
+    assert result.true_solar_time is not None
     assert result.true_solar_time.hour == 14
     assert result.true_solar_time.minute == 16
 
@@ -105,9 +106,11 @@ def test_build_bazi_chart_unknown_city_skips_correction():
     result = build_bazi_chart(request)
 
     assert result.true_solar_time_applied is False
+    assert result.true_solar_time is not None
     assert result.true_solar_time.hour == 14
     assert result.true_solar_time.minute == 30
     # 14:30 和校正后的14:16都落在未时(13-15点)区间内，四柱不受影响
     assert result.year_pillar.gan == "庚"
+    assert result.time_pillar is not None
     assert result.time_pillar.gan == "癸"
     assert result.time_pillar.zhi == "未"
