@@ -14,6 +14,7 @@ class _FakeMessage:
 
 
 async def test_generate_interpretation_daily_uses_daily_prompt(monkeypatch):
+    """section="daily" 时应使用 DAILY_PROMPT，且传给 AI 的用户消息包含排盘信息。"""
     captured = {}
 
     async def fake_call(messages, **kwargs):
@@ -39,6 +40,7 @@ async def test_generate_interpretation_daily_uses_daily_prompt(monkeypatch):
 
 
 async def test_generate_interpretation_deep_uses_deep_prompt(monkeypatch):
+    """section="deep" 时应使用 DEEP_PROMPT，时辰未知时用户消息应体现"时柱：未知"。"""
     captured = {}
 
     async def fake_call(messages, **kwargs):

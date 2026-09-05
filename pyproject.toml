@@ -179,6 +179,7 @@ convention = "google"
 "app/schemas/chan.py" = ["D415", "D101"]
 "app/schemas/bazi.py" = ["D415", "D101"]
 "app/services/bazi/*.py" = ["D415"]
+"app/core/prompts/bazi/*.py" = ["D415"]
 "tests/services/bazi/*.py" = ["D415"]
 "app/services/skills/kline.py" = ["D415"]
 "tests/services/skills/test_kline_fetch.py" = ["D415"]

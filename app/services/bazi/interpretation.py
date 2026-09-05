@@ -62,4 +62,32 @@ async def generate_interpretation(request: InterpretationRequest) -> Interpretat
             HumanMessage(content=chart_description),
         ]
     )
-    return InterpretationResponse(text=result.content)
+    return InterpretationResponse(text=_extract_message_text(result.content))
+
+
+def _extract_message_text(content: object) -> str:
+    """从 LLM 响应中只提取正文文本。
+
+    不同供应商的 ``AIMessage.content`` 形态不同：
+    - OpenAI 等：直接是 ``str``。
+    - Claude（开启 extended thinking）等：是内容块列表，例如
+      ``[{"type": "thinking", ...}, {"type": "text", "text": "..."}]``。
+    直接 ``str(content)`` 会把 thinking / signature 等原始块也当成正文，
+    因此这里只保留 text 块，丢弃 thinking / reasoning 等推理块。
+    """
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                block_type = block.get("type")
+                if block_type in {"thinking", "reasoning", "redacted_thinking"}:
+                    continue
+                text = block.get("text")
+                if isinstance(text, str) and text:
+                    parts.append(text)
+        return "\n".join(parts).strip()
+    return str(content).strip()
