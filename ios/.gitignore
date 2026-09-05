@@ -5,6 +5,7 @@ DerivedData/
 xcuserdata/
 *.xcscmblueprint
 *.xccheckout
+*.xcodeproj
 
 # Swift Package Manager
 .swiftpm/
