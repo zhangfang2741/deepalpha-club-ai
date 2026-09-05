@@ -65,6 +65,30 @@ def test_get_bazi_chart_invalid_date_returns_422():
     assert response.status_code == 422
 
 
+def test_get_bazi_chart_future_date_returns_422():
+    response = client.post(
+        "/api/v1/bazi/chart",
+        json={
+            "birth_date": "2999-01-01",
+            "birth_city": "北京",
+            "gender": "male",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_get_bazi_chart_too_old_date_returns_422():
+    response = client.post(
+        "/api/v1/bazi/chart",
+        json={
+            "birth_date": "1899-12-31",
+            "birth_city": "北京",
+            "gender": "male",
+        },
+    )
+    assert response.status_code == 422
+
+
 def test_get_bazi_interpretation_success(monkeypatch):
     class _FakeMessage:
         content = "今天适合签约 | 宜：签约 忌：争执"

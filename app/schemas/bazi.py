@@ -3,9 +3,11 @@
 from datetime import date, datetime, time
 from typing import Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.base import BaseResponse
+
+_MIN_BIRTH_YEAR = 1900
 
 
 class BaziChartRequest(BaseModel):
@@ -13,6 +15,16 @@ class BaziChartRequest(BaseModel):
     birth_time: Optional[time] = Field(None, description="出生时间，None 表示时辰不确定")
     birth_city: str = Field(description="出生城市，用于真太阳时校正")
     gender: Literal["male", "female"] = Field(description="性别，决定大运顺逆排")
+
+    @field_validator("birth_date")
+    @classmethod
+    def _birth_date_must_be_reasonable(cls, value: date) -> date:
+        """拒绝未来日期和过于久远的日期，避免用户输入错误（如年份多打/少打一位）导致排盘结果无意义。"""
+        if value > date.today():
+            raise ValueError("出生日期不能晚于今天")
+        if value.year < _MIN_BIRTH_YEAR:
+            raise ValueError(f"出生日期不能早于 {_MIN_BIRTH_YEAR} 年")
+        return value
 
 
 class Pillar(BaseModel):
@@ -44,11 +56,7 @@ class BaziChartResponse(BaseResponse):
     liu_nian_gan_zhi: str = Field(description="当前年份的流年干支")
 
 
-class InterpretationRequest(BaseModel):
-    birth_date: date = Field(description="阳历出生日期")
-    birth_time: Optional[time] = Field(None, description="出生时间，None 表示时辰不确定")
-    birth_city: str = Field(description="出生城市，用于真太阳时校正")
-    gender: Literal["male", "female"] = Field(description="性别，决定大运顺逆排")
+class InterpretationRequest(BaziChartRequest):
     section: Literal["daily", "deep"] = Field(description="daily=今日运势(免费) / deep=深度解读(付费)")
 
 
