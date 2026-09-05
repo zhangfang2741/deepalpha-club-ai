@@ -378,7 +378,7 @@ public enum APIError: Error, Sendable, Equatable {
 }
 ```
 
-**已知限制（不用现在修）**：`detailText` 只认得 `{"detail": "string"}` 或 `{"detail": {"message": "string"}}` 这两种形状。FastAPI/Pydantic 对请求体做自动校验失败时（比如 `gender` 传了非法枚举值），真实返回的是 `{"detail": [{"type": "...", "loc": [...], "msg": "..."}]}`——一个数组，这个解析逻辑接不住，会掉进 `defaultText(for: 422)` 返回"请求失败（HTTP 422）"这种不带具体原因的兜底文案。这是从 `DeepAlphaClub` 继承来的既有限制，本计划不修——Task 7 的 `BirthInfoFormView` 会用 `DatePicker` 的 `in:` 参数直接把日期范围锁在后端允许的区间内，从 UI 层面避免用户能触发这类 422，所以这个解析限制在这个功能里不会被用户实际感知到。
+**已知限制（不用现在修，但下面这段是修正过的准确描述——之前写的 FastAPI 默认 422 数组形状是错的，实测过后端 `app/main.py` 的自定义 `RequestValidationError` 处理器，真实形状见下）**：`detailText` 只认得 `{"detail": "string"}` 或 `{"detail": {"message": "string"}}` 这两种形状。本仓库后端在 `app/main.py` 里对 `RequestValidationError` 做了自定义处理，422 真实返回的是 `{"detail": "Validation error", "errors": [{"field": "birth_date", "message": "Value error, 出生日期不能晚于今天"}]}`——`detail` 是固定字符串 `"Validation error"`，具体字段错误在同级的 `errors` 数组里，不是 Pydantic 默认那种 `{"detail": [...]}` 形状。`detailText` 的两种匹配形状都接不住这个结构（`errors` 不是 `String`，`detail` 也不是嵌套 dict），一样会掉进 `defaultText(for: 422)` 返回"请求失败（HTTP 422）"这种不带具体原因的兜底文案，结论和之前写的一样，只是原因不同。这是从 `DeepAlphaClub` 继承来的既有限制，本计划不修——Task 7 的 `BirthInfoFormView` 会用 `DatePicker` 的 `in:` 参数直接把日期范围锁在后端允许的区间内，`gender`/`section` 都是固定选项的 Picker，`birth_city` 限定在内置城市表里选，这几个字段在正常使用下都不会触发 422，所以这个解析限制在这个功能里不会被用户实际感知到。
 
 </details>
 
@@ -1062,7 +1062,9 @@ struct BaziServiceTests {
     func getChartValidationError() async {
         let mock = MockServer()
         mock.handler = { req in
-            let body = #"{"detail":[{"type":"value_error","loc":["body","birth_date"],"msg":"Value error, 出生日期不能晚于今天"}]}"#
+            // 这是后端 app/main.py 里 RequestValidationError 自定义处理器的真实返回形状
+            // （不是 Pydantic 默认的 {"detail": [...]} 数组），已实测核对过
+            let body = #"{"detail":"Validation error","errors":[{"field":"birth_date","message":"Value error, 出生日期不能晚于今天"}]}"#
             return (HTTPURLResponse(url: req.url!, statusCode: 422, httpVersion: nil, headerFields: nil)!,
                     Data(body.utf8))
         }
