@@ -53,6 +53,7 @@ dependencies = [
     "deepagents>=0.6.12",
     "tradingagents==0.7.0",
     "phonenumbers>=9.0.38",
+    "lunar-python>=1.4.8",
 ]
 
 [project.optional-dependencies]
