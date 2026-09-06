@@ -130,6 +130,13 @@ class Settings:
             "DESCRIPTION", "A production-ready FastAPI template with LangGraph and Langfuse integration"
         )
         self.API_V1_STR = os.getenv("API_V1_STR", "/api/v1")
+        self.PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://api.deepalpha.club").rstrip("/")
+        self.MEDIA_STORAGE_DIR = os.getenv("MEDIA_STORAGE_DIR", "/tmp/deepalpha-media")
+        self.MEDIA_MAX_BYTES = int(os.getenv("MEDIA_MAX_BYTES", str(250 * 1024 * 1024)))
+        self.MEDIA_ALLOWED_TYPES = parse_list_from_env(
+            "MEDIA_ALLOWED_TYPES",
+            ["video/mp4", "video/quicktime", "video/webm", "image/jpeg", "image/png", "image/webp"],
+        )
         self.DEBUG = os.getenv("DEBUG", "false").lower() in ("true", "1", "t", "yes")
 
         # 产业图谱：启动时若图谱为空则自动注入 NVIDIA 产业链种子数据

@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.v1.analysis import router as analysis_router
 from app.api.v1.analyst_upgrade import router as analyst_upgrade_router
+from app.api.v1.media import router as media_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.bazi import router as bazi_router
 from app.api.v1.chan import router as chan_router
@@ -31,6 +32,7 @@ api_router = APIRouter()
 
 api_router.include_router(analysis_router, prefix="/analysis", tags=["analysis"])
 api_router.include_router(analyst_upgrade_router, prefix="/analyst-upgrades", tags=["analyst-upgrades"])
+api_router.include_router(media_router, prefix="/media", tags=["media"])
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
 api_router.include_router(bazi_router, prefix="/bazi", tags=["bazi"])
 api_router.include_router(chan_router, prefix="/chan", tags=["chan"])
