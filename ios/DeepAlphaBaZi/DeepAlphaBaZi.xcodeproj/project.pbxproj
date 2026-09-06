@@ -7,13 +7,29 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2F957A5D2D2AAA4430E16CFB /* BirthInfoFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55F794510F6A0513B56BD8B9 /* BirthInfoFormView.swift */; };
+		3B5E445CCA247BD6EB6564B8 /* CompositionRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91C1D73B28DAB3D80401BA4D /* CompositionRoot.swift */; };
+		62FCF74FA55017591657E510 /* DaYunSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B818496916E6B0979C78FD76 /* DaYunSectionView.swift */; };
+		64717473F3336B9D54C861D5 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C6CE97EAD703FA97B7BCC80 /* RootView.swift */; };
 		67A19AE1515596DAB06BEEDF /* DeepAlphaBaZiCore in Frameworks */ = {isa = PBXBuildFile; productRef = 45045E26918FA5C66D14B92B /* DeepAlphaBaZiCore */; };
+		9DEA52E7E40F97229CB0A3E9 /* DeepAlphaBaZiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D009E019EA6B3512906C6C2F /* DeepAlphaBaZiApp.swift */; };
+		B0200CC7572E6768FD669A86 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4905ACBC040C0DEEA128FDC2 /* Assets.xcassets */; };
+		E59BBEFB210A1E7FF61DB883 /* DeepInterpretationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA67B3EAD9849996833EB150 /* DeepInterpretationView.swift */; };
+		EB12867624A9506AC488AA99 /* ChartHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D53290694A4C136EE9B8061 /* ChartHomeView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		0023331B991E1130871CC4C8 /* DeepAlphaBaZi.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = DeepAlphaBaZi.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1077EA2677337BA2832A7746 /* Core */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Core; path = Core; sourceTree = SOURCE_ROOT; };
+		3C6CE97EAD703FA97B7BCC80 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		4905ACBC040C0DEEA128FDC2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		521838C1BBE15D2D9A1D7201 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		55F794510F6A0513B56BD8B9 /* BirthInfoFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BirthInfoFormView.swift; sourceTree = "<group>"; };
+		91C1D73B28DAB3D80401BA4D /* CompositionRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositionRoot.swift; sourceTree = "<group>"; };
+		9D53290694A4C136EE9B8061 /* ChartHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChartHomeView.swift; sourceTree = "<group>"; };
+		B818496916E6B0979C78FD76 /* DaYunSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaYunSectionView.swift; sourceTree = "<group>"; };
+		D009E019EA6B3512906C6C2F /* DeepAlphaBaZiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepAlphaBaZiApp.swift; sourceTree = "<group>"; };
+		EA67B3EAD9849996833EB150 /* DeepInterpretationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepInterpretationView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -45,6 +61,14 @@
 			name = Packages;
 			sourceTree = "<group>";
 		};
+		8D0BC2C4B4EF1C887349B59B /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				4905ACBC040C0DEEA128FDC2 /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		8E252A11BAD00D5459639E96 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -56,8 +80,12 @@
 		9396CF70EAF4C4186D0D1C81 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				91C1D73B28DAB3D80401BA4D /* CompositionRoot.swift */,
+				D009E019EA6B3512906C6C2F /* DeepAlphaBaZiApp.swift */,
 				521838C1BBE15D2D9A1D7201 /* Info.plist */,
+				3C6CE97EAD703FA97B7BCC80 /* RootView.swift */,
 				98F9BB9CA0A8CB44DD1D875B /* Features */,
+				8D0BC2C4B4EF1C887349B59B /* Resources */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -65,8 +93,20 @@
 		98F9BB9CA0A8CB44DD1D875B /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				C18EB29C310A6A4054A0A1FF /* Bazi */,
 			);
 			path = Features;
+			sourceTree = "<group>";
+		};
+		C18EB29C310A6A4054A0A1FF /* Bazi */ = {
+			isa = PBXGroup;
+			children = (
+				55F794510F6A0513B56BD8B9 /* BirthInfoFormView.swift */,
+				9D53290694A4C136EE9B8061 /* ChartHomeView.swift */,
+				B818496916E6B0979C78FD76 /* DaYunSectionView.swift */,
+				EA67B3EAD9849996833EB150 /* DeepInterpretationView.swift */,
+			);
+			path = Bazi;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -77,6 +117,7 @@
 			buildConfigurationList = E39C584D5EAD01B27C0A81E9 /* Build configuration list for PBXNativeTarget "DeepAlphaBaZi" */;
 			buildPhases = (
 				CA1772AC0D4D21927C8412F7 /* Sources */,
+				78C6D5C01C74C33046780FF1 /* Resources */,
 				5C504607B1C27B12403D2D62 /* Frameworks */,
 			);
 			buildRules = (
@@ -127,11 +168,29 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		78C6D5C01C74C33046780FF1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B0200CC7572E6768FD669A86 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		CA1772AC0D4D21927C8412F7 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2F957A5D2D2AAA4430E16CFB /* BirthInfoFormView.swift in Sources */,
+				EB12867624A9506AC488AA99 /* ChartHomeView.swift in Sources */,
+				3B5E445CCA247BD6EB6564B8 /* CompositionRoot.swift in Sources */,
+				62FCF74FA55017591657E510 /* DaYunSectionView.swift in Sources */,
+				9DEA52E7E40F97229CB0A3E9 /* DeepAlphaBaZiApp.swift in Sources */,
+				E59BBEFB210A1E7FF61DB883 /* DeepInterpretationView.swift in Sources */,
+				64717473F3336B9D54C861D5 /* RootView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
