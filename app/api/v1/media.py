@@ -69,7 +69,7 @@ async def upload_media(
     }
 
 
-@router.get("/files/{media_id}")
+@router.api_route("/files/{media_id}", methods=["GET", "HEAD"])
 @limiter.limit("120 per minute")
 async def read_media(request: Request, media_id: str) -> FileResponse:
     """读取已上传媒体，供 Buffer 等外部服务抓取."""
