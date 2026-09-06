@@ -36,8 +36,9 @@ async def upload_media(
     content_type = file.content_type or guessed_type
     if content_type == "application/octet-stream" and guessed_type:
         content_type = guessed_type
-    if content_type not in settings.MEDIA_ALLOWED_TYPES:
+    if content_type not in settings.MEDIA_ALLOWED_TYPES and guessed_type not in settings.MEDIA_ALLOWED_TYPES:
         raise HTTPException(status_code=415, detail="不支持的媒体类型")
+    content_type = guessed_type or content_type or "application/octet-stream"
 
     media_id = f"{uuid4().hex}{secrets.token_hex(4)}{suffix}"
     destination = _storage_dir() / media_id
