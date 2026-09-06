@@ -41,6 +41,25 @@ struct APIClientTests {
         }
     }
 
+    @Test("401 → APIError.unauthorized")
+    func unauthorized() async {
+        let mock = MockServer()
+        mock.handler = { req in
+            (HTTPURLResponse(url: req.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!, Data())
+        }
+        struct Empty: Decodable {}
+        let client = makeClient(mock)
+        do {
+            let _: Empty = try await client.get("/x")
+            Issue.record("应抛 unauthorized")
+        } catch let e as APIError {
+            #expect(e.isUnauthorized)
+            #expect(e.message == "登录已过期，请重新登录")
+        } catch {
+            Issue.record("错误类型不对：\(error)")
+        }
+    }
+
     @Test("422 → APIError.validation，detail 文本透出")
     func validation() async {
         let mock = MockServer()
