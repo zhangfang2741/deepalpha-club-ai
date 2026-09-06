@@ -60,8 +60,33 @@ struct AnalysisTabView: View {
                         .environmentObject(orientation)
                 }
             }
+            #if DEBUG
+            .task {
+                await runDemoAnalysisIfRequested()
+            }
+            #endif
         }
     }
+
+    #if DEBUG
+    /// 登录完成后自动打开演示标的，供无人工录制流程使用。
+    private func runDemoAnalysisIfRequested() async {
+        guard ProcessInfo.processInfo.arguments.contains("-deepalphaDemo"),
+              vm.analysis == nil,
+              let demoSymbol = ProcessInfo.processInfo.arguments
+                  .first(where: { $0.hasPrefix("-deepalphaDemoSymbol=") })
+                  .map({ String($0.dropFirst("-deepalphaDemoSymbol=".count)) }),
+              !demoSymbol.isEmpty else { return }
+        vm.apply(market: .us, symbol: demoSymbol)
+        // 等待登录收尾任务完成，避免 Keychain 写入与首个分析请求竞态。
+        try? await Task.sleep(nanoseconds: 800_000_000)
+        await triggerAnalysis()
+        if vm.analysis == nil, vm.errorMessage == "Not authenticated" {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            await triggerAnalysis()
+        }
+    }
+    #endif
 
     // MARK: - 门禁 + 跳转
 

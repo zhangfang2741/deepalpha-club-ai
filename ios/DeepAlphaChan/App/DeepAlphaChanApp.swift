@@ -11,6 +11,10 @@ struct DeepAlphaChanApp: App {
     @StateObject private var orientation = AppOrientation()
     @StateObject private var localization = LocalizationManager.shared
 
+    #if DEBUG
+    @State private var demoLoginStarted = false
+    #endif
+
     var body: some Scene {
         WindowGroup {
             RootView()
@@ -28,8 +32,34 @@ struct DeepAlphaChanApp: App {
                 // AppDelegate 是 UIKit 侧的，拿不到 SwiftUI 的 @StateObject，
                 // 用一个静态引用把同一个实例递过去。
                 .onAppear { AppDelegate.orientation = orientation }
+                #if DEBUG
+                .task {
+                    await runDemoLoginIfRequested()
+                }
+                #endif
         }
     }
+
+    #if DEBUG
+    /// 仅供模拟器录制使用。账号通过 Debug 启动参数注入，不进入源码或生产包。
+    private func runDemoLoginIfRequested() async {
+        guard !demoLoginStarted,
+              ProcessInfo.processInfo.arguments.contains("-deepalphaDemo"),
+              !auth.isAuthenticated,
+              let account = demoArgument(named: "deepalphaDemoAccount"),
+              let password = demoArgument(named: "deepalphaDemoPassword"),
+              !account.isEmpty, !password.isEmpty else { return }
+        demoLoginStarted = true
+        await auth.login(account: account, password: password)
+    }
+
+    private func demoArgument(named name: String) -> String? {
+        let prefix = "-\(name)="
+        return ProcessInfo.processInfo.arguments
+            .first(where: { $0.hasPrefix(prefix) })
+            .map { String($0.dropFirst(prefix.count)) }
+    }
+    #endif
 }
 
 // 原先这里有个 ShareCardSelfTest：带 -shareCardSelfTest 启动参数就用假数据渲染一张

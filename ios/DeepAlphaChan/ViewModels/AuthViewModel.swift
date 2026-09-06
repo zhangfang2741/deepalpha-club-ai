@@ -39,7 +39,7 @@ final class AuthViewModel: ObservableObject {
         }
         await perform(fallback: L("登录失败，请稍后再试")) {
             let resp = try await AuthService.login(account: account, password: password)
-            self.finishAuth(token: resp.accessToken)
+            await self.finishAuth(token: resp.accessToken)
         }
     }
 
@@ -48,7 +48,7 @@ final class AuthViewModel: ObservableObject {
         await perform(fallback: L("Apple 登录失败，请稍后再试")) {
             let resp = try await AuthService.appleLogin(
                 identityToken: identityToken, fullName: fullName)
-            self.finishAuth(token: resp.accessToken)
+            await self.finishAuth(token: resp.accessToken)
         }
     }
 
@@ -70,7 +70,7 @@ final class AuthViewModel: ObservableObject {
                 account: account, channel: channel, code: code,
                 password: password,
                 username: (username?.isEmpty == false) ? username : nil)
-            self.finishAuth(token: resp.token.accessToken)
+            await self.finishAuth(token: resp.token.accessToken)
         }
     }
 
@@ -118,8 +118,9 @@ final class AuthViewModel: ObservableObject {
     ///
     /// 不勾「保持登录」时仍然写 Keychain，因为本次会话的所有请求都要靠它取 token；
     /// 区别在于下次启动时 init 会把它清掉。
-    private func finishAuth(token: String) {
+    private func finishAuth(token: String) async {
         KeychainStore.saveToken(token)
+        await APIClient.shared.setToken(token)
         isAuthenticated = true
         Task { await loadProfile() }
     }

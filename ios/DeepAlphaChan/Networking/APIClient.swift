@@ -16,12 +16,18 @@ actor APIClient {
 
     private let session: URLSession
     private let decoder = JSONDecoder()
+    private var sessionToken: String?
 
     private init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = AppConfig.requestTimeout
         config.waitsForConnectivity = true
         self.session = URLSession(configuration: config)
+    }
+
+    /// 登录成功后立即注入内存 token，避免首个请求等待 Keychain 读取。
+    func setToken(_ token: String) {
+        sessionToken = token
     }
 
     // MARK: - 公开方法
@@ -72,7 +78,7 @@ actor APIClient {
 
     private func send<T: Decodable>(_ request: URLRequest) async throws -> T {
         var req = request
-        if let token = KeychainStore.loadToken() {
+        if let token = sessionToken ?? KeychainStore.loadToken() {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 

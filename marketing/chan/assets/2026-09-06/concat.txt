@@ -1,0 +1,6 @@
+file '/Users/zhangfang/deepalpha-club-ai/marketing/chan/assets/2026-09-06/scene-0.mp4'
+file '/Users/zhangfang/deepalpha-club-ai/marketing/chan/assets/2026-09-06/scene-1.mp4'
+file '/Users/zhangfang/deepalpha-club-ai/marketing/chan/assets/2026-09-06/scene-2.mp4'
+file '/Users/zhangfang/deepalpha-club-ai/marketing/chan/assets/2026-09-06/scene-3.mp4'
+file '/Users/zhangfang/deepalpha-club-ai/marketing/chan/assets/2026-09-06/scene-4.mp4'
+file '/Users/zhangfang/deepalpha-club-ai/marketing/chan/assets/2026-09-06/scene-5.mp4'
