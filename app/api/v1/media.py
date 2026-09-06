@@ -31,11 +31,14 @@ async def upload_media(
     user: User = Depends(get_current_user),
 ) -> dict[str, str | int]:
     """上传一个媒体文件并返回可供外部读取的 URL."""
-    content_type = file.content_type or mimetypes.guess_type(file.filename or "")[0]
+    suffix = Path(file.filename or "").suffix.lower()
+    guessed_type = mimetypes.guess_type(file.filename or "")[0]
+    content_type = file.content_type or guessed_type
+    if content_type == "application/octet-stream" and guessed_type:
+        content_type = guessed_type
     if content_type not in settings.MEDIA_ALLOWED_TYPES:
         raise HTTPException(status_code=415, detail="不支持的媒体类型")
 
-    suffix = Path(file.filename or "").suffix.lower()
     media_id = f"{uuid4().hex}{secrets.token_hex(4)}{suffix}"
     destination = _storage_dir() / media_id
     size = 0
