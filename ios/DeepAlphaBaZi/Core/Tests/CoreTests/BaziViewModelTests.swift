@@ -56,6 +56,23 @@ struct BaziViewModelTests {
         return BaziLocalStore(modelContainer: container)
     }
 
+    @Test("hasLoadedLocalProfile 初始为 false，loadLocalProfile 之后变 true（不管有没有查到档案）")
+    func hasLoadedLocalProfileFlips() async throws {
+        let store = try makeStore()
+        let vm = BaziViewModel(service: MockBaziService(), store: store)
+        #expect(vm.hasLoadedLocalProfile == false)
+        await vm.loadLocalProfile()
+        #expect(vm.hasLoadedLocalProfile == true)
+        #expect(vm.profile == nil)
+    }
+
+    @Test("store 为 nil 时，loadLocalProfile 仍然会把 hasLoadedLocalProfile 置 true")
+    func hasLoadedLocalProfileFlipsEvenWithoutStore() async throws {
+        let vm = BaziViewModel(service: MockBaziService(), store: nil)
+        await vm.loadLocalProfile()
+        #expect(vm.hasLoadedLocalProfile == true)
+    }
+
     @Test("没有本地档案时，loadLocalProfile 后 profile 仍是 nil（新用户态）")
     func loadLocalProfileEmpty() async throws {
         let store = try makeStore()

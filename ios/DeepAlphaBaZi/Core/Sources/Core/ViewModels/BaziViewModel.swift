@@ -5,6 +5,10 @@ import Observation
 @MainActor @Observable
 public final class BaziViewModel {
     public private(set) var profile: BirthProfileSnapshot?
+    /// 本地档案是否已经查过一次。RootView 靠这个字段区分"还没查完"和"查完了、确实没有"——
+    /// 否则冷启动时 profile 的初始值和"确实没有档案"长得一样，老用户每次开 App 都会先
+    /// 闪一下空的生辰表单，直到 loadLocalProfile() 异步查完才跳到已排盘首页。
+    public private(set) var hasLoadedLocalProfile = false
     public private(set) var dailyFortuneText: String?
     public private(set) var isSubmittingBirthInfo = false
     public private(set) var isLoadingFortune = false
@@ -34,6 +38,7 @@ public final class BaziViewModel {
 
     /// App 启动 / 首页出现时调用：有本地档案直接进已排盘态，没有则停在填表态。
     public func loadLocalProfile() async {
+        defer { hasLoadedLocalProfile = true }
         guard let store else { return }
         profile = try? await store.loadProfile()
     }

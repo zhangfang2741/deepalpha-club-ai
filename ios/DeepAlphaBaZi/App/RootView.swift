@@ -8,7 +8,11 @@ struct RootView: View {
 
     var body: some View {
         NavigationStack {
-            if baziVM.profile != nil {
+            // 本地档案还没查完之前不能直接当"没有档案"处理，否则老用户每次冷启动
+            // 都会先看到一闪而过的空生辰表单，等异步查询结束才跳回已排盘首页。
+            if !baziVM.hasLoadedLocalProfile {
+                ProgressView()
+            } else if baziVM.profile != nil {
                 ChartHomeView()
             } else {
                 BirthInfoFormView()

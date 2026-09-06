@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftData
 
 /// BirthProfile 是 SwiftData @Model（引用类型，非 Sendable），不能原样跨 actor 边界返回给
@@ -75,8 +76,13 @@ public actor BaziLocalStore {
 
 /// 默认磁盘容器的工厂：失败(磁盘满/迁移冲突)返回 nil，App 降级为不持久化(每次都重新走网络)。
 public enum BaziLocalStoreDefault {
+    private static let logger = Logger(subsystem: "club.deepalpha.bazi", category: "persistence")
+
     public static func make() -> BaziLocalStore? {
         guard let container = try? ModelContainer(for: BirthProfile.self, DailyFortuneCache.self) else {
+            // 这里静默降级是有意的(见上面的注释)，但完全不留痕迹会让"用户档案总是
+            // 存不住"这类支持工单没法排查——留一条日志，不影响降级行为本身。
+            logger.error("SwiftData ModelContainer 创建失败，本次会话将不持久化，每次都重新走网络")
             return nil
         }
         return BaziLocalStore(modelContainer: container)
