@@ -39,8 +39,10 @@ public final class BaziViewModel {
     }
 
     /// 提交生辰表单：调 /chart，成功后落本地并进入已排盘态。
+    /// 提交中再次调用直接忽略——避免双击/视图重建导致并发重复请求。
     public func submitBirthInfo(birthDate: String, birthTime: String?,
                                 birthCity: String, gender: String) async {
+        guard !isSubmittingBirthInfo else { return }
         formError = nil
         isSubmittingBirthInfo = true
         defer { isSubmittingBirthInfo = false }
@@ -63,14 +65,18 @@ public final class BaziViewModel {
     }
 
     /// 今日运势：本地缓存命中直接展示；未命中才调用 AI 接口(避免同一天内重复付费调用)。
+    /// 加载中再次调用直接忽略——避免视图重复触发 .task 时并发打两次付费接口。
     public func loadDailyFortuneIfNeeded() async {
+        guard !isLoadingFortune else { return }
         guard let profile else { return }
+        // 无条件清空，不能只在缓存未命中分支清——否则缓存命中时上一次的旧错误会和
+        // 新展示的运势文本同屏出现（同时显示"加载失败"和一段有效的运势内容）。
+        fortuneError = nil
         let dateKey = todayKeyProvider()
         if let store, let cached = try? await store.loadFortune(dateKey: dateKey) {
             dailyFortuneText = cached
             return
         }
-        fortuneError = nil
         isLoadingFortune = true
         defer { isLoadingFortune = false }
         do {

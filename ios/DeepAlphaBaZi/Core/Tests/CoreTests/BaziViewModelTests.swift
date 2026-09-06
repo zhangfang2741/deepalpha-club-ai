@@ -3,20 +3,44 @@ import Testing
 import SwiftData
 @testable import DeepAlphaBaZiCore
 
+/// 测试用的可控挂起点：让某次异步调用卡在半途，等测试确认了"重入调用已经被 guard 挡住"
+/// 之后再放行，比用 Task.sleep 卡时间片更可靠（不依赖具体延时长短）。
+actor Gate {
+    private var isOpen = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        if isOpen { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func open() {
+        isOpen = true
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
 final class MockBaziService: BaziServicing, @unchecked Sendable {
     var chartResult: BaziChartResponse?
     var chartError: Error?
     var interpretationResult: InterpretationResponse?
     var interpretationError: Error?
     private(set) var interpretationCallCount = 0
+    private(set) var chartCallCount = 0
+    var chartGate: Gate?
+    var interpretationGate: Gate?
 
     func getChart(_ request: BaziChartRequest) async throws -> BaziChartResponse {
+        chartCallCount += 1
+        if let chartGate { await chartGate.wait() }
         if let chartError { throw chartError }
         return chartResult ?? sampleChart()
     }
 
     func getInterpretation(_ request: InterpretationRequest) async throws -> InterpretationResponse {
         interpretationCallCount += 1
+        if let interpretationGate { await interpretationGate.wait() }
         if let interpretationError { throw interpretationError }
         return interpretationResult ?? InterpretationResponse(requestId: "x", text: "默认今日运势")
     }
@@ -114,5 +138,72 @@ struct BaziViewModelTests {
 
         #expect(vm.dailyFortuneText == nil)
         #expect(service.interpretationCallCount == 0)
+    }
+
+    @Test("submitBirthInfo 重入保护：提交中再次调用不会并发打两次 /chart")
+    func submitBirthInfoReentrancyGuard() async throws {
+        let store = try makeStore()
+        let service = MockBaziService()
+        let gate = Gate()
+        service.chartGate = gate
+        let vm = BaziViewModel(service: service, store: store)
+
+        let firstTask = Task { await vm.submitBirthInfo(
+            birthDate: "1990-05-15", birthTime: "14:30:00", birthCity: "北京", gender: "male") }
+        while service.chartCallCount == 0 { await Task.yield() }
+        #expect(vm.isSubmittingBirthInfo == true)
+
+        // 重入：此时第一次调用还卡在 gate 里没返回，第二次调用应该被 guard 直接挡掉
+        await vm.submitBirthInfo(
+            birthDate: "1991-06-20", birthTime: nil, birthCity: "上海", gender: "female")
+        #expect(service.chartCallCount == 1)
+
+        await gate.open()
+        await firstTask.value
+        #expect(vm.profile?.birthCity == "北京")
+    }
+
+    @Test("loadDailyFortuneIfNeeded 重入保护：加载中再次调用不会并发打两次接口")
+    func loadDailyFortuneReentrancyGuard() async throws {
+        let store = try makeStore()
+        let service = MockBaziService()
+        let gate = Gate()
+        service.interpretationGate = gate
+        service.interpretationResult = InterpretationResponse(requestId: "x", text: "今日宜签约")
+        let vm = BaziViewModel(service: service, store: store, todayKeyProvider: { "2026-09-05" })
+        await vm.submitBirthInfo(
+            birthDate: "1990-05-15", birthTime: "14:30:00", birthCity: "北京", gender: "male")
+
+        let firstTask = Task { await vm.loadDailyFortuneIfNeeded() }
+        while service.interpretationCallCount == 0 { await Task.yield() }
+        #expect(vm.isLoadingFortune == true)
+
+        // 重入：第一次调用还卡在 gate 里，第二次调用应该被 guard 直接挡掉，不再打接口
+        await vm.loadDailyFortuneIfNeeded()
+        #expect(service.interpretationCallCount == 1)
+
+        await gate.open()
+        await firstTask.value
+        #expect(vm.dailyFortuneText == "今日宜签约")
+    }
+
+    @Test("loadDailyFortuneIfNeeded：缓存命中时会清掉上一次遗留的 fortuneError")
+    func loadDailyFortuneClearsStaleErrorOnCacheHit() async throws {
+        let store = try makeStore()
+        let service = MockBaziService()
+        let vm = BaziViewModel(service: service, store: store, todayKeyProvider: { "2026-09-05" })
+        await vm.submitBirthInfo(
+            birthDate: "1990-05-15", birthTime: "14:30:00", birthCity: "北京", gender: "male")
+
+        // 第一次：无缓存，接口失败，留下一条 fortuneError
+        service.interpretationError = APIError.network
+        await vm.loadDailyFortuneIfNeeded()
+        #expect(vm.fortuneError != nil)
+
+        // 第二次：缓存已经命中（模拟另一路径写入了缓存），不应该还残留上一次的错误
+        try await store.saveTodayFortune(dateKey: "2026-09-05", text: "今日宜远行")
+        await vm.loadDailyFortuneIfNeeded()
+        #expect(vm.fortuneError == nil)
+        #expect(vm.dailyFortuneText == "今日宜远行")
     }
 }

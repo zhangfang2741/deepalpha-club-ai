@@ -1639,7 +1639,9 @@ git commit -m "feat(bazi-ios): 新增BaziViewModel状态机(填表->排盘->今�
 - [ ] **Step 6: 跑一遍 Core 包全部测试确认互不干扰**
 
 Run: `cd ios/DeepAlphaBaZi/Core && swift test`
-Expected: `Test run with 28 tests in 6 suites passed`（APIClientTests 4 + BaziModelsTests 6 + BaziFormattingTests 3 + BaziServiceTests 3 + BaziLocalStoreTests 6 + BaziViewModelTests 6 = 28。如果和这个数字对不上，说明前面某个 Task 的用例漏加/多加了，回去对应 Task 核对，不要跳过继续往下走）
+Expected: `Test run with 32 tests in 6 suites passed`（APIClientTests 5——含审查时补的 401 测试 + BaziModelsTests 6 + BaziFormattingTests 3 + BaziServiceTests 3 + BaziLocalStoreTests 6 + BaziViewModelTests 9——含代码质量审查时补的 2 个重入保护测试 + 1 个 fortuneError 清理测试 = 32。这个数字比原计划多，是过程中真实审查发现问题后修复补测试导致的，不是错误；如果你数出来的和这个不一致，回去对应 Task 核对，不要跳过继续往下走）
+
+**Task 6 的一处修复（代码质量审查发现，已应用）**：`BaziViewModel.swift` 的 `submitBirthInfo`/`loadDailyFortuneIfNeeded` 补了重入保护（`guard !isSubmittingBirthInfo`/`guard !isLoadingFortune`），避免视图重复触发（双击、SwiftUI `.task` 因视图重建重复执行）导致并发打两次付费接口；`loadDailyFortuneIfNeeded` 里 `fortuneError = nil` 挪到了缓存检查之前无条件执行，避免缓存命中时残留上一次的错误提示和正常内容同屏。如果你是照着本文档从头实现 Task 6（而不是继续一个已经跑到这里的分支），直接把这两处改动写进 Step 3 给出的初版代码里，不用先写"错误版本"再修。
 
 ---
 
