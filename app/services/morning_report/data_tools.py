@@ -31,7 +31,7 @@ async def cn_index_snapshot() -> str:
             return "未查到A股指数数据"
         wanted = {"上证指数", "深证成指", "创业板指"}
         lines = [
-            _fmt_row(r["名称"], r["最新价"], r["涨跌幅"])
+            _fmt_row(str(r["名称"]), r["最新价"], r["涨跌幅"])
             for _, r in df.iterrows()
             if r["名称"] in wanted
         ]
@@ -77,7 +77,7 @@ async def hk_index_snapshot() -> str:
             return "未查到港股指数数据"
         wanted = {"恒生指数", "恒生科技指数"}
         lines = [
-            _fmt_row(r["名称"], r["最新价"], r["涨跌幅"])
+            _fmt_row(str(r["名称"]), r["最新价"], r["涨跌幅"])
             for _, r in df.iterrows()
             if r["名称"] in wanted
         ]
