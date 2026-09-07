@@ -35,6 +35,9 @@ struct DeepAlphaChanApp: App {
                 #if DEBUG
                 .task {
                     await runDemoLoginIfRequested()
+                    #if targetEnvironment(simulator)
+                    await MarketingAutomation.runRequest()
+                    #endif
                 }
                 #endif
         }
@@ -54,6 +57,7 @@ struct DeepAlphaChanApp: App {
     }
 
     private func demoArgument(named name: String) -> String? {
+        if let value = ProcessInfo.processInfo.environment[name], !value.isEmpty { return value }
         let prefix = "-\(name)="
         return ProcessInfo.processInfo.arguments
             .first(where: { $0.hasPrefix(prefix) })

@@ -47,6 +47,9 @@ struct ResultDetailView: View {
             ChartFullscreenView(analysis: analysis, vm: vm)
                 .environmentObject(orientation)
         }
+        #if DEBUG && targetEnvironment(simulator)
+        .task { await MarketingAutomation.playback(vm: vm) }
+        #endif
     }
 
     private var navTitle: String {

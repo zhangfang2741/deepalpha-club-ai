@@ -27,3 +27,8 @@ evals/reports/
 
 # Superpowers brainstorm sessions
 .superpowers/
+
+# macOS / 本地工具产物
+.DS_Store
+.codex/
+Claude outputs/

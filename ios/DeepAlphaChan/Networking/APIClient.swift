@@ -30,6 +30,11 @@ actor APIClient {
         sessionToken = token
     }
 
+    #if DEBUG && targetEnvironment(simulator)
+    /// 无签名模拟器的 Keychain 可能不可用，运营桥接优先使用本次登录会话。
+    func marketingToken() -> String? { sessionToken ?? KeychainStore.loadToken() }
+    #endif
+
     // MARK: - 公开方法
 
     func get<T: Decodable>(_ path: String, query: [String: String] = [:]) async throws -> T {
