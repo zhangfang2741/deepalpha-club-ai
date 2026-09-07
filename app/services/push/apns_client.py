@@ -43,7 +43,7 @@ async def send(token: str, title: str, body: str, data: dict | None = None) -> b
         push_type=PushType.ALERT,
     )
     try:
-        result = await get_client().send(request)
+        result = await get_client().send_notification(request)
     except Exception:  # noqa: BLE001 —— 推送失败不影响生成任务
         logger.exception("apns_send_error", token_prefix=token[:8])
         return False
