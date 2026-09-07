@@ -1,0 +1,12 @@
+{
+  "run_id": "2026-09-07",
+  "id": "539b8c3a9c5141818aeeb8ba580f5870061a6c20.mp4",
+  "url": "https://api.deepalpha.club/api/v1/media/files/539b8c3a9c5141818aeeb8ba580f5870061a6c20.mp4",
+  "content_type": "video/mp4",
+  "size_bytes": 6134491,
+  "local_sha256": "91fa13ebddf1cc2674bb1ffe877710a1a74c4ffe7780409df6fa148683969869",
+  "anonymous_head": {"http": 200, "content_type": "video/mp4", "etag": "66dd3792bdd3997ccd3b4bb75a3efcf5", "last_modified": "Sun, 06 Sep 2026 17:25:26 GMT"},
+  "anonymous_get_sha256": "91fa13ebddf1cc2674bb1ffe877710a1a74c4ffe7780409df6fa148683969869",
+  "sha_match": true,
+  "verified_at_utc": "2026-09-06T17:25:33Z"
+}

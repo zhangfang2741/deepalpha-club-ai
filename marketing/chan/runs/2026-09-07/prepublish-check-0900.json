@@ -1,0 +1,40 @@
+{
+  "checked_at": "2026-09-07T09:03:53+08:00",
+  "date_beijing": "2026-09-07",
+  "organization": {
+    "id": "6a9cdfc735acc2085b560c49",
+    "name": "My organization",
+    "timezone": "Asia/Singapore"
+  },
+  "channels": [
+    {
+      "id": "6a9ce3f9cd8b9c702c154602",
+      "service": "tiktok",
+      "name": "littlemonkey437",
+      "connected": true,
+      "today_post_id": "6a9da23d9730c9bde54a5ff1",
+      "today_status": "sent",
+      "sent_at": "2026-09-06T17:28:06.130Z"
+    },
+    {
+      "id": "6a9ce2eacd8b9c702c1543bf",
+      "service": "youtube",
+      "name": "DeepAlpha",
+      "connected": true,
+      "today_post_id": "6a9da2536acbdfc9eda4d24f",
+      "today_status": "sent",
+      "sent_at": "2026-09-06T17:26:47.524Z"
+    }
+  ],
+  "ambiguous_submissions": [],
+  "other_pending": [
+    {
+      "post_id": "6a9d97d96acbdfc9eda3d6dc",
+      "service": "tiktok",
+      "status": "draft",
+      "note": "历史测试草稿，不是发送中或公开发布"
+    }
+  ],
+  "decision": "exit_without_production_or_publish",
+  "reason": "两个目标频道在北京时间当日均已有 sent 正式帖，禁止重复提交"
+}

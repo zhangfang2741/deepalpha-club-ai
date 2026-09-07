@@ -1,0 +1,50 @@
+{
+  "run_id": "2026-09-07",
+  "checked_at_utc": "2026-09-06T17:12:00Z",
+  "checked_at_beijing": "2026-09-07T01:12:00+08:00",
+  "beijing_date": "2026-09-07",
+  "beijing_day_window_utc": ["2026-09-06T16:00:00Z", "2026-09-07T15:59:59Z"],
+  "organization": {
+    "name": "My organization",
+    "id": "6a9cdfc735acc2085b560c49",
+    "account_timezone": "Asia/Singapore (UTC+8)"
+  },
+  "channels_verified": [
+    {"service": "tiktok", "name": "littlemonkey437", "channelId": "6a9ce3f9cd8b9c702c154602", "isDisconnected": false, "isLocked": false},
+    {"service": "youtube", "name": "DeepAlpha", "channelId": "6a9ce2eacd8b9c702c1543bf", "isDisconnected": false, "isLocked": false}
+  ],
+  "posts_in_beijing_date_2026_09_07": [
+    {
+      "channel": "youtube/DeepAlpha",
+      "postId": "6a9d97e56acbdfc9eda3d798",
+      "status": "sent",
+      "createdAt_utc": "2026-09-06T16:42:13.260Z",
+      "sentAt_utc": "2026-09-06T16:45:14.960Z",
+      "sentAt_beijing": "2026-09-07T00:45:14+08:00",
+      "externalLink": "https://www.youtube.com/watch?v=CNpakVuosg8",
+      "origin_run": "2026-09-06-claude-demo",
+      "note": "上一次运行提交时把北京日期误记为 2026-09-06；按 UTC+8 换算实际落在 2026-09-07。"
+    },
+    {
+      "channel": "tiktok/littlemonkey437",
+      "postId": "6a9d985b5c2ba4d154180dba",
+      "status": "sent",
+      "createdAt_utc": "2026-09-06T16:44:11.133Z",
+      "sentAt_utc": "2026-09-06T16:46:32.138Z",
+      "sentAt_beijing": "2026-09-07T00:46:32+08:00",
+      "externalLink": "https://tiktok.com/@littlemonkey437/video/7682464195287272724",
+      "origin_run": "2026-09-06-claude-demo",
+      "note": "上一次运行结束时该帖仍为 sending 并记为未确认；本次核查已变为 sent 并返回公开链接，阻塞项解除。"
+    },
+    {
+      "channel": "tiktok/littlemonkey437",
+      "postId": "6a9d97d96acbdfc9eda3d6dc",
+      "status": "draft",
+      "createdAt_utc": "2026-09-06T16:42:01.537Z",
+      "note": "草稿，未发布，不计入重复发布判断，但仍留在 Buffer 中待用户处理。"
+    }
+  ],
+  "duplicate_guard_result": "both_channels_already_sent_today",
+  "decision": "按任务硬性约束（同一频道同一天不得重复发布）与前置核验规则（当天两频道均为 sent 即记录状态并结束），本次运行在选题阶段之前正常结束，未进入第一/二/三阶段。",
+  "caveat": "今日（北京 2026-09-07）占位的两条帖子是上一次运行在 00:42-00:46 提交的全流程测试内容，文案带有「【演示/测试，稍后删除】」前缀。它们真实发布在公开频道上，因此按规则计入当日发布；若用户希望 2026-09-07 发布正式内容，需先在 Buffer/平台删除这两条测试帖，然后手动重跑本任务。"
+}

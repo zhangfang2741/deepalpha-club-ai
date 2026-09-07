@@ -32,3 +32,4 @@ evals/reports/
 .DS_Store
 .codex/
 Claude outputs/
+marketing/chan/runs/.production.lock

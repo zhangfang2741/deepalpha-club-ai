@@ -1,0 +1,43 @@
+# 选题回执
+
+{
+  "run_id": "2026-09-06-full-test",
+  "date": "2026-09-06",
+  "status": "success",
+  "mode": "常青教学功能测试",
+  "selected": {
+    "symbol": "NVDA",
+    "eligible": true,
+    "confirmed_fractals": 8,
+    "bars_count": 251,
+    "last_bar": "2026-09-04",
+    "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+  },
+  "candidates": [
+    {
+      "symbol": "NVDA",
+      "eligible": true,
+      "confirmed_fractals": 8,
+      "bars_count": 251,
+      "last_bar": "2026-09-04",
+      "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+    },
+    {
+      "symbol": "AAPL",
+      "eligible": true,
+      "confirmed_fractals": 8,
+      "bars_count": 251,
+      "last_bar": "2026-09-04",
+      "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+    },
+    {
+      "symbol": "TSLA",
+      "eligible": true,
+      "confirmed_fractals": 8,
+      "bars_count": 251,
+      "last_bar": "2026-09-04",
+      "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+    }
+  ],
+  "note": "候选顺序由调用方给定；不把常见代码等同于当日热点，教程只讲已确认分型与笔"
+}

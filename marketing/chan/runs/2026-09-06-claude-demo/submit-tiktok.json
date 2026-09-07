@@ -1,0 +1,26 @@
+{
+  "date_beijing": "2026-09-06",
+  "topic": "NVDA_fenxing_bi_xianduan_zhongshu_maimaidian_jiaoxue_demo",
+  "channel": "tiktok/littlemonkey437",
+  "channel_id": "6a9ce3f9cd8b9c702c154602",
+  "idempotency_key": "2026-09-06-claude-demo-NVDA-tiktok-littlemonkey437",
+  "status": "sending_pending_confirmation",
+  "mode": "draft",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/3a48ce5ea7d845daa289f20e8d8377e2e87ebee8.mp4",
+  "postId": "6a9d97d96acbdfc9eda3d6dc",
+  "createdAt": "2026-09-06T16:42:01.537Z",
+  "live_publish_requested_by_user": true,
+  "live_status_before": "draft",
+  "attempt_1": {
+    "postId": "6a9d985b5c2ba4d154180dba",
+    "status": "error",
+    "error": "Whoops! We are having trouble sending notifications to your mobile device. Please try linking a mobile device to your account!",
+    "schedulingType": "notification"
+  },
+  "live": {
+    "postId": "6a9d985b5c2ba4d154180dba",
+    "status": "sending",
+    "sentAt": null,
+    "note": "状态尚未变为 sent，暂不记为发布成功"
+  }
+}

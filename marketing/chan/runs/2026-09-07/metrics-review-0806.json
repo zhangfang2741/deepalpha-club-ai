@@ -1,0 +1,55 @@
+{
+  "run_id": "2026-09-07",
+  "run_instance": "0806-scheduled",
+  "reviewed_at_utc": "2026-09-07T00:08:00Z",
+  "reviewed_at_beijing": "2026-09-07T08:08:00+08:00",
+  "windows_due": [
+    {
+      "postId": "6a9ce3fada9395a1c2a962fc",
+      "channel": "tiktok/littlemonkey437",
+      "sentAt_utc": "2026-09-03T10:34:36.000Z",
+      "window_24h": "expired (2026-09-04T10:34:36Z)",
+      "window_72h": "expired (2026-09-06T10:34:36Z)",
+      "metrics": {
+        "views": 80,
+        "reach": 80,
+        "reactions": 3,
+        "comments": 0,
+        "shares": 0,
+        "engagementRate_pct": 3.75,
+        "totalTimeWatched_min": 2.88,
+        "averageTimeWatched_sec": 1.73
+      },
+      "metricsUpdatedAt": "2026-09-06T03:54:34.679Z",
+      "snapshot_age_hours_at_review": 20.2,
+      "data_freshness_caveat": "快照仍停留在 2026-09-06T03:54Z，距本次核查约 20.2 小时未刷新，数值与 2026-09-06 及本日凌晨记录完全一致。该快照对应发帖后约 65.3 小时，早于 72 小时窗口边界，因此它既不是新读数，也不是严格意义上的 72 小时读数，只是同一份 T+65h 累计快照。不作趋势或因果解读。",
+      "missing": ["完播率", "留存曲线", "下载/注册归因", "真正的 T+72h 刷新读数"],
+      "missing_policy": "缺失指标如实标注，不填零。"
+    }
+  ],
+  "windows_not_due": [
+    {"postId": "6a9cf7ef6acbdfc9ed96626b", "channel": "youtube", "sentAt_utc": "2026-09-06T05:19:45.768Z", "next_24h_due_utc": "2026-09-07T05:19:45Z", "next_24h_due_beijing": "2026-09-07T13:19+08:00", "next_72h_due_utc": "2026-09-09T05:19:45Z"},
+    {"postId": "6a9cf7bd3d30840499438975", "channel": "tiktok", "sentAt_utc": "2026-09-06T05:20:36.710Z", "next_24h_due_utc": "2026-09-07T05:20:36Z", "next_24h_due_beijing": "2026-09-07T13:20+08:00", "next_72h_due_utc": "2026-09-09T05:20:36Z"},
+    {"postId": "6a9cf96e41e2718ea3761247", "channel": "youtube", "sentAt_utc": "2026-09-06T05:26:08.015Z", "next_24h_due_utc": "2026-09-07T05:26:08Z", "next_24h_due_beijing": "2026-09-07T13:26+08:00", "next_72h_due_utc": "2026-09-09T05:26:08Z"},
+    {"postId": "6a9cf9633d3084049943a8e5", "channel": "tiktok", "sentAt_utc": "2026-09-06T05:27:40.388Z", "next_24h_due_utc": "2026-09-07T05:27:40Z", "next_24h_due_beijing": "2026-09-07T13:27+08:00", "next_72h_due_utc": "2026-09-09T05:27:40Z"},
+    {"postId": "6a9d0b26fd1c461b008e6444", "channel": "youtube", "sentAt_utc": "2026-09-06T06:41:44.787Z", "next_24h_due_utc": "2026-09-07T06:41:44Z", "next_24h_due_beijing": "2026-09-07T14:41+08:00", "next_72h_due_utc": "2026-09-09T06:41:44Z"},
+    {"postId": "6a9d0b1b6acbdfc9ed97ac2b", "channel": "tiktok", "sentAt_utc": "2026-09-06T06:43:14.629Z", "next_24h_due_utc": "2026-09-07T06:43:14Z", "next_24h_due_beijing": "2026-09-07T14:43+08:00", "next_72h_due_utc": "2026-09-09T06:43:14Z"},
+    {"postId": "6a9d97e56acbdfc9eda3d798", "channel": "youtube", "sentAt_utc": "2026-09-06T16:45:14.960Z", "next_24h_due_utc": "2026-09-07T16:45:14Z", "next_72h_due_utc": "2026-09-09T16:45:14Z"},
+    {"postId": "6a9d985b5c2ba4d154180dba", "channel": "tiktok", "sentAt_utc": "2026-09-06T16:46:32.138Z", "next_24h_due_utc": "2026-09-07T16:46:32Z", "next_72h_due_utc": "2026-09-09T16:46:32Z"},
+    {"postId": "6a9da2536acbdfc9eda4d24f", "channel": "youtube", "sentAt_utc": "2026-09-06T17:26:47.524Z", "next_24h_due_utc": "2026-09-07T17:26:47Z", "next_24h_due_beijing": "2026-09-08T01:26+08:00", "next_72h_due_utc": "2026-09-09T17:26:47Z"},
+    {"postId": "6a9da23d9730c9bde54a5ff1", "channel": "tiktok", "sentAt_utc": "2026-09-06T17:28:06.130Z", "next_24h_due_utc": "2026-09-07T17:28:06Z", "next_24h_due_beijing": "2026-09-08T01:28+08:00", "next_72h_due_utc": "2026-09-09T17:28:06Z"}
+  ],
+  "no_new_expired_window_since_last_run": true,
+  "zero_valued_metrics_are_not_real_zeros": {
+    "affected_postIds": ["6a9cf7bd3d30840499438975", "6a9cf7ef6acbdfc9ed96626b", "6a9cf9633d3084049943a8e5", "6a9cf96e41e2718ea3761247", "6a9d0b1b6acbdfc9ed97ac2b", "6a9d0b26fd1c461b008e6444"],
+    "evidence": "这 6 条帖子的 metricsUpdatedAt 与各自 createdAt 完全相同（例如 6a9cf7bd 为 2026-09-06T05:18:53.299Z，早于 sentAt 2026-09-06T05:20:36.710Z），说明 Buffer 尚未为其采集过任何一次真实指标。",
+    "conclusion": "记为「指标缺失/未采集」，不得记为 0 表现，不作任何解读。"
+  },
+  "aggregated_check": {
+    "range_utc": ["2026-09-01T00:00:00Z", "2026-09-07T00:10:00Z"],
+    "returned": {"postCount": 2, "reactions": 3, "comments": 0, "views": 80, "engagementRate_pct": 3.75},
+    "metricsUpdatedAt": "2026-09-06T17:28:17.359Z",
+    "coverage_caveat": "同期实际已 sent 的帖子为 10 条，聚合接口只计入 2 条，说明其余 8 条尚无可用指标。该聚合值不能代表全部内容的真实表现，只能作为指标采集覆盖率不足的证据。"
+  },
+  "attribution_status": "YouTube 官方 Analytics、TikTok 官方数据与下载/注册/付费归因仍未接通；公开互动数据不代替转化归因。"
+}

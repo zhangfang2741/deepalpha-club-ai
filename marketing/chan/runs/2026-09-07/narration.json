@@ -1,0 +1,26 @@
+[
+  {
+    "step_id": "01",
+    "text": "打开 DeepAlpha 缠论，英伟达日线，最新收盘二百三十点三六。五个结构图层现在全部打开。",
+    "file": "marketing/chan/runs/2026-09-07/voice-01.mp3",
+    "duration_sec": 10.764
+  },
+  {
+    "step_id": "02",
+    "text": "红色的点是顶分型，绿色的点是底分型，标出局部的高低点。",
+    "file": "marketing/chan/runs/2026-09-07/voice-02.mp3",
+    "duration_sec": 7.812
+  },
+  {
+    "step_id": "03",
+    "text": "蓝线是笔，橙线是线段，紫色的虚线框是中枢，图上有两个。",
+    "file": "marketing/chan/runs/2026-09-07/voice-03.mp3",
+    "duration_sec": 8.028
+  },
+  {
+    "step_id": "04",
+    "text": "图上还标了一买和一卖。这些是历史结构标注，不是买卖建议，看不懂先去学习页。",
+    "file": "marketing/chan/runs/2026-09-07/voice-04.mp3",
+    "duration_sec": 10.26
+  }
+]

@@ -1,0 +1,43 @@
+{
+  "run_id": "2026-09-07",
+  "date_beijing": "2026-09-07",
+  "status": "success_both_channels",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/539b8c3a9c5141818aeeb8ba580f5870061a6c20.mp4",
+  "content_sha256": "91fa13ebddf1cc2674bb1ffe877710a1a74c4ffe7780409df6fa148683969869",
+  "media_verification": {"anonymous_head_http": 200, "content_type": "video/mp4", "anonymous_get_sha256_match": true},
+  "posts": [
+    {
+      "platform": "TikTok",
+      "channel": "littlemonkey437",
+      "channel_id": "6a9ce3f9cd8b9c702c154602",
+      "postId": "6a9da23d9730c9bde54a5ff1",
+      "status": "sent",
+      "sentAt_utc": "2026-09-06T17:28:06.130Z",
+      "sentAt_beijing": "2026-09-07T01:28:06+08:00",
+      "externalLink": "https://tiktok.com/@littlemonkey437/video/7682474924597873941",
+      "isAiGenerated": true,
+      "schedulingType": "automatic",
+      "mode": "shareNow"
+    },
+    {
+      "platform": "YouTube",
+      "channel": "DeepAlpha",
+      "channel_id": "6a9ce2eacd8b9c702c1543bf",
+      "postId": "6a9da2536acbdfc9eda4d24f",
+      "status": "sent",
+      "sentAt_utc": "2026-09-06T17:26:47.524Z",
+      "sentAt_beijing": "2026-09-07T01:26:47+08:00",
+      "externalLink": "https://www.youtube.com/watch?v=Ul7AOK553Ko",
+      "youtube": {"type": "short", "title": "用 NVDA 看懂缠论五个图层：分型·笔·线段·中枢·买卖点｜DeepAlpha", "categoryId": "27", "category": "Education", "privacy": "public", "isAiGenerated": true, "madeForKids": false},
+      "schedulingType": "automatic",
+      "mode": "shareNow"
+    }
+  ],
+  "review_windows": {
+    "24h_due_utc": {"tiktok": "2026-09-07T17:28:06Z", "youtube": "2026-09-07T17:26:47Z"},
+    "72h_due_utc": {"tiktok": "2026-09-09T17:28:06Z", "youtube": "2026-09-09T17:26:47Z"},
+    "24h_due_beijing": "2026-09-08 约 01:27–01:28",
+    "72h_due_beijing": "2026-09-10 约 01:27–01:28",
+    "note": "缺失指标（完播率、留存曲线、下载/注册归因）不填零，如实标注缺失。"
+  }
+}

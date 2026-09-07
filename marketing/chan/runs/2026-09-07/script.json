@@ -1,0 +1,6 @@
+[
+  {"step_id":"01","time_sec":0.0,"duration_sec":10.764,"app_action":"真实截图开场，镜头从全图开始缓慢推近","on_screen_text":"NVDA · 日线 / 230.36 / 分型·笔·线段·中枢·买卖点 五个图层按钮","narration_text":"打开 DeepAlpha 缠论，英伟达日线，最新收盘二百三十点三六。五个结构图层现在全部打开。","expected_visual":"App 标题栏 NVDA · 日线，右上绿色价格标签 230.36，图层按钮栏五个按钮全部可见"},
+  {"step_id":"02","time_sec":11.264,"duration_sec":7.812,"app_action":"镜头继续推近，分型标注区域放大","on_screen_text":"顶分型（红）/ 底分型（绿）","narration_text":"红色的点是顶分型，绿色的点是底分型，标出局部的高低点。","expected_visual":"K线上的红色圆点与绿色圆点，底部图例标注「顶分型」红、「底分型」绿"},
+  {"step_id":"03","time_sec":19.576,"duration_sec":8.028,"app_action":"镜头继续推近，笔/线段/中枢结构占据画面主体","on_screen_text":"笔（蓝）/ 线段（橙）/ 中枢（紫色虚线框）","narration_text":"蓝线是笔，橙线是线段，紫色的虚线框是中枢，图上有两个。","expected_visual":"蓝色折线、橙色折线，两个紫色虚线矩形框（上方 212–226 区间、下方 184–198 区间）"},
+  {"step_id":"04","time_sec":28.104,"duration_sec":10.26,"app_action":"镜头推近至终点，买卖点气泡清晰","on_screen_text":"一买（红色气泡）/ 一卖（绿色气泡）","narration_text":"图上还标了一买和一卖。这些是历史结构标注，不是买卖建议，看不懂先去学习页。","expected_visual":"图中下方红色「一买」气泡与上方绿色「一卖」气泡"}
+]

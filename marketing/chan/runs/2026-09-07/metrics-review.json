@@ -1,0 +1,38 @@
+{
+  "run_id": "2026-09-07",
+  "reviewed_at_utc": "2026-09-06T17:12:00Z",
+  "windows_due": [
+    {
+      "postId": "6a9ce3fada9395a1c2a962fc",
+      "channel": "tiktok/littlemonkey437",
+      "sentAt_utc": "2026-09-03T10:34:36.000Z",
+      "window_24h": "expired",
+      "window_72h": "expired",
+      "metrics": {
+        "views": 80,
+        "reach": 80,
+        "reactions": 3,
+        "comments": 0,
+        "shares": 0,
+        "engagementRate_pct": 3.75,
+        "totalTimeWatched_min": 2.88,
+        "averageTimeWatched_sec": 1.73
+      },
+      "metricsUpdatedAt": "2026-09-06T03:54:34.679Z",
+      "data_freshness_caveat": "指标快照时间为 2026-09-06T03:54Z，距本次核查约 13 小时未刷新；与 2026-09-06 记录的数值完全一致，因此这不是一份新的 72 小时读数，只是同一份旧快照。Buffer 指标按日刷新，可能滞后约 24 小时。",
+      "missing": ["完播率", "留存曲线", "下载/注册归因"],
+      "missing_policy": "缺失指标如实标注，不填零。"
+    }
+  ],
+  "windows_not_due": [
+    {"postId": "6a9cf7bd3d30840499438975", "channel": "tiktok", "sentAt_utc": "2026-09-06T05:20:36.710Z", "next_24h_due_utc": "2026-09-07T05:20:36Z", "next_72h_due_utc": "2026-09-09T05:20:36Z"},
+    {"postId": "6a9cf7ef6acbdfc9ed96626b", "channel": "youtube", "sentAt_utc": "2026-09-06T05:19:45.768Z", "next_24h_due_utc": "2026-09-07T05:19:45Z", "next_72h_due_utc": "2026-09-09T05:19:45Z"},
+    {"postId": "6a9cf9633d3084049943a8e5", "channel": "tiktok", "sentAt_utc": "2026-09-06T05:27:40.388Z", "next_24h_due_utc": "2026-09-07T05:27:40Z", "next_72h_due_utc": "2026-09-09T05:27:40Z"},
+    {"postId": "6a9cf96e41e2718ea3761247", "channel": "youtube", "sentAt_utc": "2026-09-06T05:26:08.015Z", "next_24h_due_utc": "2026-09-07T05:26:08Z", "next_72h_due_utc": "2026-09-09T05:26:08Z"},
+    {"postId": "6a9d0b1b6acbdfc9ed97ac2b", "channel": "tiktok", "sentAt_utc": "2026-09-06T06:43:14.629Z", "next_24h_due_utc": "2026-09-07T06:43:14Z", "next_72h_due_utc": "2026-09-09T06:43:14Z"},
+    {"postId": "6a9d0b26fd1c461b008e6444", "channel": "youtube", "sentAt_utc": "2026-09-06T06:41:44.787Z", "next_24h_due_utc": "2026-09-07T06:41:44Z", "next_72h_due_utc": "2026-09-09T06:41:44Z"},
+    {"postId": "6a9d97e56acbdfc9eda3d798", "channel": "youtube", "sentAt_utc": "2026-09-06T16:45:14.960Z", "next_24h_due_utc": "2026-09-07T16:45:14Z", "next_72h_due_utc": "2026-09-09T16:45:14Z"},
+    {"postId": "6a9d985b5c2ba4d154180dba", "channel": "tiktok", "sentAt_utc": "2026-09-06T16:46:32.138Z", "next_24h_due_utc": "2026-09-07T16:46:32Z", "next_72h_due_utc": "2026-09-09T16:46:32Z"}
+  ],
+  "note": "两条 2026-09-06T16:4x 提交的演示帖当前指标全为 0，metricsUpdatedAt 早于 sentAt，属于尚未采集，不是真实的零表现，不作任何解读。"
+}

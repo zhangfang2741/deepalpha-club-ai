@@ -1,0 +1,28 @@
+{
+  "checked_at": "2026-09-07T09:03:53+08:00",
+  "newly_due_windows": [],
+  "reviews": [
+    {
+      "post_id": "6a9ce3fada9395a1c2a962fc",
+      "window": "72h_overdue",
+      "result": "no_fresh_snapshot",
+      "metrics_updated_at": "2026-09-06T03:54:34.679Z",
+      "metrics": {
+        "views": 80,
+        "reach": 80,
+        "reactions": 3,
+        "comments": 0,
+        "shares": 0,
+        "average_time_watched_sec": 1.73,
+        "engagement_rate_percent": 3.75
+      },
+      "note": "与此前回执相同，不记作新的 T+72h 读数"
+    }
+  ],
+  "missing_data_note": "2026-09-06 与 2026-09-07 的帖子指标快照仍等于或早于发送时间，显示的零值按未采集处理；完播率、留存和转化归因仍缺失。",
+  "next_windows": [
+    "2026-09-07T13:19:45+08:00 至 2026-09-07T14:43:14+08:00：9 月 6 日六条帖的 24h 窗口",
+    "2026-09-08T01:26:47+08:00 至 2026-09-08T01:28:06+08:00：9 月 7 日正式两帖的 24h 窗口",
+    "2026-09-10T01:26:47+08:00 至 2026-09-10T01:28:06+08:00：9 月 7 日正式两帖的 72h 窗口"
+  ]
+}

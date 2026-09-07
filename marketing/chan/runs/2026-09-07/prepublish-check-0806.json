@@ -1,0 +1,41 @@
+{
+  "run_id": "2026-09-07",
+  "run_instance": "0806-scheduled",
+  "checked_at_utc": "2026-09-07T00:07:00Z",
+  "checked_at_beijing": "2026-09-07T08:07:00+08:00",
+  "beijing_date": "2026-09-07",
+  "beijing_day_window_utc": ["2026-09-06T16:00:00Z", "2026-09-07T15:59:59Z"],
+  "organization": {
+    "name": "My organization",
+    "id": "6a9cdfc735acc2085b560c49",
+    "account_timezone": "Asia/Singapore (UTC+8)",
+    "buffer_reported_currentTime": "2026-09-07T08:06:05+08:00"
+  },
+  "channels_verified": [
+    {"service": "tiktok", "name": "littlemonkey437", "channelId": "6a9ce3f9cd8b9c702c154602", "isDisconnected": false, "isLocked": false},
+    {"service": "youtube", "name": "DeepAlpha", "channelId": "6a9ce2eacd8b9c702c1543bf", "isDisconnected": false, "isLocked": false}
+  ],
+  "posts_in_beijing_date_2026_09_07": [
+    {"channel": "youtube/DeepAlpha", "postId": "6a9d97e56acbdfc9eda3d798", "status": "sent", "sentAt_utc": "2026-09-06T16:45:14.960Z", "sentAt_beijing": "2026-09-07T00:45:14+08:00", "kind": "test", "origin_run": "2026-09-06-claude-demo"},
+    {"channel": "tiktok/littlemonkey437", "postId": "6a9d985b5c2ba4d154180dba", "status": "sent", "sentAt_utc": "2026-09-06T16:46:32.138Z", "sentAt_beijing": "2026-09-07T00:46:32+08:00", "kind": "test", "origin_run": "2026-09-06-claude-demo", "externalLink": "https://tiktok.com/@littlemonkey437/video/7682464195287272724"},
+    {"channel": "tiktok/littlemonkey437", "postId": "6a9da23d9730c9bde54a5ff1", "status": "sent", "sentAt_utc": "2026-09-06T17:28:06.130Z", "sentAt_beijing": "2026-09-07T01:28:06+08:00", "kind": "formal", "origin_run": "2026-09-07", "externalLink": "https://tiktok.com/@littlemonkey437/video/7682474924597873941"},
+    {"channel": "youtube/DeepAlpha", "postId": "6a9da2536acbdfc9eda4d24f", "status": "sent", "sentAt_utc": "2026-09-06T17:26:47.524Z", "sentAt_beijing": "2026-09-07T01:26:47+08:00", "kind": "formal", "origin_run": "2026-09-07", "externalLink": "https://www.youtube.com/watch?v=Ul7AOK553Ko"}
+  ],
+  "pending_or_unresolved_submissions": {
+    "sending": [],
+    "scheduled": [],
+    "error": [],
+    "needs_approval": [],
+    "note": "全量查询 status in (draft, scheduled, sending, error, needs_approval) 仅返回一条 TikTok 草稿，无任何未确定的提交需要 get_post 消歧。"
+  },
+  "leftover_draft": {
+    "postId": "6a9d97d96acbdfc9eda3d6dc",
+    "channel": "tiktok/littlemonkey437",
+    "status": "draft",
+    "createdAt_utc": "2026-09-06T16:42:01.537Z",
+    "note": "全流程测试遗留草稿，未发布，不计入重复发布判断。allowedActions 含 deletePost，可由用户删除；本次运行未获授权删除，故保留并上报。"
+  },
+  "duplicate_guard_result": "both_channels_already_sent_today_with_formal_content",
+  "decision": "两个频道在北京 2026-09-07 均已存在 sent 的正式内容（TikTok 6a9da23d…、YouTube 6a9da253…，由本 run_id 同日 01:26-01:28 完成的正式发布）。按发布前置核验规则「若当天两个频道均已是 sent，记录状态并直接结束本次运行」以及硬性约束「同一频道同一天不得重复发布」，本次运行在选题阶段之前正常结束，未进入第一/二/三阶段，未更新任何 latest-* 指针。",
+  "stages_executed": {"prepublish_check": "done", "metrics_review": "done", "stage1_selection": "skipped", "stage2_production": "skipped", "stage3_publish": "skipped"}
+}

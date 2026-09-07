@@ -1,0 +1,47 @@
+{
+  "run_id": "2026-09-07",
+  "status": "review_passed",
+  "stage": "ready_to_upload",
+  "symbol": "NVDA",
+  "video": "marketing/chan/runs/2026-09-07/teaching.mp4",
+  "asset_copy": "marketing/chan/assets/2026-09-07/chan-nvda-layers-20260907.mp4",
+  "sha256": "91fa13ebddf1cc2674bb1ffe877710a1a74c4ffe7780409df6fa148683969869",
+  "size_bytes": 6134491,
+  "duration_sec": 39.2,
+  "source_screenshot": "marketing/chan/assets/2026-09-07/simulator-nvda-daily-20260907.png",
+  "screenshot_captured_at_beijing": "2026-09-07T01:15:51+08:00",
+  "screenshot_resolution": "1206x2622",
+  "asset_source": "真实模拟器截图+ffmpeg 运镜，非连续录屏。由 computer-use 操作 macOS 上的 Xcode iOS Simulator（iPhone 17 Pro, iOS 26.5）内运行的 DeepAlphaChan，进入 NVDA 日线分析页、五个图层全开后用 Simulator 的 Save Screen（Cmd+S）截图到 ~/Desktop，再拷入 assets/2026-09-07/。模拟器连续录屏本身不可用，因此「画面变化对应脚本步骤」这一项改为人工逐帧核对。",
+  "screen_freshness_check": {
+    "on_screen_price": 230.36,
+    "api_last_close": 230.36,
+    "api_last_candle_time": "2026-09-04",
+    "match": true,
+    "note": "画面价格标签与本次 /api/v1/chan/analysis 返回的最新收盘一致，确认画面已刷新，未使用不匹配的旧截图。截图状态栏时间 01:15 与本次运行时刻一致。"
+  },
+  "tts": {
+    "provider": "MiniMax /t2a_v2",
+    "base_url": "https://api.minimaxi.com/v1",
+    "model": "speech-2.8-hd",
+    "voice_id": "male-qn-qingse",
+    "language_boost": "Chinese",
+    "segments_sec": [10.764, 7.812, 8.028, 10.26],
+    "sum_sec": 36.864,
+    "note": "首次生成的文案总时长 58.97 秒超出 20–45 秒上限，已缩写文案后重新合成，实测四段合计 36.864 秒。"
+  },
+  "camera_move": "ffmpeg zoompan 线性推近 z=1+0.18*on/1175，覆盖全部 1176 帧；使用 on（输出帧序号）线性表达式而非 min(zoom+step, cap)，因此不会在中途封顶变成静止画面。中间分辨率 1080x1920，最终 lanczos 缩放到 720x1280。",
+  "audio_mix": "四段 adelay 对齐 0 / 11264 / 19576 / 28104 ms，amix 四路混音后 loudnorm I=-16 TP=-1.5 LRA=11，输出 AAC 128k 48kHz 立体声。",
+  "checks": {
+    "codecs": {"video": "h264", "audio": "aac", "container": "mov,mp4,m4a,3gp,3g2,mj2"},
+    "resolution": "720x1280",
+    "framerate": "30/1",
+    "faststart": "passed（-movflags +faststart）",
+    "decode_null": "passed（ffmpeg -v error -f null 全片解码无报错）",
+    "duration_range_20_45s": "passed（39.2 秒）",
+    "audio_level": "passed（mean_volume -19.2 dB，max_volume -4.5 dB，无削顶）",
+    "audio_continuity": "passed（silencedetect -45dB/1.2s 未检出静音段；四段窗口 mean_volume 分别为 -20.4 / -19.0 / -18.8 / -18.1 dB，均有语音且电平一致）",
+    "visual_review": "passed（人工查看 frame-t2/t21/t38.jpg：画质清晰、中文与数字可读、镜头持续推近未在中途静止，三帧缩放比例递增）",
+    "narration_visual_correspondence": "passed（逐段核对：230.36 价格标签、五个图层按钮、红/绿分型点、蓝色笔、橙色线段、两个紫色虚线中枢框、一买红气泡与一卖绿气泡，全部为画面上真实存在的元素；旁白未描述任何画面中不存在的元素）",
+    "layer_toggle_alignment": "not_applicable（静态截图+运镜方案，无模拟器分层切换事件可比对，按 2026-09-06 方法变更记录以人工画面核对代替）"
+  }
+}

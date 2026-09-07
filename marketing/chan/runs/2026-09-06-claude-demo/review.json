@@ -1,0 +1,7 @@
+{
+  "sha256": "42d3e6a01000d52903a09ee7aebc63f3c836dc030032a764819452136581a12f",
+  "visual": "passed",
+  "audio": "passed",
+  "reviewer": "claude",
+  "note": "人工核对四帧截图与四段音频时长，未做逐字口型比对（本方案为静态图+运镜，非逐层录屏）"
+}

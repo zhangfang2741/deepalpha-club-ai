@@ -1,0 +1,10 @@
+{
+  "run_id": "2026-09-07",
+  "sha256": "91fa13ebddf1cc2674bb1ffe877710a1a74c4ffe7780409df6fa148683969869",
+  "visual": "passed",
+  "audio": "passed",
+  "reviewer": "claude (cowork scheduled run)",
+  "frames_reviewed": ["frame-t2.jpg", "frame-t21.jpg", "frame-t38.jpg"],
+  "evidence": "t=2 为全图起始构图，标题 NVDA·日线、价格 230.36、五个图层按钮与底部图例全部可读；t=21 明显放大约 1.1 倍，蓝色笔、橙色线段与两个紫色虚线中枢框清晰；t=38 放大约 1.18 倍，一买/一卖气泡清晰，文字仍锐利。三帧缩放递增证明运镜覆盖全片、未中途封顶。音频四段窗口均检出语音、电平一致、无静音段与削顶。",
+  "not_verified": "未做逐字口型/时间码级比对；本方案为静态截图+运镜，不存在分层切换事件可供机器比对。"
+}

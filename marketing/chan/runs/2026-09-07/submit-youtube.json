@@ -1,0 +1,27 @@
+{
+  "date_beijing": "2026-09-07",
+  "topic": "NVDA_five_layers_fenxing_bi_xianduan_zhongshu_maimaidian",
+  "channel": "youtube/DeepAlpha",
+  "channel_id": "6a9ce2eacd8b9c702c1543bf",
+  "idempotency_key": "2026-09-07-NVDA-youtube",
+  "status": "sent",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/539b8c3a9c5141818aeeb8ba580f5870061a6c20.mp4",
+  "content_sha256": "91fa13ebddf1cc2674bb1ffe877710a1a74c4ffe7780409df6fa148683969869",
+  "submitted_at_utc": "2026-09-06T17:26:00Z",
+  "postId": "6a9da2536acbdfc9eda4d24f",
+  "note": "schedulingType=automatic + mode=shareNow，一次提交即 sent，未触发 notification 报错。privacy 设为 public：本次是正式运营档期（非 2026-09-06 的测试运行），与当日其他正式帖一致；如需改回 private 请告知。",
+  "createdAt_utc": "2026-09-06T17:26:43.905Z",
+  "sentAt_utc": "2026-09-06T17:26:47.524Z",
+  "sentAt_beijing": "2026-09-07T01:26:47+08:00",
+  "externalLink": "https://www.youtube.com/watch?v=Ul7AOK553Ko",
+  "youtube_metadata": {
+    "type": "short",
+    "title": "用 NVDA 看懂缠论五个图层：分型·笔·线段·中枢·买卖点｜DeepAlpha",
+    "categoryId": "27",
+    "category": "Education",
+    "privacy": "public",
+    "isAiGenerated": true,
+    "madeForKids": false,
+    "notifySubscribers": true
+  }
+}

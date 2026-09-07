@@ -1,0 +1,38 @@
+[
+  {
+    "step_id": "01",
+    "time_sec": 0.0,
+    "duration_sec": 7.889,
+    "app_action": "真实截图开场，镜头缓慢推近",
+    "on_screen_text": "NVDA · 日线",
+    "narration_text": "打开缠论分析，当前是英伟达日线图，最新收盘二百三十点三六。",
+    "expected_visual": "真实App截图：NVDA日线K线图与MACD"
+  },
+  {
+    "step_id": "02",
+    "time_sec": 8.489,
+    "duration_sec": 9.509,
+    "app_action": "镜头停留于分型标注区域",
+    "on_screen_text": "分型",
+    "narration_text": "红点和绿点是分型。红色是顶分型，绿色是底分型，标记出局部高低点。",
+    "expected_visual": "红/绿分型点清晰可见"
+  },
+  {
+    "step_id": "03",
+    "time_sec": 18.598,
+    "duration_sec": 11.546,
+    "app_action": "镜头移向线段/中枢/买卖点标注",
+    "on_screen_text": "线段 · 中枢 · 买卖点",
+    "narration_text": "蓝色的线是笔，把相邻分型连起来；橙色线段和紫色中枢框标出更大级别的结构，图上还标了一买、一卖两个点。",
+    "expected_visual": "蓝色笔、橙色线段、紫色中枢虚线框、一买/一卖气泡"
+  },
+  {
+    "step_id": "04",
+    "time_sec": 30.744,
+    "duration_sec": 8.098,
+    "app_action": "镜头停留，画面不再变化",
+    "on_screen_text": "仅供学习",
+    "narration_text": "这些都是历史结构标注，不是买卖建议，看不懂图上的线，先去学习页读两分钟。",
+    "expected_visual": "保持同一真实截图供观众对照"
+  }
+]

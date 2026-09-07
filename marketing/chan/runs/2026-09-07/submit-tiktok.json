@@ -1,0 +1,35 @@
+{
+  "date_beijing": "2026-09-07",
+  "topic": "NVDA_five_layers_fenxing_bi_xianduan_zhongshu_maimaidian",
+  "channel": "tiktok/littlemonkey437",
+  "channel_id": "6a9ce3f9cd8b9c702c154602",
+  "idempotency_key": "2026-09-07-NVDA-tiktok",
+  "status": "sent",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/539b8c3a9c5141818aeeb8ba580f5870061a6c20.mp4",
+  "content_sha256": "91fa13ebddf1cc2674bb1ffe877710a1a74c4ffe7780409df6fa148683969869",
+  "submitted_at_utc": "2026-09-06T17:26:00Z",
+  "postId": "6a9da23d9730c9bde54a5ff1",
+  "note": "轮询约 105 秒后由 sending 变为 sent 并返回公开链接。error 全程为 null，无 notification 报错（schedulingType=automatic）。",
+  "createdAt_utc": "2026-09-06T17:26:21.032Z",
+  "sentAt_utc": "2026-09-06T17:28:06.130Z",
+  "externalLink": "https://tiktok.com/@littlemonkey437/video/7682474924597873941",
+  "sentAt_beijing": "2026-09-07T01:28:06+08:00",
+  "poll_history": [
+    {
+      "t_utc": "2026-09-06T17:26:21Z",
+      "status": "sending"
+    },
+    {
+      "t_utc": "2026-09-06T17:26:5xZ",
+      "status": "sending"
+    },
+    {
+      "t_utc": "2026-09-06T17:27:4xZ",
+      "status": "sending"
+    },
+    {
+      "t_utc": "2026-09-06T17:28:5xZ",
+      "status": "sent"
+    }
+  ]
+}
