@@ -32,6 +32,7 @@
 | 付费策略 | 登录即可免费，不接 Paywall |
 | 模块结构 | 参考 prompt 11 模块精简为 **7 个 LLM 模块 + 1 个固定风险提示** |
 | 推送通知 | **APNs 远程推送**：晨报生成成功后通知，点击通知跳转晨报页（详见第 7 节） |
+| 语言版本 | **中英双语**：单次 LLM 生成双版（schema 内嵌 `zh`/`en`），展示与推送按用户 App 语言选择 |
 
 ## 3. 总体架构与数据流
 
@@ -77,6 +78,9 @@ iOS 晨报 Tab：市场切换 → 卡片化原生渲染 → 个股点击跳缠�
   - 美股版：直接迁移参考 prompt（财报季/期权/美元流动性视角）。
   - A股版：政策面/北向资金/两市成交额/两融余额；涨跌语义按 A 股语境。
   - 港股版：南向资金/AH 溢价/流动性折价与修复；催化剂含美联储路径。
+- **双语生成**：单次生成同时产出中文版与英文版（英文为英文分析师 brief 风格，
+  非逐句直译；判断、数字、symbol 三市场两版必须一致），schema 内嵌 `zh` / `en`
+  两个完整内容对象——一次生成保证两版判断一致，成本低于生成两次。
 
 ### 4.2 模块结构（7 LLM 模块 + 1 固定）
 
@@ -93,12 +97,14 @@ iOS 晨报 Tab：市场切换 → 卡片化原生渲染 → 个股点击跳缠�
 
 ### 4.3 内容 Schema（要点）
 
+- 顶层 `content.locales`：`zh` 与 `en` 两个完整的报告内容对象（结构完全相同）。
 - 每个分析模块的条目固定四字段：`fact` / `insight` / `prediction` / `verification`。
-- 核心判断模块附 `metrics[]`（名称、数值、方向 up/down、说明），App 渲染指标小卡。
+- 核心判断模块附 `metrics[]`（名称、数值、方向 up/down、说明，名称与说明双语）。
 - 个股模块每只含 `symbol`（NVDA / 0700 / 600519 等，供跳转分析页）、涨跌幅、
   Bull/Base/Bear 三档（观点 + 关键价格或条件）。
 - 催化剂条目含日期、事件、为什么重要、市场标签（美/中/港）。
-- 顶层含 `market`、`trade_date`、`generated_at`、`summary`（一句话，供列表/推送用）。
+- 顶层含 `market`、`trade_date`、`generated_at`、`summary`（`zh`/`en` 各一句，
+  供推送与列表用）。
 
 ## 5. 后端模块设计
 
@@ -150,6 +156,9 @@ UI 高保真设计稿：`/Users/zhangfang/Desktop/晨报UI设计稿.html`（已�
   - 催化剂日历卡：日期块 + 事件 + 市场 flag。
   - 底部固定风险提示文案（不走 LLM）。
 - **交互**：下拉刷新；历史晨报（日期列表 sheet）；未登录显示登录引导。
+- **语言**：晨报内容按 App 当前 `AppLanguage`（zh-Hans/en，复用 `Localized` 机制）
+  渲染 `content.locales` 对应版本；`en` 缺字段时回退 `zh`。语言切换即时生效
+  （同一份数据，仅换渲染分支，无需重新请求）。
 - **状态**：
   - 生成中（06:30-07:30 窗口）：骨架屏 + 「晨报生成中，通常 07:30 前就绪」。
   - 生成失败/回退：展示最近一期，顶部黄条「今日晨报暂不可用，以下为 X月X日 内容」。
@@ -180,21 +189,23 @@ UI 高保真设计稿：`/Users/zhangfang/Desktop/晨报UI设计稿.html`（已�
 
 | 文件 | 职责 |
 | --- | --- |
-| `app/models/device_token.py` | 设备 token 表：`UUIDModel`，`user_id`(FK)、`token`（唯一）、`platform`、`updated_at`；一个用户可多设备 |
+| `app/models/device_token.py` | 设备 token 表：`UUIDModel`，`user_id`(FK)、`token`（唯一）、`platform`、`locale`(zh-Hans/en，注册时上报 App 语言)、`updated_at`；一个用户可多设备 |
 | `app/services/push/apns_client.py` | APNs 发送封装（asyncio 库如 `aioapns`，JWT ES256 认证，`uv add` 引入） |
 | `app/services/push/notifier.py` | 推送编排：查全部 token → 逐设备发送 → 失败仅记日志（不影响生成任务结果） |
 | `app/api/v1/morning_report.py` 内新增 | `POST /api/v1/morning-report/device-token`：登录态注册/心跳刷新 token |
 
 - 触发点：Celery 生成任务 `status=success` 落库后调用 `notifier`。
-- 推送内容：标题「{市场}晨报已生成」，正文用当期 `summary`（核心判断一句话），
-  `payload` 带 `{"market": "us"}` 供 App 直达对应市场页。
+- 推送内容按设备 `locale` 分组发送：中文设备标题「{市场}晨报已生成」、英文设备
+  "Your {Market} Morning Brief is ready"，正文用当期对应语言的 `summary`
+  （核心判断一句话），`payload` 带 `{"market": "us"}` 供 App 直达对应市场页。
 - 每个市场各推一条；A股/港股 07:10 同时完成时由 notifier 合并为一分钟内一条（去抖动，避免连续打扰）。
 
 ### 7.3 iOS
 
 - **权限**：登录成功后或首次进入晨报页时请求通知权限（`UNUserNotificationCenter`）。
 - **注册**：`UIApplicationDelegateAdaptor` + `didRegisterForRemoteNotificationsWithDeviceToken`
-  拿到 token 后上报后端（`MorningReportService.registerDeviceToken`），登录时刷新。
+  拿到 token 后上报后端（`MorningReportService.registerDeviceToken`，携带当前
+  `AppLanguage` 作为 `locale`）；登录时与**用户切换语言后**重新上报刷新。
 - **点击跳转**：`UNUserNotificationCenterDelegate.didReceive` 解析 `payload.market`
   → 切换到晨报 Tab 并选中对应市场（`MainTabView` selection 绑定 + 通知路由）；冷启动同样处理。
 - **前台展示**：App 在前台收到通知时仍展示系统横幅。
@@ -222,11 +233,12 @@ UI 高保真设计稿：`/Users/zhangfang/Desktop/晨报UI设计稿.html`（已�
   - prompt 渲染（三市场、日期注入）
   - API 路由（mock service）：当日命中、回退、generating、dates 列表
   - 任务幂等：已有 success 跳过
+  - 双语 schema：`zh`/`en` 两版齐全性校验（缺版/字段不齐为非法）
   - device-token 注册/心跳刷新（mock APNs client，不发真实推送）
-  - 推送触发：success 后调用 notifier（mock）；去抖动合并逻辑
+  - 推送触发：success 后调用 notifier（mock）；按 `locale` 分组发送对应语言文案；去抖动合并逻辑
 - **冒烟（`@pytest.mark.slow`）**：真实 LLM 生成一份完整美股晨报并通过 schema 校验；
   上线前手动跑。
-- **iOS**：`MorningReportModels` JSON 解码单测；UI 不强制。
+- **iOS**：`MorningReportModels` JSON 解码单测（含 `locales.zh/en` 与 `en` 缺字段回退 `zh`）；UI 不强制。
 
 ## 10. 明确不做（YAGNI）
 
