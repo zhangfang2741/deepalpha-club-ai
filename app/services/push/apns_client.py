@@ -23,7 +23,7 @@ def get_client() -> Any:
         _client = APNs(
             key_id=settings.APNS_KEY_ID,
             team_id=settings.APNS_TEAM_ID,
-            key=settings.APNS_PRIVATE_KEY,  # 支持内容或路径
+            key=settings.APNS_PRIVATE_KEY,  # 必须是 PEM 私钥内容本身，不支持文件路径
             use_sandbox=settings.APNS_USE_SANDBOX,
             topic=settings.APNS_BUNDLE_ID,
         )

@@ -3,6 +3,8 @@
 推送失败只记日志，绝不影响生成任务结果。
 """
 
+import asyncio
+
 from app.core.logging import logger
 from app.services.morning_report.schema import LocalizedText
 from app.services.push import apns_client
@@ -48,18 +50,21 @@ async def notify_generated(markets: list[str], summaries: dict[str, LocalizedTex
     if not _apns_configured():
         logger.info("morning_report_push_skipped_not_configured")
         return
-    key = "+".join(sorted(markets)) if len(markets) > 1 else markets[0]
-    zh_summary = summaries[markets[0]].zh if len(markets) == 1 else (
-        "；".join(summaries[m].zh for m in sorted(markets))
+    sorted_markets = sorted(markets)
+    primary_market = sorted_markets[0]
+    key = "+".join(sorted_markets) if len(sorted_markets) > 1 else primary_market
+    zh_summary = summaries[primary_market].zh if len(markets) == 1 else (
+        "；".join(summaries[m].zh for m in sorted_markets)
     )
-    en_summary = summaries[markets[0]].en if len(markets) == 1 else (
-        "; ".join(summaries[m].en for m in sorted(markets))
+    en_summary = summaries[primary_market].en if len(markets) == 1 else (
+        "; ".join(summaries[m].en for m in sorted_markets)
     )
-    ok = 0
-    for row in _load_tokens():
+
+    async def _send_to(row: dict) -> bool:
         locale = "zh-Hans" if row["locale"] != "en" else "en"
         title = TITLES[locale][key]
         body = zh_summary if locale == "zh-Hans" else en_summary
-        if await _send_one(row["token"], title, body, {"market": markets[0]}):
-            ok += 1
-    logger.info("morning_report_push_done", markets=markets, sent=ok)
+        return await _send_one(row["token"], title, body, {"market": primary_market})
+
+    results = await asyncio.gather(*(_send_to(row) for row in _load_tokens()))
+    logger.info("morning_report_push_done", markets=markets, sent=sum(results))
