@@ -12,6 +12,7 @@ from importlib import resources
 from zoneinfo import ZoneInfo
 
 MARKET_NAMES: dict[str, str] = {"us": "美股", "cn": "A股", "hk": "港股"}
+PROMPT_KINDS: tuple[str, ...] = ("recon", "write")
 
 
 def _read(filename: str) -> str:
@@ -20,6 +21,10 @@ def _read(filename: str) -> str:
 
 def render_prompt(kind: str, market: str, trade_date: str) -> str:
     """kind: "recon" | "write"；market: us/cn/hk；trade_date: YYYY-MM-DD。"""
+    if kind not in PROMPT_KINDS:
+        raise ValueError(f"unknown prompt kind: {kind!r}")
+    if market not in MARKET_NAMES:
+        raise ValueError(f"unknown market: {market!r}")
     base = _read(f"{kind}_base.md")
     market_block = _read(f"{market}_market.md")
     text = base.replace("{{MARKET_BLOCK}}", market_block)
