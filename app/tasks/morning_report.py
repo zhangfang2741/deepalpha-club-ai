@@ -11,7 +11,7 @@ from app.core.logging import logger
 from app.db.session import get_sync_session_cm
 from app.models.morning_report import MorningReport
 from app.services.morning_report.generator import generate_report
-from app.services.morning_report.schema import MorningReportContent
+from app.services.morning_report.schema import LocalizedText
 from app.services.push.notifier import notify_generated
 
 BEIJING = ZoneInfo("Asia/Shanghai")
@@ -69,7 +69,7 @@ async def _generate(markets: list[str]) -> dict:
     """
     trade_date = datetime.now(BEIJING).date()
     results: dict[str, dict] = {}
-    summaries: dict[str, MorningReportContent] = {}
+    summaries: dict[str, LocalizedText] = {}
     for market in markets:
         with get_sync_session_cm() as session:
             existing = session.exec(
@@ -86,7 +86,7 @@ async def _generate(markets: list[str]) -> dict:
             summaries[market] = result["summary"]
     if summaries:
         try:
-            await notify_generated(list(summaries), summaries)  # type: ignore[arg-type]
+            await notify_generated(list(summaries), summaries)
         except Exception:  # noqa: BLE001 —— 推送失败不影响任务结果
             logger.exception("morning_report_push_failed")
     return results
