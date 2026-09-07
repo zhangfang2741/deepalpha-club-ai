@@ -511,6 +511,14 @@ class Settings:
             if origin not in self.CORS_ORIGINS:
                 self.CORS_ORIGINS.append(origin)
 
+        # --- APNs 推送（晨报） ---
+        self.APNS_KEY_ID = os.getenv("APNS_KEY_ID", "")
+        self.APNS_TEAM_ID = os.getenv("APNS_TEAM_ID", "")
+        self.APNS_BUNDLE_ID = os.getenv("APNS_BUNDLE_ID", "club.deepalpha.chan")
+        # p8 私钥内容（PEM 字符串）或文件路径，二选一
+        self.APNS_PRIVATE_KEY = os.getenv("APNS_PRIVATE_KEY", "")
+        self.APNS_USE_SANDBOX = os.getenv("APNS_USE_SANDBOX", "false").lower() == "true"
+
         # HTTP Proxy Configuration
         self.HTTP_PROXY = os.getenv("HTTP_PROXY", os.getenv("http_proxy", ""))
         self.HTTPS_PROXY = os.getenv("HTTPS_PROXY", os.getenv("https_proxy", ""))

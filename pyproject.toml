@@ -54,6 +54,7 @@ dependencies = [
     "tradingagents==0.7.0",
     "phonenumbers>=9.0.38",
     "lunar-python>=1.4.8",
+    "aioapns>=4.0",
 ]
 
 [project.optional-dependencies]
@@ -184,6 +185,8 @@ convention = "google"
 "tests/services/bazi/*.py" = ["D415", "D104"]
 "app/services/skills/kline.py" = ["D415"]
 "tests/services/skills/test_kline_fetch.py" = ["D415"]
+"app/services/push/*.py" = ["D415", "D104"]
+"tests/services/push/*.py" = ["D415", "D104", "D103", "F401"]
 "tests/services/chan/*.py" = ["D415", "D101", "D102", "D103", "D104"]
 "app/api/v1/chan.py" = ["D415"]
 "app/core/langgraph/tools/chan_analysis.py" = ["D415"]
