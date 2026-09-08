@@ -67,7 +67,7 @@ struct MorningReportContent: Decodable, Hashable {
 struct MorningReportMeta: Decodable, Hashable {
     let market: String
     let tradeDate: String?
-    let status: String       // success / generating / pending / empty
+    let status: String       // success / generating / pending / failed
     let stale: Bool
 
     enum CodingKeys: String, CodingKey {
