@@ -70,7 +70,7 @@ struct ReportSectionCard: View {
                     .font(.subheadline.bold())
                     .foregroundColor(Theme.textPrimary)
             }
-            ForEach(section.entries, id: \.self) { entry in
+            ForEach(Array(section.entries.enumerated()), id: \.offset) { _, entry in
                 VStack(alignment: .leading, spacing: 6) {
                     LayerRow(layer: .fact, text: entry.fact.resolved)
                     LayerRow(layer: .insight, text: entry.insight.resolved)
@@ -132,7 +132,7 @@ struct HeadlineCard: View {
                 .fixedSize(horizontal: false, vertical: true)
             if !metrics.isEmpty {
                 HStack(alignment: .top, spacing: 8) {
-                    ForEach(metrics, id: \.self) { metric in
+                    ForEach(Array(metrics.enumerated()), id: \.offset) { _, metric in
                         VStack(alignment: .leading, spacing: 3) {
                             Text(metric.name.resolved)
                                 .font(.caption2)
