@@ -1,12 +1,15 @@
 """晨报表查询与 token upsert（异步，供 API 层调用）。"""
 
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models.device_token import DeviceToken
 from app.models.morning_report import MorningReport
+
+BEIJING = ZoneInfo("Asia/Shanghai")
 
 
 async def get_report(db: AsyncSession, market: str, report_date: date | None) -> tuple[MorningReport | None, bool]:
@@ -22,7 +25,10 @@ async def get_report(db: AsyncSession, market: str, report_date: date | None) ->
         ).first()
         return record, False  # 指定日期不回退（历史页语义）
 
-    today = date.today()
+    # 「今日」按北京时间取，与生成任务（Celery）的 trade_date 口径一致；
+    # 用 date.today()（服务器本地时区）在生产 UTC 环境会提前 8 小时切换日期，
+    # 导致当日晨报被误标 stale。
+    today = datetime.now(BEIJING).date()
     record = (
         await db.exec(
             select(MorningReport)
