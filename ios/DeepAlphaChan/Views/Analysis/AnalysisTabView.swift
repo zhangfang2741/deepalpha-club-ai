@@ -7,8 +7,9 @@ import SwiftUI
 struct AnalysisTabView: View {
     /// 由 MainTabView 注入的共享状态：晨报「重点个股」跳转分析时用的是同一个
     /// ViewModel，这样切到本 Tab 时查询条件已填好、结果也能直接呈现。
-    /// 本视图不再自己创建。
-    let vm: ChanViewModel
+    /// 本视图不再自己创建。必须用 @ObservedObject 订阅——isLoading/errorMessage
+    /// 变化要驱动本视图重算（含"外部触发分析后自动进结果页"的 onChange）。
+    @ObservedObject var vm: ChanViewModel
     @StateObject private var recent = RecentSymbols()
     @EnvironmentObject private var store: StoreManager
     @EnvironmentObject private var usage: UsageTracker

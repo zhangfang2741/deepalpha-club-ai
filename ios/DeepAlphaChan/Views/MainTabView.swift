@@ -21,20 +21,22 @@ struct MainTabView: View {
         TabView(selection: $selection) {
             MorningReportTabView(onOpenSymbol: openSymbol, pendingMarket: $pendingReportMarket)
                 .tabItem { Label(L("晨报"), systemImage: "newspaper") }
+                .tag(Tab.morningReport)
 
             AnalysisTabView(vm: chanVM)
                 .tabItem { Label(L("分析"), systemImage: "chart.xyaxis.line") }
+                .tag(Tab.analysis)
 
             LearnTabView()
                 .tabItem { Label(L("学习"), systemImage: "book") }
+                .tag(Tab.learn)
 
             ProfileView()
                 .tabItem { Label(L("我的"), systemImage: "person.circle") }
+                .tag(Tab.profile)
         }
         .onReceive(NotificationCenter.default.publisher(for: .openMorningReport)) { note in
-            if let market = note.object as? String {
-                pendingReportMarket = market
-            }
+            pendingReportMarket = (note.object as? String) ?? "us"
             selection = .morningReport
         }
     }

@@ -230,17 +230,23 @@ struct MorningReportTabView: View {
 
     /// 拉取晨报。`force` 为 false 且已有数据时跳过（.task 每次进 Tab 都会跑）；
     /// `date` 显式指定时优先于 `selectedDate`。
+    /// 结果回写前校验市场未变，避免「A 市场请求进行中切到 B」时旧结果错挂到新市场。
     private func load(force: Bool = false, date: String? = nil) async {
         guard !isLoading else { return }
         if !force && response != nil { return }
+        let requestedMarket = market
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
         do {
-            response = try await MorningReportService.report(market: market, date: date ?? selectedDate)
+            let fetched = try await MorningReportService.report(market: requestedMarket, date: date ?? selectedDate)
+            guard market == requestedMarket else { return }
+            response = fetched
         } catch let error as APIError {
+            guard market == requestedMarket else { return }
             errorMessage = error.message
         } catch {
+            guard market == requestedMarket else { return }
             errorMessage = L("加载失败，请稍后再试")
         }
     }
