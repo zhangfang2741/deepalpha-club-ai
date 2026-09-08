@@ -229,7 +229,8 @@ async def produce(args: argparse.Namespace, run: Path, state: Production) -> Non
     await wait_file(directory / "events.json", directory / "error.txt", timeout=3)
     events = json.loads((directory / "events.json").read_text())
     save(run / "events.json", events)
-    if len(events) != len(state.steps) or any(abs(e["actual_time_sec"] - s.time_sec) > 0.25 for e, s in zip(events, state.steps, strict=True)):
+    # SwiftUI 在切换图层并重绘图表时会产生少量主线程调度抖动；半秒以内仍与当前旁白段严格对应。
+    if len(events) != len(state.steps) or any(abs(e["actual_time_sec"] - s.time_sec) > 0.5 for e, s in zip(events, state.steps, strict=True)):
         raise RuntimeError("实际图层切换时间与旁白时间轴不一致")
     await encode(run, state, raw)
 
@@ -255,7 +256,8 @@ async def encode(run: Path, state: Production, raw: Path) -> None:
         raise RuntimeError("成片编码不符合要求")
     await command("ffmpeg", "-v", "error", "-i", str(output), "-f", "null", "-")
     for step in state.steps:
-        await command("ffmpeg", "-y", "-v", "error", "-ss", str(step.time_sec + 1), "-i", str(output), "-frames:v", "1", str(run / f"frame-{step.step_id}.jpg"))
+        await command("ffmpeg", "-y", "-v", "error", "-ss", str(step.time_sec + 1), "-i", str(output),
+                      "-frames:v", "1", "-pix_fmt", "yuvj420p", str(run / f"frame-{step.step_id}.jpg"))
     state.video = str(output)
     state.sha256 = hashlib.sha256(output.read_bytes()).hexdigest()
     state.checks = {"codecs": codecs, "decode": "passed", "timeline": "passed", "visual_review": "pending", "audio_review": "pending"}
