@@ -22,20 +22,19 @@ from app.services.morning_report.schema import MorningReportContent
 router = APIRouter()
 
 
-@router.get("/", response_model=MorningReportResponse)
+@router.get("", response_model=MorningReportResponse)
 async def get_morning_report(
     market: str = Query(pattern="^(us|cn|hk)$"),
-    report_date: str | None = Query(None, description="YYYY-MM-DD，不传取当日"),
+    report_date: date | None = Query(None, description="YYYY-MM-DD，不传取当日"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MorningReportResponse:
     """获取指定市场的晨报：不传日期取当日，无当日成功版则回退最近一期。"""
     logger.info("morning_report_request", market=market, date=report_date, user_id=user.id)
-    parsed = date.fromisoformat(report_date) if report_date else None
-    record, stale = await store.get_report(db, market, parsed)
+    record, stale = await store.get_report(db, market, report_date)
     if record is None:
         return MorningReportResponse(
-            meta=ReportMeta(market=market, trade_date=parsed, status="pending", stale=False)
+            meta=ReportMeta(market=market, trade_date=report_date, status="pending", stale=False)
         )
     content = MorningReportContent.model_validate(record.content) if record.content else None
     return MorningReportResponse(

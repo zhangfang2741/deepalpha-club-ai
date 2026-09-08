@@ -33,7 +33,7 @@ class ReportDatesResponse(BaseModel):
 class DeviceTokenRequest(BaseModel):
     """APNs 设备 token 注册请求体。"""
 
-    token: str = Field(min_length=1, description="APNs hex device token")
+    token: str = Field(min_length=20, description="APNs hex device token（真实为 64 位 hex）")
     locale: str = Field(default="zh-Hans", pattern="^(zh-Hans|en)$")
 
 
