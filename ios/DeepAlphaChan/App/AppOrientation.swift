@@ -47,7 +47,7 @@ final class AppOrientation: ObservableObject {
     }
 }
 
-/// 方向锁需要 UIKit 的 AppDelegate 回调，SwiftUI 生命周期本身没有这个钩子。
+/// 方向锁与 APNs 注册需要 UIKit 的 AppDelegate 回调，SwiftUI 生命周期本身没有这些钩子。
 final class AppDelegate: NSObject, UIApplicationDelegate {
     /// 与 DeepAlphaChanApp 里的 @StateObject 是同一个实例，由 App 启动时注入。
     static var orientation: AppOrientation?
@@ -57,5 +57,21 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         supportedInterfaceOrientationsFor window: UIWindow?
     ) -> UIInterfaceOrientationMask {
         AppDelegate.orientation?.mask ?? .portrait
+    }
+
+    // MARK: - APNs 注册回调桥接（转发给 PushNotificationManager）
+
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        PushNotificationManager.shared.didRegister(deviceToken: deviceToken)
+    }
+
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        PushNotificationManager.shared.didFailToRegister(error: error)
     }
 }

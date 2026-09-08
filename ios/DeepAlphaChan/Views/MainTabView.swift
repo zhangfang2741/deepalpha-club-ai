@@ -10,7 +10,14 @@ struct MainTabView: View {
         case morningReport, analysis, learn, profile
     }
 
-    @State private var selection: Tab = .morningReport
+    @State private var selection: Tab = {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-marketingPlayback") {
+            return .analysis
+        }
+        #endif
+        return .morningReport
+    }()
     /// 推送路由（Task 13 的 PushNotificationManager 发 `.openMorningReport`）
     /// 写入目标市场，晨报 Tab 消费后置 nil。
     @State private var pendingReportMarket: String?

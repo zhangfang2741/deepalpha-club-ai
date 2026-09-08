@@ -175,11 +175,13 @@ struct HeadlineCard: View {
 struct CatalystsCard: View {
     let catalysts: [MRCatalyst]
 
+    /// 复用全局市场名 key（美股/A 股/港股），不用单字「美/中/港」——
+    /// 「中」已被信号强度占用（en 为 "Medium"），单字 key 会语义冲突。
     private func marketLabel(_ market: String) -> String {
         switch market {
-        case "us": return L("美")
-        case "cn": return L("中")
-        case "hk": return L("港")
+        case "us": return L("美股")
+        case "cn": return L("A 股")
+        case "hk": return L("港股")
         default: return market.uppercased()
         }
     }

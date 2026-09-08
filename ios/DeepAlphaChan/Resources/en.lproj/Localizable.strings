@@ -246,3 +246,26 @@
 /* Auth */
 "Apple 登录失败，请稍后再试" = "Sign in with Apple failed. Please try again later.";
 "中国大陆" = "Chinese Mainland";
+
+/* Daily Morning Brief */
+"晨报" = "Brief";
+"每日晨报" = "Daily Brief";
+"历史晨报" = "Past Briefs";
+"今日核心判断" = "Today's Core Call";
+"重点个股" = "Stock Picks";
+"催化剂日历" = "Catalyst Calendar";
+"事实" = "Fact";
+"洞察" = "Insight";
+"预测" = "View";
+"验证" = "Verify";
+"晨报生成中" = "Brief is being generated";
+"通常 07:30 前就绪，稍后下拉刷新" = "Usually ready before 07:30 — pull to refresh later";
+"今日晨报暂不可用，以下为 %@ 内容" = "Today's brief is unavailable. Showing %@.";
+"正在查看 %@ 的晨报" = "Viewing the brief for %@";
+"回到最新" = "Back to Latest";
+"暂无内容" = "No content yet";
+"暂无历史晨报" = "No past briefs yet";
+"加载失败，请稍后再试" = "Failed to load. Please try again.";
+"查看缠论分析" = "View Chan analysis";
+"内容由 AI 生成，仅供参考，不构成投资建议" = "AI-generated content for reference only. Not investment advice.";
+"历史" = "History";
