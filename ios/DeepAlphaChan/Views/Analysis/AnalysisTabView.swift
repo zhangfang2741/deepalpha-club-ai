@@ -5,7 +5,10 @@ import SwiftUI
 /// 只负责录入查询条件与风险提示；分析成功后 push 到 ResultDetailView 看结果。
 /// 条件与结果分成两页：录入时不被长长的结果流干扰，看结果时也不被表单占屏。
 struct AnalysisTabView: View {
-    @StateObject private var vm = ChanViewModel()
+    /// 由 MainTabView 注入的共享状态：晨报「重点个股」跳转分析时用的是同一个
+    /// ViewModel，这样切到本 Tab 时查询条件已填好、结果也能直接呈现。
+    /// 本视图不再自己创建。
+    let vm: ChanViewModel
     @StateObject private var recent = RecentSymbols()
     @EnvironmentObject private var store: StoreManager
     @EnvironmentObject private var usage: UsageTracker
@@ -17,6 +20,10 @@ struct AnalysisTabView: View {
     @State private var showPaywall = false
     /// 分析成功后置 true，push 到详情页；用户返回时自动复位。
     @State private var showResults = false
+
+    init(vm: ChanViewModel) {
+        self.vm = vm
+    }
 
     var body: some View {
         NavigationStack {
@@ -58,6 +65,15 @@ struct AnalysisTabView: View {
                 if let analysis = vm.analysis {
                     ResultDetailView(analysis: analysis, vm: vm)
                         .environmentObject(orientation)
+                }
+            }
+            // 外部入口（晨报「重点个股」）触发的分析不经过 triggerAnalysis，
+            // 不会走到那里置 showResults 的逻辑；这里监听 isLoading 的下降沿，
+            // 只要分析成功（有结果、无错误）就同样 push 进结果页。
+            // 手动分析时 triggerAnalysis 本身也会置 true，重复赋值无副作用。
+            .onChange(of: vm.isLoading) { _, loading in
+                if !loading, vm.analysis != nil, vm.errorMessage == nil {
+                    showResults = true
                 }
             }
             #if DEBUG
