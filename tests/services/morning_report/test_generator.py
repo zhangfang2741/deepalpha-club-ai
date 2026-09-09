@@ -94,6 +94,22 @@ async def test_write_retries_on_validation_error(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_write_raises_when_llm_returns_none(monkeypatch):
+    """llm_service.call 静默返回 None（模型未触发结构化输出）时必须报错，不能把 None 当成功返回。
+
+    根因复现：minimax 等模型偶尔不触发 function-calling，LangChain 的
+    with_structured_output 会返回 None 而不抛异常；write() 若原样透传，
+    下游 `content.model_dump()` 会因 None 崩溃且不落 failed 状态。
+    """
+    async def fake_call_returns_none(messages, **kwargs):
+        return None
+
+    monkeypatch.setattr(llm_service, "call", fake_call_returns_none)
+    with pytest.raises(ValueError, match="未返回结构化"):
+        await gen.write("notes", "us", "2026-09-08")
+
+
+@pytest.mark.asyncio
 async def test_recon_summarizes_all_results_at_round_limit(monkeypatch):
     """耗尽工具轮次后必须综合全部结果，不能只返回最后一个工具结果。"""
     fake = AsyncMock()

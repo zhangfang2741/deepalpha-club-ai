@@ -40,6 +40,20 @@ async def _generate_one(market: str, trade_date: date) -> dict:
 
     try:
         content, meta = await generate_report(market, trade_date.isoformat())
+        if content is None:
+            # 正常链路应已被 write() 挡住（None 会被转成异常）；这里是防御性
+            # 兜底——不管 generate_report 因为什么原因返回空内容，都不能让
+            # 下面的 model_dump() 崩溃到 try 之外，导致记录永远卡在 generating。
+            raise ValueError("generate_report 返回了空内容")
+        record.status = "success"
+        record.content = content.model_dump()
+        record.generated_at = datetime.now(BEIJING)
+        record.model_name = meta.get("model_name")
+        record.duration_ms = meta.get("duration_ms")
+        with get_sync_session_cm() as session:
+            session.add(record)
+            session.commit()
+        return {"market": market, "status": "success", "summary": content.summary}
     except Exception as exc:  # noqa: BLE001 —— 失败落库，不让单市场炸掉整批
         logger.exception("morning_report_generate_failed", market=market)
         record.status = "failed"
@@ -48,16 +62,6 @@ async def _generate_one(market: str, trade_date: date) -> dict:
             session.add(record)
             session.commit()
         return {"market": market, "status": "failed"}
-
-    record.status = "success"
-    record.content = content.model_dump()
-    record.generated_at = datetime.now(BEIJING)
-    record.model_name = meta.get("model_name")
-    record.duration_ms = meta.get("duration_ms")
-    with get_sync_session_cm() as session:
-        session.add(record)
-        session.commit()
-    return {"market": market, "status": "success", "summary": content.summary}
 
 
 async def _generate(markets: list[str]) -> dict:

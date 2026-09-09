@@ -279,11 +279,15 @@ private struct HistoryDatesView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var dates: [String] = []
     @State private var errorMessage: String?
+    @State private var isLoading = true
 
     var body: some View {
         NavigationStack {
             Group {
-                if let errorMessage {
+                if isLoading {
+                    ProgressView().tint(Theme.accent)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let errorMessage {
                     VStack(spacing: 10) {
                         Text(errorMessage)
                             .font(.subheadline)
@@ -294,13 +298,10 @@ private struct HistoryDatesView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if dates.isEmpty {
-                    VStack(spacing: 10) {
-                        ProgressView().tint(Theme.accent)
-                        Text(L("暂无历史晨报"))
-                            .font(.footnote)
-                            .foregroundColor(Theme.textSecondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    Text(L("暂无历史晨报"))
+                        .font(.footnote)
+                        .foregroundColor(Theme.textSecondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List(dates, id: \.self) { date in
                         Button {
@@ -335,7 +336,9 @@ private struct HistoryDatesView: View {
     }
 
     private func load() async {
+        isLoading = true
         errorMessage = nil
+        defer { isLoading = false }
         do {
             let result = try await MorningReportService.dates(market: market)
             dates = result.dates

@@ -102,7 +102,7 @@ async def write(notes: str, market: str, trade_date: str) -> MorningReportConten
     ):
         with attempt:
             try:
-                return await llm_service.call(
+                result = await llm_service.call(
                     messages=[
                         SystemMessage(content=prompt),
                         HumanMessage(content=f"调研笔记：\n{notes}\n\n请输出晨报 JSON。{error_hint}"),
@@ -110,6 +110,12 @@ async def write(notes: str, market: str, trade_date: str) -> MorningReportConten
                     response_format=MorningReportContent,
                     timeout=300,
                 )
+                if result is None:
+                    # 模型未触发结构化输出时 with_structured_output 会静默返回 None
+                    # （不抛异常）——必须显式转成错误，否则会被当成功返回，
+                    # 下游 content.model_dump() 对 None 崩溃且任务不落 failed 状态。
+                    raise ValueError("模型未返回结构化晨报内容（response_format 解析为空）")
+                return result
             except Exception as exc:
                 error_hint = f"\n\n上一次输出不合格：{exc}。请严格修正后重新输出。"
                 logger.exception(

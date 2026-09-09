@@ -72,6 +72,43 @@ async def test_generate_one_marks_failed(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_generate_one_marks_failed_when_content_is_none(monkeypatch):
+    """generate_report 若未抛异常却返回 (None, meta)，不能让 content.model_dump() 崩溃。
+
+    防御性兜底：正常链路应已被 write() 挡住，这里确保记录不会永远卡在 generating。
+    """
+    class FakeSession:
+        record = MorningReport(market="us", trade_date=date(2026, 9, 8))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def exec(self, *_a):
+            class R:
+                def first(self):
+                    return None
+
+            return R()
+
+        def add(self, obj):
+            pass
+
+        def commit(self):
+            pass
+
+    async def none_content_generate(market, trade_date):
+        return None, {"model_name": "test", "duration_ms": 1}
+
+    monkeypatch.setattr(task_mod, "get_sync_session_cm", FakeSession)
+    monkeypatch.setattr(task_mod, "generate_report", none_content_generate)
+    result = await task_mod._generate_one("us", date(2026, 9, 8))
+    assert result["status"] == "failed"
+
+
+@pytest.mark.asyncio
 async def test_success_result_is_json_serializable(monkeypatch):
     """Celery JSON 后端不能收到 Pydantic 摘要对象，但推送仍需完整双语摘要。"""
     session = MagicMock()
