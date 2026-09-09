@@ -7,6 +7,7 @@
 import asyncio
 from typing import Any
 
+import akshare as ak
 from langchain_core.tools import tool
 
 from app.core.logging import logger
@@ -27,8 +28,6 @@ def _fmt_rows(df: Any, wanted: set[str]) -> list[str]:
 
 
 def _fetch_cn_index():
-    import akshare as ak
-
     return ak.stock_zh_index_spot_em(symbol="沪深重要指数")
 
 
@@ -40,8 +39,14 @@ async def cn_index_snapshot() -> str:
         if df is None or df.empty:
             return "未查到A股指数数据"
         lines = _fmt_rows(df, {"上证指数", "深证成指", "创业板指"})
-        total = sum(float(r.get("成交额") or 0) for _, r in df.iterrows())
-        lines.append(f"- 沪深两市成交额: {total / 1e8:.0f} 亿元")
+        # 指数存在成分股重叠，不能把所有指数成交额相加。
+        turnovers = {
+            str(r["名称"]): r.get("成交额") for _, r in df.iterrows()
+            if r["名称"] in {"上证指数", "深证成指"}
+        }
+        if len(turnovers) == 2 and all(value is not None for value in turnovers.values()):
+            total = sum(float(value) for value in turnovers.values() if value is not None)
+            lines.append(f"- 沪深两市成交额: {total / 1e8:.0f} 亿元")
         return "\n".join(lines) or "未查到A股指数数据"
     except Exception as exc:  # noqa: BLE001 —— 工具层约定吞异常，供 LLM 换工具兜底
         logger.exception("morning_report_tool_failed", tool="cn_index_snapshot")
@@ -49,8 +54,6 @@ async def cn_index_snapshot() -> str:
 
 
 def _fetch_hsgt():
-    import akshare as ak
-
     return ak.stock_hsgt_fund_flow_summary_em()
 
 
@@ -70,8 +73,6 @@ async def cn_north_flow() -> str:
 
 
 def _fetch_hk_index():
-    import akshare as ak
-
     return ak.stock_hk_index_spot_em()
 
 

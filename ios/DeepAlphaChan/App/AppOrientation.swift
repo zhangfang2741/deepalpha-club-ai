@@ -59,6 +59,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         AppDelegate.orientation?.mask ?? .portrait
     }
 
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        PushNotificationManager.shared.prepare()
+        return true
+    }
+
     // MARK: - APNs 注册回调桥接（转发给 PushNotificationManager）
 
     func application(

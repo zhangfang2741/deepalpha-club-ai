@@ -12,11 +12,12 @@ async def test_cn_index_snapshot_formats_rows():
     fake = type("DF", (), {"empty": False, "iterrows": lambda self: iter([
         (0, {"名称": "上证指数", "最新价": 3200.5, "涨跌幅": 0.72, "成交额": 3.1e11}),
         (1, {"名称": "深证成指", "最新价": 9800.1, "涨跌幅": -0.31, "成交额": 4.2e11}),
+        (2, {"名称": "创业板指", "最新价": 2000, "涨跌幅": 1, "成交额": 1e11}),
     ])})()
     with patch.object(data_tools, "_fetch_cn_index", return_value=fake):
         result = await data_tools.cn_index_snapshot.ainvoke({})
     assert "上证指数" in result and "+0.72%" in result and "-0.31%" in result
-    assert "两市成交额" in result
+    assert "两市成交额: 7300 亿元" in result
 
 
 @pytest.mark.asyncio

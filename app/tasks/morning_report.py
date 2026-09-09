@@ -81,7 +81,7 @@ async def _generate(markets: list[str]) -> dict:
             results[market] = {"market": market, "skipped": True, "status": "success"}
             continue
         result = await _generate_one(market, trade_date)
-        results[market] = result
+        results[market] = {key: value for key, value in result.items() if key != "summary"}
         if result.get("status") == "success" and not result.get("skipped"):
             summaries[market] = result["summary"]
     if summaries:

@@ -1,5 +1,6 @@
 """apns_client：验证真的调用了 aioapns 客户端上存在的方法（send_notification）。"""
 
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -43,3 +44,17 @@ async def test_send_returns_false_and_does_not_raise_on_client_error():
         ok = await apns_client.send("tok", "title", "body")
 
     assert ok is False
+
+
+def test_client_recreated_for_each_task_event_loop():
+    """同一循环复用连接，下一次 Celery asyncio.run 必须新建客户端。"""
+    async def get_twice():
+        first = apns_client.get_client()
+        assert apns_client.get_client() is first
+        return first
+
+    with patch.object(apns_client, "APNs", side_effect=[object(), object()]) as factory:
+        first = asyncio.run(get_twice())
+        second = asyncio.run(get_twice())
+    assert first is not second
+    assert factory.call_count == 2

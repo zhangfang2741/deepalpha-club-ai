@@ -22,6 +22,37 @@
 
 ---
 
+## 续做记录（2026-09-09）
+
+现有提交已实现 Task 1–13 的主体代码。下方原始步骤保留为实施过程参考；未勾选的历史步骤不等于对应文件尚未实现。真实服务和真机验收仍未完成，不将整个计划标记为完成。
+
+本轮补齐：
+
+- [x] 侦察工具轮次耗尽后，使用全部工具结果生成完整笔记。
+- [x] 两阶段生成共享 Langfuse 回调上下文，增加总超时，写作修复重试使用 tenacity。
+- [x] APNs 客户端按事件循环缓存，避免后续 Celery 任务复用已关闭的循环。
+- [x] Celery 返回结果移除不可 JSON 序列化的 Pydantic 摘要，推送仍保留双语摘要。
+- [x] Docker 单容器启动入口增加 beat，并与 web、worker 一起监控和退出。
+- [x] iOS 市场和历史切换使用请求标识防止旧响应覆盖，加载期间不展示旧市场个股卡。
+- [x] 推送代理在启动时初始化，待处理市场保存在管理器中，支持冷启动及登录后消费；同市场通知返回最新晨报。
+- [x] 设备注册按账号会话、设备 token、语言判断是否重新绑定。
+- [x] 行情工具避免把重叠指数成交额重复累计；补充回归测试。
+- [x] 晨报模型表名显式标注 ClassVar[str]，局部注明并屏蔽 SQLModel 重复声明产生的类型误报；工具和推送导入移至文件顶部。
+
+本轮验证：
+
+- 晨报与推送/API 专项：`35 passed, 1 deselected`（排除需要真实模型密钥的 slow 冒烟）。
+- iOS：`xcodebuild -project ios/DeepAlphaChan.xcodeproj -scheme DeepAlphaChan -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build`，`BUILD SUCCEEDED`。
+- 晨报相关 Python 文件 `ruff check` 通过；专项 `pyright` 为 `0 errors, 0 warnings`；最后的行情类型收窄调整另跑数据工具测试 `2 passed`。启动脚本 `bash -n`、`git diff --check` 通过。
+- 全仓 `make check`：lint 584 项错误；另跑 `make typecheck`，230 项错误（修复前基线，不能报告全仓通过）。
+- 全仓非 slow 测试运行约 6 分钟后中止，已得到 `162 passed, 23 failed`；失败集中在认证/交易台 API，包含 Redis 未初始化等问题，不代表全量执行完成。
+
+部署约束：单容器默认 `RUN_CELERY_BEAT=true`。若使用 Procfile 的独立 beat 服务，应在 web 设置 `RUN_CELERY_BEAT=false`。多个 web 副本也应关闭内置 beat，只保留一个独立 beat，避免重复调度。
+
+待验收：真实模型生成、数据库迁移与 API 联调、模拟器交互、APNs 真机推送、生产部署。当前默认模型缺少认证凭据，真实生成冒烟测试失败；未修改用户现有 AppConfig 和营销工作区改动。
+
+---
+
 ### Task 1: 晨报内容 Schema（双语叶子级）
 
 **Files:**

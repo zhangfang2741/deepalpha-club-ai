@@ -1,6 +1,9 @@
 """APNs 发送封装（aioapns，Token-Based p8 认证）。懒初始化，未配置时返回 None。"""
 
+import asyncio
 from typing import Any
+
+from aioapns import APNs, NotificationRequest, PushType
 
 from app.core.config import settings
 from app.core.logging import logger
@@ -12,14 +15,14 @@ def is_configured() -> bool:
 
 
 _client: Any = None
+_client_loop: asyncio.AbstractEventLoop | None = None
 
 
 def get_client() -> Any:
     """懒初始化 APNs 客户端单例，避免未配置时提前构造失败。"""
-    global _client
-    if _client is None:
-        from aioapns import APNs
-
+    global _client, _client_loop
+    loop = asyncio.get_running_loop()
+    if _client is None or _client_loop is not loop:
         _client = APNs(
             key_id=settings.APNS_KEY_ID,
             team_id=settings.APNS_TEAM_ID,
@@ -27,13 +30,12 @@ def get_client() -> Any:
             use_sandbox=settings.APNS_USE_SANDBOX,
             topic=settings.APNS_BUNDLE_ID,
         )
+        _client_loop = loop
     return _client
 
 
 async def send(token: str, title: str, body: str, data: dict | None = None) -> bool:
     """发送一条 alert 推送。返回是否成功；token 失效返回 False 并记日志。"""
-    from aioapns import NotificationRequest, PushType
-
     request = NotificationRequest(
         device_token=token,
         message={

@@ -22,6 +22,7 @@ struct MainTabView: View {
     /// 写入目标市场，晨报 Tab 消费后置 nil。
     @State private var pendingReportMarket: String?
     /// 分析 Tab 与晨报跳转共享的缠论状态。
+    @ObservedObject private var push = PushNotificationManager.shared
     @StateObject private var chanVM = ChanViewModel()
 
     var body: some View {
@@ -42,9 +43,11 @@ struct MainTabView: View {
                 .tabItem { Label(L("我的"), systemImage: "person.circle") }
                 .tag(Tab.profile)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .openMorningReport)) { note in
-            pendingReportMarket = (note.object as? String) ?? "us"
+        .onReceive(push.$pendingMarket) { market in
+            guard let market else { return }
+            pendingReportMarket = market
             selection = .morningReport
+            push.pendingMarket = nil
         }
     }
 

@@ -1,14 +1,19 @@
 """生成器：工具循环收敛、结构化输出、写作阶段校验失败重试。"""
 
 import pytest
+from unittest.mock import AsyncMock
+
+from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.runnables.config import ensure_config
+
+from tests.services.morning_report import test_schema as ts
+from app.services.llm.service import llm_service
 
 from app.services.morning_report import generator as gen
 from app.services.morning_report.schema import MorningReportContent
 
 
 def _valid_content() -> MorningReportContent:
-    import tests.services.morning_report.test_schema as ts
-
     return MorningReportContent.model_validate(ts._valid_content())
 
 
@@ -70,8 +75,6 @@ async def test_generate_report_returns_content(monkeypatch):
 @pytest.mark.asyncio
 async def test_write_retries_on_validation_error(monkeypatch):
     """写作阶段首次输出非法 → 带错误信息重试 → 第二次成功。"""
-    from app.services.llm.service import llm_service
-
     content = _valid_content()
     state = {"n": 0}
 
@@ -88,3 +91,42 @@ async def test_write_retries_on_validation_error(monkeypatch):
     monkeypatch.setattr(llm_service, "call", fake_call)
     result = await gen.write("notes", "us", "2026-09-08")
     assert state["n"] == 2 and result.headline.zh
+
+
+@pytest.mark.asyncio
+async def test_recon_summarizes_all_results_at_round_limit(monkeypatch):
+    """耗尽工具轮次后必须综合全部结果，不能只返回最后一个工具结果。"""
+    fake = AsyncMock()
+    fake.ainvoke.return_value = FakeToolResp(tool_calls=[
+        {"name": "search", "args": {}, "id": "call_1"}
+    ])
+    summarizer = AsyncMock()
+    summarizer.ainvoke.return_value = FakeToolResp(content="完整调研笔记")
+    tool = type("T", (), {"name": "search", "ainvoke": AsyncMock(return_value="最后工具结果")})()
+    monkeypatch.setattr(gen, "MAX_TOOL_ROUNDS", 2)
+    monkeypatch.setattr(gen, "build_tools", lambda _: [tool])
+    monkeypatch.setattr(gen, "_recon_llm", lambda _: fake)
+    monkeypatch.setattr(gen.llm_registry, "get_default", lambda: summarizer)
+    assert await gen.recon("us", "2026-09-08") == "完整调研笔记"
+    messages = summarizer.ainvoke.call_args.args[0]
+    assert sum(getattr(m, "type", "") == "tool" for m in messages) == 2
+
+
+@pytest.mark.asyncio
+async def test_generation_propagates_trace_context(monkeypatch):
+    """两阶段共享追踪上下文，写作服务内部的模型调用也继承回调。"""
+    async def fake_recon(market, trade_date):
+        config = ensure_config()
+        assert config["callbacks"]
+        assert config["metadata"]["market"] == market
+        return "调研笔记"
+
+    async def fake_write(notes, market, trade_date):
+        assert ensure_config()["callbacks"]
+        return _valid_content()
+
+    monkeypatch.setattr(gen.settings, "LANGFUSE_TRACING_ENABLED", True)
+    monkeypatch.setattr(gen, "langfuse_callback_handler", BaseCallbackHandler())
+    monkeypatch.setattr(gen, "recon", fake_recon)
+    monkeypatch.setattr(gen, "write", fake_write)
+    await gen.generate_report("us", "2026-09-08")

@@ -10,11 +10,15 @@
     两阶段拆开天然规避。
 """
 
+import asyncio
 import time
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.runnables import RunnableConfig, RunnableLambda
+from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential
 
+from app.core.config import settings
 from app.core.langgraph.tools.duckduckgo_search import duckduckgo_search_tool
 from app.core.langgraph.tools.fmp_data import (
     fmp_company_profile,
@@ -22,6 +26,7 @@ from app.core.langgraph.tools.fmp_data import (
     fmp_quote,
 )
 from app.core.logging import logger
+from app.core.observability import langfuse_callback_handler
 from app.services.llm.registry import llm_registry
 from app.services.llm.service import llm_service
 from app.services.morning_report.data_tools import AKSHARE_TOOLS
@@ -68,7 +73,11 @@ async def recon(market: str, trade_date: str) -> str:
         for tc in calls:
             messages.append(await _run_tool(tc, tools))
     logger.warning("morning_report_recon_round_limit", market=market)
-    return str(messages[-1].content)
+    messages.append(HumanMessage(content="工具查询额度已用完。请综合以上全部工具结果，输出完整调研笔记，不再调用工具。"))
+    response = await llm_registry.get_default().ainvoke(messages)
+    if not response.content or getattr(response, "tool_calls", None):
+        raise ValueError("侦察阶段未能生成完整调研笔记")
+    return str(response.content)
 
 
 async def _run_tool(tool_call: dict, tools: list[Any]) -> ToolMessage:
@@ -86,27 +95,46 @@ async def write(notes: str, market: str, trade_date: str) -> MorningReportConten
     """阶段二：写作。校验失败带错误重试（repair loop）。"""
     prompt = render_prompt("write", market, trade_date)
     error_hint = ""
-    for attempt in range(1, WRITE_ATTEMPTS + 1):
-        try:
-            return await llm_service.call(
-                messages=[
-                    SystemMessage(content=prompt),
-                    HumanMessage(content=f"调研笔记：\n{notes}\n\n请输出晨报 JSON。{error_hint}"),
-                ],
-                response_format=MorningReportContent,
-                timeout=300,
-            )
-        except Exception as exc:  # noqa: BLE001 —— 校验/解析失败重试一次
-            error_hint = f"\n\n上一次输出不合格：{exc}。请严格修正后重新输出。"
-            logger.warning("morning_report_write_retry", market=market, attempt=attempt, error=str(exc))
-    raise RuntimeError(f"morning report write failed after {WRITE_ATTEMPTS} attempts")
+    async for attempt in AsyncRetrying(
+        stop=stop_after_attempt(WRITE_ATTEMPTS),
+        wait=wait_exponential(multiplier=1, min=1, max=4),
+        reraise=True,
+    ):
+        with attempt:
+            try:
+                return await llm_service.call(
+                    messages=[
+                        SystemMessage(content=prompt),
+                        HumanMessage(content=f"调研笔记：\n{notes}\n\n请输出晨报 JSON。{error_hint}"),
+                    ],
+                    response_format=MorningReportContent,
+                    timeout=300,
+                )
+            except Exception as exc:
+                error_hint = f"\n\n上一次输出不合格：{exc}。请严格修正后重新输出。"
+                logger.exception(
+                    "morning_report_write_retry", market=market,
+                    attempt=attempt.retry_state.attempt_number,
+                )
+                raise
+    raise RuntimeError("晨报写作未返回内容")
 
 
 async def generate_report(market: str, trade_date: str) -> tuple[MorningReportContent, dict]:
     """入口：返回 (内容, 元信息)。元信息含耗时/重试次数，供任务层落库。"""
     started = time.monotonic()
-    notes = await recon(market, trade_date)
-    content = await write(notes, market, trade_date)
+    config: RunnableConfig = {
+        "callbacks": [langfuse_callback_handler] if settings.LANGFUSE_TRACING_ENABLED else [],
+        "metadata": {"market": market, "trade_date": trade_date},
+        "run_name": "morning_report",
+    }
+
+    async def generate(_: str) -> MorningReportContent:
+        notes = await recon(market, trade_date)
+        return await write(notes, market, trade_date)
+
+    async with asyncio.timeout(900):
+        content = await RunnableLambda(generate).ainvoke(market, config=config)
     _, model_name = llm_registry.get_or_default(None)
     meta = {
         "duration_ms": int((time.monotonic() - started) * 1000),

@@ -5,7 +5,7 @@ import UserNotifications
 /// APNs 远程推送：权限、token 上报（带 App 语言）、点击路由到晨报对应市场。
 ///
 /// token 上报时机：注册成功时、登录成功时、语言切换后重进 App 时
-/// （后端按 locale 分组推送，locale 变化才重复上报）。
+/// （后端按 locale 分组推送）。
 @MainActor
 final class PushNotificationManager: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
     static let shared = PushNotificationManager()
@@ -14,6 +14,13 @@ final class PushNotificationManager: NSObject, ObservableObject, UNUserNotificat
     @Published private(set) var deviceToken: String?
     /// 上次成功上报时用的 locale，避免同语言重复上报。
     private var reportedLocale: String?
+    private var reportedToken: String?
+    private var reportedSession: String?
+    @Published var pendingMarket: String?
+
+    func prepare() {
+        UNUserNotificationCenter.current().delegate = self
+    }
     /// 权限申请与注册只做一次（登出再登录不重复弹窗）。
     private var activated = false
 
@@ -45,14 +52,16 @@ final class PushNotificationManager: NSObject, ObservableObject, UNUserNotificat
         // 模拟器无 APNs，静默即可（联调推送需真机）。
     }
 
-    /// 登录成功 / 语言切换后调用：有 token 就上报（locale 变化才重复上报）。
+    /// 登录成功 / 语言切换后调用：账号、设备或语言变化时重新绑定。
     func reportIfPossible() async {
-        guard let token = deviceToken else { return }
+        guard let token = deviceToken, let session = KeychainStore.loadToken() else { return }
         let locale = Localized.language() == .english ? "en" : "zh-Hans"
-        guard locale != reportedLocale else { return }
+        guard locale != reportedLocale || token != reportedToken || session != reportedSession else { return }
         do {
             try await MorningReportService.registerDeviceToken(token, locale: locale)
             reportedLocale = locale
+            reportedToken = token
+            reportedSession = session
         } catch {
             // 上报失败不阻塞主流程，下次登录/切语言重试。
         }
@@ -68,7 +77,7 @@ final class PushNotificationManager: NSObject, ObservableObject, UNUserNotificat
     ) {
         let market = response.notification.request.content.userInfo["market"] as? String ?? "us"
         DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .openMorningReport, object: market)
+            self.pendingMarket = StockMarket(rawValue: market) != nil ? market : "us"
         }
         completionHandler()
     }

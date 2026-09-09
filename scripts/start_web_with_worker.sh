@@ -24,18 +24,26 @@ fi
 "${VENV}/celery" -A app.core.celery_app worker --loglevel=info -Q supply_chain,supply_chain_orchestration,morning_report &
 WORKER_PID=$!
 
+# 单容器部署默认启动唯一 beat；独立部署 beat 或多副本时关闭此开关。
+PIDS=("$WORKER_PID")
+if [ "${RUN_CELERY_BEAT:-true}" = "true" ]; then
+  "${VENV}/celery" -A app.core.celery_app beat --loglevel=info --schedule=/tmp/deepalpha-celerybeat &
+  PIDS+=("$!")
+fi
+
 # 前台启动 uvicorn
 "${VENV}/python" -c "import os,uvicorn; uvicorn.run('app.main:app', host='0.0.0.0', port=int(os.environ.get('PORT', ${PORT})))" &
 WEB_PID=$!
+PIDS+=("$WEB_PID")
 
 shutdown() {
-  kill -TERM "$WORKER_PID" "$WEB_PID" 2>/dev/null || true
-  wait "$WORKER_PID" "$WEB_PID" 2>/dev/null || true
+  kill -TERM "${PIDS[@]}" 2>/dev/null || true
+  wait "${PIDS[@]}" 2>/dev/null || true
 }
 trap shutdown TERM INT
 
 # 任一子进程退出即退出容器（返回其退出码），由平台重启
-wait -n "$WORKER_PID" "$WEB_PID"
+wait -n "${PIDS[@]}"
 EXIT_CODE=$?
 shutdown
 exit "$EXIT_CODE"

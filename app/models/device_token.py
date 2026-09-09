@@ -1,7 +1,7 @@
 """APNs 设备 token：一个用户可多设备；locale 决定推送语言。"""
 
 from datetime import UTC, datetime
-from typing import Optional
+from typing import ClassVar, Optional
 
 from sqlalchemy import Column
 from sqlalchemy.types import DateTime
@@ -23,7 +23,8 @@ class DeviceToken(UUIDModel, table=True):
     抛 asyncpg DataError。
     """
 
-    __tablename__ = "device_token"
+    # SQLModel 将表名同时声明为 ClassVar 和 declared_attr；字符串覆盖是 ORM 支持的用法。
+    __tablename__: ClassVar[str] = "device_token"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     user_id: int = Field(foreign_key="user.id", index=True)
     token: str = Field(index=True, unique=True, description="APNs hex device token")

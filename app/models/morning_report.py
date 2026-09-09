@@ -1,7 +1,7 @@
 """每日晨报表：market+trade_date 唯一，幂等与回退都依赖它。"""
 
 from datetime import UTC, date, datetime
-from typing import Optional
+from typing import ClassVar, Optional
 
 from sqlalchemy import Column, UniqueConstraint
 from sqlalchemy.types import JSON, DateTime
@@ -23,7 +23,8 @@ class MorningReport(UUIDModel, table=True):
     DataError（同步 psycopg 宽容但语义混乱）。
     """
 
-    __tablename__ = "morning_report"
+    # SQLModel 将表名同时声明为 ClassVar 和 declared_attr；字符串覆盖是 ORM 支持的用法。
+    __tablename__: ClassVar[str] = "morning_report"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     market: str = Field(index=True, description="us / cn / hk")
     trade_date: date = Field(index=True)

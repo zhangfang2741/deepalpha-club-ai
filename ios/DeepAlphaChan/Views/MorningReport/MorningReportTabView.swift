@@ -16,6 +16,7 @@ struct MorningReportTabView: View {
     @State private var response: MorningReportResponse?
     @State private var errorMessage: String?
     @State private var isLoading = false
+    @State private var requestID = UUID()
     @State private var showHistory = false
     /// 从历史列表选中的日期；nil 表示「今日（自动回退最近一期）」。
     @State private var selectedDate: String?
@@ -26,7 +27,9 @@ struct MorningReportTabView: View {
                 VStack(spacing: 12) {
                     marketSwitch
 
-                    if let errorMessage {
+                    if isLoading {
+                        skeletonView
+                    } else if let errorMessage {
                         errorView(errorMessage)
                     } else if let response {
                         reportBody(response)
@@ -232,21 +235,22 @@ struct MorningReportTabView: View {
     /// `date` 显式指定时优先于 `selectedDate`。
     /// 结果回写前校验市场未变，避免「A 市场请求进行中切到 B」时旧结果错挂到新市场。
     private func load(force: Bool = false, date: String? = nil) async {
-        guard !isLoading else { return }
         if !force && response != nil { return }
+        let currentRequest = UUID()
+        requestID = currentRequest
         let requestedMarket = market
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
+        defer { if requestID == currentRequest { isLoading = false } }
         do {
             let fetched = try await MorningReportService.report(market: requestedMarket, date: date ?? selectedDate)
-            guard market == requestedMarket else { return }
+            guard requestID == currentRequest, market == requestedMarket else { return }
             response = fetched
         } catch let error as APIError {
-            guard market == requestedMarket else { return }
+            guard requestID == currentRequest, market == requestedMarket else { return }
             errorMessage = error.message
         } catch {
-            guard market == requestedMarket else { return }
+            guard requestID == currentRequest, market == requestedMarket else { return }
             errorMessage = L("加载失败，请稍后再试")
         }
     }
@@ -256,7 +260,12 @@ struct MorningReportTabView: View {
         guard let target = pendingMarket, !target.isEmpty else { return }
         pendingMarket = nil
         guard StockMarket(rawValue: target) != nil else { return }
-        market = target
+        selectedDate = nil
+        if market == target {
+            Task { await load(force: true) }
+        } else {
+            market = target
+        }
     }
 }
 
@@ -326,6 +335,7 @@ private struct HistoryDatesView: View {
     }
 
     private func load() async {
+        errorMessage = nil
         do {
             let result = try await MorningReportService.dates(market: market)
             dates = result.dates

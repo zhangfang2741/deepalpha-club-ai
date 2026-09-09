@@ -5,6 +5,11 @@
 
 import asyncio
 
+from sqlmodel import select
+
+from app.db.session import get_sync_session_cm
+from app.models.device_token import DeviceToken
+
 from app.core.logging import logger
 from app.services.morning_report.schema import LocalizedText
 from app.services.push import apns_client
@@ -31,11 +36,6 @@ def _apns_configured() -> bool:
 
 def _load_tokens() -> list[dict]:
     """同步查全部设备 token（Celery 上下文，量小可接受）。"""
-    from sqlmodel import select
-
-    from app.db.session import get_sync_session_cm
-    from app.models.device_token import DeviceToken
-
     with get_sync_session_cm() as session:
         rows = session.exec(select(DeviceToken)).all()
         return [{"token": r.token, "locale": r.locale} for r in rows]
@@ -66,5 +66,5 @@ async def notify_generated(markets: list[str], summaries: dict[str, LocalizedTex
         body = zh_summary if locale == "zh-Hans" else en_summary
         return await _send_one(row["token"], title, body, {"market": primary_market})
 
-    results = await asyncio.gather(*(_send_to(row) for row in _load_tokens()))
+    results = await asyncio.gather(*(_send_to(row) for row in await asyncio.to_thread(_load_tokens)))
     logger.info("morning_report_push_done", markets=markets, sent=sum(results))
