@@ -111,6 +111,18 @@ def test_no_segment_high_exceeds_origin_general():
                 assert seg.high <= origin + 1e-6
 
 
+def test_adjacent_segments_alternate_direction():
+    # 线段必须严格交替：确立失败跳过若干笔后，不得误起一条同向线段
+    for prices in (
+        [100, 130, 115, 140, 118, 160, 150, 170, 120, 175, 130, 190],
+        [200, 150, 175, 120, 160, 90, 130, 70, 110, 50],
+        [50, 80, 60, 95, 70, 62, 90, 55, 100, 75, 130],
+    ):
+        segs = find_segments(_chain(prices))
+        for a, b in zip(segs, segs[1:], strict=False):
+            assert a.direction != b.direction, "相邻线段方向必须交替"
+
+
 def test_too_few_strokes():
     assert find_segments([]) == []
     assert find_segments(_chain([100, 120])) == []  # 仅1笔
