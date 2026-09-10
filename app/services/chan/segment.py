@@ -80,7 +80,16 @@ def find_segments(strokes: list[Stroke]) -> list[Segment]:
             continue
 
         direction = s0.direction
-        # 确立条件：s2 必须越过 s0 的极值
+        origin = s0.start_price        # 线段起点价（任何回调越过它都意味着线段被破坏）
+        # 确立条件1：首个回调笔 s1 不得收复起点（上升段回调不破起点低点 /
+        # 下降段回调不越起点高点）——否则此处根本不成线段
+        if direction == "up" and s1.end_price < origin:
+            i += 1
+            continue
+        if direction == "down" and s1.end_price > origin:
+            i += 1
+            continue
+        # 确立条件2：s2 必须越过 s0 的极值（创新高 / 创新低）
         if direction == "up" and s2.end_price <= s0.end_price:
             i += 1
             continue
@@ -90,7 +99,6 @@ def find_segments(strokes: list[Stroke]) -> list[Segment]:
 
         end = i + 2                    # 段内最后一笔（同向）的索引
         seg_extreme = s2.end_price     # 线段当前极值
-        origin = s0.start_price        # 线段起点价（被反向收复即结束）
 
         # 向后延伸：j 指向同向推动笔，j-1 指向其前的反向回调笔
         j = end + 2

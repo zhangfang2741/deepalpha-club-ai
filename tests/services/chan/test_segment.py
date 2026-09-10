@@ -83,6 +83,34 @@ def test_segment_strokes_are_contiguous_subsequence():
         assert seg.stroke_count >= 3
 
 
+def test_establishment_retrace_must_not_reclaim_origin():
+    # 回归：线段确立阶段的第一个回调笔若已收复起点，则该处不成线段，
+    # 不得把「越过自身起点」的走势并入线段（模糊测试曾在此暴露 I8 违反）。
+    # 100->80(下) ->105(上,越过起点100) ->70(下) ->110(上) ->60(下)
+    strokes = _chain([100, 80, 105, 70, 110, 60])
+    for seg in find_segments(strokes):
+        origin = seg.strokes[0].start_price
+        if seg.direction == "up":
+            assert seg.low >= origin - 1e-6, "上升线段最低不得跌破起点"
+        else:
+            assert seg.high <= origin + 1e-6, "下降线段最高不得越过起点"
+
+
+def test_no_segment_high_exceeds_origin_general():
+    # 综合：任意构造下，每条线段都不得吞没自身起点
+    for prices in (
+        [100, 130, 115, 140, 118, 160, 150, 170],
+        [200, 170, 190, 150, 175, 120],
+        [50, 62, 48, 70, 55, 80, 60, 95],
+    ):
+        for seg in find_segments(_chain(prices)):
+            origin = seg.strokes[0].start_price
+            if seg.direction == "up":
+                assert seg.low >= origin - 1e-6
+            else:
+                assert seg.high <= origin + 1e-6
+
+
 def test_too_few_strokes():
     assert find_segments([]) == []
     assert find_segments(_chain([100, 120])) == []  # 仅1笔
