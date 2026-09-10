@@ -77,11 +77,13 @@ def merge_candles(bars: list[dict]) -> list[MergedCandle]:
             merged.append(mc)
             continue
 
-        # 确定合并方向：看倒数第二根与倒数第一根的关系
+        # 确定合并方向：看倒数第二根与倒数第一根的关系（去包含后高低同向，比高点即可）
         if len(merged) >= 2:
             direction_up = merged[-2].high < prev.high  # 上升趋势
         else:
-            direction_up = True  # 默认上升
+            # 只有一根在手时无前序趋势可参照，用当前K线是否上破 prev 高点近似定向，
+            # 避免一律默认「上升」在开局下跌时把首根合并K线的低点取错
+            direction_up = mc.high > prev.high
 
         if direction_up:
             # 上升：取高高、高低
@@ -117,33 +119,25 @@ def _is_bottom_fractal(left: MergedCandle, mid: MergedCandle, right: MergedCandl
 
 
 def find_fractals(merged: list[MergedCandle]) -> list[Fractal]:
-    """在合并K线序列上识别顶底分型，并保证顶底严格交替。
+    """在合并K线序列上识别全部有效顶底分型，按合并K线索引升序返回。
+
+    只做「局部三根」的顶/底判定，不在分型层做价格贪心合并——旧实现会在同型分型
+    之间只保留价格极值那一个，用纯价格丢弃分型，容易在震荡区错位/漏掉真实分型，
+    也让上层的「笔」失去正确的候选端点。缠论的顶底交替与最小间隔约束属于「成笔」
+    阶段的职责（见 stroke.find_strokes），此处保持分型的完整性。
+
+    注：相邻的一顶一底（M/W 形态，中心仅隔1根）都是合法分型，均予保留，
+    是否成笔由笔层的最小间隔规则决定。
     """
     if len(merged) < 3:
         return []
 
-    raw_fractals: list[Fractal] = []
+    fractals: list[Fractal] = []
     for i in range(1, len(merged) - 1):
         left, mid, right = merged[i - 1], merged[i], merged[i + 1]
         if _is_top_fractal(left, mid, right):
-            raw_fractals.append(Fractal(type="top", candle=mid, left=left, right=right))
+            fractals.append(Fractal(type="top", candle=mid, left=left, right=right))
         elif _is_bottom_fractal(left, mid, right):
-            raw_fractals.append(Fractal(type="bottom", candle=mid, left=left, right=right))
+            fractals.append(Fractal(type="bottom", candle=mid, left=left, right=right))
 
-    # 保证顶底交替：同向分型取极值那个
-    alternated: list[Fractal] = []
-    for f in raw_fractals:
-        if not alternated:
-            alternated.append(f)
-            continue
-        prev = alternated[-1]
-        if f.type == prev.type:
-            # 同向，保留极值更强的
-            if f.type == "top" and f.price >= prev.price:
-                alternated[-1] = f
-            elif f.type == "bottom" and f.price <= prev.price:
-                alternated[-1] = f
-        else:
-            alternated.append(f)
-
-    return alternated
+    return fractals

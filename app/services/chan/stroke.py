@@ -61,10 +61,16 @@ def find_strokes(fractals: list[Fractal], min_gap: int = _MIN_GAP) -> list[Strok
     """从顶底分型序列识别笔。
 
     规则：
-    1. 成笔的两端必须一顶一底，方向由起点决定（底→顶=上升笔，顶→底=下降笔）
-    2. 两分型在合并K线序列中的索引差 >= min_gap（至少 min_gap+1 根合并K线）
+    1. 成笔的两端必须一顶一底，方向由起点决定（底→顶=上升笔，顶→底=下降笔）。
+    2. 两分型在合并K线序列中的索引差 >= min_gap（至少 min_gap+1 根合并K线）。
     3. 用游标 last 记录待成笔的起点：遇到同型分型保留更极端者（更高的顶 / 更低的底），
-       遇到间隔不足的异型分型则忽略——避免简单递增在分型密集时丢弃分型、导致笔偏少且错位
+       遇到间隔不足的异型分型则忽略——避免在分型密集时丢弃分型、导致笔偏少且错位。
+    4. 首尾相连：若「更极端的同型分型」出现在某笔已经成立之后（例如上升笔成立后又
+       创出更高的顶，且其间没有有效的反向分型），则把该笔的终点延伸到新的极值，
+       而不是留下一个缺口——保证相邻笔严格首尾相连，图上不断裂。
+
+    输入的分型序列不要求已交替（见 fractal.find_fractals 现返回全部有效分型），
+    交替、取极值与延伸都在此处统一处理。
 
     min_gap 可调：高级别（如周线）可适当减小以识别更多笔，日线保持默认 4。
     """
@@ -78,10 +84,15 @@ def find_strokes(fractals: list[Fractal], min_gap: int = _MIN_GAP) -> list[Strok
         f = fractals[k]
 
         if f.type == last.type:
-            # 同型分型：保留更极端的一端作为新的待成笔起点
-            if (last.type == "top" and f.price > last.price) or (
+            # 同型分型：仅当更极端时更新待成笔起点
+            more_extreme = (last.type == "top" and f.price > last.price) or (
                 last.type == "bottom" and f.price < last.price
-            ):
+            )
+            if more_extreme:
+                # 若上一笔正以 last 为终点，说明这是该笔方向上的进一步延伸，
+                # 延伸其终点到新极值，保持笔首尾相连
+                if strokes and strokes[-1].end is last:
+                    strokes[-1].end = f
                 last = f
             continue
 
