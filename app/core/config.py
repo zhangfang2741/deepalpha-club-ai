@@ -166,6 +166,12 @@ class Settings:
         # LangGraph Configuration
         self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
         self.DEFAULT_LLM_MODEL = os.getenv("DEFAULT_LLM_MODEL", "gpt-5-mini")
+
+        # 晨报专用模型：独立于全局 LLM_PROVIDER/DEFAULT_LLM_MODEL，只给
+        # morning_report 两阶段生成用，不影响聊天 Agent/供应链/因子探索。
+        # 留空则退回全局默认模型（向后兼容）。
+        self.MORNING_REPORT_OPENAI_API_KEY = os.getenv("MORNING_REPORT_OPENAI_API_KEY", "")
+        self.MORNING_REPORT_OPENAI_MODEL = os.getenv("MORNING_REPORT_OPENAI_MODEL", "gpt-4o")
         self.SESSION_NAMING_ENABLED = os.getenv("SESSION_NAMING_ENABLED", "true").lower() == "true"
         self.DEFAULT_LLM_TEMPERATURE = float(os.getenv("DEFAULT_LLM_TEMPERATURE", "0.2"))
         self.MAX_TOKENS = int(os.getenv("MAX_TOKENS", "2000"))

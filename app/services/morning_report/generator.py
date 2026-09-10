@@ -16,6 +16,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig, RunnableLambda
+from pydantic import SecretStr
 from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
@@ -45,15 +46,31 @@ def build_tools(market: str) -> list[Any]:
     return [duckduckgo_search_tool, *AKSHARE_TOOLS]
 
 
+def _morning_report_llm() -> Any:
+    """晨报专用模型：配置了 MORNING_REPORT_OPENAI_API_KEY 时用独立 OpenAI 实例。
+
+    与全局 LLM_PROVIDER/DEFAULT_LLM_MODEL 完全隔离——不进 registry、不影响
+    聊天 Agent/供应链/因子探索，也不受 DEFAULT_LLM_MODEL 变化影响。
+    未配置时退回全局默认模型（向后兼容，原有行为不变）。
+    """
+    if not settings.MORNING_REPORT_OPENAI_API_KEY:
+        return llm_registry.get_default()
+    from langchain_openai import ChatOpenAI
+
+    return ChatOpenAI(
+        model=settings.MORNING_REPORT_OPENAI_MODEL,
+        api_key=SecretStr(settings.MORNING_REPORT_OPENAI_API_KEY),
+    )
+
+
 def _recon_llm(market: str) -> Any:
-    """从 registry 取干净的默认模型实例 + 绑市场工具（测试 monkeypatch 点）。
+    """取晨报专用模型实例 + 绑市场工具（测试 monkeypatch 点）。
 
     注意：不能用 llm_service.bind_tools()——它会把工具绑定写回全局单例
-    self._llm，污染聊天 Agent 的默认模型。这里直接用 registry.get_default()
-    拿到的 BaseChatModel 调用 .bind_tools()，返回值是全新的 RunnableBinding，
-    不影响 registry 里的共享实例。
+    self._llm，污染聊天 Agent 的默认模型。bind_tools 返回值是全新的
+    RunnableBinding，不影响共享实例。
     """
-    return llm_registry.get_default().bind_tools(build_tools(market))
+    return _morning_report_llm().bind_tools(build_tools(market))
 
 
 async def recon(market: str, trade_date: str) -> str:
@@ -74,7 +91,7 @@ async def recon(market: str, trade_date: str) -> str:
             messages.append(await _run_tool(tc, tools))
     logger.warning("morning_report_recon_round_limit", market=market)
     messages.append(HumanMessage(content="工具查询额度已用完。请综合以上全部工具结果，输出完整调研笔记，不再调用工具。"))
-    response = await llm_registry.get_default().ainvoke(messages)
+    response = await _morning_report_llm().ainvoke(messages)
     if not response.content or getattr(response, "tool_calls", None):
         raise ValueError("侦察阶段未能生成完整调研笔记")
     return str(response.content)
@@ -102,14 +119,25 @@ async def write(notes: str, market: str, trade_date: str) -> MorningReportConten
     ):
         with attempt:
             try:
-                result = await llm_service.call(
-                    messages=[
-                        SystemMessage(content=prompt),
-                        HumanMessage(content=f"调研笔记：\n{notes}\n\n请输出晨报 JSON。{error_hint}"),
-                    ],
-                    response_format=MorningReportContent,
-                    timeout=300,
-                )
+                messages = [
+                    SystemMessage(content=prompt),
+                    HumanMessage(content=f"调研笔记：\n{notes}\n\n请输出晨报 JSON。{error_hint}"),
+                ]
+                if settings.MORNING_REPORT_OPENAI_API_KEY:
+                    # 专用 key：走独立 OpenAI 实例，不经过 llm_service.call 的
+                    # registry fallback（只有一个模型，fallback 无意义）。
+                    structured_llm = _morning_report_llm().with_structured_output(
+                        MorningReportContent
+                    )
+                    result = await asyncio.wait_for(
+                        structured_llm.ainvoke(messages), timeout=300
+                    )
+                else:
+                    result = await llm_service.call(
+                        messages=messages,
+                        response_format=MorningReportContent,
+                        timeout=300,
+                    )
                 if result is None:
                     # 模型未触发结构化输出时 with_structured_output 会静默返回 None
                     # （不抛异常）——必须显式转成错误，否则会被当成功返回，

@@ -93,6 +93,69 @@ async def test_write_retries_on_validation_error(monkeypatch):
     assert state["n"] == 2 and result.headline.zh
 
 
+def test_morning_report_llm_uses_dedicated_openai_when_configured(monkeypatch):
+    """配置 MORNING_REPORT_OPENAI_API_KEY 后必须用独立 OpenAI 实例，不能碰全局 registry。
+
+    晨报要求内容质量高，用户提供了专用 key，只给这个模块用——不能和聊天 Agent/
+    供应链/因子探索共用全局默认模型，也不该受 DEFAULT_LLM_MODEL 变化影响。
+    """
+    captured = {}
+
+    class FakeChatOpenAI:
+        def __init__(self, model, api_key, **kwargs):
+            captured["model"] = model
+            captured["api_key"] = api_key.get_secret_value()
+
+    monkeypatch.setattr(gen.settings, "MORNING_REPORT_OPENAI_API_KEY", "sk-test-dedicated-key")
+    monkeypatch.setattr(gen.settings, "MORNING_REPORT_OPENAI_MODEL", "gpt-4o")
+    monkeypatch.setattr("langchain_openai.ChatOpenAI", FakeChatOpenAI)
+
+    def boom():
+        raise AssertionError("配置了专用 key 时不该碰全局 registry")
+
+    monkeypatch.setattr(gen.llm_registry, "get_default", boom)
+
+    gen._morning_report_llm()
+    assert captured == {"model": "gpt-4o", "api_key": "sk-test-dedicated-key"}
+
+
+def test_morning_report_llm_falls_back_to_global_default_when_not_configured(monkeypatch):
+    """未配置专用 key 时必须保持原有行为：直接用全局默认模型，不做任何改动。"""
+    monkeypatch.setattr(gen.settings, "MORNING_REPORT_OPENAI_API_KEY", "")
+    sentinel = object()
+    monkeypatch.setattr(gen.llm_registry, "get_default", lambda: sentinel)
+    assert gen._morning_report_llm() is sentinel
+
+
+@pytest.mark.asyncio
+async def test_write_uses_dedicated_openai_model_when_configured(monkeypatch):
+    """写作阶段配置了专用 key 时，走独立 OpenAI 实例的结构化输出，不经过 llm_service.call。"""
+    content = _valid_content()
+
+    class FakeStructuredLLM:
+        async def ainvoke(self, messages):
+            return content
+
+    class FakeChatOpenAI:
+        def __init__(self, model, api_key, **kwargs):
+            pass
+
+        def with_structured_output(self, schema):
+            assert schema is MorningReportContent
+            return FakeStructuredLLM()
+
+    def boom(*args, **kwargs):
+        raise AssertionError("配置了专用 key 时不该走 llm_service.call")
+
+    monkeypatch.setattr(gen.settings, "MORNING_REPORT_OPENAI_API_KEY", "sk-test-dedicated-key")
+    monkeypatch.setattr(gen.settings, "MORNING_REPORT_OPENAI_MODEL", "gpt-4o")
+    monkeypatch.setattr("langchain_openai.ChatOpenAI", FakeChatOpenAI)
+    monkeypatch.setattr(llm_service, "call", boom)
+
+    result = await gen.write("notes", "us", "2026-09-08")
+    assert result is content
+
+
 @pytest.mark.asyncio
 async def test_write_raises_when_llm_returns_none(monkeypatch):
     """llm_service.call 静默返回 None（模型未触发结构化输出）时必须报错，不能把 None 当成功返回。
