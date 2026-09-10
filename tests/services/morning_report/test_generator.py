@@ -93,6 +93,13 @@ async def test_write_retries_on_validation_error(monkeypatch):
     assert state["n"] == 2 and result.headline.zh
 
 
+def test_build_tools_us_includes_yfinance_fallback():
+    """FMP quote 端点额度/订阅受限时，us 市场必须有不依赖 FMP 的行情兜底工具。"""
+    tools = gen.build_tools("us")
+    names = [t.name for t in tools]
+    assert "us_index_snapshot" in names
+
+
 def test_morning_report_llm_uses_dedicated_openai_when_configured(monkeypatch):
     """配置 MORNING_REPORT_OPENAI_API_KEY 后必须用独立 OpenAI 实例，不能碰全局 registry。
 

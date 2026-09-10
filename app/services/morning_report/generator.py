@@ -30,7 +30,7 @@ from app.core.logging import logger
 from app.core.observability import langfuse_callback_handler
 from app.services.llm.registry import llm_registry
 from app.services.llm.service import llm_service
-from app.services.morning_report.data_tools import AKSHARE_TOOLS
+from app.services.morning_report.data_tools import AKSHARE_TOOLS, us_index_snapshot
 from app.services.morning_report.prompts import render_prompt
 from app.services.morning_report.schema import MorningReportContent
 
@@ -40,9 +40,15 @@ TOOL_RESULT_LIMIT = 4000
 
 
 def build_tools(market: str) -> list[Any]:
-    """按市场选择工具集：us 用 FMP+搜索；cn/hk 用 akshare+搜索。"""
+    """按市场选择工具集：us 用 FMP+yfinance（行情兜底）+搜索；cn/hk 用 akshare+搜索。"""
     if market == "us":
-        return [duckduckgo_search_tool, fmp_quote, fmp_company_profile, fmp_financial_statement]
+        return [
+            duckduckgo_search_tool,
+            fmp_quote,
+            fmp_company_profile,
+            fmp_financial_statement,
+            us_index_snapshot,
+        ]
     return [duckduckgo_search_tool, *AKSHARE_TOOLS]
 
 

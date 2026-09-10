@@ -91,3 +91,54 @@ async def hk_index_snapshot() -> str:
 
 
 AKSHARE_TOOLS = [cn_index_snapshot, cn_north_flow, hk_index_snapshot]
+
+
+# 美股主要指数快照——FMP quote 端点额度/订阅受限时的兜底数据源，不依赖 FMP。
+US_TICKERS: dict[str, str] = {
+    "标普500": "^GSPC",
+    "道琼斯": "^DJI",
+    "纳斯达克综合": "^IXIC",
+    "罗素2000": "^RUT",
+    "VIX恐慌指数": "^VIX",
+    "10年期美债收益率": "^TNX",
+}
+
+
+def _fetch_us_snapshot() -> Any:
+    import yfinance as yf
+
+    return yf.download(
+        list(US_TICKERS.values()),
+        period="5d",
+        interval="1d",
+        progress=False,
+        group_by="ticker",
+        auto_adjust=False,
+    )
+
+
+@tool
+async def us_index_snapshot() -> str:
+    """获取美股主要指数最新快照（标普500/道指/纳指/罗素2000/VIX/10年期美债收益率），用于 FMP 行情不可用时兜底。"""
+    try:
+        df = await asyncio.to_thread(_fetch_us_snapshot)
+        if df is None or df.empty:
+            return "未查到美股指数数据"
+        lines: list[str] = []
+        for name, symbol in US_TICKERS.items():
+            try:
+                closes = df[symbol]["Close"].dropna()
+            except KeyError:
+                continue
+            if len(closes) < 2:
+                continue
+            latest, prev = float(closes.iloc[-1]), float(closes.iloc[-2])
+            if prev == 0:
+                continue
+            pct = (latest - prev) / prev * 100
+            sign = "+" if pct >= 0 else ""
+            lines.append(f"- {name}: {latest:.2f}（{sign}{pct:.2f}%，较上一交易日）")
+        return "\n".join(lines) or "未查到美股指数数据"
+    except Exception as exc:  # noqa: BLE001 —— 工具层约定吞异常，供 LLM 换工具兜底
+        logger.exception("morning_report_tool_failed", tool="us_index_snapshot")
+        return f"工具失败: {exc}"
