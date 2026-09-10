@@ -123,6 +123,28 @@ def test_adjacent_segments_alternate_direction():
             assert a.direction != b.direction, "相邻线段方向必须交替"
 
 
+def test_gap_second_case_keeps_one_segment():
+    # 第二种情况：上升途中一笔回抽创出较低高点(155<160)且与上一回调间有缺口，
+    # 但随后突破到新高(180)——缺口是中继，应保持为【一条】上升线段，而非在 160 处误分。
+    strokes = _chain([100, 140, 125, 160, 150, 155, 130, 180])
+    segs = find_segments(strokes)
+    assert len(segs) == 1
+    assert segs[0].direction == "up"
+    assert segs[0].start_price == 100
+    assert segs[0].end_price == 180
+    assert segs[0].stroke_count == 7
+
+
+def test_gap_second_case_down_direction():
+    # 对称的下降第二种情况：跌途中一笔反抽较高低点且带缺口，随后跌破新低。
+    strokes = _chain([180, 130, 145, 120, 128, 125, 150, 100])
+    segs = find_segments(strokes)
+    assert segs
+    assert segs[0].direction == "down"
+    assert segs[0].start_price == 180
+    assert segs[0].end_price == 100
+
+
 def test_too_few_strokes():
     assert find_segments([]) == []
     assert find_segments(_chain([100, 120])) == []  # 仅1笔
