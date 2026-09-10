@@ -55,6 +55,33 @@ def test_fractals_are_valid_and_ordered():
             assert mid.low < left.low and mid.low < right.low
 
 
+def _choppy_bars(n: int = 60) -> list[dict]:
+    """构造几乎每根都是局部极值的锯齿（横盘噪声），制造密集重叠分型。"""
+    bars: list[dict] = []
+    for t in range(n):
+        mid = 100 + (1.5 if t % 2 == 0 else -1.5)
+        bars.append(_bar(t, mid, mid + 1.0, mid - 1.0, mid))
+    return bars
+
+
+def test_min_spacing_filters_overlapping_fractals():
+    merged = merge_candles(_choppy_bars(60))
+    raw = find_fractals(merged, min_spacing=0)
+    filtered = find_fractals(merged, min_spacing=1)
+    # 过滤后分型不多于原始，且在密集噪声下应显著减少
+    assert len(filtered) <= len(raw)
+    # 有效分型：相邻必交替，且中心间隔 >= 2（至少1根独立K线），无重叠M/W
+    for a, b in zip(filtered, filtered[1:], strict=False):
+        assert a.type != b.type, "有效分型相邻必交替"
+        assert b.idx - a.idx >= 2, "有效分型相邻至少间隔1根独立K线"
+
+
+def test_min_spacing_zero_keeps_more():
+    # min_spacing=0 关闭间隔过滤，密集噪声下应保留更多分型
+    merged = merge_candles(_choppy_bars(60))
+    assert len(find_fractals(merged, min_spacing=0)) >= len(find_fractals(merged, min_spacing=1))
+
+
 def test_too_few_candles():
     assert find_fractals([]) == []
     bars = [_bar(0, 10, 12, 9, 11), _bar(1, 11, 13, 10, 12)]
