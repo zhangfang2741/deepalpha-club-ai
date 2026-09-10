@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date, timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -36,6 +37,21 @@ from app.services.skills.kline import fetch_kline
 router = APIRouter()
 _analyzer = ChanAnalyzer()
 
+# 窗口锚定的 warmup 天数：足够覆盖缠论左边界依赖的收敛区（实测 ~30 根合并K线）
+_WARMUP_DAYS = {"daily": 180, "weekly": 540}
+
+
+def _anchor_start(start_date: str, freq: str) -> str:
+    """把用户所选起点向前推 warmup 天，作为实际取数起点。
+
+    解析失败（非法日期）时原样返回 start_date，不影响主流程。
+    """
+    try:
+        d = date.fromisoformat(start_date[:10])
+    except ValueError:
+        return start_date
+    return (d - timedelta(days=_WARMUP_DAYS.get(freq, 180))).isoformat()
+
 # 保持对后台任务的强引用，避免被 GC 提前回收
 _background_tasks: set[asyncio.Task] = set()
 
@@ -64,11 +80,16 @@ async def chan_analysis(
     """
     logger.info("chan_analysis_request", user_id=user.id, symbol=symbol, start=start_date, end=end_date)
 
+    # 窗口锚定：在用户所选起点之前多取一段 warmup K 线一起送入缠论，在完整序列上
+    # 计算以消除左边界依赖（结构不随用户选的起始日期漂移），再裁剪回可见窗口。
+    # 实测 ~30 根合并K线即可让可见区结构收敛，这里给足冗余：日线 180 天、周线 540 天。
+    anchor_start = _anchor_start(start_date, freq)
+
     try:
         bars = await fetch_kline(
             user_id=user.id,
             symbol=symbol,
-            start_date=start_date,
+            start_date=anchor_start,
             end_date=end_date,
             freq=freq,
             redis=redis,
@@ -83,7 +104,7 @@ async def chan_analysis(
     if not bars:
         raise HTTPException(status_code=404, detail=f"未获取到 {symbol} 的K线数据，请检查股票代码或日期范围")
 
-    result = _analyzer.analyze(symbol, bars, lang=lang)
+    result = _analyzer.analyze(symbol, bars, lang=lang, visible_from=start_date)
 
     return ChanAnalysisResponse(
         symbol=result.symbol,

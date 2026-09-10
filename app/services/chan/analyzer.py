@@ -94,13 +94,18 @@ class ChanAnalyzer:
     """缠论分析器"""
 
     def analyze(
-        self, symbol: str, bars: list[dict], *, min_gap: int = 4, lang: str = "zh"
+        self, symbol: str, bars: list[dict], *, min_gap: int = 4, lang: str = "zh",
+        visible_from: str | None = None,
     ) -> ChanAnalysisResult:
         """对K线数据执行完整缠论分析。
 
         bars: list of {time, open, high, low, close, volume}
         min_gap: 笔成立所需的最小分型间隔（合并K线数 - 1），默认 4（缠论新笔标准）
         lang: 输出文案语言（zh / en）
+        visible_from: 可见窗口起点（time 字符串，含）。用于「窗口锚定」：调用方在
+            用户所选起点之前多取一段 warmup K 线一起传入，缠论在完整序列上计算以
+            消除左边界依赖（结构不随用户选的起始日期漂移），再把分型/笔/线段/中枢/
+            信号裁剪回可见窗口。为 None 时不裁剪，行为与旧版一致。
         """
         logger.info("chan_analysis_start", symbol=symbol, bars=len(bars), min_gap=min_gap)
 
@@ -171,7 +176,14 @@ class ChanAnalyzer:
         logger.debug("chan_signals", count=len(result.signals))
 
         # 9. 标注最右侧未确认结构（右侧滞后不确定性）
+        #    注意：确认标注基于「完整序列」的右边缘，必须在裁剪之前完成。
         self._mark_confirmations(result)
+
+        # 9b. 窗口锚定：把结构裁剪回可见窗口（在完整序列上算、只显示尾段）。
+        #     裁剪放在摘要/建议之前，使 summary 的计数与可见结构一致。
+        if visible_from is not None:
+            self._clip_to_window(result, visible_from, bars)
+
         result.pending_notes = self._build_pending_notes(result, lang)
 
         # 10. 当前状态摘要
@@ -245,6 +257,44 @@ class ChanAnalyzer:
         unconfirmed_end_times = {s.end_time for s in r.strokes if not s.confirmed}
         for sig in r.signals:
             sig.confirmed = sig.time not in unconfirmed_end_times
+
+    def _clip_to_window(
+        self, r: ChanAnalysisResult, from_time: str, bars: list[dict]
+    ) -> None:
+        """把已算好的结构裁剪回可见窗口（time >= from_time）。
+
+        - 分型 / 信号：按自身时间过滤。
+        - 笔 / 线段 / 中枢：只要「结束时间」落在窗口内就保留（跨越左边界的结构
+          予以保留，保证可见区左沿的笔能连上）。
+        - 合并K线：从「可见起点」起保留——可见起点取 from_time 与所有保留结构的
+          最早起点中的较早者，确保跨界结构的端点都有K线覆盖，图上不出现悬空点。
+        - MACD：与合并K线同口径按时间过滤。
+        - bars_count：改为可见窗口内的原始K线数，使摘要计数与所见一致。
+        """
+        r.fractals = [f for f in r.fractals if f.time >= from_time]
+        r.strokes = [s for s in r.strokes if s.end_time >= from_time]
+        r.segments = [g for g in r.segments if g.end_time >= from_time]
+        r.stroke_pivots = [p for p in r.stroke_pivots if p.end_time >= from_time]
+        r.segment_pivots = [p for p in r.segment_pivots if p.end_time >= from_time]
+        r.signals = [s for s in r.signals if s.time >= from_time]
+
+        starts = (
+            [s.start_time for s in r.strokes]
+            + [g.start_time for g in r.segments]
+            + [p.start_time for p in r.stroke_pivots]
+            + [p.start_time for p in r.segment_pivots]
+        )
+        visible_start = min([from_time, *starts])
+        r.merged_candles = [c for c in r.merged_candles if c.time >= visible_start]
+
+        if r.macd is not None:
+            keep = [i for i, t in enumerate(r.macd.times) if t >= visible_start]
+            r.macd.times = [r.macd.times[i] for i in keep]
+            r.macd.dif = [r.macd.dif[i] for i in keep]
+            r.macd.dea = [r.macd.dea[i] for i in keep]
+            r.macd.bar = [r.macd.bar[i] for i in keep]
+
+        r.bars_count = sum(1 for b in bars if b["time"] >= from_time)
 
     def _build_pending_notes(self, r: ChanAnalysisResult, lang: str = "zh") -> list[str]:
         """汇总最右侧未确认结构，生成人类可读的提示。"""
