@@ -29,8 +29,27 @@ _YAHOO_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 
 
 _FMP_KEY = os.environ.get("FMP_API_KEY", "")
-_FMP_URL = "https://financialmodelingprep.com/stable/historical-price-eod/full"
+# 统一使用「前复权」端点：原始 full 端点只做拆股调整、未做除息调整，会在除息日
+# （尤其 A 股送转股）留下人为跳空，污染缠论几何（假分型/假笔/假缺口）。
+# dividend-adjusted 返回 adjOpen/adjHigh/adjLow/adjClose，按「最新价不变、历史价
+# 回调」的前复权口径，与东方财富 fqt=1、Yahoo adjclose 一致。
+_FMP_URL = "https://financialmodelingprep.com/stable/historical-price-eod/dividend-adjusted"
 _CACHE_TTL = 3600 * 24  # 24h
+
+
+def _forward_adjust(
+    open_: float, high: float, low: float, close: float, adj_close: float
+) -> tuple[float, float, float, float]:
+    """按前复权收盘价等比例回调 OHL。
+
+    行情源（Yahoo quote）给的是仅拆股调整的原始 OHLC，其 adjclose 额外含除息调整。
+    以 ratio = adj_close / close 等比缩放 open/high/low，即可得到与 adjclose 同口径的
+    前复权 OHLC，保证价格序列连续、无除息跳空。close 非正时原样返回以防除零。
+    """
+    if close <= 0 or adj_close <= 0:
+        return open_, high, low, close
+    ratio = adj_close / close
+    return open_ * ratio, high * ratio, low * ratio, adj_close
 
 
 class _RateLimitError(Exception):
@@ -39,7 +58,8 @@ class _RateLimitError(Exception):
 
 def _cache_key(user_id: int | None, symbol: str, start: str, end: str, freq: str) -> str:
     prefix = f"u{user_id}" if user_id else "public"
-    return f"skill_kline:{prefix}:{symbol}:{start}:{end}:{freq}"
+    # 命名空间带 qfq：切换到前复权后，旧的不复权缓存不能再被命中
+    return f"skill_kline:qfq:{prefix}:{symbol}:{start}:{end}:{freq}"
 
 
 # 市场判别已提升到 app/utils/market.py：这里原本只区分「6 位数字 = A 股，
@@ -132,9 +152,14 @@ async def _fetch_fmp(symbol: str, start: str, end: str, freq: str) -> list[dict]
             records = raw
         records = [r for r in records if r.get("date")]
         records.sort(key=lambda r: r["date"])
+        # 前复权端点返回 adjOpen/adjHigh/adjLow/adjClose；兼容极少数只回原始字段的情况
         return [
-            {"time": r["date"], "open": r["open"], "high": r["high"],
-             "low": r["low"], "close": r["close"], "volume": r.get("volume", 0)}
+            {"time": r["date"],
+             "open": r.get("adjOpen", r.get("open")),
+             "high": r.get("adjHigh", r.get("high")),
+             "low": r.get("adjLow", r.get("low")),
+             "close": r.get("adjClose", r.get("close")),
+             "volume": r.get("volume", 0)}
             for r in records
         ]
 
@@ -229,6 +254,8 @@ async def _fetch_yahoo(symbol: str, start: str, end: str, freq: str) -> list[dic
                 "period1": _to_ts(start),
                 "period2": _to_ts(end, end_of_day=True),
                 "interval": "1d",
+                # events=div|split 让 Yahoo 返回 adjclose（前复权收盘），用于回调 OHL
+                "events": "div|split",
             },
             headers={"User-Agent": "Mozilla/5.0"},
             timeout=30,
@@ -249,6 +276,9 @@ async def _fetch_yahoo(symbol: str, start: str, end: str, freq: str) -> list[dic
         lows = quote.get("low") or []
         closes = quote.get("close") or []
         volumes = quote.get("volume") or []
+        # adjclose：Yahoo quote 仅拆股调整，adjclose 额外含除息调整，用于前复权回调 OHL
+        adj = ((r0.get("indicators") or {}).get("adjclose") or [{}])[0]
+        adjcloses = adj.get("adjclose") or []
 
         bars: list[dict] = []
         for i, ts in enumerate(timestamps):
@@ -256,12 +286,14 @@ async def _fetch_yahoo(symbol: str, start: str, end: str, freq: str) -> list[dic
             # 停牌/无成交日 Yahoo 会给 null，跳过以免污染缠论结构
             if None in (o, h, low_, c):
                 continue
+            ac = adjcloses[i] if i < len(adjcloses) and adjcloses[i] is not None else c
+            o, h, low_, c = _forward_adjust(float(o), float(h), float(low_), float(c), float(ac))
             # 港股/A 股开盘时段换算成 UTC 仍是同一自然日，取 UTC 日期即可
             day = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
             vol = volumes[i] if i < len(volumes) and volumes[i] is not None else 0
             bars.append({
-                "time": day, "open": float(o), "high": float(h),
-                "low": float(low_), "close": float(c), "volume": float(vol),
+                "time": day, "open": o, "high": h,
+                "low": low_, "close": c, "volume": float(vol),
             })
         bars.sort(key=lambda b: b["time"])
         return bars
