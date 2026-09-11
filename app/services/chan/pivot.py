@@ -50,19 +50,18 @@ def _find_pivots_from_elements(elements: list, level: Literal["stroke", "segment
             i += 1
             continue
 
-        # 有效中枢形成
+        # 有效中枢形成。ZG/ZD 由最初三段固定，延伸时不再改动（缠论标准）——
+        # 只有 GG/DD（中枢区间内的最高/最低价）随延伸更新。
         pivot_elements = [e0, e1, e2]
         gg = max(e0.high, e1.high, e2.high)
         dd = min(e0.low, e1.low, e2.low)
 
-        # 中枢延伸：后续走势仍在中枢区间内
+        # 中枢延伸：后续走势只要仍与固定区间 [ZD, ZG] 重叠即并入
         j = i + 3
         while j < len(elements):
             ej = elements[j]
             if ej.low <= zg and ej.high >= zd:
-                # 走势仍在中枢内，延伸中枢
-                zg = min(zg, ej.high)
-                zd = max(zd, ej.low)
+                # 走势仍在中枢内，延伸中枢：ZG/ZD 不变，仅更新 GG/DD
                 gg = max(gg, ej.high)
                 dd = min(dd, ej.low)
                 pivot_elements.append(ej)

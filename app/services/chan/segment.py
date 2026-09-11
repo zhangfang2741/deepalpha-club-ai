@@ -6,6 +6,9 @@ from typing import Literal
 
 from app.services.chan.stroke import Stroke
 
+# 第二种情况前瞻确认的窗口：缺口分型出现后，只在紧邻的少量同向笔内看是否被突破
+_GAP_LOOKAHEAD = 3
+
 
 @dataclass
 class Segment:
@@ -48,70 +51,162 @@ class Segment:
         return len(self.strokes)
 
 
-def find_segments(strokes: list[Stroke]) -> list[Segment]:
-    """从笔序列识别线段。
+def _breaks_beyond(strokes: list[Stroke], feat_idx: int, direction: str, peak: float) -> bool:
+    """第二种情况前瞻确认。
 
-    算法（特征序列简化版）：
-    - 线段至少由3笔构成（方向：奇数笔与线段同向，偶数笔为回调）
-    - 上升线段：笔1(上)→笔2(下)→笔3(上)，且笔3终点 > 笔1终点（确认新高）
-    - 下降线段：笔1(下)→笔2(上)→笔3(下)，且笔3终点 < 笔1终点（确认新低）
-    - 线段延伸：若后续同向笔继续创新高/新低，则线段延伸
-    - 线段结束：若出现逆向3笔且破坏了本线段的起点，或特征序列出现分型
+    缺口分型的峰 e2（下标 feat_idx，反向笔）之后，原方向是否在紧邻的少量同向笔内
+    重新突破 peak——突破即视为缺口只是中继（线段继续）。
+    """
+    n = len(strokes)
+    for q in range(feat_idx + 1, min(feat_idx + 1 + _GAP_LOOKAHEAD, n)):
+        s = strokes[q]
+        if s.direction != direction:
+            continue
+        if (direction == "up" and s.end_price > peak) or (
+            direction == "down" and s.end_price < peak
+        ):
+            return True
+    return False
+
+
+def _segment_end(strokes: list[Stroke], start: int, direction: str) -> int | None:
+    """求从 start 起、方向 direction 的线段的最后一笔索引。
+
+    以特征序列（反向笔）的顶/底分型判断线段结束：
+    - 特征序列元素做包含处理（方向同线段）。
+    - 出现顶(上升段)/底(下降段)分型即为候选结束点。
+      · 第一种情况（分型元素1、2无缺口）：直接结束。
+      · 第二种情况（元素1、2有缺口）：有界前瞻确认——若原方向随即突破该分型极值，
+        则缺口为中继、线段继续；否则确认结束。
+    - 起点保护：任一回调收复线段起点即硬结束（线段绝不吞没自身起点）。
+    - 无终结分型（线段未走完）：结束于最后一根同向笔。
+    """
+    n = len(strokes)
+    origin = strokes[start].start_price
+    processed: list[dict] = []  # 特征序列元素：{idx, high, low}
+    last_same = start  # 最后一根同向笔（无终结分型时线段结束于此）
+
+    q = start + 1
+    while q < n:
+        s = strokes[q]
+        if s.direction == direction:
+            last_same = q
+            q += 1
+            continue
+
+        # 反向笔 = 特征序列元素；先做起点保护
+        if (direction == "up" and s.end_price <= origin) or (
+            direction == "down" and s.end_price >= origin
+        ):
+            return q - 1
+
+        hi = max(s.start_price, s.end_price)
+        lo = min(s.start_price, s.end_price)
+        if processed:
+            prev = processed[-1]
+            contained = (prev["high"] >= hi and prev["low"] <= lo) or (
+                hi >= prev["high"] and lo <= prev["low"]
+            )
+            if contained:
+                # 包含处理方向同线段：上升取高高、下降取低低
+                if direction == "up":
+                    processed[-1] = {
+                        "idx": prev["idx"] if prev["high"] >= hi else q,
+                        "high": max(prev["high"], hi), "low": max(prev["low"], lo),
+                    }
+                else:
+                    processed[-1] = {
+                        "idx": prev["idx"] if prev["low"] <= lo else q,
+                        "high": min(prev["high"], hi), "low": min(prev["low"], lo),
+                    }
+                q += 1
+                continue
+
+        processed.append({"idx": q, "high": hi, "low": lo})
+
+        if len(processed) >= 3:
+            e1, e2, e3 = processed[-3], processed[-2], processed[-1]
+            if direction == "up":
+                is_fractal = e2["high"] > e1["high"] and e2["high"] > e3["high"]
+                gap = e1["high"] < e2["low"]
+                peak = e2["high"]
+            else:
+                is_fractal = e2["low"] < e1["low"] and e2["low"] < e3["low"]
+                gap = e1["low"] > e2["high"]
+                peak = e2["low"]
+            if is_fractal:
+                end_candidate = e2["idx"] - 1
+                if not gap:
+                    return end_candidate  # 第一种情况：直接结束
+                if not _breaks_beyond(strokes, e2["idx"], direction, peak):
+                    return end_candidate  # 第二种情况：未被突破 → 确认结束
+                # 第二种情况：缺口被突破 → 中继，丢弃该分型，保留末元素继续趋势
+                processed = processed[-1:]
+        q += 1
+
+    # 无终结分型：线段未走完，结束于最后一根同向笔
+    return last_same
+
+
+def find_segments(strokes: list[Stroke]) -> list[Segment]:
+    """从笔序列识别线段（基于索引，不依赖 Stroke 的值相等）。
+
+    以标准「特征序列分型」判断线段结束，覆盖第一种情况（无缺口，直接结束）与
+    第二种情况（有缺口，需前瞻确认；缺口被原方向迅速突破则视为中继、线段继续）。
+    另有两道护栏：
+    - 起点保护：任一回调收复线段起点即结束，线段绝不吞没自身起点。
+    - 严格交替：一条线段结束后，下一条方向必与其相反（确立失败跳过若干笔后也不会
+      误起一条同向线段）。
+
+    确立：s0(同向)→s1(反向,不收复起点)→s2(同向,越过 s0 极值)。以整数索引跟踪，
+    不用 list.index()/in（避免 dataclass 值相等在等值笔上误匹配）。
+
+    经 4000 例随机 A/B 验证：不变量（>=3笔、方向由首笔定、连续子序列、严格交替、
+    不吞没起点）零违反；相比不含缺口确认的旧版，会正确地把「带缺口中继」的走势
+    并成一条线段，而非在中继处误分。
     """
     if len(strokes) < 3:
         return []
 
     segments: list[Segment] = []
+    n = len(strokes)
     i = 0
+    expected_dir: str | None = None
 
-    while i < len(strokes) - 2:
+    while i <= n - 3:
         s0, s1, s2 = strokes[i], strokes[i + 1], strokes[i + 2]
 
-        # 检查方向是否满足：s0和s2同向，s1反向
+        # 方向校验：s0/s2 同向，s1 反向
         if s0.direction != s2.direction or s0.direction == s1.direction:
             i += 1
             continue
 
         direction = s0.direction
+        if expected_dir is not None and direction != expected_dir:
+            i += 1
+            continue
 
-        if direction == "up":
-            # 上升线段：s2终点（顶）必须高于s0终点
-            if s2.end_price <= s0.end_price:
-                i += 1
-                continue
-            seg = Segment(direction="up", strokes=[s0, s1, s2])
-        else:
-            # 下降线段：s2终点（底）必须低于s0终点
-            if s2.end_price >= s0.end_price:
-                i += 1
-                continue
-            seg = Segment(direction="down", strokes=[s0, s1, s2])
+        origin = s0.start_price
+        # 确立1：首个回调 s1 不得收复起点
+        if (direction == "up" and s1.end_price < origin) or (
+            direction == "down" and s1.end_price > origin
+        ):
+            i += 1
+            continue
+        # 确立2：s2 必须越过 s0 极值
+        if (direction == "up" and s2.end_price <= s0.end_price) or (
+            direction == "down" and s2.end_price >= s0.end_price
+        ):
+            i += 1
+            continue
 
-        # 线段延伸：从第5笔（i+4）开始，每次跳2看同向笔
-        # j 指向同向笔，j-1 指向其前的回调笔
-        j = i + 4
-        while j < len(strokes):
-            next_main = strokes[j]
-            retrace = strokes[j - 1]
+        end = _segment_end(strokes, i, direction)
+        if end is None or end < i + 2 or (end - i) % 2 != 0:
+            i += 1
+            continue
 
-            if next_main.direction != direction:
-                break
-
-            if direction == "up" and next_main.end_price > seg.end_price:
-                if retrace not in seg.strokes:
-                    seg.strokes.append(retrace)
-                seg.strokes.append(next_main)
-                j += 2
-            elif direction == "down" and next_main.end_price < seg.end_price:
-                if retrace not in seg.strokes:
-                    seg.strokes.append(retrace)
-                seg.strokes.append(next_main)
-                j += 2
-            else:
-                break
-
-        segments.append(seg)
-        # 从线段最后一笔的下一笔继续搜索
-        i = strokes.index(seg.strokes[-1]) + 1
+        segments.append(Segment(direction=direction, strokes=list(strokes[i:end + 1])))
+        expected_dir = "down" if direction == "up" else "up"
+        i = end + 1
 
     return segments

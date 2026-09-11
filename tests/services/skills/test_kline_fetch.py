@@ -109,6 +109,63 @@ async def test_fetch_yahoo_parses_and_skips_null_rows(monkeypatch):
     assert bars[1]["volume"] == 200.0
 
 
+def test_forward_adjust_scales_ohl_by_ratio():
+    """复权价低于原始收盘时，等比回调 open/high/low，close 取 adjClose。"""
+    o, h, low_, c = kline._forward_adjust(100.0, 110.0, 90.0, 100.0, 50.0)
+    assert c == 50.0
+    assert o == pytest.approx(50.0)
+    assert h == pytest.approx(55.0)
+    assert low_ == pytest.approx(45.0)
+
+
+def test_forward_adjust_guards_zero_close():
+    """close<=0 时原样返回，避免除零。"""
+    assert kline._forward_adjust(1.0, 2.0, 0.5, 0.0, 0.0) == (1.0, 2.0, 0.5, 0.0)
+
+
+async def test_fetch_fmp_uses_dividend_adjusted_fields(monkeypatch):
+    """FMP 前复权端点返回 adjOpen/adjHigh/adjLow/adjClose：应取复权字段。"""
+    monkeypatch.setattr(kline, "_FMP_KEY", "test-key")
+
+    def fake_get(url, params=None, timeout=None):
+        assert "dividend-adjusted" in url  # 走前复权端点
+        return _FakeResp(200, [
+            {"date": "2024-01-02", "adjOpen": 9.0, "adjHigh": 11.0, "adjLow": 8.0,
+             "adjClose": 10.0, "open": 90, "high": 110, "low": 80, "close": 100,
+             "volume": 100},
+        ])
+
+    monkeypatch.setattr(kline.httpx, "get", fake_get)
+    bars = await kline._fetch_fmp("NVDA", "2024-01-01", "2024-02-01", "daily")
+    assert bars == [
+        {"time": "2024-01-02", "open": 9.0, "high": 11.0, "low": 8.0,
+         "close": 10.0, "volume": 100}
+    ]
+
+
+async def test_fetch_yahoo_forward_adjusts_and_removes_dividend_gap(monkeypatch):
+    """Yahoo：用 adjclose 前复权回调 OHL，消除除息造成的人为跳空。"""
+    # 原始 close 在除息日从 100 跳到 90（10 元分红），adjclose 连续（99->90 等）
+    rows = [
+        {"ts": 1704153600, "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 100},
+        {"ts": 1704240000, "open": 90.0, "high": 91.0, "low": 89.0, "close": 90.0, "volume": 100},
+    ]
+    payload = _yahoo_payload(rows)
+    # 注入 adjclose：第一日回调为 90（=90/100*100），第二日 90（除息后无需回调）
+    payload["chart"]["result"][0]["indicators"]["adjclose"] = [{"adjclose": [90.0, 90.0]}]
+
+    def fake_get(url, params=None, timeout=None, headers=None):
+        return _FakeResp(200, payload)
+
+    monkeypatch.setattr(kline.httpx, "get", fake_get)
+    bars = await kline._fetch_yahoo("0700.HK", "2024-01-01", "2024-01-31", "daily")
+    assert len(bars) == 2
+    # 第一日 close 被前复权到 90，与第二日 90 连续——除息跳空被抹平
+    assert bars[0]["close"] == pytest.approx(90.0)
+    assert bars[0]["open"] == pytest.approx(90.0)   # 100 * (90/100)
+    assert bars[1]["close"] == pytest.approx(90.0)
+
+
 async def test_fetch_cn_hk_falls_back_to_eastmoney_when_yahoo_unavailable(monkeypatch):
     """Yahoo 网络不可达时应回退东方财富。"""
     async def fake_yahoo(*_args, **_kwargs):
