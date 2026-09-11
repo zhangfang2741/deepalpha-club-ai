@@ -6,8 +6,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.services.chan.divergence import MACDData, check_divergence, _in_consolidation
+from app.services.chan.divergence import (
+    MACDData,
+    check_divergence,
+    find_segment_divergences,
+    find_stroke_divergences,
+    _in_consolidation,
+)
 from app.services.chan.fractal import Fractal, MergedCandle
+from app.services.chan.segment import Segment
 from app.services.chan.stroke import Stroke
 
 
@@ -94,3 +101,58 @@ def test_dif_lower_confirms_divergence():
     assert res.is_diverged is True
     assert res.area_ratio < 1.0
     assert res.dif_ratio < 1.0
+
+
+def _seg(direction: str, t0: str, t1: str, p0: float, p1: float) -> Segment:
+    return Segment(direction=direction, strokes=[_dir_stroke(direction, t0, t1, p0, p1)])
+
+
+def _dir_stroke(direction: str, t0: str, t1: str, p0: float, p1: float) -> Stroke:
+    sk = "bottom" if direction == "up" else "top"
+    ek = "top" if direction == "up" else "bottom"
+
+    def mc(idx, p):
+        return MergedCandle(idx=idx, time=t0, open=p, high=p + 1, low=p - 1, close=p,
+                            raw_start=idx, raw_end=idx)
+    start = Fractal(type=sk, candle=mc(0, p0), left=mc(-1, p0), right=mc(1, p0))
+    end = Fractal(type=ek, candle=mc(2, p1), left=mc(1, p1), right=mc(3, p1))
+    start.candle.time = t0
+    end.candle.time = t1
+    return Stroke(direction=direction, start=start, end=end)
+
+
+def test_segment_divergence_reuses_core_on_segments():
+    # 两条同向（上升）线段：后段价格创新高但 MACD 面积更小、DIF 更低 → 线段级背驰
+    times = [f"D{i}" for i in range(8)]
+    macd = MACDData(
+        times=times,
+        dif=[2, 2, 2, 0, 0, 1, 1, 1],
+        dea=[0] * 8,
+        bar=[4, 4, 0, 0, 0, 1, 1, 0],
+    )
+    segs = [
+        _seg("up", "D0", "D2", 10, 20),
+        _seg("down", "D2", "D5", 20, 15),
+        _seg("up", "D5", "D7", 15, 25),  # 价格创新高
+    ]
+    res = find_segment_divergences(segs, macd)
+    assert len(res) == len(segs)
+    # 最后一条上升线段应判定为背驰（面积与 DIF 均衰减）
+    assert res[-1].is_diverged is True
+    assert res[-1].area_ratio < 1.0
+
+
+def test_stroke_and_segment_divergence_share_semantics():
+    # 同一组段，作为「笔」和「线段」调用应得到一致结果（核心复用）
+    times = [f"D{i}" for i in range(8)]
+    macd = MACDData(times=times, dif=[2, 2, 2, 0, 0, 1, 1, 1], dea=[0] * 8,
+                    bar=[4, 4, 0, 0, 0, 1, 1, 0])
+    legs = [
+        _dir_stroke("up", "D0", "D2", 10, 20),
+        _dir_stroke("down", "D2", "D5", 20, 15),
+        _dir_stroke("up", "D5", "D7", 15, 25),
+    ]
+    segs = [Segment(direction=s.direction, strokes=[s]) for s in legs]
+    a = find_stroke_divergences(legs, macd)
+    b = find_segment_divergences(segs, macd)
+    assert [x.is_diverged for x in a] == [x.is_diverged for x in b]

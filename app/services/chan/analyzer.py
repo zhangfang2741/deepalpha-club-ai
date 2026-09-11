@@ -15,7 +15,13 @@ from app.services.chan.bias import (
     BiasFactor,
     score_to_bias,
 )
-from app.services.chan.divergence import DivergenceResult, MACDData, calc_macd, find_stroke_divergences
+from app.services.chan.divergence import (
+    DivergenceResult,
+    MACDData,
+    calc_macd,
+    find_segment_divergences,
+    find_stroke_divergences,
+)
 from app.services.chan.fractal import Fractal, MergedCandle, find_fractals, merge_candles
 from app.services.chan.i18n import is_en, pick
 from app.services.chan.narrative import MarketNarrative, _volume_readout, build_narrative
@@ -57,6 +63,8 @@ class ChanAnalysisResult:
     stroke_pivots: list[Pivot] = field(default_factory=list)
     segment_pivots: list[Pivot] = field(default_factory=list)
     divergences: list[DivergenceResult] = field(default_factory=list)
+    # 线段级背驰（比笔级更高级别，逐条线段与前一同向线段对比 MACD 力度）
+    segment_divergences: list[DivergenceResult] = field(default_factory=list)
     signals: list[Signal] = field(default_factory=list)
     macd: MACDData | None = None
 
@@ -168,6 +176,11 @@ class ChanAnalyzer:
         result.divergences = find_stroke_divergences(
             result.strokes, result.macd, lang, pivots=result.stroke_pivots
         )
+        # 7b. 线段级背驰（更高级别）
+        if len(result.segments) >= 2:
+            result.segment_divergences = find_segment_divergences(
+                result.segments, result.macd, lang, pivots=result.segment_pivots
+            )
         diverged_count = sum(1 for d in result.divergences if d.is_diverged)
         logger.debug("chan_divergences", total=len(result.divergences), diverged=diverged_count)
 
@@ -275,7 +288,14 @@ class ChanAnalyzer:
         """
         r.fractals = [f for f in r.fractals if f.time >= from_time]
         r.strokes = [s for s in r.strokes if s.end_time >= from_time]
-        r.segments = [g for g in r.segments if g.end_time >= from_time]
+        # 线段与线段级背驰按索引平行，需一并过滤以保持对齐
+        if r.segment_divergences and len(r.segment_divergences) == len(r.segments):
+            kept = [(g, dv) for g, dv in zip(r.segments, r.segment_divergences, strict=False)
+                    if g.end_time >= from_time]
+            r.segments = [g for g, _ in kept]
+            r.segment_divergences = [dv for _, dv in kept]
+        else:
+            r.segments = [g for g in r.segments if g.end_time >= from_time]
         r.stroke_pivots = [p for p in r.stroke_pivots if p.end_time >= from_time]
         r.segment_pivots = [p for p in r.segment_pivots if p.end_time >= from_time]
         r.signals = [s for s in r.signals if s.time >= from_time]
@@ -346,6 +366,24 @@ class ChanAnalyzer:
                 notes.append(
                     f"最后一条线段（{dir_name}，起于 {seg.start_time}）尚未确认结束，"
                     f"方向可能反复"
+                )
+
+        # 线段级背驰：更高级别的动能衰减提示（若最近一条线段出现背驰）
+        if r.segment_divergences and r.segment_divergences[-1].is_diverged and r.segments:
+            seg = r.segments[-1]
+            dv = r.segment_divergences[-1]
+            kind = "顶背驰" if seg.direction == "up" else "底背驰"
+            kind_en = "top" if seg.direction == "up" else "bottom"
+            if en:
+                notes.append(
+                    f"A segment-level {kind_en} divergence appeared (higher degree than stroke "
+                    f"level; MACD area ratio={dv.area_ratio:.2f}) — the larger-degree move is "
+                    f"losing momentum"
+                )
+            else:
+                notes.append(
+                    f"出现线段级{kind}（级别高于笔级，MACD面积比值={dv.area_ratio:.2f}），"
+                    f"大级别走势动能正在衰减"
                 )
 
         pivot_names = (

@@ -224,25 +224,25 @@ def _in_consolidation(prev_leg: Stroke, cur_leg: Stroke, pivots: list | None) ->
     return True  # 有中枢但没有一个夹在两段之间 → 盘整背驰
 
 
-def find_stroke_divergences(
-    strokes: list[Stroke], macd: MACDData, lang: str = "zh", pivots: list | None = None
+def _find_divergences(
+    legs: list, macd: MACDData, lang: str = "zh", pivots: list | None = None
 ) -> list[DivergenceResult]:
-    """批量检测所有笔的背驰情况。
+    """通用背驰检测：对任意「有方向的走势段」序列（笔或线段）逐段与前一个同向段对比。
 
-    每笔与前一个同向笔对比；结合中枢把背驰区分为趋势背驰 / 盘整背驰
-    （见 _in_consolidation）。pivots 为笔级中枢列表，缺省则一律按趋势背驰。
+    段对象需具备 direction / start_time / end_time / end_price（Stroke、Segment 均满足）。
+    结合 pivots 区分趋势背驰 / 盘整背驰（见 _in_consolidation）。
     """
     results: list[DivergenceResult] = []
     none_result = DivergenceResult(
         is_diverged=False, type="none", strength="none", area_ratio=1.0, description=""
     )
 
-    for i, stroke in enumerate(strokes):
-        # 找前一个同向笔
+    for i, leg in enumerate(legs):
+        # 找前一个同向段（段方向严格交替，隔一个即同向）
         prev_same = None
-        for j in range(i - 2, -1, -2):  # 每隔两笔找同向
-            if j >= 0 and strokes[j].direction == stroke.direction:
-                prev_same = strokes[j]
+        for j in range(i - 2, -1, -2):
+            if j >= 0 and legs[j].direction == leg.direction:
+                prev_same = legs[j]
                 break
 
         if prev_same is None:
@@ -250,15 +250,32 @@ def find_stroke_divergences(
             continue
 
         # 检查价格是否创新高/新低
-        if stroke.direction == "up" and stroke.end_price <= prev_same.end_price:
+        if leg.direction == "up" and leg.end_price <= prev_same.end_price:
             results.append(none_result)
             continue
-        if stroke.direction == "down" and stroke.end_price >= prev_same.end_price:
+        if leg.direction == "down" and leg.end_price >= prev_same.end_price:
             results.append(none_result)
             continue
 
-        in_consol = _in_consolidation(prev_same, stroke, pivots)
-        result = check_divergence(stroke, prev_same, macd, in_consolidation=in_consol, lang=lang)
+        in_consol = _in_consolidation(prev_same, leg, pivots)
+        result = check_divergence(leg, prev_same, macd, in_consolidation=in_consol, lang=lang)
         results.append(result)
 
     return results
+
+
+def find_stroke_divergences(
+    strokes: list[Stroke], macd: MACDData, lang: str = "zh", pivots: list | None = None
+) -> list[DivergenceResult]:
+    """批量检测所有笔的背驰情况（每笔与前一个同向笔对比，结合笔级中枢分趋势/盘整）。"""
+    return _find_divergences(strokes, macd, lang, pivots)
+
+
+def find_segment_divergences(
+    segments: list, macd: MACDData, lang: str = "zh", pivots: list | None = None
+) -> list[DivergenceResult]:
+    """批量检测线段级背驰（比笔级更高级别，缠论中意义更大）。
+
+    每条线段与前一个同向线段对比 MACD 力度，结合线段级中枢区分趋势 / 盘整背驰。
+    """
+    return _find_divergences(segments, macd, lang, pivots)
