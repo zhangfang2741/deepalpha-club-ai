@@ -207,21 +207,14 @@ def check_divergence(
 def _in_consolidation(prev_leg: Stroke, cur_leg: Stroke, pivots: list | None) -> bool:
     """判断被比较的两个同向段属于「盘整背驰」还是「趋势背驰」。
 
-    缠论：趋势背驰 = 两个同向的「离开中枢」段之间夹着至少一个中枢；盘整背驰 =
-    围绕同一个中枢的两次同向冲击（两段之间没有独立中枢隔开）。
+    缠论定义：趋势 = 至少两个同级别中枢依次排列；盘整 = 单一中枢。据此按「当前段之前
+    已形成的中枢数」判定——已形成中枢数 >= 2 → 趋势背驰，否则（0 或 1 个）→ 盘整背驰。
 
-    因此：若在 prev_leg 结束到 cur_leg 开始之间存在一个完整中枢 → 趋势背驰；
-    否则视为盘整背驰。无中枢信息（pivots 为 None/空）时，保守按趋势处理（与旧行为
-    一致，避免把明显趋势误判成盘整）。
+    以中枢计数替代旧的「中枢恰好夹在两段正中间」判据：后者过严，真实行情里几乎所有
+    背驰都会被误判成盘整，导致一买 / 一卖被全部抹掉。
     """
-    if not pivots:
-        return False  # 无中枢信息 → 不判为盘整（保持旧「趋势」默认）
-    lo, hi = prev_leg.end_time, cur_leg.start_time
-    for p in pivots:
-        # 中枢完整地夹在两段之间 → 趋势背驰
-        if p.start_time >= lo and p.end_time <= hi:
-            return False
-    return True  # 有中枢但没有一个夹在两段之间 → 盘整背驰
+    formed = sum(1 for p in (pivots or []) if p.start_time <= cur_leg.start_time)
+    return formed < 2
 
 
 def _find_divergences(

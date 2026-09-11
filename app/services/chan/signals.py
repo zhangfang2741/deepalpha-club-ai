@@ -49,18 +49,21 @@ def generate_buy1_signals(
     lang: str = "zh",
 ) -> list[Signal]:
     """一类买点：下降笔末端出现底背驰。
-    价格创新低，但MACD动量衰减（面积背驰），形成最强买点。
+
+    价格创新低，但 MACD 动量衰减（面积 + 黄白线背驰）。
     """
     signals: list[Signal] = []
     for stroke, div in zip(strokes, divergences, strict=False):
         if stroke.direction != "down":
             continue
-        # 一类买点特指「趋势背驰」（下跌趋势末端），盘整背驰的转折不算一买——
-        # 否则任意出现面积背驰的下降笔都会触发，信号严重偏多
-        if not div.is_diverged or div.type != "trend":
+        # 一类买点 = 下降笔末端的（真）背驰。背驰真伪已由面积 + 黄白线(DIF)双重过滤
+        # （见 divergence.check_divergence），此处不再用「趋势背驰」硬门槛卡数量，
+        # 否则盘整行情里一买会被全部抹掉。趋势 / 盘整仅影响强度与描述：
+        # 趋势背驰更强（strong），盘整背驰次之。
+        if not div.is_diverged:
             continue
 
-        strength = div.strength  # type: ignore[assignment]
+        strength = "strong" if div.type == "trend" else div.strength  # type: ignore[assignment]
         signals.append(Signal(
             type="buy1",
             time=stroke.end_time,
@@ -84,17 +87,17 @@ def generate_sell1_signals(
     divergences: list[DivergenceResult],
     lang: str = "zh",
 ) -> list[Signal]:
-    """一类卖点：上升笔末端出现顶背驰。
-    """
+    """一类卖点：上升笔末端出现顶背驰。"""
     signals: list[Signal] = []
     for stroke, div in zip(strokes, divergences, strict=False):
         if stroke.direction != "up":
             continue
-        # 一类卖点特指「趋势背驰」（上涨趋势末端），盘整背驰不算一卖
-        if not div.is_diverged or div.type != "trend":
+        # 一类卖点 = 上升笔末端的（真）背驰。背驰真伪已由面积 + DIF 双重过滤；
+        # 趋势 / 盘整仅影响强度与描述（趋势背驰更强）。
+        if not div.is_diverged:
             continue
 
-        strength = div.strength  # type: ignore[assignment]
+        strength = "strong" if div.type == "trend" else div.strength  # type: ignore[assignment]
         signals.append(Signal(
             type="sell1",
             time=stroke.end_time,
