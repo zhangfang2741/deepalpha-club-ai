@@ -158,11 +158,33 @@ def check_divergence(
     )
 
 
+def _in_consolidation(prev_leg: Stroke, cur_leg: Stroke, pivots: list | None) -> bool:
+    """判断被比较的两个同向段属于「盘整背驰」还是「趋势背驰」。
+
+    缠论：趋势背驰 = 两个同向的「离开中枢」段之间夹着至少一个中枢；盘整背驰 =
+    围绕同一个中枢的两次同向冲击（两段之间没有独立中枢隔开）。
+
+    因此：若在 prev_leg 结束到 cur_leg 开始之间存在一个完整中枢 → 趋势背驰；
+    否则视为盘整背驰。无中枢信息（pivots 为 None/空）时，保守按趋势处理（与旧行为
+    一致，避免把明显趋势误判成盘整）。
+    """
+    if not pivots:
+        return False  # 无中枢信息 → 不判为盘整（保持旧「趋势」默认）
+    lo, hi = prev_leg.end_time, cur_leg.start_time
+    for p in pivots:
+        # 中枢完整地夹在两段之间 → 趋势背驰
+        if p.start_time >= lo and p.end_time <= hi:
+            return False
+    return True  # 有中枢但没有一个夹在两段之间 → 盘整背驰
+
+
 def find_stroke_divergences(
-    strokes: list[Stroke], macd: MACDData, lang: str = "zh"
+    strokes: list[Stroke], macd: MACDData, lang: str = "zh", pivots: list | None = None
 ) -> list[DivergenceResult]:
     """批量检测所有笔的背驰情况。
-    每笔与前一个同向笔对比。
+
+    每笔与前一个同向笔对比；结合中枢把背驰区分为趋势背驰 / 盘整背驰
+    （见 _in_consolidation）。pivots 为笔级中枢列表，缺省则一律按趋势背驰。
     """
     results: list[DivergenceResult] = []
     none_result = DivergenceResult(
@@ -189,7 +211,8 @@ def find_stroke_divergences(
             results.append(none_result)
             continue
 
-        result = check_divergence(stroke, prev_same, macd, lang=lang)
+        in_consol = _in_consolidation(prev_same, stroke, pivots)
+        result = check_divergence(stroke, prev_same, macd, in_consolidation=in_consol, lang=lang)
         results.append(result)
 
     return results
