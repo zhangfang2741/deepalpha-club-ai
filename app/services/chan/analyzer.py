@@ -77,6 +77,9 @@ class ChanAnalysisResult:
     current_trend: str = ""
     # 走势类型（基于中枢排布）：up_trend / down_trend / consolidation / none
     walk_type: str = "none"
+    # 走势展望（延续 vs 转折，缠论走势分类）。取值见 _compute_trend_outlook：
+    # 转折向上/转折向下、延续上涨/延续下跌、盘整上破/盘整下破、盘整延续、未明。
+    trend_outlook: str = "unclear"
     latest_signal: Signal | None = None
     summary: str = ""
     recommendation: Recommendation | None = None
@@ -213,6 +216,7 @@ class ChanAnalyzer:
         result.walk_type = classify_walk_type(
             result.segment_pivots if result.segment_pivots else result.stroke_pivots
         )
+        result.trend_outlook = self._compute_trend_outlook(result)
         result.current_trend = self._infer_trend_from_strokes(result.strokes, lang)
         result.latest_signal = result.signals[-1] if result.signals else None
         result.summary = self._build_summary(result, lang)
@@ -244,6 +248,60 @@ class ChanAnalyzer:
             "none": "No pivot yet (one-way move or insufficient data)",
         }
         return (en if is_en(lang) else zh).get(walk_type, "")
+
+    def _compute_trend_outlook(self, r: ChanAnalysisResult) -> str:
+        """走势展望：当前走势更可能「延续」还是「转折」（缠论走势分类框架）。
+
+        转折的触发是终结性背驰：下跌趋势末端出现底背驰 → 可能转为上涨（即力度最强的
+        买点结构）；上涨趋势末端出现顶背驰 → 可能转为下跌。盘整则看是否突破中枢。
+        无背驰、同向延续则判为延续。
+        """
+        if not r.strokes:
+            return "unclear"
+
+        # 最近一个背驰的方向：上升笔背驰=顶背驰，下降笔背驰=底背驰
+        recent_div_dir: str | None = None
+        for st, dv in zip(r.strokes, r.divergences, strict=False):
+            if dv.is_diverged:
+                recent_div_dir = st.direction
+
+        if r.walk_type == "down_trend":
+            return "reversal_up" if recent_div_dir == "down" else "continuation_down"
+        if r.walk_type == "up_trend":
+            return "reversal_down" if recent_div_dir == "up" else "continuation_up"
+        if r.walk_type == "consolidation":
+            last_price = r.merged_candles[-1].close if r.merged_candles else 0.0
+            p = r.stroke_pivots[-1] if r.stroke_pivots else None
+            if p is not None and last_price > p.zg:
+                return "breakout_up"
+            if p is not None and last_price < p.zd:
+                return "breakout_down"
+            return "range"
+        return "unclear"
+
+    def _trend_outlook_label(self, outlook: str, lang: str = "zh") -> str:
+        """走势展望的人话标签。"""
+        zh = {
+            "reversal_up": "下跌走势出现转折信号，可能转为上涨（力度最强的买点结构）",
+            "reversal_down": "上涨走势出现转折信号，可能转为下跌",
+            "continuation_up": "上涨走势延续",
+            "continuation_down": "下跌走势延续",
+            "breakout_up": "盘整向上突破，倾向转为上涨",
+            "breakout_down": "盘整向下突破，倾向转为下跌",
+            "range": "盘整延续（围绕中枢震荡）",
+            "unclear": "走势展望未明",
+        }
+        en = {
+            "reversal_up": "Downtrend showing a reversal signal — may turn up (strongest buy structure)",
+            "reversal_down": "Uptrend showing a reversal signal — may turn down",
+            "continuation_up": "Uptrend continuation",
+            "continuation_down": "Downtrend continuation",
+            "breakout_up": "Range breaking upward — leaning to turn up",
+            "breakout_down": "Range breaking downward — leaning to turn down",
+            "range": "Range continuation (oscillating around a pivot)",
+            "unclear": "Outlook unclear",
+        }
+        return (en if is_en(lang) else zh).get(outlook, "")
 
     def _infer_trend_from_strokes(self, strokes: list[Stroke], lang: str = "zh") -> str:
         if not strokes:
@@ -644,6 +702,9 @@ class ChanAnalyzer:
             walk_label = self._walk_type_label(r.walk_type, lang)
             if walk_label:
                 parts.append(walk_label + ". ")
+            outlook_label = self._trend_outlook_label(r.trend_outlook, lang)
+            if outlook_label:
+                parts.append(outlook_label + ". ")
             if r.signals:
                 parts.append(
                     f"Found {len(buy_signals)} buy signal(s) and {len(sell_signals)} sell signal(s). ")
@@ -669,6 +730,9 @@ class ChanAnalyzer:
         walk_label = self._walk_type_label(r.walk_type, lang)
         if walk_label:
             parts.append(walk_label + "。")
+        outlook_label = self._trend_outlook_label(r.trend_outlook, lang)
+        if outlook_label:
+            parts.append(outlook_label + "。")
         if r.signals:
             parts.append(
                 f"共发现 {len(buy_signals)} 个买点信号、{len(sell_signals)} 个卖点信号。"

@@ -138,6 +138,9 @@ class ChanAnalysisResponse(BaseModel):
     current_trend: str
     # 走势类型（基于中枢排布）：up_trend / down_trend / consolidation / none
     walk_type: str = "none"
+    # 走势展望（延续 vs 转折）：转折向上/转折向下、延续上涨/延续下跌、
+    # 盘整上破/盘整下破、盘整延续、未明（枚举值见 analyzer._compute_trend_outlook）
+    trend_outlook: str = "unclear"
     summary: str
     recommendation: Optional[RecommendationOut] = None
     narrative: Optional[MarketNarrativeOut] = None  # 大白话形态解读
