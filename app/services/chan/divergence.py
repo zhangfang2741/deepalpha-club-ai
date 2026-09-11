@@ -25,6 +25,9 @@ class DivergenceResult:
     strength: Literal["strong", "medium", "weak", "none"]
     area_ratio: float   # 当前段MACD面积/前一段面积（<1 表示背驰）
     description: str
+    # 当前段 DIF 峰值 / 前一段 DIF 峰值（黄白线高度比）。<1 表示动能高度也在衰减，
+    # 是比单纯面积更强的背驰佐证；>1 说明黄白线创新高、动能其实更强，非真背驰。
+    dif_ratio: float = 0.0
 
 
 def calc_ema(values: list[float], period: int) -> list[float]:
@@ -40,8 +43,9 @@ def calc_ema(values: list[float], period: int) -> list[float]:
 
 def calc_macd(bars: list[dict], fast: int = 12, slow: int = 26, signal: int = 9) -> MACDData:
     """计算MACD指标。
-    使用标准EMA公式：DIF = EMA(close, fast) - EMA(close, slow)
-    DEA = EMA(DIF, signal)，MACD = 2*(DIF-DEA)
+
+    使用标准EMA公式：DIF = EMA(close, fast) - EMA(close, slow)，
+    DEA = EMA(DIF, signal)，MACD = 2*(DIF-DEA)。
     """
     if len(bars) < slow:
         times = [b["time"] for b in bars]
@@ -76,6 +80,27 @@ def _get_stroke_macd_area(stroke: Stroke, macd: MACDData) -> float:
         return 0.0
 
     return sum(abs(b) for b in macd.bar[start_idx:end_idx + 1])
+
+
+def _get_stroke_dif_extreme(stroke: Stroke, macd: MACDData) -> float:
+    """笔时间段内 DIF（黄白线）的方向性峰值：上升笔取最大 DIF、下降笔取最小 DIF。
+
+    用于「黄白线高度」背驰佐证：顶背驰要求当前上升段 DIF 峰值不高于前一段，
+    底背驰要求当前下降段 DIF 谷值不低于前一段。
+    """
+    start_t, end_t = stroke.start_time, stroke.end_time
+    start_idx, end_idx = None, None
+    for i, t in enumerate(macd.times):
+        if t >= start_t and start_idx is None:
+            start_idx = i
+        if t <= end_t:
+            end_idx = i
+    if start_idx is None or end_idx is None or start_idx > end_idx:
+        return 0.0
+    window = macd.dif[start_idx:end_idx + 1]
+    if not window:
+        return 0.0
+    return max(window) if stroke.direction == "up" else min(window)
 
 
 def _classify_strength(ratio: float) -> Literal["strong", "medium", "weak", "none"]:
@@ -116,17 +141,37 @@ def check_divergence(
 
     ratio = current_area / compare_area
 
-    # 价格新高/新低但MACD面积缩小 → 背驰
-    is_diverged = ratio < 1.0
+    # 黄白线（DIF）高度比：方向性峰值之比
+    cur_dif = _get_stroke_dif_extreme(current_stroke, macd)
+    cmp_dif = _get_stroke_dif_extreme(compare_stroke, macd)
+    dif_ratio = (cur_dif / cmp_dif) if cmp_dif != 0 else 1.0
+
+    # 背驰需两个条件同时成立：
+    # 1) 价格创新高/新低但 MACD 面积缩小（力度衰减）；
+    # 2) 黄白线高度也没有创新高/新低——否则动能其实更强，属「面积因K线数变少而缩小」
+    #    的假背驰，予以排除。dif_ratio<1 表示当前段黄白线峰值弱于前段。
+    dif_confirms = dif_ratio < 1.0 or cmp_dif == 0
+    is_diverged = ratio < 1.0 and dif_confirms
 
     if not is_diverged:
+        if ratio < 1.0 and not dif_confirms:
+            reason = pick(
+                lang,
+                f"MACD面积虽缩小（比值={ratio:.2f}）但黄白线创新高（DIF比={dif_ratio:.2f}），"
+                f"动能未衰减，非真背驰",
+                f"MACD area shrank (ratio={ratio:.2f}) but DIF made a new extreme "
+                f"(DIF ratio={dif_ratio:.2f}); momentum not decaying — not a true divergence",
+            )
+        else:
+            reason = pick(lang, f"MACD面积未缩小（比值={ratio:.2f}），未见背驰",
+                          f"MACD area did not shrink (ratio={ratio:.2f}); no divergence")
         return DivergenceResult(
             is_diverged=False,
             type="none",
             strength="none",
             area_ratio=ratio,
-            description=pick(lang, f"MACD面积未缩小（比值={ratio:.2f}），未见背驰",
-                             f"MACD area did not shrink (ratio={ratio:.2f}); no divergence"),
+            description=reason,
+            dif_ratio=dif_ratio,
         )
 
     div_type = "consolidation" if in_consolidation else "trend"
@@ -155,6 +200,7 @@ def check_divergence(
         strength=strength,
         area_ratio=ratio,
         description=description,
+        dif_ratio=dif_ratio,
     )
 
 
