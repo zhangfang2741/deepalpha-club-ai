@@ -20,6 +20,8 @@ enum PreviewMock {
             macd: nil,
             signals: signals,
             currentTrend: "up",
+            walkType: "up_trend",
+            trendOutlook: "continuation_up",
             summary: "近期走出一段向上线段，价格站上前一中枢上沿并完成回踩确认，结构偏强。当前处于线段延伸阶段，尚未出现同级别背驰。",
             recommendation: Recommendation(
                 action: "hold",
