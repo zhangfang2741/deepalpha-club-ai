@@ -53,3 +53,59 @@ def test_fig_structure_invariants():
             assert seg.low >= origin - 1e-6
         else:
             assert seg.high <= origin + 1e-6
+
+
+def _mc(i, p):
+    from app.services.chan.fractal import MergedCandle
+    m = MergedCandle(idx=i, time="", open=p, high=p + 1, low=p - 1, close=p, raw_start=i, raw_end=i)
+    return m
+
+
+def _fx(kind, i, p, t):
+    from app.services.chan.fractal import Fractal
+    m = _mc(i, p)
+    m.time = t
+    return Fractal(type=kind, candle=m, left=_mc(i - 1, p), right=_mc(i + 1, p))
+
+
+def _st(direction, t0, t1, p0, p1):
+    from app.services.chan.stroke import Stroke
+    sk = "bottom" if direction == "up" else "top"
+    ek = "top" if direction == "up" else "bottom"
+    return Stroke(direction=direction, start=_fx(sk, 0, p0, t0), end=_fx(ek, 2, p1, t1))
+
+
+def _piv(zd, zg, t0, t1):
+    from app.services.chan.pivot import Pivot
+    return Pivot(zg=zg, zd=zd, gg=zg + 2, dd=zd - 2, start_time=t0, end_time=t1,
+                 level="stroke", elements=[])
+
+
+def test_stale_pivot_does_not_fire_signal():
+    """旧中枢不得在其后已形成新中枢、价格偶然回到旧带时误触发二/三类信号。
+
+    回归：FIG 8 月价格回到 12 月旧中枢价格带被误判成二卖。
+    """
+    from app.services.chan.signals import generate_sell2_signals
+    pivots = [
+        _piv(26.79, 30.26, "2025-12-10", "2026-03-27"),  # 旧中枢
+        _piv(19.82, 21.70, "2026-03-27", "2026-08-05"),  # 新中枢（在两者之间形成）
+    ]
+    # 8 月的笔：跌破 26→24 再反抽 24→28.03（落在旧中枢1带内），但已在新中枢窗口之后
+    strokes = [
+        _st("down", "2026-08-06", "2026-08-12", 26.0, 24.0),
+        _st("up", "2026-08-12", "2026-08-20", 24.0, 28.03),
+    ]
+    assert generate_sell2_signals(strokes, pivots) == []
+
+
+def test_signal_fires_within_pivot_leaving_window():
+    """离开段窗口内的正常二卖仍应触发（确保上界没有把有效信号也挡掉）。"""
+    from app.services.chan.signals import generate_sell2_signals
+    pivots = [_piv(26.79, 30.26, "2025-12-10", "2026-03-27")]  # 仅一个中枢，无上界
+    strokes = [
+        _st("down", "2026-04-01", "2026-04-08", 27.0, 25.0),   # 跌破 ZD
+        _st("up", "2026-04-08", "2026-04-15", 25.0, 28.0),     # 反抽落在中枢内
+    ]
+    sig = generate_sell2_signals(strokes, pivots)
+    assert len(sig) == 1 and sig[0].type == "sell2"
