@@ -85,6 +85,32 @@ def _find_pivots_from_elements(elements: list, level: Literal["stroke", "segment
     return pivots
 
 
+def classify_walk_type(pivots: list[Pivot]) -> str:
+    """根据中枢排布判定走势类型（缠论「走势分类」的实用判定）。
+
+    - 0 个中枢 → "none"（单边推进或数据不足，尚未形成中枢）
+    - 1 个中枢 → "consolidation"（盘整：围绕单一中枢震荡）
+    - >=2 个中枢：
+        · 后一中枢整体在前一之上（本中枢 ZD > 前中枢 ZG）依次成立 → "up_trend"（上涨趋势）
+        · 后一中枢整体在前一之下（本中枢 ZG < 前中枢 ZD）依次成立 → "down_trend"（下跌趋势）
+        · 否则（中枢区间有重叠）→ "consolidation"（大级别盘整 / 中枢扩张）
+
+    注：这是「当前级别」的走势类型判定，非完整的多级别递归走势分解。
+    """
+    valid = [p for p in pivots if p.is_valid]
+    if not valid:
+        return "none"
+    if len(valid) == 1:
+        return "consolidation"
+    ascending = all(valid[i].zd > valid[i - 1].zg for i in range(1, len(valid)))
+    descending = all(valid[i].zg < valid[i - 1].zd for i in range(1, len(valid)))
+    if ascending:
+        return "up_trend"
+    if descending:
+        return "down_trend"
+    return "consolidation"
+
+
 def find_stroke_pivots(strokes: list[Stroke]) -> list[Pivot]:
     """识别笔级别中枢"""
     return _find_pivots_from_elements(strokes, level="stroke")

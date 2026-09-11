@@ -136,6 +136,8 @@ class ChanAnalysisResponse(BaseModel):
     macd: Optional[MACDOut]
     signals: list[SignalOut]
     current_trend: str
+    # 走势类型（基于中枢排布）：up_trend / down_trend / consolidation / none
+    walk_type: str = "none"
     summary: str
     recommendation: Optional[RecommendationOut] = None
     narrative: Optional[MarketNarrativeOut] = None  # 大白话形态解读
