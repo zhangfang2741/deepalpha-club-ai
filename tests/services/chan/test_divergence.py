@@ -30,28 +30,36 @@ class _Pivot:
     end_time: str
 
 
-def test_trend_when_pivot_between_legs():
+def test_trend_when_two_or_more_pivots():
     prev_leg = _Leg("2024-01-01", "2024-01-05")
-    cur_leg = _Leg("2024-02-01", "2024-02-05")
-    # 中枢完整地夹在两段之间 → 趋势背驰（非盘整）
-    pivots = [_Pivot("2024-01-10", "2024-01-25")]
+    cur_leg = _Leg("2024-03-01", "2024-03-05")
+    # 当前段之前已形成 2 个中枢 → 趋势背驰（非盘整）
+    pivots = [_Pivot("2024-01-10", "2024-01-25"), _Pivot("2024-02-05", "2024-02-20")]
     assert _in_consolidation(prev_leg, cur_leg, pivots) is False
 
 
-def test_consolidation_when_pivot_not_between():
+def test_consolidation_when_single_pivot():
     prev_leg = _Leg("2024-01-01", "2024-01-05")
-    cur_leg = _Leg("2024-01-06", "2024-01-10")
-    # 中枢跨越/包住两段，而非夹在中间 → 盘整背驰
-    pivots = [_Pivot("2024-01-01", "2024-01-10")]
+    cur_leg = _Leg("2024-02-01", "2024-02-05")
+    # 只有单一中枢 → 盘整背驰
+    pivots = [_Pivot("2024-01-10", "2024-01-25")]
     assert _in_consolidation(prev_leg, cur_leg, pivots) is True
 
 
-def test_default_trend_without_pivots():
+def test_pivots_after_current_leg_do_not_count():
+    prev_leg = _Leg("2024-01-01", "2024-01-05")
+    cur_leg = _Leg("2024-01-20", "2024-01-25")
+    # 两个中枢中有一个在当前段起点之后形成，不计入 → 仍为盘整
+    pivots = [_Pivot("2024-01-10", "2024-01-15"), _Pivot("2024-02-01", "2024-02-10")]
+    assert _in_consolidation(prev_leg, cur_leg, pivots) is True
+
+
+def test_consolidation_without_pivots():
     prev_leg = _Leg("2024-01-01", "2024-01-05")
     cur_leg = _Leg("2024-02-01", "2024-02-05")
-    # 无中枢信息时保守按趋势（不判盘整）
-    assert _in_consolidation(prev_leg, cur_leg, None) is False
-    assert _in_consolidation(prev_leg, cur_leg, []) is False
+    # 无中枢信息 → 不构成趋势（需≥2中枢），按盘整
+    assert _in_consolidation(prev_leg, cur_leg, None) is True
+    assert _in_consolidation(prev_leg, cur_leg, []) is True
 
 
 def _up_stroke(t0: str, t1: str, p0: float, p1: float) -> Stroke:
