@@ -188,6 +188,7 @@ async def chan_analysis(
             for sig in result.signals
         ],
         current_trend=result.current_trend,
+        walk_type=result.walk_type,
         summary=result.summary,
         narrative=MarketNarrativeOut(
             phase=result.narrative.phase,

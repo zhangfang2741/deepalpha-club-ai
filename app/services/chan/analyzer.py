@@ -25,7 +25,12 @@ from app.services.chan.divergence import (
 from app.services.chan.fractal import Fractal, MergedCandle, find_fractals, merge_candles
 from app.services.chan.i18n import is_en, pick
 from app.services.chan.narrative import MarketNarrative, _volume_readout, build_narrative
-from app.services.chan.pivot import Pivot, find_segment_pivots, find_stroke_pivots
+from app.services.chan.pivot import (
+    Pivot,
+    classify_walk_type,
+    find_segment_pivots,
+    find_stroke_pivots,
+)
 from app.services.chan.segment import Segment, find_segments
 from app.services.chan.signals import Signal, generate_all_signals
 from app.services.chan.stroke import Stroke, find_strokes
@@ -70,6 +75,8 @@ class ChanAnalysisResult:
 
     # 当前市场状态摘要
     current_trend: str = ""
+    # 走势类型（基于中枢排布）：up_trend / down_trend / consolidation / none
+    walk_type: str = "none"
     latest_signal: Signal | None = None
     summary: str = ""
     recommendation: Recommendation | None = None
@@ -202,6 +209,10 @@ class ChanAnalyzer:
         result.pending_notes = self._build_pending_notes(result, lang)
 
         # 10. 当前状态摘要
+        # 走势类型：优先用线段级中枢（更高级别），不足时退回笔级中枢
+        result.walk_type = classify_walk_type(
+            result.segment_pivots if result.segment_pivots else result.stroke_pivots
+        )
         result.current_trend = self._infer_trend_from_strokes(result.strokes, lang)
         result.latest_signal = result.signals[-1] if result.signals else None
         result.summary = self._build_summary(result, lang)
@@ -217,6 +228,22 @@ class ChanAnalyzer:
             signals=len(result.signals),
         )
         return result
+
+    def _walk_type_label(self, walk_type: str, lang: str = "zh") -> str:
+        """走势类型的人话标签（基于中枢排布）。"""
+        zh = {
+            "up_trend": "当前为上涨趋势（中枢依次抬高）",
+            "down_trend": "当前为下跌趋势（中枢依次降低）",
+            "consolidation": "当前为盘整（围绕中枢震荡）",
+            "none": "尚未形成中枢（单边推进或数据不足）",
+        }
+        en = {
+            "up_trend": "Uptrend (pivots stepping higher)",
+            "down_trend": "Downtrend (pivots stepping lower)",
+            "consolidation": "Consolidation (oscillating around a pivot)",
+            "none": "No pivot yet (one-way move or insufficient data)",
+        }
+        return (en if is_en(lang) else zh).get(walk_type, "")
 
     def _infer_trend_from_strokes(self, strokes: list[Stroke], lang: str = "zh") -> str:
         if not strokes:
@@ -614,6 +641,9 @@ class ChanAnalyzer:
             ]
             if r.current_trend:
                 parts.append(r.current_trend + ". ")
+            walk_label = self._walk_type_label(r.walk_type, lang)
+            if walk_label:
+                parts.append(walk_label + ". ")
             if r.signals:
                 parts.append(
                     f"Found {len(buy_signals)} buy signal(s) and {len(sell_signals)} sell signal(s). ")
@@ -636,6 +666,9 @@ class ChanAnalyzer:
         ]
         if r.current_trend:
             parts.append(r.current_trend + "。")
+        walk_label = self._walk_type_label(r.walk_type, lang)
+        if walk_label:
+            parts.append(walk_label + "。")
         if r.signals:
             parts.append(
                 f"共发现 {len(buy_signals)} 个买点信号、{len(sell_signals)} 个卖点信号。"
