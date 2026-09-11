@@ -116,6 +116,22 @@ def generate_sell1_signals(
     return signals
 
 
+def _post_pivot_strokes(strokes: list[Stroke], pivots: list[Pivot], idx: int) -> list[Stroke]:
+    """某中枢「离开段」所在的笔窗口：从本中枢结束、到下一个中枢形成之前。
+
+    二 / 三类买卖点只属于离开该中枢的那一段。旧实现对每个历史中枢都扫描其后
+    无限远的笔，导致一个几个月前的旧中枢在价格偶然回到其价格带时误触发信号
+    （例如 FIG 8 月的价格回到 12 月旧中枢带被误判成二卖）。此处以「下一个中枢的
+    起点」为上界，把每个中枢的信号搜索限制在它自己的离开段内。
+    """
+    pivot = pivots[idx]
+    upper = pivots[idx + 1].start_time if idx + 1 < len(pivots) else None
+    return [
+        s for s in strokes
+        if s.start_time >= pivot.end_time and (upper is None or s.start_time < upper)
+    ]
+
+
 def generate_buy2_signals(
     strokes: list[Stroke],
     pivots: list[Pivot],
@@ -123,11 +139,12 @@ def generate_buy2_signals(
 ) -> list[Signal]:
     """二类买点：中枢向上突破后，回踩进入中枢区间但不破下沿ZD。
 
-    遍历中枢之后的每一对（向上突破笔 + 回调笔），回调落点在 [ZD, ZG] 内即为二买。
+    只在中枢的「离开段」窗口内取首个（向上突破笔 + 回调笔），回调落点在 [ZD, ZG]
+    内即为二买。
     """
     signals: list[Signal] = []
-    for pivot in pivots:
-        post = [s for s in strokes if s.start_time >= pivot.end_time]
+    for idx, pivot in enumerate(pivots):
+        post = _post_pivot_strokes(strokes, pivots, idx)
         for i in range(len(post) - 1):
             breakout, retrace = post[i], post[i + 1]
             # 突破笔必须真正“跨越”中枢上沿（起点≤ZG<终点），
@@ -155,6 +172,7 @@ def generate_buy2_signals(
                         f"回踩至{retrace.end_price:.2f}，落在中枢内未破ZD({pivot.zd:.2f})，确认二买"
                     ),
                 ))
+                break  # 每个中枢只取离开段内首个二买
     return signals
 
 
@@ -163,10 +181,13 @@ def generate_sell2_signals(
     pivots: list[Pivot],
     lang: str = "zh",
 ) -> list[Signal]:
-    """二类卖点：中枢向下跌破后，反抽进入中枢区间但不过上沿ZG。"""
+    """二类卖点：中枢向下跌破后，反抽进入中枢区间但不过上沿ZG。
+
+    只在中枢的「离开段」窗口内取首个（向下跌破笔 + 反抽笔）。
+    """
     signals: list[Signal] = []
-    for pivot in pivots:
-        post = [s for s in strokes if s.start_time >= pivot.end_time]
+    for idx, pivot in enumerate(pivots):
+        post = _post_pivot_strokes(strokes, pivots, idx)
         for i in range(len(post) - 1):
             breakout, retrace = post[i], post[i + 1]
             # 突破笔必须真正“跨越”中枢下沿（起点≥ZD>终点），
@@ -194,6 +215,7 @@ def generate_sell2_signals(
                         f"反抽至{retrace.end_price:.2f}，落在中枢内未过ZG({pivot.zg:.2f})，确认二卖"
                     ),
                 ))
+                break  # 每个中枢只取离开段内首个二卖
     return signals
 
 
@@ -205,10 +227,11 @@ def generate_buy3_signals(
     """三类买点：中枢向上突破后，回踩不回中枢（回调低点高于上沿ZG）。
 
     与二买的区别在回踩落点：高于 ZG 不回中枢即为三买（趋势确认，更强）。
+    只在中枢的「离开段」窗口内取首个。
     """
     signals: list[Signal] = []
-    for pivot in pivots:
-        post = [s for s in strokes if s.start_time >= pivot.end_time]
+    for idx, pivot in enumerate(pivots):
+        post = _post_pivot_strokes(strokes, pivots, idx)
         for i in range(len(post) - 1):
             breakout, retrace = post[i], post[i + 1]
             # 突破笔必须真正“跨越”中枢上沿（起点≤ZG<终点），
@@ -236,6 +259,7 @@ def generate_buy3_signals(
                         f"回踩至{retrace.end_price:.2f}，高于ZG({pivot.zg:.2f})未回中枢，确认三买"
                     ),
                 ))
+                break  # 每个中枢只取离开段内首个三买
     return signals
 
 
@@ -244,10 +268,13 @@ def generate_sell3_signals(
     pivots: list[Pivot],
     lang: str = "zh",
 ) -> list[Signal]:
-    """三类卖点：中枢向下跌破后，反抽不回中枢（反弹高点低于下沿ZD）。"""
+    """三类卖点：中枢向下跌破后，反抽不回中枢（反弹高点低于下沿ZD）。
+
+    只在中枢的「离开段」窗口内取首个。
+    """
     signals: list[Signal] = []
-    for pivot in pivots:
-        post = [s for s in strokes if s.start_time >= pivot.end_time]
+    for idx, pivot in enumerate(pivots):
+        post = _post_pivot_strokes(strokes, pivots, idx)
         for i in range(len(post) - 1):
             breakout, retrace = post[i], post[i + 1]
             # 突破笔必须真正“跨越”中枢下沿（起点≥ZD>终点），
@@ -275,6 +302,7 @@ def generate_sell3_signals(
                         f"反抽至{retrace.end_price:.2f}，低于ZD({pivot.zd:.2f})未回中枢，确认三卖"
                     ),
                 ))
+                break  # 每个中枢只取离开段内首个三卖
     return signals
 
 
