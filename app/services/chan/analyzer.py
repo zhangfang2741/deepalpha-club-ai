@@ -164,8 +164,10 @@ class ChanAnalyzer:
         # 6. MACD计算
         result.macd = calc_macd(bars)
 
-        # 7. 背驰判断
-        result.divergences = find_stroke_divergences(result.strokes, result.macd, lang)
+        # 7. 背驰判断（结合笔级中枢区分趋势背驰 / 盘整背驰）
+        result.divergences = find_stroke_divergences(
+            result.strokes, result.macd, lang, pivots=result.stroke_pivots
+        )
         diverged_count = sum(1 for d in result.divergences if d.is_diverged)
         logger.debug("chan_divergences", total=len(result.divergences), diverged=diverged_count)
 

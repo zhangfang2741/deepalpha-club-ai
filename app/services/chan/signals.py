@@ -55,7 +55,9 @@ def generate_buy1_signals(
     for stroke, div in zip(strokes, divergences, strict=False):
         if stroke.direction != "down":
             continue
-        if not div.is_diverged:
+        # 一类买点特指「趋势背驰」（下跌趋势末端），盘整背驰的转折不算一买——
+        # 否则任意出现面积背驰的下降笔都会触发，信号严重偏多
+        if not div.is_diverged or div.type != "trend":
             continue
 
         strength = div.strength  # type: ignore[assignment]
@@ -88,7 +90,8 @@ def generate_sell1_signals(
     for stroke, div in zip(strokes, divergences, strict=False):
         if stroke.direction != "up":
             continue
-        if not div.is_diverged:
+        # 一类卖点特指「趋势背驰」（上涨趋势末端），盘整背驰不算一卖
+        if not div.is_diverged or div.type != "trend":
             continue
 
         strength = div.strength  # type: ignore[assignment]
