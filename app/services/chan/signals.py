@@ -58,12 +58,13 @@ def generate_buy1_signals(
             continue
         # 一类买点 = 下降笔末端的（真）背驰。背驰真伪已由面积 + 黄白线(DIF)双重过滤
         # （见 divergence.check_divergence），此处不再用「趋势背驰」硬门槛卡数量，
-        # 否则盘整行情里一买会被全部抹掉。趋势 / 盘整仅影响强度与描述：
-        # 趋势背驰更强（strong），盘整背驰次之。
+        # 否则盘整行情里一买会被全部抹掉。
         if not div.is_diverged:
             continue
 
-        strength = "strong" if div.type == "trend" else div.strength  # type: ignore[assignment]
+        # 强度只反映背驰幅度（面积衰减程度），与趋势 / 盘整是两个维度——趋势只是背景，
+        # 不能把一个 0.9 的弱背驰仅因处于趋势就拔成 strong。趋势 / 盘整体现在描述里。
+        strength = div.strength  # type: ignore[assignment]
         signals.append(Signal(
             type="buy1",
             time=stroke.end_time,
@@ -92,12 +93,12 @@ def generate_sell1_signals(
     for stroke, div in zip(strokes, divergences, strict=False):
         if stroke.direction != "up":
             continue
-        # 一类卖点 = 上升笔末端的（真）背驰。背驰真伪已由面积 + DIF 双重过滤；
-        # 趋势 / 盘整仅影响强度与描述（趋势背驰更强）。
+        # 一类卖点 = 上升笔末端的（真）背驰。背驰真伪已由面积 + DIF 双重过滤。
         if not div.is_diverged:
             continue
 
-        strength = "strong" if div.type == "trend" else div.strength  # type: ignore[assignment]
+        # 强度只反映背驰幅度（面积衰减程度），与趋势 / 盘整是两个维度；趋势体现在描述里。
+        strength = div.strength  # type: ignore[assignment]
         signals.append(Signal(
             type="sell1",
             time=stroke.end_time,

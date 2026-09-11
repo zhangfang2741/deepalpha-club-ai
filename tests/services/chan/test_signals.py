@@ -109,3 +109,21 @@ def test_signal_fires_within_pivot_leaving_window():
     ]
     sig = generate_sell2_signals(strokes, pivots)
     assert len(sig) == 1 and sig[0].type == "sell2"
+
+
+def _div(strength, area_ratio, dtype="trend"):
+    from app.services.chan.divergence import DivergenceResult
+    return DivergenceResult(is_diverged=True, type=dtype, strength=strength,
+                            area_ratio=area_ratio, description="", dif_ratio=area_ratio)
+
+
+def test_signal_strength_reflects_divergence_magnitude_not_trend():
+    """信号强度只反映背驰幅度，趋势背驰不应把弱背驰(0.9)拔成 strong。"""
+    from app.services.chan.signals import generate_buy1_signals, generate_sell1_signals
+    up = _st("up", "T0", "T1", 100, 120)
+    down = _st("down", "T0", "T1", 120, 100)
+    # 弱幅度趋势背驰 → weak
+    assert generate_sell1_signals([up], [_div("weak", 0.91)])[0].strength == "weak"
+    assert generate_buy1_signals([down], [_div("weak", 0.92)])[0].strength == "weak"
+    # 强幅度 → strong
+    assert generate_sell1_signals([up], [_div("strong", 0.3)])[0].strength == "strong"
