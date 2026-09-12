@@ -99,7 +99,9 @@ final class CameraViewModel: ObservableObject {
         guard !toAdd.isEmpty else { return ([], [], false) }
         do {
             let resp = try await WordService.addWordsBatch(toAdd)
-            let joinedPlaylist = await addNewWordsToCurrentPlaylist(resp.created)
+            // 勾选的词无论新建还是已存在，都并入当前词库：existing 是已在生词库
+            // 里、这次也勾选了的词，连同新建的 created 一起补进当前词库歌单。
+            let joinedPlaylist = await addWordsToCurrentPlaylist(resp.created + resp.existing)
             reset()
             return (resp.created, resp.skippedExisting, joinedPlaylist)
         } catch let error as APIError {
@@ -111,14 +113,15 @@ final class CameraViewModel: ObservableObject {
         }
     }
 
-    /// 若当前停在某个自定义词库（歌单）上，把刚新增的词并入该歌单。
-    /// 返回是否确实并入了歌单（当前不是自定义词库、或没有新词时为 false）。
-    private func addNewWordsToCurrentPlaylist(_ created: [VocabularyWord]) async -> Bool {
-        guard case .custom(let playlistID) = PlaylistSelection.current, !created.isEmpty else {
+    /// 若当前停在某个自定义词库（歌单）上，把这批词（新建的 + 已存在但被勾选的）
+    /// 并入该歌单（歌单内已有的会自动跳过）。返回是否确实并入了歌单（当前不是
+    /// 自定义词库、或没有词时为 false）。
+    private func addWordsToCurrentPlaylist(_ words: [VocabularyWord]) async -> Bool {
+        guard case .custom(let playlistID) = PlaylistSelection.current, !words.isEmpty else {
             return false
         }
         do {
-            _ = try await WordService.addWordsToPlaylist(id: playlistID, wordIDs: created.map(\.id))
+            _ = try await WordService.addWordsToPlaylist(id: playlistID, wordIDs: words.map(\.id))
             return true
         } catch {
             // 尽力而为：词已在生词库，加入当前词库失败不报错、不阻断跳转。

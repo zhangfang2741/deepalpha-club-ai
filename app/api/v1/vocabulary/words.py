@@ -304,9 +304,13 @@ async def add_words_batch(
         # 转成友好提示而不是让请求 500——重新拉取生词库即可看到最新状态。
         await db.rollback()
         raise HTTPException(status_code=409, detail="部分单词提交冲突，请刷新生词库后重试") from exc
+    # 被跳过的词里，真正已在生词库中的那些，把词行（含 id）也回传：客户端在某个
+    # 词库里拍照录入时，用它把这些已存在但被勾选的词一并补进当前词库歌单。
+    existing_rows = await word_service.get_words_by_names(db, user.id, skipped)
     return WordsBatchCreateResponse(
         created=[VocabularyWordResponse.model_validate(r) for r in created_rows],
         skipped_existing=skipped,
+        existing=[VocabularyWordResponse.model_validate(r) for r in existing_rows],
     )
 
 

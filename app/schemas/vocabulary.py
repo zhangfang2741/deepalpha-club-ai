@@ -185,10 +185,16 @@ class VocabularyWordResponse(BaseModel):
 
 
 class WordsBatchCreateResponse(BaseResponse):
-    """批量加入结果。"""
+    """批量加入结果。
+
+    created 为本次新建的词；skipped_existing 为因已在生词库中被跳过的词原文；
+    existing 为这些被跳过词对应的现有词行（含 id）——客户端在某个词库里拍照
+    录入时，用它把「已在生词库、但这次也勾选了」的词一并补进当前词库歌单。
+    """
 
     created: list[VocabularyWordResponse]
     skipped_existing: list[str]
+    existing: list[VocabularyWordResponse] = []
 
 
 class WordsBatchDeleteRequest(BaseModel):
