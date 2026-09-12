@@ -268,6 +268,7 @@ def _download_and_parse(book_id: str, url: str) -> list[dict]:
 
 
 def main() -> int:
+    """下载全部精选词库、转换落地，并生成 manifest.json。"""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     manifest_groups: list[dict] = []
 
