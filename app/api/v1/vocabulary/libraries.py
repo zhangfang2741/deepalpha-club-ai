@@ -51,16 +51,17 @@ async def import_library(
     user: VocabularyUser = Depends(get_current_vocab_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """把指定内置词库整本并入当前用户生词库，自动跨全库去重。
+    """把指定内置词库整本并入当前用户生词库，并建/刷新与它同名的歌单。
 
-    幂等：已在生词库中的词会被跳过而不是报错，重复导入同一本只会把之前漏掉的
-    补齐。大词库（如专八 12197 词）在服务层分块写入，避开数据库单语句参数上限。
+    幂等：已在生词库中的词会被跳过而不是报错（保留其原有记忆进度），重复导入
+    同一本只会把之前漏掉的补齐并把歌单刷新成完整词表。大词库（如专八 12197 词）
+    在服务层分块写入，避开数据库单语句参数上限。返回的歌单可用于单独复习这本。
     """
     if library_service.get_book_meta(book_id) is None:
         raise HTTPException(status_code=404, detail="词库不存在")
 
     try:
-        imported, skipped = await library_service.import_book(db, user.id, book_id)
+        result = await library_service.import_book(db, user.id, book_id)
     except IntegrityError as exc:
         # 并发导入同一本时，应用层去重与唯一约束之间存在竞态窗口，兜底转成 409。
         await db.rollback()
@@ -69,7 +70,14 @@ async def import_library(
     logger.info(
         "vocabulary_library_imported",
         book_id=book_id,
-        imported=imported,
-        skipped=skipped,
+        imported=result.imported,
+        skipped=result.skipped,
+        playlist_id=str(result.playlist_id),
     )
-    return LibraryImportResponse(imported=imported, skipped=skipped)
+    return LibraryImportResponse(
+        imported=result.imported,
+        skipped=result.skipped,
+        playlist_id=result.playlist_id,
+        playlist_name=result.playlist_name,
+        playlist_word_count=result.playlist_word_count,
+    )

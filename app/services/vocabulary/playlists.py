@@ -11,6 +11,7 @@ import uuid
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col
 
 from app.models.vocabulary import VocabularyPlaylist, VocabularyPlaylistItem, VocabularyWord
 
@@ -179,6 +180,41 @@ async def add_words_to_playlist(
     # 词数重新 count 而不是用 next_position 推算：单词被删掉时它的 item 会被一起
     # 清掉（见 words.delete_word），position 就出现空洞，推算出来的数会偏大。
     return playlist, await count_playlist_words(session, playlist_id)
+
+
+async def get_playlist_by_name(
+    session: AsyncSession, user_id: uuid.UUID, name: str
+) -> VocabularyPlaylist | None:
+    """按名字获取该用户的歌单（名字在单用户下唯一）。"""
+    stmt = select(VocabularyPlaylist).where(
+        col(VocabularyPlaylist.user_id) == user_id, col(VocabularyPlaylist.name) == name
+    )
+    res = await session.execute(stmt)
+    return res.scalar_one_or_none()
+
+
+async def replace_or_create_playlist_by_name(
+    session: AsyncSession, user_id: uuid.UUID, name: str, word_ids: list[uuid.UUID]
+) -> tuple[VocabularyPlaylist, int]:
+    """按名字建歌单、或整体替换同名歌单的词表（导入内置词库自动建歌单用）。
+
+    与 create_playlist 的区别：这里以「名字」为幂等键——同名歌单已存在就整体
+    替换它的词表而不是撞唯一约束报错，因此重复导入同一本词库只会把歌单刷新成
+    最新的完整词表。word_ids 必须已是本用户拥有的词 id（调用方从生词库查得），
+    这里不再做归属校验，只按传入顺序写 position。
+
+    Returns:
+        (歌单, 词数)
+    """
+    playlist = await get_playlist_by_name(session, user_id, name)
+    if playlist is None:
+        playlist = VocabularyPlaylist(user_id=user_id, name=name)
+        session.add(playlist)
+        await session.flush()  # 先拿到 playlist.id 才能写 items
+    await _replace_items(session, playlist.id, word_ids)
+    await session.commit()
+    await session.refresh(playlist)
+    return playlist, len(word_ids)
 
 
 async def delete_playlist(session: AsyncSession, user_id: uuid.UUID, playlist_id: uuid.UUID) -> bool:

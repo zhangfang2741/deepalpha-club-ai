@@ -150,13 +150,12 @@ final class LibraryPickerViewModel: ObservableObject {
         defer { importingTitle = nil }
         do {
             let result = try await WordService.importLibrary(bookId: book.id)
-            // 有新词并入才需要刷新生词库/首页各分组计数。
-            if result.imported > 0 {
-                nav.notifyVocabularyDataChanged()
-            }
+            // 导入总会建/刷新对应歌单，且可能并入新词，统一通知刷新生词库/首页
+            // 各分组计数与歌单列表。
+            nav.notifyVocabularyDataChanged()
             resultAlert = LibraryImportAlert(
                 title: L("导入完成"),
-                message: Self.resultMessage(book: book, result: result)
+                message: Self.resultMessage(result: result)
             )
         } catch {
             resultAlert = LibraryImportAlert(
@@ -166,14 +165,19 @@ final class LibraryPickerViewModel: ObservableObject {
         }
     }
 
-    private static func resultMessage(book: VocabularyLibraryBook, result: LibraryImportResult) -> String {
+    private static func resultMessage(result: LibraryImportResult) -> String {
+        let head: String
         if result.imported == 0 {
-            return L("「%@」的单词都已在生词库中。", book.title)
+            head = L("这些单词都已在生词库中，进度保持不变。")
+        } else if result.skipped == 0 {
+            head = L("已加入 %lld 个新单词。", result.imported)
+        } else {
+            head = L("已加入 %lld 个新单词，%lld 个已存在（进度保留）。", result.imported, result.skipped)
         }
-        if result.skipped == 0 {
-            return L("已加入 %lld 个新单词。", result.imported)
-        }
-        return L("已加入 %lld 个新单词，%lld 个已存在自动跳过。", result.imported, result.skipped)
+        // 每本词库都会生成同名歌单，指引用户去首页单独复习这本。
+        let tail = L("已生成歌单「%@」（%lld 词），可在首页切换到它单独复习。",
+                     result.playlistName, result.playlistWordCount)
+        return head + "\n" + tail
     }
 }
 

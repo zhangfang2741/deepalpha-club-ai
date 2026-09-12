@@ -303,7 +303,13 @@ class LibraryImportResponse(BaseResponse):
 
     imported 为本次真正并入生词库的新词数；skipped 为因已在生词库中被跳过的
     词数。整本词库全部已存在时 imported=0、skipped=词库总数，属正常幂等结果。
+
+    playlist_* 描述导入时自动建/刷新的同名歌单：用户可在首页切到它，单独复习
+    这本词库、单独查看进度，而记忆进度始终跟随单词本身、不受切换影响。
     """
 
     imported: int
     skipped: int
+    playlist_id: uuid.UUID
+    playlist_name: str
+    playlist_word_count: int

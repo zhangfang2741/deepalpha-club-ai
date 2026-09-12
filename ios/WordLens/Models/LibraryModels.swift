@@ -28,8 +28,19 @@ struct LibraryListResponse: Codable {
 }
 
 /// 导入内置词库结果，对应后端 LibraryImportResponse。
-/// imported 为真正并入生词库的新词数；skipped 为因已存在被跳过的词数。
+///
+/// imported 为真正并入生词库的新词数；skipped 为因已存在被跳过的词数（其记忆
+/// 进度保留不变）。playlist* 描述导入时按词库名自动建/刷新的歌单——用户可在
+/// 首页切到它单独复习这本、单独查看进度。
 struct LibraryImportResult: Codable {
     let imported: Int
     let skipped: Int
+    let playlistName: String
+    let playlistWordCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case imported, skipped
+        case playlistName = "playlist_name"
+        case playlistWordCount = "playlist_word_count"
+    }
 }

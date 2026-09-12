@@ -354,3 +354,8 @@
 "已加入 %lld 个新单词。" = "Added %lld new words.";
 "已加入 %lld 个新单词，%lld 个已存在自动跳过。" = "Added %1$lld new words; %2$lld already existed and were skipped.";
 "好的" = "OK";
+
+/* Built-in library import result (with auto playlist) */
+"这些单词都已在生词库中，进度保持不变。" = "These words are already in your word list; your progress is unchanged.";
+"已加入 %lld 个新单词，%lld 个已存在（进度保留）。" = "Added %1$lld new words; %2$lld already existed (progress kept).";
+"已生成歌单「%@」（%lld 词），可在首页切换到它单独复习。" = "Created the \"%1$@\" playlist (%2$lld words). Switch to it on the home screen to study just this book.";
