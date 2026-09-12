@@ -138,10 +138,19 @@ struct SettingsView: View {
 
                 Section {
                     NavigationLink {
+                        LibraryPickerView()
+                    } label: {
+                        Label(L("词库"), systemImage: "books.vertical")
+                    }
+                    NavigationLink {
                         PronunciationSettingsView()
                     } label: {
                         Label(L("发音设置"), systemImage: "speaker.wave.2")
                     }
+                } footer: {
+                    Text(L("从内置词库（四六级、考研、雅思托福等）中选择，一键加入生词库开始记忆。"))
+                        .font(.caption)
+                        .foregroundStyle(Theme.textSecondary)
                 }
                 .listRowBackground(Theme.surface)
 

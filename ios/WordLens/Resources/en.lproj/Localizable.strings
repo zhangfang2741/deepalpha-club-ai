@@ -338,3 +338,19 @@
 "今日已学 %lld 个新词，共 %lld 个" = "%lld of %lld new words studied today";
 "拍照 %lld/%lld" = "Photos %lld/%lld";
 "新词 %lld/%lld" = "New %lld/%lld";
+
+/* Built-in vocabulary libraries */
+"词库" = "Word Libraries";
+"选择词库" = "Choose a Library";
+"从内置词库（四六级、考研、雅思托福等）中选择，一键加入生词库开始记忆。" = "Pick from built-in libraries (CET-4/6, postgraduate, IELTS/TOEFL and more) and add one to your word list to start studying.";
+"%lld 词" = "%lld words";
+"将「%@」的 %lld 个单词加入生词库，已有的词会自动跳过。" = "Add the %2$lld words in \"%1$@\" to your word list. Words you already have are skipped.";
+"正在导入「%@」…" = "Importing \"%@\"…";
+"加载词库失败，请稍后重试" = "Failed to load libraries, please try again later";
+"导入完成" = "Import Complete";
+"导入失败" = "Import Failed";
+"请检查网络后重试" = "Please check your network and retry";
+"「%@」的单词都已在生词库中。" = "All words in \"%@\" are already in your word list.";
+"已加入 %lld 个新单词。" = "Added %lld new words.";
+"已加入 %lld 个新单词，%lld 个已存在自动跳过。" = "Added %1$lld new words; %2$lld already existed and were skipped.";
+"好的" = "OK";
