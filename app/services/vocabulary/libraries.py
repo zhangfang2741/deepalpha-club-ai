@@ -142,9 +142,12 @@ async def import_book(session: AsyncSession, user_id: uuid.UUID, book_id: str) -
     # 词库内已按小写去重，这里保序取小写即为歌单的目标顺序。
     lower_words = [e["word"].lower() for e in entries]
     ordered_ids = await _lookup_word_ids_in_book_order(session, user_id, lower_words)
-    playlist, count = await playlist_service.replace_or_create_playlist_by_name(
-        session, user_id, playlist_name, ordered_ids
-    )
+    playlist = await playlist_service.get_or_create_playlist_by_name(session, user_id, playlist_name)
+    # 增量并入而非整体替换：保留用户在这本词库里拍照新增、后来并进歌单的词，
+    # 再次导入同一本不会把它们挤掉。已在歌单里的词自动跳过，幂等。
+    _, count = await playlist_service.add_words_to_playlist(
+        session, user_id, playlist.id, ordered_ids
+    ) or (playlist, 0)
     return ImportResult(
         imported=total_created,
         skipped=total_skipped,

@@ -85,23 +85,44 @@ final class CameraViewModel: ObservableObject {
     }
 
     /// 返回新建的单词行（而不只是数量），调用方要用 id 去生词库页做高亮定位。
-    func addSelectedToLibrary() async -> (added: [VocabularyWord], skipped: [String]) {
+    ///
+    /// joinedPlaylist：当前正停在某个自定义词库（歌单）上时，拍照新增的词除了
+    /// 进生词库，还会一并加入这个词库歌单——用户「在这本词库里录的词」自然属于
+    /// 这本，切走再切回都留着。加入歌单是尽力而为：即便失败，词也已在生词库里，
+    /// 不阻断主流程。
+    func addSelectedToLibrary() async -> (added: [VocabularyWord], skipped: [String], joinedPlaylist: Bool) {
         let toAdd = candidates
             .filter { selectedWords.contains($0.word) }
             .map { VocabularyWordCreate(word: $0.word, phoneticIpa: $0.phoneticIpa,
                                         partOfSpeech: $0.partOfSpeech, definitionZh: $0.definitionZh,
                                         etymology: $0.etymology, exampleSentence: $0.exampleSentence) }
-        guard !toAdd.isEmpty else { return ([], []) }
+        guard !toAdd.isEmpty else { return ([], [], false) }
         do {
             let resp = try await WordService.addWordsBatch(toAdd)
+            let joinedPlaylist = await addNewWordsToCurrentPlaylist(resp.created)
             reset()
-            return (resp.created, resp.skippedExisting)
+            return (resp.created, resp.skippedExisting, joinedPlaylist)
         } catch let error as APIError {
             errorMessage = error.message
-            return ([], [])
+            return ([], [], false)
         } catch {
             errorMessage = L("加入生词库失败")
-            return ([], [])
+            return ([], [], false)
+        }
+    }
+
+    /// 若当前停在某个自定义词库（歌单）上，把刚新增的词并入该歌单。
+    /// 返回是否确实并入了歌单（当前不是自定义词库、或没有新词时为 false）。
+    private func addNewWordsToCurrentPlaylist(_ created: [VocabularyWord]) async -> Bool {
+        guard case .custom(let playlistID) = PlaylistSelection.current, !created.isEmpty else {
+            return false
+        }
+        do {
+            _ = try await WordService.addWordsToPlaylist(id: playlistID, wordIDs: created.map(\.id))
+            return true
+        } catch {
+            // 尽力而为：词已在生词库，加入当前词库失败不报错、不阻断跳转。
+            return false
         }
     }
 
