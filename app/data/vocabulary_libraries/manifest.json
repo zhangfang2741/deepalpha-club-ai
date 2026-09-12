@@ -1,0 +1,262 @@
+{
+  "groups": [
+    {
+      "key": "primary",
+      "title": "小学",
+      "books": [
+        {
+          "id": "PEPXiaoXue3_1",
+          "title": "人教版小学英语·三年级上册",
+          "word_count": 64
+        },
+        {
+          "id": "PEPXiaoXue3_2",
+          "title": "人教版小学英语·三年级下册",
+          "word_count": 72
+        },
+        {
+          "id": "PEPXiaoXue4_1",
+          "title": "人教版小学英语·四年级上册",
+          "word_count": 84
+        },
+        {
+          "id": "PEPXiaoXue4_2",
+          "title": "人教版小学英语·四年级下册",
+          "word_count": 104
+        },
+        {
+          "id": "PEPXiaoXue5_1",
+          "title": "人教版小学英语·五年级上册",
+          "word_count": 131
+        },
+        {
+          "id": "PEPXiaoXue5_2",
+          "title": "人教版小学英语·五年级下册",
+          "word_count": 156
+        },
+        {
+          "id": "PEPXiaoXue6_1",
+          "title": "人教版小学英语·六年级上册",
+          "word_count": 130
+        },
+        {
+          "id": "PEPXiaoXue6_2",
+          "title": "人教版小学英语·六年级下册",
+          "word_count": 108
+        }
+      ]
+    },
+    {
+      "key": "junior",
+      "title": "初中",
+      "books": [
+        {
+          "id": "PEPChuZhong7_1",
+          "title": "人教版初中英语·七年级上册",
+          "word_count": 392
+        },
+        {
+          "id": "PEPChuZhong7_2",
+          "title": "人教版初中英语·七年级下册",
+          "word_count": 492
+        },
+        {
+          "id": "PEPChuZhong8_1",
+          "title": "人教版初中英语·八年级上册",
+          "word_count": 419
+        },
+        {
+          "id": "PEPChuZhong8_2",
+          "title": "人教版初中英语·八年级下册",
+          "word_count": 463
+        },
+        {
+          "id": "PEPChuZhong9_1",
+          "title": "人教版初中英语·九年级全册",
+          "word_count": 551
+        },
+        {
+          "id": "ChuZhongluan_2",
+          "title": "中考必备词汇",
+          "word_count": 1418
+        }
+      ]
+    },
+    {
+      "key": "senior",
+      "title": "高中",
+      "books": [
+        {
+          "id": "PEPGaoZhong_1",
+          "title": "人教版高中英语·必修1",
+          "word_count": 311
+        },
+        {
+          "id": "PEPGaoZhong_2",
+          "title": "人教版高中英语·必修2",
+          "word_count": 319
+        },
+        {
+          "id": "PEPGaoZhong_3",
+          "title": "人教版高中英语·必修3",
+          "word_count": 366
+        },
+        {
+          "id": "PEPGaoZhong_4",
+          "title": "人教版高中英语·必修4",
+          "word_count": 307
+        },
+        {
+          "id": "PEPGaoZhong_5",
+          "title": "人教版高中英语·必修5",
+          "word_count": 357
+        },
+        {
+          "id": "PEPGaoZhong_6",
+          "title": "人教版高中英语·选修6",
+          "word_count": 391
+        },
+        {
+          "id": "PEPGaoZhong_7",
+          "title": "人教版高中英语·选修7",
+          "word_count": 384
+        },
+        {
+          "id": "PEPGaoZhong_8",
+          "title": "人教版高中英语·选修8",
+          "word_count": 420
+        },
+        {
+          "id": "PEPGaoZhong_9",
+          "title": "人教版高中英语·选修9",
+          "word_count": 352
+        },
+        {
+          "id": "PEPGaoZhong_10",
+          "title": "人教版高中英语·选修10",
+          "word_count": 361
+        },
+        {
+          "id": "PEPGaoZhong_11",
+          "title": "人教版高中英语·选修11",
+          "word_count": 309
+        },
+        {
+          "id": "GaoZhongluan_2",
+          "title": "高考必备词汇",
+          "word_count": 3665
+        }
+      ]
+    },
+    {
+      "key": "cet",
+      "title": "四六级",
+      "books": [
+        {
+          "id": "CET4luan_1",
+          "title": "四级真题核心词",
+          "word_count": 1162
+        },
+        {
+          "id": "CET4luan_2",
+          "title": "四级英语词汇",
+          "word_count": 3739
+        },
+        {
+          "id": "CET6luan_1",
+          "title": "六级真题核心词",
+          "word_count": 1228
+        },
+        {
+          "id": "CET6_2",
+          "title": "六级英语词汇",
+          "word_count": 2078
+        }
+      ]
+    },
+    {
+      "key": "kaoyan",
+      "title": "考研",
+      "books": [
+        {
+          "id": "KaoYanluan_1",
+          "title": "考研必考词汇",
+          "word_count": 1340
+        },
+        {
+          "id": "KaoYan_2",
+          "title": "考研英语词汇",
+          "word_count": 4533
+        }
+      ]
+    },
+    {
+      "key": "tem",
+      "title": "专四专八",
+      "books": [
+        {
+          "id": "Level4luan_1",
+          "title": "专四真题高频词",
+          "word_count": 595
+        },
+        {
+          "id": "Level4luan_2",
+          "title": "专四核心词汇",
+          "word_count": 4025
+        },
+        {
+          "id": "Level8_1",
+          "title": "专八真题高频词",
+          "word_count": 684
+        },
+        {
+          "id": "Level8luan_2",
+          "title": "专八核心词汇",
+          "word_count": 12197
+        }
+      ]
+    },
+    {
+      "key": "overseas",
+      "title": "出国留学",
+      "books": [
+        {
+          "id": "IELTSluan_2",
+          "title": "雅思词汇",
+          "word_count": 3427
+        },
+        {
+          "id": "TOEFL_2",
+          "title": "TOEFL 词汇",
+          "word_count": 9212
+        },
+        {
+          "id": "GRE_2",
+          "title": "GRE 词汇",
+          "word_count": 7199
+        },
+        {
+          "id": "SAT_2",
+          "title": "SAT 词汇",
+          "word_count": 4423
+        },
+        {
+          "id": "GMATluan_2",
+          "title": "GMAT 词汇",
+          "word_count": 3254
+        }
+      ]
+    },
+    {
+      "key": "business",
+      "title": "商务英语",
+      "books": [
+        {
+          "id": "BEC_2",
+          "title": "商务英语词汇",
+          "word_count": 2753
+        }
+      ]
+    }
+  ]
+}

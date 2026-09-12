@@ -11,6 +11,7 @@ import uuid
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col
 
 from app.models.vocabulary import VocabularyPlaylist, VocabularyPlaylistItem, VocabularyWord
 
@@ -179,6 +180,35 @@ async def add_words_to_playlist(
     # 词数重新 count 而不是用 next_position 推算：单词被删掉时它的 item 会被一起
     # 清掉（见 words.delete_word），position 就出现空洞，推算出来的数会偏大。
     return playlist, await count_playlist_words(session, playlist_id)
+
+
+async def get_playlist_by_name(
+    session: AsyncSession, user_id: uuid.UUID, name: str
+) -> VocabularyPlaylist | None:
+    """按名字获取该用户的歌单（名字在单用户下唯一）。"""
+    stmt = select(VocabularyPlaylist).where(
+        col(VocabularyPlaylist.user_id) == user_id, col(VocabularyPlaylist.name) == name
+    )
+    res = await session.execute(stmt)
+    return res.scalar_one_or_none()
+
+
+async def get_or_create_playlist_by_name(
+    session: AsyncSession, user_id: uuid.UUID, name: str
+) -> VocabularyPlaylist:
+    """按名字取歌单，没有就建一个空的（导入内置词库自动建歌单用）。
+
+    只保证歌单存在、不动词表——往里并词交给 add_words_to_playlist，这样是「并入
+    缺的词、保留已有词」的增量语义：用户在这本词库里拍照新增的词不会因为再次
+    导入同一本而被整体替换掉。
+    """
+    playlist = await get_playlist_by_name(session, user_id, name)
+    if playlist is None:
+        playlist = VocabularyPlaylist(user_id=user_id, name=name)
+        session.add(playlist)
+        await session.commit()
+        await session.refresh(playlist)
+    return playlist
 
 
 async def delete_playlist(session: AsyncSession, user_id: uuid.UUID, playlist_id: uuid.UUID) -> bool:
