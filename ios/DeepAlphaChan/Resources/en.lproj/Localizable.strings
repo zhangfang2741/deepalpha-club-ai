@@ -269,3 +269,12 @@
 "查看缠论分析" = "View Chan analysis";
 "内容由 AI 生成，仅供参考，不构成投资建议" = "AI-generated content for reference only. Not investment advice.";
 "历史" = "History";
+
+/* 走势展望（延续 vs 转折） */
+"走势展望：出现转折信号，可能转为上涨（力度最强的买点结构）" = "Outlook: reversal signal — may turn up (strongest buy structure)";
+"走势展望：出现转折信号，可能转为下跌" = "Outlook: reversal signal — may turn down";
+"走势展望：上涨延续" = "Outlook: uptrend continuation";
+"走势展望：下跌延续" = "Outlook: downtrend continuation";
+"走势展望：盘整向上突破，倾向转为上涨" = "Outlook: range breaking up — leaning bullish";
+"走势展望：盘整向下突破，倾向转为下跌" = "Outlook: range breaking down — leaning bearish";
+"走势展望：盘整延续（围绕中枢震荡）" = "Outlook: range continuation (oscillating around a pivot)";

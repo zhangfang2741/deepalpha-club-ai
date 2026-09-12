@@ -37,6 +37,31 @@ struct AnalysisSection: View {
                  analysis.segments.count, pivots, analysis.signals.count)
     }
 
+    /// 走势展望（延续 vs 转折，缠论走势分类）：文案 + 配色（复用多空色）。
+    /// trendOutlook 为空 / unclear 时不展示。
+    private var outlookInfo: (label: String, color: Color)? {
+        guard let o = analysis.trendOutlook, o != "unclear" else { return nil }
+        switch o {
+        case "reversal_up":
+            return (L("走势展望：出现转折信号，可能转为上涨（力度最强的买点结构）"),
+                    SignalFormatting.biasColor("bullish"))
+        case "reversal_down":
+            return (L("走势展望：出现转折信号，可能转为下跌"), SignalFormatting.biasColor("bearish"))
+        case "continuation_up":
+            return (L("走势展望：上涨延续"), SignalFormatting.biasColor("bullish"))
+        case "continuation_down":
+            return (L("走势展望：下跌延续"), SignalFormatting.biasColor("bearish"))
+        case "breakout_up":
+            return (L("走势展望：盘整向上突破，倾向转为上涨"), SignalFormatting.biasColor("bullish"))
+        case "breakout_down":
+            return (L("走势展望：盘整向下突破，倾向转为下跌"), SignalFormatting.biasColor("bearish"))
+        case "range":
+            return (L("走势展望：盘整延续（围绕中枢震荡）"), SignalFormatting.biasColor("neutral"))
+        default:
+            return nil
+        }
+    }
+
     /// 标题栏 chip：优先用加权后的多空倾向；结构没成形时退回趋势。
     private var chip: (String, Color) {
         if let rec = analysis.recommendation {
@@ -65,6 +90,14 @@ struct AnalysisSection: View {
                         .font(.system(size: 18, weight: .bold))
                         .foregroundColor(SignalFormatting.biasColor(rec.bias))
                         .fixedSize(horizontal: false, vertical: true)
+
+                    // 走势展望：延续 vs 转折（缠论走势分类），底背驰转折为最强买点结构
+                    if let outlook = outlookInfo {
+                        Text(outlook.label)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(outlook.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
                     if !rec.reasons.isEmpty {
                         Divider().overlay(Theme.border)

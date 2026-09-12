@@ -95,6 +95,16 @@ def normalize(symbol: str) -> tuple[Market, str]:
     return market, upper
 
 
+def _is_shanghai(clean: str) -> bool:
+    """A 股 6 位裸号是否属于沪市（上交所）。
+
+    沪市：6 开头（主板/科创 60/68）、9 开头（B 股）、**5 开头（基金/ETF，如 510300
+    沪深300ETF、588000 科创50ETF）**。其余（0/3 主板创业板、1 基金/ETF 如 159915、
+    2 B 股）归深市。此前只认 6/9，导致沪市 5 开头的 ETF 被误判成深市、取不到行情。
+    """
+    return clean[:1] in "569"
+
+
 def fmp_symbol(symbol: str) -> str:
     """转成 FMP 要的代码形态。
 
@@ -110,8 +120,7 @@ def fmp_symbol(symbol: str) -> str:
     if market is Market.US:
         return clean
     if market is Market.CN:
-        # 6/9 开头是沪市，0/3 开头是深市
-        suffix = ".SS" if clean[0] in "69" else ".SZ"
+        suffix = ".SS" if _is_shanghai(clean) else ".SZ"
         return f"{clean}{suffix}"
     return f"{clean.lstrip('0').zfill(4)}.HK"
 
@@ -128,6 +137,5 @@ def eastmoney_secid(symbol: str) -> str:
     if market is Market.US:
         raise InvalidSymbolError("美股不走东方财富，请用 FMP")
     if market is Market.CN:
-        # 6/9 开头是沪市，0/3 开头是深市
-        return f"{'1' if clean[0] in '69' else '0'}.{clean}"
+        return f"{'1' if _is_shanghai(clean) else '0'}.{clean}"
     return f"116.{clean}"

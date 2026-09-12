@@ -139,6 +139,48 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
   )
 }
 
+const WALK_TYPE_LABEL: Record<string, string> = {
+  up_trend: '上涨趋势',
+  down_trend: '下跌趋势',
+  consolidation: '盘整',
+  none: '未形成中枢',
+}
+
+// 走势展望：文案 + 配色（转折向上=绿、转折向下=红、突破=偏色、延续/盘整=中性）
+const OUTLOOK_META: Record<string, { label: string; text: string; dot: string }> = {
+  reversal_up: { label: '出现转折信号，可能转为上涨（力度最强的买点结构）', text: 'text-green-400', dot: 'bg-green-400' },
+  reversal_down: { label: '出现转折信号，可能转为下跌', text: 'text-red-400', dot: 'bg-red-400' },
+  continuation_up: { label: '上涨延续', text: 'text-green-300', dot: 'bg-green-500' },
+  continuation_down: { label: '下跌延续', text: 'text-red-300', dot: 'bg-red-500' },
+  breakout_up: { label: '盘整向上突破，倾向转为上涨', text: 'text-green-400', dot: 'bg-green-400' },
+  breakout_down: { label: '盘整向下突破，倾向转为下跌', text: 'text-red-400', dot: 'bg-red-400' },
+  range: { label: '盘整延续（围绕中枢震荡）', text: 'text-slate-300', dot: 'bg-slate-400' },
+  unclear: { label: '走势展望未明', text: 'text-slate-400', dot: 'bg-slate-500' },
+}
+
+function WalkOutlookCard({ walkType, outlook }: { walkType?: string; outlook?: string }) {
+  if (!outlook || outlook === 'unclear') return null
+  const meta = OUTLOOK_META[outlook] ?? OUTLOOK_META.unclear
+  const wt = walkType ? WALK_TYPE_LABEL[walkType] : undefined
+  return (
+    <div className="bg-slate-800/40 rounded-lg p-3 text-xs">
+      <div className="flex items-center gap-1 text-slate-500 mb-1 font-semibold">
+        走势展望
+        <InfoTip
+          title="走势展望"
+          content="缠论走势分类：任何走势要么延续、要么转折，转折由终结性背驰触发。下跌趋势末端出现底背驰→可能转为上涨（力度最强的买点结构）；上涨趋势末端顶背驰→可能转为下跌。非投资建议。"
+          side="left"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <span className={`inline-block w-2 h-2 rounded-full ${meta.dot}`} />
+        {wt && <span className="text-slate-400">{wt} ·</span>}
+        <span className={`font-semibold ${meta.text}`}>{meta.label}</span>
+      </div>
+    </div>
+  )
+}
+
 export function SignalPanel({ data }: Props) {
   const recentSignals = [...data.signals].reverse().slice(0, 8)
   const allPivots = [...data.stroke_pivots, ...data.segment_pivots]
@@ -222,6 +264,9 @@ export function SignalPanel({ data }: Props) {
           {data.current_trend}
         </div>
       )}
+
+      {/* 走势展望：延续 vs 转折（缠论走势分类） */}
+      <WalkOutlookCard walkType={data.walk_type} outlook={data.trend_outlook} />
 
       {/* 近期中枢 */}
       {allPivots.length > 0 && (

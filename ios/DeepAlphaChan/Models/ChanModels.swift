@@ -170,6 +170,11 @@ struct ChanAnalysis: Codable {
     let macd: MACDData?
     let signals: [Signal]
     let currentTrend: String
+    // 走势类型（基于中枢排布）：up_trend / down_trend / consolidation / none
+    let walkType: String?
+    // 走势展望（延续 vs 转折）：reversal_up / reversal_down / continuation_up /
+    // continuation_down / breakout_up / breakout_down / range / unclear
+    let trendOutlook: String?
     let summary: String
     let recommendation: Recommendation?
     let narrative: MarketNarrative?
@@ -182,6 +187,8 @@ struct ChanAnalysis: Codable {
         case strokePivots = "stroke_pivots"
         case segmentPivots = "segment_pivots"
         case currentTrend = "current_trend"
+        case walkType = "walk_type"
+        case trendOutlook = "trend_outlook"
         case pendingNotes = "pending_notes"
     }
 }

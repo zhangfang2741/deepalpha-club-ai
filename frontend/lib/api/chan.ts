@@ -90,6 +90,18 @@ export interface ChanAnalysisResult {
   macd: MACDData | null
   signals: Signal[]
   current_trend: string
+  // 走势类型（基于中枢排布）
+  walk_type?: 'up_trend' | 'down_trend' | 'consolidation' | 'none'
+  // 走势展望（延续 vs 转折）
+  trend_outlook?:
+    | 'reversal_up'
+    | 'reversal_down'
+    | 'continuation_up'
+    | 'continuation_down'
+    | 'breakout_up'
+    | 'breakout_down'
+    | 'range'
+    | 'unclear'
   summary: string
   recommendation: Recommendation | null
   pending_notes: string[]
