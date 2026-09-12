@@ -274,3 +274,36 @@ class PlaylistAddWordsRequest(BaseModel):
     """把一批词并入歌单末尾（生词库多选「加入歌单」用）。"""
 
     word_ids: list[uuid.UUID] = Field(..., min_length=1)
+
+
+class LibraryBookSchema(BaseModel):
+    """内置词库单本的元信息（不含词条本身）。"""
+
+    id: str
+    title: str
+    word_count: int
+
+
+class LibraryGroupSchema(BaseModel):
+    """内置词库分组（如「四六级」「出国留学」）。"""
+
+    key: str
+    title: str
+    books: list[LibraryBookSchema]
+
+
+class LibraryListResponse(BaseResponse):
+    """内置词库列表：分组 + 每本元信息，供设置页渲染选择列表。"""
+
+    groups: list[LibraryGroupSchema]
+
+
+class LibraryImportResponse(BaseResponse):
+    """导入内置词库结果。
+
+    imported 为本次真正并入生词库的新词数；skipped 为因已在生词库中被跳过的
+    词数。整本词库全部已存在时 imported=0、skipped=词库总数，属正常幂等结果。
+    """
+
+    imported: int
+    skipped: int
