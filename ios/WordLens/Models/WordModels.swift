@@ -118,13 +118,26 @@ struct VocabularyWordCreate: Codable {
 }
 
 /// 对应后端 WordsBatchCreateResponse。
+///
+/// existing：被跳过（已在生词库）的词对应的现有词行（含 id）。在某个词库里
+/// 拍照录入时，用它把「已存在但这次也勾选了」的词一并补进当前词库歌单。
+/// 后端老版本可能不返回该字段，故给默认空数组。
 struct WordsBatchCreateResponse: Codable {
     let created: [VocabularyWord]
     let skippedExisting: [String]
+    let existing: [VocabularyWord]
 
     enum CodingKeys: String, CodingKey {
         case created
         case skippedExisting = "skipped_existing"
+        case existing
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        created = try container.decode([VocabularyWord].self, forKey: .created)
+        skippedExisting = try container.decode([String].self, forKey: .skippedExisting)
+        existing = try container.decodeIfPresent([VocabularyWord].self, forKey: .existing) ?? []
     }
 }
 

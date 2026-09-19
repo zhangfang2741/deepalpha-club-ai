@@ -85,23 +85,47 @@ final class CameraViewModel: ObservableObject {
     }
 
     /// 返回新建的单词行（而不只是数量），调用方要用 id 去生词库页做高亮定位。
-    func addSelectedToLibrary() async -> (added: [VocabularyWord], skipped: [String]) {
+    ///
+    /// joinedPlaylist：当前正停在某个自定义词库（歌单）上时，拍照新增的词除了
+    /// 进生词库，还会一并加入这个词库歌单——用户「在这本词库里录的词」自然属于
+    /// 这本，切走再切回都留着。加入歌单是尽力而为：即便失败，词也已在生词库里，
+    /// 不阻断主流程。
+    func addSelectedToLibrary() async -> (added: [VocabularyWord], skipped: [String], joinedPlaylist: Bool) {
         let toAdd = candidates
             .filter { selectedWords.contains($0.word) }
             .map { VocabularyWordCreate(word: $0.word, phoneticIpa: $0.phoneticIpa,
                                         partOfSpeech: $0.partOfSpeech, definitionZh: $0.definitionZh,
                                         etymology: $0.etymology, exampleSentence: $0.exampleSentence) }
-        guard !toAdd.isEmpty else { return ([], []) }
+        guard !toAdd.isEmpty else { return ([], [], false) }
         do {
             let resp = try await WordService.addWordsBatch(toAdd)
+            // 勾选的词无论新建还是已存在，都并入当前词库：existing 是已在生词库
+            // 里、这次也勾选了的词，连同新建的 created 一起补进当前词库歌单。
+            let joinedPlaylist = await addWordsToCurrentPlaylist(resp.created + resp.existing)
             reset()
-            return (resp.created, resp.skippedExisting)
+            return (resp.created, resp.skippedExisting, joinedPlaylist)
         } catch let error as APIError {
             errorMessage = error.message
-            return ([], [])
+            return ([], [], false)
         } catch {
             errorMessage = L("加入生词库失败")
-            return ([], [])
+            return ([], [], false)
+        }
+    }
+
+    /// 若当前停在某个自定义词库（歌单）上，把这批词（新建的 + 已存在但被勾选的）
+    /// 并入该歌单（歌单内已有的会自动跳过）。返回是否确实并入了歌单（当前不是
+    /// 自定义词库、或没有词时为 false）。
+    private func addWordsToCurrentPlaylist(_ words: [VocabularyWord]) async -> Bool {
+        guard case .custom(let playlistID) = PlaylistSelection.current, !words.isEmpty else {
+            return false
+        }
+        do {
+            _ = try await WordService.addWordsToPlaylist(id: playlistID, wordIDs: words.map(\.id))
+            return true
+        } catch {
+            // 尽力而为：词已在生词库，加入当前词库失败不报错、不阻断跳转。
+            return false
         }
     }
 

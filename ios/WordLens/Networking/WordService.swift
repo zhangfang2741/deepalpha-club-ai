@@ -134,4 +134,19 @@ enum WordService {
         let resp: VocabularyWordListResponse = try await APIClient.shared.get("/playlists/\(id)/words")
         return resp.words
     }
+
+    // MARK: - 内置词库
+
+    /// 拉取内置词库分组列表（不含词条），供设置页选择。
+    static func listLibraries() async throws -> [VocabularyLibraryGroup] {
+        let resp: LibraryListResponse = try await APIClient.shared.get("/libraries")
+        return resp.groups
+    }
+
+    /// 把指定内置词库整本并入生词库，服务端自动跨全库去重。接口无请求体，
+    /// 发一个空 JSON 对象即可。
+    static func importLibrary(bookId: String) async throws -> LibraryImportResult {
+        struct Empty: Encodable {}
+        return try await APIClient.shared.postJSON("/libraries/\(bookId)/import", body: Empty())
+    }
 }

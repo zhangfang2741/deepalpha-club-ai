@@ -51,6 +51,7 @@ struct SignalRadarView: View {
             }
             .padding(.horizontal, 12)
             .padding(.top, 8)
+            .padding(.bottom, 10)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Theme.background)
             .navigationTitle(L("信号雷达"))
@@ -175,8 +176,14 @@ struct SignalRadarView: View {
                 }
             }
         }
-        .frame(height: 360)
-        .background(Theme.surface.opacity(0.4))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(minHeight: 320)
+        .background(
+            RadialGradient(
+                colors: [Color(hex: 0x131A26), Theme.background],
+                center: .center, startRadius: 6, endRadius: 280
+            )
+        )
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
@@ -539,17 +546,19 @@ struct SignalRadarView: View {
         f.locale = Locale(identifier: "en_US_POSIX")
         return f
     }()
-    private static let weekdaySymbols = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
 
     static func monthDay(_ date: String) -> String {
         let parts = date.split(separator: "-")
         return parts.count >= 3 ? "\(parts[1])-\(parts[2])" : date
     }
 
+    /// 星期几按当前界面语言本地化（中文「周一」/ 英文「Mon」），不再硬编码中文。
     static func weekday(_ date: String) -> String {
         guard let d = parser.date(from: date) else { return "" }
-        let w = Calendar(identifier: .gregorian).component(.weekday, from: d)
-        return weekdaySymbols[(w - 1 + 7) % 7]
+        let f = DateFormatter()
+        f.locale = Locale(identifier: Localized.language().localeIdentifier)
+        f.setLocalizedDateFormatFromTemplate("EEE")
+        return f.string(from: d)
     }
 }
 
@@ -603,7 +612,7 @@ private struct RadarBubble: View {
             .position(x: baseX, y: baseY)
             .accessibilityElement()
             .accessibilityLabel(
-                "\(signal.symbol) \(signal.name) \(signal.isBuy ? "买点" : "卖点")"
+                "\(signal.symbol) \(signal.name) \(signal.isBuy ? L("买点") : L("卖点"))"
                 + (isNew ? " \(L("当日新增"))" : "")
             )
             .accessibilityAddTraits(.isButton)
@@ -621,7 +630,7 @@ private struct RadarBubble: View {
 
     private var content: some View {
         ZStack {
-            // 纯色主体，不透明、不描边
+            // 纯实色气泡，无透明、无描边
             Circle().fill(color)
 
             VStack(spacing: 1) {
@@ -646,7 +655,7 @@ private struct RadarBubble: View {
                     .lineLimit(1)
                     .padding(.horizontal, 4)
             }
-            .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
+            .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
         }
     }
 }
