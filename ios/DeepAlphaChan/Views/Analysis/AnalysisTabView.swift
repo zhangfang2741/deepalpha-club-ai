@@ -68,15 +68,14 @@ struct AnalysisTabView: View {
                         .environmentObject(orientation)
                 }
             }
-            // 外部入口（晨报「重点个股」）触发的分析不经过 triggerAnalysis，
-            // 不会走到那里置 showResults 的逻辑；这里监听 isLoading 的下降沿，
-            // 只要分析成功（有结果、无错误）就同样 push 进结果页。
-            // 手动分析时 triggerAnalysis 本身也会置 true，重复赋值无副作用。
-            .onChange(of: vm.isLoading) { _, loading in
-                if !loading, vm.analysis != nil, vm.errorMessage == nil {
-                    showResults = true
-                }
-            }
+            // 原本这里还监听 vm.isLoading 下降沿，为的是晨报「重点个股」跳转
+            // 分析 Tab 后自动进结果页（晨报当时借用的是本 Tab 的 NavigationStack）。
+            // 晨报已隐藏，「市场」页（原信号雷达）也改成了自己独立的 NavigationStack
+            // 直接 push，不再借用这里——继续留着这段监听只会误伤：chanVM 是共享的，
+            // 只要别的入口跑了一次分析，本 Tab 哪怕没被看到也会把 showResults 置为
+            // true，导致用户之后手动点开「分析」看到的是别人跑过的旧结果而不是
+            // 空白条件页。晨报以后要恢复，应该照「市场」页的做法自建 NavigationStack，
+            // 而不是复用这里。
             #if DEBUG
             .task {
                 await runDemoAnalysisIfRequested()

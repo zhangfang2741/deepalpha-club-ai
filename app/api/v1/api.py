@@ -15,6 +15,7 @@ from app.api.v1.ichimoku import router as ichimoku_router
 from app.api.v1.industry_panic import router as industry_panic_router
 from app.api.v1.institutional_signals import router as institutional_signals_router
 from app.api.v1.morning_report import router as morning_report_router
+from app.api.v1.panic_index import router as panic_index_router
 from app.api.v1.regime import router as regime_router
 from app.api.v1.research import router as research_router
 from app.api.v1.sec_filings import router as sec_filings_router
@@ -27,6 +28,7 @@ from app.api.v1.trading_desk import router as trading_desk_router
 from app.api.v1.transcripts import router as transcripts_router
 from app.api.v1.valuation import router as valuation_router
 from app.api.v1.vocabulary import router as vocabulary_router
+from app.api.v1.watchlist import router as watchlist_router
 from app.api.v1.wyckoff import router as wyckoff_router
 from app.core.logging import logger
 
@@ -45,6 +47,7 @@ api_router.include_router(ichimoku_router, prefix="/ichimoku", tags=["ichimoku"]
 api_router.include_router(industry_panic_router, prefix="/industry-panic", tags=["industry-panic"])
 api_router.include_router(institutional_signals_router, prefix="/institutional-signals", tags=["institutional-signals"])
 api_router.include_router(morning_report_router, prefix="/morning-report", tags=["morning-report"])
+api_router.include_router(panic_index_router, prefix="/panic-index", tags=["panic-index"])
 api_router.include_router(regime_router, prefix="/regime", tags=["regime"])
 api_router.include_router(research_router, prefix="/research", tags=["research"])
 api_router.include_router(sec_filings_router, prefix="/sec", tags=["sec"])
@@ -57,6 +60,7 @@ api_router.include_router(trading_desk_router, prefix="/trading-desk", tags=["tr
 api_router.include_router(transcripts_router, prefix="/transcripts", tags=["transcripts"])
 api_router.include_router(valuation_router, prefix="/valuation", tags=["valuation"])
 api_router.include_router(vocabulary_router, prefix="/vocabulary", tags=["vocabulary"])
+api_router.include_router(watchlist_router, prefix="/watchlist", tags=["watchlist"])
 api_router.include_router(wyckoff_router, prefix="/wyckoff", tags=["wyckoff"])
 
 

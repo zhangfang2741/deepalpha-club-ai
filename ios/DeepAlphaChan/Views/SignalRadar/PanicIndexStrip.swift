@@ -1,0 +1,285 @@
+import Charts
+import SwiftUI
+
+/// 三地恐慌指数小卡片 + 市场选择合二为一：点哪张卡就切到哪个市场（驱动下面的信号雷达），
+/// 三张卡本身永远同时可见，方便一眼对比三地情绪；选中的那张卡右上角多一个展开按钮，
+/// 点开看近一年完整曲线。
+struct PanicIndexStrip: View {
+    @ObservedObject var radarVM: SignalRadarViewModel
+    @ObservedObject var panicVM: PanicIndexViewModel
+
+    @State private var expanded: StockMarket?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(StockMarket.allCases) { market in
+                tile(market)
+            }
+        }
+        .task { panicVM.onAppear() }
+        .sheet(item: $expanded) { market in
+            if let resp = panicVM.responses[market] {
+                PanicIndexDetailSheet(market: market, response: resp)
+            }
+        }
+    }
+
+    private func tile(_ market: StockMarket) -> some View {
+        let isSelected = radarVM.market == market
+        let resp = panicVM.responses[market]
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(market.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(isSelected ? Theme.textPrimary : Theme.textSecondary)
+                Spacer()
+                if isSelected && resp != nil {
+                    Button { expanded = market } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(Theme.textSecondary)
+                    }
+                    .accessibilityLabel(L("查看完整曲线"))
+                }
+            }
+
+            if let resp {
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text("\(Int(resp.current.score.rounded()))")
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundColor(PanicIndexStrip.ratingColor(resp.current.score))
+                    Text(PanicIndexStrip.ratingLabel(resp.current.rating))
+                        .font(.system(size: 10))
+                        .foregroundColor(Theme.textSecondary)
+                        .lineLimit(1)
+                }
+                sparkline(resp)
+            } else if panicVM.failedMarkets.contains(market) {
+                Button { panicVM.retry(market) } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "arrow.clockwise").font(.system(size: 10))
+                        Text(L("重试")).font(.system(size: 11))
+                    }
+                    .foregroundColor(Theme.textSecondary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+            } else {
+                ProgressView().controlSize(.mini)
+                    .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(isSelected ? Theme.accent.opacity(0.12) : Theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isSelected ? Theme.accent : Theme.border, lineWidth: isSelected ? 1.5 : 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { radarVM.switchMarket(market) }
+    }
+
+    /// 迷你走势图：只取近 60 个交易日（约 3 个月），隐藏坐标轴，纯粹给个「形状」。
+    private func sparkline(_ resp: PanicIndexResponse) -> some View {
+        let points = Array(resp.history.suffix(60))
+        return Chart(points) { p in
+            LineMark(x: .value("date", p.date), y: .value("score", p.score))
+                .foregroundStyle(PanicIndexStrip.ratingColor(resp.current.score))
+                .lineStyle(StrokeStyle(lineWidth: 1.5))
+                .interpolationMethod(.catmullRom)
+        }
+        .chartYScale(domain: 0...100)
+        .chartXAxis(.hidden)
+        .chartYAxis(.hidden)
+        .frame(height: 24)
+    }
+
+    /// 分数 → 颜色，三档：恐慌偏绿（本 App「跌=绿」的语义延伸）、贪婪偏红、中性琥珀色。
+    static func ratingColor(_ score: Double) -> Color {
+        if score < 45 { return Theme.down }
+        if score > 56 { return Theme.up }
+        return Theme.segment
+    }
+
+    static func ratingLabel(_ rating: String) -> String {
+        switch rating {
+        case "Extreme Fear": return L("极度恐慌")
+        case "Fear": return L("恐慌")
+        case "Neutral": return L("中性")
+        case "Greed": return L("贪婪")
+        case "Extreme Greed": return L("极度贪婪")
+        default: return rating
+        }
+    }
+}
+
+/// 曲线上的一个可绘制点：把后端的日期字符串转成真正的 Date，
+/// 才能让 Swift Charts 的横向滚动 / 取点手势按时间轴工作。
+private struct PlotPoint: Identifiable {
+    let date: Date
+    let score: Double
+    let rating: String
+    let rawValue: Double?
+    var id: Date { date }
+}
+
+/// 展开态：完整曲线（默认停在最近约 3 个月，可左右拖动回看更早）+ 点按看具体数值
+/// + 当前/一周前/一月前快照。
+private struct PanicIndexDetailSheet: View {
+    let market: StockMarket
+    let response: PanicIndexResponse
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selected: PlotPoint?
+
+    /// 默认可视窗口长度：数据本身可能横跨十来年（A股/港股波指历史很长），
+    /// 全塞进一屏只会挤成一条线看不出细节；限定窗口 + 可横向拖动回看更早。
+    private let visibleDays: Double = 90
+
+    private static let parser: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        return f
+    }()
+
+    private var points: [PlotPoint] {
+        response.history.compactMap { p in
+            guard let d = Self.parser.date(from: p.date) else { return nil }
+            return PlotPoint(date: d, score: p.score, rating: p.rating, rawValue: p.rawValue)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    snapshotRow
+                    chart
+                    Text(L("拖动图表查看更早历史，点按看某一天的具体分值。分数 0~100，越低越恐慌、越高越贪婪；按近一年区间分位数折算，三地口径统一可比。"))
+                        .font(.caption2)
+                        .foregroundColor(Theme.textSecondary)
+                }
+                .padding(16)
+            }
+            .background(Theme.background)
+            .navigationTitle(response.label)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(L("关闭")) { dismiss() }
+                }
+            }
+        }
+    }
+
+    private var snapshotRow: some View {
+        HStack(spacing: 20) {
+            snapshotItem(L("当前"), response.current)
+            snapshotItem(L("一周前"), response.previousWeek)
+            snapshotItem(L("一月前"), response.previousMonth)
+        }
+    }
+
+    private func snapshotItem(_ title: String, _ snap: PanicIndexSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.caption2).foregroundColor(Theme.textSecondary)
+            Text("\(Int(snap.score.rounded()))")
+                .font(.title3.bold())
+                .foregroundColor(PanicIndexStrip.ratingColor(snap.score))
+            Text(PanicIndexStrip.ratingLabel(snap.rating))
+                .font(.caption2)
+                .foregroundColor(Theme.textSecondary)
+        }
+    }
+
+    /// 取离手指最近的一个点——数据是不连续交易日，直接按 x 反查大概率落不到点上。
+    private func nearest(to date: Date) -> PlotPoint? {
+        points.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }
+    }
+
+    private var chart: some View {
+        Chart {
+            ForEach(points) { p in
+                LineMark(x: .value(L("日期"), p.date), y: .value(L("分数"), p.score))
+                    .foregroundStyle(Theme.accent)
+                    .lineStyle(StrokeStyle(lineWidth: 1.5))
+                    .interpolationMethod(.catmullRom)
+                AreaMark(x: .value(L("日期"), p.date), y: .value(L("分数"), p.score))
+                    .foregroundStyle(
+                        LinearGradient(colors: [Theme.accent.opacity(0.22), Theme.accent.opacity(0.0)],
+                                       startPoint: .top, endPoint: .bottom)
+                    )
+                    .interpolationMethod(.catmullRom)
+            }
+            if let selected {
+                RuleMark(x: .value(L("日期"), selected.date))
+                    .foregroundStyle(Theme.textSecondary.opacity(0.6))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                PointMark(x: .value(L("日期"), selected.date), y: .value(L("分数"), selected.score))
+                    .foregroundStyle(PanicIndexStrip.ratingColor(selected.score))
+                    .symbolSize(70)
+                    .annotation(position: .top, overflowResolution: .init(x: .fit, y: .fit)) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(selected.date, format: .dateTime.year().month().day())
+                                .font(.caption2)
+                                .foregroundColor(Theme.textSecondary)
+                            HStack(spacing: 4) {
+                                Text("\(Int(selected.score.rounded()))")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(PanicIndexStrip.ratingColor(selected.score))
+                                Text(PanicIndexStrip.ratingLabel(selected.rating))
+                                    .font(.caption2)
+                                    .foregroundColor(Theme.textSecondary)
+                            }
+                        }
+                        .padding(8)
+                        .background(Theme.surfaceAlt)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border, lineWidth: 1))
+                    }
+            }
+        }
+        .chartYScale(domain: 0...100)
+        .chartYAxis {
+            AxisMarks(values: [0, 25, 45, 56, 76, 100]) {
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                AxisValueLabel().font(.caption2).foregroundStyle(Theme.textSecondary)
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 4)) {
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                AxisValueLabel().font(.caption2).foregroundStyle(Theme.textSecondary)
+            }
+        }
+        .chartScrollableAxes(.horizontal)
+        .chartXVisibleDomain(length: visibleDays * 86400)
+        .chartScrollPosition(initialX: points.last.map {
+            $0.date.addingTimeInterval(-visibleDays * 86400)
+        } ?? Date())
+        .chartOverlay { proxy in
+            GeometryReader { geo in
+                Rectangle().fill(Color.clear).contentShape(Rectangle())
+                    .gesture(
+                        SpatialTapGesture().onEnded { value in
+                            guard let plotFrame = proxy.plotFrame else { return }
+                            let origin = geo[plotFrame].origin
+                            let x = value.location.x - origin.x
+                            if let date: Date = proxy.value(atX: x) {
+                                selected = nearest(to: date)
+                            }
+                        }
+                    )
+            }
+        }
+        .frame(height: 240)
+        .padding(.vertical, 8)
+        .padding(.trailing, 8)
+        .background(Theme.surface.opacity(0.4))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
