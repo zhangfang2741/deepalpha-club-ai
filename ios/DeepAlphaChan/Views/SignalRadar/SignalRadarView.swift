@@ -128,12 +128,10 @@ struct SignalRadarView: View {
     // MARK: - 说明行
 
     private var metaRow: some View {
+        // 指数名称已移到雷达左上角的切换器里，这行只留日期 + 当日买卖点数，避免重复。
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(vm.response?.etfName ?? "")
-                .font(.subheadline.bold())
-                .foregroundColor(Theme.textPrimary)
             if let day = vm.selectedDay {
-                Text("· \(day.date)")
+                Text(day.date)
                     .font(.caption)
                     .foregroundColor(Theme.textSecondary)
             }
@@ -217,6 +215,58 @@ struct SignalRadarView: View {
             )
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(alignment: .topLeading) { universeSwitcher }
+    }
+
+    // MARK: - universe 切换器（雷达左上角）
+
+    /// 当前 universe 展示名（后端 etf_name 就是当前 universe 的名字）。
+    private var currentUniverseName: String {
+        vm.response?.etfName ?? ""
+    }
+
+    /// 雷达左上角的 universe 切换器：科技窄基 ↔ 大盘宽基（如 恒生科技 ↔ 恒生指数）。
+    /// 只有该市场确实有多个 universe 时才是可点的下拉；否则退化成一个静态名牌，
+    /// 保证名称永远显示（metaRow 已不再重复显示名称）。
+    @ViewBuilder
+    private var universeSwitcher: some View {
+        if vm.universes.count > 1 {
+            Menu {
+                ForEach(vm.universes) { u in
+                    Button {
+                        vm.switchUniverse(u.key)
+                    } label: {
+                        if u.key == vm.activeUniverseKey {
+                            Label(u.name, systemImage: "checkmark")
+                        } else {
+                            Text(u.name)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(currentUniverseName).font(.system(size: 12, weight: .semibold))
+                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                }
+                .foregroundColor(Theme.textPrimary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Theme.surface.opacity(0.92))
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(Theme.border, lineWidth: 1))
+            }
+            .padding(10)
+            .accessibilityLabel(L("切换指数范围"))
+        } else if !currentUniverseName.isEmpty {
+            Text(currentUniverseName)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(Theme.textPrimary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Theme.surface.opacity(0.92))
+                .clipShape(Capsule())
+                .padding(10)
+        }
     }
 
     /// 单个气泡的最终布局：先按「离查看日多少天」落到三个同心环之一（对应场里画的
