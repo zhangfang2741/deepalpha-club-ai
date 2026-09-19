@@ -9,10 +9,10 @@ final class SignalRadarViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    /// generating 轮询：间隔从 2s 递增到 6s 封顶，最多轮询 maxPolls 次（约 2 分钟）。
-    /// 大盘宽基（标普500 等）首次全量扫描可能比这还久——那时不再干等，转成「后台
+    /// generating 轮询：间隔从 2s 递增到 6s 封顶，最多 8 次（2+3+4+5+6+6+6+6 ≈ 38s）。
+    /// 大盘宽基（标普500 等）首次全量扫描通常比这久——约 30~40s 后不再干等，转成「后台
     /// 计算中」态让用户重试（后台扫描会跑完并写缓存，重试即命中），见 isComputingInBackground。
-    private let maxPolls = 24
+    private let maxPolls = 8
     private let pollInterval: UInt64 = 2_000_000_000       // 起始 2s
     private let maxPollInterval: UInt64 = 6_000_000_000    // 封顶 6s
 
