@@ -28,6 +28,7 @@ from app.api.v1.trading_desk import router as trading_desk_router
 from app.api.v1.transcripts import router as transcripts_router
 from app.api.v1.valuation import router as valuation_router
 from app.api.v1.vocabulary import router as vocabulary_router
+from app.api.v1.watchlist import router as watchlist_router
 from app.api.v1.wyckoff import router as wyckoff_router
 from app.core.logging import logger
 
@@ -59,6 +60,7 @@ api_router.include_router(trading_desk_router, prefix="/trading-desk", tags=["tr
 api_router.include_router(transcripts_router, prefix="/transcripts", tags=["transcripts"])
 api_router.include_router(valuation_router, prefix="/valuation", tags=["valuation"])
 api_router.include_router(vocabulary_router, prefix="/vocabulary", tags=["vocabulary"])
+api_router.include_router(watchlist_router, prefix="/watchlist", tags=["watchlist"])
 api_router.include_router(wyckoff_router, prefix="/wyckoff", tags=["wyckoff"])
 
 
