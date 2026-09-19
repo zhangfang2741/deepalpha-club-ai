@@ -125,32 +125,45 @@ struct SignalRadarView: View {
             let dayDate = vm.selectedDay?.date ?? ""
             let signals = (vm.selectedDay?.signals ?? [])
                 .sorted { $0.strength > $1.strength }
-            let maxDaysAgo = Double(
-                signals.map { SignalRadarView.daysAgo(from: $0.date, to: dayDate) }.max() ?? 0
-            )
+            let layouts = SignalRadarView.layoutBubbles(signals: signals, dayDate: dayDate, width: w, height: h)
             ZStack {
-                // 同心参考环
-                ForEach([0.34, 0.68, 1.0], id: \.self) { scale in
+                // 由近及远的光晕：中心亮、向外自然变暗，"越靠中心=越新"不用靠文字说明，
+                // 图本身就有纵深感。
+                RadialGradient(
+                    colors: [Theme.accent.opacity(0.20), Theme.accent.opacity(0.0)],
+                    center: .center, startRadius: 0, endRadius: base * 0.55
+                )
+                .frame(width: CGFloat(w), height: CGFloat(h))
+
+                // 同心参考环：越外越淡，呼应同一套"近实远虚"的纵深语言。
+                ForEach(Array([0.34, 0.68, 1.0].enumerated()), id: \.offset) { idx, scale in
                     Circle()
-                        .stroke(Theme.textSecondary.opacity(0.10),
+                        .stroke(Theme.textSecondary.opacity(0.16 - Double(idx) * 0.045),
                                 style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
                         .frame(width: CGFloat(base * scale), height: CGFloat(base * scale))
                         .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
                 }
 
-                if signals.isEmpty {
+                if layouts.isEmpty {
                     Text(L("当日无买卖点信号"))
                         .font(.subheadline)
                         .foregroundColor(Theme.textSecondary)
                         .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
                 } else {
-                    ForEach(Array(signals.enumerated()), id: \.element.id) { idx, sig in
-                        bubble(sig, index: idx, dayDate: dayDate, maxDaysAgo: maxDaysAgo, width: w, height: h)
+                    ForEach(layouts) { layout in
+                        let da = SignalRadarView.daysAgo(from: layout.signal.date, to: dayDate)
+                        RadarBubble(
+                            signal: layout.signal,
+                            diameter: CGFloat(layout.diameter),
+                            baseX: CGFloat(layout.x),
+                            baseY: CGFloat(layout.y),
+                            phase: layout.phase,
+                            color: SignalRadarView.bubbleColor(side: layout.signal.side, strength: layout.signal.strength),
+                            fade: SignalRadarView.ringOpacity(forDaysAgo: da),
+                            isNew: layout.signal.date == dayDate,
+                            onOpen: { openSymbol(layout.signal.symbol) }
+                        )
                     }
-                    Text(L("越靠中心 · 信号越新（NEW=当日新增）"))
-                        .font(.caption2)
-                        .foregroundColor(Theme.textSecondary)
-                        .position(x: CGFloat(w / 2), y: 12)
                 }
             }
         }
@@ -159,33 +172,94 @@ struct SignalRadarView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
-    /// 单个气泡：角度按向日葵螺旋摆开（避免同距离的挤成一条线），到中心的距离由
-    /// 「离查看日多少天」决定，大小由买卖点级别决定，颜色由方向+强度决定。
-    private func bubble(
-        _ sig: RadarSignal, index: Int, dayDate: String, maxDaysAgo: Double, width w: Double, height h: Double
-    ) -> some View {
-        let diameter = SignalRadarView.diameter(forLevel: sig.level)
-        let r = diameter / 2
-        let golden = 2.399963
-        let maxRadius = min(w, h) / 2 - r - 4
-        let daysAgo = Double(SignalRadarView.daysAgo(from: sig.date, to: dayDate))
-        let t = maxDaysAgo > 0 ? min(daysAgo / maxDaysAgo, 1.0) : 0
-        let radius = t * maxRadius
-        var x = w / 2 + radius * cos(Double(index) * golden)
-        var y = h / 2 + radius * sin(Double(index) * golden)
-        x = min(max(x, r + 2), w - r - 2)
-        y = min(max(y, r + 2), h - r - 2)
+    /// 单个气泡的最终布局：先按「离查看日多少天」落到三个同心环之一（对应场里画的
+    /// 三条参考虚线圈）+ 向日葵螺旋角度定初始位置，再跑一轮碰撞松弛
+    /// （resolveOverlaps）把挤在一起的气泡推开，保证点得到。
+    private struct BubbleLayout: Identifiable {
+        let signal: RadarSignal
+        let diameter: Double
+        var x: Double
+        var y: Double
+        let phase: Double
+        let daysAgo: Int
+        var id: String { signal.id }
+    }
 
-        return RadarBubble(
-            signal: sig,
-            diameter: CGFloat(diameter),
-            baseX: CGFloat(x),
-            baseY: CGFloat(y),
-            phase: Double(index) * 0.35,
-            color: SignalRadarView.bubbleColor(side: sig.side, strength: sig.strength),
-            isNew: sig.date == dayDate,
-            onOpen: { openSymbol(sig.symbol) }
-        )
+    /// 时间距离 → 三档环位（对应参考圈的 0.34 / 0.68 / 1.0 三个半径比例）：
+    /// 当天新增最靠里，一周内中间，超过一周（含以月计的老信号）最外圈。
+    static func ringScale(forDaysAgo daysAgo: Int) -> Double {
+        if daysAgo <= 0 { return 0.34 }
+        if daysAgo <= 7 { return 0.68 }
+        return 1.0
+    }
+
+    /// 外圈本来就该塞得下更多气泡（越久远、越多信号还没被覆盖掉），所以额外按环位
+    /// 把直径缩小一档，不然外圈越挤越点不到。和「买卖点级别」的大小是叠乘关系。
+    static func ringSizeFactor(forDaysAgo daysAgo: Int) -> Double {
+        if daysAgo <= 0 { return 1.0 }
+        if daysAgo <= 7 { return 0.85 }
+        return 0.7
+    }
+
+    /// 越远越淡：配合径向光晕，让"近实远虚"直接体现在气泡本身上，不用靠文字说明。
+    static func ringOpacity(forDaysAgo daysAgo: Int) -> Double {
+        if daysAgo <= 0 { return 1.0 }
+        if daysAgo <= 7 { return 0.82 }
+        return 0.6
+    }
+
+    private static func layoutBubbles(
+        signals: [RadarSignal], dayDate: String, width w: Double, height h: Double
+    ) -> [BubbleLayout] {
+        guard !signals.isEmpty else { return [] }
+        let golden = 2.399963
+        let fieldRadius = min(w, h) / 2
+
+        var layouts: [BubbleLayout] = signals.enumerated().map { index, sig in
+            let da = daysAgo(from: sig.date, to: dayDate)
+            let diameter = SignalRadarView.diameter(forLevel: sig.level) * ringSizeFactor(forDaysAgo: da)
+            let r = diameter / 2
+            let maxRadius = fieldRadius - r - 4
+            let radius = min(ringScale(forDaysAgo: da) * fieldRadius, maxRadius)
+            var x = w / 2 + radius * cos(Double(index) * golden)
+            var y = h / 2 + radius * sin(Double(index) * golden)
+            x = min(max(x, r + 2), w - r - 2)
+            y = min(max(y, r + 2), h - r - 2)
+            return BubbleLayout(signal: sig, diameter: diameter, x: x, y: y, phase: Double(index) * 0.35, daysAgo: da)
+        }
+        resolveOverlaps(&layouts, width: w, height: h)
+        // 同一环内谁在最上层：越接近查看日（daysAgo 越小）画得越晚，叠层里就浮在
+        // 更外面（更靠近用户）；离得越久远的沉在下面。
+        layouts.sort { $0.daysAgo > $1.daysAgo }
+        return layouts
+    }
+
+    /// 简单的迭代松弛：每一对挤太近的气泡沿连心线互相推开，直到间距 >= 两者半径和
+    /// 的 90%（留一点点重叠的自然感，但不能像之前那样能整个盖住点不到）。
+    private static func resolveOverlaps(_ layouts: inout [BubbleLayout], width w: Double, height h: Double) {
+        let minFactor = 0.9
+        for _ in 0..<12 {
+            for i in 0..<layouts.count {
+                for j in (i + 1)..<layouts.count {
+                    let dx = layouts[j].x - layouts[i].x
+                    let dy = layouts[j].y - layouts[i].y
+                    let dist = max((dx * dx + dy * dy).squareRoot(), 0.001)
+                    let minDist = (layouts[i].diameter + layouts[j].diameter) / 2 * minFactor
+                    guard dist < minDist else { continue }
+                    let overlap = (minDist - dist) / 2
+                    let ux = dx / dist, uy = dy / dist
+                    layouts[i].x -= ux * overlap
+                    layouts[i].y -= uy * overlap
+                    layouts[j].x += ux * overlap
+                    layouts[j].y += uy * overlap
+                }
+            }
+            for i in 0..<layouts.count {
+                let r = layouts[i].diameter / 2
+                layouts[i].x = min(max(layouts[i].x, r + 2), w - r - 2)
+                layouts[i].y = min(max(layouts[i].y, r + 2), h - r - 2)
+            }
+        }
     }
 
     /// 买卖点级别 → 气泡直径：一类结构意义最强，气泡最大。
@@ -279,6 +353,9 @@ struct SignalRadarView: View {
     private func dayChip(_ day: RadarDay, index: Int) -> some View {
         let active = index == min(max(vm.selectedDayIndex, 0), vm.days.count - 1)
         let buyFrac = day.total > 0 ? CGFloat(day.buyCount) / CGFloat(day.total) : 0.5
+        // 当天新出现的信号（而非从更早的日子延续下来）：气泡场里标"新"的同一批，
+        // 在日期轨上也提前露个头，不用一天天点过去找。
+        let hasNew = day.signals.contains { $0.date == day.date }
         return Button {
             vm.selectDay(index)
         } label: {
@@ -304,6 +381,15 @@ struct SignalRadarView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12)
                 .stroke(active ? Theme.accent : Theme.border, lineWidth: 1))
+            .overlay(alignment: .topTrailing) {
+                if hasNew {
+                    Circle()
+                        .fill(Theme.accent)
+                        .frame(width: 7, height: 7)
+                        .overlay(Circle().stroke(Theme.background, lineWidth: 1.5))
+                        .offset(x: 2, y: -2)
+                }
+            }
         }
         .buttonStyle(.plain)
     }
@@ -376,6 +462,8 @@ private struct RadarBubble: View {
     let baseY: CGFloat
     let phase: Double
     let color: Color
+    /// 离查看日越远越淡（1.0=当日新增），配合中心光晕做出"近实远虚"的纵深感。
+    let fade: Double
     /// 信号是不是查看这天当天新出现的（而非从更早的日子延续到现在）。
     let isNew: Bool
     let onOpen: () -> Void
@@ -392,10 +480,11 @@ private struct RadarBubble: View {
     var body: some View {
         content
             .frame(width: diameter, height: diameter)
+            .opacity(fade)
             .scaleEffect(dragging ? 1.12 : 1.0)
             .offset(y: floatY)
             .offset(drag)
-            .shadow(color: .black.opacity(dragging ? 0.5 : 0.35),
+            .shadow(color: .black.opacity((dragging ? 0.5 : 0.35) * fade),
                     radius: dragging ? 12 : 6, y: dragging ? 8 : 3)
             .contentShape(Circle())
             .gesture(
@@ -437,9 +526,21 @@ private struct RadarBubble: View {
             Circle().fill(color)
 
             VStack(spacing: 1) {
-                Text(signal.symbol)
-                    .font(.system(size: max(12, min(17, r * 0.42)), weight: .heavy))
-                    .foregroundColor(.white)
+                HStack(spacing: 3) {
+                    Text(signal.symbol)
+                        .font(.system(size: max(12, min(17, r * 0.42)), weight: .heavy))
+                        .foregroundColor(.white)
+                    // "新"放气泡内部：放在外面角标容易被相邻重叠的气泡盖住看不见。
+                    if isNew {
+                        Text(L("新"))
+                            .font(.system(size: max(7, r * 0.2), weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 3.5)
+                            .padding(.vertical, 1)
+                            .background(Color.white.opacity(0.28))
+                            .clipShape(Capsule())
+                    }
+                }
                 Text(signal.name)
                     .font(.system(size: max(9, min(12, r * 0.3))))
                     .foregroundColor(.white.opacity(0.92))
@@ -447,19 +548,6 @@ private struct RadarBubble: View {
                     .padding(.horizontal, 4)
             }
             .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
-        }
-        .overlay(alignment: .topTrailing) {
-            if isNew {
-                Text(L("新"))
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1.5)
-                    .background(Theme.accent)
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(Color.white.opacity(0.7), lineWidth: 0.5))
-                    .offset(x: 4, y: -4)
-            }
         }
     }
 }
