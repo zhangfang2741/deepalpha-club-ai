@@ -63,6 +63,9 @@ struct SignalRadarView: View {
             .background(Theme.background)
             .navigationTitle(L("缠论信号"))
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { refreshButton }
+            }
             .task { vm.onAppear() }
             .overlay { if chanVM.isLoading { analysisLoadingOverlay } }
             .navigationDestination(isPresented: $showResults) {
@@ -102,6 +105,24 @@ struct SignalRadarView: View {
                     .font(.subheadline).foregroundColor(Theme.textSecondary)
             }
         }
+    }
+
+    // MARK: - 刷新
+
+    /// 这页是固定气泡画布、不是可滚动列表，`.refreshable` 用不上，改用导航栏右上角
+    /// 的刷新按钮触发强制重扫（refresh=true），把行情源新发布的日线拉进来。
+    private var refreshButton: some View {
+        Button {
+            Task { await vm.refresh() }
+        } label: {
+            if vm.isLoading {
+                ProgressView().controlSize(.small)
+            } else {
+                Image(systemName: "arrow.clockwise")
+            }
+        }
+        .disabled(vm.isLoading)
+        .accessibilityLabel(L("刷新"))
     }
 
     // MARK: - 说明行
