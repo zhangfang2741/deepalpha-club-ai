@@ -110,10 +110,13 @@ struct WatchlistView: View {
                 Text(item.symbol)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(Theme.textPrimary)
-                Text(item.name)
-                    .font(.caption)
-                    .foregroundColor(Theme.textSecondary)
-                    .lineLimit(1)
+                // 只有拿到真正的名称（有别于代码）才显示副标题，否则不再原样重复代码。
+                if let name = item.displayName {
+                    Text(name)
+                        .font(.caption)
+                        .foregroundColor(Theme.textSecondary)
+                        .lineLimit(1)
+                }
             }
             Spacer()
             Text(relativeTime(item.createdAt))
@@ -183,7 +186,7 @@ struct WatchlistView: View {
 
     private func open(_ item: WatchlistItem) {
         guard let market = StockMarket(rawValue: item.market) else { return }
-        chanVM.apply(market: market, symbol: item.symbol)
+        chanVM.apply(market: market, symbol: item.symbol, name: item.displayName)
         Task {
             await chanVM.runAnalysis()
             if chanVM.errorMessage == nil, chanVM.analysis != nil {

@@ -63,6 +63,9 @@ struct SignalRadarView: View {
             .background(Theme.background)
             .navigationTitle(L("缠论信号"))
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { refreshButton }
+            }
             .task { vm.onAppear() }
             .overlay { if chanVM.isLoading { analysisLoadingOverlay } }
             .navigationDestination(isPresented: $showResults) {
@@ -81,8 +84,9 @@ struct SignalRadarView: View {
     }
 
     /// 点气泡 → 直接跑分析，成功后 push 详情页（不经过分析 Tab 的条件页）。
-    private func openSymbol(_ symbol: String) {
-        chanVM.apply(market: vm.market, symbol: symbol)
+    /// 带上气泡上的真实名称（如「中芯国际」），供结果页加自选时存名称。
+    private func openSymbol(_ symbol: String, name: String? = nil) {
+        chanVM.apply(market: vm.market, symbol: symbol, name: name)
         Task {
             await chanVM.runAnalysis()
             if chanVM.errorMessage == nil, chanVM.analysis != nil {
@@ -101,6 +105,24 @@ struct SignalRadarView: View {
                     .font(.subheadline).foregroundColor(Theme.textSecondary)
             }
         }
+    }
+
+    // MARK: - 刷新
+
+    /// 这页是固定气泡画布、不是可滚动列表，`.refreshable` 用不上，改用导航栏右上角
+    /// 的刷新按钮触发强制重扫（refresh=true），把行情源新发布的日线拉进来。
+    private var refreshButton: some View {
+        Button {
+            Task { await vm.refresh() }
+        } label: {
+            if vm.isLoading {
+                ProgressView().controlSize(.small)
+            } else {
+                Image(systemName: "arrow.clockwise")
+            }
+        }
+        .disabled(vm.isLoading)
+        .accessibilityLabel(L("刷新"))
     }
 
     // MARK: - 说明行
@@ -133,6 +155,8 @@ struct SignalRadarView: View {
             let w = Double(geo.size.width)
             let h = Double(geo.size.height)
             let base = min(w, h)
+            // 参考环与气泡共用的内缩场半径：最外环内缩 fieldInset，不贴容器边。
+            let fieldRadius = SignalRadarView.fieldRadius(width: w, height: h)
             let dayDate = vm.selectedDay?.date ?? ""
             let signals = (vm.selectedDay?.signals ?? [])
                 .sorted { $0.strength > $1.strength }
@@ -149,15 +173,16 @@ struct SignalRadarView: View {
                 // 同心参考环：越外越淡，呼应同一套"近实远虚"的纵深语言；环上直接标出
                 // 大致时间跨度，不用再靠单独一行说明文字解释三个圈是什么意思。
                 ForEach(Array(SignalRadarView.ringSpecs.enumerated()), id: \.offset) { idx, spec in
+                    let ringR = fieldRadius * spec.scale
                     Circle()
                         .stroke(Theme.textSecondary.opacity(0.16 - Double(idx) * 0.045),
                                 style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                        .frame(width: CGFloat(base * spec.scale), height: CGFloat(base * spec.scale))
+                        .frame(width: CGFloat(ringR * 2), height: CGFloat(ringR * 2))
                         .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
                     Text(spec.label)
                         .font(.system(size: 8))
                         .foregroundColor(Theme.textSecondary.opacity(0.55))
-                        .position(x: CGFloat(w / 2), y: CGFloat(h / 2) - CGFloat(base * spec.scale / 2) + 8)
+                        .position(x: CGFloat(w / 2), y: CGFloat(h / 2) - CGFloat(ringR) + 8)
                 }
 
                 if layouts.isEmpty {
@@ -177,7 +202,7 @@ struct SignalRadarView: View {
                             color: SignalRadarView.bubbleColor(side: layout.signal.side, strength: layout.signal.strength),
                             fade: SignalRadarView.ringOpacity(forDaysAgo: da),
                             isNew: layout.signal.date == dayDate,
-                            onOpen: { openSymbol(layout.signal.symbol) }
+                            onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name) }
                         )
                     }
                 }
@@ -212,6 +237,18 @@ struct SignalRadarView: View {
     /// 用户切换语言后文案不会跟着变。
     static var ringSpecs: [(scale: Double, label: String)] {
         [(0.34, L("1周内")), (0.68, L("2周内")), (1.0, L("1月内"))]
+    }
+
+    /// 场边距：最外环（scale 1.0）到容器四边留出的空白，给气泡的阴影 + 右上角「新」
+    /// 角标 + 拖拽放大留余量。以前最外环半径直接取 min(w,h)/2，环线正好压在容器边上，
+    /// 落在最外环、角度又指向边缘的气泡（尤其是那颗被推到远端的孤立卖点）就会被
+    /// 圆角容器裁掉一半。现在把「场半径」整体内缩这个边距，环线和气泡一起内移。
+    static let fieldInset: Double = 18
+
+    /// 气泡场的有效半径：min(w,h)/2 再内缩 fieldInset。参考环、ringRadius、
+    /// ringBandBounds、resolveOverlaps 全部以它为基准，保证环线与气泡摆位一致内缩。
+    static func fieldRadius(width w: Double, height h: Double) -> Double {
+        max(0, min(w, h) / 2 - fieldInset)
     }
 
     /// 每个环位内部按 daysAgo 线性插值的时间跨度上限（1月内档没有硬边界，用 30 天封顶）。
@@ -254,7 +291,8 @@ struct SignalRadarView: View {
     ) -> [BubbleLayout] {
         guard !signals.isEmpty else { return [] }
         let golden = 2.399963
-        let fieldRadius = min(w, h) / 2
+        // 与参考环共用的内缩场半径：最外环不贴容器边，气泡才不会被圆角容器裁掉。
+        let fieldRadius = SignalRadarView.fieldRadius(width: w, height: h)
 
         var layouts: [BubbleLayout] = signals.enumerated().map { index, sig in
             let da = daysAgo(from: sig.date, to: dayDate)
@@ -524,7 +562,9 @@ struct SignalRadarView: View {
             vm.selectDay(index)
         } label: {
             VStack(spacing: 3) {
-                Text(index == 0 ? L("今日") : SignalRadarView.weekday(day.date))
+                // 「今日」只在这格确实是今天时才显示——数据源有延迟时最新一格可能是
+                // 前一两个交易日，硬把第一格标成「今日」会让人以为 App 认死了今天是那天。
+                Text(SignalRadarView.dayLabel(day.date))
                     .font(.system(size: 9))
                     .foregroundColor(active ? .white.opacity(0.85) : Theme.textSecondary)
                 Text(SignalRadarView.monthDay(day.date))
@@ -605,6 +645,13 @@ struct SignalRadarView: View {
     static func monthDay(_ date: String) -> String {
         let parts = date.split(separator: "-")
         return parts.count >= 3 ? "\(parts[1])-\(parts[2])" : date
+    }
+
+    /// 日期轨格子的顶部标签：是今天就「今日」，否则按语言显示星期几。
+    /// 用本地自然日比较（跟用户视角一致），数据延迟时最新一格会如实显示成周几，
+    /// 而不是被硬标成「今日」。
+    static func dayLabel(_ date: String) -> String {
+        date == parser.string(from: Date()) ? L("今日") : weekday(date)
     }
 
     /// 星期几按当前界面语言本地化（中文「周一」/ 英文「Mon」），不再硬编码中文。

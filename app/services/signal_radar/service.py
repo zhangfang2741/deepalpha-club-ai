@@ -54,6 +54,13 @@ _SIGNAL_STRENGTH = {"strong": 0.8, "medium": 0.55, "weak": 0.35}
 _CACHE_PREFIX = "signal_radar"
 _CACHE_TTL = 3600 * 6  # 6h
 
+# 在场信号的过期上限（自然日）：一条买卖点即使一直没被新信号覆盖，诞生超过这个
+# 天数后也不再显示。信号雷达的定位是「看当前市场的买卖点」，不是「翻出几个月前
+# 仍未失效的老信号」；而且前端气泡按 daysAgo 落环，超过 30 天的信号只能全部堆在
+# 最外「1月内」那条环线上、彼此分不出远近（见 ios SignalRadarView.ringRadius 的
+# min(1.0, …) 封顶）——与其糊成一团，不如到点就让它退场。取 30 天与最外环刻度对齐。
+_MAX_SIGNAL_AGE_DAYS = 30
+
 
 @dataclass
 class RawSignal:
@@ -105,15 +112,22 @@ def build_signal_history(symbol: str, name: str, result: ChanAnalysisResult) -> 
 
 def build_days(
     histories: list[list[RawSignal]], trading_days: list[str], *, top_n: int,
+    max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
 ) -> list[RadarDayOut]:
     """按 trading_days（最新在前）逐日重建市场快照。
 
     histories 是「每只股票的信号历史」的列表（每条已按日期升序）。对每个展示日
     D，每只股票取它历史里日期 <= D 的最后一条作为「D 当天在场」的信号；股票数量
     很小（几十到上百），这里用线性扫描换清晰，不做二分。
+
+    过期上限（max_age_days）：某只股票在 D 当天的在场信号，若其诞生日距离 D 已超过
+    max_age_days 个自然日，则视为过期、当天不再展示（相对每个展示日各自判断，翻看
+    历史某天时看到的仍是「截至那天 max_age_days 内有效」的信号）。见模块内
+    _MAX_SIGNAL_AGE_DAYS 说明。
     """
     out: list[RadarDayOut] = []
     for day in trading_days:
+        day_date = date.fromisoformat(day)
         active: list[RawSignal] = []
         for history in histories:
             candidate: RawSignal | None = None
@@ -122,6 +136,9 @@ def build_days(
                     break
                 candidate = r
             if candidate is not None:
+                age = (day_date - date.fromisoformat(candidate.date)).days
+                if age > max_age_days:
+                    continue
                 active.append(candidate)
 
         items = sorted(active, key=lambda r: r.strength, reverse=True)[:top_n]
@@ -237,6 +254,7 @@ async def _write_cache(redis: Redis, data: SignalRadarResponse) -> None:
 async def compute_market(
     market: str, *, redis: Redis, user_id: int | None = None,
     days: int = 30, window: int = 45, top_n: int = 10,
+    max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
 ) -> SignalRadarResponse:
     """全量扫描一个市场并按日重建市场快照（不读缓存，计算完写入缓存）。"""
     universe = get_universe(market)
@@ -291,7 +309,7 @@ async def compute_market(
         universe_size=len(constituents),
         as_of=end_date,
         top_n=top_n,
-        days=build_days(histories, trading_days, top_n=top_n),
+        days=build_days(histories, trading_days, top_n=top_n, max_age_days=max_age_days),
         status="ready",
     )
     failed_symbols = sum(failure_counts.values())
@@ -329,6 +347,7 @@ async def peek_cache(redis: Redis, market: str) -> SignalRadarResponse | None:
 async def get_market(
     market: str, *, redis: Redis, user_id: int | None = None,
     days: int = 30, window: int = 45, top_n: int = 10, force: bool = False,
+    max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
 ) -> SignalRadarResponse:
     """读缓存优先；未命中则同步扫描（首访较慢，命中后走缓存）。"""
     if not force:
@@ -337,4 +356,5 @@ async def get_market(
             return cached
     return await compute_market(
         market, redis=redis, user_id=user_id, days=days, window=window, top_n=top_n,
+        max_age_days=max_age_days,
     )
