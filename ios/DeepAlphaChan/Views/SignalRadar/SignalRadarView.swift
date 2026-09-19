@@ -365,21 +365,8 @@ private struct RadarBubble: View {
 
     private var content: some View {
         ZStack {
-            // 鲜亮实色主体：竖向自上而下略压暗，形成球体体积感（而非发灰的半透明）
-            Circle().fill(
-                LinearGradient(
-                    colors: [color.opacity(0.98), color.opacity(0.82)],
-                    startPoint: .top, endPoint: .bottom
-                )
-            )
-            // 左上玻璃高光，保留通透感但不冲淡颜色
-            Circle().fill(
-                RadialGradient(
-                    colors: [Color.white.opacity(0.38), Color.clear],
-                    center: UnitPoint(x: 0.32, y: 0.26), startRadius: 1, endRadius: diameter * 0.62
-                )
-            )
-            Circle().strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
+            // 纯实色气泡，无透明、无描边
+            Circle().fill(color)
 
             VStack(spacing: 1) {
                 Text(signal.symbol)
@@ -391,11 +378,7 @@ private struct RadarBubble: View {
                     .lineLimit(1)
                     .padding(.horizontal, 4)
             }
-            .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
-
-            if isTop {
-                Circle().strokeBorder(Color.white.opacity(0.85), lineWidth: 2)
-            }
+            .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
         }
     }
 }
