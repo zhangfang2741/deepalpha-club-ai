@@ -28,10 +28,15 @@ from datetime import date, timedelta
 from redis.asyncio import Redis
 
 from app.core.logging import logger
-from app.schemas.signal_radar import RadarDayOut, RadarSignalOut, SignalRadarResponse
+from app.schemas.signal_radar import (
+    RadarDayOut,
+    RadarSignalOut,
+    RadarUniverseOut,
+    SignalRadarResponse,
+)
 from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
 from app.services.signal_radar.constituents import resolve_constituents
-from app.services.signal_radar.universe import get_universe
+from app.services.signal_radar.universe import get_universe, list_universes
 from app.services.skills.kline import fetch_kline
 
 _analyzer = ChanAnalyzer()
@@ -225,13 +230,21 @@ def _classify_failure(exc: Exception) -> str:
     return "other"
 
 
-def _cache_key(market: str) -> str:
-    return f"{_CACHE_PREFIX}:{market}"
+def _cache_key(market: str, universe_key: str) -> str:
+    return f"{_CACHE_PREFIX}:{market}:{universe_key}"
 
 
-async def _read_cache(redis: Redis, market: str) -> SignalRadarResponse | None:
+def _universes_out(market: str) -> list[RadarUniverseOut]:
+    """该市场可选 universe 列表（默认在前），用于响应里的切换器选项。"""
+    return [
+        RadarUniverseOut(key=u.key, name=u.etf_name, is_default=u.is_default)
+        for u in list_universes(market)
+    ]
+
+
+async def _read_cache(redis: Redis, market: str, universe_key: str) -> SignalRadarResponse | None:
     try:
-        rawval = await redis.get(_cache_key(market))
+        rawval = await redis.get(_cache_key(market, universe_key))
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_cache_read_error", market=market, error=str(e))
         return None
@@ -246,23 +259,26 @@ async def _read_cache(redis: Redis, market: str) -> SignalRadarResponse | None:
 
 async def _write_cache(redis: Redis, data: SignalRadarResponse) -> None:
     try:
-        await redis.set(_cache_key(data.market), data.model_dump_json(), ex=_CACHE_TTL)
+        await redis.set(
+            _cache_key(data.market, data.universe), data.model_dump_json(), ex=_CACHE_TTL
+        )
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_cache_write_error", market=data.market, error=str(e))
 
 
 async def compute_market(
     market: str, *, redis: Redis, user_id: int | None = None,
+    universe_key: str | None = None,
     days: int = 30, window: int = 45, top_n: int = 10,
     max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
 ) -> SignalRadarResponse:
-    """全量扫描一个市场并按日重建市场快照（不读缓存，计算完写入缓存）。"""
-    universe = get_universe(market)
+    """全量扫描一个 (市场, universe) 并按日重建快照（不读缓存，计算完写入缓存）。"""
+    universe = get_universe(market, universe_key)
     if universe is None:
-        raise ValueError(f"unsupported market: {market}")
+        raise ValueError(f"unsupported market/universe: {market}/{universe_key}")
 
-    # 成分股：优先 FMP ETF 持仓动态刷新，取不到回退 curated 静态清单。
-    constituents = await resolve_constituents(market, redis=redis)
+    # 成分股：按 universe 来源策略动态刷新，取不到回退 curated 静态清单。
+    constituents = await resolve_constituents(market, redis=redis, universe_key=universe.key)
 
     today = date.today()
     end_date = today.isoformat()
@@ -305,6 +321,8 @@ async def compute_market(
 
     resp = SignalRadarResponse(
         market=market,
+        universe=universe.key,
+        universes=_universes_out(market),
         etf_name=universe.etf_name,
         universe_size=len(constituents),
         as_of=end_date,
@@ -326,7 +344,7 @@ async def compute_market(
     # 只有「已经有一份旧缓存能保底」时才这么做；首次扫描没有旧缓存可保，再差也
     # 得写进去，不然用户永远看不到任何数据。
     if failure_rate > _MAX_ACCEPTABLE_FAILURE_RATE:
-        stale = await _read_cache(redis, market)
+        stale = await _read_cache(redis, market, universe.key)
         if stale is not None:
             logger.warning(
                 "signal_radar_scan_degraded_keep_stale_cache",
@@ -339,22 +357,31 @@ async def compute_market(
     return resp
 
 
-async def peek_cache(redis: Redis, market: str) -> SignalRadarResponse | None:
+async def peek_cache(
+    redis: Redis, market: str, universe_key: str | None = None
+) -> SignalRadarResponse | None:
     """只读缓存（不触发扫描），供 API 的 generating 轮询模式使用。"""
-    return await _read_cache(redis, market)
+    universe = get_universe(market, universe_key)
+    if universe is None:
+        return None
+    return await _read_cache(redis, market, universe.key)
 
 
 async def get_market(
     market: str, *, redis: Redis, user_id: int | None = None,
+    universe_key: str | None = None,
     days: int = 30, window: int = 45, top_n: int = 10, force: bool = False,
     max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
 ) -> SignalRadarResponse:
     """读缓存优先；未命中则同步扫描（首访较慢，命中后走缓存）。"""
+    universe = get_universe(market, universe_key)
+    if universe is None:
+        raise ValueError(f"unsupported market/universe: {market}/{universe_key}")
     if not force:
-        cached = await _read_cache(redis, market)
+        cached = await _read_cache(redis, market, universe.key)
         if cached is not None:
             return cached
     return await compute_market(
-        market, redis=redis, user_id=user_id, days=days, window=window, top_n=top_n,
-        max_age_days=max_age_days,
+        market, redis=redis, user_id=user_id, universe_key=universe.key,
+        days=days, window=window, top_n=top_n, max_age_days=max_age_days,
     )

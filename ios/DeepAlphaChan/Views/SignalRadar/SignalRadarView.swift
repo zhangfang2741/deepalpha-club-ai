@@ -44,6 +44,8 @@ struct SignalRadarView: View {
 
                 if vm.isScanning {
                     scanningView
+                } else if vm.isComputingInBackground {
+                    computingView
                 } else if let error = vm.errorMessage {
                     errorView(error)
                 } else if vm.days.isEmpty {
@@ -128,12 +130,10 @@ struct SignalRadarView: View {
     // MARK: - 说明行
 
     private var metaRow: some View {
+        // 指数名称已移到雷达左上角的切换器里，这行只留日期 + 当日买卖点数，避免重复。
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(vm.response?.etfName ?? "")
-                .font(.subheadline.bold())
-                .foregroundColor(Theme.textPrimary)
             if let day = vm.selectedDay {
-                Text("· \(day.date)")
+                Text(day.date)
                     .font(.caption)
                     .foregroundColor(Theme.textSecondary)
             }
@@ -217,6 +217,62 @@ struct SignalRadarView: View {
             )
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(alignment: .topLeading) { universeSwitcher }
+    }
+
+    // MARK: - universe 切换器（雷达左上角）
+
+    /// 当前 universe 展示名：优先从列表里按高亮键取（计算中 response 为 nil 时也有名字），
+    /// 否则退回响应里的 etf_name。
+    private var currentUniverseName: String {
+        if let u = vm.universes.first(where: { $0.key == vm.activeUniverseKey }) {
+            return u.name
+        }
+        return vm.response?.etfName ?? ""
+    }
+
+    /// 雷达左上角的 universe 切换器：科技窄基 ↔ 大盘宽基（如 恒生科技 ↔ 恒生指数）。
+    /// 只有该市场确实有多个 universe 时才是可点的下拉；否则退化成一个静态名牌，
+    /// 保证名称永远显示（metaRow 已不再重复显示名称）。
+    @ViewBuilder
+    private var universeSwitcher: some View {
+        if vm.universes.count > 1 {
+            Menu {
+                ForEach(vm.universes) { u in
+                    Button {
+                        vm.switchUniverse(u.key)
+                    } label: {
+                        if u.key == vm.activeUniverseKey {
+                            Label(u.name, systemImage: "checkmark")
+                        } else {
+                            Text(u.name)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(currentUniverseName).font(.system(size: 12, weight: .semibold))
+                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                }
+                .foregroundColor(Theme.textPrimary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Theme.surface.opacity(0.92))
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(Theme.border, lineWidth: 1))
+            }
+            .padding(10)
+            .accessibilityLabel(L("切换指数范围"))
+        } else if !currentUniverseName.isEmpty {
+            Text(currentUniverseName)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(Theme.textPrimary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Theme.surface.opacity(0.92))
+                .clipShape(Capsule())
+                .padding(10)
+        }
     }
 
     /// 单个气泡的最终布局：先按「离查看日多少天」落到三个同心环之一（对应场里画的
@@ -597,16 +653,42 @@ struct SignalRadarView: View {
         // 不是"全市场"——文案得说实话，否则用户会以为在扫几千只股票。
         // response 在还没收到过任何回复（含 generating 态）之前是 nil，这时还
         // 不知道具体扫的是哪个 ETF，退回市场名兜底。
-        let scope = vm.response?.etfName ?? vm.market.title
-        return VStack(spacing: 12) {
-            ProgressView().tint(Theme.accent)
-            Text(L("正在扫描「%@」成分股…", scope))
-                .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
-            Text(L("首次扫描较慢，稍候即可看到每日买卖点"))
-                .font(.footnote).foregroundColor(Theme.textSecondary)
-                .multilineTextAlignment(.center)
+        let scope = currentUniverseName.isEmpty ? vm.market.title : currentUniverseName
+        // 顶部保留切换器：扫描/计算期间用户都能随时切回已算好的指数，不被困住。
+        return ZStack(alignment: .topLeading) {
+            VStack(spacing: 12) {
+                ProgressView().tint(Theme.accent)
+                Text(L("正在扫描「%@」成分股…", scope))
+                    .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+                Text(L("首次扫描较慢，稍候即可看到每日买卖点"))
+                    .font(.footnote).foregroundColor(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            universeSwitcher
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// 轮询用尽但后端仍在算（大盘首次全量扫描较久）：不干等转圈，给个明确交代 + 重试。
+    /// 后台扫描会继续跑完并写缓存，点重试大概率直接命中。
+    private var computingView: some View {
+        let scope = currentUniverseName.isEmpty ? vm.market.title : currentUniverseName
+        // 顶部保留切换器：正算大盘时用户可随时切回已算好的（缓存命中）指数，不被困住。
+        return ZStack(alignment: .topLeading) {
+            VStack(spacing: 12) {
+                Image(systemName: "hourglass")
+                    .font(.largeTitle).foregroundColor(Theme.textSecondary)
+                Text(L("「%@」首次计算较久", scope))
+                    .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+                Text(L("大盘成分较多，已在后台计算，稍后点重试即可查看"))
+                    .font(.footnote).foregroundColor(Theme.textSecondary)
+                    .multilineTextAlignment(.center).padding(.horizontal, 40)
+                Button(L("重试")) { Task { await vm.load() } }
+                    .buttonStyle(.borderedProminent).tint(Theme.accent)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity).padding()
+            universeSwitcher
+        }
     }
 
     private func errorView(_ message: String) -> some View {
