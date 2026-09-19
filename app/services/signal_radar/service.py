@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -39,6 +40,9 @@ _analyzer = ChanAnalyzer()
 _WARMUP_DAYS = 180
 # 并发扫描的信号量：控制对行情源的压力
 _SCAN_CONCURRENCY = 8
+# 命中限流后单个任务自我冷却的时长：不缩并发槽位数，而是让占着槽位的这个任务
+# 多蹲一会儿再放行——变相拉低后续请求打过去的频率，给数据源喘息空间。
+_RATE_LIMIT_BACKOFF_SECONDS = 5
 
 # 买卖点自身强弱标签 → 形态技术面强度（0~1）。见模块 docstring：不用 score 是
 # 因为要跨很多天复用同一把尺子，只有信号自己在诞生时就确定的标签才不会变。
@@ -159,8 +163,13 @@ def _fallback_trading_days(*, end_date: str, limit: int) -> list[str]:
 async def _scan_symbol(
     symbol: str, name: str, *, user_id: int | None, start_date: str, end_date: str,
     redis: Redis,
-) -> list[RawSignal]:
-    """扫描单只股票：拉日线 → 缠论 → 取全部买卖点历史。"""
+) -> tuple[list[RawSignal], str | None]:
+    """扫描单只股票：拉日线 → 缠论 → 取全部买卖点历史。
+
+    返回 (信号历史, 失败分类)。失败分类为 None 表示这只股票本身就没有可用信号
+    ——正常情况，不是故障；非 None 时 compute_market 据此汇总统计，别再让故障
+    悄悄混进"这个市场最近确实没什么信号"里看不出来。
+    """
     try:
         bars = await fetch_kline(
             user_id=user_id, symbol=symbol, start_date=start_date,
@@ -168,18 +177,32 @@ async def _scan_symbol(
         )
     except Exception as e:  # noqa: BLE001 单只失败不影响整体扫描
         logger.warning("signal_radar_kline_failed", symbol=symbol, error=str(e))
-        return []
+        return [], _classify_failure(e)
 
     if not bars:
-        return []
+        return [], None
 
     try:
         result = _analyzer.analyze(symbol, bars, lang="zh")
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_analyze_failed", symbol=symbol, error=str(e))
-        return []
+        return [], "analyze_failed"
 
-    return build_signal_history(symbol, name, result)
+    return build_signal_history(symbol, name, result), None
+
+
+def _classify_failure(exc: Exception) -> str:
+    """按异常文案粗分类，供 compute_market 汇总「这次扫描到底卡在哪」。"""
+    msg = str(exc)
+    if "限流" in msg or "冷却" in msg or "429" in msg:
+        return "rate_limited"
+    if "不可用" in msg or "断连" in msg:
+        return "unreachable"
+    if "API_KEY" in msg or "未配置" in msg:
+        return "config_missing"
+    if "未获取到" in msg or "查无" in msg:
+        return "no_data"
+    return "other"
 
 
 def _cache_key(market: str) -> str:
@@ -228,15 +251,21 @@ async def compute_market(
 
     sem = asyncio.Semaphore(_SCAN_CONCURRENCY)
 
-    async def _one(symbol: str, name: str) -> list[RawSignal]:
+    async def _one(symbol: str, name: str) -> tuple[list[RawSignal], str | None]:
         async with sem:
-            return await _scan_symbol(
+            history, failure = await _scan_symbol(
                 symbol, name, user_id=user_id, start_date=start_date,
                 end_date=end_date, redis=redis,
             )
+            if failure == "rate_limited":
+                # 命中限流别立刻放行下一个排队的任务抢同一个名额，攒着火上浇油——
+                # 让这个名额歇一会儿，给数据源一点喘息时间再继续消费队列。
+                await asyncio.sleep(_RATE_LIMIT_BACKOFF_SECONDS)
+            return history, failure
 
-    histories = await asyncio.gather(*[_one(sym, name) for sym, name in constituents])
-    histories = [h for h in histories if h]
+    results = await asyncio.gather(*[_one(sym, name) for sym, name in constituents])
+    histories = [h for h, _ in results if h]
+    failure_counts = Counter(f for _, f in results if f)
 
     # 展示的交易日历：用 ETF 自身的日线拿真实交易日（含具体哪几天开市），
     # 拿不到就退化成「跳过周末」的近似日历。
@@ -265,6 +294,7 @@ async def compute_market(
     logger.info(
         "signal_radar_computed", market=market,
         universe=len(universe.constituents), symbols_with_signals=len(histories),
+        symbols_failed=sum(failure_counts.values()), failure_breakdown=dict(failure_counts),
         days=len(resp.days),
     )
     await _write_cache(redis, resp)

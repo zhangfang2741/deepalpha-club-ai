@@ -310,6 +310,14 @@ async def _fetch_yahoo(symbol: str, start: str, end: str, freq: str) -> list[dic
     return daily
 
 
+# 东方财富从境外网络（Railway 部署在美国）几乎必连不通。第一次摔过去发现连不上
+# 之后，在这个时间窗口内后续调用直接短路失败，不再傻乎乎地每次都重试三次、
+# 攒到 90 秒才认输——单个符号的失败不该拖累同一批里排在后面的其他符号。
+# 冷却期结束后自动再给一次机会（网络环境可能变了，比如本地开发在国内）。
+_EASTMONEY_COOLDOWN_SECONDS = 300
+_eastmoney_unavailable_until: float = 0.0
+
+
 async def _fetch_eastmoney(secid: str, start: str, end: str, freq: str) -> list[dict]:
     """A 股与港股 K 线，直连东方财富行情接口。
 
@@ -318,6 +326,13 @@ async def _fetch_eastmoney(secid: str, start: str, end: str, freq: str) -> list[
 
     数据源与 akshare 的港股/A 股接口相同，区别只是少了一层封装。
     """
+    import time
+
+    global _eastmoney_unavailable_until
+    now = time.monotonic()
+    if now < _eastmoney_unavailable_until:
+        raise ValueError("行情数据源暂时不可用（东方财富冷却中，可能被限流），请稍后重试")
+
     # klt: 101=日线 102=周线；fqt: 1=前复权，与原 akshare 链路的 adjust="qfq" 一致
     params = {
         "secid": secid,
@@ -330,17 +345,20 @@ async def _fetch_eastmoney(secid: str, start: str, end: str, freq: str) -> list[
         "end": end.replace("-", ""),
     }
 
+    # 只重试 1 次（不是 3 次）、退避封顶 2s：这是个「大概率连不通」的兜底源，
+    # 不值得为它反复重试拖住整批扫描；连不通时尽快认输把名额让出去。
     @retry(
         retry=retry_if_exception_type(httpx.TransportError),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=6),
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=1, max=2),
         reraise=True,
     )
     def _sync() -> list[dict]:
         # trust_env=False：.env 里的 HTTP_PROXY/HTTPS_PROXY 是给境外 LLM API 用的，
         # 拿它去访问东方财富只会被代理断连（本地实测 RemoteProtocolError）。
         # 这个接口不需要代理，直连即可。
-        resp = httpx.get(_EASTMONEY_URL, params=params, timeout=30, trust_env=False)
+        # timeout 缩到 8s：连不通通常立刻就报错，30s 只会在真断连时白等。
+        resp = httpx.get(_EASTMONEY_URL, params=params, timeout=8, trust_env=False)
         resp.raise_for_status()
         data = (resp.json() or {}).get("data")
         if not data or not data.get("klines"):
@@ -371,7 +389,9 @@ async def _fetch_eastmoney(secid: str, start: str, end: str, freq: str) -> list[
         except (httpx.RemoteProtocolError, httpx.TransportError) as exc:
             # 东方财富对高频请求会直接断连并封一段时间的 IP（实测十几次连续
             # 请求即触发）。裸异常抛给用户没有任何信息量，转成能看懂的话。
-            logger.warning("eastmoney_unavailable", secid=secid, error=str(exc))
+            _eastmoney_unavailable_until = time.monotonic() + _EASTMONEY_COOLDOWN_SECONDS
+            logger.warning("eastmoney_unavailable", secid=secid, error=str(exc),
+                            cooldown_seconds=_EASTMONEY_COOLDOWN_SECONDS)
             raise ValueError(
                 "行情数据源暂时不可用（可能被限流），请稍后重试"
             ) from exc
