@@ -1,0 +1,33 @@
+{
+  "reviewed_at_beijing": "2026-09-11T09:05:00+08:00",
+  "workspace": "My organization",
+  "reviews": [
+    {
+      "window": "24h",
+      "source_date_beijing": "2026-09-10",
+      "due_beijing": "2026-09-11T00:46:37+08:00",
+      "status": "completed",
+      "tiktok": {
+        "post_id": "6aa18d222472d80c22aa88ae",
+        "post_status": "sent",
+        "views": 7,
+        "total_time_watched_min": 1.13,
+        "average_time_watched_sec": 5.69,
+        "metrics_updated_at": "2026-09-10T23:13:13.749Z"
+      },
+      "youtube": {
+        "post_id": "6aa18d555e8b0a4dedb7e694",
+        "post_status": "sent",
+        "views": 50,
+        "metrics_updated_at": "2026-09-10T23:02:17.609Z"
+      },
+      "conclusion": "两平台指标时间戳均已覆盖 24 小时门槛；YouTube 当前可见播放高于 TikTok，TikTok 平均观看约占 32.93 秒成片的 17%，今日优先测试更短、更直接的图层前后反差钩子。"
+    }
+  ],
+  "not_due": [
+    "2026-09-08 内容的 72 小时窗口不早于 2026-09-11T23:42:00+08:00",
+    "2026-09-09 内容的 72 小时窗口不早于 2026-09-12T09:09:02+08:00",
+    "2026-09-10 内容的 72 小时窗口不早于 2026-09-13T00:46:37+08:00"
+  ],
+  "missing_data_policy": "缺失指标不填零；只记录 Buffer 明确返回且带刷新时间的字段。"
+}

@@ -1,0 +1,6 @@
+{
+  "run_id": "2026-09-08-0945",
+  "stage": "review",
+  "error": "视觉审核失败：模拟器系统通知权限弹窗遮挡全部审核画面，且 frame-04 未生成；禁止上传和 Buffer 提交。",
+  "recovery": "在 iPhone 17 Pro 模拟器中手动处理一次遗留通知弹窗，重新构建安装当前 Debug 包，然后使用新 run_id 执行 produce；审核通过后才可 upload 与发布。"
+}

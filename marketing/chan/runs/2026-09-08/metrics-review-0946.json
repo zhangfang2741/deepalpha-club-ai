@@ -1,0 +1,18 @@
+{
+  "checked_at_beijing": "2026-09-08T09:46:21+08:00",
+  "window": "24h_due_72h_not_due",
+  "youtube": {
+    "post_id": "6a9da2536acbdfc9eda4d24f",
+    "views": 13,
+    "metrics_updated_at": "2026-09-07T02:52:03.517Z",
+    "freshness": "insufficient_for_24h"
+  },
+  "tiktok": {
+    "post_id": "6a9da23d9730c9bde54a5ff1",
+    "average_time_watched_sec": 6.76,
+    "total_time_watched_min": 0.33,
+    "metrics_updated_at": "2026-09-07T02:56:14.142Z",
+    "freshness": "insufficient_for_24h"
+  },
+  "note": "Buffer 指标更新时间早于 24 小时窗口，不将缺失刷新解释为真实零表现。"
+}

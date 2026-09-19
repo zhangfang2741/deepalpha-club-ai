@@ -1,0 +1,25 @@
+{
+  "run_id": "2026-09-16-0906",
+  "date": "2026-09-16",
+  "status": "success",
+  "mode": "市场事件结构复盘 + 事实核对",
+  "selected": {
+    "symbol": "TRMD",
+    "eligible": true,
+    "confirmed_fractals": 8,
+    "bars_count": 251,
+    "last_bar": "2026-09-15",
+    "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+  },
+  "candidates": [
+    {
+      "symbol": "TRMD",
+      "eligible": true,
+      "confirmed_fractals": 8,
+      "bars_count": 251,
+      "last_bar": "2026-09-15",
+      "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+    }
+  ],
+  "note": "基于一手事件来源制作：TORM 于 2026-09-15 公告：控股股东 OCM Njord 将以二次公开发行方式出售 900 万股，预计总额约 2.9025 亿美元；公司明确说明自身不发行股份，也不会获得出售所得；只讲已确认历史结构"
+}

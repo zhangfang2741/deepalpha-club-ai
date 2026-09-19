@@ -1,0 +1,25 @@
+{
+  "run_id": "2026-09-16-0906",
+  "reviewed_at_beijing": "2026-09-17T21:46:00+08:00",
+  "video": "/Users/zhangfang/deepalpha-club-ai/marketing/chan/runs/2026-09-16-0906/teaching.mp4",
+  "sha256": "0367bee2beab18e5fbdb8c30808d7b217df79e4bba211904dc8f153eded2877a",
+  "visual": "passed",
+  "audio": "passed",
+  "platform_safe_zone": "passed",
+  "creative_brief_match": "passed",
+  "evidence": {
+    "visual": "逐帧查看 frame-01 至 frame-04：真实 DeepAlpha 缠论 App 的 TRMD 日线依次为原图、分型、分型叠加线段、仅线段；至少两次有意义的图层变化清晰可见；0–3 秒事实钩子和结尾品牌下载引导均可读。",
+    "audio": "MiniMax 中文旁白与 script.json 四段内容一致；ffprobe 确认 AAC，ebur128 综合响度 -16.7 LUFS、真峰值 -1.4 dBFS，无削波；40.4 秒时间轴与 events.json 对齐，结尾口播为“App Store 搜索 DeepAlpha 缠论”。",
+    "platform_safe_zone": "成片 720x1280；标题、价格、K 线、图层按钮、图例与结尾下载引导均位于 x=36–600、y=96–1020；右侧 120 像素与底部 260 像素未放置关键信息。",
+    "creative_brief_match": "兑现 TORM 股东出售 900 万股但公司不取得所得的事实核对；按 brief 执行原图→分型→分型叠加线段→仅线段；不预测涨跌或收益；画面与口播均完整使用“App Store 搜索 DeepAlpha 缠论”。"
+  },
+  "technical": {
+    "duration_sec": 40.4,
+    "width": 720,
+    "height": 1280,
+    "video_codec": "h264",
+    "audio_codec": "aac",
+    "integrated_loudness_lufs": -16.7,
+    "true_peak_dbfs": -1.4
+  }
+}

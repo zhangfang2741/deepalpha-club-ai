@@ -1,0 +1,53 @@
+[
+  {
+    "step_id": "01",
+    "time_sec": 0.0,
+    "layers": [],
+    "app_action": "展示 LH 原始日线",
+    "on_screen_text": "LH · 长期展望不是目标价",
+    "narration_text": "Labcorp给出二零二九年增长展望，能直接当股价目标吗？",
+    "expected_visual": "真实 LH 日线结果页，结构图层全部关闭",
+    "overlay_text": "2029 年增长展望\n能直接当目标价？",
+    "duration_sec": 6.222948
+  },
+  {
+    "step_id": "02",
+    "time_sec": 6.822947999999999,
+    "layers": [
+      "segments"
+    ],
+    "app_action": "打开线段",
+    "on_screen_text": "先看已确认线段",
+    "narration_text": "不能。先打开线段，看历史走势层级，别把公司展望当交易信号。",
+    "expected_visual": "橙色线段出现，其他结构图层关闭",
+    "overlay_text": "第一步：走势在哪个层级？",
+    "duration_sec": 7.592925
+  },
+  {
+    "step_id": "03",
+    "time_sec": 15.015873,
+    "layers": [
+      "segments",
+      "pivots"
+    ],
+    "app_action": "叠加中枢",
+    "on_screen_text": "再看价格重叠区",
+    "narration_text": "再叠加中枢，找到历史价格重叠区。财测和价格结构不能混为一谈。",
+    "expected_visual": "橙色线段与紫色中枢同时显示",
+    "overlay_text": "第二步：重叠区在哪里？",
+    "duration_sec": 7.372336
+  },
+  {
+    "step_id": "04",
+    "time_sec": 22.988208999999998,
+    "layers": [
+      "pivots"
+    ],
+    "app_action": "关闭线段只保留中枢并停留",
+    "on_screen_text": "App Store 搜索 DeepAlpha 缠论",
+    "narration_text": "只保留中枢再核对。App Store搜索DeepAlpha缠论。",
+    "expected_visual": "线段消失、中枢保留，DeepAlpha 缠论下载引导清晰显示",
+    "overlay_text": "App Store 搜索\nDeepAlpha 缠论",
+    "duration_sec": 5.456689
+  }
+]

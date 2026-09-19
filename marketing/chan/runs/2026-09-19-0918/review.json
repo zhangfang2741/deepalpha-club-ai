@@ -1,0 +1,17 @@
+{
+  "run_id": "2026-09-19-0918",
+  "reviewed_at_beijing": "2026-09-19T09:13:30+08:00",
+  "video": "teaching.mp4",
+  "sha256": "243846085971b38730cc16f8ee87c87c36bc38f376c5593060256a55e250c7d2",
+  "visual": "passed",
+  "audio": "passed",
+  "platform_safe_zone": "passed",
+  "creative_brief_match": "passed",
+  "evidence": {
+    "visual": "逐帧核验 frame-01 至 frame-04：SPY 原图、分型、分型叠加笔、再叠加线段均有清晰且有意义的真实 App 图层变化；无系统弹窗或亮色遮挡",
+    "audio": "四段 MiniMax 中文旁白与对应画面时间轴一致；整体响度 -16.46 LUFS、真峰值 -1.27 dBFS；结尾完整口播 App Store 搜索 DeepAlpha 缠论",
+    "platform_safe_zone": "720x1280；标题、价格、图表、图例和下载引导均位于 x=36–600、y=96–1020，右侧 120 像素及底部 260 像素未放置关键信息",
+    "creative_brief_match": "0–3 秒以加息后碰均线是否止跌的事实反问开场；3.75 秒出现分型；11.59 秒叠加笔；16.53 秒叠加线段；结尾画面与口播均为 App Store 搜索 DeepAlpha 缠论",
+    "technical": "27.23 秒，H.264/AAC，720x1280，完整解码通过"
+  }
+}

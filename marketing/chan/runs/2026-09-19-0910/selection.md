@@ -1,0 +1,27 @@
+# 选题回执
+
+{
+  "run_id": "2026-09-19-0910",
+  "date": "2026-09-19",
+  "status": "success",
+  "mode": "市场事件后的结构复盘 + App 效率演示",
+  "selected": {
+    "symbol": "SPY",
+    "eligible": true,
+    "confirmed_fractals": 8,
+    "bars_count": 251,
+    "last_bar": "2026-09-18",
+    "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+  },
+  "candidates": [
+    {
+      "symbol": "SPY",
+      "eligible": true,
+      "confirmed_fractals": 8,
+      "bars_count": 251,
+      "last_bar": "2026-09-18",
+      "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+    }
+  ],
+  "note": "基于一手事件来源制作：纽约证券交易所 2026-09-18 日报记录：美联储加息 25 个基点后，标普 500 一度回落至约 7515 的 100 日均线附近，随后收复部分跌幅；只讲已确认历史结构"
+}

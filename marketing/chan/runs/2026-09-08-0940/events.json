@@ -1,0 +1,30 @@
+[
+  {
+    "actual_time_sec": 0.00021004676818847656,
+    "layers": [],
+    "step_id": "01"
+  },
+  {
+    "step_id": "02",
+    "layers": [
+      "fractals"
+    ],
+    "actual_time_sec": 5.97596001625061
+  },
+  {
+    "actual_time_sec": 12.497071981430054,
+    "layers": [
+      "fractals",
+      "strokes"
+    ],
+    "step_id": "03"
+  },
+  {
+    "layers": [
+      "fractals",
+      "strokes"
+    ],
+    "step_id": "04",
+    "actual_time_sec": 18.983166098594666
+  }
+]

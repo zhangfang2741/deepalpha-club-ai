@@ -1,0 +1,24 @@
+{
+  "checked_at_beijing": "2026-09-14T09:12:45+08:00",
+  "workspace": "My organization",
+  "reviews": [
+    {
+      "content_date": "2026-09-13",
+      "window": "24h",
+      "due_beijing": "2026-09-14T09:11:26+08:00",
+      "status": "completed_with_incomplete_metric_freshness",
+      "tiktok": {"post_id":"6aa5f7d4bcabda92e1a1a759","status":"sent","views":4,"average_time_watched_sec":4.81,"metrics_updated_at":"2026-09-14T04:21:27.486+08:00"},
+      "youtube": {"post_id":"6aa5f81266679b076f1bf3f9","status":"sent","views":31,"metrics_updated_at":"2026-09-14T04:08:10.657+08:00"},
+      "note": "两平台指标时间戳均早于严格 24 小时门槛；保留快照，不据此做完整表现结论。"
+    },
+    {
+      "content_date": "2026-09-11",
+      "window": "72h",
+      "due_beijing": "2026-09-14T09:10:55+08:00",
+      "status": "completed_with_incomplete_metric_freshness",
+      "tiktok": {"post_id":"6aa354f230bad4fb83316d5b","status":"sent","views":8,"reach":5,"average_time_watched_sec":3.22,"metrics_updated_at":"2026-09-14T04:21:27.486+08:00"},
+      "youtube": {"post_id":"6aa3551430bad4fb83316f1a","status":"sent","views":41,"metrics_updated_at":"2026-09-14T04:08:10.657+08:00"},
+      "note": "两平台指标时间戳均早于严格 72 小时门槛；缺失项未填零。"
+    }
+  ]
+}

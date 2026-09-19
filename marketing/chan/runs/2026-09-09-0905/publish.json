@@ -1,0 +1,13 @@
+{
+  "run_id": "2026-09-09-0905",
+  "date_beijing": "2026-09-09",
+  "status": "success_both_channels",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/131897b69bcb4176834b33bfef3a04041dccb7e5.mp4",
+  "content_sha256": "ea3af5f525b34d6f0bd0da9c6523a8877c6ee483f435d3987483ef752a7a9805",
+  "media_verification": {"anonymous_head_http": 200, "content_type": "video/mp4", "anonymous_get_sha256_match": true},
+  "posts": [
+    {"platform": "TikTok", "channel": "littlemonkey437", "post_id": "6aa0b181c5c199aca46a740d", "status": "sent", "sent_at_utc": "2026-09-09T01:09:00.665Z", "sent_at_beijing": "2026-09-09T09:09:00.665+08:00", "public_url": "https://tiktok.com/@littlemonkey437/video/7683335992580771073", "is_ai_generated": true},
+    {"platform": "YouTube", "channel": "DeepAlpha", "post_id": "6aa0b1a9c5c199aca46a798f", "status": "sent", "sent_at_utc": "2026-09-09T01:09:01.594Z", "sent_at_beijing": "2026-09-09T09:09:01.594+08:00", "public_url": "https://www.youtube.com/watch?v=07jPKzwWLpU", "is_ai_generated": true, "privacy": "public", "category": "Education"}
+  ],
+  "review_windows": {"24h_due_beijing": "2026-09-10T09:09:02+08:00", "72h_due_beijing": "2026-09-12T09:09:02+08:00", "note": "以较晚发布的 YouTube 为统一复盘锚点；缺失指标不填零。"}
+}

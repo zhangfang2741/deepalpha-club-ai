@@ -71,6 +71,7 @@ final class AuthViewModel: ObservableObject {
                 password: password,
                 username: (username?.isEmpty == false) ? username : nil)
             await self.finishAuth(token: resp.token.accessToken)
+            SKAdNetworkAttribution.report(.registered)
         }
     }
 

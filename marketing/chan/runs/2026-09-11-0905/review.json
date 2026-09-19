@@ -1,0 +1,21 @@
+{
+  "run_id": "2026-09-11-0905",
+  "sha256": "784e1d93e57d26503e95c3f849977d14de2fbf118301cc6de8a3f9376682fb88",
+  "visual": "passed",
+  "audio": "passed",
+  "platform_safe_zone": "passed",
+  "creative_brief_match": "passed",
+  "evidence": {
+    "frames": [
+      "frame-01.jpg：真实 NDAQ 日线与 MACD，结构图层全部关闭；0–3 秒事实问题钩子显示 Nasdaq 投资 1 亿美元",
+      "frame-02.jpg：仅中枢按钮高亮，紫色重叠区清晰出现",
+      "frame-03.jpg：中枢与笔按钮同时高亮，紫色区间和蓝色笔叠加显示",
+      "frame-04.jpg：中枢关闭、蓝色笔保留；App Store 搜索 DeepAlpha 缠论完整品牌下载引导清晰显示"
+    ],
+    "creative_difference": "NDAQ 官方投资事件 + 中枢开关前后对比，与前两日 NVDA 分型入门、GME 财报层级递进均不同",
+    "safe_zone": "720×1280；标题、价格、图表、图例和 DeepAlpha 缠论下载引导均位于 x=36–600、y=96–1020，右侧 120 像素及底部 260 像素无关键内容",
+    "audio": "四段 MiniMax 中文旁白与原图、中枢、叠加笔、关闭中枢及下载引导逐步对应；综合响度 -16.6 LUFS，真峰值 -1.3 dBFS，无削波",
+    "timeline": "实际图层事件与脚本最大误差约 0.002 秒；审核帧取图层稳定后的时点",
+    "media": "H.264/AAC，720×1280，30fps，34.24 秒，完整解码通过"
+  }
+}

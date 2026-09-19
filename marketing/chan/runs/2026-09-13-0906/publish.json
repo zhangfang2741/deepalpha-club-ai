@@ -1,0 +1,16 @@
+{
+  "run_id": "2026-09-13-0906",
+  "date_beijing": "2026-09-13",
+  "status": "success_both_channels",
+  "creative_format": "App 效率演示 + 误区纠正",
+  "market_source": "https://www.nasdaq.com/press-release/new-fortress-energy-inc-announces-reverse-stock-split-2026-09-09",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/b83a8204c7454daa8a0f62c9724df2f6b2005c49.mp4",
+  "content_sha256": "190c451e9738f261620b9c18c3596bd9e37699c3999090a203d047592595855a",
+  "media_verification": {"anonymous_head_http": 200, "content_type": "video/mp4", "anonymous_get_sha256_match": true, "verified_after_publish_at_beijing": "2026-09-13T09:11:40+08:00"},
+  "deepalpha_app_store_prompt": {"on_screen": true, "narration": true, "youtube_link": "https://apps.apple.com/app/id6806500280"},
+  "posts": [
+    {"platform": "TikTok", "channel": "littlemonkey437", "post_id": "6aa5f7d4bcabda92e1a1a759", "status": "sent", "sent_at_utc": "2026-09-13T01:11:26.209Z", "public_url": "https://tiktok.com/@littlemonkey437/video/7684820760363306257", "is_ai_generated": true},
+    {"platform": "YouTube", "channel": "DeepAlpha", "post_id": "6aa5f81266679b076f1bf3f9", "status": "sent", "sent_at_utc": "2026-09-13T01:10:45.023Z", "public_url": "https://www.youtube.com/watch?v=m1KO38jxpis", "is_ai_generated": true, "privacy": "public", "category": "Education"}
+  ],
+  "review_windows": {"24h_due_beijing": "2026-09-14T09:11:26+08:00", "72h_due_beijing": "2026-09-16T09:11:26+08:00"}
+}

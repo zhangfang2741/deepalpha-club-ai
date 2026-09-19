@@ -1,0 +1,25 @@
+{
+  "run_id": "2026-09-13-0906",
+  "date": "2026-09-13",
+  "status": "success",
+  "mode": "App 效率演示 + 误区纠正",
+  "selected": {
+    "symbol": "NFE",
+    "eligible": true,
+    "confirmed_fractals": 8,
+    "bars_count": 249,
+    "last_bar": "2026-09-10",
+    "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+  },
+  "candidates": [
+    {
+      "symbol": "NFE",
+      "eligible": true,
+      "confirmed_fractals": 8,
+      "bars_count": 249,
+      "last_bar": "2026-09-10",
+      "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+    }
+  ],
+  "note": "基于一手事件来源制作：New Fortress Energy 公告 1 比 50 反向拆股于 2026-09-11 开盘起生效，目的是恢复 Nasdaq 最低股价合规；只讲已确认历史结构"
+}

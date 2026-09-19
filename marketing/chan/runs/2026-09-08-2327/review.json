@@ -1,0 +1,10 @@
+{
+  "run_id": "2026-09-08-2327",
+  "sha256": "69c04270ffdbb12d2741bf1b5b473c987ef2d6c0d2c6a72e18affc923e085088",
+  "visual": "passed",
+  "audio": "passed",
+  "visual_evidence": "preflight.png 无系统弹窗或遮挡；frame-01 为原始 NVDA 日线和 MACD，frame-02 出现红绿分型点，frame-03 出现分型与蓝色笔，frame-04 保持分型与笔供对照，四步均为真实 App 结果页。",
+  "audio_evidence": "四段 MiniMax 中文旁白按 script.json 顺序混入对应步骤；AAC 单声道完整解码，综合响度 -16.61 LUFS、真峰值 -1.23 dBTP，无静音或削波。",
+  "timeline_evidence": "实际图层切换时间为 0.000、5.756、11.893、17.869 秒，与脚本时间最大偏差小于 0.001 秒。",
+  "decision": "approved_for_upload"
+}

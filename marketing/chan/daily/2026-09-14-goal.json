@@ -1,0 +1,24 @@
+{
+  "date_beijing": "2026-09-14",
+  "goal": "完成到期复盘、差异化创意视频审核与媒体校验，并发布到 TikTok littlemonkey437 和 YouTube DeepAlpha；核实 DeepAlpha 缠论完整品牌名及 App Store 下载引导",
+  "status": "achieved",
+  "attempts": [
+    {
+      "run_id": "2026-09-14-0905",
+      "status": "failed_recoverable",
+      "failure_stage": "encoding",
+      "root_cause": "模拟器录屏仅保留约 30.65 秒，短于约 37 秒旁白时间轴，ffmpeg 未生成有效成片",
+      "preserved_evidence": ["analysis-LH.json", "selection.json", "script.json", "events.json", "screen.mp4", "voice-01.mp3 至 voice-04.mp3", "failure.json"],
+      "change": "压缩各段旁白并将总时长控制到 30 秒以内，使用新 run_id 完整重产",
+      "return_node": "creative brief 与生产"
+    }
+  ],
+  "completed_channels": [{"platform":"TikTok","post_id":"6aa74a9663da6bf64fa1ff35","public_url":"https://tiktok.com/@littlemonkey437/video/7685193099546545424"},{"platform":"YouTube","post_id":"6aa74ab6ea4032c0149b29b6","public_url":"https://www.youtube.com/watch?v=lukU9HZolRI"}],
+  "started_at_beijing": "2026-09-14T09:03:09+08:00",
+  "achieved_at_beijing": "2026-09-14T09:17:13+08:00",
+  "final_run_id": "2026-09-14-0911",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/af85389a84304fe2b94326fbd382b7bd16b550a6.mp4",
+  "content_sha256": "e147d2a87504a75250a07f1a0659b84137b174fc3055c46977be5e719b3fcb04",
+  "brand_evidence": {"on_screen":true,"narration":true,"youtube_app_store_link":"https://apps.apple.com/app/id6806500280"},
+  "reviews": {"completed":["2026-09-13 内容 24h（指标新鲜度不足）","2026-09-11 内容 72h（指标新鲜度不足）"],"next_24h_beijing":"2026-09-15T09:16:49+08:00","next_72h_beijing":"2026-09-17T09:16:49+08:00"}
+}

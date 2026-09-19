@@ -1,0 +1,12 @@
+{
+  "run_id": "2026-09-16-0906",
+  "date_beijing": "2026-09-17",
+  "source_goal_date_beijing": "2026-09-16",
+  "status": "sent_both_channels",
+  "content_sha256": "0367bee2beab18e5fbdb8c30808d7b217df79e4bba211904dc8f153eded2877a",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/8a41a80a0ac14c349fc01709245e980722e0ea5f.mp4",
+  "media_verification": {"head": 200, "content_type": "video/mp4", "get_sha256_match": true, "verified_at_beijing": "2026-09-17T21:47:01+08:00"},
+  "tiktok": {"channel": "littlemonkey437", "post_id": "6aabef0170f9abe0ceeedc7e", "status": "sent", "public_url": "https://tiktok.com/@littlemonkey437/video/7686499991786933511", "is_ai_generated": true},
+  "youtube": {"channel": "DeepAlpha", "post_id": "6aabef2343b800e7efc6ea45", "status": "sent", "public_url": "https://www.youtube.com/watch?v=i6DV73COD2k", "privacy": "public", "category": "Education", "is_ai_generated": true, "app_store_link": "https://apps.apple.com/app/id6806500280"},
+  "deepalpha_app_store_prompt_evidence": {"on_screen": "frame-04.jpg 完整显示 App Store 搜索 / DeepAlpha 缠论", "narration": "第四段口播完整说出 App Store 搜索 DeepAlpha 缠论", "youtube_description": "包含完整品牌名与 https://apps.apple.com/app/id6806500280"}
+}

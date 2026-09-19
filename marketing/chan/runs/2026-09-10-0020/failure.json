@@ -1,0 +1,7 @@
+{
+  "run_id": "2026-09-10-0020",
+  "stage": "selection",
+  "error": "模拟器启动失败：",
+  "status": "resolved",
+  "resolution": "未删除设备数据，仅关闭并重新启动专用模拟器；随后用同一 run_id 完成真实分析和生产。"
+}

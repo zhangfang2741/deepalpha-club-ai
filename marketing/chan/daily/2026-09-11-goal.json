@@ -1,0 +1,38 @@
+{
+  "date_beijing": "2026-09-11",
+  "goal": "完成到期复盘、差异化创意视频审核与媒体校验，并发布到 TikTok littlemonkey437 和 YouTube DeepAlpha；核实 DeepAlpha 缠论完整品牌名及 App Store 下载引导",
+  "status": "achieved",
+  "attempts": [
+    {
+      "run_id": "2026-09-11-0905",
+      "status": "success",
+      "recoverable_issue": "TikTok 首次连接器调用的媒体资产字段形状未通过本地输入校验",
+      "root_cause": "assets 使用了 type/url，而连接器要求 video.url",
+      "preserved_evidence": "未产生远端 postId，连接器返回输入校验错误",
+      "change": "改用 video.url 后提交",
+      "return_node": "Buffer TikTok 提交",
+      "result": "TikTok 与 YouTube 均 sent；首次媒体对象随后失效"
+    },
+    {
+      "run_id": "2026-09-11-0905",
+      "status": "recovered",
+      "failure_stage": "媒体末次完整性复核",
+      "root_cause": "平台抓取后首次媒体对象匿名 HEAD 返回 404",
+      "preserved_evidence": "双平台 postId、sent 状态、公开链接和成片 SHA-256 均保留",
+      "change": "仅重新上传同一已审核成片并重新执行匿名 HEAD/GET 哈希校验",
+      "return_node": "媒体上传与匿名验证",
+      "result": "新媒体 URL 返回 200、video/mp4，GET SHA-256 匹配；未重复提交任何频道"
+    }
+  ],
+  "completed_channels": [
+    {"platform": "TikTok", "post_id": "6aa354f230bad4fb83316d5b", "public_url": "https://tiktok.com/@littlemonkey437/video/7684078732167990529"},
+    {"platform": "YouTube", "post_id": "6aa3551430bad4fb83316f1a", "public_url": "https://www.youtube.com/watch?v=O8Yp7YK58S8"}
+  ],
+  "started_at_beijing": "2026-09-11T09:00:00+08:00",
+  "achieved_at_beijing": "2026-09-11T09:11:00+08:00",
+  "final_run_id": "2026-09-11-0905",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/11663ad8678947e6823a6046a487350289c4bb17.mp4",
+  "content_sha256": "784e1d93e57d26503e95c3f849977d14de2fbf118301cc6de8a3f9376682fb88",
+  "brand_evidence": {"on_screen": true, "narration": true, "youtube_app_store_link": "https://apps.apple.com/app/id6806500280"},
+  "reviews": {"completed": ["2026-09-10 内容 24h"], "next_24h_beijing": "2026-09-12T09:10:55+08:00", "next_72h_beijing": "2026-09-11T23:42:00+08:00（2026-09-08 内容）"}
+}

@@ -1,0 +1,56 @@
+{
+  "run_id": "2026-09-10-0020",
+  "market_event": "GameStop 于 2026-09-08 向 SEC 提交 Form 8-K，披露季度经营业绩",
+  "primary_source": {
+    "publisher": "U.S. Securities and Exchange Commission",
+    "url": "https://www.sec.gov/Archives/edgar/data/1326380/000132638026000050/0001326380-26-000050-index.htm",
+    "filed_at": "2026-09-08T09:02:39-04:00",
+    "form": "8-K",
+    "items": ["2.02", "7.01", "9.01"]
+  },
+  "symbol": "GME",
+  "chan_structure": "用笔、线段和中枢区分财报事件后的短期波动与更大结构；只讲已确认历史结构",
+  "format": "财报事件后的结构复盘",
+  "hook_0_3s": "GME 刚披露季度业绩，先别急着猜方向。",
+  "app_actions": ["展示原始 K 线", "打开笔", "打开线段", "打开中枢并停留"],
+  "deepalpha_app_store_prompt": "App Store 搜索 DeepAlpha 缠论",
+  "difference_from_last_14d": "主角从连续使用的 NVDA 改为 GME；从分型入门改为财报事件后的笔、线段与中枢层级；首次加入画面钩子与 DeepAlpha 缠论下载引导。",
+  "steps": [
+    {
+      "step_id": "01",
+      "layers": [],
+      "app_action": "展示财报后的原始日线",
+      "on_screen_text": "GME · 财报后先看结构",
+      "narration_text": "GME刚披露季度业绩。财报之后，先别急着猜涨跌，先看结构有没有确认。",
+      "expected_visual": "真实 GME 日线结果页，结构图层全部关闭",
+      "overlay_text": "GME 刚披露季度业绩\n先别急着猜方向"
+    },
+    {
+      "step_id": "02",
+      "layers": ["strokes"],
+      "app_action": "只打开笔",
+      "on_screen_text": "先看笔是否确认",
+      "narration_text": "先打开笔。实线是已经确认的结构，末端虚线还可能继续变化。",
+      "expected_visual": "蓝色笔出现，末端未确认笔以虚线显示",
+      "overlay_text": "第一步：笔是否确认？"
+    },
+    {
+      "step_id": "03",
+      "layers": ["strokes", "segments"],
+      "app_action": "叠加线段",
+      "on_screen_text": "再把波动放进线段",
+      "narration_text": "再打开线段，把财报后的短期波动，放回更大的走势层级里看。",
+      "expected_visual": "蓝色笔保留，橙色线段出现",
+      "overlay_text": "第二步：放回更大走势"
+    },
+    {
+      "step_id": "04",
+      "layers": ["strokes", "segments", "pivots"],
+      "app_action": "叠加中枢并停留",
+      "on_screen_text": "App Store 搜索 DeepAlpha 缠论",
+      "narration_text": "最后看中枢的位置。想自己拆解财报后的K线，App Store搜索DeepAlpha缠论。",
+      "expected_visual": "笔、线段和中枢同屏，DeepAlpha 缠论下载引导清晰显示",
+      "overlay_text": "App Store 搜索\nDeepAlpha 缠论"
+    }
+  ]
+}

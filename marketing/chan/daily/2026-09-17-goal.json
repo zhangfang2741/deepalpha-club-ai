@@ -1,0 +1,20 @@
+{
+  "date_beijing": "2026-09-17",
+  "goal": "完成到期复盘，续接未决差异化创意视频审核与媒体校验，并发布到 TikTok littlemonkey437 和 YouTube DeepAlpha；核实 DeepAlpha 缠论完整品牌名及 App Store 下载引导",
+  "status": "achieved",
+  "started_at_beijing": "2026-09-17T21:42:42+08:00",
+  "final_success_run_id": "2026-09-16-0906",
+  "resume_reason": "前一日 run 已完成生产但尚未通过审核与发布；今日先做远端防重复检查后，从 review 节点续接，避免重产与重复媒体对象",
+  "reviews": {"receipt": "marketing/chan/runs/2026-09-17/metrics-review-2142.json", "completed": ["2026-09-13 内容 72h", "2026-09-14 内容 72h 到期快照", "2026-09-15 内容 24h"]},
+  "prepublish_check": {"checked_at_beijing": "2026-09-17T21:42:42+08:00", "workspace": "My organization", "channels": ["TikTok littlemonkey437 connected", "YouTube DeepAlpha connected"], "today_all_statuses": "no_posts_found"},
+  "completed_channels": [
+    {"channel": "TikTok littlemonkey437", "post_id": "6aabef0170f9abe0ceeedc7e", "public_url": "https://tiktok.com/@littlemonkey437/video/7686499991786933511", "status": "sent"},
+    {"channel": "YouTube DeepAlpha", "post_id": "6aabef2343b800e7efc6ea45", "public_url": "https://www.youtube.com/watch?v=i6DV73COD2k", "status": "sent"}
+  ],
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/8a41a80a0ac14c349fc01709245e980722e0ea5f.mp4",
+  "content_sha256": "0367bee2beab18e5fbdb8c30808d7b217df79e4bba211904dc8f153eded2877a",
+  "review_gates": {"visual": "passed", "audio": "passed", "platform_safe_zone": "passed", "creative_brief_match": "passed", "anonymous_head_get_hash": "passed"},
+  "deepalpha_app_store_prompt_evidence": {"on_screen": "frame-04.jpg 完整显示 App Store 搜索 / DeepAlpha 缠论", "narration": "第四段完整口播 App Store 搜索 DeepAlpha 缠论", "youtube_description": "完整品牌名与 https://apps.apple.com/app/id6806500280"},
+  "achieved_at_beijing": "2026-09-17T21:47:28+08:00",
+  "next_reviews_beijing": {"24h": "2026-09-18T21:47:21+08:00", "72h": "2026-09-20T21:47:21+08:00"}
+}

@@ -1,0 +1,41 @@
+{
+  "run_id": "2026-09-08-2327",
+  "date_beijing": "2026-09-08",
+  "status": "success_both_channels",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/e937e2cf1b8d48209b84bfb6f587b53c7ae6c856.mp4",
+  "content_sha256": "69c04270ffdbb12d2741bf1b5b473c987ef2d6c0d2c6a72e18affc923e085088",
+  "media_verification": {
+    "anonymous_head_http": 200,
+    "content_type": "video/mp4",
+    "anonymous_get_sha256_match": true
+  },
+  "posts": [
+    {
+      "platform": "TikTok",
+      "channel": "littlemonkey437",
+      "post_id": "6aa02b9f45fd8d4044dbe95f",
+      "status": "sent",
+      "sent_at_utc": "2026-09-08T15:42:00.778Z",
+      "sent_at_beijing": "2026-09-08T23:42:00.778+08:00",
+      "public_url": "https://tiktok.com/@littlemonkey437/video/7683188914705681665",
+      "is_ai_generated": true
+    },
+    {
+      "platform": "YouTube",
+      "channel": "DeepAlpha",
+      "post_id": "6aa02b4fbf7753dc82a45e3f",
+      "status": "sent",
+      "sent_at_utc": "2026-09-08T15:35:46.258Z",
+      "sent_at_beijing": "2026-09-08T23:35:46.258+08:00",
+      "public_url": "https://www.youtube.com/watch?v=mT4VFY6FbnQ",
+      "is_ai_generated": true,
+      "privacy": "public",
+      "category": "Education"
+    }
+  ],
+  "review_windows": {
+    "24h_due_beijing": "2026-09-09T23:42:00+08:00",
+    "72h_due_beijing": "2026-09-11T23:42:00+08:00",
+    "note": "以较晚发布的 TikTok 为统一复盘锚点；缺失指标不填零。"
+  }
+}

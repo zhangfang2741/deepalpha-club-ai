@@ -1,0 +1,17 @@
+{
+  "market_event": "纽约证券交易所 2026-09-18 日报记录：美联储加息 25 个基点后，标普 500 一度回落至约 7515 的 100 日均线附近，随后收复部分跌幅",
+  "primary_source": {"publisher":"New York Stock Exchange","url":"https://www.nyse.com/xbcf7t9","published_at":"2026-09-18T17:00:00-04:00","event_at":"2026-09-18","source_type":"交易所官方市场日报","verified_fact":"美联储加息 25 个基点；标普 500 回落至约 7515 的 100 日均线附近后收复部分跌幅"},
+  "symbol": "SPY",
+  "chan_structure": "用 SPY 最近交易日的已确认分型、笔和线段逐级核对市场回落；100 日均线附近的价格反应是事件背景，不直接等同于缠论买点或趋势反转",
+  "format": "市场事件后的结构复盘 + App 效率演示",
+  "hook_0_3s": "加息后，碰均线就止跌？",
+  "app_actions": ["展示 SPY 原始日线与反问", "5 秒内打开分型", "叠加笔", "叠加线段并停留"],
+  "deepalpha_app_store_prompt": "App Store 搜索 DeepAlpha 缠论",
+  "difference_from_last_14d": "主角由个股切换为 SPY 指数代理；用加息后触及 100 日均线的反差切入；针对上一条 TikTok 平均观看 2.02 秒和前两轮首个图层变化偏晚，把钩子压缩成短反问，确保 5 秒内分型、随后笔与线段连续变化。",
+  "steps": [
+    {"step_id":"01","layers":[],"app_action":"展示 SPY 原始日线","on_screen_text":"SPY · 日线","narration_text":"加息后，碰均线就止跌？","expected_visual":"真实 App 的 SPY 原始日线与 MACD","overlay_text":"加息 25 个基点后\n碰均线就止跌？"},
+    {"step_id":"02","layers":["fractals"],"app_action":"5 秒内打开分型","on_screen_text":"先看已确认分型","narration_text":"先开分型，只看确认的历史拐点。均线是背景，不是缠论买点。","expected_visual":"红绿分型点在 5 秒内出现","overlay_text":"均线是背景\n分型才是结构起点"},
+    {"step_id":"03","layers":["fractals","strokes"],"app_action":"叠加笔连接相邻拐点","on_screen_text":"再看笔的连接","narration_text":"再叠加笔，别用一根反弹 K 线代替结构确认。","expected_visual":"分型点上叠加笔","overlay_text":"别用一根反弹 K 线\n代替结构确认"},
+    {"step_id":"04","layers":["fractals","strokes","segments"],"app_action":"叠加线段观察更高层级并停留","on_screen_text":"最后切到线段层级","narration_text":"最后叠加线段看更高层级。历史结构不预测涨跌。App Store 搜索 DeepAlpha 缠论。","expected_visual":"分型、笔和线段同屏，结尾完整显示品牌与下载引导","overlay_text":"App Store 搜索\nDeepAlpha 缠论"}
+  ]
+}

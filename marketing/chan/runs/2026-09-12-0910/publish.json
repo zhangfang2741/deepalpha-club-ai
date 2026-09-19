@@ -1,0 +1,16 @@
+{
+  "run_id": "2026-09-12-0910",
+  "date_beijing": "2026-09-12",
+  "status": "success_both_channels",
+  "creative_format": "误区纠正 + 用户问题式教程",
+  "market_source": "https://www.nasdaq.com/press-release/palantir-customers-set-new-standard-ai-aipcon-11-2026-09-10",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/d4c59a756b7e41ea93afc884e7a68833b92c613b.mp4",
+  "content_sha256": "1106d8c0898c73ec73b191242861efd4db131e2ba3c5ca71220e1df35f90e435",
+  "media_verification": {"anonymous_head_http": 200, "content_type": "video/mp4", "anonymous_get_sha256_match": true, "verified_after_publish_at_beijing": "2026-09-12T09:12:22+08:00"},
+  "deepalpha_app_store_prompt": {"on_screen": true, "narration": true, "youtube_link": "https://apps.apple.com/app/id6806500280"},
+  "posts": [
+    {"platform": "TikTok", "channel": "littlemonkey437", "post_id": "6aa4a6632ff05a49069bd77e", "status": "sent", "sent_at_utc": "2026-09-12T01:11:39.145Z", "public_url": "https://tiktok.com/@littlemonkey437/video/7684449792122047751", "is_ai_generated": true},
+    {"platform": "YouTube", "channel": "DeepAlpha", "post_id": "6aa4a68507d009223c678595", "status": "sent", "sent_at_utc": "2026-09-12T01:10:31.722Z", "public_url": "https://www.youtube.com/watch?v=TmCOoO4oAw4", "is_ai_generated": true, "privacy": "public", "category": "Education"}
+  ],
+  "review_windows": {"24h_due_beijing": "2026-09-13T09:11:40+08:00", "72h_due_beijing": "2026-09-15T09:11:40+08:00"}
+}

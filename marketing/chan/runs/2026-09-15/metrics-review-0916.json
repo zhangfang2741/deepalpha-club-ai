@@ -1,0 +1,50 @@
+{
+  "reviewed_at_beijing": "2026-09-15T09:16:58+08:00",
+  "workspace": "My organization",
+  "reviews": [
+    {
+      "content_date": "2026-09-12",
+      "window": "72h",
+      "strict_due_beijing": "2026-09-15T09:11:40+08:00",
+      "status": "completed_with_incomplete_metric_freshness",
+      "tiktok": {
+        "post_id": "6aa4a6632ff05a49069bd77e",
+        "post_status": "sent",
+        "views": 5,
+        "reach": 4,
+        "average_time_watched_sec": 6.36,
+        "metrics_updated_at": "2026-09-14T19:27:28.955Z",
+        "freshness_covers_window": false
+      },
+      "youtube": {
+        "post_id": "6aa4a68507d009223c678595",
+        "post_status": "sent",
+        "views": 14,
+        "metrics_updated_at": "2026-09-14T19:11:11.945Z",
+        "freshness_covers_window": false
+      }
+    },
+    {
+      "content_date": "2026-09-14",
+      "window": "24h",
+      "strict_due_beijing": "2026-09-15T09:16:49+08:00",
+      "status": "completed_with_incomplete_metric_freshness",
+      "tiktok": {
+        "post_id": "6aa74a9663da6bf64fa1ff35",
+        "post_status": "sent",
+        "views": 7,
+        "average_time_watched_sec": 1.01,
+        "metrics_updated_at": "2026-09-14T19:27:28.954Z",
+        "freshness_covers_window": false
+      },
+      "youtube": {
+        "post_id": "6aa74ab6ea4032c0149b29b6",
+        "post_status": "sent",
+        "views": 2,
+        "metrics_updated_at": "2026-09-14T19:11:11.945Z",
+        "freshness_covers_window": false
+      }
+    }
+  ],
+  "interpretation": "两组指标时间戳均早于严格复盘门槛，只保留可见快照；缺失指标不补零，不据此形成完整表现结论。"
+}

@@ -1,0 +1,25 @@
+{
+  "run_id": "2026-09-12-0910",
+  "date": "2026-09-12",
+  "status": "success",
+  "mode": "误区纠正 + 用户问题式教程",
+  "selected": {
+    "symbol": "PLTR",
+    "eligible": true,
+    "confirmed_fractals": 8,
+    "bars_count": 251,
+    "last_bar": "2026-09-10",
+    "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+  },
+  "candidates": [
+    {
+      "symbol": "PLTR",
+      "eligible": true,
+      "confirmed_fractals": 8,
+      "bars_count": 251,
+      "last_bar": "2026-09-10",
+      "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+    }
+  ],
+  "note": "基于一手事件来源制作：Palantir 于 2026-09-10 举办 AIPCon 11，并由公司官方公告列出航空、制造、医疗等客户的 AI 部署展示；只讲已确认历史结构"
+}

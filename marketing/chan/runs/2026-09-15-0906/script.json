@@ -1,0 +1,53 @@
+[
+  {
+    "step_id": "01",
+    "time_sec": 0.0,
+    "layers": [],
+    "app_action": "关闭所有结构图层并展示 FTW 原始日线",
+    "on_screen_text": "FTW · 日线",
+    "narration_text": "FTW 的季度股息今天支付。现金到账，就等于图上出现买点吗？先看真实日线。",
+    "expected_visual": "真实 App 结果页显示 FTW 原始 K 线与 MACD，5 秒内体现分析能力",
+    "overlay_text": "FTW 股息支付\n到账 = 缠论买点？",
+    "duration_sec": 9.253152
+  },
+  {
+    "step_id": "02",
+    "time_sec": 9.853152,
+    "layers": [
+      "signals"
+    ],
+    "app_action": "打开买卖点图层",
+    "on_screen_text": "买卖点",
+    "narration_text": "打开买卖点。这里的标签来自价格结构识别，不是公司派息动作。",
+    "expected_visual": "真实图表显示算法返回的买卖点标签；若当前区间无标签，则真实呈现无标签状态",
+    "overlay_text": "买卖点是技术标签",
+    "duration_sec": 7.209796
+  },
+  {
+    "step_id": "03",
+    "time_sec": 17.662948,
+    "layers": [
+      "signals",
+      "pivots"
+    ],
+    "app_action": "叠加中枢图层",
+    "on_screen_text": "买卖点 + 中枢",
+    "narration_text": "再叠加中枢，核对标签是否依附于已有重叠区。股息和结构不能混为一谈。",
+    "expected_visual": "买卖点与紫色中枢同时展示，形成第二次有意义的 App 操作变化",
+    "overlay_text": "先核对结构归属",
+    "duration_sec": 8.533333
+  },
+  {
+    "step_id": "04",
+    "time_sec": 26.796281,
+    "layers": [
+      "pivots"
+    ],
+    "app_action": "关闭买卖点，只保留中枢并停留",
+    "on_screen_text": "FTW · 历史结构",
+    "narration_text": "这里只讲历史结构，不预测收益。App Store 搜索 DeepAlpha 缠论。",
+    "expected_visual": "只保留中枢供对照，结尾画面完整显示 App Store 搜索 DeepAlpha 缠论",
+    "overlay_text": "App Store 搜索\nDeepAlpha 缠论",
+    "duration_sec": 6.733787
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "run_id": "2026-09-11-0905",
+  "date_beijing": "2026-09-11",
+  "status": "success_both_channels",
+  "creative_format": "图层前后对比",
+  "market_source": "https://www.nasdaq.com/newsroom/nasdaq-advances-always-on-markets-and-tokenized-equities-strategy-payward",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/11663ad8678947e6823a6046a487350289c4bb17.mp4",
+  "content_sha256": "784e1d93e57d26503e95c3f849977d14de2fbf118301cc6de8a3f9376682fb88",
+  "media_verification": {"anonymous_head_http": 200, "content_type": "video/mp4", "anonymous_get_sha256_match": true, "reuploaded_at_beijing": "2026-09-11T09:14:03+08:00", "reason": "平台抓取后原对象复核为 404；未重复提交平台帖子"},
+  "deepalpha_app_store_prompt": {"on_screen": true, "narration": true, "youtube_link": "https://apps.apple.com/app/id6806500280"},
+  "posts": [
+    {"platform": "TikTok", "channel": "littlemonkey437", "post_id": "6aa354f230bad4fb83316d5b", "status": "sent", "sent_at_utc": "2026-09-11T01:10:54.236Z", "sent_at_beijing": "2026-09-11T09:10:54.236+08:00", "public_url": "https://tiktok.com/@littlemonkey437/video/7684078732167990529", "is_ai_generated": true},
+    {"platform": "YouTube", "channel": "DeepAlpha", "post_id": "6aa3551430bad4fb83316f1a", "status": "sent", "sent_at_utc": "2026-09-11T01:10:46.691Z", "sent_at_beijing": "2026-09-11T09:10:46.691+08:00", "public_url": "https://www.youtube.com/watch?v=O8Yp7YK58S8", "is_ai_generated": true, "privacy": "public", "category": "Education"}
+  ],
+  "review_windows": {"24h_due_beijing": "2026-09-12T09:10:55+08:00", "72h_due_beijing": "2026-09-14T09:10:55+08:00", "note": "以较晚发布的 TikTok 为统一复盘锚点；缺失指标不填零。"}
+}

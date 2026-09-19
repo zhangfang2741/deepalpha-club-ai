@@ -1,0 +1,62 @@
+{
+  "run_id": "2026-09-14-0905",
+  "market_event": "Labcorp 于 2026-09-10 投资者日重申 2026 年指引，并给出截至 2029 年收入复合增长 5%–8%、调整后每股收益复合增长 8.5%–11.5% 的长期展望",
+  "primary_source": {
+    "publisher": "Labcorp Holdings Inc. / U.S. Securities and Exchange Commission",
+    "url": "https://www.sec.gov/Archives/edgar/data/920148/000092014826000201/formpr091026ex991investord.htm",
+    "filed_at": "2026-09-10T16:47:55-04:00",
+    "event_at": "2026-09-10T09:00:00-04:00",
+    "source_type": "上市公司向 SEC 提交的 8-K 附件"
+  },
+  "symbol": "LH",
+  "market_date": "2026-09-11",
+  "chan_structure": "公司长期增长展望不是图上的目标价；用线段与中枢拆分已确认的历史走势层级，核对价格是否仍在既有重叠区，只讲历史结构、不预测方向",
+  "format": "单一结构信号拆解 + 财测误区纠正",
+  "hook_0_3s": "Labcorp 给出 2029 年增长展望，这能直接画成目标价吗？",
+  "app_actions": [
+    "展示 LH 原始日线",
+    "打开线段观察主要走势层级",
+    "叠加中枢定位历史重叠区",
+    "关闭线段只保留中枢并停留"
+  ],
+  "deepalpha_app_store_prompt": "App Store 搜索 DeepAlpha 缠论",
+  "difference_from_last_14d": "主角由 NFE 改为 LH；首次用投资者日长期财测纠正‘增长展望等于图上目标价’的误区；教学聚焦线段与中枢关系，画面路径为原图→线段→线段叠加中枢→只保留中枢，与昨日笔和线段层级路径不同。",
+  "steps": [
+    {
+      "step_id": "01",
+      "layers": [],
+      "app_action": "展示 LH 原始日线",
+      "on_screen_text": "LH · 长期展望不是目标价",
+      "narration_text": "Labcorp刚给出二零二九年增长展望。这些财测数字，能直接画成股价目标吗？",
+      "expected_visual": "真实 LH 日线结果页，结构图层全部关闭",
+      "overlay_text": "2029 年增长展望\n能直接当目标价？"
+    },
+    {
+      "step_id": "02",
+      "layers": ["segments"],
+      "app_action": "打开线段观察主要走势层级",
+      "on_screen_text": "先看已确认线段",
+      "narration_text": "不能。先打开线段，把投资者日之前的历史走势分层，不把公司展望换算成交易信号。",
+      "expected_visual": "橙色线段出现，其他结构图层关闭",
+      "overlay_text": "第一步：走势在哪个层级？"
+    },
+    {
+      "step_id": "03",
+      "layers": ["segments", "pivots"],
+      "app_action": "叠加中枢定位历史重叠区",
+      "on_screen_text": "再看价格重叠区",
+      "narration_text": "再叠加中枢，核对价格主要重叠区。财测是公司信息，中枢是历史价格结构，两者不能混为一谈。",
+      "expected_visual": "橙色线段与紫色中枢同时显示",
+      "overlay_text": "第二步：重叠区在哪里？"
+    },
+    {
+      "step_id": "04",
+      "layers": ["pivots"],
+      "app_action": "关闭线段只保留中枢并停留",
+      "on_screen_text": "App Store 搜索 DeepAlpha 缠论",
+      "narration_text": "关掉线段，只保留中枢再核对一次。想自己拆解结构，App Store搜索DeepAlpha缠论。",
+      "expected_visual": "线段消失、中枢保留，DeepAlpha 缠论下载引导清晰显示",
+      "overlay_text": "App Store 搜索\nDeepAlpha 缠论"
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "market_event": "TORM 于 2026-09-15 公告：控股股东 OCM Njord 将以二次公开发行方式出售 900 万股，预计总额约 2.9025 亿美元；公司明确说明自身不发行股份，也不会获得出售所得",
+  "primary_source": {
+    "publisher": "TORM plc",
+    "url": "https://www.torm.com/news/company-announcements/company-announcements-details/2026/TORM-plc-announces-pricing-of-secondary-public-offering-of-its-class-A-common-shares/default.aspx",
+    "published_at": "2026-09-15T06:18:00-04:00",
+    "event_at": "2026-09-15",
+    "source_type": "上市公司官方公告",
+    "verified_fact": "出售方为股东 OCM Njord；TORM 不发行新股且不取得出售所得"
+  },
+  "symbol": "TRMD",
+  "chan_structure": "先把股东减持与公司融资两个事实拆开，再用分型与线段跨层级核对已确认历史拐点；公告不能替代价格结构，且不预测方向或收益",
+  "format": "市场事件结构复盘 + 事实核对",
+  "hook_0_3s": "TORM 股东卖 900 万股，公司却一分钱也拿不到——图上该怎么看？",
+  "app_actions": [
+    "展示 TRMD 原始日线并核对公告事实",
+    "打开分型定位已确认拐点",
+    "叠加线段过滤短期波动",
+    "关闭分型只保留线段并停留"
+  ],
+  "deepalpha_app_store_prompt": "App Store 搜索 DeepAlpha 缠论",
+  "difference_from_last_14d": "主角由 FTW 改为 TRMD；从股息与买卖点信号对照改为区分股东减持与公司融资；画面路径为原图→分型→分型叠加线段→只保留线段，避开昨日买卖点与中枢路径。",
+  "steps": [
+    {
+      "step_id": "01",
+      "layers": [],
+      "app_action": "关闭所有结构图层，展示 TRMD 原始日线",
+      "on_screen_text": "TRMD · 日线",
+      "narration_text": "TORM 股东要卖九百万股，约二点九亿美元。但公告说，公司不发新股，也拿不到这笔钱。先别把股东减持看成公司融资。",
+      "expected_visual": "真实 App 的 TRMD 原始日线与 MACD，无结构图层",
+      "overlay_text": "股东卖 900 万股\n公司却拿不到钱？"
+    },
+    {
+      "step_id": "02",
+      "layers": ["fractals"],
+      "app_action": "打开分型定位已确认拐点",
+      "on_screen_text": "先看已确认分型",
+      "narration_text": "打开分型，先找已经确认的历史拐点。公告是事实背景，分型才是图上的结构起点。",
+      "expected_visual": "红绿分型点出现，原始 K 线仍可对照",
+      "overlay_text": "公告是背景\n分型是结构起点"
+    },
+    {
+      "step_id": "03",
+      "layers": ["fractals", "segments"],
+      "app_action": "叠加线段过滤短期波动",
+      "on_screen_text": "再看线段层级",
+      "narration_text": "再叠加线段，把短期波动放回更高层级。标题再大，也不能代替结构确认。",
+      "expected_visual": "分型点上叠加橙色线段，层级变化清晰",
+      "overlay_text": "跨层级核对\n不让标题替代结构"
+    },
+    {
+      "step_id": "04",
+      "layers": ["segments"],
+      "app_action": "关闭分型，只保留线段并停留",
+      "on_screen_text": "只保留线段",
+      "narration_text": "这只是历史结构学习，不预测涨跌。App Store 搜索 DeepAlpha 缠论。",
+      "expected_visual": "仅保留线段，结尾完整显示品牌与下载引导",
+      "overlay_text": "App Store 搜索\nDeepAlpha 缠论"
+    }
+  ]
+}

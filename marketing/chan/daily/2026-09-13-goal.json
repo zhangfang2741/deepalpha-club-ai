@@ -1,0 +1,17 @@
+{
+  "date_beijing": "2026-09-13",
+  "goal": "完成到期复盘、差异化创意视频审核与媒体校验，并发布到 TikTok littlemonkey437 和 YouTube DeepAlpha；核实 DeepAlpha 缠论完整品牌名及 App Store 下载引导",
+  "status": "achieved",
+  "attempts": [{"run_id": "2026-09-13-0906", "status": "success", "result": "四项审核、媒体校验与双频道发布全部完成；TikTok sending 期间仅查询原 postId"}],
+  "completed_channels": [
+    {"platform": "TikTok", "post_id": "6aa5f7d4bcabda92e1a1a759", "public_url": "https://tiktok.com/@littlemonkey437/video/7684820760363306257"},
+    {"platform": "YouTube", "post_id": "6aa5f81266679b076f1bf3f9", "public_url": "https://www.youtube.com/watch?v=m1KO38jxpis"}
+  ],
+  "started_at_beijing": "2026-09-13T09:04:06+08:00",
+  "achieved_at_beijing": "2026-09-13T09:11:40+08:00",
+  "final_run_id": "2026-09-13-0906",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/b83a8204c7454daa8a0f62c9724df2f6b2005c49.mp4",
+  "content_sha256": "190c451e9738f261620b9c18c3596bd9e37699c3999090a203d047592595855a",
+  "brand_evidence": {"on_screen": true, "narration": true, "youtube_app_store_link": "https://apps.apple.com/app/id6806500280"},
+  "reviews": {"completed": ["2026-09-12 内容 24h", "2026-09-10 内容 72h"], "next_24h_beijing": "2026-09-14T09:11:26+08:00", "next_72h_beijing": "2026-09-16T09:11:26+08:00"}
+}

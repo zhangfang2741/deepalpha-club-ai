@@ -1,0 +1,56 @@
+{
+  "run_id": "2026-09-11-0905",
+  "market_event": "Nasdaq 于 2026-09-10 宣布通过 Nasdaq Ventures 向 Kraken 母公司 Payward 投资 1 亿美元，以推进代币化股票与全天候市场基础设施合作",
+  "primary_source": {
+    "publisher": "Nasdaq, Inc.",
+    "url": "https://www.nasdaq.com/newsroom/nasdaq-advances-always-on-markets-and-tokenized-equities-strategy-payward",
+    "published_at": "2026-09-10T07:05:00-04:00",
+    "source_type": "上市公司官方公告"
+  },
+  "symbol": "NDAQ",
+  "market_date": "2026-09-10",
+  "chan_structure": "通过中枢图层开关前后对比，观察事件发生前已确认的震荡区间，再叠加笔定位区间内的历史结构；不预测事件后的收益或方向",
+  "format": "图层前后对比",
+  "hook_0_3s": "Nasdaq 刚宣布向 Kraken 母公司投资 1 亿美元，图上先看什么？",
+  "app_actions": ["展示 NDAQ 原始日线", "打开中枢", "叠加笔", "关闭中枢只保留笔并停留"],
+  "deepalpha_app_store_prompt": "App Store 搜索 DeepAlpha 缠论",
+  "difference_from_last_14d": "主角由 GME/NVDA 改为 NDAQ；从财报后的笔→线段→中枢递进改为中枢开关前后对比；钩子使用 Nasdaq 官方 1 亿美元投资公告，并测试更短的三步问题式教程。",
+  "steps": [
+    {
+      "step_id": "01",
+      "layers": [],
+      "app_action": "展示 NDAQ 原始日线",
+      "on_screen_text": "NDAQ · 事件前先看原图",
+      "narration_text": "Nasdaq刚宣布向Kraken母公司投资一亿美元。遇到事件，图上先看什么？",
+      "expected_visual": "真实 NDAQ 日线结果页，结构图层全部关闭",
+      "overlay_text": "Nasdaq 投资 1 亿美元\n图上先看什么？"
+    },
+    {
+      "step_id": "02",
+      "layers": ["pivots"],
+      "app_action": "只打开中枢",
+      "on_screen_text": "先找已确认震荡区间",
+      "narration_text": "先只打开中枢。紫色区间帮你看清，事件发生前价格主要在哪里反复重叠。",
+      "expected_visual": "紫色中枢区间出现，其他结构图层关闭",
+      "overlay_text": "打开中枢：先找重叠区"
+    },
+    {
+      "step_id": "03",
+      "layers": ["pivots", "strokes"],
+      "app_action": "叠加笔对照区间内结构",
+      "on_screen_text": "再用笔定位结构",
+      "narration_text": "再叠加笔，比较每一段历史结构是在区间内，还是已经离开区间。",
+      "expected_visual": "紫色中枢与蓝色笔同时显示",
+      "overlay_text": "叠加笔：区间内还是区间外？"
+    },
+    {
+      "step_id": "04",
+      "layers": ["strokes"],
+      "app_action": "关闭中枢只保留笔并停留",
+      "on_screen_text": "App Store 搜索 DeepAlpha 缠论",
+      "narration_text": "关闭中枢再对照一次。想自己切换图层，App Store搜索DeepAlpha缠论。",
+      "expected_visual": "中枢消失、蓝色笔保留，DeepAlpha 缠论下载引导清晰显示",
+      "overlay_text": "App Store 搜索\nDeepAlpha 缠论"
+    }
+  ]
+}

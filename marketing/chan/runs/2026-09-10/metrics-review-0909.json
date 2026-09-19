@@ -1,0 +1,49 @@
+{
+  "reviewed_at_beijing": "2026-09-10T09:09:03+08:00",
+  "workspace": "My organization",
+  "reviews": [
+    {
+      "window": "24h",
+      "source_date_beijing": "2026-09-09",
+      "due_beijing": "2026-09-10T09:09:02+08:00",
+      "status": "completed_with_incomplete_metric_freshness",
+      "tiktok": {
+        "post_id": "6aa0b181c5c199aca46a740d",
+        "post_status": "sent",
+        "views": 1,
+        "average_time_watched_sec": 6.02,
+        "metrics_updated_at": "2026-09-10T00:08:07.547Z",
+        "freshness_note": "指标刷新早于严格 24 小时门槛，零值不作为完整表现结论"
+      },
+      "youtube": {
+        "post_id": "6aa0b1a9c5c199aca46a798f",
+        "post_status": "sent",
+        "views": 33,
+        "metrics_updated_at": "2026-09-10T00:00:42.518Z",
+        "freshness_note": "指标刷新早于严格 24 小时门槛，零值不作为完整表现结论"
+      },
+      "conclusion": "YouTube 当前可见播放高于 TikTok，但两个平台的指标时间戳均未覆盖完整 24 小时，暂不据此改变创意策略。"
+    },
+    {
+      "window": "72h",
+      "source_date_beijing": "2026-09-07",
+      "due_beijing": "2026-09-10T01:28:06+08:00",
+      "status": "completed_with_partial_platform_freshness",
+      "tiktok": {
+        "post_id": "6a9da23d9730c9bde54a5ff1",
+        "post_status": "sent",
+        "average_time_watched_sec": 6.76,
+        "metrics_updated_at": "2026-09-08T01:58:08.892Z",
+        "freshness_note": "指标远早于 72 小时门槛；播放、互动等零值视为覆盖不足"
+      },
+      "youtube": {
+        "post_id": "6a9da2536acbdfc9eda4d24f",
+        "post_status": "sent",
+        "views": 51,
+        "metrics_updated_at": "2026-09-10T00:00:42.518Z"
+      },
+      "conclusion": "YouTube 72 小时可见 51 次播放；TikTok 数据刷新不足，不能做跨平台优劣结论。"
+    }
+  ],
+  "missing_data_policy": "指标缺失不填零；仅记录 Buffer 明确返回且带刷新时间的字段。"
+}

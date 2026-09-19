@@ -1,0 +1,90 @@
+{
+  "run_id": "2026-09-19-0918",
+  "status": "ready_for_buffer",
+  "stage": "uploaded",
+  "symbol": "SPY",
+  "video": "/Users/zhangfang/deepalpha-club-ai/marketing/chan/runs/2026-09-19-0918/teaching.mp4",
+  "sha256": "243846085971b38730cc16f8ee87c87c36bc38f376c5593060256a55e250c7d2",
+  "duration_sec": 27.233742,
+  "steps": [
+    {
+      "step_id": "01",
+      "time_sec": 0.0,
+      "layers": [],
+      "app_action": "展示 SPY 原始日线",
+      "on_screen_text": "SPY · 日线",
+      "narration_text": "加息后，碰均线就止跌？",
+      "expected_visual": "真实 App 的 SPY 原始日线与 MACD",
+      "overlay_text": "加息 25 个基点后\n碰均线就止跌？",
+      "duration_sec": 3.146304
+    },
+    {
+      "step_id": "02",
+      "time_sec": 3.7463040000000003,
+      "layers": [
+        "fractals"
+      ],
+      "app_action": "5 秒内打开分型",
+      "on_screen_text": "先看已确认分型",
+      "narration_text": "先开分型，只看确认的历史拐点。均线是背景，不是缠论买点。",
+      "expected_visual": "红绿分型点在 5 秒内出现",
+      "overlay_text": "均线是背景\n分型才是结构起点",
+      "duration_sec": 7.244626
+    },
+    {
+      "step_id": "03",
+      "time_sec": 11.59093,
+      "layers": [
+        "fractals",
+        "strokes"
+      ],
+      "app_action": "叠加笔连接相邻拐点",
+      "on_screen_text": "再看笔的连接",
+      "narration_text": "再叠加笔，别用一根反弹 K 线代替结构确认。",
+      "expected_visual": "分型点上叠加笔",
+      "overlay_text": "别用一根反弹 K 线\n代替结构确认",
+      "duration_sec": 4.342132
+    },
+    {
+      "step_id": "04",
+      "time_sec": 16.533062,
+      "layers": [
+        "fractals",
+        "strokes",
+        "segments"
+      ],
+      "app_action": "叠加线段观察更高层级并停留",
+      "on_screen_text": "最后切到线段层级",
+      "narration_text": "最后叠加线段看更高层级。历史结构不预测涨跌。App Store 搜索 DeepAlpha 缠论。",
+      "expected_visual": "分型、笔和线段同屏，结尾完整显示品牌与下载引导",
+      "overlay_text": "App Store 搜索\nDeepAlpha 缠论",
+      "duration_sec": 10.10068
+    }
+  ],
+  "checks": {
+    "codecs": {
+      "video": "h264",
+      "audio": "aac"
+    },
+    "decode": "passed",
+    "timeline": "passed",
+    "platform_safe_zone": {
+      "canvas": "720x1280",
+      "content_rect": {
+        "x": 36,
+        "y": 96,
+        "width": 564,
+        "height": 924
+      },
+      "reserved": {
+        "right": 120,
+        "bottom": 260
+      },
+      "status": "awaiting_visual_review"
+    },
+    "visual_review": "passed",
+    "audio_review": "passed",
+    "anonymous_head": "passed",
+    "anonymous_get_sha256": "passed"
+  }
+}

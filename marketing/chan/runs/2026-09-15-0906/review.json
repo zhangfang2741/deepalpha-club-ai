@@ -1,0 +1,19 @@
+{
+  "run_id": "2026-09-15-0906",
+  "reviewed_at_beijing": "2026-09-15T09:08:30+08:00",
+  "sha256": "5421ba73bded5f3e56e607f5096bec17cca40b3d6077e2adde32586f2ca304a9",
+  "visual": "passed",
+  "audio": "passed",
+  "platform_safe_zone": "passed",
+  "creative_brief_match": "passed",
+  "evidence": {
+    "visual": "逐张查看 frame-01 至 frame-04：真实 FTW 日线；买卖点按钮开启；买卖点叠加中枢；关闭买卖点后只保留中枢。当前区间没有算法买卖点标签，画面如实呈现，无伪造信号。",
+    "audio": "四段 MiniMax 中文旁白由 script.json 原文逐段生成；H.264/AAC 成片解码通过，综合响度 -16.60 LUFS，真峰值 -1.38 dBTP，无背景音乐覆盖口播。",
+    "timeline": "events.json 四个实际切换时间与 script.json 对应时间差均小于 0.002 秒；旁白逐段只解释当前画面。",
+    "platform_safe_zone": "720x1280 画布内，App 内容矩形为 x=36–600、y=96–1020；右侧 120 像素和底部 260 像素无关键文字、价格、图例或下载引导。",
+    "hook": "frame-01 在 0–3 秒显示真实 FTW 图表和‘FTW 股息支付 / 到账 = 缠论买点？’，问题与一手来源事件一致。",
+    "app_actions": "买卖点按钮开启、叠加中枢、关闭买卖点保留中枢，至少两次真实 App 状态变化。",
+    "brand_and_prompt": "frame-04 完整显示‘App Store 搜索 / DeepAlpha 缠论’，第四段旁白完整口播‘App Store 搜索 DeepAlpha 缠论’。",
+    "duration_and_codec": "34.130068 秒，720x1280，H.264/AAC。"
+  }
+}

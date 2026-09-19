@@ -1,0 +1,19 @@
+{
+  "date_beijing": "2026-09-15",
+  "run_id": "2026-09-15-0906",
+  "content_sha256": "5421ba73bded5f3e56e607f5096bec17cca40b3d6077e2adde32586f2ca304a9",
+  "topic": "FTW 股息支付不等于缠论买点",
+  "channel_id": "6a9ce2eacd8b9c702c1543bf",
+  "channel_name": "DeepAlpha",
+  "status": "sent",
+  "post_id": "6aa89ac5fa1b0cab28a3eb46",
+  "public_url": "https://www.youtube.com/watch?v=rsPj-a64S3M",
+  "submitted_at_beijing": "2026-09-15T09:10:05+08:00",
+  "response_saved_at_beijing": "2026-09-15T09:10:30+08:00",
+  "metadata_verified": {
+    "privacy": "public",
+    "category": "Education",
+    "is_ai_generated": true,
+    "app_store_link_in_description": "https://apps.apple.com/app/id6806500280"
+  }
+}

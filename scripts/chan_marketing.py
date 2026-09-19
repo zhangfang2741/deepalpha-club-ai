@@ -27,6 +27,14 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "marketing/chan/runs"
 BUNDLE = "club.deepalpha.chan"
+SIMULATOR_UDID = os.environ.get("CHAN_SIMULATOR_UDID", "95F37B4C-7BEF-4690-ACAA-9018B3C246B0")
+OUTPUT_WIDTH = 720
+OUTPUT_HEIGHT = 1280
+# TikTok 与 YouTube Shorts 共用的保守安全区：右侧操作栏和底部文案区不放关键信息。
+SAFE_LEFT = 36
+SAFE_TOP = 96
+SAFE_WIDTH = 564
+SAFE_HEIGHT = 924
 console = Console()
 structlog.configure(processors=[structlog.processors.format_exc_info, structlog.processors.JSONRenderer(ensure_ascii=False)])
 logger = structlog.get_logger()
@@ -42,6 +50,7 @@ class Step(BaseModel):
     on_screen_text: str
     narration_text: str
     expected_visual: str
+    overlay_text: str = ""
     duration_sec: float = 0
 
 
@@ -76,6 +85,16 @@ async def command(*args: str) -> str:
     return stdout.decode()
 
 
+async def ensure_simulator() -> None:
+    """启动固定的运营模拟器，避免误用其他已启动设备。"""
+    process = await asyncio.create_subprocess_exec(
+        "xcrun", "simctl", "boot", SIMULATOR_UDID,
+        stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+    )
+    await process.wait()
+    await command("xcrun", "simctl", "bootstatus", SIMULATOR_UDID, "-b")
+
+
 async def wait_file(path: Path, error: Path, timeout: float = 100) -> None:
     """只轮询执行状态，不把文件缺失当成成功。"""
     deadline = time.monotonic() + timeout
@@ -90,7 +109,7 @@ async def wait_file(path: Path, error: Path, timeout: float = 100) -> None:
 
 async def launch(*args: str) -> None:
     """终止并重新启动自己的模拟器 App。"""
-    process = await asyncio.create_subprocess_exec("xcrun", "simctl", "terminate", "booted", BUNDLE,
+    process = await asyncio.create_subprocess_exec("xcrun", "simctl", "terminate", SIMULATOR_UDID, BUNDLE,
                                                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
     await process.wait()
     config = {**dotenv_values(Path.home() / ".config/deepalpha/marketing.env"), **os.environ}
@@ -98,7 +117,7 @@ async def launch(*args: str) -> None:
     for source, target in [("CHAN_DEMO_ACCOUNT", "deepalphaDemoAccount"), ("CHAN_DEMO_PASSWORD", "deepalphaDemoPassword")]:
         if config.get(source):
             environment[f"SIMCTL_CHILD_{target}"] = str(config[source])
-    process = await asyncio.create_subprocess_exec("xcrun", "simctl", "launch", "booted", BUNDLE,
+    process = await asyncio.create_subprocess_exec("xcrun", "simctl", "launch", SIMULATOR_UDID, BUNDLE,
         "-deepalphaDemo", *args, env=environment, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     _, stderr = await process.communicate()
     if process.returncode:
@@ -161,9 +180,21 @@ def teaching_steps(symbol: str) -> list[Step]:
     ]
 
 
+def brief_steps(path: Path, symbol: str) -> list[Step]:
+    """读取当天创意 brief，避免生产流程退回固定教学模板。"""
+    brief = json.loads(path.read_text())
+    if brief.get("symbol") != symbol:
+        raise RuntimeError("创意 brief 的标的与筛选结果不一致")
+    steps = [Step.model_validate(step) for step in brief.get("steps", [])]
+    if len(steps) < 4 or not any(step.overlay_text for step in steps):
+        raise RuntimeError("创意 brief 至少需要四个步骤和画面文字钩子")
+    return steps
+
+
 async def produce(args: argparse.Namespace, run: Path, state: Production) -> None:
     """按依赖顺序执行生产，上传前保留人工视觉核验入口。"""
-    container = Path((await command("xcrun", "simctl", "get_app_container", "booted", BUNDLE, "data")).strip())
+    brief = json.loads(args.brief_file.read_text()) if args.brief_file else None
+    container = Path((await command("xcrun", "simctl", "get_app_container", SIMULATOR_UDID, BUNDLE, "data")).strip())
     directory = container / "Documents/marketing"
     directory.mkdir(parents=True, exist_ok=True)
     today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
@@ -183,12 +214,19 @@ async def produce(args: argparse.Namespace, run: Path, state: Production) -> Non
     if chosen is None:
         raise RuntimeError("候选均无足够已确认分型和笔，停止生产")
     state.symbol = chosen["symbol"]
-    selection = {"run_id": state.run_id, "date": str(today), "status": "success", "mode": "常青教学功能测试" if args.test else "常青结构教学",
-                 "selected": chosen, "candidates": candidates, "note": "候选顺序由调用方给定；不把常见代码等同于当日热点，教程只讲已确认分型与笔"}
+    selection = {
+        "run_id": state.run_id,
+        "date": str(today),
+        "status": "success",
+        "mode": "创意功能测试" if args.test and brief else brief.get("format") if brief else "常青教学功能测试" if args.test else "常青结构教学",
+        "selected": chosen,
+        "candidates": candidates,
+        "note": f"基于一手事件来源制作：{brief.get('market_event')}；只讲已确认历史结构" if brief else "候选顺序由调用方给定；不把常见代码等同于当日热点，教程只讲已确认分型与笔",
+    }
     save(run / "selection.json", selection)
     (run / "selection.md").write_text(f"# 选题回执\n\n{json.dumps(selection, ensure_ascii=False, indent=2)}\n")
     state.stage = "speech"
-    state.steps = teaching_steps(state.symbol)
+    state.steps = brief_steps(args.brief_file, state.symbol) if args.brief_file else teaching_steps(state.symbol)
     elapsed = 0.0
     for step in state.steps:
         audio = run / f"voice-{step.step_id}.mp3"
@@ -207,8 +245,19 @@ async def produce(args: argparse.Namespace, run: Path, state: Production) -> Non
         (directory / name).unlink(missing_ok=True)
     await launch("-deepalphaDemo", f"-deepalphaDemoSymbol={state.symbol}", "-marketingPlayback")
     await wait_file(directory / "ready", directory / "error.txt")
+    preflight = run / "preflight.png"
+    await command("xcrun", "simctl", "io", SIMULATOR_UDID, "screenshot", str(preflight))
+    brightness = await command(
+        "ffmpeg", "-v", "error", "-i", str(preflight),
+        "-vf", "crop=iw*0.7:ih*0.28:iw*0.15:ih*0.36,signalstats,metadata=print:file=-",
+        "-frames:v", "1", "-f", "null", "-",
+    )
+    average_line = next((line for line in brightness.splitlines() if "lavfi.signalstats.YAVG=" in line), "")
+    average = float(average_line.rsplit("=", 1)[-1]) if average_line else 255
+    if average > 100:
+        raise RuntimeError(f"录屏预检发现系统弹窗或亮色遮挡：中心区域亮度={average:.1f}")
     raw = run / "screen.mp4"
-    recorder = await asyncio.create_subprocess_exec("xcrun", "simctl", "io", "booted", "recordVideo", "--codec=h264", "--force", str(raw),
+    recorder = await asyncio.create_subprocess_exec("xcrun", "simctl", "io", SIMULATOR_UDID, "recordVideo", "--codec=h264", "--force", str(raw),
                                                      stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
     try:
         assert recorder.stderr is not None
@@ -236,19 +285,45 @@ async def produce(args: argparse.Namespace, run: Path, state: Production) -> Non
 
 
 async def encode(run: Path, state: Production, raw: Path) -> None:
-    """保留模拟器可变帧时间戳并输出固定帧率成片。"""
+    """输出固定帧率成片，并把关键信息限制在短视频平台安全区。"""
     elapsed = state.duration_sec
     state.stage = "encoding"
     output = run / "teaching.mp4"
     inputs = ["ffmpeg", "-y", "-v", "error", "-ss", "0.3", "-i", str(raw)]
-    filters = []
-    for index, step in enumerate(state.steps, start=1):
+    filters = [
+        "[0:v]fps=30,split=2[background_source][content_source]",
+        f"[background_source]scale={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:force_original_aspect_ratio=increase,"
+        f"crop={OUTPUT_WIDTH}:{OUTPUT_HEIGHT},gblur=sigma=28,eq=brightness=-0.38[background]",
+        # 原始屏幕下方是分析正文和 Tab Bar，并非本条教学重点；裁掉后图表能以更大字号进入安全区。
+        f"[content_source]crop=iw:ih*0.755:0:0,scale={SAFE_WIDTH}:{SAFE_HEIGHT}:"
+        f"force_original_aspect_ratio=decrease,pad={SAFE_WIDTH}:{SAFE_HEIGHT}:"
+        "(ow-iw)/2:(oh-ih)/2:color=0x081015[content]",
+        f"[background][content]overlay={SAFE_LEFT}:{SAFE_TOP}[base]",
+    ]
+    overlay_steps = [step for step in state.steps if step.overlay_text]
+    current_video = "base"
+    for index, step in enumerate(overlay_steps, start=1):
+        overlay = run / f"overlay-{step.step_id}.png"
+        await command("swift", str(ROOT / "scripts/render_text_overlay.swift"), step.overlay_text, str(overlay))
+        inputs += ["-loop", "1", "-i", str(overlay)]
+        end = step.time_sec + step.duration_sec
+        output_video = "v" if index == len(overlay_steps) else f"overlayed{index}"
+        filters.append(f"[{index}:v]scale=520:128[overlay{index}]")
+        filters.append(
+            f"[{current_video}][overlay{index}]overlay=50:120:enable='between(t,{step.time_sec:.3f},{end:.3f})'[{output_video}]"
+        )
+        current_video = output_video
+    if not overlay_steps:
+        filters.append("[base]null[v]")
+    audio_start = 1 + len(overlay_steps)
+    for index, step in enumerate(state.steps, start=audio_start):
         inputs += ["-i", str(run / f"voice-{step.step_id}.mp3")]
-        filters.append(f"[{index}:a]adelay={int(step.time_sec * 1000)}:all=1[a{index}]")
+        audio_number = index - audio_start + 1
+        filters.append(f"[{index}:a]adelay={int(step.time_sec * 1000)}:all=1[a{audio_number}]")
     mix = "".join(f"[a{i}]" for i in range(1, len(state.steps) + 1))
     filters.append(mix + f"amix=inputs={len(state.steps)}:normalize=0,loudnorm=I=-16:TP=-1.5:LRA=11[a]")
-    await command(*inputs, "-filter_complex", ";".join(filters), "-map", "0:v", "-map", "[a]",
-                  "-vf", "fps=30,scale=720:-2", "-fps_mode", "cfr", "-c:v", "libx264", "-preset", "fast", "-crf", "21", "-pix_fmt", "yuv420p",
+    await command(*inputs, "-filter_complex", ";".join(filters), "-map", "[v]", "-map", "[a]",
+                  "-fps_mode", "cfr", "-c:v", "libx264", "-preset", "fast", "-crf", "21", "-pix_fmt", "yuv420p",
                   "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-t", str(elapsed), str(output))
     metadata = await probe(output)
     codecs = {s["codec_type"]: s["codec_name"] for s in metadata["streams"]}
@@ -256,11 +331,25 @@ async def encode(run: Path, state: Production, raw: Path) -> None:
         raise RuntimeError("成片编码不符合要求")
     await command("ffmpeg", "-v", "error", "-i", str(output), "-f", "null", "-")
     for step in state.steps:
-        await command("ffmpeg", "-y", "-v", "error", "-ss", str(step.time_sec + 1), "-i", str(output),
+        # SwiftUI 图表重绘晚于状态事件数百毫秒；审核帧应取图层稳定后的画面。
+        review_time = min(step.time_sec + 1.8, elapsed - 0.1)
+        await command("ffmpeg", "-y", "-v", "error", "-ss", str(review_time), "-i", str(output),
                       "-frames:v", "1", "-pix_fmt", "yuvj420p", str(run / f"frame-{step.step_id}.jpg"))
     state.video = str(output)
     state.sha256 = hashlib.sha256(output.read_bytes()).hexdigest()
-    state.checks = {"codecs": codecs, "decode": "passed", "timeline": "passed", "visual_review": "pending", "audio_review": "pending"}
+    state.checks = {
+        "codecs": codecs,
+        "decode": "passed",
+        "timeline": "passed",
+        "platform_safe_zone": {
+            "canvas": f"{OUTPUT_WIDTH}x{OUTPUT_HEIGHT}",
+            "content_rect": {"x": SAFE_LEFT, "y": SAFE_TOP, "width": SAFE_WIDTH, "height": SAFE_HEIGHT},
+            "reserved": {"right": OUTPUT_WIDTH - SAFE_LEFT - SAFE_WIDTH, "bottom": OUTPUT_HEIGHT - SAFE_TOP - SAFE_HEIGHT},
+            "status": "awaiting_visual_review",
+        },
+        "visual_review": "pending",
+        "audio_review": "pending",
+    }
     state.status = "awaiting_review"
     state.stage = "review"
     save(run / "production.json", state.model_dump())
@@ -273,9 +362,16 @@ async def upload(run: Path) -> None:
     review = json.loads((run / "review.json").read_text())
     video = Path(state.video)
     digest = hashlib.sha256(video.read_bytes()).hexdigest()
-    if digest != state.sha256 or review.get("sha256") != digest or review.get("visual") != "passed" or review.get("audio") != "passed":
+    if (
+        digest != state.sha256
+        or review.get("sha256") != digest
+        or review.get("visual") != "passed"
+        or review.get("audio") != "passed"
+        or review.get("platform_safe_zone") != "passed"
+        or ((run / "creative-brief.json").exists() and review.get("creative_brief_match") != "passed")
+    ):
         raise RuntimeError("缺少与成片哈希匹配的音画校验，禁止上传")
-    container = Path((await command("xcrun", "simctl", "get_app_container", "booted", BUNDLE, "data")).strip())
+    container = Path((await command("xcrun", "simctl", "get_app_container", SIMULATOR_UDID, BUNDLE, "data")).strip())
     directory = container / "Documents/marketing"
     shutil.copyfile(video, directory / "upload.mp4")
     result = await bridge(directory, {"operation": "upload"})
@@ -301,6 +397,7 @@ async def main() -> None:
     parser.add_argument("action", choices=["produce", "encode", "upload"])
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--symbols", nargs="+", default=["NVDA", "AAPL", "TSLA"])
+    parser.add_argument("--brief-file", type=Path)
     parser.add_argument("--test", action="store_true")
     args = parser.parse_args()
     if Path(args.run_id).name != args.run_id or args.run_id in {".", ".."}:
@@ -308,6 +405,7 @@ async def main() -> None:
     RUNS.mkdir(parents=True, exist_ok=True)
     with (RUNS / ".production.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        await ensure_simulator()
         run = RUNS / args.run_id
         run.mkdir(parents=True, exist_ok=True)
         state = Production(run_id=args.run_id)

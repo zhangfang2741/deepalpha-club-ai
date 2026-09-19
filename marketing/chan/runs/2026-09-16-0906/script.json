@@ -1,0 +1,53 @@
+[
+  {
+    "step_id": "01",
+    "time_sec": 0.0,
+    "layers": [],
+    "app_action": "关闭所有结构图层，展示 TRMD 原始日线",
+    "on_screen_text": "TRMD · 日线",
+    "narration_text": "TORM 股东要卖九百万股，约二点九亿美元。但公告说，公司不发新股，也拿不到这笔钱。先别把股东减持看成公司融资。",
+    "expected_visual": "真实 App 的 TRMD 原始日线与 MACD，无结构图层",
+    "overlay_text": "股东卖 900 万股\n公司却拿不到钱？",
+    "duration_sec": 12.921905
+  },
+  {
+    "step_id": "02",
+    "time_sec": 13.521905,
+    "layers": [
+      "fractals"
+    ],
+    "app_action": "打开分型定位已确认拐点",
+    "on_screen_text": "先看已确认分型",
+    "narration_text": "打开分型，先找已经确认的历史拐点。公告是事实背景，分型才是图上的结构起点。",
+    "expected_visual": "红绿分型点出现，原始 K 线仍可对照",
+    "overlay_text": "公告是背景\n分型是结构起点",
+    "duration_sec": 9.891701
+  },
+  {
+    "step_id": "03",
+    "time_sec": 24.013606,
+    "layers": [
+      "fractals",
+      "segments"
+    ],
+    "app_action": "叠加线段过滤短期波动",
+    "on_screen_text": "再看线段层级",
+    "narration_text": "再叠加线段，把短期波动放回更高层级。标题再大，也不能代替结构确认。",
+    "expected_visual": "分型点上叠加橙色线段，层级变化清晰",
+    "overlay_text": "跨层级核对\n不让标题替代结构",
+    "duration_sec": 7.801905
+  },
+  {
+    "step_id": "04",
+    "time_sec": 32.415510999999995,
+    "layers": [
+      "segments"
+    ],
+    "app_action": "关闭分型，只保留线段并停留",
+    "on_screen_text": "只保留线段",
+    "narration_text": "这只是历史结构学习，不预测涨跌。App Store 搜索 DeepAlpha 缠论。",
+    "expected_visual": "仅保留线段，结尾完整显示品牌与下载引导",
+    "overlay_text": "App Store 搜索\nDeepAlpha 缠论",
+    "duration_sec": 7.372336
+  }
+]

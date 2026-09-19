@@ -1,0 +1,14 @@
+{
+  "checked_at_beijing": "2026-09-08T09:46:21+08:00",
+  "organization": "My organization",
+  "channels": [
+    {"service": "tiktok", "name": "littlemonkey437", "id": "6a9ce3f9cd8b9c702c154602", "connected": true},
+    {"service": "youtube", "name": "DeepAlpha", "id": "6a9ce2eacd8b9c702c1543bf", "connected": true}
+  ],
+  "today_posts_all_statuses": 0,
+  "duplicate_check": "passed",
+  "media_review": "failed",
+  "upload": "not_started",
+  "buffer_submit": "not_started",
+  "blocking_run_id": "2026-09-08-0945"
+}

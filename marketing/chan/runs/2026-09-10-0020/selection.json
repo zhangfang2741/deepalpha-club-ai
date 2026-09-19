@@ -1,0 +1,41 @@
+{
+  "run_id": "2026-09-10-0020",
+  "date": "2026-09-10",
+  "status": "success",
+  "mode": "财报事件后的结构复盘",
+  "selected": {
+    "symbol": "GME",
+    "eligible": true,
+    "confirmed_fractals": 8,
+    "bars_count": 251,
+    "last_bar": "2026-09-09",
+    "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+  },
+  "candidates": [
+    {
+      "symbol": "GME",
+      "eligible": true,
+      "confirmed_fractals": 8,
+      "bars_count": 251,
+      "last_bar": "2026-09-09",
+      "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+    },
+    {
+      "symbol": "AMD",
+      "eligible": true,
+      "confirmed_fractals": 8,
+      "bars_count": 251,
+      "last_bar": "2026-09-09",
+      "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+    },
+    {
+      "symbol": "AAPL",
+      "eligible": true,
+      "confirmed_fractals": 8,
+      "bars_count": 251,
+      "last_bar": "2026-09-09",
+      "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+    }
+  ],
+  "note": "GME 因 2026-09-08 SEC 8-K 季度业绩披露进入候选；只讲已确认历史结构，不预测财报后涨跌"
+}

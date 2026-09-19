@@ -1,0 +1,21 @@
+{
+  "run_id": "2026-09-12-0910",
+  "sha256": "1106d8c0898c73ec73b191242861efd4db131e2ba3c5ca71220e1df35f90e435",
+  "visual": "passed",
+  "audio": "passed",
+  "platform_safe_zone": "passed",
+  "creative_brief_match": "passed",
+  "evidence": {
+    "frames": [
+      "frame-01.jpg：真实 PLTR 日线与 MACD，全部结构图层关闭；0–3 秒显示 AIPCon 事件问题钩子",
+      "frame-02.jpg：仅分型按钮高亮，红绿分型标记清晰出现",
+      "frame-03.jpg：分型与笔按钮同时高亮，红绿分型和蓝色笔叠加显示",
+      "frame-04.jpg：分型关闭、蓝色笔保留；App Store 搜索 DeepAlpha 缠论完整品牌下载引导清晰显示"
+    ],
+    "creative_difference": "PLTR AIPCon 官方事件 + 误区纠正式提问，与昨日 NDAQ 中枢开关对比、前日 GME 财报层级递进均不同",
+    "safe_zone": "720×1280；标题、价格、图表、图例和 DeepAlpha 缠论下载引导均位于 x=36–600、y=96–1020，右侧 120 像素及底部 260 像素无关键内容",
+    "audio": "四段 MiniMax 中文旁白与原图、分型、叠加笔、关闭分型及下载引导逐步对应；综合响度 -16.63 LUFS，真峰值 -1.41 dBTP，无削波",
+    "timeline": "实际图层事件与脚本最大误差小于 0.002 秒；审核帧取图层稳定后的时点",
+    "media": "H.264/AAC，720×1280，30fps，36.30 秒，完整解码通过"
+  }
+}

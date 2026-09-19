@@ -1,0 +1,88 @@
+{
+  "date_beijing": "2026-09-10",
+  "goal": {
+    "review_due_metrics": true,
+    "creative_video_reviewed": true,
+    "media_verified": true,
+    "tiktok_sent_with_public_url": true,
+    "youtube_sent_with_public_url": true,
+    "deepalpha_app_store_prompt_verified": true
+  },
+  "status": "achieved",
+  "attempts": [
+    {
+      "run_id": "2026-09-10-0020",
+      "stage": "selection",
+      "result": "failed_recoverable",
+      "root_cause": "专用模拟器 simctl launch 卡住",
+      "preserved_evidence": ["creative-brief.json", "failure.json"],
+      "changed_variable": "仅 shutdown/boot 原专用模拟器，不删除设备数据",
+      "return_to": "selection"
+    },
+    {
+      "run_id": "2026-09-10-0020",
+      "stage": "visual_review",
+      "result": "failed_recoverable",
+      "root_cause": "SwiftUI 图层重绘晚于事件时间，审核帧过早",
+      "preserved_evidence": ["screen.mp4", "events.json", "script.json"],
+      "changed_variable": "审核取帧延后到图层稳定后",
+      "return_to": "encoding_and_review"
+    },
+    {
+      "run_id": "2026-09-10-0020",
+      "stage": "publish",
+      "result": "achieved",
+      "root_cause": null,
+      "preserved_evidence": ["review.json", "upload.json", "publish.json"],
+      "changed_variable": "TikTok sending 时仅查询原 postId",
+      "return_to": null
+    }
+  ],
+  "final_run_id": "2026-09-10-0020",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/60b6eb1ca59846ca91d5bc8dbeb4012d5b090fe6.mp4",
+  "tiktok": {
+    "post_id": "6aa18d222472d80c22aa88ae",
+    "status": "sent",
+    "public_url": "https://tiktok.com/@littlemonkey437/video/7683577721267457300"
+  },
+  "youtube": {
+    "post_id": "6aa18d555e8b0a4dedb7e694",
+    "status": "sent",
+    "public_url": "https://www.youtube.com/watch?v=yok_oF23w2E"
+  },
+  "deepalpha_app_store_prompt_evidence": {
+    "on_screen": "frame-04.jpg 显示 App Store 搜索 / DeepAlpha 缠论",
+    "narration": "第四段旁白口播 App Store 搜索 DeepAlpha 缠论",
+    "youtube_description": "包含 https://apps.apple.com/app/id6806500280"
+  },
+  "review_24h_due_beijing": "2026-09-11T00:46:37+08:00",
+  "review_72h_due_beijing": "2026-09-13T00:46:37+08:00",
+  "automation_review_2026_09_10_0904": {
+    "checked_at_beijing": "2026-09-10T09:04:47+08:00",
+    "workspace": "My organization",
+    "channels_connected": ["TikTok littlemonkey437", "YouTube DeepAlpha"],
+    "today_remote_status": "both_sent_no_pending_or_error",
+    "today_metrics_snapshot": {
+      "tiktok": {"views": 5, "average_time_watched_sec": 6.5, "metrics_updated_at": "2026-09-10T00:08:07.547Z"},
+      "youtube": {"views": 7, "metrics_updated_at": "2026-09-10T00:00:42.518Z"}
+    },
+    "previous_post_24h_review": "completed_at_2026-09-10T09:09:03+08:00_with_incomplete_metric_freshness",
+    "previous_post_24h_due_beijing": "2026-09-10T09:09:02+08:00",
+    "previous_post_latest_snapshot": {
+      "tiktok": {"views": 1, "average_time_watched_sec": 6.02, "metrics_updated_at": "2026-09-10T00:08:07.547Z"},
+      "youtube": {"views": 33, "metrics_updated_at": "2026-09-10T00:00:42.518Z"}
+    },
+    "media_recovery": {
+      "reason": "原上传 URL 复核时 HEAD 502、GET 404，确认对象不可访问",
+      "action": "未重提任何平台帖子；按相同已审核成片 SHA-256 重新上传",
+      "sha256": "00458121d9958c38cc198547c5a545673b28efdfd479a2d3845d6952bc6f614f",
+      "anonymous_head": "passed",
+      "anonymous_get_sha256": "passed"
+    },
+    "due_reviews": {
+      "2026_09_09_24h": "completed_with_incomplete_metric_freshness",
+      "2026_09_07_72h": "completed_with_partial_platform_freshness",
+      "receipt": "marketing/chan/runs/2026-09-10/metrics-review-0909.json"
+    }
+  }
+}

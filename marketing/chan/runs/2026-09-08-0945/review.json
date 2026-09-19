@@ -1,0 +1,10 @@
+{
+  "run_id": "2026-09-08-0945",
+  "video_sha256": "e32dbbbcf243689a15748ffab54dfec1e9913713b01c4f9ab2d73dca2dc7db56",
+  "visual": "failed",
+  "audio": "passed",
+  "visual_evidence": "frame-01 至 frame-03 均显示真实 NVDA 日线，分型与笔按脚本出现，但系统通知权限弹窗遮挡图表；frame-04 因成片尾长不足未生成。",
+  "audio_evidence": "四段 MiniMax 中文旁白按 script.json 混入对应时间段；AAC 单声道可完整解码，综合响度 -16.34 LUFS、真峰值 -1.34 dBTP，未发现静音或削波。",
+  "timeline_evidence": "四步实际时间分别为 0.000、5.547、11.220、18.089 秒，与脚本时间偏差均小于 0.01 秒。",
+  "decision": "blocked_before_upload"
+}

@@ -1,0 +1,90 @@
+# 生产与上传回执
+
+{
+  "run_id": "2026-09-13-0906",
+  "status": "ready_for_buffer",
+  "stage": "uploaded",
+  "symbol": "NFE",
+  "video": "/Users/zhangfang/deepalpha-club-ai/marketing/chan/runs/2026-09-13-0906/teaching.mp4",
+  "sha256": "190c451e9738f261620b9c18c3596bd9e37699c3999090a203d047592595855a",
+  "duration_sec": 41.084444,
+  "steps": [
+    {
+      "step_id": "01",
+      "time_sec": 0.0,
+      "layers": [],
+      "app_action": "展示 NFE 原始日线",
+      "on_screen_text": "NFE · 1 比 50 反向拆股",
+      "narration_text": "NFE一比五十反向拆股，九月十一日开盘生效。价格刻度突然变化，就等于结构反转吗？",
+      "expected_visual": "真实 NFE 日线结果页，结构图层全部关闭",
+      "overlay_text": "1 比 50 反向拆股\n价格跳变等于反转？",
+      "duration_sec": 9.508571
+    },
+    {
+      "step_id": "02",
+      "time_sec": 10.108571,
+      "layers": [
+        "strokes"
+      ],
+      "app_action": "打开笔观察确认拐点",
+      "on_screen_text": "先看确认的笔",
+      "narration_text": "不等于。先打开笔，检查复权后的历史拐点能否连续连接，不把公司行为本身当交易信号。",
+      "expected_visual": "蓝色笔出现，其他结构图层关闭",
+      "overlay_text": "第一步：笔是否连续？",
+      "duration_sec": 10.24
+    },
+    {
+      "step_id": "03",
+      "time_sec": 20.948571,
+      "layers": [
+        "strokes",
+        "segments"
+      ],
+      "app_action": "叠加线段观察结构层级",
+      "on_screen_text": "再看线段层级",
+      "narration_text": "再叠加线段，把短期价格跳变放回更高层级。只讨论已经确认的历史结构，不预测方向。",
+      "expected_visual": "笔与线段同时显示",
+      "overlay_text": "第二步：放回线段层级",
+      "duration_sec": 9.508571
+    },
+    {
+      "step_id": "04",
+      "time_sec": 31.057142,
+      "layers": [
+        "segments"
+      ],
+      "app_action": "关闭笔只保留线段并停留",
+      "on_screen_text": "App Store 搜索 DeepAlpha 缠论",
+      "narration_text": "关掉笔，只保留线段再核对一次。想快速切换结构图层，App Store搜索DeepAlpha缠论。",
+      "expected_visual": "蓝色笔消失、线段保留，DeepAlpha 缠论下载引导清晰显示",
+      "overlay_text": "App Store 搜索\nDeepAlpha 缠论",
+      "duration_sec": 9.427302
+    }
+  ],
+  "checks": {
+    "codecs": {
+      "video": "h264",
+      "audio": "aac"
+    },
+    "decode": "passed",
+    "timeline": "passed",
+    "platform_safe_zone": {
+      "canvas": "720x1280",
+      "content_rect": {
+        "x": 36,
+        "y": 96,
+        "width": 564,
+        "height": 924
+      },
+      "reserved": {
+        "right": 120,
+        "bottom": 260
+      },
+      "status": "awaiting_visual_review"
+    },
+    "visual_review": "passed",
+    "audio_review": "passed",
+    "anonymous_head": "passed",
+    "anonymous_get_sha256": "passed"
+  }
+}

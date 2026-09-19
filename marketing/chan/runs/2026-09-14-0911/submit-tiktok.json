@@ -1,0 +1,14 @@
+{
+  "date_beijing": "2026-09-14",
+  "run_id": "2026-09-14-0911",
+  "content_sha256": "e147d2a87504a75250a07f1a0659b84137b174fc3055c46977be5e719b3fcb04",
+  "topic": "LH 投资者日财测与历史价格结构不能混为一谈",
+  "channel_id": "6a9ce3f9cd8b9c702c154602",
+  "channel": "TikTok littlemonkey437",
+  "status": "sent",
+  "post_id": "6aa74a9663da6bf64fa1ff35",
+  "response_saved_at_beijing": "2026-09-14T09:15:14+08:00",
+  "sent_at_utc": "2026-09-14T01:16:48.502Z",
+  "public_url": "https://tiktok.com/@littlemonkey437/video/7685193099546545424",
+  "note": "初始返回 sending；首次查询超时后继续查询同一 postId，确认 sent，未重复提交。"
+}

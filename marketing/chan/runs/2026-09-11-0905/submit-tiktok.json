@@ -1,0 +1,14 @@
+{
+  "date_beijing": "2026-09-11",
+  "run_id": "2026-09-11-0905",
+  "content_sha256": "784e1d93e57d26503e95c3f849977d14de2fbf118301cc6de8a3f9376682fb88",
+  "topic": "NDAQ 官方投资事件的中枢图层前后对比",
+  "channel": "littlemonkey437",
+  "channel_id": "6a9ce3f9cd8b9c702c154602",
+  "status": "sent",
+  "post_id": "6aa354f230bad4fb83316d5b",
+  "sent_at_utc": "2026-09-11T01:10:54.236Z",
+  "public_url": "https://tiktok.com/@littlemonkey437/video/7684078732167990529",
+  "submitted_at_beijing": "2026-09-11T09:10:10+08:00",
+  "initial_validation_failure": "首次调用的媒体资产字段形状未通过连接器本地输入校验，未发出远端请求；修正为 video.url 后提交"
+}

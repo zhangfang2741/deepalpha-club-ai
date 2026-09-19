@@ -1,0 +1,90 @@
+{
+  "run_id": "2026-09-10-0020",
+  "status": "ready_for_buffer",
+  "stage": "uploaded",
+  "symbol": "GME",
+  "video": "/Users/zhangfang/deepalpha-club-ai/marketing/chan/runs/2026-09-10-0020/teaching.mp4",
+  "sha256": "00458121d9958c38cc198547c5a545673b28efdfd479a2d3845d6952bc6f614f",
+  "duration_sec": 32.903855,
+  "steps": [
+    {
+      "step_id": "01",
+      "time_sec": 0.0,
+      "layers": [],
+      "app_action": "展示财报后的原始日线",
+      "on_screen_text": "GME · 财报后先看结构",
+      "narration_text": "GME刚披露季度业绩。财报之后，先别急着猜涨跌，先看结构有没有确认。",
+      "expected_visual": "真实 GME 日线结果页，结构图层全部关闭",
+      "overlay_text": "GME 刚披露季度业绩\n先别急着猜方向",
+      "duration_sec": 8.823583
+    },
+    {
+      "step_id": "02",
+      "time_sec": 9.423582999999999,
+      "layers": [
+        "strokes"
+      ],
+      "app_action": "只打开笔",
+      "on_screen_text": "先看笔是否确认",
+      "narration_text": "先打开笔。实线是已经确认的结构，末端虚线还可能继续变化。",
+      "expected_visual": "蓝色笔出现，末端未确认笔以虚线显示",
+      "overlay_text": "第一步：笔是否确认？",
+      "duration_sec": 7.4
+    },
+    {
+      "step_id": "03",
+      "time_sec": 17.423583,
+      "layers": [
+        "strokes",
+        "segments"
+      ],
+      "app_action": "叠加线段",
+      "on_screen_text": "再把波动放进线段",
+      "narration_text": "再打开线段，把财报后的短期波动，放回更大的走势层级里看。",
+      "expected_visual": "蓝色笔保留，橙色线段出现",
+      "overlay_text": "第二步：放回更大走势",
+      "duration_sec": 6.222948
+    },
+    {
+      "step_id": "04",
+      "time_sec": 24.246531,
+      "layers": [
+        "strokes",
+        "segments",
+        "pivots"
+      ],
+      "app_action": "叠加中枢并停留",
+      "on_screen_text": "App Store 搜索 DeepAlpha 缠论",
+      "narration_text": "最后看中枢的位置。想自己拆解财报后的K线，App Store搜索DeepAlpha缠论。",
+      "expected_visual": "笔、线段和中枢同屏，CTA 清晰显示",
+      "overlay_text": "App Store 搜索\nDeepAlpha 缠论",
+      "duration_sec": 8.057324
+    }
+  ],
+  "checks": {
+    "codecs": {
+      "video": "h264",
+      "audio": "aac"
+    },
+    "decode": "passed",
+    "timeline": "passed",
+    "platform_safe_zone": {
+      "canvas": "720x1280",
+      "content_rect": {
+        "x": 36,
+        "y": 96,
+        "width": 564,
+        "height": 924
+      },
+      "reserved": {
+        "right": 120,
+        "bottom": 260
+      },
+      "status": "awaiting_visual_review"
+    },
+    "visual_review": "passed",
+    "audio_review": "passed",
+    "anonymous_head": "passed",
+    "anonymous_get_sha256": "passed"
+  }
+}

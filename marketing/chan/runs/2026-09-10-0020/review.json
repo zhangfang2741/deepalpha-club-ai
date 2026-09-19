@@ -1,0 +1,21 @@
+{
+  "run_id": "2026-09-10-0020",
+  "sha256": "00458121d9958c38cc198547c5a545673b28efdfd479a2d3845d6952bc6f614f",
+  "visual": "passed",
+  "audio": "passed",
+  "platform_safe_zone": "passed",
+  "creative_brief_match": "passed",
+  "evidence": {
+    "frames": [
+      "frame-01.jpg：真实 GME 日线与 MACD，所有结构图层关闭；画面钩子明确显示财报披露与不猜方向",
+      "frame-02.jpg：笔按钮高亮，蓝色确认笔和末端虚线出现；画面文字为第一步检查确认",
+      "frame-03.jpg：笔与线段按钮同时高亮，橙色线段叠加在蓝色笔上；画面文字说明放回更大走势",
+      "frame-04.jpg：笔、线段和中枢按钮高亮，紫色中枢区间出现；App Store 搜索 CTA 清晰可读"
+    ],
+    "creative_difference": "与前两日 NVDA 分型入门不同：使用 GME 财报 8-K 事件、笔→线段→中枢路径、问题式钩子和画面 CTA",
+    "safe_zone": "720×1280；全部文字、价格、图表、图例和 CTA 均位于 x=36–600、y=96–1020，未进入右侧 120 像素及底部 260 像素覆盖区",
+    "audio": "四段 MiniMax 中文旁白逐步对应原图、笔、线段、中枢与 CTA；综合响度 -16.7 LUFS，真峰值 -1.2 dBFS，无削波",
+    "timeline": "事件时间与脚本误差最大约 0.011 秒；审核帧取图层重绘稳定后的时点",
+    "media": "H.264/AAC，720×1280，30fps，32.93 秒，完整解码通过"
+  }
+}

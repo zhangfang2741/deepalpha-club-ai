@@ -72,6 +72,7 @@ final class StoreManager: ObservableObject {
                 guard case .verified(let transaction) = verification else { return false }
                 await transaction.finish()
                 await refreshSubscriptionStatus()
+                if isSubscribed { SKAdNetworkAttribution.report(.subscribed) }
                 return isSubscribed
             case .userCancelled, .pending:
                 return false

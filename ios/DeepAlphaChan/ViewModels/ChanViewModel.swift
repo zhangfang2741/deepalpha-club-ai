@@ -115,6 +115,7 @@ final class ChanViewModel: ObservableObject {
             analysis = try await ChanService.analysis(
                 symbol: sym, startDate: startDateString,
                 endDate: endDateString, freq: freq, warmupDays: warmup)
+            SKAdNetworkAttribution.report(.usedAnalysis)
         } catch let error as APIError {
             // 失败时保留上一次结果，仅提示错误，避免清空已呈现的图表
             errorMessage = error.message

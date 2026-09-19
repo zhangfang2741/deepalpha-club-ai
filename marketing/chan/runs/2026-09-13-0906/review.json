@@ -1,0 +1,14 @@
+{
+  "run_id": "2026-09-13-0906",
+  "sha256": "190c451e9738f261620b9c18c3596bd9e37699c3999090a203d047592595855a",
+  "visual": "passed",
+  "audio": "passed",
+  "platform_safe_zone": "passed",
+  "creative_brief_match": "passed",
+  "evidence": {
+    "visual": "逐帧检查 frame-01 至 frame-04 及每 2 秒接触表：真实 NFE 日线清晰，原图、笔、笔叠加线段、只保留线段四种状态与脚本一致，无系统弹窗或遮挡",
+    "audio": "四段 MiniMax 中文旁白与对应步骤时长和事件时间轴一致；AAC 可完整解码，综合响度 -16.3 LUFS，真峰值 -1.3 dBFS",
+    "platform_safe_zone": "720x1280 成片内容限定在 x=36–600、y=96–1020；右侧预留 120 像素、底部预留 260 像素，标题、图表、图例和下载引导均未进入平台覆盖区",
+    "creative_brief_match": "0–3 秒显示 NFE 反向拆股问题与真实 App；5 秒内持续展示 App 核心图表；笔与线段发生两次以上有意义变化；结尾画面完整显示 App Store 搜索 DeepAlpha 缠论，第四段旁白完整口播"
+  }
+}

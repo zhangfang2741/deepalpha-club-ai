@@ -1,0 +1,90 @@
+# 生产与上传回执
+
+{
+  "run_id": "2026-09-11-0905",
+  "status": "ready_for_buffer",
+  "stage": "uploaded",
+  "symbol": "NDAQ",
+  "video": "/Users/zhangfang/deepalpha-club-ai/marketing/chan/runs/2026-09-11-0905/teaching.mp4",
+  "sha256": "784e1d93e57d26503e95c3f849977d14de2fbf118301cc6de8a3f9376682fb88",
+  "duration_sec": 34.24240399999999,
+  "steps": [
+    {
+      "step_id": "01",
+      "time_sec": 0.0,
+      "layers": [],
+      "app_action": "展示 NDAQ 原始日线",
+      "on_screen_text": "NDAQ · 事件前先看原图",
+      "narration_text": "Nasdaq刚宣布向Kraken母公司投资一亿美元。遇到事件，图上先看什么？",
+      "expected_visual": "真实 NDAQ 日线结果页，结构图层全部关闭",
+      "overlay_text": "Nasdaq 投资 1 亿美元\n图上先看什么？",
+      "duration_sec": 8.266304
+    },
+    {
+      "step_id": "02",
+      "time_sec": 8.866304,
+      "layers": [
+        "pivots"
+      ],
+      "app_action": "只打开中枢",
+      "on_screen_text": "先找已确认震荡区间",
+      "narration_text": "先只打开中枢。紫色区间帮你看清，事件发生前价格主要在哪里反复重叠。",
+      "expected_visual": "紫色中枢区间出现，其他结构图层关闭",
+      "overlay_text": "打开中枢：先找重叠区",
+      "duration_sec": 8.1
+    },
+    {
+      "step_id": "03",
+      "time_sec": 17.566304,
+      "layers": [
+        "pivots",
+        "strokes"
+      ],
+      "app_action": "叠加笔对照区间内结构",
+      "on_screen_text": "再用笔定位结构",
+      "narration_text": "再叠加笔，比较每一段历史结构是在区间内，还是已经离开区间。",
+      "expected_visual": "紫色中枢与蓝色笔同时显示",
+      "overlay_text": "叠加笔：区间内还是区间外？",
+      "duration_sec": 6.861497
+    },
+    {
+      "step_id": "04",
+      "time_sec": 25.027800999999997,
+      "layers": [
+        "strokes"
+      ],
+      "app_action": "关闭中枢只保留笔并停留",
+      "on_screen_text": "App Store 搜索 DeepAlpha 缠论",
+      "narration_text": "关闭中枢再对照一次。想自己切换图层，App Store搜索DeepAlpha缠论。",
+      "expected_visual": "中枢消失、蓝色笔保留，DeepAlpha 缠论下载引导清晰显示",
+      "overlay_text": "App Store 搜索\nDeepAlpha 缠论",
+      "duration_sec": 8.614603
+    }
+  ],
+  "checks": {
+    "codecs": {
+      "video": "h264",
+      "audio": "aac"
+    },
+    "decode": "passed",
+    "timeline": "passed",
+    "platform_safe_zone": {
+      "canvas": "720x1280",
+      "content_rect": {
+        "x": 36,
+        "y": 96,
+        "width": 564,
+        "height": 924
+      },
+      "reserved": {
+        "right": 120,
+        "bottom": 260
+      },
+      "status": "awaiting_visual_review"
+    },
+    "visual_review": "passed",
+    "audio_review": "passed",
+    "anonymous_head": "passed",
+    "anonymous_get_sha256": "passed"
+  }
+}

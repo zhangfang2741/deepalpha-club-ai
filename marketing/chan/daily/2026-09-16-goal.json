@@ -1,0 +1,47 @@
+{
+  "date_beijing": "2026-09-16",
+  "goal": "完成到期复盘、差异化创意视频审核与媒体校验，并发布到 TikTok littlemonkey437 和 YouTube DeepAlpha；核实 DeepAlpha 缠论完整品牌名及 App Store 下载引导",
+  "status": "achieved",
+  "attempts": [
+    {
+      "run_id": "2026-09-16-0906",
+      "stage": "execution_interrupted_after_production",
+      "root_cause": "2026-09-16 定时运行在成片生成后中断，未完成审核、上传和发布",
+      "preserved_evidence": ["creative-brief.json", "production.json", "teaching.mp4", "四张审核帧"],
+      "next_change": "次日续接同一已生成且未被否决的成片，从完整审核闸门恢复，不重复生产或提交",
+      "return_node": "review",
+      "resolved_at_beijing": "2026-09-17T21:47:28+08:00"
+    }
+  ],
+  "completed_channels": [
+    {"channel": "TikTok littlemonkey437", "post_id": "6aabef0170f9abe0ceeedc7e", "public_url": "https://tiktok.com/@littlemonkey437/video/7686499991786933511", "status": "sent"},
+    {"channel": "YouTube DeepAlpha", "post_id": "6aabef2343b800e7efc6ea45", "public_url": "https://www.youtube.com/watch?v=i6DV73COD2k", "status": "sent"}
+  ],
+  "started_at_beijing": "2026-09-16T09:03:41+08:00",
+  "reviews": {
+    "due": [
+      "2026-09-15 内容 24h（不早于 2026-09-16T09:09:32+08:00）",
+      "2026-09-13 内容 72h（不早于 2026-09-16T09:11:26+08:00）"
+    ],
+    "pre_threshold_snapshot": "2026-09-16T09:03:41+08:00：9 月 15 日 TikTok 8 次播放、平均观看 1.07 秒，YouTube 10 次播放；9 月 13 日 TikTok 4 次播放、平均观看 4.44 秒，YouTube 45 次播放。指标时间戳均早于严格门槛，尚未冒充到期复盘。"
+  },
+  "prepublish_check": {
+    "checked_at_beijing": "2026-09-16T09:03:41+08:00",
+    "workspace": "My organization",
+    "channels": [
+      "TikTok littlemonkey437 connected",
+      "YouTube DeepAlpha connected"
+    ],
+    "today_all_statuses": "no_posts_found"
+  },
+  "final_success_run_id": "2026-09-16-0906",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/8a41a80a0ac14c349fc01709245e980722e0ea5f.mp4",
+  "content_sha256": "0367bee2beab18e5fbdb8c30808d7b217df79e4bba211904dc8f153eded2877a",
+  "deepalpha_app_store_prompt_evidence": {
+    "on_screen": "frame-04.jpg 完整显示 App Store 搜索 / DeepAlpha 缠论",
+    "narration": "第四段完整口播 App Store 搜索 DeepAlpha 缠论",
+    "youtube_description": "完整品牌名与 App Store 直链已核实"
+  },
+  "achieved_at_beijing": "2026-09-17T21:47:28+08:00",
+  "next_reviews_beijing": {"24h": "2026-09-18T21:47:21+08:00", "72h": "2026-09-20T21:47:21+08:00"}
+}

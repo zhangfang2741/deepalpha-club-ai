@@ -1,0 +1,5 @@
+{
+  "run_id": "2026-09-08-2358-safe",
+  "stage": "preflight",
+  "error": "等待 response.json 超时；检查模拟器登录、网络和 Debug 包"
+}

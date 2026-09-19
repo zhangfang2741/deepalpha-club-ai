@@ -1,0 +1,29 @@
+{
+  "checked_at_beijing": "2026-09-19T09:04:45+08:00",
+  "workspace": "My organization",
+  "review_window": {
+    "content_run_id": "2026-09-16-0906",
+    "threshold_beijing": "2026-09-18T21:47:21+08:00",
+    "result": "completed"
+  },
+  "tiktok": {
+    "post_id": "6aabef0170f9abe0ceeedc7e",
+    "status": "sent",
+    "metrics_updated_at": "2026-09-18T23:39:15+08:00",
+    "views": 13,
+    "average_time_watched_sec": 2.02,
+    "total_time_watched_min": 0.57,
+    "reactions": 0,
+    "comments": 0,
+    "shares": 0
+  },
+  "youtube": {
+    "post_id": "6aabef2343b800e7efc6ea45",
+    "status": "sent",
+    "metrics_updated_at": "2026-09-18T23:21:10+08:00",
+    "views": 11,
+    "reactions": 0,
+    "comments": 0
+  },
+  "interpretation": "两平台指标刷新时间均晚于严格 24 小时门槛；TikTok 平均观看 2.02 秒，下一条需强化 0–3 秒事实反差并更早展示结构变化。缺失指标不补零。"
+}

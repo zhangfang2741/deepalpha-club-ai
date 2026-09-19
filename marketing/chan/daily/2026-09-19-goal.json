@@ -1,0 +1,61 @@
+{
+  "date_beijing": "2026-09-19",
+  "goal": "完成到期复盘、差异化创意视频审核与媒体校验，并发布到 TikTok littlemonkey437 和 YouTube DeepAlpha；核实 DeepAlpha 缠论完整品牌名及 App Store 下载引导",
+  "status": "achieved",
+  "started_at_beijing": "2026-09-19T09:04:45+08:00",
+  "attempts": [
+    {
+      "run_id": "2026-09-19-0910",
+      "status": "failed_recoverable",
+      "failure_stage": "creative_brief_match_review",
+      "root_cause": "首个结构图层在 9.64 秒才出现，未兑现 5 秒内展示 App 核心能力",
+      "preserved_evidence": [
+        "creative-brief.json",
+        "script.json",
+        "events.json",
+        "production.json",
+        "teaching.mp4"
+      ],
+      "change": "缩短首段旁白至约 4 秒并用新 run_id 完整重产",
+      "return_node": "creative brief 与生产"
+    },
+    {
+      "run_id": "2026-09-19-0914",
+      "status": "failed_recoverable",
+      "failure_stage": "creative_brief_match_review",
+      "root_cause": "分型图层在 5.88 秒出现，仍超出 5 秒硬门槛 0.88 秒",
+      "preserved_evidence": ["creative-brief.json", "script.json", "events.json", "production.json", "teaching.mp4", "frame-01.jpg 至 frame-04.jpg"],
+      "change": "将首句进一步压缩为短反问，目标 3–4 秒出现分型",
+      "return_node": "creative brief 与生产"
+    }
+  ],
+  "completed_channels": [
+    {"channel":"TikTok littlemonkey437","post_id":"6aade1b55fe629aa2666a625","status":"sent","public_url":"https://tiktok.com/@littlemonkey437/video/7687048289044286738"},
+    {"channel":"YouTube DeepAlpha","post_id":"6aade1d398827948876aa196","status":"sent","public_url":"https://www.youtube.com/watch?v=xT0vWrQLuJY"}
+  ],
+  "reviews": {
+    "due": [
+      "2026-09-16 内容 24h（门槛 2026-09-18T21:47:21+08:00）"
+    ],
+    "completed": [
+      "2026-09-16 内容 24h"
+    ],
+    "receipt": "marketing/chan/runs/2026-09-19/metrics-review-0904.json"
+  },
+  "prepublish_check": {
+    "workspace": "My organization",
+    "checked_at_beijing": "2026-09-19T09:04:45+08:00",
+    "channels": [
+      "TikTok littlemonkey437 connected",
+      "YouTube DeepAlpha connected"
+    ],
+    "today_all_statuses": "no_posts_found"
+  },
+  "final_success_run_id": "2026-09-19-0918",
+  "achieved_at_beijing": "2026-09-19T09:14:34+08:00",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/de16b2cd1ddf4b9b899d8785b79fa17d6202c92f.mp4",
+  "content_sha256": "243846085971b38730cc16f8ee87c87c36bc38f376c5593060256a55e250c7d2",
+  "review_gates": {"visual":"passed","audio":"passed","platform_safe_zone":"passed","creative_brief_match":"passed","anonymous_head_get_hash":"passed"},
+  "deepalpha_app_store_prompt_evidence": {"on_screen":"frame-04.jpg 完整显示 App Store 搜索 / DeepAlpha 缠论","narration":"第四段完整口播 App Store 搜索 DeepAlpha 缠论","youtube_description":"完整品牌名与 https://apps.apple.com/app/id6806500280"},
+  "next_reviews_beijing": {"24h":"2026-09-20T09:14:08+08:00","72h":"2026-09-22T09:14:08+08:00"}
+}

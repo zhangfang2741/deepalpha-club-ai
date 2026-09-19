@@ -1,0 +1,7 @@
+{
+  "run_id": "2026-09-08-2327",
+  "stage": "preflight",
+  "error": "缺少与成片哈希匹配的音画校验，禁止上传",
+  "status": "resolved",
+  "resolution": "修正 review.json 的 sha256 字段并重新执行全部上传前校验；成片哈希匹配后上传和双平台发布成功。"
+}

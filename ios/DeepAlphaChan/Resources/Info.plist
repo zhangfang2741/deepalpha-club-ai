@@ -41,5 +41,16 @@
 	     而不是弹权限框——分享功能必须带上它。 -->
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Save analysis images to your photo library</string>
+	<!-- Google Ads App Campaign 用 SKAdNetwork 做无 IDFA 场景下的安装归因，
+	     必须在这里声明它的网络 ID，否则 Apple 不会把归因 postback 发给 Google。
+	     只投 Google 一家，就只放这一个 ID；以后接入别的广告渠道（如 Meta）
+	     要再加各自的 ID，不会互相覆盖。 -->
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>cstr6suwn9.skadnetwork</string>
+		</dict>
+	</array>
 </dict>
 </plist>

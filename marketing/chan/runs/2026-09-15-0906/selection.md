@@ -1,0 +1,27 @@
+# 选题回执
+
+{
+  "run_id": "2026-09-15-0906",
+  "date": "2026-09-15",
+  "status": "success",
+  "mode": "公司事件与结构信号对照 + 单一结构信号拆解",
+  "selected": {
+    "symbol": "FTW",
+    "eligible": true,
+    "confirmed_fractals": 8,
+    "bars_count": 199,
+    "last_bar": "2026-09-14",
+    "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+  },
+  "candidates": [
+    {
+      "symbol": "FTW",
+      "eligible": true,
+      "confirmed_fractals": 8,
+      "bars_count": 199,
+      "last_bar": "2026-09-14",
+      "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+    }
+  ],
+  "note": "基于一手事件来源制作：Presidio Production Company 首个常规季度股息于 2026-09-14（美国市场日期）支付；该安排由公司 2026-04-14 公告披露；只讲已确认历史结构"
+}

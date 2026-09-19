@@ -1,0 +1,25 @@
+{
+  "checked_at_beijing": "2026-09-13T09:04:06+08:00",
+  "workspace": "My organization",
+  "channels": [
+    {"service": "tiktok", "name": "littlemonkey437", "connected": true},
+    {"service": "youtube", "name": "DeepAlpha", "connected": true}
+  ],
+  "due_reviews": [
+    {
+      "content_date": "2026-09-12",
+      "window": "24h",
+      "tiktok": {"post_id": "6aa4a6632ff05a49069bd77e", "status": "sent", "views": 4, "average_time_watched_sec": 5.72, "metrics_updated_at": "2026-09-12T21:18:16.570Z"},
+      "youtube": {"post_id": "6aa4a68507d009223c678595", "status": "sent", "views": 6, "metrics_updated_at": "2026-09-12T21:06:14.705Z"},
+      "note": "指标时间覆盖严格 24 小时门槛；只记录平台返回字段，缺失项不填零"
+    },
+    {
+      "content_date": "2026-09-10",
+      "window": "72h",
+      "tiktok": {"post_id": "6aa18d222472d80c22aa88ae", "status": "sent", "views": 7, "average_time_watched_sec": 5.4, "metrics_updated_at": "2026-09-12T21:18:16.570Z"},
+      "youtube": {"post_id": "6aa18d555e8b0a4dedb7e694", "status": "sent", "views": 59, "metrics_updated_at": "2026-09-12T21:06:14.705Z"},
+      "note": "指标时间覆盖严格 72 小时门槛；只记录平台返回字段，缺失项不填零"
+    }
+  ],
+  "today_remote_check": "北京时间 2026-09-13 尚无任何状态帖子；无 sending、error、draft、scheduled 或 needs_approval"
+}

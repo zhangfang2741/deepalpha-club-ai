@@ -1,0 +1,57 @@
+{
+  "run_id": "2026-09-13-0906",
+  "market_event": "New Fortress Energy 公告 1 比 50 反向拆股于 2026-09-11 开盘起生效，目的是恢复 Nasdaq 最低股价合规",
+  "primary_source": {
+    "publisher": "New Fortress Energy Inc.",
+    "url": "https://www.nasdaq.com/press-release/new-fortress-energy-inc-announces-reverse-stock-split-2026-09-09",
+    "published_at": "2026-09-09T12:15:00-04:00",
+    "event_at": "2026-09-11T09:30:00-04:00",
+    "source_type": "上市公司官方公告"
+  },
+  "symbol": "NFE",
+  "market_date": "2026-09-11",
+  "chan_structure": "反向拆股会改变价格刻度，但不会自动生成新的缠论结构；用缩放前后与笔、线段图层核对历史结构连续性，只解释已确认结构",
+  "format": "App 效率演示 + 误区纠正",
+  "hook_0_3s": "NFE 1 比 50 反向拆股，价格跳变等于结构反转吗？",
+  "app_actions": ["展示 NFE 原始日线", "打开笔观察确认拐点", "叠加线段观察层级", "关闭笔只保留线段并停留"],
+  "deepalpha_app_store_prompt": "App Store 搜索 DeepAlpha 缠论",
+  "difference_from_last_14d": "主角改为 NFE，首次用反向拆股后的价格刻度变化切入；教学从昨日 PLTR 的分型确认改为笔与线段的层级连续性，画面路径为原图→笔→笔叠加线段→只保留线段。",
+  "steps": [
+    {
+      "step_id": "01",
+      "layers": [],
+      "app_action": "展示 NFE 原始日线",
+      "on_screen_text": "NFE · 1 比 50 反向拆股",
+      "narration_text": "NFE一比五十反向拆股，九月十一日开盘生效。价格刻度突然变化，就等于结构反转吗？",
+      "expected_visual": "真实 NFE 日线结果页，结构图层全部关闭",
+      "overlay_text": "1 比 50 反向拆股\n价格跳变等于反转？"
+    },
+    {
+      "step_id": "02",
+      "layers": ["strokes"],
+      "app_action": "打开笔观察确认拐点",
+      "on_screen_text": "先看确认的笔",
+      "narration_text": "不等于。先打开笔，检查复权后的历史拐点能否连续连接，不把公司行为本身当交易信号。",
+      "expected_visual": "蓝色笔出现，其他结构图层关闭",
+      "overlay_text": "第一步：笔是否连续？"
+    },
+    {
+      "step_id": "03",
+      "layers": ["strokes", "segments"],
+      "app_action": "叠加线段观察结构层级",
+      "on_screen_text": "再看线段层级",
+      "narration_text": "再叠加线段，把短期价格跳变放回更高层级。只讨论已经确认的历史结构，不预测方向。",
+      "expected_visual": "笔与线段同时显示",
+      "overlay_text": "第二步：放回线段层级"
+    },
+    {
+      "step_id": "04",
+      "layers": ["segments"],
+      "app_action": "关闭笔只保留线段并停留",
+      "on_screen_text": "App Store 搜索 DeepAlpha 缠论",
+      "narration_text": "关掉笔，只保留线段再核对一次。想快速切换结构图层，App Store搜索DeepAlpha缠论。",
+      "expected_visual": "蓝色笔消失、线段保留，DeepAlpha 缠论下载引导清晰显示",
+      "overlay_text": "App Store 搜索\nDeepAlpha 缠论"
+    }
+  ]
+}

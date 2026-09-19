@@ -1,0 +1,32 @@
+{
+  "reviewed_at_beijing": "2026-09-17T21:42:42+08:00",
+  "workspace": "My organization",
+  "policy": "指标缺失不填零；指标刷新时间早于严格门槛时只保存快照，不把它冒充完整窗口数据",
+  "reviews": [
+    {
+      "content_date_beijing": "2026-09-13",
+      "window": "72h",
+      "threshold_beijing": "2026-09-16T09:11:26+08:00",
+      "status": "completed",
+      "tiktok": {"post_id": "6aa5f7d4bcabda92e1a1a759", "views": 4, "average_time_watched_sec": 4.44, "metrics_updated_at": "2026-09-17T05:03:11.827+08:00"},
+      "youtube": {"post_id": "6aa5f81266679b076f1bf3f9", "views": 46, "metrics_updated_at": "2026-09-17T01:16:20.261+08:00"}
+    },
+    {
+      "content_date_beijing": "2026-09-14",
+      "window": "72h",
+      "threshold_beijing": "2026-09-17T09:16:48+08:00",
+      "status": "snapshot_metrics_not_refreshed_past_threshold",
+      "tiktok": {"post_id": "6aa74a9663da6bf64fa1ff35", "views": 7, "average_time_watched_sec": 5.78, "metrics_updated_at": "2026-09-17T05:03:11.916+08:00"},
+      "youtube": {"post_id": "6aa74ab6ea4032c0149b29b6", "views": 9, "metrics_updated_at": "2026-09-17T01:16:20.261+08:00"},
+      "note": "复盘在严格门槛之后执行，但 Buffer 指标刷新时间仍早于门槛；保留快照，缺失项不填零。"
+    },
+    {
+      "content_date_beijing": "2026-09-15",
+      "window": "24h",
+      "threshold_beijing": "2026-09-16T09:09:32+08:00",
+      "status": "completed",
+      "tiktok": {"post_id": "6aa89aa17a172fa74f842f47", "views": 9, "average_time_watched_sec": 1.02, "metrics_updated_at": "2026-09-17T05:03:11.806+08:00"},
+      "youtube": {"post_id": "6aa89ac5fa1b0cab28a3eb46", "views": 17, "metrics_updated_at": "2026-09-17T01:16:20.261+08:00"}
+    }
+  ]
+}
