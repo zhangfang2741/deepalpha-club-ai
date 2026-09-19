@@ -210,7 +210,7 @@ async def _write_cache(redis: Redis, data: SignalRadarResponse) -> None:
 
 async def compute_market(
     market: str, *, redis: Redis, user_id: int | None = None,
-    days: int = 8, window: int = 30, top_n: int = 10,
+    days: int = 30, window: int = 45, top_n: int = 10,
 ) -> SignalRadarResponse:
     """全量扫描一个市场并按日重建市场快照（不读缓存，计算完写入缓存）。"""
     universe = get_universe(market)
@@ -278,7 +278,7 @@ async def peek_cache(redis: Redis, market: str) -> SignalRadarResponse | None:
 
 async def get_market(
     market: str, *, redis: Redis, user_id: int | None = None,
-    days: int = 8, window: int = 30, top_n: int = 10, force: bool = False,
+    days: int = 30, window: int = 45, top_n: int = 10, force: bool = False,
 ) -> SignalRadarResponse:
     """读缓存优先；未命中则同步扫描（首访较慢，命中后走缓存）。"""
     if not force:

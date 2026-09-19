@@ -26,6 +26,9 @@ struct SignalRadarView: View {
 
     /// 分析成功后置 true，push 到详情页；返回（含右滑手势）时自动复位。
     @State private var showResults = false
+    /// 日期轨"更多"打开的日期选择器状态。
+    @State private var showDatePicker = false
+    @State private var pickedDate = Date()
 
     var body: some View {
         NavigationStack {
@@ -135,13 +138,18 @@ struct SignalRadarView: View {
                 )
                 .frame(width: CGFloat(w), height: CGFloat(h))
 
-                // 同心参考环：越外越淡，呼应同一套"近实远虚"的纵深语言。
-                ForEach(Array([0.34, 0.68, 1.0].enumerated()), id: \.offset) { idx, scale in
+                // 同心参考环：越外越淡，呼应同一套"近实远虚"的纵深语言；环上直接标出
+                // 大致时间跨度，不用再靠单独一行说明文字解释三个圈是什么意思。
+                ForEach(Array(SignalRadarView.ringSpecs.enumerated()), id: \.offset) { idx, spec in
                     Circle()
                         .stroke(Theme.textSecondary.opacity(0.16 - Double(idx) * 0.045),
                                 style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                        .frame(width: CGFloat(base * scale), height: CGFloat(base * scale))
+                        .frame(width: CGFloat(base * spec.scale), height: CGFloat(base * spec.scale))
                         .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
+                    Text(spec.label)
+                        .font(.system(size: 8))
+                        .foregroundColor(Theme.textSecondary.opacity(0.55))
+                        .position(x: CGFloat(w / 2), y: CGFloat(h / 2) - CGFloat(base * spec.scale / 2) + 8)
                 }
 
                 if layouts.isEmpty {
@@ -185,26 +193,32 @@ struct SignalRadarView: View {
         var id: String { signal.id }
     }
 
-    /// 时间距离 → 三档环位（对应参考圈的 0.34 / 0.68 / 1.0 三个半径比例）：
-    /// 当天新增最靠里，一周内中间，超过一周（含以月计的老信号）最外圈。
+    /// 三档环的半径比例 + 环上标注的大致时间跨度文案，参考圈和气泡摆位共用同一份。
+    /// 用计算属性而非 static let：L() 依赖运行时语言设置，static let 只会算一次，
+    /// 用户切换语言后文案不会跟着变。
+    static var ringSpecs: [(scale: Double, label: String)] {
+        [(0.34, L("1周内")), (0.68, L("2周内")), (1.0, L("1月内"))]
+    }
+
+    /// 时间距离 → 三档环位（对应 ringSpecs 的 0.34 / 0.68 / 1.0 三个半径比例）。
     static func ringScale(forDaysAgo daysAgo: Int) -> Double {
-        if daysAgo <= 0 { return 0.34 }
-        if daysAgo <= 7 { return 0.68 }
-        return 1.0
+        if daysAgo <= 7 { return ringSpecs[0].scale }
+        if daysAgo <= 14 { return ringSpecs[1].scale }
+        return ringSpecs[2].scale
     }
 
     /// 外圈本来就该塞得下更多气泡（越久远、越多信号还没被覆盖掉），所以额外按环位
     /// 把直径缩小一档，不然外圈越挤越点不到。和「买卖点级别」的大小是叠乘关系。
     static func ringSizeFactor(forDaysAgo daysAgo: Int) -> Double {
-        if daysAgo <= 0 { return 1.0 }
-        if daysAgo <= 7 { return 0.85 }
+        if daysAgo <= 7 { return 1.0 }
+        if daysAgo <= 14 { return 0.85 }
         return 0.7
     }
 
     /// 越远越淡：配合径向光晕，让"近实远虚"直接体现在气泡本身上，不用靠文字说明。
     static func ringOpacity(forDaysAgo daysAgo: Int) -> Double {
-        if daysAgo <= 0 { return 1.0 }
-        if daysAgo <= 7 { return 0.82 }
+        if daysAgo <= 7 { return 1.0 }
+        if daysAgo <= 14 { return 0.82 }
         return 0.6
     }
 
@@ -273,9 +287,13 @@ struct SignalRadarView: View {
 
     /// 信号诞生日 → 查看日的天数差（signal.date 恒 <= dayDate，见后端按日重建）。
     static func daysAgo(from signalDate: String, to viewedDate: String) -> Int {
-        guard let s = parser.date(from: signalDate), let v = parser.date(from: viewedDate) else { return 0 }
-        let days = Calendar(identifier: .gregorian).dateComponents([.day], from: s, to: v).day ?? 0
-        return max(0, days)
+        max(0, absDayDiff(signalDate, viewedDate))
+    }
+
+    /// 两个 yyyy-MM-dd 日期字符串相差多少天（可正可负；解析失败按 0 处理）。
+    static func absDayDiff(_ a: String, _ b: String) -> Int {
+        guard let da = parser.date(from: a), let db = parser.date(from: b) else { return 0 }
+        return abs(Calendar(identifier: .gregorian).dateComponents([.day], from: da, to: db).day ?? 0)
     }
 
     /// 形态强度 → 气泡颜色：买（亮红→深红）/ 卖（亮绿→深绿）。
@@ -344,10 +362,91 @@ struct SignalRadarView: View {
                     ForEach(Array(vm.days.enumerated()), id: \.element.id) { idx, day in
                         dayChip(day, index: idx)
                     }
+                    moreDateChip
                 }
                 .padding(.horizontal, 2)
             }
         }
+        .sheet(isPresented: $showDatePicker) { datePickerSheet }
+    }
+
+    /// 日期轨最后一格：打开日期选择器，可以直接跳到某一天（不用一格格滑）。
+    private var moreDateChip: some View {
+        Button {
+            pickedDate = SignalRadarView.parser.date(from: vm.selectedDay?.date ?? "") ?? Date()
+            showDatePicker = true
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 14))
+                    .foregroundColor(Theme.accent)
+                Text(L("更多")).font(.system(size: 11)).foregroundColor(Theme.accent)
+            }
+            .frame(width: 56)
+            .padding(.vertical, 12)
+            .background(Theme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 日期选择器弹层：范围限定在 vm.days 覆盖的区间内，选完自动跳到最接近的交易日
+    /// （周末/假日没有数据，落在这些天上就近取最接近的那个交易日）。
+    private var datePickerSheet: some View {
+        let dates = vm.days.compactMap { SignalRadarView.parser.date(from: $0.date) }
+        let range: ClosedRange<Date> = {
+            guard let lo = dates.min(), let hi = dates.max() else {
+                let now = Date()
+                return now...now
+            }
+            return lo...hi
+        }()
+        return NavigationStack {
+            VStack {
+                DatePicker(
+                    L("选择日期"), selection: $pickedDate, in: range, displayedComponents: .date
+                )
+                .datePickerStyle(.graphical)
+                .tint(Theme.accent)
+                .padding()
+                Spacer()
+            }
+            .background(Theme.background)
+            .navigationTitle(L("选择日期"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(L("确定")) {
+                        jumpToNearestDay(pickedDate)
+                        showDatePicker = false
+                    }
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(L("取消")) { showDatePicker = false }
+                }
+            }
+        }
+    }
+
+    /// 挑一个日期 → 跳到 vm.days 里日期最接近的那个交易日（选中周末/假日时兜底）。
+    private func jumpToNearestDay(_ date: Date) {
+        guard !vm.days.isEmpty else { return }
+        let target = SignalRadarView.parser.string(from: date)
+        var bestIndex = 0
+        var bestDiff = Int.max
+        for (idx, day) in vm.days.enumerated() {
+            let diff = SignalRadarView.absDayDiff(day.date, target)
+            if day.date == target {
+                bestIndex = idx
+                break
+            }
+            if diff < bestDiff {
+                bestDiff = diff
+                bestIndex = idx
+            }
+        }
+        vm.selectDay(bestIndex)
     }
 
     private func dayChip(_ day: RadarDay, index: Int) -> some View {
