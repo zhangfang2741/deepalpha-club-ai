@@ -24,6 +24,9 @@ struct SignalRadarView: View {
     @StateObject private var panicVM = PanicIndexViewModel()
     @EnvironmentObject private var orientation: AppOrientation
 
+    /// 日期轨直接摆出来的格子数（约 2 周的交易日），更早的走"更多"里的日期选择器。
+    static let visibleDayChipCount = 10
+
     /// 分析成功后置 true，push 到详情页；返回（含右滑手势）时自动复位。
     @State private var showResults = false
     /// 日期轨"更多"打开的日期选择器状态。
@@ -54,7 +57,7 @@ struct SignalRadarView: View {
             .padding(.bottom, 10)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Theme.background)
-            .navigationTitle(L("信号雷达"))
+            .navigationTitle(L("缠论信号"))
             .navigationBarTitleDisplayMode(.inline)
             .task { vm.onAppear() }
             .overlay { if chanVM.isLoading { analysisLoadingOverlay } }
@@ -207,11 +210,24 @@ struct SignalRadarView: View {
         [(0.34, L("1周内")), (0.68, L("2周内")), (1.0, L("1月内"))]
     }
 
-    /// 时间距离 → 三档环位（对应 ringSpecs 的 0.34 / 0.68 / 1.0 三个半径比例）。
-    static func ringScale(forDaysAgo daysAgo: Int) -> Double {
-        if daysAgo <= 7 { return ringSpecs[0].scale }
-        if daysAgo <= 14 { return ringSpecs[1].scale }
-        return ringSpecs[2].scale
+    /// 每个环位内部按 daysAgo 线性插值的时间跨度上限（1月内档没有硬边界，用 30 天封顶）。
+    private static let ringBandMaxDays: [Int] = [7, 14, 30]
+
+    /// 时间距离 → 具体半径（不再是卡死在环线上的三个定值）：同一环位内部也按 daysAgo
+    /// 线性插值，比如距查看日 3 天的信号落在「1周内」环（0~scale0）的 3/7 处，而不是
+    /// 一律贴到 scale0 那条环线上——环线只是每个时间档的上限，不是气泡的固定摆放半径。
+    static func ringRadius(forDaysAgo daysAgo: Int, fieldRadius: Double) -> Double {
+        let scales = ringSpecs.map(\.scale)
+        if daysAgo <= ringBandMaxDays[0] {
+            let t = Double(daysAgo) / Double(ringBandMaxDays[0])
+            return t * scales[0] * fieldRadius
+        }
+        if daysAgo <= ringBandMaxDays[1] {
+            let t = Double(daysAgo - ringBandMaxDays[0]) / Double(ringBandMaxDays[1] - ringBandMaxDays[0])
+            return (scales[0] + t * (scales[1] - scales[0])) * fieldRadius
+        }
+        let t = min(1.0, Double(daysAgo - ringBandMaxDays[1]) / Double(ringBandMaxDays[2] - ringBandMaxDays[1]))
+        return (scales[1] + t * (scales[2] - scales[1])) * fieldRadius
     }
 
     /// 外圈本来就该塞得下更多气泡（越久远、越多信号还没被覆盖掉），所以额外按环位
@@ -241,24 +257,38 @@ struct SignalRadarView: View {
             let diameter = SignalRadarView.diameter(forLevel: sig.level) * ringSizeFactor(forDaysAgo: da)
             let r = diameter / 2
             let maxRadius = fieldRadius - r - 4
-            let radius = min(ringScale(forDaysAgo: da) * fieldRadius, maxRadius)
+            let radius = min(ringRadius(forDaysAgo: da, fieldRadius: fieldRadius), maxRadius)
             var x = w / 2 + radius * cos(Double(index) * golden)
             var y = h / 2 + radius * sin(Double(index) * golden)
             x = min(max(x, r + 2), w - r - 2)
             y = min(max(y, r + 2), h - r - 2)
             return BubbleLayout(signal: sig, diameter: diameter, x: x, y: y, phase: Double(index) * 0.35, daysAgo: da)
         }
-        resolveOverlaps(&layouts, width: w, height: h)
+        resolveOverlaps(&layouts, width: w, height: h, fieldRadius: fieldRadius)
         // 同一环内谁在最上层：越接近查看日（daysAgo 越小）画得越晚，叠层里就浮在
         // 更外面（更靠近用户）；离得越久远的沉在下面。
         layouts.sort { $0.daysAgo > $1.daysAgo }
         return layouts
     }
 
+    /// 某个 daysAgo 所属环位允许的半径范围（相对场中心，单位与 fieldRadius 一致）。
+    /// 直接用 ringSpecs 的三条环线本身做边界（而不是环线之间取中点）：「1周内」气泡的
+    /// 圆心必须落在 0~scale0 这条环线画出的圆盘内部，不能越过环线本身混进「2周内」的
+    /// 视觉区域；「2周内」「1月内」同理各自卡在自己两条环线之间。
+    private static func ringBandBounds(forDaysAgo daysAgo: Int, fieldRadius: Double) -> (min: Double, max: Double) {
+        let scales = ringSpecs.map(\.scale)
+        if daysAgo <= ringBandMaxDays[0] { return (0, scales[0] * fieldRadius) }
+        if daysAgo <= ringBandMaxDays[1] { return (scales[0] * fieldRadius, scales[1] * fieldRadius) }
+        return (scales[1] * fieldRadius, scales[2] * fieldRadius)
+    }
+
     /// 简单的迭代松弛：每一对挤太近的气泡沿连心线互相推开，直到间距 >= 两者半径和
     /// 的 90%（留一点点重叠的自然感，但不能像之前那样能整个盖住点不到）。
-    private static func resolveOverlaps(_ layouts: inout [BubbleLayout], width w: Double, height h: Double) {
+    private static func resolveOverlaps(
+        _ layouts: inout [BubbleLayout], width w: Double, height h: Double, fieldRadius: Double
+    ) {
         let minFactor = 0.9
+        let cx = w / 2, cy = h / 2
         for _ in 0..<12 {
             for i in 0..<layouts.count {
                 for j in (i + 1)..<layouts.count {
@@ -279,6 +309,19 @@ struct SignalRadarView: View {
                 let r = layouts[i].diameter / 2
                 layouts[i].x = min(max(layouts[i].x, r + 2), w - r - 2)
                 layouts[i].y = min(max(layouts[i].y, r + 2), h - r - 2)
+                // 径向回拉：碰撞推挤只允许改变角度，不允许把气泡挤出自己所属的环位半径带
+                // （否则一个刚出现的 daysAgo=0 信号会被外环的拥挤挤到外环去，居中程度失真）。
+                let band = ringBandBounds(forDaysAgo: layouts[i].daysAgo, fieldRadius: fieldRadius)
+                let dx = layouts[i].x - cx
+                let dy = layouts[i].y - cy
+                let dist = max((dx * dx + dy * dy).squareRoot(), 0.001)
+                let maxAllowed = min(band.max, fieldRadius - r - 4)
+                let clampedDist = min(max(dist, band.min), maxAllowed)
+                if abs(clampedDist - dist) > 0.01 {
+                    let scale = clampedDist / dist
+                    layouts[i].x = cx + dx * scale
+                    layouts[i].y = cy + dy * scale
+                }
             }
         }
     }
@@ -366,7 +409,10 @@ struct SignalRadarView: View {
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(Array(vm.days.enumerated()), id: \.element.id) { idx, day in
+                    // 日期轨只摆最近 2 周（10 个交易日）的格子，够用又不用滑很远；
+                    // 再往前的历史走"更多"里的日期选择器（范围覆盖后端返回的全部
+                    // 天数，即近 1 个月），不用把几十个格子都塞进这条横滑条。
+                    ForEach(Array(vm.days.prefix(SignalRadarView.visibleDayChipCount).enumerated()), id: \.element.id) { idx, day in
                         dayChip(day, index: idx)
                     }
                     moreDateChip
@@ -458,7 +504,6 @@ struct SignalRadarView: View {
 
     private func dayChip(_ day: RadarDay, index: Int) -> some View {
         let active = index == min(max(vm.selectedDayIndex, 0), vm.days.count - 1)
-        let buyFrac = day.total > 0 ? CGFloat(day.buyCount) / CGFloat(day.total) : 0.5
         // 当天新出现的信号（而非从更早的日子延续下来）：气泡场里标"新"的同一批，
         // 在日期轨上也提前露个头，不用一天天点过去找。
         let hasNew = day.signals.contains { $0.date == day.date }
@@ -472,14 +517,6 @@ struct SignalRadarView: View {
                 Text(SignalRadarView.monthDay(day.date))
                     .font(.system(size: 13, weight: .bold, design: .monospaced))
                     .foregroundColor(active ? .white : Theme.textPrimary)
-                GeometryReader { g in
-                    HStack(spacing: 0) {
-                        Rectangle().fill(Theme.up).frame(width: g.size.width * buyFrac)
-                        Rectangle().fill(Theme.down)
-                    }
-                }
-                .frame(width: 38, height: 4)
-                .clipShape(Capsule())
             }
             .frame(width: 56)
             .padding(.vertical, 8)
@@ -634,21 +671,9 @@ private struct RadarBubble: View {
             Circle().fill(color)
 
             VStack(spacing: 1) {
-                HStack(spacing: 3) {
-                    Text(signal.symbol)
-                        .font(.system(size: max(12, min(17, r * 0.42)), weight: .heavy))
-                        .foregroundColor(.white)
-                    // "新"放气泡内部：放在外面角标容易被相邻重叠的气泡盖住看不见。
-                    if isNew {
-                        Text(L("新"))
-                            .font(.system(size: max(7, r * 0.2), weight: .bold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 3.5)
-                            .padding(.vertical, 1)
-                            .background(Color.white.opacity(0.28))
-                            .clipShape(Capsule())
-                    }
-                }
+                Text(signal.symbol)
+                    .font(.system(size: max(12, min(17, r * 0.42)), weight: .heavy))
+                    .foregroundColor(.white)
                 Text(signal.name)
                     .font(.system(size: max(9, min(12, r * 0.3))))
                     .foregroundColor(.white.opacity(0.92))
@@ -656,6 +681,20 @@ private struct RadarBubble: View {
                     .padding(.horizontal, 4)
             }
             .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
+        }
+        .overlay(alignment: .topTrailing) {
+            // "新"改放气泡外面右上角：挤在气泡内部会跟代码/名称文字抢地方。
+            if isNew {
+                Text(L("新"))
+                    .font(.system(size: max(8, r * 0.22), weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1.5)
+                    .background(Theme.segment)
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Theme.background, lineWidth: 1))
+                    .offset(x: 4, y: -4)
+            }
         }
     }
 }

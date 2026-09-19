@@ -1,4 +1,4 @@
-"""三地恐慌指数 API：美股 VIX / A股 50ETF-QVIX / 港股 VHSI，统一折算成 0~100 分。"""
+"""三地恐慌指数 API：美股 VIX(CNN Fear&Greed) / A股上证指数 RSI / 港股恒生指数 RSI，统一折算成 0~100 分。"""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from redis.asyncio import Redis

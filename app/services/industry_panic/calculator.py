@@ -8,12 +8,12 @@
 from __future__ import annotations
 
 import datetime
-from typing import Optional
 
 import httpx
 
 from app.core.config import settings
 from app.core.logging import logger
+from app.services.rsi import rsi_series
 
 FMP_BASE_URL = "https://financialmodelingprep.com/stable"
 
@@ -64,34 +64,6 @@ def _fetch_closes(symbol: str) -> list[tuple[str, float]]:
     return pairs
 
 
-def _rsi_series(closes: list[float], period: int = RSI_PERIOD) -> list[Optional[float]]:
-    """Wilder 平滑 RSI 序列，长度与 closes 相同，前 period 个为 None。"""
-    n = len(closes)
-    result: list[Optional[float]] = [None] * n
-    if n <= period:
-        return result
-
-    gains = [max(closes[i] - closes[i - 1], 0.0) for i in range(1, n)]
-    losses = [max(closes[i - 1] - closes[i], 0.0) for i in range(1, n)]
-
-    avg_gain = sum(gains[:period]) / period
-    avg_loss = sum(losses[:period]) / period
-
-    def _rsi(ag: float, al: float) -> float:
-        if al == 0:
-            return 100.0
-        return 100.0 - 100.0 / (1.0 + ag / al)
-
-    result[period] = _rsi(avg_gain, avg_loss)
-
-    for i in range(period, n - 1):
-        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
-        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
-        result[i + 1] = _rsi(avg_gain, avg_loss)
-
-    return result
-
-
 def compute_sector_panic(symbol: str) -> list[dict]:
     """计算单个行业 ETF 的历史恐慌指数序列。
 
@@ -102,7 +74,7 @@ def compute_sector_panic(symbol: str) -> list[dict]:
     if pairs:
         dates = [p[0] for p in pairs]
         closes = [p[1] for p in pairs]
-        rsi_vals = _rsi_series(closes)
+        rsi_vals = rsi_series(closes, period=RSI_PERIOD)
 
         result = []
         for date, rsi in zip(dates, rsi_vals, strict=False):

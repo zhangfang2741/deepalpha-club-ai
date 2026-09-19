@@ -1,9 +1,9 @@
-"""三地恐慌指数（美股 VIX / A股 50ETF-QVIX / 港股 VHSI）Pydantic schemas。
+"""三地恐慌指数（美股 VIX / A股上证指数 / 港股恒生指数）Pydantic schemas。
 
-三个市场原始量纲不同（VIX 与美股 Fear & Greed 已经是 0~100 分；QVIX / VHSI
-是波动率百分比，量级 10~40），统一折算成与 CNN Fear & Greed 同语义的
-0~100 分（越低越恐慌、越高越贪婪），供前端用同一套卡片/曲线组件展示三地。
-折算规则见 app/services/panic_index.py 的 _vol_to_score。
+美股沿用 CNN Fear & Greed 官方合成分（已经是 0~100 分）；A股/港股用指数收盘价
+算 RSI(14) 直接当分数（RSI 天然 0~100，越高越贪婪、越低越恐慌），统一折算成
+同语义的 0~100 分，供前端用同一套卡片/曲线组件展示三地。
+折算规则见 app/services/panic_index.py 的 _price_to_points。
 """
 from typing import List, Optional
 
@@ -18,7 +18,7 @@ class PanicIndexPoint(BaseResponse):
     date: str = Field(description="日期，格式 YYYY-MM-DD")
     score: float = Field(ge=0, le=100, description="恐慌贪婪分数 0~100（越低越恐慌）")
     rating: str = Field(description="情绪标签：Extreme Fear / Fear / Neutral / Greed / Extreme Greed")
-    raw_value: Optional[float] = Field(None, description="原始指标值（VIX/QVIX/VHSI 点位），仅供参考展示")
+    raw_value: Optional[float] = Field(None, description="原始指标值（cn/hk 为指数收盘点位，us 恒为空），仅供参考展示")
 
 
 class PanicIndexSnapshot(BaseResponse):

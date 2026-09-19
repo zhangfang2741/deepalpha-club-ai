@@ -1,20 +1,20 @@
 import SwiftUI
 
-/// 分段控件的「形态分析」段。
+/// 分段控件的「整体分析」段。
 ///
-/// 刻意不叫「结论」：这里只陈述算法从 K 线结构里读出的事实（形态处在哪个阶段、
-/// 各维度的技术强弱如何加权），不给任何投资结论。措辞层面也一路避开操作动词。
+/// 刻意不叫「形态分析」：这里只陈述算法从 K 线结构里读出的事实（形态处在哪个阶段、
+/// 各维度的技术强弱如何加权），不给任何投资结论，条件页的风险提示也写明「不要只看
+/// 技术信号，要结合整体走势与市场结构」——这张卡本身就是那个「整体」的呈现，标题得
+/// 对上，不能听起来像只在讲局部形态。
 ///
-/// 两张卡：
-/// - 形态分析：大白话一句话 → 加权后的技术强弱 → 各项事实依据 → 一行结构统计；
-/// - 风险提示：单独折叠、默认收起。它讲的是「这些事实有多不可靠」（右侧未确认
-///   结构、缠论的滞后性、免责声明），和上面陈述事实是两件事，混在一张卡里读者
-///   会把它当成结论的一部分略过。
+/// 拆成两张卡而不是一张长卡：
+/// - 当前状态：加权后的技术强弱 → 各项事实依据 → 一行结构统计，回答「现在是什么样」；
+/// - 走势展望：延续/转折的结论单独放大呈现，回答「接下来大概率怎么走」——两个问题
+///   读法不同，挤在同一张卡里，走势展望这句最该先读到的话反而被淹没在事实列表中间。
 ///
-/// 改造前这一段是「形态解读」+「技术形态倾向」两张卡，两边其实是同一批因子
-/// （末笔 / 线段 / 中枢位置 / 背驰）算了两遍、措辞各写一套，且两张卡的 chip 会
-/// 各自表述（一个「上涨动能减弱」、一个「偏空」）。现在后端把这些因子加权成
-/// 一个倾向，前端也就只剩一处表述。
+/// 风险提示已拆到 `RiskSection` 独立成一个 tab（见 ResultSegments），不再嵌在这里：
+/// 折叠在整体分析卡片里时经常被当成结论的一部分顺手划过，与「陈述事实」混在一起读者
+/// 分不清哪句是事实、哪句是「这些事实有多不可靠」。
 ///
 /// 字号统一走 AnalysisType 的三级（见 SignalFormatting.swift）。
 struct AnalysisSection: View {
@@ -22,10 +22,8 @@ struct AnalysisSection: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            analysisCard
-            if let caveats = analysis.recommendation?.caveats, !caveats.isEmpty {
-                riskCard(caveats)
-            }
+            statusCard
+            outlookCard
         }
     }
 
@@ -37,28 +35,37 @@ struct AnalysisSection: View {
                  analysis.segments.count, pivots, analysis.signals.count)
     }
 
-    /// 走势展望（延续 vs 转折，缠论走势分类）：文案 + 配色（复用多空色）。
-    /// trendOutlook 为空 / unclear 时不展示。
-    private var outlookInfo: (label: String, color: Color)? {
-        guard let o = analysis.trendOutlook, o != "unclear" else { return nil }
+    /// 走势展望（延续 vs 转折，缠论走势分类）：文案 + 图标 + 配色（复用多空色）。
+    /// 结构没成形（trendOutlook 为空/unclear）时给一句待确认的中性文案，而不是
+    /// 整张卡消失——两张卡并列时缺一张会显得布局跳来跳去。
+    private var outlookInfo: (label: String, icon: String, color: Color) {
+        guard let o = analysis.trendOutlook, o != "unclear" else {
+            return (L("结构暂未成形，还需更多笔/线段确认后才能给出走势展望"),
+                    "questionmark.circle", Theme.textSecondary)
+        }
         switch o {
         case "reversal_up":
-            return (L("走势展望：出现转折信号，可能转为上涨（力度最强的买点结构）"),
-                    SignalFormatting.biasColor("bullish"))
+            return (L("出现转折信号，可能转为上涨（力度最强的买点结构）"),
+                    "arrow.turn.right.up", SignalFormatting.biasColor("bullish"))
         case "reversal_down":
-            return (L("走势展望：出现转折信号，可能转为下跌"), SignalFormatting.biasColor("bearish"))
+            return (L("出现转折信号，可能转为下跌"),
+                    "arrow.turn.right.down", SignalFormatting.biasColor("bearish"))
         case "continuation_up":
-            return (L("走势展望：上涨延续"), SignalFormatting.biasColor("bullish"))
+            return (L("上涨延续"), "arrow.up.right", SignalFormatting.biasColor("bullish"))
         case "continuation_down":
-            return (L("走势展望：下跌延续"), SignalFormatting.biasColor("bearish"))
+            return (L("下跌延续"), "arrow.down.right", SignalFormatting.biasColor("bearish"))
         case "breakout_up":
-            return (L("走势展望：盘整向上突破，倾向转为上涨"), SignalFormatting.biasColor("bullish"))
+            return (L("盘整向上突破，倾向转为上涨"),
+                    "arrow.up.forward.circle", SignalFormatting.biasColor("bullish"))
         case "breakout_down":
-            return (L("走势展望：盘整向下突破，倾向转为下跌"), SignalFormatting.biasColor("bearish"))
+            return (L("盘整向下突破，倾向转为下跌"),
+                    "arrow.down.forward.circle", SignalFormatting.biasColor("bearish"))
         case "range":
-            return (L("走势展望：盘整延续（围绕中枢震荡）"), SignalFormatting.biasColor("neutral"))
+            return (L("盘整延续（围绕中枢震荡）"),
+                    "arrow.left.and.right", SignalFormatting.biasColor("neutral"))
         default:
-            return nil
+            return (L("结构暂未成形，还需更多笔/线段确认后才能给出走势展望"),
+                    "questionmark.circle", Theme.textSecondary)
         }
     }
 
@@ -71,9 +78,9 @@ struct AnalysisSection: View {
                 SignalFormatting.trendColor(analysis.currentTrend))
     }
 
-    private var analysisCard: some View {
-        // 默认展开——它是这张页面最该先读的那段
-        CollapsibleCard(title: L("形态分析"), systemImage: "text.magnifyingglass",
+    /// 当前状态：大白话一句话 → 加权后的技术强弱 → 各项事实依据 → 一行结构统计。
+    private var statusCard: some View {
+        CollapsibleCard(title: L("当前状态"), systemImage: "waveform.path.ecg",
                         accessoryChip: chip, defaultExpanded: true) {
             VStack(alignment: .leading, spacing: 14) {
                 // 结构没成形（笔太少）时没有大白话解读，退回后端摘要
@@ -90,14 +97,6 @@ struct AnalysisSection: View {
                         .font(.system(size: 18, weight: .bold))
                         .foregroundColor(SignalFormatting.biasColor(rec.bias))
                         .fixedSize(horizontal: false, vertical: true)
-
-                    // 走势展望：延续 vs 转折（缠论走势分类），底背驰转折为最强买点结构
-                    if let outlook = outlookInfo {
-                        Text(outlook.label)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(outlook.color)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
 
                     if !rec.reasons.isEmpty {
                         Divider().overlay(Theme.border)
@@ -116,11 +115,39 @@ struct AnalysisSection: View {
         }
     }
 
-    /// 风险提示。后端 caveats 已含「待确认结构」（caveats.extend(pending_notes)）。
-    private func riskCard(_ caveats: [String]) -> some View {
-        CollapsibleCard(title: L("风险提示"), systemImage: "exclamationmark.triangle",
-                        accessoryChip: (L("%lld 条", caveats.count), Theme.segment)) {
-            BulletList(items: caveats, color: Theme.segment)
+    /// 走势展望：不折叠，用大图标 + 渐变色块直接给出结论，一眼可读——这是继「当前
+    /// 状态」之后用户最想看的一句话，不该像依据/统计那样藏在收起的卡片里。
+    private var outlookCard: some View {
+        let info = outlookInfo
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "binoculars.fill").foregroundColor(Theme.accent)
+                Text(L("走势展望")).font(.headline).foregroundColor(Theme.textPrimary)
+            }
+
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle().fill(info.color.opacity(0.15)).frame(width: 44, height: 44)
+                    Image(systemName: info.icon)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(info.color)
+                }
+                Text(info.label)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(info.color)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            LinearGradient(colors: [info.color.opacity(0.12), Theme.surface],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14).stroke(info.color.opacity(0.25), lineWidth: 1)
+        )
     }
 }

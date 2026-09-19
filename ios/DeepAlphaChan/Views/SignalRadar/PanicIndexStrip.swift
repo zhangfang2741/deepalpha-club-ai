@@ -132,33 +132,36 @@ private struct PanicIndexDetailSheet: View {
     let response: PanicIndexResponse
 
     @Environment(\.dismiss) private var dismiss
-    @State private var selected: PlotPoint?
+    /// 用 Apple 内置的 `chartXSelection` 而不是手写 chartOverlay + 手势：
+    /// 后者不管是 .gesture 还是 .simultaneousGesture，一个盖住整个绘图区的
+    /// Rectangle 手势识别器仍然会跟 chartScrollableAxes 内部的横向滚动手势抢
+    /// 优先级，实测点开后完全划不动。chartXSelection 是苹果专门设计用来和
+    /// 可滚动图表共存的取值手势，两者不冲突。
+    @State private var selectedDate: Date?
+    /// 日期解析 + Chart 建图的结果只算一次（见 `loadPoints`），而不是每次 `selected`
+    /// 变化触发重绘时都重新跑一遍——A股/港股指数历史能有几千个交易日，之前用计算属性
+    /// 导致每点一下图表就要重新解析全量日期，这才是"点开/点按都卡很久"的真正原因。
+    @State private var points: [PlotPoint] = []
+    @State private var isLoading = true
 
-    /// 默认可视窗口长度：数据本身可能横跨十来年（A股/港股波指历史很长），
+    /// 默认可视窗口长度：数据本身可能横跨十来年（A股/港股指数历史很长），
     /// 全塞进一屏只会挤成一条线看不出细节；限定窗口 + 可横向拖动回看更早。
     private let visibleDays: Double = 90
-
-    private static let parser: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = TimeZone(identifier: "UTC")
-        return f
-    }()
-
-    private var points: [PlotPoint] {
-        response.history.compactMap { p in
-            guard let d = Self.parser.date(from: p.date) else { return nil }
-            return PlotPoint(date: d, score: p.score, rating: p.rating, rawValue: p.rawValue)
-        }
-    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     snapshotRow
-                    chart
+                    if isLoading {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Theme.surface.opacity(0.4))
+                            .frame(height: 240)
+                            .overlay(ProgressView())
+                    } else {
+                        chart
+                            .transition(.opacity)
+                    }
                     Text(L("拖动图表查看更早历史，点按看某一天的具体分值。分数 0~100，越低越恐慌、越高越贪婪；按近一年区间分位数折算，三地口径统一可比。"))
                         .font(.caption2)
                         .foregroundColor(Theme.textSecondary)
@@ -173,6 +176,26 @@ private struct PanicIndexDetailSheet: View {
                     Button(L("关闭")) { dismiss() }
                 }
             }
+        }
+        .task { await loadPoints() }
+    }
+
+    /// 在后台线程把整段历史一次性解析成 `PlotPoint`，避免在主线程阻塞 sheet 的展开动画。
+    private func loadPoints() async {
+        let history = response.history
+        let parsed = await Task.detached(priority: .userInitiated) {
+            let parser = DateFormatter()
+            parser.dateFormat = "yyyy-MM-dd"
+            parser.locale = Locale(identifier: "en_US_POSIX")
+            parser.timeZone = TimeZone(identifier: "UTC")
+            return history.compactMap { p -> PlotPoint? in
+                guard let d = parser.date(from: p.date) else { return nil }
+                return PlotPoint(date: d, score: p.score, rating: p.rating, rawValue: p.rawValue)
+            }
+        }.value
+        withAnimation(.easeInOut(duration: 0.2)) {
+            points = parsed
+            isLoading = false
         }
     }
 
@@ -199,6 +222,11 @@ private struct PanicIndexDetailSheet: View {
     /// 取离手指最近的一个点——数据是不连续交易日，直接按 x 反查大概率落不到点上。
     private func nearest(to date: Date) -> PlotPoint? {
         points.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }
+    }
+
+    private var selected: PlotPoint? {
+        guard let selectedDate else { return nil }
+        return nearest(to: selectedDate)
     }
 
     private var chart: some View {
@@ -261,21 +289,7 @@ private struct PanicIndexDetailSheet: View {
         .chartScrollPosition(initialX: points.last.map {
             $0.date.addingTimeInterval(-visibleDays * 86400)
         } ?? Date())
-        .chartOverlay { proxy in
-            GeometryReader { geo in
-                Rectangle().fill(Color.clear).contentShape(Rectangle())
-                    .gesture(
-                        SpatialTapGesture().onEnded { value in
-                            guard let plotFrame = proxy.plotFrame else { return }
-                            let origin = geo[plotFrame].origin
-                            let x = value.location.x - origin.x
-                            if let date: Date = proxy.value(atX: x) {
-                                selected = nearest(to: date)
-                            }
-                        }
-                    )
-            }
-        }
+        .chartXSelection(value: $selectedDate)
         .frame(height: 240)
         .padding(.vertical, 8)
         .padding(.trailing, 8)
