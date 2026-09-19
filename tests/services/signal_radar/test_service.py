@@ -7,6 +7,7 @@ from app.services.signal_radar.service import (
     RawSignal,
     build_days,
     build_signal_history,
+    display_rank,
     signal_strength,
 )
 
@@ -18,10 +19,10 @@ def _sig(sig_type: str, time: str, price: float, strength: str = "medium") -> Si
     )
 
 
-def _raw(symbol: str, day: str, side: str, strength: float) -> RawSignal:
+def _raw(symbol: str, day: str, side: str, strength: float, level: int = 1) -> RawSignal:
     return RawSignal(
         symbol=symbol, name=symbol, side=side, label="一买" if side == "buy" else "一卖",
-        signal_type="buy1" if side == "buy" else "sell1", date=day, price=10.0,
+        signal_type=f"{side}{level}", date=day, price=10.0,
         strength=strength, bias="bullish" if side == "buy" else "bearish",
         signal_strength="medium", confirmed=True,
     )
@@ -81,7 +82,8 @@ class TestBuildDays:
         assert days[0].signals == []
         assert days[0].buy_count == 0
 
-    def test_top_n_limits_and_sorts_by_strength_desc(self):
+    def test_top_n_limits_and_sorts_by_strength_when_same_level(self):
+        """同为一类时，重要度随强弱单调——前 top_n 仍按 strength 从高到低。"""
         histories = [[_raw(f"S{i}", "2026-09-19", "buy", i / 20)] for i in range(15)]
         days = build_days(histories, ["2026-09-19"], top_n=10)
         assert len(days) == 1
@@ -90,6 +92,44 @@ class TestBuildDays:
         strengths = [s.strength for s in signals]
         assert strengths == sorted(strengths, reverse=True)
         assert min(strengths) >= 5 / 20
+
+    def test_big_pale_signal_outranks_small_dark_in_cull(self):
+        """淘汰按'潜在空间+强弱'综合：一类弱背驰(大而淡)排在三类强背驰(小而深)之前。"""
+        histories = [
+            [_raw("BIG", "2026-09-19", "buy", 0.35, level=1)],   # 大而淡
+            [_raw("SMALL", "2026-09-19", "buy", 0.8, level=3)],  # 小而深
+        ]
+        days = build_days(histories, ["2026-09-19"], top_n=1)
+        assert [s.symbol for s in days[0].signals] == ["BIG"]
+
+    def test_small_pale_signal_culled_first(self):
+        """看板满员时最先淘汰'小而淡'(三类弱)，大或深的留下。"""
+        histories = [
+            [_raw("A", "2026-09-19", "buy", 0.8, level=1)],   # 大而深
+            [_raw("B", "2026-09-19", "buy", 0.35, level=1)],  # 大而淡
+            [_raw("C", "2026-09-19", "buy", 0.8, level=3)],   # 小而深
+            [_raw("D", "2026-09-19", "buy", 0.35, level=3)],  # 小而淡 → 被淘汰
+        ]
+        days = build_days(histories, ["2026-09-19"], top_n=3)
+        kept = {s.symbol for s in days[0].signals}
+        assert kept == {"A", "B", "C"}
+        assert "D" not in kept
+
+
+class TestDisplayRank:
+    def test_level_read_from_signal_type_suffix(self):
+        assert display_rank(_raw("X", "2026-09-19", "buy", 0.5, level=1)) > display_rank(
+            _raw("X", "2026-09-19", "buy", 0.5, level=2)
+        )
+        assert display_rank(_raw("X", "2026-09-19", "buy", 0.5, level=2)) > display_rank(
+            _raw("X", "2026-09-19", "buy", 0.5, level=3)
+        )
+
+    def test_potential_space_can_outweigh_strength(self):
+        """0.6/0.4 权重下，一类弱(大而淡)重要度高于三类强(小而深)。"""
+        big_pale = _raw("BIG", "2026-09-19", "buy", 0.35, level=1)
+        small_dark = _raw("SMALL", "2026-09-19", "buy", 0.8, level=3)
+        assert display_rank(big_pale) > display_rank(small_dark)
 
     def test_counts_buy_and_sell(self):
         histories = [
