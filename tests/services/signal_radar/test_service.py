@@ -1,13 +1,13 @@
 """信号雷达纯聚合逻辑单测（无 IO）。"""
 from __future__ import annotations
 
-from app.services.chan.analyzer import ChanAnalysisResult, Recommendation
+from app.services.chan.analyzer import ChanAnalysisResult
 from app.services.chan.signals import Signal
 from app.services.signal_radar.service import (
     RawSignal,
-    aggregate_days,
-    build_raw_signal,
-    strength_from_score,
+    build_days,
+    build_signal_history,
+    signal_strength,
 )
 
 
@@ -27,96 +27,95 @@ def _raw(symbol: str, day: str, side: str, strength: float) -> RawSignal:
     )
 
 
-class TestStrengthFromScore:
-    def test_zero(self):
-        assert strength_from_score(0.0) == 0.0
+class TestSignalStrength:
+    def test_known_labels(self):
+        assert signal_strength("strong") == 0.8
+        assert signal_strength("medium") == 0.55
+        assert signal_strength("weak") == 0.35
 
-    def test_saturates_at_one(self):
-        assert strength_from_score(99.0) == 1.0
-
-    def test_sign_independent(self):
-        assert strength_from_score(-3.0) == strength_from_score(3.0)
-
-    def test_monotonic(self):
-        assert strength_from_score(1.0) < strength_from_score(4.0)
+    def test_unknown_label_defaults_to_mid(self):
+        assert signal_strength("???") == 0.5
 
 
-class TestBuildRawSignal:
-    def test_none_when_no_signal(self):
+class TestBuildSignalHistory:
+    def test_empty_when_no_signals(self):
         r = ChanAnalysisResult(symbol="X", bars_count=100)
-        assert build_raw_signal("X", "测试", r) is None
+        assert build_signal_history("X", "测试", r) == []
 
-    def test_uses_recommendation_score_for_strength(self):
-        sig = _sig("buy1", "2026-09-19", 12.34)
-        r = ChanAnalysisResult(symbol="X", bars_count=100, signals=[sig], latest_signal=sig)
-        r.recommendation = Recommendation(
-            action="buy", action_label="技术面偏强", bias="bullish", score=4.0,
-        )
-        raw = build_raw_signal("NVDA", "英伟达", r)
-        assert raw is not None
-        assert raw.side == "buy"
-        assert raw.name == "英伟达"
-        assert raw.date == "2026-09-19"
-        assert raw.bias == "bullish"
-        assert raw.strength == strength_from_score(4.0)
-
-    def test_fallback_strength_without_recommendation(self):
-        sig = _sig("sell1", "2026-09-18", 50.0, strength="strong")
-        r = ChanAnalysisResult(symbol="X", bars_count=100, signals=[sig], latest_signal=sig)
-        raw = build_raw_signal("AAPL", "苹果", r)
-        assert raw is not None
-        assert raw.side == "sell"
-        assert raw.bias == "bearish"
-        assert 0.0 < raw.strength <= 1.0
+    def test_returns_all_signals_sorted_by_date(self):
+        s1 = _sig("buy1", "2026-09-01", 10.0)
+        s2 = _sig("sell1", "2026-09-10", 12.0)
+        r = ChanAnalysisResult(symbol="X", bars_count=100, signals=[s2, s1])
+        history = build_signal_history("NVDA", "英伟达", r)
+        assert [h.date for h in history] == ["2026-09-01", "2026-09-10"]
+        assert history[0].side == "buy"
+        assert history[1].side == "sell"
+        assert all(h.name == "英伟达" for h in history)
 
     def test_date_is_truncated_to_day(self):
         sig = _sig("buy1", "2026-09-19T00:00:00", 12.0)
-        r = ChanAnalysisResult(symbol="X", bars_count=100, signals=[sig], latest_signal=sig)
-        r.recommendation = Recommendation(
-            action="buy", action_label="", bias="bullish", score=2.0,
-        )
-        raw = build_raw_signal("X", "x", r)
-        assert raw is not None
-        assert raw.date == "2026-09-19"
+        r = ChanAnalysisResult(symbol="X", bars_count=100, signals=[sig])
+        history = build_signal_history("X", "x", r)
+        assert history[0].date == "2026-09-19"
+
+    def test_strength_from_signal_label_not_score(self):
+        sig = _sig("sell1", "2026-09-18", 50.0, strength="strong")
+        r = ChanAnalysisResult(symbol="X", bars_count=100, signals=[sig])
+        history = build_signal_history("AAPL", "苹果", r)
+        assert history[0].strength == signal_strength("strong")
+        assert history[0].bias == "bearish"
 
 
-class TestAggregateDays:
-    def test_buckets_by_date_desc(self):
-        raw = [
-            _raw("A", "2026-09-17", "buy", 0.5),
-            _raw("B", "2026-09-19", "sell", 0.9),
-            _raw("C", "2026-09-18", "buy", 0.7),
-        ]
-        days = aggregate_days(raw, days=8, top_n=10)
-        assert [d.date for d in days] == ["2026-09-19", "2026-09-18", "2026-09-17"]
+class TestBuildDays:
+    def test_signal_stays_active_until_superseded(self):
+        """一只股票 09-01 出现买点，09-10 之前没有新信号——09-01~09-09 每天都该
+        看到它（在场），09-10 起换成新信号。"""
+        history = [_raw("A", "2026-09-01", "buy", 0.5), _raw("A", "2026-09-10", "sell", 0.9)]
+        days = build_days([history], ["2026-09-05", "2026-09-01"], top_n=10)
+        assert [s.date for s in days[0].signals] == ["2026-09-01"]
+        assert days[0].signals[0].side == "buy"
+        assert [s.date for s in days[1].signals] == ["2026-09-01"]
+
+    def test_symbol_absent_before_its_first_signal(self):
+        history = [_raw("A", "2026-09-10", "buy", 0.5)]
+        days = build_days([history], ["2026-09-05"], top_n=10)
+        assert days[0].signals == []
+        assert days[0].buy_count == 0
 
     def test_top_n_limits_and_sorts_by_strength_desc(self):
-        raw = [_raw(f"S{i}", "2026-09-19", "buy", i / 20) for i in range(15)]
-        days = aggregate_days(raw, days=8, top_n=10)
+        histories = [[_raw(f"S{i}", "2026-09-19", "buy", i / 20)] for i in range(15)]
+        days = build_days(histories, ["2026-09-19"], top_n=10)
         assert len(days) == 1
         signals = days[0].signals
         assert len(signals) == 10
         strengths = [s.strength for s in signals]
         assert strengths == sorted(strengths, reverse=True)
-        # 只保留最强的 10 个（强度 >= 5/20）
         assert min(strengths) >= 5 / 20
 
     def test_counts_buy_and_sell(self):
-        raw = [
-            _raw("A", "2026-09-19", "buy", 0.9),
-            _raw("B", "2026-09-19", "buy", 0.8),
-            _raw("C", "2026-09-19", "sell", 0.7),
+        histories = [
+            [_raw("A", "2026-09-19", "buy", 0.9)],
+            [_raw("B", "2026-09-19", "buy", 0.8)],
+            [_raw("C", "2026-09-19", "sell", 0.7)],
         ]
-        days = aggregate_days(raw, days=8, top_n=10)
+        days = build_days(histories, ["2026-09-19"], top_n=10)
         assert days[0].buy_count == 2
         assert days[0].sell_count == 1
 
-    def test_days_limit(self):
-        raw = [_raw(f"S{i}", f"2026-09-{10 + i:02d}", "buy", 0.5) for i in range(8)]
-        days = aggregate_days(raw, days=3, top_n=10)
-        assert len(days) == 3
-        # 最新三天
-        assert [d.date for d in days] == ["2026-09-17", "2026-09-16", "2026-09-15"]
+    def test_returns_one_entry_per_requested_day_in_order(self):
+        histories = [[_raw("A", "2026-09-10", "buy", 0.5)]]
+        requested = ["2026-09-17", "2026-09-16", "2026-09-15"]
+        days = build_days(histories, requested, top_n=10)
+        assert [d.date for d in days] == requested
 
-    def test_empty(self):
-        assert aggregate_days([], days=8, top_n=10) == []
+    def test_no_histories_still_returns_a_day_with_zero_counts(self):
+        """trading_days 独立传入（来自 ETF 日历，不依赖有没有信号）：没有任何股票
+        有信号时，请求的那天仍要出现，只是空桶——不能连日期都消失。"""
+        days = build_days([], ["2026-09-19"], top_n=10)
+        assert len(days) == 1
+        assert days[0].date == "2026-09-19"
+        assert days[0].signals == []
+
+    def test_no_requested_days_returns_empty(self):
+        history = [_raw("A", "2026-09-19", "buy", 0.5)]
+        assert build_days([history], [], top_n=10) == []

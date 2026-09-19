@@ -115,12 +115,43 @@ struct PanicIndexStrip: View {
     }
 }
 
-/// 展开态：近一年完整曲线 + 当前/一周前/一月前快照。
+/// 曲线上的一个可绘制点：把后端的日期字符串转成真正的 Date，
+/// 才能让 Swift Charts 的横向滚动 / 取点手势按时间轴工作。
+private struct PlotPoint: Identifiable {
+    let date: Date
+    let score: Double
+    let rating: String
+    let rawValue: Double?
+    var id: Date { date }
+}
+
+/// 展开态：完整曲线（默认停在最近约 3 个月，可左右拖动回看更早）+ 点按看具体数值
+/// + 当前/一周前/一月前快照。
 private struct PanicIndexDetailSheet: View {
     let market: StockMarket
     let response: PanicIndexResponse
 
     @Environment(\.dismiss) private var dismiss
+    @State private var selected: PlotPoint?
+
+    /// 默认可视窗口长度：数据本身可能横跨十来年（A股/港股波指历史很长），
+    /// 全塞进一屏只会挤成一条线看不出细节；限定窗口 + 可横向拖动回看更早。
+    private let visibleDays: Double = 90
+
+    private static let parser: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        return f
+    }()
+
+    private var points: [PlotPoint] {
+        response.history.compactMap { p in
+            guard let d = Self.parser.date(from: p.date) else { return nil }
+            return PlotPoint(date: d, score: p.score, rating: p.rating, rawValue: p.rawValue)
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -128,7 +159,7 @@ private struct PanicIndexDetailSheet: View {
                 VStack(alignment: .leading, spacing: 16) {
                     snapshotRow
                     chart
-                    Text(L("分数 0~100，越低越恐慌、越高越贪婪；按近一年区间分位数折算，三地口径统一可比。"))
+                    Text(L("拖动图表查看更早历史，点按看某一天的具体分值。分数 0~100，越低越恐慌、越高越贪婪；按近一年区间分位数折算，三地口径统一可比。"))
                         .font(.caption2)
                         .foregroundColor(Theme.textSecondary)
                 }
@@ -165,20 +196,89 @@ private struct PanicIndexDetailSheet: View {
         }
     }
 
+    /// 取离手指最近的一个点——数据是不连续交易日，直接按 x 反查大概率落不到点上。
+    private func nearest(to date: Date) -> PlotPoint? {
+        points.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }
+    }
+
     private var chart: some View {
-        Chart(response.history) { p in
-            LineMark(x: .value("date", p.date), y: .value("score", p.score))
-                .foregroundStyle(Theme.accent)
-                .lineStyle(StrokeStyle(lineWidth: 1.5))
-            AreaMark(x: .value("date", p.date), y: .value("score", p.score))
-                .foregroundStyle(Theme.accent.opacity(0.12))
+        Chart {
+            ForEach(points) { p in
+                LineMark(x: .value(L("日期"), p.date), y: .value(L("分数"), p.score))
+                    .foregroundStyle(Theme.accent)
+                    .lineStyle(StrokeStyle(lineWidth: 1.5))
+                    .interpolationMethod(.catmullRom)
+                AreaMark(x: .value(L("日期"), p.date), y: .value(L("分数"), p.score))
+                    .foregroundStyle(
+                        LinearGradient(colors: [Theme.accent.opacity(0.22), Theme.accent.opacity(0.0)],
+                                       startPoint: .top, endPoint: .bottom)
+                    )
+                    .interpolationMethod(.catmullRom)
+            }
+            if let selected {
+                RuleMark(x: .value(L("日期"), selected.date))
+                    .foregroundStyle(Theme.textSecondary.opacity(0.6))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                PointMark(x: .value(L("日期"), selected.date), y: .value(L("分数"), selected.score))
+                    .foregroundStyle(PanicIndexStrip.ratingColor(selected.score))
+                    .symbolSize(70)
+                    .annotation(position: .top, overflowResolution: .init(x: .fit, y: .fit)) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(selected.date, format: .dateTime.year().month().day())
+                                .font(.caption2)
+                                .foregroundColor(Theme.textSecondary)
+                            HStack(spacing: 4) {
+                                Text("\(Int(selected.score.rounded()))")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(PanicIndexStrip.ratingColor(selected.score))
+                                Text(PanicIndexStrip.ratingLabel(selected.rating))
+                                    .font(.caption2)
+                                    .foregroundColor(Theme.textSecondary)
+                            }
+                        }
+                        .padding(8)
+                        .background(Theme.surfaceAlt)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.border, lineWidth: 1))
+                    }
+            }
         }
         .chartYScale(domain: 0...100)
-        .chartXAxis {
-            AxisMarks(values: .automatic(desiredCount: 4))
+        .chartYAxis {
+            AxisMarks(values: [0, 25, 45, 56, 76, 100]) {
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                AxisValueLabel().font(.caption2).foregroundStyle(Theme.textSecondary)
+            }
         }
-        .frame(height: 220)
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 4)) {
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                AxisValueLabel().font(.caption2).foregroundStyle(Theme.textSecondary)
+            }
+        }
+        .chartScrollableAxes(.horizontal)
+        .chartXVisibleDomain(length: visibleDays * 86400)
+        .chartScrollPosition(initialX: points.last.map {
+            $0.date.addingTimeInterval(-visibleDays * 86400)
+        } ?? Date())
+        .chartOverlay { proxy in
+            GeometryReader { geo in
+                Rectangle().fill(Color.clear).contentShape(Rectangle())
+                    .gesture(
+                        SpatialTapGesture().onEnded { value in
+                            guard let plotFrame = proxy.plotFrame else { return }
+                            let origin = geo[plotFrame].origin
+                            let x = value.location.x - origin.x
+                            if let date: Date = proxy.value(atX: x) {
+                                selected = nearest(to: date)
+                            }
+                        }
+                    )
+            }
+        }
+        .frame(height: 240)
         .padding(.vertical, 8)
+        .padding(.trailing, 8)
         .background(Theme.surface.opacity(0.4))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }

@@ -59,6 +59,11 @@ struct RadarSignal: Decodable, Identifiable {
     var id: String { "\(symbol)-\(date)-\(signalType)" }
     var isBuy: Bool { side == "buy" }
 
+    /// 买卖点级别：1/2/3（一类最强），取 signalType 末位数字，如 "buy2" → 2。
+    var level: Int {
+        Int(String(signalType.suffix(1))) ?? 1
+    }
+
     enum CodingKeys: String, CodingKey {
         case symbol, name, side, label, date, price, strength, bias, confirmed
         case signalType = "signal_type"
