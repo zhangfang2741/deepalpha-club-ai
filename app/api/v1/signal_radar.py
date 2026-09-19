@@ -17,9 +17,9 @@ from app.cache.client import current_redis, get_redis
 from app.core.limiter import limiter
 from app.core.logging import logger
 from app.models.user import User
-from app.schemas.signal_radar import SignalRadarResponse
+from app.schemas.signal_radar import RadarUniverseOut, SignalRadarResponse
 from app.services.signal_radar.service import compute_market, peek_cache
-from app.services.signal_radar.universe import get_universe, supported_markets
+from app.services.signal_radar.universe import get_universe, list_universes, supported_markets
 
 router = APIRouter()
 
@@ -33,23 +33,23 @@ def _spawn(coro) -> None:
     task.add_done_callback(_background_tasks.discard)
 
 
-def _generating_key(market: str) -> str:
-    return f"signal_radar:generating:{market}"
+def _generating_key(market: str, universe_key: str) -> str:
+    return f"signal_radar:generating:{market}:{universe_key}"
 
 
-async def _run_scan(market: str, user_id: int) -> None:
+async def _run_scan(market: str, universe_key: str, user_id: int) -> None:
     """后台执行一次全量扫描，完成后清除 generating 标记。"""
     redis = current_redis()
     if redis is None:
         logger.error("signal_radar_scan_no_redis", market=market)
         return
     try:
-        await compute_market(market, redis=redis, user_id=user_id)
+        await compute_market(market, redis=redis, user_id=user_id, universe_key=universe_key)
     except Exception as e:  # noqa: BLE001
         logger.exception("signal_radar_scan_failed", market=market, error=str(e))
     finally:
         try:
-            await redis.delete(_generating_key(market))
+            await redis.delete(_generating_key(market, universe_key))
         except Exception:  # noqa: BLE001
             pass
 
@@ -59,35 +59,46 @@ async def _run_scan(market: str, user_id: int) -> None:
 async def signal_radar(
     request: Request,
     market: str = Query(default="us", description="市场：us / cn / hk"),
+    universe: str | None = Query(
+        default=None, description="universe 键，如 nasdaq100 / sp500；缺省=该市场默认（科技指数）"
+    ),
     refresh: bool = Query(default=False, description="强制重新扫描（后台）"),
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
 ) -> SignalRadarResponse:
-    """获取某市场最近交易日的缠论买卖点雷达。"""
-    universe = get_universe(market)
-    if universe is None:
+    """获取某 (市场, universe) 最近交易日的缠论买卖点雷达。"""
+    uni = get_universe(market, universe)
+    if uni is None:
         raise HTTPException(
             status_code=400,
-            detail=f"不支持的市场：{market}，可选 {', '.join(supported_markets())}",
+            detail=(
+                f"不支持的市场/universe：{market}/{universe}，"
+                f"市场可选 {', '.join(supported_markets())}"
+            ),
         )
 
     if not refresh:
-        cached = await peek_cache(redis, market)
+        cached = await peek_cache(redis, market, uni.key)
         if cached is not None:
             return cached
 
-    # 去重：已有后台扫描在跑就不再重复启动
-    gkey = _generating_key(market)
+    # 去重：已有后台扫描在跑就不再重复启动（按 (市场, universe) 各自去重）
+    gkey = _generating_key(market, uni.key)
     already = await redis.get(gkey)
     if not already or refresh:
         await redis.set(gkey, "1", ex=_GENERATING_TTL)
-        _spawn(_run_scan(market, user.id))
-        logger.info("signal_radar_scan_spawned", market=market, user_id=user.id)
+        _spawn(_run_scan(market, uni.key, user.id))
+        logger.info("signal_radar_scan_spawned", market=market, universe=uni.key, user_id=user.id)
 
     return SignalRadarResponse(
         market=market,
-        etf_name=universe.etf_name,
-        universe_size=len(universe.constituents),
+        universe=uni.key,
+        universes=[
+            RadarUniverseOut(key=u.key, name=u.etf_name, is_default=u.is_default)
+            for u in list_universes(market)
+        ],
+        etf_name=uni.etf_name,
+        universe_size=len(uni.constituents),
         as_of="",
         top_n=10,
         days=[],

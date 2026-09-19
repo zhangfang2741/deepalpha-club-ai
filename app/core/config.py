@@ -304,6 +304,11 @@ class Settings:
         self.SIGNAL_RADAR_PREWARM_MARKETS = parse_list_from_env(
             "SIGNAL_RADAR_PREWARM_MARKETS", ["us", "cn", "hk"]
         )
+        # 是否预热大盘宽基 universe（标普500/沪深300/恒生指数）。它们成分多、扫描重，
+        # 单独一个开关：数据源吃紧时可只预热科技窄基，大盘走首访 generating 按需扫。
+        self.SIGNAL_RADAR_PREWARM_BROAD_ENABLED = os.getenv(
+            "SIGNAL_RADAR_PREWARM_BROAD_ENABLED", "true"
+        ).lower() in ("true", "1", "yes")
         self.SUPPLY_CHAIN_DISCOVER_CACHE_TTL = int(os.getenv("SUPPLY_CHAIN_DISCOVER_CACHE_TTL", "604800"))
         self.SUPPLY_CHAIN_TRANSCRIPT_QUARTERS = int(os.getenv("SUPPLY_CHAIN_TRANSCRIPT_QUARTERS", "4"))
         self.SUPPLY_CHAIN_NEWS_LOOKBACK_DAYS = int(os.getenv("SUPPLY_CHAIN_NEWS_LOOKBACK_DAYS", "730"))
