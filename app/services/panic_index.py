@@ -1,17 +1,19 @@
-"""三地恐慌指数服务：统一美股 VIX / A股 50ETF-QVIX / 港股 VHSI 为同一套 0~100 分数。
+"""三地恐慌指数服务：统一美股 VIX / A股上证指数 / 港股恒生指数为同一套 0~100 分数。
 
 数据源：
 - us：复用现有 app.services.fear_greed（CNN Fear & Greed，已经是 0~100 分，直接搬字段）。
-- cn：akshare `index_option_50etf_qvix`（上证50ETF期权隐含波动率，业内俗称"中国波指"）。
-      沪深300版本 `index_option_300index_qvix` 近几个月数据大量缺失/为 0（akshare 该接口
-      的已知数据质量问题），弃用，改用数据完整的 50ETF 版本。
-- hk：akshare `stock_hk_index_daily_sina(symbol="VHSI")`（恒指波幅指数，港交所官方指标）。
+- cn：akshare `stock_zh_index_daily`（上证指数，新浪源）。
+- hk：akshare `stock_hk_index_daily_sina`（恒生指数，新浪源，跟 cn 同一套算法）。
 
-折算规则（_vol_to_score）：VIX/QVIX/VHSI 都是「波动率越高＝越恐慌」，但原始量纲
-（10~40 上下）和 CNN 分数（0~100，越高越贪婪）没法直接比。做法是取每个点位在其
-「最近一年」窗口内的分位数，分位数越高（处于近一年高位）＝越恐慌＝分数越低——
-分数 = 100 − 分位数。这样三地的 0/50/100 都对齐到同一套语义（历史同期相对水位），
-可以直接复用 CNN 的 Extreme Fear/Fear/Neutral/Greed/Extreme Greed 五档阈值。
+折算规则：cn/hk 直接对指数收盘价算 RSI(14)（Wilder 平滑，与
+app/services/industry_panic 的行业 ETF 情绪同一套算法，见 app/services/rsi.py），
+`score = RSI` 直接当分数用——RSI 天然就是 0~100，越高越强势=越贪婪，越低越弱势=越
+恐慌，不需要再套一层百分位转换。这样可以直接复用 CNN 的 Extreme Fear/Fear/
+Neutral/Greed/Extreme Greed 五档阈值。
+
+（曾经用波动率百分位数——A股 50ETF-QVIX / 港股 VHSI 相对自身近一年分位数折算——
+但那套算法只反映"贵不贵"一个维度，跟 CNN 官方 7 因子合成的美股版本不是同一把尺子，
+换成指数动能 RSI 更直观、也跟项目里已有的行业恐慌页面用同一套算法。）
 """
 from __future__ import annotations
 
@@ -27,17 +29,17 @@ from app.cache.panic_index_cache import get_panic_index_cache, set_panic_index_c
 from app.core.logging import logger
 from app.schemas.panic_index import PanicIndexPoint, PanicIndexResponse, PanicIndexSnapshot
 from app.services.fear_greed import fear_greed_service
+from app.services.rsi import rsi_series
 
-# 分位数窗口：约一年的交易日。窗口内数据不足时用已有的全部历史兜底（见 _vol_to_score）。
-_PERCENTILE_WINDOW = 252
 # 一周 / 一月对应的交易日回溯步数，与 previous_week/previous_month 语义对齐。
 _WEEK_LAG = 5
 _MONTH_LAG = 21
+_RSI_PERIOD = 14
 
 _LABELS = {
     "us": "VIX 恐慌贪婪指数",
-    "cn": "中国波指 (50ETF QVIX)",
-    "hk": "恒指波幅指数 (VHSI)",
+    "cn": "A股情绪 (上证指数 RSI)",
+    "hk": "港股情绪 (恒生指数 RSI)",
 }
 
 
@@ -57,30 +59,7 @@ def _score_to_rating(score: float) -> str:
 @dataclass
 class _RawPoint:
     date: str
-    value: float
-
-
-def _percentile_rank(window: list[float], target: float) -> float:
-    """target 在 window 内的分位（0~100，含等于）。"""
-    if not window:
-        return 50.0
-    less_eq = sum(1 for v in window if v <= target)
-    return 100.0 * less_eq / len(window)
-
-
-def _vol_to_points(raw: list[_RawPoint]) -> list[PanicIndexPoint]:
-    """把一串波动率原始值转换成 0~100 恐慌贪婪分数序列（越低越恐慌）。"""
-    values = [p.value for p in raw]
-    points: list[PanicIndexPoint] = []
-    for i, p in enumerate(raw):
-        lo = max(0, i - _PERCENTILE_WINDOW + 1)
-        window = values[lo:i]  # 不含当天，避免"自己跟自己比"把分位数锁在两端
-        pct = _percentile_rank(window, p.value) if window else 50.0
-        score = round(100.0 - pct, 1)
-        points.append(PanicIndexPoint(
-            date=p.date, score=score, rating=_score_to_rating(score), raw_value=p.value,
-        ))
-    return points
+    close: float
 
 
 def _snapshot_at(points: list[PanicIndexPoint], lag: int) -> PanicIndexSnapshot:
@@ -92,34 +71,52 @@ def _snapshot_at(points: list[PanicIndexPoint], lag: int) -> PanicIndexSnapshot:
     return PanicIndexSnapshot(score=p.score, rating=p.rating, raw_value=p.raw_value)
 
 
-def _fetch_cn_qvix() -> pd.DataFrame:
-    return ak.index_option_50etf_qvix()
+def _price_to_points(raw: list[_RawPoint]) -> list[PanicIndexPoint]:
+    """把一串指数收盘价转换成 0~100 恐慌贪婪分数序列（RSI 越高越贪婪）。
+
+    前 _RSI_PERIOD 个点没有 RSI（预热期），直接丢弃不进历史序列。
+    """
+    closes = [p.close for p in raw]
+    rsi_vals = rsi_series(closes, period=_RSI_PERIOD)
+    points: list[PanicIndexPoint] = []
+    for p, rsi in zip(raw, rsi_vals, strict=False):
+        if rsi is None:
+            continue
+        score = round(rsi, 1)
+        points.append(PanicIndexPoint(
+            date=p.date, score=score, rating=_score_to_rating(score), raw_value=p.close,
+        ))
+    return points
 
 
-def _fetch_hk_vhsi() -> pd.DataFrame:
-    return ak.stock_hk_index_daily_sina(symbol="VHSI")
+def _fetch_cn_index() -> pd.DataFrame:
+    return ak.stock_zh_index_daily(symbol="sh000001")
+
+
+def _fetch_hk_index() -> pd.DataFrame:
+    return ak.stock_hk_index_daily_sina(symbol="HSI")
 
 
 async def _build_cn(redis: Redis) -> PanicIndexResponse:
-    df = await asyncio.to_thread(_fetch_cn_qvix)
-    return await _build_from_vol_df(redis, market="cn", df=df)
+    df = await asyncio.to_thread(_fetch_cn_index)
+    return await _build_from_price_df(redis, market="cn", df=df)
 
 
 async def _build_hk(redis: Redis) -> PanicIndexResponse:
-    df = await asyncio.to_thread(_fetch_hk_vhsi)
-    return await _build_from_vol_df(redis, market="hk", df=df)
+    df = await asyncio.to_thread(_fetch_hk_index)
+    return await _build_from_price_df(redis, market="hk", df=df)
 
 
-async def _build_from_vol_df(redis: Redis, *, market: str, df: pd.DataFrame) -> PanicIndexResponse:
+async def _build_from_price_df(redis: Redis, *, market: str, df: pd.DataFrame) -> PanicIndexResponse:
     raw = sorted(
         (
-            _RawPoint(date=str(r["date"])[:10], value=float(r["close"]))
+            _RawPoint(date=str(r["date"])[:10], close=float(r["close"]))
             for _, r in df.dropna(subset=["close"]).iterrows()
             if float(r["close"]) > 0
         ),
         key=lambda p: p.date,
     )
-    points = _vol_to_points(raw)
+    points = _price_to_points(raw)
 
     current = points[-1] if points else PanicIndexPoint(
         date=date.today().isoformat(), score=50.0, rating="Neutral", raw_value=None,

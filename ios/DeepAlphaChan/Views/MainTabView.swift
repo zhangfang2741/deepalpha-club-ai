@@ -2,11 +2,11 @@ import SwiftUI
 
 /// 登录后的主容器。
 ///
-/// 四个 Tab 对应四种意图：**看市场**、**做分析**、**学概念**、**管账号**。
+/// 四个 Tab 对应四种意图：**看信号**、**做分析**、**学概念**、**管账号**。
 /// 「晨报」暂时隐藏（保留代码与推送路由，随时可以重新挂回 TabView）；
-/// 原「信号」放到首位改叫「市场」，作为每日回访的第一入口。
+/// 「信号」放在首位，作为每日回访的第一入口，页面顶部标题为「缠论信号」。
 /// 分析 Tab 仍是最重的功能，其 ChanViewModel 提升到这里持有，
-/// 「市场」页个股跳转分析时共用同一份状态。
+/// 「信号」页个股跳转分析时共用同一份状态。
 struct MainTabView: View {
     enum Tab: Hashable {
         case morningReport, analysis, signalRadar, learn, profile
@@ -36,7 +36,7 @@ struct MainTabView: View {
             //     .tag(Tab.morningReport)
 
             SignalRadarView(chanVM: chanVM)
-                .tabItem { Label(L("市场"), systemImage: "dot.radiowaves.left.and.right") }
+                .tabItem { Label(L("信号"), systemImage: "dot.radiowaves.left.and.right") }
                 .tag(Tab.signalRadar)
 
             AnalysisTabView(vm: chanVM)
@@ -54,7 +54,7 @@ struct MainTabView: View {
         .onReceive(push.$pendingMarket) { market in
             guard let market else { return }
             pendingReportMarket = market
-            // 晨报隐藏期间，推送路由先落到「市场」页，避免 selection 指向一个
+            // 晨报隐藏期间，推送路由先落到「信号」页，避免 selection 指向一个
             // 不在 TabView 里的 tag（那样切换会没有任何反应）。
             selection = .signalRadar
             push.pendingMarket = nil

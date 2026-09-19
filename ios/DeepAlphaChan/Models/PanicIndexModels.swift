@@ -1,6 +1,7 @@
 import Foundation
 
-/// 三地恐慌指数：美股 VIX / A股 50ETF-QVIX / 港股 VHSI，统一折算成 0~100 分（越低越恐慌）。
+/// 三地恐慌指数：美股 VIX(CNN Fear&Greed) / A股上证指数 / 港股恒生指数，
+/// 统一折算成 0~100 分（越低越恐慌）。A股/港股是指数收盘价的 RSI(14)。
 struct PanicIndexResponse: Decodable {
     let market: String
     let label: String
