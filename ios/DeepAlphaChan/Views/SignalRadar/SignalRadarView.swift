@@ -26,12 +26,12 @@ struct SignalRadarView: View {
                     metaRow
                     bubbleField
                     legend
-                    Spacer(minLength: 0)
                     dateRail
                 }
             }
             .padding(.horizontal, 12)
             .padding(.top, 8)
+            .padding(.bottom, 10)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Theme.background)
             .navigationTitle(L("信号雷达"))
@@ -103,7 +103,7 @@ struct SignalRadarView: View {
                         .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
                 } else {
                     ForEach(Array(signals.enumerated()), id: \.element.id) { idx, sig in
-                        bubble(sig, index: idx, width: w, height: h)
+                        bubble(sig, index: idx, count: signals.count, width: w, height: h)
                     }
                     Text(L("越靠中心 · 形态技术面越强"))
                         .font(.caption2)
@@ -112,23 +112,32 @@ struct SignalRadarView: View {
                 }
             }
         }
-        .frame(height: 360)
-        .background(Theme.surface.opacity(0.4))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(minHeight: 320)
+        .background(
+            RadialGradient(
+                colors: [Color(hex: 0x131A26), Theme.background],
+                center: .center, startRadius: 6, endRadius: 280
+            )
+        )
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.border, lineWidth: 1))
     }
 
     /// 单个气泡：向日葵螺旋摆位（最强居中），大小/颜色随形态强度。
-    private func bubble(_ sig: RadarSignal, index: Int, width w: Double, height h: Double) -> some View {
+    private func bubble(_ sig: RadarSignal, index: Int, count: Int, width w: Double, height h: Double) -> some View {
         let diameter = 48.0 + sig.strength * 40.0
         let r = diameter / 2
+        // 向日葵螺旋 + 归一化到整个气泡场的椭圆铺满：最强(index 0)居中，其余向四周
+        // 均匀铺开，随气泡场宽高自适应，避免高屏上挤成中间一小团。
         let golden = 2.399963
-        let spacing = min(w, h) * 0.11
-        let radius = spacing * Double(index).squareRoot()
-        var x = w / 2 + radius * cos(Double(index) * golden)
-        var y = h / 2 + radius * sin(Double(index) * golden)
-        x = min(max(x, r + 2), w - r - 2)
-        y = min(max(y, r + 2), h - r - 2)
+        let maxIdx = Double(max(count - 1, 1))
+        let frac = (Double(index) / maxIdx).squareRoot()
+        let ang = Double(index) * golden
+        let rx = max(0, w / 2 - r - 8) * frac
+        let ry = max(0, h / 2 - r - 8) * frac
+        let x = w / 2 + rx * cos(ang)
+        let y = h / 2 + ry * sin(ang)
 
         return RadarBubble(
             signal: sig,
@@ -356,16 +365,8 @@ private struct RadarBubble: View {
 
     private var content: some View {
         ZStack {
-            // 半透明主体
-            Circle().fill(color.opacity(0.72))
-            // 玻璃高光：左上角提亮 + 整体一层极浅白，营造通透感
-            Circle().fill(
-                RadialGradient(
-                    colors: [Color.white.opacity(0.45), Color.white.opacity(0.04)],
-                    center: .topLeading, startRadius: 1, endRadius: diameter * 0.9
-                )
-            )
-            Circle().strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
+            // 纯实色气泡，无透明、无描边
+            Circle().fill(color)
 
             VStack(spacing: 1) {
                 Text(signal.symbol)
@@ -377,11 +378,7 @@ private struct RadarBubble: View {
                     .lineLimit(1)
                     .padding(.horizontal, 4)
             }
-            .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
-
-            if isTop {
-                Circle().strokeBorder(Color.white.opacity(0.85), lineWidth: 2)
-            }
+            .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
         }
     }
 }
