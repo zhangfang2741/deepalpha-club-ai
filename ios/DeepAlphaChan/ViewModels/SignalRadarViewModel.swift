@@ -13,6 +13,20 @@ final class SignalRadarViewModel: ObservableObject {
     private let maxPolls = 16
     private let pollInterval: UInt64 = 2_500_000_000  // 2.5s
 
+    /// 上次成功加载时的本地自然日（yyyy-MM-dd）。用来判断「跨天回到 Tab」是否要重拉：
+    /// response 存在内存里，onAppear 原本只在 response==nil 时才拉，用户把 App 开着
+    /// 过了一天再回来，最新日期就一直停在昨天。跨天则强制刷新。
+    private var lastLoadedLocalDay: String?
+
+    private static let localDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
+    private var todayLocalDay: String { Self.localDayFormatter.string(from: Date()) }
+
     var days: [RadarDay] { response?.days ?? [] }
 
     var selectedDay: RadarDay? {
@@ -27,7 +41,9 @@ final class SignalRadarViewModel: ObservableObject {
     }
 
     func onAppear() {
-        if response == nil && !isLoading {
+        guard !isLoading else { return }
+        // 首次进入（无数据）或已跨自然日（内存里的还是昨天的）都重拉，避免日期停住。
+        if response == nil || lastLoadedLocalDay != todayLocalDay {
             Task { await load() }
         }
     }
@@ -64,6 +80,7 @@ final class SignalRadarViewModel: ObservableObject {
             if market != requested { return }
             response = resp
             selectedDayIndex = 0
+            lastLoadedLocalDay = todayLocalDay
         } catch is CancellationError {
             return
         } catch let e as APIError {

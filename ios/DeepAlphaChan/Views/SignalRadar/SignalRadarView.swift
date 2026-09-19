@@ -541,7 +541,9 @@ struct SignalRadarView: View {
             vm.selectDay(index)
         } label: {
             VStack(spacing: 3) {
-                Text(index == 0 ? L("今日") : SignalRadarView.weekday(day.date))
+                // 「今日」只在这格确实是今天时才显示——数据源有延迟时最新一格可能是
+                // 前一两个交易日，硬把第一格标成「今日」会让人以为 App 认死了今天是那天。
+                Text(SignalRadarView.dayLabel(day.date))
                     .font(.system(size: 9))
                     .foregroundColor(active ? .white.opacity(0.85) : Theme.textSecondary)
                 Text(SignalRadarView.monthDay(day.date))
@@ -622,6 +624,13 @@ struct SignalRadarView: View {
     static func monthDay(_ date: String) -> String {
         let parts = date.split(separator: "-")
         return parts.count >= 3 ? "\(parts[1])-\(parts[2])" : date
+    }
+
+    /// 日期轨格子的顶部标签：是今天就「今日」，否则按语言显示星期几。
+    /// 用本地自然日比较（跟用户视角一致），数据延迟时最新一格会如实显示成周几，
+    /// 而不是被硬标成「今日」。
+    static func dayLabel(_ date: String) -> String {
+        date == parser.string(from: Date()) ? L("今日") : weekday(date)
     }
 
     /// 星期几按当前界面语言本地化（中文「周一」/ 英文「Mon」），不再硬编码中文。
