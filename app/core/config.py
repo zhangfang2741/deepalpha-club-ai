@@ -291,6 +291,19 @@ class Settings:
         self.SUPPLY_CHAIN_WEEKLY_SCHEDULER_INTERVAL_SECONDS = int(
             os.getenv("SUPPLY_CHAIN_WEEKLY_SCHEDULER_INTERVAL_SECONDS", "3600")
         )
+        # 信号雷达：进程内定时预热扫描（把各市场每日买卖点算好写进 Redis 缓存），
+        # 让用户进「信号」Tab 直接命中缓存，而非首访触发数十只缠论的慢扫描。
+        self.SIGNAL_RADAR_PREWARM_ENABLED = os.getenv(
+            "SIGNAL_RADAR_PREWARM_ENABLED", "true"
+        ).lower() in ("true", "1", "yes")
+        # 预热间隔（秒），默认 6h，与缓存 TTL 对齐，保证缓存不过期空窗。
+        self.SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS = int(
+            os.getenv("SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS", "21600")
+        )
+        # 预热覆盖的市场；逗号分隔。
+        self.SIGNAL_RADAR_PREWARM_MARKETS = parse_list_from_env(
+            "SIGNAL_RADAR_PREWARM_MARKETS", ["us", "cn", "hk"]
+        )
         self.SUPPLY_CHAIN_DISCOVER_CACHE_TTL = int(os.getenv("SUPPLY_CHAIN_DISCOVER_CACHE_TTL", "604800"))
         self.SUPPLY_CHAIN_TRANSCRIPT_QUARTERS = int(os.getenv("SUPPLY_CHAIN_TRANSCRIPT_QUARTERS", "4"))
         self.SUPPLY_CHAIN_NEWS_LOOKBACK_DAYS = int(os.getenv("SUPPLY_CHAIN_NEWS_LOOKBACK_DAYS", "730"))

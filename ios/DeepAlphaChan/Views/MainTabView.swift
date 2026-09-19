@@ -7,7 +7,7 @@ import SwiftUI
 /// 其 ChanViewModel 提升到这里持有，晨报「重点个股」跳转分析时共用同一份状态。
 struct MainTabView: View {
     enum Tab: Hashable {
-        case morningReport, analysis, learn, profile
+        case morningReport, analysis, signalRadar, learn, profile
     }
 
     @State private var selection: Tab = {
@@ -34,6 +34,10 @@ struct MainTabView: View {
             AnalysisTabView(vm: chanVM)
                 .tabItem { Label(L("分析"), systemImage: "chart.xyaxis.line") }
                 .tag(Tab.analysis)
+
+            SignalRadarView(onOpenSymbol: openSymbol)
+                .tabItem { Label(L("信号"), systemImage: "dot.radiowaves.left.and.right") }
+                .tag(Tab.signalRadar)
 
             LearnTabView()
                 .tabItem { Label(L("学习"), systemImage: "book") }
