@@ -26,7 +26,6 @@ struct SignalRadarView: View {
                     metaRow
                     bubbleField
                     legend
-                    Spacer(minLength: 0)
                     dateRail
                 }
             }
@@ -112,7 +111,8 @@ struct SignalRadarView: View {
                 }
             }
         }
-        .frame(height: 360)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(minHeight: 320)
         .background(Theme.surface.opacity(0.4))
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.border, lineWidth: 1))
