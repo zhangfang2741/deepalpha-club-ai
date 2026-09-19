@@ -51,6 +51,18 @@ _MAX_ACCEPTABLE_FAILURE_RATE = 0.5
 # 因为要跨很多天复用同一把尺子，只有信号自己在诞生时就确定的标签才不会变。
 _SIGNAL_STRENGTH = {"strong": 0.8, "medium": 0.55, "weak": 0.35}
 
+# 买卖点级别（一/二/三类）→ 潜在行情空间分值（0~1）。一类能吃到从底部开始的整段
+# 反转、空间最大，三类只剩突破后的延续段、空间最小。与前端气泡「大小=潜在空间」
+# 是同一套语义（见 ios SignalRadarView.diameter(forLevel:)），别让前后端各判各的。
+_LEVEL_SPACE = {1: 1.0, 2: 0.7, 3: 0.4}
+
+# 看板满员（前 top_n）淘汰时的重要度权重：潜在空间(大小) 略高于 强弱(深浅)。大小是
+# 气泡最主导的视觉线索，若纯按 strength 淘汰，会把「大而淡」的一类挤出、反留下「小
+# 而深」的三类，与用户对画面的直觉相反（大=重要却先出局）。加权综合两维，让小而淡
+# 的先退场。见 display_rank。
+_DISPLAY_SPACE_WEIGHT = 0.6
+_DISPLAY_STRENGTH_WEIGHT = 0.4
+
 _CACHE_PREFIX = "signal_radar"
 _CACHE_TTL = 3600 * 6  # 6h
 
@@ -82,6 +94,23 @@ class RawSignal:
 def signal_strength(label: str) -> float:
     """买卖点自身强弱标签（strong/medium/weak）→ 形态技术面强度（0~1）。"""
     return _SIGNAL_STRENGTH.get(label, 0.5)
+
+
+def _signal_level(signal_type: str) -> int:
+    """从 signal_type（buy1/sell2…）末位取买卖点级别 1/2/3，与前端 RadarSignal.level 一致。"""
+    tail = signal_type[-1:]
+    return int(tail) if tail.isdigit() else 1
+
+
+def display_rank(signal: RawSignal) -> float:
+    """信号在看板上的重要度（0~1）：潜在空间(大小) 与 形态强弱(深浅) 的加权综合。
+
+    看板满员时按此分数从高到低取前 top_n——小而淡的先被淘汰，大或深的留下，与前端
+    「大小=潜在空间、深浅=强弱」两维视觉对齐。不再纯按 strength 淘汰（那会把大而淡
+    的一类挤掉、留下小而深的三类，看起来不符合直觉）。
+    """
+    space = _LEVEL_SPACE.get(_signal_level(signal.signal_type), _LEVEL_SPACE[1])
+    return _DISPLAY_SPACE_WEIGHT * space + _DISPLAY_STRENGTH_WEIGHT * signal.strength
 
 
 def build_signal_history(symbol: str, name: str, result: ChanAnalysisResult) -> list[RawSignal]:
@@ -141,7 +170,7 @@ def build_days(
                     continue
                 active.append(candidate)
 
-        items = sorted(active, key=lambda r: r.strength, reverse=True)[:top_n]
+        items = sorted(active, key=display_rank, reverse=True)[:top_n]
         out.append(RadarDayOut(
             date=day,
             buy_count=sum(1 for r in items if r.side == "buy"),
