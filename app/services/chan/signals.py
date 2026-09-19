@@ -4,10 +4,43 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from app.services.chan.bias import SEGMENT_WEIGHT, STROKE_WEIGHT
 from app.services.chan.divergence import DivergenceResult
 from app.services.chan.i18n import is_en
 from app.services.chan.pivot import Pivot
 from app.services.chan.stroke import Stroke
+
+# 二/三类买卖点强度：中枢级别（线段级中枢权重高于笔级，复用 bias.py 里已定义
+# 的同一套权重，不能另起一套数字）+ 回踩/反抽落点离中枢边界的余地（相对中枢
+# 高度归一化，越远离边界说明多空争夺的胜负越坚决）。
+# 之前二类固定"medium"、三类固定"strong"，是完全不反映具体情况的占位符——
+# 同是三类信号，贴着边界勉强不回中枢的和远远甩开中枢的，强度应该不一样。
+_MARGIN_WEIGHT = 1.5
+_TYPE23_STRONG_THRESHOLD = 2.5
+_TYPE23_MEDIUM_THRESHOLD = 1.5
+
+
+def _type23_strength(pivot: Pivot, margin_ratio: float) -> Literal["strong", "medium", "weak"]:
+    """二/三类买卖点强度：中枢级别 + 回踩/反抽余地加权后分三档。
+
+    margin_ratio：回踩/反抽落点离中枢边界的距离，相对中枢高度归一化（0=贴着
+    边界，1=已拉开一整个中枢高度），由调用方按买/卖、二/三类各自的边界算好传入。
+    """
+    level_weight = SEGMENT_WEIGHT if pivot.level == "segment" else STROKE_WEIGHT
+    score = level_weight + min(max(margin_ratio, 0.0), 1.0) * _MARGIN_WEIGHT
+    if score >= _TYPE23_STRONG_THRESHOLD:
+        return "strong"
+    if score >= _TYPE23_MEDIUM_THRESHOLD:
+        return "medium"
+    return "weak"
+
+
+def _margin_ratio(pivot: Pivot, boundary: float, retrace_price: float) -> float:
+    """回踩/反抽落点离 boundary 有多远，相对中枢高度归一化；中枢高度异常时退回 0。"""
+    height = pivot.height
+    if height <= 0:
+        return 0.0
+    return abs(retrace_price - boundary) / height
 
 
 @dataclass
@@ -118,19 +151,28 @@ def generate_sell1_signals(
 
 
 def _post_pivot_strokes(strokes: list[Stroke], pivots: list[Pivot], idx: int) -> list[Stroke]:
-    """某中枢「离开段」所在的笔窗口：从本中枢结束、到下一个中枢形成之前。
+    """某中枢「离开段」所在的笔窗口：从突破笔开始、到下一个中枢形成之前。
 
     二 / 三类买卖点只属于离开该中枢的那一段。旧实现对每个历史中枢都扫描其后
     无限远的笔，导致一个几个月前的旧中枢在价格偶然回到其价格带时误触发信号
     （例如 FIG 8 月的价格回到 12 月旧中枢带被误判成二卖）。此处以「下一个中枢的
     起点」为上界，把每个中枢的信号搜索限制在它自己的离开段内。
+
+    中枢延伸判定（见 pivot.py）只要笔与 [ZD, ZG] 有重叠就并入 pivot.elements——
+    真正的突破笔因为起点必然还在区间内，永远会被判定为「重叠」而吞并进中枢，
+    连带回踩笔如果落回区间内也会一并吞并。结果是突破笔/回踩笔从未出现在
+    `end_time` 之后，二/三类买卖点因此在真实数据上几乎永远无法触发。这里把
+    中枢自身吞并进去的延伸段（第 4 段起）接回来，才能还原出完整的「突破笔 +
+    回踩笔」序列供下面的配对逻辑使用。
     """
     pivot = pivots[idx]
     upper = pivots[idx + 1].start_time if idx + 1 < len(pivots) else None
-    return [
+    absorbed = pivot.elements[3:] if pivot.level == "stroke" else []
+    post = [
         s for s in strokes
         if s.start_time >= pivot.end_time and (upper is None or s.start_time < upper)
     ]
+    return [*absorbed, *post]
 
 
 def generate_buy2_signals(
@@ -141,7 +183,7 @@ def generate_buy2_signals(
     """二类买点：中枢向上突破后，回踩进入中枢区间但不破下沿ZD。
 
     只在中枢的「离开段」窗口内取首个（向上突破笔 + 回调笔），回调落点在 [ZD, ZG]
-    内即为二买。
+    内即为二买。强度按中枢级别 + 回踩落点离 ZD 的余地加权（见 _type23_strength）。
     """
     signals: list[Signal] = []
     for idx, pivot in enumerate(pivots):
@@ -162,7 +204,7 @@ def generate_buy2_signals(
                     type="buy2",
                     time=retrace.end_time,
                     price=retrace.end_price,
-                    strength="medium",
+                    strength=_type23_strength(pivot, _margin_ratio(pivot, pivot.zd, retrace.end_price)),
                     divergence=None,
                     description=(
                         f"Type-2 buy: at {retrace.end_time}, after breaking above the pivot "
@@ -184,7 +226,8 @@ def generate_sell2_signals(
 ) -> list[Signal]:
     """二类卖点：中枢向下跌破后，反抽进入中枢区间但不过上沿ZG。
 
-    只在中枢的「离开段」窗口内取首个（向下跌破笔 + 反抽笔）。
+    只在中枢的「离开段」窗口内取首个（向下跌破笔 + 反抽笔）。强度按中枢级别 +
+    反抽落点离 ZG 的余地加权（见 _type23_strength）。
     """
     signals: list[Signal] = []
     for idx, pivot in enumerate(pivots):
@@ -205,7 +248,7 @@ def generate_sell2_signals(
                     type="sell2",
                     time=retrace.end_time,
                     price=retrace.end_price,
-                    strength="medium",
+                    strength=_type23_strength(pivot, _margin_ratio(pivot, pivot.zg, retrace.end_price)),
                     divergence=None,
                     description=(
                         f"Type-2 sell: at {retrace.end_time}, after breaking below the pivot "
@@ -228,7 +271,8 @@ def generate_buy3_signals(
     """三类买点：中枢向上突破后，回踩不回中枢（回调低点高于上沿ZG）。
 
     与二买的区别在回踩落点：高于 ZG 不回中枢即为三买（趋势确认，更强）。
-    只在中枢的「离开段」窗口内取首个。
+    只在中枢的「离开段」窗口内取首个。强度按中枢级别 + 回踩落点离 ZG 的余地
+    加权（见 _type23_strength），不再固定写死"strong"。
     """
     signals: list[Signal] = []
     for idx, pivot in enumerate(pivots):
@@ -249,7 +293,7 @@ def generate_buy3_signals(
                     type="buy3",
                     time=retrace.end_time,
                     price=retrace.end_price,
-                    strength="strong",
+                    strength=_type23_strength(pivot, _margin_ratio(pivot, pivot.zg, retrace.end_price)),
                     divergence=None,
                     description=(
                         f"Type-3 buy: at {retrace.end_time}, after breaking above the pivot "
@@ -271,7 +315,8 @@ def generate_sell3_signals(
 ) -> list[Signal]:
     """三类卖点：中枢向下跌破后，反抽不回中枢（反弹高点低于下沿ZD）。
 
-    只在中枢的「离开段」窗口内取首个。
+    只在中枢的「离开段」窗口内取首个。强度按中枢级别 + 反抽落点离 ZD 的余地
+    加权（见 _type23_strength）。
     """
     signals: list[Signal] = []
     for idx, pivot in enumerate(pivots):
@@ -292,7 +337,7 @@ def generate_sell3_signals(
                     type="sell3",
                     time=retrace.end_time,
                     price=retrace.end_price,
-                    strength="strong",
+                    strength=_type23_strength(pivot, _margin_ratio(pivot, pivot.zd, retrace.end_price)),
                     divergence=None,
                     description=(
                         f"Type-3 sell: at {retrace.end_time}, after breaking below the pivot "

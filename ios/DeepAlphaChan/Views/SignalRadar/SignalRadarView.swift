@@ -5,9 +5,13 @@ import SwiftUI
 /// 顶部市场选择与三地恐慌指数小卡片合二为一（PanicIndexStrip）：点哪张卡就切到
 /// 哪个市场，不再单独放一条分段选择器。
 ///
-/// 气泡编码（三个视觉维度对应三件不同的事，不再互相重复）：
+/// 气泡编码（四个视觉维度对应四件不同的事，不再互相重复）：
 /// - 颜色：方向（红=买点 / 绿=卖点）+ 深浅（形态技术面强弱）；
-/// - 大小：买卖点级别（一类最大 → 三类最小），级别是缠论里结构意义的分类；
+/// - 大小：买卖点级别的潜在行情空间（一类最大 → 三类最小）——一类能吃到从底部
+///   开始的整段反转，三类只剩突破后的延续段；
+/// - 边框：确定性——虚线=未确认（`signal.confirmed == false`），跟图表页
+///   「虚线=未确认」同一套语言。级别（一/二/三类）本身隐含的"确定性"不再叠加
+///   到大小上：那会跟"深浅=强弱"读成同一件事，两个独立维度混成了一个；
 /// - 居中程度：时间距离——信号是哪天出现的离当前查看的这天越近，越靠中心；
 ///   后端会让一只股票的信号在被更新的信号覆盖前持续「在场」（见
 ///   app/services/signal_radar/service.py 的按日重建），所以翻看某一天时，
@@ -326,12 +330,16 @@ struct SignalRadarView: View {
         }
     }
 
-    /// 买卖点级别 → 气泡直径：一类结构意义最强，气泡最大。
+    /// 买卖点级别 → 气泡直径：一类潜在空间最大（能捕捉到从底部开始的整段反转），
+    /// 三类最小（只剩突破后的延续段）。
+    /// 「确定性」不再叠加到大小上——之前把确定性也塞进大小，会跟深浅（形态技术面
+    /// 强弱）读成同一件事，两个独立维度混成了一个。确定性改用气泡边框实/虚线表达
+    /// （见 RadarBubble，跟图表页「虚线=未确认」同一套语言），大小专心只管潜在空间。
     static func diameter(forLevel level: Int) -> Double {
         switch level {
-        case 1: return 84
-        case 2: return 66
-        default: return 50
+        case 1: return 92
+        case 2: return 76
+        default: return 60  // 三类
         }
     }
 
@@ -365,23 +373,24 @@ struct SignalRadarView: View {
     // MARK: - 图例
 
     private var legend: some View {
-        VStack(spacing: 5) {
+        // 大小、深浅、边框分别管三件不同的事，拆成独立行说清楚，不然挤在一起
+        // 用户会把"大小"和"深浅"都读成"这个信号有多强"，浪费一个维度。
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 14) {
                 legendBar(label: L("买"), color: Theme.up,
                           gradient: [Color(hex: 0xF87185), Color(hex: 0x780F26)])
                 legendBar(label: L("卖"), color: Theme.down,
                           gradient: [Color(hex: 0x6EE7B7), Color(hex: 0x045A40)])
             }
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
+                Text(L("大小=潜在空间")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
                 levelDot(diameter: SignalRadarView.diameter(forLevel: 1), label: L("一类"))
                 levelDot(diameter: SignalRadarView.diameter(forLevel: 2), label: L("二类"))
                 levelDot(diameter: SignalRadarView.diameter(forLevel: 3), label: L("三类"))
-                Text(L("· 深浅=强弱 · 居中=越新 · 点击查看分析"))
-                    .font(.system(size: 9))
-                    .foregroundColor(Theme.textSecondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
             }
+            Text(L("深浅=强弱 · 虚线边框=未确认 · 居中=越新 · 点击查看分析"))
+                .font(.system(size: 10))
+                .foregroundColor(Theme.textSecondary)
         }
     }
 
@@ -659,7 +668,7 @@ private struct RadarBubble: View {
             .accessibilityElement()
             .accessibilityLabel(
                 "\(signal.symbol) \(signal.name) \(signal.isBuy ? L("买点") : L("卖点"))"
-                + (isNew ? " \(L("当日新增"))" : "")
+                + (isNew ? " \(L("所选日期当天新增"))" : "")
             )
             .accessibilityAddTraits(.isButton)
             .onAppear {
@@ -676,8 +685,14 @@ private struct RadarBubble: View {
 
     private var content: some View {
         ZStack {
-            // 纯实色气泡，无透明、无描边
+            // 纯实色气泡；未确认的信号额外描一圈虚线边框——跟图表页「虚线=未确认」
+            // 同一套语言，确认的信号维持无描边的纯实色（多数信号都是已确认的，
+            // 不想让所有气泡都套上边框，那样反而弱化了「未确认」这个特殊标记）。
             Circle().fill(color)
+            if !signal.confirmed {
+                Circle().stroke(style: StrokeStyle(lineWidth: 2, dash: [4, 3]))
+                    .foregroundColor(.white.opacity(0.85))
+            }
 
             VStack(spacing: 1) {
                 Text(signal.symbol)

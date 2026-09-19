@@ -17,6 +17,11 @@ struct ResultDetailView: View {
     @State private var previewItem: SharePreviewItem?
     @State private var showShareError = false
 
+    /// 星标状态自己持有一份，不从外面传入——「信号」页气泡跳转和「自选」页跳转
+    /// 都会 push 到这同一个 ResultDetailView，没必要为了一个星标按钮把这份状态
+    /// 一路从 MainTabView 穿过两条不同的调用链传下来。
+    @StateObject private var watchlistVM = WatchlistViewModel()
+
     var body: some View {
         ScrollView {
             pageContent(isStatic: false)
@@ -27,6 +32,11 @@ struct ResultDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { shareButton }
+            ToolbarItem(placement: .topBarTrailing) { starButton }
+        }
+        .task { await watchlistVM.refreshSilently() }
+        .onReceive(NotificationCenter.default.publisher(for: .watchlistDidChange)) { _ in
+            Task { await watchlistVM.refreshSilently() }
         }
         // 预览已经开着时不再响应截图：用户在预览里截图不该再套一层。
         // 全屏图表也要排除：它是盖在本页上的 fullScreenCover，SwiftUI 不会给呈现方发
@@ -83,6 +93,23 @@ struct ResultDetailView: View {
         var tx = Transaction()
         tx.disablesAnimations = true
         withTransaction(tx) { showFullscreenChart = true }
+    }
+
+    // MARK: - 自选
+
+    private var isStarred: Bool {
+        watchlistVM.isStarred(market: vm.market, symbol: vm.symbol.uppercased())
+    }
+
+    private var starButton: some View {
+        Button {
+            let symbol = vm.symbol.uppercased()
+            Task { await watchlistVM.toggle(market: vm.market, symbol: symbol, name: symbol) }
+        } label: {
+            Image(systemName: isStarred ? "star.fill" : "star")
+                .foregroundColor(isStarred ? Theme.segment : nil)
+        }
+        .accessibilityLabel(isStarred ? L("移出自选") : L("加入自选"))
     }
 
     // MARK: - 分享
