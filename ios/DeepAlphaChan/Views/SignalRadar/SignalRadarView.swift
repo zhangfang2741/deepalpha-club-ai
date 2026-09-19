@@ -2,19 +2,28 @@ import SwiftUI
 
 /// 信号雷达 Tab —— 扫描各市场科技 ETF 成分股跑缠论，把每日买卖点前 10 只用气泡呈现。
 ///
+/// 顶部市场选择与三地恐慌指数小卡片合二为一（PanicIndexStrip）：点哪张卡就切到
+/// 哪个市场，不再单独放一条分段选择器。
 /// 气泡编码：颜色区分方向（红=买点 / 绿=卖点），颜色深浅与大小统一由「形态技术面强度」
 /// 驱动（越强越深越大，最强居中）。底部可横滑的日期轨手动选某一天，看当天信号。
-/// 点气泡跳到缠论分析详情页（复用晨报「重点个股」的 onOpenSymbol 跳转机制）。
+/// 点气泡直接在本页自己的 NavigationStack 里 push 到缠论分析详情页——不经过
+/// 分析 Tab 的条件页中转，右滑手势/返回按钮也就自然直接回到信号页。
 struct SignalRadarView: View {
-    /// 个股跳转回调：(market, symbol) → 切到分析 Tab 跑缠论。
-    let onOpenSymbol: (String, String) -> Void
+    /// 与分析 Tab 共享的缠论状态（同 MorningReportTabView），这样从信号页
+    /// 分析过的标的，切到分析 Tab 时条件与结果也是同步的。
+    @ObservedObject var chanVM: ChanViewModel
 
     @StateObject private var vm = SignalRadarViewModel()
+    @StateObject private var panicVM = PanicIndexViewModel()
+    @EnvironmentObject private var orientation: AppOrientation
+
+    /// 分析成功后置 true，push 到详情页；返回（含右滑手势）时自动复位。
+    @State private var showResults = false
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
-                marketSwitch
+                PanicIndexStrip(radarVM: vm, panicVM: panicVM)
 
                 if vm.isScanning {
                     scanningView
@@ -26,8 +35,8 @@ struct SignalRadarView: View {
                     metaRow
                     bubbleField
                     legend
-                    Spacer(minLength: 0)
                     dateRail
+                    Spacer(minLength: 0)
                 }
             }
             .padding(.horizontal, 12)
@@ -37,21 +46,43 @@ struct SignalRadarView: View {
             .navigationTitle(L("信号雷达"))
             .navigationBarTitleDisplayMode(.inline)
             .task { vm.onAppear() }
+            .overlay { if chanVM.isLoading { analysisLoadingOverlay } }
+            .navigationDestination(isPresented: $showResults) {
+                if let analysis = chanVM.analysis {
+                    ResultDetailView(analysis: analysis, vm: chanVM)
+                        .environmentObject(orientation)
+                }
+            }
+            .alert(chanVM.errorMessage ?? "", isPresented: Binding(
+                get: { !showResults && chanVM.errorMessage != nil },
+                set: { if !$0 { chanVM.errorMessage = nil } }
+            )) {
+                Button(L("好"), role: .cancel) {}
+            }
         }
     }
 
-    // MARK: - 市场切换
-
-    private var marketSwitch: some View {
-        Picker("", selection: Binding(
-            get: { vm.market },
-            set: { vm.switchMarket($0) }
-        )) {
-            ForEach(StockMarket.allCases) { m in
-                Text(m.title).tag(m)
+    /// 点气泡 → 直接跑分析，成功后 push 详情页（不经过分析 Tab 的条件页）。
+    private func openSymbol(_ symbol: String) {
+        chanVM.apply(market: vm.market, symbol: symbol)
+        Task {
+            await chanVM.runAnalysis()
+            if chanVM.errorMessage == nil, chanVM.analysis != nil {
+                showResults = true
             }
         }
-        .pickerStyle(.segmented)
+    }
+
+    /// 跑分析期间盖在信号页上的等待态，文案与分析 Tab 保持一致。
+    private var analysisLoadingOverlay: some View {
+        ZStack {
+            Theme.background.opacity(0.85).ignoresSafeArea()
+            VStack(spacing: 12) {
+                ProgressView().tint(Theme.accent)
+                Text(L("正在拉取行情并计算缠论结构…"))
+                    .font(.subheadline).foregroundColor(Theme.textSecondary)
+            }
+        }
     }
 
     // MARK: - 说明行
@@ -135,10 +166,9 @@ struct SignalRadarView: View {
             diameter: CGFloat(diameter),
             baseX: CGFloat(x),
             baseY: CGFloat(y),
-            isTop: index == 0,
             phase: Double(index) * 0.35,
             color: SignalRadarView.bubbleColor(side: sig.side, strength: sig.strength),
-            onOpen: { onOpenSymbol(vm.market.rawValue, sig.symbol) }
+            onOpen: { openSymbol(sig.symbol) }
         )
     }
 
@@ -295,13 +325,12 @@ struct SignalRadarView: View {
     }
 }
 
-/// 单个信号气泡：半透明玻璃质感 + 持续轻微漂浮 + 可按住拖拽（松手弹回原位）。
+/// 单个信号气泡：纯色实心 + 持续轻微漂浮 + 可按住拖拽（松手弹回原位）。
 private struct RadarBubble: View {
     let signal: RadarSignal
     let diameter: CGFloat
     let baseX: CGFloat
     let baseY: CGFloat
-    let isTop: Bool
     let phase: Double
     let color: Color
     let onOpen: () -> Void
@@ -356,16 +385,8 @@ private struct RadarBubble: View {
 
     private var content: some View {
         ZStack {
-            // 半透明主体
-            Circle().fill(color.opacity(0.72))
-            // 玻璃高光：左上角提亮 + 整体一层极浅白，营造通透感
-            Circle().fill(
-                RadialGradient(
-                    colors: [Color.white.opacity(0.45), Color.white.opacity(0.04)],
-                    center: .topLeading, startRadius: 1, endRadius: diameter * 0.9
-                )
-            )
-            Circle().strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
+            // 纯色主体，不透明、不描边
+            Circle().fill(color)
 
             VStack(spacing: 1) {
                 Text(signal.symbol)
@@ -378,10 +399,6 @@ private struct RadarBubble: View {
                     .padding(.horizontal, 4)
             }
             .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
-
-            if isTop {
-                Circle().strokeBorder(Color.white.opacity(0.85), lineWidth: 2)
-            }
         }
     }
 }
