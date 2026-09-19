@@ -133,6 +133,8 @@ struct SignalRadarView: View {
             let w = Double(geo.size.width)
             let h = Double(geo.size.height)
             let base = min(w, h)
+            // 参考环与气泡共用的内缩场半径：最外环内缩 fieldInset，不贴容器边。
+            let fieldRadius = SignalRadarView.fieldRadius(width: w, height: h)
             let dayDate = vm.selectedDay?.date ?? ""
             let signals = (vm.selectedDay?.signals ?? [])
                 .sorted { $0.strength > $1.strength }
@@ -149,15 +151,16 @@ struct SignalRadarView: View {
                 // 同心参考环：越外越淡，呼应同一套"近实远虚"的纵深语言；环上直接标出
                 // 大致时间跨度，不用再靠单独一行说明文字解释三个圈是什么意思。
                 ForEach(Array(SignalRadarView.ringSpecs.enumerated()), id: \.offset) { idx, spec in
+                    let ringR = fieldRadius * spec.scale
                     Circle()
                         .stroke(Theme.textSecondary.opacity(0.16 - Double(idx) * 0.045),
                                 style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                        .frame(width: CGFloat(base * spec.scale), height: CGFloat(base * spec.scale))
+                        .frame(width: CGFloat(ringR * 2), height: CGFloat(ringR * 2))
                         .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
                     Text(spec.label)
                         .font(.system(size: 8))
                         .foregroundColor(Theme.textSecondary.opacity(0.55))
-                        .position(x: CGFloat(w / 2), y: CGFloat(h / 2) - CGFloat(base * spec.scale / 2) + 8)
+                        .position(x: CGFloat(w / 2), y: CGFloat(h / 2) - CGFloat(ringR) + 8)
                 }
 
                 if layouts.isEmpty {
@@ -214,6 +217,18 @@ struct SignalRadarView: View {
         [(0.34, L("1周内")), (0.68, L("2周内")), (1.0, L("1月内"))]
     }
 
+    /// 场边距：最外环（scale 1.0）到容器四边留出的空白，给气泡的阴影 + 右上角「新」
+    /// 角标 + 拖拽放大留余量。以前最外环半径直接取 min(w,h)/2，环线正好压在容器边上，
+    /// 落在最外环、角度又指向边缘的气泡（尤其是那颗被推到远端的孤立卖点）就会被
+    /// 圆角容器裁掉一半。现在把「场半径」整体内缩这个边距，环线和气泡一起内移。
+    static let fieldInset: Double = 18
+
+    /// 气泡场的有效半径：min(w,h)/2 再内缩 fieldInset。参考环、ringRadius、
+    /// ringBandBounds、resolveOverlaps 全部以它为基准，保证环线与气泡摆位一致内缩。
+    static func fieldRadius(width w: Double, height h: Double) -> Double {
+        max(0, min(w, h) / 2 - fieldInset)
+    }
+
     /// 每个环位内部按 daysAgo 线性插值的时间跨度上限（1月内档没有硬边界，用 30 天封顶）。
     private static let ringBandMaxDays: [Int] = [7, 14, 30]
 
@@ -254,7 +269,8 @@ struct SignalRadarView: View {
     ) -> [BubbleLayout] {
         guard !signals.isEmpty else { return [] }
         let golden = 2.399963
-        let fieldRadius = min(w, h) / 2
+        // 与参考环共用的内缩场半径：最外环不贴容器边，气泡才不会被圆角容器裁掉。
+        let fieldRadius = SignalRadarView.fieldRadius(width: w, height: h)
 
         var layouts: [BubbleLayout] = signals.enumerated().map { index, sig in
             let da = daysAgo(from: sig.date, to: dayDate)

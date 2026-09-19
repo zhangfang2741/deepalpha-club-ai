@@ -68,8 +68,7 @@ class TestBuildSignalHistory:
 
 class TestBuildDays:
     def test_signal_stays_active_until_superseded(self):
-        """一只股票 09-01 出现买点，09-10 之前没有新信号——09-01~09-09 每天都该
-        看到它（在场），09-10 起换成新信号。"""
+        """一只股票 09-01 出现买点、09-10 前无新信号——09-01~09-09 每天都在场，09-10 起换新信号。"""
         history = [_raw("A", "2026-09-01", "buy", 0.5), _raw("A", "2026-09-10", "sell", 0.9)]
         days = build_days([history], ["2026-09-05", "2026-09-01"], top_n=10)
         assert [s.date for s in days[0].signals] == ["2026-09-01"]
@@ -109,8 +108,7 @@ class TestBuildDays:
         assert [d.date for d in days] == requested
 
     def test_no_histories_still_returns_a_day_with_zero_counts(self):
-        """trading_days 独立传入（来自 ETF 日历，不依赖有没有信号）：没有任何股票
-        有信号时，请求的那天仍要出现，只是空桶——不能连日期都消失。"""
+        """trading_days 独立传入（来自 ETF 日历）：无任何股票有信号时，那天仍要出现（空桶），不能连日期都消失。"""
         days = build_days([], ["2026-09-19"], top_n=10)
         assert len(days) == 1
         assert days[0].date == "2026-09-19"
@@ -119,3 +117,23 @@ class TestBuildDays:
     def test_no_requested_days_returns_empty(self):
         history = [_raw("A", "2026-09-19", "buy", 0.5)]
         assert build_days([history], [], top_n=10) == []
+
+    def test_signal_expires_after_max_age(self):
+        """在场信号诞生超过 max_age_days 天后不再展示（09-01 买点在 34 天后的 10-05 已过期）。"""
+        history = [_raw("A", "2026-09-01", "buy", 0.5)]
+        days = build_days([history], ["2026-10-05"], top_n=10, max_age_days=30)
+        assert days[0].signals == []
+        assert days[0].buy_count == 0
+
+    def test_signal_visible_at_exactly_max_age(self):
+        """恰好等于 max_age_days 天仍在场（09-01 买点在 30 天后的 10-01 边界含、应显示）。"""
+        history = [_raw("A", "2026-09-01", "buy", 0.5)]
+        days = build_days([history], ["2026-10-01"], top_n=10, max_age_days=30)
+        assert [s.date for s in days[0].signals] == ["2026-09-01"]
+
+    def test_expiry_is_relative_to_each_viewed_day(self):
+        """过期相对每个展示日各自判断：同条 09-01 信号翻看 09-15 在场、10-05 已过期。"""
+        history = [_raw("A", "2026-09-01", "buy", 0.5)]
+        days = build_days([history], ["2026-10-05", "2026-09-15"], top_n=10, max_age_days=30)
+        assert days[0].signals == []  # 10-05：过期
+        assert [s.date for s in days[1].signals] == ["2026-09-01"]  # 09-15：在场
