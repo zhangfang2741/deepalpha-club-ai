@@ -11,10 +11,17 @@ struct PanicIndexStrip: View {
     @State private var expanded: StockMarket?
 
     var body: some View {
-        HStack(spacing: 8) {
-            ForEach(StockMarket.allCases) { market in
-                tile(market)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                ForEach(StockMarket.allCases) { market in
+                    tile(market)
+                }
             }
+            // 卡片本身"既展示数据又是市场切换器"这件事不明显，容易被当成纯信息卡——
+            // 点一下才发现下面的信号雷达跟着变了市场。补一行提示说明这个副作用。
+            Text(L("点击卡片切换市场"))
+                .font(.system(size: 9))
+                .foregroundColor(Theme.textSecondary)
         }
         .task { panicVM.onAppear() }
         .sheet(item: $expanded) { market in
@@ -96,11 +103,37 @@ struct PanicIndexStrip: View {
         .frame(height: 24)
     }
 
-    /// 分数 → 颜色，三档：恐慌偏绿（本 App「跌=绿」的语义延伸）、贪婪偏红、中性琥珀色。
+    /// 分数 → 颜色，5 个锚点对应五档中心（0-25 极度恐慌/25-45 恐慌/45-55 中性/
+    /// 55-75 贪婪/75-100 极度贪婪的区间中点），锚点之间线性插值出连续渐变——
+    /// 不是卡在几个色块之间突变，分数差 1 分颜色也只差一点点。
+    /// 按用户明确要求固定：红=恐慌、灰=中性、绿=贪婪（国际通行的恐慌贪婪指数
+    /// 配色，如 CNN Fear & Greed），不跟本 App 全局的「涨=红/跌=绿」挂钩——
+    /// 这条规则已经反复确认过，不要再按「红=贪婪」的方向改回去。
+    private static let ratingAnchors: [(pos: Double, r: Double, g: Double, b: Double)] = [
+        (12.5, 69, 10, 10),      // 乌红：极度恐慌
+        (35, 220, 38, 38),       // 红：恐慌
+        (50, 156, 163, 175),     // 灰色：中性
+        (65, 34, 197, 94),       // 绿：贪婪
+        (87.5, 20, 83, 45),      // 深绿：极度贪婪
+    ]
+
     static func ratingColor(_ score: Double) -> Color {
-        if score < 45 { return Theme.down }
-        if score > 56 { return Theme.up }
-        return Theme.segment
+        let s = min(max(score, 0), 100)
+        guard let first = ratingAnchors.first, let last = ratingAnchors.last else { return .gray }
+        if s <= first.pos { return Color(.sRGB, red: first.r / 255, green: first.g / 255, blue: first.b / 255) }
+        if s >= last.pos { return Color(.sRGB, red: last.r / 255, green: last.g / 255, blue: last.b / 255) }
+        for i in 0..<(ratingAnchors.count - 1) {
+            let a = ratingAnchors[i], b = ratingAnchors[i + 1]
+            guard s >= a.pos && s <= b.pos else { continue }
+            let t = (s - a.pos) / (b.pos - a.pos)
+            return Color(
+                .sRGB,
+                red: (a.r + (b.r - a.r) * t) / 255,
+                green: (a.g + (b.g - a.g) * t) / 255,
+                blue: (a.b + (b.b - a.b) * t) / 255
+            )
+        }
+        return Color(.sRGB, red: last.r / 255, green: last.g / 255, blue: last.b / 255)
     }
 
     static func ratingLabel(_ rating: String) -> String {
@@ -229,16 +262,20 @@ private struct PanicIndexDetailSheet: View {
         return nearest(to: selectedDate)
     }
 
+    /// 跟小卡片/迷你走势图用同一套恐慌-贪婪配色，不再是一条跟分数无关的蓝线——
+    /// 之前展开大图和入口小卡片配色不统一，从花花绿绿的卡片点进来却看到素蓝线。
+    private var lineColor: Color { PanicIndexStrip.ratingColor(response.current.score) }
+
     private var chart: some View {
         Chart {
             ForEach(points) { p in
                 LineMark(x: .value(L("日期"), p.date), y: .value(L("分数"), p.score))
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(lineColor)
                     .lineStyle(StrokeStyle(lineWidth: 1.5))
                     .interpolationMethod(.catmullRom)
                 AreaMark(x: .value(L("日期"), p.date), y: .value(L("分数"), p.score))
                     .foregroundStyle(
-                        LinearGradient(colors: [Theme.accent.opacity(0.22), Theme.accent.opacity(0.0)],
+                        LinearGradient(colors: [lineColor.opacity(0.22), lineColor.opacity(0.0)],
                                        startPoint: .top, endPoint: .bottom)
                     )
                     .interpolationMethod(.catmullRom)

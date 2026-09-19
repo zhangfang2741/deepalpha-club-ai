@@ -2,6 +2,7 @@
 
 /* Tab bar */
 "分析" = "Analyze";
+"自选" = "Watchlist";
 "学习" = "Learn";
 "我的" = "Me";
 
@@ -41,7 +42,6 @@
 "算法自动生成，仅供技术研究，不构成投资建议。" = "Auto-generated for technical research only; not investment advice.";
 
 /* Segments */
-"形态分析" = "Analysis";
 "买卖点" = "Signals";
 "%lld 条" = "%lld";
 
@@ -284,18 +284,58 @@
 "信号雷达" = "Signal Radar";
 "%lld 买点" = "%lld buys";
 "%lld 卖点" = "%lld sells";
-"越靠中心 · 形态技术面越强" = "Closer to center = stronger technicals";
 "当日无买卖点信号" = "No buy/sell signals that day";
 "买" = "Buy";
 "卖" = "Sell";
-"越深 · 越大 = 形态技术面越强 · 点击查看分析" = "Deeper & larger = stronger technicals · tap for analysis";
 "选择日期" = "Pick a date";
 "← 左右滑动 →" = "← swipe →";
 "今日" = "Today";
-"正在扫描全市场成分股…" = "Scanning market constituents…";
 "首次扫描较慢，稍候即可看到每日买卖点" = "The first scan takes a moment; daily signals will appear shortly";
 "近期暂无买卖点信号" = "No recent buy/sell signals";
 "刷新" = "Refresh";
 /* 气泡无障碍标签（VoiceOver）用买/卖点方向 */
 "买点" = "buy point";
 "卖点" = "sell point";
+
+/* Watchlist tab */
+"还没有自选" = "No watchlist items yet";
+"在缠论分析结果页点星标即可加入，方便随时回来看结构变化" = "Tap the star on an analysis result to add one, so you can come back anytime to see how the structure changes";
+"移出自选" = "Remove from watchlist";
+"加入自选" = "Add to watchlist";
+
+/* Panic index detail sheet */
+"一周前" = "1 week ago";
+"一月前" = "1 month ago";
+"分数" = "Score";
+"当前" = "Current";
+"恐慌" = "Fear";
+"贪婪" = "Greed";
+"极度恐慌" = "Extreme Fear";
+"极度贪婪" = "Extreme Greed";
+"查看完整曲线" = "View full chart";
+"日期" = "Date";
+"拖动图表查看更早历史，点按看某一天的具体分值。分数 0~100，越低越恐慌、越高越贪婪；按近一年区间分位数折算，三地口径统一可比。" = "Drag the chart to see earlier history, tap to see a specific day's value. Score 0–100: lower is more fearful, higher is more greedy — normalized to a 1-year percentile so all three markets are comparable.";
+
+/* Analysis result — overall analysis / risk notes */
+"整体分析" = "Overall Analysis";
+"当前状态" = "Current State";
+"本次分析暂无需要特别注意的风险提示。" = "No particular risk notes for this analysis.";
+
+/* Signal Radar — bubble field rings, legend, date picker */
+"缠论信号" = "Chan Signals";
+"正在扫描「%@」成分股…" = "Scanning \"%@\" constituents…";
+"1周内" = "Within 1wk";
+"2周内" = "Within 2wk";
+"1月内" = "Within 1mo";
+"一类" = "Tier 1";
+"二类" = "Tier 2";
+"三类" = "Tier 3";
+"点击卡片切换市场" = "Tap a card to switch market";
+"新" = "New";
+"所选日期当天新增" = "new on the selected date";
+"更多" = "More";
+"确定" = "Done";
+
+/* Signal Radar legend */
+"大小=潜在空间" = "Size = potential move";
+"深浅=强弱 · 虚线边框=未确认 · 居中=越新 · 点击查看分析" = "Shade = strength · dashed border = unconfirmed · centered = newer · tap for analysis";

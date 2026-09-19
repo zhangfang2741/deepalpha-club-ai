@@ -50,7 +50,7 @@ struct RadarSignal: Decodable, Identifiable {
     let signalType: String    // buy1 / sell1 …
     let date: String
     let price: Double
-    /// 形态技术面强度 0~1（同时决定气泡大小与颜色深浅）
+    /// 形态技术面强度 0~1（决定气泡颜色深浅；气泡大小由 `level` 决定，见下）
     let strength: Double
     let bias: String
     let signalStrength: String
@@ -59,7 +59,11 @@ struct RadarSignal: Decodable, Identifiable {
     var id: String { "\(symbol)-\(date)-\(signalType)" }
     var isBuy: Bool { side == "buy" }
 
-    /// 买卖点级别：1/2/3（一类最强），取 signalType 末位数字，如 "buy2" → 2。
+    /// 买卖点级别：1/2/3，取 signalType 末位数字（"buy2"/"sell2" 都取到 2），
+    /// 对买卖两侧通用。级别决定气泡大小（潜在行情空间），映射见
+    /// SignalRadarView.diameter(forLevel:)——一类能吃到从底部开始的整段反转，
+    /// 气泡最大；三类只剩突破后的延续段，气泡最小。级别的"确定性"改由
+    /// `confirmed` 字段驱动气泡边框虚实表达，不叠加到大小上。
     var level: Int {
         Int(String(signalType.suffix(1))) ?? 1
     }
