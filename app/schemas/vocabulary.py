@@ -185,10 +185,16 @@ class VocabularyWordResponse(BaseModel):
 
 
 class WordsBatchCreateResponse(BaseResponse):
-    """批量加入结果。"""
+    """批量加入结果。
+
+    created 为本次新建的词；skipped_existing 为因已在生词库中被跳过的词原文；
+    existing 为这些被跳过词对应的现有词行（含 id）——客户端在某个词库里拍照
+    录入时，用它把「已在生词库、但这次也勾选了」的词一并补进当前词库歌单。
+    """
 
     created: list[VocabularyWordResponse]
     skipped_existing: list[str]
+    existing: list[VocabularyWordResponse] = []
 
 
 class WordsBatchDeleteRequest(BaseModel):
@@ -274,3 +280,42 @@ class PlaylistAddWordsRequest(BaseModel):
     """把一批词并入歌单末尾（生词库多选「加入歌单」用）。"""
 
     word_ids: list[uuid.UUID] = Field(..., min_length=1)
+
+
+class LibraryBookSchema(BaseModel):
+    """内置词库单本的元信息（不含词条本身）。"""
+
+    id: str
+    title: str
+    word_count: int
+
+
+class LibraryGroupSchema(BaseModel):
+    """内置词库分组（如「四六级」「出国留学」）。"""
+
+    key: str
+    title: str
+    books: list[LibraryBookSchema]
+
+
+class LibraryListResponse(BaseResponse):
+    """内置词库列表：分组 + 每本元信息，供设置页渲染选择列表。"""
+
+    groups: list[LibraryGroupSchema]
+
+
+class LibraryImportResponse(BaseResponse):
+    """导入内置词库结果。
+
+    imported 为本次真正并入生词库的新词数；skipped 为因已在生词库中被跳过的
+    词数。整本词库全部已存在时 imported=0、skipped=词库总数，属正常幂等结果。
+
+    playlist_* 描述导入时自动建/刷新的同名歌单：用户可在首页切到它，单独复习
+    这本词库、单独查看进度，而记忆进度始终跟随单词本身、不受切换影响。
+    """
+
+    imported: int
+    skipped: int
+    playlist_id: uuid.UUID
+    playlist_name: str
+    playlist_word_count: int

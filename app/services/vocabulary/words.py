@@ -52,6 +52,27 @@ async def get_existing_words(session: AsyncSession, user_id: uuid.UUID) -> set[s
     return set(res.scalars().all())
 
 
+async def get_words_by_names(
+    session: AsyncSession, user_id: uuid.UUID, names: list[str]
+) -> list[VocabularyWord]:
+    """按单词原文（大小写不敏感）查回该用户生词库中的对应词行。
+
+    用于「拍照录入时把已在生词库、但被勾选的词也补进当前词库歌单」——批量加入
+    接口对这些词只回传了原文（在 skipped_existing 里），客户端要拿到它们的 id
+    才能并入歌单。同一小写词库里只会有一行（写入时已大小写不敏感去重），因此
+    直接按 lower(word) 匹配即可。
+    """
+    if not names:
+        return []
+    lowered = list({n.lower() for n in names})
+    stmt = select(VocabularyWord).where(
+        col(VocabularyWord.user_id) == user_id,
+        func.lower(col(VocabularyWord.word)).in_(lowered),
+    )
+    res = await session.execute(stmt)
+    return list(res.scalars().all())
+
+
 async def create_words_batch(session: AsyncSession, user_id: uuid.UUID, words: list[dict]) -> list[VocabularyWord]:
     """批量插入生词（调用方已去重）。
 
