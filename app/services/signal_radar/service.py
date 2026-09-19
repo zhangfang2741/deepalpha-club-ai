@@ -43,6 +43,9 @@ _SCAN_CONCURRENCY = 8
 # 命中限流后单个任务自我冷却的时长：不缩并发槽位数，而是让占着槽位的这个任务
 # 多蹲一会儿再放行——变相拉低后续请求打过去的频率，给数据源喘息空间。
 _RATE_LIMIT_BACKOFF_SECONDS = 5
+# 单次扫描失败率超过这个比例，就认为这次扫描本身出了问题（数据源大面积不可用），
+# 不能拿它覆盖已有的好缓存——宁可继续服务旧数据，也不要用残缺结果污染 6 小时。
+_MAX_ACCEPTABLE_FAILURE_RATE = 0.5
 
 # 买卖点自身强弱标签 → 形态技术面强度（0~1）。见模块 docstring：不用 score 是
 # 因为要跨很多天复用同一把尺子，只有信号自己在诞生时就确定的标签才不会变。
@@ -291,12 +294,29 @@ async def compute_market(
         days=build_days(histories, trading_days, top_n=top_n),
         status="ready",
     )
+    failed_symbols = sum(failure_counts.values())
+    failure_rate = failed_symbols / len(constituents) if constituents else 0.0
     logger.info(
         "signal_radar_computed", market=market,
         universe=len(universe.constituents), symbols_with_signals=len(histories),
-        symbols_failed=sum(failure_counts.values()), failure_breakdown=dict(failure_counts),
-        days=len(resp.days),
+        symbols_failed=failed_symbols, failure_rate=round(failure_rate, 2),
+        failure_breakdown=dict(failure_counts), days=len(resp.days),
     )
+
+    # 这次扫描大半个市场都请求不到（比如限流/熔断赶一起了），别让这坨残缺结果
+    # 覆盖掉几分钟前还好好的缓存——那样用户接下来 6 小时看到的就是这次的烂摊子。
+    # 只有「已经有一份旧缓存能保底」时才这么做；首次扫描没有旧缓存可保，再差也
+    # 得写进去，不然用户永远看不到任何数据。
+    if failure_rate > _MAX_ACCEPTABLE_FAILURE_RATE:
+        stale = await _read_cache(redis, market)
+        if stale is not None:
+            logger.warning(
+                "signal_radar_scan_degraded_keep_stale_cache",
+                market=market, failure_rate=round(failure_rate, 2),
+                failure_breakdown=dict(failure_counts),
+            )
+            return stale
+
     await _write_cache(redis, resp)
     return resp
 
