@@ -81,8 +81,9 @@ struct SignalRadarView: View {
     }
 
     /// 点气泡 → 直接跑分析，成功后 push 详情页（不经过分析 Tab 的条件页）。
-    private func openSymbol(_ symbol: String) {
-        chanVM.apply(market: vm.market, symbol: symbol)
+    /// 带上气泡上的真实名称（如「中芯国际」），供结果页加自选时存名称。
+    private func openSymbol(_ symbol: String, name: String? = nil) {
+        chanVM.apply(market: vm.market, symbol: symbol, name: name)
         Task {
             await chanVM.runAnalysis()
             if chanVM.errorMessage == nil, chanVM.analysis != nil {
@@ -180,7 +181,7 @@ struct SignalRadarView: View {
                             color: SignalRadarView.bubbleColor(side: layout.signal.side, strength: layout.signal.strength),
                             fade: SignalRadarView.ringOpacity(forDaysAgo: da),
                             isNew: layout.signal.date == dayDate,
-                            onOpen: { openSymbol(layout.signal.symbol) }
+                            onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name) }
                         )
                     }
                 }
