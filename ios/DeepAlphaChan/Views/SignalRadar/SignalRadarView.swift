@@ -342,7 +342,11 @@ struct SignalRadarView: View {
 
     /// 两个 yyyy-MM-dd 日期字符串相差多少天（可正可负；解析失败按 0 处理）。
     static func absDayDiff(_ a: String, _ b: String) -> Int {
-        guard let da = parser.date(from: a), let db = parser.date(from: b) else { return 0 }
+        // 解析失败不能返回 0——0 意味着"完全匹配"，会在 jumpToNearestDay 的
+        // 就近查找里把解析失败的项当成最佳命中，把日期选择器锁死在第一项上
+        // （表现为用户选哪天点确定都跳不动）。解析失败时返回一个大数，让它
+        // 永远选不中。
+        guard let da = parser.date(from: a), let db = parser.date(from: b) else { return .max }
         return abs(Calendar(identifier: .gregorian).dateComponents([.day], from: da, to: db).day ?? 0)
     }
 
@@ -540,9 +544,14 @@ struct SignalRadarView: View {
     // MARK: - 状态视图
 
     private var scanningView: some View {
-        VStack(spacing: 12) {
+        // 扫描范围是选定市场的代表性成分股（如纳斯达克100/科创50/恒生科技），
+        // 不是"全市场"——文案得说实话，否则用户会以为在扫几千只股票。
+        // response 在还没收到过任何回复（含 generating 态）之前是 nil，这时还
+        // 不知道具体扫的是哪个 ETF，退回市场名兜底。
+        let scope = vm.response?.etfName ?? vm.market.title
+        return VStack(spacing: 12) {
             ProgressView().tint(Theme.accent)
-            Text(L("正在扫描全市场成分股…"))
+            Text(L("正在扫描「%@」成分股…", scope))
                 .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
             Text(L("首次扫描较慢，稍候即可看到每日买卖点"))
                 .font(.footnote).foregroundColor(Theme.textSecondary)

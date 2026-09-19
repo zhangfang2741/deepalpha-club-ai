@@ -96,11 +96,35 @@ struct PanicIndexStrip: View {
         .frame(height: 24)
     }
 
-    /// 分数 → 颜色，三档：恐慌偏绿（本 App「跌=绿」的语义延伸）、贪婪偏红、中性琥珀色。
+    /// 分数 → 颜色，三档：恐慌红（危险）、中性绿（安全）、贪婪黄（警示过热）。
+    /// 5 个锚点对应五档中心（0-25 极度恐慌/25-45 恐慌/45-55 中性/55-75 贪婪/75-100
+    /// 极度贪婪的区间中点），锚点之间线性插值出连续渐变——不是卡在几个色块之间
+    /// 突变，分数差 1 分颜色也只差一点点。
+    private static let ratingAnchors: [(pos: Double, r: Double, g: Double, b: Double)] = [
+        (12.5, 153, 27, 27),    // 深红：极度恐慌
+        (35, 248, 113, 113),    // 浅红：恐慌
+        (50, 156, 163, 175),    // 灰色：中性
+        (65, 74, 222, 128),     // 浅绿：贪婪
+        (87.5, 22, 101, 52),    // 深绿：极度贪婪
+    ]
+
     static func ratingColor(_ score: Double) -> Color {
-        if score < 45 { return Theme.down }
-        if score > 56 { return Theme.up }
-        return Theme.segment
+        let s = min(max(score, 0), 100)
+        guard let first = ratingAnchors.first, let last = ratingAnchors.last else { return .gray }
+        if s <= first.pos { return Color(.sRGB, red: first.r / 255, green: first.g / 255, blue: first.b / 255) }
+        if s >= last.pos { return Color(.sRGB, red: last.r / 255, green: last.g / 255, blue: last.b / 255) }
+        for i in 0..<(ratingAnchors.count - 1) {
+            let a = ratingAnchors[i], b = ratingAnchors[i + 1]
+            guard s >= a.pos && s <= b.pos else { continue }
+            let t = (s - a.pos) / (b.pos - a.pos)
+            return Color(
+                .sRGB,
+                red: (a.r + (b.r - a.r) * t) / 255,
+                green: (a.g + (b.g - a.g) * t) / 255,
+                blue: (a.b + (b.b - a.b) * t) / 255
+            )
+        }
+        return Color(.sRGB, red: last.r / 255, green: last.g / 255, blue: last.b / 255)
     }
 
     static func ratingLabel(_ rating: String) -> String {
