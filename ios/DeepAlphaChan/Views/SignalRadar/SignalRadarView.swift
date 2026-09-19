@@ -31,6 +31,7 @@ struct SignalRadarView: View {
             }
             .padding(.horizontal, 12)
             .padding(.top, 8)
+            .padding(.bottom, 10)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Theme.background)
             .navigationTitle(L("信号雷达"))
