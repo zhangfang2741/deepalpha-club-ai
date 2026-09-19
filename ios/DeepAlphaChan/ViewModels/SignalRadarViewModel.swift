@@ -37,11 +37,17 @@ final class SignalRadarViewModel: ObservableObject {
     /// 当前市场选中的 universe 键（nil=默认）。
     private var currentUniverse: String? { universeByMarket[market] }
 
-    /// 该市场可选的 universe 列表（来自响应，默认在前）。只有 >1 个时前端才显示切换器。
-    var universes: [RadarUniverse] { response?.universes ?? [] }
+    /// 该市场可选的 universe 列表（默认在前）。独立持有、不随「切换时清空 response」一起
+    /// 消失——这样正在计算（转圈/后台计算卡片）时切换器依然在，用户随时能切回别的指数。
+    /// 只在切「市场」时清空（不同市场列表不同），切「universe」时保留。
+    @Published private(set) var availableUniverses: [RadarUniverse] = []
+    var universes: [RadarUniverse] { availableUniverses }
 
-    /// 当前实际生效的 universe 键（用来在切换器里高亮；响应回来才确定）。
-    var activeUniverseKey: String { response?.universe ?? "" }
+    /// 正在切往的 universe 键（还没拉回结果时用于即时高亮）；结果落地后清空。
+    private var pendingUniverseKey: String?
+
+    /// 当前在切换器里高亮的 universe 键：优先目标键（切换瞬间就高亮），否则用响应里的。
+    var activeUniverseKey: String { pendingUniverseKey ?? response?.universe ?? "" }
 
     var days: [RadarDay] { response?.days ?? [] }
 
@@ -72,14 +78,19 @@ final class SignalRadarViewModel: ObservableObject {
         guard m != market else { return }
         market = m
         response = nil
+        // 不同市场的 universe 列表不同，清掉旧的，等新市场响应回来再填。
+        availableUniverses = []
+        pendingUniverseKey = nil
         selectedDayIndex = 0
         Task { await load() }
     }
 
     /// 切换当前市场的 universe（科技窄基 ↔ 大盘宽基）。key 与当前生效的相同则忽略。
+    /// 注意不清空 availableUniverses：正在计算时切换器仍要在，方便随时切回别的指数。
     func switchUniverse(_ key: String) {
         guard key != activeUniverseKey else { return }
         universeByMarket[market] = key
+        pendingUniverseKey = key
         response = nil
         selectedDayIndex = 0
         Task { await load() }
@@ -114,6 +125,8 @@ final class SignalRadarViewModel: ObservableObject {
             // 加载期间用户切了市场或 universe，就丢弃这次结果，别覆盖新请求。
             if market != requested || currentUniverse != requestedUniverse { return }
             response = resp
+            if !resp.universes.isEmpty { availableUniverses = resp.universes }
+            pendingUniverseKey = nil
             selectedDayIndex = 0
             lastLoadedLocalDay = todayLocalDay
         } catch is CancellationError {

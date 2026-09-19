@@ -222,9 +222,13 @@ struct SignalRadarView: View {
 
     // MARK: - universe 切换器（雷达左上角）
 
-    /// 当前 universe 展示名（后端 etf_name 就是当前 universe 的名字）。
+    /// 当前 universe 展示名：优先从列表里按高亮键取（计算中 response 为 nil 时也有名字），
+    /// 否则退回响应里的 etf_name。
     private var currentUniverseName: String {
-        vm.response?.etfName ?? ""
+        if let u = vm.universes.first(where: { $0.key == vm.activeUniverseKey }) {
+            return u.name
+        }
+        return vm.response?.etfName ?? ""
     }
 
     /// 雷达左上角的 universe 切换器：科技窄基 ↔ 大盘宽基（如 恒生科技 ↔ 恒生指数）。
@@ -649,22 +653,26 @@ struct SignalRadarView: View {
         // 不是"全市场"——文案得说实话，否则用户会以为在扫几千只股票。
         // response 在还没收到过任何回复（含 generating 态）之前是 nil，这时还
         // 不知道具体扫的是哪个 ETF，退回市场名兜底。
-        let scope = vm.response?.etfName ?? vm.market.title
-        return VStack(spacing: 12) {
-            ProgressView().tint(Theme.accent)
-            Text(L("正在扫描「%@」成分股…", scope))
-                .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
-            Text(L("首次扫描较慢，稍候即可看到每日买卖点"))
-                .font(.footnote).foregroundColor(Theme.textSecondary)
-                .multilineTextAlignment(.center)
+        let scope = currentUniverseName.isEmpty ? vm.market.title : currentUniverseName
+        // 顶部保留切换器：扫描/计算期间用户都能随时切回已算好的指数，不被困住。
+        return ZStack(alignment: .topLeading) {
+            VStack(spacing: 12) {
+                ProgressView().tint(Theme.accent)
+                Text(L("正在扫描「%@」成分股…", scope))
+                    .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+                Text(L("首次扫描较慢，稍候即可看到每日买卖点"))
+                    .font(.footnote).foregroundColor(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            universeSwitcher
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// 轮询用尽但后端仍在算（大盘首次全量扫描较久）：不干等转圈，给个明确交代 + 重试。
     /// 后台扫描会继续跑完并写缓存，点重试大概率直接命中。
     private var computingView: some View {
-        let scope = vm.response?.etfName ?? vm.market.title
+        let scope = currentUniverseName.isEmpty ? vm.market.title : currentUniverseName
         // 顶部保留切换器：正算大盘时用户可随时切回已算好的（缓存命中）指数，不被困住。
         return ZStack(alignment: .topLeading) {
             VStack(spacing: 12) {
