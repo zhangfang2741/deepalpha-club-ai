@@ -9,9 +9,12 @@ final class SignalRadarViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    /// 首次扫描的 generating 轮询上限（次 × 间隔 ≈ 40s）。
-    private let maxPolls = 16
-    private let pollInterval: UInt64 = 2_500_000_000  // 2.5s
+    /// generating 轮询：间隔从 2s 递增到 6s 封顶，最多轮询 maxPolls 次（约 2 分钟）。
+    /// 大盘宽基（标普500 等）首次全量扫描可能比这还久——那时不再干等，转成「后台
+    /// 计算中」态让用户重试（后台扫描会跑完并写缓存，重试即命中），见 isComputingInBackground。
+    private let maxPolls = 24
+    private let pollInterval: UInt64 = 2_000_000_000       // 起始 2s
+    private let maxPollInterval: UInt64 = 6_000_000_000    // 封顶 6s
 
     /// 上次成功加载时的本地自然日（yyyy-MM-dd）。用来判断「跨天回到 Tab」是否要重拉：
     /// response 存在内存里，onAppear 原本只在 response==nil 时才拉，用户把 App 开着
@@ -48,9 +51,13 @@ final class SignalRadarViewModel: ObservableObject {
         return days[idx]
     }
 
-    /// 是否仍在首次扫描（后端 generating 且暂无数据）。
-    var isScanning: Bool {
-        isLoading || (response?.isGenerating ?? false && days.isEmpty)
+    /// 正在主动拉取/轮询（转圈扫描态）。
+    var isScanning: Bool { isLoading }
+
+    /// 轮询已用尽但后端仍在算（generating + 无数据、且当前没在轮询）。此时不干等，
+    /// 前端展示「后台计算中，可稍后重试」——后台扫描会跑完并写缓存，重试即命中。
+    var isComputingInBackground: Bool {
+        !isLoading && (response?.isGenerating ?? false) && days.isEmpty
     }
 
     func onAppear() {
@@ -95,12 +102,14 @@ final class SignalRadarViewModel: ObservableObject {
             var resp = try await SignalRadarService.fetch(
                 market: requested.rawValue, universe: requestedUniverse, refresh: refresh)
             var tries = 0
+            var delay = pollInterval
             while resp.isGenerating && tries < maxPolls {
                 if market != requested || currentUniverse != requestedUniverse { return }
-                try await Task.sleep(nanoseconds: pollInterval)
+                try await Task.sleep(nanoseconds: delay)
                 resp = try await SignalRadarService.fetch(
                     market: requested.rawValue, universe: requestedUniverse)
                 tries += 1
+                delay = min(delay + 1_000_000_000, maxPollInterval)  // 每次 +1s，封顶 6s
             }
             // 加载期间用户切了市场或 universe，就丢弃这次结果，别覆盖新请求。
             if market != requested || currentUniverse != requestedUniverse { return }

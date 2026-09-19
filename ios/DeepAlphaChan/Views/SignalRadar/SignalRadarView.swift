@@ -44,6 +44,8 @@ struct SignalRadarView: View {
 
                 if vm.isScanning {
                     scanningView
+                } else if vm.isComputingInBackground {
+                    computingView
                 } else if let error = vm.errorMessage {
                     errorView(error)
                 } else if vm.days.isEmpty {
@@ -657,6 +659,28 @@ struct SignalRadarView: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// 轮询用尽但后端仍在算（大盘首次全量扫描较久）：不干等转圈，给个明确交代 + 重试。
+    /// 后台扫描会继续跑完并写缓存，点重试大概率直接命中。
+    private var computingView: some View {
+        let scope = vm.response?.etfName ?? vm.market.title
+        // 顶部保留切换器：正算大盘时用户可随时切回已算好的（缓存命中）指数，不被困住。
+        return ZStack(alignment: .topLeading) {
+            VStack(spacing: 12) {
+                Image(systemName: "hourglass")
+                    .font(.largeTitle).foregroundColor(Theme.textSecondary)
+                Text(L("「%@」首次计算较久", scope))
+                    .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+                Text(L("大盘成分较多，已在后台计算，稍后点重试即可查看"))
+                    .font(.footnote).foregroundColor(Theme.textSecondary)
+                    .multilineTextAlignment(.center).padding(.horizontal, 40)
+                Button(L("重试")) { Task { await vm.load() } }
+                    .buttonStyle(.borderedProminent).tint(Theme.accent)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity).padding()
+            universeSwitcher
+        }
     }
 
     private func errorView(_ message: String) -> some View {
