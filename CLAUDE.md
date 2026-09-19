@@ -135,6 +135,7 @@ deepalpha-club-ai/
 | ETF 资金流 | `/etf` | `/etf` | 资金流热力图 + 偏离度 |
 | 行业估值 | `/valuation` | （并入行业恐慌页） | GICS 行业 PE z-score |
 | 缠论 | `/chan` | `/chan` | 缠论分笔/中枢/背驰 |
+| 信号雷达 | `/signal-radar` | iOS「信号」Tab | 扫描各市场科技 ETF 成分股跑缠论，按日聚合买卖点前 10（气泡：红买绿卖、大小/深浅=形态技术面强度） |
 | 威科夫 | `/wyckoff` | `/wyckoff` | Wyckoff 阶段/事件 |
 | 一目均衡表 | `/ichimoku` | `/ichimoku` | Ichimoku 云图信号 |
 | 分析师上调 | `/analyst-upgrades` | `/analyst-upgrades` | 目标价上调榜（SP500/Nasdaq100） |
