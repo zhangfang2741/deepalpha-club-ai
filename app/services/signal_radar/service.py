@@ -20,6 +20,7 @@ from redis.asyncio import Redis
 from app.core.logging import logger
 from app.schemas.signal_radar import RadarDayOut, RadarSignalOut, SignalRadarResponse
 from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
+from app.services.signal_radar.constituents import resolve_constituents
 from app.services.signal_radar.universe import get_universe
 from app.services.skills.kline import fetch_kline
 
@@ -184,6 +185,9 @@ async def compute_market(
     if universe is None:
         raise ValueError(f"unsupported market: {market}")
 
+    # 成分股：优先 FMP ETF 持仓动态刷新，取不到回退 curated 静态清单。
+    constituents = await resolve_constituents(market, redis=redis)
+
     today = date.today()
     end_date = today.isoformat()
     # 取足够 warmup + 候选窗口的历史；缠论在完整序列上算以消除左边界漂移。
@@ -200,14 +204,14 @@ async def compute_market(
             )
 
     results = await asyncio.gather(
-        *[_one(sym, name) for sym, name in universe.constituents]
+        *[_one(sym, name) for sym, name in constituents]
     )
     raw = [r for r in results if r is not None]
 
     resp = SignalRadarResponse(
         market=market,
         etf_name=universe.etf_name,
-        universe_size=len(universe.constituents),
+        universe_size=len(constituents),
         as_of=end_date,
         top_n=top_n,
         days=aggregate_days(raw, days=days, top_n=top_n),

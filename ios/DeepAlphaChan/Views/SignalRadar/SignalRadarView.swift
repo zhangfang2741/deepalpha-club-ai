@@ -129,31 +129,17 @@ struct SignalRadarView: View {
         var y = h / 2 + radius * sin(Double(index) * golden)
         x = min(max(x, r + 2), w - r - 2)
         y = min(max(y, r + 2), h - r - 2)
-        let isTop = index == 0
 
-        return Button {
-            onOpenSymbol(vm.market.rawValue, sig.symbol)
-        } label: {
-            VStack(spacing: 1) {
-                Text(sig.symbol)
-                    .font(.system(size: CGFloat(max(12, min(17, r * 0.42))), weight: .heavy))
-                    .foregroundColor(.white)
-                Text(sig.name)
-                    .font(.system(size: CGFloat(max(9, min(12, r * 0.3)))))
-                    .foregroundColor(.white.opacity(0.92))
-                    .lineLimit(1)
-                    .padding(.horizontal, 4)
-            }
-            .frame(width: CGFloat(diameter), height: CGFloat(diameter))
-            .background(SignalRadarView.bubbleColor(side: sig.side, strength: sig.strength))
-            .clipShape(Circle())
-            .overlay(
-                Circle().stroke(Color.white.opacity(isTop ? 0.85 : 0), lineWidth: 2)
-            )
-            .shadow(color: .black.opacity(0.4), radius: 6, y: 3)
-        }
-        .buttonStyle(.plain)
-        .position(x: CGFloat(x), y: CGFloat(y))
+        return RadarBubble(
+            signal: sig,
+            diameter: CGFloat(diameter),
+            baseX: CGFloat(x),
+            baseY: CGFloat(y),
+            isTop: index == 0,
+            phase: Double(index) * 0.35,
+            color: SignalRadarView.bubbleColor(side: sig.side, strength: sig.strength),
+            onOpen: { onOpenSymbol(vm.market.rawValue, sig.symbol) }
+        )
     }
 
     /// 形态强度 → 气泡颜色：买（亮红→深红）/ 卖（亮绿→深绿）。
@@ -306,5 +292,96 @@ struct SignalRadarView: View {
         guard let d = parser.date(from: date) else { return "" }
         let w = Calendar(identifier: .gregorian).component(.weekday, from: d)
         return weekdaySymbols[(w - 1 + 7) % 7]
+    }
+}
+
+/// 单个信号气泡：半透明玻璃质感 + 持续轻微漂浮 + 可按住拖拽（松手弹回原位）。
+private struct RadarBubble: View {
+    let signal: RadarSignal
+    let diameter: CGFloat
+    let baseX: CGFloat
+    let baseY: CGFloat
+    let isTop: Bool
+    let phase: Double
+    let color: Color
+    let onOpen: () -> Void
+
+    /// 持续漂浮的竖向偏移（onAppear 后在 0 ↔ 负值间无限往复）。
+    @State private var floatY: CGFloat = 0
+    /// 拖拽偏移；松手后用弹簧动画归零。
+    @State private var drag: CGSize = .zero
+    /// 拖拽中放大一点，给「被拎起来」的反馈。
+    @State private var dragging = false
+
+    private var r: CGFloat { diameter / 2 }
+
+    var body: some View {
+        content
+            .frame(width: diameter, height: diameter)
+            .scaleEffect(dragging ? 1.12 : 1.0)
+            .offset(y: floatY)
+            .offset(drag)
+            .shadow(color: .black.opacity(dragging ? 0.5 : 0.35),
+                    radius: dragging ? 12 : 6, y: dragging ? 8 : 3)
+            .contentShape(Circle())
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        if !dragging { withAnimation(.easeOut(duration: 0.15)) { dragging = true } }
+                        drag = value.translation
+                    }
+                    .onEnded { _ in
+                        withAnimation(.spring(response: 0.45, dampingFraction: 0.55)) {
+                            drag = .zero
+                        }
+                        withAnimation(.easeOut(duration: 0.2)) { dragging = false }
+                    }
+            )
+            .onTapGesture { onOpen() }
+            .position(x: baseX, y: baseY)
+            .accessibilityElement()
+            .accessibilityLabel("\(signal.symbol) \(signal.name) \(signal.isBuy ? "买点" : "卖点")")
+            .accessibilityAddTraits(.isButton)
+            .onAppear {
+                floatY = -6
+                withAnimation(
+                    .easeInOut(duration: Double.random(in: 2.2...3.4))
+                        .repeatForever(autoreverses: true)
+                        .delay(phase * 0.2)
+                ) {
+                    floatY = 6
+                }
+            }
+    }
+
+    private var content: some View {
+        ZStack {
+            // 半透明主体
+            Circle().fill(color.opacity(0.72))
+            // 玻璃高光：左上角提亮 + 整体一层极浅白，营造通透感
+            Circle().fill(
+                RadialGradient(
+                    colors: [Color.white.opacity(0.45), Color.white.opacity(0.04)],
+                    center: .topLeading, startRadius: 1, endRadius: diameter * 0.9
+                )
+            )
+            Circle().strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
+
+            VStack(spacing: 1) {
+                Text(signal.symbol)
+                    .font(.system(size: max(12, min(17, r * 0.42)), weight: .heavy))
+                    .foregroundColor(.white)
+                Text(signal.name)
+                    .font(.system(size: max(9, min(12, r * 0.3))))
+                    .foregroundColor(.white.opacity(0.92))
+                    .lineLimit(1)
+                    .padding(.horizontal, 4)
+            }
+            .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
+
+            if isTop {
+                Circle().strokeBorder(Color.white.opacity(0.85), lineWidth: 2)
+            }
+        }
     }
 }

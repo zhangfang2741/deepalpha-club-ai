@@ -278,3 +278,21 @@
 "走势展望：盘整向上突破，倾向转为上涨" = "Outlook: range breaking up — leaning bullish";
 "走势展望：盘整向下突破，倾向转为下跌" = "Outlook: range breaking down — leaning bearish";
 "走势展望：盘整延续（围绕中枢震荡）" = "Outlook: range continuation (oscillating around a pivot)";
+
+/* Signal Radar */
+"信号" = "Radar";
+"信号雷达" = "Signal Radar";
+"%lld 买点" = "%lld buys";
+"%lld 卖点" = "%lld sells";
+"越靠中心 · 形态技术面越强" = "Closer to center = stronger technicals";
+"当日无买卖点信号" = "No buy/sell signals that day";
+"买" = "Buy";
+"卖" = "Sell";
+"越深 · 越大 = 形态技术面越强 · 点击查看分析" = "Deeper & larger = stronger technicals · tap for analysis";
+"选择日期" = "Pick a date";
+"← 左右滑动 →" = "← swipe →";
+"今日" = "Today";
+"正在扫描全市场成分股…" = "Scanning market constituents…";
+"首次扫描较慢，稍候即可看到每日买卖点" = "The first scan takes a moment; daily signals will appear shortly";
+"近期暂无买卖点信号" = "No recent buy/sell signals";
+"刷新" = "Refresh";
