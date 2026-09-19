@@ -296,3 +296,6 @@
 "首次扫描较慢，稍候即可看到每日买卖点" = "The first scan takes a moment; daily signals will appear shortly";
 "近期暂无买卖点信号" = "No recent buy/sell signals";
 "刷新" = "Refresh";
+/* 气泡无障碍标签（VoiceOver）用买/卖点方向 */
+"买点" = "buy point";
+"卖点" = "sell point";

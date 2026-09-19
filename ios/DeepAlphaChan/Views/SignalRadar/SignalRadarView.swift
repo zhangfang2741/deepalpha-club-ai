@@ -290,17 +290,19 @@ struct SignalRadarView: View {
         f.locale = Locale(identifier: "en_US_POSIX")
         return f
     }()
-    private static let weekdaySymbols = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
 
     static func monthDay(_ date: String) -> String {
         let parts = date.split(separator: "-")
         return parts.count >= 3 ? "\(parts[1])-\(parts[2])" : date
     }
 
+    /// 星期几按当前界面语言本地化（中文「周一」/ 英文「Mon」），不再硬编码中文。
     static func weekday(_ date: String) -> String {
         guard let d = parser.date(from: date) else { return "" }
-        let w = Calendar(identifier: .gregorian).component(.weekday, from: d)
-        return weekdaySymbols[(w - 1 + 7) % 7]
+        let f = DateFormatter()
+        f.locale = Locale(identifier: Localized.language().localeIdentifier)
+        f.setLocalizedDateFormatFromTemplate("EEE")
+        return f.string(from: d)
     }
 }
 
@@ -349,7 +351,7 @@ private struct RadarBubble: View {
             .onTapGesture { onOpen() }
             .position(x: baseX, y: baseY)
             .accessibilityElement()
-            .accessibilityLabel("\(signal.symbol) \(signal.name) \(signal.isBuy ? "买点" : "卖点")")
+            .accessibilityLabel("\(signal.symbol) \(signal.name) \(signal.isBuy ? L("买点") : L("卖点"))")
             .accessibilityAddTraits(.isButton)
             .onAppear {
                 floatY = -6
