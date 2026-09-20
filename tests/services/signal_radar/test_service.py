@@ -1,8 +1,12 @@
 """信号雷达纯聚合逻辑单测（无 IO）。"""
 from __future__ import annotations
 
+import pytest
+
+from app.core.config import settings
 from app.services.chan.analyzer import ChanAnalysisResult
 from app.services.chan.signals import Signal
+from app.services.signal_radar import service as svc
 from app.services.signal_radar.service import (
     RawSignal,
     build_days,
@@ -177,3 +181,88 @@ class TestDisplayRank:
         days = build_days([history], ["2026-10-05", "2026-09-15"], top_n=10, max_age_days=30)
         assert days[0].signals == []  # 10-05：过期
         assert [s.date for s in days[1].signals] == ["2026-09-01"]  # 09-15：在场
+
+
+class TestCacheTiming:
+    """缓存 TTL 与陈旧判定（方案1 消除过期空窗 + 方案2 stale-while-revalidate）。"""
+
+    def test_ttl_comfortably_exceeds_prewarm_interval(self, monkeypatch):
+        """TTL 必须明显长于预热间隔，否则会出现'过期了但下一轮预热还没跑'的空窗。"""
+        monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS", 21600)
+        assert svc._cache_ttl() > settings.SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS
+        assert svc._cache_ttl() == 21600 * 2
+
+    def test_ttl_never_below_floor(self, monkeypatch):
+        """预热间隔调得很短时，TTL 仍有 6h 下限兜底。"""
+        monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS", 60)
+        assert svc._cache_ttl() == svc._CACHE_TTL_FLOOR
+
+    def test_stale_threshold_between_interval_and_ttl(self, monkeypatch):
+        """陈旧阈值落在 (interval, ttl) 之间：正常预热够不着，预热停摆才触发自愈刷新。"""
+        monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS", 21600)
+        assert settings.SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS < svc._cache_stale_after()
+        assert svc._cache_stale_after() < svc._cache_ttl()
+
+
+class _FakeRedis:
+    """只实现所需命令的内存替身：set(ex=) / get / ttl。"""
+
+    def __init__(self) -> None:
+        self.store: dict[str, str] = {}
+        self.ttls: dict[str, int] = {}
+
+    async def set(self, key: str, value: str, ex: int | None = None) -> None:
+        self.store[key] = value
+        if ex is not None:
+            self.ttls[key] = ex
+
+    async def get(self, key: str) -> str | None:
+        return self.store.get(key)
+
+    async def ttl(self, key: str) -> int:
+        if key not in self.store:
+            return -2
+        return self.ttls.get(key, -1)
+
+
+def _write(redis: _FakeRedis, key: str, remaining_ttl: int) -> None:
+    """直接往替身里塞一条缓存并指定剩余 TTL，模拟不同新鲜度。"""
+    redis.store[key] = "{}"
+    redis.ttls[key] = remaining_ttl
+
+
+class TestCacheStaleness:
+    """_cache_is_stale：按剩余 TTL 反推年龄判断陈旧。"""
+
+    @pytest.fixture(autouse=True)
+    def _fixed_interval(self, monkeypatch):
+        monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS", 21600)
+
+    async def test_fresh_cache_not_stale(self):
+        """刚写入（剩余 TTL 接近满）→ 不陈旧，不触发刷新。"""
+        redis = _FakeRedis()
+        key = svc._cache_key("us", "nasdaq100")
+        _write(redis, key, remaining_ttl=svc._cache_ttl())
+        assert await svc._cache_is_stale(redis, "us", "nasdaq100") is False
+
+    async def test_old_cache_is_stale(self):
+        """剩余 TTL 很小（年龄已超阈值）→ 陈旧，触发后台刷新。"""
+        redis = _FakeRedis()
+        key = svc._cache_key("us", "nasdaq100")
+        _write(redis, key, remaining_ttl=svc._cache_ttl() - svc._cache_stale_after() - 1)
+        assert await svc._cache_is_stale(redis, "us", "nasdaq100") is True
+
+    async def test_missing_ttl_treated_as_stale(self):
+        """无过期时间（-1）→ 当作陈旧，好让刷新把带正常 TTL 的缓存重建起来。"""
+        redis = _FakeRedis()
+        redis.store[svc._cache_key("us", "nasdaq100")] = "{}"  # 未设 ttl
+        assert await svc._cache_is_stale(redis, "us", "nasdaq100") is True
+
+    async def test_ttl_read_error_not_stale(self):
+        """读 TTL 抛错 → 保守当作不陈旧，避免无谓地反复触发刷新。"""
+
+        class _BoomRedis(_FakeRedis):
+            async def ttl(self, key: str) -> int:
+                raise RuntimeError("boom")
+
+        assert await svc._cache_is_stale(_BoomRedis(), "us", "nasdaq100") is False
