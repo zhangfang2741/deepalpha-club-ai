@@ -155,8 +155,8 @@ struct SignalRadarView: View {
             let w = Double(geo.size.width)
             let h = Double(geo.size.height)
             let base = min(w, h)
-            // 参考环与气泡共用的内缩场半径：最外环内缩 fieldInset，不贴容器边。
-            let fieldRadius = SignalRadarView.fieldRadius(width: w, height: h)
+            // 参考环与气泡共用的内缩场半轴：椭圆填满画布，长边不再留大片空白。
+            let (hRad, vRad) = SignalRadarView.fieldRadii(width: w, height: h)
             let dayDate = vm.selectedDay?.date ?? ""
             let signals = (vm.selectedDay?.signals ?? [])
                 .sorted { $0.strength > $1.strength }
@@ -173,16 +173,17 @@ struct SignalRadarView: View {
                 // 同心参考环：越外越淡，呼应同一套"近实远虚"的纵深语言；环上直接标出
                 // 大致时间跨度，不用再靠单独一行说明文字解释三个圈是什么意思。
                 ForEach(Array(SignalRadarView.ringSpecs.enumerated()), id: \.offset) { idx, spec in
-                    let ringR = fieldRadius * spec.scale
-                    Circle()
+                    let rx = hRad * spec.scale
+                    let ry = vRad * spec.scale
+                    Ellipse()
                         .stroke(Theme.textSecondary.opacity(0.16 - Double(idx) * 0.045),
                                 style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                        .frame(width: CGFloat(ringR * 2), height: CGFloat(ringR * 2))
+                        .frame(width: CGFloat(rx * 2), height: CGFloat(ry * 2))
                         .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
                     Text(spec.label)
                         .font(.system(size: 8))
                         .foregroundColor(Theme.textSecondary.opacity(0.55))
-                        .position(x: CGFloat(w / 2), y: CGFloat(h / 2) - CGFloat(ringR) + 8)
+                        .position(x: CGFloat(w / 2), y: CGFloat(h / 2) - CGFloat(ry) + 8)
                 }
 
                 if layouts.isEmpty {
@@ -301,10 +302,12 @@ struct SignalRadarView: View {
     /// 圆角容器裁掉一半。现在把「场半径」整体内缩这个边距，环线和气泡一起内移。
     static let fieldInset: Double = 18
 
-    /// 气泡场的有效半径：min(w,h)/2 再内缩 fieldInset。参考环、ringRadius、
-    /// ringBandBounds、resolveOverlaps 全部以它为基准，保证环线与气泡摆位一致内缩。
-    static func fieldRadius(width w: Double, height h: Double) -> Double {
-        max(0, min(w, h) / 2 - fieldInset)
+    /// 气泡场的水平/垂直半轴：各方向取 (边长/2 - fieldInset)。以前用单一 min(w,h)/2
+    /// 圆半径，画布一旦不是正方形（信号页画布通常比它高要宽），圆就卡在短边上、长边
+    /// 留大片空白。改成两个半轴后，参考环与气泡摆位是一个填满画布的椭圆，把空间尽量
+    /// 用满；ringRadius / ringBandBounds 改成返回「占半轴的分数(0~1)」，各轴乘各自半轴。
+    static func fieldRadii(width w: Double, height h: Double) -> (h: Double, v: Double) {
+        (max(0, w / 2 - fieldInset), max(0, h / 2 - fieldInset))
     }
 
     /// 每个环位内部按 daysAgo 线性插值的时间跨度上限（1月内档没有硬边界，用 30 天封顶）。
@@ -347,22 +350,26 @@ struct SignalRadarView: View {
     ) -> [BubbleLayout] {
         guard !signals.isEmpty else { return [] }
         let golden = 2.399963
-        // 与参考环共用的内缩场半径：最外环不贴容器边，气泡才不会被圆角容器裁掉。
-        let fieldRadius = SignalRadarView.fieldRadius(width: w, height: h)
+        // 与参考环共用的内缩场半轴：椭圆填满画布，气泡按「时间→半径分数」摆到对应环带。
+        let (hRad, vRad) = SignalRadarView.fieldRadii(width: w, height: h)
 
         var layouts: [BubbleLayout] = signals.enumerated().map { index, sig in
             let da = daysAgo(from: sig.date, to: dayDate)
             let diameter = SignalRadarView.diameter(forLevel: sig.level) * ringSizeFactor(forDaysAgo: da)
             let r = diameter / 2
-            let maxRadius = fieldRadius - r - 4
-            let radius = min(ringRadius(forDaysAgo: da, fieldRadius: fieldRadius), maxRadius)
-            var x = w / 2 + radius * cos(Double(index) * golden)
-            var y = h / 2 + radius * sin(Double(index) * golden)
+            // ringRadius 传 fieldRadius=1 得到「占半轴的分数(0~1)」，再各轴留出气泡半径
+            // 余量（fMax），避免最外环的大气泡贴边被圆角容器裁掉。
+            let f = ringRadius(forDaysAgo: da, fieldRadius: 1.0)
+            let fMax = min(1.0, (hRad - r - 4) / max(hRad, 1), (vRad - r - 4) / max(vRad, 1))
+            let ff = min(f, fMax)
+            let ang = Double(index) * golden
+            var x = w / 2 + ff * hRad * cos(ang)
+            var y = h / 2 + ff * vRad * sin(ang)
             x = min(max(x, r + 2), w - r - 2)
             y = min(max(y, r + 2), h - r - 2)
             return BubbleLayout(signal: sig, diameter: diameter, x: x, y: y, phase: Double(index) * 0.35, daysAgo: da)
         }
-        resolveOverlaps(&layouts, width: w, height: h, fieldRadius: fieldRadius)
+        resolveOverlaps(&layouts, width: w, height: h, hRad: hRad, vRad: vRad)
         // 同一环内谁在最上层：越接近查看日（daysAgo 越小）画得越晚，叠层里就浮在
         // 更外面（更靠近用户）；离得越久远的沉在下面。
         layouts.sort { $0.daysAgo > $1.daysAgo }
@@ -383,7 +390,7 @@ struct SignalRadarView: View {
     /// 简单的迭代松弛：每一对挤太近的气泡沿连心线互相推开，直到间距 >= 两者半径和
     /// 的 90%（留一点点重叠的自然感，但不能像之前那样能整个盖住点不到）。
     private static func resolveOverlaps(
-        _ layouts: inout [BubbleLayout], width w: Double, height h: Double, fieldRadius: Double
+        _ layouts: inout [BubbleLayout], width w: Double, height h: Double, hRad: Double, vRad: Double
     ) {
         let minFactor = 0.9
         let cx = w / 2, cy = h / 2
@@ -409,16 +416,18 @@ struct SignalRadarView: View {
                 layouts[i].y = min(max(layouts[i].y, r + 2), h - r - 2)
                 // 径向回拉：碰撞推挤只允许改变角度，不允许把气泡挤出自己所属的环位半径带
                 // （否则一个刚出现的 daysAgo=0 信号会被外环的拥挤挤到外环去，居中程度失真）。
-                let band = ringBandBounds(forDaysAgo: layouts[i].daysAgo, fieldRadius: fieldRadius)
-                let dx = layouts[i].x - cx
-                let dy = layouts[i].y - cy
-                let dist = max((dx * dx + dy * dy).squareRoot(), 0.001)
-                let maxAllowed = min(band.max, fieldRadius - r - 4)
-                let clampedDist = min(max(dist, band.min), maxAllowed)
-                if abs(clampedDist - dist) > 0.01 {
-                    let scale = clampedDist / dist
-                    layouts[i].x = cx + dx * scale
-                    layouts[i].y = cy + dy * scale
+                // 环带回拉在「归一化椭圆」坐标里做：偏移各除以对应半轴得到 0~1 的椭圆
+                // 半径分数，卡回该 daysAgo 所属环带 [min,max]（同为分数），再等比缩放回去。
+                let band = ringBandBounds(forDaysAgo: layouts[i].daysAgo, fieldRadius: 1.0)
+                let nx = (layouts[i].x - cx) / max(hRad, 1)
+                let ny = (layouts[i].y - cy) / max(vRad, 1)
+                let nd = max((nx * nx + ny * ny).squareRoot(), 0.001)
+                let fMax = min(band.max, (hRad - r - 4) / max(hRad, 1), (vRad - r - 4) / max(vRad, 1))
+                let clamped = min(max(nd, band.min), fMax)
+                if abs(clamped - nd) > 0.001 {
+                    let scale = clamped / nd
+                    layouts[i].x = cx + (layouts[i].x - cx) * scale
+                    layouts[i].y = cy + (layouts[i].y - cy) * scale
                 }
             }
         }
