@@ -471,3 +471,30 @@
 "尚未完成离开段与回抽结构" = "The exit and pullback structures aren't complete yet";
 "一根向上笔 ≠ 趋势反转：线段未被破坏前，它只是下降线段里的一次反抽。" = "An up stroke ≠ a trend reversal: until the segment breaks, it's just a bounce within a down segment.";
 "一根向下笔 ≠ 趋势结束：线段未被破坏前，它只是上升线段里的一次回调。" = "A down stroke ≠ a trend ending: until the segment breaks, it's just a pullback within an up segment.";
+
+/* Overall analysis — trend phase (which step) */
+"走到哪一步" = "Which step";
+"中枢未形成" = "No pivot yet";
+"向上离开中枢" = "Leaving pivot upward";
+"向下离开中枢" = "Leaving pivot downward";
+"中枢震荡阶段" = "Pivot oscillation";
+"已完成" = "Done";
+"进行中" = "In progress";
+"待确认" = "Pending";
+"走势单边推进，尚未围出中枢" = "One-way move so far — no pivot enclosed yet";
+"出现三段重叠后才形成中枢" = "A pivot forms once three moves overlap";
+"形成中枢（%1$@–%2$@）" = "Pivot formed (%1$@–%2$@)";
+"向上离开中枢（现价站上 ZG %@）" = "Left the pivot upward (price above ZG %@)";
+"回抽不进中枢，三买确认" = "Pullback stayed out — 3rd buy confirmed";
+"等待离开段走完后回抽确认" = "Waiting for the exit leg to finish, then a pullback to confirm";
+"向下离开中枢（现价跌破 ZD %@）" = "Left the pivot downward (price below ZD %@)";
+"反抽不回中枢，三卖确认" = "Bounce stayed out — 3rd sell confirmed";
+"等待反抽确认" = "Waiting for a bounce to confirm";
+"中枢内震荡，区间延伸中" = "Oscillating inside the pivot — range extending";
+"等待向上突破 ZG 或跌破 ZD" = "Waiting to break above ZG or below ZD";
+"回抽不进中枢 → 确认三买" = "Pullback stays out → confirms 3rd buy";
+"回抽跌回中枢 → 回到震荡" = "Pullback re-enters pivot → back to oscillation";
+"反抽不回中枢 → 确认三卖" = "Bounce stays out → confirms 3rd sell";
+"反抽升回中枢 → 回到震荡" = "Bounce re-enters pivot → back to oscillation";
+"向上突破 ZG → 进入上涨离开段" = "Break above ZG → up exit leg";
+"向下跌破 ZD → 进入下跌离开段" = "Break below ZD → down exit leg";

@@ -40,6 +40,9 @@ struct AnalysisSection: View {
                 trendBlock
 
                 Divider().overlay(Theme.border)
+                progressBlock
+
+                Divider().overlay(Theme.border)
                 evidenceDisclosure
 
                 Divider().overlay(Theme.border)
@@ -64,6 +67,59 @@ struct AnalysisSection: View {
             Text(SignalFormatting.walkTypeDetail(analysis.walkType))
                 .font(.caption)
                 .foregroundColor(Theme.textSecondary)
+        }
+    }
+
+    // MARK: - 走到哪一步（走势阶段）
+
+    private var progressBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(L("走到哪一步"))
+                    .font(AnalysisType.label).tracking(0.5)
+                    .foregroundColor(Theme.textSecondary)
+                Spacer(minLength: 8)
+                Chip(text: ChanPhase.stageLabel(analysis), color: Theme.segment)
+            }
+            VStack(alignment: .leading, spacing: 9) {
+                ForEach(ChanPhase.steps(analysis)) { step in stepRow(step) }
+            }
+            if let branches = ChanPhase.branches(analysis) {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(branches.enumerated()), id: \.offset) { _, b in
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: "arrow.triangle.branch")
+                                .font(.system(size: 10)).foregroundColor(Theme.segment)
+                                .frame(width: 14)
+                            Text(b).font(.caption2).foregroundColor(Theme.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                .padding(9)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.surfaceAlt)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+
+    private func stepRow(_ step: PhaseStep) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: step.state.symbol)
+                .font(.system(size: 13))
+                .foregroundColor(step.state.color)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(step.state.label)
+                    .font(.system(size: 9, weight: .semibold)).tracking(0.5)
+                    .foregroundColor(step.state.color)
+                Text(step.text)
+                    .font(.footnote)
+                    .foregroundColor(Theme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
         }
     }
 
@@ -286,6 +342,106 @@ enum ChanEvidence {
         return bi == .up
             ? L("一根向上笔 ≠ 趋势反转：线段未被破坏前，它只是下降线段里的一次反抽。")
             : L("一根向下笔 ≠ 趋势结束：线段未被破坏前，它只是上升线段里的一次回调。")
+    }
+
+    private static func fmt(_ v: Double) -> String { String(format: "%.2f", v) }
+}
+
+// MARK: - 走势阶段（走到哪一步）
+
+/// 单步的状态：已完成 / 进行中 / 待确认。
+enum PhaseState {
+    case done, doing, wait
+
+    var symbol: String {
+        switch self {
+        case .done: return "checkmark.circle.fill"
+        case .doing: return "circle.fill"
+        case .wait: return "circle"
+        }
+    }
+    var color: Color {
+        switch self {
+        case .done: return Theme.accent
+        case .doing: return Theme.accent
+        case .wait: return Theme.textSecondary
+        }
+    }
+    var label: String {
+        switch self {
+        case .done: return L("已完成")
+        case .doing: return L("进行中")
+        case .wait: return L("待确认")
+        }
+    }
+}
+
+/// 走势阶段的一步。
+struct PhaseStep: Identifiable {
+    let id = UUID()
+    let state: PhaseState
+    let text: String
+}
+
+/// 用中枢生命周期把「走到哪一步」推导出来：中枢形成 → 震荡/离开 → 回抽确认，
+/// 并给出下一步的可能分支。端上规则化推导（与 ChanEvidence 同口径），后续要更严格
+/// 的离开段/回抽判定可整体挪到后端 pivot_phase。
+enum ChanPhase {
+
+    /// 阶段总标签（放在小节右侧的 chip）。
+    static func stageLabel(_ a: ChanAnalysis) -> String {
+        guard let p = a.strokePivots.last, let close = a.mergedCandles.last?.close else {
+            return L("中枢未形成")
+        }
+        if close > p.zg { return L("向上离开中枢") }
+        if close < p.zd { return L("向下离开中枢") }
+        return L("中枢震荡阶段")
+    }
+
+    /// 已完成 / 进行中 / 待确认 的步骤序列。
+    static func steps(_ a: ChanAnalysis) -> [PhaseStep] {
+        guard let p = a.strokePivots.last, let close = a.mergedCandles.last?.close else {
+            return [
+                PhaseStep(state: .doing, text: L("走势单边推进，尚未围出中枢")),
+                PhaseStep(state: .wait, text: L("出现三段重叠后才形成中枢")),
+            ]
+        }
+        var steps: [PhaseStep] = [
+            PhaseStep(state: .done, text: L("形成中枢（%1$@–%2$@）", fmt(p.zd), fmt(p.zg)))
+        ]
+        if close > p.zg {
+            steps.append(PhaseStep(state: .done, text: L("向上离开中枢（现价站上 ZG %@）", fmt(p.zg))))
+            steps.append(hasConfirmed(a, "buy3")
+                ? PhaseStep(state: .done, text: L("回抽不进中枢，三买确认"))
+                : PhaseStep(state: .wait, text: L("等待离开段走完后回抽确认")))
+        } else if close < p.zd {
+            steps.append(PhaseStep(state: .done, text: L("向下离开中枢（现价跌破 ZD %@）", fmt(p.zd))))
+            steps.append(hasConfirmed(a, "sell3")
+                ? PhaseStep(state: .done, text: L("反抽不回中枢，三卖确认"))
+                : PhaseStep(state: .wait, text: L("等待反抽确认")))
+        } else {
+            steps.append(PhaseStep(state: .doing, text: L("中枢内震荡，区间延伸中")))
+            steps.append(PhaseStep(state: .wait, text: L("等待向上突破 ZG 或跌破 ZD")))
+        }
+        return steps
+    }
+
+    /// 下一步的可能分支（两条），已确认到位时返回 nil。
+    static func branches(_ a: ChanAnalysis) -> [String]? {
+        guard let p = a.strokePivots.last, let close = a.mergedCandles.last?.close else { return nil }
+        if close > p.zg {
+            if hasConfirmed(a, "buy3") { return nil }
+            return [L("回抽不进中枢 → 确认三买"), L("回抽跌回中枢 → 回到震荡")]
+        }
+        if close < p.zd {
+            if hasConfirmed(a, "sell3") { return nil }
+            return [L("反抽不回中枢 → 确认三卖"), L("反抽升回中枢 → 回到震荡")]
+        }
+        return [L("向上突破 ZG → 进入上涨离开段"), L("向下跌破 ZD → 进入下跌离开段")]
+    }
+
+    private static func hasConfirmed(_ a: ChanAnalysis, _ type: String) -> Bool {
+        a.signals.contains { $0.type.rawValue == type && $0.confirmed }
     }
 
     private static func fmt(_ v: Double) -> String { String(format: "%.2f", v) }
