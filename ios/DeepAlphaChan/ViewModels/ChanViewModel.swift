@@ -73,11 +73,19 @@ final class ChanViewModel: ObservableObject {
     /// （见 QueryBar.marketBinding）。
     /// name 只在入口能提供真实名称时传（如信号雷达气泡）；不传则清空 displayName，
     /// 避免沿用上一只标的的名称串到这一只上。
-    func apply(market: StockMarket, symbol: String, name: String? = nil) {
+    /// startDate/endDate/freq 可选：信号雷达点气泡进来时会传入与雷达同口径的窗口，
+    /// 让详情页跑出的买卖点与雷达一致（否则默认 365 天窗口会算出不同结构）。不传则沿用当前值。
+    func apply(
+        market: StockMarket, symbol: String, name: String? = nil,
+        startDate: Date? = nil, endDate: Date? = nil, freq: String? = nil
+    ) {
         self.market = market
         self.symbol = symbol.trimmingCharacters(in: .whitespaces).uppercased()
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.displayName = (trimmed?.isEmpty == false) ? trimmed : nil
+        if let startDate { self.startDate = startDate }
+        if let endDate { self.endDate = endDate }
+        if let freq { self.freq = freq }
     }
 
     // MARK: - 缠论分析
