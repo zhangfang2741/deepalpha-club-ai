@@ -2,27 +2,23 @@ import SwiftUI
 
 /// 分段控件的「整体分析」段。
 ///
-/// 这张卡回答缠论用户翻开一只票时最先想知道的三件事，按「走势 → 结构 → 信号」
-/// 从大到小铺开，每块都只陈述算法从 K 线里读出的事实、不替用户下操作结论：
+/// 目标从「把结果画出来」升级成「让用户看懂**为什么这样判断**」，但保持紧凑：
 ///
-/// - **走势**：缠论按**中枢排布**定义的大级别走势（`walk_type`）+ 延续/转折展望
-///   （`trend_outlook`，由走势 + 终结性背驰派生）。这两者天然自洽。
-/// - **结构**：当前中枢（多空争夺区）ZG/ZD 区间 + 现价在其上方/内部/下方，
-///   以及笔（短期）/ 线段（中期）方向是否共振——多级别分开讲清楚，是缠论的读法，
-///   不是自相矛盾。
-/// - **信号**：最近一个买卖点（级别 / 强度 / 是否确认 / 价位）+ 背驰状态；完整
-///   买卖点列表在「买卖点」独立 tab。
+/// - **综合判断**（默认显示）：一句话同时给出大结构（线段方向）、小结构（最新笔
+///   方向）、所处位置（中枢内 / 上方 / 下方）、信号状态（确认 / 候选 / 暂无）——
+///   全部由结构数据拼出，不写死文案。
+/// - **走势** chips：中枢级别走势（`walk_type`）+ 延续/转折展望（`trend_outlook`）。
+/// - **查看判断依据**（默认收起）：展开才显示「笔 / 线段 / 中枢 / 买卖点」的证据链
+///   表格——每一行给「当前结果 + 判断依据」。这张表是核心教学：让用户明白一根
+///   向上笔为什么不等于趋势反转。收起时不占地方，避免首屏太密。
 ///
-/// 顶部保留一句 `narrative.headline` 白话概括当引子（结构没成形时退回后端 summary）。
-///
-/// 刻意**不再**堆那串「多因子加权依据」：那些单条依据彼此方向相反（卡里都得挂
-/// 一句"下列依据可能与结论相反"），用户反馈这种自相矛盾比没有更糟。现在换成上面
-/// 三块层次分明、各自单一口径的事实，谁强谁弱、在哪个位置、有没有信号一目了然。
-///
-/// 风险提示已拆到 `RiskSection` 独立成一个 tab（见 ResultSegments）。
-/// 字号统一走 AnalysisType 的三级（见 SignalFormatting.swift）。
+/// 依据文案由 `ChanEvidence` 从结构数据规则化推导（对齐 `narrative.py` 的思路，
+/// 但在端上、离线、即时）。刻意不再堆易自相矛盾的「多因子加权依据」。
+/// 风险提示在 `RiskSection` 独立 tab；字号走 AnalysisType 三级（见 SignalFormatting）。
 struct AnalysisSection: View {
     let analysis: ChanAnalysis
+
+    @State private var showEvidence = false
 
     var body: some View {
         statusCard
@@ -33,19 +29,18 @@ struct AnalysisSection: View {
     private var statusCard: some View {
         CollapsibleCard(title: L("当前状态"), systemImage: "waveform.path.ecg",
                         defaultExpanded: true) {
-            VStack(alignment: .leading, spacing: 16) {
-                // 一句话白话概括（结构没成形时退回后端 summary）
-                Text(analysis.narrative?.headline ?? analysis.summary)
+            VStack(alignment: .leading, spacing: 14) {
+                // 综合判断：结构没成形时退回后端白话/摘要
+                Text(ChanEvidence.verdict(analysis) ?? analysis.narrative?.headline ?? analysis.summary)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(Theme.textPrimary)
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Divider().overlay(Theme.border)
-
                 trendBlock
-                structureBlock
-                signalBlock
+
+                Divider().overlay(Theme.border)
+                evidenceDisclosure
 
                 Divider().overlay(Theme.border)
                 Text(structureStats)
@@ -72,102 +67,70 @@ struct AnalysisSection: View {
         }
     }
 
-    // MARK: - 结构
+    // MARK: - 证据链（可折叠）
 
-    private var structureBlock: some View {
-        factBlock(L("结构")) {
-            VStack(alignment: .leading, spacing: 5) {
-                infoLine(pivotLine)
-                if let rhythm = rhythmLine { infoLine(rhythm) }
-            }
-        }
-    }
-
-    /// 当前中枢（多空争夺区）+ 现价所处位置。没有中枢时说明未成形。
-    private var pivotLine: String {
-        guard let p = analysis.strokePivots.last,
-              let close = analysis.mergedCandles.last?.close else {
-            return L("尚未形成中枢（单边推进或数据不足）")
-        }
-        let range = "\(fmt(p.zd))–\(fmt(p.zg))"
-        if close > p.zg {
-            return L("中枢 %1$@｜现价 %2$@ 站在中枢上方，多方暂占优", range, fmt(close))
-        }
-        if close < p.zd {
-            return L("中枢 %1$@｜现价 %2$@ 跌破中枢下沿，空方暂占优", range, fmt(close))
-        }
-        return L("中枢 %1$@｜现价 %2$@ 在中枢内来回，多空僵持", range, fmt(close))
-    }
-
-    /// 笔（短期）/ 线段（中期）方向，及是否同向共振。
-    private var rhythmLine: String? {
-        let s = analysis.strokes.last?.direction
-        let g = analysis.segments.last?.direction
-        guard s != nil || g != nil else { return nil }
-        let sTxt = s.map { $0 == .up ? L("笔向上") : L("笔向下") } ?? L("笔未成形")
-        let gTxt = g.map { $0 == .up ? L("线段向上") : L("线段向下") } ?? L("线段未成形")
-        if let s = s, let g = g {
-            let note = s == g ? L("短期与中期同向") : L("短期与中期方向不一致")
-            return L("%1$@ · %2$@（%3$@）", sTxt, gTxt, note)
-        }
-        return L("%1$@ · %2$@", sTxt, gTxt)
-    }
-
-    // MARK: - 信号
-
-    private var signalBlock: some View {
-        factBlock(L("买卖信号")) {
-            VStack(alignment: .leading, spacing: 6) {
-                latestSignalRow
-                infoLine(divergenceNote)
-                if analysis.signals.count > 1 {
-                    Text(L("共 %lld 个买卖点，完整列表见「买卖点」标签", analysis.signals.count))
-                        .font(.caption2)
-                        .foregroundColor(Theme.textSecondary)
-                }
-            }
-        }
-    }
-
-    /// 最近一个买卖点（时间倒序取首个）——级别 / 强度 / 是否确认 / 价位。
-    @ViewBuilder
-    private var latestSignalRow: some View {
-        if let sig = analysis.signals.sorted(by: { $0.time > $1.time }).first {
-            VStack(alignment: .leading, spacing: 4) {
+    private var evidenceDisclosure: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { showEvidence.toggle() }
+            } label: {
                 HStack(spacing: 6) {
-                    Text(sig.label)
-                        .font(.subheadline.bold())
-                        .foregroundColor(sig.isBuy ? Theme.up : Theme.down)
-                    Chip(text: SignalFormatting.strengthLabel(sig.strength),
-                         color: SignalFormatting.strengthColor(sig.strength))
-                    if !sig.confirmed { Chip(text: L("未确认·左侧预判"), color: Theme.textSecondary) }
-                    Spacer(minLength: 4)
-                    Text(sig.time).font(.caption).foregroundColor(Theme.textSecondary)
+                    Image(systemName: "checklist").foregroundColor(Theme.accent).font(.footnote)
+                    Text(L("查看判断依据"))
+                        .font(.footnote.weight(.semibold))
+                        .foregroundColor(Theme.textPrimary)
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(Theme.textSecondary)
+                        .rotationEffect(.degrees(showEvidence ? 0 : -90))
                 }
-                Text(L("价位 %@", fmt(sig.price)))
-                    .font(.caption)
-                    .foregroundColor(Theme.textSecondary)
+                .contentShape(Rectangle())
             }
-        } else {
-            Text(L("近期无买卖点信号"))
-                .font(AnalysisType.body)
-                .foregroundColor(Theme.textSecondary)
+            .buttonStyle(.plain)
+
+            if showEvidence {
+                VStack(spacing: 10) {
+                    ForEach(ChanEvidence.rows(analysis)) { row in evidenceRow(row) }
+                }
+                if let tip = ChanEvidence.tip(analysis) {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "lightbulb").font(.caption2).foregroundColor(Theme.segment)
+                        Text(tip)
+                            .font(.caption2)
+                            .foregroundColor(Theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
         }
     }
 
-    /// 背驰状态：由 trend_outlook 的转折分支反推（reversal 才是终结性背驰），
-    /// 单一口径，不跟走势块打架。
-    private var divergenceNote: String {
-        switch analysis.trendOutlook ?? "" {
-        case "reversal_down": return L("顶背驰：价创新高但动能没跟上，上涨力度在衰减")
-        case "reversal_up": return L("底背驰：价创新低但动能在减弱，下跌力度在衰减")
-        default: return L("暂无背驰信号，力度未见明显衰减")
+    private func evidenceRow(_ row: EvidenceRow) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(row.term)
+                .font(.footnote.bold())
+                .foregroundColor(row.termColor)
+                .frame(width: 40, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.result)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundColor(Theme.textPrimary)
+                Text(row.why)
+                    .font(.caption2)
+                    .foregroundColor(Theme.textSecondary)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
         }
+        .padding(10)
+        .background(Theme.surfaceAlt)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     // MARK: - 结构统计
 
-    /// 一行精简结构统计。
     private var structureStats: String {
         let pivots = analysis.strokePivots.count + analysis.segmentPivots.count
         return L("%lld 根K线 · %lld 笔 · %lld 线段 · %lld 中枢 · %lld 买卖点",
@@ -177,7 +140,6 @@ struct AnalysisSection: View {
 
     // MARK: - 复用小组件
 
-    /// 段内小标题（走势 / 结构 / 信号）+ 内容。
     private func factBlock<Content: View>(
         _ title: String, @ViewBuilder content: () -> Content
     ) -> some View {
@@ -189,14 +151,142 @@ struct AnalysisSection: View {
             content()
         }
     }
+}
 
-    private func infoLine(_ text: String) -> some View {
-        Text(text)
-            .font(AnalysisType.body)
-            .foregroundColor(Theme.textPrimary)
-            .lineSpacing(3)
-            .fixedSize(horizontal: false, vertical: true)
+// MARK: - 证据链推导
+
+/// 证据链的一行：结构名 + 当前结果 + 判断依据。
+struct EvidenceRow: Identifiable {
+    let id = UUID()
+    let term: String
+    let termColor: Color
+    let result: String
+    let why: String
+}
+
+/// 把 ChanAnalysis 的结构数据规则化成「为什么这样判断」的证据链与一句话综合判断。
+///
+/// 全部由数据推导、不写死场景文案——否则又会退回「描述没价值」。放在这里而不是
+/// 后端，是为了即时、离线、免一次网络往返（与 SignalFormatting 同层）。
+enum ChanEvidence {
+
+    /// 一句话综合判断：大结构（线段）+ 小结构（笔）+ 位置（中枢）+ 信号状态。
+    /// 结构还没成形（没有笔）时返回 nil，由调用方退回后端白话。
+    static func verdict(_ a: ChanAnalysis) -> String? {
+        guard let bi = a.strokes.last?.direction else { return nil }
+        let segDir = a.segments.last?.direction
+        let segPart: String
+        if segDir == .up { segPart = L("向上线段") }
+        else if segDir == .down { segPart = L("向下线段") }
+        else { segPart = L("尚未成形的线段") }
+        let biPart = bi == .up ? L("向上笔") : L("向下笔")
+        return L("当前处于%1$@中的一根%2$@，%3$@，%4$@。",
+                 segPart, biPart, positionPhrase(a), signalPhrase(a))
     }
 
-    private func fmt(_ v: Double) -> String { String(format: "%.2f", v) }
+    /// 现价相对最近中枢的位置短语（含中枢是否延伸）。
+    private static func positionPhrase(_ a: ChanAnalysis) -> String {
+        guard let p = a.strokePivots.last, let close = a.mergedCandles.last?.close else {
+            return L("尚未形成中枢")
+        }
+        let pos: String
+        if close > p.zg { pos = L("现价站上中枢上方") }
+        else if close < p.zd { pos = L("现价跌破中枢下沿") }
+        else { pos = L("现价在中枢内") }
+        return p.confirmed ? pos : L("%@、中枢仍在延伸", pos)
+    }
+
+    /// 最近买卖点状态短语。
+    private static func signalPhrase(_ a: ChanAnalysis) -> String {
+        guard let s = a.signals.sorted(by: { $0.time > $1.time }).first else {
+            return L("暂无确认买卖点")
+        }
+        let state = s.confirmed ? L("已确认") : L("候选")
+        return L("最近出现%1$@（%2$@）", s.label, state)
+    }
+
+    /// 证据链四行：笔 / 线段 / 中枢 / 买卖点。
+    static func rows(_ a: ChanAnalysis) -> [EvidenceRow] {
+        [stroke(a), segment(a), pivot(a), signal(a)]
+    }
+
+    private static func stroke(_ a: ChanAnalysis) -> EvidenceRow {
+        let result: String
+        let why: String
+        if let s = a.strokes.last {
+            let dir = s.direction == .up ? L("向上笔") : L("向下笔")
+            result = s.confirmed ? L("%@已走完", dir) : L("%@形成中", dir)
+            if s.confirmed {
+                why = L("两端分型已确认，这一笔已经走完")
+            } else if s.direction == .up {
+                why = L("最新底分型后向上延伸，顶分型尚未确认")
+            } else {
+                why = L("最新顶分型后向下延伸，底分型尚未确认")
+            }
+        } else {
+            result = L("尚未成形")
+            why = L("有效分型不足，还连不成一笔")
+        }
+        return EvidenceRow(term: L("笔"), termColor: Theme.stroke, result: result, why: why)
+    }
+
+    private static func segment(_ a: ChanAnalysis) -> EvidenceRow {
+        let result: String
+        let why: String
+        if let s = a.segments.last {
+            let dir = s.direction == .up ? L("向上线段") : L("向下线段")
+            result = s.confirmed ? L("%@已结束", dir) : L("%@未结束", dir)
+            why = s.confirmed
+                ? L("特征序列已确认线段结束")
+                : L("当前笔尚未破坏线段结构，线段延续")
+        } else {
+            result = L("尚未成形")
+            why = L("不足 3 笔，还叠不出线段")
+        }
+        return EvidenceRow(term: L("线段"), termColor: Theme.segment, result: result, why: why)
+    }
+
+    private static func pivot(_ a: ChanAnalysis) -> EvidenceRow {
+        let result: String
+        let why: String
+        if let p = a.strokePivots.last {
+            result = p.confirmed ? L("中枢已确认") : L("中枢延伸中")
+            if let close = a.mergedCandles.last?.close, close > p.zg || close < p.zd {
+                why = L("走势已离开 %1$@–%2$@ 区间，等待是否回抽",
+                        fmt(p.zd), fmt(p.zg))
+            } else {
+                why = L("最新走势仍与 %1$@–%2$@ 区间重叠", fmt(p.zd), fmt(p.zg))
+            }
+        } else {
+            result = L("尚未形成中枢")
+            why = L("重叠不足三段，还没围出中枢")
+        }
+        return EvidenceRow(term: L("中枢"), termColor: Theme.pivotFill, result: result, why: why)
+    }
+
+    private static func signal(_ a: ChanAnalysis) -> EvidenceRow {
+        let result: String
+        let why: String
+        if let s = a.signals.sorted(by: { $0.time > $1.time }).first {
+            result = s.confirmed ? L("%@已确认", s.label) : L("%@候选", s.label)
+            why = s.confirmed
+                ? L("离开与回抽结构均已完成确认")
+                : L("落在未确认笔上，属左侧预判")
+        } else {
+            result = L("暂无确认信号")
+            why = L("尚未完成离开段与回抽结构")
+        }
+        return EvidenceRow(term: L("买卖点"), termColor: Theme.accent, result: result, why: why)
+    }
+
+    /// 教学点睛：仅当笔与线段方向相反（短期反抽大级别）时才提示，其余情形不啰嗦。
+    static func tip(_ a: ChanAnalysis) -> String? {
+        guard let bi = a.strokes.last?.direction,
+              let seg = a.segments.last?.direction, bi != seg else { return nil }
+        return bi == .up
+            ? L("一根向上笔 ≠ 趋势反转：线段未被破坏前，它只是下降线段里的一次反抽。")
+            : L("一根向下笔 ≠ 趋势结束：线段未被破坏前，它只是上升线段里的一次回调。")
+    }
+
+    private static func fmt(_ v: Double) -> String { String(format: "%.2f", v) }
 }
