@@ -337,5 +337,7 @@
 "确定" = "Done";
 
 /* Signal Radar legend */
-"大小=潜在空间" = "Size = potential move";
-"深浅=强弱 · 虚线边框=未确认 · 居中=越新 · 点击查看分析" = "Shade = strength · dashed border = unconfirmed · centered = newer · tap for analysis";
+"大小/深浅=强度" = "Size / shade = strength";
+"弱" = "Weak";
+"强" = "Strong";
+"角标=级别（一/二/三类） · 居中=越新 · 点击查看分析" = "Badge = tier (1/2/3) · centered = newer · tap for analysis";

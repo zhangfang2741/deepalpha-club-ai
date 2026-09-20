@@ -5,13 +5,12 @@ import SwiftUI
 /// 顶部市场选择与三地恐慌指数小卡片合二为一（PanicIndexStrip）：点哪张卡就切到
 /// 哪个市场，不再单独放一条分段选择器。
 ///
-/// 气泡编码（四个视觉维度对应四件不同的事，不再互相重复）：
+/// 气泡编码：
 /// - 颜色：方向（红=买点 / 绿=卖点）+ 深浅（形态技术面强弱）；
-/// - 大小：买卖点级别的潜在行情空间（一类最大 → 三类最小）——一类能吃到从底部
-///   开始的整段反转，三类只剩突破后的延续段；
-/// - 边框：确定性——虚线=未确认（`signal.confirmed == false`），跟图表页
-///   「虚线=未确认」同一套语言。级别（一/二/三类）本身隐含的"确定性"不再叠加
-///   到大小上：那会跟"深浅=强弱"读成同一件事，两个独立维度混成了一个；
+/// - 大小：形态技术面强弱——大小与深浅同向强化（越强既大又深），让强弱信号
+///   一眼可辨；不再用大小编码买卖点级别；
+/// - 角标：买卖点级别（一/二/三类，潜在行情空间：一类能吃到从底部开始的整段
+///   反转，三类只剩突破后的延续段）以左上角小角标标注，不再占用大小维度；
 /// - 居中程度：时间距离——信号是哪天出现的离当前查看的这天越近，越靠中心；
 ///   后端会让一只股票的信号在被更新的信号覆盖前持续「在场」（见
 ///   app/services/signal_radar/service.py 的按日重建），所以翻看某一天时，
@@ -366,7 +365,7 @@ struct SignalRadarView: View {
 
         var layouts: [BubbleLayout] = signals.enumerated().map { index, sig in
             let da = daysAgo(from: sig.date, to: dayDate)
-            let diameter = SignalRadarView.diameter(forLevel: sig.level) * ringSizeFactor(forDaysAgo: da)
+            let diameter = SignalRadarView.diameter(forStrength: sig.strength) * ringSizeFactor(forDaysAgo: da)
             let r = diameter / 2
             // ringRadius 传 fieldRadius=1 得到「占半轴的分数(0~1)」，再各轴留出气泡半径
             // 余量（fMax），避免最外环的大气泡贴边被圆角容器裁掉。
@@ -444,16 +443,21 @@ struct SignalRadarView: View {
         }
     }
 
-    /// 买卖点级别 → 气泡直径：一类潜在空间最大（能捕捉到从底部开始的整段反转），
-    /// 三类最小（只剩突破后的延续段）。
-    /// 「确定性」不再叠加到大小上——之前把确定性也塞进大小，会跟深浅（形态技术面
-    /// 强弱）读成同一件事，两个独立维度混成了一个。确定性改用气泡边框实/虚线表达
-    /// （见 RadarBubble，跟图表页「虚线=未确认」同一套语言），大小专心只管潜在空间。
-    static func diameter(forLevel level: Int) -> Double {
+    /// 形态技术面强弱 → 气泡直径：越强越大（56 弱 → 96 强）。大小与颜色深浅同向
+    /// 强化同一件事（强度），越强的信号既大又深，一眼就能从一堆气泡里挑出来。
+    /// 买卖点级别（潜在行情空间）不再由大小表达，改用左上角小角标（见 RadarBubble），
+    /// 避免大小同时背负「强度」和「级别」两件事读成一团。
+    static func diameter(forStrength strength: Double) -> Double {
+        let t = min(max(strength, 0), 1)
+        return 56 + t * 40
+    }
+
+    /// 买卖点级别 → 角标文案（一/二/三类）。级别取自 signalType 末位，见 RadarSignal.level。
+    static func levelLabel(_ level: Int) -> String {
         switch level {
-        case 1: return 92
-        case 2: return 76
-        default: return 60  // 三类
+        case 1: return L("一类")
+        case 2: return L("二类")
+        default: return L("三类")
         }
     }
 
@@ -487,8 +491,8 @@ struct SignalRadarView: View {
     // MARK: - 图例
 
     private var legend: some View {
-        // 大小、深浅、边框分别管三件不同的事，拆成独立行说清楚，不然挤在一起
-        // 用户会把"大小"和"深浅"都读成"这个信号有多强"，浪费一个维度。
+        // 大小和深浅现在同向表达同一件事（强度），刻意冗余强化，让强弱信号一眼可辨；
+        // 级别退到左上角小角标。拆成独立行说清楚，别挤成一坨。
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 14) {
                 legendBar(label: L("买"), color: Theme.up,
@@ -497,21 +501,20 @@ struct SignalRadarView: View {
                           gradient: [Color(hex: 0x6EE7B7), Color(hex: 0x045A40)])
             }
             HStack(spacing: 6) {
-                Text(L("大小=潜在空间")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
-                levelDot(diameter: SignalRadarView.diameter(forLevel: 1), label: L("一类"))
-                levelDot(diameter: SignalRadarView.diameter(forLevel: 2), label: L("二类"))
-                levelDot(diameter: SignalRadarView.diameter(forLevel: 3), label: L("三类"))
+                Text(L("大小/深浅=强度")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                strengthDot(diameter: SignalRadarView.diameter(forStrength: 0.15), label: L("弱"))
+                strengthDot(diameter: SignalRadarView.diameter(forStrength: 1.0), label: L("强"))
             }
-            Text(L("深浅=强弱 · 虚线边框=未确认 · 居中=越新 · 点击查看分析"))
+            Text(L("角标=级别（一/二/三类） · 居中=越新 · 点击查看分析"))
                 .font(.system(size: 10))
                 .foregroundColor(Theme.textSecondary)
         }
     }
 
-    /// 图例里的买卖点级别参考点：真实按 `diameter(forLevel:)` 等比缩小展示。
-    private func levelDot(diameter: Double, label: String) -> some View {
+    /// 图例里的强度参考点：真实按 `diameter(forStrength:)` 等比缩小展示（弱→小、强→大）。
+    private func strengthDot(diameter: Double, label: String) -> some View {
         HStack(spacing: 3) {
-            Circle().fill(Theme.textSecondary).frame(width: diameter * 0.16, height: diameter * 0.16)
+            Circle().fill(Theme.textSecondary).frame(width: diameter * 0.2, height: diameter * 0.2)
             Text(label).font(.system(size: 9)).foregroundColor(Theme.textSecondary)
         }
     }
@@ -834,14 +837,8 @@ private struct RadarBubble: View {
 
     private var content: some View {
         ZStack {
-            // 纯实色气泡；未确认的信号额外描一圈虚线边框——跟图表页「虚线=未确认」
-            // 同一套语言，确认的信号维持无描边的纯实色（多数信号都是已确认的，
-            // 不想让所有气泡都套上边框，那样反而弱化了「未确认」这个特殊标记）。
+            // 纯实色气泡，不再描边——未确认信号的虚线边框已按需求去掉。
             Circle().fill(color)
-            if !signal.confirmed {
-                Circle().stroke(style: StrokeStyle(lineWidth: 2, dash: [4, 3]))
-                    .foregroundColor(.white.opacity(0.85))
-            }
 
             VStack(spacing: 1) {
                 Text(signal.symbol)
@@ -854,6 +851,18 @@ private struct RadarBubble: View {
                     .padding(.horizontal, 4)
             }
             .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
+        }
+        .overlay(alignment: .topLeading) {
+            // 级别角标：大小让出「级别」维度后，级别（潜在行情空间：一/二/三类）
+            // 改用左上角这个小角标标注，信息不丢，也不跟「大小/深浅=强度」抢读法。
+            Text(SignalRadarView.levelLabel(signal.level))
+                .font(.system(size: max(8, r * 0.24), weight: .bold))
+                .foregroundColor(.white.opacity(0.95))
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1.5)
+                .background(Color.black.opacity(0.28))
+                .clipShape(Capsule())
+                .offset(x: 2, y: 2)
         }
         .overlay(alignment: .topTrailing) {
             // "新"改放气泡外面右上角：挤在气泡内部会跟代码/名称文字抢地方。

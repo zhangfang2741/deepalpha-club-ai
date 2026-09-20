@@ -69,7 +69,8 @@ struct RadarSignal: Decodable, Identifiable {
     let signalType: String    // buy1 / sell1 …
     let date: String
     let price: Double
-    /// 形态技术面强度 0~1（决定气泡颜色深浅；气泡大小由 `level` 决定，见下）
+    /// 形态技术面强度 0~1：同时决定气泡的颜色深浅与大小（越强既深又大），见
+    /// SignalRadarView.bubbleColor / diameter(forStrength:)。
     let strength: Double
     let bias: String
     let signalStrength: String
@@ -79,10 +80,10 @@ struct RadarSignal: Decodable, Identifiable {
     var isBuy: Bool { side == "buy" }
 
     /// 买卖点级别：1/2/3，取 signalType 末位数字（"buy2"/"sell2" 都取到 2），
-    /// 对买卖两侧通用。级别决定气泡大小（潜在行情空间），映射见
-    /// SignalRadarView.diameter(forLevel:)——一类能吃到从底部开始的整段反转，
-    /// 气泡最大；三类只剩突破后的延续段，气泡最小。级别的"确定性"改由
-    /// `confirmed` 字段驱动气泡边框虚实表达，不叠加到大小上。
+    /// 对买卖两侧通用。级别代表潜在行情空间（一类能吃到从底部开始的整段反转，
+    /// 三类只剩突破后的延续段），在雷达里以气泡左上角小角标标注，不再占用大小
+    /// 维度——大小已改为与颜色深浅同向表达强度，见 SignalRadarView.levelLabel /
+    /// diameter(forStrength:)。
     var level: Int {
         Int(String(signalType.suffix(1))) ?? 1
     }
