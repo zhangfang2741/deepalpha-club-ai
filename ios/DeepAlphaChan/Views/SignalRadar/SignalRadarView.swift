@@ -88,18 +88,18 @@ struct SignalRadarView: View {
     /// 点气泡 → 直接跑分析，成功后 push 详情页（不经过分析 Tab 的条件页）。
     /// 带上气泡上的真实名称（如「中芯国际」），供结果页加自选时存名称。
     ///
-    /// 关键：让详情页与雷达同口径。雷达是在 today-270 ~ today 的日线上跑缠论，而详情
-    /// 接口默认按用户 365 天窗口、且会自动再往前补 180 天 warmup。若不指定窗口，两边
-    /// 结构不同、买卖点会对不上（如雷达上的某个二卖在详情页里因窗口更长而消失）。
-    /// 这里传 end=雷达数据日(as_of)、start=end-90 天：叠加接口 180 天 warmup 后，取到的
-    /// 正是 today-270 ~ today 这同一段 K 线，详情页买卖点即与雷达一致。90 = 雷达多取的
-    /// window*2（见后端 signal_radar/service.py 与 chan.py 的 warmup 常量，二者 180 对齐）。
+    /// 关键：让详情页与雷达完全同口径。雷达是在 today-270 ~ today 的日线上跑缠论
+    /// （全序列、不额外加 warmup）。这里传 end=雷达数据日(as_of)、start=end-270 天、
+    /// warmupDays=0：详情接口不再前补 warmup，取到的正是 today-270 ~ today 这同一段
+    /// K 线，且整段都可见——买卖点集合与雷达一致（连更早、超过 90 天的买卖点也照常显示，
+    /// 不会因可见窗口太窄被挡掉）。270 = 雷达的 warmup(180) + window*2(90)，见后端
+    /// signal_radar/service.py。
     private func openSymbol(_ symbol: String, name: String? = nil) {
         let end = SignalRadarView.parser.date(from: vm.response?.asOf ?? "") ?? Date()
-        let start = Calendar.current.date(byAdding: .day, value: -90, to: end) ?? end
+        let start = Calendar.current.date(byAdding: .day, value: -270, to: end) ?? end
         chanVM.apply(
             market: vm.market, symbol: symbol, name: name,
-            startDate: start, endDate: end, freq: "daily")
+            startDate: start, endDate: end, freq: "daily", warmupDays: 0)
         Task {
             await chanVM.runAnalysis()
             if chanVM.errorMessage == nil, chanVM.analysis != nil {

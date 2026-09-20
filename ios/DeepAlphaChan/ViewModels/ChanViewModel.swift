@@ -24,6 +24,10 @@ final class ChanViewModel: ObservableObject {
     @Published var startDate: Date
     @Published var endDate: Date
 
+    /// 向前多取的 warmup 天数覆盖（nil=后端默认 180/540）。信号雷达点进详情时置 0，
+    /// 让取数区间与雷达完全一致（雷达不额外加 warmup）。其他入口保持 nil。
+    var warmupDays: Int?
+
     /// 当前标的的展示名称（如「中芯国际」）。仅在入口能提供真实名称时才有值
     /// （如从信号雷达点气泡进来）；手动输入代码等无名称的入口为 nil。加自选时
     /// 用它，拿不到就退回代码——避免自选里副标题原样重复代码。
@@ -77,7 +81,8 @@ final class ChanViewModel: ObservableObject {
     /// 让详情页跑出的买卖点与雷达一致（否则默认 365 天窗口会算出不同结构）。不传则沿用当前值。
     func apply(
         market: StockMarket, symbol: String, name: String? = nil,
-        startDate: Date? = nil, endDate: Date? = nil, freq: String? = nil
+        startDate: Date? = nil, endDate: Date? = nil, freq: String? = nil,
+        warmupDays: Int? = nil
     ) {
         self.market = market
         self.symbol = symbol.trimmingCharacters(in: .whitespaces).uppercased()
@@ -86,6 +91,9 @@ final class ChanViewModel: ObservableObject {
         if let startDate { self.startDate = startDate }
         if let endDate { self.endDate = endDate }
         if let freq { self.freq = freq }
+        // 显式重置：从雷达进来带 0，其他入口传 nil 时要清掉上一次雷达留下的 0，
+        // 否则分析 Tab 会一直沿用「不加 warmup」，左边界结构可能漂移。
+        self.warmupDays = warmupDays
     }
 
     // MARK: - 缠论分析
@@ -98,11 +106,15 @@ final class ChanViewModel: ObservableObject {
         }
         isLoading = true
         errorMessage = nil
+        // warmup 覆盖是「一次性」的：消费掉即清空，避免雷达带来的 warmup=0 泄漏到
+        // 分析 Tab 后续手动分析（那会让普通 365 天分析少了左侧 warmup、结构可能漂移）。
+        let warmup = warmupDays
+        warmupDays = nil
         defer { isLoading = false }
         do {
             analysis = try await ChanService.analysis(
                 symbol: sym, startDate: startDateString,
-                endDate: endDateString, freq: freq)
+                endDate: endDateString, freq: freq, warmupDays: warmup)
         } catch let error as APIError {
             // 失败时保留上一次结果，仅提示错误，避免清空已呈现的图表
             errorMessage = error.message
