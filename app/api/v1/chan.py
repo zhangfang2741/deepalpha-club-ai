@@ -41,16 +41,19 @@ _analyzer = ChanAnalyzer()
 _WARMUP_DAYS = {"daily": 180, "weekly": 540}
 
 
-def _anchor_start(start_date: str, freq: str) -> str:
+def _anchor_start(start_date: str, freq: str, warmup_days: int | None = None) -> str:
     """把用户所选起点向前推 warmup 天，作为实际取数起点。
 
-    解析失败（非法日期）时原样返回 start_date，不影响主流程。
+    warmup_days 为 None 时用该周期默认（日线 180 / 周线 540）；显式传入（含 0）则
+    覆盖默认——信号雷达点进详情时传 0，好让取数区间与雷达完全一致（雷达不额外加
+    warmup，就在 today-270~today 上跑）。解析失败（非法日期）时原样返回 start_date。
     """
+    days = _WARMUP_DAYS.get(freq, 180) if warmup_days is None else max(0, warmup_days)
     try:
         d = date.fromisoformat(start_date[:10])
     except ValueError:
         return start_date
-    return (d - timedelta(days=_WARMUP_DAYS.get(freq, 180))).isoformat()
+    return (d - timedelta(days=days)).isoformat()
 
 # 保持对后台任务的强引用，避免被 GC 提前回收
 _background_tasks: set[asyncio.Task] = set()
@@ -71,6 +74,10 @@ async def chan_analysis(
     end_date: str = Query(description="结束日期，格式 YYYY-MM-DD"),
     freq: str = Query(default="daily", description="K线周期：daily / weekly"),
     lang: str = Query(default="zh", description="分析文案语言：zh / en"),
+    warmup_days: int | None = Query(
+        default=None, ge=0,
+        description="向前多取的 warmup 天数，覆盖默认（日线180/周线540）；信号雷达点进传 0 以与雷达同区间",
+    ),
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
 ) -> ChanAnalysisResponse:
@@ -83,7 +90,7 @@ async def chan_analysis(
     # 窗口锚定：在用户所选起点之前多取一段 warmup K 线一起送入缠论，在完整序列上
     # 计算以消除左边界依赖（结构不随用户选的起始日期漂移），再裁剪回可见窗口。
     # 实测 ~30 根合并K线即可让可见区结构收敛，这里给足冗余：日线 180 天、周线 540 天。
-    anchor_start = _anchor_start(start_date, freq)
+    anchor_start = _anchor_start(start_date, freq, warmup_days)
 
     try:
         bars = await fetch_kline(
