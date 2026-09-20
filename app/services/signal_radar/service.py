@@ -27,6 +27,7 @@ from datetime import date, timedelta
 
 from redis.asyncio import Redis
 
+from app.core.config import settings
 from app.core.logging import logger
 from app.schemas.signal_radar import (
     RadarDayOut,
@@ -69,7 +70,30 @@ _DISPLAY_SPACE_WEIGHT = 0.6
 _DISPLAY_STRENGTH_WEIGHT = 0.4
 
 _CACHE_PREFIX = "signal_radar"
-_CACHE_TTL = 3600 * 6  # 6h
+# 缓存 TTL 的下限：即便预热间隔被调得很短，也至少存活 6h。
+_CACHE_TTL_FLOOR = 3600 * 6  # 6h
+
+
+def _cache_ttl() -> int:
+    """缓存存活时间（秒）：取预热间隔的 2 倍，并以 6h 兜底。
+
+    关键在于 TTL 必须明显长于预热周期，这样每一轮预热都会在缓存过期之前把它覆盖
+    重写，永远不会出现「缓存刚过期、下一轮预热还没跑」的空窗——正是那个空窗让第
+    一个撞上的用户被迫触发慢扫描、干等十几秒。TTL == interval（旧口径）恰好卡在临
+    界点，稍有延迟就漏，故这里显式放宽到 2 倍。
+    """
+    return max(_CACHE_TTL_FLOOR, settings.SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS * 2)
+
+
+def _cache_stale_after() -> int:
+    """缓存「陈旧」阈值（秒）：写入至今超过此时长即视为陈旧。
+
+    取预热间隔的 1.5 倍。正常情况下预热每 interval 覆盖一次缓存、年龄始终归零，够
+    不到这个阈值；只有当预热确实迟到或停摆（比如被关掉、异常、容器刚重启还没轮到）
+    时缓存年龄才会涨过 1.5×interval——此时由用户访问顺带触发一次后台刷新，既不与正
+    常预热重复抢扫，又能在预热失灵时自愈。
+    """
+    return int(settings.SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS * 1.5)
 
 # 在场信号的过期上限（自然日）：一条买卖点即使一直没被新信号覆盖，诞生超过这个
 # 天数后也不再显示。信号雷达的定位是「看当前市场的买卖点」，不是「翻出几个月前
@@ -289,7 +313,7 @@ async def _read_cache(redis: Redis, market: str, universe_key: str) -> SignalRad
 async def _write_cache(redis: Redis, data: SignalRadarResponse) -> None:
     try:
         await redis.set(
-            _cache_key(data.market, data.universe), data.model_dump_json(), ex=_CACHE_TTL
+            _cache_key(data.market, data.universe), data.model_dump_json(), ex=_cache_ttl()
         )
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_cache_write_error", market=data.market, error=str(e))
@@ -386,14 +410,39 @@ async def compute_market(
     return resp
 
 
-async def peek_cache(
+async def _cache_is_stale(redis: Redis, market: str, universe_key: str) -> bool:
+    """按剩余 TTL 反推缓存年龄，判断是否已陈旧（超过 _cache_stale_after）。
+
+    年龄 = 完整 TTL - 剩余 TTL。拿不到剩余 TTL（异常）时保守地当作「不陈旧」，
+    避免因读 TTL 失败而无谓地反复触发后台刷新；剩余 TTL < 0（无过期时间/刚好过期）
+    则当作陈旧，好让下一次刷新把带正常 TTL 的缓存重新建起来。
+    """
+    try:
+        remaining = await redis.ttl(_cache_key(market, universe_key))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_cache_ttl_error", market=market, error=str(e))
+        return False
+    if remaining < 0:
+        return True
+    age = _cache_ttl() - remaining
+    return age >= _cache_stale_after()
+
+
+async def peek_cache_entry(
     redis: Redis, market: str, universe_key: str | None = None
-) -> SignalRadarResponse | None:
-    """只读缓存（不触发扫描），供 API 的 generating 轮询模式使用。"""
+) -> tuple[SignalRadarResponse | None, bool]:
+    """只读缓存并判断是否陈旧（不触发扫描），供 API 的 stale-while-revalidate 使用。
+
+    返回 (响应, 是否陈旧)：命中且陈旧时 API 会先把旧数据返给用户、再在后台悄悄刷新，
+    避免让用户看到 generating 空屏。无缓存返回 (None, False)。
+    """
     universe = get_universe(market, universe_key)
     if universe is None:
-        return None
-    return await _read_cache(redis, market, universe.key)
+        return None, False
+    cached = await _read_cache(redis, market, universe.key)
+    if cached is None:
+        return None, False
+    return cached, await _cache_is_stale(redis, market, universe.key)
 
 
 async def get_market(
