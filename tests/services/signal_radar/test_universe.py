@@ -5,6 +5,7 @@ from app.services.signal_radar.universe import (
     all_universes,
     get_universe,
     list_universes,
+    resolve_name,
     supported_markets,
 )
 from app.utils.market import Market, detect_market
@@ -62,3 +63,22 @@ class TestUniverse:
                 assert detect_market(sym) == expected[u.market], (
                     f"{u.market}/{u.key} 的 {sym} 市场判别不符"
                 )
+
+
+class TestResolveName:
+    def test_resolves_curated_names_across_markets(self):
+        assert resolve_name("us", "NVDA") == "英伟达"
+        assert resolve_name("cn", "688981") == "中芯国际"
+        assert resolve_name("hk", "2015") == "理想汽车"
+
+    def test_symbol_case_insensitive(self):
+        assert resolve_name("us", "nvda") == "英伟达"
+
+    def test_hk_code_zero_padded(self):
+        # 港股裸码零补齐到 4 位再查（"700" → "0700"）
+        assert resolve_name("hk", "700") == "腾讯控股"
+        assert resolve_name("hk", "0700") == "腾讯控股"
+
+    def test_unknown_symbol_or_market_returns_none(self):
+        assert resolve_name("us", "FIG") is None      # 不在任何 curated 成分里
+        assert resolve_name("jp", "7203") is None      # 不支持的市场

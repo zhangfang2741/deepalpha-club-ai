@@ -237,3 +237,27 @@ def all_universes() -> list[MarketUniverse]:
 def supported_markets() -> list[str]:
     """支持的市场列表。"""
     return list(_BY_MARKET.keys())
+
+
+# 反查表：市场 → {裸代码(大写): 中文名}。合并该市场所有 universe 的 curated 成分，
+# 复用信号雷达气泡同一套名称，供缠论分析 / 自选等「按代码要个展示名」的地方直接查。
+_NAME_BY_MARKET: dict[str, dict[str, str]] = {}
+for _u in _ALL_UNIVERSES:
+    _m = _NAME_BY_MARKET.setdefault(_u.market, {})
+    for _sym, _name in _u.constituents:
+        _m.setdefault(_sym.upper(), _name)
+
+
+def resolve_name(market: str, symbol: str) -> str | None:
+    """按 市场 + 裸代码 从 curated 成分清单查中文名（复用信号雷达气泡的名称来源）。
+
+    查不到返回 None（该标的不在任何已覆盖的 ETF 成分里），调用方自行决定是否回退到
+    代码本身。港股代码零补齐到 4 位再查（"700" → "0700"），与清单 key 对齐。
+    """
+    table = _NAME_BY_MARKET.get(market)
+    if not table:
+        return None
+    key = symbol.strip().upper()
+    if market == "hk" and key.isdigit():
+        key = key.zfill(4)
+    return table.get(key)
