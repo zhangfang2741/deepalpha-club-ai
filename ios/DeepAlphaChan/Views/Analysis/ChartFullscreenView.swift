@@ -30,7 +30,7 @@ struct ChartFullscreenView: View {
                 ChanChartView(analysis: analysis, vm: vm,
                               priceHeight: priceH, macdHeight: macdH)
 
-                ChartLegend()
+                ChartLegend(analysis: analysis)
                     .padding(.bottom, 2)
             }
             .padding(.top, 6)

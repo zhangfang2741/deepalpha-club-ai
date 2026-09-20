@@ -23,7 +23,7 @@ struct ChartSection: View {
 
             ChanChartView(analysis: analysis, vm: vm)
 
-            ChartLegend()
+            ChartLegend(analysis: analysis)
         }
     }
 
@@ -143,8 +143,12 @@ struct ChipFlow: Layout {
     }
 }
 
-/// 颜色图例。每个术语都能点开对应词条——图例本来就是给看不懂的人准备的，
-/// 让它只显示颜色而不能解释含义是浪费。
+/// 颜色图例。每个术语都能点开——图例本来就是给看不懂的人准备的，让它只显示
+/// 颜色而不能解释含义是浪费。
+///
+/// 点术语弹的是 `TermInsightView`：先给**当前这只票**该结构的实时数据（最近一笔
+/// 多长、当前中枢在哪、最近分型什么价……）再接词条通用讲解，而不是只弹一篇跟标的
+/// 无关的统一教程——边看自己的票边学概念。所以这里要拿到 `analysis`。
 ///
 /// 两个刻意的选择：
 /// - 术语不加下划线。中文在 caption2 字号下虚下划线会贴着甚至穿过字身，看起来
@@ -152,6 +156,15 @@ struct ChipFlow: Layout {
 /// - 「点术语看解释」这行提示不放进横向滚动条里。放进去会被截断成半个词，
 ///   而且要滑到最右才看得见，起不到提示作用。
 struct ChartLegend: View {
+    let analysis: ChanAnalysis
+
+    /// sheet(item:) 需要 Identifiable 载体，String 本身不是，包一层。
+    private struct SelectedTerm: Identifiable {
+        var id: String { term }
+        let term: String
+    }
+    @State private var selected: SelectedTerm?
+
     var body: some View {
         VStack(spacing: 6) {
             ScrollView(.horizontal, showsIndicators: false) {
@@ -168,24 +181,35 @@ struct ChartLegend: View {
 
             HStack(spacing: 3) {
                 Image(systemName: "hand.tap").font(.system(size: 9))
-                Text(L("点术语可查看解释")).font(.caption2)
+                Text(L("点术语看讲解 + 当前结构数据")).font(.caption2)
             }
             .foregroundColor(Theme.accent.opacity(0.75))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 4)
         }
+        .sheet(item: $selected) { sel in
+            NavigationStack {
+                TermInsightView(term: sel.term, analysis: analysis)
+            }
+            .presentationDetents([.medium, .large])
+            .preferredColorScheme(.dark)
+            // 与 GlossaryLink 同理：弹层盖在截图分享协调器之上，不抑制会抢 presenter。
+            .suppressScreenshotShare()
+        }
     }
 
     private func item(_ color: Color, _ term: String) -> some View {
         // term 为中文规范词（术语表按中文键查），显示走 L() 本地化
-        GlossaryLink(term: term) {
+        Button {
+            selected = SelectedTerm(term: term)
+        } label: {
             HStack(spacing: 4) {
                 RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 12, height: 3)
                 Text(L(term))
                     .font(.caption2)
-                    .foregroundColor(GlossaryIndex.hasEntry(for: term)
-                                     ? Theme.textPrimary : Theme.textSecondary)
+                    .foregroundColor(Theme.textPrimary)
             }
         }
+        .buttonStyle(.plain)
     }
 }

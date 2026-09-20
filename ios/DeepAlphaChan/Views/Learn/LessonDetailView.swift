@@ -24,45 +24,55 @@ struct LessonDetailView: View {
 
     private var content: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                Text(article.summary)
-                    .font(.subheadline)
-                    .foregroundColor(Theme.textSecondary)
-                    .padding(14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Theme.surface)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                // 示意图放在摘要之后、正文之前：先看图建立直观印象，再读定义。
-                if let spec = LessonDiagrams.spec(for: article.id) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        LessonDiagram(spec: spec)
-                        Text(L("示意图，与分析页使用同一套配色"))
-                            .font(.caption2)
-                            .foregroundColor(Theme.textSecondary)
-                    }
-                }
-
-                // 按空行切段落分别渲染，而不是把整篇丢给一个 Text：
-                // AttributedString 的 Markdown 解析默认会把换行折叠掉，
-                // 整篇渲染出来会是没有段落的一大坨。
-                ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
-                    Text(markdown(paragraph))
-                        .font(.system(size: 15))
-                        .foregroundColor(Theme.textPrimary)
-                        .lineSpacing(6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                }
-
-                Text(L("以上为缠论的通行解读，仅供学习参考，不构成投资建议。"))
-                    .font(.caption2)
-                    .foregroundColor(Theme.textSecondary)
-                    .padding(.top, 8)
-            }
             // 这一页正文是裸 Text（没有卡片背景兜底），水平边距不跟着列表页收窄，
             // 否则文字会直接贴到屏幕边上。
-            .padding(18)
+            LessonArticleContent(article: article).padding(18)
+        }
+    }
+}
+
+/// 词条正文（摘要 + 示意图 + Markdown 段落 + 免责）。不含 ScrollView / 导航，
+/// 这样既能被 LessonDetailView 包进滚动页，也能被术语弹层（TermInsightView）
+/// 拼在「当前结构数据」卡之后，两处渲染同一份内容、不重复。
+struct LessonArticleContent: View {
+    let article: LessonArticle
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text(article.summary)
+                .font(.subheadline)
+                .foregroundColor(Theme.textSecondary)
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            // 示意图放在摘要之后、正文之前：先看图建立直观印象，再读定义。
+            if let spec = LessonDiagrams.spec(for: article.id) {
+                VStack(alignment: .leading, spacing: 6) {
+                    LessonDiagram(spec: spec)
+                    Text(L("示意图，与分析页使用同一套配色"))
+                        .font(.caption2)
+                        .foregroundColor(Theme.textSecondary)
+                }
+            }
+
+            // 按空行切段落分别渲染，而不是把整篇丢给一个 Text：
+            // AttributedString 的 Markdown 解析默认会把换行折叠掉，
+            // 整篇渲染出来会是没有段落的一大坨。
+            ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                Text(markdown(paragraph))
+                    .font(.system(size: 15))
+                    .foregroundColor(Theme.textPrimary)
+                    .lineSpacing(6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+
+            Text(L("以上为缠论的通行解读，仅供学习参考，不构成投资建议。"))
+                .font(.caption2)
+                .foregroundColor(Theme.textSecondary)
+                .padding(.top, 8)
         }
     }
 
