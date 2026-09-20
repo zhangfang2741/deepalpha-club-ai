@@ -63,6 +63,63 @@ enum SignalFormatting {
         default: return Theme.segment  // topping / bottoming / range / unclear：警示或中性
         }
     }
+
+    // MARK: - 走势类型 / 走势展望（对应后端 walk_type / trend_outlook）
+    //
+    // 后端把这两个字段以 raw code 下发（app/services/chan/analyzer.py 里有对应的
+    // _walk_type_label / _trend_outlook_label 长句版），这里给一套「短标签 + 配色」
+    // 的映射供整体分析卡当 chip 用。走势类型是缠论按**中枢排布**定义的大级别走势，
+    // trend_outlook 由 walk_type + 终结性背驰派生，两者天然自洽、不会互相打架。
+
+    /// 走势类型短标签（基于中枢排布）。
+    static func walkTypeLabel(_ walkType: String?) -> String {
+        switch walkType ?? "" {
+        case "up_trend": return L("上涨趋势")
+        case "down_trend": return L("下跌趋势")
+        case "consolidation": return L("盘整")
+        default: return L("趋势未成形")
+        }
+    }
+
+    /// 走势类型的一句补充说明（中枢怎么排布出来的）。
+    static func walkTypeDetail(_ walkType: String?) -> String {
+        switch walkType ?? "" {
+        case "up_trend": return L("中枢依次抬高")
+        case "down_trend": return L("中枢依次降低")
+        case "consolidation": return L("围绕中枢震荡")
+        default: return L("单边推进或数据不足，尚未形成中枢")
+        }
+    }
+
+    static func walkTypeColor(_ walkType: String?) -> Color {
+        switch walkType ?? "" {
+        case "up_trend": return Theme.up
+        case "down_trend": return Theme.down
+        default: return Theme.segment
+        }
+    }
+
+    /// 走势展望短标签（延续 vs 转折 vs 盘整突破）。
+    static func trendOutlookLabel(_ outlook: String?) -> String {
+        switch outlook ?? "" {
+        case "reversal_up": return L("可能转折向上")
+        case "reversal_down": return L("可能转折向下")
+        case "continuation_up": return L("上涨延续")
+        case "continuation_down": return L("下跌延续")
+        case "breakout_up": return L("盘整上破")
+        case "breakout_down": return L("盘整下破")
+        case "range": return L("盘整延续")
+        default: return L("展望未明")
+        }
+    }
+
+    static func trendOutlookColor(_ outlook: String?) -> Color {
+        switch outlook ?? "" {
+        case "reversal_up", "continuation_up", "breakout_up": return Theme.up
+        case "reversal_down", "continuation_down", "breakout_down": return Theme.down
+        default: return Theme.segment
+        }
+    }
 }
 
 /// 分析区统一的字号层级。
