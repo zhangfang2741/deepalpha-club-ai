@@ -28,10 +28,15 @@ from datetime import date, timedelta
 from redis.asyncio import Redis
 
 from app.core.logging import logger
-from app.schemas.signal_radar import RadarDayOut, RadarSignalOut, SignalRadarResponse
+from app.schemas.signal_radar import (
+    RadarDayOut,
+    RadarSignalOut,
+    RadarUniverseOut,
+    SignalRadarResponse,
+)
 from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
 from app.services.signal_radar.constituents import resolve_constituents
-from app.services.signal_radar.universe import get_universe
+from app.services.signal_radar.universe import get_universe, list_universes
 from app.services.skills.kline import fetch_kline
 
 _analyzer = ChanAnalyzer()
@@ -51,8 +56,27 @@ _MAX_ACCEPTABLE_FAILURE_RATE = 0.5
 # 因为要跨很多天复用同一把尺子，只有信号自己在诞生时就确定的标签才不会变。
 _SIGNAL_STRENGTH = {"strong": 0.8, "medium": 0.55, "weak": 0.35}
 
+# 买卖点级别（一/二/三类）→ 潜在行情空间分值（0~1）。一类能吃到从底部开始的整段
+# 反转、空间最大，三类只剩突破后的延续段、空间最小。与前端气泡「大小=潜在空间」
+# 是同一套语义（见 ios SignalRadarView.diameter(forLevel:)），别让前后端各判各的。
+_LEVEL_SPACE = {1: 1.0, 2: 0.7, 3: 0.4}
+
+# 看板满员（前 top_n）淘汰时的重要度权重：潜在空间(大小) 略高于 强弱(深浅)。大小是
+# 气泡最主导的视觉线索，若纯按 strength 淘汰，会把「大而淡」的一类挤出、反留下「小
+# 而深」的三类，与用户对画面的直觉相反（大=重要却先出局）。加权综合两维，让小而淡
+# 的先退场。见 display_rank。
+_DISPLAY_SPACE_WEIGHT = 0.6
+_DISPLAY_STRENGTH_WEIGHT = 0.4
+
 _CACHE_PREFIX = "signal_radar"
 _CACHE_TTL = 3600 * 6  # 6h
+
+# 在场信号的过期上限（自然日）：一条买卖点即使一直没被新信号覆盖，诞生超过这个
+# 天数后也不再显示。信号雷达的定位是「看当前市场的买卖点」，不是「翻出几个月前
+# 仍未失效的老信号」；而且前端气泡按 daysAgo 落环，超过 30 天的信号只能全部堆在
+# 最外「1月内」那条环线上、彼此分不出远近（见 ios SignalRadarView.ringRadius 的
+# min(1.0, …) 封顶）——与其糊成一团，不如到点就让它退场。取 30 天与最外环刻度对齐。
+_MAX_SIGNAL_AGE_DAYS = 30
 
 
 @dataclass
@@ -75,6 +99,23 @@ class RawSignal:
 def signal_strength(label: str) -> float:
     """买卖点自身强弱标签（strong/medium/weak）→ 形态技术面强度（0~1）。"""
     return _SIGNAL_STRENGTH.get(label, 0.5)
+
+
+def _signal_level(signal_type: str) -> int:
+    """从 signal_type（buy1/sell2…）末位取买卖点级别 1/2/3，与前端 RadarSignal.level 一致。"""
+    tail = signal_type[-1:]
+    return int(tail) if tail.isdigit() else 1
+
+
+def display_rank(signal: RawSignal) -> float:
+    """信号在看板上的重要度（0~1）：潜在空间(大小) 与 形态强弱(深浅) 的加权综合。
+
+    看板满员时按此分数从高到低取前 top_n——小而淡的先被淘汰，大或深的留下，与前端
+    「大小=潜在空间、深浅=强弱」两维视觉对齐。不再纯按 strength 淘汰（那会把大而淡
+    的一类挤掉、留下小而深的三类，看起来不符合直觉）。
+    """
+    space = _LEVEL_SPACE.get(_signal_level(signal.signal_type), _LEVEL_SPACE[1])
+    return _DISPLAY_SPACE_WEIGHT * space + _DISPLAY_STRENGTH_WEIGHT * signal.strength
 
 
 def build_signal_history(symbol: str, name: str, result: ChanAnalysisResult) -> list[RawSignal]:
@@ -105,15 +146,22 @@ def build_signal_history(symbol: str, name: str, result: ChanAnalysisResult) -> 
 
 def build_days(
     histories: list[list[RawSignal]], trading_days: list[str], *, top_n: int,
+    max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
 ) -> list[RadarDayOut]:
     """按 trading_days（最新在前）逐日重建市场快照。
 
     histories 是「每只股票的信号历史」的列表（每条已按日期升序）。对每个展示日
     D，每只股票取它历史里日期 <= D 的最后一条作为「D 当天在场」的信号；股票数量
     很小（几十到上百），这里用线性扫描换清晰，不做二分。
+
+    过期上限（max_age_days）：某只股票在 D 当天的在场信号，若其诞生日距离 D 已超过
+    max_age_days 个自然日，则视为过期、当天不再展示（相对每个展示日各自判断，翻看
+    历史某天时看到的仍是「截至那天 max_age_days 内有效」的信号）。见模块内
+    _MAX_SIGNAL_AGE_DAYS 说明。
     """
     out: list[RadarDayOut] = []
     for day in trading_days:
+        day_date = date.fromisoformat(day)
         active: list[RawSignal] = []
         for history in histories:
             candidate: RawSignal | None = None
@@ -122,9 +170,12 @@ def build_days(
                     break
                 candidate = r
             if candidate is not None:
+                age = (day_date - date.fromisoformat(candidate.date)).days
+                if age > max_age_days:
+                    continue
                 active.append(candidate)
 
-        items = sorted(active, key=lambda r: r.strength, reverse=True)[:top_n]
+        items = sorted(active, key=display_rank, reverse=True)[:top_n]
         out.append(RadarDayOut(
             date=day,
             buy_count=sum(1 for r in items if r.side == "buy"),
@@ -208,13 +259,21 @@ def _classify_failure(exc: Exception) -> str:
     return "other"
 
 
-def _cache_key(market: str) -> str:
-    return f"{_CACHE_PREFIX}:{market}"
+def _cache_key(market: str, universe_key: str) -> str:
+    return f"{_CACHE_PREFIX}:{market}:{universe_key}"
 
 
-async def _read_cache(redis: Redis, market: str) -> SignalRadarResponse | None:
+def _universes_out(market: str) -> list[RadarUniverseOut]:
+    """该市场可选 universe 列表（默认在前），用于响应里的切换器选项。"""
+    return [
+        RadarUniverseOut(key=u.key, name=u.etf_name, is_default=u.is_default)
+        for u in list_universes(market)
+    ]
+
+
+async def _read_cache(redis: Redis, market: str, universe_key: str) -> SignalRadarResponse | None:
     try:
-        rawval = await redis.get(_cache_key(market))
+        rawval = await redis.get(_cache_key(market, universe_key))
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_cache_read_error", market=market, error=str(e))
         return None
@@ -229,22 +288,26 @@ async def _read_cache(redis: Redis, market: str) -> SignalRadarResponse | None:
 
 async def _write_cache(redis: Redis, data: SignalRadarResponse) -> None:
     try:
-        await redis.set(_cache_key(data.market), data.model_dump_json(), ex=_CACHE_TTL)
+        await redis.set(
+            _cache_key(data.market, data.universe), data.model_dump_json(), ex=_CACHE_TTL
+        )
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_cache_write_error", market=data.market, error=str(e))
 
 
 async def compute_market(
     market: str, *, redis: Redis, user_id: int | None = None,
+    universe_key: str | None = None,
     days: int = 30, window: int = 45, top_n: int = 10,
+    max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
 ) -> SignalRadarResponse:
-    """全量扫描一个市场并按日重建市场快照（不读缓存，计算完写入缓存）。"""
-    universe = get_universe(market)
+    """全量扫描一个 (市场, universe) 并按日重建快照（不读缓存，计算完写入缓存）。"""
+    universe = get_universe(market, universe_key)
     if universe is None:
-        raise ValueError(f"unsupported market: {market}")
+        raise ValueError(f"unsupported market/universe: {market}/{universe_key}")
 
-    # 成分股：优先 FMP ETF 持仓动态刷新，取不到回退 curated 静态清单。
-    constituents = await resolve_constituents(market, redis=redis)
+    # 成分股：按 universe 来源策略动态刷新，取不到回退 curated 静态清单。
+    constituents = await resolve_constituents(market, redis=redis, universe_key=universe.key)
 
     today = date.today()
     end_date = today.isoformat()
@@ -287,11 +350,13 @@ async def compute_market(
 
     resp = SignalRadarResponse(
         market=market,
+        universe=universe.key,
+        universes=_universes_out(market),
         etf_name=universe.etf_name,
         universe_size=len(constituents),
         as_of=end_date,
         top_n=top_n,
-        days=build_days(histories, trading_days, top_n=top_n),
+        days=build_days(histories, trading_days, top_n=top_n, max_age_days=max_age_days),
         status="ready",
     )
     failed_symbols = sum(failure_counts.values())
@@ -308,7 +373,7 @@ async def compute_market(
     # 只有「已经有一份旧缓存能保底」时才这么做；首次扫描没有旧缓存可保，再差也
     # 得写进去，不然用户永远看不到任何数据。
     if failure_rate > _MAX_ACCEPTABLE_FAILURE_RATE:
-        stale = await _read_cache(redis, market)
+        stale = await _read_cache(redis, market, universe.key)
         if stale is not None:
             logger.warning(
                 "signal_radar_scan_degraded_keep_stale_cache",
@@ -321,20 +386,31 @@ async def compute_market(
     return resp
 
 
-async def peek_cache(redis: Redis, market: str) -> SignalRadarResponse | None:
+async def peek_cache(
+    redis: Redis, market: str, universe_key: str | None = None
+) -> SignalRadarResponse | None:
     """只读缓存（不触发扫描），供 API 的 generating 轮询模式使用。"""
-    return await _read_cache(redis, market)
+    universe = get_universe(market, universe_key)
+    if universe is None:
+        return None
+    return await _read_cache(redis, market, universe.key)
 
 
 async def get_market(
     market: str, *, redis: Redis, user_id: int | None = None,
+    universe_key: str | None = None,
     days: int = 30, window: int = 45, top_n: int = 10, force: bool = False,
+    max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
 ) -> SignalRadarResponse:
     """读缓存优先；未命中则同步扫描（首访较慢，命中后走缓存）。"""
+    universe = get_universe(market, universe_key)
+    if universe is None:
+        raise ValueError(f"unsupported market/universe: {market}/{universe_key}")
     if not force:
-        cached = await _read_cache(redis, market)
+        cached = await _read_cache(redis, market, universe.key)
         if cached is not None:
             return cached
     return await compute_market(
-        market, redis=redis, user_id=user_id, days=days, window=window, top_n=top_n,
+        market, redis=redis, user_id=user_id, universe_key=universe.key,
+        days=days, window=window, top_n=top_n, max_age_days=max_age_days,
     )

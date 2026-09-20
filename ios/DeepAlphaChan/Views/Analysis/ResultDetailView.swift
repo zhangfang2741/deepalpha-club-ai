@@ -104,7 +104,10 @@ struct ResultDetailView: View {
     private var starButton: some View {
         Button {
             let symbol = vm.symbol.uppercased()
-            Task { await watchlistVM.toggle(market: vm.market, symbol: symbol, name: symbol) }
+            // 有真实名称就存名称，没有则退回代码（后端 name 非空约束）。自选列表
+            // 侧再判断 name==代码时不重复显示，见 WatchlistItem.displayName。
+            let name = vm.displayName ?? symbol
+            Task { await watchlistVM.toggle(market: vm.market, symbol: symbol, name: name) }
         } label: {
             Image(systemName: isStarred ? "star.fill" : "star")
                 .foregroundColor(isStarred ? Theme.segment : nil)

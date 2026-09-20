@@ -1,8 +1,25 @@
 import Foundation
 
-/// 信号雷达：某市场最近若干交易日的每日缠论买卖点。
+/// 一个可选的扫描 universe（科技窄基 / 大盘宽基），供左上角切换器用。
+struct RadarUniverse: Decodable, Identifiable, Equatable {
+    let key: String       // nasdaq100 / sp500 …
+    let name: String      // 纳斯达克100 / 标普500 …
+    let isDefault: Bool
+
+    var id: String { key }
+
+    enum CodingKeys: String, CodingKey {
+        case key, name
+        case isDefault = "is_default"
+    }
+}
+
+/// 信号雷达：某 (市场, universe) 最近若干交易日的每日缠论买卖点。
 struct SignalRadarResponse: Decodable {
     let market: String
+    /// 当前 universe 键 + 可选项：给默认值，兼容部署切换期缺字段的旧缓存响应。
+    var universe: String = ""
+    var universes: [RadarUniverse] = []
     let etfName: String
     let universeSize: Int
     let asOf: String
@@ -12,6 +29,8 @@ struct SignalRadarResponse: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case market
+        case universe
+        case universes
         case etfName = "etf_name"
         case universeSize = "universe_size"
         case asOf = "as_of"

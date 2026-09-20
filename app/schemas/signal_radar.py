@@ -31,11 +31,23 @@ class RadarDayOut(BaseModel):
     signals: list[RadarSignalOut] = Field(default_factory=list, description="当日信号，按强度降序")
 
 
+class RadarUniverseOut(BaseModel):
+    """一个可选的扫描 universe（供前端左上角切换器）。"""
+
+    key: str = Field(description="universe 唯一键，如 nasdaq100 / sp500")
+    name: str = Field(description="展示名，如 纳斯达克100 / 标普500")
+    is_default: bool = Field(default=False, description="是否该市场默认 universe")
+
+
 class SignalRadarResponse(BaseModel):
-    """信号雷达响应：某市场最近若干交易日的每日信号。"""
+    """信号雷达响应：某 (市场, universe) 最近若干交易日的每日信号。"""
 
     market: str = Field(description="市场：us / cn / hk")
-    etf_name: str = Field(description="扫描所用科技 ETF 名称")
+    universe: str = Field(default="", description="当前 universe 键，如 nasdaq100 / sp500")
+    universes: list[RadarUniverseOut] = Field(
+        default_factory=list, description="该市场可选的全部 universe（默认在前）"
+    )
+    etf_name: str = Field(description="当前 universe 展示名（标题用）")
     universe_size: int = Field(description="扫描的成分股数量")
     as_of: str = Field(description="数据生成时间 YYYY-MM-DD")
     top_n: int = Field(description="每日展示的信号条数上限")

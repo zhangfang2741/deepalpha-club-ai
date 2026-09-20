@@ -12,6 +12,7 @@ from app.cache.client import current_redis
 from app.core.config import settings
 from app.core.logging import logger
 from app.services.signal_radar.service import compute_market
+from app.services.signal_radar.universe import all_universes
 
 # 启动后先等一会儿再首扫，避开启动期其它预热任务抢资源。
 _STARTUP_DELAY_SECONDS = 45
@@ -22,14 +23,28 @@ async def _prewarm_once() -> None:
     if redis is None:
         logger.warning("signal_radar_prewarm_no_redis")
         return
-    for market in settings.SIGNAL_RADAR_PREWARM_MARKETS:
+    markets = set(settings.SIGNAL_RADAR_PREWARM_MARKETS)
+    prewarm_broad = settings.SIGNAL_RADAR_PREWARM_BROAD_ENABLED
+    # 遍历所有 (市场, universe)。串行执行：大盘宽基成分多，避免多套扫描并发抢数据源。
+    for u in all_universes():
+        if u.market not in markets:
+            continue
+        # 非默认（大盘宽基）universe 由独立开关控制，关掉则跳过、走首访按需扫。
+        if not u.is_default and not prewarm_broad:
+            continue
         try:
-            resp = await compute_market(market, redis=redis, user_id=None)
-            logger.info("signal_radar_prewarmed", market=market, days=len(resp.days))
+            resp = await compute_market(
+                u.market, redis=redis, user_id=None, universe_key=u.key
+            )
+            logger.info(
+                "signal_radar_prewarmed", market=u.market, universe=u.key, days=len(resp.days)
+            )
         except asyncio.CancelledError:
             raise
-        except Exception as e:  # noqa: BLE001 单个市场失败不影响其余
-            logger.exception("signal_radar_prewarm_market_failed", market=market, error=str(e))
+        except Exception as e:  # noqa: BLE001 单个 universe 失败不影响其余
+            logger.exception(
+                "signal_radar_prewarm_market_failed", market=u.market, universe=u.key, error=str(e)
+            )
 
 
 async def run_signal_radar_prewarm_scheduler() -> None:

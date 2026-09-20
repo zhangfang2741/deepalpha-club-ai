@@ -14,6 +14,16 @@ struct WatchlistItem: Decodable, Identifiable {
         case market, symbol, name
         case createdAt = "created_at"
     }
+
+    /// 列表副标题用的显示名：只有当 name 是真正有别于代码的名称时才返回。
+    /// 后端拿不到名称时会把 name 回落成代码本身（如「2015」的 name 也是「2015」），
+    /// 这时返回 nil，避免副标题原样重复上面的代码（「NVDA / NVDA」这种）。
+    var displayName: String? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              trimmed.caseInsensitiveCompare(symbol) != .orderedSame else { return nil }
+        return trimmed
+    }
 }
 
 struct WatchlistResponse: Decodable {

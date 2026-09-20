@@ -24,6 +24,11 @@ final class ChanViewModel: ObservableObject {
     @Published var startDate: Date
     @Published var endDate: Date
 
+    /// 当前标的的展示名称（如「中芯国际」）。仅在入口能提供真实名称时才有值
+    /// （如从信号雷达点气泡进来）；手动输入代码等无名称的入口为 nil。加自选时
+    /// 用它，拿不到就退回代码——避免自选里副标题原样重复代码。
+    @Published var displayName: String?
+
     // 分析结果
     @Published var analysis: ChanAnalysis?
     @Published var isLoading = false
@@ -66,9 +71,13 @@ final class ChanViewModel: ObservableObject {
     /// 选中的 A 股去查一个美股代码。同理，任何「市场变了就清空代码」的联动都
     /// 不能挂在 `market` 的数据变化上，否则会把这里刚设好的代码清掉
     /// （见 QueryBar.marketBinding）。
-    func apply(market: StockMarket, symbol: String) {
+    /// name 只在入口能提供真实名称时传（如信号雷达气泡）；不传则清空 displayName，
+    /// 避免沿用上一只标的的名称串到这一只上。
+    func apply(market: StockMarket, symbol: String, name: String? = nil) {
         self.market = market
         self.symbol = symbol.trimmingCharacters(in: .whitespaces).uppercased()
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.displayName = (trimmed?.isEmpty == false) ? trimmed : nil
     }
 
     // MARK: - 缠论分析
