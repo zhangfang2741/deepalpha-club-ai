@@ -37,10 +37,10 @@ struct AnalysisSection: View {
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
 
-                trendBlock
+                progressBlock
 
                 Divider().overlay(Theme.border)
-                progressBlock
+                trendBlock
 
                 Divider().overlay(Theme.border)
                 evidenceDisclosure
@@ -83,6 +83,14 @@ struct AnalysisSection: View {
             }
             VStack(alignment: .leading, spacing: 9) {
                 ForEach(ChanPhase.steps(analysis)) { step in stepRow(step) }
+            }
+            // 为什么就在这一步：把判断依据贴进阶段本身，而不是丢到另一个折叠区
+            HStack(alignment: .top, spacing: 6) {
+                Text(L("因为")).font(.caption2.weight(.semibold)).foregroundColor(Theme.accent)
+                Text(ChanPhase.reason(analysis))
+                    .font(.caption2).foregroundColor(Theme.textSecondary)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let branches = ChanPhase.branches(analysis) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -424,6 +432,21 @@ enum ChanPhase {
             steps.append(PhaseStep(state: .wait, text: L("等待向上突破 ZG 或跌破 ZD")))
         }
         return steps
+    }
+
+    /// 为什么当前就在这一步：给出决定阶段的那条结构依据（贴进阶段，回答「原因」）。
+    static func reason(_ a: ChanAnalysis) -> String {
+        guard let p = a.strokePivots.last, let close = a.mergedCandles.last?.close else {
+            return L("走势还在单边推进，三段没重叠，围不出中枢。")
+        }
+        if close > p.zg {
+            return L("现价 %1$@ 已站上 ZG %2$@，最新向上笔离开了中枢区间。", fmt(close), fmt(p.zg))
+        }
+        if close < p.zd {
+            return L("现价 %1$@ 已跌破 ZD %2$@，最新向下笔离开了中枢区间。", fmt(close), fmt(p.zd))
+        }
+        return L("现价 %1$@ 仍在 %2$@–%3$@ 区间内反复重叠，中枢在延伸。",
+                 fmt(close), fmt(p.zd), fmt(p.zg))
     }
 
     /// 下一步的可能分支（两条），已确认到位时返回 nil。

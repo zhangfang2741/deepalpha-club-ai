@@ -498,3 +498,8 @@
 "反抽升回中枢 → 回到震荡" = "Bounce re-enters pivot → back to oscillation";
 "向上突破 ZG → 进入上涨离开段" = "Break above ZG → up exit leg";
 "向下跌破 ZD → 进入下跌离开段" = "Break below ZD → down exit leg";
+"因为" = "Because";
+"走势还在单边推进，三段没重叠，围不出中枢。" = "Price is still moving one way — no three moves overlap, so no pivot forms.";
+"现价 %1$@ 已站上 ZG %2$@，最新向上笔离开了中枢区间。" = "Price %1$@ is above ZG %2$@ — the latest up stroke has left the pivot range.";
+"现价 %1$@ 已跌破 ZD %2$@，最新向下笔离开了中枢区间。" = "Price %1$@ is below ZD %2$@ — the latest down stroke has left the pivot range.";
+"现价 %1$@ 仍在 %2$@–%3$@ 区间内反复重叠，中枢在延伸。" = "Price %1$@ keeps overlapping the %2$@–%3$@ range — the pivot is extending.";
