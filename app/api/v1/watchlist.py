@@ -21,7 +21,14 @@ async def list_watchlist(
     items = await store.list_items(db, user.id)
     return WatchlistResponse(
         items=[
-            WatchlistItemOut(market=i.market, symbol=i.symbol, name=i.name, created_at=i.created_at)
+            WatchlistItemOut(
+                market=i.market,
+                symbol=i.symbol,
+                # 历史上只存了代码的老条目，读取时用 curated 成分清单补中文名（如 2015
+                # → 理想汽车），不必等用户重新加入。
+                name=store.display_name(i.market, i.symbol, i.name),
+                created_at=i.created_at,
+            )
             for i in items
         ]
     )
