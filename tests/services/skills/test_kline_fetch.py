@@ -109,6 +109,45 @@ async def test_fetch_yahoo_parses_and_skips_null_rows(monkeypatch):
     assert bars[1]["volume"] == 200.0
 
 
+async def test_fetch_fmp_intraday_5min_parses_and_sorts(monkeypatch):
+    """日内 5min：走 intraday 端点，返回按时间升序整理的未复权 OHLCV。"""
+    monkeypatch.setattr(kline, "_FMP_KEY", "test-key")
+
+    captured = {}
+
+    def fake_get(url, params=None, timeout=None):
+        captured["url"] = url
+        # FMP 日内端点返回时间倒序
+        return _FakeResp(200, [
+            {"date": "2026-09-18 15:55:00", "open": 2, "high": 3, "low": 1, "close": 2.5, "volume": 20},
+            {"date": "2026-09-18 15:50:00", "open": 1, "high": 2, "low": 0.5, "close": 1.5, "volume": 10},
+        ])
+
+    monkeypatch.setattr(kline.httpx, "get", fake_get)
+
+    bars = await kline._fetch_fmp("AAPL", "2026-09-15", "2026-09-18", "5min")
+
+    assert "historical-chart/5min" in captured["url"]
+    assert [b["time"] for b in bars] == ["2026-09-18 15:50:00", "2026-09-18 15:55:00"]
+    assert bars[0]["close"] == 1.5
+
+
+async def test_fetch_fmp_intraday_402_raises_readable_error(monkeypatch):
+    """套餐不含日内数据（402）：抛出可读中文错误。"""
+    monkeypatch.setattr(kline, "_FMP_KEY", "test-key")
+    monkeypatch.setattr(kline.httpx, "get", lambda *a, **k: _FakeResp(402))
+
+    with pytest.raises(ValueError, match="不支持日内"):
+        await kline._fetch_fmp("AAPL", "2026-09-15", "2026-09-18", "30min")
+
+
+def test_intraday_cache_key_uses_raw_namespace():
+    """日内缓存键用 raw 命名空间，与日线 qfq 隔离。"""
+    assert ":raw:" in kline._cache_key(1, "AAPL", "a", "b", "5min")
+    assert ":qfq:" in kline._cache_key(1, "AAPL", "a", "b", "daily")
+    assert kline._is_intraday("30min") and not kline._is_intraday("weekly")
+
+
 def test_forward_adjust_scales_ohl_by_ratio():
     """复权价低于原始收盘时，等比回调 open/high/low，close 取 adjClose。"""
     o, h, low_, c = kline._forward_adjust(100.0, 110.0, 90.0, 100.0, 50.0)

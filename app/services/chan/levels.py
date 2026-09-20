@@ -24,10 +24,14 @@ if TYPE_CHECKING:
 # freq → 各结构级别对应的时间周期标签。缠论递归关系：本级别的线段 ≈ 高一级别的笔，
 # 故「笔」对应本级别（图上所选周期），「线段」对应高一级别（更大的时间周期）。
 _TF_LABELS: dict[str, dict[str, str]] = {
+    "5min": {"stroke": "5分 5F", "segment": "30分 30F"},
+    "30min": {"stroke": "30分 30F", "segment": "日线 1D"},
     "daily": {"stroke": "日线 1D", "segment": "周线 1W"},
     "weekly": {"stroke": "周线 1W", "segment": "月线 1M"},
 }
 _TF_LABELS_EN: dict[str, dict[str, str]] = {
+    "5min": {"stroke": "5m 5F", "segment": "30m 30F"},
+    "30min": {"stroke": "30m 30F", "segment": "Daily 1D"},
     "daily": {"stroke": "Daily 1D", "segment": "Weekly 1W"},
     "weekly": {"stroke": "Weekly 1W", "segment": "Monthly 1M"},
 }

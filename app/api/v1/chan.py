@@ -38,8 +38,9 @@ from app.services.skills.kline import fetch_kline
 router = APIRouter()
 _analyzer = ChanAnalyzer()
 
-# 窗口锚定的 warmup 天数：足够覆盖缠论左边界依赖的收敛区（实测 ~30 根合并K线）
-_WARMUP_DAYS = {"daily": 180, "weekly": 540}
+# 窗口锚定的 warmup 天数：足够覆盖缠论左边界依赖的收敛区（实测 ~30 根合并K线）。
+# 日内级别（5min/30min）历史很短，warmup 也按日历天给少量冗余即可。
+_WARMUP_DAYS = {"daily": 180, "weekly": 540, "5min": 4, "30min": 15}
 
 
 def _anchor_start(start_date: str, freq: str) -> str:
@@ -70,7 +71,7 @@ async def chan_analysis(
     symbol: str = Query(description="股票代码，如 AAPL"),
     start_date: str = Query(description="开始日期，格式 YYYY-MM-DD"),
     end_date: str = Query(description="结束日期，格式 YYYY-MM-DD"),
-    freq: str = Query(default="daily", description="K线周期：daily / weekly"),
+    freq: str = Query(default="daily", description="K线周期：daily / weekly / 5min / 30min（日内仅美股）"),
     lang: str = Query(default="zh", description="分析文案语言：zh / en"),
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),

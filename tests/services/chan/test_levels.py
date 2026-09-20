@@ -134,6 +134,21 @@ def test_latest_signal_only_on_stroke_level():
     assert "一买" in lp.latest_signal_label
 
 
+def test_intraday_tf_labels_5f_30f():
+    r = ChanAnalysisResult(symbol="T", bars_count=0)
+    r.strokes = [_stroke("up", 0, 100, 110)]
+    r.merged_candles = [_mc(0, 110)]
+    from app.services.chan.segment import Segment
+    r.segments = [Segment(direction="up", strokes=[_stroke("up", 0, 100, 110),
+                  _stroke("down", 1, 110, 105), _stroke("up", 2, 105, 120)])]
+    five = build_level_progress(r, freq="5min")
+    assert five[0].tf_label == "5分 5F"      # 笔=本级别
+    assert five[1].tf_label == "30分 30F"    # 线段=高一级别
+    thirty = build_level_progress(r, freq="30min")
+    assert thirty[0].tf_label == "30分 30F"
+    assert thirty[1].tf_label == "日线 1D"
+
+
 def test_english_detail():
     r = ChanAnalysisResult(symbol="T", bars_count=0)
     r.strokes = [_stroke("up", 0, 100, 110)]

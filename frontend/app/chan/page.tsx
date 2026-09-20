@@ -10,9 +10,15 @@ import { ConceptGuide } from '@/components/chan/ConceptGuide'
 import DashboardShell from '@/components/layout/DashboardShell'
 
 const DEFAULT_SYMBOL = 'AAPL'
+const DAY = 24 * 60 * 60 * 1000
 const TODAY = new Date().toISOString().split('T')[0]
-const SIX_MONTHS_AGO = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-const TWO_YEARS_AGO = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+const SIX_MONTHS_AGO = new Date(Date.now() - 180 * DAY).toISOString().split('T')[0]
+const TWO_YEARS_AGO = new Date(Date.now() - 730 * DAY).toISOString().split('T')[0]
+// 日内级别历史很短：5min ~10 个交易日、30min 几十天，起始日期取近端即可
+const SEVEN_DAYS_AGO = new Date(Date.now() - 7 * DAY).toISOString().split('T')[0]
+const THIRTY_DAYS_AGO = new Date(Date.now() - 30 * DAY).toISOString().split('T')[0]
+
+type Freq = 'daily' | 'weekly' | '5min' | '30min'
 
 function DateInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
@@ -32,7 +38,7 @@ export default function ChanPage() {
   const [symbol, setSymbol] = useState(DEFAULT_SYMBOL)
   const [startDate, setStartDate] = useState(SIX_MONTHS_AGO)
   const [endDate, setEndDate] = useState(TODAY)
-  const [freq, setFreq] = useState<'daily' | 'weekly'>('daily')
+  const [freq, setFreq] = useState<Freq>('daily')
   const [result, setResult] = useState<ChanAnalysisResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -44,10 +50,14 @@ export default function ChanPage() {
   const [showSignals, setShowSignals] = useState(true)
   const [showMacd, setShowMacd] = useState(true)
 
-  // 切换周期：周线需要更长区间才能识别出结构，自动放宽起始日期
-  const handleFreqChange = (next: 'daily' | 'weekly') => {
+  // 切换周期：不同周期需要的区间跨度不同，自动把起始日期调到合适范围
+  const handleFreqChange = (next: Freq) => {
     setFreq(next)
     if (next === 'weekly' && startDate > TWO_YEARS_AGO) setStartDate(TWO_YEARS_AGO)
+    // 日内级别历史很短：把起始日期收到近端，避免请求过长空窗
+    else if (next === '5min') setStartDate(SEVEN_DAYS_AGO)
+    else if (next === '30min') setStartDate(THIRTY_DAYS_AGO)
+    else if (next === 'daily' && startDate < SIX_MONTHS_AGO) setStartDate(SIX_MONTHS_AGO)
   }
 
   const handleAnalyze = useCallback(async () => {
@@ -77,6 +87,11 @@ export default function ChanPage() {
           <p className="text-sm text-slate-400">
             基于缠中说禅理论，自动识别分型、笔、线段、中枢，判断背驰，生成三类买卖点
           </p>
+          {(freq === '5min' || freq === '30min') && (
+            <p className="text-xs text-amber-400/80">
+              ⓘ 日内级别（5分/30分）目前仅支持美股，且为<b>未复权</b>原始价（日内窗口短，除息影响极小）；历史深度有限。
+            </p>
+          )}
         </div>
 
         {/* 参数输入 */}
@@ -98,9 +113,11 @@ export default function ChanPage() {
             <label className="text-xs font-medium text-slate-400">周期</label>
             <select
               value={freq}
-              onChange={(e) => handleFreqChange(e.target.value as 'daily' | 'weekly')}
+              onChange={(e) => handleFreqChange(e.target.value as Freq)}
               className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
+              <option value="5min">5分（美股）</option>
+              <option value="30min">30分（美股）</option>
               <option value="daily">日线</option>
               <option value="weekly">周线</option>
             </select>
@@ -174,6 +191,7 @@ export default function ChanPage() {
             <div className="h-[70vh] lg:h-auto min-h-0 rounded-xl overflow-hidden bg-slate-900 border border-slate-800 p-3">
               <ChanChart
                 data={result}
+                freq={freq}
                 showStrokes={showStrokes}
                 showSegments={showSegments}
                 showPivots={showPivots}

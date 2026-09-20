@@ -16,7 +16,7 @@ interface Props {
   symbol: string
   startDate: string
   endDate: string
-  freq: 'daily' | 'weekly'
+  freq: 'daily' | 'weekly' | '5min' | '30min'
 }
 
 // 快选维度：点一下即可给出产业判断的骨架，值直接对应 gap 的比对维度

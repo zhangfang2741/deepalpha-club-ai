@@ -34,7 +34,18 @@ _FMP_KEY = os.environ.get("FMP_API_KEY", "")
 # dividend-adjusted 返回 adjOpen/adjHigh/adjLow/adjClose，按「最新价不变、历史价
 # 回调」的前复权口径，与东方财富 fqt=1、Yahoo adjclose 一致。
 _FMP_URL = "https://financialmodelingprep.com/stable/historical-price-eod/dividend-adjusted"
-_CACHE_TTL = 3600 * 24  # 24h
+# 日内（分钟级）端点：FMP 的 intraday chart 仅提供**未复权**原始价（无 adjClose）。
+# 缠论本要求全链路前复权，但日内分析窗口很短（5min 仅 ~10 个交易日、30min 几十天），
+# 除息几乎不会落在窗口内，故日内级别接受「未复权」这一显式例外（见 CLAUDE.md）。
+_FMP_INTRADAY_URL = "https://financialmodelingprep.com/stable/historical-chart/{interval}"
+# 支持的日内周期 → FMP interval 路径段
+_INTRADAY_INTERVALS = {"5min": "5min", "30min": "30min"}
+_CACHE_TTL = 3600 * 24  # 24h（日线/周线）
+_INTRADAY_CACHE_TTL = 600  # 10min（日内数据盘中会变，缓存短一些）
+
+
+def _is_intraday(freq: str) -> bool:
+    return freq in _INTRADAY_INTERVALS
 
 
 def _forward_adjust(
@@ -58,8 +69,9 @@ class _RateLimitError(Exception):
 
 def _cache_key(user_id: int | None, symbol: str, start: str, end: str, freq: str) -> str:
     prefix = f"u{user_id}" if user_id else "public"
-    # 命名空间带 qfq：切换到前复权后，旧的不复权缓存不能再被命中
-    return f"skill_kline:qfq:{prefix}:{symbol}:{start}:{end}:{freq}"
+    # 命名空间区分复权口径：日线/周线为前复权(qfq)，日内为未复权(raw)——两者不能互相命中
+    ns = "raw" if _is_intraday(freq) else "qfq"
+    return f"skill_kline:{ns}:{prefix}:{symbol}:{start}:{end}:{freq}"
 
 
 # 市场判别已提升到 app/utils/market.py：这里原本只区分「6 位数字 = A 股，
@@ -100,18 +112,26 @@ async def fetch_kline(
     # chart 接口海外可达，且同样覆盖港股（0700.HK）与 A 股（600519.SS/000001.SZ），
     # 代码形态与 fmp_symbol() 一致。东方财富保留为回退，供中国大陆部署/开发时兜底
     # （彼时 Yahoo 可能被墙）。
+    # 日内（分钟级）目前仅美股走 FMP intraday；A 股/港股日内暂不支持，给出可读提示
+    if _is_intraday(freq) and market is not Market.US:
+        raise ValueError("日内级别（5分/30分）目前仅支持美股，A股/港股请使用日线或周线")
+
     if market is Market.US:
         bars = await _fetch_fmp(fmp_symbol(symbol), start_date, end_date, freq)
     else:
         bars = await _fetch_cn_hk(symbol, start_date, end_date, freq)
 
     if redis and bars:
-        await set_json(redis, cache_key, bars, expire=_CACHE_TTL)
+        ttl = _INTRADAY_CACHE_TTL if _is_intraday(freq) else _CACHE_TTL
+        await set_json(redis, cache_key, bars, expire=ttl)
 
     return bars
 
 
 async def _fetch_fmp(symbol: str, start: str, end: str, freq: str) -> list[dict]:
+    if _is_intraday(freq):
+        return await _fetch_fmp_intraday(symbol, start, end, freq)
+
     import asyncio
     from concurrent.futures import ThreadPoolExecutor
 
@@ -174,6 +194,71 @@ async def _fetch_fmp(symbol: str, start: str, end: str, freq: str) -> list[dict]
     if freq == "weekly":
         return _resample_weekly(daily)
     return daily
+
+
+async def _fetch_fmp_intraday(symbol: str, start: str, end: str, freq: str) -> list[dict]:
+    """拉取 FMP 分钟级 K 线（未复权原始价）。
+
+    intraday 端点返回按时间倒序的 {date, open, high, low, close, volume}，date 含具体
+    时刻（如 "2026-09-18 15:55:00"）。此处升序整理，字段与日线对齐。日内历史有限
+    （5min ~10 个交易日、30min 几十天），拿到多少用多少。
+    """
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    if not _FMP_KEY:
+        raise ValueError("数据源未配置：缺少 FMP_API_KEY 环境变量，请联系管理员")
+
+    interval = _INTRADAY_INTERVALS[freq]
+    url = _FMP_INTRADAY_URL.format(interval=interval)
+
+    @retry(
+        retry=retry_if_exception_type((_RateLimitError, httpx.TransportError)),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=8),
+        reraise=True,
+    )
+    def _sync():
+        resp = httpx.get(
+            url,
+            params={"symbol": symbol, "from": start, "to": end, "apikey": _FMP_KEY},
+            timeout=30,
+        )
+        if resp.status_code == 401:
+            raise ValueError("数据源认证失败：FMP_API_KEY 无效")
+        if resp.status_code == 402:
+            # 低档套餐不含日内数据
+            raise ValueError("当前 FMP 套餐不支持日内（分钟级）行情，请使用日线或周线")
+        if resp.status_code == 429:
+            raise _RateLimitError
+        resp.raise_for_status()
+        raw = resp.json()
+        if isinstance(raw, dict):
+            err = raw.get("Error Message") or raw.get("error")
+            if err:
+                raise ValueError(f"数据源返回错误：{err}")
+            records = []
+        else:
+            records = raw
+        records = [r for r in records if r.get("date")]
+        records.sort(key=lambda r: r["date"])
+        # 日内端点为未复权原始价，无 adj 字段
+        return [
+            {"time": r["date"],
+             "open": r.get("open"),
+             "high": r.get("high"),
+             "low": r.get("low"),
+             "close": r.get("close"),
+             "volume": r.get("volume", 0)}
+            for r in records
+        ]
+
+    loop = asyncio.get_event_loop()
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            return await loop.run_in_executor(pool, _sync)
+    except _RateLimitError:
+        raise ValueError("数据源请求过于频繁，请稍后再试")
 
 
 def _resample_weekly(daily: list[dict]) -> list[dict]:

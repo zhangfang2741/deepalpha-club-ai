@@ -16,6 +16,7 @@ import {
 import type {
   ChanAnalysisResult,
   Fractal,
+  LevelProgress,
   Pivot,
   Signal,
   Stroke,
@@ -23,11 +24,30 @@ import type {
 
 interface Props {
   data: ChanAnalysisResult
+  freq?: string
   showStrokes?: boolean
   showSegments?: boolean
   showPivots?: boolean
   showSignals?: boolean
   showMacd?: boolean
+}
+
+// freq → 各级别时间周期短码（笔=本级别，线段=高一级别），用于图上标注中枢/买卖点级别
+const TF_SHORT: Record<string, { stroke: string; segment: string }> = {
+  '5min': { stroke: '5F', segment: '30F' },
+  '30min': { stroke: '30F', segment: '1D' },
+  daily: { stroke: '1D', segment: '1W' },
+  weekly: { stroke: '1W', segment: '1M' },
+}
+
+// 阶段代码 → 图上短标（走到哪一步）
+const STAGE_SHORT: Record<string, string> = {
+  building: '延伸中',
+  leaving_up: '离开↑',
+  leaving_down: '离开↓',
+  inside: '震荡',
+  no_pivot: '单边',
+  forming: '',
 }
 
 const SIGNAL_COLORS: Record<string, string> = {
@@ -47,12 +67,16 @@ const STRENGTH_SIZE: Record<string, 'small' | 'normal' | 'large'> = {
 
 export function ChanChart({
   data,
+  freq = 'daily',
   showStrokes = true,
   showSegments = true,
   showPivots = true,
   showSignals = true,
   showMacd = true,
 }: Props) {
+  const tf = TF_SHORT[freq] ?? TF_SHORT.daily
+  const stageByLevel: Record<string, string> = {}
+  for (const lp of data.level_progress ?? []) stageByLevel[lp.level] = STAGE_SHORT[lp.stage] ?? ''
   const klineRef = useRef<HTMLDivElement>(null)
   const macdRef = useRef<HTMLDivElement>(null)
   const klineChartRef = useRef<IChartApi | null>(null)
@@ -182,6 +206,9 @@ export function ChanChart({
     // ── 中枢（半透明矩形带 + 加粗边框，醒目标识震荡区）───────────
     if (showPivots) {
       const pivots = [...data.stroke_pivots, ...data.segment_pivots]
+      // 只在每个级别「最新」的中枢上标级别+阶段，避免逐个中枢标注造成图面拥挤
+      const lastStrokePivot = data.stroke_pivots[data.stroke_pivots.length - 1]
+      const lastSegPivot = data.segment_pivots[data.segment_pivots.length - 1]
       for (const pivot of pivots) {
         const isSeg = pivot.level === 'segment'
         // 未确认中枢：填充更淡、边框改虚线，提示区间仍可能延伸
@@ -222,6 +249,22 @@ export function ChanChart({
           { time: pivot.start_time as Time, value: pivot.zd },
           { time: pivot.end_time as Time, value: pivot.zd },
         ])
+
+        // 在每个级别最新的中枢上标注「级别 + 走到哪一步」（如 5F 延伸中 / 30F 离开↑）
+        if (pivot === lastStrokePivot || pivot === lastSegPivot) {
+          const tfCode = isSeg ? tf.segment : tf.stroke
+          const stageShort = stageByLevel[pivot.level] ?? ''
+          createSeriesMarkers(bandSeries, [
+            {
+              time: pivot.end_time as Time,
+              position: 'aboveBar',
+              color: borderColor,
+              shape: 'square',
+              text: stageShort ? `${tfCode}中枢·${stageShort}` : `${tfCode}中枢`,
+              size: 0,
+            },
+          ])
+        }
       }
     }
 
@@ -232,8 +275,8 @@ export function ChanChart({
         position: sig.is_buy ? 'belowBar' : 'aboveBar',
         color: SIGNAL_COLORS[sig.type] ?? '#ffffff',
         shape: sig.is_buy ? 'arrowUp' : 'arrowDown',
-        // 未确认信号追加 "?" 提示其为左侧预判、需后续K线验证
-        text: sig.confirmed ? sig.label : `${sig.label}?`,
+        // 标注级别（买卖点均为本级别/笔级）；未确认信号追加 "?" 提示需后续K线验证
+        text: `${sig.label}·${tf.stroke}${sig.confirmed ? '' : '?'}`,
         size: STRENGTH_SIZE[sig.strength] === 'large' ? 2 : STRENGTH_SIZE[sig.strength] === 'normal' ? 1.5 : 1,
       }))
       createSeriesMarkers(candleSeries, markers)
@@ -318,7 +361,7 @@ export function ChanChart({
       klineChartRef.current = null
       macdChartRef.current = null
     }
-  }, [data, showStrokes, showSegments, showPivots, showSignals, showMacd])
+  }, [data, freq, showStrokes, showSegments, showPivots, showSignals, showMacd])
 
   return (
     <div className="flex flex-col gap-2 h-full">
@@ -329,8 +372,8 @@ export function ChanChart({
           {showSegments && <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-emerald-500" />线段</span>}
           {showPivots && (
             <>
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded-sm bg-blue-500/30 border border-blue-400" />笔级中枢</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded-sm bg-purple-500/30 border border-purple-400" />线段级中枢</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded-sm bg-blue-500/30 border border-blue-400" />本级中枢·{tf.stroke}</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded-sm bg-purple-500/30 border border-purple-400" />高级中枢·{tf.segment}</span>
             </>
           )}
           <span className="flex items-center gap-1 text-slate-500"><span className="inline-block w-3 border-b border-dashed border-slate-400" />虚线/带 ? = 最右侧未确认</span>
