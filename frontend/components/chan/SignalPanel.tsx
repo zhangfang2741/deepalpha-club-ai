@@ -1,5 +1,5 @@
 'use client'
-import type { Signal, Pivot, Recommendation, ChanAnalysisResult } from '@/lib/api/chan'
+import type { Signal, Pivot, Recommendation, ChanAnalysisResult, LevelProgress } from '@/lib/api/chan'
 import { InfoTip } from './InfoTip'
 import {
   CHAN_TERM_MAP,
@@ -39,7 +39,7 @@ function TermLabel({ termKey, label }: { termKey: string; label: string }) {
   )
 }
 
-function SignalCard({ sig }: { sig: Signal }) {
+function SignalCard({ sig, tfLabel }: { sig: Signal; tfLabel?: string }) {
   const style = SIGNAL_STYLE[sig.type] ?? { bg: 'bg-slate-800', text: 'text-slate-300', border: 'border-slate-700' }
   const glossary = SIGNAL_GLOSSARY[sig.type]
   return (
@@ -49,6 +49,9 @@ function SignalCard({ sig }: { sig: Signal }) {
           <span className={`flex items-center gap-1 font-bold text-sm ${style.text}`}>
             {sig.label}
             {glossary && <InfoTip title={glossary.name} content={glossary.detail} side="left" />}
+          </span>
+          <span className="px-1.5 py-0.5 rounded bg-blue-900/40 text-blue-300 text-[10px] font-mono">
+            笔级{tfLabel ? ` · ${tfLabel.split(' ').pop()}` : ''}
           </span>
           {!sig.confirmed && (
             <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-950/50 text-amber-400 text-[10px] font-medium border border-amber-800/60">
@@ -81,13 +84,13 @@ function SignalCard({ sig }: { sig: Signal }) {
   )
 }
 
-function PivotRow({ pivot }: { pivot: Pivot }) {
+function PivotRow({ pivot, tfLabel }: { pivot: Pivot; tfLabel?: string }) {
   const isSegment = pivot.level === 'segment'
   return (
     <div className={`flex items-center justify-between text-xs py-2 border-b border-slate-800 ${isSegment ? 'text-violet-300' : 'text-blue-300'}`}>
       <div className="flex items-center gap-2">
         <span className={`px-1.5 py-0.5 rounded text-xs font-mono ${isSegment ? 'bg-violet-900/50' : 'bg-blue-900/50'}`}>
-          {isSegment ? '线段级' : '笔级'}
+          {isSegment ? '线段级' : '笔级'}{tfLabel ? ` · ${tfLabel.split(' ').pop()}` : ''}
         </span>
         {!pivot.confirmed && (
           <span className="px-1 py-0.5 rounded bg-amber-950/50 text-amber-400 text-[10px] border border-amber-800/60">延伸中</span>
@@ -181,7 +184,62 @@ function WalkOutlookCard({ walkType, outlook }: { walkType?: string; outlook?: s
   )
 }
 
+// 走势类型 → 配色（上涨绿、下跌红、盘整/无中枢中性）
+const WALK_STYLE: Record<string, { text: string; dot: string }> = {
+  up_trend: { text: 'text-green-400', dot: 'bg-green-400' },
+  down_trend: { text: 'text-red-400', dot: 'bg-red-400' },
+  consolidation: { text: 'text-amber-300', dot: 'bg-amber-400' },
+  none: { text: 'text-slate-400', dot: 'bg-slate-500' },
+}
+
+// 级别进度：把「哪个级别、走到第几步」用文字讲清楚（笔级=本级别，线段级=高一级别）
+function LevelProgressCard({ levels }: { levels: LevelProgress[] }) {
+  if (levels.length === 0) return null
+  return (
+    <div className="bg-slate-800/40 rounded-lg p-3">
+      <div className="flex items-center gap-1 text-xs text-slate-500 mb-2 font-semibold">
+        级别进度
+        <InfoTip
+          title="级别进度（走到哪一步）"
+          content="缠论按级别递归：图上「笔」是本级别（如日线 1D），「线段」是高一级别（≈周线 1W）。这里按级别列出各自已形成几个中枢、当前走势类型，以及走到哪一步（中枢延伸 / 离开段 / 接近背驰）。中枢与买卖点都标注了所属级别。仅描述现状，非投资建议。"
+          side="left"
+        />
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {levels.map((lp) => {
+          const s = WALK_STYLE[lp.walk_type] ?? WALK_STYLE.none
+          return (
+            <div key={lp.level} className="text-xs">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span
+                  className={`px-1.5 py-0.5 rounded font-mono text-[11px] ${
+                    lp.level === 'segment' ? 'bg-violet-900/50 text-violet-300' : 'bg-blue-900/50 text-blue-300'
+                  }`}
+                >
+                  {lp.level_name} · {lp.tf_label}
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${s.dot}`} />
+                  <span className={`font-semibold ${s.text}`}>{lp.walk_label}</span>
+                </span>
+                <span className="text-slate-500">· {lp.pivot_count} 个中枢</span>
+              </div>
+              <div className="text-slate-300 leading-relaxed pl-0.5">{lp.stage_label}</div>
+              {lp.latest_signal_label && (
+                <div className="text-[11px] text-slate-500 pl-0.5">最近买卖点：{lp.latest_signal_label}</div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export function SignalPanel({ data }: Props) {
+  const levelProgress = data.level_progress ?? []
+  const tfByLevel: Record<string, string> = {}
+  for (const lp of levelProgress) tfByLevel[lp.level] = lp.tf_label
   const recentSignals = [...data.signals].reverse().slice(0, 8)
   const allPivots = [...data.stroke_pivots, ...data.segment_pivots]
     .sort((a, b) => b.start_time.localeCompare(a.start_time))
@@ -268,6 +326,9 @@ export function SignalPanel({ data }: Props) {
       {/* 走势展望：延续 vs 转折（缠论走势分类） */}
       <WalkOutlookCard walkType={data.walk_type} outlook={data.trend_outlook} />
 
+      {/* 级别进度：各级别（笔级 / 线段级）走到哪一步 */}
+      <LevelProgressCard levels={levelProgress} />
+
       {/* 近期中枢 */}
       {allPivots.length > 0 && (
         <div>
@@ -277,7 +338,7 @@ export function SignalPanel({ data }: Props) {
           </div>
           <div>
             {allPivots.map((p, i) => (
-              <PivotRow key={i} pivot={p} />
+              <PivotRow key={i} pivot={p} tfLabel={tfByLevel[p.level]} />
             ))}
           </div>
         </div>
@@ -289,7 +350,7 @@ export function SignalPanel({ data }: Props) {
           <div className="text-xs font-semibold text-slate-400 mb-2">买卖点信号（最近8个）</div>
           <div className="flex flex-col gap-2">
             {recentSignals.map((sig, i) => (
-              <SignalCard key={i} sig={sig} />
+              <SignalCard key={i} sig={sig} tfLabel={tfByLevel['stroke']} />
             ))}
           </div>
         </div>

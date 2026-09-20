@@ -92,6 +92,20 @@ class MarketNarrativeOut(BaseModel):
     details: list[str]    # 分条解读（趋势 / 位置 / 量价 / 动能）
 
 
+class LevelProgressOut(BaseModel):
+    """单个结构级别（笔级 / 线段级）当前走到哪一步。"""
+    level: Literal["stroke", "segment"]
+    level_name: str                       # 级别名（笔级别 / 线段级别）
+    tf_label: str                         # 时间周期标签（日线 1D / 周线 1W ...）
+    pivot_count: int                      # 已形成的有效中枢数
+    walk_type: str                        # up_trend / down_trend / consolidation / none
+    walk_label: str                       # 走势类型人话
+    stage: str                            # 阶段代码
+    stage_label: str                      # 当前「走到哪一步」（一句话）
+    detail: str                           # 一句话汇总
+    latest_signal_label: Optional[str] = None  # 该级别最近买卖点（仅笔级别有）
+
+
 class StructureGapRequest(BaseModel):
     symbol: str
     start_date: str
@@ -144,4 +158,5 @@ class ChanAnalysisResponse(BaseModel):
     summary: str
     recommendation: Optional[RecommendationOut] = None
     narrative: Optional[MarketNarrativeOut] = None  # 大白话形态解读
+    level_progress: list[LevelProgressOut] = []  # 各级别（笔级 / 线段级）走到哪一步
     pending_notes: list[str] = []  # 最右侧未确认结构的提示

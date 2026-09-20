@@ -19,6 +19,7 @@ from app.schemas.chan import (
     FractalOut,
     GapItemOut,
     GapJobStatus,
+    LevelProgressOut,
     MACDOut,
     MarketNarrativeOut,
     MergedCandleOut,
@@ -104,7 +105,7 @@ async def chan_analysis(
     if not bars:
         raise HTTPException(status_code=404, detail=f"未获取到 {symbol} 的K线数据，请检查股票代码或日期范围")
 
-    result = _analyzer.analyze(symbol, bars, lang=lang, visible_from=start_date)
+    result = _analyzer.analyze(symbol, bars, lang=lang, visible_from=start_date, freq=freq)
 
     return ChanAnalysisResponse(
         symbol=result.symbol,
@@ -197,6 +198,21 @@ async def chan_analysis(
             headline=result.narrative.headline,
             details=result.narrative.details,
         ) if result.narrative else None,
+        level_progress=[
+            LevelProgressOut(
+                level=lp.level,
+                level_name=lp.level_name,
+                tf_label=lp.tf_label,
+                pivot_count=lp.pivot_count,
+                walk_type=lp.walk_type,
+                walk_label=lp.walk_label,
+                stage=lp.stage,
+                stage_label=lp.stage_label,
+                detail=lp.detail,
+                latest_signal_label=lp.latest_signal_label,
+            )
+            for lp in result.level_progress
+        ],
         pending_notes=result.pending_notes,
         recommendation=RecommendationOut(
             action=result.recommendation.action,

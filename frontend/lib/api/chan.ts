@@ -78,6 +78,19 @@ export interface Recommendation {
   caveats: string[]
 }
 
+export interface LevelProgress {
+  level: 'stroke' | 'segment'
+  level_name: string
+  tf_label: string
+  pivot_count: number
+  walk_type: 'up_trend' | 'down_trend' | 'consolidation' | 'none'
+  walk_label: string
+  stage: string
+  stage_label: string
+  detail: string
+  latest_signal_label: string | null
+}
+
 export interface ChanAnalysisResult {
   symbol: string
   bars_count: number
@@ -104,6 +117,7 @@ export interface ChanAnalysisResult {
     | 'unclear'
   summary: string
   recommendation: Recommendation | null
+  level_progress?: LevelProgress[]
   pending_notes: string[]
 }
 

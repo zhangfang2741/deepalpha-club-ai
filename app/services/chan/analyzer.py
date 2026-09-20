@@ -24,6 +24,7 @@ from app.services.chan.divergence import (
 )
 from app.services.chan.fractal import Fractal, MergedCandle, find_fractals, merge_candles
 from app.services.chan.i18n import is_en, pick
+from app.services.chan.levels import LevelProgress, build_level_progress
 from app.services.chan.narrative import MarketNarrative, _volume_readout, build_narrative
 from app.services.chan.pivot import (
     Pivot,
@@ -85,6 +86,8 @@ class ChanAnalysisResult:
     recommendation: Recommendation | None = None
     # 大白话形态解读（趋势 / 位置 / 量价 / 动能），供普通用户理解当前市场在做什么
     narrative: MarketNarrative | None = None
+    # 各结构级别（笔级 / 线段级）当前走到哪一步的文字进度
+    level_progress: list[LevelProgress] = field(default_factory=list)
 
     # 最右侧未确认结构的提示（把缠论的右侧滞后不确定性显式暴露出来）
     pending_notes: list[str] = field(default_factory=list)
@@ -113,13 +116,14 @@ class ChanAnalyzer:
 
     def analyze(
         self, symbol: str, bars: list[dict], *, min_gap: int = 4, lang: str = "zh",
-        visible_from: str | None = None,
+        visible_from: str | None = None, freq: str = "daily",
     ) -> ChanAnalysisResult:
         """对K线数据执行完整缠论分析。
 
         bars: list of {time, open, high, low, close, volume}
         min_gap: 笔成立所需的最小分型间隔（合并K线数 - 1），默认 4（缠论新笔标准）
         lang: 输出文案语言（zh / en）
+        freq: K线周期（daily / weekly），仅用于「级别进度」的时间周期标签映射
         visible_from: 可见窗口起点（time 字符串，含）。用于「窗口锚定」：调用方在
             用户所选起点之前多取一段 warmup K 线一起传入，缠论在完整序列上计算以
             消除左边界依赖（结构不随用户选的起始日期漂移），再把分型/笔/线段/中枢/
@@ -223,6 +227,7 @@ class ChanAnalyzer:
         # 量价需要原始 bars（合并K线不含 volume），故两处都在此传入
         result.recommendation = self._build_recommendation(result, bars, lang)
         result.narrative = build_narrative(result, bars, lang)
+        result.level_progress = build_level_progress(result, freq, lang)
 
         logger.info(
             "chan_analysis_complete",
