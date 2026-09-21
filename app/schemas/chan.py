@@ -92,6 +92,43 @@ class MarketNarrativeOut(BaseModel):
     details: list[str]    # 分条解读（趋势 / 位置 / 量价 / 动能）
 
 
+class PhaseChecklistItemOut(BaseModel):
+    label: str
+    detail: str
+    state: Literal["done", "pending"]
+
+
+class PhaseBranchOut(BaseModel):
+    outcome: Literal["type2", "type3", "back_to_range"]
+    condition_label: str
+    result_label: str
+
+
+class StageGuideStepOut(BaseModel):
+    key: str
+    title: str
+    detail: str
+
+
+class StageGuideOut(BaseModel):
+    current_index: int
+    steps: list[StageGuideStepOut]
+    why_it_matters: str
+
+
+class PivotPhaseOut(BaseModel):
+    """中枢生命周期状态机：当前走到哪一步（见 app/services/chan/pivot_phase.py）。"""
+    phase: Literal["pivot_forming", "pivot_oscillating", "leaving", "retrace_confirmed", "divergence_turn"]
+    phase_label: str
+    direction: Optional[Literal["up", "down"]] = None
+    pivot: PivotOut
+    checklist: list[PhaseChecklistItemOut]
+    reason: str
+    confirmed: bool = True
+    branches: list[PhaseBranchOut] = []
+    stage_guide: StageGuideOut
+
+
 class StructureGapRequest(BaseModel):
     symbol: str
     start_date: str
@@ -138,10 +175,13 @@ class ChanAnalysisResponse(BaseModel):
     current_trend: str
     # 走势类型（基于中枢排布）：up_trend / down_trend / consolidation / none
     walk_type: str = "none"
+    walk_type_label: str = ""  # 走势类型人话标签
     # 走势展望（延续 vs 转折）：转折向上/转折向下、延续上涨/延续下跌、
     # 盘整上破/盘整下破、盘整延续、未明（枚举值见 analyzer._compute_trend_outlook）
     trend_outlook: str = "unclear"
+    trend_outlook_label: str = ""  # 走势展望人话标签
     summary: str
     recommendation: Optional[RecommendationOut] = None
     narrative: Optional[MarketNarrativeOut] = None  # 大白话形态解读
     pending_notes: list[str] = []  # 最右侧未确认结构的提示
+    pivot_phase: Optional[PivotPhaseOut] = None  # 中枢生命周期：走到哪一步

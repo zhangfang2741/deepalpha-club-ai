@@ -21,7 +21,9 @@ enum PreviewMock {
             signals: signals,
             currentTrend: "up",
             walkType: "up_trend",
+            walkTypeLabel: "当前为上涨趋势（中枢依次抬高）",
             trendOutlook: "continuation_up",
+            trendOutlookLabel: "上涨走势延续",
             summary: "近期走出一段向上线段，价格站上前一中枢上沿并完成回踩确认，结构偏强。当前处于线段延伸阶段，尚未出现同级别背驰。",
             recommendation: Recommendation(
                 action: "hold",
@@ -49,7 +51,41 @@ enum PreviewMock {
             pendingNotes: [
                 "最新一笔尚未确认，需等待后续 K 线验证顶分型是否成立",
                 "周线级别中枢尚未形成，当前判断仅适用于日线级别",
-            ]
+            ],
+            pivotPhase: PivotPhase(
+                phase: "leaving",
+                phaseLabel: "向上离开中枢",
+                direction: "up",
+                pivot: Pivot(zg: 388.0, zd: 372.0, gg: 390.5, dd: 370.2,
+                             startTime: "2026-05-12", endTime: "2026-06-20",
+                             level: .stroke, confirmed: true),
+                checklist: [
+                    PhaseChecklistItem(label: "形成中枢", detail: "372.00–388.00", state: .done),
+                    PhaseChecklistItem(label: "向上离开中枢", detail: "现价 392.16 已站上 ZG 388.00", state: .done),
+                    PhaseChecklistItem(label: "等待离开段走完后回抽确认", detail: "", state: .pending),
+                ],
+                reason: "现价 392.16 已站上 ZG 388.00，最新向上笔离开了中枢区间。",
+                confirmed: true,
+                branches: [
+                    PhaseBranch(outcome: "type3", conditionLabel: "回踩守住 ZG 388.00 以上，不回中枢",
+                                resultLabel: "确认三买（趋势确认，最强）"),
+                    PhaseBranch(outcome: "type2", conditionLabel: "回踩落在中枢区间内，未破 ZD 372.00",
+                                resultLabel: "确认二买（中枢升级，弱于三买）"),
+                    PhaseBranch(outcome: "back_to_range", conditionLabel: "回踩跌破 ZD 372.00，重新进入中枢",
+                                resultLabel: "假突破，回到中枢震荡"),
+                ],
+                stageGuide: StageGuide(
+                    currentIndex: 2,
+                    steps: [
+                        StageGuideStep(key: "pivot_forming", title: "中枢形成", detail: "三段重叠围出 372.00–388.00"),
+                        StageGuideStep(key: "pivot_oscillating", title: "中枢震荡", detail: "区间内反复，中枢延伸"),
+                        StageGuideStep(key: "leaving", title: "离开段", detail: "向上离开中枢，候选第三类买点"),
+                        StageGuideStep(key: "retrace_confirmed", title: "回抽确认", detail: "回抽不进中枢 → 确认三买"),
+                        StageGuideStep(key: "divergence_turn", title: "背驰/转折", detail: "趋势末端背驰 → 一类买卖点"),
+                    ],
+                    whyItMatters: "离开段是缠论趋势能否延续的分水岭：向上离开中枢后若回抽不进中枢，就确认三买、中枢升级、趋势打开；若回抽跌回中枢，则回到震荡。"
+                )
+            )
         )
     }
 
@@ -110,5 +146,12 @@ enum PreviewMock {
 
 #Preview("学习列表") {
     LearnTabView().preferredColorScheme(.dark)
+}
+
+#Preview("阶段讲解") {
+    NavigationStack {
+        PivotPhaseGuideSheet(pivotPhase: PreviewMock.analysis.pivotPhase!)
+    }
+    .preferredColorScheme(.dark)
 }
 #endif
