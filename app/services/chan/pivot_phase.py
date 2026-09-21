@@ -1,11 +1,20 @@
 """缠论中枢生命周期状态机：把已有的中枢/笔/背驰结构翻译成「走到哪一步」的进度。
 
-判定的核心难点——中枢延伸时会把「仍在中枢内反复」和「已突破但被延伸判定吞并」
-的笔混在同一个 `pivot.elements` 里（见 pivot.py 的宽松重叠判据：只要有一点价格
-重叠就吞并），因此不能靠 `len(post)` 判断是否已突破，必须复用
-`_post_pivot_strokes` 之后，按 generate_buy2/3_signals 同一套「起点在中枢内、
-终点越过边界」判据，在结果里找第一对突破笔+回踩笔。这里独立实现一份等价判据
-（不改 signals.py，那是有随机模糊护栏的高风险模块，见设计文档）。
+判定的核心难点有两层：
+
+1. 中枢延伸时会把「仍在中枢内反复」和「已突破但被延伸判定吞并」的笔混在
+   同一个 `pivot.elements` 里（见 pivot.py 的宽松重叠判据：只要有一点价格
+   重叠就吞并），因此不能靠 `len(post)` 判断是否已突破，必须复用
+   `_post_pivot_strokes` 之后，按 generate_buy2/3_signals 同一套「起点在中枢
+   内、终点越过边界」判据在结果里逐笔找突破。这里独立实现一份等价判据（不改
+   signals.py，那是有随机模糊护栏的高风险模块，见设计文档）。
+2. 中枢的 `end_time` 可能很早，`post` 因此可能横跨好几个月、包含好几轮「试探
+   突破→被打回→再次突破」的完整周期——只看第一次尝试、把假突破（back_to_range）
+   直接当结论会漏掉后面真正生效的那次突破（实测用真实数据回归时发现：某支
+   股票半年前有一次假突破被打回，之后又大幅真突破，旧算法只看到第一次假突破
+   就报「仍在中枢震荡」，而现价其实早已远离中枢一大截）。所以 `_scan_post`
+   要在遇到 back_to_range 时继续往后扫，直到找到决定性的突破或耗尽整个
+   `post`，不能在第一次假突破就停手。
 
 只描述「已经走到哪一步」的客观事实，不做涨跌预测——`leaving` 阶段给出的
 `branches` 是规则本身在三种已定义结果下分别是什么（真值表），不是对未来的
@@ -92,43 +101,66 @@ class _Pair:
     index: int  # breakout 在 post 里的下标，供定位「配对之后」的笔
 
 
-def _find_first_pair(post: list["Stroke"], pivot: "Pivot") -> _Pair | None:
-    """在 post 里找第一对突破笔+回踩笔，判据与 generate_buy2/3_signals 完全一致。"""
-    for i in range(len(post) - 1):
-        breakout, retrace = post[i], post[i + 1]
-        if breakout.direction == "up" and breakout.start_price <= pivot.zg < breakout.end_price:
-            if retrace.direction != "down":
-                continue
-            if retrace.end_price > pivot.zg:
-                outcome: Outcome = "type3"
-            elif retrace.end_price >= pivot.zd:
-                outcome = "type2"
-            else:
-                outcome = "back_to_range"
-            return _Pair(breakout, retrace, "up", outcome, i)
-        if breakout.direction == "down" and breakout.start_price >= pivot.zd > breakout.end_price:
-            if retrace.direction != "up":
-                continue
-            if retrace.end_price < pivot.zd:
-                outcome = "type3"
-            elif retrace.end_price <= pivot.zg:
-                outcome = "type2"
-            else:
-                outcome = "back_to_range"
-            return _Pair(breakout, retrace, "down", outcome, i)
+def _is_breakout(candidate: "Stroke", pivot: "Pivot") -> Literal["up", "down"] | None:
+    """判断 candidate 是否满足「起点在中枢内、终点越过边界」的突破判据，返回突破方向。"""
+    if candidate.direction == "up" and candidate.start_price <= pivot.zg < candidate.end_price:
+        return "up"
+    if candidate.direction == "down" and candidate.start_price >= pivot.zd > candidate.end_price:
+        return "down"
     return None
 
 
-def _find_open_breakout(post: list["Stroke"], pivot: "Pivot") -> "Stroke | None":
-    """在 post 里找还没等到回抽笔、独自满足突破条件的最后一笔（leaving 阶段）。"""
-    if not post:
-        return None
-    last = post[-1]
-    if last.direction == "up" and last.start_price <= pivot.zg < last.end_price:
-        return last
-    if last.direction == "down" and last.start_price >= pivot.zd > last.end_price:
-        return last
-    return None
+def _classify_retrace(direction: Literal["up", "down"], retrace_price: float, pivot: "Pivot") -> Outcome:
+    if direction == "up":
+        if retrace_price > pivot.zg:
+            return "type3"
+        if retrace_price >= pivot.zd:
+            return "type2"
+        return "back_to_range"
+    if retrace_price < pivot.zd:
+        return "type3"
+    if retrace_price <= pivot.zg:
+        return "type2"
+    return "back_to_range"
+
+
+def _scan_post(post: list["Stroke"], pivot: "Pivot") -> tuple[_Pair | None, "Stroke | None", list["Stroke"]]:
+    """从头扫描 post，跳过「假突破被打回」的失败尝试，找最新一次决定性的突破。
+
+    中枢的 end_time 可能很早，`post` 因此可能跨越好几次「试探突破→被打回→再次
+    突破」的完整周期（例如价格先跌破中枢又被拉回中枢内，几个月后才真正向上
+    突破）——只看第一次尝试、把 back_to_range 直接当结论会漏掉后面真正生效的
+    那次突破，把早已远离中枢的走势误判成还在中枢里反复。所以 back_to_range
+    不是终态，是「这次尝试作废，从它的回抽笔之后继续找下一次尝试」的信号。
+
+    判据与 generate_buy2/3_signals 完全一致（见模块 docstring）。
+
+    Returns:
+        (决定性配对, None, 配对之后剩余的笔)：找到 type2/type3 的真正突破
+        (None, 进行中的突破笔, [])：突破已发生但还没等到回踩笔（leaving 阶段）
+        (None, None, [])：整个 post 里都没有任何有效突破尝试，仍在中枢内反复
+    """
+    i = 0
+    n = len(post)
+    while i < n:
+        direction = _is_breakout(post[i], pivot)
+        if direction is None:
+            i += 1
+            continue
+        if i + 1 >= n:
+            return None, post[i], []
+        retrace = post[i + 1]
+        expected_retrace_dir = "down" if direction == "up" else "up"
+        if retrace.direction != expected_retrace_dir:
+            # 回抽笔方向不对（比如同向续行），这次突破候选作废，从下一笔重新找
+            i += 1
+            continue
+        outcome = _classify_retrace(direction, retrace.end_price, pivot)
+        if outcome == "back_to_range":
+            i += 2  # 假突破，从回抽笔之后继续找下一次尝试
+            continue
+        return _Pair(post[i], retrace, direction, outcome, i), None, post[i + 2:]
+    return None, None, []
 
 
 def _find_divergence_turn(
@@ -356,19 +388,16 @@ def build_pivot_phase(result: "ChanAnalysisResult", lang: str = "zh") -> PivotPh
     pivot, all_pivots, idx = picked
     post = _post_pivot_strokes(result.strokes, all_pivots, idx)
 
-    pair = _find_first_pair(post, pivot)
-    if pair is None:
-        open_breakout = _find_open_breakout(post, pivot)
-        if open_breakout is not None:
-            last_price = result.merged_candles[-1].close if result.merged_candles else 0.0
-            return _build_leaving(pivot, open_breakout, last_price, lang)
-        return _build_oscillating(pivot, forming=len(pivot.elements) <= 3, lang=lang)
+    pair, open_breakout, remaining = _scan_post(post, pivot)
 
-    if pair.outcome == "back_to_range":
-        return _build_oscillating(pivot, forming=False, lang=lang)
+    if pair is not None:
+        turn_stroke = _find_divergence_turn(result, remaining, pair.direction)
+        if turn_stroke is not None:
+            return _build_divergence_turn(pivot, pair, turn_stroke, lang)
+        return _build_retrace_confirmed(pivot, pair, lang)
 
-    remaining = post[pair.index + 2:]
-    turn_stroke = _find_divergence_turn(result, remaining, pair.direction)
-    if turn_stroke is not None:
-        return _build_divergence_turn(pivot, pair, turn_stroke, lang)
-    return _build_retrace_confirmed(pivot, pair, lang)
+    if open_breakout is not None:
+        last_price = result.merged_candles[-1].close if result.merged_candles else 0.0
+        return _build_leaving(pivot, open_breakout, last_price, lang)
+
+    return _build_oscillating(pivot, forming=len(pivot.elements) <= 3, lang=lang)

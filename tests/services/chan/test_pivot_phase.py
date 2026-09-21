@@ -222,3 +222,26 @@ def test_analyzer_populates_pivot_phase_end_to_end():
         assert result.pivot_phase.phase in {
             "pivot_forming", "pivot_oscillating", "leaving", "retrace_confirmed", "divergence_turn",
         }
+
+
+def test_failed_breakout_attempt_does_not_hide_later_real_breakout():
+    """回归：真实数据（AAPL 2026）曾发现的 bug。
+
+    中枢形成后先出现一次向上假突破（back_to_range，回抽反而跌穿对侧 ZD，
+    价格甩到远高于中枢又摔到远低于中枢），中间夹着两段没到边界的噪音，之后
+    才出现真正决定性的向上突破+回踩确认。旧算法只看 post 里第一对突破+回踩，
+    遇到 back_to_range 就直接判定"仍在中枢震荡"，导致现价早已远离中枢一大截
+    时还报"中枢震荡"。新算法要跳过失败的尝试，继续找到后面真正生效的那次
+    突破——不能在遇到第一次假突破就停手。
+    """
+    strokes = _chain(
+        ("down", 100, 90), ("up", 90, 98), ("down", 98, 92),  # 形成中枢 zg=98 zd=90
+        ("up", 92, 110), ("down", 110, 85),                    # 假突破1：向上离开但回抽跌破ZD(85<90) -> back_to_range
+        ("up", 85, 96), ("down", 96, 91),                      # 噪音：两段都没碰到中枢边界，非突破候选
+        ("up", 91, 120), ("down", 120, 105),                   # 真正突破：向上离开(120>98)，回踩105>98未回中枢 -> type3
+    )
+    pivot = _pivot_from(strokes, 9, zg=98, zd=90)
+    pp = build_pivot_phase(_result(strokes, [pivot], []))
+    assert pp.phase == "retrace_confirmed"
+    assert pp.direction == "up"
+    assert "三买" in pp.phase_label
