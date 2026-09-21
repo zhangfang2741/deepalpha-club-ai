@@ -50,23 +50,54 @@
 
 ### 阶段判定
 
-以该中枢的 `post`（`_post_pivot_strokes` 返回的离开段笔序列）为依据：
+**关键实现细节**（调研 `test_signals.py::test_buy2_fires_when_pivot_absorbs_breakout_and_retrace`
+才发现，会用一整版覆盖设计初稿里过于简化的假设）：`pivot.py` 的中枢延伸判定是
+"只要笔与 `[ZD, ZG]` 有任意重叠就吞并"，比"完全落在区间内"宽松得多——真正的
+突破笔/回踩笔只要还有一点价格重叠，也会被吞并进 `pivot.elements`，不会自然出现
+在 `end_time` 之后。`_post_pivot_strokes` 因此要把 `pivot.elements[3:]`（中枢自己
+吞并的延伸段）连同真正在 `end_time` 之后的笔一起拼成 `post`，`generate_buy2/3_signals`
+才能从 `post` 里配对出真正的突破笔+回踩笔。
+
+这意味着 `post` 非空**不能**直接当作"已出现突破"的信号——`post` 里可能全是
+"仍在震荡、没有真正突破"的延伸笔。阶段判定必须复用 `generate_buy2/3_signals`
+同一套"突破笔跨越边界"判据，在 `post` 里从头找**第一对**满足条件的
+（突破笔, 回踩笔），而不是简单看 `len(post)`：
 
 | phase | 判定条件 |
 |---|---|
 | `none` | 笔数 < 3，或没有有效中枢（结构未成形，与 `narrative` 的隐藏条件一致） |
-| `pivot_forming` | 中枢恰好由最初 3 段构成，`post` 为空（尚未延伸） |
-| `pivot_oscillating` | 中枢已延伸（`elements` > 3 段），`post` 仍为空 |
-| `leaving` | `len(post) == 1`（突破笔已出现，回抽笔未出现） |
-| `retrace_confirmed` | `len(post) >= 2`，取 `outcome`（见下） |
-| `divergence_turn` | `retrace_confirmed`（`outcome` 为 `type2`/`type3`）之后，趋势方向上后续笔/线段出现背驰（`divergences.is_diverged`），对应已生成一类买/卖点 |
+| `pivot_forming` | `post` 中找不到任何一笔满足"突破笔"条件（起点在中枢内、终点越过 ZG 或 ZD），且中枢恰好是最初 3 段构成 |
+| `pivot_oscillating` | 同上找不到突破笔，但中枢已吞并了更多段（`elements` > 3），或曾经出现过 `back_to_range`（假突破退回） |
+| `leaving` | `post` 中找到了满足条件的突破笔，但其后紧跟的一笔方向不对/或它是 `post` 最后一笔（回抽笔尚未出现） |
+| `retrace_confirmed` | 找到"突破笔 + 紧邻的反向回抽笔"这一对，取其 `outcome`（见下），且 `outcome ∈ {type2, type3}` |
+| `divergence_turn` | `retrace_confirmed` 之后，`post` 中该配对**之后**的笔里，出现与突破方向同向、且 `divergences.is_diverged` 的笔（对应已生成一类买/卖点） |
 
-`retrace_confirmed` 的 `outcome` 三取一：回踩守住对侧边界外 → `type3`；落在
-`[zd, zg]` 内未破对侧边界 → `type2`；穿破对侧边界 → `back_to_range`（视为回退到
-`pivot_oscillating`，用于给"假突破"一个去处，不新增第 7 个 phase）。
+`outcome` 三取一，判据与 `generate_buy2_signals`/`generate_buy3_signals`
+（`app/services/chan/signals.py`）完全一致，不再另起一套数字：回踩守住对侧边界外
+→ `type3`；落在 `[zd, zg]` 内未破对侧边界 → `type2`；穿破对侧边界 → `back_to_range`
+（视为回退到 `pivot_oscillating`，用于给"假突破"一个去处，不新增第 7 个 phase）。
 
-判定条件全部由既有结构的静态几何关系推出，不引入新的预测规则。`confirmed` 字段
-复用回抽笔 `.confirmed` 的既有语义（是否仍可能因右侧不确定性变化）。
+判定条件全部由既有结构的静态几何关系推出，不引入新的预测规则；实现时**独立
+重写**这套"找第一对突破+回踩"的判据（不直接改 `signals.py`），原因见下方
+"与 signals.py 的关系"。`confirmed` 字段复用回抽笔 `.confirmed` 的既有语义
+（是否仍可能因右侧不确定性变化）。
+
+### 与 signals.py 的关系（重要：不重构 signals.py）
+
+`pivot_phase.py` 需要的"找第一对突破+回踩"逻辑，和 `generate_buy2/3_signals`/
+`generate_sell2/3_signals` 里的逻辑本质相同，理想情况应该抽成共享函数复用。
+但 `signals.py` 是 CLAUDE.md 明确标注"每条不变量都有单元测试 + 随机模糊护栏"
+的高风险模块（历史上曾因为过度收紧/重写吞并逻辑出过真实回归，如 FIG 一买被
+整段抹掉的教训），本次改动时间/精力有限、且核心目标是 iOS 详情页而非
+signals.py 重构。因此本次**在 `pivot_phase.py` 里独立实现一份等价的判据**
+（~15 行，允许和 `signals.py` 有少量重复），不改动 `signals.py` 一行代码，
+把回归风险限制在新文件内。
+
+为保证两处判据不会悄悄跑偏，`test_pivot_phase.py` 里加一个交叉验证测试：用
+`test_signals.py` 里已经验证过的真实吞并场景（`find_stroke_pivots` 产出的
+真实中枢 + 突破/回踩笔），同时断言 `generate_buy2_signals`/`generate_buy3_signals`
+产出的信号类型，与 `pivot_phase` 判定出的 `outcome` 一致。后续如果要抽共享
+函数消重复，这个测试能直接复用来验证重构没有改变行为。
 
 ### 分支文案（仅 `leaving` 阶段给出）
 
