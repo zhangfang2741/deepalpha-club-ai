@@ -36,19 +36,31 @@ struct ResultSegments: View {
         }
     }
 
+    /// 三个 tab 是真正独立的页面：各自一个 ScrollView，`.id(segment)` 强制切换
+    /// 时整个滚动视图换一个新实例（滚动位置回到顶部），不共享同一份滚动状态。
+    /// 之前三段内容挤在外层同一个 ScrollView 里切换，切到内容更短的 tab 时
+    /// 滚动位置对不上、看起来会跳动。
     private var interactiveSections: some View {
         VStack(spacing: 12) {
             SegmentTabBar(selection: $segment, title: title(for:))
 
-            switch segment {
-            case .analysis:
-                AnalysisSection(analysis: analysis)
-            case .signals:
-                SignalListSection(analysis: analysis)
-            case .risk:
-                RiskSection(analysis: analysis)
+            ScrollView {
+                Group {
+                    switch segment {
+                    case .analysis:
+                        AnalysisSection(analysis: analysis)
+                    case .signals:
+                        SignalListSection(analysis: analysis)
+                    case .risk:
+                        RiskSection(analysis: analysis)
+                    }
+                }
+                .padding(.bottom, Theme.contentVInset)
             }
+            .id(segment)
+            .scrollBounceBehavior(.basedOnSize)
         }
+        .frame(maxHeight: .infinity)
     }
 
     /// 长图布局：三段全铺，标题复用交互态的文案（买卖点/风险提示带数量）。
