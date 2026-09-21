@@ -157,6 +157,72 @@ struct MarketNarrative: Codable {
     }
 }
 
+/// 中枢生命周期 checklist 里的一行（对应后端 PhaseChecklistItemOut）。
+struct PhaseChecklistItem: Codable, Identifiable {
+    enum State: String, Codable { case done, pending }
+    let label: String
+    let detail: String
+    let state: State
+
+    var id: String { label }
+}
+
+/// 回抽结果的一种可能分支（对应后端 PhaseBranchOut，仅 leaving 阶段非空）。
+struct PhaseBranch: Codable, Identifiable {
+    let outcome: String  // type2 / type3 / back_to_range
+    let conditionLabel: String
+    let resultLabel: String
+
+    var id: String { outcome }
+
+    enum CodingKeys: String, CodingKey {
+        case outcome
+        case conditionLabel = "condition_label"
+        case resultLabel = "result_label"
+    }
+}
+
+/// 阶段讲解弹层里的一个标准步骤（对应后端 StageGuideStepOut）。
+struct StageGuideStep: Codable, Identifiable {
+    let key: String
+    let title: String
+    let detail: String
+
+    var id: String { key }
+}
+
+/// 阶段讲解弹层内容（对应后端 StageGuideOut）。
+struct StageGuide: Codable {
+    let currentIndex: Int
+    let steps: [StageGuideStep]
+    let whyItMatters: String
+
+    enum CodingKeys: String, CodingKey {
+        case steps
+        case currentIndex = "current_index"
+        case whyItMatters = "why_it_matters"
+    }
+}
+
+/// 中枢生命周期状态机：「走到哪一步」（对应后端 PivotPhaseOut）。
+struct PivotPhase: Codable {
+    let phase: String  // pivot_forming / pivot_oscillating / leaving / retrace_confirmed / divergence_turn
+    let phaseLabel: String
+    let direction: String?  // up / down / nil
+    let pivot: Pivot
+    let checklist: [PhaseChecklistItem]
+    let reason: String
+    let confirmed: Bool
+    let branches: [PhaseBranch]
+    let stageGuide: StageGuide
+
+    enum CodingKeys: String, CodingKey {
+        case phase, pivot, checklist, reason, confirmed, branches, direction
+        case phaseLabel = "phase_label"
+        case stageGuide = "stage_guide"
+    }
+}
+
 /// 完整缠论分析结果。
 struct ChanAnalysis: Codable {
     let symbol: String
@@ -172,13 +238,16 @@ struct ChanAnalysis: Codable {
     let currentTrend: String
     // 走势类型（基于中枢排布）：up_trend / down_trend / consolidation / none
     let walkType: String?
+    let walkTypeLabel: String?
     // 走势展望（延续 vs 转折）：reversal_up / reversal_down / continuation_up /
     // continuation_down / breakout_up / breakout_down / range / unclear
     let trendOutlook: String?
+    let trendOutlookLabel: String?
     let summary: String
     let recommendation: Recommendation?
     let narrative: MarketNarrative?
     let pendingNotes: [String]
+    let pivotPhase: PivotPhase?
 
     enum CodingKeys: String, CodingKey {
         case symbol, fractals, strokes, segments, macd, signals, summary, recommendation, narrative
@@ -188,8 +257,11 @@ struct ChanAnalysis: Codable {
         case segmentPivots = "segment_pivots"
         case currentTrend = "current_trend"
         case walkType = "walk_type"
+        case walkTypeLabel = "walk_type_label"
         case trendOutlook = "trend_outlook"
+        case trendOutlookLabel = "trend_outlook_label"
         case pendingNotes = "pending_notes"
+        case pivotPhase = "pivot_phase"
     }
 }
 
