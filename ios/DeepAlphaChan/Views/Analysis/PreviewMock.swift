@@ -95,7 +95,8 @@ enum PreviewMock {
                                 detail: "现价 392.16 已站上 ZG 388.00，最新向上笔离开了中枢区间。"),
                 StructureLayer(layer: "signal", label: "买卖点", title: "三买候选",
                                 detail: "落在未确认笔上，属左侧预判。"),
-            ]
+            ],
+            structureHeadline: "当前处于向下线段中的一根向上笔，现价站上中枢上方，最近出现三买（候选）。"
         )
     }
 

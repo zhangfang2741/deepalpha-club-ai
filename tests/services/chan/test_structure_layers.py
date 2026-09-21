@@ -12,7 +12,7 @@ from app.services.chan.fractal import Fractal, MergedCandle
 from app.services.chan.segment import Segment
 from app.services.chan.signals import Signal
 from app.services.chan.stroke import Stroke
-from app.services.chan.structure_layers import build_structure_layers
+from app.services.chan.structure_layers import build_structure_headline, build_structure_layers
 
 
 def _mc(idx: int, price: float) -> MergedCandle:
@@ -45,12 +45,14 @@ def _signal(kind: SignalType, confirmed: bool = True) -> Signal:
                   divergence=None, description="", confirmed=confirmed)
 
 
-def _result(strokes=None, segments=None, signals=None, pivot_phase=None) -> ChanAnalysisResult:
+def _result(strokes=None, segments=None, signals=None, pivot_phase=None,
+            merged_candles=None) -> ChanAnalysisResult:
     r = ChanAnalysisResult(symbol="T", bars_count=0)
     r.strokes = strokes or []
     r.segments = segments or []
     r.signals = signals or []
     r.pivot_phase = pivot_phase
+    r.merged_candles = merged_candles or []
     return r
 
 
@@ -133,3 +135,52 @@ def test_layer_order_is_stroke_segment_pivot_signal():
     layers = build_structure_layers(_result(strokes=strokes, segments=[seg], signals=[signal],
                                              pivot_phase=phase))
     assert [layer.layer for layer in layers] == ["stroke", "segment", "pivot", "signal"]
+
+
+def test_headline_none_when_structure_not_formed():
+    assert build_structure_headline(_result()) is None
+
+
+def test_headline_matches_mockup_wording():
+    from app.services.chan.pivot_phase import PivotPhase, StageGuide
+    from app.services.chan.pivot import Pivot
+
+    strokes = [_st("down", 0, 100, 90), _st("up", 1, 90, 98, confirmed=False)]
+    seg = _seg("down", strokes, confirmed=False)
+    pivot = Pivot(zg=98, zd=90, gg=100, dd=89, start_time="T0", end_time="T1",
+                  level="stroke", elements=[])
+    phase = PivotPhase(phase="leaving", phase_label="", direction="up", pivot=pivot,
+                        checklist=[], reason="", confirmed=True, branches=[],
+                        stage_guide=StageGuide(current_index=2, steps=[], why_it_matters=""))
+    signal = _signal("buy3", confirmed=False)
+    result = _result(strokes=strokes, segments=[seg], signals=[signal], pivot_phase=phase,
+                      merged_candles=[_mc(0, 99)])  # 99 > zg(98) -> 站上中枢上方
+    headline = build_structure_headline(result)
+    assert headline == "当前处于向下线段中的一根向上笔，现价站上中枢上方，最近出现三买（候选）。"
+
+
+def test_headline_price_inside_and_below_pivot():
+    from app.services.chan.pivot_phase import PivotPhase, StageGuide
+    from app.services.chan.pivot import Pivot
+
+    strokes = [_st("up", 0, 90, 98)]
+    seg = _seg("up", strokes)
+    pivot = Pivot(zg=98, zd=90, gg=100, dd=89, start_time="T0", end_time="T1",
+                  level="stroke", elements=[])
+    phase = PivotPhase(phase="pivot_oscillating", phase_label="", direction=None, pivot=pivot,
+                        checklist=[], reason="", confirmed=True, branches=[],
+                        stage_guide=StageGuide(current_index=1, steps=[], why_it_matters=""))
+
+    inside = _result(strokes=strokes, segments=[seg], pivot_phase=phase, merged_candles=[_mc(0, 94)])
+    assert "现价运行在中枢区间内" in build_structure_headline(inside)
+
+    below = _result(strokes=strokes, segments=[seg], pivot_phase=phase, merged_candles=[_mc(0, 85)])
+    assert "现价跌破中枢下方" in build_structure_headline(below)
+
+
+def test_headline_omits_signal_clause_when_no_signals():
+    strokes = [_st("up", 0, 90, 98)]
+    seg = _seg("up", strokes)
+    headline = build_structure_headline(_result(strokes=strokes, segments=[seg]))
+    assert headline == "当前处于向上线段中的一根向上笔。"
+    assert "最近出现" not in headline

@@ -264,6 +264,7 @@ async def chan_analysis(
         ) if result.recommendation else None,
         pivot_phase=pivot_phase_out,
         structure_layers=structure_layers_out,
+        structure_headline=result.structure_headline,
     )
 
 

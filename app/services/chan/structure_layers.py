@@ -97,3 +97,51 @@ def build_structure_layers(result: "ChanAnalysisResult", lang: str = "zh") -> li
         _signal_layer(result, lang),
     )
     return [layer for layer in candidates if layer is not None]
+
+
+def _price_position_clause(result: "ChanAnalysisResult", lang: str) -> str | None:
+    """现价相对最新中枢的位置：站上/跌破/运行在区间内。取不到中枢或现价时返回 None。"""
+    phase = result.pivot_phase
+    if phase is None or not result.merged_candles:
+        return None
+    price = result.merged_candles[-1].close
+    pivot = phase.pivot
+    if price > pivot.zg:
+        return pick(lang, "现价站上中枢上方", "price is sitting above the pivot")
+    if price < pivot.zd:
+        return pick(lang, "现价跌破中枢下方", "price has broken below the pivot")
+    return pick(lang, "现价运行在中枢区间内", "price is sitting inside the pivot range")
+
+
+def build_structure_headline(result: "ChanAnalysisResult", lang: str = "zh") -> str | None:
+    """按「线段+笔+中枢位置+买卖点」四个维度拼一句摘要，供详情页「当前状态」用。
+
+    这是固定模板句，不是自由文本生成——每个分句直接对应 structure_layers 里
+    同一份判定依据（线段/笔方向、pivot_phase 的中枢位置、最新买卖点），保证
+    「当前状态」这句话和下面「查看判断依据」展开的四层结论是同一套事实的两种
+    呈现，不会读起来像两套互相独立的算法各说各话。
+
+    结构没成形（缺线段或缺笔）时返回 None，调用方退回旧的 narrative.headline。
+    """
+    if not result.segments or not result.strokes:
+        return None
+    seg = result.segments[-1]
+    stroke = result.strokes[-1]
+    seg_dir = pick(lang, "向上" if seg.direction == "up" else "向下",
+                    "an upward" if seg.direction == "up" else "a downward")
+    stroke_dir = pick(lang, "向上" if stroke.direction == "up" else "向下",
+                        "an upward" if stroke.direction == "up" else "a downward")
+
+    parts = [pick(lang, f"当前处于{seg_dir}线段中的一根{stroke_dir}笔",
+                  f"Currently riding {stroke_dir} stroke within {seg_dir} segment")]
+
+    position = _price_position_clause(result, lang)
+    if position:
+        parts.append(position)
+
+    if result.signals:
+        last = result.signals[-1]
+        suffix = pick(lang, "（候选）", " (candidate)") if not last.confirmed else ""
+        parts.append(pick(lang, f"最近出现{last.label}{suffix}", f"recently showing {last.label}{suffix}"))
+
+    return pick(lang, "，", ", ").join(parts) + pick(lang, "。", ".")

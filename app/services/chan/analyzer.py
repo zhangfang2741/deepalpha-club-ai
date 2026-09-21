@@ -35,7 +35,11 @@ from app.services.chan.pivot_phase import PivotPhase, build_pivot_phase
 from app.services.chan.segment import Segment, find_segments
 from app.services.chan.signals import Signal, generate_all_signals
 from app.services.chan.stroke import Stroke, find_strokes
-from app.services.chan.structure_layers import StructureLayer, build_structure_layers
+from app.services.chan.structure_layers import (
+    StructureLayer,
+    build_structure_headline,
+    build_structure_layers,
+)
 
 
 @dataclass
@@ -93,6 +97,9 @@ class ChanAnalysisResult:
     pivot_phase: "PivotPhase | None" = None
     # 按笔/线段/中枢/买卖点分层的判断依据，见 structure_layers.py
     structure_layers: "list[StructureLayer]" = field(default_factory=list)
+    # 按线段+笔+中枢位置+买卖点拼的一句摘要，供「当前状态」标题用；
+    # 结构未成形时为 None，退回 narrative.headline
+    structure_headline: str | None = None
 
     # 最右侧未确认结构的提示（把缠论的右侧滞后不确定性显式暴露出来）
     pending_notes: list[str] = field(default_factory=list)
@@ -235,6 +242,7 @@ class ChanAnalyzer:
         result.narrative = build_narrative(result, bars, lang)
         result.pivot_phase = build_pivot_phase(result, lang)
         result.structure_layers = build_structure_layers(result, lang)
+        result.structure_headline = build_structure_headline(result, lang)
 
         logger.info(
             "chan_analysis_complete",

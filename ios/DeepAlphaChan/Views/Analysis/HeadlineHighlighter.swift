@@ -1,16 +1,15 @@
 import SwiftUI
 
-/// 把大白话摘要（`narrative.headline`）里的缠论术语按结构级别着色。
+/// 把「当前状态」摘要（`structureHeadline`/`narrative.headline`）里的缠论术语
+/// 按结构类别着色。
 ///
-/// 后端只给纯文本，没有也不该给富文本标记——着色是纯展示层的事，不该让
-/// `narrative.py` 为了 UI 样式去拼 Markdown/HTML。
+/// 后端只给纯文本，没有也不该给富文本标记——着色是纯展示层的事，不该让后端
+/// 为了 UI 样式去拼 Markdown/HTML。
 ///
-/// 着色规则（对照设计稿反推确认）：**大级别结构**（线段/中枢/背驰，这些是
-/// 描述"大盘面在哪个阶段"的词）用橙色；**小级别/当下细节**（笔、买卖点信号、
-/// 价格相对中枢的位置描述）用紫色。不是多空二分，也不是简单的固定关键词
-/// 表——「现价站上中枢上方」这类价格位置从句要整句染紫色，即使句子中间出现
-/// 了单独该染橙色的「中枢」二字，也要跟着从句走紫色，所以价格位置规则必须
-/// 放在最后整体覆盖（`highlight` 按数组顺序应用，后应用的规则覆盖先应用的）。
+/// 颜色和「查看判断依据」展开区里 `StructureLayerRow` 的色标用同一套映射
+/// （笔=蓝/线段=橙/中枢=紫/买卖点=主题蓝）：同一张卡片里，摘要句子里的
+/// 「线段」和下面判断依据里「线段」这个标签必须是同一个颜色，用户才不会
+/// 看着像两套互不相干的系统。不要在这两处各自发明一套配色。
 enum HeadlineHighlighter {
     private struct Rule {
         let pattern: String
@@ -18,16 +17,11 @@ enum HeadlineHighlighter {
     }
 
     private static let rules: [Rule] = [
-        // 大级别结构：线段 / 中枢 / 背驰
         Rule(pattern: "(上升|下降|向上|向下)?线段", color: Theme.segment),
-        Rule(pattern: "中枢", color: Theme.segment),
+        Rule(pattern: "(上升|下降|向上|向下)?笔", color: Theme.stroke),
+        Rule(pattern: "中枢", color: Theme.pivotFill),
         Rule(pattern: "(顶背驰|底背驰|背驰)", color: Theme.segment),
-        // 小级别/当下细节：笔、买卖点信号
-        Rule(pattern: "(上升|下降|向上|向下)?笔", color: Theme.pivotFill),
-        Rule(pattern: "[一二三](买|卖)(（候选）)?", color: Theme.pivotFill),
-        // 价格位置从句：整句染色，放最后覆盖从句内被前面规则单独染色的词
-        // （如「现价站上中枢上方」里的「中枢」不能被单独染成橙色）
-        Rule(pattern: "现价[^，。！]{0,24}?(上方|下方|以上|以下)", color: Theme.pivotFill),
+        Rule(pattern: "[一二三](买|卖)(（候选）)?", color: Theme.accent),
     ]
 
     /// 对纯文本做关键词着色，匹配不到任何关键词时原样返回（不着色，不报错）。

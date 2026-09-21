@@ -266,6 +266,7 @@ struct ChanAnalysis: Codable {
     let pendingNotes: [String]
     let pivotPhase: PivotPhase?
     let structureLayers: [StructureLayer]
+    let structureHeadline: String?
 
     enum CodingKeys: String, CodingKey {
         case symbol, fractals, strokes, segments, macd, signals, summary, recommendation, narrative
@@ -281,6 +282,7 @@ struct ChanAnalysis: Codable {
         case pendingNotes = "pending_notes"
         case pivotPhase = "pivot_phase"
         case structureLayers = "structure_layers"
+        case structureHeadline = "structure_headline"
     }
 }
 

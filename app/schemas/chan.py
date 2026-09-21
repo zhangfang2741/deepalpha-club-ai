@@ -194,3 +194,4 @@ class ChanAnalysisResponse(BaseModel):
     pending_notes: list[str] = []  # 最右侧未确认结构的提示
     pivot_phase: Optional[PivotPhaseOut] = None  # 中枢生命周期：走到哪一步
     structure_layers: list[StructureLayerOut] = []  # 按笔/线段/中枢/买卖点分层的判断依据
+    structure_headline: Optional[str] = None  # 按线段+笔+中枢位置+买卖点拼的一句摘要
