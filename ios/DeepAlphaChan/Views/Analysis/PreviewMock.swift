@@ -147,4 +147,11 @@ enum PreviewMock {
 #Preview("学习列表") {
     LearnTabView().preferredColorScheme(.dark)
 }
+
+#Preview("阶段讲解") {
+    NavigationStack {
+        PivotPhaseGuideSheet(pivotPhase: PreviewMock.analysis.pivotPhase!)
+    }
+    .preferredColorScheme(.dark)
+}
 #endif
