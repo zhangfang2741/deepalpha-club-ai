@@ -79,9 +79,9 @@ private struct BuyTypesView: View {
 
     private var rows: [BuyRow] {
         [
-            BuyRow(id: "b1", name: L("一类买卖点"), desc: L("趋势末端背驰 → 转折起点。空间最大、最左侧（风险高）。")),
-            BuyRow(id: "b2", name: L("二类买卖点"), desc: L("一类之后回抽不创新低 / 反弹不创新高 → 确认转折，稳一档。")),
-            BuyRow(id: "b3", name: L("三类买卖点"), desc: L("离开中枢后回抽不进中枢 → 趋势延续确认。最右侧、最稳、空间小。"))
+            BuyRow(id: "b1", name: L("一类买卖点"), desc: L("涨/跌到尽头、劲用光了，往往是最早的转折点。空间最大，但也最靠前、最不确定。")),
+            BuyRow(id: "b2", name: L("二类买卖点"), desc: L("转折后回踩没再创新低（或反弹没再创新高），算确认了一下，稳一点。")),
+            BuyRow(id: "b3", name: L("三类买卖点"), desc: L("突破争夺区、回踩不再回到区里，说明新方向立住了。最稳，但空间也小。"))
         ]
     }
 
@@ -153,7 +153,7 @@ private struct RecursionInfoView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text(L("%@ 的内部", pivotName))
                     .font(.system(size: 17, weight: .bold)).foregroundColor(Theme.textPrimary)
-                Text(L("这个中枢，往里看就是次级别（如 30 分）的一整段走势——级别层层嵌套，这就是「多周期」的根：本级中枢由次级别走势重叠而成，次级别里又有次次级别中枢……"))
+                Text(L("这块争夺区，放大了看，就是更小周期（比如 30 分钟）的一整段行情。大周期套着小周期、小周期里又有更小的……这就是「多周期」：这块区域，本来就是下面更小的波动来回重叠出来的。"))
                     .font(.system(size: 14)).foregroundColor(Theme.textSecondary)
                     .lineSpacing(4).fixedSize(horizontal: false, vertical: true)
 

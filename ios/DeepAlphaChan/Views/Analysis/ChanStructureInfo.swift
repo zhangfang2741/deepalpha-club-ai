@@ -145,7 +145,7 @@ enum ChanStructureInfo {
         case .segment:
             return ChanTopic(
                 name: L("线段"), tag: L("结构"), color: Theme.segment, lead: L("是什么"),
-                why: L("由至少 3 笔搭成（走势 ⊃ 线段 ⊃ 笔），代表中期方向。"),
+                why: L("由好几段小波动接起来的一段，代表中期的方向。"),
                 concept: L("线段是大级别趋势的组成块。"))
 
         case .segDir(let up):
@@ -156,14 +156,14 @@ enum ChanStructureInfo {
                 tag: isCurrent ? L("当前") : L("未处于"),
                 color: Theme.segment, lead: isCurrent ? L("为什么") : L("是什么"),
                 why: isCurrent
-                    ? L("当前这一笔尚未破坏线段结构，所以线段仍是这个方向、未结束。")
-                    : L("线段当前不在这个方向。"),
+                    ? L("最近这个小波动还没把中期方向掰过来，所以中期还是这个方向、还没走完。")
+                    : L("中期现在不是这个方向。"),
                 concept: "")
 
         case .stroke:
             return ChanTopic(
                 name: L("笔"), tag: L("结构"), color: Theme.stroke, lead: L("是什么"),
-                why: L("相邻一顶一底的连线，隶属链最小一环，最小的方向单位。"),
+                why: L("就是价格最小的一上一下、一小段方向。"),
                 concept: "")
 
         case .strokeState(let forming):
@@ -174,8 +174,8 @@ enum ChanStructureInfo {
                 tag: isCurrent ? L("当前") : (forming ? L("已过") : L("未来")),
                 color: Theme.stroke, lead: isCurrent ? L("为什么") : L("要什么"),
                 why: forming
-                    ? L("最新分型后延伸、另一端分型尚未确认，这一笔还在走（未确认=虚线）。")
-                    : L("要等末端分型确认后，这一笔才算走完。"),
+                    ? L("最近这一小段还在走、还没走完（没走完的用虚线画）。")
+                    : L("要等它走完、被后面的走势确认，才算数。"),
                 concept: "")
         }
     }
@@ -183,12 +183,11 @@ enum ChanStructureInfo {
     // MARK: - 各结构的「为什么」
 
     private static func trendWhy(_ a: ChanAnalysis) -> String {
-        let n = a.strokePivots.count
         switch walkKey(a) {
-        case "up_trend": return L("%lld 个中枢依次抬高 = 上涨趋势。它是所有小级别动作的背景。", n)
-        case "down_trend": return L("%lld 个中枢依次降低 = 下跌趋势。它是所有小级别动作的背景。", n)
-        case "consolidation": return L("只有一个中枢，价在区间内反复 = 盘整，方向未定。")
-        default: return L("尚未形成中枢，单边推进或数据不足，走势未定。")
+        case "up_trend": return L("价格一波比一波高，整体在往上走。下面那些小的涨跌，都发生在这个上涨大方向里。")
+        case "down_trend": return L("价格一波比一波低，整体在往下走。下面那些小反弹，都还在这个下跌大方向里。")
+        case "consolidation": return L("价格在一个区间里来回晃，没走出明确方向，就是横着震荡。")
+        default: return L("目前还没走出清楚的结构，方向看不准。")
         }
     }
 
@@ -203,14 +202,14 @@ enum ChanStructureInfo {
         let name = k == "range" ? L("盘整") : (k == "up" ? L("上涨趋势") : L("下跌趋势"))
         let why: String
         switch k {
-        case "range": why = L("只有一个中枢的走势，价在区间内反复。")
-        case "up": why = L("≥2 个依次抬高的中枢。")
-        default: why = L("≥2 个依次降低的中枢。")
+        case "range": why = L("价格在一个区间里来回晃、没方向。")
+        case "up": why = L("价格一波比一波高。")
+        default: why = L("价格一波比一波低。")
         }
         return ChanTopic(
             name: name, tag: isCur ? L("当前") : L("未处于"),
             color: trendColor(a), lead: isCur ? L("为什么") : L("是什么"),
-            why: isCur ? L("%1$@ 当前走势正是如此。", why) : why,
+            why: isCur ? L("%1$@ 现在走的就是这种。", why) : why,
             concept: L("带的条数与排布本身就是盘整 / 趋势的定义。"),
             extra: .regime)
     }
@@ -220,9 +219,9 @@ enum ChanStructureInfo {
         let tag = k == "none" ? L("未出现") : L("已显现")
         let why: String
         switch k {
-        case "top": why = L("上涨末端出现顶背驰：价创新高但动能没跟上，可能转下跌。")
-        case "bottom": why = L("下跌末端出现底背驰：价创新低但动能减弱，可能转上涨（一买结构）。")
-        default: why = L("当前未出现背驰，推动力度仍在。")
+        case "top": why = L("涨到后面劲不够了：价格还在创新高，但上涨的力气明显变弱，容易冲高回落。")
+        case "bottom": why = L("跌到后面劲不够了：价格还在创新低，但下跌的力气在减弱，容易见底反弹。")
+        default: why = L("眼下推动的劲头还在，没看到明显减弱。")
         }
         return ChanTopic(
             name: L("背驰监测"), tag: tag, color: Theme.segment, lead: L("是什么"),
@@ -235,7 +234,7 @@ enum ChanStructureInfo {
         guard i >= 0, i < pivots.count else {
             return ChanTopic(name: L("中枢"), tag: L("尚未形成"), color: Theme.pivotFill,
                              lead: L("是什么"),
-                             why: L("重叠不足三段，还没围出中枢——只有单边推进。"),
+                             why: L("价格还没在一块区间里反复重叠出争夺区，眼下一直在单边走。"),
                              concept: L("中枢=≥3 段走势重叠的价格带。"))
         }
         let p = pivots[i]
@@ -246,8 +245,8 @@ enum ChanStructureInfo {
             tag: isLatest ? L("当前") : L("已完成"),
             color: Theme.pivotFill, lead: L("是什么"),
             why: isLatest
-                ? L("下面这些笔 / 线段重叠围出的区间带（ZG %1$@ / ZD %2$@），趋势里最新的中枢。", fmt(p.zg), fmt(p.zd))
-                : L("更早的中枢，已被走势离开；它与其它中枢的排布决定了走势是盘整还是趋势。"),
+                ? L("最近多空反复争夺的一段价格区间（%1$@ 到 %2$@），是由下面那些小波动来回重叠出来的。", fmt(p.zd), fmt(p.zg))
+                : L("更早的一段争夺区间，价格已经走出去了。它和别的区间怎么排，决定了是横盘还是趋势。"),
             concept: L("中枢=重叠区，不是更深一层框；可下钻看它内部的次级别。"),
             drillable: true)
     }
@@ -264,13 +263,13 @@ enum ChanStructureInfo {
         let why: String
         switch s {
         case "form":
-            name = L("中枢 · 形成"); why = L("三段次级别走势重叠，围出 ZG–ZD 区间。")
+            name = L("中枢 · 形成"); why = L("价格在一小段区间里来回，重叠出了一块区域。")
         case "osc":
-            name = L("中枢 · 震荡"); why = L("价格在 ZG–ZD 内反复、中枢延伸。")
+            name = L("中枢 · 震荡"); why = L("价格还在这块区域里上上下下地晃。")
         case "leave":
-            name = L("中枢 · 离开"); why = L("次级别走势带价离开中枢区间；离开是否成立要看接下来的回抽。")
+            name = L("中枢 · 离开"); why = L("价格已经跑出这块区域了；算不算真突破，还要看会不会又被拉回来。")
         default:
-            name = L("中枢 · 回抽"); why = L("离开后回抽：不进中枢→买卖点成立；进中枢→回到震荡。不预言。")
+            name = L("中枢 · 回抽"); why = L("跑出去之后回头拉一下：不再回到区域里 → 信号成立；又回到里面 → 继续横盘。这一步还没发生，先不下结论。")
         }
         return ChanTopic(name: name, tag: tag, color: Theme.pivotFill,
                          lead: status == .future ? L("要什么") : L("为什么"),
@@ -282,16 +281,17 @@ enum ChanStructureInfo {
     private static func signalTopic(_ a: ChanAnalysis) -> ChanTopic {
         guard let s = latestSignal(a) else {
             return ChanTopic(name: L("买卖点"), tag: L("暂无"), color: Theme.accent, lead: L("是什么"),
-                             why: L("当前区间尚未识别到明确买卖点。"),
+                             why: L("这段行情还没找到明确的买卖点。"),
                              concept: L("买卖点必依附具体级别与中枢的进出。"), extra: .buyTypes)
         }
         let color = s.isBuy ? Theme.up : Theme.down
         let tag = s.confirmed ? L("已确认") : L("候选")
         var why = s.confirmed
-            ? L("离开与回抽结构均已完成确认。")
-            : L("落在未确认笔上，为左侧预判（候选）。")
+            ? L("该走的都走完了，这个信号已经成立。")
+            : L("信号刚冒头、走势还没走完，属于提前预判，不一定成。")
         if let inv = invalidation(a) {
-            why += L(" 失效价 %1$@：%2$@即废。", fmt(inv.price), inv.isBuy ? L("跌回中枢内") : L("升回中枢内"))
+            why += L(" 要是价格%1$@ %2$@ 那一带（又回到争夺区里），这个信号就作废。",
+                     inv.isBuy ? L("跌回") : L("涨回"), fmt(inv.price))
         }
         return ChanTopic(
             name: L("买卖点 · %@", s.label), tag: tag, color: color, lead: L("为什么"),

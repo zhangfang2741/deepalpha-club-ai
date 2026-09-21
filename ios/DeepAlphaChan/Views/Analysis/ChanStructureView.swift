@@ -18,6 +18,12 @@ struct ChanStructureView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            StructureMiniChart(analysis: analysis, selected: selected)
+                .frame(height: 84)
+                .frame(maxWidth: .infinity)
+                .background(Theme.background)
+                .overlay(RoundedRectangle(cornerRadius: 9).stroke(Theme.border, lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 9))
             legend
             trendFrame
         }
@@ -356,5 +362,96 @@ private struct PivotBands: View {
         guard analysis.strokePivots.count > 1 else { return "" }
         let marks = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"]
         return i < marks.count ? marks[i] : "\(i + 1)"
+    }
+}
+
+// MARK: - 迷你 K 线（图-盒联动）
+
+/// 结构视图顶部的迷你 K 线：真实合并K线 + 中枢盒 + 现价线 + 最近买卖点标记。
+/// 选中某个中枢 / 买卖点时，这里对应的元素高亮、其余淡出，把抽象的框带点锚回价格。
+private struct StructureMiniChart: View {
+    let analysis: ChanAnalysis
+    let selected: ChanRef?
+
+    private enum HL { case none, pivot(Int), signal }
+
+    private var hl: HL {
+        switch selected {
+        case .pivot(let i): return .pivot(i)
+        case .stage: return .pivot(analysis.strokePivots.count - 1)  // 生命周期属最新中枢
+        case .signal: return .signal
+        default: return .none
+        }
+    }
+
+    var body: some View {
+        Canvas { ctx, size in
+            let bars = analysis.mergedCandles
+            guard bars.count > 1 else { return }
+            let pivots = analysis.strokePivots
+            let inset: CGFloat = 6
+
+            var hi = bars.map(\.high).max() ?? 1
+            var lo = bars.map(\.low).min() ?? 0
+            for p in pivots { hi = max(hi, p.zg); lo = min(lo, p.zd) }
+            if let s = ChanStructureInfo.latestSignal(analysis) { hi = max(hi, s.price); lo = min(lo, s.price) }
+            let span = max(hi - lo, 0.0001)
+
+            let w = size.width, h = size.height
+            func xOf(_ i: Int) -> CGFloat { inset + (w - 2 * inset) * CGFloat(i) / CGFloat(bars.count - 1) }
+            func yOf(_ v: Double) -> CGFloat { inset + (h - 2 * inset) * CGFloat((hi - v) / span) }
+            func idxOf(_ time: String) -> Int? { bars.firstIndex { $0.time == time } }
+
+            // 蜡烛（细线：高-低），有结构选中时整体压暗
+            let candleAlpha: Double = { if case .none = hl { return 0.85 } else { return 0.35 } }()
+            for (i, b) in bars.enumerated() {
+                let x = xOf(i)
+                var path = Path()
+                path.move(to: CGPoint(x: x, y: yOf(b.high)))
+                path.addLine(to: CGPoint(x: x, y: yOf(b.low)))
+                let up = b.close >= b.open
+                ctx.stroke(path, with: .color((up ? Theme.up : Theme.down).opacity(candleAlpha)), lineWidth: 1)
+            }
+
+            // 中枢盒
+            for (idx, p) in pivots.enumerated() {
+                let x1 = xOf(idxOf(p.startTime) ?? 0)
+                let x2 = xOf(idxOf(p.endTime) ?? (bars.count - 1))
+                let y1 = yOf(p.zg), y2 = yOf(p.zd)
+                let rect = CGRect(x: x1, y: y1, width: max(2, x2 - x1), height: max(2, y2 - y1))
+                let a: Double
+                switch hl {
+                case .none: a = 1
+                case .pivot(let j): a = idx == j ? 1 : 0.2
+                case .signal: a = 0.2
+                }
+                ctx.fill(Path(rect), with: .color(Theme.pivotFill.opacity(0.14 * a)))
+                ctx.stroke(Path(rect), with: .color(Theme.pivotFill.opacity(a)),
+                           style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+            }
+
+            // 现价线
+            if let last = bars.last {
+                var line = Path()
+                line.move(to: CGPoint(x: 0, y: yOf(last.close)))
+                line.addLine(to: CGPoint(x: w, y: yOf(last.close)))
+                ctx.stroke(line, with: .color(Theme.textPrimary.opacity(0.55)),
+                           style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            }
+
+            // 最近买卖点标记
+            if let s = ChanStructureInfo.latestSignal(analysis), let si = idxOf(s.time) {
+                let mA: Double = { switch hl { case .signal, .none: return 1; case .pivot: return 0.25 } }()
+                let x = xOf(si), y = yOf(s.price)
+                let c = (s.isBuy ? Theme.up : Theme.down).opacity(mA)
+                var tri = Path()
+                let dy: CGFloat = s.isBuy ? 6 : -6
+                tri.move(to: CGPoint(x: x, y: y))
+                tri.addLine(to: CGPoint(x: x - 4, y: y + dy))
+                tri.addLine(to: CGPoint(x: x + 4, y: y + dy))
+                tri.closeSubpath()
+                ctx.fill(tri, with: .color(c))
+            }
+        }
     }
 }
