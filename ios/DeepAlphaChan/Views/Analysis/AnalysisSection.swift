@@ -27,6 +27,15 @@ struct AnalysisSection: View {
         statusCard
     }
 
+    /// 大白话摘要按关键词着色（笔/线段/中枢/背驰/买卖点），结构未成形时的
+    /// 后端兜底摘要（`analysis.summary`）不做关键词着色处理，原样展示。
+    private var headlineText: Text {
+        if let headline = analysis.narrative?.headline {
+            return Text(HeadlineHighlighter.highlight(headline))
+        }
+        return Text(analysis.summary)
+    }
+
     /// 一行精简结构统计，取代原「当前结构」那段长技术描述。
     private var structureStats: String {
         let pivots = analysis.strokePivots.count + analysis.segmentPivots.count
@@ -44,8 +53,9 @@ struct AnalysisSection: View {
         CollapsibleCard(title: L("当前状态"), systemImage: "waveform.path.ecg",
                         defaultExpanded: true) {
             VStack(alignment: .leading, spacing: 14) {
-                // 结构没成形（笔太少）时没有大白话解读，退回后端摘要
-                Text(analysis.narrative?.headline ?? analysis.summary)
+                // 结构没成形（笔太少）时没有大白话解读，退回后端摘要；关键词着色见
+                // HeadlineHighlighter，未命中关键词的字保持默认前景色
+                headlineText
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(Theme.textPrimary)
                     .lineSpacing(4)
