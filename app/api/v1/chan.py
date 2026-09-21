@@ -22,10 +22,15 @@ from app.schemas.chan import (
     MACDOut,
     MarketNarrativeOut,
     MergedCandleOut,
+    PhaseBranchOut,
+    PhaseChecklistItemOut,
     PivotOut,
+    PivotPhaseOut,
     RecommendationOut,
     SegmentOut,
     SignalOut,
+    StageGuideOut,
+    StageGuideStepOut,
     StrokeOut,
     StructureGapRequest,
     StructureGapResponse,
@@ -105,6 +110,43 @@ async def chan_analysis(
         raise HTTPException(status_code=404, detail=f"未获取到 {symbol} 的K线数据，请检查股票代码或日期范围")
 
     result = _analyzer.analyze(symbol, bars, lang=lang, visible_from=start_date)
+
+    pivot_phase_out: PivotPhaseOut | None = None
+    if result.pivot_phase:
+        # build_pivot_phase 的每条返回非 None PivotPhase 的路径都会设置 stage_guide，
+        # 因此这里必然非 None；断言仅用于向 pyright 收窄类型，不是防御性兜底。
+        assert result.pivot_phase.stage_guide is not None
+        pivot_phase_out = PivotPhaseOut(
+            phase=result.pivot_phase.phase,
+            phase_label=result.pivot_phase.phase_label,
+            direction=result.pivot_phase.direction,
+            pivot=PivotOut(
+                zg=result.pivot_phase.pivot.zg, zd=result.pivot_phase.pivot.zd,
+                gg=result.pivot_phase.pivot.gg, dd=result.pivot_phase.pivot.dd,
+                start_time=result.pivot_phase.pivot.start_time,
+                end_time=result.pivot_phase.pivot.end_time,
+                level=result.pivot_phase.pivot.level,
+                confirmed=result.pivot_phase.pivot.confirmed,
+            ),
+            checklist=[
+                PhaseChecklistItemOut(label=c.label, detail=c.detail, state=c.state)
+                for c in result.pivot_phase.checklist
+            ],
+            reason=result.pivot_phase.reason,
+            confirmed=result.pivot_phase.confirmed,
+            branches=[
+                PhaseBranchOut(outcome=b.outcome, condition_label=b.condition_label, result_label=b.result_label)
+                for b in result.pivot_phase.branches
+            ],
+            stage_guide=StageGuideOut(
+                current_index=result.pivot_phase.stage_guide.current_index,
+                steps=[
+                    StageGuideStepOut(key=s.key, title=s.title, detail=s.detail)
+                    for s in result.pivot_phase.stage_guide.steps
+                ],
+                why_it_matters=result.pivot_phase.stage_guide.why_it_matters,
+            ),
+        )
 
     return ChanAnalysisResponse(
         symbol=result.symbol,
@@ -189,7 +231,9 @@ async def chan_analysis(
         ],
         current_trend=result.current_trend,
         walk_type=result.walk_type,
+        walk_type_label=result.walk_type_label,
         trend_outlook=result.trend_outlook,
+        trend_outlook_label=result.trend_outlook_label,
         summary=result.summary,
         narrative=MarketNarrativeOut(
             phase=result.narrative.phase,
@@ -205,6 +249,7 @@ async def chan_analysis(
             reasons=result.recommendation.reasons,
             caveats=result.recommendation.caveats,
         ) if result.recommendation else None,
+        pivot_phase=pivot_phase_out,
     )
 
 
