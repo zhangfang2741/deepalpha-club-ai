@@ -106,6 +106,7 @@ private struct PivotPhaseBlock: View {
                 .background(Theme.accent.opacity(0.15))
                 .foregroundColor(Theme.accent)
                 .clipShape(Capsule())
+                .accessibilityHint(L("点击查看阶段判定说明"))
             }
 
             VStack(alignment: .leading, spacing: 6) {
