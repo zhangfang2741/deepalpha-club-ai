@@ -34,6 +34,7 @@ from app.schemas.chan import (
     StrokeOut,
     StructureGapRequest,
     StructureGapResponse,
+    StructureLayerOut,
 )
 from app.services.chan.analyzer import ChanAnalyzer
 from app.services.chan.gap import analyze_structure_gap
@@ -155,6 +156,11 @@ async def chan_analysis(
             ),
         )
 
+    structure_layers_out = [
+        StructureLayerOut(layer=layer.layer, label=layer.label, title=layer.title, detail=layer.detail)
+        for layer in result.structure_layers
+    ]
+
     return ChanAnalysisResponse(
         symbol=result.symbol,
         bars_count=result.bars_count,
@@ -257,6 +263,7 @@ async def chan_analysis(
             caveats=result.recommendation.caveats,
         ) if result.recommendation else None,
         pivot_phase=pivot_phase_out,
+        structure_layers=structure_layers_out,
     )
 
 

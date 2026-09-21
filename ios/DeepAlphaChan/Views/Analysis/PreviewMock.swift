@@ -85,7 +85,17 @@ enum PreviewMock {
                     ],
                     whyItMatters: "离开段是缠论趋势能否延续的分水岭：向上离开中枢后若回抽不进中枢，就确认三买、中枢升级、趋势打开；若回抽跌回中枢，则回到震荡。"
                 )
-            )
+            ),
+            structureLayers: [
+                StructureLayer(layer: "stroke", label: "笔", title: "向上笔形成中",
+                                detail: "最新底分型后向上延伸，顶分型尚未确认"),
+                StructureLayer(layer: "segment", label: "线段", title: "向下线段未结束",
+                                detail: "当前笔尚未破坏线段结构，线段延续"),
+                StructureLayer(layer: "pivot", label: "中枢", title: "向上离开中枢",
+                                detail: "现价 392.16 已站上 ZG 388.00，最新向上笔离开了中枢区间。"),
+                StructureLayer(layer: "signal", label: "买卖点", title: "三买候选",
+                                detail: "落在未确认笔上，属左侧预判。"),
+            ]
         )
     }
 

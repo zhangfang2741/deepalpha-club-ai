@@ -129,6 +129,14 @@ class PivotPhaseOut(BaseModel):
     stage_guide: StageGuideOut
 
 
+class StructureLayerOut(BaseModel):
+    """结构分层判断依据的一条（见 app/services/chan/structure_layers.py）。"""
+    layer: Literal["stroke", "segment", "pivot", "signal"]
+    label: str
+    title: str
+    detail: str
+
+
 class StructureGapRequest(BaseModel):
     symbol: str
     start_date: str
@@ -185,3 +193,4 @@ class ChanAnalysisResponse(BaseModel):
     narrative: Optional[MarketNarrativeOut] = None  # 大白话形态解读
     pending_notes: list[str] = []  # 最右侧未确认结构的提示
     pivot_phase: Optional[PivotPhaseOut] = None  # 中枢生命周期：走到哪一步
+    structure_layers: list[StructureLayerOut] = []  # 按笔/线段/中枢/买卖点分层的判断依据

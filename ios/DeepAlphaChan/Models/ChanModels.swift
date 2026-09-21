@@ -229,6 +229,17 @@ struct PivotPhase: Codable {
     }
 }
 
+/// 结构分层判断依据的一条：笔/线段/中枢/买卖点各自的当前状态
+/// （对应后端 StructureLayerOut）。
+struct StructureLayer: Codable, Identifiable {
+    let layer: String  // stroke / segment / pivot / signal
+    let label: String
+    let title: String
+    let detail: String
+
+    var id: String { layer }
+}
+
 /// 完整缠论分析结果。
 struct ChanAnalysis: Codable {
     let symbol: String
@@ -254,6 +265,7 @@ struct ChanAnalysis: Codable {
     let narrative: MarketNarrative?
     let pendingNotes: [String]
     let pivotPhase: PivotPhase?
+    let structureLayers: [StructureLayer]
 
     enum CodingKeys: String, CodingKey {
         case symbol, fractals, strokes, segments, macd, signals, summary, recommendation, narrative
@@ -268,6 +280,7 @@ struct ChanAnalysis: Codable {
         case trendOutlookLabel = "trend_outlook_label"
         case pendingNotes = "pending_notes"
         case pivotPhase = "pivot_phase"
+        case structureLayers = "structure_layers"
     }
 }
 

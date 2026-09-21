@@ -71,9 +71,9 @@ struct AnalysisSection: View {
                     walkTypeSection
                 }
 
-                if let rec = analysis.recommendation, !rec.reasons.isEmpty {
+                if !analysis.structureLayers.isEmpty {
                     Divider().overlay(Theme.border)
-                    reasonsDisclosure(rec.reasons)
+                    reasonsDisclosure(analysis.structureLayers)
                 }
 
                 Divider().overlay(Theme.border)
@@ -112,17 +112,63 @@ struct AnalysisSection: View {
         }
     }
 
-    /// 「查看判断依据」：默认收起的加权依据列表。
-    private func reasonsDisclosure(_ reasons: [String]) -> some View {
+    /// 「查看判断依据」：默认收起，按笔/线段/中枢/买卖点分层展示当前状态
+    /// （而不是一份扁平的加权依据列表）——用户想知道结论怎么来的，按结构层
+    /// 拆开比一句句读加权因子更好懂。
+    private func reasonsDisclosure(_ layers: [StructureLayer]) -> some View {
         DisclosureGroup {
-            BulletList(items: reasons, color: Theme.textSecondary)
-                .padding(.top, 6)
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(layers) { layer in
+                    StructureLayerRow(layer: layer)
+                }
+            }
+            .padding(.top, 6)
         } label: {
             Label(L("查看判断依据"), systemImage: "checklist")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(Theme.textSecondary)
         }
         .tint(Theme.textSecondary)
+    }
+}
+
+/// 「查看判断依据」里的一行：结构层色标 + 当前状态标题 + 说明。
+private struct StructureLayerRow: View {
+    let layer: StructureLayer
+
+    /// 层级色标复用图表图层图例色（笔=蓝/线段=橙/中枢=紫），买卖点用主题蓝——
+    /// 这里是纯粹的「给类别贴标签」，和大白话摘要的语义着色（HeadlineHighlighter）
+    /// 是两码事，不要混用同一套规则。
+    private var color: Color {
+        switch layer.layer {
+        case "stroke": return Theme.stroke
+        case "segment": return Theme.segment
+        case "pivot": return Theme.pivotFill
+        case "signal": return Theme.accent
+        default: return Theme.textSecondary
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(layer.label)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(color)
+                .frame(width: 40, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(layer.title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(Theme.textPrimary)
+                Text(layer.detail)
+                    .font(.caption)
+                    .foregroundColor(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.surfaceAlt)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 

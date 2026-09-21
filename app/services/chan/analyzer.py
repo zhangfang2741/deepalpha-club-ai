@@ -35,6 +35,7 @@ from app.services.chan.pivot_phase import PivotPhase, build_pivot_phase
 from app.services.chan.segment import Segment, find_segments
 from app.services.chan.signals import Signal, generate_all_signals
 from app.services.chan.stroke import Stroke, find_strokes
+from app.services.chan.structure_layers import StructureLayer, build_structure_layers
 
 
 @dataclass
@@ -90,6 +91,8 @@ class ChanAnalysisResult:
     narrative: MarketNarrative | None = None
     # 中枢生命周期状态机：「走到哪一步」，见 pivot_phase.py
     pivot_phase: "PivotPhase | None" = None
+    # 按笔/线段/中枢/买卖点分层的判断依据，见 structure_layers.py
+    structure_layers: "list[StructureLayer]" = field(default_factory=list)
 
     # 最右侧未确认结构的提示（把缠论的右侧滞后不确定性显式暴露出来）
     pending_notes: list[str] = field(default_factory=list)
@@ -231,6 +234,7 @@ class ChanAnalyzer:
         result.recommendation = self._build_recommendation(result, bars, lang)
         result.narrative = build_narrative(result, bars, lang)
         result.pivot_phase = build_pivot_phase(result, lang)
+        result.structure_layers = build_structure_layers(result, lang)
 
         logger.info(
             "chan_analysis_complete",
