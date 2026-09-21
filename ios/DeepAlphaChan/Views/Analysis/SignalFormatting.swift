@@ -65,6 +65,52 @@ enum SignalFormatting {
     }
 }
 
+/// 「走势」标签行的短文案映射。
+///
+/// 后端 `walk_type_label`/`trend_outlook_label` 是给 summary 拼整句用的完整句子
+/// （如"当前为上涨趋势（中枢依次抬高）"），直接塞进 Chip 里会太长撑爆一行。这里
+/// 按原始枚举码（`walk_type`/`trend_outlook`）单独映射一套「chip 短标签 + 一行
+/// 补充说明」，枚举值定义见 `app/services/chan/pivot.py::classify_walk_type` 与
+/// `app/services/chan/analyzer.py::_compute_trend_outlook`。
+enum WalkTypeFormatting {
+    /// 走势类型短标签（用于 Chip）。未知枚举值退回完整句子，避免显示空白。
+    static func shortLabel(_ walkType: String, fallback: String?) -> String {
+        switch walkType {
+        case "up_trend": return L("上涨趋势")
+        case "down_trend": return L("下跌趋势")
+        case "consolidation": return L("盘整")
+        case "none": return L("结构未成形")
+        default: return fallback ?? walkType
+        }
+    }
+
+    /// 走势类型的一行补充说明（对应完整句子里的括号部分）。
+    static func detail(_ walkType: String) -> String? {
+        switch walkType {
+        case "up_trend": return L("中枢依次抬高")
+        case "down_trend": return L("中枢依次降低")
+        case "consolidation": return L("围绕中枢震荡")
+        case "none": return L("单边推进或数据不足")
+        default: return nil
+        }
+    }
+
+    /// 走势展望短标签（用于 Chip）。未知枚举值退回完整句子。
+    static func shortOutlookLabel(_ outlook: String, fallback: String?) -> String {
+        switch outlook {
+        case "reversal_up": return L("可能转折向上")
+        case "reversal_down": return L("可能转折向下")
+        case "continuation_up": return L("延续上涨")
+        case "continuation_down": return L("延续下跌")
+        case "breakout_up": return L("向上突破")
+        case "breakout_down": return L("向下突破")
+        case "range": return L("盘整延续")
+        case "unclear": return L("走势不明")
+        default: return fallback ?? outlook
+        }
+    }
+}
+
 /// 分析区统一的字号层级。
 ///
 /// 改造前这块混用了 12/13/15/20 四种字号，而且「依据」这类小标题(12pt)比它

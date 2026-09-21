@@ -7,11 +7,15 @@ import SwiftUI
 /// 技术信号，要结合整体走势与市场结构」——这张卡本身就是那个「整体」的呈现，标题得
 /// 对上，不能听起来像只在讲局部形态。
 ///
-/// 不展示任何方向性判断（多空 chip / 加权强弱结论 / 走势展望）：这三者算法口径
-/// 各自独立，同一次分析里出现过互相矛盾的情况（比如标题栏"中性"、结论行却写
-/// "下跌动能转弱"、走势展望又说"上涨延续"），用户反馈这种自相矛盾比"没有结论"
-/// 更糟。只保留客观陈述——大白话摘要、加权依据列表、结构统计——由用户自己判断，
-/// 不替用户下结论。
+/// 不展示"加权强弱结论"的多空 chip（`recommendation.bias`）：它和大白话摘要、
+/// 走势展望的算法口径各自独立，同一次分析里出现过互相矛盾的情况（比如结论行写
+/// "下跌动能转弱"、走势展望却说"上涨延续"），用户反馈这种自相矛盾比"没有结论"
+/// 更糟，所以这个多空结论至今没有入口。
+///
+/// 「走势」区块（`walkTypeSection`）展示的 `walk_type`/`trend_outlook` 是另一
+/// 回事：这两个是纯几何判定（中枢排布 + 背驰方向），不是多因子加权，口径单一、
+/// 不会自相矛盾，因此可以直接展示——不要和上面那条"不展示方向性判断"的原则
+/// 混为一谈。
 ///
 /// 风险提示已拆到 `RiskSection` 独立成一个 tab（见 ResultSegments）。
 ///
@@ -31,8 +35,11 @@ struct AnalysisSection: View {
                  analysis.segments.count, pivots, analysis.signals.count)
     }
 
-    /// 当前状态：大白话一句话 → 走到哪一步 → 各项事实依据 → 走势标签 → 结构统计，
-    /// 只陈述事实不下结论。
+    /// 当前状态：大白话一句话 → 走到哪一步 → 走势标签 → 查看判断依据（默认收起）
+    /// → 结构统计，只陈述事实不下结论。
+    ///
+    /// 「查看判断依据」故意收起：加权依据是给想深挖的人看的，默认展开会和
+    /// 「走到哪一步」的结论抢视觉焦点，参照设计稿改为点开才展开。
     private var statusCard: some View {
         CollapsibleCard(title: L("当前状态"), systemImage: "waveform.path.ecg",
                         defaultExpanded: true) {
@@ -49,14 +56,14 @@ struct AnalysisSection: View {
                     PivotPhaseBlock(phase: phase)
                 }
 
-                if let rec = analysis.recommendation, !rec.reasons.isEmpty {
+                if analysis.walkType != nil || analysis.trendOutlook != nil {
                     Divider().overlay(Theme.border)
-                    BulletList(title: L("依据"), items: rec.reasons, color: Theme.textSecondary)
+                    walkTypeSection
                 }
 
-                if analysis.walkTypeLabel != nil || analysis.trendOutlookLabel != nil {
+                if let rec = analysis.recommendation, !rec.reasons.isEmpty {
                     Divider().overlay(Theme.border)
-                    walkTypeChips
+                    reasonsDisclosure(rec.reasons)
                 }
 
                 Divider().overlay(Theme.border)
@@ -68,12 +75,44 @@ struct AnalysisSection: View {
         }
     }
 
-    /// 「走势」标签行：走势类型 + 走势展望的人话标签（这两个字段此前未被 UI 消费）。
-    private var walkTypeChips: some View {
-        HStack(spacing: 8) {
-            if let label = analysis.walkTypeLabel { Chip(text: label, color: Theme.accent) }
-            if let label = analysis.trendOutlookLabel { Chip(text: label, color: Theme.segment) }
+    /// 「走势」区块：短标签 chip（上涨趋势/可能转折向下…）+ 一行补充说明
+    /// （中枢依次抬高…）。后端的 `walkTypeLabel`/`trendOutlookLabel` 是完整句子
+    /// （给 summary 拼句子用），塞进 chip 里会太长，这里按原始枚举码单独映射一套
+    /// 短文案——短标签只在这一处使用，暂不值得为此新增后端字段。
+    private var walkTypeSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L("走势"))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Theme.textSecondary)
+            HStack(spacing: 8) {
+                if let walkType = analysis.walkType {
+                    Chip(text: WalkTypeFormatting.shortLabel(walkType, fallback: analysis.walkTypeLabel),
+                         color: Theme.accent)
+                }
+                if let outlook = analysis.trendOutlook {
+                    Chip(text: WalkTypeFormatting.shortOutlookLabel(outlook, fallback: analysis.trendOutlookLabel),
+                         color: Theme.segment)
+                }
+            }
+            if let walkType = analysis.walkType, let detail = WalkTypeFormatting.detail(walkType) {
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundColor(Theme.textSecondary)
+            }
         }
+    }
+
+    /// 「查看判断依据」：默认收起的加权依据列表。
+    private func reasonsDisclosure(_ reasons: [String]) -> some View {
+        DisclosureGroup {
+            BulletList(items: reasons, color: Theme.textSecondary)
+                .padding(.top, 6)
+        } label: {
+            Label(L("查看判断依据"), systemImage: "checklist")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Theme.textSecondary)
+        }
+        .tint(Theme.textSecondary)
     }
 }
 
@@ -135,11 +174,17 @@ private struct PivotPhaseBlock: View {
             }
 
             if !phase.branches.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 6) {
                     ForEach(phase.branches) { branch in
-                        Text("↳ \(branch.conditionLabel) → \(branch.resultLabel)")
-                            .font(.caption2)
-                            .foregroundColor(Theme.textSecondary)
+                        HStack(alignment: .top, spacing: 4) {
+                            Image(systemName: "arrow.turn.down.right")
+                                .font(.system(size: 10))
+                                .foregroundColor(Theme.textSecondary)
+                            Text("\(branch.conditionLabel) → \(branch.resultLabel)")
+                                .font(.caption2)
+                                .foregroundColor(Theme.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
             }
