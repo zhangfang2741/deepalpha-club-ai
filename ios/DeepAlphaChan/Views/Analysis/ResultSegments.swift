@@ -14,13 +14,14 @@ struct ResultSegments: View {
     /// 所以长图不走切换器，三段上下全铺，各带小标题 —— 长图要的就是完整内容。
     var isStatic = false
 
-    @State private var segment: Segment = .analysis
+    @State private var segment: Segment = .structure
 
     enum Segment: String, CaseIterable, Identifiable {
-        case analysis, signals, risk
+        case structure, analysis, signals, risk
         var id: String { rawValue }
         var title: String {
             switch self {
+            case .structure: return L("结构")
             case .analysis: return L("整体分析")
             case .signals: return L("买卖点")
             case .risk: return L("风险提示")
@@ -48,6 +49,8 @@ struct ResultSegments: View {
             .pickerStyle(.segmented)
 
             switch segment {
+            case .structure:
+                ChanStructureView(analysis: analysis)
             case .analysis:
                 AnalysisSection(analysis: analysis)
             case .signals:
@@ -61,6 +64,9 @@ struct ResultSegments: View {
     /// 长图布局：三段全铺，标题复用交互态的文案（买卖点/风险提示带数量）。
     private var staticSections: some View {
         VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(L("结构"))
+            ChanStructureView(analysis: analysis)
+
             sectionHeader(L("整体分析"))
             AnalysisSection(analysis: analysis)
 
@@ -81,7 +87,7 @@ struct ResultSegments: View {
     /// 买卖点/风险提示段带上数量，不用切过去就知道有没有东西。
     private func title(for s: Segment) -> String {
         switch s {
-        case .analysis:
+        case .structure, .analysis:
             return s.title
         case .signals:
             guard !analysis.signals.isEmpty else { return s.title }

@@ -342,6 +342,44 @@
 "强" = "Strong";
 "角标=级别（一/二/三类） · 居中=越新 · 点击查看分析" = "Badge = tier (1/2/3) · centered = newer · tap for analysis";
 
+/* Structure view (框带点) */
+"结构" = "Structure";
+"框=隶属 · 带=中枢 · 点=买卖点 · 虚线=未确认 · 点任意元素看详情" = "Frame = nesting · band = pivot · dot = signal · dashed = unconfirmed · tap any element";
+"大级别" = "Large";
+"中期" = "Mid";
+"近期" = "Recent";
+"走势（大级别）" = "Trend (large degree)";
+"顶背驰 已现" = "Top divergence shown";
+"底背驰 已现" = "Bottom divergence shown";
+"背驰 未现" = "No divergence";
+"背驰监测" = "Divergence watch";
+"当前" = "Now";
+"已过" = "Passed";
+"未来" = "Future";
+"未处于" = "Not here";
+"已完成" = "Done";
+"尚未形成" = "Not formed";
+"尚未形成中枢 · 单边推进" = "No pivot yet · one-way move";
+"候选" = "Candidate";
+"形成" = "Form";
+"震荡" = "Oscillate";
+"离开" = "Leave";
+"回抽" = "Pullback";
+"向上" = "Up";
+"向下" = "Down";
+"形成中" = "Forming";
+"已确认" = "Confirmed";
+"下钻到次级别看内部" = "Drill into the sub-level";
+"下钻 · 次级别" = "Drill · sub-level";
+"三类各挂在结构的不同位置（点看区别）" = "The three signal classes attach at different spots (tap to compare)";
+"中枢有几个 → 盘整还是趋势" = "How many pivots → range or trend";
+"0 中枢" = "0 pivots";
+"1 中枢" = "1 pivot";
+"2+ 中枢" = "2+ pivots";
+"单边推进" = "One-way move";
+"趋势（依次移动）" = "Trend (stepping)";
+"← 当前" = "← now";
+
 /* Overall analysis — trend / structure / signal blocks */
 "走势" = "Trend";
 "结构" = "Structure";
