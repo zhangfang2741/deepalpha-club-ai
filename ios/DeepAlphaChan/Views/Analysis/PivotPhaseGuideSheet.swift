@@ -31,6 +31,7 @@ struct PivotPhaseGuideSheet: View {
                 } label: {
                     Image(systemName: "xmark")
                 }
+                .accessibilityLabel(L("关闭"))
             }
         }
     }
@@ -47,7 +48,7 @@ struct PivotPhaseGuideSheet: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(Theme.textSecondary)
             VStack(alignment: .leading, spacing: 14) {
-                ForEach(Array(pivotPhase.stageGuide.steps.enumerated()), id: \.element.id) { idx, step in
+                ForEach(Array(pivotPhase.stageGuide.steps.enumerated()), id: \.offset) { idx, step in
                     let isCurrent = idx == pivotPhase.stageGuide.currentIndex
                     let isPast = idx < pivotPhase.stageGuide.currentIndex
                     HStack(alignment: .top, spacing: 10) {
