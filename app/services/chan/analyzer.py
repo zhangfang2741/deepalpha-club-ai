@@ -31,6 +31,7 @@ from app.services.chan.pivot import (
     find_segment_pivots,
     find_stroke_pivots,
 )
+from app.services.chan.pivot_phase import PivotPhase, build_pivot_phase
 from app.services.chan.segment import Segment, find_segments
 from app.services.chan.signals import Signal, generate_all_signals
 from app.services.chan.stroke import Stroke, find_strokes
@@ -77,14 +78,18 @@ class ChanAnalysisResult:
     current_trend: str = ""
     # 走势类型（基于中枢排布）：up_trend / down_trend / consolidation / none
     walk_type: str = "none"
+    walk_type_label: str = ""  # 走势类型人话标签（供 iOS「走势」标签行直接展示）
     # 走势展望（延续 vs 转折，缠论走势分类）。取值见 _compute_trend_outlook：
     # 转折向上/转折向下、延续上涨/延续下跌、盘整上破/盘整下破、盘整延续、未明。
     trend_outlook: str = "unclear"
+    trend_outlook_label: str = ""  # 走势展望人话标签（同上）
     latest_signal: Signal | None = None
     summary: str = ""
     recommendation: Recommendation | None = None
     # 大白话形态解读（趋势 / 位置 / 量价 / 动能），供普通用户理解当前市场在做什么
     narrative: MarketNarrative | None = None
+    # 中枢生命周期状态机：「走到哪一步」，见 pivot_phase.py
+    pivot_phase: "PivotPhase | None" = None
 
     # 最右侧未确认结构的提示（把缠论的右侧滞后不确定性显式暴露出来）
     pending_notes: list[str] = field(default_factory=list)
@@ -216,13 +221,16 @@ class ChanAnalyzer:
         result.walk_type = classify_walk_type(
             result.segment_pivots if result.segment_pivots else result.stroke_pivots
         )
+        result.walk_type_label = self._walk_type_label(result.walk_type, lang)
         result.trend_outlook = self._compute_trend_outlook(result)
+        result.trend_outlook_label = self._trend_outlook_label(result.trend_outlook, lang)
         result.current_trend = self._infer_trend_from_strokes(result.strokes, lang)
         result.latest_signal = result.signals[-1] if result.signals else None
         result.summary = self._build_summary(result, lang)
         # 量价需要原始 bars（合并K线不含 volume），故两处都在此传入
         result.recommendation = self._build_recommendation(result, bars, lang)
         result.narrative = build_narrative(result, bars, lang)
+        result.pivot_phase = build_pivot_phase(result, lang)
 
         logger.info(
             "chan_analysis_complete",
