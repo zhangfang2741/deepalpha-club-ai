@@ -27,10 +27,13 @@ struct AnalysisSection: View {
         statusCard
     }
 
-    /// 大白话摘要按关键词着色（笔/线段/中枢/背驰/买卖点），结构未成形时的
-    /// 后端兜底摘要（`analysis.summary`）不做关键词着色处理，原样展示。
+    /// 大白话摘要按关键词着色（笔/线段/中枢/背驰/买卖点）。优先用
+    /// `structureHeadline`——它和下面「查看判断依据」展开的四层结论出自同一份
+    /// 判定（线段/笔方向、中枢位置、最新买卖点），是同一套事实的两种呈现；
+    /// 结构没成形到能拼出这句话时（缺线段或缺笔）才退回 `narrative.headline`，
+    /// 两者都没有时最后退回后端兜底摘要 `analysis.summary`（不做着色处理）。
     private var headlineText: Text {
-        if let headline = analysis.narrative?.headline {
+        if let headline = analysis.structureHeadline ?? analysis.narrative?.headline {
             return Text(HeadlineHighlighter.highlight(headline))
         }
         return Text(analysis.summary)
@@ -47,11 +50,12 @@ struct AnalysisSection: View {
     /// 当前状态：大白话一句话 → 走到哪一步 → 走势标签 → 查看判断依据（默认收起）
     /// → 结构统计，只陈述事实不下结论。
     ///
-    /// 「查看判断依据」故意收起：加权依据是给想深挖的人看的，默认展开会和
-    /// 「走到哪一步」的结论抢视觉焦点，参照设计稿改为点开才展开。
+    /// 卡片本身不可折叠（`SectionCard` 而不是 `CollapsibleCard`）：这是
+    /// 「整体分析」这个独立 tab 的主内容，不是可有可无的附加信息，折叠起来
+    /// 一进页面就看不到东西没有意义。「查看判断依据」这一小块内部单独收起——
+    /// 加权依据是给想深挖的人看的，默认展开会和「走到哪一步」的结论抢视觉焦点。
     private var statusCard: some View {
-        CollapsibleCard(title: L("当前状态"), systemImage: "waveform.path.ecg",
-                        defaultExpanded: true) {
+        SectionCard(title: L("当前状态"), systemImage: "waveform.path.ecg") {
             VStack(alignment: .leading, spacing: 14) {
                 // 结构没成形（笔太少）时没有大白话解读，退回后端摘要；关键词着色见
                 // HeadlineHighlighter，未命中关键词的字保持默认前景色
@@ -204,19 +208,21 @@ private struct PivotPhaseBlock: View {
                 .accessibilityHint(L("点击查看阶段判定说明"))
             }
 
+            // 字号对齐「查看判断依据」里 StructureLayerRow 的 title(14 semibold)/
+            // detail(.caption)——同一张卡片里两处列表项该是一样的字号层级。
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(phase.checklist) { item in
                     HStack(alignment: .top, spacing: 6) {
                         Image(systemName: item.state == .done ? "checkmark.circle.fill" : "circle")
                             .foregroundColor(item.state == .done ? Theme.accent : Theme.textSecondary)
-                            .font(.system(size: 13))
+                            .font(.system(size: 14))
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.label)
-                                .font(.system(size: 13, weight: item.state == .done ? .medium : .regular))
+                                .font(.system(size: 14, weight: item.state == .done ? .semibold : .regular))
                                 .foregroundColor(item.state == .done ? Theme.textPrimary : Theme.textSecondary)
                             if !item.detail.isEmpty {
                                 Text(item.detail)
-                                    .font(.caption2)
+                                    .font(.caption)
                                     .foregroundColor(Theme.textSecondary)
                             }
                         }
