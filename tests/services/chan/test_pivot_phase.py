@@ -5,6 +5,8 @@ build_pivot_phase，不跑完整分析流程。
 """
 from __future__ import annotations
 
+from typing import Literal
+
 from app.services.chan.analyzer import ChanAnalysisResult
 from app.services.chan.divergence import DivergenceResult
 from app.services.chan.fractal import Fractal, MergedCandle
@@ -19,19 +21,19 @@ def _mc(idx: int, price: float) -> MergedCandle:
                          low=price - 1, close=price, raw_start=idx, raw_end=idx)
 
 
-def _fx(kind: str, idx: int, price: float) -> Fractal:
+def _fx(kind: Literal["top", "bottom"], idx: int, price: float) -> Fractal:
     mid = _mc(idx, price)
     return Fractal(type=kind, candle=mid, left=_mc(idx - 1, price), right=_mc(idx + 1, price))
 
 
-def _st(direction: str, idx: int, p0: float, p1: float, confirmed: bool = True) -> Stroke:
+def _st(direction: Literal["up", "down"], idx: int, p0: float, p1: float, confirmed: bool = True) -> Stroke:
     sk = "bottom" if direction == "up" else "top"
     ek = "top" if direction == "up" else "bottom"
     return Stroke(direction=direction, start=_fx(sk, idx * 10, p0), end=_fx(ek, idx * 10 + 5, p1),
                   confirmed=confirmed)
 
 
-def _chain(*legs: tuple[str, float, float]) -> list[Stroke]:
+def _chain(*legs: tuple[Literal["up", "down"], float, float]) -> list[Stroke]:
     """按顺序生成前后相连的一串笔：leg = (direction, p0, p1)。"""
     return [_st(direction, i, p0, p1) for i, (direction, p0, p1) in enumerate(legs)]
 
@@ -87,6 +89,7 @@ def test_pivot_oscillating_when_extension_stays_inside_range():
     strokes = _chain(("down", 100, 90), ("up", 90, 98), ("down", 98, 92), ("up", 92, 96))
     pivot = _pivot_from(strokes, 4, zg=98, zd=90)
     pp = build_pivot_phase(_result(strokes, [pivot], []))
+    assert pp is not None
     assert pp.phase == "pivot_oscillating"
     assert pp.direction is None
 
@@ -95,6 +98,7 @@ def test_leaving_when_breakout_crosses_zg_without_retrace_yet():
     strokes = _chain(("down", 100, 90), ("up", 90, 98), ("down", 98, 92), ("up", 92, 110))
     pivot = _pivot_from(strokes, 4, zg=99, zd=91)
     pp = build_pivot_phase(_result(strokes, [pivot], []))
+    assert pp is not None
     assert pp.phase == "leaving"
     assert pp.direction == "up"
     assert len(pp.branches) == 3
@@ -106,6 +110,7 @@ def test_retrace_confirmed_type3_when_retrace_holds_above_zg():
                       ("up", 92, 110), ("down", 110, 101))
     pivot = _pivot_from(strokes, 5, zg=99, zd=91)
     pp = build_pivot_phase(_result(strokes, [pivot], []))
+    assert pp is not None
     assert pp.phase == "retrace_confirmed"
     assert pp.direction == "up"
     assert "三买" in pp.phase_label
@@ -117,6 +122,7 @@ def test_retrace_confirmed_type2_when_retrace_lands_inside_pivot():
                       ("up", 92, 110), ("down", 110, 95))
     pivot = _pivot_from(strokes, 5, zg=99, zd=91)
     pp = build_pivot_phase(_result(strokes, [pivot], []))
+    assert pp is not None
     assert pp.phase == "retrace_confirmed"
     assert "二买" in pp.phase_label
 
@@ -126,6 +132,7 @@ def test_back_to_range_falls_back_to_oscillating():
                       ("up", 92, 110), ("down", 110, 85))  # 85 < ZD(91)，反手跌穿对侧
     pivot = _pivot_from(strokes, 5, zg=99, zd=91)
     pp = build_pivot_phase(_result(strokes, [pivot], []))
+    assert pp is not None
     assert pp.phase == "pivot_oscillating"
     assert pp.direction is None
 
@@ -136,6 +143,7 @@ def test_divergence_turn_after_retrace_confirmed_with_matching_divergence():
     pivot = _pivot_from(strokes, 5, zg=99, zd=91)  # 第6段（延续笔）不吞并，走 post 的时间过滤
     divs = [_div(False)] * 5 + [_div(True)]  # 第6段（延续的上升笔）出现背驰
     pp = build_pivot_phase(_result(strokes, [pivot], divs))
+    assert pp is not None
     assert pp.phase == "divergence_turn"
     assert pp.direction == "up"
 
@@ -146,6 +154,7 @@ def test_stays_retrace_confirmed_without_matching_divergence():
     pivot = _pivot_from(strokes, 5, zg=99, zd=91)
     divs = [_div(False)] * 6  # 延续笔没有背驰
     pp = build_pivot_phase(_result(strokes, [pivot], divs))
+    assert pp is not None
     assert pp.phase == "retrace_confirmed"
 
 
@@ -169,5 +178,6 @@ def test_cross_check_matches_generate_buy2_signals():
     assert len(sig) == 1 and sig[0].type == "buy2"
 
     pp = build_pivot_phase(_result(strokes, pivots, []))
+    assert pp is not None
     assert pp.phase == "retrace_confirmed"
     assert "二买" in pp.phase_label
