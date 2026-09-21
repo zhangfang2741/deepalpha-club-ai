@@ -164,6 +164,8 @@ struct PhaseChecklistItem: Codable, Identifiable {
     let detail: String
     let state: State
 
+    // label 目前唯一：后端 pivot_phase.py 的 _checklist() 每次最多生成 3 条不同文案，
+    // 唯一性是隐式约定，不是类型层面保证的，后端改动时留意别引入重复 label。
     var id: String { label }
 }
 
@@ -173,6 +175,8 @@ struct PhaseBranch: Codable, Identifiable {
     let conditionLabel: String
     let resultLabel: String
 
+    // outcome 目前唯一：后端 pivot_phase.py 的 _branches() 固定只产出 type2/type3/
+    // back_to_range 这 3 个 outcome，唯一性由后端实现保证，不是类型层面保证的。
     var id: String { outcome }
 
     enum CodingKeys: String, CodingKey {
@@ -188,6 +192,8 @@ struct StageGuideStep: Codable, Identifiable {
     let title: String
     let detail: String
 
+    // key 目前唯一：后端 pivot_phase.py 的 _stage_guide() 固定产出同一组 5 个阶段 key，
+    // 唯一性是隐式约定，不是类型层面保证的。
     var id: String { key }
 }
 
