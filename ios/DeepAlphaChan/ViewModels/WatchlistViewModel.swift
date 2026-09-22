@@ -17,6 +17,11 @@ final class WatchlistViewModel: ObservableObject {
     @Published private(set) var items: [WatchlistItem] = []
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
+    /// 每只自选标的当前的中枢阶段，key 为 `WatchlistItem.id`（`{market}:{symbol}`）。
+    /// 只在「自选」Tab 的 `refresh()`/`onAppear()` 里拉，`refreshSilently()`
+    /// （给分析详情页星标按钮判断收藏状态用）不拉——那条路径要快，多算全部
+    /// 标的的缠论阶段没必要也拖慢它。取不到的标的直接没有 key，UI 不显示标签。
+    @Published private(set) var phases: [String: WatchlistPhase] = [:]
 
     private var memberships: Set<String> = []
 
@@ -37,7 +42,16 @@ final class WatchlistViewModel: ObservableObject {
             try await fetchAndApply()
         } catch {
             errorMessage = (error as? APIError)?.message ?? "加载自选失败"
+            return
         }
+        await loadPhases()
+    }
+
+    /// 拉阶段标签：单独一次请求，比拉列表慢（要跑缠论分析），失败静默——
+    /// 阶段标签是锦上添花，不该因为算阶段失败把整个自选列表的加载判定为失败。
+    private func loadPhases() async {
+        guard let resp = try? await WatchlistService.phases() else { return }
+        phases = resp.phases
     }
 
     /// 只用来判断分析结果页当前标的的星标状态，不需要展示 loading，失败静默即可

@@ -16,6 +16,12 @@ enum WatchlistService {
         try await APIClient.shared.get("/watchlist")
     }
 
+    /// 批量拉自选列表里每只标的当前的中枢阶段——单独一个接口，比拉列表慢
+    /// （要跑缠论分析），列表先展示出来，阶段标签异步补上。
+    static func phases() async throws -> WatchlistPhasesResponse {
+        try await APIClient.shared.get("/watchlist/phases")
+    }
+
     static func add(market: StockMarket, symbol: String, name: String) async throws -> WatchlistItem {
         try await APIClient.shared.postJSON(
             "/watchlist",

@@ -101,6 +101,18 @@ struct WatchlistView: View {
         }
     }
 
+    /// 中枢阶段 → 标签配色：形成/震荡（还没怎样）用中性灰，离开段（正在发生）用
+    /// 橙，回抽确认（已确认）用主题蓝，背驰转折（趋势信号）用紫——和详情页
+    /// "走到哪一步"的阶段徽标是同一套语言，不再另起一套。
+    private static func phaseColor(_ phase: String?) -> Color {
+        switch phase {
+        case "leaving": return Theme.segment
+        case "retrace_confirmed": return Theme.accent
+        case "divergence_turn": return Theme.pivotFill
+        default: return Theme.textSecondary  // pivot_forming / pivot_oscillating / nil
+        }
+    }
+
     private func row(_ item: WatchlistItem, market: StockMarket) -> some View {
         HStack(spacing: 12) {
             RoundedRectangle(cornerRadius: 2)
@@ -119,6 +131,9 @@ struct WatchlistView: View {
                 }
             }
             Spacer()
+            if let phase = vm.phases[item.id], let label = phase.phaseLabel {
+                Chip(text: label, color: Self.phaseColor(phase.phase))
+            }
             Text(relativeTime(item.createdAt))
                 .font(.caption2)
                 .foregroundColor(Theme.textSecondary)

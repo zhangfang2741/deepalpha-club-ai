@@ -29,3 +29,22 @@ struct WatchlistItem: Decodable, Identifiable {
 struct WatchlistResponse: Decodable {
     let items: [WatchlistItem]
 }
+
+/// 一只自选标的当前的中枢生命周期阶段（对应后端 WatchlistPhaseOut）。
+/// 结构没成形或行情拉取失败时 phase/phaseLabel 为 nil，UI 不显示标签。
+struct WatchlistPhase: Decodable {
+    let symbol: String
+    let market: String
+    let phase: String?
+    let phaseLabel: String?
+
+    enum CodingKeys: String, CodingKey {
+        case symbol, market, phase
+        case phaseLabel = "phase_label"
+    }
+}
+
+struct WatchlistPhasesResponse: Decodable {
+    /// key 为 `{market}:{symbol}`，与 WatchlistItem.id 同一套拼法，直接查表用。
+    let phases: [String: WatchlistPhase]
+}

@@ -1,13 +1,22 @@
 """自选股路由：登录用户的关注清单，加入/删除/查看。"""
 from fastapi import APIRouter, Depends, HTTPException
+from redis.asyncio import Redis
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.v1.auth.dependencies import get_current_user
+from app.cache.client import get_redis
 from app.core.logging import logger
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.watchlist import WatchlistAddRequest, WatchlistItemOut, WatchlistResponse
+from app.schemas.watchlist import (
+    WatchlistAddRequest,
+    WatchlistItemOut,
+    WatchlistPhaseOut,
+    WatchlistPhasesResponse,
+    WatchlistResponse,
+)
 from app.services import watchlist as store
+from app.services.watchlist_phases import fetch_phase_labels
 
 router = APIRouter()
 
@@ -32,6 +41,30 @@ async def list_watchlist(
             for i in items
         ]
     )
+
+
+@router.get("/phases", response_model=WatchlistPhasesResponse)
+async def get_watchlist_phases(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+) -> WatchlistPhasesResponse:
+    """批量算一遍当前用户自选列表里每只标的的中枢阶段（见 pivot_phase.py）。
+
+    单独成一个端点、不塞进 GET /watchlist：算阶段要拉 K 线+跑缠论分析，比
+    纯 DB 查询慢得多，前端列表页可以先渲染出代码/名称，阶段标签异步补上，
+    不用为了等阶段把整个列表都卡住。
+    """
+    items = await store.list_items(db, user.id)
+    results = await fetch_phase_labels(
+        [(i.market, i.symbol) for i in items], user_id=user.id, redis=redis,
+    )
+    return WatchlistPhasesResponse(phases={
+        f"{r.market}:{r.symbol}": WatchlistPhaseOut(
+            symbol=r.symbol, market=r.market, phase=r.phase, phase_label=r.phase_label,
+        )
+        for r in results
+    })
 
 
 @router.post("", response_model=WatchlistItemOut)
