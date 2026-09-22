@@ -36,31 +36,30 @@ struct ResultSegments: View {
         }
     }
 
-    /// 三个 tab 是真正独立的页面：各自一个 ScrollView，`.id(segment)` 强制切换
-    /// 时整个滚动视图换一个新实例（滚动位置回到顶部），不共享同一份滚动状态。
-    /// 之前三段内容挤在外层同一个 ScrollView 里切换，切到内容更短的 tab 时
-    /// 滚动位置对不上、看起来会跳动。
+    /// 回退记录：曾经尝试把图表+图层开关固定在顶部、tab 内容单独套一个
+    /// `.frame(maxHeight: .infinity)` 的 ScrollView 独立滚动——真机实测发现
+    /// 图表+MACD+图例已经占掉大半屏，留给 tab 内容的"剩余空间"被挤成一个
+    /// 只有几行高的小框，体验比之前更差，已经撤回。tab 内容和图表一起回到
+    /// 外层共享的那个 ScrollView 里（见 ResultDetailView.body），这里只负责
+    /// 切换器 + 当前选中的内容，不再自带 ScrollView。`.id(segment)` 保留：
+    /// 让 SwiftUI 把每次切换都当成一棵新的内容树，不会把上一个 tab 的布局
+    /// 状态带过来。
     private var interactiveSections: some View {
         VStack(spacing: 12) {
             SegmentTabBar(selection: $segment, title: title(for:))
 
-            ScrollView {
-                Group {
-                    switch segment {
-                    case .analysis:
-                        AnalysisSection(analysis: analysis)
-                    case .signals:
-                        SignalListSection(analysis: analysis)
-                    case .risk:
-                        RiskSection(analysis: analysis)
-                    }
+            Group {
+                switch segment {
+                case .analysis:
+                    AnalysisSection(analysis: analysis)
+                case .signals:
+                    SignalListSection(analysis: analysis)
+                case .risk:
+                    RiskSection(analysis: analysis)
                 }
-                .padding(.bottom, Theme.contentVInset)
             }
             .id(segment)
-            .scrollBounceBehavior(.basedOnSize)
         }
-        .frame(maxHeight: .infinity)
     }
 
     /// 长图布局：三段全铺，标题复用交互态的文案（买卖点/风险提示带数量）。

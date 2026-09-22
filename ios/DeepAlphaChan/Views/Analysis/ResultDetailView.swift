@@ -23,13 +23,16 @@ struct ResultDetailView: View {
     @StateObject private var watchlistVM = WatchlistViewModel()
 
     var body: some View {
-        // 不再整页套一个 ScrollView：图表/免责声明固定不动，中间的分段内容
-        // （ResultSegments）自己就是「三个独立页面各自滚动」，需要拿到剩余
-        // 空间去铺满、独立滚动——套在外层 ScrollView 里会让它的
-        // `.frame(maxHeight: .infinity)` 失去意义（外层给的是无限高度，
-        // 内层就会长到贴合内容而不是限定在剩余空间内，独立滚动无从谈起）。
-        pageContent(isStatic: false)
-            .background(Theme.background)
+        // 曾经尝试把图表固定在顶部、只让 ResultSegments 的 tab 内容单独滚动
+        // （给它 .frame(maxHeight: .infinity)）——真机实测图表+MACD+图层图例
+        // 本来就占大半屏，留给 tab 内容的"剩余空间"被挤成一个只有几行高的
+        // 小框，体验比之前更差，已撤回。回到整页一个 ScrollView，图表和
+        // tab 内容一起自然滚动。
+        ScrollView {
+            pageContent(isStatic: false)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .background(Theme.background)
         .navigationTitle(navTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -69,17 +72,13 @@ struct ResultDetailView: View {
         return "\(vm.symbol.uppercased()) · \(freq)"
     }
 
-    /// 页面内容，同时是分享长图的渲染源（PageSnapshot.render）。
+    /// ScrollView 的完整内容，同时是分享长图的渲染源（PageSnapshot.render）。
     ///
-    /// 抽成一个方法让屏幕显示与离屏长图复用同一棵视图树、内容顺序保持一致——
-    /// 改这里会同时改变页面显示与分享图，两处内容不会走样。但两条路径的
-    /// **布局**已经分道：屏幕上 `ResultSegments(isStatic: false)` 自己独立
-    /// 滚动（见该文件注释），需要父级给它无限高度；离屏渲染是给 ImageRenderer
-    /// 量一张固定高度的长图，不能有任何「无限高度」的容器（量不出高度），所以
-    /// `isStatic: true` 时 `ResultSegments` 走的是三段全铺的 `staticSections`，
-    /// 天然是有限高度，两条路径互不冲突。
-    /// ChartSection 里图层开关的横向 ScrollView 在 ImageRenderer 下会高度塌成
-    /// 0，也是由 isStatic 分流处理（见 ChartSection 内部）。
+    /// 抽成一个方法让屏幕显示与离屏长图复用同一棵视图树，修饰符与顺序保持
+    /// 一致——改这里会同时改变页面显示与分享图，两处永不走样。
+    /// 差别只在两处「屏幕上能滚/能切、离屏渲染却拍不出来」的控件，都由 isStatic
+    /// 分流：ResultSegments 的分段切换器（离屏渲染没有交互，三段全铺）和
+    /// ChartSection 里图层开关的横向 ScrollView（在 ImageRenderer 下高度塌成 0）。
     private func pageContent(isStatic: Bool) -> some View {
         VStack(spacing: 14) {
             ChartSection(analysis: analysis, vm: vm,
