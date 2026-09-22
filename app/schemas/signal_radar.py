@@ -14,12 +14,17 @@ class RadarSignalOut(BaseModel):
     signal_type: str = Field(description="买卖点类型：buy1/buy2/buy3/sell1/sell2/sell3")
     date: str = Field(description="信号出现日期 YYYY-MM-DD")
     price: float = Field(description="信号价位")
-    # 形态技术面强度（0~1）：由缠论多因子加权净值（recommendation.score）归一化而来，
-    # 同时驱动前端气泡的大小与颜色深浅。
-    strength: float = Field(description="形态技术面强度 0~1，越强越大越深")
+    # 形态技术面强度（0~1）：由信号自身的 strong/medium/weak 标签折算，决定看板
+    # 满员时的淘汰排序（display_rank），不再决定气泡视觉——气泡大小由买卖点级别
+    # （一/二/三类）决定，颜色深浅由 pivot_stage_depth 决定。
+    strength: float = Field(description="形态技术面强度 0~1，决定看板淘汰排序")
     bias: str = Field(description="技术面倾向：bullish / bearish / neutral")
     signal_strength: str = Field(description="买卖点自身强度：strong / medium / weak")
     confirmed: bool = Field(description="信号是否已确认（未确认为右侧预判）")
+    # 该信号发生当天的中枢生命周期阶段折算：形成中枢=浅/中枢震荡=中/已离开中枢
+    # （离开段/回抽确认/背驰转折）=深，见 app/services/chan/replay.py 按发生
+    # 日期回溯的 pivot_phase_as_of。决定前端气泡颜色深浅。
+    pivot_stage_depth: float = Field(description="信号发生当天的中枢阶段深浅 0~1，决定气泡颜色深浅")
 
 
 class RadarDayOut(BaseModel):

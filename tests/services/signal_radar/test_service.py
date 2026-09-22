@@ -29,6 +29,8 @@ def _raw(symbol: str, day: str, side: str, strength: float, level: int = 1) -> R
         signal_type=f"{side}{level}", date=day, price=10.0,
         strength=strength, bias="bullish" if side == "buy" else "bearish",
         signal_strength="medium", confirmed=True,
+        pivot_stage_depth=0.55,  # 这批测试只关心 display_rank/build_days 的排序与淘汰逻辑，
+        # 都不读这个字段，给个中性占位值即可
     )
 
 
@@ -70,6 +72,55 @@ class TestBuildSignalHistory:
         assert history[0].strength == signal_strength("strong")
         assert history[0].bias == "bearish"
 
+    def test_pivot_stage_depth_defaults_when_no_pivot(self):
+        """结构没有笔/中枢时取不到阶段，深浅退回中性默认值，不假装知道阶段。"""
+        sig = _sig("buy1", "2026-09-18", 10.0)
+        r = ChanAnalysisResult(symbol="X", bars_count=100, signals=[sig])
+        history = build_signal_history("X", "x", r)
+        assert history[0].pivot_stage_depth == svc._DEFAULT_STAGE_DEPTH
+
+    def test_pivot_stage_depth_reflects_phase_on_signals_own_date(self):
+        """深浅按信号自己发生那天回溯的中枢阶段算，不是"今天"的阶段快照。"""
+        from app.services.chan.fractal import Fractal, MergedCandle
+        from app.services.chan.pivot import Pivot
+        from app.services.chan.stroke import Stroke
+
+        def mc(idx: int, price: float) -> MergedCandle:
+            return MergedCandle(idx=idx, time=f"D{idx:03d}", open=price, high=price + 1,
+                                 low=price - 1, close=price, raw_start=idx, raw_end=idx)
+
+        def fx(kind: str, idx: int, price: float) -> Fractal:
+            mid = mc(idx, price)
+            return Fractal(type=kind, candle=mid, left=mc(idx - 1, price), right=mc(idx + 1, price))
+
+        def st(direction: str, idx: int, p0: float, p1: float) -> Stroke:
+            sk = "bottom" if direction == "up" else "top"
+            ek = "top" if direction == "up" else "bottom"
+            return Stroke(direction=direction, start=fx(sk, idx * 10, p0), end=fx(ek, idx * 10 + 5, p1))
+
+        # 形成中枢(zg=98,zd=90) -> 震荡延伸 -> 真正突破 -> 回踩确认三买
+        strokes = [
+            st("down", 0, 100, 90), st("up", 1, 90, 98), st("down", 2, 98, 92),
+            st("up", 3, 92, 96), st("down", 4, 96, 91),
+            st("up", 5, 91, 110), st("down", 6, 110, 101),
+        ]
+        pivot = Pivot(zg=98, zd=90, gg=100, dd=89, start_time=strokes[0].start_time,
+                      end_time=strokes[6].end_time, level="stroke", elements=strokes[:7])
+        r = ChanAnalysisResult(symbol="X", bars_count=100)
+        r.strokes = strokes
+        r.stroke_pivots = [pivot]
+        r.divergences = []
+        r.signals = [
+            _sig("buy2", strokes[2].end_time, 92.0),   # 中枢刚形成那天
+            _sig("buy3", strokes[6].end_time, 101.0),  # 确认三买那天（已离开中枢）
+        ]
+        history = build_signal_history("X", "x", r)
+        forming_signal = next(h for h in history if h.date == strokes[2].end_time[:10])
+        confirmed_signal = next(h for h in history if h.date == strokes[6].end_time[:10])
+        assert forming_signal.pivot_stage_depth == svc._PIVOT_STAGE_DEPTH["pivot_forming"]
+        assert confirmed_signal.pivot_stage_depth == svc._PIVOT_STAGE_DEPTH["retrace_confirmed"]
+        assert forming_signal.pivot_stage_depth != confirmed_signal.pivot_stage_depth
+
 
 class TestBuildDays:
     def test_signal_stays_active_until_superseded(self):
@@ -98,21 +149,21 @@ class TestBuildDays:
         assert min(strengths) >= 5 / 20
 
     def test_big_pale_signal_outranks_small_dark_in_cull(self):
-        """淘汰按'潜在空间+强弱'综合：一类弱背驰(大而淡)排在三类强背驰(小而深)之前。"""
+        """淘汰按'确定性+强弱'综合：三类弱背驰(大而淡)排在一类强背驰(小而深)之前。"""
         histories = [
-            [_raw("BIG", "2026-09-19", "buy", 0.35, level=1)],   # 大而淡
-            [_raw("SMALL", "2026-09-19", "buy", 0.8, level=3)],  # 小而深
+            [_raw("BIG", "2026-09-19", "buy", 0.35, level=3)],   # 大而淡
+            [_raw("SMALL", "2026-09-19", "buy", 0.8, level=1)],  # 小而深
         ]
         days = build_days(histories, ["2026-09-19"], top_n=1)
         assert [s.symbol for s in days[0].signals] == ["BIG"]
 
     def test_small_pale_signal_culled_first(self):
-        """看板满员时最先淘汰'小而淡'(三类弱)，大或深的留下。"""
+        """看板满员时最先淘汰'小而淡'(一类弱)，大或深的留下。"""
         histories = [
-            [_raw("A", "2026-09-19", "buy", 0.8, level=1)],   # 大而深
-            [_raw("B", "2026-09-19", "buy", 0.35, level=1)],  # 大而淡
-            [_raw("C", "2026-09-19", "buy", 0.8, level=3)],   # 小而深
-            [_raw("D", "2026-09-19", "buy", 0.35, level=3)],  # 小而淡 → 被淘汰
+            [_raw("A", "2026-09-19", "buy", 0.8, level=3)],   # 大而深
+            [_raw("B", "2026-09-19", "buy", 0.35, level=3)],  # 大而淡
+            [_raw("C", "2026-09-19", "buy", 0.8, level=1)],   # 小而深
+            [_raw("D", "2026-09-19", "buy", 0.35, level=1)],  # 小而淡 → 被淘汰
         ]
         days = build_days(histories, ["2026-09-19"], top_n=3)
         kept = {s.symbol for s in days[0].signals}
@@ -122,17 +173,17 @@ class TestBuildDays:
 
 class TestDisplayRank:
     def test_level_read_from_signal_type_suffix(self):
-        assert display_rank(_raw("X", "2026-09-19", "buy", 0.5, level=1)) > display_rank(
+        assert display_rank(_raw("X", "2026-09-19", "buy", 0.5, level=3)) > display_rank(
             _raw("X", "2026-09-19", "buy", 0.5, level=2)
         )
         assert display_rank(_raw("X", "2026-09-19", "buy", 0.5, level=2)) > display_rank(
-            _raw("X", "2026-09-19", "buy", 0.5, level=3)
+            _raw("X", "2026-09-19", "buy", 0.5, level=1)
         )
 
     def test_potential_space_can_outweigh_strength(self):
-        """0.6/0.4 权重下，一类弱(大而淡)重要度高于三类强(小而深)。"""
-        big_pale = _raw("BIG", "2026-09-19", "buy", 0.35, level=1)
-        small_dark = _raw("SMALL", "2026-09-19", "buy", 0.8, level=3)
+        """0.6/0.4 权重下，三类弱(大而淡)重要度高于一类强(小而深)。"""
+        big_pale = _raw("BIG", "2026-09-19", "buy", 0.35, level=3)
+        small_dark = _raw("SMALL", "2026-09-19", "buy", 0.8, level=1)
         assert display_rank(big_pale) > display_rank(small_dark)
 
     def test_counts_buy_and_sell(self):

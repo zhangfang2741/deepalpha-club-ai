@@ -36,6 +36,8 @@ from app.schemas.signal_radar import (
     SignalRadarResponse,
 )
 from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
+from app.services.chan.pivot_phase import PivotPhase
+from app.services.chan.replay import pivot_phase_as_of
 from app.services.signal_radar.constituents import resolve_constituents
 from app.services.signal_radar.universe import get_universe, list_universes
 from app.services.skills.kline import fetch_kline
@@ -57,16 +59,17 @@ _MAX_ACCEPTABLE_FAILURE_RATE = 0.5
 # 因为要跨很多天复用同一把尺子，只有信号自己在诞生时就确定的标签才不会变。
 _SIGNAL_STRENGTH = {"strong": 0.8, "medium": 0.55, "weak": 0.35}
 
-# 买卖点级别（一/二/三类）→ 潜在行情空间分值（0~1）。一类能吃到从底部开始的整段
-# 反转、空间最大，三类只剩突破后的延续段、空间最小。与前端气泡「大小=潜在空间」
-# 是同一套语义（见 ios SignalRadarView.diameter(forLevel:)），别让前后端各判各的。
-_LEVEL_SPACE = {1: 1.0, 2: 0.7, 3: 0.4}
+# 买卖点级别（一/二/三类）→ 确定性分值（0~1）。一类只是背驰迹象，尚待验证，
+# 确定性最低；二类是回踩不破中枢的初步确认；三类是回踩完全不回中枢的最强确认，
+# 确定性最高。级别越高、气泡越大。与前端气泡「大小=确定性」是同一套语义（见
+# ios SignalRadarView.diameter(forLevel:)），别让前后端各判各的。
+_LEVEL_CERTAINTY = {1: 0.4, 2: 0.7, 3: 1.0}
 
-# 看板满员（前 top_n）淘汰时的重要度权重：潜在空间(大小) 略高于 强弱(深浅)。大小是
-# 气泡最主导的视觉线索，若纯按 strength 淘汰，会把「大而淡」的一类挤出、反留下「小
-# 而深」的三类，与用户对画面的直觉相反（大=重要却先出局）。加权综合两维，让小而淡
+# 看板满员（前 top_n）淘汰时的重要度权重：确定性(大小) 略高于 强弱(深浅)。大小是
+# 气泡最主导的视觉线索，若纯按 strength 淘汰，会把「大而淡」的三类挤出、反留下「小
+# 而深」的一类，与用户对画面的直觉相反（大=重要却先出局）。加权综合两维，让小而淡
 # 的先退场。见 display_rank。
-_DISPLAY_SPACE_WEIGHT = 0.6
+_DISPLAY_CERTAINTY_WEIGHT = 0.6
 _DISPLAY_STRENGTH_WEIGHT = 0.4
 
 _CACHE_PREFIX = "signal_radar"
@@ -114,15 +117,38 @@ class RawSignal:
     signal_type: str
     date: str
     price: float
-    strength: float      # 形态技术面强度 0~1
+    strength: float      # 形态技术面强度 0~1（决定气泡淘汰排序，不再决定深浅）
     bias: str
     signal_strength: str
     confirmed: bool
+    pivot_stage_depth: float  # 该信号发生当天的中枢阶段深浅 0~1（决定气泡颜色深浅）
 
 
 def signal_strength(label: str) -> float:
     """买卖点自身强弱标签（strong/medium/weak）→ 形态技术面强度（0~1）。"""
     return _SIGNAL_STRENGTH.get(label, 0.5)
+
+
+# 中枢生命周期阶段（见 app/services/chan/pivot_phase.py）→ 气泡深浅 0~1。
+# 形成/震荡两档区分"还没离开中枢"的程度；一旦离开中枢（leaving/回抽确认/
+# 背驰转折），不管具体哪个子阶段，都算"已突破"给最深档——三档对应用户要的
+# "中枢形成=浅、中枢震荡=中、中枢突破=深"。取不到阶段（比如结构还没成形）
+# 时退回中间档，不假装知道处于哪个阶段。
+_PIVOT_STAGE_DEPTH = {
+    "pivot_forming": 0.3,
+    "pivot_oscillating": 0.55,
+    "leaving": 0.85,
+    "retrace_confirmed": 0.85,
+    "divergence_turn": 0.85,
+}
+_DEFAULT_STAGE_DEPTH = 0.55
+
+
+def pivot_stage_depth(phase: PivotPhase | None) -> float:
+    """把 pivot_phase 的 5 个阶段折成气泡深浅三档，取不到阶段时退回中间档。"""
+    if phase is None:
+        return _DEFAULT_STAGE_DEPTH
+    return _PIVOT_STAGE_DEPTH.get(phase.phase, _DEFAULT_STAGE_DEPTH)
 
 
 def _signal_level(signal_type: str) -> int:
@@ -132,14 +158,14 @@ def _signal_level(signal_type: str) -> int:
 
 
 def display_rank(signal: RawSignal) -> float:
-    """信号在看板上的重要度（0~1）：潜在空间(大小) 与 形态强弱(深浅) 的加权综合。
+    """信号在看板上的重要度（0~1）：确定性(大小) 与 形态强弱(深浅) 的加权综合。
 
     看板满员时按此分数从高到低取前 top_n——小而淡的先被淘汰，大或深的留下，与前端
-    「大小=潜在空间、深浅=强弱」两维视觉对齐。不再纯按 strength 淘汰（那会把大而淡
-    的一类挤掉、留下小而深的三类，看起来不符合直觉）。
+    「大小=确定性、深浅=中枢阶段」两维视觉对齐。不再纯按 strength 淘汰（那会把大而
+    淡的三类挤掉、留下小而深的一类，看起来不符合直觉——三类确定性最高反而最先出局）。
     """
-    space = _LEVEL_SPACE.get(_signal_level(signal.signal_type), _LEVEL_SPACE[1])
-    return _DISPLAY_SPACE_WEIGHT * space + _DISPLAY_STRENGTH_WEIGHT * signal.strength
+    certainty = _LEVEL_CERTAINTY.get(_signal_level(signal.signal_type), _LEVEL_CERTAINTY[1])
+    return _DISPLAY_CERTAINTY_WEIGHT * certainty + _DISPLAY_STRENGTH_WEIGHT * signal.strength
 
 
 def build_signal_history(symbol: str, name: str, result: ChanAnalysisResult) -> list[RawSignal]:
@@ -147,6 +173,11 @@ def build_signal_history(symbol: str, name: str, result: ChanAnalysisResult) -> 
 
     不只是最新一条，按日期升序返回，供按日重建市场快照时找「某天为止最近一条」用。
     没有买卖点返回空列表。
+
+    每条信号的中枢阶段深浅按它自己发生那天回溯（`pivot_phase_as_of`），不是
+    统一套用"今天"的阶段——同一只股票在看板上可能同时展示好几天前的历史
+    信号，深浅要反映那条信号发生当天中枢真实处于哪个阶段，不然同一只股票
+    不同日期的气泡会被错误地画成同一个深浅。
     """
     history = [
         RawSignal(
@@ -161,6 +192,7 @@ def build_signal_history(symbol: str, name: str, result: ChanAnalysisResult) -> 
             bias="bullish" if sig.is_buy else "bearish",
             signal_strength=sig.strength,
             confirmed=sig.confirmed,
+            pivot_stage_depth=pivot_stage_depth(pivot_phase_as_of(result, sig.time)),
         )
         for sig in result.signals
     ]
@@ -210,6 +242,7 @@ def build_days(
                     signal_type=r.signal_type, date=r.date, price=r.price,
                     strength=r.strength, bias=r.bias,
                     signal_strength=r.signal_strength, confirmed=r.confirmed,
+                    pivot_stage_depth=r.pivot_stage_depth,
                 )
                 for r in items
             ],

@@ -6,12 +6,14 @@ import SwiftUI
 /// 哪个市场，不再单独放一条分段选择器。
 ///
 /// 气泡编码（四个视觉维度对应四件不同的事，不再互相重复）：
-/// - 颜色：方向（红=买点 / 绿=卖点）+ 深浅（形态技术面强弱）；
-/// - 大小：买卖点级别的潜在行情空间（一类最大 → 三类最小）——一类能吃到从底部
-///   开始的整段反转，三类只剩突破后的延续段；
-/// - 边框：确定性——虚线=未确认（`signal.confirmed == false`），跟图表页
-///   「虚线=未确认」同一套语言。级别（一/二/三类）本身隐含的"确定性"不再叠加
-///   到大小上：那会跟"深浅=强弱"读成同一件事，两个独立维度混成了一个；
+/// - 颜色：方向（红=买点 / 绿=卖点）+ 深浅（该信号发生当天的中枢生命周期阶段：
+///   形成中枢=浅、中枢震荡=中、已离开中枢=深，见 pivot_stage_depth）；
+/// - 大小：买卖点级别本身的确定性（一类最小 → 三类最大）——一类只是背驰迹象、
+///   尚待验证，二类回踩不破中枢是初步确认，三类回踩完全不回中枢是最强确认；
+/// - 边框：单条信号自身是否已被后续走势确认——虚线=未确认
+///   （`signal.confirmed == false`），跟图表页「虚线=未确认」同一套语言。这是
+///   「这一条信号有没有走完」的实时状态，跟大小编码的「这一类信号本身多可信」
+///   是两件不同的事，不重复；
 /// - 居中程度：时间距离——信号是哪天出现的离当前查看的这天越近，越靠中心；
 ///   后端会让一只股票的信号在被更新的信号覆盖前持续「在场」（见
 ///   app/services/signal_radar/service.py 的按日重建），所以翻看某一天时，
@@ -211,7 +213,7 @@ struct SignalRadarView: View {
                             baseX: CGFloat(layout.x),
                             baseY: CGFloat(layout.y),
                             phase: layout.phase,
-                            color: SignalRadarView.bubbleColor(side: layout.signal.side, strength: layout.signal.strength),
+                            color: SignalRadarView.bubbleColor(side: layout.signal.side, depth: layout.signal.pivotStageDepth),
                             fade: SignalRadarView.ringOpacity(forDaysAgo: da),
                             isNew: layout.signal.date == dayDate,
                             onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name) }
@@ -444,16 +446,15 @@ struct SignalRadarView: View {
         }
     }
 
-    /// 买卖点级别 → 气泡直径：一类潜在空间最大（能捕捉到从底部开始的整段反转），
-    /// 三类最小（只剩突破后的延续段）。
-    /// 「确定性」不再叠加到大小上——之前把确定性也塞进大小，会跟深浅（形态技术面
-    /// 强弱）读成同一件事，两个独立维度混成了一个。确定性改用气泡边框实/虚线表达
-    /// （见 RadarBubble，跟图表页「虚线=未确认」同一套语言），大小专心只管潜在空间。
+    /// 买卖点级别 → 气泡直径：级别越高确定性越强，气泡越大。一类只是背驰迹象、
+    /// 尚待验证，最小；二类回踩不破中枢是初步确认；三类回踩完全不回中枢是最强
+    /// 确认，最大。单条信号自身「有没有走完」是另一件事，用气泡边框实/虚线表达
+    /// （见 RadarBubble，跟图表页「虚线=未确认」同一套语言），不叠加到大小上。
     static func diameter(forLevel level: Int) -> Double {
         switch level {
-        case 1: return 92
+        case 1: return 60
         case 2: return 76
-        default: return 60  // 三类
+        default: return 92  // 三类
         }
     }
 
@@ -472,9 +473,10 @@ struct SignalRadarView: View {
         return abs(Calendar(identifier: .gregorian).dateComponents([.day], from: da, to: db).day ?? 0)
     }
 
-    /// 形态强度 → 气泡颜色：买（亮红→深红）/ 卖（亮绿→深绿）。
-    static func bubbleColor(side: String, strength: Double) -> Color {
-        let t = min(max(strength, 0), 1)
+    /// 中枢阶段深浅 → 气泡颜色：买（亮红→深红）/ 卖（亮绿→深绿）。depth 越大
+    /// （该信号发生当天中枢越是已经离开）颜色越深，见后端 pivot_stage_depth。
+    static func bubbleColor(side: String, depth: Double) -> Color {
+        let t = min(max(depth, 0), 1)
         func lerp(_ a: Double, _ b: Double) -> Double { a + (b - a) * t }
         if side == "buy" {
             return Color(.sRGB,
@@ -497,12 +499,12 @@ struct SignalRadarView: View {
                           gradient: [Color(hex: 0x6EE7B7), Color(hex: 0x045A40)])
             }
             HStack(spacing: 6) {
-                Text(L("大小=潜在空间")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                Text(L("大小=确定性")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
                 levelDot(diameter: SignalRadarView.diameter(forLevel: 1), label: L("一类"))
                 levelDot(diameter: SignalRadarView.diameter(forLevel: 2), label: L("二类"))
                 levelDot(diameter: SignalRadarView.diameter(forLevel: 3), label: L("三类"))
             }
-            Text(L("深浅=强弱 · 虚线边框=未确认 · 居中=越新 · 点击查看分析"))
+            Text(L("深浅=中枢阶段 · 虚线边框=未确认 · 居中=越新 · 点击查看分析"))
                 .font(.system(size: 10))
                 .foregroundColor(Theme.textSecondary)
         }
