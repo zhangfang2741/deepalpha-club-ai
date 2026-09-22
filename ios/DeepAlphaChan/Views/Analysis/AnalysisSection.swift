@@ -235,20 +235,29 @@ private struct PivotPhaseBlock: View {
                 Text(phase.reason).font(.caption).foregroundColor(Theme.textSecondary)
             }
 
+            // 套一层和 StructureLayerRow 一样的卡片背景，和「查看判断依据」的
+            // 视觉分量对齐——之前直接铺在卡片背景上，分支说明和上面的正文
+            // 文字混在一起，看不出这是独立的一块信息。箭头图标也换成在小
+            // 尺寸下依然清晰的样式（原来的 arrow.turn.down.right 在 10pt 太小
+            // 几乎看不清）。
             if !phase.branches.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
                     ForEach(phase.branches) { branch in
-                        HStack(alignment: .top, spacing: 4) {
-                            Image(systemName: "arrow.turn.down.right")
-                                .font(.system(size: 10))
-                                .foregroundColor(Theme.textSecondary)
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: "arrowshape.turn.up.right.fill")
+                                .font(.system(size: 11))
+                                .foregroundColor(Theme.accent)
                             Text("\(branch.conditionLabel) → \(branch.resultLabel)")
-                                .font(.caption2)
+                                .font(.caption)
                                 .foregroundColor(Theme.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.surfaceAlt)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
         }
         .sheet(isPresented: $showGuide) {
