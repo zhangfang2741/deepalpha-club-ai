@@ -148,27 +148,43 @@ class TestBuildDays:
         assert strengths == sorted(strengths, reverse=True)
         assert min(strengths) >= 5 / 20
 
-    def test_big_pale_signal_outranks_small_dark_in_cull(self):
-        """淘汰按'确定性+强弱'综合：三类弱背驰(大而淡)排在一类强背驰(小而深)之前。"""
-        histories = [
-            [_raw("BIG", "2026-09-19", "buy", 0.35, level=3)],   # 大而淡
-            [_raw("SMALL", "2026-09-19", "buy", 0.8, level=1)],  # 小而深
-        ]
-        days = build_days(histories, ["2026-09-19"], top_n=1)
-        assert [s.symbol for s in days[0].signals] == ["BIG"]
+    def test_one_level_cannot_monopolize_the_board(self):
+        """哪怕某个级别信号又多又强，也不能把其它级别全部挤出榜单。
 
-    def test_small_pale_signal_culled_first(self):
-        """看板满员时最先淘汰'小而淡'(一类弱)，大或深的留下。"""
+        回归：display_rank 单纯按分数排序时，无论把"确定性"权重给哪个级别
+        最高，那个级别都会把榜单挤满（实测把权重给三类后，看板几乎清一色
+        三买三卖）。换成分桶轮流选取后，即便三类信号数量和强弱都占绝对
+        优势，一类信号只要存在就该有名额。
+        """
+        histories = (
+            [[_raw(f"L3-{i}", "2026-09-19", "buy", 0.9, level=3)] for i in range(10)]
+            + [[_raw("L1-ONLY", "2026-09-19", "buy", 0.9, level=1)]]
+        )
+        days = build_days(histories, ["2026-09-19"], top_n=3)
+        assert "L1-ONLY" in {s.symbol for s in days[0].signals}
+
+    def test_round_robin_fills_from_each_level_when_available(self):
+        """三个级别都有余量时，按级别轮流各取一个，画面同时看得到一二三类。"""
         histories = [
-            [_raw("A", "2026-09-19", "buy", 0.8, level=3)],   # 大而深
-            [_raw("B", "2026-09-19", "buy", 0.35, level=3)],  # 大而淡
-            [_raw("C", "2026-09-19", "buy", 0.8, level=1)],   # 小而深
-            [_raw("D", "2026-09-19", "buy", 0.35, level=1)],  # 小而淡 → 被淘汰
+            [_raw("A1", "2026-09-19", "buy", 0.9, level=1)],
+            [_raw("A2", "2026-09-19", "buy", 0.5, level=1)],
+            [_raw("B1", "2026-09-19", "buy", 0.9, level=2)],
+            [_raw("B2", "2026-09-19", "buy", 0.5, level=2)],
+            [_raw("C1", "2026-09-19", "buy", 0.9, level=3)],
+            [_raw("C2", "2026-09-19", "buy", 0.5, level=3)],
         ]
         days = build_days(histories, ["2026-09-19"], top_n=3)
-        kept = {s.symbol for s in days[0].signals}
-        assert kept == {"A", "B", "C"}
-        assert "D" not in kept
+        levels = sorted(s.signal_type[-1] for s in days[0].signals)
+        assert levels == ["1", "2", "3"]
+
+    def test_exhausted_bucket_does_not_waste_a_slot(self):
+        """某个级别的信号提前取完，剩下名额继续从其它级别补齐，不会空着。"""
+        histories = (
+            [[_raw("ONLY_L1", "2026-09-19", "buy", 0.9, level=1)]]
+            + [[_raw(f"L3-{i}", "2026-09-19", "buy", 0.9, level=3)] for i in range(5)]
+        )
+        days = build_days(histories, ["2026-09-19"], top_n=3)
+        assert len(days[0].signals) == 3
 
 
 class TestDisplayRank:

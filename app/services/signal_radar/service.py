@@ -200,6 +200,35 @@ def build_signal_history(symbol: str, name: str, result: ChanAnalysisResult) -> 
     return history
 
 
+def _diversified_top_n(active: list[RawSignal], top_n: int) -> list[RawSignal]:
+    """按买卖点级别（一/二/三类）轮流选取，不让单一级别独占看板名额。
+
+    单纯按 display_rank 排序会有个结构性问题：无论把"确定性"权重给哪个级别
+    最高，那个级别都会把看板挤满——三类信号本身出现得又多又稳，权重给到
+    三类最高后，实测看板几乎清一色三买三卖，一类/二类难得一见；换成任何
+    其它级别权重最高，也会重演同样的挤占，只是换了一种信号类型垄断画面。
+    这不是调权重能根治的，得换成"分桶 + 轮流取"：每个级别桶内仍按
+    display_rank 排序（保留"桶内谁更值得展示"的判断），但选取时在三个桶
+    之间轮流各取一个，保证画面里始终能同时看到一/二/三类，不会被某一类
+    信号刷屏。某个桶提前取空时不空占名额，直接跳到下一个还有货的桶。
+    """
+    buckets: dict[int, list[RawSignal]] = {1: [], 2: [], 3: []}
+    for s in active:
+        buckets.setdefault(_signal_level(s.signal_type), []).append(s)
+    for bucket in buckets.values():
+        bucket.sort(key=display_rank, reverse=True)
+
+    result: list[RawSignal] = []
+    levels = sorted(buckets)
+    round_idx = 0
+    while len(result) < top_n and any(buckets[lv] for lv in levels):
+        level = levels[round_idx % len(levels)]
+        if buckets[level]:
+            result.append(buckets[level].pop(0))
+        round_idx += 1
+    return result
+
+
 def build_days(
     histories: list[list[RawSignal]], trading_days: list[str], *, top_n: int,
     max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
@@ -231,7 +260,7 @@ def build_days(
                     continue
                 active.append(candidate)
 
-        items = sorted(active, key=display_rank, reverse=True)[:top_n]
+        items = _diversified_top_n(active, top_n)
         out.append(RadarDayOut(
             date=day,
             buy_count=sum(1 for r in items if r.side == "buy"),
