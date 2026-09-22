@@ -23,7 +23,11 @@ from app.services.skills.kline import fetch_kline
 
 _analyzer = ChanAnalyzer()
 
-# 缠论窗口锚定所需的 warmup 天数，与 chan.py / signal_radar 的日线口径一致。
+# 可见窗口天数，与 iOS 详情页默认起点（近 365 天）保持一致——否则自选标签和
+# 点进详情页看到的阶段会对不上（同一只票、同一天，仅因为窗口不同算出两个答案）。
+_VISIBLE_DAYS = 365
+# 窗口锚定所需的 warmup 天数，与 chan.py 的日线口径一致：在可见起点之前多取一段
+# K 线一起送入缠论消除左边界依赖，再裁剪回可见窗口。
 _WARMUP_DAYS = 180
 # 自选列表规模通常远小于信号雷达扫的全市场 universe，给一个更宽松的并发上限。
 _CONCURRENCY = 12
@@ -41,10 +45,11 @@ async def _phase_for_symbol(
     market: str, symbol: str, *, user_id: int, end_date: str, redis: Redis, sem: asyncio.Semaphore,
 ) -> WatchlistPhase:
     async with sem:
-        start_date = (date.fromisoformat(end_date) - timedelta(days=_WARMUP_DAYS)).isoformat()
+        visible_from = (date.fromisoformat(end_date) - timedelta(days=_VISIBLE_DAYS)).isoformat()
+        anchor_start = (date.fromisoformat(visible_from) - timedelta(days=_WARMUP_DAYS)).isoformat()
         try:
             bars = await fetch_kline(
-                user_id=user_id, symbol=symbol, start_date=start_date,
+                user_id=user_id, symbol=symbol, start_date=anchor_start,
                 end_date=end_date, freq="daily", redis=redis,
             )
         except Exception as e:  # noqa: BLE001 单只失败不影响自选列表里的其他标的
@@ -55,7 +60,7 @@ async def _phase_for_symbol(
             return WatchlistPhase(market=market, symbol=symbol, phase=None, phase_label=None)
 
         try:
-            result = _analyzer.analyze(symbol, bars, lang="zh")
+            result = _analyzer.analyze(symbol, bars, lang="zh", visible_from=visible_from)
         except Exception as e:  # noqa: BLE001 同上
             logger.warning("watchlist_phase_analyze_failed", symbol=symbol, error=str(e))
             return WatchlistPhase(market=market, symbol=symbol, phase=None, phase_label=None)
