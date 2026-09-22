@@ -245,3 +245,43 @@ def test_failed_breakout_attempt_does_not_hide_later_real_breakout():
     assert pp.phase == "retrace_confirmed"
     assert pp.direction == "up"
     assert "三买" in pp.phase_label
+
+
+def test_confirmed_pair_superseded_by_later_opposite_breakout():
+    """回归：真实数据（NVDA 2026）发现的 bug。
+
+    「二买」confirmed 之后（回踩落在中枢内），价格反手向下真正突破并确认
+    「三卖」，说明更早那次二买判断已经被后续走势推翻了。旧算法找到第一对
+    配对就不再往后看，会一直停留在过时的"确认二买"，即便现价早已在中枢
+    下方。新算法要继续扫描到 post 结束，用最新出现的决定性状态覆盖更早
+    的结论。
+    """
+    strokes = _chain(
+        ("down", 100, 90), ("up", 90, 98), ("down", 98, 92),  # 形成中枢 zg=98 zd=90
+        ("up", 92, 110), ("down", 110, 95),                    # 向上突破+回踩：95落在中枢内 -> type2 确认二买
+        ("up", 95, 97),                                         # 噪音：97未过zg(98)，不构成突破
+        ("down", 97, 80), ("up", 80, 85),                       # 反手向下真突破，回踩85<zd(90)未回中枢 -> type3，覆盖二买
+    )
+    pivot = _pivot_from(strokes, 8, zg=98, zd=90)
+    pp = build_pivot_phase(_result(strokes, [pivot], []))
+    assert pp is not None
+    assert pp.phase == "retrace_confirmed"
+    assert pp.direction == "down"
+    assert "三卖" in pp.phase_label
+
+
+def test_open_breakout_at_tail_supersedes_earlier_confirmed_pair():
+    """回归：确认配对之后如果 post 以一个新的、还没等到回踩笔的突破收尾。
+
+    应该报告"进行中的突破"（leaving），而不是停留在更早那次已确认的配对。
+    """
+    strokes = _chain(
+        ("down", 100, 90), ("up", 90, 98), ("down", 98, 92),   # 形成中枢 zg=98 zd=90
+        ("up", 92, 110), ("down", 110, 105),                    # type3 确认三买
+        ("up", 105, 130), ("down", 130, 80),                     # 反手向下突破zd(90)，还没等到回踩笔
+    )
+    pivot = _pivot_from(strokes, 7, zg=98, zd=90)
+    pp = build_pivot_phase(_result(strokes, [pivot], []))
+    assert pp is not None
+    assert pp.phase == "leaving"
+    assert pp.direction == "down"

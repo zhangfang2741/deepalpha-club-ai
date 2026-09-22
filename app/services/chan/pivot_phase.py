@@ -125,29 +125,37 @@ def _classify_retrace(direction: Literal["up", "down"], retrace_price: float, pi
 
 
 def _scan_post(post: list["Stroke"], pivot: "Pivot") -> tuple[_Pair | None, "Stroke | None", list["Stroke"]]:
-    """从头扫描 post，跳过「假突破被打回」的失败尝试，找最新一次决定性的突破。
+    """连续扫描整个 post，找「最新」的决定性状态，不是「第一个」。
 
-    中枢的 end_time 可能很早，`post` 因此可能跨越好几次「试探突破→被打回→再次
-    突破」的完整周期（例如价格先跌破中枢又被拉回中枢内，几个月后才真正向上
-    突破）——只看第一次尝试、把 back_to_range 直接当结论会漏掉后面真正生效的
-    那次突破，把早已远离中枢的走势误判成还在中枢里反复。所以 back_to_range
-    不是终态，是「这次尝试作废，从它的回抽笔之后继续找下一次尝试」的信号。
+    中枢的 end_time 可能很早，`post` 因此可能跨越好几个月、包含好几轮突破
+    尝试——不只是「假突破被打回」这一种情况，一次已经 type2/type3 确认的
+    信号，后续也完全可能被再一次反向突破整个推翻（实测 NVDA 数据发现：
+    确认「二卖」后价格反手一路涨穿 ZG，此时应该说「现在是向上离开中枢」，
+    不能停留在过时的「确认二卖」）。所以 back_to_range 和 type2/type3 确认
+    都不是终态——只要后面还有更多笔，都可能出现下一次覆盖当前结论的尝试，
+    必须扫到 post 结束，以最后一次结果为准。
 
     判据与 generate_buy2/3_signals 完全一致（见模块 docstring）。
 
     Returns:
-        (决定性配对, None, 配对之后剩余的笔)：找到 type2/type3 的真正突破
-        (None, 进行中的突破笔, [])：突破已发生但还没等到回踩笔（leaving 阶段）
+        (最新的决定性配对, None, 配对之后剩余的笔)：目前处于 type2/type3
+          确认之后的状态（背驰判定用 remaining）
+        (None, 进行中的突破笔, [])：post 以一个还没等到回踩笔的突破笔收尾
+          （leaving 阶段）——这永远是最新状态，会覆盖它之前任何已确认的配对
         (None, None, [])：整个 post 里都没有任何有效突破尝试，仍在中枢内反复
     """
     i = 0
     n = len(post)
+    latest_pair: _Pair | None = None
+    tail_start = 0  # latest_pair 的回抽笔之后的下标，供背驰判定复用
     while i < n:
         direction = _is_breakout(post[i], pivot)
         if direction is None:
             i += 1
             continue
         if i + 1 >= n:
+            # 突破已发生但还没等到回踩笔：这是当下最新的状态，覆盖之前任何
+            # 已确认的配对——进行中的突破比"过去确认过什么"更能代表现在
             return None, post[i], []
         retrace = post[i + 1]
         expected_retrace_dir = "down" if direction == "up" else "up"
@@ -159,7 +167,12 @@ def _scan_post(post: list["Stroke"], pivot: "Pivot") -> tuple[_Pair | None, "Str
         if outcome == "back_to_range":
             i += 2  # 假突破，从回抽笔之后继续找下一次尝试
             continue
-        return _Pair(post[i], retrace, direction, outcome, i), None, post[i + 2:]
+        latest_pair = _Pair(post[i], retrace, direction, outcome, i)
+        tail_start = i + 2
+        i = tail_start  # 继续往后找，可能还有更新的一次突破/反向突破
+
+    if latest_pair is not None:
+        return latest_pair, None, post[tail_start:]
     return None, None, []
 
 
