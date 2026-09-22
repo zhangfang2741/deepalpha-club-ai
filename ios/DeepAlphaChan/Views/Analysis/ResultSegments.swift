@@ -98,14 +98,16 @@ struct ResultSegments: View {
     }
 }
 
-/// 深色圆角胶囊分段条：选中项浮一块次级底色，替代系统默认的
-/// `UISegmentedControl` 桥接样式（浅灰选中背景，和全 App 的深色投研风格不搭）。
+/// 分段条：每个 tab 各自一个独立胶囊，之间留白露出页面底色——不是挤在同一个
+/// 统一容器里贴着。之前套了一个外层 `.background(Theme.surface)` 大胶囊把三个
+/// 挤在一起，只有选中项有背景色，看起来像系统分段控件的变体；设计稿里三个
+/// tab 是分开的独立元素，之间有明显间距。
 private struct SegmentTabBar: View {
     @Binding var selection: ResultSegments.Segment
     let title: (ResultSegments.Segment) -> String
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 10) {
             ForEach(ResultSegments.Segment.allCases) { seg in
                 let isSelected = seg == selection
                 Button {
@@ -114,8 +116,8 @@ private struct SegmentTabBar: View {
                     Text(title(seg))
                         .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
                         .foregroundColor(isSelected ? Theme.textPrimary : Theme.textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
                         .background(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
                                 .fill(isSelected ? Theme.surfaceAlt : Color.clear)
@@ -124,9 +126,7 @@ private struct SegmentTabBar: View {
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(isSelected ? [.isSelected] : [])
             }
+            Spacer(minLength: 0)
         }
-        .padding(4)
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
