@@ -202,8 +202,8 @@ private struct PivotPhaseBlock: View {
                 .buttonStyle(.plain)
                 .font(.system(size: 12, weight: .medium))
                 .padding(.horizontal, 10).padding(.vertical, 4)
-                .background(Theme.accent.opacity(0.15))
-                .foregroundColor(Theme.accent)
+                .background(Theme.pivotPhaseColor(phase.phase).opacity(0.15))
+                .foregroundColor(Theme.pivotPhaseColor(phase.phase))
                 .clipShape(Capsule())
                 .accessibilityHint(L("点击查看阶段判定说明"))
             }

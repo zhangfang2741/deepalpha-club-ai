@@ -110,7 +110,7 @@ async def signal_radar(
         etf_name=uni.etf_name,
         universe_size=len(uni.constituents),
         as_of="",
-        top_n=10,
+        top_n=15,
         days=[],
         status="generating",
     )
