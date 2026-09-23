@@ -50,18 +50,28 @@
 
 ## 组件设计
 
-**重要澄清（调研发现）**：czsc（从 2024 年的纯 Python 版本 v0.9.69 到当前 1.0.1 的 Rust 版本）**从未实现过"线段"对象**——`CZSC` 只暴露 `bi_list`（笔）/`zs_list`（笔级别中枢）/`fx_list`（分型），没有 `seg_list`/`Segment` 之类的线段结构。因此线段层（`segment.py`）**不接入 czsc**，保留我们自己的特征序列算法，只是把输入源从自研 `Stroke` 换成 czsc 转换后的 `Stroke`；线段级别中枢（`find_segment_pivots`）同理保留自研实现。
+**重要澄清（调研发现，经过多轮验证）**：czsc（从 2024 年的纯 Python 版本 v0.9.69、到当前 1.0.1 的 Rust 版本、到官方案例索引 `docs/examples.md` "缠论核心"分组）**从未实现过"线段"对象**——`CZSC` 只暴露 `bi_list`（笔）/`zs_list`（笔级别中枢，直接由连续 3 笔的价格重叠区域计算，`zg/zd` 取最初 3 笔、`gg/dd` 随延伸更新，和我们自己的中枢规则概念一致）/`fx_list`（分型），没有 `seg_list`/`Segment` 之类的线段结构。czsc 处理"跨尺度结构"的方式是多周期联立（`BarGenerator`/`CzscTrader` 同时维护多个 `Freq` 各自的分型/笔/中枢），不是在同一周期内用特征序列算法拼出线段这个中间层。
+
+**决定：线段这一层直接去掉，不做任何替代**（不保留自研 `segment.py`，也不用周线/30分钟等其他周期替代）。理由：
+
+- 30 分钟"次级别确认"（大级别日线定方向、小级别找更精确买卖点）是缠论里真实存在的实践，但这是**独立的新功能**，服务于买卖点信号精度，需要新接入一路 30 分钟盘中数据源，不在本次重构范围内，作为后续待办记录。
+- 周线 resample（`czsc.resample_bars`，从日线聚合，不需要新数据源）在技术上可行，但周线笔/中枢是"另一个周期的完整结构"，语义上不等于我们现在"线段"的定义，硬套只会制造新的自研概念，不如干脆去掉。
+- 线段被 `segment.py`、`pivot.py`（`find_segment_pivots`）、`divergence.py`（`find_segment_divergences`）、`ChanAnalysisResult.segments/segment_pivots/segment_divergences` 引用；这次直接删除这些函数和字段。API schema 层面按"对外契约"章节的降级策略处理：`ChanAnalysisResponse` 里对应字段返回空列表，不强行保留無意义数据；**实现阶段需要检查前端 `/chan` 页面是否渲染了这些字段，若有渲染需要同步清理**。
 
 | 文件 | 变化 |
 |------|------|
 | `app/services/chan/czsc_adapter.py`（新增） | 前复权后的 bars → czsc `RawBar` 输入 → 调用 czsc 引擎产出 `CZSC` 对象 → 把 `fx_list`/`bi_list`/`zs_list`（笔级别）转换回现有 `Fractal`/`Stroke`/`Pivot` dataclass 形状（字段名尽量对齐，映不上置 `None`） |
 | `app/services/chan/czsc_signals.py`（新增） | 买卖点信号引擎，封装 czsc signal 体系，产出 `DivergenceResult`/`Signal` 形状的买卖点列表，独立于展示逻辑 |
 | `fractal.py` / `stroke.py` / `pivot.py`（笔级别中枢部分） | 删除自研识别逻辑，改为调用 `czsc_adapter` |
-| `segment.py`（线段） / `pivot.py`（线段级别中枢 `find_segment_pivots`） | **保留自研算法不变**，输入换成 `czsc_adapter` 转换后的 `Stroke` 列表 |
-| `divergence.py` / `signals.py` | 删除自研背驰双过滤/买卖点判定，改为调用 `czsc_signals` |
-| `bias.py` / `narrative.py` / `pivot_phase.py` / `gap.py` / `replay.py` | 保留业务目标（多因子推荐、中文叙事、阶段状态机、结构缺口分析、历史回放），内部实现跟着新的 dataclass 形状重写 |
-| `analyzer.py` | 编排顺序基本不变：`czsc_adapter` 拿分型/笔/笔级中枢 → 自研 `segment.py`/`pivot.py` 拿线段/线段级中枢 → `czsc_signals` 拿买卖点 → 喂给 `pivot_phase`/`narrative`/`bias` |
-| `app/core/langgraph/tools/chan_analysis.py`、`structure_gap.py` | 同步改造以适配可能缺失的字段 |
+| `segment.py` | **删除**（线段概念不再存在） |
+| `pivot.py` 中的 `find_segment_pivots` | **删除** |
+| `divergence.py` 中的 `find_segment_divergences` | **删除**（背驰整体改走 `czsc_signals`，笔级别即可） |
+| `bias.py` / `narrative.py` / `pivot_phase.py` / `gap.py` / `replay.py` | 保留业务目标（多因子推荐、中文叙事、阶段状态机、结构缺口分析、历史回放），内部实现跟着新的 dataclass 形状重写，去掉对 `segments`/`segment_pivots` 的引用 |
+| `app/schemas/chan.py` 的 `ChanAnalysisResponse` | 移除 `segments`/`segment_pivots`/`segment_divergences` 字段（或保留字段名但固定返回空列表——两种做法二选一，实现阶段根据前端实际依赖情况决定） |
+| `analyzer.py` | 编排顺序简化：`czsc_adapter` 拿分型/笔/笔级中枢 → `czsc_signals` 拿买卖点 → 喂给 `pivot_phase`/`narrative`/`bias`，不再有线段这一步 |
+| `app/core/langgraph/tools/chan_analysis.py`、`structure_gap.py` | 同步改造以适配可能缺失的字段，去掉对 `segments` 的遍历 |
+
+**后续待办（不在本次范围内）**：30 分钟次级别确认功能——需要先确认 FMP 能否稳定提供足够长的 30 分钟历史数据，再评估是否值得做。
 
 ## 实现顺序（分阶段验证）
 
