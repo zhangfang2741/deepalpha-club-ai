@@ -35,16 +35,32 @@
 
 买卖点信号计算封装成独立 service 模块（`app/services/chan/czsc_signals.py`），只依赖 czsc 的结构识别结果，不感知 `stroke.py`/`pivot.py` 的展示逻辑，可独立单测（给定一段 K 线 → 断言买卖点列表），不需要拉通整个 `analyze()` 流程。
 
+## czsc 真实 API（调研自 PyPI 1.0.1 / GitHub master 的 `czsc/_native/__init__.pyi` 类型 stub）
+
+核心算法已全部迁移至 Rust（`czsc._native`），以下是确认过的真实签名，供后续实现直接使用：
+
+- `RawBar(symbol: str, dt, freq: Freq, open: float, close: float, high: float, low: float, vol: float, amount: float, id: int = 0)` —— 原始 K 线，`freq` 为 `Freq` 枚举（`Freq.D`=日线等）。我们的 `bars: list[dict]`（`time/open/high/low/close/volume`）里没有 `amount`（成交额），需要在 adapter 里置 0.0 或用 `close*volume` 近似。
+- `CZSC(bars_raw: Sequence[RawBar], max_bi_num: int = 0, min_bi_len: int = 0)` —— 核心分析对象，构造时一次性喂入完整序列（不是必须流式 `update()`），属性：`fx_list: list[FX]`、`bi_list: list[BI]`、`zs_list: list[ZS]`（基于已完成笔计算的笔级别中枢）。
+- `FX`：`symbol/dt/mark(Mark.G顶或Mark.D底)/high/low/fx/elements`。
+- `BI`：`symbol/direction(Direction.Up/Down)/high/low/fx_a(起点FX)/fx_b(终点FX)/sdt/edt/power/length/change` 等。
+- `ZS`：`bis(构成中枢的BI列表)/sdt/edt/zg/zd/zz/gg/dd`——`zg/zd/gg/dd` 字段名与我们自己的 `Pivot.zg/zd/gg/dd` 完全一致，映射成本低。
+- `format_standard_kline(df: pd.DataFrame, freq: Freq | str) -> list[RawBar]`：要求 DataFrame 含 `dt/symbol/open/close/high/low/vol/amount` 八列；我们也可以不经 DataFrame，直接逐根构造 `RawBar`。
+- `generate_czsc_signals` / `get_signals_config` / `derive_signals_config`（`czsc.traders`）：信号计算入口，`Signal` 对象字段为 `key/value/k1/k2/k3/v1/v2/v3/score`。**具体哪些信号函数对应背驰/买卖点，220+ 个信号函数编译在 Rust 里，没有可静态阅读的源码目录，必须在 spike 阶段实际安装后运行时探测**（如 `dir(czsc._native.signals)`、`parse_signal_doc`），不能凭文档猜测。
+- **czsc 没有线段（Segment）对象**（详见上文组件设计的澄清），`bi_list`/`zs_list` 已是能拿到的最细粒度结构化输出。
+
 ## 组件设计
+
+**重要澄清（调研发现）**：czsc（从 2024 年的纯 Python 版本 v0.9.69 到当前 1.0.1 的 Rust 版本）**从未实现过"线段"对象**——`CZSC` 只暴露 `bi_list`（笔）/`zs_list`（笔级别中枢）/`fx_list`（分型），没有 `seg_list`/`Segment` 之类的线段结构。因此线段层（`segment.py`）**不接入 czsc**，保留我们自己的特征序列算法，只是把输入源从自研 `Stroke` 换成 czsc 转换后的 `Stroke`；线段级别中枢（`find_segment_pivots`）同理保留自研实现。
 
 | 文件 | 变化 |
 |------|------|
-| `app/services/chan/czsc_adapter.py`（新增） | 前复权后的 bars → czsc `RawBar` 输入 → 调用 czsc 引擎产出 `CZSC` 对象 → 转换回现有 `Fractal`/`Stroke`/`Segment`/`Pivot` dataclass 形状（字段名尽量对齐，映不上置 `None`） |
+| `app/services/chan/czsc_adapter.py`（新增） | 前复权后的 bars → czsc `RawBar` 输入 → 调用 czsc 引擎产出 `CZSC` 对象 → 把 `fx_list`/`bi_list`/`zs_list`（笔级别）转换回现有 `Fractal`/`Stroke`/`Pivot` dataclass 形状（字段名尽量对齐，映不上置 `None`） |
 | `app/services/chan/czsc_signals.py`（新增） | 买卖点信号引擎，封装 czsc signal 体系，产出 `DivergenceResult`/`Signal` 形状的买卖点列表，独立于展示逻辑 |
-| `fractal.py` / `stroke.py` / `segment.py` / `pivot.py` | 删除自研识别逻辑，改为调用 `czsc_adapter` |
+| `fractal.py` / `stroke.py` / `pivot.py`（笔级别中枢部分） | 删除自研识别逻辑，改为调用 `czsc_adapter` |
+| `segment.py`（线段） / `pivot.py`（线段级别中枢 `find_segment_pivots`） | **保留自研算法不变**，输入换成 `czsc_adapter` 转换后的 `Stroke` 列表 |
 | `divergence.py` / `signals.py` | 删除自研背驰双过滤/买卖点判定，改为调用 `czsc_signals` |
 | `bias.py` / `narrative.py` / `pivot_phase.py` / `gap.py` / `replay.py` | 保留业务目标（多因子推荐、中文叙事、阶段状态机、结构缺口分析、历史回放），内部实现跟着新的 dataclass 形状重写 |
-| `analyzer.py` | 编排顺序基本不变：`czsc_adapter` 拿结构 → `czsc_signals` 拿买卖点 → 喂给 `pivot_phase`/`narrative`/`bias` |
+| `analyzer.py` | 编排顺序基本不变：`czsc_adapter` 拿分型/笔/笔级中枢 → 自研 `segment.py`/`pivot.py` 拿线段/线段级中枢 → `czsc_signals` 拿买卖点 → 喂给 `pivot_phase`/`narrative`/`bias` |
 | `app/core/langgraph/tools/chan_analysis.py`、`structure_gap.py` | 同步改造以适配可能缺失的字段 |
 
 ## 实现顺序（分阶段验证）
