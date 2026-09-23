@@ -67,19 +67,46 @@
 | `pivot.py` 中的 `find_segment_pivots` | **删除** |
 | `divergence.py` 中的 `find_segment_divergences` | **删除**（背驰整体改走 `czsc_signals`，笔级别即可） |
 | `bias.py` / `narrative.py` / `pivot_phase.py` / `gap.py` / `replay.py` | 保留业务目标（多因子推荐、中文叙事、阶段状态机、结构缺口分析、历史回放），内部实现跟着新的 dataclass 形状重写，去掉对 `segments`/`segment_pivots` 的引用 |
-| `app/schemas/chan.py` 的 `ChanAnalysisResponse` | 移除 `segments`/`segment_pivots`/`segment_divergences` 字段（或保留字段名但固定返回空列表——两种做法二选一，实现阶段根据前端实际依赖情况决定） |
+| `app/schemas/chan.py` 的 `ChanAnalysisResponse` | 移除 `segments`/`segment_pivots`/`segment_divergences` 字段 |
 | `analyzer.py` | 编排顺序简化：`czsc_adapter` 拿分型/笔/笔级中枢 → `czsc_signals` 拿买卖点 → 喂给 `pivot_phase`/`narrative`/`bias`，不再有线段这一步 |
 | `app/core/langgraph/tools/chan_analysis.py`、`structure_gap.py` | 同步改造以适配可能缺失的字段，去掉对 `segments` 的遍历 |
 
+**前端同步范围（调研发现，两端都要改，且和后端字段删除放在同一轮计划里，不拆分延后）**：
+
+`ChanAnalysisResponse` 里的 `segments`/`segment_pivots` 不是只在 schema 里存在的哑字段，Next.js 网页端和 iOS 端都在**真实渲染**：
+
+| 端 | 文件 | 用到的地方 |
+|----|------|-----------|
+| Next.js | `frontend/components/chan/ChanChart.tsx` | `drawSegments()` 在图上画线段；中枢渲染拼接 `[...data.stroke_pivots, ...data.segment_pivots]`；`showSegments` 图例开关 |
+| Next.js | `frontend/components/chan/SignalPanel.tsx` | 中枢明细区分"线段级"/"笔级"标签；展示 `data.segments.length`/`data.segment_pivots.length` |
+| Next.js | `frontend/app/chan/page.tsx` | `showSegments` 状态与开关 UI |
+| iOS | `ios/DeepAlphaChan/Models/ChanModels.swift` | `struct Segment: Codable`、`Level` 枚举的 `.segment` case、`ChanAnalysis.segments`/`segmentPivots` 字段解码（JSON key `segments`/`segment_pivots`） |
+| iOS | `ios/DeepAlphaChan/Views/Chart/ChanChartView.swift` | `drawSegments()` 真实画线段；`vm.showSegments` 开关；中枢渲染拼接 `segmentPivots` |
+
+（iOS 端 `ResultSegments.swift` 里的 `Segment` 是无关的 UI tab 概念——整体分析/买卖点/风险提示三个分段——和缠论线段无关，不用动。）
+
+删除后端字段的同一轮计划里，需要同步：去掉两端的线段绘制代码、`showSegments` 开关、图例、中枢列表里对 `segment_pivots`/`segmentPivots` 的拼接（中枢渲染只剩 `stroke_pivots`/`pivots` 一种）、iOS `ChanModels.swift` 里 `Segment` 结构体和相关解码逻辑。
+
 **后续待办（不在本次范围内）**：30 分钟次级别确认功能——需要先确认 FMP 能否稳定提供足够长的 30 分钟历史数据，再评估是否值得做。
+
+## iOS 学习模块内容同步
+
+`ios/DeepAlphaChan/Resources/{zh-Hans,en}.lproj/lessons.json` 是一套完整的缠论理论教程（`inclusion` K线包含处理 → `fractal` 分型 → `stroke` 笔 → `segment` 线段 → `pivot` 中枢 → `divergence` 背驰 → `macd` MACD与面积比 → `trade-points` 三类买卖点 → `level` 走势级别，共 9 节），每节讲的是缠论原著理论，理论本身不因为这次重构而改变。但涉及两处需要同步更新：
+
+1. **`segment`（线段）这一节**：保留，作为缠论理论知识科普（线段本身是真实存在的缠论概念），但要加一句说明性文字——本 App 的实际分析不包含线段这一层（`pivot` 中枢那节正文提到"在线段层面就是连续三段的重叠部分"，以及 `level` 走势级别那节提到"线段构成的中枢是更高一个级别"，这两处也要相应调整措辞，避免暗示用户能在图上看到线段级别的东西）。
+2. **每一节理论讲解之后，都要补一段"本 App 具体怎么实现"**：把理论和 App 实际采用的具体规则/阈值对应起来（比如笔的最小间隔要求几根K线、中枢上下沿怎么由前几段固定、背驰用什么方法判定等），**全程不能出现 czsc 或任何第三方库名字**——普通用户不需要也不应该知道我们用了什么开源库，只需要知道"这个 App 是怎么判断的"。
+
+这部分内容**只能在结构识别引擎（Task 2）和买卖点信号引擎（Task 3）实际替换完成、真实行为确定之后才能写**——写之前必须先跑通实际代码看清楚 czsc 到底是怎么判定的，不能凭 API 文档猜。因此排进"实现顺序"的最后一步，作为独立任务，不在 Phase 1（本文档对应的 spike + 适配层基础）范围内。
 
 ## 实现顺序（分阶段验证）
 
 1. **Spike（go/no-go 前提）**：`uv add czsc`，验证 Python 3.13 + Railway 部署环境能装上预编译 wheel；跑通最小 demo（喂一段真实 K 线，拿到笔/中枢）；验证 czsc 的 `CZSC` 对象（增量 `update()` 式）能否支持"在 warmup+可见窗口的完整序列上算完再裁剪"的窗口锚定方式，或需要改造成流式喂入。
-2. **结构识别引擎**：实现 `czsc_adapter.py`，替换 `fractal/stroke/segment/pivot`，先让 `ChanAnalysisResponse` 中结构部分字段出数据（买卖点先留空），用几只熟悉的股票人工核对笔/中枢画得对不对。
+2. **结构识别引擎**：实现 `czsc_adapter.py`，替换 `fractal/stroke/pivot`，删除 `segment.py`，先让 `ChanAnalysisResponse` 中结构部分字段出数据（买卖点先留空），用几只熟悉的股票人工核对笔/中枢画得对不对。
 3. **买卖点信号引擎**：实现 `czsc_signals.py`，替换 `divergence/signals`，人工核对买卖点标注。
-4. **业务层收尾**：重写 `pivot_phase`/`narrative`/`bias`/`gap`/`replay`，改造 LangGraph tools。
-5. **全量回归**：跑通 `tests/services/chan/`（预期大量失败，逐个决定删除重写还是调整期望值）+ 手工过一遍 `/chan`、`signal-radar`、`watchlist` 页面。
+4. **业务层收尾**：重写 `pivot_phase`/`narrative`/`bias`/`gap`/`replay`，改造 LangGraph tools，删除 `segments`/`segment_pivots`/`segment_divergences` 的 schema 字段。
+5. **前端同步**：Next.js（`ChanChart.tsx`/`SignalPanel.tsx`/`app/chan/page.tsx`）和 iOS（`ChanModels.swift`/`ChanChartView.swift`）同步去掉线段相关渲染/开关/字段解码。
+6. **iOS 学习模块内容更新**：按上一节"iOS 学习模块内容同步"的要求，补每节的"本 App 怎么实现"，调整 `segment`/`pivot`/`level` 三节措辞。
+7. **全量回归**：跑通 `tests/services/chan/`（预期大量失败，逐个决定删除重写还是调整期望值）+ 手工过一遍 `/chan`、`signal-radar`、`watchlist` 页面 + iOS App 手工验证图表和学习模块。
 
 ## 测试策略
 
