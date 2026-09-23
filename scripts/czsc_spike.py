@@ -44,6 +44,7 @@ def _make_bars(n: int = 60) -> list[RawBar]:
 
 
 def main() -> None:
+    """跑一遍 czsc 的构造/结构识别/信号目录探测，把真实输出打印到终端。"""
     bars = _make_bars()
     print(f"[1] 构造 RawBar 成功，数量={len(bars)}，dt 类型={type(bars[0].dt)}")
 
