@@ -56,7 +56,7 @@
 
 - 30 分钟"次级别确认"（大级别日线定方向、小级别找更精确买卖点）是缠论里真实存在的实践，但这是**独立的新功能**，服务于买卖点信号精度，需要新接入一路 30 分钟盘中数据源，不在本次重构范围内，作为后续待办记录。
 - 周线 resample（`czsc.resample_bars`，从日线聚合，不需要新数据源）在技术上可行，但周线笔/中枢是"另一个周期的完整结构"，语义上不等于我们现在"线段"的定义，硬套只会制造新的自研概念，不如干脆去掉。
-- 线段被 `segment.py`、`pivot.py`（`find_segment_pivots`）、`divergence.py`（`find_segment_divergences`）、`ChanAnalysisResult.segments/segment_pivots/segment_divergences` 引用；这次直接删除这些函数和字段。API schema 层面按"对外契约"章节的降级策略处理：`ChanAnalysisResponse` 里对应字段返回空列表，不强行保留無意义数据；**实现阶段需要检查前端 `/chan` 页面是否渲染了这些字段，若有渲染需要同步清理**。
+- 线段被 `segment.py`、`pivot.py`（`find_segment_pivots`）、`divergence.py`（`find_segment_divergences`）、`ChanAnalysisResult.segments/segment_pivots/segment_divergences` 引用；这次直接删除这些计算函数和内部 dataclass 逻辑。**但对外 API schema 的 `segments`/`segment_pivots` 字段名保留，固定返回空列表**——原因见下面"iOS 向后兼容"一节：已安装的旧版 iOS App 用 Swift `Codable` 做的是非 optional 字段的强制解码，如果 JSON 里直接不出现这个 key 会导致 `keyNotFound` 解码失败、整个分析结果解析不出来，不是"线段不显示了"这么温和的降级。保留字段名、返回空数组，新旧两端都能正常工作。
 
 | 文件 | 变化 |
 |------|------|
@@ -67,7 +67,7 @@
 | `pivot.py` 中的 `find_segment_pivots` | **删除** |
 | `divergence.py` 中的 `find_segment_divergences` | **删除**（背驰整体改走 `czsc_signals`，笔级别即可） |
 | `bias.py` / `narrative.py` / `pivot_phase.py` / `gap.py` / `replay.py` | 保留业务目标（多因子推荐、中文叙事、阶段状态机、结构缺口分析、历史回放），内部实现跟着新的 dataclass 形状重写，去掉对 `segments`/`segment_pivots` 的引用 |
-| `app/schemas/chan.py` 的 `ChanAnalysisResponse` | 移除 `segments`/`segment_pivots`/`segment_divergences` 字段 |
+| `app/schemas/chan.py` 的 `ChanAnalysisResponse` | **保留** `segments`/`segment_pivots` 字段名（类型不变，固定填 `[]`），供旧版 iOS App 兼容；`segment_divergences` 如果 schema 里有对应字段同样处理。新写的业务代码（`pivot_phase`/`narrative`/`bias`/`gap`/`replay`/`analyzer.py`）不再往这两个字段塞任何数据 |
 | `analyzer.py` | 编排顺序简化：`czsc_adapter` 拿分型/笔/笔级中枢 → `czsc_signals` 拿买卖点 → 喂给 `pivot_phase`/`narrative`/`bias`，不再有线段这一步 |
 | `app/core/langgraph/tools/chan_analysis.py`、`structure_gap.py` | 同步改造以适配可能缺失的字段，去掉对 `segments` 的遍历 |
 
@@ -76,7 +76,7 @@
 `ChanAnalysisResponse` 里的 `segments`/`segment_pivots` 不是只在 schema 里存在的哑字段，Next.js 网页端和 iOS 端都在**真实渲染**：
 
 | 端 | 文件 | 用到的地方 |
-|----|------|-----------|
+| --- | --- | --- |
 | Next.js | `frontend/components/chan/ChanChart.tsx` | `drawSegments()` 在图上画线段；中枢渲染拼接 `[...data.stroke_pivots, ...data.segment_pivots]`；`showSegments` 图例开关 |
 | Next.js | `frontend/components/chan/SignalPanel.tsx` | 中枢明细区分"线段级"/"笔级"标签；展示 `data.segments.length`/`data.segment_pivots.length` |
 | Next.js | `frontend/app/chan/page.tsx` | `showSegments` 状态与开关 UI |
@@ -85,7 +85,13 @@
 
 （iOS 端 `ResultSegments.swift` 里的 `Segment` 是无关的 UI tab 概念——整体分析/买卖点/风险提示三个分段——和缠论线段无关，不用动。）
 
-删除后端字段的同一轮计划里，需要同步：去掉两端的线段绘制代码、`showSegments` 开关、图例、中枢列表里对 `segment_pivots`/`segmentPivots` 的拼接（中枢渲染只剩 `stroke_pivots`/`pivots` 一种）、iOS `ChanModels.swift` 里 `Segment` 结构体和相关解码逻辑。
+同一轮计划里，需要同步：去掉两端的线段绘制代码、`showSegments` 开关、图例、中枢列表里对 `segment_pivots`/`segmentPivots` 的拼接（中枢渲染只剩 `stroke_pivots`/`pivots` 一种）。
+
+## iOS 向后兼容（已安装旧版 App 不升级也不能崩）
+
+`ChanModels.swift` 的 `ChanAnalysis` 用标准 `Codable` 自动解码，`segments: [Segment]`、`segmentPivots: [Pivot]` 是**非 optional 的必填字段**——如果后端 JSON 响应里彻底不出现 `segments`/`segment_pivots` 这两个 key，`JSONDecoder` 会抛 `keyNotFound`，**整个 `ChanAnalysis` 解码失败**，不是线段不显示这么温和，而是已安装的旧版 App（还没升级到不含这两个字段的新版本）在后端部署后直接看不了任何缠论分析结果，一直到用户升级 App 为止（iOS 审核 + 用户更新有几天到几周的窗口期）。
+
+**处理方式**：后端 `segments`/`segment_pivots` 字段名永久保留、固定返回 `[]`（不是"过渡期保留，以后再删"——没有明确计划要删的必要，保留一个空字段成本很低）。新版 iOS App 的 `ChanModels.swift` **可以**完全删掉 `segments`/`segmentPivots` 这两个 struct 属性（Swift `Decodable` 会自动忽略 JSON 里没有在 struct 里声明的字段，不会因为后端多返回了 `segments: []` 而报错），连带删掉 `Segment` 结构体定义、`ChanChartView.swift` 的 `drawSegments()`、`showSegments` 开关。旧版 App 仍然能正常解码（拿到的 `segments` 永远是空数组，线段图层永远不画东西，这本来就是旧版当前该有的行为退化，不是新 bug）。
 
 **后续待办（不在本次范围内）**：30 分钟次级别确认功能——需要先确认 FMP 能否稳定提供足够长的 30 分钟历史数据，再评估是否值得做。
 
