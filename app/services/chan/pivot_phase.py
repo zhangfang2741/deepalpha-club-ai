@@ -197,7 +197,9 @@ def _pick_current_pivot(result: "ChanAnalysisResult") -> tuple["Pivot", list["Pi
     return pivot, all_pivots, all_pivots.index(pivot)
 
 
-def _phase_label(phase: Phase, direction: str | None, outcome: Outcome | None, lang: str) -> str:
+def _phase_label(phase: Phase, direction: str | None, outcome: Outcome | None, lang: str,
+                 signaled: bool = False) -> str:
+    """signaled：回抽笔上是否有对应的二/三类买卖点信号；没有时只描述结构，不声称「确认X买/卖」。"""
     up = direction == "up"
     if phase == "pivot_forming":
         return pick(lang, "形成中枢", "Pivot formed")
@@ -207,6 +209,12 @@ def _phase_label(phase: Phase, direction: str | None, outcome: Outcome | None, l
         return pick(lang, "向上离开中枢" if up else "向下离开中枢",
                      "Leaving pivot upward" if up else "Leaving pivot downward")
     if phase == "retrace_confirmed":
+        if not signaled:
+            if outcome == "type3":
+                return pick(lang, "回踩守住中枢上沿" if up else "反抽受制中枢下沿",
+                             "Retrace held above pivot top" if up else "Rebound held below pivot bottom")
+            return pick(lang, "回踩落回中枢内" if up else "反抽回到中枢内",
+                         "Retrace back inside pivot" if up else "Rebound back inside pivot")
         if outcome == "type3":
             return pick(lang, "确认三买" if up else "确认三卖",
                          "Type-3 buy confirmed" if up else "Type-3 sell confirmed")
@@ -238,7 +246,7 @@ def _checklist(phase: Phase, phase_label: str, detail: str, pivot: "Pivot", lang
 
 
 def _reason(phase: Phase, direction: str | None, pivot: "Pivot", last_price: float,
-            pair: "_Pair | None", lang: str) -> str:
+            pair: "_Pair | None", lang: str, signaled: bool = False) -> str:
     up = direction == "up"
     if phase == "pivot_forming":
         return pick(lang,
@@ -258,18 +266,26 @@ def _reason(phase: Phase, direction: str | None, pivot: "Pivot", last_price: flo
             f"Price {last_price:.2f} has broken below ZD {pivot.zd:.2f}; the latest down-leg left the pivot.")
     assert pair is not None
     if phase == "retrace_confirmed":
+        kind = "三" if pair.outcome == "type3" else "二"
+        kind_en = "3" if pair.outcome == "type3" else "2"
+        side, side_en = ("买", "buy") if up else ("卖", "sell")
+        if signaled:
+            tail_zh = f"确认{kind}{side}。"
+            tail_en = f" — type-{kind_en} {side_en} confirmed."
+        else:
+            # 结构上像二/三类，但买卖点判定没有在这一笔上给出对应信号，不能说「确认」
+            tail_zh = f"结构上接近{kind}{side}形态，但尚未出现对应的{kind}{side}信号。"
+            tail_en = f" — shaped like a type-{kind_en} {side_en}, but no type-{kind_en} {side_en} signal has appeared."
         if pair.outcome == "type3":
             boundary = pivot.zg if up else pivot.zd
             return pick(lang,
-                f"回踩至 {pair.retrace.end_price:.2f}，守住 {'ZG' if up else 'ZD'} {boundary:.2f} 未回中枢，"
-                f"确认{'三买' if up else '三卖'}。",
+                f"回踩至 {pair.retrace.end_price:.2f}，守住 {'ZG' if up else 'ZD'} {boundary:.2f} 未回中枢，" + tail_zh,
                 f"Retrace held at {pair.retrace.end_price:.2f}, staying beyond "
-                f"{'ZG' if up else 'ZD'} {boundary:.2f} — type-3 {'buy' if up else 'sell'} confirmed.")
+                f"{'ZG' if up else 'ZD'} {boundary:.2f}" + tail_en)
         return pick(lang,
-            f"回踩至 {pair.retrace.end_price:.2f}，落在中枢 {pivot.zd:.2f}–{pivot.zg:.2f} 内未破对侧边界，"
-            f"确认{'二买' if up else '二卖'}。",
+            f"回踩至 {pair.retrace.end_price:.2f}，落在中枢 {pivot.zd:.2f}–{pivot.zg:.2f} 内未破对侧边界，" + tail_zh,
             f"Retrace landed at {pair.retrace.end_price:.2f}, inside the pivot "
-            f"{pivot.zd:.2f}-{pivot.zg:.2f} — type-2 {'buy' if up else 'sell'} confirmed.")
+            f"{pivot.zd:.2f}-{pivot.zg:.2f}" + tail_en)
     return pick(lang,
         f"延续的{'上升' if up else '下降'}笔出现{'顶' if up else '底'}背驰，动能未能同步创新高/新低。",
         f"The continuing {'up' if up else 'down'}-leg shows a {'top' if up else 'bottom'} divergence "
@@ -371,10 +387,17 @@ def _build_leaving(pivot: "Pivot", breakout: "Stroke", last_price: float, lang: 
                        stage_guide=_stage_guide(phase, direction, pivot, lang))
 
 
-def _build_retrace_confirmed(pivot: "Pivot", pair: _Pair, lang: str) -> PivotPhase:
+def _has_matching_signal(result: "ChanAnalysisResult", pair: _Pair) -> bool:
+    """回抽笔终点上是否有同类买卖点信号（二类对二类、三类对三类，买卖方向一致）。"""
+    kind = "3" if pair.outcome == "type3" else "2"
+    want = ("buy" if pair.direction == "up" else "sell") + kind
+    return any(s.type == want and s.time == pair.retrace.end_time for s in result.signals)
+
+
+def _build_retrace_confirmed(pivot: "Pivot", pair: _Pair, lang: str, signaled: bool) -> PivotPhase:
     phase: Phase = "retrace_confirmed"
-    label = _phase_label(phase, pair.direction, pair.outcome, lang)
-    reason = _reason(phase, pair.direction, pivot, pair.retrace.end_price, pair, lang)
+    label = _phase_label(phase, pair.direction, pair.outcome, lang, signaled)
+    reason = _reason(phase, pair.direction, pivot, pair.retrace.end_price, pair, lang, signaled)
     return PivotPhase(phase=phase, phase_label=label, direction=pair.direction, pivot=pivot,
                        checklist=_checklist(phase, label, reason, pivot, lang), reason=reason,
                        confirmed=pair.retrace.confirmed, branches=[],
@@ -407,7 +430,7 @@ def build_pivot_phase(result: "ChanAnalysisResult", lang: str = "zh") -> PivotPh
         turn_stroke = _find_divergence_turn(result, remaining, pair.direction)
         if turn_stroke is not None:
             return _build_divergence_turn(pivot, pair, turn_stroke, lang)
-        return _build_retrace_confirmed(pivot, pair, lang)
+        return _build_retrace_confirmed(pivot, pair, lang, _has_matching_signal(result, pair))
 
     if open_breakout is not None:
         last_price = result.merged_candles[-1].close if result.merged_candles else 0.0

@@ -112,7 +112,7 @@ def test_retrace_confirmed_type3_when_retrace_holds_above_zg():
     assert pp is not None
     assert pp.phase == "retrace_confirmed"
     assert pp.direction == "up"
-    assert "三买" in pp.phase_label
+    assert pp.phase_label == "回踩守住中枢上沿"
     assert pp.branches == []
 
 
@@ -123,7 +123,7 @@ def test_retrace_confirmed_type2_when_retrace_lands_inside_pivot():
     pp = build_pivot_phase(_result(strokes, [pivot], []))
     assert pp is not None
     assert pp.phase == "retrace_confirmed"
-    assert "二买" in pp.phase_label
+    assert pp.phase_label == "回踩落回中枢内"
 
 
 def test_back_to_range_falls_back_to_oscillating():
@@ -176,7 +176,7 @@ def test_retrace_inside_absorbing_pivot_is_retrace_confirmed():
     pp = build_pivot_phase(_result(strokes, pivots, []))
     assert pp is not None
     assert pp.phase == "retrace_confirmed"
-    assert "二买" in pp.phase_label
+    assert pp.phase_label == "回踩落回中枢内"
 
 
 def test_analyzer_populates_pivot_phase_end_to_end():
@@ -223,7 +223,7 @@ def test_failed_breakout_attempt_does_not_hide_later_real_breakout():
     pp = build_pivot_phase(_result(strokes, [pivot], []))
     assert pp.phase == "retrace_confirmed"
     assert pp.direction == "up"
-    assert "三买" in pp.phase_label
+    assert pp.phase_label == "回踩守住中枢上沿"
 
 
 def test_confirmed_pair_superseded_by_later_opposite_breakout():
@@ -246,7 +246,7 @@ def test_confirmed_pair_superseded_by_later_opposite_breakout():
     assert pp is not None
     assert pp.phase == "retrace_confirmed"
     assert pp.direction == "down"
-    assert "三卖" in pp.phase_label
+    assert pp.phase_label == "反抽受制中枢下沿"
 
 
 def test_open_breakout_at_tail_supersedes_earlier_confirmed_pair():
@@ -264,3 +264,42 @@ def test_open_breakout_at_tail_supersedes_earlier_confirmed_pair():
     assert pp is not None
     assert pp.phase == "leaving"
     assert pp.direction == "down"
+
+
+# ---- 阶段文案与图上买卖点一致：只有同一回抽笔上有对应买卖点信号时才说「确认X买/卖」----
+
+def _signal(sig_type, stroke):
+    from app.services.chan.signals import Signal
+    return Signal(type=sig_type, time=stroke.end_time, price=stroke.end_price, strength="medium",
+                  divergence=None, description="")
+
+
+def test_retrace_label_claims_buy3_only_when_matching_signal_exists():
+    strokes = _chain(("down", 100, 90), ("up", 90, 98), ("down", 98, 92),
+                     ("up", 92, 110), ("down", 110, 101))
+    pivot = _pivot_from(strokes, 5, zg=99, zd=91)
+    r = _result(strokes, [pivot], [])
+    r.signals = [_signal("buy3", strokes[-1])]
+    pp = build_pivot_phase(r)
+    assert pp is not None and pp.phase_label == "确认三买"
+    assert "确认三买" in pp.reason
+
+
+def test_retrace_label_stays_structural_when_signal_type_differs():
+    """回抽笔上只有二买信号、结构却是三类形态时，不能硬说「确认三买」。"""
+    strokes = _chain(("down", 100, 90), ("up", 90, 98), ("down", 98, 92),
+                     ("up", 92, 110), ("down", 110, 101))
+    pivot = _pivot_from(strokes, 5, zg=99, zd=91)
+    r = _result(strokes, [pivot], [])
+    r.signals = [_signal("buy2", strokes[-1])]
+    pp = build_pivot_phase(r)
+    assert pp is not None and pp.phase_label == "回踩守住中枢上沿"
+    assert "确认" not in pp.reason
+
+
+def test_retrace_label_english_structural():
+    strokes = _chain(("down", 100, 90), ("up", 90, 98), ("down", 98, 92),
+                     ("up", 92, 110), ("down", 110, 95))
+    pivot = _pivot_from(strokes, 5, zg=99, zd=91)
+    pp = build_pivot_phase(_result(strokes, [pivot], []), lang="en")
+    assert pp is not None and pp.phase_label == "Retrace back inside pivot"

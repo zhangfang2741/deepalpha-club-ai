@@ -105,7 +105,20 @@ def test_phase_as_of_after_retrace_is_confirmed():
     phase = pivot_phase_as_of(result, _FULL_STROKES[6].end_time)  # 回踩笔走完，确认三买
     assert phase is not None
     assert phase.phase == "retrace_confirmed"
-    assert "三买" in phase.phase_label
+    assert phase.phase_label == "回踩守住中枢上沿"
+
+
+def test_phase_as_of_ignores_signals_after_as_of_time():
+    """回放不能偷看未来：回放时点之后才出现的买卖点信号不能让当时的阶段写成「确认三买」。"""
+    from app.services.chan.signals import Signal
+    result = _result(_FULL_STROKES, [_FULL_PIVOT])
+    retrace = _FULL_STROKES[6]
+    result.signals = [Signal(type="buy3", time=retrace.end_time, price=retrace.end_price,
+                             strength="medium", divergence=None, description="")]
+    at_retrace = pivot_phase_as_of(result, retrace.end_time)
+    assert at_retrace is not None and at_retrace.phase_label == "确认三买"
+    before = pivot_phase_as_of(result, _FULL_STROKES[5].end_time)
+    assert before is not None and "确认" not in before.phase_label
 
 
 def test_different_dates_of_same_stock_give_different_phases():

@@ -45,6 +45,8 @@ def truncate_as_of(result: ChanAnalysisResult, as_of_time: str) -> ChanAnalysisR
         p for p in (_truncate_pivot(p, as_of_time) for p in result.segment_pivots) if p is not None
     ]
     truncated.merged_candles = [c for c in result.merged_candles if c.time <= as_of_time]
+    # 阶段文案是否写「确认X买/卖」取决于回抽笔上有没有对应信号，信号也按时点截断
+    truncated.signals = [s for s in result.signals if s.time <= as_of_time]
     return truncated
 
 
