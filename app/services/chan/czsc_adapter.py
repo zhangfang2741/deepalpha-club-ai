@@ -60,7 +60,7 @@ class CzscStructures:
     stroke_pivots: list[Pivot]
 
 
-def _ts_date(ts) -> str:
+def ts_date(ts) -> str:
     # str(date()) 输出 YYYY-MM-DD；包一层 str 以兼容 pyright 对 NaTType 的联合类型标注
     return str(pd.Timestamp(ts).date())
 
@@ -81,7 +81,7 @@ def extract_structures(c: CZSC, bars: list[dict]) -> CzscStructures:
     合并K线时间语义：czsc 的 ``NewBar.dt`` 是合并时按方向选定的一根原始
     K线时间（实测上升合并取后根、下降合并取前根，不固定是 ``elements[0]``
     还是 ``elements[-1]``），因此 ``MergedCandle.time`` 直接取
-    ``_ts_date(nb.dt)`` —— dt 本就源自某根输入 bar 的 time，可无损还原；
+    ``ts_date(nb.dt)`` —— dt 本就源自某根输入 bar 的 time，可无损还原；
     笔/中枢的起止时间匹配（按 ``fx.dt``）依赖这一点。open/close 仍取
     首根开价/末根收价，raw_start/raw_end 为完整合并范围。
     """
@@ -100,7 +100,7 @@ def extract_structures(c: CZSC, bars: list[dict]) -> CzscStructures:
         return MergedCandle(
             idx=pos_by_dt[nb.dt],
             # time 与 NewBar.dt 同源（合并时按方向选定的那根原始K线），见 docstring
-            time=_ts_date(nb.dt),
+            time=ts_date(nb.dt),
             open=float(raw[0].open), close=float(raw[-1].close),
             high=float(nb.high), low=float(nb.low),
             raw_start=raw[0].id, raw_end=raw[-1].id,
@@ -148,11 +148,11 @@ def extract_structures(c: CZSC, bars: list[dict]) -> CzscStructures:
 
     pivots = []
     for zs in c.zs_list:
-        elements = [stroke_by_start_time[_ts_date(bi.fx_a.dt)] for bi in zs.bis]
+        elements = [stroke_by_start_time[ts_date(bi.fx_a.dt)] for bi in zs.bis]
         pivots.append(Pivot(
             zg=float(zs.zg), zd=float(zs.zd), gg=float(zs.gg), dd=float(zs.dd),
-            start_time=_ts_date(zs.bis[0].fx_a.dt),
-            end_time=_ts_date(zs.bis[-1].fx_b.dt),
+            start_time=ts_date(zs.bis[0].fx_a.dt),
+            end_time=ts_date(zs.bis[-1].fx_b.dt),
             level="stroke", elements=elements,
         ))
 
