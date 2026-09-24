@@ -149,6 +149,15 @@ struct SignalRadarView: View {
                 Text(day.date)
                     .font(.caption)
                     .foregroundColor(Theme.textSecondary)
+                // 共振标记只在最新交易日出现、盘中每 30 分钟刷新：标出更新时刻，
+                // 与点进详情看到的实时结论有出入时，用户知道差在时间上
+                if day.id == vm.response?.days.first?.id,
+                   day.signals.contains(where: { $0.isSubLevelResonance }),
+                   let updated = vm.response?.subLevelUpdatedText {
+                    Text(L("共振 %@ 更新", updated))
+                        .font(.caption2)
+                        .foregroundColor(Theme.textSecondary)
+                }
             }
             Spacer(minLength: 8)
             if let day = vm.selectedDay {

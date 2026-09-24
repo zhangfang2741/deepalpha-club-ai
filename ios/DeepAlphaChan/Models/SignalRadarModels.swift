@@ -26,6 +26,8 @@ struct SignalRadarResponse: Decodable {
     let topN: Int
     let days: [RadarDay]
     let status: String   // ready / generating
+    /// 最新一天气泡共振结论的更新时间（ISO8601 UTC）。盘中每 30 分钟刷新；旧后端无此字段。
+    let subLevelAsOf: String?
 
     enum CodingKeys: String, CodingKey {
         case market
@@ -37,6 +39,16 @@ struct SignalRadarResponse: Decodable {
         case topN = "top_n"
         case days
         case status
+        case subLevelAsOf = "sub_level_as_of"
+    }
+
+    /// 共振结论更新时刻（本地时间 HH:mm），解析不了返回 nil。
+    var subLevelUpdatedText: String? {
+        guard let raw = subLevelAsOf, !raw.isEmpty,
+              let date = ISO8601DateFormatter().date(from: raw) else { return nil }
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f.string(from: date)
     }
 
     var isGenerating: Bool { status == "generating" }

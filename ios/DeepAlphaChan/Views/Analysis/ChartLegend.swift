@@ -11,11 +11,12 @@ struct ChartLegend: View {
 
     var body: some View {
         WrapLayout(spacing: 4, lineSpacing: 3) {
+                // 顶底分型沿用原先同一个图层开关；两个小圆点（顶/底色）与图上分型圆点一致。
+                item(Theme.topFractal, "分型", isOn: $vm.showFractals,
+                     secondaryColor: Theme.bottomFractal, dotted: true)
                 item(Theme.stroke, "笔", isOn: $vm.showStrokes)
                 item(Theme.segment, "线段", isOn: $vm.showSegments)
                 item(Theme.pivotFill, "中枢", isOn: $vm.showPivots)
-                // 顶底分型沿用原先同一个图层开关，两种颜色一起保留。
-                item(Theme.topFractal, "分型", isOn: $vm.showFractals, secondaryColor: Theme.bottomFractal)
                 item(Theme.up, "买卖点", isOn: $vm.showSignals, secondaryColor: Theme.down)
                 item(Theme.divergence, "背驰", isOn: $vm.showDivergences)
                 // 说明放进同一个换行流里，不单独占一行
@@ -28,14 +29,24 @@ struct ChartLegend: View {
     }
 
     private func item(
-        _ color: Color, _ title: String, isOn: Binding<Bool>, secondaryColor: Color? = nil
+        _ color: Color, _ title: String, isOn: Binding<Bool>, secondaryColor: Color? = nil,
+        dotted: Bool = false
     ) -> some View {
         Toggle(isOn: isOn) {
             HStack(spacing: 3) {
-                VStack(spacing: 1.5) {
-                    Capsule().fill(color).frame(width: 8, height: 2.5)
-                    if let secondaryColor {
-                        Capsule().fill(secondaryColor).frame(width: 8, height: 2.5)
+                if dotted {
+                    HStack(spacing: 1.5) {
+                        Circle().fill(color).frame(width: 5, height: 5)
+                        if let secondaryColor {
+                            Circle().fill(secondaryColor).frame(width: 5, height: 5)
+                        }
+                    }
+                } else {
+                    VStack(spacing: 1.5) {
+                        Capsule().fill(color).frame(width: 8, height: 2.5)
+                        if let secondaryColor {
+                            Capsule().fill(secondaryColor).frame(width: 8, height: 2.5)
+                        }
                     }
                 }
                 Text(L(title)).font(.system(size: 9.5, weight: .medium))

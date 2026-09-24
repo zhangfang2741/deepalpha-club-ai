@@ -372,3 +372,5 @@
 "周线定方向、日线找进出点：两者同向为共振，反向多为次级别的反弹或回调。" = "The weekly chart sets the direction; the daily chart times entries and exits. When they agree it's aligned; when they disagree it's usually just a lower-level bounce or pullback.";
 "浅色底 = 最近两周（次级别判断所看的区间）" = "Shaded = last two weeks (the window the lower-level check looks at)";
 "日线近两周买卖点" = "Daily buy/sell points, last 2 weeks";
+"共振 %@ 更新" = "Aligned · updated %@";
+"数据截至 %@" = "data as of %@";

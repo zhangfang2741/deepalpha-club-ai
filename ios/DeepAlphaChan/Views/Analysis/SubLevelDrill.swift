@@ -179,8 +179,9 @@ struct SubLevelSheet: View {
                               priceHeight: 220, macdHeight: 60,
                               highlightFrom: isWeekly ? Self.lastDaysStart(a, days: 14)
                                                       : Self.lastSessionsStart(a, sessions: 2))
-                Text(isWeekly ? L("浅色底 = 最近两周（次级别判断所看的区间）")
-                              : L("浅色底 = 最近 2 个交易日（次级别判断所看的区间）"))
+                Text((isWeekly ? L("浅色底 = 最近两周（次级别判断所看的区间）")
+                               : L("浅色底 = 最近 2 个交易日（次级别判断所看的区间）"))
+                     + (a.mergedCandles.last.map { " · " + L("数据截至 %@", $0.time) } ?? ""))
                     .font(.caption2)
                     .foregroundColor(Theme.textSecondary)
             }
