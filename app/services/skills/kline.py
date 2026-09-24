@@ -35,6 +35,19 @@ _FMP_KEY = os.environ.get("FMP_API_KEY", "")
 # 回调」的前复权口径，与东方财富 fqt=1、Yahoo adjclose 一致。
 _FMP_URL = "https://financialmodelingprep.com/stable/historical-price-eod/dividend-adjusted"
 _CACHE_TTL = 3600 * 24  # 24h
+# 30 分钟线盘中持续变化，缓存不宜久
+_INTRADAY_CACHE_TTL = 60 * 15
+_FMP_INTRADAY_URL = "https://financialmodelingprep.com/stable/historical-chart/30min"
+# FMP 30 分钟端点单次最多约一个月数据，按 20 天一段分段拉取
+_FMP_INTRADAY_CHUNK_DAYS = 20
+# 东方财富 klt：101=日线 102=周线 30=30 分钟
+_EASTMONEY_KLT = {"daily": "101", "weekly": "102", "30min": "30"}
+
+
+def _date(d: str):
+    """YYYY-MM-DD → date。"""
+    from datetime import date
+    return date.fromisoformat(d)
 
 
 def _forward_adjust(
@@ -101,14 +114,81 @@ async def fetch_kline(
     # 代码形态与 fmp_symbol() 一致。东方财富保留为回退，供中国大陆部署/开发时兜底
     # （彼时 Yahoo 可能被墙）。
     if market is Market.US:
-        bars = await _fetch_fmp(fmp_symbol(symbol), start_date, end_date, freq)
+        if freq == "30min":
+            bars = await _fetch_fmp_intraday(fmp_symbol(symbol), start_date, end_date)
+        else:
+            bars = await _fetch_fmp(fmp_symbol(symbol), start_date, end_date, freq)
     else:
         bars = await _fetch_cn_hk(symbol, start_date, end_date, freq)
 
     if redis and bars:
-        await set_json(redis, cache_key, bars, expire=_CACHE_TTL)
+        ttl = _INTRADAY_CACHE_TTL if freq == "30min" else _CACHE_TTL
+        await set_json(redis, cache_key, bars, expire=ttl)
 
     return bars
+
+
+async def _fetch_fmp_intraday(symbol: str, start: str, end: str) -> list[dict]:
+    """美股 30 分钟 K 线：FMP 分段拉取后合并，时间为美东本地 YYYY-MM-DD HH:MM。
+
+    分钟线端点不提供复权字段；次级别只看最近几十天，除息造成的跳空影响可忽略。
+    """
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    from datetime import timedelta
+
+    if not _FMP_KEY:
+        raise ValueError("数据源未配置：缺少 FMP_API_KEY 环境变量，请联系管理员")
+
+    chunks: list[tuple[str, str]] = []
+    cur, last = _date(start), _date(end)
+    while cur <= last:
+        stop = min(cur + timedelta(days=_FMP_INTRADAY_CHUNK_DAYS), last)
+        chunks.append((cur.isoformat(), stop.isoformat()))
+        cur = stop + timedelta(days=1)
+
+    @retry(
+        retry=retry_if_exception_type((_RateLimitError, httpx.TransportError)),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=8),
+        reraise=True,
+    )
+    def _chunk(frm: str, to: str) -> list[dict]:
+        resp = httpx.get(
+            _FMP_INTRADAY_URL,
+            params={"symbol": symbol, "from": frm, "to": to, "apikey": _FMP_KEY},
+            timeout=30,
+        )
+        if resp.status_code == 401:
+            raise ValueError("数据源认证失败：FMP_API_KEY 无效")
+        if resp.status_code == 402:
+            raise _PremiumRequiredError
+        if resp.status_code == 429:
+            raise _RateLimitError
+        resp.raise_for_status()
+        raw = resp.json()
+        if isinstance(raw, dict):
+            err = raw.get("Error Message") or raw.get("error")
+            raise ValueError(f"数据源返回错误：{err}")
+        return raw
+
+    def _sync() -> list[dict]:
+        by_time: dict[str, dict] = {}
+        for frm, to in chunks:
+            for r in _chunk(frm, to):
+                if not r.get("date"):
+                    continue
+                t = r["date"][:16]
+                by_time[t] = {"time": t, "open": r["open"], "high": r["high"], "low": r["low"],
+                              "close": r["close"], "volume": r.get("volume", 0)}
+        return [by_time[t] for t in sorted(by_time)]
+
+    loop = asyncio.get_event_loop()
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            return await loop.run_in_executor(pool, _sync)
+    except _RateLimitError:
+        raise ValueError("数据源请求过于频繁，请稍后再试")
 
 
 async def _fetch_fmp(symbol: str, start: str, end: str, freq: str) -> list[dict]:
@@ -239,6 +319,8 @@ async def _fetch_yahoo(symbol: str, start: str, end: str, freq: str) -> list[dic
             dt = dt.replace(hour=23, minute=59, second=59)
         return int(dt.timestamp())
 
+    intraday = freq == "30min"
+
     @retry(
         retry=retry_if_exception_type(httpx.TransportError),
         stop=stop_after_attempt(3),
@@ -246,14 +328,15 @@ async def _fetch_yahoo(symbol: str, start: str, end: str, freq: str) -> list[dic
         reraise=True,
     )
     def _sync() -> list[dict]:
-        # 始终拉日线；Yahoo 虽支持 1wk，但周线统一在本地聚合以与 FMP 口径一致。
+        # 日线/周线始终拉日线；Yahoo 虽支持 1wk，但周线统一在本地聚合以与 FMP 口径一致。
+        # 30 分钟直接拉 30m（Yahoo 分钟线最多近 60 天）。
         # 带 UA：Yahoo 对无 User-Agent 的请求可能返回 429/403。
         resp = httpx.get(
             _YAHOO_URL.format(symbol=symbol),
             params={
                 "period1": _to_ts(start),
                 "period2": _to_ts(end, end_of_day=True),
-                "interval": "1d",
+                "interval": "30m" if intraday else "1d",
                 # events=div|split 让 Yahoo 返回 adjclose（前复权收盘），用于回调 OHL
                 "events": "div|split",
             },
@@ -269,6 +352,7 @@ async def _fetch_yahoo(symbol: str, start: str, end: str, freq: str) -> list[dic
         if not results:
             return []
         r0 = results[0]
+        gmtoffset = int((r0.get("meta") or {}).get("gmtoffset") or 0)
         timestamps = r0.get("timestamp") or []
         quote = ((r0.get("indicators") or {}).get("quote") or [{}])[0]
         opens = quote.get("open") or []
@@ -286,10 +370,15 @@ async def _fetch_yahoo(symbol: str, start: str, end: str, freq: str) -> list[dic
             # 停牌/无成交日 Yahoo 会给 null，跳过以免污染缠论结构
             if None in (o, h, low_, c):
                 continue
-            ac = adjcloses[i] if i < len(adjcloses) and adjcloses[i] is not None else c
-            o, h, low_, c = _forward_adjust(float(o), float(h), float(low_), float(c), float(ac))
-            # 港股/A 股开盘时段换算成 UTC 仍是同一自然日，取 UTC 日期即可
-            day = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+            if intraday:
+                # 分钟线无 adjclose；时间戳为 UTC，按交易所偏移换算成本地时刻
+                o, h, low_, c = float(o), float(h), float(low_), float(c)
+                day = datetime.fromtimestamp(ts + gmtoffset, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+            else:
+                ac = adjcloses[i] if i < len(adjcloses) and adjcloses[i] is not None else c
+                o, h, low_, c = _forward_adjust(float(o), float(h), float(low_), float(c), float(ac))
+                # 港股/A 股开盘时段换算成 UTC 仍是同一自然日，取 UTC 日期即可
+                day = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
             vol = volumes[i] if i < len(volumes) and volumes[i] is not None else 0
             bars.append({
                 "time": day, "open": o, "high": h,
@@ -339,7 +428,7 @@ async def _fetch_eastmoney(secid: str, start: str, end: str, freq: str) -> list[
         "fields1": "f1,f2,f3,f4,f5,f6",
         # 依次为：日期、开盘、收盘、最高、最低、成交量、成交额
         "fields2": "f51,f52,f53,f54,f55,f56,f57",
-        "klt": "101" if freq == "daily" else "102",
+        "klt": _EASTMONEY_KLT[freq],
         "fqt": "1",
         "beg": start.replace("-", ""),
         "end": end.replace("-", ""),

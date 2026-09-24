@@ -185,3 +185,79 @@ async def test_fetch_cn_hk_falls_back_to_eastmoney_when_yahoo_unavailable(monkey
 
     assert called["eastmoney"] is True
     assert len(bars) == 1
+
+
+# ---- 30 分钟 K 线（次级别确认）----
+
+async def test_fetch_yahoo_30min_converts_utc_to_exchange_local_time(monkeypatch):
+    """Yahoo 分钟线返回 UTC 时间戳：按 meta.gmtoffset 换算成交易所本地 YYYY-MM-DD HH:MM。"""
+    # 2026-09-24 01:30 / 02:00 UTC = 香港 09:30 / 10:00
+    rows = [
+        {"ts": 1790213400, "open": 10.0, "high": 11.0, "low": 9.5, "close": 10.5, "volume": 100},
+        {"ts": 1790215200, "open": 10.5, "high": 11.5, "low": 10.0, "close": 11.0, "volume": 200},
+    ]
+    payload = _yahoo_payload(rows)
+    payload["chart"]["result"][0]["meta"] = {"gmtoffset": 28800}
+    seen = {}
+
+    def fake_get(url, params=None, timeout=None, headers=None):
+        seen.update(params or {})
+        return _FakeResp(200, payload)
+
+    monkeypatch.setattr(kline.httpx, "get", fake_get)
+    bars = await kline._fetch_yahoo("0700.HK", "2026-09-01", "2026-09-24", "30min")
+
+    assert seen["interval"] == "30m"
+    assert [b["time"] for b in bars] == ["2026-09-24 09:30", "2026-09-24 10:00"]
+    assert bars[1]["close"] == 11.0  # 分钟线无 adjclose，不做复权回调
+
+
+async def test_fetch_fmp_intraday_chunks_range_and_merges(monkeypatch):
+    """FMP 30 分钟单次约一个月：40 天按 <=20 天分段请求，合并去重、按时间升序、时间截到分钟。"""
+    monkeypatch.setattr(kline, "_FMP_KEY", "test-key")
+    calls = []
+
+    def fake_get(url, params=None, timeout=None):
+        assert "historical-chart/30min" in url
+        calls.append((params["from"], params["to"]))
+        # 每段都返回同一根重叠 K 线 + 本段专属一根，验证去重
+        return _FakeResp(200, [
+            {"date": f"{params['to']} 09:30:00", "open": 1, "high": 2, "low": 0.5, "close": 1.5, "volume": 10},
+            {"date": "2026-09-10 10:00:00", "open": 1, "high": 2, "low": 0.5, "close": 1.5, "volume": 10},
+        ])
+
+    monkeypatch.setattr(kline.httpx, "get", fake_get)
+    bars = await kline._fetch_fmp_intraday("AAPL", "2026-08-15", "2026-09-24")
+
+    assert len(calls) >= 2
+    for f, t in calls:
+        assert (kline._date(t) - kline._date(f)).days <= 20
+    times = [b["time"] for b in bars]
+    assert times == sorted(times)
+    assert len(times) == len(set(times))
+    assert "2026-09-10 10:00" in times
+
+
+async def test_fetch_eastmoney_30min_uses_klt_30(monkeypatch):
+    """东方财富回退源：30 分钟用 klt=30，时间保留到分钟。"""
+    seen = {}
+
+    def fake_get(url, params=None, timeout=None, trust_env=None):
+        seen.update(params)
+        return _FakeResp(200, {"data": {"klines": ["2026-09-24 10:00,10,11,12,9,100,1000"]}})
+
+    monkeypatch.setattr(kline.httpx, "get", fake_get)
+    bars = await kline._fetch_eastmoney("1.600519", "2026-09-01", "2026-09-24", "30min")
+
+    assert seen["klt"] == "30"
+    assert bars[0]["time"] == "2026-09-24 10:00"
+
+
+async def test_fetch_kline_us_30min_routes_to_fmp_intraday(monkeypatch):
+    """美股 30 分钟走 FMP 分钟线分段拉取，而不是日线端点。"""
+    async def fake_intraday(symbol, start, end):
+        return [{"time": "2026-09-24 09:30", "open": 1, "high": 2, "low": 0.5, "close": 1.5, "volume": 1}]
+
+    monkeypatch.setattr(kline, "_fetch_fmp_intraday", fake_intraday)
+    bars = await kline.fetch_kline(None, "AAPL", "2026-09-01", "2026-09-24", "30min")
+    assert bars[0]["time"] == "2026-09-24 09:30"
