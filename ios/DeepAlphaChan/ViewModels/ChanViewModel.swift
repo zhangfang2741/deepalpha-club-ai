@@ -132,6 +132,29 @@ final class ChanViewModel: ObservableObject {
         }
     }
 
+    // MARK: - 周期切换（详情页内原地切换日线 / 周线 / 30 分钟）
+
+    /// 周期的展示文案，标题与全屏页共用。
+    static func freqLabel(_ freq: String) -> String {
+        switch freq {
+        case "weekly": return L("周线")
+        case "30min": return L("30分钟")
+        default: return L("日线")
+        }
+    }
+
+    /// 在详情页里切换周期并重新分析；失败则退回原周期，页面保留原结果。
+    /// 30 分钟级别由后端把可见区间收窄到最近 30 天，这里不用改日期。
+    func switchFreq(_ newFreq: String) async {
+        guard newFreq != freq, !isLoading else { return }
+        let previous = freq
+        freq = newFreq
+        await runAnalysis()
+        if errorMessage != nil {
+            freq = previous
+        }
+    }
+
     // MARK: - 次级别确认
 
     /// 仅日线分析有次级别（30 分钟）；周线不加载。失败只清空卡片，不打扰主结果。

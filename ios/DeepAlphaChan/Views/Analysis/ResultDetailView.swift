@@ -68,8 +68,7 @@ struct ResultDetailView: View {
     }
 
     private var navTitle: String {
-        let freq = vm.freq == "weekly" ? L("周线") : L("日线")
-        return "\(vm.symbol.uppercased()) · \(freq)"
+        return "\(vm.symbol.uppercased()) · \(ChanViewModel.freqLabel(vm.freq))"
     }
 
     /// ScrollView 的完整内容，同时是分享长图的渲染源（PageSnapshot.render）。
@@ -81,6 +80,8 @@ struct ResultDetailView: View {
     /// ChartSection 里图层开关的横向 ScrollView（在 ImageRenderer 下高度塌成 0）。
     private func pageContent(isStatic: Bool) -> some View {
         VStack(spacing: 14) {
+            if !isStatic { periodSwitcher }
+
             ChartSection(analysis: analysis, vm: vm,
                          onFullscreen: openFullscreen, isStatic: isStatic)
 
@@ -92,6 +93,32 @@ struct ResultDetailView: View {
         }
         .padding(.horizontal, Theme.contentHInset)
         .padding(.vertical, Theme.contentVInset)
+    }
+
+    /// 周期切换：原地重新分析（30 分钟级别由后端收窄到最近 30 天），失败退回原周期。
+    private var periodSwitcher: some View {
+        VStack(spacing: 6) {
+            Picker("", selection: Binding(
+                get: { vm.freq },
+                set: { newFreq in Task { await vm.switchFreq(newFreq) } }
+            )) {
+                Text(L("日线")).tag("daily")
+                Text(L("周线")).tag("weekly")
+                Text(L("30分钟")).tag("30min")
+            }
+            .pickerStyle(.segmented)
+            .disabled(vm.isLoading)
+
+            if vm.isLoading {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text(L("正在切换周期…")).font(.caption).foregroundColor(Theme.textSecondary)
+                }
+            } else if let err = vm.errorMessage {
+                Text(err).font(.caption).foregroundColor(Theme.up)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     /// 打开全屏图表（转屏 + 关呈现动画，逻辑同条件页原实现）。

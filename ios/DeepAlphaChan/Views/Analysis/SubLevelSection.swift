@@ -57,6 +57,16 @@ struct SubLevelSection: View {
                     }
                 }
 
+                Button {
+                    Task { await vm.switchFreq("30min") }
+                } label: {
+                    Label(L("查看 30 分钟图表"), systemImage: "chart.xyaxis.line")
+                        .font(AnalysisType.label)
+                }
+                .buttonStyle(.bordered)
+                .tint(Theme.accent)
+                .disabled(vm.isLoading)
+
                 Text(L("日线定方向、30 分钟找进出点：两者同向为共振，反向多为次级别的反弹或回调。"))
                     .font(.caption2)
                     .foregroundColor(Theme.textSecondary)

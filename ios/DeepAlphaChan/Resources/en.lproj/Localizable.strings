@@ -348,3 +348,8 @@
 "日线定方向、30 分钟找进出点：两者同向为共振，反向多为次级别的反弹或回调。" = "The daily chart sets the direction; the 30-minute chart times entries and exits. When they agree it's aligned; when they disagree it's usually just a lower-level bounce or pullback.";
 "日线与30分钟共振" = "Daily and 30-minute aligned";
 "共振" = "Aligned";
+
+/* 30-minute chart */
+"30分钟" = "30-min";
+"正在切换周期…" = "Switching timeframe…";
+"查看 30 分钟图表" = "View 30-min chart";

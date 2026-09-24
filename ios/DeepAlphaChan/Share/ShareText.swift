@@ -10,7 +10,7 @@ enum ShareText {
     /// （含微信）只取其一 —— 落到只有文字的那一侧，这行不带风险说明的
     /// 「AAPL · 日线 | 看多」就是唯一传出去的内容。图里的免责条管不到这半边。
     static func share(analysis: ChanAnalysis, vm: ChanViewModel) -> String {
-        let freq = vm.freq == "weekly" ? L("周线") : L("日线")
+        let freq = ChanViewModel.freqLabel(vm.freq)
         let bias: String
         if let rec = analysis.recommendation {
             bias = SignalFormatting.biasLabel(rec.bias)

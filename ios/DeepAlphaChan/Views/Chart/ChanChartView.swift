@@ -217,8 +217,9 @@ struct ChanChartView: View {
                               height: CGFloat, range: VisibleRange) {
         let count = range.end - range.start
         guard count > 0 else { return }
-        // 根据可见根数决定标签数量
-        let labelCount = min(6, count)
+        // 根据可见根数决定标签数量；分钟线标签带时刻（"09/24 10:30"）更长，少画几个免得挤
+        let isIntraday = candles.first?.time.contains(" ") ?? false
+        let labelCount = min(isIntraday ? 4 : 6, count)
         guard labelCount > 0 else { return }
         let step = CGFloat(count) / CGFloat(labelCount)
         for i in 0..<labelCount {
@@ -234,11 +235,13 @@ struct ChanChartView: View {
         }
     }
 
-    /// 将 "2026-01-13" 格式化为 "01/13" 短日期标签。
+    /// 将 "2026-01-13" 格式化为 "01/13"；分钟线 "2026-01-13 10:30" 格式化为 "01/13 10:30"。
     private func formatTimeLabel(_ time: String) -> String {
-        let parts = time.split(separator: "-")
+        let halves = time.split(separator: " ")
+        let parts = halves[0].split(separator: "-")
         guard parts.count >= 3 else { return time }
-        return "\(parts[1])/\(parts[2])"
+        let day = "\(parts[1])/\(parts[2])"
+        return halves.count > 1 ? "\(day) \(halves[1])" : day
     }
 
     // MARK: - 可见窗口计算
