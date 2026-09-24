@@ -23,7 +23,7 @@ from __future__ import annotations
 import asyncio
 from collections import Counter
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from redis.asyncio import Redis
 
@@ -314,6 +314,74 @@ async def attach_sub_levels(
     await asyncio.gather(*[_one(sig) for sig in day.signals])
 
 
+# 各市场开盘时段（UTC，工作日），末端多留半小时拿到收盘那根 30 分钟K线。
+# 美股按夏令时/冬令时取并集（13:30–21:00 UTC）；不识别节假日——休市日刷新只是空转。
+_SESSIONS_UTC: dict[str, tuple[tuple[int, int], tuple[int, int]]] = {
+    "us": ((13, 30), (21, 30)),
+    "cn": ((1, 30), (7, 30)),
+    "hk": ((1, 30), (8, 30)),
+}
+
+
+def market_session_active(market: str, now: datetime) -> bool:
+    """该市场此刻是否处于开盘时段（含收盘后半小时）。"""
+    window = _SESSIONS_UTC.get(market)
+    now = now.astimezone(UTC)
+    if window is None or now.weekday() >= 5:
+        return False
+    (h1, m1), (h2, m2) = window
+    minutes = now.hour * 60 + now.minute
+    return h1 * 60 + m1 <= minutes <= h2 * 60 + m2
+
+
+async def refresh_sub_levels(
+    market: str, universe_key: str, *, redis: Redis, user_id: int | None = None,
+    now: datetime | None = None, window: int = 45,
+) -> bool:
+    """只重算缓存快照里最新一天入榜气泡的次级别（共振）结论，写回并保留原 TTL。
+
+    全量扫描 6 小时一轮，而 30 分钟级别盘中每半小时就可能变化，共振标记不能跟着
+    快照一起放 6 小时——这里单独刷新，请求量只有入榜的十几只。
+    写回前重新读取快照：若期间全量预热已写入新一天的快照，放弃本次写入，不用旧气泡
+    覆盖新数据。返回是否写回。
+    """
+    snapshot = await _read_cache(redis, market, universe_key)
+    if snapshot is None or not snapshot.days:
+        return False
+    day = snapshot.days[0]
+    today = date.today()
+    end_date = today.isoformat()
+    start_date = _fetch_start(today, window)
+
+    async def _daily(sig: RadarSignalOut) -> tuple[str, ChanAnalysisResult | None]:
+        _, _, result = await _scan_symbol(sig.symbol, sig.name, user_id=user_id, start_date=start_date,
+                                          end_date=end_date, redis=redis)
+        return sig.symbol, result
+
+    pairs = await asyncio.gather(*[_daily(sig) for sig in day.signals])
+    daily_results = {sym: res for sym, res in pairs if res is not None}
+    await attach_sub_levels(day, daily_results, end_date=end_date, user_id=user_id, redis=redis)
+
+    latest = await _read_cache(redis, market, universe_key)
+    if latest is None or not latest.days or latest.days[0].date != day.date:
+        logger.info("signal_radar_sub_level_refresh_skipped", market=market, universe=universe_key)
+        return False
+    fresh = {s.symbol: s for s in day.signals}
+    for sig in latest.days[0].signals:
+        if sig.symbol in fresh:
+            sig.sub_level_verdict = fresh[sig.symbol].sub_level_verdict
+            sig.sub_level_label = fresh[sig.symbol].sub_level_label
+    latest.sub_level_as_of = (now or datetime.now(UTC)).astimezone(UTC).replace(microsecond=0).isoformat()
+    try:
+        await redis.set(_cache_key(market, universe_key), latest.model_dump_json(), keepttl=True)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_sub_level_write_error", market=market, error=str(e))
+        return False
+    logger.info("signal_radar_sub_levels_refreshed", market=market, universe=universe_key,
+                symbols=len(daily_results))
+    return True
+
+
 def _trading_days_from_bars(bars: list[dict], *, cutoff: str, end_date: str, limit: int) -> list[str]:
     """从一串日线 bar 里提取 [cutoff, end_date] 内的交易日期，最新在前，最多取 limit 个。"""
     dates = sorted({b["time"][:10] for b in bars if cutoff <= b["time"][:10] <= end_date}, reverse=True)
@@ -494,6 +562,7 @@ async def compute_market(
     if resp.days:
         # 次级别结论描述的是「现在」，只给最新交易日的入榜气泡补算
         await attach_sub_levels(resp.days[0], daily_results, end_date=end_date, user_id=user_id, redis=redis)
+        resp.sub_level_as_of = datetime.now(UTC).replace(microsecond=0).isoformat()
     failed_symbols = sum(failure_counts.values())
     failure_rate = failed_symbols / len(constituents) if constituents else 0.0
     logger.info(

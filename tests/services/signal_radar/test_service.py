@@ -278,10 +278,12 @@ class _FakeRedis:
         self.store: dict[str, str] = {}
         self.ttls: dict[str, int] = {}
 
-    async def set(self, key: str, value: str, ex: int | None = None) -> None:
+    async def set(self, key: str, value: str, ex: int | None = None, keepttl: bool = False) -> None:
         self.store[key] = value
         if ex is not None:
             self.ttls[key] = ex
+        elif not keepttl:
+            self.ttls.pop(key, None)  # 与 Redis 一致：不带 EX/KEEPTTL 的 SET 会清掉过期时间
 
     async def get(self, key: str) -> str | None:
         return self.store.get(key)
@@ -370,3 +372,115 @@ class TestAttachSubLevels:
         assert by_sym["AAPL"].sub_level_label == "共振买点"
         assert by_sym["NVDA"].sub_level_verdict is None   # 补算失败留空
         assert by_sym["MSFT"].sub_level_verdict is None   # 没有日线结果留空
+
+
+class TestSubLevelRefresh:
+    """共振标记独立刷新：盘中每 30 分钟只重算最新一天入榜气泡的次级别，写回快照保留原 TTL。"""
+
+    def _snapshot(self, day: str = "2026-09-24"):
+        from app.schemas.signal_radar import RadarDayOut, RadarSignalOut, SignalRadarResponse
+
+        def sig(sym):
+            return RadarSignalOut(symbol=sym, name=sym, side="sell", label="二卖", signal_type="sell2",
+                                  date=day, price=1.0, strength=0.5, bias="bearish",
+                                  signal_strength="medium", confirmed=True, pivot_stage_depth=0.5)
+        return SignalRadarResponse(market="us", universe="nasdaq100", etf_name="QQQ", universe_size=2,
+                                   as_of=day, top_n=12, days=[RadarDayOut(date=day, buy_count=0, sell_count=2,
+                                                                          signals=[sig("AAPL"), sig("NVDA")])])
+
+    def _patch(self, monkeypatch, on_sub=None):
+        from app.services.chan.analyzer import ChanAnalysisResult
+        from app.services.chan.sub_level import SubLevelResult
+
+        async def fake_scan(symbol, name, **kwargs):
+            return [], None, ChanAnalysisResult(symbol=symbol, bars_count=1)
+
+        async def fake_sub(symbol, end_date, daily, **kwargs):
+            if on_sub:
+                await on_sub()
+            return SubLevelResult(daily_bias="bearish", daily_bias_label="偏弱", verdict="resonance_sell",
+                                  verdict_label="共振卖点", detail="")
+
+        monkeypatch.setattr(svc, "_scan_symbol", fake_scan)
+        monkeypatch.setattr(svc, "analyze_sub_level", fake_sub)
+
+    async def test_refresh_updates_verdicts_and_keeps_ttl(self, monkeypatch):
+        from datetime import UTC, datetime
+
+        from app.schemas.signal_radar import SignalRadarResponse
+
+        redis = _FakeRedis()
+        key = svc._cache_key("us", "nasdaq100")
+        redis.store[key] = self._snapshot().model_dump_json()
+        redis.ttls[key] = 1000
+        self._patch(monkeypatch)
+
+        now = datetime(2026, 9, 24, 15, 0, tzinfo=UTC)
+        assert await svc.refresh_sub_levels("us", "nasdaq100", redis=redis, now=now) is True
+
+        data = SignalRadarResponse.model_validate_json(redis.store[key])
+        assert {s.sub_level_verdict for s in data.days[0].signals} == {"resonance_sell"}
+        assert data.sub_level_as_of == "2026-09-24T15:00:00+00:00"
+        assert redis.ttls[key] == 1000  # 保留原 TTL，不打乱「陈旧」判断与全量预热节奏
+
+    async def test_refresh_skips_when_snapshot_replaced_meanwhile(self, monkeypatch):
+        """补算期间全量预热写入了新一天的快照：不能用旧气泡覆盖它。"""
+        from datetime import UTC, datetime
+
+        from app.schemas.signal_radar import SignalRadarResponse
+
+        redis = _FakeRedis()
+        key = svc._cache_key("us", "nasdaq100")
+        redis.store[key] = self._snapshot("2026-09-24").model_dump_json()
+        newer = self._snapshot("2026-09-25").model_dump_json()
+
+        async def replace():
+            redis.store[key] = newer
+
+        self._patch(monkeypatch, on_sub=replace)
+        now = datetime(2026, 9, 25, 15, 0, tzinfo=UTC)
+        assert await svc.refresh_sub_levels("us", "nasdaq100", redis=redis, now=now) is False
+        assert SignalRadarResponse.model_validate_json(redis.store[key]).days[0].date == "2026-09-25"
+
+    async def test_refresh_without_cache_is_noop(self):
+        assert await svc.refresh_sub_levels("us", "nasdaq100", redis=_FakeRedis()) is False
+
+
+def test_market_session_windows():
+    """开盘时段（含收盘后半小时，拿到收盘那根 30 分钟K线）才刷新；周末不刷。"""
+    from datetime import UTC, datetime
+
+    def at(h, m=0, day=24):  # 2026-09-24 周四；26 周六
+        return datetime(2026, 9, day, h, m, tzinfo=UTC)
+
+    assert svc.market_session_active("cn", at(3)) is True       # 北京 11:00
+    assert svc.market_session_active("cn", at(7, 20)) is True    # 收盘后 20 分钟
+    assert svc.market_session_active("cn", at(12)) is False
+    assert svc.market_session_active("hk", at(8, 20)) is True    # 港股 16:00 收盘后
+    assert svc.market_session_active("us", at(15)) is True       # 美东 11:00
+    assert svc.market_session_active("us", at(2)) is False
+    assert svc.market_session_active("us", at(15, day=26)) is False  # 周六
+
+
+async def test_refresh_loop_only_touches_open_markets(monkeypatch):
+    """调度一轮：只刷新此刻开盘的市场。"""
+    from datetime import UTC, datetime
+
+    from app.services.signal_radar import scheduler
+
+    called = []
+
+    async def fake_refresh(market, key, **kwargs):
+        called.append(market)
+        return True
+
+    class _FixedDT(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 9, 24, 3, 0, tzinfo=UTC)  # 北京 11:00：A/港股开盘、美股休市
+
+    monkeypatch.setattr(scheduler, "refresh_sub_levels", fake_refresh)
+    monkeypatch.setattr(scheduler, "current_redis", lambda: object())
+    monkeypatch.setattr(scheduler, "datetime", _FixedDT)
+    await scheduler._refresh_sub_levels_once()
+    assert called and set(called) <= {"cn", "hk"}

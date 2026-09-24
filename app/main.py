@@ -36,7 +36,10 @@ from app.core.middleware import (
 from app.core.observability import langfuse_init
 from app.services.database import database_service
 from app.services.memory import memory_service
-from app.services.signal_radar.scheduler import run_signal_radar_prewarm_scheduler
+from app.services.signal_radar.scheduler import (
+    run_signal_radar_prewarm_scheduler,
+    run_signal_radar_sub_level_scheduler,
+)
 from app.services.supply_chain.scheduler import run_weekly_supply_chain_scheduler
 
 # Load environment variables
@@ -76,6 +79,7 @@ async def lifespan(app: FastAPI):
     """Handle application startup and shutdown events."""
     supply_chain_scheduler_task: asyncio.Task[None] | None = None
     signal_radar_scheduler_task: asyncio.Task[None] | None = None
+    signal_radar_sub_level_task: asyncio.Task[None] | None = None
     logger.info(
         "application_startup",
         project_name=settings.PROJECT_NAME,
@@ -159,6 +163,8 @@ async def lifespan(app: FastAPI):
             markets=settings.SIGNAL_RADAR_PREWARM_MARKETS,
             interval_seconds=settings.SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS,
         )
+        # 共振标记盘中独立刷新（依赖预热产出的快照，随预热开关一起启用）
+        signal_radar_sub_level_task = asyncio.create_task(run_signal_radar_sub_level_scheduler())
 
     yield
 
@@ -175,6 +181,12 @@ async def lifespan(app: FastAPI):
             await signal_radar_scheduler_task
         except asyncio.CancelledError:
             logger.info("signal_radar_prewarm_scheduler_stopped")
+    if signal_radar_sub_level_task:
+        signal_radar_sub_level_task.cancel()
+        try:
+            await signal_radar_sub_level_task
+        except asyncio.CancelledError:
+            logger.info("signal_radar_sub_level_scheduler_stopped")
     await close_redis()
     await cache_service.close()
     if agent._connection_pool:

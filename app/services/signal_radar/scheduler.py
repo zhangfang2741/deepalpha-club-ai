@@ -7,11 +7,12 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 
 from app.cache.client import current_redis
 from app.core.config import settings
 from app.core.logging import logger
-from app.services.signal_radar.service import compute_market
+from app.services.signal_radar.service import compute_market, market_session_active, refresh_sub_levels
 from app.services.signal_radar.universe import all_universes
 
 # 启动后先等一会儿再首扫，避开启动期其它预热任务抢资源。
@@ -45,6 +46,54 @@ async def _prewarm_once() -> None:
             logger.exception(
                 "signal_radar_prewarm_market_failed", market=u.market, universe=u.key, error=str(e)
             )
+
+
+def _target_universes() -> list:
+    """预热覆盖的 (市场, universe)：与全量预热同一范围。"""
+    markets = set(settings.SIGNAL_RADAR_PREWARM_MARKETS)
+    return [u for u in all_universes()
+            if u.market in markets and (u.is_default or settings.SIGNAL_RADAR_PREWARM_BROAD_ENABLED)]
+
+
+async def _refresh_sub_levels_once() -> None:
+    redis = current_redis()
+    if redis is None:
+        return
+    now = datetime.now(UTC)
+    for u in _target_universes():
+        if not market_session_active(u.market, now):
+            continue
+        try:
+            await refresh_sub_levels(u.market, u.key, redis=redis, now=now)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 单个 universe 失败不影响其余
+            logger.exception("signal_radar_sub_level_refresh_failed", market=u.market, universe=u.key,
+                             error=str(e))
+
+
+async def run_signal_radar_sub_level_scheduler() -> None:
+    """盘中定时刷新雷达共振标记（次级别结论），直到进程退出。"""
+    interval = settings.SIGNAL_RADAR_SUB_LEVEL_REFRESH_SECONDS
+    if interval <= 0:
+        logger.info("signal_radar_sub_level_refresh_disabled")
+        return
+    try:
+        # 晚于全量首扫启动，首轮通常已有快照可刷
+        await asyncio.sleep(_STARTUP_DELAY_SECONDS + interval)
+    except asyncio.CancelledError:
+        return
+    while True:
+        try:
+            await _refresh_sub_levels_once()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            logger.exception("signal_radar_sub_level_refresh_loop_failed", error=str(e))
+        try:
+            await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            return
 
 
 async def run_signal_radar_prewarm_scheduler() -> None:

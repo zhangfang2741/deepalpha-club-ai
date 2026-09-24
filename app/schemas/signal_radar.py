@@ -65,3 +65,6 @@ class SignalRadarResponse(BaseModel):
     top_n: int = Field(description="每日展示的信号条数上限")
     days: list[RadarDayOut] = Field(default_factory=list, description="最近交易日，最新在前")
     status: str = Field(default="ready", description="ready / generating（首次扫描进行中）")
+    sub_level_as_of: str = Field(
+        default="", description="最新一天气泡次级别（共振）结论的更新时间，ISO8601 UTC；盘中每 30 分钟刷新"
+    )

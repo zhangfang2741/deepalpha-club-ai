@@ -309,6 +309,11 @@ class Settings:
         self.SIGNAL_RADAR_PREWARM_BROAD_ENABLED = os.getenv(
             "SIGNAL_RADAR_PREWARM_BROAD_ENABLED", "true"
         ).lower() in ("true", "1", "yes")
+        # 共振标记（次级别结论）独立刷新间隔（秒）：只在各市场开盘时段、只重算最新一天
+        # 入榜的十几只。30 分钟级别盘中每半小时就可能变化，不能跟全量快照一起放 6h。0 = 关闭。
+        self.SIGNAL_RADAR_SUB_LEVEL_REFRESH_SECONDS = int(
+            os.getenv("SIGNAL_RADAR_SUB_LEVEL_REFRESH_SECONDS", "1800")
+        )
         self.SUPPLY_CHAIN_DISCOVER_CACHE_TTL = int(os.getenv("SUPPLY_CHAIN_DISCOVER_CACHE_TTL", "604800"))
         self.SUPPLY_CHAIN_TRANSCRIPT_QUARTERS = int(os.getenv("SUPPLY_CHAIN_TRANSCRIPT_QUARTERS", "4"))
         self.SUPPLY_CHAIN_NEWS_LOOKBACK_DAYS = int(os.getenv("SUPPLY_CHAIN_NEWS_LOOKBACK_DAYS", "730"))
