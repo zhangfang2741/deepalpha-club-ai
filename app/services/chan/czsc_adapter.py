@@ -61,9 +61,17 @@ class CzscStructures:
 
 
 def ts_date(ts) -> str:
-    """把 czsc 的 dt（pd.Timestamp）转成项目统一的 YYYY-MM-DD 时间字符串。"""
-    # 包一层 str(date()) 以兼容 pyright 对 NaTType 的联合类型标注
-    return str(pd.Timestamp(ts).date())
+    """把 czsc 的 dt（pd.Timestamp）转成项目统一的时间字符串。
+
+    日线/周线（零点）输出 YYYY-MM-DD；分钟线保留时刻 YYYY-MM-DD HH:MM，
+    否则同一天的多根 30 分钟 K 线会撞成同一时间。
+    """
+    t = pd.Timestamp(ts)
+    # 包一层 str(...) 以兼容 pyright 对 NaTType 的联合类型标注
+    day = str(t.date())
+    if t.hour == 0 and t.minute == 0:
+        return day
+    return f"{day} {t.hour:02d}:{t.minute:02d}"
 
 
 def extract_structures(c: CZSC, bars: list[dict]) -> CzscStructures:

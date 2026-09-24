@@ -143,3 +143,51 @@ def test_extract_structures_drops_groups_with_fewer_than_three_strokes():
     structures = extract_structures(c, bars)
     assert all(len(p.elements) >= 3 for p in structures.stroke_pivots)
     assert structures.stroke_pivots == []
+
+
+def _intraday_bars(days: int = 12, per_day: int = 8, start_price: float = 100.0) -> list[dict]:
+    """30 分钟合成数据：每天 per_day 根，时间 YYYY-MM-DD HH:MM；大振幅锯齿以便成笔。"""
+    bars = []
+    price = start_price
+    day0 = dt.date(2025, 3, 3)
+    i = 0
+    for d in range(days):
+        day = day0 + dt.timedelta(days=d)
+        for k in range(per_day):
+            hh, mm = divmod(9 * 60 + 30 + 30 * k, 60)
+            step = 5.0 if (i % 16) < 8 else -2.5
+            o, c = price, price + step
+            bars.append(_bar(f"{day.isoformat()} {hh:02d}:{mm:02d}", o, max(o, c) + 1.0, min(o, c) - 1.0, c))
+            price = c
+            i += 1
+    return bars
+
+
+def test_intraday_times_keep_minutes_and_do_not_collide():
+    """30 分钟级别：结构时间保留到分钟，同一天多根合并K线时间互不相同。"""
+    bars = _intraday_bars()
+    c = build_czsc(bars, symbol="T", freq=Freq.F30)
+    s = extract_structures(c, bars)
+    times = {b["time"] for b in bars}
+    assert s.strokes, "合成数据应能成笔"
+    for st in s.strokes:
+        assert st.start_time in times and st.end_time in times
+        assert len(st.end_time) == 16  # YYYY-MM-DD HH:MM
+    mc_times = [m.time for m in s.merged_candles]
+    assert len(mc_times) == len(set(mc_times))
+
+
+def test_daily_times_stay_date_only():
+    bars = _trending_bars(40, start_price=100.0, up=True)
+    s = extract_structures(build_czsc(bars, symbol="T", freq=Freq.D), bars)
+    assert all(len(st.end_time) == 10 for st in s.strokes)
+
+
+def test_analyzer_accepts_30min_freq():
+    """以 30 分钟级别分析：结构与买卖点时间都保留到分钟。"""
+    from app.services.chan.analyzer import ChanAnalyzer
+    bars = _intraday_bars(days=16)
+    r = ChanAnalyzer().analyze("T", bars, freq="30min")
+    assert r.strokes
+    assert all(len(st.end_time) == 16 for st in r.strokes)
+    assert all(len(sig.time) == 16 for sig in r.signals)

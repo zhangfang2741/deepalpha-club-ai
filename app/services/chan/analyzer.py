@@ -126,6 +126,9 @@ class ChanAnalysisResult:
         return bool(self.pending_notes)
 
 
+_CZSC_FREQ = {"daily": Freq.D, "weekly": Freq.W, "30min": Freq.F30}
+
+
 class ChanAnalyzer:
     """缠论分析器"""
 
@@ -162,7 +165,7 @@ class ChanAnalyzer:
         #        再由 adapter 转换回项目内部 dataclass，下游自研代码无感消费。
         #        注意：czsc 会丢弃首笔确认前的前导K线，merged_candles 可能不从
         #        raw_start=0 开始（见 extract_structures docstring，属预期行为）。
-        czsc_freq = Freq.D if freq == "daily" else Freq.W
+        czsc_freq = _CZSC_FREQ[freq]
         czsc_obj = build_czsc(bars, symbol=symbol, freq=czsc_freq)
         structures = extract_structures(czsc_obj, bars)
         result.merged_candles = structures.merged_candles
