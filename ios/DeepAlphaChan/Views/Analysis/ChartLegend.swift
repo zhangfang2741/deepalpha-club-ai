@@ -2,13 +2,12 @@ import SwiftUI
 
 /// 图例兼作图层开关，竖屏、全屏与分享长图共用同一份显示状态。
 ///
-/// 悬浮在主图左上角（由 ChanChartView 的 showsLegend 挂载）：紧凑小标签、放不下自动
-/// 换行，半透明底避免压住 K 线看不清；关掉的图层变淡。十字光标激活时让位给光标详情。
+/// 紧贴图表下方：紧凑小标签、放不下自动换行；关掉的图层变淡。
 struct ChartLegend: View {
     @ObservedObject var vm: ChanViewModel
     var isStatic = false
-    /// 可用宽度上限（给右上角全屏按钮留位）。
-    var maxWidth: CGFloat = 260
+    /// 可用宽度上限。
+    var maxWidth: CGFloat = .infinity
 
     var body: some View {
         WrapLayout(spacing: 4, lineSpacing: 3) {

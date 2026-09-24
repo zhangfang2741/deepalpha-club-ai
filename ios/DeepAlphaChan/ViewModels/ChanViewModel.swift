@@ -9,7 +9,7 @@ final class ChanViewModel: ObservableObject {
     /// 用户显式选择的市场。不靠代码形态猜——猜是能猜对，但 4~6 位数字在
     /// A 股和港股之间有歧义时，用户没有办法纠正。选了就以选的为准。
     @Published var market: StockMarket = .us
-    @Published var freq: String = "daily"       // daily / weekly
+    @Published var freq: String = "daily"       // daily / weekly（30min 只在次级别浮层里用）
 
     /// 发给后端的代码：带上市场后缀，让服务端不必再猜。
     var requestSymbol: String {
@@ -133,7 +133,7 @@ final class ChanViewModel: ObservableObject {
         }
     }
 
-    // MARK: - 周期切换（详情页内原地切换日线 / 周线 / 30 分钟）
+    // MARK: - 周期文案
 
     /// 周期的展示文案，标题与全屏页共用。
     static func freqLabel(_ freq: String) -> String {
@@ -144,34 +144,22 @@ final class ChanViewModel: ObservableObject {
         }
     }
 
-    /// 在详情页里切换周期并重新分析；失败则退回原周期，页面保留原结果。
-    /// 30 分钟级别由后端把可见区间收窄到最近 30 天，这里不用改日期。
-    func switchFreq(_ newFreq: String) async {
-        guard newFreq != freq, !isLoading else { return }
-        let previous = freq
-        freq = newFreq
-        await runAnalysis()
-        if errorMessage != nil {
-            freq = previous
-        }
-    }
-
     // MARK: - 次级别确认
 
-    /// 仅日线分析有次级别（30 分钟）；周线不加载。失败只清空卡片，不打扰主结果。
+    /// 次级别逐级递推不跨级：日线配 30 分钟、周线配日线。失败只清空提示，不打扰主结果。
     private func loadSubLevel(symbol: String, warmupDays: Int?) {
         subLevelRequestID += 1
         let requestID = subLevelRequestID
         subLevel = nil
-        guard freq == "daily" else {
+        guard freq == "daily" || freq == "weekly" else {
             subLevelLoading = false
             return
         }
         subLevelLoading = true
-        let start = startDateString, end = endDateString
+        let start = startDateString, end = endDateString, parent = freq
         Task { [weak self] in
             let result = try? await ChanService.subLevel(
-                symbol: symbol, startDate: start, endDate: end, warmupDays: warmupDays)
+                symbol: symbol, startDate: start, endDate: end, parentFreq: parent, warmupDays: warmupDays)
             guard let self, requestID == self.subLevelRequestID else { return }
             self.subLevel = result
             self.subLevelLoading = false

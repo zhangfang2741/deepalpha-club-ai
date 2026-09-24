@@ -46,7 +46,6 @@ struct QueryBar: View {
             Picker("", selection: $vm.freq) {
                 Text(L("日线")).tag("daily")
                 Text(L("周线")).tag("weekly")
-                Text(L("30分钟")).tag("30min")
             }
             .pickerStyle(.segmented)
 

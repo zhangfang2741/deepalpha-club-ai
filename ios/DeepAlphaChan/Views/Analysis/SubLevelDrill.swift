@@ -1,11 +1,11 @@
 import SwiftUI
 
-/// 次级别下钻入口：紧贴日线图上方的一行结论（「30分 共振买 · 日线偏多 ›」）。
+/// 次级别下钻入口：紧贴图表上方的一行结论（「30分 共振买 · 日线偏多 ›」）。
 ///
-/// 交互取缠论「区间套」的思路——日线定方向、30 分钟找进出点：结论贴着图表放，
-/// 看图时一眼可见；点一下从底部弹出 30 分钟图（半屏，可上拉全屏），日线页原样不动、
-/// 不重新加载。想完整看 30 分钟分析，仍可用页面顶部的周期切换。
-/// 只在日线分析显示；加载失败或后端未部署该接口时整行不出现，不打扰主结果。
+/// 交互取缠论「区间套」的思路，级别逐级递推不跨级——日线配 30 分钟、周线配日线：
+/// 结论贴着图表放，看图时一眼可见；点一下从底部弹出次级别图（半屏，可上拉全屏），
+/// 大级别页原样不动、不重新加载。次级别图只从这里看，不单独提供 30 分钟入口。
+/// 加载失败或后端未部署该接口时整行不出现，不打扰主结果。
 struct SubLevelBar: View {
     @ObservedObject var vm: ChanViewModel
     /// 离屏渲染分享长图时置 true：保留结论，去掉点击。
@@ -14,19 +14,19 @@ struct SubLevelBar: View {
     @State private var showSheet = false
 
     var body: some View {
-        if vm.freq == "daily" {
+        if vm.freq == "daily" || vm.freq == "weekly" {
             if let sub = vm.subLevel {
                 Button { showSheet = true } label: { row(sub) }
                     .buttonStyle(.plain)
                     .allowsHitTesting(!isStatic)
-                    .accessibilityHint(L("打开 30 分钟图表"))
+                    .accessibilityHint(L("打开次级别图表"))
                     .sheet(isPresented: $showSheet) {
                         SubLevelSheet(parent: vm, sub: sub)
                     }
             } else if vm.subLevelLoading && !isStatic {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.mini)
-                    Text(L("正在加载 30 分钟级别…"))
+                    Text(L("正在加载次级别…"))
                         .font(.caption)
                         .foregroundColor(Theme.textSecondary)
                     Spacer(minLength: 0)
@@ -38,12 +38,18 @@ struct SubLevelBar: View {
         }
     }
 
-    static func shortBias(_ bias: String) -> String {
+    static func shortBias(_ bias: String, parent: String) -> String {
+        let weekly = parent == "weekly"
         switch bias {
-        case "bullish": return L("日线偏多")
-        case "bearish": return L("日线偏空")
-        default: return L("日线中性")
+        case "bullish": return weekly ? L("周线偏多") : L("日线偏多")
+        case "bearish": return weekly ? L("周线偏空") : L("日线偏空")
+        default: return weekly ? L("周线中性") : L("日线中性")
         }
+    }
+
+    /// 次级别短名：30min → 「30分」，daily → 「日线」。
+    static func childShort(_ subFreq: String) -> String {
+        subFreq == "daily" ? L("日线") : L("30分")
     }
 
         private func row(_ sub: SubLevel) -> some View {
@@ -51,12 +57,12 @@ struct SubLevelBar: View {
             Image(systemName: "scope")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(Theme.accent)
-            Text(L("30分"))
+            Text(Self.childShort(sub.subFreq))
                 .font(.caption.weight(.semibold))
                 .foregroundColor(Theme.textSecondary)
             VerdictBadge(sub: sub)
             // 一行放不下后端的完整方向描述，这里只给短标签；完整描述在浮层里
-            Text(Self.shortBias(sub.dailyBias))
+            Text(Self.shortBias(sub.dailyBias, parent: sub.parentFreq ?? "daily"))
                 .font(.caption)
                 .foregroundColor(SignalFormatting.biasColor(sub.dailyBias))
                 .lineLimit(1)
@@ -103,15 +109,16 @@ struct VerdictBadge: View {
     }
 }
 
-/// 下钻浮层：30 分钟图 + 结论 + 近两日买卖点。
+/// 下钻浮层：次级别图 + 结论 + 近期买卖点。
 ///
-/// 用独立的 ChanViewModel 拉 30 分钟分析，不改动详情页的日线状态；
-/// 最近 2 个交易日（次级别判断所看的区间）用浅色底标出，与日线图上的标注对应。
+/// 用独立的 ChanViewModel 拉次级别分析（日线页 → 30 分钟、周线页 → 日线），不改动
+/// 详情页状态；次级别判断所看的近期区间（30 分钟近 2 个交易日 / 日线近两周）用浅色底
+/// 标出，与大级别图上的标注对应。
 struct SubLevelSheet: View {
     @ObservedObject var parent: ChanViewModel
     let sub: SubLevel
 
-    @StateObject private var vm30 = ChanViewModel()
+    @StateObject private var subVM = ChanViewModel()
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -121,17 +128,9 @@ struct SubLevelSheet: View {
                     header
                     chart
                     if !sub.recentSignals.isEmpty { signals }
-                    Button {
-                        dismiss()
-                        Task { await parent.switchFreq("30min") }
-                    } label: {
-                        Label(L("切换到 30 分钟完整分析"), systemImage: "chart.xyaxis.line")
-                            .font(AnalysisType.label)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(Theme.accent)
-                    Text(L("日线定方向、30 分钟找进出点：两者同向为共振，反向多为次级别的反弹或回调。"))
+                    Text(isWeekly
+                         ? L("周线定方向、日线找进出点：两者同向为共振，反向多为次级别的反弹或回调。")
+                         : L("日线定方向、30 分钟找进出点：两者同向为共振，反向多为次级别的反弹或回调。"))
                         .font(.caption2)
                         .foregroundColor(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -140,7 +139,7 @@ struct SubLevelSheet: View {
                 .padding(.vertical, 12)
             }
             .background(Theme.background)
-            .navigationTitle(parent.symbol.uppercased() + " · " + L("30分钟"))
+            .navigationTitle(parent.symbol.uppercased() + " · " + ChanViewModel.freqLabel(sub.subFreq))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -153,11 +152,13 @@ struct SubLevelSheet: View {
         .task { await load() }
     }
 
+    private var isWeekly: Bool { (sub.parentFreq ?? "daily") == "weekly" }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 VerdictBadge(sub: sub)
-                Text(L("日线：") + sub.dailyBiasLabel)
+                Text((isWeekly ? L("周线：") : L("日线：")) + sub.dailyBiasLabel)
                     .font(.footnote)
                     .foregroundColor(SignalFormatting.biasColor(sub.dailyBias))
             }
@@ -171,17 +172,19 @@ struct SubLevelSheet: View {
 
     @ViewBuilder
     private var chart: some View {
-        if let a = vm30.analysis {
+        if let a = subVM.analysis {
             VStack(alignment: .leading, spacing: 6) {
-                ChanChartView(analysis: a, vm: vm30,
+                ChanChartView(analysis: a, vm: subVM,
                               initialWindow: Self.window(for: a),
                               priceHeight: 220, macdHeight: 60,
-                              highlightFrom: Self.lastSessionsStart(a, sessions: 2))
-                Text(L("浅色底 = 最近 2 个交易日（次级别判断所看的区间）"))
+                              highlightFrom: isWeekly ? Self.lastDaysStart(a, days: 14)
+                                                      : Self.lastSessionsStart(a, sessions: 2))
+                Text(isWeekly ? L("浅色底 = 最近两周（次级别判断所看的区间）")
+                              : L("浅色底 = 最近 2 个交易日（次级别判断所看的区间）"))
                     .font(.caption2)
                     .foregroundColor(Theme.textSecondary)
             }
-        } else if let err = vm30.errorMessage {
+        } else if let err = subVM.errorMessage {
             Text(err)
                 .font(.footnote)
                 .foregroundColor(Theme.textSecondary)
@@ -194,7 +197,7 @@ struct SubLevelSheet: View {
 
     private var signals: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(L("30 分钟近两日买卖点"))
+            Text(isWeekly ? L("日线近两周买卖点") : L("30 分钟近两日买卖点"))
                 .font(.caption)
                 .foregroundColor(Theme.textSecondary)
             ForEach(sub.recentSignals) { sig in
@@ -218,20 +221,32 @@ struct SubLevelSheet: View {
     }
 
     private func load() async {
-        guard vm30.analysis == nil, !vm30.isLoading else { return }
-        vm30.symbol = parent.symbol
-        vm30.market = parent.market
-        vm30.freq = "30min"
-        vm30.startDate = parent.startDate
-        vm30.endDate = parent.endDate
-        await vm30.runAnalysis()
+        guard subVM.analysis == nil, !subVM.isLoading else { return }
+        subVM.symbol = parent.symbol
+        subVM.market = parent.market
+        subVM.freq = sub.subFreq
+        subVM.startDate = parent.startDate
+        subVM.endDate = parent.endDate
+        await subVM.runAnalysis()
     }
 
-    /// 默认看最新约 60 根（约 4~5 个交易日），给最近两日留出前文。
+    /// 默认看最新约 60 根（30 分钟约 4~5 个交易日 / 日线约 3 个月），给最近区间留出前文。
     static func window(for a: ChanAnalysis) -> ChartWindow {
         let count = Double(a.mergedCandles.count)
         let visible = min(60, max(10, count))
         return ChartWindow(firstVisible: max(0, count - visible), visibleCount: visible)
+    }
+
+    /// 最近 n 个自然日的起始日期（日线次级别用，与后端「近两周 = 14 个自然日」一致）。
+    static func lastDaysStart(_ a: ChanAnalysis, days: Int) -> String? {
+        guard let last = a.mergedCandles.last?.time.prefix(10) else { return nil }
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        guard let d = f.date(from: String(last)),
+              let start = Calendar(identifier: .gregorian).date(byAdding: .day, value: -(days - 1), to: d)
+        else { return nil }
+        return f.string(from: start)
     }
 
     /// 最近 n 个交易日的起始日期（分钟线时间形如 "2026-09-23 10:30"，按日期部分去重）。

@@ -375,7 +375,9 @@ struct SubLevel: Decodable {
     let symbol: String
     let dailyBias: String        // bullish / bearish / neutral
     let dailyBiasLabel: String
-    let subFreq: String          // 30min
+    let subFreq: String          // 30min（日线配）/ daily（周线配）
+    /// 大级别：daily / weekly。可选：旧后端无此字段，视为 daily。
+    let parentFreq: String?
     let verdict: Verdict
     let verdictLabel: String
     let detail: String
@@ -386,6 +388,7 @@ struct SubLevel: Decodable {
         case dailyBias = "daily_bias"
         case dailyBiasLabel = "daily_bias_label"
         case subFreq = "sub_freq"
+        case parentFreq = "parent_freq"
         case verdictLabel = "verdict_label"
         case recentSignals = "recent_signals"
     }

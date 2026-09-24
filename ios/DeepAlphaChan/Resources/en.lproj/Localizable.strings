@@ -342,7 +342,6 @@
 
 /* Lower-level check (daily direction × 30-minute entries) */
 "次级别确认（30 分钟）" = "Lower-Level Check (30-min)";
-"正在加载 30 分钟级别…" = "Loading the 30-minute level…";
 "日线：" = "Daily: ";
 "30 分钟近两日买卖点" = "30-min buy/sell points, last 2 days";
 "日线定方向、30 分钟找进出点：两者同向为共振，反向多为次级别的反弹或回调。" = "The daily chart sets the direction; the 30-minute chart times entries and exits. When they agree it's aligned; when they disagree it's usually just a lower-level bounce or pullback.";
@@ -352,7 +351,6 @@
 /* 30-minute chart */
 "30分钟" = "30-min";
 "正在切换周期…" = "Switching timeframe…";
-"查看 30 分钟图表" = "View 30-min chart";
 
 /* Chart */
 "价差 %@ · 量能 %@ · 时长 %@" = "Range %@ · Volume %@ · Duration %@";
@@ -361,9 +359,16 @@
 "底背驰" = "Bottom div";
 "背驰" = "Divergence";
 "30分" = "30m";
-"打开 30 分钟图表" = "Opens the 30-minute chart";
-"切换到 30 分钟完整分析" = "Switch to full 30-min analysis";
 "浅色底 = 最近 2 个交易日（次级别判断所看的区间）" = "Shaded = last 2 trading days (the window the lower-level check looks at)";
 "日线偏多" = "Daily bullish";
 "日线偏空" = "Daily bearish";
 "日线中性" = "Daily neutral";
+"周线偏多" = "Weekly bullish";
+"周线偏空" = "Weekly bearish";
+"周线中性" = "Weekly neutral";
+"周线：" = "Weekly: ";
+"打开次级别图表" = "Opens the lower-level chart";
+"正在加载次级别…" = "Loading lower level…";
+"周线定方向、日线找进出点：两者同向为共振，反向多为次级别的反弹或回调。" = "The weekly chart sets the direction; the daily chart times entries and exits. When they agree it's aligned; when they disagree it's usually just a lower-level bounce or pullback.";
+"浅色底 = 最近两周（次级别判断所看的区间）" = "Shaded = last two weeks (the window the lower-level check looks at)";
+"日线近两周买卖点" = "Daily buy/sell points, last 2 weeks";

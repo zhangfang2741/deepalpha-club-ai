@@ -32,9 +32,8 @@ struct ChanChartView: View {
     /// 次级别下钻区间的起点（K 线时间，含）：从这根到最新用浅色底标出。nil = 不标。
     var highlightFrom: String? = nil
 
-    /// 是否在主图左上角悬浮图例（兼图层开关）；staticLegend = 分享长图用，不响应点击。
-    var showsLegend: Bool = false
-    var staticLegend: Bool = false
+    /// 全屏入口：非 nil 时在主图左上角放全屏按钮（十字光标激活时让位给光标详情）。
+    var onFullscreen: (() -> Void)? = nil
 
     /// 显式 init 只为一件事：把 `initialWindow` 灌进 @State 的**初始值**。
     ///
@@ -47,8 +46,7 @@ struct ChanChartView: View {
          priceHeight: CGFloat = 240,
          macdHeight: CGFloat = 78,
          highlightFrom: String? = nil,
-         showsLegend: Bool = false,
-         staticLegend: Bool = false,
+         onFullscreen: (() -> Void)? = nil,
          onWindowChange: ((ChartWindow) -> Void)? = nil) {
         self.analysis = analysis
         _vm = ObservedObject(wrappedValue: vm)
@@ -58,8 +56,7 @@ struct ChanChartView: View {
         self.macdHeight = macdHeight
         self.onWindowChange = onWindowChange
         self.highlightFrom = highlightFrom
-        self.showsLegend = showsLegend
-        self.staticLegend = staticLegend
+        self.onFullscreen = onFullscreen
         _firstVisible = State(initialValue: initialWindow?.firstVisible ?? 0)
         _visibleCount = State(initialValue: initialWindow?.visibleCount ?? 60)
     }
@@ -186,11 +183,9 @@ struct ChanChartView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                         .padding(8)
                         .allowsHitTesting(false)
-                } else if showsLegend {
-                    // 光标激活时让位给光标详情（同在左上角）；右侧给全屏按钮与价格轴留位
-                    ChartLegend(vm: vm, isStatic: staticLegend,
-                                maxWidth: max(160, geo.size.width - 60))
-                        .padding(6)
+                } else if let onFullscreen {
+                    // 光标激活时让位给光标详情（同在左上角）；右上角留给价格轴与末价
+                    fullscreenButton(onFullscreen)
                 }
             }
         }
@@ -317,9 +312,9 @@ struct ChanChartView: View {
         let span = max(dataSpan * 1.24, minimumSpan)
         // 有量柱时向下扩出一截：量柱占主图底部 volumeShare，K 线最低点落在量柱区之上
         let volumePad = hasVolume ? span * 0.24 : 0
-        // 左上角悬浮图例时顶部多留一截，最高的 K 线与卖点标记不被图例压住
-        let legendPad = showsLegend ? span * 0.30 : 0
-        return PriceBounds(minP: midpoint - span / 2 - volumePad, maxP: midpoint + span / 2 + legendPad)
+        // 左上角有全屏按钮时顶部略多留白，最高的 K 线与卖点标记不被按钮压住
+        let topPad = onFullscreen != nil ? span * 0.10 : 0
+        return PriceBounds(minP: midpoint - span / 2 - volumePad, maxP: midpoint + span / 2 + topPad)
     }
 
     private func y(for price: Double, height: CGFloat, bounds: PriceBounds) -> CGFloat {
@@ -915,6 +910,25 @@ struct ChanChartView: View {
         let labelRect = CGRect(x: plotWidth - labelW, y: clampY(cy, height) - labelH / 2, width: labelW, height: labelH)
         ctx.fill(Path(labelRect), with: .color(Theme.accent))
         ctx.draw(labelText, at: CGPoint(x: labelRect.midX, y: labelRect.midY), anchor: .center)
+    }
+
+    // MARK: - 全屏按钮
+
+    private func fullscreenButton(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.accent)
+                .frame(width: 24, height: 24)
+                .background(Theme.surfaceAlt.opacity(0.85), in: Circle())
+                // 视觉尺寸缩小，点击区域仍保留 44pt。
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        // 纯图标按钮必须给 label，否则 VoiceOver 只会念出「按钮」
+        .accessibilityLabel(L("全屏查看图表"))
+        .accessibilityHint(L("横屏显示，可看到更多 K 线"))
     }
 
     // MARK: - 光标详情浮层

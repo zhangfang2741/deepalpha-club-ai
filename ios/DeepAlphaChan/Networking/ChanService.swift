@@ -18,14 +18,16 @@ enum ChanService {
         return try await APIClient.shared.get("/chan/analysis", query: query)
     }
 
-    /// 次级别确认：日线（与分析详情页同一窗口）定方向 × 30 分钟近两日买卖点。
-    /// 30 分钟取不到时后端仍返回 200，verdict 为 unavailable。
+    /// 次级别确认：大级别（与分析详情页同一窗口）定方向 × 次级别近期买卖点。
+    /// 日线配 30 分钟近两日、周线配日线近两周；次级别取不到时后端仍返回 200，verdict 为 unavailable。
     static func subLevel(symbol: String, startDate: String, endDate: String,
+                         parentFreq: String = "daily",
                          warmupDays: Int? = nil) async throws -> SubLevel {
         var query = [
             "symbol": symbol.uppercased(),
             "start_date": startDate,
             "end_date": endDate,
+            "parent_freq": parentFreq,
             "lang": Localized.language() == .english ? "en" : "zh",
         ]
         if let warmupDays { query["warmup_days"] = String(warmupDays) }

@@ -78,8 +78,6 @@ struct ResultDetailView: View {
     /// 分享长图通过 isStatic 隐藏周期与全屏控件，并将 ResultSegments 的三段内容全部展开。
     private func pageContent(isStatic: Bool) -> some View {
         VStack(spacing: 14) {
-            if !isStatic { periodSwitcher }
-
             ChartSection(analysis: analysis, vm: vm,
                          onFullscreen: openFullscreen, isStatic: isStatic)
                 .allowsHitTesting(isStatic || !vm.isLoading)
@@ -103,26 +101,6 @@ struct ResultDetailView: View {
         }
         .padding(.horizontal, Theme.contentHInset)
         .padding(.vertical, Theme.contentVInset)
-    }
-
-    /// 周期切换：原地重新分析（30 分钟级别由后端收窄到最近 30 天），失败退回原周期。
-    private var periodSwitcher: some View {
-        Picker("", selection: Binding(
-            get: { vm.freq },
-            set: { newFreq in Task { await vm.switchFreq(newFreq) } }
-        )) {
-            Text(L("日线")).tag("daily")
-            Text(L("周线")).tag("weekly")
-            Text(L("30分钟")).tag("30min")
-        }
-        .pickerStyle(.segmented)
-        .disabled(vm.isLoading)
-        .alert(vm.errorMessage ?? "", isPresented: Binding(
-            get: { !vm.isLoading && vm.errorMessage != nil },
-            set: { if !$0 { vm.errorMessage = nil } }
-        )) {
-            Button(L("好"), role: .cancel) {}
-        }
     }
 
     /// 打开全屏图表（转屏 + 关呈现动画，逻辑同条件页原实现）。
