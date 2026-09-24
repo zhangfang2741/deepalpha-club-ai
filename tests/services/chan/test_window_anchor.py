@@ -53,8 +53,10 @@ def test_visible_structure_is_window_independent():
         anchored_v = _visible_strokes(anchored, cut)
         if anchored_v == base:
             matched += 1
-        # 返回的笔必须都落在可见窗口内（结束时间 >= cut）
-        assert all(s.end_time >= cut for s in anchored.strokes)
+        # 返回的笔都落在图表范围内：结束时间不早于图表左沿（左沿可因跨界结构早于 cut）
+        if anchored.merged_candles:
+            left = anchored.merged_candles[0].time
+            assert all(s.end_time > left or s.end_time == left == cut for s in anchored.strokes)
         # 合并K线需覆盖所有保留笔的端点（不出现悬空点）：
         # 最早的合并K线不晚于最早保留笔的起点
         if anchored.merged_candles and anchored.strokes:
@@ -72,9 +74,11 @@ def test_clip_keeps_summary_counts_consistent():
     # 摘要里的合并K线/笔计数应与裁剪后的实际列表长度一致
     assert f"{len(r.merged_candles)} 根合并K线" in r.summary
     assert f"{len(r.strokes)} 笔" in r.summary
-    # 所有可见结构不早于窗口
-    assert all(f.time >= cut for f in r.fractals)
-    assert all(sig.time >= cut for sig in r.signals)
+    # 所有可见结构不早于图表左沿（左沿可因跨界结构早于 cut，此时该段的结构一并保留）
+    left = r.merged_candles[0].time
+    assert left <= cut
+    assert all(f.time >= left for f in r.fractals)
+    assert all(sig.time >= left for sig in r.signals)
 
 
 def test_no_visible_from_is_unchanged():
@@ -100,3 +104,36 @@ def test_clip_keeps_stroke_divergences_aligned_with_strokes():
     assert len(clipped.divergences) == len(clipped.strokes)
     for s, dv in zip(clipped.strokes, clipped.divergences, strict=True):
         assert dv == by_stroke[(s.start_time, s.end_time)]
+
+
+def test_left_edge_is_covered_by_strokes_when_structures_cross_boundary():
+    """跨过可见起点的长线段/中枢把图表左沿往前拉时，笔也必须一起保留到那里，
+    否则图表最左侧只剩 K 线和一条孤零零的长线段（回归：NVDA 左侧 4~5 个月没有笔）。
+    """
+    for seed in (3, 7, 11, 19):
+        bars = _walk(420, seed=seed)
+        cut = bars[220]["time"]
+        r = ChanAnalyzer().analyze("T", bars, visible_from=cut)
+        if not r.strokes:
+            continue
+        left = r.merged_candles[0].time
+        # 图表最左的K线就是被保留结构的最早起点，且该处有笔覆盖
+        assert r.strokes[0].start_time <= min(
+            [g.start_time for g in r.segments] + [p.start_time for p in r.stroke_pivots] + [r.strokes[0].start_time]
+        )
+        for g in r.segments:
+            assert g.start_time >= left, "线段起点必须在图表范围内，否则画不出来"
+        for s in r.strokes:
+            assert s.start_time >= left
+        # 笔与笔级背驰仍然一一对应
+        assert len(r.divergences) == len(r.strokes)
+
+
+def test_extension_does_not_cascade_through_touching_segments():
+    """左沿扩展只纳入真正跨过左沿的结构，不因首尾相接的前一段线段一路扩展到全部历史。"""
+    bars = _walk(600, seed=5)
+    cut = bars[400]["time"]
+    clipped = ChanAnalyzer().analyze("T", bars, visible_from=cut)
+    full = ChanAnalyzer().analyze("T", bars)
+    if full.strokes:
+        assert clipped.merged_candles[0].time > full.merged_candles[0].time

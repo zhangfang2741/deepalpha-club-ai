@@ -397,42 +397,51 @@ class ChanAnalyzer:
     ) -> None:
         """把已算好的结构裁剪回可见窗口（time >= from_time）。
 
-        - 分型 / 信号：按自身时间过滤。
-        - 笔 / 线段 / 中枢：只要「结束时间」落在窗口内就保留（跨越左边界的结构
-          予以保留，保证可见区左沿的笔能连上）。
-        - 合并K线：从「可见起点」起保留——可见起点取 from_time 与所有保留结构的
-          最早起点中的较早者，确保跨界结构的端点都有K线覆盖，图上不出现悬空点。
+        - 跨越左边界的笔 / 线段 / 中枢予以保留，图表左沿随之前移到它们的起点，
+          保证跨界结构的端点都有K线覆盖、图上不出现悬空点。
+        - 左沿前移后，落在新左沿与 from_time 之间的笔 / 中枢 / 分型 / 信号**一并保留**：
+          否则一条跨界的长线段会把图表拉长好几个月，而那段区域只有K线、没有笔。
+          左沿反复扩展到稳定；扩展时只纳入真正跨过左沿的结构（终点 > 左沿），不纳入
+          「终点恰好在左沿」的首尾相接前一段，避免一段接一段地连锁扩展到全部历史。
         - MACD：与合并K线同口径按时间过滤。
-        - bars_count：改为可见窗口内的原始K线数，使摘要计数与所见一致。
+        - bars_count：仍为 from_time 起的原始K线数，使摘要计数与所选区间一致。
         """
-        r.fractals = [f for f in r.fractals if f.time >= from_time]
+        def spans() -> list:
+            return [*r.strokes, *r.segments, *r.stroke_pivots, *r.segment_pivots]
+
+        # 第一轮沿用原口径：终点落在窗口内（>= from_time）的结构都保留
+        visible_start = min([from_time, *(x.start_time for x in spans() if x.end_time >= from_time)])
+        # 左沿前移后再纳入跨过新左沿的结构，直到稳定
+        while True:
+            crossing = [x.start_time for x in spans()
+                        if x.end_time > visible_start and x.start_time < visible_start]
+            if not crossing:
+                break
+            visible_start = min(crossing)
+
+        def keep_span(end_time: str) -> bool:
+            return end_time > visible_start or (visible_start == from_time and end_time == from_time)
+
+        r.fractals = [f for f in r.fractals if f.time >= visible_start]
         # 笔与笔级背驰按索引平行（下游 zip(strokes, divergences) 依赖对齐），需一并过滤
         if len(r.divergences) == len(r.strokes):
-            kept_s = [(s, dv) for s, dv in zip(r.strokes, r.divergences, strict=True)
-                      if s.end_time >= from_time]
+            kept_s = [(s, dv) for s, dv in zip(r.strokes, r.divergences, strict=True) if keep_span(s.end_time)]
             r.strokes = [s for s, _ in kept_s]
             r.divergences = [dv for _, dv in kept_s]
         else:
-            r.strokes = [s for s in r.strokes if s.end_time >= from_time]
+            r.strokes = [s for s in r.strokes if keep_span(s.end_time)]
         # 线段与线段级背驰按索引平行，需一并过滤以保持对齐
         if r.segment_divergences and len(r.segment_divergences) == len(r.segments):
             kept = [(g, dv) for g, dv in zip(r.segments, r.segment_divergences, strict=False)
-                    if g.end_time >= from_time]
+                    if keep_span(g.end_time)]
             r.segments = [g for g, _ in kept]
             r.segment_divergences = [dv for _, dv in kept]
         else:
-            r.segments = [g for g in r.segments if g.end_time >= from_time]
-        r.stroke_pivots = [p for p in r.stroke_pivots if p.end_time >= from_time]
-        r.segment_pivots = [p for p in r.segment_pivots if p.end_time >= from_time]
-        r.signals = [s for s in r.signals if s.time >= from_time]
+            r.segments = [g for g in r.segments if keep_span(g.end_time)]
+        r.stroke_pivots = [p for p in r.stroke_pivots if keep_span(p.end_time)]
+        r.segment_pivots = [p for p in r.segment_pivots if keep_span(p.end_time)]
+        r.signals = [s for s in r.signals if s.time >= visible_start]
 
-        starts = (
-            [s.start_time for s in r.strokes]
-            + [g.start_time for g in r.segments]
-            + [p.start_time for p in r.stroke_pivots]
-            + [p.start_time for p in r.segment_pivots]
-        )
-        visible_start = min([from_time, *starts])
         r.merged_candles = [c for c in r.merged_candles if c.time >= visible_start]
 
         if r.macd is not None:
