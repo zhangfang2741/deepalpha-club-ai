@@ -118,9 +118,11 @@ def test_adjacent_segments_alternate_direction():
         [200, 150, 175, 120, 160, 90, 130, 70, 110, 50],
         [50, 80, 60, 95, 70, 62, 90, 55, 100, 75, 130],
     ):
-        segs = find_segments(_chain(prices))
+        strokes = _chain(prices)
+        segs = find_segments(strokes)
         for a, b in zip(segs, segs[1:], strict=False):
-            assert a.direction != b.direction, "相邻线段方向必须交替"
+            if _connected(strokes, a, b):
+                assert a.direction != b.direction, "首尾相接的线段方向必须交替"
 
 
 def test_gap_second_case_keeps_one_segment():
@@ -148,3 +150,131 @@ def test_gap_second_case_down_direction():
 def test_too_few_strokes():
     assert find_segments([]) == []
     assert find_segments(_chain([100, 120])) == []  # 仅1笔
+
+
+def _assert_invariants(strokes: list[Stroke], segs) -> None:
+    pos = {id(s): k for k, s in enumerate(strokes)}
+    for seg in segs:
+        first = pos[id(seg.strokes[0])]
+        for offset, s in enumerate(seg.strokes):
+            assert strokes[first + offset] is s
+        assert seg.stroke_count >= 3
+        assert seg.direction == seg.strokes[0].direction
+        origin = seg.strokes[0].start_price
+        if seg.direction == "up":
+            assert seg.low >= origin - 1e-6
+        else:
+            assert seg.high <= origin + 1e-6
+    for a, b in zip(segs, segs[1:], strict=False):
+        if _connected(strokes, a, b):  # 首尾相接的必须交替；隔着空档的按实际走势
+            assert a.direction != b.direction
+
+
+def _connected(strokes: list[Stroke], a, b) -> bool:
+    pos = {id(s): k for k, s in enumerate(strokes)}
+    return pos[id(a.strokes[-1])] + 1 == pos[id(b.strokes[0])]
+
+
+def test_segments_connect_end_to_start_in_consolidation():
+    # 上升段 100->140 结束后进入震荡：三笔重叠即成下降段，不要求第三笔创新低；
+    # 线段首尾相接，前一段终点 = 下一段起点，中间不留没被划入线段的笔。
+    strokes = _chain([100, 130, 115, 140, 120, 135, 118, 132, 110, 150, 125, 160, 130, 150, 120])
+    segs = find_segments(strokes)
+    _assert_invariants(strokes, segs)
+    assert len(segs) >= 2
+    for a, b in zip(segs, segs[1:], strict=False):
+        assert _connected(strokes, a, b), "相邻线段必须首尾相接"
+
+
+def test_first_case_fractal_ends_segment_and_next_starts_there():
+    # 特征序列 (130,115)(140,125)(135,120) 在 140 处形成第一种情况顶分型：上升段在 140
+    # 结束（不能因为之后涨到 160 就硬并成一段）；下降段 140->125->135->120 从 140 接上，
+    # 其后 160 收复下降段起点，下降段结束，上升段再从 120 接上。
+    strokes = _chain([100, 130, 115, 140, 125, 135, 120, 160, 150, 170, 140, 155, 130])
+    segs = find_segments(strokes)
+    _assert_invariants(strokes, segs)
+    assert (segs[0].direction, segs[0].start_price, segs[0].end_price) == ("up", 100, 140)
+    assert (segs[1].direction, segs[1].start_price, segs[1].end_price) == ("down", 140, 120)
+    for a, b in zip(segs, segs[1:], strict=False):
+        assert _connected(strokes, a, b)
+
+
+def test_random_walks_only_break_where_no_valid_segment_exists():
+    """随机走势：不变量零违反，空档处必然构不成线段。
+
+    相邻线段之间若有空档，从前段终点起步的线段必然不成立（不足三笔即被收复起点，或只是「一笔 + 横盘」）——不为了连起来而连起来。
+    """
+    import random
+
+    from app.services.chan.segment import _extreme_on_first, _segment_end
+
+    rng = random.Random(7)
+    pairs = gaps = 0
+    for _ in range(2000):
+        prices = [100.0]
+        for k in range(rng.randint(6, 40)):
+            step = rng.uniform(3, 30)
+            prices.append(prices[-1] + (step if k % 2 == 0 else -step))
+        strokes = _chain(prices)
+        pos = {id(s): k for k, s in enumerate(strokes)}
+        segs = find_segments(strokes)
+        _assert_invariants(strokes, segs)
+        for a, b in zip(segs, segs[1:], strict=False):
+            pairs += 1
+            if _connected(strokes, a, b):
+                continue
+            gaps += 1
+            i = pos[id(a.strokes[-1])] + 1
+            d = strokes[i].direction
+            end = _segment_end(strokes, i, d)
+            assert end is None or end < i + 2 or _extreme_on_first(strokes, i, end, d)
+    assert gaps / pairs < 0.15
+
+
+def test_origin_reclaimed_segment_ends_at_its_extreme():
+    # 真实回归（NVDA 2024-11~2025-01）：下降段 149.37->131.46->146.17->126.53->141.54->133.48，
+    # 随后 152.74 收复起点。下降段必须结束在段内最低 126.53，而不是触发前一笔 133.48；
+    # 126.53->141.54->133.48->152.74 接着构成上升段。
+    strokes = _chain([144.04, 131.76, 149.37, 131.46, 146.17, 126.53, 141.54, 133.48,
+                      152.74, 129.18, 148.58, 112.72])
+    segs = find_segments(strokes)
+    _assert_invariants(strokes, segs)
+    down = next(s for s in segs if s.direction == "down")
+    assert down.start_price == 149.37
+    assert down.end_price == 126.53
+
+
+def test_confirmed_segments_end_at_their_extreme():
+    """已结束的线段终点应是段内极值。
+
+    唯一例外（约 0.1%）：线段极值就在首笔终点、此后高点逐级走低的横盘——特征序列
+    分型的第一元素须在极值之前，此处不存在，分型无法按定义成立。容忍 0.5% 以内。
+    """
+    import random
+
+    rng = random.Random(11)
+    total = bad = 0
+    for _ in range(2000):
+        prices = [100.0]
+        for k in range(rng.randint(6, 40)):
+            step = rng.uniform(3, 30)
+            prices.append(prices[-1] + (step if k % 2 == 0 else -step))
+        strokes = _chain(prices)
+        segs = find_segments(strokes)
+        _assert_invariants(strokes, segs)
+        for seg in segs[:-1]:  # 最后一段可能未走完
+            total += 1
+            ends = [s.end_price for s in seg.strokes if s.direction == seg.direction]
+            bad += seg.end_price != (max(ends) if seg.direction == "up" else min(ends))
+    assert bad / total < 0.005
+
+
+def test_float_noise_high_is_not_a_new_extreme():
+    # 真实回归（腾讯 2024-11~12）：前复权价 422.3494536 与 422.3494581 仅差浮点尾差，
+    # 不算创新高；384->422->394->422 只是「一笔 + 横盘」，下降段应一直走到 357.48。
+    strokes = _chain([357.67, 472.72, 396.48, 427.25, 384.13, 422.3494536, 393.74,
+                      422.3494581, 357.48, 511.52, 463.70, 536.02, 489.18, 534.06, 410.59])
+    segs = find_segments(strokes)
+    _assert_invariants(strokes, segs)
+    down = next(s for s in segs if s.direction == "down")
+    assert (down.start_price, down.end_price) == (472.72, 357.48)

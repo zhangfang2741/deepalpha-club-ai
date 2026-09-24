@@ -296,10 +296,14 @@ struct ChanChartView: View {
             hi = max(hi, candles[i].high)
         }
         if lo > hi { return PriceBounds(minP: 0, maxP: 1) }
-        // 12% 而不是 8%：买卖点标记要在价格上下各占约 30pt，留白太少会顶到边缘。
-        // 夹取逻辑（drawSignals）是兜底，这里先给出自然的呼吸空间。
-        let pad = (hi - lo) * 0.12
-        return PriceBounds(minP: lo - pad, maxP: hi + pad)
+        // 保留原有上下各 12% 价差的标记留白。
+        let dataSpan = hi - lo
+        let midpoint = lo + dataSpan / 2
+        // 日线纵轴至少覆盖中间价的 12%，避免窄幅行情被放大到几乎占满主图。
+        // 最小跨度包含留白；大幅行情继续自适应，分钟线与周线保持原有比例。
+        let minimumSpan = vm.freq == "daily" ? abs(midpoint) * 0.12 : 0
+        let span = max(dataSpan * 1.24, minimumSpan)
+        return PriceBounds(minP: midpoint - span / 2, maxP: midpoint + span / 2)
     }
 
     private func y(for price: Double, height: CGFloat, bounds: PriceBounds) -> CGFloat {

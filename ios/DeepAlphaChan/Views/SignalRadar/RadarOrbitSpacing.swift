@@ -36,3 +36,136 @@ enum RadarOrbitSpacing {
         }
     }
 }
+
+// MARK: - 轨道规划：按时间档由内向外排轨道
+
+extension RadarOrbitSpacing {
+    /// 一个时间档（环带）的输入：气泡数、最大直径（点）、环带归一化范围（占半轴比例 0~1）。
+    struct BandInput {
+        let count: Int
+        let maxDiameter: Double
+        let bandMin: Double
+        let bandMax: Double
+    }
+
+    /// 一条轨道：所属环带、归一化半径（0 = 圆心）、放几个气泡。
+    struct Orbit: Equatable {
+        let band: Int
+        let radius: Double
+        let count: Int
+    }
+
+    /// 保持原始气泡大小规划轨道；放不下时仅在所属时间环带内压缩间距，允许重叠。
+    static func planOrbits(
+        bands: [BandInput], hRad: Double, vRad: Double, gap: Double = 6
+    ) -> (scale: Double, orbits: [Orbit], compressed: Bool) {
+        let minAxis = max(min(hRad, vRad), 1)
+        let scale = 1.0
+        let (orbits, fits) = layout(bands: bands, scale: scale, hRad: hRad, vRad: vRad,
+                                   minAxis: minAxis, gap: gap)
+        if fits { return (scale, orbits, false) }
+        // 各环带独立压缩，不能全场等比缩放，否则旧信号会落入更新的时间档。
+        let bounded = orbits.map { orbit in
+            let band = bands[orbit.band]
+            let edge = max(band.bandMin, 1 - (band.maxDiameter * scale / 2 + 4) / minAxis)
+            let upper = min(band.bandMax, edge)
+            let sameBand = orbits.filter { $0.band == orbit.band }
+            let first = sameBand.map(\.radius).min() ?? band.bandMin
+            let last = sameBand.map(\.radius).max() ?? band.bandMax
+            let lower = min(max(first, band.bandMin), upper)
+            let radius: Double
+            if last > upper, last > first {
+                radius = lower + (orbit.radius - first) / (last - first) * (upper - lower)
+            } else {
+                radius = min(max(orbit.radius, band.bandMin), upper)
+            }
+            return Orbit(band: orbit.band, radius: radius, count: orbit.count)
+        }
+        return (scale, bounded, true)
+    }
+
+    /// 椭圆轨道（归一化半径 r）能等距放下的气泡数。
+    static func capacity(radius r: Double, pitch: Double, hRad: Double, vRad: Double) -> Int {
+        if r < 1e-9 { return 1 }
+        let a = r * hRad, b = r * vRad
+        let h = pow(a - b, 2) / pow(a + b, 2)
+        // Ramanujan 椭圆周长近似
+        let perimeter = Double.pi * (a + b) * (1 + 3 * h / (10 + (4 - 3 * h).squareRoot()))
+        return max(1, Int(perimeter / pitch))
+    }
+
+    private static func layout(
+        bands: [BandInput], scale: Double, hRad: Double, vRad: Double, minAxis: Double, gap: Double
+    ) -> ([Orbit], Bool) {
+        var orbits: [Orbit] = []
+        var cursor = 0.0            // 下一条轨道允许的最小归一化半径
+        var outerLimit = 0.0        // 各轨道所需的最外边界（含气泡半径）
+        for (index, band) in bands.enumerated() where band.count > 0 {
+            let d = band.maxDiameter * scale
+            let pitch = d + gap
+            let step = pitch / minAxis
+            var radii: [Double]
+            if orbits.isEmpty && band.bandMin == 0 && (2...4).contains(band.count) {
+                // 最内档只有 2~4 个：不占圆心，围成一圈（半径取刚好不重叠的弦长）
+                let r = pitch / (2 * sin(.pi / Double(band.count))) / minAxis
+                radii = [max(r, cursor)]
+            } else {
+                // 起点：圆心（仅最内档）或环带内沿再让出半个间距
+                let start = orbits.isEmpty && band.bandMin == 0
+                    ? 0 : max(cursor, band.bandMin + step / 2)
+                var total = 0
+                radii = []
+                var r = start
+                while total < band.count {
+                    radii.append(r)
+                    total += capacity(radius: r, pitch: pitch, hRad: hRad, vRad: vRad)
+                    r += step
+                }
+                // 环带内有富余：把轨道均匀铺到环带外沿（留半个间距给下一档）
+                let hi = band.bandMax - (index < bands.count - 1 ? step / 2 : 0)
+                if radii.count > 1, let last = radii.last, last < hi {
+                    let lo = radii[0]
+                    radii = (0..<radii.count).map { lo + (hi - lo) * Double($0) / Double(radii.count - 1) }
+                } else if radii.count == 1, radii[0] > 0, radii[0] < band.bandMin + (hi - band.bandMin) / 2 {
+                    radii[0] = max(radii[0], (band.bandMin + hi) / 2)
+                }
+            }
+            // 按容量比例分配气泡数（内圈先满足，余数给外圈）
+            let caps = radii.map { capacity(radius: $0, pitch: pitch, hRad: hRad, vRad: vRad) }
+            let counts = distribute(band.count, capacities: caps)
+            for (r, c) in zip(radii, counts) where c > 0 {
+                orbits.append(Orbit(band: index, radius: r, count: c))
+            }
+            let last = radii.last ?? cursor
+            cursor = last + step
+            outerLimit = max(outerLimit, last + (d / 2 + 4) / minAxis)
+        }
+        let staysInBands = orbits.allSatisfy { orbit in
+            let band = bands[orbit.band]
+            return orbit.radius >= band.bandMin - 1e-9 && orbit.radius <= band.bandMax + 1e-9
+        }
+        return (orbits, staysInBands && outerLimit <= 1 + 1e-9)
+    }
+
+    /// 把 total 个名额按容量比例分到各轨道，每条不超过自身容量（超出时溢出到最外圈）。
+    static func distribute(_ total: Int, capacities: [Int]) -> [Int] {
+        guard !capacities.isEmpty else { return [] }
+        let sum = capacities.reduce(0, +)
+        if sum <= total {
+            var counts = capacities
+            counts[counts.count - 1] += total - sum
+            return counts
+        }
+        var counts = capacities.map { Int(Double(total) * Double($0) / Double(sum)) }
+        var remaining = total - counts.reduce(0, +)
+        var index = 0
+        while remaining > 0 {
+            if counts[index] < capacities[index] {
+                counts[index] += 1
+                remaining -= 1
+            }
+            index = (index + 1) % counts.count
+        }
+        return counts
+    }
+}

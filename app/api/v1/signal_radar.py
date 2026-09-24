@@ -19,7 +19,7 @@ from app.core.limiter import limiter
 from app.core.logging import logger
 from app.models.user import User
 from app.schemas.signal_radar import RadarUniverseOut, SignalRadarResponse
-from app.services.signal_radar.service import compute_market, peek_cache_entry
+from app.services.signal_radar.service import DEFAULT_TOP_N, compute_market, peek_cache_entry
 from app.services.signal_radar.universe import get_universe, list_universes, supported_markets
 
 router = APIRouter()
@@ -98,6 +98,12 @@ async def signal_radar(
     # 有缓存就先返回（stale-while-revalidate）：哪怕正在后台刷新，也不让用户看空屏。
     # 只有真正冷启动（连一份旧缓存都没有）才回 generating，让前端轮询等待首扫。
     if cached is not None:
+        # 旧缓存可能仍有 15 只，响应时同步收窄，避免等待下一轮扫描才能生效。
+        cached.top_n = DEFAULT_TOP_N
+        for day in cached.days:
+            day.signals = day.signals[:DEFAULT_TOP_N]
+            day.buy_count = sum(signal.side == "buy" for signal in day.signals)
+            day.sell_count = sum(signal.side == "sell" for signal in day.signals)
         return cached
 
     return SignalRadarResponse(
@@ -110,7 +116,7 @@ async def signal_radar(
         etf_name=uni.etf_name,
         universe_size=len(uni.constituents),
         as_of="",
-        top_n=15,
+        top_n=DEFAULT_TOP_N,
         days=[],
         status="generating",
     )

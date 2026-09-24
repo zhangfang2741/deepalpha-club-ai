@@ -43,6 +43,8 @@ from app.services.signal_radar.constituents import resolve_constituents
 from app.services.signal_radar.universe import get_universe, list_universes
 from app.services.skills.kline import fetch_kline
 
+DEFAULT_TOP_N = 12
+
 _analyzer = ChanAnalyzer()
 
 # 缠论窗口锚定所需的 warmup 天数（与 chan.py 的日线口径一致）
@@ -426,7 +428,7 @@ def _fetch_start(today: date, window: int) -> str:
 async def compute_market(
     market: str, *, redis: Redis, user_id: int | None = None,
     universe_key: str | None = None,
-    days: int = 30, window: int = 45, top_n: int = 15,
+    days: int = 30, window: int = 45, top_n: int = DEFAULT_TOP_N,
     max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
 ) -> SignalRadarResponse:
     """全量扫描一个 (市场, universe) 并按日重建快照（不读缓存，计算完写入缓存）。"""
@@ -557,7 +559,7 @@ async def peek_cache_entry(
 async def get_market(
     market: str, *, redis: Redis, user_id: int | None = None,
     universe_key: str | None = None,
-    days: int = 30, window: int = 45, top_n: int = 15, force: bool = False,
+    days: int = 30, window: int = 45, top_n: int = DEFAULT_TOP_N, force: bool = False,
     max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
 ) -> SignalRadarResponse:
     """读缓存优先；未命中则同步扫描（首访较慢，命中后走缓存）。"""
