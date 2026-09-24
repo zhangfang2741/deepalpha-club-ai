@@ -19,6 +19,11 @@ class Stroke:
     end: Fractal
     # 笔是否已确认：最后一笔的端点可能被后续K线突破/延伸，转折点尚未被反向结构确认
     confirmed: bool = True
+    # 力度（取自 czsc 的笔）：价差 = 两端分型价差（两位小数）；量能 = 笔内去掉首尾两根的
+    # 成交量合计；时长 = 笔包含的去包含K线根数。背驰与一类买卖点都按这三项比较力度。
+    power_price: float = 0.0
+    power_volume: float = 0.0
+    length: int = 0
 
     @property
     def start_time(self) -> str:

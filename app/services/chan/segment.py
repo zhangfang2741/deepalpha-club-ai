@@ -50,6 +50,19 @@ class Segment:
     def stroke_count(self) -> int:
         return len(self.strokes)
 
+    # 线段力度：由所含笔汇总，口径与笔一致（价差取两端价差，量能/时长为各笔之和）
+    @property
+    def power_price(self) -> float:
+        return round(abs(self.end_price - self.start_price), 2)
+
+    @property
+    def power_volume(self) -> float:
+        return sum(s.power_volume for s in self.strokes)
+
+    @property
+    def length(self) -> int:
+        return sum(s.length for s in self.strokes)
+
 
 def _breaks_beyond(strokes: list[Stroke], feat_idx: int, direction: str, peak: float) -> bool:
     """第二种情况前瞻确认。

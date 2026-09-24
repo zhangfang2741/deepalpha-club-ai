@@ -191,3 +191,29 @@ def test_analyzer_accepts_30min_freq():
     assert r.strokes
     assert all(len(st.end_time) == 16 for st in r.strokes)
     assert all(len(sig.time) == 16 for sig in r.signals)
+
+
+def test_strokes_carry_czsc_force_values():
+    """笔带上 czsc 自带的力度：价差 power_price、量能 power_volume、时长 length（去包含K线根数）。"""
+    bars = _trending_bars(80, start_price=100.0, up=True)
+    c = build_czsc(bars, symbol="T", freq=Freq.D)
+    s = extract_structures(c, bars)
+    assert len(s.strokes) == len(c.bi_list)
+    for st, bi in zip(s.strokes, c.bi_list, strict=True):
+        assert st.power_price == float(bi.power_price)
+        assert st.power_volume == float(bi.power_volume)
+        assert st.length == int(bi.length)
+        assert st.power_price == round(abs(st.end_price - st.start_price), 2)
+
+
+def test_segment_force_aggregates_its_strokes():
+    from app.services.chan.segment import Segment
+    from app.services.chan.stroke import Stroke
+
+    bars = _trending_bars(80, start_price=100.0, up=True)
+    strokes = extract_structures(build_czsc(bars, symbol="T", freq=Freq.D), bars).strokes[:3]
+    seg = Segment(direction=strokes[0].direction, strokes=list(strokes))
+    assert seg.power_price == round(abs(seg.end_price - seg.start_price), 2)
+    assert seg.power_volume == sum(x.power_volume for x in strokes)
+    assert seg.length == sum(x.length for x in strokes)
+    assert isinstance(strokes[0], Stroke)

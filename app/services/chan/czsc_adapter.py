@@ -148,7 +148,8 @@ def extract_structures(c: CZSC, bars: list[dict]) -> CzscStructures:
     def bi_to_stroke(bi) -> Stroke:
         direction = "up" if bi.direction == Direction.Up else "down"
         return Stroke(direction=direction, start=fx_cached(bi.fx_a),
-                      end=fx_cached(bi.fx_b))
+                      end=fx_cached(bi.fx_b), power_price=float(bi.power_price),
+                      power_volume=float(bi.power_volume), length=int(bi.length))
 
     strokes = [bi_to_stroke(bi) for bi in c.bi_list]
     stroke_by_start_time: dict[str, Stroke] = {}
