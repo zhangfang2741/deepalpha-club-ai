@@ -186,6 +186,11 @@ deepalpha-club-ai/
 - `pivot_phase.py`（中枢阶段徽标）仍用自研结构判定阶段；只有回抽笔终点上有**同类**
   买卖点信号时才写「确认X买/卖」，否则只描述结构（如「回踩守住中枢上沿」），保证徽标
   与图上买卖点一致。`replay.truncate_as_of` 须同步按时点截断 signals。
+- **次级别确认**（`sub_level.py` 纯函数 + `sub_level_service.py` 编排，接口 `GET /chan/sub-level`）：
+  日线 `recommendation.bias` 定方向 × 30 分钟最近 2 个交易日买卖点 → 共振/逆势/等待/不可用；
+  30 分钟失败只降级为 unavailable，不影响日线。30 分钟数据：美股 FMP 分段拉取，港股/A 股
+  Yahoo `30m`（上限约 60 天）。分钟线时间为交易所本地 `YYYY-MM-DD HH:MM`（`ts_date` 零点才输出纯日期）。
+  信号雷达只对最新交易日入榜气泡补算（`attach_sub_levels`）。
 - 走势类型 `walk_type`（up_trend / down_trend / consolidation / none）由中枢排布判定，
   经响应字段暴露给前端。
 - 形态分析（recommendation）是**多因子加权净值**，单条依据可与结论方向相反是设计使然
