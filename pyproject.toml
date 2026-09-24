@@ -199,6 +199,7 @@ convention = "google"
 "app/services/push/*.py" = ["D415", "D104"]
 "tests/services/push/*.py" = ["D415", "D104", "D103", "F401"]
 "tests/services/chan/*.py" = ["D415", "D101", "D102", "D103", "D104"]
+"tests/core/test_logging_levels.py" = ["D415"]
 "app/services/rsi.py" = ["D415"]
 "app/services/panic_index.py" = ["D415"]
 "app/schemas/panic_index.py" = ["D415"]
