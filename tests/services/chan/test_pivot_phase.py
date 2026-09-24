@@ -12,7 +12,6 @@ from app.services.chan.divergence import DivergenceResult
 from app.services.chan.fractal import Fractal, MergedCandle
 from app.services.chan.pivot import Pivot, _find_pivots_from_elements
 from app.services.chan.pivot_phase import build_pivot_phase
-from app.services.chan.signals import generate_buy2_signals
 from app.services.chan.stroke import Stroke
 
 
@@ -158,13 +157,11 @@ def test_stays_retrace_confirmed_without_matching_divergence():
     assert pp.phase == "retrace_confirmed"
 
 
-def test_cross_check_matches_generate_buy2_signals():
-    """交叉验证：pivot_phase 判定出的 outcome 必须和 signals.py 实际产出的信号一致。
+def test_retrace_inside_absorbing_pivot_is_retrace_confirmed():
+    """真实吞并场景：突破笔 + 回踩笔被中枢算法吞并进 elements，阶段应判为回踩确认。
 
-    复用 test_signals.py::test_buy2_fires_when_pivot_absorbs_breakout_and_retrace
-    同一份真实吞并场景（中枢算法产出的真中枢，不是手搭 elements=[]）。
-    笔级中枢入口（find_stroke_pivots）已随 czsc 接入删除，这里直接调共用的
-    _find_pivots_from_elements（level="stroke"），与 signals.py 的消费语义一致。
+    用中枢算法产出的真中枢（不是手搭 elements=[]），覆盖 _post_pivot_strokes
+    把吞并段接回来的逻辑。买卖点标记已改由 czsc 结构信号判定，这里只验证阶段判定本身。
     """
     e0 = _st("down", 0, 100, 90)
     e1 = _st("up", 1, 90, 98)
@@ -175,9 +172,6 @@ def test_cross_check_matches_generate_buy2_signals():
 
     pivots = _find_pivots_from_elements(strokes, level="stroke")
     assert len(pivots) == 1
-
-    sig = generate_buy2_signals(strokes, pivots)
-    assert len(sig) == 1 and sig[0].type == "buy2"
 
     pp = build_pivot_phase(_result(strokes, pivots, []))
     assert pp is not None

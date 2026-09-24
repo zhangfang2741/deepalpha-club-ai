@@ -25,6 +25,7 @@ from app.services.chan.divergence import (
 from czsc import Freq
 
 from app.services.chan.czsc_adapter import build_czsc, extract_structures
+from app.services.chan.czsc_signals import scan_bs_events
 from app.services.chan.fractal import Fractal, MergedCandle
 from app.services.chan.i18n import is_en, pick
 from app.services.chan.narrative import MarketNarrative, _volume_readout, build_narrative
@@ -161,7 +162,8 @@ class ChanAnalyzer:
         #        再由 adapter 转换回项目内部 dataclass，下游自研代码无感消费。
         #        注意：czsc 会丢弃首笔确认前的前导K线，merged_candles 可能不从
         #        raw_start=0 开始（见 extract_structures docstring，属预期行为）。
-        czsc_obj = build_czsc(bars, symbol=symbol, freq=Freq.D if freq == "daily" else Freq.W)
+        czsc_freq = Freq.D if freq == "daily" else Freq.W
+        czsc_obj = build_czsc(bars, symbol=symbol, freq=czsc_freq)
         structures = extract_structures(czsc_obj, bars)
         result.merged_candles = structures.merged_candles
         logger.debug("chan_merged_candles", count=len(result.merged_candles))
@@ -218,10 +220,11 @@ class ChanAnalyzer:
         diverged_count = sum(1 for d in result.divergences if d.is_diverged)
         logger.debug("chan_divergences", total=len(result.divergences), diverged=diverged_count)
 
-        # 8. 买卖点生成（使用笔级别中枢）
         all_pivots = result.stroke_pivots + result.segment_pivots
         all_pivots.sort(key=lambda p: p.start_time)
-        result.signals = generate_all_signals(result.strokes, result.divergences, all_pivots, lang)
+        # 8. 买卖点：是否成立由 czsc 结构信号逐根判定（不回看未来），强度用本地背驰与中枢
+        events = scan_bs_events(bars, symbol=symbol, freq=czsc_freq)
+        result.signals = generate_all_signals(events, result.strokes, result.divergences, all_pivots, lang)
         logger.debug("chan_signals", count=len(result.signals))
 
         # 9. 标注最右侧未确认结构（右侧滞后不确定性）

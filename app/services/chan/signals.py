@@ -1,10 +1,15 @@
-"""缠论三类买卖点生成"""
+"""缠论三类买卖点：czsc 结构信号事件 → 带强度/背驰/文案的 Signal。
+
+「是否构成买卖点」由 czsc_signals.scan_bs_events 判定；这里只负责把事件落到
+所属笔端点，并用本地背驰度量（一类）与中枢级别+余量（二/三类）给出强度。
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal
 
 from app.services.chan.bias import SEGMENT_WEIGHT, STROKE_WEIGHT
+from app.services.chan.czsc_signals import BsEvent
 from app.services.chan.divergence import DivergenceResult
 from app.services.chan.i18n import is_en
 from app.services.chan.pivot import Pivot
@@ -76,82 +81,8 @@ class Signal:
         return self.type.startswith("buy")
 
 
-def generate_buy1_signals(
-    strokes: list[Stroke],
-    divergences: list[DivergenceResult],
-    lang: str = "zh",
-) -> list[Signal]:
-    """一类买点：下降笔末端出现底背驰。
-
-    价格创新低，但 MACD 动量衰减（面积 + 黄白线背驰）。
-    """
-    signals: list[Signal] = []
-    for stroke, div in zip(strokes, divergences, strict=False):
-        if stroke.direction != "down":
-            continue
-        # 一类买点 = 下降笔末端的（真）背驰。背驰真伪已由面积 + 黄白线(DIF)双重过滤
-        # （见 divergence.check_divergence），此处不再用「趋势背驰」硬门槛卡数量，
-        # 否则盘整行情里一买会被全部抹掉。
-        if not div.is_diverged:
-            continue
-
-        # 强度只反映背驰幅度（面积衰减程度），与趋势 / 盘整是两个维度——趋势只是背景，
-        # 不能把一个 0.9 的弱背驰仅因处于趋势就拔成 strong。趋势 / 盘整体现在描述里。
-        strength = div.strength  # type: ignore[assignment]
-        signals.append(Signal(
-            type="buy1",
-            time=stroke.end_time,
-            price=stroke.end_price,
-            strength=strength,
-            divergence=div,
-            description=(
-                f"Type-1 buy: down-leg formed a "
-                f"{'trend' if div.type == 'trend' else 'consolidation'} bottom divergence at "
-                f"{stroke.end_time}, MACD area ratio={div.area_ratio:.2f}. {div.description}"
-                if is_en(lang) else
-                f"一类买点：下降笔在 {stroke.end_time} 出现{div.type == 'trend' and '趋势' or '盘整'}底背驰，"
-                f"MACD面积比值={div.area_ratio:.2f}，{div.description}"
-            ),
-        ))
-    return signals
-
-
-def generate_sell1_signals(
-    strokes: list[Stroke],
-    divergences: list[DivergenceResult],
-    lang: str = "zh",
-) -> list[Signal]:
-    """一类卖点：上升笔末端出现顶背驰。"""
-    signals: list[Signal] = []
-    for stroke, div in zip(strokes, divergences, strict=False):
-        if stroke.direction != "up":
-            continue
-        # 一类卖点 = 上升笔末端的（真）背驰。背驰真伪已由面积 + DIF 双重过滤。
-        if not div.is_diverged:
-            continue
-
-        # 强度只反映背驰幅度（面积衰减程度），与趋势 / 盘整是两个维度；趋势体现在描述里。
-        strength = div.strength  # type: ignore[assignment]
-        signals.append(Signal(
-            type="sell1",
-            time=stroke.end_time,
-            price=stroke.end_price,
-            strength=strength,
-            divergence=div,
-            description=(
-                f"Type-1 sell: up-leg formed a "
-                f"{'trend' if div.type == 'trend' else 'consolidation'} top divergence at "
-                f"{stroke.end_time}, MACD area ratio={div.area_ratio:.2f}. {div.description}"
-                if is_en(lang) else
-                f"一类卖点：上升笔在 {stroke.end_time} 出现{div.type == 'trend' and '趋势' or '盘整'}顶背驰，"
-                f"MACD面积比值={div.area_ratio:.2f}，{div.description}"
-            ),
-        ))
-    return signals
-
-
 def _post_pivot_strokes(strokes: list[Stroke], pivots: list[Pivot], idx: int) -> list[Stroke]:
-    """某中枢「离开段」所在的笔窗口：从突破笔开始、到下一个中枢形成之前。
+    """某中枢「离开段」所在的笔窗口：从突破笔开始、到下一个中枢形成之前（中枢阶段判定用）。
 
     二 / 三类买卖点只属于离开该中枢的那一段。旧实现对每个历史中枢都扫描其后
     无限远的笔，导致一个几个月前的旧中枢在价格偶然回到其价格带时误触发信号
@@ -163,7 +94,7 @@ def _post_pivot_strokes(strokes: list[Stroke], pivots: list[Pivot], idx: int) ->
     连带回踩笔如果落回区间内也会一并吞并。结果是突破笔/回踩笔从未出现在
     `end_time` 之后，二/三类买卖点因此在真实数据上几乎永远无法触发。这里把
     中枢自身吞并进去的延伸段（第 4 段起）接回来，才能还原出完整的「突破笔 +
-    回踩笔」序列供下面的配对逻辑使用。
+    回踩笔」序列供阶段判定的突破/回踩配对使用。
     """
     pivot = pivots[idx]
     upper = pivots[idx + 1].start_time if idx + 1 < len(pivots) else None
@@ -175,210 +106,100 @@ def _post_pivot_strokes(strokes: list[Stroke], pivots: list[Pivot], idx: int) ->
     return [*absorbed, *post]
 
 
-def generate_buy2_signals(
-    strokes: list[Stroke],
-    pivots: list[Pivot],
-    lang: str = "zh",
-) -> list[Signal]:
-    """二类买点：中枢向上突破后，回踩进入中枢区间但不破下沿ZD。
-
-    只在中枢的「离开段」窗口内取首个（向上突破笔 + 回调笔），回调落点在 [ZD, ZG]
-    内即为二买。强度按中枢级别 + 回踩落点离 ZD 的余地加权（见 _type23_strength）。
-    """
-    signals: list[Signal] = []
-    for idx, pivot in enumerate(pivots):
-        post = _post_pivot_strokes(strokes, pivots, idx)
-        for i in range(len(post) - 1):
-            breakout, retrace = post[i], post[i + 1]
-            # 突破笔必须真正“跨越”中枢上沿（起点≤ZG<终点），
-            # 排除价格已远离中枢后的笔被误判为突破
-            if breakout.direction != "up" or not (
-                breakout.start_price <= pivot.zg < breakout.end_price
-            ):
-                continue
-            if retrace.direction != "down":
-                continue
-            # 回踩落在中枢区间内、未破下沿 ZD → 二买
-            if pivot.zd <= retrace.end_price <= pivot.zg:
-                signals.append(Signal(
-                    type="buy2",
-                    time=retrace.end_time,
-                    price=retrace.end_price,
-                    strength=_type23_strength(pivot, _margin_ratio(pivot, pivot.zd, retrace.end_price)),
-                    divergence=None,
-                    description=(
-                        f"Type-2 buy: at {retrace.end_time}, after breaking above the pivot "
-                        f"({pivot.zd:.2f}-{pivot.zg:.2f}), price pulled back to {retrace.end_price:.2f}, "
-                        f"staying inside the pivot without breaking ZD ({pivot.zd:.2f}) — confirms a type-2 buy"
-                        if is_en(lang) else
-                        f"二类买点：{retrace.end_time} 中枢({pivot.zd:.2f}-{pivot.zg:.2f})向上突破后"
-                        f"回踩至{retrace.end_price:.2f}，落在中枢内未破ZD({pivot.zd:.2f})，确认二买"
-                    ),
-                ))
-                break  # 每个中枢只取离开段内首个二买
-    return signals
+# 二/三类买卖点强度的参照边界：回踩/反抽落点离哪条中枢边界越远越坚决
+_TYPE23_BOUNDARY = {"buy2": "zd", "sell2": "zg", "buy3": "zg", "sell3": "zd"}
 
 
-def generate_sell2_signals(
-    strokes: list[Stroke],
-    pivots: list[Pivot],
-    lang: str = "zh",
-) -> list[Signal]:
-    """二类卖点：中枢向下跌破后，反抽进入中枢区间但不过上沿ZG。
-
-    只在中枢的「离开段」窗口内取首个（向下跌破笔 + 反抽笔）。强度按中枢级别 +
-    反抽落点离 ZG 的余地加权（见 _type23_strength）。
-    """
-    signals: list[Signal] = []
-    for idx, pivot in enumerate(pivots):
-        post = _post_pivot_strokes(strokes, pivots, idx)
-        for i in range(len(post) - 1):
-            breakout, retrace = post[i], post[i + 1]
-            # 突破笔必须真正“跨越”中枢下沿（起点≥ZD>终点），
-            # 排除价格已远离中枢后的笔被误判为跌破
-            if breakout.direction != "down" or not (
-                breakout.start_price >= pivot.zd > breakout.end_price
-            ):
-                continue
-            if retrace.direction != "up":
-                continue
-            # 反抽落在中枢区间内、未过上沿 ZG → 二卖
-            if pivot.zd <= retrace.end_price <= pivot.zg:
-                signals.append(Signal(
-                    type="sell2",
-                    time=retrace.end_time,
-                    price=retrace.end_price,
-                    strength=_type23_strength(pivot, _margin_ratio(pivot, pivot.zg, retrace.end_price)),
-                    divergence=None,
-                    description=(
-                        f"Type-2 sell: at {retrace.end_time}, after breaking below the pivot "
-                        f"({pivot.zd:.2f}-{pivot.zg:.2f}), price bounced to {retrace.end_price:.2f}, "
-                        f"staying inside the pivot without exceeding ZG ({pivot.zg:.2f}) — confirms a type-2 sell"
-                        if is_en(lang) else
-                        f"二类卖点：{retrace.end_time} 中枢({pivot.zd:.2f}-{pivot.zg:.2f})向下跌破后"
-                        f"反抽至{retrace.end_price:.2f}，落在中枢内未过ZG({pivot.zg:.2f})，确认二卖"
-                    ),
-                ))
-                break  # 每个中枢只取离开段内首个二卖
-    return signals
+def _latest_pivot_before(pivots: list[Pivot], time: str) -> Pivot | None:
+    """信号时刻之前已结束的最近中枢（结束时间最晚者）；尚未结束的中枢不参与，避免回看未来。"""
+    done = [p for p in pivots if p.end_time <= time]
+    return max(done, key=lambda p: p.end_time) if done else None
 
 
-def generate_buy3_signals(
-    strokes: list[Stroke],
-    pivots: list[Pivot],
-    lang: str = "zh",
-) -> list[Signal]:
-    """三类买点：中枢向上突破后，回踩不回中枢（回调低点高于上沿ZG）。
-
-    与二买的区别在回踩落点：高于 ZG 不回中枢即为三买（趋势确认，更强）。
-    只在中枢的「离开段」窗口内取首个。强度按中枢级别 + 回踩落点离 ZG 的余地
-    加权（见 _type23_strength），不再固定写死"strong"。
-    """
-    signals: list[Signal] = []
-    for idx, pivot in enumerate(pivots):
-        post = _post_pivot_strokes(strokes, pivots, idx)
-        for i in range(len(post) - 1):
-            breakout, retrace = post[i], post[i + 1]
-            # 突破笔必须真正“跨越”中枢上沿（起点≤ZG<终点），
-            # 排除价格已远离中枢后的笔被误判为突破
-            if breakout.direction != "up" or not (
-                breakout.start_price <= pivot.zg < breakout.end_price
-            ):
-                continue
-            if retrace.direction != "down":
-                continue
-            # 回踩低点高于上沿 ZG、未回中枢 → 三买
-            if retrace.end_price > pivot.zg:
-                signals.append(Signal(
-                    type="buy3",
-                    time=retrace.end_time,
-                    price=retrace.end_price,
-                    strength=_type23_strength(pivot, _margin_ratio(pivot, pivot.zg, retrace.end_price)),
-                    divergence=None,
-                    description=(
-                        f"Type-3 buy: at {retrace.end_time}, after breaking above the pivot "
-                        f"({pivot.zd:.2f}-{pivot.zg:.2f}), price pulled back to {retrace.end_price:.2f}, "
-                        f"holding above ZG ({pivot.zg:.2f}) without re-entering — confirms a type-3 buy"
-                        if is_en(lang) else
-                        f"三类买点：{retrace.end_time} 突破中枢({pivot.zd:.2f}-{pivot.zg:.2f})后"
-                        f"回踩至{retrace.end_price:.2f}，高于ZG({pivot.zg:.2f})未回中枢，确认三买"
-                    ),
-                ))
-                break  # 每个中枢只取离开段内首个三买
-    return signals
+def _span_count(span: str) -> str:
+    return span[:-1] if span.endswith("笔") else ""
 
 
-def generate_sell3_signals(
-    strokes: list[Stroke],
-    pivots: list[Pivot],
-    lang: str = "zh",
-) -> list[Signal]:
-    """三类卖点：中枢向下跌破后，反抽不回中枢（反弹高点低于下沿ZD）。
-
-    只在中枢的「离开段」窗口内取首个。强度按中枢级别 + 反抽落点离 ZD 的余地
-    加权（见 _type23_strength）。
-    """
-    signals: list[Signal] = []
-    for idx, pivot in enumerate(pivots):
-        post = _post_pivot_strokes(strokes, pivots, idx)
-        for i in range(len(post) - 1):
-            breakout, retrace = post[i], post[i + 1]
-            # 突破笔必须真正“跨越”中枢下沿（起点≥ZD>终点），
-            # 排除价格已远离中枢后的笔被误判为跌破
-            if breakout.direction != "down" or not (
-                breakout.start_price >= pivot.zd > breakout.end_price
-            ):
-                continue
-            if retrace.direction != "up":
-                continue
-            # 反抽高点低于下沿 ZD、未回中枢 → 三卖
-            if retrace.end_price < pivot.zd:
-                signals.append(Signal(
-                    type="sell3",
-                    time=retrace.end_time,
-                    price=retrace.end_price,
-                    strength=_type23_strength(pivot, _margin_ratio(pivot, pivot.zd, retrace.end_price)),
-                    divergence=None,
-                    description=(
-                        f"Type-3 sell: at {retrace.end_time}, after breaking below the pivot "
-                        f"({pivot.zd:.2f}-{pivot.zg:.2f}), price bounced to {retrace.end_price:.2f}, "
-                        f"staying below ZD ({pivot.zd:.2f}) without re-entering — confirms a type-3 sell"
-                        if is_en(lang) else
-                        f"三类卖点：{retrace.end_time} 跌破中枢({pivot.zd:.2f}-{pivot.zg:.2f})后"
-                        f"反抽至{retrace.end_price:.2f}，低于ZD({pivot.zd:.2f})未回中枢，确认三卖"
-                    ),
-                ))
-                break  # 每个中枢只取离开段内首个三卖
-    return signals
+def _describe(sig_type: str, time: str, price: float, span: str,
+              div: DivergenceResult | None, lang: str) -> str:
+    n = _span_count(span)
+    area = f"，MACD面积比值={div.area_ratio:.2f}" if div else ""
+    area_en = f"; MACD area ratio={div.area_ratio:.2f}" if div else ""
+    if is_en(lang):
+        legs = f"the last of {n} legs" if n else "the last leg"
+        texts = {
+            "buy1": f"Type-1 buy: at {time}, {legs} of the decline made a new low ({price:.2f}) with weaker "
+                    f"force than earlier legs (price range plus volume/duration fading) — a bottom divergence{area_en}",
+            "sell1": f"Type-1 sell: at {time}, {legs} of the advance made a new high ({price:.2f}) with weaker "
+                     f"force than earlier legs (price range plus volume/duration fading) — a top divergence{area_en}",
+            "buy2": f"Type-2 buy: at {time}, the pullback low ({price:.2f}) landed in a zone where several earlier "
+                    f"turning points clustered, finding support without a new low",
+            "sell2": f"Type-2 sell: at {time}, the rebound high ({price:.2f}) met a zone where several earlier "
+                     f"turning points clustered, capped without a new high",
+            "buy3": f"Type-3 buy: at {time}, after the prior five legs formed a pivot, the pullback low "
+                    f"({price:.2f}) stayed above the pivot top with the moving average stepping higher",
+            "sell3": f"Type-3 sell: at {time}, after the prior five legs formed a pivot, the rebound high "
+                     f"({price:.2f}) stayed below the pivot bottom with the moving average stepping lower",
+        }
+    else:
+        legs = f"近{n}笔" if n else "近几笔"
+        texts = {
+            "buy1": f"一类买点：{time} {legs}下跌中末笔创新低（{price:.2f}），但下跌力度弱于前段"
+                    f"（价差与量能/时长同步衰减），构成底背驰{area}",
+            "sell1": f"一类卖点：{time} {legs}上涨中末笔创新高（{price:.2f}），但上涨力度弱于前段"
+                     f"（价差与量能/时长同步衰减），构成顶背驰{area}",
+            "buy2": f"二类买点：{time} 回调低点（{price:.2f}）落在此前多次转折形成的价格密集区，获得支撑、未再创新低",
+            "sell2": f"二类卖点：{time} 反弹高点（{price:.2f}）触及此前多次转折形成的价格密集区，受压回落、未再创新高",
+            "buy3": f"三类买点：{time} 前五笔构成中枢后，回调低点（{price:.2f}）仍在中枢上沿之上未回中枢，且均线逐级抬升",
+            "sell3": f"三类卖点：{time} 前五笔构成中枢后，反弹高点（{price:.2f}）仍在中枢下沿之下未回中枢，且均线逐级下移",
+        }
+    return texts[sig_type]
 
 
 def generate_all_signals(
+    events: list[BsEvent],
     strokes: list[Stroke],
     divergences: list[DivergenceResult],
     pivots: list[Pivot],
     lang: str = "zh",
 ) -> list[Signal]:
-    """生成所有买卖点信号，按时间排序"""
+    """把 czsc 买卖点事件组装成 Signal，按时间排序、(类型, 时间) 去重。
+
+    - 落点：所属笔的终点（与图上笔端点对齐，_mark_confirmations 据此判断是否确认）。
+    - 一类强度：只反映该笔的背驰幅度（本地 MACD 面积 + DIF 双过滤）；本地度量未确认
+      背驰时降为 weak、不挂背驰对象——czsc 的一买判据是笔力度，二者可能不一致。
+    - 二/三类强度：信号前最近已结束中枢的级别 + 落点离对应边界的余量（_type23_strength）；
+      无可依中枢时为 weak。
+    """
+    div_by_end = {s.end_time: dv for s, dv in zip(strokes, divergences, strict=False)}
     signals: list[Signal] = []
-    signals.extend(generate_buy1_signals(strokes, divergences, lang))
-    signals.extend(generate_sell1_signals(strokes, divergences, lang))
-    signals.extend(generate_buy2_signals(strokes, pivots, lang))
-    signals.extend(generate_sell2_signals(strokes, pivots, lang))
-    signals.extend(generate_buy3_signals(strokes, pivots, lang))
-    signals.extend(generate_sell3_signals(strokes, pivots, lang))
-
-    signals.sort(key=lambda s: s.time)
-
-    # 去重：不同中枢（笔级/线段级、或延伸重叠）可能对同一笔对重复触发，
-    # 同一时间 + 同一类型只保留一个
     seen: set[tuple[str, str]] = set()
-    deduped: list[Signal] = []
-    for s in signals:
-        key = (s.type, s.time)
+    for ev in sorted(events, key=lambda e: e.bi_end_time):
+        key = (ev.type, ev.bi_end_time)
         if key in seen:
             continue
         seen.add(key)
-        deduped.append(s)
-    for sig in deduped:
-        sig.lang = lang
-    return deduped
+
+        div: DivergenceResult | None = None
+        strength: Literal["strong", "medium", "weak"] = "weak"
+        if ev.type in ("buy1", "sell1"):
+            dv = div_by_end.get(ev.bi_end_time)
+            if dv is not None and dv.is_diverged and dv.strength != "none":
+                div = dv
+                strength = dv.strength  # type: ignore[assignment]
+        else:
+            pivot = _latest_pivot_before(pivots, ev.bi_end_time)
+            if pivot is not None:
+                boundary = getattr(pivot, _TYPE23_BOUNDARY[ev.type])
+                strength = _type23_strength(pivot, _margin_ratio(pivot, boundary, ev.bi_end_price))
+
+        signals.append(Signal(
+            type=ev.type,
+            time=ev.bi_end_time,
+            price=ev.bi_end_price,
+            strength=strength,
+            divergence=div,
+            description=_describe(ev.type, ev.bi_end_time, ev.bi_end_price, ev.span, div, lang),
+            lang=lang,
+        ))
+    return signals

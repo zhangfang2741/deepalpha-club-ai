@@ -61,7 +61,8 @@ class CzscStructures:
 
 
 def ts_date(ts) -> str:
-    # str(date()) 输出 YYYY-MM-DD；包一层 str 以兼容 pyright 对 NaTType 的联合类型标注
+    """把 czsc 的 dt（pd.Timestamp）转成项目统一的 YYYY-MM-DD 时间字符串。"""
+    # 包一层 str(date()) 以兼容 pyright 对 NaTType 的联合类型标注
     return str(pd.Timestamp(ts).date())
 
 
