@@ -39,6 +39,7 @@ struct ChartLegend: View {
         // 顶底分型沿用原先同一个图层开关，两种颜色一起保留。
         item(Theme.topFractal, "分型", isOn: $vm.showFractals, secondaryColor: Theme.bottomFractal)
         item(Theme.up, "买卖点", isOn: $vm.showSignals, secondaryColor: Theme.down)
+        item(Theme.divergence, "背驰", isOn: $vm.showDivergences)
     }
 
     private func item(

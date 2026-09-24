@@ -97,8 +97,6 @@ struct ResultDetailView: View {
                     }
                 }
 
-            SubLevelSection(vm: vm)
-
             ResultSegments(analysis: analysis, isStatic: isStatic)
 
             compactDisclaimer

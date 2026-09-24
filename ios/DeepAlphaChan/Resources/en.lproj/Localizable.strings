@@ -357,4 +357,13 @@
 /* Chart */
 "价差 %@ · 量能 %@ · 时长 %@" = "Range %@ · Volume %@ · Duration %@";
 "量" = "Vol";
-"背驰标注" = "Div";
+"顶背驰" = "Top div";
+"底背驰" = "Bottom div";
+"背驰" = "Divergence";
+"30分" = "30m";
+"打开 30 分钟图表" = "Opens the 30-minute chart";
+"切换到 30 分钟完整分析" = "Switch to full 30-min analysis";
+"浅色底 = 最近 2 个交易日（次级别判断所看的区间）" = "Shaded = last 2 trading days (the window the lower-level check looks at)";
+"日线偏多" = "Daily bullish";
+"日线偏空" = "Daily bearish";
+"日线中性" = "Daily neutral";

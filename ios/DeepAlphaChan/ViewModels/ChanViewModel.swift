@@ -51,6 +51,7 @@ final class ChanViewModel: ObservableObject {
     @Published var showSegments = true
     @Published var showPivots = true
     @Published var showSignals = true
+    @Published var showDivergences = true
 
     // GAP 分析
     @Published var industryView: String = ""

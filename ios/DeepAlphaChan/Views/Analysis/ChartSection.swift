@@ -11,13 +11,23 @@ struct ChartSection: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            ChanChartView(analysis: analysis, vm: vm)
+            SubLevelBar(vm: vm, isStatic: isStatic)
+
+            ChanChartView(analysis: analysis, vm: vm, highlightFrom: drillFrom)
                 .overlay(alignment: .topTrailing) {
                     if !isStatic { fullscreenButton }
                 }
 
             ChartLegend(vm: vm, isStatic: isStatic)
         }
+    }
+
+    /// 日线图上标出次级别下钻区间：最近 2 根K线（≈ 30 分钟判断所看的最近 2 个交易日）。
+    private var drillFrom: String? {
+        guard vm.freq == "daily", vm.subLevel != nil else { return nil }
+        let candles = analysis.mergedCandles
+        guard candles.count >= 2 else { return nil }
+        return candles[candles.count - 2].time
     }
 
     private var fullscreenButton: some View {

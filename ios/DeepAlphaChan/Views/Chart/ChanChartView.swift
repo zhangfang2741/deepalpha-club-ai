@@ -29,6 +29,9 @@ struct ChanChartView: View {
     /// 窗口变化时回调（平移/缩放结束时触发一次，不在 onChanged 里刷）。
     var onWindowChange: ((ChartWindow) -> Void)? = nil
 
+    /// 次级别下钻区间的起点（K 线时间，含）：从这根到最新用浅色底标出。nil = 不标。
+    var highlightFrom: String? = nil
+
     /// 显式 init 只为一件事：把 `initialWindow` 灌进 @State 的**初始值**。
     ///
     /// 光靠 onAppear 里赋值不够 —— 离屏渲染不保证触发 onAppear，
@@ -39,6 +42,7 @@ struct ChanChartView: View {
          interactive: Bool = true,
          priceHeight: CGFloat = 240,
          macdHeight: CGFloat = 78,
+         highlightFrom: String? = nil,
          onWindowChange: ((ChartWindow) -> Void)? = nil) {
         self.analysis = analysis
         _vm = ObservedObject(wrappedValue: vm)
@@ -47,6 +51,7 @@ struct ChanChartView: View {
         self.priceHeight = priceHeight
         self.macdHeight = macdHeight
         self.onWindowChange = onWindowChange
+        self.highlightFrom = highlightFrom
         _firstVisible = State(initialValue: initialWindow?.firstVisible ?? 0)
         _visibleCount = State(initialValue: initialWindow?.visibleCount ?? 60)
     }
@@ -135,12 +140,13 @@ struct ChanChartView: View {
                     let plotW = size.width - rightAxisWidth
                     drawGrid(ctx, size: CGSize(width: plotW, height: size.height),
                              bounds: priceBounds)
+                    drawHighlight(ctx, plotWidth: plotW, height: size.height, range: range)
                     drawVolume(ctx, plotWidth: plotW, height: size.height, range: range)
                     drawCandles(ctx, plotWidth: plotW, height: size.height,
                                 range: range, bounds: priceBounds)
                     if vm.showPivots { drawPivots(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showStrokes { drawStrokes(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
-                    if vm.showStrokes { drawDivergences(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
+                    if vm.showDivergences { drawDivergences(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showSegments { drawSegments(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showFractals { drawFractals(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showSignals { drawSignals(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
@@ -541,6 +547,19 @@ struct ChanChartView: View {
         }
     }
 
+    // MARK: - 绘制：次级别下钻区间
+
+    /// 从 highlightFrom 到最新一根铺浅色底，顶部标「30分」——告诉用户下钻放大的是哪一段。
+    private func drawHighlight(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat, range: VisibleRange) {
+        guard let from = highlightFrom,
+              let start = candles.firstIndex(where: { $0.time >= from }) else { return }
+        let x1 = max(0, x(for: start, range: range) - range.candleWidth / 2)
+        let x2 = min(plotWidth, x(for: candles.count - 1, range: range) + range.candleWidth / 2)
+        guard x2 > x1 else { return }
+        ctx.fill(Path(CGRect(x: x1, y: 0, width: x2 - x1, height: height)),
+                 with: .color(Theme.accent.opacity(0.10)))
+    }
+
     // MARK: - 绘制：量柱（主图底部）
 
     /// 量柱占主图高度的比例。
@@ -574,8 +593,9 @@ struct ChanChartView: View {
     // MARK: - 绘制：背驰标注
 
     /// 力度背驰（价格创新高/低，但价差弱于前一个同向笔，且量能或时长也更弱）直接标在主图：
-    /// 粉色虚线连起参与比较的两笔终点（前一同向笔 → 当前笔），线中间标「背驰 0.52」（价差比）。
-    /// 一眼看出拿哪两段比、结论如何，与买卖点说明、背驰课程同一口径。
+    /// 粉色细实线连起参与比较的两笔终点（前一同向笔 → 当前笔），线中间标「顶背驰 0.52」
+    /// （价差比）。与行情软件画背离的习惯一致（实线连两个高点/低点 + 方向文字）；不用虚线，
+    /// 虚线在本图里专指「未确认」。一眼看出拿哪两段比、结论如何，与买卖点说明同一口径。
     private func drawDivergences(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
                                  range: VisibleRange, bounds: PriceBounds) {
         let strokes = analysis.strokes
@@ -591,7 +611,7 @@ struct ChanChartView: View {
             line.move(to: p1)
             line.addLine(to: p2)
             ctx.stroke(line, with: .color(Theme.divergence),
-                       style: StrokeStyle(lineWidth: 1.2, lineCap: .round, dash: [4, 3]))
+                       style: StrokeStyle(lineWidth: 1.3, lineCap: .round))
             for pt in [p1, p2] {
                 let r: CGFloat = 2.6
                 ctx.fill(Path(ellipseIn: CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)),
@@ -599,7 +619,8 @@ struct ChanChartView: View {
             }
 
             // 标签放在虚线中点、朝外侧（顶背驰在线上方、底背驰在线下方），避开端点上的买卖点徽标
-            let label = cur.priceRatio.map { L("背驰标注") + String(format: " %.2f", $0) } ?? L("背驰标注")
+            let kind = cur.direction == .up ? L("顶背驰") : L("底背驰")
+            let label = cur.priceRatio.map { kind + String(format: " %.2f", $0) } ?? kind
             let resolved = ctx.resolve(Text(label).font(.system(size: 9, weight: .semibold))
                                         .foregroundColor(Theme.divergence))
             let size = resolved.measure(in: CGSize(width: 200, height: 40))
