@@ -81,7 +81,17 @@
 
 1. **Spike（go/no-go 前提）**：✅ 已完成（见 `2026-09-23-czsc-spike-findings.md`）——`uv add czsc` 走预编译 wheel 安装成功，Python 3.13 环境可用；第二轮探测（2026-09-24）确认 `fx.mark == Mark.G` / `bi.direction == Direction.Up` 可直接比较（`.name` 给英文标识）、`BI.sdt/edt`/`FX.dt` 均为 `pd.Timestamp`、`generate_czsc_signals(bars, [dict...])` 返回逐 K 线信号字典（值格式 `v1_v2_v3_score`，如 `向上_延伸_任意_0`）。
 2. **结构识别引擎**：实现 `czsc_adapter.py` 的完整映射（`fx_list`/`bi_list`/`zs_list` → `Fractal`/`Stroke`/`Pivot`，含 `MergedCandle` 重建与 `confirmed` 语义），`analyzer.py` 步骤 1-5 改接 czsc，线段层输入换源，用真实股票人工核对笔/中枢画得对不对。
-3. **买卖点信号引擎**：实现 `czsc_signals.py`，替换 `divergence.py` 笔级背驰与 `signals.py` 买卖点，人工核对买卖点标注。
+3. **买卖点信号引擎**：实现 `czsc_signals.py`，替换 `signals.py` 买卖点判定，人工核对买卖点标注。
+
+   **Phase 3 实际方案（2026-09-24，基于真实数据探测 + 阅读 czsc 源码后确定）**：
+   - 信号选型（全部基于笔结构，不选纯 MACD 金叉死叉类，如 `tas_macd_first_bs_V221201` 实为零轴下金叉死叉节奏、不看笔结构）：
+     一买/一卖 `cxt_first_buy/sell_V221126`（最近 5~21 笔，末笔创新低/新高且价差/量能/长度力度弱于前段关键笔）；
+     二买/二卖 `cxt_second_bs_V240524`（W9T2：末笔终点分型与前 9 笔中 ≥2 个长笔终点分型价格重叠）；
+     三买/三卖 `cxt_third_bs_V230318`（SMA34：前 5 笔构中枢，第 5 笔离开中枢且三个转折点均线同向）。
+   - 用 `CzscSignals` 逐根推进（不回看未来），信号从「其他」切换为买卖点的那一刻，读取当时 `bi_list[-1]` 作为信号所属笔；Signal.time/price 取该笔终点，与图上笔端点对齐、`_mark_confirmations` 语义不变；按 (类型, 笔终点) 去重。
+   - czsc 信号是持续多根的「状态」而非事件（`score` 恒为 0、不给强度），故强度由我们计算：一买/一卖 = 对应笔的背驰强度（沿用「一类强度只反映背驰幅度」），二/三类 = 最近中枢级别 + 余量（复用 `_type23_strength`）。
+   - **背驰计算（`divergence.py`，MACD 面积 + DIF 双过滤）保留**：czsc 不输出面积比/DIF 比等可量化背驰指标，而推荐因子、走势展望、前端背驰字段依赖 `DivergenceResult`。即「是否构成买卖点」由 czsc 判定，「背驰有多强」仍由自研度量。
+   - 面向用户的描述文案不出现 czsc 字样。
 4. **业务层收尾与全量回归**：跑通 `tests/services/chan/`（逐个决定删除重写还是调整期望值），确认 LangGraph tools 无回归，手工过一遍 `/chan`、signal-radar、watchlist 页面。
 
 （原第 5-7 步"前端同步/iOS 学习模块更新"随 2026-09-24 修订取消——线段层保留后，schema 与前端完全不变。）
