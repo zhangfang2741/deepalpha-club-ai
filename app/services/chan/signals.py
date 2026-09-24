@@ -165,6 +165,9 @@ def generate_all_signals(
 ) -> list[Signal]:
     """把 czsc 买卖点事件组装成 Signal，按时间排序、(类型, 时间) 去重。
 
+    - 失效过滤：信号亮起时依据的「最后一笔」若后来被延伸（价格继续创新低/新高），
+      其端点在最终结构里已不存在——这是已失效的信号，丢弃；只保留所属笔仍是最终
+      结构中同向笔终点的事件（买点落下降笔终点、卖点落上升笔终点）。
     - 落点：所属笔的终点（与图上笔端点对齐，_mark_confirmations 据此判断是否确认）。
     - 一类强度：只反映该笔的背驰幅度（本地 MACD 面积 + DIF 双过滤）；本地度量未确认
       背驰时降为 weak、不挂背驰对象——czsc 的一买判据是笔力度，二者可能不一致。
@@ -172,11 +175,13 @@ def generate_all_signals(
       无可依中枢时为 weak。
     """
     div_by_end = {s.end_time: dv for s, dv in zip(strokes, divergences, strict=False)}
+    direction_by_end = {s.end_time: s.direction for s in strokes}
     signals: list[Signal] = []
     seen: set[tuple[str, str]] = set()
     for ev in sorted(events, key=lambda e: e.bi_end_time):
         key = (ev.type, ev.bi_end_time)
-        if key in seen:
+        want = "down" if ev.type.startswith("buy") else "up"
+        if key in seen or direction_by_end.get(ev.bi_end_time) != want:
             continue
         seen.add(key)
 

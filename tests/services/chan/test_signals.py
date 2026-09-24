@@ -111,7 +111,8 @@ def test_sell1_weak_divergence_not_promoted():
 def test_buy2_strength_uses_latest_pivot_before_signal():
     """二买强度取信号之前最近结束的中枢；贴着 ZD 回踩、笔级中枢 → weak。"""
     pivots = [_piv(90, 110, "2025-01-01", "2025-01-20")]
-    sig = generate_all_signals([_ev("buy2", "2025-02-01", 91.0)], [], [], pivots)
+    down = _st("down", "2025-01-25", "2025-02-01", 108, 91)
+    sig = generate_all_signals([_ev("buy2", "2025-02-01", 91.0)], [down], [_div("none", 1.0, diverged=False)], pivots)
     assert sig[0].type == "buy2" and sig[0].strength == "weak"
     assert sig[0].divergence is None
 
@@ -120,14 +121,16 @@ def test_buy3_strong_with_segment_pivot_and_large_margin():
     from app.services.chan.pivot import Pivot
     seg = Pivot(zg=110, zd=90, gg=112, dd=88, start_time="2025-01-01", end_time="2025-01-20",
                 level="segment", elements=[])
-    sig = generate_all_signals([_ev("buy3", "2025-02-01", 131.0)], [], [], [seg])
+    down = _st("down", "2025-01-25", "2025-02-01", 140, 131)
+    sig = generate_all_signals([_ev("buy3", "2025-02-01", 131.0)], [down], [_div("none", 1.0, diverged=False)], [seg])
     assert sig[0].strength == "strong"
 
 
 def test_pivot_ending_after_signal_is_ignored():
     """信号时刻尚未结束的中枢不能参与强度计算（不回看未来）→ 无中枢可依时为 weak。"""
     pivots = [_piv(90, 110, "2025-01-01", "2025-03-01")]
-    sig = generate_all_signals([_ev("sell3", "2025-02-01", 80.0)], [], [], pivots)
+    up = _st("up", "2025-01-25", "2025-02-01", 70, 80)
+    sig = generate_all_signals([_ev("sell3", "2025-02-01", 80.0)], [up], [_div("none", 1.0, diverged=False)], pivots)
     assert sig[0].strength == "weak"
 
 
@@ -138,10 +141,26 @@ def test_signals_sorted_deduped_and_localized():
         _ev("buy1", "2025-01-10", 100.0),
     ]
     down = _st("down", "2025-01-01", "2025-01-10", 120, 100)
-    sig = generate_all_signals(events, [down], [_div("medium", 0.6)], [], lang="en")
+    up = _st("up", "2025-02-20", "2025-03-01", 100, 120)
+    sig = generate_all_signals(events, [down, up], [_div("medium", 0.6), _div("none", 1.0, diverged=False)], [], lang="en")
     assert [s.type for s in sig] == ["buy1", "sell2"]
     assert sig[0].label == "1st Buy"
     assert "Type-1 buy" in sig[0].description
+
+
+def test_event_on_later_extended_stroke_is_dropped():
+    """信号所属笔后来被延伸（价格继续创新低/新高），该端点已不在最终结构中 → 视为失效信号丢弃。"""
+    final_down = _st("down", "2025-01-01", "2025-01-20", 120, 90)  # 1/10 的低点后又延伸到 1/20
+    events = [_ev("buy1", "2025-01-10", 100.0), _ev("buy2", "2025-01-20", 90.0)]
+    sig = generate_all_signals(events, [final_down], [_div("none", 1.0, diverged=False)], [])
+    assert [(s.type, s.time) for s in sig] == [("buy2", "2025-01-20")]
+
+
+def test_event_direction_must_match_stroke():
+    """买点只能落在下降笔终点、卖点只能落在上升笔终点。"""
+    up = _st("up", "2025-01-01", "2025-01-10", 100, 120)
+    sig = generate_all_signals([_ev("buy2", "2025-01-10", 120.0)], [up], [_div("none", 1.0, diverged=False)], [])
+    assert sig == []
 
 
 # ---- 二/三类买卖点强度：中枢级别 + 回踩/反抽余地加权 ----
