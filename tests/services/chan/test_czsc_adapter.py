@@ -1,9 +1,11 @@
 """czsc 适配层单元测试：bars(list[dict]) -> czsc.RawBar 的转换。"""
 from __future__ import annotations
 
+import datetime as dt
+
 from czsc import Freq
 
-from app.services.chan.czsc_adapter import bars_to_raw_bars, build_czsc
+from app.services.chan.czsc_adapter import bars_to_raw_bars, build_czsc, extract_structures
 
 
 def _bar(time: str, o: float, h: float, low: float, c: float, v: float = 1000.0) -> dict:
@@ -56,6 +58,7 @@ def _trending_bars(n: int, start_price: float, up: bool) -> list[dict]:
     amp = 5.0
     down_ratio = 0.5
     sign = 1.0 if up else -1.0
+    day0 = dt.date(2024, 1, 1)
     for i in range(n):
         cycle_pos = i % (2 * wave)
         step = sign * (amp if cycle_pos < wave else -amp * down_ratio)
@@ -64,7 +67,7 @@ def _trending_bars(n: int, start_price: float, up: bool) -> list[dict]:
         h = max(o, c) + 1.0
         low_ = min(o, c) - 1.0
         price = c
-        bars.append(_bar(f"2024-01-{i + 1:02d}" if i < 28 else f"2024-02-{i - 27:02d}", o, h, low_, c))
+        bars.append(_bar((day0 + dt.timedelta(days=i)).isoformat(), o, h, low_, c))
     return bars
 
 
@@ -78,3 +81,42 @@ def test_build_czsc_returns_object_with_structure_lists():
     assert isinstance(c.zs_list, list)
     # 40 根波动 K 线足够形成至少一笔
     assert len(c.bi_list) >= 1
+
+
+def test_extract_structures_maps_to_existing_dataclasses():
+    bars = _trending_bars(80, start_price=100.0, up=True)
+    c = build_czsc(bars, symbol="TEST", freq=Freq.D)
+    structures = extract_structures(c, bars)
+
+    times = {b["time"] for b in bars}
+    # 分型
+    for f in structures.fractals:
+        assert f.type in ("top", "bottom")
+        assert f.price == (f.candle.high if f.type == "top" else f.candle.low)
+        assert f.left.idx + 1 == f.candle.idx == f.right.idx - 1
+        assert f.time in times
+    # 笔：首尾相连 + 方向交替
+    for a, b in zip(structures.strokes, structures.strokes[1:], strict=False):
+        assert a.end.time == b.start.time
+        assert a.direction != b.direction
+    for s in structures.strokes:
+        assert s.start_time in times and s.end_time in times
+        if s.direction == "up":
+            assert s.start.type == "bottom" and s.end.type == "top"
+            assert s.end_price > s.start_price
+        else:
+            assert s.start.type == "top" and s.end.type == "bottom"
+            assert s.end_price < s.start_price
+    # 笔级中枢
+    for p in structures.stroke_pivots:
+        assert p.zg > p.zd
+        assert p.level == "stroke"
+        assert all(any(el is s for s in structures.strokes) for el in p.elements)
+    # 合并K线
+    mcs = structures.merged_candles
+    assert [mc.idx for mc in mcs] == list(range(len(mcs)))
+    for a, b in zip(mcs, mcs[1:], strict=False):
+        assert not (a.high >= b.high and a.low <= b.low)
+        assert not (b.high >= a.high and b.low <= a.low)
+        assert a.time < b.time
+        assert a.raw_start <= a.raw_end
