@@ -195,8 +195,9 @@ struct SignalRadarView: View {
                 // 同心参考环：越外越淡，呼应同一套"近实远虚"的纵深语言；环上直接标出
                 // 大致时间跨度，不用再靠单独一行说明文字解释三个圈是什么意思。
                 ForEach(Array(SignalRadarView.ringSpecs.enumerated()), id: \.offset) { idx, spec in
-                    let rx = hRad * spec.scale
-                    let ry = vRad * spec.scale
+                    // 正圆：离中心的距离 = 时间，各方向一致
+                    let rx = min(hRad, vRad) * spec.scale
+                    let ry = rx
                     Ellipse()
                         .stroke(Theme.textSecondary.opacity(0.16 - Double(idx) * 0.045),
                                 style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
@@ -371,86 +372,51 @@ struct SignalRadarView: View {
         return 0.6
     }
 
+    /// 气泡摆位：离中心的距离严格由时间决定（正圆轨道），方向任意。
+    ///
+    /// - 半径 = ringRadius(daysAgo) × 场半径（当天为圆心），同一天共用一条圆轨道；同一天
+    ///   多个气泡放不下时才外扩到刚好排开，且不越过所在时间档外沿（RadarOrbitSpacing.orbitRadius）。
+    /// - 方向：由内圈到外圈、大气泡先放，每个气泡在自己的圆上选与已摆气泡重叠最少的
+    ///   方向（RadarOrbitSpacing.bestAngle）。半径不为避让而改变——不同轨道放不开时允许重叠，
+    ///   否则「远近 = 时间」就不成立了。
     private static func layoutBubbles(
         signals: [RadarSignal], dayDate: String, width w: Double, height h: Double
     ) -> [BubbleLayout] {
         guard !signals.isEmpty else { return [] }
         let (hRad, vRad) = fieldRadii(width: w, height: h)
+        let fieldRadius = min(hRad, vRad)
+        let center = (x: w / 2, y: h / 2)
         let scales = ringSpecs.map(\.scale)
-        let bandBounds = [(0.0, scales[0]), (scales[0], scales[1]), (scales[1], scales[2])]
         func age(_ s: RadarSignal) -> Int { daysAgo(from: s.date, to: dayDate) }
-        func rawDiameter(_ s: RadarSignal) -> Double {
+        func bubbleDiameter(_ s: RadarSignal) -> Double {
             diameter(forLevel: s.level) * ringSizeFactor(forDaysAgo: age(s))
         }
-        // 总面积放不下时全部气泡等比缩小（保留一/二/三类相对大小），不然必然互相压住
-        let sizeScale = RadarOrbitSpacing.areaScale(diameters: signals.map(rawDiameter), hRad: hRad, vRad: vRad)
-        func baseDiameter(_ s: RadarSignal) -> Double { rawDiameter(s) * sizeScale }
-        // 按时间档分组；档内由新到旧（越新越靠内、最新居中），同日按稳定标识排序，
-        // 避免强度排名变化导致同一批气泡交换位置。
-        let groups: [[RadarSignal]] = (0..<3).map { band in
-            signals.filter { bandIndex(forDaysAgo: age($0)) == band }
-                .sorted { (age($0), $0.id) < (age($1), $1.id) }
-        }
-        let plan = RadarOrbitSpacing.planOrbits(
-            bands: groups.enumerated().map { index, members in
-                RadarOrbitSpacing.BandInput(
-                    count: members.count, maxDiameter: members.map(baseDiameter).max() ?? 0,
-                    bandMin: bandBounds[index].0, bandMax: bandBounds[index].1)
-            },
-            hRad: hRad, vRad: vRad)
-
+        let byDay = Dictionary(grouping: signals, by: age)
         var layouts: [BubbleLayout] = []
-        var taken = [0, 0, 0]
-        for (orbitIndex, orbit) in plan.orbits.enumerated() {
-            let members = Array(groups[orbit.band][taken[orbit.band]..<(taken[orbit.band] + orbit.count)])
-            taken[orbit.band] += orbit.count
-            var best: [BubbleLayout] = []
-            var bestScore = Double.infinity
-            // 轨道整体转动找重叠最少的起始角：只需搜索一个等距间隔（1/count 圈）。
-            let rotations = orbit.radius == 0 ? 1 : 24
-            for rotation in 0..<rotations {
-                let offset = Double(orbitIndex) * 0.381966
-                    + Double(rotation) / Double(rotations) / Double(max(orbit.count, 1))
-                let angles = RadarOrbitSpacing.angles(
-                    count: members.count, horizontalRadius: hRad, verticalRadius: vRad, offset: offset)
-                let candidate = members.enumerated().map { index, sig in
-                    let d = baseDiameter(sig)
-                    let x = w / 2 + orbit.radius * hRad * cos(angles[index])
-                    let y = h / 2 + orbit.radius * vRad * sin(angles[index])
-                    return BubbleLayout(
-                        signal: sig, diameter: d,
-                        x: min(max(x, d / 2 + 2), w - d / 2 - 2),
-                        y: min(max(y, d / 2 + 2), h - d / 2 - 2),
-                        phase: Double(layouts.count + index) * 0.35, daysAgo: age(sig))
-                }
-                var score = 0.0
-                for (index, bubble) in candidate.enumerated() {
-                    for other in layouts + Array(candidate.prefix(index)) {
-                        let gap = (bubble.diameter + other.diameter) / 2 + 6
-                        let overlap = max(0, gap - hypot(bubble.x - other.x, bubble.y - other.y))
-                        score += overlap * overlap
-                    }
-                }
-                if score < bestScore {
-                    bestScore = score
-                    best = candidate
-                }
+        var placed: [RadarOrbitSpacing.Placed] = []
+        for (orbitIndex, days) in byDay.keys.sorted().enumerated() {
+            // 大气泡先占位；同尺寸按稳定标识排序，强度排名变化时气泡不互换位置
+            let members = (byDay[days] ?? []).sorted {
+                (bubbleDiameter($0), $1.id) > (bubbleDiameter($1), $0.id)
             }
-            layouts.append(contentsOf: best)
+            let radius = fieldRadius * RadarOrbitSpacing.orbitRadius(
+                timeRadius: ringRadius(forDaysAgo: days, fieldRadius: 1),
+                diameters: members.map(bubbleDiameter), fieldRadius: fieldRadius,
+                cap: scales[bandIndex(forDaysAgo: days)])
+            // 各轨道首选方向错开（黄金角），避免所有轨道都从正上方开始排
+            let preferred = -Double.pi / 2 + Double(orbitIndex) * 2.399963
+            for sig in members {
+                let d = bubbleDiameter(sig)
+                let angle = RadarOrbitSpacing.bestAngle(
+                    radius: radius, diameter: d, center: center, placed: placed, preferred: preferred)
+                let x = min(max(center.x + radius * cos(angle), d / 2 + 2), w - d / 2 - 2)
+                let y = min(max(center.y + radius * sin(angle), d / 2 + 2), h - d / 2 - 2)
+                placed.append(.init(x: x, y: y, diameter: d))
+                layouts.append(BubbleLayout(signal: sig, diameter: d, x: x, y: y,
+                                            phase: Double(layouts.count) * 0.35, daysAgo: days))
+            }
         }
-        // 碰撞松弛：轨道只是初始位置，同环带内等距摆放、跨环带时仍可能挤压；推开重叠的
-        // 气泡，并用弱回复力把每个拉回自己轨道半径，保留「越靠中心越新」。
-        let bodies = layouts.map { l -> RadarOrbitSpacing.Body in
-            let r = hypot((l.x - w / 2) / max(hRad, 1), (l.y - h / 2) / max(vRad, 1))
-            return .init(x: l.x, y: l.y, diameter: l.diameter, targetRadius: r)
-        }
-        let relaxed = RadarOrbitSpacing.relax(bodies, width: w, height: h, hRad: hRad, vRad: vRad, gap: 4)
-        for i in layouts.indices {
-            layouts[i].x = relaxed[i].x
-            layouts[i].y = relaxed[i].y
-        }
-        // 同一环内谁在最上层：越接近查看日（daysAgo 越小）画得越晚，叠层里就浮在
-        // 更外面（更靠近用户）；离得越久远的沉在下面。
+        // 叠层：越接近查看日（daysAgo 越小）画得越晚，重叠时新的浮在上面
         layouts.sort { $0.daysAgo > $1.daysAgo }
         return layouts
     }
