@@ -84,6 +84,20 @@ struct ResultDetailView: View {
 
             ChartSection(analysis: analysis, vm: vm,
                          onFullscreen: openFullscreen, isStatic: isStatic)
+                .allowsHitTesting(isStatic || !vm.isLoading)
+                .accessibilityHidden(!isStatic && vm.isLoading)
+                .overlay {
+                    if !isStatic && vm.isLoading {
+                        // 覆盖图表而不改变布局高度，保留原图直到新周期加载完成。
+                        ZStack {
+                            Theme.background.opacity(0.75)
+                            ProgressView()
+                                .controlSize(.large)
+                                .tint(Theme.accent)
+                                .accessibilityLabel(L("正在切换周期…"))
+                        }
+                    }
+                }
 
             SubLevelSection(vm: vm)
 
@@ -97,27 +111,21 @@ struct ResultDetailView: View {
 
     /// 周期切换：原地重新分析（30 分钟级别由后端收窄到最近 30 天），失败退回原周期。
     private var periodSwitcher: some View {
-        VStack(spacing: 6) {
-            Picker("", selection: Binding(
-                get: { vm.freq },
-                set: { newFreq in Task { await vm.switchFreq(newFreq) } }
-            )) {
-                Text(L("日线")).tag("daily")
-                Text(L("周线")).tag("weekly")
-                Text(L("30分钟")).tag("30min")
-            }
-            .pickerStyle(.segmented)
-            .disabled(vm.isLoading)
-
-            if vm.isLoading {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text(L("正在切换周期…")).font(.caption).foregroundColor(Theme.textSecondary)
-                }
-            } else if let err = vm.errorMessage {
-                Text(err).font(.caption).foregroundColor(Theme.up)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        Picker("", selection: Binding(
+            get: { vm.freq },
+            set: { newFreq in Task { await vm.switchFreq(newFreq) } }
+        )) {
+            Text(L("日线")).tag("daily")
+            Text(L("周线")).tag("weekly")
+            Text(L("30分钟")).tag("30min")
+        }
+        .pickerStyle(.segmented)
+        .disabled(vm.isLoading)
+        .alert(vm.errorMessage ?? "", isPresented: Binding(
+            get: { !vm.isLoading && vm.errorMessage != nil },
+            set: { if !$0 { vm.errorMessage = nil } }
+        )) {
+            Button(L("好"), role: .cancel) {}
         }
     }
 

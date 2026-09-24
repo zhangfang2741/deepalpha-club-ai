@@ -14,7 +14,7 @@ import SwiftUI
 ///   （`signal.confirmed == false`），跟图表页「虚线=未确认」同一套语言。这是
 ///   「这一条信号有没有走完」的实时状态，跟大小编码的「这一类信号本身多可信」
 ///   是两件不同的事，不重复；
-/// - 居中程度：时间距离——信号是哪天出现的离当前查看的这天越近，越靠中心；
+/// - 居中程度：时间档位——按 1 周内、2 周内、1 月内由内向外分层，同档位均匀排列；
 ///   后端会让一只股票的信号在被更新的信号覆盖前持续「在场」（见
 ///   app/services/signal_radar/service.py 的按日重建），所以翻看某一天时，
 ///   有的气泡是当天新出现的（右上角标"新"），有的是更早出现、一直有效到今天的。
@@ -289,9 +289,7 @@ struct SignalRadarView: View {
         }
     }
 
-    /// 单个气泡的最终布局：先按「离查看日多少天」落到三个同心环之一（对应场里画的
-    /// 三条参考虚线圈）+ 向日葵螺旋角度定初始位置，再跑一轮碰撞松弛
-    /// （resolveOverlaps）把挤在一起的气泡推开，保证点得到。
+    /// 每个时间环带共用一条等距轨道，只整体转动轨道来缓解遮挡，不单独推挤气泡。
     private struct BubbleLayout: Identifiable {
         let signal: RadarSignal
         let diameter: Double
@@ -326,9 +324,8 @@ struct SignalRadarView: View {
     /// 每个环位内部按 daysAgo 线性插值的时间跨度上限（1月内档没有硬边界，用 30 天封顶）。
     private static let ringBandMaxDays: [Int] = [7, 14, 30]
 
-    /// 时间距离 → 具体半径（不再是卡死在环线上的三个定值）：同一环位内部也按 daysAgo
-    /// 线性插值，比如距查看日 3 天的信号落在「1周内」环（0~scale0）的 3/7 处，而不是
-    /// 一律贴到 scale0 那条环线上——环线只是每个时间档的上限，不是气泡的固定摆放半径。
+    /// 时间距离 → 建议半径；布局取同环建议半径的均值，并按数量展开到环带边界以内。
+    /// 同一环带共用最终半径，避免逐个径向偏移破坏周长上的均匀间隔。
     static func ringRadius(forDaysAgo daysAgo: Int, fieldRadius: Double) -> Double {
         let scales = ringSpecs.map(\.scale)
         if daysAgo <= ringBandMaxDays[0] {
@@ -362,27 +359,67 @@ struct SignalRadarView: View {
         signals: [RadarSignal], dayDate: String, width w: Double, height h: Double
     ) -> [BubbleLayout] {
         guard !signals.isEmpty else { return [] }
-        let golden = 2.399963
-        // 与参考环共用的内缩场半轴：椭圆填满画布，气泡按「时间→半径分数」摆到对应环带。
-        let (hRad, vRad) = SignalRadarView.fieldRadii(width: w, height: h)
-
-        var layouts: [BubbleLayout] = signals.enumerated().map { index, sig in
-            let da = daysAgo(from: sig.date, to: dayDate)
-            let diameter = SignalRadarView.diameter(forLevel: sig.level) * ringSizeFactor(forDaysAgo: da)
-            let r = diameter / 2
-            // ringRadius 传 fieldRadius=1 得到「占半轴的分数(0~1)」，再各轴留出气泡半径
-            // 余量（fMax），避免最外环的大气泡贴边被圆角容器裁掉。
-            let f = ringRadius(forDaysAgo: da, fieldRadius: 1.0)
-            let fMax = min(1.0, (hRad - r - 4) / max(hRad, 1), (vRad - r - 4) / max(vRad, 1))
-            let ff = min(f, fMax)
-            let ang = Double(index) * golden
-            var x = w / 2 + ff * hRad * cos(ang)
-            var y = h / 2 + ff * vRad * sin(ang)
-            x = min(max(x, r + 2), w - r - 2)
-            y = min(max(y, r + 2), h - r - 2)
-            return BubbleLayout(signal: sig, diameter: diameter, x: x, y: y, phase: Double(index) * 0.35, daysAgo: da)
+        let (hRad, vRad) = fieldRadii(width: w, height: h)
+        // 使用稳定标识排序，避免强度排名变化导致同一批气泡交换位置。
+        let groups = Dictionary(grouping: signals) { signal in
+            let age = daysAgo(from: signal.date, to: dayDate)
+            return age <= 7 ? 0 : (age <= 14 ? 1 : 2)
         }
-        resolveOverlaps(&layouts, width: w, height: h, hRad: hRad, vRad: vRad)
+        var layouts: [BubbleLayout] = []
+        for bandIndex in 0..<3 {
+            let members = (groups[bandIndex] ?? []).sorted { $0.id < $1.id }
+            guard !members.isEmpty else { continue }
+            let largestDiameter = members.map {
+                diameter(forLevel: $0.level) * ringSizeFactor(forDaysAgo: daysAgo(from: $0.date, to: dayDate))
+            }.max() ?? 0
+            // 多个当天信号也需要非零起始半径，否则全部重合在圆心、没有分离方向。
+            let spreadRadius = members.count > 1
+                ? (largestDiameter + 8) / (2 * sin(.pi / Double(members.count)) * max(1, min(hRad, vRad)))
+                : 0
+            let ages = members.map { daysAgo(from: $0.date, to: dayDate) }
+            let band = ringBandBounds(forDaysAgo: ages[0], fieldRadius: 1)
+            let radiusLimit = max(0, min(
+                band.max,
+                (hRad - largestDiameter / 2 - 4) / max(hRad, 1),
+                (vRad - largestDiameter / 2 - 4) / max(vRad, 1)
+            ))
+            // 同环共用半径，避免不同日期和气泡大小把等距角度重新拉成疏密不一的形状。
+            let averageRadius = ages.reduce(0.0) {
+                $0 + ringRadius(forDaysAgo: $1, fieldRadius: 1)
+            } / Double(members.count)
+            let radius = min(radiusLimit, max(band.min, averageRadius, spreadRadius))
+            var best: [BubbleLayout] = []
+            var bestScore = Double.infinity
+            // 只搜索整圈的起始位置，任何避让结果都必须保留同环等弧长间隔。
+            for rotation in 0..<48 {
+                let angles = RadarOrbitSpacing.angles(
+                    count: members.count, horizontalRadius: hRad, verticalRadius: vRad,
+                    offset: Double(bandIndex) * 0.381966 + Double(rotation) / 48
+                )
+                let candidate = members.enumerated().map { index, sig in
+                    BubbleLayout(
+                        signal: sig,
+                        diameter: diameter(forLevel: sig.level) * ringSizeFactor(forDaysAgo: ages[index]),
+                        x: w / 2 + radius * hRad * cos(angles[index]),
+                        y: h / 2 + radius * vRad * sin(angles[index]),
+                        phase: Double(index) * 0.35, daysAgo: ages[index]
+                    )
+                }
+                var score = 0.0
+                for (index, bubble) in candidate.enumerated() {
+                    for other in layouts + Array(candidate.prefix(index)) {
+                        let gap = (bubble.diameter + other.diameter) / 2 + 8
+                        let overlap = max(0, gap - hypot(bubble.x - other.x, bubble.y - other.y))
+                        score += overlap * overlap
+                    }
+                }
+                if score < bestScore {
+                    bestScore = score
+                    best = candidate
+                }
+            }
+            layouts.append(contentsOf: best)
+        }
         // 同一环内谁在最上层：越接近查看日（daysAgo 越小）画得越晚，叠层里就浮在
         // 更外面（更靠近用户）；离得越久远的沉在下面。
         layouts.sort { $0.daysAgo > $1.daysAgo }
@@ -398,52 +435,6 @@ struct SignalRadarView: View {
         if daysAgo <= ringBandMaxDays[0] { return (0, scales[0] * fieldRadius) }
         if daysAgo <= ringBandMaxDays[1] { return (scales[0] * fieldRadius, scales[1] * fieldRadius) }
         return (scales[1] * fieldRadius, scales[2] * fieldRadius)
-    }
-
-    /// 简单的迭代松弛：每一对挤太近的气泡沿连心线互相推开，直到间距 >= 两者半径和
-    /// 的 90%（留一点点重叠的自然感，但不能像之前那样能整个盖住点不到）。
-    private static func resolveOverlaps(
-        _ layouts: inout [BubbleLayout], width w: Double, height h: Double, hRad: Double, vRad: Double
-    ) {
-        let minFactor = 0.9
-        let cx = w / 2, cy = h / 2
-        for _ in 0..<12 {
-            for i in 0..<layouts.count {
-                for j in (i + 1)..<layouts.count {
-                    let dx = layouts[j].x - layouts[i].x
-                    let dy = layouts[j].y - layouts[i].y
-                    let dist = max((dx * dx + dy * dy).squareRoot(), 0.001)
-                    let minDist = (layouts[i].diameter + layouts[j].diameter) / 2 * minFactor
-                    guard dist < minDist else { continue }
-                    let overlap = (minDist - dist) / 2
-                    let ux = dx / dist, uy = dy / dist
-                    layouts[i].x -= ux * overlap
-                    layouts[i].y -= uy * overlap
-                    layouts[j].x += ux * overlap
-                    layouts[j].y += uy * overlap
-                }
-            }
-            for i in 0..<layouts.count {
-                let r = layouts[i].diameter / 2
-                layouts[i].x = min(max(layouts[i].x, r + 2), w - r - 2)
-                layouts[i].y = min(max(layouts[i].y, r + 2), h - r - 2)
-                // 径向回拉：碰撞推挤只允许改变角度，不允许把气泡挤出自己所属的环位半径带
-                // （否则一个刚出现的 daysAgo=0 信号会被外环的拥挤挤到外环去，居中程度失真）。
-                // 环带回拉在「归一化椭圆」坐标里做：偏移各除以对应半轴得到 0~1 的椭圆
-                // 半径分数，卡回该 daysAgo 所属环带 [min,max]（同为分数），再等比缩放回去。
-                let band = ringBandBounds(forDaysAgo: layouts[i].daysAgo, fieldRadius: 1.0)
-                let nx = (layouts[i].x - cx) / max(hRad, 1)
-                let ny = (layouts[i].y - cy) / max(vRad, 1)
-                let nd = max((nx * nx + ny * ny).squareRoot(), 0.001)
-                let fMax = min(band.max, (hRad - r - 4) / max(hRad, 1), (vRad - r - 4) / max(vRad, 1))
-                let clamped = min(max(nd, band.min), fMax)
-                if abs(clamped - nd) > 0.001 {
-                    let scale = clamped / nd
-                    layouts[i].x = cx + (layouts[i].x - cx) * scale
-                    layouts[i].y = cy + (layouts[i].y - cy) * scale
-                }
-            }
-        }
     }
 
     /// 买卖点级别 → 气泡直径：级别越高确定性越强，气泡越大。一类只是背驰迹象、
@@ -842,7 +833,7 @@ private struct RadarBubble: View {
             // 不想让所有气泡都套上边框，那样反而弱化了「未确认」这个特殊标记）。
             Circle().fill(color)
             if !signal.confirmed {
-                Circle().stroke(style: StrokeStyle(lineWidth: 2, dash: [4, 3]))
+                Circle().stroke(style: StrokeStyle(lineWidth: 0.5, dash: [4, 3]))
                     .foregroundColor(.white.opacity(0.85))
             }
 
