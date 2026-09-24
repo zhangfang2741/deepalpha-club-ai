@@ -222,6 +222,11 @@ def setup_logging() -> None:
         handlers=[file_handler, console_handler],
     )
 
+    # HTTP 客户端库在 INFO/DEBUG 级别会打印完整请求 URL，而 FMP 等数据源把 apikey
+    # 放在查询参数里——不压下来就会把密钥明文写进控制台与日志文件（线上 Railway 日志）。
+    for noisy in ("httpx", "httpcore", "urllib3"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
     # Configure structlog based on environment
     if settings.LOG_FORMAT == "console":
         # Development-friendly console logging
