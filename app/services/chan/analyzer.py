@@ -401,7 +401,14 @@ class ChanAnalyzer:
         - bars_count：改为可见窗口内的原始K线数，使摘要计数与所见一致。
         """
         r.fractals = [f for f in r.fractals if f.time >= from_time]
-        r.strokes = [s for s in r.strokes if s.end_time >= from_time]
+        # 笔与笔级背驰按索引平行（下游 zip(strokes, divergences) 依赖对齐），需一并过滤
+        if len(r.divergences) == len(r.strokes):
+            kept_s = [(s, dv) for s, dv in zip(r.strokes, r.divergences, strict=True)
+                      if s.end_time >= from_time]
+            r.strokes = [s for s, _ in kept_s]
+            r.divergences = [dv for _, dv in kept_s]
+        else:
+            r.strokes = [s for s in r.strokes if s.end_time >= from_time]
         # 线段与线段级背驰按索引平行，需一并过滤以保持对齐
         if r.segment_divergences and len(r.segment_divergences) == len(r.segments):
             kept = [(g, dv) for g, dv in zip(r.segments, r.segment_divergences, strict=False)

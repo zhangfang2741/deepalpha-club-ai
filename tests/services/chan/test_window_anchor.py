@@ -84,3 +84,19 @@ def test_no_visible_from_is_unchanged():
     b = analyzer.analyze("T", full, visible_from=None)
     assert len(a.strokes) == len(b.strokes)
     assert len(a.merged_candles) == len(b.merged_candles)
+
+
+def test_clip_keeps_stroke_divergences_aligned_with_strokes():
+    """裁剪后笔级背驰仍与笔按下标一一对应（下游 zip(strokes, divergences) 依赖此对齐）。"""
+    bars = _walk(400, seed=11)
+    cut = bars[200]["time"]
+    full = ChanAnalyzer().analyze("T", bars)
+    clipped = ChanAnalyzer().analyze("T", bars, visible_from=cut)
+
+    by_stroke = {
+        (s.start_time, s.end_time): dv
+        for s, dv in zip(full.strokes, full.divergences, strict=True)
+    }
+    assert len(clipped.divergences) == len(clipped.strokes)
+    for s, dv in zip(clipped.strokes, clipped.divergences, strict=True):
+        assert dv == by_stroke[(s.start_time, s.end_time)]
