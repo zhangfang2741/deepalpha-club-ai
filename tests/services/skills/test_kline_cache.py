@@ -2,23 +2,19 @@
 from app.services.skills.kline import _cache_key
 
 
-def test_cache_key_includes_user_id():
-    """缓存键区分登录用户与匿名."""
-    assert "u42" in _cache_key(42, "NVDA", "2024-01-01", "2025-01-01", "daily")
-    assert "public" in _cache_key(None, "NVDA", "2024-01-01", "2025-01-01", "daily")
+def test_cache_key_shared_across_users():
+    """K 线与用户无关，所有用户（含雷达扫描的匿名调用）共用同一份缓存.
 
-
-def test_cache_key_different_for_different_users():
-    """不同用户的缓存键不同."""
-    k1 = _cache_key(1, "NVDA", "2024-01-01", "2025-01-01", "daily")
-    k2 = _cache_key(2, "NVDA", "2024-01-01", "2025-01-01", "daily")
-    assert k1 != k2
+    回归：按用户分缓存时，雷达（public）与用户点进详情（u42）各自在不同时刻取数，
+    盘中未收盘K线不同 → 同一只股票两边笔与买卖点不一致（雷达有 9.22 买点、详情没有）。
+    """
+    keys = {_cache_key(uid, "NVDA", "2024-01-01", "2025-01-01", "daily") for uid in (None, 1, 42)}
+    assert len(keys) == 1
 
 
 def test_cache_key_includes_symbol_and_dates():
     """缓存键包含代码与起止日期."""
     k = _cache_key(42, "NVDA", "2024-01-01", "2025-01-01", "daily")
-    assert "u42" in k
     assert "NVDA" in k
     assert "2024-01-01" in k
     assert "2025-01-01" in k

@@ -89,9 +89,14 @@ def _cache_ttl_for(freq: str, end_date: str, *, today: date | None = None) -> in
 
 
 def _cache_key(user_id: int | None, symbol: str, start: str, end: str, freq: str) -> str:
-    prefix = f"u{user_id}" if user_id else "public"
-    # 命名空间带 qfq：切换到前复权后，旧的不复权缓存不能再被命中
-    return f"skill_kline:qfq:{prefix}:{symbol}:{start}:{end}:{freq}"
+    """K 线缓存键：与用户无关（行情对所有人一样），user_id 参数仅为兼容调用方保留。
+
+    所有用户与雷达扫描共用同一份缓存，同一区间读到同一份K线——按用户分缓存时，雷达
+    与详情页在不同时刻取数（盘中未收盘K线不同），同一只股票两边的笔和买卖点会对不上。
+    命名空间带 qfq：切换到前复权后，旧的不复权缓存不能再被命中。
+    """
+    del user_id
+    return f"skill_kline:qfq:public:{symbol}:{start}:{end}:{freq}"
 
 
 # 市场判别已提升到 app/utils/market.py：这里原本只区分「6 位数字 = A 股，
