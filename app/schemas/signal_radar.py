@@ -25,6 +25,13 @@ class RadarSignalOut(BaseModel):
     # （离开段/回抽确认/背驰转折）=深，见 app/services/chan/replay.py 按发生
     # 日期回溯的 pivot_phase_as_of。决定前端气泡颜色深浅。
     pivot_stage_depth: float = Field(description="信号发生当天的中枢阶段深浅 0~1，决定气泡颜色深浅")
+    # 次级别确认（日线定方向 × 30 分钟找买卖点），只对最新交易日的入榜气泡补算；
+    # 其余日期、补算失败或 30 分钟不可用时为 None。见 app/services/chan/sub_level.py。
+    sub_level_verdict: str | None = Field(
+        default=None,
+        description="resonance_buy / resonance_sell / counter_trend / waiting / unavailable",
+    )
+    sub_level_label: str | None = Field(default=None, description="次级别结论文案，如 共振买点")
 
 
 class RadarDayOut(BaseModel):

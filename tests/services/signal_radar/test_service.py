@@ -333,3 +333,40 @@ class TestCacheStaleness:
                 raise RuntimeError("boom")
 
         assert await svc._cache_is_stale(_BoomRedis(), "us", "nasdaq100") is False
+
+
+class TestAttachSubLevels:
+    """只给最新一天入榜气泡补算次级别结论；缺日线结果或补算失败时留空、不影响榜单。"""
+
+    def _day(self):
+        from app.schemas.signal_radar import RadarDayOut, RadarSignalOut
+
+        def sig(sym):
+            return RadarSignalOut(symbol=sym, name=sym, side="buy", label="一买", signal_type="buy1",
+                                  date="2026-09-24", price=1.0, strength=0.5, bias="bullish",
+                                  signal_strength="medium", confirmed=True, pivot_stage_depth=0.5)
+        return RadarDayOut(date="2026-09-24", buy_count=3, sell_count=0,
+                           signals=[sig("AAPL"), sig("NVDA"), sig("MSFT")])
+
+    async def test_fills_verdict_for_symbols_with_daily_result(self, monkeypatch):
+        from app.services.chan.analyzer import ChanAnalysisResult
+        from app.services.chan.sub_level import SubLevelResult
+        from app.services.signal_radar import service
+
+        async def fake_sub(symbol, end_date, daily, **kwargs):
+            if symbol == "NVDA":
+                raise RuntimeError("boom")
+            return SubLevelResult(daily_bias="bullish", daily_bias_label="偏强", verdict="resonance_buy",
+                                  verdict_label="共振买点", detail="")
+
+        monkeypatch.setattr(service, "analyze_sub_level", fake_sub)
+        day = self._day()
+        results = {"AAPL": ChanAnalysisResult(symbol="AAPL", bars_count=1),
+                   "NVDA": ChanAnalysisResult(symbol="NVDA", bars_count=1)}
+        await service.attach_sub_levels(day, results, end_date="2026-09-24", user_id=None, redis=None)
+
+        by_sym = {s.symbol: s for s in day.signals}
+        assert by_sym["AAPL"].sub_level_verdict == "resonance_buy"
+        assert by_sym["AAPL"].sub_level_label == "共振买点"
+        assert by_sym["NVDA"].sub_level_verdict is None   # 补算失败留空
+        assert by_sym["MSFT"].sub_level_verdict is None   # 没有日线结果留空

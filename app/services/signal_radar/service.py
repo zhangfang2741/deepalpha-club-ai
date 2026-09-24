@@ -38,6 +38,7 @@ from app.schemas.signal_radar import (
 from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
 from app.services.chan.pivot_phase import PivotPhase
 from app.services.chan.replay import pivot_phase_as_of
+from app.services.chan.sub_level_service import analyze_sub_level
 from app.services.signal_radar.constituents import resolve_constituents
 from app.services.signal_radar.universe import get_universe, list_universes
 from app.services.skills.kline import fetch_kline
@@ -48,6 +49,8 @@ _analyzer = ChanAnalyzer()
 _WARMUP_DAYS = 180
 # 并发扫描的信号量：控制对行情源的压力
 _SCAN_CONCURRENCY = 8
+# 次级别补算（美股每只要分段请求 FMP 30 分钟）并发上限，避免撞限流
+_SUB_LEVEL_CONCURRENCY = 4
 # 命中限流后单个任务自我冷却的时长：不缩并发槽位数，而是让占着槽位的这个任务
 # 多蹲一会儿再放行——变相拉低后续请求打过去的频率，给数据源喘息空间。
 _RATE_LIMIT_BACKOFF_SECONDS = 5
@@ -279,6 +282,33 @@ def build_days(
     return out
 
 
+async def attach_sub_levels(
+    day: RadarDayOut, daily_results: dict[str, ChanAnalysisResult], *,
+    end_date: str, user_id: int | None, redis: Redis | None,
+) -> None:
+    """给某一天的入榜气泡补算次级别结论（原地写入 sub_level_verdict/label）。
+
+    只对入榜的候选（约 top_n 只）拉 30 分钟，控制请求量；缺日线结果或补算失败的
+    候选留空，不影响榜单。
+    """
+    sem = asyncio.Semaphore(_SUB_LEVEL_CONCURRENCY)
+
+    async def _one(sig: RadarSignalOut) -> None:
+        daily = daily_results.get(sig.symbol)
+        if daily is None:
+            return
+        async with sem:
+            try:
+                sub = await analyze_sub_level(sig.symbol, end_date, daily, user_id=user_id, redis=redis)
+            except Exception as e:  # noqa: BLE001 单只补算失败不影响榜单
+                logger.warning("signal_radar_sub_level_failed", symbol=sig.symbol, error=str(e))
+                return
+        sig.sub_level_verdict = sub.verdict
+        sig.sub_level_label = sub.verdict_label
+
+    await asyncio.gather(*[_one(sig) for sig in day.signals])
+
+
 def _trading_days_from_bars(bars: list[dict], *, cutoff: str, end_date: str, limit: int) -> list[str]:
     """从一串日线 bar 里提取 [cutoff, end_date] 内的交易日期，最新在前，最多取 limit 个。"""
     dates = sorted({b["time"][:10] for b in bars if cutoff <= b["time"][:10] <= end_date}, reverse=True)
@@ -303,7 +333,7 @@ def _fallback_trading_days(*, end_date: str, limit: int) -> list[str]:
 async def _scan_symbol(
     symbol: str, name: str, *, user_id: int | None, start_date: str, end_date: str,
     redis: Redis,
-) -> tuple[list[RawSignal], str | None]:
+) -> tuple[list[RawSignal], str | None, ChanAnalysisResult | None]:
     """扫描单只股票：拉日线 → 缠论 → 取全部买卖点历史。
 
     返回 (信号历史, 失败分类)。失败分类为 None 表示这只股票本身就没有可用信号
@@ -317,18 +347,18 @@ async def _scan_symbol(
         )
     except Exception as e:  # noqa: BLE001 单只失败不影响整体扫描
         logger.warning("signal_radar_kline_failed", symbol=symbol, error=str(e))
-        return [], _classify_failure(e)
+        return [], _classify_failure(e), None
 
     if not bars:
-        return [], None
+        return [], None, None
 
     try:
         result = _analyzer.analyze(symbol, bars, lang="zh")
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_analyze_failed", symbol=symbol, error=str(e))
-        return [], "analyze_failed"
+        return [], "analyze_failed", None
 
-    return build_signal_history(symbol, name, result), None
+    return build_signal_history(symbol, name, result), None, result
 
 
 def _classify_failure(exc: Exception) -> str:
@@ -403,9 +433,9 @@ async def compute_market(
 
     sem = asyncio.Semaphore(_SCAN_CONCURRENCY)
 
-    async def _one(symbol: str, name: str) -> tuple[list[RawSignal], str | None]:
+    async def _one(symbol: str, name: str) -> tuple[list[RawSignal], str | None, ChanAnalysisResult | None]:
         async with sem:
-            history, failure = await _scan_symbol(
+            history, failure, daily = await _scan_symbol(
                 symbol, name, user_id=user_id, start_date=start_date,
                 end_date=end_date, redis=redis,
             )
@@ -413,11 +443,13 @@ async def compute_market(
                 # 命中限流别立刻放行下一个排队的任务抢同一个名额，攒着火上浇油——
                 # 让这个名额歇一会儿，给数据源一点喘息时间再继续消费队列。
                 await asyncio.sleep(_RATE_LIMIT_BACKOFF_SECONDS)
-            return history, failure
+            return history, failure, daily
 
-    results = await asyncio.gather(*[_one(sym, name) for sym, name in constituents])
-    histories = [h for h, _ in results if h]
-    failure_counts = Counter(f for _, f in results if f)
+    scanned = await asyncio.gather(*[_one(sym, name) for sym, name in constituents])
+    histories = [h for h, _, _ in scanned if h]
+    failure_counts = Counter(f for _, f, _ in scanned if f)
+    daily_results = {sym: daily for (sym, _), (_, _, daily) in zip(constituents, scanned, strict=True)
+                     if daily is not None}
 
     # 展示的交易日历：用 ETF 自身的日线拿真实交易日（含具体哪几天开市），
     # 拿不到就退化成「跳过周末」的近似日历。
@@ -445,6 +477,9 @@ async def compute_market(
         days=build_days(histories, trading_days, top_n=top_n, max_age_days=max_age_days),
         status="ready",
     )
+    if resp.days:
+        # 次级别结论描述的是「现在」，只给最新交易日的入榜气泡补算
+        await attach_sub_levels(resp.days[0], daily_results, end_date=end_date, user_id=user_id, redis=redis)
     failed_symbols = sum(failure_counts.values())
     failure_rate = failed_symbols / len(constituents) if constituents else 0.0
     logger.info(
