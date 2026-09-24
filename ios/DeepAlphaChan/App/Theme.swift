@@ -23,6 +23,7 @@ enum Theme {
     static let pivotFill = Color(hex: 0x8B5CF6)    // 中枢
     static let topFractal = Color(hex: 0xEF4444)   // 顶分型
     static let bottomFractal = Color(hex: 0x22C55E)// 底分型
+    static let divergence = Color(hex: 0xEC4899)   // 背驰标注（与线段橙区分）
 
     // MARK: - 内容容器边距
 

@@ -10,6 +10,8 @@ struct MergedCandle: Codable, Identifiable {
     let low: Double
     let open: Double
     let close: Double
+    /// 成交量（合并K线内所含原始K线之和）。可选：旧后端无此字段。
+    let volume: Double?
 
     var id: Int { idx }
     var isUp: Bool { close >= open }

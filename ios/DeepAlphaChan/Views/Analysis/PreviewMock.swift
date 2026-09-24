@@ -109,7 +109,8 @@ enum PreviewMock {
                 high: base + 2.4,
                 low: base - 2.1,
                 open: base - 0.8,
-                close: base + 1.1
+                close: base + 1.1,
+                volume: 2_000_000 + abs(sin(Double(i) / 3)) * 3_000_000
             )
         }
     }

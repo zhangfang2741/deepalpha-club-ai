@@ -94,13 +94,8 @@ struct ChanChartView: View {
     var body: some View {
         VStack(spacing: 0) {
             priceChart
-            // 有力度数据（新后端）画力度副图：背驰判定用的就是它；否则退回 MACD 副图
-            if hasForce {
-                Divider().background(Theme.border)
-                subChart { ctx, plotWidth, height, range in
-                    drawForce(ctx, plotWidth: plotWidth, height: height, range: range)
-                }
-            } else if analysis.macd != nil {
+            // MACD 副图仅作参考（背驰不用它判定，判定结果标在主图上）
+            if analysis.macd != nil {
                 Divider().background(Theme.border)
                 macdChart
             }
@@ -140,10 +135,12 @@ struct ChanChartView: View {
                     let plotW = size.width - rightAxisWidth
                     drawGrid(ctx, size: CGSize(width: plotW, height: size.height),
                              bounds: priceBounds)
+                    drawVolume(ctx, plotWidth: plotW, height: size.height, range: range)
                     drawCandles(ctx, plotWidth: plotW, height: size.height,
                                 range: range, bounds: priceBounds)
                     if vm.showPivots { drawPivots(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showStrokes { drawStrokes(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
+                    if vm.showStrokes { drawDivergences(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showSegments { drawSegments(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showFractals { drawFractals(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showSignals { drawSignals(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
@@ -181,11 +178,7 @@ struct ChanChartView: View {
         .frame(height: priceHeight)
     }
 
-    // MARK: - 副图（力度 / MACD）
-
-    private var hasForce: Bool {
-        analysis.strokes.contains { ($0.powerPrice ?? 0) > 0 }
-    }
+    // MARK: - 副图（MACD）
 
     private var macdChart: some View {
         subChart { ctx, plotWidth, height, range in
@@ -303,7 +296,9 @@ struct ChanChartView: View {
         // 最小跨度包含留白；大幅行情继续自适应，分钟线与周线保持原有比例。
         let minimumSpan = vm.freq == "daily" ? abs(midpoint) * 0.12 : 0
         let span = max(dataSpan * 1.24, minimumSpan)
-        return PriceBounds(minP: midpoint - span / 2, maxP: midpoint + span / 2)
+        // 有量柱时向下扩出一截：量柱占主图底部 volumeShare，K 线最低点落在量柱区之上
+        let volumePad = hasVolume ? span * 0.24 : 0
+        return PriceBounds(minP: midpoint - span / 2 - volumePad, maxP: midpoint + span / 2)
     }
 
     private func y(for price: Double, height: CGFloat, bounds: PriceBounds) -> CGFloat {
@@ -546,53 +541,75 @@ struct ChanChartView: View {
         }
     }
 
-    // MARK: - 绘制：力度
+    // MARK: - 绘制：量柱（主图底部）
 
-    /// 每一笔一根窄柱，居中于该笔起止，柱高 = 价差力度（相对可见区最大值）；红涨绿跌，
-    /// 未确认的笔变淡。力度背驰（价格创新高/低但价差弱于前一同向笔，且量能或时长也更弱）
-    /// 的笔加橙色描边并标「背」——与买卖点、背驰说明同一口径。
-    private func drawForce(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat, range: VisibleRange) {
-        let top: CGFloat = 14
-        let usable = max(1, height - top - 2)
-        var visible: [(Stroke, Int, Int)] = []
-        for s in analysis.strokes {
-            guard let si = timeIndex[s.startTime], let ei = timeIndex[s.endTime],
-                  ei >= range.start, si < range.end else { continue }
-            visible.append((s, si, ei))
+    /// 量柱占主图高度的比例。
+    private let volumeShare: CGFloat = 0.18
+
+    private var hasVolume: Bool {
+        candles.contains { ($0.volume ?? 0) > 0 }
+    }
+
+    /// 主图底部的半透明量柱：与蜡烛同宽、红涨绿跌，高度相对可见区最大量。
+    /// 先于蜡烛绘制，被价格压住时不抢视线。
+    private func drawVolume(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat, range: VisibleRange) {
+        guard hasVolume else { return }
+        let end = min(range.end, candles.count)
+        guard range.start < end else { return }
+        let maxVol = (range.start..<end).map { candles[$0].volume ?? 0 }.max() ?? 0
+        guard maxVol > 0 else { return }
+        let areaH = height * volumeShare
+        let bodyWidth = max(1, range.candleWidth * 0.72)
+        for i in range.start..<end {
+            let c = candles[i]
+            let cx = x(for: i, range: range)
+            if cx < -bodyWidth || cx > plotWidth + bodyWidth { continue }
+            let h = CGFloat((c.volume ?? 0) / maxVol) * areaH
+            guard h > 0 else { continue }
+            let rect = CGRect(x: cx - bodyWidth / 2, y: height - h, width: bodyWidth, height: h)
+            ctx.fill(Path(rect), with: .color((c.isUp ? Theme.up : Theme.down).opacity(0.28)))
         }
-        let maxPower = visible.map { $0.0.powerPrice ?? 0 }.max() ?? 0
-        guard maxPower > 0 else { return }
+    }
 
-        for (s, si, ei) in visible {
-            let x1 = x(for: si, range: range), x2 = x(for: ei, range: range)
-            // 窄柱放在该笔时间范围的正中：横跨整笔会宽成色块、相邻几根连成一片，
-            // 读不出「一根柱 = 一笔」。宽度取 3 根K线宽（不超过笔本身的跨度）。
-            let span = abs(x2 - x1)
-            let width = max(3, min(range.candleWidth * 3, span * 0.8))
-            let h = CGFloat((s.powerPrice ?? 0) / maxPower) * usable
-            let bar = CGRect(x: (x1 + x2) / 2 - width / 2, y: height - h, width: width, height: h)
-            let base = s.direction == .up ? Theme.up : Theme.down
-            ctx.fill(Path(roundedRect: bar, cornerRadius: 2), with: .color(base.opacity(s.confirmed ? 0.55 : 0.28)))
-            if s.diverged == true {
-                ctx.stroke(Path(roundedRect: bar, cornerRadius: 2), with: .color(Theme.segment), lineWidth: 1.5)
-                let mark = Text(L("背")).font(.system(size: 9, weight: .bold)).foregroundColor(Theme.segment)
-                ctx.draw(mark, at: CGPoint(x: bar.midX, y: max(top - 4, bar.minY - 7)), anchor: .center)
+    // MARK: - 绘制：背驰标注
+
+    /// 力度背驰（价格创新高/低，但价差弱于前一个同向笔，且量能或时长也更弱）直接标在主图：
+    /// 粉色虚线连起参与比较的两笔终点（前一同向笔 → 当前笔），线中间标「背驰 0.52」（价差比）。
+    /// 一眼看出拿哪两段比、结论如何，与买卖点说明、背驰课程同一口径。
+    private func drawDivergences(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
+                                 range: VisibleRange, bounds: PriceBounds) {
+        let strokes = analysis.strokes
+        guard strokes.count >= 3 else { return }
+        for k in 2..<strokes.count {
+            let cur = strokes[k], prev = strokes[k - 2]
+            guard cur.diverged == true, prev.direction == cur.direction,
+                  let pi = timeIndex[prev.endTime], let ci = timeIndex[cur.endTime],
+                  ci >= range.start, pi < range.end else { continue }
+            let p1 = CGPoint(x: x(for: pi, range: range), y: y(for: prev.endPrice, height: height, bounds: bounds))
+            let p2 = CGPoint(x: x(for: ci, range: range), y: y(for: cur.endPrice, height: height, bounds: bounds))
+            var line = Path()
+            line.move(to: p1)
+            line.addLine(to: p2)
+            ctx.stroke(line, with: .color(Theme.divergence),
+                       style: StrokeStyle(lineWidth: 1.2, lineCap: .round, dash: [4, 3]))
+            for pt in [p1, p2] {
+                let r: CGFloat = 2.6
+                ctx.fill(Path(ellipseIn: CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)),
+                         with: .color(Theme.divergence))
             }
-        }
 
-        if let ci = cursorIndex, ci >= range.start, ci < range.end {
-            let cx = x(for: ci, range: range)
-            if cx >= 0, cx <= plotWidth {
-                var vLine = Path()
-                vLine.move(to: CGPoint(x: cx, y: 0))
-                vLine.addLine(to: CGPoint(x: cx, y: height))
-                ctx.stroke(vLine, with: .color(Theme.textSecondary.opacity(0.4)),
-                           style: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
-            }
+            // 标签放在虚线中点、朝外侧（顶背驰在线上方、底背驰在线下方），避开端点上的买卖点徽标
+            let label = cur.priceRatio.map { L("背驰标注") + String(format: " %.2f", $0) } ?? L("背驰标注")
+            let resolved = ctx.resolve(Text(label).font(.system(size: 9, weight: .semibold))
+                                        .foregroundColor(Theme.divergence))
+            let size = resolved.measure(in: CGSize(width: 200, height: 40))
+            let dir: CGFloat = cur.direction == .up ? -1 : 1
+            let midY = clampY((p1.y + p2.y) / 2 + dir * (size.height / 2 + 5), height)
+            let box = CGRect(x: (p1.x + p2.x) / 2 - size.width / 2 - 3, y: midY - size.height / 2 - 1,
+                             width: size.width + 6, height: size.height + 2)
+            ctx.fill(Path(roundedRect: box, cornerRadius: 3), with: .color(Theme.surface.opacity(0.85)))
+            ctx.draw(resolved, at: CGPoint(x: box.midX, y: box.midY), anchor: .center)
         }
-
-        let tag = Text(L("力度（柱高=价差，橙框=背驰）")).font(.system(size: 8)).foregroundColor(Theme.textSecondary)
-        ctx.draw(tag, at: CGPoint(x: 6, y: 7), anchor: .leading)
     }
 
     // MARK: - 绘制：MACD
@@ -881,12 +898,28 @@ struct ChanChartView: View {
                 infoText(L("收"), String(format: "%.2f", c.close))
             }
             .font(.system(size: 10))
-            HStack(spacing: 4) {
+            HStack(spacing: 8) {
                 Text(String(format: "%+.2f%%", change))
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(changeColor)
+                if let v = c.volume, v > 0 {
+                    infoText(L("量"), Self.formatVolume(v)).font(.system(size: 10))
+                }
             }
         }
+    }
+
+    /// 成交量缩写：中文用万/亿，英文用 K/M/B。
+    static func formatVolume(_ v: Double) -> String {
+        if Localized.language() == .english {
+            if v >= 1e9 { return String(format: "%.2fB", v / 1e9) }
+            if v >= 1e6 { return String(format: "%.2fM", v / 1e6) }
+            if v >= 1e3 { return String(format: "%.1fK", v / 1e3) }
+            return String(format: "%.0f", v)
+        }
+        if v >= 1e8 { return String(format: "%.2f亿", v / 1e8) }
+        if v >= 1e4 { return String(format: "%.1f万", v / 1e4) }
+        return String(format: "%.0f", v)
     }
 
     private func infoText(_ label: String, _ value: String) -> some View {
