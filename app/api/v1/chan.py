@@ -53,16 +53,19 @@ _WARMUP_DAYS = {"daily": 180, "weekly": 540}
 def _anchor_start(start_date: str, freq: str, warmup_days: int | None = None) -> str:
     """把用户所选起点向前推 warmup 天，作为实际取数起点。
 
-    warmup_days 为 None 时用该周期默认（日线 180 / 周线 540）；显式传入（含 0）则
-    覆盖默认——信号雷达点进详情时传 0，好让取数区间与雷达完全一致（雷达不额外加
-    warmup，就在 today-270~today 上跑）。解析失败（非法日期）时原样返回 start_date。
+    warmup_days 参数已废弃、被忽略：详情页始终按周期默认预热（日线 180 / 周线 540）。
+    czsc 要积累若干笔（一买 >=5、三买 >=7、二买 >=15）才开始出信号，不预热会让图表
+    开头一两个月没有任何买卖点。旧版 iOS 从信号雷达点进来会传 0（为与雷达同区间），
+    现在改由雷达把取数起点同步前移（见 signal_radar.service._fetch_start），两边
+    区间仍完全一致。解析失败（非法日期）时原样返回 start_date。
     """
-    days = _WARMUP_DAYS.get(freq, 180) if warmup_days is None else max(0, warmup_days)
+    days = _WARMUP_DAYS.get(freq, 180)
     try:
         d = date.fromisoformat(start_date[:10])
     except ValueError:
         return start_date
     return (d - timedelta(days=days)).isoformat()
+
 
 def _signal_out(sig: Signal) -> SignalOut:
     return SignalOut(
@@ -118,7 +121,7 @@ async def chan_analysis(
     lang: str = Query(default="zh", description="分析文案语言：zh / en"),
     warmup_days: int | None = Query(
         default=None, ge=0,
-        description="向前多取的 warmup 天数，覆盖默认（日线180/周线540）；信号雷达点进传 0 以与雷达同区间",
+        description="已废弃、被忽略：详情页始终按默认预热（日线180/周线540），保留仅为兼容旧版 App",
     ),
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
@@ -338,7 +341,7 @@ async def chan_sub_level(
     start_date: str = Query(description="日线可见起点，与分析详情页一致，格式 YYYY-MM-DD"),
     end_date: str = Query(description="结束日期，格式 YYYY-MM-DD"),
     lang: str = Query(default="zh", description="文案语言：zh / en"),
-    warmup_days: int | None = Query(default=None, ge=0, description="日线 warmup 天数，与详情页保持一致"),
+    warmup_days: int | None = Query(default=None, ge=0, description="已废弃、被忽略，保留仅为兼容旧版 App"),
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
 ) -> SubLevelResponse:

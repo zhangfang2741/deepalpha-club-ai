@@ -47,6 +47,9 @@ _analyzer = ChanAnalyzer()
 
 # 缠论窗口锚定所需的 warmup 天数（与 chan.py 的日线口径一致）
 _WARMUP_DAYS = 180
+# 详情页日线默认预热天数（app/api/v1/chan.py 的 _WARMUP_DAYS['daily']）。雷达取数起点额外前移
+# 这么多天，使「从雷达点进详情」时详情页的取数区间与雷达完全一致。
+_DETAIL_WARMUP_DAYS = 180
 # 并发扫描的信号量：控制对行情源的压力
 _SCAN_CONCURRENCY = 8
 # 次级别补算（美股每只要分段请求 FMP 30 分钟）并发上限，避免撞限流
@@ -411,6 +414,15 @@ async def _write_cache(redis: Redis, data: SignalRadarResponse) -> None:
         logger.warning("signal_radar_cache_write_error", market=data.market, error=str(e))
 
 
+def _fetch_start(today: date, window: int) -> str:
+    """雷达日线取数起点。
+
+    在可见区间起点（today - warmup - window*2，即 iOS 点进详情用的 start）之前，再前移
+    详情页的默认预热天数，保证与详情页取数区间一致，结构与买卖点一致。
+    """
+    return (today - timedelta(days=_WARMUP_DAYS + window * 2 + _DETAIL_WARMUP_DAYS)).isoformat()
+
+
 async def compute_market(
     market: str, *, redis: Redis, user_id: int | None = None,
     universe_key: str | None = None,
@@ -428,7 +440,7 @@ async def compute_market(
     today = date.today()
     end_date = today.isoformat()
     # 取足够 warmup + 候选窗口的历史；缠论在完整序列上算以消除左边界漂移。
-    start_date = (today - timedelta(days=_WARMUP_DAYS + window * 2)).isoformat()
+    start_date = _fetch_start(today, window)
     cutoff = (today - timedelta(days=window)).isoformat()
 
     sem = asyncio.Semaphore(_SCAN_CONCURRENCY)
