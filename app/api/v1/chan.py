@@ -35,9 +35,12 @@ from app.schemas.chan import (
     StructureGapRequest,
     StructureGapResponse,
     StructureLayerOut,
+    SubLevelResponse,
 )
 from app.services.chan.analyzer import ChanAnalyzer
 from app.services.chan.gap import analyze_structure_gap
+from app.services.chan.signals import Signal
+from app.services.chan.sub_level_service import analyze_sub_level
 from app.services.skills.kline import fetch_kline
 
 router = APIRouter()
@@ -60,6 +63,39 @@ def _anchor_start(start_date: str, freq: str, warmup_days: int | None = None) ->
     except ValueError:
         return start_date
     return (d - timedelta(days=days)).isoformat()
+
+def _signal_out(sig: Signal) -> SignalOut:
+    return SignalOut(
+        type=sig.type,
+        label=sig.label,
+        time=sig.time,
+        price=sig.price,
+        strength=sig.strength,
+        is_buy=sig.is_buy,
+        description=sig.description,
+        area_ratio=sig.divergence.area_ratio if sig.divergence else None,
+        confirmed=sig.confirmed,
+    )
+
+
+async def _fetch_bars_or_http_error(
+    user_id: int, symbol: str, start: str, end: str, freq: str, redis: Redis | None,
+) -> list[dict]:
+    """取 K 线；数据源错误转成可读的 HTTP 错误（400 可读原因 / 502 上游故障 / 404 无数据）。"""
+    try:
+        bars = await fetch_kline(
+            user_id=user_id, symbol=symbol, start_date=start, end_date=end, freq=freq, redis=redis,
+        )
+    except ValueError as e:
+        # 数据源配置错误、认证失败、限流等可读信息直接透传给用户
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("chan_kline_failed", symbol=symbol, error=str(e))
+        raise HTTPException(status_code=502, detail=f"获取 {symbol} 行情数据失败，请稍后再试")
+    if not bars:
+        raise HTTPException(status_code=404, detail=f"未获取到 {symbol} 的K线数据，请检查股票代码或日期范围")
+    return bars
+
 
 # 保持对后台任务的强引用，避免被 GC 提前回收
 _background_tasks: set[asyncio.Task] = set()
@@ -98,25 +134,7 @@ async def chan_analysis(
     # 实测 ~30 根合并K线即可让可见区结构收敛，这里给足冗余：日线 180 天、周线 540 天。
     anchor_start = _anchor_start(start_date, freq, warmup_days)
 
-    try:
-        bars = await fetch_kline(
-            user_id=user.id,
-            symbol=symbol,
-            start_date=anchor_start,
-            end_date=end_date,
-            freq=freq,
-            redis=redis,
-        )
-    except ValueError as e:
-        # 数据源配置错误、认证失败、限流等可读信息直接透传给用户
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.exception("chan_kline_failed", symbol=symbol, error=str(e))
-        raise HTTPException(status_code=502, detail=f"获取 {symbol} 行情数据失败，请稍后再试")
-
-    if not bars:
-        raise HTTPException(status_code=404, detail=f"未获取到 {symbol} 的K线数据，请检查股票代码或日期范围")
-
+    bars = await _fetch_bars_or_http_error(user.id, symbol, anchor_start, end_date, freq, redis)
     result = _analyzer.analyze(symbol, bars, lang=lang, visible_from=start_date, freq=freq)
 
     pivot_phase_out: PivotPhaseOut | None = None
@@ -228,20 +246,7 @@ async def chan_analysis(
             dea=result.macd.dea,
             bar=result.macd.bar,
         ) if result.macd else None,
-        signals=[
-            SignalOut(
-                type=sig.type,
-                label=sig.label,
-                time=sig.time,
-                price=sig.price,
-                strength=sig.strength,
-                is_buy=sig.is_buy,
-                description=sig.description,
-                area_ratio=sig.divergence.area_ratio if sig.divergence else None,
-                confirmed=sig.confirmed,
-            )
-            for sig in result.signals
-        ],
+        signals=[_signal_out(sig) for sig in result.signals],
         current_trend=result.current_trend,
         walk_type=result.walk_type,
         walk_type_label=result.walk_type_label,
@@ -323,6 +328,39 @@ async def _run_gap_job(job_id: str, user_id: int, body: StructureGapRequest) -> 
     except Exception as e:
         logger.exception("chan_gap_job_failed", job_id=job_id, symbol=body.symbol, error=str(e))
         await _store("failed", error="生成结构 gap 分析失败，请稍后再试")
+
+
+@router.get("/sub-level", response_model=SubLevelResponse)
+@limiter.limit("20 per minute")
+async def chan_sub_level(
+    request: Request,
+    symbol: str = Query(description="股票代码，如 AAPL / 0700.HK / 600519.SS"),
+    start_date: str = Query(description="日线可见起点，与分析详情页一致，格式 YYYY-MM-DD"),
+    end_date: str = Query(description="结束日期，格式 YYYY-MM-DD"),
+    lang: str = Query(default="zh", description="文案语言：zh / en"),
+    warmup_days: int | None = Query(default=None, ge=0, description="日线 warmup 天数，与详情页保持一致"),
+    user: User = Depends(get_current_user),
+    redis: Redis = Depends(get_redis),
+) -> SubLevelResponse:
+    """次级别确认：日线定方向（与详情页同一窗口的形态倾向）× 30 分钟近两日买卖点。
+
+    30 分钟取数失败或不足时 verdict=unavailable，仍返回 200；日线取数失败按 /analysis 同样报错。
+    """
+    logger.info("chan_sub_level_request", user_id=user.id, symbol=symbol, end=end_date)
+    anchor_start = _anchor_start(start_date, "daily", warmup_days)
+    bars = await _fetch_bars_or_http_error(user.id, symbol, anchor_start, end_date, "daily", redis)
+    daily = _analyzer.analyze(symbol, bars, lang=lang, visible_from=start_date, freq="daily")
+    sub = await analyze_sub_level(symbol, end_date, daily, user_id=user.id, redis=redis, lang=lang)
+    return SubLevelResponse(
+        symbol=symbol,
+        daily_bias=sub.daily_bias,
+        daily_bias_label=sub.daily_bias_label,
+        sub_freq=sub.sub_freq,
+        verdict=sub.verdict,
+        verdict_label=sub.verdict_label,
+        detail=sub.detail,
+        recent_signals=[_signal_out(sig) for sig in sub.recent_signals],
+    )
 
 
 @router.post("/gap", response_model=GapJobStatus)

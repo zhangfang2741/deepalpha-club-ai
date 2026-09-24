@@ -195,3 +195,15 @@ class ChanAnalysisResponse(BaseModel):
     pivot_phase: Optional[PivotPhaseOut] = None  # 中枢生命周期：走到哪一步
     structure_layers: list[StructureLayerOut] = []  # 按笔/线段/中枢/买卖点分层的判断依据
     structure_headline: Optional[str] = None  # 按线段+笔+中枢位置+买卖点拼的一句摘要
+
+
+class SubLevelResponse(BaseModel):
+    """次级别确认：日线定方向 × 30 分钟找买卖点。"""
+    symbol: str
+    daily_bias: str               # bullish / bearish / neutral
+    daily_bias_label: str         # 日线形态倾向文案（与详情页一致）
+    sub_freq: str                 # 次级别周期，目前固定 30min
+    verdict: Literal["resonance_buy", "resonance_sell", "counter_trend", "waiting", "unavailable"]
+    verdict_label: str
+    detail: str
+    recent_signals: list[SignalOut] = []  # 30 分钟最近两个交易日内的买卖点
