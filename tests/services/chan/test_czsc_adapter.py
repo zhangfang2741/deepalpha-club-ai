@@ -217,3 +217,16 @@ def test_segment_force_aggregates_its_strokes():
     assert seg.power_volume == sum(x.power_volume for x in strokes)
     assert seg.length == sum(x.length for x in strokes)
     assert isinstance(strokes[0], Stroke)
+
+
+def test_merged_candle_volume_sums_its_raw_bars():
+    """合并K线的成交量 = 被合并的原始K线成交量之和（主图量柱用）。"""
+    bars = _trending_bars(80, start_price=100.0, up=True)
+    for i, b in enumerate(bars):
+        b["volume"] = 1000.0 + i
+    c = build_czsc(bars, symbol="T", freq=Freq.D)
+    s = extract_structures(c, bars)
+    assert s.merged_candles
+    for mc in s.merged_candles:
+        expected = sum(bars[i]["volume"] for i in range(mc.raw_start, mc.raw_end + 1))
+        assert mc.volume == expected

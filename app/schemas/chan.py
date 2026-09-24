@@ -13,6 +13,7 @@ class MergedCandleOut(BaseModel):
     low: float
     open: float
     close: float
+    volume: float = 0.0
 
 
 class FractalOut(BaseModel):

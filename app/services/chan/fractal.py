@@ -20,6 +20,7 @@ class MergedCandle:
     close: float
     raw_start: int  # 原始K线起始索引
     raw_end: int    # 原始K线结束索引
+    volume: float = 0.0  # 所含原始K线成交量之和
 
 
 @dataclass
