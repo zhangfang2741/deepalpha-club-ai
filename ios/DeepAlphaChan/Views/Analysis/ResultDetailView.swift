@@ -84,6 +84,8 @@ struct ResultDetailView: View {
             ChartSection(analysis: analysis, vm: vm,
                          onFullscreen: openFullscreen, isStatic: isStatic)
 
+            SubLevelSection(vm: vm)
+
             ResultSegments(analysis: analysis, isStatic: isStatic)
 
             compactDisclaimer

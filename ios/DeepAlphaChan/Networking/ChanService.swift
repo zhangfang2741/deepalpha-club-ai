@@ -18,6 +18,20 @@ enum ChanService {
         return try await APIClient.shared.get("/chan/analysis", query: query)
     }
 
+    /// 次级别确认：日线（与分析详情页同一窗口）定方向 × 30 分钟近两日买卖点。
+    /// 30 分钟取不到时后端仍返回 200，verdict 为 unavailable。
+    static func subLevel(symbol: String, startDate: String, endDate: String,
+                         warmupDays: Int? = nil) async throws -> SubLevel {
+        var query = [
+            "symbol": symbol.uppercased(),
+            "start_date": startDate,
+            "end_date": endDate,
+            "lang": Localized.language() == .english ? "en" : "zh",
+        ]
+        if let warmupDays { query["warmup_days"] = String(warmupDays) }
+        return try await APIClient.shared.get("/chan/sub-level", query: query)
+    }
+
     /// 提交结构 GAP 异步任务，返回 job_id。
     static func submitGap(symbol: String, startDate: String, endDate: String,
                           industryView: String, freq: String = "daily") async throws -> GapJobStatus {

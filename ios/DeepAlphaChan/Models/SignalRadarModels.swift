@@ -78,8 +78,17 @@ struct RadarSignal: Decodable, Identifiable {
     /// 该信号发生当天的中枢生命周期阶段深浅 0~1：形成中枢=浅/中枢震荡=中/
     /// 已离开中枢=深，决定气泡颜色深浅（见 SignalRadarView.bubbleColor）。
     let pivotStageDepth: Double
+    /// 次级别确认结论（日线定方向 × 30 分钟找买卖点），只有最新交易日的入榜气泡有；
+    /// 可选字段，后端未部署或旧缓存里缺失时为 nil。
+    let subLevelVerdict: String?
+    let subLevelLabel: String?
 
     var id: String { "\(symbol)-\(date)-\(signalType)" }
+
+    /// 日线与 30 分钟同向（共振买点/共振卖点），气泡上加标记。
+    var isSubLevelResonance: Bool {
+        subLevelVerdict == "resonance_buy" || subLevelVerdict == "resonance_sell"
+    }
     var isBuy: Bool { side == "buy" }
 
     /// 买卖点级别：1/2/3，取 signalType 末位数字（"buy2"/"sell2" 都取到 2），
@@ -97,5 +106,7 @@ struct RadarSignal: Decodable, Identifiable {
         case signalType = "signal_type"
         case signalStrength = "signal_strength"
         case pivotStageDepth = "pivot_stage_depth"
+        case subLevelVerdict = "sub_level_verdict"
+        case subLevelLabel = "sub_level_label"
     }
 }

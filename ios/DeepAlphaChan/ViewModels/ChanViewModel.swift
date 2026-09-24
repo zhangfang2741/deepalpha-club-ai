@@ -38,6 +38,13 @@ final class ChanViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
+    // 次级别确认（日线定方向 × 30 分钟找买卖点）：日线分析成功后异步加载，
+    // 不阻塞主结果；放在 VM 里而不是卡片自己持有，分享长图离屏渲染时也能拿到。
+    @Published var subLevel: SubLevel?
+    @Published var subLevelLoading = false
+    /// 递增序号：切换标的/重新分析后，旧请求晚到的结果直接丢弃。
+    private var subLevelRequestID = 0
+
     // 叠加图层开关
     @Published var showFractals = true
     @Published var showStrokes = true
@@ -116,11 +123,34 @@ final class ChanViewModel: ObservableObject {
                 symbol: sym, startDate: startDateString,
                 endDate: endDateString, freq: freq, warmupDays: warmup)
             SKAdNetworkAttribution.report(.usedAnalysis)
+            loadSubLevel(symbol: sym, warmupDays: warmup)
         } catch let error as APIError {
             // 失败时保留上一次结果，仅提示错误，避免清空已呈现的图表
             errorMessage = error.message
         } catch {
             errorMessage = L("分析失败，请稍后再试")
+        }
+    }
+
+    // MARK: - 次级别确认
+
+    /// 仅日线分析有次级别（30 分钟）；周线不加载。失败只清空卡片，不打扰主结果。
+    private func loadSubLevel(symbol: String, warmupDays: Int?) {
+        subLevelRequestID += 1
+        let requestID = subLevelRequestID
+        subLevel = nil
+        guard freq == "daily" else {
+            subLevelLoading = false
+            return
+        }
+        subLevelLoading = true
+        let start = startDateString, end = endDateString
+        Task { [weak self] in
+            let result = try? await ChanService.subLevel(
+                symbol: symbol, startDate: start, endDate: end, warmupDays: warmupDays)
+            guard let self, requestID == self.subLevelRequestID else { return }
+            self.subLevel = result
+            self.subLevelLoading = false
         }
     }
 

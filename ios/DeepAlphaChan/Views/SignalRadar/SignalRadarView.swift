@@ -820,6 +820,7 @@ private struct RadarBubble: View {
             .accessibilityLabel(
                 "\(signal.symbol) \(signal.name) \(signal.isBuy ? L("买点") : L("卖点"))"
                 + (isNew ? " \(L("所选日期当天新增"))" : "")
+                + (signal.isSubLevelResonance ? " \(L("日线与30分钟共振"))" : "")
             )
             .accessibilityAddTraits(.isButton)
             .onAppear {
@@ -869,6 +870,20 @@ private struct RadarBubble: View {
                     .clipShape(Capsule())
                     .overlay(Capsule().stroke(Theme.background, lineWidth: 1))
                     .offset(x: 4, y: -4)
+            }
+        }
+        .overlay(alignment: .bottomLeading) {
+            // 日线定方向 × 30 分钟找买卖点同向（共振），只在最新交易日的入榜气泡上出现。
+            if signal.isSubLevelResonance {
+                Text(L("共振"))
+                    .font(.system(size: max(8, r * 0.22), weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1.5)
+                    .background(Theme.accent)
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Theme.background, lineWidth: 1))
+                    .offset(x: -4, y: 4)
             }
         }
     }

@@ -339,3 +339,12 @@
 /* Signal Radar legend */
 "大小=潜在空间" = "Size = potential move";
 "深浅=强弱 · 虚线边框=未确认 · 居中=越新 · 点击查看分析" = "Shade = strength · dashed border = unconfirmed · centered = newer · tap for analysis";
+
+/* Lower-level check (daily direction × 30-minute entries) */
+"次级别确认（30 分钟）" = "Lower-Level Check (30-min)";
+"正在加载 30 分钟级别…" = "Loading the 30-minute level…";
+"日线：" = "Daily: ";
+"30 分钟近两日买卖点" = "30-min buy/sell points, last 2 days";
+"日线定方向、30 分钟找进出点：两者同向为共振，反向多为次级别的反弹或回调。" = "The daily chart sets the direction; the 30-minute chart times entries and exits. When they agree it's aligned; when they disagree it's usually just a lower-level bounce or pullback.";
+"日线与30分钟共振" = "Daily and 30-minute aligned";
+"共振" = "Aligned";

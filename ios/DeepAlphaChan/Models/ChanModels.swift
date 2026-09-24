@@ -334,3 +334,40 @@ struct GapJobStatus: Codable {
         case jobId = "job_id"
     }
 }
+
+// MARK: - 次级别确认（对应 SubLevelResponse）
+
+/// 次级别确认：日线定方向 × 30 分钟找买卖点。
+struct SubLevel: Decodable {
+    /// 共振 / 逆势 / 等待 / 不可用；未知值按「等待」处理，兼容后端以后加新结论。
+    enum Verdict: String, Decodable {
+        case resonanceBuy = "resonance_buy"
+        case resonanceSell = "resonance_sell"
+        case counterTrend = "counter_trend"
+        case waiting
+        case unavailable
+
+        init(from decoder: Decoder) throws {
+            let raw = try decoder.singleValueContainer().decode(String.self)
+            self = Verdict(rawValue: raw) ?? .waiting
+        }
+    }
+
+    let symbol: String
+    let dailyBias: String        // bullish / bearish / neutral
+    let dailyBiasLabel: String
+    let subFreq: String          // 30min
+    let verdict: Verdict
+    let verdictLabel: String
+    let detail: String
+    let recentSignals: [Signal]
+
+    enum CodingKeys: String, CodingKey {
+        case symbol, verdict, detail
+        case dailyBias = "daily_bias"
+        case dailyBiasLabel = "daily_bias_label"
+        case subFreq = "sub_freq"
+        case verdictLabel = "verdict_label"
+        case recentSignals = "recent_signals"
+    }
+}
