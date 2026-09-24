@@ -107,7 +107,8 @@ def test_clip_keeps_stroke_divergences_aligned_with_strokes():
 
 
 def test_left_edge_is_covered_by_strokes_when_structures_cross_boundary():
-    """跨过可见起点的长线段/中枢把图表左沿往前拉时，笔也必须一起保留到那里，
+    """跨界结构把图表左沿往前拉时，笔也必须一起保留到那里。
+
     否则图表最左侧只剩 K 线和一条孤零零的长线段（回归：NVDA 左侧 4~5 个月没有笔）。
     """
     for seed in (3, 7, 11, 19):
