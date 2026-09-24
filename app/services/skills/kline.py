@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 from redis.asyncio import Redis
@@ -37,6 +38,10 @@ _FMP_URL = "https://financialmodelingprep.com/stable/historical-price-eod/divide
 _CACHE_TTL = 3600 * 24  # 24h
 # 30 分钟线盘中持续变化，缓存不宜久
 _INTRADAY_CACHE_TTL = 60 * 15
+# 截止日覆盖最近交易日的日线/周线只缓存 30 分钟：当日K线可能还没收盘/还没发布，
+# 按 24h 缓存会让收盘后整天都读到缺当日K线的旧数据（A 股收盘 = UTC 07:00，
+# 北京时间白天扫描的结果会一直缺当天）。
+_RECENT_CACHE_TTL = 60 * 30
 _FMP_INTRADAY_URL = "https://financialmodelingprep.com/stable/historical-chart/30min"
 # FMP 30 分钟端点单次最多约一个月数据，按 20 天一段分段拉取
 _FMP_INTRADAY_CHUNK_DAYS = 20
@@ -67,6 +72,20 @@ def _forward_adjust(
 
 class _RateLimitError(Exception):
     """FMP 返回 429 时抛出的可重试异常（内部使用，不透传给用户）。"""
+
+
+def _cache_ttl_for(freq: str, end_date: str, *, today: date | None = None) -> int:
+    """按周期与截止日决定缓存时长。
+
+    「最近」以 UTC 昨天为界：美股晚间用户的本地日期比 UTC 落后一天、东八区用户领先
+    一天，两种都要算作覆盖最近交易日。
+    """
+    if freq == "30min":
+        return _INTRADAY_CACHE_TTL
+    today = today or datetime.now(UTC).date()
+    if end_date >= (today - timedelta(days=1)).isoformat():
+        return _RECENT_CACHE_TTL
+    return _CACHE_TTL
 
 
 def _cache_key(user_id: int | None, symbol: str, start: str, end: str, freq: str) -> str:
@@ -122,8 +141,7 @@ async def fetch_kline(
         bars = await _fetch_cn_hk(symbol, start_date, end_date, freq)
 
     if redis and bars:
-        ttl = _INTRADAY_CACHE_TTL if freq == "30min" else _CACHE_TTL
-        await set_json(redis, cache_key, bars, expire=ttl)
+        await set_json(redis, cache_key, bars, expire=_cache_ttl_for(freq, end_date))
 
     return bars
 
