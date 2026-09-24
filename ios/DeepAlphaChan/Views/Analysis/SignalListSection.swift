@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 分段控件的「买卖点」段：逐条列出识别到的买卖点。
 ///
-/// 每条的类型标签（一买、二买……）和「面积比」都接了术语跳转——这几个词
+/// 每条的类型标签（一买、二买……）和一类的力度比都接了术语跳转——这几个词
 /// 恰恰是新手最容易看不懂、又最影响判断的。
 struct SignalListSection: View {
     let analysis: ChanAnalysis
@@ -81,10 +81,13 @@ struct SignalListSection: View {
                 HStack(spacing: 12) {
                     Text(L("价位 %@", String(format: "%.2f", sig.price)))
                         .font(.caption2).foregroundColor(Theme.textSecondary)
-                    if let ar = sig.areaRatio {
-                        GlossaryLink(term: "面积比") {
+                    if let pr = sig.priceRatio {
+                        GlossaryLink(term: "背驰") {
                             HStack(spacing: 2) {
-                                Text(L("面积比 %@", String(format: "%.2f", ar)))
+                                Text(L("价差 %@ · 量能 %@ · 时长 %@",
+                                       String(format: "%.2f", pr),
+                                       String(format: "%.2f", sig.volumeRatio ?? 1),
+                                       String(format: "%.2f", sig.lengthRatio ?? 1)))
                                     .font(.caption2)
                                     .foregroundColor(Theme.textSecondary)
                                 Image(systemName: "questionmark.circle")

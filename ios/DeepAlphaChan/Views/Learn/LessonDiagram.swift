@@ -145,8 +145,8 @@ struct LessonDiagram: View {
 
     /// MACD 副图。画法与分析页一致：柱子正绿负红，零轴一条细线。
     ///
-    /// 教程里必须能画 MACD——这个 App 判定背驰靠的就是 MACD 面积比，
-    /// 只画价格不画 MACD，等于把背驰最关键的那一半藏起来了。
+    /// 教程里能画 MACD——课程把它作为常见的背驰度量工具介绍（App 自身改用力度比），
+    /// 讲面积比时只画价格不画 MACD，读者就看不到那组面积对比。
     private func drawMACD(_ ctx: GraphicsContext, size: CGSize,
                           macdHeight: CGFloat, priceGeo: Geometry) {
         let top = size.height - macdHeight

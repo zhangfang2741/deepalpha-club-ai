@@ -353,3 +353,8 @@
 "30分钟" = "30-min";
 "正在切换周期…" = "Switching timeframe…";
 "查看 30 分钟图表" = "View 30-min chart";
+
+/* Force sub-chart */
+"背" = "Div";
+"力度（柱高=价差，橙框=背驰）" = "Force (bar = price range, orange = divergence)";
+"价差 %@ · 量能 %@ · 时长 %@" = "Range %@ · Volume %@ · Duration %@";

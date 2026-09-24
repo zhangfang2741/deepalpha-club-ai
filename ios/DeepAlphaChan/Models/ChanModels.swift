@@ -38,15 +38,25 @@ struct Stroke: Codable, Identifiable {
     let high: Double
     let low: Double
     let confirmed: Bool
+    /// 力度（与背驰、一类买卖点同一口径）：价差 / 量能 / 时长。可选：旧后端无此字段。
+    let powerPrice: Double?
+    let powerVolume: Double?
+    let length: Int?
+    /// 与前一个同向笔相比是否力度背驰，及价差力度比（未比较时为 nil）。
+    let diverged: Bool?
+    let priceRatio: Double?
 
     var id: String { "\(startTime)-\(endTime)" }
 
     enum CodingKeys: String, CodingKey {
-        case direction, high, low, confirmed
+        case direction, high, low, confirmed, length, diverged
         case startTime = "start_time"
         case endTime = "end_time"
         case startPrice = "start_price"
         case endPrice = "end_price"
+        case powerPrice = "power_price"
+        case powerVolume = "power_volume"
+        case priceRatio = "price_ratio"
     }
 }
 
@@ -120,6 +130,10 @@ struct Signal: Codable, Identifiable {
     let description: String
     let areaRatio: Double?
     let confirmed: Bool
+    /// 一类买卖点的力度比（与判定同一基准）：价差 / 量能 / 时长。二、三类或旧后端为 nil。
+    let priceRatio: Double?
+    let volumeRatio: Double?
+    let lengthRatio: Double?
 
     var id: String { "\(type.rawValue)-\(time)" }
 
@@ -127,6 +141,9 @@ struct Signal: Codable, Identifiable {
         case type, label, time, price, strength, description, confirmed
         case isBuy = "is_buy"
         case areaRatio = "area_ratio"
+        case priceRatio = "price_ratio"
+        case volumeRatio = "volume_ratio"
+        case lengthRatio = "length_ratio"
     }
 }
 

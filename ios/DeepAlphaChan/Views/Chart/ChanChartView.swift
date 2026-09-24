@@ -94,7 +94,13 @@ struct ChanChartView: View {
     var body: some View {
         VStack(spacing: 0) {
             priceChart
-            if analysis.macd != nil {
+            // 有力度数据（新后端）画力度副图：背驰判定用的就是它；否则退回 MACD 副图
+            if hasForce {
+                Divider().background(Theme.border)
+                subChart { ctx, plotWidth, height, range in
+                    drawForce(ctx, plotWidth: plotWidth, height: height, range: range)
+                }
+            } else if analysis.macd != nil {
                 Divider().background(Theme.border)
                 macdChart
             }
@@ -175,14 +181,27 @@ struct ChanChartView: View {
         .frame(height: priceHeight)
     }
 
-    // MARK: - MACD 副图
+    // MARK: - 副图（力度 / MACD）
+
+    private var hasForce: Bool {
+        analysis.strokes.contains { ($0.powerPrice ?? 0) > 0 }
+    }
 
     private var macdChart: some View {
+        subChart { ctx, plotWidth, height, range in
+            drawMACD(ctx, plotWidth: plotWidth, height: height, range: range)
+        }
+    }
+
+    /// 副图容器：与主图共用可视窗口与手势，内容由 draw 决定。
+    private func subChart(
+        _ draw: @escaping (GraphicsContext, CGFloat, CGFloat, VisibleRange) -> Void
+    ) -> some View {
         GeometryReader { geo in
             let plotWidth = geo.size.width - rightAxisWidth
             let range = visibleRange(plotWidth: plotWidth)
             Canvas { ctx, size in
-                drawMACD(ctx, plotWidth: size.width - rightAxisWidth, height: size.height, range: range)
+                draw(ctx, size.width - rightAxisWidth, size.height, range)
             }
             // 副图与主图共用同一个可视窗口，手势也必须是同一套：手指落在 MACD 上
             // 拖不动、捏不动，用户会以为图卡住了（副图占了图表近三分之一高度，
@@ -521,6 +540,54 @@ struct ChanChartView: View {
                      with: .color(color.opacity(alpha)))
             ctx.draw(resolved, at: CGPoint(x: badgeRect.midX, y: badgeRect.midY), anchor: .center)
         }
+    }
+
+    // MARK: - 绘制：力度
+
+    /// 每一笔一根柱，横跨该笔起止，柱高 = 价差力度（相对可见区最大值）；红涨绿跌，
+    /// 未确认的笔变淡。力度背驰（价格创新高/低但价差弱于前一同向笔，且量能或时长也更弱）
+    /// 的笔加橙色描边并标「背」——与买卖点、背驰说明同一口径。
+    private func drawForce(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat, range: VisibleRange) {
+        let top: CGFloat = 14
+        let usable = max(1, height - top - 2)
+        var visible: [(Stroke, Int, Int)] = []
+        for s in analysis.strokes {
+            guard let si = timeIndex[s.startTime], let ei = timeIndex[s.endTime],
+                  ei >= range.start, si < range.end else { continue }
+            visible.append((s, si, ei))
+        }
+        let maxPower = visible.map { $0.0.powerPrice ?? 0 }.max() ?? 0
+        guard maxPower > 0 else { return }
+
+        for (s, si, ei) in visible {
+            let x1 = x(for: si, range: range), x2 = x(for: ei, range: range)
+            // 相邻笔共用端点 K 线，两侧各让出一点间隙，柱子才不会粘成一片
+            let gap = max(1, range.candleWidth * 0.3)
+            let h = CGFloat((s.powerPrice ?? 0) / maxPower) * usable
+            let bar = CGRect(x: min(x1, x2) + gap / 2, y: height - h,
+                             width: max(2, abs(x2 - x1) - gap), height: h)
+            let base = s.direction == .up ? Theme.up : Theme.down
+            ctx.fill(Path(roundedRect: bar, cornerRadius: 2), with: .color(base.opacity(s.confirmed ? 0.55 : 0.28)))
+            if s.diverged == true {
+                ctx.stroke(Path(roundedRect: bar, cornerRadius: 2), with: .color(Theme.segment), lineWidth: 1.5)
+                let mark = Text(L("背")).font(.system(size: 9, weight: .bold)).foregroundColor(Theme.segment)
+                ctx.draw(mark, at: CGPoint(x: bar.midX, y: max(top - 4, bar.minY - 7)), anchor: .center)
+            }
+        }
+
+        if let ci = cursorIndex, ci >= range.start, ci < range.end {
+            let cx = x(for: ci, range: range)
+            if cx >= 0, cx <= plotWidth {
+                var vLine = Path()
+                vLine.move(to: CGPoint(x: cx, y: 0))
+                vLine.addLine(to: CGPoint(x: cx, y: height))
+                ctx.stroke(vLine, with: .color(Theme.textSecondary.opacity(0.4)),
+                           style: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
+            }
+        }
+
+        let tag = Text(L("力度（柱高=价差，橙框=背驰）")).font(.system(size: 8)).foregroundColor(Theme.textSecondary)
+        ctx.draw(tag, at: CGPoint(x: 6, y: 7), anchor: .leading)
     }
 
     // MARK: - 绘制：MACD

@@ -119,15 +119,18 @@ enum PreviewMock {
             Signal(type: .buy3, label: "三买", time: "2026-07-18", price: 208.34,
                    strength: .strong, isBuy: true,
                    description: "突破前中枢上沿后回踩不破，确认第三类买点。",
-                   areaRatio: nil, confirmed: true),
+                   areaRatio: nil, confirmed: true,
+                   priceRatio: nil, volumeRatio: nil, lengthRatio: nil),
             Signal(type: .buy2, label: "二买", time: "2026-06-25", price: 191.02,
                    strength: .medium, isBuy: true,
                    description: "一买后反弹回调不创新低，构成第二类买点。",
-                   areaRatio: 0.72, confirmed: true),
+                   areaRatio: nil, confirmed: true,
+                   priceRatio: nil, volumeRatio: nil, lengthRatio: nil),
             Signal(type: .sell1, label: "一卖", time: "2026-08-14", price: 219.60,
-                   strength: .weak, isBuy: false,
-                   description: "创新高但 MACD 面积明显缩小，出现盘整背驰。",
-                   areaRatio: 0.58, confirmed: false),
+                   strength: .strong, isBuy: false,
+                   description: "创新高但力度弱于前段，出现盘整背驰：价差为前段的 0.58 倍、量能 0.71 倍、时长 0.90 倍。",
+                   areaRatio: nil, confirmed: false,
+                   priceRatio: 0.58, volumeRatio: 0.71, lengthRatio: 0.90),
         ]
     }
 }

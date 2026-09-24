@@ -125,9 +125,8 @@ enum LessonDiagrams {
 
     /// 背驰：价格创新高，但 MACD 柱面积明显缩小。
     ///
-    /// 必须画 MACD。这个 App 判定背驰用的就是 MACD 面积比，只画两段斜率不同的
-    /// 价格线，展示的是「斜率变缓」而不是背驰的定义——学的人对不上买卖点卡片里
-    /// 那个「面积比 0.58」是怎么来的。
+    /// 这是课程正文介绍的「常见方法」之一（面积比）；App 自己判定背驰用的是力度比
+    /// （价差 / 量能 / 时长），见课程「本 App 的做法」与图表下方的力度副图。
     private static var divergence: DiagramSpec {
         .fromPath(
             [0.16, 0.34, 0.58, 0.72, 0.52, 0.44, 0.58, 0.72, 0.82],
@@ -148,7 +147,7 @@ enum LessonDiagrams {
         )
     }
 
-    /// MACD：柱、DIF/DEA，以及本 App 用来量化背驰的「面积比」。
+    /// MACD：柱、DIF/DEA。作为常见的背驰工具介绍，App 本身不用它判定背驰。
     private static var macd: DiagramSpec {
         .fromPath(
             [0.20, 0.36, 0.54, 0.70, 0.78, 0.62, 0.48, 0.40, 0.52],
