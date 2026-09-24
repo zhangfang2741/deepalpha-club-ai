@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from app.services.chan.analyzer import ChanAnalyzer
-from app.services.chan.fractal import find_fractals, merge_candles
 
 
 def _bar(t: str, o: float, h: float, low: float, c: float, v: float = 1000) -> dict:
@@ -35,13 +34,10 @@ def _zigzag_bars() -> list[dict]:
 
 def test_last_fractal_is_unconfirmed():
     """最右侧分型的右侧K线是最后一根合并K线时，应标注为未确认。"""
-    bars = _zigzag_bars()
-    merged = merge_candles(bars)
-    fractals = find_fractals(merged)
-    assert fractals  # 至少要有分型
-
     analyzer = ChanAnalyzer()
-    result = analyzer.analyze("TEST", bars)
+    result = analyzer.analyze("TEST", _zigzag_bars())
+
+    assert result.fractals  # 至少要有分型
 
     # 结果中的分型经过确认标注：非最后的分型应当确认，最后一个若贴近右侧则未确认
     if result.fractals:

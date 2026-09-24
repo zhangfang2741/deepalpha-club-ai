@@ -22,19 +22,21 @@ from app.services.chan.divergence import (
     find_segment_divergences,
     find_stroke_divergences,
 )
-from app.services.chan.fractal import Fractal, MergedCandle, find_fractals, merge_candles
+from czsc import Freq
+
+from app.services.chan.czsc_adapter import build_czsc, extract_structures
+from app.services.chan.fractal import Fractal, MergedCandle
 from app.services.chan.i18n import is_en, pick
 from app.services.chan.narrative import MarketNarrative, _volume_readout, build_narrative
 from app.services.chan.pivot import (
     Pivot,
     classify_walk_type,
     find_segment_pivots,
-    find_stroke_pivots,
 )
 from app.services.chan.pivot_phase import PivotPhase, build_pivot_phase
 from app.services.chan.segment import Segment, find_segments
 from app.services.chan.signals import Signal, generate_all_signals
-from app.services.chan.stroke import Stroke, find_strokes
+from app.services.chan.stroke import Stroke
 from app.services.chan.structure_layers import (
     StructureLayer,
     build_structure_headline,
@@ -128,19 +130,25 @@ class ChanAnalyzer:
 
     def analyze(
         self, symbol: str, bars: list[dict], *, min_gap: int = 4, lang: str = "zh",
-        visible_from: str | None = None,
+        visible_from: str | None = None, freq: str = "daily",
     ) -> ChanAnalysisResult:
         """对K线数据执行完整缠论分析。
 
+        结构识别（包含处理/分型/笔/笔级中枢）由 czsc 引擎完成（见 czsc_adapter），
+        线段及线段级中枢、MACD、背驰、买卖点、叙事等下游逻辑仍为自研实现。
+
         bars: list of {time, open, high, low, close, volume}
-        min_gap: 笔成立所需的最小分型间隔（合并K线数 - 1），默认 4（缠论新笔标准）
+        min_gap: 已废弃，保留仅为向后兼容签名兼容——成笔规则由 czsc 内部
+            bi 算法决定（build_czsc 传 min_bi_len=0），本参数不再影响任何结果。
         lang: 输出文案语言（zh / en）
         visible_from: 可见窗口起点（time 字符串，含）。用于「窗口锚定」：调用方在
             用户所选起点之前多取一段 warmup K 线一起传入，缠论在完整序列上计算以
             消除左边界依赖（结构不随用户选的起始日期漂移），再把分型/笔/线段/中枢/
             信号裁剪回可见窗口。为 None 时不裁剪，行为与旧版一致。
+        freq: K线周期（"daily" / "weekly"），映射 czsc.Freq.D / Freq.W，仅影响
+            czsc 对象的周期标注（bars 本身已是目标周期的K线）。
         """
-        logger.info("chan_analysis_start", symbol=symbol, bars=len(bars), min_gap=min_gap)
+        logger.info("chan_analysis_start", symbol=symbol, bars=len(bars), freq=freq)
 
         result = ChanAnalysisResult(symbol=symbol, bars_count=len(bars))
 
@@ -149,13 +157,18 @@ class ChanAnalyzer:
                                   "Not enough candles (at least 10 required) for Chan analysis")
             return result
 
-        # 1. 包含关系处理
-        result.merged_candles = merge_candles(bars)
+        # 1-3+5. 结构识别（包含K线 / 分型 / 笔 / 笔级中枢）交给 czsc，
+        #        再由 adapter 转换回项目内部 dataclass，下游自研代码无感消费。
+        #        注意：czsc 会丢弃首笔确认前的前导K线，merged_candles 可能不从
+        #        raw_start=0 开始（见 extract_structures docstring，属预期行为）。
+        czsc_obj = build_czsc(bars, symbol=symbol, freq=Freq.D if freq == "daily" else Freq.W)
+        structures = extract_structures(czsc_obj, bars)
+        result.merged_candles = structures.merged_candles
         logger.debug("chan_merged_candles", count=len(result.merged_candles))
-
-        # 2. 分型识别
-        result.fractals = find_fractals(result.merged_candles)
+        result.fractals = structures.fractals
         logger.debug("chan_fractals", count=len(result.fractals))
+        result.strokes = structures.strokes
+        logger.debug("chan_strokes", count=len(result.strokes))
 
         if len(result.fractals) < 2:
             result.summary = pick(
@@ -164,10 +177,6 @@ class ChanAnalyzer:
                 f"Too few fractals (only {len(result.fractals)}); the market may be in a one-way move",
             )
             return result
-
-        # 3. 笔识别
-        result.strokes = find_strokes(result.fractals, min_gap=min_gap)
-        logger.debug("chan_strokes", count=len(result.strokes))
 
         if len(result.strokes) < 3:
             result.summary = pick(
@@ -178,12 +187,12 @@ class ChanAnalyzer:
             result.current_trend = self._infer_trend_from_strokes(result.strokes, lang)
             return result
 
-        # 4. 线段识别
+        # 4. 线段识别（自研，消费 czsc 转换出的笔）
         result.segments = find_segments(result.strokes)
         logger.debug("chan_segments", count=len(result.segments))
 
-        # 5. 中枢识别（笔级别）
-        result.stroke_pivots = find_stroke_pivots(result.strokes)
+        # 5. 中枢识别（笔级别）：同样来自 czsc 转换结果
+        result.stroke_pivots = structures.stroke_pivots
 
         # 5b. 中枢识别（线段级别）
         if len(result.segments) >= 3:

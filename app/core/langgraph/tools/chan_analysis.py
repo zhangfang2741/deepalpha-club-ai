@@ -45,7 +45,7 @@ async def chan_analysis_tool(
     if not bars:
         return f"未能获取 {symbol} 的K线数据，请检查股票代码和日期范围。"
 
-    result = _analyzer.analyze(symbol, bars)
+    result = _analyzer.analyze(symbol, bars, freq=freq)
 
     lines = [
         f"## {symbol} 缠论分析报告",

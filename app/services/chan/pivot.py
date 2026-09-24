@@ -1,11 +1,14 @@
-"""缠论中枢识别：连续3段走势的价格重叠区域"""
+"""缠论中枢：连续3段走势的价格重叠区域。
+
+笔级中枢识别已切换到 czsc 引擎（见 czsc_adapter.py）；线段级中枢
+（find_segment_pivots）与走势类型判定（classify_walk_type）仍为自研。
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal
 
 from app.services.chan.segment import Segment
-from app.services.chan.stroke import Stroke
 
 
 @dataclass
@@ -109,11 +112,6 @@ def classify_walk_type(pivots: list[Pivot]) -> str:
     if descending:
         return "down_trend"
     return "consolidation"
-
-
-def find_stroke_pivots(strokes: list[Stroke]) -> list[Pivot]:
-    """识别笔级别中枢"""
-    return _find_pivots_from_elements(strokes, level="stroke")
 
 
 def find_segment_pivots(segments: list[Segment]) -> list[Pivot]:

@@ -117,7 +117,7 @@ async def chan_analysis(
     if not bars:
         raise HTTPException(status_code=404, detail=f"未获取到 {symbol} 的K线数据，请检查股票代码或日期范围")
 
-    result = _analyzer.analyze(symbol, bars, lang=lang, visible_from=start_date)
+    result = _analyzer.analyze(symbol, bars, lang=lang, visible_from=start_date, freq=freq)
 
     pivot_phase_out: PivotPhaseOut | None = None
     if result.pivot_phase:
@@ -299,7 +299,7 @@ async def _run_gap_job(job_id: str, user_id: int, body: StructureGapRequest) -> 
             await _store("failed", error=f"未获取到 {body.symbol} 的K线数据，请检查股票代码或日期范围")
             return
 
-        result = _analyzer.analyze(body.symbol, bars)
+        result = _analyzer.analyze(body.symbol, bars, freq=body.freq)
         analysis = await analyze_structure_gap(result, body.industry_view)
 
         resp = StructureGapResponse(

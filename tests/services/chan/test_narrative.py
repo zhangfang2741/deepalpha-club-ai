@@ -2,17 +2,23 @@
 from __future__ import annotations
 
 import math
+from datetime import date, timedelta
 
 from app.services.chan.analyzer import ChanAnalyzer
 from app.services.chan.narrative import _volume_readout
 
 
 def _bars(closes: list[float], vols: list[float]) -> list[dict]:
-    """由收盘价与成交量构造最小 bars（OHLC 围绕 close 造一个小范围）。"""
+    """由收盘价与成交量构造最小 bars（OHLC 围绕 close 造一个小范围）。
+
+    time 必须是合法且递增的日期（czsc 引擎需要解析为 pd.Timestamp，
+    旧实现只做字符串比较，合成出 2026-01-32 这类假日期也能跑）。
+    """
+    start = date(2026, 1, 1)
     out = []
     for i, (c, v) in enumerate(zip(closes, vols, strict=True)):
         out.append({
-            "time": f"2026-01-{i + 1:02d}",
+            "time": (start + timedelta(days=i)).isoformat(),
             "open": c - 0.1, "high": c + 0.2, "low": c - 0.2, "close": c, "volume": v,
         })
     return out
