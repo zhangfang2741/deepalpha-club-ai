@@ -47,7 +47,22 @@ router = APIRouter()
 _analyzer = ChanAnalyzer()
 
 # 窗口锚定的 warmup 天数：足够覆盖缠论左边界依赖的收敛区（实测 ~30 根合并K线）
-_WARMUP_DAYS = {"daily": 180, "weekly": 540}
+_WARMUP_DAYS = {"daily": 180, "weekly": 540, "30min": 20}
+# 30 分钟可见区间上限：港股/A 股的 Yahoo 分钟线最多约 60 天，美股 FMP 分钟线要分段请求；
+# 可见 30 天 + 预热 20 天 ≈ 50 天，既在上限内，请求量也可控。
+_MAX_VISIBLE_DAYS = {"30min": 30}
+
+
+def _visible_start(start_date: str, end_date: str, freq: str) -> str:
+    """可见区间起点：30 分钟级别收窄到最近 _MAX_VISIBLE_DAYS 天，日线/周线原样返回。"""
+    cap = _MAX_VISIBLE_DAYS.get(freq)
+    if cap is None:
+        return start_date
+    try:
+        earliest = (date.fromisoformat(end_date[:10]) - timedelta(days=cap)).isoformat()
+    except ValueError:
+        return start_date
+    return max(start_date, earliest)
 
 
 def _anchor_start(start_date: str, freq: str, warmup_days: int | None = None) -> str:
@@ -117,7 +132,8 @@ async def chan_analysis(
     symbol: str = Query(description="股票代码，如 AAPL"),
     start_date: str = Query(description="开始日期，格式 YYYY-MM-DD"),
     end_date: str = Query(description="结束日期，格式 YYYY-MM-DD"),
-    freq: str = Query(default="daily", description="K线周期：daily / weekly"),
+    freq: str = Query(default="daily", pattern="^(daily|weekly|30min)$",
+                      description="K线周期：daily / weekly / 30min（30 分钟可见区间最多近 30 天）"),
     lang: str = Query(default="zh", description="分析文案语言：zh / en"),
     warmup_days: int | None = Query(
         default=None, ge=0,
@@ -135,6 +151,7 @@ async def chan_analysis(
     # 窗口锚定：在用户所选起点之前多取一段 warmup K 线一起送入缠论，在完整序列上
     # 计算以消除左边界依赖（结构不随用户选的起始日期漂移），再裁剪回可见窗口。
     # 实测 ~30 根合并K线即可让可见区结构收敛，这里给足冗余：日线 180 天、周线 540 天。
+    start_date = _visible_start(start_date, end_date, freq)
     anchor_start = _anchor_start(start_date, freq, warmup_days)
 
     bars = await _fetch_bars_or_http_error(user.id, symbol, anchor_start, end_date, freq, redis)

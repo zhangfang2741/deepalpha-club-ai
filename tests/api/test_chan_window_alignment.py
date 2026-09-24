@@ -20,3 +20,13 @@ def test_radar_fetch_range_equals_detail_range_from_radar_entry():
     as_of = date(2026, 9, 24)
     detail_visible_start = (as_of - timedelta(days=270)).isoformat()  # iOS openSymbol 的 start
     assert radar._fetch_start(as_of, window=45) == _anchor_start(detail_visible_start, "daily", 0)
+
+
+def test_30min_window_is_clamped_and_warmed_briefly():
+    """30 分钟：可见区间最多最近 30 天、预热 20 天（合计约 50 天，在 Yahoo 分钟线 60 天上限内）。"""
+    from app.api.v1.chan import _visible_start
+
+    assert _visible_start("2025-09-24", "2026-09-24", "30min") == "2026-08-25"   # 一年被收窄到 30 天
+    assert _visible_start("2026-09-10", "2026-09-24", "30min") == "2026-09-10"   # 本就更短则不动
+    assert _visible_start("2025-09-24", "2026-09-24", "daily") == "2025-09-24"   # 日线不受影响
+    assert _anchor_start("2026-08-25", "30min", None) == "2026-08-05"
