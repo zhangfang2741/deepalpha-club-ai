@@ -147,8 +147,12 @@ def extract_structures(c: CZSC, bars: list[dict]) -> CzscStructures:
     for s in strokes:
         stroke_by_start_time.setdefault(s.start_time, s)
 
+    # czsc 的 zs_list 只是把已完成笔按「是否离开上一组」分组，1~2 笔的组、上下沿不重叠
+    # 的组也会返回；缠论中枢至少 3 笔且有重叠区间，不满足的不是中枢，丢弃。
     pivots = []
     for zs in c.zs_list:
+        if len(zs.bis) < 3 or not zs.is_valid() or zs.zg <= zs.zd:
+            continue
         elements = [stroke_by_start_time[ts_date(bi.fx_a.dt)] for bi in zs.bis]
         pivots.append(Pivot(
             zg=float(zs.zg), zd=float(zs.zd), gg=float(zs.gg), dd=float(zs.dd),

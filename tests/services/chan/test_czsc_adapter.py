@@ -120,3 +120,26 @@ def test_extract_structures_maps_to_existing_dataclasses():
         assert not (b.high >= a.high and b.low <= a.low)
         assert a.time < b.time
         assert a.raw_start <= a.raw_end
+
+
+def _staircase_bars(n: int = 96, up_amp: float = 5.0, dn_amp: float = 1.0, wave: int = 8) -> list[dict]:
+    """强势阶梯上涨：每段涨 up_amp、回调 dn_amp，回调低点始终高于前面的区间。"""
+    bars = []
+    price = 100.0
+    day0 = dt.date(2025, 1, 1)
+    for i in range(n):
+        step = up_amp if (i % (2 * wave)) < wave else -dn_amp
+        o, c = price, price + step
+        bars.append(_bar((day0 + dt.timedelta(days=i)).isoformat(), o, max(o, c) + 0.5, min(o, c) - 0.5, c))
+        price = c
+    return bars
+
+
+def test_extract_structures_drops_groups_with_fewer_than_three_strokes():
+    """中枢至少 3 笔重叠：czsc 的 zs_list 只是把笔分组，1~2 笔的组也会返回，需丢弃。"""
+    bars = _staircase_bars()
+    c = build_czsc(bars, symbol="STAIR", freq=Freq.D)
+    assert any(len(z.bis) < 3 for z in c.zs_list), "前提：czsc 原始分组里有不足 3 笔的组"
+    structures = extract_structures(c, bars)
+    assert all(len(p.elements) >= 3 for p in structures.stroke_pivots)
+    assert structures.stroke_pivots == []
