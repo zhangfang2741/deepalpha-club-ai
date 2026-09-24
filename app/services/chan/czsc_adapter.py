@@ -61,7 +61,8 @@ class CzscStructures:
 
 
 def _ts_date(ts) -> str:
-    return pd.Timestamp(ts).strftime("%Y-%m-%d")
+    # str(date()) 输出 YYYY-MM-DD；包一层 str 以兼容 pyright 对 NaTType 的联合类型标注
+    return str(pd.Timestamp(ts).date())
 
 
 def extract_structures(c: CZSC, bars: list[dict]) -> CzscStructures:
