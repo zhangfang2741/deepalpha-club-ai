@@ -544,7 +544,7 @@ struct ChanChartView: View {
 
     // MARK: - 绘制：力度
 
-    /// 每一笔一根柱，横跨该笔起止，柱高 = 价差力度（相对可见区最大值）；红涨绿跌，
+    /// 每一笔一根窄柱，居中于该笔起止，柱高 = 价差力度（相对可见区最大值）；红涨绿跌，
     /// 未确认的笔变淡。力度背驰（价格创新高/低但价差弱于前一同向笔，且量能或时长也更弱）
     /// 的笔加橙色描边并标「背」——与买卖点、背驰说明同一口径。
     private func drawForce(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat, range: VisibleRange) {
@@ -561,11 +561,12 @@ struct ChanChartView: View {
 
         for (s, si, ei) in visible {
             let x1 = x(for: si, range: range), x2 = x(for: ei, range: range)
-            // 相邻笔共用端点 K 线，两侧各让出一点间隙，柱子才不会粘成一片
-            let gap = max(1, range.candleWidth * 0.3)
+            // 窄柱放在该笔时间范围的正中：横跨整笔会宽成色块、相邻几根连成一片，
+            // 读不出「一根柱 = 一笔」。宽度取 3 根K线宽（不超过笔本身的跨度）。
+            let span = abs(x2 - x1)
+            let width = max(3, min(range.candleWidth * 3, span * 0.8))
             let h = CGFloat((s.powerPrice ?? 0) / maxPower) * usable
-            let bar = CGRect(x: min(x1, x2) + gap / 2, y: height - h,
-                             width: max(2, abs(x2 - x1) - gap), height: h)
+            let bar = CGRect(x: (x1 + x2) / 2 - width / 2, y: height - h, width: width, height: h)
             let base = s.direction == .up ? Theme.up : Theme.down
             ctx.fill(Path(roundedRect: bar, cornerRadius: 2), with: .color(base.opacity(s.confirmed ? 0.55 : 0.28)))
             if s.diverged == true {
