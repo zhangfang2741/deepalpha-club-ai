@@ -31,6 +31,48 @@ struct RadarOrbitSpacingTests {
             }
         }
         testOrbitPlanning()
+        testAreaScale()
+        testRelaxRemovesOverlap()
+    }
+
+    /// 面积缩放：放得下不缩；太挤按面积等比缩小，且不低于下限。
+    static func testAreaScale() {
+        let roomy = RadarOrbitSpacing.areaScale(diameters: [60, 76], hRad: 160, vRad: 220)
+        assert(roomy == 1, "放得下时不缩放")
+        let crowded = RadarOrbitSpacing.areaScale(diameters: Array(repeating: 92, count: 12), hRad: 160, vRad: 220)
+        assert(crowded < 1 && crowded >= 0.6, "太挤时缩小但不低于 0.6")
+        let total = 12 * Double.pi * pow(92 * crowded / 2, 2)
+        assert(total <= 0.42 * Double.pi * 160 * 220 + 1 || crowded == 0.6, "缩放后总面积不超过场面积的 42%")
+    }
+
+    /// 碰撞松弛：从全部挤在一起的初始位置出发，松弛后两两不重叠（留出间距）、都在场内，
+    /// 且离中心的相对远近次序大体保留（目标半径小的仍更靠内）。
+    static func testRelaxRemovesOverlap() {
+        let w = 360.0, h = 480.0, hRad = 162.0, vRad = 222.0
+        var items: [RadarOrbitSpacing.Body] = []
+        for i in 0..<12 {
+            let target = i < 6 ? 0.25 : 0.75   // 前 6 个「近」、后 6 个「远」
+            let angle = Double(i) * 0.5
+            items.append(.init(x: w / 2 + 5 * cos(angle), y: h / 2 + 5 * sin(angle),
+                               diameter: i % 3 == 0 ? 76 : 60, targetRadius: target))
+        }
+        let out = RadarOrbitSpacing.relax(items, width: w, height: h, hRad: hRad, vRad: vRad, gap: 4)
+        for i in out.indices {
+            let b = out[i]
+            assert(b.x - b.diameter / 2 >= -0.5 && b.x + b.diameter / 2 <= w + 0.5, "水平在场内")
+            assert(b.y - b.diameter / 2 >= -0.5 && b.y + b.diameter / 2 <= h + 0.5, "垂直在场内")
+            for j in out.indices where j > i {
+                let o = out[j]
+                let dist = hypot(b.x - o.x, b.y - o.y)
+                assert(dist >= (b.diameter + o.diameter) / 2 - 1, "松弛后不应重叠: \(i) \(j) \(dist)")
+            }
+        }
+        func norm(_ b: RadarOrbitSpacing.Body) -> Double {
+            hypot((b.x - w / 2) / hRad, (b.y - h / 2) / vRad)
+        }
+        let near = out.prefix(6).map(norm).reduce(0, +) / 6
+        let far = out.suffix(6).map(norm).reduce(0, +) / 6
+        assert(near < far, "近的整体仍更靠中心")
     }
 
     /// 轨道规划：由内向外、间距不重叠、容量不超、各档数量守恒、单个气泡居中。

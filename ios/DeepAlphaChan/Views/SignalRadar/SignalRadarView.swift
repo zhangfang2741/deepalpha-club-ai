@@ -379,9 +379,12 @@ struct SignalRadarView: View {
         let scales = ringSpecs.map(\.scale)
         let bandBounds = [(0.0, scales[0]), (scales[0], scales[1]), (scales[1], scales[2])]
         func age(_ s: RadarSignal) -> Int { daysAgo(from: s.date, to: dayDate) }
-        func baseDiameter(_ s: RadarSignal) -> Double {
+        func rawDiameter(_ s: RadarSignal) -> Double {
             diameter(forLevel: s.level) * ringSizeFactor(forDaysAgo: age(s))
         }
+        // 总面积放不下时全部气泡等比缩小（保留一/二/三类相对大小），不然必然互相压住
+        let sizeScale = RadarOrbitSpacing.areaScale(diameters: signals.map(rawDiameter), hRad: hRad, vRad: vRad)
+        func baseDiameter(_ s: RadarSignal) -> Double { rawDiameter(s) * sizeScale }
         // 按时间档分组；档内由新到旧（越新越靠内、最新居中），同日按稳定标识排序，
         // 避免强度排名变化导致同一批气泡交换位置。
         let groups: [[RadarSignal]] = (0..<3).map { band in
@@ -434,6 +437,17 @@ struct SignalRadarView: View {
                 }
             }
             layouts.append(contentsOf: best)
+        }
+        // 碰撞松弛：轨道只是初始位置，同环带内等距摆放、跨环带时仍可能挤压；推开重叠的
+        // 气泡，并用弱回复力把每个拉回自己轨道半径，保留「越靠中心越新」。
+        let bodies = layouts.map { l -> RadarOrbitSpacing.Body in
+            let r = hypot((l.x - w / 2) / max(hRad, 1), (l.y - h / 2) / max(vRad, 1))
+            return .init(x: l.x, y: l.y, diameter: l.diameter, targetRadius: r)
+        }
+        let relaxed = RadarOrbitSpacing.relax(bodies, width: w, height: h, hRad: hRad, vRad: vRad, gap: 4)
+        for i in layouts.indices {
+            layouts[i].x = relaxed[i].x
+            layouts[i].y = relaxed[i].y
         }
         // 同一环内谁在最上层：越接近查看日（daysAgo 越小）画得越晚，叠层里就浮在
         // 更外面（更靠近用户）；离得越久远的沉在下面。

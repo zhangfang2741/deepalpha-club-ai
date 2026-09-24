@@ -169,3 +169,89 @@ extension RadarOrbitSpacing {
         return counts
     }
 }
+
+// MARK: - 面积缩放 + 碰撞松弛
+
+extension RadarOrbitSpacing {
+    /// 气泡总面积占场（椭圆）面积的上限：超过就按面积等比缩小全部气泡。
+    /// 带时间环带约束的圆堆积，实测 40% 出头还能不重叠地摆开，再多必然互相压住。
+    static let maxAreaFill = 0.42
+    /// 缩放下限：再小文字就读不清，宁可允许少量重叠。
+    static let minScale = 0.6
+
+    /// 让全部气泡放得下的统一缩放比例（1 = 不缩）。等比缩小保留一/二/三类的相对大小。
+    static func areaScale(diameters: [Double], hRad: Double, vRad: Double) -> Double {
+        let bubbles = diameters.reduce(0) { $0 + Double.pi * $1 * $1 / 4 }
+        let field = Double.pi * hRad * vRad
+        guard bubbles > 0, field > 0 else { return 1 }
+        let budget = field * maxAreaFill
+        if bubbles <= budget { return 1 }
+        return max(minScale, (budget / bubbles).squareRoot())
+    }
+
+    /// 参与松弛的气泡：中心坐标、直径、按时间应在的归一化半径（占半轴比例 0~1）。
+    struct Body: Equatable {
+        var x: Double
+        var y: Double
+        var diameter: Double
+        var targetRadius: Double
+    }
+
+    /// 碰撞松弛：反复把两两重叠的气泡沿连线推开，同时用弱回复力把每个气泡拉回
+    /// 它按时间应在的椭圆半径上（保留「越靠中心越新」），并夹在画布内。
+    /// 纯函数、确定性（固定迭代次数、固定顺序），同样输入永远得到同样布局，不会闪动。
+    static func relax(
+        _ bodies: [Body], width w: Double, height h: Double, hRad: Double, vRad: Double,
+        gap: Double = 4, iterations: Int = 240
+    ) -> [Body] {
+        var b = bodies
+        let cx = w / 2, cy = h / 2
+        let n = b.count
+        guard n > 1 else { return b.map { clamp($0, w, h) } }
+        for step in 0..<iterations {
+            // 回复力随迭代衰减：前期让气泡回到各自时间环，后期让位给去重叠
+            let pull = 0.08 * (1 - Double(step) / Double(iterations))
+            for i in 0..<n {
+                let dx = (b[i].x - cx) / max(hRad, 1), dy = (b[i].y - cy) / max(vRad, 1)
+                let r = (dx * dx + dy * dy).squareRoot()
+                if r > 1e-6 {
+                    let k = (b[i].targetRadius / r - 1) * pull
+                    b[i].x += (b[i].x - cx) * k
+                    b[i].y += (b[i].y - cy) * k
+                }
+            }
+            var moved = false
+            for i in 0..<n {
+                for j in (i + 1)..<n {
+                    var dx = b[j].x - b[i].x, dy = b[j].y - b[i].y
+                    var dist = (dx * dx + dy * dy).squareRoot()
+                    let need = (b[i].diameter + b[j].diameter) / 2 + gap
+                    guard dist < need else { continue }
+                    if dist < 1e-6 {
+                        // 完全重合：按下标给个确定的方向分开
+                        let angle = Double(i * 7 + j * 13)
+                        dx = cos(angle); dy = sin(angle); dist = 1
+                    }
+                    // 大气泡挪得少、小气泡挪得多（按面积反比分配位移）
+                    let ai = b[i].diameter * b[i].diameter, aj = b[j].diameter * b[j].diameter
+                    let push = need - dist
+                    let ui = push * aj / (ai + aj), uj = push * ai / (ai + aj)
+                    b[i].x -= dx / dist * ui; b[i].y -= dy / dist * ui
+                    b[j].x += dx / dist * uj; b[j].y += dy / dist * uj
+                    moved = true
+                }
+            }
+            for i in 0..<n { b[i] = clamp(b[i], w, h) }
+            if !moved && pull < 1e-3 { break }
+        }
+        return b
+    }
+
+    private static func clamp(_ body: Body, _ w: Double, _ h: Double) -> Body {
+        var c = body
+        let r = c.diameter / 2 + 2
+        c.x = min(max(c.x, r), w - r)
+        c.y = min(max(c.y, r), h - r)
+        return c
+    }
+}
