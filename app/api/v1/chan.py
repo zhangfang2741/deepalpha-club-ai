@@ -82,6 +82,11 @@ def _anchor_start(start_date: str, freq: str, warmup_days: int | None = None) ->
     return (d - timedelta(days=days)).isoformat()
 
 
+def _zip_divergences(strokes: list, divergences: list) -> list[tuple]:
+    """笔与笔级背驰按下标平行；笔数不足 3 的早退分支不计算背驰（列表为空），此时补 None。"""
+    return [(s, divergences[i] if i < len(divergences) else None) for i, s in enumerate(strokes)]
+
+
 def _signal_out(sig: Signal) -> SignalOut:
     return SignalOut(
         type=sig.type,
@@ -91,8 +96,10 @@ def _signal_out(sig: Signal) -> SignalOut:
         strength=sig.strength,
         is_buy=sig.is_buy,
         description=sig.description,
-        area_ratio=sig.divergence.area_ratio if sig.divergence else None,
         confirmed=sig.confirmed,
+        price_ratio=sig.divergence.price_ratio if sig.divergence else None,
+        volume_ratio=sig.divergence.volume_ratio if sig.divergence else None,
+        length_ratio=sig.divergence.length_ratio if sig.divergence else None,
     )
 
 
@@ -227,8 +234,14 @@ async def chan_analysis(
                 high=s.high,
                 low=s.low,
                 confirmed=s.confirmed,
+                power_price=s.power_price,
+                power_volume=s.power_volume,
+                length=s.length,
+                diverged=dv.is_diverged if dv else False,
+                # 未做比较（无前一个同向笔 / 未创新高低）的默认结果说明为空，不给比值
+                price_ratio=dv.price_ratio if dv and dv.description else None,
             )
-            for s in result.strokes
+            for s, dv in _zip_divergences(result.strokes, result.divergences)
         ],
         segments=[
             SegmentOut(

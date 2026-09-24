@@ -31,7 +31,7 @@ def _stroke(direction: str, idx: int, p0: float, p1: float) -> Stroke:
 def _div(is_div: bool) -> DivergenceResult:
     return DivergenceResult(is_diverged=is_div, type="trend" if is_div else "none",
                             strength="strong" if is_div else "none",
-                            area_ratio=0.5 if is_div else 1.0, description="", dif_ratio=0.5)
+                            price_ratio=0.5 if is_div else 1.0, description="", volume_ratio=0.5)
 
 
 def _outlook(walk_type, strokes, divergences, merged=None, pivots=None):

@@ -20,6 +20,7 @@ from app.services.chan.divergence import (
     MACDData,
     calc_macd,
     find_segment_divergences,
+    force_text,
     find_stroke_divergences,
 )
 from czsc import Freq
@@ -77,7 +78,7 @@ class ChanAnalysisResult:
     stroke_pivots: list[Pivot] = field(default_factory=list)
     segment_pivots: list[Pivot] = field(default_factory=list)
     divergences: list[DivergenceResult] = field(default_factory=list)
-    # 线段级背驰（比笔级更高级别，逐条线段与前一同向线段对比 MACD 力度）
+    # 线段级背驰（比笔级更高级别，逐条线段与前一同向线段对比力度：价差/量能/时长）
     segment_divergences: list[DivergenceResult] = field(default_factory=list)
     signals: list[Signal] = field(default_factory=list)
     macd: MACDData | None = None
@@ -212,13 +213,11 @@ class ChanAnalyzer:
         result.macd = calc_macd(bars)
 
         # 7. 背驰判断（结合笔级中枢区分趋势背驰 / 盘整背驰）
-        result.divergences = find_stroke_divergences(
-            result.strokes, result.macd, lang, pivots=result.stroke_pivots
-        )
+        result.divergences = find_stroke_divergences(result.strokes, lang, pivots=result.stroke_pivots)
         # 7b. 线段级背驰（更高级别）
         if len(result.segments) >= 2:
             result.segment_divergences = find_segment_divergences(
-                result.segments, result.macd, lang, pivots=result.segment_pivots
+                result.segments, lang, pivots=result.segment_pivots
             )
         diverged_count = sum(1 for d in result.divergences if d.is_diverged)
         logger.debug("chan_divergences", total=len(result.divergences), diverged=diverged_count)
@@ -495,7 +494,7 @@ class ChanAnalyzer:
                     f"方向可能反复"
                 )
 
-        # 线段级背驰：更高级别的动能衰减提示（若最近一条线段出现背驰）
+        # 线段级背驰：更高级别的力度衰减提示（若最近一条线段出现背驰）
         if r.segment_divergences and r.segment_divergences[-1].is_diverged and r.segments:
             seg = r.segments[-1]
             dv = r.segment_divergences[-1]
@@ -504,13 +503,14 @@ class ChanAnalyzer:
             if en:
                 notes.append(
                     f"A segment-level {kind_en} divergence appeared (higher degree than stroke "
-                    f"level; MACD area ratio={dv.area_ratio:.2f}) — the larger-degree move is "
-                    f"losing momentum"
+                    f"level; {force_text(dv.price_ratio, dv.volume_ratio, dv.length_ratio, lang)}) "
+                    f"— the larger-degree move is losing force"
                 )
             else:
                 notes.append(
-                    f"出现线段级{kind}（级别高于笔级，MACD面积比值={dv.area_ratio:.2f}），"
-                    f"大级别走势动能正在衰减"
+                    f"出现线段级{kind}（级别高于笔级，"
+                    f"{force_text(dv.price_ratio, dv.volume_ratio, dv.length_ratio, lang)}），"
+                    f"大级别走势力度正在衰减"
                 )
 
         pivot_names = (
@@ -638,14 +638,14 @@ class ChanAnalyzer:
         # ---- 因子 5：背驰（只削弱当前方向的力度）----
         if recent_div_dir == "up":
             factors.append(BiasFactor(pick(lang,
-                "上涨过程中出现顶背驰：价格创新高但动能没跟上，上涨力度在衰减",
-                "A top divergence appeared during the advance: price made new highs but momentum "
-                "didn't follow — the push is decaying"), -DIVERGENCE_WEIGHT))
+                "上涨过程中出现顶背驰：价格创新高但力度（价差、量能或时长）跟不上，上涨在衰减",
+                "A top divergence appeared during the advance: price made new highs but force (range, "
+                "volume or duration) didn't follow — the push is decaying"), -DIVERGENCE_WEIGHT))
         elif recent_div_dir == "down":
             factors.append(BiasFactor(pick(lang,
-                "下跌过程中出现底背驰：价格创新低但动能在减弱，下跌力度在衰减",
-                "A bottom divergence appeared during the decline: price made new lows but momentum "
-                "weakened — the selling is decaying"), DIVERGENCE_WEIGHT))
+                "下跌过程中出现底背驰：价格创新低但力度（价差、量能或时长）在减弱，下跌在衰减",
+                "A bottom divergence appeared during the decline: price made new lows but force (range, "
+                "volume or duration) weakened — the selling is decaying"), DIVERGENCE_WEIGHT))
 
         # ---- 因子 6：量价配合 ----
         if bars:
@@ -691,9 +691,9 @@ class ChanAnalyzer:
     def _bias_label(
         self, score: float, bias: str, div_dir: str | None, lang: str = "zh"
     ) -> str:
-        """把加权分数说成人话：强弱程度 + 动能是否在衰减。
+        """把加权分数说成人话：强弱程度 + 力度是否在衰减。
 
-        动能衰减降级为后缀而不是主语——它描述的是力度的二阶变化（还在涨、只是
+        力度衰减降级为后缀而不是主语——它描述的是力度的二阶变化（还在涨、只是
         变慢），跟「多空方向」不是一回事，写成主语就会和 chip 上的倾向打架。
         """
         strong = abs(score) >= STRONG_BIAS_THRESHOLD
@@ -707,9 +707,9 @@ class ChanAnalyzer:
             label = pick(lang, "技术面多空僵持", "Technicals balanced")
 
         if div_dir == "up":
-            label += pick(lang, "，上涨动能转弱", ", upside momentum fading")
+            label += pick(lang, "，上涨力度转弱", ", upside force fading")
         elif div_dir == "down":
-            label += pick(lang, "，下跌动能转弱", ", downside momentum fading")
+            label += pick(lang, "，下跌力度转弱", ", downside force fading")
         return label
 
     def _factor_summary(self, factors: list[BiasFactor], lang: str = "zh") -> str:

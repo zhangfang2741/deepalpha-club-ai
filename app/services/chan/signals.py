@@ -10,7 +10,12 @@ from typing import Literal
 
 from app.services.chan.bias import SEGMENT_WEIGHT, STROKE_WEIGHT
 from app.services.chan.czsc_signals import BsEvent
-from app.services.chan.divergence import DivergenceResult
+from app.services.chan.divergence import (
+    DivergenceResult,
+    _in_consolidation,
+    classify_strength,
+    force_text,
+)
 from app.services.chan.i18n import is_en
 from app.services.chan.pivot import Pivot
 from app.services.chan.stroke import Stroke
@@ -116,6 +121,41 @@ def _latest_pivot_before(pivots: list[Pivot], time: str) -> Pivot | None:
     return max(done, key=lambda p: p.end_time) if done else None
 
 
+def _first_bs_force(
+    strokes: list[Stroke], end_idx: int, n: int, is_buy: bool, pivots: list[Pivot], lang: str,
+) -> DivergenceResult | None:
+    """按 czsc 一买/一卖的判据复算力度比，使说明与信号成立的原因完全一致。
+
+    与 czsc check_first_buy/sell 相同：取以该笔结尾的最近 n 笔，关键笔 = 第 1 笔 + 之后逐段
+    创新低（卖点为创新高）的同向笔；基准 = max(前一个同向笔, 关键笔均值)，价差/量能/时长
+    分别比较。窗口不足 n 笔时返回 None（由调用方退回该笔自身的背驰度量）。
+    """
+    if n < 5 or end_idx - n + 1 < 0:
+        return None
+    bis = strokes[end_idx - n + 1:end_idx + 1]
+    key = [bis[0]]
+    for i in range(2, len(bis) - 2, 2):
+        if (bis[i].low < bis[i - 2].low) if is_buy else (bis[i].high > bis[i - 2].high):
+            key.append(bis[i])
+    last, prev = bis[-1], bis[-3]
+
+    def ratio(attr: str) -> float:
+        bench = max(float(getattr(prev, attr)), sum(float(getattr(k, attr)) for k in key) / len(key))
+        return round(float(getattr(last, attr)) / bench, 2) if bench > 0 else 1.0
+
+    price_ratio, volume_ratio, length_ratio = ratio("power_price"), ratio("power_volume"), ratio("length")
+    strength = classify_strength(price_ratio)
+    return DivergenceResult(
+        is_diverged=True,
+        type="consolidation" if _in_consolidation(prev, last, pivots) else "trend",
+        strength=strength if strength != "none" else "weak",
+        price_ratio=price_ratio,
+        description=force_text(price_ratio, volume_ratio, length_ratio, lang),
+        volume_ratio=volume_ratio,
+        length_ratio=length_ratio,
+    )
+
+
 def _span_count(span: str) -> str:
     return span[:-1] if span.endswith("笔") else ""
 
@@ -123,15 +163,15 @@ def _span_count(span: str) -> str:
 def _describe(sig_type: str, time: str, price: float, span: str,
               div: DivergenceResult | None, lang: str) -> str:
     n = _span_count(span)
-    area = f"，MACD面积比值={div.area_ratio:.2f}" if div else ""
-    area_en = f"; MACD area ratio={div.area_ratio:.2f}" if div else ""
+    area = f"：{force_text(div.price_ratio, div.volume_ratio, div.length_ratio, lang)}" if div else ""
+    area_en = f": {force_text(div.price_ratio, div.volume_ratio, div.length_ratio, lang)}" if div else ""
     if is_en(lang):
         legs = f"the last of {n} legs" if n else "the last leg"
         texts = {
             "buy1": f"Type-1 buy: at {time}, {legs} of the decline made a new low ({price:.2f}) with weaker "
-                    f"force than earlier legs (price range plus volume/duration fading) — a bottom divergence{area_en}",
+                    f"force than earlier legs — a bottom divergence{area_en}",
             "sell1": f"Type-1 sell: at {time}, {legs} of the advance made a new high ({price:.2f}) with weaker "
-                     f"force than earlier legs (price range plus volume/duration fading) — a top divergence{area_en}",
+                     f"force than earlier legs — a top divergence{area_en}",
             "buy2": f"Type-2 buy: at {time}, the pullback low ({price:.2f}) landed in a zone where several earlier "
                     f"turning points clustered, finding support without a new low",
             "sell2": f"Type-2 sell: at {time}, the rebound high ({price:.2f}) met a zone where several earlier "
@@ -144,10 +184,8 @@ def _describe(sig_type: str, time: str, price: float, span: str,
     else:
         legs = f"近{n}笔" if n else "近几笔"
         texts = {
-            "buy1": f"一类买点：{time} {legs}下跌中末笔创新低（{price:.2f}），但下跌力度弱于前段"
-                    f"（价差与量能/时长同步衰减），构成底背驰{area}",
-            "sell1": f"一类卖点：{time} {legs}上涨中末笔创新高（{price:.2f}），但上涨力度弱于前段"
-                     f"（价差与量能/时长同步衰减），构成顶背驰{area}",
+            "buy1": f"一类买点：{time} {legs}下跌中末笔创新低（{price:.2f}），但力度弱于前段，构成底背驰{area}",
+            "sell1": f"一类卖点：{time} {legs}上涨中末笔创新高（{price:.2f}），但力度弱于前段，构成顶背驰{area}",
             "buy2": f"二类买点：{time} 回调低点（{price:.2f}）落在此前多次转折形成的价格密集区，获得支撑、未再创新低",
             "sell2": f"二类卖点：{time} 反弹高点（{price:.2f}）触及此前多次转折形成的价格密集区，受压回落、未再创新高",
             "buy3": f"三类买点：{time} 前五笔构成中枢后，回调低点（{price:.2f}）仍在中枢上沿之上未回中枢，且均线逐级抬升",
@@ -169,13 +207,14 @@ def generate_all_signals(
       其端点在最终结构里已不存在——这是已失效的信号，丢弃；只保留所属笔仍是最终
       结构中同向笔终点的事件（买点落下降笔终点、卖点落上升笔终点）。
     - 落点：所属笔的终点（与图上笔端点对齐，_mark_confirmations 据此判断是否确认）。
-    - 一类强度：只反映该笔的背驰幅度（本地 MACD 面积 + DIF 双过滤）；本地度量未确认
-      背驰时降为 weak、不挂背驰对象——czsc 的一买判据是笔力度，二者可能不一致。
+    - 一类强度：按 czsc 一买/一卖同一判据复算的价差力度比分档（<0.4 强 / <0.7 中 / 其余弱），
+      说明写出价差/量能/时长三项比值；窗口不足时退回该笔自身的力度背驰。
     - 二/三类强度：信号前最近已结束中枢的级别 + 落点离对应边界的余量（_type23_strength）；
       无可依中枢时为 weak。
     """
     div_by_end = {s.end_time: dv for s, dv in zip(strokes, divergences, strict=False)}
     direction_by_end = {s.end_time: s.direction for s in strokes}
+    idx_by_end = {s.end_time: i for i, s in enumerate(strokes)}
     signals: list[Signal] = []
     seen: set[tuple[str, str]] = set()
     for ev in sorted(events, key=lambda e: e.bi_end_time):
@@ -188,7 +227,10 @@ def generate_all_signals(
         div: DivergenceResult | None = None
         strength: Literal["strong", "medium", "weak"] = "weak"
         if ev.type in ("buy1", "sell1"):
-            dv = div_by_end.get(ev.bi_end_time)
+            span_n = int(_span_count(ev.span) or 0)
+            forced = _first_bs_force(strokes, idx_by_end[ev.bi_end_time], span_n,
+                                     ev.type == "buy1", pivots, lang)
+            dv = forced or div_by_end.get(ev.bi_end_time)
             if dv is not None and dv.is_diverged and dv.strength != "none":
                 div = dv
                 strength = dv.strength  # type: ignore[assignment]

@@ -50,7 +50,7 @@ def _set_only_divergence(result, direction: str) -> None:
         if result.strokes[i].direction == direction:
             result.divergences[i] = DivergenceResult(
                 is_diverged=True, type="trend", strength="strong",
-                area_ratio=0.6, description="test divergence",
+                price_ratio=0.6, description="test divergence",
             )
             return
     raise AssertionError(f"行情里没有 {direction} 方向的笔，测试用例不成立")
@@ -91,8 +91,8 @@ class TestBiasWeighting:
         assert after.score == pytest.approx(base.score - 1.5)
         if base.score - 1.5 >= BIAS_THRESHOLD:
             assert after.bias == "bullish"
-        # 动能衰减仍要说出来，只是降级为标签后缀
-        assert "动能转弱" in after.action_label
+        # 力度衰减仍要说出来，只是降级为标签后缀
+        assert "力度转弱" in after.action_label
 
     def test_底背驰只加分不直接翻多(self):
         bars = _downtrend_bars()
@@ -108,7 +108,7 @@ class TestBiasWeighting:
         assert after.score == pytest.approx(base.score + 1.5)
         if base.score + 1.5 <= -BIAS_THRESHOLD:
             assert after.bias == "bearish"
-        assert "动能转弱" in after.action_label
+        assert "力度转弱" in after.action_label
 
 
 class TestReasons:

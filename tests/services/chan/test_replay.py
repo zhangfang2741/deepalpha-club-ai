@@ -47,7 +47,7 @@ def _pivot_from(strokes: list[Stroke], n_absorbed: int, zg: float, zd: float) ->
 def _div(is_div: bool = False) -> DivergenceResult:
     return DivergenceResult(is_diverged=is_div, type="trend" if is_div else "none",
                              strength="strong" if is_div else "none",
-                             area_ratio=0.5 if is_div else 1.0, description="", dif_ratio=0.5)
+                             price_ratio=0.5 if is_div else 1.0, description="", volume_ratio=0.5)
 
 
 def _result(strokes, stroke_pivots) -> ChanAnalysisResult:

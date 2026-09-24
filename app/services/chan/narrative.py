@@ -150,13 +150,13 @@ def build_narrative(
     # ---- 阶段判定（描述当前形态，不预测）----
     if trend_up and div_dir == "up":
         phase = "topping"
-        label = pick(lang, "上涨动能减弱", "Momentum fading")
+        label = pick(lang, "上涨力度减弱", "Upside force fading")
         headline = pick(lang,
             "股价还在往上走，但上涨的力度已经开始减弱，要警惕冲高见顶、转入回调。",
             "Price is still rising, but the push is weakening — watch for a top and a shift into pullback.")
     elif trend_down and div_dir == "down":
         phase = "bottoming"
-        label = pick(lang, "下跌动能减弱", "Downside fading")
+        label = pick(lang, "下跌力度减弱", "Downside force fading")
         headline = pick(lang,
             "跌势还在延续，但下跌的力度在收敛，市场可能正在寻找底部。",
             "The decline continues, but downside force is converging — the market may be searching for a bottom.")
@@ -228,13 +228,13 @@ def build_narrative(
 
     if div_dir == "up" and trend_up:
         details.append(pick(lang,
-            "上涨过程中出现了力度背离（顶背驰）：价格创新高但动能没跟上，是见顶的常见前兆。",
-            "A momentum divergence appeared during the advance (top divergence): price made new highs but "
-            "momentum didn't follow — a common precursor to a top."))
+            "上涨过程中出现了力度背离（顶背驰）：价格创新高但力度（价差、量能或时长）没跟上，是见顶的常见前兆。",
+            "A force divergence appeared during the advance (top divergence): price made new highs but "
+            "force (range, volume or duration) didn't follow — a common precursor to a top."))
     elif div_dir == "down" and trend_down:
         details.append(pick(lang,
-            "下跌过程中出现了力度背离（底背驰）：价格创新低但动能在减弱，是筑底的常见前兆。",
-            "A momentum divergence appeared during the decline (bottom divergence): price made new lows but "
-            "momentum weakened — a common precursor to a bottom."))
+            "下跌过程中出现了力度背离（底背驰）：价格创新低但力度（价差、量能或时长）在减弱，是筑底的常见前兆。",
+            "A force divergence appeared during the decline (bottom divergence): price made new lows but "
+            "force (range, volume or duration) weakened — a common precursor to a bottom."))
 
     return MarketNarrative(phase=phase, phase_label=label, headline=headline, details=details)

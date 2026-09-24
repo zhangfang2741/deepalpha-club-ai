@@ -69,10 +69,10 @@ def _piv(zd, zg, t0, t1):
                  level="stroke", elements=[])
 
 
-def _div(strength, area_ratio, diverged=True):
+def _div(strength, price_ratio, diverged=True):
     from app.services.chan.divergence import DivergenceResult
     return DivergenceResult(is_diverged=diverged, type="trend", strength=strength if diverged else "none",
-                            area_ratio=area_ratio, description="", dif_ratio=area_ratio)
+                            price_ratio=price_ratio, description="", volume_ratio=price_ratio)
 
 
 def _ev(sig_type, bi_end_time, price, bar_time=None, span=""):
@@ -89,9 +89,42 @@ def test_buy1_lands_on_stroke_end_with_divergence_strength():
     assert len(sig) == 1
     s = sig[0]
     assert (s.type, s.time, s.price, s.strength) == ("buy1", "2025-01-10", 100.0, "strong")
-    assert s.divergence is not None and s.divergence.area_ratio == 0.3
+    assert s.divergence is not None and s.divergence.price_ratio == 0.3  # 窗口不足 9 笔时退回该笔自身背驰
     assert "一类买点" in s.description and "9笔" in s.description
     assert "czsc" not in s.description.lower()
+
+
+def _fst(direction, i, p0, p1, power, volume, length=8):
+    """带力度的笔：第 i 笔，时间按下标递增。"""
+    st = _st(direction, f"2025-01-{i + 1:02d}", f"2025-01-{i + 2:02d}", p0, p1)
+    st.power_price, st.power_volume, st.length = power, volume, length
+    return st
+
+
+def test_buy1_ratios_follow_czsc_benchmark_over_its_span():
+    """一买按 czsc 的比较基准算力度比：末笔 vs max(前一个同向笔, 各关键笔均值)。
+
+    9 笔下跌结构：下降笔低点 90→80→70→60→50 逐段创新低（都是关键笔），价差 20、量能 1000；
+    末笔价差 8、量能 500、时长 8 → 价差比 8/20=0.40（强，<0.6）、量能比 0.50、时长比 1.00。
+    """
+    legs, price = [], 110.0
+    for i in range(9):
+        if i % 2 == 0:
+            last = i == 8
+            low = 90 - 10 * (i // 2)
+            legs.append(_fst("down", i, price, low, 8 if last else 20, 500 if last else 1000))
+            price = low
+        else:
+            legs.append(_fst("up", i, price, price + 12, 12, 800))
+            price += 12
+    ev = _ev("buy1", legs[-1].end_time, legs[-1].end_price, span="9笔")
+    sig = generate_all_signals([ev], legs, [_div("none", 1.0, diverged=False)] * 9, [])
+    assert len(sig) == 1
+    s = sig[0]
+    assert s.divergence is not None
+    assert (s.divergence.price_ratio, s.divergence.volume_ratio, s.divergence.length_ratio) == (0.4, 0.5, 1.0)
+    assert s.strength == "strong"
+    assert "近9笔" in s.description and "0.40" in s.description and "MACD" not in s.description
 
 
 def test_buy1_without_local_divergence_is_weak_and_has_no_divergence():

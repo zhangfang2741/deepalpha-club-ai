@@ -32,6 +32,13 @@ class StrokeOut(BaseModel):
     high: float
     low: float
     confirmed: bool = True  # 是否已完成确认（最后一笔为 False）
+    # 力度（与背驰、一类买卖点同一口径）：价差 / 量能 / 时长（去包含K线根数）
+    power_price: float = 0.0
+    power_volume: float = 0.0
+    length: int = 0
+    # 该笔与前一个同向笔相比是否力度背驰，及价差力度比（未比较时为 None）
+    diverged: bool = False
+    price_ratio: Optional[float] = None
 
 
 class SegmentOut(BaseModel):
@@ -72,8 +79,12 @@ class SignalOut(BaseModel):
     strength: Literal["strong", "medium", "weak"]
     is_buy: bool
     description: str
-    area_ratio: Optional[float] = None
+    area_ratio: Optional[float] = None  # 已废弃：背驰改为力度口径后不再填值，保留兼容旧版 App
     confirmed: bool = True  # 是否已确认（落在未确认笔上的信号为 False）
+    # 一类买卖点的力度比（与 czsc 判据同一基准）；二/三类为 None
+    price_ratio: Optional[float] = None
+    volume_ratio: Optional[float] = None
+    length_ratio: Optional[float] = None
 
 
 class RecommendationOut(BaseModel):

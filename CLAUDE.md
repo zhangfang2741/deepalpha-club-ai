@@ -164,8 +164,11 @@ deepalpha-club-ai/
 - 买卖点：`czsc_signals.scan_bs_events` 用 `CzscSignals` 逐根推进（不回看未来），选型均基于
   笔结构——一类 `cxt_first_buy/sell_V221126`、二类 `cxt_second_bs_V240524`、三类
   `cxt_third_bs_V230318`。**不要**换成 `tas_macd_first_bs_*` 这类纯 MACD 金叉死叉信号（不看笔结构）。
-- 背驰度量：仍自研（`divergence.py`），真伪 = MACD 面积缩小 **且** DIF 峰值未创新高/新低
-  （双过滤）；czsc 不输出面积比等数值，推荐因子 / 走势展望 / 前端依赖 `DivergenceResult`。
+- 背驰度量：**力度口径**（`divergence.py`，与 czsc 一类买卖点同一口径，保证可解释）——价格创新
+  高/新低，价差力度弱于前一个同向段，且量能或时长至少一项也更弱。力度三项取自 czsc 的笔
+  （`Stroke.power_price/power_volume/length`），线段为所含笔汇总。强弱按价差比分档：<0.6 强、
+  <0.8 中、其余弱（取自 169 个真实一类信号的三分位点）。**MACD 不参与任何判定**，仅为 API
+  `macd` 字段（旧版 App 副图）保留计算；新版 App 图表下方为力度面板。
 
 **数据层（根治性，别在算法层补数据的锅）**
 - **前复权**：`skills/kline.py` 全链路用前复权价（FMP dividend-adjusted 端点、Yahoo
@@ -180,7 +183,8 @@ deepalpha-club-ai/
   按（类型, 笔终点）去重。
 - **失效过滤**：所属笔若后续被延伸（端点不在最终结构中）即为失效信号，丢弃；买点只落
   下降笔终点、卖点只落上升笔终点。信号 time/price = 所属笔终点。
-- 强度：一类只反映该笔**本地背驰幅度**（本地未确认背驰则 weak），别把弱背驰拔成 strong；
+- 强度：一类按 czsc 同一判据复算的力度比分档（基准 = max(前一个同向笔, 关键笔均值)，
+  见 `signals._first_bs_force`），说明写出价差/量能/时长三项比值；
   二/三类 = 信号前**最近已结束**中枢的级别 + 余量（`_type23_strength`），尚未结束的中枢不参与。
 - 描述文案不出现 czsc 等第三方库名。
 - `pivot_phase.py`（中枢阶段徽标）仍用自研结构判定阶段；只有回抽笔终点上有**同类**

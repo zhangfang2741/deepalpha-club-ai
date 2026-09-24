@@ -287,9 +287,9 @@ def _reason(phase: Phase, direction: str | None, pivot: "Pivot", last_price: flo
             f"Retrace landed at {pair.retrace.end_price:.2f}, inside the pivot "
             f"{pivot.zd:.2f}-{pivot.zg:.2f}" + tail_en)
     return pick(lang,
-        f"延续的{'上升' if up else '下降'}笔出现{'顶' if up else '底'}背驰，动能未能同步创新高/新低。",
+        f"延续的{'上升' if up else '下降'}笔出现{'顶' if up else '底'}背驰，价格创新高/新低但力度（价差、量能或时长）减弱。",
         f"The continuing {'up' if up else 'down'}-leg shows a {'top' if up else 'bottom'} divergence "
-        "— momentum failed to confirm.")
+        "— new extreme with weaker force (range, volume or duration).")
 
 
 def _branches(direction: str, pivot: "Pivot", lang: str) -> list[PhaseBranch]:
@@ -352,7 +352,7 @@ def _why_it_matters(phase: Phase, up: bool, lang: str) -> str:
                     "离开中枢后若回抽不进中枢，就确认三" + ("买" if up else "卖") +
                     "、中枢升级、趋势打开；若回抽跌回中枢，则回到震荡。"),
         "retrace_confirmed": "回抽确认之后，趋势能走多远就看后续同向的笔是否还有力度、会不会出现背驰。",
-        "divergence_turn": "背驰意味着推动价格新高/新低的动能已经跟不上，是趋势可能见顶/见底的信号。",
+        "divergence_turn": "背驰意味着推动价格新高/新低的力度已经跟不上，是趋势可能见顶/见底的信号。",
     }
     en = {
         "pivot_forming": "Once a pivot forms, every later leg's strength and retrace are measured against its ZG/ZD.",
@@ -360,8 +360,8 @@ def _why_it_matters(phase: Phase, up: bool, lang: str) -> str:
         "leaving": (f"The leaving leg is the fork in the road: after leaving {'upward' if up else 'downward'}, "
                     "if the retrace stays out of the pivot, it confirms a type-3 signal and the trend opens up; "
                     "if it falls back in, it returns to oscillation."),
-        "retrace_confirmed": "How far the trend goes next depends on whether momentum holds or a divergence appears.",
-        "divergence_turn": "Divergence means the momentum driving new highs/lows can't keep up — a common "
+        "retrace_confirmed": "How far the trend goes next depends on whether force holds or a divergence appears.",
+        "divergence_turn": "Divergence means the force driving new highs/lows can't keep up — a common "
                             "precursor to a top or bottom.",
     }
     return pick(lang, zh[phase], en[phase])
