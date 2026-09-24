@@ -32,6 +32,10 @@ struct ChanChartView: View {
     /// 次级别下钻区间的起点（K 线时间，含）：从这根到最新用浅色底标出。nil = 不标。
     var highlightFrom: String? = nil
 
+    /// 是否在主图左上角悬浮图例（兼图层开关）；staticLegend = 分享长图用，不响应点击。
+    var showsLegend: Bool = false
+    var staticLegend: Bool = false
+
     /// 显式 init 只为一件事：把 `initialWindow` 灌进 @State 的**初始值**。
     ///
     /// 光靠 onAppear 里赋值不够 —— 离屏渲染不保证触发 onAppear，
@@ -43,6 +47,8 @@ struct ChanChartView: View {
          priceHeight: CGFloat = 240,
          macdHeight: CGFloat = 78,
          highlightFrom: String? = nil,
+         showsLegend: Bool = false,
+         staticLegend: Bool = false,
          onWindowChange: ((ChartWindow) -> Void)? = nil) {
         self.analysis = analysis
         _vm = ObservedObject(wrappedValue: vm)
@@ -52,6 +58,8 @@ struct ChanChartView: View {
         self.macdHeight = macdHeight
         self.onWindowChange = onWindowChange
         self.highlightFrom = highlightFrom
+        self.showsLegend = showsLegend
+        self.staticLegend = staticLegend
         _firstVisible = State(initialValue: initialWindow?.firstVisible ?? 0)
         _visibleCount = State(initialValue: initialWindow?.visibleCount ?? 60)
     }
@@ -178,6 +186,11 @@ struct ChanChartView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                         .padding(8)
                         .allowsHitTesting(false)
+                } else if showsLegend {
+                    // 光标激活时让位给光标详情（同在左上角）；右侧给全屏按钮与价格轴留位
+                    ChartLegend(vm: vm, isStatic: staticLegend,
+                                maxWidth: max(160, geo.size.width - 60))
+                        .padding(6)
                 }
             }
         }
@@ -304,7 +317,9 @@ struct ChanChartView: View {
         let span = max(dataSpan * 1.24, minimumSpan)
         // 有量柱时向下扩出一截：量柱占主图底部 volumeShare，K 线最低点落在量柱区之上
         let volumePad = hasVolume ? span * 0.24 : 0
-        return PriceBounds(minP: midpoint - span / 2 - volumePad, maxP: midpoint + span / 2)
+        // 左上角悬浮图例时顶部多留一截，最高的 K 线与卖点标记不被图例压住
+        let legendPad = showsLegend ? span * 0.30 : 0
+        return PriceBounds(minP: midpoint - span / 2 - volumePad, maxP: midpoint + span / 2 + legendPad)
     }
 
     private func y(for price: Double, height: CGFloat, bounds: PriceBounds) -> CGFloat {

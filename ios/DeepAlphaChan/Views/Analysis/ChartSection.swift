@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// K 线图 + 图例与全屏入口。
+/// K 线图（图例悬浮在主图左上角）+ 次级别入口 + 全屏入口。
 struct ChartSection: View {
     let analysis: ChanAnalysis
     @ObservedObject var vm: ChanViewModel
@@ -13,12 +13,11 @@ struct ChartSection: View {
         VStack(spacing: 10) {
             SubLevelBar(vm: vm, isStatic: isStatic)
 
-            ChanChartView(analysis: analysis, vm: vm, highlightFrom: drillFrom)
+            ChanChartView(analysis: analysis, vm: vm, highlightFrom: drillFrom,
+                          showsLegend: true, staticLegend: isStatic)
                 .overlay(alignment: .topTrailing) {
                     if !isStatic { fullscreenButton }
                 }
-
-            ChartLegend(vm: vm, isStatic: isStatic)
         }
     }
 

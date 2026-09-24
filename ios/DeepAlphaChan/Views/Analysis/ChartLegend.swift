@@ -1,69 +1,100 @@
 import SwiftUI
 
-/// 图例兼作图层开关，竖屏与全屏共用同一份显示状态。
+/// 图例兼作图层开关，竖屏、全屏与分享长图共用同一份显示状态。
+///
+/// 悬浮在主图左上角（由 ChanChartView 的 showsLegend 挂载）：紧凑小标签、放不下自动
+/// 换行，半透明底避免压住 K 线看不清；关掉的图层变淡。十字光标激活时让位给光标详情。
 struct ChartLegend: View {
     @ObservedObject var vm: ChanViewModel
     var isStatic = false
+    /// 可用宽度上限（给右上角全屏按钮留位）。
+    var maxWidth: CGFloat = 260
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if isStatic {
-                // 分享长图直接展开，避免横向滚动容器截断图例。
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 8) { structureItems }
-                    HStack(spacing: 8) { signalItems }
-                }
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        structureItems
-                        signalItems
-                    }
-                }
-            }
-            Text(L("虚线=未确认"))
-                .font(.caption2)
-                .foregroundStyle(Theme.textSecondary)
+        WrapLayout(spacing: 4, lineSpacing: 3) {
+                item(Theme.stroke, "笔", isOn: $vm.showStrokes)
+                item(Theme.segment, "线段", isOn: $vm.showSegments)
+                item(Theme.pivotFill, "中枢", isOn: $vm.showPivots)
+                // 顶底分型沿用原先同一个图层开关，两种颜色一起保留。
+                item(Theme.topFractal, "分型", isOn: $vm.showFractals, secondaryColor: Theme.bottomFractal)
+                item(Theme.up, "买卖点", isOn: $vm.showSignals, secondaryColor: Theme.down)
+                item(Theme.divergence, "背驰", isOn: $vm.showDivergences)
+                // 说明放进同一个换行流里，不单独占一行
+                Text(L("虚线=未确认"))
+                    .font(.system(size: 8.5))
+                    .foregroundStyle(Theme.textSecondary)
+                    .padding(.horizontal, 2)
         }
-    }
-
-    @ViewBuilder
-    private var structureItems: some View {
-        item(Theme.stroke, "笔", isOn: $vm.showStrokes)
-        item(Theme.segment, "线段", isOn: $vm.showSegments)
-        item(Theme.pivotFill, "中枢", isOn: $vm.showPivots)
-    }
-
-    @ViewBuilder
-    private var signalItems: some View {
-        // 顶底分型沿用原先同一个图层开关，两种颜色一起保留。
-        item(Theme.topFractal, "分型", isOn: $vm.showFractals, secondaryColor: Theme.bottomFractal)
-        item(Theme.up, "买卖点", isOn: $vm.showSignals, secondaryColor: Theme.down)
-        item(Theme.divergence, "背驰", isOn: $vm.showDivergences)
+        .frame(maxWidth: maxWidth, alignment: .leading)
     }
 
     private func item(
         _ color: Color, _ title: String, isOn: Binding<Bool>, secondaryColor: Color? = nil
     ) -> some View {
         Toggle(isOn: isOn) {
-            HStack(spacing: 4) {
-                VStack(spacing: 2) {
-                    Capsule().fill(color).frame(width: 10, height: 3)
+            HStack(spacing: 3) {
+                VStack(spacing: 1.5) {
+                    Capsule().fill(color).frame(width: 8, height: 2.5)
                     if let secondaryColor {
-                        Capsule().fill(secondaryColor).frame(width: 10, height: 3)
+                        Capsule().fill(secondaryColor).frame(width: 8, height: 2.5)
                     }
                 }
-                Text(L(title)).font(.caption2)
+                Text(L(title)).font(.system(size: 9.5, weight: .medium))
             }
             .foregroundStyle(isOn.wrappedValue ? Theme.textPrimary : Theme.textSecondary)
             .opacity(isOn.wrappedValue ? 1 : 0.45)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 6)
-            .background(isOn.wrappedValue ? Theme.accent.opacity(0.12) : .clear, in: Capsule())
-            .frame(minHeight: 44)
-            .contentShape(Rectangle())
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2.5)
+            .background(Theme.surfaceAlt.opacity(0.72), in: Capsule())
+            .contentShape(Capsule())
         }
         .toggleStyle(ChartLayerToggleStyle())
         .allowsHitTesting(!isStatic)
+    }
+}
+
+/// 简单的自动换行布局：一行放不下就折到下一行（图例在英文下更长）。
+struct WrapLayout: Layout {
+    var spacing: CGFloat = 4
+    var lineSpacing: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(width: proposal.width ?? .infinity, subviews: subviews)
+        let width = rows.map { $0.width }.max() ?? 0
+        let height = rows.reduce(0) { $0 + $1.height } + lineSpacing * CGFloat(max(0, rows.count - 1))
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in arrange(width: bounds.width, subviews: subviews) {
+            var x = bounds.minX
+            for idx in row.indices {
+                let size = subviews[idx].sizeThatFits(.unspecified)
+                subviews[idx].place(at: CGPoint(x: x, y: y + (row.height - size.height) / 2),
+                                    proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += row.height + lineSpacing
+        }
+    }
+
+    private struct Row { var indices: [Int] = []; var width: CGFloat = 0; var height: CGFloat = 0 }
+
+    private func arrange(width: CGFloat, subviews: Subviews) -> [Row] {
+        var rows: [Row] = [Row()]
+        for (idx, sub) in subviews.enumerated() {
+            let size = sub.sizeThatFits(.unspecified)
+            let extra = rows[rows.count - 1].indices.isEmpty ? size.width : size.width + spacing
+            if rows[rows.count - 1].width + extra > width, !rows[rows.count - 1].indices.isEmpty {
+                rows.append(Row())
+            }
+            var row = rows[rows.count - 1]
+            row.width += row.indices.isEmpty ? size.width : size.width + spacing
+            row.height = max(row.height, size.height)
+            row.indices.append(idx)
+            rows[rows.count - 1] = row
+        }
+        return rows
     }
 }

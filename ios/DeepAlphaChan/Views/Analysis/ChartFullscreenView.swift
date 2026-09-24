@@ -28,10 +28,7 @@ struct ChartFullscreenView: View {
                 header
 
                 ChanChartView(analysis: analysis, vm: vm,
-                              priceHeight: priceH, macdHeight: macdH)
-
-                ChartLegend(vm: vm)
-                    .padding(.bottom, 2)
+                              priceHeight: priceH, macdHeight: macdH, showsLegend: true)
             }
             .padding(.top, 6)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
