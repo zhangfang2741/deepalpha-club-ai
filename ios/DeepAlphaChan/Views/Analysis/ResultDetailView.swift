@@ -75,9 +75,7 @@ struct ResultDetailView: View {
     ///
     /// 抽成一个方法让屏幕显示与离屏长图复用同一棵视图树，修饰符与顺序保持
     /// 一致——改这里会同时改变页面显示与分享图，两处永不走样。
-    /// 差别只在两处「屏幕上能滚/能切、离屏渲染却拍不出来」的控件，都由 isStatic
-    /// 分流：ResultSegments 的分段切换器（离屏渲染没有交互，三段全铺）和
-    /// ChartSection 里图层开关的横向 ScrollView（在 ImageRenderer 下高度塌成 0）。
+    /// 分享长图通过 isStatic 隐藏周期与全屏控件，并将 ResultSegments 的三段内容全部展开。
     private func pageContent(isStatic: Bool) -> some View {
         VStack(spacing: 14) {
             if !isStatic { periodSwitcher }

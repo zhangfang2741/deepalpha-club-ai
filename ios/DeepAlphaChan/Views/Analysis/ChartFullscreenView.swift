@@ -13,7 +13,7 @@ struct ChartFullscreenView: View {
 
     /// 顶栏 + 图例 + 上下留白占掉的高度，剩下的全给图表。
     /// 图层开关已移除 —— 全屏的用途是尽可能大地看图，开关占的 42pt 还给图表。
-    /// 图层状态沿用进入全屏前在竖屏结果页的设置。
+    /// 图层状态与竖屏结果页共用。
     private let chromeHeight: CGFloat = 90
     /// 主图与 MACD 的高度配比。副图给太多会挤掉主图，2.8 : 1 接近常规看盘软件。
     private let macdRatio: CGFloat = 1 / 3.8
@@ -30,7 +30,7 @@ struct ChartFullscreenView: View {
                 ChanChartView(analysis: analysis, vm: vm,
                               priceHeight: priceH, macdHeight: macdH)
 
-                ChartLegend()
+                ChartLegend(vm: vm)
                     .padding(.bottom, 2)
             }
             .padding(.top, 6)
