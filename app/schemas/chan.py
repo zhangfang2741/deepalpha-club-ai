@@ -210,12 +210,13 @@ class ChanAnalysisResponse(BaseModel):
 
 
 class SubLevelResponse(BaseModel):
-    """次级别确认：日线定方向 × 30 分钟找买卖点。"""
+    """次级别确认：大级别定方向 × 次级别找买卖点（日线 × 30 分钟 / 周线 × 日线）。"""
     symbol: str
-    daily_bias: str               # bullish / bearish / neutral
-    daily_bias_label: str         # 日线形态倾向文案（与详情页一致）
-    sub_freq: str                 # 次级别周期，目前固定 30min
+    parent_freq: str = "daily"    # 大级别：daily / weekly
+    daily_bias: str               # 大级别形态倾向 bullish / bearish / neutral（字段名沿用）
+    daily_bias_label: str         # 大级别形态倾向文案（与详情页一致）
+    sub_freq: str                 # 次级别周期：30min（日线配）/ daily（周线配）
     verdict: Literal["resonance_buy", "resonance_sell", "counter_trend", "waiting", "unavailable"]
     verdict_label: str
     detail: str
-    recent_signals: list[SignalOut] = []  # 30 分钟最近两个交易日内的买卖点
+    recent_signals: list[SignalOut] = []  # 次级别最近窗口内的买卖点（30 分钟近两日 / 日线近两周）

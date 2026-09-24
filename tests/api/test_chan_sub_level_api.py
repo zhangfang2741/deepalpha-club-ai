@@ -51,3 +51,25 @@ def test_sub_level_404_when_no_daily_bars(client):
     with patch.object(chan_api, "fetch_kline", AsyncMock(return_value=[])):
         resp = client.get("/chan/sub-level", params=_PARAMS)
     assert resp.status_code == 404
+
+
+def test_sub_level_weekly_parent_pairs_with_daily(client):
+    """周线详情页的次级别是日线（不跨级到 30 分钟）。"""
+    parent = AsyncMock(return_value=_decaying_downtrend_bars())
+    child = AsyncMock(return_value=_decaying_downtrend_bars())
+    with patch.object(chan_api, "fetch_kline", parent), patch.object(sub_level_service, "fetch_kline", child):
+        resp = client.get("/chan/sub-level", params={**_PARAMS, "parent_freq": "weekly"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert (body["parent_freq"], body["sub_freq"]) == ("weekly", "daily")
+    def freq_of(mock):
+        args, kwargs = mock.call_args
+        return kwargs.get("freq", args[4] if len(args) > 4 else None)
+
+    assert freq_of(parent) == "weekly"
+    assert freq_of(child) == "daily"
+
+
+def test_sub_level_rejects_30min_parent(client):
+    resp = client.get("/chan/sub-level", params={**_PARAMS, "parent_freq": "30min"})
+    assert resp.status_code == 422

@@ -372,21 +372,28 @@ async def chan_sub_level(
     start_date: str = Query(description="日线可见起点，与分析详情页一致，格式 YYYY-MM-DD"),
     end_date: str = Query(description="结束日期，格式 YYYY-MM-DD"),
     lang: str = Query(default="zh", description="文案语言：zh / en"),
+    parent_freq: str = Query(default="daily", pattern="^(daily|weekly)$",
+                             description="大级别：daily（配 30 分钟）/ weekly（配日线）"),
     warmup_days: int | None = Query(default=None, ge=0, description="已废弃、被忽略，保留仅为兼容旧版 App"),
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
 ) -> SubLevelResponse:
-    """次级别确认：日线定方向（与详情页同一窗口的形态倾向）× 30 分钟近两日买卖点。
+    """次级别确认：大级别定方向（与详情页同一窗口的形态倾向）× 次级别近期买卖点。
 
-    30 分钟取数失败或不足时 verdict=unavailable，仍返回 200；日线取数失败按 /analysis 同样报错。
+    日线配 30 分钟近两个交易日、周线配日线近两周。次级别取数失败或不足时
+    verdict=unavailable，仍返回 200；大级别取数失败按 /analysis 同样报错。
+    daily_bias* 字段名沿用（旧版 App 兼容），周线配对时即周线倾向。
     """
-    logger.info("chan_sub_level_request", user_id=user.id, symbol=symbol, end=end_date)
-    anchor_start = _anchor_start(start_date, "daily", warmup_days)
-    bars = await _fetch_bars_or_http_error(user.id, symbol, anchor_start, end_date, "daily", redis)
-    daily = _analyzer.analyze(symbol, bars, lang=lang, visible_from=start_date, freq="daily")
-    sub = await analyze_sub_level(symbol, end_date, daily, user_id=user.id, redis=redis, lang=lang)
+    logger.info("chan_sub_level_request", user_id=user.id, symbol=symbol, end=end_date,
+                parent_freq=parent_freq)
+    anchor_start = _anchor_start(start_date, parent_freq, warmup_days)
+    bars = await _fetch_bars_or_http_error(user.id, symbol, anchor_start, end_date, parent_freq, redis)
+    parent = _analyzer.analyze(symbol, bars, lang=lang, visible_from=start_date, freq=parent_freq)
+    sub = await analyze_sub_level(symbol, end_date, parent, user_id=user.id, redis=redis, lang=lang,
+                                  parent_freq=parent_freq)
     return SubLevelResponse(
         symbol=symbol,
+        parent_freq=sub.parent_freq,
         daily_bias=sub.daily_bias,
         daily_bias_label=sub.daily_bias_label,
         sub_freq=sub.sub_freq,

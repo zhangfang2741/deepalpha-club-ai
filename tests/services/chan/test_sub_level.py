@@ -75,3 +75,37 @@ def test_english_labels():
     res = build_sub_level(_daily("bullish", "Technicals firm"), _sub([("buy1", "2026-09-23 10:00")]), lang="en")
     assert res.verdict_label == "Aligned buy"
     assert res.daily_bias == "bullish"
+
+
+def _daily_sub(signals: list[tuple[str, str]], last: str = "2026-09-24") -> ChanAnalysisResult:
+    """日线作为次级别：每个自然日一根合并K线（到 last 为止 40 天）。"""
+    from datetime import date, timedelta
+
+    end = date.fromisoformat(last)
+    r = ChanAnalysisResult(symbol="T", bars_count=40)
+    r.merged_candles = [_mc((end - timedelta(days=k)).isoformat()) for k in range(39, -1, -1)]
+    r.strokes = [object()] * 5  # type: ignore[assignment]
+    r.signals = [Signal(type=t, time=tm, price=10.0, strength="strong", divergence=None,  # type: ignore[arg-type]
+                        description="") for t, tm in signals]
+    return r
+
+
+def test_weekly_parent_uses_daily_signals_of_last_two_weeks():
+    # 周线定方向 × 日线找买卖点：窗口按级别放大到最近两周（14 个自然日）
+    res = build_sub_level(_daily("bullish"), _daily_sub([("buy2", "2026-09-15")]), parent_freq="weekly")
+    assert res.verdict == "resonance_buy"
+    assert res.sub_freq == "daily"
+    assert res.parent_freq == "weekly"
+    assert "周线" in res.detail and "日线" in res.detail and "30 分钟" not in res.detail
+
+
+def test_weekly_parent_ignores_daily_signals_older_than_two_weeks():
+    res = build_sub_level(_daily("bullish"), _daily_sub([("buy2", "2026-09-05")]), parent_freq="weekly")
+    assert res.verdict == "waiting"
+    assert "近两周" in res.detail
+
+
+def test_daily_parent_defaults_unchanged():
+    res = build_sub_level(_daily("bullish"), _sub([("buy1", "2026-09-23 10:00")]))
+    assert (res.parent_freq, res.sub_freq) == ("daily", "30min")
+    assert "日线" in res.detail and "30 分钟" in res.detail

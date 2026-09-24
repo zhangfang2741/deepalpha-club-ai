@@ -44,3 +44,19 @@ async def test_empty_bars_degrade_to_unavailable(monkeypatch):
     monkeypatch.setattr(sub_level_service, "fetch_kline", empty)
     res = await sub_level_service.analyze_sub_level("600519.SS", "2026-09-24", _daily("bearish"))
     assert res.verdict == "unavailable"
+
+
+async def test_weekly_parent_fetches_daily_window(monkeypatch):
+    from tests.services.chan.test_czsc_adapter import _trending_bars
+
+    seen = {}
+
+    async def fake_fetch(user_id, symbol, start_date, end_date, freq="daily", *, redis=None):
+        seen.update(start=start_date, freq=freq)
+        return _trending_bars(200, start_price=100.0, up=True)
+
+    monkeypatch.setattr(sub_level_service, "fetch_kline", fake_fetch)
+    res = await sub_level_service.analyze_sub_level("AAPL", "2026-09-24", _daily("bullish"), parent_freq="weekly")
+    assert seen["freq"] == "daily"
+    assert seen["start"] < "2026-04-01"  # 日线要足够的预热，czsc 才能形成笔与买卖点
+    assert res.sub_freq == "daily"
