@@ -32,6 +32,17 @@ struct AnalysisInterpretationTests {
         precondition(AnalysisInterpretation.riskCount(empty) == 0)
         let caveatsOnly = try fixture(pending: [], caveats: ["观察中枢", "观察中枢", "数据不足"])
         precondition(AnalysisInterpretation.otherRisks(caveatsOnly) == ["观察中枢", "数据不足"], "保留首次出现的顺序")
+
+        // 每类最多展示 2 条，避免风险提示页信息过载；otherRisks 的去重仍基于完整
+        // 的 pendingNotes（第三条也算），不因截断而让被截掉的条目在另一栏重复出现。
+        let many = try fixture(pending: ["顶分型未确认", "笔未完成", "线段未确认", "二卖左侧预判"],
+                                caveats: ["线段未确认", "背驰滞后", "样本不足"])
+        precondition(AnalysisInterpretation.pendingNotes(many).count == 4, "完整列表不截断")
+        precondition(AnalysisInterpretation.displayedPendingNotes(many) == ["顶分型未确认", "笔未完成"],
+                     "展示层只取前两条")
+        precondition(AnalysisInterpretation.displayedOtherRisks(many) == ["背驰滞后", "样本不足"],
+                     "「线段未确认」虽被截掉，仍因在完整 pendingNotes 里而不重复出现在这里")
+        precondition(AnalysisInterpretation.riskCount(many) == 4, "Tab 数量等于两栏各自展示的条数之和（2+2）")
         precondition(AnalysisInterpretation.branchExplanation("type2").contains("不能仅凭"))
         precondition(AnalysisInterpretation.branchExplanation("type3").contains("不等于信号已确认"))
     }

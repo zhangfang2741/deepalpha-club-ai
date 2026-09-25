@@ -11,23 +11,23 @@ struct RiskSection: View {
                     .font(AnalysisType.body)
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if AnalysisInterpretation.pendingNotes(analysis).isEmpty {
+                if AnalysisInterpretation.displayedPendingNotes(analysis).isEmpty {
                     Text(L("本次数据未提供额外的待确认说明，请继续核对图上的虚线和买卖点状态。"))
                         .font(AnalysisType.body)
                         .foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    BulletList(items: AnalysisInterpretation.pendingNotes(analysis), color: Theme.textPrimary)
+                    BulletList(items: AnalysisInterpretation.displayedPendingNotes(analysis), color: Theme.textPrimary)
                 }
             }
             SectionCard(title: L("其他风险与限制"), systemImage: "exclamationmark.triangle") {
-                if AnalysisInterpretation.otherRisks(analysis).isEmpty {
+                if AnalysisInterpretation.displayedOtherRisks(analysis).isEmpty {
                     Text(L("本次分析未提供额外风险条目，不代表没有风险。"))
                         .font(AnalysisType.body)
                         .foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    BulletList(items: AnalysisInterpretation.otherRisks(analysis), color: Theme.textPrimary)
+                    BulletList(items: AnalysisInterpretation.displayedOtherRisks(analysis), color: Theme.textPrimary)
                 }
             }
             SectionCard(title: L("使用这些信息前"), systemImage: "checklist") {
