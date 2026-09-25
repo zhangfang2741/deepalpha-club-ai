@@ -41,12 +41,19 @@ Password: AppReview2026
 Please switch to the "Email" tab on the sign-in screen.
 
 2. QUICK WALKTHROUGH
-- After signing in, the Analysis tab is pre-filled with AAPL. Tap "Analyse".
-  You may also pick a market and enter 600519 (China A-share) or 0700 (HK).
+- After signing in, the first tab is "Signals" (a bubble map of the day's top
+  structural buy/sell signals across a US/A-share/HK index's constituents, see
+  section 3 for how to read it). Tap a market card at the top to switch
+  markets; tap a bubble to open its full analysis; the date strip at the
+  bottom re-plays past trading days.
+- The "Analysis" tab is pre-filled with AAPL. Tap "Analyse". You may also pick
+  a market and enter 600519 (China A-share) or 0700 (HK).
 - The result screen draws fractals, strokes, segments, pivots and buy/sell
   points on the chart, with a MACD subchart below. Tap the icon at the top
-  right for fullscreen.
-- The "Analysis" and "Signals" tabs below describe the detected structure.
+  right for fullscreen. Below the chart, a "sub-level" row (when available)
+  opens a lower-timeframe confirmation view in a sheet.
+- The "Analysis" and "Signals" sections below the chart describe the detected
+  structure.
 - The Learn tab contains nine lessons, each with a diagram. Terms in the chart
   legend and on signal labels are tappable and open the matching lesson.
 - Content is also viewable WITHOUT an account: tap "Browse the Chan primer"
@@ -59,14 +66,25 @@ securities, issue trade instructions, or promise returns.
 Labels such as "Buy 1 / Buy 2 / Buy 3" are the standard terminology of Chan
 theory for structural positions (first/second/third-class buy point). They name
 a detected chart structure; they are not recommendations to trade.
+The "Signals" bubble map works the same way: each bubble is one stock that our
+algorithm detected a Buy1/2/3 or Sell1/2/3 structure for that trading day. Color
+is direction (red = buy-type, green = sell-type) and shade encodes the pattern
+strength label already described above; size encodes which of the three
+structural types (1/2/3) fired; position only encodes how many trading days ago
+the signal appeared (newer = closer to center). None of these visual encodings
+rank stocks by expected return or imply a recommendation to buy or sell — a
+"bigger" or "redder" bubble is a more-confirmed structural pattern, not a
+stronger buy call. An in-app "?" info sheet on that screen spells this scoring
+out in full, and a disclaimer is pinned under the bubble field at all times.
 The "Analysis" tab reports a technical read such as "firm / soft / balanced".
 This is an objective description of structure that has already formed, derived
 by weighting the last stroke, segment direction, position relative to the latest
 pivot, divergence and volume; every contributing factor is listed so the reader
 can check it. It describes the present state, makes no forecast, and contains no
 action verbs.
-A disclaimer is shown on the sign-in screen, on the analysis result screen, in
-the signal list, and at the end of every lesson.
+A disclaimer is shown on the sign-in screen, on the Signals bubble-map screen,
+on the analysis result screen, in the signal list, in the daily AI brief, and
+at the end of every lesson.
 
 4. SUBSCRIPTION
 Free users may analyse 3 distinct tickers per day. DeepAlpha Pro removes the
@@ -84,6 +102,21 @@ advertising tracking. Photo-library access is write-only and is used solely to
 save an image the user explicitly generated — see section 7.
 
 7. NEW IN THIS VERSION (1.1)
+- New "Signals" tab: a bubble map of the day's top 10 buy/sell-type structural
+  signals across a chosen index's constituents (US tech/broad, A-share,
+  HK), rebuilt daily and browsable by past trading day. See section 3 for the
+  visual encoding and why it is not a ranked recommendation list. No new data
+  is collected for this feature; it reads the same public market data used
+  elsewhere in the app.
+- New sub-level confirmation: on the daily/weekly analysis result, a row below
+  the chart (when available) opens a sheet with a lower-timeframe chart
+  (30-minute for daily, daily for weekly) used only to confirm or contradict
+  the higher-timeframe read — same disclaimer scope as the main analysis.
+- Watchlist ("Favorites") tab: sign-in users can star a ticker from the result
+  screen and scan just their own list on the Signals tab.
+- Reworked structure explainers: tapping a term in the chart legend, a signal
+  label, or the new "pivot phase" diagram opens the matching Learn-tab lesson
+  inline, without leaving the result screen.
 - Share analysis image: the share button at the top right of the result screen
   exports the whole analysis page as one tall image (with branding and a
   download QR code). Taking a screenshot inside the app opens the same share
@@ -108,15 +141,19 @@ save an image the user explicitly generated — see section 7.
 登录时请切换到「邮箱」页签。
 
 二、如何快速体验核心功能
-1. 登录后进入「分析」页，股票代码默认为 AAPL，直接点「分析」；
-   也可选择市场后输入 A 股代码 600519 或港股代码 0700。
-2. 分析完成后进入结果页：图表上会标出分型、笔、线段、中枢与买卖点，
-   下方是 MACD 副图。点右上角图标可全屏查看。
-3. 下方「形态分析」与「买卖点」两栏是结构识别结果的文字说明。
-4. 「学习」页有 9 篇缠论入门词条，每篇配示意图。图例中的术语
+1. 登录后第一个 Tab 是「信号」：以气泡图展示某个美股/A股/港股指数成分股
+   当天排名前 10 的买卖点结构信号（怎么看见第三节）。点顶部市场卡片切换
+   市场，点气泡直接打开该股完整分析，底部日期条可翻看历史交易日。
+2. 「分析」页股票代码默认为 AAPL，直接点「分析」；也可选择市场后输入
+   A 股代码 600519 或港股代码 0700。
+3. 分析完成后进入结果页：图表上会标出分型、笔、线段、中枢与买卖点，
+   下方是 MACD 副图。点右上角图标可全屏查看；图表下方若有「次级别」一行，
+   点开会弹出更低周期的确认图。
+4. 下方「形态分析」与「买卖点」两栏是结构识别结果的文字说明。
+5. 「学习」页有 9 篇缠论入门词条，每篇配示意图。图例中的术语
    （笔 / 线段 / 中枢 / 顶分型 / 底分型）和买卖点标签均可点击，
    会弹出对应词条。
-5. 无需登录也可查看教程：登录页点「先看看缠论入门」。
+6. 无需登录也可查看教程：登录页点「先看看缠论入门」。
 
 三、关于内容性质（重要）
 本 App 是 K 线技术分析工具与缠论学习材料，不是投资顾问服务，
@@ -124,10 +161,18 @@ save an image the user explicitly generated — see section 7.
 图表上标注的「一买 / 二买 / 三买」等是缠论理论中对走势结构位置的
 固定命名（第一类买点 / 第二类买点 / 第三类买点），是结构识别结果的
 标签，不是操作建议。
+「信号」页的气泡图用的是同一套标签：每个气泡是算法当天检测到
+一买/二买/三买或一卖/二卖/三卖结构的一只股票。颜色是方向
+（红=买点类、绿=卖点类），深浅是上面说的形态强弱标签；大小是
+一二三类里的哪一类；位置只编码信号是几天前出现的（越新越靠中心）。
+这几个视觉维度都不是按预期收益排名，「更大」或「颜色更深」的气泡
+只代表结构确认程度更高，不代表买入信号更强。页面上的「?」按钮有
+完整的打分口径说明，气泡区域下方始终显示免责声明。
 「形态分析」栏给出的「技术面偏强 / 偏弱 / 多空僵持」是对已发生结构的
 客观描述，由末笔方向、线段方向、中枢位置、背驰、量价等因子加权得出，
 每一项依据都逐条列出供核对；它描述现状，不预测涨跌，也不含操作动词。
-免责声明在登录页、分析结果页、买卖点列表和每篇教程末尾均有展示。
+免责声明在登录页、「信号」气泡图页、分析结果页、买卖点列表、每日 AI
+晨报和每篇教程末尾均有展示。
 
 四、订阅说明
 免费用户每日可分析 3 支不同标的。DeepAlpha Pro 解除次数限制。
@@ -142,14 +187,25 @@ save an image the user explicitly generated — see section 7.
 写入相册（add-only），详见第七节。
 
 七、本版新增（1.1）
-1. 分享分析图：结果页右上角的分享按钮会把整页分析导出为一张长图
+1. 新增「信号」Tab：以气泡图展示所选指数成分股当天排名前 10 的买卖点
+   结构信号（美股科技/大盘、A 股、港股均可切换），按交易日重建、可翻看
+   历史。视觉编码与是否构成推荐见第三节；不额外采集数据，用的是 App
+   别处同一套公开行情数据。
+2. 新增次级别确认：日线/周线分析结果图下方（有数据时）会出现一行结论，
+   点开弹出更低一级周期的图表（日线配 30 分钟、周线配日线），只用于验证
+   或推翻大级别的判断，免责声明范围与主分析页相同。
+3. 新增「自选」Tab：登录用户可在结果页给标的加星，「信号」页可单独扫
+   自选列表。
+4. 结构讲解改版：点击图例术语、买卖点标签，或新增的「中枢阶段」示意图
+   里的术语，都会在结果页内联弹出对应的学习页词条，无需跳出当前页面。
+5. 分享分析图：结果页右上角的分享按钮会把整页分析导出为一张长图
    （含品牌与下载二维码）；在 App 内截屏也会自动弹出同一个分享预览。
-2. 相册权限（本版新增）：预览页的「保存到相册」会申请相册写入权限
+6. 相册权限（本版新增）：预览页的「保存到相册」会申请相册写入权限
    （PHAccessLevel.addOnly，只写不读）。App 不读取、不浏览、不上传
    用户相册中的任何内容；不点「保存到相册」就完全不会触发该权限。
    复现路径：分析任意标的 → 结果页右上角分享按钮 → 保存到相册。
-3. MACD 副图现在与主图一样支持左右平移与双指缩放。
-4. 新增手机号注册与登录（中国大陆 +86）。
+7. MACD 副图现在与主图一样支持左右平移与双指缩放。
+8. 新增手机号注册与登录（中国大陆 +86）。
 ```
 
 ---
@@ -160,7 +216,9 @@ save an image the user explicitly generated — see section 7.
 
 这是金融类 App 最常见的拒因。应对：强调上面备注第三条——「一买/二买/三买」
 是缠论理论的固定术语（对应 first/second/third-class buy point），命名的是
-走势结构位置，不是操作指令；App 内四处都有免责声明。
+走势结构位置，不是操作指令；「信号」页的气泡图用同一套标签，大小/颜色/
+位置编码的是结构确认程度与新鲜度，不是收益排名；App 内登录页、信号页、
+结果页、买卖点列表、每日晨报、教程末尾均有免责声明展示。
 必要时可截图说明免责声明的展示位置。
 
 **2. Guideline 2.1 — 审核员登录不进去**

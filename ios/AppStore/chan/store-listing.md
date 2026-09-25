@@ -155,8 +155,11 @@ consequences are your own.
 中文：
 
 ```
-新增分享，图表操作更跟手。
+新增「信号」雷达与次级别确认，分享与图表操作更跟手。
 
+• 新增「信号」页：气泡图展示所选指数当天前 10 名买卖点结构信号，可按市场切换、按历史交易日翻看
+• 新增次级别确认：日线/周线结果图下方一键查看更低周期走势
+• 新增「自选」：可在结果页加星，单独查看自选股信号
 • 分析结果一键生成长图，带品牌与下载二维码
 • 在 App 内截屏会自动弹出分享预览，可存相册或直接分享
 • 图表平移支持惯性滑动，滑到边缘有回弹
@@ -169,8 +172,11 @@ consequences are your own.
 英文：
 
 ```
-Sharing is here, and the chart feels more responsive.
+New Signals radar and sub-level confirmation, plus a more responsive chart and sharing.
 
+• New Signals tab: a bubble map of the day's top 10 buy/sell-type structural signals for your chosen index, switchable by market and browsable by past trading day
+• New sub-level confirmation: open a lower-timeframe view right under the daily/weekly result
+• New Watchlist: star a ticker from the result screen and scan just your own list on Signals
 • Turn any analysis into a long image with branding and a download QR code
 • Take a screenshot in the app to get a share preview — save to Photos or share directly
 • Chart panning now has inertia, with a rubber-band bounce at the edges
