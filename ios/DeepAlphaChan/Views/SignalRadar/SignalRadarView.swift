@@ -487,12 +487,17 @@ struct SignalRadarView: View {
             HStack(spacing: 4) {
                 Circle().fill(Theme.up).frame(width: 8, height: 8)
                 Circle().fill(Theme.down).frame(width: 8, height: 8)
-                Text(L("颜色=方向")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                // 颜色不止编码方向，深浅还编码买卖点类型的确认程度（一类浅→三类深）；
+                // 之前只写「颜色=方向」漏了深浅这层意思，这里补一个词点出来，深浅具体
+                // 代表什么留给问号弹层展开——常驻图例只负责让人知道「还有一层没读」。
+                Text(L("颜色=方向·深浅")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
             HStack(spacing: 3) {
                 sizeDot(diameter: SignalRadarView.diameter(forStrength: "weak"))
                 sizeDot(diameter: SignalRadarView.diameter(forStrength: "strong"))
-                Text(L("大小=强弱")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                // 「强弱」二字太空泛，点一下问号能看到具体口径（一类按背驰力度比、
+                // 二三类按中枢级别+回踩余地），这里先点出是「形态」层面的强弱。
+                Text(L("大小=形态强弱")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
             HStack(spacing: 4) {
                 legendBadge(L("新"), color: Theme.segment)

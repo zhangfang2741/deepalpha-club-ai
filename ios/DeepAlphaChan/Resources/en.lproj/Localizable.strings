@@ -500,13 +500,13 @@
 "返回当前状态" = "Return to current state";
 "走势级别" = "Timeframes & levels";
 "区间走势：%@" = "Trend across the range: %@";
-"大小=强弱" = "Size = strength";
+"大小=形态强弱" = "Size = pattern strength";
 "自选中暂无该市场的股票" = "No stocks from this market in your watchlist";
 "在分析详情页点右上角 ☆ 加入自选" = "Tap ☆ at the top right of an analysis to add one";
 "点击气泡查看分析" = "Tap a bubble for analysis";
 "今天" = "Today";
 "距离=时间：三个环依次是今天、1 周、2 周" = "Distance = time: rings mark today, 1 week, 2 weeks";
-"颜色=方向" = "Color = direction";
+"颜色=方向·深浅" = "Color = direction · shade";
 "标签=状态" = "Tag = status";
 "算法说明" = "How it works";
 "气泡怎么看" = "Reading the bubbles";
