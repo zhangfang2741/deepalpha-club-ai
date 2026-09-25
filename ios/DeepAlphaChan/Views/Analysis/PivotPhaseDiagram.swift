@@ -153,6 +153,12 @@ struct PivotPhaseDiagram: View {
                 let scale = geo.size.width / designWidth
                 ZStack(alignment: .topLeading) {
                     Canvas { ctx, _ in drawEdges(ctx, scale: scale) }
+                    // 线本身也要能点，不能只靠标签那一小块文字——Canvas 画的线没有
+                    // 手势，之前点线基本没反应，只有精准点中标签才有用。放在节点
+                    // 之前，避免短竖线贴着节点边界时抢了节点的点击。
+                    ForEach(edges, id: \.key) { edge in
+                        edgeHitArea(edge, scale: scale)
+                    }
                     ForEach(nodeSpecs, id: \.key) { spec in
                         nodeView(spec, scale: scale)
                     }
@@ -232,7 +238,46 @@ struct PivotPhaseDiagram: View {
         return isSelected ? Theme.textPrimary.opacity(0.85) : Theme.border
     }
 
-    // MARK: - 边（可点的标签 + Canvas 画的线/曲线）
+    // MARK: - 边（可点的标签 + 可点的线本身 + Canvas 画的视觉线/曲线）
+
+    /// 沿整条线/曲线给一条加宽的透明可点区域，而不是只有 labelPos 那一小块文字——
+    /// 视觉线是 Canvas 画的，Canvas 内容本身没有手势，之前只能精准点中标签才有反应。
+    private struct EdgePath: Shape {
+        let from: CGPoint
+        let to: CGPoint
+        let control1: CGPoint?
+        let control2: CGPoint?
+
+        func path(in rect: CGRect) -> Path {
+            var path = Path()
+            path.move(to: from)
+            if let c1 = control1, let c2 = control2 {
+                path.addCurve(to: to, control1: c1, control2: c2)
+            } else {
+                path.addLine(to: to)
+            }
+            return path
+        }
+    }
+
+    private func edgeHitArea(_ edge: Edge, scale: CGFloat) -> some View {
+        let shape = EdgePath(
+            from: CGPoint(x: edge.from.x * scale, y: edge.from.y * scale),
+            to: CGPoint(x: edge.to.x * scale, y: edge.to.y * scale),
+            control1: edge.control1.map { CGPoint(x: $0.x * scale, y: $0.y * scale) },
+            control2: edge.control2.map { CGPoint(x: $0.x * scale, y: $0.y * scale) })
+        let hitStyle = StrokeStyle(lineWidth: 26 * scale, lineCap: .round)
+        // `strokedPath` 是 Path 的方法，不是 Shape 的——先拿 EdgePath 的 Path 实例
+        // 再加粗轮廓，才能喂给 contentShape。
+        let hitPath = shape.path(in: .zero).strokedPath(hitStyle)
+        return shape
+            .stroke(Color.clear, style: hitStyle)
+            .contentShape(hitPath)
+            .onTapGesture { selected = edge.key }
+            // 只是给 edgeLabel 加大点击范围，语义上是同一个东西——VoiceOver 交给
+            // 下面那个有文字的 edgeLabel 播报就够了，这层不重复念一遍。
+            .accessibilityHidden(true)
+    }
 
     private func edgeLabel(_ edge: Edge, scale: CGFloat) -> some View {
         let isSelected = selected == edge.key
