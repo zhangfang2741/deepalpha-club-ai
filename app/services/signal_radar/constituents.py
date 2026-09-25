@@ -9,8 +9,9 @@
 FMP 当前套餐不含 ETF 持仓与指数成分端点（402），美股全量改走后两者。
 
 结果按 (market, universe) 缓存 24h，避免每次扫描重复拉取。名称优先用静态清单里的
-中文名，缺失时回退来源给的名称。任何来源拿不到足量（< _MIN_VALID）时回退静态清单，
-保证任何情况下都有可扫的范围。
+中文名，美股再查东方财富的中文名（见 _resolve_us_names，覆盖面远超 curated 清单），
+最后回退来源给的名称。任何来源拿不到足量（< _MIN_VALID）时回退静态清单，保证任何
+情况下都有可扫的范围。
 """
 from __future__ import annotations
 
@@ -39,9 +40,92 @@ _CACHE_PREFIX = "signal_radar:constituents:v2"
 _CACHE_TTL = 3600 * 24  # 24h
 _MIN_VALID = 20          # 动态结果至少这么多只才采用，否则回退静态
 
+# 美股中文名：东方财富美股搜索接口（公开、免鉴权，token 为其前端固定值非密钥）覆盖面
+# 远超本文件 curated 清单（几千只美股，含标普500/纳指100 全量的绝大多数）。按代码缓存
+# 30 天——公司中文译名基本不变，减少下次成分刷新时的请求量。
+_EASTMONEY_SUGGEST_URL = "https://searchapi.eastmoney.com/api/suggest/get"
+_EASTMONEY_SUGGEST_TOKEN = "D43BF722C8E33BDC906FB84D85E326E8"
+_US_NAME_CACHE_PREFIX = "signal_radar:us_name:v1"
+_US_NAME_CACHE_TTL = 3600 * 24 * 30  # 30 天
+_US_NAME_CONCURRENCY = 8
+
 
 def _zh_name_map(u: MarketUniverse) -> dict[str, str]:
     return {sym: name for sym, name in u.constituents}
+
+
+def parse_eastmoney_us_suggest(payload: object, symbol: str) -> str | None:
+    """从东方财富搜索接口的返回里挑出某代码的中文名。
+
+    搜索是模糊匹配，同代码可能还挂着债券/优先股条目（如 ORCL_D）；只认代码精确
+    相同、且是普通股（TypeUS=1）的美股条目，查不到 / payload 形状不对都返回 None。
+    """
+    try:
+        rows = payload["QuotationCodeTable"]["Data"]  # type: ignore[index]
+    except (TypeError, KeyError):
+        return None
+    for r in rows or []:
+        if not isinstance(r, dict):
+            continue
+        if (str(r.get("Code", "")).upper() == symbol.upper()
+                and r.get("Classify") == "UsStock" and r.get("TypeUS") == "1"):
+            name = str(r.get("Name") or "").strip()
+            return name or None
+    return None
+
+
+async def _fetch_eastmoney_us_name(client: httpx.AsyncClient, symbol: str) -> str | None:
+    """查东方财富美股搜索接口的中文名；查不到 / 接口异常都返回 None，不影响其他标的。"""
+    try:
+        resp = await client.get(_EASTMONEY_SUGGEST_URL, params={
+            "input": symbol, "type": "14", "token": _EASTMONEY_SUGGEST_TOKEN, "count": 5,
+        })
+        if resp.status_code != 200:
+            return None
+        return parse_eastmoney_us_suggest(resp.json(), symbol)
+    except Exception:  # noqa: BLE001 单只查询失败不影响其他标的
+        return None
+
+
+async def _resolve_us_names(symbols: list[str], *, redis: Redis | None) -> dict[str, str]:
+    """批量取一组美股代码的中文名（东方财富，命中 Redis 缓存的直接用，其余并发查询）。"""
+    result: dict[str, str] = {}
+    to_fetch: list[str] = []
+    for sym in symbols:
+        cached = None
+        if redis is not None:
+            try:
+                cached = await redis.get(f"{_US_NAME_CACHE_PREFIX}:{sym}")
+            except Exception as e:  # noqa: BLE001
+                logger.warning("signal_radar_us_name_cache_read_error", symbol=sym, error=str(e))
+        if cached:
+            result[sym] = cached if isinstance(cached, str) else cached.decode()
+        else:
+            to_fetch.append(sym)
+
+    if not to_fetch:
+        return result
+
+    sem = asyncio.Semaphore(_US_NAME_CONCURRENCY)
+
+    async def _one(client: httpx.AsyncClient, sym: str) -> None:
+        async with sem:
+            name = await _fetch_eastmoney_us_name(client, sym)
+        if not name:
+            return
+        result[sym] = name
+        if redis is not None:
+            try:
+                await redis.set(f"{_US_NAME_CACHE_PREFIX}:{sym}", name, ex=_US_NAME_CACHE_TTL)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("signal_radar_us_name_cache_write_error", symbol=sym, error=str(e))
+
+    async with httpx.AsyncClient(timeout=10, headers={"User-Agent": _PUBLIC_UA}) as client:
+        await asyncio.gather(*(_one(client, sym) for sym in to_fetch))
+
+    logger.info("signal_radar_us_names_resolved", requested=len(symbols),
+                cached=len(symbols) - len(to_fetch), fetched=len(result) - (len(symbols) - len(to_fetch)))
+    return result
 
 
 # 请求头均不含任何个人信息。维基百科要求写明客户端身份；纳斯达克接口会挂起非浏览器
@@ -321,14 +405,21 @@ async def resolve_constituents(
     raw = await _fetch_dynamic(universe)
     # 中文名：先用本 universe 的 curated 名，再查同市场其他 universe 的（纳指/标普互补）
     zh = _zh_name_map(universe)
+    clean_symbols: list[str] = []
     for sym, _, _ in raw:
         try:
             _, clean = normalize(sym)
         except InvalidSymbolError:
             continue
+        clean_symbols.append(clean)
         if clean not in zh and (name := resolve_name(universe.market, clean)):
             zh[clean] = name
-    # 美股没有中文名时名称留空（气泡只显示代码），英文全称太长不展示
+    if universe.market == "us":
+        # curated 清单只覆盖几十只龙头；其余的查东方财富美股中文名，覆盖面广得多
+        missing = [s for s in clean_symbols if s not in zh]
+        if missing:
+            zh.update(await _resolve_us_names(missing, redis=redis))
+    # 美股查不到中文名（东方财富也没有）时名称留空（气泡只显示代码），英文全称太长不展示
     resolved = _map_to_universe(raw, zh, max_scan=universe.max_scan,
                                 fallback_to_source_name=universe.market != "us")
 
