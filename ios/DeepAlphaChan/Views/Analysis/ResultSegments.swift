@@ -7,7 +7,6 @@ struct ResultSegments: View {
     /// 渲染进分享长图时传 true：静态图里没有切换交互，长图要的是完整内容而不是
     /// 用户当下选中的那一段，所以不走切换器，三段上下全铺，各带小标题。
     var isStatic = false
-    var onSelectionChange: () -> Void = {}
 
     @State private var segment: Segment = .analysis
 
@@ -31,7 +30,6 @@ struct ResultSegments: View {
                 interactiveSections
             }
         }
-        .onChange(of: segment) { _, _ in onSelectionChange() }
     }
 
     /// 回退记录：曾经尝试把图表+图层开关固定在顶部、tab 内容单独套一个
