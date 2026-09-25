@@ -36,8 +36,11 @@ _FMP_KEY = os.environ.get("FMP_API_KEY", "")
 # 回调」的前复权口径，与东方财富 fqt=1、Yahoo adjclose 一致。
 _FMP_URL = "https://financialmodelingprep.com/stable/historical-price-eod/dividend-adjusted"
 _CACHE_TTL = 3600 * 24  # 24h
-# 30 分钟线盘中持续变化，缓存不宜久
-_INTRADAY_CACHE_TTL = 60 * 15
+# 30 分钟线盘中持续变化，缓存不宜久。原为 15 分钟——当前这根未收盘的 K 线本身
+# 会持续更新（收盘价、成交量随行情变化），15 分钟内重复请求会一直读到同一份
+# 快照，看起来像"拿不到最新数据"；缩到 3 分钟，明显更接近实时又不至于把
+# FMP 分钟线接口打得太频繁（详情页手动查看 + 次级别按需补算，量本身不大）。
+_INTRADAY_CACHE_TTL = 60 * 3
 # 截止日覆盖最近交易日的日线/周线只缓存 30 分钟：当日K线可能还没收盘/还没发布，
 # 按 24h 缓存会让收盘后整天都读到缺当日K线的旧数据（A 股收盘 = UTC 07:00，
 # 北京时间白天扫描的结果会一直缺当天）。
