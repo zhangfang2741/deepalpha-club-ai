@@ -44,23 +44,22 @@ struct PivotPhaseGuideSheet: View {
 
     private var stageStepper: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(L("你在标准阶段的哪一步"))
-                .font(.system(size: 13, weight: .semibold))
+            Text(L("阶段参考 · 非必经顺序"))
+                .font(.footnote.weight(.semibold))
                 .foregroundColor(Theme.textSecondary)
             VStack(alignment: .leading, spacing: 14) {
-                ForEach(Array(pivotPhase.stageGuide.steps.enumerated()), id: \.offset) { idx, step in
-                    let isCurrent = idx == pivotPhase.stageGuide.currentIndex
-                    let isPast = idx < pivotPhase.stageGuide.currentIndex
+                ForEach(pivotPhase.stageGuide.steps) { step in
+                    let isCurrent = step.key == pivotPhase.phase
                     HStack(alignment: .top, spacing: 10) {
                         Circle()
-                            .fill(isCurrent ? Theme.segment : (isPast ? Theme.accent : Theme.textSecondary.opacity(0.3)))
+                            .fill(isCurrent ? Theme.pivotPhaseColor(pivotPhase.phase) : Theme.textSecondary.opacity(0.3))
                             .frame(width: 10, height: 10)
                             .padding(.top, 4)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(isCurrent ? currentStepTitle(step.title) : step.title)
-                                .font(.system(size: 14, weight: isCurrent ? .semibold : .regular))
-                                .foregroundColor(isCurrent ? Theme.segment : Theme.textPrimary)
-                            Text(step.detail)
+                                .font(.subheadline.weight(isCurrent ? .semibold : .regular))
+                                .foregroundColor(isCurrent ? Theme.pivotPhaseColor(pivotPhase.phase) : Theme.textPrimary)
+                            Text(AnalysisInterpretation.stageExplanation(step.key))
                                 .font(.caption)
                                 .foregroundColor(Theme.textSecondary)
                         }
@@ -72,11 +71,11 @@ struct PivotPhaseGuideSheet: View {
 
     private var whyItMattersSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(L("这一步为什么关键？"))
-                .font(.system(size: 13, weight: .semibold))
+            Text(L("本次判定依据"))
+                .font(.footnote.weight(.semibold))
                 .foregroundColor(Theme.accent)
-            Text(pivotPhase.stageGuide.whyItMatters)
-                .font(.system(size: 14))
+            Text(pivotPhase.reason)
+                .font(.subheadline)
                 .foregroundColor(Theme.textPrimary)
                 .lineSpacing(4)
         }
@@ -85,16 +84,16 @@ struct PivotPhaseGuideSheet: View {
     private var satisfiedSoFarSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(L("现在满足到哪了？"))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.footnote.weight(.semibold))
                 .foregroundColor(Theme.textSecondary)
             ForEach(pivotPhase.checklist) { item in
                 HStack(alignment: .top, spacing: 6) {
                     Image(systemName: item.state == .done ? "checkmark.circle.fill" : "exclamationmark.circle")
-                        .foregroundColor(item.state == .done ? .green : Theme.segment)
-                        .font(.system(size: 14))
+                        .foregroundColor(item.state == .done ? Theme.accent : Theme.textSecondary)
+                        .font(.subheadline)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.state == .done ? L("已满足：%@", item.label) : L("尚未满足：%@", item.label))
-                            .font(.system(size: 13))
+                            .font(.footnote)
                             .foregroundColor(Theme.textPrimary)
                         if !item.detail.isEmpty {
                             Text(item.detail).font(.caption2).foregroundColor(Theme.textSecondary)

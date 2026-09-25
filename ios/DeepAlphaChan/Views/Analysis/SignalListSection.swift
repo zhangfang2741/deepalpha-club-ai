@@ -1,120 +1,59 @@
 import SwiftUI
 
-/// 分段控件的「买卖点」段：逐条列出识别到的买卖点。
-///
-/// 每条的类型标签（一买、二买……）和一类的力度比都接了术语跳转——这几个词
-/// 恰恰是新手最容易看不懂、又最影响判断的。
+/// 类型、强弱、确认状态分别解释，避免把「三类」误读为「强信号」。
 struct SignalListSection: View {
     let analysis: ChanAnalysis
+    var isStatic = false
 
-    /// 按时间倒序（最新在最上）。后端返回的顺序不保证有序；而用户翻到这一段
-    /// 最想先看「最近发生了什么」，最新信号不该被压在长列表的底部。
     private var sortedSignals: [Signal] {
         analysis.signals.sorted { $0.time > $1.time }
     }
 
     var body: some View {
         VStack(spacing: 12) {
-            SectionCard(title: L("买卖点"), systemImage: "flag.fill") {
-                if analysis.signals.isEmpty {
-                    emptyHint
-                } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        // 常驻说明：明确「买卖点」是缠论的技术信号名词，不是操作指令
-                        Text(L("「买卖点」是缠论对价格结构的技术信号命名，非买入/卖出操作建议。"))
-                            .font(.caption2)
-                            .foregroundColor(Theme.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        ForEach(sortedSignals) { sig in signalRow(sig) }
-                    }
+            SectionCard(title: L("先读懂信号，再看明细"), systemImage: "flag") {
+                WrapLayout(spacing: 12, lineSpacing: 8) {
+                    Label(L("买点"), systemImage: "arrow.up.circle.fill").foregroundStyle(Theme.up)
+                    Label(L("卖点"), systemImage: "arrow.down.circle.fill").foregroundStyle(Theme.down)
                 }
-            }
-
-            disclaimer
-        }
-    }
-
-    private var emptyHint: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(L("当前区间未识别到明确买卖点"))
-                .font(AnalysisType.body).foregroundColor(Theme.textPrimary)
-            Text(L("可以试试换个时间范围，或切到周线看更大级别的结构。"))
-                .font(.footnote).foregroundColor(Theme.textSecondary)
-                .lineSpacing(3)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func signalRow(_ sig: Signal) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            RoundedRectangle(cornerRadius: 3)
-                .fill(sig.isBuy ? Theme.up : Theme.down)
-                .frame(width: 4)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    // 「一买」「二卖」这类标签直接接词条。不加下划线：中文小字号下
-                    // 虚下划线贴着字身，看起来像删除线；这里靠尾随的问号图标提示可点。
-                    GlossaryLink(term: sig.label) {
-                        HStack(spacing: 2) {
-                            Text(sig.label)
-                                .font(.subheadline.bold())
-                                .foregroundColor(sig.isBuy ? Theme.up : Theme.down)
-                            if GlossaryIndex.hasEntry(for: sig.label) {
-                                Image(systemName: "questionmark.circle")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(Theme.textSecondary)
-                            }
-                        }
-                    }
-                    Chip(text: SignalFormatting.strengthLabel(sig.strength),
-                         color: SignalFormatting.strengthColor(sig.strength))
-                    if !sig.confirmed { Chip(text: L("未确认"), color: Theme.textSecondary) }
-                    Spacer()
-                    Text(sig.time).font(.caption).foregroundColor(Theme.textSecondary)
-                }
-                // 与形态分析段同一套字号，两段来回切时不该有字号跳变
-                Text(sig.description)
+                .font(.subheadline.bold())
+                Text(L("与 K 线、雷达一致：红色为买点，绿色为卖点；虚线表示未确认。"))
                     .font(AnalysisType.body)
-                    .foregroundColor(Theme.textSecondary)
-                    .lineSpacing(AnalysisType.bodyLineSpacing)
+                    .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 12) {
-                    Text(L("价位 %@", String(format: "%.2f", sig.price)))
-                        .font(.caption2).foregroundColor(Theme.textSecondary)
-                    if let pr = sig.priceRatio {
-                        GlossaryLink(term: "背驰") {
-                            HStack(spacing: 2) {
-                                Text(L("价差 %@ · 量能 %@ · 时长 %@",
-                                       String(format: "%.2f", pr),
-                                       String(format: "%.2f", sig.volumeRatio ?? 1),
-                                       String(format: "%.2f", sig.lengthRatio ?? 1)))
-                                    .font(.caption2)
-                                    .foregroundColor(Theme.textSecondary)
-                                Image(systemName: "questionmark.circle")
-                                    .font(.system(size: 9))
-                                    .foregroundColor(Theme.textSecondary)
-                            }
-                        }
-                    }
+                Text(L("一／二／三类描述结构类型；强／中／弱描述信号强度，对应雷达颜色深浅。类型、强度与是否确认是三个不同维度。"))
+                    .font(AnalysisType.body)
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                AnalysisTermLink(term: "买卖点", color: Theme.textSecondary)
+            }
+
+            if sortedSignals.isEmpty {
+                SectionCard(title: L("当前区间未识别到明确买卖点"), systemImage: "magnifyingglass") {
+                    Text(L("没有信号不代表没有风险。可返回「当前状态」查看中枢位置和待观察条件。"))
+                        .font(AnalysisType.body)
+                        .foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                HStack {
+                    Text(L("信号明细 · 最新在前"))
+                    Spacer()
+                    Text(L("%lld 条未确认", sortedSignals.filter { !$0.confirmed }.count))
+                }
+                .font(.caption)
+                .foregroundStyle(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 8)
+                ForEach(sortedSignals) { signal in
+                    SignalDetailCard(signal: signal, isStatic: isStatic)
                 }
             }
-        }
-        .padding(10)
-        .background(Theme.surfaceAlt)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-
-    /// 买卖点是这个 App 里最像「投资建议」的部分，提示放在这一段而不是全局，
-    /// 出现在用户真正会误读的地方。
-    private var disclaimer: some View {
-        HStack(alignment: .top, spacing: 6) {
-            Image(systemName: "info.circle")
-                .font(.caption2).foregroundColor(Theme.textSecondary)
-            Text(L("以上为结构识别结果，不构成投资建议。信号需与你的持仓周期匹配，参见学习页「走势级别」。"))
-                .font(.caption2).foregroundColor(Theme.textSecondary)
+            Text(L("「买卖点」是缠论对价格结构的技术信号命名，非买入/卖出操作建议。"))
+                .font(.caption)
+                .foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 8)
         }
-        // 补回卡片那一层内边距，脚注才和卡片里的文字左对齐
-        .padding(.horizontal, 8)
     }
 }

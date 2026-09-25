@@ -1,0 +1,45 @@
+import Foundation
+
+/// 只整理已有分析事实，不另行推导交易信号。
+enum AnalysisInterpretation {
+    static func uniqueNotes(_ notes: [String]) -> [String] {
+        var seen: Set<String> = []
+        return notes.compactMap { note in
+            let value = note.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty, seen.insert(value).inserted else { return nil }
+            return value
+        }
+    }
+
+    static func pendingNotes(_ analysis: ChanAnalysis) -> [String] {
+        uniqueNotes(analysis.pendingNotes)
+    }
+
+    static func otherRisks(_ analysis: ChanAnalysis) -> [String] {
+        let pending = Set(pendingNotes(analysis))
+        return uniqueNotes(analysis.recommendation?.caveats ?? []).filter { !pending.contains($0) }
+    }
+
+    static func riskCount(_ analysis: ChanAnalysis) -> Int {
+        pendingNotes(analysis).count + otherRisks(analysis).count
+    }
+
+    static func stageExplanation(_ phase: String) -> String {
+        switch phase {
+        case "pivot_forming": return L("连续走势的重叠区间构成中枢，先定位上下沿。")
+        case "pivot_oscillating": return L("价格围绕中枢反复，观察区间是否继续延伸。")
+        case "leaving": return L("价格离开中枢，观察后续回抽；离开本身不等于三类信号。")
+        case "retrace_confirmed": return L("回抽结构已确认，再核对落点与中枢的关系及具体买卖点条件。")
+        case "divergence_turn": return L("创新高或新低时力度减弱，提示可能转折，不保证反转。")
+        default: return L("结合当前结构与确认状态理解这一阶段。")
+        }
+    }
+
+    static func branchExplanation(_ outcome: String) -> String {
+        switch outcome {
+        case "type3": return L("回抽未回到中枢，继续核对三类买卖点的完整条件；位置满足不等于信号已确认。")
+        case "type2": return L("回抽落回中枢内，继续观察支撑或压力；不能仅凭这一位置认定二类买卖点。")
+        default: return L("原来的离开结构需要重新评估，观察是否回到中枢震荡。")
+        }
+    }
+}

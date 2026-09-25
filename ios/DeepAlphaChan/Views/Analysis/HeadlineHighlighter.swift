@@ -7,7 +7,7 @@ import SwiftUI
 /// 为了 UI 样式去拼 Markdown/HTML。
 ///
 /// 颜色和「查看判断依据」展开区里 `StructureLayerRow` 的色标用同一套映射
-/// （笔=蓝/线段=橙/中枢=紫/买卖点=主题蓝）：同一张卡片里，摘要句子里的
+/// （笔=蓝/线段=橙/中枢=紫/背驰=粉/买点=红/卖点=绿）：同一张卡片里，摘要句子里的
 /// 「线段」和下面判断依据里「线段」这个标签必须是同一个颜色，用户才不会
 /// 看着像两套互不相干的系统。不要在这两处各自发明一套配色。
 enum HeadlineHighlighter {
@@ -17,11 +17,12 @@ enum HeadlineHighlighter {
     }
 
     private static let rules: [Rule] = [
-        Rule(pattern: "(上升|下降|向上|向下)?线段", color: Theme.segment),
-        Rule(pattern: "(上升|下降|向上|向下)?笔", color: Theme.stroke),
-        Rule(pattern: "中枢", color: Theme.pivotFill),
-        Rule(pattern: "(顶背驰|底背驰|背驰)", color: Theme.segment),
-        Rule(pattern: "[一二三](买|卖)(（候选）)?", color: Theme.accent),
+        Rule(pattern: "(上升|下降|向上|向下)?线段|\\b[Ss]egments?\\b", color: Theme.segment),
+        Rule(pattern: "(上升|下降|向上|向下)?笔|\\b[Ss]trokes?\\b", color: Theme.stroke),
+        Rule(pattern: "中枢|\\b[Pp]ivots?\\b", color: Theme.pivotFill),
+        Rule(pattern: "(顶背驰|底背驰|背驰|[Dd]ivergence)", color: Theme.divergence),
+        Rule(pattern: "[一二三]买(（候选）)?|[123](st|nd|rd) Buy", color: Theme.up),
+        Rule(pattern: "[一二三]卖(（候选）)?|[123](st|nd|rd) Sell", color: Theme.down),
     ]
 
     /// 对纯文本做关键词着色，匹配不到任何关键词时原样返回（不着色，不报错）。

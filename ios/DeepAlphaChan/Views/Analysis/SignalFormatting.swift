@@ -6,6 +6,37 @@ import SwiftUI
 /// 留在任何一边都会让另一边去引用一个「看起来不相干」的视图。
 enum SignalFormatting {
 
+    /// 与雷达共用：强弱只控制红／绿的深浅，不改成蓝／橙等类别色。
+    static func strengthDepth(_ strength: String) -> Double {
+        switch strength {
+        case "strong": return 0.9
+        case "weak": return 0.2
+        default: return 0.55
+        }
+    }
+
+    static func radarColor(side: String, depth: Double) -> Color {
+        let t = min(max(depth, 0), 1)
+        func lerp(_ a: Double, _ b: Double) -> Double { a + (b - a) * t }
+        if side == "buy" {
+            return Color(.sRGB,
+                         red: lerp(248, 120) / 255, green: lerp(113, 15) / 255, blue: lerp(133, 38) / 255)
+        }
+        return Color(.sRGB,
+                     red: lerp(110, 4) / 255, green: lerp(231, 90) / 255, blue: lerp(183, 64) / 255)
+    }
+
+    static func typeExplanation(_ kind: Signal.Kind) -> String {
+        switch kind {
+        case .buy1, .sell1:
+            return L("一类观察创新低／新高时的力度衰竭。强度按价差比分档：小于 0.6 为强，0.6 至小于 0.8 为中，其余为弱。")
+        case .buy2, .sell2:
+            return L("二类观察回调／反弹是否获得支撑或压力。本 App 结合回调笔长度和此前多次转折的重叠区间识别，具体依据见上方说明与学习词条。")
+        case .buy3, .sell3:
+            return L("三类观察离开中枢后的回抽是否留在中枢之外。本 App 还核对相关笔与均线条件，仅越过中枢边界不足以确认信号。")
+        }
+    }
+
     static func trendLabel(_ trend: String) -> String {
         switch trend {
         case "up": return L("上涨趋势")
@@ -47,14 +78,6 @@ enum SignalFormatting {
         }
     }
 
-    static func strengthColor(_ strength: Signal.Strength) -> Color {
-        switch strength {
-        case .strong: return Theme.accent
-        case .medium: return Theme.segment
-        case .weak: return Theme.textSecondary
-        }
-    }
-
     /// 形态阶段的配色：偏多用涨色、偏空用跌色、需警惕/中性用橙色。
     static func phaseColor(_ phase: String) -> Color {
         switch phase {
@@ -73,6 +96,16 @@ enum SignalFormatting {
 /// 补充说明」，枚举值定义见 `app/services/chan/pivot.py::classify_walk_type` 与
 /// `app/services/chan/analyzer.py::_compute_trend_outlook`。
 enum WalkTypeFormatting {
+    /// 方向复用 K 线涨跌色，盘整用中枢紫，未知状态用中性文字色。
+    static func color(_ value: String) -> Color {
+        switch value {
+        case "up_trend", "reversal_up", "continuation_up", "breakout_up": return Theme.up
+        case "down_trend", "reversal_down", "continuation_down", "breakout_down": return Theme.down
+        case "consolidation", "range": return Theme.pivotFill
+        default: return Theme.textSecondary
+        }
+    }
+
     /// 走势类型短标签（用于 Chip）。未知枚举值退回完整句子，避免显示空白。
     static func shortLabel(_ walkType: String, fallback: String?) -> String {
         switch walkType {

@@ -6,8 +6,7 @@ import SwiftUI
 /// 哪个市场，不再单独放一条分段选择器。
 ///
 /// 气泡编码（四个视觉维度对应四件不同的事，不再互相重复）：
-/// - 颜色：方向（红=买点 / 绿=卖点）+ 深浅（该信号发生当天的中枢生命周期阶段：
-///   形成中枢=浅、中枢震荡=中、已离开中枢=深，见 pivot_stage_depth）；
+/// - 颜色：方向（红=买点 / 绿=卖点）+ 深浅（信号强弱：越强越深，与详情页共用映射）；
 /// - 大小：买卖点级别本身的确定性（一类最小 → 三类最大）——一类只是背驰迹象、
 ///   尚待验证，二类回踩不破中枢是初步确认，三类回踩完全不回中枢是最强确认；
 /// - 边框：单条信号自身是否已被后续走势确认——虚线=未确认
@@ -218,7 +217,7 @@ struct SignalRadarView: View {
                     ForEach(layouts) { layout in
                         RadarBubble(
                             signal: layout.signal,
-                            diameter: CGFloat(layout.diameter),
+                            metrics: layout.metrics,
                             baseX: CGFloat(layout.x),
                             baseY: CGFloat(layout.y),
                             phase: layout.phase,
@@ -302,7 +301,8 @@ struct SignalRadarView: View {
     /// 按实际天数确定半径，按时间环带统一均分方向，避让不改变时间半径。
     private struct BubbleLayout: Identifiable {
         let signal: RadarSignal
-        let diameter: Double
+        let metrics: RadarBubbleMetrics
+        var diameter: Double { metrics.diameter }
         var x: Double
         var y: Double
         let phase: Double
@@ -369,31 +369,37 @@ struct SignalRadarView: View {
         let center = (x: w / 2, y: h / 2)
         let scales = ringSpecs.map(\.scale)
         func age(_ s: RadarSignal) -> Int { daysAgo(from: s.date, to: dayDate) }
-        func bubbleDiameter(_ s: RadarSignal) -> Double {
-            diameter(forLevel: s.level) * ringSizeFactor(forDaysAgo: age(s))
+        let maxDiameter = max(1, min(w, h) - 2 * RadarBubbleMetrics.edgePadding)
+        // 每次布局每个信号只测量一次，排序和避让都使用最终尺寸。
+        let metrics = signals.map { signal in
+            RadarBubbleMetrics(symbol: signal.symbol,
+                               baseDiameter: diameter(forLevel: signal.level) * ringSizeFactor(forDaysAgo: age(signal)),
+                               maxDiameter: maxDiameter)
         }
-        let byDay = Dictionary(grouping: signals, by: age)
+        let sizedSignals = Array(zip(signals, metrics))
+        let byDay = Dictionary(grouping: sizedSignals) { age($0.0) }
         var layouts: [BubbleLayout] = []
         var placed: [RadarOrbitSpacing.Placed] = []
         for (orbitIndex, days) in byDay.keys.sorted().enumerated() {
             // 大气泡先占位；同尺寸按稳定标识排序，强度排名变化时气泡不互换位置
             let members = (byDay[days] ?? []).sorted {
-                (bubbleDiameter($0), $1.id) > (bubbleDiameter($1), $0.id)
+                ($0.1.diameter, $1.0.id) > ($1.1.diameter, $0.0.id)
             }
             let radius = fieldRadius * RadarOrbitSpacing.orbitRadius(
                 timeRadius: ringRadius(forDaysAgo: days, fieldRadius: 1),
-                diameters: members.map(bubbleDiameter), fieldRadius: fieldRadius,
+                diameters: members.map { $0.1.diameter }, fieldRadius: fieldRadius,
                 cap: scales[bandIndex(forDaysAgo: days)])
             // 各轨道首选方向错开（黄金角），避免所有轨道都从正上方开始排
             let preferred = -Double.pi / 2 + Double(orbitIndex) * 2.399963
-            for sig in members {
-                let d = bubbleDiameter(sig)
+            for (sig, metrics) in members {
+                let d = metrics.diameter
                 let angle = RadarOrbitSpacing.bestAngle(
                     radius: radius, diameter: d, center: center, placed: placed, preferred: preferred)
-                let x = min(max(center.x + radius * cos(angle), d / 2 + 2), w - d / 2 - 2)
-                let y = min(max(center.y + radius * sin(angle), d / 2 + 2), h - d / 2 - 2)
+                let inset = d / 2 + RadarBubbleMetrics.edgePadding
+                let x = min(max(center.x + radius * cos(angle), inset), max(inset, w - inset))
+                let y = min(max(center.y + radius * sin(angle), inset), max(inset, h - inset))
                 placed.append(.init(x: x, y: y, diameter: d))
-                layouts.append(BubbleLayout(signal: sig, diameter: d, x: x, y: y,
+                layouts.append(BubbleLayout(signal: sig, metrics: metrics, x: x, y: y,
                                             phase: Double(layouts.count) * 0.35, daysAgo: days))
             }
         }
@@ -432,23 +438,12 @@ struct SignalRadarView: View {
     /// 买卖点强弱 → 颜色深浅：越强越深。与详情页买卖点列表的「强/中/弱」同一口径
     /// （一类按背驰力度比、二三类按中枢级别 + 回踩余地），未知值按中档。
     static func strengthDepth(_ strength: String) -> Double {
-        switch strength {
-        case "strong": return 0.9
-        case "weak": return 0.2
-        default: return 0.55
-        }
+        SignalFormatting.strengthDepth(strength)
     }
 
-    /// 深浅 → 气泡颜色：买（亮红→深红）/ 卖（亮绿→深绿），depth 越大颜色越深。
+    /// 与详情页共用强度渐变，避免两处颜色随各自修改而偏离。
     static func bubbleColor(side: String, depth: Double) -> Color {
-        let t = min(max(depth, 0), 1)
-        func lerp(_ a: Double, _ b: Double) -> Double { a + (b - a) * t }
-        if side == "buy" {
-            return Color(.sRGB,
-                         red: lerp(248, 120) / 255, green: lerp(113, 15) / 255, blue: lerp(133, 38) / 255)
-        }
-        return Color(.sRGB,
-                     red: lerp(110, 4) / 255, green: lerp(231, 90) / 255, blue: lerp(183, 64) / 255)
+        SignalFormatting.radarColor(side: side, depth: depth)
     }
 
     // MARK: - 图例
@@ -754,123 +749,5 @@ struct SignalRadarView: View {
         f.locale = Locale(identifier: Localized.language().localeIdentifier)
         f.setLocalizedDateFormatFromTemplate("EEE")
         return f.string(from: d)
-    }
-}
-
-/// 单个信号气泡：纯色实心 + 持续轻微漂浮 + 可按住拖拽（松手弹回原位）。
-private struct RadarBubble: View {
-    let signal: RadarSignal
-    let diameter: CGFloat
-    let baseX: CGFloat
-    let baseY: CGFloat
-    let phase: Double
-    let color: Color
-    /// 信号是不是查看这天当天新出现的（而非从更早的日子延续到现在）。
-    let isNew: Bool
-    let onOpen: () -> Void
-
-    /// 持续漂浮的竖向偏移（onAppear 后在 0 ↔ 负值间无限往复）。
-    @State private var floatY: CGFloat = 0
-    /// 拖拽偏移；松手后用弹簧动画归零。
-    @State private var drag: CGSize = .zero
-    /// 拖拽中放大一点，给「被拎起来」的反馈。
-    @State private var dragging = false
-
-    private var r: CGFloat { diameter / 2 }
-
-    var body: some View {
-        content
-            .frame(width: diameter, height: diameter)
-            .scaleEffect(dragging ? 1.12 : 1.0)
-            .offset(y: isNew ? 0 : floatY)
-            .offset(drag)
-            .shadow(color: .black.opacity(dragging ? 0.5 : 0.35),
-                    radius: dragging ? 12 : 6, y: dragging ? 8 : 3)
-            .contentShape(Circle())
-            .gesture(
-                DragGesture()
-                    .onChanged { value in
-                        if !dragging { withAnimation(.easeOut(duration: 0.15)) { dragging = true } }
-                        drag = value.translation
-                    }
-                    .onEnded { _ in
-                        withAnimation(.spring(response: 0.45, dampingFraction: 0.55)) {
-                            drag = .zero
-                        }
-                        withAnimation(.easeOut(duration: 0.2)) { dragging = false }
-                    }
-            )
-            .onTapGesture { onOpen() }
-            .position(x: baseX, y: baseY)
-            .accessibilityElement()
-            .accessibilityLabel(
-                "\(signal.symbol) \(signal.name) \(signal.isBuy ? L("买点") : L("卖点"))"
-                + (isNew ? " \(L("所选日期当天新增"))" : "")
-                + (signal.isSubLevelResonance ? " \(L("日线与30分钟共振"))" : "")
-            )
-            .accessibilityAddTraits(.isButton)
-            .onAppear {
-                floatY = -6
-                withAnimation(
-                    .easeInOut(duration: Double.random(in: 2.2...3.4))
-                        .repeatForever(autoreverses: true)
-                        .delay(phase * 0.2)
-                ) {
-                    floatY = 6
-                }
-            }
-    }
-
-    private var content: some View {
-        ZStack {
-            // 纯实色气泡；未确认的信号额外描一圈虚线边框——跟图表页「虚线=未确认」
-            // 同一套语言，确认的信号维持无描边的纯实色（多数信号都是已确认的，
-            // 不想让所有气泡都套上边框，那样反而弱化了「未确认」这个特殊标记）。
-            Circle().fill(color)
-            if !signal.confirmed {
-                Circle().stroke(style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                    .foregroundColor(.white.opacity(0.85))
-            }
-
-            VStack(spacing: 1) {
-                Text(signal.symbol)
-                    .font(.system(size: max(12, min(17, r * 0.42)), weight: .heavy))
-                    .foregroundColor(.white)
-                Text(signal.name)
-                    .font(.system(size: max(9, min(12, r * 0.3))))
-                    .foregroundColor(.white.opacity(0.92))
-                    .lineLimit(1)
-                    .padding(.horizontal, 4)
-            }
-            .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
-        }
-        .overlay(alignment: .topTrailing) {
-            // "新"改放气泡外面右上角：挤在气泡内部会跟代码/名称文字抢地方。
-            if isNew {
-                Text(L("新"))
-                    .font(.system(size: max(8, r * 0.22), weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1.5)
-                    .background(Theme.segment)
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(Theme.background, lineWidth: 1))
-                    .offset(x: 4, y: -4)
-            }
-        }
-        .overlay(alignment: .bottomLeading) {
-            // 日线定方向 × 30 分钟找买卖点同向（共振），只在最新交易日的入榜气泡上出现。
-            if signal.isSubLevelResonance {
-                Text(L("共振"))
-                    .font(.system(size: max(8, r * 0.22), weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1.5)
-                    .background(Theme.accent)
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(Theme.background, lineWidth: 1))
-                    .offset(x: -4, y: 4)
-            }
-        }
     }
 }

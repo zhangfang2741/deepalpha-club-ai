@@ -1,16 +1,13 @@
 import SwiftUI
 
-/// 图表下方的分段内容：整体分析 / 买卖点 / 风险提示。
-///
-/// 三段读法不同故分段：整体分析是整体读法、买卖点是逐条明细、风险提示单独摘出来——
-/// 原先风险提示折叠在整体分析卡片里，容易被当成结论的一部分顺手划过，现在单独
-/// 成一个 tab，和另外两段并列，想看风险时才点进来，也更显眼。
+/// 图表下方按状态、信号、风险组织阅读，整页共用外层滚动容器。
 struct ResultSegments: View {
     let analysis: ChanAnalysis
 
     /// 渲染进分享长图时传 true：静态图里没有切换交互，长图要的是完整内容而不是
     /// 用户当下选中的那一段，所以不走切换器，三段上下全铺，各带小标题。
     var isStatic = false
+    var onSelectionChange: () -> Void = {}
 
     @State private var segment: Segment = .analysis
 
@@ -19,7 +16,7 @@ struct ResultSegments: View {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .analysis: return L("整体分析")
+            case .analysis: return L("当前状态")
             case .signals: return L("买卖点")
             case .risk: return L("风险提示")
             }
@@ -34,6 +31,7 @@ struct ResultSegments: View {
                 interactiveSections
             }
         }
+        .onChange(of: segment) { _, _ in onSelectionChange() }
     }
 
     /// 回退记录：曾经尝试把图表+图层开关固定在顶部、tab 内容单独套一个
@@ -53,23 +51,46 @@ struct ResultSegments: View {
                 case .analysis:
                     AnalysisSection(analysis: analysis)
                 case .signals:
-                    SignalListSection(analysis: analysis)
+                    SignalListSection(analysis: analysis, isStatic: isStatic)
                 case .risk:
                     RiskSection(analysis: analysis)
                 }
             }
             .id(segment)
+
+            Button {
+                switch segment {
+                case .analysis: segment = .signals
+                case .signals: segment = .risk
+                case .risk: segment = .analysis
+                }
+            } label: {
+                Label(nextTitle, systemImage: "arrow.right")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .foregroundStyle(Theme.accent)
+                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var nextTitle: String {
+        switch segment {
+        case .analysis: return L("继续核对买卖点")
+        case .signals: return L("查看风险与限制")
+        case .risk: return L("返回当前状态")
         }
     }
 
     /// 长图布局：三段全铺，标题复用交互态的文案（买卖点/风险提示带数量）。
     private var staticSections: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionHeader(L("整体分析"))
+            sectionHeader(L("当前状态"))
             AnalysisSection(analysis: analysis)
 
             sectionHeader(title(for: .signals))
-            SignalListSection(analysis: analysis)
+            SignalListSection(analysis: analysis, isStatic: isStatic)
 
             sectionHeader(title(for: .risk))
             RiskSection(analysis: analysis)
@@ -91,42 +112,9 @@ struct ResultSegments: View {
             guard !analysis.signals.isEmpty else { return s.title }
             return "\(s.title) \(analysis.signals.count)"
         case .risk:
-            let count = analysis.recommendation?.caveats.count ?? 0
+            let count = AnalysisInterpretation.riskCount(analysis)
             guard count > 0 else { return s.title }
             return "\(s.title) \(count)"
-        }
-    }
-}
-
-/// 分段条：每个 tab 各自一个独立胶囊，之间留白露出页面底色——不是挤在同一个
-/// 统一容器里贴着。之前套了一个外层 `.background(Theme.surface)` 大胶囊把三个
-/// 挤在一起，只有选中项有背景色，看起来像系统分段控件的变体；设计稿里三个
-/// tab 是分开的独立元素，之间有明显间距。
-private struct SegmentTabBar: View {
-    @Binding var selection: ResultSegments.Segment
-    let title: (ResultSegments.Segment) -> String
-
-    var body: some View {
-        HStack(spacing: 10) {
-            ForEach(ResultSegments.Segment.allCases) { seg in
-                let isSelected = seg == selection
-                Button {
-                    withAnimation(.easeInOut(duration: 0.15)) { selection = seg }
-                } label: {
-                    Text(title(seg))
-                        .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
-                        .foregroundColor(isSelected ? Theme.textPrimary : Theme.textSecondary)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 9)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(isSelected ? Theme.surfaceAlt : Color.clear)
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-            }
-            Spacer(minLength: 0)
         }
     }
 }

@@ -36,15 +36,13 @@ enum Theme {
     /// 滚动内容容器的垂直内边距（首尾留白，与卡片间距一致）。
     static let contentVInset: CGFloat = 14
 
-    /// 中枢阶段 → 标签配色：形成/震荡（还没怎样）用中性灰，离开段（正在发生）用
-    /// 橙，回抽确认（已确认）用主题蓝，背驰转折（趋势信号）用紫。自选列表标签和
-    /// 详情页「走到哪一步」徽标共用同一套映射，同一只票同一阶段在两处颜色一致。
+    /// 中枢阶段沿用结构色，避免线段橙或涨跌绿被误读为进度状态。
+    /// 自选、详情和阶段讲解共用；方向与信号强弱另行表达。
     static func pivotPhaseColor(_ phase: String?) -> Color {
         switch phase {
-        case "leaving": return Theme.segment
-        case "retrace_confirmed": return Theme.accent
-        case "divergence_turn": return Theme.pivotFill
-        default: return Theme.textSecondary  // pivot_forming / pivot_oscillating / nil
+        case "pivot_forming", "pivot_oscillating", "leaving", "retrace_confirmed": return Theme.pivotFill
+        case "divergence_turn": return Theme.divergence
+        default: return Theme.textSecondary
         }
     }
 }

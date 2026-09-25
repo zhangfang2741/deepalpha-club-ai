@@ -215,7 +215,7 @@ struct SubLevelSheet: View {
                         .foregroundColor(Theme.textPrimary)
                     Text(SignalFormatting.strengthLabel(sig.strength))
                         .font(.caption)
-                        .foregroundColor(SignalFormatting.strengthColor(sig.strength))
+                        .foregroundColor(sig.isBuy ? Theme.up : Theme.down)
                 }
             }
         }
