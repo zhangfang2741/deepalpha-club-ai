@@ -324,6 +324,7 @@
 /* Signal Radar — bubble field rings, legend, date picker */
 "缠论信号" = "Chan Signals";
 "正在扫描「%@」成分股…" = "Scanning \"%@\" constituents…";
+"正在刷新…" = "Refreshing…";
 "3天内" = "Within 3d";
 "一周内" = "Within 1wk";
 "1月内" = "Within 1mo";
