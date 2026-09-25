@@ -46,16 +46,16 @@ private struct PhaseDiagramCopy {
                 body: L("价格在中枢区间反复，最近的笔里还没有一笔「起点在中枢内、终点越过 ZG/ZD 边界」的笔。交付物：无买卖点信号，只更新中枢的 ZG/ZD 参考区间。"))
         case .leaving:
             return PhaseDiagramCopy(
-                title: L("离开段"),
+                title: L("离开中枢"),
                 body: L("出现一笔起点在中枢内、终点越过 ZG（向上）或 ZD（向下）的笔，正等它之后的回踩笔出现。交付物：候选三买/三卖，尚未确认。"))
         case .retraceConfirmed:
             return PhaseDiagramCopy(
-                title: L("回抽确认"),
+                title: L("确认买卖点"),
                 body: L("回踩笔收在越过原边界处 → 三买/三卖；收在区间内但没破对侧边界 → 二买/二卖。交付物：对应的买卖点信号，强度由中枢级别 + 回踩离边界的距离决定。"))
         case .divergence:
             return PhaseDiagramCopy(
                 title: L("背驰 / 转折"),
-                body: L("回抽确认之后，后续同方向的笔里出现了背驰——创新高/新低，但价差、量能或时长比前一个同向段更弱。交付物：一买或一卖信号，强弱由这三项的比值决定。"))
+                body: L("确认买卖点之后，后续同方向的笔里出现了背驰——创新高/新低，但价差、量能或时长比前一个同向段更弱。交付物：一买或一卖信号，强弱由这三项的比值决定。"))
         case .edgeForm:
             return PhaseDiagramCopy(
                 title: L("条件：形成中枢"),
@@ -67,11 +67,11 @@ private struct PhaseDiagramCopy {
         case .edgeHold:
             return PhaseDiagramCopy(
                 title: L("条件：回踩守住"),
-                body: L("离开段之后的回踩笔，收在越过原边界处（三类）或区间内但未破对侧边界（二类），判定为「回抽确认」。"))
+                body: L("离开中枢之后的回踩笔，收在越过原边界处（三类）或区间内但未破对侧边界（二类），判定为「确认买卖点」。"))
         case .edgeDiverge:
             return PhaseDiagramCopy(
                 title: L("条件：出现背驰"),
-                body: L("回抽确认之后，继续沿同一方向前进的笔里，力度（价差/量能/时长）比前一个同向段更弱，判定为「背驰」。"))
+                body: L("确认买卖点之后，继续沿同一方向前进的笔里，力度（价差/量能/时长）比前一个同向段更弱，判定为「背驰」。"))
         case .edgeFake:
             return PhaseDiagramCopy(
                 title: L("条件：假突破"),
@@ -79,7 +79,7 @@ private struct PhaseDiagramCopy {
         case .edgeReverse:
             return PhaseDiagramCopy(
                 title: L("条件：反向突破"),
-                body: L("「回抽确认」或「背驰/转折」之后，后面出现一次方向相反、同样满足突破+回踩条件的新尝试——整体重新判定一次，结论会被新结果直接覆盖。"))
+                body: L("「确认买卖点」或「背驰/转折」之后，后面出现一次方向相反、同样满足突破+回踩条件的新尝试——整体重新判定一次，结论会被新结果直接覆盖。"))
         }
     }
 }
@@ -129,9 +129,9 @@ struct PivotPhaseDiagram: View {
             NodeSpec(key: .pivotIn, rect: CGRect(x: 112, y: 70, width: 170, height: 46),
                      title: L("中枢内"), dashed: false, hasDeliverable: false, isCurrent: currentNode == .pivotIn),
             NodeSpec(key: .leaving, rect: CGRect(x: 112, y: 174, width: 170, height: 46),
-                     title: L("离开段"), dashed: false, hasDeliverable: true, isCurrent: currentNode == .leaving),
+                     title: L("离开中枢"), dashed: false, hasDeliverable: true, isCurrent: currentNode == .leaving),
             NodeSpec(key: .retraceConfirmed, rect: CGRect(x: 100, y: 278, width: 194, height: 54),
-                     title: L("回抽确认"), dashed: false, hasDeliverable: true, isCurrent: currentNode == .retraceConfirmed),
+                     title: L("确认买卖点"), dashed: false, hasDeliverable: true, isCurrent: currentNode == .retraceConfirmed),
             NodeSpec(key: .divergence, rect: CGRect(x: 112, y: 386, width: 170, height: 46),
                      title: L("背驰 / 转折"), dashed: false, hasDeliverable: true, isCurrent: currentNode == .divergence),
         ]
@@ -163,6 +163,10 @@ struct PivotPhaseDiagram: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            // 先看文字说明（现在在哪、为什么），图放下面当作可交互的参考——
+            // 一进来不用先看图才知道当前状态，点图上别的方块/线时上面这块跟着切换。
+            detailPanel
+
             diagramCanvas
                 .frame(maxWidth: .infinity)
                 .background(
@@ -178,8 +182,6 @@ struct PivotPhaseDiagram: View {
                 .font(.caption2)
                 .foregroundStyle(Theme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .center)
-
-            detailPanel
         }
         // `selected` 用自定义 init 只在这个视图第一次被创建时按 phase 设初始值；
         // 之后只要外层还在同一个 tab（同一个 `.id(segment)`），切换股票/周期时
@@ -220,14 +222,17 @@ struct PivotPhaseDiagram: View {
 
     private func nodeView(_ spec: NodeSpec, scale: CGFloat) -> some View {
         let isSelected = selected == spec.key
+        // 5 个节点统一用同一套高亮规则（只看 isCurrent/isSelected）——「确认买卖点」
+        // 之前不论选没选都固定填中枢紫色，跟「当前」徽标各说各话，会让人误判当前
+        // 在哪一步（比如真正当前是「中枢内」，视觉上最显眼的却是「确认买卖点」）。
         return Button {
             selected = spec.key
         } label: {
             RoundedRectangle(cornerRadius: 10 * scale)
-                .fill(spec.key == .retraceConfirmed ? Theme.pivotFill.opacity(0.16) : Theme.surfaceAlt)
+                .fill(Theme.surfaceAlt)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10 * scale)
-                        .strokeBorder(borderColor(spec, isSelected: isSelected),
+                        .strokeBorder(isSelected ? Theme.textPrimary.opacity(0.85) : Theme.border,
                                       style: StrokeStyle(lineWidth: (isSelected ? 2.2 : 1.2) * scale,
                                                           dash: spec.dashed ? [4 * scale, 3 * scale] : []))
                 )
@@ -241,9 +246,15 @@ struct PivotPhaseDiagram: View {
                 }
                 .overlay(alignment: .topTrailing) {
                     if spec.isCurrent {
-                        Text(L("当前"))
+                        // 直接显示这次算出来的具体结论（如「确认三买」），不用固定的「当前」
+                        // 两个字——自选列表的 Chip 用的就是同一个 phase.phaseLabel，两处
+                        // 要看到一样的字，不然自选列表和判定图像是两套不同的结论。
+                        Text(phase.phaseLabel)
                             .font(.system(size: 9 * scale, weight: .bold))
                             .foregroundStyle(Theme.background)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                            .frame(maxWidth: spec.rect.width * scale * 0.94)
                             .padding(.horizontal, 6 * scale).padding(.vertical, 2 * scale)
                             .background(Theme.pivotPhaseColor(phase.phase), in: Capsule())
                             .padding(4 * scale)
@@ -267,13 +278,6 @@ struct PivotPhaseDiagram: View {
         .frame(width: spec.rect.width * scale, height: spec.rect.height * scale)
         .position(x: spec.rect.midX * scale, y: spec.rect.midY * scale)
         .accessibilityLabel(spec.title)
-    }
-
-    private func borderColor(_ spec: NodeSpec, isSelected: Bool) -> Color {
-        if spec.key == .retraceConfirmed {
-            return Theme.pivotFill.opacity(isSelected ? 1 : 0.7)
-        }
-        return isSelected ? Theme.textPrimary.opacity(0.85) : Theme.border
     }
 
     // MARK: - 边（可点的标签 + 可点的线本身 + Canvas 画的视觉线/曲线）
@@ -376,7 +380,10 @@ struct PivotPhaseDiagram: View {
         let copy = PhaseDiagramCopy.copy(for: selected)
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text(copy.title)
+                // 选中的正是当前状态时，标题换成这次算出来的具体结论（跟自选列表
+                // Chip、图上节点徽标同一个 phase.phaseLabel）；选别的方块/线看
+                // 通用规则时，还是用那个方块/边自己的名字（copy.title）。
+                Text(isCurrentSelection ? phase.phaseLabel : copy.title)
                     .font(.subheadline.bold())
                     .foregroundStyle(Theme.textPrimary)
                 if isCurrentSelection {

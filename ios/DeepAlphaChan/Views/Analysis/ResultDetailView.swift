@@ -28,12 +28,13 @@ struct ResultDetailView: View {
         // 本来就占大半屏，留给 tab 内容的"剩余空间"被挤成一个只有几行高的
         // 小框，体验比之前更差，已撤回。回到整页一个 ScrollView，图表和
         // tab 内容一起自然滚动。
-        ScrollViewReader { proxy in
-            ScrollView {
-                pageContent(isStatic: false) {
-                    proxy.scrollTo("result-sections", anchor: .top)
-                }
-            }
+        //
+        // 切 tab（当前状态/买卖点/风险提示）之前会顺带把页面滚回顶部
+        // （`proxy.scrollTo("result-sections")`），单纯切个 tab 却把用户已经
+        // 往下翻的位置弹掉，体验是"跳来跳去"，已去掉——现在切 tab 只换内容，
+        // 不动滚动位置。
+        ScrollView {
+            pageContent(isStatic: false)
         }
         .scrollBounceBehavior(.basedOnSize)
         .background(Theme.background)
@@ -80,7 +81,7 @@ struct ResultDetailView: View {
     /// 抽成一个方法让屏幕显示与离屏长图复用同一棵视图树，修饰符与顺序保持
     /// 一致——改这里会同时改变页面显示与分享图，两处永不走样。
     /// 分享长图通过 isStatic 隐藏周期与全屏控件，并将 ResultSegments 的三段内容全部展开。
-    private func pageContent(isStatic: Bool, onSectionChange: @escaping () -> Void = {}) -> some View {
+    private func pageContent(isStatic: Bool) -> some View {
         VStack(spacing: 14) {
             ChartSection(analysis: analysis, vm: vm,
                          onFullscreen: openFullscreen, isStatic: isStatic)
@@ -99,8 +100,7 @@ struct ResultDetailView: View {
                     }
                 }
 
-            ResultSegments(analysis: analysis, isStatic: isStatic, onSelectionChange: onSectionChange)
-                .id("result-sections")
+            ResultSegments(analysis: analysis, isStatic: isStatic)
 
             compactDisclaimer
         }

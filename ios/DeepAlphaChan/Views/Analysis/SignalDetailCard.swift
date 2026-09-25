@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// 历史买卖点的一行：默认收起，只有一行信息；点开才展开"为什么是这个信号"。
-/// 边框虚实对应确认状态，色块深浅复用雷达的强度映射。
+/// 色块深浅复用雷达的强度映射；确认状态已经用行内的勾选/虚线圆图标表达过，
+/// 不再另用边框虚实重复一遍。
 struct SignalDetailCard: View {
     let signal: Signal
     var isStatic = false
@@ -32,11 +33,6 @@ struct SignalDetailCard: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(directionColor.opacity(0.35),
-                              style: StrokeStyle(lineWidth: 1, dash: signal.confirmed ? [] : [4, 3]))
-        }
     }
 
     private var row: some View {
