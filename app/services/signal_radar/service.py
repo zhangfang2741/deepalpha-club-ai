@@ -220,13 +220,22 @@ def _select_top_n(items: list, top_n: int, *, level_of, score_of) -> list:
     return sorted(picked, key=score_of, reverse=True)[:top_n]
 
 
+def is_aligned_resonance(side: str, verdict: str | None) -> bool:
+    """气泡方向与次级别共振方向一致才算共振：买点配共振买、卖点配共振卖。
+
+    一买常出现在下跌末端（日线形态偏弱），会碰上「共振卖点」——那不是对这个买点的确认，
+    反而是相反信号，不能给它挂共振、也不能加分。
+    """
+    return (side == "buy" and verdict == "resonance_buy") or (side == "sell" and verdict == "resonance_sell")
+
+
 def rerank_with_resonance(day: RadarDayOut, top_n: int) -> RadarDayOut:
     """最新一天：候选池（已补算次级别）按综合分 + 共振加分重排，取前 top_n。"""
     day_date = date.fromisoformat(day.date)
 
     def score_of(s: RadarSignalOut) -> float:
         age = (day_date - date.fromisoformat(s.date)).days
-        resonance = s.sub_level_verdict in ("resonance_buy", "resonance_sell")
+        resonance = is_aligned_resonance(s.side, s.sub_level_verdict)
         return radar_score(_signal_level(s.signal_type), s.strength, age, resonance)
 
     items = _select_top_n(list(day.signals), top_n, level_of=lambda s: _signal_level(s.signal_type),

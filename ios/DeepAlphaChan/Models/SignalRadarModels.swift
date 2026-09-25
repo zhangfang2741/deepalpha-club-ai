@@ -105,9 +105,11 @@ struct RadarSignal: Decodable, Identifiable {
 
     var id: String { "\(symbol)-\(date)-\(signalType)" }
 
-    /// 日线与 30 分钟同向（共振买点/共振卖点），气泡上加标记。
+    /// 共振且方向与气泡一致（买点配共振买、卖点配共振卖）才在气泡上加标记。
+    /// 一买常出现在下跌末端，会碰上「共振卖点」——那是相反信号，不能挂共振。
     var isSubLevelResonance: Bool {
-        subLevelVerdict == "resonance_buy" || subLevelVerdict == "resonance_sell"
+        (side == "buy" && subLevelVerdict == "resonance_buy")
+            || (side == "sell" && subLevelVerdict == "resonance_sell")
     }
     var isBuy: Bool { side == "buy" }
 

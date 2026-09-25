@@ -601,3 +601,23 @@ class TestWatchlistUniverse:
         assert svc.watchlist_cache_key("us", 7, wl) in redis.store
         assert svc.watchlist_cache_key("us", 7, wl[:1]) != svc.watchlist_cache_key("us", 7, wl), "清单变了键也变"
         assert svc._cache_key("us", svc.WATCHLIST_KEY) not in redis.store, "不能写进所有人共用的键"
+
+
+def test_resonance_bonus_requires_same_direction_as_bubble():
+    """共振必须与气泡方向一致：一买配「共振卖点」（如 CSCO：日线偏弱 + 30 分钟三卖）不加分。"""
+    from app.schemas.signal_radar import RadarDayOut, RadarSignalOut
+
+    def sig(sym, side, verdict):
+        return RadarSignalOut(symbol=sym, name=sym, side=side, label="一买", signal_type=f"{side}1",
+                              date="2026-09-19", price=1.0, strength=0.55, bias="bearish",
+                              signal_strength="medium", confirmed=True, pivot_stage_depth=0.5,
+                              sub_level_verdict=verdict)
+    day = RadarDayOut(date="2026-09-19", buy_count=2, sell_count=1, signals=[
+        sig("CSCO", "buy", "resonance_sell"),   # 方向相反：不算共振
+        sig("SAME", "buy", None),
+        sig("SELL", "sell", "resonance_sell"),  # 方向一致：算共振
+    ])
+    out = svc.rerank_with_resonance(day, top_n=3)
+    assert out.signals[0].symbol == "SELL"
+    assert svc.is_aligned_resonance("buy", "resonance_sell") is False
+    assert svc.is_aligned_resonance("buy", "resonance_buy") is True
