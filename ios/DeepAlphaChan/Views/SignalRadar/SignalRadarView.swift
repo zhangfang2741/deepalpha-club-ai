@@ -110,8 +110,13 @@ struct SignalRadarView: View {
     /// 不会因可见窗口太窄被挡掉）。270 = 雷达的 warmup(180) + window*2(90)，见后端
     /// signal_radar/service.py。
     private func openSymbol(_ symbol: String, name: String? = nil) {
-        let end = SignalRadarView.parser.date(from: vm.response?.asOf ?? "") ?? Date()
-        let start = Calendar.current.date(byAdding: .day, value: -270, to: end) ?? end
+        // 截止到「现在」：详情页要有最新K线（盘中也是）。之前截止到雷达扫描日 as_of，A 股/港股
+        // 盘中点进去永远只有前一交易日。起点仍按 as_of 往前 270 天，与雷达扫描窗口的左端对齐，
+        // 结构尽量一致；右端多出来的新K线可能改写最新几笔，弹层已说明「以详情页为准」。
+        let m = vm.market.rawValue
+        let asOf = QueryDates.date(from: vm.response?.asOf ?? "", market: m) ?? Date()
+        let start = QueryDates.adding(days: -270, to: asOf, market: m)
+        let end = Date()
         chanVM.apply(
             // 名称为空（美股无中文名）时不传，详情页标题退回显示代码
             market: vm.market, symbol: symbol, name: (name?.isEmpty ?? true) ? nil : name,

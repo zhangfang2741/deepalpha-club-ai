@@ -59,13 +59,6 @@ final class ChanViewModel: ObservableObject {
     @Published var gapLoading = false
     @Published var gapError: String?
 
-    private let dateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = TimeZone(identifier: "America/New_York")
-        return f
-    }()
 
     /// 记录上次校正日期时「今天」是哪天：ChanViewModel 是跨 Tab 共享的长生命周期对象
     /// （见类注释），startDate/endDate 只在 init 时按当时的 Date() 设一次。App 常驻
@@ -99,8 +92,9 @@ final class ChanViewModel: ObservableObject {
         lastKnownToday = today
     }
 
-    var startDateString: String { dateFormatter.string(from: startDate) }
-    var endDateString: String { dateFormatter.string(from: endDate) }
+    // 按当前市场交易所时区换算（见 QueryDates）：A 股/港股盘中当天也能取到
+    var startDateString: String { QueryDates.string(from: startDate, market: market.rawValue) }
+    var endDateString: String { QueryDates.string(from: endDate, market: market.rawValue) }
 
     /// 一次套用一组查询条件，供「最近分析过」「起步示例」这类快捷入口使用。
     ///
