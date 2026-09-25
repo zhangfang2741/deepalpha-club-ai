@@ -82,13 +82,15 @@ struct RadarSignal: Decodable, Identifiable {
     let date: String
     let price: Double
     /// 形态技术面强度 0~1（决定看板淘汰排序；气泡大小由 `level` 决定，
-    /// 颜色深浅由 `pivotStageDepth` 决定，见下）
+    /// 颜色深浅由 `signalStrength` 决定）
     let strength: Double
     let bias: String
+    /// 买卖点强弱 strong / medium / weak，决定气泡颜色深浅（越强越深），
+    /// 与详情页买卖点列表的「强/中/弱」一致。
     let signalStrength: String
     let confirmed: Bool
-    /// 该信号发生当天的中枢生命周期阶段深浅 0~1：形成中枢=浅/中枢震荡=中/
-    /// 已离开中枢=深，决定气泡颜色深浅（见 SignalRadarView.bubbleColor）。
+    /// 该信号发生当天的中枢生命周期阶段深浅 0~1。旧版用来决定气泡深浅，现改为按
+    /// `signalStrength`；字段仍由后端返回，保留解码。
     let pivotStageDepth: Double
     /// 次级别确认结论（日线定方向 × 30 分钟找买卖点），只有最新交易日的入榜气泡有；
     /// 可选字段，后端未部署或旧缓存里缺失时为 nil。

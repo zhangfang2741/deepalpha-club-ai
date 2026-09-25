@@ -129,7 +129,7 @@ class RawSignal:
     bias: str
     signal_strength: str
     confirmed: bool
-    pivot_stage_depth: float  # 该信号发生当天的中枢阶段深浅 0~1（决定气泡颜色深浅）
+    pivot_stage_depth: float  # 该信号发生当天的中枢阶段深浅 0~1（旧版 App 的气泡深浅）
 
 
 def signal_strength(label: str) -> float:
@@ -169,7 +169,7 @@ def display_rank(signal: RawSignal) -> float:
     """信号在看板上的重要度（0~1）：确定性(大小) 与 形态强弱(深浅) 的加权综合。
 
     看板满员时按此分数从高到低取前 top_n——小而淡的先被淘汰，大或深的留下，与前端
-    「大小=确定性、深浅=中枢阶段」两维视觉对齐。不再纯按 strength 淘汰（那会把大而
+    「大小=确定性、深浅=信号强弱」两维视觉对齐。不再纯按 strength 淘汰（那会把大而
     淡的三类挤掉、留下小而深的一类，看起来不符合直觉——三类确定性最高反而最先出局）。
     """
     certainty = _LEVEL_CERTAINTY.get(_signal_level(signal.signal_type), _LEVEL_CERTAINTY[1])

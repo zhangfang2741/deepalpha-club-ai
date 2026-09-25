@@ -216,15 +216,15 @@ struct SignalRadarView: View {
                         .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
                 } else {
                     ForEach(layouts) { layout in
-                        let da = SignalRadarView.daysAgo(from: layout.signal.date, to: dayDate)
                         RadarBubble(
                             signal: layout.signal,
                             diameter: CGFloat(layout.diameter),
                             baseX: CGFloat(layout.x),
                             baseY: CGFloat(layout.y),
                             phase: layout.phase,
-                            color: SignalRadarView.bubbleColor(side: layout.signal.side, depth: layout.signal.pivotStageDepth),
-                            fade: SignalRadarView.ringOpacity(forDaysAgo: da),
+                            color: SignalRadarView.bubbleColor(
+                                side: layout.signal.side,
+                                depth: SignalRadarView.strengthDepth(layout.signal.signalStrength)),
                             isNew: layout.signal.date == dayDate,
                             onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name) }
                         )
@@ -365,13 +365,6 @@ struct SignalRadarView: View {
         return 0.7
     }
 
-    /// 越远越淡：配合径向光晕，让"近实远虚"直接体现在气泡本身上，不用靠文字说明。
-    static func ringOpacity(forDaysAgo daysAgo: Int) -> Double {
-        if daysAgo <= 7 { return 1.0 }
-        if daysAgo <= 14 { return 0.82 }
-        return 0.6
-    }
-
     /// 气泡摆位：离中心的距离严格由时间决定（正圆轨道），方向任意。
     ///
     /// - 半径 = ringRadius(daysAgo) × 场半径（当天为圆心），同一天共用一条圆轨道；同一天
@@ -448,8 +441,17 @@ struct SignalRadarView: View {
         return abs(Calendar(identifier: .gregorian).dateComponents([.day], from: da, to: db).day ?? 0)
     }
 
-    /// 中枢阶段深浅 → 气泡颜色：买（亮红→深红）/ 卖（亮绿→深绿）。depth 越大
-    /// （该信号发生当天中枢越是已经离开）颜色越深，见后端 pivot_stage_depth。
+    /// 买卖点强弱 → 颜色深浅：越强越深。与详情页买卖点列表的「强/中/弱」同一口径
+    /// （一类按背驰力度比、二三类按中枢级别 + 回踩余地），未知值按中档。
+    static func strengthDepth(_ strength: String) -> Double {
+        switch strength {
+        case "strong": return 0.9
+        case "weak": return 0.2
+        default: return 0.55
+        }
+    }
+
+    /// 深浅 → 气泡颜色：买（亮红→深红）/ 卖（亮绿→深绿），depth 越大颜色越深。
     static func bubbleColor(side: String, depth: Double) -> Color {
         let t = min(max(depth, 0), 1)
         func lerp(_ a: Double, _ b: Double) -> Double { a + (b - a) * t }
@@ -479,7 +481,7 @@ struct SignalRadarView: View {
                 levelDot(diameter: SignalRadarView.diameter(forLevel: 2), label: L("二类"))
                 levelDot(diameter: SignalRadarView.diameter(forLevel: 3), label: L("三类"))
             }
-            Text(L("深浅=中枢阶段 · 虚线边框=未确认 · 居中=越新 · 点击查看分析"))
+            Text(L("深浅=信号强弱（越深越强） · 虚线边框=未确认 · 居中=越新 · 点击查看分析"))
                 .font(.system(size: 10))
                 .foregroundColor(Theme.textSecondary)
         }
@@ -751,8 +753,6 @@ private struct RadarBubble: View {
     let baseY: CGFloat
     let phase: Double
     let color: Color
-    /// 离查看日越远越淡（1.0=当日新增），配合中心光晕做出"近实远虚"的纵深感。
-    let fade: Double
     /// 信号是不是查看这天当天新出现的（而非从更早的日子延续到现在）。
     let isNew: Bool
     let onOpen: () -> Void
@@ -769,11 +769,10 @@ private struct RadarBubble: View {
     var body: some View {
         content
             .frame(width: diameter, height: diameter)
-            .opacity(fade)
             .scaleEffect(dragging ? 1.12 : 1.0)
             .offset(y: isNew ? 0 : floatY)
             .offset(drag)
-            .shadow(color: .black.opacity((dragging ? 0.5 : 0.35) * fade),
+            .shadow(color: .black.opacity(dragging ? 0.5 : 0.35),
                     radius: dragging ? 12 : 6, y: dragging ? 8 : 3)
             .contentShape(Circle())
             .gesture(

@@ -15,16 +15,16 @@ class RadarSignalOut(BaseModel):
     date: str = Field(description="信号出现日期 YYYY-MM-DD")
     price: float = Field(description="信号价位")
     # 形态技术面强度（0~1）：由信号自身的 strong/medium/weak 标签折算，决定看板
-    # 满员时的淘汰排序（display_rank），不再决定气泡视觉——气泡大小由买卖点级别
-    # （一/二/三类）决定，颜色深浅由 pivot_stage_depth 决定。
+    # 满员时的淘汰排序（display_rank）。气泡大小由买卖点级别（一/二/三类）决定，
+    # 颜色深浅由 signal_strength 决定（越强越深，与详情页买卖点「强/中/弱」一致）。
     strength: float = Field(description="形态技术面强度 0~1，决定看板淘汰排序")
     bias: str = Field(description="技术面倾向：bullish / bearish / neutral")
-    signal_strength: str = Field(description="买卖点自身强度：strong / medium / weak")
+    signal_strength: str = Field(description="买卖点自身强度：strong / medium / weak，决定气泡颜色深浅")
     confirmed: bool = Field(description="信号是否已确认（未确认为右侧预判）")
     # 该信号发生当天的中枢生命周期阶段折算：形成中枢=浅/中枢震荡=中/已离开中枢
     # （离开段/回抽确认/背驰转折）=深，见 app/services/chan/replay.py 按发生
-    # 日期回溯的 pivot_phase_as_of。决定前端气泡颜色深浅。
-    pivot_stage_depth: float = Field(description="信号发生当天的中枢阶段深浅 0~1，决定气泡颜色深浅")
+    # 日期回溯的 pivot_phase_as_of。旧版 App 用它决定气泡深浅，新版改按 signal_strength，保留兼容。
+    pivot_stage_depth: float = Field(description="信号发生当天的中枢阶段深浅 0~1（旧版 App 的气泡深浅）")
     # 次级别确认（日线定方向 × 30 分钟找买卖点），只对最新交易日的入榜气泡补算；
     # 其余日期、补算失败或 30 分钟不可用时为 None。见 app/services/chan/sub_level.py。
     sub_level_verdict: str | None = Field(

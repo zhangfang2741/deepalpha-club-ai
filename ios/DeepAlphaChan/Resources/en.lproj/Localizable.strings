@@ -374,3 +374,4 @@
 "日线近两周买卖点" = "Daily buy/sell points, last 2 weeks";
 "共振 %@ 更新" = "Aligned · updated %@";
 "数据截至 %@" = "data as of %@";
+"深浅=信号强弱（越深越强） · 虚线边框=未确认 · 居中=越新 · 点击查看分析" = "Shade = signal strength (darker = stronger) · Dashed border = unconfirmed · Center = newer · Tap for analysis";
