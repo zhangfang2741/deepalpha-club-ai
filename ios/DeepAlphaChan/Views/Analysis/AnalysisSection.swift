@@ -6,32 +6,6 @@ struct AnalysisSection: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            SectionCard(title: L("现在处于什么状态"), systemImage: "waveform.path.ecg") {
-                Text(HeadlineHighlighter.highlight(
-                    analysis.structureHeadline ?? analysis.narrative?.headline ?? analysis.summary
-                ))
-                .font(.headline)
-                .foregroundStyle(Theme.textPrimary)
-                .lineSpacing(5)
-                .fixedSize(horizontal: false, vertical: true)
-
-                if let walkType = analysis.walkType {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(L("区间走势：%@", WalkTypeFormatting.shortLabel(walkType, fallback: analysis.walkTypeLabel)))
-                            .font(.subheadline.bold())
-                            .foregroundStyle(WalkTypeFormatting.color(walkType))
-                        if let detail = WalkTypeFormatting.detail(walkType) {
-                            Text(detail).font(.subheadline).foregroundStyle(Theme.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
-                Text(L("以下状态对应当前图表周期与区间；切换周期后，结构与信号可能不同。"))
-                    .font(.caption)
-                    .foregroundStyle(Theme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
             if let phase = analysis.pivotPhase {
                 PivotPhaseBlock(phase: phase)
             } else {
@@ -44,27 +18,7 @@ struct AnalysisSection: View {
                 }
             }
 
-            SectionCard(title: L("02 · 图上依据"), systemImage: "checklist") {
-                if analysis.structureLayers.isEmpty {
-                    Text(L("暂无分层判断依据，先观察结构是否形成。"))
-                        .font(AnalysisType.body)
-                        .foregroundStyle(Theme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    // 先看大结构，再看局部笔和信号，与学习页的阅读顺序一致。
-                    ForEach(orderedLayers) { layer in
-                        StructureLayerRow(layer: layer)
-                    }
-                }
-                Text(L("%lld 根K线 · %lld 笔 · %lld 线段 · %lld 中枢 · %lld 买卖点",
-                       analysis.barsCount, analysis.strokes.count, analysis.segments.count,
-                       analysis.strokePivots.count + analysis.segmentPivots.count, analysis.signals.count))
-                    .font(.caption)
-                    .foregroundStyle(Theme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            SectionCard(title: L("03 · 接下来观察什么"), systemImage: "arrow.triangle.branch") {
+            SectionCard(title: L("02 · 接下来观察什么"), systemImage: "arrow.triangle.branch") {
                 if let phase = analysis.pivotPhase {
                     ForEach(phase.checklist.filter { $0.state == .pending }) { item in
                         Label(item.label, systemImage: "circle.dashed")
@@ -103,13 +57,6 @@ struct AnalysisSection: View {
                     .fixedSize(horizontal: false, vertical: true)
                 AnalysisTermLink(term: "走势级别", color: Theme.textSecondary)
             }
-        }
-    }
-
-    private var orderedLayers: [StructureLayer] {
-        let order = ["segment", "pivot", "stroke", "signal"]
-        return analysis.structureLayers.sorted {
-            (order.firstIndex(of: $0.layer) ?? order.count) < (order.firstIndex(of: $1.layer) ?? order.count)
         }
     }
 }
