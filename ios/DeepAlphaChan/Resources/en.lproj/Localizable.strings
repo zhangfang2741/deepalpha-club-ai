@@ -408,14 +408,13 @@
 "先读懂信号，再看明细" = "Understand the signals first";
 "其他风险与限制" = "Other risks & limitations";
 "单边推进或数据不足" = "One-way movement or insufficient data";
-"原来的离开结构需要重新评估，观察是否回到中枢震荡。" = "Reassess the departure structure and observe whether price returns to pivot oscillation.";
 "参考中枢 %@ · 下沿 ZD %@ — 上沿 ZG %@" = "Reference pivot %@ · ZD %@ — ZG %@";
+"下一步观察：%@" = "Watch next: %@";
+"%@ %@ %@ 价位 %@" = "%@, %@, %@, price %@";
 "可能转折向上" = "Possible upward reversal";
 "可能转折向下" = "Possible downward reversal";
 "向上突破" = "Upward breakout";
 "向下突破" = "Downward breakout";
-"回抽未回到中枢，继续核对三类买卖点的完整条件；位置满足不等于信号已确认。" = "The retrace stays outside the pivot. Check the full type-3 conditions; position alone does not confirm a signal.";
-"回抽落回中枢内，继续观察支撑或压力；不能仅凭这一位置认定二类买卖点。" = "The retrace returns inside the pivot. Observe support or resistance; this position alone does not establish a type-2 signal.";
 "围绕中枢震荡" = "Oscillating around the pivot";
 "对应结构仍在延伸，后续 K 线可能使信号改变或消失。" = "The underlying structure is still extending. Later candles may change or invalidate this signal.";
 "尚未满足：%@" = "Pending: %@";

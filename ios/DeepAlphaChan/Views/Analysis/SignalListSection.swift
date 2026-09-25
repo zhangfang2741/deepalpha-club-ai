@@ -24,12 +24,14 @@ struct SignalListSection: View {
                     Spacer()
                     Text(L("%lld 条未确认", sortedSignals.filter { !$0.confirmed }.count))
                 }
-                .font(.caption)
+                .font(.caption2)
                 .foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 8)
-                ForEach(sortedSignals) { signal in
-                    SignalDetailCard(signal: signal, isStatic: isStatic)
+                VStack(spacing: 6) {
+                    ForEach(sortedSignals) { signal in
+                        SignalDetailCard(signal: signal, isStatic: isStatic)
+                    }
                 }
             }
             Text(L("「买卖点」是缠论对价格结构的技术信号命名，非买入/卖出操作建议。"))

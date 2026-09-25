@@ -1,9 +1,12 @@
 import SwiftUI
 
+/// 历史买卖点的一行：默认收起，只有一行信息；点开才展开"为什么是这个信号"。
 /// 边框虚实对应确认状态，色块深浅复用雷达的强度映射。
 struct SignalDetailCard: View {
     let signal: Signal
     var isStatic = false
+
+    @State private var expanded = false
 
     private var directionColor: Color { signal.isBuy ? Theme.up : Theme.down }
     private var strengthColor: Color {
@@ -12,97 +15,97 @@ struct SignalDetailCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                GlossaryLink(term: "买卖点") {
-                    Label(signal.label, systemImage: signal.isBuy ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
-                        .font(.headline)
-                        .foregroundStyle(directionColor)
-                        .frame(minHeight: 44)
-                }
-                Spacer(minLength: 8)
-                Text(signal.time).font(.caption).foregroundStyle(Theme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                if !isStatic { withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() } }
+            } label: {
+                row
             }
-            WrapLayout(spacing: 10, lineSpacing: 8) {
-                Label(signal.confirmed ? L("已确认") : L("未确认"),
-                      systemImage: signal.confirmed ? "checkmark.circle" : "circle.dashed")
-                HStack(spacing: 5) {
-                    Circle().fill(strengthColor).frame(width: 12, height: 12)
-                    Text(L("强度：%@", SignalFormatting.strengthLabel(signal.strength)))
-                }
-                Text(L("价位 %@", String(format: "%.2f", signal.price))).monospacedDigit()
-            }
-            .font(.caption)
-            .foregroundStyle(Theme.textSecondary)
-            .fixedSize(horizontal: false, vertical: true)
+            .buttonStyle(.plain)
+            .disabled(isStatic)
 
-            Text(HeadlineHighlighter.highlight(signal.description))
-                .font(AnalysisType.body)
-                .foregroundStyle(Theme.textPrimary)
-                .lineSpacing(AnalysisType.bodyLineSpacing)
-                .fixedSize(horizontal: false, vertical: true)
-            if !signal.confirmed {
-                Text(L("对应结构仍在延伸，后续 K 线可能使信号改变或消失。"))
-                    .font(.caption)
-                    .foregroundStyle(Theme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if isStatic {
+            if isStatic || expanded {
                 explanation
-            } else {
-                DisclosureGroup {
-                    explanation.padding(.top, 8)
-                } label: {
-                    Text(L("为什么是这个信号"))
-                        .font(.subheadline.weight(.medium))
-                        .frame(minHeight: 44)
-                }
-                .tint(Theme.textSecondary)
+                    .padding(.top, 2)
             }
         }
-        .padding(16)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10))
         .overlay {
-            RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(directionColor.opacity(0.5),
-                              style: StrokeStyle(lineWidth: 1, dash: signal.confirmed ? [] : [5, 4]))
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(directionColor.opacity(0.35),
+                              style: StrokeStyle(lineWidth: 1, dash: signal.confirmed ? [] : [4, 3]))
         }
     }
 
+    private var row: some View {
+        HStack(spacing: 8) {
+            Image(systemName: signal.isBuy ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
+                .foregroundStyle(directionColor)
+                .font(.footnote)
+            Text(signal.label)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Theme.textPrimary)
+            Circle().fill(strengthColor).frame(width: 7, height: 7)
+            Image(systemName: signal.confirmed ? "checkmark.circle" : "circle.dashed")
+                .font(.caption2)
+                .foregroundStyle(Theme.textSecondary)
+            Spacer(minLength: 6)
+            Text(String(format: "%.2f", signal.price))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(Theme.textSecondary)
+            Text(signal.time)
+                .font(.caption2)
+                .foregroundStyle(Theme.textSecondary)
+            if !isStatic {
+                Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Theme.textSecondary)
+            }
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(L("%@ %@ %@ 价位 %@",
+                              signal.label, signal.confirmed ? L("已确认") : L("未确认"),
+                              SignalFormatting.strengthLabel(signal.strength),
+                              String(format: "%.2f", signal.price)))
+    }
+
     private var explanation: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(HeadlineHighlighter.highlight(signal.description))
+                .font(.caption)
+                .foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
             Text(SignalFormatting.typeExplanation(signal.type))
-                .font(AnalysisType.body)
+                .font(.caption)
                 .foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
+            if !signal.confirmed {
+                Text(L("对应结构仍在延伸，后续 K 线可能使信号改变或消失。"))
+                    .font(.caption2)
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if signal.type == .buy1 || signal.type == .sell1 {
-                WrapLayout(spacing: 12, lineSpacing: 8) {
+                WrapLayout(spacing: 12, lineSpacing: 4) {
                     ratio(L("价差比"), value: signal.priceRatio)
                     ratio(L("量能比"), value: signal.volumeRatio)
                     ratio(L("时长比"), value: signal.lengthRatio)
                 }
-                Text(L("比值为当前笔与比较基准之比，小于 1 表示该项减弱；缺失数据以 — 表示。背驰不等于反转。"))
-                    .font(.caption)
-                    .foregroundStyle(Theme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
                 AnalysisTermLink(term: "背驰", color: Theme.divergence)
             } else {
-                Text(L("二、三类强度综合参考中枢级别与回抽余地，不由类型编号决定。"))
-                    .font(.caption)
-                    .foregroundStyle(Theme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
                 AnalysisTermLink(term: "买卖点", color: directionColor)
             }
         }
     }
 
     private func ratio(_ title: String, value: Double?) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.caption).foregroundStyle(Theme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: 3) {
+            Text(title).font(.caption2).foregroundStyle(Theme.textSecondary)
             Text(value.map { String(format: "%.2f", $0) } ?? "—")
-                .font(.subheadline.monospacedDigit().bold())
+                .font(.caption.monospacedDigit().bold())
                 .foregroundStyle(Theme.divergence)
         }
     }
