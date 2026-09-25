@@ -12,7 +12,12 @@ from datetime import UTC, datetime
 from app.cache.client import current_redis
 from app.core.config import settings
 from app.core.logging import logger
-from app.services.signal_radar.service import compute_market, market_session_active, refresh_sub_levels
+from app.services.signal_radar.service import (
+    _cache_key,
+    compute_market,
+    market_session_active,
+    refresh_sub_levels,
+)
 from app.services.signal_radar.universe import all_universes
 
 # 启动后先等一会儿再首扫，避开启动期其它预热任务抢资源。
@@ -24,15 +29,22 @@ async def _prewarm_once() -> None:
     if redis is None:
         logger.warning("signal_radar_prewarm_no_redis")
         return
-    markets = set(settings.SIGNAL_RADAR_PREWARM_MARKETS)
-    prewarm_broad = settings.SIGNAL_RADAR_PREWARM_BROAD_ENABLED
-    # 遍历所有 (市场, universe)。串行执行：大盘宽基成分多，避免多套扫描并发抢数据源。
-    for u in all_universes():
-        if u.market not in markets:
-            continue
-        # 非默认（大盘宽基）universe 由独立开关控制，关掉则跳过、走首访按需扫。
-        if not u.is_default and not prewarm_broad:
-            continue
+    # 串行执行（大盘宽基成分多，避免多套扫描并发抢数据源），按缓存剩余有效期从短到长：
+    # 最久没刷新的先扫。进程频繁重启（每次部署）时扫描常被打断，固定按美股→A股→港股的
+    # 顺序会让排在后面的市场一直轮不到、停在旧快照上。
+    async def remaining_ttl(u) -> int:
+        """缓存剩余秒数；没有缓存（-2）或读不到按最旧处理。"""
+        try:
+            return int(await redis.ttl(_cache_key(u.market, u.key)))
+        except Exception:  # noqa: BLE001
+            return -2
+
+    targets = _target_universes()
+    ttls = [await remaining_ttl(u) for u in targets]
+    # 稳定排序：剩余 TTL 相同时保持原有顺序
+    ordered = [u for _, _, u in sorted(zip(ttls, range(len(targets)), targets, strict=True),
+                                       key=lambda x: (x[0], x[1]))]
+    for u in ordered:
         try:
             resp = await compute_market(
                 u.market, redis=redis, user_id=None, universe_key=u.key

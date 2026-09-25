@@ -371,6 +371,29 @@ async def refresh_sub_levels(
     return True
 
 
+# 一个日期至少有这么多比例的成分股有K线，才算交易日（排除个别标的串日/错位）
+_CALENDAR_MIN_SHARE = 0.3
+
+
+def trading_days_from_constituents(
+    per_symbol_dates: list[list[str]], *, etf_dates: list[str], cutoff: str, end_date: str, limit: int,
+) -> list[str]:
+    """交易日历：按扫描到的成分股日线确定（>=30% 成分股有K线的日期），并入参考 ETF 的日期。
+
+    不再只看参考 ETF：ETF 的数据源可能比成分股慢一天（科创50 588000 在 Yahoo 只到前一日），
+    指数代码（沪深300 000300）还可能取不到——时间轴会缺最近交易日。最新在前，最多 limit 个。
+    """
+    from collections import Counter
+
+    counts: Counter[str] = Counter()
+    for dates in per_symbol_dates:
+        counts.update({d[:10] for d in dates if cutoff <= d[:10] <= end_date})
+    need = max(1, int(len(per_symbol_dates) * _CALENDAR_MIN_SHARE + 0.9999)) if per_symbol_dates else 1
+    days = {d for d, n in counts.items() if n >= need}
+    days |= {d[:10] for d in etf_dates if cutoff <= d[:10] <= end_date}
+    return sorted(days, reverse=True)[:limit]
+
+
 def _trading_days_from_bars(bars: list[dict], *, cutoff: str, end_date: str, limit: int) -> list[str]:
     """从一串日线 bar 里提取 [cutoff, end_date] 内的交易日期，最新在前，最多取 limit 个。"""
     dates = sorted({b["time"][:10] for b in bars if cutoff <= b["time"][:10] <= end_date}, reverse=True)
@@ -395,10 +418,10 @@ def _fallback_trading_days(*, end_date: str, limit: int) -> list[str]:
 async def _scan_symbol(
     symbol: str, name: str, *, user_id: int | None, start_date: str, end_date: str,
     redis: Redis,
-) -> tuple[list[RawSignal], str | None, ChanAnalysisResult | None]:
+) -> tuple[list[RawSignal], str | None, ChanAnalysisResult | None, list[str]]:
     """扫描单只股票：拉日线 → 缠论 → 取全部买卖点历史。
 
-    返回 (信号历史, 失败分类)。失败分类为 None 表示这只股票本身就没有可用信号
+    返回 (信号历史, 失败分类, 日线分析结果, 最近的K线日期)。K线日期用来确定交易日历。失败分类为 None 表示这只股票本身就没有可用信号
     ——正常情况，不是故障；非 None 时 compute_market 据此汇总统计，别再让故障
     悄悄混进"这个市场最近确实没什么信号"里看不出来。
     """
@@ -409,18 +432,18 @@ async def _scan_symbol(
         )
     except Exception as e:  # noqa: BLE001 单只失败不影响整体扫描
         logger.warning("signal_radar_kline_failed", symbol=symbol, error=str(e))
-        return [], _classify_failure(e), None
+        return [], _classify_failure(e), None, []
 
     if not bars:
-        return [], None, None
+        return [], None, None, []
 
     try:
         result = _analyzer.analyze(symbol, bars, lang="zh")
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_analyze_failed", symbol=symbol, error=str(e))
-        return [], "analyze_failed", None
+        return [], "analyze_failed", None, []
 
-    return build_signal_history(symbol, name, result), None, result
+    return build_signal_history(symbol, name, result), None, result, [b["time"][:10] for b in bars[-60:]]
 
 
 def _classify_failure(exc: Exception) -> str:
@@ -504,9 +527,9 @@ async def compute_market(
 
     sem = asyncio.Semaphore(_SCAN_CONCURRENCY)
 
-    async def _one(symbol: str, name: str) -> tuple[list[RawSignal], str | None, ChanAnalysisResult | None]:
+    async def _one(symbol: str, name: str) -> tuple[list[RawSignal], str | None, list[str]]:
         async with sem:
-            history, failure, daily = await _scan_symbol(
+            history, failure, _, dates = await _scan_symbol(
                 symbol, name, user_id=user_id, start_date=start_date,
                 end_date=end_date, redis=redis,
             )
@@ -514,14 +537,14 @@ async def compute_market(
                 # 命中限流别立刻放行下一个排队的任务抢同一个名额，攒着火上浇油——
                 # 让这个名额歇一会儿，给数据源一点喘息时间再继续消费队列。
                 await asyncio.sleep(_RATE_LIMIT_BACKOFF_SECONDS)
-            return history, failure, daily
+            return history, failure, dates
 
     scanned = await asyncio.gather(*[_one(sym, name) for sym, name in constituents])
     histories = [h for h, _, _ in scanned if h]
     failure_counts = Counter(f for _, f, _ in scanned if f)
 
-    # 展示的交易日历：用 ETF 自身的日线拿真实交易日（含具体哪几天开市），
-    # 拿不到就退化成「跳过周末」的近似日历。
+    # 展示的交易日历：以成分股日线为准（>=30% 成分股有K线的日期），并入参考 ETF 的日期；
+    # 都拿不到才退化成「跳过周末」的近似日历。
     try:
         etf_bars = await fetch_kline(
             user_id=user_id, symbol=universe.etf_symbol, start_date=cutoff,
@@ -530,10 +553,10 @@ async def compute_market(
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_etf_kline_failed", market=market, error=str(e))
         etf_bars = []
-    trading_days = (
-        _trading_days_from_bars(etf_bars, cutoff=cutoff, end_date=end_date, limit=days)
-        if etf_bars else _fallback_trading_days(end_date=end_date, limit=days)
-    )
+    trading_days = trading_days_from_constituents(
+        [dates for _, _, dates in scanned if dates],
+        etf_dates=[b["time"] for b in etf_bars], cutoff=cutoff, end_date=end_date, limit=days,
+    ) or _fallback_trading_days(end_date=end_date, limit=days)
 
     resp = SignalRadarResponse(
         market=market,

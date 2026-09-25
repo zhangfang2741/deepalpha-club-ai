@@ -480,3 +480,51 @@ async def test_refresh_loop_only_touches_open_markets(monkeypatch):
     monkeypatch.setattr(scheduler, "datetime", _FixedDT)
     await scheduler._refresh_sub_levels_once()
     assert called and set(called) <= {"cn", "hk"}
+
+
+def test_trading_days_from_constituents_not_limited_by_lagging_etf():
+    """交易日按成分股日线确定：参考 ETF 数据慢一天（科创50 588000 只到 9.23）不能让时间轴缺 9.24。"""
+    per_symbol = [["2026-09-22", "2026-09-23", "2026-09-24"]] * 8 + [["2026-09-22", "2026-09-23"]] * 2
+    etf = ["2026-09-22", "2026-09-23"]
+    days = svc.trading_days_from_constituents(per_symbol, etf_dates=etf, cutoff="2026-09-01",
+                                              end_date="2026-09-25", limit=30)
+    assert days[0] == "2026-09-24"
+    assert days == ["2026-09-24", "2026-09-23", "2026-09-22"]
+
+
+def test_trading_days_ignore_dates_only_few_symbols_have():
+    """个别标的的异常日期（停牌复牌错位、数据源串日）不算交易日：需 >=30% 成分股都有。"""
+    per_symbol = [["2026-09-23", "2026-09-24"]] * 9 + [["2026-09-23", "2026-09-24", "2026-09-25"]]
+    days = svc.trading_days_from_constituents(per_symbol, etf_dates=[], cutoff="2026-09-01",
+                                              end_date="2026-09-25", limit=30)
+    assert days == ["2026-09-24", "2026-09-23"]
+
+
+def test_prewarm_scans_stalest_universe_first(monkeypatch):
+    """频繁重启时先扫缓存最旧的 universe，A 股/港股不会一直排在美股后面轮不到。"""
+    import asyncio
+
+    from app.services.signal_radar import scheduler
+
+    order = []
+    ttl = {"us:nasdaq100": 40000, "cn:star50": 100, "hk:hstech": 5000}
+
+    class _R:
+        async def ttl(self, key):
+            for k, v in ttl.items():
+                if key.endswith(k):
+                    return v
+            return -2
+
+    async def fake_compute(market, *, redis, user_id, universe_key):
+        order.append(f"{market}:{universe_key}")
+
+        class _Resp:
+            days = []
+        return _Resp()
+
+    monkeypatch.setattr(scheduler, "current_redis", lambda: _R())
+    monkeypatch.setattr(scheduler, "compute_market", fake_compute)
+    monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_BROAD_ENABLED", False)
+    asyncio.run(scheduler._prewarm_once())
+    assert order[:3] == ["cn:star50", "hk:hstech", "us:nasdaq100"]
