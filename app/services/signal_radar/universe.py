@@ -24,9 +24,11 @@ from dataclasses import dataclass
 SOURCE_ETF_HOLDINGS = "etf_holdings"
 SOURCE_FMP_SP500 = "fmp_sp500"
 SOURCE_AKSHARE_INDEX = "akshare_index"
+SOURCE_NASDAQ100 = "nasdaq100_list"   # 纳斯达克官方成分列表（纳指100 全量）
+SOURCE_WIKI_SP500 = "wiki_sp500"      # 维基百科标普500 成分表（全量 ~503）
 
 # 科技指数（窄基）默认扫描上限；大盘宽基要「更全」，上限放大。
-_TECH_MAX_SCAN = 40
+_TECH_MAX_SCAN = 110  # 覆盖完整科技指数（纳指100 约 101 只、科创50、恒生科技 30）
 _BROAD_MAX_SCAN = 520
 
 
@@ -52,7 +54,7 @@ _US_NASDAQ100 = MarketUniverse(
     etf_name="纳斯达克100",
     etf_symbol="QQQ",
     is_default=True,
-    source=SOURCE_ETF_HOLDINGS,
+    source=SOURCE_NASDAQ100,
     constituents=[
         ("NVDA", "英伟达"), ("AAPL", "苹果"), ("MSFT", "微软"), ("AVGO", "博通"),
         ("AMD", "超微"), ("TSLA", "特斯拉"), ("META", "Meta"), ("GOOGL", "谷歌"),
@@ -71,7 +73,7 @@ _US_SP500 = MarketUniverse(
     key="sp500",
     etf_name="标普500",
     etf_symbol="^GSPC",
-    source=SOURCE_FMP_SP500,
+    source=SOURCE_WIKI_SP500,
     max_scan=_BROAD_MAX_SCAN,
     # 静态兜底：跨行业大盘龙头（FMP 标普500 端点可用时会拿到全量 ~500 覆盖它）。
     constituents=[
@@ -98,7 +100,8 @@ _CN_STAR50 = MarketUniverse(
     etf_name="科创50",
     etf_symbol="588000",
     is_default=True,
-    source=SOURCE_ETF_HOLDINGS,
+    source=SOURCE_AKSHARE_INDEX,
+    source_arg="000688",
     constituents=[
         ("688981", "中芯国际"), ("688111", "金山办公"), ("688012", "中微公司"),
         ("688008", "澜起科技"), ("688169", "石头科技"), ("688036", "传音控股"),
@@ -158,7 +161,8 @@ _HK_HSTECH = MarketUniverse(
         ("0992", "联想集团"), ("0285", "比亚迪电子"), ("6618", "京东健康"),
         ("2269", "药明生物"), ("9866", "蔚来"), ("9961", "携程集团"),
         ("3888", "金山软件"), ("0268", "金蝶国际"), ("1833", "平安好医生"),
-        ("6060", "众安在线"), ("9698", "万国数据"),
+        ("6060", "众安在线"), ("9698", "万国数据"), ("0522", "ASMPT"),
+        ("0772", "阅文集团"), ("0241", "阿里健康"), ("6690", "海尔智家"),
     ],
 )
 

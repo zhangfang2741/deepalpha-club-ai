@@ -69,16 +69,19 @@ _SIGNAL_STRENGTH = {"strong": 0.8, "medium": 0.55, "weak": 0.35}
 
 # 买卖点级别（一/二/三类）→ 确定性分值（0~1）。一类只是背驰迹象，尚待验证，
 # 确定性最低；二类是回踩不破中枢的初步确认；三类是回踩完全不回中枢的最强确认，
-# 确定性最高。级别越高、气泡越大。与前端气泡「大小=确定性」是同一套语义（见
-# ios SignalRadarView.diameter(forLevel:)），别让前后端各判各的。
+# 确定性最高。前端气泡以颜色深浅表达类型（ios SignalRadarView.levelDepth）。
 _LEVEL_CERTAINTY = {1: 0.4, 2: 0.7, 3: 1.0}
 
-# 看板满员（前 top_n）淘汰时的重要度权重：确定性(大小) 略高于 强弱(深浅)。大小是
-# 气泡最主导的视觉线索，若纯按 strength 淘汰，会把「大而淡」的三类挤出、反留下「小
-# 而深」的一类，与用户对画面的直觉相反（大=重要却先出局）。加权综合两维，让小而淡
-# 的先退场。见 display_rank。
-_DISPLAY_CERTAINTY_WEIGHT = 0.6
-_DISPLAY_STRENGTH_WEIGHT = 0.4
+# 入榜综合分权重：类型确认程度 + 强弱 + 新鲜度（最新一天再加共振）。
+# 新鲜度与类型同权：用户最关心最近几天的新信号，25 天前的旧信号不该与今天的平起平坐。
+_SCORE_CERTAINTY_WEIGHT = 0.35
+_SCORE_STRENGTH_WEIGHT = 0.30
+_SCORE_FRESHNESS_WEIGHT = 0.35
+# 共振（日线与 30 分钟同向）加分：只对最新一天、在候选池内补算次级别后重排。
+_RESONANCE_BONUS = 0.15
+_RESONANCE_POOL = 20
+# 多样性弱约束：每类买卖点最多保底这么多名额，其余全部按综合分取。
+_MIN_PER_LEVEL = 2
 
 _CACHE_PREFIX = "signal_radar"
 # 缓存 TTL 的下限：即便预热间隔被调得很短，也至少存活 6h。
@@ -165,16 +168,58 @@ def _signal_level(signal_type: str) -> int:
     return int(tail) if tail.isdigit() else 1
 
 
-def display_rank(signal: RawSignal) -> float:
-    """信号在看板上的重要度（0~1）：确定性(大小) 与 形态强弱(深浅) 的加权综合。
+def radar_score(level: int, strength: float, age_days: int, resonance: bool = False,
+                *, max_age_days: int = _MAX_SIGNAL_AGE_DAYS) -> float:
+    """入榜综合分：类型确认程度 + 强弱 + 新鲜度（当天 1 → max_age_days 天 0），共振另加分。"""
+    certainty = _LEVEL_CERTAINTY.get(level, _LEVEL_CERTAINTY[1])
+    freshness = 1.0 - min(max(age_days, 0), max_age_days) / max(max_age_days, 1)
+    score = (_SCORE_CERTAINTY_WEIGHT * certainty + _SCORE_STRENGTH_WEIGHT * strength
+             + _SCORE_FRESHNESS_WEIGHT * freshness)
+    return score + (_RESONANCE_BONUS if resonance else 0.0)
 
-    看板满员时按此分数从高到低取前 top_n——小而淡的先被淘汰，大或深的留下，与前端
-    「大小=确定性、深浅=信号强弱」两维视觉对齐。不再纯按 strength 淘汰（那会把大而
-    淡的三类挤掉、留下小而深的一类，看起来不符合直觉——三类确定性最高反而最先出局）。
+
+def display_rank(signal: RawSignal, age_days: int = 0) -> float:
+    """信号在看板上的综合分（见 radar_score）；age_days 为相对展示日的天数。"""
+    return radar_score(_signal_level(signal.signal_type), signal.strength, age_days)
+
+
+def _select_top_n(items: list, top_n: int, *, level_of, score_of) -> list:
+    """先给每类买卖点保底（最多 _MIN_PER_LEVEL 个，按类轮流、类内按分数），其余按综合分取。
+
+    以前是三类严格轮流各取一个，结果弱一类也能挤掉强三类；现在多样性只做弱约束。
+    结果按综合分从高到低返回。
     """
-    certainty = _LEVEL_CERTAINTY.get(_signal_level(signal.signal_type), _LEVEL_CERTAINTY[1])
-    return _DISPLAY_CERTAINTY_WEIGHT * certainty + _DISPLAY_STRENGTH_WEIGHT * signal.strength
+    buckets: dict[int, list] = {}
+    for it in items:
+        buckets.setdefault(level_of(it), []).append(it)
+    for b in buckets.values():
+        b.sort(key=score_of, reverse=True)
+    picked: list = []
+    for rank in range(_MIN_PER_LEVEL):
+        for lv in sorted(buckets):
+            if len(picked) >= top_n:
+                break
+            if len(buckets[lv]) > rank:
+                picked.append(buckets[lv][rank])
+    chosen = {id(x) for x in picked}
+    rest = sorted((x for x in items if id(x) not in chosen), key=score_of, reverse=True)
+    picked.extend(rest[: max(0, top_n - len(picked))])
+    return sorted(picked, key=score_of, reverse=True)[:top_n]
 
+
+def rerank_with_resonance(day: RadarDayOut, top_n: int) -> RadarDayOut:
+    """最新一天：候选池（已补算次级别）按综合分 + 共振加分重排，取前 top_n。"""
+    day_date = date.fromisoformat(day.date)
+
+    def score_of(s: RadarSignalOut) -> float:
+        age = (day_date - date.fromisoformat(s.date)).days
+        resonance = s.sub_level_verdict in ("resonance_buy", "resonance_sell")
+        return radar_score(_signal_level(s.signal_type), s.strength, age, resonance)
+
+    items = _select_top_n(list(day.signals), top_n, level_of=lambda s: _signal_level(s.signal_type),
+                          score_of=score_of)
+    return RadarDayOut(date=day.date, buy_count=sum(s.side == "buy" for s in items),
+                       sell_count=sum(s.side == "sell" for s in items), signals=items)
 
 def build_signal_history(symbol: str, name: str, result: ChanAnalysisResult) -> list[RawSignal]:
     """从一只股票的缠论结果里取出全部买卖点历史。
@@ -208,35 +253,6 @@ def build_signal_history(symbol: str, name: str, result: ChanAnalysisResult) -> 
     return history
 
 
-def _diversified_top_n(active: list[RawSignal], top_n: int) -> list[RawSignal]:
-    """按买卖点级别（一/二/三类）轮流选取，不让单一级别独占看板名额。
-
-    单纯按 display_rank 排序会有个结构性问题：无论把"确定性"权重给哪个级别
-    最高，那个级别都会把看板挤满——三类信号本身出现得又多又稳，权重给到
-    三类最高后，实测看板几乎清一色三买三卖，一类/二类难得一见；换成任何
-    其它级别权重最高，也会重演同样的挤占，只是换了一种信号类型垄断画面。
-    这不是调权重能根治的，得换成"分桶 + 轮流取"：每个级别桶内仍按
-    display_rank 排序（保留"桶内谁更值得展示"的判断），但选取时在三个桶
-    之间轮流各取一个，保证画面里始终能同时看到一/二/三类，不会被某一类
-    信号刷屏。某个桶提前取空时不空占名额，直接跳到下一个还有货的桶。
-    """
-    buckets: dict[int, list[RawSignal]] = {1: [], 2: [], 3: []}
-    for s in active:
-        buckets.setdefault(_signal_level(s.signal_type), []).append(s)
-    for bucket in buckets.values():
-        bucket.sort(key=display_rank, reverse=True)
-
-    result: list[RawSignal] = []
-    levels = sorted(buckets)
-    round_idx = 0
-    while len(result) < top_n and any(buckets[lv] for lv in levels):
-        level = levels[round_idx % len(levels)]
-        if buckets[level]:
-            result.append(buckets[level].pop(0))
-        round_idx += 1
-    return result
-
-
 def build_days(
     histories: list[list[RawSignal]], trading_days: list[str], *, top_n: int,
     max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
@@ -268,7 +284,10 @@ def build_days(
                     continue
                 active.append(candidate)
 
-        items = _diversified_top_n(active, top_n)
+        items = _select_top_n(
+            active, top_n, level_of=lambda r: _signal_level(r.signal_type),
+            score_of=lambda r, d=day_date: display_rank(r, (d - date.fromisoformat(r.date)).days),
+        )
         out.append(RadarDayOut(
             date=day,
             buy_count=sum(1 for r in items if r.side == "buy"),
@@ -570,8 +589,12 @@ async def compute_market(
         status="ready",
     )
     if resp.days:
-        # 次级别结论描述的是「现在」，只给最新交易日的入榜气泡补算
-        await attach_sub_levels(resp.days[0], end_date=end_date, user_id=user_id, redis=redis)
+        # 次级别结论描述的是「现在」，只对最新交易日：先取更大的候选池补算次级别，
+        # 再按综合分 + 共振加分重排取前 top_n（共振参与排名）
+        pool = build_days(histories, trading_days[:1], top_n=max(top_n, _RESONANCE_POOL),
+                          max_age_days=max_age_days)[0]
+        await attach_sub_levels(pool, end_date=end_date, user_id=user_id, redis=redis)
+        resp.days[0] = rerank_with_resonance(pool, top_n)
         resp.sub_level_as_of = datetime.now(UTC).replace(microsecond=0).isoformat()
     failed_symbols = sum(failure_counts.values())
     failure_rate = failed_symbols / len(constituents) if constituents else 0.0

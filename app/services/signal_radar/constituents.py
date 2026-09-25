@@ -3,7 +3,10 @@
 来源策略（universe.source）：
 - etf_holdings：FMP ETF 持仓（美股 QQQ 覆盖好；A 股/港股 ETF 覆盖有限，多回退静态）；
 - fmp_sp500  ：FMP 标普500 成分端点（拿全量 ~500）；
-- akshare_index：akshare 指数成分（沪深300 / 恒生指数全量），在线程里跑、失败回退静态。
+- akshare_index：akshare 指数成分（沪深300 / 科创50 / 恒生指数全量），在线程里跑、失败回退静态；
+- nasdaq100_list：纳斯达克官方成分列表（纳指100 全量）；
+- wiki_sp500   ：维基百科标普500 成分表（全量 ~503）。
+FMP 当前套餐不含 ETF 持仓与指数成分端点（402），美股全量改走后两者。
 
 结果按 (market, universe) 缓存 24h，避免每次扫描重复拉取。名称优先用静态清单里的
 中文名，缺失时回退来源给的名称。任何来源拿不到足量（< _MIN_VALID）时回退静态清单，
@@ -13,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 
 import httpx
 from redis.asyncio import Redis
@@ -22,8 +26,11 @@ from app.core.logging import logger
 from app.services.signal_radar.universe import (
     SOURCE_AKSHARE_INDEX,
     SOURCE_FMP_SP500,
+    SOURCE_NASDAQ100,
+    SOURCE_WIKI_SP500,
     MarketUniverse,
     get_universe,
+    resolve_name,
 )
 from app.utils.market import InvalidSymbolError, fmp_symbol, normalize
 
@@ -34,6 +41,91 @@ _MIN_VALID = 20          # 动态结果至少这么多只才采用，否则回�
 
 def _zh_name_map(u: MarketUniverse) -> dict[str, str]:
     return {sym: name for sym, name in u.constituents}
+
+
+# 请求头均不含任何个人信息。维基百科要求写明客户端身份；纳斯达克接口会挂起非浏览器
+# 形态的请求（实测 ReadTimeout），只能用浏览器形态。
+_PUBLIC_UA = "Mozilla/5.0 (compatible; DeepAlphaRadar/1.0; +https://deepalpha.club)"
+_BROWSER_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+               "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+
+def clean_us_name(name: str) -> str:
+    """纳斯达克列表的公司全称 → 简短展示名（去掉 Inc./Corporation、Class A Common Stock 等尾巴）。"""
+    s = re.sub(r"\s+Class\s+[A-C]\s+(Common|Ordinary|Capital)\s+(Stock|Shares).*$", "", name.strip())
+    s = re.sub(r"\s+(Common|Ordinary|Capital)\s+(Stock|Shares).*$", "", s)
+    s = re.sub(r"\s+American Depositary Shares.*$", "", s)
+    s = re.sub(r",?\s+(Inc\.?|Incorporated|Corporation|Corp\.?|Ltd\.?|Limited|plc|N\.V\.)$", "", s)
+    s = re.sub(r",?\s+Company$", "", s)
+    return s.strip() or name.strip()
+
+
+def parse_nasdaq100(payload: object) -> list[tuple[str, str, float]]:
+    """解析纳斯达克官方成分列表 JSON（data.data.rows[{symbol, companyName}]）。"""
+    try:
+        rows = payload["data"]["data"]["rows"]  # type: ignore[index]
+    except (TypeError, KeyError):
+        return []
+    out: list[tuple[str, str, float]] = []
+    for r in rows or []:
+        if not isinstance(r, dict):
+            continue
+        sym = str(r.get("symbol") or "").strip().upper()
+        if sym:
+            out.append((sym, clean_us_name(str(r.get("companyName") or sym)), 0.0))
+    return out
+
+
+def parse_wiki_sp500(html: str) -> list[tuple[str, str, float]]:
+    """解析维基百科标普500 成分表（Symbol / Security 列）。代码里的 . 换成 -（BRK.B → BRK-B，行情源形态）。"""
+    import io
+
+    import pandas as pd
+
+    try:
+        tables = pd.read_html(io.StringIO(html))
+    except ValueError:
+        return []
+    for tbl in tables:
+        cols = [str(c) for c in tbl.columns]
+        if "Symbol" in cols and "Security" in cols and len(tbl) > 90:
+            return [(str(s).strip().replace(".", "-"), str(n).strip(), 0.0)
+                    for s, n in zip(tbl["Symbol"], tbl["Security"], strict=False) if str(s).strip()]
+    return []
+
+
+async def _fetch_nasdaq100() -> list[tuple[str, str, float]]:
+    """纳斯达克官方纳指100 成分列表，失败返回空列表。"""
+    url = "https://api.nasdaq.com/api/quote/list-type/nasdaq100"
+    try:
+        async with httpx.AsyncClient(timeout=20, headers={"User-Agent": _BROWSER_UA, "Accept": "application/json"}) as c:
+            resp = await c.get(url)
+        if resp.status_code != 200:
+            logger.warning("signal_radar_nasdaq100_http_error", status=resp.status_code)
+            return []
+        rows = parse_nasdaq100(resp.json())
+        logger.info("signal_radar_nasdaq100_fetched", count=len(rows))
+        return rows
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_nasdaq100_fetch_error", error=str(e))
+        return []
+
+
+async def _fetch_wiki_sp500() -> list[tuple[str, str, float]]:
+    """维基百科标普500 成分表，失败返回空列表。"""
+    url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+    try:
+        async with httpx.AsyncClient(timeout=20, headers={"User-Agent": _PUBLIC_UA},
+                                     follow_redirects=True) as c:
+            resp = await c.get(url)
+        if resp.status_code != 200:
+            logger.warning("signal_radar_wiki_sp500_http_error", status=resp.status_code)
+            return []
+        rows = await asyncio.to_thread(parse_wiki_sp500, resp.text)
+        logger.info("signal_radar_wiki_sp500_fetched", count=len(rows))
+        return rows
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_wiki_sp500_fetch_error", error=str(e))
+        return []
 
 
 async def _fetch_fmp_holdings(etf_symbol: str) -> list[tuple[str, str, float]]:
@@ -190,6 +282,10 @@ def _map_to_universe(
 
 async def _fetch_dynamic(universe: MarketUniverse) -> list[tuple[str, str, float]]:
     """按 universe 的来源策略动态拉取原始成分。"""
+    if universe.source == SOURCE_NASDAQ100:
+        return await _fetch_nasdaq100()
+    if universe.source == SOURCE_WIKI_SP500:
+        return await _fetch_wiki_sp500() or await _fetch_fmp_sp500()
     if universe.source == SOURCE_FMP_SP500:
         return await _fetch_fmp_sp500()
     if universe.source == SOURCE_AKSHARE_INDEX:
@@ -221,7 +317,16 @@ async def resolve_constituents(
             pass
 
     raw = await _fetch_dynamic(universe)
-    resolved = _map_to_universe(raw, _zh_name_map(universe), max_scan=universe.max_scan)
+    # 中文名：先用本 universe 的 curated 名，再查同市场其他 universe 的（纳指/标普互补）
+    zh = _zh_name_map(universe)
+    for sym, _, _ in raw:
+        try:
+            _, clean = normalize(sym)
+        except InvalidSymbolError:
+            continue
+        if clean not in zh and (name := resolve_name(universe.market, clean)):
+            zh[clean] = name
+    resolved = _map_to_universe(raw, zh, max_scan=universe.max_scan)
 
     if len(resolved) < _MIN_VALID:
         logger.info(

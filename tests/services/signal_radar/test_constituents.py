@@ -36,3 +36,57 @@ class TestMapToUniverse:
         raw = [("0700.HK", "Tencent", 0.0)]
         out = _map_to_universe(raw, {"00700": "腾讯控股"}, max_scan=10)
         assert out == [("00700", "腾讯控股")]
+
+
+class TestDynamicSources:
+    """新成分来源的解析（纯函数，不联网）。
+
+    FMP 套餐不含成分端点（402），改用纳斯达克官方列表（纳指100）、维基百科成分表（标普500）、
+    akshare 中证指数（科创50）。
+    """
+
+    def test_parse_nasdaq100_api(self):
+        from app.services.signal_radar.constituents import parse_nasdaq100
+
+        payload = {"data": {"data": {"rows": [
+            {"symbol": "AAPL", "companyName": "Apple Inc. Common Stock"},
+            {"symbol": "GOOGL", "companyName": "Alphabet Inc. Class A Common Stock"},
+            {"symbol": "", "companyName": "bad"},
+        ]}}}
+        assert parse_nasdaq100(payload) == [("AAPL", "Apple", 0.0), ("GOOGL", "Alphabet", 0.0)]
+
+    def test_parse_nasdaq100_bad_payload(self):
+        from app.services.signal_radar.constituents import parse_nasdaq100
+
+        assert parse_nasdaq100({"data": None}) == []
+        assert parse_nasdaq100("oops") == []
+
+    def test_parse_wiki_sp500(self):
+        from app.services.signal_radar.constituents import parse_wiki_sp500
+
+        html = """<table class="wikitable"><thead><tr><th>Symbol</th><th>Security</th><th>GICS Sector</th></tr></thead>
+        <tbody>""" + "".join(f"<tr><td>S{i:03d}</td><td>Co {i}</td><td>IT</td></tr>" for i in range(120)) + \
+            "<tr><td>BRK.B</td><td>Berkshire Hathaway</td><td>Fin</td></tr></tbody></table>"
+        rows = parse_wiki_sp500(html)
+        assert len(rows) == 121
+        assert rows[0] == ("S000", "Co 0", 0.0)
+        assert rows[-1] == ("BRK-B", "Berkshire Hathaway", 0.0)  # 转成行情源的代码形态
+
+    def test_clean_us_name(self):
+        from app.services.signal_radar.constituents import clean_us_name
+
+        assert clean_us_name("Apple Inc. Common Stock") == "Apple"
+        assert clean_us_name("Alphabet Inc. Class C Capital Stock") == "Alphabet"
+        assert clean_us_name("Meta Platforms, Inc. Class A Common Stock") == "Meta Platforms"
+        assert clean_us_name("NVIDIA Corporation Common Stock") == "NVIDIA"
+        assert clean_us_name("American Electric Power Company, Inc. Common Stock") == "American Electric Power"
+
+
+def test_tech_universes_scan_full_index():
+    """科技池扫描上限覆盖完整指数（纳指100 约 101 只），科创50 走 akshare 中证指数。"""
+    from app.services.signal_radar.universe import SOURCE_AKSHARE_INDEX, get_universe
+
+    assert get_universe("us", "nasdaq100").max_scan >= 101
+    star = get_universe("cn", "star50")
+    assert star.source == SOURCE_AKSHARE_INDEX and star.source_arg == "000688"
+    assert len(get_universe("hk", "hstech").constituents) >= 30

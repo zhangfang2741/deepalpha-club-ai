@@ -528,3 +528,40 @@ def test_prewarm_scans_stalest_universe_first(monkeypatch):
     monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_BROAD_ENABLED", False)
     asyncio.run(scheduler._prewarm_once())
     assert order[:3] == ["cn:star50", "hk:hstech", "us:nasdaq100"]
+
+
+class TestCompositeRanking:
+    """入榜 = 综合分（类型确认程度 + 强弱 + 新鲜度，最新一天再加共振）+ 每类保底名额。"""
+
+    def test_fresh_signal_beats_stale_one(self):
+        """同类型：今天刚出现的中等信号，排在 25 天前的强信号前面（用户最关心新信号）。"""
+        stale = _raw("OLD", "2026-08-25", "buy", 0.8, level=2)
+        fresh = _raw("NEW", "2026-09-18", "buy", 0.55, level=2)
+        days = build_days([[stale], [fresh]], ["2026-09-19"], top_n=1)
+        assert [s.symbol for s in days[0].signals] == ["NEW"]
+
+    def test_each_level_keeps_two_slots_then_by_score(self):
+        """每类最多保底 2 个名额，其余按综合分：弱一类不能靠轮流挤掉强三类。"""
+        histories = (
+            [[_raw(f"L3-{i}", "2026-09-19", "buy", 0.8, level=3)] for i in range(8)]
+            + [[_raw(f"L1-{i}", "2026-09-19", "buy", 0.35, level=1)] for i in range(4)]
+        )
+        days = build_days(histories, ["2026-09-19"], top_n=6)
+        syms = [s.symbol for s in days[0].signals]
+        assert sum(s.startswith("L1") for s in syms) == 2, "一类保底 2 个，不再轮流占到一半"
+        assert sum(s.startswith("L3") for s in syms) == 4
+
+    def test_resonance_bonus_reranks_latest_day(self):
+        """最新一天：候选池里共振的信号加分，可以挤进前 N。"""
+        from app.schemas.signal_radar import RadarDayOut, RadarSignalOut
+
+        def sig(sym, strength, verdict=None):
+            return RadarSignalOut(symbol=sym, name=sym, side="buy", label="二买", signal_type="buy2",
+                                  date="2026-09-19", price=1.0, strength=strength, bias="bullish",
+                                  signal_strength="medium", confirmed=True, pivot_stage_depth=0.5,
+                                  sub_level_verdict=verdict)
+        day = RadarDayOut(date="2026-09-19", buy_count=3, sell_count=0,
+                          signals=[sig("A", 0.8), sig("B", 0.7), sig("C", 0.55, "resonance_buy")])
+        out = svc.rerank_with_resonance(day, top_n=2)
+        assert [s.symbol for s in out.signals] == ["C", "A"]
+        assert out.buy_count == 2
