@@ -106,3 +106,22 @@ class CompanyProfileResponse(BaseResponse):
     ticker: str = Field("", description="股票代码")
     sic_description: str = Field("", description="行业 SIC 描述")
     profile: CompanyProfile = Field(description="大模型生成的公司基础画像")
+
+
+class CompanyBasicIntroResponse(BaseResponse):
+    """公司基础介绍，中英文对照。
+
+    基础字段与英文简介直接取自 FMP company profile；中文简介是对英文简介的 LLM
+    翻译（复用聊天用的 LLM，不接入第三方翻译 API），失败时留空、前端回退显示英文。
+    """
+
+    ticker: str = Field(description="股票代码（FMP 形态，如 AAPL / 0700.HK / 600519.SS）")
+    name: str = Field("", description="公司名称（英文官方注册名）")
+    industry: str = Field("", description="所属行业")
+    sector: str = Field("", description="所属板块")
+    ceo: str = Field("", description="CEO 姓名")
+    website: str = Field("", description="官网地址")
+    employees: str = Field("", description="全职员工数")
+    ipo_date: str = Field("", description="IPO 日期 YYYY-MM-DD")
+    description_en: str = Field("", description="公司简介原文（英文，来自 FMP）")
+    description_zh: str = Field("", description="公司简介中文翻译；翻译失败时为空")

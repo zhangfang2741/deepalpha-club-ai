@@ -34,6 +34,9 @@ struct SignalRadarResponse: Decodable {
     let status: String   // ready / generating
     /// 最新一天气泡共振结论的更新时间（ISO8601 UTC）。盘中每 30 分钟刷新；旧后端无此字段。
     let subLevelAsOf: String?
+    /// as_of 只是「代表哪个交易日」的日期，同一天内不管几点刷新都长一样，看不出这份
+    /// 快照有多新；computed_at 才是这次全量扫描真正算出来的时间点。旧后端无此字段。
+    let computedAt: String?
 
     enum CodingKeys: String, CodingKey {
         case market
@@ -46,12 +49,23 @@ struct SignalRadarResponse: Decodable {
         case days
         case status
         case subLevelAsOf = "sub_level_as_of"
+        case computedAt = "computed_at"
     }
 
     /// 共振结论更新时刻（本地时间 HH:mm），解析不了返回 nil。
     var subLevelUpdatedText: String? {
-        guard let raw = subLevelAsOf, !raw.isEmpty,
-              let date = ISO8601DateFormatter().date(from: raw) else { return nil }
+        Self.localTime(from: subLevelAsOf)
+    }
+
+    /// 本次全量扫描的算出时刻（本地时间 HH:mm），解析不了返回 nil——用来提醒用户
+    /// 「气泡是这个时间点的快照，跟现在点进详情页实时算的结果可能不完全一样」，
+    /// 缠论笔在数据右端本身就是临时性的，晚几根K线就可能改写，这是预期行为。
+    var computedAtText: String? {
+        Self.localTime(from: computedAt)
+    }
+
+    private static func localTime(from raw: String?) -> String? {
+        guard let raw, !raw.isEmpty, let date = ISO8601DateFormatter().date(from: raw) else { return nil }
         let f = DateFormatter()
         f.dateFormat = "HH:mm"
         return f.string(from: date)
@@ -116,8 +130,8 @@ struct RadarSignal: Decodable, Identifiable {
     /// 买卖点级别：1/2/3，取 signalType 末位数字（"buy2"/"sell2" 都取到 2），
     /// 对买卖两侧通用。级别决定气泡颜色深浅（该类买卖点本身的确认程度），映射见
     /// SignalRadarView.levelDepth(_:)——一类只是背驰迹象、尚待验证，最浅；三类
-    /// 回踩完全不回中枢是最强确认，最深。单条信号自己「有没有走完」是另一件事，
-    /// 由 `confirmed` 字段驱动气泡边框虚实表达。
+    /// 回踩完全不回中枢是最强确认，最深。`confirmed` 字段仍由后端返回、保留解码，
+    /// 但雷达气泡不再用边框虚实表达它——详情页里才展示单条信号是否已走完。
     var level: Int {
         Int(String(signalType.suffix(1))) ?? 1
     }

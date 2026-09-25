@@ -338,7 +338,6 @@
 
 /* Signal Radar legend */
 "大小=潜在空间" = "Size = potential move";
-"深浅=强弱 · 虚线边框=未确认 · 居中=越新 · 点击查看分析" = "Shade = strength · dashed border = unconfirmed · centered = newer · tap for analysis";
 
 /* Lower-level check (daily direction × 30-minute entries) */
 "次级别确认（30 分钟）" = "Lower-Level Check (30-min)";
@@ -372,7 +371,8 @@
 "周线定方向、日线找进出点：两者同向为共振，反向多为次级别的反弹或回调。" = "The weekly chart sets the direction; the daily chart times entries and exits. When they agree it's aligned; when they disagree it's usually just a lower-level bounce or pullback.";
 "浅色底 = 最近两周（次级别判断所看的区间）" = "Shaded = last two weeks (the window the lower-level check looks at)";
 "日线近两周买卖点" = "Daily buy/sell points, last 2 weeks";
-"共振 %@ 更新" = "Aligned · updated %@";
+"次级别 %@ 更新" = "Sub-level updated %@";
+"数据 %@ 计算" = "Snapshot computed %@";
 "数据截至 %@" = "data as of %@";
 "大小=买卖点类型" = "Size = signal type";
 "· 越远越小" = "· smaller when older";
@@ -500,20 +500,19 @@
 "返回当前状态" = "Return to current state";
 "走势级别" = "Timeframes & levels";
 "区间走势：%@" = "Trend across the range: %@";
-"大小=强弱" = "Size = strength";
+"大小=形态强弱" = "Size = pattern strength";
 "自选中暂无该市场的股票" = "No stocks from this market in your watchlist";
 "在分析详情页点右上角 ☆ 加入自选" = "Tap ☆ at the top right of an analysis to add one";
 "点击气泡查看分析" = "Tap a bubble for analysis";
 "今天" = "Today";
 "距离=时间：三个环依次是今天、1 周、2 周" = "Distance = time: rings mark today, 1 week, 2 weeks";
-"颜色=方向" = "Color = direction";
+"颜色=方向·深浅" = "Color = direction · shade";
 "标签=状态" = "Tag = status";
 "算法说明" = "How it works";
 "气泡怎么看" = "Reading the bubbles";
 "颜色：红=买点，绿=卖点；深浅=买卖点类型的确认程度，一类最浅、三类最深。" = "Color: red = buy, green = sell; shade = how confirmed the signal type is — type 1 lightest, type 3 darkest.";
 "大小：买卖点自身强弱（弱/中/强），越强气泡越大，与详情页同一套判定。" = "Size: the signal's own strength (weak/medium/strong) — stronger signals get bigger bubbles, same rule as the detail page.";
 "位置：离中心越近代表信号越新，三个圈依次是今天、3天内、一周内。" = "Position: closer to center means more recent — the three rings mark today, within 3 days, within 1 week.";
-"边框：虚线表示这条信号还没被后续走势确认。" = "Border: a dashed outline means this signal hasn't been confirmed by later price action yet.";
 "角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。" = "Badges: \"Aligned\" means the daily and 30-minute directions agree; \"New\" means the signal first appeared today.";
 "扫描范围怎么定" = "How the scan range is chosen";
 "每个市场提供「科技指数」（默认）和「大盘宽基」两套可切换范围，如美股的纳斯达克100 / 标普500。" = "Each market offers a switchable \"tech index\" (default) and a \"broad market\" range, e.g. Nasdaq 100 / S&P 500 for US stocks.";
@@ -523,4 +522,8 @@
 "类型确定性：一类 0.4（背驰迹象，待验证）、二类 0.7（回踩不破中枢）、三类 1.0（完全不回中枢，最强确认）。" = "Type certainty: type 1 = 0.4 (a divergence hint, unconfirmed), type 2 = 0.7 (pullback holds the pivot), type 3 = 1.0 (pullback never re-enters the pivot — the strongest confirmation).";
 "新鲜度：当天最高，7 天后归零；超过 7 天没被更新信号覆盖的旧信号会自动退场。" = "Freshness: highest on the signal's own day, decaying to zero after 7 days; a signal not superseded within 7 days drops off automatically.";
 "每类买卖点先保底最多 2 个名额，其余按综合分从高到低补满，共取前 12 名。" = "Each signal type gets up to 2 guaranteed slots first; the rest are filled by score, for a top-12 list overall.";
-"以上口径与详情页强弱、确认状态完全一致。" = "This matches the same strength and confirmation logic used on the analysis detail page.";
+"以上打分口径与详情页强弱、确认状态判定完全一致，只是气泡取的是某一次扫描的快照。" = "This scoring matches the same strength and confirmation logic used on the analysis detail page — the bubbles just reflect a snapshot from one scan.";
+"为什么点进详情页可能对不上" = "Why the detail page can look different";
+"气泡是最近一次全量扫描那一刻的快照（历史日期下方会标出算出时刻），不是实时数据；点进详情页是用当下最新K线重新跑一遍缠论。" = "Bubbles are a snapshot from the last full scan (the computed time is shown under past dates), not live data; opening the detail page reruns the Chan analysis on the latest candles.";
+"缠论的笔和买卖点在最新几根K线上本身是临时性的，后续新K线一出现，原来某天的信号可能被延伸、改写甚至判定失效——这是分析方法的特性，不是数据错误。" = "Chan strokes and signals near the most recent candles are inherently provisional — once new candles arrive, a signal from an earlier day can be extended, rewritten, or invalidated. That's how the method works, not a data error.";
+"越靠近「今天」的气泡越可能受影响；对某个信号有疑问，以点进详情页当下重新算出的结构为准。" = "Bubbles closer to \"today\" are more likely to be affected; if a signal looks off, trust the structure recomputed live on the detail page.";

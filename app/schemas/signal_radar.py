@@ -68,3 +68,12 @@ class SignalRadarResponse(BaseModel):
     sub_level_as_of: str = Field(
         default="", description="最新一天气泡次级别（共振）结论的更新时间，ISO8601 UTC；盘中每 30 分钟刷新"
     )
+    # as_of 只是「代表哪个交易日」的日期，不是「什么时候算出来的」——同一天内不管
+    # 几点刷新都长一个样，看不出这份快照有多新。computed_at 是这次全量扫描
+    # （build_days 生成全部 days 快照那一刻）的真实时间戳，供前端提示用户「你看到
+    # 的气泡是这个时间点算出来的，跟现在重新点进详情页实时算的结果可能不完全一样」
+    # ——尤其是缠论笔在数据右端本身就是临时性的，晚几根K线就可能改写，这是预期行为
+    # 不是 bug，只是需要让用户看得到「有多新」。
+    computed_at: str = Field(
+        default="", description="本次全量扫描完成时间，ISO8601 UTC；缓存命中时沿用缓存写入时的时间"
+    )

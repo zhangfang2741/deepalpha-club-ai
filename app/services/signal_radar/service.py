@@ -629,6 +629,7 @@ async def compute_market(
         top_n=top_n,
         days=build_days(histories, trading_days, top_n=top_n, max_age_days=max_age_days),
         status="ready",
+        computed_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
     )
     if resp.days:
         # 次级别结论描述的是「现在」，只对最新交易日：先取更大的候选池补算次级别，

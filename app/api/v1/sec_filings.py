@@ -10,11 +10,12 @@ from redis.asyncio import Redis
 from app.cache.client import get_redis_optional
 from app.core.logging import logger
 from app.schemas.sec_filings import (
+    CompanyBasicIntroResponse,
     CompanyFilingsResponse,
     CompanyProfileResponse,
     FilingDocumentsResponse,
 )
-from app.services.sec_filings import company_profile_service, sec_filings_service
+from app.services.sec_filings import company_profile_service, get_basic_intro, sec_filings_service
 
 router = APIRouter()
 
@@ -63,6 +64,36 @@ async def get_filing_documents(
     if result is None:
         raise HTTPException(status_code=404, detail="未找到该 filing 的文档清单")
     return FilingDocumentsResponse.model_validate(result)
+
+
+@router.get("/company-basic-intro", response_model=CompanyBasicIntroResponse)
+async def get_company_basic_intro(
+    symbol: str = Query(
+        ...,
+        description="股票代码，如 AAPL / 0700.HK / 600519",
+        min_length=1,
+        max_length=20,
+    ),
+    redis: Optional[Redis] = Depends(get_redis_optional),
+) -> CompanyBasicIntroResponse:
+    """获取公司基础介绍（中英文对照）。
+
+    英文简介与基础字段直接取自 FMP company profile（真实数据）；中文简介是对该
+    英文简介的 LLM 翻译（复用聊天 LLM，不接第三方翻译 API），翻译失败时留空，
+    前端应回退显示英文。结果按 FMP 代码缓存 7 天。
+
+    Args:
+        symbol: 股票代码，接受任意市场惯用写法。
+    """
+    logger.info("company_basic_intro_request", symbol=symbol)
+
+    result = await get_basic_intro(symbol, redis)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"未找到「{symbol}」对应的公司基础信息，请确认股票代码是否正确",
+        )
+    return CompanyBasicIntroResponse.model_validate(result)
 
 
 @router.get("/company-profile", response_model=CompanyProfileResponse)

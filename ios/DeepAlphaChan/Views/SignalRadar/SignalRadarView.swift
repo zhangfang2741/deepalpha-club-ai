@@ -5,14 +5,12 @@ import SwiftUI
 /// 顶部市场选择与三地恐慌指数小卡片合二为一（PanicIndexStrip）：点哪张卡就切到
 /// 哪个市场，不再单独放一条分段选择器。
 ///
-/// 气泡编码（四个视觉维度对应四件不同的事，不再互相重复）：
-/// - 颜色：方向（红=买点 / 绿=卖点）+ 深浅（信号强弱：越强越深，与详情页共用映射）；
-/// - 大小：买卖点级别本身的确定性（一类最小 → 三类最大）——一类只是背驰迹象、
-///   尚待验证，二类回踩不破中枢是初步确认，三类回踩完全不回中枢是最强确认；
-/// - 边框：单条信号自身是否已被后续走势确认——虚线=未确认
-///   （`signal.confirmed == false`），跟图表页「虚线=未确认」同一套语言。这是
-///   「这一条信号有没有走完」的实时状态，跟大小编码的「这一类信号本身多可信」
-///   是两件不同的事，不重复；
+/// 气泡编码（三个视觉维度对应三件不同的事，不再互相重复；纯实色气泡，
+/// 不用边框表达确认状态——那是详情页里的事，见 RadarBubble）：
+/// - 颜色：方向（红=买点 / 绿=卖点）+ 深浅（买卖点级别本身的确定性：一类最浅、
+///   只是背驰迹象、尚待验证，二类居中、回踩不破中枢是初步确认，三类最深、
+///   回踩完全不回中枢是最强确认）；
+/// - 大小：买卖点自身强弱（弱/中/强，与详情页同一套判定），越强越大；
 /// - 居中程度：时间距离——当天信号位于中心，越早出现的信号越靠外；
 ///   后端会让一只股票的信号在被更新的信号覆盖前持续「在场」（见
 ///   app/services/signal_radar/service.py 的按日重建），所以翻看某一天时，
@@ -162,12 +160,23 @@ struct SignalRadarView: View {
                 Text(day.date)
                     .font(.caption)
                     .foregroundColor(Theme.textSecondary)
-                // 共振标记只在最新交易日出现、盘中每 30 分钟刷新：标出更新时刻，
-                // 与点进详情看到的实时结论有出入时，用户知道差在时间上
-                if day.id == vm.response?.days.first?.id,
-                   day.signals.contains(where: { $0.isSubLevelResonance }),
-                   let updated = vm.response?.subLevelUpdatedText {
-                    Text(L("共振 %@ 更新", updated))
+                if day.id == vm.response?.days.first?.id {
+                    // 次级别结论只对最新交易日算、盘中每 30 分钟刷新：标出更新时刻，
+                    // 与点进详情看到的实时结论有出入时，用户知道差在时间上。之前只在
+                    // 当天有共振徽标时才显示这行，导致共振本来就少的港股/A股几乎
+                    // 看不到更新时间；改成只要最新一天算过次级别就显示，三个市场一致。
+                    if let updated = vm.response?.subLevelUpdatedText {
+                        Text(L("次级别 %@ 更新", updated))
+                            .font(.caption2)
+                            .foregroundColor(Theme.textSecondary)
+                    }
+                } else if let computed = vm.response?.computedAtText {
+                    // 翻看历史某一天：这天的气泡是上一次全量扫描（computed_at）算出来的
+                    // 快照，缠论笔在数据右端本身就是临时性的，之后如果又跑过新的扫描、
+                    // 有更多K线进来，同一只股票在这天的买卖点可能已经变了——点进详情页
+                    // 是用当下最新数据重新算，跟这份快照对不上是预期行为，不是 bug。
+                    // 标出算出时刻，用户能明白「点进去可能不一样」的原因在这。
+                    Text(L("数据 %@ 计算", computed))
                         .font(.caption2)
                         .foregroundColor(Theme.textSecondary)
                 }
@@ -345,9 +354,14 @@ struct SignalRadarView: View {
     /// 落在最外环、角度又指向边缘的气泡（尤其是那颗被推到远端的孤立卖点）就会被
     /// 圆角容器裁掉一半。现在把「场半径」整体内缩这个边距，环线和气泡一起内移。
     static let fieldInset: Double = 18
-    /// 雷达画布宽高比与椭圆纵/横半轴比。
-    static let fieldAspect: CGFloat = 1.3
-    static let ellipseRatio: Double = 0.72
+    /// 雷达画布宽高比与椭圆纵/横半轴比。图例精简成一行 + 问号弹层后空出的纵向空间
+    /// 让给了画布本身：宽高比从 1.3 收到 1.1（画布更高），ellipseRatio 从 0.72 提到
+    /// 0.9——不然只把画布拉高、椭圆纵向半轴仍卡在旧比例上限，新增的高度只会变成
+    /// 椭圆上下的空白，而不是让椭圆本身跟着变大。常见手机宽度下 0.9 已经让
+    /// `fieldRadii` 里 `min(h/2-fieldInset, hRad*ellipseRatio)` 的瓶颈从
+    /// ellipseRatio 切回画布高度本身，椭圆基本吃满新增的纵向空间。
+    static let fieldAspect: CGFloat = 1.1
+    static let ellipseRatio: Double = 0.9
 
     /// 气泡场的水平/垂直半轴：各方向取 (边长/2 - fieldInset)。以前用单一 min(w,h)/2
     /// 圆半径，画布一旦不是正方形（信号页画布通常比它高要宽），圆就卡在短边上、长边
@@ -434,7 +448,6 @@ struct SignalRadarView: View {
 
     /// 买卖点强弱 → 气泡直径：越强越大（弱 60 / 中 76 / 强 92），与详情页买卖点
     /// 「强/中/弱」同一口径（一类按背驰力度比、二三类按中枢级别 + 回踩余地），未知按中。
-    /// 单条信号「有没有走完」用边框实/虚线表达（见 RadarBubble），不叠加到大小上。
     static func diameter(forStrength strength: String) -> Double {
         switch strength {
         case "strong": return 92
@@ -482,12 +495,17 @@ struct SignalRadarView: View {
             HStack(spacing: 4) {
                 Circle().fill(Theme.up).frame(width: 8, height: 8)
                 Circle().fill(Theme.down).frame(width: 8, height: 8)
-                Text(L("颜色=方向")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                // 颜色不止编码方向，深浅还编码买卖点类型的确认程度（一类浅→三类深）；
+                // 之前只写「颜色=方向」漏了深浅这层意思，这里补一个词点出来，深浅具体
+                // 代表什么留给问号弹层展开——常驻图例只负责让人知道「还有一层没读」。
+                Text(L("颜色=方向·深浅")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
             HStack(spacing: 3) {
                 sizeDot(diameter: SignalRadarView.diameter(forStrength: "weak"))
                 sizeDot(diameter: SignalRadarView.diameter(forStrength: "strong"))
-                Text(L("大小=强弱")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                // 「强弱」二字太空泛，点一下问号能看到具体口径（一类按背驰力度比、
+                // 二三类按中枢级别+回踩余地），这里先点出是「形态」层面的强弱。
+                Text(L("大小=形态强弱")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
             HStack(spacing: 4) {
                 legendBadge(L("新"), color: Theme.segment)
@@ -537,8 +555,12 @@ struct SignalRadarView: View {
                         L("颜色：红=买点，绿=卖点；深浅=买卖点类型的确认程度，一类最浅、三类最深。"),
                         L("大小：买卖点自身强弱（弱/中/强），越强气泡越大，与详情页同一套判定。"),
                         L("位置：离中心越近代表信号越新，三个圈依次是今天、3天内、一周内。"),
-                        L("边框：虚线表示这条信号还没被后续走势确认。"),
                         L("角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。"),
+                    ])
+                    infoSection(L("为什么点进详情页可能对不上"), [
+                        L("气泡是最近一次全量扫描那一刻的快照（历史日期下方会标出算出时刻），不是实时数据；点进详情页是用当下最新K线重新跑一遍缠论。"),
+                        L("缠论的笔和买卖点在最新几根K线上本身是临时性的，后续新K线一出现，原来某天的信号可能被延伸、改写甚至判定失效——这是分析方法的特性，不是数据错误。"),
+                        L("越靠近「今天」的气泡越可能受影响；对某个信号有疑问，以点进详情页当下重新算出的结构为准。"),
                     ])
                     infoSection(L("扫描范围怎么定"), [
                         L("每个市场提供「科技指数」（默认）和「大盘宽基」两套可切换范围，如美股的纳斯达克100 / 标普500。"),
@@ -550,7 +572,7 @@ struct SignalRadarView: View {
                         L("新鲜度：当天最高，7 天后归零；超过 7 天没被更新信号覆盖的旧信号会自动退场。"),
                         L("每类买卖点先保底最多 2 个名额，其余按综合分从高到低补满，共取前 12 名。"),
                     ])
-                    Text(L("以上口径与详情页强弱、确认状态完全一致。"))
+                    Text(L("以上打分口径与详情页强弱、确认状态判定完全一致，只是气泡取的是某一次扫描的快照。"))
                         .font(.footnote)
                         .foregroundColor(Theme.textSecondary)
                 }
