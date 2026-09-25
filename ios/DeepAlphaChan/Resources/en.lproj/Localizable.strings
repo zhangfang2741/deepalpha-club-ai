@@ -376,7 +376,6 @@
 "数据截至 %@" = "data as of %@";
 "大小=买卖点类型" = "Size = signal type";
 "· 越远越小" = "· smaller when older";
-"距离=时间：越靠中心越新，最外圈约 1 个月前" = "Distance = time: closer to center is newer; outer ring ≈ 1 month ago";
 "日线与30分钟同向" = "daily & 30-min agree";
 "当日新出现" = "new today";
 
@@ -505,3 +504,5 @@
 "自选中暂无该市场的股票" = "No stocks from this market in your watchlist";
 "在分析详情页点右上角 ☆ 加入自选" = "Tap ☆ at the top right of an analysis to add one";
 "点击气泡查看分析" = "Tap a bubble for analysis";
+"今天" = "Today";
+"距离=时间：三个环依次是今天、1 周、2 周" = "Distance = time: rings mark today, 1 week, 2 weeks";

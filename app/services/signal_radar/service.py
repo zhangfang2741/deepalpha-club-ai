@@ -85,7 +85,8 @@ _MIN_PER_LEVEL = 2
 
 _CACHE_PREFIX = "signal_radar"
 
-# 「自选」股票池：每个市场都可选，按用户各自的自选股计算；缓存按用户隔离、30 分钟。
+# 「自选」股票池：按用户各自的自选股计算（universe=watchlist）；缓存按用户隔离、30 分钟。
+# 不列入指数切换菜单（产品决定），接口能力保留。
 WATCHLIST_KEY = "watchlist"
 WATCHLIST_CACHE_TTL = 1800
 
@@ -123,10 +124,10 @@ def _cache_stale_after() -> int:
 
 # 在场信号的过期上限（自然日）：一条买卖点即使一直没被新信号覆盖，诞生超过这个
 # 天数后也不再显示。信号雷达的定位是「看当前市场的买卖点」，不是「翻出几个月前
-# 仍未失效的老信号」；而且前端气泡按 daysAgo 落环，超过 30 天的信号只能全部堆在
-# 最外「1月内」那条环线上、彼此分不出远近（见 ios SignalRadarView.ringRadius 的
-# min(1.0, …) 封顶）——与其糊成一团，不如到点就让它退场。取 30 天与最外环刻度对齐。
-_MAX_SIGNAL_AGE_DAYS = 30
+# 仍未失效的老信号」；而且前端气泡按 daysAgo 落环（今天 / 1 周 / 2 周三个环），超过
+# 14 天的信号只能全部堆在最外「2周」环上、彼此分不出远近——与其糊成一团，不如到点
+# 就让它退场。取 14 天与最外环刻度对齐；新鲜度评分也按这个窗口衰减。
+_MAX_SIGNAL_AGE_DAYS = 14
 
 
 @dataclass
@@ -500,7 +501,7 @@ def _universes_out(market: str) -> list[RadarUniverseOut]:
     return [
         RadarUniverseOut(key=u.key, name=u.etf_name, is_default=u.is_default)
         for u in list_universes(market)
-    ] + [RadarUniverseOut(key=WATCHLIST_KEY, name="自选", is_default=False)]
+    ]
 
 
 async def read_watchlist_cache(

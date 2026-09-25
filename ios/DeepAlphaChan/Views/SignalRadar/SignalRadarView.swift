@@ -328,14 +328,12 @@ struct SignalRadarView: View {
         var id: String { signal.id }
     }
 
-    /// 三档参考环：半径与气泡同一套「按天数平方根」映射（RadarOrbitSpacing.timeRadius），
-    /// 环上标注大致时间跨度。1 周内 ≈ 0.48、2 周内 ≈ 0.68、1 月内 = 1.0。
+    /// 三个等距参考环：今天 1/3、1 周 2/3、2 周 1.0，与气泡同一套时间半径映射
+    /// （RadarOrbitSpacing.timeRadius）。
     /// 用计算属性而非 static let：L() 依赖运行时语言设置，static let 只会算一次，
     /// 用户切换语言后文案不会跟着变。
     static var ringSpecs: [(scale: Double, label: String)] {
-        zip(ringBandMaxDays, [L("1周内"), L("2周内"), L("1月内")]).map {
-            (RadarOrbitSpacing.timeRadius(daysAgo: $0.0), $0.1)
-        }
+        [(1.0 / 3, L("今天")), (2.0 / 3, L("1周内")), (1.0, L("2周内"))]
     }
 
     /// 场边距：最外环（scale 1.0）到容器四边留出的空白，给气泡的阴影 + 右上角「新」
@@ -352,17 +350,14 @@ struct SignalRadarView: View {
         (max(0, w / 2 - fieldInset), max(0, h / 2 - fieldInset))
     }
 
-    /// 三档时间跨度上限（天），参考环与时间档共用。
-    private static let ringBandMaxDays: [Int] = [7, 14, 30]
-
-    /// 时间距离 → 半径：按天数平方根（见 RadarOrbitSpacing.timeRadius），当天为零。
+    /// 时间距离 → 半径（见 RadarOrbitSpacing.timeRadius）：今天在圆心。
     static func ringRadius(forDaysAgo daysAgo: Int, fieldRadius: Double) -> Double {
-        RadarOrbitSpacing.timeRadius(daysAgo: daysAgo, horizon: ringBandMaxDays[2]) * fieldRadius
+        RadarOrbitSpacing.timeRadius(daysAgo: daysAgo) * fieldRadius
     }
 
-    /// daysAgo → 时间档：0=1周内、1=2周内、2=1月内（含更早）。
+    /// daysAgo → 时间档：0=今天、1=1周内、2=2周内（含更早）。
     static func bandIndex(forDaysAgo daysAgo: Int) -> Int {
-        daysAgo <= ringBandMaxDays[0] ? 0 : (daysAgo <= ringBandMaxDays[1] ? 1 : 2)
+        daysAgo <= 0 ? 0 : (daysAgo <= 7 ? 1 : 2)
     }
 
     /// 越远越小（按天连续递减，见 RadarOrbitSpacing.timeSizeFactor），和「买卖点类型」的
@@ -487,7 +482,7 @@ struct SignalRadarView: View {
                 levelDot(diameter: SignalRadarView.diameter(forStrength: "strong"), label: L("强"))
                 Text(L("· 越远越小")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
-            Text(L("距离=时间：越靠中心越新，最外圈约 1 个月前"))
+            Text(L("距离=时间：三个环依次是今天、1 周、2 周"))
                 .font(.system(size: 10))
                 .foregroundColor(Theme.textSecondary)
             HStack(spacing: 6) {

@@ -51,18 +51,19 @@ struct RadarOrbitSpacingTests {
 
     /// 半径按天数平方根：严格递增、最近几天间距更大、30 天起在最外圈。
     static func testTimeRadius() {
-        let r = (0...40).map { RadarOrbitSpacing.timeRadius(daysAgo: $0) }
-        assert(r[0] == 0 && abs(r[30] - 1) < 1e-9 && r[40] == 1, "当天圆心、30 天起最外圈")
-        for d in 1...30 { assert(r[d] > r[d - 1], "越新越靠中心") }
-        assert(r[1] - r[0] > 5 * (r[30] - r[29]), "最近几天之间的间距明显大于远处")
+        let r = (0...20).map { RadarOrbitSpacing.timeRadius(daysAgo: $0) }
+        assert(r[0] == 0, "今天在圆心")
+        assert(abs(r[1] - 1.0 / 3) < 1e-9 && abs(r[7] - 2.0 / 3) < 1e-9, "1 天在「今天」环、7 天在「1周」环")
+        assert(abs(r[14] - 1) < 1e-9 && r[20] == 1, "14 天在「2周」环，更早封顶")
+        for d in 1...14 { assert(r[d] > r[d - 1], "越新越靠中心") }
     }
 
-    /// 越远越小：按天严格递减，当天 1.0、30 天起封底 0.55。
+    /// 越远越小：按天严格递减，当天 1.0、14 天起封底 0.55。
     static func testTimeSizeFactor() {
-        let f = (0...40).map { RadarOrbitSpacing.timeSizeFactor(daysAgo: $0) }
+        let f = (0...20).map { RadarOrbitSpacing.timeSizeFactor(daysAgo: $0) }
         assert(f[0] == 1, "当天原尺寸")
-        for d in 1...30 { assert(f[d] < f[d - 1], "30 天内每往前一天都更小") }
-        assert(abs(f[30] - 0.55) < 1e-9 && f[40] == f[30], "30 天起封底")
+        for d in 1...14 { assert(f[d] < f[d - 1], "14 天内每往前一天都更小") }
+        assert(abs(f[14] - 0.55) < 1e-9 && f[20] == f[14], "14 天起封底")
     }
 
     /// 选方向：半径固定，避开已摆的气泡；同轨道两个气泡能放下时互不重叠。

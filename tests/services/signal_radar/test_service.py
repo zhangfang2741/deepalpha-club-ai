@@ -570,10 +570,11 @@ class TestCompositeRanking:
 class TestWatchlistUniverse:
     """「自选」股票池：每个市场都可选，按用户各自的自选股计算，缓存按用户隔离。"""
 
-    def test_universes_list_ends_with_watchlist(self):
+    def test_universes_menu_has_no_watchlist(self):
+        """指数切换菜单里不出现「自选」（按用户算自选的接口能力保留，不作为菜单项）。"""
         for market in ("us", "cn", "hk"):
             keys = [u.key for u in svc._universes_out(market)]
-            assert keys[-1] == svc.WATCHLIST_KEY
+            assert svc.WATCHLIST_KEY not in keys
 
     async def test_compute_with_override_writes_per_user_cache(self, monkeypatch):
         scanned = []

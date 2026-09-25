@@ -40,16 +40,19 @@ enum RadarOrbitSpacing {
 // MARK: - 时间轨道（正圆）
 
 extension RadarOrbitSpacing {
-    /// 时间 → 归一化半径：√(天数 / horizon)，horizon 天及更早在最外圈。
-    /// 平方根让最近几天之间的间距拉开（当天→1 天 ≈ 0.18，29→30 天 ≈ 0.01），
-    /// 越新越靠中心的顺序不变。
-    static func timeRadius(daysAgo: Int, horizon: Int = 30) -> Double {
-        (min(1, Double(max(0, daysAgo)) / Double(max(1, horizon)))).squareRoot()
+    /// 时间 → 归一化半径，对应「今天 / 1 周 / 2 周」三个等距环（1/3、2/3、1）：
+    /// 今天在最内环以内（圆心），1～7 天前在第一、二环之间，8～14 天前在第二、三环之间，
+    /// 各区间内按天均匀分布；更早的封顶在最外环。
+    static func timeRadius(daysAgo: Int) -> Double {
+        let d = max(0, daysAgo)
+        if d == 0 { return 0 }
+        if d <= 7 { return (1.0 + Double(d - 1) / 6.0) / 3.0 }
+        return (2.0 + min(1.0, Double(d - 7) / 7.0)) / 3.0
     }
 
-    /// 时间 → 气泡尺寸系数：越远越小，按天连续递减（当天 1.0，30 天及更早 0.55）。
-    /// 与买卖点类型的直径相乘，保留一/二/三类的相对大小。
-    static func timeSizeFactor(daysAgo: Int, horizon: Int = 30, minFactor: Double = 0.55) -> Double {
+    /// 时间 → 气泡尺寸系数：越远越小，按天连续递减（当天 1.0，14 天及更早 0.55）。
+    /// 与强弱对应的直径相乘。
+    static func timeSizeFactor(daysAgo: Int, horizon: Int = 14, minFactor: Double = 0.55) -> Double {
         let t = min(1, Double(max(0, daysAgo)) / Double(max(1, horizon)))
         return 1 - (1 - minFactor) * t
     }
