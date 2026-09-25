@@ -394,10 +394,10 @@ struct PivotPhaseDiagram: View {
                 }
             }
             Text(HeadlineHighlighter.highlight(phase.reason))
-                .font(.footnote)
+                .font(AnalysisType.body)
                 .foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
-                .lineSpacing(3)
+                .lineSpacing(AnalysisType.bodyLineSpacing)
             Text(L("参考中枢 %@ · 下沿 ZD %@ — 上沿 ZG %@",
                    phase.pivot.level == .segment ? L("线段级") : L("笔级"),
                    String(format: "%.2f", phase.pivot.zd),
@@ -429,9 +429,9 @@ private struct PhaseRuleSheet: View {
         NavigationStack {
             ScrollView {
                 Text(copy.body)
-                    .font(.body)
+                    .font(AnalysisType.body)
                     .foregroundStyle(Theme.textPrimary)
-                    .lineSpacing(5)
+                    .lineSpacing(AnalysisType.bodyLineSpacing)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(20)
             }
@@ -440,7 +440,7 @@ private struct PhaseRuleSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(L("关闭")) { dismiss() }
+                    Button(L("完成")) { dismiss() }
                 }
             }
         }

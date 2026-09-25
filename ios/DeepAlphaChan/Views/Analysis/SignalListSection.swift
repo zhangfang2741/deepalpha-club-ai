@@ -13,7 +13,7 @@ struct SignalListSection: View {
         VStack(spacing: 12) {
             if sortedSignals.isEmpty {
                 SectionCard(title: L("当前区间未识别到明确买卖点"), systemImage: "magnifyingglass") {
-                    Text(L("没有信号不代表没有风险。可返回「当前状态」查看中枢位置和待观察条件。"))
+                    Text(L("没有信号不代表没有风险。可返回「当前状态」查看中枢位置和下一步观察。"))
                         .font(AnalysisType.body)
                         .foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)

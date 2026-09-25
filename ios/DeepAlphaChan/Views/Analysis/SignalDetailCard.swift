@@ -41,7 +41,7 @@ struct SignalDetailCard: View {
                 .foregroundStyle(directionColor)
                 .font(.footnote)
             Text(signal.label)
-                .font(.footnote.weight(.semibold))
+                .font(AnalysisType.label)
                 .foregroundStyle(Theme.textPrimary)
             Circle().fill(strengthColor).frame(width: 7, height: 7)
             Image(systemName: signal.confirmed ? "checkmark.circle" : "circle.dashed")
@@ -71,16 +71,18 @@ struct SignalDetailCard: View {
     private var explanation: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(HeadlineHighlighter.highlight(signal.description))
-                .font(.caption)
+                .font(AnalysisType.body)
                 .foregroundStyle(Theme.textPrimary)
+                .lineSpacing(AnalysisType.bodyLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
             Text(SignalFormatting.typeExplanation(signal.type))
-                .font(.caption)
+                .font(AnalysisType.body)
                 .foregroundStyle(Theme.textSecondary)
+                .lineSpacing(AnalysisType.bodyLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
             if !signal.confirmed {
                 Text(L("对应结构仍在延伸，后续 K 线可能使信号改变或消失。"))
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
