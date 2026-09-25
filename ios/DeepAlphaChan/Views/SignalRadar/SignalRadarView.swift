@@ -32,6 +32,10 @@ struct SignalRadarView: View {
     /// 信号雷达（气泡场）是高级版专属功能，未订阅时弹这个付费墙。
     /// 恐慌指数小卡片（PanicIndexStrip）不受影响，所有用户可见。
     @State private var showPaywall = false
+    /// 使用雷达前的风险确认：已订阅但还没勾选同意过，先挡在 consentView，
+    /// 不直接看到买卖点气泡。
+    @StateObject private var consent = RadarConsent()
+    @State private var consentChecked = false
 
     /// 日期轨直接摆出来的格子数（约 2 周的交易日），更早的走"更多"里的日期选择器。
     static let visibleDayChipCount = 10
@@ -51,6 +55,8 @@ struct SignalRadarView: View {
 
                 if !store.isPremium {
                     lockedView
+                } else if !consent.hasAgreed {
+                    consentView
                 } else if vm.isScanning {
                     scanningView
                 } else if vm.isComputingInBackground {
@@ -132,6 +138,77 @@ struct SignalRadarView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - 使用前风险确认
+
+    /// 雷达是把多只标的的买卖点集中展示的「信号流」，比单只标的的分析详情页更容易
+    /// 被当成可以直接照抄的操作清单——这里要求主动勾选确认过才放行，不是随手能划掉
+    /// 的常驻提示条。已确认过不会再弹，见 RadarConsent。
+    private var consentView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 34)).foregroundColor(Theme.segment)
+                    Text(L("使用信号雷达前，请确认"))
+                        .font(.headline).foregroundColor(Theme.textPrimary)
+                    Text(L("雷达把多只标的的买卖点集中展示在一张图上，方便发现，但也更容易被当成可以直接照抄的操作清单——请先看完以下几点。"))
+                        .font(.footnote).foregroundColor(Theme.textSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    consentPoint(L("雷达上的买卖点由算法根据缠论结构自动生成，仅为技术分析研究结果，不构成投资建议、荐股或买卖要约。"))
+                    consentPoint(L("气泡的颜色、大小、位置只反映价格结构的技术特征（如背驰强弱、确认程度），不代表标的当前「值得买入」或「应当卖出」，也不能预测未来涨跌。"))
+                    consentPoint(L("请不要仅凭雷达上出现的买卖点做出交易决策。投资决策应结合基本面、行业趋势、估值、盈利预期与市场环境等因素综合判断。"))
+                    consentPoint(L("证券投资有风险，因参考雷达信号作出的任何投资决策及由此产生的盈亏，均由你自行判断、自行承担。"))
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                Button {
+                    consentChecked.toggle()
+                } label: {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: consentChecked ? "checkmark.square.fill" : "square")
+                            .font(.system(size: 20))
+                            .foregroundColor(consentChecked ? Theme.accent : Theme.textSecondary)
+                        Text(L("我已阅读并理解以上内容，同意仅将雷达信号作为技术研究参考，不作为投资建议"))
+                            .font(.footnote).foregroundColor(Theme.textPrimary)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(consentChecked ? [.isSelected] : [])
+
+                Button {
+                    consent.agree()
+                } label: {
+                    Text(L("同意并继续"))
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity).padding(.vertical, 13)
+                        .background(consentChecked ? Theme.accent : Theme.accent.opacity(0.35))
+                        .foregroundColor(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(!consentChecked)
+            }
+            .padding(20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func consentPoint(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text("•").foregroundColor(Theme.textSecondary)
+            Text(text).font(.footnote).foregroundColor(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     /// 点气泡 → 直接跑分析，成功后 push 详情页（不经过分析 Tab 的条件页）。
