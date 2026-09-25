@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 图例兼作图层开关，竖屏、全屏与分享长图共用同一份显示状态。
 ///
-/// 紧贴图表下方：紧凑小标签、放不下自动换行；关掉的图层变淡。
+/// 紧贴图表上方：紧凑小标签、放不下自动换行；关掉的图层变淡。
 struct ChartLegend: View {
     @ObservedObject var vm: ChanViewModel
     var isStatic = false

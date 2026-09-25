@@ -27,11 +27,11 @@ struct ChartFullscreenView: View {
             VStack(spacing: 8) {
                 header
 
-                ChanChartView(analysis: analysis, vm: vm,
-                              priceHeight: priceH, macdHeight: macdH)
-
                 ChartLegend(vm: vm)
                     .padding(.horizontal, 8)
+
+                ChanChartView(analysis: analysis, vm: vm,
+                              priceHeight: priceH, macdHeight: macdH)
             }
             .padding(.top, 6)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
