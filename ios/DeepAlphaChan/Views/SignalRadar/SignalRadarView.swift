@@ -310,13 +310,14 @@ struct SignalRadarView: View {
         var id: String { signal.id }
     }
 
-    /// 三档环的半径比例 + 环上标注的大致时间跨度文案，参考圈和气泡摆位共用同一份。
-    /// 各档环带宽度按 5:3:2 分配（0.5 / 0.8 / 1.0）：最近一周信号最多、也最该看清，
-    /// 给最大的中心区域；等分成三档时一周内只有 1/3 半径，气泡全挤在中间。
+    /// 三档参考环：半径与气泡同一套「按天数平方根」映射（RadarOrbitSpacing.timeRadius），
+    /// 环上标注大致时间跨度。1 周内 ≈ 0.48、2 周内 ≈ 0.68、1 月内 = 1.0。
     /// 用计算属性而非 static let：L() 依赖运行时语言设置，static let 只会算一次，
     /// 用户切换语言后文案不会跟着变。
     static var ringSpecs: [(scale: Double, label: String)] {
-        [(0.5, L("1周内")), (0.8, L("2周内")), (1.0, L("1月内"))]
+        zip(ringBandMaxDays, [L("1周内"), L("2周内"), L("1月内")]).map {
+            (RadarOrbitSpacing.timeRadius(daysAgo: $0.0), $0.1)
+        }
     }
 
     /// 场边距：最外环（scale 1.0）到容器四边留出的空白，给气泡的阴影 + 右上角「新」
@@ -333,23 +334,12 @@ struct SignalRadarView: View {
         (max(0, w / 2 - fieldInset), max(0, h / 2 - fieldInset))
     }
 
-    /// 每个环位内部按 daysAgo 线性插值的时间跨度上限（1月内档没有硬边界，用 30 天封顶）。
+    /// 三档时间跨度上限（天），参考环与时间档共用。
     private static let ringBandMaxDays: [Int] = [7, 14, 30]
 
-    /// 时间距离 → 半径：当天为零，按三个时间刻度分段线性递增。
-    /// 仅同一天的信号共用半径，不能按整个时间档位平均。
+    /// 时间距离 → 半径：按天数平方根（见 RadarOrbitSpacing.timeRadius），当天为零。
     static func ringRadius(forDaysAgo daysAgo: Int, fieldRadius: Double) -> Double {
-        let scales = ringSpecs.map(\.scale)
-        if daysAgo <= ringBandMaxDays[0] {
-            let t = Double(daysAgo) / Double(ringBandMaxDays[0])
-            return t * scales[0] * fieldRadius
-        }
-        if daysAgo <= ringBandMaxDays[1] {
-            let t = Double(daysAgo - ringBandMaxDays[0]) / Double(ringBandMaxDays[1] - ringBandMaxDays[0])
-            return (scales[0] + t * (scales[1] - scales[0])) * fieldRadius
-        }
-        let t = min(1.0, Double(daysAgo - ringBandMaxDays[1]) / Double(ringBandMaxDays[2] - ringBandMaxDays[1]))
-        return (scales[1] + t * (scales[2] - scales[1])) * fieldRadius
+        RadarOrbitSpacing.timeRadius(daysAgo: daysAgo, horizon: ringBandMaxDays[2]) * fieldRadius
     }
 
     /// daysAgo → 时间档：0=1周内、1=2周内、2=1月内（含更早）。
@@ -357,12 +347,10 @@ struct SignalRadarView: View {
         daysAgo <= ringBandMaxDays[0] ? 0 : (daysAgo <= ringBandMaxDays[1] ? 1 : 2)
     }
 
-    /// 外圈本来就该塞得下更多气泡（越久远、越多信号还没被覆盖掉），所以额外按环位
-    /// 把直径缩小一档，不然外圈越挤越点不到。和「买卖点级别」的大小是叠乘关系。
+    /// 越远越小（按天连续递减，见 RadarOrbitSpacing.timeSizeFactor），和「买卖点类型」的
+    /// 大小是叠乘关系：外圈越久远的信号越小，也更塞得下。
     static func ringSizeFactor(forDaysAgo daysAgo: Int) -> Double {
-        if daysAgo <= 7 { return 1.0 }
-        if daysAgo <= 14 { return 0.85 }
-        return 0.7
+        RadarOrbitSpacing.timeSizeFactor(daysAgo: daysAgo)
     }
 
     /// 气泡摆位：离中心的距离严格由时间决定（正圆轨道），方向任意。
@@ -466,9 +454,10 @@ struct SignalRadarView: View {
     // MARK: - 图例
 
     private var legend: some View {
-        // 大小、深浅、边框分别管三件不同的事，拆成独立行说清楚，不然挤在一起
-        // 用户会把"大小"和"深浅"都读成"这个信号有多强"，浪费一个维度。
+        // 颜色、大小、距离、角标各管一件事，一行说一件，不然挤在一起用户会把
+        // 「大小」和「深浅」都读成「这个信号有多强」。
         VStack(alignment: .leading, spacing: 6) {
+            // 深浅 = 强弱：渐变条两端标出弱→强
             HStack(spacing: 14) {
                 legendBar(label: L("买"), color: Theme.up,
                           gradient: [Color(hex: 0xF87185), Color(hex: 0x780F26)])
@@ -476,15 +465,35 @@ struct SignalRadarView: View {
                           gradient: [Color(hex: 0x6EE7B7), Color(hex: 0x045A40)])
             }
             HStack(spacing: 6) {
-                Text(L("大小=确定性")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                Text(L("大小=买卖点类型")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
                 levelDot(diameter: SignalRadarView.diameter(forLevel: 1), label: L("一类"))
                 levelDot(diameter: SignalRadarView.diameter(forLevel: 2), label: L("二类"))
                 levelDot(diameter: SignalRadarView.diameter(forLevel: 3), label: L("三类"))
+                Text(L("· 越远越小")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
-            Text(L("深浅=信号强弱（越深越强） · 虚线边框=未确认 · 居中=越新 · 点击查看分析"))
+            Text(L("距离=时间：越靠中心越新，最外圈约 1 个月前"))
+                .font(.system(size: 10))
+                .foregroundColor(Theme.textSecondary)
+            HStack(spacing: 6) {
+                legendBadge(L("共振"), color: Theme.accent)
+                Text(L("日线与30分钟同向")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                legendBadge(L("新"), color: Theme.segment)
+                Text(L("当日新出现")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+            }
+            Text(L("虚线边框=未确认 · 点击气泡查看分析"))
                 .font(.system(size: 10))
                 .foregroundColor(Theme.textSecondary)
         }
+    }
+
+    /// 图例里的角标样例：与气泡上的「共振」「新」同一样式。
+    private func legendBadge(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 8, weight: .bold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1.5)
+            .background(color, in: Capsule())
     }
 
     /// 图例里的买卖点级别参考点：真实按 `diameter(forLevel:)` 等比缩小展示。
@@ -495,12 +504,15 @@ struct SignalRadarView: View {
         }
     }
 
+    /// 深浅图例：「买 弱 ▬▬▬ 强」，渐变与气泡同一套配色，越深越强。
     private func legendBar(label: String, color: Color, gradient: [Color]) -> some View {
         HStack(spacing: 6) {
             Text(label).font(.caption.bold()).foregroundColor(color)
+            Text(L("弱")).font(.system(size: 9)).foregroundColor(Theme.textSecondary)
             RoundedRectangle(cornerRadius: 999)
                 .fill(LinearGradient(colors: gradient, startPoint: .leading, endPoint: .trailing))
                 .frame(height: 7)
+            Text(L("强")).font(.system(size: 9)).foregroundColor(Theme.textSecondary)
         }
     }
 

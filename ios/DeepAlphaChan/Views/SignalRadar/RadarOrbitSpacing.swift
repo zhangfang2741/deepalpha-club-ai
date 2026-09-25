@@ -40,6 +40,20 @@ enum RadarOrbitSpacing {
 // MARK: - 时间轨道（正圆）
 
 extension RadarOrbitSpacing {
+    /// 时间 → 归一化半径：√(天数 / horizon)，horizon 天及更早在最外圈。
+    /// 平方根让最近几天之间的间距拉开（当天→1 天 ≈ 0.18，29→30 天 ≈ 0.01），
+    /// 越新越靠中心的顺序不变。
+    static func timeRadius(daysAgo: Int, horizon: Int = 30) -> Double {
+        (min(1, Double(max(0, daysAgo)) / Double(max(1, horizon)))).squareRoot()
+    }
+
+    /// 时间 → 气泡尺寸系数：越远越小，按天连续递减（当天 1.0，30 天及更早 0.55）。
+    /// 与买卖点类型的直径相乘，保留一/二/三类的相对大小。
+    static func timeSizeFactor(daysAgo: Int, horizon: Int = 30, minFactor: Double = 0.55) -> Double {
+        let t = min(1, Double(max(0, daysAgo)) / Double(max(1, horizon)))
+        return 1 - (1 - minFactor) * t
+    }
+
     /// 同一天气泡所在圆轨道的归一化半径（占场半径比例）。
     ///
     /// 远近严格由时间决定：默认就是时间半径。只有当这条圆轨道周长放不下同一天的全部

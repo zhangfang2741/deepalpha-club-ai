@@ -51,30 +51,34 @@ struct PanicIndexStrip: View {
                 }
             }
 
-            if let resp {
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text("\(Int(resp.current.score.rounded()))")
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundColor(PanicIndexStrip.ratingColor(resp.current.score))
-                    Text(PanicIndexStrip.ratingLabel(resp.current.rating))
-                        .font(.system(size: 10))
-                        .foregroundColor(Theme.textSecondary)
-                        .lineLimit(1)
-                }
-                sparkline(resp)
-            } else if panicVM.failedMarkets.contains(market) {
-                Button { panicVM.retry(market) } label: {
-                    HStack(spacing: 3) {
-                        Image(systemName: "arrow.clockwise").font(.system(size: 10))
-                        Text(L("重试")).font(.system(size: 11))
+            // 三种状态共用分数行、间距和走势图的高度，避免异步响应挤动下方雷达。
+            VStack(alignment: .leading, spacing: 6) {
+                if let resp {
+                    HStack(alignment: .firstTextBaseline, spacing: 3) {
+                        Text("\(Int(resp.current.score.rounded()))")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundColor(PanicIndexStrip.ratingColor(resp.current.score))
+                        Text(PanicIndexStrip.ratingLabel(resp.current.rating))
+                            .font(.system(size: 10))
+                            .foregroundColor(Theme.textSecondary)
+                            .lineLimit(1)
                     }
-                    .foregroundColor(Theme.textSecondary)
+                    .frame(height: 24)
+                    sparkline(resp)
+                } else if panicVM.failedMarkets.contains(market) {
+                    Button { panicVM.retry(market) } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "arrow.clockwise").font(.system(size: 10))
+                            Text(L("重试")).font(.system(size: 11))
+                        }
+                        .foregroundColor(Theme.textSecondary)
+                    }
+                } else {
+                    ProgressView().controlSize(.mini)
                 }
-                .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
-            } else {
-                ProgressView().controlSize(.mini)
-                    .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 54, alignment: .leading)
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
