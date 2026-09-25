@@ -161,7 +161,9 @@ async def lifespan(app: FastAPI):
         logger.info(
             "signal_radar_prewarm_scheduler_started",
             markets=settings.SIGNAL_RADAR_PREWARM_MARKETS,
-            interval_seconds=settings.SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS,
+            # 已改成按各市场收盘时间触发，不再是固定间隔；这个值现在只用来换算
+            # 缓存 TTL 下限/陈旧阈值，日志里换个字段名避免被当成实际扫描间隔。
+            cache_ttl_basis_seconds=settings.SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS,
         )
         # 共振标记盘中独立刷新（依赖预热产出的快照，随预热开关一起启用）
         signal_radar_sub_level_task = asyncio.create_task(run_signal_radar_sub_level_scheduler())

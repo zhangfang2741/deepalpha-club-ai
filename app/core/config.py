@@ -296,9 +296,13 @@ class Settings:
         self.SIGNAL_RADAR_PREWARM_ENABLED = os.getenv(
             "SIGNAL_RADAR_PREWARM_ENABLED", "true"
         ).lower() in ("true", "1", "yes")
-        # 预热间隔（秒），默认 6h，与缓存 TTL 对齐，保证缓存不过期空窗。
+        # 不再是实际预热间隔——预热已改成按各市场收盘时间触发（见
+        # signal_radar/scheduler.py 的 _next_close_trigger），同一交易日内日线不会
+        # 变，没必要按固定间隔盲扫。这个值现在只用来换算缓存 TTL 下限与陈旧阈值
+        # （见 signal_radar/service.py 的 _cache_ttl / _cache_stale_after），默认
+        # 给到 24h，对应「每个市场一天一次」的正常节奏。
         self.SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS = int(
-            os.getenv("SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS", "21600")
+            os.getenv("SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS", "86400")
         )
         # 预热覆盖的市场；逗号分隔。
         self.SIGNAL_RADAR_PREWARM_MARKETS = parse_list_from_env(
