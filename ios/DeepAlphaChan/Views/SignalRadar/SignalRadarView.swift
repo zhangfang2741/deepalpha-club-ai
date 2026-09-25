@@ -54,6 +54,11 @@ struct SignalRadarView: View {
                 } else {
                     metaRow
                     bubbleField
+                        // 切换市场/刷新时保留旧内容，调暗并盖加载指示、暂不响应点按（避免点进上一个市场的标的）
+                        .opacity(vm.isReloading ? 0.35 : 1)
+                        .allowsHitTesting(!vm.isReloading)
+                        .overlay { if vm.isReloading { ProgressView().tint(Theme.accent) } }
+                        .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
                     legend
                     dateRail
                     Spacer(minLength: 0)
@@ -223,7 +228,7 @@ struct SignalRadarView: View {
                             phase: layout.phase,
                             color: SignalRadarView.bubbleColor(
                                 side: layout.signal.side,
-                                depth: SignalRadarView.strengthDepth(layout.signal.signalStrength)),
+                                depth: SignalRadarView.levelDepth(layout.signal.level)),
                             isNew: layout.signal.date == dayDate,
                             onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name) }
                         )
@@ -373,7 +378,7 @@ struct SignalRadarView: View {
         // 每次布局每个信号只测量一次，排序和避让都使用最终尺寸。
         let metrics = signals.map { signal in
             RadarBubbleMetrics(symbol: signal.symbol,
-                               baseDiameter: diameter(forLevel: signal.level) * ringSizeFactor(forDaysAgo: age(signal)),
+                               baseDiameter: diameter(forStrength: signal.signalStrength) * ringSizeFactor(forDaysAgo: age(signal)),
                                maxDiameter: maxDiameter)
         }
         let sizedSignals = Array(zip(signals, metrics))
@@ -408,15 +413,24 @@ struct SignalRadarView: View {
         return layouts
     }
 
-    /// 买卖点级别 → 气泡直径：级别越高确定性越强，气泡越大。一类只是背驰迹象、
-    /// 尚待验证，最小；二类回踩不破中枢是初步确认；三类回踩完全不回中枢是最强
-    /// 确认，最大。单条信号自身「有没有走完」是另一件事，用气泡边框实/虚线表达
-    /// （见 RadarBubble，跟图表页「虚线=未确认」同一套语言），不叠加到大小上。
-    static func diameter(forLevel level: Int) -> Double {
+    /// 买卖点强弱 → 气泡直径：越强越大（弱 60 / 中 76 / 强 92），与详情页买卖点
+    /// 「强/中/弱」同一口径（一类按背驰力度比、二三类按中枢级别 + 回踩余地），未知按中。
+    /// 单条信号「有没有走完」用边框实/虚线表达（见 RadarBubble），不叠加到大小上。
+    static func diameter(forStrength strength: String) -> Double {
+        switch strength {
+        case "strong": return 92
+        case "weak": return 60
+        default: return 76
+        }
+    }
+
+    /// 买卖点类型 → 颜色深浅：一类最浅（只是背驰迹象、尚待验证）、二类居中（回踩不破
+    /// 中枢，初步确认）、三类最深（回踩完全不回中枢，确认程度最高）。
+    static func levelDepth(_ level: Int) -> Double {
         switch level {
-        case 1: return 60
-        case 2: return 76
-        default: return 92  // 三类
+        case 1: return 0.2
+        case 2: return 0.55
+        default: return 0.9
         }
     }
 
@@ -435,13 +449,7 @@ struct SignalRadarView: View {
         return abs(Calendar(identifier: .gregorian).dateComponents([.day], from: da, to: db).day ?? 0)
     }
 
-    /// 买卖点强弱 → 颜色深浅：越强越深。与详情页买卖点列表的「强/中/弱」同一口径
-    /// （一类按背驰力度比、二三类按中枢级别 + 回踩余地），未知值按中档。
-    static func strengthDepth(_ strength: String) -> Double {
-        SignalFormatting.strengthDepth(strength)
-    }
-
-    /// 与详情页共用强度渐变，避免两处颜色随各自修改而偏离。
+    /// 与详情页共用同一套渐变色（深浅含义在雷达上是买卖点类型）。
     static func bubbleColor(side: String, depth: Double) -> Color {
         SignalFormatting.radarColor(side: side, depth: depth)
     }
@@ -452,7 +460,7 @@ struct SignalRadarView: View {
         // 颜色、大小、距离、角标各管一件事，一行说一件，不然挤在一起用户会把
         // 「大小」和「深浅」都读成「这个信号有多强」。
         VStack(alignment: .leading, spacing: 6) {
-            // 深浅 = 强弱：渐变条两端标出弱→强
+            // 深浅 = 买卖点类型：渐变条两端标出一类→三类
             HStack(spacing: 14) {
                 legendBar(label: L("买"), color: Theme.up,
                           gradient: [Color(hex: 0xF87185), Color(hex: 0x780F26)])
@@ -460,10 +468,10 @@ struct SignalRadarView: View {
                           gradient: [Color(hex: 0x6EE7B7), Color(hex: 0x045A40)])
             }
             HStack(spacing: 6) {
-                Text(L("大小=买卖点类型")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
-                levelDot(diameter: SignalRadarView.diameter(forLevel: 1), label: L("一类"))
-                levelDot(diameter: SignalRadarView.diameter(forLevel: 2), label: L("二类"))
-                levelDot(diameter: SignalRadarView.diameter(forLevel: 3), label: L("三类"))
+                Text(L("大小=强弱")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                levelDot(diameter: SignalRadarView.diameter(forStrength: "weak"), label: L("弱"))
+                levelDot(diameter: SignalRadarView.diameter(forStrength: "medium"), label: L("中"))
+                levelDot(diameter: SignalRadarView.diameter(forStrength: "strong"), label: L("强"))
                 Text(L("· 越远越小")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
             Text(L("距离=时间：越靠中心越新，最外圈约 1 个月前"))
@@ -491,7 +499,7 @@ struct SignalRadarView: View {
             .background(color, in: Capsule())
     }
 
-    /// 图例里的买卖点级别参考点：真实按 `diameter(forLevel:)` 等比缩小展示。
+    /// 图例里的强弱参考点：真实按 `diameter(forStrength:)` 等比缩小展示。
     private func levelDot(diameter: Double, label: String) -> some View {
         HStack(spacing: 3) {
             Circle().fill(Theme.textSecondary).frame(width: diameter * 0.16, height: diameter * 0.16)
@@ -499,15 +507,15 @@ struct SignalRadarView: View {
         }
     }
 
-    /// 深浅图例：「买 弱 ▬▬▬ 强」，渐变与气泡同一套配色，越深越强。
+    /// 深浅图例：「买 一类 ▬▬▬ 三类」，渐变与气泡同一套配色，三类最深。
     private func legendBar(label: String, color: Color, gradient: [Color]) -> some View {
         HStack(spacing: 6) {
             Text(label).font(.caption.bold()).foregroundColor(color)
-            Text(L("弱")).font(.system(size: 9)).foregroundColor(Theme.textSecondary)
+            Text(L("一类")).font(.system(size: 9)).foregroundColor(Theme.textSecondary)
             RoundedRectangle(cornerRadius: 999)
                 .fill(LinearGradient(colors: gradient, startPoint: .leading, endPoint: .trailing))
                 .frame(height: 7)
-            Text(L("强")).font(.system(size: 9)).foregroundColor(Theme.textSecondary)
+            Text(L("三类")).font(.system(size: 9)).foregroundColor(Theme.textSecondary)
         }
     }
 

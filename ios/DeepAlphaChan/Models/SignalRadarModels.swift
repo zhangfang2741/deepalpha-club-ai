@@ -81,11 +81,11 @@ struct RadarSignal: Decodable, Identifiable {
     let signalType: String    // buy1 / sell1 …
     let date: String
     let price: Double
-    /// 形态技术面强度 0~1（决定看板淘汰排序；气泡大小由 `level` 决定，
-    /// 颜色深浅由 `signalStrength` 决定）
+    /// 形态技术面强度 0~1（决定看板淘汰排序；气泡大小由 `signalStrength` 决定，
+    /// 颜色深浅由 `level`（一/二/三类）决定）
     let strength: Double
     let bias: String
-    /// 买卖点强弱 strong / medium / weak，决定气泡颜色深浅（越强越深），
+    /// 买卖点强弱 strong / medium / weak，决定气泡大小（越强越大），
     /// 与详情页买卖点列表的「强/中/弱」一致。
     let signalStrength: String
     let confirmed: Bool
@@ -106,11 +106,10 @@ struct RadarSignal: Decodable, Identifiable {
     var isBuy: Bool { side == "buy" }
 
     /// 买卖点级别：1/2/3，取 signalType 末位数字（"buy2"/"sell2" 都取到 2），
-    /// 对买卖两侧通用。级别决定气泡大小（该类买卖点本身的确定性），映射见
-    /// SignalRadarView.diameter(forLevel:)——一类只是背驰迹象、尚待验证，
-    /// 气泡最小；三类回踩完全不回中枢是最强确认，气泡最大。单条信号自己
-    /// 「有没有走完」是另一件事，由 `confirmed` 字段驱动气泡边框虚实表达，
-    /// 不叠加到大小上。
+    /// 对买卖两侧通用。级别决定气泡颜色深浅（该类买卖点本身的确认程度），映射见
+    /// SignalRadarView.levelDepth(_:)——一类只是背驰迹象、尚待验证，最浅；三类
+    /// 回踩完全不回中枢是最强确认，最深。单条信号自己「有没有走完」是另一件事，
+    /// 由 `confirmed` 字段驱动气泡边框虚实表达。
     var level: Int {
         Int(String(signalType.suffix(1))) ?? 1
     }

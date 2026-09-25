@@ -58,7 +58,12 @@ final class SignalRadarViewModel: ObservableObject {
     }
 
     /// 正在主动拉取/轮询（转圈扫描态）。
-    var isScanning: Bool { isLoading }
+    /// 整页「扫描中」只在确实还没有任何数据可展示时出现；已有数据时（切换市场、刷新）
+    /// 保留旧内容、原地盖加载态，避免整块内容被替换导致页面上下跳动。
+    var isScanning: Bool { isLoading && days.isEmpty }
+
+    /// 已有内容、正在加载新数据（切换市场/universe、刷新）：旧内容调暗 + 加载指示，不换布局。
+    var isReloading: Bool { isLoading && !days.isEmpty }
 
     /// 轮询已用尽但后端仍在算（generating + 无数据、且当前没在轮询）。此时不干等，
     /// 前端展示「后台计算中，可稍后重试」——后台扫描会跑完并写缓存，重试即命中。
@@ -77,7 +82,7 @@ final class SignalRadarViewModel: ObservableObject {
     func switchMarket(_ m: StockMarket) {
         guard m != market else { return }
         market = m
-        response = nil
+        // 不清空 response：新市场数据回来前保留旧内容（调暗 + 加载指示），页面不跳动
         // 不同市场的 universe 列表不同，清掉旧的，等新市场响应回来再填。
         availableUniverses = []
         pendingUniverseKey = nil
@@ -91,7 +96,6 @@ final class SignalRadarViewModel: ObservableObject {
         guard key != activeUniverseKey else { return }
         universeByMarket[market] = key
         pendingUniverseKey = key
-        response = nil
         selectedDayIndex = 0
         Task { await load() }
     }
