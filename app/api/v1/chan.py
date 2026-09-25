@@ -40,7 +40,7 @@ from app.services.chan.analyzer import ChanAnalyzer
 from app.services.chan.gap import analyze_structure_gap
 from app.services.chan.sub_level_service import current_sub_level
 from app.services.chan.sub_level_service import signal_out as _signal_out
-from app.services.skills.kline import fetch_kline
+from app.services.skills.kline import LIVE_MAX_AGE, fetch_kline
 
 router = APIRouter()
 _analyzer = ChanAnalyzer()
@@ -88,13 +88,13 @@ def _zip_divergences(strokes: list, divergences: list) -> list[tuple]:
 
 async def _fetch_bars_or_http_error(
     user_id: int, symbol: str, start: str, end: str, freq: str, redis: Redis | None,
-    *, use_cache: bool = True,
+    *, max_age: int | None = None,
 ) -> list[dict]:
     """取 K 线；数据源错误转成可读的 HTTP 错误（400 可读原因 / 502 上游故障 / 404 无数据）。"""
     try:
         bars = await fetch_kline(
             user_id=user_id, symbol=symbol, start_date=start, end_date=end, freq=freq, redis=redis,
-            use_cache=use_cache,
+            max_age=max_age,
         )
     except ValueError as e:
         # 数据源配置错误、认证失败、限流等可读信息直接透传给用户
@@ -146,9 +146,9 @@ async def chan_analysis(
     start_date = _visible_start(start_date, end_date, freq)
     anchor_start = _anchor_start(start_date, freq, warmup_days)
 
-    # 详情页现拉现算、不读K线缓存：盘中要看到刚走出的K线（单次取数约 1 秒，计算毫秒级）
+    # 详情页准实时：只用 1 分钟内的K线缓存，盘中能看到刚走出的K线
     bars = await _fetch_bars_or_http_error(user.id, symbol, anchor_start, end_date, freq, redis,
-                                           use_cache=False)
+                                           max_age=LIVE_MAX_AGE)
     result = _analyzer.analyze(symbol, bars, lang=lang, visible_from=start_date, freq=freq)
 
     pivot_phase_out: PivotPhaseOut | None = None
@@ -376,13 +376,14 @@ async def chan_sub_level(
                 parent_freq=parent_freq)
 
     async def fetch_parent(start: str, end: str, freq: str) -> list[dict]:
-        return await _fetch_bars_or_http_error(user.id, symbol, start, end, freq, redis, use_cache=False)
+        return await _fetch_bars_or_http_error(user.id, symbol, start, end, freq, redis, max_age=LIVE_MAX_AGE)
 
     # 与信号雷达共用唯一入口（固定口径 + 结论缓存）：气泡上的共振与这里是同一次计算。
     # start_date 不再参与次级别计算（结论描述「现在」，与详情页日期范围无关），保留兼容。
-    # 详情页现拉现算（不读结论与K线缓存），新结论写回缓存，雷达下次读到的就是这份
+    # 详情页准实时（结论与K线都只用 1 分钟内的缓存），新结论写回缓存，雷达下次读到的就是这份
     return await current_sub_level(symbol, parent_freq, end_date=end_date, user_id=user.id,
-                                   redis=redis, lang=lang, fetch_parent=fetch_parent, use_cache=False)
+                                   redis=redis, lang=lang, fetch_parent=fetch_parent,
+                                   max_age=LIVE_MAX_AGE)
 
 
 @router.post("/gap", response_model=GapJobStatus)

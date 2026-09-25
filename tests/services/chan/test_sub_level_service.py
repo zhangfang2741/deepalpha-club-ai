@@ -15,7 +15,7 @@ def _daily(bias: str) -> ChanAnalysisResult:
 async def test_fetches_30min_window_and_builds_verdict(monkeypatch):
     seen = {}
 
-    async def fake_fetch(user_id, symbol, start_date, end_date, freq="daily", *, redis=None, use_cache=True):
+    async def fake_fetch(user_id, symbol, start_date, end_date, freq="daily", *, redis=None, max_age=None):
         seen.update(symbol=symbol, start=start_date, end=end_date, freq=freq)
         return _intraday_bars(days=16)
 
@@ -51,7 +51,7 @@ async def test_weekly_parent_fetches_daily_window(monkeypatch):
 
     seen = {}
 
-    async def fake_fetch(user_id, symbol, start_date, end_date, freq="daily", *, redis=None, use_cache=True):
+    async def fake_fetch(user_id, symbol, start_date, end_date, freq="daily", *, redis=None, max_age=None):
         seen.update(start=start_date, freq=freq)
         return _trending_bars(200, start_price=100.0, up=True)
 
@@ -89,7 +89,7 @@ def test_canonical_end_clamps_to_server_today():
 def _fake_fetch(calls):
     from tests.services.chan.test_czsc_adapter import _intraday_bars, _trending_bars
 
-    async def fetch(user_id, symbol, start_date, end_date, freq="daily", *, redis=None, use_cache=True):
+    async def fetch(user_id, symbol, start_date, end_date, freq="daily", *, redis=None, max_age=None):
         calls.append((symbol, start_date, end_date, freq))
         return _intraday_bars(days=16) if freq == "30min" else _trending_bars(300, start_price=100.0, up=True)
     return fetch
@@ -135,23 +135,22 @@ async def test_refresh_recomputes_and_overwrites(monkeypatch):
     assert len(calls) > n, "refresh 必须重算"
 
 
-async def test_use_cache_false_recomputes_live_and_bypasses_kline_cache(monkeypatch):
-    """详情页现拉现算：不读结论缓存、次级别K线也不读缓存；新结论写回供雷达复用。"""
+async def test_max_age_zero_recomputes_live_and_passes_freshness_to_kline(monkeypatch):
+    """详情页准实时：max_age=0 不读结论缓存、K线也按同一新鲜度取；新结论写回供雷达复用。"""
     calls: list = []
-    seen_use_cache: list = []
+    seen_max_age: list = []
     base = _fake_fetch(calls)
 
-    async def fetch(user_id, symbol, start_date, end_date, freq="daily", *, redis=None, use_cache=True):
-        seen_use_cache.append(use_cache)
+    async def fetch(user_id, symbol, start_date, end_date, freq="daily", *, redis=None, max_age=None):
+        seen_max_age.append(max_age)
         return await base(user_id, symbol, start_date, end_date, freq, redis=redis)
 
     monkeypatch.setattr(sub_level_service, "fetch_kline", fetch)
     redis = _MemRedis()
     await sub_level_service.current_sub_level("AAPL", "daily", end_date="2026-09-24", redis=redis)
     n = len(calls)
-    seen_use_cache.clear()
-    await sub_level_service.current_sub_level("AAPL", "daily", end_date="2026-09-24", redis=redis,
-                                              use_cache=False)
+    seen_max_age.clear()
+    await sub_level_service.current_sub_level("AAPL", "daily", end_date="2026-09-24", redis=redis, max_age=0)
     assert len(calls) > n, "不读结论缓存，重新计算"
-    assert seen_use_cache and not any(seen_use_cache), "K线也不读缓存"
+    assert seen_max_age and all(m == 0 for m in seen_max_age), "K线按同一新鲜度取"
     assert redis.store, "新结论写回缓存"

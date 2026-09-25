@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 import httpx
 from redis.asyncio import Redis
@@ -46,6 +47,22 @@ _INTRADAY_CACHE_TTL = 60 * 3
 # 北京时间白天扫描的结果会一直缺当天）。
 _RECENT_CACHE_TTL = 60 * 30
 _FMP_INTRADAY_URL = "https://financialmodelingprep.com/stable/historical-chart/30min"
+# 分析详情页的缓存新鲜度（秒）：盘中最多晚 1 分钟，1 分钟内反复打开/切周期/点次级别秒开。
+# 不直接完全不缓存：美股盘中 FMP 单次取数实测 1.7~10 秒，每次都现取体验太差。
+LIVE_MAX_AGE = 60
+
+_fmp_client_instance: httpx.Client | None = None
+
+
+def _fmp_get(url: str, params: dict | None = None, timeout: float = 30) -> httpx.Response:
+    """FMP 请求走共享客户端复用连接：实测每次新建连接平均 ~6.6s，复用后 ~2.9s（省握手）。
+
+    httpx.Client 线程安全，可被取数线程池并发使用。
+    """
+    global _fmp_client_instance
+    if _fmp_client_instance is None:
+        _fmp_client_instance = httpx.Client(timeout=timeout)
+    return _fmp_client_instance.get(url, params=params, timeout=timeout)
 # FMP 30 分钟端点单次最多约一个月数据，按 20 天一段分段拉取
 _FMP_INTRADAY_CHUNK_DAYS = 20
 # 东方财富 klt：101=日线 102=周线 30=30 分钟
@@ -114,19 +131,26 @@ async def fetch_kline(
     freq: str = "daily",
     *,
     redis: Redis | None = None,
-    use_cache: bool = True,
+    max_age: int | None = None,
 ) -> list[dict]:
     """获取 K 线数据（Redis 优先），返回 list[{time, open, high, low, close, volume}]。
 
-    use_cache=False：不读缓存、直接向数据源取最新（分析详情页用，盘中要看到刚走出的K线；
-    实测单次取数约 1 秒），取到的新数据仍写回缓存，供雷达等批量场景复用。
+    max_age：只接受这么多秒以内写入的缓存（分析详情页用 LIVE_MAX_AGE，盘中要看到刚走出的
+    K线）；过旧就向数据源重新取并写回。None=按缓存自身 TTL，0=不读缓存。缓存年龄由
+    「写入时 TTL - 剩余 TTL」反推，不改缓存格式。
     """
     # 先归一化再算缓存键：否则 0700 / 00700 / 0700.HK 是同一支股票却各存一份
     market, clean_symbol = normalize_symbol(symbol)
     cache_key = _cache_key(user_id, clean_symbol, start_date, end_date, freq)
 
-    if redis and use_cache:
+    stale: Any = None  # 超过 max_age 的旧缓存：数据源失败时兜底
+    if redis and max_age != 0:
         cached = await get_json(redis, cache_key)
+        if cached and max_age is not None:
+            remaining = await redis.ttl(cache_key)
+            written_ttl = _cache_ttl_for(freq, end_date)
+            if remaining is None or remaining < 0 or written_ttl - remaining > max_age:
+                stale, cached = cached, None
         if cached:
             logger.debug("kline_cache_hit", key=cache_key)
             return cached
@@ -145,13 +169,20 @@ async def fetch_kline(
     # chart 接口海外可达，且同样覆盖港股（0700.HK）与 A 股（600519.SS/000001.SZ），
     # 代码形态与 fmp_symbol() 一致。东方财富保留为回退，供中国大陆部署/开发时兜底
     # （彼时 Yahoo 可能被墙）。
-    if market is Market.US:
-        if freq == "30min":
-            bars = await _fetch_fmp_intraday(fmp_symbol(symbol), start_date, end_date)
+    try:
+        if market is Market.US:
+            if freq == "30min":
+                bars = await _fetch_fmp_intraday(fmp_symbol(symbol), start_date, end_date)
+            else:
+                bars = await _fetch_fmp(fmp_symbol(symbol), start_date, end_date, freq)
         else:
-            bars = await _fetch_fmp(fmp_symbol(symbol), start_date, end_date, freq)
-    else:
-        bars = await _fetch_cn_hk(symbol, start_date, end_date, freq)
+            bars = await _fetch_cn_hk(symbol, start_date, end_date, freq)
+    except Exception as e:
+        # 准实时取数失败（超时/限流/上游故障）但有稍旧的缓存：退回旧数据，别让详情页直接报错
+        if stale:
+            logger.warning("kline_fetch_failed_serving_stale", symbol=symbol, freq=freq, error=str(e))
+            return stale
+        raise
 
     if redis and bars:
         await set_json(redis, cache_key, bars, expire=_cache_ttl_for(freq, end_date))
@@ -185,7 +216,7 @@ async def _fetch_fmp_intraday(symbol: str, start: str, end: str) -> list[dict]:
         reraise=True,
     )
     def _chunk(frm: str, to: str) -> list[dict]:
-        resp = httpx.get(
+        resp = _fmp_get(
             _FMP_INTRADAY_URL,
             params={"symbol": symbol, "from": frm, "to": to, "apikey": _FMP_KEY},
             timeout=30,
@@ -241,7 +272,7 @@ async def _fetch_fmp(symbol: str, start: str, end: str, freq: str) -> list[dict]
     )
     def _sync():
         # FMP 的 EOD 端点仅提供日线；周线在本地聚合，因此始终拉日线
-        resp = httpx.get(
+        resp = _fmp_get(
             _FMP_URL,
             params={"symbol": symbol, "from": start, "to": end, "apikey": _FMP_KEY},
             timeout=30,

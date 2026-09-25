@@ -60,7 +60,7 @@ async def test_fetch_fmp_retries_then_succeeds(monkeypatch):
             [{"date": "2024-01-02", "open": 1, "high": 2, "low": 0.5, "close": 1.5, "volume": 100}],
         )
 
-    monkeypatch.setattr(kline.httpx, "get", fake_get)
+    monkeypatch.setattr(kline, "_fmp_get", fake_get)
 
     bars = await kline._fetch_fmp("NVDA", "2024-01-01", "2024-02-01", "daily")
 
@@ -80,7 +80,7 @@ async def test_fetch_fmp_persistent_429_raises_readable_error(monkeypatch):
     def fake_get(url, params=None, timeout=None):
         return _FakeResp(429)
 
-    monkeypatch.setattr(kline.httpx, "get", fake_get)
+    monkeypatch.setattr(kline, "_fmp_get", fake_get)
 
     with pytest.raises(ValueError, match="数据源请求过于频繁"):
         await kline._fetch_fmp("NVDA", "2024-01-01", "2024-02-01", "daily")
@@ -135,7 +135,7 @@ async def test_fetch_fmp_uses_dividend_adjusted_fields(monkeypatch):
              "volume": 100},
         ])
 
-    monkeypatch.setattr(kline.httpx, "get", fake_get)
+    monkeypatch.setattr(kline, "_fmp_get", fake_get)
     bars = await kline._fetch_fmp("NVDA", "2024-01-01", "2024-02-01", "daily")
     assert bars == [
         {"time": "2024-01-02", "open": 9.0, "high": 11.0, "low": 8.0,
@@ -226,7 +226,7 @@ async def test_fetch_fmp_intraday_chunks_range_and_merges(monkeypatch):
             {"date": "2026-09-10 10:00:00", "open": 1, "high": 2, "low": 0.5, "close": 1.5, "volume": 10},
         ])
 
-    monkeypatch.setattr(kline.httpx, "get", fake_get)
+    monkeypatch.setattr(kline, "_fmp_get", fake_get)
     bars = await kline._fetch_fmp_intraday("AAPL", "2026-08-15", "2026-09-24")
 
     assert len(calls) >= 2
@@ -263,22 +263,74 @@ async def test_fetch_kline_us_30min_routes_to_fmp_intraday(monkeypatch):
     assert bars[0]["time"] == "2026-09-24 09:30"
 
 
-async def test_fetch_kline_use_cache_false_skips_read_but_writes_fresh(monkeypatch):
-    """详情页现拉现算：use_cache=False 不读缓存（拿到盘中最新K线），但新数据照样写回缓存供雷达复用。"""
-    from tests.services.chan.test_sub_level_service import _MemRedis
+class _TtlRedis:
+    """get/set/ttl 内存替身：ttl 返回剩余秒数，可手动设置模拟缓存写入了多久。"""
 
+    def __init__(self):
+        self.store: dict[str, str] = {}
+        self.remaining: dict[str, int] = {}
+
+    async def get(self, key):
+        return self.store.get(key)
+
+    async def set(self, key, value, ex=None):
+        self.store[key] = value
+        self.remaining[key] = ex or -1
+
+    async def ttl(self, key):
+        return self.remaining.get(key, -2)
+
+
+async def test_fetch_kline_max_age_only_accepts_recent_cache(monkeypatch):
+    """详情页准实时：只接受 max_age 秒内写入的缓存（年龄 = 写入 TTL - 剩余 TTL），过旧就重新取并写回。"""
     fresh = [{"time": "2026-09-25 10:30", "open": 1, "high": 2, "low": 0.5, "close": 1.9, "volume": 1}]
 
     async def fake_intraday(symbol, start, end):
         return fresh
 
     monkeypatch.setattr(kline, "_fetch_fmp_intraday", fake_intraday)
-    redis = _MemRedis()
+    redis = _TtlRedis()
     key = kline._cache_key(None, "AAPL", "2026-09-01", "2026-09-25", "30min")
     stale = [{"time": "2026-09-24 15:30", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]
-    await kline.set_json(redis, key, stale, expire=600)
+    full = kline._cache_ttl_for("30min", "2026-09-25")
+    await kline.set_json(redis, key, stale, expire=full)
 
-    assert await kline.fetch_kline(None, "AAPL", "2026-09-01", "2026-09-25", "30min", redis=redis) == stale
-    got = await kline.fetch_kline(None, "AAPL", "2026-09-01", "2026-09-25", "30min", redis=redis, use_cache=False)
-    assert got == fresh
-    assert await kline.get_json(redis, key) == fresh  # 写回了新数据
+    redis.remaining[key] = full - 30  # 写入 30 秒
+    got = await kline.fetch_kline(None, "AAPL", "2026-09-01", "2026-09-25", "30min", redis=redis, max_age=60)
+    assert got == stale, "60 秒内的缓存照用"
+
+    redis.remaining[key] = full - 120  # 写入 2 分钟
+    got = await kline.fetch_kline(None, "AAPL", "2026-09-01", "2026-09-25", "30min", redis=redis, max_age=60)
+    assert got == fresh, "超过 max_age 重新取"
+    assert await kline.get_json(redis, key) == fresh, "新数据写回缓存"
+
+    redis.remaining[key] = full - 1
+    got = await kline.fetch_kline(None, "AAPL", "2026-09-01", "2026-09-25", "30min", redis=redis, max_age=0)
+    assert got == fresh, "max_age=0 不读缓存"
+
+
+async def test_fetch_kline_falls_back_to_stale_cache_when_source_fails(monkeypatch):
+    """准实时取数失败（数据源超时/报错）时退回用稍旧的缓存，不让详情页直接报错。"""
+    async def boom(symbol, start, end):
+        raise ValueError("数据源暂时不可用")
+
+    monkeypatch.setattr(kline, "_fetch_fmp_intraday", boom)
+    redis = _TtlRedis()
+    key = kline._cache_key(None, "AAPL", "2026-09-01", "2026-09-25", "30min")
+    stale = [{"time": "2026-09-25 10:00", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]
+    full = kline._cache_ttl_for("30min", "2026-09-25")
+    await kline.set_json(redis, key, stale, expire=full)
+    redis.remaining[key] = full - 300
+    assert await kline.fetch_kline(None, "AAPL", "2026-09-01", "2026-09-25", "30min",
+                                   redis=redis, max_age=60) == stale
+
+
+async def test_fetch_kline_raises_when_source_fails_without_cache(monkeypatch):
+    """没有任何缓存可兜底时照常抛错，由接口层转成可读的 HTTP 错误。"""
+    async def boom(symbol, start, end):
+        raise ValueError("数据源暂时不可用")
+
+    monkeypatch.setattr(kline, "_fetch_fmp_intraday", boom)
+    import pytest
+    with pytest.raises(ValueError):
+        await kline.fetch_kline(None, "AAPL", "2026-09-01", "2026-09-25", "30min", redis=_TtlRedis(), max_age=60)
