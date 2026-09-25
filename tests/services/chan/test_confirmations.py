@@ -58,14 +58,14 @@ def test_last_stroke_unconfirmed():
 
 
 def test_segment_confirmed_once_left():
-    """线段仅在仍含最后一笔（右侧前沿）时未确认；被后续笔离开后应确认。"""
+    """线段已被特征序列终结、且被后续笔离开后才确认；仍含最后一笔或尚未终结的都未确认。"""
     analyzer = ChanAnalyzer()
     result = analyzer.analyze("TEST", _zigzag_bars())
 
     last_stroke = result.strokes[-1] if result.strokes else None
     for seg in result.segments:
         still_frontier = bool(seg.strokes) and seg.strokes[-1] is last_stroke
-        assert seg.confirmed == (not still_frontier)
+        assert seg.confirmed == (seg.terminated and not still_frontier)
 
 
 def test_pivot_confirmed_once_left():

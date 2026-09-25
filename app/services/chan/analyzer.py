@@ -33,7 +33,6 @@ from app.services.chan.narrative import MarketNarrative, _volume_readout, build_
 from app.services.chan.pivot import (
     Pivot,
     classify_walk_type,
-    find_segment_pivots,
 )
 from app.services.chan.pivot_phase import PivotPhase, build_pivot_phase
 from app.services.chan.segment import Segment, find_segments
@@ -200,14 +199,9 @@ class ChanAnalyzer:
         # 5. 中枢识别（笔级别）：同样来自 czsc 转换结果
         result.stroke_pivots = structures.stroke_pivots
 
-        # 5b. 中枢识别（线段级别）
-        if len(result.segments) >= 3:
-            result.segment_pivots = find_segment_pivots(result.segments)
-        logger.debug(
-            "chan_pivots",
-            stroke_pivots=len(result.stroke_pivots),
-            segment_pivots=len(result.segment_pivots),
-        )
+        # 不再在日线上另算线段级中枢：两年日线只有几条线段，线段级中枢往往一个铺满全图、
+        # 信息量低；更高一级结构按 czsc 思路到周线上看。segment_pivots 保持为空（接口兼容）。
+        logger.debug("chan_pivots", stroke_pivots=len(result.stroke_pivots))
 
         # 6. MACD计算
         result.macd = calc_macd(bars)
@@ -217,7 +211,7 @@ class ChanAnalyzer:
         # 7b. 线段级背驰（更高级别）
         if len(result.segments) >= 2:
             result.segment_divergences = find_segment_divergences(
-                result.segments, lang, pivots=result.segment_pivots
+                result.segments, lang, pivots=result.stroke_pivots
             )
         diverged_count = sum(1 for d in result.divergences if d.is_diverged)
         logger.debug("chan_divergences", total=len(result.divergences), diverged=diverged_count)
@@ -241,10 +235,8 @@ class ChanAnalyzer:
         result.pending_notes = self._build_pending_notes(result, lang)
 
         # 10. 当前状态摘要
-        # 走势类型：优先用线段级中枢（更高级别），不足时退回笔级中枢
-        result.walk_type = classify_walk_type(
-            result.segment_pivots if result.segment_pivots else result.stroke_pivots
-        )
+        # 走势类型：按笔级中枢（czsc）的排布判定
+        result.walk_type = classify_walk_type(result.stroke_pivots)
         result.walk_type_label = self._walk_type_label(result.walk_type, lang)
         result.trend_outlook = self._compute_trend_outlook(result)
         result.trend_outlook_label = self._trend_outlook_label(result.trend_outlook, lang)
@@ -368,7 +360,7 @@ class ChanAnalyzer:
             is_last = i == len(r.strokes) - 1
             s.confirmed = (not is_last) and s.end.confirmed
 
-        # 线段：由笔构成，仅当仍含整段笔序列的最末一笔时未确认
+        # 线段：由笔构成，仍含整段笔序列的最末一笔、或尚未被特征序列终结时未确认
         # （此时尚无后续笔离开以锁定其结束；一旦有笔离开，线段即已确认，
         #  即便它是最后一条线段）。
         last_stroke = r.strokes[-1] if r.strokes else None
@@ -376,7 +368,8 @@ class ChanAnalyzer:
             still_frontier = (
                 last_stroke is not None and bool(seg.strokes) and seg.strokes[-1] is last_stroke
             )
-            seg.confirmed = not still_frontier
+            # 未终结（数据到头、终点暂取当前极值）的线段即使后面已有笔也不算确认
+            seg.confirmed = seg.terminated and not still_frontier
 
         # 中枢：由笔/线段构成，仅当仍含整段序列的最末元素时未确认。
         for pivots, elements in ((r.stroke_pivots, r.strokes), (r.segment_pivots, r.segments)):
@@ -745,8 +738,7 @@ class ChanAnalyzer:
             parts = [
                 f"Identified {len(r.merged_candles)} merged candles, {len(r.fractals)} fractals, "
                 f"{len(r.strokes)} strokes, {len(r.segments)} segments, "
-                f"{len(r.stroke_pivots)} stroke-level pivots, "
-                f"{len(r.segment_pivots)} segment-level pivots. "
+                f"{len(r.stroke_pivots)} pivots. "
             ]
             if r.current_trend:
                 parts.append(r.current_trend + ". ")
@@ -773,8 +765,7 @@ class ChanAnalyzer:
             f"共识别 {len(r.merged_candles)} 根合并K线，"
             f"{len(r.fractals)} 个分型，{len(r.strokes)} 笔，"
             f"{len(r.segments)} 条线段，"
-            f"{len(r.stroke_pivots)} 个笔级中枢，"
-            f"{len(r.segment_pivots)} 个线段级中枢。",
+            f"{len(r.stroke_pivots)} 个中枢。",
         ]
         if r.current_trend:
             parts.append(r.current_trend + "。")

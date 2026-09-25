@@ -17,6 +17,8 @@ class Segment:
     strokes: list[Stroke] = field(default_factory=list)
     # 线段是否已确认：最后一条线段的结束需后续笔/特征序列确认
     confirmed: bool = True
+    # 是否已由特征序列分型 / 收复起点终结；False = 数据走到尽头、线段仍在进行（终点暂取当前极值）
+    terminated: bool = True
 
     @property
     def start_time(self) -> str:
@@ -108,9 +110,9 @@ def _extreme_on_first(strokes: list[Stroke], start: int, end: int, direction: st
     )
 
 
-def _segment_end(
+def _segment_scan(
     strokes: list[Stroke], start: int, direction: str, feat_from: int | None = None
-) -> int | None:
+) -> tuple[int | None, bool]:
     """求从 start 起、方向 direction 的线段的最后一笔索引。
 
     以特征序列（反向笔）的顶/底分型判断线段结束：
@@ -142,7 +144,7 @@ def _segment_end(
         if (direction == "up" and s.end_price <= origin) or (
             direction == "down" and s.end_price >= origin
         ):
-            return _extreme_end(strokes, start, q - 1, direction)
+            return _extreme_end(strokes, start, q - 1, direction), True
 
         hi = max(s.start_price, s.end_price)
         lo = min(s.start_price, s.end_price)
@@ -185,15 +187,23 @@ def _segment_end(
             if is_fractal:
                 end_candidate = e2["idx"] - 1
                 if not gap:
-                    return end_candidate  # 第一种情况：直接结束
+                    return end_candidate, True  # 第一种情况：直接结束
                 if not _breaks_beyond(strokes, e2["idx"], direction, peak):
-                    return end_candidate  # 第二种情况：未被突破 → 确认结束
+                    return end_candidate, True  # 第二种情况：未被突破 → 确认结束
                 # 第二种情况：缺口被突破 → 中继，丢弃该分型，保留末元素继续趋势
                 processed = processed[-1:]
         q += 1
 
-    # 无终结分型：线段未走完，结束于最后一根同向笔
-    return last_same
+    # 无终结分型：线段未走完（数据到头），终点暂取当前极值、标记未终结——
+    # 画到最后一根同向笔会停在半路的非极值处，看起来像已结束
+    return _extreme_end(strokes, start, last_same, direction), False
+
+
+def _segment_end(
+    strokes: list[Stroke], start: int, direction: str, feat_from: int | None = None
+) -> int | None:
+    """_segment_scan 的终点部分（不关心是否终结的调用方用）。"""
+    return _segment_scan(strokes, start, direction, feat_from)[0]
 
 
 def find_segments(strokes: list[Stroke]) -> list[Segment]:
@@ -226,9 +236,9 @@ def find_segments(strokes: list[Stroke]) -> list[Segment]:
     while i <= n - 3:
         if chained:
             direction = strokes[i].direction
-            end = _segment_end(strokes, i, direction)
+            end, term = _segment_scan(strokes, i, direction)
             if end is not None and end >= i + 2 and not _extreme_on_first(strokes, i, end, direction):
-                segments.append(Segment(direction=direction, strokes=list(strokes[i:end + 1])))
+                segments.append(Segment(direction=direction, strokes=list(strokes[i:end + 1]), terminated=term))
                 starts.append(i)
                 expected_dir = "down" if direction == "up" else "up"
                 i = end + 1
@@ -236,14 +246,37 @@ def find_segments(strokes: list[Stroke]) -> list[Segment]:
             # 新段不足三笔即被破坏（其极值就是首笔、随后被收复起点 = 前段终点）：
             # 前段创出新极值、并未结束——从断点起重建特征序列，延续前段
             prev_start, prev = starts[-1], segments[-1]
-            end = _segment_end(strokes, prev_start, prev.direction, feat_from=i)
+            end, term = _segment_scan(strokes, prev_start, prev.direction, feat_from=i)
             new_high = end is not None and end > i - 1 and (
                 strokes[end].end_price > prev.end_price if prev.direction == "up"
                 else strokes[end].end_price < prev.end_price)
             if new_high and end is not None:
-                segments[-1] = Segment(direction=prev.direction, strokes=list(strokes[prev_start:end + 1]))
+                segments[-1] = Segment(direction=prev.direction, strokes=list(strokes[prev_start:end + 1]),
+                                       terminated=term)
                 i = end + 1
                 continue
+            # 前段尚未终结（数据到头、终点暂取当前极值）：之后这几笔是它还没走完的部分，
+            # 不另起同向线段，尾部留给后续走势确认
+            if not prev.terminated:
+                break
+            # 失败的反转：前段刚成形就被一笔收复起点并创出反向新极值——前段是失败的反转，
+            # 再往前那条同向线段并未结束。撤掉前段、从它的起点重建特征序列延续更早那段，
+            # 终点仍由特征序列分型确认、落在极值上。
+            if len(segments) >= 2 and segments[-2].direction == strokes[i].direction \
+                    and starts[-2] + segments[-2].stroke_count == prev_start:
+                older_start, older = starts[-2], segments[-2]
+                end, term = _segment_scan(strokes, older_start, older.direction, feat_from=prev_start)
+                extends = end is not None and end >= i and (
+                    strokes[end].end_price < older.end_price if older.direction == "down"
+                    else strokes[end].end_price > older.end_price)
+                if extends and end is not None:
+                    segments.pop()
+                    starts.pop()
+                    segments[-1] = Segment(direction=older.direction,
+                                           strokes=list(strokes[older_start:end + 1]), terminated=term)
+                    expected_dir = "down" if older.direction == "up" else "up"
+                    i = end + 1
+                    continue
             # 前段也无法延续（回调已收复前段起点）：退回确立规则。中间这一两笔构不成
             # 线段、本身就是反向运动，之后的线段按实际走势定方向，不强求与前段交替。
             chained = False
@@ -268,12 +301,12 @@ def find_segments(strokes: list[Stroke]) -> list[Segment]:
         ):
             i += 1
             continue
-        end = _segment_end(strokes, i, direction)
+        end, term = _segment_scan(strokes, i, direction)
         if end is None or end < i + 2 or (end - i) % 2 != 0 or _extreme_on_first(strokes, i, end, direction):
             i += 1
             continue
 
-        segments.append(Segment(direction=direction, strokes=list(strokes[i:end + 1])))
+        segments.append(Segment(direction=direction, strokes=list(strokes[i:end + 1]), terminated=term))
         starts.append(i)
         expected_dir = "down" if direction == "up" else "up"
         i = end + 1

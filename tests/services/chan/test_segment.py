@@ -278,3 +278,17 @@ def test_float_noise_high_is_not_a_new_extreme():
     _assert_invariants(strokes, segs)
     down = next(s for s in segs if s.direction == "down")
     assert (down.start_price, down.end_price) == (472.72, 357.48)
+
+
+def test_failed_reversal_revives_previous_segment():
+    # 真实回归（9999.HK 2026-01~07）：下降段 232.02->168.99 后，短上升段 168.99->186.97
+    # 刚成形就被一笔创新低（168.59 < 168.99）破坏——这是失败的反转，原下降段并未结束：
+    # 应为下降段 232.02->168.59、上升段从 168.59 接上，不能在 186.97->168.59 留空档。
+    strokes = _chain([150, 200, 180, 232.02, 173.76, 190.22, 168.99, 182.57, 172.98, 186.97,
+                      168.59, 198.35, 185.11, 202.50, 180.11, 216.49, 186.01, 210.49, 190.00])
+    segs = find_segments(strokes)
+    _assert_invariants(strokes, segs)
+    down = next(s for s in segs if s.direction == "down")
+    assert (down.start_price, down.end_price) == (232.02, 168.59)
+    for a, b in zip(segs, segs[1:], strict=False):
+        assert _connected(strokes, a, b), "失败的反转不应留下空档"

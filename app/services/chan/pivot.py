@@ -1,14 +1,14 @@
 """缠论中枢：连续3段走势的价格重叠区域。
 
-笔级中枢识别已切换到 czsc 引擎（见 czsc_adapter.py）；线段级中枢
-（find_segment_pivots）与走势类型判定（classify_walk_type）仍为自研。
+中枢识别全部来自 czsc 引擎（笔级，见 czsc_adapter.py）；不在日线上另算线段级
+中枢——更高一级结构按 czsc 的思路到更大周期（周线）看。走势类型判定（classify_walk_type）
+仍为自研。
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal
 
-from app.services.chan.segment import Segment
 
 
 @dataclass
@@ -35,7 +35,7 @@ class Pivot:
 
 
 def _find_pivots_from_elements(elements: list, level: Literal["stroke", "segment"]) -> list[Pivot]:
-    """通用中枢识别：从任意走势元素序列中识别中枢"""
+    """通用中枢识别：从任意走势元素序列中识别中枢（测试里用来从合成笔构造中枢）。"""
     if len(elements) < 3:
         return []
 
@@ -88,6 +88,7 @@ def _find_pivots_from_elements(elements: list, level: Literal["stroke", "segment
     return pivots
 
 
+
 def classify_walk_type(pivots: list[Pivot]) -> str:
     """根据中枢排布判定走势类型（缠论「走势分类」的实用判定）。
 
@@ -112,8 +113,3 @@ def classify_walk_type(pivots: list[Pivot]) -> str:
     if descending:
         return "down_trend"
     return "consolidation"
-
-
-def find_segment_pivots(segments: list[Segment]) -> list[Pivot]:
-    """识别线段级别中枢"""
-    return _find_pivots_from_elements(segments, level="segment")
