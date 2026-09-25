@@ -73,6 +73,7 @@ struct SignalRadarView: View {
                     legend
                     dateRail
                     Spacer(minLength: 0)
+                    compactDisclaimer
                 }
             }
             .padding(.horizontal, 12)
@@ -592,6 +593,17 @@ struct SignalRadarView: View {
                 }
             }
         }
+    }
+
+    // MARK: - 免责声明
+
+    /// 压缩版免责声明，钉在页面最底部；完整版在「我的」页（App Store 要求必须可见）。
+    private var compactDisclaimer: some View {
+        Text(L("算法自动生成，仅供技术研究，不构成投资建议。"))
+            .font(.caption2)
+            .foregroundColor(Theme.textSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 4)
     }
 
     // MARK: - 日期轨（底部横滑）

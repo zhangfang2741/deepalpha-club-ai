@@ -36,7 +36,6 @@
 "起始" = "From";
 "截止" = "To";
 "分析中" = "Analyzing";
-"分析" = "Analyze";
 
 /* Result detail */
 "算法自动生成，仅供技术研究，不构成投资建议。" = "Auto-generated for technical research only; not investment advice.";
