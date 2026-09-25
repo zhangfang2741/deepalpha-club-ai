@@ -562,3 +562,10 @@
 "新鲜度：按信号出现后的交易日数算（周末、休市不算），当天最高，5 个交易日（一周）后归零并退场。" = "Freshness: counted in trading days since the signal appeared (weekends and holidays excluded) — highest on the day, reaching zero after 5 trading days (a week), when the signal leaves the board.";
 "未确认的信号（落在最后一笔上的提前预判）：类型确定性和强弱两部分打 6 折，新鲜度不打折。" = "Unconfirmed signals (early calls on the last, still-open stroke): the type-certainty and strength parts are discounted to 60%; freshness is not.";
 "价格走坏即退场：信号出现后，收盘价跌破买点价位（卖点：涨破）就判定失效，当天起不再上榜。" = "Invalidation: once the close falls below a buy signal's price (or rises above a sell signal's), the signal is treated as failed and leaves the board from that day.";
+"气泡多久更新一次" = "How often bubbles update";
+"当前数据：%@ 全量计算，共振标记 %@ 更新。" = "Current data: full scan at %@; resonance tags updated at %@.";
+"当前数据：%@ 全量计算。" = "Current data: full scan at %@.";
+"全量重扫：每个交易日收盘后约 45 分钟重算全部气泡（等行情源发布当天日线），按你的时区约为 美股 %@、A股 %@、港股 %@。盘中当天日线还没定型，不做全量重扫。" = "Full rescan: about 45 minutes after each market closes on trading days (once the day's candle is published) — in your time zone roughly US %@, A-shares %@, Hong Kong %@. No full rescan intraday, since the day's candle isn't final yet.";
+"盘中：每 30 分钟刷新一次最新一天的「共振」标记（日线方向 × 30 分钟买卖点），气泡位置和大小不变。" = "Intraday: the latest day's \"resonance\" tags (daily direction × 30-minute signals) refresh every 30 minutes; bubble positions and sizes stay the same.";
+"自动补算：服务重启后会先补扫一轮；数据过旧时，你打开本页也会在后台重算，期间先显示上一次的结果。" = "Auto catch-up: after a server restart a scan runs right away; if the data is stale, opening this page triggers a background rescan while the previous result stays on screen.";
+"点进详情页是当下实时计算（不用缓存），盘中与气泡快照可能有出入，以详情页为准。" = "The detail page is computed live (no cache), so intraday it may differ from the bubble snapshot — the detail page is the reference.";

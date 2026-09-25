@@ -114,13 +114,18 @@ async def fetch_kline(
     freq: str = "daily",
     *,
     redis: Redis | None = None,
+    use_cache: bool = True,
 ) -> list[dict]:
-    """获取 K 线数据（Redis 优先），返回 list[{time, open, high, low, close, volume}]。"""
+    """获取 K 线数据（Redis 优先），返回 list[{time, open, high, low, close, volume}]。
+
+    use_cache=False：不读缓存、直接向数据源取最新（分析详情页用，盘中要看到刚走出的K线；
+    实测单次取数约 1 秒），取到的新数据仍写回缓存，供雷达等批量场景复用。
+    """
     # 先归一化再算缓存键：否则 0700 / 00700 / 0700.HK 是同一支股票却各存一份
     market, clean_symbol = normalize_symbol(symbol)
     cache_key = _cache_key(user_id, clean_symbol, start_date, end_date, freq)
 
-    if redis:
+    if redis and use_cache:
         cached = await get_json(redis, cache_key)
         if cached:
             logger.debug("kline_cache_hit", key=cache_key)

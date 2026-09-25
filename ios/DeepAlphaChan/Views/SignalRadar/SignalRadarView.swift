@@ -540,6 +540,7 @@ struct SignalRadarView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    infoSection(L("气泡多久更新一次"), updateScheduleLines)
                     infoSection(L("气泡怎么看"), [
                         L("颜色：红=买点，绿=卖点；深浅=形态强弱（弱/中/强），越强越深，与详情页同一套判定。"),
                         L("大小：买卖点类型，一类最小、三类最大——越往后确认程度越高。"),
@@ -582,6 +583,47 @@ struct SignalRadarView: View {
     }
 
     /// 说明弹层里的一个分组：标题 + 若干条目，条目前带圆点。
+    /// 「气泡多久更新一次」：本次数据的实际计算时刻 + 调度规则。时刻与后端调度同源：
+    /// 全量重扫 = 各市场收盘窗口末端 + 45 分钟（app/services/signal_radar/scheduler.py
+    /// `_POST_CLOSE_BUFFER_MINUTES`、service.py `_SESSIONS_UTC`），按手机时区换算显示；
+    /// 共振标记盘中每 30 分钟刷新（SIGNAL_RADAR_SUB_LEVEL_REFRESH_SECONDS）。
+    private var updateScheduleLines: [String] {
+        var lines: [String] = []
+        if let computed = SignalRadarView.localStamp(vm.response?.computedAt) {
+            if let sub = SignalRadarView.localStamp(vm.response?.subLevelAsOf) {
+                lines.append(L("当前数据：%@ 全量计算，共振标记 %@ 更新。", computed, sub))
+            } else {
+                lines.append(L("当前数据：%@ 全量计算。", computed))
+            }
+        }
+        lines.append(L("全量重扫：每个交易日收盘后约 45 分钟重算全部气泡（等行情源发布当天日线），按你的时区约为 美股 %@、A股 %@、港股 %@。盘中当天日线还没定型，不做全量重扫。",
+                       SignalRadarView.localClock(utcHour: 22, minute: 15),
+                       SignalRadarView.localClock(utcHour: 8, minute: 15),
+                       SignalRadarView.localClock(utcHour: 9, minute: 15)))
+        lines.append(L("盘中：每 30 分钟刷新一次最新一天的「共振」标记（日线方向 × 30 分钟买卖点），气泡位置和大小不变。"))
+        lines.append(L("自动补算：服务重启后会先补扫一轮；数据过旧时，你打开本页也会在后台重算，期间先显示上一次的结果。"))
+        lines.append(L("点进详情页是当下实时计算（不用缓存），盘中与气泡快照可能有出入，以详情页为准。"))
+        return lines
+    }
+
+    /// UTC 时刻 → 手机本地时区的 HH:mm（全量重扫时刻按市场收盘写死在后端，这里只做换算）。
+    static func localClock(utcHour: Int, minute: Int) -> String {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        let date = utc.date(bySettingHour: utcHour, minute: minute, second: 0, of: Date()) ?? Date()
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f.string(from: date)
+    }
+
+    /// ISO8601 时间戳 → 本地「M/d HH:mm」，解析不了返回 nil。
+    static func localStamp(_ iso: String?) -> String? {
+        guard let iso, !iso.isEmpty, let date = ISO8601DateFormatter().date(from: iso) else { return nil }
+        let f = DateFormatter()
+        f.dateFormat = "M/d HH:mm"
+        return f.string(from: date)
+    }
+
     private func infoSection(_ title: String, _ lines: [String]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)

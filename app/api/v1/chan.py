@@ -88,11 +88,13 @@ def _zip_divergences(strokes: list, divergences: list) -> list[tuple]:
 
 async def _fetch_bars_or_http_error(
     user_id: int, symbol: str, start: str, end: str, freq: str, redis: Redis | None,
+    *, use_cache: bool = True,
 ) -> list[dict]:
     """取 K 线；数据源错误转成可读的 HTTP 错误（400 可读原因 / 502 上游故障 / 404 无数据）。"""
     try:
         bars = await fetch_kline(
             user_id=user_id, symbol=symbol, start_date=start, end_date=end, freq=freq, redis=redis,
+            use_cache=use_cache,
         )
     except ValueError as e:
         # 数据源配置错误、认证失败、限流等可读信息直接透传给用户
@@ -144,7 +146,9 @@ async def chan_analysis(
     start_date = _visible_start(start_date, end_date, freq)
     anchor_start = _anchor_start(start_date, freq, warmup_days)
 
-    bars = await _fetch_bars_or_http_error(user.id, symbol, anchor_start, end_date, freq, redis)
+    # 详情页现拉现算、不读K线缓存：盘中要看到刚走出的K线（单次取数约 1 秒，计算毫秒级）
+    bars = await _fetch_bars_or_http_error(user.id, symbol, anchor_start, end_date, freq, redis,
+                                           use_cache=False)
     result = _analyzer.analyze(symbol, bars, lang=lang, visible_from=start_date, freq=freq)
 
     pivot_phase_out: PivotPhaseOut | None = None
@@ -372,12 +376,13 @@ async def chan_sub_level(
                 parent_freq=parent_freq)
 
     async def fetch_parent(start: str, end: str, freq: str) -> list[dict]:
-        return await _fetch_bars_or_http_error(user.id, symbol, start, end, freq, redis)
+        return await _fetch_bars_or_http_error(user.id, symbol, start, end, freq, redis, use_cache=False)
 
     # 与信号雷达共用唯一入口（固定口径 + 结论缓存）：气泡上的共振与这里是同一次计算。
     # start_date 不再参与次级别计算（结论描述「现在」，与详情页日期范围无关），保留兼容。
+    # 详情页现拉现算（不读结论与K线缓存），新结论写回缓存，雷达下次读到的就是这份
     return await current_sub_level(symbol, parent_freq, end_date=end_date, user_id=user.id,
-                                   redis=redis, lang=lang, fetch_parent=fetch_parent)
+                                   redis=redis, lang=lang, fetch_parent=fetch_parent, use_cache=False)
 
 
 @router.post("/gap", response_model=GapJobStatus)

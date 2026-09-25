@@ -261,3 +261,24 @@ async def test_fetch_kline_us_30min_routes_to_fmp_intraday(monkeypatch):
     monkeypatch.setattr(kline, "_fetch_fmp_intraday", fake_intraday)
     bars = await kline.fetch_kline(None, "AAPL", "2026-09-01", "2026-09-24", "30min")
     assert bars[0]["time"] == "2026-09-24 09:30"
+
+
+async def test_fetch_kline_use_cache_false_skips_read_but_writes_fresh(monkeypatch):
+    """详情页现拉现算：use_cache=False 不读缓存（拿到盘中最新K线），但新数据照样写回缓存供雷达复用。"""
+    from tests.services.chan.test_sub_level_service import _MemRedis
+
+    fresh = [{"time": "2026-09-25 10:30", "open": 1, "high": 2, "low": 0.5, "close": 1.9, "volume": 1}]
+
+    async def fake_intraday(symbol, start, end):
+        return fresh
+
+    monkeypatch.setattr(kline, "_fetch_fmp_intraday", fake_intraday)
+    redis = _MemRedis()
+    key = kline._cache_key(None, "AAPL", "2026-09-01", "2026-09-25", "30min")
+    stale = [{"time": "2026-09-24 15:30", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]
+    await kline.set_json(redis, key, stale, expire=600)
+
+    assert await kline.fetch_kline(None, "AAPL", "2026-09-01", "2026-09-25", "30min", redis=redis) == stale
+    got = await kline.fetch_kline(None, "AAPL", "2026-09-01", "2026-09-25", "30min", redis=redis, use_cache=False)
+    assert got == fresh
+    assert await kline.get_json(redis, key) == fresh  # 写回了新数据

@@ -32,6 +32,7 @@ async def _fetch_sub_analysis(
     user_id: int | None,
     redis: Redis | None,
     lang: str,
+    use_cache: bool = True,
 ) -> ChanAnalysisResult | None:
     """只取次级别 K 线并分析，不做联动判定。
 
@@ -41,7 +42,8 @@ async def _fetch_sub_analysis(
     pair = LEVEL_PAIRS.get(parent_freq, LEVEL_PAIRS["daily"])
     start = (date.fromisoformat(end_date[:10]) - timedelta(days=pair.fetch_days)).isoformat()
     try:
-        bars = await fetch_kline(user_id, symbol, start, end_date, pair.child, redis=redis)
+        bars = await fetch_kline(user_id, symbol, start, end_date, pair.child, redis=redis,
+                                 use_cache=use_cache)
     except Exception as exc:  # noqa: BLE001  次级别失败只降级，不影响大级别
         logger.warning("sub_level_kline_failed", symbol=symbol, freq=pair.child, error=str(exc))
         bars = []
@@ -142,6 +144,7 @@ async def current_sub_level(
     lang: str = "zh",
     refresh: bool = False,
     fetch_parent: Callable[[str, str, str], Awaitable[list[dict]]] | None = None,
+    use_cache: bool = True,
 ) -> SubLevelResponse:
     """当前次级别结论（雷达与详情页的唯一入口）：固定口径计算 + 按结论缓存。
 
@@ -150,10 +153,12 @@ async def current_sub_level(
     - 结论缓存：按（归一化代码, 大级别, 截止日, 语言）缓存完整结果。雷达刷新传 refresh=True
       重算并覆盖，详情页优先读缓存——气泡上的共振与点进去看到的是同一次计算。
     - fetch_parent：大级别取数函数（接口层传入以把数据源错误转成 HTTP 错误），默认 fetch_kline。
+    - use_cache=False：详情页现拉现算——不读结论缓存、次级别K线也不读缓存（盘中要看到最新
+      的 30 分钟K线），算出的新结论仍写回缓存，雷达下次读到的就是这份。
     """
     end = canonical_end(end_date)
     key = _cache_key(symbol, parent_freq, end, lang)
-    if redis is not None and not refresh:
+    if redis is not None and not refresh and use_cache:
         cached = await get_json(redis, key)
         if cached:
             try:
@@ -166,13 +171,14 @@ async def current_sub_level(
     async def _fetch_parent_bars() -> list[dict]:
         if fetch_parent is not None:
             return await fetch_parent(start, end, parent_freq)
-        return await fetch_kline(user_id, symbol, start, end, parent_freq, redis=redis)
+        return await fetch_kline(user_id, symbol, start, end, parent_freq, redis=redis, use_cache=use_cache)
 
     # 大级别与次级别取数互相独立，并发发起——原先是「等大级别取完+分析完才开始取次级别」，
     # 串行等待白白多花一轮网络延迟，是详情页打开次级别徽标慢的主因之一。
     bars, sub_analysis = await asyncio.gather(
         _fetch_parent_bars(),
-        _fetch_sub_analysis(symbol, end, parent_freq=parent_freq, user_id=user_id, redis=redis, lang=lang),
+        _fetch_sub_analysis(symbol, end, parent_freq=parent_freq, user_id=user_id, redis=redis, lang=lang,
+                            use_cache=use_cache),
     )
     parent = _analyzer.analyze(symbol, bars, lang=lang, freq=parent_freq)
     pair = LEVEL_PAIRS.get(parent_freq, LEVEL_PAIRS["daily"])
