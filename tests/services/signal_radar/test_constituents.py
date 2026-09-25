@@ -97,3 +97,108 @@ def test_us_symbols_without_chinese_name_get_empty_name():
     raw = [("AAPL", "Apple", 0.0), ("AEP", "American Electric Power", 0.0)]
     out = _map_to_universe(raw, {"AAPL": "苹果"}, max_scan=10, fallback_to_source_name=False)
     assert out == [("AAPL", "苹果"), ("AEP", "")]
+
+
+class TestEastmoneyUsName:
+    """东方财富美股搜索接口的中文名解析（纯函数）+ 批量解析的缓存行为（假 redis，不联网）。"""
+
+    def test_matches_exact_code_and_common_stock(self):
+        from app.services.signal_radar.constituents import parse_eastmoney_us_suggest
+
+        # 真实响应形状：同代码前缀还挂着债券/优先股条目，必须精确匹配 Code 且 TypeUS=1
+        payload = {"QuotationCodeTable": {"Data": [
+            {"Code": "AAPL", "Name": "苹果", "Classify": "UsStock", "TypeUS": "1"},
+            {"Code": "AAPL22", "Name": "Apple Inc Notes 2022", "Classify": "UsStock", "TypeUS": "6"},
+        ]}}
+        assert parse_eastmoney_us_suggest(payload, "AAPL") == "苹果"
+
+    def test_skips_preferred_and_non_us_entries(self):
+        from app.services.signal_radar.constituents import parse_eastmoney_us_suggest
+
+        payload = {"QuotationCodeTable": {"Data": [
+            {"Code": "ORCL_D", "Name": "Oracle Corp Series D Pfd", "Classify": "UsStock", "TypeUS": "2"},
+        ]}}
+        assert parse_eastmoney_us_suggest(payload, "ORCL_D") is None
+
+    def test_no_match_returns_none(self):
+        from app.services.signal_radar.constituents import parse_eastmoney_us_suggest
+
+        payload = {"QuotationCodeTable": {"Data": [
+            {"Code": "BRRR", "Name": "Coinshares Bitcoin ETF", "Classify": "UsStock", "TypeUS": "5"},
+        ]}}
+        assert parse_eastmoney_us_suggest(payload, "COIN") is None
+
+    def test_malformed_payload_returns_none(self):
+        from app.services.signal_radar.constituents import parse_eastmoney_us_suggest
+
+        assert parse_eastmoney_us_suggest({"QuotationCodeTable": None}, "AAPL") is None
+        assert parse_eastmoney_us_suggest("oops", "AAPL") is None
+
+
+class _FakeRedis:
+    """只实现所需命令的内存替身：set(ex=) / get。"""
+
+    def __init__(self) -> None:
+        self.store: dict[str, str] = {}
+
+    async def get(self, key: str) -> str | None:
+        return self.store.get(key)
+
+    async def set(self, key: str, value: str, ex: int | None = None) -> None:
+        self.store[key] = value
+
+
+async def test_resolve_us_names_caches_and_skips_refetch(monkeypatch):
+    """命中缓存的代码不再查东方财富；新查到的名称写回缓存供下次直接命中。"""
+    from app.services.signal_radar import constituents as mod
+
+    calls: list[str] = []
+
+    async def fake_fetch(client, symbol):
+        calls.append(symbol)
+        return {"AAPL": "苹果", "ORCL": "甲骨文"}.get(symbol)
+
+    monkeypatch.setattr(mod, "_fetch_eastmoney_us_name", fake_fetch)
+    redis = _FakeRedis()
+    await redis.set(f"{mod._US_NAME_CACHE_PREFIX}:MSFT", "微软")
+
+    result = await mod._resolve_us_names(["AAPL", "ORCL", "MSFT", "ZZZZ"], redis=redis)
+
+    assert result == {"AAPL": "苹果", "ORCL": "甲骨文", "MSFT": "微软"}
+    assert sorted(calls) == ["AAPL", "ORCL", "ZZZZ"]  # MSFT 命中缓存，没有发起查询
+    assert redis.store[f"{mod._US_NAME_CACHE_PREFIX}:AAPL"] == "苹果"  # 新查到的写回缓存
+
+
+async def test_resolve_us_names_without_redis_still_works(monkeypatch):
+    """无 redis（如未配置）时跳过缓存读写，仍能查询并返回结果。"""
+    from app.services.signal_radar import constituents as mod
+
+    async def fake_fetch(client, symbol):
+        return "苹果" if symbol == "AAPL" else None
+
+    monkeypatch.setattr(mod, "_fetch_eastmoney_us_name", fake_fetch)
+    result = await mod._resolve_us_names(["AAPL", "ZZZZ"], redis=None)
+    assert result == {"AAPL": "苹果"}
+
+
+async def test_resolve_constituents_enriches_us_names_beyond_curated(monkeypatch):
+    """resolve_constituents 端到端：curated 清单之外的美股代码也能拿到中文名（东方财富补充）。"""
+    from app.services.signal_radar import constituents as mod
+
+    # ORCL 不在 nasdaq100 的 curated 清单里，验证它会走东方财富补齐；动态结果要
+    # >= _MIN_VALID 只才不会被判定「结果太少」回退回纯静态清单（纯字母代码才是合法美股代码）
+    async def fake_dynamic(universe):
+        filler = [(f"{chr(65 + i // 26)}{chr(65 + i % 26)}X", "filler", 0.0) for i in range(25)]
+        return [("AAPL", "Apple", 10.0), ("ORCL", "Oracle", 5.0), *filler]
+
+    async def fake_eastmoney(client, symbol):
+        return {"ORCL": "甲骨文"}.get(symbol)
+
+    monkeypatch.setattr(mod, "_fetch_dynamic", fake_dynamic)
+    monkeypatch.setattr(mod, "_fetch_eastmoney_us_name", fake_eastmoney)
+    redis = _FakeRedis()
+
+    resolved = await mod.resolve_constituents("us", redis=redis, universe_key="nasdaq100")
+
+    assert dict(resolved)["AAPL"] == "苹果"   # curated 清单命中
+    assert dict(resolved)["ORCL"] == "甲骨文"  # 东方财富补齐，之前会是空字符串

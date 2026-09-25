@@ -23,7 +23,7 @@ async def test_fetches_30min_window_and_builds_verdict(monkeypatch):
     res = await sub_level_service.analyze_sub_level("AAPL", "2026-09-24", _daily("bullish"))
 
     assert seen["freq"] == "30min"
-    assert seen["start"] == "2026-08-15"  # 结束日前 40 个自然日
+    assert seen["start"] == "2026-08-05"  # 结束日前 50 个自然日，与详情页 30min 取数窗口对齐
     assert res.verdict in ("resonance_buy", "resonance_sell", "counter_trend", "waiting")
     assert res.sub_freq == "30min"
 

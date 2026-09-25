@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import date, timedelta
 
@@ -23,6 +24,30 @@ from app.utils.market import normalize as normalize_symbol
 _analyzer = ChanAnalyzer()
 
 
+async def _fetch_sub_analysis(
+    symbol: str,
+    end_date: str,
+    *,
+    parent_freq: str,
+    user_id: int | None,
+    redis: Redis | None,
+    lang: str,
+) -> ChanAnalysisResult | None:
+    """只取次级别 K 线并分析，不做联动判定。
+
+    供 analyze_sub_level 与 current_sub_level 复用，后者借此把次级别取数与大级别
+    取数并发起来，而不是等大级别取完再取次级别。
+    """
+    pair = LEVEL_PAIRS.get(parent_freq, LEVEL_PAIRS["daily"])
+    start = (date.fromisoformat(end_date[:10]) - timedelta(days=pair.fetch_days)).isoformat()
+    try:
+        bars = await fetch_kline(user_id, symbol, start, end_date, pair.child, redis=redis)
+    except Exception as exc:  # noqa: BLE001  次级别失败只降级，不影响大级别
+        logger.warning("sub_level_kline_failed", symbol=symbol, freq=pair.child, error=str(exc))
+        bars = []
+    return _analyzer.analyze(symbol, bars, lang=lang, freq=pair.child) if bars else None
+
+
 async def analyze_sub_level(
     symbol: str,
     end_date: str,
@@ -35,14 +60,9 @@ async def analyze_sub_level(
 ) -> SubLevelResult:
     """以 end_date 为止取次级别 K 线分析，并与大级别结果（daily 参数）联动判定。"""
     pair = LEVEL_PAIRS.get(parent_freq, LEVEL_PAIRS["daily"])
-    start = (date.fromisoformat(end_date[:10]) - timedelta(days=pair.fetch_days)).isoformat()
-    try:
-        bars = await fetch_kline(user_id, symbol, start, end_date, pair.child, redis=redis)
-    except Exception as exc:  # noqa: BLE001  次级别失败只降级，不影响大级别
-        logger.warning("sub_level_kline_failed", symbol=symbol, freq=pair.child, error=str(exc))
-        bars = []
-
-    sub = _analyzer.analyze(symbol, bars, lang=lang, freq=pair.child) if bars else None
+    sub = await _fetch_sub_analysis(
+        symbol, end_date, parent_freq=parent_freq, user_id=user_id, redis=redis, lang=lang,
+    )
     return build_sub_level(daily, sub, lang, parent_freq=pair.parent)
 
 
@@ -142,13 +162,21 @@ async def current_sub_level(
                 logger.warning("sub_level_cache_invalid", key=key, error=str(exc))
 
     start = (date.fromisoformat(end) - timedelta(days=_PARENT_LOOKBACK_DAYS.get(parent_freq, 450))).isoformat()
-    if fetch_parent is not None:
-        bars = await fetch_parent(start, end, parent_freq)
-    else:
-        bars = await fetch_kline(user_id, symbol, start, end, parent_freq, redis=redis)
+
+    async def _fetch_parent_bars() -> list[dict]:
+        if fetch_parent is not None:
+            return await fetch_parent(start, end, parent_freq)
+        return await fetch_kline(user_id, symbol, start, end, parent_freq, redis=redis)
+
+    # 大级别与次级别取数互相独立，并发发起——原先是「等大级别取完+分析完才开始取次级别」，
+    # 串行等待白白多花一轮网络延迟，是详情页打开次级别徽标慢的主因之一。
+    bars, sub_analysis = await asyncio.gather(
+        _fetch_parent_bars(),
+        _fetch_sub_analysis(symbol, end, parent_freq=parent_freq, user_id=user_id, redis=redis, lang=lang),
+    )
     parent = _analyzer.analyze(symbol, bars, lang=lang, freq=parent_freq)
-    sub = await analyze_sub_level(symbol, end, parent, user_id=user_id, redis=redis, lang=lang,
-                                  parent_freq=parent_freq)
+    pair = LEVEL_PAIRS.get(parent_freq, LEVEL_PAIRS["daily"])
+    sub = build_sub_level(parent, sub_analysis, lang, parent_freq=pair.parent)
     resp = to_response(symbol, sub)
     if redis is not None:
         await set_json(redis, key, resp.model_dump(), expire=SUB_LEVEL_CACHE_TTL)
