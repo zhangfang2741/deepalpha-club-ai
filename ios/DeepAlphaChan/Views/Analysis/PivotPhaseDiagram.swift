@@ -5,9 +5,11 @@ import SwiftUI
 /// 这是全部可能结果的地图，不是必然依次完成的进度条：`build_pivot_phase()`
 /// 每次都拿完整笔历史重新判一遍，直接给出属于这 5 个方块之一的结果，不依赖
 /// 上一次的结论（见 app/services/chan/pivot_phase.py 顶部 docstring）。
-enum PivotPhaseDiagramSelection: Hashable {
+enum PivotPhaseDiagramSelection: Hashable, Identifiable {
     case none, pivotIn, leaving, retraceConfirmed, divergence
     case edgeForm, edgeBreak, edgeHold, edgeDiverge, edgeFake, edgeReverse
+
+    var id: Self { self }
 
     /// 后端 `PivotPhase.phase` 字符串 → 图上对应的节点。
     static func node(for phase: String) -> PivotPhaseDiagramSelection {
@@ -32,8 +34,9 @@ private struct PhaseDiagramCopy {
     let title: String
     let body: String
 
-    /// 各方块/边的通用规则讲解——跟具体某支股票无关，点非当前状态时显示这个。
-    /// 当前状态改显示 `phase.reason`（真实计算出来的判定依据），不用这份文案。
+    /// 各方块/边的通用规则讲解——跟具体某支股票无关，点开对应的 `PhaseRuleSheet`
+    /// 时用这份文案。「这支股票现在的具体结论」另见 `PivotPhaseDiagram.detailPanel`
+    /// 用的 `phase.reason`，两者不共用同一套文案。
     static func copy(for selection: PivotPhaseDiagramSelection) -> PhaseDiagramCopy {
         switch selection {
         case .none:
@@ -84,17 +87,14 @@ private struct PhaseDiagramCopy {
     }
 }
 
-/// 结构位置：全部可能结果的全局判定图。点任意方块/线看它的通用规则；
-/// 当前状态额外显示这一次的真实判定依据（`phase.reason`），一进来就知道
-/// 「现在在哪、这一步为什么是这样」。
+/// 结构位置：全部可能结果的全局判定图。上面的卡片固定展示这一次的真实判定
+/// 依据（`phase.phaseLabel`/`phase.reason`），不随点击变化；点任意方块/线
+/// 上滑弹出一个独立页面看它的通用规则——两者职责不同，互不打扰。
 struct PivotPhaseDiagram: View {
     let phase: PivotPhase
-    @State private var selected: PivotPhaseDiagramSelection
-
-    init(phase: PivotPhase) {
-        self.phase = phase
-        _selected = State(initialValue: .node(for: phase.phase))
-    }
+    /// 点了哪个方块/边，非 nil 时弹出对应的规则讲解页。跟上面卡片的内容
+    /// 完全独立，卡片永远只展示 `phase` 算出来的当前状态。
+    @State private var sheetSelection: PivotPhaseDiagramSelection?
 
     // 设计坐标系：所有节点/边坐标都按这个基准写死，绘制时统一乘 scale。
     private let designWidth: CGFloat = 394
@@ -173,7 +173,8 @@ struct PivotPhaseDiagram: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             // 先看文字说明（现在在哪、为什么），图放下面当作可交互的参考——
-            // 一进来不用先看图才知道当前状态，点图上别的方块/线时上面这块跟着切换。
+            // 一进来不用先看图才知道当前状态；点图上的方块/线不会改这张卡片，
+            // 只会弹出讲解页（见 body 末尾的 .sheet）。
             detailPanel
                 .background(
                     GeometryReader { geo in
@@ -191,14 +192,11 @@ struct PivotPhaseDiagram: View {
                 .foregroundStyle(Theme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .center)
         }
-        // `selected` 用自定义 init 只在这个视图第一次被创建时按 phase 设初始值；
-        // 之后只要外层还在同一个 tab（同一个 `.id(segment)`），切换股票/周期时
-        // SwiftUI 会复用同一份视图身份，`selected` 不会自动跟着新的 phase 变化
-        // ——不加这行会出现"当前"徽标指着新状态，高亮框却停在旧状态上的错位。
-        // 用 reason 而不是 phase 判断变化：reason 带具体数值，同一个 phase 分类
-        // 换了股票/中枢数值也一定不同，比只比较 phase 字符串更可靠。
-        .onChange(of: phase.reason) { _, _ in
-            selected = currentNode
+        .sheet(item: $sheetSelection) { selection in
+            PhaseRuleSheet(selection: selection)
+                .presentationDetents([.fraction(0.4), .medium])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(.dark)
         }
     }
 
@@ -229,19 +227,17 @@ struct PivotPhaseDiagram: View {
     // MARK: - 节点
 
     private func nodeView(_ spec: NodeSpec, scale: CGFloat) -> some View {
-        let isSelected = selected == spec.key
-        // 5 个节点统一用同一套高亮规则（只看 isCurrent/isSelected）——「确认买卖点」
-        // 之前不论选没选都固定填中枢紫色，跟「当前」徽标各说各话，会让人误判当前
-        // 在哪一步（比如真正当前是「中枢内」，视觉上最显眼的却是「确认买卖点」）。
+        // 5 个节点只按「是不是当前状态」决定高亮，不再有「点击后选中」这个中间态——
+        // 点节点是去弹讲解页，不是把这个节点变成焦点，视觉上不需要区分两者。
         return Button {
-            selected = spec.key
+            sheetSelection = spec.key
         } label: {
             RoundedRectangle(cornerRadius: 10 * scale)
                 .fill(Theme.surfaceAlt)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10 * scale)
-                        .strokeBorder(isSelected ? Theme.textPrimary.opacity(0.85) : Theme.border,
-                                      style: StrokeStyle(lineWidth: (isSelected ? 2.2 : 1.2) * scale,
+                        .strokeBorder(spec.isCurrent ? Theme.pivotPhaseColor(phase.phase) : Theme.border,
+                                      style: StrokeStyle(lineWidth: (spec.isCurrent ? 2.2 : 1.2) * scale,
                                                           dash: spec.dashed ? [4 * scale, 3 * scale] : []))
                 )
                 .overlay {
@@ -254,15 +250,11 @@ struct PivotPhaseDiagram: View {
                 }
                 .overlay(alignment: .topTrailing) {
                     if spec.isCurrent {
-                        // 直接显示这次算出来的具体结论（如「确认三买」），不用固定的「当前」
-                        // 两个字——自选列表的 Chip 用的就是同一个 phase.phaseLabel，两处
-                        // 要看到一样的字，不然自选列表和判定图像是两套不同的结论。
-                        Text(phase.phaseLabel)
+                        // 只标「当前」，不塞具体结论——具体结论（如「确认三买」）已经在
+                        // 上面固定的卡片里完整展示，节点这个小徽标空间放不下长文案。
+                        Text(L("当前"))
                             .font(.system(size: 9 * scale, weight: .bold))
                             .foregroundStyle(Theme.background)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                            .frame(maxWidth: spec.rect.width * scale * 0.94)
                             .padding(.horizontal, 6 * scale).padding(.vertical, 2 * scale)
                             .background(Theme.pivotPhaseColor(phase.phase), in: Capsule())
                             .padding(4 * scale)
@@ -323,22 +315,21 @@ struct PivotPhaseDiagram: View {
         return shape
             .stroke(Color.clear, style: hitStyle)
             .contentShape(hitPath)
-            .onTapGesture { selected = edge.key }
+            .onTapGesture { sheetSelection = edge.key }
             // 只是给 edgeLabel 加大点击范围，语义上是同一个东西——VoiceOver 交给
             // 下面那个有文字的 edgeLabel 播报就够了，这层不重复念一遍。
             .accessibilityHidden(true)
     }
 
     private func edgeLabel(_ edge: Edge, scale: CGFloat) -> some View {
-        let isSelected = selected == edge.key
-        return Button {
-            selected = edge.key
+        Button {
+            sheetSelection = edge.key
         } label: {
             Text(edge.label)
-                .font(.system(size: 10 * scale, weight: isSelected ? .bold : .regular))
-                .foregroundStyle(isSelected ? edge.color : Theme.textSecondary)
+                .font(.system(size: 10 * scale, weight: .regular))
+                .foregroundStyle(Theme.textSecondary)
                 .padding(.horizontal, 5 * scale).padding(.vertical, 2 * scale)
-                .background(isSelected ? Theme.surfaceAlt : Color.clear, in: Capsule())
+                .background(Color.clear, in: Capsule())
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -348,7 +339,6 @@ struct PivotPhaseDiagram: View {
     private func drawEdges(_ ctx: GraphicsContext, scale: CGFloat) {
         func sp(_ pt: CGPoint) -> CGPoint { CGPoint(x: pt.x * scale, y: pt.y * scale) }
         for edge in edges {
-            let isSelected = selected == edge.key
             let isCurved = edge.control1 != nil
             var path = Path()
             path.move(to: sp(edge.from))
@@ -361,8 +351,8 @@ struct PivotPhaseDiagram: View {
                 endAngle = atan2(edge.to.y - edge.from.y, edge.to.x - edge.from.x)
             }
             let color = isCurved ? edge.color : Theme.textSecondary
-            let opacity: Double = isSelected ? 1.0 : (isCurved ? 0.55 : 0.7)
-            let width = (isSelected ? 2.4 : (isCurved ? 1.3 : 1.4)) * scale
+            let opacity: Double = isCurved ? 0.55 : 0.7
+            let width = (isCurved ? 1.3 : 1.4) * scale
             ctx.stroke(path, with: .color(color.opacity(opacity)),
                        style: StrokeStyle(lineWidth: width, dash: isCurved ? [4 * scale, 3 * scale] : []))
             ctx.fill(arrowhead(at: sp(edge.to), angle: endAngle, size: 6 * scale),
@@ -383,53 +373,76 @@ struct PivotPhaseDiagram: View {
 
     // MARK: - 详情面板
 
+    /// 固定展示这一次算出来的当前状态，不受下面图上点了哪个方块/边影响——
+    /// 那些点击只弹讲解页（见 `PhaseRuleSheet`），跟这张卡片各管各的。
     private var detailPanel: some View {
-        let isCurrentSelection = selected == currentNode
-        let copy = PhaseDiagramCopy.copy(for: selected)
-        return VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                // 选中的正是当前状态时，标题换成这次算出来的具体结论（跟自选列表
-                // Chip、图上节点徽标同一个 phase.phaseLabel）；选别的方块/线看
-                // 通用规则时，还是用那个方块/边自己的名字（copy.title）。
-                Text(isCurrentSelection ? phase.phaseLabel : copy.title)
+                Text(phase.phaseLabel)
                     .font(.subheadline.bold())
                     .foregroundStyle(Theme.textPrimary)
-                if isCurrentSelection {
-                    Text(L("当前"))
-                        .font(.caption2.bold())
-                        .foregroundStyle(Theme.background)
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Theme.pivotPhaseColor(phase.phase), in: Capsule())
-                }
+                Text(L("当前"))
+                    .font(.caption2.bold())
+                    .foregroundStyle(Theme.background)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Theme.pivotPhaseColor(phase.phase), in: Capsule())
                 Spacer(minLength: 0)
-                if isCurrentSelection && !phase.confirmed {
+                if !phase.confirmed {
                     Label(L("未确认"), systemImage: "circle.dashed")
                         .font(.caption2)
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
-            Text(isCurrentSelection ? HeadlineHighlighter.highlight(phase.reason) : AttributedString(copy.body))
+            Text(HeadlineHighlighter.highlight(phase.reason))
                 .font(.footnote)
                 .foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .lineSpacing(3)
-            if isCurrentSelection {
-                Text(L("参考中枢 %@ · 下沿 ZD %@ — 上沿 ZG %@",
-                       phase.pivot.level == .segment ? L("线段级") : L("笔级"),
-                       String(format: "%.2f", phase.pivot.zd),
-                       String(format: "%.2f", phase.pivot.zg)))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(Theme.textSecondary)
-                if let next = phase.checklist.first(where: { $0.state == .pending }) {
-                    Text(L("下一步观察：%@", next.label))
-                        .font(.caption)
-                        .foregroundStyle(Theme.accent)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            Text(L("参考中枢 %@ · 下沿 ZD %@ — 上沿 ZG %@",
+                   phase.pivot.level == .segment ? L("线段级") : L("笔级"),
+                   String(format: "%.2f", phase.pivot.zd),
+                   String(format: "%.2f", phase.pivot.zg)))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(Theme.textSecondary)
+            if let next = phase.checklist.first(where: { $0.state == .pending }) {
+                Text(L("下一步观察：%@", next.label))
+                    .font(.caption)
+                    .foregroundStyle(Theme.accent)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+/// 点判定图上任意方块/线，上滑弹出的规则讲解页——跟上面固定的状态卡片是两件事：
+/// 卡片说「这支股票现在在哪」，这个页面说「这个方块/边的规则是什么」，互不影响。
+private struct PhaseRuleSheet: View {
+    let selection: PivotPhaseDiagramSelection
+    @Environment(\.dismiss) private var dismiss
+
+    private var copy: PhaseDiagramCopy { PhaseDiagramCopy.copy(for: selection) }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(copy.body)
+                    .font(.body)
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineSpacing(5)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(20)
+            }
+            .background(Theme.background)
+            .navigationTitle(copy.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(L("关闭")) { dismiss() }
+                }
+            }
+        }
     }
 }
