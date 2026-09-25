@@ -1,10 +1,12 @@
 import CoreText
 import Foundation
 
-/// 气泡尺寸与文字排版：直径按编码（强弱 × 时间远近），代码和名称两行都必须显示。
+/// 气泡尺寸与文字排版：直径严格只由编码（强弱 × 时间远近）决定，代码和名称两行都必须显示。
 ///
-/// 先缩字号让两行放进编码尺寸的圆内；缩到最小字号仍放不下，才把气泡撑大到刚好放下——
-/// 大小编码只在迫不得已时让步，且幅度最小（以前一律按字宽撑到约 85pt，大小失去意义）。
+/// 只靠缩字号让两行放进编码尺寸的圆内，绝不为了放下文字而撑大气泡——A股/港股「代码+
+/// 中文名」两行天然比美股「只有代码」更宽，若允许因放不下文字而撑大，会让同样强弱/新鲜度
+/// 的信号在不同市场画出大小不一致的气泡，大小编码就失去了跨市场可比性。缩到最小字号仍放
+/// 不下时，直径依旧保持编码尺寸不变，交给渲染层的 `minimumScaleFactor` 继续压缩字号兜底。
 struct RadarBubbleMetrics {
     static let edgePadding = 12.0
     /// 可读性下限：再小点不到。
@@ -73,10 +75,12 @@ struct RadarBubbleMetrics {
             size -= 0.5
         }
         if picked == nil {
-            // 最小字号仍放不下：撑大到刚好放下两行（不超过画布）
+            // 最小字号仍放不下：不撑大气泡（那会让气泡大小随文字长度而非强弱/时间变化，
+            // 跨市场就不可比了）——直径继续保持编码尺寸，字号定在最小值，剩下交给
+            // RadarBubble 渲染时的 minimumScaleFactor 兜底再压一压。
             let (sf, nf) = fonts(Self.minSymbolSize)
             let need = required(sf, nf)
-            picked = (sf, nf, min(cap, ceil(need.diameter)), need.height)
+            picked = (sf, nf, base, need.height)
         }
         let (sf, nf, d, h) = picked!
         symbolFont = sf
