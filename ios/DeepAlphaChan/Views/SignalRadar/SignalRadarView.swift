@@ -37,6 +37,8 @@ struct SignalRadarView: View {
     /// 日期轨"更多"打开的日期选择器状态。
     @State private var showDatePicker = false
     @State private var pickedDate = Date()
+    /// 图例旁「算法说明」问号按钮打开的详细说明弹层状态。
+    @State private var showAlgorithmInfo = false
 
     var body: some View {
         NavigationStack {
@@ -330,12 +332,12 @@ struct SignalRadarView: View {
         var id: String { signal.id }
     }
 
-    /// 三个等距参考环：今天 1/3、1 周 2/3、2 周 1.0，与气泡同一套时间半径映射
+    /// 三个等距参考环：今天 1/3、3 天 2/3、1 周 1.0，与气泡同一套时间半径映射
     /// （RadarOrbitSpacing.timeRadius）。
     /// 用计算属性而非 static let：L() 依赖运行时语言设置，static let 只会算一次，
     /// 用户切换语言后文案不会跟着变。
     static var ringSpecs: [(scale: Double, label: String)] {
-        [(1.0 / 3, L("今天")), (2.0 / 3, L("1周内")), (1.0, L("2周内"))]
+        [(1.0 / 3, L("今天")), (2.0 / 3, L("3天内")), (1.0, L("一周内"))]
     }
 
     /// 场边距：最外环（scale 1.0）到容器四边留出的空白，给气泡的阴影 + 右上角「新」
@@ -362,9 +364,9 @@ struct SignalRadarView: View {
         RadarOrbitSpacing.timeRadius(daysAgo: daysAgo) * fieldRadius
     }
 
-    /// daysAgo → 时间档：0=今天、1=1周内、2=2周内（含更早）。
+    /// daysAgo → 时间档：0=今天、1=3天内、2=一周内（含更早，最多保留 7 天）。
     static func bandIndex(forDaysAgo daysAgo: Int) -> Int {
-        daysAgo <= 0 ? 0 : (daysAgo <= 7 ? 1 : 2)
+        daysAgo <= 0 ? 0 : (daysAgo <= 3 ? 1 : 2)
     }
 
     /// 越远越小（按天连续递减，见 RadarOrbitSpacing.timeSizeFactor），和「买卖点类型」的
@@ -473,36 +475,26 @@ struct SignalRadarView: View {
 
     // MARK: - 图例
 
+    /// 一行说完颜色/大小/标签三件事，点右边的问号看完整算法说明（选股范围 + 排序公式），
+    /// 不用把所有细节都堆在常驻图例里挤占气泡场的空间。
     private var legend: some View {
-        // 颜色、大小、距离、角标各管一件事，一行说一件，不然挤在一起用户会把
-        // 「大小」和「深浅」都读成「这个信号有多强」。
-        VStack(alignment: .leading, spacing: 6) {
-            // 深浅 = 买卖点类型：渐变条两端标出一类→三类
-            HStack(spacing: 14) {
-                legendBar(label: L("买"), color: Theme.up,
-                          gradient: [Color(hex: 0xF87185), Color(hex: 0x780F26)])
-                legendBar(label: L("卖"), color: Theme.down,
-                          gradient: [Color(hex: 0x6EE7B7), Color(hex: 0x045A40)])
+        HStack(spacing: 12) {
+            HStack(spacing: 4) {
+                Circle().fill(Theme.up).frame(width: 8, height: 8)
+                Circle().fill(Theme.down).frame(width: 8, height: 8)
+                Text(L("颜色=方向")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
-            HStack(spacing: 6) {
+            HStack(spacing: 3) {
+                sizeDot(diameter: SignalRadarView.diameter(forStrength: "weak"))
+                sizeDot(diameter: SignalRadarView.diameter(forStrength: "strong"))
                 Text(L("大小=强弱")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
-                levelDot(diameter: SignalRadarView.diameter(forStrength: "weak"), label: L("弱"))
-                levelDot(diameter: SignalRadarView.diameter(forStrength: "medium"), label: L("中"))
-                levelDot(diameter: SignalRadarView.diameter(forStrength: "strong"), label: L("强"))
-                Text(L("· 越远越小")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
-            Text(L("距离=时间：三个环依次是今天、1 周、2 周"))
-                .font(.system(size: 10))
-                .foregroundColor(Theme.textSecondary)
-            HStack(spacing: 6) {
-                legendBadge(L("共振"), color: Theme.accent)
-                Text(L("日线与30分钟同向")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+            HStack(spacing: 4) {
                 legendBadge(L("新"), color: Theme.segment)
-                Text(L("当日新出现")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                Text(L("标签=状态")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
-            Text(L("点击气泡查看分析"))
-                .font(.system(size: 10))
-                .foregroundColor(Theme.textSecondary)
+            Spacer(minLength: 4)
+            algorithmInfoButton
         }
     }
 
@@ -516,23 +508,77 @@ struct SignalRadarView: View {
             .background(color, in: Capsule())
     }
 
-    /// 图例里的强弱参考点：真实按 `diameter(forStrength:)` 等比缩小展示。
-    private func levelDot(diameter: Double, label: String) -> some View {
-        HStack(spacing: 3) {
-            Circle().fill(Theme.textSecondary).frame(width: diameter * 0.16, height: diameter * 0.16)
-            Text(label).font(.system(size: 9)).foregroundColor(Theme.textSecondary)
-        }
+    /// 图例里的强弱参考点：真实按 `diameter(forStrength:)` 等比缩小展示，不带文字标签
+    /// （弱/中/强的说明移进算法说明弹层，这里只给一眼看出"有大有小"的直观印象）。
+    private func sizeDot(diameter: Double) -> some View {
+        Circle().fill(Theme.textSecondary).frame(width: diameter * 0.16, height: diameter * 0.16)
     }
 
-    /// 深浅图例：「买 一类 ▬▬▬ 三类」，渐变与气泡同一套配色，三类最深。
-    private func legendBar(label: String, color: Color, gradient: [Color]) -> some View {
-        HStack(spacing: 6) {
-            Text(label).font(.caption.bold()).foregroundColor(color)
-            Text(L("一类")).font(.system(size: 9)).foregroundColor(Theme.textSecondary)
-            RoundedRectangle(cornerRadius: 999)
-                .fill(LinearGradient(colors: gradient, startPoint: .leading, endPoint: .trailing))
-                .frame(height: 7)
-            Text(L("三类")).font(.system(size: 9)).foregroundColor(Theme.textSecondary)
+    /// 图例问号按钮：点开算法说明弹层，把选股范围、打分公式等细节讲清楚。
+    private var algorithmInfoButton: some View {
+        Button {
+            showAlgorithmInfo = true
+        } label: {
+            Image(systemName: "questionmark.circle")
+                .font(.system(size: 15))
+                .foregroundColor(Theme.textSecondary)
+        }
+        .accessibilityLabel(L("算法说明"))
+        .sheet(isPresented: $showAlgorithmInfo) { algorithmInfoSheet }
+    }
+
+    /// 算法说明弹层：气泡视觉编码 + 扫描范围来源 + 上榜打分公式，对应后端
+    /// app/services/signal_radar/{service.py, constituents.py, universe.py} 的实际口径。
+    private var algorithmInfoSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    infoSection(L("气泡怎么看"), [
+                        L("颜色：红=买点，绿=卖点；深浅=买卖点类型的确认程度，一类最浅、三类最深。"),
+                        L("大小：买卖点自身强弱（弱/中/强），越强气泡越大，与详情页同一套判定。"),
+                        L("位置：离中心越近代表信号越新，三个圈依次是今天、3天内、一周内。"),
+                        L("边框：虚线表示这条信号还没被后续走势确认。"),
+                        L("角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。"),
+                    ])
+                    infoSection(L("扫描范围怎么定"), [
+                        L("每个市场提供「科技指数」（默认）和「大盘宽基」两套可切换范围，如美股的纳斯达克100 / 标普500。"),
+                        L("成分股优先实时拉取官方/交易所数据源，取不到或数量不足时自动回退到内置清单，保证随时有得扫。"),
+                    ])
+                    infoSection(L("上榜排序怎么算"), [
+                        L("综合分 = 35% 类型确定性 + 30% 强弱 + 35% 新鲜度，最新一天命中「共振」再额外加分。"),
+                        L("类型确定性：一类 0.4（背驰迹象，待验证）、二类 0.7（回踩不破中枢）、三类 1.0（完全不回中枢，最强确认）。"),
+                        L("新鲜度：当天最高，7 天后归零；超过 7 天没被更新信号覆盖的旧信号会自动退场。"),
+                        L("每类买卖点先保底最多 2 个名额，其余按综合分从高到低补满，共取前 12 名。"),
+                    ])
+                    Text(L("以上口径与详情页强弱、确认状态完全一致。"))
+                        .font(.footnote)
+                        .foregroundColor(Theme.textSecondary)
+                }
+                .padding(16)
+            }
+            .background(Theme.background)
+            .navigationTitle(L("算法说明"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(L("完成")) { showAlgorithmInfo = false }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    /// 说明弹层里的一个分组：标题 + 若干条目，条目前带圆点。
+    private func infoSection(_ title: String, _ lines: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+            ForEach(lines, id: \.self) { line in
+                HStack(alignment: .top, spacing: 6) {
+                    Text("•").foregroundColor(Theme.textSecondary)
+                    Text(line).font(.system(size: 13)).foregroundColor(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
     }
 

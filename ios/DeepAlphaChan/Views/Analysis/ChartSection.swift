@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 次级别入口 + 紧贴 K 线图上方的图例 + K 线图（全屏按钮在主图左上角）。
+/// 紧贴 K 线图上方的图例 + K 线图（全屏按钮在主图左上角）+ 次级别入口。
 struct ChartSection: View {
     let analysis: ChanAnalysis
     @ObservedObject var vm: ChanViewModel
@@ -11,14 +11,14 @@ struct ChartSection: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            SubLevelBar(vm: vm, isStatic: isStatic)
-
             VStack(alignment: .leading, spacing: 4) {
                 // 图例（兼图层开关）紧贴在 K 线图正上方，先看懂颜色再看图
                 ChartLegend(vm: vm, isStatic: isStatic)
                 ChanChartView(analysis: analysis, vm: vm, highlightFrom: drillFrom,
                               onFullscreen: isStatic ? nil : onFullscreen)
             }
+
+            SubLevelBar(vm: vm, isStatic: isStatic)
         }
     }
 
