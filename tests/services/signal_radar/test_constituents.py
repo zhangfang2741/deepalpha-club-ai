@@ -1,6 +1,8 @@
 """信号雷达成分股映射纯逻辑单测（不触发任何网络）。"""
 from __future__ import annotations
 
+import json
+
 from app.services.signal_radar.constituents import _map_to_universe
 
 
@@ -202,3 +204,46 @@ async def test_resolve_constituents_enriches_us_names_beyond_curated(monkeypatch
 
     assert dict(resolved)["AAPL"] == "苹果"   # curated 清单命中
     assert dict(resolved)["ORCL"] == "甲骨文"  # 东方财富补齐，之前会是空字符串
+
+
+async def test_resolve_us_names_force_refresh_skips_cache(monkeypatch):
+    """force_refresh=True 时跳过缓存读取，重新查询并用新结果覆盖旧缓存。"""
+    from app.services.signal_radar import constituents as mod
+
+    calls: list[str] = []
+
+    async def fake_fetch(client, symbol):
+        calls.append(symbol)
+        return "新苹果"
+
+    monkeypatch.setattr(mod, "_fetch_eastmoney_us_name", fake_fetch)
+    redis = _FakeRedis()
+    await redis.set(f"{mod._US_NAME_CACHE_PREFIX}:AAPL", "旧苹果")
+
+    result = await mod._resolve_us_names(["AAPL"], redis=redis, force_refresh=True)
+
+    assert result == {"AAPL": "新苹果"}
+    assert calls == ["AAPL"]  # 命中缓存也照样发起查询，不因为有旧值就跳过
+    assert redis.store[f"{mod._US_NAME_CACHE_PREFIX}:AAPL"] == "新苹果"  # 覆盖旧值
+
+
+async def test_resolve_constituents_force_refresh_skips_cache(monkeypatch):
+    """force_refresh=True 时跳过成分清单缓存，重新走动态来源，不用等 24h 自然过期。"""
+    from app.services.signal_radar import constituents as mod
+
+    async def fake_dynamic(universe):
+        filler = [(f"{chr(65 + i // 26)}{chr(65 + i % 26)}X", "filler", 0.0) for i in range(25)]
+        return [("AAPL", "Apple", 10.0), *filler]
+
+    async def fake_resolve_us_names(symbols, *, redis, force_refresh=False):
+        return {}
+
+    monkeypatch.setattr(mod, "_fetch_dynamic", fake_dynamic)
+    monkeypatch.setattr(mod, "_resolve_us_names", fake_resolve_us_names)
+    redis = _FakeRedis()
+    await redis.set(f"{mod._CACHE_PREFIX}:us:nasdaq100", json.dumps([["AAPL", "陈旧的错误中文名"]]))
+
+    resolved = await mod.resolve_constituents("us", redis=redis, universe_key="nasdaq100", force_refresh=True)
+
+    # curated 清单命中「苹果」，而不是缓存里那个陈旧/错误的名字
+    assert dict(resolved)["AAPL"] == "苹果"

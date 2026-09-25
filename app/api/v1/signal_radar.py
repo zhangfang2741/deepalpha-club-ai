@@ -89,14 +89,15 @@ async def _watchlist_radar(
     return empty("generating")
 
 
-async def _run_scan(market: str, universe_key: str, user_id: int) -> None:
+async def _run_scan(market: str, universe_key: str, user_id: int, force_refresh: bool = False) -> None:
     """后台执行一次全量扫描，完成后清除 generating 标记。"""
     redis = current_redis()
     if redis is None:
         logger.error("signal_radar_scan_no_redis", market=market)
         return
     try:
-        await compute_market(market, redis=redis, user_id=user_id, universe_key=universe_key)
+        await compute_market(market, redis=redis, user_id=user_id, universe_key=universe_key,
+                             force_refresh=force_refresh)
     except Exception as e:  # noqa: BLE001
         logger.exception("signal_radar_scan_failed", market=market, error=str(e))
     finally:
@@ -142,7 +143,7 @@ async def signal_radar(
         already = await redis.get(gkey)
         if refresh or not already:
             await redis.set(gkey, "1", ex=_GENERATING_TTL)
-            _spawn(_run_scan(market, uni.key, user.id))
+            _spawn(_run_scan(market, uni.key, user.id, force_refresh=refresh))
             reason = "refresh" if refresh else ("cold" if cached is None else "stale")
             logger.info(
                 "signal_radar_scan_spawned",

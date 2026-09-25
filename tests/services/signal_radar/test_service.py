@@ -579,7 +579,7 @@ class TestComputedAt:
 
     async def test_compute_market_stamps_computed_at(self, monkeypatch):
         """全量扫描完成后 computed_at 是一个合法的 ISO8601 UTC 时间戳，而不是空字符串。"""
-        async def fake_resolve(market, *, redis, universe_key=None):
+        async def fake_resolve(market, *, redis, universe_key=None, force_refresh=False):
             return [("AAPL", "苹果")]
 
         async def fake_scan(symbol, name, **kwargs):

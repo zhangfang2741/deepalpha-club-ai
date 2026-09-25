@@ -87,13 +87,19 @@ async def _fetch_eastmoney_us_name(client: httpx.AsyncClient, symbol: str) -> st
         return None
 
 
-async def _resolve_us_names(symbols: list[str], *, redis: Redis | None) -> dict[str, str]:
-    """批量取一组美股代码的中文名（东方财富，命中 Redis 缓存的直接用，其余并发查询）。"""
+async def _resolve_us_names(
+    symbols: list[str], *, redis: Redis | None, force_refresh: bool = False,
+) -> dict[str, str]:
+    """批量取一组美股代码的中文名（东方财富，命中 Redis 缓存的直接用，其余并发查询）。
+
+    force_refresh=True 时跳过缓存读取，全部重新查（仍会把新结果写回缓存，覆盖旧值）——
+    用户反馈某只股票中文名不对/缺失时，靠这个绕开 30 天缓存立即纠正，不用等自然过期。
+    """
     result: dict[str, str] = {}
     to_fetch: list[str] = []
     for sym in symbols:
         cached = None
-        if redis is not None:
+        if redis is not None and not force_refresh:
             try:
                 cached = await redis.get(f"{_US_NAME_CACHE_PREFIX}:{sym}")
             except Exception as e:  # noqa: BLE001
@@ -382,25 +388,30 @@ async def _fetch_dynamic(universe: MarketUniverse) -> list[tuple[str, str, float
 
 
 async def resolve_constituents(
-    market: str, *, redis: Redis, universe_key: str | None = None,
+    market: str, *, redis: Redis, universe_key: str | None = None, force_refresh: bool = False,
 ) -> list[tuple[str, str]]:
-    """解析某 (市场, universe) 的扫描成分股：缓存 → 动态来源 → 静态兜底。"""
+    """解析某 (市场, universe) 的扫描成分股：缓存 → 动态来源 → 静态兜底。
+
+    force_refresh=True 时跳过成分清单缓存（24h）和美股中文名缓存（30 天），强制重新
+    拉取——由 API 层的 `refresh` 查询参数触发，修正股票中文名显示错误不用等自然过期。
+    """
     universe = get_universe(market, universe_key)
     if universe is None:
         return []
 
     cache_key = f"{_CACHE_PREFIX}:{universe.market}:{universe.key}"
-    try:
-        cached = await redis.get(cache_key)
-    except Exception as e:  # noqa: BLE001
-        logger.warning("signal_radar_constituents_cache_read_error", market=market, error=str(e))
-        cached = None
-    if cached:
+    if not force_refresh:
         try:
-            pairs = json.loads(cached)
-            return [(str(s), str(n)) for s, n in pairs]
-        except Exception:  # noqa: BLE001
-            pass
+            cached = await redis.get(cache_key)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("signal_radar_constituents_cache_read_error", market=market, error=str(e))
+            cached = None
+        if cached:
+            try:
+                pairs = json.loads(cached)
+                return [(str(s), str(n)) for s, n in pairs]
+            except Exception:  # noqa: BLE001
+                pass
 
     raw = await _fetch_dynamic(universe)
     # 中文名：先用本 universe 的 curated 名，再查同市场其他 universe 的（纳指/标普互补）
@@ -418,7 +429,7 @@ async def resolve_constituents(
         # curated 清单只覆盖几十只龙头；其余的查东方财富美股中文名，覆盖面广得多
         missing = [s for s in clean_symbols if s not in zh]
         if missing:
-            zh.update(await _resolve_us_names(missing, redis=redis))
+            zh.update(await _resolve_us_names(missing, redis=redis, force_refresh=force_refresh))
     # 美股查不到中文名（东方财富也没有）时名称留空（气泡只显示代码），英文全称太长不展示
     resolved = _map_to_universe(raw, zh, max_scan=universe.max_scan,
                                 fallback_to_source_name=universe.market != "us")
