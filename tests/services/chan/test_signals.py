@@ -94,6 +94,15 @@ def test_buy1_lands_on_stroke_end_with_divergence_strength():
     assert "czsc" not in s.description.lower()
 
 
+def test_signal_records_detection_time_separately_from_stroke_end():
+    """信号的 time 仍落在笔终点（图上画在那里），detected_time 记录它亮起的那根K线。"""
+    down = _st("down", "2025-01-01", "2025-01-10", 120, 100)
+    events = [_ev("buy1", "2025-01-10", 100.0, bar_time="2025-01-14", span="9笔")]
+    s = generate_all_signals(events, [down], [_div("strong", 0.3)], [])[0]
+    assert s.time == "2025-01-10"
+    assert s.detected_time == "2025-01-14"
+
+
 def _fst(direction, i, p0, p1, power, volume, length=8):
     """带力度的笔：第 i 笔，时间按下标递增。"""
     st = _st(direction, f"2025-01-{i + 1:02d}", f"2025-01-{i + 2:02d}", p0, p1)

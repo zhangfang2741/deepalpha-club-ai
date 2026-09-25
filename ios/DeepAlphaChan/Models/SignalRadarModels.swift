@@ -116,6 +116,9 @@ struct RadarSignal: Decodable, Identifiable {
     /// 可选字段，后端未部署或旧缓存里缺失时为 nil。
     let subLevelVerdict: String?
     let subLevelLabel: String?
+    /// 距所在展示日隔了几个交易日（周末、休市不算），后端算好下发；旧缓存或旧后端没有时为 nil，
+    /// 客户端退回按自然日算（见 SignalRadarView.layoutBubbles）。
+    let ageDays: Int?
 
     var id: String { "\(symbol)-\(date)-\(signalType)" }
 
@@ -143,5 +146,6 @@ struct RadarSignal: Decodable, Identifiable {
         case pivotStageDepth = "pivot_stage_depth"
         case subLevelVerdict = "sub_level_verdict"
         case subLevelLabel = "sub_level_label"
+        case ageDays = "age_days"
     }
 }

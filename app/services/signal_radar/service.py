@@ -39,11 +39,12 @@ from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
 from app.services.chan.pivot_phase import PivotPhase
 from app.services.chan.replay import pivot_phase_as_of
 from app.services.chan.sub_level_service import current_sub_level
+from app.services.chan.bias import UNCONFIRMED_DISCOUNT
 from app.services.signal_radar.constituents import resolve_constituents
 from app.services.signal_radar.universe import get_universe, list_universes
 from app.services.skills.kline import fetch_kline
 
-DEFAULT_TOP_N = 12
+DEFAULT_TOP_N = 10
 
 _analyzer = ChanAnalyzer()
 
@@ -126,13 +127,11 @@ def _cache_stale_after() -> int:
     """
     return int(settings.SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS * 1.5)
 
-# 在场信号的过期上限（自然日）：一条买卖点即使一直没被新信号覆盖，诞生超过这个
-# 天数后也不再显示。信号雷达的定位是「看当前市场的买卖点」，不是「翻出几个月前
-# 仍未失效的老信号」；而且前端气泡按 daysAgo 落环（今天 / 3 天 / 1 周三个环），超过
-# 7 天的信号只能堆在最外「1周」环上、彼此分不出远近——与其糊成一团，不如到点就让它
-# 退场。取 7 天与最外环刻度对齐，也比原先 14 天少算一倍窗口的历史信号、省计算量；
-# 新鲜度评分也按这个窗口衰减。
-_MAX_SIGNAL_AGE_DAYS = 7
+# 在场信号的过期上限（交易日，见 trading_age）：一条买卖点即使一直没被新信号覆盖，
+# 亮起超过这个交易日数后也不再显示。信号雷达的定位是「看当前市场的买卖点」，不是
+# 「翻出几个月前仍未失效的老信号」。5 个交易日 = 一周，与前端最外「一周内」环对齐；
+# 按交易日而不是自然日数，周末和休市不会让信号平白变老。新鲜度评分也按这个窗口衰减。
+_MAX_SIGNAL_AGE_DAYS = 5
 
 
 @dataclass
@@ -151,6 +150,8 @@ class RawSignal:
     signal_strength: str
     confirmed: bool
     pivot_stage_depth: float  # 该信号发生当天的中枢阶段深浅 0~1（旧版 App 的气泡深浅）
+    # 价格失效日：亮起后首个收盘价跌破买点价位（卖点：涨破）的交易日；从这天起不再在场
+    invalidated_on: str | None = None
 
 
 def signal_strength(label: str) -> float:
@@ -186,19 +187,47 @@ def _signal_level(signal_type: str) -> int:
     return int(tail) if tail.isdigit() else 1
 
 
+def trading_age(sig_date: str, day: str, calendar: list[str]) -> int:
+    """sig_date 之后、day 当天及之前隔了几个交易日（同一天为 0）。
+
+    calendar 为已知交易日（扫描时从成分股K线得到，含节假日休市的真实缺口）；日历覆盖
+    不到的更早区间按工作日近似（跳过周六日）。
+    """
+    if sig_date >= day:
+        return 0
+    cal = sorted({d for d in calendar if d <= day})
+    first = cal[0] if cal else None
+    exact = sum(1 for d in cal if d > sig_date)
+    approx_end = date.fromisoformat(first) if first else date.fromisoformat(day) + timedelta(days=1)
+    approx = 0
+    d = date.fromisoformat(sig_date) + timedelta(days=1)
+    while d < approx_end:
+        if d.weekday() < 5:
+            approx += 1
+        d += timedelta(days=1)
+    return exact + approx
+
+
 def radar_score(level: int, strength: float, age_days: int, resonance: bool = False,
-                *, max_age_days: int = _MAX_SIGNAL_AGE_DAYS) -> float:
-    """入榜综合分：类型确认程度 + 强弱 + 新鲜度（当天 1 → max_age_days 天 0），共振另加分。"""
+                *, confirmed: bool = True, max_age_days: int = _MAX_SIGNAL_AGE_DAYS) -> float:
+    """入榜综合分：类型确认程度 + 强弱 + 新鲜度（当天 1 → max_age_days 天 0），共振另加分。
+
+    未确认信号（落在最后一笔上的左侧预判）的质量部分（类型确认程度 + 强弱）按
+    UNCONFIRMED_DISCOUNT 打折，与多空倾向同一口径；新鲜度不打折。
+    """
     certainty = _LEVEL_CERTAINTY.get(level, _LEVEL_CERTAINTY[1])
     freshness = 1.0 - min(max(age_days, 0), max_age_days) / max(max_age_days, 1)
-    score = (_SCORE_CERTAINTY_WEIGHT * certainty + _SCORE_STRENGTH_WEIGHT * strength
-             + _SCORE_FRESHNESS_WEIGHT * freshness)
+    quality = _SCORE_CERTAINTY_WEIGHT * certainty + _SCORE_STRENGTH_WEIGHT * strength
+    if not confirmed:
+        quality *= UNCONFIRMED_DISCOUNT
+    score = quality + _SCORE_FRESHNESS_WEIGHT * freshness
     return score + (_RESONANCE_BONUS if resonance else 0.0)
 
 
 def display_rank(signal: RawSignal, age_days: int = 0) -> float:
     """信号在看板上的综合分（见 radar_score）；age_days 为相对展示日的天数。"""
-    return radar_score(_signal_level(signal.signal_type), signal.strength, age_days)
+    return radar_score(_signal_level(signal.signal_type), signal.strength, age_days,
+                       confirmed=signal.confirmed)
 
 
 def _select_top_n(items: list, top_n: int, *, level_of, score_of) -> list:
@@ -239,16 +268,37 @@ def rerank_with_resonance(day: RadarDayOut, top_n: int) -> RadarDayOut:
     day_date = date.fromisoformat(day.date)
 
     def score_of(s: RadarSignalOut) -> float:
-        age = (day_date - date.fromisoformat(s.date)).days
+        # 优先用构建时算好的交易日龄；旧缓存没有该字段时退回自然日
+        age = s.age_days if s.age_days is not None else (day_date - date.fromisoformat(s.date)).days
         resonance = is_aligned_resonance(s.side, s.sub_level_verdict)
-        return radar_score(_signal_level(s.signal_type), s.strength, age, resonance)
+        return radar_score(_signal_level(s.signal_type), s.strength, age, resonance,
+                           confirmed=s.confirmed)
 
     items = _select_top_n(list(day.signals), top_n, level_of=lambda s: _signal_level(s.signal_type),
                           score_of=score_of)
     return RadarDayOut(date=day.date, buy_count=sum(s.side == "buy" for s in items),
                        sell_count=sum(s.side == "sell" for s in items), signals=items)
 
-def build_signal_history(symbol: str, name: str, result: ChanAnalysisResult) -> list[RawSignal]:
+def _invalidated_on(is_buy: bool, price: float, detected: str, bars: list[dict] | None) -> str | None:
+    """亮起之后首个收盘价跌破买点价位（卖点：涨破）的日期；没有则 None。
+
+    价位是信号所属那一笔的端点（买点=低点、卖点=高点）。一二三类统一按它判：一买/二买
+    跌破即新低、结构被否定；三买的回踩低点本就在中枢上沿之上，跌回中枢之前必先跌破它。
+    亮起之前（笔终点到亮起之间）的走势不算。
+    """
+    for b in bars or []:
+        t = str(b.get("time", ""))[:10]
+        close = b.get("close")
+        if t <= detected or close is None:
+            continue
+        if (is_buy and close < price) or (not is_buy and close > price):
+            return t
+    return None
+
+
+def build_signal_history(
+    symbol: str, name: str, result: ChanAnalysisResult, bars: list[dict] | None = None,
+) -> list[RawSignal]:
     """从一只股票的缠论结果里取出全部买卖点历史。
 
     不只是最新一条，按日期升序返回，供按日重建市场快照时找「某天为止最近一条」用。
@@ -266,13 +316,17 @@ def build_signal_history(symbol: str, name: str, result: ChanAnalysisResult) -> 
             side="buy" if sig.is_buy else "sell",
             label=sig.label,
             signal_type=sig.type,
-            date=sig.time[:10],
+            # 按亮起日期算「几天前」：笔终点要等后续K线确认才出信号，按笔终点算会把今天
+            # 刚出现的信号当成几天前的旧信号；翻看历史某天时也不会提前看到之后才亮起的信号。
+            date=(sig.detected_time or sig.time)[:10],
             price=round(sig.price, 2),
             strength=signal_strength(sig.strength),
             bias="bullish" if sig.is_buy else "bearish",
             signal_strength=sig.strength,
             confirmed=sig.confirmed,
             pivot_stage_depth=pivot_stage_depth(pivot_phase_as_of(result, sig.time)),
+            invalidated_on=_invalidated_on(
+                sig.is_buy, sig.price, (sig.detected_time or sig.time)[:10], bars),
         )
         for sig in result.signals
     ]
@@ -282,7 +336,7 @@ def build_signal_history(symbol: str, name: str, result: ChanAnalysisResult) -> 
 
 def build_days(
     histories: list[list[RawSignal]], trading_days: list[str], *, top_n: int,
-    max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
+    max_age_days: int = _MAX_SIGNAL_AGE_DAYS, calendar: list[str] | None = None,
 ) -> list[RadarDayOut]:
     """按 trading_days（最新在前）逐日重建市场快照。
 
@@ -295,10 +349,12 @@ def build_days(
     历史某天时看到的仍是「截至那天 max_age_days 内有效」的信号）。见模块内
     _MAX_SIGNAL_AGE_DAYS 说明。
     """
+    # 数交易日龄用的日历：调用方给了更长的日历就用它（覆盖到最老展示日之前），否则用展示日本身
+    cal = calendar if calendar is not None else trading_days
     out: list[RadarDayOut] = []
     for day in trading_days:
-        day_date = date.fromisoformat(day)
         active: list[RawSignal] = []
+        ages: dict[int, int] = {}
         for history in histories:
             candidate: RawSignal | None = None
             for r in history:
@@ -306,14 +362,17 @@ def build_days(
                     break
                 candidate = r
             if candidate is not None:
-                age = (day_date - date.fromisoformat(candidate.date)).days
+                if candidate.invalidated_on is not None and candidate.invalidated_on <= day:
+                    continue  # 价格已走坏（跌破买点 / 涨破卖点），当天起退场
+                age = trading_age(candidate.date, day, cal)
                 if age > max_age_days:
                     continue
                 active.append(candidate)
+                ages[id(candidate)] = age
 
         items = _select_top_n(
             active, top_n, level_of=lambda r: _signal_level(r.signal_type),
-            score_of=lambda r, d=day_date: display_rank(r, (d - date.fromisoformat(r.date)).days),
+            score_of=lambda r, ages=ages: display_rank(r, ages[id(r)]),
         )
         out.append(RadarDayOut(
             date=day,
@@ -326,6 +385,7 @@ def build_days(
                     strength=r.strength, bias=r.bias,
                     signal_strength=r.signal_strength, confirmed=r.confirmed,
                     pivot_stage_depth=r.pivot_stage_depth,
+                    age_days=ages[id(r)],
                 )
                 for r in items
             ],
@@ -489,7 +549,8 @@ async def _scan_symbol(
         logger.warning("signal_radar_analyze_failed", symbol=symbol, error=str(e))
         return [], "analyze_failed", None, []
 
-    return build_signal_history(symbol, name, result), None, result, [b["time"][:10] for b in bars[-60:]]
+    return (build_signal_history(symbol, name, result, bars=bars), None, result,
+            [b["time"][:10] for b in bars[-60:]])
 
 
 def _classify_failure(exc: Exception) -> str:
@@ -620,10 +681,13 @@ async def compute_market(
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_etf_kline_failed", market=market, error=str(e))
         etf_bars = []
-    trading_days = trading_days_from_constituents(
+    # 日历多取一段（最老展示日之前再往前 max_age_days 天），用来按交易日数信号年龄
+    calendar = trading_days_from_constituents(
         [dates for _, _, dates in scanned if dates],
-        etf_dates=[b["time"] for b in etf_bars], cutoff=cutoff, end_date=end_date, limit=days,
-    ) or _fallback_trading_days(end_date=end_date, limit=days)
+        etf_dates=[b["time"] for b in etf_bars], cutoff=cutoff, end_date=end_date,
+        limit=days + max_age_days + 1,
+    ) or _fallback_trading_days(end_date=end_date, limit=days + max_age_days + 1)
+    trading_days = calendar[:days]
 
     resp = SignalRadarResponse(
         market=market,
@@ -633,7 +697,8 @@ async def compute_market(
         universe_size=len(constituents),
         as_of=end_date,
         top_n=top_n,
-        days=build_days(histories, trading_days, top_n=top_n, max_age_days=max_age_days),
+        days=build_days(histories, trading_days, top_n=top_n, max_age_days=max_age_days,
+                        calendar=calendar),
         status="ready",
         computed_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
     )
@@ -641,7 +706,7 @@ async def compute_market(
         # 次级别结论描述的是「现在」，只对最新交易日：先取更大的候选池补算次级别，
         # 再按综合分 + 共振加分重排取前 top_n（共振参与排名）
         pool = build_days(histories, trading_days[:1], top_n=max(top_n, _RESONANCE_POOL),
-                          max_age_days=max_age_days)[0]
+                          max_age_days=max_age_days, calendar=calendar)[0]
         await attach_sub_levels(pool, end_date=end_date, user_id=user_id, redis=redis)
         resp.days[0] = rerank_with_resonance(pool, top_n)
         resp.sub_level_as_of = datetime.now(UTC).replace(microsecond=0).isoformat()

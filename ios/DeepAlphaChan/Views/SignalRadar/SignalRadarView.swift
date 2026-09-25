@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 信号雷达 Tab —— 扫描各市场科技 ETF 成分股跑缠论，把每日买卖点前 12 只用气泡呈现。
+/// 信号雷达 Tab —— 扫描各市场科技 ETF 成分股跑缠论，把每日买卖点前 10 只用气泡呈现。
 ///
 /// 顶部市场选择与三地恐慌指数小卡片合二为一（PanicIndexStrip）：点哪张卡就切到
 /// 哪个市场，不再单独放一条分段选择器。
@@ -24,6 +24,8 @@ struct SignalRadarView: View {
     @ObservedObject var chanVM: ChanViewModel
 
     @StateObject private var vm = SignalRadarViewModel()
+    /// 叠在雷达左上角的指数切换按钮实测尺寸，气泡摆位时避开（见 layoutBubbles）。
+    @State private var switcherSize: CGSize = .zero
     @StateObject private var panicVM = PanicIndexViewModel()
     @EnvironmentObject private var orientation: AppOrientation
 
@@ -186,7 +188,10 @@ struct SignalRadarView: View {
             let dayDate = vm.selectedDay?.date ?? ""
             let signals = (vm.selectedDay?.signals ?? [])
                 .sorted { $0.strength > $1.strength }
-            let layouts = SignalRadarView.layoutBubbles(signals: signals, dayDate: dayDate, width: w, height: h)
+            let layouts = SignalRadarView.layoutBubbles(
+                signals: signals, dayDate: dayDate, width: w, height: h,
+                avoid: switcherSize == .zero ? [] : [.init(x: 0, y: 0, width: Double(switcherSize.width),
+                                                            height: Double(switcherSize.height))])
             ZStack {
                 // 由近及远的光晕：中心亮、向外自然变暗，"越靠中心=越新"不用靠文字说明，
                 // 图本身就有纵深感。
@@ -249,7 +254,11 @@ struct SignalRadarView: View {
             )
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(alignment: .topLeading) { universeSwitcher }
+        .overlay(alignment: .topLeading) {
+            // 实测按钮大小（随指数名称长短变化），气泡摆位时当作禁区避开
+            universeSwitcher
+                .onGeometryChange(for: CGSize.self) { $0.size } action: { switcherSize = $0 }
+        }
     }
 
     // MARK: - universe 切换器（雷达左上角）
@@ -357,7 +366,7 @@ struct SignalRadarView: View {
         RadarOrbitSpacing.timeRadius(daysAgo: daysAgo) * fieldRadius
     }
 
-    /// daysAgo → 时间档：0=今天、1=3天内、2=一周内（含更早，最多保留 7 天）。
+    /// daysAgo（交易日）→ 时间档：0=今天、1=3天内、2=一周内（含更早，最多保留 5 个交易日）。
     static func bandIndex(forDaysAgo daysAgo: Int) -> Int {
         daysAgo <= 0 ? 0 : (daysAgo <= 3 ? 1 : 2)
     }
@@ -373,10 +382,13 @@ struct SignalRadarView: View {
     /// - 半径 = ringRadius(daysAgo) × 场半径（当天为圆心），同一天共用一条圆轨道；同一天
     ///   多个气泡放不下时才外扩到刚好排开，且不越过所在时间档外沿（RadarOrbitSpacing.orbitRadius）。
     /// - 方向：由内圈到外圈、大气泡先放，每个气泡在自己的椭圆轨道上选「重叠最少、尽量
-    ///   横向」的方向（RadarOrbitSpacing.bestAngle）。半径不为避让而改变——不同轨道放不开时允许重叠，
-    ///   否则「远近 = 时间」就不成立了。
+    ///   横向」的方向（RadarOrbitSpacing.bestAngle）。
+    /// - 避让：最后做一轮碰撞松弛（RadarOrbitSpacing.relax），把仍然压在一起的气泡推开、
+    ///   铺到外圈空处，保证代码和名称看得清；推开时靠中心的一方挪得少，远近仍大致对应时间，
+    ///   但不再严格落在所属时间圈上（产品决定：可读性优先）。
     private static func layoutBubbles(
-        signals: [RadarSignal], dayDate: String, width w: Double, height h: Double
+        signals: [RadarSignal], dayDate: String, width w: Double, height h: Double,
+        avoid: [RadarOrbitSpacing.Obstacle] = []
     ) -> [BubbleLayout] {
         guard !signals.isEmpty else { return [] }
         let (hRad, vRad) = fieldRadii(width: w, height: h)
@@ -384,13 +396,15 @@ struct SignalRadarView: View {
         let meanRadius = ((hRad * hRad + vRad * vRad) / 2).squareRoot()
         let center = (x: w / 2, y: h / 2)
         let scales = ringSpecs.map(\.scale)
-        func age(_ s: RadarSignal) -> Int { daysAgo(from: s.date, to: dayDate) }
+        func age(_ s: RadarSignal) -> Int { s.ageDays ?? daysAgo(from: s.date, to: dayDate) }
         let maxDiameter = max(1, min(w, h) - 2 * RadarBubbleMetrics.edgePadding)
         // 每次布局每个信号只测量一次，排序和避让都使用最终尺寸。
-        let metrics = signals.map { signal in
+        let bases = signals.map { diameter(forLevel: $0.level) * ringSizeFactor(forDaysAgo: age($0)) }
+        // 当天信号特别集中时统一缩小，保证推开避让有地方可去（一二三类的大小关系不变）
+        let crowd = RadarOrbitSpacing.crowdScale(diameters: bases, width: w, height: h)
+        let metrics = zip(signals, bases).map { signal, base in
             RadarBubbleMetrics(symbol: signal.symbol, name: signal.name,
-                               baseDiameter: diameter(forLevel: signal.level) * ringSizeFactor(forDaysAgo: age(signal)),
-                               maxDiameter: maxDiameter)
+                               baseDiameter: base * crowd, maxDiameter: maxDiameter)
         }
         let sizedSignals = Array(zip(signals, metrics))
         let byDay = Dictionary(grouping: sizedSignals) { age($0.0) }
@@ -420,18 +434,26 @@ struct SignalRadarView: View {
                                             phase: Double(layouts.count) * 0.35, daysAgo: days))
             }
         }
+        // 按时间摆完后推开互相压住的气泡，铺到外圈空处（越近中心的挪得越少，远近仍大致=时间）
+        let relaxed = RadarOrbitSpacing.relax(
+            layouts.map { .init(x: $0.x, y: $0.y, diameter: $0.diameter) },
+            width: w, height: h, inset: RadarBubbleMetrics.edgePadding, obstacles: avoid)
+        for i in layouts.indices {
+            layouts[i].x = relaxed[i].x
+            layouts[i].y = relaxed[i].y
+        }
         // 叠层：越接近查看日（daysAgo 越小）画得越晚，重叠时新的浮在上面
         layouts.sort { $0.daysAgo > $1.daysAgo }
         return layouts
     }
 
-    /// 买卖点类型 → 气泡直径：一类 60 / 二类 76 / 三类 92。一类只是背驰迹象、尚待验证，
+    /// 买卖点类型 → 气泡直径：一类 70 / 二类 88 / 三类 108。一类只是背驰迹象、尚待验证，
     /// 三类回踩完全不回中枢、确认程度最高，越确认越大。
     static func diameter(forLevel level: Int) -> Double {
         switch level {
-        case 1: return 60
-        case 2: return 76
-        default: return 92
+        case 1: return 70
+        case 2: return 88
+        default: return 108
         }
     }
 
@@ -519,7 +541,7 @@ struct SignalRadarView: View {
                     infoSection(L("气泡怎么看"), [
                         L("颜色：红=买点，绿=卖点；深浅=形态强弱（弱/中/强），越强越深，与详情页同一套判定。"),
                         L("大小：买卖点类型，一类最小、三类最大——越往后确认程度越高。"),
-                        L("位置：离中心越近代表信号越新，三个圈依次是今天、3天内、一周内。"),
+                        L("位置：大致越靠中心信号越新（按信号出现后的交易日数，周末不算），三个圈依次是今天、3个交易日内、一周内；气泡太挤时会自动推开。"),
                         L("角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。"),
                     ])
                     infoSection(L("为什么点进详情页可能对不上"), [
@@ -534,8 +556,10 @@ struct SignalRadarView: View {
                     infoSection(L("上榜排序怎么算"), [
                         L("综合分 = 35% 类型确定性 + 30% 强弱 + 35% 新鲜度，最新一天命中「共振」再额外加分。"),
                         L("类型确定性：一类 0.4（背驰迹象，待验证）、二类 0.7（回踩不破中枢）、三类 1.0（完全不回中枢，最强确认）。"),
-                        L("新鲜度：当天最高，7 天后归零；超过 7 天没被更新信号覆盖的旧信号会自动退场。"),
-                        L("每类买卖点先保底最多 2 个名额，其余按综合分从高到低补满，共取前 12 名。"),
+                        L("新鲜度：按信号出现后的交易日数算（周末、休市不算），当天最高，5 个交易日（一周）后归零并退场。"),
+                        L("未确认的信号（落在最后一笔上的提前预判）：类型确定性和强弱两部分打 6 折，新鲜度不打折。"),
+                        L("价格走坏即退场：信号出现后，收盘价跌破买点价位（卖点：涨破）就判定失效，当天起不再上榜。"),
+                        L("每类买卖点先保底最多 2 个名额，其余按综合分从高到低补满，共取前 10 名。"),
                     ])
                     Text(L("以上打分口径与详情页强弱、确认状态判定完全一致，只是气泡取的是某一次扫描的快照。"))
                         .font(.footnote)

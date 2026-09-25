@@ -532,7 +532,7 @@
 "标签=状态" = "Tag = status";
 "算法说明" = "How it works";
 "气泡怎么看" = "Reading the bubbles";
-"位置：离中心越近代表信号越新，三个圈依次是今天、3天内、一周内。" = "Position: closer to center means more recent — the three rings mark today, within 3 days, within 1 week.";
+"位置：大致越靠中心信号越新（按信号出现后的交易日数，周末不算），三个圈依次是今天、3个交易日内、一周内；气泡太挤时会自动推开。" = "Position: roughly, closer to center means more recent (counted in trading days since the signal appeared; weekends excluded). The rings mark today, within 3 trading days, and within 1 week; crowded bubbles are nudged apart.";
 "角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。" = "Badges: \"Aligned\" means the daily and 30-minute directions agree; \"New\" means the signal first appeared today.";
 "扫描范围怎么定" = "How the scan range is chosen";
 "每个市场提供「科技指数」（默认）和「大盘宽基」两套可切换范围，如美股的纳斯达克100 / 标普500。" = "Each market offers a switchable \"tech index\" (default) and a \"broad market\" range, e.g. Nasdaq 100 / S&P 500 for US stocks.";
@@ -540,8 +540,7 @@
 "上榜排序怎么算" = "How the ranking is scored";
 "综合分 = 35% 类型确定性 + 30% 强弱 + 35% 新鲜度，最新一天命中「共振」再额外加分。" = "Score = 35% type certainty + 30% strength + 35% freshness, with a bonus for hitting \"Aligned\" on the latest day.";
 "类型确定性：一类 0.4（背驰迹象，待验证）、二类 0.7（回踩不破中枢）、三类 1.0（完全不回中枢，最强确认）。" = "Type certainty: type 1 = 0.4 (a divergence hint, unconfirmed), type 2 = 0.7 (pullback holds the pivot), type 3 = 1.0 (pullback never re-enters the pivot — the strongest confirmation).";
-"新鲜度：当天最高，7 天后归零；超过 7 天没被更新信号覆盖的旧信号会自动退场。" = "Freshness: highest on the signal's own day, decaying to zero after 7 days; a signal not superseded within 7 days drops off automatically.";
-"每类买卖点先保底最多 2 个名额，其余按综合分从高到低补满，共取前 12 名。" = "Each signal type gets up to 2 guaranteed slots first; the rest are filled by score, for a top-12 list overall.";
+"每类买卖点先保底最多 2 个名额，其余按综合分从高到低补满，共取前 10 名。" = "Each signal type gets up to 2 guaranteed slots first; the rest are filled by score, for a top-10 list overall.";
 "以上打分口径与详情页强弱、确认状态判定完全一致，只是气泡取的是某一次扫描的快照。" = "This scoring matches the same strength and confirmation logic used on the analysis detail page — the bubbles just reflect a snapshot from one scan.";
 "为什么点进详情页可能对不上" = "Why the detail page can look different";
 "气泡是最近一次全量扫描那一刻的快照（历史日期下方会标出算出时刻），不是实时数据；点进详情页是用当下最新K线重新跑一遍缠论。" = "Bubbles are a snapshot from the last full scan (the computed time is shown under past dates), not live data; opening the detail page reruns the Chan analysis on the latest candles.";
@@ -561,3 +560,6 @@
 "大小=一二三类" = "Size = type 1/2/3";
 "颜色：红=买点，绿=卖点；深浅=形态强弱（弱/中/强），越强越深，与详情页同一套判定。" = "Color: red = buy, green = sell; shade = pattern strength (weak/medium/strong) — stronger is darker, judged the same way as on the detail page.";
 "大小：买卖点类型，一类最小、三类最大——越往后确认程度越高。" = "Size: signal type — type 1 smallest, type 3 largest; later types are more confirmed.";
+"新鲜度：按信号出现后的交易日数算（周末、休市不算），当天最高，5 个交易日（一周）后归零并退场。" = "Freshness: counted in trading days since the signal appeared (weekends and holidays excluded) — highest on the day, reaching zero after 5 trading days (a week), when the signal leaves the board.";
+"未确认的信号（落在最后一笔上的提前预判）：类型确定性和强弱两部分打 6 折，新鲜度不打折。" = "Unconfirmed signals (early calls on the last, still-open stroke): the type-certainty and strength parts are discounted to 60%; freshness is not.";
+"价格走坏即退场：信号出现后，收盘价跌破买点价位（卖点：涨破）就判定失效，当天起不再上榜。" = "Invalidation: once the close falls below a buy signal's price (or rises above a sell signal's), the signal is treated as failed and leaves the board from that day.";

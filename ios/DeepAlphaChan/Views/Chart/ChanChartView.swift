@@ -572,7 +572,7 @@ struct ChanChartView: View {
 
     // MARK: - 绘制：次级别下钻区间
 
-    /// 从 highlightFrom 到最新一根铺浅色底，顶部标「30分」——告诉用户下钻放大的是哪一段。
+    /// 从 highlightFrom 到最新一根铺浅色底——在次级别弹出图里标出对应大级别最后一段的区间。
     private func drawHighlight(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat, range: VisibleRange) {
         guard let from = highlightFrom,
               let start = candles.firstIndex(where: { $0.time >= from }) else { return }

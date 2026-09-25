@@ -66,6 +66,9 @@ class Signal:
     confirmed: bool = True
     # 输出语言（由 generate_all_signals 统一注入），驱动 label 的中英
     lang: str = "zh"
+    # 信号亮起（被识别出来）的那根K线日期。time 是所属笔终点，要等后续几根K线确认分型
+    # 才会亮起（实测多数晚 1 个交易日，少数 2~4 个）；「信号是几天前出现的」应按这个日期算（信号雷达的新鲜度）。
+    detected_time: str = ""
 
     @property
     def label(self) -> str:
@@ -248,5 +251,6 @@ def generate_all_signals(
             divergence=div,
             description=_describe(ev.type, ev.bi_end_time, ev.bi_end_price, ev.span, div, lang),
             lang=lang,
+            detected_time=ev.bar_time,
         ))
     return signals

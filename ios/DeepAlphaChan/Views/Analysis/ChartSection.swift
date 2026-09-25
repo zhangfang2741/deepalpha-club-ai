@@ -14,20 +14,13 @@ struct ChartSection: View {
             VStack(alignment: .leading, spacing: 10) {
                 // 图例（兼图层开关）在 K 线图正上方，先看懂颜色再看图
                 ChartLegend(vm: vm, isStatic: isStatic)
-                ChanChartView(analysis: analysis, vm: vm, highlightFrom: drillFrom,
+                // 主图不标次级别下钻区间：最右两根K线铺浅底没有说明，看起来像莫名的阴影；
+                // 次级别结论已在下方 SubLevelBar 一行写明，区间只在弹出的 30 分钟图里标。
+                ChanChartView(analysis: analysis, vm: vm,
                               onFullscreen: isStatic ? nil : onFullscreen)
             }
 
             SubLevelBar(vm: vm, isStatic: isStatic)
         }
-    }
-
-    /// 大级别图上标出次级别下钻区间：最近 2 根K线（日线 ≈ 30 分钟看的近 2 个交易日，
-    /// 周线 ≈ 日线看的近两周）。
-    private var drillFrom: String? {
-        guard vm.freq == "daily" || vm.freq == "weekly", vm.subLevel != nil else { return nil }
-        let candles = analysis.mergedCandles
-        guard candles.count >= 2 else { return nil }
-        return candles[candles.count - 2].time
     }
 }

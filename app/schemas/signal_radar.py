@@ -32,6 +32,8 @@ class RadarSignalOut(BaseModel):
         description="resonance_buy / resonance_sell / counter_trend / waiting / unavailable",
     )
     sub_level_label: str | None = Field(default=None, description="次级别结论文案，如 共振买点")
+    # 距所在展示日隔了几个交易日（周末、休市不算）。旧缓存里没有时为 None，客户端退回按自然日算。
+    age_days: int | None = Field(default=None, description="距展示日的交易日数，当天为 0")
 
 
 class RadarDayOut(BaseModel):

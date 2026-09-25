@@ -22,6 +22,7 @@ final class WatchlistViewModel: ObservableObject {
     /// （给分析详情页星标按钮判断收藏状态用）不拉——那条路径要快，多算全部
     /// 标的的缠论阶段没必要也拖慢它。取不到的标的直接没有 key，UI 不显示标签。
     @Published private(set) var phases: [String: WatchlistPhase] = [:]
+    private var isLoadingPhases = false
 
     private var memberships: Set<String> = []
 
@@ -29,10 +30,16 @@ final class WatchlistViewModel: ObservableObject {
         memberships.contains(Self.key(market: market, symbol: symbol))
     }
 
-    /// 已有数据时不重复拉取；下拉刷新走 `refresh()`。
+    /// 每次切到自选页都重算阶段（行情每天在变，之前只在列表为空时加载，切回来标签不更新、
+    /// 只能手动下拉）。首次带 loading 完整加载；已有数据时静默刷新列表 + 阶段，旧标签先留着，
+    /// 新结果回来直接替换，不闪、不转圈。
     func onAppear() async {
-        guard items.isEmpty else { return }
-        await refresh()
+        if items.isEmpty {
+            await refresh()
+            return
+        }
+        try? await fetchAndApply()
+        await loadPhases()
     }
 
     func refresh() async {
@@ -47,11 +54,21 @@ final class WatchlistViewModel: ObservableObject {
         await loadPhases()
     }
 
-    /// 拉阶段标签：单独一次请求，比拉列表慢（要跑缠论分析），失败静默——
-    /// 阶段标签是锦上添花，不该因为算阶段失败把整个自选列表的加载判定为失败。
+    /// 拉阶段标签：单独一次请求，比拉列表慢（要跑缠论分析）。失败隔 2 秒重试一次，
+    /// 仍失败则保留旧标签——阶段标签是锦上添花，不该因此把整个自选列表判定为加载失败。
+    /// 进行中不重复发起（快速来回切 tab 时）。
     private func loadPhases() async {
-        guard let resp = try? await WatchlistService.phases() else { return }
-        phases = resp.phases
+        guard !isLoadingPhases else { return }
+        isLoadingPhases = true
+        defer { isLoadingPhases = false }
+        for attempt in 0..<2 {
+            if let resp = try? await WatchlistService.phases() {
+                phases = resp.phases
+                return
+            }
+            guard attempt == 0, !Task.isCancelled else { return }
+            try? await Task.sleep(for: .seconds(2))
+        }
     }
 
     /// 只用来判断分析结果页当前标的的星标状态，不需要展示 loading，失败静默即可

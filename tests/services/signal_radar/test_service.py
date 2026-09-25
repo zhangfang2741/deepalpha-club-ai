@@ -61,6 +61,20 @@ class TestBuildSignalHistory:
         assert history[1].side == "sell"
         assert all(h.name == "英伟达" for h in history)
 
+    def test_date_uses_detection_day_not_stroke_end(self):
+        """雷达的「几天前」按信号亮起那天算：笔终点 09-18、09-22 才确认亮起，今天看是新信号。"""
+        sig = _sig("buy2", "2026-09-18", 10.0)
+        sig.detected_time = "2026-09-22"
+        r = ChanAnalysisResult(symbol="X", bars_count=100, signals=[sig])
+        history = build_signal_history("X", "x", r)
+        assert history[0].date == "2026-09-22"
+        assert history[0].price == 10.0  # 价位仍是笔终点价
+
+    def test_date_falls_back_to_stroke_end_without_detection_time(self):
+        sig = _sig("buy2", "2026-09-18", 10.0)
+        r = ChanAnalysisResult(symbol="X", bars_count=100, signals=[sig])
+        assert build_signal_history("X", "x", r)[0].date == "2026-09-18"
+
     def test_date_is_truncated_to_day(self):
         sig = _sig("buy1", "2026-09-19T00:00:00", 12.0)
         r = ChanAnalysisResult(symbol="X", bars_count=100, signals=[sig])
@@ -232,24 +246,71 @@ class TestDisplayRank:
         assert build_days([history], [], top_n=10) == []
 
     def test_signal_expires_after_max_age(self):
-        """在场信号诞生超过 max_age_days 天后不再展示（09-01 买点在 34 天后的 10-05 已过期）。"""
-        history = [_raw("A", "2026-09-01", "buy", 0.5)]
-        days = build_days([history], ["2026-10-05"], top_n=10, max_age_days=30)
-        assert days[0].signals == []
-        assert days[0].buy_count == 0
+        """在场信号超过 max_age_days 个交易日后不再展示（按交易日历数，周末不算）。"""
+        cal = ["2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-21"]
+        history = [_raw("A", "2026-09-14", "buy", 0.5)]
+        days = build_days([history], ["2026-09-21"], top_n=10, max_age_days=4, calendar=cal)
+        assert days[0].signals == []  # 09-14 → 09-21 隔了 5 个交易日
 
     def test_signal_visible_at_exactly_max_age(self):
-        """恰好等于 max_age_days 天仍在场（09-01 买点在 30 天后的 10-01 边界含、应显示）。"""
-        history = [_raw("A", "2026-09-01", "buy", 0.5)]
-        days = build_days([history], ["2026-10-01"], top_n=10, max_age_days=30)
-        assert [s.date for s in days[0].signals] == ["2026-09-01"]
+        cal = ["2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-21"]
+        history = [_raw("A", "2026-09-14", "buy", 0.5)]
+        days = build_days([history], ["2026-09-21"], top_n=10, max_age_days=5, calendar=cal)
+        assert [s.date for s in days[0].signals] == ["2026-09-14"]
+        assert days[0].signals[0].age_days == 5
 
     def test_expiry_is_relative_to_each_viewed_day(self):
-        """过期相对每个展示日各自判断：同条 09-01 信号翻看 09-15 在场、10-05 已过期。"""
-        history = [_raw("A", "2026-09-01", "buy", 0.5)]
-        days = build_days([history], ["2026-10-05", "2026-09-15"], top_n=10, max_age_days=30)
-        assert days[0].signals == []  # 10-05：过期
-        assert [s.date for s in days[1].signals] == ["2026-09-01"]  # 09-15：在场
+        cal = ["2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-21"]
+        history = [_raw("A", "2026-09-14", "buy", 0.5)]
+        days = build_days([history], ["2026-09-21", "2026-09-16"], top_n=10, max_age_days=4, calendar=cal)
+        assert days[0].signals == []  # 09-21：5 个交易日，过期
+        assert days[1].signals[0].age_days == 2  # 09-16：在场
+
+    def test_weekend_does_not_age_a_signal(self):
+        """周五的信号到周一只算 1 个交易日，不是 3 天。"""
+        cal = ["2026-09-18", "2026-09-21"]
+        history = [_raw("A", "2026-09-18", "buy", 0.5)]
+        days = build_days([history], ["2026-09-21"], top_n=10, calendar=cal)
+        assert days[0].signals[0].age_days == 1
+
+
+class TestTradingAge:
+    def test_same_day_is_zero(self):
+        assert svc.trading_age("2026-09-21", "2026-09-21", ["2026-09-21"]) == 0
+
+    def test_counts_calendar_days_after_signal(self):
+        cal = ["2026-09-17", "2026-09-18", "2026-09-21", "2026-09-22"]
+        assert svc.trading_age("2026-09-17", "2026-09-22", cal) == 3
+
+    def test_holiday_missing_from_calendar_is_skipped(self):
+        """日历里没有的工作日（节假日休市）不算。"""
+        cal = ["2026-09-30", "2026-10-08"]
+        assert svc.trading_age("2026-09-30", "2026-10-08", cal) == 1
+
+    def test_before_calendar_falls_back_to_weekdays(self):
+        """日历覆盖不到的更早区间按工作日近似：09-11(五) 之后 09-14~09-16 三个工作日 + 日历内 09-17。"""
+        cal = ["2026-09-17"]
+        assert svc.trading_age("2026-09-11", "2026-09-17", cal) == 4
+
+    def test_no_calendar_counts_weekdays(self):
+        assert svc.trading_age("2026-09-18", "2026-09-21", []) == 1
+
+
+class TestRerankUsesTradingAge:
+    def test_rerank_prefers_age_days_over_natural_days(self):
+        """最新一天重排按信号自带的交易日龄：周五信号在周一 age_days=1，与周一新信号只差一天。"""
+        from app.schemas.signal_radar import RadarDayOut, RadarSignalOut
+
+        def out(sym, d, age, level=2):
+            return RadarSignalOut(symbol=sym, name=sym, side="buy", label="买", signal_type=f"buy{level}",
+                                  date=d, price=1.0, strength=0.55, bias="bullish", signal_strength="medium",
+                                  confirmed=True, pivot_stage_depth=0.55, age_days=age)
+        day = RadarDayOut(date="2026-09-21", buy_count=2, sell_count=0,
+                          signals=[out("FRI", "2026-09-18", 1, level=3), out("MON", "2026-09-21", 0)])
+        # 周五三买按 1 个交易日算排第一；若误按 3 个自然日算会被周一二买反超
+        assert svc.radar_score(3, 0.55, 1) > svc.radar_score(2, 0.55, 0) > svc.radar_score(3, 0.55, 3)
+        ranked = svc.rerank_with_resonance(day, top_n=2)
+        assert [s.symbol for s in ranked.signals] == ["FRI", "MON"]
 
 
 class TestCacheTiming:
@@ -765,3 +826,74 @@ class TestCloseTriggeredPrewarm:
         monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_BROAD_ENABLED", False)
         await scheduler._prewarm_once(markets={"cn"})
         assert scanned == ["cn:star50"]
+
+
+class TestUnconfirmedDiscount:
+    """未确认（落在最后一笔上的左侧预判）信号入榜打折，与多空倾向同一折扣。"""
+
+    def test_unconfirmed_scores_lower_than_confirmed(self):
+        full = svc.radar_score(3, 0.8, 0, confirmed=True)
+        left = svc.radar_score(3, 0.8, 0, confirmed=False)
+        assert left < full
+
+    def test_discount_applies_to_quality_not_freshness(self):
+        from app.services.chan.bias import UNCONFIRMED_DISCOUNT
+
+        # 新鲜度为 0（到期那天）时，得分只剩质量部分，未确认恰好乘折扣
+        old_full = svc.radar_score(2, 0.55, svc._MAX_SIGNAL_AGE_DAYS, confirmed=True)
+        old_left = svc.radar_score(2, 0.55, svc._MAX_SIGNAL_AGE_DAYS, confirmed=False)
+        assert abs(old_left - old_full * UNCONFIRMED_DISCOUNT) < 1e-9
+        # 新鲜度部分不打折：两者差值 = 质量部分 × (1 - 折扣)，与天数无关
+        new_full = svc.radar_score(2, 0.55, 0, confirmed=True)
+        new_left = svc.radar_score(2, 0.55, 0, confirmed=False)
+        assert abs((new_full - new_left) - (old_full - old_left)) < 1e-9
+
+    def test_display_rank_reads_signal_confirmed(self):
+        confirmed = _raw("A", "2026-09-20", "buy", 0.8, level=3)
+        unconfirmed = _raw("B", "2026-09-20", "buy", 0.8, level=3)
+        unconfirmed.confirmed = False
+        assert svc.display_rank(unconfirmed) < svc.display_rank(confirmed)
+
+
+class TestPriceInvalidation:
+    """信号亮起后，收盘价跌破买点价位（卖点：涨破）即失效，从那天起不再在雷达上出现。"""
+
+    @staticmethod
+    def _bars(closes: dict[str, float]) -> list[dict]:
+        return [{"time": d, "close": c} for d, c in sorted(closes.items())]
+
+    def test_buy_invalidated_when_close_breaks_signal_price(self):
+        sig = _sig("buy3", "2026-09-14", 100.0)
+        sig.detected_time = "2026-09-15"
+        r = ChanAnalysisResult(symbol="X", bars_count=100, signals=[sig])
+        bars = self._bars({"2026-09-15": 102, "2026-09-16": 101, "2026-09-17": 99.5, "2026-09-18": 103})
+        history = build_signal_history("X", "x", r, bars=bars)
+        assert history[0].invalidated_on == "2026-09-17"
+
+    def test_sell_invalidated_when_close_breaks_above(self):
+        sig = _sig("sell2", "2026-09-14", 50.0)
+        sig.detected_time = "2026-09-15"
+        r = ChanAnalysisResult(symbol="X", bars_count=100, signals=[sig])
+        bars = self._bars({"2026-09-15": 49, "2026-09-16": 50.5})
+        assert build_signal_history("X", "x", r, bars=bars)[0].invalidated_on == "2026-09-16"
+
+    def test_moves_before_detection_do_not_count(self):
+        """亮起之前的走势（笔终点到亮起之间）不算失效。"""
+        sig = _sig("buy1", "2026-09-14", 100.0)
+        sig.detected_time = "2026-09-16"
+        r = ChanAnalysisResult(symbol="X", bars_count=100, signals=[sig])
+        bars = self._bars({"2026-09-15": 99, "2026-09-16": 101, "2026-09-17": 102})
+        assert build_signal_history("X", "x", r, bars=bars)[0].invalidated_on is None
+
+    def test_invalidated_signal_leaves_board_from_that_day(self):
+        cal = ["2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18"]
+        raw = _raw("A", "2026-09-15", "buy", 0.5)
+        raw.invalidated_on = "2026-09-17"
+        days = build_days([[raw]], ["2026-09-18", "2026-09-17", "2026-09-16"], top_n=10, calendar=cal)
+        assert days[0].signals == [] and days[1].signals == []  # 09-17 起失效
+        assert [s.symbol for s in days[2].signals] == ["A"]  # 09-16 仍在场
+
+    def test_without_bars_nothing_is_invalidated(self):
+        sig = _sig("buy2", "2026-09-14", 100.0)
+        r = ChanAnalysisResult(symbol="X", bars_count=100, signals=[sig])
+        assert build_signal_history("X", "x", r)[0].invalidated_on is None
