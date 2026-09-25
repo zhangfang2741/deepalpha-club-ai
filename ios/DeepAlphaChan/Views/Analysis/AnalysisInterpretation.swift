@@ -36,15 +36,4 @@ enum AnalysisInterpretation {
     static func riskCount(_ analysis: ChanAnalysis) -> Int {
         displayedPendingNotes(analysis).count + displayedOtherRisks(analysis).count
     }
-
-    static func stageExplanation(_ phase: String) -> String {
-        switch phase {
-        case "pivot_forming": return L("连续走势的重叠区间构成中枢，先定位上下沿。")
-        case "pivot_oscillating": return L("价格围绕中枢反复，观察区间是否继续延伸。")
-        case "leaving": return L("价格离开中枢，观察后续回抽；离开本身不等于三类信号。")
-        case "retrace_confirmed": return L("回抽结构已确认，再核对落点与中枢的关系及具体买卖点条件。")
-        case "divergence_turn": return L("创新高或新低时力度减弱，提示可能转折，不保证反转。")
-        default: return L("结合当前结构与确认状态理解这一阶段。")
-        }
-    }
 }
