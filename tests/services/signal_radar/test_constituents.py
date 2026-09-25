@@ -90,3 +90,10 @@ def test_tech_universes_scan_full_index():
     star = get_universe("cn", "star50")
     assert star.source == SOURCE_AKSHARE_INDEX and star.source_arg == "000688"
     assert len(get_universe("hk", "hstech").constituents) >= 30
+
+
+def test_us_symbols_without_chinese_name_get_empty_name():
+    """美股没拿到中文名时名称留空（气泡只显示代码），不回退到太长的英文全称。"""
+    raw = [("AAPL", "Apple", 0.0), ("AEP", "American Electric Power", 0.0)]
+    out = _map_to_universe(raw, {"AAPL": "苹果"}, max_scan=10, fallback_to_source_name=False)
+    assert out == [("AAPL", "苹果"), ("AEP", "")]

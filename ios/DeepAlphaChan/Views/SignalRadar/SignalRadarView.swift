@@ -110,7 +110,8 @@ struct SignalRadarView: View {
         let end = SignalRadarView.parser.date(from: vm.response?.asOf ?? "") ?? Date()
         let start = Calendar.current.date(byAdding: .day, value: -270, to: end) ?? end
         chanVM.apply(
-            market: vm.market, symbol: symbol, name: name,
+            // 名称为空（美股无中文名）时不传，详情页标题退回显示代码
+            market: vm.market, symbol: symbol, name: (name?.isEmpty ?? true) ? nil : name,
             startDate: start, endDate: end, freq: "daily", warmupDays: 0)
         Task {
             await chanVM.runAnalysis()

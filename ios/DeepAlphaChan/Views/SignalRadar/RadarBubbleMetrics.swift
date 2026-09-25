@@ -20,14 +20,15 @@ struct RadarBubbleMetrics {
     let symbolFont: CTFont
     let nameFont: CTFont
     let textWidth: Double
-    /// 名称始终显示（保留字段供视图判断）。
-    let showsName = true
+    /// 有名称就显示（名称为空时只显示代码）。
+    let showsName: Bool
 
     static func textPadding(for diameter: Double) -> Double {
         max(3, diameter * paddingRatio)
     }
 
     init(symbol: String, name: String = "", baseDiameter: Double, maxDiameter: Double) {
+        showsName = !name.isEmpty
         let cap = max(1, maxDiameter)
         let base = min(max(baseDiameter, Self.minDiameter), cap)
         let start = max(Self.minSymbolSize, min(17, base * Self.symbolRatio))
@@ -54,8 +55,9 @@ struct RadarBubbleMetrics {
         /// 两行文字的包围矩形（较宽一行 + 左右余量 × 两行高）放进内圆所需的直径。
         func required(_ sf: CTFont, _ nf: CTFont) -> (diameter: Double, height: Double) {
             // 内边距已按直径比例预留，这里只留很小的字边余量，避免留白算两遍把字压得过小
-            let w = max(width(symbol, sf), width(name, nf) + 2)
-            let h = ceil(lineHeight(sf) + lineHeight(nf) + 1) + 2
+            let w = max(width(symbol, sf), name.isEmpty ? 0 : width(name, nf) + 2)
+            // 名称为空（美股无中文名）时只排代码一行
+            let h = ceil(lineHeight(sf) + (name.isEmpty ? 0 : lineHeight(nf) + 1)) + 2
             let inner = hypot(w + 4, h)
             // 内边距与直径相关：先按无边距求，再加上该直径对应的边距（迭代一次足够）
             let d0 = inner + 2 * Self.textPadding(for: inner)

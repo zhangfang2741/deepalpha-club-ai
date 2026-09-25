@@ -34,7 +34,8 @@ from app.services.signal_radar.universe import (
 )
 from app.utils.market import InvalidSymbolError, fmp_symbol, normalize
 
-_CACHE_PREFIX = "signal_radar:constituents"
+# v2：美股无中文名改为留空，旧缓存里的英文全称需要失效
+_CACHE_PREFIX = "signal_radar:constituents:v2"
 _CACHE_TTL = 3600 * 24  # 24h
 _MIN_VALID = 20          # 动态结果至少这么多只才采用，否则回退静态
 
@@ -257,7 +258,8 @@ async def _fetch_akshare_index(index_arg: str) -> list[tuple[str, str, float]]:
 
 
 def _map_to_universe(
-    raw: list[tuple[str, str, float]], zh_names: dict[str, str], *, max_scan: int
+    raw: list[tuple[str, str, float]], zh_names: dict[str, str], *, max_scan: int,
+    fallback_to_source_name: bool = True,
 ) -> list[tuple[str, str]]:
     """把原始成分归一化成 (裸代码, 中文名优先) 并按权重降序取前 max_scan，去重。
 
@@ -274,7 +276,7 @@ def _map_to_universe(
         if clean in seen:
             continue
         seen.add(clean)
-        resolved.append((clean, zh_names.get(clean, name)))
+        resolved.append((clean, zh_names.get(clean, name if fallback_to_source_name else "")))
         if len(resolved) >= max_scan:
             break
     return resolved
@@ -326,7 +328,9 @@ async def resolve_constituents(
             continue
         if clean not in zh and (name := resolve_name(universe.market, clean)):
             zh[clean] = name
-    resolved = _map_to_universe(raw, zh, max_scan=universe.max_scan)
+    # 美股没有中文名时名称留空（气泡只显示代码），英文全称太长不展示
+    resolved = _map_to_universe(raw, zh, max_scan=universe.max_scan,
+                                fallback_to_source_name=universe.market != "us")
 
     if len(resolved) < _MIN_VALID:
         logger.info(

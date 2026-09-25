@@ -77,13 +77,15 @@ struct RadarBubble: View {
                     .minimumScaleFactor(0.1)
                     .allowsTightening(true)
                     .foregroundColor(.white)
-                // 名称始终显示：尺寸计算已保证两行放得下（见 RadarBubbleMetrics）
-                Text(signal.name)
-                    .font(Font(metrics.nameFont))
-                    .foregroundColor(.white.opacity(0.92))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .padding(.horizontal, 4)
+                // 有名称就显示（尺寸计算已保证两行放得下）；美股无中文名时名称为空，只显示代码
+                if !signal.name.isEmpty {
+                    Text(signal.name)
+                        .font(Font(metrics.nameFont))
+                        .foregroundColor(.white.opacity(0.92))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .padding(.horizontal, 4)
+                }
             }
             .frame(width: metrics.textWidth)
             .shadow(color: .black.opacity(0.4), radius: 2, y: 1)

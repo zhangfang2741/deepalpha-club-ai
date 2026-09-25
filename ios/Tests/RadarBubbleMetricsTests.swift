@@ -17,7 +17,7 @@ struct RadarBubbleMetricsTests {
             var previous = 0.0
             for base in [33.0, 42.0, 60.0, 76.0, 92.0] {
                 let m = RadarBubbleMetrics(symbol: symbol, name: name, baseDiameter: base, maxDiameter: 250)
-                precondition(m.showsName, "名称必须显示")
+                precondition(m.showsName, "有名称就必须显示")
                 precondition(m.diameter >= max(base, RadarBubbleMetrics.minDiameter), "不小于编码尺寸与可读下限")
                 precondition(m.diameter >= previous, "编码越大气泡越大（单调）")
                 previous = m.diameter
@@ -41,6 +41,11 @@ struct RadarBubbleMetricsTests {
         let rBig = CTFontGetSize(big.symbolFont) / big.diameter
         let rTiny = CTFontGetSize(tiny.symbolFont) / tiny.diameter
         precondition(abs(rBig - rTiny) < 0.04, "大小气泡的字号占比一致: \(rBig) \(rTiny)")
+        // 美股无中文名：名称为空只排代码一行，字号可以比两行时更大
+        let codeOnly = RadarBubbleMetrics(symbol: "AEP", name: "", baseDiameter: 60, maxDiameter: 250)
+        let twoLines = RadarBubbleMetrics(symbol: "AEP", name: "美国电力", baseDiameter: 60, maxDiameter: 250)
+        precondition(!codeOnly.showsName && twoLines.showsName)
+        precondition(CTFontGetSize(codeOnly.symbolFont) >= CTFontGetSize(twoLines.symbolFont))
         let capped = RadarBubbleMetrics(symbol: "LONG-STOCK-SYMBOL", name: "Very Long Company Name",
                                         baseDiameter: 60, maxDiameter: 100)
         precondition(capped.diameter <= 100, "不能超出画布")
