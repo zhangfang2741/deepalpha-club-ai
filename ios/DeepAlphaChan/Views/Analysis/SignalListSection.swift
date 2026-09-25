@@ -11,23 +11,6 @@ struct SignalListSection: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            SectionCard(title: L("先读懂信号，再看明细"), systemImage: "flag") {
-                WrapLayout(spacing: 12, lineSpacing: 8) {
-                    Label(L("买点"), systemImage: "arrow.up.circle.fill").foregroundStyle(Theme.up)
-                    Label(L("卖点"), systemImage: "arrow.down.circle.fill").foregroundStyle(Theme.down)
-                }
-                .font(.subheadline.bold())
-                Text(L("与 K 线、雷达一致：红色为买点，绿色为卖点；虚线表示未确认。"))
-                    .font(AnalysisType.body)
-                    .foregroundStyle(Theme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(L("一／二／三类描述结构类型；强／中／弱描述信号强度，对应雷达颜色深浅。类型、强度与是否确认是三个不同维度。"))
-                    .font(AnalysisType.body)
-                    .foregroundStyle(Theme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                AnalysisTermLink(term: "买卖点", color: Theme.textSecondary)
-            }
-
             if sortedSignals.isEmpty {
                 SectionCard(title: L("当前区间未识别到明确买卖点"), systemImage: "magnifyingglass") {
                     Text(L("没有信号不代表没有风险。可返回「当前状态」查看中枢位置和待观察条件。"))
