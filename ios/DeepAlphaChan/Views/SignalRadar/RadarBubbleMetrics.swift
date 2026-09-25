@@ -38,16 +38,16 @@ struct RadarBubbleMetrics {
         let base = min(max(baseDiameter, Self.minDiameter), cap)
         let start = max(Self.minSymbolSize, min(17, base * Self.symbolRatio))
 
-        func fonts(_ size: Double) -> (CTFont, CTFont) {
+        func makeSymbolFont(_ size: Double) -> CTFont {
             let system = CTFontCreateUIFontForLanguage(.system, size, nil)
                 ?? CTFontCreateWithName("Helvetica" as CFString, size, nil)
             let traits = [kCTFontWeightTrait: 0.56] as CFDictionary
             let descriptor = CTFontDescriptorCreateWithAttributes([kCTFontTraitsAttribute: traits] as CFDictionary)
-            let symbolFont = CTFontCreateCopyWithAttributes(system, size, nil, descriptor)
-            let nameSize = max(Self.minNameSize, size * Self.nameToSymbol)
-            let nameFont = CTFontCreateUIFontForLanguage(.system, nameSize, nil)
-                ?? CTFontCreateWithName("Helvetica" as CFString, nameSize, nil)
-            return (symbolFont, nameFont)
+            return CTFontCreateCopyWithAttributes(system, size, nil, descriptor)
+        }
+        func makeNameFont(_ size: Double) -> CTFont {
+            CTFontCreateUIFontForLanguage(.system, size, nil)
+                ?? CTFontCreateWithName("Helvetica" as CFString, size, nil)
         }
         func lineHeight(_ f: CTFont) -> Double {
             CTFontGetAscent(f) + CTFontGetDescent(f) + CTFontGetLeading(f)
@@ -69,19 +69,41 @@ struct RadarBubbleMetrics {
             return (inner + 2 * Self.textPadding(for: d0), h)
         }
 
-        var size = start
         var picked: (CTFont, CTFont, Double, Double)?
-        while size >= Self.minSymbolSize {
-            let (sf, nf) = fonts(size)
-            let need = required(sf, nf)
-            if need.diameter <= base { picked = (sf, nf, base, need.height); break }
-            size -= 0.5
+
+        // 代码字号与名称字号分开求：名称（尤其是长中文名，如「美国电话电报」）比代码
+        // 天然更容易放不下，若两者绑成同一个 size 一起退让，代码会被名称拖着一起缩得
+        // 很小——代码通常只有 1~5 个字符，本不该被拖累。先把代码固定在它的自然字号
+        // （`start`），只压名称去凑空间；只有代码在自然字号下配最小号名称仍放不下时，
+        // 才退回两者一起缩的兜底（与最初实现一致）。
+        if !name.isEmpty {
+            let sf = makeSymbolFont(start)
+            var nameSize = start * Self.nameToSymbol
+            while nameSize >= Self.minNameSize {
+                let nf = makeNameFont(nameSize)
+                let need = required(sf, nf)
+                if need.diameter <= base { picked = (sf, nf, base, need.height); break }
+                nameSize -= 0.5
+            }
+        }
+
+        if picked == nil {
+            // 名称已经缩到最小仍放不下（多半是代码本身也偏长），退回两者同步缩放。
+            var size = start
+            while size >= Self.minSymbolSize {
+                let sf = makeSymbolFont(size)
+                let nf = makeNameFont(max(Self.minNameSize, size * Self.nameToSymbol))
+                let need = required(sf, nf)
+                if need.diameter <= base { picked = (sf, nf, base, need.height); break }
+                size -= 0.5
+            }
         }
         if picked == nil {
             // 最小字号仍放不下：不撑大气泡（那会让气泡大小随文字长度而非类型/时间变化，
             // 跨市场就不可比了）——直径继续保持编码尺寸，字号定在最小值，剩下交给
             // RadarBubble 渲染时的 minimumScaleFactor 兜底再压一压。
-            let (sf, nf) = fonts(Self.minSymbolSize)
+            let sf = makeSymbolFont(Self.minSymbolSize)
+            let nf = makeNameFont(Self.minNameSize)
             let need = required(sf, nf)
             picked = (sf, nf, base, need.height)
         }
