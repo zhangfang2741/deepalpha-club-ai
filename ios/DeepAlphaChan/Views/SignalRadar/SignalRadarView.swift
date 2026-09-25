@@ -55,7 +55,7 @@ struct SignalRadarView: View {
                     metaRow
                     bubbleField
                         // 切换市场/刷新时：气泡清空（见 bubbleField），盖一道旋转的雷达扫描光束表示
-                        // 正在扫描，扫完新气泡淡入；布局不变，页面不跳动
+                        // 正在扫描，扫完新气泡直接出现；布局不变，页面不跳动
                         .allowsHitTesting(!vm.isReloading)
                         .overlay {
                             if vm.isReloading {
@@ -241,7 +241,8 @@ struct SignalRadarView: View {
                             isNew: layout.signal.date == dayDate,
                             onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name) }
                         )
-                        .transition(.opacity)
+                        // 气泡任何时候都不做透明处理：刷新完直接出现，不淡入
+                        .transition(.identity)
                     }
                 }
             }
