@@ -1,0 +1,16 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "watchPatterns": [
+      "app/**",
+      "alembic/**",
+      "alembic.ini",
+      "scripts/**",
+      "pyproject.toml",
+      "uv.lock",
+      "Dockerfile",
+      "Procfile",
+      "railway.json"
+    ]
+  }
+}
