@@ -56,8 +56,9 @@ struct WatchlistView: View {
         }
     }
 
-    /// 未订阅高级版时替代自选内容展示的锁定态：说明权益 + 升级入口，
-    /// 与信号雷达 SignalRadarView.lockedView 同一视觉语言。
+    /// 未订阅高级版时替代自选内容展示的锁定态：说明权益 + 升级入口。
+    /// 自选没有可以"模糊预览"的公开数据（列表本身就是用户私有数据），
+    /// 不套信号雷达那套模糊预览，直接锁死更合适。
     private var lockedView: some View {
         VStack(spacing: 14) {
             Image(systemName: "star.fill")

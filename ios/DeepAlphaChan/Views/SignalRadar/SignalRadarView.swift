@@ -29,7 +29,8 @@ struct SignalRadarView: View {
     @StateObject private var panicVM = PanicIndexViewModel()
     @EnvironmentObject private var orientation: AppOrientation
     @EnvironmentObject private var store: StoreManager
-    /// 信号雷达（气泡场）是高级版专属功能，未订阅时弹这个付费墙。
+    /// 信号雷达（气泡场）是高级版专属功能，未订阅时是模糊预览（见
+    /// radarPreviewLockOverlay），点里面的升级按钮弹这个付费墙。
     /// 恐慌指数小卡片（PanicIndexStrip）不受影响，所有用户可见。
     @State private var showPaywall = false
     /// 使用雷达前的风险确认：已订阅但还没勾选同意过，先挡在 consentView，
@@ -57,9 +58,7 @@ struct SignalRadarView: View {
             VStack(spacing: 12) {
                 PanicIndexStrip(radarVM: vm, panicVM: panicVM)
 
-                if !store.isPremium {
-                    lockedView
-                } else if !consent.hasAgreed {
+                if store.isPremium && !consent.hasAgreed {
                     consentView
                 } else if vm.isScanning {
                     scanningView
@@ -75,7 +74,7 @@ struct SignalRadarView: View {
                         // 切换市场/刷新时保留旧气泡、调暗，盖转圈 + 文字提示；期间暂不响应点按
                         // （避免点进上一个市场的标的）；布局不变，页面不跳动
                         .opacity(vm.isReloading ? 0.35 : 1)
-                        .allowsHitTesting(!vm.isReloading)
+                        .allowsHitTesting(!vm.isReloading && store.isPremium)
                         .overlay {
                             if vm.isReloading {
                                 VStack(spacing: 10) {
@@ -86,6 +85,14 @@ struct SignalRadarView: View {
                             }
                         }
                         .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
+                        // 未订阅：气泡场照常用真实数据渲染（能看出今天信号多不多、颜色深浅），
+                        // 打上高斯模糊看不清具体标的与买卖点——「预告片」而非空白锁定页，
+                        // 免得用户压根不知道自己错过了什么，比之前的纯图标锁定页转化更好。
+                        .blur(radius: store.isPremium ? 0 : Self.previewBlurRadius)
+                        .overlay {
+                            if !store.isPremium { radarPreviewLockOverlay }
+                        }
+                        .animation(.easeInOut(duration: 0.2), value: store.isPremium)
                     legend
                     dateRail
                     Spacer(minLength: 0)
@@ -99,12 +106,9 @@ struct SignalRadarView: View {
             .background(Theme.background)
             .navigationTitle(L("缠论信号"))
             .navigationBarTitleDisplayMode(.inline)
-            .task { if store.isPremium { vm.onAppear() } }
-            // 付费墙里升级成功（tier 变化）后，若已具备高级版权益且尚未拉过数据，
-            // 立刻补拉一次——不用退出再进这个 Tab 才刷新。
-            .onChange(of: store.isPremium) { _, isPremium in
-                if isPremium { vm.onAppear() }
-            }
+            // 未订阅也照常拉数据：气泡场用真实数据渲染成模糊预览（见 radarPreviewLockOverlay），
+            // 不是完全屏蔽，所以不再按订阅状态决定要不要发这个请求。
+            .task { vm.onAppear() }
             .overlay { if chanVM.isLoading { analysisLoadingOverlay } }
             .navigationDestination(isPresented: $showResults) {
                 if let analysis = chanVM.analysis {
@@ -122,26 +126,32 @@ struct SignalRadarView: View {
         }
     }
 
-    /// 未订阅高级版时替代气泡场展示的锁定态：说明权益 + 升级入口。
-    private var lockedView: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "dot.radiowaves.left.and.right")
-                .font(.system(size: 40)).foregroundColor(Theme.segment)
-            Text(L("信号雷达是高级版专属功能"))
-                .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
-            Text(L("扫描科技指数成分股，每日买卖点一图看全，订阅高级版解锁"))
-                .font(.footnote).foregroundColor(Theme.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 30)
-            Button { showPaywall = true } label: {
-                Label(L("升级高级版"), systemImage: "crown.fill")
-                    .font(.subheadline.bold())
-                    .padding(.horizontal, 20).padding(.vertical, 10)
-                    .background(Theme.accent).foregroundColor(.white)
-                    .clipShape(Capsule())
+    /// 模糊预览的高斯模糊半径：够糊到看不出具体标的代码/名称，又保留得住
+    /// 颜色分布和气泡疏密这层"形状"信息。
+    private static let previewBlurRadius: CGFloat = 14
+
+    /// 叠在模糊气泡场上的解锁引导：深色蒙版 + 锁图标 + 升级入口，不挡住整块气泡场
+    /// 的轮廓（蒙版半透明），让"这里有内容、但看不清"这件事一眼可辨。
+    private var radarPreviewLockOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.32)
+            VStack(spacing: 10) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 22)).foregroundColor(.white)
+                Text(L("解锁信号雷达，查看具体标的与买卖点"))
+                    .font(.footnote.bold()).foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                Button { showPaywall = true } label: {
+                    Label(L("升级高级版"), systemImage: "crown.fill")
+                        .font(.caption.bold())
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                        .background(Theme.accent).foregroundColor(.white)
+                        .clipShape(Capsule())
+                }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
     // MARK: - 使用前风险确认
