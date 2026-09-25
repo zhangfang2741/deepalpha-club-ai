@@ -54,11 +54,17 @@ struct SignalRadarView: View {
                 } else {
                     metaRow
                     bubbleField
-                        // 切换市场/刷新时保留旧内容，调暗并盖加载指示、暂不响应点按（避免点进上一个市场的标的）
-                        .opacity(vm.isReloading ? 0.35 : 1)
+                        // 切换市场/刷新时保留旧内容、不调暗，盖一道旋转的雷达扫描光束表示正在扫描；
+                        // 期间暂不响应点按（避免点进上一个市场的标的）
                         .allowsHitTesting(!vm.isReloading)
-                        .overlay { if vm.isReloading { ProgressView().tint(Theme.accent) } }
-                        .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
+                        .overlay {
+                            if vm.isReloading {
+                                RadarSweep()
+                                    .allowsHitTesting(false)
+                                    .transition(.opacity)
+                            }
+                        }
+                        .animation(.easeInOut(duration: 0.3), value: vm.isReloading)
                     legend
                     dateRail
                     Spacer(minLength: 0)
@@ -757,5 +763,36 @@ struct SignalRadarView: View {
         f.locale = Locale(identifier: Localized.language().localeIdentifier)
         f.setLocalizedDateFormatFromTemplate("EEE")
         return f.string(from: d)
+    }
+}
+
+/// 加载中的雷达扫描光束：一道扇形渐变绕场中心匀速旋转，像雷达在扫描。
+/// 叠加（plusLighter）在气泡之上，不遮挡、不调暗原有内容。
+struct RadarSweep: View {
+    @State private var angle: Double = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            let side = hypot(geo.size.width, geo.size.height)
+            AngularGradient(
+                gradient: Gradient(stops: [
+                    .init(color: Theme.accent.opacity(0.0), location: 0.0),
+                    .init(color: Theme.accent.opacity(0.0), location: 0.80),
+                    .init(color: Theme.accent.opacity(0.22), location: 0.97),
+                    .init(color: Theme.accent.opacity(0.55), location: 1.0),
+                ]),
+                center: .center
+            )
+            .frame(width: side, height: side)
+            .rotationEffect(.degrees(angle))
+            .position(x: geo.size.width / 2, y: geo.size.height / 2)
+            .blendMode(.plusLighter)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .onAppear {
+            withAnimation(.linear(duration: 1.6).repeatForever(autoreverses: false)) {
+                angle = 360
+            }
+        }
     }
 }
