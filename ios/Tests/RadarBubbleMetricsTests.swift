@@ -26,6 +26,12 @@ struct RadarBubbleMetricsTests {
                                        baseDiameter: 44, maxDiameter: 250)
         precondition(small.diameter == RadarBubbleMetrics.minDiameter, "文字放不下也不撑大气泡")
         precondition(CTFontGetSize(small.symbolFont) == RadarBubbleMetrics.minSymbolSize, "放不下时字号落到最小值")
+        // 短代码配长名称（如「T」配「美国电话电报」）：代码本身放得下时字号不该被名称拖小，
+        // 只压缩名称去凑空间——回归此前两者绑同一个字号一起退让、代码被长名称拖得跟名称一样小的问题。
+        let shortCodeLongName = RadarBubbleMetrics(symbol: "T", name: "美国电话电报", baseDiameter: 60, maxDiameter: 250)
+        let naturalSymbolSize = min(17.0, 60.0 * RadarBubbleMetrics.symbolRatio)
+        precondition(abs(CTFontGetSize(shortCodeLongName.symbolFont) - naturalSymbolSize) < 0.01,
+                    "代码字号应保持自然尺寸，不被长名称拖小: \(CTFontGetSize(shortCodeLongName.symbolFont)) vs \(naturalSymbolSize)")
         // 协调：小气泡的内边距都随直径变小
         let big = RadarBubbleMetrics(symbol: "AAPL", name: "苹果", baseDiameter: 92, maxDiameter: 250)
         let tiny = RadarBubbleMetrics(symbol: "AAPL", name: "苹果", baseDiameter: 44, maxDiameter: 250)

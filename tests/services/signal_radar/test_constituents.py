@@ -134,6 +134,22 @@ class TestEastmoneyUsName:
         assert parse_eastmoney_us_suggest({"QuotationCodeTable": None}, "AAPL") is None
         assert parse_eastmoney_us_suggest("oops", "AAPL") is None
 
+    def test_strips_trailing_ticker_suffix(self):
+        """代码已单独显示在气泡第一行，名字里重复的英文代码括注要去掉。"""
+        from app.services.signal_radar.constituents import parse_eastmoney_us_suggest
+
+        payload = {"QuotationCodeTable": {"Data": [
+            {"Code": "T", "Name": "美国电话电报(AT&T)", "Classify": "UsStock", "TypeUS": "1"},
+        ]}}
+        assert parse_eastmoney_us_suggest(payload, "T") == "美国电话电报"
+
+    def test_strip_ticker_suffix_leaves_plain_name_untouched(self):
+        from app.services.signal_radar.constituents import strip_ticker_suffix
+
+        assert strip_ticker_suffix("苹果") == "苹果"
+        assert strip_ticker_suffix("美国电话电报(AT&T)") == "美国电话电报"
+        assert strip_ticker_suffix("美国电话电报（AT&T）") == "美国电话电报"
+
 
 class _FakeRedis:
     """只实现所需命令的内存替身：set(ex=) / get。"""

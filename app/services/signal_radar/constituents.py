@@ -46,7 +46,7 @@ _MIN_VALID = 20          # 动态结果至少这么多只才采用，否则回�
 # 30 天——公司中文译名基本不变，减少下次成分刷新时的请求量。
 _EASTMONEY_SUGGEST_URL = "https://searchapi.eastmoney.com/api/suggest/get"
 _EASTMONEY_SUGGEST_TOKEN = "D43BF722C8E33BDC906FB84D85E326E8"
-_US_NAME_CACHE_PREFIX = "signal_radar:us_name:v1"
+_US_NAME_CACHE_PREFIX = "signal_radar:us_name:v2"
 _US_NAME_CACHE_TTL = 3600 * 24 * 30  # 30 天
 _US_NAME_CONCURRENCY = 8
 
@@ -70,9 +70,18 @@ def parse_eastmoney_us_suggest(payload: object, symbol: str) -> str | None:
             continue
         if (str(r.get("Code", "")).upper() == symbol.upper()
                 and r.get("Classify") == "UsStock" and r.get("TypeUS") == "1"):
-            name = str(r.get("Name") or "").strip()
+            name = strip_ticker_suffix(str(r.get("Name") or "").strip())
             return name or None
     return None
+
+
+def strip_ticker_suffix(name: str) -> str:
+    """去掉东方财富中文名末尾重复的英文代码括注，如「美国电话电报(AT&T)」→「美国电话电报」。
+
+    气泡第一行已经单独显示代码（见 RadarBubbleMetrics），名字里再带一遍纯属重复占字数——
+    长中文名+英文代码括注的组合（如 AT&T）会把气泡里本就紧张的字号进一步压小到难以辨认。
+    """
+    return re.sub(r"[（(][^（）()]*[）)]\s*$", "", name).strip() or name
 
 
 async def _fetch_eastmoney_us_name(client: httpx.AsyncClient, symbol: str) -> str | None:

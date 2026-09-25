@@ -67,11 +67,36 @@ final class ChanViewModel: ObservableObject {
         return f
     }()
 
+    /// 记录上次校正日期时「今天」是哪天：ChanViewModel 是跨 Tab 共享的长生命周期对象
+    /// （见类注释），startDate/endDate 只在 init 时按当时的 Date() 设一次。App 常驻
+    /// 后台跨过零点不重启时，这两个日期会一直停在「昨天」，用户点「分析」实际请求的
+    /// 截止日还是旧的——后端 canonical_end 只会把「比今天还晚」的日期拉回今天，比今天
+    /// 早的（这正是这里的情况）照单全收，日线、次级别都会卡在旧的那天，表现为「明明是
+    /// 25 号了，数据却停在 24 号」。
+    private var lastKnownToday: Date
+
     init() {
         let now = Date()
         self.endDate = now
+        self.lastKnownToday = now
         // 默认看最近约一年
         self.startDate = Calendar.current.date(byAdding: .day, value: -365, to: now) ?? now
+    }
+
+    /// 每次真正发起查询前调用：跨天了就把 start/end 一起顺移过去的天数，让「默认看到
+    /// 今天」的窗口继续覆盖今天。只有 endDate 仍等于上次记录的「今天」（即用户没有手动
+    /// 改过日期）才顺移——已经手动选了别的历史区间的保留用户的查询意图，不去动它。
+    private func refreshDatesForNewDayIfNeeded() {
+        let cal = Calendar.current
+        let today = Date()
+        guard !cal.isDate(lastKnownToday, inSameDayAs: today) else { return }
+        if cal.isDate(endDate, inSameDayAs: lastKnownToday),
+           let daysPassed = cal.dateComponents([.day], from: lastKnownToday, to: today).day,
+           daysPassed > 0 {
+            endDate = cal.date(byAdding: .day, value: daysPassed, to: endDate) ?? today
+            startDate = cal.date(byAdding: .day, value: daysPassed, to: startDate) ?? startDate
+        }
+        lastKnownToday = today
     }
 
     var startDateString: String { dateFormatter.string(from: startDate) }
@@ -112,6 +137,7 @@ final class ChanViewModel: ObservableObject {
             errorMessage = L("请输入股票代码")
             return
         }
+        refreshDatesForNewDayIfNeeded()
         isLoading = true
         errorMessage = nil
         // warmup 覆盖是「一次性」的：消费掉即清空，避免雷达带来的 warmup=0 泄漏到

@@ -36,4 +36,4 @@ def test_daily_ttl_short_when_range_reaches_latest_session():
     assert _cache_ttl_for("daily", "2026-09-25", today=today) == 1800  # 东八区用户本地日期领先一天
     assert _cache_ttl_for("daily", "2026-09-01", today=today) == 3600 * 24  # 纯历史区间
     assert _cache_ttl_for("weekly", "2026-09-24", today=today) == 1800
-    assert _cache_ttl_for("30min", "2026-09-01", today=today) == 60 * 15
+    assert _cache_ttl_for("30min", "2026-09-01", today=today) == 60 * 3
