@@ -565,3 +565,38 @@ class TestCompositeRanking:
         out = svc.rerank_with_resonance(day, top_n=2)
         assert [s.symbol for s in out.signals] == ["C", "A"]
         assert out.buy_count == 2
+
+
+class TestWatchlistUniverse:
+    """「自选」股票池：每个市场都可选，按用户各自的自选股计算，缓存按用户隔离。"""
+
+    def test_universes_list_ends_with_watchlist(self):
+        for market in ("us", "cn", "hk"):
+            keys = [u.key for u in svc._universes_out(market)]
+            assert keys[-1] == svc.WATCHLIST_KEY
+
+    async def test_compute_with_override_writes_per_user_cache(self, monkeypatch):
+        scanned = []
+
+        async def fake_scan(symbol, name, **kwargs):
+            scanned.append(symbol)
+            return [_raw(symbol, "2026-09-19", "buy", 0.8, level=2)], None, None, ["2026-09-18", "2026-09-19"]
+
+        async def fake_kline(**kwargs):
+            return []
+
+        async def fake_attach(day, **kwargs):
+            return None
+
+        monkeypatch.setattr(svc, "_scan_symbol", fake_scan)
+        monkeypatch.setattr(svc, "fetch_kline", fake_kline)
+        monkeypatch.setattr(svc, "attach_sub_levels", fake_attach)
+        redis = _FakeRedis()
+        resp = await svc.compute_market("us", redis=redis, user_id=7,
+                                        watchlist=[("AAPL", "苹果"), ("TSLA", "特斯拉")])
+        assert sorted(scanned) == ["AAPL", "TSLA"]
+        assert resp.universe == svc.WATCHLIST_KEY and resp.universe_size == 2
+        wl = [("AAPL", "苹果"), ("TSLA", "特斯拉")]
+        assert svc.watchlist_cache_key("us", 7, wl) in redis.store
+        assert svc.watchlist_cache_key("us", 7, wl[:1]) != svc.watchlist_cache_key("us", 7, wl), "清单变了键也变"
+        assert svc._cache_key("us", svc.WATCHLIST_KEY) not in redis.store, "不能写进所有人共用的键"

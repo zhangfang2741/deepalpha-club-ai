@@ -12,15 +12,25 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from redis.asyncio import Redis
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.v1.auth import get_current_user
 from app.cache.client import current_redis, get_redis
 from app.core.limiter import limiter
 from app.core.logging import logger
+from app.db.session import get_db
 from app.models.user import User
-from app.schemas.signal_radar import RadarUniverseOut, SignalRadarResponse
-from app.services.signal_radar.service import DEFAULT_TOP_N, compute_market, peek_cache_entry
-from app.services.signal_radar.universe import get_universe, list_universes, supported_markets
+from app.schemas.signal_radar import SignalRadarResponse
+from app.services.signal_radar.service import (
+    DEFAULT_TOP_N,
+    WATCHLIST_KEY,
+    _universes_out,
+    compute_market,
+    peek_cache_entry,
+    read_watchlist_cache,
+)
+from app.services.watchlist import display_name, list_items
+from app.services.signal_radar.universe import get_universe, supported_markets
 
 router = APIRouter()
 
@@ -36,6 +46,47 @@ def _spawn(coro) -> None:
 
 def _generating_key(market: str, universe_key: str) -> str:
     return f"signal_radar:generating:{market}:{universe_key}"
+
+
+async def _run_watchlist_scan(market: str, user_id: int, watchlist: list[tuple[str, str]]) -> None:
+    """后台扫描某用户的自选股，完成后清除该用户的 generating 标记。"""
+    redis = current_redis()
+    if redis is None:
+        return
+    try:
+        await compute_market(market, redis=redis, user_id=user_id, watchlist=watchlist)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("signal_radar_watchlist_scan_failed", market=market, error=str(e))
+    finally:
+        try:
+            await redis.delete(_generating_key(market, f"{WATCHLIST_KEY}:u{user_id}"))
+        except Exception:  # noqa: BLE001
+            pass
+
+
+async def _watchlist_radar(
+    market: str, user: User, db: AsyncSession, redis: Redis, refresh: bool,
+) -> SignalRadarResponse:
+    """「自选」股票池：当前用户该市场的自选股；命中缓存直接返回，否则后台扫描并回 generating。"""
+    items = [i for i in await list_items(db, user.id) if i.market == market]
+    watchlist = [(i.symbol, display_name(market, i.symbol, i.name)) for i in items]
+
+    def empty(status: str) -> SignalRadarResponse:
+        return SignalRadarResponse(
+            market=market, universe=WATCHLIST_KEY, universes=_universes_out(market), etf_name="自选",
+            universe_size=len(watchlist), as_of="", top_n=DEFAULT_TOP_N, days=[], status=status,
+        )
+
+    if not watchlist:
+        return empty("ready")  # 自选里还没有该市场的股票，前端提示去加入
+    if not refresh and (cached := await read_watchlist_cache(redis, market, user.id, watchlist)):
+        return cached
+    gkey = _generating_key(market, f"{WATCHLIST_KEY}:u{user.id}")
+    if refresh or not await redis.get(gkey):
+        await redis.set(gkey, "1", ex=_GENERATING_TTL)
+        _spawn(_run_watchlist_scan(market, user.id, watchlist))
+        logger.info("signal_radar_watchlist_scan_spawned", market=market, user_id=user.id, size=len(watchlist))
+    return empty("generating")
 
 
 async def _run_scan(market: str, universe_key: str, user_id: int) -> None:
@@ -66,8 +117,11 @@ async def signal_radar(
     refresh: bool = Query(default=False, description="强制重新扫描（后台）"),
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
+    db: AsyncSession = Depends(get_db),
 ) -> SignalRadarResponse:
-    """获取某 (市场, universe) 最近交易日的缠论买卖点雷达。"""
+    """获取某 (市场, universe) 最近交易日的缠论买卖点雷达；universe=watchlist 为用户自选。"""
+    if universe == WATCHLIST_KEY and market in supported_markets():
+        return await _watchlist_radar(market, user, db, redis, refresh)
     uni = get_universe(market, universe)
     if uni is None:
         raise HTTPException(
@@ -109,10 +163,7 @@ async def signal_radar(
     return SignalRadarResponse(
         market=market,
         universe=uni.key,
-        universes=[
-            RadarUniverseOut(key=u.key, name=u.etf_name, is_default=u.is_default)
-            for u in list_universes(market)
-        ],
+        universes=_universes_out(market),
         etf_name=uni.etf_name,
         universe_size=len(uni.constituents),
         as_of="",

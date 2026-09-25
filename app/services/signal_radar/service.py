@@ -84,6 +84,18 @@ _RESONANCE_POOL = 20
 _MIN_PER_LEVEL = 2
 
 _CACHE_PREFIX = "signal_radar"
+
+# 「自选」股票池：每个市场都可选，按用户各自的自选股计算；缓存按用户隔离、30 分钟。
+WATCHLIST_KEY = "watchlist"
+WATCHLIST_CACHE_TTL = 1800
+
+
+def watchlist_cache_key(market: str, user_id: int, watchlist: list[tuple[str, str]]) -> str:
+    """按用户 + 自选清单摘要隔离：清单增删后键自然变化，旧结果不会被读到。"""
+    import hashlib
+
+    digest = hashlib.sha1(",".join(sorted(s.upper() for s, _ in watchlist)).encode()).hexdigest()[:10]
+    return f"{_CACHE_PREFIX}:{market}:{WATCHLIST_KEY}:u{user_id}:{digest}"
 # 缓存 TTL 的下限：即便预热间隔被调得很短，也至少存活 6h。
 _CACHE_TTL_FLOOR = 3600 * 6  # 6h
 
@@ -488,7 +500,19 @@ def _universes_out(market: str) -> list[RadarUniverseOut]:
     return [
         RadarUniverseOut(key=u.key, name=u.etf_name, is_default=u.is_default)
         for u in list_universes(market)
-    ]
+    ] + [RadarUniverseOut(key=WATCHLIST_KEY, name="自选", is_default=False)]
+
+
+async def read_watchlist_cache(
+    redis: Redis, market: str, user_id: int, watchlist: list[tuple[str, str]],
+) -> SignalRadarResponse | None:
+    """读某用户某市场（当前自选清单）的自选雷达缓存。"""
+    try:
+        raw = await redis.get(watchlist_cache_key(market, user_id, watchlist))
+        return SignalRadarResponse.model_validate_json(raw) if raw else None
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_watchlist_cache_read_error", market=market, error=str(e))
+        return None
 
 
 async def _read_cache(redis: Redis, market: str, universe_key: str) -> SignalRadarResponse | None:
@@ -529,14 +553,21 @@ async def compute_market(
     universe_key: str | None = None,
     days: int = 30, window: int = 45, top_n: int = DEFAULT_TOP_N,
     max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
+    watchlist: list[tuple[str, str]] | None = None,
 ) -> SignalRadarResponse:
-    """全量扫描一个 (市场, universe) 并按日重建快照（不读缓存，计算完写入缓存）。"""
-    universe = get_universe(market, universe_key)
+    """全量扫描一个 (市场, universe) 并按日重建快照（不读缓存，计算完写入缓存）。
+
+    watchlist 非 None 时扫用户自选股（「自选」股票池）：结果写入按用户隔离的缓存键，
+    交易日历仍参考该市场默认 universe 的 ETF。
+    """
+    is_watchlist = watchlist is not None
+    universe = get_universe(market, None if is_watchlist else universe_key)
     if universe is None:
         raise ValueError(f"unsupported market/universe: {market}/{universe_key}")
 
-    # 成分股：按 universe 来源策略动态刷新，取不到回退 curated 静态清单。
-    constituents = await resolve_constituents(market, redis=redis, universe_key=universe.key)
+    # 成分股：自选用用户清单；否则按 universe 来源策略动态刷新，取不到回退 curated 静态清单。
+    constituents = list(watchlist) if watchlist is not None else \
+        await resolve_constituents(market, redis=redis, universe_key=universe.key)
 
     today = date.today()
     end_date = today.isoformat()
@@ -579,9 +610,9 @@ async def compute_market(
 
     resp = SignalRadarResponse(
         market=market,
-        universe=universe.key,
+        universe=WATCHLIST_KEY if is_watchlist else universe.key,
         universes=_universes_out(market),
-        etf_name=universe.etf_name,
+        etf_name="自选" if is_watchlist else universe.etf_name,
         universe_size=len(constituents),
         as_of=end_date,
         top_n=top_n,
@@ -609,6 +640,16 @@ async def compute_market(
     # 覆盖掉几分钟前还好好的缓存——那样用户接下来 6 小时看到的就是这次的烂摊子。
     # 只有「已经有一份旧缓存能保底」时才这么做；首次扫描没有旧缓存可保，再差也
     # 得写进去，不然用户永远看不到任何数据。
+    if is_watchlist:
+        # 自选结果按用户隔离缓存，不进共用键；也不做「保留旧缓存」保护（清单随时会变）
+        if user_id is not None:
+            try:
+                await redis.set(watchlist_cache_key(market, user_id, constituents), resp.model_dump_json(),
+                                ex=WATCHLIST_CACHE_TTL)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("signal_radar_watchlist_cache_write_error", market=market, error=str(e))
+        return resp
+
     if failure_rate > _MAX_ACCEPTABLE_FAILURE_RATE:
         stale = await _read_cache(redis, market, universe.key)
         if stale is not None:
