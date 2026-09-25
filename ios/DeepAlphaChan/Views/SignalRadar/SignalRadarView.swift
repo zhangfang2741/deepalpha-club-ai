@@ -345,9 +345,14 @@ struct SignalRadarView: View {
     /// 落在最外环、角度又指向边缘的气泡（尤其是那颗被推到远端的孤立卖点）就会被
     /// 圆角容器裁掉一半。现在把「场半径」整体内缩这个边距，环线和气泡一起内移。
     static let fieldInset: Double = 18
-    /// 雷达画布宽高比与椭圆纵/横半轴比。
-    static let fieldAspect: CGFloat = 1.3
-    static let ellipseRatio: Double = 0.72
+    /// 雷达画布宽高比与椭圆纵/横半轴比。图例精简成一行 + 问号弹层后空出的纵向空间
+    /// 让给了画布本身：宽高比从 1.3 收到 1.1（画布更高），ellipseRatio 从 0.72 提到
+    /// 0.9——不然只把画布拉高、椭圆纵向半轴仍卡在旧比例上限，新增的高度只会变成
+    /// 椭圆上下的空白，而不是让椭圆本身跟着变大。常见手机宽度下 0.9 已经让
+    /// `fieldRadii` 里 `min(h/2-fieldInset, hRad*ellipseRatio)` 的瓶颈从
+    /// ellipseRatio 切回画布高度本身，椭圆基本吃满新增的纵向空间。
+    static let fieldAspect: CGFloat = 1.1
+    static let ellipseRatio: Double = 0.9
 
     /// 气泡场的水平/垂直半轴：各方向取 (边长/2 - fieldInset)。以前用单一 min(w,h)/2
     /// 圆半径，画布一旦不是正方形（信号页画布通常比它高要宽），圆就卡在短边上、长边
