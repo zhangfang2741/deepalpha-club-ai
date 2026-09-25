@@ -36,6 +36,10 @@ struct SignalRadarView: View {
     /// 不直接看到买卖点气泡。
     @StateObject private var consent = RadarConsent()
     @State private var consentChecked = false
+    /// 强制最短阅读时长（秒）：勾选框可以随时点，但「同意并继续」在这段时间内
+    /// 保持禁用——避免手快的用户没看内容就秒点同意，让确认更站得住脚。
+    static let consentMinReadSeconds = 10
+    @State private var consentSecondsRemaining = SignalRadarView.consentMinReadSeconds
 
     /// 日期轨直接摆出来的格子数（约 2 周的交易日），更早的走"更多"里的日期选择器。
     static let visibleDayChipCount = 10
@@ -189,18 +193,43 @@ struct SignalRadarView: View {
                 Button {
                     consent.agree()
                 } label: {
-                    Text(L("同意并继续"))
+                    Text(consentButtonText)
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity).padding(.vertical, 13)
-                        .background(consentChecked ? Theme.accent : Theme.accent.opacity(0.35))
+                        .background(canConfirmConsent ? Theme.accent : Theme.accent.opacity(0.35))
                         .foregroundColor(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
-                .disabled(!consentChecked)
+                .disabled(!canConfirmConsent)
+                .animation(.default, value: consentSecondsRemaining)
             }
             .padding(20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // 每次挂载（含首次进入、勾选状态被外部重置后再次出现）都从头倒数 10 秒；
+        // 视图消失（如切到别的 Tab）时 Task 自动取消，回来再重新计时，不留半截状态。
+        .task {
+            consentSecondsRemaining = Self.consentMinReadSeconds
+            while consentSecondsRemaining > 0 {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                consentSecondsRemaining -= 1
+            }
+        }
+    }
+
+    /// 勾选 + 满 10 秒阅读时长，两者都满足才放行。
+    private var canConfirmConsent: Bool { consentChecked && consentSecondsRemaining <= 0 }
+
+    /// 按钮文案随状态推进：倒计时中 → 勾了但没到时间 → 都满足。
+    private var consentButtonText: String {
+        if consentSecondsRemaining > 0 {
+            return L("请仔细阅读（%lld 秒）", consentSecondsRemaining)
+        } else if !consentChecked {
+            return L("请先勾选上方确认")
+        } else {
+            return L("同意并继续")
+        }
     }
 
     private func consentPoint(_ text: String) -> some View {
