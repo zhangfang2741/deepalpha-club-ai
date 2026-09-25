@@ -33,16 +33,23 @@ final class WatchlistViewModel: ObservableObject {
     /// 每次切到自选页都重算阶段（行情每天在变，之前只在列表为空时加载，切回来标签不更新、
     /// 只能手动下拉）。首次带 loading 完整加载；已有数据时静默刷新列表 + 阶段，旧标签先留着，
     /// 新结果回来直接替换，不闪、不转圈。
-    func onAppear() async {
+    ///
+    /// `isPremium`：自选批量状态计算是高级版专属功能，非高级版用户跳过 `loadPhases()`，
+    /// 列表本身（增删、点开分析）照常可用——付费墙挡的只是批量算出的阶段标签。
+    func onAppear(isPremium: Bool) async {
         if items.isEmpty {
-            await refresh()
+            await refresh(isPremium: isPremium)
             return
         }
         try? await fetchAndApply()
-        await loadPhases()
+        if isPremium {
+            await loadPhases()
+        } else {
+            phases = [:]
+        }
     }
 
-    func refresh() async {
+    func refresh(isPremium: Bool) async {
         isLoading = true
         defer { isLoading = false }
         do {
@@ -51,7 +58,11 @@ final class WatchlistViewModel: ObservableObject {
             errorMessage = (error as? APIError)?.message ?? "加载自选失败"
             return
         }
-        await loadPhases()
+        if isPremium {
+            await loadPhases()
+        } else {
+            phases = [:]
+        }
     }
 
     /// 拉阶段标签：单独一次请求，比拉列表慢（要跑缠论分析）。失败隔 2 秒重试一次，

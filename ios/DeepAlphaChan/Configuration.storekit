@@ -17,11 +17,11 @@
       "localizations" : [
         {
           "description" : "",
-          "displayName" : "DeepAlpha Pro",
+          "displayName" : "DeepAlpha 缠论会员",
           "locale" : "zh_CN"
         }
       ],
-      "name" : "DeepAlpha Pro",
+      "name" : "DeepAlpha 缠论会员",
       "subscriptions" : [
         {
           "adHocOffers" : [],
@@ -33,18 +33,43 @@
           "introductoryOffer" : {
             "internalID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000012",
             "paymentMode" : "free",
-            "subscriptionPeriod" : "P1W"
+            "subscriptionPeriod" : "P3D"
           },
           "localizations" : [
             {
               "description" : "解锁全部缠论分析，不受每日 3 支标的限制",
-              "displayName" : "DeepAlpha Pro 月度会员",
+              "displayName" : "体验版 月度会员",
               "locale" : "zh_CN"
             }
           ],
           "productID" : "club.deepalpha.chan.pro.monthly",
           "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "Pro Monthly",
+          "referenceName" : "Experience Monthly",
+          "subscriptionGroupID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000010",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "188.00",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000021",
+          "introductoryOffer" : {
+            "internalID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000022",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P3D"
+          },
+          "localizations" : [
+            {
+              "description" : "体验版全部权益 + 信号雷达、30 分钟次级别确认、自选批量状态计算",
+              "displayName" : "高级版 月度会员",
+              "locale" : "zh_CN"
+            }
+          ],
+          "productID" : "club.deepalpha.chan.premium.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Premium Monthly",
           "subscriptionGroupID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000010",
           "type" : "RecurringSubscription"
         }

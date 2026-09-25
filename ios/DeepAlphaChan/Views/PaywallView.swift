@@ -1,7 +1,16 @@
 import SwiftUI
 import StoreKit
 
-/// 订阅付费墙。展示权益、价格、7 天免费试用，并含自动续订披露与条款/隐私链接（苹果要求）。
+/// 方案卡上的一条权益。
+private struct PlanFeature: Identifiable {
+    let icon: String
+    let title: String
+    let desc: String
+    var id: String { title }
+}
+
+/// 订阅付费墙。展示两档方案（体验版 / 高级版）的权益、价格与免费试用，
+/// 并含自动续订披露与条款/隐私链接（苹果要求）。
 struct PaywallView: View {
     @EnvironmentObject var store: StoreManager
     @Environment(\.dismiss) private var dismiss
@@ -12,8 +21,8 @@ struct PaywallView: View {
             ScrollView {
                 VStack(spacing: 22) {
                     header
-                    featureList
                     content
+                    restoreButton
                     legal
                 }
                 .padding(20)
@@ -27,9 +36,9 @@ struct PaywallView: View {
                         .tint(Theme.textSecondary)
                 }
             }
-            .onChange(of: store.isSubscribed) { _, subscribed in
-                if subscribed { dismiss() }
-            }
+            // tier 变化（购买/恢复成功）即关闭；已订阅体验版再升级高级版时 isSubscribed
+            // 本就是 true，必须看 tier 本身的变化才能在升级完成后自动收起付费墙。
+            .onChange(of: store.tier) { _, _ in dismiss() }
         }
         // 付费墙不参与截图分享：订阅价格与权益文案带法务口径，截出去容易被
         // 脱离上下文传播；且它常从「我的」页弹出，抑制声明与呈现路径无关才可靠。
@@ -40,7 +49,7 @@ struct PaywallView: View {
         VStack(spacing: 10) {
             Image(systemName: "crown.fill")
                 .font(.system(size: 40)).foregroundStyle(Theme.segment)
-            Text("DeepAlpha Pro")
+            Text(L("DeepAlpha 会员"))
                 .font(.title.bold()).foregroundColor(Theme.textPrimary)
             Text(L("解锁全部缠论分析，突破每日 %lld 次限制", AppConfig.freeDailyQuota))
                 .font(.subheadline).foregroundColor(Theme.textSecondary)
@@ -49,41 +58,38 @@ struct PaywallView: View {
         .padding(.top, 8)
     }
 
-    private var featureList: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            feature("infinity", L("无限次缠论分析"), L("不再受每日次数限制"))
-            // 原来这里写的是「结构 GAP 分析」，但该功能已在 5b6b35d 移除，
-            // GapAnalysisView 现在是无人引用的死代码。付费墙不能卖一个 App 里
-            // 找不到的功能——既是 App Store 2.3.1 的拒因，也是消费欺诈。
-            feature("globe.asia.australia.fill", L("美股 / A 股 / 港股"), L("三个市场统一的缠论结构分析"))
-            // 不写「操作倾向」：付费墙是宣传语境，这四个字等于在卖操作建议，
-            // 正踩 3.1.1 / 5.2.5。口径与 App 内的「形态分析」保持一致。
-            feature("flag.fill", L("全部买卖点与形态分析"), L("一二三类买卖点、背驰与加权依据"))
-            feature("bolt.fill", L("优先体验新功能"), L("后续模块优先向会员开放"))
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-    }
-
-    private func feature(_ icon: String, _ title: String, _ desc: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: icon).foregroundColor(Theme.accent).frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
-                Text(desc).font(.caption).foregroundColor(Theme.textSecondary)
-            }
-        }
-    }
-
     @ViewBuilder
     private var content: some View {
-        if let product = store.monthlyProduct {
-            VStack(spacing: 14) {
-                priceCard(product)
-                subscribeButton(product)
-                restoreButton
+        if store.experienceProduct != nil || store.premiumProduct != nil {
+            VStack(spacing: 16) {
+                if let premium = store.premiumProduct {
+                    planCard(
+                        product: premium, planName: L("高级版"), badge: L("推荐"),
+                        features: [
+                            PlanFeature(icon: "infinity", title: L("无限次缠论分析"), desc: L("不再受每日次数限制")),
+                            PlanFeature(icon: "dot.radiowaves.left.and.right", title: L("信号雷达"),
+                                        desc: L("扫描科技指数成分股，每日买卖点一图看全")),
+                            PlanFeature(icon: "scope", title: L("30 分钟次级别确认"),
+                                        desc: L("日线定方向、30 分钟找进出点，共振/逆势一眼分辨")),
+                            PlanFeature(icon: "star.fill", title: L("自选批量状态计算"),
+                                        desc: L("自选列表批量算出每只标的当前所处的结构阶段")),
+                            PlanFeature(icon: "globe.asia.australia.fill", title: L("美股 / A 股 / 港股"),
+                                        desc: L("三个市场统一的缠论结构分析")),
+                        ])
+                }
+                if let experience = store.experienceProduct {
+                    planCard(
+                        product: experience, planName: L("体验版"), badge: nil,
+                        features: [
+                            PlanFeature(icon: "infinity", title: L("无限次缠论分析"), desc: L("不再受每日次数限制")),
+                            PlanFeature(icon: "globe.asia.australia.fill", title: L("美股 / A 股 / 港股"),
+                                        desc: L("三个市场统一的缠论结构分析")),
+                            // 不写「操作倾向」：付费墙是宣传语境，这四个字等于在卖操作建议，
+                            // 正踩 3.1.1 / 5.2.5。口径与 App 内的「形态分析」保持一致。
+                            PlanFeature(icon: "flag.fill", title: L("全部买卖点与形态分析"),
+                                        desc: L("一二三类买卖点、背驰与加权依据")),
+                        ])
+                }
             }
         } else if store.loadFailed {
             VStack(spacing: 10) {
@@ -97,32 +103,80 @@ struct PaywallView: View {
         }
     }
 
-    private func priceCard(_ product: Product) -> some View {
-        VStack(spacing: 6) {
-            if store.offersFreeTrial {
-                Text(L("7 天免费试用")).font(.title3.bold()).foregroundColor(Theme.up)
-                Text(L("试用结束后 %@/月，可随时取消", product.displayPrice))
-                    .font(.footnote).foregroundColor(Theme.textSecondary)
-            } else {
-                Text(L("%@/月", product.displayPrice)).font(.title3.bold()).foregroundColor(Theme.textPrimary)
-                Text(L("可随时取消")).font(.footnote).foregroundColor(Theme.textSecondary)
+    /// 一张方案卡：权益列表 + 价格 + 订阅按钮。高级版带「推荐」角标。
+    private func planCard(
+        product: Product, planName: String, badge: String?, features: [PlanFeature]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text(planName).font(.title3.bold()).foregroundColor(Theme.textPrimary)
+                if let badge {
+                    Text(badge)
+                        .font(.caption2.bold()).foregroundColor(.white)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Theme.segment, in: Capsule())
+                }
+                Spacer()
             }
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(features) { f in feature(f.icon, f.title, f.desc) }
+            }
+            priceRow(product)
+            subscribeButton(product, planName: planName)
         }
-        .frame(maxWidth: .infinity).padding(16)
-        .background(Theme.accent.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(16)
+        .background(Theme.surface)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(badge != nil ? Theme.segment.opacity(0.5) : Theme.border, lineWidth: badge != nil ? 1.5 : 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
-    private func subscribeButton(_ product: Product) -> some View {
+    private func feature(_ icon: String, _ title: String, _ desc: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon).foregroundColor(Theme.accent).frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+                Text(desc).font(.caption).foregroundColor(Theme.textSecondary)
+            }
+        }
+    }
+
+    private func priceRow(_ product: Product) -> some View {
+        HStack {
+            if let trial = store.trialPeriodText(product) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("%@免费试用", trial)).font(.subheadline.bold()).foregroundColor(Theme.up)
+                    Text(L("试用结束后 %@/月，可随时取消", product.displayPrice))
+                        .font(.caption2).foregroundColor(Theme.textSecondary)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("%@/月", product.displayPrice)).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+                    Text(L("可随时取消")).font(.caption2).foregroundColor(Theme.textSecondary)
+                }
+            }
+            Spacer()
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity)
+        .background(Theme.accent.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func subscribeButton(_ product: Product, planName: String) -> some View {
         Button {
             Task { await store.purchase(product) }
         } label: {
             HStack {
                 if store.purchaseInProgress { ProgressView().tint(.white) }
-                Text(store.offersFreeTrial ? L("开始 7 天免费试用") : L("订阅 Pro"))
+                Text(store.offersFreeTrial(product)
+                     ? L("开始 %@免费试用", store.trialPeriodText(product) ?? "")
+                     : L("订阅%@", planName))
                     .fontWeight(.semibold)
             }
-            .frame(maxWidth: .infinity).padding(.vertical, 15)
+            .frame(maxWidth: .infinity).padding(.vertical, 13)
             .background(Theme.accent).foregroundColor(.white)
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }

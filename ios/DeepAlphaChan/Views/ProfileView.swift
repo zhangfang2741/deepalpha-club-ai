@@ -39,22 +39,34 @@ struct ProfileView: View {
                     HStack {
                         Text(L("当前方案")).foregroundColor(Theme.textSecondary)
                         Spacer()
-                        if store.isSubscribed {
-                            Label(L("Pro 会员"), systemImage: "crown.fill")
+                        switch store.tier {
+                        case .premium:
+                            Label(L("高级版"), systemImage: "crown.fill")
                                 .font(.subheadline.bold()).foregroundColor(Theme.segment)
-                        } else {
+                        case .experience:
+                            Label(L("体验版"), systemImage: "checkmark.seal.fill")
+                                .font(.subheadline.bold()).foregroundColor(Theme.accent)
+                        case .free:
                             Text(L("免费版")).foregroundColor(Theme.textPrimary)
+                        }
+                    }
+                    if store.tier == .experience {
+                        Button {
+                            showPaywall = true
+                        } label: {
+                            Label(L("升级高级版"), systemImage: "crown.fill")
+                                .foregroundColor(Theme.segment)
+                        }
+                    } else if !store.isSubscribed {
+                        Button {
+                            showPaywall = true
+                        } label: {
+                            Label(L("查看订阅方案"), systemImage: "crown.fill")
+                                .foregroundColor(Theme.segment)
                         }
                     }
                     if store.isSubscribed {
                         Button(L("管理订阅")) { showManageSubscriptions = true }
-                    } else {
-                        Button {
-                            showPaywall = true
-                        } label: {
-                            Label(L("升级 Pro（7 天免费试用）"), systemImage: "crown.fill")
-                                .foregroundColor(Theme.segment)
-                        }
                     }
                     Button(L("恢复购买")) { Task { await store.restore() } }
                         .foregroundColor(Theme.accent)

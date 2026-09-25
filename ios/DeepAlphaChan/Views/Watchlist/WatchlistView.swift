@@ -6,16 +6,27 @@ import SwiftUI
 struct WatchlistView: View {
     @ObservedObject var chanVM: ChanViewModel
     @StateObject private var vm = WatchlistViewModel()
+    @EnvironmentObject private var store: StoreManager
 
     @State private var showResults = false
+    /// 自选批量状态计算是高级版专属功能；非高级版点解锁横幅弹这个付费墙。
+    @State private var showPaywall = false
 
     var body: some View {
         NavigationStack {
-            content
+            VStack(spacing: 0) {
+                if !store.isPremium && !vm.items.isEmpty { unlockBanner }
+                content
+            }
                 .navigationTitle(L("自选"))
-                .task { await vm.onAppear() }
+                .task { await vm.onAppear(isPremium: store.isPremium) }
                 .onReceive(NotificationCenter.default.publisher(for: .watchlistDidChange)) { _ in
-                    Task { await vm.refresh() }
+                    Task { await vm.refresh(isPremium: store.isPremium) }
+                }
+                // 付费墙里升级成功后，立刻补一次批量状态计算，不用手动下拉刷新。
+                .onChange(of: store.isPremium) { _, isPremium in
+                    guard isPremium else { return }
+                    Task { await vm.refresh(isPremium: true) }
                 }
                 .navigationDestination(isPresented: $showResults) {
                     if let analysis = chanVM.analysis {
@@ -29,7 +40,23 @@ struct WatchlistView: View {
                 )) {
                     Button(L("好"), role: .cancel) {}
                 }
+                .sheet(isPresented: $showPaywall) { PaywallView() }
         }
+    }
+
+    /// 列表非空且未订阅高级版时顶部的解锁横幅：说明批量状态计算未开启，点开付费墙。
+    private var unlockBanner: some View {
+        Button { showPaywall = true } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.fill").foregroundColor(Theme.segment).font(.caption)
+                Text(L("批量状态计算是高级版专属，订阅解锁 ›"))
+                    .font(.caption).foregroundColor(Theme.textPrimary)
+                Spacer()
+            }
+            .padding(10)
+            .background(Theme.segment.opacity(0.08))
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder

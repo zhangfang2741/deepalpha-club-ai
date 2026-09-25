@@ -28,6 +28,10 @@ struct SignalRadarView: View {
     @State private var switcherSize: CGSize = .zero
     @StateObject private var panicVM = PanicIndexViewModel()
     @EnvironmentObject private var orientation: AppOrientation
+    @EnvironmentObject private var store: StoreManager
+    /// 信号雷达（气泡场）是高级版专属功能，未订阅时弹这个付费墙。
+    /// 恐慌指数小卡片（PanicIndexStrip）不受影响，所有用户可见。
+    @State private var showPaywall = false
 
     /// 日期轨直接摆出来的格子数（约 2 周的交易日），更早的走"更多"里的日期选择器。
     static let visibleDayChipCount = 10
@@ -45,7 +49,9 @@ struct SignalRadarView: View {
             VStack(spacing: 12) {
                 PanicIndexStrip(radarVM: vm, panicVM: panicVM)
 
-                if vm.isScanning {
+                if !store.isPremium {
+                    lockedView
+                } else if vm.isScanning {
                     scanningView
                 } else if vm.isComputingInBackground {
                     computingView
@@ -83,7 +89,12 @@ struct SignalRadarView: View {
             .background(Theme.background)
             .navigationTitle(L("缠论信号"))
             .navigationBarTitleDisplayMode(.inline)
-            .task { vm.onAppear() }
+            .task { if store.isPremium { vm.onAppear() } }
+            // 付费墙里升级成功（tier 变化）后，若已具备高级版权益且尚未拉过数据，
+            // 立刻补拉一次——不用退出再进这个 Tab 才刷新。
+            .onChange(of: store.isPremium) { _, isPremium in
+                if isPremium { vm.onAppear() }
+            }
             .overlay { if chanVM.isLoading { analysisLoadingOverlay } }
             .navigationDestination(isPresented: $showResults) {
                 if let analysis = chanVM.analysis {
@@ -97,7 +108,30 @@ struct SignalRadarView: View {
             )) {
                 Button(L("好"), role: .cancel) {}
             }
+            .sheet(isPresented: $showPaywall) { PaywallView() }
         }
+    }
+
+    /// 未订阅高级版时替代气泡场展示的锁定态：说明权益 + 升级入口。
+    private var lockedView: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "dot.radiowaves.left.and.right")
+                .font(.system(size: 40)).foregroundColor(Theme.segment)
+            Text(L("信号雷达是高级版专属功能"))
+                .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+            Text(L("扫描科技指数成分股，每日买卖点一图看全，订阅高级版解锁"))
+                .font(.footnote).foregroundColor(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 30)
+            Button { showPaywall = true } label: {
+                Label(L("升级高级版"), systemImage: "crown.fill")
+                    .font(.subheadline.bold())
+                    .padding(.horizontal, 20).padding(.vertical, 10)
+                    .background(Theme.accent).foregroundColor(.white)
+                    .clipShape(Capsule())
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// 点气泡 → 直接跑分析，成功后 push 详情页（不经过分析 Tab 的条件页）。

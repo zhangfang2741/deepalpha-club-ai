@@ -27,6 +27,7 @@ struct MainTabView: View {
     /// 分析 Tab 与晨报跳转共享的缠论状态。
     @ObservedObject private var push = PushNotificationManager.shared
     @StateObject private var chanVM = ChanViewModel()
+    @EnvironmentObject private var store: StoreManager
 
     var body: some View {
         TabView(selection: $selection) {
@@ -62,6 +63,11 @@ struct MainTabView: View {
             // 不在 TabView 里的 tag（那样切换会没有任何反应）。
             selection = .signalRadar
             push.pendingMarket = nil
+        }
+        // chanVM 是跨 Tab 共享的长生命周期对象，次级别确认（高级版专属）需要知道
+        // 当前订阅层级——用 onChange 而非每次 runAnalysis 时现查，避免漏同步。
+        .onChange(of: store.tier, initial: true) { _, _ in
+            chanVM.isPremiumUser = store.isPremium
         }
     }
 
