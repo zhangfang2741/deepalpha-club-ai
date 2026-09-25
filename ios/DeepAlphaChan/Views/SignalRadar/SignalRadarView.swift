@@ -160,13 +160,23 @@ struct SignalRadarView: View {
                 Text(day.date)
                     .font(.caption)
                     .foregroundColor(Theme.textSecondary)
-                // 次级别结论只对最新交易日算、盘中每 30 分钟刷新：标出更新时刻，
-                // 与点进详情看到的实时结论有出入时，用户知道差在时间上。之前只在
-                // 当天有共振徽标时才显示这行，导致共振本来就少的港股/A股几乎
-                // 看不到更新时间；改成只要最新一天算过次级别就显示，三个市场一致。
-                if day.id == vm.response?.days.first?.id,
-                   let updated = vm.response?.subLevelUpdatedText {
-                    Text(L("次级别 %@ 更新", updated))
+                if day.id == vm.response?.days.first?.id {
+                    // 次级别结论只对最新交易日算、盘中每 30 分钟刷新：标出更新时刻，
+                    // 与点进详情看到的实时结论有出入时，用户知道差在时间上。之前只在
+                    // 当天有共振徽标时才显示这行，导致共振本来就少的港股/A股几乎
+                    // 看不到更新时间；改成只要最新一天算过次级别就显示，三个市场一致。
+                    if let updated = vm.response?.subLevelUpdatedText {
+                        Text(L("次级别 %@ 更新", updated))
+                            .font(.caption2)
+                            .foregroundColor(Theme.textSecondary)
+                    }
+                } else if let computed = vm.response?.computedAtText {
+                    // 翻看历史某一天：这天的气泡是上一次全量扫描（computed_at）算出来的
+                    // 快照，缠论笔在数据右端本身就是临时性的，之后如果又跑过新的扫描、
+                    // 有更多K线进来，同一只股票在这天的买卖点可能已经变了——点进详情页
+                    // 是用当下最新数据重新算，跟这份快照对不上是预期行为，不是 bug。
+                    // 标出算出时刻，用户能明白「点进去可能不一样」的原因在这。
+                    Text(L("数据 %@ 计算", computed))
                         .font(.caption2)
                         .foregroundColor(Theme.textSecondary)
                 }
@@ -547,6 +557,11 @@ struct SignalRadarView: View {
                         L("位置：离中心越近代表信号越新，三个圈依次是今天、3天内、一周内。"),
                         L("角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。"),
                     ])
+                    infoSection(L("为什么点进详情页可能对不上"), [
+                        L("气泡是最近一次全量扫描那一刻的快照（历史日期下方会标出算出时刻），不是实时数据；点进详情页是用当下最新K线重新跑一遍缠论。"),
+                        L("缠论的笔和买卖点在最新几根K线上本身是临时性的，后续新K线一出现，原来某天的信号可能被延伸、改写甚至判定失效——这是分析方法的特性，不是数据错误。"),
+                        L("越靠近「今天」的气泡越可能受影响；对某个信号有疑问，以点进详情页当下重新算出的结构为准。"),
+                    ])
                     infoSection(L("扫描范围怎么定"), [
                         L("每个市场提供「科技指数」（默认）和「大盘宽基」两套可切换范围，如美股的纳斯达克100 / 标普500。"),
                         L("成分股优先实时拉取官方/交易所数据源，取不到或数量不足时自动回退到内置清单，保证随时有得扫。"),
@@ -557,7 +572,7 @@ struct SignalRadarView: View {
                         L("新鲜度：当天最高，7 天后归零；超过 7 天没被更新信号覆盖的旧信号会自动退场。"),
                         L("每类买卖点先保底最多 2 个名额，其余按综合分从高到低补满，共取前 12 名。"),
                     ])
-                    Text(L("以上口径与详情页强弱、确认状态完全一致。"))
+                    Text(L("以上打分口径与详情页强弱、确认状态判定完全一致，只是气泡取的是某一次扫描的快照。"))
                         .font(.footnote)
                         .foregroundColor(Theme.textSecondary)
                 }

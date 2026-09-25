@@ -34,6 +34,9 @@ struct SignalRadarResponse: Decodable {
     let status: String   // ready / generating
     /// 最新一天气泡共振结论的更新时间（ISO8601 UTC）。盘中每 30 分钟刷新；旧后端无此字段。
     let subLevelAsOf: String?
+    /// as_of 只是「代表哪个交易日」的日期，同一天内不管几点刷新都长一样，看不出这份
+    /// 快照有多新；computed_at 才是这次全量扫描真正算出来的时间点。旧后端无此字段。
+    let computedAt: String?
 
     enum CodingKeys: String, CodingKey {
         case market
@@ -46,12 +49,23 @@ struct SignalRadarResponse: Decodable {
         case days
         case status
         case subLevelAsOf = "sub_level_as_of"
+        case computedAt = "computed_at"
     }
 
     /// 共振结论更新时刻（本地时间 HH:mm），解析不了返回 nil。
     var subLevelUpdatedText: String? {
-        guard let raw = subLevelAsOf, !raw.isEmpty,
-              let date = ISO8601DateFormatter().date(from: raw) else { return nil }
+        Self.localTime(from: subLevelAsOf)
+    }
+
+    /// 本次全量扫描的算出时刻（本地时间 HH:mm），解析不了返回 nil——用来提醒用户
+    /// 「气泡是这个时间点的快照，跟现在点进详情页实时算的结果可能不完全一样」，
+    /// 缠论笔在数据右端本身就是临时性的，晚几根K线就可能改写，这是预期行为。
+    var computedAtText: String? {
+        Self.localTime(from: computedAt)
+    }
+
+    private static func localTime(from raw: String?) -> String? {
+        guard let raw, !raw.isEmpty, let date = ISO8601DateFormatter().date(from: raw) else { return nil }
         let f = DateFormatter()
         f.dateFormat = "HH:mm"
         return f.string(from: date)

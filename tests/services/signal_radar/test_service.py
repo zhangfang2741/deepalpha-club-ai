@@ -1,6 +1,8 @@
 """信号雷达纯聚合逻辑单测（无 IO）。"""
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from app.core.config import settings
@@ -565,6 +567,39 @@ class TestCompositeRanking:
         out = svc.rerank_with_resonance(day, top_n=2)
         assert [s.symbol for s in out.signals] == ["C", "A"]
         assert out.buy_count == 2
+
+
+class TestComputedAt:
+    """computed_at：区分「这份快照算出来的时刻」与 as_of（只是代表哪个交易日）。"""
+
+    async def test_compute_market_stamps_computed_at(self, monkeypatch):
+        """全量扫描完成后 computed_at 是一个合法的 ISO8601 UTC 时间戳，而不是空字符串。"""
+        async def fake_resolve(market, *, redis, universe_key=None):
+            return [("AAPL", "苹果")]
+
+        async def fake_scan(symbol, name, **kwargs):
+            return [_raw(symbol, "2026-09-19", "buy", 0.8, level=2)], None, None, ["2026-09-19"]
+
+        async def fake_kline(**kwargs):
+            return []
+
+        async def fake_attach(day, **kwargs):
+            return None
+
+        monkeypatch.setattr(svc, "resolve_constituents", fake_resolve)
+        monkeypatch.setattr(svc, "_scan_symbol", fake_scan)
+        monkeypatch.setattr(svc, "fetch_kline", fake_kline)
+        monkeypatch.setattr(svc, "attach_sub_levels", fake_attach)
+
+        before = datetime.now(UTC).replace(microsecond=0)
+        resp = await svc.compute_market("us", redis=_FakeRedis())
+        after = datetime.now(UTC)
+
+        assert resp.computed_at, "computed_at 不该是空字符串"
+        stamped = datetime.fromisoformat(resp.computed_at)
+        # computed_at 本身按秒截断（見 service.py），before 也截到秒才能公平比较，
+        # 否则 before 落在同一秒的非零微秒上会比截断后的 stamped 更晚，误判失败。
+        assert before <= stamped <= after
 
 
 class TestWatchlistUniverse:
