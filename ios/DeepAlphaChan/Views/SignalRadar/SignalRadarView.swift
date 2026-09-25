@@ -7,10 +7,10 @@ import SwiftUI
 ///
 /// 气泡编码（三个视觉维度对应三件不同的事，不再互相重复；纯实色气泡，
 /// 不用边框表达确认状态——那是详情页里的事，见 RadarBubble）：
-/// - 颜色：方向（红=买点 / 绿=卖点）+ 深浅（买卖点级别本身的确定性：一类最浅、
-///   只是背驰迹象、尚待验证，二类居中、回踩不破中枢是初步确认，三类最深、
-///   回踩完全不回中枢是最强确认）；
-/// - 大小：买卖点自身强弱（弱/中/强，与详情页同一套判定），越强越大；
+/// - 颜色：方向（红=买点 / 绿=卖点）+ 深浅（形态强弱：弱/中/强，与详情页买卖点
+///   色块同一映射 SignalFormatting.strengthDepth），越强越深；
+/// - 大小：买卖点类型（一类最小、二类居中、三类最大——一类只是背驰迹象、尚待验证，
+///   三类回踩完全不回中枢，确认程度最高）；
 /// - 居中程度：时间距离——当天信号位于中心，越早出现的信号越靠外；
 ///   后端会让一只股票的信号在被更新的信号覆盖前持续「在场」（见
 ///   app/services/signal_radar/service.py 的按日重建），所以翻看某一天时，
@@ -229,7 +229,7 @@ struct SignalRadarView: View {
                             phase: layout.phase,
                             color: SignalRadarView.bubbleColor(
                                 side: layout.signal.side,
-                                depth: SignalRadarView.levelDepth(layout.signal.level)),
+                                depth: SignalFormatting.strengthDepth(layout.signal.signalStrength)),
                             isNew: layout.signal.date == dayDate,
                             onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name) }
                         )
@@ -389,7 +389,7 @@ struct SignalRadarView: View {
         // 每次布局每个信号只测量一次，排序和避让都使用最终尺寸。
         let metrics = signals.map { signal in
             RadarBubbleMetrics(symbol: signal.symbol, name: signal.name,
-                               baseDiameter: diameter(forStrength: signal.signalStrength) * ringSizeFactor(forDaysAgo: age(signal)),
+                               baseDiameter: diameter(forLevel: signal.level) * ringSizeFactor(forDaysAgo: age(signal)),
                                maxDiameter: maxDiameter)
         }
         let sizedSignals = Array(zip(signals, metrics))
@@ -425,23 +425,13 @@ struct SignalRadarView: View {
         return layouts
     }
 
-    /// 买卖点强弱 → 气泡直径：越强越大（弱 60 / 中 76 / 强 92），与详情页买卖点
-    /// 「强/中/弱」同一口径（一类按背驰力度比、二三类按中枢级别 + 回踩余地），未知按中。
-    static func diameter(forStrength strength: String) -> Double {
-        switch strength {
-        case "strong": return 92
-        case "weak": return 60
-        default: return 76
-        }
-    }
-
-    /// 买卖点类型 → 颜色深浅：一类最浅（只是背驰迹象、尚待验证）、二类居中（回踩不破
-    /// 中枢，初步确认）、三类最深（回踩完全不回中枢，确认程度最高）。
-    static func levelDepth(_ level: Int) -> Double {
+    /// 买卖点类型 → 气泡直径：一类 60 / 二类 76 / 三类 92。一类只是背驰迹象、尚待验证，
+    /// 三类回踩完全不回中枢、确认程度最高，越确认越大。
+    static func diameter(forLevel level: Int) -> Double {
         switch level {
-        case 1: return 0.2
-        case 2: return 0.55
-        default: return 0.9
+        case 1: return 60
+        case 2: return 76
+        default: return 92
         }
     }
 
@@ -460,7 +450,7 @@ struct SignalRadarView: View {
         return abs(Calendar(identifier: .gregorian).dateComponents([.day], from: da, to: db).day ?? 0)
     }
 
-    /// 与详情页共用同一套渐变色（深浅含义在雷达上是买卖点类型）。
+    /// 与详情页共用同一套渐变色（深浅 = 形态强弱，两边同一口径）。
     static func bubbleColor(side: String, depth: Double) -> Color {
         SignalFormatting.radarColor(side: side, depth: depth)
     }
@@ -474,17 +464,13 @@ struct SignalRadarView: View {
             HStack(spacing: 4) {
                 Circle().fill(Theme.up).frame(width: 8, height: 8)
                 Circle().fill(Theme.down).frame(width: 8, height: 8)
-                // 颜色不止编码方向，深浅还编码买卖点类型的确认程度（一类浅→三类深）；
-                // 之前只写「颜色=方向」漏了深浅这层意思，这里补一个词点出来，深浅具体
-                // 代表什么留给问号弹层展开——常驻图例只负责让人知道「还有一层没读」。
-                Text(L("颜色=方向·深浅")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                // 颜色编码方向，深浅编码形态强弱（弱浅→强深），具体口径留给问号弹层。
+                Text(L("深浅=形态强弱")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
             HStack(spacing: 3) {
-                sizeDot(diameter: SignalRadarView.diameter(forStrength: "weak"))
-                sizeDot(diameter: SignalRadarView.diameter(forStrength: "strong"))
-                // 「强弱」二字太空泛，点一下问号能看到具体口径（一类按背驰力度比、
-                // 二三类按中枢级别+回踩余地），这里先点出是「形态」层面的强弱。
-                Text(L("大小=形态强弱")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                sizeDot(diameter: SignalRadarView.diameter(forLevel: 1))
+                sizeDot(diameter: SignalRadarView.diameter(forLevel: 3))
+                Text(L("大小=一二三类")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
             HStack(spacing: 4) {
                 legendBadge(L("新"), color: Theme.segment)
@@ -505,8 +491,8 @@ struct SignalRadarView: View {
             .background(color, in: Capsule())
     }
 
-    /// 图例里的强弱参考点：真实按 `diameter(forStrength:)` 等比缩小展示，不带文字标签
-    /// （弱/中/强的说明移进算法说明弹层，这里只给一眼看出"有大有小"的直观印象）。
+    /// 图例里的大小参考点：真实按 `diameter(forLevel:)` 等比缩小展示，不带文字标签
+    /// （一/二/三类的说明在算法说明弹层，这里只给一眼看出"有大有小"的直观印象）。
     private func sizeDot(diameter: Double) -> some View {
         Circle().fill(Theme.textSecondary).frame(width: diameter * 0.16, height: diameter * 0.16)
     }
@@ -531,8 +517,8 @@ struct SignalRadarView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     infoSection(L("气泡怎么看"), [
-                        L("颜色：红=买点，绿=卖点；深浅=买卖点类型的确认程度，一类最浅、三类最深。"),
-                        L("大小：买卖点自身强弱（弱/中/强），越强气泡越大，与详情页同一套判定。"),
+                        L("颜色：红=买点，绿=卖点；深浅=形态强弱（弱/中/强），越强越深，与详情页同一套判定。"),
+                        L("大小：买卖点类型，一类最小、三类最大——越往后确认程度越高。"),
                         L("位置：离中心越近代表信号越新，三个圈依次是今天、3天内、一周内。"),
                         L("角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。"),
                     ])

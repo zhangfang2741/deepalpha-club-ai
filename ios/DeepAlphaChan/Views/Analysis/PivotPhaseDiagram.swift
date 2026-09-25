@@ -112,6 +112,7 @@ struct PivotPhaseDiagram: View {
         let control1: CGPoint?
         let control2: CGPoint?
         let label: String
+        /// 标签左边缘中点：标签贴在线（曲线取最外侧）右边，不随文字长短漂移。
         let labelPos: CGPoint
         let color: Color
     }
@@ -135,19 +136,19 @@ struct PivotPhaseDiagram: View {
 
     private let edges: [Edge] = [
         Edge(key: .edgeForm, from: CGPoint(x: 197, y: 40), to: CGPoint(x: 197, y: 70),
-             control1: nil, control2: nil, label: L("形成中枢"), labelPos: CGPoint(x: 253, y: 58), color: Theme.textSecondary),
+             control1: nil, control2: nil, label: L("形成中枢"), labelPos: CGPoint(x: 199, y: 55), color: Theme.textSecondary),
         Edge(key: .edgeBreak, from: CGPoint(x: 197, y: 116), to: CGPoint(x: 197, y: 174),
-             control1: nil, control2: nil, label: L("突破"), labelPos: CGPoint(x: 227, y: 148), color: Theme.textSecondary),
+             control1: nil, control2: nil, label: L("突破"), labelPos: CGPoint(x: 199, y: 145), color: Theme.textSecondary),
         Edge(key: .edgeHold, from: CGPoint(x: 197, y: 220), to: CGPoint(x: 197, y: 278),
-             control1: nil, control2: nil, label: L("回踩守住"), labelPos: CGPoint(x: 253, y: 252), color: Theme.textSecondary),
+             control1: nil, control2: nil, label: L("回踩守住"), labelPos: CGPoint(x: 199, y: 249), color: Theme.textSecondary),
         Edge(key: .edgeDiverge, from: CGPoint(x: 197, y: 332), to: CGPoint(x: 197, y: 386),
-             control1: nil, control2: nil, label: L("背驰"), labelPos: CGPoint(x: 220, y: 362), color: Theme.textSecondary),
+             control1: nil, control2: nil, label: L("背驰"), labelPos: CGPoint(x: 199, y: 359), color: Theme.textSecondary),
         Edge(key: .edgeFake, from: CGPoint(x: 282, y: 198), to: CGPoint(x: 284, y: 94),
              control1: CGPoint(x: 340, y: 198), control2: CGPoint(x: 340, y: 94),
-             label: L("假突破"), labelPos: CGPoint(x: 349, y: 150), color: Theme.segment),
+             label: L("假突破"), labelPos: CGPoint(x: 328, y: 146), color: Theme.segment),
         Edge(key: .edgeReverse, from: CGPoint(x: 282, y: 410), to: CGPoint(x: 284, y: 198),
              control1: CGPoint(x: 352, y: 410), control2: CGPoint(x: 352, y: 198),
-             label: L("反向突破"), labelPos: CGPoint(x: 356, y: 306), color: Theme.stroke),
+             label: L("反向突破"), labelPos: CGPoint(x: 337, y: 304), color: Theme.stroke),
     ]
 
     var body: some View {
@@ -294,6 +295,9 @@ struct PivotPhaseDiagram: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .fixedSize()
+        // 零尺寸锚点 + leading 对齐的 overlay：让标签左边缘落在 labelPos，而不是中心。
+        .frame(width: 0, height: 0, alignment: .leading)
         .position(x: edge.labelPos.x * scale, y: edge.labelPos.y * scale)
     }
 

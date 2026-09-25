@@ -374,7 +374,6 @@
 "次级别 %@ 更新" = "Sub-level updated %@";
 "数据 %@ 计算" = "Snapshot computed %@";
 "数据截至 %@" = "data as of %@";
-"大小=买卖点类型" = "Size = signal type";
 "· 越远越小" = "· smaller when older";
 "日线与30分钟同向" = "daily & 30-min agree";
 "当日新出现" = "new today";
@@ -525,18 +524,14 @@
 "返回当前状态" = "Return to current state";
 "走势级别" = "Timeframes & levels";
 "区间走势：%@" = "Trend across the range: %@";
-"大小=形态强弱" = "Size = pattern strength";
 "自选中暂无该市场的股票" = "No stocks from this market in your watchlist";
 "在分析详情页点右上角 ☆ 加入自选" = "Tap ☆ at the top right of an analysis to add one";
 "点击气泡查看分析" = "Tap a bubble for analysis";
 "今天" = "Today";
 "距离=时间：三个环依次是今天、1 周、2 周" = "Distance = time: rings mark today, 1 week, 2 weeks";
-"颜色=方向·深浅" = "Color = direction · shade";
 "标签=状态" = "Tag = status";
 "算法说明" = "How it works";
 "气泡怎么看" = "Reading the bubbles";
-"颜色：红=买点，绿=卖点；深浅=买卖点类型的确认程度，一类最浅、三类最深。" = "Color: red = buy, green = sell; shade = how confirmed the signal type is — type 1 lightest, type 3 darkest.";
-"大小：买卖点自身强弱（弱/中/强），越强气泡越大，与详情页同一套判定。" = "Size: the signal's own strength (weak/medium/strong) — stronger signals get bigger bubbles, same rule as the detail page.";
 "位置：离中心越近代表信号越新，三个圈依次是今天、3天内、一周内。" = "Position: closer to center means more recent — the three rings mark today, within 3 days, within 1 week.";
 "角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。" = "Badges: \"Aligned\" means the daily and 30-minute directions agree; \"New\" means the signal first appeared today.";
 "扫描范围怎么定" = "How the scan range is chosen";
@@ -562,3 +557,7 @@
 "「%@」首次计算较久" = "First computation of \"%@\" takes a while";
 "大盘成分较多，已在后台计算，稍后点重试即可查看" = "This broad index has many constituents and is being computed in the background. Tap Retry in a moment to view it.";
 "没有信号不代表没有风险。可返回「当前状态」查看中枢位置和下一步观察。" = "No signal doesn't mean no risk. Go back to \"Current State\" to check the pivot position and what to watch next.";
+"深浅=形态强弱" = "Shade = strength";
+"大小=一二三类" = "Size = type 1/2/3";
+"颜色：红=买点，绿=卖点；深浅=形态强弱（弱/中/强），越强越深，与详情页同一套判定。" = "Color: red = buy, green = sell; shade = pattern strength (weak/medium/strong) — stronger is darker, judged the same way as on the detail page.";
+"大小：买卖点类型，一类最小、三类最大——越往后确认程度越高。" = "Size: signal type — type 1 smallest, type 3 largest; later types are more confirmed.";

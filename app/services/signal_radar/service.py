@@ -16,7 +16,7 @@
 强度口径：形态技术面强度统一使用信号自带的 strong/medium/weak 标签折算
 （signal_strength），不用 recommendation.score——score 是分析当下对整条序列
 算出的即时加权净值，对着几周前的历史信号回填没有意义，会导致同一个信号在
-被翻看的不同日子里强度/大小忽大忽小。方向由买卖点决定（buy=红 / sell=绿）。
+被翻看的不同日子里强度/深浅忽深忽浅。方向由买卖点决定（buy=红 / sell=绿）。
 """
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ _SIGNAL_STRENGTH = {"strong": 0.8, "medium": 0.55, "weak": 0.35}
 
 # 买卖点级别（一/二/三类）→ 确定性分值（0~1）。一类只是背驰迹象，尚待验证，
 # 确定性最低；二类是回踩不破中枢的初步确认；三类是回踩完全不回中枢的最强确认，
-# 确定性最高。前端气泡以颜色深浅表达类型（ios SignalRadarView.levelDepth）。
+# 确定性最高。前端气泡以大小表达类型（ios SignalRadarView.diameter(forLevel:)）。
 _LEVEL_CERTAINTY = {1: 0.4, 2: 0.7, 3: 1.0}
 
 # 入榜综合分权重：类型确认程度 + 强弱 + 新鲜度（最新一天再加共振）。
@@ -146,7 +146,7 @@ class RawSignal:
     signal_type: str
     date: str
     price: float
-    strength: float      # 形态技术面强度 0~1（决定气泡淘汰排序，不再决定深浅）
+    strength: float      # 形态技术面强度 0~1（决定气泡淘汰排序；气泡深浅按 signal_strength）
     bias: str
     signal_strength: str
     confirmed: bool
