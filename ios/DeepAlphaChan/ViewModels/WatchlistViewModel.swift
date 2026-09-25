@@ -26,6 +26,16 @@ final class WatchlistViewModel: ObservableObject {
 
     private var memberships: Set<String> = []
 
+    /// 自选上限，从 `GET /watchlist` 的 `max_items` 同步，不在端上硬编码——
+    /// 改上限只用改后端 `app.services.watchlist.MAX_ITEMS` 一处。20 是加载前的
+    /// 合理默认值，与后端当前配置一致。
+    @Published private(set) var maxItems = 20
+    var isFull: Bool { items.count >= maxItems }
+
+    /// toggle()/remove() 失败重新拉取列表时用：这两条路径是内部错误恢复，不经过
+    /// 持有 StoreManager 的 View，借上一次外部调用 onAppear/refresh 时记下的值。
+    private var lastKnownIsPremium = false
+
     func isStarred(market: StockMarket, symbol: String) -> Bool {
         memberships.contains(Self.key(market: market, symbol: symbol))
     }
@@ -37,6 +47,7 @@ final class WatchlistViewModel: ObservableObject {
     /// `isPremium`：自选批量状态计算是高级版专属功能，非高级版用户跳过 `loadPhases()`，
     /// 列表本身（增删、点开分析）照常可用——付费墙挡的只是批量算出的阶段标签。
     func onAppear(isPremium: Bool) async {
+        lastKnownIsPremium = isPremium
         if items.isEmpty {
             await refresh(isPremium: isPremium)
             return
@@ -50,6 +61,7 @@ final class WatchlistViewModel: ObservableObject {
     }
 
     func refresh(isPremium: Bool) async {
+        lastKnownIsPremium = isPremium
         isLoading = true
         defer { isLoading = false }
         do {
@@ -91,10 +103,15 @@ final class WatchlistViewModel: ObservableObject {
     private func fetchAndApply() async throws {
         let resp = try await WatchlistService.list()
         items = resp.items
+        maxItems = resp.maxItems
         memberships = Set(items.map { Self.key(marketRaw: $0.market, symbol: $0.symbol) })
     }
 
     /// 星标切换：乐观更新 UI，失败回退并重新拉取真实状态。
+    ///
+    /// 加入前先在端上按 `maxItems` 短路一次，省一次注定失败的网络往返；
+    /// 服务端仍会在 `WatchlistService.add` 里做最终校验（见 `catch`），保证并发
+    /// 加入（如两台设备同时各加一支）不会让总数超过上限。
     func toggle(market: StockMarket, symbol: String, name: String) async {
         let key = Self.key(market: market, symbol: symbol)
         if memberships.contains(key) {
@@ -105,9 +122,13 @@ final class WatchlistViewModel: ObservableObject {
                 NotificationCenter.default.post(name: .watchlistDidChange, object: nil)
             } catch {
                 errorMessage = (error as? APIError)?.message ?? "移出自选失败"
-                await refresh()
+                await refresh(isPremium: lastKnownIsPremium)
             }
         } else {
+            guard !isFull else {
+                errorMessage = L("自选最多添加 %lld 支标的，请先移出几支再试", maxItems)
+                return
+            }
             memberships.insert(key)
             do {
                 let item = try await WatchlistService.add(market: market, symbol: symbol, name: name)
@@ -129,7 +150,7 @@ final class WatchlistViewModel: ObservableObject {
             NotificationCenter.default.post(name: .watchlistDidChange, object: nil)
         } catch {
             errorMessage = (error as? APIError)?.message ?? "移出自选失败"
-            await refresh()
+            await refresh(isPremium: lastKnownIsPremium)
         }
     }
 

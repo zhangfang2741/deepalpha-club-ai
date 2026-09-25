@@ -1,11 +1,19 @@
 """自选股存取：直接对 watchlist_item 表做增删查，业务逻辑很薄不单独分层。"""
 from __future__ import annotations
 
-from sqlmodel import select
+from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models.watchlist import WatchlistItem
 from app.services.signal_radar.universe import resolve_name
+
+# 单用户自选上限。定得太大会拖垮 /watchlist/phases（每只都要跑一遍缠论分析），
+# 定死在这里而非 config.py：这是产品规则，不是环境相关配置。
+MAX_ITEMS = 20
+
+
+class WatchlistLimitExceeded(Exception):
+    """加入自选时已达 MAX_ITEMS 上限，供 API 层转换成 400 响应。"""
 
 
 def display_name(market: str, symbol: str, stored: str) -> str:
@@ -32,7 +40,11 @@ async def list_items(db: AsyncSession, user_id: int) -> list[WatchlistItem]:
 
 
 async def add_item(db: AsyncSession, user_id: int, market: str, symbol: str, name: str) -> WatchlistItem:
-    """加入自选：已存在同 (market, symbol) 则视为幂等成功，只更新展示名称。"""
+    """加入自选：已存在同 (market, symbol) 则视为幂等成功，只更新展示名称。
+
+    未存在且已达 MAX_ITEMS 上限则抛 WatchlistLimitExceeded（幂等更新不受限，
+    避免「已在自选里」的标的因为达到上限反而改不了名称）。
+    """
     symbol = symbol.strip().upper()
     # 客户端只有代码没有真名时（name 传成了代码），用 curated 成分清单补中文名再落库，
     # 让存进去的就是「理想汽车」而不是「2015」。
@@ -52,6 +64,14 @@ async def add_item(db: AsyncSession, user_id: int, market: str, symbol: str, nam
         await db.commit()
         await db.refresh(existing)
         return existing
+
+    count = (
+        await db.execute(
+            select(func.count()).select_from(WatchlistItem).where(WatchlistItem.user_id == user_id)
+        )
+    ).scalar_one()
+    if count >= MAX_ITEMS:
+        raise WatchlistLimitExceeded(MAX_ITEMS)
 
     item = WatchlistItem(user_id=user_id, market=market, symbol=symbol, name=name)
     db.add(item)

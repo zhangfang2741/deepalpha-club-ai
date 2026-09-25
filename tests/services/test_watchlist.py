@@ -1,7 +1,84 @@
-"""自选股展示名补全逻辑单测（纯函数，无 IO）。"""
+"""自选股服务层单测。
+
+展示名补全（纯函数）+ 加入上限（用假 AsyncSession 模拟两次 db.execute：
+已存在检查 → 计数检查）。
+"""
 from __future__ import annotations
 
-from app.services.watchlist import display_name
+from app.models.watchlist import WatchlistItem
+from app.services.watchlist import MAX_ITEMS, WatchlistLimitExceeded, add_item, display_name
+
+
+class _FakeResult:
+    """伪装 SQLAlchemy 的 Result：只实现 add_item 用到的 scalars().first() / scalar_one()。"""
+
+    def __init__(self, *, first=None, scalar=None):
+        self._first = first
+        self._scalar = scalar
+
+    def scalars(self):
+        return self
+
+    def first(self):
+        return self._first
+
+    def scalar_one(self):
+        return self._scalar
+
+
+class _FakeSession:
+    """按调用顺序依次返回预设结果的假 AsyncSession，不接真数据库。"""
+
+    def __init__(self, results):
+        self._results = list(results)
+        self.added: list = []
+        self.committed = False
+
+    async def execute(self, *_args, **_kwargs):
+        return self._results.pop(0)
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    async def commit(self):
+        self.committed = True
+
+    async def refresh(self, _obj):
+        pass
+
+
+class TestAddItemLimit:
+    async def test_raises_when_at_limit(self):
+        session = _FakeSession([
+            _FakeResult(first=None),        # 未加过这只标的
+            _FakeResult(scalar=MAX_ITEMS),  # 已有 MAX_ITEMS 条，达到上限
+        ])
+        try:
+            await add_item(session, user_id=1, market="us", symbol="AAPL", name="AAPL")
+            raise AssertionError("expected WatchlistLimitExceeded")
+        except WatchlistLimitExceeded:
+            pass
+        assert session.added == []
+        assert not session.committed
+
+    async def test_allows_when_below_limit(self):
+        session = _FakeSession([
+            _FakeResult(first=None),
+            _FakeResult(scalar=MAX_ITEMS - 1),
+        ])
+        item = await add_item(session, user_id=1, market="us", symbol="AAPL", name="AAPL")
+        assert item.symbol == "AAPL"
+        assert session.added == [item]
+        assert session.committed
+
+    async def test_updating_existing_item_bypasses_limit(self):
+        # 幂等更新走「已存在」分支，不会碰计数查询——达到上限也不该拦住改名。
+        existing = WatchlistItem(user_id=1, market="us", symbol="AAPL", name="旧名字")
+        session = _FakeSession([_FakeResult(first=existing)])
+        item = await add_item(session, user_id=1, market="us", symbol="AAPL", name="苹果")
+        assert item is existing
+        assert item.name == "苹果"
+        assert session.committed
 
 
 class TestDisplayName:

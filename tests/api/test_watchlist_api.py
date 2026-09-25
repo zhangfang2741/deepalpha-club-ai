@@ -54,6 +54,23 @@ def test_add_rejects_unknown_market(client):
     assert resp.status_code == 422
 
 
+def test_add_rejects_when_watchlist_full(client):
+    from app.services import watchlist as store
+
+    with patch.object(store, "add_item", AsyncMock(side_effect=store.WatchlistLimitExceeded(store.MAX_ITEMS))):
+        resp = client.post("/watchlist", json={"market": "us", "symbol": "AAPL", "name": "苹果"})
+    assert resp.status_code == 400
+    assert str(store.MAX_ITEMS) in resp.json()["detail"]
+
+
+def test_list_watchlist_reports_max_items(client):
+    from app.services import watchlist as store
+
+    with patch.object(store, "list_items", AsyncMock(return_value=[_item()])):
+        resp = client.get("/watchlist")
+    assert resp.json()["max_items"] == store.MAX_ITEMS
+
+
 def test_remove_from_watchlist_success(client):
     from app.services import watchlist as store
 

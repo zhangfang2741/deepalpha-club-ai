@@ -320,6 +320,9 @@
 "在缠论分析结果页点星标即可加入，方便随时回来看结构变化" = "Tap the star on an analysis result to add one, so you can come back anytime to see how the structure changes";
 "移出自选" = "Remove from watchlist";
 "加入自选" = "Add to watchlist";
+"自选已满" = "Watchlist full";
+"已收藏 %lld / %lld" = "%lld / %lld saved";
+"自选最多添加 %lld 支标的，请先移出几支再试" = "Your watchlist can hold up to %lld stocks. Remove a few and try again.";
 
 /* Panic index detail sheet */
 "一周前" = "1 week ago";

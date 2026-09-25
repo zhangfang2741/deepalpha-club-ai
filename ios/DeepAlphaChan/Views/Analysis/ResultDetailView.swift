@@ -63,6 +63,14 @@ struct ResultDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: .watchlistDidChange)) { _ in
             Task { await watchlistVM.refreshSilently() }
         }
+        // 星标加入/移出失败（含达到 20 支上限）的提示——此前没有挂 alert，失败等于
+        // 点了没反应，用户不知道发生了什么。
+        .alert(watchlistVM.errorMessage ?? "", isPresented: Binding(
+            get: { watchlistVM.errorMessage != nil },
+            set: { if !$0 { watchlistVM.errorMessage = nil } }
+        )) {
+            Button(L("好"), role: .cancel) {}
+        }
         // 预览已经开着时不再响应截图：用户在预览里截图不该再套一层。
         // 全屏图表也要排除：它是盖在本页上的 fullScreenCover，SwiftUI 不会给呈现方发
         // onDisappear，本页监听仍然活着，会和全屏页的监听同时弹 sheet，撞掉一个。
@@ -140,6 +148,9 @@ struct ResultDetailView: View {
         watchlistVM.isStarred(market: vm.market, symbol: vm.symbol.uppercased())
     }
 
+    /// 已收藏的可以随时移出，不受上限影响；只有「还没收藏 + 已达上限」才拦。
+    private var watchlistFull: Bool { !isStarred && watchlistVM.isFull }
+
     private var starButton: some View {
         Button {
             let symbol = vm.symbol.uppercased()
@@ -148,10 +159,12 @@ struct ResultDetailView: View {
             let name = vm.displayName ?? symbol
             Task { await watchlistVM.toggle(market: vm.market, symbol: symbol, name: name) }
         } label: {
-            Image(systemName: isStarred ? "star.fill" : "star")
-                .foregroundColor(isStarred ? Theme.segment : nil)
+            Image(systemName: isStarred ? "star.fill" : (watchlistFull ? "star.slash" : "star"))
+                .foregroundColor(isStarred ? Theme.segment : (watchlistFull ? Theme.textSecondary : nil))
         }
-        .accessibilityLabel(isStarred ? L("移出自选") : L("加入自选"))
+        .accessibilityLabel(isStarred ? L("移出自选") : (watchlistFull ? L("自选已满") : L("加入自选")))
+        // watchlistFull 时点按仍会走 toggle()——它内部会短路并给出同样的 errorMessage，
+        // 这里不单独拦截点击，保证唯一的提示路径就是下面这个 alert，逻辑不用两处对齐。
     }
 
     // MARK: - 分享

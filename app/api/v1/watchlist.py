@@ -39,7 +39,8 @@ async def list_watchlist(
                 created_at=i.created_at,
             )
             for i in items
-        ]
+        ],
+        max_items=store.MAX_ITEMS,
     )
 
 
@@ -73,8 +74,13 @@ async def add_to_watchlist(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WatchlistItemOut:
-    """加入自选（已存在则幂等更新名称）。"""
-    item = await store.add_item(db, user.id, body.market, body.symbol, body.name)
+    """加入自选（已存在则幂等更新名称；已达 MAX_ITEMS 上限则 400）。"""
+    try:
+        item = await store.add_item(db, user.id, body.market, body.symbol, body.name)
+    except store.WatchlistLimitExceeded:
+        raise HTTPException(
+            status_code=400, detail=f"自选最多添加 {store.MAX_ITEMS} 支标的，请先移出几支再试"
+        ) from None
     logger.info("watchlist_item_added", user_id=user.id, market=item.market, symbol=item.symbol)
     return WatchlistItemOut(market=item.market, symbol=item.symbol, name=item.name, created_at=item.created_at)
 

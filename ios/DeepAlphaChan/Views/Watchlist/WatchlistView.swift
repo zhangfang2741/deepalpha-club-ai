@@ -16,6 +16,7 @@ struct WatchlistView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 if !store.isPremium && !vm.items.isEmpty { unlockBanner }
+                if !vm.items.isEmpty { countRow }
                 content
             }
                 .navigationTitle(L("自选"))
@@ -40,6 +41,13 @@ struct WatchlistView: View {
                 )) {
                     Button(L("好"), role: .cancel) {}
                 }
+                // 移出自选（滑动删除）失败时的提示——不用等下次下拉刷新才发现没删掉。
+                .alert(vm.errorMessage ?? "", isPresented: Binding(
+                    get: { vm.errorMessage != nil },
+                    set: { if !$0 { vm.errorMessage = nil } }
+                )) {
+                    Button(L("好"), role: .cancel) {}
+                }
                 .sheet(isPresented: $showPaywall) { PaywallView() }
         }
     }
@@ -57,6 +65,18 @@ struct WatchlistView: View {
             .background(Theme.segment.opacity(0.08))
         }
         .buttonStyle(.plain)
+    }
+
+    /// 自选数量 / 上限，让用户在接近 20 支上限前就有数，不用加满了才在报错里第一次看到数字。
+    private var countRow: some View {
+        HStack {
+            Text(L("已收藏 %lld / %lld", vm.items.count, vm.maxItems))
+                .font(.caption2)
+                .foregroundColor(vm.isFull ? Theme.segment : Theme.textSecondary)
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
     }
 
     @ViewBuilder
@@ -115,7 +135,7 @@ struct WatchlistView: View {
             }
         }
         .listStyle(.plain)
-        .refreshable { await vm.refresh() }
+        .refreshable { await vm.refresh(isPremium: store.isPremium) }
     }
 
     /// 各市场一个基调色，纯粹用来在自选列表里做视觉区分（左侧色条 + 圆点），

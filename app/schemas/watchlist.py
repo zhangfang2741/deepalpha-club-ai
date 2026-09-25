@@ -30,9 +30,14 @@ class WatchlistItemOut(BaseResponse):
 
 
 class WatchlistResponse(BaseResponse):
-    """自选列表响应。"""
+    """自选列表响应。
+
+    max_items 一并下发（而非让客户端各自硬编码上限），避免前后端上限数字
+    走漂——改上限只用改 `app.services.watchlist.MAX_ITEMS` 这一处。
+    """
 
     items: list[WatchlistItemOut]
+    max_items: int
 
 
 class WatchlistPhaseOut(BaseModel):
