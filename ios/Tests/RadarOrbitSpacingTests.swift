@@ -50,13 +50,13 @@ struct RadarOrbitSpacingTests {
                                              fieldRadius: R, cap: 0.5) == 0.5, "排不开时最多外扩到时间档外沿")
     }
 
-    /// 半径按天数平方根：严格递增、最近几天间距更大、30 天起在最外圈。
+    /// 半径按天数平方根：严格递增、最近几天间距更大、7 天起在最外圈。
     static func testTimeRadius() {
         let r = (0...20).map { RadarOrbitSpacing.timeRadius(daysAgo: $0) }
         assert(r[0] == 0, "今天在圆心")
-        assert(abs(r[1] - 1.0 / 3) < 1e-9 && abs(r[7] - 2.0 / 3) < 1e-9, "1 天在「今天」环、7 天在「1周」环")
-        assert(abs(r[14] - 1) < 1e-9 && r[20] == 1, "14 天在「2周」环，更早封顶")
-        for d in 1...14 { assert(r[d] > r[d - 1], "越新越靠中心") }
+        assert(abs(r[1] - 1.0 / 3) < 1e-9 && abs(r[3] - 2.0 / 3) < 1e-9, "1 天在「今天」环、3 天在「3天」环")
+        assert(abs(r[7] - 1) < 1e-9 && r[20] == 1, "7 天在「1周」环，更早封顶")
+        for d in 1...7 { assert(r[d] > r[d - 1], "越新越靠中心") }
     }
 
     /// 椭圆轨道：没有遮挡时放在左右；左边已占，下一个去右边而不是上下。

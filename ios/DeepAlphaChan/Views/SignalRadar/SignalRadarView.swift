@@ -332,12 +332,12 @@ struct SignalRadarView: View {
         var id: String { signal.id }
     }
 
-    /// 三个等距参考环：今天 1/3、1 周 2/3、2 周 1.0，与气泡同一套时间半径映射
+    /// 三个等距参考环：今天 1/3、3 天 2/3、1 周 1.0，与气泡同一套时间半径映射
     /// （RadarOrbitSpacing.timeRadius）。
     /// 用计算属性而非 static let：L() 依赖运行时语言设置，static let 只会算一次，
     /// 用户切换语言后文案不会跟着变。
     static var ringSpecs: [(scale: Double, label: String)] {
-        [(1.0 / 3, L("今天")), (2.0 / 3, L("1周内")), (1.0, L("2周内"))]
+        [(1.0 / 3, L("今天")), (2.0 / 3, L("3天内")), (1.0, L("一周内"))]
     }
 
     /// 场边距：最外环（scale 1.0）到容器四边留出的空白，给气泡的阴影 + 右上角「新」
@@ -364,9 +364,9 @@ struct SignalRadarView: View {
         RadarOrbitSpacing.timeRadius(daysAgo: daysAgo) * fieldRadius
     }
 
-    /// daysAgo → 时间档：0=今天、1=1周内、2=2周内（含更早）。
+    /// daysAgo → 时间档：0=今天、1=3天内、2=一周内（含更早，最多保留 14 天）。
     static func bandIndex(forDaysAgo daysAgo: Int) -> Int {
-        daysAgo <= 0 ? 0 : (daysAgo <= 7 ? 1 : 2)
+        daysAgo <= 0 ? 0 : (daysAgo <= 3 ? 1 : 2)
     }
 
     /// 越远越小（按天连续递减，见 RadarOrbitSpacing.timeSizeFactor），和「买卖点类型」的
@@ -536,7 +536,7 @@ struct SignalRadarView: View {
                     infoSection(L("气泡怎么看"), [
                         L("颜色：红=买点，绿=卖点；深浅=买卖点类型的确认程度，一类最浅、三类最深。"),
                         L("大小：买卖点自身强弱（弱/中/强），越强气泡越大，与详情页同一套判定。"),
-                        L("位置：离中心越近代表信号越新，三个圈依次是今天、1周内、2周内。"),
+                        L("位置：离中心越近代表信号越新，三个圈依次是今天、3天内、一周内。"),
                         L("边框：虚线表示这条信号还没被后续走势确认。"),
                         L("角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。"),
                     ])

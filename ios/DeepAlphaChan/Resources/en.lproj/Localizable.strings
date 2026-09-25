@@ -324,8 +324,8 @@
 /* Signal Radar — bubble field rings, legend, date picker */
 "缠论信号" = "Chan Signals";
 "正在扫描「%@」成分股…" = "Scanning \"%@\" constituents…";
-"1周内" = "Within 1wk";
-"2周内" = "Within 2wk";
+"3天内" = "Within 3d";
+"一周内" = "Within 1wk";
 "1月内" = "Within 1mo";
 "一类" = "Tier 1";
 "二类" = "Tier 2";
@@ -512,7 +512,7 @@
 "气泡怎么看" = "Reading the bubbles";
 "颜色：红=买点，绿=卖点；深浅=买卖点类型的确认程度，一类最浅、三类最深。" = "Color: red = buy, green = sell; shade = how confirmed the signal type is — type 1 lightest, type 3 darkest.";
 "大小：买卖点自身强弱（弱/中/强），越强气泡越大，与详情页同一套判定。" = "Size: the signal's own strength (weak/medium/strong) — stronger signals get bigger bubbles, same rule as the detail page.";
-"位置：离中心越近代表信号越新，三个圈依次是今天、1周内、2周内。" = "Position: closer to center means more recent — the three rings mark today, within 1 week, within 2 weeks.";
+"位置：离中心越近代表信号越新，三个圈依次是今天、3天内、一周内。" = "Position: closer to center means more recent — the three rings mark today, within 3 days, within 1 week.";
 "边框：虚线表示这条信号还没被后续走势确认。" = "Border: a dashed outline means this signal hasn't been confirmed by later price action yet.";
 "角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。" = "Badges: \"Aligned\" means the daily and 30-minute directions agree; \"New\" means the signal first appeared today.";
 "扫描范围怎么定" = "How the scan range is chosen";
