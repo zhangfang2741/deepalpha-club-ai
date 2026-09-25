@@ -142,7 +142,12 @@ extension RadarOrbitSpacing {
 
     /// 拥挤缩放：气泡总面积超过画布面积的 maxFill 时，返回让总面积恰好等于上限的统一缩放系数，
     /// 否则 1。统一缩放不改变一二三类之间的大小关系，只在当天信号特别集中时生效。
-    static func crowdScale(diameters: [Double], width: Double, height: Double, maxFill: Double = 0.5) -> Double {
+    ///
+    /// 上榜固定取前 10 名（见 SignalRadarView 算法说明），几乎每天都接近这个数，导致旧上限
+    /// 0.5（气泡总面积占画布一半）几乎天天顶格生效——气泡感觉总是偏大。收紧到 0.32，10 个
+    /// 气泡的常见场景下线性尺寸约缩小 20%（sqrt(0.32/0.5)），留出更多空白，同一二三类的
+    /// 相对大小关系不变。
+    static func crowdScale(diameters: [Double], width: Double, height: Double, maxFill: Double = 0.32) -> Double {
         let canvas = width * height
         guard canvas > 0 else { return 1 }
         let fill = diameters.map { Double.pi * $0 * $0 / 4 }.reduce(0, +) / canvas

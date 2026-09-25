@@ -447,13 +447,14 @@ struct SignalRadarView: View {
         return layouts
     }
 
-    /// 买卖点类型 → 气泡直径：一类 70 / 二类 88 / 三类 108。一类只是背驰迹象、尚待验证，
-    /// 三类回踩完全不回中枢、确认程度最高，越确认越大。
+    /// 买卖点类型 → 气泡直径：一类 78 / 二类 90 / 三类 102。一类只是背驰迹象、尚待验证，
+    /// 三类回踩完全不回中枢、确认程度最高，越确认越大。三档面积比原先 (70/88/108) 收窄
+    /// 到约 1.7 倍（原先约 2.4 倍）：三类仍最大，但不至于让一类显得过小、三类过分抢眼。
     static func diameter(forLevel level: Int) -> Double {
         switch level {
-        case 1: return 70
-        case 2: return 88
-        default: return 108
+        case 1: return 78
+        case 2: return 90
+        default: return 102
         }
     }
 
