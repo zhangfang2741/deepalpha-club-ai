@@ -12,7 +12,10 @@ struct RadarBubbleMetrics {
     /// 可读性下限：再小点不到。
     static let minDiameter = 44.0
     /// 内边距、字号都按直径同比例缩放，大小气泡里文字与留白的比例一致、看起来协调。
-    static let paddingRatio = 0.09
+    /// 直径不再为放不下的文字撑大后（见下方 init 注释），最小的气泡（时间远 × 强度弱，
+    /// 卡在 minDiameter floor）留给文字的空间最紧张，9% 的内边距在这些气泡上占比明显
+    /// 偏大、看起来跟文字本身差不多宽，收窄到 5% 更协调。
+    static let paddingRatio = 0.05
     static let symbolRatio = 0.19
     static let nameToSymbol = 0.74
     static let minSymbolSize = 7.0
@@ -26,7 +29,7 @@ struct RadarBubbleMetrics {
     let showsName: Bool
 
     static func textPadding(for diameter: Double) -> Double {
-        max(3, diameter * paddingRatio)
+        max(2, diameter * paddingRatio)
     }
 
     init(symbol: String, name: String = "", baseDiameter: Double, maxDiameter: Double) {
