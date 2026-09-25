@@ -13,7 +13,7 @@ struct SubLevelBar: View {
 
     @EnvironmentObject private var store: StoreManager
     @State private var showSheet = false
-    /// 次级别确认是高级版专属功能，未订阅时点锁定行弹这个付费墙。
+    /// 次级别确认是基础版起可用的付费功能，未订阅时点锁定行弹这个付费墙。
     @State private var showPaywall = false
 
     var body: some View {
@@ -30,12 +30,12 @@ struct SubLevelBar: View {
                 // `!isStatic` 放在 `&&` 左边：短路求值保证离屏分享长图渲染
                 // （PageSnapshot.render 走独立的 ImageRenderer，不继承 App 根部注入的
                 // EnvironmentObject）时压根不会去读 store，避免「找不到 StoreManager」崩溃。
-                } else if !isStatic && !store.isPremium {
-                    // 非高级版：ChanViewModel 根本没发次级别请求（见 loadSubLevel 的
-                    // isPremiumUser 门禁），这里直接展示锁定态引导升级，不误显示成加载中。
+                } else if !isStatic && !store.isSubscribed {
+                    // 未订阅：ChanViewModel 根本没发次级别请求（见 loadSubLevel 的
+                    // hasSubLevelAccess 门禁），这里直接展示锁定态引导订阅，不误显示成加载中。
                     Button { showPaywall = true } label: { lockedRow }
                         .buttonStyle(.plain)
-                        .accessibilityHint(L("订阅高级版解锁次级别确认"))
+                        .accessibilityHint(L("订阅基础版解锁次级别确认"))
                         .sheet(isPresented: $showPaywall) { PaywallView() }
                 } else if !isStatic && vm.subLevelLoading {
                     HStack(spacing: 8) {
@@ -51,10 +51,10 @@ struct SubLevelBar: View {
                 }
             }
         }
-        // 付费墙里升级成功后，若之前因未订阅被跳过次级别请求，立刻补一次。三元表达式
-        // 短路：isStatic 时右边的 store.isPremium 根本不求值，原因同上。
-        .onChange(of: isStatic ? false : store.isPremium) { _, isPremium in
-            if isPremium { vm.refreshSubLevelIfEligible() }
+        // 付费墙里订阅成功后，若之前因未订阅被跳过次级别请求，立刻补一次。三元表达式
+        // 短路：isStatic 时右边的 store.isSubscribed 根本不求值，原因同上。
+        .onChange(of: isStatic ? false : store.isSubscribed) { _, isSubscribed in
+            if isSubscribed { vm.refreshSubLevelIfEligible() }
         }
     }
 
@@ -63,7 +63,7 @@ struct SubLevelBar: View {
             Image(systemName: "lock.fill")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(Theme.segment)
-            Text(L("次级别确认 · 高级版解锁"))
+            Text(L("次级别确认 · 基础版解锁"))
                 .font(.caption)
                 .foregroundColor(Theme.textSecondary)
             Spacer(minLength: 4)

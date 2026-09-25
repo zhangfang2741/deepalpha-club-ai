@@ -44,7 +44,7 @@ struct ProfileView: View {
                             Label(L("高级版"), systemImage: "crown.fill")
                                 .font(.subheadline.bold()).foregroundColor(Theme.segment)
                         case .experience:
-                            Label(L("体验版"), systemImage: "checkmark.seal.fill")
+                            Label(L("基础版"), systemImage: "checkmark.seal.fill")
                                 .font(.subheadline.bold()).foregroundColor(Theme.accent)
                         case .free:
                             Text(L("免费版")).foregroundColor(Theme.textPrimary)

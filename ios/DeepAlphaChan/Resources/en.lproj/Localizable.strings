@@ -100,7 +100,7 @@
 "语言" = "Language";
 "订阅" = "Subscription";
 "当前方案" = "Current plan";
-"体验版" = "Experience";
+"基础版" = "Basic";
 "高级版" = "Premium";
 "免费版" = "Free";
 "管理订阅" = "Manage subscription";
@@ -199,8 +199,8 @@
 "我已阅读并理解以上内容，同意仅将雷达信号作为技术研究参考，不作为投资建议" = "I have read and understood the above, and agree to treat radar signals as technical research reference only, not as investment advice";
 "同意并继续" = "Agree & Continue";
 "批量状态计算是高级版专属，订阅解锁 ›" = "Batch status is Premium-only. Subscribe to unlock ›";
-"次级别确认 · 高级版解锁" = "Lower-level check · Premium unlock";
-"订阅高级版解锁次级别确认" = "Subscribe to Premium to unlock the lower-level check";
+"次级别确认 · 基础版解锁" = "Lower-level check · Basic unlock";
+"订阅基础版解锁次级别确认" = "Subscribe to Basic to unlock the lower-level check";
 "订阅为自动续订。免费试用结束后将按上述价格自动扣款，除非在当前订阅周期结束前至少 24 小时取消。你可随时在 App Store 账户设置中管理或取消订阅。" = "Subscription auto-renews. After the free trial you'll be charged the price above unless you cancel at least 24 hours before the current period ends. Manage or cancel anytime in your App Store account settings.";
 
 /* Accessibility */

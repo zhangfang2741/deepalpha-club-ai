@@ -1,9 +1,9 @@
 import Foundation
 import StoreKit
 
-/// 订阅层级：免费 < 体验版（解锁全量缠论分析）< 高级版（体验版权益 + 信号雷达 /
-/// 30 分钟次级别确认 / 自选批量状态计算）。数值越大权益越高，`max` 取较高档即可判定
-/// 「拥有该档或以上」。
+/// 订阅层级：免费 < 基础版（解锁全量缠论分析 + 30 分钟次级别确认）< 高级版
+/// （基础版权益 + 信号雷达 / 自选批量状态计算）。数值越大权益越高，`max` 取较高档
+/// 即可判定「拥有该档或以上」。
 enum SubscriptionTier: Int, Comparable {
     case free = 0
     case experience = 1
@@ -35,12 +35,12 @@ final class StoreManager: ObservableObject {
 
     deinit { updatesTask?.cancel() }
 
-    /// 是否拥有任一档订阅（体验版或高级版）：解锁无限次缠论分析。
+    /// 是否拥有任一档订阅（基础版或高级版）：解锁无限次缠论分析 + 30 分钟次级别确认。
     var isSubscribed: Bool { tier != .free }
-    /// 是否拥有高级版：额外解锁信号雷达、30 分钟次级别确认、自选批量状态计算。
+    /// 是否拥有高级版：额外解锁信号雷达、自选批量状态计算。
     var isPremium: Bool { tier == .premium }
 
-    /// 体验版月度订阅商品。
+    /// 基础版月度订阅商品。
     var experienceProduct: Product? {
         products.first { $0.id == AppConfig.experienceMonthlyProductID }
     }

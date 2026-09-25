@@ -45,9 +45,10 @@ final class ChanViewModel: ObservableObject {
     /// 递增序号：切换标的/重新分析后，旧请求晚到的结果直接丢弃。
     private var subLevelRequestID = 0
 
-    /// 次级别确认（30 分钟）是高级版专属功能，由持有本 VM 的视图（通过 StoreManager）同步。
-    /// 非高级版用户直接跳过请求——省一次网络调用，也避免悄悄给未付费用户算出结果。
-    var isPremiumUser = false
+    /// 次级别确认（30 分钟）是基础版起可用的付费功能（免费版不可用），由持有本 VM
+    /// 的视图（通过 StoreManager.isSubscribed）同步。未订阅用户直接跳过请求——
+    /// 省一次网络调用，也避免悄悄给未付费用户算出结果。
+    var hasSubLevelAccess = false
 
     // 叠加图层开关
     @Published var showFractals = true
@@ -183,7 +184,7 @@ final class ChanViewModel: ObservableObject {
         subLevelRequestID += 1
         let requestID = subLevelRequestID
         subLevel = nil
-        guard isPremiumUser, freq == "daily" || freq == "weekly" else {
+        guard hasSubLevelAccess, freq == "daily" || freq == "weekly" else {
             subLevelLoading = false
             return
         }

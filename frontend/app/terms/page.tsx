@@ -47,11 +47,11 @@ export default function TermsPage() {
             </ul>
           </Section>
 
-          <Section title="三、订阅与付费（体验版 / 高级版）">
+          <Section title="三、订阅与付费（基础版 / 高级版）">
             <p>
               iOS 应用「DeepAlpha 缠论」提供免费额度与两档付费订阅。免费用户每日可分析 3 支不同标的；
-              <strong>体验版</strong>解除该次数限制，解锁全量缠论分析；<strong>高级版</strong>（¥188/月）在体验版基础上，
-              额外解锁信号雷达、30 分钟次级别确认、自选批量状态计算。
+              <strong>基础版</strong>（¥38/月）解除该次数限制，解锁全量缠论分析与 30 分钟次级别确认；
+              <strong>高级版</strong>（¥188/月）在基础版基础上，额外解锁信号雷达、自选批量状态计算。
             </p>
             <ul className="mt-3 list-disc space-y-2 pl-5">
               <li>
@@ -64,7 +64,7 @@ export default function TermsPage() {
               </li>
               <li>
                 <strong>管理、升级与取消</strong>：在 iOS「设置 → Apple 账户 → 订阅」中随时管理、
-                切换档位或关闭自动续订。由体验版升级为高级版按 Apple 规则折算已付费用；
+                切换档位或关闭自动续订。由基础版升级为高级版按 Apple 规则折算已付费用；
                 取消在当前已付费周期结束时生效，此前仍可正常使用。
               </li>
               <li>

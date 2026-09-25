@@ -9,7 +9,7 @@ private struct PlanFeature: Identifiable {
     var id: String { title }
 }
 
-/// 订阅付费墙。展示两档方案（体验版 / 高级版）的权益、价格与免费试用，
+/// 订阅付费墙。展示两档方案（基础版 / 高级版）的权益、价格与免费试用，
 /// 并含自动续订披露与条款/隐私链接（苹果要求）。
 struct PaywallView: View {
     @EnvironmentObject var store: StoreManager
@@ -36,7 +36,7 @@ struct PaywallView: View {
                         .tint(Theme.textSecondary)
                 }
             }
-            // tier 变化（购买/恢复成功）即关闭；已订阅体验版再升级高级版时 isSubscribed
+            // tier 变化（购买/恢复成功）即关闭；已订阅基础版再升级高级版时 isSubscribed
             // 本就是 true，必须看 tier 本身的变化才能在升级完成后自动收起付费墙。
             .onChange(of: store.tier) { _, _ in dismiss() }
         }
@@ -67,10 +67,10 @@ struct PaywallView: View {
                         product: premium, planName: L("高级版"), badge: L("推荐"),
                         features: [
                             PlanFeature(icon: "infinity", title: L("无限次缠论分析"), desc: L("不再受每日次数限制")),
-                            PlanFeature(icon: "dot.radiowaves.left.and.right", title: L("信号雷达"),
-                                        desc: L("扫描科技指数成分股，每日买卖点一图看全")),
                             PlanFeature(icon: "scope", title: L("30 分钟次级别确认"),
                                         desc: L("日线定方向、30 分钟找进出点，共振/逆势一眼分辨")),
+                            PlanFeature(icon: "dot.radiowaves.left.and.right", title: L("信号雷达"),
+                                        desc: L("扫描科技指数成分股，每日买卖点一图看全")),
                             PlanFeature(icon: "star.fill", title: L("自选批量状态计算"),
                                         desc: L("自选列表批量算出每只标的当前所处的结构阶段")),
                             PlanFeature(icon: "globe.asia.australia.fill", title: L("美股 / A 股 / 港股"),
@@ -79,9 +79,11 @@ struct PaywallView: View {
                 }
                 if let experience = store.experienceProduct {
                     planCard(
-                        product: experience, planName: L("体验版"), badge: nil,
+                        product: experience, planName: L("基础版"), badge: nil,
                         features: [
                             PlanFeature(icon: "infinity", title: L("无限次缠论分析"), desc: L("不再受每日次数限制")),
+                            PlanFeature(icon: "scope", title: L("30 分钟次级别确认"),
+                                        desc: L("日线定方向、30 分钟找进出点，共振/逆势一眼分辨")),
                             PlanFeature(icon: "globe.asia.australia.fill", title: L("美股 / A 股 / 港股"),
                                         desc: L("三个市场统一的缠论结构分析")),
                             // 不写「操作倾向」：付费墙是宣传语境，这四个字等于在卖操作建议，

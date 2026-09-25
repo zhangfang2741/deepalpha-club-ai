@@ -26,7 +26,7 @@
         {
           "adHocOffers" : [],
           "codeOffers" : [],
-          "displayPrice" : "9.90",
+          "displayPrice" : "38.00",
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000011",
@@ -37,8 +37,8 @@
           },
           "localizations" : [
             {
-              "description" : "解锁全部缠论分析，不受每日 3 支标的限制",
-              "displayName" : "体验版 月度会员",
+              "description" : "解锁全部缠论分析与 30 分钟次级别确认，不受每日 3 支标的限制",
+              "displayName" : "基础版 月度会员",
               "locale" : "zh_CN"
             }
           ],
@@ -62,7 +62,7 @@
           },
           "localizations" : [
             {
-              "description" : "体验版全部权益 + 信号雷达、30 分钟次级别确认、自选批量状态计算",
+              "description" : "基础版全部权益 + 信号雷达、自选批量状态计算",
               "displayName" : "高级版 月度会员",
               "locale" : "zh_CN"
             }
