@@ -116,8 +116,8 @@ struct RadarSignal: Decodable, Identifiable {
     /// 买卖点级别：1/2/3，取 signalType 末位数字（"buy2"/"sell2" 都取到 2），
     /// 对买卖两侧通用。级别决定气泡颜色深浅（该类买卖点本身的确认程度），映射见
     /// SignalRadarView.levelDepth(_:)——一类只是背驰迹象、尚待验证，最浅；三类
-    /// 回踩完全不回中枢是最强确认，最深。单条信号自己「有没有走完」是另一件事，
-    /// 由 `confirmed` 字段驱动气泡边框虚实表达。
+    /// 回踩完全不回中枢是最强确认，最深。`confirmed` 字段仍由后端返回、保留解码，
+    /// 但雷达气泡不再用边框虚实表达它——详情页里才展示单条信号是否已走完。
     var level: Int {
         Int(String(signalType.suffix(1))) ?? 1
     }

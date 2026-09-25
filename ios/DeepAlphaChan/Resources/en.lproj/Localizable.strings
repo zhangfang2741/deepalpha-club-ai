@@ -338,7 +338,6 @@
 
 /* Signal Radar legend */
 "大小=潜在空间" = "Size = potential move";
-"深浅=强弱 · 虚线边框=未确认 · 居中=越新 · 点击查看分析" = "Shade = strength · dashed border = unconfirmed · centered = newer · tap for analysis";
 
 /* Lower-level check (daily direction × 30-minute entries) */
 "次级别确认（30 分钟）" = "Lower-Level Check (30-min)";
@@ -372,7 +371,7 @@
 "周线定方向、日线找进出点：两者同向为共振，反向多为次级别的反弹或回调。" = "The weekly chart sets the direction; the daily chart times entries and exits. When they agree it's aligned; when they disagree it's usually just a lower-level bounce or pullback.";
 "浅色底 = 最近两周（次级别判断所看的区间）" = "Shaded = last two weeks (the window the lower-level check looks at)";
 "日线近两周买卖点" = "Daily buy/sell points, last 2 weeks";
-"共振 %@ 更新" = "Aligned · updated %@";
+"次级别 %@ 更新" = "Sub-level updated %@";
 "数据截至 %@" = "data as of %@";
 "大小=买卖点类型" = "Size = signal type";
 "· 越远越小" = "· smaller when older";
@@ -513,7 +512,6 @@
 "颜色：红=买点，绿=卖点；深浅=买卖点类型的确认程度，一类最浅、三类最深。" = "Color: red = buy, green = sell; shade = how confirmed the signal type is — type 1 lightest, type 3 darkest.";
 "大小：买卖点自身强弱（弱/中/强），越强气泡越大，与详情页同一套判定。" = "Size: the signal's own strength (weak/medium/strong) — stronger signals get bigger bubbles, same rule as the detail page.";
 "位置：离中心越近代表信号越新，三个圈依次是今天、3天内、一周内。" = "Position: closer to center means more recent — the three rings mark today, within 3 days, within 1 week.";
-"边框：虚线表示这条信号还没被后续走势确认。" = "Border: a dashed outline means this signal hasn't been confirmed by later price action yet.";
 "角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。" = "Badges: \"Aligned\" means the daily and 30-minute directions agree; \"New\" means the signal first appeared today.";
 "扫描范围怎么定" = "How the scan range is chosen";
 "每个市场提供「科技指数」（默认）和「大盘宽基」两套可切换范围，如美股的纳斯达克100 / 标普500。" = "Each market offers a switchable \"tech index\" (default) and a \"broad market\" range, e.g. Nasdaq 100 / S&P 500 for US stocks.";
