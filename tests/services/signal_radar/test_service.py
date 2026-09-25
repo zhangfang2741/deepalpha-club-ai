@@ -256,13 +256,18 @@ class TestCacheTiming:
     """缓存 TTL 与陈旧判定（方案1 消除过期空窗 + 方案2 stale-while-revalidate）。"""
 
     def test_ttl_comfortably_exceeds_prewarm_interval(self, monkeypatch):
-        """TTL 必须明显长于预热间隔，否则会出现'过期了但下一轮预热还没跑'的空窗。"""
-        monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS", 21600)
-        assert svc._cache_ttl() > settings.SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS
-        assert svc._cache_ttl() == 21600 * 2
+        """预热间隔足够大（超过 4 天下限的一半）时，TTL 按间隔的 2 倍走，明显长于间隔。"""
+        big_interval = 3 * 24 * 3600  # 3 天：*2 = 6 天，超过 4 天下限
+        monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS", big_interval)
+        assert svc._cache_ttl() > big_interval
+        assert svc._cache_ttl() == big_interval * 2
 
     def test_ttl_never_below_floor(self, monkeypatch):
-        """预热间隔调得很短时，TTL 仍有 6h 下限兜底。"""
+        """预热间隔调得很短时，TTL 仍有 4 天下限兜底。
+
+        下限要覆盖周末（周五收盘触发到下周一收盘触发之间跨了周六周日，接近 3 天），
+        否则周一开盘前缓存就先过期了。
+        """
         monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS", 60)
         assert svc._cache_ttl() == svc._CACHE_TTL_FLOOR
 
@@ -656,3 +661,76 @@ def test_resonance_bonus_requires_same_direction_as_bubble():
     assert out.signals[0].symbol == "SELL"
     assert svc.is_aligned_resonance("buy", "resonance_sell") is False
     assert svc.is_aligned_resonance("buy", "resonance_buy") is True
+
+
+class TestCloseTriggeredPrewarm:
+    """预热改成按各市场收盘时间触发（不再是固定 interval 盲扫）。"""
+
+    def test_next_close_trigger_same_day_before_close(self):
+        """收盘触发点还没到：取当天的触发时间（窗口末端 + 45 分钟发布延迟）。"""
+        from app.services.signal_radar import scheduler
+
+        after = datetime(2026, 9, 24, 3, 0, tzinfo=UTC)  # 周四，A股/港股开盘中
+        trigger = scheduler._next_close_trigger("cn", after)
+        assert trigger == datetime(2026, 9, 24, 8, 15, tzinfo=UTC)  # 7:30 收盘 + 45 分钟
+
+    def test_next_close_trigger_rolls_to_next_day_after_passed(self):
+        """当天的触发点已经过了：取下一个交易日（周五）同一时刻。"""
+        from app.services.signal_radar import scheduler
+
+        after = datetime(2026, 9, 24, 9, 0, tzinfo=UTC)  # 已过当天 8:15 触发点
+        trigger = scheduler._next_close_trigger("cn", after)
+        assert trigger == datetime(2026, 9, 25, 8, 15, tzinfo=UTC)  # 周五
+
+    def test_next_close_trigger_skips_weekend(self):
+        """周五触发点已过：跳过周六周日，落到下周一。"""
+        from app.services.signal_radar import scheduler
+
+        after = datetime(2026, 9, 25, 9, 0, tzinfo=UTC)  # 周五，已过当天触发点
+        trigger = scheduler._next_close_trigger("cn", after)
+        assert trigger == datetime(2026, 9, 28, 8, 15, tzinfo=UTC)  # 下周一
+        assert trigger.weekday() == 0
+
+    def test_next_close_trigger_per_market_offset(self):
+        """三个市场收盘时间不同，触发点各自独立（美股比A股/港股晚约 14 小时）。"""
+        from app.services.signal_radar import scheduler
+
+        after = datetime(2026, 9, 24, 0, 0, tzinfo=UTC)
+        assert scheduler._next_close_trigger("cn", after) == datetime(2026, 9, 24, 8, 15, tzinfo=UTC)
+        assert scheduler._next_close_trigger("hk", after) == datetime(2026, 9, 24, 9, 15, tzinfo=UTC)
+        assert scheduler._next_close_trigger("us", after) == datetime(2026, 9, 24, 22, 15, tzinfo=UTC)
+
+    def test_next_close_trigger_unknown_market_raises(self):
+        from app.services.signal_radar import scheduler
+
+        with pytest.raises(ValueError):
+            scheduler._next_close_trigger("jp", datetime(2026, 9, 24, tzinfo=UTC))
+
+    def test_target_markets_dedupes_in_declared_order(self):
+        """去重后的市场列表，用于给每个市场各自排一条触发时间线。"""
+        from app.services.signal_radar import scheduler
+
+        assert scheduler._target_markets() == ["us", "cn", "hk"]
+
+    async def test_prewarm_once_filters_by_market(self, monkeypatch):
+        """market-close 触发时只扫指定市场，不重扫其它市场（省算力，也不抢别的市场排队）。"""
+        from app.services.signal_radar import scheduler
+
+        scanned = []
+
+        async def fake_compute(market, *, redis, user_id, universe_key):
+            scanned.append(f"{market}:{universe_key}")
+
+            class _Resp:
+                days = []
+            return _Resp()
+
+        class _R:
+            async def ttl(self, key):
+                return -2
+
+        monkeypatch.setattr(scheduler, "current_redis", lambda: _R())
+        monkeypatch.setattr(scheduler, "compute_market", fake_compute)
+        monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_BROAD_ENABLED", False)
+        await scheduler._prewarm_once(markets={"cn"})
+        assert scanned == ["cn:star50"]

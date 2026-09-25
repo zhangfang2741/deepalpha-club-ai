@@ -97,17 +97,20 @@ def watchlist_cache_key(market: str, user_id: int, watchlist: list[tuple[str, st
 
     digest = hashlib.sha1(",".join(sorted(s.upper() for s, _ in watchlist)).encode()).hexdigest()[:10]
     return f"{_CACHE_PREFIX}:{market}:{WATCHLIST_KEY}:u{user_id}:{digest}"
-# 缓存 TTL 的下限：即便预热间隔被调得很短，也至少存活 6h。
-_CACHE_TTL_FLOOR = 3600 * 6  # 6h
+# 缓存 TTL 的下限：预热已改成按各市场收盘触发（见 scheduler.py），正常间隔是
+# ~24h（每个市场一天一次），周末则是 ~72h（周五收盘触发到下周一收盘触发之间跨了
+# 周六周日）。下限按周末缺口 + 一天余量给到 4 天，否则周一开盘前缓存就先过期了，
+# 第一个访问的用户会被迫触发同步慢扫描——不识别节假日，国庆/春节等连续多日休市
+# 期间调度仍会每个工作日空转触发一次（扫不到新数据，无害），不会比周末缺口更长。
+_CACHE_TTL_FLOOR = 3600 * 24 * 4  # 4 天
 
 
 def _cache_ttl() -> int:
-    """缓存存活时间（秒）：取预热间隔的 2 倍，并以 6h 兜底。
+    """缓存存活时间（秒）：取预热间隔的 2 倍，并以 4 天兜底（覆盖周末缺口）。
 
-    关键在于 TTL 必须明显长于预热周期，这样每一轮预热都会在缓存过期之前把它覆盖
-    重写，永远不会出现「缓存刚过期、下一轮预热还没跑」的空窗——正是那个空窗让第
-    一个撞上的用户被迫触发慢扫描、干等十几秒。TTL == interval（旧口径）恰好卡在临
-    界点，稍有延迟就漏，故这里显式放宽到 2 倍。
+    关键在于 TTL 必须明显长于两次预热之间的最大间隔，这样下一轮预热总能在缓存
+    过期之前把它覆盖重写，永远不会出现「缓存刚过期、下一轮预热还没到」的空窗——
+    正是那个空窗让第一个撞上的用户被迫触发慢扫描、干等十几秒。
     """
     return max(_CACHE_TTL_FLOOR, settings.SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS * 2)
 
@@ -115,10 +118,11 @@ def _cache_ttl() -> int:
 def _cache_stale_after() -> int:
     """缓存「陈旧」阈值（秒）：写入至今超过此时长即视为陈旧。
 
-    取预热间隔的 1.5 倍。正常情况下预热每 interval 覆盖一次缓存、年龄始终归零，够
-    不到这个阈值；只有当预热确实迟到或停摆（比如被关掉、异常、容器刚重启还没轮到）
-    时缓存年龄才会涨过 1.5×interval——此时由用户访问顺带触发一次后台刷新，既不与正
-    常预热重复抢扫，又能在预热失灵时自愈。
+    取 SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS（现在只作为这个阈值的换算基数，
+    不再是实际预热间隔——预热已改成按各市场收盘触发）的 1.5 倍。正常情况下每个
+    市场一天最多一次新日线，缓存年龄够不到这个阈值；只有当收盘触发确实迟到或
+    停摆（比如被关掉、异常、容器刚重启还没轮到）时缓存年龄才会涨过阈值——此时
+    由用户访问顺带触发一次后台刷新，既不与正常预热重复抢扫，又能在预热失灵时自愈。
     """
     return int(settings.SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS * 1.5)
 
