@@ -100,7 +100,6 @@ struct RadarBubble: View {
                     .padding(.vertical, 1.5)
                     .background(Theme.segment)
                     .clipShape(Capsule())
-                    .overlay(Capsule().stroke(Theme.background, lineWidth: 1))
                     .offset(x: 4, y: -4)
             }
         }
@@ -114,7 +113,6 @@ struct RadarBubble: View {
                     .padding(.vertical, 1.5)
                     .background(Theme.accent)
                     .clipShape(Capsule())
-                    .overlay(Capsule().stroke(Theme.background, lineWidth: 1))
                     .offset(x: -4, y: 4)
             }
         }

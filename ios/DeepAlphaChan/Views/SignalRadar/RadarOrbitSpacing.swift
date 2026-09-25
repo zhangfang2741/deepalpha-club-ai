@@ -78,22 +78,34 @@ extension RadarOrbitSpacing {
         var diameter: Double
     }
 
-    /// 在半径固定的圆轨道上为一个气泡选方向：采样一圈角度，取与已摆气泡重叠最少的一个。
-    ///
-    /// 半径不动（远近 = 时间），方向任意。并列时取离 preferred 最近的角度，保证确定性、
-    /// 同样输入同样布局；samples 越多越精细。
+    /// 在半径固定的圆轨道上为一个气泡选方向（椭圆轨道 rx = ry 的特例，不加横向偏好）。
     static func bestAngle(
         radius: Double, diameter: Double, center: (x: Double, y: Double),
         placed: [Placed], preferred: Double = -Double.pi / 2, samples: Int = 72
     ) -> Double {
         guard radius > 0, !placed.isEmpty else { return preferred }
+        return bestAngle(radiusX: radius, radiusY: radius, diameter: diameter, center: center,
+                         placed: placed, preferred: preferred, horizontalBias: 0, samples: samples)
+    }
+
+    /// 在椭圆轨道（相对半径固定 = 时间）上为一个气泡选方向：采样一圈角度，取「与已摆气泡的
+    /// 重叠 + 偏离水平方向的惩罚」最小的一个。
+    ///
+    /// horizontalBias：越偏上下扣分越多（按 sin² 计，单位与重叠平方一致），左右放得下就
+    /// 优先左右，挤了才往上下放。并列时取离 preferred 最近的角度，保证确定性。
+    static func bestAngle(
+        radiusX: Double, radiusY: Double, diameter: Double, center: (x: Double, y: Double),
+        placed: [Placed], preferred: Double = 0, horizontalBias: Double = 0.15, samples: Int = 72
+    ) -> Double {
+        guard radiusX > 0 || radiusY > 0 else { return preferred }
+        let r = diameter / 2
         var best = preferred
         var bestScore = Double.infinity
         var bestDelta = Double.infinity
         for k in 0..<samples {
             let angle = preferred + 2 * Double.pi * Double(k) / Double(samples)
-            let x = center.x + radius * cos(angle), y = center.y + radius * sin(angle)
-            var score = 0.0
+            let x = center.x + radiusX * cos(angle), y = center.y + radiusY * sin(angle)
+            var score = horizontalBias * r * r * sin(angle) * sin(angle)
             for p in placed {
                 let overlap = max(0, (diameter + p.diameter) / 2 - hypot(x - p.x, y - p.y))
                 score += overlap * overlap

@@ -34,6 +34,7 @@ struct RadarOrbitSpacingTests {
         testBestAngle()
         testTimeSizeFactor()
         testTimeRadius()
+        testEllipseHorizontalPreference()
     }
 
     /// 时间轨道半径：单个气泡保持时间半径（当天居中）；同一天多个时外扩到能排开，但不越过时间档外沿。
@@ -56,6 +57,16 @@ struct RadarOrbitSpacingTests {
         assert(abs(r[1] - 1.0 / 3) < 1e-9 && abs(r[7] - 2.0 / 3) < 1e-9, "1 天在「今天」环、7 天在「1周」环")
         assert(abs(r[14] - 1) < 1e-9 && r[20] == 1, "14 天在「2周」环，更早封顶")
         for d in 1...14 { assert(r[d] > r[d - 1], "越新越靠中心") }
+    }
+
+    /// 椭圆轨道：没有遮挡时放在左右；左边已占，下一个去右边而不是上下。
+    static func testEllipseHorizontalPreference() {
+        let c = (x: 200.0, y: 150.0), rx = 150.0, ry = 100.0
+        let a1 = RadarOrbitSpacing.bestAngle(radiusX: rx, radiusY: ry, diameter: 60, center: c, placed: [], preferred: .pi)
+        assert(abs(sin(a1)) < 0.2, "无遮挡时放左右")
+        let p1 = RadarOrbitSpacing.Placed(x: c.x + rx * cos(a1), y: c.y + ry * sin(a1), diameter: 60)
+        let a2 = RadarOrbitSpacing.bestAngle(radiusX: rx, radiusY: ry, diameter: 60, center: c, placed: [p1], preferred: .pi)
+        assert(abs(sin(a2)) < 0.2 && cos(a2) * cos(a1) < 0, "一侧已占时去另一侧，仍在横向")
     }
 
     /// 越远越小：按天严格递减，当天 1.0、14 天起封底 0.55。

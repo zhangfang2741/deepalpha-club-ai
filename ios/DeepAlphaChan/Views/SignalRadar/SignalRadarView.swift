@@ -207,8 +207,9 @@ struct SignalRadarView: View {
                 // 大致时间跨度，不用再靠单独一行说明文字解释三个圈是什么意思。
                 ForEach(Array(SignalRadarView.ringSpecs.enumerated()), id: \.offset) { idx, spec in
                     // 正圆：离中心的距离 = 时间，各方向一致
-                    let rx = min(hRad, vRad) * spec.scale
-                    let ry = rx
+                    // 横向椭圆：左右宽、上下窄，与气泡摆位同一套半轴
+                    let rx = hRad * spec.scale
+                    let ry = vRad * spec.scale
                     Ellipse()
                         .stroke(Theme.textSecondary.opacity(0.16 - Double(idx) * 0.045),
                                 style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
@@ -248,8 +249,9 @@ struct SignalRadarView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .frame(minHeight: 320)
+        // 横向椭圆：画布宽高比约 1.3 : 1，腾出的纵向空间留给下方图例与日期轨
+        .frame(maxWidth: .infinity)
+        .aspectRatio(SignalRadarView.fieldAspect, contentMode: .fit)
         .background(
             RadialGradient(
                 colors: [Color(hex: 0x131A26), Theme.background],
@@ -341,13 +343,18 @@ struct SignalRadarView: View {
     /// 落在最外环、角度又指向边缘的气泡（尤其是那颗被推到远端的孤立卖点）就会被
     /// 圆角容器裁掉一半。现在把「场半径」整体内缩这个边距，环线和气泡一起内移。
     static let fieldInset: Double = 18
+    /// 雷达画布宽高比与椭圆纵/横半轴比。
+    static let fieldAspect: CGFloat = 1.3
+    static let ellipseRatio: Double = 0.72
 
     /// 气泡场的水平/垂直半轴：各方向取 (边长/2 - fieldInset)。以前用单一 min(w,h)/2
     /// 圆半径，画布一旦不是正方形（信号页画布通常比它高要宽），圆就卡在短边上、长边
     /// 留大片空白。改成两个半轴后，参考环与气泡摆位是一个填满画布的椭圆，把空间尽量
     /// 用满；ringRadius 返回「占半轴的分数(0~1)」，各轴乘各自半轴。
     static func fieldRadii(width w: Double, height h: Double) -> (h: Double, v: Double) {
-        (max(0, w / 2 - fieldInset), max(0, h / 2 - fieldInset))
+        let hRad = max(0, w / 2 - fieldInset)
+        // 纵向半轴不超过横向的 ellipseRatio：左右宽、上下窄的椭圆
+        return (hRad, max(0, min(h / 2 - fieldInset, hRad * ellipseRatio)))
     }
 
     /// 时间距离 → 半径（见 RadarOrbitSpacing.timeRadius）：今天在圆心。
@@ -366,19 +373,20 @@ struct SignalRadarView: View {
         RadarOrbitSpacing.timeSizeFactor(daysAgo: daysAgo)
     }
 
-    /// 气泡摆位：离中心的距离严格由时间决定（正圆轨道），方向任意。
+    /// 气泡摆位：离中心的相对距离严格由时间决定（横向椭圆轨道），优先横向摆放。
     ///
     /// - 半径 = ringRadius(daysAgo) × 场半径（当天为圆心），同一天共用一条圆轨道；同一天
     ///   多个气泡放不下时才外扩到刚好排开，且不越过所在时间档外沿（RadarOrbitSpacing.orbitRadius）。
-    /// - 方向：由内圈到外圈、大气泡先放，每个气泡在自己的圆上选与已摆气泡重叠最少的
-    ///   方向（RadarOrbitSpacing.bestAngle）。半径不为避让而改变——不同轨道放不开时允许重叠，
+    /// - 方向：由内圈到外圈、大气泡先放，每个气泡在自己的椭圆轨道上选「重叠最少、尽量
+    ///   横向」的方向（RadarOrbitSpacing.bestAngle）。半径不为避让而改变——不同轨道放不开时允许重叠，
     ///   否则「远近 = 时间」就不成立了。
     private static func layoutBubbles(
         signals: [RadarSignal], dayDate: String, width w: Double, height h: Double
     ) -> [BubbleLayout] {
         guard !signals.isEmpty else { return [] }
         let (hRad, vRad) = fieldRadii(width: w, height: h)
-        let fieldRadius = min(hRad, vRad)
+        // 椭圆轨道：相对半径 r（= 时间）对应横半轴 r·hRad、纵半轴 r·vRad；放不下时按平均半轴外扩
+        let meanRadius = ((hRad * hRad + vRad * vRad) / 2).squareRoot()
         let center = (x: w / 2, y: h / 2)
         let scales = ringSpecs.map(\.scale)
         func age(_ s: RadarSignal) -> Int { daysAgo(from: s.date, to: dayDate) }
@@ -398,19 +406,20 @@ struct SignalRadarView: View {
             let members = (byDay[days] ?? []).sorted {
                 ($0.1.diameter, $1.0.id) > ($1.1.diameter, $0.0.id)
             }
-            let radius = fieldRadius * RadarOrbitSpacing.orbitRadius(
+            let r = RadarOrbitSpacing.orbitRadius(
                 timeRadius: ringRadius(forDaysAgo: days, fieldRadius: 1),
-                diameters: members.map { $0.1.diameter }, fieldRadius: fieldRadius,
+                diameters: members.map { $0.1.diameter }, fieldRadius: meanRadius,
                 cap: scales[bandIndex(forDaysAgo: days)])
-            // 各轨道首选方向错开（黄金角），避免所有轨道都从正上方开始排
-            let preferred = -Double.pi / 2 + Double(orbitIndex) * 2.399963
+            let rx = r * hRad, ry = r * vRad
+            // 首选方向在右、左之间交替：气泡优先铺在横向
+            let preferred = orbitIndex % 2 == 0 ? 0 : Double.pi
             for (sig, metrics) in members {
                 let d = metrics.diameter
                 let angle = RadarOrbitSpacing.bestAngle(
-                    radius: radius, diameter: d, center: center, placed: placed, preferred: preferred)
+                    radiusX: rx, radiusY: ry, diameter: d, center: center, placed: placed, preferred: preferred)
                 let inset = d / 2 + RadarBubbleMetrics.edgePadding
-                let x = min(max(center.x + radius * cos(angle), inset), max(inset, w - inset))
-                let y = min(max(center.y + radius * sin(angle), inset), max(inset, h - inset))
+                let x = min(max(center.x + rx * cos(angle), inset), max(inset, w - inset))
+                let y = min(max(center.y + ry * sin(angle), inset), max(inset, h - inset))
                 placed.append(.init(x: x, y: y, diameter: d))
                 layouts.append(BubbleLayout(signal: sig, metrics: metrics, x: x, y: y,
                                             phase: Double(layouts.count) * 0.35, daysAgo: days))
