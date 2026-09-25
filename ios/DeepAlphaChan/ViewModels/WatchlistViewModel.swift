@@ -27,9 +27,9 @@ final class WatchlistViewModel: ObservableObject {
     private var memberships: Set<String> = []
 
     /// 自选上限，从 `GET /watchlist` 的 `max_items` 同步，不在端上硬编码——
-    /// 改上限只用改后端 `app.services.watchlist.MAX_ITEMS` 一处。20 是加载前的
+    /// 改上限只用改后端 `app.services.watchlist.MAX_ITEMS` 一处。1 是加载前的
     /// 合理默认值，与后端当前配置一致。
-    @Published private(set) var maxItems = 20
+    @Published private(set) var maxItems = 1
     var isFull: Bool { items.count >= maxItems }
 
     func isStarred(market: StockMarket, symbol: String) -> Bool {

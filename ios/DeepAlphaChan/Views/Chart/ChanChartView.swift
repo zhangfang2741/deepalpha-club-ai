@@ -160,6 +160,8 @@ struct ChanChartView: View {
                     if let sel = selectedElement {
                         drawSelection(ctx, sel, height: size.height, range: range, bounds: priceBounds)
                     }
+                    // 雷达快照锚点竖线：画在结构叠加层之上，避免被中枢/笔的色块盖住看不清
+                    drawAnchorLine(ctx, plotWidth: plotW, height: size.height, range: range)
                     drawPriceAxis(ctx, size: size, bounds: priceBounds)
                     // 末价参考线（光标激活时让位给光标价签，避免右轴两个标签叠一起）
                     if cursorIndex == nil {
@@ -378,6 +380,28 @@ struct ChanChartView: View {
         ctx.draw(Text(String(format: "%.2f", last.close))
                     .font(.system(size: 10, weight: .semibold)).foregroundColor(.white),
                  at: CGPoint(x: labelRect.midX, y: labelRect.midY), anchor: .center)
+    }
+
+    // MARK: - 绘制：雷达快照锚点竖线
+
+    /// 从信号雷达点气泡进来时，在雷达快照那天画一条竖线（见 ChanViewModel.anchorDate），
+    /// 让用户一眼看出分析对应的是雷达上正在看的哪一天，不用去猜。手动分析等其它入口
+    /// anchorDate 为 nil，不画。
+    private func drawAnchorLine(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
+                                range: VisibleRange) {
+        guard let anchor = vm.anchorDate, let idx = timeIndex[anchor],
+              idx >= range.start, idx < range.end else { return }
+        let cx = x(for: idx, range: range)
+        var line = Path()
+        line.move(to: CGPoint(x: cx, y: 0))
+        line.addLine(to: CGPoint(x: cx, y: height))
+        ctx.stroke(line, with: .color(Theme.segment.opacity(0.85)),
+                   style: StrokeStyle(lineWidth: 1.4, dash: [5, 3]))
+        // 标签横向夹在图内，贴着左右边界时不截断
+        let clampedX = min(max(cx, 24), plotWidth - 24)
+        ctx.draw(Text(L("雷达快照"))
+                    .font(.system(size: 9, weight: .bold)).foregroundColor(Theme.segment),
+                 at: CGPoint(x: clampedX, y: 4), anchor: .top)
     }
 
     private func drawPriceAxis(_ ctx: GraphicsContext, size: CGSize, bounds: PriceBounds) {
@@ -1134,7 +1158,16 @@ struct ChanChartView: View {
         let total = Double(candles.count)
         // 默认约 60 根：蜡烛宽度适中、结构看得清，又不至于太少看不出趋势
         visibleCount = min(60, max(20, total))
-        firstVisible = max(0, total - visibleCount)  // 默认显示最新
+        // 从雷达点进来：把雷达快照那天摆在可见窗口正中间，而不是像默认那样停在
+        // 最新数据——不然用户点进来看到的是「今天」，不是气泡所在的那一天，
+        // 容易误以为点错了标的。只在真正 onAppear（honoringInitial）时生效，
+        // 换标的（.onChange(of: analysis.symbol)）走的是 honoringInitial: false，
+        // 不会沿用上一个标的的锚点日期。
+        if honoringInitial, let anchor = vm.anchorDate, let idx = timeIndex[anchor] {
+            firstVisible = max(0, min(Double(idx) - visibleCount / 2, total - visibleCount))
+        } else {
+            firstVisible = max(0, total - visibleCount)  // 默认显示最新
+        }
     }
 }
 

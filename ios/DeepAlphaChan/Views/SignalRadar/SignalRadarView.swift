@@ -328,7 +328,10 @@ struct SignalRadarView: View {
         chanVM.apply(
             // 名称为空（美股无中文名）时不传，详情页标题退回显示代码
             market: vm.market, symbol: symbol, name: (name?.isEmpty ?? true) ? nil : name,
-            startDate: start, endDate: end, freq: "daily", warmupDays: 0)
+            startDate: start, endDate: end, freq: "daily", warmupDays: 0,
+            // 雷达快照日期：详情页据此把可见窗口居中、画一条竖线标出来，
+            // 让用户看得出分析的是雷达上正在看的那一天，不是默认的「最新」。
+            anchorDate: vm.selectedDay?.date)
         Task {
             await chanVM.runAnalysis()
             if chanVM.errorMessage == nil, chanVM.analysis != nil {

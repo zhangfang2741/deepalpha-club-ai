@@ -33,6 +33,12 @@ final class ChanViewModel: ObservableObject {
     /// 用它，拿不到就退回代码——避免自选里副标题原样重复代码。
     @Published var displayName: String?
 
+    /// 雷达快照日期（`yyyy-MM-dd`），仅信号雷达点气泡进来时有值。ChanChartView
+    /// 据此把可见窗口居中到这一天、并画一条竖线标出来，让用户看得出「分析的是
+    /// 雷达上那一天」，而不是打开后默认停在最新数据。跟 warmupDays 同一个模式：
+    /// 显式重置，不传则清空上一次雷达进来留下的值，避免串到后续手动分析上。
+    var anchorDate: String?
+
     // 分析结果
     @Published var analysis: ChanAnalysis?
     @Published var isLoading = false
@@ -114,7 +120,7 @@ final class ChanViewModel: ObservableObject {
     func apply(
         market: StockMarket, symbol: String, name: String? = nil,
         startDate: Date? = nil, endDate: Date? = nil, freq: String? = nil,
-        warmupDays: Int? = nil
+        warmupDays: Int? = nil, anchorDate: String? = nil
     ) {
         self.market = market
         self.symbol = symbol.trimmingCharacters(in: .whitespaces).uppercased()
@@ -126,6 +132,8 @@ final class ChanViewModel: ObservableObject {
         // 显式重置：从雷达进来带 0，其他入口传 nil 时要清掉上一次雷达留下的 0，
         // 否则分析 Tab 会一直沿用「不加 warmup」，左边界结构可能漂移。
         self.warmupDays = warmupDays
+        // 同理显式重置：不传则清掉上一次雷达进来留下的锚点日期。
+        self.anchorDate = anchorDate
     }
 
     // MARK: - 缠论分析

@@ -10,7 +10,7 @@ import Foundation
 /// 也跟着变，不会显得和上面的市场选择脱节。
 enum RadarDemoData {
     /// 演示日期，长期固定；不是"最近"，往后运行多久都显示这一天。
-    static let dayDate = "2026-01-01"
+    static let dayDate = "2026-08-01"
 
     static func day(for market: StockMarket) -> RadarDay {
         let items = signals(for: market)

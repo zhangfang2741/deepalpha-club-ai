@@ -7,9 +7,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.models.watchlist import WatchlistItem
 from app.services.signal_radar.universe import resolve_name
 
-# 单用户自选上限。定得太大会拖垮 /watchlist/phases（每只都要跑一遍缠论分析），
-# 定死在这里而非 config.py：这是产品规则，不是环境相关配置。
-MAX_ITEMS = 20
+# 单用户自选上限。定死在这里而非 config.py：这是产品规则，不是环境相关配置。
+MAX_ITEMS = 1
 
 
 class WatchlistLimitExceeded(Exception):
