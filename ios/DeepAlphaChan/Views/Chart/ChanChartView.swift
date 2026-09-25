@@ -549,7 +549,11 @@ struct ChanChartView: View {
             let gap: CGFloat = 7
             let span = gap + tri + badgeH
             let midY = min(max(cy + dir * (gap + tri + badgeH / 2), span), height - span)
-            let badgeRect = CGRect(x: cx - badgeW / 2, y: midY - badgeH / 2, width: badgeW, height: badgeH)
+            // 水平方向同样要夹住：徽标原来直接以 cx（蜡烛中心）为中心画，最左/最右
+            // 那根可见蜡烛的信号会有半个徽标画到可视区外面去，文字被切得看不全。
+            // 小三角仍指向真实蜡烛位置（下面 arrow 路径用的是原始 cx，不受这里影响）。
+            let badgeCx = min(max(cx, badgeW / 2), plotWidth - badgeW / 2)
+            let badgeRect = CGRect(x: badgeCx - badgeW / 2, y: midY - badgeH / 2, width: badgeW, height: badgeH)
 
             // 小三角（徽标朝蜡烛的一侧）
             let triBase = midY - dir * badgeH / 2
@@ -645,8 +649,12 @@ struct ChanChartView: View {
             let size = resolved.measure(in: CGSize(width: 200, height: 40))
             let dir: CGFloat = cur.direction == .up ? -1 : 1
             let midY = clampY((p1.y + p2.y) / 2 + dir * (size.height / 2 + 5), height)
-            let box = CGRect(x: (p1.x + p2.x) / 2 - size.width / 2 - 3, y: midY - size.height / 2 - 1,
-                             width: size.width + 6, height: size.height + 2)
+            let boxW = size.width + 6
+            // 同样要夹住水平方向：背驰发生在可见区最左/最右那对笔端点时，标签原来
+            // 直接居中在两点中点上，会有一半画到可视区外面。
+            let boxX = min(max((p1.x + p2.x) / 2 - boxW / 2, 0), plotWidth - boxW)
+            let box = CGRect(x: boxX, y: midY - size.height / 2 - 1,
+                             width: boxW, height: size.height + 2)
             ctx.fill(Path(roundedRect: box, cornerRadius: 3), with: .color(Theme.surface.opacity(0.85)))
             ctx.draw(resolved, at: CGPoint(x: box.midX, y: box.midY), anchor: .center)
         }
