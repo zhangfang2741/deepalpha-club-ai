@@ -4,6 +4,11 @@ import Foundation
 
 /// 合并后的 K 线（缠论按包含关系处理过）。
 struct MergedCandle: Codable, Identifiable {
+    enum CodingKeys: String, CodingKey {
+        case idx, time, high, low, open, close, volume
+        case endTime = "end_time"
+    }
+
     let idx: Int
     let time: String
     let high: Double
@@ -12,6 +17,13 @@ struct MergedCandle: Codable, Identifiable {
     let close: Double
     /// 成交量（合并K线内所含原始K线之和）。可选：旧后端无此字段。
     let volume: Double?
+    /// 所含最后一根原始K线的时间（展示用）。`time` 是缠论合并时选定的那根，笔/分型/买卖点
+    /// 按它对位；今天被昨天包含时 `time` 仍是昨天，展示要用 `displayTime` 才看得出今天在里面。
+    /// 可选：旧后端无此字段。
+    let endTime: String?
+
+    /// 时间轴、十字光标、「数据截至」等展示用的时间。
+    var displayTime: String { endTime ?? time }
 
     var id: Int { idx }
     var isUp: Bool { close >= open }

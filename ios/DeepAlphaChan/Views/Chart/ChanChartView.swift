@@ -262,7 +262,7 @@ struct ChanChartView: View {
             guard idx >= 0, idx < candles.count else { continue }
             let cx = x(for: idx, range: range)
             guard cx >= 0, cx <= plotWidth else { continue }
-            let dateStr = formatTimeLabel(candles[idx].time)
+            let dateStr = formatTimeLabel(candles[idx].displayTime)
             let text = Text(dateStr)
                 .font(.system(size: 9))
                 .foregroundColor(Theme.textSecondary)
@@ -1072,7 +1072,8 @@ struct ChanChartView: View {
         let change = c.open > 0 ? (c.close - c.open) / c.open * 100 : 0
         let changeColor = c.isUp ? Theme.up : Theme.down
         return VStack(alignment: .leading, spacing: 2) {
-            Text(c.time)
+            // 多根合并成一根时标出起止，看得出今天被并进了前一根（不是缺数据）
+            Text(c.displayTime == c.time ? c.time : "\(c.time) ~ \(c.displayTime)")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(Theme.textSecondary)
             HStack(spacing: 8) {

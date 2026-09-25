@@ -14,6 +14,8 @@ class MergedCandleOut(BaseModel):
     open: float
     close: float
     volume: float = 0.0
+    # 合并K线所含最后一根原始K线的时间（展示用，笔/分型仍按 time 对位）
+    end_time: str | None = None
 
 
 class FractalOut(BaseModel):

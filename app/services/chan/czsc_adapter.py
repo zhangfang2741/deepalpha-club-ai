@@ -114,6 +114,7 @@ def extract_structures(c: CZSC, bars: list[dict]) -> CzscStructures:
             high=float(nb.high), low=float(nb.low),
             raw_start=raw[0].id, raw_end=raw[-1].id,
             volume=float(sum(r.vol for r in raw)),
+            end_time=ts_date(raw[-1].dt),
         )
 
     merged = [nb_to_candle(nb) for nb in seq]

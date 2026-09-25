@@ -230,3 +230,20 @@ def test_merged_candle_volume_sums_its_raw_bars():
     for mc in s.merged_candles:
         expected = sum(bars[i]["volume"] for i in range(mc.raw_start, mc.raw_end + 1))
         assert mc.volume == expected
+
+
+def test_merged_candle_end_time_is_last_raw_bar():
+    """end_time = 合并K线所含最后一根原始K线的时间（展示用）；time 仍是 czsc 选定的那根（笔对位用）。
+
+    回归：今天这根被昨天包含时合成一根、time 标成昨天，图上看起来像「今天没有数据」。
+    """
+    bars = _trending_bars(80, start_price=100.0, up=True)
+    last = bars[-1]
+    prev = bars[-2]
+    # 让最后一根被倒数第二根完全包含：必然与前一根合并
+    last["high"], last["low"] = prev["high"] - 0.1, prev["low"] + 0.1
+    c = build_czsc(bars, symbol="T", freq=Freq.D)
+    s = extract_structures(c, bars)
+    for mc in s.merged_candles:
+        assert mc.end_time == bars[mc.raw_end]["time"]
+    assert s.merged_candles[-1].end_time == last["time"]

@@ -21,6 +21,9 @@ class MergedCandle:
     raw_start: int  # 原始K线起始索引
     raw_end: int    # 原始K线结束索引
     volume: float = 0.0  # 所含原始K线成交量之和
+    # 所含最后一根原始K线的时间，仅供展示。time 是 czsc 按合并方向选定的那根（笔/分型按它对位，
+    # 不能改）；今天被昨天包含时 time 仍是昨天，图上要显示 end_time 才看得出今天的数据已在里面。
+    end_time: str = ""
 
 
 @dataclass

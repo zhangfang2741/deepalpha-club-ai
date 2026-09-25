@@ -201,6 +201,7 @@ async def chan_analysis(
                 open=mc.open,
                 close=mc.close,
                 volume=mc.volume,
+                end_time=mc.end_time or None,
             )
             for mc in result.merged_candles
         ],

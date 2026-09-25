@@ -181,7 +181,7 @@ struct SubLevelSheet: View {
                                                       : Self.lastSessionsStart(a, sessions: 2))
                 Text((isWeekly ? L("浅色底 = 最近两周（次级别判断所看的区间）")
                                : L("浅色底 = 最近 2 个交易日（次级别判断所看的区间）"))
-                     + (a.mergedCandles.last.map { " · " + L("数据截至 %@", $0.time) } ?? ""))
+                     + (a.mergedCandles.last.map { " · " + L("数据截至 %@", $0.displayTime) } ?? ""))
                     .font(.caption2)
                     .foregroundColor(Theme.textSecondary)
             }
@@ -240,7 +240,7 @@ struct SubLevelSheet: View {
 
     /// 最近 n 个自然日的起始日期（日线次级别用，与后端「近两周 = 14 个自然日」一致）。
     static func lastDaysStart(_ a: ChanAnalysis, days: Int) -> String? {
-        guard let last = a.mergedCandles.last?.time.prefix(10) else { return nil }
+        guard let last = a.mergedCandles.last?.displayTime.prefix(10) else { return nil }
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
         f.locale = Locale(identifier: "en_US_POSIX")
