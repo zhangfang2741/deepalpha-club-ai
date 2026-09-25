@@ -67,14 +67,8 @@ struct RadarBubble: View {
 
     private var content: some View {
         ZStack {
-            // 纯实色气泡；未确认的信号额外描一圈虚线边框——跟图表页「虚线=未确认」
-            // 同一套语言，确认的信号维持无描边的纯实色（多数信号都是已确认的，
-            // 不想让所有气泡都套上边框，那样反而弱化了「未确认」这个特殊标记）。
+            // 纯实色气泡，不再用虚线边框表达「未确认」（点进分析详情页有确认状态与图例）
             Circle().fill(color)
-            if !signal.confirmed {
-                Circle().stroke(style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                    .foregroundColor(.white.opacity(0.85))
-            }
 
             VStack(spacing: 1) {
                 Text(signal.symbol)

@@ -8,6 +8,12 @@ struct RadarUniverse: Decodable, Identifiable, Equatable {
 
     var id: String { key }
 
+    /// 「自选」股票池（按用户自选股计算）。
+    static let watchlistKey = "watchlist"
+    var isWatchlist: Bool { key == Self.watchlistKey }
+    /// 展示名：「自选」随界面语言，其余用后端给的指数名。
+    var displayName: String { isWatchlist ? L("自选") : name }
+
     enum CodingKeys: String, CodingKey {
         case key, name
         case isDefault = "is_default"

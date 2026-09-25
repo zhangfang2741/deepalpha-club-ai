@@ -265,8 +265,9 @@ struct SignalRadarView: View {
     /// 否则退回响应里的 etf_name。
     private var currentUniverseName: String {
         if let u = vm.universes.first(where: { $0.key == vm.activeUniverseKey }) {
-            return u.name
+            return u.displayName
         }
+        if vm.activeUniverseKey == RadarUniverse.watchlistKey { return L("自选") }
         return vm.response?.etfName ?? ""
     }
 
@@ -282,9 +283,9 @@ struct SignalRadarView: View {
                         vm.switchUniverse(u.key)
                     } label: {
                         if u.key == vm.activeUniverseKey {
-                            Label(u.name, systemImage: "checkmark")
+                            Label(u.displayName, systemImage: "checkmark")
                         } else {
-                            Text(u.name)
+                            Text(u.displayName)
                         }
                     }
                 }
@@ -494,7 +495,7 @@ struct SignalRadarView: View {
                 legendBadge(L("新"), color: Theme.segment)
                 Text(L("当日新出现")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
-            Text(L("虚线边框=未确认 · 点击气泡查看分析"))
+            Text(L("点击气泡查看分析"))
                 .font(.system(size: 10))
                 .foregroundColor(Theme.textSecondary)
         }
@@ -729,15 +730,28 @@ struct SignalRadarView: View {
     }
 
     private var emptyView: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "dot.radiowaves.left.and.right")
-                .font(.largeTitle).foregroundColor(Theme.textSecondary)
-            Text(L("近期暂无买卖点信号"))
-                .font(.subheadline).foregroundColor(Theme.textPrimary)
-            Button(L("刷新")) { Task { await vm.refresh() } }
-                .buttonStyle(.bordered).tint(Theme.accent)
+        // 顶部保留股票池切换器：切到「自选」但自选为空时，能直接切回别的指数
+        let emptyWatchlist = vm.activeUniverseKey == RadarUniverse.watchlistKey
+            && (vm.response?.universeSize ?? 0) == 0
+        return ZStack(alignment: .topLeading) {
+            VStack(spacing: 12) {
+                Image(systemName: emptyWatchlist ? "star" : "dot.radiowaves.left.and.right")
+                    .font(.largeTitle).foregroundColor(Theme.textSecondary)
+                if emptyWatchlist {
+                    Text(L("自选中暂无该市场的股票"))
+                        .font(.subheadline).foregroundColor(Theme.textPrimary)
+                    Text(L("在分析详情页点右上角 ☆ 加入自选"))
+                        .font(.footnote).foregroundColor(Theme.textSecondary)
+                } else {
+                    Text(L("近期暂无买卖点信号"))
+                        .font(.subheadline).foregroundColor(Theme.textPrimary)
+                    Button(L("刷新")) { Task { await vm.refresh() } }
+                        .buttonStyle(.bordered).tint(Theme.accent)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            universeSwitcher
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - 日期格式化

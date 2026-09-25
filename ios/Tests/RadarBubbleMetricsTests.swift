@@ -22,8 +22,8 @@ struct RadarBubbleMetricsTests {
                 precondition(m.diameter >= previous, "编码越大气泡越大（单调）")
                 previous = m.diameter
                 // 代码与名称都完整放进圆内的文字宽度
-                precondition(m.textWidth >= width(symbol, m.symbolFont) + 7, "代码完整落在圆内: \(symbol) \(base)")
-                precondition(m.textWidth >= width(name, m.nameFont) + 8, "名称完整落在圆内: \(name) \(base)")
+                precondition(m.textWidth >= width(symbol, m.symbolFont) + 3, "代码完整落在圆内: \(symbol) \(base)")
+                precondition(m.textWidth >= width(name, m.nameFont) + 3, "名称完整落在圆内: \(name) \(base)")
                 let pad = RadarBubbleMetrics.textPadding(for: m.diameter)
                 precondition(m.textWidth <= m.diameter - 2 * pad + 0.01, "文字不贴圆边")
             }
@@ -33,7 +33,14 @@ struct RadarBubbleMetricsTests {
         precondition(normal.diameter == 92, "足够大的气泡保持编码尺寸")
         // 小气泡：只在最小字号也放不下时才撑大，且明显小于旧版一律约 85pt
         let small = RadarBubbleMetrics(symbol: "AAPL", name: "苹果", baseDiameter: 44, maxDiameter: 250)
-        precondition(small.diameter < 70, "小气泡只撑到刚好放下两行")
+        precondition(small.diameter < 60, "小气泡只撑到刚好放下两行")
+        // 协调：小气泡的内边距与字号都随直径变小，字号/直径比例与大气泡相近
+        let big = RadarBubbleMetrics(symbol: "AAPL", name: "苹果", baseDiameter: 92, maxDiameter: 250)
+        let tiny = RadarBubbleMetrics(symbol: "AAPL", name: "苹果", baseDiameter: 44, maxDiameter: 250)
+        precondition(RadarBubbleMetrics.textPadding(for: tiny.diameter) < RadarBubbleMetrics.textPadding(for: big.diameter))
+        let rBig = CTFontGetSize(big.symbolFont) / big.diameter
+        let rTiny = CTFontGetSize(tiny.symbolFont) / tiny.diameter
+        precondition(abs(rBig - rTiny) < 0.04, "大小气泡的字号占比一致: \(rBig) \(rTiny)")
         let capped = RadarBubbleMetrics(symbol: "LONG-STOCK-SYMBOL", name: "Very Long Company Name",
                                         baseDiameter: 60, maxDiameter: 100)
         precondition(capped.diameter <= 100, "不能超出画布")

@@ -7,12 +7,14 @@ import Foundation
 /// 大小编码只在迫不得已时让步，且幅度最小（以前一律按字宽撑到约 85pt，大小失去意义）。
 struct RadarBubbleMetrics {
     static let edgePadding = 12.0
-    /// 文字包围矩形到圆边的留白上限（大气泡每侧 10 点；小气泡按直径比例收窄）。
-    static let maxTextPadding = 10.0
     /// 可读性下限：再小点不到。
     static let minDiameter = 44.0
-    static let minSymbolSize = 8.0
-    static let minNameSize = 7.0
+    /// 内边距、字号都按直径同比例缩放，大小气泡里文字与留白的比例一致、看起来协调。
+    static let paddingRatio = 0.09
+    static let symbolRatio = 0.19
+    static let nameToSymbol = 0.74
+    static let minSymbolSize = 7.0
+    static let minNameSize = 6.0
 
     let diameter: Double
     let symbolFont: CTFont
@@ -22,12 +24,13 @@ struct RadarBubbleMetrics {
     let showsName = true
 
     static func textPadding(for diameter: Double) -> Double {
-        max(4, min(maxTextPadding, diameter * 0.12))
+        max(3, diameter * paddingRatio)
     }
 
     init(symbol: String, name: String = "", baseDiameter: Double, maxDiameter: Double) {
         let cap = max(1, maxDiameter)
-        let start = max(Self.minSymbolSize, min(17, baseDiameter * 0.21))
+        let base = min(max(baseDiameter, Self.minDiameter), cap)
+        let start = max(Self.minSymbolSize, min(17, base * Self.symbolRatio))
 
         func fonts(_ size: Double) -> (CTFont, CTFont) {
             let system = CTFontCreateUIFontForLanguage(.system, size, nil)
@@ -35,7 +38,7 @@ struct RadarBubbleMetrics {
             let traits = [kCTFontWeightTrait: 0.56] as CFDictionary
             let descriptor = CTFontDescriptorCreateWithAttributes([kCTFontTraitsAttribute: traits] as CFDictionary)
             let symbolFont = CTFontCreateCopyWithAttributes(system, size, nil, descriptor)
-            let nameSize = max(Self.minNameSize, size * 0.72)
+            let nameSize = max(Self.minNameSize, size * Self.nameToSymbol)
             let nameFont = CTFontCreateUIFontForLanguage(.system, nameSize, nil)
                 ?? CTFontCreateWithName("Helvetica" as CFString, nameSize, nil)
             return (symbolFont, nameFont)
@@ -50,15 +53,15 @@ struct RadarBubbleMetrics {
         }
         /// 两行文字的包围矩形（较宽一行 + 左右余量 × 两行高）放进内圆所需的直径。
         func required(_ sf: CTFont, _ nf: CTFont) -> (diameter: Double, height: Double) {
-            let w = max(width(symbol, sf), width(name, nf) + 8)
+            // 内边距已按直径比例预留，这里只留很小的字边余量，避免留白算两遍把字压得过小
+            let w = max(width(symbol, sf), width(name, nf) + 2)
             let h = ceil(lineHeight(sf) + lineHeight(nf) + 1) + 2
-            let inner = hypot(w + 8, h)
+            let inner = hypot(w + 4, h)
             // 内边距与直径相关：先按无边距求，再加上该直径对应的边距（迭代一次足够）
             let d0 = inner + 2 * Self.textPadding(for: inner)
             return (inner + 2 * Self.textPadding(for: d0), h)
         }
 
-        let base = min(max(baseDiameter, Self.minDiameter), cap)
         var size = start
         var picked: (CTFont, CTFont, Double, Double)?
         while size >= Self.minSymbolSize {
