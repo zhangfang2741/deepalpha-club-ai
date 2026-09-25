@@ -181,6 +181,15 @@ struct PivotPhaseDiagram: View {
 
             detailPanel
         }
+        // `selected` 用自定义 init 只在这个视图第一次被创建时按 phase 设初始值；
+        // 之后只要外层还在同一个 tab（同一个 `.id(segment)`），切换股票/周期时
+        // SwiftUI 会复用同一份视图身份，`selected` 不会自动跟着新的 phase 变化
+        // ——不加这行会出现"当前"徽标指着新状态，高亮框却停在旧状态上的错位。
+        // 用 reason 而不是 phase 判断变化：reason 带具体数值，同一个 phase 分类
+        // 换了股票/中枢数值也一定不同，比只比较 phase 字符串更可靠。
+        .onChange(of: phase.reason) { _, _ in
+            selected = currentNode
+        }
     }
 
     @ViewBuilder
