@@ -32,10 +32,6 @@ final class WatchlistViewModel: ObservableObject {
     @Published private(set) var maxItems = 20
     var isFull: Bool { items.count >= maxItems }
 
-    /// toggle()/remove() 失败重新拉取列表时用：这两条路径是内部错误恢复，不经过
-    /// 持有 StoreManager 的 View，借上一次外部调用 onAppear/refresh 时记下的值。
-    private var lastKnownIsPremium = false
-
     func isStarred(market: StockMarket, symbol: String) -> Bool {
         memberships.contains(Self.key(market: market, symbol: symbol))
     }
@@ -44,24 +40,19 @@ final class WatchlistViewModel: ObservableObject {
     /// 只能手动下拉）。首次带 loading 完整加载；已有数据时静默刷新列表 + 阶段，旧标签先留着，
     /// 新结果回来直接替换，不闪、不转圈。
     ///
-    /// `isPremium`：自选批量状态计算是高级版专属功能，非高级版用户跳过 `loadPhases()`，
-    /// 列表本身（增删、点开分析）照常可用——付费墙挡的只是批量算出的阶段标签。
-    func onAppear(isPremium: Bool) async {
-        lastKnownIsPremium = isPremium
+    /// 自选整体是高级版专属功能（见 WatchlistView 的 `!store.isPremium` 门禁），持有本 VM
+    /// 的自选页只有拿到高级版权益才会调用这几个方法，所以这里不再重复判断订阅层级，
+    /// 阶段标签固定跟着列表一起算。
+    func onAppear() async {
         if items.isEmpty {
-            await refresh(isPremium: isPremium)
+            await refresh()
             return
         }
         try? await fetchAndApply()
-        if isPremium {
-            await loadPhases()
-        } else {
-            phases = [:]
-        }
+        await loadPhases()
     }
 
-    func refresh(isPremium: Bool) async {
-        lastKnownIsPremium = isPremium
+    func refresh() async {
         isLoading = true
         defer { isLoading = false }
         do {
@@ -70,11 +61,7 @@ final class WatchlistViewModel: ObservableObject {
             errorMessage = (error as? APIError)?.message ?? "加载自选失败"
             return
         }
-        if isPremium {
-            await loadPhases()
-        } else {
-            phases = [:]
-        }
+        await loadPhases()
     }
 
     /// 拉阶段标签：单独一次请求，比拉列表慢（要跑缠论分析）。失败隔 2 秒重试一次，
@@ -122,7 +109,7 @@ final class WatchlistViewModel: ObservableObject {
                 NotificationCenter.default.post(name: .watchlistDidChange, object: nil)
             } catch {
                 errorMessage = (error as? APIError)?.message ?? "移出自选失败"
-                await refresh(isPremium: lastKnownIsPremium)
+                await refresh()
             }
         } else {
             guard !isFull else {
@@ -150,7 +137,7 @@ final class WatchlistViewModel: ObservableObject {
             NotificationCenter.default.post(name: .watchlistDidChange, object: nil)
         } catch {
             errorMessage = (error as? APIError)?.message ?? "移出自选失败"
-            await refresh(isPremium: lastKnownIsPremium)
+            await refresh()
         }
     }
 

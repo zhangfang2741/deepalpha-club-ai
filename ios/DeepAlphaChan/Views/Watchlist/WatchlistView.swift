@@ -9,25 +9,29 @@ struct WatchlistView: View {
     @EnvironmentObject private var store: StoreManager
 
     @State private var showResults = false
-    /// 自选批量状态计算是高级版专属功能；非高级版点解锁横幅弹这个付费墙。
+    /// 自选是高级版专属功能；非高级版看到的是 lockedView，点它弹这个付费墙。
     @State private var showPaywall = false
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                if !store.isPremium && !vm.items.isEmpty { unlockBanner }
-                if !vm.items.isEmpty { countRow }
-                content
+                if !store.isPremium {
+                    lockedView
+                } else {
+                    if !vm.items.isEmpty { countRow }
+                    content
+                }
             }
                 .navigationTitle(L("自选"))
-                .task { await vm.onAppear(isPremium: store.isPremium) }
+                .task { if store.isPremium { await vm.onAppear() } }
                 .onReceive(NotificationCenter.default.publisher(for: .watchlistDidChange)) { _ in
-                    Task { await vm.refresh(isPremium: store.isPremium) }
+                    guard store.isPremium else { return }
+                    Task { await vm.refresh() }
                 }
-                // 付费墙里升级成功后，立刻补一次批量状态计算，不用手动下拉刷新。
+                // 付费墙里订阅成功后，立刻拉一次自选列表，不用退出再进这个 Tab。
                 .onChange(of: store.isPremium) { _, isPremium in
                     guard isPremium else { return }
-                    Task { await vm.refresh(isPremium: true) }
+                    Task { await vm.refresh() }
                 }
                 .navigationDestination(isPresented: $showResults) {
                     if let analysis = chanVM.analysis {
@@ -52,19 +56,27 @@ struct WatchlistView: View {
         }
     }
 
-    /// 列表非空且未订阅高级版时顶部的解锁横幅：说明批量状态计算未开启，点开付费墙。
-    private var unlockBanner: some View {
-        Button { showPaywall = true } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "lock.fill").foregroundColor(Theme.segment).font(.caption)
-                Text(L("批量状态计算是高级版专属，订阅解锁 ›"))
-                    .font(.caption).foregroundColor(Theme.textPrimary)
-                Spacer()
+    /// 未订阅高级版时替代自选内容展示的锁定态：说明权益 + 升级入口，
+    /// 与信号雷达 SignalRadarView.lockedView 同一视觉语言。
+    private var lockedView: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 40)).foregroundColor(Theme.segment)
+            Text(L("自选是高级版专属功能"))
+                .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+            Text(L("关注的标的批量算出当前结构阶段，订阅高级版解锁"))
+                .font(.footnote).foregroundColor(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 30)
+            Button { showPaywall = true } label: {
+                Label(L("升级高级版"), systemImage: "crown.fill")
+                    .font(.subheadline.bold())
+                    .padding(.horizontal, 20).padding(.vertical, 10)
+                    .background(Theme.accent).foregroundColor(.white)
+                    .clipShape(Capsule())
             }
-            .padding(10)
-            .background(Theme.segment.opacity(0.08))
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// 自选数量 / 上限，让用户在接近 20 支上限前就有数，不用加满了才在报错里第一次看到数字。
@@ -135,7 +147,7 @@ struct WatchlistView: View {
             }
         }
         .listStyle(.plain)
-        .refreshable { await vm.refresh(isPremium: store.isPremium) }
+        .refreshable { await vm.refresh() }
     }
 
     /// 各市场一个基调色，纯粹用来在自选列表里做视觉区分（左侧色条 + 圆点），

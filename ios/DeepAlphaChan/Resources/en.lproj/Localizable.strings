@@ -200,7 +200,8 @@
 "同意并继续" = "Agree & Continue";
 "请仔细阅读（%lld 秒）" = "Please keep reading (%lld s)";
 "请先勾选上方确认" = "Check the box above first";
-"批量状态计算是高级版专属，订阅解锁 ›" = "Batch status is Premium-only. Subscribe to unlock ›";
+"自选是高级版专属功能" = "Watchlist is a Premium-only feature";
+"关注的标的批量算出当前结构阶段，订阅高级版解锁" = "Get the current structure phase for every stock you follow, batch-computed — subscribe to Premium to unlock";
 "次级别确认 · 基础版解锁" = "Lower-level check · Basic unlock";
 "订阅基础版解锁次级别确认" = "Subscribe to Basic to unlock the lower-level check";
 "订阅为自动续订。免费试用结束后将按上述价格自动扣款，除非在当前订阅周期结束前至少 24 小时取消。你可随时在 App Store 账户设置中管理或取消订阅。" = "Subscription auto-renews. After the free trial you'll be charged the price above unless you cancel at least 24 hours before the current period ends. Manage or cancel anytime in your App Store account settings.";
