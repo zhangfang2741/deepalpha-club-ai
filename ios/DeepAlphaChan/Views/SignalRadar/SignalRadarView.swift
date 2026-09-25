@@ -241,7 +241,7 @@ struct SignalRadarView: View {
                             isNew: layout.signal.date == dayDate,
                             onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name) }
                         )
-                        .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                        .transition(.opacity)
                     }
                 }
             }
