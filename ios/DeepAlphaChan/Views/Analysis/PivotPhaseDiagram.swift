@@ -159,6 +159,15 @@ struct PivotPhaseDiagram: View {
     /// 自己的尺寸提案，点击态引发的重新布局在部分机型上会让坐标和实际点击区域
     /// 对不上（表现为点一次之后所有节点/边都点不动）。测量与内容分离，图按测量
     /// 到的宽度用固定 frame 摆放，点击态变化不会反过来影响测量。
+    ///
+    /// 测量必须挂在 `detailPanel` 上，不能挂在 `diagramCanvas` 自己身上：
+    /// `diagramCanvas` 内部已经用 `measuredWidth ?? designWidth` 把自己钉死成一个
+    /// 固定宽度，外面再套 `.frame(maxWidth: .infinity)` 也不会让它变窄——测到的
+    /// 只会是它已经占用的宽度（首次即 designWidth=394pt），跟卡片真正可用的宽度
+    /// 无关，一量出来就是 394 自己钉住自己，永远收不到比卡片还窄的真实值，图会
+    /// 一直比卡片宽、横向溢出屏幕。`detailPanel` 用 `.frame(maxWidth: .infinity)`
+    /// 且内部文字都允许换行，不会撑宽自己，能如实反映 VStack 分给这张卡片的
+    /// 可用宽度，拿它来测才准。
     @State private var measuredWidth: CGFloat?
 
     var body: some View {
@@ -166,9 +175,6 @@ struct PivotPhaseDiagram: View {
             // 先看文字说明（现在在哪、为什么），图放下面当作可交互的参考——
             // 一进来不用先看图才知道当前状态，点图上别的方块/线时上面这块跟着切换。
             detailPanel
-
-            diagramCanvas
-                .frame(maxWidth: .infinity)
                 .background(
                     GeometryReader { geo in
                         Color.clear.preference(key: DiagramWidthKey.self, value: geo.size.width)
@@ -177,6 +183,8 @@ struct PivotPhaseDiagram: View {
                 .onPreferenceChange(DiagramWidthKey.self) { width in
                     if width > 0 { measuredWidth = width }
                 }
+
+            diagramCanvas
 
             Text(L("● 有买卖点信号　○ 没有信号 · 点框或点线看规则"))
                 .font(.caption2)
