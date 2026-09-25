@@ -11,9 +11,6 @@ struct RadarBubble: View {
     let color: Color
     /// 信号是不是查看这天当天新出现的（而非从更早的日子延续到现在）。
     let isNew: Bool
-    /// 未订阅高级版时为 true：代码/名称打码，颜色、大小、位置、角标等其它信息照常显示
-    /// （预告片式预览，见 SignalRadarView 的模糊预览策略）。
-    var isMasked: Bool = false
     let onOpen: () -> Void
 
     /// 持续漂浮的竖向偏移（onAppear 后在 0 ↔ 负值间无限往复）。
@@ -51,9 +48,7 @@ struct RadarBubble: View {
             .position(x: baseX, y: baseY)
             .accessibilityElement()
             .accessibilityLabel(
-                isMasked
-                ? L("已打码，订阅高级版查看标的")
-                : "\(signal.symbol) \(signal.name) \(signal.isBuy ? L("买点") : L("卖点"))"
+                "\(signal.symbol) \(signal.name) \(signal.isBuy ? L("买点") : L("卖点"))"
                 + (isNew ? " \(L("所选日期当天新增"))" : "")
                 + (signal.isSubLevelResonance ? " \(L("日线与30分钟共振"))" : "")
             )
@@ -94,10 +89,6 @@ struct RadarBubble: View {
             }
             .frame(width: metrics.textWidth)
             .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
-            // 打码：只糊代码/名称这两行文字，颜色、大小、位置、角标等其它信息照常清晰——
-            // 预告片式预览，不是把整颗气泡都糊掉。
-            .blur(radius: isMasked ? 5 : 0)
-            .accessibilityHidden(true)
         }
         .overlay(alignment: .topTrailing) {
             // "新"改放气泡外面右上角：挤在气泡内部会跟代码/名称文字抢地方。

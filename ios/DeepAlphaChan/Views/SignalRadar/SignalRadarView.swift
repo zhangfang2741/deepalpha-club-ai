@@ -29,9 +29,9 @@ struct SignalRadarView: View {
     @StateObject private var panicVM = PanicIndexViewModel()
     @EnvironmentObject private var orientation: AppOrientation
     @EnvironmentObject private var store: StoreManager
-    /// 信号雷达（气泡场）是高级版专属功能，未订阅时代码/名称打码（见
-    /// RadarBubble.isMasked），点 radarPreviewBanner 弹这个付费墙。
-    /// 恐慌指数小卡片（PanicIndexStrip）不受影响，所有用户可见。
+    /// 信号雷达（气泡场）是高级版专属功能，未订阅时展示钉死某一天的示例数据
+    /// （见 RadarDemoData / demoBubbleField），点 demoNoticeBanner 或示例气泡
+    /// 弹这个付费墙。恐慌指数小卡片（PanicIndexStrip）不受影响，所有用户可见。
     @State private var showPaywall = false
     /// 使用雷达前的风险确认：已订阅但还没勾选同意过，先挡在 consentView，
     /// 不直接看到买卖点气泡。
@@ -58,7 +58,16 @@ struct SignalRadarView: View {
             VStack(spacing: 12) {
                 PanicIndexStrip(radarVM: vm, panicVM: panicVM)
 
-                if store.isPremium && !consent.hasAgreed {
+                if !store.isPremium {
+                    // 未订阅：不发真实雷达请求，展示钉死某一天的示例数据（RadarDemoData）——
+                    // 既能让用户看到"这功能长什么样"，又不会把当下可操作的真实信号免费泄露。
+                    demoMetaRow
+                    demoBubbleField
+                    demoNoticeBanner
+                    legend
+                    Spacer(minLength: 0)
+                    compactDisclaimer
+                } else if !consent.hasAgreed {
                     consentView
                 } else if vm.isScanning {
                     scanningView
@@ -74,9 +83,7 @@ struct SignalRadarView: View {
                         // 切换市场/刷新时保留旧气泡、调暗，盖转圈 + 文字提示；期间暂不响应点按
                         // （避免点进上一个市场的标的）；布局不变，页面不跳动
                         .opacity(vm.isReloading ? 0.35 : 1)
-                        // 未订阅：气泡照常渲染真实颜色/大小/位置（RadarBubble 内部按 isMasked
-                        // 只糊代码/名称两行文字），这里额外禁用点按，防止绕过打码点开真实标的。
-                        .allowsHitTesting(!vm.isReloading && store.isPremium)
+                        .allowsHitTesting(!vm.isReloading)
                         .overlay {
                             if vm.isReloading {
                                 VStack(spacing: 10) {
@@ -87,15 +94,8 @@ struct SignalRadarView: View {
                             }
                         }
                         .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
-                    if !store.isPremium { radarPreviewBanner }
                     legend
-                    if store.isPremium {
-                        dateRail
-                    } else {
-                        // 免费预览只给最新一日：不展示日期轨，也就没有别的路径能把
-                        // selectedDayIndex 拨离 0（最新一日）。
-                        historyLockedNotice
-                    }
+                    dateRail
                     Spacer(minLength: 0)
                     compactDisclaimer
                 }
@@ -107,10 +107,14 @@ struct SignalRadarView: View {
             .background(Theme.background)
             .navigationTitle(L("缠论信号"))
             .navigationBarTitleDisplayMode(.inline)
-            // 未订阅也照常拉数据：气泡场用真实数据渲染成预览（颜色/大小/位置清晰，
-            // 代码/名称打码，见 RadarBubble.isMasked），不是完全屏蔽，
-            // 所以不再按订阅状态决定要不要发这个请求。
-            .task { vm.onAppear() }
+            // 未订阅时展示的是钉死数据的 RadarDemoData（见上面 demoBubbleField），
+            // 不需要真实雷达数据，这个请求只留给高级版用户。
+            .task { if store.isPremium { vm.onAppear() } }
+            // 付费墙里订阅成功（tier 变化）后，若已具备高级版权益且尚未拉过数据，
+            // 立刻补拉一次——不用退出再进这个 Tab 才刷新。
+            .onChange(of: store.isPremium) { _, isPremium in
+                if isPremium { vm.onAppear() }
+            }
             .overlay { if chanVM.isLoading { analysisLoadingOverlay } }
             .navigationDestination(isPresented: $showResults) {
                 if let analysis = chanVM.analysis {
@@ -128,13 +132,76 @@ struct SignalRadarView: View {
         }
     }
 
-    /// 气泡场下方的解锁横幅：说明代码/名称已打码，点开付费墙。气泡本身现在只糊文字、
-    /// 不再整块调暗，横幅不必再压在气泡场上面，挪到下方做成一条不挡内容的窄条。
-    private var radarPreviewBanner: some View {
+    // MARK: - 未订阅示例数据（RadarDemoData）
+
+    /// 示例数据版的说明行：跟 metaRow 布局一致，多一个「示例数据」角标，
+    /// 避免用户把钉死的历史数据误当成今天的实时信号。
+    private var demoMetaRow: some View {
+        let day = RadarDemoData.day(for: vm.market)
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(day.date)
+                .font(.caption)
+                .foregroundColor(Theme.textSecondary)
+            Text(L("示例数据"))
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(Theme.segment, in: Capsule())
+            Spacer(minLength: 8)
+            Text(L("%lld 买点", day.buyCount))
+                .font(.caption.bold()).foregroundColor(Theme.up)
+            Text("·").font(.caption).foregroundColor(Theme.textSecondary)
+            Text(L("%lld 卖点", day.sellCount))
+                .font(.caption.bold()).foregroundColor(Theme.down)
+        }
+    }
+
+    /// 示例数据版的气泡场：跟 bubbleField 共用背景光晕/参考环（fieldDecoration）与
+    /// 摆位算法（layoutBubbles），数据源换成 RadarDemoData；气泡可点，点开直接弹付费墙
+    /// （不会像真实气泡那样跳去分析详情页——示例标的不该被当真去做分析）。
+    private var demoBubbleField: some View {
+        GeometryReader { geo in
+            let w = Double(geo.size.width)
+            let h = Double(geo.size.height)
+            let day = RadarDemoData.day(for: vm.market)
+            let signals = day.signals.sorted { $0.strength > $1.strength }
+            let layouts = SignalRadarView.layoutBubbles(signals: signals, dayDate: day.date, width: w, height: h)
+            ZStack {
+                fieldDecoration(width: w, height: h)
+                ForEach(layouts) { layout in
+                    RadarBubble(
+                        signal: layout.signal,
+                        metrics: layout.metrics,
+                        baseX: CGFloat(layout.x),
+                        baseY: CGFloat(layout.y),
+                        phase: layout.phase,
+                        color: SignalRadarView.bubbleColor(
+                            side: layout.signal.side,
+                            depth: SignalFormatting.strengthDepth(layout.signal.signalStrength)),
+                        isNew: false,
+                        onOpen: { showPaywall = true }
+                    )
+                    .transition(.identity)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .aspectRatio(SignalRadarView.fieldAspect, contentMode: .fit)
+        .background(
+            RadialGradient(
+                colors: [Color(hex: 0x131A26), Theme.background],
+                center: .center, startRadius: 6, endRadius: 280
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    /// 示例数据下方的解锁横幅：说明这是示例、真实数据要订阅才能看。
+    private var demoNoticeBanner: some View {
         Button { showPaywall = true } label: {
             HStack(spacing: 8) {
-                Image(systemName: "lock.fill").foregroundColor(Theme.segment).font(.caption)
-                Text(L("标的代码与名称已打码，订阅高级版查看 ›"))
+                Image(systemName: "sparkles").foregroundColor(Theme.segment).font(.caption)
+                Text(L("以上为示例数据，订阅高级版查看每日实时信号 ›"))
                     .font(.caption).foregroundColor(Theme.textPrimary)
                 Spacer()
             }
@@ -143,17 +210,6 @@ struct SignalRadarView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
-    }
-
-    /// 日期轨的替代行：告诉免费用户为什么这里没有日期轨——只给看最新一日。
-    private var historyLockedNotice: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(.caption2).foregroundColor(Theme.textSecondary)
-            Text(L("预览仅展示最新一日信号，订阅高级版查看历史"))
-                .font(.caption2).foregroundColor(Theme.textSecondary)
-            Spacer()
-        }
     }
 
     // MARK: - 使用前风险确认
@@ -336,13 +392,45 @@ struct SignalRadarView: View {
 
     // MARK: - 气泡场
 
+    /// 气泡场的背景装饰：中心光晕 + 同心参考环，bubbleField（真实数据）与
+    /// demoBubbleField（示例数据）共用同一套视觉，只是气泡数据源不同。
+    @ViewBuilder
+    private func fieldDecoration(width w: Double, height h: Double) -> some View {
+        let base = min(w, h)
+        // 参考环与气泡共用的内缩场半轴：椭圆填满画布，长边不再留大片空白。
+        let (hRad, vRad) = SignalRadarView.fieldRadii(width: w, height: h)
+
+        // 由近及远的光晕：中心亮、向外自然变暗，"越靠中心=越新"不用靠文字说明，
+        // 图本身就有纵深感。
+        RadialGradient(
+            colors: [Theme.accent.opacity(0.20), Theme.accent.opacity(0.0)],
+            center: .center, startRadius: 0, endRadius: base * 0.55
+        )
+        .frame(width: CGFloat(w), height: CGFloat(h))
+
+        // 同心参考环：越外越淡，呼应同一套"近实远虚"的纵深语言；环上直接标出
+        // 大致时间跨度，不用再靠单独一行说明文字解释三个圈是什么意思。
+        ForEach(Array(SignalRadarView.ringSpecs.enumerated()), id: \.offset) { idx, spec in
+            // 正圆：离中心的距离 = 时间，各方向一致
+            // 横向椭圆：左右宽、上下窄，与气泡摆位同一套半轴
+            let rx = hRad * spec.scale
+            let ry = vRad * spec.scale
+            Ellipse()
+                .stroke(Theme.textSecondary.opacity(0.16 - Double(idx) * 0.045),
+                        style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                .frame(width: CGFloat(rx * 2), height: CGFloat(ry * 2))
+                .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
+            Text(spec.label)
+                .font(.system(size: 8))
+                .foregroundColor(Theme.textSecondary.opacity(0.55))
+                .position(x: CGFloat(w / 2), y: CGFloat(h / 2) - CGFloat(ry) + 8)
+        }
+    }
+
     private var bubbleField: some View {
         GeometryReader { geo in
             let w = Double(geo.size.width)
             let h = Double(geo.size.height)
-            let base = min(w, h)
-            // 参考环与气泡共用的内缩场半轴：椭圆填满画布，长边不再留大片空白。
-            let (hRad, vRad) = SignalRadarView.fieldRadii(width: w, height: h)
             let dayDate = vm.selectedDay?.date ?? ""
             let signals = (vm.selectedDay?.signals ?? [])
                 .sorted { $0.strength > $1.strength }
@@ -351,31 +439,7 @@ struct SignalRadarView: View {
                 avoid: switcherSize == .zero ? [] : [.init(x: 0, y: 0, width: Double(switcherSize.width),
                                                             height: Double(switcherSize.height))])
             ZStack {
-                // 由近及远的光晕：中心亮、向外自然变暗，"越靠中心=越新"不用靠文字说明，
-                // 图本身就有纵深感。
-                RadialGradient(
-                    colors: [Theme.accent.opacity(0.20), Theme.accent.opacity(0.0)],
-                    center: .center, startRadius: 0, endRadius: base * 0.55
-                )
-                .frame(width: CGFloat(w), height: CGFloat(h))
-
-                // 同心参考环：越外越淡，呼应同一套"近实远虚"的纵深语言；环上直接标出
-                // 大致时间跨度，不用再靠单独一行说明文字解释三个圈是什么意思。
-                ForEach(Array(SignalRadarView.ringSpecs.enumerated()), id: \.offset) { idx, spec in
-                    // 正圆：离中心的距离 = 时间，各方向一致
-                    // 横向椭圆：左右宽、上下窄，与气泡摆位同一套半轴
-                    let rx = hRad * spec.scale
-                    let ry = vRad * spec.scale
-                    Ellipse()
-                        .stroke(Theme.textSecondary.opacity(0.16 - Double(idx) * 0.045),
-                                style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                        .frame(width: CGFloat(rx * 2), height: CGFloat(ry * 2))
-                        .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
-                    Text(spec.label)
-                        .font(.system(size: 8))
-                        .foregroundColor(Theme.textSecondary.opacity(0.55))
-                        .position(x: CGFloat(w / 2), y: CGFloat(h / 2) - CGFloat(ry) + 8)
-                }
+                fieldDecoration(width: w, height: h)
 
                 if layouts.isEmpty {
                     Text(L("当日无买卖点信号"))
@@ -394,7 +458,6 @@ struct SignalRadarView: View {
                                 side: layout.signal.side,
                                 depth: SignalFormatting.strengthDepth(layout.signal.signalStrength)),
                             isNew: layout.signal.date == dayDate,
-                            isMasked: !store.isPremium,
                             onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name) }
                         )
                         // 气泡任何时候都不做透明处理：刷新完直接出现，不淡入
