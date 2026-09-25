@@ -521,6 +521,6 @@
 "上榜排序怎么算" = "How the ranking is scored";
 "综合分 = 35% 类型确定性 + 30% 强弱 + 35% 新鲜度，最新一天命中「共振」再额外加分。" = "Score = 35% type certainty + 30% strength + 35% freshness, with a bonus for hitting \"Aligned\" on the latest day.";
 "类型确定性：一类 0.4（背驰迹象，待验证）、二类 0.7（回踩不破中枢）、三类 1.0（完全不回中枢，最强确认）。" = "Type certainty: type 1 = 0.4 (a divergence hint, unconfirmed), type 2 = 0.7 (pullback holds the pivot), type 3 = 1.0 (pullback never re-enters the pivot — the strongest confirmation).";
-"新鲜度：当天最高，14 天后归零；超过 14 天没被更新信号覆盖的旧信号会自动退场。" = "Freshness: highest on the signal's own day, decaying to zero after 14 days; a signal not superseded within 14 days drops off automatically.";
+"新鲜度：当天最高，7 天后归零；超过 7 天没被更新信号覆盖的旧信号会自动退场。" = "Freshness: highest on the signal's own day, decaying to zero after 7 days; a signal not superseded within 7 days drops off automatically.";
 "每类买卖点先保底最多 2 个名额，其余按综合分从高到低补满，共取前 12 名。" = "Each signal type gets up to 2 guaranteed slots first; the rest are filled by score, for a top-12 list overall.";
 "以上口径与详情页强弱、确认状态完全一致。" = "This matches the same strength and confirmation logic used on the analysis detail page.";

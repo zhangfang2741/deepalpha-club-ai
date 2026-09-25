@@ -69,12 +69,12 @@ struct RadarOrbitSpacingTests {
         assert(abs(sin(a2)) < 0.2 && cos(a2) * cos(a1) < 0, "一侧已占时去另一侧，仍在横向")
     }
 
-    /// 越远越小：按天严格递减，当天 1.0、14 天起封底 0.55。
+    /// 越远越小：按天严格递减，当天 1.0、7 天起封底 0.55。
     static func testTimeSizeFactor() {
         let f = (0...20).map { RadarOrbitSpacing.timeSizeFactor(daysAgo: $0) }
         assert(f[0] == 1, "当天原尺寸")
-        for d in 1...14 { assert(f[d] < f[d - 1], "14 天内每往前一天都更小") }
-        assert(abs(f[14] - 0.55) < 1e-9 && f[20] == f[14], "14 天起封底")
+        for d in 1...7 { assert(f[d] < f[d - 1], "7 天内每往前一天都更小") }
+        assert(abs(f[7] - 0.55) < 1e-9 && f[20] == f[7], "7 天起封底")
     }
 
     /// 选方向：半径固定，避开已摆的气泡；同轨道两个气泡能放下时互不重叠。

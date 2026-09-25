@@ -364,7 +364,7 @@ struct SignalRadarView: View {
         RadarOrbitSpacing.timeRadius(daysAgo: daysAgo) * fieldRadius
     }
 
-    /// daysAgo → 时间档：0=今天、1=3天内、2=一周内（含更早，最多保留 14 天）。
+    /// daysAgo → 时间档：0=今天、1=3天内、2=一周内（含更早，最多保留 7 天）。
     static func bandIndex(forDaysAgo daysAgo: Int) -> Int {
         daysAgo <= 0 ? 0 : (daysAgo <= 3 ? 1 : 2)
     }
@@ -547,7 +547,7 @@ struct SignalRadarView: View {
                     infoSection(L("上榜排序怎么算"), [
                         L("综合分 = 35% 类型确定性 + 30% 强弱 + 35% 新鲜度，最新一天命中「共振」再额外加分。"),
                         L("类型确定性：一类 0.4（背驰迹象，待验证）、二类 0.7（回踩不破中枢）、三类 1.0（完全不回中枢，最强确认）。"),
-                        L("新鲜度：当天最高，14 天后归零；超过 14 天没被更新信号覆盖的旧信号会自动退场。"),
+                        L("新鲜度：当天最高，7 天后归零；超过 7 天没被更新信号覆盖的旧信号会自动退场。"),
                         L("每类买卖点先保底最多 2 个名额，其余按综合分从高到低补满，共取前 12 名。"),
                     ])
                     Text(L("以上口径与详情页强弱、确认状态完全一致。"))

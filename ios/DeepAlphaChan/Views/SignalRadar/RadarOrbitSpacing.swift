@@ -42,7 +42,8 @@ enum RadarOrbitSpacing {
 extension RadarOrbitSpacing {
     /// 时间 → 归一化半径，对应「今天 / 3 天 / 1 周」三个等距环（1/3、2/3、1）：
     /// 今天在最内环以内（圆心），1～3 天前在第一、二环之间，4～7 天前在第二、三环之间，
-    /// 各区间内按天均匀分布；7 天前及更早（信号最多保留 14 天）一律封顶在最外环。
+    /// 各区间内按天均匀分布；后端信号本身最多只保留 7 天（见 _MAX_SIGNAL_AGE_DAYS），
+    /// 7 天封顶只是兜底，正常不会有更早的信号传进来。
     static func timeRadius(daysAgo: Int) -> Double {
         let d = max(0, daysAgo)
         if d == 0 { return 0 }
@@ -50,9 +51,9 @@ extension RadarOrbitSpacing {
         return (2.0 + min(1.0, Double(d - 3) / 4.0)) / 3.0
     }
 
-    /// 时间 → 气泡尺寸系数：越远越小，按天连续递减（当天 1.0，14 天及更早 0.55）。
-    /// 与强弱对应的直径相乘。
-    static func timeSizeFactor(daysAgo: Int, horizon: Int = 14, minFactor: Double = 0.55) -> Double {
+    /// 时间 → 气泡尺寸系数：越远越小，按天连续递减（当天 1.0，7 天及更早 0.55），
+    /// horizon 与后端信号保留上限（7 天）对齐。与强弱对应的直径相乘。
+    static func timeSizeFactor(daysAgo: Int, horizon: Int = 7, minFactor: Double = 0.55) -> Double {
         let t = min(1, Double(max(0, daysAgo)) / Double(max(1, horizon)))
         return 1 - (1 - minFactor) * t
     }
