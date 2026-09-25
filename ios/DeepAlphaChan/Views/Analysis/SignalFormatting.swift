@@ -146,19 +146,15 @@ enum WalkTypeFormatting {
 
 /// 分析区统一的字号层级。
 ///
-/// 改造前这块混用了 12/13/15/20 四种字号，而且「依据」这类小标题(12pt)比它
-/// 统领的正文(13pt)还小，层级是倒的。现在收成三级：
-///
-/// - 卡片标题 17pt semibold（SectionCard 自带）
-/// - 正文 15pt regular，行距 5——这是真正要读的内容，不该比标题挤
-/// - 段内小标题 13pt semibold + 字距，小而重才像标签而不像正文
+/// 正文原来用 15pt（.subheadline），风险提示、信号列表这些次要内容读起来
+/// 比标题还显眼；缩到 13pt（.footnote），和信号列表行的字号对齐，风险提示
+/// 不再是全页最大的字。
 enum AnalysisType {
     // 用文本样式而不是固定 size：.system(size:) 不跟随系统的「文字大小」设置，
-    // 调大字号的用户看到的还是 15pt。subheadline 本身就是 15pt，footnote 13pt，
-    // 视觉不变但会随动态字体缩放。
-    static let body = Font.subheadline
+    // 调大字号的用户看到的还是这个比例。footnote 13pt，会随动态字体缩放。
+    static let body = Font.footnote
     static let label = Font.footnote.weight(.semibold)
-    static let bodyLineSpacing: CGFloat = 5
+    static let bodyLineSpacing: CGFloat = 4
 }
 
 /// 项目符号列表。标题可省——风险提示自己就是一张卡，卡标题之下再来个同名

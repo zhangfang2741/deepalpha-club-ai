@@ -21,6 +21,13 @@ enum PivotPhaseDiagramSelection: Hashable {
     }
 }
 
+private struct DiagramWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 private struct PhaseDiagramCopy {
     let title: String
     let body: String
@@ -147,29 +154,25 @@ struct PivotPhaseDiagram: View {
              label: L("反向突破"), labelPos: CGPoint(x: 356, y: 306), color: Theme.stroke),
     ]
 
+    /// 卡片可用宽度，通过下面 `.background(GeometryReader …)` 的一次性测量写入——
+    /// 不直接把图内容放进 GeometryReader：那样图会被拉伸/挤压成 GeometryReader
+    /// 自己的尺寸提案，点击态引发的重新布局在部分机型上会让坐标和实际点击区域
+    /// 对不上（表现为点一次之后所有节点/边都点不动）。测量与内容分离，图按测量
+    /// 到的宽度用固定 frame 摆放，点击态变化不会反过来影响测量。
+    @State private var measuredWidth: CGFloat?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            GeometryReader { geo in
-                let scale = geo.size.width / designWidth
-                ZStack(alignment: .topLeading) {
-                    Canvas { ctx, _ in drawEdges(ctx, scale: scale) }
-                    // 线本身也要能点，不能只靠标签那一小块文字——Canvas 画的线没有
-                    // 手势，之前点线基本没反应，只有精准点中标签才有用。放在节点
-                    // 之前，避免短竖线贴着节点边界时抢了节点的点击。
-                    ForEach(edges, id: \.key) { edge in
-                        edgeHitArea(edge, scale: scale)
+            diagramCanvas
+                .frame(maxWidth: .infinity)
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(key: DiagramWidthKey.self, value: geo.size.width)
                     }
-                    ForEach(nodeSpecs, id: \.key) { spec in
-                        nodeView(spec, scale: scale)
-                    }
-                    ForEach(edges, id: \.key) { edge in
-                        edgeLabel(edge, scale: scale)
-                    }
+                )
+                .onPreferenceChange(DiagramWidthKey.self) { width in
+                    if width > 0 { measuredWidth = width }
                 }
-            }
-            .aspectRatio(designWidth / designHeight, contentMode: .fit)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(L("结构位置全局判定图"))
 
             Text(L("● 有买卖点信号　○ 没有信号 · 点框或点线看规则"))
                 .font(.caption2)
@@ -178,57 +181,92 @@ struct PivotPhaseDiagram: View {
 
             detailPanel
         }
+        // `selected` 用自定义 init 只在这个视图第一次被创建时按 phase 设初始值；
+        // 之后只要外层还在同一个 tab（同一个 `.id(segment)`），切换股票/周期时
+        // SwiftUI 会复用同一份视图身份，`selected` 不会自动跟着新的 phase 变化
+        // ——不加这行会出现"当前"徽标指着新状态，高亮框却停在旧状态上的错位。
+        // 用 reason 而不是 phase 判断变化：reason 带具体数值，同一个 phase 分类
+        // 换了股票/中枢数值也一定不同，比只比较 phase 字符串更可靠。
+        .onChange(of: phase.reason) { _, _ in
+            selected = currentNode
+        }
+    }
+
+    @ViewBuilder
+    private var diagramCanvas: some View {
+        let width = measuredWidth ?? designWidth
+        let scale = width / designWidth
+        ZStack(alignment: .topLeading) {
+            Canvas { ctx, _ in drawEdges(ctx, scale: scale) }
+            // 线本身也要能点，不能只靠标签那一小块文字——Canvas 画的线没有
+            // 手势，之前点线基本没反应，只有精准点中标签才有用。放在节点
+            // 之前，避免短竖线贴着节点边界时抢了节点的点击。
+            ForEach(edges, id: \.key) { edge in
+                edgeHitArea(edge, scale: scale)
+            }
+            ForEach(nodeSpecs, id: \.key) { spec in
+                nodeView(spec, scale: scale)
+            }
+            ForEach(edges, id: \.key) { edge in
+                edgeLabel(edge, scale: scale)
+            }
+        }
+        .frame(width: width, height: designHeight * scale)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(L("结构位置全局判定图"))
     }
 
     // MARK: - 节点
 
     private func nodeView(_ spec: NodeSpec, scale: CGFloat) -> some View {
         let isSelected = selected == spec.key
-        return RoundedRectangle(cornerRadius: 10 * scale)
-            .fill(spec.key == .retraceConfirmed ? Theme.pivotFill.opacity(0.16) : Theme.surfaceAlt)
-            .overlay(
-                RoundedRectangle(cornerRadius: 10 * scale)
-                    .strokeBorder(borderColor(spec, isSelected: isSelected),
-                                  style: StrokeStyle(lineWidth: (isSelected ? 2.2 : 1.2) * scale,
-                                                      dash: spec.dashed ? [4 * scale, 3 * scale] : []))
-            )
-            .overlay {
-                Text(spec.title)
-                    .font(.system(size: (spec.key == .none ? 11 : 13) * scale, weight: .semibold))
-                    .foregroundStyle(spec.key == .none ? Theme.textSecondary : Theme.textPrimary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .padding(.horizontal, 4 * scale)
-            }
-            .overlay(alignment: .topTrailing) {
-                if spec.isCurrent {
-                    Text(L("当前"))
-                        .font(.system(size: 9 * scale, weight: .bold))
-                        .foregroundStyle(Theme.background)
-                        .padding(.horizontal, 6 * scale).padding(.vertical, 2 * scale)
-                        .background(Theme.pivotPhaseColor(phase.phase), in: Capsule())
-                        .padding(4 * scale)
+        return Button {
+            selected = spec.key
+        } label: {
+            RoundedRectangle(cornerRadius: 10 * scale)
+                .fill(spec.key == .retraceConfirmed ? Theme.pivotFill.opacity(0.16) : Theme.surfaceAlt)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10 * scale)
+                        .strokeBorder(borderColor(spec, isSelected: isSelected),
+                                      style: StrokeStyle(lineWidth: (isSelected ? 2.2 : 1.2) * scale,
+                                                          dash: spec.dashed ? [4 * scale, 3 * scale] : []))
+                )
+                .overlay {
+                    Text(spec.title)
+                        .font(.system(size: (spec.key == .none ? 11 : 13) * scale, weight: .semibold))
+                        .foregroundStyle(spec.key == .none ? Theme.textSecondary : Theme.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .padding(.horizontal, 4 * scale)
                 }
-            }
-            .overlay(alignment: .bottomTrailing) {
-                if spec.key != .none {
-                    Group {
-                        if spec.hasDeliverable {
-                            Circle().fill(Theme.accent)
-                        } else {
-                            Circle().strokeBorder(Theme.textSecondary, lineWidth: 1)
-                        }
+                .overlay(alignment: .topTrailing) {
+                    if spec.isCurrent {
+                        Text(L("当前"))
+                            .font(.system(size: 9 * scale, weight: .bold))
+                            .foregroundStyle(Theme.background)
+                            .padding(.horizontal, 6 * scale).padding(.vertical, 2 * scale)
+                            .background(Theme.pivotPhaseColor(phase.phase), in: Capsule())
+                            .padding(4 * scale)
                     }
-                    .frame(width: 7 * scale, height: 7 * scale)
-                    .padding(6 * scale)
                 }
-            }
-            .frame(width: spec.rect.width * scale, height: spec.rect.height * scale)
-            .position(x: spec.rect.midX * scale, y: spec.rect.midY * scale)
-            .contentShape(Rectangle())
-            .onTapGesture { selected = spec.key }
-            .accessibilityAddTraits(.isButton)
-            .accessibilityLabel(spec.title)
+                .overlay(alignment: .bottomTrailing) {
+                    if spec.key != .none {
+                        Group {
+                            if spec.hasDeliverable {
+                                Circle().fill(Theme.accent)
+                            } else {
+                                Circle().strokeBorder(Theme.textSecondary, lineWidth: 1)
+                            }
+                        }
+                        .frame(width: 7 * scale, height: 7 * scale)
+                        .padding(6 * scale)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .frame(width: spec.rect.width * scale, height: spec.rect.height * scale)
+        .position(x: spec.rect.midX * scale, y: spec.rect.midY * scale)
+        .accessibilityLabel(spec.title)
     }
 
     private func borderColor(_ spec: NodeSpec, isSelected: Bool) -> Color {
@@ -281,15 +319,18 @@ struct PivotPhaseDiagram: View {
 
     private func edgeLabel(_ edge: Edge, scale: CGFloat) -> some View {
         let isSelected = selected == edge.key
-        return Text(edge.label)
-            .font(.system(size: 10 * scale, weight: isSelected ? .bold : .regular))
-            .foregroundStyle(isSelected ? edge.color : Theme.textSecondary)
-            .padding(.horizontal, 5 * scale).padding(.vertical, 2 * scale)
-            .background(isSelected ? Theme.surfaceAlt : Color.clear, in: Capsule())
-            .position(x: edge.labelPos.x * scale, y: edge.labelPos.y * scale)
-            .contentShape(Rectangle())
-            .onTapGesture { selected = edge.key }
-            .accessibilityAddTraits(.isButton)
+        return Button {
+            selected = edge.key
+        } label: {
+            Text(edge.label)
+                .font(.system(size: 10 * scale, weight: isSelected ? .bold : .regular))
+                .foregroundStyle(isSelected ? edge.color : Theme.textSecondary)
+                .padding(.horizontal, 5 * scale).padding(.vertical, 2 * scale)
+                .background(isSelected ? Theme.surfaceAlt : Color.clear, in: Capsule())
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .position(x: edge.labelPos.x * scale, y: edge.labelPos.y * scale)
     }
 
     private func drawEdges(_ ctx: GraphicsContext, scale: CGFloat) {
@@ -364,6 +405,12 @@ struct PivotPhaseDiagram: View {
                        String(format: "%.2f", phase.pivot.zg)))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(Theme.textSecondary)
+                if let next = phase.checklist.first(where: { $0.state == .pending }) {
+                    Text(L("下一步观察：%@", next.label))
+                        .font(.caption)
+                        .foregroundStyle(Theme.accent)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .padding(12)

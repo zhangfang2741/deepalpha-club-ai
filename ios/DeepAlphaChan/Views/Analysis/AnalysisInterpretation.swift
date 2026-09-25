@@ -47,12 +47,4 @@ enum AnalysisInterpretation {
         default: return L("结合当前结构与确认状态理解这一阶段。")
         }
     }
-
-    static func branchExplanation(_ outcome: String) -> String {
-        switch outcome {
-        case "type3": return L("回抽未回到中枢，继续核对三类买卖点的完整条件；位置满足不等于信号已确认。")
-        case "type2": return L("回抽落回中枢内，继续观察支撑或压力；不能仅凭这一位置认定二类买卖点。")
-        default: return L("原来的离开结构需要重新评估，观察是否回到中枢震荡。")
-        }
-    }
 }
