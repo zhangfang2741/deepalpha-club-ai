@@ -54,8 +54,8 @@ struct SignalRadarView: View {
                 } else {
                     metaRow
                     bubbleField
-                        // 切换市场/刷新时保留旧内容、不调暗，盖一道旋转的雷达扫描光束表示正在扫描；
-                        // 期间暂不响应点按（避免点进上一个市场的标的）
+                        // 切换市场/刷新时：气泡清空（见 bubbleField），盖一道旋转的雷达扫描光束表示
+                        // 正在扫描，扫完新气泡淡入；布局不变，页面不跳动
                         .allowsHitTesting(!vm.isReloading)
                         .overlay {
                             if vm.isReloading {
@@ -219,7 +219,10 @@ struct SignalRadarView: View {
                         .position(x: CGFloat(w / 2), y: CGFloat(h / 2) - CGFloat(ry) + 8)
                 }
 
-                if layouts.isEmpty {
+                if vm.isReloading {
+                    // 刷新/切换市场中：清空气泡，只留参考环、光晕与扫描光束，扫完再淡入新气泡
+                    EmptyView()
+                } else if layouts.isEmpty {
                     Text(L("当日无买卖点信号"))
                         .font(.subheadline)
                         .foregroundColor(Theme.textSecondary)
@@ -238,6 +241,7 @@ struct SignalRadarView: View {
                             isNew: layout.signal.date == dayDate,
                             onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name) }
                         )
+                        .transition(.opacity.combined(with: .scale(scale: 0.6)))
                     }
                 }
             }
