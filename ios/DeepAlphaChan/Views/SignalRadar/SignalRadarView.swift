@@ -29,8 +29,8 @@ struct SignalRadarView: View {
     @StateObject private var panicVM = PanicIndexViewModel()
     @EnvironmentObject private var orientation: AppOrientation
     @EnvironmentObject private var store: StoreManager
-    /// 信号雷达（气泡场）是高级版专属功能，未订阅时是模糊预览（见
-    /// radarPreviewLockOverlay），点里面的升级按钮弹这个付费墙。
+    /// 信号雷达（气泡场）是高级版专属功能，未订阅时代码/名称打码（见
+    /// RadarBubble.isMasked），点 radarPreviewBanner 弹这个付费墙。
     /// 恐慌指数小卡片（PanicIndexStrip）不受影响，所有用户可见。
     @State private var showPaywall = false
     /// 使用雷达前的风险确认：已订阅但还没勾选同意过，先挡在 consentView，
@@ -74,6 +74,8 @@ struct SignalRadarView: View {
                         // 切换市场/刷新时保留旧气泡、调暗，盖转圈 + 文字提示；期间暂不响应点按
                         // （避免点进上一个市场的标的）；布局不变，页面不跳动
                         .opacity(vm.isReloading ? 0.35 : 1)
+                        // 未订阅：气泡照常渲染真实颜色/大小/位置（RadarBubble 内部按 isMasked
+                        // 只糊代码/名称两行文字），这里额外禁用点按，防止绕过打码点开真实标的。
                         .allowsHitTesting(!vm.isReloading && store.isPremium)
                         .overlay {
                             if vm.isReloading {
@@ -85,16 +87,15 @@ struct SignalRadarView: View {
                             }
                         }
                         .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
-                        // 未订阅：气泡场照常用真实数据渲染（能看出今天信号多不多、颜色深浅），
-                        // 打上高斯模糊看不清具体标的与买卖点——「预告片」而非空白锁定页，
-                        // 免得用户压根不知道自己错过了什么，比之前的纯图标锁定页转化更好。
-                        .blur(radius: store.isPremium ? 0 : Self.previewBlurRadius)
-                        .overlay {
-                            if !store.isPremium { radarPreviewLockOverlay }
-                        }
-                        .animation(.easeInOut(duration: 0.2), value: store.isPremium)
+                    if !store.isPremium { radarPreviewBanner }
                     legend
-                    dateRail
+                    if store.isPremium {
+                        dateRail
+                    } else {
+                        // 免费预览只给最新一日：不展示日期轨，也就没有别的路径能把
+                        // selectedDayIndex 拨离 0（最新一日）。
+                        historyLockedNotice
+                    }
                     Spacer(minLength: 0)
                     compactDisclaimer
                 }
@@ -106,8 +107,9 @@ struct SignalRadarView: View {
             .background(Theme.background)
             .navigationTitle(L("缠论信号"))
             .navigationBarTitleDisplayMode(.inline)
-            // 未订阅也照常拉数据：气泡场用真实数据渲染成模糊预览（见 radarPreviewLockOverlay），
-            // 不是完全屏蔽，所以不再按订阅状态决定要不要发这个请求。
+            // 未订阅也照常拉数据：气泡场用真实数据渲染成预览（颜色/大小/位置清晰，
+            // 代码/名称打码，见 RadarBubble.isMasked），不是完全屏蔽，
+            // 所以不再按订阅状态决定要不要发这个请求。
             .task { vm.onAppear() }
             .overlay { if chanVM.isLoading { analysisLoadingOverlay } }
             .navigationDestination(isPresented: $showResults) {
@@ -126,32 +128,32 @@ struct SignalRadarView: View {
         }
     }
 
-    /// 模糊预览的高斯模糊半径：够糊到看不出具体标的代码/名称，又保留得住
-    /// 颜色分布和气泡疏密这层"形状"信息。
-    private static let previewBlurRadius: CGFloat = 14
-
-    /// 叠在模糊气泡场上的解锁引导：深色蒙版 + 锁图标 + 升级入口，不挡住整块气泡场
-    /// 的轮廓（蒙版半透明），让"这里有内容、但看不清"这件事一眼可辨。
-    private var radarPreviewLockOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.32)
-            VStack(spacing: 10) {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 22)).foregroundColor(.white)
-                Text(L("解锁信号雷达，查看具体标的与买卖点"))
-                    .font(.footnote.bold()).foregroundColor(.white)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-                Button { showPaywall = true } label: {
-                    Label(L("升级高级版"), systemImage: "crown.fill")
-                        .font(.caption.bold())
-                        .padding(.horizontal, 16).padding(.vertical, 8)
-                        .background(Theme.accent).foregroundColor(.white)
-                        .clipShape(Capsule())
-                }
+    /// 气泡场下方的解锁横幅：说明代码/名称已打码，点开付费墙。气泡本身现在只糊文字、
+    /// 不再整块调暗，横幅不必再压在气泡场上面，挪到下方做成一条不挡内容的窄条。
+    private var radarPreviewBanner: some View {
+        Button { showPaywall = true } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.fill").foregroundColor(Theme.segment).font(.caption)
+                Text(L("标的代码与名称已打码，订阅高级版查看 ›"))
+                    .font(.caption).foregroundColor(Theme.textPrimary)
+                Spacer()
             }
+            .padding(10)
+            .background(Theme.segment.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
         }
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .buttonStyle(.plain)
+    }
+
+    /// 日期轨的替代行：告诉免费用户为什么这里没有日期轨——只给看最新一日。
+    private var historyLockedNotice: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.caption2).foregroundColor(Theme.textSecondary)
+            Text(L("预览仅展示最新一日信号，订阅高级版查看历史"))
+                .font(.caption2).foregroundColor(Theme.textSecondary)
+            Spacer()
+        }
     }
 
     // MARK: - 使用前风险确认
@@ -392,6 +394,7 @@ struct SignalRadarView: View {
                                 side: layout.signal.side,
                                 depth: SignalFormatting.strengthDepth(layout.signal.signalStrength)),
                             isNew: layout.signal.date == dayDate,
+                            isMasked: !store.isPremium,
                             onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name) }
                         )
                         // 气泡任何时候都不做透明处理：刷新完直接出现，不淡入
