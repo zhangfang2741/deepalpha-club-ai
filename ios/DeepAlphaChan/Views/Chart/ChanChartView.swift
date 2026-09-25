@@ -71,6 +71,8 @@ struct ChanChartView: View {
 
     // 光标：选中的 K 线索引（nil = 不显示）
     @State private var cursorIndex: Int? = nil
+    /// 点中的缠论元素（弹出说明卡片，并在图上高亮）。
+    @State private var selectedElement: ChartElement? = nil
     @State private var cursorDragging: Bool = false
 
     // 双指缩放基准值
@@ -155,6 +157,9 @@ struct ChanChartView: View {
                     if vm.showSegments { drawSegments(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showFractals { drawFractals(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showSignals { drawSignals(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
+                    if let sel = selectedElement {
+                        drawSelection(ctx, sel, height: size.height, range: range, bounds: priceBounds)
+                    }
                     drawPriceAxis(ctx, size: size, bounds: priceBounds)
                     // 末价参考线（光标激活时让位给光标价签，避免右轴两个标签叠一起）
                     if cursorIndex == nil {
@@ -172,9 +177,13 @@ struct ChanChartView: View {
             // 横向拖动平移图表、纵向留给页面滚动、点按看十字光标、双指缩放；
             // 左边缘的系统「右滑返回」起点在图表左侧之外，不受影响。
             // including: 而不是 isEnabled:——后者是 iOS 18 才有的重载，本工程部署目标 17.0。
-            .simultaneousGesture(inspectTap(plotWidth: plotWidth), including: gestureMask)
+            .simultaneousGesture(inspectTap(plotWidth: plotWidth, hitHeight: priceHeight), including: gestureMask)
             .simultaneousGesture(panGesture(plotWidth: plotWidth), including: gestureMask)
             .simultaneousGesture(magnificationGesture(plotWidth: plotWidth), including: gestureMask)
+            .sheet(item: $selectedElement) { element in
+                ChartElementSheet(element: element)
+                    .preferredColorScheme(.dark)
+            }
             .overlay(alignment: .topLeading) {
                 if let ci = cursorIndex, ci >= 0, ci < candles.count {
                     cursorDetail(index: ci)
@@ -707,14 +716,131 @@ struct ChanChartView: View {
 
     /// 点按看十字光标。tap 不会拦截外层 ScrollView 的滚动。
     /// 再次点中当前已选中的那根 K 线 → 收起光标（自然的开/关切换）。
-    private func inspectTap(plotWidth: CGFloat) -> some Gesture {
+    /// 点按：主图（hitHeight 非 nil）先判定是否点中缠论元素——点中弹出说明卡片；
+    /// 没点中或在副图上，切换十字光标。
+    private func inspectTap(plotWidth: CGFloat, hitHeight: CGFloat? = nil) -> some Gesture {
         SpatialTapGesture()
             .onEnded { value in
+                if let h = hitHeight,
+                   let hit = hitTest(value.location, plotWidth: plotWidth, height: h) {
+                    cursorIndex = nil
+                    selectedElement = hit
+                    return
+                }
                 let range = visibleRange(plotWidth: plotWidth)
                 let rel = Double(value.location.x / range.candleWidth) + range.firstVisible
                 let idx = max(0, min(candles.count - 1, Int(rel.rounded())))
                 cursorIndex = (cursorIndex == idx) ? nil : idx
             }
+    }
+
+    // MARK: - 元素命中与高亮
+
+    /// 点到线段 ab 的距离。
+    private func distance(_ p: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat {
+        let dx = b.x - a.x, dy = b.y - a.y
+        let len2 = dx * dx + dy * dy
+        guard len2 > 0 else { return hypot(p.x - a.x, p.y - a.y) }
+        let t = max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2))
+        return hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
+    }
+
+    private func point(_ time: String, _ price: Double, range: VisibleRange, height: CGFloat,
+                       bounds: PriceBounds) -> CGPoint? {
+        guard let i = timeIndex[time] else { return nil }
+        return CGPoint(x: x(for: i, range: range), y: y(for: price, height: height, bounds: bounds))
+    }
+
+    /// 命中判定：只看图例里打开的图层；按「买卖点 > 背驰 > 分型 > 笔 > 线段 > 中枢」优先，
+    /// 同一层取最近的。阈值按手指大小给（约 10–22pt）。
+    private func hitTest(_ loc: CGPoint, plotWidth: CGFloat, height: CGFloat) -> ChartElement? {
+        let range = visibleRange(plotWidth: plotWidth)
+        let bounds = visiblePriceBounds(range: range)
+        func pt(_ t: String, _ p: Double) -> CGPoint? { point(t, p, range: range, height: height, bounds: bounds) }
+
+        if vm.showSignals {
+            // 徽标画在价格下方（买）/上方（卖）约 19pt，端点本身也算
+            let hit = analysis.signals.compactMap { s -> (Signal, CGFloat)? in
+                guard let p = pt(s.time, s.price) else { return nil }
+                let badge = CGPoint(x: p.x, y: p.y + (s.isBuy ? 19 : -19))
+                let d = min(hypot(loc.x - badge.x, loc.y - badge.y), hypot(loc.x - p.x, loc.y - p.y))
+                return d < 20 ? (s, d) : nil
+            }.min { $0.1 < $1.1 }
+            if let (s, _) = hit { return .signal(s) }
+        }
+        let strokes = analysis.strokes
+        if vm.showDivergences, strokes.count >= 3 {
+            var best: (ChartElement, CGFloat)?
+            for k in 2..<strokes.count where strokes[k].diverged == true && strokes[k - 2].direction == strokes[k].direction {
+                guard let a = pt(strokes[k - 2].endTime, strokes[k - 2].endPrice),
+                      let b = pt(strokes[k].endTime, strokes[k].endPrice) else { continue }
+                let d = distance(loc, a, b)
+                if d < 12, d < (best?.1 ?? .infinity) { best = (.divergence(current: strokes[k], previous: strokes[k - 2]), d) }
+            }
+            if let best { return best.0 }
+        }
+        if vm.showFractals {
+            let hit = analysis.fractals.compactMap { f -> (Fractal, CGFloat)? in
+                guard let p = pt(f.time, f.price) else { return nil }
+                let d = hypot(loc.x - p.x, loc.y - p.y)
+                return d < 12 ? (f, d) : nil
+            }.min { $0.1 < $1.1 }
+            if let (f, _) = hit { return .fractal(f) }
+        }
+        if vm.showStrokes {
+            let hit = strokes.compactMap { s -> (Stroke, CGFloat)? in
+                guard let a = pt(s.startTime, s.startPrice), let b = pt(s.endTime, s.endPrice) else { return nil }
+                let d = distance(loc, a, b)
+                return d < 10 ? (s, d) : nil
+            }.min { $0.1 < $1.1 }
+            if let (s, _) = hit { return .stroke(s) }
+        }
+        if vm.showSegments {
+            let hit = analysis.segments.compactMap { s -> (Segment, CGFloat)? in
+                guard let a = pt(s.startTime, s.startPrice), let b = pt(s.endTime, s.endPrice) else { return nil }
+                let d = distance(loc, a, b)
+                return d < 10 ? (s, d) : nil
+            }.min { $0.1 < $1.1 }
+            if let (s, _) = hit { return .segment(s) }
+        }
+        if vm.showPivots {
+            // 线段级中枢更大，先看笔级（更小、更具体）
+            for p in analysis.strokePivots + analysis.segmentPivots {
+                guard let a = pt(p.startTime, p.zg), let b = pt(p.endTime, p.zd) else { continue }
+                if CGRect(x: a.x, y: a.y, width: max(2, b.x - a.x), height: max(1, b.y - a.y)).contains(loc) {
+                    return .pivot(p)
+                }
+            }
+        }
+        return nil
+    }
+
+    /// 选中元素的高亮：白色描边，让说明卡片说的是哪一个一目了然。
+    private func drawSelection(_ ctx: GraphicsContext, _ e: ChartElement, height: CGFloat,
+                               range: VisibleRange, bounds: PriceBounds) {
+        func pt(_ t: String, _ p: Double) -> CGPoint? { point(t, p, range: range, height: height, bounds: bounds) }
+        let glow = Color.white.opacity(0.9)
+        func line(_ a: CGPoint?, _ b: CGPoint?, _ w: CGFloat) {
+            guard let a, let b else { return }
+            var path = Path(); path.move(to: a); path.addLine(to: b)
+            ctx.stroke(path, with: .color(glow), style: StrokeStyle(lineWidth: w, lineCap: .round))
+        }
+        func ring(_ c: CGPoint?, _ r: CGFloat) {
+            guard let c else { return }
+            ctx.stroke(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)),
+                       with: .color(glow), lineWidth: 2)
+        }
+        switch e {
+        case .fractal(let f): ring(pt(f.time, f.price), 7)
+        case .stroke(let s): line(pt(s.startTime, s.startPrice), pt(s.endTime, s.endPrice), 3)
+        case .segment(let s): line(pt(s.startTime, s.startPrice), pt(s.endTime, s.endPrice), 4)
+        case .signal(let s): ring(pt(s.time, s.price), 8)
+        case .divergence(let c, let p): line(pt(p.endTime, p.endPrice), pt(c.endTime, c.endPrice), 2.5)
+        case .pivot(let p):
+            guard let a = pt(p.startTime, p.zg), let b = pt(p.endTime, p.zd) else { return }
+            ctx.stroke(Path(CGRect(x: a.x, y: a.y, width: max(2, b.x - a.x), height: max(1, b.y - a.y))),
+                       with: .color(glow), lineWidth: 2)
+        }
     }
 
     /// 把手指横坐标换算成 K 线下标（光标定位/滑动共用）。
