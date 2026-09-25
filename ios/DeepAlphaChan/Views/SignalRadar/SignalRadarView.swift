@@ -383,7 +383,7 @@ struct SignalRadarView: View {
         let maxDiameter = max(1, min(w, h) - 2 * RadarBubbleMetrics.edgePadding)
         // 每次布局每个信号只测量一次，排序和避让都使用最终尺寸。
         let metrics = signals.map { signal in
-            RadarBubbleMetrics(symbol: signal.symbol,
+            RadarBubbleMetrics(symbol: signal.symbol, name: signal.name,
                                baseDiameter: diameter(forStrength: signal.signalStrength) * ringSizeFactor(forDaysAgo: age(signal)),
                                maxDiameter: maxDiameter)
         }

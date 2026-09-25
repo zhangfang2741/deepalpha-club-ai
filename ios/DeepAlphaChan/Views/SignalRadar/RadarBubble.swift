@@ -83,14 +83,13 @@ struct RadarBubble: View {
                     .minimumScaleFactor(0.1)
                     .allowsTightening(true)
                     .foregroundColor(.white)
-                // 小气泡放不下两行时只显示代码（见 RadarBubbleMetrics.showsName）
-                if metrics.showsName {
-                    Text(signal.name)
-                        .font(Font(metrics.nameFont))
-                        .foregroundColor(.white.opacity(0.92))
-                        .lineLimit(1)
-                        .padding(.horizontal, 4)
-                }
+                // 名称始终显示：尺寸计算已保证两行放得下（见 RadarBubbleMetrics）
+                Text(signal.name)
+                    .font(Font(metrics.nameFont))
+                    .foregroundColor(.white.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .padding(.horizontal, 4)
             }
             .frame(width: metrics.textWidth)
             .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
