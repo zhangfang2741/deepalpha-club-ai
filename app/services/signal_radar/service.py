@@ -38,7 +38,7 @@ from app.schemas.signal_radar import (
 from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
 from app.services.chan.pivot_phase import PivotPhase
 from app.services.chan.replay import pivot_phase_as_of
-from app.services.chan.sub_level_service import analyze_sub_level
+from app.services.chan.sub_level_service import current_sub_level
 from app.services.signal_radar.constituents import resolve_constituents
 from app.services.signal_radar.universe import get_universe, list_universes
 from app.services.skills.kline import fetch_kline
@@ -288,23 +288,23 @@ def build_days(
 
 
 async def attach_sub_levels(
-    day: RadarDayOut, daily_results: dict[str, ChanAnalysisResult], *,
-    end_date: str, user_id: int | None, redis: Redis | None,
+    day: RadarDayOut, *, end_date: str, user_id: int | None, redis: Redis | None,
 ) -> None:
     """给某一天的入榜气泡补算次级别结论（原地写入 sub_level_verdict/label）。
 
-    只对入榜的候选（约 top_n 只）拉 30 分钟，控制请求量；缺日线结果或补算失败的
-    候选留空，不影响榜单。
+    走与详情页相同的唯一入口 current_sub_level（固定口径 + 结论缓存），refresh=True
+    重算并覆盖缓存——点进详情读到的就是这一次的结论，气泡与详情不会各算各的。
+    中英文各算一份写缓存（详情页按界面语言读取）。补算失败的候选留空，不影响榜单。
     """
     sem = asyncio.Semaphore(_SUB_LEVEL_CONCURRENCY)
 
     async def _one(sig: RadarSignalOut) -> None:
-        daily = daily_results.get(sig.symbol)
-        if daily is None:
-            return
         async with sem:
             try:
-                sub = await analyze_sub_level(sig.symbol, end_date, daily, user_id=user_id, redis=redis)
+                sub = await current_sub_level(sig.symbol, "daily", end_date=end_date, user_id=user_id,
+                                              redis=redis, lang="zh", refresh=True)
+                await current_sub_level(sig.symbol, "daily", end_date=end_date, user_id=user_id,
+                                        redis=redis, lang="en", refresh=True)
             except Exception as e:  # noqa: BLE001 单只补算失败不影响榜单
                 logger.warning("signal_radar_sub_level_failed", symbol=sig.symbol, error=str(e))
                 return
@@ -349,18 +349,7 @@ async def refresh_sub_levels(
     if snapshot is None or not snapshot.days:
         return False
     day = snapshot.days[0]
-    today = date.today()
-    end_date = today.isoformat()
-    start_date = _fetch_start(today, window)
-
-    async def _daily(sig: RadarSignalOut) -> tuple[str, ChanAnalysisResult | None]:
-        _, _, result = await _scan_symbol(sig.symbol, sig.name, user_id=user_id, start_date=start_date,
-                                          end_date=end_date, redis=redis)
-        return sig.symbol, result
-
-    pairs = await asyncio.gather(*[_daily(sig) for sig in day.signals])
-    daily_results = {sym: res for sym, res in pairs if res is not None}
-    await attach_sub_levels(day, daily_results, end_date=end_date, user_id=user_id, redis=redis)
+    await attach_sub_levels(day, end_date=date.today().isoformat(), user_id=user_id, redis=redis)
 
     latest = await _read_cache(redis, market, universe_key)
     if latest is None or not latest.days or latest.days[0].date != day.date:
@@ -378,7 +367,7 @@ async def refresh_sub_levels(
         logger.warning("signal_radar_sub_level_write_error", market=market, error=str(e))
         return False
     logger.info("signal_radar_sub_levels_refreshed", market=market, universe=universe_key,
-                symbols=len(daily_results))
+                symbols=len(day.signals))
     return True
 
 
@@ -530,8 +519,6 @@ async def compute_market(
     scanned = await asyncio.gather(*[_one(sym, name) for sym, name in constituents])
     histories = [h for h, _, _ in scanned if h]
     failure_counts = Counter(f for _, f, _ in scanned if f)
-    daily_results = {sym: daily for (sym, _), (_, _, daily) in zip(constituents, scanned, strict=True)
-                     if daily is not None}
 
     # 展示的交易日历：用 ETF 自身的日线拿真实交易日（含具体哪几天开市），
     # 拿不到就退化成「跳过周末」的近似日历。
@@ -561,7 +548,7 @@ async def compute_market(
     )
     if resp.days:
         # 次级别结论描述的是「现在」，只给最新交易日的入榜气泡补算
-        await attach_sub_levels(resp.days[0], daily_results, end_date=end_date, user_id=user_id, redis=redis)
+        await attach_sub_levels(resp.days[0], end_date=end_date, user_id=user_id, redis=redis)
         resp.sub_level_as_of = datetime.now(UTC).replace(microsecond=0).isoformat()
     failed_symbols = sum(failure_counts.values())
     failure_rate = failed_symbols / len(constituents) if constituents else 0.0

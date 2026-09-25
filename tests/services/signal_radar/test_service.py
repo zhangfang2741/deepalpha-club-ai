@@ -350,28 +350,29 @@ class TestAttachSubLevels:
         return RadarDayOut(date="2026-09-24", buy_count=3, sell_count=0,
                            signals=[sig("AAPL"), sig("NVDA"), sig("MSFT")])
 
-    async def test_fills_verdict_for_symbols_with_daily_result(self, monkeypatch):
-        from app.services.chan.analyzer import ChanAnalysisResult
-        from app.services.chan.sub_level import SubLevelResult
+    async def test_fills_verdict_via_shared_entry(self, monkeypatch):
+        """走与详情页相同的 current_sub_level（refresh=True、中英各一份）；补算失败留空。"""
+        from app.schemas.chan import SubLevelResponse
         from app.services.signal_radar import service
 
-        async def fake_sub(symbol, end_date, daily, **kwargs):
+        calls = []
+
+        async def fake_current(symbol, parent_freq="daily", **kwargs):
+            calls.append((symbol, parent_freq, kwargs.get("lang"), kwargs.get("refresh")))
             if symbol == "NVDA":
                 raise RuntimeError("boom")
-            return SubLevelResult(daily_bias="bullish", daily_bias_label="偏强", verdict="resonance_buy",
-                                  verdict_label="共振买点", detail="")
+            return SubLevelResponse(symbol=symbol, daily_bias="bullish", daily_bias_label="偏强", sub_freq="30min",
+                                    verdict="resonance_buy", verdict_label="共振买点", detail="")
 
-        monkeypatch.setattr(service, "analyze_sub_level", fake_sub)
+        monkeypatch.setattr(service, "current_sub_level", fake_current)
         day = self._day()
-        results = {"AAPL": ChanAnalysisResult(symbol="AAPL", bars_count=1),
-                   "NVDA": ChanAnalysisResult(symbol="NVDA", bars_count=1)}
-        await service.attach_sub_levels(day, results, end_date="2026-09-24", user_id=None, redis=None)
+        await service.attach_sub_levels(day, end_date="2026-09-24", user_id=None, redis=None)
 
         by_sym = {s.symbol: s for s in day.signals}
         assert by_sym["AAPL"].sub_level_verdict == "resonance_buy"
         assert by_sym["AAPL"].sub_level_label == "共振买点"
         assert by_sym["NVDA"].sub_level_verdict is None   # 补算失败留空
-        assert by_sym["MSFT"].sub_level_verdict is None   # 没有日线结果留空
+        assert ("AAPL", "daily", "zh", True) in calls and ("AAPL", "daily", "en", True) in calls
 
 
 class TestSubLevelRefresh:
@@ -389,20 +390,15 @@ class TestSubLevelRefresh:
                                                                           signals=[sig("AAPL"), sig("NVDA")])])
 
     def _patch(self, monkeypatch, on_sub=None):
-        from app.services.chan.analyzer import ChanAnalysisResult
-        from app.services.chan.sub_level import SubLevelResult
+        from app.schemas.chan import SubLevelResponse
 
-        async def fake_scan(symbol, name, **kwargs):
-            return [], None, ChanAnalysisResult(symbol=symbol, bars_count=1)
-
-        async def fake_sub(symbol, end_date, daily, **kwargs):
+        async def fake_current(symbol, parent_freq="daily", **kwargs):
             if on_sub:
                 await on_sub()
-            return SubLevelResult(daily_bias="bearish", daily_bias_label="偏弱", verdict="resonance_sell",
-                                  verdict_label="共振卖点", detail="")
+            return SubLevelResponse(symbol=symbol, daily_bias="bearish", daily_bias_label="偏弱", sub_freq="30min",
+                                    verdict="resonance_sell", verdict_label="共振卖点", detail="")
 
-        monkeypatch.setattr(svc, "_scan_symbol", fake_scan)
-        monkeypatch.setattr(svc, "analyze_sub_level", fake_sub)
+        monkeypatch.setattr(svc, "current_sub_level", fake_current)
 
     async def test_refresh_updates_verdicts_and_keeps_ttl(self, monkeypatch):
         from datetime import UTC, datetime

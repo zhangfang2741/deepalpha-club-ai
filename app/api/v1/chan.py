@@ -28,7 +28,6 @@ from app.schemas.chan import (
     PivotPhaseOut,
     RecommendationOut,
     SegmentOut,
-    SignalOut,
     StageGuideOut,
     StageGuideStepOut,
     StrokeOut,
@@ -39,8 +38,8 @@ from app.schemas.chan import (
 )
 from app.services.chan.analyzer import ChanAnalyzer
 from app.services.chan.gap import analyze_structure_gap
-from app.services.chan.signals import Signal
-from app.services.chan.sub_level_service import analyze_sub_level
+from app.services.chan.sub_level_service import current_sub_level
+from app.services.chan.sub_level_service import signal_out as _signal_out
 from app.services.skills.kline import fetch_kline
 
 router = APIRouter()
@@ -85,22 +84,6 @@ def _anchor_start(start_date: str, freq: str, warmup_days: int | None = None) ->
 def _zip_divergences(strokes: list, divergences: list) -> list[tuple]:
     """笔与笔级背驰按下标平行；笔数不足 3 的早退分支不计算背驰（列表为空），此时补 None。"""
     return [(s, divergences[i] if i < len(divergences) else None) for i, s in enumerate(strokes)]
-
-
-def _signal_out(sig: Signal) -> SignalOut:
-    return SignalOut(
-        type=sig.type,
-        label=sig.label,
-        time=sig.time,
-        price=sig.price,
-        strength=sig.strength,
-        is_buy=sig.is_buy,
-        description=sig.description,
-        confirmed=sig.confirmed,
-        price_ratio=sig.divergence.price_ratio if sig.divergence else None,
-        volume_ratio=sig.divergence.volume_ratio if sig.divergence else None,
-        length_ratio=sig.divergence.length_ratio if sig.divergence else None,
-    )
 
 
 async def _fetch_bars_or_http_error(
@@ -386,22 +369,14 @@ async def chan_sub_level(
     """
     logger.info("chan_sub_level_request", user_id=user.id, symbol=symbol, end=end_date,
                 parent_freq=parent_freq)
-    anchor_start = _anchor_start(start_date, parent_freq, warmup_days)
-    bars = await _fetch_bars_or_http_error(user.id, symbol, anchor_start, end_date, parent_freq, redis)
-    parent = _analyzer.analyze(symbol, bars, lang=lang, visible_from=start_date, freq=parent_freq)
-    sub = await analyze_sub_level(symbol, end_date, parent, user_id=user.id, redis=redis, lang=lang,
-                                  parent_freq=parent_freq)
-    return SubLevelResponse(
-        symbol=symbol,
-        parent_freq=sub.parent_freq,
-        daily_bias=sub.daily_bias,
-        daily_bias_label=sub.daily_bias_label,
-        sub_freq=sub.sub_freq,
-        verdict=sub.verdict,
-        verdict_label=sub.verdict_label,
-        detail=sub.detail,
-        recent_signals=[_signal_out(sig) for sig in sub.recent_signals],
-    )
+
+    async def fetch_parent(start: str, end: str, freq: str) -> list[dict]:
+        return await _fetch_bars_or_http_error(user.id, symbol, start, end, freq, redis)
+
+    # 与信号雷达共用唯一入口（固定口径 + 结论缓存）：气泡上的共振与这里是同一次计算。
+    # start_date 不再参与次级别计算（结论描述「现在」，与详情页日期范围无关），保留兼容。
+    return await current_sub_level(symbol, parent_freq, end_date=end_date, user_id=user.id,
+                                   redis=redis, lang=lang, fetch_parent=fetch_parent)
 
 
 @router.post("/gap", response_model=GapJobStatus)

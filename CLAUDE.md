@@ -201,6 +201,8 @@ deepalpha-club-ai/
 - **次级别确认**（`sub_level.py` 纯函数 + `sub_level_service.py` 编排，接口 `GET /chan/sub-level`）：
   级别逐级递推不跨级（`LEVEL_PAIRS`，`parent_freq` 参数）：日线 × 30 分钟最近 2 个交易日、
   周线 × 日线最近两周。大级别 `recommendation.bias` 定方向 × 次级别买卖点 → 共振/逆势/等待/不可用；
+  **唯一入口 `current_sub_level`**：雷达气泡与详情页共用（固定口径：大级别窗口不随详情页日期范围变、
+  截止日取服务器当天、代码归一化；按结论缓存 1h，雷达盘中每 30 分钟 refresh 覆盖），不要再各算各的。
   30 分钟失败只降级为 unavailable，不影响日线。30 分钟数据：美股 FMP 分段拉取，港股/A 股
   Yahoo `30m`（上限约 60 天）。分钟线时间为交易所本地 `YYYY-MM-DD HH:MM`（`ts_date` 零点才输出纯日期）。
   信号雷达只对最新交易日入榜气泡补算（`attach_sub_levels`）。
