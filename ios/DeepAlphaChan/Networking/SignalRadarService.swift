@@ -12,4 +12,10 @@ enum SignalRadarService {
         if refresh { query["refresh"] = "true" }
         return try await APIClient.shared.get("/signal-radar", query: query)
     }
+
+    /// 免费预览：未订阅高级版用户唯一能点开的一天（后端固定算「上个月 1 号」，
+    /// 随当前月份自动滚动），真实数据，可能返回 status=generating 需要轮询。
+    static func demo(market: String) async throws -> SignalRadarResponse {
+        try await APIClient.shared.get("/signal-radar/demo", query: ["market": market])
+    }
 }

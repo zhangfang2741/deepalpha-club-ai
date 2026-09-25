@@ -29,9 +29,11 @@ struct SignalRadarView: View {
     @StateObject private var panicVM = PanicIndexViewModel()
     @EnvironmentObject private var orientation: AppOrientation
     @EnvironmentObject private var store: StoreManager
-    /// 信号雷达（气泡场）是高级版专属功能，未订阅时展示钉死某一天的示例数据
-    /// （见 RadarDemoData / demoBubbleField），点 demoNoticeBanner 或示例气泡
-    /// 弹这个付费墙。恐慌指数小卡片（PanicIndexStrip）不受影响，所有用户可见。
+    @EnvironmentObject private var usage: UsageTracker
+    /// 信号雷达（气泡场）是高级版专属功能，未订阅时只展示「上个月 1 号」这一天的真实快照
+    /// （见 RadarDemoViewModel / demoBubbleField）——相当于在雷达时间轴末尾多露出这一天，
+    /// 点进气泡走真实分析（消耗免费额度），不是钉死的示例假数据。
+    @StateObject private var demoVM = RadarDemoViewModel()
     @State private var showPaywall = false
     /// 使用雷达前的风险确认：已订阅但还没勾选同意过，先挡在 consentView，
     /// 不直接看到买卖点气泡。
@@ -59,14 +61,26 @@ struct SignalRadarView: View {
                 PanicIndexStrip(radarVM: vm, panicVM: panicVM)
 
                 if !store.isPremium {
-                    // 未订阅：不发真实雷达请求，展示钉死某一天的示例数据（RadarDemoData）——
-                    // 既能让用户看到"这功能长什么样"，又不会把当下可操作的真实信号免费泄露。
-                    demoMetaRow
-                    demoBubbleField
-                    demoNoticeBanner
-                    legend
-                    Spacer(minLength: 0)
-                    compactDisclaimer
+                    // 未订阅高级版：不发真实雷达滚动窗口请求，只展示「上个月 1 号」这一天
+                    // 的真实快照（demoVM）——既能让用户看到功能长什么样、点进去也是真分析，
+                    // 又不会把当下可操作的实时信号免费泄露。
+                    if demoVM.isLoading {
+                        demoScanningView
+                    } else if demoVM.isComputingInBackground {
+                        demoComputingView
+                    } else if let error = demoVM.errorMessage {
+                        errorView(error) { await demoVM.load(market: vm.market) }
+                    } else if let day = demoVM.day {
+                        demoMetaRow(day)
+                        demoBubbleField(day)
+                        demoNoticeBanner
+                        legend
+                        Spacer(minLength: 0)
+                        compactDisclaimer
+                    } else {
+                        demoNoticeBanner
+                        Spacer(minLength: 0)
+                    }
                 } else if !consent.hasAgreed {
                     consentView
                 } else if vm.isScanning {
@@ -74,7 +88,7 @@ struct SignalRadarView: View {
                 } else if vm.isComputingInBackground {
                     computingView
                 } else if let error = vm.errorMessage {
-                    errorView(error)
+                    errorView(error) { await vm.load() }
                 } else if vm.days.isEmpty {
                     emptyView
                 } else {
@@ -107,9 +121,12 @@ struct SignalRadarView: View {
             .background(Theme.background)
             .navigationTitle(L("缠论信号"))
             .navigationBarTitleDisplayMode(.inline)
-            // 未订阅时展示的是钉死数据的 RadarDemoData（见上面 demoBubbleField），
-            // 不需要真实雷达数据，这个请求只留给高级版用户。
+            // 高级版用户拉真实滚动窗口雷达；未订阅用户只拉「上个月 1 号」这一天的真实快照
+            // （demoVM），市场切换时 .task(id:) 自动取消旧请求、重新拉一次。
             .task { if store.isPremium { vm.onAppear() } }
+            .task(id: vm.market) {
+                if !store.isPremium { await demoVM.load(market: vm.market) }
+            }
             // 付费墙里订阅成功（tier 变化）后，若已具备高级版权益且尚未拉过数据，
             // 立刻补拉一次——不用退出再进这个 Tab 才刷新。
             .onChange(of: store.isPremium) { _, isPremium in
@@ -132,17 +149,16 @@ struct SignalRadarView: View {
         }
     }
 
-    // MARK: - 未订阅示例数据（RadarDemoData）
+    // MARK: - 未订阅高级版：免费预览（上个月 1 号真实快照，RadarDemoViewModel）
 
-    /// 示例数据版的说明行：跟 metaRow 布局一致，多一个「示例数据」角标，
-    /// 避免用户把钉死的历史数据误当成今天的实时信号。
-    private var demoMetaRow: some View {
-        let day = RadarDemoData.day(for: vm.market)
-        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+    /// 免费预览的说明行：跟 metaRow 布局一致，多一个「历史快照」角标，
+    /// 提示这是过去某一天的数据、不是今天的实时信号（但确实是真实计算结果）。
+    private func demoMetaRow(_ day: RadarDay) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(day.date)
                 .font(.caption)
                 .foregroundColor(Theme.textSecondary)
-            Text(L("示例数据"))
+            Text(L("历史快照"))
                 .font(.system(size: 9, weight: .bold))
                 .foregroundColor(.white)
                 .padding(.horizontal, 6).padding(.vertical, 2)
@@ -156,14 +172,13 @@ struct SignalRadarView: View {
         }
     }
 
-    /// 示例数据版的气泡场：跟 bubbleField 共用背景光晕/参考环（fieldDecoration）与
-    /// 摆位算法（layoutBubbles），数据源换成 RadarDemoData；气泡可点，点开直接弹付费墙
-    /// （不会像真实气泡那样跳去分析详情页——示例标的不该被当真去做分析）。
-    private var demoBubbleField: some View {
+    /// 免费预览版的气泡场：跟 bubbleField 共用背景光晕/参考环（fieldDecoration）与
+    /// 摆位算法（layoutBubbles），数据是后端真实算出的「上个月 1 号」快照；气泡可点，
+    /// 点开跟高级版一样走真实分析详情页（会消耗免费每日额度），不是弹付费墙糊弄过去。
+    private func demoBubbleField(_ day: RadarDay) -> some View {
         GeometryReader { geo in
             let w = Double(geo.size.width)
             let h = Double(geo.size.height)
-            let day = RadarDemoData.day(for: vm.market)
             let signals = day.signals.sorted { $0.strength > $1.strength }
             let layouts = SignalRadarView.layoutBubbles(signals: signals, dayDate: day.date, width: w, height: h)
             ZStack {
@@ -179,7 +194,9 @@ struct SignalRadarView: View {
                             side: layout.signal.side,
                             depth: SignalFormatting.strengthDepth(layout.signal.signalStrength)),
                         isNew: false,
-                        onOpen: { showPaywall = true }
+                        onOpen: {
+                            openSymbol(layout.signal.symbol, name: layout.signal.name, dayDate: day.date)
+                        }
                     )
                     .transition(.identity)
                 }
@@ -196,12 +213,12 @@ struct SignalRadarView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
-    /// 示例数据下方的解锁横幅：说明这是示例、真实数据要订阅才能看。
+    /// 免费预览下方的解锁横幅：说明这只是历史上的一天，订阅才能看每天的实时信号。
     private var demoNoticeBanner: some View {
         Button { showPaywall = true } label: {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles").foregroundColor(Theme.segment).font(.caption)
-                Text(L("以上为示例数据，订阅高级版查看每日实时信号 ›"))
+                Text(L("以上为历史快照，订阅高级版查看每日实时信号 ›"))
                     .font(.caption).foregroundColor(Theme.textPrimary)
                 Spacer()
             }
@@ -210,6 +227,30 @@ struct SignalRadarView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
+    }
+
+    /// 免费预览首次拉取时的等待态，文案与 scanningView 呼应但更简短（只算一天，不是全量扫描）。
+    private var demoScanningView: some View {
+        VStack(spacing: 12) {
+            ProgressView().tint(Theme.accent)
+            Text(L("正在加载历史快照…"))
+                .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// 免费预览轮询用尽但后端仍在算（该市场第一次有人打开时会遇到）。
+    private var demoComputingView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "hourglass")
+                .font(.largeTitle).foregroundColor(Theme.textSecondary)
+            Text(L("首次计算较久，已在后台计算，稍后点重试即可查看"))
+                .font(.footnote).foregroundColor(Theme.textSecondary)
+                .multilineTextAlignment(.center).padding(.horizontal, 40)
+            Button(L("重试")) { Task { await demoVM.load(market: vm.market) } }
+                .buttonStyle(.borderedProminent).tint(Theme.accent)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity).padding()
     }
 
     // MARK: - 使用前风险确认
@@ -317,12 +358,21 @@ struct SignalRadarView: View {
     /// K 线，且整段都可见——买卖点集合与雷达一致（连更早、超过 90 天的买卖点也照常显示，
     /// 不会因可见窗口太窄被挡掉）。270 = 雷达的 warmup(180) + window*2(90)，见后端
     /// signal_radar/service.py。
-    private func openSymbol(_ symbol: String, name: String? = nil) {
+    ///
+    /// dayDate：来自免费预览（demoBubbleField）时传该气泡所属的快照日期（覆盖
+    /// vm.selectedDay?.date，那边未订阅时压根没有真实雷达响应）。未订阅时这次分析
+    /// 跟分析 Tab 一样走每日免费额度（usage.canUseFree/recordUse），额度用尽弹付费墙，
+    /// 不能绕开——免费预览只是多给了一天可点的真实信号，不是无限次分析的后门。
+    private func openSymbol(_ symbol: String, name: String? = nil, dayDate: String? = nil) {
+        if !store.isSubscribed && !usage.canUseFree(symbol: symbol) {
+            showPaywall = true
+            return
+        }
         // 截止到「现在」：详情页要有最新K线（盘中也是）。之前截止到雷达扫描日 as_of，A 股/港股
         // 盘中点进去永远只有前一交易日。起点仍按 as_of 往前 270 天，与雷达扫描窗口的左端对齐，
         // 结构尽量一致；右端多出来的新K线可能改写最新几笔，弹层已说明「以详情页为准」。
         let m = vm.market.rawValue
-        let asOf = QueryDates.date(from: vm.response?.asOf ?? "", market: m) ?? Date()
+        let asOf = QueryDates.date(from: dayDate ?? vm.response?.asOf ?? "", market: m) ?? Date()
         let start = QueryDates.adding(days: -270, to: asOf, market: m)
         let end = Date()
         chanVM.apply(
@@ -331,10 +381,11 @@ struct SignalRadarView: View {
             startDate: start, endDate: end, freq: "daily", warmupDays: 0,
             // 雷达快照日期：详情页据此把可见窗口居中、画一条竖线标出来，
             // 让用户看得出分析的是雷达上正在看的那一天，不是默认的「最新」。
-            anchorDate: vm.selectedDay?.date)
+            anchorDate: dayDate ?? vm.selectedDay?.date)
         Task {
             await chanVM.runAnalysis()
             if chanVM.errorMessage == nil, chanVM.analysis != nil {
+                if !store.isSubscribed { usage.recordUse(symbol: symbol) }
                 showResults = true
             }
         }
@@ -395,8 +446,8 @@ struct SignalRadarView: View {
 
     // MARK: - 气泡场
 
-    /// 气泡场的背景装饰：中心光晕 + 同心参考环，bubbleField（真实数据）与
-    /// demoBubbleField（示例数据）共用同一套视觉，只是气泡数据源不同。
+    /// 气泡场的背景装饰：中心光晕 + 同心参考环，bubbleField（真实滚动窗口）与
+    /// demoBubbleField（免费预览的真实历史快照）共用同一套视觉，只是气泡数据源不同。
     @ViewBuilder
     private func fieldDecoration(width w: Double, height h: Double) -> some View {
         let base = min(w, h)
@@ -1058,13 +1109,14 @@ struct SignalRadarView: View {
         }
     }
 
-    private func errorView(_ message: String) -> some View {
+    /// retry：高级版滚动窗口错误态传 vm.load，免费预览错误态传 demoVM.load，复用同一个视图。
+    private func errorView(_ message: String, retry: @escaping () async -> Void) -> some View {
         VStack(spacing: 12) {
             Image(systemName: "wifi.exclamationmark")
                 .font(.largeTitle).foregroundColor(Theme.textSecondary)
             Text(message).font(.subheadline).foregroundColor(Theme.textSecondary)
                 .multilineTextAlignment(.center)
-            Button(L("重试")) { Task { await vm.load() } }
+            Button(L("重试")) { Task { await retry() } }
                 .buttonStyle(.borderedProminent).tint(Theme.accent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity).padding()
