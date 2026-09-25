@@ -26,7 +26,7 @@ struct RadarBubble: View {
         content
             .frame(width: diameter, height: diameter)
             .scaleEffect(dragging ? 1.12 : 1.0)
-            .offset(y: isNew ? 0 : floatY)
+            .offset(y: floatY)
             .offset(drag)
             .shadow(color: .black.opacity(dragging ? 0.5 : 0.35),
                     radius: dragging ? 12 : 6, y: dragging ? 8 : 3)
