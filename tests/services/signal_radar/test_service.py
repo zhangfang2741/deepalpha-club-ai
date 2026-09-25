@@ -574,12 +574,43 @@ class TestCompositeRanking:
         assert out.buy_count == 2
 
 
+class TestRefreshConstituents:
+    """用户主动刷新时，成分股（含中文名）也要跟着重建，而不是沿用 24h 缓存。"""
+
+    async def test_compute_market_forwards_refresh_to_constituents(self, monkeypatch):
+        seen: dict = {}
+
+        async def fake_resolve(market, *, redis, universe_key=None, refresh=False):
+            seen["refresh"] = refresh
+            return [("AAPL", "苹果")]
+
+        async def fake_scan(symbol, name, **kwargs):
+            return [], None, None, []
+
+        async def fake_kline(**kwargs):
+            return []
+
+        async def fake_attach(day, **kwargs):
+            return None
+
+        monkeypatch.setattr(svc, "resolve_constituents", fake_resolve)
+        monkeypatch.setattr(svc, "_scan_symbol", fake_scan)
+        monkeypatch.setattr(svc, "fetch_kline", fake_kline)
+        monkeypatch.setattr(svc, "attach_sub_levels", fake_attach)
+
+        await svc.compute_market("us", redis=_FakeRedis(), refresh_constituents=True)
+        assert seen["refresh"] is True
+
+        await svc.compute_market("us", redis=_FakeRedis())
+        assert seen["refresh"] is False
+
+
 class TestComputedAt:
     """computed_at：区分「这份快照算出来的时刻」与 as_of（只是代表哪个交易日）。"""
 
     async def test_compute_market_stamps_computed_at(self, monkeypatch):
         """全量扫描完成后 computed_at 是一个合法的 ISO8601 UTC 时间戳，而不是空字符串。"""
-        async def fake_resolve(market, *, redis, universe_key=None):
+        async def fake_resolve(market, *, redis, universe_key=None, refresh=False):
             return [("AAPL", "苹果")]
 
         async def fake_scan(symbol, name, **kwargs):

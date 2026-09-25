@@ -6,7 +6,7 @@ struct RiskSection: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            SectionCard(title: L("先核对尚未确认的结构"), systemImage: "circle.dashed") {
+            SectionCard(title: L("先核对尚未确认的结构"), systemImage: "circle.dashed", titleFont: AnalysisType.title) {
                 Text(L("与图表、雷达一致：虚线表示未确认，不表示看空。已确认也不代表后续价格必然按预期发展。"))
                     .font(AnalysisType.body)
                     .foregroundStyle(Theme.textSecondary)
@@ -17,20 +17,20 @@ struct RiskSection: View {
                         .foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    BulletList(items: AnalysisInterpretation.displayedPendingNotes(analysis), color: Theme.textPrimary)
+                    BulletList(items: AnalysisInterpretation.displayedPendingNotes(analysis), color: Theme.textSecondary)
                 }
             }
-            SectionCard(title: L("其他风险与限制"), systemImage: "exclamationmark.triangle") {
+            SectionCard(title: L("其他风险与限制"), systemImage: "exclamationmark.triangle", titleFont: AnalysisType.title) {
                 if AnalysisInterpretation.displayedOtherRisks(analysis).isEmpty {
                     Text(L("本次分析未提供额外风险条目，不代表没有风险。"))
                         .font(AnalysisType.body)
                         .foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    BulletList(items: AnalysisInterpretation.displayedOtherRisks(analysis), color: Theme.textPrimary)
+                    BulletList(items: AnalysisInterpretation.displayedOtherRisks(analysis), color: Theme.textSecondary)
                 }
             }
-            SectionCard(title: L("使用这些信息前"), systemImage: "checklist") {
+            SectionCard(title: L("使用这些信息前"), systemImage: "checklist", titleFont: AnalysisType.title) {
                 Text(L("先核对周期与中枢级别，再看信号是否确认。背驰表示力度减弱，不等于反转；历史信号也不等于当前仍有同样的条件。"))
                     .font(AnalysisType.body)
                     .foregroundStyle(Theme.textSecondary)

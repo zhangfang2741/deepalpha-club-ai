@@ -36,7 +36,8 @@ from app.services.signal_radar.universe import (
 from app.utils.market import InvalidSymbolError, fmp_symbol, normalize
 
 # v2：美股无中文名改为留空，旧缓存里的英文全称需要失效
-_CACHE_PREFIX = "signal_radar:constituents:v2"
+# v3：美股中文名接入东方财富后，旧缓存里大量空名称需要一次性失效重建
+_CACHE_PREFIX = "signal_radar:constituents:v3"
 _CACHE_TTL = 3600 * 24  # 24h
 _MIN_VALID = 20          # 动态结果至少这么多只才采用，否则回退静态
 
@@ -382,19 +383,24 @@ async def _fetch_dynamic(universe: MarketUniverse) -> list[tuple[str, str, float
 
 
 async def resolve_constituents(
-    market: str, *, redis: Redis, universe_key: str | None = None,
+    market: str, *, redis: Redis, universe_key: str | None = None, refresh: bool = False,
 ) -> list[tuple[str, str]]:
-    """解析某 (市场, universe) 的扫描成分股：缓存 → 动态来源 → 静态兜底。"""
+    """解析某 (市场, universe) 的扫描成分股：缓存 → 动态来源 → 静态兜底。
+
+    refresh=True（用户主动刷新）跳过成分股缓存重新解析，让之前没解析出中文名的标的
+    有机会补上；已解析成功的美股中文名有独立 30 天缓存，不会重复查询。
+    """
     universe = get_universe(market, universe_key)
     if universe is None:
         return []
 
     cache_key = f"{_CACHE_PREFIX}:{universe.market}:{universe.key}"
-    try:
-        cached = await redis.get(cache_key)
-    except Exception as e:  # noqa: BLE001
-        logger.warning("signal_radar_constituents_cache_read_error", market=market, error=str(e))
-        cached = None
+    cached = None
+    if not refresh:
+        try:
+            cached = await redis.get(cache_key)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("signal_radar_constituents_cache_read_error", market=market, error=str(e))
     if cached:
         try:
             pairs = json.loads(cached)

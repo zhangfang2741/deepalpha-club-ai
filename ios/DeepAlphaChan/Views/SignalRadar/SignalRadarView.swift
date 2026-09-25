@@ -54,17 +54,20 @@ struct SignalRadarView: View {
                 } else {
                     metaRow
                     bubbleField
-                        // 切换市场/刷新时：气泡清空（见 bubbleField），盖一道旋转的雷达扫描光束表示
-                        // 正在扫描，扫完新气泡直接出现；布局不变，页面不跳动
+                        // 切换市场/刷新时保留旧气泡、调暗，盖转圈 + 文字提示；期间暂不响应点按
+                        // （避免点进上一个市场的标的）；布局不变，页面不跳动
+                        .opacity(vm.isReloading ? 0.35 : 1)
                         .allowsHitTesting(!vm.isReloading)
                         .overlay {
                             if vm.isReloading {
-                                RadarSweep()
-                                    .allowsHitTesting(false)
-                                    .transition(.opacity)
+                                VStack(spacing: 10) {
+                                    ProgressView().tint(Theme.accent)
+                                    Text(L("正在刷新买卖点信号…"))
+                                        .font(.subheadline).foregroundColor(Theme.textSecondary)
+                                }
                             }
                         }
-                        .animation(.easeInOut(duration: 0.3), value: vm.isReloading)
+                        .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
                     legend
                     dateRail
                     Spacer(minLength: 0)
@@ -232,10 +235,7 @@ struct SignalRadarView: View {
                         .position(x: CGFloat(w / 2), y: CGFloat(h / 2) - CGFloat(ry) + 8)
                 }
 
-                if vm.isReloading {
-                    // 刷新/切换市场中：清空气泡，只留参考环、光晕与扫描光束，扫完再淡入新气泡
-                    EmptyView()
-                } else if layouts.isEmpty {
+                if layouts.isEmpty {
                     Text(L("当日无买卖点信号"))
                         .font(.subheadline)
                         .foregroundColor(Theme.textSecondary)
@@ -855,36 +855,5 @@ struct SignalRadarView: View {
         f.locale = Locale(identifier: Localized.language().localeIdentifier)
         f.setLocalizedDateFormatFromTemplate("EEE")
         return f.string(from: d)
-    }
-}
-
-/// 加载中的雷达扫描光束：一道扇形渐变绕场中心匀速旋转，像雷达在扫描。
-/// 叠加（plusLighter）在气泡之上，不遮挡、不调暗原有内容。
-struct RadarSweep: View {
-    @State private var angle: Double = 0
-
-    var body: some View {
-        GeometryReader { geo in
-            let side = hypot(geo.size.width, geo.size.height)
-            AngularGradient(
-                gradient: Gradient(stops: [
-                    .init(color: Theme.accent.opacity(0.0), location: 0.0),
-                    .init(color: Theme.accent.opacity(0.0), location: 0.80),
-                    .init(color: Theme.accent.opacity(0.22), location: 0.97),
-                    .init(color: Theme.accent.opacity(0.55), location: 1.0),
-                ]),
-                center: .center
-            )
-            .frame(width: side, height: side)
-            .rotationEffect(.degrees(angle))
-            .position(x: geo.size.width / 2, y: geo.size.height / 2)
-            .blendMode(.plusLighter)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .onAppear {
-            withAnimation(.linear(duration: 1.6).repeatForever(autoreverses: false)) {
-                angle = 360
-            }
-        }
     }
 }

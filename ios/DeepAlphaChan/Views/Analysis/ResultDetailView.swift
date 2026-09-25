@@ -12,6 +12,17 @@ struct ResultDetailView: View {
 
     @State private var showFullscreenChart = false
 
+    /// 页面可视宽度，取自包在 ScrollView 外面的 GeometryReader。
+    ///
+    /// 不能量 ScrollView 里面的任何内容，也不能量 ScrollView 本身：VStack 会把
+    /// 自己的最终宽度（= 最宽子视图）重新提案给所有子视图，竖向 ScrollView 在
+    /// 内容比它宽时也会跟着内容变宽——只要「当前状态」里的判定图第一帧用设计稿
+    /// 宽度渲染得比屏幕宽，量到的就是撑宽后的值，再拿去定宽只会自我确认、
+    /// 永远缩不回来（整页左右两边都被裁掉）。GeometryReader 的尺寸只由父视图
+    /// 的提案决定、与内容无关，而且在同一轮布局里就能拿到，没有「先错一帧」。
+    /// 这里另存一份只给分享长图（离屏渲染）用。
+    @State private var viewportWidth: CGFloat?
+
     /// 截图与分享按钮共用的预览内容。两条入口合流到同一个 state，
     /// 才能只挂一个 `.sheet` —— 同一层级两个 sheet 在 SwiftUI 里会互相吞掉。
     @State private var previewItem: SharePreviewItem?
@@ -33,10 +44,14 @@ struct ResultDetailView: View {
         // （`proxy.scrollTo("result-sections")`），单纯切个 tab 却把用户已经
         // 往下翻的位置弹掉，体验是"跳来跳去"，已去掉——现在切 tab 只换内容，
         // 不动滚动位置。
-        ScrollView {
-            pageContent(isStatic: false)
+        GeometryReader { geo in
+            ScrollView {
+                pageContent(isStatic: false, width: geo.size.width)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .onAppear { viewportWidth = geo.size.width }
+            .onChange(of: geo.size.width) { _, width in viewportWidth = width }
         }
-        .scrollBounceBehavior(.basedOnSize)
         .background(Theme.background)
         .navigationTitle(navTitle)
         .navigationBarTitleDisplayMode(.inline)
@@ -81,7 +96,7 @@ struct ResultDetailView: View {
     /// 抽成一个方法让屏幕显示与离屏长图复用同一棵视图树，修饰符与顺序保持
     /// 一致——改这里会同时改变页面显示与分享图，两处永不走样。
     /// 分享长图通过 isStatic 隐藏周期与全屏控件，并将 ResultSegments 的三段内容全部展开。
-    private func pageContent(isStatic: Bool) -> some View {
+    private func pageContent(isStatic: Bool, width: CGFloat?) -> some View {
         VStack(spacing: 14) {
             ChartSection(analysis: analysis, vm: vm,
                          onFullscreen: openFullscreen, isStatic: isStatic)
@@ -100,12 +115,15 @@ struct ResultDetailView: View {
                     }
                 }
 
-            ResultSegments(analysis: analysis, isStatic: isStatic)
+            ResultSegments(analysis: analysis, isStatic: isStatic, contentWidth: width.map { max($0 - Theme.contentHInset * 2, 0) })
 
             compactDisclaimer
         }
         .padding(.horizontal, Theme.contentHInset)
         .padding(.vertical, Theme.contentVInset)
+        // 硬性钉死整页宽度 = 可视宽度：页面里任何元素算宽了，都只会在自己
+        // 那一块被裁/挤压，不会把整页撑出屏幕。
+        .frame(width: width)
     }
 
     /// 打开全屏图表（转屏 + 关呈现动画，逻辑同条件页原实现）。
@@ -152,7 +170,7 @@ struct ResultDetailView: View {
     /// 「整个页面的内容」——不含导航栏/TabBar，没滚到的部分也在图里。
     /// 长图通过 PageSnapshot 离屏渲染内容视图得到，两者最终走同一个 ShareComposer。
     private func share() {
-        guard let shot = PageSnapshot.render(pageContent(isStatic: true)),
+        guard let shot = PageSnapshot.render(pageContent(isStatic: true, width: viewportWidth)),
               let composed = ShareComposer.compose(screenshot: shot) else {
             // 与截图入口不同，这里是用户主动点的，静默失败等于点了没反应，必须报错
             showShareError = true

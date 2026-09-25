@@ -8,6 +8,10 @@ struct ResultSegments: View {
     /// 用户当下选中的那一段，所以不走切换器，三段上下全铺，各带小标题。
     var isStatic = false
 
+    /// 透传给 `AnalysisSection` → `PivotPhaseBlock`，见 `ResultDetailView` 里
+    /// `pageContentWidth` 的说明。
+    var contentWidth: CGFloat?
+
     @State private var segment: Segment = .analysis
 
     enum Segment: String, CaseIterable, Identifiable {
@@ -47,7 +51,7 @@ struct ResultSegments: View {
             Group {
                 switch segment {
                 case .analysis:
-                    AnalysisSection(analysis: analysis)
+                    AnalysisSection(analysis: analysis, contentWidth: contentWidth)
                 case .signals:
                     SignalListSection(analysis: analysis, isStatic: isStatic)
                 case .risk:
@@ -85,7 +89,7 @@ struct ResultSegments: View {
     private var staticSections: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionHeader(L("当前状态"))
-            AnalysisSection(analysis: analysis)
+            AnalysisSection(analysis: analysis, contentWidth: contentWidth)
 
             sectionHeader(title(for: .signals))
             SignalListSection(analysis: analysis, isStatic: isStatic)

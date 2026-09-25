@@ -569,6 +569,7 @@ async def compute_market(
     days: int = 30, window: int = 45, top_n: int = DEFAULT_TOP_N,
     max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
     watchlist: list[tuple[str, str]] | None = None,
+    refresh_constituents: bool = False,
 ) -> SignalRadarResponse:
     """全量扫描一个 (市场, universe) 并按日重建快照（不读缓存，计算完写入缓存）。
 
@@ -582,7 +583,8 @@ async def compute_market(
 
     # 成分股：自选用用户清单；否则按 universe 来源策略动态刷新，取不到回退 curated 静态清单。
     constituents = list(watchlist) if watchlist is not None else \
-        await resolve_constituents(market, redis=redis, universe_key=universe.key)
+        await resolve_constituents(market, redis=redis, universe_key=universe.key,
+                                   refresh=refresh_constituents)
 
     today = date.today()
     end_date = today.isoformat()

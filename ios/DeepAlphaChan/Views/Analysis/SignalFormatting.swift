@@ -154,6 +154,8 @@ enum AnalysisType {
     // 调大字号的用户看到的还是这个比例。footnote 13pt，会随动态字体缩放。
     static let body = Font.footnote
     static let label = Font.footnote.weight(.semibold)
+    /// 卡片/条目标题：当前状态、买卖点、风险提示三个 tab 共用同一字号。
+    static let title = Font.subheadline.bold()
     static let bodyLineSpacing: CGFloat = 4
 }
 

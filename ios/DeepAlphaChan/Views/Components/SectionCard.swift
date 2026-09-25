@@ -4,14 +4,16 @@ import SwiftUI
 struct SectionCard<Content: View>: View {
     let title: String
     var systemImage: String? = nil
+    var titleFont: Font = .headline
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
                 if let systemImage { Image(systemName: systemImage).foregroundColor(Theme.accent) }
-                Text(title).font(.headline).foregroundColor(Theme.textPrimary)
+                Text(title).foregroundColor(Theme.textPrimary)
             }
+            .font(titleFont)
             content()
         }
         .padding(16)

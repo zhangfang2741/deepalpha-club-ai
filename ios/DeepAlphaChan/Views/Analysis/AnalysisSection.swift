@@ -4,11 +4,13 @@ import SwiftUI
 /// 不需要再单独一张卡片复述一遍。
 struct AnalysisSection: View {
     let analysis: ChanAnalysis
+    /// 透传给 `PivotPhaseBlock`，见该文件里 `contentWidth` 的说明。
+    var contentWidth: CGFloat?
 
     var body: some View {
         VStack(spacing: 12) {
             if let phase = analysis.pivotPhase {
-                PivotPhaseBlock(phase: phase)
+                PivotPhaseBlock(phase: phase, contentWidth: contentWidth)
             } else {
                 Text(L("当前数据尚不足以判断中枢阶段，请先对照图上的笔与线段。"))
                     .font(AnalysisType.body)

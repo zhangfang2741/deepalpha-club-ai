@@ -39,9 +39,9 @@ struct SignalDetailCard: View {
         HStack(spacing: 8) {
             Image(systemName: signal.isBuy ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
                 .foregroundStyle(directionColor)
-                .font(.footnote)
+                .font(AnalysisType.title)
             Text(signal.label)
-                .font(AnalysisType.label)
+                .font(AnalysisType.title)
                 .foregroundStyle(Theme.textPrimary)
             Circle().fill(strengthColor).frame(width: 7, height: 7)
             Image(systemName: signal.confirmed ? "checkmark.circle" : "circle.dashed")

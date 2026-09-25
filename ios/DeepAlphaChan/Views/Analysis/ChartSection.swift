@@ -11,8 +11,8 @@ struct ChartSection: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                // 图例（兼图层开关）紧贴在 K 线图正上方，先看懂颜色再看图
+            VStack(alignment: .leading, spacing: 10) {
+                // 图例（兼图层开关）在 K 线图正上方，先看懂颜色再看图
                 ChartLegend(vm: vm, isStatic: isStatic)
                 ChanChartView(analysis: analysis, vm: vm, highlightFrom: drillFrom,
                               onFullscreen: isStatic ? nil : onFullscreen)

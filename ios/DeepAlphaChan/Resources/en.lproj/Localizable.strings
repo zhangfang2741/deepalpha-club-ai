@@ -552,3 +552,13 @@
 "气泡是最近一次全量扫描那一刻的快照（历史日期下方会标出算出时刻），不是实时数据；点进详情页是用当下最新K线重新跑一遍缠论。" = "Bubbles are a snapshot from the last full scan (the computed time is shown under past dates), not live data; opening the detail page reruns the Chan analysis on the latest candles.";
 "缠论的笔和买卖点在最新几根K线上本身是临时性的，后续新K线一出现，原来某天的信号可能被延伸、改写甚至判定失效——这是分析方法的特性，不是数据错误。" = "Chan strokes and signals near the most recent candles are inherently provisional — once new candles arrive, a signal from an earlier day can be extended, rewritten, or invalidated. That's how the method works, not a data error.";
 "越靠近「今天」的气泡越可能受影响；对某个信号有疑问，以点进详情页当下重新算出的结构为准。" = "Bubbles closer to \"today\" are more likely to be affected; if a signal looks off, trust the structure recomputed live on the detail page.";
+"正在刷新买卖点信号…" = "Refreshing signals…";
+"确认买卖点" = "Signal confirmed";
+"确认买卖点之后，后续同方向的笔里出现了背驰——创新高/新低，但价差、量能或时长比前一个同向段更弱。交付物：一买或一卖信号，强弱由这三项的比值决定。" = "After the signal is confirmed, a later stroke in the same direction shows divergence — a new high/low, but with a weaker price range, volume, or duration than the prior same-direction leg. Output: a type-1 buy/sell signal, with strength set by those three ratios.";
+"确认买卖点之后，继续沿同一方向前进的笔里，力度（价差/量能/时长）比前一个同向段更弱，判定为「背驰」。" = "After the signal is confirmed, a stroke continuing in the same direction shows weaker force (price range/volume/duration) than the prior same-direction leg — that's judged as \"divergence.\"";
+"离开中枢之后的回踩笔，收在越过原边界处（三类）或区间内但未破对侧边界（二类），判定为「确认买卖点」。" = "The retrace stroke after leaving the pivot closes beyond the original boundary (type-3) or inside the range without breaking the opposite boundary (type-2) — that's judged as \"signal confirmed.\"";
+"「确认买卖点」或「背驰/转折」之后，后面出现一次方向相反、同样满足突破+回踩条件的新尝试——整体重新判定一次，结论会被新结果直接覆盖。" = "After \"signal confirmed\" or \"divergence / turn,\" a later attempt in the opposite direction also satisfies the breakout + retrace conditions — the whole judgment reruns from scratch, and the new result directly overrides the previous conclusion.";
+"切换指数范围" = "Switch index";
+"「%@」首次计算较久" = "First computation of \"%@\" takes a while";
+"大盘成分较多，已在后台计算，稍后点重试即可查看" = "This broad index has many constituents and is being computed in the background. Tap Retry in a moment to view it.";
+"没有信号不代表没有风险。可返回「当前状态」查看中枢位置和下一步观察。" = "No signal doesn't mean no risk. Go back to \"Current State\" to check the pivot position and what to watch next.";

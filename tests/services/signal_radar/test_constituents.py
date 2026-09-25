@@ -202,3 +202,48 @@ async def test_resolve_constituents_enriches_us_names_beyond_curated(monkeypatch
 
     assert dict(resolved)["AAPL"] == "苹果"   # curated 清单命中
     assert dict(resolved)["ORCL"] == "甲骨文"  # 东方财富补齐，之前会是空字符串
+
+
+def _fake_dynamic_with_orcl():
+    async def fake_dynamic(universe):
+        filler = [(f"{chr(65 + i // 26)}{chr(65 + i % 26)}X", "filler", 0.0) for i in range(25)]
+        return [("AAPL", "Apple", 10.0), ("ORCL", "Oracle", 5.0), *filler]
+    return fake_dynamic
+
+
+async def test_resolve_constituents_reads_cache_by_default(monkeypatch):
+    """不刷新时命中成分股缓存就直接返回，不重新拉取来源。"""
+    import json
+
+    from app.services.signal_radar import constituents as mod
+
+    async def boom(universe):
+        raise AssertionError("命中缓存时不应再拉取来源")
+
+    monkeypatch.setattr(mod, "_fetch_dynamic", boom)
+    redis = _FakeRedis()
+    await redis.set(f"{mod._CACHE_PREFIX}:us:nasdaq100", json.dumps([["ORCL", ""]]))
+
+    resolved = await mod.resolve_constituents("us", redis=redis, universe_key="nasdaq100")
+    assert resolved == [("ORCL", "")]
+
+
+async def test_resolve_constituents_refresh_rebuilds_stale_names(monkeypatch):
+    """refresh=True 跳过成分股缓存重新解析：旧缓存里没解析出中文名的标的这次能补上。"""
+    import json
+
+    from app.services.signal_radar import constituents as mod
+
+    async def fake_eastmoney(client, symbol):
+        return {"ORCL": "甲骨文"}.get(symbol)
+
+    monkeypatch.setattr(mod, "_fetch_dynamic", _fake_dynamic_with_orcl())
+    monkeypatch.setattr(mod, "_fetch_eastmoney_us_name", fake_eastmoney)
+    redis = _FakeRedis()
+    cache_key = f"{mod._CACHE_PREFIX}:us:nasdaq100"
+    await redis.set(cache_key, json.dumps([["ORCL", ""]]))
+
+    resolved = await mod.resolve_constituents("us", redis=redis, universe_key="nasdaq100", refresh=True)
+
+    assert dict(resolved)["ORCL"] == "甲骨文"
+    assert dict(json.loads(redis.store[cache_key]))["ORCL"] == "甲骨文"  # 新结果写回缓存

@@ -23,13 +23,6 @@ enum PivotPhaseDiagramSelection: Hashable, Identifiable {
     }
 }
 
-private struct DiagramWidthKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
 private struct PhaseDiagramCopy {
     let title: String
     let body: String
@@ -92,6 +85,9 @@ private struct PhaseDiagramCopy {
 /// 上滑弹出一个独立页面看它的通用规则——两者职责不同，互不打扰。
 struct PivotPhaseDiagram: View {
     let phase: PivotPhase
+    /// 卡片实际可用宽度，由 `ResultDetailView` 在页面顶层测量一次后逐层传下来
+    /// （见 `ResultDetailView.pageContentWidth` 的说明）。传 nil 时退回 `designWidth`。
+    var availableWidth: CGFloat?
     /// 点了哪个方块/边，非 nil 时弹出对应的规则讲解页。跟上面卡片的内容
     /// 完全独立，卡片永远只展示 `phase` 算出来的当前状态。
     @State private var sheetSelection: PivotPhaseDiagramSelection?
@@ -154,55 +150,19 @@ struct PivotPhaseDiagram: View {
              label: L("反向突破"), labelPos: CGPoint(x: 356, y: 306), color: Theme.stroke),
     ]
 
-    /// 卡片可用宽度，通过下面 `.background(GeometryReader …)` 的一次性测量写入——
-    /// 不直接把图内容放进 GeometryReader：那样图会被拉伸/挤压成 GeometryReader
-    /// 自己的尺寸提案，点击态引发的重新布局在部分机型上会让坐标和实际点击区域
-    /// 对不上（表现为点一次之后所有节点/边都点不动）。测量与内容分离，图按测量
-    /// 到的宽度用固定 frame 摆放，点击态变化不会反过来影响测量。
-    ///
-    /// 测量必须挂在 `detailPanel` 上，不能挂在 `diagramCanvas` 自己身上：
-    /// `diagramCanvas` 内部已经用 `measuredWidth ?? designWidth` 把自己钉死成一个
-    /// 固定宽度，外面再套 `.frame(maxWidth: .infinity)` 也不会让它变窄——测到的
-    /// 只会是它已经占用的宽度（首次即 designWidth=394pt），跟卡片真正可用的宽度
-    /// 无关，一量出来就是 394 自己钉住自己，永远收不到比卡片还窄的真实值，图会
-    /// 一直比卡片宽、横向溢出屏幕。`detailPanel` 用 `.frame(maxWidth: .infinity)`
-    /// 且内部文字都允许换行，不会撑宽自己，能如实反映 VStack 分给这张卡片的
-    /// 可用宽度，拿它来测才准。
-    @State private var measuredWidth: CGFloat?
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // 先看文字说明（现在在哪、为什么），图放下面当作可交互的参考——
-            // 一进来不用先看图才知道当前状态；点图上的方块/线不会改这张卡片，
-            // 只会弹出讲解页（见 body 末尾的 .sheet）。
-            detailPanel
-                .background(
-                    GeometryReader { geo in
-                        Color.clear.preference(key: DiagramWidthKey.self, value: geo.size.width)
-                    }
-                )
-                .onPreferenceChange(DiagramWidthKey.self) { width in
-                    if width > 0 { measuredWidth = width }
-                }
-
-            diagramCanvas
-
-            Text(L("● 有买卖点信号　○ 没有信号 · 点框或点线看规则"))
-                .font(.caption2)
-                .foregroundStyle(Theme.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-        }
-        .sheet(item: $sheetSelection) { selection in
-            PhaseRuleSheet(selection: selection)
-                .presentationDetents([.fraction(0.4), .medium])
-                .presentationDragIndicator(.visible)
-                .preferredColorScheme(.dark)
-        }
+        detailPanel
+            .sheet(item: $sheetSelection) { selection in
+                PhaseRuleSheet(selection: selection)
+                    .presentationDetents([.fraction(0.4), .medium])
+                    .presentationDragIndicator(.visible)
+                    .preferredColorScheme(.dark)
+            }
     }
 
     @ViewBuilder
     private var diagramCanvas: some View {
-        let width = measuredWidth ?? designWidth
+        let width = availableWidth ?? designWidth
         let scale = width / designWidth
         ZStack(alignment: .topLeading) {
             Canvas { ctx, _ in drawEdges(ctx, scale: scale) }
@@ -236,8 +196,9 @@ struct PivotPhaseDiagram: View {
                 .fill(Theme.surfaceAlt)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10 * scale)
-                        .strokeBorder(spec.isCurrent ? Theme.pivotPhaseColor(phase.phase) : Theme.border,
-                                      style: StrokeStyle(lineWidth: (spec.isCurrent ? 2.2 : 1.2) * scale,
+                        // 非当前节点不用 Theme.border：它和节点底色 surfaceAlt 几乎同色，边框看不出来。
+                        .strokeBorder(spec.isCurrent ? Theme.pivotPhaseColor(phase.phase) : Theme.textSecondary.opacity(0.6),
+                                      style: StrokeStyle(lineWidth: (spec.isCurrent ? 2.2 : 1.5) * scale,
                                                           dash: spec.dashed ? [4 * scale, 3 * scale] : []))
                 )
                 .overlay {
@@ -376,44 +337,51 @@ struct PivotPhaseDiagram: View {
     /// 固定展示这一次算出来的当前状态，不受下面图上点了哪个方块/边影响——
     /// 那些点击只弹讲解页（见 `PhaseRuleSheet`），跟这张卡片各管各的。
     private var detailPanel: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text(phase.phaseLabel)
-                    .font(.subheadline.bold())
-                    .foregroundStyle(Theme.textPrimary)
-                Text(L("当前"))
-                    .font(.caption2.bold())
-                    .foregroundStyle(Theme.background)
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(Theme.pivotPhaseColor(phase.phase), in: Capsule())
-                Spacer(minLength: 0)
-                if !phase.confirmed {
-                    Label(L("未确认"), systemImage: "circle.dashed")
-                        .font(.caption2)
-                        .foregroundStyle(Theme.textSecondary)
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text(phase.phaseLabel)
+                        .font(AnalysisType.title)
+                        .foregroundStyle(Theme.textPrimary)
+                    Text(L("当前"))
+                        .font(.caption2.bold())
+                        .foregroundStyle(Theme.background)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Theme.pivotPhaseColor(phase.phase), in: Capsule())
+                    Spacer(minLength: 0)
+                    if !phase.confirmed {
+                        Label(L("未确认"), systemImage: "circle.dashed")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
+                Text(HeadlineHighlighter.highlight(phase.reason))
+                    .font(AnalysisType.body)
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineSpacing(AnalysisType.bodyLineSpacing)
+                Text(L("参考中枢 %@ · 下沿 ZD %@ — 上沿 ZG %@",
+                       phase.pivot.level == .segment ? L("线段级") : L("笔级"),
+                       String(format: "%.2f", phase.pivot.zd),
+                       String(format: "%.2f", phase.pivot.zg)))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(Theme.textSecondary)
+                if let next = phase.checklist.first(where: { $0.state == .pending }) {
+                    Text(L("下一步观察：%@", next.label))
+                        .font(.caption)
+                        .foregroundStyle(Theme.accent)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Text(HeadlineHighlighter.highlight(phase.reason))
-                .font(AnalysisType.body)
+
+            diagramCanvas
+
+            Text(L("● 有买卖点信号　○ 没有信号 · 点框或点线看规则"))
+                .font(.caption2)
                 .foregroundStyle(Theme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .lineSpacing(AnalysisType.bodyLineSpacing)
-            Text(L("参考中枢 %@ · 下沿 ZD %@ — 上沿 ZG %@",
-                   phase.pivot.level == .segment ? L("线段级") : L("笔级"),
-                   String(format: "%.2f", phase.pivot.zd),
-                   String(format: "%.2f", phase.pivot.zg)))
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(Theme.textSecondary)
-            if let next = phase.checklist.first(where: { $0.state == .pending }) {
-                Text(L("下一步观察：%@", next.label))
-                    .font(.caption)
-                    .foregroundStyle(Theme.accent)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+                .frame(maxWidth: .infinity, alignment: .center)
         }
-        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
