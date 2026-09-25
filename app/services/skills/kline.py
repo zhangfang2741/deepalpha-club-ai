@@ -195,23 +195,26 @@ async def _fetch_fmp_intraday(symbol: str, start: str, end: str) -> list[dict]:
             raise ValueError(f"数据源返回错误：{err}")
         return raw
 
-    def _sync() -> list[dict]:
-        by_time: dict[str, dict] = {}
-        for frm, to in chunks:
-            for r in _chunk(frm, to):
-                if not r.get("date"):
-                    continue
-                t = r["date"][:16]
-                by_time[t] = {"time": t, "open": r["open"], "high": r["high"], "low": r["low"],
-                              "close": r["close"], "volume": r.get("volume", 0)}
-        return [by_time[t] for t in sorted(by_time)]
-
+    # 各段互相独立，并发请求而非顺序请求：次级别取数窗口一般切成 2~3 段，
+    # 顺序请求会把每段的网络延迟叠加起来，是次级别加载慢的主因之一。
     loop = asyncio.get_event_loop()
     try:
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            return await loop.run_in_executor(pool, _sync)
+        with ThreadPoolExecutor(max_workers=min(len(chunks), 4) or 1) as pool:
+            results = await asyncio.gather(
+                *(loop.run_in_executor(pool, _chunk, frm, to) for frm, to in chunks)
+            )
     except _RateLimitError:
         raise ValueError("数据源请求过于频繁，请稍后再试")
+
+    by_time: dict[str, dict] = {}
+    for raw in results:
+        for r in raw:
+            if not r.get("date"):
+                continue
+            t = r["date"][:16]
+            by_time[t] = {"time": t, "open": r["open"], "high": r["high"], "low": r["low"],
+                          "close": r["close"], "volume": r.get("volume", 0)}
+    return [by_time[t] for t in sorted(by_time)]
 
 
 async def _fetch_fmp(symbol: str, start: str, end: str, freq: str) -> list[dict]:

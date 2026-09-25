@@ -41,8 +41,11 @@ class LevelPair:
 
 
 LEVEL_PAIRS: dict[str, LevelPair] = {
-    # 30 分钟取数约 27 个交易日，足够形成次级别的笔与中枢；Yahoo 分钟线上限 60 天
-    "daily": LevelPair(parent="daily", child="30min", recent_sessions=2, fetch_days=40),
+    # 30 分钟取数窗口与详情页 freq=30min 的取数窗口对齐（可见 30 天 + 预热 20 天 = 50 天，
+    # 见 api/v1/chan.py 的 _MAX_VISIBLE_DAYS / _WARMUP_DAYS）：两边算出同样的 start/end，
+    # 命中同一份 K 线 Redis 缓存（15 分钟 TTL）——用户看完次级别徽标点进详情图时不用
+    # 再等一次 FMP 分段拉取。Yahoo 分钟线上限 60 天，50 天仍在范围内。
+    "daily": LevelPair(parent="daily", child="30min", recent_sessions=2, fetch_days=50),
     # 日线作次级别要有足够预热（czsc 需积累若干笔才出买卖点），与详情页日线预热同量级
     "weekly": LevelPair(parent="weekly", child="daily", recent_calendar_days=14, fetch_days=270,
                         parent_zh="周线", parent_en="Weekly", child_zh="日线", child_en="daily",
