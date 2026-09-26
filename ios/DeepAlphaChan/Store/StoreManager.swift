@@ -10,6 +10,16 @@ enum SubscriptionTier: Int, Comparable {
     case premium = 2
 
     static func < (lhs: SubscriptionTier, rhs: SubscriptionTier) -> Bool { lhs.rawValue < rhs.rawValue }
+
+    /// 传给后端的档位字符串（如自选上限按档位区分，见 app/services/watchlist.py
+    /// 的 TIER_LIMITS）。"experience" 是历史命名，对外/对接口统一叫 "basic"。
+    var apiValue: String {
+        switch self {
+        case .free: return "free"
+        case .experience: return "basic"
+        case .premium: return "premium"
+        }
+    }
 }
 
 /// 订阅管理：基于 StoreKit 2，端上用加密签名凭证判断订阅状态。

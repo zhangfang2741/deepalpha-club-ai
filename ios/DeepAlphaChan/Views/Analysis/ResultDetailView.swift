@@ -12,8 +12,6 @@ struct ResultDetailView: View {
     @EnvironmentObject private var store: StoreManager
 
     @State private var showFullscreenChart = false
-    /// 自选是高级版专属功能，未订阅时点星标弹这个付费墙，而不是真的调用 toggle()。
-    @State private var showWatchlistPaywall = false
 
     /// 页面可视宽度，取自包在 ScrollView 外面的 GeometryReader。
     ///
@@ -62,14 +60,17 @@ struct ResultDetailView: View {
             ToolbarItem(placement: .topBarTrailing) { shareButton }
             ToolbarItem(placement: .topBarTrailing) { starButton }
         }
-        // 非高级版不查星标状态：自选整体是付费功能，免费/基础版用户点星标只会看到
-        // 付费墙，没必要为一个用不了的按钮多打一次自选列表的请求。
-        .task { if store.isPremium { await watchlistVM.refreshSilently() } }
+        // 自选现在所有档位都能用（未订阅 1 支 / 基础版 10 支 / 高级版不限），
+        // 星标状态每个用户都要查，不再按 isPremium 短路。
+        .task { await watchlistVM.refreshSilently(tier: store.tier) }
         .onReceive(NotificationCenter.default.publisher(for: .watchlistDidChange)) { _ in
-            guard store.isPremium else { return }
-            Task { await watchlistVM.refreshSilently() }
+            Task { await watchlistVM.refreshSilently(tier: store.tier) }
         }
-        // 星标加入/移出失败（含达到 20 支上限）的提示——此前没有挂 alert，失败等于
+        // tier 变化（订阅/升级/降级）时上限可能跟着变，重新拉一次同步 maxItems/isFull。
+        .onChange(of: store.tier) { _, tier in
+            Task { await watchlistVM.refreshSilently(tier: tier) }
+        }
+        // 星标加入/移出失败（含达到上限）的提示——此前没有挂 alert，失败等于
         // 点了没反应，用户不知道发生了什么。
         .alert(watchlistVM.errorMessage ?? "", isPresented: Binding(
             get: { watchlistVM.errorMessage != nil },
@@ -77,7 +78,6 @@ struct ResultDetailView: View {
         )) {
             Button(L("好"), role: .cancel) {}
         }
-        .sheet(isPresented: $showWatchlistPaywall) { PaywallView() }
         // 预览已经开着时不再响应截图：用户在预览里截图不该再套一层。
         // 全屏图表也要排除：它是盖在本页上的 fullScreenCover，SwiftUI 不会给呈现方发
         // onDisappear，本页监听仍然活着，会和全屏页的监听同时弹 sheet，撞掉一个。
@@ -160,25 +160,16 @@ struct ResultDetailView: View {
 
     private var starButton: some View {
         Button {
-            // 非高级版：不调用 toggle()（后端也没跑过 refreshSilently，isStarred 恒为
-            // false，不会误判成已收藏），直接弹付费墙，和信号雷达/次级别同一个模式。
-            guard store.isPremium else {
-                showWatchlistPaywall = true
-                return
-            }
             let symbol = vm.symbol.uppercased()
             // 有真实名称就存名称，没有则退回代码（后端 name 非空约束）。自选列表
             // 侧再判断 name==代码时不重复显示，见 WatchlistItem.displayName。
             let name = vm.displayName ?? symbol
-            Task { await watchlistVM.toggle(market: vm.market, symbol: symbol, name: name) }
+            Task { await watchlistVM.toggle(market: vm.market, symbol: symbol, name: name, tier: store.tier) }
         } label: {
-            Image(systemName: !store.isPremium ? "star"
-                  : (isStarred ? "star.fill" : (watchlistFull ? "star.slash" : "star")))
-                .foregroundColor(!store.isPremium ? Theme.textSecondary
-                                 : (isStarred ? Theme.segment : (watchlistFull ? Theme.textSecondary : nil)))
+            Image(systemName: isStarred ? "star.fill" : (watchlistFull ? "star.slash" : "star"))
+                .foregroundColor(isStarred ? Theme.segment : (watchlistFull ? Theme.textSecondary : nil))
         }
-        .accessibilityLabel(!store.isPremium ? L("自选是高级版专属功能")
-                             : (isStarred ? L("移出自选") : (watchlistFull ? L("自选已满") : L("加入自选"))))
+        .accessibilityLabel(isStarred ? L("移出自选") : (watchlistFull ? L("自选已满") : L("加入自选")))
         // watchlistFull 时点按仍会走 toggle()——它内部会短路并给出同样的 errorMessage，
         // 这里不单独拦截点击，保证唯一的提示路径就是下面这个 alert，逻辑不用两处对齐。
     }

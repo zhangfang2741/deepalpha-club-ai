@@ -32,6 +32,13 @@ enum AppConfig {
     /// 高级版月度订阅商品 ID（需与 App Store Connect / Configuration.storekit 一致）。
     static let premiumMonthlyProductID = "club.deepalpha.chan.premium.monthly"
 
+    /// 两档订阅的原价（¥/月），付费墙用来对比展示「限时活动价」的号召力。
+    /// StoreKit 商品本身没有「原价」概念——`product.displayPrice` 只反映当前实际
+    /// 扣款价格（即活动价 ¥38 / ¥188，见 Configuration.storekit），这两个只是营销
+    /// 对比文案用的常量，不参与任何计费逻辑，改活动策略时改这里即可。
+    static let experienceOriginalPriceText = "¥88"
+    static let premiumOriginalPriceText = "¥388"
+
     /// 免费用户每日可用的缠论分析次数（超出需订阅基础版或高级版）。
     static let freeDailyQuota = 3
 

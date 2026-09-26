@@ -1,5 +1,5 @@
 """自选股路由：登录用户的关注清单，加入/删除/查看。"""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from redis.asyncio import Redis
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -21,8 +21,16 @@ from app.services.watchlist_phases import fetch_phase_labels
 router = APIRouter()
 
 
+def _tier_query() -> str:
+    return Query(
+        default=store.DEFAULT_TIER, pattern="^(free|basic|premium)$",
+        description="订阅档位：free/basic/premium，决定自选上限（1/10/不限）",
+    )
+
+
 @router.get("", response_model=WatchlistResponse)
 async def list_watchlist(
+    tier: str = _tier_query(),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WatchlistResponse:
@@ -40,7 +48,7 @@ async def list_watchlist(
             )
             for i in items
         ],
-        max_items=store.MAX_ITEMS,
+        max_items=store.max_items_for(tier),
     )
 
 
@@ -71,15 +79,16 @@ async def get_watchlist_phases(
 @router.post("", response_model=WatchlistItemOut)
 async def add_to_watchlist(
     body: WatchlistAddRequest,
+    tier: str = _tier_query(),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WatchlistItemOut:
-    """加入自选（已存在则幂等更新名称；已达 MAX_ITEMS 上限则 400）。"""
+    """加入自选（已存在则幂等更新名称；已达该订阅档上限则 400）。"""
     try:
-        item = await store.add_item(db, user.id, body.market, body.symbol, body.name)
-    except store.WatchlistLimitExceeded:
+        item = await store.add_item(db, user.id, body.market, body.symbol, body.name, tier=tier)
+    except store.WatchlistLimitExceeded as e:
         raise HTTPException(
-            status_code=400, detail=f"自选最多添加 {store.MAX_ITEMS} 支标的，请先移出几支再试"
+            status_code=400, detail=f"自选最多添加 {e.limit} 支标的，请先移出几支再试"
         ) from None
     logger.info("watchlist_item_added", user_id=user.id, market=item.market, symbol=item.symbol)
     return WatchlistItemOut(market=item.market, symbol=item.symbol, name=item.name, created_at=item.created_at)

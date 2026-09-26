@@ -7,12 +7,27 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.models.watchlist import WatchlistItem
 from app.services.signal_radar.universe import resolve_name
 
-# 单用户自选上限。定死在这里而非 config.py：这是产品规则，不是环境相关配置。
-MAX_ITEMS = 1
+# 各订阅档自选上限：未订阅 1 / 基础版 10 / 高级版不限（None）。定死在这里而非
+# config.py：这是产品规则，不是环境相关配置。tier 由客户端按 StoreKit 本地判断后
+# 随请求传入——本项目未接入服务端收据校验，跟 UsageTracker 的免费额度一样是端上
+# 可信任模型（后续如需加固可在服务端做收据验证）。tier 非法或缺省一律按最保守的
+# free 处理。
+TIER_LIMITS: dict[str, int | None] = {"free": 1, "basic": 10, "premium": None}
+DEFAULT_TIER = "free"
+
+
+def max_items_for(tier: str) -> int | None:
+    """某订阅档的自选上限，None 表示不限（高级版）。"""
+    return TIER_LIMITS.get(tier, TIER_LIMITS[DEFAULT_TIER])
 
 
 class WatchlistLimitExceeded(Exception):
-    """加入自选时已达 MAX_ITEMS 上限，供 API 层转换成 400 响应。"""
+    """加入自选时已达当前订阅档上限，供 API 层转换成 400 响应。"""
+
+    def __init__(self, limit: int):
+        """limit：触发异常时命中的上限值，供 API 层拼进错误提示。"""
+        self.limit = limit
+        super().__init__(f"watchlist limit exceeded: {limit}")
 
 
 def display_name(market: str, symbol: str, stored: str) -> str:
@@ -38,10 +53,12 @@ async def list_items(db: AsyncSession, user_id: int) -> list[WatchlistItem]:
     return list(result.scalars().all())
 
 
-async def add_item(db: AsyncSession, user_id: int, market: str, symbol: str, name: str) -> WatchlistItem:
+async def add_item(
+    db: AsyncSession, user_id: int, market: str, symbol: str, name: str, tier: str = DEFAULT_TIER,
+) -> WatchlistItem:
     """加入自选：已存在同 (market, symbol) 则视为幂等成功，只更新展示名称。
 
-    未存在且已达 MAX_ITEMS 上限则抛 WatchlistLimitExceeded（幂等更新不受限，
+    未存在且已达 tier 对应上限则抛 WatchlistLimitExceeded（幂等更新不受限，
     避免「已在自选里」的标的因为达到上限反而改不了名称）。
     """
     symbol = symbol.strip().upper()
@@ -64,13 +81,15 @@ async def add_item(db: AsyncSession, user_id: int, market: str, symbol: str, nam
         await db.refresh(existing)
         return existing
 
-    count = (
-        await db.execute(
-            select(func.count()).select_from(WatchlistItem).where(WatchlistItem.user_id == user_id)
-        )
-    ).scalar_one()
-    if count >= MAX_ITEMS:
-        raise WatchlistLimitExceeded(MAX_ITEMS)
+    limit = max_items_for(tier)
+    if limit is not None:
+        count = (
+            await db.execute(
+                select(func.count()).select_from(WatchlistItem).where(WatchlistItem.user_id == user_id)
+            )
+        ).scalar_one()
+        if count >= limit:
+            raise WatchlistLimitExceeded(limit)
 
     item = WatchlistItem(user_id=user_id, market=market, symbol=symbol, name=name)
     db.add(item)

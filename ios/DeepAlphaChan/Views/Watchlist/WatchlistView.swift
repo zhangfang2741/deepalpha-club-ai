@@ -9,29 +9,24 @@ struct WatchlistView: View {
     @EnvironmentObject private var store: StoreManager
 
     @State private var showResults = false
-    /// 自选是高级版专属功能；非高级版看到的是 lockedView，点它弹这个付费墙。
+    /// 自选现在所有档位都能用（未订阅 1 支 / 基础版 10 支 / 高级版不限），
+    /// 点已满时的「升级解锁更多」入口才弹这个付费墙，不再整体锁死。
     @State private var showPaywall = false
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                if !store.isPremium {
-                    lockedView
-                } else {
-                    if !vm.items.isEmpty { countRow }
-                    content
-                }
+                if !vm.items.isEmpty { countRow }
+                content
             }
                 .navigationTitle(L("自选"))
-                .task { if store.isPremium { await vm.onAppear() } }
+                .task { await vm.onAppear(tier: store.tier) }
                 .onReceive(NotificationCenter.default.publisher(for: .watchlistDidChange)) { _ in
-                    guard store.isPremium else { return }
-                    Task { await vm.refresh() }
+                    Task { await vm.refresh(tier: store.tier) }
                 }
-                // 付费墙里订阅成功后，立刻拉一次自选列表，不用退出再进这个 Tab。
-                .onChange(of: store.isPremium) { _, isPremium in
-                    guard isPremium else { return }
-                    Task { await vm.refresh() }
+                // tier 变化（订阅/升级/降级）后上限可能跟着变，重新拉一次同步。
+                .onChange(of: store.tier) { _, tier in
+                    Task { await vm.refresh(tier: tier) }
                 }
                 .navigationDestination(isPresented: $showResults) {
                     if let analysis = chanVM.analysis {
@@ -56,37 +51,29 @@ struct WatchlistView: View {
         }
     }
 
-    /// 未订阅高级版时替代自选内容展示的锁定态：说明权益 + 升级入口。
-    /// 自选没有可以"模糊预览"的公开数据（列表本身就是用户私有数据），
-    /// 不套信号雷达那套模糊预览，直接锁死更合适。
-    private var lockedView: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "star.fill")
-                .font(.system(size: 40)).foregroundColor(Theme.segment)
-            Text(L("自选是高级版专属功能"))
-                .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
-            Text(L("关注的标的批量算出当前结构阶段，订阅高级版解锁"))
-                .font(.footnote).foregroundColor(Theme.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 30)
-            Button { showPaywall = true } label: {
-                Label(L("升级高级版"), systemImage: "crown.fill")
-                    .font(.subheadline.bold())
-                    .padding(.horizontal, 20).padding(.vertical, 10)
-                    .background(Theme.accent).foregroundColor(.white)
-                    .clipShape(Capsule())
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    /// 自选数量 / 上限，让用户在接近 20 支上限前就有数，不用加满了才在报错里第一次看到数字。
+    /// 自选数量 / 上限，让用户在接近上限前就有数，不用加满了才在报错里第一次看到数字。
+    /// 高级版不限（maxItems 为 nil）时只显示已收藏数量，不显示「/ 上限」；接近或已达
+    /// 上限（未订阅/基础版）时额外给一个升级入口，直接引导到更高档位而不是让用户自己
+    /// 去「我的」页找订阅入口。
     private var countRow: some View {
         HStack {
-            Text(L("已收藏 %lld / %lld", vm.items.count, vm.maxItems))
-                .font(.caption2)
-                .foregroundColor(vm.isFull ? Theme.segment : Theme.textSecondary)
+            if let maxItems = vm.maxItems {
+                Text(L("已收藏 %lld / %lld", vm.items.count, maxItems))
+                    .font(.caption2)
+                    .foregroundColor(vm.isFull ? Theme.segment : Theme.textSecondary)
+            } else {
+                Text(L("已收藏 %lld 支", vm.items.count))
+                    .font(.caption2)
+                    .foregroundColor(Theme.textSecondary)
+            }
             Spacer()
+            if !store.isPremium, vm.isFull {
+                Button { showPaywall = true } label: {
+                    Label(L("升级解锁更多"), systemImage: "crown.fill")
+                        .font(.caption2.bold())
+                }
+                .tint(Theme.segment)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
@@ -131,7 +118,7 @@ struct WatchlistView: View {
                     .onDelete { offsets in
                         for index in offsets {
                             let item = group.items[index]
-                            Task { await vm.remove(item) }
+                            Task { await vm.remove(item, tier: store.tier) }
                         }
                     }
                 } header: {
@@ -148,7 +135,7 @@ struct WatchlistView: View {
             }
         }
         .listStyle(.plain)
-        .refreshable { await vm.refresh() }
+        .refreshable { await vm.refresh(tier: store.tier) }
     }
 
     /// 各市场一个基调色，纯粹用来在自选列表里做视觉区分（左侧色条 + 圆点），

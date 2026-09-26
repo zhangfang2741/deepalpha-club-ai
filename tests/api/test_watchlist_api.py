@@ -57,18 +57,46 @@ def test_add_rejects_unknown_market(client):
 def test_add_rejects_when_watchlist_full(client):
     from app.services import watchlist as store
 
-    with patch.object(store, "add_item", AsyncMock(side_effect=store.WatchlistLimitExceeded(store.MAX_ITEMS))):
+    with patch.object(store, "add_item", AsyncMock(side_effect=store.WatchlistLimitExceeded(1))):
         resp = client.post("/watchlist", json={"market": "us", "symbol": "AAPL", "name": "苹果"})
     assert resp.status_code == 400
-    assert str(store.MAX_ITEMS) in resp.json()["detail"]
+    assert "1" in resp.json()["detail"]
 
 
-def test_list_watchlist_reports_max_items(client):
+def test_list_watchlist_reports_max_items_for_default_free_tier(client):
     from app.services import watchlist as store
 
     with patch.object(store, "list_items", AsyncMock(return_value=[_item()])):
         resp = client.get("/watchlist")
-    assert resp.json()["max_items"] == store.MAX_ITEMS
+    assert resp.json()["max_items"] == store.TIER_LIMITS["free"]
+
+
+def test_list_watchlist_reports_max_items_for_basic_tier(client):
+    from app.services import watchlist as store
+
+    with patch.object(store, "list_items", AsyncMock(return_value=[_item()])):
+        resp = client.get("/watchlist", params={"tier": "basic"})
+    assert resp.json()["max_items"] == store.TIER_LIMITS["basic"]
+
+
+def test_list_watchlist_reports_unlimited_for_premium_tier(client):
+    from app.services import watchlist as store
+
+    with patch.object(store, "list_items", AsyncMock(return_value=[_item()])):
+        resp = client.get("/watchlist", params={"tier": "premium"})
+    assert resp.json()["max_items"] is None
+
+
+def test_add_to_watchlist_passes_tier_through(client):
+    from app.services import watchlist as store
+
+    with patch.object(store, "add_item", AsyncMock(return_value=_item())) as mock_add:
+        resp = client.post(
+            "/watchlist", params={"tier": "basic"},
+            json={"market": "us", "symbol": "aapl", "name": "苹果"},
+        )
+    assert resp.status_code == 200
+    assert mock_add.await_args.kwargs["tier"] == "basic"
 
 
 def test_remove_from_watchlist_success(client):

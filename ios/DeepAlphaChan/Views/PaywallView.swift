@@ -145,26 +145,58 @@ struct PaywallView: View {
         }
     }
 
+    /// 该商品的营销对比原价（见 AppConfig），未知商品 ID 返回 nil（不显示对比）。
+    private func originalPriceText(for product: Product) -> String? {
+        switch product.id {
+        case AppConfig.experienceMonthlyProductID: return AppConfig.experienceOriginalPriceText
+        case AppConfig.premiumMonthlyProductID: return AppConfig.premiumOriginalPriceText
+        default: return nil
+        }
+    }
+
     private func priceRow(_ product: Product) -> some View {
         HStack {
-            if let trial = store.trialPeriodText(product) {
-                VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 2) {
+                if let trial = store.trialPeriodText(product) {
                     Text(L("%@免费试用", trial)).font(.subheadline.bold()).foregroundColor(Theme.up)
-                    Text(L("试用结束后 %@/月，可随时取消", product.displayPrice))
-                        .font(.caption2).foregroundColor(Theme.textSecondary)
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(L("%@/月", product.displayPrice)).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+                    priceLine(product, trialText: L("试用结束后 %@/月，可随时取消", product.displayPrice))
+                } else {
+                    priceLine(product, trialText: nil)
                     Text(L("可随时取消")).font(.caption2).foregroundColor(Theme.textSecondary)
                 }
             }
             Spacer()
+            if originalPriceText(for: product) != nil {
+                Text(L("限时活动价"))
+                    .font(.system(size: 9, weight: .bold)).foregroundColor(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Theme.segment, in: Capsule())
+            }
         }
         .padding(10)
         .frame(maxWidth: .infinity)
         .background(Theme.accent.opacity(0.1))
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// 价格那一行：有原价就在活动价前加一个删除线的原价做对比，没有（未知商品 ID）
+    /// 就只显示活动价本身。trialText 非空时说明这行是试用期之后的价格提示（小字号），
+    /// 为空则是不带试用的主价格（大字号加粗），两种场景共用同一套原价对比逻辑。
+    @ViewBuilder
+    private func priceLine(_ product: Product, trialText: String?) -> some View {
+        HStack(spacing: 6) {
+            if let original = originalPriceText(for: product) {
+                Text(L("原价 %@/月", original))
+                    .strikethrough()
+                    .font(trialText == nil ? .subheadline : .caption2)
+                    .foregroundColor(Theme.textSecondary)
+            }
+            if let trialText {
+                Text(trialText).font(.caption2).foregroundColor(Theme.textSecondary)
+            } else {
+                Text(L("%@/月", product.displayPrice)).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+            }
+        }
     }
 
     private func subscribeButton(_ product: Product, planName: String) -> some View {
