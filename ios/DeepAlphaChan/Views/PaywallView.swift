@@ -111,13 +111,12 @@ struct PaywallView: View {
         [
             PlanRow(icon: "infinity", title: L("不限次分析"),
                     basic: .yes, premium: .yes),
-            PlanRow(icon: "star.fill", title: L("自选股"),
-                    basic: .text(L("%lld 支", 10)), premium: .text(L("不限"))),
-            PlanRow(icon: "square.stack.3d.up.fill", title: L("自选状态"),
-                    basic: .text(L("%lld 支", 1)), premium: .text(L("全部"))),
+            // 自选股数量 / 其中能看结构状态的数量，合成一行
+            PlanRow(icon: "star.fill", title: L("自选股 / 状态"),
+                    basic: .text("10 / 1"), premium: .text(L("不限 / 不限"))),
             PlanRow(icon: "dot.radiowaves.left.and.right", title: L("信号雷达"),
                     basic: .no, premium: .yes),
-            PlanRow(icon: "scope", title: L("次级别确认"),
+            PlanRow(icon: "scope", title: L("30 分钟次级别确认"),
                     basic: .no, premium: .yes),
         ]
     }
