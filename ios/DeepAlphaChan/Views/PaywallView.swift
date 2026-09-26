@@ -111,8 +111,6 @@ struct PaywallView: View {
     private var basicFeatures: [PlanFeature] {
         [
             PlanFeature(icon: "infinity", title: L("无限次缠论分析"), desc: L("不再受每日次数限制")),
-            PlanFeature(icon: "scope", title: L("30 分钟次级别确认"),
-                        desc: L("日线定方向、30 分钟找进出点，共振/逆势一眼分辨")),
             PlanFeature(icon: "globe.asia.australia.fill", title: L("美股 / A 股 / 港股"),
                         desc: L("三个市场统一的缠论结构分析")),
             // 不写「操作倾向」：付费墙是宣传语境，这四个字等于在卖操作建议，
@@ -131,7 +129,7 @@ struct PaywallView: View {
     private var comparisonFeatures: [ComparisonFeature] {
         [
             .init(icon: "infinity", title: L("无限次缠论分析"), inBasic: true, inPremium: true),
-            .init(icon: "scope", title: L("30 分钟次级别确认"), inBasic: true, inPremium: true),
+            .init(icon: "scope", title: L("30 分钟次级别确认"), inBasic: false, inPremium: true),
             .init(icon: "flag.fill", title: L("全部买卖点与形态分析"), inBasic: true, inPremium: true),
             .init(icon: "globe.asia.australia.fill", title: L("美股 / A 股 / 港股"), inBasic: true, inPremium: true),
             .init(icon: "dot.radiowaves.left.and.right", title: L("信号雷达"), inBasic: false, inPremium: true),

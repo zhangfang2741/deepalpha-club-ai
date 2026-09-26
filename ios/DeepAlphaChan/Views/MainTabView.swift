@@ -64,10 +64,10 @@ struct MainTabView: View {
             selection = .signalRadar
             push.pendingMarket = nil
         }
-        // chanVM 是跨 Tab 共享的长生命周期对象，次级别确认（基础版起可用）需要知道
+        // chanVM 是跨 Tab 共享的长生命周期对象，次级别确认（高级版专属）需要知道
         // 当前订阅层级——用 onChange 而非每次 runAnalysis 时现查，避免漏同步。
         .onChange(of: store.tier, initial: true) { _, _ in
-            chanVM.hasSubLevelAccess = store.isSubscribed
+            chanVM.hasSubLevelAccess = store.isPremium
         }
     }
 
