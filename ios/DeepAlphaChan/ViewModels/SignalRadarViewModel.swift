@@ -27,11 +27,17 @@ final class SignalRadarViewModel: ObservableObject {
     /// 也用作 View 里 `.task(id:)` 的 id。
     var demoKey: String { "\(market.rawValue)|\(currentUniverse ?? "")" }
 
-    /// 未订阅且当前市场/指数的预览日还在路上：这段时间不展示真实滚动窗口，否则会先闪出
-    /// 最新一天的气泡、预览日到了再跳过去。预览拉取失败/放弃后此值回落为 false，
-    /// 退回展示真实窗口（最新一天点不开，但至少不是空页）。
+    /// 已放弃拉取预览日的键（失败 / 轮询用尽仍在算 / 返回为空）。被取消不算放弃。
+    @Published private(set) var demoGaveUpKey: String?
+
+    /// 未订阅且当前市场/指数的预览日还没到：这段时间不展示真实滚动窗口，否则会先闪出
+    /// 最新一天的气泡、预览日到了再跳过去。
+    ///
+    /// 按「还没拿到、也没放弃」判断，而不是「请求是否在飞」：切市场后的第一帧请求还没发出，
+    /// 按后者会先闪一下旧气泡调暗 +「正在刷新」，紧接着又换成「正在扫描」，两条提示前后
+    /// 叠着出现。放弃后回落为 false，退回展示真实窗口（最新一天点不开，但至少不是空页）。
     var isAwaitingDemo: Bool {
-        !isPremiumUser && demoDay == nil && loadingDemoKey == demoKey
+        !isPremiumUser && demoDay == nil && demoGaveUpKey != demoKey
     }
 
     /// 订阅层级由外部（持有本 VM 的 View）按 StoreManager 同步，VM 本身不感知
@@ -268,12 +274,18 @@ final class SignalRadarViewModel: ObservableObject {
                 delay = min(delay + 1_000_000_000, maxPollInterval)
             }
             try Task.checkCancellation()
-            guard demoKey == key, !resp.isGenerating, let day = resp.days.first else { return }
+            guard demoKey == key else { return }
+            guard !resp.isGenerating, let day = resp.days.first else {
+                demoGaveUpKey = key  // 轮询用尽仍在算，或当天没有数据：放弃，退回真实窗口
+                return
+            }
             demoDay = day
             demoComputedAt = resp.computedAt
             jumpToDemoDayIfPresent()
         } catch {
-            // 免费预览拉取失败/取消：安静放弃，不影响真实滚动窗口的展示。
+            // 被取消（切走了 / 页面消失）不算放弃，回来 .task 会重拉；真失败才放弃，
+            // 退回真实滚动窗口的展示。URLSession 被取消抛的是 URLError，不是 CancellationError。
+            if !Task.isCancelled, demoKey == key { demoGaveUpKey = key }
         }
     }
 }
