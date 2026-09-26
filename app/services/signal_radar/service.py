@@ -42,7 +42,7 @@ from app.services.chan.sub_level_service import current_sub_level
 from app.services.chan.bias import UNCONFIRMED_DISCOUNT
 from app.services.signal_radar.constituents import resolve_constituents
 from app.services.signal_radar.universe import get_universe, list_universes
-from app.services.skills.kline import fetch_kline
+from app.services.skills.kline import LIVE_MAX_AGE, fetch_kline
 
 DEFAULT_TOP_N = 10
 
@@ -401,6 +401,11 @@ async def attach_sub_levels(
     走与详情页相同的唯一入口 current_sub_level（固定口径 + 结论缓存），refresh=True
     重算并覆盖缓存——点进详情读到的就是这一次的结论，气泡与详情不会各算各的。
     中英文各算一份写缓存（详情页按界面语言读取）。补算失败的候选留空，不影响榜单。
+
+    K 线新鲜度对齐详情页的 LIVE_MAX_AGE：refresh=True 只保证「结论」重算，若不管
+    K 线缓存的新鲜度，仍可能命中收盘前后写入、尚未反映数据源最终定稿价格/成交量的
+    旧 K 线（日线缓存 TTL 有 30 分钟）——算出的 bias/买卖点会和详情页现拉的不一致，
+    气泡与详情又变回「各算各的」。传 max_age 强制它和详情页一样只信任足够新的缓存。
     """
     sem = asyncio.Semaphore(_SUB_LEVEL_CONCURRENCY)
 
@@ -408,9 +413,9 @@ async def attach_sub_levels(
         async with sem:
             try:
                 sub = await current_sub_level(sig.symbol, "daily", end_date=end_date, user_id=user_id,
-                                              redis=redis, lang="zh", refresh=True)
+                                              redis=redis, lang="zh", refresh=True, max_age=LIVE_MAX_AGE)
                 await current_sub_level(sig.symbol, "daily", end_date=end_date, user_id=user_id,
-                                        redis=redis, lang="en", refresh=True)
+                                        redis=redis, lang="en", refresh=True, max_age=LIVE_MAX_AGE)
             except Exception as e:  # noqa: BLE001 单只补算失败不影响榜单
                 logger.warning("signal_radar_sub_level_failed", symbol=sig.symbol, error=str(e))
                 return
