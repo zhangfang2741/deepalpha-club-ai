@@ -91,11 +91,11 @@ _CACHE_PREFIX = "signal_radar"
 WATCHLIST_KEY = "watchlist"
 WATCHLIST_CACHE_TTL = 1800
 
-# 免费预览快照（未订阅用户在雷达上能点开的唯一一天）：缓存键按目标日期区分，
-# 45 天足够跨过一个月 + 缓冲，键随目标日期变化不会无限累积，符合「所有 key
-# 必须设置 TTL」的规则；这一天已经过去，end_date=该日算出的结果是确定性的，
-# 不需要像滚动窗口那样每天重算。
-_DEMO_CACHE_TTL = 3600 * 24 * 45
+# 免费预览快照（未订阅用户在雷达上能点开的唯一一天）：缓存键按目标日期区分。
+# 快照用截至今天的数据回看目标日（见 compute_demo_day），新 K 线可能改写结构，
+# 要跟详情页（每次按最新数据算）保持一致，所以半天重算一次，不能按「那天已过去、
+# 结果确定」长期缓存。
+_DEMO_CACHE_TTL = 3600 * 12
 
 
 def watchlist_cache_key(market: str, user_id: int, watchlist: list[tuple[str, str]]) -> str:
@@ -838,8 +838,8 @@ def demo_snapshot_date() -> str:
 
 
 def _demo_cache_key(market: str, target: str) -> str:
-    # v2：起剔除一周前的未确认信号；旧键（TTL 45 天）里的快照还带着它们，换键即失效
-    return f"{_CACHE_PREFIX}:demo:v2:{market}:{target}"
+    # v3：改为用截至今天的数据回看目标日；v2 快照（截至目标日算、未确认被剔光）换键即失效
+    return f"{_CACHE_PREFIX}:demo:v3:{market}:{target}"
 
 
 async def read_demo_cache(redis: Redis, market: str) -> SignalRadarResponse | None:
@@ -859,11 +859,13 @@ async def read_demo_cache(redis: Redis, market: str) -> SignalRadarResponse | No
 
 
 async def compute_demo_day(market: str, *, redis: Redis) -> SignalRadarResponse:
-    """免费预览：只算「上个月 1 号」这一天的真实快照，用该市场默认 universe。
+    """免费预览：只展示「上个月 1 号」这一天，用该市场默认 universe。
 
-    不走标准滚动窗口（compute_market 默认只保留最近 30 个交易日），因为这个
-    目标日期离「今天」通常已经超出那个窗口；也不需要像标准快照那样每天重算——
-    这一天已经过去，用它做 end_date 算出的结果不会再随后续行情变化。
+    K 线取数与滚动窗口、详情页同一段（_fetch_start(今天) ~ 今天），再回看目标日当天
+    在场的信号——不能只取到目标日为止：那样最近几天的信号全挂在数据末端未走完的笔上，
+    都是未确认的，被一周前剔除未确认的规则删光（A 股/港股曾因此 0 个气泡）；而且其中
+    后来笔被延伸、事后失效的信号，点进详情页（按今天的数据重算）根本找不到。
+    用今天的结构回看，留下的是经得起后续走势、与详情页一致的信号。
     """
     target = demo_snapshot_date()
     universe = get_universe(market, None)
@@ -871,8 +873,9 @@ async def compute_demo_day(market: str, *, redis: Redis) -> SignalRadarResponse:
         raise ValueError(f"unsupported market: {market}")
     constituents = await resolve_constituents(market, redis=redis, universe_key=universe.key)
 
-    end_date = target
-    start_date = _fetch_start(date.fromisoformat(target), window=45)
+    today = date.today()
+    end_date = today.isoformat()
+    start_date = _fetch_start(today, window=45)
     sem = asyncio.Semaphore(_SCAN_CONCURRENCY)
 
     async def _one(symbol: str, name: str) -> tuple[list[RawSignal], list[str]]:
