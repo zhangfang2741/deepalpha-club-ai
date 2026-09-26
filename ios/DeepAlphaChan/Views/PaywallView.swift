@@ -183,7 +183,7 @@ struct PaywallView: View {
             .frame(maxWidth: .infinity)
     }
 
-    /// 对比表价格列：方案名 + 角标 + 价格（原价对比同单卡展示）+ 订阅按钮，
+    /// 对比表价格列：方案名 + 角标 + 真实价格（不做划线原价，见 priceRow）+ 订阅按钮，
     /// 竖直堆叠塞进一列窄栏（Self.columnWidth）。
     private func planColumn(_ product: Product, planName: String, badge: String?) -> some View {
         VStack(spacing: 6) {
@@ -202,11 +202,6 @@ struct PaywallView: View {
                     .font(.system(size: 9)).foregroundColor(Theme.textSecondary)
                     .multilineTextAlignment(.center)
             } else {
-                if let original = originalPriceText(for: product) {
-                    Text(original)
-                        .strikethrough()
-                        .font(.system(size: 10)).foregroundColor(Theme.textSecondary)
-                }
                 Text(L("%@/月", product.displayPrice))
                     .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
                     .minimumScaleFactor(0.8).lineLimit(1)
