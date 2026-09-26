@@ -66,7 +66,7 @@ struct PaywallView: View {
                 .font(.system(size: 40)).foregroundStyle(Theme.segment)
             Text(L("DeepAlpha 会员"))
                 .font(.title.bold()).foregroundColor(Theme.textPrimary)
-            Text(L("不限次缠论分析，解锁信号雷达与次级别确认"))
+            Text(L("不限次分析 · 信号雷达 · 次级别确认"))
                 .font(.subheadline).foregroundColor(Theme.textSecondary)
                 .multilineTextAlignment(.center)
         }
@@ -110,20 +110,20 @@ struct PaywallView: View {
     /// 文案只描述功能本身，不暗示收益或操作建议（3.1.1 / 5.2.5）。
     private var planRows: [PlanRow] {
         [
-            PlanRow(icon: "infinity", title: L("缠论分析不限次"),
-                    desc: L("免费版每日 %lld 支，订阅后想看哪支看哪支", AppConfig.freeDailyQuota),
+            PlanRow(icon: "infinity", title: L("不限次分析"),
+                    desc: L("免费版每日仅 %lld 支", AppConfig.freeDailyQuota),
                     basic: .yes, premium: .yes),
             PlanRow(icon: "star.fill", title: L("自选股"),
-                    desc: L("关注的标的收进一张清单，随时回来看结构变化"),
+                    desc: L("关注标的一处收藏"),
                     basic: .text(L("%lld 支", 10)), premium: .text(L("不限"))),
-            PlanRow(icon: "square.stack.3d.up.fill", title: L("自选结构状态"),
-                    desc: L("每只自选走到了哪个阶段，打开清单一屏看全"),
+            PlanRow(icon: "square.stack.3d.up.fill", title: L("自选状态"),
+                    desc: L("结构阶段一屏看全"),
                     basic: .text(L("%lld 支", 1)), premium: .text(L("全部"))),
             PlanRow(icon: "dot.radiowaves.left.and.right", title: L("信号雷达"),
-                    desc: L("每日扫描指数成分股，当天的买卖点汇成一张图"),
+                    desc: L("每日买卖点一图汇总"),
                     basic: .no, premium: .yes),
             PlanRow(icon: "scope", title: L("次级别确认"),
-                    desc: L("日线看 30 分钟、周线看日线，大小级别是否共振一目了然"),
+                    desc: L("大小级别共振一眼辨"),
                     basic: .no, premium: .yes),
         ]
     }
