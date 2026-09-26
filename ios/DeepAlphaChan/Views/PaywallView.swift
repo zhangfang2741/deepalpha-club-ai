@@ -23,8 +23,6 @@ private struct PlanRow: Identifiable {
     let group: String
     let icon: String
     let title: String
-    /// 一句大白话：这项是干什么的；免费版能用多少也写在这里（免费功能不单列成付费权益）。
-    let desc: String
     let basic: TierValue
     let premium: TierValue
     var id: String { title }
@@ -117,24 +115,17 @@ struct PaywallView: View {
     private var planRows: [PlanRow] {
         let analysis = L("缠论分析"), watchlist = L("自选股"), radar = L("信号雷达")
         return [
-            PlanRow(group: analysis, icon: "infinity", title: L("缠论分析"),
-                    desc: L("自动标出买卖点，免费版每天 %lld 支", AppConfig.freeDailyQuota),
+            PlanRow(group: analysis, icon: "infinity", title: L("分析次数"),
                     basic: .text(L("不限")), premium: .text(L("不限"))),
-            PlanRow(group: analysis, icon: "scope", title: L("30 分钟次级别"),
-                    desc: L("日线信号再用 30 分钟确认"), basic: .no, premium: .yes),
-            PlanRow(group: analysis, icon: "calendar", title: L("周线看日线"),
-                    desc: L("周线信号再用日线确认"), basic: .no, premium: .yes),
-            PlanRow(group: watchlist, icon: "star.fill", title: L("自选股"),
-                    desc: L("免费版可收藏 %lld 支", 1),
+            PlanRow(group: analysis, icon: "scope", title: L("30 分钟次级别"), basic: .no, premium: .yes),
+            PlanRow(group: analysis, icon: "calendar", title: L("周线看日线"), basic: .no, premium: .yes),
+            PlanRow(group: watchlist, icon: "star.fill", title: L("自选数量"),
                     basic: .text(L("%lld 支", 10)), premium: .text(L("不限"))),
-            PlanRow(group: watchlist, icon: "square.stack.3d.up.fill", title: L("自选阶段一览"),
-                    desc: L("每只自选走到哪一步，列表直接看"),
+            PlanRow(group: watchlist, icon: "square.stack.3d.up.fill", title: L("自选状态"),
                     basic: .text(L("%lld 支", 1)), premium: .text(L("全部"))),
-            PlanRow(group: radar, icon: "dot.radiowaves.left.and.right", title: L("每日信号雷达"),
-                    desc: L("美股、A 股、港股 6 大指数，买卖点一图看全"),
+            PlanRow(group: radar, icon: "dot.radiowaves.left.and.right", title: L("每日雷达"),
                     basic: .sample, premium: .yes),
-            PlanRow(group: radar, icon: "clock.arrow.circlepath", title: L("历史回看"),
-                    desc: L("近 30 个交易日逐日翻看"), basic: .no, premium: .yes),
+            PlanRow(group: radar, icon: "clock.arrow.circlepath", title: L("历史回看"), basic: .no, premium: .yes),
         ]
     }
 
@@ -182,11 +173,7 @@ struct PaywallView: View {
                             HStack(alignment: .center, spacing: 10) {
                                 HStack(alignment: .top, spacing: 8) {
                                     Image(systemName: row.icon).foregroundColor(Theme.accent).frame(width: 20)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(row.title).font(.footnote.bold()).foregroundColor(Theme.textPrimary)
-                                        Text(row.desc).font(.caption2).foregroundColor(Theme.textSecondary)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                    }
+                                    Text(row.title).font(.footnote.bold()).foregroundColor(Theme.textPrimary)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 tierCell(row.basic).frame(width: Self.columnWidth)
@@ -305,7 +292,7 @@ struct PaywallView: View {
                 Spacer()
             }
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(rows) { r in feature(r.icon, r.title, r.desc) }
+                ForEach(rows) { r in feature(r.icon, r.title) }
             }
             priceRow(product)
             subscribeButton(product, planName: planName)
@@ -319,13 +306,10 @@ struct PaywallView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
-    private func feature(_ icon: String, _ title: String, _ desc: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+    private func feature(_ icon: String, _ title: String) -> some View {
+        HStack(spacing: 12) {
             Image(systemName: icon).foregroundColor(Theme.accent).frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
-                Text(desc).font(.caption).foregroundColor(Theme.textSecondary)
-            }
+            Text(title).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
         }
     }
 
