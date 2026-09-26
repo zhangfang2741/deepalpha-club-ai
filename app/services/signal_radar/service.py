@@ -837,17 +837,18 @@ def demo_snapshot_date() -> str:
     return last_month_end.replace(day=1).isoformat()
 
 
-def _demo_cache_key(market: str, target: str) -> str:
+def _demo_cache_key(market: str, universe_key: str, target: str) -> str:
     # 改了快照的计算口径就必须升版本号，否则旧快照要等 TTL（12 小时）过期才会被替换：
     # v3：改为用截至今天的数据回看目标日（v2 截至目标日算、未确认被剔光）
     # v4：名义日期落在非交易日时对齐到之前最近的交易日（v3 仍按名义日期 08-01 周六展示）
-    return f"{_CACHE_PREFIX}:demo:v4:{market}:{target}"
+    # v5：按 universe 分别计算与缓存（之前只算市场默认指数，切到标普500 仍是纳斯达克100）
+    return f"{_CACHE_PREFIX}:demo:v5:{market}:{universe_key}:{target}"
 
 
-async def read_demo_cache(redis: Redis, market: str) -> SignalRadarResponse | None:
-    """读免费预览快照缓存（不触发计算），键按当前 demo_snapshot_date() 取。"""
+async def read_demo_cache(redis: Redis, market: str, universe_key: str) -> SignalRadarResponse | None:
+    """读免费预览快照缓存（不触发计算），键按 (市场, universe, 当前 demo_snapshot_date()) 取。"""
     try:
-        raw = await redis.get(_demo_cache_key(market, demo_snapshot_date()))
+        raw = await redis.get(_demo_cache_key(market, universe_key, demo_snapshot_date()))
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_demo_cache_read_error", market=market, error=str(e))
         return None
@@ -876,8 +877,10 @@ def resolve_demo_target(nominal: str, per_symbol_dates: list[list[str]]) -> tupl
     return calendar[0], calendar
 
 
-async def compute_demo_day(market: str, *, redis: Redis) -> SignalRadarResponse:
-    """免费预览：只展示「上个月 1 号」这一天，用该市场默认 universe。
+async def compute_demo_day(
+    market: str, universe_key: str | None = None, *, redis: Redis,
+) -> SignalRadarResponse:
+    """免费预览：只展示「上个月 1 号」这一天，按所选 universe（缺省为该市场默认）。
 
     K 线取数与滚动窗口、详情页同一段（_fetch_start(今天) ~ 今天），再回看目标日当天
     在场的信号——不能只取到目标日为止：那样最近几天的信号全挂在数据末端未走完的笔上，
@@ -886,9 +889,9 @@ async def compute_demo_day(market: str, *, redis: Redis) -> SignalRadarResponse:
     用今天的结构回看，留下的是经得起后续走势、与详情页一致的信号。
     """
     nominal = demo_snapshot_date()
-    universe = get_universe(market, None)
+    universe = get_universe(market, universe_key)
     if universe is None:
-        raise ValueError(f"unsupported market: {market}")
+        raise ValueError(f"unsupported market/universe: {market}/{universe_key}")
     constituents = await resolve_constituents(market, redis=redis, universe_key=universe.key)
 
     today = date.today()
@@ -921,7 +924,8 @@ async def compute_demo_day(market: str, *, redis: Redis) -> SignalRadarResponse:
     )
     try:
         # 键按名义日期：read_demo_cache 只知道 demo_snapshot_date()，不知道对齐后的交易日
-        await redis.set(_demo_cache_key(market, nominal), resp.model_dump_json(), ex=_DEMO_CACHE_TTL)
+        await redis.set(_demo_cache_key(market, universe.key, nominal), resp.model_dump_json(),
+                        ex=_DEMO_CACHE_TTL)
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_demo_cache_write_error", market=market, error=str(e))
     return resp
