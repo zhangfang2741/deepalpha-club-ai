@@ -35,6 +35,8 @@ async def list_watchlist(
     db: AsyncSession = Depends(get_db),
 ) -> WatchlistResponse:
     """获取当前用户的自选列表，最近加入的在前。"""
+    # 首次打开自选时补上默认示例股（每个用户只补一次，见 store.ensure_samples）
+    await store.ensure_samples(db, user.id)
     items = await store.list_items(db, user.id)
     return WatchlistResponse(
         items=[
@@ -45,6 +47,7 @@ async def list_watchlist(
                 # → 理想汽车），不必等用户重新加入。
                 name=store.display_name(i.market, i.symbol, i.name),
                 created_at=i.created_at,
+                is_sample=i.is_sample,
             )
             for i in items
         ],
@@ -92,7 +95,8 @@ async def add_to_watchlist(
             status_code=400, detail=f"自选最多添加 {e.limit} 支标的，请先移出几支再试"
         ) from None
     logger.info("watchlist_item_added", user_id=user.id, market=item.market, symbol=item.symbol)
-    return WatchlistItemOut(market=item.market, symbol=item.symbol, name=item.name, created_at=item.created_at)
+    return WatchlistItemOut(market=item.market, symbol=item.symbol, name=item.name, created_at=item.created_at,
+                            is_sample=item.is_sample)
 
 
 @router.delete("/{market}/{symbol}")

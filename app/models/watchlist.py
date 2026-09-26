@@ -32,6 +32,11 @@ class WatchlistItem(UUIDModel, table=True):
     market: str = Field(description="us / cn / hk")
     symbol: str = Field(index=True, description="裸代码，不带市场后缀")
     name: str = Field(description="展示用名称")
+    # 示例自选：每个用户默认送的美/A/港龙头（见 app/services/watchlist.py SAMPLE_ITEMS），
+    # 不占订阅档名额。用户删除示例股时只置 hidden，不真删——留着这条记录才知道「送过了」，
+    # 不会下次打开又补回来。
+    is_sample: bool = Field(default=False, sa_column_kwargs={"server_default": "false"})
+    hidden: bool = Field(default=False, sa_column_kwargs={"server_default": "false"})
 
     created_at: datetime = Field(  # type: ignore[assignment]
         default_factory=_utcnow,
