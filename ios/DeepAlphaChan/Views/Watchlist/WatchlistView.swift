@@ -17,6 +17,9 @@ struct WatchlistView: View {
         NavigationStack {
             content
                 .navigationTitle(L("自选"))
+                // 与「信号」「我的」等 Tab 一致用小标题；大标题在自选只有一两支时
+                // 会在顶部留出一大块空白。
+                .navigationBarTitleDisplayMode(.inline)
                 .task { await vm.onAppear(tier: store.tier) }
                 .onReceive(NotificationCenter.default.publisher(for: .watchlistDidChange)) { _ in
                     Task { await vm.refresh(tier: store.tier) }
@@ -56,25 +59,34 @@ struct WatchlistView: View {
     /// 放在 List 里作为第一行，不能摆在 List 外面：外面的话下拉时大标题和列表一起被
     /// 拉伸，这一行却钉在原地，看起来像飘在半空。
     private var countRow: some View {
-        HStack {
+        HStack(spacing: 6) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 11))
+                .foregroundColor(vm.isFull ? Theme.segment : Theme.accent)
             if let maxItems = vm.maxItems {
                 Text(L("已收藏 %lld / %lld", vm.items.count, maxItems))
-                    .font(.caption2)
                     .foregroundColor(vm.isFull ? Theme.segment : Theme.textSecondary)
             } else {
                 Text(L("已收藏 %lld 支", vm.items.count))
-                    .font(.caption2)
                     .foregroundColor(Theme.textSecondary)
             }
             Spacer()
             if !store.isPremium, vm.isFull {
                 Button { showPaywall = true } label: {
-                    Label(L("升级解锁更多"), systemImage: "crown.fill")
-                        .font(.caption2.bold())
+                    HStack(spacing: 4) {
+                        Image(systemName: "crown.fill")
+                        Text(L("升级解锁更多"))
+                    }
+                    .font(.caption.bold())
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Theme.segment, in: Capsule())
                 }
-                .tint(Theme.segment)
+                .buttonStyle(.plain)
             }
         }
+        .font(.footnote)
     }
 
     /// 非高级版只有最早加入的一支能看状态（见 WatchlistViewModel.phase(for:)），
@@ -123,7 +135,7 @@ struct WatchlistView: View {
         List {
             Section {
                 countRow
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 4, trailing: 16))
+                    .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 6, trailing: 16))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Theme.background)
                 if vm.hasLockedPhases {
@@ -164,11 +176,34 @@ struct WatchlistView: View {
                     }
                     .font(.caption.weight(.semibold))
                     .foregroundColor(Theme.textPrimary)
+                    // plain 列表的分组标题自带一层灰色底，和页面背景不一致；铺满自己的底色盖掉。
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
+                    .padding(.bottom, 4)
+                    .background(Theme.background)
+                    .listRowInsets(EdgeInsets())
                 }
                 .textCase(nil)
             }
         }
+            // 列表末尾的操作提示：自选只有一两支时页面下半截不至于一片空白，
+            // 也顺带告诉用户怎么加、怎么删。
+            Text(L("在分析结果页点 ☆ 加入自选，左滑可移出"))
+                .font(.caption2)
+                .foregroundColor(Theme.textSecondary)
+                .frame(maxWidth: .infinity)
+                .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Theme.background)
+        }
         .listStyle(.plain)
+        // 隐藏系统列表底色，整页统一用主题背景——否则列表是纯黑、行是主题深灰，
+        // 每一行都像一条色带。
+        .scrollContentBackground(.hidden)
+        .background(Theme.background)
+        // 去掉系统默认 44pt 最小行高，计数行才能紧凑。
+        .environment(\.defaultMinListRowHeight, 0)
         .refreshable { await vm.refresh(tier: store.tier) }
     }
 

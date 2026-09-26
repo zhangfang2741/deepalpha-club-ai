@@ -606,3 +606,4 @@
 "点进详情页是当下实时计算（不用缓存），盘中与气泡快照可能有出入，以详情页为准。" = "The detail page is computed live (no cache), so intraday it may differ from the bubble snapshot — the detail page is the reference.";
 "升级高级版，显示全部自选标的的结构状态" = "Upgrade to Premium to see the structural phase of every ticker";
 "示例" = "Sample";
+"在分析结果页点 ☆ 加入自选，左滑可移出" = "Tap ☆ on a result page to add; swipe left to remove";
