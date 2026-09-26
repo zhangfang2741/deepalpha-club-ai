@@ -18,7 +18,6 @@ private enum TierValue {
 private struct PlanRow: Identifiable {
     let icon: String
     let title: String
-    let desc: String
     let basic: TierValue
     let premium: TierValue
     var id: String { title }
@@ -111,19 +110,14 @@ struct PaywallView: View {
     private var planRows: [PlanRow] {
         [
             PlanRow(icon: "infinity", title: L("不限次分析"),
-                    desc: L("免费版每日仅 %lld 支", AppConfig.freeDailyQuota),
                     basic: .yes, premium: .yes),
             PlanRow(icon: "star.fill", title: L("自选股"),
-                    desc: L("关注标的一处收藏"),
                     basic: .text(L("%lld 支", 10)), premium: .text(L("不限"))),
             PlanRow(icon: "square.stack.3d.up.fill", title: L("自选状态"),
-                    desc: L("结构阶段一屏看全"),
                     basic: .text(L("%lld 支", 1)), premium: .text(L("全部"))),
             PlanRow(icon: "dot.radiowaves.left.and.right", title: L("信号雷达"),
-                    desc: L("每日买卖点一图汇总"),
                     basic: .no, premium: .yes),
             PlanRow(icon: "scope", title: L("次级别确认"),
-                    desc: L("大小级别共振一眼辨"),
                     basic: .no, premium: .yes),
         ]
     }
@@ -155,11 +149,7 @@ struct PaywallView: View {
                     HStack(alignment: .center, spacing: 10) {
                         HStack(alignment: .top, spacing: 8) {
                             Image(systemName: row.icon).foregroundColor(Theme.accent).frame(width: 20)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(row.title).font(.footnote.bold()).foregroundColor(Theme.textPrimary)
-                                Text(row.desc).font(.caption2).foregroundColor(Theme.textSecondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
+                            Text(row.title).font(.footnote.bold()).foregroundColor(Theme.textPrimary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         tierCell(row.basic).frame(width: Self.columnWidth)
@@ -273,7 +263,7 @@ struct PaywallView: View {
                 Spacer()
             }
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(rows) { r in feature(r.icon, r.title, r.desc) }
+                ForEach(rows) { r in feature(r.icon, r.title) }
             }
             priceRow(product)
             subscribeButton(product, planName: planName)
@@ -287,13 +277,10 @@ struct PaywallView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
-    private func feature(_ icon: String, _ title: String, _ desc: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+    private func feature(_ icon: String, _ title: String) -> some View {
+        HStack(spacing: 12) {
             Image(systemName: icon).foregroundColor(Theme.accent).frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
-                Text(desc).font(.caption).foregroundColor(Theme.textSecondary)
-            }
+            Text(title).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
         }
     }
 

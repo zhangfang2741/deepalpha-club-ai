@@ -622,10 +622,5 @@
 "全部" = "All";
 "次级别确认" = "Sub-level confirmation";
 "不限次分析" = "Unlimited analysis";
-"免费版每日仅 %lld 支" = "Free plan: %lld tickers a day";
-"关注标的一处收藏" = "Keep your tickers in one list";
 "自选状态" = "Watchlist phases";
-"结构阶段一屏看全" = "Every phase on one screen";
-"每日买卖点一图汇总" = "The day's signals in one view";
-"大小级别共振一眼辨" = "Spot level alignment at a glance";
 "不限次分析 · 信号雷达 · 次级别确认" = "Unlimited analysis · Signals radar · Sub-levels";
