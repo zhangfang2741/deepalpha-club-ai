@@ -72,30 +72,63 @@ extension RadarOrbitSpacing {
         return min(max(timeRadius, fit), max(timeRadius, cap))
     }
 
-    /// 碰撞松弛：先按时间摆好后，把互相压住的气泡沿中心连线推开，直到不再重叠或达到迭代上限。
+    /// 碰撞松弛：先按时间摆好后，把压得太多的气泡沿中心连线推开，直到达标或达到迭代上限。
     ///
-    /// 按时间严格分圈时，同几天的信号全挤在内圈、外圈空着，代码和名称被盖住。推开时
-    /// 离画布中心更远的一方多挪、更近的一方少挪，所以越新（越靠中心）的气泡仍留在中间，
-    /// 远近依旧大致对应时间。每一步都夹回画布内；本来不重叠的气泡位置不变。
+    /// 推开时离画布中心更远的一方多挪、更近的一方少挪，越新（越靠中心）的气泡仍留在中间。
+    /// 每一步都夹回画布内；本来不冲突的气泡位置不变。
+    ///
+    /// - overlapRatio：允许两个气泡边缘重叠「较小直径 × 此比例」。0 = 必须完全分开并留 gap
+    ///   （旧行为）。完全不许重叠时，10 个气泡在手机画布里只能被挤成一整圈铺满，离中心的
+    ///   远近就不再代表时间；允许边缘少量重叠（文字在气泡中间，盖不到），时间感才留得住。
+    /// - anchors：每个气泡所属时间环的椭圆半轴（圆心在画布中心）。给了就每轮把气泡沿当前
+    ///   方向往自己的环上拉一点，拉力随迭代线性衰减到 0，最后一段只做碰撞收尾，保证结束时
+    ///   重叠不超过上限。nil = 不回拉（旧行为）。
     static func relax(
         _ input: [Placed], width: Double, height: Double, inset: Double,
-        gap: Double = 4, iterations: Int = 300, obstacles: [Obstacle] = []
+        gap: Double = 4, iterations: Int = 300, obstacles: [Obstacle] = [],
+        overlapRatio: Double = 0, anchors: [Anchor]? = nil, anchorStrength: Double = 0.12
     ) -> [Placed] {
         var ps = input
-        guard ps.count > 1 || !obstacles.isEmpty else { return ps }
+        let anchors = anchors.flatMap { $0.count == ps.count ? $0 : nil }
+        guard ps.count > 1 || !obstacles.isEmpty || anchors != nil else { return ps }
         let cx = width / 2, cy = height / 2
         func clamp(_ p: inout Placed) {
             let r = p.diameter / 2 + inset
             p.x = min(max(p.x, r), max(r, width - r))
             p.y = min(max(p.y, r), max(r, height - r))
         }
-        for _ in 0..<iterations {
+        // 回拉只在前 70% 的迭代里生效，剩下的纯做碰撞收尾
+        let pullIterations = anchors == nil ? 0 : Int(Double(iterations) * 0.7)
+        for k in 0..<iterations {
             var moved = false
+            if let anchors, k < pullIterations {
+                let strength = anchorStrength * (1 - Double(k) / Double(pullIterations))
+                for i in ps.indices {
+                    let a = anchors[i]
+                    var tx = cx, ty = cy
+                    if a.rx > 1e-6, a.ry > 1e-6 {
+                        let dx = ps[i].x - cx, dy = ps[i].y - cy
+                        // 按椭圆参数角取环上同方向的点；正好在圆心时给一个确定的方向（水平向右）
+                        let t = (abs(dx) < 1e-9 && abs(dy) < 1e-9) ? 0 : atan2(dy / a.ry, dx / a.rx)
+                        tx = cx + a.rx * cos(t)
+                        ty = cy + a.ry * sin(t)
+                    }
+                    let mx = (tx - ps[i].x) * strength, my = (ty - ps[i].y) * strength
+                    if abs(mx) > 1e-3 || abs(my) > 1e-3 {
+                        ps[i].x += mx
+                        ps[i].y += my
+                        clamp(&ps[i])
+                        moved = true
+                    }
+                }
+            }
             for i in 0..<ps.count {
                 for j in (i + 1)..<ps.count {
                     var dx = ps[j].x - ps[i].x, dy = ps[j].y - ps[i].y
                     var d = hypot(dx, dy)
-                    let need = (ps[i].diameter + ps[j].diameter) / 2 + gap
+                    let slack = overlapRatio > 0
+                        ? -overlapRatio * min(ps[i].diameter, ps[j].diameter) : gap
+                    let need = (ps[i].diameter + ps[j].diameter) / 2 + slack
                     guard d < need else { continue }
                     if d < 1e-6 {
                         // 完全重合：用黄金角给一个确定性的推开方向
@@ -135,9 +168,15 @@ extension RadarOrbitSpacing {
                     moved = true
                 }
             }
-            if !moved { break }
+            if !moved && k >= pullIterations { break }
         }
         return ps
+    }
+
+    /// 气泡所属时间环的椭圆半轴（圆心 = 画布中心）；0 表示「今天」落在圆心。
+    struct Anchor: Equatable {
+        var rx: Double
+        var ry: Double
     }
 
     /// 拥挤缩放：气泡总面积超过画布面积的 maxFill 时，返回让总面积恰好等于上限的统一缩放系数，
