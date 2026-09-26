@@ -238,7 +238,7 @@ struct PaywallView: View {
             Task { await store.purchase(product) }
         } label: {
             Group {
-                if store.purchaseInProgress {
+                if store.purchasingProductID == product.id {
                     ProgressView().tint(.white)
                 } else {
                     Text(store.offersFreeTrial(product)
@@ -253,6 +253,8 @@ struct PaywallView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
         }
         .disabled(store.purchaseInProgress)
+        // 另一档正在购买时本按钮置灰（转圈只出现在被点的那个按钮上）
+        .opacity(store.purchaseInProgress && store.purchasingProductID != product.id ? 0.45 : 1)
     }
 
     /// 一张方案卡：权益列表 + 价格 + 订阅按钮。高级版带「推荐」角标。
@@ -331,7 +333,7 @@ struct PaywallView: View {
             Task { await store.purchase(product) }
         } label: {
             HStack {
-                if store.purchaseInProgress { ProgressView().tint(.white) }
+                if store.purchasingProductID == product.id { ProgressView().tint(.white) }
                 Text(store.offersFreeTrial(product)
                      ? L("开始 %@免费试用", store.trialPeriodText(product) ?? "")
                      : L("订阅%@", planName))
@@ -342,6 +344,8 @@ struct PaywallView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .disabled(store.purchaseInProgress)
+        // 另一档正在购买时本按钮置灰（转圈只出现在被点的那个按钮上）
+        .opacity(store.purchaseInProgress && store.purchasingProductID != product.id ? 0.45 : 1)
     }
 
     private var restoreButton: some View {

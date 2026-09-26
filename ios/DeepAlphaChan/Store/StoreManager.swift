@@ -30,7 +30,10 @@ enum SubscriptionTier: Int, Comparable {
 final class StoreManager: ObservableObject {
     @Published private(set) var products: [Product] = []
     @Published private(set) var tier: SubscriptionTier = .free
-    @Published var purchaseInProgress = false
+    /// 正在购买的商品 ID（nil = 没有进行中的购买）。记 ID 而不是布尔：两档按钮并排时
+    /// 只有被点的那个转圈，另一个仅置灰防重复下单——布尔会让两个按钮一起转圈。
+    @Published private(set) var purchasingProductID: String?
+    var purchaseInProgress: Bool { purchasingProductID != nil }
     @Published private(set) var loadFailed = false
 
     private var updatesTask: Task<Void, Never>?
@@ -177,8 +180,8 @@ final class StoreManager: ObservableObject {
 
     @discardableResult
     func purchase(_ product: Product) async -> Bool {
-        purchaseInProgress = true
-        defer { purchaseInProgress = false }
+        purchasingProductID = product.id
+        defer { purchasingProductID = nil }
         do {
             let result = try await product.purchase()
             switch result {
