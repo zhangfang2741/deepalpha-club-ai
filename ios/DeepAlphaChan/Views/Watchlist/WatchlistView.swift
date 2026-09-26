@@ -15,10 +15,7 @@ struct WatchlistView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                if !vm.items.isEmpty { countRow }
-                content
-            }
+            content
                 .navigationTitle(L("自选"))
                 .task { await vm.onAppear(tier: store.tier) }
                 .onReceive(NotificationCenter.default.publisher(for: .watchlistDidChange)) { _ in
@@ -55,6 +52,9 @@ struct WatchlistView: View {
     /// 高级版不限（maxItems 为 nil）时只显示已收藏数量，不显示「/ 上限」；接近或已达
     /// 上限（未订阅/基础版）时额外给一个升级入口，直接引导到更高档位而不是让用户自己
     /// 去「我的」页找订阅入口。
+    ///
+    /// 放在 List 里作为第一行，不能摆在 List 外面：外面的话下拉时大标题和列表一起被
+    /// 拉伸，这一行却钉在原地，看起来像飘在半空。
     private var countRow: some View {
         HStack {
             if let maxItems = vm.maxItems {
@@ -75,8 +75,27 @@ struct WatchlistView: View {
                 .tint(Theme.segment)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
+    }
+
+    /// 非高级版只有最早加入的一支能看状态（见 WatchlistViewModel.phase(for:)），
+    /// 其余行没有标签——不说明的话，用户只会觉得「状态没渲染出来、下拉也不刷新」。
+    private var phaseLockedBanner: some View {
+        Button { showPaywall = true } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.fill").font(.caption)
+                Text(L("升级高级版，显示全部自选标的的结构状态"))
+                    .font(.caption)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.caption2)
+            }
+            .foregroundColor(Theme.segment)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 12)
+            .background(Theme.segment.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -102,6 +121,18 @@ struct WatchlistView: View {
 
     private var list: some View {
         List {
+            Section {
+                countRow
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 4, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Theme.background)
+                if vm.hasLockedPhases {
+                    phaseLockedBanner
+                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Theme.background)
+                }
+            }
             ForEach(groupedItems, id: \.market) { group in
                 Section {
                     ForEach(group.items) { item in
@@ -114,11 +145,14 @@ struct WatchlistView: View {
                         .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Theme.background)
-                    }
-                    .onDelete { offsets in
-                        for index in offsets {
-                            let item = group.items[index]
-                            Task { await vm.remove(item, tier: store.tier) }
+                        // 左滑只露垃圾桶图标，不显示「删除」文字；Label 保留文字给 VoiceOver 读。
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                Task { await vm.remove(item, tier: store.tier) }
+                            } label: {
+                                Label(L("移出自选"), systemImage: "trash")
+                                    .labelStyle(.iconOnly)
+                            }
                         }
                     }
                 } header: {
@@ -166,7 +200,7 @@ struct WatchlistView: View {
                 }
             }
             Spacer()
-            if let phase = vm.phases[item.id], let label = phase.phaseLabel {
+            if let phase = vm.phase(for: item), let label = phase.phaseLabel {
                 Chip(text: label, color: Theme.pivotPhaseColor(phase.phase))
             }
             Text(relativeTime(item.createdAt))

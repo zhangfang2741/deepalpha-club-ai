@@ -18,12 +18,27 @@ final class WatchlistViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
     /// 每只自选标的当前的中枢阶段，key 为 `WatchlistItem.id`（`{market}:{symbol}`）。
-    /// 「自选批量状态计算」是高级版专属权益（见 PaywallView 的高级版权益列表），
-    /// 只在「自选」Tab 的 `refresh()`/`onAppear()` 里、且 tier 为 premium 时才拉；
-    /// `refreshSilently()`（给分析详情页星标按钮判断收藏状态用）不拉——那条路径要快，
-    /// 多算全部标的的缠论阶段没必要也拖慢它。取不到的标的直接没有 key，UI 不显示标签。
+    /// 只在「自选」Tab 的 `refresh()`/`onAppear()` 里拉；`refreshSilently()`（给分析
+    /// 详情页星标按钮判断收藏状态用）不拉——那条路径要快。取不到的标的直接没有 key，
+    /// UI 不显示标签。展示给谁看由 `phase(for:)` 按档位决定，不在这里过滤。
     @Published private(set) var phases: [String: WatchlistPhase] = [:]
     private var isLoadingPhases = false
+    /// 最近一次加载时的订阅档位，`phase(for:)` 据此决定哪些行能看到状态。
+    @Published private(set) var tier: SubscriptionTier = .free
+
+    /// 非高级版免费看状态的那一支：最早加入的（列表按最近加入在前，取最后一个）。
+    /// 选最早而不是最新，位置稳定——新加一支不会把状态「挪走」。免费版上限 1 支，
+    /// 正好全部可见；「全部批量状态」是高级版权益。
+    private var freePhaseItemID: String? { tier == .premium ? nil : items.last?.id }
+
+    /// 某一行要展示的状态：高级版全部可见，其余档位只有 freePhaseItemID 那一支。
+    func phase(for item: WatchlistItem) -> WatchlistPhase? {
+        guard tier == .premium || item.id == freePhaseItemID else { return nil }
+        return phases[item.id]
+    }
+
+    /// 是否有被锁住、看不到状态的行（用来决定要不要展示升级提示）。
+    var hasLockedPhases: Bool { tier != .premium && items.count > 1 }
 
     private var memberships: Set<String> = []
 
@@ -52,11 +67,13 @@ final class WatchlistViewModel: ObservableObject {
             await refresh(tier: tier)
             return
         }
+        self.tier = tier
         try? await fetchAndApply(tier: tier)
-        if tier == .premium { await loadPhases() } else { phases = [:] }
+        await loadPhases()
     }
 
     func refresh(tier: SubscriptionTier) async {
+        self.tier = tier
         isLoading = true
         defer { isLoading = false }
         do {
@@ -65,7 +82,7 @@ final class WatchlistViewModel: ObservableObject {
             errorMessage = (error as? APIError)?.message ?? "加载自选失败"
             return
         }
-        if tier == .premium { await loadPhases() } else { phases = [:] }
+        await loadPhases()
     }
 
     /// 拉阶段标签：单独一次请求，比拉列表慢（要跑缠论分析）。失败隔 2 秒重试一次，
