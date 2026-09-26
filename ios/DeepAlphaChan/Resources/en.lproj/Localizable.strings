@@ -626,3 +626,15 @@
 "不限次分析 · 信号雷达 · 次级别确认" = "Unlimited analysis · Signals radar · Sub-levels";
 "自选股 / 状态" = "Watchlist / phases";
 "不限 / 不限" = "Unlimited / Unlimited";
+"自动标出买卖点，免费版每天 %lld 支" = "Auto-marks buy/sell points; free plan: %lld tickers a day";
+"30 分钟次级别" = "30-min sub-level";
+"日线信号再用 30 分钟确认" = "Confirm daily signals on the 30-min chart";
+"周线看日线" = "Weekly × daily";
+"周线信号再用日线确认" = "Confirm weekly signals on the daily chart";
+"免费版可收藏 %lld 支" = "Free plan: %lld ticker";
+"自选阶段一览" = "Watchlist phases";
+"每只自选走到哪一步，列表直接看" = "See where each ticker stands, right in the list";
+"每日信号雷达" = "Daily Signals radar";
+"美股、A 股、港股 6 大指数，买卖点一图看全" = "6 indexes across US, A-share and HK — signals in one view";
+"历史回看" = "History";
+"近 30 个交易日逐日翻看" = "Browse each of the last 30 trading days";
