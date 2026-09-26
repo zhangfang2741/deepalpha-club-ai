@@ -18,7 +18,7 @@ private struct ComparisonFeature: Identifiable {
     var id: String { title }
 }
 
-/// 订阅付费墙。展示两档方案（基础版 / 高级版）的权益、价格与免费试用，
+/// 订阅付费墙。展示两档方案（基础版 / 高级版）的权益、价格与新客优惠，
 /// 并含自动续订披露与条款/隐私链接（苹果要求）。
 struct PaywallView: View {
     @EnvironmentObject var store: StoreManager
@@ -181,8 +181,8 @@ struct PaywallView: View {
             .frame(maxWidth: .infinity)
     }
 
-    /// 对比表价格列：方案名 + 角标 + 真实价格（不做划线原价，见 priceRow）+ 订阅按钮，
-    /// 竖直堆叠塞进一列窄栏（Self.columnWidth）。
+    /// 对比表价格列：方案名 + 角标 + 价格 + 订阅按钮，竖直堆叠塞进一列窄栏（Self.columnWidth）。
+    /// 有新客资格时显示新客价 + 划线正价（两者都来自 App Store，见 priceRow 注释）。
     private func planColumn(_ product: Product, planName: String, badge: String?) -> some View {
         VStack(spacing: 6) {
             Text(planName).font(.footnote.bold()).foregroundColor(Theme.textPrimary)
@@ -201,6 +201,16 @@ struct PaywallView: View {
                 Text(L("之后 %@/月", product.displayPrice))
                     .font(.system(size: 9)).foregroundColor(Theme.textSecondary)
                     .multilineTextAlignment(.center)
+            } else if let intro = store.introDiscount(product) {
+                Text(L("新客%@", intro.durationText))
+                    .font(.system(size: 10, weight: .bold)).foregroundColor(Theme.segment)
+                Text(intro.priceText)
+                    .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+                    .minimumScaleFactor(0.8).lineLimit(1)
+                Text(L("%@/月", product.displayPrice))
+                    .strikethrough()
+                    .font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                    .lineLimit(1)
             } else {
                 Text(L("%@/月", product.displayPrice))
                     .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
@@ -275,15 +285,23 @@ struct PaywallView: View {
         }
     }
 
-    /// 价格只显示 App Store 的真实扣款价，不做「划线原价 / 限时活动价」对比：
-    /// 从未按那个原价卖过，属于虚构参考价，踩 App Store 2.3.1 / 5.6（误导性营销）
-    /// 与各地价格法。以后真要做限时折扣，用 ASC 的推介/促销优惠，价格由 StoreKit 给出。
+    /// 划线价只能是真实正价：正价 = product.displayPrice，新客价 = ASC 里配置的推介优惠，
+    /// 两者都由 StoreKit 给出，且只对有资格的新客展示。不要在代码里写死「原价」倍数——
+    /// 从未按那个价卖过的划线价属于虚构参考价，踩 App Store 2.3.1 / 5.6 与各地价格法。
     private func priceRow(_ product: Product) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 if let trial = store.trialPeriodText(product) {
                     Text(L("%@免费试用", trial)).font(.subheadline.bold()).foregroundColor(Theme.up)
                     Text(L("试用结束后 %@/月，可随时取消", product.displayPrice))
+                        .font(.caption2).foregroundColor(Theme.textSecondary)
+                } else if let intro = store.introDiscount(product) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(intro.priceText).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+                        Text(L("%@/月", product.displayPrice))
+                            .strikethrough().font(.caption).foregroundColor(Theme.textSecondary)
+                    }
+                    Text(L("新客专享%@，之后 %@/月，可随时取消", intro.durationText, product.displayPrice))
                         .font(.caption2).foregroundColor(Theme.textSecondary)
                 } else {
                     Text(L("%@/月", product.displayPrice)).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
@@ -334,9 +352,21 @@ struct PaywallView: View {
         store.products.contains { store.offersFreeTrial($0) }
     }
 
+    /// 有新客价时的续订披露：写清优惠期多长、之后按什么价续订（3.1.2 要求续订价清楚可见）。
+    /// 两档优惠期通常一致，取第一个有优惠的商品的时长。
+    private var introDisclosure: String? {
+        guard let intro = store.products.lazy.compactMap({ store.introDiscount($0) }).first else { return nil }
+        return L("新客专享价仅限首次订阅的 Apple 账户，优惠期（%@）结束后按各方案正价自动续订。", intro.durationText)
+    }
+
     /// 自动续订披露 + 条款/隐私链接（App Store 审核必备）。
     private var legal: some View {
         VStack(spacing: 8) {
+            if let introDisclosure {
+                Text(introDisclosure)
+                    .font(.caption2).foregroundColor(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
             Text(anyProductOffersTrial
                  ? L("订阅为自动续订。免费试用结束后将按上述价格自动扣款，除非在当前订阅周期结束前至少 24 小时取消。你可随时在 App Store 账户设置中管理或取消订阅。")
                  : L("订阅为自动续订，将按上述价格自动扣款，除非在当前订阅周期结束前至少 24 小时取消。你可随时在 App Store 账户设置中管理或取消订阅。"))

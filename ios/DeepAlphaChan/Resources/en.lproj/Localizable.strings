@@ -607,3 +607,9 @@
 "升级高级版，显示全部自选标的的结构状态" = "Upgrade to Premium to see the structural phase of every ticker";
 "示例" = "Sample";
 "在分析结果页点 ☆ 加入自选，左滑可移出" = "Tap ☆ on a result page to add; swipe left to remove";
+"%@/%@" = "%@/%@";
+"首月" = "first month";
+"前 %@" = "first %@";
+"新客%@" = "New users · %@";
+"新客专享%@，之后 %@/月，可随时取消" = "New-user price for the %1$@, then %2$@/month. Cancel anytime.";
+"新客专享价仅限首次订阅的 Apple 账户，优惠期（%@）结束后按各方案正价自动续订。" = "The new-user price is only for Apple Accounts subscribing for the first time. After the offer period (%@), each plan renews automatically at its regular price.";
