@@ -605,3 +605,4 @@
 "自动补算：服务重启后会先补扫一轮；数据过旧时，你打开本页也会在后台重算，期间先显示上一次的结果。" = "Auto catch-up: after a server restart a scan runs right away; if the data is stale, opening this page triggers a background rescan while the previous result stays on screen.";
 "点进详情页是当下实时计算（不用缓存），盘中与气泡快照可能有出入，以详情页为准。" = "The detail page is computed live (no cache), so intraday it may differ from the bubble snapshot — the detail page is the reference.";
 "升级高级版，显示全部自选标的的结构状态" = "Upgrade to Premium to see the structural phase of every ticker";
+"示例" = "Sample";

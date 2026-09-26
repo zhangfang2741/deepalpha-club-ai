@@ -952,15 +952,28 @@ struct SignalRadarView: View {
         // 当天新出现的信号（而非从更早的日子延续下来）：气泡场里标"新"的同一批，
         // 在日期轨上也提前露个头，不用一天天点过去找。
         let hasNew = day.signals.contains { $0.date == day.date }
+        // 未订阅时的免费预览日（上个月 1 号）：标「示例」，说明这天是给你试看的样例，
+        // 不是雷达的最新结果。高级版没有这一天，也就不会出现这个标记。
+        let isDemo = !store.isPremium && day.date == vm.unlockedDayDate
         return Button {
             selectDay(index)
         } label: {
             VStack(spacing: 3) {
-                // 「今日」只在这格确实是今天时才显示——数据源有延迟时最新一格可能是
-                // 前一两个交易日，硬把第一格标成「今日」会让人以为 App 认死了今天是那天。
-                Text(SignalRadarView.dayLabel(day.date))
-                    .font(.system(size: 9))
-                    .foregroundColor(active ? .white.opacity(0.85) : Theme.textSecondary)
+                if isDemo {
+                    // 替换掉星期那一行而不是另外悬浮一个角标：格子高度不变，也不会被
+                    // 横向 ScrollView 的上边界裁掉。
+                    Text(L("示例"))
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 5)
+                        .background(Theme.segment, in: Capsule())
+                } else {
+                    // 「今日」只在这格确实是今天时才显示——数据源有延迟时最新一格可能是
+                    // 前一两个交易日，硬把第一格标成「今日」会让人以为 App 认死了今天是那天。
+                    Text(SignalRadarView.dayLabel(day.date))
+                        .font(.system(size: 9))
+                        .foregroundColor(active ? .white.opacity(0.85) : Theme.textSecondary)
+                }
                 Text(SignalRadarView.monthDay(day.date))
                     .font(.system(size: 13, weight: .bold, design: .monospaced))
                     .foregroundColor(active ? .white : Theme.textPrimary)
