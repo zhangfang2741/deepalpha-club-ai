@@ -145,13 +145,19 @@ struct PaywallView: View {
         }
     }
 
-    /// 该商品的营销对比原价（见 AppConfig），未知商品 ID 返回 nil（不显示对比）。
+    /// 该商品的营销对比原价：按 AppConfig 里的倍数乘以这个地区的实际活动价
+    /// （product.price 已经是该 App Store 地区、该价位档的本地金额），再用
+    /// product.priceFormatStyle 格式化——同一台设备在美区显示 $ 、日区显示 ¥（JPY）、
+    /// 印度显示 ₹，不会因为 App 同时在多个地区上架而到哪儿都写死显示人民币符号。
+    /// 未知商品 ID 返回 nil（不显示对比）。
     private func originalPriceText(for product: Product) -> String? {
+        let ratio: Decimal
         switch product.id {
-        case AppConfig.experienceMonthlyProductID: return AppConfig.experienceOriginalPriceText
-        case AppConfig.premiumMonthlyProductID: return AppConfig.premiumOriginalPriceText
+        case AppConfig.experienceMonthlyProductID: ratio = AppConfig.experienceOriginalPriceRatio
+        case AppConfig.premiumMonthlyProductID: ratio = AppConfig.premiumOriginalPriceRatio
         default: return nil
         }
+        return (product.price * ratio).formatted(product.priceFormatStyle)
     }
 
     private func priceRow(_ product: Product) -> some View {
@@ -228,10 +234,19 @@ struct PaywallView: View {
         .disabled(restoring)
     }
 
+    /// 当前是否有任一商品带免费试用——目前两档都没配试用期，但披露文案不能写死
+    /// 「免费试用结束后」，否则试用期一旦被拿掉（如这次去掉的 3 天试用）文案就说谎；
+    /// 以后如果又在 ASC 给某个地区配了试用，也不用记得回来改这行。
+    private var anyProductOffersTrial: Bool {
+        store.products.contains { store.offersFreeTrial($0) }
+    }
+
     /// 自动续订披露 + 条款/隐私链接（App Store 审核必备）。
     private var legal: some View {
         VStack(spacing: 8) {
-            Text(L("订阅为自动续订。免费试用结束后将按上述价格自动扣款，除非在当前订阅周期结束前至少 24 小时取消。你可随时在 App Store 账户设置中管理或取消订阅。"))
+            Text(anyProductOffersTrial
+                 ? L("订阅为自动续订。免费试用结束后将按上述价格自动扣款，除非在当前订阅周期结束前至少 24 小时取消。你可随时在 App Store 账户设置中管理或取消订阅。")
+                 : L("订阅为自动续订，将按上述价格自动扣款，除非在当前订阅周期结束前至少 24 小时取消。你可随时在 App Store 账户设置中管理或取消订阅。"))
                 .font(.caption2).foregroundColor(Theme.textSecondary)
                 .multilineTextAlignment(.center)
             HStack(spacing: 16) {
