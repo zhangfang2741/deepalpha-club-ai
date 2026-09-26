@@ -52,6 +52,7 @@ class WatchlistPhaseOut(BaseModel):
     market: str
     phase: str | None = None
     phase_label: str | None = None
+    direction: str | None = Field(default=None, description="离开中枢的方向 up/down；App 据此配色")
 
 
 class WatchlistPhasesResponse(BaseResponse):

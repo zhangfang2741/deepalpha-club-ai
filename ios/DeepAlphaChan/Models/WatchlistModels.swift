@@ -45,9 +45,11 @@ struct WatchlistPhase: Decodable {
     let market: String
     let phase: String?
     let phaseLabel: String?
+    /// 离开中枢的方向 up/down，配色用（Theme.phaseColor）；旧后端没有这个字段时为 nil。
+    let direction: String?
 
     enum CodingKeys: String, CodingKey {
-        case symbol, market, phase
+        case symbol, market, phase, direction
         case phaseLabel = "phase_label"
     }
 }

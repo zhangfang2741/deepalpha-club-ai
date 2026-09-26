@@ -809,7 +809,7 @@ struct ChanChartView: View {
         return CGPoint(x: x(for: i, range: range), y: y(for: price, height: height, bounds: bounds))
     }
 
-    /// 命中判定：只看图例里打开的图层；按「买卖点 > 背驰 > 分型 > 笔 > 线段 > 中枢」优先，
+    /// 命中判定：只看图例里打开的图层；按「买卖点徽标 > 分型 > 背驰 > 笔 > 线段 > 中枢」优先，
     /// 同一层取最近的。阈值按手指大小给（约 10–22pt）。
     private func hitTest(_ loc: CGPoint, plotWidth: CGFloat, height: CGFloat) -> ChartElement? {
         let range = visibleRange(plotWidth: plotWidth)
@@ -817,14 +817,30 @@ struct ChanChartView: View {
         func pt(_ t: String, _ p: Double) -> CGPoint? { point(t, p, range: range, height: height, bounds: bounds) }
 
         if vm.showSignals {
-            // 徽标画在价格下方（买）/上方（卖）约 19pt，端点本身也算
+            // 徽标画在价格下方（买）/上方（卖）约 19pt，只按徽标区域命中：
+            // 买卖点落在笔端点上，端点处的圆点是分型，点端点应出分型说明。
+            // 分型图层关闭时端点才算买卖点。
             let hit = analysis.signals.compactMap { s -> (Signal, CGFloat)? in
                 guard let p = pt(s.time, s.price) else { return nil }
                 let badge = CGPoint(x: p.x, y: p.y + (s.isBuy ? 19 : -19))
-                let d = min(hypot(loc.x - badge.x, loc.y - badge.y), hypot(loc.x - p.x, loc.y - p.y))
-                return d < 20 ? (s, d) : nil
+                let dx = abs(loc.x - badge.x), dy = abs(loc.y - badge.y)
+                if dx < 18, dy < 11 { return (s, hypot(dx, dy)) }
+                if !vm.showFractals {
+                    let d = hypot(loc.x - p.x, loc.y - p.y)
+                    if d < 12 { return (s, d) }
+                }
+                return nil
             }.min { $0.1 < $1.1 }
             if let (s, _) = hit { return .signal(s) }
+        }
+        // 分型先于背驰：背驰虚线两端就是分型点，点端点应出分型说明
+        if vm.showFractals {
+            let hit = analysis.fractals.compactMap { f -> (Fractal, CGFloat)? in
+                guard let p = pt(f.time, f.price) else { return nil }
+                let d = hypot(loc.x - p.x, loc.y - p.y)
+                return d < 12 ? (f, d) : nil
+            }.min { $0.1 < $1.1 }
+            if let (f, _) = hit { return .fractal(f) }
         }
         let strokes = analysis.strokes
         if vm.showDivergences, strokes.count >= 3 {
@@ -836,14 +852,6 @@ struct ChanChartView: View {
                 if d < 12, d < (best?.1 ?? .infinity) { best = (.divergence(current: strokes[k], previous: strokes[k - 2]), d) }
             }
             if let best { return best.0 }
-        }
-        if vm.showFractals {
-            let hit = analysis.fractals.compactMap { f -> (Fractal, CGFloat)? in
-                guard let p = pt(f.time, f.price) else { return nil }
-                let d = hypot(loc.x - p.x, loc.y - p.y)
-                return d < 12 ? (f, d) : nil
-            }.min { $0.1 < $1.1 }
-            if let (f, _) = hit { return .fractal(f) }
         }
         if vm.showStrokes {
             let hit = strokes.compactMap { s -> (Stroke, CGFloat)? in

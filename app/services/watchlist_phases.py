@@ -39,6 +39,8 @@ class WatchlistPhase:
     symbol: str
     phase: str | None
     phase_label: str | None
+    # 离开中枢的方向（up/down），App 按它给阶段配色（偏多红 / 偏空绿），与详情页一致
+    direction: str | None = None
 
 
 async def _phase_for_symbol(
@@ -68,7 +70,8 @@ async def _phase_for_symbol(
         if result.pivot_phase is None:
             return WatchlistPhase(market=market, symbol=symbol, phase=None, phase_label=None)
         return WatchlistPhase(market=market, symbol=symbol,
-                               phase=result.pivot_phase.phase, phase_label=result.pivot_phase.phase_label)
+                               phase=result.pivot_phase.phase, phase_label=result.pivot_phase.phase_label,
+                               direction=result.pivot_phase.direction)
 
 
 async def fetch_phase_labels(

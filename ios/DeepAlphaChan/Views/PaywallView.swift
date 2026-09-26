@@ -1,20 +1,25 @@
 import SwiftUI
 import StoreKit
 
-/// 方案卡上的一条权益（单卡展示用，仅在只加载到一个商品的兜底路径里使用）。
-private struct PlanFeature: Identifiable {
-    let icon: String
-    let title: String
-    let desc: String
-    var id: String { title }
+/// 某一档在某项权益上的取值：包含 / 不包含 / 具体额度（如「10 支」）。
+private enum TierValue {
+    case yes, no
+    case text(String)
+
+    var included: Bool {
+        if case .no = self { return false }
+        return true
+    }
 }
 
-/// 对比表里的一行权益：同一行，标出基础版/高级版各自是否包含。
-private struct ComparisonFeature: Identifiable {
+/// 付费墙的一行权益：对比表与单卡兜底共用同一份数据，保证两处说法一致。
+/// 只列订阅后才有的差异——免费版也能用的（买卖点与形态分析、三个市场）不列，
+/// 否则等于把免费功能包装成付费权益（2.3.1，也会让用户觉得被误导）。
+private struct PlanRow: Identifiable {
     let icon: String
     let title: String
-    let inBasic: Bool
-    let inPremium: Bool
+    let basic: TierValue
+    let premium: TierValue
     var id: String { title }
 }
 
@@ -60,7 +65,7 @@ struct PaywallView: View {
                 .font(.system(size: 40)).foregroundStyle(Theme.segment)
             Text(L("DeepAlpha 会员"))
                 .font(.title.bold()).foregroundColor(Theme.textPrimary)
-            Text(L("解锁全部缠论分析，突破每日 %lld 次限制", AppConfig.freeDailyQuota))
+            Text(L("不限次分析 · 信号雷达 · 次级别确认"))
                 .font(.subheadline).foregroundColor(Theme.textSecondary)
                 .multilineTextAlignment(.center)
         }
@@ -75,11 +80,12 @@ struct PaywallView: View {
             // 更便宜的档位。并排后两个价格、订阅按钮一屏内同时看见。
             comparisonTable(basic: experience, premium: premium)
         } else if let only = store.premiumProduct ?? store.experienceProduct {
+            let isPremium = only.id == AppConfig.premiumMonthlyProductID
             planCard(
                 product: only,
-                planName: only.id == AppConfig.premiumMonthlyProductID ? L("高级版") : L("基础版"),
-                badge: only.id == AppConfig.premiumMonthlyProductID ? L("推荐") : nil,
-                features: only.id == AppConfig.premiumMonthlyProductID ? premiumFeatures : basicFeatures)
+                planName: isPremium ? L("高级版") : L("基础版"),
+                badge: isPremium ? L("推荐") : nil,
+                rows: planRows.filter { (isPremium ? $0.premium : $0.basic).included })
         } else if store.loadFailed {
             VStack(spacing: 10) {
                 Text(L("暂时无法加载订阅信息")).foregroundColor(Theme.textPrimary)
@@ -92,31 +98,26 @@ struct PaywallView: View {
         }
     }
 
-    // MARK: - 兜底：只加载到一个商品时的单卡展示（详见 content 里的 else if let only 分支）
+    // MARK: - 权益数据
 
-    private var premiumFeatures: [PlanFeature] {
+    /// 与代码里的实际门禁一一对应（改门禁时同步改这里）：
+    /// - 分析次数：免费每日 AppConfig.freeDailyQuota 支不同标的（UsageTracker），订阅后不限
+    /// - 自选上限：免费 1 / 基础 10 / 高级不限（后端 app/services/watchlist.py TIER_LIMITS）
+    /// - 自选结构状态：非高级版只显示最早加入的 1 支（WatchlistViewModel.phase(for:)）
+    /// - 信号雷达：仅高级版可看每日真实雷达，其余只有示例日
+    /// - 次级别确认（日线×30 分钟、周线×日线）：仅高级版（MainTabView.hasSubLevelAccess）
+    /// 文案只描述功能本身，不暗示收益或操作建议（3.1.1 / 5.2.5）。
+    private var planRows: [PlanRow] {
         [
-            PlanFeature(icon: "infinity", title: L("无限次缠论分析"), desc: L("不再受每日次数限制")),
-            PlanFeature(icon: "scope", title: L("30 分钟次级别确认"),
-                        desc: L("日线定方向、30 分钟找进出点，共振/逆势一眼分辨")),
-            PlanFeature(icon: "dot.radiowaves.left.and.right", title: L("信号雷达"),
-                        desc: L("扫描科技指数成分股，每日买卖点一图看全")),
-            PlanFeature(icon: "star.fill", title: L("自选批量状态计算"),
-                        desc: L("自选列表批量算出每只标的当前所处的结构阶段")),
-            PlanFeature(icon: "globe.asia.australia.fill", title: L("美股 / A 股 / 港股"),
-                        desc: L("三个市场统一的缠论结构分析")),
-        ]
-    }
-
-    private var basicFeatures: [PlanFeature] {
-        [
-            PlanFeature(icon: "infinity", title: L("无限次缠论分析"), desc: L("不再受每日次数限制")),
-            PlanFeature(icon: "globe.asia.australia.fill", title: L("美股 / A 股 / 港股"),
-                        desc: L("三个市场统一的缠论结构分析")),
-            // 不写「操作倾向」：付费墙是宣传语境，这四个字等于在卖操作建议，
-            // 正踩 3.1.1 / 5.2.5。口径与 App 内的「形态分析」保持一致。
-            PlanFeature(icon: "flag.fill", title: L("全部买卖点与形态分析"),
-                        desc: L("一二三类买卖点、背驰与加权依据")),
+            PlanRow(icon: "infinity", title: L("不限次分析"),
+                    basic: .yes, premium: .yes),
+            // 自选股数量 / 其中能看结构状态的数量，合成一行
+            PlanRow(icon: "star.fill", title: L("自选股 / 状态"),
+                    basic: .text("10 / 1"), premium: .text(L("不限 / 不限"))),
+            PlanRow(icon: "dot.radiowaves.left.and.right", title: L("信号雷达"),
+                    basic: .no, premium: .yes),
+            PlanRow(icon: "scope", title: L("30 分钟次级别确认"),
+                    basic: .no, premium: .yes),
         ]
     }
 
@@ -125,17 +126,6 @@ struct PaywallView: View {
     /// 表格里两个价格/按钮列各自的宽度：够放下「¥188.00/月」和两行中文按钮文案，
     /// 又不至于挤压左边功能名称列（较长的英文文案会换行，属预期内）。
     private static let columnWidth: CGFloat = 96
-
-    private var comparisonFeatures: [ComparisonFeature] {
-        [
-            .init(icon: "infinity", title: L("无限次缠论分析"), inBasic: true, inPremium: true),
-            .init(icon: "scope", title: L("30 分钟次级别确认"), inBasic: false, inPremium: true),
-            .init(icon: "flag.fill", title: L("全部买卖点与形态分析"), inBasic: true, inPremium: true),
-            .init(icon: "globe.asia.australia.fill", title: L("美股 / A 股 / 港股"), inBasic: true, inPremium: true),
-            .init(icon: "dot.radiowaves.left.and.right", title: L("信号雷达"), inBasic: false, inPremium: true),
-            .init(icon: "star.fill", title: L("自选批量状态计算"), inBasic: false, inPremium: true),
-        ]
-    }
 
     /// 两档方案并排的对比表：顶部价格+订阅按钮各占一列（一进付费墙就同时看见两个
     /// 价位，不用先看完高级版一整张卡片再往下滑才发现基础版），下面按行列出功能，
@@ -154,15 +144,15 @@ struct PaywallView: View {
             Divider().padding(.vertical, 14)
 
             VStack(spacing: 16) {
-                ForEach(comparisonFeatures) { row in
-                    HStack(alignment: .top, spacing: 10) {
+                ForEach(planRows) { row in
+                    HStack(alignment: .center, spacing: 10) {
                         HStack(alignment: .top, spacing: 8) {
                             Image(systemName: row.icon).foregroundColor(Theme.accent).frame(width: 20)
-                            Text(row.title).font(.footnote).foregroundColor(Theme.textPrimary)
+                            Text(row.title).font(.footnote.bold()).foregroundColor(Theme.textPrimary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        checkMark(row.inBasic).frame(width: Self.columnWidth)
-                        checkMark(row.inPremium).frame(width: Self.columnWidth)
+                        tierCell(row.basic).frame(width: Self.columnWidth)
+                        tierCell(row.premium).frame(width: Self.columnWidth)
                     }
                 }
             }
@@ -173,12 +163,21 @@ struct PaywallView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
-    /// 对比表功能行里的勾选标记：包含=实心对勾（强调色），不包含=浅色横杠
-    /// （不用叉号——「基础版没有信号雷达」不是缺陷，用横杠比红叉更不带负面暗示）。
-    private func checkMark(_ included: Bool) -> some View {
-        Image(systemName: included ? "checkmark.circle.fill" : "minus.circle")
-            .foregroundColor(included ? Theme.up : Theme.textSecondary.opacity(0.35))
-            .frame(maxWidth: .infinity)
+    /// 对比表单元格：包含=实心对勾，不包含=浅色横杠（不用叉号——「基础版没有信号雷达」
+    /// 不是缺陷，横杠比红叉更不带负面暗示），有具体额度的直接写数字（如「10 支」）。
+    @ViewBuilder
+    private func tierCell(_ value: TierValue) -> some View {
+        switch value {
+        case .yes:
+            Image(systemName: "checkmark.circle.fill").foregroundColor(Theme.up)
+                .frame(maxWidth: .infinity)
+        case .no:
+            Image(systemName: "minus.circle").foregroundColor(Theme.textSecondary.opacity(0.35))
+                .frame(maxWidth: .infinity)
+        case .text(let t):
+            Text(t).font(.footnote.bold()).foregroundColor(Theme.textPrimary)
+                .frame(maxWidth: .infinity)
+        }
     }
 
     /// 对比表价格列：方案名 + 角标 + 价格 + 订阅按钮，竖直堆叠塞进一列窄栏（Self.columnWidth）。
@@ -228,7 +227,7 @@ struct PaywallView: View {
             Task { await store.purchase(product) }
         } label: {
             Group {
-                if store.purchaseInProgress {
+                if store.purchasingProductID == product.id {
                     ProgressView().tint(.white)
                 } else {
                     Text(store.offersFreeTrial(product)
@@ -243,11 +242,13 @@ struct PaywallView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
         }
         .disabled(store.purchaseInProgress)
+        // 另一档正在购买时本按钮置灰（转圈只出现在被点的那个按钮上）
+        .opacity(store.purchaseInProgress && store.purchasingProductID != product.id ? 0.45 : 1)
     }
 
     /// 一张方案卡：权益列表 + 价格 + 订阅按钮。高级版带「推荐」角标。
     private func planCard(
-        product: Product, planName: String, badge: String?, features: [PlanFeature]
+        product: Product, planName: String, badge: String?, rows: [PlanRow]
     ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
@@ -261,7 +262,7 @@ struct PaywallView: View {
                 Spacer()
             }
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(features) { f in feature(f.icon, f.title, f.desc) }
+                ForEach(rows) { r in feature(r.icon, r.title) }
             }
             priceRow(product)
             subscribeButton(product, planName: planName)
@@ -275,13 +276,10 @@ struct PaywallView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
-    private func feature(_ icon: String, _ title: String, _ desc: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+    private func feature(_ icon: String, _ title: String) -> some View {
+        HStack(spacing: 12) {
             Image(systemName: icon).foregroundColor(Theme.accent).frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
-                Text(desc).font(.caption).foregroundColor(Theme.textSecondary)
-            }
+            Text(title).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
         }
     }
 
@@ -321,7 +319,7 @@ struct PaywallView: View {
             Task { await store.purchase(product) }
         } label: {
             HStack {
-                if store.purchaseInProgress { ProgressView().tint(.white) }
+                if store.purchasingProductID == product.id { ProgressView().tint(.white) }
                 Text(store.offersFreeTrial(product)
                      ? L("开始 %@免费试用", store.trialPeriodText(product) ?? "")
                      : L("订阅%@", planName))
@@ -332,6 +330,8 @@ struct PaywallView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .disabled(store.purchaseInProgress)
+        // 另一档正在购买时本按钮置灰（转圈只出现在被点的那个按钮上）
+        .opacity(store.purchaseInProgress && store.purchasingProductID != product.id ? 0.45 : 1)
     }
 
     private var restoreButton: some View {

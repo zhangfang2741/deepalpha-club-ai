@@ -235,7 +235,7 @@ struct WatchlistView: View {
             }
             Spacer()
             if let phase = vm.phase(for: item), let label = phase.phaseLabel {
-                Chip(text: label, color: Theme.pivotPhaseColor(phase.phase))
+                Chip(text: label, color: Theme.phaseColor(phase: phase.phase, direction: phase.direction))
             }
             Text(relativeTime(item.createdAt))
                 .font(.caption2)

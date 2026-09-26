@@ -115,7 +115,15 @@ final class SignalRadarViewModel: ObservableObject {
     private var universesByMarket: [StockMarket: [RadarUniverse]] = [:]
 
     /// 真实滚动窗口本身就有的天数，不含 demoDay。
-    private var realDays: [RadarDay] { response?.days ?? [] }
+    private var realDays: [RadarDay] { responseMatchesSelection ? (response?.days ?? []) : [] }
+
+    /// response 是否就是当前所选（市场, 指数）的数据。切市场/指数后新数据回来前，response
+    /// 还是旧的：不能拿来展示（否则免费用户会把新市场的示例日和旧市场的真实日期拼在一条
+    /// 日期轨上），也不算「刷新中」——这段时间统一显示「正在扫描」，只有一种加载态。
+    private var responseMatchesSelection: Bool {
+        guard let response, response.market == market.rawValue else { return false }
+        return response.universe.isEmpty || response.universe == activeUniverseKey
+    }
 
     /// 非高级版且 demoDay 已就绪时，把它插到真实天数列表最前面：这是免费用户唯一
     /// 能点开的一天，放第一格、默认选中，进页面直接看到它，不必先看最新一天再跳过去。
@@ -167,14 +175,14 @@ final class SignalRadarViewModel: ObservableObject {
         }
     }
 
-    /// 正在主动拉取/轮询（转圈扫描态）。
-    /// 整页「扫描中」只在确实还没有任何数据可展示时出现；已有数据时（切换市场、刷新）
-    /// 保留旧内容、原地盖加载态，避免整块内容被替换导致页面上下跳动。
-    /// 未订阅用户等预览日时也算扫描态，不先露出最新一天的气泡。
+    /// 整页「正在扫描」：当前所选（市场, 指数）还没有任何可展示的数据时出现——首次进入、
+    /// 切市场/指数（旧数据不再展示，见 responseMatchesSelection）、未订阅用户等示例日。
     var isScanning: Bool { (isLoading || isAwaitingDemo) && days.isEmpty }
 
-    /// 已有内容、正在加载新数据（切换市场/universe、刷新）：旧内容调暗 + 加载指示，不换布局。
-    var isReloading: Bool { isLoading && !days.isEmpty }
+    /// 只用于同一（市场, 指数）的重新加载（如手动刷新）：旧气泡调暗、暂不响应点按。
+    /// 首次进入时示例日往往先于主数据返回，那时 response 还是 nil，不算刷新——否则扫描
+    /// 结束后会再闪一下刷新态，看起来像两层加载。
+    var isReloading: Bool { isLoading && responseMatchesSelection && !days.isEmpty }
 
     /// 轮询已用尽但后端仍在算（generating + 无数据、且当前没在轮询）。此时不干等，
     /// 前端展示「后台计算中，可稍后重试」——后台扫描会跑完并写缓存，重试即命中。

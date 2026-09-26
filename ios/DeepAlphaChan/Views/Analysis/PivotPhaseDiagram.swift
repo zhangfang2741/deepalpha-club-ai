@@ -198,7 +198,7 @@ struct PivotPhaseDiagram: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 10 * scale)
                         // 非当前节点不用 Theme.border：它和节点底色 surfaceAlt 几乎同色，边框看不出来。
-                        .strokeBorder(spec.isCurrent ? Theme.pivotPhaseColor(phase.phase) : Theme.textSecondary.opacity(0.6),
+                        .strokeBorder(spec.isCurrent ? Theme.phaseColor(phase: phase.phase, direction: phase.direction) : Theme.textSecondary.opacity(0.6),
                                       style: StrokeStyle(lineWidth: (spec.isCurrent ? 2.2 : 1.5) * scale,
                                                           dash: spec.dashed ? [4 * scale, 3 * scale] : []))
                 )
@@ -218,7 +218,7 @@ struct PivotPhaseDiagram: View {
                             .font(.system(size: 9 * scale, weight: .bold))
                             .foregroundStyle(Theme.background)
                             .padding(.horizontal, 6 * scale).padding(.vertical, 2 * scale)
-                            .background(Theme.pivotPhaseColor(phase.phase), in: Capsule())
+                            .background(Theme.currentBadge, in: Capsule())
                             .padding(4 * scale)
                     }
                 }
@@ -346,12 +346,12 @@ struct PivotPhaseDiagram: View {
                 HStack(spacing: 6) {
                     Text(phase.phaseLabel)
                         .font(AnalysisType.title)
-                        .foregroundStyle(Theme.textPrimary)
+                        .foregroundStyle(Theme.phaseColor(phase: phase.phase, direction: phase.direction))
                     Text(L("当前"))
                         .font(.caption2.bold())
                         .foregroundStyle(Theme.background)
                         .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Theme.pivotPhaseColor(phase.phase), in: Capsule())
+                        .background(Theme.currentBadge, in: Capsule())
                     Spacer(minLength: 0)
                     if !phase.confirmed {
                         Label(L("未确认"), systemImage: "circle.dashed")

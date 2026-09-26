@@ -89,3 +89,18 @@ async def test_concurrent_scan_covers_all_requested_symbols(monkeypatch, fake_re
     items = [("us", f"SYM{i}") for i in range(20)]  # 超过并发上限，验证 semaphore 不丢标的
     result = await svc.fetch_phase_labels(items, user_id=1, redis=fake_redis)
     assert {r.symbol for r in result} == {f"SYM{i}" for i in range(20)}
+
+
+async def test_direction_is_passed_through(monkeypatch, fake_redis):
+    """方向（up/down）随阶段一起下发：App 用它给「确认三买/三卖」等阶段配色，与详情页一致。"""
+    from types import SimpleNamespace
+
+    async def fake_fetch_kline(*, user_id, symbol, start_date, end_date, freq, redis):
+        return _bars()
+
+    phase = SimpleNamespace(phase="retrace_confirmed", phase_label="确认三买", direction="up")
+    monkeypatch.setattr(svc, "fetch_kline", fake_fetch_kline)
+    monkeypatch.setattr(svc._analyzer, "analyze", lambda *a, **k: SimpleNamespace(pivot_phase=phase))
+    result = await svc.fetch_phase_labels([("us", "AAPL")], user_id=1, redis=fake_redis)
+    assert result[0].direction == "up"
+    assert result[0].phase_label == "确认三买"
