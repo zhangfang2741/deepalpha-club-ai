@@ -411,12 +411,13 @@ struct ChanChartView: View {
         var line = Path()
         line.move(to: CGPoint(x: cx, y: 0))
         line.addLine(to: CGPoint(x: cx, y: height))
-        ctx.stroke(line, with: .color(Theme.segment.opacity(0.85)),
+        // 白色虚线：不占用任何结构图层的配色（线段/中枢/买卖点各有专属色），不会被误读成结构线
+        ctx.stroke(line, with: .color(.white.opacity(0.85)),
                    style: StrokeStyle(lineWidth: 1.4, dash: [5, 3]))
         // 标签横向夹在图内，贴着左右边界时不截断
         let clampedX = min(max(cx, 24), plotWidth - 24)
         ctx.draw(Text(L("雷达日期"))
-                    .font(.system(size: 9, weight: .bold)).foregroundColor(Theme.segment),
+                    .font(.system(size: 9, weight: .bold)).foregroundColor(.white),
                  at: CGPoint(x: clampedX, y: 4), anchor: .top)
     }
 
