@@ -60,9 +60,11 @@ final class ChanViewModel: ObservableObject {
     var isSampleSymbol: Bool { AppConfig.isSampleSymbol(market: market, symbol: symbol) }
 
     // 叠加图层开关
-    @Published var showFractals = true
+    // 默认只开笔 / 中枢 / 买卖点 / 背驰：分型与线段是画笔、画段的中间过程，全开时图面最乱；
+    // 需要时从图例「更多图层」打开（见 ChartLegend.compact）。
+    @Published var showFractals = false
     @Published var showStrokes = true
-    @Published var showSegments = true
+    @Published var showSegments = false
     @Published var showPivots = true
     @Published var showSignals = true
     @Published var showDivergences = true

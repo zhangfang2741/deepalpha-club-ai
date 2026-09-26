@@ -105,7 +105,7 @@ def test_phase_as_of_after_retrace_is_confirmed():
     phase = pivot_phase_as_of(result, _FULL_STROKES[6].end_time)  # 回踩笔走完，确认三买
     assert phase is not None
     assert phase.phase == "retrace_confirmed"
-    assert phase.phase_label == "回踩守住中枢上沿"
+    assert phase.phase_label == "回落未跌回中枢"
 
 
 def test_phase_as_of_ignores_signals_after_as_of_time():

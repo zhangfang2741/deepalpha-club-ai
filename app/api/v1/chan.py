@@ -173,6 +173,7 @@ async def chan_analysis(
                 for c in result.pivot_phase.checklist
             ],
             reason=result.pivot_phase.reason,
+            outcome=result.pivot_phase.outcome,
             confirmed=result.pivot_phase.confirmed,
             branches=[
                 PhaseBranchOut(outcome=b.outcome, condition_label=b.condition_label, result_label=b.result_label)

@@ -112,7 +112,7 @@ def test_retrace_confirmed_type3_when_retrace_holds_above_zg():
     assert pp is not None
     assert pp.phase == "retrace_confirmed"
     assert pp.direction == "up"
-    assert pp.phase_label == "回踩守住中枢上沿"
+    assert pp.phase_label == "回落未跌回中枢"
     assert pp.branches == []
 
 
@@ -123,7 +123,7 @@ def test_retrace_confirmed_type2_when_retrace_lands_inside_pivot():
     pp = build_pivot_phase(_result(strokes, [pivot], []))
     assert pp is not None
     assert pp.phase == "retrace_confirmed"
-    assert pp.phase_label == "回踩落回中枢内"
+    assert pp.phase_label == "回落回到中枢内"
 
 
 def test_back_to_range_falls_back_to_oscillating():
@@ -176,7 +176,7 @@ def test_retrace_inside_absorbing_pivot_is_retrace_confirmed():
     pp = build_pivot_phase(_result(strokes, pivots, []))
     assert pp is not None
     assert pp.phase == "retrace_confirmed"
-    assert pp.phase_label == "回踩落回中枢内"
+    assert pp.phase_label == "回落回到中枢内"
 
 
 def test_analyzer_populates_pivot_phase_end_to_end():
@@ -223,7 +223,7 @@ def test_failed_breakout_attempt_does_not_hide_later_real_breakout():
     pp = build_pivot_phase(_result(strokes, [pivot], []))
     assert pp.phase == "retrace_confirmed"
     assert pp.direction == "up"
-    assert pp.phase_label == "回踩守住中枢上沿"
+    assert pp.phase_label == "回落未跌回中枢"
 
 
 def test_confirmed_pair_superseded_by_later_opposite_breakout():
@@ -246,7 +246,7 @@ def test_confirmed_pair_superseded_by_later_opposite_breakout():
     assert pp is not None
     assert pp.phase == "retrace_confirmed"
     assert pp.direction == "down"
-    assert pp.phase_label == "反抽受制中枢下沿"
+    assert pp.phase_label == "反弹未升回中枢"
 
 
 def test_open_breakout_at_tail_supersedes_earlier_confirmed_pair():
@@ -293,7 +293,7 @@ def test_retrace_label_stays_structural_when_signal_type_differs():
     r = _result(strokes, [pivot], [])
     r.signals = [_signal("buy2", strokes[-1])]
     pp = build_pivot_phase(r)
-    assert pp is not None and pp.phase_label == "回踩守住中枢上沿"
+    assert pp is not None and pp.phase_label == "回落未跌回中枢"
     assert "确认" not in pp.reason
 
 
@@ -302,4 +302,73 @@ def test_retrace_label_english_structural():
                      ("up", 92, 110), ("down", 110, 95))
     pivot = _pivot_from(strokes, 5, zg=99, zd=91)
     pp = build_pivot_phase(_result(strokes, [pivot], []), lang="en")
-    assert pp is not None and pp.phase_label == "Retrace back inside pivot"
+    assert pp is not None and pp.phase_label == "Retest fell back inside pivot"
+
+
+
+# ---- 统一词表：状态/动作叫法贴合缠论原文，流程图节点与外面的解释一一对应 ----
+# 原文第三类买卖点：离开中枢后「回试」（买）/「回抽」（卖）不回到中枢，对用户写成大白话
+# 「回落 / 反弹」；不用回踩、反抽、离开段、假突破等俗称；ZG/ZD 写成「中枢上沿 / 下沿」。
+
+_BANNED = ("回踩", "反抽", "回试", "回抽", "离开段", "假突破", "ZG", "ZD")
+
+
+def _all_texts(pp) -> list[str]:
+    texts = [pp.phase_label, pp.reason, pp.stage_guide.why_it_matters]
+    texts += [c.label for c in pp.checklist]
+    texts += [b.condition_label for b in pp.branches] + [b.result_label for b in pp.branches]
+    texts += [s.title for s in pp.stage_guide.steps] + [s.detail for s in pp.stage_guide.steps]
+    return texts
+
+
+def test_stage_titles_match_flow_diagram_nodes():
+    """阶段指引的名字 = App 流程图节点名（中枢形成 / 震荡同属「中枢震荡」节点前后两步）。"""
+    strokes = _chain(("down", 100, 90), ("up", 90, 98), ("down", 98, 92), ("up", 92, 110))
+    pivot = _pivot_from(strokes, 3, zg=99, zd=91)
+    pp = build_pivot_phase(_result(strokes, [pivot], []))
+    assert [s.title for s in pp.stage_guide.steps] == ["中枢形成", "中枢震荡", "离开中枢", "确认买卖点", "背驰 / 转折"]
+
+
+def test_up_side_uses_huiluo_and_plain_edges():
+    strokes = _chain(("down", 100, 90), ("up", 90, 98), ("down", 98, 92),
+                      ("up", 92, 110), ("down", 110, 101))
+    pivot = _pivot_from(strokes, 5, zg=99, zd=91)
+    pp = build_pivot_phase(_result(strokes, [pivot], []))
+    assert "回落" in pp.reason and "中枢上沿" in pp.reason
+    for t in _all_texts(pp):
+        assert not any(w in t for w in _BANNED), t
+
+
+def test_leaving_texts_use_unified_terms():
+    strokes = _chain(("down", 100, 90), ("up", 90, 98), ("down", 98, 92), ("up", 92, 110))
+    pivot = _pivot_from(strokes, 3, zg=99, zd=91)
+    pp = build_pivot_phase(_result(strokes, [pivot], []))
+    assert pp.phase == "leaving"
+    assert any("回落" in c.label for c in pp.checklist if c.state == "pending")
+    assert any(b.outcome == "back_to_range" and "回到中枢" in b.result_label for b in pp.branches)
+    for t in _all_texts(pp):
+        assert not any(w in t for w in _BANNED), t
+
+
+def test_down_side_uses_fantan():
+    strokes = _chain(("up", 90, 100), ("down", 100, 92), ("up", 92, 98),
+                      ("down", 98, 80), ("up", 80, 89))
+    pivot = _pivot_from(strokes, 5, zg=99, zd=91)
+    pp = build_pivot_phase(_result(strokes, [pivot], []))
+    assert pp is not None and pp.direction == "down"
+    assert pp.phase_label == "反弹未升回中枢"
+    assert "反弹" in pp.reason and "中枢下沿" in pp.reason
+    for t in _all_texts(pp):
+        assert not any(w in t for w in _BANNED), t
+
+
+def test_outcome_exposed_for_retrace_confirmed():
+    """App 的一句话结论要区分三类（没回到中枢）与二类（回到中枢内），靠 outcome 而不是解析标签文字。"""
+    base = (("down", 100, 90), ("up", 90, 98), ("down", 98, 92), ("up", 92, 110))
+    t3 = _chain(*base, ("down", 110, 101))
+    pp3 = build_pivot_phase(_result(t3, [_pivot_from(t3, 5, zg=99, zd=91)], []))
+    t2 = _chain(*base, ("down", 110, 95))
+    pp2 = build_pivot_phase(_result(t2, [_pivot_from(t2, 5, zg=99, zd=91)], []))
+    lv = _chain(*base)
+    ppl = build_pivot_phase(_result(lv, [_pivot_from(lv, 3, zg=99, zd=91)], []))
+    assert (pp3.outcome, pp2.outcome, ppl.outcome) == ("type3", "type2", None)

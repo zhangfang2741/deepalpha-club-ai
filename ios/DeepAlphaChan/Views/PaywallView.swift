@@ -4,11 +4,15 @@ import StoreKit
 /// 某一档在某项权益上的取值：包含 / 不包含 / 具体额度（如「10 支」）。
 private enum TierValue {
     case yes, no
+    /// 只能看示例（如基础版的信号雷达只有示例日）：表格里写「示例」，但不算这一档包含该权益
+    case sample
     case text(String)
 
     var included: Bool {
-        if case .no = self { return false }
-        return true
+        switch self {
+        case .no, .sample: return false
+        case .yes, .text: return true
+        }
     }
 }
 
@@ -16,6 +20,7 @@ private enum TierValue {
 /// 只列订阅后才有的差异——免费版也能用的（买卖点与形态分析、三个市场）不列，
 /// 否则等于把免费功能包装成付费权益（2.3.1，也会让用户觉得被误导）。
 private struct PlanRow: Identifiable {
+    let group: String
     let icon: String
     let title: String
     let basic: TierValue
@@ -104,21 +109,37 @@ struct PaywallView: View {
     /// - 分析次数：免费每日 AppConfig.freeDailyQuota 支不同标的（UsageTracker），订阅后不限
     /// - 自选上限：免费 1 / 基础 10 / 高级不限（后端 app/services/watchlist.py TIER_LIMITS）
     /// - 自选结构状态：非高级版只显示最早加入的 1 支（WatchlistViewModel.phase(for:)）
-    /// - 信号雷达：仅高级版可看每日真实雷达，其余只有示例日
+    /// - 信号雷达：仅高级版可看每日真实雷达（含近 30 个交易日历史回看），其余只有示例日
     /// - 次级别确认（日线×30 分钟、周线×日线）：仅高级版（MainTabView.hasSubLevelAccess）
     /// 文案只描述功能本身，不暗示收益或操作建议（3.1.1 / 5.2.5）。
     private var planRows: [PlanRow] {
-        [
-            PlanRow(icon: "infinity", title: L("不限次分析"),
-                    basic: .yes, premium: .yes),
-            // 自选股数量 / 其中能看结构状态的数量，合成一行
-            PlanRow(icon: "star.fill", title: L("自选股 / 状态"),
-                    basic: .text("10 / 1"), premium: .text(L("不限 / 不限"))),
-            PlanRow(icon: "dot.radiowaves.left.and.right", title: L("信号雷达"),
-                    basic: .no, premium: .yes),
-            PlanRow(icon: "scope", title: L("30 分钟次级别确认"),
-                    basic: .no, premium: .yes),
+        let analysis = L("缠论分析"), watchlist = L("自选股"), radar = L("信号雷达")
+        return [
+            PlanRow(group: analysis, icon: "infinity", title: L("分析次数"),
+                    basic: .text(L("不限")), premium: .text(L("不限"))),
+            PlanRow(group: analysis, icon: "scope", title: L("30 分钟次级别"), basic: .no, premium: .yes),
+            PlanRow(group: analysis, icon: "calendar", title: L("周线看日线"), basic: .no, premium: .yes),
+            PlanRow(group: watchlist, icon: "star.fill", title: L("自选数量"),
+                    basic: .text(L("%lld 支", 10)), premium: .text(L("不限"))),
+            PlanRow(group: watchlist, icon: "square.stack.3d.up.fill", title: L("自选状态"),
+                    basic: .text(L("%lld 支", 1)), premium: .text(L("全部"))),
+            PlanRow(group: radar, icon: "dot.radiowaves.left.and.right", title: L("每日雷达"),
+                    basic: .sample, premium: .yes),
+            PlanRow(group: radar, icon: "clock.arrow.circlepath", title: L("历史回看"), basic: .no, premium: .yes),
         ]
+    }
+
+    /// 按分组保持顺序（缠论分析 → 自选股 → 信号雷达）。
+    private var groupedPlanRows: [(group: String, rows: [PlanRow])] {
+        var out: [(group: String, rows: [PlanRow])] = []
+        for row in planRows {
+            if let i = out.firstIndex(where: { $0.group == row.group }) {
+                out[i].rows.append(row)
+            } else {
+                out.append((row.group, [row]))
+            }
+        }
+        return out
     }
 
     // MARK: - 对比表（两档并排，默认路径）
@@ -143,16 +164,22 @@ struct PaywallView: View {
 
             Divider().padding(.vertical, 14)
 
-            VStack(spacing: 16) {
-                ForEach(planRows) { row in
-                    HStack(alignment: .center, spacing: 10) {
-                        HStack(alignment: .top, spacing: 8) {
-                            Image(systemName: row.icon).foregroundColor(Theme.accent).frame(width: 20)
-                            Text(row.title).font(.footnote.bold()).foregroundColor(Theme.textPrimary)
+            VStack(alignment: .leading, spacing: 18) {
+                ForEach(groupedPlanRows, id: \.group) { section in
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(section.group)
+                            .font(.caption.bold()).foregroundColor(Theme.textSecondary)
+                        ForEach(section.rows) { row in
+                            HStack(alignment: .center, spacing: 10) {
+                                HStack(alignment: .top, spacing: 8) {
+                                    Image(systemName: row.icon).foregroundColor(Theme.accent).frame(width: 20)
+                                    Text(row.title).font(.footnote.bold()).foregroundColor(Theme.textPrimary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                tierCell(row.basic).frame(width: Self.columnWidth)
+                                tierCell(row.premium).frame(width: Self.columnWidth)
+                            }
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        tierCell(row.basic).frame(width: Self.columnWidth)
-                        tierCell(row.premium).frame(width: Self.columnWidth)
                     }
                 }
             }
@@ -173,6 +200,9 @@ struct PaywallView: View {
                 .frame(maxWidth: .infinity)
         case .no:
             Image(systemName: "minus.circle").foregroundColor(Theme.textSecondary.opacity(0.35))
+                .frame(maxWidth: .infinity)
+        case .sample:
+            Text(L("示例")).font(.caption).foregroundColor(Theme.textSecondary)
                 .frame(maxWidth: .infinity)
         case .text(let t):
             Text(t).font(.footnote.bold()).foregroundColor(Theme.textPrimary)

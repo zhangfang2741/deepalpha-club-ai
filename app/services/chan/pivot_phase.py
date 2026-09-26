@@ -42,10 +42,14 @@ _PHASE_ORDER: list[Phase] = [
     "pivot_forming", "pivot_oscillating", "leaving", "retrace_confirmed", "divergence_turn",
 ]
 
+# 用户可见的叫法统一贴合缠论原文（见 App 流程图 PivotPhaseDiagram 的节点 / 连线）：
+# 状态 = 中枢形成 → 中枢震荡 → 离开中枢 → 确认买卖点 → 背驰 / 转折；
+# 动作 = 形成中枢 / 突破 / 回落（向上离开后，原文第三类买点的「回试」）/ 反弹（向下离开后，
+# 原文第三类卖点的「回抽」）/ 回到中枢。用大白话替代原文的回试、回抽，不用回踩、反抽、
+# 离开段、假突破等俗称；ZG / ZD 对用户写成「中枢上沿 / 下沿」。
 _NEXT_STEP: dict[Phase, tuple[str, str]] = {
-    "pivot_forming": ("等待中枢是否延伸或被突破", "Waiting to see if the pivot extends or breaks"),
-    "pivot_oscillating": ("等待突破中枢确认离开段", "Waiting for a breakout to confirm the leaving leg"),
-    "leaving": ("等待离开段走完后回抽确认", "Waiting for the retrace to confirm after leaving"),
+    "pivot_forming": ("等待中枢震荡延伸或被突破", "Waiting to see if the pivot extends or breaks out"),
+    "pivot_oscillating": ("等待突破、离开中枢", "Waiting for a breakout that leaves the pivot"),
     "retrace_confirmed": ("关注后续走势是否出现背驰", "Watch for divergence as the move continues"),
 }
 
@@ -89,6 +93,9 @@ class PivotPhase:
     confirmed: bool = True
     branches: list[PhaseBranch] = field(default_factory=list)
     stage_guide: StageGuide | None = None
+    # 回落 / 反弹后的结果：type3 = 没有回到中枢（三类），type2 = 回到中枢内（二类）；
+    # 只在确认买卖点及之后（背驰）有值，App 据此写一句话结论，不必解析标签文字。
+    outcome: Literal["type2", "type3"] | None = None
 
 
 @dataclass
@@ -204,17 +211,17 @@ def _phase_label(phase: Phase, direction: str | None, outcome: Outcome | None, l
     if phase == "pivot_forming":
         return pick(lang, "形成中枢", "Pivot formed")
     if phase == "pivot_oscillating":
-        return pick(lang, "中枢震荡", "Pivot oscillating")
+        return pick(lang, "中枢震荡", "Pivot oscillation")
     if phase == "leaving":
         return pick(lang, "向上离开中枢" if up else "向下离开中枢",
                      "Leaving pivot upward" if up else "Leaving pivot downward")
     if phase == "retrace_confirmed":
         if not signaled:
             if outcome == "type3":
-                return pick(lang, "回踩守住中枢上沿" if up else "反抽受制中枢下沿",
-                             "Retrace held above pivot top" if up else "Rebound held below pivot bottom")
-            return pick(lang, "回踩落回中枢内" if up else "反抽回到中枢内",
-                         "Retrace back inside pivot" if up else "Rebound back inside pivot")
+                return pick(lang, "回落未跌回中枢" if up else "反弹未升回中枢",
+                             "Retest stayed above pivot" if up else "Pullback stayed below pivot")
+            return pick(lang, "回落回到中枢内" if up else "反弹回到中枢内",
+                         "Retest fell back inside pivot" if up else "Pullback rose back inside pivot")
         if outcome == "type3":
             return pick(lang, "确认三买" if up else "确认三卖",
                          "Type-3 buy confirmed" if up else "Type-3 sell confirmed")
@@ -224,7 +231,11 @@ def _phase_label(phase: Phase, direction: str | None, outcome: Outcome | None, l
                  "Top divergence, trend may turn" if up else "Bottom divergence, trend may turn")
 
 
-def _next_step_label(phase: Phase, lang: str) -> str | None:
+def _next_step_label(phase: Phase, lang: str, direction: str | None = None) -> str | None:
+    if phase == "leaving":
+        up = direction != "down"
+        return pick(lang, "等待回落确认" if up else "等待反弹确认",
+                    "Waiting for the retest to confirm" if up else "Waiting for the pullback to confirm")
     entry = _NEXT_STEP.get(phase)
     if entry is None:
         return None
@@ -232,14 +243,15 @@ def _next_step_label(phase: Phase, lang: str) -> str | None:
     return pick(lang, zh, en)
 
 
-def _checklist(phase: Phase, phase_label: str, detail: str, pivot: "Pivot", lang: str) -> list[PhaseChecklistItem]:
+def _checklist(phase: Phase, phase_label: str, detail: str, pivot: "Pivot", lang: str,
+               direction: str | None = None) -> list[PhaseChecklistItem]:
     items = [
         PhaseChecklistItem(label=pick(lang, "形成中枢", "Pivot formed"),
                             detail=f"{pivot.zd:.2f}–{pivot.zg:.2f}", state="done"),
     ]
     if phase != "pivot_forming":
         items.append(PhaseChecklistItem(label=phase_label, detail=detail, state="done"))
-    next_label = _next_step_label(phase, lang)
+    next_label = _next_step_label(phase, lang, direction)
     if next_label is not None:
         items.append(PhaseChecklistItem(label=next_label, detail="", state="pending"))
     return items
@@ -254,16 +266,16 @@ def _reason(phase: Phase, direction: str | None, pivot: "Pivot", last_price: flo
             f"The last three legs overlapped within {pivot.zd:.2f}-{pivot.zg:.2f}, forming a pivot.")
     if phase == "pivot_oscillating":
         return pick(lang,
-            f"价格持续在中枢 {pivot.zd:.2f}–{pivot.zg:.2f} 区间内反复，尚未离开。",
+            f"价格仍在中枢 {pivot.zd:.2f}–{pivot.zg:.2f} 内反复（中枢震荡），尚未离开。",
             f"Price keeps oscillating inside the pivot {pivot.zd:.2f}-{pivot.zg:.2f}, hasn't left yet.")
     if phase == "leaving":
         if up:
             return pick(lang,
-                f"现价 {last_price:.2f} 已站上 ZG {pivot.zg:.2f}，最新向上笔离开了中枢区间。",
-                f"Price {last_price:.2f} has cleared ZG {pivot.zg:.2f}; the latest up-leg left the pivot.")
+                f"现价 {last_price:.2f} 已站上中枢上沿 {pivot.zg:.2f}，最新一笔向上离开了中枢。",
+                f"Price {last_price:.2f} has cleared the pivot top {pivot.zg:.2f}; the latest up-leg left the pivot.")
         return pick(lang,
-            f"现价 {last_price:.2f} 已跌破 ZD {pivot.zd:.2f}，最新向下笔离开了中枢区间。",
-            f"Price {last_price:.2f} has broken below ZD {pivot.zd:.2f}; the latest down-leg left the pivot.")
+            f"现价 {last_price:.2f} 已跌破中枢下沿 {pivot.zd:.2f}，最新一笔向下离开了中枢。",
+            f"Price {last_price:.2f} has broken below the pivot bottom {pivot.zd:.2f}; the latest down-leg left the pivot.")
     assert pair is not None
     if phase == "retrace_confirmed":
         kind = "三" if pair.outcome == "type3" else "二"
@@ -276,15 +288,21 @@ def _reason(phase: Phase, direction: str | None, pivot: "Pivot", last_price: flo
             # 结构上像二/三类，但买卖点判定没有在这一笔上给出对应信号，不能说「确认」
             tail_zh = f"结构上接近{kind}{side}形态，但尚未出现对应的{kind}{side}信号。"
             tail_en = f" — shaped like a type-{kind_en} {side_en}, but no type-{kind_en} {side_en} signal has appeared."
+        verb, verb_en = ("回落", "Retest") if up else ("反弹", "Pullback")
+        extreme = "低点" if up else "高点"
         if pair.outcome == "type3":
             boundary = pivot.zg if up else pivot.zd
+            edge, edge_en = ("中枢上沿", "pivot top") if up else ("中枢下沿", "pivot bottom")
             return pick(lang,
-                f"回踩至 {pair.retrace.end_price:.2f}，守住 {'ZG' if up else 'ZD'} {boundary:.2f} 未回中枢，" + tail_zh,
-                f"Retrace held at {pair.retrace.end_price:.2f}, staying beyond "
-                f"{'ZG' if up else 'ZD'} {boundary:.2f}" + tail_en)
+                f"{verb}{extreme} {pair.retrace.end_price:.2f}，未{'跌破' if up else '升破'}{edge} {boundary:.2f}"
+                f"（没有回到中枢），" + tail_zh,
+                f"{verb_en} held at {pair.retrace.end_price:.2f}, staying beyond the {edge_en} {boundary:.2f}" + tail_en)
+        far = pivot.zd if up else pivot.zg
+        far_edge = "中枢下沿" if up else "中枢上沿"
         return pick(lang,
-            f"回踩至 {pair.retrace.end_price:.2f}，落在中枢 {pivot.zd:.2f}–{pivot.zg:.2f} 内未破对侧边界，" + tail_zh,
-            f"Retrace landed at {pair.retrace.end_price:.2f}, inside the pivot "
+            f"{verb}{extreme} {pair.retrace.end_price:.2f}，回到中枢 {pivot.zd:.2f}–{pivot.zg:.2f} 内，"
+            f"但未{'跌破' if up else '升破'}{far_edge} {far:.2f}，" + tail_zh,
+            f"{verb_en} landed at {pair.retrace.end_price:.2f}, inside the pivot "
             f"{pivot.zd:.2f}-{pivot.zg:.2f}" + tail_en)
     return pick(lang,
         f"延续的{'上升' if up else '下降'}笔出现{'顶' if up else '底'}背驰，价格创新高/新低但力度（价差、量能或时长）减弱。",
@@ -296,27 +314,29 @@ def _branches(direction: str, pivot: "Pivot", lang: str) -> list[PhaseBranch]:
     up = direction == "up"
     near = pivot.zg if up else pivot.zd   # 突破跨越的边界
     far = pivot.zd if up else pivot.zg    # 对侧边界（回抽/反抽要守住或跌穿的边界）
-    near_label = "ZG" if up else "ZD"
-    far_label = "ZD" if up else "ZG"
-    verb_zh = "回踩" if up else "反抽"
-    verb_en = "Retrace" if up else "Bounce"
-    side_zh = "以上" if up else "以下"
+    near_label = "中枢上沿" if up else "中枢下沿"
+    far_label = "中枢下沿" if up else "中枢上沿"
+    near_en = "pivot top" if up else "pivot bottom"
+    far_en = "pivot bottom" if up else "pivot top"
+    verb_zh = "回落" if up else "反弹"
+    verb_en = "Retest" if up else "Pullback"
+    cross_zh = "跌破" if up else "升破"
     buy_or_sell = "买" if up else "卖"
     buy_or_sell_en = "buy" if up else "sell"
     return [
         PhaseBranch("type3",
-            pick(lang, f"{verb_zh}守住 {near_label} {near:.2f} {side_zh}，不回中枢",
-                 f"{verb_en} holds beyond {near_label} {near:.2f}"),
+            pick(lang, f"{verb_zh}未{cross_zh}{near_label} {near:.2f}，不回到中枢",
+                 f"{verb_en} holds beyond the {near_en} {near:.2f}"),
             pick(lang, f"确认三{buy_or_sell}（趋势确认，最强）", f"Type-3 {buy_or_sell_en} confirmed (strongest)")),
         PhaseBranch("type2",
-            pick(lang, f"{verb_zh}落在中枢区间内，未破 {far_label} {far:.2f}",
-                 f"{verb_en} lands inside the pivot, holding {far_label} {far:.2f}"),
+            pick(lang, f"{verb_zh}回到中枢内，未{cross_zh}{far_label} {far:.2f}",
+                 f"{verb_en} lands inside the pivot, holding the {far_en} {far:.2f}"),
             pick(lang, f"确认二{buy_or_sell}（中枢升级，弱于三{buy_or_sell}）",
                  f"Type-2 {buy_or_sell_en} confirmed (weaker than type-3)")),
         PhaseBranch("back_to_range",
-            pick(lang, f"{verb_zh}穿破 {far_label} {far:.2f}，重新进入中枢",
-                 f"{verb_en} breaks through {far_label} {far:.2f}"),
-            pick(lang, "假突破，回到中枢震荡", "False breakout — back to pivot oscillation")),
+            pick(lang, f"{verb_zh}{cross_zh}{far_label} {far:.2f}",
+                 f"{verb_en} breaks through the {far_en} {far:.2f}"),
+            pick(lang, "回到中枢，继续中枢震荡", "Back into the pivot — oscillation continues")),
     ]
 
 
@@ -326,18 +346,20 @@ def _stage_guide(current_phase: Phase, direction: str | None, pivot: "Pivot", la
     up = direction != "down"
     steps = [
         StageGuideStep("pivot_forming", pick(lang, "中枢形成", "Pivot forms"),
-                        pick(lang, f"三段重叠围出 {pivot.zd:.2f}–{pivot.zg:.2f}",
-                             f"Three overlapping legs define {pivot.zd:.2f}-{pivot.zg:.2f}")),
-        StageGuideStep("pivot_oscillating", pick(lang, "中枢震荡", "Pivot oscillates"),
-                        pick(lang, "区间内反复，中枢延伸", "Price churns inside the range, pivot extends")),
-        StageGuideStep("leaving", pick(lang, "离开段", "Leaving leg"),
-                        pick(lang, f"{'向上' if up else '向下'}离开中枢，候选第三类{'买' if up else '卖'}点",
-                             f"Leaving the pivot {'upward' if up else 'downward'}, "
+                        pick(lang, f"三段走势重叠，围出中枢 {pivot.zd:.2f}–{pivot.zg:.2f}",
+                             f"Three overlapping legs define the pivot {pivot.zd:.2f}-{pivot.zg:.2f}")),
+        StageGuideStep("pivot_oscillating", pick(lang, "中枢震荡", "Pivot oscillation"),
+                        pick(lang, "价格在中枢内反复，中枢延伸", "Price churns inside the pivot; the pivot extends")),
+        StageGuideStep("leaving", pick(lang, "离开中枢", "Leaving the pivot"),
+                        pick(lang, f"{'向上' if up else '向下'}突破，离开中枢，候选第三类{'买' if up else '卖'}点",
+                             f"Breaks {'up' if up else 'down'} and leaves the pivot — "
                              f"a type-3 {'buy' if up else 'sell'} candidate")),
-        StageGuideStep("retrace_confirmed", pick(lang, "回抽确认", "Retrace confirmation"),
-                        pick(lang, f"回抽不进中枢 → 确认三{'买' if up else '卖'}",
-                             f"Retrace stays out → type-3 {'buy' if up else 'sell'} confirmed")),
-        StageGuideStep("divergence_turn", pick(lang, "背驰/转折", "Divergence / turn"),
+        StageGuideStep("retrace_confirmed", pick(lang, "确认买卖点", "Signal confirmed"),
+                        pick(lang, f"{'回落' if up else '反弹'}不回到中枢 → 三{'买' if up else '卖'}；"
+                                   f"回到中枢内但未破对侧 → 二{'买' if up else '卖'}",
+                             f"{'Retest' if up else 'Pullback'} stays out → type-3; "
+                             f"back inside but holds the far edge → type-2")),
+        StageGuideStep("divergence_turn", pick(lang, "背驰 / 转折", "Divergence / turn"),
                         pick(lang, "趋势末端背驰 → 一类买卖点", "End-of-trend divergence → type-1 signal")),
     ]
     return StageGuide(current_index=_PHASE_ORDER.index(current_phase), steps=steps,
@@ -346,20 +368,20 @@ def _stage_guide(current_phase: Phase, direction: str | None, pivot: "Pivot", la
 
 def _why_it_matters(phase: Phase, up: bool, lang: str) -> str:
     zh = {
-        "pivot_forming": "中枢一旦形成，后续所有笔的力度、回踩都以它的 ZG/ZD 为基准衡量。",
+        "pivot_forming": "中枢一旦形成，后续每一笔的力度、回落与反弹，都以它的上沿、下沿为基准衡量。",
         "pivot_oscillating": "中枢延伸得越久，之后一旦突破，力度往往越强——这是蓄势阶段。",
-        "leaving": ("离开段是缠论趋势能否延续的分水岭：" + ("向上" if up else "向下") +
-                    "离开中枢后若回抽不进中枢，就确认三" + ("买" if up else "卖") +
-                    "、中枢升级、趋势打开；若回抽跌回中枢，则回到震荡。"),
-        "retrace_confirmed": "回抽确认之后，趋势能走多远就看后续同向的笔是否还有力度、会不会出现背驰。",
+        "leaving": ("离开中枢是走势能否延续的分水岭：" + ("向上" if up else "向下") +
+                    "离开后若" + ("回落" if up else "反弹") + "不回到中枢，就确认三" + ("买" if up else "卖") +
+                    "、趋势打开；若" + ("回落跌回" if up else "反弹升回") + "中枢，则回到中枢震荡。"),
+        "retrace_confirmed": "买卖点确认之后，走势能走多远，看后续同向的笔还有没有力度、会不会出现背驰。",
         "divergence_turn": "背驰意味着推动价格新高/新低的力度已经跟不上，是趋势可能见顶/见底的信号。",
     }
     en = {
-        "pivot_forming": "Once a pivot forms, every later leg's strength and retrace are measured against its ZG/ZD.",
+        "pivot_forming": "Once a pivot forms, every later leg's strength, retest and pullback is measured against its top and bottom.",
         "pivot_oscillating": "The longer a pivot extends, the stronger the eventual breakout tends to be.",
-        "leaving": (f"The leaving leg is the fork in the road: after leaving {'upward' if up else 'downward'}, "
-                    "if the retrace stays out of the pivot, it confirms a type-3 signal and the trend opens up; "
-                    "if it falls back in, it returns to oscillation."),
+        "leaving": (f"Leaving the pivot is the fork in the road: after leaving {'upward' if up else 'downward'}, "
+                    f"if the {'retest' if up else 'pullback'} stays out of the pivot, it confirms a type-3 signal "
+                    "and the trend opens up; if it gets back in, the pivot oscillation resumes."),
         "retrace_confirmed": "How far the trend goes next depends on whether force holds or a divergence appears.",
         "divergence_turn": "Divergence means the force driving new highs/lows can't keep up — a common "
                             "precursor to a top or bottom.",
@@ -382,7 +404,7 @@ def _build_leaving(pivot: "Pivot", breakout: "Stroke", last_price: float, lang: 
     label = _phase_label(phase, direction, None, lang)
     reason = _reason(phase, direction, pivot, last_price, None, lang)
     return PivotPhase(phase=phase, phase_label=label, direction=direction, pivot=pivot,
-                       checklist=_checklist(phase, label, reason, pivot, lang), reason=reason,
+                       checklist=_checklist(phase, label, reason, pivot, lang, direction), reason=reason,
                        confirmed=breakout.confirmed, branches=_branches(direction, pivot, lang),
                        stage_guide=_stage_guide(phase, direction, pivot, lang))
 
@@ -401,7 +423,8 @@ def _build_retrace_confirmed(pivot: "Pivot", pair: _Pair, lang: str, signaled: b
     return PivotPhase(phase=phase, phase_label=label, direction=pair.direction, pivot=pivot,
                        checklist=_checklist(phase, label, reason, pivot, lang), reason=reason,
                        confirmed=pair.retrace.confirmed, branches=[],
-                       stage_guide=_stage_guide(phase, pair.direction, pivot, lang))
+                       stage_guide=_stage_guide(phase, pair.direction, pivot, lang),
+                       outcome=pair.outcome if pair.outcome != "back_to_range" else None)
 
 
 def _build_divergence_turn(pivot: "Pivot", pair: _Pair, turn_stroke: "Stroke", lang: str) -> PivotPhase:
@@ -411,7 +434,8 @@ def _build_divergence_turn(pivot: "Pivot", pair: _Pair, turn_stroke: "Stroke", l
     return PivotPhase(phase=phase, phase_label=label, direction=pair.direction, pivot=pivot,
                        checklist=_checklist(phase, label, reason, pivot, lang), reason=reason,
                        confirmed=turn_stroke.confirmed, branches=[],
-                       stage_guide=_stage_guide(phase, pair.direction, pivot, lang))
+                       stage_guide=_stage_guide(phase, pair.direction, pivot, lang),
+                       outcome=pair.outcome if pair.outcome != "back_to_range" else None)
 
 
 def build_pivot_phase(result: "ChanAnalysisResult", lang: str = "zh") -> PivotPhase | None:

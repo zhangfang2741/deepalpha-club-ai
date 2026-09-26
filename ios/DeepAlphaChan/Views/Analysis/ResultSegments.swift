@@ -1,122 +1,188 @@
 import SwiftUI
 
-/// 图表下方按状态、信号、风险组织阅读，整页共用外层滚动容器。
+/// 详情页图表以下的内容：一条往下读的页面，不再分「当前状态 / 买卖点 / 风险提示」三个 Tab。
+///
+/// 以前三个 Tab + 底部「继续核对 →」按钮是两套导航，每个 Tab 内容又偏短、多是模板文字，
+/// 页面头重脚轻。现在按阅读顺序连续排：这意味着什么 → 买卖点 → 阶段流程图（默认收起）
+/// → 需要留意（只列本股的待确认项与风险）。结论本身在页面顶部的 ConclusionCard。
 struct ResultSegments: View {
     let analysis: ChanAnalysis
-
-    /// 渲染进分享长图时传 true：静态图里没有切换交互，长图要的是完整内容而不是
-    /// 用户当下选中的那一段，所以不走切换器，三段上下全铺，各带小标题。
+    /// 离屏渲染分享长图时置 true：买卖点全部展开、不放可折叠的流程图。
     var isStatic = false
-
-    /// 透传给 `AnalysisSection` → `PivotPhaseBlock`，见 `ResultDetailView` 里
-    /// `pageContentWidth` 的说明。
+    /// 页面可用内容宽度，透传给阶段流程图（见 PivotPhaseBlock）。
     var contentWidth: CGFloat?
 
-    @State private var segment: Segment = .analysis
+    /// 买卖点默认只展示最近几条，其余点「查看全部」。
+    static let collapsedSignalCount = 3
 
-    enum Segment: String, CaseIterable, Identifiable {
-        case analysis, signals, risk
-        var id: String { rawValue }
-        var title: String {
-            switch self {
-            case .analysis: return L("当前状态")
-            case .signals: return L("买卖点")
-            case .risk: return L("风险提示")
-            }
-        }
-    }
+    @State private var showAllSignals = false
+    @State private var showDiagram = false
 
     var body: some View {
-        VStack(spacing: 12) {
-            if isStatic {
-                staticSections
-            } else {
-                interactiveSections
+        VStack(alignment: .leading, spacing: 10) {
+            if let phase = analysis.pivotPhase {
+                sectionHeader(L("这意味着什么"))
+                meaningCard(phase)
+            }
+
+            signalsSection
+
+            if let phase = analysis.pivotPhase, !isStatic {
+                diagramSection(phase)
+            }
+
+            if !cautions.isEmpty {
+                sectionHeader(L("需要留意"))
+                BulletList(items: cautions, color: Theme.textSecondary)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func sectionHeader(_ text: String, trailing: String? = nil) -> some View {
+        HStack {
+            Text(text)
+            Spacer()
+            if let trailing { Text(trailing) }
+        }
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundColor(Theme.textSecondary)
+        .padding(.horizontal, 4)
+        .padding(.top, 6)
+    }
+
+    // MARK: - 这意味着什么
+
+    private func meaningCard(_ phase: PivotPhase) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(HeadlineHighlighter.highlight(Self.plainTerms(phase.reason)))
+                .font(AnalysisType.body)
+                .foregroundStyle(Theme.textPrimary.opacity(0.9))
+                .lineSpacing(AnalysisType.bodyLineSpacing)
+                .fixedSize(horizontal: false, vertical: true)
+            if !phase.stageGuide.whyItMatters.isEmpty {
+                Text(phase.stageGuide.whyItMatters)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text(L("参考中枢（%@）：%@ ~ %@",
+                   phase.pivot.level == .segment ? L("线段级") : L("笔级"),
+                   String(format: "%.2f", phase.pivot.zd),
+                   String(format: "%.2f", phase.pivot.zg)))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(Theme.textSecondary)
+            if let next = phase.checklist.first(where: { $0.state == .pending }) {
+                Divider().background(Theme.border)
+                Text(L("接下来看：%@", next.label))
+                    .font(.footnote)
+                    .foregroundStyle(Theme.accent)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    /// 后端原因文案里的 ZG / ZD 是缠论记号，普通用户看不懂，换成「上沿 / 下沿」。
+    /// 原文「守住 ZG 302.16」里记号两侧带空格（中英混排），换成中文后去掉前面那个空格，
+    /// 得到「守住上沿 302.16」。
+    static func plainTerms(_ text: String) -> String {
+        var t = text
+        for (mark, word) in [("ZG", L("上沿")), ("ZD", L("下沿"))] {
+            t = t.replacingOccurrences(of: " \(mark) ", with: "\(word) ")
+                .replacingOccurrences(of: mark, with: word)
+        }
+        return t
+    }
+
+    // MARK: - 买卖点
+
+    private var sortedSignals: [Signal] { analysis.signals.sorted { $0.time > $1.time } }
+
+    @ViewBuilder
+    private var signalsSection: some View {
+        let all = sortedSignals
+        let unconfirmed = all.filter { !$0.confirmed }.count
+        sectionHeader(L("买卖点 · 最新在前"),
+                      trailing: unconfirmed > 0 ? L("%lld 条未确认", unconfirmed) : nil)
+        if all.isEmpty {
+            Text(L("当前区间没有识别到明确的买卖点，可先看上面的状态和图上的中枢位置。"))
+                .font(AnalysisType.body)
+                .foregroundStyle(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+        } else {
+            let expanded = isStatic || showAllSignals
+            let shown = expanded ? all : Array(all.prefix(Self.collapsedSignalCount))
+            VStack(spacing: 6) {
+                ForEach(shown) { SignalDetailCard(signal: $0, isStatic: isStatic) }
+            }
+            if !isStatic && all.count > Self.collapsedSignalCount {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { showAllSignals.toggle() }
+                } label: {
+                    Text(showAllSignals ? L("收起") : L("查看全部 %lld 个买卖点", all.count))
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                }
+                .buttonStyle(.plain)
             }
         }
     }
 
-    /// 回退记录：曾经尝试把图表+图层开关固定在顶部、tab 内容单独套一个
-    /// `.frame(maxHeight: .infinity)` 的 ScrollView 独立滚动——真机实测发现
-    /// 图表+MACD+图例已经占掉大半屏，留给 tab 内容的"剩余空间"被挤成一个
-    /// 只有几行高的小框，体验比之前更差，已经撤回。tab 内容和图表一起回到
-    /// 外层共享的那个 ScrollView 里（见 ResultDetailView.body），这里只负责
-    /// 切换器 + 当前选中的内容，不再自带 ScrollView。`.id(segment)` 保留：
-    /// 让 SwiftUI 把每次切换都当成一棵新的内容树，不会把上一个 tab 的布局
-    /// 状态带过来。
-    private var interactiveSections: some View {
-        VStack(spacing: 12) {
-            SegmentTabBar(selection: $segment, title: title(for:))
+    // MARK: - 阶段流程图（默认收起）
 
-            Group {
-                switch segment {
-                case .analysis:
-                    AnalysisSection(analysis: analysis, contentWidth: contentWidth)
-                case .signals:
-                    SignalListSection(analysis: analysis, isStatic: isStatic)
-                case .risk:
-                    RiskSection(analysis: analysis)
-                }
-            }
-            .id(segment)
-
+    private func diagramSection(_ phase: PivotPhase) -> some View {
+        VStack(spacing: 0) {
             Button {
-                switch segment {
-                case .analysis: segment = .signals
-                case .signals: segment = .risk
-                case .risk: segment = .analysis
-                }
+                withAnimation(.easeInOut(duration: 0.2)) { showDiagram.toggle() }
             } label: {
-                Label(nextTitle, systemImage: "arrow.right")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .foregroundStyle(Theme.accent)
-                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10))
+                HStack {
+                    Text(L("阶段流程图 · 当前在「%@」", Self.stageTitle(phase)))
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.textPrimary)
+                    Spacer()
+                    Text(showDiagram ? L("收起") : L("展开"))
+                        .font(.footnote)
+                        .foregroundStyle(Theme.textSecondary)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Theme.textSecondary)
+                        .rotationEffect(.degrees(showDiagram ? 180 : 0))
+                }
+                .padding(14)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            if showDiagram {
+                PivotPhaseBlock(phase: phase, contentWidth: contentWidth, showsDetail: false)
+            }
         }
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .padding(.top, 6)
     }
 
-    private var nextTitle: String {
-        switch segment {
-        case .analysis: return L("继续核对买卖点")
-        case .signals: return L("查看风险与限制")
-        case .risk: return L("返回当前状态")
-        }
+    /// 当前所在的流程节点名（如「确认买卖点」）：直接取流程图自己的节点名，保证与图上
+    /// 高亮的框一字不差（不读后端 stage_guide，那里「中枢形成」与图上的「中枢震荡」是同一个框）。
+    static func stageTitle(_ phase: PivotPhase) -> String {
+        PhaseDiagramCopy.name(of: .node(for: phase.phase))
     }
 
-    /// 长图布局：三段全铺，标题复用交互态的文案（买卖点/风险提示带数量）。
-    private var staticSections: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader(L("当前状态"))
-            AnalysisSection(analysis: analysis, contentWidth: contentWidth)
+    // MARK: - 需要留意
 
-            sectionHeader(title(for: .signals))
-            SignalListSection(analysis: analysis, isStatic: isStatic)
-
-            sectionHeader(title(for: .risk))
-            RiskSection(analysis: analysis)
-        }
-    }
-
-    private func sectionHeader(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundColor(Theme.textSecondary)
-    }
-
-    /// 买卖点/风险提示段带上数量，不用切过去就知道有没有东西。
-    private func title(for s: Segment) -> String {
-        switch s {
-        case .analysis:
-            return s.title
-        case .signals:
-            guard !analysis.signals.isEmpty else { return s.title }
-            return "\(s.title) \(analysis.signals.count)"
-        case .risk:
-            let count = AnalysisInterpretation.riskCount(analysis)
-            guard count > 0 else { return s.title }
-            return "\(s.title) \(count)"
-        }
+    /// 只列本股具体的待确认项与风险（后端给的），不再放通用模板说明。
+    private var cautions: [String] {
+        AnalysisInterpretation.displayedPendingNotes(analysis)
+            + AnalysisInterpretation.displayedOtherRisks(analysis)
     }
 }
