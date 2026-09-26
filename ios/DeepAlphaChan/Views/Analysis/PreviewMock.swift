@@ -77,14 +77,15 @@ enum PreviewMock {
                 stageGuide: StageGuide(
                     currentIndex: 2,
                     steps: [
-                        StageGuideStep(key: "pivot_forming", title: "中枢形成", detail: "三段重叠围出 372.00–388.00"),
-                        StageGuideStep(key: "pivot_oscillating", title: "中枢震荡", detail: "区间内反复，中枢延伸"),
-                        StageGuideStep(key: "leaving", title: "离开段", detail: "向上离开中枢，候选第三类买点"),
-                        StageGuideStep(key: "retrace_confirmed", title: "回抽确认", detail: "回抽不进中枢 → 确认三买"),
-                        StageGuideStep(key: "divergence_turn", title: "背驰/转折", detail: "趋势末端背驰 → 一类买卖点"),
+                        StageGuideStep(key: "pivot_forming", title: "中枢形成", detail: "三段走势重叠，围出中枢 372.00–388.00"),
+                        StageGuideStep(key: "pivot_oscillating", title: "中枢震荡", detail: "价格在中枢内反复，中枢延伸"),
+                        StageGuideStep(key: "leaving", title: "离开中枢", detail: "向上突破，离开中枢，候选第三类买点"),
+                        StageGuideStep(key: "retrace_confirmed", title: "确认买卖点", detail: "回落不回到中枢 → 三买；回到中枢内但未破对侧 → 二买"),
+                        StageGuideStep(key: "divergence_turn", title: "背驰 / 转折", detail: "趋势末端背驰 → 一类买卖点"),
                     ],
-                    whyItMatters: "离开段是缠论趋势能否延续的分水岭：向上离开中枢后若回抽不进中枢，就确认三买、中枢升级、趋势打开；若回抽跌回中枢，则回到震荡。"
-                )
+                    whyItMatters: "离开中枢是走势能否延续的分水岭：向上离开后若回落不回到中枢，就确认三买、趋势打开；若回落跌回中枢，则回到中枢震荡。"
+                ),
+                outcome: nil
             ),
             structureLayers: [
                 StructureLayer(layer: "stroke", label: "笔", title: "向上笔形成中",

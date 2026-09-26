@@ -117,26 +117,31 @@ struct ConclusionCard: View {
         }
     }
 
-    /// 一句人话：说清价格和震荡区（中枢）的关系，数字取中枢上下沿，不出现 ZG / ZD。
+    /// 一句人话：说清价格和中枢的关系。叫法与流程图、后端阶段文案同一套（中枢、离开中枢、
+    /// 回落 / 反弹、中枢上沿 / 下沿），不出现 ZG / ZD。
     static func plainSentence(_ phase: PivotPhase) -> String {
         let hi = format(phase.pivot.zg), lo = format(phase.pivot.zd)
         let up = phase.direction == "up"
         switch phase.phase {
         case "pivot_forming":
-            return L("价格开始在 %@ ~ %@ 之间来回，正在形成震荡区", lo, hi)
+            return L("三段走势重叠，形成中枢（%@ ~ %@）", lo, hi)
         case "pivot_oscillating":
-            return L("价格还在 %@ ~ %@ 的震荡区里来回，方向未明", lo, hi)
+            return L("价格在中枢（%@ ~ %@）内反复，方向未明", lo, hi)
         case "leaving":
-            return up ? L("价格向上离开 %@ ~ %@ 的震荡区，等回落确认", lo, hi)
-                      : L("价格向下离开 %@ ~ %@ 的震荡区，等反弹确认", lo, hi)
+            return up ? L("价格向上离开中枢（上沿 %@），等待回落确认", hi)
+                      : L("价格向下离开中枢（下沿 %@），等待反弹确认", lo)
         case "retrace_confirmed":
-            return up ? L("突破震荡区后回落，没有跌回区间（%@ ~ %@）", lo, hi)
-                      : L("跌破震荡区后反弹，没有回到区间（%@ ~ %@）", lo, hi)
+            if phase.outcome == "type2" {
+                return up ? L("向上离开中枢后回落，回到中枢内但没有跌破下沿 %@", lo)
+                          : L("向下离开中枢后反弹，回到中枢内但没有升破上沿 %@", hi)
+            }
+            return up ? L("向上离开中枢后回落，没有跌回中枢（%@ ~ %@）", lo, hi)
+                      : L("向下离开中枢后反弹，没有升回中枢（%@ ~ %@）", lo, hi)
         case "divergence_turn":
-            return up ? L("继续上涨但力度变弱，上涨可能接近尾声")
-                      : L("继续下跌但力度变弱，下跌可能接近尾声")
+            return up ? L("继续上涨但力度变弱（顶背驰），上涨可能接近尾声")
+                      : L("继续下跌但力度变弱（底背驰），下跌可能接近尾声")
         default:
-            return L("价格与 %@ ~ %@ 震荡区的关系见下方说明", lo, hi)
+            return L("价格与中枢（%@ ~ %@）的关系见下方说明", lo, hi)
         }
     }
 

@@ -252,9 +252,11 @@ struct PivotPhase: Codable {
     let confirmed: Bool
     let branches: [PhaseBranch]
     let stageGuide: StageGuide
+    /// 回落 / 反弹结果：type3 没有回到中枢、type2 回到中枢内；确认买卖点后才有，旧后端为 nil。
+    let outcome: String?
 
     enum CodingKeys: String, CodingKey {
-        case phase, pivot, checklist, reason, confirmed, branches, direction
+        case phase, pivot, checklist, reason, confirmed, branches, direction, outcome
         case phaseLabel = "phase_label"
         case stageGuide = "stage_guide"
     }

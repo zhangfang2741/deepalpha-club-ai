@@ -23,59 +23,71 @@ enum PivotPhaseDiagramSelection: Hashable, Identifiable {
     }
 }
 
-private struct PhaseDiagramCopy {
+struct PhaseDiagramCopy {
     let title: String
     let body: String
 
     /// 各方块/边的通用规则讲解——跟具体某支股票无关，点开对应的 `PhaseRuleSheet`
     /// 时用这份文案。「这支股票现在的具体结论」另见 `PivotPhaseDiagram.detailPanel`
     /// 用的 `phase.reason`，两者不共用同一套文案。
+    /// 流程图上每个框（状态）与每条线（动作）的名字——图上的框、线标签、讲解弹窗标题、
+    /// 以及外面「阶段流程图 · 当前在「X」」都读这里，保证处处同名。叫法贴合缠论原文：
+    /// 中枢形成 / 震荡、离开中枢、背驰；原文的「回试 / 回抽」用大白话「回落 / 反弹」，
+    /// ZG / ZD 写成「中枢上沿 / 下沿」（与后端 app/services/chan/pivot_phase.py 同一套词表）。
+    static func name(of selection: PivotPhaseDiagramSelection) -> String {
+        switch selection {
+        case .none: return L("无中枢")
+        case .pivotIn: return L("中枢震荡")
+        case .leaving: return L("离开中枢")
+        case .retraceConfirmed: return L("确认买卖点")
+        case .divergence: return L("背驰 / 转折")
+        case .edgeForm: return L("形成中枢")
+        case .edgeBreak: return L("突破")
+        case .edgeHold: return L("回落 / 反弹")
+        case .edgeDiverge: return L("背驰")
+        case .edgeFake: return L("回到中枢")
+        case .edgeReverse: return L("反向突破")
+        }
+    }
+
+    /// 各方块/边的通用规则讲解——跟具体某支股票无关，点开对应的 `PhaseRuleSheet`
+    /// 时用这份文案。「这支股票现在的具体结论」另见详情页的「这意味着什么」。
     static func copy(for selection: PivotPhaseDiagramSelection) -> PhaseDiagramCopy {
+        let n = name(of: selection)
         switch selection {
         case .none:
-            return PhaseDiagramCopy(
-                title: L("无状态"),
-                body: L("笔数不足 3 笔，或者当前没有可用的中枢——这是兜底状态，不是算出来的判定结果。交付物：无。"))
+            return PhaseDiagramCopy(title: n,
+                body: L("笔数不足 3 笔，或者当前还没有可用的中枢——这是兜底状态，不是判定结果，不产生买卖点。"))
         case .pivotIn:
-            return PhaseDiagramCopy(
-                title: L("中枢内"),
-                body: L("价格在中枢区间反复，最近的笔里还没有一笔「起点在中枢内、终点越过 ZG/ZD 边界」的笔。交付物：无买卖点信号，只更新中枢的 ZG/ZD 参考区间。"))
+            return PhaseDiagramCopy(title: n,
+                body: L("三段走势重叠形成中枢之后，价格在中枢上沿与下沿之间反复（也叫中枢延伸），还没有一笔从中枢内出发、收在中枢外。这个阶段不产生买卖点。"))
         case .leaving:
-            return PhaseDiagramCopy(
-                title: L("离开中枢"),
-                body: L("出现一笔起点在中枢内、终点越过 ZG（向上）或 ZD（向下）的笔，正等它之后的回踩笔出现。交付物：候选三买/三卖，尚未确认。"))
+            return PhaseDiagramCopy(title: n,
+                body: L("一笔从中枢内出发，向上收在中枢上沿之上、或向下收在中枢下沿之下，就是离开中枢。这是第三类买卖点的候选，还要等之后的回落（向上离开时）或反弹（向下离开时）来确认。"))
         case .retraceConfirmed:
-            return PhaseDiagramCopy(
-                title: L("确认买卖点"),
-                body: L("回踩笔收在越过原边界处 → 三买/三卖；收在区间内但没破对侧边界 → 二买/二卖。交付物：对应的买卖点信号，强度由中枢级别 + 回踩离边界的距离决定。"))
+            return PhaseDiagramCopy(title: n,
+                body: L("离开中枢后的回落 / 反弹没有回到中枢 → 三买 / 三卖；回到了中枢里、但没有穿过另一侧边沿 → 二买 / 二卖。强弱看中枢级别，以及回落 / 反弹离中枢边沿还有多远。"))
         case .divergence:
-            return PhaseDiagramCopy(
-                title: L("背驰 / 转折"),
-                body: L("确认买卖点之后，后续同方向的笔里出现了背驰——创新高/新低，但价差、量能或时长比前一个同向段更弱。交付物：一买或一卖信号，强弱由这三项的比值决定。"))
+            return PhaseDiagramCopy(title: n,
+                body: L("买卖点确认之后，同方向继续走出新高 / 新低，但价差、量能或时长比前一段更弱，就是背驰（向上叫顶背驰，向下叫底背驰），对应一卖或一买。"))
         case .edgeForm:
-            return PhaseDiagramCopy(
-                title: L("条件：形成中枢"),
-                body: L("最近的笔数达到 3 笔以上，且价格区间有重叠，构成一个中枢——这是后面所有判定的起点。"))
+            return PhaseDiagramCopy(title: L("动作：%@", n),
+                body: L("连续三段走势的价格区间有重叠，重叠的部分就是中枢——后面所有判断都从它开始。"))
         case .edgeBreak:
-            return PhaseDiagramCopy(
-                title: L("条件：突破"),
-                body: L("中枢形成之后，出现一笔起点在中枢内、终点越过 ZG 或 ZD 的笔，判定为「离开中枢」。"))
+            return PhaseDiagramCopy(title: L("动作：%@", n),
+                body: L("一笔从中枢内出发，收在中枢上沿之上或下沿之下，进入「离开中枢」。"))
         case .edgeHold:
-            return PhaseDiagramCopy(
-                title: L("条件：回踩守住"),
-                body: L("离开中枢之后的回踩笔，收在越过原边界处（三类）或区间内但未破对侧边界（二类），判定为「确认买卖点」。"))
+            return PhaseDiagramCopy(title: L("动作：%@", n),
+                body: L("离开中枢之后第一段反向走势：向上离开后叫回落，向下离开后叫反弹。没有回到中枢（三类），或回到中枢但没有穿过另一侧边沿（二类），进入「确认买卖点」。"))
         case .edgeDiverge:
-            return PhaseDiagramCopy(
-                title: L("条件：出现背驰"),
-                body: L("确认买卖点之后，继续沿同一方向前进的笔里，力度（价差/量能/时长）比前一个同向段更弱，判定为「背驰」。"))
+            return PhaseDiagramCopy(title: L("动作：%@", n),
+                body: L("买卖点确认之后，同方向继续前进的笔，力度（价差 / 量能 / 时长）比前一个同向段更弱，进入「背驰 / 转折」。"))
         case .edgeFake:
-            return PhaseDiagramCopy(
-                title: L("条件：假突破"),
-                body: L("回踩笔直接穿破了对侧边界，整根笔又回到中枢区间内——这次突破作废，退回「中枢内」重新计算，不是终态。"))
+            return PhaseDiagramCopy(title: L("动作：%@", n),
+                body: L("回落 / 反弹直接穿过了中枢另一侧边沿，重新回到中枢里——这次离开不算数，退回「中枢震荡」重新判断。"))
         case .edgeReverse:
-            return PhaseDiagramCopy(
-                title: L("条件：反向突破"),
-                body: L("「确认买卖点」或「背驰/转折」之后，后面出现一次方向相反、同样满足突破+回踩条件的新尝试——整体重新判定一次，结论会被新结果直接覆盖。"))
+            return PhaseDiagramCopy(title: L("动作：%@", n),
+                body: L("「确认买卖点」或「背驰 / 转折」之后，出现一次方向相反的突破并完成回落 / 反弹确认——整体重新判定，结论以新的为准。"))
         }
     }
 }
@@ -125,33 +137,33 @@ struct PivotPhaseDiagram: View {
     private var nodeSpecs: [NodeSpec] {
         [
             NodeSpec(key: .none, rect: CGRect(x: 145, y: 14, width: 104, height: 26),
-                     title: L("无状态"), dashed: true, hasDeliverable: false, isCurrent: currentNode == .none),
+                     title: PhaseDiagramCopy.name(of: .none), dashed: true, hasDeliverable: false, isCurrent: currentNode == .none),
             NodeSpec(key: .pivotIn, rect: CGRect(x: 112, y: 70, width: 170, height: 46),
-                     title: L("中枢内"), dashed: false, hasDeliverable: false, isCurrent: currentNode == .pivotIn),
+                     title: PhaseDiagramCopy.name(of: .pivotIn), dashed: false, hasDeliverable: false, isCurrent: currentNode == .pivotIn),
             NodeSpec(key: .leaving, rect: CGRect(x: 112, y: 174, width: 170, height: 46),
-                     title: L("离开中枢"), dashed: false, hasDeliverable: true, isCurrent: currentNode == .leaving),
+                     title: PhaseDiagramCopy.name(of: .leaving), dashed: false, hasDeliverable: true, isCurrent: currentNode == .leaving),
             NodeSpec(key: .retraceConfirmed, rect: CGRect(x: 100, y: 278, width: 194, height: 54),
-                     title: L("确认买卖点"), dashed: false, hasDeliverable: true, isCurrent: currentNode == .retraceConfirmed),
+                     title: PhaseDiagramCopy.name(of: .retraceConfirmed), dashed: false, hasDeliverable: true, isCurrent: currentNode == .retraceConfirmed),
             NodeSpec(key: .divergence, rect: CGRect(x: 112, y: 386, width: 170, height: 46),
-                     title: L("背驰 / 转折"), dashed: false, hasDeliverable: true, isCurrent: currentNode == .divergence),
+                     title: PhaseDiagramCopy.name(of: .divergence), dashed: false, hasDeliverable: true, isCurrent: currentNode == .divergence),
         ]
     }
 
     private let edges: [Edge] = [
         Edge(key: .edgeForm, from: CGPoint(x: 197, y: 40), to: CGPoint(x: 197, y: 70),
-             control1: nil, control2: nil, label: L("形成中枢"), labelPos: CGPoint(x: 199, y: 55), color: Theme.textSecondary),
+             control1: nil, control2: nil, label: PhaseDiagramCopy.name(of: .edgeForm), labelPos: CGPoint(x: 199, y: 55), color: Theme.textSecondary),
         Edge(key: .edgeBreak, from: CGPoint(x: 197, y: 116), to: CGPoint(x: 197, y: 174),
-             control1: nil, control2: nil, label: L("突破"), labelPos: CGPoint(x: 199, y: 145), color: Theme.textSecondary),
+             control1: nil, control2: nil, label: PhaseDiagramCopy.name(of: .edgeBreak), labelPos: CGPoint(x: 199, y: 145), color: Theme.textSecondary),
         Edge(key: .edgeHold, from: CGPoint(x: 197, y: 220), to: CGPoint(x: 197, y: 278),
-             control1: nil, control2: nil, label: L("回踩守住"), labelPos: CGPoint(x: 199, y: 249), color: Theme.textSecondary),
+             control1: nil, control2: nil, label: PhaseDiagramCopy.name(of: .edgeHold), labelPos: CGPoint(x: 199, y: 249), color: Theme.textSecondary),
         Edge(key: .edgeDiverge, from: CGPoint(x: 197, y: 332), to: CGPoint(x: 197, y: 386),
-             control1: nil, control2: nil, label: L("背驰"), labelPos: CGPoint(x: 199, y: 359), color: Theme.textSecondary),
+             control1: nil, control2: nil, label: PhaseDiagramCopy.name(of: .edgeDiverge), labelPos: CGPoint(x: 199, y: 359), color: Theme.textSecondary),
         Edge(key: .edgeFake, from: CGPoint(x: 282, y: 198), to: CGPoint(x: 284, y: 94),
              control1: CGPoint(x: 340, y: 198), control2: CGPoint(x: 340, y: 94),
-             label: L("假突破"), labelPos: CGPoint(x: 328, y: 146), color: Theme.segment),
+             label: PhaseDiagramCopy.name(of: .edgeFake), labelPos: CGPoint(x: 328, y: 146), color: Theme.segment),
         Edge(key: .edgeReverse, from: CGPoint(x: 282, y: 410), to: CGPoint(x: 284, y: 198),
              control1: CGPoint(x: 352, y: 410), control2: CGPoint(x: 352, y: 198),
-             label: L("反向突破"), labelPos: CGPoint(x: 337, y: 304), color: Theme.stroke),
+             label: PhaseDiagramCopy.name(of: .edgeReverse), labelPos: CGPoint(x: 337, y: 304), color: Theme.stroke),
     ]
 
     var body: some View {
@@ -368,7 +380,7 @@ struct PivotPhaseDiagram: View {
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .lineSpacing(AnalysisType.bodyLineSpacing)
-                Text(L("参考中枢 %@ · 下沿 ZD %@ — 上沿 ZG %@",
+                Text(L("参考中枢（%@）：下沿 %@ — 上沿 %@",
                        phase.pivot.level == .segment ? L("线段级") : L("笔级"),
                        String(format: "%.2f", phase.pivot.zd),
                        String(format: "%.2f", phase.pivot.zg)))

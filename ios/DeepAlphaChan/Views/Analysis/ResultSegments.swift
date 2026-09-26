@@ -70,7 +70,7 @@ struct ResultSegments: View {
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text(L("参考震荡区（%@）：%@ ~ %@",
+            Text(L("参考中枢（%@）：%@ ~ %@",
                    phase.pivot.level == .segment ? L("线段级") : L("笔级"),
                    String(format: "%.2f", phase.pivot.zd),
                    String(format: "%.2f", phase.pivot.zg)))
@@ -172,9 +172,10 @@ struct ResultSegments: View {
         .padding(.top, 6)
     }
 
-    /// 当前所在的流程节点名（如「回抽确认」），取后端 stage_guide，取不到退回阶段标签。
+    /// 当前所在的流程节点名（如「确认买卖点」）：直接取流程图自己的节点名，保证与图上
+    /// 高亮的框一字不差（不读后端 stage_guide，那里「中枢形成」与图上的「中枢震荡」是同一个框）。
     static func stageTitle(_ phase: PivotPhase) -> String {
-        phase.stageGuide.steps.first { $0.key == phase.phase }?.title ?? phase.phaseLabel
+        PhaseDiagramCopy.name(of: .node(for: phase.phase))
     }
 
     // MARK: - 需要留意
