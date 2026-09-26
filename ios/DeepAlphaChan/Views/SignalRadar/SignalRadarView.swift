@@ -552,9 +552,10 @@ struct SignalRadarView: View {
     ///   多个气泡放不下时才外扩到刚好排开，且不越过所在时间档外沿（RadarOrbitSpacing.orbitRadius）。
     /// - 方向：由内圈到外圈、大气泡先放，每个气泡在自己的椭圆轨道上选「重叠最少、尽量
     ///   横向」的方向（RadarOrbitSpacing.bestAngle）。
-    /// - 避让：最后做一轮碰撞松弛（RadarOrbitSpacing.relax），把仍然压在一起的气泡推开、
-    ///   铺到外圈空处，保证代码和名称看得清；推开时靠中心的一方挪得少，远近仍大致对应时间，
-    ///   但不再严格落在所属时间圈上（产品决定：可读性优先）。
+    /// - 避让：最后做一轮碰撞松弛（RadarOrbitSpacing.relax）。允许边缘重叠较小气泡直径的
+    ///   bubbleOverlapRatio（代码/名称在气泡中间，盖不到），同时每个气泡被拉回自己的时间环——
+    ///   以前要求完全不重叠，10 个气泡只能被挤成一整圈铺满画布，远近不再对应时间，
+    ///   看不出哪个是哪天的。新的在上层（见末尾排序），重叠处被盖住的是更旧的气泡边缘。
     private static func layoutBubbles(
         signals: [RadarSignal], dayDate: String, width w: Double, height h: Double,
         avoid: [RadarOrbitSpacing.Obstacle] = []
@@ -579,6 +580,7 @@ struct SignalRadarView: View {
         let byDay = Dictionary(grouping: sizedSignals) { age($0.0) }
         var layouts: [BubbleLayout] = []
         var placed: [RadarOrbitSpacing.Placed] = []
+        var anchors: [RadarOrbitSpacing.Anchor] = []
         for (orbitIndex, days) in byDay.keys.sorted().enumerated() {
             // 大气泡先占位；同尺寸按稳定标识排序，强度排名变化时气泡不互换位置
             let members = (byDay[days] ?? []).sorted {
@@ -599,14 +601,16 @@ struct SignalRadarView: View {
                 let x = min(max(center.x + rx * cos(angle), inset), max(inset, w - inset))
                 let y = min(max(center.y + ry * sin(angle), inset), max(inset, h - inset))
                 placed.append(.init(x: x, y: y, diameter: d))
+                anchors.append(.init(rx: rx, ry: ry))
                 layouts.append(BubbleLayout(signal: sig, metrics: metrics, x: x, y: y,
                                             phase: Double(layouts.count) * 0.35, daysAgo: days))
             }
         }
-        // 按时间摆完后推开互相压住的气泡，铺到外圈空处（越近中心的挪得越少，远近仍大致=时间）
+        // 按时间摆完后推开压得太多的气泡：允许边缘少量重叠，并把每个气泡拉回自己的时间环
         let relaxed = RadarOrbitSpacing.relax(
             layouts.map { .init(x: $0.x, y: $0.y, diameter: $0.diameter) },
-            width: w, height: h, inset: RadarBubbleMetrics.edgePadding, obstacles: avoid)
+            width: w, height: h, inset: RadarBubbleMetrics.edgePadding, obstacles: avoid,
+            overlapRatio: bubbleOverlapRatio, anchors: anchors)
         for i in layouts.indices {
             layouts[i].x = relaxed[i].x
             layouts[i].y = relaxed[i].y
@@ -615,6 +619,10 @@ struct SignalRadarView: View {
         layouts.sort { $0.daysAgo > $1.daysAgo }
         return layouts
     }
+
+    /// 允许两个气泡边缘重叠「较小直径 × 此比例」。0.2 时重叠最深处离被盖气泡中心仍有
+    /// 约 0.6 个半径，中间的代码和名称不会被盖住；再大就开始压字。
+    static let bubbleOverlapRatio: Double = 0.2
 
     /// 买卖点类型 → 气泡直径：一类 78 / 二类 90 / 三类 102。一类只是背驰迹象、尚待验证，
     /// 三类回踩完全不回中枢、确认程度最高，越确认越大。三档面积比原先 (70/88/108) 收窄

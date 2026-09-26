@@ -5,6 +5,7 @@ import Foundation
 struct RadarOrbitSpacingTests {
     static func main() {
         testRelax()
+        testRelaxWithOverlapAndAnchors()
         testCrowdScale()
         assert(RadarOrbitSpacing.angles(count: 0, horizontalRadius: 100, verticalRadius: 100, offset: 0).isEmpty)
         for (rx, ry) in [(160.0, 160.0), (280.0, 140.0), (140.0, 280.0)] {
@@ -139,6 +140,52 @@ struct RadarOrbitSpacingTests {
         assert(hypot(b.x - nx, b.y - ny) >= r - 0.5, "推出禁区")
         assert(inBounds(out), "推出禁区后仍在画布内")
         print("RadarOrbitSpacing relax 测试通过")
+    }
+
+    /// 允许边缘重叠 + 时间回拉：气泡不必完全铺开，远近仍对应时间。
+    static func testRelaxWithOverlapAndAnchors() {
+        typealias P = RadarOrbitSpacing.Placed
+        typealias A = RadarOrbitSpacing.Anchor
+        let w = 400.0, h = 320.0, inset = 12.0, ratio = 0.2
+        let c = (x: w / 2, y: h / 2)
+        func d(_ a: P, _ b: P) -> Double { hypot(a.x - b.x, a.y - b.y) }
+        // 1. 轻微重叠（重叠 10 < 允许的 20）：不动
+        let light = [P(x: 150, y: 160, diameter: 100), P(x: 240, y: 160, diameter: 100)]
+        let same = RadarOrbitSpacing.relax(light, width: w, height: h, inset: inset, overlapRatio: ratio)
+        assert(zip(light, same).allSatisfy { abs($0.x - $1.x) < 1e-9 && abs($0.y - $1.y) < 1e-9 }, "允许范围内的重叠不推")
+        // 2. 严重重叠：推到允许重叠的边界，而不是推到完全分开
+        let heavy = [P(x: 190, y: 160, diameter: 100), P(x: 210, y: 160, diameter: 100)]
+        let pushed = RadarOrbitSpacing.relax(heavy, width: w, height: h, inset: inset, overlapRatio: ratio)
+        let dist = d(pushed[0], pushed[1])
+        assert(dist >= 80 - 0.5, "推到最多重叠 20%")
+        assert(dist < 100, "不必推到完全分开")
+        // 3. 回拉：没有碰撞时，离开时间环的气泡被拉回自己的环上
+        let off = [P(x: c.x + 30, y: c.y, diameter: 60)]
+        let back = RadarOrbitSpacing.relax(off, width: w, height: h, inset: inset, overlapRatio: ratio,
+                                           anchors: [A(rx: 150, ry: 120)])
+        let norm = hypot((back[0].x - c.x) / 150, (back[0].y - c.y) / 120)
+        assert(abs(norm - 1) < 0.1, "拉回到所属时间环附近（归一化半径 \(norm)）")
+        // 4. 拥挤时远近仍对应时间：内环组的平均半径明显小于外环组
+        var crowded: [P] = []
+        var anchors: [A] = []
+        for i in 0..<10 {
+            let inner = i < 5
+            let a = Double(i) * 0.63
+            let r = inner ? 0.33 : 1.0
+            crowded.append(P(x: c.x + 20 * cos(a), y: c.y + 20 * sin(a), diameter: 80))
+            anchors.append(A(rx: r * 180, ry: r * 140))
+        }
+        let out = RadarOrbitSpacing.relax(crowded, width: w, height: h, inset: inset, overlapRatio: ratio,
+                                          anchors: anchors)
+        func nr(_ p: P) -> Double { hypot((p.x - c.x) / 180, (p.y - c.y) / 140) }
+        let innerMean = out[0..<5].map(nr).reduce(0, +) / 5
+        let outerMean = out[5..<10].map(nr).reduce(0, +) / 5
+        assert(outerMean - innerMean > 0.3, "内环 \(innerMean) 应明显比外环 \(outerMean) 靠里")
+        // 收尾后不超过允许的重叠
+        for i in 0..<out.count { for j in (i + 1)..<out.count {
+            assert(d(out[i], out[j]) >= 80 * (1 - ratio) - 1, "收尾后重叠不超过 20%")
+        } }
+        print("RadarOrbitSpacing 重叠 + 回拉 测试通过")
     }
 
     static func testCrowdScale() {
