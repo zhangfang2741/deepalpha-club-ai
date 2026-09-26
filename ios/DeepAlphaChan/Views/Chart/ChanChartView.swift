@@ -598,16 +598,16 @@ struct ChanChartView: View {
             let padH: CGFloat = 5, padV: CGFloat = 2.5
             let badgeH = textSize.height + padV * 2
             let badgeW = textSize.width + padH * 2
-            let tri: CGFloat = 4  // 指向蜡烛的小三角高度
+            let tri = ChartHitResolver.badgeTriangle  // 指向蜡烛的小三角高度
 
             // 版面：蜡烛 →(间距7)→ 三角 →(贴着)→ 徽标。整体夹在可视区内。
-            let gap: CGFloat = 7
-            let span = gap + tri + badgeH
-            let midY = min(max(cy + dir * (gap + tri + badgeH / 2), span), height - span)
-            // 水平方向同样要夹住：徽标原来直接以 cx（蜡烛中心）为中心画，最左/最右
-            // 那根可见蜡烛的信号会有半个徽标画到可视区外面去，文字被切得看不全。
-            // 小三角仍指向真实蜡烛位置（下面 arrow 路径用的是原始 cx，不受这里影响）。
-            let badgeCx = min(max(cx, badgeW / 2), plotWidth - badgeW / 2)
+            // 位置与点击判定共用同一个函数（上下左右都夹在可视区内），画在哪就点得到哪。
+            // 小三角仍指向真实蜡烛位置（下面 arrow 路径用的是原始 cx，不受夹取影响）。
+            let center = ChartHitResolver.badgeCenter(
+                anchor: CGPoint(x: cx, y: cy), isBuy: sig.isBuy, plotWidth: plotWidth, height: height,
+                badgeSize: CGSize(width: badgeW, height: badgeH))
+            let midY = center.y
+            let badgeCx = center.x
             let badgeRect = CGRect(x: badgeCx - badgeW / 2, y: midY - badgeH / 2, width: badgeW, height: badgeH)
 
             // 小三角（徽标朝蜡烛的一侧）
@@ -821,32 +821,33 @@ struct ChanChartView: View {
         let bounds = visiblePriceBounds(range: range)
         func pt(_ t: String, _ p: Double) -> CGPoint? { point(t, p, range: range, height: height, bounds: bounds) }
 
+        // 买卖点徽标与分型圆点一起比距离，取视觉中心离手指最近的一个——以前固定「买卖点
+        // 优先」，底分型圆点的命中区与下方买点徽标重叠，点圆点略下方就弹出买点说明。
+        var nearby: [(ChartElement, CGFloat)] = []
         if vm.showSignals {
-            // 徽标画在价格下方（买）/上方（卖）约 19pt，只按徽标区域命中：
-            // 买卖点落在笔端点上，端点处的圆点是分型，点端点应出分型说明。
-            // 分型图层关闭时端点才算买卖点。
-            let hit = analysis.signals.compactMap { s -> (Signal, CGFloat)? in
-                guard let p = pt(s.time, s.price) else { return nil }
-                let badge = CGPoint(x: p.x, y: p.y + (s.isBuy ? 19 : -19))
+            for s in analysis.signals {
+                guard let p = pt(s.time, s.price) else { continue }
+                let badge = ChartHitResolver.badgeCenter(
+                    anchor: p, isBuy: s.isBuy, plotWidth: plotWidth, height: height,
+                    badgeSize: ChartHitResolver.typicalBadgeSize)
                 let dx = abs(loc.x - badge.x), dy = abs(loc.y - badge.y)
-                if dx < 18, dy < 11 { return (s, hypot(dx, dy)) }
+                if dx < 18, dy < 11 { nearby.append((.signal(s), hypot(dx, dy))) }
+                // 分型图层关闭时端点上没有圆点，点端点也算点买卖点
                 if !vm.showFractals {
                     let d = hypot(loc.x - p.x, loc.y - p.y)
-                    if d < 12 { return (s, d) }
+                    if d < 12 { nearby.append((.signal(s), d)) }
                 }
-                return nil
-            }.min { $0.1 < $1.1 }
-            if let (s, _) = hit { return .signal(s) }
+            }
         }
         // 分型先于背驰：背驰虚线两端就是分型点，点端点应出分型说明
         if vm.showFractals {
-            let hit = analysis.fractals.compactMap { f -> (Fractal, CGFloat)? in
-                guard let p = pt(f.time, f.price) else { return nil }
+            for f in analysis.fractals {
+                guard let p = pt(f.time, f.price) else { continue }
                 let d = hypot(loc.x - p.x, loc.y - p.y)
-                return d < 12 ? (f, d) : nil
-            }.min { $0.1 < $1.1 }
-            if let (f, _) = hit { return .fractal(f) }
+                if d < 12 { nearby.append((.fractal(f), d)) }
+            }
         }
+        if let hit = ChartHitResolver.nearest(nearby) { return hit }
         let strokes = analysis.strokes
         if vm.showDivergences, strokes.count >= 3 {
             var best: (ChartElement, CGFloat)?
