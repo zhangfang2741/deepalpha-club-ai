@@ -210,7 +210,7 @@ struct ResultDetailView: View {
     /// 压缩版免责声明。完整版在「我的」页——App Store 要求这个可见，不能删。
     private var compactDisclaimer: some View {
         // 全页唯一一处免责（原买卖点 Tab 底部那句并入这里）
-        Text(L("「买卖点」是缠论对价格结构的技术命名；本页由算法自动生成，仅供技术研究，不构成投资建议。"))
+        Text(L("「买卖点」是缠论对价格结构的技术命名；本页按标准缠论规则识别，仅供技术研究，不构成投资建议。"))
             .multilineTextAlignment(.center)
             .font(.caption2)
             .foregroundColor(Theme.textSecondary)
