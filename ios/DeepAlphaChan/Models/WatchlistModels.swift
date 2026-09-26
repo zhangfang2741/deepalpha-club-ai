@@ -28,6 +28,14 @@ struct WatchlistItem: Decodable, Identifiable {
 
 struct WatchlistResponse: Decodable {
     let items: [WatchlistItem]
+    /// 自选上限，按请求带的订阅档位算出，来自后端 `app.services.watchlist.TIER_LIMITS`，
+    /// 不在端上硬编码。nil 表示该档不限（高级版）。
+    let maxItems: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case items
+        case maxItems = "max_items"
+    }
 }
 
 /// 一只自选标的当前的中枢生命周期阶段（对应后端 WatchlistPhaseOut）。

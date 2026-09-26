@@ -17,34 +17,49 @@
       "localizations" : [
         {
           "description" : "",
-          "displayName" : "DeepAlpha Pro",
+          "displayName" : "DeepAlpha 缠论会员",
           "locale" : "zh_CN"
         }
       ],
-      "name" : "DeepAlpha Pro",
+      "name" : "DeepAlpha 缠论会员",
       "subscriptions" : [
         {
           "adHocOffers" : [],
           "codeOffers" : [],
-          "displayPrice" : "9.90",
+          "displayPrice" : "38.00",
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000011",
-          "introductoryOffer" : {
-            "internalID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000012",
-            "paymentMode" : "free",
-            "subscriptionPeriod" : "P1W"
-          },
           "localizations" : [
             {
-              "description" : "解锁全部缠论分析，不受每日 3 支标的限制",
-              "displayName" : "DeepAlpha Pro 月度会员",
+              "description" : "解锁全部缠论分析与 30 分钟次级别确认，不受每日 3 支标的限制",
+              "displayName" : "基础版 月度会员",
               "locale" : "zh_CN"
             }
           ],
           "productID" : "club.deepalpha.chan.pro.monthly",
           "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "Pro Monthly",
+          "referenceName" : "Experience Monthly",
+          "subscriptionGroupID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000010",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "188.00",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000021",
+          "localizations" : [
+            {
+              "description" : "基础版全部权益 + 信号雷达、自选批量状态计算",
+              "displayName" : "高级版 月度会员",
+              "locale" : "zh_CN"
+            }
+          ],
+          "productID" : "club.deepalpha.chan.premium.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Premium Monthly",
           "subscriptionGroupID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000010",
           "type" : "RecurringSubscription"
         }

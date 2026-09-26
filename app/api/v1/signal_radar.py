@@ -25,8 +25,10 @@ from app.services.signal_radar.service import (
     DEFAULT_TOP_N,
     WATCHLIST_KEY,
     _universes_out,
+    compute_demo_day,
     compute_market,
     peek_cache_entry,
+    read_demo_cache,
     read_watchlist_cache,
 )
 from app.services.watchlist import display_name, list_items
@@ -105,6 +107,70 @@ async def _run_scan(market: str, universe_key: str, user_id: int, refresh: bool 
             await redis.delete(_generating_key(market, universe_key))
         except Exception:  # noqa: BLE001
             pass
+
+
+def _demo_generating_key(market: str) -> str:
+    return f"signal_radar:demo:generating:{market}"
+
+
+async def _run_demo_scan(market: str) -> None:
+    """后台算一次免费预览快照（「上个月 1 号」），完成后清除 generating 标记。"""
+    redis = current_redis()
+    if redis is None:
+        logger.error("signal_radar_demo_scan_no_redis", market=market)
+        return
+    try:
+        await compute_demo_day(market, redis=redis)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("signal_radar_demo_scan_failed", market=market, error=str(e))
+    finally:
+        try:
+            await redis.delete(_demo_generating_key(market))
+        except Exception:  # noqa: BLE001
+            pass
+
+
+@router.get("/demo", response_model=SignalRadarResponse)
+@limiter.limit("30 per minute")
+async def signal_radar_demo(
+    request: Request,
+    market: str = Query(default="us", description="市场：us / cn / hk"),
+    user: User = Depends(get_current_user),
+    redis: Redis = Depends(get_redis),
+) -> SignalRadarResponse:
+    """免费预览：未订阅高级版的用户在信号雷达上唯一能点开的一天。
+
+    「上个月 1 号」的真实快照（该市场默认 universe），不是虚构数据，点进去能看到
+    真实的分析详情。跟主接口一样走 generating 轮询：命中缓存直接返回，未命中
+    后台起算并回 generating。
+    """
+    if market not in supported_markets():
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的市场：{market}，市场可选 {', '.join(supported_markets())}",
+        )
+    cached = await read_demo_cache(redis, market)
+    if cached is not None:
+        return cached
+
+    gkey = _demo_generating_key(market)
+    if not await redis.get(gkey):
+        await redis.set(gkey, "1", ex=_GENERATING_TTL)
+        _spawn(_run_demo_scan(market))
+        logger.info("signal_radar_demo_scan_spawned", market=market, user_id=user.id)
+
+    uni = get_universe(market, None)
+    return SignalRadarResponse(
+        market=market,
+        universe=uni.key if uni else "",
+        universes=_universes_out(market),
+        etf_name=uni.etf_name if uni else "",
+        universe_size=len(uni.constituents) if uni else 0,
+        as_of="",
+        top_n=DEFAULT_TOP_N,
+        days=[],
+        status="generating",
+    )
 
 
 @router.get("", response_model=SignalRadarResponse)

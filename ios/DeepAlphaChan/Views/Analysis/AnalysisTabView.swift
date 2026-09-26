@@ -55,7 +55,7 @@ struct AnalysisTabView: View {
                 if !store.isSubscribed {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button { showPaywall = true } label: {
-                            Label("Pro", systemImage: "crown.fill").font(.caption.bold())
+                            Label(L("去订阅"), systemImage: "crown.fill").font(.caption.bold())
                         }
                         .tint(Theme.segment)
                     }
@@ -175,7 +175,7 @@ struct AnalysisTabView: View {
                          : L("今日还可分析 %lld 支新股票", usage.remaining))
                         .font(.caption).foregroundColor(Theme.textPrimary)
                     Spacer()
-                    Text(exhausted ? L("开通 Pro 继续 ›") : L("升级 Pro 无限次 ›"))
+                    Text(exhausted ? L("开通订阅继续 ›") : L("订阅解锁无限次 ›"))
                         .font(.caption.bold()).foregroundColor(Theme.accent)
                 }
                 if exhausted {

@@ -91,6 +91,12 @@ _CACHE_PREFIX = "signal_radar"
 WATCHLIST_KEY = "watchlist"
 WATCHLIST_CACHE_TTL = 1800
 
+# 免费预览快照（未订阅用户在雷达上能点开的唯一一天）：缓存键按目标日期区分，
+# 45 天足够跨过一个月 + 缓冲，键随目标日期变化不会无限累积，符合「所有 key
+# 必须设置 TTL」的规则；这一天已经过去，end_date=该日算出的结果是确定性的，
+# 不需要像滚动窗口那样每天重算。
+_DEMO_CACHE_TTL = 3600 * 24 * 45
+
 
 def watchlist_cache_key(market: str, user_id: int, watchlist: list[tuple[str, str]]) -> str:
     """按用户 + 自选清单摘要隔离：清单增删后键自然变化，旧结果不会被读到。"""
@@ -805,3 +811,87 @@ async def get_market(
         market, redis=redis, user_id=user_id, universe_key=universe.key,
         days=days, window=window, top_n=top_n, max_age_days=max_age_days,
     )
+
+
+# ---------------------------------------------------------------------------
+# 免费预览：未订阅用户在雷达上唯一能点开的一天——「上个月 1 号」的真实快照
+# ---------------------------------------------------------------------------
+
+
+def demo_snapshot_date() -> str:
+    """免费预览锚定的日期：上个月 1 号，随当前月份自动往后走，不是钉死的某天。"""
+    first_of_this_month = date.today().replace(day=1)
+    last_month_end = first_of_this_month - timedelta(days=1)
+    return last_month_end.replace(day=1).isoformat()
+
+
+def _demo_cache_key(market: str, target: str) -> str:
+    return f"{_CACHE_PREFIX}:demo:{market}:{target}"
+
+
+async def read_demo_cache(redis: Redis, market: str) -> SignalRadarResponse | None:
+    """读免费预览快照缓存（不触发计算），键按当前 demo_snapshot_date() 取。"""
+    try:
+        raw = await redis.get(_demo_cache_key(market, demo_snapshot_date()))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_demo_cache_read_error", market=market, error=str(e))
+        return None
+    if raw is None:
+        return None
+    try:
+        return SignalRadarResponse.model_validate_json(raw)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_demo_cache_deserialize_error", market=market, error=str(e))
+        return None
+
+
+async def compute_demo_day(market: str, *, redis: Redis) -> SignalRadarResponse:
+    """免费预览：只算「上个月 1 号」这一天的真实快照，用该市场默认 universe。
+
+    不走标准滚动窗口（compute_market 默认只保留最近 30 个交易日），因为这个
+    目标日期离「今天」通常已经超出那个窗口；也不需要像标准快照那样每天重算——
+    这一天已经过去，用它做 end_date 算出的结果不会再随后续行情变化。
+    """
+    target = demo_snapshot_date()
+    universe = get_universe(market, None)
+    if universe is None:
+        raise ValueError(f"unsupported market: {market}")
+    constituents = await resolve_constituents(market, redis=redis, universe_key=universe.key)
+
+    end_date = target
+    start_date = _fetch_start(date.fromisoformat(target), window=45)
+    sem = asyncio.Semaphore(_SCAN_CONCURRENCY)
+
+    async def _one(symbol: str, name: str) -> tuple[list[RawSignal], list[str]]:
+        async with sem:
+            history, _, _, dates = await _scan_symbol(
+                symbol, name, user_id=None, start_date=start_date, end_date=end_date, redis=redis,
+            )
+            return history, dates
+
+    scanned = await asyncio.gather(*[_one(sym, name) for sym, name in constituents])
+    histories = [h for h, _ in scanned if h]
+    calendar = trading_days_from_constituents(
+        [dates for _, dates in scanned if dates], etf_dates=[], cutoff=target, end_date=target,
+        limit=_MAX_SIGNAL_AGE_DAYS + 1,
+    ) or [target]
+    if target not in calendar:
+        calendar = sorted({*calendar, target}, reverse=True)
+
+    resp = SignalRadarResponse(
+        market=market,
+        universe=universe.key,
+        universes=_universes_out(market),
+        etf_name=universe.etf_name,
+        universe_size=len(constituents),
+        as_of=target,
+        top_n=DEFAULT_TOP_N,
+        days=build_days(histories, [target], top_n=DEFAULT_TOP_N, calendar=calendar),
+        status="ready",
+        computed_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
+    )
+    try:
+        await redis.set(_demo_cache_key(market, target), resp.model_dump_json(), ex=_DEMO_CACHE_TTL)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_demo_cache_write_error", market=market, error=str(e))
+    return resp

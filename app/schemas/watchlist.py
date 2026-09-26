@@ -30,9 +30,15 @@ class WatchlistItemOut(BaseResponse):
 
 
 class WatchlistResponse(BaseResponse):
-    """自选列表响应。"""
+    """自选列表响应。
+
+    max_items 按请求带的 tier 一并算好下发（而非让客户端各自硬编码上限），避免
+    前后端上限数字走漂——改上限只用改 `app.services.watchlist.TIER_LIMITS` 这
+    一处。None 表示该档不限（高级版）。
+    """
 
     items: list[WatchlistItemOut]
+    max_items: int | None
 
 
 class WatchlistPhaseOut(BaseModel):

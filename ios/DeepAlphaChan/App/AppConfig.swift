@@ -18,11 +18,32 @@ enum AppConfig {
     static let requestTimeout: TimeInterval = 45
 
     // MARK: - 订阅
+    //
+    // 两档月度订阅，逐级递进：
+    //   基础版 —— 解锁全量缠论分析（不受每日次数限制）+ 30 分钟次级别确认，¥38/月。
+    //   高级版 —— 在基础版基础上，额外解锁信号雷达、自选批量状态计算，¥188/月。
+    // 具体定价与免费试用时长在 App Store Connect / Configuration.storekit 配置，
+    // 不写死在代码里（见 StoreManager.trialPeriodText，读商品实际配置生成文案）。
 
-    /// 月度订阅商品 ID（需与 App Store Connect / Configuration.storekit 一致）。
-    static let proMonthlyProductID = "club.deepalpha.chan.pro.monthly"
+    /// 基础版月度订阅商品 ID（沿用历史商品 ID，避免破坏线上已订阅用户；商品 ID 里的
+    /// "pro" 是历史命名，与当前展示名「基础版」无关，不必为了改名同步改 ID）。
+    static let experienceMonthlyProductID = "club.deepalpha.chan.pro.monthly"
 
-    /// 免费用户每日可用的缠论分析次数（超出需订阅）。
+    /// 高级版月度订阅商品 ID（需与 App Store Connect / Configuration.storekit 一致）。
+    static let premiumMonthlyProductID = "club.deepalpha.chan.premium.monthly"
+
+    /// 两档订阅「原价 / 活动价」的倍数，付费墙用来对比展示「限时活动价」的号召力。
+    /// 基础版 ¥88 原价 / ¥38 活动价 ≈ 2.32，高级版 ¥388 / ¥188 ≈ 2.06——这是中国区的
+    /// 定价关系，其它地区 App Store 会按各自价格档位换算出不同金额，所以这里存的是
+    /// **倍数**而不是写死的「¥88」文本：App 同时在多个地区上架，各地区实际扣款价格
+    /// 不同（`product.displayPrice` 已按当地货币/价位自动处理），原价必须用同一倍数
+    /// 乘以当地活动价、再用 `product.priceFormatStyle` 格式化，才会显示成当地货币而不是
+    /// 到哪个地区都写死显示人民币符号。StoreKit 商品本身没有「原价」概念，这两个纯粹是
+    /// 营销对比用的常量，不参与任何计费逻辑，改活动策略时改这里即可。
+    static let experienceOriginalPriceRatio: Decimal = 88.0 / 38.0
+    static let premiumOriginalPriceRatio: Decimal = 388.0 / 188.0
+
+    /// 免费用户每日可用的缠论分析次数（超出需订阅基础版或高级版）。
     static let freeDailyQuota = 3
 
     // MARK: - 分享

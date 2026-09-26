@@ -11,31 +11,70 @@ struct SubLevelBar: View {
     /// 离屏渲染分享长图时置 true：保留结论，去掉点击。
     var isStatic = false
 
+    @EnvironmentObject private var store: StoreManager
     @State private var showSheet = false
+    /// 次级别确认是基础版起可用的付费功能，未订阅时点锁定行弹这个付费墙。
+    @State private var showPaywall = false
 
     var body: some View {
-        if vm.freq == "daily" || vm.freq == "weekly" {
-            if let sub = vm.subLevel {
-                Button { showSheet = true } label: { row(sub) }
-                    .buttonStyle(.plain)
-                    .allowsHitTesting(!isStatic)
-                    .accessibilityHint(L("打开次级别图表"))
-                    .sheet(isPresented: $showSheet) {
-                        SubLevelSheet(parent: vm, sub: sub)
+        Group {
+            if vm.freq == "daily" || vm.freq == "weekly" {
+                if let sub = vm.subLevel {
+                    Button { showSheet = true } label: { row(sub) }
+                        .buttonStyle(.plain)
+                        .allowsHitTesting(!isStatic)
+                        .accessibilityHint(L("打开次级别图表"))
+                        .sheet(isPresented: $showSheet) {
+                            SubLevelSheet(parent: vm, sub: sub)
+                        }
+                // `!isStatic` 放在 `&&` 左边：短路求值保证离屏分享长图渲染
+                // （PageSnapshot.render 走独立的 ImageRenderer，不继承 App 根部注入的
+                // EnvironmentObject）时压根不会去读 store，避免「找不到 StoreManager」崩溃。
+                } else if !isStatic && !store.isSubscribed {
+                    // 未订阅：ChanViewModel 根本没发次级别请求（见 loadSubLevel 的
+                    // hasSubLevelAccess 门禁），这里直接展示锁定态引导订阅，不误显示成加载中。
+                    Button { showPaywall = true } label: { lockedRow }
+                        .buttonStyle(.plain)
+                        .accessibilityHint(L("订阅基础版解锁次级别确认"))
+                        .sheet(isPresented: $showPaywall) { PaywallView() }
+                } else if !isStatic && vm.subLevelLoading {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.mini)
+                        Text(L("正在加载次级别…"))
+                            .font(.caption)
+                            .foregroundColor(Theme.textSecondary)
+                        Spacer(minLength: 0)
                     }
-            } else if vm.subLevelLoading && !isStatic {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.mini)
-                    Text(L("正在加载次级别…"))
-                        .font(.caption)
-                        .foregroundColor(Theme.textSecondary)
-                    Spacer(minLength: 0)
+                    .padding(.horizontal, 12)
+                    .frame(height: 36)
+                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10))
                 }
-                .padding(.horizontal, 12)
-                .frame(height: 36)
-                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10))
             }
         }
+        // 付费墙里订阅成功后，若之前因未订阅被跳过次级别请求，立刻补一次。三元表达式
+        // 短路：isStatic 时右边的 store.isSubscribed 根本不求值，原因同上。
+        .onChange(of: isStatic ? false : store.isSubscribed) { _, isSubscribed in
+            if isSubscribed { vm.refreshSubLevelIfEligible() }
+        }
+    }
+
+    private var lockedRow: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(Theme.segment)
+            Text(L("次级别确认 · 基础版解锁"))
+                .font(.caption)
+                .foregroundColor(Theme.textSecondary)
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(Theme.textSecondary)
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 36)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10))
+        .contentShape(Rectangle())
     }
 
     static func shortBias(_ bias: String, parent: String) -> String {

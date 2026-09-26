@@ -33,6 +33,12 @@ final class ChanViewModel: ObservableObject {
     /// 用它，拿不到就退回代码——避免自选里副标题原样重复代码。
     @Published var displayName: String?
 
+    /// 雷达快照日期（`yyyy-MM-dd`），仅信号雷达点气泡进来时有值。ChanChartView
+    /// 据此把可见窗口居中到这一天、并画一条竖线标出来，让用户看得出「分析的是
+    /// 雷达上那一天」，而不是打开后默认停在最新数据。跟 warmupDays 同一个模式：
+    /// 显式重置，不传则清空上一次雷达进来留下的值，避免串到后续手动分析上。
+    var anchorDate: String?
+
     // 分析结果
     @Published var analysis: ChanAnalysis?
     @Published var isLoading = false
@@ -44,6 +50,11 @@ final class ChanViewModel: ObservableObject {
     @Published var subLevelLoading = false
     /// 递增序号：切换标的/重新分析后，旧请求晚到的结果直接丢弃。
     private var subLevelRequestID = 0
+
+    /// 次级别确认（30 分钟）是基础版起可用的付费功能（免费版不可用），由持有本 VM
+    /// 的视图（通过 StoreManager.isSubscribed）同步。未订阅用户直接跳过请求——
+    /// 省一次网络调用，也避免悄悄给未付费用户算出结果。
+    var hasSubLevelAccess = false
 
     // 叠加图层开关
     @Published var showFractals = true
@@ -109,7 +120,7 @@ final class ChanViewModel: ObservableObject {
     func apply(
         market: StockMarket, symbol: String, name: String? = nil,
         startDate: Date? = nil, endDate: Date? = nil, freq: String? = nil,
-        warmupDays: Int? = nil
+        warmupDays: Int? = nil, anchorDate: String? = nil
     ) {
         self.market = market
         self.symbol = symbol.trimmingCharacters(in: .whitespaces).uppercased()
@@ -121,6 +132,8 @@ final class ChanViewModel: ObservableObject {
         // 显式重置：从雷达进来带 0，其他入口传 nil 时要清掉上一次雷达留下的 0，
         // 否则分析 Tab 会一直沿用「不加 warmup」，左边界结构可能漂移。
         self.warmupDays = warmupDays
+        // 同理显式重置：不传则清掉上一次雷达进来留下的锚点日期。
+        self.anchorDate = anchorDate
     }
 
     // MARK: - 缠论分析
@@ -166,12 +179,20 @@ final class ChanViewModel: ObservableObject {
 
     // MARK: - 次级别确认
 
+    /// 从付费墙升级到高级版后调用：若当前已有分析结果但次级别此前因未订阅被跳过，
+    /// 补一次请求，不用用户手动重新分析一遍。非日线/周线周期或本来就没有分析结果
+    /// 时 `loadSubLevel` 内部的 guard 自然是空操作。
+    func refreshSubLevelIfEligible() {
+        guard analysis != nil, subLevel == nil, !subLevelLoading else { return }
+        loadSubLevel(symbol: requestSymbol, warmupDays: nil)
+    }
+
     /// 次级别逐级递推不跨级：日线配 30 分钟、周线配日线。失败只清空提示，不打扰主结果。
     private func loadSubLevel(symbol: String, warmupDays: Int?) {
         subLevelRequestID += 1
         let requestID = subLevelRequestID
         subLevel = nil
-        guard freq == "daily" || freq == "weekly" else {
+        guard hasSubLevelAccess, freq == "daily" || freq == "weekly" else {
             subLevelLoading = false
             return
         }

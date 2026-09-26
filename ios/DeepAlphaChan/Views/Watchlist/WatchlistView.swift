@@ -6,16 +6,27 @@ import SwiftUI
 struct WatchlistView: View {
     @ObservedObject var chanVM: ChanViewModel
     @StateObject private var vm = WatchlistViewModel()
+    @EnvironmentObject private var store: StoreManager
 
     @State private var showResults = false
+    /// 自选现在所有档位都能用（未订阅 1 支 / 基础版 10 支 / 高级版不限），
+    /// 点已满时的「升级解锁更多」入口才弹这个付费墙，不再整体锁死。
+    @State private var showPaywall = false
 
     var body: some View {
         NavigationStack {
-            content
+            VStack(spacing: 0) {
+                if !vm.items.isEmpty { countRow }
+                content
+            }
                 .navigationTitle(L("自选"))
-                .task { await vm.onAppear() }
+                .task { await vm.onAppear(tier: store.tier) }
                 .onReceive(NotificationCenter.default.publisher(for: .watchlistDidChange)) { _ in
-                    Task { await vm.refresh() }
+                    Task { await vm.refresh(tier: store.tier) }
+                }
+                // tier 变化（订阅/升级/降级）后上限可能跟着变，重新拉一次同步。
+                .onChange(of: store.tier) { _, tier in
+                    Task { await vm.refresh(tier: tier) }
                 }
                 .navigationDestination(isPresented: $showResults) {
                     if let analysis = chanVM.analysis {
@@ -29,7 +40,43 @@ struct WatchlistView: View {
                 )) {
                     Button(L("好"), role: .cancel) {}
                 }
+                // 移出自选（滑动删除）失败时的提示——不用等下次下拉刷新才发现没删掉。
+                .alert(vm.errorMessage ?? "", isPresented: Binding(
+                    get: { vm.errorMessage != nil },
+                    set: { if !$0 { vm.errorMessage = nil } }
+                )) {
+                    Button(L("好"), role: .cancel) {}
+                }
+                .sheet(isPresented: $showPaywall) { PaywallView() }
         }
+    }
+
+    /// 自选数量 / 上限，让用户在接近上限前就有数，不用加满了才在报错里第一次看到数字。
+    /// 高级版不限（maxItems 为 nil）时只显示已收藏数量，不显示「/ 上限」；接近或已达
+    /// 上限（未订阅/基础版）时额外给一个升级入口，直接引导到更高档位而不是让用户自己
+    /// 去「我的」页找订阅入口。
+    private var countRow: some View {
+        HStack {
+            if let maxItems = vm.maxItems {
+                Text(L("已收藏 %lld / %lld", vm.items.count, maxItems))
+                    .font(.caption2)
+                    .foregroundColor(vm.isFull ? Theme.segment : Theme.textSecondary)
+            } else {
+                Text(L("已收藏 %lld 支", vm.items.count))
+                    .font(.caption2)
+                    .foregroundColor(Theme.textSecondary)
+            }
+            Spacer()
+            if !store.isPremium, vm.isFull {
+                Button { showPaywall = true } label: {
+                    Label(L("升级解锁更多"), systemImage: "crown.fill")
+                        .font(.caption2.bold())
+                }
+                .tint(Theme.segment)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
     }
 
     @ViewBuilder
@@ -71,7 +118,7 @@ struct WatchlistView: View {
                     .onDelete { offsets in
                         for index in offsets {
                             let item = group.items[index]
-                            Task { await vm.remove(item) }
+                            Task { await vm.remove(item, tier: store.tier) }
                         }
                     }
                 } header: {
@@ -88,7 +135,7 @@ struct WatchlistView: View {
             }
         }
         .listStyle(.plain)
-        .refreshable { await vm.refresh() }
+        .refreshable { await vm.refresh(tier: store.tier) }
     }
 
     /// 各市场一个基调色，纯粹用来在自选列表里做视觉区分（左侧色条 + 圆点），

@@ -9,6 +9,7 @@ struct ResultDetailView: View {
     @ObservedObject var vm: ChanViewModel
 
     @EnvironmentObject private var orientation: AppOrientation
+    @EnvironmentObject private var store: StoreManager
 
     @State private var showFullscreenChart = false
 
@@ -59,9 +60,23 @@ struct ResultDetailView: View {
             ToolbarItem(placement: .topBarTrailing) { shareButton }
             ToolbarItem(placement: .topBarTrailing) { starButton }
         }
-        .task { await watchlistVM.refreshSilently() }
+        // 自选现在所有档位都能用（未订阅 1 支 / 基础版 10 支 / 高级版不限），
+        // 星标状态每个用户都要查，不再按 isPremium 短路。
+        .task { await watchlistVM.refreshSilently(tier: store.tier) }
         .onReceive(NotificationCenter.default.publisher(for: .watchlistDidChange)) { _ in
-            Task { await watchlistVM.refreshSilently() }
+            Task { await watchlistVM.refreshSilently(tier: store.tier) }
+        }
+        // tier 变化（订阅/升级/降级）时上限可能跟着变，重新拉一次同步 maxItems/isFull。
+        .onChange(of: store.tier) { _, tier in
+            Task { await watchlistVM.refreshSilently(tier: tier) }
+        }
+        // 星标加入/移出失败（含达到上限）的提示——此前没有挂 alert，失败等于
+        // 点了没反应，用户不知道发生了什么。
+        .alert(watchlistVM.errorMessage ?? "", isPresented: Binding(
+            get: { watchlistVM.errorMessage != nil },
+            set: { if !$0 { watchlistVM.errorMessage = nil } }
+        )) {
+            Button(L("好"), role: .cancel) {}
         }
         // 预览已经开着时不再响应截图：用户在预览里截图不该再套一层。
         // 全屏图表也要排除：它是盖在本页上的 fullScreenCover，SwiftUI 不会给呈现方发
@@ -140,18 +155,23 @@ struct ResultDetailView: View {
         watchlistVM.isStarred(market: vm.market, symbol: vm.symbol.uppercased())
     }
 
+    /// 已收藏的可以随时移出，不受上限影响；只有「还没收藏 + 已达上限」才拦。
+    private var watchlistFull: Bool { !isStarred && watchlistVM.isFull }
+
     private var starButton: some View {
         Button {
             let symbol = vm.symbol.uppercased()
             // 有真实名称就存名称，没有则退回代码（后端 name 非空约束）。自选列表
             // 侧再判断 name==代码时不重复显示，见 WatchlistItem.displayName。
             let name = vm.displayName ?? symbol
-            Task { await watchlistVM.toggle(market: vm.market, symbol: symbol, name: name) }
+            Task { await watchlistVM.toggle(market: vm.market, symbol: symbol, name: name, tier: store.tier) }
         } label: {
-            Image(systemName: isStarred ? "star.fill" : "star")
-                .foregroundColor(isStarred ? Theme.segment : nil)
+            Image(systemName: isStarred ? "star.fill" : (watchlistFull ? "star.slash" : "star"))
+                .foregroundColor(isStarred ? Theme.segment : (watchlistFull ? Theme.textSecondary : nil))
         }
-        .accessibilityLabel(isStarred ? L("移出自选") : L("加入自选"))
+        .accessibilityLabel(isStarred ? L("移出自选") : (watchlistFull ? L("自选已满") : L("加入自选")))
+        // watchlistFull 时点按仍会走 toggle()——它内部会短路并给出同样的 errorMessage，
+        // 这里不单独拦截点击，保证唯一的提示路径就是下面这个 alert，逻辑不用两处对齐。
     }
 
     // MARK: - 分享

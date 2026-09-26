@@ -48,8 +48,8 @@ actor APIClient {
         return try await send(req)
     }
 
-    func postJSON<T: Decodable>(_ path: String, body: Encodable) async throws -> T {
-        var req = request(path: path, method: "POST")
+    func postJSON<T: Decodable>(_ path: String, query: [String: String] = [:], body: Encodable) async throws -> T {
+        var req = request(path: path, method: "POST", query: query)
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONEncoder().encode(AnyEncodable(body))
         return try await send(req)
@@ -74,9 +74,13 @@ actor APIClient {
 
     // MARK: - 内部
 
-    private func request(path: String, method: String) -> URLRequest {
-        let url = AppConfig.baseURL.appendingPathComponent(AppConfig.apiPrefix + path)
-        var req = URLRequest(url: url)
+    private func request(path: String, method: String, query: [String: String] = [:]) -> URLRequest {
+        var comps = URLComponents(url: AppConfig.baseURL.appendingPathComponent(AppConfig.apiPrefix + path),
+                                  resolvingAgainstBaseURL: false)!
+        if !query.isEmpty {
+            comps.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
+        }
+        var req = URLRequest(url: comps.url!)
         req.httpMethod = method
         return req
     }

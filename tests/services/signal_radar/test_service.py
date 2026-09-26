@@ -1,7 +1,7 @@
 """信号雷达纯聚合逻辑单测（无 IO）。"""
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -337,6 +337,41 @@ class TestCacheTiming:
         monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS", 21600)
         assert settings.SIGNAL_RADAR_PREWARM_INTERVAL_SECONDS < svc._cache_stale_after()
         assert svc._cache_stale_after() < svc._cache_ttl()
+
+
+class TestDemoSnapshotDate:
+    """免费预览锚定日期：上个月 1 号，随「今天」滚动，不是钉死的某天。"""
+
+    def test_returns_first_of_previous_month(self, monkeypatch):
+        class _Today:
+            @staticmethod
+            def today():
+                return date(2026, 9, 25)
+
+        monkeypatch.setattr(svc, "date", _Today)
+        assert svc.demo_snapshot_date() == "2026-08-01"
+
+    def test_rolls_across_year_boundary(self, monkeypatch):
+        class _Today:
+            @staticmethod
+            def today():
+                return date(2026, 1, 15)
+
+        monkeypatch.setattr(svc, "date", _Today)
+        assert svc.demo_snapshot_date() == "2025-12-01"
+
+    def test_stable_within_the_same_month(self, monkeypatch):
+        """同一个月里任意一天算出的目标日期都一样，不会随「今天」是几号而漂移。"""
+        results = set()
+        for day in (1, 15, 30):
+            class _Today:
+                @staticmethod
+                def today(_day=day):
+                    return date(2026, 9, _day)
+
+            monkeypatch.setattr(svc, "date", _Today)
+            results.add(svc.demo_snapshot_date())
+        assert results == {"2026-08-01"}
 
 
 class _FakeRedis:

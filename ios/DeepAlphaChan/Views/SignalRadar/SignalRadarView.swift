@@ -28,6 +28,21 @@ struct SignalRadarView: View {
     @State private var switcherSize: CGSize = .zero
     @StateObject private var panicVM = PanicIndexViewModel()
     @EnvironmentObject private var orientation: AppOrientation
+    @EnvironmentObject private var store: StoreManager
+    @EnvironmentObject private var usage: UsageTracker
+    /// 信号雷达（气泡场）是高级版专属功能，未订阅时只展示「上个月 1 号」这一天的真实快照
+    /// （见 RadarDemoViewModel / demoBubbleField）——相当于在雷达时间轴末尾多露出这一天，
+    /// 点进气泡走真实分析（消耗免费额度），不是钉死的示例假数据。
+    @StateObject private var demoVM = RadarDemoViewModel()
+    @State private var showPaywall = false
+    /// 使用雷达前的风险确认：不管是否订阅，只要还没勾选同意过就先挡在 consentView，
+    /// 不直接看到买卖点气泡——免费预览现在也是真实信号，同样要过这道门槛。
+    @StateObject private var consent = RadarConsent()
+    @State private var consentChecked = false
+    /// 强制最短阅读时长（秒）：勾选框可以随时点，但「同意并继续」在这段时间内
+    /// 保持禁用——避免手快的用户没看内容就秒点同意，让确认更站得住脚。
+    static let consentMinReadSeconds = 10
+    @State private var consentSecondsRemaining = SignalRadarView.consentMinReadSeconds
 
     /// 日期轨直接摆出来的格子数（约 2 周的交易日），更早的走"更多"里的日期选择器。
     static let visibleDayChipCount = 10
@@ -45,12 +60,39 @@ struct SignalRadarView: View {
             VStack(spacing: 12) {
                 PanicIndexStrip(radarVM: vm, panicVM: panicVM)
 
-                if vm.isScanning {
+                if !consent.hasAgreed {
+                    // 风险确认放在最前面，同时挡住高级版真实雷达和免费预览：demoBubbleField
+                    // 现在展示的是后端真实算出的买卖点（不再是钉死的假数据），未订阅用户
+                    // 一样会看到红买绿卖的真实信号气泡，同样需要先确认过风险声明才放行，
+                    // 不能因为「未订阅」就绕过这道门槛。
+                    consentView
+                } else if !store.isPremium {
+                    // 未订阅高级版：不发真实雷达滚动窗口请求，只展示「上个月 1 号」这一天
+                    // 的真实快照（demoVM）——既能让用户看到功能长什么样、点进去也是真分析，
+                    // 又不会把当下可操作的实时信号免费泄露。
+                    if demoVM.isLoading {
+                        demoScanningView
+                    } else if demoVM.isComputingInBackground {
+                        demoComputingView
+                    } else if let error = demoVM.errorMessage {
+                        errorView(error) { await demoVM.load(market: vm.market) }
+                    } else if let day = demoVM.day {
+                        demoMetaRow(day)
+                        demoBubbleField(day)
+                        demoNoticeBanner
+                        legend
+                        Spacer(minLength: 0)
+                        compactDisclaimer
+                    } else {
+                        demoNoticeBanner
+                        Spacer(minLength: 0)
+                    }
+                } else if vm.isScanning {
                     scanningView
                 } else if vm.isComputingInBackground {
                     computingView
                 } else if let error = vm.errorMessage {
-                    errorView(error)
+                    errorView(error) { await vm.load() }
                 } else if vm.days.isEmpty {
                     emptyView
                 } else {
@@ -83,7 +125,24 @@ struct SignalRadarView: View {
             .background(Theme.background)
             .navigationTitle(L("缠论信号"))
             .navigationBarTitleDisplayMode(.inline)
-            .task { vm.onAppear() }
+            // 高级版用户拉真实滚动窗口雷达；未订阅用户只拉「上个月 1 号」这一天的真实快照
+            // （demoVM），市场切换时 .task(id:) 自动取消旧请求、重新拉一次。
+            .task { if store.isPremium { vm.onAppear() } }
+            .task(id: vm.market) {
+                if !store.isPremium { await demoVM.load(market: vm.market) }
+            }
+            // 付费墙里订阅成功（tier 变化）后，若已具备高级版权益且尚未拉过数据，
+            // 立刻补拉一次——不用退出再进这个 Tab 才刷新。反过来订阅中途被降级/过期
+            // （如 StoreKit 交易更新把 tier 打回免费档）也要补一次：上面
+            // `.task(id: vm.market)` 只在市场切换时触发，市场没变就不会自动去拉
+            // demoVM，不补的话会卡在「一片空白」直到用户手动切市场或重启 App。
+            .onChange(of: store.isPremium) { _, isPremium in
+                if isPremium {
+                    vm.onAppear()
+                } else if demoVM.day == nil {
+                    Task { await demoVM.load(market: vm.market) }
+                }
+            }
             .overlay { if chanVM.isLoading { analysisLoadingOverlay } }
             .navigationDestination(isPresented: $showResults) {
                 if let analysis = chanVM.analysis {
@@ -97,6 +156,207 @@ struct SignalRadarView: View {
             )) {
                 Button(L("好"), role: .cancel) {}
             }
+            .sheet(isPresented: $showPaywall) { PaywallView() }
+        }
+    }
+
+    // MARK: - 未订阅高级版：免费预览（上个月 1 号真实快照，RadarDemoViewModel）
+
+    /// 免费预览的说明行：跟 metaRow 布局一致，多一个「历史快照」角标，
+    /// 提示这是过去某一天的数据、不是今天的实时信号（但确实是真实计算结果）。
+    private func demoMetaRow(_ day: RadarDay) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(day.date)
+                .font(.caption)
+                .foregroundColor(Theme.textSecondary)
+            Text(L("历史快照"))
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(Theme.segment, in: Capsule())
+            Spacer(minLength: 8)
+            Text(L("%lld 买点", day.buyCount))
+                .font(.caption.bold()).foregroundColor(Theme.up)
+            Text("·").font(.caption).foregroundColor(Theme.textSecondary)
+            Text(L("%lld 卖点", day.sellCount))
+                .font(.caption.bold()).foregroundColor(Theme.down)
+        }
+    }
+
+    /// 免费预览版的气泡场：跟 bubbleField 共用背景光晕/参考环（fieldDecoration）与
+    /// 摆位算法（layoutBubbles），数据是后端真实算出的「上个月 1 号」快照；气泡可点，
+    /// 点开跟高级版一样走真实分析详情页（会消耗免费每日额度），不是弹付费墙糊弄过去。
+    private func demoBubbleField(_ day: RadarDay) -> some View {
+        GeometryReader { geo in
+            let w = Double(geo.size.width)
+            let h = Double(geo.size.height)
+            let signals = day.signals.sorted { $0.strength > $1.strength }
+            let layouts = SignalRadarView.layoutBubbles(signals: signals, dayDate: day.date, width: w, height: h)
+            ZStack {
+                fieldDecoration(width: w, height: h)
+                ForEach(layouts) { layout in
+                    RadarBubble(
+                        signal: layout.signal,
+                        metrics: layout.metrics,
+                        baseX: CGFloat(layout.x),
+                        baseY: CGFloat(layout.y),
+                        phase: layout.phase,
+                        color: SignalRadarView.bubbleColor(
+                            side: layout.signal.side,
+                            depth: SignalFormatting.strengthDepth(layout.signal.signalStrength)),
+                        isNew: false,
+                        onOpen: {
+                            openSymbol(layout.signal.symbol, name: layout.signal.name, dayDate: day.date)
+                        }
+                    )
+                    .transition(.identity)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .aspectRatio(SignalRadarView.fieldAspect, contentMode: .fit)
+        .background(
+            RadialGradient(
+                colors: [Color(hex: 0x131A26), Theme.background],
+                center: .center, startRadius: 6, endRadius: 280
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    /// 免费预览下方的解锁横幅：说明这只是历史上的一天，订阅才能看每天的实时信号。
+    private var demoNoticeBanner: some View {
+        Button { showPaywall = true } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles").foregroundColor(Theme.segment).font(.caption)
+                Text(L("以上为历史快照，订阅高级版查看每日实时信号 ›"))
+                    .font(.caption).foregroundColor(Theme.textPrimary)
+                Spacer()
+            }
+            .padding(10)
+            .background(Theme.segment.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 免费预览首次拉取时的等待态，文案与 scanningView 呼应但更简短（只算一天，不是全量扫描）。
+    private var demoScanningView: some View {
+        VStack(spacing: 12) {
+            ProgressView().tint(Theme.accent)
+            Text(L("正在加载历史快照…"))
+                .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// 免费预览轮询用尽但后端仍在算（该市场第一次有人打开时会遇到）。
+    private var demoComputingView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "hourglass")
+                .font(.largeTitle).foregroundColor(Theme.textSecondary)
+            Text(L("首次计算较久，已在后台计算，稍后点重试即可查看"))
+                .font(.footnote).foregroundColor(Theme.textSecondary)
+                .multilineTextAlignment(.center).padding(.horizontal, 40)
+            Button(L("重试")) { Task { await demoVM.load(market: vm.market) } }
+                .buttonStyle(.borderedProminent).tint(Theme.accent)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity).padding()
+    }
+
+    // MARK: - 使用前风险确认
+
+    /// 雷达是把多只标的的买卖点集中展示的「信号流」，比单只标的的分析详情页更容易
+    /// 被当成可以直接照抄的操作清单——这里要求主动勾选确认过才放行，不是随手能划掉
+    /// 的常驻提示条。已确认过不会再弹，见 RadarConsent。
+    private var consentView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 34)).foregroundColor(Theme.segment)
+                    Text(L("使用信号雷达前，请确认"))
+                        .font(.headline).foregroundColor(Theme.textPrimary)
+                    Text(L("雷达把多只标的的买卖点集中展示在一张图上，方便发现，但也更容易被当成可以直接照抄的操作清单——请先看完以下几点。"))
+                        .font(.footnote).foregroundColor(Theme.textSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    consentPoint(L("雷达上的买卖点由算法根据缠论结构自动生成，仅为技术分析研究结果，不构成投资建议、荐股或买卖要约。"))
+                    consentPoint(L("气泡的颜色、大小、位置只反映价格结构的技术特征（如背驰强弱、确认程度），不代表标的当前「值得买入」或「应当卖出」，也不能预测未来涨跌。"))
+                    consentPoint(L("请不要仅凭雷达上出现的买卖点做出交易决策。投资决策应结合基本面、行业趋势、估值、盈利预期与市场环境等因素综合判断。"))
+                    consentPoint(L("证券投资有风险，因参考雷达信号作出的任何投资决策及由此产生的盈亏，均由你自行判断、自行承担。"))
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                Button {
+                    consentChecked.toggle()
+                } label: {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: consentChecked ? "checkmark.square.fill" : "square")
+                            .font(.system(size: 20))
+                            .foregroundColor(consentChecked ? Theme.accent : Theme.textSecondary)
+                        Text(L("我已阅读并理解以上内容，同意仅将雷达信号作为技术研究参考，不作为投资建议"))
+                            .font(.footnote).foregroundColor(Theme.textPrimary)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(consentChecked ? [.isSelected] : [])
+
+                Button {
+                    consent.agree()
+                } label: {
+                    Text(consentButtonText)
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity).padding(.vertical, 13)
+                        .background(canConfirmConsent ? Theme.accent : Theme.accent.opacity(0.35))
+                        .foregroundColor(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(!canConfirmConsent)
+                .animation(.default, value: consentSecondsRemaining)
+            }
+            .padding(20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // 每次挂载（含首次进入、勾选状态被外部重置后再次出现）都从头倒数 10 秒；
+        // 视图消失（如切到别的 Tab）时 Task 自动取消，回来再重新计时，不留半截状态。
+        .task {
+            consentSecondsRemaining = Self.consentMinReadSeconds
+            while consentSecondsRemaining > 0 {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                consentSecondsRemaining -= 1
+            }
+        }
+    }
+
+    /// 勾选 + 满 10 秒阅读时长，两者都满足才放行。
+    private var canConfirmConsent: Bool { consentChecked && consentSecondsRemaining <= 0 }
+
+    /// 按钮文案随状态推进：倒计时中 → 勾了但没到时间 → 都满足。
+    private var consentButtonText: String {
+        if consentSecondsRemaining > 0 {
+            return L("请仔细阅读（%lld 秒）", consentSecondsRemaining)
+        } else if !consentChecked {
+            return L("请先勾选上方确认")
+        } else {
+            return L("同意并继续")
+        }
+    }
+
+    private func consentPoint(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text("•").foregroundColor(Theme.textSecondary)
+            Text(text).font(.footnote).foregroundColor(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -109,21 +369,34 @@ struct SignalRadarView: View {
     /// K 线，且整段都可见——买卖点集合与雷达一致（连更早、超过 90 天的买卖点也照常显示，
     /// 不会因可见窗口太窄被挡掉）。270 = 雷达的 warmup(180) + window*2(90)，见后端
     /// signal_radar/service.py。
-    private func openSymbol(_ symbol: String, name: String? = nil) {
+    ///
+    /// dayDate：来自免费预览（demoBubbleField）时传该气泡所属的快照日期（覆盖
+    /// vm.selectedDay?.date，那边未订阅时压根没有真实雷达响应）。未订阅时这次分析
+    /// 跟分析 Tab 一样走每日免费额度（usage.canUseFree/recordUse），额度用尽弹付费墙，
+    /// 不能绕开——免费预览只是多给了一天可点的真实信号，不是无限次分析的后门。
+    private func openSymbol(_ symbol: String, name: String? = nil, dayDate: String? = nil) {
+        if !store.isSubscribed && !usage.canUseFree(symbol: symbol) {
+            showPaywall = true
+            return
+        }
         // 截止到「现在」：详情页要有最新K线（盘中也是）。之前截止到雷达扫描日 as_of，A 股/港股
         // 盘中点进去永远只有前一交易日。起点仍按 as_of 往前 270 天，与雷达扫描窗口的左端对齐，
         // 结构尽量一致；右端多出来的新K线可能改写最新几笔，弹层已说明「以详情页为准」。
         let m = vm.market.rawValue
-        let asOf = QueryDates.date(from: vm.response?.asOf ?? "", market: m) ?? Date()
+        let asOf = QueryDates.date(from: dayDate ?? vm.response?.asOf ?? "", market: m) ?? Date()
         let start = QueryDates.adding(days: -270, to: asOf, market: m)
         let end = Date()
         chanVM.apply(
             // 名称为空（美股无中文名）时不传，详情页标题退回显示代码
             market: vm.market, symbol: symbol, name: (name?.isEmpty ?? true) ? nil : name,
-            startDate: start, endDate: end, freq: "daily", warmupDays: 0)
+            startDate: start, endDate: end, freq: "daily", warmupDays: 0,
+            // 雷达快照日期：详情页据此把可见窗口居中、画一条竖线标出来，
+            // 让用户看得出分析的是雷达上正在看的那一天，不是默认的「最新」。
+            anchorDate: dayDate ?? vm.selectedDay?.date)
         Task {
             await chanVM.runAnalysis()
             if chanVM.errorMessage == nil, chanVM.analysis != nil {
+                if !store.isSubscribed { usage.recordUse(symbol: symbol) }
                 showResults = true
             }
         }
@@ -184,13 +457,45 @@ struct SignalRadarView: View {
 
     // MARK: - 气泡场
 
+    /// 气泡场的背景装饰：中心光晕 + 同心参考环，bubbleField（真实滚动窗口）与
+    /// demoBubbleField（免费预览的真实历史快照）共用同一套视觉，只是气泡数据源不同。
+    @ViewBuilder
+    private func fieldDecoration(width w: Double, height h: Double) -> some View {
+        let base = min(w, h)
+        // 参考环与气泡共用的内缩场半轴：椭圆填满画布，长边不再留大片空白。
+        let (hRad, vRad) = SignalRadarView.fieldRadii(width: w, height: h)
+
+        // 由近及远的光晕：中心亮、向外自然变暗，"越靠中心=越新"不用靠文字说明，
+        // 图本身就有纵深感。
+        RadialGradient(
+            colors: [Theme.accent.opacity(0.20), Theme.accent.opacity(0.0)],
+            center: .center, startRadius: 0, endRadius: base * 0.55
+        )
+        .frame(width: CGFloat(w), height: CGFloat(h))
+
+        // 同心参考环：越外越淡，呼应同一套"近实远虚"的纵深语言；环上直接标出
+        // 大致时间跨度，不用再靠单独一行说明文字解释三个圈是什么意思。
+        ForEach(Array(SignalRadarView.ringSpecs.enumerated()), id: \.offset) { idx, spec in
+            // 正圆：离中心的距离 = 时间，各方向一致
+            // 横向椭圆：左右宽、上下窄，与气泡摆位同一套半轴
+            let rx = hRad * spec.scale
+            let ry = vRad * spec.scale
+            Ellipse()
+                .stroke(Theme.textSecondary.opacity(0.16 - Double(idx) * 0.045),
+                        style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                .frame(width: CGFloat(rx * 2), height: CGFloat(ry * 2))
+                .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
+            Text(spec.label)
+                .font(.system(size: 8))
+                .foregroundColor(Theme.textSecondary.opacity(0.55))
+                .position(x: CGFloat(w / 2), y: CGFloat(h / 2) - CGFloat(ry) + 8)
+        }
+    }
+
     private var bubbleField: some View {
         GeometryReader { geo in
             let w = Double(geo.size.width)
             let h = Double(geo.size.height)
-            let base = min(w, h)
-            // 参考环与气泡共用的内缩场半轴：椭圆填满画布，长边不再留大片空白。
-            let (hRad, vRad) = SignalRadarView.fieldRadii(width: w, height: h)
             let dayDate = vm.selectedDay?.date ?? ""
             let signals = (vm.selectedDay?.signals ?? [])
                 .sorted { $0.strength > $1.strength }
@@ -199,31 +504,7 @@ struct SignalRadarView: View {
                 avoid: switcherSize == .zero ? [] : [.init(x: 0, y: 0, width: Double(switcherSize.width),
                                                             height: Double(switcherSize.height))])
             ZStack {
-                // 由近及远的光晕：中心亮、向外自然变暗，"越靠中心=越新"不用靠文字说明，
-                // 图本身就有纵深感。
-                RadialGradient(
-                    colors: [Theme.accent.opacity(0.20), Theme.accent.opacity(0.0)],
-                    center: .center, startRadius: 0, endRadius: base * 0.55
-                )
-                .frame(width: CGFloat(w), height: CGFloat(h))
-
-                // 同心参考环：越外越淡，呼应同一套"近实远虚"的纵深语言；环上直接标出
-                // 大致时间跨度，不用再靠单独一行说明文字解释三个圈是什么意思。
-                ForEach(Array(SignalRadarView.ringSpecs.enumerated()), id: \.offset) { idx, spec in
-                    // 正圆：离中心的距离 = 时间，各方向一致
-                    // 横向椭圆：左右宽、上下窄，与气泡摆位同一套半轴
-                    let rx = hRad * spec.scale
-                    let ry = vRad * spec.scale
-                    Ellipse()
-                        .stroke(Theme.textSecondary.opacity(0.16 - Double(idx) * 0.045),
-                                style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                        .frame(width: CGFloat(rx * 2), height: CGFloat(ry * 2))
-                        .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
-                    Text(spec.label)
-                        .font(.system(size: 8))
-                        .foregroundColor(Theme.textSecondary.opacity(0.55))
-                        .position(x: CGFloat(w / 2), y: CGFloat(h / 2) - CGFloat(ry) + 8)
-                }
+                fieldDecoration(width: w, height: h)
 
                 if layouts.isEmpty {
                     Text(L("当日无买卖点信号"))
@@ -839,13 +1120,14 @@ struct SignalRadarView: View {
         }
     }
 
-    private func errorView(_ message: String) -> some View {
+    /// retry：高级版滚动窗口错误态传 vm.load，免费预览错误态传 demoVM.load，复用同一个视图。
+    private func errorView(_ message: String, retry: @escaping () async -> Void) -> some View {
         VStack(spacing: 12) {
             Image(systemName: "wifi.exclamationmark")
                 .font(.largeTitle).foregroundColor(Theme.textSecondary)
             Text(message).font(.subheadline).foregroundColor(Theme.textSecondary)
                 .multilineTextAlignment(.center)
-            Button(L("重试")) { Task { await vm.load() } }
+            Button(L("重试")) { Task { await retry() } }
                 .buttonStyle(.borderedProminent).tint(Theme.accent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity).padding()
