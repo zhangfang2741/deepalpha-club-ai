@@ -65,18 +65,18 @@ struct SignalRadarView: View {
             // 跟高级版一模一样，见 radarContent）；市场切换时 .task(id:) 额外拉一次
             // 「上个月 1 号」免费预览快照，自动取消上一次未完成的请求、重新拉一次。
             .task { vm.onAppear() }
-            .task(id: vm.market) {
-                if !store.isPremium { await vm.loadDemoDay(market: vm.market) }
+            .task(id: vm.demoKey) {
+                if !store.isPremium { await vm.loadDemoDay() }
             }
             // 订阅层级同步进 vm（跟 ChanViewModel.hasSubLevelAccess 同一个模式，vm 本身
             // 不感知 StoreKit）。initial: true 保证首次进入就同步一次，不用等 tier 变化。
             // 降级/过期（如 StoreKit 交易更新把 tier 打回免费档）时若还没拉过免费预览，
-            // 补拉一次——上面 `.task(id: vm.market)` 只在市场切换时触发，市场没变就不会
+            // 补拉一次——上面 `.task(id: vm.demoKey)` 只在市场/指数切换时触发，没切就不会
             // 自动去拉，不补的话会一直停在真实滚动窗口里点不开的那些天。
             .onChange(of: store.isPremium, initial: true) { _, isPremium in
                 vm.isPremiumUser = isPremium
                 if !isPremium && vm.demoDay == nil {
-                    Task { await vm.loadDemoDay(market: vm.market) }
+                    Task { await vm.loadDemoDay() }
                 }
             }
             .overlay { if chanVM.isLoading { analysisLoadingOverlay } }
@@ -135,12 +135,9 @@ struct SignalRadarView: View {
                         .opacity(vm.isReloading ? 0.35 : 1)
                         .allowsHitTesting(!vm.isReloading)
                         .overlay {
+                            // 只留转圈，不再配「正在刷新买卖点信号…」文字：旧气泡调暗已经说明在刷新
                             if vm.isReloading {
-                                VStack(spacing: 10) {
-                                    ProgressView().tint(Theme.accent)
-                                    Text(L("正在刷新买卖点信号…"))
-                                        .font(.subheadline).foregroundColor(Theme.textSecondary)
-                                }
+                                ProgressView().tint(Theme.accent)
                             }
                         }
                         .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
@@ -468,9 +465,13 @@ struct SignalRadarView: View {
         }
         if vm.activeUniverseKey == RadarUniverse.watchlistKey { return L("自选") }
         // 切市场时 response 暂时还是上一个市场的（保留旧内容防跳动），它的名称不能拿来用，
-        // 否则选了 A 股却显示「正在扫描纳斯达克100」；返回空让调用方退回市场名。
-        guard let response = vm.response, response.market == vm.market.rawValue else { return "" }
-        return response.etfName
+        // 否则选了 A 股却显示「正在扫描纳斯达克100」。还没拿到过这个市场的列表时用默认
+        // 指数名兜底，直接显示「科创50」，不先闪一下「A 股」。
+        if let response = vm.response, response.market == vm.market.rawValue { return response.etfName }
+        if vm.activeUniverseKey == SignalRadarViewModel.defaultUniverseKeys[vm.market] {
+            return SignalRadarViewModel.defaultUniverseNames[vm.market] ?? ""
+        }
+        return ""
     }
 
     /// 雷达左上角的 universe 切换器：科技窄基 ↔ 大盘宽基（如 恒生科技 ↔ 恒生指数）。
@@ -529,12 +530,12 @@ struct SignalRadarView: View {
         var id: String { signal.id }
     }
 
-    /// 三个等距参考环：今天 1/3、3 天 2/3、1 周 1.0，与气泡同一套时间半径映射
-    /// （RadarOrbitSpacing.timeRadius）。
+    /// 三个等距参考环：当日 1/3、3 天 2/3、1 周 1.0，与气泡同一套时间半径映射
+    /// （RadarOrbitSpacing.timeRadius）。「当日」指当前查看的那一天，不一定是今天。
     /// 用计算属性而非 static let：L() 依赖运行时语言设置，static let 只会算一次，
     /// 用户切换语言后文案不会跟着变。
     static var ringSpecs: [(scale: Double, label: String)] {
-        [(1.0 / 3, L("今天")), (2.0 / 3, L("3天内")), (1.0, L("一周内"))]
+        [(1.0 / 3, L("当日")), (2.0 / 3, L("3天内")), (1.0, L("一周内"))]
     }
 
     /// 场边距：最外环（scale 1.0）到容器四边留出的空白，给气泡的阴影 + 右上角「新」

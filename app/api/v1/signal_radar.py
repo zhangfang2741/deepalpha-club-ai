@@ -109,23 +109,23 @@ async def _run_scan(market: str, universe_key: str, user_id: int, refresh: bool 
             pass
 
 
-def _demo_generating_key(market: str) -> str:
-    return f"signal_radar:demo:generating:{market}"
+def _demo_generating_key(market: str, universe_key: str) -> str:
+    return f"signal_radar:demo:generating:{market}:{universe_key}"
 
 
-async def _run_demo_scan(market: str) -> None:
+async def _run_demo_scan(market: str, universe_key: str) -> None:
     """后台算一次免费预览快照（「上个月 1 号」），完成后清除 generating 标记。"""
     redis = current_redis()
     if redis is None:
-        logger.error("signal_radar_demo_scan_no_redis", market=market)
+        logger.error("signal_radar_demo_scan_no_redis", market=market, universe=universe_key)
         return
     try:
-        await compute_demo_day(market, redis=redis)
+        await compute_demo_day(market, universe_key, redis=redis)
     except Exception as e:  # noqa: BLE001
-        logger.exception("signal_radar_demo_scan_failed", market=market, error=str(e))
+        logger.exception("signal_radar_demo_scan_failed", market=market, universe=universe_key, error=str(e))
     finally:
         try:
-            await redis.delete(_demo_generating_key(market))
+            await redis.delete(_demo_generating_key(market, universe_key))
         except Exception:  # noqa: BLE001
             pass
 
@@ -135,37 +135,44 @@ async def _run_demo_scan(market: str) -> None:
 async def signal_radar_demo(
     request: Request,
     market: str = Query(default="us", description="市场：us / cn / hk"),
+    universe: str | None = Query(
+        default=None, description="universe 键，如 nasdaq100 / sp500；缺省=该市场默认（科技指数）"
+    ),
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
 ) -> SignalRadarResponse:
     """免费预览：未订阅高级版的用户在信号雷达上唯一能点开的一天。
 
-    「上个月 1 号」的真实快照（该市场默认 universe），不是虚构数据，点进去能看到
-    真实的分析详情。跟主接口一样走 generating 轮询：命中缓存直接返回，未命中
-    后台起算并回 generating。
+    「上个月 1 号」的真实快照（所选 universe，缺省为该市场默认），不是虚构数据，点进去
+    能看到真实的分析详情。按 (市场, universe) 分别计算与缓存——同一市场切换指数时
+    示例日要跟着换。跟主接口一样走 generating 轮询：命中缓存直接返回，未命中后台起算
+    并回 generating。自选（watchlist）是高级版功能，不提供免费预览。
     """
-    if market not in supported_markets():
+    uni = get_universe(market, universe)
+    if uni is None:
         raise HTTPException(
             status_code=400,
-            detail=f"不支持的市场：{market}，市场可选 {', '.join(supported_markets())}",
+            detail=(
+                f"不支持的市场/universe：{market}/{universe}，"
+                f"市场可选 {', '.join(supported_markets())}"
+            ),
         )
-    cached = await read_demo_cache(redis, market)
+    cached = await read_demo_cache(redis, market, uni.key)
     if cached is not None:
         return cached
 
-    gkey = _demo_generating_key(market)
+    gkey = _demo_generating_key(market, uni.key)
     if not await redis.get(gkey):
         await redis.set(gkey, "1", ex=_GENERATING_TTL)
-        _spawn(_run_demo_scan(market))
-        logger.info("signal_radar_demo_scan_spawned", market=market, user_id=user.id)
+        _spawn(_run_demo_scan(market, uni.key))
+        logger.info("signal_radar_demo_scan_spawned", market=market, universe=uni.key, user_id=user.id)
 
-    uni = get_universe(market, None)
     return SignalRadarResponse(
         market=market,
-        universe=uni.key if uni else "",
+        universe=uni.key,
         universes=_universes_out(market),
-        etf_name=uni.etf_name if uni else "",
-        universe_size=len(uni.constituents) if uni else 0,
+        etf_name=uni.etf_name,
+        universe_size=len(uni.constituents),
         as_of="",
         top_n=DEFAULT_TOP_N,
         days=[],

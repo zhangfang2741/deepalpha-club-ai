@@ -18,16 +18,26 @@ final class SignalRadarViewModel: ObservableObject {
     /// demoDay 所属那次扫描的算出时刻（跟主 response 是两次不同的扫描，metaRow
     /// 展示「数据 XX:XX 计算」时要用对应那次的时刻，见 selectedDayComputedAtText）。
     private var demoComputedAt: String?
-    /// 正在拉免费预览的市场。记市场而不是一个布尔：切市场时 `.task(id:)` 取消旧请求、
-    /// 立刻发新请求，旧请求的 defer 还没跑完——用布尔的话新请求会被 guard 当成
-    /// 「已在加载」直接跳过，新市场就永远拿不到预览日。
-    @Published private(set) var loadingDemoMarket: StockMarket?
+    /// 正在拉免费预览的（市场, universe）键。记键而不是一个布尔：切市场/指数时 `.task(id:)`
+    /// 取消旧请求、立刻发新请求，旧请求的 defer 还没跑完——用布尔的话新请求会被 guard
+    /// 当成「已在加载」直接跳过，新市场/指数就永远拿不到预览日。
+    @Published private(set) var loadingDemoKey: String?
 
-    /// 未订阅且当前市场的预览日还在路上：这段时间不展示真实滚动窗口，否则会先闪出
-    /// 最新一天的气泡、预览日到了再跳过去。预览拉取失败/放弃后此值回落为 false，
-    /// 退回展示真实窗口（最新一天点不开，但至少不是空页）。
+    /// 免费预览按（市场, universe）区分：同一市场切换纳斯达克100/标普500，示例日要跟着换。
+    /// 也用作 View 里 `.task(id:)` 的 id。
+    var demoKey: String { "\(market.rawValue)|\(currentUniverse ?? "")" }
+
+    /// 已放弃拉取预览日的键（失败 / 轮询用尽仍在算 / 返回为空）。被取消不算放弃。
+    @Published private(set) var demoGaveUpKey: String?
+
+    /// 未订阅且当前市场/指数的预览日还没到：这段时间不展示真实滚动窗口，否则会先闪出
+    /// 最新一天的气泡、预览日到了再跳过去。
+    ///
+    /// 按「还没拿到、也没放弃」判断，而不是「请求是否在飞」：切市场后的第一帧请求还没发出，
+    /// 按后者会先闪一下旧气泡调暗 +「正在刷新」，紧接着又换成「正在扫描」，两条提示前后
+    /// 叠着出现。放弃后回落为 false，退回展示真实窗口（最新一天点不开，但至少不是空页）。
     var isAwaitingDemo: Bool {
-        !isPremiumUser && demoDay == nil && loadingDemoMarket == market
+        !isPremiumUser && demoDay == nil && demoGaveUpKey != demoKey
     }
 
     /// 订阅层级由外部（持有本 VM 的 View）按 StoreManager 同步，VM 本身不感知
@@ -85,7 +95,24 @@ final class SignalRadarViewModel: ObservableObject {
     private var pendingUniverseKey: String?
 
     /// 当前在切换器里高亮的 universe 键：优先目标键（切换瞬间就高亮），否则用响应里的。
-    var activeUniverseKey: String { pendingUniverseKey ?? response?.universe ?? "" }
+    ///
+    /// 切市场期间 response 还是上一个市场的，不能用它的 universe；这时取该市场记住的选择，
+    /// 没选过就取该市场默认指数（列表缓存里的 isDefault，或 defaultUniverseKeys 兜底）。
+    var activeUniverseKey: String {
+        if let pendingUniverseKey { return pendingUniverseKey }
+        if let response, response.market == market.rawValue { return response.universe }
+        return currentUniverse
+            ?? availableUniverses.first(where: \.isDefault)?.key
+            ?? Self.defaultUniverseKeys[market] ?? ""
+    }
+
+    /// 各市场默认指数（与后端 universe.py 的 is_default 一致），只用于「从没进过这个市场、
+    /// 还没拿到列表」时的展示兜底——切到 A 股直接显示「科创50」，不先闪「A 股」。
+    static let defaultUniverseKeys: [StockMarket: String] = [.us: "nasdaq100", .cn: "star50", .hk: "hstech"]
+    static let defaultUniverseNames: [StockMarket: String] = [.us: "纳斯达克100", .cn: "科创50", .hk: "恒生科技"]
+
+    /// 每个市场拿到过的 universe 列表：切回来时直接恢复，切换器和扫描提示都不用等接口。
+    private var universesByMarket: [StockMarket: [RadarUniverse]] = [:]
 
     /// 真实滚动窗口本身就有的天数，不含 demoDay。
     private var realDays: [RadarDay] { response?.days ?? [] }
@@ -167,8 +194,9 @@ final class SignalRadarViewModel: ObservableObject {
         guard m != market else { return }
         market = m
         // 不清空 response：新市场数据回来前保留旧内容（调暗 + 加载指示），页面不跳动
-        // 不同市场的 universe 列表不同，清掉旧的，等新市场响应回来再填。
-        availableUniverses = []
+        // 不同市场的 universe 列表不同：换成这个市场之前拿到过的列表（没有就先空着），
+        // 切换器与「正在扫描 X」立刻显示正确的指数名，不用等接口。
+        availableUniverses = universesByMarket[m] ?? []
         pendingUniverseKey = nil
         selectedDayIndex = 0
         // demoDay 是按市场拉的（见 loadDemoDay），不清掉的话新市场数据回来前会短暂
@@ -186,6 +214,9 @@ final class SignalRadarViewModel: ObservableObject {
         universeByMarket[market] = key
         pendingUniverseKey = key
         selectedDayIndex = 0
+        // 示例日按 universe 算，旧指数的那天不能留着拼进新指数的日期轨（同 switchMarket）
+        demoDay = nil
+        demoComputedAt = nil
         Task { await load() }
     }
 
@@ -218,7 +249,10 @@ final class SignalRadarViewModel: ObservableObject {
             // 加载期间用户切了市场或 universe，就丢弃这次结果，别覆盖新请求。
             if market != requested || currentUniverse != requestedUniverse { return }
             response = resp
-            if !resp.universes.isEmpty { availableUniverses = resp.universes }
+            if !resp.universes.isEmpty {
+                availableUniverses = resp.universes
+                universesByMarket[requested] = resp.universes
+            }
             pendingUniverseKey = nil
             selectedDayIndex = 0
             jumpToDemoDayIfPresent()
@@ -235,34 +269,44 @@ final class SignalRadarViewModel: ObservableObject {
         if market == requested && currentUniverse == requestedUniverse { isLoading = false }
     }
 
-    /// 拉「上个月 1 号」的免费预览快照（GET /signal-radar/demo），仅未订阅高级版时
-    /// 调用；由 `.task(id: market)` 驱动，市场切换时 SwiftUI 自动取消上一次未完成
-    /// 的调用、重新拉一次。轮询逻辑与 load() 同一套；轮询用尽仍在算就安静放弃——
-    /// 不单独起一套「计算中」提示，日期轨里少这一天，之后重进页面/换市场再拉。
-    func loadDemoDay(market m: StockMarket) async {
-        // 同一市场已在拉（onChange 与 .task(id:) 可能同时触发）就不重复发请求。
-        guard loadingDemoMarket != m else { return }
-        loadingDemoMarket = m
-        // 只清自己设的：切市场后新请求已把它改成新市场，旧请求收尾时不能把它清掉。
-        defer { if loadingDemoMarket == m { loadingDemoMarket = nil } }
+    /// 拉「上个月 1 号」的免费预览快照（GET /signal-radar/demo），按当前（市场, universe），
+    /// 仅未订阅高级版时调用；由 `.task(id: demoKey)` 驱动，切市场/指数时 SwiftUI 自动
+    /// 取消上一次未完成的调用、重新拉一次。轮询逻辑与 load() 同一套；轮询用尽仍在算就
+    /// 安静放弃——不单独起一套「计算中」提示，日期轨里少这一天，之后重进页面再拉。
+    func loadDemoDay() async {
+        let key = demoKey
+        let m = market
+        // 自选是高级版功能，没有免费预览；其余按所选指数（nil = 市场默认）
+        let u = currentUniverse == RadarUniverse.watchlistKey ? nil : currentUniverse
+        // 同一键已在拉（onChange 与 .task(id:) 可能同时触发）就不重复发请求。
+        guard loadingDemoKey != key else { return }
+        loadingDemoKey = key
+        // 只清自己设的：切换后新请求已把它改成新键，旧请求收尾时不能把它清掉。
+        defer { if loadingDemoKey == key { loadingDemoKey = nil } }
         do {
-            var resp = try await SignalRadarService.demo(market: m.rawValue)
+            var resp = try await SignalRadarService.demo(market: m.rawValue, universe: u)
             var tries = 0
             var delay = pollInterval
             while resp.isGenerating && tries < maxPolls {
                 try Task.checkCancellation()
                 try await Task.sleep(nanoseconds: delay)
-                resp = try await SignalRadarService.demo(market: m.rawValue)
+                resp = try await SignalRadarService.demo(market: m.rawValue, universe: u)
                 tries += 1
                 delay = min(delay + 1_000_000_000, maxPollInterval)
             }
             try Task.checkCancellation()
-            guard market == m, !resp.isGenerating, let day = resp.days.first else { return }
+            guard demoKey == key else { return }
+            guard !resp.isGenerating, let day = resp.days.first else {
+                demoGaveUpKey = key  // 轮询用尽仍在算，或当天没有数据：放弃，退回真实窗口
+                return
+            }
             demoDay = day
             demoComputedAt = resp.computedAt
             jumpToDemoDayIfPresent()
         } catch {
-            // 免费预览拉取失败/取消：安静放弃，不影响真实滚动窗口的展示。
+            // 被取消（切走了 / 页面消失）不算放弃，回来 .task 会重拉；真失败才放弃，
+            // 退回真实滚动窗口的展示。URLSession 被取消抛的是 URLError，不是 CancellationError。
+            if !Task.isCancelled, demoKey == key { demoGaveUpKey = key }
         }
     }
 }
