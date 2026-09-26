@@ -858,6 +858,22 @@ async def read_demo_cache(redis: Redis, market: str) -> SignalRadarResponse | No
         return None
 
 
+def resolve_demo_target(nominal: str, per_symbol_dates: list[list[str]]) -> tuple[str, list[str]]:
+    """免费预览的名义日期（上个月 1 号）→（实际展示的交易日, 该日及之前的真实交易日历）。
+
+    名义日期落在周末/节假日时取之前最近的交易日：那天没有 K 线，既不会有「当天新增」，
+    还会被当成一个交易日参与算信号龄，把前一天的信号挤成「1 天前」、窗口少一天。
+    日历取实际展示日往前 _MAX_SIGNAL_AGE_DAYS 个交易日（按成分股真实 K 线，含节假日缺口）；
+    一根 K 线都没有时按工作日兜底。
+    """
+    cutoff = (date.fromisoformat(nominal) - timedelta(days=30)).isoformat()
+    calendar = trading_days_from_constituents(
+        per_symbol_dates, etf_dates=[], cutoff=cutoff, end_date=nominal,
+        limit=_MAX_SIGNAL_AGE_DAYS + 1,
+    ) or _fallback_trading_days(end_date=nominal, limit=_MAX_SIGNAL_AGE_DAYS + 1)
+    return calendar[0], calendar
+
+
 async def compute_demo_day(market: str, *, redis: Redis) -> SignalRadarResponse:
     """免费预览：只展示「上个月 1 号」这一天，用该市场默认 universe。
 
@@ -867,7 +883,7 @@ async def compute_demo_day(market: str, *, redis: Redis) -> SignalRadarResponse:
     后来笔被延伸、事后失效的信号，点进详情页（按今天的数据重算）根本找不到。
     用今天的结构回看，留下的是经得起后续走势、与详情页一致的信号。
     """
-    target = demo_snapshot_date()
+    nominal = demo_snapshot_date()
     universe = get_universe(market, None)
     if universe is None:
         raise ValueError(f"unsupported market: {market}")
@@ -887,12 +903,7 @@ async def compute_demo_day(market: str, *, redis: Redis) -> SignalRadarResponse:
 
     scanned = await asyncio.gather(*[_one(sym, name) for sym, name in constituents])
     histories = [h for h, _ in scanned if h]
-    calendar = trading_days_from_constituents(
-        [dates for _, dates in scanned if dates], etf_dates=[], cutoff=target, end_date=target,
-        limit=_MAX_SIGNAL_AGE_DAYS + 1,
-    ) or [target]
-    if target not in calendar:
-        calendar = sorted({*calendar, target}, reverse=True)
+    target, calendar = resolve_demo_target(nominal, [dates for _, dates in scanned if dates])
 
     resp = SignalRadarResponse(
         market=market,
@@ -907,7 +918,8 @@ async def compute_demo_day(market: str, *, redis: Redis) -> SignalRadarResponse:
         computed_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
     )
     try:
-        await redis.set(_demo_cache_key(market, target), resp.model_dump_json(), ex=_DEMO_CACHE_TTL)
+        # 键按名义日期：read_demo_cache 只知道 demo_snapshot_date()，不知道对齐后的交易日
+        await redis.set(_demo_cache_key(market, nominal), resp.model_dump_json(), ex=_DEMO_CACHE_TTL)
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_demo_cache_write_error", market=market, error=str(e))
     return resp
