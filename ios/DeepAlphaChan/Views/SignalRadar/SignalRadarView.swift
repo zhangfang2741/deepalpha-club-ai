@@ -57,71 +57,19 @@ struct SignalRadarView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 12) {
-                PanicIndexStrip(radarVM: vm, panicVM: panicVM)
-
+            // 风险确认（consentView）挡在整个页面最外层，不跟 PanicIndexStrip
+            // 的市场卡片共用一个 VStack——两者叠在一起会挤占 consentView 的高度，
+            // 内容一多「同意并继续」按钮就被压到贴底部/被 Tab 栏遮住一截。同时挡住
+            // 高级版真实雷达和免费预览：demoBubbleField 现在展示的是后端真实算出的
+            // 买卖点（不再是钉死的假数据），未订阅用户一样会看到红买绿卖的真实信号
+            // 气泡，同样需要先确认过风险声明才放行，不能因为「未订阅」就绕过这道门槛。
+            Group {
                 if !consent.hasAgreed {
-                    // 风险确认放在最前面，同时挡住高级版真实雷达和免费预览：demoBubbleField
-                    // 现在展示的是后端真实算出的买卖点（不再是钉死的假数据），未订阅用户
-                    // 一样会看到红买绿卖的真实信号气泡，同样需要先确认过风险声明才放行，
-                    // 不能因为「未订阅」就绕过这道门槛。
                     consentView
-                } else if !store.isPremium {
-                    // 未订阅高级版：不发真实雷达滚动窗口请求，只展示「上个月 1 号」这一天
-                    // 的真实快照（demoVM）——既能让用户看到功能长什么样、点进去也是真分析，
-                    // 又不会把当下可操作的实时信号免费泄露。
-                    if demoVM.isLoading {
-                        demoScanningView
-                    } else if demoVM.isComputingInBackground {
-                        demoComputingView
-                    } else if let error = demoVM.errorMessage {
-                        errorView(error) { await demoVM.load(market: vm.market) }
-                    } else if let day = demoVM.day {
-                        demoMetaRow(day)
-                        demoBubbleField(day)
-                        demoNoticeBanner
-                        legend
-                        Spacer(minLength: 0)
-                        compactDisclaimer
-                    } else {
-                        demoNoticeBanner
-                        Spacer(minLength: 0)
-                    }
-                } else if vm.isScanning {
-                    scanningView
-                } else if vm.isComputingInBackground {
-                    computingView
-                } else if let error = vm.errorMessage {
-                    errorView(error) { await vm.load() }
-                } else if vm.days.isEmpty {
-                    emptyView
                 } else {
-                    metaRow
-                    bubbleField
-                        // 切换市场/刷新时保留旧气泡、调暗，盖转圈 + 文字提示；期间暂不响应点按
-                        // （避免点进上一个市场的标的）；布局不变，页面不跳动
-                        .opacity(vm.isReloading ? 0.35 : 1)
-                        .allowsHitTesting(!vm.isReloading)
-                        .overlay {
-                            if vm.isReloading {
-                                VStack(spacing: 10) {
-                                    ProgressView().tint(Theme.accent)
-                                    Text(L("正在刷新买卖点信号…"))
-                                        .font(.subheadline).foregroundColor(Theme.textSecondary)
-                                }
-                            }
-                        }
-                        .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
-                    legend
-                    dateRail
-                    Spacer(minLength: 0)
-                    compactDisclaimer
+                    radarContent
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-            .padding(.bottom, 10)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Theme.background)
             .navigationTitle(L("缠论信号"))
             .navigationBarTitleDisplayMode(.inline)
@@ -158,6 +106,70 @@ struct SignalRadarView: View {
             }
             .sheet(isPresented: $showPaywall) { PaywallView() }
         }
+    }
+
+    /// 已通过风险确认后的正文：市场卡片 + 雷达/免费预览。抽成独立计算属性单纯是为了
+    /// 让 body 里「consentView 独占整屏」与「正文」两个分支不再共用同一个 VStack。
+    private var radarContent: some View {
+        VStack(spacing: 12) {
+            PanicIndexStrip(radarVM: vm, panicVM: panicVM)
+
+            if !store.isPremium {
+                // 未订阅高级版：不发真实雷达滚动窗口请求，只展示「上个月 1 号」这一天
+                // 的真实快照（demoVM）——既能让用户看到功能长什么样、点进去也是真分析，
+                // 又不会把当下可操作的实时信号免费泄露。
+                if demoVM.isLoading {
+                    demoScanningView
+                } else if demoVM.isComputingInBackground {
+                    demoComputingView
+                } else if let error = demoVM.errorMessage {
+                    errorView(error) { await demoVM.load(market: vm.market) }
+                } else if let day = demoVM.day {
+                    demoMetaRow(day)
+                    demoBubbleField(day)
+                    demoNoticeBanner
+                    legend
+                    Spacer(minLength: 0)
+                    compactDisclaimer
+                } else {
+                    demoNoticeBanner
+                    Spacer(minLength: 0)
+                }
+            } else if vm.isScanning {
+                scanningView
+            } else if vm.isComputingInBackground {
+                computingView
+            } else if let error = vm.errorMessage {
+                errorView(error) { await vm.load() }
+            } else if vm.days.isEmpty {
+                emptyView
+            } else {
+                metaRow
+                bubbleField
+                    // 切换市场/刷新时保留旧气泡、调暗，盖转圈 + 文字提示；期间暂不响应点按
+                    // （避免点进上一个市场的标的）；布局不变，页面不跳动
+                    .opacity(vm.isReloading ? 0.35 : 1)
+                    .allowsHitTesting(!vm.isReloading)
+                    .overlay {
+                        if vm.isReloading {
+                            VStack(spacing: 10) {
+                                ProgressView().tint(Theme.accent)
+                                Text(L("正在刷新买卖点信号…"))
+                                    .font(.subheadline).foregroundColor(Theme.textSecondary)
+                            }
+                        }
+                    }
+                    .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
+                legend
+                dateRail
+                Spacer(minLength: 0)
+                compactDisclaimer
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     // MARK: - 未订阅高级版：免费预览（上个月 1 号真实快照，RadarDemoViewModel）
