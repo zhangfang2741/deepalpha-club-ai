@@ -51,11 +51,16 @@ DeepAlpha 缠论把 K 线图上的结构自动标出来，让你看懂行情在�
 
 【自动标注缠论结构】
 输入代码即可得到完整的结构识别：K 线包含处理、分型、笔、线段、中枢、
-背驰，以及一二三类买卖点，全部直接画在图上。配 MACD 副图，可查看用于
-判断背驰的面积比。
+背驰，以及一二三类买卖点，全部直接画在图上。背驰按价差、量能、时长三项
+力度对比判定，每一项比值都写在说明里；另附 MACD 副图作参考。
 
 【三个市场】
-美股、A 股、港股统一分析，代码格式各按各市场习惯输入。支持日线与周线。
+美股、A 股、港股统一分析，代码格式各按各市场习惯输入。支持日线与周线，
+并可在结果下方查看更低一级周期（日线看 30 分钟、周线看日线）的走势。
+
+【信号雷达与自选】
+按指数扫描成分股，把当天出现的买卖点结构以气泡图汇总展示，可按历史交易日
+翻看。自选列表可批量查看每只标的当前所处的结构阶段。
 
 【看不懂就先学】
 内置 9 篇缠论入门词条，从 K 线包含处理一路讲到走势级别，每篇配一张
@@ -74,8 +79,10 @@ DeepAlpha 缠论把 K 线图上的结构自动标出来，让你看懂行情在�
 ——
 
 关于订阅
-免费用户每日可分析 3 支不同标的。DeepAlpha Pro 解除次数限制。
-DeepAlpha Pro 为自动续订订阅，按月计费，含 7 天免费试用。
+免费用户每日可分析 3 支不同标的。提供两档自动续订订阅，均按月计费：
+· 基础版：解除每日次数限制，解锁全量缠论分析与 30 分钟次级别确认
+· 高级版：基础版全部权益，另加信号雷达与自选批量状态计算
+价格以 App 内及 App Store 显示为准。
 付款在确认购买时从你的 Apple 账户扣除。若在当前周期结束前 24 小时内
 未关闭自动续订，订阅将自动续期并按同样价格扣费。购买后可在
 App Store 账户设置中管理或关闭自动续订。
@@ -99,12 +106,19 @@ so you can see what shape the market is actually forming.
 AUTOMATIC CHAN STRUCTURE
 Enter a ticker to get the full structural breakdown: candle inclusion merging,
 fractals, strokes, segments, pivots, divergence, and the three classes of
-buy/sell points — all drawn directly on the chart. A MACD subchart shows the
-area ratio used to judge divergence.
+buy/sell points — all drawn directly on the chart. Divergence is judged by
+comparing price range, volume and duration, and each ratio is spelled out;
+a MACD subchart is included for reference.
 
 THREE MARKETS
 US, China A-share and Hong Kong equities in one place, each using its own
-familiar ticker format. Daily and weekly timeframes.
+familiar ticker format. Daily and weekly timeframes, with a one-tap view of the
+next lower timeframe (30-minute under daily, daily under weekly).
+
+SIGNALS RADAR AND WATCHLIST
+Scan an index's constituents and see the day's buy/sell-type structures as a
+bubble map, browsable by past trading day. Your watchlist shows the current
+structural phase of every ticker at a glance.
 
 LEARN AS YOU GO
 Nine built-in lessons take you from candle inclusion through to trend levels.
@@ -123,10 +137,12 @@ current structure indicates and what to watch out for.
 --
 
 ABOUT SUBSCRIPTION
-Free users can analyse 3 distinct tickers per day. DeepAlpha Pro removes the
-daily limit. DeepAlpha Pro is an auto-renewing monthly subscription with a
-7-day free trial. Payment is charged to your Apple Account at confirmation of
-purchase. The subscription renews automatically at the same price unless
+Free users can analyse 3 distinct tickers per day. Two auto-renewing monthly
+subscriptions are available:
+- Basic: removes the daily limit; full Chan analysis and 30-minute sub-level view
+- Premium: everything in Basic, plus Signals radar and watchlist phase overview
+Prices are shown in the app and on the App Store. Payment is charged to your
+Apple Account at confirmation of purchase. The subscription renews automatically at the same price unless
 auto-renew is turned off at least 24 hours before the end of the current
 period. You can manage or turn off auto-renew in your App Store account
 settings after purchase.
@@ -147,7 +163,64 @@ consequences are your own.
 
 ## 五、本版更新说明
 
-### 1.1（本版，2026-09）
+### 1.2（本版，2026-09-26，build 3）
+
+中文：
+
+```
+新增两档订阅、信号雷达全面改版，图表可直接点开结构说明。
+
+• 订阅分为基础版与高级版：基础版解除每日次数限制并含 30 分钟次级别确认，高级版另加信号雷达与自选批量状态
+• 信号雷达改版：气泡颜色区分一二三类、大小表示强弱，参考环按今天/1 周/2 周排布；使用前需阅读风险提示
+• 次级别确认改为图上下钻：日线看 30 分钟，周线看日线
+• 点击 K 线上的分型、笔、线段、中枢、买卖点或背驰，弹出说明并可跳转对应课程
+• 图表下方新增力度面板，背驰按价差、量能、时长三项对比
+• 查询日期按各市场交易所时区换算，修复跨天后日期停在前一天的问题
+```
+
+英文：
+
+```
+Two subscription tiers, a redesigned Signals radar, and tappable chart structures.
+
+• Subscriptions now come in Basic and Premium: Basic removes the daily limit and includes the 30-minute sub-level view; Premium adds the Signals radar and watchlist phase overview
+• Redesigned Signals radar: colour shows signal class, size shows strength, and rings mark today / 1 week / 2 weeks; a risk notice is shown before first use
+• Sub-level view is now a drill-down on the chart: 30-minute under daily, daily under weekly
+• Tap a fractal, stroke, segment, pivot, signal or divergence on the chart to see what it means and jump to the lesson
+• New strength panel under the chart; divergence compares price range, volume and duration
+• Query dates follow each market's exchange time zone; fixed the date getting stuck on the previous day
+```
+
+### 1.2 审核备注（App 审核信息 → 备注；两个订阅的「审核备注」也用这份）
+
+> 线上 `pro.monthly` 的审核备注还写着「唯一订阅、含 7 天试用、不解锁额外模块」，
+> 与 1.2 完全矛盾，必须整段替换。
+
+```
+This version introduces two auto-renewing monthly subscriptions in one group:
+- Basic (club.deepalpha.chan.pro.monthly, existing product): removes the free
+  daily limit of 3 distinct tickers and unlocks the 30-minute sub-level view.
+- Premium (club.deepalpha.chan.premium.monthly, new in this version): everything
+  in Basic, plus the Signals radar tab and watchlist phase overview.
+Neither tier has a free trial.
+
+HOW TO REACH THE PAYWALL
+Sign in with the demo account (use the "Email" tab; phone login only works
+for mainland China numbers):
+  appreview@deepalpha.club / AppReview2026
+Then either: the crown icon on the Analysis tab, or Profile -> "View plans".
+Non-subscribers see a blurred preview on the Signals tab with an upgrade button.
+The paywall shows both plans, prices, the auto-renewal disclosure, Terms and
+Privacy links, and Restore Purchases.
+
+TESTING
+A sandbox Apple Account can purchase and restore both tiers. The Signals radar
+shows a risk notice with a 10-second reading timer before first use.
+All analysis is generated algorithmically from public market data for technical
+study only and is not investment advice. Network access is required.
+```
+
+### 1.1（2026-09，已上线）
 
 > 更新说明只讲功能变化，不重复描述里的免责声明；也不写「买卖点更准」这类
 > 效果承诺——那是 3.1.1/5.2.5 的高风险措辞。
