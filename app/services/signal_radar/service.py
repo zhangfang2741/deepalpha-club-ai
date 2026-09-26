@@ -96,6 +96,8 @@ WATCHLIST_CACHE_TTL = 1800
 # 要跟详情页（每次按最新数据算）保持一致，所以半天重算一次，不能按「那天已过去、
 # 结果确定」长期缓存。
 _DEMO_CACHE_TTL = 3600 * 12
+# 部分成分股拉数失败时的缩短 TTL：结果能用但不完整，半小时后重算自愈
+_DEMO_DEGRADED_CACHE_TTL = 1800
 
 
 def watchlist_cache_key(market: str, user_id: int, watchlist: list[tuple[str, str]]) -> str:
@@ -842,7 +844,8 @@ def _demo_cache_key(market: str, universe_key: str, target: str) -> str:
     # v3：改为用截至今天的数据回看目标日（v2 截至目标日算、未确认被剔光）
     # v4：名义日期落在非交易日时对齐到之前最近的交易日（v3 仍按名义日期 08-01 周六展示）
     # v5：按 universe 分别计算与缓存（之前只算市场默认指数，切到标普500 仍是纳斯达克100）
-    return f"{_CACHE_PREFIX}:demo:v5:{market}:{universe_key}:{target}"
+    # v6：失败率过高不再写缓存（v5 里有部署重启时限流算出的纳斯达克100 空快照）
+    return f"{_CACHE_PREFIX}:demo:v6:{market}:{universe_key}:{target}"
 
 
 async def read_demo_cache(redis: Redis, market: str, universe_key: str) -> SignalRadarResponse | None:
@@ -899,16 +902,21 @@ async def compute_demo_day(
     start_date = _fetch_start(today, window=45)
     sem = asyncio.Semaphore(_SCAN_CONCURRENCY)
 
-    async def _one(symbol: str, name: str) -> tuple[list[RawSignal], list[str]]:
+    async def _one(symbol: str, name: str) -> tuple[list[RawSignal], str | None, list[str]]:
         async with sem:
-            history, _, _, dates = await _scan_symbol(
+            history, failure, _, dates = await _scan_symbol(
                 symbol, name, user_id=None, start_date=start_date, end_date=end_date, redis=redis,
             )
-            return history, dates
+            if failure == "rate_limited":
+                # 与 compute_market 同一套：命中限流让这个名额歇一会儿，别立刻放下一个去撞
+                await asyncio.sleep(_RATE_LIMIT_BACKOFF_SECONDS)
+            return history, failure, dates
 
     scanned = await asyncio.gather(*[_one(sym, name) for sym, name in constituents])
-    histories = [h for h, _ in scanned if h]
-    target, calendar = resolve_demo_target(nominal, [dates for _, dates in scanned if dates])
+    histories = [h for h, _, _ in scanned if h]
+    failure_counts = Counter(f for _, f, _ in scanned if f)
+    failure_rate = sum(failure_counts.values()) / len(constituents) if constituents else 0.0
+    target, calendar = resolve_demo_target(nominal, [dates for _, _, dates in scanned if dates])
 
     resp = SignalRadarResponse(
         market=market,
@@ -922,10 +930,25 @@ async def compute_demo_day(
         status="ready",
         computed_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
     )
+    logger.info(
+        "signal_radar_demo_scan_done", market=market, universe=universe.key, target=target,
+        symbols_total=len(constituents), symbols_failed=sum(failure_counts.values()),
+        failure_rate=round(failure_rate, 2), failure_breakdown=dict(failure_counts),
+        signals=len(resp.days[0].signals) if resp.days else 0,
+    )
+    # 免费预览是所有用户共享的缓存：大面积拉数失败（部署重启时各市场并发预热，行情源限流）
+    # 算出来的残缺/空快照不能写进去，否则所有人半天都看到空雷达；不写缓存，下一个请求重算。
+    if failure_rate > _MAX_ACCEPTABLE_FAILURE_RATE or not histories:
+        logger.warning(
+            "signal_radar_demo_scan_degraded_not_cached", market=market, universe=universe.key,
+            failure_rate=round(failure_rate, 2), failure_breakdown=dict(failure_counts),
+        )
+        return resp
+    # 少量失败：能用，但缩短缓存让它尽快自愈
+    ttl = _DEMO_CACHE_TTL if not failure_counts else _DEMO_DEGRADED_CACHE_TTL
     try:
         # 键按名义日期：read_demo_cache 只知道 demo_snapshot_date()，不知道对齐后的交易日
-        await redis.set(_demo_cache_key(market, universe.key, nominal), resp.model_dump_json(),
-                        ex=_DEMO_CACHE_TTL)
+        await redis.set(_demo_cache_key(market, universe.key, nominal), resp.model_dump_json(), ex=ttl)
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_demo_cache_write_error", market=market, error=str(e))
     return resp
