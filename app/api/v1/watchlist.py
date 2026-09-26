@@ -71,6 +71,7 @@ async def get_watchlist_phases(
     return WatchlistPhasesResponse(phases={
         f"{r.market}:{r.symbol}": WatchlistPhaseOut(
             symbol=r.symbol, market=r.market, phase=r.phase, phase_label=r.phase_label,
+            direction=r.direction,
         )
         for r in results
     })
