@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class MergedCandleOut(BaseModel):
@@ -141,6 +141,8 @@ class PivotPhaseOut(BaseModel):
     confirmed: bool = True
     branches: list[PhaseBranchOut] = []
     stage_guide: StageGuideOut
+    outcome: Optional[Literal["type2", "type3"]] = Field(
+        default=None, description="回落/反弹结果：type3 未回到中枢，type2 回到中枢内；确认买卖点后才有")
 
 
 class StructureLayerOut(BaseModel):

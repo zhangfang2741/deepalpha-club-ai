@@ -93,6 +93,9 @@ class PivotPhase:
     confirmed: bool = True
     branches: list[PhaseBranch] = field(default_factory=list)
     stage_guide: StageGuide | None = None
+    # 回落 / 反弹后的结果：type3 = 没有回到中枢（三类），type2 = 回到中枢内（二类）；
+    # 只在确认买卖点及之后（背驰）有值，App 据此写一句话结论，不必解析标签文字。
+    outcome: Literal["type2", "type3"] | None = None
 
 
 @dataclass
@@ -420,7 +423,8 @@ def _build_retrace_confirmed(pivot: "Pivot", pair: _Pair, lang: str, signaled: b
     return PivotPhase(phase=phase, phase_label=label, direction=pair.direction, pivot=pivot,
                        checklist=_checklist(phase, label, reason, pivot, lang), reason=reason,
                        confirmed=pair.retrace.confirmed, branches=[],
-                       stage_guide=_stage_guide(phase, pair.direction, pivot, lang))
+                       stage_guide=_stage_guide(phase, pair.direction, pivot, lang),
+                       outcome=pair.outcome if pair.outcome != "back_to_range" else None)
 
 
 def _build_divergence_turn(pivot: "Pivot", pair: _Pair, turn_stroke: "Stroke", lang: str) -> PivotPhase:
@@ -430,7 +434,8 @@ def _build_divergence_turn(pivot: "Pivot", pair: _Pair, turn_stroke: "Stroke", l
     return PivotPhase(phase=phase, phase_label=label, direction=pair.direction, pivot=pivot,
                        checklist=_checklist(phase, label, reason, pivot, lang), reason=reason,
                        confirmed=turn_stroke.confirmed, branches=[],
-                       stage_guide=_stage_guide(phase, pair.direction, pivot, lang))
+                       stage_guide=_stage_guide(phase, pair.direction, pivot, lang),
+                       outcome=pair.outcome if pair.outcome != "back_to_range" else None)
 
 
 def build_pivot_phase(result: "ChanAnalysisResult", lang: str = "zh") -> PivotPhase | None:

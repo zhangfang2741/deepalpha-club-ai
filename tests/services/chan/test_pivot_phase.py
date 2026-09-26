@@ -360,3 +360,15 @@ def test_down_side_uses_fantan():
     assert "反弹" in pp.reason and "中枢下沿" in pp.reason
     for t in _all_texts(pp):
         assert not any(w in t for w in _BANNED), t
+
+
+def test_outcome_exposed_for_retrace_confirmed():
+    """App 的一句话结论要区分三类（没回到中枢）与二类（回到中枢内），靠 outcome 而不是解析标签文字。"""
+    base = (("down", 100, 90), ("up", 90, 98), ("down", 98, 92), ("up", 92, 110))
+    t3 = _chain(*base, ("down", 110, 101))
+    pp3 = build_pivot_phase(_result(t3, [_pivot_from(t3, 5, zg=99, zd=91)], []))
+    t2 = _chain(*base, ("down", 110, 95))
+    pp2 = build_pivot_phase(_result(t2, [_pivot_from(t2, 5, zg=99, zd=91)], []))
+    lv = _chain(*base)
+    ppl = build_pivot_phase(_result(lv, [_pivot_from(lv, 3, zg=99, zd=91)], []))
+    assert (pp3.outcome, pp2.outcome, ppl.outcome) == ("type3", "type2", None)
