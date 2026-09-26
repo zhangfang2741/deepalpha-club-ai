@@ -6,6 +6,7 @@ struct RadarOrbitSpacingTests {
     static func main() {
         testRelax()
         testRelaxWithOverlapAndAnchors()
+        testRingDates()
         testCrowdScale()
         assert(RadarOrbitSpacing.angles(count: 0, horizontalRadius: 100, verticalRadius: 100, offset: 0).isEmpty)
         for (rx, ry) in [(160.0, 160.0), (280.0, 140.0), (140.0, 280.0)] {
@@ -186,6 +187,24 @@ struct RadarOrbitSpacingTests {
             assert(d(out[i], out[j]) >= 80 * (1 - ratio) - 1, "收尾后重叠不超过 20%")
         } }
         print("RadarOrbitSpacing 重叠 + 回拉 测试通过")
+    }
+
+    /// 参考环标具体日期：内环=查看日，中环=往前 3 个交易日，外环=往前 5 个交易日。
+    static func testRingDates() {
+        // 有交易日历（最新在前，含节假日缺口：07-20 休市）
+        let cal = ["2026-07-24", "2026-07-23", "2026-07-22", "2026-07-21", "2026-07-17", "2026-07-16"]
+        assert(RadarOrbitSpacing.ringDates(day: "2026-07-24", tradingDaysBack: [0, 3, 5], calendar: cal)
+               == ["2026.07.24", "2026.07.21", "2026.07.16"], "按真实交易日历往前数，跳过休市日")
+        // 查看日不在日历里（如示例日）：按工作日往前推，跳过周末
+        assert(RadarOrbitSpacing.ringDates(day: "2026-07-31", tradingDaysBack: [0, 3, 5], calendar: [])
+               == ["2026.07.31", "2026.07.28", "2026.07.24"], "无日历时按工作日推算")
+        // 日历不够长：够的部分用日历，不够的部分从日历最早一天接着按工作日推
+        let short = ["2026-07-24", "2026-07-23"]
+        assert(RadarOrbitSpacing.ringDates(day: "2026-07-24", tradingDaysBack: [0, 3], calendar: short)
+               == ["2026.07.24", "2026.07.21"], "日历不够长时接着按工作日推")
+        // 解析失败：原样返回，不崩
+        assert(RadarOrbitSpacing.ringDates(day: "", tradingDaysBack: [0], calendar: []) == [""])
+        print("RadarOrbitSpacing ringDates 测试通过")
     }
 
     static func testCrowdScale() {
