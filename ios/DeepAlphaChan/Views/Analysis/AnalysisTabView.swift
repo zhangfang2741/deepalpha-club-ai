@@ -129,8 +129,8 @@ struct AnalysisTabView: View {
 
     // MARK: - 风险提示
 
-    /// 条件页的核心风险提示：说明买卖点只是算法给出的最小观测单元，不是可直接执行的
-    /// 操作结论，别把「技术买点」当「值得买」。
+    /// 条件页的核心风险提示：说明买卖点只是按标准缠论规则给出的最小观测单元，不是可
+    /// 直接执行的操作结论，别把「技术买点」当「值得买」。
     private var riskNotice: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
@@ -139,7 +139,7 @@ struct AnalysisTabView: View {
                 Text(L("信号只是最小观测单元"))
                     .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
             }
-            Text(L("每个买卖点都是算法基于价格走势与结构规律识别出的一次独立观测，可能随后续行情被修正或失效，不是可以直接执行的操作结论。"))
+            Text(L("每个买卖点都是按标准缠论结构规则识别出的一次独立观测，可能随后续行情被修正或失效，不是可以直接执行的操作结论。"))
                 .font(.footnote).foregroundColor(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             Text(L("是否值得操作，需要你自己结合基本面、其他技术面和市场环境综合判断。"))

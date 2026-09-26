@@ -9,7 +9,7 @@
 /* Analysis — conditions page */
 "缠论分析" = "Chan Analysis";
 "信号只是最小观测单元" = "A signal is just a minimal observation";
-"每个买卖点都是算法基于价格走势与结构规律识别出的一次独立观测，可能随后续行情被修正或失效，不是可以直接执行的操作结论。" = "Each buy/sell point is a single, isolated observation the algorithm derives from price action and structural rules. It may be revised or invalidated as new price data comes in — it is not an actionable trading conclusion on its own.";
+"每个买卖点都是按标准缠论结构规则识别出的一次独立观测，可能随后续行情被修正或失效，不是可以直接执行的操作结论。" = "Each buy/sell point is a single, isolated observation derived from standard Chan structural rules. It may be revised or invalidated as new price data comes in — it is not an actionable trading conclusion on its own.";
 "是否值得操作，需要你自己结合基本面、其他技术面和市场环境综合判断。" = "Whether it's worth acting on is for you to judge, combining fundamentals, other technical factors, and the overall market environment.";
 "今日还可分析 %lld 支新股票" = "%lld more new stocks today";
 "今日 %lld 支新股票的免费额度已用完" = "Daily free limit reached (%lld new stocks)";
@@ -40,6 +40,7 @@
 
 /* Result detail */
 "算法自动生成，仅供技术研究，不构成投资建议。" = "Auto-generated for technical research only; not investment advice.";
+"按缠论规则识别，仅为孤立观测，不构成投资建议。" = "Identified per standard Chan-theory rules; each is an isolated observation, not investment advice.";
 
 /* Segments */
 "买卖点" = "Signals";
@@ -606,7 +607,8 @@
 "新客专享价仅限首次订阅的 Apple 账户，优惠期（%@）结束后按各方案正价自动续订。" = "The new-user price is only for Apple Accounts subscribing for the first time. After the offer period (%@), each plan renews automatically at its regular price.";
 "信号雷达免责声明" = "Signals Radar Disclaimer";
 "信号雷达基于公开行情数据，按缠论结构规则自动识别并汇总所选指数成分股的买卖点形态，供技术分析研究使用。" = "The Signals radar uses Chan-theory structure rules on public market data to identify and aggregate buy/sell patterns among the constituents of the selected index, for technical-analysis research.";
-"本功能展示的内容均为算法生成的技术分析结果，不构成任何投资建议、证券推荐或买卖要约。" = "All content shown is algorithm-generated technical analysis and does not constitute investment advice, a securities recommendation, or an offer to buy or sell.";
+"本功能展示的内容均为按标准缠论技术分析规则得出的结果，不构成任何投资建议、证券推荐或买卖要约。" = "All content shown is derived from standard Chan-theory technical analysis rules and does not constitute investment advice, a securities recommendation, or an offer to buy or sell.";
+"每个买卖点都只是缠论对价格结构的一次孤立观测，是否值得操作需要你自己结合基本面、其他技术面和市场环境综合判断。" = "Each buy/sell point is just one isolated observation of price structure under Chan theory. Whether it's worth acting on is for you to judge, combining fundamentals, other technical factors, and the overall market environment.";
 "气泡的颜色、深浅与大小分别表示信号方向、形态强弱与买卖点类型，不代表对未来价格走势的判断或收益承诺。" = "Bubble color, shade and size indicate signal direction, pattern strength and signal class. They do not represent a view on future prices or any promise of returns.";
 "缠论结构随后续行情更新而调整，已显示的信号可能被修正或失效。" = "Chan structures are adjusted as new market data arrives; signals already shown may be revised or invalidated.";
 "行情数据来自第三方，可能存在延迟或误差。" = "Market data comes from third parties and may be delayed or inaccurate.";
