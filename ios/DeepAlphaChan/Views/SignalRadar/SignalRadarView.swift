@@ -836,9 +836,16 @@ struct SignalRadarView: View {
                     moreDateChip
                 }
                 .padding(.horizontal, 2)
+                .padding(.top, demoBadgeInset)
             }
         }
         .sheet(isPresented: $showDatePicker) { datePickerSheet }
+    }
+
+    /// 有「示例」标签时日期轨顶部多留的空间：标签骑在格子上沿外侧，
+    /// 不留余量会被横向 ScrollView 的边界裁掉半截。
+    private var demoBadgeInset: CGFloat {
+        !store.isPremium && vm.unlockedDayDate != nil ? 8 : 0
     }
 
     /// 日期轨最后一格：打开日期选择器，可以直接跳到某一天（不用一格格滑）。
@@ -959,21 +966,11 @@ struct SignalRadarView: View {
             selectDay(index)
         } label: {
             VStack(spacing: 3) {
-                if isDemo {
-                    // 替换掉星期那一行而不是另外悬浮一个角标：格子高度不变，也不会被
-                    // 横向 ScrollView 的上边界裁掉。
-                    Text(L("示例"))
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 5)
-                        .background(Theme.segment, in: Capsule())
-                } else {
-                    // 「今日」只在这格确实是今天时才显示——数据源有延迟时最新一格可能是
-                    // 前一两个交易日，硬把第一格标成「今日」会让人以为 App 认死了今天是那天。
-                    Text(SignalRadarView.dayLabel(day.date))
-                        .font(.system(size: 9))
-                        .foregroundColor(active ? .white.opacity(0.85) : Theme.textSecondary)
-                }
+                // 「今日」只在这格确实是今天时才显示——数据源有延迟时最新一格可能是
+                // 前一两个交易日，硬把第一格标成「今日」会让人以为 App 认死了今天是那天。
+                Text(SignalRadarView.dayLabel(day.date))
+                    .font(.system(size: 9))
+                    .foregroundColor(active ? .white.opacity(0.85) : Theme.textSecondary)
                 Text(SignalRadarView.monthDay(day.date))
                     .font(.system(size: 13, weight: .bold, design: .monospaced))
                     .foregroundColor(active ? .white : Theme.textPrimary)
@@ -984,6 +981,20 @@ struct SignalRadarView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12)
                 .stroke(active ? Theme.accent : Theme.border, lineWidth: 1))
+            // 「示例」骑在格子上沿外侧，不占格子内部空间；日期轨顶部留了余量
+            // （见 dateRail 的 demoBadgeInset），不会被横向 ScrollView 裁掉。
+            .overlay(alignment: .top) {
+                if isDemo {
+                    Text(L("示例"))
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundColor(Theme.segment)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Theme.background, in: Capsule())
+                        .overlay(Capsule().stroke(Theme.segment.opacity(0.7), lineWidth: 0.8))
+                        .offset(y: -7)
+                }
+            }
             .overlay(alignment: .topTrailing) {
                 if hasNew {
                     Circle()
