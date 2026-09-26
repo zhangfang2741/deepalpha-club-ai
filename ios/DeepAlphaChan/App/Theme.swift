@@ -38,13 +38,18 @@ enum Theme {
 
     /// 中枢阶段沿用结构色，避免线段橙或涨跌绿被误读为进度状态。
     /// 自选、详情和阶段讲解共用；方向与信号强弱另行表达。
-    static func pivotPhaseColor(_ phase: String?) -> Color {
-        switch phase {
-        case "pivot_forming", "pivot_oscillating", "leaving", "retrace_confirmed": return Theme.pivotFill
-        case "divergence_turn": return Theme.divergence
-        default: return Theme.textSecondary
-        }
+    /// 中枢阶段的配色：自选列表的状态标签、详情页的阶段标题、判定图的当前节点共用，
+    /// 三处必须一致。按多空倾向配色，与图上买卖点同一套（红=偏多 / 绿=偏空）：
+    /// direction 是离开中枢的方向——向上离开、确认三买偏多；但背驰转折时向上对应顶背驰，偏空。
+    /// 没有方向（中枢形成 / 震荡）为中性，用正文色。不再用中枢紫：和图上的中枢色块撞色。
+    static func phaseColor(phase: String?, direction: String?) -> Color {
+        guard let direction, direction == "up" || direction == "down" else { return Theme.textPrimary }
+        let bullish = (direction == "up") != (phase == "divergence_turn")
+        return bullish ? Theme.up : Theme.down
     }
+
+    /// 「当前」标记的颜色（判定图节点角标、详情卡片标题旁）。
+    static let currentBadge = Theme.down
 }
 
 extension Color {
