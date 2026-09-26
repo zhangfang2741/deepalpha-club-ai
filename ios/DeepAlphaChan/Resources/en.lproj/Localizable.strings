@@ -190,12 +190,6 @@
 "%lld 周" = "%lld-week";
 "%lld 个月" = "%lld-month";
 "%lld 年" = "%lld-year";
-"使用信号雷达前，请确认" = "Before you use Signal Radar";
-"买卖点由算法自动算出，不是投资建议，也不是荐股。" = "Signals are generated automatically by an algorithm. They are not investment advice or stock picks.";
-"气泡的颜色和大小只表示结构强弱，不能预测涨跌。" = "Bubble color and size only show structural strength. They cannot predict price moves.";
-"不要只看雷达就买卖，投资盈亏由你自己承担。" = "Don't trade on the radar alone. Any gains or losses are your own.";
-"我已了解，雷达信号只作技术参考" = "I understand radar signals are for technical reference only";
-"同意并继续" = "Agree & Continue";
 "请仔细阅读（%lld 秒）" = "Please keep reading (%lld s)";
 "请先勾选上方确认" = "Check the box above first";
 "次级别确认 · 高级版解锁" = "Sub-level confirmation · Premium";
@@ -613,3 +607,14 @@
 "新客%@" = "New users · %@";
 "新客专享%@，之后 %@/月，可随时取消" = "New-user price for the %1$@, then %2$@/month. Cancel anytime.";
 "新客专享价仅限首次订阅的 Apple 账户，优惠期（%@）结束后按各方案正价自动续订。" = "The new-user price is only for Apple Accounts subscribing for the first time. After the offer period (%@), each plan renews automatically at its regular price.";
+"信号雷达免责声明" = "Signals Radar Disclaimer";
+"信号雷达基于公开行情数据，按缠论结构规则自动识别并汇总所选指数成分股的买卖点形态，供技术分析研究使用。" = "The Signals radar uses Chan-theory structure rules on public market data to identify and aggregate buy/sell patterns among the constituents of the selected index, for technical-analysis research.";
+"本功能展示的内容均为算法生成的技术分析结果，不构成任何投资建议、证券推荐或买卖要约。" = "All content shown is algorithm-generated technical analysis and does not constitute investment advice, a securities recommendation, or an offer to buy or sell.";
+"气泡的颜色、深浅与大小分别表示信号方向、形态强弱与买卖点类型，不代表对未来价格走势的判断或收益承诺。" = "Bubble color, shade and size indicate signal direction, pattern strength and signal class. They do not represent a view on future prices or any promise of returns.";
+"缠论结构随后续行情更新而调整，已显示的信号可能被修正或失效。" = "Chan structures are adjusted as new market data arrives; signals already shown may be revised or invalidated.";
+"行情数据来自第三方，可能存在延迟或误差。" = "Market data comes from third parties and may be delayed or inaccurate.";
+"证券投资存在风险，投资决策及其结果由投资者独立判断并承担。" = "Investing in securities involves risk. Investment decisions and their outcomes are the investor's own responsibility.";
+"我已阅读并理解上述免责声明" = "I have read and understood the disclaimer above";
+"同意并查看" = "Agree and View";
+"查看信号雷达前，请阅读并同意免责声明" = "Please read and accept the disclaimer before viewing the Signals radar";
+"阅读免责声明" = "Read Disclaimer";

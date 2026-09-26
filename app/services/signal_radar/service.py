@@ -838,8 +838,10 @@ def demo_snapshot_date() -> str:
 
 
 def _demo_cache_key(market: str, target: str) -> str:
-    # v3：改为用截至今天的数据回看目标日；v2 快照（截至目标日算、未确认被剔光）换键即失效
-    return f"{_CACHE_PREFIX}:demo:v3:{market}:{target}"
+    # 改了快照的计算口径就必须升版本号，否则旧快照要等 TTL（12 小时）过期才会被替换：
+    # v3：改为用截至今天的数据回看目标日（v2 截至目标日算、未确认被剔光）
+    # v4：名义日期落在非交易日时对齐到之前最近的交易日（v3 仍按名义日期 08-01 周六展示）
+    return f"{_CACHE_PREFIX}:demo:v4:{market}:{target}"
 
 
 async def read_demo_cache(redis: Redis, market: str) -> SignalRadarResponse | None:

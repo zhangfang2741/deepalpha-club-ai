@@ -7,13 +7,14 @@ import Foundation
 /// 用户主动勾选确认过才放行，降低「用户只看雷达买卖点做交易导致亏损」的误解
 /// 与由此带来的责任风险。
 ///
-/// 只在「已订阅高级版」的用户第一次进入雷达时出现一次；确认过不再重复弹，
+/// 只在第一次查看非示例日的雷达图时出现（即订阅高级版后）；确认过不再重复弹，
 /// 除非声明文案发生实质性变化（见 currentVersion）。
 @MainActor
 final class RadarConsent: ObservableObject {
     /// 声明文案版本号：以后改了声明的实质内容（新增风险点、改变责任表述等，
     /// 不是纯措辞微调）就把这个数字加一，旧版本的确认记录自动失效、强制重新确认。
-    static let currentVersion = 1
+    /// v2：改为规范的免责声明文本（新增结构可能修正、数据来源两项），且只在查看非示例日时弹出。
+    static let currentVersion = 2
 
     @Published private(set) var hasAgreed: Bool
 
