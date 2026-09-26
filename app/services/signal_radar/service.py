@@ -138,6 +138,10 @@ def _cache_stale_after() -> int:
 # 「翻出几个月前仍未失效的老信号」。5 个交易日 = 一周，与前端最外「一周内」环对齐；
 # 按交易日而不是自然日数，周末和休市不会让信号平白变老。新鲜度评分也按这个窗口衰减。
 _MAX_SIGNAL_AGE_DAYS = 5
+# 展示日距今超过这么多自然日，未确认信号不再上雷达：未确认信号挂在还没走完的笔上，
+# 笔一延伸就会被改写/失效，一周前的快照点进详情页（按今天的数据重算）时早已不存在，
+# 气泡与详情对不上。最近一周内保留——那时笔可能确实还在走，右侧预判有参考价值。
+_UNCONFIRMED_MAX_DAYS_AGO = 7
 
 
 @dataclass
@@ -343,6 +347,7 @@ def build_signal_history(
 def build_days(
     histories: list[list[RawSignal]], trading_days: list[str], *, top_n: int,
     max_age_days: int = _MAX_SIGNAL_AGE_DAYS, calendar: list[str] | None = None,
+    today: date | None = None,
 ) -> list[RadarDayOut]:
     """按 trading_days（最新在前）逐日重建市场快照。
 
@@ -354,9 +359,14 @@ def build_days(
     max_age_days 个自然日，则视为过期、当天不再展示（相对每个展示日各自判断，翻看
     历史某天时看到的仍是「截至那天 max_age_days 内有效」的信号）。见模块内
     _MAX_SIGNAL_AGE_DAYS 说明。
+
+    未确认信号：展示日早于 today 往前 _UNCONFIRMED_MAX_DAYS_AGO 个自然日时剔除，
+    且在取前 top_n 之前剔除，不占名额。today 缺省为服务器当天（测试注入固定值）。
     """
     # 数交易日龄用的日历：调用方给了更长的日历就用它（覆盖到最老展示日之前），否则用展示日本身
     cal = calendar if calendar is not None else trading_days
+    unconfirmed_cutoff = (
+        (today or date.today()) - timedelta(days=_UNCONFIRMED_MAX_DAYS_AGO)).isoformat()
     out: list[RadarDayOut] = []
     for day in trading_days:
         active: list[RawSignal] = []
@@ -370,6 +380,8 @@ def build_days(
             if candidate is not None:
                 if candidate.invalidated_on is not None and candidate.invalidated_on <= day:
                     continue  # 价格已走坏（跌破买点 / 涨破卖点），当天起退场
+                if not candidate.confirmed and day < unconfirmed_cutoff:
+                    continue  # 一周前的展示日：未确认信号事后多半已被改写，不上雷达
                 age = trading_age(candidate.date, day, cal)
                 if age > max_age_days:
                     continue
@@ -826,7 +838,8 @@ def demo_snapshot_date() -> str:
 
 
 def _demo_cache_key(market: str, target: str) -> str:
-    return f"{_CACHE_PREFIX}:demo:{market}:{target}"
+    # v2：起剔除一周前的未确认信号；旧键（TTL 45 天）里的快照还带着它们，换键即失效
+    return f"{_CACHE_PREFIX}:demo:v2:{market}:{target}"
 
 
 async def read_demo_cache(redis: Redis, market: str) -> SignalRadarResponse | None:
