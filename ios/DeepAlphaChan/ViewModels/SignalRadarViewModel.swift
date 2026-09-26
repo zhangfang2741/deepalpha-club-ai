@@ -9,16 +9,26 @@ final class SignalRadarViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    /// 免费预览锚定日期（「上个月 1 号」）的真实快照，未订阅高级版时追加到 `days`
-    /// 末尾，让日期轨在真实滚动窗口之外多出这一天可点；订阅高级版则完全不拉、
-    /// 不追加——雷达图标是和高级版完全一样的一套 UI，唯一区别是免费用户默认停在
-    /// 这一天、点其它天会被拦下（见 SignalRadarView 的 dayChip/jumpToNearestDay
+    /// 免费预览锚定日期（「上个月 1 号」）的真实快照，未订阅高级版时插到 `days`
+    /// 最前面并默认选中，让日期轨在真实滚动窗口之外多出这一天可点；订阅高级版则
+    /// 完全不拉、不插——雷达图标是和高级版完全一样的一套 UI，唯一区别是免费用户默认
+    /// 停在这一天、点其它天会被拦下（见 SignalRadarView 的 dayChip/jumpToNearestDay
     /// 门禁），而不是另起一套「示例」界面。
     @Published private(set) var demoDay: RadarDay?
     /// demoDay 所属那次扫描的算出时刻（跟主 response 是两次不同的扫描，metaRow
-    /// 展示「数据 XX:XX 计算」时要用对应那次的时刻，见 isAppendedDemoDay）。
+    /// 展示「数据 XX:XX 计算」时要用对应那次的时刻，见 selectedDayComputedAtText）。
     private var demoComputedAt: String?
-    private var isLoadingDemo = false
+    /// 正在拉免费预览的市场。记市场而不是一个布尔：切市场时 `.task(id:)` 取消旧请求、
+    /// 立刻发新请求，旧请求的 defer 还没跑完——用布尔的话新请求会被 guard 当成
+    /// 「已在加载」直接跳过，新市场就永远拿不到预览日。
+    @Published private(set) var loadingDemoMarket: StockMarket?
+
+    /// 未订阅且当前市场的预览日还在路上：这段时间不展示真实滚动窗口，否则会先闪出
+    /// 最新一天的气泡、预览日到了再跳过去。预览拉取失败/放弃后此值回落为 false，
+    /// 退回展示真实窗口（最新一天点不开，但至少不是空页）。
+    var isAwaitingDemo: Bool {
+        !isPremiumUser && demoDay == nil && loadingDemoMarket == market
+    }
 
     /// 订阅层级由外部（持有本 VM 的 View）按 StoreManager 同步，VM 本身不感知
     /// StoreKit——跟 ChanViewModel.hasSubLevelAccess 同一个模式。非高级版时：
@@ -80,15 +90,16 @@ final class SignalRadarViewModel: ObservableObject {
     /// 真实滚动窗口本身就有的天数，不含 demoDay。
     private var realDays: [RadarDay] { response?.days ?? [] }
 
-    /// 非高级版且 demoDay 已就绪时，把它追加到真实天数列表末尾（demoDay 锚定
-    /// 「上个月 1 号」，通常比真实窗口最老的一天更早，追加在末尾天然保持「最新在
-    /// 前」的顺序）。极少数情况下（如月初，真实窗口正好覆盖到了上个月 1 号）
-    /// 这天本来就在真实数据里，这时不重复追加——直接展示真实数据即可，日期没变、
-    /// 用户点开看到的还是同一天。
+    /// 非高级版且 demoDay 已就绪时，把它插到真实天数列表最前面：这是免费用户唯一
+    /// 能点开的一天，放第一格、默认选中，进页面直接看到它，不必先看最新一天再跳过去。
+    /// 预览日还在路上时返回空（见 isAwaitingDemo），页面显示扫描中。极少数情况下
+    /// （如月初，真实窗口正好覆盖到了上个月 1 号）这天本来就在真实数据里，不重复
+    /// 插入——直接展示真实数据，由 jumpToDemoDayIfPresent 选中它。
     var days: [RadarDay] {
+        if isAwaitingDemo { return [] }
         guard !isPremiumUser, let demoDay, !realDays.contains(where: { $0.date == demoDay.date })
         else { return realDays }
-        return realDays + [demoDay]
+        return [demoDay] + realDays
     }
 
     var selectedDay: RadarDay? {
@@ -132,7 +143,8 @@ final class SignalRadarViewModel: ObservableObject {
     /// 正在主动拉取/轮询（转圈扫描态）。
     /// 整页「扫描中」只在确实还没有任何数据可展示时出现；已有数据时（切换市场、刷新）
     /// 保留旧内容、原地盖加载态，避免整块内容被替换导致页面上下跳动。
-    var isScanning: Bool { isLoading && days.isEmpty }
+    /// 未订阅用户等预览日时也算扫描态，不先露出最新一天的气泡。
+    var isScanning: Bool { (isLoading || isAwaitingDemo) && days.isEmpty }
 
     /// 已有内容、正在加载新数据（切换市场/universe、刷新）：旧内容调暗 + 加载指示，不换布局。
     var isReloading: Bool { isLoading && !days.isEmpty }
@@ -228,9 +240,11 @@ final class SignalRadarViewModel: ObservableObject {
     /// 的调用、重新拉一次。轮询逻辑与 load() 同一套；轮询用尽仍在算就安静放弃——
     /// 不单独起一套「计算中」提示，日期轨里少这一天，之后重进页面/换市场再拉。
     func loadDemoDay(market m: StockMarket) async {
-        guard !isLoadingDemo else { return }
-        isLoadingDemo = true
-        defer { isLoadingDemo = false }
+        // 同一市场已在拉（onChange 与 .task(id:) 可能同时触发）就不重复发请求。
+        guard loadingDemoMarket != m else { return }
+        loadingDemoMarket = m
+        // 只清自己设的：切市场后新请求已把它改成新市场，旧请求收尾时不能把它清掉。
+        defer { if loadingDemoMarket == m { loadingDemoMarket = nil } }
         do {
             var resp = try await SignalRadarService.demo(market: m.rawValue)
             var tries = 0

@@ -31,7 +31,7 @@ struct SignalRadarView: View {
     @EnvironmentObject private var store: StoreManager
     @EnvironmentObject private var usage: UsageTracker
     /// 信号雷达图跟高级版完全是同一套 UI（同一个 vm），未订阅时唯一的区别：
-    /// vm.days 末尾多一天「上个月 1 号」的真实快照（见 SignalRadarViewModel.demoDay），
+    /// vm.days 最前面多一天「上个月 1 号」的真实快照（见 SignalRadarViewModel.demoDay），
     /// 默认停在这天；点日期轨上其它天会弹这个付费墙，而不是真的切过去——见 selectDay。
     @State private var showPaywall = false
     /// 使用雷达前的风险确认：不管是否订阅，只要还没勾选同意过就先挡在 consentView，
@@ -108,7 +108,7 @@ struct SignalRadarView: View {
     }
 
     /// 已通过风险确认后的正文：市场卡片 + 雷达。跟高级版完全同一套 UI，未订阅时
-    /// 唯一的区别在 vm.days（末尾多一天免费预览）和 selectDay（点非解锁日弹付费墙），
+    /// 唯一的区别在 vm.days（最前面多一天免费预览）和 selectDay（点非解锁日弹付费墙），
     /// 这里不再区分订阅层级。抽成独立计算属性单纯是为了让 body 里「consentView
     /// 独占整屏」与「正文」两个分支不再共用同一个 VStack。
     private var radarContent: some View {
@@ -847,8 +847,8 @@ struct SignalRadarView: View {
 
     /// 日期轨最后一格：打开日期选择器，可以直接跳到某一天（不用一格格滑）。
     private var moreDateChip: some View {
-        // 当前选中日不在可见日期轨范围内——比如未订阅用户默认停在的免费预览日，
-        // 通常远早于最近 10 个交易日——时，这一格改用高亮态展示该日期本身，而不是
+        // 当前选中日不在可见日期轨范围内——比如通过日期选择器跳到 10 个交易日
+        // 之前的某天——时，这一格改用高亮态展示该日期本身，而不是
         // 灰底静态的「更多」，否则整条日期轨会一格都不高亮，看起来像没选中任何一天。
         let selectedOutsideVisible = vm.selectedDayIndex >= SignalRadarView.visibleDayChipCount
             && vm.days.indices.contains(vm.selectedDayIndex)
