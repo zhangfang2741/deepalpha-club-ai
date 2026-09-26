@@ -8,8 +8,50 @@ struct ChartLegend: View {
     var isStatic = false
     /// 可用宽度上限。
     var maxWidth: CGFloat = .infinity
+    /// 紧凑模式（详情页竖屏）：只摆笔 / 中枢 / 买卖点三个常用开关，分型 / 线段 / 背驰和
+    /// 「虚线=未确认」收进「更多图层」菜单，图例压成一行。全屏图与分享长图用完整图例。
+    var compact = false
 
     var body: some View {
+        if compact && !isStatic {
+            compactLegend
+        } else {
+            fullLegend
+        }
+    }
+
+    private var compactLegend: some View {
+        HStack(spacing: 6) {
+            item(Theme.stroke, "笔", isOn: $vm.showStrokes)
+            item(Theme.pivotFill, "中枢", isOn: $vm.showPivots)
+            item(Theme.up, "买卖点", isOn: $vm.showSignals, secondaryColor: Theme.down)
+            Menu {
+                Toggle(L("分型"), isOn: $vm.showFractals)
+                Toggle(L("线段"), isOn: $vm.showSegments)
+                Toggle(L("背驰"), isOn: $vm.showDivergences)
+                Section(L("虚线=未确认")) {}
+            } label: {
+                HStack(spacing: 3) {
+                    Text(L("更多图层"))
+                    if moreOnCount > 0 { Text("\(moreOnCount)").foregroundStyle(Theme.accent) }
+                    Image(systemName: "chevron.down").font(.system(size: 7, weight: .bold))
+                }
+                .font(.system(size: 9.5, weight: .medium))
+                .foregroundStyle(Theme.textSecondary)
+                .padding(.horizontal, 6).padding(.vertical, 2.5)
+                .background(Theme.surfaceAlt.opacity(0.72), in: Capsule())
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: maxWidth, alignment: .leading)
+    }
+
+    /// 「更多图层」里当前打开了几个，标在按钮上，免得用户忘了图上多画了什么。
+    private var moreOnCount: Int {
+        [vm.showFractals, vm.showSegments, vm.showDivergences].filter { $0 }.count
+    }
+
+    private var fullLegend: some View {
         WrapLayout(spacing: 4, lineSpacing: 3) {
                 // 顶底分型沿用原先同一个图层开关；两个小圆点（顶/底色）与图上分型圆点一致。
                 item(Theme.topFractal, "分型", isOn: $vm.showFractals,

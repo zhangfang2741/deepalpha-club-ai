@@ -45,6 +45,7 @@ struct ChanChartView: View {
          interactive: Bool = true,
          priceHeight: CGFloat = 240,
          macdHeight: CGFloat = 78,
+         showsMACD: Bool = true,
          highlightFrom: String? = nil,
          onFullscreen: (() -> Void)? = nil,
          onWindowChange: ((ChartWindow) -> Void)? = nil) {
@@ -54,6 +55,7 @@ struct ChanChartView: View {
         self.interactive = interactive
         self.priceHeight = priceHeight
         self.macdHeight = macdHeight
+        self.showsMACD = showsMACD
         self.onWindowChange = onWindowChange
         self.highlightFrom = highlightFrom
         self.onFullscreen = onFullscreen
@@ -95,6 +97,9 @@ struct ChanChartView: View {
     // 主图偏矮，整体呈横向长方形（宽 ≈ 屏宽，明显大于高），看盘视觉更舒展
     var priceHeight: CGFloat = 240
     var macdHeight: CGFloat = 78
+    /// 详情页竖屏不显示 MACD：背驰按力度判定、MACD 不参与，放在第一屏只占位置还让人困惑
+    /// 该看哪个；全屏图与次级别图仍显示，供需要的人参考。
+    var showsMACD = true
     private let timeAxisHeight: CGFloat = 22
     // 右轴不再预留固定列：K 线铺满整宽，价格刻度以透明浮层画在右边缘、不遮挡蜡烛。
     private let rightAxisWidth: CGFloat = 0
@@ -107,7 +112,7 @@ struct ChanChartView: View {
         VStack(spacing: 0) {
             priceChart
             // MACD 副图仅作参考（背驰不用它判定，判定结果标在主图上）
-            if analysis.macd != nil {
+            if showsMACD, analysis.macd != nil {
                 Divider().background(Theme.border)
                 macdChart
             }

@@ -113,6 +113,9 @@ struct ResultDetailView: View {
     /// 分享长图通过 isStatic 隐藏周期与全屏控件，并将 ResultSegments 的三段内容全部展开。
     private func pageContent(isStatic: Bool, width: CGFloat?) -> some View {
         VStack(spacing: 14) {
+            // 结论先行：状态、最新信号、次级别确认第一屏就能看到，不必翻过图表
+            ConclusionCard(analysis: analysis, vm: vm, isStatic: isStatic)
+
             ChartSection(analysis: analysis, vm: vm,
                          onFullscreen: openFullscreen, isStatic: isStatic)
                 .allowsHitTesting(isStatic || !vm.isLoading)
@@ -206,7 +209,9 @@ struct ResultDetailView: View {
 
     /// 压缩版免责声明。完整版在「我的」页——App Store 要求这个可见，不能删。
     private var compactDisclaimer: some View {
-        Text(L("算法自动生成，仅供技术研究，不构成投资建议。"))
+        // 全页唯一一处免责（原买卖点 Tab 底部那句并入这里）
+        Text(L("「买卖点」是缠论对价格结构的技术命名；本页由算法自动生成，仅供技术研究，不构成投资建议。"))
+            .multilineTextAlignment(.center)
             .font(.caption2)
             .foregroundColor(Theme.textSecondary)
             .frame(maxWidth: .infinity)

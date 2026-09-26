@@ -34,11 +34,6 @@ struct SignalListSection: View {
                     }
                 }
             }
-            Text(L("「买卖点」是缠论对价格结构的技术信号命名，非买入/卖出操作建议。"))
-                .font(.caption)
-                .foregroundStyle(Theme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 8)
         }
     }
 }

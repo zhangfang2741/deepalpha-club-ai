@@ -1,130 +1,5 @@
 import SwiftUI
 
-/// 次级别下钻入口：紧贴图表下方的一行结论（「30分 共振买 · 日线偏多 ›」）。
-///
-/// 交互取缠论「区间套」的思路，级别逐级递推不跨级——日线配 30 分钟、周线配日线：
-/// 结论贴着图表放，看完图紧接着就能看到次级别结论；点一下从底部弹出次级别图（半屏，可上拉全屏），
-/// 大级别页原样不动、不重新加载。次级别图只从这里看，不单独提供 30 分钟入口。
-/// 加载失败或后端未部署该接口时整行不出现，不打扰主结果。
-struct SubLevelBar: View {
-    @ObservedObject var vm: ChanViewModel
-    /// 离屏渲染分享长图时置 true：保留结论，去掉点击。
-    var isStatic = false
-
-    @EnvironmentObject private var store: StoreManager
-    @State private var showSheet = false
-    /// 次级别确认是基础版起可用的付费功能，未订阅时点锁定行弹这个付费墙。
-    @State private var showPaywall = false
-
-    var body: some View {
-        Group {
-            if vm.freq == "daily" || vm.freq == "weekly" {
-                if let sub = vm.subLevel {
-                    Button { showSheet = true } label: { row(sub) }
-                        .buttonStyle(.plain)
-                        .allowsHitTesting(!isStatic)
-                        .accessibilityHint(L("打开次级别图表"))
-                        .sheet(isPresented: $showSheet) {
-                            SubLevelSheet(parent: vm, sub: sub)
-                        }
-                // `!isStatic` 放在 `&&` 左边：短路求值保证离屏分享长图渲染
-                // （PageSnapshot.render 走独立的 ImageRenderer，不继承 App 根部注入的
-                // EnvironmentObject）时压根不会去读 store，避免「找不到 StoreManager」崩溃。
-                } else if !isStatic && !store.isPremium && !vm.isSampleSymbol {
-                    // 非高级版：ChanViewModel 根本没发次级别请求（见 loadSubLevel 的
-                    // hasSubLevelAccess 门禁），这里直接展示锁定态引导订阅，不误显示成加载中。
-                    Button { showPaywall = true } label: { lockedRow }
-                        .buttonStyle(.plain)
-                        .accessibilityHint(L("订阅高级版解锁次级别确认"))
-                        .sheet(isPresented: $showPaywall) { PaywallView() }
-                } else if !isStatic && vm.subLevelLoading {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.mini)
-                        Text(L("正在加载次级别…"))
-                            .font(.caption)
-                            .foregroundColor(Theme.textSecondary)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 12)
-                    .frame(height: 36)
-                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10))
-                }
-            }
-        }
-        // 付费墙里升级高级版后，若之前因档位不够被跳过次级别请求，立刻补一次。三元表达式
-        // 短路：isStatic 时右边的 store.isPremium 根本不求值，原因同上。
-        .onChange(of: isStatic ? false : store.isPremium) { _, isPremium in
-            if isPremium { vm.refreshSubLevelIfEligible() }
-        }
-    }
-
-    private var lockedRow: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "lock.fill")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(Theme.segment)
-            Text(L("次级别确认 · 高级版解锁"))
-                .font(.caption)
-                .foregroundColor(Theme.textSecondary)
-            Spacer(minLength: 4)
-            Image(systemName: "chevron.right")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(Theme.textSecondary)
-        }
-        .padding(.horizontal, 12)
-        .frame(minHeight: 36)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10))
-        .contentShape(Rectangle())
-    }
-
-    static func shortBias(_ bias: String, parent: String) -> String {
-        let weekly = parent == "weekly"
-        switch bias {
-        case "bullish": return weekly ? L("周线偏多") : L("日线偏多")
-        case "bearish": return weekly ? L("周线偏空") : L("日线偏空")
-        default: return weekly ? L("周线中性") : L("日线中性")
-        }
-    }
-
-    /// 次级别短名：30min → 「30分」，daily → 「日线」。
-    static func childShort(_ subFreq: String) -> String {
-        subFreq == "daily" ? L("日线") : L("30分")
-    }
-
-        private func row(_ sub: SubLevel) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "scope")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(Theme.accent)
-            Text(Self.childShort(sub.subFreq))
-                .font(.caption.weight(.semibold))
-                .foregroundColor(Theme.textSecondary)
-            VerdictBadge(sub: sub)
-            // 一行放不下后端的完整方向描述，这里只给短标签；完整描述在浮层里
-            Text(Self.shortBias(sub.dailyBias, parent: sub.parentFreq ?? "daily"))
-                .font(.caption)
-                .foregroundColor(SignalFormatting.biasColor(sub.dailyBias))
-                .lineLimit(1)
-            if let last = sub.recentSignals.last {
-                Text("· " + last.label)
-                    .font(.caption)
-                    .foregroundColor(last.isBuy ? Theme.up : Theme.down)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 4)
-            if !isStatic {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(Theme.textSecondary)
-            }
-        }
-        .padding(.horizontal, 12)
-        .frame(minHeight: 36)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10))
-        .contentShape(Rectangle())
-    }
-}
-
 /// 结论徽标：共振买=涨色、共振卖=跌色、逆势=橙色警示、等待/不可用=灰。
 struct VerdictBadge: View {
     let sub: SubLevel
@@ -298,5 +173,71 @@ struct SubLevelSheet: View {
             if days.count == sessions { break }
         }
         return days.last
+    }
+}
+
+/// 结论卡里的「30 分钟确认」小格（周线页为「日线确认」），接替原图表下方的次级别结论行：
+/// 已算出 → 显示结论，点开次级别图；非高级版且非示例股 → 锁，点开付费墙；
+/// 加载中 → 转圈；不适用或失败 → 「暂不可用」。
+struct SubLevelTile: View {
+    @ObservedObject var vm: ChanViewModel
+    var isStatic = false
+
+    @EnvironmentObject private var store: StoreManager
+    @State private var showSheet = false
+    @State private var showPaywall = false
+
+    private var title: String { vm.freq == "weekly" ? L("日线确认") : L("30 分钟确认") }
+
+    var body: some View {
+        Group {
+            if let sub = vm.subLevel {
+                Button { showSheet = true } label: {
+                    tile {
+                        Text(sub.verdictLabel)
+                            .foregroundStyle(VerdictBadge.color(sub.verdict))
+                    }
+                }
+                .buttonStyle(.plain)
+                .allowsHitTesting(!isStatic)
+                .accessibilityHint(L("打开次级别图表"))
+                .sheet(isPresented: $showSheet) { SubLevelSheet(parent: vm, sub: sub) }
+            // `!isStatic` 放左边短路：离屏渲染分享长图时不读 store（不继承 EnvironmentObject）
+            } else if !isStatic && !store.isPremium && !vm.isSampleSymbol
+                        && (vm.freq == "daily" || vm.freq == "weekly") {
+                Button { showPaywall = true } label: {
+                    tile {
+                        Label(L("高级版"), systemImage: "lock.fill")
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(L("订阅高级版解锁次级别确认"))
+                .sheet(isPresented: $showPaywall) { PaywallView() }
+            } else if !isStatic && vm.subLevelLoading {
+                tile {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.mini)
+                        Text(L("加载中")).foregroundStyle(Theme.textSecondary)
+                    }
+                }
+            } else {
+                tile { Text(L("暂不可用")).foregroundStyle(Theme.textSecondary) }
+            }
+        }
+        .onChange(of: isStatic ? false : store.isPremium) { _, isPremium in
+            if isPremium { vm.refreshSubLevelIfEligible() }
+        }
+    }
+
+    private func tile<V: View>(@ViewBuilder _ value: () -> V) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.caption2).foregroundStyle(Theme.textSecondary)
+            value().font(.subheadline.weight(.bold)).lineLimit(1).minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 10))
+        .contentShape(Rectangle())
     }
 }
