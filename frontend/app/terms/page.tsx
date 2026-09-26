@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: 'DeepAlpha 缠论与投研平台服务条款',
 }
 
-const UPDATED = '2026 年 8 月 31 日'
+const UPDATED = '2026 年 9 月 26 日'
 const CONTACT = 'zfleo.sg@gmail.com'
 
 export default function TermsPage() {
@@ -50,12 +50,12 @@ export default function TermsPage() {
           <Section title="三、订阅与付费（基础版 / 高级版）">
             <p>
               iOS 应用「DeepAlpha 缠论」提供免费额度与两档付费订阅。免费用户每日可分析 3 支不同标的；
-              <strong>基础版</strong>（¥38/月）解除该次数限制，解锁全量缠论分析与 30 分钟次级别确认；
-              <strong>高级版</strong>（¥188/月）在基础版基础上，额外解锁信号雷达、自选批量状态计算。
+              <strong>基础版</strong>解除该次数限制，解锁全量缠论分析与 30 分钟次级别确认；
+              <strong>高级版</strong>在基础版基础上，额外解锁信号雷达、自选批量状态计算。
             </p>
             <ul className="mt-3 list-disc space-y-2 pl-5">
               <li>
-                <strong>订阅形式</strong>：均为自动续订订阅，周期为 1 个月，含 3 天免费试用。
+                <strong>订阅形式</strong>：均为自动续订订阅，周期为 1 个月。
                 价格随地区不同，以 App 内付费墙与 App Store 显示的金额为准。
               </li>
               <li>
@@ -68,7 +68,8 @@ export default function TermsPage() {
                 取消在当前已付费周期结束时生效，此前仍可正常使用。
               </li>
               <li>
-                <strong>免费试用</strong>：在试用结束前 24 小时以上关闭自动续订则不会产生费用。
+                <strong>免费试用</strong>：如 App 内付费墙对某档订阅展示了免费试用，
+                在试用结束前 24 小时以上关闭自动续订则不会产生费用。
                 按 Apple 规则，若你在试用期内购买订阅，试用期剩余未使用的部分将作废。
               </li>
               <li>
