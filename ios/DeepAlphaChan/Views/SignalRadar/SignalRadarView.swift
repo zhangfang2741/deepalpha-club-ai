@@ -34,10 +34,11 @@ struct SignalRadarView: View {
     /// vm.days 最前面多一天「上个月 1 号」的真实快照（见 SignalRadarViewModel.demoDay），
     /// 默认停在这天；点日期轨上其它天会弹这个付费墙，而不是真的切过去——见 selectDay。
     @State private var showPaywall = false
-    /// 使用雷达前的风险确认：不管是否订阅，只要还没勾选同意过就先挡在 consentView，
-    /// 不直接看到买卖点气泡——免费预览现在也是真实信号，同样要过这道门槛。
+    /// 免责声明：第一次查看非示例日的雷达图（即订阅高级版后的真实雷达）时弹出，
+    /// 同意前该日的气泡不显示；示例日（未订阅的免费预览）不弹。见 needsConsent。
     @StateObject private var consent = RadarConsent()
     @State private var consentChecked = false
+    @State private var showConsent = false
     /// 强制最短阅读时长（秒）：勾选框可以随时点，但「同意并继续」在这段时间内
     /// 保持禁用——避免手快的用户没看内容就秒点同意，让确认更站得住脚。
     static let consentMinReadSeconds = 10
@@ -56,19 +57,7 @@ struct SignalRadarView: View {
 
     var body: some View {
         NavigationStack {
-            // 风险确认（consentView）挡在整个页面最外层，不跟 PanicIndexStrip
-            // 的市场卡片共用一个 VStack——两者叠在一起会挤占 consentView 的高度，
-            // 内容一多「同意并继续」按钮就被压到贴底部/被 Tab 栏遮住一截。同时挡住
-            // 高级版和未订阅：两者现在共用同一套真实雷达 UI（见 radarContent），
-            // 未订阅用户一样会看到红买绿卖的真实信号气泡（只是只有一天能点开），
-            // 同样需要先确认过风险声明才放行，不能因为「未订阅」就绕过这道门槛。
-            Group {
-                if !consent.hasAgreed {
-                    consentView
-                } else {
-                    radarContent
-                }
-            }
+            radarContent
             .background(Theme.background)
             .navigationTitle(L("缠论信号"))
             .navigationBarTitleDisplayMode(.inline)
@@ -104,13 +93,25 @@ struct SignalRadarView: View {
                 Button(L("好"), role: .cancel) {}
             }
             .sheet(isPresented: $showPaywall) { PaywallView() }
+            // 免责声明：要看非示例日的真实雷达、且还没同意过时弹出（含订阅刚生效、
+            // 从示例日切到真实日期的那一刻）。可下滑关闭，关闭后气泡区保持锁定并给入口重开。
+            .sheet(isPresented: $showConsent) { consentView }
+            .onChange(of: needsConsent, initial: true) { _, needs in
+                if needs { showConsent = true }
+            }
         }
     }
 
-    /// 已通过风险确认后的正文：市场卡片 + 雷达。跟高级版完全同一套 UI，未订阅时
-    /// 唯一的区别在 vm.days（最前面多一天免费预览）和 selectDay（点非解锁日弹付费墙），
-    /// 这里不再区分订阅层级。抽成独立计算属性单纯是为了让 body 里「consentView
-    /// 独占整屏」与「正文」两个分支不再共用同一个 VStack。
+    /// 当前选中的是非示例日、且还没同意过免责声明。示例日（vm.unlockedDayDate，仅未订阅
+    /// 时存在）不需要；高级版没有示例日，所有日期都需要。
+    private var needsConsent: Bool {
+        guard !consent.hasAgreed, let day = vm.selectedDay else { return false }
+        return day.date != vm.unlockedDayDate
+    }
+
+    /// 正文：市场卡片 + 雷达。跟高级版完全同一套 UI，未订阅时唯一的区别在 vm.days
+    /// （最前面多一天免费预览）和 selectDay（点非解锁日弹付费墙）。非示例日未同意免责
+    /// 声明时，气泡区换成锁定占位（consentLockedField）。
     private var radarContent: some View {
         VStack(spacing: 12) {
             PanicIndexStrip(radarVM: vm, panicVM: panicVM)
@@ -125,21 +126,25 @@ struct SignalRadarView: View {
                 emptyView
             } else {
                 metaRow
-                bubbleField
-                    // 切换市场/刷新时保留旧气泡、调暗，盖转圈 + 文字提示；期间暂不响应点按
-                    // （避免点进上一个市场的标的）；布局不变，页面不跳动
-                    .opacity(vm.isReloading ? 0.35 : 1)
-                    .allowsHitTesting(!vm.isReloading)
-                    .overlay {
-                        if vm.isReloading {
-                            VStack(spacing: 10) {
-                                ProgressView().tint(Theme.accent)
-                                Text(L("正在刷新买卖点信号…"))
-                                    .font(.subheadline).foregroundColor(Theme.textSecondary)
+                if needsConsent {
+                    consentLockedField
+                } else {
+                    bubbleField
+                        // 切换市场/刷新时保留旧气泡、调暗，盖转圈 + 文字提示；期间暂不响应点按
+                        // （避免点进上一个市场的标的）；布局不变，页面不跳动
+                        .opacity(vm.isReloading ? 0.35 : 1)
+                        .allowsHitTesting(!vm.isReloading)
+                        .overlay {
+                            if vm.isReloading {
+                                VStack(spacing: 10) {
+                                    ProgressView().tint(Theme.accent)
+                                    Text(L("正在刷新买卖点信号…"))
+                                        .font(.subheadline).foregroundColor(Theme.textSecondary)
+                                }
                             }
                         }
-                    }
-                    .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
+                        .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
+                }
                 legend
                 dateRail
                 Spacer(minLength: 0)
@@ -152,26 +157,48 @@ struct SignalRadarView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    // MARK: - 使用前风险确认
+    // MARK: - 免责声明
 
-    /// 雷达是把多只标的的买卖点集中展示的「信号流」，比单只标的的分析详情页更容易
-    /// 被当成可以直接照抄的操作清单——这里要求主动勾选确认过才放行，不是随手能划掉
-    /// 的常驻提示条。已确认过不会再弹，见 RadarConsent。
+    /// 气泡区锁定占位：非示例日、未同意免责声明时代替气泡显示，可重新打开声明。
+    private var consentLockedField: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "doc.text.magnifyingglass")
+                .font(.system(size: 30)).foregroundColor(Theme.textSecondary)
+            Text(L("查看信号雷达前，请阅读并同意免责声明"))
+                .font(.footnote).foregroundColor(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+            Button(L("阅读免责声明")) { showConsent = true }
+                .buttonStyle(.bordered).tint(Theme.accent)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.surface.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    /// 信号雷达免责声明（弹层）。雷达把多只标的的买卖点集中展示，比单只标的的详情页
+    /// 更容易被当成操作清单，所以要求阅读并勾选同意；同意过不再弹，见 RadarConsent。
+    /// 口吻是规范的免责声明：客观说明功能性质与局限，不对用户说教。
     private var consentView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 34)).foregroundColor(Theme.segment)
-                    Text(L("使用信号雷达前，请确认"))
+                    Image(systemName: "doc.text")
+                        .font(.system(size: 30)).foregroundColor(Theme.accent)
+                    Text(L("信号雷达免责声明"))
                         .font(.headline).foregroundColor(Theme.textPrimary)
                 }
                 .frame(maxWidth: .infinity)
 
+                Text(L("信号雷达基于公开行情数据，按缠论结构规则自动识别并汇总所选指数成分股的买卖点形态，供技术分析研究使用。"))
+                    .font(.footnote).foregroundColor(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 VStack(alignment: .leading, spacing: 10) {
-                    consentPoint(L("买卖点由算法自动算出，不是投资建议，也不是荐股。"))
-                    consentPoint(L("气泡的颜色和大小只表示结构强弱，不能预测涨跌。"))
-                    consentPoint(L("不要只看雷达就买卖，投资盈亏由你自己承担。"))
+                    consentPoint(L("本功能展示的内容均为算法生成的技术分析结果，不构成任何投资建议、证券推荐或买卖要约。"))
+                    consentPoint(L("气泡的颜色、深浅与大小分别表示信号方向、形态强弱与买卖点类型，不代表对未来价格走势的判断或收益承诺。"))
+                    consentPoint(L("缠论结构随后续行情更新而调整，已显示的信号可能被修正或失效。"))
+                    consentPoint(L("行情数据来自第三方，可能存在延迟或误差。"))
+                    consentPoint(L("证券投资存在风险，投资决策及其结果由投资者独立判断并承担。"))
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -185,7 +212,7 @@ struct SignalRadarView: View {
                         Image(systemName: consentChecked ? "checkmark.square.fill" : "square")
                             .font(.system(size: 20))
                             .foregroundColor(consentChecked ? Theme.accent : Theme.textSecondary)
-                        Text(L("我已了解，雷达信号只作技术参考"))
+                        Text(L("我已阅读并理解上述免责声明"))
                             .font(.footnote).foregroundColor(Theme.textPrimary)
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
@@ -196,6 +223,7 @@ struct SignalRadarView: View {
 
                 Button {
                     consent.agree()
+                    showConsent = false
                 } label: {
                     Text(consentButtonText)
                         .fontWeight(.semibold)
@@ -232,7 +260,7 @@ struct SignalRadarView: View {
         } else if !consentChecked {
             return L("请先勾选上方确认")
         } else {
-            return L("同意并继续")
+            return L("同意并查看")
         }
     }
 

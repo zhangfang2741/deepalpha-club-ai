@@ -219,8 +219,9 @@ The paywall shows both plans, prices, the auto-renewal disclosure, Terms and
 Privacy links, and Restore Purchases.
 
 TESTING
-A sandbox Apple Account can purchase and restore both tiers. The Signals radar
-shows a risk notice with a 10-second reading timer before first use.
+A sandbox Apple Account can purchase and restore both tiers. The first time a
+subscriber opens a live (non-sample) radar day, a disclaimer with a 10-second
+reading timer must be accepted before the bubbles are shown.
 All analysis is generated algorithmically from public market data for technical
 study only and is not investment advice. Network access is required.
 ```
