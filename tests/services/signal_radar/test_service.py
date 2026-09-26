@@ -979,3 +979,35 @@ class TestUnconfirmedCutoff:
         days = build_days(histories, ["2026-08-01"], top_n=1, calendar=[
             "2026-08-01", "2026-07-31", "2026-07-30", "2026-07-29"], today=date(2026, 9, 26))
         assert [s.symbol for s in days[0].signals] == ["AAPL"]
+
+
+class TestResolveDemoTarget:
+    """免费预览日：「上个月 1 号」落在非交易日时取之前最近的交易日，日历用真实交易日。"""
+
+    _WEEK = ["2026-07-24", "2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30",
+             "2026-07-31", "2026-08-03"]
+
+    def test_weekend_snaps_to_previous_trading_day(self):
+        target, cal = svc.resolve_demo_target("2026-08-01", [self._WEEK, self._WEEK])
+        assert target == "2026-07-31"
+        assert cal[0] == "2026-07-31"
+        assert "2026-08-01" not in cal and "2026-08-03" not in cal
+
+    def test_calendar_covers_signal_age_window(self):
+        _, cal = svc.resolve_demo_target("2026-08-01", [self._WEEK])
+        assert cal == ["2026-07-31", "2026-07-30", "2026-07-29", "2026-07-28", "2026-07-27", "2026-07-24"]
+
+    def test_trading_day_stays(self):
+        target, _ = svc.resolve_demo_target("2026-07-31", [self._WEEK])
+        assert target == "2026-07-31"
+
+    def test_signal_on_snapped_day_is_new(self):
+        """周五的信号在示例日（周五）算当天新增，龄为 0，而不是被周六挤成 1。"""
+        target, cal = svc.resolve_demo_target("2026-08-01", [self._WEEK])
+        assert svc.trading_age("2026-07-31", target, cal) == 0
+        assert svc.trading_age("2026-07-27", target, cal) == 4
+
+    def test_no_bars_falls_back_to_weekday(self):
+        target, cal = svc.resolve_demo_target("2026-08-01", [])
+        assert target == "2026-07-31"
+        assert cal[0] == "2026-07-31"

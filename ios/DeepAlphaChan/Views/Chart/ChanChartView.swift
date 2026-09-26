@@ -424,7 +424,8 @@ struct ChanChartView: View {
                    style: StrokeStyle(lineWidth: 1.4, dash: [5, 3]))
         // 标签横向夹在图内，贴着左右边界时不截断
         let clampedX = min(max(cx, 24), plotWidth - 24)
-        ctx.draw(Text(L("雷达日期"))
+        // 直接标具体日期（yyyy.MM.dd），比「雷达日期」更一眼看出是哪天
+        ctx.draw(Text(String(anchor.prefix(10)).replacingOccurrences(of: "-", with: "."))
                     .font(.system(size: 9, weight: .bold)).foregroundColor(.white),
                  at: CGPoint(x: clampedX, y: 4), anchor: .top)
     }

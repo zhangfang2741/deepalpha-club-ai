@@ -439,7 +439,10 @@ struct SignalRadarView: View {
             return u.displayName
         }
         if vm.activeUniverseKey == RadarUniverse.watchlistKey { return L("自选") }
-        return vm.response?.etfName ?? ""
+        // 切市场时 response 暂时还是上一个市场的（保留旧内容防跳动），它的名称不能拿来用，
+        // 否则选了 A 股却显示「正在扫描纳斯达克100」；返回空让调用方退回市场名。
+        guard let response = vm.response, response.market == vm.market.rawValue else { return "" }
+        return response.etfName
     }
 
     /// 雷达左上角的 universe 切换器：科技窄基 ↔ 大盘宽基（如 恒生科技 ↔ 恒生指数）。
