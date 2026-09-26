@@ -58,11 +58,24 @@ def test_uptrend_mirror_yields_sell1():
 
 
 def test_constant_volume_downtrend_yields_no_buy1_but_third_sell():
-    """量能、时长都未衰减时不构成一买；跌势中离开中枢不回的反抽给出三卖。"""
-    events = scan_bs_events(_decaying_downtrend_bars(shrink_volume=False), symbol="DN", freq=Freq.D)
-    types = {e.type for e in events}
-    assert "buy1" not in types
-    assert "sell3" in types
+    """量能、时长都未衰减时不构成一买；跌势中离开中枢不回的反弹给出三卖。
+
+    三类不再来自 czsc 信号，而是由 signals 按标准定义从笔与中枢推出，这里走完整分析。
+    """
+    from app.services.chan.analyzer import ChanAnalyzer
+
+    bars = _decaying_downtrend_bars(shrink_volume=False)
+    assert "buy1" not in {e.type for e in scan_bs_events(bars, symbol="DN", freq=Freq.D)}
+    assert "sell3" in {s.type for s in ChanAnalyzer().analyze("DN", bars).signals}
+
+
+def test_scan_only_emits_type1_and_records_stroke_completion():
+    """扫描只给一类背驰事件；每一笔完成的K线不早于笔终点（不回看未来）。"""
+    done: dict[str, str] = {}
+    events = scan_bs_events(_decaying_downtrend_bars(), symbol="DN", freq=Freq.D, stroke_done_at=done)
+    assert {e.type for e in events} <= {"buy1", "sell1"}
+    assert done
+    assert all(bar_time >= end for end, bar_time in done.items())
 
 
 def test_events_deduped_by_type_and_stroke_and_sorted():

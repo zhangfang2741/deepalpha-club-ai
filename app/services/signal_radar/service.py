@@ -85,6 +85,10 @@ _RESONANCE_POOL = 20
 _MIN_PER_LEVEL = 2
 
 _CACHE_PREFIX = "signal_radar"
+# 买卖点判定口径版本：改了一 / 二 / 三类的定义就改这里，雷达的三类缓存（每日快照、自选雷达、
+# 示例日）一起换键失效——否则部署后缓存里还是旧口径的气泡，与详情页（每次实时算）对不上。
+# std1：2026-09 起严格按缠论原文（一类须趋势背驰、二类须跟在一类后、三类由中枢结构推出）。
+_SIGNAL_DEF = "std1"
 
 # 「自选」股票池：按用户各自的自选股计算（universe=watchlist）；缓存按用户隔离、30 分钟。
 # 不列入指数切换菜单（产品决定），接口能力保留。
@@ -105,7 +109,7 @@ def watchlist_cache_key(market: str, user_id: int, watchlist: list[tuple[str, st
     import hashlib
 
     digest = hashlib.sha1(",".join(sorted(s.upper() for s, _ in watchlist)).encode()).hexdigest()[:10]
-    return f"{_CACHE_PREFIX}:{market}:{WATCHLIST_KEY}:u{user_id}:{digest}"
+    return f"{_CACHE_PREFIX}:{_SIGNAL_DEF}:{market}:{WATCHLIST_KEY}:u{user_id}:{digest}"
 # 缓存 TTL 的下限：预热已改成按各市场收盘触发（见 scheduler.py），正常间隔是
 # ~24h（每个市场一天一次），周末则是 ~72h（周五收盘触发到下周一收盘触发之间跨了
 # 周六周日）。下限按周末缺口 + 一天余量给到 4 天，否则周一开盘前缓存就先过期了，
@@ -593,7 +597,7 @@ def _classify_failure(exc: Exception) -> str:
 
 
 def _cache_key(market: str, universe_key: str) -> str:
-    return f"{_CACHE_PREFIX}:{market}:{universe_key}"
+    return f"{_CACHE_PREFIX}:{_SIGNAL_DEF}:{market}:{universe_key}"
 
 
 def _universes_out(market: str) -> list[RadarUniverseOut]:
@@ -845,7 +849,7 @@ def _demo_cache_key(market: str, universe_key: str, target: str) -> str:
     # v4：名义日期落在非交易日时对齐到之前最近的交易日（v3 仍按名义日期 08-01 周六展示）
     # v5：按 universe 分别计算与缓存（之前只算市场默认指数，切到标普500 仍是纳斯达克100）
     # v6：失败率过高不再写缓存（v5 里有部署重启时限流算出的纳斯达克100 空快照）
-    return f"{_CACHE_PREFIX}:demo:v6:{market}:{universe_key}:{target}"
+    return f"{_CACHE_PREFIX}:demo:v6:{_SIGNAL_DEF}:{market}:{universe_key}:{target}"
 
 
 async def read_demo_cache(redis: Redis, market: str, universe_key: str) -> SignalRadarResponse | None:

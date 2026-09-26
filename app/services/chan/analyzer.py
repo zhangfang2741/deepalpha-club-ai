@@ -219,8 +219,10 @@ class ChanAnalyzer:
         all_pivots = result.stroke_pivots + result.segment_pivots
         all_pivots.sort(key=lambda p: p.start_time)
         # 8. 买卖点：是否成立由 czsc 结构信号逐根判定（不回看未来），强度用本地背驰与中枢
-        events = scan_bs_events(bars, symbol=symbol, freq=czsc_freq)
-        result.signals = generate_all_signals(events, result.strokes, result.divergences, all_pivots, lang)
+        stroke_done_at: dict[str, str] = {}
+        events = scan_bs_events(bars, symbol=symbol, freq=czsc_freq, stroke_done_at=stroke_done_at)
+        result.signals = generate_all_signals(events, result.strokes, result.divergences, all_pivots, lang,
+                                              stroke_done_at=stroke_done_at)
         logger.debug("chan_signals", count=len(result.signals))
 
         # 9. 标注最右侧未确认结构（右侧滞后不确定性）

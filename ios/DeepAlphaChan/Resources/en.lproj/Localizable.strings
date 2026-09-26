@@ -700,3 +700,7 @@
 "继续上涨但力度变弱（顶背驰），上涨可能接近尾声" = "Still rising but with weaker force (top divergence) — the advance may be nearing its end";
 "继续下跌但力度变弱（底背驰），下跌可能接近尾声" = "Still falling but with weaker force (bottom divergence) — the decline may be nearing its end";
 "价格与中枢（%@ ~ %@）的关系见下方说明" = "See below for how price relates to the pivot (%@ – %@)";
+"一类是趋势背驰：之前已有两个依次下移（一卖为上移）的中枢，离开后一个中枢再创新低／新高但力度变弱；盘整里的背驰不算。强度按价差比分档：小于 0.6 为强，0.6 至小于 0.8 为中，其余为弱。" = "Type 1 is a trend divergence: after two pivots stepping lower (higher for a sell), price leaves the latest one to a new low / high with weaker force; a divergence inside a range does not count. Strength by range ratio: below 0.6 strong, 0.6 to below 0.8 medium, otherwise weak.";
+"二类是一买后的第一次回落没有跌破一买低点（一卖后的第一次反弹没有升破一卖高点）；再往后的回落不算。" = "Type 2 is the first retest after a type-1 buy that holds above its low (the first pullback after a type-1 sell that holds below its high); later retests do not count.";
+"三类是离开中枢后的第一次回落没有跌回中枢（三卖：第一次反弹没有升回中枢）；仅越过中枢边沿、还没等到回落确认时不算。" = "Type 3 is the first retest after leaving a pivot that stays out of it (for a sell, the first pullback that stays below it); merely crossing the edge without that confirmation does not count.";
+"类型确定性：一类 0.4（趋势背驰，待验证）、二类 0.7（一买后第一次回落不破低点）、三类 1.0（离开中枢后不回中枢，最强确认）。" = "Type certainty: type 1 0.4 (trend divergence, still to be proven), type 2 0.7 (first retest after a type-1 buy holds its low), type 3 1.0 (left the pivot and stayed out — strongest).";
