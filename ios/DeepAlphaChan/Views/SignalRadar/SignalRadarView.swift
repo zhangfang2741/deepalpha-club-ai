@@ -185,7 +185,8 @@ struct SignalRadarView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 VStack(alignment: .leading, spacing: 10) {
-                    consentPoint(L("本功能展示的内容均为算法生成的技术分析结果，不构成任何投资建议、证券推荐或买卖要约。"))
+                    consentPoint(L("本功能展示的内容均为按标准缠论技术分析规则得出的结果，不构成任何投资建议、证券推荐或买卖要约。"))
+                    consentPoint(L("每个买卖点都只是缠论对价格结构的一次孤立观测，是否值得操作需要你自己结合基本面、其他技术面和市场环境综合判断。"))
                     consentPoint(L("气泡的颜色、深浅与大小分别表示信号方向、形态强弱与买卖点类型，不代表对未来价格走势的判断或收益承诺。"))
                     consentPoint(L("缠论结构随后续行情更新而调整，已显示的信号可能被修正或失效。"))
                     consentPoint(L("行情数据来自第三方，可能存在延迟或误差。"))
@@ -845,7 +846,7 @@ struct SignalRadarView: View {
 
     /// 压缩版免责声明，钉在页面最底部；完整版在「我的」页（App Store 要求必须可见）。
     private var compactDisclaimer: some View {
-        Text(L("算法自动生成，仅供技术研究，不构成投资建议。"))
+        Text(L("按缠论规则识别，仅为孤立观测，不构成投资建议。"))
             .font(.caption2)
             .foregroundColor(Theme.textSecondary)
             .frame(maxWidth: .infinity)
