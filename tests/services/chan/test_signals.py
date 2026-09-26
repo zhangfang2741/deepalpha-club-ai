@@ -153,49 +153,109 @@ def test_sell1_weak_divergence_not_promoted():
 def test_buy2_strength_uses_latest_pivot_before_signal():
     """二买强度取信号之前最近结束的中枢；贴着 ZD 回踩、笔级中枢 → weak。"""
     pivots = [_piv(90, 110, "2025-01-01", "2025-01-20")]
+    anchor = _st("down", "2025-01-20", "2025-01-24", 110, 95)
     down = _st("down", "2025-01-25", "2025-02-01", 108, 91)
-    sig = generate_all_signals([_ev("buy2", "2025-02-01", 91.0)], [down], [_div("none", 1.0, diverged=False)], pivots)
-    assert sig[0].type == "buy2" and sig[0].strength == "weak"
-    assert sig[0].divergence is None
+    events = [_ev("buy1", "2025-01-24", 95.0), _ev("buy2", "2025-02-01", 91.0)]
+    sig = generate_all_signals(events, [anchor, down], [_div("none", 1.0, diverged=False)] * 2, pivots)
+    buy2 = next(s for s in sig if s.type == "buy2")
+    assert buy2.strength == "weak"
+    assert buy2.divergence is None
 
 
 def test_buy3_strong_with_segment_pivot_and_large_margin():
     from app.services.chan.pivot import Pivot
     seg = Pivot(zg=110, zd=90, gg=112, dd=88, start_time="2025-01-01", end_time="2025-01-20",
                 level="segment", elements=[])
+    anchor = _st("down", "2025-01-20", "2025-01-24", 150, 140)
     down = _st("down", "2025-01-25", "2025-02-01", 140, 131)
-    sig = generate_all_signals([_ev("buy3", "2025-02-01", 131.0)], [down], [_div("none", 1.0, diverged=False)], [seg])
-    assert sig[0].strength == "strong"
+    events = [_ev("buy1", "2025-01-24", 140.0), _ev("buy3", "2025-02-01", 131.0)]
+    sig = generate_all_signals(events, [anchor, down], [_div("none", 1.0, diverged=False)] * 2, [seg])
+    buy3 = next(s for s in sig if s.type == "buy3")
+    assert buy3.strength == "strong"
 
 
 def test_pivot_ending_after_signal_is_ignored():
     """信号时刻尚未结束的中枢不能参与强度计算（不回看未来）→ 无中枢可依时为 weak。"""
     pivots = [_piv(90, 110, "2025-01-01", "2025-03-01")]
+    anchor = _st("up", "2025-01-20", "2025-01-24", 60, 70)
     up = _st("up", "2025-01-25", "2025-02-01", 70, 80)
-    sig = generate_all_signals([_ev("sell3", "2025-02-01", 80.0)], [up], [_div("none", 1.0, diverged=False)], pivots)
-    assert sig[0].strength == "weak"
+    events = [_ev("sell1", "2025-01-24", 70.0), _ev("sell3", "2025-02-01", 80.0)]
+    sig = generate_all_signals(events, [anchor, up], [_div("none", 1.0, diverged=False)] * 2, pivots)
+    sell3 = next(s for s in sig if s.type == "sell3")
+    assert sell3.strength == "weak"
+
+
+# ---- 二/三类信号必须锚定在同方向的一类信号之后（缠论定义：二卖是一卖之后的反抽高点） ----
+
+def test_type23_signal_without_preceding_type1_is_dropped():
+    """脱离一买单独出现的二买，在结构上不成立（无法回答"是哪次一买之后的回踩"）→ 丢弃。"""
+    down = _st("down", "2025-01-25", "2025-02-01", 108, 91)
+    sig = generate_all_signals([_ev("buy2", "2025-02-01", 91.0)], [down], [_div("none", 1.0, diverged=False)], [])
+    assert sig == []
+
+
+def test_type23_signal_kept_when_preceding_type1_exists():
+    """一买先出现、二买后出现（同方向、更早）→ 二买保留。"""
+    anchor = _st("down", "2025-01-20", "2025-01-24", 120, 100)
+    down = _st("down", "2025-01-25", "2025-02-01", 108, 91)
+    events = [_ev("buy1", "2025-01-24", 100.0), _ev("buy2", "2025-02-01", 91.0)]
+    sig = generate_all_signals(events, [anchor, down], [_div("none", 1.0, diverged=False)] * 2, [])
+    assert [s.type for s in sig] == ["buy1", "buy2"]
+
+
+def test_type23_signal_ignores_anchor_of_opposite_direction():
+    """场上只有一卖，没有一买时，二买（买方向）仍应被丢弃——方向不匹配的一类信号不能当锚点。"""
+    sell_anchor = _st("up", "2025-01-20", "2025-01-24", 90, 100)
+    down = _st("down", "2025-01-25", "2025-02-01", 108, 91)
+    events = [_ev("sell1", "2025-01-24", 100.0), _ev("buy2", "2025-02-01", 91.0)]
+    sig = generate_all_signals(events, [sell_anchor, down], [_div("none", 1.0, diverged=False)] * 2, [])
+    assert [s.type for s in sig] == ["sell1"]
+
+
+def test_type23_signal_requires_anchor_strictly_earlier():
+    """二卖出现在一卖之前（或同一笔上）时，不能反过来当作"跟在一卖后面"——丢弃。"""
+    down_then_up = _st("up", "2025-01-01", "2025-01-10", 100, 120)
+    later_sell1 = _st("up", "2025-01-15", "2025-01-20", 118, 130)
+    events = [_ev("sell2", "2025-01-10", 120.0), _ev("sell1", "2025-01-20", 130.0)]
+    sig = generate_all_signals(
+        events, [down_then_up, later_sell1], [_div("none", 1.0, diverged=False)] * 2, [],
+    )
+    assert [s.type for s in sig] == ["sell1"]
 
 
 def test_signals_sorted_deduped_and_localized():
     events = [
         _ev("sell2", "2025-03-01", 120.0),
+        _ev("sell1", "2025-02-15", 110.0),
         _ev("buy1", "2025-01-10", 100.0),
         _ev("buy1", "2025-01-10", 100.0),
     ]
     down = _st("down", "2025-01-01", "2025-01-10", 120, 100)
-    up = _st("up", "2025-02-20", "2025-03-01", 100, 120)
-    sig = generate_all_signals(events, [down, up], [_div("medium", 0.6), _div("none", 1.0, diverged=False)], [], lang="en")
-    assert [s.type for s in sig] == ["buy1", "sell2"]
+    up1 = _st("up", "2025-02-10", "2025-02-15", 100, 110)
+    up2 = _st("up", "2025-02-20", "2025-03-01", 100, 120)
+    sig = generate_all_signals(
+        events, [down, up1, up2],
+        [_div("medium", 0.6), _div("none", 1.0, diverged=False), _div("none", 1.0, diverged=False)],
+        [], lang="en",
+    )
+    assert [s.type for s in sig] == ["buy1", "sell1", "sell2"]
     assert sig[0].label == "1st Buy"
     assert "Type-1 buy" in sig[0].description
 
 
 def test_event_on_later_extended_stroke_is_dropped():
     """信号所属笔后来被延伸（价格继续创新低/新高），该端点已不在最终结构中 → 视为失效信号丢弃。"""
+    anchor = _st("down", "2024-12-20", "2024-12-28", 140, 120)
     final_down = _st("down", "2025-01-01", "2025-01-20", 120, 90)  # 1/10 的低点后又延伸到 1/20
-    events = [_ev("buy1", "2025-01-10", 100.0), _ev("buy2", "2025-01-20", 90.0)]
-    sig = generate_all_signals(events, [final_down], [_div("none", 1.0, diverged=False)], [])
-    assert [(s.type, s.time) for s in sig] == [("buy2", "2025-01-20")]
+    events = [
+        _ev("buy1", "2024-12-28", 120.0),
+        _ev("buy1", "2025-01-10", 100.0),  # 所属笔被延伸，端点已不在最终结构中 → 丢弃
+        _ev("buy2", "2025-01-20", 90.0),
+    ]
+    sig = generate_all_signals(
+        events, [anchor, final_down], [_div("none", 1.0, diverged=False)] * 2, [],
+    )
+    assert [(s.type, s.time) for s in sig] == [("buy1", "2024-12-28"), ("buy2", "2025-01-20")]
 
 
 def test_event_direction_must_match_stroke():

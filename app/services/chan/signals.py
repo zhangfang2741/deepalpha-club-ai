@@ -209,6 +209,11 @@ def generate_all_signals(
     - 失效过滤：信号亮起时依据的「最后一笔」若后来被延伸（价格继续创新低/新高），
       其端点在最终结构里已不存在——这是已失效的信号，丢弃；只保留所属笔仍是最终
       结构中同向笔终点的事件（买点落下降笔终点、卖点落上升笔终点）。
+    - 锚定过滤：二/三类买卖点在缠论定义里必须跟在同方向的一类买卖点之后（如二卖
+      是一卖后不创新高的反抽高点），脱离一卖/一买单独出现在结构上不成立——
+      czsc 的 cxt_second_bs/cxt_third_bs 判据本身不检查这一点（只看端点价格是否
+      与此前若干笔端点重叠/是否离开中枢），所以这里补上：找不到更早的同方向一类
+      信号（本身也通过了上面的失效过滤）时丢弃。
     - 落点：所属笔的终点（与图上笔端点对齐，_mark_confirmations 据此判断是否确认）。
     - 一类强度：按 czsc 一买/一卖同一判据复算的价差力度比分档（<0.4 强 / <0.7 中 / 其余弱），
       说明写出价差/量能/时长三项比值；窗口不足时退回该笔自身的力度背驰。
@@ -220,12 +225,14 @@ def generate_all_signals(
     idx_by_end = {s.end_time: i for i, s in enumerate(strokes)}
     signals: list[Signal] = []
     seen: set[tuple[str, str]] = set()
+    last_type1_time: dict[str, str] = {}  # "buy"/"sell" → 最近一次同方向一类信号所属笔终点
     for ev in sorted(events, key=lambda e: e.bi_end_time):
         key = (ev.type, ev.bi_end_time)
         want = "down" if ev.type.startswith("buy") else "up"
         if key in seen or direction_by_end.get(ev.bi_end_time) != want:
             continue
         seen.add(key)
+        direction = "buy" if ev.type.startswith("buy") else "sell"
 
         div: DivergenceResult | None = None
         strength: Literal["strong", "medium", "weak"] = "weak"
@@ -238,6 +245,9 @@ def generate_all_signals(
                 div = dv
                 strength = dv.strength  # type: ignore[assignment]
         else:
+            anchor = last_type1_time.get(direction)
+            if anchor is None or anchor >= ev.bi_end_time:
+                continue
             pivot = _latest_pivot_before(pivots, ev.bi_end_time)
             if pivot is not None:
                 boundary = getattr(pivot, _TYPE23_BOUNDARY[ev.type])
@@ -253,4 +263,6 @@ def generate_all_signals(
             lang=lang,
             detected_time=ev.bar_time,
         ))
+        if ev.type in ("buy1", "sell1"):
+            last_type1_time[direction] = ev.bi_end_time
     return signals
