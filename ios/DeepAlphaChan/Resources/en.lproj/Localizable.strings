@@ -660,3 +660,17 @@
 "继续上涨但力度变弱，上涨可能接近尾声" = "Still rising but with weaker force — the advance may be nearing its end";
 "继续下跌但力度变弱，下跌可能接近尾声" = "Still falling but with weaker force — the decline may be nearing its end";
 "价格与 %@ ~ %@ 震荡区的关系见下方说明" = "See below for how price relates to the %@ – %@ range";
+"这意味着什么" = "What this means";
+"需要留意" = "Things to watch";
+"参考震荡区（%@）：%@ ~ %@" = "Reference range (%1$@): %2$@ – %3$@";
+"接下来看：%@" = "Next: %@";
+"上沿 " = "upper edge ";
+"下沿 " = "lower edge ";
+"上沿" = "upper edge";
+"下沿" = "lower edge";
+"买卖点 · 最新在前" = "Signals · newest first";
+"当前区间没有识别到明确的买卖点，可先看上面的状态和图上的中枢位置。" = "No clear signals in this range yet — check the status above and the pivots on the chart.";
+"收起" = "Collapse";
+"展开" = "Expand";
+"查看全部 %lld 个买卖点" = "View all %lld signals";
+"阶段流程图 · 当前在「%@」" = "Phase map · now at “%@”";

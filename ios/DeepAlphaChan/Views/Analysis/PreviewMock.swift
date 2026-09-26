@@ -146,8 +146,8 @@ enum PreviewMock {
         .preferredColorScheme(.dark)
 }
 
-#Preview("买卖点") {
-    ScrollView { SignalListSection(analysis: PreviewMock.analysis).padding(14) }
+#Preview("图表以下内容") {
+    ScrollView { ResultSegments(analysis: PreviewMock.analysis).padding(Theme.contentHInset) }
         .background(Theme.background)
         .preferredColorScheme(.dark)
 }

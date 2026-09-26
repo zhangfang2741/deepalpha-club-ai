@@ -12,6 +12,8 @@ struct PivotPhaseBlock: View {
     /// 切换「当前状态」tab 都会先用设计稿宽度渲染一帧，宽于绝大多数机型的
     /// 卡片可用宽度，导致横向溢出）。这里的水平内边距是 16*2=32。
     var contentWidth: CGFloat?
+    /// 透传给 PivotPhaseDiagram：false 时只画流程图（详情页折叠区用）。
+    var showsDetail = true
 
     private let horizontalPadding: CGFloat = 16
 
@@ -25,14 +27,15 @@ struct PivotPhaseBlock: View {
                 // 之前那版「修复」翻车的地方）。硬宽度 + 下面的 `.clipShape` 才能
                 // 保证卡片对外汇报的宽度永远等于页面真实宽度，判定图内部哪怕算错，
                 // 最多是卡片内部被裁掉一角，绝不会向外溢出。
-                PivotPhaseDiagram(phase: phase, availableWidth: max(contentWidth - horizontalPadding * 2, 0))
+                PivotPhaseDiagram(phase: phase, availableWidth: max(contentWidth - horizontalPadding * 2, 0),
+                                  showsDetail: showsDetail)
                     .padding(horizontalPadding)
                     .frame(width: contentWidth, alignment: .leading)
             } else {
                 // 极端情况：还没测到页面宽度（例如离屏渲染分享长图时跳过了
                 // ResultDetailView 的测量链路）。退回原来的弹性宽度，判定图自己
                 // 也会退回 designWidth 兜底，不会崩，只是没法保证不溢出。
-                PivotPhaseDiagram(phase: phase, availableWidth: nil)
+                PivotPhaseDiagram(phase: phase, availableWidth: nil, showsDetail: showsDetail)
                     .padding(horizontalPadding)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

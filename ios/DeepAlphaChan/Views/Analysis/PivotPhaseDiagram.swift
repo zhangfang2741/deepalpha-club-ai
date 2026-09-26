@@ -88,6 +88,9 @@ struct PivotPhaseDiagram: View {
     /// 卡片实际可用宽度，由 `ResultDetailView` 在页面顶层测量一次后逐层传下来
     /// （见 `ResultDetailView.pageContentWidth` 的说明）。传 nil 时退回 `designWidth`。
     var availableWidth: CGFloat?
+    /// false = 只画流程图：标题、原因、下一步已经在结论卡与「这意味着什么」里，展开流程图时
+    /// 不再重复一遍（详情页折叠区用）。
+    var showsDetail = true
     /// 点了哪个方块/边，非 nil 时弹出对应的规则讲解页。跟上面卡片的内容
     /// 完全独立，卡片永远只展示 `phase` 算出来的当前状态。
     @State private var sheetSelection: PivotPhaseDiagramSelection?
@@ -342,6 +345,7 @@ struct PivotPhaseDiagram: View {
     /// 那些点击只弹讲解页（见 `PhaseRuleSheet`），跟这张卡片各管各的。
     private var detailPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if showsDetail {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text(phase.phaseLabel)
@@ -376,6 +380,7 @@ struct PivotPhaseDiagram: View {
                         .foregroundStyle(Theme.accent)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+            }
             }
 
             diagramCanvas
