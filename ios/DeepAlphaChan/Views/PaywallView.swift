@@ -1,11 +1,20 @@
 import SwiftUI
 import StoreKit
 
-/// 方案卡上的一条权益。
+/// 方案卡上的一条权益（单卡展示用，仅在只加载到一个商品的兜底路径里使用）。
 private struct PlanFeature: Identifiable {
     let icon: String
     let title: String
     let desc: String
+    var id: String { title }
+}
+
+/// 对比表里的一行权益：同一行，标出基础版/高级版各自是否包含。
+private struct ComparisonFeature: Identifiable {
+    let icon: String
+    let title: String
+    let inBasic: Bool
+    let inPremium: Bool
     var id: String { title }
 }
 
@@ -60,39 +69,17 @@ struct PaywallView: View {
 
     @ViewBuilder
     private var content: some View {
-        if store.experienceProduct != nil || store.premiumProduct != nil {
-            VStack(spacing: 16) {
-                if let premium = store.premiumProduct {
-                    planCard(
-                        product: premium, planName: L("高级版"), badge: L("推荐"),
-                        features: [
-                            PlanFeature(icon: "infinity", title: L("无限次缠论分析"), desc: L("不再受每日次数限制")),
-                            PlanFeature(icon: "scope", title: L("30 分钟次级别确认"),
-                                        desc: L("日线定方向、30 分钟找进出点，共振/逆势一眼分辨")),
-                            PlanFeature(icon: "dot.radiowaves.left.and.right", title: L("信号雷达"),
-                                        desc: L("扫描科技指数成分股，每日买卖点一图看全")),
-                            PlanFeature(icon: "star.fill", title: L("自选批量状态计算"),
-                                        desc: L("自选列表批量算出每只标的当前所处的结构阶段")),
-                            PlanFeature(icon: "globe.asia.australia.fill", title: L("美股 / A 股 / 港股"),
-                                        desc: L("三个市场统一的缠论结构分析")),
-                        ])
-                }
-                if let experience = store.experienceProduct {
-                    planCard(
-                        product: experience, planName: L("基础版"), badge: nil,
-                        features: [
-                            PlanFeature(icon: "infinity", title: L("无限次缠论分析"), desc: L("不再受每日次数限制")),
-                            PlanFeature(icon: "scope", title: L("30 分钟次级别确认"),
-                                        desc: L("日线定方向、30 分钟找进出点，共振/逆势一眼分辨")),
-                            PlanFeature(icon: "globe.asia.australia.fill", title: L("美股 / A 股 / 港股"),
-                                        desc: L("三个市场统一的缠论结构分析")),
-                            // 不写「操作倾向」：付费墙是宣传语境，这四个字等于在卖操作建议，
-                            // 正踩 3.1.1 / 5.2.5。口径与 App 内的「形态分析」保持一致。
-                            PlanFeature(icon: "flag.fill", title: L("全部买卖点与形态分析"),
-                                        desc: L("一二三类买卖点、背驰与加权依据")),
-                        ])
-                }
-            }
+        if let premium = store.premiumProduct, let experience = store.experienceProduct {
+            // 两档并排放成一张对比表，而不是纵向堆叠两张完整卡片——纵向堆叠时
+            // 「基础版」整张卡片都在折叠线以下，不下滑很容易根本不知道还有这个
+            // 更便宜的档位。并排后两个价格、订阅按钮一屏内同时看见。
+            comparisonTable(basic: experience, premium: premium)
+        } else if let only = store.premiumProduct ?? store.experienceProduct {
+            planCard(
+                product: only,
+                planName: only.id == AppConfig.premiumMonthlyProductID ? L("高级版") : L("基础版"),
+                badge: only.id == AppConfig.premiumMonthlyProductID ? L("推荐") : nil,
+                features: only.id == AppConfig.premiumMonthlyProductID ? premiumFeatures : basicFeatures)
         } else if store.loadFailed {
             VStack(spacing: 10) {
                 Text(L("暂时无法加载订阅信息")).foregroundColor(Theme.textPrimary)
@@ -103,6 +90,154 @@ struct PaywallView: View {
         } else {
             ProgressView().tint(Theme.accent).frame(maxWidth: .infinity, minHeight: 100)
         }
+    }
+
+    // MARK: - 兜底：只加载到一个商品时的单卡展示（详见 content 里的 else if let only 分支）
+
+    private var premiumFeatures: [PlanFeature] {
+        [
+            PlanFeature(icon: "infinity", title: L("无限次缠论分析"), desc: L("不再受每日次数限制")),
+            PlanFeature(icon: "scope", title: L("30 分钟次级别确认"),
+                        desc: L("日线定方向、30 分钟找进出点，共振/逆势一眼分辨")),
+            PlanFeature(icon: "dot.radiowaves.left.and.right", title: L("信号雷达"),
+                        desc: L("扫描科技指数成分股，每日买卖点一图看全")),
+            PlanFeature(icon: "star.fill", title: L("自选批量状态计算"),
+                        desc: L("自选列表批量算出每只标的当前所处的结构阶段")),
+            PlanFeature(icon: "globe.asia.australia.fill", title: L("美股 / A 股 / 港股"),
+                        desc: L("三个市场统一的缠论结构分析")),
+        ]
+    }
+
+    private var basicFeatures: [PlanFeature] {
+        [
+            PlanFeature(icon: "infinity", title: L("无限次缠论分析"), desc: L("不再受每日次数限制")),
+            PlanFeature(icon: "scope", title: L("30 分钟次级别确认"),
+                        desc: L("日线定方向、30 分钟找进出点，共振/逆势一眼分辨")),
+            PlanFeature(icon: "globe.asia.australia.fill", title: L("美股 / A 股 / 港股"),
+                        desc: L("三个市场统一的缠论结构分析")),
+            // 不写「操作倾向」：付费墙是宣传语境，这四个字等于在卖操作建议，
+            // 正踩 3.1.1 / 5.2.5。口径与 App 内的「形态分析」保持一致。
+            PlanFeature(icon: "flag.fill", title: L("全部买卖点与形态分析"),
+                        desc: L("一二三类买卖点、背驰与加权依据")),
+        ]
+    }
+
+    // MARK: - 对比表（两档并排，默认路径）
+
+    /// 表格里两个价格/按钮列各自的宽度：够放下「¥188.00/月」和两行中文按钮文案，
+    /// 又不至于挤压左边功能名称列（较长的英文文案会换行，属预期内）。
+    private static let columnWidth: CGFloat = 108
+
+    private var comparisonFeatures: [ComparisonFeature] {
+        [
+            .init(icon: "infinity", title: L("无限次缠论分析"), inBasic: true, inPremium: true),
+            .init(icon: "scope", title: L("30 分钟次级别确认"), inBasic: true, inPremium: true),
+            .init(icon: "flag.fill", title: L("全部买卖点与形态分析"), inBasic: true, inPremium: true),
+            .init(icon: "globe.asia.australia.fill", title: L("美股 / A 股 / 港股"), inBasic: true, inPremium: true),
+            .init(icon: "dot.radiowaves.left.and.right", title: L("信号雷达"), inBasic: false, inPremium: true),
+            .init(icon: "star.fill", title: L("自选批量状态计算"), inBasic: false, inPremium: true),
+        ]
+    }
+
+    /// 两档方案并排的对比表：顶部价格+订阅按钮各占一列（一进付费墙就同时看见两个
+    /// 价位，不用先看完高级版一整张卡片再往下滑才发现基础版），下面按行列出功能，
+    /// 用勾/横杠标出各自是否包含——比两张纵向长卡片更容易一眼比较。
+    private func comparisonTable(basic: Product, premium: Product) -> some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 10) {
+                Text(L("功能")).font(.caption).foregroundColor(Theme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                planColumn(basic, planName: L("基础版"), badge: nil)
+                    .frame(width: Self.columnWidth)
+                planColumn(premium, planName: L("高级版"), badge: L("推荐"))
+                    .frame(width: Self.columnWidth)
+            }
+
+            Divider().padding(.vertical, 14)
+
+            VStack(spacing: 16) {
+                ForEach(comparisonFeatures) { row in
+                    HStack(alignment: .top, spacing: 10) {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: row.icon).foregroundColor(Theme.accent).frame(width: 20)
+                            Text(row.title).font(.footnote).foregroundColor(Theme.textPrimary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        checkMark(row.inBasic).frame(width: Self.columnWidth)
+                        checkMark(row.inPremium).frame(width: Self.columnWidth)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(Theme.surface)
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    /// 对比表功能行里的勾选标记：包含=实心对勾（强调色），不包含=浅色横杠
+    /// （不用叉号——「基础版没有信号雷达」不是缺陷，用横杠比红叉更不带负面暗示）。
+    private func checkMark(_ included: Bool) -> some View {
+        Image(systemName: included ? "checkmark.circle.fill" : "minus.circle")
+            .foregroundColor(included ? Theme.up : Theme.textSecondary.opacity(0.35))
+            .frame(maxWidth: .infinity)
+    }
+
+    /// 对比表价格列：方案名 + 角标 + 价格（原价对比同单卡展示）+ 订阅按钮，
+    /// 竖直堆叠塞进一列窄栏（Self.columnWidth）。
+    private func planColumn(_ product: Product, planName: String, badge: String?) -> some View {
+        VStack(spacing: 6) {
+            Text(planName).font(.footnote.bold()).foregroundColor(Theme.textPrimary)
+            if let badge {
+                Text(badge)
+                    .font(.system(size: 9, weight: .bold)).foregroundColor(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Theme.segment, in: Capsule())
+            }
+            if let trial = store.trialPeriodText(product) {
+                Text(L("%@免费试用", trial))
+                    .font(.system(size: 11, weight: .bold)).foregroundColor(Theme.up)
+                    .multilineTextAlignment(.center)
+                Text(L("之后 %@/月", product.displayPrice))
+                    .font(.system(size: 9)).foregroundColor(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+            } else {
+                if let original = originalPriceText(for: product) {
+                    Text(original)
+                        .strikethrough()
+                        .font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                }
+                Text(L("%@/月", product.displayPrice))
+                    .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+                    .minimumScaleFactor(0.8).lineLimit(1)
+            }
+            compactSubscribeButton(product, planName: planName)
+        }
+    }
+
+    /// 对比表窄列专用的订阅按钮：文案与试用逻辑跟 subscribeButton 完全一致（App
+    /// Store 审核要求价格/方案名清楚可见，这里字号更小是为了在窄列里少换行，
+    /// 不是省略信息），只是字号更小、允许换行以适应窄列宽度。
+    private func compactSubscribeButton(_ product: Product, planName: String) -> some View {
+        Button {
+            Task { await store.purchase(product) }
+        } label: {
+            Group {
+                if store.purchaseInProgress {
+                    ProgressView().tint(.white)
+                } else {
+                    Text(store.offersFreeTrial(product)
+                         ? L("开始 %@免费试用", store.trialPeriodText(product) ?? "")
+                         : L("订阅%@", planName))
+                        .font(.system(size: 12, weight: .semibold))
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .frame(maxWidth: .infinity).padding(.vertical, 10)
+            .background(Theme.accent).foregroundColor(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .disabled(store.purchaseInProgress)
     }
 
     /// 一张方案卡：权益列表 + 价格 + 订阅按钮。高级版带「推荐」角标。

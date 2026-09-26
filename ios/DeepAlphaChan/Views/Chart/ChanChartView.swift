@@ -398,9 +398,9 @@ struct ChanChartView: View {
                  at: CGPoint(x: labelRect.midX, y: labelRect.midY), anchor: .center)
     }
 
-    // MARK: - 绘制：雷达快照锚点竖线
+    // MARK: - 绘制：雷达日期锚点竖线
 
-    /// 从信号雷达点气泡进来时，在雷达快照那天画一条竖线（见 ChanViewModel.anchorDate），
+    /// 从信号雷达点气泡进来时，在雷达那天画一条竖线（见 ChanViewModel.anchorDate），
     /// 让用户一眼看出分析对应的是雷达上正在看的哪一天，不用去猜。手动分析等其它入口
     /// anchorDate 为 nil，不画。
     private func drawAnchorLine(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
@@ -415,7 +415,7 @@ struct ChanChartView: View {
                    style: StrokeStyle(lineWidth: 1.4, dash: [5, 3]))
         // 标签横向夹在图内，贴着左右边界时不截断
         let clampedX = min(max(cx, 24), plotWidth - 24)
-        ctx.draw(Text(L("雷达快照"))
+        ctx.draw(Text(L("雷达日期"))
                     .font(.system(size: 9, weight: .bold)).foregroundColor(Theme.segment),
                  at: CGPoint(x: clampedX, y: 4), anchor: .top)
     }
