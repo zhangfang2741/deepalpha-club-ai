@@ -64,10 +64,10 @@ struct WatchlistView: View {
                 .font(.system(size: 11))
                 .foregroundColor(vm.isFull ? Theme.segment : Theme.accent)
             if let maxItems = vm.maxItems {
-                Text(L("已收藏 %lld / %lld", vm.items.count, maxItems))
+                Text(L("已收藏 %lld / %lld", vm.ownItems.count, maxItems))
                     .foregroundColor(vm.isFull ? Theme.segment : Theme.textSecondary)
             } else {
-                Text(L("已收藏 %lld 支", vm.items.count))
+                Text(L("已收藏 %lld 支", vm.ownItems.count))
                     .foregroundColor(Theme.textSecondary)
             }
             Spacer()
@@ -222,9 +222,19 @@ struct WatchlistView: View {
                 .fill(marketColor(market))
                 .frame(width: 3, height: 32)
             VStack(alignment: .leading, spacing: 3) {
-                Text(item.symbol)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(Theme.textPrimary)
+                HStack(spacing: 6) {
+                    Text(item.symbol)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(Theme.textPrimary)
+                    // 默认送的示例股：不占名额、免额度、可看完整次级别；与雷达示例日同一种标记
+                    if item.isSample {
+                        Text(L("示例"))
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(Theme.segment)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .overlay(Capsule().stroke(Theme.segment.opacity(0.7), lineWidth: 0.8))
+                    }
+                }
                 // 只有拿到真正的名称（有别于代码）才显示副标题，否则不再原样重复代码。
                 if let name = item.displayName {
                     Text(name)

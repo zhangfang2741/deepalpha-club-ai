@@ -111,14 +111,16 @@ struct AnalysisTabView: View {
     private func triggerAnalysis() async {
         guard !vm.isLoading else { return }  // 防重入
         let symbol = vm.symbol.trimmingCharacters(in: .whitespaces).uppercased()
-        if !store.isSubscribed && !symbol.isEmpty && !usage.canUseFree(symbol: symbol) {
+        // 示例股（英伟达/茅台/腾讯）不扣额度，见 AppConfig.sampleSymbols
+        let chargesQuota = !store.isSubscribed && !AppConfig.isSampleSymbol(market: vm.market, symbol: symbol)
+        if chargesQuota && !symbol.isEmpty && !usage.canUseFree(symbol: symbol) {
             showPaywall = true
             return
         }
         await vm.runAnalysis()
 
         if vm.errorMessage == nil && vm.analysis != nil {
-            if !store.isSubscribed { usage.recordUse(symbol: symbol) }
+            if chargesQuota { usage.recordUse(symbol: symbol) }
             // 会员也要记：这是快捷入口，和计费额度无关
             recent.record(market: vm.market, symbol: symbol)
             showResults = true

@@ -18,11 +18,30 @@ def client():
     yield TestClient(app)
 
 
-def _item(market="us", symbol="AAPL", name="苹果"):
+@pytest.fixture(autouse=True)
+def _no_sample_seeding():
+    """列表接口首次会补示例自选（写库）；这些用例只测接口本身，统一替掉。"""
+    from app.services import watchlist as store
+
+    with patch.object(store, "ensure_samples", AsyncMock()) as m:
+        yield m
+
+
+def _item(market="us", symbol="AAPL", name="苹果", is_sample=False):
     return type("Item", (), {
-        "market": market, "symbol": symbol, "name": name,
+        "market": market, "symbol": symbol, "name": name, "is_sample": is_sample,
         "created_at": datetime(2026, 9, 19, tzinfo=UTC),
     })()
+
+
+def test_list_seeds_samples_and_marks_them(client, _no_sample_seeding):
+    from app.services import watchlist as store
+
+    items = [_item("us", "NVDA", "英伟达", is_sample=True), _item()]
+    with patch.object(store, "list_items", AsyncMock(return_value=items)):
+        body = client.get("/watchlist").json()
+    _no_sample_seeding.assert_awaited_once()
+    assert [i["is_sample"] for i in body["items"]] == [True, False]
 
 
 def test_list_watchlist_returns_items(client):

@@ -7,12 +7,16 @@ struct WatchlistItem: Decodable, Identifiable {
     let symbol: String
     let name: String
     let createdAt: String
+    /// 默认送的示例自选（不占名额，见 AppConfig.sampleSymbols）；旧后端没有这个字段时为 nil。
+    private let sampleFlag: Bool?
+    var isSample: Bool { sampleFlag ?? false }
 
     var id: String { "\(market):\(symbol)" }
 
     enum CodingKeys: String, CodingKey {
         case market, symbol, name
         case createdAt = "created_at"
+        case sampleFlag = "is_sample"
     }
 
     /// 列表副标题用的显示名：只有当 name 是真正有别于代码的名称时才返回。

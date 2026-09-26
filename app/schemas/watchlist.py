@@ -27,6 +27,7 @@ class WatchlistItemOut(BaseResponse):
     symbol: str
     name: str
     created_at: datetime
+    is_sample: bool = Field(default=False, description="默认送的示例自选：不占名额，免额度可看完整次级别")
 
 
 class WatchlistResponse(BaseResponse):

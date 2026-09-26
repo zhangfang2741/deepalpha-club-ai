@@ -165,3 +165,70 @@ class TestDisplayName:
     def test_stored_name_case_differs_from_code_kept(self):
         # 存的名字与代码大小写不同但语义就是代码——仍按「等于代码」处理去补全
         assert display_name("us", "NVDA", "nvda") == "英伟达"
+
+
+# ---- 示例自选：每个用户默认送美/A/港市值龙头各一只，不占名额、可删、删了不再补 ----
+
+from app.services.watchlist import SAMPLE_ITEMS, remove_item, samples_to_seed  # noqa: E402
+
+
+def _item(market, symbol, *, is_sample=False, hidden=False):
+    return WatchlistItem(user_id=1, market=market, symbol=symbol, name=symbol,
+                         is_sample=is_sample, hidden=hidden)
+
+
+class _DelSession(_FakeSession):
+    def __init__(self, results):
+        super().__init__(results)
+        self.deleted: list = []
+
+    async def delete(self, obj):
+        self.deleted.append(obj)
+
+
+class TestSamplesToSeed:
+    def test_new_user_gets_all_three(self):
+        assert [(m, s) for m, s, _ in samples_to_seed([])] == [(m, s) for m, s, _ in SAMPLE_ITEMS]
+
+    def test_defaults_are_nvda_moutai_tencent(self):
+        assert {(m, s) for m, s, _ in SAMPLE_ITEMS} == {("us", "NVDA"), ("cn", "600519"), ("hk", "0700")}
+
+    def test_seeded_once_even_if_all_deleted(self):
+        rows = [_item(m, s, is_sample=True, hidden=True) for m, s, _ in SAMPLE_ITEMS]
+        assert samples_to_seed(rows) == []
+
+    def test_skips_symbol_user_already_follows(self):
+        seeded = samples_to_seed([_item("us", "NVDA")])
+        assert [(m, s) for m, s, _ in seeded] == [("cn", "600519"), ("hk", "0700")]
+
+
+class TestSampleRemoveAndReadd:
+    async def test_removing_sample_hides_instead_of_deleting(self):
+        sample = _item("us", "NVDA", is_sample=True)
+        session = _DelSession([_FakeResult(first=sample)])
+        assert await remove_item(session, 1, "us", "NVDA") is True
+        assert sample.hidden is True
+        assert session.deleted == []
+
+    async def test_removing_own_item_deletes(self):
+        own = _item("us", "AAPL")
+        session = _DelSession([_FakeResult(first=own)])
+        assert await remove_item(session, 1, "us", "AAPL") is True
+        assert session.deleted == [own]
+
+    async def test_readding_hidden_sample_becomes_own_item(self):
+        hidden = _item("us", "NVDA", is_sample=True, hidden=True)
+        session = _FakeSession([_FakeResult(first=hidden), _FakeResult(scalar=0)])
+        item = await add_item(session, 1, "us", "NVDA", "英伟达", tier="free")
+        assert item.hidden is False and item.is_sample is False
+
+    async def test_readding_hidden_sample_respects_limit(self):
+        hidden = _item("us", "NVDA", is_sample=True, hidden=True)
+        session = _FakeSession([_FakeResult(first=hidden), _FakeResult(scalar=TIER_LIMITS["free"])])
+        try:
+            await add_item(session, 1, "us", "NVDA", "英伟达", tier="free")
+        except WatchlistLimitExceeded:
+            pass
+        else:
+            raise AssertionError("重新加入已删的示例股会变成自己的自选，应当受名额限制")
+        assert hidden.hidden is True

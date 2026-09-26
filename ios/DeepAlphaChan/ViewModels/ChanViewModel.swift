@@ -56,6 +56,9 @@ final class ChanViewModel: ObservableObject {
     /// 省一次网络调用，也避免悄悄给没买这项权益的用户算出结果。
     var hasSubLevelAccess = false
 
+    /// 当前标的是否示例股：示例股对所有用户开放完整次级别确认（见 AppConfig.sampleSymbols）。
+    var isSampleSymbol: Bool { AppConfig.isSampleSymbol(market: market, symbol: symbol) }
+
     // 叠加图层开关
     @Published var showFractals = true
     @Published var showStrokes = true
@@ -192,7 +195,7 @@ final class ChanViewModel: ObservableObject {
         subLevelRequestID += 1
         let requestID = subLevelRequestID
         subLevel = nil
-        guard hasSubLevelAccess, freq == "daily" || freq == "weekly" else {
+        guard hasSubLevelAccess || isSampleSymbol, freq == "daily" || freq == "weekly" else {
             subLevelLoading = false
             return
         }

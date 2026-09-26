@@ -1,7 +1,7 @@
 """自选股存取：直接对 watchlist_item 表做增删查，业务逻辑很薄不单独分层。"""
 from __future__ import annotations
 
-from sqlmodel import func, select
+from sqlmodel import col, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models.watchlist import WatchlistItem
@@ -14,6 +14,39 @@ from app.services.signal_radar.universe import resolve_name
 # free 处理。
 TIER_LIMITS: dict[str, int | None] = {"free": 1, "basic": 10, "premium": None}
 DEFAULT_TIER = "free"
+
+
+# 示例自选：每个用户默认送的三只（美/A/港市值龙头，A 股选贵州茅台而非市值第一的工商银行
+# ——银行股波动小、缠论结构不明显，不适合当样例）。不占名额、可删、删了不再补；点进去
+# 免额度、可看完整 30 分钟次级别（iOS 端 AppConfig.sampleSymbols 与此保持一致）。
+SAMPLE_ITEMS: list[tuple[str, str, str]] = [
+    ("us", "NVDA", "英伟达"),
+    ("cn", "600519", "贵州茅台"),
+    ("hk", "0700", "腾讯控股"),
+]
+
+
+def samples_to_seed(rows: list[WatchlistItem]) -> list[tuple[str, str, str]]:
+    """该用户还需要补的示例自选。
+
+    rows 是用户全部记录（含已隐藏的）。只要出现过任何一条示例记录就说明送过了，
+    一条都不补——哪怕用户把它们全删了（删除只置 hidden）。用户自己已关注的同一只不重复送。
+    """
+    if any(r.is_sample for r in rows):
+        return []
+    owned = {(r.market, r.symbol) for r in rows}
+    return [s for s in SAMPLE_ITEMS if (s[0], s[1]) not in owned]
+
+
+async def ensure_samples(db: AsyncSession, user_id: int) -> None:
+    """首次读自选列表时补上示例自选（每个用户只补一次）。"""
+    rows = list((await db.execute(select(WatchlistItem).where(WatchlistItem.user_id == user_id))).scalars().all())
+    seeds = samples_to_seed(rows)
+    if not seeds:
+        return
+    for market, symbol, name in seeds:
+        db.add(WatchlistItem(user_id=user_id, market=market, symbol=symbol, name=name, is_sample=True))
+    await db.commit()
 
 
 def max_items_for(tier: str) -> int | None:
@@ -44,11 +77,11 @@ def display_name(market: str, symbol: str, stored: str) -> str:
 
 
 async def list_items(db: AsyncSession, user_id: int) -> list[WatchlistItem]:
-    """按加入时间倒序，最近加入的在前。"""
+    """按加入时间倒序，最近加入的在前；不含用户删掉的示例股（hidden）。"""
     result = await db.execute(
         select(WatchlistItem)
-        .where(WatchlistItem.user_id == user_id)
-        .order_by(WatchlistItem.created_at.desc())
+        .where(WatchlistItem.user_id == user_id, col(WatchlistItem.hidden).is_(False))
+        .order_by(col(WatchlistItem.created_at).desc())
     )
     return list(result.scalars().all())
 
@@ -74,22 +107,37 @@ async def add_item(
             )
         )
     ).scalars().first()
-    if existing:
+    if existing and not existing.hidden:
         existing.name = name
         db.add(existing)
         await db.commit()
         await db.refresh(existing)
         return existing
 
+    # 名额只算用户自己加的：示例股与已删的示例股都不计入
     limit = max_items_for(tier)
     if limit is not None:
         count = (
             await db.execute(
-                select(func.count()).select_from(WatchlistItem).where(WatchlistItem.user_id == user_id)
+                select(func.count()).select_from(WatchlistItem).where(
+                    WatchlistItem.user_id == user_id,
+                    col(WatchlistItem.is_sample).is_(False),
+                    col(WatchlistItem.hidden).is_(False),
+                )
             )
         ).scalar_one()
         if count >= limit:
             raise WatchlistLimitExceeded(limit)
+
+    if existing:
+        # 删掉过的示例股又被用户自己加回来：转成普通自选（上面已按名额校验过）
+        existing.hidden = False
+        existing.is_sample = False
+        existing.name = name
+        db.add(existing)
+        await db.commit()
+        await db.refresh(existing)
+        return existing
 
     item = WatchlistItem(user_id=user_id, market=market, symbol=symbol, name=name)
     db.add(item)
@@ -99,7 +147,10 @@ async def add_item(
 
 
 async def remove_item(db: AsyncSession, user_id: int, market: str, symbol: str) -> bool:
-    """移出自选。返回是否真的删到了一条（供 API 层决定是否 404）。"""
+    """移出自选。返回是否真的删到了一条（供 API 层决定是否 404）。
+
+    示例股只置 hidden 不真删（见 WatchlistItem.is_sample），已隐藏的视为不存在。
+    """
     symbol = symbol.strip().upper()
     existing = (
         await db.execute(
@@ -110,8 +161,12 @@ async def remove_item(db: AsyncSession, user_id: int, market: str, symbol: str) 
             )
         )
     ).scalars().first()
-    if existing is None:
+    if existing is None or existing.hidden:
         return False
-    await db.delete(existing)
+    if existing.is_sample:
+        existing.hidden = True
+        db.add(existing)
+    else:
+        await db.delete(existing)
     await db.commit()
     return True
