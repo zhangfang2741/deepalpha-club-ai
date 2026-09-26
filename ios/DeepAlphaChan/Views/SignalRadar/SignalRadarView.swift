@@ -31,7 +31,7 @@ struct SignalRadarView: View {
     @EnvironmentObject private var store: StoreManager
     @EnvironmentObject private var usage: UsageTracker
     /// 信号雷达图跟高级版完全是同一套 UI（同一个 vm），未订阅时唯一的区别：
-    /// vm.days 末尾多一天「上个月 1 号」的真实快照（见 SignalRadarViewModel.demoDay），
+    /// vm.days 最前面多一天「上个月 1 号」的真实快照（见 SignalRadarViewModel.demoDay），
     /// 默认停在这天；点日期轨上其它天会弹这个付费墙，而不是真的切过去——见 selectDay。
     @State private var showPaywall = false
     /// 使用雷达前的风险确认：不管是否订阅，只要还没勾选同意过就先挡在 consentView，
@@ -108,7 +108,7 @@ struct SignalRadarView: View {
     }
 
     /// 已通过风险确认后的正文：市场卡片 + 雷达。跟高级版完全同一套 UI，未订阅时
-    /// 唯一的区别在 vm.days（末尾多一天免费预览）和 selectDay（点非解锁日弹付费墙），
+    /// 唯一的区别在 vm.days（最前面多一天免费预览）和 selectDay（点非解锁日弹付费墙），
     /// 这里不再区分订阅层级。抽成独立计算属性单纯是为了让 body 里「consentView
     /// 独占整屏」与「正文」两个分支不再共用同一个 VStack。
     private var radarContent: some View {
@@ -165,17 +165,13 @@ struct SignalRadarView: View {
                         .font(.system(size: 34)).foregroundColor(Theme.segment)
                     Text(L("使用信号雷达前，请确认"))
                         .font(.headline).foregroundColor(Theme.textPrimary)
-                    Text(L("雷达把多只标的的买卖点集中展示在一张图上，方便发现，但也更容易被当成可以直接照抄的操作清单——请先看完以下几点。"))
-                        .font(.footnote).foregroundColor(Theme.textSecondary)
-                        .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
 
                 VStack(alignment: .leading, spacing: 10) {
-                    consentPoint(L("雷达上的买卖点由算法根据缠论结构自动生成，仅为技术分析研究结果，不构成投资建议、荐股或买卖要约。"))
-                    consentPoint(L("气泡的颜色、大小、位置只反映价格结构的技术特征（如背驰强弱、确认程度），不代表标的当前「值得买入」或「应当卖出」，也不能预测未来涨跌。"))
-                    consentPoint(L("请不要仅凭雷达上出现的买卖点做出交易决策。投资决策应结合基本面、行业趋势、估值、盈利预期与市场环境等因素综合判断。"))
-                    consentPoint(L("证券投资有风险，因参考雷达信号作出的任何投资决策及由此产生的盈亏，均由你自行判断、自行承担。"))
+                    consentPoint(L("买卖点由算法自动算出，不是投资建议，也不是荐股。"))
+                    consentPoint(L("气泡的颜色和大小只表示结构强弱，不能预测涨跌。"))
+                    consentPoint(L("不要只看雷达就买卖，投资盈亏由你自己承担。"))
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -189,7 +185,7 @@ struct SignalRadarView: View {
                         Image(systemName: consentChecked ? "checkmark.square.fill" : "square")
                             .font(.system(size: 20))
                             .foregroundColor(consentChecked ? Theme.accent : Theme.textSecondary)
-                        Text(L("我已阅读并理解以上内容，同意仅将雷达信号作为技术研究参考，不作为投资建议"))
+                        Text(L("我已了解，雷达信号只作技术参考"))
                             .font(.footnote).foregroundColor(Theme.textPrimary)
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
@@ -840,15 +836,22 @@ struct SignalRadarView: View {
                     moreDateChip
                 }
                 .padding(.horizontal, 2)
+                .padding(.top, demoBadgeInset)
             }
         }
         .sheet(isPresented: $showDatePicker) { datePickerSheet }
     }
 
+    /// 有「示例」标签时日期轨顶部多留的空间：标签骑在格子上沿外侧，
+    /// 不留余量会被横向 ScrollView 的边界裁掉半截。
+    private var demoBadgeInset: CGFloat {
+        !store.isPremium && vm.unlockedDayDate != nil ? 8 : 0
+    }
+
     /// 日期轨最后一格：打开日期选择器，可以直接跳到某一天（不用一格格滑）。
     private var moreDateChip: some View {
-        // 当前选中日不在可见日期轨范围内——比如未订阅用户默认停在的免费预览日，
-        // 通常远早于最近 10 个交易日——时，这一格改用高亮态展示该日期本身，而不是
+        // 当前选中日不在可见日期轨范围内——比如通过日期选择器跳到 10 个交易日
+        // 之前的某天——时，这一格改用高亮态展示该日期本身，而不是
         // 灰底静态的「更多」，否则整条日期轨会一格都不高亮，看起来像没选中任何一天。
         let selectedOutsideVisible = vm.selectedDayIndex >= SignalRadarView.visibleDayChipCount
             && vm.days.indices.contains(vm.selectedDayIndex)
@@ -956,6 +959,9 @@ struct SignalRadarView: View {
         // 当天新出现的信号（而非从更早的日子延续下来）：气泡场里标"新"的同一批，
         // 在日期轨上也提前露个头，不用一天天点过去找。
         let hasNew = day.signals.contains { $0.date == day.date }
+        // 未订阅时的免费预览日（上个月 1 号）：标「示例」，说明这天是给你试看的样例，
+        // 不是雷达的最新结果。高级版没有这一天，也就不会出现这个标记。
+        let isDemo = !store.isPremium && day.date == vm.unlockedDayDate
         return Button {
             selectDay(index)
         } label: {
@@ -975,6 +981,20 @@ struct SignalRadarView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12)
                 .stroke(active ? Theme.accent : Theme.border, lineWidth: 1))
+            // 「示例」骑在格子上沿外侧，不占格子内部空间；日期轨顶部留了余量
+            // （见 dateRail 的 demoBadgeInset），不会被横向 ScrollView 裁掉。
+            .overlay(alignment: .top) {
+                if isDemo {
+                    Text(L("示例"))
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundColor(Theme.segment)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Theme.background, in: Capsule())
+                        .overlay(Capsule().stroke(Theme.segment.opacity(0.7), lineWidth: 0.8))
+                        .offset(y: -7)
+                }
+            }
             .overlay(alignment: .topTrailing) {
                 if hasNew {
                     Circle()

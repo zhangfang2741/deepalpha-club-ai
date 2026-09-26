@@ -405,18 +405,27 @@ struct ChanChartView: View {
     /// anchorDate 为 nil，不画。
     private func drawAnchorLine(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
                                 range: VisibleRange) {
-        guard let anchor = vm.anchorDate, let idx = anchorIndex(anchor),
-              idx >= range.start, idx < range.end else { return }
+        guard let anchor = vm.anchorDate, let idx = anchorIndex(anchor), idx < range.end else { return }
+        // 雷达日期之后的 K 线盖一层淡遮罩：那是雷达当时还看不到的「未来」，
+        // 让人一眼分清哪段是雷达判断的依据、哪段是事后走势。锚点已滑出可视区左侧时
+        // 整个可视区都属于「之后」，全盖。
+        let maskStart = idx >= range.start ? x(for: idx, range: range) : 0
+        if maskStart < plotWidth {
+            ctx.fill(Path(CGRect(x: maskStart, y: 0, width: plotWidth - maskStart, height: height)),
+                     with: .color(Color.black.opacity(0.28)))
+        }
+        guard idx >= range.start else { return }
         let cx = x(for: idx, range: range)
         var line = Path()
         line.move(to: CGPoint(x: cx, y: 0))
         line.addLine(to: CGPoint(x: cx, y: height))
-        ctx.stroke(line, with: .color(Theme.segment.opacity(0.85)),
+        // 白色虚线：不占用任何结构图层的配色（线段/中枢/买卖点各有专属色），不会被误读成结构线
+        ctx.stroke(line, with: .color(.white.opacity(0.85)),
                    style: StrokeStyle(lineWidth: 1.4, dash: [5, 3]))
         // 标签横向夹在图内，贴着左右边界时不截断
         let clampedX = min(max(cx, 24), plotWidth - 24)
         ctx.draw(Text(L("雷达日期"))
-                    .font(.system(size: 9, weight: .bold)).foregroundColor(Theme.segment),
+                    .font(.system(size: 9, weight: .bold)).foregroundColor(.white),
                  at: CGPoint(x: clampedX, y: 4), anchor: .top)
     }
 

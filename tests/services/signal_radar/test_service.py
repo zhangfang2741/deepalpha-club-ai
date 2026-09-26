@@ -932,3 +932,50 @@ class TestPriceInvalidation:
         sig = _sig("buy2", "2026-09-14", 100.0)
         r = ChanAnalysisResult(symbol="X", bars_count=100, signals=[sig])
         assert build_signal_history("X", "x", r)[0].invalidated_on is None
+
+
+class TestUnconfirmedCutoff:
+    """展示日距今超过一周：未确认信号不再上雷达。
+
+    未确认信号挂在还没走完的笔上，之后笔一延伸就会被改写/失效——一周前的快照
+    （如免费预览的「上个月 1 号」）点进详情页按今天的数据重算时，这类信号早已
+    不存在，气泡与详情对不上。最近一周内保留：那时笔可能确实还在走，有参考价值。
+    """
+
+    @staticmethod
+    def _unconfirmed(symbol: str, day: str, strength: float) -> RawSignal:
+        r = _raw(symbol, day, "sell", strength)
+        r.confirmed = False
+        return r
+
+    def test_old_day_drops_unconfirmed_keeps_confirmed(self):
+        histories = [
+            [self._unconfirmed("ISRG", "2026-07-29", 0.8)],
+            [_raw("AAPL", "2026-07-30", "buy", 0.5)],
+        ]
+        days = build_days(histories, ["2026-08-01"], top_n=10, calendar=[
+            "2026-08-01", "2026-07-31", "2026-07-30", "2026-07-29"], today=date(2026, 9, 26))
+        assert [s.symbol for s in days[0].signals] == ["AAPL"]
+        assert days[0].sell_count == 0
+
+    def test_recent_day_keeps_unconfirmed(self):
+        histories = [[self._unconfirmed("ISRG", "2026-09-24", 0.8)]]
+        days = build_days(histories, ["2026-09-25"], top_n=10,
+                          calendar=["2026-09-25", "2026-09-24"], today=date(2026, 9, 26))
+        assert [s.symbol for s in days[0].signals] == ["ISRG"]
+
+    def test_exactly_one_week_ago_still_keeps_unconfirmed(self):
+        histories = [[self._unconfirmed("ISRG", "2026-09-18", 0.8)]]
+        days = build_days(histories, ["2026-09-19"], top_n=10,
+                          calendar=["2026-09-19", "2026-09-18"], today=date(2026, 9, 26))
+        assert [s.symbol for s in days[0].signals] == ["ISRG"]
+
+    def test_dropped_unconfirmed_does_not_take_a_top_n_slot(self):
+        """先过滤再取前 N：被过滤的强信号不能占掉名额，让确认过的弱信号补上。"""
+        histories = [
+            [self._unconfirmed("ISRG", "2026-07-29", 0.9)],
+            [_raw("AAPL", "2026-07-30", "buy", 0.3)],
+        ]
+        days = build_days(histories, ["2026-08-01"], top_n=1, calendar=[
+            "2026-08-01", "2026-07-31", "2026-07-30", "2026-07-29"], today=date(2026, 9, 26))
+        assert [s.symbol for s in days[0].signals] == ["AAPL"]

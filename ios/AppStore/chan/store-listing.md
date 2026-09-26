@@ -80,8 +80,8 @@ DeepAlpha 缠论把 K 线图上的结构自动标出来，让你看懂行情在�
 
 关于订阅
 免费用户每日可分析 3 支不同标的。提供两档自动续订订阅，均按月计费：
-· 基础版：解除每日次数限制，解锁全量缠论分析与 30 分钟次级别确认
-· 高级版：基础版全部权益，另加信号雷达与自选批量状态计算
+· 基础版：解除每日次数限制，解锁全量缠论分析
+· 高级版：基础版全部权益，另加次级别确认、信号雷达与自选批量状态计算
 价格以 App 内及 App Store 显示为准。
 付款在确认购买时从你的 Apple 账户扣除。若在当前周期结束前 24 小时内
 未关闭自动续订，订阅将自动续期并按同样价格扣费。购买后可在
@@ -139,8 +139,8 @@ current structure indicates and what to watch out for.
 ABOUT SUBSCRIPTION
 Free users can analyse 3 distinct tickers per day. Two auto-renewing monthly
 subscriptions are available:
-- Basic: removes the daily limit; full Chan analysis and 30-minute sub-level view
-- Premium: everything in Basic, plus Signals radar and watchlist phase overview
+- Basic: removes the daily limit; full Chan analysis
+- Premium: everything in Basic, plus the sub-level view, Signals radar and watchlist phase overview
 Prices are shown in the app and on the App Store. Payment is charged to your
 Apple Account at confirmation of purchase. The subscription renews automatically at the same price unless
 auto-renew is turned off at least 24 hours before the end of the current
@@ -170,7 +170,7 @@ consequences are your own.
 ```
 新增两档订阅、信号雷达全面改版，图表可直接点开结构说明。
 
-• 订阅分为基础版与高级版：基础版解除每日次数限制并含 30 分钟次级别确认，高级版另加信号雷达与自选批量状态
+• 订阅分为基础版与高级版：基础版解除每日次数限制，高级版另加次级别确认、信号雷达与自选批量状态
 • 信号雷达改版：气泡颜色区分一二三类、大小表示强弱，参考环按今天/1 周/2 周排布；使用前需阅读风险提示
 • 次级别确认改为图上下钻：日线看 30 分钟，周线看日线
 • 点击 K 线上的分型、笔、线段、中枢、买卖点或背驰，弹出说明并可跳转对应课程
@@ -183,7 +183,7 @@ consequences are your own.
 ```
 Two subscription tiers, a redesigned Signals radar, and tappable chart structures.
 
-• Subscriptions now come in Basic and Premium: Basic removes the daily limit and includes the 30-minute sub-level view; Premium adds the Signals radar and watchlist phase overview
+• Subscriptions now come in Basic and Premium: Basic removes the daily limit; Premium adds the sub-level view, Signals radar and watchlist phase overview
 • Redesigned Signals radar: colour shows signal class, size shows strength, and rings mark today / 1 week / 2 weeks; a risk notice is shown before first use
 • Sub-level view is now a drill-down on the chart: 30-minute under daily, daily under weekly
 • Tap a fractal, stroke, segment, pivot, signal or divergence on the chart to see what it means and jump to the lesson
@@ -199,9 +199,10 @@ Two subscription tiers, a redesigned Signals radar, and tappable chart structure
 ```
 This version introduces two auto-renewing monthly subscriptions in one group:
 - Basic (club.deepalpha.chan.pro.monthly, existing product): removes the free
-  daily limit of 3 distinct tickers and unlocks the 30-minute sub-level view.
+  daily limit of 3 distinct tickers.
 - Premium (club.deepalpha.chan.premium.monthly, new in this version): everything
-  in Basic, plus the Signals radar tab and watchlist phase overview.
+  in Basic, plus the sub-level view (30-minute under daily, daily under weekly),
+  the Signals radar tab and watchlist phase overview.
 Neither tier has a free trial.
 
 HOW TO REACH THE PAYWALL
