@@ -102,6 +102,8 @@
 "当前方案" = "Current plan";
 "基础版" = "Basic";
 "高级版" = "Premium";
+"功能" = "Features";
+"之后 %@/月" = "then %@/mo";
 "免费版" = "Free";
 "管理订阅" = "Manage subscription";
 "升级高级版" = "Upgrade to Premium";
