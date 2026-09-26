@@ -165,17 +165,13 @@ struct SignalRadarView: View {
                         .font(.system(size: 34)).foregroundColor(Theme.segment)
                     Text(L("使用信号雷达前，请确认"))
                         .font(.headline).foregroundColor(Theme.textPrimary)
-                    Text(L("雷达把多只标的的买卖点集中展示在一张图上，方便发现，但也更容易被当成可以直接照抄的操作清单——请先看完以下几点。"))
-                        .font(.footnote).foregroundColor(Theme.textSecondary)
-                        .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
 
                 VStack(alignment: .leading, spacing: 10) {
-                    consentPoint(L("雷达上的买卖点由算法根据缠论结构自动生成，仅为技术分析研究结果，不构成投资建议、荐股或买卖要约。"))
-                    consentPoint(L("气泡的颜色、大小、位置只反映价格结构的技术特征（如背驰强弱、确认程度），不代表标的当前「值得买入」或「应当卖出」，也不能预测未来涨跌。"))
-                    consentPoint(L("请不要仅凭雷达上出现的买卖点做出交易决策。投资决策应结合基本面、行业趋势、估值、盈利预期与市场环境等因素综合判断。"))
-                    consentPoint(L("证券投资有风险，因参考雷达信号作出的任何投资决策及由此产生的盈亏，均由你自行判断、自行承担。"))
+                    consentPoint(L("买卖点由算法自动算出，不是投资建议，也不是荐股。"))
+                    consentPoint(L("气泡的颜色和大小只表示结构强弱，不能预测涨跌。"))
+                    consentPoint(L("不要只看雷达就买卖，投资盈亏由你自己承担。"))
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -189,7 +185,7 @@ struct SignalRadarView: View {
                         Image(systemName: consentChecked ? "checkmark.square.fill" : "square")
                             .font(.system(size: 20))
                             .foregroundColor(consentChecked ? Theme.accent : Theme.textSecondary)
-                        Text(L("我已阅读并理解以上内容，同意仅将雷达信号作为技术研究参考，不作为投资建议"))
+                        Text(L("我已了解，雷达信号只作技术参考"))
                             .font(.footnote).foregroundColor(Theme.textPrimary)
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
