@@ -1011,3 +1011,53 @@ class TestResolveDemoTarget:
         target, cal = svc.resolve_demo_target("2026-08-01", [])
         assert target == "2026-07-31"
         assert cal[0] == "2026-07-31"
+
+
+class TestComputeDemoDayResilience:
+    """免费预览是所有用户共享的缓存：一次失败的扫描不能把空快照缓存半天。"""
+
+    class _Redis:
+        def __init__(self):
+            self.writes = {}
+
+        async def set(self, k, v, ex=None):
+            self.writes[k] = ex
+
+    @pytest.fixture()
+    def env(self, monkeypatch):
+        cons = [(f"S{i}", f"S{i}") for i in range(10)]
+
+        async def fake_constituents(market, *, redis, universe_key):
+            return cons
+
+        monkeypatch.setattr(svc, "resolve_constituents", fake_constituents)
+        monkeypatch.setattr(svc, "_RATE_LIMIT_BACKOFF_SECONDS", 0)
+        dates = ["2026-07-31", "2026-07-30", "2026-07-29"]
+        state = {"failed": set()}
+
+        async def fake_scan(symbol, name, *, user_id, start_date, end_date, redis):
+            if symbol in state["failed"]:
+                return [], "rate_limited", None, []
+            return [_raw(symbol, "2026-07-31", "buy", 0.5)], None, None, dates
+
+        monkeypatch.setattr(svc, "_scan_symbol", fake_scan)
+        monkeypatch.setattr(svc, "demo_snapshot_date", lambda: "2026-08-01")
+        return state
+
+    async def test_healthy_scan_cached_full_ttl(self, env):
+        redis = self._Redis()
+        resp = await svc.compute_demo_day("us", "nasdaq100", redis=redis)
+        assert len(resp.days[0].signals) == 10
+        assert list(redis.writes.values()) == [svc._DEMO_CACHE_TTL]
+
+    async def test_mostly_failed_scan_not_cached(self, env):
+        env["failed"] = {f"S{i}" for i in range(6)}  # 60% 失败
+        redis = self._Redis()
+        await svc.compute_demo_day("us", "nasdaq100", redis=redis)
+        assert redis.writes == {}
+
+    async def test_partial_failure_cached_short_ttl(self, env):
+        env["failed"] = {"S0"}  # 10% 失败：能用，但尽快重算
+        redis = self._Redis()
+        await svc.compute_demo_day("us", "nasdaq100", redis=redis)
+        assert list(redis.writes.values()) == [svc._DEMO_DEGRADED_CACHE_TTL]
