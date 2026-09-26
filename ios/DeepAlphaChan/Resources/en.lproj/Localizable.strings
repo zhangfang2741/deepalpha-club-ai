@@ -410,7 +410,7 @@
 "日线近两周买卖点" = "Daily buy/sell points, last 2 weeks";
 "次级别 %@ 更新" = "Sub-level updated %@";
 "数据 %@ 计算" = "Snapshot computed %@";
-"雷达快照" = "Radar snapshot";
+"雷达日期" = "Radar date";
 "数据截至 %@" = "data as of %@";
 "· 越远越小" = "· smaller when older";
 "日线与30分钟同向" = "daily & 30-min agree";
