@@ -158,6 +158,9 @@ struct ResultDetailView: View {
     /// 已收藏的可以随时移出，不受上限影响；只有「还没收藏 + 已达上限」才拦。
     private var watchlistFull: Bool { !isStarred && watchlistVM.isFull }
 
+    /// 导航栏右侧图标字号：系统默认在 iOS 26 的玻璃胶囊里偏大，压到 15pt 与返回按钮视觉重量相当。
+    private static let toolbarIconFont = Font.system(size: 15, weight: .medium)
+
     private var starButton: some View {
         Button {
             let symbol = vm.symbol.uppercased()
@@ -167,6 +170,7 @@ struct ResultDetailView: View {
             Task { await watchlistVM.toggle(market: vm.market, symbol: symbol, name: name, tier: store.tier) }
         } label: {
             Image(systemName: isStarred ? "star.fill" : (watchlistFull ? "star.slash" : "star"))
+                .font(Self.toolbarIconFont)
                 .foregroundColor(isStarred ? Theme.segment : (watchlistFull ? Theme.textSecondary : nil))
         }
         .accessibilityLabel(isStarred ? L("移出自选") : (watchlistFull ? L("自选已满") : L("加入自选")))
@@ -179,6 +183,7 @@ struct ResultDetailView: View {
     private var shareButton: some View {
         Button(action: share) {
             Image(systemName: "square.and.arrow.up")
+                .font(Self.toolbarIconFont)
         }
         .accessibilityLabel(L("分享分析图"))
         .accessibilityHint(L("生成一张带二维码的分析图并打开预览"))
