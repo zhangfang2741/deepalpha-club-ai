@@ -340,6 +340,22 @@ struct ChanChartView: View {
         ChartIndexCache.shared.index(for: analysis)
     }
 
+    /// 锚点日期对应的下标：exact 匹配不到时退回小于等于该日期的最近一根K线。
+    ///
+    /// anchorDate 不保证一定落在某根K线上——信号雷达免费预览锚定「上个月 1 号」是
+    /// 自然日历日期，恰好是周末/节假日（非交易日）时精确匹配会失败，此时应显示
+    /// 「那一天收盘时的状态」，即往前找最近的交易日，语义上与后端按日重建快照时
+    /// 的 carry-forward 逻辑一致，而不是直接找不到就整个跳过定位/画线。
+    private func anchorIndex(_ anchor: String) -> Int? {
+        if let idx = timeIndex[anchor] { return idx }
+        var result: Int?
+        for (idx, c) in candles.enumerated() {
+            if c.time > anchor { break }
+            result = idx
+        }
+        return result
+    }
+
     // MARK: - 绘制：网格与坐标轴
 
     private func drawGrid(_ ctx: GraphicsContext, size: CGSize, bounds: PriceBounds) {
@@ -389,7 +405,7 @@ struct ChanChartView: View {
     /// anchorDate 为 nil，不画。
     private func drawAnchorLine(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
                                 range: VisibleRange) {
-        guard let anchor = vm.anchorDate, let idx = timeIndex[anchor],
+        guard let anchor = vm.anchorDate, let idx = anchorIndex(anchor),
               idx >= range.start, idx < range.end else { return }
         let cx = x(for: idx, range: range)
         var line = Path()
@@ -1163,7 +1179,7 @@ struct ChanChartView: View {
         // 容易误以为点错了标的。只在真正 onAppear（honoringInitial）时生效，
         // 换标的（.onChange(of: analysis.symbol)）走的是 honoringInitial: false，
         // 不会沿用上一个标的的锚点日期。
-        if honoringInitial, let anchor = vm.anchorDate, let idx = timeIndex[anchor] {
+        if honoringInitial, let anchor = vm.anchorDate, let idx = anchorIndex(anchor) {
             firstVisible = max(0, min(Double(idx) - visibleCount / 2, total - visibleCount))
         } else {
             firstVisible = max(0, total - visibleCount)  // 默认显示最新

@@ -35,8 +35,8 @@ struct SignalRadarView: View {
     /// 点进气泡走真实分析（消耗免费额度），不是钉死的示例假数据。
     @StateObject private var demoVM = RadarDemoViewModel()
     @State private var showPaywall = false
-    /// 使用雷达前的风险确认：已订阅但还没勾选同意过，先挡在 consentView，
-    /// 不直接看到买卖点气泡。
+    /// 使用雷达前的风险确认：不管是否订阅，只要还没勾选同意过就先挡在 consentView，
+    /// 不直接看到买卖点气泡——免费预览现在也是真实信号，同样要过这道门槛。
     @StateObject private var consent = RadarConsent()
     @State private var consentChecked = false
     /// 强制最短阅读时长（秒）：勾选框可以随时点，但「同意并继续」在这段时间内
@@ -60,7 +60,13 @@ struct SignalRadarView: View {
             VStack(spacing: 12) {
                 PanicIndexStrip(radarVM: vm, panicVM: panicVM)
 
-                if !store.isPremium {
+                if !consent.hasAgreed {
+                    // 风险确认放在最前面，同时挡住高级版真实雷达和免费预览：demoBubbleField
+                    // 现在展示的是后端真实算出的买卖点（不再是钉死的假数据），未订阅用户
+                    // 一样会看到红买绿卖的真实信号气泡，同样需要先确认过风险声明才放行，
+                    // 不能因为「未订阅」就绕过这道门槛。
+                    consentView
+                } else if !store.isPremium {
                     // 未订阅高级版：不发真实雷达滚动窗口请求，只展示「上个月 1 号」这一天
                     // 的真实快照（demoVM）——既能让用户看到功能长什么样、点进去也是真分析，
                     // 又不会把当下可操作的实时信号免费泄露。
@@ -81,8 +87,6 @@ struct SignalRadarView: View {
                         demoNoticeBanner
                         Spacer(minLength: 0)
                     }
-                } else if !consent.hasAgreed {
-                    consentView
                 } else if vm.isScanning {
                     scanningView
                 } else if vm.isComputingInBackground {
@@ -128,9 +132,16 @@ struct SignalRadarView: View {
                 if !store.isPremium { await demoVM.load(market: vm.market) }
             }
             // 付费墙里订阅成功（tier 变化）后，若已具备高级版权益且尚未拉过数据，
-            // 立刻补拉一次——不用退出再进这个 Tab 才刷新。
+            // 立刻补拉一次——不用退出再进这个 Tab 才刷新。反过来订阅中途被降级/过期
+            // （如 StoreKit 交易更新把 tier 打回免费档）也要补一次：上面
+            // `.task(id: vm.market)` 只在市场切换时触发，市场没变就不会自动去拉
+            // demoVM，不补的话会卡在「一片空白」直到用户手动切市场或重启 App。
             .onChange(of: store.isPremium) { _, isPremium in
-                if isPremium { vm.onAppear() }
+                if isPremium {
+                    vm.onAppear()
+                } else if demoVM.day == nil {
+                    Task { await demoVM.load(market: vm.market) }
+                }
             }
             .overlay { if chanVM.isLoading { analysisLoadingOverlay } }
             .navigationDestination(isPresented: $showResults) {
