@@ -30,11 +30,6 @@
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000011",
-          "introductoryOffer" : {
-            "internalID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000012",
-            "paymentMode" : "free",
-            "subscriptionPeriod" : "P3D"
-          },
           "localizations" : [
             {
               "description" : "解锁全部缠论分析与 30 分钟次级别确认，不受每日 3 支标的限制",
@@ -55,11 +50,6 @@
           "familyShareable" : false,
           "groupNumber" : 2,
           "internalID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000021",
-          "introductoryOffer" : {
-            "internalID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000022",
-            "paymentMode" : "free",
-            "subscriptionPeriod" : "P3D"
-          },
           "localizations" : [
             {
               "description" : "基础版全部权益 + 信号雷达、自选批量状态计算",
