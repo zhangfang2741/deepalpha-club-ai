@@ -426,7 +426,6 @@
 "二类观察回调／反弹是否获得支撑或压力。本 App 结合回调笔长度和此前多次转折的重叠区间识别，具体依据见上方说明与学习词条。" = "Type 2 examines support or resistance during a retrace. The app considers stroke length and overlapping ranges of earlier turning points. See the signal description and lesson for details.";
 "以下状态对应当前图表周期与区间；切换周期后，结构与信号可能不同。" = "This state applies to the chart's current timeframe and range. Changing the timeframe may change the structure and signals.";
 "价差比" = "Price-range ratio";
-"位置与依据" = "Structure & evidence";
 "你在这" = "You are here";
 "使用这些信息前" = "Before using this information";
 "信号明细 · 最新在前" = "Signals · Newest first";
@@ -451,7 +450,6 @@
 "延续下跌" = "Downward continuation";
 "强度：%@" = "Strength: %@";
 "当前数据尚不足以判断中枢阶段，请先对照图上的笔与线段。" = "There is not enough structure to determine the pivot phase. Start with the strokes and segments on the chart.";
-"待确认与限制" = "Pending & limits";
 "时长比" = "Duration ratio";
 "暂无分层判断依据，先观察结构是否形成。" = "No layer-by-layer evidence is available yet. Observe whether a structure forms.";
 "本次分析未提供额外风险条目，不代表没有风险。" = "No additional risk items were provided. This does not mean there is no risk.";
@@ -465,7 +463,6 @@
 "盘整" = "Consolidation";
 "盘整延续" = "Continued consolidation";
 "笔级" = "Stroke level";
-"类型与确认" = "Type & confirmation";
 "线段级" = "Segment level";
 "结构未成形" = "Structure not formed";
 "走势不明" = "Unclear direction";

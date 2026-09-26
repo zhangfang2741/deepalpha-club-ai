@@ -130,16 +130,10 @@ struct SignalRadarView: View {
                     consentLockedField
                 } else {
                     bubbleField
-                        // 切换市场/刷新时保留旧气泡、调暗，盖转圈 + 文字提示；期间暂不响应点按
-                        // （避免点进上一个市场的标的）；布局不变，页面不跳动
+                        // 同一市场/指数重新加载时保留旧气泡、调暗，期间暂不响应点按；不再盖转圈，
+                        // 加载提示只有「正在扫描」一种（切市场/指数走 scanningView）
                         .opacity(vm.isReloading ? 0.35 : 1)
                         .allowsHitTesting(!vm.isReloading)
-                        .overlay {
-                            // 只留转圈，不再配「正在刷新买卖点信号…」文字：旧气泡调暗已经说明在刷新
-                            if vm.isReloading {
-                                ProgressView().tint(Theme.accent)
-                            }
-                        }
                         .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
                 }
                 legend
