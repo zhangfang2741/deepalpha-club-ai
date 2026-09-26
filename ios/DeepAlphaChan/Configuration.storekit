@@ -1,73 +1,87 @@
 {
-  "identifier" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000001",
-  "nonRenewingSubscriptions" : [],
-  "products" : [],
-  "settings" : {
-    "_applicationInternalID" : "",
-    "_developerTeamID" : "",
-    "_failTransactionsEnabled" : false,
-    "_lastSynchronizedDate" : 0,
-    "_locale" : "zh_CN",
-    "_storefront" : "CHN",
-    "_storeKitErrors" : []
+  "identifier": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000001",
+  "nonRenewingSubscriptions": [],
+  "products": [],
+  "settings": {
+    "_applicationInternalID": "",
+    "_developerTeamID": "",
+    "_failTransactionsEnabled": false,
+    "_lastSynchronizedDate": 0,
+    "_locale": "zh_CN",
+    "_storefront": "CHN",
+    "_storeKitErrors": []
   },
-  "subscriptionGroups" : [
+  "subscriptionGroups": [
     {
-      "id" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000010",
-      "localizations" : [
+      "id": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000010",
+      "localizations": [
         {
-          "description" : "",
-          "displayName" : "DeepAlpha 缠论会员",
-          "locale" : "zh_CN"
+          "description": "",
+          "displayName": "DeepAlpha 缠论会员",
+          "locale": "zh_CN"
         }
       ],
-      "name" : "DeepAlpha 缠论会员",
-      "subscriptions" : [
+      "name": "DeepAlpha 缠论会员",
+      "subscriptions": [
         {
-          "adHocOffers" : [],
-          "codeOffers" : [],
-          "displayPrice" : "38.00",
-          "familyShareable" : false,
-          "groupNumber" : 1,
-          "internalID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000011",
-          "localizations" : [
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "88.00",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000011",
+          "localizations": [
             {
-              "description" : "解锁全部缠论分析，不受每日 3 支标的限制",
-              "displayName" : "基础版 月度会员",
-              "locale" : "zh_CN"
+              "description": "解锁全部缠论分析，不受每日 3 支标的限制",
+              "displayName": "基础版 月度会员",
+              "locale": "zh_CN"
             }
           ],
-          "productID" : "club.deepalpha.chan.pro.monthly",
-          "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "Experience Monthly",
-          "subscriptionGroupID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000010",
-          "type" : "RecurringSubscription"
+          "productID": "club.deepalpha.chan.pro.monthly",
+          "recurringSubscriptionPeriod": "P1M",
+          "referenceName": "Experience Monthly",
+          "subscriptionGroupID": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000010",
+          "type": "RecurringSubscription",
+          "introductoryOffer": {
+            "displayPrice": "38.00",
+            "internalID": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000012",
+            "numberOfPeriods": 1,
+            "paymentMode": "payAsYouGo",
+            "subscriptionPeriod": "P1M"
+          }
         },
         {
-          "adHocOffers" : [],
-          "codeOffers" : [],
-          "displayPrice" : "188.00",
-          "familyShareable" : false,
-          "groupNumber" : 2,
-          "internalID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000021",
-          "localizations" : [
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "388.00",
+          "familyShareable": false,
+          "groupNumber": 2,
+          "internalID": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000021",
+          "localizations": [
             {
-              "description" : "基础版全部权益 + 次级别确认、信号雷达、自选批量状态计算",
-              "displayName" : "高级版 月度会员",
-              "locale" : "zh_CN"
+              "description": "基础版全部权益 + 次级别确认、信号雷达、自选批量状态计算",
+              "displayName": "高级版 月度会员",
+              "locale": "zh_CN"
             }
           ],
-          "productID" : "club.deepalpha.chan.premium.monthly",
-          "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "Premium Monthly",
-          "subscriptionGroupID" : "5C0F1A2B-DEEP-ALPHA-CHAN-000000000010",
-          "type" : "RecurringSubscription"
+          "productID": "club.deepalpha.chan.premium.monthly",
+          "recurringSubscriptionPeriod": "P1M",
+          "referenceName": "Premium Monthly",
+          "subscriptionGroupID": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000010",
+          "type": "RecurringSubscription",
+          "introductoryOffer": {
+            "displayPrice": "188.00",
+            "internalID": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000022",
+            "numberOfPeriods": 1,
+            "paymentMode": "payAsYouGo",
+            "subscriptionPeriod": "P1M"
+          }
         }
       ]
     }
   ],
-  "version" : {
-    "major" : 3,
-    "minor" : 0
+  "version": {
+    "major": 3,
+    "minor": 0
   }
 }
