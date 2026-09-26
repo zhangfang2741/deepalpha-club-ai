@@ -65,18 +65,18 @@ struct SignalRadarView: View {
             // 跟高级版一模一样，见 radarContent）；市场切换时 .task(id:) 额外拉一次
             // 「上个月 1 号」免费预览快照，自动取消上一次未完成的请求、重新拉一次。
             .task { vm.onAppear() }
-            .task(id: vm.market) {
-                if !store.isPremium { await vm.loadDemoDay(market: vm.market) }
+            .task(id: vm.demoKey) {
+                if !store.isPremium { await vm.loadDemoDay() }
             }
             // 订阅层级同步进 vm（跟 ChanViewModel.hasSubLevelAccess 同一个模式，vm 本身
             // 不感知 StoreKit）。initial: true 保证首次进入就同步一次，不用等 tier 变化。
             // 降级/过期（如 StoreKit 交易更新把 tier 打回免费档）时若还没拉过免费预览，
-            // 补拉一次——上面 `.task(id: vm.market)` 只在市场切换时触发，市场没变就不会
+            // 补拉一次——上面 `.task(id: vm.demoKey)` 只在市场/指数切换时触发，没切就不会
             // 自动去拉，不补的话会一直停在真实滚动窗口里点不开的那些天。
             .onChange(of: store.isPremium, initial: true) { _, isPremium in
                 vm.isPremiumUser = isPremium
                 if !isPremium && vm.demoDay == nil {
-                    Task { await vm.loadDemoDay(market: vm.market) }
+                    Task { await vm.loadDemoDay() }
                 }
             }
             .overlay { if chanVM.isLoading { analysisLoadingOverlay } }
@@ -383,8 +383,13 @@ struct SignalRadarView: View {
         )
         .frame(width: CGFloat(w), height: CGFloat(h))
 
-        // 同心参考环：越外越淡，呼应同一套"近实远虚"的纵深语言；环上直接标出
-        // 大致时间跨度，不用再靠单独一行说明文字解释三个圈是什么意思。
+        // 同心参考环：越外越淡，呼应同一套"近实远虚"的纵深语言；环上直接标具体日期
+        // （查看日 / 往前 3 个交易日 / 往前 5 个交易日），比「今天 / 3天内」更一眼对上是哪天。
+        // 日历用滚动窗口的真实交易日；示例日不在其中，按工作日推算。
+        let ringLabels = RadarOrbitSpacing.ringDates(
+            day: vm.selectedDay?.date ?? "",
+            tradingDaysBack: SignalRadarView.ringSpecs.map(\.tradingDaysBack),
+            calendar: vm.response?.days.map(\.date) ?? [])
         ForEach(Array(SignalRadarView.ringSpecs.enumerated()), id: \.offset) { idx, spec in
             // 正圆：离中心的距离 = 时间，各方向一致
             // 横向椭圆：左右宽、上下窄，与气泡摆位同一套半轴
@@ -395,7 +400,7 @@ struct SignalRadarView: View {
                         style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
                 .frame(width: CGFloat(rx * 2), height: CGFloat(ry * 2))
                 .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
-            Text(spec.label)
+            Text(ringLabels[idx])
                 .font(.system(size: 8))
                 .foregroundColor(Theme.textSecondary.opacity(0.55))
                 .position(x: CGFloat(w / 2), y: CGFloat(h / 2) - CGFloat(ry) + 8)
@@ -529,13 +534,9 @@ struct SignalRadarView: View {
         var id: String { signal.id }
     }
 
-    /// 三个等距参考环：今天 1/3、3 天 2/3、1 周 1.0，与气泡同一套时间半径映射
-    /// （RadarOrbitSpacing.timeRadius）。
-    /// 用计算属性而非 static let：L() 依赖运行时语言设置，static let 只会算一次，
-    /// 用户切换语言后文案不会跟着变。
-    static var ringSpecs: [(scale: Double, label: String)] {
-        [(1.0 / 3, L("今天")), (2.0 / 3, L("3天内")), (1.0, L("一周内"))]
-    }
+    /// 三个等距参考环：查看日 1/3、往前 3 个交易日 2/3、往前 5 个交易日 1.0，与气泡同一套
+    /// 时间半径映射（RadarOrbitSpacing.timeRadius）。环上标签是具体日期，见 fieldDecoration。
+    static let ringSpecs: [(scale: Double, tradingDaysBack: Int)] = [(1.0 / 3, 0), (2.0 / 3, 3), (1.0, 5)]
 
     /// 场边距：最外环（scale 1.0）到容器四边留出的空白，给气泡的阴影 + 右上角「新」
     /// 角标 + 拖拽放大留余量。以前最外环半径直接取 min(w,h)/2，环线正好压在容器边上，
