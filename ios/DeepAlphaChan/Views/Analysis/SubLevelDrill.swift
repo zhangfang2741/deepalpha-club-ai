@@ -30,7 +30,7 @@ struct SubLevelBar: View {
                 // `!isStatic` 放在 `&&` 左边：短路求值保证离屏分享长图渲染
                 // （PageSnapshot.render 走独立的 ImageRenderer，不继承 App 根部注入的
                 // EnvironmentObject）时压根不会去读 store，避免「找不到 StoreManager」崩溃。
-                } else if !isStatic && !store.isPremium {
+                } else if !isStatic && !store.isPremium && !vm.isSampleSymbol {
                     // 非高级版：ChanViewModel 根本没发次级别请求（见 loadSubLevel 的
                     // hasSubLevelAccess 门禁），这里直接展示锁定态引导订阅，不误显示成加载中。
                     Button { showPaywall = true } label: { lockedRow }

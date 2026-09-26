@@ -26,19 +26,23 @@ final class WatchlistViewModel: ObservableObject {
     /// 最近一次加载时的订阅档位，`phase(for:)` 据此决定哪些行能看到状态。
     @Published private(set) var tier: SubscriptionTier = .free
 
-    /// 非高级版免费看状态的那一支：最早加入的（列表按最近加入在前，取最后一个）。
+    /// 用户自己加的自选（不含默认送的示例股）：名额与「已收藏 x / y」只算这些。
+    var ownItems: [WatchlistItem] { items.filter { !$0.isSample } }
+
+    /// 非高级版免费看状态的那一支：自己加的里最早的一支（列表按最近加入在前，取最后一个）。
     /// 选最早而不是最新，位置稳定——新加一支不会把状态「挪走」。免费版上限 1 支，
     /// 正好全部可见；「全部批量状态」是高级版权益。
-    private var freePhaseItemID: String? { tier == .premium ? nil : items.last?.id }
+    private var freePhaseItemID: String? { tier == .premium ? nil : ownItems.last?.id }
 
-    /// 某一行要展示的状态：高级版全部可见，其余档位只有 freePhaseItemID 那一支。
+    /// 某一行要展示的状态：高级版全部可见；示例股所有人可见（完整展示高级版效果）；
+    /// 其余档位自己加的只有 freePhaseItemID 那一支。
     func phase(for item: WatchlistItem) -> WatchlistPhase? {
-        guard tier == .premium || item.id == freePhaseItemID else { return nil }
+        guard tier == .premium || item.isSample || item.id == freePhaseItemID else { return nil }
         return phases[item.id]
     }
 
     /// 是否有被锁住、看不到状态的行（用来决定要不要展示升级提示）。
-    var hasLockedPhases: Bool { tier != .premium && items.count > 1 }
+    var hasLockedPhases: Bool { tier != .premium && ownItems.count > 1 }
 
     private var memberships: Set<String> = []
 
@@ -48,7 +52,7 @@ final class WatchlistViewModel: ObservableObject {
     @Published private(set) var maxItems: Int? = 1
     var isFull: Bool {
         guard let maxItems else { return false }
-        return items.count >= maxItems
+        return ownItems.count >= maxItems
     }
 
     func isStarred(market: StockMarket, symbol: String) -> Bool {

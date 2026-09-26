@@ -277,7 +277,9 @@ struct SignalRadarView: View {
     /// （usage.canUseFree/recordUse），额度用尽弹付费墙，不能绕开——免费预览只是
     /// 多给了一天可点的真实信号，不是无限次分析的后门。
     private func openSymbol(_ symbol: String, name: String? = nil) {
-        if !store.isSubscribed && !usage.canUseFree(symbol: symbol) {
+        // 示例股（英伟达/茅台/腾讯）不扣额度，见 AppConfig.sampleSymbols
+        let chargesQuota = !store.isSubscribed && !AppConfig.isSampleSymbol(market: vm.market, symbol: symbol)
+        if chargesQuota && !usage.canUseFree(symbol: symbol) {
             showPaywall = true
             return
         }
@@ -298,7 +300,7 @@ struct SignalRadarView: View {
         Task {
             await chanVM.runAnalysis()
             if chanVM.errorMessage == nil, chanVM.analysis != nil {
-                if !store.isSubscribed { usage.recordUse(symbol: symbol) }
+                if chargesQuota { usage.recordUse(symbol: symbol) }
                 showResults = true
             }
         }

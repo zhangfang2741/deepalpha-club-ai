@@ -32,6 +32,23 @@ enum AppConfig {
     /// 高级版月度订阅商品 ID（需与 App Store Connect / Configuration.storekit 一致）。
     static let premiumMonthlyProductID = "club.deepalpha.chan.premium.monthly"
 
+    // MARK: - 示例自选
+
+    /// 每个用户默认送的三只示例自选（美/A/港龙头；A 股选贵州茅台而非市值第一的工商银行，
+    /// 银行股缠论结构不明显）。与后端 app/services/watchlist.py 的 SAMPLE_ITEMS 保持一致。
+    /// 这三只：不占自选名额、点进去不扣每日免费额度、可看完整 30 分钟次级别确认。
+    static let sampleSymbols: [StockMarket: String] = [.us: "NVDA", .cn: "600519", .hk: "0700"]
+
+    /// 是否示例股。按市场比对（A 股 000700 与港股 0700 数字相同，不能只看代码）；
+    /// 容忍用户输入的写法差异：大小写、.HK/.SS/.SZ 后缀、港股前导零（700 / 0700 / 00700）。
+    static func isSampleSymbol(market: StockMarket, symbol: String) -> Bool {
+        guard let sample = sampleSymbols[market] else { return false }
+        let raw = symbol.trimmingCharacters(in: .whitespaces).uppercased()
+            .split(separator: ".").first.map(String.init) ?? ""
+        if market == .hk, let a = Int(raw), let b = Int(sample) { return a == b }
+        return raw == sample
+    }
+
     /// 免费用户每日可用的缠论分析次数（超出需订阅基础版或高级版）。
     static let freeDailyQuota = 3
 

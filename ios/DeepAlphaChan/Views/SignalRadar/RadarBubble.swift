@@ -83,7 +83,9 @@ struct RadarBubble: View {
                         .font(Font(metrics.nameFont))
                         .foregroundColor(.white.opacity(0.92))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.6)
+                        // 名称已按最小可读字号排版，再放不下就尾部截断，别压到看不清
+                        .minimumScaleFactor(0.85)
+                        .truncationMode(.tail)
                         .padding(.horizontal, 4)
                 }
             }

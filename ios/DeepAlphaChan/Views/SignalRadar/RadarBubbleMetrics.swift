@@ -7,6 +7,7 @@ import Foundation
 /// 中文名」两行天然比美股「只有代码」更宽，若允许因放不下文字而撑大，会让同样类型/新鲜度
 /// 的信号在不同市场画出大小不一致的气泡，大小编码就失去了跨市场可比性。缩到最小字号仍放
 /// 不下时，直径依旧保持编码尺寸不变，交给渲染层的 `minimumScaleFactor` 继续压缩字号兜底。
+/// 代码字号不受名称长度影响：长名称只压名称自己，放不下由渲染层截断。
 struct RadarBubbleMetrics {
     static let edgePadding = 12.0
     /// 可读性下限：再小点不到。
@@ -58,9 +59,11 @@ struct RadarBubbleMetrics {
             return ceil(CTLineGetTypographicBounds(CTLineCreateWithAttributedString(text), nil, nil, nil))
         }
         /// 两行文字的包围矩形（较宽一行 + 左右余量 × 两行高）放进内圆所需的直径。
-        func required(_ sf: CTFont, _ nf: CTFont) -> (diameter: Double, height: Double) {
+        /// `nameWidth: false` 只按代码宽度算（名称行只占高度），用来定代码字号。
+        func required(_ sf: CTFont, _ nf: CTFont, nameWidth: Bool = true) -> (diameter: Double, height: Double) {
             // 内边距已按直径比例预留，这里只留很小的字边余量，避免留白算两遍把字压得过小
-            let w = max(width(symbol, sf), name.isEmpty ? 0 : width(name, nf) + 2)
+            let nw = (name.isEmpty || !nameWidth) ? 0 : width(name, nf) + 2
+            let w = max(width(symbol, sf), nw)
             // 名称为空（美股无中文名）时只排代码一行
             let h = ceil(lineHeight(sf) + (name.isEmpty ? 0 : lineHeight(nf) + 1)) + 2
             let inner = hypot(w + 4, h)
@@ -69,45 +72,29 @@ struct RadarBubbleMetrics {
             return (inner + 2 * Self.textPadding(for: d0), h)
         }
 
-        var picked: (CTFont, CTFont, Double, Double)?
+        // 代码优先：代码字号只看代码自己（名称行只占高度）放不放得下，名称宽度绝不拖小代码——
+        // 代码通常只有 1~5 个字符，是气泡里最重要的信息；名称（如「Citizens Financial
+        // Group Inc」「美国电话电报」）再长也只压名称自己，缩到最小号仍放不下就交给
+        // RadarBubble 渲染层截断。代码本身都放不下时才缩代码，最小字号兜底且不撑大气泡
+        // （那会让气泡大小随文字长度而非类型/时间变化，跨市场就不可比了）。
+        let minName = makeNameFont(Self.minNameSize)
+        var symbolSize = start
+        while symbolSize > Self.minSymbolSize,
+              required(makeSymbolFont(symbolSize), minName, nameWidth: false).diameter > base {
+            symbolSize -= 0.5
+        }
+        let sf = makeSymbolFont(max(Self.minSymbolSize, symbolSize))
 
-        // 代码字号与名称字号分开求：名称（尤其是长中文名，如「美国电话电报」）比代码
-        // 天然更容易放不下，若两者绑成同一个 size 一起退让，代码会被名称拖着一起缩得
-        // 很小——代码通常只有 1~5 个字符，本不该被拖累。先把代码固定在它的自然字号
-        // （`start`），只压名称去凑空间；只有代码在自然字号下配最小号名称仍放不下时，
-        // 才退回两者一起缩的兜底（与最初实现一致）。
+        var nf = minName
         if !name.isEmpty {
-            let sf = makeSymbolFont(start)
-            var nameSize = start * Self.nameToSymbol
-            while nameSize >= Self.minNameSize {
-                let nf = makeNameFont(nameSize)
-                let need = required(sf, nf)
-                if need.diameter <= base { picked = (sf, nf, base, need.height); break }
+            var nameSize = max(Self.minNameSize, CTFontGetSize(sf) * Self.nameToSymbol)
+            while nameSize > Self.minNameSize, required(sf, makeNameFont(nameSize)).diameter > base {
                 nameSize -= 0.5
             }
+            nf = makeNameFont(max(Self.minNameSize, nameSize))
         }
-
-        if picked == nil {
-            // 名称已经缩到最小仍放不下（多半是代码本身也偏长），退回两者同步缩放。
-            var size = start
-            while size >= Self.minSymbolSize {
-                let sf = makeSymbolFont(size)
-                let nf = makeNameFont(max(Self.minNameSize, size * Self.nameToSymbol))
-                let need = required(sf, nf)
-                if need.diameter <= base { picked = (sf, nf, base, need.height); break }
-                size -= 0.5
-            }
-        }
-        if picked == nil {
-            // 最小字号仍放不下：不撑大气泡（那会让气泡大小随文字长度而非类型/时间变化，
-            // 跨市场就不可比了）——直径继续保持编码尺寸，字号定在最小值，剩下交给
-            // RadarBubble 渲染时的 minimumScaleFactor 兜底再压一压。
-            let sf = makeSymbolFont(Self.minSymbolSize)
-            let nf = makeNameFont(Self.minNameSize)
-            let need = required(sf, nf)
-            picked = (sf, nf, base, need.height)
-        }
-        let (sf, nf, d, h) = picked!
+        let h = required(sf, nf, nameWidth: false).height
+        let d = base
         symbolFont = sf
         nameFont = nf
         diameter = d
