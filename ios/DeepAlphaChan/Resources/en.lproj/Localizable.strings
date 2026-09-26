@@ -8,9 +8,9 @@
 
 /* Analysis — conditions page */
 "缠论分析" = "Chan Analysis";
-"不要只看技术信号" = "Don't rely on technical signals alone";
-"缠论主要观察价格走势与市场结构。投资决策还应结合基本面、成长性、估值、盈利预期和市场环境综合判断。" = "Chan theory focuses on price action and market structure. Investment decisions should also weigh fundamentals, growth, valuation, earnings expectations and the overall market environment.";
-"技术上的「买点」，不等于投资上的「值得买」。" = "A technical \"buy point\" is not the same as being \"worth buying\" as an investment.";
+"信号只是最小观测单元" = "A signal is just a minimal observation";
+"每个买卖点都是算法基于价格走势与结构规律识别出的一次独立观测，可能随后续行情被修正或失效，不是可以直接执行的操作结论。" = "Each buy/sell point is a single, isolated observation the algorithm derives from price action and structural rules. It may be revised or invalidated as new price data comes in — it is not an actionable trading conclusion on its own.";
+"是否值得操作，需要你自己结合基本面、其他技术面和市场环境综合判断。" = "Whether it's worth acting on is for you to judge, combining fundamentals, other technical factors, and the overall market environment.";
 "今日还可分析 %lld 支新股票" = "%lld more new stocks today";
 "今日 %lld 支新股票的免费额度已用完" = "Daily free limit reached (%lld new stocks)";
 "今天已分析过的股票仍可继续查看" = "Stocks you already analyzed today are still available";
