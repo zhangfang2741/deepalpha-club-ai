@@ -135,12 +135,9 @@ struct SignalRadarView: View {
                         .opacity(vm.isReloading ? 0.35 : 1)
                         .allowsHitTesting(!vm.isReloading)
                         .overlay {
+                            // 只留转圈，不再配「正在刷新买卖点信号…」文字：旧气泡调暗已经说明在刷新
                             if vm.isReloading {
-                                VStack(spacing: 10) {
-                                    ProgressView().tint(Theme.accent)
-                                    Text(L("正在刷新买卖点信号…"))
-                                        .font(.subheadline).foregroundColor(Theme.textSecondary)
-                                }
+                                ProgressView().tint(Theme.accent)
                             }
                         }
                         .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
@@ -468,9 +465,13 @@ struct SignalRadarView: View {
         }
         if vm.activeUniverseKey == RadarUniverse.watchlistKey { return L("自选") }
         // 切市场时 response 暂时还是上一个市场的（保留旧内容防跳动），它的名称不能拿来用，
-        // 否则选了 A 股却显示「正在扫描纳斯达克100」；返回空让调用方退回市场名。
-        guard let response = vm.response, response.market == vm.market.rawValue else { return "" }
-        return response.etfName
+        // 否则选了 A 股却显示「正在扫描纳斯达克100」。还没拿到过这个市场的列表时用默认
+        // 指数名兜底，直接显示「科创50」，不先闪一下「A 股」。
+        if let response = vm.response, response.market == vm.market.rawValue { return response.etfName }
+        if vm.activeUniverseKey == SignalRadarViewModel.defaultUniverseKeys[vm.market] {
+            return SignalRadarViewModel.defaultUniverseNames[vm.market] ?? ""
+        }
+        return ""
     }
 
     /// 雷达左上角的 universe 切换器：科技窄基 ↔ 大盘宽基（如 恒生科技 ↔ 恒生指数）。

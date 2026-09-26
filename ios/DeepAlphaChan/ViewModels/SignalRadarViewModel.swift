@@ -95,7 +95,24 @@ final class SignalRadarViewModel: ObservableObject {
     private var pendingUniverseKey: String?
 
     /// 当前在切换器里高亮的 universe 键：优先目标键（切换瞬间就高亮），否则用响应里的。
-    var activeUniverseKey: String { pendingUniverseKey ?? response?.universe ?? "" }
+    ///
+    /// 切市场期间 response 还是上一个市场的，不能用它的 universe；这时取该市场记住的选择，
+    /// 没选过就取该市场默认指数（列表缓存里的 isDefault，或 defaultUniverseKeys 兜底）。
+    var activeUniverseKey: String {
+        if let pendingUniverseKey { return pendingUniverseKey }
+        if let response, response.market == market.rawValue { return response.universe }
+        return currentUniverse
+            ?? availableUniverses.first(where: \.isDefault)?.key
+            ?? Self.defaultUniverseKeys[market] ?? ""
+    }
+
+    /// 各市场默认指数（与后端 universe.py 的 is_default 一致），只用于「从没进过这个市场、
+    /// 还没拿到列表」时的展示兜底——切到 A 股直接显示「科创50」，不先闪「A 股」。
+    static let defaultUniverseKeys: [StockMarket: String] = [.us: "nasdaq100", .cn: "star50", .hk: "hstech"]
+    static let defaultUniverseNames: [StockMarket: String] = [.us: "纳斯达克100", .cn: "科创50", .hk: "恒生科技"]
+
+    /// 每个市场拿到过的 universe 列表：切回来时直接恢复，切换器和扫描提示都不用等接口。
+    private var universesByMarket: [StockMarket: [RadarUniverse]] = [:]
 
     /// 真实滚动窗口本身就有的天数，不含 demoDay。
     private var realDays: [RadarDay] { response?.days ?? [] }
@@ -177,8 +194,9 @@ final class SignalRadarViewModel: ObservableObject {
         guard m != market else { return }
         market = m
         // 不清空 response：新市场数据回来前保留旧内容（调暗 + 加载指示），页面不跳动
-        // 不同市场的 universe 列表不同，清掉旧的，等新市场响应回来再填。
-        availableUniverses = []
+        // 不同市场的 universe 列表不同：换成这个市场之前拿到过的列表（没有就先空着），
+        // 切换器与「正在扫描 X」立刻显示正确的指数名，不用等接口。
+        availableUniverses = universesByMarket[m] ?? []
         pendingUniverseKey = nil
         selectedDayIndex = 0
         // demoDay 是按市场拉的（见 loadDemoDay），不清掉的话新市场数据回来前会短暂
@@ -231,7 +249,10 @@ final class SignalRadarViewModel: ObservableObject {
             // 加载期间用户切了市场或 universe，就丢弃这次结果，别覆盖新请求。
             if market != requested || currentUniverse != requestedUniverse { return }
             response = resp
-            if !resp.universes.isEmpty { availableUniverses = resp.universes }
+            if !resp.universes.isEmpty {
+                availableUniverses = resp.universes
+                universesByMarket[requested] = resp.universes
+            }
             pendingUniverseKey = nil
             selectedDayIndex = 0
             jumpToDemoDayIfPresent()
