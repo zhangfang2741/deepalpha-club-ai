@@ -95,9 +95,10 @@ _MIN_PER_LEVEL = 2
 _CACHE_PREFIX = "signal_radar"
 # 买卖点口径（宽松 / 严格 / …，见 chan.signal_policy）：雷达的三类缓存（每日快照、自选雷达、
 # 示例日）按口径的 version 分键——改了某口径的判定逻辑就升它的 version，旧快照自动换键失效，
-# 否则部署后缓存里还是旧口径的气泡。shape1 仅隔离雷达形态筛选，不改变详情口径。
+# 否则部署后缓存里还是旧口径的气泡。shape2 = 已确认 + 价格失效 + czsc 形态过滤
+# （假突破 / 窄幅震荡 / 收盘偏弱 / 低波动 / 区间震荡中的一类），仅隔离雷达筛选，不改变详情口径。
 def _mode_ns(mode: str) -> str:
-    return f"{get_policy(mode).version}:shape1"
+    return f"{get_policy(mode).version}:shape2"
 
 # 「自选」股票池：按用户各自的自选股计算（universe=watchlist）；缓存按用户隔离、30 分钟。
 # 不列入指数切换菜单（产品决定），接口能力保留。
@@ -610,7 +611,7 @@ async def _scan_symbol(
         return [], None, None, []
 
     try:
-        result = _analyzer.analyze(symbol, bars, lang="zh", mode=mode)
+        result = _analyzer.analyze(symbol, bars, lang="zh", mode=mode, shape_filters=True)
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_analyze_failed", symbol=symbol, error=str(e))
         return [], "analyze_failed", None, []

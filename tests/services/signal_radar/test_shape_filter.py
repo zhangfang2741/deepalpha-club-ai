@@ -83,7 +83,7 @@ async def test_scan_does_not_fill_empty_slots_with_unconfirmed_candidates(monkey
 
 
 def test_shape_filter_invalidates_all_radar_cache_types() -> None:
-    assert all(":shape1:" in key for key in [
+    assert all(":shape2:" in key for key in [
         svc._cache_key("us", "nasdaq100"),
         svc.watchlist_cache_key("us", 7, [("X", "测试")]),
         svc._demo_cache_key("us", "nasdaq100", "2026-09-01"),
@@ -155,3 +155,25 @@ def test_real_analysis_shape_marks_are_valid_filter_names() -> None:
     valid = {None, "假突破", "窄幅震荡", "收盘位置", "低波动", "区间震荡"}
     assert {r.shape_rejected for r in history} <= valid
     assert len(history) == len(result.signals)
+    # 开关真实生效：有逐日形态状态，且这份数据稳定剔除至少一条（空表时上面的集合断言也会过）
+    assert result.shape_states
+    assert any(r.shape_rejected for r in history)
+
+
+async def test_scan_symbol_enables_shape_filters(monkeypatch: pytest.MonkeyPatch) -> None:
+    """雷达扫描路径的 analyze 必须开 shape_filters（形态状态进入历史标记链路）。"""
+    seen: dict[str, object] = {}
+
+    class _SpyAnalyzer:
+        def analyze(self, symbol: str, bars: list[dict], **kwargs: object) -> svc.ChanAnalysisResult:
+            seen["shape_filters"] = kwargs.get("shape_filters")
+            return svc.ChanAnalysisResult(symbol=symbol, bars_count=len(bars))
+
+    async def fake_fetch(**kwargs: object) -> list[dict]:
+        return [{"time": "2026-09-20", "open": 10, "high": 11, "low": 9, "close": 10, "volume": 100}]
+
+    monkeypatch.setattr(svc, "_analyzer", _SpyAnalyzer())
+    monkeypatch.setattr(svc, "fetch_kline", fake_fetch)
+    await svc._scan_symbol("X", "测试", user_id=None, start_date="2026-08-01",
+                           end_date="2026-09-20", redis=_FakeRedis())
+    assert seen["shape_filters"] is True
