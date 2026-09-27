@@ -83,3 +83,4 @@ class SignalRadarResponse(BaseModel):
     computed_at: str = Field(
         default="", description="本次全量扫描完成时间，ISO8601 UTC；缓存命中时沿用缓存写入时的时间"
     )
+    signal_mode: str = Field(default="loose", description="买卖点口径（见 GET /chan/signal-modes）")

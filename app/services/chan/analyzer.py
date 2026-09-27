@@ -36,7 +36,8 @@ from app.services.chan.pivot import (
 )
 from app.services.chan.pivot_phase import PivotPhase, build_pivot_phase
 from app.services.chan.segment import Segment, find_segments
-from app.services.chan.signals import Signal, generate_all_signals
+from app.services.chan.signal_policy import DEFAULT_MODE, get_policy
+from app.services.chan.signals import Signal
 from app.services.chan.stroke import Stroke
 from app.services.chan.structure_layers import (
     StructureLayer,
@@ -137,7 +138,7 @@ class ChanAnalyzer:
 
     def analyze(
         self, symbol: str, bars: list[dict], *, min_gap: int = 4, lang: str = "zh",
-        visible_from: str | None = None, freq: str = "daily",
+        visible_from: str | None = None, freq: str = "daily", mode: str = DEFAULT_MODE,
     ) -> ChanAnalysisResult:
         """对K线数据执行完整缠论分析。
 
@@ -148,6 +149,8 @@ class ChanAnalyzer:
         min_gap: 已废弃，保留仅为向后兼容签名兼容——成笔规则由 czsc 内部
             bi 算法决定（build_czsc 传 min_bi_len=0），本参数不再影响任何结果。
         lang: 输出文案语言（zh / en）
+        mode: 买卖点口径名，见 signal_policy.SIGNAL_POLICIES（loose 默认 / strict）。
+            未知口径回退默认。
         visible_from: 可见窗口起点（time 字符串，含）。用于「窗口锚定」：调用方在
             用户所选起点之前多取一段 warmup K 线一起传入，缠论在完整序列上计算以
             消除左边界依赖（结构不随用户选的起始日期漂移），再把分型/笔/线段/中枢/
@@ -222,19 +225,20 @@ class ChanAnalyzer:
         all_pivots = result.stroke_pivots + result.segment_pivots
         all_pivots.sort(key=lambda p: p.start_time)
         # 8. 买卖点：是否成立由 czsc 结构信号逐根判定（不回看未来），强度用本地背驰与中枢
+        #    口径（宽松 / 严格 / …）由 signal_policy 注册表提供，这里只走统一接口
+        policy = get_policy(mode)
         stroke_done_at: dict[str, str] = {}
-        events = scan_bs_events(bars, symbol=symbol, freq=czsc_freq, stroke_done_at=stroke_done_at)
-        result.signals = generate_all_signals(events, result.strokes, result.divergences, all_pivots, lang,
-                                              stroke_done_at=stroke_done_at)
+        events = scan_bs_events(bars, symbol=symbol, freq=czsc_freq, stroke_done_at=stroke_done_at,
+                                families=policy.czsc_families)
+        result.signals = policy.assemble(events, result.strokes, result.divergences, all_pivots, lang,
+                                         stroke_done_at=stroke_done_at)
         logger.debug("chan_signals", count=len(result.signals))
 
         # 9. 标注最右侧未确认结构（右侧滞后不确定性）
         #    注意：确认标注基于「完整序列」的右边缘，必须在裁剪之前完成。
         self._mark_confirmations(result)
-        # 严格按缠论定义：买卖点所在的那一笔必须已完成。最后一笔还在走（端点可能继续延伸、
-        # 甚至回到中枢），其上的一 / 二 / 三类都尚不成立，不作为买卖点输出（等笔走完再出）。
-        result.candidate_signals = [s for s in result.signals if not s.confirmed]
-        result.signals = [s for s in result.signals if s.confirmed]
+        #    最后一笔上的信号怎么处理由口径决定（严格：移入 candidate_signals；宽松：保留并标未确认）
+        result.signals, result.candidate_signals = policy.split_unconfirmed(result.signals)
 
         # 9b. 窗口锚定：把结构裁剪回可见窗口（在完整序列上算、只显示尾段）。
         #     裁剪放在摘要/建议之前，使 summary 的计数与可见结构一致。

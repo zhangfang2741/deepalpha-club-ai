@@ -26,7 +26,18 @@ enum SignalFormatting {
                      red: lerp(110, 4) / 255, green: lerp(231, 90) / 255, blue: lerp(183, 64) / 255)
     }
 
+    /// 买卖点类型说明，随买卖点模式（宽松 / 严格）给出对应口径。
     static func typeExplanation(_ kind: Signal.Kind) -> String {
+        if SignalMode.current() == SignalMode.defaultKey {
+            switch kind {
+            case .buy1, .sell1:
+                return L("一类是背驰：末笔创新低（一卖为新高），但价差力度弱于前段，且量能或时长也更弱；宽松模式下盘整里的背驰也算。强度按价差比分档：小于 0.6 为强，0.6 至小于 0.8 为中，其余为弱。")
+            case .buy2, .sell2:
+                return L("二类是回落低点落在此前多次转折形成的价格密集区，获得支撑、没有再创新低（二卖：反弹高点受压、没有再创新高）；宽松模式不要求先有一类。")
+            case .buy3, .sell3:
+                return L("三类是前五笔构成中枢后，回落低点仍在中枢上沿之上、没有回到中枢，且均线逐级抬升（三卖反之）。")
+            }
+        }
         switch kind {
         case .buy1, .sell1:
             return L("一类是趋势背驰：之前已有两个依次下移（一卖为上移）的中枢，离开后一个中枢再创新低／新高但力度变弱；盘整里的背驰不算。强度按价差比分档：小于 0.6 为强，0.6 至小于 0.8 为中，其余为弱。")

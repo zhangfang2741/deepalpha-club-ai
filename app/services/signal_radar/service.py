@@ -38,6 +38,7 @@ from app.schemas.signal_radar import (
 from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
 from app.services.chan.pivot_phase import PivotPhase
 from app.services.chan.replay import pivot_phase_as_of
+from app.services.chan.signal_policy import DEFAULT_MODE, get_policy
 from app.services.chan.sub_level_service import current_sub_level
 from app.services.chan.bias import UNCONFIRMED_DISCOUNT
 from app.services.signal_radar.constituents import resolve_constituents
@@ -85,13 +86,11 @@ _RESONANCE_POOL = 20
 _MIN_PER_LEVEL = 2
 
 _CACHE_PREFIX = "signal_radar"
-# 买卖点判定口径版本：改了一 / 二 / 三类的定义就改这里，雷达的三类缓存（每日快照、自选雷达、
-# 示例日）一起换键失效——否则部署后缓存里还是旧口径的气泡，与详情页（每次实时算）对不上。
-# std1：2026-09 起严格按缠论原文（一类须趋势背驰、二类须跟在一类后、三类由中枢结构推出）。
-# std2：趋势前提按中枢「已形成」判定（修正漏掉的一买）；被下一笔跌破的一类作废；
-#       买卖点只落在已完成的笔上（最后一笔还在走时不出信号）。
-# std3：最新一天新增 candidates（最后一笔上的「待确认」候选，不算买卖点）。
-_SIGNAL_DEF = "std3"
+# 买卖点口径（宽松 / 严格 / …，见 chan.signal_policy）：雷达的三类缓存（每日快照、自选雷达、
+# 示例日）按口径的 version 分键——改了某口径的判定逻辑就升它的 version，旧快照自动换键失效，
+# 否则部署后缓存里还是旧口径的气泡，与详情页（每次实时算）对不上。
+def _mode_ns(mode: str) -> str:
+    return get_policy(mode).version
 
 # 「自选」股票池：按用户各自的自选股计算（universe=watchlist）；缓存按用户隔离、30 分钟。
 # 不列入指数切换菜单（产品决定），接口能力保留。
@@ -107,12 +106,14 @@ _DEMO_CACHE_TTL = 3600 * 12
 _DEMO_DEGRADED_CACHE_TTL = 1800
 
 
-def watchlist_cache_key(market: str, user_id: int, watchlist: list[tuple[str, str]]) -> str:
+def watchlist_cache_key(
+    market: str, user_id: int, watchlist: list[tuple[str, str]], mode: str = DEFAULT_MODE,
+) -> str:
     """按用户 + 自选清单摘要隔离：清单增删后键自然变化，旧结果不会被读到。"""
     import hashlib
 
     digest = hashlib.sha1(",".join(sorted(s.upper() for s, _ in watchlist)).encode()).hexdigest()[:10]
-    return f"{_CACHE_PREFIX}:{_SIGNAL_DEF}:{market}:{WATCHLIST_KEY}:u{user_id}:{digest}"
+    return f"{_CACHE_PREFIX}:{_mode_ns(mode)}:{market}:{WATCHLIST_KEY}:u{user_id}:{digest}"
 # 缓存 TTL 的下限：预热已改成按各市场收盘触发（见 scheduler.py），正常间隔是
 # ~24h（每个市场一天一次），周末则是 ~72h（周五收盘触发到下周一收盘触发之间跨了
 # 周六周日）。下限按周末缺口 + 一天余量给到 4 天，否则周一开盘前缓存就先过期了，
@@ -472,6 +473,7 @@ def build_days(
 
 async def attach_sub_levels(
     day: RadarDayOut, *, end_date: str, user_id: int | None, redis: Redis | None,
+    mode: str = DEFAULT_MODE,
 ) -> None:
     """给某一天的入榜气泡补算次级别结论（原地写入 sub_level_verdict/label）。
 
@@ -490,9 +492,11 @@ async def attach_sub_levels(
         async with sem:
             try:
                 sub = await current_sub_level(sig.symbol, "daily", end_date=end_date, user_id=user_id,
-                                              redis=redis, lang="zh", refresh=True, max_age=LIVE_MAX_AGE)
+                                              redis=redis, lang="zh", refresh=True, max_age=LIVE_MAX_AGE,
+                                              mode=mode)
                 await current_sub_level(sig.symbol, "daily", end_date=end_date, user_id=user_id,
-                                        redis=redis, lang="en", refresh=True, max_age=LIVE_MAX_AGE)
+                                        redis=redis, lang="en", refresh=True, max_age=LIVE_MAX_AGE,
+                                        mode=mode)
             except Exception as e:  # noqa: BLE001 单只补算失败不影响榜单
                 logger.warning("signal_radar_sub_level_failed", symbol=sig.symbol, error=str(e))
                 return
@@ -524,7 +528,7 @@ def market_session_active(market: str, now: datetime) -> bool:
 
 async def refresh_sub_levels(
     market: str, universe_key: str, *, redis: Redis, user_id: int | None = None,
-    now: datetime | None = None, window: int = 45,
+    now: datetime | None = None, window: int = 45, mode: str = DEFAULT_MODE,
 ) -> bool:
     """只重算缓存快照里最新一天入榜气泡的次级别（共振）结论，写回并保留原 TTL。
 
@@ -533,13 +537,13 @@ async def refresh_sub_levels(
     写回前重新读取快照：若期间全量预热已写入新一天的快照，放弃本次写入，不用旧气泡
     覆盖新数据。返回是否写回。
     """
-    snapshot = await _read_cache(redis, market, universe_key)
+    snapshot = await _read_cache(redis, market, universe_key, mode)
     if snapshot is None or not snapshot.days:
         return False
     day = snapshot.days[0]
-    await attach_sub_levels(day, end_date=date.today().isoformat(), user_id=user_id, redis=redis)
+    await attach_sub_levels(day, end_date=date.today().isoformat(), user_id=user_id, redis=redis, mode=mode)
 
-    latest = await _read_cache(redis, market, universe_key)
+    latest = await _read_cache(redis, market, universe_key, mode)
     if latest is None or not latest.days or latest.days[0].date != day.date:
         logger.info("signal_radar_sub_level_refresh_skipped", market=market, universe=universe_key)
         return False
@@ -550,7 +554,7 @@ async def refresh_sub_levels(
             sig.sub_level_label = fresh[sig.symbol].sub_level_label
     latest.sub_level_as_of = (now or datetime.now(UTC)).astimezone(UTC).replace(microsecond=0).isoformat()
     try:
-        await redis.set(_cache_key(market, universe_key), latest.model_dump_json(), keepttl=True)
+        await redis.set(_cache_key(market, universe_key, mode), latest.model_dump_json(), keepttl=True)
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_sub_level_write_error", market=market, error=str(e))
         return False
@@ -605,7 +609,7 @@ def _fallback_trading_days(*, end_date: str, limit: int) -> list[str]:
 
 async def _scan_symbol(
     symbol: str, name: str, *, user_id: int | None, start_date: str, end_date: str,
-    redis: Redis,
+    redis: Redis, mode: str = DEFAULT_MODE,
 ) -> tuple[list[RawSignal], str | None, ChanAnalysisResult | None, list[str]]:
     """扫描单只股票：拉日线 → 缠论 → 取全部买卖点历史。
 
@@ -626,7 +630,7 @@ async def _scan_symbol(
         return [], None, None, []
 
     try:
-        result = _analyzer.analyze(symbol, bars, lang="zh")
+        result = _analyzer.analyze(symbol, bars, lang="zh", mode=mode)
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_analyze_failed", symbol=symbol, error=str(e))
         return [], "analyze_failed", None, []
@@ -649,8 +653,8 @@ def _classify_failure(exc: Exception) -> str:
     return "other"
 
 
-def _cache_key(market: str, universe_key: str) -> str:
-    return f"{_CACHE_PREFIX}:{_SIGNAL_DEF}:{market}:{universe_key}"
+def _cache_key(market: str, universe_key: str, mode: str = DEFAULT_MODE) -> str:
+    return f"{_CACHE_PREFIX}:{_mode_ns(mode)}:{market}:{universe_key}"
 
 
 def _universes_out(market: str) -> list[RadarUniverseOut]:
@@ -662,20 +666,22 @@ def _universes_out(market: str) -> list[RadarUniverseOut]:
 
 
 async def read_watchlist_cache(
-    redis: Redis, market: str, user_id: int, watchlist: list[tuple[str, str]],
+    redis: Redis, market: str, user_id: int, watchlist: list[tuple[str, str]], mode: str = DEFAULT_MODE,
 ) -> SignalRadarResponse | None:
     """读某用户某市场（当前自选清单）的自选雷达缓存。"""
     try:
-        raw = await redis.get(watchlist_cache_key(market, user_id, watchlist))
+        raw = await redis.get(watchlist_cache_key(market, user_id, watchlist, mode))
         return SignalRadarResponse.model_validate_json(raw) if raw else None
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_watchlist_cache_read_error", market=market, error=str(e))
         return None
 
 
-async def _read_cache(redis: Redis, market: str, universe_key: str) -> SignalRadarResponse | None:
+async def _read_cache(
+    redis: Redis, market: str, universe_key: str, mode: str = DEFAULT_MODE,
+) -> SignalRadarResponse | None:
     try:
-        rawval = await redis.get(_cache_key(market, universe_key))
+        rawval = await redis.get(_cache_key(market, universe_key, mode))
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_cache_read_error", market=market, error=str(e))
         return None
@@ -691,7 +697,7 @@ async def _read_cache(redis: Redis, market: str, universe_key: str) -> SignalRad
 async def _write_cache(redis: Redis, data: SignalRadarResponse) -> None:
     try:
         await redis.set(
-            _cache_key(data.market, data.universe), data.model_dump_json(), ex=_cache_ttl()
+            _cache_key(data.market, data.universe, data.signal_mode), data.model_dump_json(), ex=_cache_ttl()
         )
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_cache_write_error", market=data.market, error=str(e))
@@ -713,8 +719,11 @@ async def compute_market(
     max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
     watchlist: list[tuple[str, str]] | None = None,
     refresh_constituents: bool = False,
+    mode: str = DEFAULT_MODE,
 ) -> SignalRadarResponse:
     """全量扫描一个 (市场, universe) 并按日重建快照（不读缓存，计算完写入缓存）。
+
+    mode：买卖点口径，结果写入该口径的缓存键。多个口径各调一次（K线走缓存，不重复拉数）。
 
     watchlist 非 None 时扫用户自选股（「自选」股票池）：结果写入按用户隔离的缓存键，
     交易日历仍参考该市场默认 universe 的 ETF。
@@ -743,7 +752,7 @@ async def compute_market(
         async with sem:
             history, failure, result, dates = await _scan_symbol(
                 symbol, name, user_id=user_id, start_date=start_date,
-                end_date=end_date, redis=redis,
+                end_date=end_date, redis=redis, mode=mode,
             )
             if result is not None:
                 candidates.extend(build_candidates(symbol, name, result))
@@ -787,13 +796,14 @@ async def compute_market(
                         calendar=calendar),
         status="ready",
         computed_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
+        signal_mode=mode,
     )
     if resp.days:
         # 次级别结论描述的是「现在」，只对最新交易日：先取更大的候选池补算次级别，
         # 再按综合分 + 共振加分重排取前 top_n（共振参与排名）
         pool = build_days(histories, trading_days[:1], top_n=max(top_n, _RESONANCE_POOL),
                           max_age_days=max_age_days, calendar=calendar)[0]
-        await attach_sub_levels(pool, end_date=end_date, user_id=user_id, redis=redis)
+        await attach_sub_levels(pool, end_date=end_date, user_id=user_id, redis=redis, mode=mode)
         resp.days[0] = rerank_with_resonance(pool, top_n)
         resp.sub_level_as_of = datetime.now(UTC).replace(microsecond=0).isoformat()
         # 「待确认」候选：最后一笔还在走、不算买卖点，只给最新一天补足剩余名额
@@ -818,14 +828,14 @@ async def compute_market(
         # 自选结果按用户隔离缓存，不进共用键；也不做「保留旧缓存」保护（清单随时会变）
         if user_id is not None:
             try:
-                await redis.set(watchlist_cache_key(market, user_id, constituents), resp.model_dump_json(),
+                await redis.set(watchlist_cache_key(market, user_id, constituents, mode), resp.model_dump_json(),
                                 ex=WATCHLIST_CACHE_TTL)
             except Exception as e:  # noqa: BLE001
                 logger.warning("signal_radar_watchlist_cache_write_error", market=market, error=str(e))
         return resp
 
     if failure_rate > _MAX_ACCEPTABLE_FAILURE_RATE:
-        stale = await _read_cache(redis, market, universe.key)
+        stale = await _read_cache(redis, market, universe.key, mode)
         if stale is not None:
             logger.warning(
                 "signal_radar_scan_degraded_keep_stale_cache",
@@ -838,7 +848,7 @@ async def compute_market(
     return resp
 
 
-async def _cache_is_stale(redis: Redis, market: str, universe_key: str) -> bool:
+async def _cache_is_stale(redis: Redis, market: str, universe_key: str, mode: str = DEFAULT_MODE) -> bool:
     """按剩余 TTL 反推缓存年龄，判断是否已陈旧（超过 _cache_stale_after）。
 
     年龄 = 完整 TTL - 剩余 TTL。拿不到剩余 TTL（异常）时保守地当作「不陈旧」，
@@ -846,7 +856,7 @@ async def _cache_is_stale(redis: Redis, market: str, universe_key: str) -> bool:
     则当作陈旧，好让下一次刷新把带正常 TTL 的缓存重新建起来。
     """
     try:
-        remaining = await redis.ttl(_cache_key(market, universe_key))
+        remaining = await redis.ttl(_cache_key(market, universe_key, mode))
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_cache_ttl_error", market=market, error=str(e))
         return False
@@ -857,7 +867,7 @@ async def _cache_is_stale(redis: Redis, market: str, universe_key: str) -> bool:
 
 
 async def peek_cache_entry(
-    redis: Redis, market: str, universe_key: str | None = None
+    redis: Redis, market: str, universe_key: str | None = None, mode: str = DEFAULT_MODE,
 ) -> tuple[SignalRadarResponse | None, bool]:
     """只读缓存并判断是否陈旧（不触发扫描），供 API 的 stale-while-revalidate 使用。
 
@@ -867,29 +877,29 @@ async def peek_cache_entry(
     universe = get_universe(market, universe_key)
     if universe is None:
         return None, False
-    cached = await _read_cache(redis, market, universe.key)
+    cached = await _read_cache(redis, market, universe.key, mode)
     if cached is None:
         return None, False
-    return cached, await _cache_is_stale(redis, market, universe.key)
+    return cached, await _cache_is_stale(redis, market, universe.key, mode)
 
 
 async def get_market(
     market: str, *, redis: Redis, user_id: int | None = None,
     universe_key: str | None = None,
     days: int = 30, window: int = 45, top_n: int = DEFAULT_TOP_N, force: bool = False,
-    max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
+    max_age_days: int = _MAX_SIGNAL_AGE_DAYS, mode: str = DEFAULT_MODE,
 ) -> SignalRadarResponse:
     """读缓存优先；未命中则同步扫描（首访较慢，命中后走缓存）。"""
     universe = get_universe(market, universe_key)
     if universe is None:
         raise ValueError(f"unsupported market/universe: {market}/{universe_key}")
     if not force:
-        cached = await _read_cache(redis, market, universe.key)
+        cached = await _read_cache(redis, market, universe.key, mode)
         if cached is not None:
             return cached
     return await compute_market(
         market, redis=redis, user_id=user_id, universe_key=universe.key,
-        days=days, window=window, top_n=top_n, max_age_days=max_age_days,
+        days=days, window=window, top_n=top_n, max_age_days=max_age_days, mode=mode,
     )
 
 
@@ -905,19 +915,21 @@ def demo_snapshot_date() -> str:
     return last_month_end.replace(day=1).isoformat()
 
 
-def _demo_cache_key(market: str, universe_key: str, target: str) -> str:
+def _demo_cache_key(market: str, universe_key: str, target: str, mode: str = DEFAULT_MODE) -> str:
     # 改了快照的计算口径就必须升版本号，否则旧快照要等 TTL（12 小时）过期才会被替换：
     # v3：改为用截至今天的数据回看目标日（v2 截至目标日算、未确认被剔光）
     # v4：名义日期落在非交易日时对齐到之前最近的交易日（v3 仍按名义日期 08-01 周六展示）
     # v5：按 universe 分别计算与缓存（之前只算市场默认指数，切到标普500 仍是纳斯达克100）
     # v6：失败率过高不再写缓存（v5 里有部署重启时限流算出的纳斯达克100 空快照）
-    return f"{_CACHE_PREFIX}:demo:v6:{_SIGNAL_DEF}:{market}:{universe_key}:{target}"
+    return f"{_CACHE_PREFIX}:demo:v6:{_mode_ns(mode)}:{market}:{universe_key}:{target}"
 
 
-async def read_demo_cache(redis: Redis, market: str, universe_key: str) -> SignalRadarResponse | None:
-    """读免费预览快照缓存（不触发计算），键按 (市场, universe, 当前 demo_snapshot_date()) 取。"""
+async def read_demo_cache(
+    redis: Redis, market: str, universe_key: str, mode: str = DEFAULT_MODE,
+) -> SignalRadarResponse | None:
+    """读免费预览快照缓存（不触发计算），键按 (口径, 市场, universe, 当前 demo_snapshot_date()) 取。"""
     try:
-        raw = await redis.get(_demo_cache_key(market, universe_key, demo_snapshot_date()))
+        raw = await redis.get(_demo_cache_key(market, universe_key, demo_snapshot_date(), mode))
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_demo_cache_read_error", market=market, error=str(e))
         return None
@@ -947,7 +959,7 @@ def resolve_demo_target(nominal: str, per_symbol_dates: list[list[str]]) -> tupl
 
 
 async def compute_demo_day(
-    market: str, universe_key: str | None = None, *, redis: Redis,
+    market: str, universe_key: str | None = None, *, redis: Redis, mode: str = DEFAULT_MODE,
 ) -> SignalRadarResponse:
     """免费预览：只展示「上个月 1 号」这一天，按所选 universe（缺省为该市场默认）。
 
@@ -972,6 +984,7 @@ async def compute_demo_day(
         async with sem:
             history, failure, _, dates = await _scan_symbol(
                 symbol, name, user_id=None, start_date=start_date, end_date=end_date, redis=redis,
+                mode=mode,
             )
             if failure == "rate_limited":
                 # 与 compute_market 同一套：命中限流让这个名额歇一会儿，别立刻放下一个去撞
@@ -995,6 +1008,7 @@ async def compute_demo_day(
         days=build_days(histories, [target], top_n=DEFAULT_TOP_N, calendar=calendar),
         status="ready",
         computed_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
+        signal_mode=mode,
     )
     logger.info(
         "signal_radar_demo_scan_done", market=market, universe=universe.key, target=target,
@@ -1014,7 +1028,7 @@ async def compute_demo_day(
     ttl = _DEMO_CACHE_TTL if not failure_counts else _DEMO_DEGRADED_CACHE_TTL
     try:
         # 键按名义日期：read_demo_cache 只知道 demo_snapshot_date()，不知道对齐后的交易日
-        await redis.set(_demo_cache_key(market, universe.key, nominal), resp.model_dump_json(), ex=ttl)
+        await redis.set(_demo_cache_key(market, universe.key, nominal, mode), resp.model_dump_json(), ex=ttl)
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_demo_cache_write_error", market=market, error=str(e))
     return resp

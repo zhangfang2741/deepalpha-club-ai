@@ -14,9 +14,16 @@
 czsc 信号是持续多根K线的「状态」而非一次性事件，这里逐根推进（不回看未来），
 在状态从「其他」切换为买卖点的那根K线记一次事件，并读取当时最后一笔已完成笔
 作为信号所属笔；同一 (类型, 笔终点) 只保留首次。
+
+按口径（signal_policy）选择启用哪些 czsc 信号族（families）：
+- first：一买/一卖（所有口径都用）。
+- second / third：czsc 原生二 / 三类（宽松口径用，严格化之前的做法）：
+- 二买/二卖 cxt_second_bs_V240524：末笔终点分型与前 9 笔中 >=2 个长笔终点分型价格重叠。
+- 三买/三卖 cxt_third_bs_V230318：前 5 笔构中枢，第 5 笔离开中枢不回，且三个转折点 SMA34 同向。
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal
 
@@ -25,8 +32,13 @@ from czsc import BarGenerator, CzscSignals, Freq
 from app.services.chan.czsc_adapter import ts_date, bars_to_raw_bars
 
 SignalType = Literal["buy1", "buy2", "buy3", "sell1", "sell2", "sell3"]
+SignalFamily = Literal["first", "second", "third"]
 
-_V1_TO_TYPE: dict[str, SignalType] = {"一买": "buy1", "一卖": "sell1"}
+_V1_TO_TYPE: dict[str, SignalType] = {
+    "一买": "buy1", "一卖": "sell1",
+    "二买": "buy2", "二卖": "sell2",
+    "三买": "buy3", "三卖": "sell3",
+}
 
 # 初始化 BarGenerator 的预热根数：单周期下只影响「从第几根开始逐根判定」，
 # 不影响结构本身（CZSC 从第一根起就在算）；信号至少要若干笔才可能亮起。
@@ -43,19 +55,45 @@ class BsEvent:
     span: str  # 一类信号命中的结构笔数（如 "9笔"），其余类型为空
 
 
-def _signal_keys_and_config(label: str) -> tuple[list[str], list[dict]]:
-    config = [
-        {"name": "cxt_first_buy_V221126", "freq": label, "di": 1},
-        {"name": "cxt_first_sell_V221126", "freq": label, "di": 1},
-    ]
-    keys = [f"{label}_D1B_BUY1", f"{label}_D1B_SELL1"]
+def _family_specs(label: str) -> dict[str, tuple[list[str], list[dict]]]:
+    """信号族 → (状态键, czsc 信号配置)。"""
+    return {
+        "first": (
+            [f"{label}_D1B_BUY1", f"{label}_D1B_SELL1"],
+            [{"name": "cxt_first_buy_V221126", "freq": label, "di": 1},
+             {"name": "cxt_first_sell_V221126", "freq": label, "di": 1}],
+        ),
+        "second": (
+            [f"{label}_D1W9T2_第二买卖点V240524"],
+            [{"name": "cxt_second_bs_V240524", "freq": label, "di": 1, "w": 9, "t": 2}],
+        ),
+        "third": (
+            [f"{label}_D1#SMA#34_BS3辅助V230318"],
+            [{"name": "cxt_third_bs_V230318", "freq": label, "di": 1, "ma_type": "SMA", "timeperiod": 34}],
+        ),
+    }
+
+
+def _signal_keys_and_config(
+    label: str, families: Iterable[SignalFamily] = ("first",),
+) -> tuple[list[str], list[dict]]:
+    specs = _family_specs(label)
+    keys: list[str] = []
+    config: list[dict] = []
+    for fam in ("first", "second", "third"):
+        if fam in families:
+            keys += specs[fam][0]
+            config += specs[fam][1]
     return keys, config
 
 
 def scan_bs_events(
     bars: list[dict], *, symbol: str, freq: Freq, stroke_done_at: dict[str, str] | None = None,
+    families: Iterable[SignalFamily] = ("first",),
 ) -> list[BsEvent]:
-    """逐根推进 czsc 结构信号，返回按亮起时间排序、去重后的一类背驰事件。
+    """逐根推进 czsc 结构信号，返回按亮起时间排序、去重后的买卖点事件。
+
+    families 决定启用哪些信号族，默认只有一类背驰。
 
     stroke_done_at：传入时逐根记录「笔终点 → 这一笔完成的那根K线」（czsc 的 bi_list
     只含已完成的笔，新出现的末笔即在当根完成），供二 / 三类作检测时间。
@@ -65,7 +103,7 @@ def scan_bs_events(
         return []
 
     label = freq.value
-    keys, config = _signal_keys_and_config(label)
+    keys, config = _signal_keys_and_config(label, families)
     bg = BarGenerator(label, [], max_count=len(raw) + 1)
     bg.init_freq_bars(label, raw[:_INIT_N])
     cs = CzscSignals(bg, config)

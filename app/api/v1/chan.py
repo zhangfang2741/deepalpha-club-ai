@@ -15,6 +15,8 @@ from app.core.limiter import limiter
 from app.core.logging import logger
 from app.models.user import User
 from app.schemas.chan import (
+    SignalModeOut,
+    SignalModesResponse,
     ChanAnalysisResponse,
     FractalOut,
     GapItemOut,
@@ -38,6 +40,7 @@ from app.schemas.chan import (
 )
 from app.services.chan.analyzer import ChanAnalyzer
 from app.services.chan.gap import analyze_structure_gap
+from app.services.chan.signal_policy import DEFAULT_MODE, SIGNAL_POLICIES, normalize_mode
 from app.services.chan.sub_level_service import current_sub_level
 from app.services.chan.sub_level_service import signal_out as _signal_out
 from app.services.skills.kline import LIVE_MAX_AGE, fetch_kline
@@ -127,6 +130,7 @@ async def chan_analysis(
     freq: str = Query(default="daily", pattern="^(daily|weekly|30min)$",
                       description="K线周期：daily / weekly / 30min（30 分钟可见区间最多近 30 天）"),
     lang: str = Query(default="zh", description="分析文案语言：zh / en"),
+    mode: str | None = Query(default=None, description="买卖点口径：loose（默认）/ strict，见 /chan/signal-modes"),
     warmup_days: int | None = Query(
         default=None, ge=0,
         description="已废弃、被忽略：详情页始终按默认预热（日线180/周线540），保留仅为兼容旧版 App",
@@ -149,7 +153,8 @@ async def chan_analysis(
     # 详情页准实时：只用 1 分钟内的K线缓存，盘中能看到刚走出的K线
     bars = await _fetch_bars_or_http_error(user.id, symbol, anchor_start, end_date, freq, redis,
                                            max_age=LIVE_MAX_AGE)
-    result = _analyzer.analyze(symbol, bars, lang=lang, visible_from=start_date, freq=freq)
+    mode = normalize_mode(mode)
+    result = _analyzer.analyze(symbol, bars, lang=lang, visible_from=start_date, freq=freq, mode=mode)
 
     pivot_phase_out: PivotPhaseOut | None = None
     if result.pivot_phase:
@@ -293,6 +298,8 @@ async def chan_analysis(
         pivot_phase=pivot_phase_out,
         structure_layers=structure_layers_out,
         structure_headline=result.structure_headline,
+        signal_mode=mode,
+        candidate_signals=[_signal_out(sig) for sig in result.candidate_signals],
     )
 
 
@@ -364,6 +371,7 @@ async def chan_sub_level(
     parent_freq: str = Query(default="daily", pattern="^(daily|weekly)$",
                              description="大级别：daily（配 30 分钟）/ weekly（配日线）"),
     warmup_days: int | None = Query(default=None, ge=0, description="已废弃、被忽略，保留仅为兼容旧版 App"),
+    mode: str | None = Query(default=None, description="买卖点口径：loose（默认）/ strict"),
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
 ) -> SubLevelResponse:
@@ -384,7 +392,24 @@ async def chan_sub_level(
     # 详情页准实时（结论与K线都只用 1 分钟内的缓存），新结论写回缓存，雷达下次读到的就是这份
     return await current_sub_level(symbol, parent_freq, end_date=end_date, user_id=user.id,
                                    redis=redis, lang=lang, fetch_parent=fetch_parent,
-                                   max_age=LIVE_MAX_AGE)
+                                   max_age=LIVE_MAX_AGE, mode=normalize_mode(mode))
+
+
+@router.get("/signal-modes", response_model=SignalModesResponse)
+async def chan_signal_modes(
+    lang: str = Query(default="zh", description="文案语言：zh / en"),
+) -> SignalModesResponse:
+    """可选的买卖点口径（App 设置页据此渲染选项；新增口径无需发版）。"""
+    en = lang.lower().startswith("en")
+    return SignalModesResponse(
+        default=DEFAULT_MODE,
+        modes=[
+            SignalModeOut(key=p.name, label=p.label_en if en else p.label_zh,
+                          description=p.description_en if en else p.description_zh,
+                          is_default=p.name == DEFAULT_MODE)
+            for p in SIGNAL_POLICIES.values()
+        ],
+    )
 
 
 @router.post("/gap", response_model=GapJobStatus)

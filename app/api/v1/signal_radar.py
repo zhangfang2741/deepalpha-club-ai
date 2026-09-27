@@ -31,6 +31,7 @@ from app.services.signal_radar.service import (
     read_demo_cache,
     read_watchlist_cache,
 )
+from app.services.chan.signal_policy import DEFAULT_MODE, normalize_mode
 from app.services.watchlist import display_name, list_items
 from app.services.signal_radar.universe import get_universe, supported_markets
 
@@ -46,28 +47,33 @@ def _spawn(coro) -> None:
     task.add_done_callback(_background_tasks.discard)
 
 
-def _generating_key(market: str, universe_key: str) -> str:
-    return f"signal_radar:generating:{market}:{universe_key}"
+def _generating_key(market: str, universe_key: str, mode: str = DEFAULT_MODE) -> str:
+    return f"signal_radar:generating:{mode}:{market}:{universe_key}"
 
 
-async def _run_watchlist_scan(market: str, user_id: int, watchlist: list[tuple[str, str]]) -> None:
+_MODE_QUERY = Query(default=None, description="买卖点口径：loose（默认）/ strict，见 /chan/signal-modes")
+
+
+async def _run_watchlist_scan(
+    market: str, user_id: int, watchlist: list[tuple[str, str]], mode: str = DEFAULT_MODE,
+) -> None:
     """后台扫描某用户的自选股，完成后清除该用户的 generating 标记。"""
     redis = current_redis()
     if redis is None:
         return
     try:
-        await compute_market(market, redis=redis, user_id=user_id, watchlist=watchlist)
+        await compute_market(market, redis=redis, user_id=user_id, watchlist=watchlist, mode=mode)
     except Exception as e:  # noqa: BLE001
         logger.exception("signal_radar_watchlist_scan_failed", market=market, error=str(e))
     finally:
         try:
-            await redis.delete(_generating_key(market, f"{WATCHLIST_KEY}:u{user_id}"))
+            await redis.delete(_generating_key(market, f"{WATCHLIST_KEY}:u{user_id}", mode))
         except Exception:  # noqa: BLE001
             pass
 
 
 async def _watchlist_radar(
-    market: str, user: User, db: AsyncSession, redis: Redis, refresh: bool,
+    market: str, user: User, db: AsyncSession, redis: Redis, refresh: bool, mode: str = DEFAULT_MODE,
 ) -> SignalRadarResponse:
     """「自选」股票池：当前用户该市场的自选股；命中缓存直接返回，否则后台扫描并回 generating。"""
     items = [i for i in await list_items(db, user.id) if i.market == market]
@@ -77,21 +83,24 @@ async def _watchlist_radar(
         return SignalRadarResponse(
             market=market, universe=WATCHLIST_KEY, universes=_universes_out(market), etf_name="自选",
             universe_size=len(watchlist), as_of="", top_n=DEFAULT_TOP_N, days=[], status=status,
+            signal_mode=mode,
         )
 
     if not watchlist:
         return empty("ready")  # 自选里还没有该市场的股票，前端提示去加入
-    if not refresh and (cached := await read_watchlist_cache(redis, market, user.id, watchlist)):
+    if not refresh and (cached := await read_watchlist_cache(redis, market, user.id, watchlist, mode)):
         return cached
-    gkey = _generating_key(market, f"{WATCHLIST_KEY}:u{user.id}")
+    gkey = _generating_key(market, f"{WATCHLIST_KEY}:u{user.id}", mode)
     if refresh or not await redis.get(gkey):
         await redis.set(gkey, "1", ex=_GENERATING_TTL)
-        _spawn(_run_watchlist_scan(market, user.id, watchlist))
+        _spawn(_run_watchlist_scan(market, user.id, watchlist, mode))
         logger.info("signal_radar_watchlist_scan_spawned", market=market, user_id=user.id, size=len(watchlist))
     return empty("generating")
 
 
-async def _run_scan(market: str, universe_key: str, user_id: int, refresh: bool = False) -> None:
+async def _run_scan(
+    market: str, universe_key: str, user_id: int, refresh: bool = False, mode: str = DEFAULT_MODE,
+) -> None:
     """后台执行一次全量扫描，完成后清除 generating 标记。refresh=True 时连成分股（含中文名）一起重建。"""
     redis = current_redis()
     if redis is None:
@@ -99,33 +108,33 @@ async def _run_scan(market: str, universe_key: str, user_id: int, refresh: bool 
         return
     try:
         await compute_market(market, redis=redis, user_id=user_id, universe_key=universe_key,
-                             refresh_constituents=refresh)
+                             refresh_constituents=refresh, mode=mode)
     except Exception as e:  # noqa: BLE001
         logger.exception("signal_radar_scan_failed", market=market, error=str(e))
     finally:
         try:
-            await redis.delete(_generating_key(market, universe_key))
+            await redis.delete(_generating_key(market, universe_key, mode))
         except Exception:  # noqa: BLE001
             pass
 
 
-def _demo_generating_key(market: str, universe_key: str) -> str:
-    return f"signal_radar:demo:generating:{market}:{universe_key}"
+def _demo_generating_key(market: str, universe_key: str, mode: str = DEFAULT_MODE) -> str:
+    return f"signal_radar:demo:generating:{mode}:{market}:{universe_key}"
 
 
-async def _run_demo_scan(market: str, universe_key: str) -> None:
+async def _run_demo_scan(market: str, universe_key: str, mode: str = DEFAULT_MODE) -> None:
     """后台算一次免费预览快照（「上个月 1 号」），完成后清除 generating 标记。"""
     redis = current_redis()
     if redis is None:
         logger.error("signal_radar_demo_scan_no_redis", market=market, universe=universe_key)
         return
     try:
-        await compute_demo_day(market, universe_key, redis=redis)
+        await compute_demo_day(market, universe_key, redis=redis, mode=mode)
     except Exception as e:  # noqa: BLE001
         logger.exception("signal_radar_demo_scan_failed", market=market, universe=universe_key, error=str(e))
     finally:
         try:
-            await redis.delete(_demo_generating_key(market, universe_key))
+            await redis.delete(_demo_generating_key(market, universe_key, mode))
         except Exception:  # noqa: BLE001
             pass
 
@@ -138,6 +147,7 @@ async def signal_radar_demo(
     universe: str | None = Query(
         default=None, description="universe 键，如 nasdaq100 / sp500；缺省=该市场默认（科技指数）"
     ),
+    mode: str | None = _MODE_QUERY,
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
 ) -> SignalRadarResponse:
@@ -157,14 +167,15 @@ async def signal_radar_demo(
                 f"市场可选 {', '.join(supported_markets())}"
             ),
         )
-    cached = await read_demo_cache(redis, market, uni.key)
+    mode = normalize_mode(mode)
+    cached = await read_demo_cache(redis, market, uni.key, mode)
     if cached is not None:
         return cached
 
-    gkey = _demo_generating_key(market, uni.key)
+    gkey = _demo_generating_key(market, uni.key, mode)
     if not await redis.get(gkey):
         await redis.set(gkey, "1", ex=_GENERATING_TTL)
-        _spawn(_run_demo_scan(market, uni.key))
+        _spawn(_run_demo_scan(market, uni.key, mode))
         logger.info("signal_radar_demo_scan_spawned", market=market, universe=uni.key, user_id=user.id)
 
     return SignalRadarResponse(
@@ -177,6 +188,7 @@ async def signal_radar_demo(
         top_n=DEFAULT_TOP_N,
         days=[],
         status="generating",
+        signal_mode=mode,
     )
 
 
@@ -189,13 +201,15 @@ async def signal_radar(
         default=None, description="universe 键，如 nasdaq100 / sp500；缺省=该市场默认（科技指数）"
     ),
     refresh: bool = Query(default=False, description="强制重新扫描（后台）"),
+    mode: str | None = _MODE_QUERY,
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
     db: AsyncSession = Depends(get_db),
 ) -> SignalRadarResponse:
     """获取某 (市场, universe) 最近交易日的缠论买卖点雷达；universe=watchlist 为用户自选。"""
+    mode = normalize_mode(mode)
     if universe == WATCHLIST_KEY and market in supported_markets():
-        return await _watchlist_radar(market, user, db, redis, refresh)
+        return await _watchlist_radar(market, user, db, redis, refresh, mode)
     uni = get_universe(market, universe)
     if uni is None:
         raise HTTPException(
@@ -206,21 +220,21 @@ async def signal_radar(
             ),
         )
 
-    cached, is_stale = await peek_cache_entry(redis, market, uni.key)
+    cached, is_stale = await peek_cache_entry(redis, market, uni.key, mode)
 
     # 需要触发一次后台扫描的情形：强制刷新、无任何缓存、或缓存已陈旧（预热迟到/停摆）。
     if refresh or cached is None or is_stale:
         # 去重：已有后台扫描在跑就不再重复启动（按 (市场, universe) 各自去重）；
         # 但用户主动 refresh 时无视去重，确保确实重扫一次。
-        gkey = _generating_key(market, uni.key)
+        gkey = _generating_key(market, uni.key, mode)
         already = await redis.get(gkey)
         if refresh or not already:
             await redis.set(gkey, "1", ex=_GENERATING_TTL)
-            _spawn(_run_scan(market, uni.key, user.id, refresh=refresh))
+            _spawn(_run_scan(market, uni.key, user.id, refresh=refresh, mode=mode))
             reason = "refresh" if refresh else ("cold" if cached is None else "stale")
             logger.info(
                 "signal_radar_scan_spawned",
-                market=market, universe=uni.key, user_id=user.id, reason=reason,
+                market=market, universe=uni.key, user_id=user.id, reason=reason, mode=mode,
             )
 
     # 有缓存就先返回（stale-while-revalidate）：哪怕正在后台刷新，也不让用户看空屏。
@@ -244,4 +258,5 @@ async def signal_radar(
         top_n=DEFAULT_TOP_N,
         days=[],
         status="generating",
+        signal_mode=mode,
     )

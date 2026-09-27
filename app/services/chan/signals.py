@@ -372,5 +372,101 @@ def generate_all_signals(
     for sig_type, st, pivot in _derive_type3(strokes, pivots):
         _structural(sig_type, st, f"{pivot.zd:.2f}–{pivot.zg:.2f}")
 
+    # 成立日期：所在笔要等下一笔走完才不会再延伸，信号此时才算成立。detected_time 不早于
+    # 下一笔完成的那根K线，否则历史雷达日会提前看到未来才成立的信号、最新日又因「亮起」
+    # 太早被判过期。最后一笔上的（候选）没有下一笔，保留亮起日期。
+    for x in signals:
+        i = idx_by_end.get(x.time)
+        if i is not None and i + 1 < len(strokes):
+            est = done_at.get(strokes[i + 1].end_time, "")
+            if est > x.detected_time:
+                x.detected_time = est
+
     signals.sort(key=lambda x: (x.time, x.type))
+    return signals
+
+
+# ---------------------------------------------------------------------------
+# 宽松模式（App 默认）：严格化之前的口径，直接采用 czsc 原生一 / 二 / 三类事件
+# ---------------------------------------------------------------------------
+
+def _describe_loose(sig_type: str, time: str, price: float, span: str,
+                    div: DivergenceResult | None, lang: str) -> str:
+    n = _span_count(span)
+    area = f"：{force_text(div.price_ratio, div.volume_ratio, div.length_ratio, lang)}" if div else ""
+    area_en = f": {force_text(div.price_ratio, div.volume_ratio, div.length_ratio, lang)}" if div else ""
+    if is_en(lang):
+        legs = f"the last of {n} legs" if n else "the last leg"
+        texts = {
+            "buy1": f"Type-1 buy: at {time}, {legs} of the decline made a new low ({price:.2f}) with weaker "
+                    f"force than earlier legs — a bottom divergence{area_en}",
+            "sell1": f"Type-1 sell: at {time}, {legs} of the advance made a new high ({price:.2f}) with weaker "
+                     f"force than earlier legs — a top divergence{area_en}",
+            "buy2": f"Type-2 buy: at {time}, the pullback low ({price:.2f}) landed in a zone where several earlier "
+                    f"turning points clustered, finding support without a new low",
+            "sell2": f"Type-2 sell: at {time}, the rebound high ({price:.2f}) met a zone where several earlier "
+                     f"turning points clustered, capped without a new high",
+            "buy3": f"Type-3 buy: at {time}, after the prior five legs formed a pivot, the pullback low "
+                    f"({price:.2f}) stayed above the pivot top with the moving average stepping higher",
+            "sell3": f"Type-3 sell: at {time}, after the prior five legs formed a pivot, the rebound high "
+                     f"({price:.2f}) stayed below the pivot bottom with the moving average stepping lower",
+        }
+    else:
+        legs = f"近{n}笔" if n else "近几笔"
+        texts = {
+            "buy1": f"一类买点：{time} {legs}下跌中末笔创新低（{price:.2f}），但力度弱于前段，构成底背驰{area}",
+            "sell1": f"一类卖点：{time} {legs}上涨中末笔创新高（{price:.2f}），但力度弱于前段，构成顶背驰{area}",
+            "buy2": f"二类买点：{time} 回落低点（{price:.2f}）落在此前多次转折形成的价格密集区，获得支撑、未再创新低",
+            "sell2": f"二类卖点：{time} 反弹高点（{price:.2f}）触及此前多次转折形成的价格密集区，受压回落、未再创新高",
+            "buy3": f"三类买点：{time} 前五笔构成中枢后，回落低点（{price:.2f}）仍在中枢上沿之上没有回到中枢，且均线逐级抬升",
+            "sell3": f"三类卖点：{time} 前五笔构成中枢后，反弹高点（{price:.2f}）仍在中枢下沿之下没有回到中枢，且均线逐级下移",
+        }
+    return texts[sig_type]
+
+
+def generate_loose_signals(
+    events: list[BsEvent],
+    strokes: list[Stroke],
+    divergences: list[DivergenceResult],
+    pivots: list[Pivot],
+    lang: str = "zh",
+) -> list[Signal]:
+    """宽松模式：把 czsc 一 / 二 / 三类事件直接组装成 Signal（严格化之前的口径）。
+
+    与严格模式的区别：一类不要求趋势前提（盘整背驰也算）、不做「被下一笔跌破作废」；
+    二类取 czsc 的端点价格重叠（不要求先有一类）；三类取 czsc 的 5 笔中枢 + 均线过滤；
+    最后一笔上的信号也保留（confirmed=False）。detected_time = czsc 事件亮起的K线。
+    失效过滤、落点与强度口径与严格模式相同。
+    """
+    div_by_end = {s.end_time: dv for s, dv in zip(strokes, divergences, strict=False)}
+    direction_by_end = {s.end_time: s.direction for s in strokes}
+    idx_by_end = {s.end_time: i for i, s in enumerate(strokes)}
+    signals: list[Signal] = []
+    seen: set[tuple[str, str]] = set()
+    for ev in sorted(events, key=lambda e: e.bi_end_time):
+        key = (ev.type, ev.bi_end_time)
+        want = "down" if ev.type.startswith("buy") else "up"
+        if key in seen or direction_by_end.get(ev.bi_end_time) != want:
+            continue
+        seen.add(key)
+        div: DivergenceResult | None = None
+        strength: Literal["strong", "medium", "weak"] = "weak"
+        if ev.type in ("buy1", "sell1"):
+            span_n = int(_span_count(ev.span) or 0)
+            forced = _first_bs_force(strokes, idx_by_end[ev.bi_end_time], span_n,
+                                     ev.type == "buy1", pivots, lang)
+            dv = forced or div_by_end.get(ev.bi_end_time)
+            if dv is not None and dv.is_diverged and dv.strength != "none":
+                div = dv
+                strength = dv.strength  # type: ignore[assignment]
+        else:
+            pivot = _latest_pivot_before(pivots, ev.bi_end_time)
+            if pivot is not None:
+                boundary = getattr(pivot, _TYPE23_BOUNDARY[ev.type])
+                strength = _type23_strength(pivot, _margin_ratio(pivot, boundary, ev.bi_end_price))
+        signals.append(Signal(
+            type=ev.type, time=ev.bi_end_time, price=ev.bi_end_price, strength=strength,
+            divergence=div, lang=lang, detected_time=ev.bar_time,
+            description=_describe_loose(ev.type, ev.bi_end_time, ev.bi_end_price, ev.span, div, lang),
+        ))
     return signals

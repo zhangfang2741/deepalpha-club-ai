@@ -46,7 +46,7 @@ def test_bottom_divergence_yields_buy1():
 
 def test_structure_invariants_end_to_end():
     """端到端：笔首尾相连、方向交替、线段不吞没起点。"""
-    result = ChanAnalyzer().analyze("DN", _decaying_downtrend_bars())
+    result = ChanAnalyzer().analyze("DN", _decaying_downtrend_bars(), mode="strict")
     st = result.strokes
     assert len(st) >= 10
     for a, b in zip(st, st[1:], strict=False):
@@ -126,6 +126,27 @@ def test_signal_records_detection_time_separately_from_stroke_end():
     events = [_ev("buy1", "2025-01-10", 100.0, bar_time="2025-01-14", span="9笔")]
     s = generate_all_signals(events, [down], [_div("strong", 0.3)], _DOWN_TREND)[0]
     assert s.time == "2025-01-10"
+    assert s.detected_time == "2025-01-14"
+
+
+def test_detection_time_is_when_next_stroke_completes():
+    """买卖点所在的笔要等下一笔走完（被 czsc 确认）才不会再延伸，信号这时才算成立：
+    detected_time 取下一笔完成的那根K线，不能早于它（否则历史雷达日会提前看到未来才成立的信号）。"""
+    legs, ev = _after_buy1(103, extra=(_st("up", "2025-01-20", "2025-01-25", 103, 116),))
+    ev = [_ev("buy1", "2025-01-10", 100.0, bar_time="2025-01-12", span="9笔")]
+    done = {"2025-01-10": "2025-01-12", "2025-01-15": "2025-01-17",
+            "2025-01-20": "2025-01-22", "2025-01-25": "2025-01-27"}
+    sig = generate_all_signals(ev, legs, [_div("strong", 0.3)] + [_NO_DIV] * 3, _DOWN_TREND,
+                               stroke_done_at=done)
+    assert {(x.type, x.detected_time) for x in sig} >= {("buy1", "2025-01-17"), ("buy2", "2025-01-27")}
+
+
+def test_detection_time_on_last_stroke_keeps_early_date():
+    """最后一笔上的（候选）没有下一笔，保留亮起的日期。"""
+    down = _st("down", "2025-01-01", "2025-01-10", 120, 100)
+    events = [_ev("buy1", "2025-01-10", 100.0, bar_time="2025-01-14", span="9笔")]
+    s = generate_all_signals(events, [down], [_div("strong", 0.3)], _DOWN_TREND,
+                             stroke_done_at={"2025-01-10": "2025-01-13"})[0]
     assert s.detected_time == "2025-01-14"
 
 
@@ -436,7 +457,7 @@ def test_buy1_broken_by_next_pullback_is_dropped():
 def test_no_signal_on_unfinished_last_stroke():
     """最后一笔还在走（端点可能继续延伸、甚至回到中枢），其上的买卖点尚不成立，不输出。"""
     bars = _decaying_downtrend_bars(shrink_volume=False)
-    result = ChanAnalyzer().analyze("DN", bars)
+    result = ChanAnalyzer().analyze("DN", bars, mode="strict")
     assert result.signals, "合成数据应至少产出一个买卖点"
     last_end = result.strokes[-1].end_time
     assert all(s.confirmed for s in result.signals)
@@ -444,14 +465,14 @@ def test_no_signal_on_unfinished_last_stroke():
     # 截掉尾部，让某个信号所在的笔变成「最后一笔」：该信号必须随之消失
     sig_time = result.signals[-1].time
     cut = [b for b in bars if b["time"][:10] <= sig_time] + [b for b in bars if b["time"][:10] > sig_time][:1]
-    cut_result = ChanAnalyzer().analyze("DN", cut)
+    cut_result = ChanAnalyzer().analyze("DN", cut, mode="strict")
     if cut_result.strokes and cut_result.strokes[-1].end_time == sig_time:
         assert sig_time not in {s.time for s in cut_result.signals}
 
 
 def test_signal_on_unfinished_stroke_becomes_candidate():
     """最后一笔上的信号不算买卖点，但保留为「待确认」候选（供雷达单独展示）。"""
-    result = ChanAnalyzer().analyze("DN", _decaying_downtrend_bars())  # 数据停在底部，一买在最后一笔上
+    result = ChanAnalyzer().analyze("DN", _decaying_downtrend_bars(), mode="strict")  # 数据停在底部，一买在最后一笔上
     last_end = result.strokes[-1].end_time
     assert all(s.time != last_end for s in result.signals)
     assert any(c.type == "buy1" and c.time == last_end and not c.confirmed for c in result.candidate_signals)

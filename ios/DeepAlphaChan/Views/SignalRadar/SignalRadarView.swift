@@ -37,6 +37,7 @@ struct SignalRadarView: View {
     /// 免责声明：第一次查看非示例日的雷达图（即订阅高级版后的真实雷达）时弹出，
     /// 同意前该日的气泡不显示；示例日（未订阅的免费预览）不弹。见 needsConsent。
     @StateObject private var consent = RadarConsent()
+    @ObservedObject private var signalMode = SignalModeManager.shared
     @State private var consentChecked = false
     @State private var showConsent = false
     /// 强制最短阅读时长（秒）：勾选框可以随时点，但「同意并继续」在这段时间内
@@ -65,6 +66,8 @@ struct SignalRadarView: View {
             // 跟高级版一模一样，见 radarContent）；市场切换时 .task(id:) 额外拉一次
             // 「上个月 1 号」免费预览快照，自动取消上一次未完成的请求、重新拉一次。
             .task { vm.onAppear() }
+            // 设置页换了买卖点模式：按新模式重拉（示例日随 demoKey 变化由下面的 .task(id:) 重拉）
+            .onChange(of: signalMode.mode) { _, _ in vm.signalModeChanged() }
             .task(id: vm.demoKey) {
                 if !store.isPremium { await vm.loadDemoDay() }
             }
@@ -769,15 +772,7 @@ struct SignalRadarView: View {
                         L("每个市场提供「科技指数」（默认）和「大盘宽基」两套可切换范围，如美股的纳斯达克100 / 标普500。"),
                         L("成分股优先实时拉取官方/交易所数据源，取不到或数量不足时自动回退到内置清单，保证随时有得扫。"),
                     ])
-                    infoSection(L("上榜排序怎么算"), [
-                        L("综合分 = 35% 类型确定性 + 30% 强弱 + 35% 新鲜度，最新一天命中「共振」再额外加分。"),
-                        L("类型确定性：一类 0.4（趋势背驰，待验证）、二类 0.7（一买后第一次回落不破低点）、三类 1.0（离开中枢后不回中枢，最强确认）。"),
-                        L("新鲜度：按信号出现后的交易日数算（周末、休市不算），当天最高，5 个交易日（一周）后归零并退场。"),
-                        L("只收已完成的笔上的买卖点：最后一笔还在走时不上榜，等这一笔走完、买卖点成立后才出现。"),
-                        L("灰色虚线气泡是「待确认」：落在还没走完的最后一笔上，按缠论尚不成立、不算买卖点；只在最新一天补足剩余名额。"),
-                        L("价格走坏即退场：信号出现后，收盘价跌破买点价位（卖点：涨破）就判定失效，当天起不再上榜。"),
-                        L("每类买卖点先保底最多 2 个名额，其余按综合分从高到低补满，共取前 10 名。"),
-                    ])
+                    infoSection(L("上榜排序怎么算"), rankingInfoLines)
                     Text(L("以上打分口径与详情页强弱、确认状态判定完全一致，只是气泡取的是某一次扫描的快照。"))
                         .font(.footnote)
                         .foregroundColor(Theme.textSecondary)
@@ -836,6 +831,31 @@ struct SignalRadarView: View {
         let f = DateFormatter()
         f.dateFormat = "M/d HH:mm"
         return f.string(from: date)
+    }
+
+    /// 「上榜排序怎么算」随买卖点模式给出对应口径（宽松：最后一笔上的也上榜、标未确认；
+    /// 严格：只收已完成的笔，最后一笔上的画成灰色虚线「待确认」）。
+    private var rankingInfoLines: [String] {
+        let loose = signalMode.mode == SignalMode.defaultKey
+        var lines = [
+            L("综合分 = 35% 类型确定性 + 30% 强弱 + 35% 新鲜度，最新一天命中「共振」再额外加分。"),
+            loose
+                ? L("类型确定性：一类 0.4（背驰，待验证）、二类 0.7（回落在价格密集区获得支撑）、三类 1.0（离开中枢后不回中枢，最强确认）。")
+                : L("类型确定性：一类 0.4（趋势背驰，待验证）、二类 0.7（一买后第一次回落不破低点）、三类 1.0（离开中枢后不回中枢，最强确认）。"),
+            L("新鲜度：按信号出现后的交易日数算（周末、休市不算），当天最高，5 个交易日（一周）后归零并退场。"),
+        ]
+        if loose {
+            lines.append(L("最后一笔还在走时出现的买卖点也会上榜（标为未确认），之后可能被新K线改写。"))
+        } else {
+            lines.append(L("只收已完成的笔上的买卖点：最后一笔还在走时不上榜，等这一笔走完、买卖点成立后才出现。"))
+            lines.append(L("灰色虚线气泡是「待确认」：落在还没走完的最后一笔上，按缠论尚不成立、不算买卖点；只在最新一天补足剩余名额。"))
+        }
+        lines += [
+            L("价格走坏即退场：信号出现后，收盘价跌破买点价位（卖点：涨破）就判定失效，当天起不再上榜。"),
+            L("每类买卖点先保底最多 2 个名额，其余按综合分从高到低补满，共取前 10 名。"),
+            L("当前为「%@」模式，可在「我的 → 买卖点模式」切换。", signalMode.currentOption?.label ?? L("宽松")),
+        ]
+        return lines
     }
 
     private func infoSection(_ title: String, _ lines: [String]) -> some View {

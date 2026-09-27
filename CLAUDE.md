@@ -153,6 +153,16 @@ deepalpha-club-ai/
 改动 chan 前务必理解以下已确立的约束，否则容易走回头路。改动后跑 `uv run pytest tests/services/chan/`。
 设计与演进记录见 `docs/superpowers/specs/2026-09-23-czsc-chan-refactor-design.md`。
 
+**买卖点口径（`signal_policy.py`，统一接口 + 多套实现）**
+- 「什么算买卖点」有多套口径，都实现 `SignalPolicy`（`czsc_families` / `assemble` /
+  `split_unconfirmed` + 名称、版本、中英文案），在 `SIGNAL_POLICIES` 注册，按名字 `get_policy(mode)` 取。
+  analyzer、`/chan/analysis`、`/chan/sub-level`、信号雷达（快照 / 自选 / 示例日）都只传 `mode`、走接口，
+  **不要**写 `if mode == ...` 分支。App 设置页从 `GET /chan/signal-modes` 读选项。
+- `loose`（宽松，**默认**）= 严格化之前的口径：czsc 原生一/二/三类，最后一笔上的也输出（标未确认）。
+  `strict`（严格）= 下文「买卖点组装」的缠论原文定义。
+- 新增口径（如「中等」）：写实现类 + 注册即可；雷达与次级别缓存键按 `policy.version` 自动隔离，
+  定时预热遍历注册表（同一 universe 连着算各口径，第二遍K线命中缓存）。**改了某口径的判定逻辑必须升它的 version**。
+
 **引擎分工（2026-09 起接入开源库 czsc，Rust 内核，PyPI `czsc`）**
 - 分型 / 笔 / 笔级中枢：czsc 计算，经 `czsc_adapter.extract_structures` 转回项目
   dataclass（`Fractal/Stroke/Pivot/MergedCandle`，schema 与前端不变）。czsc 会丢弃首笔
@@ -199,7 +209,7 @@ deepalpha-club-ai/
   保证「从雷达点进详情」两边 K 线区间完全一致，有测试 `test_chan_window_alignment` 守护。
   30 分钟级别（`freq=30min`）可见区间收窄到最近 30 天、预热 20 天（Yahoo 分钟线上限约 60 天）。
 
-**买卖点组装（signals.generate_all_signals，信号质量别走偏）**
+**买卖点组装（严格口径 signals.generate_all_signals，信号质量别走偏）**
 - czsc 一类信号是持续多根K线的「状态」，在切换为买卖点时记一次事件，绑定当时最后一笔；
   按（类型, 笔终点）去重。二 / 三类的检测时间取所属笔完成的那根K线（扫描时逐根记录
   `stroke_done_at`，不回看未来）。
@@ -210,6 +220,8 @@ deepalpha-club-ai/
   `ChanAnalysisResult.candidate_signals`。雷达最新一天用它们补足剩余名额（`RadarDayOut.candidates`，
   `pick_candidates`），App 画成灰色虚线「待确认」气泡、不计入买点 / 卖点数——**不要**把候选
   混回 `signals`，也不要让它们占真实买卖点的名额。
+- **成立日 = 下一笔走完**：`detected_time` 不早于所在笔的下一笔完成的那根K线（`stroke_done_at`）。
+  用更早的「亮起日」会让历史雷达日提前看到未来才成立的信号、最新日又因太早被判过期进不了雷达。
 - 强度：一类按 czsc 同一判据复算的力度比分档（基准 = max(前一个同向笔, 关键笔均值)，
   见 `signals._first_bs_force`），说明写出价差/量能/时长三项比值；
   二/三类 = 信号前**最近已结束**中枢的级别 + 余量（`_type23_strength`），尚未结束的中枢不参与。

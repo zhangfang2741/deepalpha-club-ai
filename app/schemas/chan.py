@@ -211,6 +211,22 @@ class ChanAnalysisResponse(BaseModel):
     pivot_phase: Optional[PivotPhaseOut] = None  # 中枢生命周期：走到哪一步
     structure_layers: list[StructureLayerOut] = []  # 按笔/线段/中枢/买卖点分层的判断依据
     structure_headline: Optional[str] = None  # 按线段+笔+中枢位置+买卖点拼的一句摘要
+    signal_mode: str = "loose"  # 本次买卖点口径（见 GET /chan/signal-modes）
+    # 严格口径下最后一笔上的「待确认」候选（不算买卖点）；宽松口径恒为空（直接标未确认放进 signals）
+    candidate_signals: list[SignalOut] = []
+
+
+class SignalModeOut(BaseModel):
+    """一种买卖点口径（App 设置里的一个选项）。"""
+    key: str
+    label: str
+    description: str
+    is_default: bool = False
+
+
+class SignalModesResponse(BaseModel):
+    default: str
+    modes: list[SignalModeOut]
 
 
 class SubLevelResponse(BaseModel):
