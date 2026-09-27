@@ -46,7 +46,7 @@ def test_bottom_divergence_yields_buy1():
 
 def test_structure_invariants_end_to_end():
     """端到端：笔首尾相连、方向交替、线段不吞没起点。"""
-    result = ChanAnalyzer().analyze("DN", _decaying_downtrend_bars())
+    result = ChanAnalyzer().analyze("DN", _decaying_downtrend_bars(), mode="strict")
     st = result.strokes
     assert len(st) >= 10
     for a, b in zip(st, st[1:], strict=False):
@@ -457,7 +457,7 @@ def test_buy1_broken_by_next_pullback_is_dropped():
 def test_no_signal_on_unfinished_last_stroke():
     """最后一笔还在走（端点可能继续延伸、甚至回到中枢），其上的买卖点尚不成立，不输出。"""
     bars = _decaying_downtrend_bars(shrink_volume=False)
-    result = ChanAnalyzer().analyze("DN", bars)
+    result = ChanAnalyzer().analyze("DN", bars, mode="strict")
     assert result.signals, "合成数据应至少产出一个买卖点"
     last_end = result.strokes[-1].end_time
     assert all(s.confirmed for s in result.signals)
@@ -465,14 +465,14 @@ def test_no_signal_on_unfinished_last_stroke():
     # 截掉尾部，让某个信号所在的笔变成「最后一笔」：该信号必须随之消失
     sig_time = result.signals[-1].time
     cut = [b for b in bars if b["time"][:10] <= sig_time] + [b for b in bars if b["time"][:10] > sig_time][:1]
-    cut_result = ChanAnalyzer().analyze("DN", cut)
+    cut_result = ChanAnalyzer().analyze("DN", cut, mode="strict")
     if cut_result.strokes and cut_result.strokes[-1].end_time == sig_time:
         assert sig_time not in {s.time for s in cut_result.signals}
 
 
 def test_signal_on_unfinished_stroke_becomes_candidate():
     """最后一笔上的信号不算买卖点，但保留为「待确认」候选（供雷达单独展示）。"""
-    result = ChanAnalyzer().analyze("DN", _decaying_downtrend_bars())  # 数据停在底部，一买在最后一笔上
+    result = ChanAnalyzer().analyze("DN", _decaying_downtrend_bars(), mode="strict")  # 数据停在底部，一买在最后一笔上
     last_end = result.strokes[-1].end_time
     assert all(s.time != last_end for s in result.signals)
     assert any(c.type == "buy1" and c.time == last_end and not c.confirmed for c in result.candidate_signals)
