@@ -17,6 +17,7 @@ from app.core.logging import logger
 from app.schemas.chan import SignalOut, SubLevelResponse
 from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
 from app.services.chan.signals import Signal
+from app.services.chan.signal_policy import DEFAULT_MODE, get_policy
 from app.services.chan.sub_level import LEVEL_PAIRS, SubLevelResult, build_sub_level
 from app.services.skills.kline import fetch_kline
 from app.utils.market import normalize as normalize_symbol
@@ -33,6 +34,7 @@ async def _fetch_sub_analysis(
     redis: Redis | None,
     lang: str,
     max_age: int | None = None,
+    mode: str = DEFAULT_MODE,
 ) -> ChanAnalysisResult | None:
     """只取次级别 K 线并分析，不做联动判定。
 
@@ -47,7 +49,7 @@ async def _fetch_sub_analysis(
     except Exception as exc:  # noqa: BLE001  次级别失败只降级，不影响大级别
         logger.warning("sub_level_kline_failed", symbol=symbol, freq=pair.child, error=str(exc))
         bars = []
-    return _analyzer.analyze(symbol, bars, lang=lang, freq=pair.child) if bars else None
+    return _analyzer.analyze(symbol, bars, lang=lang, freq=pair.child, mode=mode) if bars else None
 
 
 async def analyze_sub_level(
@@ -59,11 +61,12 @@ async def analyze_sub_level(
     redis: Redis | None = None,
     lang: str = "zh",
     parent_freq: str = "daily",
+    mode: str = DEFAULT_MODE,
 ) -> SubLevelResult:
     """以 end_date 为止取次级别 K 线分析，并与大级别结果（daily 参数）联动判定。"""
     pair = LEVEL_PAIRS.get(parent_freq, LEVEL_PAIRS["daily"])
     sub = await _fetch_sub_analysis(
-        symbol, end_date, parent_freq=parent_freq, user_id=user_id, redis=redis, lang=lang,
+        symbol, end_date, parent_freq=parent_freq, user_id=user_id, redis=redis, lang=lang, mode=mode,
     )
     return build_sub_level(daily, sub, lang, parent_freq=pair.parent)
 
@@ -115,8 +118,9 @@ def _canonical_symbol(symbol: str) -> str:
         return symbol.strip().upper()
 
 
-def _cache_key(symbol: str, parent_freq: str, end: str, lang: str) -> str:
-    return f"chan_sub_level:{_canonical_symbol(symbol)}:{parent_freq}:{end}:{lang}"
+def _cache_key(symbol: str, parent_freq: str, end: str, lang: str, mode: str = DEFAULT_MODE) -> str:
+    # 口径段带版本：改了某口径的判定逻辑，旧结论自动失效
+    return f"chan_sub_level:{get_policy(mode).version}:{_canonical_symbol(symbol)}:{parent_freq}:{end}:{lang}"
 
 
 def to_response(symbol: str, sub: SubLevelResult) -> SubLevelResponse:
@@ -145,6 +149,7 @@ async def current_sub_level(
     refresh: bool = False,
     fetch_parent: Callable[[str, str, str], Awaitable[list[dict]]] | None = None,
     max_age: int | None = None,
+    mode: str = DEFAULT_MODE,
 ) -> SubLevelResponse:
     """当前次级别结论（雷达与详情页的唯一入口）：固定口径计算 + 按结论缓存。
 
@@ -153,11 +158,12 @@ async def current_sub_level(
     - 结论缓存：按（归一化代码, 大级别, 截止日, 语言）缓存完整结果。雷达刷新传 refresh=True
       重算并覆盖，详情页优先读缓存——气泡上的共振与点进去看到的是同一次计算。
     - fetch_parent：大级别取数函数（接口层传入以把数据源错误转成 HTTP 错误），默认 fetch_kline。
+    - mode：买卖点口径（signal_policy），大小级别同一口径，结论按口径分别缓存。
     - max_age：详情页准实时——结论缓存与K线缓存都只接受这么多秒以内写入的（0=不读），
       过旧就重算，新结论仍写回缓存，雷达下次读到的就是这份。
     """
     end = canonical_end(end_date)
-    key = _cache_key(symbol, parent_freq, end, lang)
+    key = _cache_key(symbol, parent_freq, end, lang, mode)
     if redis is not None and not refresh and max_age != 0:
         cached = await get_json(redis, key)
         if cached and max_age is not None:
@@ -182,9 +188,9 @@ async def current_sub_level(
     bars, sub_analysis = await asyncio.gather(
         _fetch_parent_bars(),
         _fetch_sub_analysis(symbol, end, parent_freq=parent_freq, user_id=user_id, redis=redis, lang=lang,
-                            max_age=max_age),
+                            max_age=max_age, mode=mode),
     )
-    parent = _analyzer.analyze(symbol, bars, lang=lang, freq=parent_freq)
+    parent = _analyzer.analyze(symbol, bars, lang=lang, freq=parent_freq, mode=mode)
     pair = LEVEL_PAIRS.get(parent_freq, LEVEL_PAIRS["daily"])
     sub = build_sub_level(parent, sub_analysis, lang, parent_freq=pair.parent)
     resp = to_response(symbol, sub)

@@ -26,7 +26,16 @@ from app.services.signal_radar.service import (
     market_session_active,
     refresh_sub_levels,
 )
+from app.services.chan.signal_policy import DEFAULT_MODE, SIGNAL_POLICIES
 from app.services.signal_radar.universe import all_universes
+
+
+def _modes() -> list[str]:
+    """预热覆盖的买卖点口径：默认口径在前，其余按注册顺序。
+
+    同一 universe 连着算各口径：第二遍起K线全部命中 Redis 缓存，只多 CPU 不多拉数。
+    """
+    return [DEFAULT_MODE] + [m for m in SIGNAL_POLICIES if m != DEFAULT_MODE]
 
 # 启动后先等一会儿再首扫，避开启动期其它预热任务抢资源。
 _STARTUP_DELAY_SECONDS = 45
@@ -64,19 +73,21 @@ async def _prewarm_once(markets: set[str] | None = None) -> None:
     ordered = [u for _, _, u in sorted(zip(ttls, range(len(targets)), targets, strict=True),
                                        key=lambda x: (x[0], x[1]))]
     for u in ordered:
-        try:
-            resp = await compute_market(
-                u.market, redis=redis, user_id=None, universe_key=u.key
-            )
-            logger.info(
-                "signal_radar_prewarmed", market=u.market, universe=u.key, days=len(resp.days)
-            )
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:  # noqa: BLE001 单个 universe 失败不影响其余
-            logger.exception(
-                "signal_radar_prewarm_market_failed", market=u.market, universe=u.key, error=str(e)
-            )
+        for mode in _modes():
+            try:
+                resp = await compute_market(
+                    u.market, redis=redis, user_id=None, universe_key=u.key, mode=mode,
+                )
+                logger.info(
+                    "signal_radar_prewarmed", market=u.market, universe=u.key, mode=mode, days=len(resp.days)
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001 单个 universe / 口径失败不影响其余
+                logger.exception(
+                    "signal_radar_prewarm_market_failed", market=u.market, universe=u.key, mode=mode,
+                    error=str(e),
+                )
 
 
 def _target_universes() -> list:
@@ -125,13 +136,14 @@ async def _refresh_sub_levels_once() -> None:
     for u in _target_universes():
         if not market_session_active(u.market, now):
             continue
-        try:
-            await refresh_sub_levels(u.market, u.key, redis=redis, now=now)
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:  # noqa: BLE001 单个 universe 失败不影响其余
-            logger.exception("signal_radar_sub_level_refresh_failed", market=u.market, universe=u.key,
-                             error=str(e))
+        for mode in _modes():
+            try:
+                await refresh_sub_levels(u.market, u.key, redis=redis, now=now, mode=mode)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001 单个 universe / 口径失败不影响其余
+                logger.exception("signal_radar_sub_level_refresh_failed", market=u.market, universe=u.key,
+                                 mode=mode, error=str(e))
 
 
 async def run_signal_radar_sub_level_scheduler() -> None:

@@ -82,7 +82,7 @@ def recorded(monkeypatch, ctx):
     async def _noop():
         return None
 
-    def fake_scan(market, universe_key):
+    def fake_scan(market, universe_key, mode=None):
         # 创建协程时就记下参数（_spawn 会直接关掉协程，函数体不会执行）
         calls.append((market, universe_key))
         return _noop()

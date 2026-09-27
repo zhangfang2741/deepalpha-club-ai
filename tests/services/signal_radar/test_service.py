@@ -619,8 +619,8 @@ def test_prewarm_scans_stalest_universe_first(monkeypatch):
                     return v
             return -2
 
-    async def fake_compute(market, *, redis, user_id, universe_key):
-        order.append(f"{market}:{universe_key}")
+    async def fake_compute(market, *, redis, user_id, universe_key, mode):
+        order.append((f"{market}:{universe_key}", mode))
 
         class _Resp:
             days = []
@@ -630,7 +630,9 @@ def test_prewarm_scans_stalest_universe_first(monkeypatch):
     monkeypatch.setattr(scheduler, "compute_market", fake_compute)
     monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_BROAD_ENABLED", False)
     asyncio.run(scheduler._prewarm_once())
-    assert order[:3] == ["cn:star50", "hk:hstech", "us:nasdaq100"]
+    # 同一 universe 连着算各口径（默认口径在前，第二遍K线命中缓存）
+    assert [u for u, m in order if m == "loose"][:3] == ["cn:star50", "hk:hstech", "us:nasdaq100"]
+    assert order[:2] == [("cn:star50", "loose"), ("cn:star50", "strict")]
 
 
 class TestCompositeRanking:
@@ -845,8 +847,9 @@ class TestCloseTriggeredPrewarm:
 
         scanned = []
 
-        async def fake_compute(market, *, redis, user_id, universe_key):
-            scanned.append(f"{market}:{universe_key}")
+        async def fake_compute(market, *, redis, user_id, universe_key, mode):
+            if mode == "loose":
+                scanned.append(f"{market}:{universe_key}")
 
             class _Resp:
                 days = []
@@ -1035,7 +1038,7 @@ class TestComputeDemoDayResilience:
         dates = ["2026-07-31", "2026-07-30", "2026-07-29"]
         state = {"failed": set()}
 
-        async def fake_scan(symbol, name, *, user_id, start_date, end_date, redis):
+        async def fake_scan(symbol, name, *, user_id, start_date, end_date, redis, mode=None):
             if symbol in state["failed"]:
                 return [], "rate_limited", None, []
             return [_raw(symbol, "2026-07-31", "buy", 0.5)], None, None, dates
@@ -1104,3 +1107,23 @@ class TestCandidates:
     def test_day_out_has_empty_candidates_by_default(self):
         from app.schemas.signal_radar import RadarDayOut
         assert RadarDayOut(date="2026-09-25", buy_count=0, sell_count=0).candidates == []
+
+
+class TestSignalModeIsolation:
+    """不同买卖点口径的雷达缓存互不串用，默认口径 = loose。"""
+
+    def test_cache_keys_differ_by_mode(self):
+        wl = [("AAPL", "苹果")]
+        assert svc._cache_key("us", "nasdaq100") == svc._cache_key("us", "nasdaq100", "loose")
+        assert svc._cache_key("us", "nasdaq100", "loose") != svc._cache_key("us", "nasdaq100", "strict")
+        assert svc.watchlist_cache_key("us", 7, wl, "loose") != svc.watchlist_cache_key("us", 7, wl, "strict")
+        assert svc._demo_cache_key("us", "nasdaq100", "2026-08-01", "loose") != \
+            svc._demo_cache_key("us", "nasdaq100", "2026-08-01", "strict")
+
+    def test_unknown_mode_uses_default_keys(self):
+        assert svc._cache_key("us", "nasdaq100", "medium?") == svc._cache_key("us", "nasdaq100")
+
+    def test_sub_level_cache_key_differs_by_mode(self):
+        from app.services.chan import sub_level_service as sls
+        assert sls._cache_key("AAPL", "daily", "2026-09-24", "zh", "loose") != \
+            sls._cache_key("AAPL", "daily", "2026-09-24", "zh", "strict")
