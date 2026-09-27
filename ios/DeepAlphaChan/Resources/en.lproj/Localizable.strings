@@ -724,3 +724,7 @@
 "类型确定性：一类 0.4（背驰，待验证）、二类 0.7（回落在价格密集区获得支撑）、三类 1.0（离开中枢后不回中枢，最强确认）。" = "Type certainty: type-1 0.4 (divergence, to be verified), type-2 0.7 (pullback holds in a price cluster), type-3 1.0 (left the pivot without returning, strongest confirmation).";
 "最后一笔还在走时出现的买卖点也会上榜（标为未确认），之后可能被新K线改写。" = "Signals on the unfinished last leg are also listed (marked unconfirmed) and may be revised by new candles.";
 "当前为「%@」模式，可在「我的 → 买卖点模式」切换。" = "Current mode: %@. Change it in Me → Signal Mode.";
+"所在的最后一笔还在走，端点可能延伸甚至回到中枢，按缠论尚不成立；这一笔走完才算买卖点。" = "The last leg is still unfolding — its end may extend or even return to the pivot, so by Chan theory it is not yet a signal; it counts once this leg completes.";
+"%@（待确认）" = "%@ (pending)";
+"待确认 · 不算买卖点" = "Pending · not yet a signal";
+"待确认 %@ · %@" = "Pending %@ · %@";

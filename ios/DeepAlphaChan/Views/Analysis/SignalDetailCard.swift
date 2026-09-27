@@ -44,9 +44,17 @@ struct SignalDetailCard: View {
                 .font(AnalysisType.title)
                 .foregroundStyle(Theme.textPrimary)
             Circle().fill(strengthColor).frame(width: 7, height: 7)
-            Image(systemName: signal.confirmed ? "checkmark.circle" : "circle.dashed")
-                .font(.caption2)
-                .foregroundStyle(Theme.textSecondary)
+            if signal.isCandidate {
+                Text(L("待确认"))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Theme.textSecondary)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .overlay(Capsule().stroke(directionColor, style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
+            } else {
+                Image(systemName: signal.confirmed ? "checkmark.circle" : "circle.dashed")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.textSecondary)
+            }
             Spacer(minLength: 6)
             Text(String(format: "%.2f", signal.price))
                 .font(.caption.monospacedDigit())
@@ -80,7 +88,12 @@ struct SignalDetailCard: View {
                 .foregroundStyle(Theme.textSecondary)
                 .lineSpacing(AnalysisType.bodyLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
-            if !signal.confirmed {
+            if signal.isCandidate {
+                Text(L("所在的最后一笔还在走，端点可能延伸甚至回到中枢，按缠论尚不成立；这一笔走完才算买卖点。"))
+                    .font(.caption)
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if !signal.confirmed {
                 Text(L("对应结构仍在延伸，后续 K 线可能使信号改变或消失。"))
                     .font(.caption)
                     .foregroundStyle(Theme.textSecondary)

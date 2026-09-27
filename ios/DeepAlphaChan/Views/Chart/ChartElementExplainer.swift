@@ -118,13 +118,18 @@ enum ChartExplainer {
         var facts: [(String, String)] = [
             (L("时间"), s.time), (L("价格"), price(s.price)),
             (L("强弱"), SignalFormatting.strengthLabel(s.strength)),
-            (L("状态"), s.confirmed ? L("已确认") : L("未确认，待后续K线验证")),
+            (L("状态"), s.isCandidate ? L("待确认，不算买卖点")
+                        : (s.confirmed ? L("已确认") : L("未确认，待后续K线验证"))),
         ]
         if let r = s.priceRatio {
             facts.append((L("力度比"), String(format: "%.2f", r)))
         }
-        return ChartExplanation(title: s.label, color: s.isBuy ? Theme.up : Theme.down,
-                                facts: facts, reason: s.description, lessonTerm: "买卖点")
+        let reason = s.isCandidate
+            ? s.description + "\n" + L("所在的最后一笔还在走，端点可能延伸甚至回到中枢，按缠论尚不成立；这一笔走完才算买卖点。")
+            : s.description
+        return ChartExplanation(title: s.isCandidate ? L("%@（待确认）", s.label) : s.label,
+                                color: s.isBuy ? Theme.up : Theme.down,
+                                facts: facts, reason: reason, lessonTerm: "买卖点")
     }
 
     private static func divergence(_ c: Stroke, _ p: Stroke) -> ChartExplanation {
