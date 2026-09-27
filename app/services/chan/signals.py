@@ -165,14 +165,36 @@ def _in_trend(pivots: list[Pivot], time: str, is_buy: bool, price: float) -> boo
     a+A+b+B+c：信号前至少两个已结束的同级别中枢 A、B，区间不重叠且依次下移（一买）/ 上移
     （一卖），并且信号落在离开 B 的 c 段上——价格跌破 B 的下沿（一买）/ 升破上沿（一卖）。
     只有一个中枢、或两个中枢区间重叠，属于盘整，其中的背驰是盘整背驰，不算一类。
+
+    按中枢「已形成」（前三笔走完，上下沿由这三笔决定、之后不变）而不是「已结束」判断：
+    趋势背驰后价格至少回到最后一个中枢，中枢因此被延伸、结束时间晚于一买——那正是一买的
+    确认，不能反过来据此否掉一买（回归：DXCM 2026-04-29 一买曾被漏掉）。
     """
-    done = sorted((p for p in pivots if p.end_time <= time), key=lambda p: p.end_time)
-    if len(done) < 2:
+    formed = sorted((p for p in pivots if _formed_at(p) <= time), key=_formed_at)
+    if len(formed) < 2:
         return False
-    a, b = done[-2], done[-1]
+    a, b = formed[-2], formed[-1]
     if is_buy:
         return b.zg < a.zd and price < b.zd
     return b.zd > a.zg and price > b.zg
+
+
+def _formed_at(p: Pivot) -> str:
+    """中枢形成的时刻：前三个构成元素走完；没有元素明细时退回结束时间。"""
+    return p.elements[2].end_time if len(p.elements) >= 3 else p.end_time
+
+
+def _holds(sig: "Signal", strokes: list[Stroke]) -> bool:
+    """一类之后下一次同向笔（i+2）没有再创新低 / 新高：背驰段到此为止，一类成立。
+
+    若又创新低 / 新高，说明背驰段还在延伸，这个一类作废，只认后面的那个。i+2 还没出现时
+    暂且保留（最右端尚待确认）。
+    """
+    i = next((k for k, st in enumerate(strokes) if st.end_time == sig.time), None)
+    if i is None or i + 2 >= len(strokes) or strokes[i + 2].direction != strokes[i].direction:
+        return True
+    nxt = strokes[i + 2].end_price
+    return nxt > sig.price if sig.is_buy else nxt < sig.price
 
 
 def _derive_type2(type1: list["Signal"], strokes: list[Stroke]) -> list[tuple[str, Stroke, "Signal"]]:
@@ -321,6 +343,10 @@ def generate_all_signals(
             divergence=div, lang=lang, detected_time=ev.bar_time,
             description=_describe(ev.type, ev.bi_end_time, ev.bi_end_price, ev.span, div, lang),
         ))
+
+    # 背驰段还在延伸（下一次同向笔又创新低 / 新高）的一类作废
+    signals = [x for x in signals if _holds(x, strokes)]
+    seen = {(x.type, x.time) for x in signals}
 
     def _structural(sig_type: str, st: Stroke, ref: str) -> None:
         key = (sig_type, st.end_time)
