@@ -59,7 +59,7 @@ struct SignalRadarView: View {
         NavigationStack {
             radarContent
             .background(Theme.background)
-            .navigationTitle(L("缠论信号"))
+            .navigationTitle(L("市场雷达"))
             .navigationBarTitleDisplayMode(.inline)
             // 真实滚动窗口雷达对所有用户都拉（未订阅一样看得到市场卡片、图例、日期轨，
             // 跟高级版一模一样，见 radarContent）；市场切换时 .task(id:) 额外拉一次

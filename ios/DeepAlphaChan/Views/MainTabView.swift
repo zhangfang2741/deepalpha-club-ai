@@ -37,7 +37,7 @@ struct MainTabView: View {
             //     .tag(Tab.morningReport)
 
             SignalRadarView(chanVM: chanVM)
-                .tabItem { Label(L("信号"), systemImage: "dot.radiowaves.left.and.right") }
+                .tabItem { Label(L("雷达"), systemImage: "dot.radiowaves.left.and.right") }
                 .tag(Tab.signalRadar)
 
             WatchlistView(chanVM: chanVM)
