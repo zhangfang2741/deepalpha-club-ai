@@ -23,10 +23,9 @@ from __future__ import annotations
 import asyncio
 import json
 import weakref
-from collections import Counter, deque
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
-from math import fsum, isfinite
 
 from uuid import uuid4
 
@@ -94,9 +93,9 @@ _MIN_PER_LEVEL = 2
 _CACHE_PREFIX = "signal_radar"
 # 买卖点口径（宽松 / 严格 / …，见 chan.signal_policy）：雷达的三类缓存（每日快照、自选雷达、
 # 示例日）按口径的 version 分键——改了某口径的判定逻辑就升它的 version，旧快照自动换键失效，
-# 否则部署后缓存里还是旧口径的气泡。ma20v1 仅隔离雷达展示过滤，不改变详情口径。
+# 否则部署后缓存里还是旧口径的气泡，与详情页（每次实时算）对不上。
 def _mode_ns(mode: str) -> str:
-    return f"{get_policy(mode).version}:ma20v1"
+    return get_policy(mode).version
 
 # 「自选」股票池：按用户各自的自选股计算（universe=watchlist）；缓存按用户隔离、30 分钟。
 # 不列入指数切换菜单（产品决定），接口能力保留。
@@ -178,35 +177,6 @@ class RawSignal:
     pivot_stage_depth: float  # 该信号发生当天的中枢阶段深浅 0~1（旧版 App 的气泡深浅）
     # 价格失效日：亮起后首个收盘价跌破买点价位（卖点：涨破）的交易日；从这天起不再在场
     invalidated_on: str | None = None
-    # 按展示日记录收盘价相对 MA20 的方向；只用于雷达，不改详情的买卖点。
-    # None 供未提供行情的纯聚合调用使用；实际扫描始终提供映射，空映射不通过。
-    ma_sides: dict[str, str] | None = None
-
-
-def moving_average_sides(bars: list[dict]) -> dict[str, str]:
-    """用截至各交易日的 20 根原始日线计算方向，缺失或无效数据不通过。"""
-    closes: deque[float] = deque(maxlen=20)
-    sides: dict[str, str] = {}
-    for bar in sorted(bars, key=lambda b: str(b.get("time", ""))):
-        day = str(bar.get("time", ""))[:10]
-        close = bar.get("close")
-        if not day or not isinstance(close, (int, float)) or not isfinite(close) or close <= 0:
-            closes.clear()
-            continue
-        closes.append(float(close))
-        if len(closes) < 20:
-            continue
-        average = fsum(closes) / 20
-        if close > average:
-            sides[day] = "buy"
-        elif close < average:
-            sides[day] = "sell"
-    return sides
-
-
-def passes_moving_average(signal: RawSignal, day: str) -> bool:
-    """只按展示日过滤，停牌或预热不足时不沿用其他日期的均线方向。"""
-    return signal.ma_sides is None or signal.ma_sides.get(day) == signal.side
 
 
 def signal_strength(label: str) -> float:
@@ -364,7 +334,6 @@ def build_signal_history(
     信号，深浅要反映那条信号发生当天中枢真实处于哪个阶段，不然同一只股票
     不同日期的气泡会被错误地画成同一个深浅。
     """
-    ma_sides = moving_average_sides(bars) if bars is not None else None
     history = [
         RawSignal(
             symbol=symbol,
@@ -381,7 +350,6 @@ def build_signal_history(
             signal_strength=sig.strength,
             confirmed=sig.confirmed,
             pivot_stage_depth=pivot_stage_depth(pivot_phase_as_of(result, sig.time)),
-            ma_sides=ma_sides,
             invalidated_on=_invalidated_on(
                 sig.is_buy, sig.price, (sig.detected_time or sig.time)[:10], bars),
         )
@@ -391,14 +359,10 @@ def build_signal_history(
     return history
 
 
-def build_candidates(
-    symbol: str, name: str, result: ChanAnalysisResult, bars: list[dict] | None = None,
-) -> list[RawSignal]:
+def build_candidates(symbol: str, name: str, result: ChanAnalysisResult) -> list[RawSignal]:
     """最后一笔上的「待确认」候选（result.candidate_signals）→ 雷达中间结构，confirmed=False。"""
-    ma_sides = moving_average_sides(bars) if bars is not None else None
     return [
         RawSignal(
-            ma_sides=ma_sides,
             symbol=symbol, name=name, side="buy" if sig.is_buy else "sell", label=sig.label,
             signal_type=sig.type, date=(sig.detected_time or sig.time)[:10], price=round(sig.price, 2),
             strength=signal_strength(sig.strength), bias="bullish" if sig.is_buy else "bearish",
@@ -422,7 +386,7 @@ def pick_candidates(
         return []
     pool: list[tuple[RawSignal, int]] = []
     for c in candidates:
-        if c.symbol in taken or c.date > day or not passes_moving_average(c, day):
+        if c.symbol in taken or c.date > day:
             continue
         age = trading_age(c.date, day, calendar)
         if age <= max_age_days:
@@ -479,8 +443,6 @@ def build_days(
                     break
                 candidate = r
             if candidate is not None:
-                if not passes_moving_average(candidate, day):
-                    continue
                 if candidate.invalidated_on is not None and candidate.invalidated_on <= day:
                     continue  # 价格已走坏（跌破买点 / 涨破卖点），当天起退场
                 if not candidate.confirmed and day < unconfirmed_cutoff:
@@ -618,6 +580,8 @@ def trading_days_from_constituents(
     不再只看参考 ETF：ETF 的数据源可能比成分股慢一天（科创50 588000 在 Yahoo 只到前一日），
     指数代码（沪深300 000300）还可能取不到——时间轴会缺最近交易日。最新在前，最多 limit 个。
     """
+    from collections import Counter
+
     counts: Counter[str] = Counter()
     for dates in per_symbol_dates:
         counts.update({d[:10] for d in dates if cutoff <= d[:10] <= end_date})
@@ -651,10 +615,10 @@ def _fallback_trading_days(*, end_date: str, limit: int) -> list[str]:
 async def _scan_symbol(
     symbol: str, name: str, *, user_id: int | None, start_date: str, end_date: str,
     redis: Redis, mode: str = DEFAULT_MODE,
-) -> tuple[list[RawSignal], str | None, list[RawSignal], list[str]]:
+) -> tuple[list[RawSignal], str | None, ChanAnalysisResult | None, list[str]]:
     """扫描单只股票：拉日线 → 缠论 → 取全部买卖点历史。
 
-    返回 (信号历史, 失败分类, 待确认候选, 最近的K线日期)。K线日期用来确定交易日历。失败分类为 None 表示这只股票本身就没有可用信号
+    返回 (信号历史, 失败分类, 日线分析结果, 最近的K线日期)。K线日期用来确定交易日历。失败分类为 None 表示这只股票本身就没有可用信号
     ——正常情况，不是故障；非 None 时 compute_market 据此汇总统计，别再让故障
     悄悄混进"这个市场最近确实没什么信号"里看不出来。
     """
@@ -667,19 +631,18 @@ async def _scan_symbol(
             )
     except Exception as e:  # noqa: BLE001 单只失败不影响整体扫描
         logger.warning("signal_radar_kline_failed", symbol=symbol, error=str(e))
-        return [], _classify_failure(e), [], []
+        return [], _classify_failure(e), None, []
 
     if not bars:
-        return [], None, [], []
+        return [], None, None, []
 
     try:
         result = _analyzer.analyze(symbol, bars, lang="zh", mode=mode)
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_analyze_failed", symbol=symbol, error=str(e))
-        return [], "analyze_failed", [], []
+        return [], "analyze_failed", None, []
 
-    return (build_signal_history(symbol, name, result, bars=bars), None,
-            build_candidates(symbol, name, result, bars=bars),
+    return (build_signal_history(symbol, name, result, bars=bars), None, result,
             [b["time"][:10] for b in bars[-60:]])
 
 
@@ -872,7 +835,7 @@ class _ScanState:
 
 async def _scan_into(state: _ScanState, symbol: str, name: str, *, redis: Redis) -> str | None:
     """扫一只成分股并把结果记进 state，返回失败分类（None=成功或本就没有K线）。"""
-    history, failure, candidates, dates = await _scan_symbol(
+    history, failure, result, dates = await _scan_symbol(
         symbol, name, user_id=state.user_id, start_date=state.start_date,
         end_date=state.end_date, redis=redis, mode=state.mode,
     )
@@ -880,7 +843,8 @@ async def _scan_into(state: _ScanState, symbol: str, name: str, *, redis: Redis)
         state.failures[symbol] = failure
         return failure
     state.failures.pop(symbol, None)
-    state.results[symbol] = (history, candidates, dates)
+    cands = build_candidates(symbol, name, result) if result is not None else []
+    state.results[symbol] = (history, cands, dates)
     return None
 
 
