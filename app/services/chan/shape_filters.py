@@ -104,6 +104,7 @@ def read_shape_state(cs: CzscSignals, label: str, *, total_bars: int) -> ShapeSt
 def reject_reason(state: ShapeState | None, signal_type: str) -> str | None:
     """按五条规则判定一条买卖点是否该被雷达剔除，返回首个命中的过滤器名。
 
+    signal_type 取值为 "buy1"~"sell3" 六值之一（见 czsc_signals.SignalType）。
     state 为 None（信号日早于逐根推进起点、查不到形态状态）时不剔除，防误杀。
     """
     if state is None:

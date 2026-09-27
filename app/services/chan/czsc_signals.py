@@ -30,6 +30,7 @@ from typing import Literal
 from czsc import BarGenerator, CzscSignals, Freq
 
 from app.services.chan.czsc_adapter import ts_date, bars_to_raw_bars
+from app.services.chan.shape_filters import ShapeState, read_shape_state, shape_config
 
 SignalType = Literal["buy1", "buy2", "buy3", "sell1", "sell2", "sell3"]
 SignalFamily = Literal["first", "second", "third"]
@@ -90,6 +91,7 @@ def _signal_keys_and_config(
 def scan_bs_events(
     bars: list[dict], *, symbol: str, freq: Freq, stroke_done_at: dict[str, str] | None = None,
     families: Iterable[SignalFamily] = ("first",),
+    shape_states: dict[str, ShapeState] | None = None,
 ) -> list[BsEvent]:
     """逐根推进 czsc 结构信号，返回按亮起时间排序、去重后的买卖点事件。
 
@@ -97,6 +99,10 @@ def scan_bs_events(
 
     stroke_done_at：传入时逐根记录「笔终点 → 这一笔完成的那根K线」（czsc 的 bi_list
     只含已完成的笔，新出现的末笔即在当根完成），供二 / 三类作检测时间。
+
+    shape_states：传入时 config 追加形态过滤信号（shape_filters），逐根记录
+    「日期 → 当日形态状态」，供雷达按信号日查表剔除假信号；None 时不算形态信号，
+    行为与现状一致。与 stroke_done_at 同构，一次推进零重复计算。
     """
     raw = bars_to_raw_bars(bars, symbol=symbol, freq=freq)
     if len(raw) <= _INIT_N:
@@ -104,6 +110,8 @@ def scan_bs_events(
 
     label = freq.value
     keys, config = _signal_keys_and_config(label, families)
+    if shape_states is not None:
+        config = config + shape_config(label)
     bg = BarGenerator(label, [], max_count=len(raw) + 1)
     bg.init_freq_bars(label, raw[:_INIT_N])
     cs = CzscSignals(bg, config)
@@ -113,6 +121,8 @@ def scan_bs_events(
     events: list[BsEvent] = []
     for bar in raw[_INIT_N:]:
         cs.update_signals(bar)
+        if shape_states is not None:
+            shape_states[ts_date(bar.dt)] = read_shape_state(cs, label, total_bars=len(raw))
         if stroke_done_at is not None:
             bis = cs.kas[label].bi_list
             if bis:

@@ -7,6 +7,7 @@ import pytest
 from czsc import BarGenerator, CzscSignals, Freq
 
 from app.services.chan.czsc_adapter import bars_to_raw_bars
+from app.services.chan.czsc_signals import scan_bs_events
 from app.services.chan.shape_filters import (
     ShapeState,
     read_shape_state,
@@ -163,3 +164,75 @@ def test_shape_signal_keys_align_with_czsc_runtime() -> None:
     # 键列表取自 shape_keys（与 read_shape_state 共用单一来源），改坏键名测试立刻红。
     for key in shape_keys(label).values():
         assert key in cs.s, key
+    # 收盘位置两条信号的运行时取值集合：缺键回退「其他」/「中性」会让收盘位置
+    # 规则 fail-unsafe（买点恒剔、卖点恒留），把取值集合也钉在这里。
+    assert state.close_pos in {"高位", "中间", "低位"}
+    assert state.k2_close_pos in {"看多", "看空", "中性"}
+
+
+# ---- 逐根推进集成：scan_bs_events 产出 shape_states ----
+
+
+def _trend_then_flat(n_flat: int = 20, n_extra: int = 0) -> list[dict]:
+    """40 根趋势 + n_flat 根窄幅横盘（可选 n_extra 根续涨）：横盘段应触发窄幅震荡。
+
+    横盘需约 20 根才触发 bar_zfzd（n=10 但判定窗口含趋势尾巴，实测 14 根不触发）。
+    """
+    seq: list[tuple[float, float, float, float]] = []
+    p = 100.0
+    for _ in range(40):
+        seq.append((p, p + 0.6, p - 0.2, p + 0.5))
+        p += 0.5
+    for _ in range(n_flat):
+        seq.append((p, p + 0.05, p - 0.05, p + 0.01))
+    for _ in range(n_extra):
+        seq.append((p, p + 0.6, p - 0.2, p + 0.5))
+        p += 0.5
+    return _bars(seq)
+
+
+def test_scan_bs_events_records_shape_states_per_day() -> None:
+    """逐根推进从第 21 根开始，每个交易日都记录一条形态状态。"""
+    bars = _trend_then_flat()
+    states: dict[str, ShapeState] = {}
+    scan_bs_events(bars, symbol="TEST", freq=Freq.D, shape_states=states)
+    # 逐根推进从第 21 根开始，每天都有一条状态
+    assert len(states) == len(bars) - 20
+    # 窄幅横盘段（最后一根一定在横盘中）触发窄幅震荡
+    last_day = bars[-1]["time"]
+    assert states[last_day].narrow_range is True
+    # 趋势段中段不触发
+    mid_day = bars[30]["time"]
+    assert states[mid_day].narrow_range is False
+
+
+def test_shape_states_volatility_unknown_when_bars_insufficient() -> None:
+    """K 线不足 w+n（210）根：波动率一律「未知」，不信 czsc 的退化输出。"""
+    bars = _trend_then_flat(n_flat=30)
+    states: dict[str, ShapeState] = {}
+    scan_bs_events(bars, symbol="TEST", freq=Freq.D, shape_states=states)
+    assert all(s.volatility == "未知" for s in states.values())
+
+
+def test_early_day_volatility_never_low_when_total_bars_sufficient() -> None:
+    """序列足够长（>=210 根，未知守护不生效）但信号日早于第 210 根时的退化守护。
+
+    read_shape_state 的 total_bars 传的是本次推进的K线总数而非已推进根数，
+    早期日期的波动率直接暴露 czsc 退化输出；实测为「其他」（fail-safe，
+    不触发低波动剔除），一旦 czsc 升级改为输出「低波动」本测试立刻红。
+    """
+    bars = _trend_then_flat(n_flat=30, n_extra=160)  # 40 + 30 + 160 = 230 根
+    assert len(bars) >= 210
+    states: dict[str, ShapeState] = {}
+    scan_bs_events(bars, symbol="TEST", freq=Freq.D, shape_states=states)
+    early_day = bars[100]["time"]  # 前 200 根内、晚于逐根推进起点（第 21 根）
+    assert states[early_day].volatility in {"其他", "未知", "中波动", "高波动"}
+
+
+def test_scan_bs_events_without_shape_states_unchanged() -> None:
+    """不传 shape_states 时行为与现状完全一致（事件数不变）。"""
+    bars = _trend_then_flat(n_flat=30)
+    baseline = scan_bs_events(bars, symbol="TEST", freq=Freq.D)
+    states: dict[str, ShapeState] = {}
+    with_states = scan_bs_events(bars, symbol="TEST", freq=Freq.D, shape_states=states)
+    assert [(e.type, e.bar_time) for e in with_states] == [(e.type, e.bar_time) for e in baseline]
