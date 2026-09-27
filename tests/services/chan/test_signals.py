@@ -129,6 +129,27 @@ def test_signal_records_detection_time_separately_from_stroke_end():
     assert s.detected_time == "2025-01-14"
 
 
+def test_detection_time_is_when_next_stroke_completes():
+    """买卖点所在的笔要等下一笔走完（被 czsc 确认）才不会再延伸，信号这时才算成立：
+    detected_time 取下一笔完成的那根K线，不能早于它（否则历史雷达日会提前看到未来才成立的信号）。"""
+    legs, ev = _after_buy1(103, extra=(_st("up", "2025-01-20", "2025-01-25", 103, 116),))
+    ev = [_ev("buy1", "2025-01-10", 100.0, bar_time="2025-01-12", span="9笔")]
+    done = {"2025-01-10": "2025-01-12", "2025-01-15": "2025-01-17",
+            "2025-01-20": "2025-01-22", "2025-01-25": "2025-01-27"}
+    sig = generate_all_signals(ev, legs, [_div("strong", 0.3)] + [_NO_DIV] * 3, _DOWN_TREND,
+                               stroke_done_at=done)
+    assert {(x.type, x.detected_time) for x in sig} >= {("buy1", "2025-01-17"), ("buy2", "2025-01-27")}
+
+
+def test_detection_time_on_last_stroke_keeps_early_date():
+    """最后一笔上的（候选）没有下一笔，保留亮起的日期。"""
+    down = _st("down", "2025-01-01", "2025-01-10", 120, 100)
+    events = [_ev("buy1", "2025-01-10", 100.0, bar_time="2025-01-14", span="9笔")]
+    s = generate_all_signals(events, [down], [_div("strong", 0.3)], _DOWN_TREND,
+                             stroke_done_at={"2025-01-10": "2025-01-13"})[0]
+    assert s.detected_time == "2025-01-14"
+
+
 def _fst(direction, i, p0, p1, power, volume, length=8):
     """带力度的笔：第 i 笔，时间按下标递增。"""
     st = _st(direction, f"2025-01-{i + 1:02d}", f"2025-01-{i + 2:02d}", p0, p1)

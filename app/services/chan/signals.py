@@ -372,5 +372,15 @@ def generate_all_signals(
     for sig_type, st, pivot in _derive_type3(strokes, pivots):
         _structural(sig_type, st, f"{pivot.zd:.2f}–{pivot.zg:.2f}")
 
+    # 成立日期：所在笔要等下一笔走完才不会再延伸，信号此时才算成立。detected_time 不早于
+    # 下一笔完成的那根K线，否则历史雷达日会提前看到未来才成立的信号、最新日又因「亮起」
+    # 太早被判过期。最后一笔上的（候选）没有下一笔，保留亮起日期。
+    for x in signals:
+        i = idx_by_end.get(x.time)
+        if i is not None and i + 1 < len(strokes):
+            est = done_at.get(strokes[i + 1].end_time, "")
+            if est > x.detected_time:
+                x.detected_time = est
+
     signals.sort(key=lambda x: (x.time, x.type))
     return signals

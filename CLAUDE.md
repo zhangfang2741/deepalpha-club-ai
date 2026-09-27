@@ -210,6 +210,8 @@ deepalpha-club-ai/
   `ChanAnalysisResult.candidate_signals`。雷达最新一天用它们补足剩余名额（`RadarDayOut.candidates`，
   `pick_candidates`），App 画成灰色虚线「待确认」气泡、不计入买点 / 卖点数——**不要**把候选
   混回 `signals`，也不要让它们占真实买卖点的名额。
+- **成立日 = 下一笔走完**：`detected_time` 不早于所在笔的下一笔完成的那根K线（`stroke_done_at`）。
+  用更早的「亮起日」会让历史雷达日提前看到未来才成立的信号、最新日又因太早被判过期进不了雷达。
 - 强度：一类按 czsc 同一判据复算的力度比分档（基准 = max(前一个同向笔, 关键笔均值)，
   见 `signals._first_bs_force`），说明写出价差/量能/时长三项比值；
   二/三类 = 信号前**最近已结束**中枢的级别 + 余量（`_type23_strength`），尚未结束的中枢不参与。
