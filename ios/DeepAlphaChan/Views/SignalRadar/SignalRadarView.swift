@@ -356,6 +356,11 @@ struct SignalRadarView: View {
                 Text("·").font(.caption).foregroundColor(Theme.textSecondary)
                 Text(L("%lld 卖点", day.sellCount))
                     .font(.caption.bold()).foregroundColor(Theme.down)
+                if !day.candidates.isEmpty {
+                    Text("·").font(.caption).foregroundColor(Theme.textSecondary)
+                    Text(L("%lld 待确认", day.candidates.count))
+                        .font(.caption).foregroundColor(Theme.textSecondary)
+                }
             }
         }
     }
@@ -401,7 +406,9 @@ struct SignalRadarView: View {
             let w = Double(geo.size.width)
             let h = Double(geo.size.height)
             let dayDate = vm.selectedDay?.date ?? ""
-            let signals = (vm.selectedDay?.signals ?? [])
+            // 确认的买卖点 + 「待确认」候选一起排版；候选画成灰色虚线气泡
+            let candidateIDs = Set((vm.selectedDay?.candidates ?? []).map(\.id))
+            let signals = ((vm.selectedDay?.signals ?? []) + (vm.selectedDay?.candidates ?? []))
                 .sorted { $0.strength > $1.strength }
             let layouts = SignalRadarView.layoutBubbles(
                 signals: signals, dayDate: dayDate, width: w, height: h,
@@ -427,6 +434,7 @@ struct SignalRadarView: View {
                                 side: layout.signal.side,
                                 depth: SignalFormatting.strengthDepth(layout.signal.signalStrength)),
                             isNew: layout.signal.date == dayDate,
+                            isCandidate: candidateIDs.contains(layout.signal.id),
                             onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name) }
                         )
                         // 气泡任何时候都不做透明处理：刷新完直接出现，不淡入
@@ -766,6 +774,7 @@ struct SignalRadarView: View {
                         L("类型确定性：一类 0.4（趋势背驰，待验证）、二类 0.7（一买后第一次回落不破低点）、三类 1.0（离开中枢后不回中枢，最强确认）。"),
                         L("新鲜度：按信号出现后的交易日数算（周末、休市不算），当天最高，5 个交易日（一周）后归零并退场。"),
                         L("只收已完成的笔上的买卖点：最后一笔还在走时不上榜，等这一笔走完、买卖点成立后才出现。"),
+                        L("灰色虚线气泡是「待确认」：落在还没走完的最后一笔上，按缠论尚不成立、不算买卖点；只在最新一天补足剩余名额。"),
                         L("价格走坏即退场：信号出现后，收盘价跌破买点价位（卖点：涨破）就判定失效，当天起不再上榜。"),
                         L("每类买卖点先保底最多 2 个名额，其余按综合分从高到低补满，共取前 10 名。"),
                     ])

@@ -80,6 +80,10 @@ struct RadarDay: Decodable, Identifiable {
     let buyCount: Int
     let sellCount: Int
     let signals: [RadarSignal]
+    /// 「待确认」候选：落在还没走完的最后一笔上，按缠论尚不成立、不算买卖点，只在最新一天
+    /// 补足剩余名额，画成灰色虚线气泡。旧缓存 / 旧后端没有这个字段时为空。
+    private let candidatesRaw: [RadarSignal]?
+    var candidates: [RadarSignal] { candidatesRaw ?? [] }
 
     var id: String { date }
     var total: Int { signals.count }
@@ -89,6 +93,7 @@ struct RadarDay: Decodable, Identifiable {
         case buyCount = "buy_count"
         case sellCount = "sell_count"
         case signals
+        case candidatesRaw = "candidates"
     }
 }
 

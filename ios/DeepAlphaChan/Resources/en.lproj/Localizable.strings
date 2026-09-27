@@ -705,3 +705,7 @@
 "三类是离开中枢后的第一次回落没有跌回中枢（三卖：第一次反弹没有升回中枢）；仅越过中枢边沿、还没等到回落确认时不算。" = "Type 3 is the first retest after leaving a pivot that stays out of it (for a sell, the first pullback that stays below it); merely crossing the edge without that confirmation does not count.";
 "类型确定性：一类 0.4（趋势背驰，待验证）、二类 0.7（一买后第一次回落不破低点）、三类 1.0（离开中枢后不回中枢，最强确认）。" = "Type certainty: type 1 0.4 (trend divergence, still to be proven), type 2 0.7 (first retest after a type-1 buy holds its low), type 3 1.0 (left the pivot and stayed out — strongest).";
 "只收已完成的笔上的买卖点：最后一笔还在走时不上榜，等这一笔走完、买卖点成立后才出现。" = "Only signals on completed strokes are listed: while the last stroke is still moving, it waits until the stroke finishes and the signal is established.";
+"待确认" = "Pending";
+"待确认，不算买卖点" = "pending, not a buy/sell point";
+"%lld 待确认" = "%lld pending";
+"灰色虚线气泡是「待确认」：落在还没走完的最后一笔上，按缠论尚不成立、不算买卖点；只在最新一天补足剩余名额。" = "Grey dashed bubbles are “pending”: they sit on the last stroke, which is still moving, so under Chan theory they are not buy/sell points yet; they only fill remaining slots on the latest day.";
