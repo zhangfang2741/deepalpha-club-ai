@@ -45,7 +45,7 @@ class RadarDayOut(BaseModel):
     signals: list[RadarSignalOut] = Field(default_factory=list, description="当日信号，按强度降序")
     candidates: list[RadarSignalOut] = Field(
         default_factory=list,
-        description="兼容旧版客户端的候选字段；雷达仅展示已确认形态，始终为空",
+        description="待确认候选：落在还没走完的最后一笔上，不算买卖点；只在最新一天、补足剩余名额",
     )
 
 

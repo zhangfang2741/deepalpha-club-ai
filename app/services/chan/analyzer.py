@@ -70,8 +70,6 @@ class ChanAnalysisResult:
     """缠论完整分析结果"""
     symbol: str
     bars_count: int
-    # 逐根扫描已有的笔完成时刻，仅供雷达按历史日期检查确认状态，不改变详情信号。
-    stroke_done_at: dict[str, str] = field(default_factory=dict)
     # 逐日形态状态（shape_filters），仅供雷达按信号日查表剔除假信号，详情页不读。
     shape_states: dict[str, ShapeState] = field(default_factory=dict)
 
@@ -241,7 +239,6 @@ class ChanAnalyzer:
         events = scan_bs_events(bars, symbol=symbol, freq=czsc_freq, stroke_done_at=stroke_done_at,
                                 families=policy.czsc_families,
                                 shape_states=shape_states if shape_filters else None)
-        result.stroke_done_at = stroke_done_at
         result.shape_states = shape_states
         result.signals = policy.assemble(events, result.strokes, result.divergences, all_pivots, lang,
                                          stroke_done_at=stroke_done_at)

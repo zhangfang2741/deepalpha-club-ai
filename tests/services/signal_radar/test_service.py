@@ -972,8 +972,13 @@ class TestPriceInvalidation:
         assert build_signal_history("X", "x", r)[0].invalidated_on is None
 
 
-class TestUnconfirmedShapes:
-    """形态未确认的信号不进入任何日期的雷达。"""
+class TestUnconfirmedCutoff:
+    """展示日距今超过一周：未确认信号不再上雷达。
+
+    未确认信号挂在还没走完的笔上，之后笔一延伸就会被改写/失效——一周前的快照
+    （如免费预览的「上个月 1 号」）点进详情页按今天的数据重算时，这类信号早已
+    不存在，气泡与详情对不上。最近一周内保留：那时笔可能确实还在走，有参考价值。
+    """
 
     @staticmethod
     def _unconfirmed(symbol: str, day: str, strength: float) -> RawSignal:
@@ -987,21 +992,21 @@ class TestUnconfirmedShapes:
             [_raw("AAPL", "2026-07-30", "buy", 0.5)],
         ]
         days = build_days(histories, ["2026-08-01"], top_n=10, calendar=[
-            "2026-08-01", "2026-07-31", "2026-07-30", "2026-07-29"])
+            "2026-08-01", "2026-07-31", "2026-07-30", "2026-07-29"], today=date(2026, 9, 26))
         assert [s.symbol for s in days[0].signals] == ["AAPL"]
         assert days[0].sell_count == 0
 
-    def test_recent_day_drops_unconfirmed(self):
+    def test_recent_day_keeps_unconfirmed(self):
         histories = [[self._unconfirmed("ISRG", "2026-09-24", 0.8)]]
         days = build_days(histories, ["2026-09-25"], top_n=10,
-                          calendar=["2026-09-25", "2026-09-24"])
-        assert days[0].signals == []
+                          calendar=["2026-09-25", "2026-09-24"], today=date(2026, 9, 26))
+        assert [s.symbol for s in days[0].signals] == ["ISRG"]
 
-    def test_exactly_one_week_ago_drops_unconfirmed(self):
+    def test_exactly_one_week_ago_still_keeps_unconfirmed(self):
         histories = [[self._unconfirmed("ISRG", "2026-09-18", 0.8)]]
         days = build_days(histories, ["2026-09-19"], top_n=10,
-                          calendar=["2026-09-19", "2026-09-18"])
-        assert days[0].signals == []
+                          calendar=["2026-09-19", "2026-09-18"], today=date(2026, 9, 26))
+        assert [s.symbol for s in days[0].signals] == ["ISRG"]
 
     def test_dropped_unconfirmed_does_not_take_a_top_n_slot(self):
         """先过滤再取前 N：被过滤的强信号不能占掉名额，让确认过的弱信号补上。"""
@@ -1010,7 +1015,7 @@ class TestUnconfirmedShapes:
             [_raw("AAPL", "2026-07-30", "buy", 0.3)],
         ]
         days = build_days(histories, ["2026-08-01"], top_n=1, calendar=[
-            "2026-08-01", "2026-07-31", "2026-07-30", "2026-07-29"])
+            "2026-08-01", "2026-07-31", "2026-07-30", "2026-07-29"], today=date(2026, 9, 26))
         assert [s.symbol for s in days[0].signals] == ["AAPL"]
 
 
@@ -1098,6 +1103,49 @@ class TestComputeDemoDayResilience:
         redis = self._Redis()
         await svc.compute_demo_day("us", "nasdaq100", redis=redis)
         assert list(redis.demo_writes().values()) == [svc._DEMO_DEGRADED_CACHE_TTL]
+
+
+class TestCandidates:
+    """最后一笔上的「待确认」候选：单独给最新一天，只补剩余名额，不算买卖点。"""
+
+    @staticmethod
+    def _cand(symbol, day, side="sell", strength=0.8, level=3):
+        r = _raw(symbol, day, side, strength, level)
+        r.confirmed = False
+        return r
+
+    _CAL = ["2026-09-25", "2026-09-24", "2026-09-23", "2026-09-22", "2026-09-21", "2026-09-18"]
+
+    def test_fill_only_remaining_slots_and_skip_taken_symbols(self):
+        cands = [self._cand("IDXX", "2026-09-24"), self._cand("AVGO", "2026-09-22"),
+                 self._cand("FTNT", "2026-09-24", strength=0.35, level=1)]
+        out = svc.pick_candidates(cands, "2026-09-25", self._CAL, taken={"AVGO"}, slots=1)
+        assert [c.symbol for c in out] == ["IDXX"]
+        assert all(c.confirmed is False for c in out)
+        assert out[0].age_days == 1
+
+    def test_no_slots_no_candidates(self):
+        assert svc.pick_candidates([self._cand("IDXX", "2026-09-24")], "2026-09-25", self._CAL,
+                                   taken=set(), slots=0) == []
+
+    def test_too_old_candidate_dropped(self):
+        old = self._cand("MNST", "2026-09-10")
+        assert svc.pick_candidates([old], "2026-09-25", self._CAL + ["2026-09-17", "2026-09-16",
+                                   "2026-09-15", "2026-09-14", "2026-09-11", "2026-09-10"],
+                                   taken=set(), slots=5) == []
+
+    def test_build_candidates_from_unconfirmed_signals(self):
+        sig = _sig("sell3", "2026-09-24", 524.12, strength="strong")
+        sig.confirmed = False
+        r = ChanAnalysisResult(symbol="IDXX", bars_count=100)
+        r.candidate_signals = [sig]
+        out = svc.build_candidates("IDXX", "爱德士", r)
+        assert [(c.symbol, c.signal_type, c.date, c.confirmed) for c in out] == [
+            ("IDXX", "sell3", "2026-09-24", False)]
+
+    def test_day_out_has_empty_candidates_by_default(self):
+        from app.schemas.signal_radar import RadarDayOut
+        assert RadarDayOut(date="2026-09-25", buy_count=0, sell_count=0).candidates == []
 
 
 class TestSignalModeIsolation:

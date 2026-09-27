@@ -26,7 +26,6 @@ import weakref
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
-from math import isfinite
 
 from uuid import uuid4
 
@@ -95,16 +94,16 @@ _MIN_PER_LEVEL = 2
 _CACHE_PREFIX = "signal_radar"
 # 买卖点口径（宽松 / 严格 / …，见 chan.signal_policy）：雷达的三类缓存（每日快照、自选雷达、
 # 示例日）按口径的 version 分键——改了某口径的判定逻辑就升它的 version，旧快照自动换键失效，
-# 否则部署后缓存里还是旧口径的气泡。shape 版本仅隔离雷达筛选，不改变详情口径；
-# shape4 = 已确认 + 价格失效（czsc 形态过滤暂停，见 _SHAPE_FILTERS_ENABLED）。
-# 开关或形态规则一变就升这个版本。
+# 否则部署后缓存里还是旧口径的气泡，与详情页（每次实时算）对不上。shape 版本只隔离雷达自身的
+# 筛选规则（不改变详情口径），开关或规则一变就升：shape5 = 恢复 78bee01 之前的筛选（宽松口径
+# 最后一笔上的未确认信号也上榜、收盘价跌破才失效、最新日「待确认」候选补位），形态过滤暂停。
 def _mode_ns(mode: str) -> str:
-    return f"{get_policy(mode).version}:shape4"
+    return f"{get_policy(mode).version}:shape5"
 
 
 # czsc 形态过滤（chan/shape_filters：同向假突破 / 窄幅震荡 / 低波动）暂停应用，代码与测试保留。
-# 2026-09-27 全量 nasdaq100 实测：它在 5 日窗口里几乎不剔信号，雷达空主要来自「未确认不上榜」；
-# 产品决定先不做这层过滤。重新启用：改为 True 并升 _mode_ns 的 shape 版本。
+# 2026-09-27 全量 nasdaq100 实测：它在 5 日窗口里几乎不剔信号；产品决定先不做这层过滤。
+# 重新启用：改为 True 并升 _mode_ns 的 shape 版本。
 _SHAPE_FILTERS_ENABLED = False
 
 # 「自选」股票池：按用户各自的自选股计算（universe=watchlist）；缓存按用户隔离、30 分钟。
@@ -163,6 +162,10 @@ def _cache_stale_after() -> int:
 # 「翻出几个月前仍未失效的老信号」。5 个交易日 = 一周，与前端最外「一周内」环对齐；
 # 按交易日而不是自然日数，周末和休市不会让信号平白变老。新鲜度评分也按这个窗口衰减。
 _MAX_SIGNAL_AGE_DAYS = 5
+# 展示日距今超过这么多自然日，未确认信号不再上雷达：未确认信号挂在还没走完的笔上，
+# 笔一延伸就会被改写/失效，一周前的快照点进详情页（按今天的数据重算）时早已不存在，
+# 气泡与详情对不上。最近一周内保留——那时笔可能确实还在走，右侧预判有参考价值。
+_UNCONFIRMED_MAX_DAYS_AGO = 7
 
 
 @dataclass
@@ -181,11 +184,9 @@ class RawSignal:
     signal_strength: str
     confirmed: bool
     pivot_stage_depth: float  # 该信号发生当天的中枢阶段深浅 0~1（旧版 App 的气泡深浅）
-    # 形态失效日：亮起后最低价跌破买点低点（卖点：最高价突破高点）；从这天起退场
+    # 价格失效日：亮起后首个收盘价跌破买点价位（卖点：涨破）的交易日；从这天起不再在场
     invalidated_on: str | None = None
-    # 所在笔由后续笔确认的日期；历史展示日不能提前使用今天的 confirmed 状态。
-    confirmed_on: str | None = None
-    # 形态过滤命中（假突破 / 窄幅震荡 / 低波动），出生即不入雷达榜单
+    # 形态过滤命中（假突破 / 窄幅震荡 / 低波动），出生即不入雷达榜单（开关见 _SHAPE_FILTERS_ENABLED）
     shape_rejected: str | None = None
 
 
@@ -315,30 +316,20 @@ def rerank_with_resonance(day: RadarDayOut, top_n: int) -> RadarDayOut:
                        sell_count=sum(s.side == "sell" for s in items), signals=items)
 
 def _invalidated_on(is_buy: bool, price: float, detected: str, bars: list[dict] | None) -> str | None:
-    """亮起之后首个低点跌破买点（卖点：高点突破）的日期，收盘收回也仍算失效。
+    """亮起之后首个收盘价跌破买点价位（卖点：涨破）的日期；没有则 None。
 
-    一二三类统一按信号所属笔的端点价位判断，不引入均线方向。仅有收盘价的历史数据
-    退回收盘检查；亮起当日及之前的日内先后顺序无法确定，因此不用于事后失效判断。
+    价位是信号所属那一笔的端点（买点=低点、卖点=高点）。一二三类统一按它判：一买/二买
+    跌破即新低、结构被否定；三买的回踩低点本就在中枢上沿之上，跌回中枢之前必先跌破它。
+    亮起之前（笔终点到亮起之间）的走势不算。
     """
-    for bar in sorted(bars or [], key=lambda b: str(b.get("time", ""))):
-        day = str(bar.get("time", ""))[:10]
-        extreme = bar.get("low" if is_buy else "high")
-        if extreme is None:
-            extreme = bar.get("close")
-        if day <= detected or not isinstance(extreme, (int, float)) or not isfinite(extreme):
+    for b in bars or []:
+        t = str(b.get("time", ""))[:10]
+        close = b.get("close")
+        if t <= detected or close is None:
             continue
-        if (is_buy and extreme < price) or (not is_buy and extreme > price):
-            return day
+        if (is_buy and close < price) or (not is_buy and close > price):
+            return t
     return None
-
-
-def _confirmation_dates(result: ChanAnalysisResult) -> dict[str, str]:
-    """复用 CZSC 逐根扫描得到的完成时刻，不额外运行分析或拉取行情。"""
-    return {
-        current.end_time: result.stroke_done_at[following.end_time][:10]
-        for current, following in zip(result.strokes, result.strokes[1:], strict=False)
-        if following.end_time in result.stroke_done_at
-    }
 
 
 def build_signal_history(
@@ -360,7 +351,6 @@ def build_signal_history(
     那是分型极值那根K线，其形态天然偏向信号反面，会系统性误剔。detected_time 缺失时
     （仅严格口径下笔完成时刻缺失）才兜底回退笔终点日。
     """
-    confirmed_on = _confirmation_dates(result)
     history = [
         RawSignal(
             symbol=symbol,
@@ -376,7 +366,6 @@ def build_signal_history(
             bias="bullish" if sig.is_buy else "bearish",
             signal_strength=sig.strength,
             confirmed=sig.confirmed,
-            confirmed_on=confirmed_on.get(sig.time),
             pivot_stage_depth=pivot_stage_depth(pivot_phase_as_of(result, sig.time)),
             invalidated_on=_invalidated_on(
                 sig.is_buy, sig.price, (sig.detected_time or sig.time)[:10], bars),
@@ -392,9 +381,60 @@ def build_signal_history(
     return history
 
 
+def build_candidates(symbol: str, name: str, result: ChanAnalysisResult) -> list[RawSignal]:
+    """最后一笔上的「待确认」候选（result.candidate_signals）→ 雷达中间结构，confirmed=False。"""
+    return [
+        RawSignal(
+            symbol=symbol, name=name, side="buy" if sig.is_buy else "sell", label=sig.label,
+            signal_type=sig.type, date=(sig.detected_time or sig.time)[:10], price=round(sig.price, 2),
+            strength=signal_strength(sig.strength), bias="bullish" if sig.is_buy else "bearish",
+            signal_strength=sig.strength, confirmed=False,
+            pivot_stage_depth=pivot_stage_depth(pivot_phase_as_of(result, sig.time)),
+        )
+        for sig in result.candidate_signals
+    ]
+
+
+def pick_candidates(
+    candidates: list[RawSignal], day: str, calendar: list[str], *, taken: set[str], slots: int,
+    max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
+) -> list[RadarSignalOut]:
+    """最新一天的「待确认」候选，只补剩余 slots 个名额。
+
+    不占真实买卖点的名额；已有确认气泡的标的不重复出候选；超过信号有效期的不要；
+    按与买卖点同一套综合分排序。
+    """
+    if slots <= 0:
+        return []
+    pool: list[tuple[RawSignal, int]] = []
+    for c in candidates:
+        if c.symbol in taken or c.date > day:
+            continue
+        age = trading_age(c.date, day, calendar)
+        if age <= max_age_days:
+            pool.append((c, age))
+    pool.sort(key=lambda x: display_rank(x[0], x[1]), reverse=True)
+    out: list[RadarSignalOut] = []
+    seen: set[str] = set()
+    for c, age in pool:
+        if c.symbol in seen:
+            continue
+        seen.add(c.symbol)
+        out.append(RadarSignalOut(
+            symbol=c.symbol, name=c.name, side=c.side, label=c.label, signal_type=c.signal_type,
+            date=c.date, price=c.price, strength=c.strength, bias=c.bias,
+            signal_strength=c.signal_strength, confirmed=False,
+            pivot_stage_depth=c.pivot_stage_depth, age_days=age,
+        ))
+        if len(out) >= slots:
+            break
+    return out
+
+
 def build_days(
     histories: list[list[RawSignal]], trading_days: list[str], *, top_n: int,
     max_age_days: int = _MAX_SIGNAL_AGE_DAYS, calendar: list[str] | None = None,
+    today: date | None = None,
 ) -> list[RadarDayOut]:
     """按 trading_days（最新在前）逐日重建市场快照。
 
@@ -407,12 +447,15 @@ def build_days(
     历史某天时看到的仍是「截至那天 max_age_days 内有效」的信号）。见模块内
     _MAX_SIGNAL_AGE_DAYS 说明。
 
-    形态筛选在取前 top_n 前进行：未确认、展示日尚未确认或已经价格失效的信号不入榜；
-    czsc 形态过滤（shape_rejected，见 build_signal_history）同样在每只股票最新信号确定
-    后剔除。仍先选每只股票最新信号再筛选，避免新信号被剔除后旧信号重新上榜。
+    未确认信号：展示日早于 today 往前 _UNCONFIRMED_MAX_DAYS_AGO 个自然日时剔除，
+    且在取前 top_n 之前剔除，不占名额。today 缺省为服务器当天（测试注入固定值）。
+    czsc 形态过滤（shape_rejected，见 build_signal_history）在每只股票最新信号确定后剔除，
+    避免新信号被剔除后旧信号重新上榜。
     """
     # 数交易日龄用的日历：调用方给了更长的日历就用它（覆盖到最老展示日之前），否则用展示日本身
     cal = calendar if calendar is not None else trading_days
+    unconfirmed_cutoff = (
+        (today or date.today()) - timedelta(days=_UNCONFIRMED_MAX_DAYS_AGO)).isoformat()
     out: list[RadarDayOut] = []
     for day in trading_days:
         active: list[RawSignal] = []
@@ -428,10 +471,8 @@ def build_days(
                     continue  # 形态过滤命中（出生即剔除），也不让被剔信号背后的旧信号回锅
                 if candidate.invalidated_on is not None and candidate.invalidated_on <= day:
                     continue  # 价格已走坏（跌破买点 / 涨破卖点），当天起退场
-                if not candidate.confirmed:
-                    continue  # 形态尚未锁定，不作为雷达买卖点，也不补候选气泡
-                if candidate.confirmed_on is not None and candidate.confirmed_on > day:
-                    continue  # 不能把今天已确认的状态用于当时尚未确认的历史日期
+                if not candidate.confirmed and day < unconfirmed_cutoff:
+                    continue  # 一周前的展示日：未确认信号事后多半已被改写，不上雷达
                 age = trading_age(candidate.date, day, cal)
                 if age > max_age_days:
                     continue
@@ -821,7 +862,7 @@ class _ScanState:
 
 async def _scan_into(state: _ScanState, symbol: str, name: str, *, redis: Redis) -> str | None:
     """扫一只成分股并把结果记进 state，返回失败分类（None=成功或本就没有K线）。"""
-    history, failure, _result, dates = await _scan_symbol(
+    history, failure, result, dates = await _scan_symbol(
         symbol, name, user_id=state.user_id, start_date=state.start_date,
         end_date=state.end_date, redis=redis, mode=state.mode,
     )
@@ -829,13 +870,15 @@ async def _scan_into(state: _ScanState, symbol: str, name: str, *, redis: Redis)
         state.failures[symbol] = failure
         return failure
     state.failures.pop(symbol, None)
-    state.results[symbol] = (history, [], dates)
+    cands = build_candidates(symbol, name, result) if result is not None else []
+    state.results[symbol] = (history, cands, dates)
     return None
 
 
 async def _assemble(state: _ScanState, *, redis: Redis) -> SignalRadarResponse:
-    """按扫描结果组装快照（交易日历、已确认形态榜单和原有共振补算）。"""
+    """按 state 里已有的扫描结果组装一份快照（交易日历、每日榜单、共振、待确认候选）。"""
     histories = [h for h, _, _ in state.results.values() if h]
+    candidates = [c for _, cands, _ in state.results.values() for c in cands]
     # 展示的交易日历：以成分股日线为准（>=30% 成分股有K线的日期），并入参考 ETF 的日期；
     # 都拿不到才退化成「跳过周末」的近似日历。
     try:
@@ -879,6 +922,11 @@ async def _assemble(state: _ScanState, *, redis: Redis) -> SignalRadarResponse:
                                 mode=state.mode)
         resp.days[0] = rerank_with_resonance(pool, top_n)
         resp.sub_level_as_of = datetime.now(UTC).replace(microsecond=0).isoformat()
+        # 「待确认」候选：最后一笔还在走、不算买卖点，只给最新一天补足剩余名额
+        latest = resp.days[0]
+        latest.candidates = pick_candidates(
+            candidates, latest.date, calendar, taken={x.symbol for x in latest.signals},
+            slots=top_n - len(latest.signals), max_age_days=state.max_age_days)
     return resp
 
 
