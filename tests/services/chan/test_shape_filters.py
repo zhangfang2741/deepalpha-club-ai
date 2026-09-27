@@ -1,10 +1,19 @@
 """形态过滤：czsc 形态信号 → 雷达剔除规则（纯函数部分）。"""
 
+import datetime as dt
 from typing import Any
 
 import pytest
+from czsc import BarGenerator, CzscSignals, Freq
 
-from app.services.chan.shape_filters import ShapeState, reject_reason
+from app.services.chan.czsc_adapter import bars_to_raw_bars
+from app.services.chan.shape_filters import (
+    ShapeState,
+    read_shape_state,
+    reject_reason,
+    shape_config,
+    shape_keys,
+)
 
 
 def _state(**kwargs: Any) -> ShapeState:
@@ -111,3 +120,46 @@ def test_rules_short_circuit_in_documented_order() -> None:
     assert reject_reason(_state(narrow_range=True, close_pos="中间"), "buy1") == "窄幅震荡"
     assert reject_reason(_state(close_pos="中间", k2_close_pos="中性", volatility="低波动"), "buy1") == "收盘位置"
     assert reject_reason(_state(volatility="低波动", range_osc="3笔震荡"), "buy1") == "低波动"
+
+
+def _bars(seq: list[tuple[float, float, float, float]]) -> list[dict]:
+    """把 (open, high, low, close) 元组序列转成 czsc_adapter 可消费的 bar dict。"""
+    day0 = dt.date(2025, 1, 1)
+    return [
+        {
+            "time": (day0 + dt.timedelta(days=i)).isoformat(),
+            "open": o,
+            "high": h,
+            "low": lo,
+            "close": c,
+            "volume": 1000,
+        }
+        for i, (o, h, lo, c) in enumerate(seq)
+    ]
+
+
+def test_shape_signal_keys_align_with_czsc_runtime() -> None:
+    """键名对齐：czsc 实际渲染的 7 个形态键必须与 read_shape_state 读取的键一致。
+
+    czsc 模板字符串与 Rust 运行时渲染可能不一致（假突破键实测不带版本后缀），
+    read_shape_state 里 get() 缺键会静默回退默认值导致规则整体失效，
+    这里用真实 CzscSignals 驱动显式暴露键名漂移。
+    """
+    seq = []
+    p = 100.0
+    for _ in range(60):  # 60 根缓慢趋势，足够 CzscSignals 初始化产出全部键
+        seq.append((p, p + 0.6, p - 0.2, p + 0.5))
+        p += 0.5
+    raw = bars_to_raw_bars(_bars(seq), symbol="TEST", freq=Freq.D)
+    label = Freq.D.value
+    bg = BarGenerator(label, [], max_count=len(raw) + 1)
+    bg.init_freq_bars(label, raw[:20])
+    cs = CzscSignals(bg, shape_config(label))
+    for bar in raw[20:]:
+        cs.update_signals(bar)
+    state = read_shape_state(cs, label, total_bars=len(raw))
+    assert isinstance(state, ShapeState)
+    # 全部 7 个键真实存在（缺失时 v1 会静默回退默认值，这里必须显式暴露）。
+    # 键列表取自 shape_keys（与 read_shape_state 共用单一来源），改坏键名测试立刻红。
+    for key in shape_keys(label).values():
+        assert key in cs.s, key

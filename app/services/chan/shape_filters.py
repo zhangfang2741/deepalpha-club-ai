@@ -60,32 +60,44 @@ def shape_config(label: str) -> list[dict]:
     ]
 
 
+def shape_keys(label: str) -> dict[str, str]:
+    """read_shape_state 查询的 7 个 czsc 信号键（单一来源）。
+
+    实现与键名对齐测试共用本函数：czsc 升级改键名时测试立刻红，避免
+    read_shape_state 里 get() 缺键静默回退默认值导致规则整体失效。
+    """
+    return {
+        # czsc 渲染该键不带版本后缀（实测），其余键带。
+        "fake_break": f"{label}_D1N{_FAKE_BREAK_N}M{_FAKE_BREAK_M}_假突破",
+        "volatility": f"{label}_波动率分层W{_VOLATILITY_W}N{_VOLATILITY_N}_完全分类V241013",
+        "narrow_v241013": f"{label}_窄幅震荡N{_NARROW_N}_形态V241013",
+        "narrow_v241014": f"{label}_窄幅震荡N{_NARROW_N}_形态V241014",
+        "close_pos": f"{label}_D1收盘位置_分类V240606",
+        "k2_close_pos": f"{label}_D1K2收盘位置_分类V240607",
+        "range_osc": f"{label}_D1TH{_RANGE_OSC_TH}_区间震荡V230620",
+    }
+
+
 def read_shape_state(cs: CzscSignals, label: str, *, total_bars: int) -> ShapeState:
     """从逐根推进到当根的 CzscSignals 读出当日形态状态。
 
     total_bars 是本次推进的K线总数（不是已推进根数）：波动率分层需要 w+n 根
     缓存才有意义，不足时 czsc 会基于退化数据照常输出某档，必须显式置「未知」。
     """
+    keys = shape_keys(label)
 
     def v1(key: str) -> str:
         return cs.s.get(key, "其他_任意_任意_0").split("_")[0]
 
-    narrow = (
-        v1(f"{label}_窄幅震荡N{_NARROW_N}_形态V241013") == "满足"
-        or v1(f"{label}_窄幅震荡N{_NARROW_N}_形态V241014") == "满足"
-    )
-    volatility = (
-        "未知"
-        if total_bars < _VOLATILITY_W + _VOLATILITY_N
-        else v1(f"{label}_波动率分层W{_VOLATILITY_W}N{_VOLATILITY_N}_完全分类V241013")
-    )
+    narrow = v1(keys["narrow_v241013"]) == "满足" or v1(keys["narrow_v241014"]) == "满足"
+    volatility = "未知" if total_bars < _VOLATILITY_W + _VOLATILITY_N else v1(keys["volatility"])
     return ShapeState(
-        fake_break=v1(f"{label}_D1N{_FAKE_BREAK_N}M{_FAKE_BREAK_M}_假突破V230204"),
+        fake_break=v1(keys["fake_break"]),
         narrow_range=narrow,
-        close_pos=v1(f"{label}_D1收盘位置_分类V240606"),
-        k2_close_pos=v1(f"{label}_D1K2收盘位置_分类V240607"),
+        close_pos=v1(keys["close_pos"]),
+        k2_close_pos=v1(keys["k2_close_pos"]),
         volatility=volatility,
-        range_osc=v1(f"{label}_D1TH{_RANGE_OSC_TH}_区间震荡V230620"),
+        range_osc=v1(keys["range_osc"]),
     )
 
 
