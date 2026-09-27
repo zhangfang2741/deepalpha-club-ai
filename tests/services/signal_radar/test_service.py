@@ -712,7 +712,7 @@ class TestRefreshConstituents:
             return [("AAPL", "苹果")]
 
         async def fake_scan(symbol, name, **kwargs):
-            return [], None, None, []
+            return [], None, [], []
 
         async def fake_kline(**kwargs):
             return []
@@ -741,7 +741,7 @@ class TestComputedAt:
             return [("AAPL", "苹果")]
 
         async def fake_scan(symbol, name, **kwargs):
-            return [_raw(symbol, "2026-09-19", "buy", 0.8, level=2)], None, None, ["2026-09-19"]
+            return [_raw(symbol, "2026-09-19", "buy", 0.8, level=2)], None, [], ["2026-09-19"]
 
         async def fake_kline(**kwargs):
             return []
@@ -779,7 +779,7 @@ class TestWatchlistUniverse:
 
         async def fake_scan(symbol, name, **kwargs):
             scanned.append(symbol)
-            return [_raw(symbol, "2026-09-19", "buy", 0.8, level=2)], None, None, ["2026-09-18", "2026-09-19"]
+            return [_raw(symbol, "2026-09-19", "buy", 0.8, level=2)], None, [], ["2026-09-18", "2026-09-19"]
 
         async def fake_kline(**kwargs):
             return []
@@ -1079,8 +1079,8 @@ class TestComputeDemoDayResilience:
 
         async def fake_scan(symbol, name, *, user_id, start_date, end_date, redis, mode=None):
             if symbol in state["failed"]:
-                return [], "rate_limited", None, []
-            return [_raw(symbol, "2026-07-31", "buy", 0.5)], None, None, dates
+                return [], "rate_limited", [], []
+            return [_raw(symbol, "2026-07-31", "buy", 0.5)], None, [], dates
 
         monkeypatch.setattr(svc, "_scan_symbol", fake_scan)
         monkeypatch.setattr(svc, "demo_snapshot_date", lambda: "2026-08-01")
@@ -1181,8 +1181,8 @@ class TestBackfillFailedConstituents:
             plan = fail_plan.get(symbol, [])
             failure = plan.pop(0) if plan else None
             if failure:
-                return [], failure, None, []
-            return [_raw(symbol, "2026-09-19", "buy", 0.8, level=2)], None, None, ["2026-09-18", "2026-09-19"]
+                return [], failure, [], []
+            return [_raw(symbol, "2026-09-19", "buy", 0.8, level=2)], None, [], ["2026-09-18", "2026-09-19"]
 
         async def fake_kline(**kwargs):
             return []
@@ -1310,8 +1310,8 @@ class TestDemoBackfill:
         async def fake_scan(symbol, name, **kwargs):
             tries[symbol] = tries.get(symbol, 0) + 1
             if symbol == "S0" and tries[symbol] == 1:
-                return [], "rate_limited", None, []
-            return [_raw(symbol, "2026-07-31", "buy", 0.5)], None, None, ["2026-07-31", "2026-07-30"]
+                return [], "rate_limited", [], []
+            return [_raw(symbol, "2026-07-31", "buy", 0.5)], None, [], ["2026-07-31", "2026-07-30"]
 
         monkeypatch.setattr(svc, "resolve_constituents", fake_constituents)
         monkeypatch.setattr(svc, "_scan_symbol", fake_scan)
@@ -1340,8 +1340,8 @@ class TestBackfillResumeAfterRestart:
 
         async def fake_scan(symbol, name, **kwargs):
             if symbol in fail:
-                return [], "rate_limited", None, []
-            return [_raw(symbol, "2026-09-19", "buy", 0.8, level=2)], None, None, ["2026-09-18", "2026-09-19"]
+                return [], "rate_limited", [], []
+            return [_raw(symbol, "2026-09-19", "buy", 0.8, level=2)], None, [], ["2026-09-18", "2026-09-19"]
 
         async def fake_kline(**kwargs):
             return []
