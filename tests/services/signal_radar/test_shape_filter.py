@@ -103,21 +103,34 @@ def test_shape_rejected_latest_signal_excluded_without_fallback() -> None:
     assert [s.symbol for s in days[0].signals] == ["X"]
 
 
-def test_build_signal_history_marks_shape_rejected_by_signal_day() -> None:
-    """按信号所属笔终点日（sig.time 的日期部分）查形态状态表，命中即标记过滤器名。"""
-    rejected = _sig("buy1", "2026-09-10", 10.0)
-    kept = _sig("sell1", "2026-09-15", 12.0)
-    missing = _sig("buy2", "2026-09-18", 11.0)  # 查不到形态状态：不剔
+def test_build_signal_history_marks_shape_rejected_by_detected_day() -> None:
+    """按信号成立日（detected_time，雷达展示的日期）查形态状态表，不看笔终点日。
+
+    笔终点是分型极值那根K线，其形态天然偏向信号反面，用它判定会系统性误剔。
+    """
+    # 笔终点日窄幅震荡、成立日干净：保留
+    kept = _sig("buy1", "2026-09-10", 10.0)
+    kept.detected_time = "2026-09-14"
+    # 笔终点日干净、成立日低波动：剔除
+    rejected = _sig("sell1", "2026-09-15", 12.0)
+    rejected.detected_time = "2026-09-17"
+    # 没有成立日：回退笔终点日（窄幅震荡）
+    fallback = _sig("buy2", "2026-09-18", 11.0)
+    # 查不到形态状态：不剔
+    missing = _sig("buy3", "2026-09-21", 11.0)
     result = svc.ChanAnalysisResult(
-        symbol="X", bars_count=100, signals=[rejected, kept, missing],
+        symbol="X", bars_count=100, signals=[kept, rejected, fallback, missing],
         shape_states={
-            "2026-09-10": ShapeState(narrow_range=True, close_pos="高位"),
-            "2026-09-15": ShapeState(close_pos="低位", volatility="中波动"),
+            "2026-09-10": ShapeState(narrow_range=True),
+            "2026-09-14": ShapeState(volatility="中波动"),
+            "2026-09-15": ShapeState(volatility="中波动"),
+            "2026-09-17": ShapeState(volatility="低波动"),
+            "2026-09-18": ShapeState(narrow_range=True),
         },
     )
     history = svc.build_signal_history("X", "测试", result)
     by_type = {r.signal_type: r.shape_rejected for r in history}
-    assert by_type == {"buy1": "窄幅震荡", "sell1": None, "buy2": None}
+    assert by_type == {"buy1": None, "sell1": "低波动", "buy2": "窄幅震荡", "buy3": None}
 
 
 def test_build_signal_history_logs_rejection_counts(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -135,7 +148,7 @@ def test_build_signal_history_logs_rejection_counts(monkeypatch: pytest.MonkeyPa
     sig = _sig("buy1", "2026-09-10", 10.0)
     result = svc.ChanAnalysisResult(
         symbol="X", bars_count=100, signals=[sig],
-        shape_states={"2026-09-10": ShapeState(fake_break="看空", close_pos="高位")},
+        shape_states={"2026-09-10": ShapeState(fake_break="看空")},
     )
     svc.build_signal_history("X", "测试", result)
     logged = [kw for e, kw in events if e == "signal_radar_shape_rejected"]
@@ -148,16 +161,19 @@ def test_build_signal_history_logs_rejection_counts(monkeypatch: pytest.MonkeyPa
 
 
 def test_real_analysis_shape_marks_are_valid_filter_names() -> None:
-    """真实分析链路：开 shape_filters 后标记值只可能是 None 或五个过滤器名，且不改信号条数。"""
+    """真实分析链路：开 shape_filters 后标记值只可能是 None 或三个过滤器名，且不改信号条数。"""
     result = ChanAnalyzer().analyze("X", _decaying_downtrend_bars(), mode="loose",
                                     shape_filters=True)
     history = svc.build_signal_history("X", "测试", result)
-    valid = {None, "假突破", "窄幅震荡", "收盘位置", "低波动", "区间震荡"}
+    valid = {None, "假突破", "窄幅震荡", "低波动"}
     assert {r.shape_rejected for r in history} <= valid
     assert len(history) == len(result.signals)
-    # 开关真实生效：有逐日形态状态，且这份数据稳定剔除至少一条（空表时上面的集合断言也会过）
+    # 开关真实生效，且每条信号的成立日都能在形态状态表里查到：查不到时 reject_reason(None)
+    # 静默不剔，规则形同虚设（日期格式或预热段错位都会造成这种情况）
     assert result.shape_states
-    assert any(r.shape_rejected for r in history)
+    assert result.signals
+    for sig in result.signals:
+        assert (sig.detected_time or sig.time)[:10] in result.shape_states, sig
 
 
 async def test_scan_symbol_enables_shape_filters(monkeypatch: pytest.MonkeyPatch) -> None:

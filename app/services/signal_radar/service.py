@@ -347,8 +347,9 @@ def build_signal_history(
     信号，深浅要反映那条信号发生当天中枢真实处于哪个阶段，不然同一只股票
     不同日期的气泡会被错误地画成同一个深浅。
 
-    形态过滤按信号所属笔终点日查 `result.shape_states`，命中记入 `shape_rejected`
-    （出生时一次判定，后续按日重建快照不再重判）。
+    形态过滤按信号成立日（与 date 同一天，即雷达展示的日期）查 `result.shape_states`，
+    命中记入 `shape_rejected`（出生时一次判定，后续按日重建快照不再重判）。不用笔终点日：
+    那是分型极值那根K线，其形态天然偏向信号反面，会系统性误剔。
     """
     confirmed_on = _confirmation_dates(result)
     history = [
@@ -370,7 +371,8 @@ def build_signal_history(
             pivot_stage_depth=pivot_stage_depth(pivot_phase_as_of(result, sig.time)),
             invalidated_on=_invalidated_on(
                 sig.is_buy, sig.price, (sig.detected_time or sig.time)[:10], bars),
-            shape_rejected=reject_reason(result.shape_states.get(sig.time[:10]), sig.type),
+            shape_rejected=reject_reason(
+                result.shape_states.get((sig.detected_time or sig.time)[:10]), sig.type),
         )
         for sig in result.signals
     ]
