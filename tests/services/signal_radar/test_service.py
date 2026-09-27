@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.services.chan.analyzer import ChanAnalysisResult
 from app.services.chan.signals import Signal
 from app.services.signal_radar import service as svc
+from app.schemas.signal_radar import SignalRadarResponse
 from app.services.signal_radar.service import (
     RawSignal,
     build_days,
@@ -381,12 +382,28 @@ class _FakeRedis:
         self.store: dict[str, str] = {}
         self.ttls: dict[str, int] = {}
 
-    async def set(self, key: str, value: str, ex: int | None = None, keepttl: bool = False) -> None:
+    async def set(self, key: str, value: str, ex: int | None = None, keepttl: bool = False,
+                  nx: bool = False) -> bool | None:
+        if nx and key in self.store:
+            return None
         self.store[key] = value
         if ex is not None:
             self.ttls[key] = ex
         elif not keepttl:
             self.ttls.pop(key, None)  # 与 Redis 一致：不带 EX/KEEPTTL 的 SET 会清掉过期时间
+        return True
+
+    async def delete(self, key: str) -> None:
+        self.store.pop(key, None)
+        self.ttls.pop(key, None)
+
+    async def incr(self, key: str) -> int:
+        value = int(self.store.get(key, 0)) + 1
+        self.store[key] = str(value)
+        return value
+
+    async def expire(self, key: str, ttl: int) -> None:
+        self.ttls[key] = ttl
 
     async def get(self, key: str) -> str | None:
         return self.store.get(key)
@@ -618,6 +635,12 @@ def test_prewarm_scans_stalest_universe_first(monkeypatch):
                 if key.endswith(k):
                     return v
             return -2
+
+        async def set(self, key, value, ex=None, nx=False):
+            return True
+
+        async def delete(self, key):
+            return None
 
     async def fake_compute(market, *, redis, user_id, universe_key, mode):
         order.append((f"{market}:{universe_key}", mode))
@@ -858,6 +881,12 @@ class TestCloseTriggeredPrewarm:
         class _R:
             async def ttl(self, key):
                 return -2
+
+            async def set(self, key, value, ex=None, nx=False):
+                return True
+
+            async def delete(self, key):
+                return None
 
         monkeypatch.setattr(scheduler, "current_redis", lambda: _R())
         monkeypatch.setattr(scheduler, "compute_market", fake_compute)
@@ -1127,3 +1156,132 @@ class TestSignalModeIsolation:
         from app.services.chan import sub_level_service as sls
         assert sls._cache_key("AAPL", "daily", "2026-09-24", "zh", "loose") != \
             sls._cache_key("AAPL", "daily", "2026-09-24", "zh", "strict")
+
+
+class TestBackfillFailedConstituents:
+    """扫描时拉失败的成分股在后台慢慢补算，补上后重写快照，保证指数成分都算到。"""
+
+    def _patch(self, monkeypatch, fail_plan: dict[str, list[str | None]], scanned: list[str]):
+        """fail_plan：symbol → 每次扫描的失败分类序列（None=成功），用完后一律成功。"""
+        async def fake_resolve(market, *, redis, universe_key=None, refresh=False):
+            return [("AAPL", "苹果"), ("TSLA", "特斯拉"), ("MSFT", "微软")]
+
+        async def fake_scan(symbol, name, **kwargs):
+            scanned.append(symbol)
+            plan = fail_plan.get(symbol, [])
+            failure = plan.pop(0) if plan else None
+            if failure:
+                return [], failure, None, []
+            return [_raw(symbol, "2026-09-19", "buy", 0.8, level=2)], None, None, ["2026-09-18", "2026-09-19"]
+
+        async def fake_kline(**kwargs):
+            return []
+
+        async def fake_attach(day, **kwargs):
+            return None
+
+        monkeypatch.setattr(svc, "resolve_constituents", fake_resolve)
+        monkeypatch.setattr(svc, "_scan_symbol", fake_scan)
+        monkeypatch.setattr(svc, "fetch_kline", fake_kline)
+        monkeypatch.setattr(svc, "attach_sub_levels", fake_attach)
+        monkeypatch.setattr(svc, "_BACKFILL_DELAYS", (0, 0, 0))
+        monkeypatch.setattr(svc, "_BACKFILL_PACE_SECONDS", 0)
+        monkeypatch.setattr(svc, "_RATE_LIMIT_BACKOFF_SECONDS", 0)
+
+    def _cached_symbols(self, redis) -> set[str]:
+        resp = SignalRadarResponse.model_validate_json(redis.store[svc._cache_key("us", "nasdaq100")])
+        return {s.symbol for d in resp.days for s in d.signals}
+
+    async def test_failed_symbols_backfilled_into_cache(self, monkeypatch):
+        scanned: list[str] = []
+        self._patch(monkeypatch, {"TSLA": ["rate_limited", "unreachable"]}, scanned)
+        redis = _FakeRedis()
+        resp = await svc.compute_market("us", redis=redis, universe_key="nasdaq100")
+        assert resp.pending_symbols == 1
+        assert "TSLA" not in self._cached_symbols(redis)
+
+        await svc.wait_backfills()
+        assert "TSLA" in self._cached_symbols(redis), "补算成功后快照里要有 TSLA"
+        cached = SignalRadarResponse.model_validate_json(redis.store[svc._cache_key("us", "nasdaq100")])
+        assert cached.pending_symbols == 0
+        assert scanned.count("TSLA") == 3 and scanned.count("AAPL") == 1, "只重试失败的，成功的不重拉"
+
+    async def test_non_retryable_failures_not_retried(self, monkeypatch):
+        scanned: list[str] = []
+        self._patch(monkeypatch, {"TSLA": ["config_missing"], "MSFT": ["analyze_failed"]}, scanned)
+        resp = await svc.compute_market("us", redis=_FakeRedis(), universe_key="nasdaq100")
+        await svc.wait_backfills()
+        assert resp.pending_symbols == 0
+        assert scanned.count("TSLA") == 1 and scanned.count("MSFT") == 1
+
+    async def test_backfill_gives_up_after_all_rounds(self, monkeypatch):
+        scanned: list[str] = []
+        self._patch(monkeypatch, {"TSLA": ["rate_limited"] * 10}, scanned)
+        await svc.compute_market("us", redis=_FakeRedis(), universe_key="nasdaq100")
+        await svc.wait_backfills()
+        assert scanned.count("TSLA") == 1 + len(svc._BACKFILL_DELAYS)
+
+    async def test_newer_scan_supersedes_old_backfill(self, monkeypatch):
+        scanned: list[str] = []
+        self._patch(monkeypatch, {"TSLA": ["rate_limited"] * 10}, scanned)
+        monkeypatch.setattr(svc, "_BACKFILL_DELAYS", (0.05, 0.05))
+        redis = _FakeRedis()
+        await svc.compute_market("us", redis=redis, universe_key="nasdaq100")
+        await svc.compute_market("us", redis=redis, universe_key="nasdaq100")  # 新一轮全量扫描
+        await svc.wait_backfills()
+        # 两轮全量各扫 1 次 + 只有最新一轮的补算在跑（2 轮）
+        assert scanned.count("TSLA") == 2 + 2
+
+    async def test_watchlist_not_backfilled(self, monkeypatch):
+        scanned: list[str] = []
+        self._patch(monkeypatch, {"TSLA": ["rate_limited"]}, scanned)
+        await svc.compute_market("us", redis=_FakeRedis(), user_id=7, watchlist=[("TSLA", "特斯拉")])
+        await svc.wait_backfills()
+        assert scanned.count("TSLA") == 1
+
+
+class TestConcurrencyGuards:
+    async def test_global_fetch_gate_caps_parallel_kline_fetches(self, monkeypatch):
+        """多个扫描同时跑（多指数 / 多口径 / 多人自选），同时拉K线的总数不超过全局上限。"""
+        import asyncio
+
+        monkeypatch.setattr(svc, "_GLOBAL_FETCH_CONCURRENCY", 3)
+        monkeypatch.setattr(svc, "_fetch_gates", __import__("weakref").WeakKeyDictionary())
+        state = {"now": 0, "peak": 0}
+
+        async def fake_kline(**kwargs):
+            state["now"] += 1
+            state["peak"] = max(state["peak"], state["now"])
+            await asyncio.sleep(0.01)
+            state["now"] -= 1
+            return []
+
+        monkeypatch.setattr(svc, "fetch_kline", fake_kline)
+        await asyncio.gather(*[
+            svc._scan_symbol(f"S{i}", "x", user_id=None, start_date="2026-01-01", end_date="2026-09-25",
+                             redis=None)  # type: ignore[arg-type]
+            for i in range(20)
+        ])
+        assert state["peak"] == 3
+
+    async def test_prewarm_skips_universe_being_scanned(self, monkeypatch):
+        """用户触发的扫描正持锁时，定时预热跳过这一份，不重复扫。"""
+        from app.services.signal_radar import scheduler
+
+        redis = _FakeRedis()
+        redis.store[svc.scan_lock_key("cn", "star50", "loose")] = "1"
+        scanned = []
+
+        async def fake_compute(market, *, redis, user_id, universe_key, mode):
+            scanned.append((universe_key, mode))
+
+            class _Resp:
+                days = []
+            return _Resp()
+
+        monkeypatch.setattr(scheduler, "current_redis", lambda: redis)
+        monkeypatch.setattr(scheduler, "compute_market", fake_compute)
+        monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_BROAD_ENABLED", False)
+        await scheduler._prewarm_once(markets={"cn"})
+        assert scanned == [("star50", "strict")]
+        assert svc.scan_lock_key("cn", "star50", "strict") not in redis.store, "预热结束释放锁"

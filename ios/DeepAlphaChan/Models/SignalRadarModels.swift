@@ -37,6 +37,8 @@ struct SignalRadarResponse: Decodable {
     /// as_of 只是「代表哪个交易日」的日期，同一天内不管几点刷新都长一样，看不出这份
     /// 快照有多新；computed_at 才是这次全量扫描真正算出来的时间点。旧后端无此字段。
     let computedAt: String?
+    /// 拉数失败、正在后台补算的成分股数（补齐后快照自动重写）。旧后端无此字段。
+    let pendingSymbols: Int?
 
     enum CodingKeys: String, CodingKey {
         case market
@@ -50,6 +52,7 @@ struct SignalRadarResponse: Decodable {
         case status
         case subLevelAsOf = "sub_level_as_of"
         case computedAt = "computed_at"
+        case pendingSymbols = "pending_symbols"
     }
 
     /// 共振结论更新时刻（本地时间 HH:mm），解析不了返回 nil。

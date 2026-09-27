@@ -84,3 +84,6 @@ class SignalRadarResponse(BaseModel):
         default="", description="本次全量扫描完成时间，ISO8601 UTC；缓存命中时沿用缓存写入时的时间"
     )
     signal_mode: str = Field(default="loose", description="买卖点口径（见 GET /chan/signal-modes）")
+    pending_symbols: int = Field(
+        default=0, description="拉数失败、正在后台补算的成分股数；补齐后快照会自动重写（0=已全部算完）"
+    )

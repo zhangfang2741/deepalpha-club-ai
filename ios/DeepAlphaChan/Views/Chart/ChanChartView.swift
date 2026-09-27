@@ -571,7 +571,7 @@ struct ChanChartView: View {
         // 只取可见区内的信号，按 x 排序，用「相邻信号最小间距」判断是否会挤。
         // 用间距而非列宽：信号通常稀疏，60 根默认视图里也多半放得下完整标签；
         // 只有当两个信号靠得太近（< 完整药丸宽 ~28pt）才整体降级成数字徽标。
-        let visible = analysis.signals
+        let visible = analysis.chartSignals
             .compactMap { sig -> (Signal, CGFloat)? in
                 guard let idx = timeIndex[sig.time], idx >= range.start, idx < range.end else { return nil }
                 return (sig, x(for: idx, range: range))
@@ -633,10 +633,17 @@ struct ChanChartView: View {
             arrow.addLine(to: CGPoint(x: cx - tri, y: triBase))
             arrow.addLine(to: CGPoint(x: cx + tri, y: triBase))
             arrow.closeSubpath()
-            ctx.fill(arrow, with: .color(color.opacity(alpha)))
-
-            ctx.fill(Path(roundedRect: badgeRect, cornerRadius: badgeH / 2),
-                     with: .color(color.opacity(alpha)))
+            let pill = Path(roundedRect: badgeRect, cornerRadius: badgeH / 2)
+            if sig.isCandidate {
+                // 待确认候选（严格模式，最后一笔还在走、不算买卖点）：与雷达同一画法——
+                // 灰底 + 买卖方向色虚线边框
+                ctx.fill(arrow, with: .color(Theme.textSecondary.opacity(0.6)))
+                ctx.fill(pill, with: .color(Theme.textSecondary.opacity(0.35)))
+                ctx.stroke(pill, with: .color(color), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+            } else {
+                ctx.fill(arrow, with: .color(color.opacity(alpha)))
+                ctx.fill(pill, with: .color(color.opacity(alpha)))
+            }
             ctx.draw(badge.text, at: CGPoint(x: badgeRect.midX, y: badgeRect.midY), anchor: .center)
         }
     }
@@ -841,7 +848,7 @@ struct ChanChartView: View {
         // 优先」，底分型圆点的命中区与下方买点徽标重叠，点圆点略下方就弹出买点说明。
         var nearby: [(ChartElement, CGFloat)] = []
         if vm.showSignals {
-            for s in analysis.signals {
+            for s in analysis.chartSignals {
                 guard let p = pt(s.time, s.price) else { continue }
                 let badge = ChartHitResolver.badgeCenter(
                     anchor: p, isBuy: s.isBuy, plotWidth: plotWidth, height: height,

@@ -70,6 +70,12 @@ struct ConclusionCard: View {
     // MARK: - 最新信号
 
     private var latestSignal: Signal? { analysis.signals.max { $0.time < $1.time } }
+    /// 比最新买卖点更新的「待确认」候选（严格模式）：结论卡上也提示，但标明待确认。
+    private var newerCandidate: Signal? {
+        guard let c = analysis.candidates.max(by: { $0.time < $1.time }) else { return nil }
+        if let s = latestSignal, s.time >= c.time { return nil }
+        return c
+    }
 
     private var latestSignalTile: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -86,8 +92,15 @@ struct ConclusionCard: View {
                 .font(.subheadline.weight(.bold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
-            } else {
+            } else if newerCandidate == nil {
                 Text(L("暂无")).font(.subheadline.weight(.bold)).foregroundStyle(Theme.textSecondary)
+            }
+            if let c = newerCandidate {
+                Text(L("待确认 %@ · %@", c.label, Self.monthDay(c.time)))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

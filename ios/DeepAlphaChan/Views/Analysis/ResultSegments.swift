@@ -26,6 +26,7 @@ struct ResultSegments: View {
             }
 
             signalsSection
+            candidatesSection
 
             if let phase = analysis.pivotPhase, !isStatic {
                 diagramSection(phase)
@@ -135,6 +136,20 @@ struct ResultSegments: View {
                         .frame(maxWidth: .infinity, minHeight: 36)
                 }
                 .buttonStyle(.plain)
+            }
+        }
+    }
+
+    // MARK: - 待确认候选（严格模式）
+
+    /// 严格模式下最后一笔上的候选：单列一组，明确不算买卖点（宽松模式为空，不显示）。
+    @ViewBuilder
+    private var candidatesSection: some View {
+        let cands = analysis.candidates.sorted { $0.time > $1.time }
+        if !cands.isEmpty {
+            sectionHeader(L("待确认 · 不算买卖点"))
+            VStack(spacing: 6) {
+                ForEach(cands) { SignalDetailCard(signal: $0, isStatic: isStatic) }
             }
         }
     }

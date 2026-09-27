@@ -148,8 +148,10 @@ struct Signal: Codable, Identifiable {
     let priceRatio: Double?
     let volumeRatio: Double?
     let lengthRatio: Double?
+    /// 严格模式下最后一笔上的「待确认」候选（不算买卖点）。端上标记，不参与编解码。
+    var isCandidate = false
 
-    var id: String { "\(type.rawValue)-\(time)" }
+    var id: String { "\(isCandidate ? "cand-" : "")\(type.rawValue)-\(time)" }
 
     enum CodingKeys: String, CodingKey {
         case type, label, time, price, strength, description, confirmed
@@ -300,9 +302,20 @@ struct ChanAnalysis: Codable {
     let pivotPhase: PivotPhase?
     let structureLayers: [StructureLayer]
     let structureHeadline: String?
+    /// 严格模式：最后一笔还在走、尚不成立的候选（后端 candidate_signals）；宽松模式与旧后端为空/缺省。
+    let candidateSignals: [Signal]?
+
+    /// 「待确认」候选（已打上 isCandidate 标记）。不算买卖点，不进买卖点计数。
+    var candidates: [Signal] {
+        (candidateSignals ?? []).map { var s = $0; s.isCandidate = true; return s }
+    }
+
+    /// 图上要画的：买卖点 + 待确认候选（候选画成灰色虚线徽标）。
+    var chartSignals: [Signal] { signals + candidates }
 
     enum CodingKeys: String, CodingKey {
         case symbol, fractals, strokes, segments, macd, signals, summary, recommendation, narrative
+        case candidateSignals = "candidate_signals"
         case barsCount = "bars_count"
         case mergedCandles = "merged_candles"
         case strokePivots = "stroke_pivots"
