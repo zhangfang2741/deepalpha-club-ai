@@ -79,6 +79,10 @@ enum GlossaryIndex {
         "特征序列": "segment",
         "中枢": "pivot",
         "背驰": "divergence",
+        "顶背驰": "divergence",
+        "底背驰": "divergence",
+        "趋势背驰": "divergence",
+        "盘整背驰": "divergence",
         // 面积比指向 MACD 词条：那篇才讲了它是怎么算出来的
         "面积比": "macd",
         "MACD": "macd",
@@ -93,6 +97,10 @@ enum GlossaryIndex {
         "三卖": "trade-points",
         "级别": "level",
         "走势级别": "level",
+        // 次级别确认也在「级别」一篇里讲
+        "次级别": "level",
+        "共振": "level",
+        "逆势信号": "level",
         // 英文界面下后端返回的买卖点 label 也要能点开对应词条
         "1st Buy": "trade-points",
         "2nd Buy": "trade-points",
