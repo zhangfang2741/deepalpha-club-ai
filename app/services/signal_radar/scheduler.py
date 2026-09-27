@@ -19,12 +19,15 @@ from datetime import UTC, datetime, timedelta
 from app.cache.client import current_redis
 from app.core.config import settings
 from app.core.logging import logger
+from app.cache.operations import acquire_lock, release_lock
 from app.services.signal_radar.service import (
+    SCAN_LOCK_TTL,
     _cache_key,
     _SESSIONS_UTC,
     compute_market,
     market_session_active,
     refresh_sub_levels,
+    scan_lock_key,
 )
 from app.services.chan.signal_policy import DEFAULT_MODE, SIGNAL_POLICIES
 from app.services.signal_radar.universe import all_universes
@@ -74,6 +77,11 @@ async def _prewarm_once(markets: set[str] | None = None) -> None:
                                        key=lambda x: (x[0], x[1]))]
     for u in ordered:
         for mode in _modes():
+            # 与接口触发的扫描共用同一把锁：用户刚好在扫这一份就跳过，不重复扫
+            lock = scan_lock_key(u.market, u.key, mode)
+            if not await acquire_lock(redis, lock, SCAN_LOCK_TTL):
+                logger.info("signal_radar_prewarm_skipped_locked", market=u.market, universe=u.key, mode=mode)
+                continue
             try:
                 resp = await compute_market(
                     u.market, redis=redis, user_id=None, universe_key=u.key, mode=mode,
@@ -88,6 +96,8 @@ async def _prewarm_once(markets: set[str] | None = None) -> None:
                     "signal_radar_prewarm_market_failed", market=u.market, universe=u.key, mode=mode,
                     error=str(e),
                 )
+            finally:
+                await release_lock(redis, lock)
 
 
 def _target_universes() -> list:

@@ -146,6 +146,12 @@ deepalpha-club-ai/
 | 财报电话会 | `/transcripts` | `/(dashboard)/transcripts` | 转录 + AI 中文翻译 |
 | 结构性分析 | `/analysis` | `/analysis` | 结构性投资六层分析框架 |
 
+> 信号雷达扫描约束（`app/services/signal_radar`）：同一 (口径, 市场, universe) 任一时刻只跑一轮全量扫描
+> ——接口与定时预热共用 `scan_lock_key` 原子锁（`acquire_lock` = SET NX EX），主动刷新有 5 分钟冷却；
+> 所有扫描 / 补算 / 示例日拉 K 线共用进程级闸门 `_fetch_gate`。拉数失败（限流 / 不可用）的成分股
+> 由 `_backfill` 在后台逐轮慢慢补算、补上即重写快照（响应 `pending_symbols` = 仍在补算的只数），
+> 轮次号存 Redis（`incr_with_ttl`），新一轮扫描开始旧补算自动退出。**不要**绕过锁直接起全量扫描。
+
 > 新增一个投研模块时，通常需同步落地五处：`app/api/v1/<mod>.py`、`app/services/<mod>/`、`app/schemas/<mod>.py`、前端 `app/<mod>/page.tsx` + `lib/api/<mod>.ts`，并在 `api.py`、`TopNav.tsx` 注册。
 
 ## 缠论模块设计约束（app/services/chan）

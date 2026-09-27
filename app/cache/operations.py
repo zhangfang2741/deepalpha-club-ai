@@ -44,6 +44,28 @@ async def exists(redis: Redis, key: str) -> bool:
     return bool(await redis.exists(key))
 
 
+# ---------- 分布式锁 / 计数 ----------
+
+async def acquire_lock(redis: Redis, key: str, ttl: int) -> bool:
+    """原子抢锁（SET NX EX）：抢到返回 True。多实例、多请求同时抢只有一个成功。"""
+    return bool(await redis.set(key, "1", ex=ttl, nx=True))
+
+
+async def release_lock(redis: Redis, key: str) -> None:
+    """释放锁（删除 key）。失败只记日志：锁自带 TTL，最坏等它过期。"""
+    try:
+        await redis.delete(key)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("lock_release_failed", key=key, error=str(e))
+
+
+async def incr_with_ttl(redis: Redis, key: str, ttl: int) -> int:
+    """原子自增并刷新 TTL，返回自增后的值（多实例共享的轮次号）。"""
+    value = int(await redis.incr(key))
+    await redis.expire(key, ttl)
+    return value
+
+
 # ---------- JSON 操作 ----------
 
 async def get_json(redis: Redis, key: str) -> Optional[dict]:

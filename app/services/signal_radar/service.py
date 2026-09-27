@@ -21,12 +21,14 @@
 from __future__ import annotations
 
 import asyncio
+import weakref
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 
 from redis.asyncio import Redis
 
+from app.cache.operations import incr_with_ttl
 from app.core.config import settings
 from app.core.logging import logger
 from app.schemas.signal_radar import (
@@ -42,7 +44,7 @@ from app.services.chan.signal_policy import DEFAULT_MODE, get_policy
 from app.services.chan.sub_level_service import current_sub_level
 from app.services.chan.bias import UNCONFIRMED_DISCOUNT
 from app.services.signal_radar.constituents import resolve_constituents
-from app.services.signal_radar.universe import get_universe, list_universes
+from app.services.signal_radar.universe import MarketUniverse, get_universe, list_universes
 from app.services.skills.kline import LIVE_MAX_AGE, fetch_kline
 
 DEFAULT_TOP_N = 10
@@ -618,10 +620,12 @@ async def _scan_symbol(
     悄悄混进"这个市场最近确实没什么信号"里看不出来。
     """
     try:
-        bars = await fetch_kline(
-            user_id=user_id, symbol=symbol, start_date=start_date,
-            end_date=end_date, freq="daily", redis=redis,
-        )
+        # 全局闸门：所有扫描 / 补算 / 示例日共用，多人同时触发也不会把数据源打到限流
+        async with _fetch_gate():
+            bars = await fetch_kline(
+                user_id=user_id, symbol=symbol, start_date=start_date,
+                end_date=end_date, freq="daily", redis=redis,
+            )
     except Exception as e:  # noqa: BLE001 单只失败不影响整体扫描
         logger.warning("signal_radar_kline_failed", symbol=symbol, error=str(e))
         return [], _classify_failure(e), None, []
@@ -712,6 +716,278 @@ def _fetch_start(today: date, window: int) -> str:
     return (today - timedelta(days=_WARMUP_DAYS + window * 2 + _DETAIL_WARMUP_DAYS)).isoformat()
 
 
+# ---------------------------------------------------------------------------
+# 全量扫描 + 失败成分股后台补算
+# ---------------------------------------------------------------------------
+
+# 值得重试的失败：限流 / 数据源暂时不可用 / 其它偶发异常。配置缺失、查无此股、
+# 缠论计算失败（同样的K线重算结果一样）不会自己好，不重试。
+_RETRYABLE_FAILURES = frozenset({"rate_limited", "unreachable", "other"})
+# 后台补算节奏：每轮开始前等待的秒数（逐轮拉长，给数据源恢复时间），共约 1 小时。
+_BACKFILL_DELAYS: tuple[float, ...] = (60, 180, 600, 1200, 1800)
+# 补算时每只之间的间隔：串行慢慢拉，不和全量扫描、其它市场抢数据源。
+_BACKFILL_PACE_SECONDS: float = 2.0
+
+# 全量扫描锁：同一 (口径, 市场, universe) 任一时刻只跑一轮。接口触发与定时预热共用，
+# 用 Redis SET NX 原子抢锁（多实例也互斥）。时长要长于一次全量扫描（宽基几百只 +
+# 共振补算），扫描结束会主动释放。
+SCAN_LOCK_TTL = 1800
+
+
+def scan_lock_key(market: str, universe_key: str, mode: str = DEFAULT_MODE) -> str:
+    """全量扫描锁的键（universe_key 为自选时传 watchlist:u{用户}）。"""
+    return f"{_CACHE_PREFIX}:generating:{mode}:{market}:{universe_key}"
+
+
+# 进程内的补算任务（保持强引用，避免被 GC）。
+_backfill_tasks: set[asyncio.Task] = set()
+
+# 各 (口径, 市场, universe) 的最新一轮扫描号，存 Redis（INCR，多实例共享——滚动部署时新旧
+# 实例并存也能互相感知）：新一轮全量扫描开始后，旧一轮的补算发现自己过期就退出，
+# 不会用旧数据覆盖新快照。Redis 不可用时退回进程内计数。
+_SCAN_GEN_TTL = 3600 * 6
+_scan_generation: dict[tuple[str, str, str], int] = {}
+
+# 全局拉数闸门：进程内所有扫描（各指数 × 各口径、自选、示例日、后台补算）同时拉 K 线的上限。
+# 每轮扫描自己还有 _SCAN_CONCURRENCY 的并发，但多人同时触发、多个指数一起预热时会叠加，
+# 不设总闸会把数据源打到限流，失败反而更多。按事件循环各建一个（测试会换循环）。
+_GLOBAL_FETCH_CONCURRENCY = 12
+_fetch_gates: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = \
+    weakref.WeakKeyDictionary()
+
+
+def _fetch_gate() -> asyncio.Semaphore:
+    loop = asyncio.get_running_loop()
+    gate = _fetch_gates.get(loop)
+    if gate is None:
+        gate = _fetch_gates[loop] = asyncio.Semaphore(_GLOBAL_FETCH_CONCURRENCY)
+    return gate
+
+
+def _gen_redis_key(gen_key: tuple[str, str, str]) -> str:
+    mode, market, universe = gen_key
+    return f"{_CACHE_PREFIX}:scan_gen:{mode}:{market}:{universe}"
+
+
+async def _next_generation(redis: Redis, gen_key: tuple[str, str, str]) -> int:
+    """开始新一轮扫描：轮次号 +1（Redis 原子自增），返回本轮号。"""
+    try:
+        gen = await incr_with_ttl(redis, _gen_redis_key(gen_key), _SCAN_GEN_TTL)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_scan_gen_incr_failed", key=gen_key, error=str(e))
+        gen = _scan_generation.get(gen_key, 0) + 1
+    _scan_generation[gen_key] = gen
+    return gen
+
+
+async def _is_superseded(redis: Redis, gen_key: tuple[str, str, str], generation: int) -> bool:
+    """是否已有更新的一轮扫描（本轮的补算应当退出、不再写缓存）。"""
+    try:
+        raw = await redis.get(_gen_redis_key(gen_key))
+        current = int(raw) if raw is not None else _scan_generation.get(gen_key)
+    except Exception:  # noqa: BLE001
+        current = _scan_generation.get(gen_key)
+    return current is not None and current != generation
+
+
+@dataclass
+class _ScanState:
+    """一轮扫描的累积结果：全量扫描填一次，后台补算把失败的逐只补进来后重新组装快照。"""
+
+    market: str
+    universe: MarketUniverse
+    is_watchlist: bool
+    constituents: list[tuple[str, str]]
+    user_id: int | None
+    mode: str
+    days: int
+    top_n: int
+    max_age_days: int
+    start_date: str
+    end_date: str
+    cutoff: str
+    # symbol → (信号历史, 待确认候选, 最近K线日期)；只存拉数成功的
+    results: dict[str, tuple[list[RawSignal], list[RawSignal], list[str]]] = field(default_factory=dict)
+    # symbol → 失败分类；补算成功后移除
+    failures: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def gen_key(self) -> tuple[str, str, str]:
+        return (self.mode, self.market, WATCHLIST_KEY if self.is_watchlist else self.universe.key)
+
+    @property
+    def pending(self) -> list[str]:
+        """还能补算的失败成分股。"""
+        return [sym for sym, f in self.failures.items() if f in _RETRYABLE_FAILURES]
+
+
+async def _scan_into(state: _ScanState, symbol: str, name: str, *, redis: Redis) -> str | None:
+    """扫一只成分股并把结果记进 state，返回失败分类（None=成功或本就没有K线）。"""
+    history, failure, result, dates = await _scan_symbol(
+        symbol, name, user_id=state.user_id, start_date=state.start_date,
+        end_date=state.end_date, redis=redis, mode=state.mode,
+    )
+    if failure:
+        state.failures[symbol] = failure
+        return failure
+    state.failures.pop(symbol, None)
+    cands = build_candidates(symbol, name, result) if result is not None else []
+    state.results[symbol] = (history, cands, dates)
+    return None
+
+
+async def _assemble(state: _ScanState, *, redis: Redis) -> SignalRadarResponse:
+    """按 state 里已有的扫描结果组装一份快照（交易日历、每日榜单、共振、待确认候选）。"""
+    histories = [h for h, _, _ in state.results.values() if h]
+    candidates = [c for _, cands, _ in state.results.values() for c in cands]
+    # 展示的交易日历：以成分股日线为准（>=30% 成分股有K线的日期），并入参考 ETF 的日期；
+    # 都拿不到才退化成「跳过周末」的近似日历。
+    try:
+        etf_bars = await fetch_kline(
+            user_id=state.user_id, symbol=state.universe.etf_symbol, start_date=state.cutoff,
+            end_date=state.end_date, freq="daily", redis=redis,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_etf_kline_failed", market=state.market, error=str(e))
+        etf_bars = []
+    # 日历多取一段（最老展示日之前再往前 max_age_days 天），用来按交易日数信号年龄
+    limit = state.days + state.max_age_days + 1
+    calendar = trading_days_from_constituents(
+        [dates for _, _, dates in state.results.values() if dates],
+        etf_dates=[b["time"] for b in etf_bars], cutoff=state.cutoff, end_date=state.end_date, limit=limit,
+    ) or _fallback_trading_days(end_date=state.end_date, limit=limit)
+    trading_days = calendar[:state.days]
+    top_n = state.top_n
+
+    resp = SignalRadarResponse(
+        market=state.market,
+        universe=WATCHLIST_KEY if state.is_watchlist else state.universe.key,
+        universes=_universes_out(state.market),
+        etf_name="自选" if state.is_watchlist else state.universe.etf_name,
+        universe_size=len(state.constituents),
+        as_of=state.end_date,
+        top_n=top_n,
+        days=build_days(histories, trading_days, top_n=top_n, max_age_days=state.max_age_days,
+                        calendar=calendar),
+        status="ready",
+        computed_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
+        signal_mode=state.mode,
+        pending_symbols=0 if state.is_watchlist else len(state.pending),
+    )
+    if resp.days:
+        # 次级别结论描述的是「现在」，只对最新交易日：先取更大的候选池补算次级别，
+        # 再按综合分 + 共振加分重排取前 top_n（共振参与排名）
+        pool = build_days(histories, trading_days[:1], top_n=max(top_n, _RESONANCE_POOL),
+                          max_age_days=state.max_age_days, calendar=calendar)[0]
+        await attach_sub_levels(pool, end_date=state.end_date, user_id=state.user_id, redis=redis,
+                                mode=state.mode)
+        resp.days[0] = rerank_with_resonance(pool, top_n)
+        resp.sub_level_as_of = datetime.now(UTC).replace(microsecond=0).isoformat()
+        # 「待确认」候选：最后一笔还在走、不算买卖点，只给最新一天补足剩余名额
+        latest = resp.days[0]
+        latest.candidates = pick_candidates(
+            candidates, latest.date, calendar, taken={x.symbol for x in latest.signals},
+            slots=top_n - len(latest.signals), max_age_days=state.max_age_days)
+    return resp
+
+
+async def _publish(state: _ScanState, resp: SignalRadarResponse, *, redis: Redis) -> SignalRadarResponse:
+    """写缓存并返回应当交给调用方的快照（残缺过多且有旧缓存时返回旧缓存）。"""
+    failure_counts = Counter(state.failures.values())
+    failed_symbols = len(state.failures)
+    failure_rate = failed_symbols / len(state.constituents) if state.constituents else 0.0
+    logger.info(
+        "signal_radar_computed", market=state.market, mode=state.mode,
+        universe=len(state.constituents), symbols_with_signals=sum(1 for h, _, _ in state.results.values() if h),
+        symbols_failed=failed_symbols, failure_rate=round(failure_rate, 2),
+        failure_breakdown=dict(failure_counts), pending=resp.pending_symbols, days=len(resp.days),
+    )
+    if state.is_watchlist:
+        # 自选结果按用户隔离缓存，不进共用键；也不做「保留旧缓存」保护（清单随时会变）
+        if state.user_id is not None:
+            try:
+                await redis.set(watchlist_cache_key(state.market, state.user_id, state.constituents, state.mode),
+                                resp.model_dump_json(), ex=WATCHLIST_CACHE_TTL)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("signal_radar_watchlist_cache_write_error", market=state.market, error=str(e))
+        return resp
+
+    # 这次扫描大半个市场都请求不到（比如限流/熔断赶一起了），别让这坨残缺结果
+    # 覆盖掉还好好的旧缓存——宁可继续服务旧数据，后台补算把失败的补齐后再写。
+    # 首次扫描没有旧缓存可保，再差也得写进去，不然用户永远看不到任何数据。
+    if failure_rate > _MAX_ACCEPTABLE_FAILURE_RATE:
+        stale = await _read_cache(redis, state.market, state.universe.key, state.mode)
+        if stale is not None:
+            logger.warning(
+                "signal_radar_scan_degraded_keep_stale_cache",
+                market=state.market, failure_rate=round(failure_rate, 2),
+                failure_breakdown=dict(failure_counts),
+            )
+            return stale
+
+    await _write_cache(redis, resp)
+    return resp
+
+
+async def _backfill(state: _ScanState, generation: int, *, redis: Redis) -> None:
+    """后台慢慢补算拉失败的成分股：逐轮等待（越等越久）→ 串行重扫失败的 → 有补上的就重写快照。
+
+    新一轮全量扫描开始后（扫描号变了）立即退出；全部补齐或轮次用完即结束。
+    """
+    names = dict(state.constituents)
+
+    async def superseded() -> bool:
+        return await _is_superseded(redis, state.gen_key, generation)
+
+    for round_no, delay in enumerate(_BACKFILL_DELAYS, start=1):
+        await asyncio.sleep(delay)
+        todo = state.pending
+        if not todo or await superseded():
+            return
+        recovered = 0
+        for sym in todo:
+            if await superseded():
+                return
+            try:
+                if await _scan_into(state, sym, names.get(sym, sym), redis=redis) is None:
+                    recovered += 1
+            except Exception as e:  # noqa: BLE001 单只补算异常不影响其余
+                logger.warning("signal_radar_backfill_symbol_failed", symbol=sym, error=str(e))
+            await asyncio.sleep(_BACKFILL_PACE_SECONDS)
+        logger.info("signal_radar_backfill_round", market=state.market, universe=state.universe.key,
+                    mode=state.mode, round=round_no, retried=len(todo), recovered=recovered,
+                    remaining=len(state.pending))
+        if recovered and not await superseded():
+            resp = await _assemble(state, redis=redis)
+            # 组装要补算共振（有网络请求），期间可能已开始新一轮扫描：写入前再核对一次
+            if await _is_superseded(redis, state.gen_key, generation):
+                return
+            await _publish(state, resp, redis=redis)
+    if state.pending:
+        logger.warning("signal_radar_backfill_gave_up", market=state.market, universe=state.universe.key,
+                       mode=state.mode, remaining=state.pending)
+
+
+def _spawn_backfill(state: _ScanState, generation: int, *, redis: Redis) -> None:
+    async def _run() -> None:
+        try:
+            await _backfill(state, generation, redis=redis)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            logger.exception("signal_radar_backfill_failed", market=state.market, error=str(e))
+
+    task = asyncio.create_task(_run())
+    _backfill_tasks.add(task)
+    task.add_done_callback(_backfill_tasks.discard)
+
+
+async def wait_backfills() -> None:
+    """等待当前所有后台补算结束（测试与优雅退出用）。"""
+    while _backfill_tasks:
+        await asyncio.gather(*list(_backfill_tasks), return_exceptions=True)
+
+
 async def compute_market(
     market: str, *, redis: Redis, user_id: int | None = None,
     universe_key: str | None = None,
@@ -725,8 +1001,11 @@ async def compute_market(
 
     mode：买卖点口径，结果写入该口径的缓存键。多个口径各调一次（K线走缓存，不重复拉数）。
 
+    拉数失败（限流 / 暂时不可用）的成分股不会就此缺席：先用已成功的写一份快照，再在后台
+    慢慢补算失败的（见 _backfill），补上一批就重写一次，直到指数成分全部算完。
+
     watchlist 非 None 时扫用户自选股（「自选」股票池）：结果写入按用户隔离的缓存键，
-    交易日历仍参考该市场默认 universe 的 ETF。
+    交易日历仍参考该市场默认 universe 的 ETF；自选不做后台补算（用户可随时下拉重扫）。
     """
     is_watchlist = watchlist is not None
     universe = get_universe(market, None if is_watchlist else universe_key)
@@ -739,112 +1018,32 @@ async def compute_market(
                                    refresh=refresh_constituents)
 
     today = date.today()
-    end_date = today.isoformat()
-    # 取足够 warmup + 候选窗口的历史；缠论在完整序列上算以消除左边界漂移。
-    start_date = _fetch_start(today, window)
-    cutoff = (today - timedelta(days=window)).isoformat()
+    state = _ScanState(
+        market=market, universe=universe, is_watchlist=is_watchlist, constituents=constituents,
+        user_id=user_id, mode=mode, days=days, top_n=top_n, max_age_days=max_age_days,
+        # 取足够 warmup + 候选窗口的历史；缠论在完整序列上算以消除左边界漂移。
+        start_date=_fetch_start(today, window), end_date=today.isoformat(),
+        cutoff=(today - timedelta(days=window)).isoformat(),
+    )
+    # 新一轮扫描：作废同一 (口径, 市场, universe) 上还在跑的旧补算
+    generation = await _next_generation(redis, state.gen_key)
 
     sem = asyncio.Semaphore(_SCAN_CONCURRENCY)
 
-    candidates: list[RawSignal] = []
-
-    async def _one(symbol: str, name: str) -> tuple[list[RawSignal], str | None, list[str]]:
+    async def _one(symbol: str, name: str) -> None:
         async with sem:
-            history, failure, result, dates = await _scan_symbol(
-                symbol, name, user_id=user_id, start_date=start_date,
-                end_date=end_date, redis=redis, mode=mode,
-            )
-            if result is not None:
-                candidates.extend(build_candidates(symbol, name, result))
-            if failure == "rate_limited":
+            if await _scan_into(state, symbol, name, redis=redis) == "rate_limited":
                 # 命中限流别立刻放行下一个排队的任务抢同一个名额，攒着火上浇油——
                 # 让这个名额歇一会儿，给数据源一点喘息时间再继续消费队列。
                 await asyncio.sleep(_RATE_LIMIT_BACKOFF_SECONDS)
-            return history, failure, dates
 
-    scanned = await asyncio.gather(*[_one(sym, name) for sym, name in constituents])
-    histories = [h for h, _, _ in scanned if h]
-    failure_counts = Counter(f for _, f, _ in scanned if f)
+    await asyncio.gather(*[_one(sym, name) for sym, name in constituents])
 
-    # 展示的交易日历：以成分股日线为准（>=30% 成分股有K线的日期），并入参考 ETF 的日期；
-    # 都拿不到才退化成「跳过周末」的近似日历。
-    try:
-        etf_bars = await fetch_kline(
-            user_id=user_id, symbol=universe.etf_symbol, start_date=cutoff,
-            end_date=end_date, freq="daily", redis=redis,
-        )
-    except Exception as e:  # noqa: BLE001
-        logger.warning("signal_radar_etf_kline_failed", market=market, error=str(e))
-        etf_bars = []
-    # 日历多取一段（最老展示日之前再往前 max_age_days 天），用来按交易日数信号年龄
-    calendar = trading_days_from_constituents(
-        [dates for _, _, dates in scanned if dates],
-        etf_dates=[b["time"] for b in etf_bars], cutoff=cutoff, end_date=end_date,
-        limit=days + max_age_days + 1,
-    ) or _fallback_trading_days(end_date=end_date, limit=days + max_age_days + 1)
-    trading_days = calendar[:days]
-
-    resp = SignalRadarResponse(
-        market=market,
-        universe=WATCHLIST_KEY if is_watchlist else universe.key,
-        universes=_universes_out(market),
-        etf_name="自选" if is_watchlist else universe.etf_name,
-        universe_size=len(constituents),
-        as_of=end_date,
-        top_n=top_n,
-        days=build_days(histories, trading_days, top_n=top_n, max_age_days=max_age_days,
-                        calendar=calendar),
-        status="ready",
-        computed_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
-        signal_mode=mode,
-    )
-    if resp.days:
-        # 次级别结论描述的是「现在」，只对最新交易日：先取更大的候选池补算次级别，
-        # 再按综合分 + 共振加分重排取前 top_n（共振参与排名）
-        pool = build_days(histories, trading_days[:1], top_n=max(top_n, _RESONANCE_POOL),
-                          max_age_days=max_age_days, calendar=calendar)[0]
-        await attach_sub_levels(pool, end_date=end_date, user_id=user_id, redis=redis, mode=mode)
-        resp.days[0] = rerank_with_resonance(pool, top_n)
-        resp.sub_level_as_of = datetime.now(UTC).replace(microsecond=0).isoformat()
-        # 「待确认」候选：最后一笔还在走、不算买卖点，只给最新一天补足剩余名额
-        latest = resp.days[0]
-        latest.candidates = pick_candidates(
-            candidates, latest.date, calendar, taken={x.symbol for x in latest.signals},
-            slots=top_n - len(latest.signals), max_age_days=max_age_days)
-    failed_symbols = sum(failure_counts.values())
-    failure_rate = failed_symbols / len(constituents) if constituents else 0.0
-    logger.info(
-        "signal_radar_computed", market=market,
-        universe=len(universe.constituents), symbols_with_signals=len(histories),
-        symbols_failed=failed_symbols, failure_rate=round(failure_rate, 2),
-        failure_breakdown=dict(failure_counts), days=len(resp.days),
-    )
-
-    # 这次扫描大半个市场都请求不到（比如限流/熔断赶一起了），别让这坨残缺结果
-    # 覆盖掉几分钟前还好好的缓存——那样用户接下来 6 小时看到的就是这次的烂摊子。
-    # 只有「已经有一份旧缓存能保底」时才这么做；首次扫描没有旧缓存可保，再差也
-    # 得写进去，不然用户永远看不到任何数据。
-    if is_watchlist:
-        # 自选结果按用户隔离缓存，不进共用键；也不做「保留旧缓存」保护（清单随时会变）
-        if user_id is not None:
-            try:
-                await redis.set(watchlist_cache_key(market, user_id, constituents, mode), resp.model_dump_json(),
-                                ex=WATCHLIST_CACHE_TTL)
-            except Exception as e:  # noqa: BLE001
-                logger.warning("signal_radar_watchlist_cache_write_error", market=market, error=str(e))
-        return resp
-
-    if failure_rate > _MAX_ACCEPTABLE_FAILURE_RATE:
-        stale = await _read_cache(redis, market, universe.key, mode)
-        if stale is not None:
-            logger.warning(
-                "signal_radar_scan_degraded_keep_stale_cache",
-                market=market, failure_rate=round(failure_rate, 2),
-                failure_breakdown=dict(failure_counts),
-            )
-            return stale
-
-    await _write_cache(redis, resp)
+    resp = await _publish(state, await _assemble(state, redis=redis), redis=redis)
+    if not is_watchlist and state.pending and _BACKFILL_DELAYS:
+        logger.info("signal_radar_backfill_scheduled", market=market, universe=universe.key, mode=mode,
+                    pending=len(state.pending))
+        _spawn_backfill(state, generation, redis=redis)
     return resp
 
 

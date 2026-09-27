@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from redis.asyncio import Redis
@@ -16,6 +17,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.v1.auth import get_current_user
 from app.cache.client import current_redis, get_redis
+from app.cache.operations import acquire_lock, release_lock
 from app.core.limiter import limiter
 from app.core.logging import logger
 from app.db.session import get_db
@@ -30,6 +32,8 @@ from app.services.signal_radar.service import (
     peek_cache_entry,
     read_demo_cache,
     read_watchlist_cache,
+    scan_lock_key,
+    SCAN_LOCK_TTL,
 )
 from app.services.chan.signal_policy import DEFAULT_MODE, normalize_mode
 from app.services.watchlist import display_name, list_items
@@ -37,7 +41,21 @@ from app.services.signal_radar.universe import get_universe, supported_markets
 
 router = APIRouter()
 
-_GENERATING_TTL = 300  # 后台扫描去重标记的存活时间（秒）
+_GENERATING_TTL = SCAN_LOCK_TTL  # 见 service.SCAN_LOCK_TTL
+# 主动刷新的冷却：快照在这么多秒内刚算过就不再重扫——多人同时下拉刷新时，
+# 只有第一次真正触发扫描，其余直接用这份新快照。
+_REFRESH_COOLDOWN_SECONDS = 300
+
+
+def _recently_computed(resp: SignalRadarResponse | None) -> bool:
+    """快照是否在刷新冷却期内算出。"""
+    if resp is None or not resp.computed_at:
+        return False
+    try:
+        computed = datetime.fromisoformat(resp.computed_at)
+    except ValueError:
+        return False
+    return (datetime.now(UTC) - computed).total_seconds() < _REFRESH_COOLDOWN_SECONDS
 _background_tasks: set[asyncio.Task] = set()
 
 
@@ -48,7 +66,7 @@ def _spawn(coro) -> None:
 
 
 def _generating_key(market: str, universe_key: str, mode: str = DEFAULT_MODE) -> str:
-    return f"signal_radar:generating:{mode}:{market}:{universe_key}"
+    return scan_lock_key(market, universe_key, mode)
 
 
 _MODE_QUERY = Query(default=None, description="买卖点口径：loose（默认）/ strict，见 /chan/signal-modes")
@@ -67,7 +85,7 @@ async def _run_watchlist_scan(
         logger.exception("signal_radar_watchlist_scan_failed", market=market, error=str(e))
     finally:
         try:
-            await redis.delete(_generating_key(market, f"{WATCHLIST_KEY}:u{user_id}", mode))
+            await release_lock(redis, _generating_key(market, f"{WATCHLIST_KEY}:u{user_id}", mode))
         except Exception:  # noqa: BLE001
             pass
 
@@ -88,11 +106,12 @@ async def _watchlist_radar(
 
     if not watchlist:
         return empty("ready")  # 自选里还没有该市场的股票，前端提示去加入
-    if not refresh and (cached := await read_watchlist_cache(redis, market, user.id, watchlist, mode)):
+    cached = await read_watchlist_cache(redis, market, user.id, watchlist, mode)
+    if cached and (not refresh or _recently_computed(cached)):
         return cached
+    # 原子抢锁：同一用户同一市场只跑一轮自选扫描（连点刷新、多端同时打开都不会叠加）
     gkey = _generating_key(market, f"{WATCHLIST_KEY}:u{user.id}", mode)
-    if refresh or not await redis.get(gkey):
-        await redis.set(gkey, "1", ex=_GENERATING_TTL)
+    if await acquire_lock(redis, gkey, _GENERATING_TTL):
         _spawn(_run_watchlist_scan(market, user.id, watchlist, mode))
         logger.info("signal_radar_watchlist_scan_spawned", market=market, user_id=user.id, size=len(watchlist))
     return empty("generating")
@@ -113,7 +132,7 @@ async def _run_scan(
         logger.exception("signal_radar_scan_failed", market=market, error=str(e))
     finally:
         try:
-            await redis.delete(_generating_key(market, universe_key, mode))
+            await release_lock(redis, _generating_key(market, universe_key, mode))
         except Exception:  # noqa: BLE001
             pass
 
@@ -134,7 +153,7 @@ async def _run_demo_scan(market: str, universe_key: str, mode: str = DEFAULT_MOD
         logger.exception("signal_radar_demo_scan_failed", market=market, universe=universe_key, error=str(e))
     finally:
         try:
-            await redis.delete(_demo_generating_key(market, universe_key, mode))
+            await release_lock(redis, _demo_generating_key(market, universe_key, mode))
         except Exception:  # noqa: BLE001
             pass
 
@@ -173,8 +192,7 @@ async def signal_radar_demo(
         return cached
 
     gkey = _demo_generating_key(market, uni.key, mode)
-    if not await redis.get(gkey):
-        await redis.set(gkey, "1", ex=_GENERATING_TTL)
+    if await acquire_lock(redis, gkey, _GENERATING_TTL):
         _spawn(_run_demo_scan(market, uni.key, mode))
         logger.info("signal_radar_demo_scan_spawned", market=market, universe=uni.key, user_id=user.id)
 
@@ -222,14 +240,16 @@ async def signal_radar(
 
     cached, is_stale = await peek_cache_entry(redis, market, uni.key, mode)
 
+    # 主动刷新在冷却期内（刚算过）视同普通请求，避免多人同时下拉刷新接连重扫
+    if refresh and _recently_computed(cached):
+        refresh = False
     # 需要触发一次后台扫描的情形：强制刷新、无任何缓存、或缓存已陈旧（预热迟到/停摆）。
     if refresh or cached is None or is_stale:
-        # 去重：已有后台扫描在跑就不再重复启动（按 (市场, universe) 各自去重）；
-        # 但用户主动 refresh 时无视去重，确保确实重扫一次。
+        # 去重：原子抢锁（SET NX），同一 (口径, 市场, universe) 任一时刻只有一轮扫描——
+        # 多人同时请求、刷新、定时预热撞在一起都只跑一次；正在扫描时刷新也不再叠加，
+        # 等这一轮结果即可。
         gkey = _generating_key(market, uni.key, mode)
-        already = await redis.get(gkey)
-        if refresh or not already:
-            await redis.set(gkey, "1", ex=_GENERATING_TTL)
+        if await acquire_lock(redis, gkey, _GENERATING_TTL):
             _spawn(_run_scan(market, uni.key, user.id, refresh=refresh, mode=mode))
             reason = "refresh" if refresh else ("cold" if cached is None else "stale")
             logger.info(

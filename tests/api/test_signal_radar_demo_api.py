@@ -18,8 +18,11 @@ class _Redis:
     async def get(self, k):
         return self.store.get(k)
 
-    async def set(self, k, v, ex=None, keepttl=False):
+    async def set(self, k, v, ex=None, keepttl=False, nx=False):
+        if nx and k in self.store:
+            return None
         self.store[k] = v
+        return True
 
     async def delete(self, k):
         self.store.pop(k, None)
