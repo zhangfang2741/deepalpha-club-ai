@@ -22,12 +22,16 @@ RUN apt-get update && apt-get install -y \
     && pip install uv \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy pyproject.toml first to leverage Docker cache
-COPY pyproject.toml .
-RUN uv venv && . .venv/bin/activate && uv pip install -e .
+# 先只拷依赖清单，利用 Docker 层缓存。
+# 必须按 uv.lock 精确安装：原来的 `uv pip install -e .` 不读锁文件，每次部署都装
+# 最新版，曾把 sqlmodel 从 0.0.38 静默升到 0.0.47（强制 datetime 带时区），
+# 导致生词本评分 / 待复习 / 统计接口全部 500。
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy the application
 COPY . .
+RUN uv sync --frozen --no-dev
 
 # Make entrypoint script executable - do this before changing user
 RUN chmod +x /app/scripts/docker-entrypoint.sh /app/start.sh /app/scripts/start_web_with_worker.sh
