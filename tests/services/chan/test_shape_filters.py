@@ -1,6 +1,7 @@
 """形态过滤：czsc 形态信号 → 雷达剔除规则（纯函数部分）。"""
 
 import datetime as dt
+import math
 from typing import Any
 
 import pytest
@@ -207,7 +208,7 @@ def test_scan_bs_events_records_shape_states_per_day() -> None:
 
 
 def test_shape_states_volatility_unknown_when_bars_insufficient() -> None:
-    """K 线不足 w+n（210）根：波动率一律「未知」，不信 czsc 的退化输出。"""
+    """K 线不足 w+n（130）根：波动率一律「未知」，不信 czsc 的退化输出。"""
     bars = _trend_then_flat(n_flat=30)
     states: dict[str, ShapeState] = {}
     scan_bs_events(bars, symbol="TEST", freq=Freq.D, shape_states=states)
@@ -215,17 +216,18 @@ def test_shape_states_volatility_unknown_when_bars_insufficient() -> None:
 
 
 def test_early_day_volatility_never_low_when_total_bars_sufficient() -> None:
-    """序列足够长（>=210 根，未知守护不生效）但信号日早于第 210 根时的退化守护。
+    """序列足够长（>=130 根，未知守护不生效）但信号日早于分档产出点时的退化守护。
 
     read_shape_state 的 total_bars 传的是本次推进的K线总数而非已推进根数，
-    早期日期的波动率直接暴露 czsc 退化输出；实测为「其他」（fail-safe，
-    不触发低波动剔除），一旦 czsc 升级改为输出「低波动」本测试立刻红。
+    早期日期的波动率直接暴露 czsc 退化输出；实测为「其他」（分档值约从第
+    2w+n≈250 根起才产出，早期日期 fail-safe，不触发低波动剔除），一旦
+    czsc 升级改为输出「低波动」本测试立刻红。
     """
-    bars = _trend_then_flat(n_flat=30, n_extra=160)  # 40 + 30 + 160 = 230 根
-    assert len(bars) >= 210
+    bars = _trend_then_flat(n_flat=30, n_extra=160)  # 40 + 30 + 160 = 230 根 >= 130
+    assert len(bars) >= 130
     states: dict[str, ShapeState] = {}
     scan_bs_events(bars, symbol="TEST", freq=Freq.D, shape_states=states)
-    early_day = bars[100]["time"]  # 前 200 根内、晚于逐根推进起点（第 21 根）
+    early_day = bars[100]["time"]  # 晚于逐根推进起点（第 21 根）、早于分档产出点
     assert states[early_day].volatility in {"其他", "未知", "中波动", "高波动"}
 
 
@@ -236,3 +238,32 @@ def test_scan_bs_events_without_shape_states_unchanged() -> None:
     states: dict[str, ShapeState] = {}
     with_states = scan_bs_events(bars, symbol="TEST", freq=Freq.D, shape_states=states)
     assert [(e.type, e.bar_time) for e in with_states] == [(e.type, e.bar_time) for e in baseline]
+
+
+def _sine_bars(segments: list[tuple[int, float]]) -> list[dict]:
+    """分段 (根数, 振幅) 的确定性正弦序列：波动幅度可控且无随机性。"""
+    seq: list[tuple[float, float, float, float]] = []
+    p = 100.0
+    i = 0
+    for n, amp in segments:
+        for _ in range(n):
+            o = p
+            c = p + math.sin(i / 4) * amp
+            seq.append((o, max(o, c) + amp * 0.4, min(o, c) - amp * 0.4, c))
+            p = c
+            i += 1
+    return _bars(seq)
+
+
+def test_volatility_layering_actually_fires() -> None:
+    """波动率分层真实触发守护：w 必须落在 czsc 实际可产出分档值的范围内。
+
+    czsc 1.0.1 的 CzscSignals 信号滚动窗口有限：实测 260 根序列下 w=130 起恒
+    输出「其他」（规则形同虚设），w=120 时约从第 2w+n（≈250）根起开始产出
+    分档值。序列取 130 根低波动 + 140 根剧烈波动（270 根 > 250），断言存在
+    某天产出真实分档值；具体哪天、哪一档交给 czsc，避免对分档细节过拟合。
+    """
+    bars = _sine_bars([(130, 0.2), (140, 3.0)])
+    states: dict[str, ShapeState] = {}
+    scan_bs_events(bars, symbol="TEST", freq=Freq.D, shape_states=states)
+    assert any(s.volatility in {"低波动", "中波动", "高波动"} for s in states.values())

@@ -28,7 +28,11 @@ from czsc import CzscSignals
 _FAKE_BREAK_N = 20
 _FAKE_BREAK_M = 5
 _NARROW_N = 10
-_VOLATILITY_W = 200
+# czsc 1.0.1 的 CzscSignals 对每个信号只提供最近约 130 根 bars 的滚动窗口：
+# 实测 260 根序列下 w=130 起恒输出「其他」（规则形同虚设），取 120 留余量；
+# 分档值约从第 2w+n（≈250）根起才产出（雷达日线窗口约 500 根，充裕）。
+# total_bars 不足 w+n=130 根时 read_shape_state 仍置「未知」跳过。
+_VOLATILITY_W = 120
 _VOLATILITY_N = 10
 _RANGE_OSC_TH = 10  # czsc 默认 th=2（2% 中心振幅）对美股日线几乎不触发，取 10
 
