@@ -37,6 +37,10 @@ struct DiagramSpec {
     var macdDEA: [Double] = []
     /// MACD 副图上的标注，坐标独立于主图。
     var macdLabels: [Mark] = []
+    /// 背驰连线：与分析页一致，粉色实线连起参与比较的两段终点，两端各一个圆点。
+    var divergences: [Conn] = []
+    /// 主图高度。K 线多的图（买卖点全过程）给高一点，否则挤成一团。
+    var height: CGFloat = 160
 
     struct Conn {
         let from: Int
@@ -113,10 +117,77 @@ struct DiagramSpec {
     }
 }
 
+/// 由一串转折点生成蜡烛：相邻两个转折点之间铺 legBars 根，一笔跨好几根 K 线，
+/// 跟分析页上真实的笔一个样子（fromPath 一根蜡烛就是一笔，看着不像）。
+///
+/// 转折点上那根的影线加长，保证它就是局部极值——笔的端点按 high / low 连，
+/// 分型圆点也贴着它画，三者对得上。
+struct Zigzag {
+    let turns: [Double]
+    var legBars = 3
+
+    /// 第 k 个转折点所在的蜡烛下标。
+    func t(_ k: Int) -> Int { k * legBars }
+
+    var candles: [DiagramCandle] {
+        var out: [DiagramCandle] = []
+        let wick = 0.012
+        for k in turns.indices {
+            if k == 0 {
+                let p = turns[0]
+                // 起点是底就从上方落下来收在 p（低点探出去），是顶则反过来
+                if turns.count > 1 && turns[1] > p {
+                    out.append(DiagramCandle(open: p + 0.03, high: p + 0.03 + wick,
+                                             low: p - wick * 2.5, close: p))
+                } else {
+                    out.append(DiagramCandle(open: p - 0.03, high: p + wick * 2.5,
+                                             low: p - 0.03 - wick, close: p))
+                }
+                continue
+            }
+            let a = turns[k - 1], b = turns[k]
+            for j in 1...legBars {
+                let open = a + (b - a) * Double(j - 1) / Double(legBars)
+                let close = a + (b - a) * Double(j) / Double(legBars)
+                var high = max(open, close) + wick
+                var low = min(open, close) - wick
+                if j == legBars {
+                    // 转折点：向上走到这里是顶，向下走到这里是底
+                    if b > a { high = b + wick * 2.5 } else { low = b - wick * 2.5 }
+                }
+                out.append(DiagramCandle(open: open, high: high, low: low, close: close))
+            }
+        }
+        return out
+    }
+
+    /// 第 from 到第 to 个转折点之间逐个连笔（端点取顶的高点 / 底的低点）。
+    /// dashedLast：最后一笔画成虚线，表示还在走、未确认。
+    func strokes(from: Int = 0, to: Int? = nil, dashedLast: Bool = false) -> [DiagramSpec.Conn] {
+        let end = to ?? turns.count - 1
+        guard end > from else { return [] }
+        return (from..<end).map { k in
+            conn(k, k + 1, dashed: dashedLast && k + 1 == end)
+        }
+    }
+
+    /// 第 a 个转折点连到第 b 个（线段、背驰连线都用它）。
+    func conn(_ a: Int, _ b: Int, dashed: Bool = false) -> DiagramSpec.Conn {
+        DiagramSpec.Conn(from: t(a), to: t(b), fromEdge: edge(a), toEdge: edge(b), dashed: dashed)
+    }
+
+    /// 第 k 个转折点是顶还是底：比左右邻居高就是顶。
+    func isTop(_ k: Int) -> Bool {
+        let neighbor = k + 1 < turns.count ? turns[k + 1] : turns[k - 1]
+        return turns[k] > neighbor
+    }
+
+    private func edge(_ k: Int) -> DiagramSpec.Conn.Edge { isTop(k) ? .high : .low }
+}
+
 /// 按 DiagramSpec 绘制的示意图。
 struct LessonDiagram: View {
     let spec: DiagramSpec
-    var height: CGFloat = 160
 
     var body: some View {
         Canvas { ctx, size in
@@ -131,6 +202,7 @@ struct LessonDiagram: View {
             drawCandles(ctx, geo: geo)
             drawConns(ctx, geo: geo, conns: spec.segments, color: Theme.segment, width: 2.4)
             drawConns(ctx, geo: geo, conns: spec.strokes, color: Theme.stroke, width: 1.4)
+            drawDivergences(ctx, geo: geo)
             drawFractals(ctx, geo: geo)
             drawLabels(ctx, geo: geo, size: priceSize)
 
@@ -138,7 +210,7 @@ struct LessonDiagram: View {
                 drawMACD(ctx, size: size, macdHeight: macdH, priceGeo: geo)
             }
         }
-        .frame(height: spec.macdBars.isEmpty ? height : height * 1.35)
+        .frame(height: spec.macdBars.isEmpty ? spec.height : spec.height * 1.35)
         .background(Theme.surfaceAlt)
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
@@ -278,6 +350,26 @@ struct LessonDiagram: View {
             ctx.stroke(p, with: .color(c.dashed ? color.opacity(0.7) : color),
                        style: StrokeStyle(lineWidth: width, lineCap: .round,
                                           dash: c.dashed ? [4, 4] : []))
+        }
+    }
+
+    /// 背驰连线：画法同分析页 ChanChartView.drawDivergences（粉色细实线 + 两端圆点）。
+    private func drawDivergences(_ ctx: GraphicsContext, geo: Geometry) {
+        for c in spec.divergences {
+            guard spec.candles.indices.contains(c.from),
+                  spec.candles.indices.contains(c.to) else { continue }
+            let p1 = CGPoint(x: geo.x(c.from), y: geo.y(price(c.from, c.fromEdge)))
+            let p2 = CGPoint(x: geo.x(c.to), y: geo.y(price(c.to, c.toEdge)))
+            var line = Path()
+            line.move(to: p1)
+            line.addLine(to: p2)
+            ctx.stroke(line, with: .color(Theme.divergence),
+                       style: StrokeStyle(lineWidth: 1.3, lineCap: .round))
+            for pt in [p1, p2] {
+                let r: CGFloat = 2.6
+                ctx.fill(Path(ellipseIn: CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)),
+                         with: .color(Theme.divergence))
+            }
         }
     }
 
