@@ -731,3 +731,8 @@
 "待确认 · 不算买卖点" = "Pending · not yet a signal";
 "待确认 %@ · %@" = "Pending %@ · %@";
 "%lld 只补算中" = "%lld catching up";
+
+/* 雷达形态有效性筛选 */
+"形态未确认不上榜：雷达只展示已确认买卖点，未确认信号与待确认候选仍可在详情页查看。" = "Only confirmed patterns appear on the radar. Unconfirmed signals and candidates remain available in the details.";
+"形态被破坏即退场：信号出现后，最低价跌破买点低点，或最高价突破卖点高点，即使收盘收回，当天起也不再上榜。" = "A signal leaves the radar when a later low breaks below its buy level or a later high breaks above its sell level, even if the closing price recovers.";
+"历史日期只展示当时已确认的信号；形态筛选不代表后续价格一定按预期发展。" = "Historical dates show signals confirmed by that date. Pattern screening does not guarantee subsequent price direction.";

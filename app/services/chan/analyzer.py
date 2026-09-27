@@ -69,6 +69,8 @@ class ChanAnalysisResult:
     """缠论完整分析结果"""
     symbol: str
     bars_count: int
+    # 逐根扫描已有的笔完成时刻，仅供雷达按历史日期检查确认状态，不改变详情信号。
+    stroke_done_at: dict[str, str] = field(default_factory=dict)
 
     # 各层分析结果
     merged_candles: list[MergedCandle] = field(default_factory=list)
@@ -230,6 +232,7 @@ class ChanAnalyzer:
         stroke_done_at: dict[str, str] = {}
         events = scan_bs_events(bars, symbol=symbol, freq=czsc_freq, stroke_done_at=stroke_done_at,
                                 families=policy.czsc_families)
+        result.stroke_done_at = stroke_done_at
         result.signals = policy.assemble(events, result.strokes, result.divergences, all_pivots, lang,
                                          stroke_done_at=stroke_done_at)
         logger.debug("chan_signals", count=len(result.signals))
