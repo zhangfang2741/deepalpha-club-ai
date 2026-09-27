@@ -329,7 +329,7 @@ def _confirmation_dates(result: ChanAnalysisResult) -> dict[str, str]:
     """复用 CZSC 逐根扫描得到的完成时刻，不额外运行分析或拉取行情。"""
     return {
         current.end_time: result.stroke_done_at[following.end_time][:10]
-        for current, following in zip(result.strokes, result.strokes[1:])
+        for current, following in zip(result.strokes, result.strokes[1:], strict=False)
         if following.end_time in result.stroke_done_at
     }
 
