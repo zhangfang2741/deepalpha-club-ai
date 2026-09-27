@@ -97,20 +97,14 @@ class StrictPolicy(_PolicyInfo):
 _ALL: tuple[SignalPolicy, ...] = (
         LoosePolicy(
             name="loose", version="loose1", label_zh="宽松", label_en="Relaxed",
-            description_zh="信号更多、出得更早：盘整里的背驰也算一类，二、三类按价格密集区与均线辅助判断，"
-                           "最后一笔还在走时也先标出（未确认）。",
-            description_en="More and earlier signals: divergence inside a range also counts as type-1; "
-                           "type-2/3 use price clusters and a moving-average filter; signals on the unfinished "
-                           "last leg are shown as unconfirmed.",
+            description_zh="信号更多、出得更早，最后一笔还在走时也先标出（未确认）",
+            description_en="More and earlier signals; signals on the unfinished last leg are shown as unconfirmed",
             czsc_families=("first", "second", "third"),
         ),
         StrictPolicy(
             name="strict", version="std4", label_zh="严格", label_en="Strict",
-            description_zh="严格按缠论原文：一类须趋势背驰，二类须跟在一类之后，三类须离开中枢后回落 / 反弹"
-                           "没有回到中枢；只认已走完的笔，最后一笔上的单列为「待确认」。",
-            description_en="Textbook Chan: type-1 needs a trend divergence, type-2 must follow a type-1, "
-                           "type-3 must not return to the pivot; only completed legs count, signals on the "
-                           "last leg are listed as pending.",
+            description_zh="严格按缠论原文定义，只认已走完的笔",
+            description_en="Textbook Chan definitions; only completed legs count",
             czsc_families=("first",),
         ),
 )

@@ -12,6 +12,8 @@ enum ChanService {
             "freq": freq,
             // 让后端按当前界面语言返回分析正文（趋势/形态解读/依据/买卖点描述）
             "lang": Localized.language() == .english ? "en" : "zh",
+            // 买卖点模式（宽松 / 严格，设置页选择），见 SignalModeManager
+            "mode": SignalMode.current(),
         ]
         // 信号雷达点进详情时传 0：不额外加 warmup，取数区间与雷达完全一致。
         if let warmupDays { query["warmup_days"] = String(warmupDays) }
@@ -29,6 +31,7 @@ enum ChanService {
             "end_date": endDate,
             "parent_freq": parentFreq,
             "lang": Localized.language() == .english ? "en" : "zh",
+            "mode": SignalMode.current(),
         ]
         if let warmupDays { query["warmup_days"] = String(warmupDays) }
         return try await APIClient.shared.get("/chan/sub-level", query: query)

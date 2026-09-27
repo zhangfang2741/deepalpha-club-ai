@@ -25,7 +25,8 @@ final class SignalRadarViewModel: ObservableObject {
 
     /// 免费预览按（市场, universe）区分：同一市场切换纳斯达克100/标普500，示例日要跟着换。
     /// 也用作 View 里 `.task(id:)` 的 id。
-    var demoKey: String { "\(market.rawValue)|\(currentUniverse ?? "")" }
+    /// 买卖点模式（宽松 / 严格）也进键：换模式后示例日要按新模式重拉。
+    var demoKey: String { "\(market.rawValue)|\(currentUniverse ?? "")|\(SignalMode.current())" }
 
     /// 已放弃拉取预览日的键（失败 / 轮询用尽仍在算 / 返回为空）。被取消不算放弃。
     @Published private(set) var demoGaveUpKey: String?
@@ -228,6 +229,16 @@ final class SignalRadarViewModel: ObservableObject {
         Task { await load() }
     }
 
+    /// 设置页切换了买卖点模式：旧模式的快照与示例日作废，按新模式重拉（后端按模式分别缓存）。
+    func signalModeChanged() {
+        response = nil
+        demoDay = nil
+        demoComputedAt = nil
+        demoGaveUpKey = nil
+        selectedDayIndex = 0
+        Task { await load() }
+    }
+
     func selectDay(_ index: Int) {
         selectedDayIndex = index
     }
@@ -241,13 +252,14 @@ final class SignalRadarViewModel: ObservableObject {
         errorMessage = nil
         let requested = market
         let requestedUniverse = currentUniverse
+        let requestedMode = SignalMode.current()
         do {
             var resp = try await SignalRadarService.fetch(
                 market: requested.rawValue, universe: requestedUniverse, refresh: refresh)
             var tries = 0
             var delay = pollInterval
             while resp.isGenerating && tries < maxPolls {
-                if market != requested || currentUniverse != requestedUniverse { return }
+                if market != requested || currentUniverse != requestedUniverse || SignalMode.current() != requestedMode { return }
                 try await Task.sleep(nanoseconds: delay)
                 resp = try await SignalRadarService.fetch(
                     market: requested.rawValue, universe: requestedUniverse)
@@ -255,7 +267,7 @@ final class SignalRadarViewModel: ObservableObject {
                 delay = min(delay + 1_000_000_000, maxPollInterval)  // 每次 +1s，封顶 6s
             }
             // 加载期间用户切了市场或 universe，就丢弃这次结果，别覆盖新请求。
-            if market != requested || currentUniverse != requestedUniverse { return }
+            if market != requested || currentUniverse != requestedUniverse || SignalMode.current() != requestedMode { return }
             response = resp
             if !resp.universes.isEmpty {
                 availableUniverses = resp.universes
@@ -268,13 +280,13 @@ final class SignalRadarViewModel: ObservableObject {
         } catch is CancellationError {
             return
         } catch let e as APIError {
-            if market == requested && currentUniverse == requestedUniverse { errorMessage = e.message }
+            if market == requested && currentUniverse == requestedUniverse && SignalMode.current() == requestedMode { errorMessage = e.message }
         } catch {
-            if market == requested && currentUniverse == requestedUniverse {
+            if market == requested && currentUniverse == requestedUniverse && SignalMode.current() == requestedMode {
                 errorMessage = "加载失败，请稍后再试"
             }
         }
-        if market == requested && currentUniverse == requestedUniverse { isLoading = false }
+        if market == requested && currentUniverse == requestedUniverse && SignalMode.current() == requestedMode { isLoading = false }
     }
 
     /// 拉「上个月 1 号」的免费预览快照（GET /signal-radar/demo），按当前（市场, universe），
