@@ -36,6 +36,7 @@ from app.services.chan.pivot import (
 )
 from app.services.chan.pivot_phase import PivotPhase, build_pivot_phase
 from app.services.chan.segment import Segment, find_segments
+from app.services.chan.shape_filters import ShapeState
 from app.services.chan.signal_policy import DEFAULT_MODE, get_policy
 from app.services.chan.signals import Signal
 from app.services.chan.stroke import Stroke
@@ -71,6 +72,8 @@ class ChanAnalysisResult:
     bars_count: int
     # 逐根扫描已有的笔完成时刻，仅供雷达按历史日期检查确认状态，不改变详情信号。
     stroke_done_at: dict[str, str] = field(default_factory=dict)
+    # 逐日形态状态（shape_filters），仅供雷达按信号日查表剔除假信号，详情页不读。
+    shape_states: dict[str, ShapeState] = field(default_factory=dict)
 
     # 各层分析结果
     merged_candles: list[MergedCandle] = field(default_factory=list)
@@ -141,6 +144,7 @@ class ChanAnalyzer:
     def analyze(
         self, symbol: str, bars: list[dict], *, min_gap: int = 4, lang: str = "zh",
         visible_from: str | None = None, freq: str = "daily", mode: str = DEFAULT_MODE,
+        shape_filters: bool = False,
     ) -> ChanAnalysisResult:
         """对K线数据执行完整缠论分析。
 
@@ -159,6 +163,9 @@ class ChanAnalyzer:
             信号裁剪回可见窗口。为 None 时不裁剪，行为与旧版一致。
         freq: K线周期（"daily" / "weekly"），映射 czsc.Freq.D / Freq.W，仅影响
             czsc 对象的周期标注（bars 本身已是目标周期的K线）。
+        shape_filters: 是否同时产出逐日形态状态（result.shape_states），供信号雷达
+            剔除假信号（假突破 / 窄幅震荡 / 收盘偏弱 / 低波动 / 区间震荡中的一类）。
+            只加状态不改买卖点；详情页等非雷达路径不传。
         """
         logger.info("chan_analysis_start", symbol=symbol, bars=len(bars), freq=freq)
 
@@ -230,9 +237,12 @@ class ChanAnalyzer:
         #    口径（宽松 / 严格 / …）由 signal_policy 注册表提供，这里只走统一接口
         policy = get_policy(mode)
         stroke_done_at: dict[str, str] = {}
+        shape_states: dict[str, ShapeState] = {}
         events = scan_bs_events(bars, symbol=symbol, freq=czsc_freq, stroke_done_at=stroke_done_at,
-                                families=policy.czsc_families)
+                                families=policy.czsc_families,
+                                shape_states=shape_states if shape_filters else None)
         result.stroke_done_at = stroke_done_at
+        result.shape_states = shape_states
         result.signals = policy.assemble(events, result.strokes, result.divergences, all_pivots, lang,
                                          stroke_done_at=stroke_done_at)
         logger.debug("chan_signals", count=len(result.signals))

@@ -119,10 +119,12 @@ def scan_bs_events(
     prev = dict.fromkeys(keys, "其他")
     seen: set[tuple[str, str]] = set()
     events: list[BsEvent] = []
-    for bar in raw[_INIT_N:]:
+    # i 为截至当根已见的K线总根数（1-based，含前 _INIT_N 根预热）：波动率分层
+    # 须知道「当时已见多少根」，序列总长不能代表信号日的信息量。
+    for i, bar in enumerate(raw[_INIT_N:], start=_INIT_N + 1):
         cs.update_signals(bar)
         if shape_states is not None:
-            shape_states[ts_date(bar.dt)] = read_shape_state(cs, label, total_bars=len(raw))
+            shape_states[ts_date(bar.dt)] = read_shape_state(cs, label, bars_seen=i)
         if stroke_done_at is not None:
             bis = cs.kas[label].bi_list
             if bis:

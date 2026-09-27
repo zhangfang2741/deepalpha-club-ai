@@ -28,10 +28,10 @@ from czsc import CzscSignals
 _FAKE_BREAK_N = 20
 _FAKE_BREAK_M = 5
 _NARROW_N = 10
-# czsc 1.0.1 的 CzscSignals 对每个信号只提供最近约 130 根 bars 的滚动窗口：
-# 实测 260 根序列下 w=130 起恒输出「其他」（规则形同虚设），取 120 留余量；
-# 分档值约从第 2w+n（≈250）根起才产出（雷达日线窗口约 500 根，充裕）。
-# total_bars 不足 w+n=130 根时 read_shape_state 仍置「未知」跳过。
+# 波动率分档值从第 ≈ w+130 根起产出（w=100~200 五点实测 220/240/250/270/320）；
+# 分层还需序列本身有波动率对比，波动恒定的序列恒「其他」属正常退化（与 w 无关）。
+# w=120 取值依据：产出更早且 500 根雷达窗口内有效覆盖更长。
+# bars_seen（已见根数）不足 w+n=130 根时 read_shape_state 置「未知」跳过。
 _VOLATILITY_W = 120
 _VOLATILITY_N = 10
 _RANGE_OSC_TH = 10  # czsc 默认 th=2（2% 中心振幅）对美股日线几乎不触发，取 10
@@ -82,10 +82,10 @@ def shape_keys(label: str) -> dict[str, str]:
     }
 
 
-def read_shape_state(cs: CzscSignals, label: str, *, total_bars: int) -> ShapeState:
+def read_shape_state(cs: CzscSignals, label: str, *, bars_seen: int) -> ShapeState:
     """从逐根推进到当根的 CzscSignals 读出当日形态状态。
 
-    total_bars 是本次推进的K线总数（不是已推进根数）：波动率分层需要 w+n 根
+    bars_seen 是截至当根已见的K线总根数（含预热段）：波动率分层需要 w+n 根
     缓存才有意义，不足时 czsc 会基于退化数据照常输出某档，必须显式置「未知」。
     """
     keys = shape_keys(label)
@@ -94,7 +94,7 @@ def read_shape_state(cs: CzscSignals, label: str, *, total_bars: int) -> ShapeSt
         return cs.s.get(key, "其他_任意_任意_0").split("_")[0]
 
     narrow = v1(keys["narrow_v241013"]) == "满足" or v1(keys["narrow_v241014"]) == "满足"
-    volatility = "未知" if total_bars < _VOLATILITY_W + _VOLATILITY_N else v1(keys["volatility"])
+    volatility = "未知" if bars_seen < _VOLATILITY_W + _VOLATILITY_N else v1(keys["volatility"])
     return ShapeState(
         fake_break=v1(keys["fake_break"]),
         narrow_range=narrow,

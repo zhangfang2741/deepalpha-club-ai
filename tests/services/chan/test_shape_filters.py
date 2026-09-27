@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from czsc import BarGenerator, CzscSignals, Freq
 
+from app.services.chan.analyzer import ChanAnalyzer
 from app.services.chan.czsc_adapter import bars_to_raw_bars
 from app.services.chan.czsc_signals import scan_bs_events
 from app.services.chan.shape_filters import (
@@ -16,6 +17,7 @@ from app.services.chan.shape_filters import (
     shape_config,
     shape_keys,
 )
+from tests.services.chan.test_signals import _decaying_downtrend_bars
 
 
 def _state(**kwargs: Any) -> ShapeState:
@@ -159,7 +161,7 @@ def test_shape_signal_keys_align_with_czsc_runtime() -> None:
     cs = CzscSignals(bg, shape_config(label))
     for bar in raw[20:]:
         cs.update_signals(bar)
-    state = read_shape_state(cs, label, total_bars=len(raw))
+    state = read_shape_state(cs, label, bars_seen=len(raw))
     assert isinstance(state, ShapeState)
     # 全部 7 个键真实存在（缺失时 v1 会静默回退默认值，这里必须显式暴露）。
     # 键列表取自 shape_keys（与 read_shape_state 共用单一来源），改坏键名测试立刻红。
@@ -215,20 +217,22 @@ def test_shape_states_volatility_unknown_when_bars_insufficient() -> None:
     assert all(s.volatility == "未知" for s in states.values())
 
 
-def test_early_day_volatility_never_low_when_total_bars_sufficient() -> None:
-    """序列足够长（>=130 根，未知守护不生效）但信号日早于分档产出点时的退化守护。
+def test_early_day_volatility_unknown_before_bars_seen_threshold() -> None:
+    """序列足够长但信号日早于 w+n 根时，波动率按「已见根数」置「未知」。
 
-    read_shape_state 的 total_bars 传的是本次推进的K线总数而非已推进根数，
-    早期日期的波动率直接暴露 czsc 退化输出；实测为「其他」（分档值约从第
-    2w+n≈250 根起才产出，早期日期 fail-safe，不触发低波动剔除），一旦
-    czsc 升级改为输出「低波动」本测试立刻红。
+    read_shape_state 的 bars_seen 传的是截至当根已见的K线总根数（含预热段）：
+    230 根序列的第 101 根已见 101 根 < 130，波动率显式置「未知」，
+    不依赖 czsc 对早期日期的退化输出（一旦退化输出变化行为也稳定）。
     """
-    bars = _trend_then_flat(n_flat=30, n_extra=160)  # 40 + 30 + 160 = 230 根 >= 130
+    bars = _trend_then_flat(n_flat=30, n_extra=160)  # 40 + 30 + 160 = 230 根
     assert len(bars) >= 130
     states: dict[str, ShapeState] = {}
     scan_bs_events(bars, symbol="TEST", freq=Freq.D, shape_states=states)
-    early_day = bars[100]["time"]  # 晚于逐根推进起点（第 21 根）、早于分档产出点
-    assert states[early_day].volatility in {"其他", "未知", "中波动", "高波动"}
+    early_day = bars[100]["time"]  # 第 101 根：已见 101 根 < w+n=130
+    assert states[early_day].volatility == "未知"
+    # 阈值之后才读 czsc 分档值（第 131 根起已见 >= 130）
+    late_day = bars[130]["time"]
+    assert states[late_day].volatility != "未知"
 
 
 def test_scan_bs_events_without_shape_states_unchanged() -> None:
@@ -258,12 +262,27 @@ def _sine_bars(segments: list[tuple[int, float]]) -> list[dict]:
 def test_volatility_layering_actually_fires() -> None:
     """波动率分层真实触发守护：w 必须落在 czsc 实际可产出分档值的范围内。
 
-    czsc 1.0.1 的 CzscSignals 信号滚动窗口有限：实测 260 根序列下 w=130 起恒
-    输出「其他」（规则形同虚设），w=120 时约从第 2w+n（≈250）根起开始产出
-    分档值。序列取 130 根低波动 + 140 根剧烈波动（270 根 > 250），断言存在
-    某天产出真实分档值；具体哪天、哪一档交给 czsc，避免对分档细节过拟合。
+    czsc 分档值从第 ≈ w+130 根起产出（w=100~200 五点实测），w=120 即约第 250 根起。
+    序列取 130 根低波动 + 140 根剧烈波动（270 根 > 250，且两段波动差异明显），
+    断言存在某天产出真实分档值；具体哪天、哪一档交给 czsc，避免对分档细节过拟合。
     """
     bars = _sine_bars([(130, 0.2), (140, 3.0)])
     states: dict[str, ShapeState] = {}
     scan_bs_events(bars, symbol="TEST", freq=Freq.D, shape_states=states)
     assert any(s.volatility in {"低波动", "中波动", "高波动"} for s in states.values())
+
+
+# ---- analyzer 集成 ----
+
+
+def test_analyze_shape_filters_switch() -> None:
+    bars = _decaying_downtrend_bars()
+    # 默认关闭：不算形态状态、买卖点与既有口径完全一致
+    off = ChanAnalyzer().analyze("X", bars, mode="loose")
+    assert off.shape_states == {}
+    # 开启：有逐日形态状态，且不改变买卖点（详情页口径守护）
+    on = ChanAnalyzer().analyze("X", bars, mode="loose", shape_filters=True)
+    assert on.shape_states
+    assert [(s.type, s.time) for s in on.signals] == [(s.type, s.time) for s in off.signals]
+    # 形态状态键与信号日期同格式（纯日期），雷达可直接查表
+    assert all(len(k) == 10 for k in on.shape_states)
