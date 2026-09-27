@@ -724,3 +724,8 @@
 "形态未确认不上榜：雷达只展示已确认买卖点，未确认信号与待确认候选仍可在详情页查看。" = "Only confirmed patterns appear on the radar. Unconfirmed signals and candidates remain available in the details.";
 "形态被破坏即退场：信号出现后，最低价跌破买点低点，或最高价突破卖点高点，即使收盘收回，当天起也不再上榜。" = "A signal leaves the radar when a later low breaks below its buy level or a later high breaks above its sell level, even if the closing price recovers.";
 "历史日期只展示当时已确认的信号；形态筛选不代表后续价格一定按预期发展。" = "Historical dates show signals confirmed by that date. Pattern screening does not guarantee subsequent price direction.";
+
+/* 雷达 czsc 形态过滤 */
+"形态过滤剔除假信号：信号出现当天若处于窄幅震荡、同向假突破、低波动或收盘偏弱，则不上榜。" = "Fake-signal screening: a signal stays off the radar if, on its pattern day, the price is in a narrow range, shows a same-direction fake breakout, has low volatility, or closes weakly.";
+"一类买卖点额外要求趋势环境：信号当天处于区间震荡中的一类信号不上榜。" = "Type 1 signals also require a trend: a Type 1 signal that appears inside a range-bound market stays off the radar.";
+"详情页仍显示全部买卖点，形态过滤只影响雷达榜单。" = "The details page still shows every signal; screening only affects the radar list.";
