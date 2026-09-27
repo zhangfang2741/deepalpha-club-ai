@@ -447,3 +447,11 @@ def test_no_signal_on_unfinished_last_stroke():
     cut_result = ChanAnalyzer().analyze("DN", cut)
     if cut_result.strokes and cut_result.strokes[-1].end_time == sig_time:
         assert sig_time not in {s.time for s in cut_result.signals}
+
+
+def test_signal_on_unfinished_stroke_becomes_candidate():
+    """最后一笔上的信号不算买卖点，但保留为「待确认」候选（供雷达单独展示）。"""
+    result = ChanAnalyzer().analyze("DN", _decaying_downtrend_bars())  # 数据停在底部，一买在最后一笔上
+    last_end = result.strokes[-1].end_time
+    assert all(s.time != last_end for s in result.signals)
+    assert any(c.type == "buy1" and c.time == last_end and not c.confirmed for c in result.candidate_signals)

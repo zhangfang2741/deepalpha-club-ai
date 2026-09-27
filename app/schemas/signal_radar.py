@@ -43,6 +43,10 @@ class RadarDayOut(BaseModel):
     buy_count: int = Field(description="当日买点数量")
     sell_count: int = Field(description="当日卖点数量")
     signals: list[RadarSignalOut] = Field(default_factory=list, description="当日信号，按强度降序")
+    candidates: list[RadarSignalOut] = Field(
+        default_factory=list,
+        description="待确认候选：落在还没走完的最后一笔上，不算买卖点；只在最新一天、补足剩余名额",
+    )
 
 
 class RadarUniverseOut(BaseModel):

@@ -1061,3 +1061,46 @@ class TestComputeDemoDayResilience:
         redis = self._Redis()
         await svc.compute_demo_day("us", "nasdaq100", redis=redis)
         assert list(redis.writes.values()) == [svc._DEMO_DEGRADED_CACHE_TTL]
+
+
+class TestCandidates:
+    """最后一笔上的「待确认」候选：单独给最新一天，只补剩余名额，不算买卖点。"""
+
+    @staticmethod
+    def _cand(symbol, day, side="sell", strength=0.8, level=3):
+        r = _raw(symbol, day, side, strength, level)
+        r.confirmed = False
+        return r
+
+    _CAL = ["2026-09-25", "2026-09-24", "2026-09-23", "2026-09-22", "2026-09-21", "2026-09-18"]
+
+    def test_fill_only_remaining_slots_and_skip_taken_symbols(self):
+        cands = [self._cand("IDXX", "2026-09-24"), self._cand("AVGO", "2026-09-22"),
+                 self._cand("FTNT", "2026-09-24", strength=0.35, level=1)]
+        out = svc.pick_candidates(cands, "2026-09-25", self._CAL, taken={"AVGO"}, slots=1)
+        assert [c.symbol for c in out] == ["IDXX"]
+        assert all(c.confirmed is False for c in out)
+        assert out[0].age_days == 1
+
+    def test_no_slots_no_candidates(self):
+        assert svc.pick_candidates([self._cand("IDXX", "2026-09-24")], "2026-09-25", self._CAL,
+                                   taken=set(), slots=0) == []
+
+    def test_too_old_candidate_dropped(self):
+        old = self._cand("MNST", "2026-09-10")
+        assert svc.pick_candidates([old], "2026-09-25", self._CAL + ["2026-09-17", "2026-09-16",
+                                   "2026-09-15", "2026-09-14", "2026-09-11", "2026-09-10"],
+                                   taken=set(), slots=5) == []
+
+    def test_build_candidates_from_unconfirmed_signals(self):
+        sig = _sig("sell3", "2026-09-24", 524.12, strength="strong")
+        sig.confirmed = False
+        r = ChanAnalysisResult(symbol="IDXX", bars_count=100)
+        r.candidate_signals = [sig]
+        out = svc.build_candidates("IDXX", "爱德士", r)
+        assert [(c.symbol, c.signal_type, c.date, c.confirmed) for c in out] == [
+            ("IDXX", "sell3", "2026-09-24", False)]
+
+    def test_day_out_has_empty_candidates_by_default(self):
+        from app.schemas.signal_radar import RadarDayOut
+        assert RadarDayOut(date="2026-09-25", buy_count=0, sell_count=0).candidates == []
