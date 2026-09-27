@@ -12,7 +12,7 @@ import pytest
 
 from app.services.chan.analyzer import ChanAnalyzer
 from app.services.chan.czsc_signals import BsEvent
-from app.services.chan.signals import generate_all_signals
+from app.services.chan.signals import generate_all_signals, generate_loose_signals
 from tests.services.chan.test_czsc_signals import _decaying_downtrend_bars
 
 
@@ -476,3 +476,60 @@ def test_signal_on_unfinished_stroke_becomes_candidate():
     last_end = result.strokes[-1].end_time
     assert all(s.time != last_end for s in result.signals)
     assert any(c.type == "buy1" and c.time == last_end and not c.confirmed for c in result.candidate_signals)
+
+
+# ---- 宽松口径一致性：三族 czsc 信号独立扫描，组装层要消除互相矛盾的结果 ----
+#
+# czsc 一 / 二 / 三类是三个独立信号源，同一笔终点可能同时命中多族（实测 CTAS
+# 2026-09-24 一买+二买同日同价、PEP 2026-06-16 二卖+三卖同日同价），二类也不
+# 要求先有一类（实测 42 只样本里 45% 的二类「无源」）。宽松口径保留 czsc 原生
+# 判定，但组装时统一约束：同一笔只留信息量最强的一个（一类 > 三类 > 二类）；
+# 二类必须存在更早的同类一类（没有一买何来二买）。
+
+def test_loose_same_stroke_keeps_type1_over_type2():
+    """同笔同时亮一买 + 二买（CTAS 2026-09-24 案例）：只保留一买。"""
+    down = _st("down", "2025-01-01", "2025-01-10", 120, 100)
+    events = [_ev("buy1", "2025-01-10", 100.0, span="5笔"), _ev("buy2", "2025-01-10", 100.0)]
+    sig = generate_loose_signals(events, [down], [_div("strong", 0.3)], [])
+    assert [(s.type, s.time, s.price) for s in sig] == [("buy1", "2025-01-10", 100.0)]
+
+
+def test_loose_same_stroke_keeps_type3_over_type2():
+    """同笔同时亮二类 + 三类（PEP 2026-06-16 二卖+三卖案例）：三类有独立结构依据，优先于二类。"""
+    up = _st("up", "2025-01-01", "2025-01-10", 100, 120)
+    events = [_ev("sell2", "2025-01-10", 120.0), _ev("sell3", "2025-01-10", 120.0)]
+    sig = generate_loose_signals(events, [up], [_NO_DIV], [])
+    assert [(s.type, s.time) for s in sig] == [("sell3", "2025-01-10")]
+
+
+def test_loose_drops_type2_without_earlier_type1():
+    """二类前面不存在任何更早的一类（「无源二类」）：丢弃——缠论里二类以一类为前提。"""
+    legs = [_st("up", "2025-01-10", "2025-02-01", 100, 110), _st("down", "2025-02-01", "2025-03-10", 110, 105)]
+    events = [_ev("buy2", "2025-03-10", 105.0)]
+    assert generate_loose_signals(events, legs, [_NO_DIV] * 2, []) == []
+
+
+def test_loose_sell2_needs_earlier_sell1():
+    """卖点镜像：无源二卖丢弃，有更早一卖的二卖保留。"""
+    legs = [
+        _st("up", "2025-01-01", "2025-01-10", 100, 120),
+        _st("down", "2025-01-10", "2025-02-01", 120, 110),
+        _st("up", "2025-02-01", "2025-03-10", 110, 115),
+    ]
+    orphan = [_ev("sell2", "2025-03-10", 115.0)]
+    assert generate_loose_signals(orphan, legs, [_NO_DIV] * 3, []) == []
+    events = [_ev("sell1", "2025-01-10", 120.0, span="5笔"), _ev("sell2", "2025-03-10", 115.0)]
+    sig = generate_loose_signals(events, legs, [_div("strong", 0.3)] + [_NO_DIV] * 2, [])
+    assert [(s.type, s.time) for s in sig] == [("sell1", "2025-01-10"), ("sell2", "2025-03-10")]
+
+
+def test_loose_keeps_type2_with_earlier_type1():
+    """同一笔的一买先在、后面另一笔的二买：两个都保留。"""
+    legs = [
+        _st("down", "2025-01-01", "2025-01-10", 120, 100),
+        _st("up", "2025-01-10", "2025-02-01", 100, 110),
+        _st("down", "2025-02-01", "2025-03-10", 110, 105),
+    ]
+    events = [_ev("buy1", "2025-01-10", 100.0, span="5笔"), _ev("buy2", "2025-03-10", 105.0)]
+    sig = generate_loose_signals(events, legs, [_div("strong", 0.3)] + [_NO_DIV] * 2, [])
+    assert [(s.type, s.time) for s in sig] == [("buy1", "2025-01-10"), ("buy2", "2025-03-10")]

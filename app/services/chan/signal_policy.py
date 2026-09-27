@@ -93,10 +93,12 @@ class StrictPolicy(_PolicyInfo):
 
 
 # 版本记录——strict：std1 严格按原文；std2 中枢「已形成」判定 + 一类被跌破作废 + 只落已完成的笔；
-# std3 新增 candidates；std4 日期改为成立日（所在笔的下一笔走完）。loose：loose1 严格化之前的口径。
+# std3 新增 candidates；std4 日期改为成立日（所在笔的下一笔走完）。
+# loose：loose1 严格化之前的口径；loose2 组装加一致性约束（同笔多信号按一类>三类>二类
+# 去重、无源二类过滤）。
 _ALL: tuple[SignalPolicy, ...] = (
         LoosePolicy(
-            name="loose", version="loose1", label_zh="宽松", label_en="Relaxed",
+            name="loose", version="loose2", label_zh="宽松", label_en="Relaxed",
             description_zh="信号更多、出得更早，最后一笔还在走时也先标出（未确认）",
             description_en="More and earlier signals; signals on the unfinished last leg are shown as unconfirmed",
             czsc_families=("first", "second", "third"),

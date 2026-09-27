@@ -117,6 +117,11 @@ def _post_pivot_strokes(strokes: list[Stroke], pivots: list[Pivot], idx: int) ->
 # 二/三类买卖点强度的参照边界：回踩/反抽落点离哪条中枢边界越远越坚决
 _TYPE23_BOUNDARY = {"buy2": "zd", "sell2": "zg", "buy3": "zg", "sell3": "zd"}
 
+# 宽松口径同笔多信号的保留优先级：一类（背驰，语义源头）> 三类（有独立结构依据，
+# 离开中枢不回）> 二类（价格密集区，最弱）。czsc 三族信号独立扫描，同一笔终点
+# 可能同时命中多族（实测 CTAS 一买+二买、PEP 二卖+三卖同日同价），组装时只留最强的一个。
+_DUP_PRIORITY = {"buy1": 0, "sell1": 0, "buy3": 1, "sell3": 1, "buy2": 2, "sell2": 2}
+
 
 def _latest_pivot_before(pivots: list[Pivot], time: str) -> Pivot | None:
     """信号时刻之前已结束的最近中枢（结束时间最晚者）；尚未结束的中枢不参与，避免回看未来。"""
@@ -434,9 +439,13 @@ def generate_loose_signals(
     """宽松模式：把 czsc 一 / 二 / 三类事件直接组装成 Signal（严格化之前的口径）。
 
     与严格模式的区别：一类不要求趋势前提（盘整背驰也算）、不做「被下一笔跌破作废」；
-    二类取 czsc 的端点价格重叠（不要求先有一类）；三类取 czsc 的 5 笔中枢 + 均线过滤；
+    二类取 czsc 的端点价格重叠；三类取 czsc 的 5 笔中枢 + 均线过滤；
     最后一笔上的信号也保留（confirmed=False）。detected_time = czsc 事件亮起的K线。
     失效过滤、落点与强度口径与严格模式相同。
+
+    组装后的两条一致性约束（三族信号独立扫描、互相不知晓，直接拼合会自相矛盾）：
+    同一笔终点命中多族只保留最强的一个（_DUP_PRIORITY）；二类要求存在更早的
+    同类一类——没有一买何来二买（czsc 二类本身不检查，实测无源二类约四成）。
     """
     div_by_end = {s.end_time: dv for s, dv in zip(strokes, divergences, strict=False)}
     direction_by_end = {s.end_time: s.direction for s in strokes}
@@ -469,4 +478,18 @@ def generate_loose_signals(
             divergence=div, lang=lang, detected_time=ev.bar_time,
             description=_describe_loose(ev.type, ev.bi_end_time, ev.bi_end_price, ev.span, div, lang),
         ))
-    return signals
+
+    # 一致性约束 1：同一笔终点（同一 time）命中多族时只保留最强的一个
+    by_time: dict[str, list[Signal]] = {}
+    for s in signals:
+        by_time.setdefault(s.time, []).append(s)
+    kept = [min(group, key=lambda s: _DUP_PRIORITY[s.type]) for group in by_time.values()]
+    # 一致性约束 2：二类丢弃「无源」——前面不存在更早的同类一类
+    source = {"buy2": "buy1", "sell2": "sell1"}
+    kept = [
+        s for s in kept
+        if s.type not in source
+        or any(x.type == source[s.type] and x.time < s.time for x in kept)
+    ]
+    kept.sort(key=lambda x: (x.time, x.type))
+    return kept
