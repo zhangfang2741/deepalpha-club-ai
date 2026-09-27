@@ -405,6 +405,12 @@ class _FakeRedis:
     async def expire(self, key: str, ttl: int) -> None:
         self.ttls[key] = ttl
 
+    async def scan_iter(self, match: str | None = None, count: int | None = None):
+        import fnmatch
+        for k in list(self.store):
+            if match is None or fnmatch.fnmatch(k, match):
+                yield k
+
     async def get(self, key: str) -> str | None:
         return self.store.get(key)
 
@@ -1055,6 +1061,10 @@ class TestComputeDemoDayResilience:
         async def set(self, k, v, ex=None):
             self.writes[k] = ex
 
+        def demo_writes(self) -> dict:
+            """只看示例日缓存本身的写入（补算标记另算）。"""
+            return {k: v for k, v in self.writes.items() if ":demo:v" in k}
+
     @pytest.fixture()
     def env(self, monkeypatch):
         cons = [(f"S{i}", f"S{i}") for i in range(10)]
@@ -1080,19 +1090,19 @@ class TestComputeDemoDayResilience:
         redis = self._Redis()
         resp = await svc.compute_demo_day("us", "nasdaq100", redis=redis)
         assert len(resp.days[0].signals) == 10
-        assert list(redis.writes.values()) == [svc._DEMO_CACHE_TTL]
+        assert list(redis.demo_writes().values()) == [svc._DEMO_CACHE_TTL]
 
     async def test_mostly_failed_scan_not_cached(self, env):
         env["failed"] = {f"S{i}" for i in range(6)}  # 60% 失败
         redis = self._Redis()
         await svc.compute_demo_day("us", "nasdaq100", redis=redis)
-        assert redis.writes == {}
+        assert redis.demo_writes() == {}
 
     async def test_partial_failure_cached_short_ttl(self, env):
         env["failed"] = {"S0"}  # 10% 失败：能用，但尽快重算
         redis = self._Redis()
         await svc.compute_demo_day("us", "nasdaq100", redis=redis)
-        assert list(redis.writes.values()) == [svc._DEMO_DEGRADED_CACHE_TTL]
+        assert list(redis.demo_writes().values()) == [svc._DEMO_DEGRADED_CACHE_TTL]
 
 
 class TestCandidates:
@@ -1285,3 +1295,107 @@ class TestConcurrencyGuards:
         await scheduler._prewarm_once(markets={"cn"})
         assert scanned == [("star50", "strict")]
         assert svc.scan_lock_key("cn", "star50", "strict") not in redis.store, "预热结束释放锁"
+
+
+class TestDemoBackfill:
+    """免费示例日也补算：拉失败的成分股后台补齐后重写示例日缓存（恢复完整 TTL）。"""
+
+    async def test_demo_failed_symbols_backfilled(self, monkeypatch):
+        cons = [(f"S{i}", f"S{i}") for i in range(4)]
+        tries: dict[str, int] = {}
+
+        async def fake_constituents(market, *, redis, universe_key, refresh=False):
+            return cons
+
+        async def fake_scan(symbol, name, **kwargs):
+            tries[symbol] = tries.get(symbol, 0) + 1
+            if symbol == "S0" and tries[symbol] == 1:
+                return [], "rate_limited", None, []
+            return [_raw(symbol, "2026-07-31", "buy", 0.5)], None, None, ["2026-07-31", "2026-07-30"]
+
+        monkeypatch.setattr(svc, "resolve_constituents", fake_constituents)
+        monkeypatch.setattr(svc, "_scan_symbol", fake_scan)
+        monkeypatch.setattr(svc, "demo_snapshot_date", lambda: "2026-08-01")
+        monkeypatch.setattr(svc, "_RATE_LIMIT_BACKOFF_SECONDS", 0)
+        monkeypatch.setattr(svc, "_BACKFILL_DELAYS", (0,))
+        monkeypatch.setattr(svc, "_BACKFILL_PACE_SECONDS", 0)
+        redis = _FakeRedis()
+        resp = await svc.compute_demo_day("us", "nasdaq100", redis=redis)
+        key = svc._demo_cache_key("us", "nasdaq100", "2026-08-01")
+        assert resp.pending_symbols == 1 and redis.ttls[key] == svc._DEMO_DEGRADED_CACHE_TTL
+
+        await svc.wait_backfills()
+        cached = SignalRadarResponse.model_validate_json(redis.store[key])
+        assert cached.pending_symbols == 0 and "S0" in {s.symbol for s in cached.days[0].signals}
+        assert redis.ttls[key] == svc._DEMO_CACHE_TTL
+        assert tries["S0"] == 2 and tries["S1"] == 1
+
+
+class TestBackfillResumeAfterRestart:
+    """补算进度记在 Redis：进程重启后，启动时接手上一个进程没补完的。"""
+
+    def _patch_market(self, monkeypatch, fail: set[str]):
+        async def fake_resolve(market, *, redis, universe_key=None, refresh=False):
+            return [("AAPL", "苹果"), ("TSLA", "特斯拉")]
+
+        async def fake_scan(symbol, name, **kwargs):
+            if symbol in fail:
+                return [], "rate_limited", None, []
+            return [_raw(symbol, "2026-09-19", "buy", 0.8, level=2)], None, None, ["2026-09-18", "2026-09-19"]
+
+        async def fake_kline(**kwargs):
+            return []
+
+        async def fake_attach(day, **kwargs):
+            return None
+
+        monkeypatch.setattr(svc, "resolve_constituents", fake_resolve)
+        monkeypatch.setattr(svc, "_scan_symbol", fake_scan)
+        monkeypatch.setattr(svc, "fetch_kline", fake_kline)
+        monkeypatch.setattr(svc, "attach_sub_levels", fake_attach)
+        monkeypatch.setattr(svc, "_RATE_LIMIT_BACKOFF_SECONDS", 0)
+
+    async def test_marker_saved_while_pending_and_cleared_when_complete(self, monkeypatch):
+        fail = {"TSLA"}
+        self._patch_market(monkeypatch, fail)
+        redis = _FakeRedis()
+        await svc.compute_market("us", redis=redis, universe_key="sp500", mode="strict")
+        markers = await svc.list_backfill_markers(redis)
+        assert [(m["kind"], m["market"], m["universe"], m["mode"], m["pending"]) for m in markers] == [
+            ("market", "us", "sp500", "strict", ["TSLA"])]
+
+        fail.clear()
+        await svc.compute_market("us", redis=redis, universe_key="sp500", mode="strict")
+        assert await svc.list_backfill_markers(redis) == []
+
+    async def test_orphan_markers_exclude_own_process(self, monkeypatch):
+        self._patch_market(monkeypatch, {"TSLA"})
+        redis = _FakeRedis()
+        await svc.compute_market("us", redis=redis, universe_key="sp500")
+        assert await svc.list_backfill_markers(redis, orphans_only=True) == [], "本进程的补算还活着"
+        monkeypatch.setattr(svc, "_INSTANCE_ID", "new-process")
+        assert len(await svc.list_backfill_markers(redis, orphans_only=True)) == 1, "换进程后成了孤儿"
+
+    async def test_scheduler_resumes_orphans(self, monkeypatch):
+        from app.services.signal_radar import scheduler
+
+        redis = _FakeRedis()
+        calls = []
+
+        async def fake_markers(r, orphans_only=False):
+            return [{"kind": "market", "market": "us", "universe": "sp500", "mode": "strict"},
+                    {"kind": "demo", "market": "hk", "universe": "hstech", "mode": "loose"}]
+
+        async def fake_compute(market, *, redis, user_id=None, universe_key, mode):
+            calls.append(("market", market, universe_key, mode))
+
+        async def fake_demo(market, universe_key, *, redis, mode):
+            calls.append(("demo", market, universe_key, mode))
+
+        monkeypatch.setattr(scheduler, "current_redis", lambda: redis)
+        monkeypatch.setattr(scheduler, "list_backfill_markers", fake_markers)
+        monkeypatch.setattr(scheduler, "compute_market", fake_compute)
+        monkeypatch.setattr(scheduler, "compute_demo_day", fake_demo)
+        await scheduler._resume_orphan_backfills()
+        assert calls == [("market", "us", "sp500", "strict"), ("demo", "hk", "hstech", "loose")]
+        assert not any(k.startswith("signal_radar:generating") for k in redis.store), "接手后释放锁"

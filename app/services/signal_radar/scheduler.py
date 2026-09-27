@@ -23,6 +23,9 @@ from app.cache.operations import acquire_lock, release_lock
 from app.services.signal_radar.service import (
     SCAN_LOCK_TTL,
     _cache_key,
+    compute_demo_day,
+    demo_lock_key,
+    list_backfill_markers,
     _SESSIONS_UTC,
     compute_market,
     market_session_active,
@@ -98,6 +101,39 @@ async def _prewarm_once(markets: set[str] | None = None) -> None:
                 )
             finally:
                 await release_lock(redis, lock)
+
+
+async def _resume_orphan_backfills() -> None:
+    """接手上一个进程没补完的补算（部署重启会中断进程内的补算任务）。
+
+    补算标记记在 Redis（service._sync_marker）；owner 不是本进程的即为孤儿。接手方式是
+    抢锁重扫这一份（K线多半还在缓存里），扫完仍有失败的由本进程继续后台补算。
+    在启动预热之后调用：预热过的那几份已被本进程重写标记，不会重复扫。
+    """
+    redis = current_redis()
+    if redis is None:
+        return
+    for m in await list_backfill_markers(redis, orphans_only=True):
+        kind, market, universe, mode = m.get("kind"), m.get("market"), m.get("universe"), m.get("mode")
+        if not (market and universe and mode):
+            continue
+        lock = demo_lock_key(market, universe, mode) if kind == "demo" else scan_lock_key(market, universe, mode)
+        if not await acquire_lock(redis, lock, SCAN_LOCK_TTL):
+            continue  # 已有扫描在跑，它会自己处理失败的成分股
+        logger.info("signal_radar_backfill_resumed", kind=kind, market=market, universe=universe, mode=mode,
+                    pending=len(m.get("pending") or []))
+        try:
+            if kind == "demo":
+                await compute_demo_day(market, universe, redis=redis, mode=mode)
+            else:
+                await compute_market(market, redis=redis, user_id=None, universe_key=universe, mode=mode)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 单份失败不影响其余
+            logger.exception("signal_radar_backfill_resume_failed", kind=kind, market=market,
+                             universe=universe, mode=mode, error=str(e))
+        finally:
+            await release_lock(redis, lock)
 
 
 def _target_universes() -> list:
@@ -184,6 +220,14 @@ async def run_signal_radar_prewarm_scheduler() -> None:
     """按各市场收盘时间触发全量重扫，直到进程退出。"""
     if not settings.SIGNAL_RADAR_PREWARM_ENABLED:
         logger.info("signal_radar_prewarm_disabled")
+        # 不预热也要接手上一个进程没补完的补算，否则重启后那几只就一直缺着
+        try:
+            await asyncio.sleep(_STARTUP_DELAY_SECONDS)
+            await _resume_orphan_backfills()
+        except asyncio.CancelledError:
+            return
+        except Exception as e:  # noqa: BLE001
+            logger.exception("signal_radar_backfill_resume_failed", error=str(e))
         return
 
     try:
@@ -203,6 +247,13 @@ async def run_signal_radar_prewarm_scheduler() -> None:
         raise
     except Exception as e:  # noqa: BLE001
         logger.exception("signal_radar_prewarm_failed", error=str(e))
+    # 预热之后再接手上一个进程没补完的（预热过的那几份已由本进程接管，不会重复扫）
+    try:
+        await _resume_orphan_backfills()
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:  # noqa: BLE001
+        logger.exception("signal_radar_backfill_resume_failed", error=str(e))
 
     next_trigger = {m: _next_close_trigger(m, datetime.now(UTC)) for m in markets}
     while True:
