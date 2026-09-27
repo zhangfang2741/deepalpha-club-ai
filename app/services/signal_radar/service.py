@@ -90,7 +90,8 @@ _CACHE_PREFIX = "signal_radar"
 # std1：2026-09 起严格按缠论原文（一类须趋势背驰、二类须跟在一类后、三类由中枢结构推出）。
 # std2：趋势前提按中枢「已形成」判定（修正漏掉的一买）；被下一笔跌破的一类作废；
 #       买卖点只落在已完成的笔上（最后一笔还在走时不出信号）。
-_SIGNAL_DEF = "std2"
+# std3：最新一天新增 candidates（最后一笔上的「待确认」候选，不算买卖点）。
+_SIGNAL_DEF = "std3"
 
 # 「自选」股票池：按用户各自的自选股计算（universe=watchlist）；缓存按用户隔离、30 分钟。
 # 不列入指数切换菜单（产品决定），接口能力保留。
@@ -350,6 +351,56 @@ def build_signal_history(
     ]
     history.sort(key=lambda r: r.date)
     return history
+
+
+def build_candidates(symbol: str, name: str, result: ChanAnalysisResult) -> list[RawSignal]:
+    """最后一笔上的「待确认」候选（result.candidate_signals）→ 雷达中间结构，confirmed=False。"""
+    return [
+        RawSignal(
+            symbol=symbol, name=name, side="buy" if sig.is_buy else "sell", label=sig.label,
+            signal_type=sig.type, date=(sig.detected_time or sig.time)[:10], price=round(sig.price, 2),
+            strength=signal_strength(sig.strength), bias="bullish" if sig.is_buy else "bearish",
+            signal_strength=sig.strength, confirmed=False,
+            pivot_stage_depth=pivot_stage_depth(pivot_phase_as_of(result, sig.time)),
+        )
+        for sig in result.candidate_signals
+    ]
+
+
+def pick_candidates(
+    candidates: list[RawSignal], day: str, calendar: list[str], *, taken: set[str], slots: int,
+    max_age_days: int = _MAX_SIGNAL_AGE_DAYS,
+) -> list[RadarSignalOut]:
+    """最新一天的「待确认」候选，只补剩余 slots 个名额。
+
+    不占真实买卖点的名额；已有确认气泡的标的不重复出候选；超过信号有效期的不要；
+    按与买卖点同一套综合分排序。
+    """
+    if slots <= 0:
+        return []
+    pool: list[tuple[RawSignal, int]] = []
+    for c in candidates:
+        if c.symbol in taken or c.date > day:
+            continue
+        age = trading_age(c.date, day, calendar)
+        if age <= max_age_days:
+            pool.append((c, age))
+    pool.sort(key=lambda x: display_rank(x[0], x[1]), reverse=True)
+    out: list[RadarSignalOut] = []
+    seen: set[str] = set()
+    for c, age in pool:
+        if c.symbol in seen:
+            continue
+        seen.add(c.symbol)
+        out.append(RadarSignalOut(
+            symbol=c.symbol, name=c.name, side=c.side, label=c.label, signal_type=c.signal_type,
+            date=c.date, price=c.price, strength=c.strength, bias=c.bias,
+            signal_strength=c.signal_strength, confirmed=False,
+            pivot_stage_depth=c.pivot_stage_depth, age_days=age,
+        ))
+        if len(out) >= slots:
+            break
+    return out
 
 
 def build_days(
@@ -686,12 +737,16 @@ async def compute_market(
 
     sem = asyncio.Semaphore(_SCAN_CONCURRENCY)
 
+    candidates: list[RawSignal] = []
+
     async def _one(symbol: str, name: str) -> tuple[list[RawSignal], str | None, list[str]]:
         async with sem:
-            history, failure, _, dates = await _scan_symbol(
+            history, failure, result, dates = await _scan_symbol(
                 symbol, name, user_id=user_id, start_date=start_date,
                 end_date=end_date, redis=redis,
             )
+            if result is not None:
+                candidates.extend(build_candidates(symbol, name, result))
             if failure == "rate_limited":
                 # 命中限流别立刻放行下一个排队的任务抢同一个名额，攒着火上浇油——
                 # 让这个名额歇一会儿，给数据源一点喘息时间再继续消费队列。
@@ -741,6 +796,11 @@ async def compute_market(
         await attach_sub_levels(pool, end_date=end_date, user_id=user_id, redis=redis)
         resp.days[0] = rerank_with_resonance(pool, top_n)
         resp.sub_level_as_of = datetime.now(UTC).replace(microsecond=0).isoformat()
+        # 「待确认」候选：最后一笔还在走、不算买卖点，只给最新一天补足剩余名额
+        latest = resp.days[0]
+        latest.candidates = pick_candidates(
+            candidates, latest.date, calendar, taken={x.symbol for x in latest.signals},
+            slots=top_n - len(latest.signals), max_age_days=max_age_days)
     failed_symbols = sum(failure_counts.values())
     failure_rate = failed_symbols / len(constituents) if constituents else 0.0
     logger.info(

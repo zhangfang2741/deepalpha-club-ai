@@ -80,6 +80,9 @@ class ChanAnalysisResult:
     # 线段级背驰（比笔级更高级别，逐条线段与前一同向线段对比力度：价差/量能/时长）
     segment_divergences: list[DivergenceResult] = field(default_factory=list)
     signals: list[Signal] = field(default_factory=list)
+    # 最后一笔（还在走）上的一 / 二 / 三类：按严格定义尚不成立，不算买卖点；
+    # 单独保留给雷达以「待确认」样式展示
+    candidate_signals: list[Signal] = field(default_factory=list)
     macd: MACDData | None = None
 
     # 当前市场状态摘要
@@ -230,6 +233,7 @@ class ChanAnalyzer:
         self._mark_confirmations(result)
         # 严格按缠论定义：买卖点所在的那一笔必须已完成。最后一笔还在走（端点可能继续延伸、
         # 甚至回到中枢），其上的一 / 二 / 三类都尚不成立，不作为买卖点输出（等笔走完再出）。
+        result.candidate_signals = [s for s in result.signals if not s.confirmed]
         result.signals = [s for s in result.signals if s.confirmed]
 
         # 9b. 窗口锚定：把结构裁剪回可见窗口（在完整序列上算、只显示尾段）。

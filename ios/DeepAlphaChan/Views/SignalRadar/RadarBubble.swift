@@ -11,6 +11,9 @@ struct RadarBubble: View {
     let color: Color
     /// 信号是不是查看这天当天新出现的（而非从更早的日子延续到现在）。
     let isNew: Bool
+    /// 「待确认」候选：最后一笔还在走，不算买卖点——灰底 + 买卖方向色虚线边框 + 「待确认」标签，
+    /// 不挂「新 / 共振」角标，与真实买卖点一眼区分。
+    var isCandidate = false
     let onOpen: () -> Void
 
     /// 持续漂浮的竖向偏移（onAppear 后在 0 ↔ 负值间无限往复）。
@@ -49,6 +52,7 @@ struct RadarBubble: View {
             .accessibilityElement()
             .accessibilityLabel(
                 "\(signal.symbol) \(signal.name) \(signal.isBuy ? L("买点") : L("卖点"))"
+                + (isCandidate ? " \(L("待确认，不算买卖点"))" : "")
                 + (isNew ? " \(L("所选日期当天新增"))" : "")
                 + (signal.isSubLevelResonance ? " \(L("日线与30分钟共振"))" : "")
             )
@@ -67,8 +71,12 @@ struct RadarBubble: View {
 
     private var content: some View {
         ZStack {
-            // 纯实色气泡，不再用虚线边框表达「未确认」（点进分析详情页有确认状态与图例）
-            Circle().fill(color)
+            if isCandidate {
+                Circle().fill(Theme.surfaceAlt)
+                Circle().strokeBorder(color, style: StrokeStyle(lineWidth: 1.6, dash: [4, 3]))
+            } else {
+                Circle().fill(color)
+            }
 
             VStack(spacing: 1) {
                 Text(signal.symbol)
@@ -92,9 +100,21 @@ struct RadarBubble: View {
             .frame(width: metrics.textWidth)
             .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
         }
+        .overlay(alignment: .bottom) {
+            if isCandidate {
+                Text(L("待确认"))
+                    .font(.system(size: max(8, min(11, r * 0.2)), weight: .semibold))
+                    .foregroundColor(Theme.textSecondary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(Theme.background, in: Capsule())
+                    .overlay(Capsule().stroke(Theme.textSecondary.opacity(0.6), lineWidth: 0.8))
+                    .offset(y: 6)
+            }
+        }
         .overlay(alignment: .topTrailing) {
             // "新"改放气泡外面右上角：挤在气泡内部会跟代码/名称文字抢地方。
-            if isNew {
+            if isNew && !isCandidate {
                 Text(L("新"))
                     .font(.system(size: max(8, min(12, r * 0.22)), weight: .bold))
                     .foregroundColor(.white)
@@ -107,7 +127,7 @@ struct RadarBubble: View {
         }
         .overlay(alignment: .bottomLeading) {
             // 日线定方向 × 30 分钟找买卖点同向（共振），只在最新交易日的入榜气泡上出现。
-            if signal.isSubLevelResonance {
+            if signal.isSubLevelResonance && !isCandidate {
                 Text(L("共振"))
                     .font(.system(size: max(8, min(12, r * 0.22)), weight: .bold))
                     .foregroundColor(.white)
