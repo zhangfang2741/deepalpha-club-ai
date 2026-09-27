@@ -702,18 +702,15 @@
 "继续上涨但力度变弱（顶背驰），上涨可能接近尾声" = "Still rising but with weaker force (top divergence) — the advance may be nearing its end";
 "继续下跌但力度变弱（底背驰），下跌可能接近尾声" = "Still falling but with weaker force (bottom divergence) — the decline may be nearing its end";
 "价格与中枢（%@ ~ %@）的关系见下方说明" = "See below for how price relates to the pivot (%@ – %@)";
-"只收已完成的笔上的买卖点：最后一笔还在走时不上榜，等这一笔走完、买卖点成立后才出现。" = "Only signals on completed strokes are listed: while the last stroke is still moving, it waits until the stroke finishes and the signal is established.";
 "待确认" = "Pending";
 "待确认，不算买卖点" = "pending, not a buy/sell point";
 "%lld 待确认" = "%lld pending";
-"灰色虚线气泡是「待确认」：落在还没走完的最后一笔上，按缠论尚不成立、不算买卖点；只在最新一天补足剩余名额。" = "Grey dashed bubbles are “pending”: they sit on the last stroke, which is still moving, so under Chan theory they are not buy/sell points yet; they only fill remaining slots on the latest day.";
 
 /* Signal mode */
 "一类是背驰：末笔创新低（一卖为新高），但价差力度弱于前段，且量能或时长也更弱；盘整里的背驰也算。强度按价差比分档：小于 0.6 为强，0.6 至小于 0.8 为中，其余为弱。" = "Type-1 is a divergence: the last leg makes a new low (new high for sell-1) with weaker price force than the prior leg, and weaker volume or duration; a divergence inside a range also counts. Strength by price ratio: below 0.6 strong, 0.6 to below 0.8 medium, otherwise weak.";
 "二类是出现一买之后，回落低点落在此前多次转折形成的价格密集区，获得支撑、没有再创新低（二卖：一卖之后反弹高点受压、没有再创新高）；之前没有一类的不算。" = "Type-2: after a type-1 buy, the pullback low lands in a price cluster formed by earlier turning points and holds without a new low (sell-2: after a type-1 sell, the rebound high is capped without a new high); without a prior type-1 it does not count.";
 "三类是前五笔构成中枢后，回落低点仍在中枢上沿之上、没有回到中枢，且均线逐级抬升（三卖反之）。" = "Type-3: after five legs form a pivot, the pullback low stays above the pivot top without returning to it, with the moving average stepping higher (the reverse for sell-3).";
 "类型确定性：一类 0.4（背驰，待验证）、二类 0.7（回落在价格密集区获得支撑）、三类 1.0（离开中枢后不回中枢，最强确认）。" = "Type certainty: type-1 0.4 (divergence, to be verified), type-2 0.7 (pullback holds in a price cluster), type-3 1.0 (left the pivot without returning, strongest confirmation).";
-"最后一笔还在走时出现的买卖点也会上榜（标为未确认），之后可能被新K线改写。" = "Signals on the unfinished last leg are also listed (marked unconfirmed) and may be revised by new candles.";
 "所在的最后一笔还在走，端点可能延伸甚至回到中枢，按缠论尚不成立；这一笔走完才算买卖点。" = "The last leg is still unfolding — its end may extend or even return to the pivot, so by Chan theory it is not yet a signal; it counts once this leg completes.";
 "%@（待确认）" = "%@ (pending)";
 "待确认 · 不算买卖点" = "Pending · not yet a signal";
@@ -721,9 +718,9 @@
 "%lld 只补算中" = "%lld catching up";
 
 /* 雷达形态有效性筛选 */
-"形态未确认不上榜：雷达只展示已确认买卖点，未确认信号与待确认候选仍可在详情页查看。" = "Only confirmed patterns appear on the radar. Unconfirmed signals and candidates remain available in the details.";
-"形态被破坏即退场：信号出现后，最低价跌破买点低点，或最高价突破卖点高点，即使收盘收回，当天起也不再上榜。" = "A signal leaves the radar when a later low breaks below its buy level or a later high breaks above its sell level, even if the closing price recovers.";
-"历史日期只展示当时已确认的信号；形态筛选不代表后续价格一定按预期发展。" = "Historical dates show signals confirmed by that date. Pattern screening does not guarantee subsequent price direction.";
+"买卖点未确认不上榜：雷达只展示已确认买卖点，未确认信号与待确认候选仍可在详情页查看。" = "Only confirmed patterns appear on the radar. Unconfirmed signals and candidates remain available in the details.";
+"买卖点被破坏即退场：信号出现后，最低价跌破买点低点，或最高价突破卖点高点，即使收盘收回，当天起也不再上榜。" = "A signal leaves the radar when a later low breaks below its buy level or a later high breaks above its sell level, even if the closing price recovers.";
+"历史日期只展示当时已确认的信号；雷达筛选不代表后续价格一定按预期发展。" = "Historical dates show signals confirmed by that date. Pattern screening does not guarantee subsequent price direction.";
 
 /* 雷达 czsc 形态过滤 */
 "形态过滤剔除假信号：信号出现当天若处于窄幅震荡、同向假突破或低波动，则不上榜。" = "Fake-signal screening: a signal stays off the radar if, on the day it appears, the price is in a narrow range, shows a same-direction fake breakout, or has low volatility.";
