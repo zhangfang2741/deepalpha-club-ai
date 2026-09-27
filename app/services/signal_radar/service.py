@@ -44,6 +44,7 @@ from app.schemas.signal_radar import (
 from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
 from app.services.chan.pivot_phase import PivotPhase
 from app.services.chan.replay import pivot_phase_as_of
+from app.services.chan.shape_filters import reject_reason
 from app.services.chan.signal_policy import DEFAULT_MODE, get_policy
 from app.services.chan.sub_level_service import current_sub_level
 from app.services.chan.bias import UNCONFIRMED_DISCOUNT
@@ -176,6 +177,8 @@ class RawSignal:
     invalidated_on: str | None = None
     # 所在笔由后续笔确认的日期；历史展示日不能提前使用今天的 confirmed 状态。
     confirmed_on: str | None = None
+    # 形态过滤命中（假突破/窄幅震荡/收盘位置/低波动/区间震荡），出生即不入雷达榜单
+    shape_rejected: str | None = None
 
 
 def signal_strength(label: str) -> float:
@@ -342,6 +345,9 @@ def build_signal_history(
     统一套用"今天"的阶段——同一只股票在看板上可能同时展示好几天前的历史
     信号，深浅要反映那条信号发生当天中枢真实处于哪个阶段，不然同一只股票
     不同日期的气泡会被错误地画成同一个深浅。
+
+    形态过滤按信号所属笔终点日查 `result.shape_states`，命中记入 `shape_rejected`
+    （出生时一次判定，后续按日重建快照不再重判）。
     """
     confirmed_on = _confirmation_dates(result)
     history = [
@@ -363,10 +369,14 @@ def build_signal_history(
             pivot_stage_depth=pivot_stage_depth(pivot_phase_as_of(result, sig.time)),
             invalidated_on=_invalidated_on(
                 sig.is_buy, sig.price, (sig.detected_time or sig.time)[:10], bars),
+            shape_rejected=reject_reason(result.shape_states.get(sig.time[:10]), sig.type),
         )
         for sig in result.signals
     ]
     history.sort(key=lambda r: r.date)
+    reasons = [r.shape_rejected for r in history if r.shape_rejected]
+    if reasons:
+        logger.debug("signal_radar_shape_rejected", symbol=symbol, counts=dict(Counter(reasons)))
     return history
 
 
@@ -385,8 +395,9 @@ def build_days(
     历史某天时看到的仍是「截至那天 max_age_days 内有效」的信号）。见模块内
     _MAX_SIGNAL_AGE_DAYS 说明。
 
-    形态筛选在取前 top_n 前进行：未确认、展示日尚未确认或已经价格失效的信号不入榜。
-    仍先选每只股票最新信号再筛选，避免新信号被剔除后旧信号重新上榜。
+    形态筛选在取前 top_n 前进行：未确认、展示日尚未确认或已经价格失效的信号不入榜；
+    czsc 形态过滤（shape_rejected，见 build_signal_history）同样在每只股票最新信号确定
+    后剔除。仍先选每只股票最新信号再筛选，避免新信号被剔除后旧信号重新上榜。
     """
     # 数交易日龄用的日历：调用方给了更长的日历就用它（覆盖到最老展示日之前），否则用展示日本身
     cal = calendar if calendar is not None else trading_days
@@ -401,6 +412,8 @@ def build_days(
                     break
                 candidate = r
             if candidate is not None:
+                if candidate.shape_rejected is not None:
+                    continue  # 形态过滤命中（出生即剔除），也不让被剔信号背后的旧信号回锅
                 if candidate.invalidated_on is not None and candidate.invalidated_on <= day:
                     continue  # 价格已走坏（跌破买点 / 涨破卖点），当天起退场
                 if not candidate.confirmed:

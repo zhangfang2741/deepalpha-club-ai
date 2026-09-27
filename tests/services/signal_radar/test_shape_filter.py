@@ -5,6 +5,7 @@ from datetime import date
 import pytest
 
 from app.services.chan.analyzer import ChanAnalyzer
+from app.services.chan.shape_filters import ShapeState
 from app.services.signal_radar import service as svc
 from tests.services.chan.test_signals import _decaying_downtrend_bars
 from tests.services.signal_radar.test_service import _FakeRedis, _raw, _sig
@@ -87,3 +88,70 @@ def test_shape_filter_invalidates_all_radar_cache_types() -> None:
         svc.watchlist_cache_key("us", 7, [("X", "测试")]),
         svc._demo_cache_key("us", "nasdaq100", "2026-09-01"),
     ])
+
+
+# ---- czsc 形态过滤：shape_rejected 出生即剔除、不回退旧信号 ----
+def test_shape_rejected_latest_signal_excluded_without_fallback() -> None:
+    """最新信号被形态过滤剔除后，该 symbol 当日无信号，旧信号不得回锅上榜。"""
+    older = _raw("X", "2026-09-20", "buy", 0.8)
+    latest = _raw("X", "2026-09-21", "buy", 0.9)
+    latest.shape_rejected = "窄幅震荡"
+    days = svc.build_days([[older, latest]], ["2026-09-22"], top_n=10)
+    assert days[0].signals == []
+    # 对照：未被剔除的旧信号单独存在时正常上榜
+    days = svc.build_days([[older]], ["2026-09-22"], top_n=10)
+    assert [s.symbol for s in days[0].signals] == ["X"]
+
+
+def test_build_signal_history_marks_shape_rejected_by_signal_day() -> None:
+    """按信号所属笔终点日（sig.time 的日期部分）查形态状态表，命中即标记过滤器名。"""
+    rejected = _sig("buy1", "2026-09-10", 10.0)
+    kept = _sig("sell1", "2026-09-15", 12.0)
+    missing = _sig("buy2", "2026-09-18", 11.0)  # 查不到形态状态：不剔
+    result = svc.ChanAnalysisResult(
+        symbol="X", bars_count=100, signals=[rejected, kept, missing],
+        shape_states={
+            "2026-09-10": ShapeState(narrow_range=True, close_pos="高位"),
+            "2026-09-15": ShapeState(close_pos="低位", volatility="中波动"),
+        },
+    )
+    history = svc.build_signal_history("X", "测试", result)
+    by_type = {r.signal_type: r.shape_rejected for r in history}
+    assert by_type == {"buy1": "窄幅震荡", "sell1": None, "buy2": None}
+
+
+def test_build_signal_history_logs_rejection_counts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """剔除分布按过滤器名计数记 debug 日志（可观测）；无剔除时不记。"""
+    events: list[tuple[str, dict]] = []
+
+    class _Spy:
+        def debug(self, event: str, **kw: object) -> None:
+            events.append((event, kw))
+
+        def __getattr__(self, name: str):
+            return lambda *a, **k: None
+
+    monkeypatch.setattr(svc, "logger", _Spy())
+    sig = _sig("buy1", "2026-09-10", 10.0)
+    result = svc.ChanAnalysisResult(
+        symbol="X", bars_count=100, signals=[sig],
+        shape_states={"2026-09-10": ShapeState(fake_break="看空", close_pos="高位")},
+    )
+    svc.build_signal_history("X", "测试", result)
+    logged = [kw for e, kw in events if e == "signal_radar_shape_rejected"]
+    assert logged == [{"symbol": "X", "counts": {"假突破": 1}}]
+
+    events.clear()
+    clean = svc.ChanAnalysisResult(symbol="X", bars_count=100, signals=[sig])
+    svc.build_signal_history("X", "测试", clean)
+    assert not [e for e, _ in events if e == "signal_radar_shape_rejected"]
+
+
+def test_real_analysis_shape_marks_are_valid_filter_names() -> None:
+    """真实分析链路：开 shape_filters 后标记值只可能是 None 或五个过滤器名，且不改信号条数。"""
+    result = ChanAnalyzer().analyze("X", _decaying_downtrend_bars(), mode="loose",
+                                    shape_filters=True)
+    history = svc.build_signal_history("X", "测试", result)
+    valid = {None, "假突破", "窄幅震荡", "收盘位置", "低波动", "区间震荡"}
+    assert {r.shape_rejected for r in history} <= valid
+    assert len(history) == len(result.signals)
