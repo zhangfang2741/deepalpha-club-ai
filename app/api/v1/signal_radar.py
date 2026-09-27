@@ -32,6 +32,7 @@ from app.services.signal_radar.service import (
     peek_cache_entry,
     read_demo_cache,
     read_watchlist_cache,
+    demo_lock_key,
     scan_lock_key,
     SCAN_LOCK_TTL,
 )
@@ -138,7 +139,7 @@ async def _run_scan(
 
 
 def _demo_generating_key(market: str, universe_key: str, mode: str = DEFAULT_MODE) -> str:
-    return f"signal_radar:demo:generating:{mode}:{market}:{universe_key}"
+    return demo_lock_key(market, universe_key, mode)
 
 
 async def _run_demo_scan(market: str, universe_key: str, mode: str = DEFAULT_MODE) -> None:

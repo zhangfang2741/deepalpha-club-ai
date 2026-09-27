@@ -66,6 +66,14 @@ async def incr_with_ttl(redis: Redis, key: str, ttl: int) -> int:
     return value
 
 
+async def scan_keys(redis: Redis, pattern: str) -> list[str]:
+    """按通配符列出 key（SCAN 游标遍历，不阻塞 Redis；只用于小规模前缀，如补算标记）。"""
+    keys: list[str] = []
+    async for k in redis.scan_iter(match=pattern, count=200):
+        keys.append(k.decode("utf-8") if isinstance(k, bytes) else str(k))
+    return keys
+
+
 # ---------- JSON 操作 ----------
 
 async def get_json(redis: Redis, key: str) -> Optional[dict]:

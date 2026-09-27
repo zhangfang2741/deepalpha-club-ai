@@ -150,7 +150,9 @@ deepalpha-club-ai/
 > ——接口与定时预热共用 `scan_lock_key` 原子锁（`acquire_lock` = SET NX EX），主动刷新有 5 分钟冷却；
 > 所有扫描 / 补算 / 示例日拉 K 线共用进程级闸门 `_fetch_gate`。拉数失败（限流 / 不可用）的成分股
 > 由 `_backfill` 在后台逐轮慢慢补算、补上即重写快照（响应 `pending_symbols` = 仍在补算的只数），
-> 轮次号存 Redis（`incr_with_ttl`），新一轮扫描开始旧补算自动退出。**不要**绕过锁直接起全量扫描。
+> 轮次号存 Redis（`incr_with_ttl`），新一轮扫描开始旧补算自动退出。免费示例日（`compute_demo_day`）同一套补算。
+> 补算进度记为 Redis 标记（`signal_radar:backfill:*`，含进程 owner），进程重启后 `scheduler._resume_orphan_backfills`
+> 在启动预热之后接手别的进程没补完的。**不要**绕过锁直接起全量扫描。
 
 > 新增一个投研模块时，通常需同步落地五处：`app/api/v1/<mod>.py`、`app/services/<mod>/`、`app/schemas/<mod>.py`、前端 `app/<mod>/page.tsx` + `lib/api/<mod>.ts`，并在 `api.py`、`TopNav.tsx` 注册。
 
