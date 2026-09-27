@@ -722,6 +722,3 @@
 "买卖点被破坏即退场：信号出现后，最低价跌破买点低点，或最高价突破卖点高点，即使收盘收回，当天起也不再上榜。" = "A signal leaves the radar when a later low breaks below its buy level or a later high breaks above its sell level, even if the closing price recovers.";
 "历史日期只展示当时已确认的信号；雷达筛选不代表后续价格一定按预期发展。" = "Historical dates show signals confirmed by that date. Pattern screening does not guarantee subsequent price direction.";
 
-/* 雷达 czsc 形态过滤 */
-"形态过滤剔除假信号：信号出现当天若处于窄幅震荡、同向假突破或低波动，则不上榜。" = "Fake-signal screening: a signal stays off the radar if, on the day it appears, the price is in a narrow range, shows a same-direction fake breakout, or has low volatility.";
-"详情页仍显示全部买卖点，形态过滤只影响雷达榜单。" = "The details page still shows every signal; screening only affects the radar list.";

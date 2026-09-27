@@ -95,10 +95,17 @@ _MIN_PER_LEVEL = 2
 _CACHE_PREFIX = "signal_radar"
 # 买卖点口径（宽松 / 严格 / …，见 chan.signal_policy）：雷达的三类缓存（每日快照、自选雷达、
 # 示例日）按口径的 version 分键——改了某口径的判定逻辑就升它的 version，旧快照自动换键失效，
-# 否则部署后缓存里还是旧口径的气泡。shape3 = 已确认 + 价格失效 + czsc 形态过滤
-# （按成立日判定同向假突破 / 窄幅震荡 / 低波动），仅隔离雷达筛选，不改变详情口径。
+# 否则部署后缓存里还是旧口径的气泡。shape 版本仅隔离雷达筛选，不改变详情口径；
+# shape4 = 已确认 + 价格失效（czsc 形态过滤暂停，见 _SHAPE_FILTERS_ENABLED）。
+# 开关或形态规则一变就升这个版本。
 def _mode_ns(mode: str) -> str:
-    return f"{get_policy(mode).version}:shape3"
+    return f"{get_policy(mode).version}:shape4"
+
+
+# czsc 形态过滤（chan/shape_filters：同向假突破 / 窄幅震荡 / 低波动）暂停应用，代码与测试保留。
+# 2026-09-27 全量 nasdaq100 实测：它在 5 日窗口里几乎不剔信号，雷达空主要来自「未确认不上榜」；
+# 产品决定先不做这层过滤。重新启用：改为 True 并升 _mode_ns 的 shape 版本。
+_SHAPE_FILTERS_ENABLED = False
 
 # 「自选」股票池：按用户各自的自选股计算（universe=watchlist）；缓存按用户隔离、30 分钟。
 # 不列入指数切换菜单（产品决定），接口能力保留。
@@ -615,7 +622,8 @@ async def _scan_symbol(
         return [], None, None, []
 
     try:
-        result = _analyzer.analyze(symbol, bars, lang="zh", mode=mode, shape_filters=True)
+        result = _analyzer.analyze(symbol, bars, lang="zh", mode=mode,
+                                   shape_filters=_SHAPE_FILTERS_ENABLED)
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_analyze_failed", symbol=symbol, error=str(e))
         return [], "analyze_failed", None, []

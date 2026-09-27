@@ -83,7 +83,7 @@ async def test_scan_does_not_fill_empty_slots_with_unconfirmed_candidates(monkey
 
 
 def test_shape_filter_invalidates_all_radar_cache_types() -> None:
-    assert all(":shape3:" in key for key in [
+    assert all(":shape4:" in key for key in [
         svc._cache_key("us", "nasdaq100"),
         svc.watchlist_cache_key("us", 7, [("X", "测试")]),
         svc._demo_cache_key("us", "nasdaq100", "2026-09-01"),
@@ -176,8 +176,11 @@ def test_real_analysis_shape_marks_are_valid_filter_names() -> None:
         assert (sig.detected_time or sig.time)[:10] in result.shape_states, sig
 
 
-async def test_scan_symbol_enables_shape_filters(monkeypatch: pytest.MonkeyPatch) -> None:
-    """雷达扫描路径的 analyze 必须开 shape_filters（形态状态进入历史标记链路）。"""
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_scan_symbol_shape_filters_follow_switch(
+    monkeypatch: pytest.MonkeyPatch, enabled: bool,
+) -> None:
+    """雷达扫描是否开形态过滤只由 _SHAPE_FILTERS_ENABLED 决定（当前默认关闭，代码保留）。"""
     seen: dict[str, object] = {}
 
     class _SpyAnalyzer:
@@ -190,6 +193,11 @@ async def test_scan_symbol_enables_shape_filters(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(svc, "_analyzer", _SpyAnalyzer())
     monkeypatch.setattr(svc, "fetch_kline", fake_fetch)
+    monkeypatch.setattr(svc, "_SHAPE_FILTERS_ENABLED", enabled)
     await svc._scan_symbol("X", "测试", user_id=None, start_date="2026-08-01",
                            end_date="2026-09-20", redis=_FakeRedis())
-    assert seen["shape_filters"] is True
+    assert seen["shape_filters"] is enabled
+
+
+def test_shape_filters_disabled_by_default() -> None:
+    assert svc._SHAPE_FILTERS_ENABLED is False
