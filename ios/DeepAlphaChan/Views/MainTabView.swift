@@ -28,7 +28,6 @@ struct MainTabView: View {
     @ObservedObject private var push = PushNotificationManager.shared
     @StateObject private var chanVM = ChanViewModel()
     @EnvironmentObject private var store: StoreManager
-    @ObservedObject private var signalMode = SignalModeManager.shared
 
     var body: some View {
         TabView(selection: $selection) {
@@ -70,11 +69,6 @@ struct MainTabView: View {
         .onChange(of: store.tier, initial: true) { _, _ in
             chanVM.hasSubLevelAccess = store.isPremium
         }
-        // 设置页换了买卖点模式：已打开的分析按新模式重算（不扣额度，额度只在用户发起分析时记）
-        .onChange(of: signalMode.mode) { _, _ in
-            if chanVM.analysis != nil { Task { await chanVM.runAnalysis() } }
-        }
-        .task { await signalMode.loadOptions() }
     }
 
     /// 晨报「重点个股」的跳转：填好共享 ViewModel 的查询条件，切到分析 Tab 并起跑。

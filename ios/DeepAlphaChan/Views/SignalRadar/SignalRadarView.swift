@@ -37,7 +37,6 @@ struct SignalRadarView: View {
     /// 免责声明：第一次查看非示例日的雷达图（即订阅高级版后的真实雷达）时弹出，
     /// 同意前该日的气泡不显示；示例日（未订阅的免费预览）不弹。见 needsConsent。
     @StateObject private var consent = RadarConsent()
-    @ObservedObject private var signalMode = SignalModeManager.shared
     @State private var consentChecked = false
     @State private var showConsent = false
     /// 强制最短阅读时长（秒）：勾选框可以随时点，但「同意并继续」在这段时间内
@@ -66,8 +65,6 @@ struct SignalRadarView: View {
             // 跟高级版一模一样，见 radarContent）；市场切换时 .task(id:) 额外拉一次
             // 「上个月 1 号」免费预览快照，自动取消上一次未完成的请求、重新拉一次。
             .task { vm.onAppear() }
-            // 设置页换了买卖点模式：按新模式重拉（示例日随 demoKey 变化由下面的 .task(id:) 重拉）
-            .onChange(of: signalMode.mode) { _, _ in vm.signalModeChanged() }
             .task(id: vm.demoKey) {
                 if !store.isPremium { await vm.loadDemoDay() }
             }
@@ -839,14 +836,11 @@ struct SignalRadarView: View {
         return f.string(from: date)
     }
 
-    /// 宽松／严格沿用各自买卖点定义，雷达统一只展示已确认且未价格失效的形态。
+    /// 雷达统一只展示已确认且未价格失效的形态。
     private var rankingInfoLines: [String] {
-        let loose = signalMode.mode == SignalMode.defaultKey
         var lines = [
             L("综合分 = 35% 类型确定性 + 30% 强弱 + 35% 新鲜度，最新一天命中「共振」再额外加分。"),
-            loose
-                ? L("类型确定性：一类 0.4（背驰，待验证）、二类 0.7（回落在价格密集区获得支撑）、三类 1.0（离开中枢后不回中枢，最强确认）。")
-                : L("类型确定性：一类 0.4（趋势背驰，待验证）、二类 0.7（一买后第一次回落不破低点）、三类 1.0（离开中枢后不回中枢，最强确认）。"),
+            L("类型确定性：一类 0.4（背驰，待验证）、二类 0.7（回落在价格密集区获得支撑）、三类 1.0（离开中枢后不回中枢，最强确认）。"),
             L("新鲜度：按信号出现后的交易日数算（周末、休市不算），当天最高，5 个交易日（一周）后归零并退场。"),
         ]
         lines += [
@@ -854,7 +848,6 @@ struct SignalRadarView: View {
             L("形态被破坏即退场：信号出现后，最低价跌破买点低点，或最高价突破卖点高点，即使收盘收回，当天起也不再上榜。"),
             L("历史日期只展示当时已确认的信号；形态筛选不代表后续价格一定按预期发展。"),
             L("每类买卖点先保底最多 2 个名额，其余按综合分从高到低补满，共取前 10 名。"),
-            L("当前为「%@」模式，可在「我的 → 买卖点模式」切换。", signalMode.currentOption?.label ?? L("宽松")),
         ]
         return lines
     }

@@ -702,10 +702,6 @@
 "继续上涨但力度变弱（顶背驰），上涨可能接近尾声" = "Still rising but with weaker force (top divergence) — the advance may be nearing its end";
 "继续下跌但力度变弱（底背驰），下跌可能接近尾声" = "Still falling but with weaker force (bottom divergence) — the decline may be nearing its end";
 "价格与中枢（%@ ~ %@）的关系见下方说明" = "See below for how price relates to the pivot (%@ – %@)";
-"一类是趋势背驰：之前已有两个依次下移（一卖为上移）的中枢，离开后一个中枢再创新低／新高但力度变弱；盘整里的背驰不算。强度按价差比分档：小于 0.6 为强，0.6 至小于 0.8 为中，其余为弱。" = "Type 1 is a trend divergence: after two pivots stepping lower (higher for a sell), price leaves the latest one to a new low / high with weaker force; a divergence inside a range does not count. Strength by range ratio: below 0.6 strong, 0.6 to below 0.8 medium, otherwise weak.";
-"二类是一买后的第一次回落没有跌破一买低点（一卖后的第一次反弹没有升破一卖高点）；再往后的回落不算。" = "Type 2 is the first retest after a type-1 buy that holds above its low (the first pullback after a type-1 sell that holds below its high); later retests do not count.";
-"三类是离开中枢后的第一次回落没有跌回中枢（三卖：第一次反弹没有升回中枢）；仅越过中枢边沿、还没等到回落确认时不算。" = "Type 3 is the first retest after leaving a pivot that stays out of it (for a sell, the first pullback that stays below it); merely crossing the edge without that confirmation does not count.";
-"类型确定性：一类 0.4（趋势背驰，待验证）、二类 0.7（一买后第一次回落不破低点）、三类 1.0（离开中枢后不回中枢，最强确认）。" = "Type certainty: type 1 0.4 (trend divergence, still to be proven), type 2 0.7 (first retest after a type-1 buy holds its low), type 3 1.0 (left the pivot and stayed out — strongest).";
 "只收已完成的笔上的买卖点：最后一笔还在走时不上榜，等这一笔走完、买卖点成立后才出现。" = "Only signals on completed strokes are listed: while the last stroke is still moving, it waits until the stroke finishes and the signal is established.";
 "待确认" = "Pending";
 "待确认，不算买卖点" = "pending, not a buy/sell point";
@@ -713,19 +709,11 @@
 "灰色虚线气泡是「待确认」：落在还没走完的最后一笔上，按缠论尚不成立、不算买卖点；只在最新一天补足剩余名额。" = "Grey dashed bubbles are “pending”: they sit on the last stroke, which is still moving, so under Chan theory they are not buy/sell points yet; they only fill remaining slots on the latest day.";
 
 /* Signal mode */
-"买卖点模式" = "Signal Mode";
-"宽松" = "Relaxed";
-"严格" = "Strict";
-"默认" = "Default";
-"信号更多、出得更早，最后一笔还在走时也先标出（未确认）" = "More and earlier signals; signals on the unfinished last leg are shown as unconfirmed";
-"严格按缠论原文定义，只认已走完的笔" = "Textbook Chan definitions; only completed legs count";
-"切换后信号雷达、分析详情与次级别确认都按所选模式重新计算。" = "Signal Radar, analysis details and sub-level confirmation are recalculated with the selected mode.";
-"一类是背驰：末笔创新低（一卖为新高），但价差力度弱于前段，且量能或时长也更弱；宽松模式下盘整里的背驰也算。强度按价差比分档：小于 0.6 为强，0.6 至小于 0.8 为中，其余为弱。" = "Type-1 is a divergence: the last leg makes a new low (new high for sell-1) with weaker price force than the prior leg, and weaker volume or duration; in Relaxed mode a divergence inside a range also counts. Strength by price ratio: below 0.6 strong, 0.6 to below 0.8 medium, otherwise weak.";
-"二类是回落低点落在此前多次转折形成的价格密集区，获得支撑、没有再创新低（二卖：反弹高点受压、没有再创新高）；宽松模式不要求先有一类。" = "Type-2: the pullback low lands in a price cluster formed by earlier turning points and holds without a new low (sell-2: the rebound high is capped without a new high); Relaxed mode does not require a prior type-1.";
+"一类是背驰：末笔创新低（一卖为新高），但价差力度弱于前段，且量能或时长也更弱；盘整里的背驰也算。强度按价差比分档：小于 0.6 为强，0.6 至小于 0.8 为中，其余为弱。" = "Type-1 is a divergence: the last leg makes a new low (new high for sell-1) with weaker price force than the prior leg, and weaker volume or duration; a divergence inside a range also counts. Strength by price ratio: below 0.6 strong, 0.6 to below 0.8 medium, otherwise weak.";
+"二类是出现一买之后，回落低点落在此前多次转折形成的价格密集区，获得支撑、没有再创新低（二卖：一卖之后反弹高点受压、没有再创新高）；之前没有一类的不算。" = "Type-2: after a type-1 buy, the pullback low lands in a price cluster formed by earlier turning points and holds without a new low (sell-2: after a type-1 sell, the rebound high is capped without a new high); without a prior type-1 it does not count.";
 "三类是前五笔构成中枢后，回落低点仍在中枢上沿之上、没有回到中枢，且均线逐级抬升（三卖反之）。" = "Type-3: after five legs form a pivot, the pullback low stays above the pivot top without returning to it, with the moving average stepping higher (the reverse for sell-3).";
 "类型确定性：一类 0.4（背驰，待验证）、二类 0.7（回落在价格密集区获得支撑）、三类 1.0（离开中枢后不回中枢，最强确认）。" = "Type certainty: type-1 0.4 (divergence, to be verified), type-2 0.7 (pullback holds in a price cluster), type-3 1.0 (left the pivot without returning, strongest confirmation).";
 "最后一笔还在走时出现的买卖点也会上榜（标为未确认），之后可能被新K线改写。" = "Signals on the unfinished last leg are also listed (marked unconfirmed) and may be revised by new candles.";
-"当前为「%@」模式，可在「我的 → 买卖点模式」切换。" = "Current mode: %@. Change it in Me → Signal Mode.";
 "所在的最后一笔还在走，端点可能延伸甚至回到中枢，按缠论尚不成立；这一笔走完才算买卖点。" = "The last leg is still unfolding — its end may extend or even return to the pivot, so by Chan theory it is not yet a signal; it counts once this leg completes.";
 "%@（待确认）" = "%@ (pending)";
 "待确认 · 不算买卖点" = "Pending · not yet a signal";

@@ -25,8 +25,7 @@ final class SignalRadarViewModel: ObservableObject {
 
     /// 免费预览按（市场, universe）区分：同一市场切换纳斯达克100/标普500，示例日要跟着换。
     /// 也用作 View 里 `.task(id:)` 的 id。
-    /// 买卖点模式（宽松 / 严格）也进键：换模式后示例日要按新模式重拉。
-    var demoKey: String { "\(market.rawValue)|\(currentUniverse ?? "")|\(SignalMode.current())" }
+    var demoKey: String { "\(market.rawValue)|\(currentUniverse ?? "")" }
 
     /// 已放弃拉取预览日的键（失败 / 轮询用尽仍在算 / 返回为空）。被取消不算放弃。
     @Published private(set) var demoGaveUpKey: String?
@@ -226,16 +225,6 @@ final class SignalRadarViewModel: ObservableObject {
         // 示例日按 universe 算，旧指数的那天不能留着拼进新指数的日期轨（同 switchMarket）
         demoDay = nil
         demoComputedAt = nil
-        Task { await load() }
-    }
-
-    /// 设置页切换了买卖点模式：旧模式的快照与示例日作废，按新模式重拉（后端按模式分别缓存）。
-    func signalModeChanged() {
-        response = nil
-        demoDay = nil
-        demoComputedAt = nil
-        demoGaveUpKey = nil
-        selectedDayIndex = 0
         Task { await load() }
     }
 

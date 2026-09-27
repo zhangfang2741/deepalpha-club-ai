@@ -6,7 +6,6 @@ struct ProfileView: View {
     @EnvironmentObject var auth: AuthViewModel
     @EnvironmentObject var store: StoreManager
     @EnvironmentObject var localization: LocalizationManager
-    @ObservedObject private var signalMode = SignalModeManager.shared
     @State private var showLogoutAlert = false
     @State private var showDeleteAlert = false
     @State private var showPaywall = false
@@ -33,16 +32,6 @@ struct ProfileView: View {
                         }
                     } label: {
                         Label(L("语言"), systemImage: "globe")
-                    }
-                    NavigationLink {
-                        SignalModeSettingView()
-                    } label: {
-                        HStack {
-                            Label(L("买卖点模式"), systemImage: "slider.horizontal.3")
-                            Spacer()
-                            Text(signalMode.currentOption?.label ?? "")
-                                .foregroundColor(Theme.textSecondary)
-                        }
                     }
                 }
 
