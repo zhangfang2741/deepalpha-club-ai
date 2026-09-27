@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>缠论详情页 · 现状 vs 调整后</title>
+<style>
+  :root{
+    --accent:#3B82F6; --bg:#0B0E14; --surface:#141A24; --surface2:#1C2431; --border:#263041;
+    --text:#E6EDF3; --text2:#8B98A9; --up:#F6465D; --down:#2EBD85; --stroke:#60A5FA;
+    --segment:#F59E0B; --pivot:#8B5CF6; --div:#EC4899;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#05070B;color:var(--text);font-family:-apple-system,"SF Pro Text","PingFang SC",sans-serif;
+       padding:36px 40px 60px;display:flex;flex-direction:column;align-items:center}
+  h1{font-size:22px;font-weight:700;margin-bottom:6px}
+  .sub{color:var(--text2);font-size:13px;margin-bottom:28px}
+  .row{display:flex;gap:56px;align-items:flex-start}
+  .col{display:flex;flex-direction:column;align-items:center;gap:14px}
+  .tag{font-size:13px;font-weight:700;padding:4px 12px;border-radius:99px}
+  .tag.old{background:#2a1418;color:#ff8a98}
+  .tag.new{background:#10281f;color:#5fe0aa}
+  .phone{width:402px;background:var(--bg);border-radius:44px;border:10px solid #1b1f27;position:relative;overflow:hidden;
+         box-shadow:0 30px 80px rgba(0,0,0,.6)}
+  .status{height:54px;display:flex;justify-content:space-between;align-items:center;padding:0 30px;font-size:15px;font-weight:600}
+  .nav{height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+  .circ{width:40px;height:40px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;color:var(--text);font-size:18px}
+  .nav .t{font-size:17px;font-weight:700}
+  .pill{display:flex;gap:18px;background:var(--surface);border-radius:22px;padding:9px 16px;font-size:15px}
+  .content{padding:10px 8px 18px}
+  .card{background:var(--surface);border-radius:14px;padding:14px}
+  .legend{display:flex;flex-wrap:wrap;gap:6px;padding:4px 2px 8px;font-size:11.5px}
+  .chip{display:flex;align-items:center;gap:4px;background:var(--surface);border-radius:99px;padding:4px 8px;color:var(--text)}
+  .dot{width:10px;height:3px;border-radius:2px}
+  .muted{color:var(--text2)}
+  .chart{background:var(--surface);border-radius:12px;overflow:hidden}
+  .tabs{display:flex;gap:8px;margin-top:12px}
+  .tab{flex:1;background:var(--surface);border-radius:12px;text-align:center;padding:9px 0 8px;font-size:15px;color:var(--text2)}
+  .tab small{display:block;font-size:11px;margin-top:3px}
+  .tab.on{color:var(--text)} .tab.on:after{content:"";display:block;height:2px;background:var(--accent);margin:7px 10px 0;border-radius:2px}
+  .lockbar{display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:10px;height:36px;padding:0 12px;font-size:13px;color:var(--text2);margin-top:10px}
+  .btn2{margin-top:12px;background:var(--surface);border-radius:10px;height:44px;display:flex;align-items:center;justify-content:center;color:var(--accent);font-weight:600;font-size:14px}
+  .disc{font-size:11px;color:var(--text2);text-align:center;margin-top:14px;line-height:1.6}
+  .badge{font-size:11px;font-weight:700;color:var(--bg);background:var(--down);border-radius:99px;padding:2px 7px}
+  .flow{position:relative;height:250px;margin-top:14px}
+  .node{position:absolute;background:var(--surface2);border:1.5px solid rgba(139,152,169,.6);border-radius:10px;font-size:12.5px;font-weight:600;
+        display:flex;align-items:center;justify-content:center;width:92px;height:40px}
+  .node.dash{border-style:dashed;color:var(--text2)}
+  .node.cur{border:2.2px solid var(--up)}
+  .fold{display:flex;justify-content:space-between;align-items:center;background:var(--surface);border-radius:12px;padding:13px 14px;font-size:14px;margin-top:10px}
+  .sect{font-size:12px;font-weight:700;color:var(--text2);margin:16px 4px 8px;letter-spacing:.5px}
+  .sig{display:flex;align-items:center;gap:10px;background:var(--surface);border-radius:12px;padding:11px 12px;margin-bottom:6px}
+  .sig .k{font-weight:800;font-size:13px;border-radius:7px;padding:3px 7px}
+  .foldline{position:absolute;left:0;right:0;border-top:2px dashed #ff5c7a;z-index:5}
+  .foldline span{position:absolute;right:8px;top:-22px;font-size:11px;font-weight:700;color:#ff8a98;background:#05070Bcc;padding:2px 6px;border-radius:6px}
+  .tabbar{position:absolute;left:12px;right:12px;bottom:14px;height:66px;border-radius:33px;background:rgba(20,26,36,.92);border:1px solid var(--border);
+          display:flex;justify-content:space-around;align-items:center;font-size:11px;color:var(--text);z-index:6;backdrop-filter:blur(8px)}
+  .tabbar div{text-align:center} .tabbar b{display:block;font-size:20px;line-height:22px}
+  .tabbar .on{color:var(--accent)}
+  .notes{width:402px;font-size:12.5px;line-height:1.75;color:#b9c4d2}
+  .notes li{margin-left:18px}
+  .num{display:inline-flex;width:18px;height:18px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:800;
+       align-items:center;justify-content:center;margin-right:6px}
+  .callout{position:absolute;right:-2px;z-index:7}
+</style>
+</head>
+<body>
+<h1>缠论分析详情页 · 现状 vs 调整后</h1>
+<div class="sub">同一只股票（AAPL · 日线），按真实尺寸 1:1 绘制；红色虚线 = 第一屏底部（底部 Tab 栏以上能看到的范围）</div>
+
+<div class="row">
+  <!-- ================= 现状 ================= -->
+  <div class="col">
+    <span class="tag old">现状</span>
+    <div class="phone" id="old">
+      <div class="status"><span>13:50</span><span>●●● ▮</span></div>
+      <div class="nav"><div class="circ">‹</div><div class="t">AAPL · 日线</div><div class="pill"><span style="color:var(--accent)">⇪</span><span style="color:var(--segment)">★</span></div></div>
+      <div class="content">
+        <div class="legend">
+          <span class="chip"><span class="dot" style="background:var(--up);width:5px;height:5px;border-radius:50%"></span><span class="dot" style="background:var(--down);width:5px;height:5px;border-radius:50%"></span>分型</span>
+          <span class="chip"><span class="dot" style="background:var(--stroke)"></span>笔</span>
+          <span class="chip"><span class="dot" style="background:var(--segment)"></span>线段</span>
+          <span class="chip"><span class="dot" style="background:var(--pivot)"></span>中枢</span>
+          <span class="chip"><span class="dot" style="background:var(--up)"></span>买卖点</span>
+          <span class="chip"><span class="dot" style="background:var(--div)"></span>背驰</span>
+          <span class="muted" style="align-self:center">虚线=未确认</span>
+        </div>
+        <div class="chart"><svg id="c-old" width="386" height="240"></svg><svg id="m-old" width="386" height="78"></svg><svg id="t-old" width="386" height="22"></svg></div>
+        <div class="lockbar">🔒 <span>次级别确认 · 高级版解锁</span><span style="margin-left:auto">›</span></div>
+        <div class="tabs">
+          <div class="tab on">当前状态<small>位置与依据</small></div>
+          <div class="tab">买卖点 9<small>类型与确认</small></div>
+          <div class="tab">风险提示 4<small>待确认与限制</small></div>
+        </div>
+        <div class="card" style="margin-top:12px">
+          <div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px;font-weight:700;color:var(--up)">确认三买</span><span class="badge">当前</span></div>
+          <div style="font-size:14px;color:var(--text2);margin-top:8px;line-height:1.6">回踩至 319.07，守住 ZG 302.16 未回<span style="color:var(--pivot)">中枢</span>，确认<span style="color:var(--up)">三买</span>。</div>
+          <div style="font-size:13px;color:var(--text2);margin-top:6px">参考中枢 笔级 · 下沿 ZD 287.13 — 上沿 ZG 302.16</div>
+          <div style="font-size:13px;color:var(--accent);margin-top:6px">下一步观察：关注后续走势是否出现背驰</div>
+          <div class="flow">
+            <div class="node dash" style="left:131px;top:0">无状态</div>
+            <div class="node" style="left:131px;top:62px">形成中枢</div>
+            <div class="node" style="left:131px;top:124px">中枢震荡</div>
+            <div class="node" style="left:20px;top:192px">离开中枢</div>
+            <div class="node cur" style="left:242px;top:192px">回抽确认<span class="badge" style="position:absolute;right:-6px;top:-9px;font-size:9px">当前</span></div>
+            <svg width="354" height="250" style="position:absolute;left:0;top:0">
+              <g stroke="#8B98A9" stroke-width="1.2" fill="none">
+                <path d="M177 40 V62"/><path d="M177 102 V124"/><path d="M160 164 L80 192"/><path d="M194 164 L270 192"/><path d="M112 212 H242"/>
+              </g>
+              <g font-size="10" fill="#8B98A9"><text x="182" y="55">形成中枢</text><text x="182" y="117">第三笔</text><text x="95" y="182">突破</text><text x="232" y="182">假突破</text></g>
+            </svg>
+          </div>
+          <div style="font-size:11px;color:var(--text2);text-align:center">● 有买卖点信号　○ 没有信号 · 点框或点线看规则</div>
+        </div>
+        <div class="btn2">继续核对买卖点 →</div>
+        <div class="disc">「买卖点」是缠论对价格结构的技术信号命名，非买入/卖出操作建议。</div>
+        <div class="disc">本页内容由算法生成，仅供技术研究与学习参考，不构成投资建议。</div>
+        <div style="height:96px"></div>
+      </div>
+      <div class="foldline" style="top:784px"><span>第一屏底部（Tab 栏上沿）</span></div>
+    </div>
+    <ol class="notes">
+      <li>第一屏 <b>70%+ 是图表与控件</b>（图例 7 项、主图、MACD、次级别锁、3 个 Tab），结论压在屏幕底边</li>
+      <li>MACD 占 78pt，但背驰按「力度」判定，MACD 不参与——展示与说法矛盾</li>
+      <li>判定流程图占半屏，和上方那段文字讲同一件事；ZD / ZG 等术语没有翻译</li>
+      <li>免责文字 4 处，「继续核对买卖点 →」与 3 个 Tab 是两套导航</li>
+    </ol>
+  </div>
+
+  <!-- ================= 调整后 ================= -->
+  <div class="col">
+    <span class="tag new">调整后</span>
+    <div class="phone" id="new">
+      <div class="status"><span>13:50</span><span>●●● ▮</span></div>
+      <div class="nav"><div class="circ">‹</div><div class="t">AAPL · 日线</div><div class="pill" style="gap:14px;padding:9px 13px;font-size:13px"><span style="color:var(--accent)">⇪</span><span style="color:var(--segment)">★</span></div></div>
+      <div class="content">
+        <!-- ① 结论卡 -->
+        <div class="card" style="padding:14px 14px 12px;background:linear-gradient(135deg,#1a1620 0%,#141A24 60%);border:1px solid #3a2530;position:relative">
+          <span class="num callout" style="top:10px;right:10px;position:absolute">1</span>
+          <div style="display:flex;align-items:baseline;gap:8px">
+            <span style="font-size:22px;font-weight:800;color:var(--up)">确认三买</span>
+            <span style="font-size:13px;font-weight:600;color:#ff9aa7">结构偏强</span>
+          </div>
+          <div style="font-size:13px;color:#c9d3df;margin-top:6px;line-height:1.55">突破震荡区后回落，<b style="color:var(--text)">没有跌回区间</b>（302 ~ 287）</div>
+          <div style="display:flex;gap:8px;margin-top:11px">
+            <div style="flex:1;background:var(--surface2);border-radius:10px;padding:8px 10px">
+              <div style="font-size:11px;color:var(--text2)">最新信号</div>
+              <div style="font-size:14px;font-weight:700;margin-top:2px"><span style="color:var(--up)">三买</span> · 09-19 <span style="font-size:11px;color:var(--down)">✓ 已确认</span></div>
+            </div>
+            <div style="flex:1;background:var(--surface2);border-radius:10px;padding:8px 10px">
+              <div style="font-size:11px;color:var(--text2)">30 分钟确认</div>
+              <div style="font-size:14px;font-weight:700;margin-top:2px;color:var(--text2)">🔒 高级版</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ② 图表 -->
+        <div style="display:flex;align-items:center;gap:6px;margin:12px 2px 8px;font-size:11.5px;position:relative">
+          <span class="chip"><span class="dot" style="background:var(--stroke)"></span>笔</span>
+          <span class="chip"><span class="dot" style="background:var(--pivot)"></span>中枢</span>
+          <span class="chip"><span class="dot" style="background:var(--up)"></span>买卖点</span>
+          <span class="chip" style="color:var(--text2)">更多图层 ▾</span>
+          <span class="num" style="margin-left:auto">2</span>
+        </div>
+        <div class="chart"><svg id="c-new" width="386" height="240"></svg><svg id="t-new" width="386" height="22"></svg></div>
+
+        <!-- ③ 状态与信号 -->
+        <div class="sect" style="display:flex;justify-content:space-between">这意味着什么<span class="num">3</span></div>
+        <div class="card" style="font-size:14px;line-height:1.75;color:#c9d3df">
+          价格先在 <b style="color:var(--pivot)">287 ~ 302</b> 之间来回震荡（中枢），随后向上突破，回落时停在 <b style="color:var(--text)">319</b>，没有跌回震荡区——缠论把这种走法叫「<span style="color:var(--up)">三买</span>」，说明上方结构暂时站稳。
+          <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:13px;color:var(--accent)">接下来看：继续上涨时力度会不会减弱（背驰）</div>
+        </div>
+
+        <div class="sect">买卖点 · 最新在前</div>
+        <div class="sig"><span class="k" style="background:#3a1820;color:var(--up)">三买</span><div style="flex:1"><div style="font-size:14px;font-weight:600">319.07 · 09-19</div><div style="font-size:12px;color:var(--text2)">回落没跌回震荡区</div></div><span style="font-size:12px;color:var(--down)">✓ 已确认</span></div>
+        <div class="sig"><span class="k" style="background:#3a1820;color:var(--up)">一买</span><div style="flex:1"><div style="font-size:14px;font-weight:600">283.40 · 08-26</div><div style="font-size:12px;color:var(--text2)">新低但下跌力度变弱</div></div><span style="font-size:12px;color:var(--down)">✓ 已确认</span></div>
+        <div class="sig"><span class="k" style="background:#10281f;color:var(--down)">一卖</span><div style="flex:1"><div style="font-size:14px;font-weight:600">352.10 · 07-15</div><div style="font-size:12px;color:var(--text2)">新高但上涨力度变弱</div></div><span style="font-size:12px;color:var(--down)">✓ 已确认</span></div>
+        <div style="font-size:12.5px;color:var(--accent);text-align:center;padding:6px 0">查看全部 9 个买卖点 ›</div>
+
+        <div class="fold"><span>阶段流程图 · 当前在「回抽确认」</span><span class="muted">展开 ▾</span></div>
+
+        <div class="sect" style="display:flex;justify-content:space-between">还没确认的地方<span class="num">4</span></div>
+        <div class="card" style="font-size:13.5px;line-height:1.7;color:#c9d3df">
+          <div>• 最后一笔（09-19 起）还在走，终点可能继续变化</div>
+          <div>• 图上虚线部分都属于未确认结构</div>
+        </div>
+
+        <div class="disc" style="margin-top:16px">以上由算法根据公开行情自动生成，仅供技术研究参考，不构成投资建议。<span class="num" style="width:15px;height:15px;font-size:9px;margin-left:4px">5</span></div>
+        <div style="height:96px"></div>
+      </div>
+      <div class="foldline" style="top:784px"><span>第一屏底部（Tab 栏上沿）</span></div>
+    </div>
+    <ol class="notes" style="list-style:none">
+      <li><span class="num">1</span><b>结论卡放最上面</b>：状态 + 一句人话 + 最新信号 + 30 分钟确认（原次级别条并入），第一眼就有答案</li>
+      <li><span class="num">2</span><b>图表减负</b>：图例只留 3 项、其余收进「更多图层」；MACD 移到全屏图，省约 140pt</li>
+      <li><span class="num">3</span><b>3 个 Tab 合成一条往下读的页面</b>：大白话解读 → 信号时间线，下半屏有实在内容，重心下移</li>
+      <li><span class="num">4</span>风险只列这只股票自己的待确认项；判定流程图默认收起</li>
+      <li><span class="num">5</span>免责声明只留页尾一处；去掉「继续核对买卖点 →」</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+// 用固定种子生成同一段 K 线，两边图表完全一致，只比较版式
+function rng(seed){return()=>{seed=(seed*16807)%2147483647;return(seed-1)/2147483646}}
+const r=rng(20260926);
+const N=64, bars=[]; let p=275;
+const path=[ -1,-1,-1,1,1,1,1,1,-1,-1,-1,1,1,1,1,1,1,-1,-1,-1,-1,1,1,1,1,-1,-1,-1,-1,-1,-1,1,1,1,1,1,1,-1,-1,1,1,1,1,1,-1,-1,-1,-1,1,1,1,1,1,1,1,-1,-1,1,1,1,1,1,1,1];
+for(let i=0;i<N;i++){const d=path[i]*(3+r()*5)+(r()-.5)*4;const o=p;p=Math.max(250,Math.min(355,p+d));const c=p;
+  bars.push({o,c,h:Math.max(o,c)+r()*5,l:Math.min(o,c)-r()*5,v:30+r()*70})}
+const lo=Math.min(...bars.map(b=>b.l))-6, hi=Math.max(...bars.map(b=>b.h))+10;
+function draw(id,{overlays=true,macd=null,axis=null,full=true}={}){
+  const W=386,H=240,vol=48,pw=338,bw=pw/N;
+  const y=v=>8+(hi-v)/(hi-lo)*(H-vol-16), x=i=>6+i*bw+bw/2;
+  let s=`<g stroke="#263041" stroke-width="1">${[0,1,2,3].map(k=>`<line x1="0" x2="${pw+6}" y1="${14+k*55}" y2="${14+k*55}"/>`).join('')}</g>`;
+  bars.forEach((b,i)=>{const up=b.c>=b.o,col=up?'#F6465D':'#2EBD85';
+    s+=`<line x1="${x(i)}" x2="${x(i)}" y1="${y(b.h)}" y2="${y(b.l)}" stroke="${col}" stroke-width="1"/>`;
+    s+=`<rect x="${x(i)-bw*.33}" y="${y(Math.max(b.o,b.c))}" width="${bw*.66}" height="${Math.max(1,Math.abs(y(b.o)-y(b.c)))}" fill="${col}"/>`;
+    const vh=b.v/100*(vol-8);s+=`<rect x="${x(i)-bw*.33}" y="${H-vh}" width="${bw*.66}" height="${vh}" fill="${up?'#F6465D55':'#2EBD8555'}"/>`});
+  // 笔：按固定转折点连线
+  const piv=[2,8,11,17,21,25,31,37,39,44,48,55,57,63];
+  const px=piv.map((i,k)=>[x(i),y(k%2? bars[i].h:bars[i].l)]);
+  if(overlays){
+    s+=`<rect x="${x(20)}" y="${y(318)}" width="${x(40)-x(20)}" height="${y(296)-y(318)}" fill="#8B5CF622" stroke="#8B5CF6" stroke-width="1.2"/>`;
+    s+=`<polyline points="${px.map(p=>p.join(',')).join(' ')}" fill="none" stroke="#60A5FA" stroke-width="1.6"/>`;
+    if(full){s+=`<polyline points="${[px[0],px[5],px[8],px[13]].map(p=>p.join(',')).join(' ')}" fill="none" stroke="#F59E0B" stroke-width="2" stroke-dasharray="6 4"/>`;
+      px.forEach((p,k)=>{s+=`<circle cx="${p[0]}" cy="${p[1]}" r="2.6" fill="${k%2?'#EF4444':'#22C55E'}"/>`});
+      s+=`<line x1="${px[4][0]}" y1="${px[4][1]+8}" x2="${px[6][0]}" y2="${px[6][1]+8}" stroke="#EC4899" stroke-width="1.4" stroke-dasharray="3 3"/>`;}
+    const lab=(k,t,c,below)=>{const [cx,cy]=px[k];const yy=below?cy+8:cy-26;
+      s+=`<rect x="${cx-15}" y="${yy}" width="30" height="18" rx="9" fill="${c}"/><text x="${cx}" y="${yy+13}" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">${t}</text>`};
+    lab(3,'一卖','#2EBD85',false); lab(6,'一买','#F6465D',true); lab(10,'二买','#F6465D',true); lab(12,'三买','#F6465D',true);
+  }
+  // 末价线 + 价格轴
+  const last=bars[N-1].c;
+  s+=`<line x1="0" x2="${pw+6}" y1="${y(last)}" y2="${y(last)}" stroke="#F6465D" stroke-dasharray="3 3" stroke-width="1"/>`;
+  s+=`<rect x="${pw+2}" y="${y(last)-9}" width="44" height="18" rx="4" fill="#F6465D"/><text x="${pw+24}" y="${y(last)+4}" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">${last.toFixed(1)}</text>`;
+  [hi-8,(hi+lo)/2,lo+8].forEach(v=>{s+=`<text x="${W-4}" y="${y(v)+4}" font-size="10" fill="#8B98A9" text-anchor="end">${v.toFixed(0)}</text>`});
+  s+=`<rect x="8" y="10" width="26" height="26" rx="8" fill="#1C2431"/><text x="21" y="28" font-size="13" fill="#3B82F6" text-anchor="middle">⤢</text>`;
+  document.getElementById(id).innerHTML=s;
+  if(macd){let m='<text x="6" y="12" font-size="10" fill="#8B98A9">MACD</text>';let e=0;
+    bars.forEach((b,i)=>{e=e*.8+(b.c-b.o)*.9;const hh=Math.min(28,Math.abs(e)*1.6);m+=`<rect x="${x(i)-bw*.3}" y="${e>0?40-hh:40}" width="${bw*.6}" height="${hh}" fill="${e>0?'#F6465D':'#2EBD85'}"/>`});
+    m+=`<path d="M6 55 C 90 30, 160 20, 230 38 S 320 60, 344 50" fill="none" stroke="#60A5FA" stroke-width="1.2"/><path d="M6 58 C 90 38, 170 26, 240 36 S 320 52, 344 46" fill="none" stroke="#F59E0B" stroke-width="1.2"/>`;
+    document.getElementById(macd).innerHTML=m}
+  if(axis){document.getElementById(axis).innerHTML=['06/18','07/07','07/22','08/05','08/26','09/10'].map((t,k)=>`<text x="${16+k*62}" y="15" font-size="10.5" fill="#8B98A9">${t}</text>`).join('')}
+}
+draw('c-old',{macd:'m-old',axis:'t-old',full:true});
+draw('c-new',{axis:'t-new',full:false});
+</script>
+</body>
+</html>

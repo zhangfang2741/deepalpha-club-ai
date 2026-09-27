@@ -163,7 +163,7 @@ struct ChanChartView: View {
                     if vm.showFractals { drawFractals(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showSignals { drawSignals(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if let sel = selectedElement {
-                        drawSelection(ctx, sel, height: size.height, range: range, bounds: priceBounds)
+                        drawSelection(ctx, sel, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds)
                     }
                     // 雷达快照锚点竖线：画在结构叠加层之上，避免被中枢/笔的色块盖住看不清
                     drawAnchorLine(ctx, plotWidth: plotW, height: size.height, range: range)
@@ -558,8 +558,16 @@ struct ChanChartView: View {
 
     // MARK: - 绘制：买卖点
 
-    private func drawSignals(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
-                             range: VisibleRange, bounds: PriceBounds) {
+    /// 买卖点徽标的版面：绘制与选中高亮共用，保证高亮框正好套在徽标上。
+    private struct SignalBadge {
+        let signal: Signal
+        let anchorX: CGFloat
+        let rect: CGRect
+        let text: GraphicsContext.ResolvedText
+    }
+
+    private func signalBadges(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
+                              range: VisibleRange, bounds: PriceBounds) -> [SignalBadge] {
         // 只取可见区内的信号，按 x 排序，用「相邻信号最小间距」判断是否会挤。
         // 用间距而非列宽：信号通常稀疏，60 根默认视图里也多半放得下完整标签；
         // 只有当两个信号靠得太近（< 完整药丸宽 ~28pt）才整体降级成数字徽标。
@@ -577,13 +585,8 @@ struct ChanChartView: View {
         // 自解释短标签——比完整术语窄，又不用猜数字含义；完整解读仍在「买卖点」列表。
         let compact = minGap < 28
 
-        for (sig, cx) in visible {
+        return visible.map { sig, cx in
             let cy = y(for: sig.price, height: height, bounds: bounds)
-            let color = sig.isBuy ? Theme.up : Theme.down
-            let alpha: Double = sig.confirmed ? 1.0 : 0.5
-            // 买点朝上画在价格下方，卖点朝下画在价格上方
-            let dir: CGFloat = sig.isBuy ? 1 : -1
-
             // 徽标文字：紧凑态用「买卖+类型末位数字」并跟随界面语言（中文买1/卖3、英文 B1/S3），
             // 完整态用后端已本地化的 label
             let n = String(sig.type.rawValue.suffix(1))
@@ -598,19 +601,32 @@ struct ChanChartView: View {
             let padH: CGFloat = 5, padV: CGFloat = 2.5
             let badgeH = textSize.height + padV * 2
             let badgeW = textSize.width + padH * 2
-            let tri = ChartHitResolver.badgeTriangle  // 指向蜡烛的小三角高度
 
             // 版面：蜡烛 →(间距7)→ 三角 →(贴着)→ 徽标。整体夹在可视区内。
             // 位置与点击判定共用同一个函数（上下左右都夹在可视区内），画在哪就点得到哪。
-            // 小三角仍指向真实蜡烛位置（下面 arrow 路径用的是原始 cx，不受夹取影响）。
             let center = ChartHitResolver.badgeCenter(
                 anchor: CGPoint(x: cx, y: cy), isBuy: sig.isBuy, plotWidth: plotWidth, height: height,
                 badgeSize: CGSize(width: badgeW, height: badgeH))
-            let midY = center.y
-            let badgeCx = center.x
-            let badgeRect = CGRect(x: badgeCx - badgeW / 2, y: midY - badgeH / 2, width: badgeW, height: badgeH)
+            let rect = CGRect(x: center.x - badgeW / 2, y: center.y - badgeH / 2, width: badgeW, height: badgeH)
+            return SignalBadge(signal: sig, anchorX: cx, rect: rect, text: resolved)
+        }
+    }
 
-            // 小三角（徽标朝蜡烛的一侧）
+    private func drawSignals(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
+                             range: VisibleRange, bounds: PriceBounds) {
+        for badge in signalBadges(ctx, plotWidth: plotWidth, height: height, range: range, bounds: bounds) {
+            let sig = badge.signal
+            let cx = badge.anchorX
+            let badgeRect = badge.rect
+            let color = sig.isBuy ? Theme.up : Theme.down
+            let alpha: Double = sig.confirmed ? 1.0 : 0.5
+            // 买点朝上画在价格下方，卖点朝下画在价格上方
+            let dir: CGFloat = sig.isBuy ? 1 : -1
+            let badgeH = badgeRect.height
+            let midY = badgeRect.midY
+            let tri = ChartHitResolver.badgeTriangle  // 指向蜡烛的小三角高度
+
+            // 小三角（徽标朝蜡烛的一侧）；仍指向真实蜡烛位置（原始 cx，不受夹取影响）
             let triBase = midY - dir * badgeH / 2
             var arrow = Path()
             arrow.move(to: CGPoint(x: cx, y: triBase - dir * tri))
@@ -621,7 +637,7 @@ struct ChanChartView: View {
 
             ctx.fill(Path(roundedRect: badgeRect, cornerRadius: badgeH / 2),
                      with: .color(color.opacity(alpha)))
-            ctx.draw(resolved, at: CGPoint(x: badgeRect.midX, y: badgeRect.midY), anchor: .center)
+            ctx.draw(badge.text, at: CGPoint(x: badgeRect.midX, y: badgeRect.midY), anchor: .center)
         }
     }
 
@@ -888,7 +904,7 @@ struct ChanChartView: View {
     }
 
     /// 选中元素的高亮：白色描边，让说明卡片说的是哪一个一目了然。
-    private func drawSelection(_ ctx: GraphicsContext, _ e: ChartElement, height: CGFloat,
+    private func drawSelection(_ ctx: GraphicsContext, _ e: ChartElement, plotWidth: CGFloat, height: CGFloat,
                                range: VisibleRange, bounds: PriceBounds) {
         func pt(_ t: String, _ p: Double) -> CGPoint? { point(t, p, range: range, height: height, bounds: bounds) }
         let glow = Color.white.opacity(0.9)
@@ -906,7 +922,16 @@ struct ChanChartView: View {
         case .fractal(let f): ring(pt(f.time, f.price), 7)
         case .stroke(let s): line(pt(s.startTime, s.startPrice), pt(s.endTime, s.endPrice), 3)
         case .segment(let s): line(pt(s.startTime, s.startPrice), pt(s.endTime, s.endPrice), 4)
-        case .signal(let s): ring(pt(s.time, s.price), 8)
+        case .signal(let s):
+            // 点的是徽标，高亮也套在徽标上（而不是笔端点），与手指位置一致
+            if vm.showSignals,
+               let badge = signalBadges(ctx, plotWidth: plotWidth, height: height, range: range, bounds: bounds)
+                .first(where: { $0.signal.id == s.id }) {
+                let r = badge.rect.insetBy(dx: -2, dy: -2)
+                ctx.stroke(Path(roundedRect: r, cornerRadius: r.height / 2), with: .color(glow), lineWidth: 2)
+            } else {
+                ring(pt(s.time, s.price), 8)
+            }
         case .divergence(let c, let p): line(pt(p.endTime, p.endPrice), pt(c.endTime, c.endPrice), 2.5)
         case .pivot(let p):
             guard let a = pt(p.startTime, p.zg), let b = pt(p.endTime, p.zd) else { return }

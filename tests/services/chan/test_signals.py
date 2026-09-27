@@ -16,9 +16,25 @@ from app.services.chan.signals import generate_all_signals
 from tests.services.chan.test_czsc_signals import _decaying_downtrend_bars
 
 
+def _with_rebound(bars: list[dict], n: int = 12, step: float = 3.0, pullback: int = 6) -> list[dict]:
+    """在末尾接一段反弹再小幅回落，形成顶分型、让底部那一下降笔走完（买卖点只落在已完成的笔上）。
+
+    只涨不跌没有顶分型，上升笔成不了，底部那一笔就一直是「最后一笔」。
+    """
+    import datetime as dt
+    out, price = list(bars), bars[-1]["close"]
+    day = dt.date.fromisoformat(bars[-1]["time"][:10])
+    for k in range(1, n + pullback + 1):
+        o, c = price, price + (step if k <= n else -step * 0.6)
+        out.append({"time": (day + dt.timedelta(days=k)).isoformat(), "open": o, "high": c + 1.0,
+                    "low": o - 1.0, "close": c, "volume": 600})
+        price = c
+    return out
+
+
 def test_bottom_divergence_yields_buy1():
-    """跌势末端缩量衰减（底背驰）应产出一买（回归：一买曾被整段抹掉）。"""
-    result = ChanAnalyzer().analyze("DN", _decaying_downtrend_bars())
+    """跌势末端缩量衰减（底背驰）、之后反弹让底部那一笔走完 → 应产出一买（回归：一买曾被整段抹掉）。"""
+    result = ChanAnalyzer().analyze("DN", _with_rebound(_decaying_downtrend_bars()))
     assert len(result.strokes) >= 10, "合成数据应产出足够多的笔"
     buy1 = [s for s in result.signals if s.type == "buy1"]
     assert buy1, "底背驰应至少产出一个一买信号"
@@ -215,9 +231,10 @@ def test_buy2_is_first_pullback_after_buy1_not_breaking_its_low():
 
 
 def test_no_buy2_when_pullback_breaks_buy1_low():
+    """第一次回落就跌破一买低点：背驰段还在延伸，一买本身也不成立，自然也没有二买。"""
     legs, ev = _after_buy1(98)
     sig = generate_all_signals(ev, legs, [_div("strong", 0.3)] + [_NO_DIV] * 2, _DOWN_TREND)
-    assert [x.type for x in sig] == ["buy1"]
+    assert [x.type for x in sig if x.type in ("buy1", "buy2")] == []
 
 
 def test_only_first_pullback_counts_as_buy2():
@@ -369,3 +386,64 @@ def test_margin_ratio_zero_height_pivot_returns_zero():
     pivot = Pivot(zg=100, zd=100, gg=102, dd=98, start_time="T0", end_time="T1",
                   level="stroke", elements=[])
     assert _margin_ratio(pivot, 100, 105) == 0.0
+
+
+# ---- 回归（DXCM）：一买后价格回到最后一个中枢，中枢被延伸，不能因此否掉一买 ----
+
+def _formed_piv(zd, zg, first3_end, end_time):
+    """前三笔在 first3_end 已完成（中枢已形成），但后来被延伸到 end_time 才结束。"""
+    from app.services.chan.pivot import Pivot
+    els = [_st("down", "2025-10-01", "2025-10-10", zg + 2, zd),
+           _st("up", "2025-10-10", "2025-10-20", zd, zg),
+           _st("down", "2025-10-20", first3_end, zg, zd + 1)]
+    return Pivot(zg=zg, zd=zd, gg=zg + 2, dd=zd - 2, start_time="2025-10-01", end_time=end_time,
+                 level="stroke", elements=els)
+
+
+_A = _piv(83.48, 87.65, "2025-05-20", "2025-08-06")
+_B_EXTENDED = _formed_piv(64.67, 69.77, "2025-11-01", "2026-07-16")  # 一买之后被延伸到 7 月
+
+
+def test_buy1_counts_when_last_pivot_formed_before_but_extended_after():
+    """缠论：趋势背驰后价格至少回到最后一个中枢——这正是一买的确认，中枢因此延伸不该否掉一买。"""
+    down = _st("down", "2026-04-09", "2026-04-29", 66.4, 56.72)
+    sig = generate_all_signals([_ev("buy1", "2026-04-29", 56.72)], [down], [_div("strong", 0.3)], [_A, _B_EXTENDED])
+    assert [(s.type, s.time) for s in sig] == [("buy1", "2026-04-29")]
+
+
+def test_buy1_not_counted_before_last_pivot_formed():
+    """后一个中枢还没形成（前三笔未走完）时，不能拿它当趋势前提（不回看未来）。"""
+    down = _st("down", "2025-10-20", "2025-10-31", 70, 56.45)
+    sig = generate_all_signals([_ev("buy1", "2025-10-31", 56.45)], [down], [_div("strong", 0.3)], [_A, _B_EXTENDED])
+    assert sig == []
+
+
+def test_buy1_broken_by_next_pullback_is_dropped():
+    """一买之后下一次回落又创新低：背驰段还在延伸，这个一买不成立，只认最后那个。"""
+    legs = [_st("down", "2026-03-19", "2026-04-02", 68.8, 60.57),
+            _st("up", "2026-04-02", "2026-04-09", 60.57, 66.4),
+            _st("down", "2026-04-09", "2026-04-29", 66.4, 56.72),
+            _st("up", "2026-04-29", "2026-06-10", 56.72, 78.9),
+            _st("down", "2026-06-10", "2026-06-30", 78.9, 67.3)]
+    ev = [_ev("buy1", "2026-04-02", 60.57), _ev("buy1", "2026-04-29", 56.72)]
+    sig = generate_all_signals(ev, legs, [_div("strong", 0.3)] * 5, [_A, _B_EXTENDED])
+    assert [(s.type, s.time) for s in sig if s.type in ("buy1", "buy2")] == [
+        ("buy1", "2026-04-29"), ("buy2", "2026-06-30")]
+
+
+# ---- 严格定义：买卖点只落在已完成的笔上 ----
+
+def test_no_signal_on_unfinished_last_stroke():
+    """最后一笔还在走（端点可能继续延伸、甚至回到中枢），其上的买卖点尚不成立，不输出。"""
+    bars = _decaying_downtrend_bars(shrink_volume=False)
+    result = ChanAnalyzer().analyze("DN", bars)
+    assert result.signals, "合成数据应至少产出一个买卖点"
+    last_end = result.strokes[-1].end_time
+    assert all(s.confirmed for s in result.signals)
+    assert all(s.time != last_end for s in result.signals)
+    # 截掉尾部，让某个信号所在的笔变成「最后一笔」：该信号必须随之消失
+    sig_time = result.signals[-1].time
+    cut = [b for b in bars if b["time"][:10] <= sig_time] + [b for b in bars if b["time"][:10] > sig_time][:1]
+    cut_result = ChanAnalyzer().analyze("DN", cut)
+    if cut_result.strokes and cut_result.strokes[-1].end_time == sig_time:
+        assert sig_time not in {s.time for s in cut_result.signals}
