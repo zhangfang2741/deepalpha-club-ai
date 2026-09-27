@@ -728,3 +728,4 @@
 "%@（待确认）" = "%@ (pending)";
 "待确认 · 不算买卖点" = "Pending · not yet a signal";
 "待确认 %@ · %@" = "Pending %@ · %@";
+"%lld 只补算中" = "%lld catching up";

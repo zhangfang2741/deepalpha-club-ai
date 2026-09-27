@@ -341,6 +341,12 @@ struct SignalRadarView: View {
                             .font(.caption2)
                             .foregroundColor(Theme.textSecondary)
                     }
+                    // 有成分股拉数失败、后台还在补算：告诉用户榜单还会补全，不是漏了
+                    if let pending = vm.response?.pendingSymbols, pending > 0 {
+                        Text(L("%lld 只补算中", pending))
+                            .font(.caption2)
+                            .foregroundColor(Theme.textSecondary)
+                    }
                 } else if let computed = vm.selectedDayComputedAtText {
                     // 翻看历史某一天：这天的气泡是上一次全量扫描（computed_at）算出来的
                     // 快照，缠论笔在数据右端本身就是临时性的，之后如果又跑过新的扫描、
