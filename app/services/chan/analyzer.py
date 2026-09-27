@@ -164,7 +164,7 @@ class ChanAnalyzer:
         freq: K线周期（"daily" / "weekly"），映射 czsc.Freq.D / Freq.W，仅影响
             czsc 对象的周期标注（bars 本身已是目标周期的K线）。
         shape_filters: 是否同时产出逐日形态状态（result.shape_states），供信号雷达
-            剔除假信号（假突破 / 窄幅震荡 / 收盘偏弱 / 低波动 / 区间震荡中的一类）。
+            剔除假信号（同向假突破 / 窄幅震荡 / 低波动）。
             只加状态不改买卖点；详情页等非雷达路径不传。
         """
         logger.info("chan_analysis_start", symbol=symbol, bars=len(bars), freq=freq)

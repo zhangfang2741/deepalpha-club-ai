@@ -227,6 +227,6 @@ def test_analyze_shape_filters_switch() -> None:
     # 开启：有逐日形态状态，且不改变买卖点（详情页口径守护）
     on = ChanAnalyzer().analyze("X", bars, mode="loose", shape_filters=True)
     assert on.shape_states
-    assert [(s.type, s.time) for s in on.signals] == [(s.type, s.time) for s in off.signals]
+    assert on.signals == off.signals  # 整条 Signal 相等：成立日、强度、确认状态、文案都不变
     # 形态状态键与信号日期同格式（纯日期），雷达可直接查表
     assert all(len(k) == 10 for k in on.shape_states)

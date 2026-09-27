@@ -95,10 +95,10 @@ _MIN_PER_LEVEL = 2
 _CACHE_PREFIX = "signal_radar"
 # 买卖点口径（宽松 / 严格 / …，见 chan.signal_policy）：雷达的三类缓存（每日快照、自选雷达、
 # 示例日）按口径的 version 分键——改了某口径的判定逻辑就升它的 version，旧快照自动换键失效，
-# 否则部署后缓存里还是旧口径的气泡。shape2 = 已确认 + 价格失效 + czsc 形态过滤
-# （假突破 / 窄幅震荡 / 收盘偏弱 / 低波动 / 区间震荡中的一类），仅隔离雷达筛选，不改变详情口径。
+# 否则部署后缓存里还是旧口径的气泡。shape3 = 已确认 + 价格失效 + czsc 形态过滤
+# （按成立日判定同向假突破 / 窄幅震荡 / 低波动），仅隔离雷达筛选，不改变详情口径。
 def _mode_ns(mode: str) -> str:
-    return f"{get_policy(mode).version}:shape2"
+    return f"{get_policy(mode).version}:shape3"
 
 # 「自选」股票池：按用户各自的自选股计算（universe=watchlist）；缓存按用户隔离、30 分钟。
 # 不列入指数切换菜单（产品决定），接口能力保留。
@@ -178,7 +178,7 @@ class RawSignal:
     invalidated_on: str | None = None
     # 所在笔由后续笔确认的日期；历史展示日不能提前使用今天的 confirmed 状态。
     confirmed_on: str | None = None
-    # 形态过滤命中（假突破/窄幅震荡/收盘位置/低波动/区间震荡），出生即不入雷达榜单
+    # 形态过滤命中（假突破 / 窄幅震荡 / 低波动），出生即不入雷达榜单
     shape_rejected: str | None = None
 
 
@@ -347,9 +347,11 @@ def build_signal_history(
     信号，深浅要反映那条信号发生当天中枢真实处于哪个阶段，不然同一只股票
     不同日期的气泡会被错误地画成同一个深浅。
 
-    形态过滤按信号成立日（与 date 同一天，即雷达展示的日期）查 `result.shape_states`，
+    形态过滤按信号成立日（detected_time，与 date 同一天，即雷达展示的日期；宽松口径下是
+    czsc 事件点亮那根K线，严格口径下推后到下一笔走完）查 `result.shape_states`，
     命中记入 `shape_rejected`（出生时一次判定，后续按日重建快照不再重判）。不用笔终点日：
-    那是分型极值那根K线，其形态天然偏向信号反面，会系统性误剔。
+    那是分型极值那根K线，其形态天然偏向信号反面，会系统性误剔。detected_time 缺失时
+    （仅严格口径下笔完成时刻缺失）才兜底回退笔终点日。
     """
     confirmed_on = _confirmation_dates(result)
     history = [

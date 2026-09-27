@@ -153,7 +153,7 @@ deepalpha-club-ai/
 > 轮次号存 Redis（`incr_with_ttl`），新一轮扫描开始旧补算自动退出。免费示例日（`compute_demo_day`）同一套补算。
 > 补算进度记为 Redis 标记（`signal_radar:backfill:*`，含进程 owner），进程重启后 `scheduler._resume_orphan_backfills`
 > 在启动预热之后接手别的进程没补完的。**不要**绕过锁直接起全量扫描。
-> 雷达形态过滤（`chan/shape_filters.py`，仅雷达、详情页不受影响）：按信号**成立日**查 czsc 形态状态，
+> 雷达形态过滤（`chan/shape_filters.py`，仅雷达、详情页不受影响）：按信号**成立日**（`detected_time`，宽松口径=czsc 事件点亮日）查 czsc 形态状态，
 > 同向假突破 / 窄幅震荡 / 低波动命中即不上榜。**不要**改回按笔终点日判定（分型极值K线天然偏向信号反面），
 > 也**不要**加回收盘位置（bar_classify）、区间震荡（cxt_range_oscillation）——真实数据校准会让雷达几乎清空，
 > 见 `docs/superpowers/specs/2026-09-27-radar-shape-filters-design.md`「校准后调整」。改规则须升缓存键 `_mode_ns` 的 shape 版本。

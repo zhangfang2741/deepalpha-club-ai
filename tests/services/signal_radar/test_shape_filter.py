@@ -83,7 +83,7 @@ async def test_scan_does_not_fill_empty_slots_with_unconfirmed_candidates(monkey
 
 
 def test_shape_filter_invalidates_all_radar_cache_types() -> None:
-    assert all(":shape2:" in key for key in [
+    assert all(":shape3:" in key for key in [
         svc._cache_key("us", "nasdaq100"),
         svc.watchlist_cache_key("us", 7, [("X", "测试")]),
         svc._demo_cache_key("us", "nasdaq100", "2026-09-01"),
