@@ -32,16 +32,18 @@ from app.services.signal_radar.service import (
     refresh_sub_levels,
     scan_lock_key,
 )
-from app.services.chan.signal_policy import DEFAULT_MODE, SIGNAL_POLICIES
+from app.services.chan.signal_policy import DEFAULT_MODE
 from app.services.signal_radar.universe import all_universes
 
 
 def _modes() -> list[str]:
-    """预热覆盖的买卖点口径：默认口径在前，其余按注册顺序。
+    """预热 / 盘中次级别刷新覆盖的买卖点口径：只有默认口径。
 
-    同一 universe 连着算各口径：第二遍起K线全部命中 Redis 缓存，只多 CPU 不多拉数。
+    App 固定宽松（默认）口径，严格口径没有用户入口：每天为它全量重扫、补算、刷 30 分钟
+    次级别只占数据源额度与 _fetch_gate（大池子限流时拖慢默认口径的补算）。严格口径接口
+    能力保留，有请求时按需现算并写缓存。恢复多口径预热：在这里把注册表其余口径加回来。
     """
-    return [DEFAULT_MODE] + [m for m in SIGNAL_POLICIES if m != DEFAULT_MODE]
+    return [DEFAULT_MODE]
 
 # 启动后先等一会儿再首扫，避开启动期其它预热任务抢资源。
 _STARTUP_DELAY_SECONDS = 45
