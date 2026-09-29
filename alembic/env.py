@@ -4,13 +4,13 @@ Loads the database URL from the application's settings so migrations
 stay in sync with the running app configuration.
 """
 
-from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
 
 from alembic import context
 from app.core.config import settings
+from app.core.logging import configure_alembic_logging
 from app.models.session import Session  # noqa: F401
 from app.models.thread import Thread  # noqa: F401
 from app.models.user import User  # noqa: F401
@@ -44,9 +44,9 @@ from app.models.vocabulary import (  # noqa: F401
 # Alembic Config object
 config = context.config
 
-# Set up Python logging from the ini file
+# 日志：应用内跑迁移时保留应用自己的日志配置，单独跑命令行才用 ini（见 configure_alembic_logging）
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    configure_alembic_logging(config.config_file_name)
 
 # Build the database URL from app settings
 DATABASE_URL = (

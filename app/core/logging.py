@@ -266,3 +266,18 @@ logger.info(
     log_format=settings.LOG_FORMAT,
     debug=settings.DEBUG,
 )
+
+
+def configure_alembic_logging(config_file_name: str) -> None:
+    """Alembic env.py 的日志配置：应用已配好日志时不覆盖。
+
+    启动时（main.lifespan）会在进程内跑迁移，此时根 logger 已由 setup_logging 挂好 handler。
+    若再执行 fileConfig(alembic.ini)，会把根 logger 改成 WARNING、换掉 handler 并禁用已存在的
+    logger——生产环境之后的 INFO 日志（预热、补算、请求）全部消失。只有单独跑 alembic 命令行
+    （根 logger 还没有 handler）时才按 alembic.ini 配置。
+    """
+    from logging.config import fileConfig
+
+    if logging.getLogger().handlers:
+        return
+    fileConfig(config_file_name, disable_existing_loggers=False)
