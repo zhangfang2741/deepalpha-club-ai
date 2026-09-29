@@ -70,7 +70,7 @@ struct PaywallView: View {
                 .font(.system(size: 40)).foregroundStyle(Theme.segment)
             Text(L("DeepAlpha 会员"))
                 .font(.title.bold()).foregroundColor(Theme.textPrimary)
-            Text(L("不限次分析 · 信号雷达 · 次级别确认"))
+            Text(L("不限次分析 · 市场雷达 · 次级别确认"))
                 .font(.subheadline).foregroundColor(Theme.textSecondary)
                 .multilineTextAlignment(.center)
         }
@@ -113,7 +113,7 @@ struct PaywallView: View {
     /// - 次级别确认（日线×30 分钟、周线×日线）：仅高级版（MainTabView.hasSubLevelAccess）
     /// 文案只描述功能本身，不暗示收益或操作建议（3.1.1 / 5.2.5）。
     private var planRows: [PlanRow] {
-        let analysis = L("缠论分析"), watchlist = L("自选股"), radar = L("信号雷达")
+        let analysis = L("缠论分析"), watchlist = L("自选股"), radar = L("市场雷达")
         return [
             PlanRow(group: analysis, icon: "infinity", title: L("分析次数"),
                     basic: .text(L("不限")), premium: .text(L("不限"))),

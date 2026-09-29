@@ -306,7 +306,7 @@
 
 /* Signal Radar */
 "雷达" = "Radar";
-"信号雷达" = "Signal Radar";
+"市场雷达" = "Market Radar";
 "%lld 买点" = "%lld buys";
 "%lld 卖点" = "%lld sells";
 "当日无买卖点信号" = "No buy/sell signals that day";
@@ -352,14 +352,13 @@
 "本次分析暂无需要特别注意的风险提示。" = "No particular risk notes for this analysis.";
 
 /* Signal Radar — bubble field rings, legend, date picker */
-"市场雷达" = "Market Radar";
 "正在扫描「%@」成分股…" = "Scanning \"%@\" constituents…";
 "3天内" = "Within 3d";
 "一周内" = "Within 1wk";
 "1月内" = "Within 1mo";
-"一类" = "Tier 1";
-"二类" = "Tier 2";
-"三类" = "Tier 3";
+"一类" = "Type 1";
+"二类" = "Type 2";
+"三类" = "Type 3";
 "点击卡片切换市场" = "Tap a card to switch market";
 "新" = "New";
 "所选日期当天新增" = "new on the selected date";
@@ -561,7 +560,7 @@
 "算法说明" = "How it works";
 "气泡怎么看" = "Reading the bubbles";
 "位置：大致越靠中心信号越新（按信号出现后的交易日数，周末不算），三个圈依次是今天、3个交易日内、一周内；气泡太挤时会自动推开。" = "Position: roughly, closer to center means more recent (counted in trading days since the signal appeared; weekends excluded). The rings mark today, within 3 trading days, and within 1 week; crowded bubbles are nudged apart.";
-"角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。" = "Badges: \"Aligned\" means the daily and 30-minute directions agree; \"New\" means the signal first appeared today.";
+"角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号；底部「未确认」= 所在最后一笔还在走，之后可能被新K线改写。" = "Badges: \"Aligned\" means the daily and 30-minute directions agree; \"New\" means the signal appeared that day; \"Unconfirmed\" at the bottom means its last stroke is still unfolding and new candles may revise it.";
 "扫描范围怎么定" = "How the scan range is chosen";
 "每个市场提供「科技指数」（默认）和「大盘宽基」两套可切换范围，如美股的纳斯达克100 / 标普500。" = "Each market offers a switchable \"tech index\" (default) and a \"broad market\" range, e.g. Nasdaq 100 / S&P 500 for US stocks.";
 "成分股优先实时拉取官方/交易所数据源，取不到或数量不足时自动回退到内置清单，保证随时有得扫。" = "Constituents are fetched live from official/exchange sources first, and fall back to a built-in list when unavailable or too few, so there's always something to scan.";
@@ -584,13 +583,13 @@
 "「%@」首次计算较久" = "First computation of \"%@\" takes a while";
 "大盘成分较多，已在后台计算，稍后点重试即可查看" = "This broad index has many constituents and is being computed in the background. Tap Retry in a moment to view it.";
 "没有信号不代表没有风险。可返回「当前状态」查看中枢位置和下一步观察。" = "No signal doesn't mean no risk. Go back to \"Current State\" to check the pivot position and what to watch next.";
-"深浅=形态强弱" = "Shade = strength";
+"深浅=信号强弱" = "Shade = strength";
 "大小=一二三类" = "Size = type 1/2/3";
-"颜色：红=买点，绿=卖点；深浅=形态强弱（弱/中/强），越强越深，与详情页同一套判定。" = "Color: red = buy, green = sell; shade = pattern strength (weak/medium/strong) — stronger is darker, judged the same way as on the detail page.";
+"颜色：红=买点，绿=卖点；深浅=信号强弱（弱/中/强），越强越深，与详情页同一套判定。" = "Color: red = buy, green = sell; shade = signal strength (weak/medium/strong), darker is stronger, judged the same way as on the details page.";
 "大小：买卖点类型，一类最小、三类最大——越往后确认程度越高。" = "Size: signal type — type 1 smallest, type 3 largest; later types are more confirmed.";
-"新鲜度：按信号出现后的交易日数算（周末、休市不算），当天最高，5 个交易日（一周）后归零并退场。" = "Freshness: counted in trading days since the signal appeared (weekends and holidays excluded) — highest on the day, reaching zero after 5 trading days (a week), when the signal leaves the board.";
+"新鲜度：按信号出现后的交易日数算（周末、休市不算），当天最高，第 5 个交易日归零，之后退场。" = "Freshness: counted in trading days since the signal appeared (weekends and holidays excluded); highest on the day, zero on the 5th trading day, then it leaves the radar.";
 "未确认的信号（落在最后一笔上的提前预判）：类型确定性和强弱两部分打 6 折，新鲜度不打折。" = "Unconfirmed signals (early calls on the last, still-open stroke): the type-certainty and strength parts are discounted to 60%; freshness is not.";
-"价格走坏即退场：信号出现后，收盘价跌破买点价位（卖点：涨破）就判定失效，当天起不再上榜。" = "Invalidation: once the close falls below a buy signal's price (or rises above a sell signal's), the signal is treated as failed and leaves the board from that day.";
+"价格走坏即退场：信号出现后，收盘价跌破买点价位（卖点：涨破）当天起从雷达移出；详情页仍显示该买卖点。" = "Exit on a broken price: once a close falls below the buy level (for sells, rises above it), the signal leaves the radar from that day; the details page still shows it.";
 "气泡多久更新一次" = "How often bubbles update";
 "当前数据：%@ 全量计算，共振标记 %@ 更新。" = "Current data: full scan at %@; resonance tags updated at %@.";
 "当前数据：%@ 全量计算。" = "Current data: full scan at %@.";
@@ -607,8 +606,8 @@
 "新客%@" = "New users · %@";
 "新客专享%@，之后 %@/月，可随时取消" = "New-user price for the %1$@, then %2$@/month. Cancel anytime.";
 "新客专享价仅限首次订阅的 Apple 账户，优惠期（%@）结束后按各方案正价自动续订。" = "The new-user price is only for Apple Accounts subscribing for the first time. After the offer period (%@), each plan renews automatically at its regular price.";
-"信号雷达免责声明" = "Signals Radar Disclaimer";
-"信号雷达基于公开行情数据，按缠论结构规则自动识别并汇总所选指数成分股的买卖点形态，供技术分析研究使用。" = "The Signals radar uses Chan-theory structure rules on public market data to identify and aggregate buy/sell patterns among the constituents of the selected index, for technical-analysis research.";
+"市场雷达免责声明" = "Market Radar Disclaimer";
+"市场雷达基于公开行情数据，按缠论结构规则自动识别并汇总所选指数成分股的买卖点形态，供技术分析研究使用。" = "The Market Radar uses Chan-theory structure rules on public market data to identify and aggregate buy/sell patterns among the constituents of the selected index, for technical-analysis research.";
 "本功能展示的内容均为按标准缠论技术分析规则得出的结果，不构成任何投资建议、证券推荐或买卖要约。" = "All content shown is derived from standard Chan-theory technical analysis rules and does not constitute investment advice, a securities recommendation, or an offer to buy or sell.";
 "每个买卖点都只是缠论对价格结构的一次孤立观测，是否值得操作需要你自己结合基本面、其他技术面和市场环境综合判断。" = "Each buy/sell point is just one isolated observation of price structure under Chan theory. Whether it's worth acting on is for you to judge, combining fundamentals, other technical factors, and the overall market environment.";
 "气泡的颜色、深浅与大小分别表示信号方向、形态强弱与买卖点类型，不代表对未来价格走势的判断或收益承诺。" = "Bubble color, shade and size indicate signal direction, pattern strength and signal class. They do not represent a view on future prices or any promise of returns.";
@@ -617,7 +616,7 @@
 "证券投资存在风险，投资决策及其结果由投资者独立判断并承担。" = "Investing in securities involves risk. Investment decisions and their outcomes are the investor's own responsibility.";
 "我已阅读并理解上述免责声明" = "I have read and understood the disclaimer above";
 "同意并查看" = "Agree and View";
-"查看信号雷达前，请阅读并同意免责声明" = "Please read and accept the disclaimer before viewing the Signals radar";
+"查看市场雷达前，请阅读并同意免责声明" = "Please read and accept the disclaimer before viewing the Market Radar";
 "阅读免责声明" = "Read Disclaimer";
 "当日" = "Today";
 "自选股" = "Watchlist";
@@ -627,7 +626,7 @@
 "次级别确认" = "Sub-level confirmation";
 "不限次分析" = "Unlimited analysis";
 "自选状态" = "Watchlist phases";
-"不限次分析 · 信号雷达 · 次级别确认" = "Unlimited analysis · Signals radar · Sub-levels";
+"不限次分析 · 市场雷达 · 次级别确认" = "Unlimited analysis · Market Radar · Sub-levels";
 "自选股 / 状态" = "Watchlist / phases";
 "不限 / 不限" = "Unlimited / Unlimited";
 "30 分钟次级别" = "30-min sub-level";
@@ -676,29 +675,29 @@
 "「买卖点」是缠论对价格结构的技术命名；本页按标准缠论规则识别，仅供技术研究，不构成投资建议。" = "\"Buy/sell points\" are Chan-theory names for price structures. This page applies standard Chan-theory rules for technical research only and is not investment advice.";
 "无中枢" = "No pivot";
 "动作：%@" = "Move: %@";
-"回落 / 反弹" = "Retest / pullback";
+"回落 / 反弹" = "Pullback / rebound";
 "回到中枢" = "Back into pivot";
 "笔数不足 3 笔，或者当前还没有可用的中枢——这是兜底状态，不是判定结果，不产生买卖点。" = "Fewer than 3 strokes, or no usable pivot yet — a fallback state, not a verdict. No signals.";
 "三段走势重叠形成中枢之后，价格在中枢上沿与下沿之间反复（也叫中枢延伸），还没有一笔从中枢内出发、收在中枢外。这个阶段不产生买卖点。" = "After three overlapping legs form a pivot, price swings between its top and bottom (the pivot extends) and no stroke has yet started inside and closed outside. No signals in this phase.";
-"一笔从中枢内出发，向上收在中枢上沿之上、或向下收在中枢下沿之下，就是离开中枢。这是第三类买卖点的候选，还要等之后的回落（向上离开时）或反弹（向下离开时）来确认。" = "A stroke that starts inside the pivot and closes above its top (or below its bottom) leaves the pivot. It is a type-3 candidate, waiting for the retest (after leaving upward) or pullback (after leaving downward) to confirm.";
-"离开中枢后的回落 / 反弹没有回到中枢 → 三买 / 三卖；回到了中枢里、但没有穿过另一侧边沿 → 二买 / 二卖。强弱看中枢级别，以及回落 / 反弹离中枢边沿还有多远。" = "If the retest / pullback after leaving stays out of the pivot → type-3 buy / sell; if it gets back in without crossing the far edge → type-2. Strength depends on the pivot level and how far the retest / pullback stays from the edge.";
+"一笔从中枢内出发，向上收在中枢上沿之上、或向下收在中枢下沿之下，就是离开中枢。这是第三类买卖点的候选，还要等之后的回落（向上离开时）或反弹（向下离开时）来确认。" = "A stroke that starts inside the pivot and closes above its top (or below its bottom) leaves the pivot. It is a type-3 candidate, waiting for the pullback (after leaving upward) or rebound (after leaving downward) to confirm.";
+"离开中枢后的回落 / 反弹没有回到中枢 → 三买 / 三卖；回到了中枢里、但没有穿过另一侧边沿 → 二买 / 二卖。强弱看中枢级别，以及回落 / 反弹离中枢边沿还有多远。" = "If the pullback / rebound after leaving stays out of the pivot → type-3 buy / sell; if it gets back in without crossing the far edge → type-2. Strength depends on the pivot level and how far the pullback / rebound stays from the edge.";
 "买卖点确认之后，同方向继续走出新高 / 新低，但价差、量能或时长比前一段更弱，就是背驰（向上叫顶背驰，向下叫底背驰），对应一卖或一买。" = "After a signal is confirmed, a new high / low in the same direction with weaker range, volume or duration is a divergence (top divergence going up, bottom going down) — a type-1 sell or buy.";
 "连续三段走势的价格区间有重叠，重叠的部分就是中枢——后面所有判断都从它开始。" = "Three consecutive legs overlap; the overlap is the pivot — every later judgment starts from it.";
 "一笔从中枢内出发，收在中枢上沿之上或下沿之下，进入「离开中枢」。" = "A stroke starts inside the pivot and closes above its top or below its bottom → \"Leaving the pivot\".";
-"离开中枢之后第一段反向走势：向上离开后叫回落，向下离开后叫反弹。没有回到中枢（三类），或回到中枢但没有穿过另一侧边沿（二类），进入「确认买卖点」。" = "The first counter-move after leaving: a retest after leaving upward, a pullback after leaving downward. Staying out of the pivot (type-3) or getting back in without crossing the far edge (type-2) → \"Signal confirmed\".";
+"离开中枢之后第一段反向走势：向上离开后叫回落，向下离开后叫反弹。没有回到中枢（三类），或回到中枢但没有穿过另一侧边沿（二类），进入「确认买卖点」。" = "The first counter-move after leaving: a pullback after leaving upward, a rebound after leaving downward. Staying out of the pivot (type-3) or getting back in without crossing the far edge (type-2) → \"Signal confirmed\".";
 "买卖点确认之后，同方向继续前进的笔，力度（价差 / 量能 / 时长）比前一个同向段更弱，进入「背驰 / 转折」。" = "After a signal is confirmed, a same-direction stroke with weaker force (range / volume / duration) than the previous one → \"Divergence / turn\".";
-"回落 / 反弹直接穿过了中枢另一侧边沿，重新回到中枢里——这次离开不算数，退回「中枢震荡」重新判断。" = "The retest / pullback crosses the far edge back into the pivot — the exit is void; back to \"Pivot oscillation\".";
-"「确认买卖点」或「背驰 / 转折」之后，出现一次方向相反的突破并完成回落 / 反弹确认——整体重新判定，结论以新的为准。" = "After \"Signal confirmed\" or \"Divergence / turn\", an opposite breakout completes its own retest / pullback — everything is re-evaluated and the new result wins.";
+"回落 / 反弹直接穿过了中枢另一侧边沿，重新回到中枢里——这次离开不算数，退回「中枢震荡」重新判断。" = "The pullback / rebound crosses the far edge back into the pivot — the exit is void; back to \"Pivot oscillation\".";
+"「确认买卖点」或「背驰 / 转折」之后，出现一次方向相反的突破并完成回落 / 反弹确认——整体重新判定，结论以新的为准。" = "After \"Signal confirmed\" or \"Divergence / turn\", an opposite breakout completes its own pullback / rebound — everything is re-evaluated and the new result wins.";
 "参考中枢（%@）：下沿 %@ — 上沿 %@" = "Reference pivot (%1$@): bottom %2$@ — top %3$@";
 "参考中枢（%@）：%@ ~ %@" = "Reference pivot (%1$@): %2$@ – %3$@";
 "三段走势重叠，形成中枢（%@ ~ %@）" = "Three legs overlap, forming a pivot (%@ – %@)";
 "价格在中枢（%@ ~ %@）内反复，方向未明" = "Price swings inside the pivot (%@ – %@); direction unclear";
-"价格向上离开中枢（上沿 %@），等待回落确认" = "Price left the pivot upward (top %@); waiting for the retest to confirm";
-"价格向下离开中枢（下沿 %@），等待反弹确认" = "Price left the pivot downward (bottom %@); waiting for the pullback to confirm";
-"向上离开中枢后回落，回到中枢内但没有跌破下沿 %@" = "Left the pivot upward, retested back inside but held the bottom %@";
+"价格向上离开中枢（上沿 %@），等待回落确认" = "Price left the pivot upward (top %@); waiting for a pullback to confirm";
+"价格向下离开中枢（下沿 %@），等待反弹确认" = "Price left the pivot downward (bottom %@); waiting for a rebound to confirm";
+"向上离开中枢后回落，回到中枢内但没有跌破下沿 %@" = "Left the pivot upward, pulled back inside but held the bottom %@";
 "向下离开中枢后反弹，回到中枢内但没有升破上沿 %@" = "Left the pivot downward, pulled back inside but held the top %@";
-"向上离开中枢后回落，没有跌回中枢（%@ ~ %@）" = "Left the pivot upward and the retest stayed out of it (%@ – %@)";
-"向下离开中枢后反弹，没有升回中枢（%@ ~ %@）" = "Left the pivot downward and the pullback stayed out of it (%@ – %@)";
+"向上离开中枢后回落，没有跌回中枢（%@ ~ %@）" = "Left the pivot upward and the pullback stayed out of it (%@ – %@)";
+"向下离开中枢后反弹，没有升回中枢（%@ ~ %@）" = "Left the pivot downward and the rebound stayed out of it (%@ – %@)";
 "继续上涨但力度变弱（顶背驰），上涨可能接近尾声" = "Still rising but with weaker force (top divergence) — the advance may be nearing its end";
 "继续下跌但力度变弱（底背驰），下跌可能接近尾声" = "Still falling but with weaker force (bottom divergence) — the decline may be nearing its end";
 "价格与中枢（%@ ~ %@）的关系见下方说明" = "See below for how price relates to the pivot (%@ – %@)";
@@ -707,13 +706,24 @@
 "%lld 待确认" = "%lld pending";
 
 /* Signal mode */
-"一类是背驰：末笔创新低（一卖为新高），但价差力度弱于前段，且量能或时长也更弱；盘整里的背驰也算。强度按价差比分档：小于 0.6 为强，0.6 至小于 0.8 为中，其余为弱。" = "Type-1 is a divergence: the last leg makes a new low (new high for sell-1) with weaker price force than the prior leg, and weaker volume or duration; a divergence inside a range also counts. Strength by price ratio: below 0.6 strong, 0.6 to below 0.8 medium, otherwise weak.";
-"二类是出现一买之后，回落低点落在此前多次转折形成的价格密集区，获得支撑、没有再创新低（二卖：一卖之后反弹高点受压、没有再创新高）；之前没有一类的不算。" = "Type-2: after a type-1 buy, the pullback low lands in a price cluster formed by earlier turning points and holds without a new low (sell-2: after a type-1 sell, the rebound high is capped without a new high); without a prior type-1 it does not count.";
-"三类是前五笔构成中枢后，回落低点仍在中枢上沿之上、没有回到中枢，且均线逐级抬升（三卖反之）。" = "Type-3: after five legs form a pivot, the pullback low stays above the pivot top without returning to it, with the moving average stepping higher (the reverse for sell-3).";
+"一类是背驰：末笔创新低（一卖为新高），但价差力度弱于前段，且量能或时长也更弱；盘整里的背驰也算。强度按价差比分档：小于 0.6 为强，0.6 至小于 0.8 为中，其余为弱。" = "Type-1 is a divergence: the last stroke makes a new low (new high for a 1st sell) with weaker price force than the prior leg, and weaker volume or duration; a divergence inside a range also counts. Strength by price-range ratio: below 0.6 strong, 0.6 to below 0.8 medium, otherwise weak.";
+"二类是出现一买之后，回落低点落在此前多次转折形成的价格密集区，获得支撑、没有再创新低（二卖：一卖之后反弹高点受压、没有再创新高）；之前没有一类的不算。" = "Type-2: after a 1st buy, the pullback low lands in a price cluster formed by earlier turning points and holds without a new low (2nd sell: after a 1st sell, the rebound high is capped without a new high); without a prior type-1 it does not count.";
+"三类是前五笔构成中枢后，回落低点仍在中枢上沿之上、没有回到中枢，且均线逐级抬升（三卖反之）。" = "Type-3: after five strokes form a pivot, the pullback low stays above the pivot top without returning to it, with the moving average stepping higher (the reverse for a 3rd sell).";
 "类型确定性：一类 0.4（背驰，待验证）、二类 0.7（回落在价格密集区获得支撑）、三类 1.0（离开中枢后不回中枢，最强确认）。" = "Type certainty: type-1 0.4 (divergence, to be verified), type-2 0.7 (pullback holds in a price cluster), type-3 1.0 (left the pivot without returning, strongest confirmation).";
-"所在的最后一笔还在走，端点可能延伸甚至回到中枢，按缠论尚不成立；这一笔走完才算买卖点。" = "The last leg is still unfolding — its end may extend or even return to the pivot, so by Chan theory it is not yet a signal; it counts once this leg completes.";
+"所在的最后一笔还在走，端点可能延伸甚至回到中枢，按缠论尚不成立；这一笔走完才算买卖点。" = "The last stroke is still unfolding — its end may extend or even return to the pivot, so by Chan theory it is not yet a signal; it counts once this stroke completes.";
 "%@（待确认）" = "%@ (pending)";
 "待确认 · 不算买卖点" = "Pending · not yet a signal";
 "待确认 %@ · %@" = "Pending %@ · %@";
-"%lld 只补算中" = "%lld catching up";
-"最后一笔还在走时出现的买卖点也会上榜（标为未确认），之后可能被新K线改写。" = "Signals on the unfinished last leg are also listed (marked unconfirmed) and may be revised by new candles.";
+"%lld 只补算中" = "%lld stocks still loading";
+"最后一笔还在走时出现的买卖点也会上榜，气泡底部标「未确认」，之后可能被新K线改写；一周前的历史日期不再显示这类信号。" = "Signals on the still-unfolding last stroke are also listed, marked \"Unconfirmed\" at the bottom of the bubble, and may be revised by new candles; historical dates more than a week back no longer show them.";
+"气泡日期是信号出现那天；详情页图上的标记画在所属笔的极值 K 线，通常在出现日左侧几根，展开该买卖点可看到两个日期。" = "A bubble's date is the day the signal appeared; on the details chart the marker sits on the stroke's extreme candle, usually a few candles to the left. Expand the signal to see both dates.";
+"%@ 出现；所在笔的极值在 %@，图上标记画在那根 K 线。" = "Appeared on %@; the stroke's extreme was on %@, where the chart marker sits.";
+"出现" = "Appeared";
+"极值 K 线" = "Extreme candle";
+"纳斯达克100" = "Nasdaq-100";
+"科创50" = "STAR 50";
+"恒生科技" = "Hang Seng Tech";
+"中枢震荡" = "Pivot oscillation";
+"标普500" = "S&P 500";
+"沪深300" = "CSI 300";
+"恒生指数" = "Hang Seng Index";

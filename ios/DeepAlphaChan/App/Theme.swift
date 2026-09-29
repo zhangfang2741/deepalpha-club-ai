@@ -48,8 +48,9 @@ enum Theme {
         return bullish ? Theme.up : Theme.down
     }
 
-    /// 「当前」标记的颜色（判定图节点角标、详情卡片标题旁）。
-    static let currentBadge = Theme.down
+    /// 「当前」标记的颜色（判定图节点角标、详情卡片标题旁）：用中性主题蓝，
+    /// 不用红 / 绿——那两色在本 App 专指买 / 卖，当前节点偏多时绿角标会误读成卖。
+    static let currentBadge = Theme.accent
 }
 
 extension Color {

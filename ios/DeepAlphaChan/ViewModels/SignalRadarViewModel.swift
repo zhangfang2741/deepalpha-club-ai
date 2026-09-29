@@ -109,7 +109,9 @@ final class SignalRadarViewModel: ObservableObject {
     /// 各市场默认指数（与后端 universe.py 的 is_default 一致），只用于「从没进过这个市场、
     /// 还没拿到列表」时的展示兜底——切到 A 股直接显示「科创50」，不先闪「A 股」。
     static let defaultUniverseKeys: [StockMarket: String] = [.us: "nasdaq100", .cn: "star50", .hk: "hstech"]
-    static let defaultUniverseNames: [StockMarket: String] = [.us: "纳斯达克100", .cn: "科创50", .hk: "恒生科技"]
+    static var defaultUniverseNames: [StockMarket: String] {
+        [.us: L("纳斯达克100"), .cn: L("科创50"), .hk: L("恒生科技")]
+    }
 
     /// 每个市场拿到过的 universe 列表：切回来时直接恢复，切换器和扫描提示都不用等接口。
     private var universesByMarket: [StockMarket: [RadarUniverse]] = [:]
@@ -236,6 +238,22 @@ final class SignalRadarViewModel: ObservableObject {
         await load(refresh: true)
     }
 
+    /// 后台补算轮询间隔：后端每补完一轮（约 20～30 分钟）才重写快照，90 秒足够及时又不费流量。
+    static let backfillPollSeconds: UInt64 = 90
+
+    /// 后台还在补算（pendingSymbols > 0）时静默重拉缓存：补上的气泡与剩余只数随之更新。
+    /// 不置 isLoading（不调暗、不打断浏览），不重置所选日期；只读缓存，不触发重新扫描。
+    func refreshWhileBackfilling() async {
+        guard !isLoading, responseMatchesSelection, (response?.pendingSymbols ?? 0) > 0 else { return }
+        let requested = market
+        let requestedUniverse = currentUniverse
+        guard let resp = try? await SignalRadarService.fetch(market: requested.rawValue, universe: requestedUniverse),
+              !resp.isGenerating, !isLoading,
+              market == requested, currentUniverse == requestedUniverse else { return }
+        response = resp
+        if selectedDayIndex >= days.count { selectedDayIndex = 0 }
+    }
+
     func load(refresh: Bool = false) async {
         isLoading = true
         errorMessage = nil
@@ -272,7 +290,7 @@ final class SignalRadarViewModel: ObservableObject {
             if market == requested && currentUniverse == requestedUniverse && SignalMode.current() == requestedMode { errorMessage = e.message }
         } catch {
             if market == requested && currentUniverse == requestedUniverse && SignalMode.current() == requestedMode {
-                errorMessage = "加载失败，请稍后再试"
+                errorMessage = L("加载失败，请稍后再试")
             }
         }
         if market == requested && currentUniverse == requestedUniverse && SignalMode.current() == requestedMode { isLoading = false }

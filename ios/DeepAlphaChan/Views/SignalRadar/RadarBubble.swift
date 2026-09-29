@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 单个信号气泡：纯色实心 + 持续轻微漂浮 + 可按住拖拽（松手弹回原位）。
+/// 单个信号气泡：纯色实心（未确认的底部挂「未确认」标签）+ 持续轻微漂浮 + 可按住拖拽（松手弹回原位）。
 struct RadarBubble: View {
     let signal: RadarSignal
     let metrics: RadarBubbleMetrics
@@ -24,6 +24,8 @@ struct RadarBubble: View {
     @State private var dragging = false
 
     private var r: CGFloat { diameter / 2 }
+    /// 真实买卖点但所在最后一笔还在走：底部挂「未确认」，与详情页同一说法。
+    private var isUnconfirmed: Bool { !isCandidate && !signal.confirmed }
 
     var body: some View {
         content
@@ -53,6 +55,7 @@ struct RadarBubble: View {
             .accessibilityLabel(
                 "\(signal.symbol) \(signal.name) \(signal.isBuy ? L("买点") : L("卖点"))"
                 + (isCandidate ? " \(L("待确认，不算买卖点"))" : "")
+                + (isUnconfirmed ? " \(L("未确认"))" : "")
                 + (isNew ? " \(L("所选日期当天新增"))" : "")
                 + (signal.isSubLevelResonance ? " \(L("日线与30分钟共振"))" : "")
             )
@@ -101,8 +104,8 @@ struct RadarBubble: View {
             .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
         }
         .overlay(alignment: .bottom) {
-            if isCandidate {
-                Text(L("待确认"))
+            if isCandidate || isUnconfirmed {
+                Text(isCandidate ? L("待确认") : L("未确认"))
                     .font(.system(size: max(8, min(11, r * 0.2)), weight: .semibold))
                     .foregroundColor(Theme.textSecondary)
                     .padding(.horizontal, 4)

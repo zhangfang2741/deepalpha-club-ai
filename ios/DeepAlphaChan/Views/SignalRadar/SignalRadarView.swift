@@ -6,8 +6,8 @@ import SwiftUI
 /// 哪个市场，不再单独放一条分段选择器。
 ///
 /// 气泡编码（三个视觉维度对应三件不同的事，不再互相重复；纯实色气泡，
-/// 不用边框表达确认状态——那是详情页里的事，见 RadarBubble）：
-/// - 颜色：方向（红=买点 / 绿=卖点）+ 深浅（形态强弱：弱/中/强，与详情页买卖点
+/// 未确认的在底部挂「未确认」标签、不用边框虚实，见 RadarBubble）：
+/// - 颜色：方向（红=买点 / 绿=卖点）+ 深浅（信号强弱：弱/中/强，与详情页买卖点
 ///   色块同一映射 SignalFormatting.strengthDepth），越强越深；
 /// - 大小：买卖点类型（一类最小、二类居中、三类最大——一类只是背驰迹象、尚待验证，
 ///   三类回踩完全不回中枢，确认程度最高）；
@@ -65,6 +65,14 @@ struct SignalRadarView: View {
             // 跟高级版一模一样，见 radarContent）；市场切换时 .task(id:) 额外拉一次
             // 「上个月 1 号」免费预览快照，自动取消上一次未完成的请求、重新拉一次。
             .task { vm.onAppear() }
+            // 后台补算未完成时定期静默重拉，补上的成分股不用用户手动刷新就能出现；
+            // 离开页面时 SwiftUI 自动取消，补算完成后 refreshWhileBackfilling 直接返回、不发请求。
+            .task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: SignalRadarViewModel.backfillPollSeconds * 1_000_000_000)
+                    await vm.refreshWhileBackfilling()
+                }
+            }
             .task(id: vm.demoKey) {
                 if !store.isPremium { await vm.loadDemoDay() }
             }
@@ -155,7 +163,7 @@ struct SignalRadarView: View {
         VStack(spacing: 12) {
             Image(systemName: "doc.text.magnifyingglass")
                 .font(.system(size: 30)).foregroundColor(Theme.textSecondary)
-            Text(L("查看信号雷达前，请阅读并同意免责声明"))
+            Text(L("查看市场雷达前，请阅读并同意免责声明"))
                 .font(.footnote).foregroundColor(Theme.textSecondary)
                 .multilineTextAlignment(.center)
             Button(L("阅读免责声明")) { showConsent = true }
@@ -175,12 +183,12 @@ struct SignalRadarView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "doc.text")
                         .font(.system(size: 30)).foregroundColor(Theme.accent)
-                    Text(L("信号雷达免责声明"))
+                    Text(L("市场雷达免责声明"))
                         .font(.headline).foregroundColor(Theme.textPrimary)
                 }
                 .frame(maxWidth: .infinity)
 
-                Text(L("信号雷达基于公开行情数据，按缠论结构规则自动识别并汇总所选指数成分股的买卖点形态，供技术分析研究使用。"))
+                Text(L("市场雷达基于公开行情数据，按缠论结构规则自动识别并汇总所选指数成分股的买卖点形态，供技术分析研究使用。"))
                     .font(.footnote).foregroundColor(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -267,12 +275,11 @@ struct SignalRadarView: View {
     /// 点气泡 → 直接跑分析，成功后 push 详情页（不经过分析 Tab 的条件页）。
     /// 带上气泡上的真实名称（如「中芯国际」），供结果页加自选时存名称。
     ///
-    /// 关键：让详情页与雷达完全同口径。雷达是在 today-270 ~ today 的日线上跑缠论
-    /// （全序列、不额外加 warmup）。这里传 end=雷达数据日(as_of)、start=end-270 天、
-    /// warmupDays=0：详情接口不再前补 warmup，取到的正是 today-270 ~ today 这同一段
-    /// K 线，且整段都可见——买卖点集合与雷达一致（连更早、超过 90 天的买卖点也照常显示，
-    /// 不会因可见窗口太窄被挡掉）。270 = 雷达的 warmup(180) + window*2(90)，见后端
-    /// signal_radar/service.py。
+    /// 关键：让详情页与雷达完全同口径。这里传 end=雷达数据日(as_of)、start=end-270 天
+    /// （270 = 雷达的 warmup(180) + window*2(90)）；详情接口始终在 start 之前再预热 180 天
+    /// （warmupDays 参数已被后端忽略），与雷达取数起点 _fetch_start 完全一致，买卖点集合
+    /// 与雷达相同（后端测试 test_chan_window_alignment 守护）。anchorDate 为气泡日期
+    /// （信号出现日），详情页列表显示的也是出现日，图上标记则在所属笔的极值 K 线。
     ///
     /// 未订阅高级版时（含点开免费预览那一天）这次分析跟分析 Tab 一样走每日免费额度
     /// （usage.canUseFree/recordUse），额度用尽弹付费墙，不能绕开——免费预览只是
@@ -478,7 +485,7 @@ struct SignalRadarView: View {
         // 切市场时 response 暂时还是上一个市场的（保留旧内容防跳动），它的名称不能拿来用，
         // 否则选了 A 股却显示「正在扫描纳斯达克100」。还没拿到过这个市场的列表时用默认
         // 指数名兜底，直接显示「科创50」，不先闪一下「A 股」。
-        if let response = vm.response, response.market == vm.market.rawValue { return response.etfName }
+        if let response = vm.response, response.market == vm.market.rawValue { return L(response.etfName) }
         if vm.activeUniverseKey == SignalRadarViewModel.defaultUniverseKeys[vm.market] {
             return SignalRadarViewModel.defaultUniverseNames[vm.market] ?? ""
         }
@@ -693,7 +700,8 @@ struct SignalRadarView: View {
         return abs(Calendar(identifier: .gregorian).dateComponents([.day], from: da, to: db).day ?? 0)
     }
 
-    /// 与详情页共用同一套渐变色（深浅 = 形态强弱，两边同一口径）。
+    /// 与详情页买卖点列表的强弱圆点共用同一套渐变色（深浅 = 信号强弱，同一口径）；
+    /// 详情页 K 线图上的买卖点徽标只用红 / 绿纯色，不画深浅。
     static func bubbleColor(side: String, depth: Double) -> Color {
         SignalFormatting.radarColor(side: side, depth: depth)
     }
@@ -708,7 +716,7 @@ struct SignalRadarView: View {
                 Circle().fill(Theme.up).frame(width: 8, height: 8)
                 Circle().fill(Theme.down).frame(width: 8, height: 8)
                 // 颜色编码方向，深浅编码形态强弱（弱浅→强深），具体口径留给问号弹层。
-                Text(L("深浅=形态强弱")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                Text(L("深浅=信号强弱")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
             HStack(spacing: 3) {
                 sizeDot(diameter: SignalRadarView.diameter(forLevel: 1))
@@ -761,15 +769,16 @@ struct SignalRadarView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     infoSection(L("气泡多久更新一次"), updateScheduleLines)
                     infoSection(L("气泡怎么看"), [
-                        L("颜色：红=买点，绿=卖点；深浅=形态强弱（弱/中/强），越强越深，与详情页同一套判定。"),
+                        L("颜色：红=买点，绿=卖点；深浅=信号强弱（弱/中/强），越强越深，与详情页同一套判定。"),
                         L("大小：买卖点类型，一类最小、三类最大——越往后确认程度越高。"),
                         L("位置：大致越靠中心信号越新（按信号出现后的交易日数，周末不算），三个圈依次是今天、3个交易日内、一周内；气泡太挤时会自动推开。"),
-                        L("角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。"),
+                        L("角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号；底部「未确认」= 所在最后一笔还在走，之后可能被新K线改写。"),
                     ])
                     infoSection(L("为什么点进详情页可能对不上"), [
                         L("气泡是最近一次全量扫描那一刻的快照（历史日期下方会标出算出时刻），不是实时数据；点进详情页是用当下最新K线重新跑一遍缠论。"),
                         L("缠论的笔和买卖点在最新几根K线上本身是临时性的，后续新K线一出现，原来某天的信号可能被延伸、改写甚至判定失效——这是分析方法的特性，不是数据错误。"),
                         L("越靠近「今天」的气泡越可能受影响；对某个信号有疑问，以点进详情页当下重新算出的结构为准。"),
+                        L("气泡日期是信号出现那天；详情页图上的标记画在所属笔的极值 K 线，通常在出现日左侧几根，展开该买卖点可看到两个日期。"),
                     ])
                     infoSection(L("扫描范围怎么定"), [
                         L("每个市场提供「科技指数」（默认）和「大盘宽基」两套可切换范围，如美股的纳斯达克100 / 标普500。"),
@@ -836,16 +845,17 @@ struct SignalRadarView: View {
         return f.string(from: date)
     }
 
-    /// 「上榜排序怎么算」（App 固定宽松口径：最后一笔上的买卖点也上榜、标未确认）。
+    /// 「上榜排序怎么算」（App 固定宽松口径：最后一笔上的买卖点也上榜、气泡底部标未确认）。
     private var rankingInfoLines: [String] {
         var lines = [
             L("综合分 = 35% 类型确定性 + 30% 强弱 + 35% 新鲜度，最新一天命中「共振」再额外加分。"),
             L("类型确定性：一类 0.4（背驰，待验证）、二类 0.7（回落在价格密集区获得支撑）、三类 1.0（离开中枢后不回中枢，最强确认）。"),
-            L("新鲜度：按信号出现后的交易日数算（周末、休市不算），当天最高，5 个交易日（一周）后归零并退场。"),
+            L("新鲜度：按信号出现后的交易日数算（周末、休市不算），当天最高，第 5 个交易日归零，之后退场。"),
         ]
         lines += [
-            L("最后一笔还在走时出现的买卖点也会上榜（标为未确认），之后可能被新K线改写。"),
-            L("价格走坏即退场：信号出现后，收盘价跌破买点价位（卖点：涨破）就判定失效，当天起不再上榜。"),
+            L("最后一笔还在走时出现的买卖点也会上榜，气泡底部标「未确认」，之后可能被新K线改写；一周前的历史日期不再显示这类信号。"),
+            L("未确认的信号（落在最后一笔上的提前预判）：类型确定性和强弱两部分打 6 折，新鲜度不打折。"),
+            L("价格走坏即退场：信号出现后，收盘价跌破买点价位（卖点：涨破）当天起从雷达移出；详情页仍显示该买卖点。"),
             L("每类买卖点先保底最多 2 个名额，其余按综合分从高到低补满，共取前 10 名。"),
         ]
         return lines

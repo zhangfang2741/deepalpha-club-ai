@@ -15,7 +15,7 @@ enum ChanService {
             // 买卖点口径（App 固定宽松），见 SignalMode
             "mode": SignalMode.current(),
         ]
-        // 信号雷达点进详情时传 0：不额外加 warmup，取数区间与雷达完全一致。
+        // 兼容旧后端保留；现后端忽略该参数、始终预热 180 天（与雷达取数区间一致）。
         if let warmupDays { query["warmup_days"] = String(warmupDays) }
         return try await APIClient.shared.get("/chan/analysis", query: query)
     }

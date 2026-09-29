@@ -12,7 +12,8 @@ struct RadarUniverse: Decodable, Identifiable, Equatable {
     static let watchlistKey = "watchlist"
     var isWatchlist: Bool { key == Self.watchlistKey }
     /// 展示名：「自选」随界面语言，其余用后端给的指数名。
-    var displayName: String { isWatchlist ? L("自选") : name }
+    /// 后端下发中文指数名，按词表本地化（英文界面显示英文名，与兜底名一致、不闪动）。
+    var displayName: String { isWatchlist ? L("自选") : L(name) }
 
     enum CodingKeys: String, CodingKey {
         case key, name
@@ -141,8 +142,8 @@ struct RadarSignal: Decodable, Identifiable {
     /// 买卖点级别：1/2/3，取 signalType 末位数字（"buy2"/"sell2" 都取到 2），
     /// 对买卖两侧通用。级别决定气泡大小（该类买卖点本身的确认程度），映射见
     /// SignalRadarView.diameter(forLevel:)——一类只是背驰迹象、尚待验证，最小；三类
-    /// 回踩完全不回中枢是最强确认，最大。`confirmed` 字段仍由后端返回、保留解码，
-    /// 但雷达气泡不再用边框虚实表达它——详情页里才展示单条信号是否已走完。
+    /// 回踩完全不回中枢是最强确认，最大。`confirmed == false`（所在最后一笔还在走）的
+    /// 气泡底部挂「未确认」小标签，与详情页的「未确认」对应（不用边框虚实，避免和候选混淆）。
     var level: Int {
         Int(String(signalType.suffix(1))) ?? 1
     }
