@@ -69,11 +69,11 @@ struct ConclusionCard: View {
 
     // MARK: - 最新信号
 
-    private var latestSignal: Signal? { analysis.signals.max { $0.time < $1.time } }
-    /// 比最新买卖点更新的「待确认」候选（严格模式）：结论卡上也提示，但标明待确认。
+    private var latestSignal: Signal? { analysis.signals.max { $0.displayTime < $1.displayTime } }
+    /// 比最新买卖点更新的「待确认」候选（仅严格口径产出）：结论卡上也提示，但标明待确认。
     private var newerCandidate: Signal? {
-        guard let c = analysis.candidates.max(by: { $0.time < $1.time }) else { return nil }
-        if let s = latestSignal, s.time >= c.time { return nil }
+        guard let c = analysis.candidates.max(by: { $0.displayTime < $1.displayTime }) else { return nil }
+        if let s = latestSignal, s.displayTime >= c.displayTime { return nil }
         return c
     }
 
@@ -83,10 +83,10 @@ struct ConclusionCard: View {
             if let s = latestSignal {
                 HStack(spacing: 4) {
                     Text(s.label).foregroundStyle(s.isBuy ? Theme.up : Theme.down)
-                    Text("· " + Self.monthDay(s.time)).foregroundStyle(Theme.textPrimary)
+                    Text("· " + Self.monthDay(s.displayTime)).foregroundStyle(Theme.textPrimary)
                     Image(systemName: s.confirmed ? "checkmark.circle.fill" : "circle.dashed")
                         .font(.caption2)
-                        .foregroundStyle(s.confirmed ? Theme.down : Theme.textSecondary)
+                        .foregroundStyle(Theme.textSecondary)
                         .accessibilityLabel(s.confirmed ? L("已确认") : L("未确认"))
                 }
                 .font(.subheadline.weight(.bold))
@@ -96,7 +96,7 @@ struct ConclusionCard: View {
                 Text(L("暂无")).font(.subheadline.weight(.bold)).foregroundStyle(Theme.textSecondary)
             }
             if let c = newerCandidate {
-                Text(L("待确认 %@ · %@", c.label, Self.monthDay(c.time)))
+                Text(L("待确认 %@ · %@", c.label, Self.monthDay(c.displayTime)))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)

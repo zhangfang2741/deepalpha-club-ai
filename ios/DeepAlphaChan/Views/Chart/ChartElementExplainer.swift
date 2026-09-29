@@ -115,8 +115,11 @@ enum ChartExplainer {
     }
 
     private static func signal(_ s: Signal) -> ChartExplanation {
-        var facts: [(String, String)] = [
-            (L("时间"), s.time), (L("价格"), price(s.price)),
+        let dates: [(String, String)] = s.displayTime == s.time
+            ? [(L("时间"), s.time)]
+            : [(L("出现"), s.displayTime), (L("极值 K 线"), s.time)]
+        var facts: [(String, String)] = dates + [
+            (L("价格"), price(s.price)),
             (L("强弱"), SignalFormatting.strengthLabel(s.strength)),
             (L("状态"), s.isCandidate ? L("待确认，不算买卖点")
                         : (s.confirmed ? L("已确认") : L("未确认，待后续K线验证"))),

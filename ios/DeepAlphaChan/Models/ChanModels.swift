@@ -148,7 +148,12 @@ struct Signal: Codable, Identifiable {
     let priceRatio: Double?
     let volumeRatio: Double?
     let lengthRatio: Double?
-    /// 严格模式下最后一笔上的「待确认」候选（不算买卖点）。端上标记，不参与编解码。
+    /// 信号出现的那根 K 线（与雷达气泡的日期同一口径）；time 是所属笔终点（极值 K 线），
+    /// 图上标记画在 time。旧后端没有该字段时为 nil，回退 time。
+    var detectedTime: String? = nil
+    /// 界面上展示的日期：与雷达一致，用出现日而不是笔终点。
+    var displayTime: String { detectedTime ?? time }
+    /// 后端返回的「待确认」候选（仅严格口径产出，App 固定宽松口径时为空）。端上标记，不参与编解码。
     var isCandidate = false
 
     var id: String { "\(isCandidate ? "cand-" : "")\(type.rawValue)-\(time)" }
@@ -160,6 +165,7 @@ struct Signal: Codable, Identifiable {
         case priceRatio = "price_ratio"
         case volumeRatio = "volume_ratio"
         case lengthRatio = "length_ratio"
+        case detectedTime = "detected_time"
     }
 }
 

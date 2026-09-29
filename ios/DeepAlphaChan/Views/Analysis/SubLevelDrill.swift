@@ -120,7 +120,7 @@ struct SubLevelSheet: View {
                     Text(sig.label)
                         .font(AnalysisType.label)
                         .foregroundColor(sig.isBuy ? Theme.up : Theme.down)
-                    Text(sig.time)
+                    Text(sig.displayTime)
                         .font(.footnote.monospacedDigit())
                         .foregroundColor(Theme.textSecondary)
                     Spacer(minLength: 4)

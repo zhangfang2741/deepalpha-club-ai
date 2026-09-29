@@ -59,7 +59,7 @@ struct SignalDetailCard: View {
             Text(String(format: "%.2f", signal.price))
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(Theme.textSecondary)
-            Text(signal.time)
+            Text(signal.displayTime)
                 .font(.caption2)
                 .foregroundStyle(Theme.textSecondary)
             if !isStatic {
@@ -88,6 +88,13 @@ struct SignalDetailCard: View {
                 .foregroundStyle(Theme.textSecondary)
                 .lineSpacing(AnalysisType.bodyLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
+            if signal.displayTime != signal.time {
+                // 雷达与这里的日期都是出现日；图上标记画在所属笔的极值 K 线，所以会在出现日左侧
+                Text(L("%@ 出现；所在笔的极值在 %@，图上标记画在那根 K 线。", signal.displayTime, signal.time))
+                    .font(.caption)
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if signal.isCandidate {
                 Text(L("所在的最后一笔还在走，端点可能延伸甚至回到中枢，按缠论尚不成立；这一笔走完才算买卖点。"))
                     .font(.caption)

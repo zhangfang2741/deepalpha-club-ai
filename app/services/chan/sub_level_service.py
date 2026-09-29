@@ -95,6 +95,7 @@ def signal_out(sig: Signal) -> SignalOut:
         is_buy=sig.is_buy,
         description=sig.description,
         confirmed=sig.confirmed,
+        detected_time=sig.detected_time or sig.time,
         price_ratio=sig.divergence.price_ratio if sig.divergence else None,
         volume_ratio=sig.divergence.volume_ratio if sig.divergence else None,
         length_ratio=sig.divergence.length_ratio if sig.divergence else None,

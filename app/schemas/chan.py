@@ -84,6 +84,9 @@ class SignalOut(BaseModel):
     description: str
     area_ratio: Optional[float] = None  # 已废弃：背驰改为力度口径后不再填值，保留兼容旧版 App
     confirmed: bool = True  # 是否已确认（落在未确认笔上的信号为 False）
+    # 展示日：信号出现的那根 K 线（日线 YYYY-MM-DD，分钟线带时分），与雷达气泡的日期同一口径（宽松口径 = czsc 亮起日，
+    # 严格口径 = 下一笔走完日）。time 是所属笔终点（极值 K 线），图上标记仍画在 time。
+    detected_time: Optional[str] = None
     # 一类买卖点的力度比（与 czsc 判据同一基准）；二/三类为 None
     price_ratio: Optional[float] = None
     volume_ratio: Optional[float] = None
