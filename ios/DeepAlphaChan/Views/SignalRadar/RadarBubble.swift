@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 单个信号气泡：纯色实心（未确认的底部挂「未确认」标签）+ 持续轻微漂浮 + 可按住拖拽（松手弹回原位）。
+/// 单个信号气泡：纯色实心（已确认的左上角打勾）+ 持续轻微漂浮 + 可按住拖拽（松手弹回原位）。
 struct RadarBubble: View {
     let signal: RadarSignal
     let metrics: RadarBubbleMetrics
@@ -24,8 +24,9 @@ struct RadarBubble: View {
     @State private var dragging = false
 
     private var r: CGFloat { diameter / 2 }
-    /// 真实买卖点但所在最后一笔还在走：底部挂「未确认」，与详情页同一说法。
-    private var isUnconfirmed: Bool { !isCandidate && !signal.confirmed }
+    /// 已确认（所在笔已走完）：左上角打勾。宽松口径下每天多数气泡落在还没走完的最后一笔上、
+    /// 是未确认的，所以只给少数已确认的做标记，不给多数未确认的挂标签（画面更干净）。
+    private var isConfirmed: Bool { !isCandidate && signal.confirmed }
 
     var body: some View {
         content
@@ -55,7 +56,7 @@ struct RadarBubble: View {
             .accessibilityLabel(
                 "\(signal.symbol) \(signal.name) \(signal.isBuy ? L("买点") : L("卖点"))"
                 + (isCandidate ? " \(L("待确认，不算买卖点"))" : "")
-                + (isUnconfirmed ? " \(L("未确认"))" : "")
+                + (isCandidate ? "" : " \(isConfirmed ? L("已确认") : L("未确认"))")
                 + (isNew ? " \(L("所选日期当天新增"))" : "")
                 + (signal.isSubLevelResonance ? " \(L("日线与30分钟共振"))" : "")
             )
@@ -104,8 +105,8 @@ struct RadarBubble: View {
             .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
         }
         .overlay(alignment: .bottom) {
-            if isCandidate || isUnconfirmed {
-                Text(isCandidate ? L("待确认") : L("未确认"))
+            if isCandidate {
+                Text(L("待确认"))
                     .font(.system(size: max(8, min(11, r * 0.2)), weight: .semibold))
                     .foregroundColor(Theme.textSecondary)
                     .padding(.horizontal, 4)
@@ -126,6 +127,20 @@ struct RadarBubble: View {
                     .background(Theme.segment)
                     .clipShape(Capsule())
                     .offset(x: 4, y: -4)
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            // 已确认：白色对勾 + 深色描边小圆，红 / 绿气泡上都清楚，不与买卖方向色混淆。
+            if isConfirmed {
+                let side = max(14, min(20, r * 0.36))
+                Image(systemName: "checkmark")
+                    .font(.system(size: side * 0.55, weight: .heavy))
+                    .foregroundColor(.white)
+                    .frame(width: side, height: side)
+                    .background(Theme.background, in: Circle())
+                    .overlay(Circle().stroke(.white.opacity(0.85), lineWidth: 1))
+                    .offset(x: -3, y: -3)
+                    .accessibilityHidden(true)
             }
         }
         .overlay(alignment: .bottomLeading) {

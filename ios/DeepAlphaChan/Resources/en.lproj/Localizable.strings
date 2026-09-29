@@ -560,7 +560,7 @@
 "算法说明" = "How it works";
 "气泡怎么看" = "Reading the bubbles";
 "位置：大致越靠中心信号越新（按信号出现后的交易日数，周末不算），三个圈依次是今天、3个交易日内、一周内；气泡太挤时会自动推开。" = "Position: roughly, closer to center means more recent (counted in trading days since the signal appeared; weekends excluded). The rings mark today, within 3 trading days, and within 1 week; crowded bubbles are nudged apart.";
-"角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号；底部「未确认」= 所在最后一笔还在走，之后可能被新K线改写。" = "Badges: \"Aligned\" means the daily and 30-minute directions agree; \"New\" means the signal appeared that day; \"Unconfirmed\" at the bottom means its last stroke is still unfolding and new candles may revise it.";
+"角标：左上角「✓」= 已确认（所在笔已走完）；「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。没有「✓」的是最后一笔上的未确认信号，之后可能被新K线改写。" = "Badges: \"✓\" at the top left means confirmed (its stroke has finished); \"Aligned\" means the daily and 30-minute directions agree; \"New\" means the signal appeared that day. Bubbles without \"✓\" are unconfirmed signals on the last stroke and may be revised by new candles.";
 "扫描范围怎么定" = "How the scan range is chosen";
 "每个市场提供「科技指数」（默认）和「大盘宽基」两套可切换范围，如美股的纳斯达克100 / 标普500。" = "Each market offers a switchable \"tech index\" (default) and a \"broad market\" range, e.g. Nasdaq 100 / S&P 500 for US stocks.";
 "成分股优先实时拉取官方/交易所数据源，取不到或数量不足时自动回退到内置清单，保证随时有得扫。" = "Constituents are fetched live from official/exchange sources first, and fall back to a built-in list when unavailable or too few, so there's always something to scan.";
@@ -715,7 +715,7 @@
 "待确认 · 不算买卖点" = "Pending · not yet a signal";
 "待确认 %@ · %@" = "Pending %@ · %@";
 "%lld 只补算中" = "%lld stocks still loading";
-"最后一笔还在走时出现的买卖点也会上榜，气泡底部标「未确认」，之后可能被新K线改写；一周前的历史日期不再显示这类信号。" = "Signals on the still-unfolding last stroke are also listed, marked \"Unconfirmed\" at the bottom of the bubble, and may be revised by new candles; historical dates more than a week back no longer show them.";
+"最后一笔还在走时出现的买卖点也会上榜（气泡不带「✓」），之后可能被新K线改写；一周前的历史日期不再显示这类信号。" = "Signals on the still-unfolding last stroke are also listed (bubbles without \"✓\") and may be revised by new candles; historical dates more than a week back no longer show them.";
 "气泡日期是信号出现那天；详情页图上的标记画在所属笔的极值 K 线，通常在出现日左侧几根，展开该买卖点可看到两个日期。" = "A bubble's date is the day the signal appeared; on the details chart the marker sits on the stroke's extreme candle, usually a few candles to the left. Expand the signal to see both dates.";
 "%@ 出现；所在笔的极值在 %@，图上标记画在那根 K 线。" = "Appeared on %@; the stroke's extreme was on %@, where the chart marker sits.";
 "出现" = "Appeared";

@@ -142,8 +142,8 @@ struct RadarSignal: Decodable, Identifiable {
     /// 买卖点级别：1/2/3，取 signalType 末位数字（"buy2"/"sell2" 都取到 2），
     /// 对买卖两侧通用。级别决定气泡大小（该类买卖点本身的确认程度），映射见
     /// SignalRadarView.diameter(forLevel:)——一类只是背驰迹象、尚待验证，最小；三类
-    /// 回踩完全不回中枢是最强确认，最大。`confirmed == false`（所在最后一笔还在走）的
-    /// 气泡底部挂「未确认」小标签，与详情页的「未确认」对应（不用边框虚实，避免和候选混淆）。
+    /// 回踩完全不回中枢是最强确认，最大。`confirmed == true`（所在笔已走完）的气泡左上角
+    /// 打勾，与详情页「已确认」对应；未确认的不挂标记（不用边框虚实，避免和候选混淆）。
     var level: Int {
         Int(String(signalType.suffix(1))) ?? 1
     }
