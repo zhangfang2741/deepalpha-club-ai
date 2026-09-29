@@ -618,8 +618,9 @@ struct ChanChartView: View {
             let sig = badge.signal
             let cx = badge.anchorX
             let badgeRect = badge.rect
+            // 已确认 / 未确认同一纯色：半透明叠在深色底上会显得更暗，最近（多为未确认）的买卖点
+            // 就比历史的「深一截」，与雷达气泡、列表圆点对不上。未确认由虚线末笔、列表图标与说明表达。
             let color = sig.isBuy ? Theme.up : Theme.down
-            let alpha: Double = sig.confirmed ? 1.0 : 0.5
             // 买点朝上画在价格下方，卖点朝下画在价格上方
             let dir: CGFloat = sig.isBuy ? 1 : -1
             let badgeH = badgeRect.height
@@ -641,8 +642,8 @@ struct ChanChartView: View {
                 ctx.fill(pill, with: .color(Theme.textSecondary.opacity(0.35)))
                 ctx.stroke(pill, with: .color(color), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
             } else {
-                ctx.fill(arrow, with: .color(color.opacity(alpha)))
-                ctx.fill(pill, with: .color(color.opacity(alpha)))
+                ctx.fill(arrow, with: .color(color))
+                ctx.fill(pill, with: .color(color))
             }
             ctx.draw(badge.text, at: CGPoint(x: badgeRect.midX, y: badgeRect.midY), anchor: .center)
         }
