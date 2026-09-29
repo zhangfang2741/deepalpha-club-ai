@@ -399,7 +399,11 @@ async def chan_sub_level(
 async def chan_signal_modes(
     lang: str = Query(default="zh", description="文案语言：zh / en"),
 ) -> SignalModesResponse:
-    """可选的买卖点口径（App 设置页据此渲染选项；新增口径无需发版）。"""
+    """可选的买卖点口径列表。
+
+    App 已取消口径选择、固定宽松（默认）口径，当前不再调用；保留给旧版 App 兼容与
+    以后重新开放口径选择（新增口径无需发版）。
+    """
     en = lang.lower().startswith("en")
     return SignalModesResponse(
         default=DEFAULT_MODE,

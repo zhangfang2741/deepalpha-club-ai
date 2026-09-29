@@ -135,7 +135,7 @@ deepalpha-club-ai/
 | ETF 资金流 | `/etf` | `/etf` | 资金流热力图 + 偏离度 |
 | 行业估值 | `/valuation` | （并入行业恐慌页） | GICS 行业 PE z-score |
 | 缠论 | `/chan` | `/chan` | 缠论分笔/中枢/背驰 |
-| 信号雷达 | `/signal-radar` | iOS「信号」Tab | 扫描各市场科技 ETF 成分股跑缠论，按日聚合买卖点前 10（气泡：红买绿卖、深浅=形态强弱、大小=一二三类） |
+| 信号雷达 | `/signal-radar` | iOS「雷达」Tab（页面标题「市场雷达」） | 扫描各市场指数成分股跑缠论，按日聚合买卖点前 10（气泡：红买绿卖、深浅=信号强弱、大小=一二三类、底部「未确认」= 最后一笔上的信号） |
 | 威科夫 | `/wyckoff` | `/wyckoff` | Wyckoff 阶段/事件 |
 | 一目均衡表 | `/ichimoku` | `/ichimoku` | Ichimoku 云图信号 |
 | 分析师上调 | `/analyst-upgrades` | `/analyst-upgrades` | 目标价上调榜（SP500/Nasdaq100） |
@@ -154,7 +154,8 @@ deepalpha-club-ai/
 > 补算进度记为 Redis 标记（`signal_radar:backfill:*`，含进程 owner），进程重启后 `scheduler._resume_orphan_backfills`
 > 在启动预热之后接手别的进程没补完的。**不要**绕过锁直接起全量扫描。
 > 雷达形态过滤（`chan/shape_filters.py`，仅雷达、详情页不受影响）**当前暂停**（`service._SHAPE_FILTERS_ENABLED=False`，
-> 代码与测试保留；实测它不是雷达变空的原因，空主要来自「未确认不上榜」）。启用时：按信号**成立日**（`detected_time`，宽松口径=czsc 事件点亮日）查 czsc 形态状态，
+> 代码与测试保留；实测它在 5 日窗口内几乎不剔信号。当时雷达变空的真正原因是 78bee01 的「未确认不上榜」，
+> 已在 2544d31 回退：宽松口径最后一笔上的信号照常上榜、`confirmed=false`，一周前的展示日不显示，收盘价跌破才退场）。启用时：按信号**成立日**（`detected_time`，宽松口径=czsc 事件点亮日）查 czsc 形态状态，
 > 同向假突破 / 窄幅震荡 / 低波动命中即不上榜。**不要**改回按笔终点日判定（分型极值K线天然偏向信号反面），
 > 也**不要**加回收盘位置（bar_classify）、区间震荡（cxt_range_oscillation）——真实数据校准会让雷达几乎清空，
 > 见 `docs/superpowers/specs/2026-09-27-radar-shape-filters-design.md`「校准后调整」。改规则须升缓存键 `_mode_ns` 的 shape 版本。
@@ -170,14 +171,16 @@ deepalpha-club-ai/
 - 「什么算买卖点」有多套口径，都实现 `SignalPolicy`（`czsc_families` / `assemble` /
   `split_unconfirmed` + 名称、版本、中英文案），在 `SIGNAL_POLICIES` 注册，按名字 `get_policy(mode)` 取。
   analyzer、`/chan/analysis`、`/chan/sub-level`、信号雷达（快照 / 自选 / 示例日）都只传 `mode`、走接口，
-  **不要**写 `if mode == ...` 分支。App 设置页从 `GET /chan/signal-modes` 读选项。
+  **不要**写 `if mode == ...` 分支。**App 已取消口径选择、固定宽松口径**（iOS `SignalMode.current()` 恒为 loose）；
+  `GET /chan/signal-modes` 仅为旧版 App 兼容与以后重新开放保留。
 - `loose`（宽松，**默认**）= 严格化之前的口径：czsc 原生一/二/三类，最后一笔上的也输出（标未确认）。
   三族信号独立扫描、互不知晓，组装时（`generate_loose_signals`）必须做两条一致性约束（loose2 起）：
   同一笔终点命中多族只留一个（一类 > 三类 > 二类，`_DUP_PRIORITY`）；二类要求存在更早的同类一类，
   无源二类丢弃。**不要**去掉——否则会出现同日同价「一买+二买」（CTAS 2026-09-24）、约四成二类无源。
   `strict`（严格）= 下文「买卖点组装」的缠论原文定义。
 - 新增口径（如「中等」）：写实现类 + 注册即可；雷达与次级别缓存键按 `policy.version` 自动隔离，
-  定时预热遍历注册表（同一 universe 连着算各口径，第二遍K线命中缓存）。**改了某口径的判定逻辑必须升它的 version**。
+  定时预热 / 盘中次级别刷新**只跑默认口径**（`scheduler._modes`），其余口径有请求时按需现算。
+  **改了某口径的判定逻辑必须升它的 version**。
 
 **引擎分工（2026-09 起接入开源库 czsc，Rust 内核，PyPI `czsc`）**
 - 分型 / 笔 / 笔级中枢：czsc 计算，经 `czsc_adapter.extract_structures` 转回项目
@@ -195,7 +198,8 @@ deepalpha-club-ai/
   （失败的反转）则撤掉前段、延续更早的同向段。未终结线段（数据到头）终点取当前极值、
   `terminated=False` 且不算确认，其后尾部不另起同向段。仅当一根大笔反转整条前段
   （任何划分都会吞没起点）才如实留一笔空档，空档后按实际走势定方向。不要为连续而硬连。
-- 买卖点**严格按缠论原文定义**（2026-09 起，产品决定）：
+- **严格口径（strict）**的买卖点按缠论原文定义（宽松口径见上文「买卖点口径」，有意使用 czsc 原生
+  二 / 三类，由 loose2 两条一致性约束兜底；下列「不要再用」只针对严格口径）：
   - 一类 = 趋势背驰：czsc `cxt_first_buy/sell_V221126` 的力度背驰事件（`czsc_signals.scan_bs_events`
     逐根推进，不回看未来）+ 趋势前提 `signals._in_trend`——信号前两个**已形成**（前三笔走完，
     `_formed_at`）的中枢区间不重叠且依次下移（一卖为上移），信号价离开后一个中枢。**不要**改成
@@ -204,7 +208,7 @@ deepalpha-club-ai/
   - 二类 = 一类后的第一次回落 / 反弹不破一类极值（`_derive_type2`，一类所在笔 i 的 i+2 笔）。
   - 三类 = 离开中枢后的第一次回落 / 反弹没有回到中枢（`_derive_type3`，复用 `pivot_phase` 的
     `_is_breakout` / `_classify_retrace` 配对，与「确认三买」同源）。
-  - **不要**再用 czsc 的 `cxt_second_bs_V240524`（按端点价格重叠、不要求先有一类）或
+  - 严格口径**不要**用 czsc 的 `cxt_second_bs_V240524`（按端点价格重叠、不要求先有一类）或
     `cxt_third_bs_V230318`（5 笔局部中枢 + SMA34 均线过滤）——都偏离原文；实测 8 只股票一年
     由 62 个降到 9 个，全部符合标准定义。也**不要**换成 `tas_macd_first_bs_*` 这类纯 MACD 信号。
 - 背驰度量：**力度口径**（`divergence.py`，与 czsc 一类买卖点同一口径，保证可解释）——价格创新
@@ -226,18 +230,25 @@ deepalpha-club-ai/
   30 分钟级别（`freq=30min`）可见区间收窄到最近 30 天、预热 20 天（Yahoo 分钟线上限约 60 天）。
 
 **买卖点组装（严格口径 signals.generate_all_signals，信号质量别走偏）**
+- 宽松口径（`generate_loose_signals`，App 实际使用）的对应行为：最后一笔上的信号**留在 `signals`、
+  标 `confirmed=false`**（不产出候选，`candidate_signals` 恒空，雷达 `candidates` 也恒空）；
+  `detected_time` = czsc 事件亮起的那根K线，不推后到下一笔走完。下面「只落在已完成的笔上」
+  「成立日 = 下一笔走完」两条**仅严格口径**。
 - czsc 一类信号是持续多根K线的「状态」，在切换为买卖点时记一次事件，绑定当时最后一笔；
   按（类型, 笔终点）去重。二 / 三类的检测时间取所属笔完成的那根K线（扫描时逐根记录
   `stroke_done_at`，不回看未来）。
 - **失效过滤**：所属笔若后续被延伸（端点不在最终结构中）即为失效信号，丢弃；买点只落
   下降笔终点、卖点只落上升笔终点。信号 time/price = 所属笔终点。
-- **只落在已完成的笔上**（analyzer 在 `_mark_confirmations` 之后过滤）：最后一笔还在走，端点
+- **只落在已完成的笔上**（仅严格口径；`policy.split_unconfirmed` 在 `_mark_confirmations` 之后拆分）：最后一笔还在走，端点
   可能延伸甚至回到中枢，其上的买卖点尚不成立，不作为买卖点输出，而是放进
   `ChanAnalysisResult.candidate_signals`。雷达最新一天用它们补足剩余名额（`RadarDayOut.candidates`，
   `pick_candidates`），App 画成灰色虚线「待确认」气泡、不计入买点 / 卖点数——**不要**把候选
   混回 `signals`，也不要让它们占真实买卖点的名额。
-- **成立日 = 下一笔走完**：`detected_time` 不早于所在笔的下一笔完成的那根K线（`stroke_done_at`）。
+- **成立日 = 下一笔走完**（仅严格口径）：`detected_time` 不早于所在笔的下一笔完成的那根K线（`stroke_done_at`）。
   用更早的「亮起日」会让历史雷达日提前看到未来才成立的信号、最新日又因太早被判过期进不了雷达。
+- **展示日期两边一致**：雷达气泡日期 = `detected_time`；详情接口 `SignalOut.detected_time` 同值（日线纯日期、
+  分钟线带时分），App 列表 / 结论卡 / 次级别列表显示它，图上标记仍画在 `time`（所属笔终点，极值K线，
+  通常在出现日左侧几根）。守护测试 `tests/services/chan/test_signal_out.py`。
 - 强度：一类按 czsc 同一判据复算的力度比分档（基准 = max(前一个同向笔, 关键笔均值)，
   见 `signals._first_bs_force`），说明写出价差/量能/时长三项比值；
   二/三类 = 信号前**最近已结束**中枢的级别 + 余量（`_type23_strength`），尚未结束的中枢不参与。
@@ -253,6 +264,8 @@ deepalpha-club-ai/
   周线 × 日线最近两周。大级别 `recommendation.bias` 定方向 × 次级别买卖点 → 共振/逆势/等待/不可用；
   **唯一入口 `current_sub_level`**：雷达气泡与详情页共用（固定口径：大级别窗口不随详情页日期范围变、
   截止日取服务器当天、代码归一化；按结论缓存 1h，雷达盘中每 30 分钟 refresh 覆盖），不要再各算各的。
+  注意详情页请求带 `max_age=LIVE_MAX_AGE`（60 秒），盘中会比雷达气泡上的共振标记更新，两者最多差一个
+  30 分钟刷新周期；收盘后数据定型即一致。
   30 分钟失败只降级为 unavailable，不影响日线。30 分钟数据：美股 FMP 分段拉取，港股/A 股
   Yahoo `30m`（上限约 60 天）。分钟线时间为交易所本地 `YYYY-MM-DD HH:MM`（`ts_date` 零点才输出纯日期）。
   信号雷达只对最新交易日入榜气泡补算（`attach_sub_levels`）。

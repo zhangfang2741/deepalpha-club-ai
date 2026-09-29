@@ -345,7 +345,8 @@ def build_signal_history(
     信号，深浅要反映那条信号发生当天中枢真实处于哪个阶段，不然同一只股票
     不同日期的气泡会被错误地画成同一个深浅。
 
-    形态过滤按信号成立日（detected_time，与 date 同一天，即雷达展示的日期；宽松口径下是
+    形态过滤（当前暂停：_SHAPE_FILTERS_ENABLED=False 时 shape_states 为空、恒不剔除）按信号
+    成立日（detected_time，与 date 同一天，即雷达展示的日期；宽松口径下是
     czsc 事件点亮那根K线，严格口径下推后到下一笔走完）查 `result.shape_states`，
     命中记入 `shape_rejected`（出生时一次判定，后续按日重建快照不再重判）。不用笔终点日：
     那是分型极值那根K线，其形态天然偏向信号反面，会系统性误剔。detected_time 缺失时
@@ -449,7 +450,7 @@ def build_days(
 
     未确认信号：展示日早于 today 往前 _UNCONFIRMED_MAX_DAYS_AGO 个自然日时剔除，
     且在取前 top_n 之前剔除，不占名额。today 缺省为服务器当天（测试注入固定值）。
-    czsc 形态过滤（shape_rejected，见 build_signal_history）在每只股票最新信号确定后剔除，
+    czsc 形态过滤（shape_rejected，见 build_signal_history；当前暂停）在每只股票最新信号确定后剔除，
     避免新信号被剔除后旧信号重新上榜。
     """
     # 数交易日龄用的日历：调用方给了更长的日历就用它（覆盖到最老展示日之前），否则用展示日本身

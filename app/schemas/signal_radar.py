@@ -42,10 +42,15 @@ class RadarDayOut(BaseModel):
     date: str = Field(description="交易日 YYYY-MM-DD")
     buy_count: int = Field(description="当日买点数量")
     sell_count: int = Field(description="当日卖点数量")
-    signals: list[RadarSignalOut] = Field(default_factory=list, description="当日信号，按强度降序")
+    signals: list[RadarSignalOut] = Field(
+        default_factory=list,
+        description="当日上榜信号：每类先保底名额、其余按综合分（类型确定性 + 强弱 + 新鲜度 + 共振）取前 N，按综合分降序；"
+                    "宽松口径下最后一笔上的信号也在这里，confirmed=false",
+    )
     candidates: list[RadarSignalOut] = Field(
         default_factory=list,
-        description="待确认候选：落在还没走完的最后一笔上，不算买卖点；只在最新一天、补足剩余名额",
+        description="待确认候选（仅严格口径产出；宽松口径恒为空）：落在还没走完的最后一笔上，不算买卖点；"
+                    "只在最新一天、补足剩余名额",
     )
 
 

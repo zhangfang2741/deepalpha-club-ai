@@ -70,7 +70,8 @@ class ChanAnalysisResult:
     """缠论完整分析结果"""
     symbol: str
     bars_count: int
-    # 逐日形态状态（shape_filters），仅供雷达按信号日查表剔除假信号，详情页不读。
+    # 逐日形态状态（shape_filters），仅供雷达按信号日查表剔除假信号，详情页不读；
+    # 雷达形态过滤当前暂停（signal_radar.service._SHAPE_FILTERS_ENABLED），平时为空。
     shape_states: dict[str, ShapeState] = field(default_factory=dict)
 
     # 各层分析结果
