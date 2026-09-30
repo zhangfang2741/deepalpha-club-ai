@@ -74,3 +74,20 @@ async def test_distributions_replace_and_results(clean):
     latest = await repo.get_latest_result(MARKET, "NVDA")
     assert latest is not None and latest.as_of == date(2026, 10, 1)
     assert await repo.get_prev_grades(MARKET, date(2026, 10, 1)) == {"NVDA": {"overall": "B"}}
+
+
+async def test_radar_grade_history_is_scoped_and_includes_last_stale_row(clean):
+    """只取指定市场/股票，保留区间内每日等级及区间前最后一条供过期判断。"""
+    base = {"market": MARKET, "sector_key": "tech", "payload_en": {}, "grades": {}}
+    rows = []
+    for symbol in ("NVDA", "OTHER"):
+        for day, grade in ((1, "B"), (2, "A-"), (29, "A"), (30, "A+")):
+            rows.append(dict(base, symbol=symbol, as_of=date(2026, 9, day),
+                             payload_zh={"overall": {"grade": grade, "score": 70}, "dimensions": ["不读取"]}))
+    await repo.upsert_results(rows)
+    result = await repo.get_quant_grade_history(MARKET, ["NVDA"], date(2026, 9, 23), date(2026, 9, 29))
+    assert [(r.symbol, r.as_of.day, r.payload_zh["overall"]["grade"]) for r in result] == [
+        ("NVDA", 29, "A"), ("NVDA", 2, "A-")]
+    assert all("dimensions" not in r.payload_zh for r in result)
+    assert await repo.get_quant_grade_history("nonexistent", ["NVDA"], date(2026, 9, 1), date(2026, 9, 30)) == []
+    assert await repo.get_quant_grade_history(MARKET, [], date(2026, 9, 1), date(2026, 9, 30)) == []

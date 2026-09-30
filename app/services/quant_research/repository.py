@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
 from sqlalchemy import delete, func, or_, select
@@ -161,7 +162,19 @@ async def upsert_results(rows: list[dict]) -> None:
         await s.commit()
 
 
-async def get_quant_grade_history(market: str, symbols: list[str], start: date, end: date) -> list[QuantResult]:
+@dataclass(frozen=True)
+class QuantGradeSnapshot:
+    """雷达只读取综合评级和数据日期，避免拉取全部指标明细。"""
+
+    symbol: str
+    as_of: date
+    created_at: datetime
+    updated_at: datetime
+    payload_zh: dict
+    payload_en: dict
+
+
+async def get_quant_grade_history(market: str, symbols: list[str], start: date, end: date) -> list[QuantGradeSnapshot]:
     """按市场和评级日期批量读取；可用时间校验由雷达筛选层完成。"""
     if not symbols:
         return []
@@ -170,13 +183,20 @@ async def get_quant_grade_history(market: str, symbols: list[str], start: date, 
                        col(QuantResult.as_of) < start)
                 .distinct(col(QuantResult.symbol))
                 .order_by(col(QuantResult.symbol), col(QuantResult.as_of).desc()))
-    q = (select(QuantResult)
+    q = (select(col(QuantResult.symbol), col(QuantResult.as_of),
+                col(QuantResult.created_at), col(QuantResult.updated_at),
+                col(QuantResult.payload_zh)["overall"], col(QuantResult.payload_zh)["as_of"],
+                col(QuantResult.payload_en)["overall"], col(QuantResult.payload_en)["as_of"])
          .where(col(QuantResult.market) == market,
                 col(QuantResult.symbol).in_(symbols), col(QuantResult.as_of) <= end,
                 or_(col(QuantResult.as_of) >= start, col(QuantResult.id).in_(previous)))
          .order_by(col(QuantResult.as_of).desc(), col(QuantResult.updated_at).desc()))
     async with AsyncSessionFactory() as session:
-        return list((await session.execute(q)).scalars().all())
+        rows = (await session.execute(q)).all()
+    return [QuantGradeSnapshot(symbol, as_of, created, updated,
+                              {"overall": zh, "as_of": zh_dates} if zh else {},
+                              {"overall": en, "as_of": en_dates} if en else {})
+            for symbol, as_of, created, updated, zh, zh_dates, en, en_dates in rows]
 
 
 async def get_latest_result(market: str, symbol: str) -> QuantResult | None:

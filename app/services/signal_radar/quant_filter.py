@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from app.core.logging import logger
-from app.models.quant_research import QuantResult
 from app.schemas.signal_radar import RadarDayOut, RadarQuantFilterOut, RadarSignalOut
 from app.services.quant_research import repository
 from app.services.quant_research.grading import GRADE_ORDER
@@ -25,7 +24,7 @@ class QuantGrade:
     available_on: date
 
 
-def grade_from_row(row: QuantResult) -> QuantGrade | None:
+def grade_from_row(row: repository.QuantGradeSnapshot) -> QuantGrade | None:
     """更新时刻也参与可用日判断，避免事后覆盖的历史结果泄漏到过去。"""
     payload = row.payload_zh or row.payload_en or {}
     overall = payload.get("overall") or {}
