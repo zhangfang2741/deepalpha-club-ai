@@ -79,6 +79,7 @@ def env(monkeypatch):
 
     monkeypatch.setattr(batch, "fetch_sp1500", fake_universe)
     monkeypatch.setattr(batch, "FmpClient", lambda client, redis, priority: fake)
+    monkeypatch.setattr(batch.settings, "FMP_API_KEY", "k")
     return mem, fake
 
 
@@ -122,3 +123,9 @@ def test_needs_refresh():
     assert not batch.needs_refresh(Snap(), set(), "A", AS_OF)
     Snap.fetched_at = datetime(2026, 5, 1)
     assert batch.needs_refresh(Snap(), set(), "A", AS_OF)
+
+
+async def test_missing_key_fails_loudly(monkeypatch):
+    monkeypatch.setattr(batch.settings, "FMP_API_KEY", "")
+    summary = await batch.run_us_batch(AS_OF, redis=None, client=None)  # type: ignore[arg-type]
+    assert summary == {"ok": False, "reason": "missing_fmp_key"}

@@ -17,6 +17,7 @@ import httpx
 from redis.asyncio import Redis
 
 from app.cache.operations import scan_keys
+from app.core.config import settings
 from app.core.logging import logger
 from app.services.quant_research import repository as repo
 from app.services.quant_research.builder import (
@@ -40,7 +41,7 @@ LAST_RUN_KEY = "quant:us:last_batch_date"
 KEY_TTL = 3 * 86400
 REFRESH_AFTER_DAYS = 100
 HISTORY_DAYS = 120
-_CONCURRENCY = 4
+_CONCURRENCY = 12  # 速率由全局 FMP 预算控制（批量 ≤150/分钟），并发只用来掩盖接口延迟
 
 
 def estimate_rows(market: str, symbol: str, snapshot_date: date, estimates: list[dict]) -> list[dict]:
@@ -101,11 +102,16 @@ async def _collect_one(fmp: FmpClient, symbol: str, sector: str, name: str, as_o
 
 
 async def run_us_batch(as_of: date, *, redis: Redis | None, client: httpx.AsyncClient,
-                       limit: int | None = None) -> dict:
-    """美股标普1500 全量计算并落库，返回摘要。limit 只用于本地试跑前 N 只。"""
+                       limit: int | None = None, sectors: set[str] | None = None) -> dict:
+    """美股标普1500 全量计算并落库，返回摘要。limit / sectors 只用于本地试跑（取部分板块或前 N 只）。"""
     started = datetime.now(UTC)
+    if not settings.FMP_API_KEY:
+        logger.error("quant_batch_missing_fmp_key")
+        return {"ok": False, "reason": "missing_fmp_key"}
     fmp = FmpClient(client, redis, "batch")
     universe = await fetch_sp1500(redis)
+    if sectors:
+        universe = {k: v for k, v in universe.items() if v[1] in sectors}
     symbols = sorted(universe)[:limit] if limit else sorted(universe)
     if not symbols:
         logger.error("quant_batch_empty_universe")
@@ -175,11 +181,14 @@ async def run_us_batch(as_of: date, *, redis: Redis | None, client: httpx.AsyncC
         stale = await scan_keys(redis, "quant:us:sym:*")  # SCAN，不用 KEYS 扫全库
         if stale:
             await redis.delete(*stale)
-    summary = {"ok": True, "as_of": as_of.isoformat(), "universe": len(symbols), "computed": len(evals),
+    summary = {"ok": bool(evals), "as_of": as_of.isoformat(), "universe": len(symbols), "computed": len(evals),
                "estimates_inserted": inserted, "refreshed": sum(1 for s in symbols if needs_refresh(
                    snapshots.get(s), reported, s, as_of)),
                "seconds": round((datetime.now(UTC) - started).total_seconds())}
-    logger.info("quant_batch_us_done", **summary)
+    if evals:
+        logger.info("quant_batch_us_done", **summary)
+    else:
+        logger.error("quant_batch_us_nothing_computed", **summary)
     return summary
 
 
