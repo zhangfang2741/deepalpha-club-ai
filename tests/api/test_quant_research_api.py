@@ -62,3 +62,63 @@ def test_methodology_no_auth_needed():
     text = json.dumps(body, ensure_ascii=False) + json.dumps(c.get("/api/v1/quant-research/methodology").json(),
                                                              ensure_ascii=False)
     assert contains_forbidden(text) == []
+
+
+def test_batch_run_endpoint_lock_semantics(client, monkeypatch):
+    """手动触发批量：锁被占返回 already_running，空闲返回 started。"""
+    from datetime import UTC, datetime
+
+    from app.services.quant_research.scheduler import _lock_key, last_us_session
+
+    class FakeRedis:
+        def __init__(self):
+            self.keys: set[str] = set()
+
+        async def set(self, key, value, ex=None, nx=False):
+            if nx:
+                if key in self.keys:
+                    return False
+                self.keys.add(key)
+                return True
+            return True
+
+        async def delete(self, key):
+            self.keys.discard(key)
+
+    async def noop(day, *, redis, client=None):
+        return {"ok": True}
+
+    fake = FakeRedis()
+    monkeypatch.setattr(api_mod, "run_us_batch", noop)
+    monkeypatch.setattr(api_mod, "current_redis", lambda: fake)
+    day = last_us_session(datetime.now(UTC))
+    fake.keys.add(_lock_key("us", day))  # 模拟定时批量正在跑
+    assert client[0].post("/api/v1/quant-research/batch/run").json() == {
+        "status": "already_running", "day": day.isoformat()}
+    fake.keys.clear()
+    body = client[0].post("/api/v1/quant-research/batch/run").json()
+    assert body["status"] == "started" and body["day"] == day.isoformat()
+
+
+async def test_run_manual_batch_releases_lock_on_failure(monkeypatch):
+    """后台批量失败也释放锁，不挡当晚定时批。"""
+    from datetime import date
+
+    from app.api.v1 import quant_research as api
+    from app.services.quant_research.scheduler import _lock_key
+
+    async def boom(day, *, redis, client=None):
+        raise RuntimeError("跑批炸了")
+
+    class FakeRedis:
+        def __init__(self):
+            self.deleted: list[str] = []
+
+        async def delete(self, key):
+            self.deleted.append(key)
+
+    fake = FakeRedis()
+    monkeypatch.setattr(api, "run_us_batch", boom)
+    monkeypatch.setattr(api, "current_redis", lambda: fake)
+    await api._run_manual_batch(date(2026, 9, 29))
+    assert fake.deleted == [_lock_key("us", date(2026, 9, 29))]
