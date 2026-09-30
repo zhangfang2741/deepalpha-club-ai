@@ -146,6 +146,14 @@ struct QuantFormula: Decodable {
     let inputs: [QuantFormulaInput]
 }
 
+struct QuantMetricInterpretation: Decodable, Identifiable {
+    let what: String
+    let role: String
+    let threshold: String
+    let calculation: String?
+    var id: String { what }
+}
+
 struct QuantMetric: Decodable, Identifiable {
     let key: String
     let name: String
@@ -163,6 +171,7 @@ struct QuantMetric: Decodable, Identifiable {
     let distribution: [String: Double]?
     let formula: QuantFormula?
     let positionText: String?
+    let interpretation: QuantMetricInterpretation?
 
     var id: String { key }
     var lowerBetter: Bool { direction == "lower_better" }
@@ -175,6 +184,7 @@ struct QuantMetric: Decodable, Identifiable {
         case sectorMedianDisplay = "sector_median_display"
         case diffToMedianPct = "diff_to_median_pct"
         case positionText = "position_text"
+        case interpretation
     }
 }
 

@@ -21,7 +21,7 @@ struct QuantGradeBadge: View {
 
     var body: some View {
         Text(grade ?? "—")
-            .font(.system(size: size, weight: .heavy))
+            .font(.system(size: size, weight: .semibold))
             .foregroundStyle(QuantGradeStyle.color(grade))
             .frame(minWidth: size * 2.2, minHeight: size * 1.75)
             .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 8))

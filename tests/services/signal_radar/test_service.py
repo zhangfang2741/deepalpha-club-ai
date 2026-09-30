@@ -19,6 +19,16 @@ from app.services.signal_radar.service import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _quant_data(monkeypatch):
+    """编排测试注入每日有效评级；筛选边界由 test_quant_filter 独立覆盖。"""
+    async def load(market, symbols, days):
+        return {symbol: [svc.quant_filter.QuantGrade("A-", 70.0, date.fromisoformat(day),
+                                                   date.fromisoformat(day)) for day in days]
+                for symbol in symbols}
+    monkeypatch.setattr(svc.quant_filter, "load_grades", load)
+
+
 def _sig(sig_type: str, time: str, price: float, strength: str = "medium") -> Signal:
     return Signal(
         type=sig_type, time=time, price=price, strength=strength,

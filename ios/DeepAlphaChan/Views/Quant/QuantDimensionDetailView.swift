@@ -24,7 +24,7 @@ struct QuantDimensionDetailView: View {
                     .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
                 }
                 Text(research.disclaimer)
-                    .font(.caption2).foregroundStyle(Theme.textSecondary)
+                    .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
                     .multilineTextAlignment(.center).frame(maxWidth: .infinity).padding(.top, 6)
             }
             .padding(.horizontal, Theme.contentHInset)
@@ -35,7 +35,7 @@ struct QuantDimensionDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $selected) { m in
             QuantMetricSheet(metric: m, research: research)
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
     }
@@ -43,17 +43,21 @@ struct QuantDimensionDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(dimension.name).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.textPrimary)
+                Text(dimension.name).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
                 Spacer()
-                QuantGradeBadge(grade: dimension.grade, size: 17)
+                QuantGradeBadge(grade: dimension.grade)
             }
-            Text(dimension.description).font(.footnote).foregroundStyle(Theme.textSecondary)
+            if let fact = dimension.keyFact {
+                Text(fact.text).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text(dimension.description).font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
             if let formula = dimension.formula {
-                VStack(alignment: .leading, spacing: 4) {
+                DisclosureGroup(L("展开评分计算")) {
                     Text(L("维度分 = 各项指标板块百分位的平均"))
-                        .font(.caption).foregroundStyle(Theme.textSecondary)
+                        .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
                     Text(formula)
-                        .font(.system(size: 14, weight: .semibold).monospacedDigit())
+                        .font(QuantTypography.emphasis.monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -61,10 +65,10 @@ struct QuantDimensionDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 10))
             } else if let note = dimension.statusNote {
-                Text(note).font(.footnote).foregroundStyle(Theme.segment)
+                Text(note).font(QuantTypography.body).foregroundStyle(Theme.segment)
             }
             if let peer = research.peerGroup {
-                Text(peer.text).font(.caption2).foregroundStyle(Theme.textSecondary)
+                Text(peer.text).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
             }
         }
         .padding(14)
@@ -72,32 +76,46 @@ struct QuantDimensionDetailView: View {
     }
 
     private func row(_ m: QuantMetric) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(m.name).font(.subheadline.weight(.medium)).foregroundStyle(Theme.textPrimary)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                Text(m.name).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
                 Spacer(minLength: 8)
-                Text(m.displayValue).font(.subheadline.monospacedDigit()).foregroundStyle(Theme.textPrimary)
+                QuantGradeBadge(grade: m.grade)
+            }
+            Text(m.interpretation?.what ?? m.description)
+                .font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .top, spacing: 24) {
+                valueColumn(L("本股"), value: m.displayValue, prominent: true)
                 if let median = m.sectorMedianDisplay {
-                    Text("/ \(median)").font(.caption.monospacedDigit()).foregroundStyle(Theme.textSecondary)
+                    valueColumn(L("板块中位"), value: median, prominent: false)
                 }
-                QuantGradeBadge(grade: m.grade, size: 11)
+                Spacer(minLength: 0)
             }
             if let p = m.percentile {
                 QuantPercentileBar(percentile: p, color: QuantGradeStyle.color(m.grade))
-                HStack {
-                    Text(L("第 %@ 百分位", String(format: "%.0f", p)))
-                    if let diff = m.diffToMedianPct {
-                        Text(L("较板块中位 %@", String(format: "%+.0f%%", diff)))
-                    }
-                    Spacer()
-                }
-                .font(.caption2).foregroundStyle(Theme.textSecondary)
-            } else if let note = m.statusNote {
-                Text(note).font(.caption2).foregroundStyle(Theme.textSecondary)
+                Text(L("第 %@ 百分位", String(format: "%.0f", p)))
+                    .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+            }
+            if let note = m.statusNote {
+                Text(note).font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            Label(L("查看计算与价值解读"), systemImage: "info.circle")
+                .font(QuantTypography.metadata).foregroundStyle(Theme.accent)
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 18)
         .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(L("查看计算与价值解读"))
+    }
+
+    private func valueColumn(_ title: String, value: String, prominent: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+            Text(value).font(prominent ? QuantTypography.value : QuantTypography.body)
+                .monospacedDigit().foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }

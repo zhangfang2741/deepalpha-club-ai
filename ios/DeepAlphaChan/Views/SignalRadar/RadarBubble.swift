@@ -51,6 +51,18 @@ struct RadarBubble: View {
                     }
             )
             .onTapGesture { onOpen() }
+            .contextMenu {
+                if let grade = signal.quantGrade, let score = signal.quantScore {
+                    Text(L("量化 %@ · 综合分 %.1f", grade, score))
+                    if let date = signal.quantAsOf {
+                        Text(L("评级日期：%@", date))
+                    }
+                    if signal.quantStatus == "stale" { Text(L("评级已过期，仅保留卖出提醒")) }
+                } else if signal.quantStatus != nil {
+                    Text(L("量化评级不可用，仅保留卖出提醒"))
+                }
+                Button(L("查看股票详情"), systemImage: "chart.xyaxis.line") { onOpen() }
+            }
             .position(x: baseX, y: baseY)
             .accessibilityElement()
             .accessibilityLabel(

@@ -11,6 +11,8 @@ struct QuantResearchTests {
     static func main() throws {
         let root = CommandLine.arguments[1]
         try decodesGoldenPayloads(root: root)
+        try decodesEducationCompatibility(root: root)
+        lifecycleStageBoundaries()
         try decodesAnalystOverview()
         layoutKeepsLabelsInside()
         gradeColors()
@@ -26,6 +28,10 @@ struct QuantResearchTests {
             precondition(r.dimensions.last?.status == "accumulating")
             precondition(r.dimensions.filter(\.isHighest).count == 1, "\(sym) 最高维度只能有一个")
             precondition(!r.dimensions[0].allMetrics.isEmpty)
+            if let stage = r.stage {
+                precondition(QuantLifecycleStage(rawValue: stage.key) != nil, "后端阶段必须对应可高亮的节点")
+            }
+            if sym == "JPM" { precondition(r.stage == nil, "金融公司不应高亮阶段") }
         }
         let nvda = try JSONDecoder().decode(QuantResearch.self, from: Data(contentsOf: URL(
             fileURLWithPath: "\(root)/tests/fixtures/quant_research/golden_NVDA.json")))
@@ -34,6 +40,25 @@ struct QuantResearchTests {
         precondition(pe.distribution?["p50"] != nil && pe.lowerBetter)
         precondition(nvda.stage?.name == "成熟期")
         precondition(nvda.peerGroup?.inUniverse == true)
+    }
+
+    static func decodesEducationCompatibility(root: String) throws {
+        let url = URL(fileURLWithPath: "\(root)/tests/fixtures/quant_research/golden_NVDA.json")
+        let research = try JSONDecoder().decode(QuantResearch.self, from: Data(contentsOf: url))
+        precondition(research.dimensions.flatMap(\.allMetrics).allSatisfy {
+            !($0.interpretation?.calculation ?? "").isEmpty
+        }, "全部指标都应有不依赖数据的通用公式")
+        let legacy = Data(#"{"what":"指标定义","role":"投资含义","threshold":"适用边界"}"#.utf8)
+        let interpretation = try JSONDecoder().decode(QuantMetricInterpretation.self, from: legacy)
+        precondition(interpretation.calculation == nil, "旧响应缺少通用公式时仍应正常解码")
+    }
+
+    static func lifecycleStageBoundaries() {
+        precondition(QuantLifecycleStage.allCases.map(\.rawValue) == ["intro", "growth", "mature", "shakeout", "decline"])
+        precondition(QuantLifecycleStage(rawValue: "unknown") == nil, "未知阶段不能错误地高亮成熟期")
+        precondition(QuantLifecycleStage.signLabel(0) == "零值 · 按非正值处理")
+        precondition(QuantLifecycleStage.signLabel(-1) == "负值 · 流出")
+        precondition(QuantLifecycleStage.signLabel(1) == "正值 · 流入")
     }
 
     static func decodesAnalystOverview() throws {

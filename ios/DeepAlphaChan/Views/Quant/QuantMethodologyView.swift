@@ -10,8 +10,8 @@ struct QuantMethodologyView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(m.sections) { s in
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(s.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.textPrimary)
-                            Text(s.body).font(.footnote).foregroundStyle(Theme.textPrimary.opacity(0.85))
+                            Text(s.title).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
+                            Text(s.body).font(QuantTypography.body).foregroundStyle(Theme.textPrimary.opacity(0.85))
                                 .lineSpacing(3).fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(14)
@@ -22,9 +22,9 @@ struct QuantMethodologyView: View {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {
                         ForEach(m.gradeBands) { b in
                             VStack(spacing: 2) {
-                                Text(b.grade).font(.system(size: 15, weight: .heavy))
+                                Text(b.grade).font(QuantTypography.value)
                                     .foregroundStyle(QuantGradeStyle.color(b.grade))
-                                Text("≥ \(Int(b.minPercentile))").font(.caption2.monospacedDigit())
+                                Text("≥ \(Int(b.minPercentile))").font(QuantTypography.metadata.monospacedDigit())
                                     .foregroundStyle(Theme.textSecondary)
                             }
                             .frame(maxWidth: .infinity).padding(.vertical, 6)
@@ -34,13 +34,13 @@ struct QuantMethodologyView: View {
                     ForEach(m.dimensions) { d in
                         QuantSectionHeader(text: d.name, trailing: L("%lld 项指标", d.metrics.count))
                         VStack(alignment: .leading, spacing: 0) {
-                            Text(d.description).font(.caption).foregroundStyle(Theme.textSecondary)
+                            Text(d.description).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
                                 .padding(.vertical, 8)
                             ForEach(d.metrics) { metric in
                                 Divider().background(Theme.border)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(metric.name).font(.footnote.weight(.medium)).foregroundStyle(Theme.textPrimary)
-                                    Text(metric.description).font(.caption2).foregroundStyle(Theme.textSecondary)
+                                    Text(metric.name).font(QuantTypography.emphasis).foregroundStyle(Theme.textPrimary)
+                                    Text(metric.description).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                                 .padding(.vertical, 7)
@@ -49,7 +49,7 @@ struct QuantMethodologyView: View {
                         .padding(.horizontal, 14)
                         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
                     }
-                    Text(m.disclaimer).font(.caption2).foregroundStyle(Theme.textSecondary)
+                    Text(m.disclaimer).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
                         .multilineTextAlignment(.center).frame(maxWidth: .infinity).padding(.top, 6)
                 }
                 .padding(.horizontal, Theme.contentHInset)

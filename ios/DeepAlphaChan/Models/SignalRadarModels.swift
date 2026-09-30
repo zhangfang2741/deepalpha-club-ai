@@ -81,6 +81,7 @@ struct SignalRadarResponse: Decodable {
 /// 单个交易日的信号快照。
 struct RadarDay: Decodable, Identifiable {
     let date: String
+    let quantFilter: RadarQuantFilter?
     let buyCount: Int
     let sellCount: Int
     let signals: [RadarSignal]
@@ -94,6 +95,7 @@ struct RadarDay: Decodable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case date
+        case quantFilter = "quant_filter"
         case buyCount = "buy_count"
         case sellCount = "sell_count"
         case signals
@@ -127,6 +129,10 @@ struct RadarSignal: Decodable, Identifiable {
     let subLevelLabel: String?
     /// 距所在展示日隔了几个交易日（周末、休市不算），后端算好下发；旧缓存或旧后端没有时为 nil，
     /// 客户端退回按自然日算（见 SignalRadarView.layoutBubbles）。
+    let quantGrade: String?
+    let quantScore: Double?
+    let quantAsOf: String?
+    let quantStatus: String?
     let ageDays: Int?
 
     var id: String { "\(symbol)-\(date)-\(signalType)" }
@@ -155,6 +161,10 @@ struct RadarSignal: Decodable, Identifiable {
         case pivotStageDepth = "pivot_stage_depth"
         case subLevelVerdict = "sub_level_verdict"
         case subLevelLabel = "sub_level_label"
+        case quantGrade = "quant_grade"
+        case quantScore = "quant_score"
+        case quantAsOf = "quant_as_of"
+        case quantStatus = "quant_status"
         case ageDays = "age_days"
     }
 }

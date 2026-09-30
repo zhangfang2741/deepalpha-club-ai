@@ -6,6 +6,7 @@ TEST_DIR=$(mktemp -d)
 trap 'rm -rf "$TEST_DIR"' EXIT
 swiftc -parse-as-library \
   "$ROOT/ios/DeepAlphaChan/Models/QuantResearchModels.swift" \
+  "$ROOT/ios/DeepAlphaChan/Models/QuantLifecycleStage.swift" \
   "$ROOT/ios/DeepAlphaChan/App/Theme.swift" \
   "$ROOT/ios/DeepAlphaChan/Views/Quant/QuantGradeStyle.swift" \
   "$ROOT/ios/DeepAlphaChan/Views/Quant/FiveDimensionChart.swift" \

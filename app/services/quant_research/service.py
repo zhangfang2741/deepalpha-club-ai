@@ -22,6 +22,7 @@ from app.services.quant_research.builder import (
 )
 from app.services.quant_research import copy as tx
 from app.services.quant_research.copy import Lang
+from app.services.quant_research.education import enrich_education
 from app.services.quant_research.fmp import FmpClient
 from app.services.quant_research.inputs import build_inputs
 from app.services.quant_research.scoring import OVERALL_KEY, OVERALL_SECTOR
@@ -47,13 +48,13 @@ async def get_quant_research(market: str, symbol: str, lang: Lang, *, redis: Red
         try:
             cached = await get_json(redis, key)
             if cached:
-                return QuantResearchOut(**cached)
+                return enrich_education(QuantResearchOut(**cached), lang)
         except Exception as e:  # noqa: BLE001
             logger.warning("quant_cache_read_failed", symbol=symbol, error=str(e))
 
     row = await repo.get_latest_result(MARKET, symbol)
     if row is not None:
-        out = QuantResearchOut(**(row.payload_zh if lang == "zh" else row.payload_en))
+        out = enrich_education(QuantResearchOut(**(row.payload_zh if lang == "zh" else row.payload_en)), lang)
         await _cache(redis, key, out, RESULT_TTL)
         return out
 

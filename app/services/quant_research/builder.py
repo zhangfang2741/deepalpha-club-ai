@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.services.quant_research import copy as tx
+from app.services.quant_research.education import metric_interpretation
 from app.services.quant_research.inputs import StockInputs, analyst_count
 from app.services.quant_research.metrics import (
     DIMENSIONS,
@@ -158,6 +159,7 @@ def _metric_out(sm: ScoredMetric, ev: Evaluation, lang: tx.Lang) -> MetricOut:
         distribution=sm.distribution,
         formula=MetricFormula(expression=expr, inputs=_formula_inputs(sm, ev, lang)) if expr else None,
         position_text=tx.position_text(sm, lang),
+        interpretation=metric_interpretation(d, lang),
     )
 
 

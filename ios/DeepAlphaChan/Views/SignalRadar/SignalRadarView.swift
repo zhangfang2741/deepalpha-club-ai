@@ -144,6 +144,9 @@ struct SignalRadarView: View {
                         .allowsHitTesting(!vm.isReloading)
                         .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
                 }
+                if let filter = vm.selectedDay?.quantFilter {
+                    RadarQuantFilterSummary(filter: filter)
+                }
                 legend
                 dateRail
                 Spacer(minLength: 0)
@@ -785,6 +788,13 @@ struct SignalRadarView: View {
                         L("成分股优先实时拉取官方/交易所数据源，取不到或数量不足时自动回退到内置清单，保证随时有得扫。"),
                     ])
                     infoSection(L("上榜排序怎么算"), rankingInfoLines)
+                    if vm.selectedDay?.quantFilter != nil {
+                        infoSection(L("量化评级筛选"), [
+                            L("美股指数仅保留量化综合等级 A− 及以上；无评级或评级超过 7 天的股票不进入气泡，自选股保留卖出提醒。"),
+                            L("先筛评级，再按技术信号和共振排序；技术分相同时优先量化分较高者。历史日期只使用当时已经生成的评级。"),
+                            L("长按气泡可查看量化等级、综合分和评级日期。"),
+                        ])
+                    }
                     Text(L("以上打分口径与详情页强弱、确认状态判定完全一致，只是气泡取的是某一次扫描的快照。"))
                         .font(.footnote)
                         .foregroundColor(Theme.textSecondary)

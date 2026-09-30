@@ -69,3 +69,22 @@ async def test_class_share_symbol_normalized(monkeypatch):
     monkeypatch.setattr(service.repo, "latest_distribution_date", none)
     await service.get_quant_research("us", "brk.b", "zh", redis=None)
     assert seen["symbol"] == "BRK-B"
+
+
+async def test_legacy_cache_receives_guidance_without_recomputation(monkeypatch):
+    payload = json.loads((FIXTURE_DIR / "golden_NVDA.json").read_text())
+    for dimension in payload["dimensions"]:
+        for group in dimension["groups"]:
+            for metric in group["metrics"]:
+                metric.pop("interpretation", None)
+
+    async def unexpected(*args, **kwargs):
+        raise AssertionError("缓存命中时不应查询数据库或重新计算")
+
+    monkeypatch.setattr(service.repo, "get_latest_result", unexpected)
+    redis = _FakeRedis()
+    redis.store["quant:us:sym:NVDA:zh"] = json.dumps(payload)
+    out = await service.get_quant_research("us", "NVDA", "zh", redis=redis)
+    metrics = [metric for dimension in out.dimensions for group in dimension.groups for metric in group.metrics]
+    assert all(metric.interpretation and metric.interpretation.role for metric in metrics)
+    assert out.overall.model_dump() == payload["overall"]

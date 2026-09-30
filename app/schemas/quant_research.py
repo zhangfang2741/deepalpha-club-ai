@@ -37,9 +37,9 @@ class Stage(BaseModel):
 
 
 class Overall(BaseModel):
-    grade: str | None
+    grade: str | None = None
     score: float | None
-    universe_percentile: float | None
+    universe_percentile: float | None = None
     dimensions_used: int
     capped: bool
     note: str | None = Field(None, description="封顶 / 分析师不足 / 维度不足的说明")
@@ -57,23 +57,32 @@ class MetricFormula(BaseModel):
     inputs: list[FormulaInput]
 
 
+class MetricInterpretation(BaseModel):
+    """指标定义、投资含义、适用边界与不依赖数据的通用公式。"""
+    what: str            # 指标含义
+    role: str = ""       # 在维度里的作用
+    threshold: str = ""  # 适用边界
+    calculation: str | None = None  # 通用公式，与真实数字代入分开
+
+
 class MetricOut(BaseModel):
     key: str
     name: str
     description: str
     direction: Literal["lower_better", "higher_better"]
-    value: float | None
+    value: float | None = None
     display_value: str
     status: str
-    status_note: str | None
+    status_note: str | None = None
     percentile: float | None
     grade: str | None
-    sector_median: float | None
-    sector_median_display: str | None
-    diff_to_median_pct: float | None
-    distribution: dict[str, float] | None
-    formula: MetricFormula | None
-    position_text: str | None
+    sector_median: float | None = None
+    sector_median_display: str | None = None
+    diff_to_median_pct: float | None = None
+    distribution: dict[str, float] | None = None
+    formula: MetricFormula | None = None
+    position_text: str | None = None
+    interpretation: MetricInterpretation | None = None
 
 
 class MetricGroup(BaseModel):

@@ -786,3 +786,97 @@
 "卖出" = "Sell";
 "强力卖出" = "Strong Sell";
 "较现价 %@" = "%@ vs price";
+
+/* 量化研究指标说明 */
+"先看生意质量，再看价格；动量与预期作为辅助观察。" = "Start with business quality and price; use momentum and forecasts as supporting context.";
+"等级反映相对排名，不代表内在价值或预期收益。" = "Grades reflect relative rankings, not intrinsic value or expected returns.";
+"本股" = "This stock";
+"查看计算与价值解读" = "Explore calculation and value perspective";
+"指标解读" = "Metric guide";
+"如何计算" = "How it is calculated";
+"如何理解" = "How to interpret it";
+"当前数据不足，暂无可代入的计算结果。" = "There is not enough data to show a calculated result.";
+"术语速查" = "Terms at a glance";
+"TTM：最近 12 个月实际值\nFWD：基于分析师预期\nNTM：未来 12 个月；本页按财年剩余时间加权\nEPS：每股收益\nEBIT：息税前利润\nEBITDA：息税折旧摊销前利润\nEV：本页按市值 + 负债 − 现金计算\n百分位：按指标优劣方向换算的相对排名，不是收益率" = "TTM: trailing 12-month actuals\nFWD: based on analyst estimates\nNTM: next 12 months, weighted by time remaining in the fiscal year\nEPS: earnings per share\nEBIT: earnings before interest and tax\nEBITDA: earnings before interest, tax, depreciation and amortization\nEV: market cap + debt − cash in this model\nPercentile: relative rank adjusted for metric direction, not an investment return";
+
+/* 指标详情标签 */
+"价值投资视角" = "Value investing perspective";
+"方向" = "Direction";
+"档位" = "Grade";
+"越低排名越靠前" = "Lower values rank higher";
+"越高排名越靠前" = "Higher values rank higher";
+"代入本股数据" = "Using this stock’s data";
+
+/* 自上而下的研究层级 */
+"研究摘要" = "Research summary";
+"强项在%@，短板在%@" = "Relative strength: %@; relative weakness: %@";
+"先看整体，再看各项表现" = "Start with the overall picture";
+"相对强项" = "Relative strength";
+"相对短板" = "Relative weakness";
+"强弱按本股可用维度的得分比较。" = "Strengths and weaknesses compare this stock’s available dimension scores.";
+"赚钱能力如何" = "How profitable is the business?";
+"生意是否在成长" = "Is the business growing?";
+"价格相对基本面如何" = "How is it priced against fundamentals?";
+"市场近期如何定价" = "How has the market priced it recently?";
+"盈利预期有何变化" = "How have earnings expectations changed?";
+"判断依据" = "What supports the assessment";
+"先看生意与价格，再看市场变化；点开查看指标。" = "Start with the business and price, then market changes. Tap to explore metrics.";
+"生意与价格" = "Business and price";
+"市场与预期" = "Market and expectations";
+"五维图对比" = "Compare the five dimensions";
+"数据与方法" = "Data and methodology";
+"展开评分计算" = "How the score is calculated";
+
+/* 企业现金流阶段与判定依据 */
+"初创期" = "Introduction";
+"成长期" = "Growth";
+"成熟期" = "Mature";
+"调整期" = "Shake-out";
+"收缩期" = "Contraction";
+"初创" = "Intro";
+"成长" = "Growth";
+"成熟" = "Mature";
+"调整" = "Shake-out";
+"收缩" = "Contraction";
+"经营与投资现金流均为净流出或零，同时筹资带来现金流入。本页将这种现金流结构标为初创期，不代表公司一定刚成立。" = "Operating and investing cash flows are non-positive, while financing brings cash in. This model calls that pattern introduction; it does not necessarily mean the company is newly founded.";
+"经营活动产生现金，投资现金流为净流出或零，同时筹资带来现金流入。本页将这种结构标为成长期。" = "Operating cash flow is positive, investing cash flow is non-positive, and financing brings cash in. This model labels that pattern growth.";
+"经营活动产生现金，投资与筹资活动均为净流出或零。本页将这种结构标为成熟期；筹资流出可能涉及还债、分红或回购，具体原因仍需查看财报。" = "Operations generate cash, while investing and financing cash flows are negative or zero. This model labels that pattern mature. Financing outflows may involve debt repayments, dividends or repurchases; consult the financial statements for the actual causes.";
+"现金流组合未落入初创、成长、成熟或收缩规则，本页归为调整期。它不一定意味着经营恶化，也不能据此认定正在进入收缩。" = "Cash-flow patterns outside the introduction, growth, mature and contraction rules are classified as shake-out. This does not necessarily indicate deterioration or a transition into contraction.";
+"经营活动未产生正向净现金流，而投资活动带来现金流入。本页将这种结构标为收缩期；是否涉及资产处置等情况，需要进一步查看财报。" = "Operating cash flow is non-positive while investing brings cash in. This model labels that pattern contraction. Review the financial statements to determine whether asset disposals or other events are involved.";
+"经营 ≤ 0 · 投资 ≤ 0 · 筹资 > 0" = "Operating ≤ 0 · Investing ≤ 0 · Financing > 0";
+"经营 > 0 · 投资 ≤ 0 · 筹资 > 0" = "Operating > 0 · Investing ≤ 0 · Financing > 0";
+"经营 > 0 · 投资 ≤ 0 · 筹资 ≤ 0" = "Operating > 0 · Investing ≤ 0 · Financing ≤ 0";
+"经营 > 0、投资 > 0（筹资不限）；或三项均 ≤ 0。" = "Operating > 0 and investing > 0 (any financing); or all three ≤ 0.";
+"经营 ≤ 0 · 投资 > 0 · 筹资不限" = "Operating ≤ 0 · Investing > 0 · Any financing";
+"正值 · 流入" = "Positive · Inflow";
+"负值 · 流出" = "Negative · Outflow";
+"零值 · 按非正值处理" = "Zero · Treated as non-positive";
+"企业阶段" = "Company stage";
+"暂无阶段判定" = "Stage unavailable";
+"金融公司的现金流结构不同，本模型不判定阶段。" = "Financial companies have different cash-flow structures and are excluded from this stage model.";
+"暂时没有可用的阶段结果，仍可点开了解各阶段。" = "No stage result is available. Tap any stage to learn about it.";
+"点阶段看释义，点当前阶段看判定依据。" = "Tap any stage for its meaning, or the current stage for supporting data.";
+"当前阶段" = "Current stage";
+"查看阶段释义与判定依据" = "View the stage definition and supporting data";
+"查看阶段释义" = "View the stage definition";
+"阶段释义" = "Stage definition";
+"判定规则" = "Classification rule";
+"使用最近 12 个月的现金流；零值与负值归为同一侧。" = "Uses trailing 12-month cash flows; zero is grouped with negative values.";
+"为什么判为%@？" = "Why is this classified as %@?";
+"三项实际现金流符合上面的阶段组合。" = "The three actual cash flows match the pattern above.";
+"财报参考期：%@" = "Financial reporting reference: %@";
+"这是现金流结构的阶段定位，不是完成进度。企业可能跨阶段变化；阶段标注不影响量化等级。" = "This locates the cash-flow pattern, not progress toward completion. Companies can move between stages; stage labels do not affect quant grades.";
+
+"量化评级筛选" = "Quant grade filter";
+"美股指数仅保留量化综合等级 A− 及以上；无评级或评级超过 7 天的股票不进入气泡，自选股保留卖出提醒。" = "US index radars keep composite grades A− and above. Unrated stocks and ratings older than 7 days are excluded. Watchlist sell alerts are retained.";
+"先筛评级，再按技术信号和共振排序；技术分相同时优先量化分较高者。历史日期只使用当时已经生成的评级。" = "Grades are filtered before technical and resonance ranking. Quant scores break ties. Historical dates use only ratings already available then.";
+"长按气泡可查看量化等级、综合分和评级日期。" = "Touch and hold a bubble to see its quant grade, score and rating date.";
+"量化 %@ · 综合分 %.1f" = "Quant %@ · Score %.1f";
+"评级日期：%@" = "Rating date: %@";
+"评级已过期，仅保留卖出提醒" = "Rating expired; sell alert retained";
+"量化评级不可用，仅保留卖出提醒" = "Quant rating unavailable; sell alert retained";
+"查看股票详情" = "View stock details";
+"量化评级暂不可用，请稍后刷新" = "Quant ratings unavailable. Please refresh later.";
+"量化 ≥ %@ · 符合 %lld 只 · 低于门槛 %lld 只" = "Quant ≥ %@ · %lld eligible · %lld below threshold";
+"评级缺失 %lld 只 · 已过期 %lld 只" = "%lld unrated · %lld expired";
+"自选股卖出提醒保留" = "Watchlist sell alerts retained";

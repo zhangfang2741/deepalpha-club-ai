@@ -48,6 +48,7 @@ from app.services.chan.signal_policy import DEFAULT_MODE, get_policy
 from app.services.chan.sub_level_service import current_sub_level
 from app.services.chan.bias import UNCONFIRMED_DISCOUNT
 from app.services.signal_radar.constituents import resolve_constituents
+from app.services.signal_radar import quant_filter
 from app.services.signal_radar.universe import MarketUniverse, get_universe, list_universes
 from app.services.skills.kline import LIVE_MAX_AGE, fetch_kline
 
@@ -98,7 +99,7 @@ _CACHE_PREFIX = "signal_radar"
 # 筛选规则（不改变详情口径），开关或规则一变就升：shape5 = 恢复 78bee01 之前的筛选（宽松口径
 # 最后一笔上的未确认信号也上榜、收盘价跌破才失效、最新日「待确认」候选补位），形态过滤暂停。
 def _mode_ns(mode: str) -> str:
-    return f"{get_policy(mode).version}:shape5"
+    return f"{get_policy(mode).version}:shape5:quant1"
 
 
 # czsc 形态过滤（chan/shape_filters：同向假突破 / 窄幅震荡 / 低波动）暂停应用，代码与测试保留。
@@ -303,17 +304,19 @@ def rerank_with_resonance(day: RadarDayOut, top_n: int) -> RadarDayOut:
     """最新一天：候选池（已补算次级别）按综合分 + 共振加分重排，取前 top_n。"""
     day_date = date.fromisoformat(day.date)
 
-    def score_of(s: RadarSignalOut) -> float:
+    def score_of(s: RadarSignalOut) -> tuple[float, float]:
         # 优先用构建时算好的交易日龄；旧缓存没有该字段时退回自然日
         age = s.age_days if s.age_days is not None else (day_date - date.fromisoformat(s.date)).days
         resonance = is_aligned_resonance(s.side, s.sub_level_verdict)
-        return radar_score(_signal_level(s.signal_type), s.strength, age, resonance,
-                           confirmed=s.confirmed)
+        technical = radar_score(_signal_level(s.signal_type), s.strength, age, resonance,
+                                confirmed=s.confirmed)
+        quant = s.quant_score if s.quant_status == "eligible" and s.quant_score is not None else -1.0
+        return technical, quant
 
     items = _select_top_n(list(day.signals), top_n, level_of=lambda s: _signal_level(s.signal_type),
                           score_of=score_of)
-    return RadarDayOut(date=day.date, buy_count=sum(s.side == "buy" for s in items),
-                       sell_count=sum(s.side == "sell" for s in items), signals=items)
+    return day.model_copy(update={"buy_count": sum(s.side == "buy" for s in items),
+                                  "sell_count": sum(s.side == "sell" for s in items), "signals": items})
 
 def _invalidated_on(is_buy: bool, price: float, detected: str, bars: list[dict] | None) -> str | None:
     """亮起之后首个收盘价跌破买点价位（卖点：涨破）的日期；没有则 None。
@@ -536,7 +539,6 @@ async def attach_sub_levels(
         sig.sub_level_label = sub.verdict_label
 
     await asyncio.gather(*[_one(sig) for sig in day.signals])
-
 
 # 各市场开盘时段（UTC，工作日），末端多留半小时拿到收盘那根 30 分钟K线。
 # 美股按夏令时/冬令时取并集（13:30–21:00 UTC）；不识别节假日——休市日刷新只是空转。
@@ -907,32 +909,40 @@ async def _assemble(state: _ScanState, *, redis: Redis) -> SignalRadarResponse:
         universe_size=len(state.constituents),
         as_of=state.end_date,
         top_n=top_n,
-        days=build_days(histories, trading_days, top_n=top_n, max_age_days=state.max_age_days,
+        days=build_days(histories, trading_days, top_n=max(top_n, len(state.constituents)), max_age_days=state.max_age_days,
                         calendar=calendar),
         status="ready",
         computed_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
         signal_mode=state.mode,
         pending_symbols=0 if state.is_watchlist else len(state.pending),
     )
-    if resp.days:
-        # 次级别结论描述的是「现在」，只对最新交易日：先取更大的候选池补算次级别，
-        # 再按综合分 + 共振加分重排取前 top_n（共振参与排名）
-        pool = build_days(histories, trading_days[:1], top_n=max(top_n, _RESONANCE_POOL),
-                          max_age_days=state.max_age_days, calendar=calendar)[0]
-        await attach_sub_levels(pool, end_date=state.end_date, user_id=state.user_id, redis=redis,
-                                mode=state.mode)
-        resp.days[0] = rerank_with_resonance(pool, top_n)
-        resp.sub_level_as_of = datetime.now(UTC).replace(microsecond=0).isoformat()
-        # 「待确认」候选：最后一笔还在走、不算买卖点，只给最新一天补足剩余名额
-        latest = resp.days[0]
-        latest.candidates = pick_candidates(
-            candidates, latest.date, calendar, taken={x.symbol for x in latest.signals},
-            slots=top_n - len(latest.signals), max_age_days=state.max_age_days)
+    symbols = [symbol for symbol, _ in state.constituents]
+    grades = await quant_filter.load_grades(state.market, symbols, trading_days) if state.market == "us" else {}
+    for index, day in enumerate(resp.days):
+        if index == 0:
+            day.candidates = pick_candidates(
+                candidates, day.date, calendar, taken={x.symbol for x in day.signals},
+                slots=len(state.constituents), max_age_days=state.max_age_days)
+        if state.market == "us":
+            day = quant_filter.apply_filter(day, grades, symbols, preserve_sells=state.is_watchlist)
+        if index == 0:
+            # 评级过滤完成后才截取共振池，低评级股票不占候选名额。
+            day = rerank_with_resonance(day, max(top_n, _RESONANCE_POOL))
+            await attach_sub_levels(day, end_date=state.end_date, user_id=state.user_id, redis=redis,
+                                    mode=state.mode)
+            resp.sub_level_as_of = datetime.now(UTC).replace(microsecond=0).isoformat()
+        day = rerank_with_resonance(day, top_n)
+        if index == 0:
+            candidate_day = RadarDayOut(date=day.date, buy_count=0, sell_count=0, signals=day.candidates)
+            day.candidates = rerank_with_resonance(candidate_day, max(0, top_n - len(day.signals))).signals
+        resp.days[index] = day
     return resp
 
 
 async def _publish(state: _ScanState, resp: SignalRadarResponse, *, redis: Redis) -> SignalRadarResponse:
     """写缓存并返回应当交给调用方的快照（残缺过多且有旧缓存时返回旧缓存）。"""
+    if any(day.quant_filter and day.quant_filter.status == "unavailable" for day in resp.days):
+        return resp
     failure_counts = Counter(state.failures.values())
     failed_symbols = len(state.failures)
     failure_rate = failed_symbols / len(state.constituents) if state.constituents else 0.0
@@ -1064,7 +1074,7 @@ async def _backfill(state: _ScanState, generation: int, *, redis: Redis) -> None
 async def _rebuild_if_current(state: _ScanState, generation: int, *, redis: Redis) -> None:
     """按 state 现有结果重新组装，写入前确认仍是最新一轮（指数快照 / 示例日各走各的规则）。"""
     if state.kind == "demo":
-        resp_demo = _assemble_demo(state)
+        resp_demo = await _assemble_demo(state)
         if not await _is_superseded(redis, state.gen_key, generation):
             await _publish_demo(state, resp_demo, redis=redis)
         return
@@ -1270,12 +1280,12 @@ def resolve_demo_target(nominal: str, per_symbol_dates: list[list[str]]) -> tupl
     return calendar[0], calendar
 
 
-def _assemble_demo(state: _ScanState) -> SignalRadarResponse:
+async def _assemble_demo(state: _ScanState) -> SignalRadarResponse:
     """示例日快照：用今天的结构回看名义日期（对齐到之前最近交易日）那一天在场的信号。"""
     histories = [h for h, _, _ in state.results.values() if h]
     target, calendar = resolve_demo_target(
         state.demo_nominal, [dates for _, _, dates in state.results.values() if dates])
-    return SignalRadarResponse(
+    resp = SignalRadarResponse(
         market=state.market,
         universe=state.universe.key,
         universes=_universes_out(state.market),
@@ -1283,16 +1293,25 @@ def _assemble_demo(state: _ScanState) -> SignalRadarResponse:
         universe_size=len(state.constituents),
         as_of=target,
         top_n=DEFAULT_TOP_N,
-        days=build_days(histories, [target], top_n=DEFAULT_TOP_N, calendar=calendar),
+        days=build_days(histories, [target], top_n=max(DEFAULT_TOP_N, len(state.constituents)), calendar=calendar),
         status="ready",
         computed_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
         signal_mode=state.mode,
         pending_symbols=len(state.pending),
     )
 
+    symbols = [symbol for symbol, _ in state.constituents]
+    if state.market == "us":
+        grades = await quant_filter.load_grades(state.market, symbols, [target])
+        resp.days[0] = quant_filter.apply_filter(resp.days[0], grades, symbols)
+    resp.days[0] = rerank_with_resonance(resp.days[0], DEFAULT_TOP_N)
+    return resp
+
 
 async def _publish_demo(state: _ScanState, resp: SignalRadarResponse, *, redis: Redis) -> None:
     """写示例日缓存（所有用户共享）：残缺过多不写；还有待补的用短 TTL，补齐后恢复完整 TTL。"""
+    if any(day.quant_filter and day.quant_filter.status == "unavailable" for day in resp.days):
+        return
     failure_counts = Counter(state.failures.values())
     failure_rate = len(state.failures) / len(state.constituents) if state.constituents else 0.0
     has_signals = any(h for h, _, _ in state.results.values())
@@ -1355,7 +1374,7 @@ async def compute_demo_day(
                 await asyncio.sleep(_RATE_LIMIT_BACKOFF_SECONDS)
 
     await asyncio.gather(*[_one(sym, name) for sym, name in constituents])
-    resp = _assemble_demo(state)
+    resp = await _assemble_demo(state)
     await _publish_demo(state, resp, redis=redis)
     await _after_scan(state, generation, redis=redis)
     return resp

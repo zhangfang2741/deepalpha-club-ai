@@ -126,7 +126,7 @@ METRICS: dict[str, MetricDef] = {m.key: m for m in [
     _d("roic", _P, "ROIC", "ROIC", _HI, "ROIC", "Return on invested capital",
        "税后 EBIT 相对投入资本（负债 + 股东权益 − 现金）的比例", "After-tax EBIT over debt + equity − cash", "pct"),
     _d("asset_turn", _P, "资产周转率", "Asset turnover", _HI, "资产周转率", "Asset turnover",
-       "最近 12 个月营收相对总资产的倍数", "Trailing revenue over total assets"),
+       "最近 12 个月营收相对总资产的倍数", "Trailing revenue over total assets", "pct"),
     # 动量
     _d("r3m", _M, "3 月", "3M", _HI, "3 个月涨幅", "3M price change",
        "最近 3 个月（63 个交易日）的前复权涨跌幅", "Dividend-adjusted price change over 63 trading days", "pct"),

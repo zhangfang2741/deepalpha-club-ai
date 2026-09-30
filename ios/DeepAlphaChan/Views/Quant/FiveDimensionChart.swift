@@ -134,7 +134,7 @@ struct FiveDimensionChart: View {
                         VStack(alignment: label.alignment, spacing: 0) {
                             Text(d.name).foregroundStyle(Theme.textPrimary)
                             Text(d.grade ?? L("暂无"))
-                                .fontWeight(.heavy)
+                                .fontWeight(.semibold)
                                 .foregroundStyle(QuantGradeStyle.color(d.grade))
                         }
                         .font(.system(size: 12.5))

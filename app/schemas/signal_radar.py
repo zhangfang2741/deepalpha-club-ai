@@ -33,12 +33,30 @@ class RadarSignalOut(BaseModel):
     )
     sub_level_label: str | None = Field(default=None, description="次级别结论文案，如 共振买点")
     # 距所在展示日隔了几个交易日（周末、休市不算）。旧缓存里没有时为 None，客户端退回按自然日算。
+    quant_grade: str | None = None
+    quant_score: float | None = None
+    quant_as_of: str | None = None
+    quant_status: str | None = Field(default=None, description="eligible / below_threshold / missing / stale")
     age_days: int | None = Field(default=None, description="距展示日的交易日数，当天为 0")
+
+
+class RadarQuantFilterOut(BaseModel):
+    """统计覆盖所选股票池，数量不是气泡数。"""
+
+    min_grade: str = "A-"
+    status: str = "ready"
+    eligible: int = 0
+    below_threshold: int = 0
+    missing: int = 0
+    stale: int = 0
+    max_age_days: int = 7
+    preserve_sells: bool = False
 
 
 class RadarDayOut(BaseModel):
     """某一交易日的当日信号快照（前 N 只）。"""
 
+    quant_filter: RadarQuantFilterOut | None = None
     date: str = Field(description="交易日 YYYY-MM-DD")
     buy_count: int = Field(description="当日买点数量")
     sell_count: int = Field(description="当日卖点数量")
