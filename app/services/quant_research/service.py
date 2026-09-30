@@ -24,7 +24,7 @@ from app.services.quant_research.copy import Lang
 from app.services.quant_research.fmp import FmpClient
 from app.services.quant_research.inputs import build_inputs
 from app.services.quant_research.scoring import OVERALL_KEY, OVERALL_SECTOR
-from app.services.quant_research.universe import FMP_SECTOR_TO_GICS
+from app.services.quant_research.universe import FMP_SECTOR_TO_GICS, normalize_us_symbol
 
 RESULT_TTL = 6 * 3600          # 批量跑完会主动清缓存
 ON_DEMAND_TTL = 86400
@@ -39,6 +39,7 @@ async def get_quant_research(market: str, symbol: str, lang: Lang, *, redis: Red
     market, symbol = market.lower(), symbol.upper()
     if market != MARKET:
         return unsupported(market, symbol, lang)
+    symbol = normalize_us_symbol(symbol)
 
     key = _cache_key(symbol, lang)
     if redis is not None:

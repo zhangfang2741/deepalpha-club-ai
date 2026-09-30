@@ -37,7 +37,7 @@ from app.services.quant_research.universe import fetch_sp1500
 
 MARKET = "us"
 LATEST_KEY = "quant:us:latest_as_of"
-LAST_RUN_KEY = "quant:us:last_batch_date"
+EARNINGS_WINDOW_DAYS = 30
 KEY_TTL = 3 * 86400
 REFRESH_AFTER_DAYS = 100
 HISTORY_DAYS = 120
@@ -61,17 +61,31 @@ def estimate_rows(market: str, symbol: str, snapshot_date: date, estimates: list
     return rows
 
 
-def needs_refresh(snapshot, reported: set[str], symbol: str, as_of: date) -> bool:
-    """是否需要重拉报表：无快照、窗口内披露了新财报、或快照超过 100 天。"""
-    if snapshot is None or symbol in reported:
+def needs_refresh(snapshot, reported: dict[str, str], symbol: str, as_of: date) -> bool:
+    """是否需要重拉报表：无快照、快照超过 100 天，或近期发布了财报而库里还是旧季度。
+
+    FMP 的报表常比财报发布晚几天才更新：只要库里最新报表的披露日早于这次财报发布日，
+    每天都重拉，直到拿到新季度（窗口 30 天，见 EARNINGS_WINDOW_DAYS）。
+    """
+    if snapshot is None:
         return True
     fetched = snapshot.fetched_at.date() if snapshot.fetched_at else None
-    return fetched is None or (as_of - fetched).days > REFRESH_AFTER_DAYS
+    if fetched is None or (as_of - fetched).days > REFRESH_AFTER_DAYS:
+        return True
+    reported_on = reported.get(symbol)
+    return reported_on is not None and (snapshot.filing_date or "") < reported_on
 
 
-async def _reported_since(fmp: FmpClient, start: date, end: date) -> set[str]:
-    cal = await fmp.earnings_calendar(start, end) or []
-    return {str(r.get("symbol")) for r in cal if isinstance(r, dict) and r.get("epsActual") is not None}
+async def _recent_reports(fmp: FmpClient, as_of: date) -> dict[str, str]:
+    """最近 EARNINGS_WINDOW_DAYS 天内发布过财报的公司 → 最近一次发布日。"""
+    cal = await fmp.earnings_calendar(as_of - timedelta(days=EARNINGS_WINDOW_DAYS), as_of) or []
+    out: dict[str, str] = {}
+    for r in cal:
+        if isinstance(r, dict) and r.get("epsActual") is not None and r.get("symbol") and r.get("date"):
+            sym, d = str(r["symbol"]), str(r["date"])[:10]
+            if d > out.get(sym, ""):
+                out[sym] = d
+    return out
 
 
 async def _collect_one(fmp: FmpClient, symbol: str, sector: str, name: str, as_of: date, snapshot,
@@ -118,11 +132,7 @@ async def run_us_batch(as_of: date, *, redis: Redis | None, client: httpx.AsyncC
         return {"ok": False}
 
     snapshots = await repo.get_fundamentals(MARKET, symbols)
-    last_run = None
-    if redis is not None:
-        raw = await redis.get(LAST_RUN_KEY)
-        last_run = date.fromisoformat(raw.decode() if isinstance(raw, bytes) else raw) if raw else None
-    reported = await _reported_since(fmp, (last_run or as_of - timedelta(days=7)) - timedelta(days=1), as_of)
+    reported = await _recent_reports(fmp, as_of)
 
     sem = asyncio.Semaphore(_CONCURRENCY)
     inputs: dict[str, StockInputs] = {}
@@ -176,11 +186,13 @@ async def run_us_batch(as_of: date, *, redis: Redis | None, client: httpx.AsyncC
     await repo.upsert_results(rows)
 
     if redis is not None:
-        await redis.set(LATEST_KEY, as_of.isoformat(), ex=KEY_TTL)
-        await redis.set(LAST_RUN_KEY, as_of.isoformat(), ex=30 * 86400)
-        stale = await scan_keys(redis, "quant:us:sym:*")  # SCAN，不用 KEYS 扫全库
-        if stale:
-            await redis.delete(*stale)
+        try:
+            await redis.set(LATEST_KEY, as_of.isoformat(), ex=KEY_TTL)
+            stale = await scan_keys(redis, "quant:us:sym:*")  # SCAN，不用 KEYS 扫全库
+            if stale:
+                await redis.delete(*stale)
+        except Exception as e:  # noqa: BLE001 结果已落库，缓存清理失败只会让旧缓存多活到 TTL
+            logger.warning("quant_batch_cache_invalidate_failed", error=str(e))
     summary = {"ok": bool(evals), "as_of": as_of.isoformat(), "universe": len(symbols), "computed": len(evals),
                "estimates_inserted": inserted, "refreshed": sum(1 for s in symbols if needs_refresh(
                    snapshots.get(s), reported, s, as_of)),

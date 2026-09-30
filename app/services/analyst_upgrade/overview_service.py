@@ -13,6 +13,7 @@ from app.core.logging import logger
 from app.schemas.analyst_upgrade import AnalystOverviewOut
 from app.services.analyst_upgrade.overview import Lang, build_overview
 from app.services.quant_research.fmp import FmpClient
+from app.services.quant_research.universe import normalize_us_symbol
 
 CACHE_TTL = 6 * 3600
 
@@ -24,7 +25,7 @@ def cache_key(symbol: str, lang: str) -> str:
 
 async def get_analyst_overview(symbol: str, lang: Lang, *, redis: Redis | None) -> AnalystOverviewOut:
     """缓存 → 并发拉取 → 整理。"""
-    symbol = symbol.upper()
+    symbol = normalize_us_symbol(symbol)
     key = cache_key(symbol, lang)
     if redis is not None:
         try:

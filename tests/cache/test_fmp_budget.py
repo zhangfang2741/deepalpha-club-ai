@@ -111,3 +111,29 @@ async def test_local_fallback_without_redis():
     await report_429(None, "batch", now=c.now)
     await acquire(None, "batch", now=c.now, sleep=c.sleep, limit_total=10, limit_batch=2)
     assert c.slept[-1] == pytest.approx(fmp_budget.settings.FMP_BATCH_BREAKER_SECONDS)
+
+
+class _BrokenRedis:
+    async def incr(self, key):
+        raise ConnectionError("upstash down")
+
+    async def expire(self, key, ttl):
+        raise ConnectionError("upstash down")
+
+    async def ttl(self, key):
+        raise ConnectionError("upstash down")
+
+    async def set(self, key, value, ex=None, nx=False):
+        raise ConnectionError("upstash down")
+
+
+async def test_redis_errors_fall_back_to_local_counting():
+    r, c = _BrokenRedis(), _Clock()
+    for _ in range(2):
+        await acquire(r, "batch", now=c.now, sleep=c.sleep, limit_total=10, limit_batch=2)
+    assert c.slept == []
+    await acquire(r, "batch", now=c.now, sleep=c.sleep, limit_total=10, limit_batch=2)
+    assert len(c.slept) == 1                     # 仍按进程内计数限流
+    await report_429(r, "batch", now=c.now)      # 不抛异常
+    await acquire(r, "batch", now=c.now, sleep=c.sleep, limit_total=10, limit_batch=2)
+    assert c.slept[-1] == pytest.approx(fmp_budget.settings.FMP_BATCH_BREAKER_SECONDS)
