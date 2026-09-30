@@ -43,7 +43,9 @@ class RadarSignalOut(BaseModel):
 class RadarQuantFilterOut(BaseModel):
     """统计覆盖所选股票池，数量不是气泡数。"""
 
-    min_grade: str = "A-"
+    mode: str = "weighted"
+    weight: float = 0.2
+    min_grade: str | None = None
     status: str = "ready"
     eligible: int = 0
     below_threshold: int = 0

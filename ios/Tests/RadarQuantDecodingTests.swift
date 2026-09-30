@@ -34,6 +34,15 @@ struct RadarQuantDecodingTests {
         precondition(current.signals[0].quantGrade == "A-")
         precondition(current.signals[0].quantScore == 67.7)
         precondition(current.signals[0].quantAsOf == "2026-09-29")
+        payload["quant_filter"] = [
+            "mode": "weighted", "weight": 0.2, "min_grade": NSNull(), "status": "ready",
+            "eligible": 80, "below_threshold": 0, "missing": 15, "stale": 5,
+            "max_age_days": 7, "preserve_sells": false,
+        ]
+        let weighted = try decoder.decode(RadarDay.self, from: JSONSerialization.data(withJSONObject: payload))
+        precondition(weighted.quantFilter?.mode == "weighted")
+        precondition(weighted.quantFilter?.weight == 0.2)
+        precondition(weighted.quantFilter?.minGrade == nil)
         print("雷达量化评级解码测试通过")
     }
 }

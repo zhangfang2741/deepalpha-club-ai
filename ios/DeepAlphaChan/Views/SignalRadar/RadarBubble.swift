@@ -71,9 +71,9 @@ struct RadarBubble: View {
                     if let date = signal.quantAsOf {
                         Text(L("评级日期：%@", date))
                     }
-                    if signal.quantStatus == "stale" { Text(L("评级已过期，仅保留卖出提醒")) }
+                    if signal.quantStatus == "stale" { Text(L("评级已过期，按中性权重排序")) }
                 } else if signal.quantStatus != nil {
-                    Text(L("量化评级不可用，仅保留卖出提醒"))
+                    Text(L("评级不可用，按中性权重排序"))
                 }
                 Button(L("查看股票详情"), systemImage: "chart.xyaxis.line") { onOpen() }
             }

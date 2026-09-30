@@ -99,7 +99,7 @@ _CACHE_PREFIX = "signal_radar"
 # 筛选规则（不改变详情口径），开关或规则一变就升：shape5 = 恢复 78bee01 之前的筛选（宽松口径
 # 最后一笔上的未确认信号也上榜、收盘价跌破才失效、最新日「待确认」候选补位），形态过滤暂停。
 def _mode_ns(mode: str) -> str:
-    return f"{get_policy(mode).version}:shape5:quant2"
+    return f"{get_policy(mode).version}:shape5:quant_weight1"
 
 
 # czsc 形态过滤（chan/shape_filters：同向假突破 / 窄幅震荡 / 低波动）暂停应用，代码与测试保留。
@@ -310,8 +310,12 @@ def rerank_with_resonance(day: RadarDayOut, top_n: int) -> RadarDayOut:
         resonance = is_aligned_resonance(s.side, s.sub_level_verdict)
         technical = radar_score(_signal_level(s.signal_type), s.strength, age, resonance,
                                 confirmed=s.confirmed)
-        quant = s.quant_score if s.quant_status == "eligible" and s.quant_score is not None else -1.0
-        return technical, quant
+        if s.quant_status is None:
+            return technical, 0.0
+        # 技术分含最多 0.15 共振加分，先归一化，再按 80% 技术 / 20% 等级加权。
+        score = ((1 - quant_filter.QUANT_WEIGHT) * technical / (1 + _RESONANCE_BONUS)
+                 + quant_filter.QUANT_WEIGHT * quant_filter.rating_factor(s))
+        return score, technical
 
     items = _select_top_n(list(day.signals), top_n, level_of=lambda s: _signal_level(s.signal_type),
                           score_of=score_of)
@@ -731,10 +735,15 @@ async def _read_cache(
         return None
 
 
+def _quant_unavailable(data: SignalRadarResponse) -> bool:
+    """评级不可用时仍展示有效技术结果，并缩短快照有效期以便重试。"""
+    return any(day.quant_filter is not None and day.quant_filter.status == "unavailable" for day in data.days)
+
+
 async def _write_cache(redis: Redis, data: SignalRadarResponse) -> None:
     try:
         await redis.set(
-            _cache_key(data.market, data.universe, data.signal_mode), data.model_dump_json(), ex=_cache_ttl()
+            _cache_key(data.market, data.universe, data.signal_mode), data.model_dump_json(), ex=300 if _quant_unavailable(data) else _cache_ttl()
         )
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_cache_write_error", market=data.market, error=str(e))
@@ -849,11 +858,6 @@ class _ScanState:
     demo_nominal: str = ""
     # symbol → (信号历史, 待确认候选, 最近K线日期)；只存拉数成功的
     results: dict[str, tuple[list[RawSignal], list[RawSignal], list[str]]] = field(default_factory=dict)
-    # 指数先评级筛选；固定本轮日期和评级快照，组装/补算复用，避免中途口径变化。
-    scan_calendar: list[str] | None = None
-    scan_count: int | None = None
-    quant_loaded: bool = False
-    quant_grades: dict[str, list[quant_filter.QuantGrade]] | None = None
     # symbol → 失败分类；补算成功后移除
     failures: dict[str, str] = field(default_factory=dict)
 
@@ -866,36 +870,6 @@ class _ScanState:
     def pending(self) -> list[str]:
         """还能补算的失败成分股。"""
         return [sym for sym, f in self.failures.items() if f in _RETRYABLE_FAILURES]
-
-
-async def _prefilter_constituents(state: _ScanState, *, redis: Redis) -> list[tuple[str, str]]:
-    """指数先筛评级再扫描；历史窗口取各展示日合格股票的并集，每只仅算一次。"""
-    if state.market != "us" or state.is_watchlist:
-        return state.constituents
-    end = state.demo_nominal if state.kind == "demo" else state.end_date
-    limit = state.days + state.max_age_days + 1
-    cutoff = (date.fromisoformat(end) - timedelta(days=30)).isoformat() if state.kind == "demo" else state.cutoff
-    try:
-        bars = await fetch_kline(user_id=state.user_id, symbol=state.universe.etf_symbol,
-                                 start_date=cutoff, end_date=end, freq="daily", redis=redis)
-    except Exception:
-        logger.exception("signal_radar_prefilter_calendar_failed", market=state.market)
-        bars = []
-    state.scan_calendar = trading_days_from_constituents(
-        [], etf_dates=[bar["time"] for bar in bars], cutoff=cutoff, end_date=end, limit=limit,
-    ) or _fallback_trading_days(end_date=end, limit=limit)
-    days = state.scan_calendar[:state.days]
-    symbols = [symbol for symbol, _ in state.constituents]
-    state.quant_grades = await quant_filter.load_grades(state.market, symbols, days)
-    state.quant_loaded = True
-    targets = [date.fromisoformat(day) for day in days]
-    selected = [(symbol, name) for symbol, name in state.constituents
-                if any(quant_filter.grade_on(state.quant_grades or {}, symbol, day)[1] == "eligible"
-                       for day in targets)]
-    state.scan_count = len(selected)
-    logger.info("signal_radar_universe_prefiltered", universe=state.universe.key,
-                total=len(state.constituents), scanned=len(selected), days=len(days))
-    return selected
 
 
 async def _scan_into(state: _ScanState, symbol: str, name: str, *, redis: Redis) -> str | None:
@@ -919,23 +893,20 @@ async def _assemble(state: _ScanState, *, redis: Redis) -> SignalRadarResponse:
     candidates = [c for _, cands, _ in state.results.values() for c in cands]
     # 展示的交易日历：以成分股日线为准（>=30% 成分股有K线的日期），并入参考 ETF 的日期；
     # 都拿不到才退化成「跳过周末」的近似日历。
-    if state.scan_calendar is not None:
-        calendar = state.scan_calendar
-    else:
-        try:
-            etf_bars = await fetch_kline(
-                user_id=state.user_id, symbol=state.universe.etf_symbol, start_date=state.cutoff,
-                end_date=state.end_date, freq="daily", redis=redis,
-            )
-        except Exception as e:  # noqa: BLE001
-            logger.warning("signal_radar_etf_kline_failed", market=state.market, error=str(e))
-            etf_bars = []
-        # 日历多取一段（最老展示日之前再往前 max_age_days 天），用来按交易日数信号年龄
-        limit = state.days + state.max_age_days + 1
-        calendar = trading_days_from_constituents(
-            [dates for _, _, dates in state.results.values() if dates],
-            etf_dates=[b["time"] for b in etf_bars], cutoff=state.cutoff, end_date=state.end_date, limit=limit,
-        ) or _fallback_trading_days(end_date=state.end_date, limit=limit)
+    try:
+        etf_bars = await fetch_kline(
+            user_id=state.user_id, symbol=state.universe.etf_symbol, start_date=state.cutoff,
+            end_date=state.end_date, freq="daily", redis=redis,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_etf_kline_failed", market=state.market, error=str(e))
+        etf_bars = []
+    # 日历多取一段（最老展示日之前再往前 max_age_days 天），用来按交易日数信号年龄
+    limit = state.days + state.max_age_days + 1
+    calendar = trading_days_from_constituents(
+        [dates for _, _, dates in state.results.values() if dates],
+        etf_dates=[b["time"] for b in etf_bars], cutoff=state.cutoff, end_date=state.end_date, limit=limit,
+    ) or _fallback_trading_days(end_date=state.end_date, limit=limit)
     trading_days = calendar[:state.days]
     top_n = state.top_n
 
@@ -955,17 +926,16 @@ async def _assemble(state: _ScanState, *, redis: Redis) -> SignalRadarResponse:
         pending_symbols=0 if state.is_watchlist else len(state.pending),
     )
     symbols = [symbol for symbol, _ in state.constituents]
-    grades = state.quant_grades if state.quant_loaded else (
-        await quant_filter.load_grades(state.market, symbols, trading_days) if state.market == "us" else {})
+    grades = await quant_filter.load_grades(state.market, symbols, trading_days) if state.market == "us" else {}
     for index, day in enumerate(resp.days):
         if index == 0:
             day.candidates = pick_candidates(
                 candidates, day.date, calendar, taken={x.symbol for x in day.signals},
                 slots=len(state.constituents), max_age_days=state.max_age_days)
         if state.market == "us":
-            day = quant_filter.apply_filter(day, grades, symbols, preserve_sells=state.is_watchlist)
+            day = quant_filter.attach_grades(day, grades, symbols)
         if index == 0:
-            # 评级过滤完成后才截取共振池，低评级股票不占候选名额。
+            # 评级只影响排序，不剔除低评级或无评级信号。
             day = rerank_with_resonance(day, max(top_n, _RESONANCE_POOL))
             await attach_sub_levels(day, end_date=state.end_date, user_id=state.user_id, redis=redis,
                                     mode=state.mode)
@@ -980,11 +950,9 @@ async def _assemble(state: _ScanState, *, redis: Redis) -> SignalRadarResponse:
 
 async def _publish(state: _ScanState, resp: SignalRadarResponse, *, redis: Redis) -> SignalRadarResponse:
     """写缓存并返回应当交给调用方的快照（残缺过多且有旧缓存时返回旧缓存）。"""
-    if any(day.quant_filter and day.quant_filter.status == "unavailable" for day in resp.days):
-        return resp
     failure_counts = Counter(state.failures.values())
     failed_symbols = len(state.failures)
-    scan_count = state.scan_count if state.scan_count is not None else len(state.constituents)
+    scan_count = len(state.constituents)
     failure_rate = failed_symbols / scan_count if scan_count else 0.0
     logger.info(
         "signal_radar_computed", market=state.market, mode=state.mode,
@@ -997,7 +965,7 @@ async def _publish(state: _ScanState, resp: SignalRadarResponse, *, redis: Redis
         if state.user_id is not None:
             try:
                 await redis.set(watchlist_cache_key(state.market, state.user_id, state.constituents, state.mode),
-                                resp.model_dump_json(), ex=WATCHLIST_CACHE_TTL)
+                                resp.model_dump_json(), ex=300 if _quant_unavailable(resp) else WATCHLIST_CACHE_TTL)
             except Exception as e:  # noqa: BLE001
                 logger.warning("signal_radar_watchlist_cache_write_error", market=state.market, error=str(e))
         return resp
@@ -1194,7 +1162,6 @@ async def compute_market(
     # 新一轮扫描：作废同一 (口径, 市场, universe) 上还在跑的旧补算
     generation = await _next_generation(redis, state.gen_key)
 
-    scan_constituents = await _prefilter_constituents(state, redis=redis)
     sem = asyncio.Semaphore(_SCAN_CONCURRENCY)
 
     async def _one(symbol: str, name: str) -> None:
@@ -1204,7 +1171,7 @@ async def compute_market(
                 # 让这个名额歇一会儿，给数据源一点喘息时间再继续消费队列。
                 await asyncio.sleep(_RATE_LIMIT_BACKOFF_SECONDS)
 
-    await asyncio.gather(*[_one(sym, name) for sym, name in scan_constituents])
+    await asyncio.gather(*[_one(sym, name) for sym, name in constituents])
 
     resp = await _publish(state, await _assemble(state, redis=redis), redis=redis)
     await _after_scan(state, generation, redis=redis)
@@ -1324,12 +1291,8 @@ def resolve_demo_target(nominal: str, per_symbol_dates: list[list[str]]) -> tupl
 async def _assemble_demo(state: _ScanState) -> SignalRadarResponse:
     """示例日快照：用今天的结构回看名义日期（对齐到之前最近交易日）那一天在场的信号。"""
     histories = [h for h, _, _ in state.results.values() if h]
-    if state.scan_calendar is not None:
-        calendar = state.scan_calendar
-        target = calendar[0]
-    else:
-        target, calendar = resolve_demo_target(
-            state.demo_nominal, [dates for _, _, dates in state.results.values() if dates])
+    target, calendar = resolve_demo_target(
+        state.demo_nominal, [dates for _, _, dates in state.results.values() if dates])
     resp = SignalRadarResponse(
         market=state.market,
         universe=state.universe.key,
@@ -1347,19 +1310,16 @@ async def _assemble_demo(state: _ScanState) -> SignalRadarResponse:
 
     symbols = [symbol for symbol, _ in state.constituents]
     if state.market == "us":
-        grades = state.quant_grades if state.quant_loaded else await quant_filter.load_grades(
-            state.market, symbols, [target])
-        resp.days[0] = quant_filter.apply_filter(resp.days[0], grades, symbols)
+        grades = await quant_filter.load_grades(state.market, symbols, [target])
+        resp.days[0] = quant_filter.attach_grades(resp.days[0], grades, symbols)
     resp.days[0] = rerank_with_resonance(resp.days[0], DEFAULT_TOP_N)
     return resp
 
 
 async def _publish_demo(state: _ScanState, resp: SignalRadarResponse, *, redis: Redis) -> None:
     """写示例日缓存（所有用户共享）：残缺过多不写；还有待补的用短 TTL，补齐后恢复完整 TTL。"""
-    if any(day.quant_filter and day.quant_filter.status == "unavailable" for day in resp.days):
-        return
     failure_counts = Counter(state.failures.values())
-    scan_count = state.scan_count if state.scan_count is not None else len(state.constituents)
+    scan_count = len(state.constituents)
     failure_rate = len(state.failures) / scan_count if scan_count else 0.0
     has_signals = any(h for h, _, _ in state.results.values())
     logger.info(
@@ -1370,8 +1330,7 @@ async def _publish_demo(state: _ScanState, resp: SignalRadarResponse, *, redis: 
     )
     # 大面积拉数失败（部署重启时各市场并发预热，行情源限流）算出来的残缺/空快照不能写进去，
     # 否则所有人半天都看到空雷达；不写缓存，后台补算补上后再写（或下一个请求重算）。
-    # 评级预筛选确实没有合格股票时，空结果有效，可缓存以免重复扫描。
-    if failure_rate > _MAX_ACCEPTABLE_FAILURE_RATE or (not has_signals and state.scan_count != 0):
+    if failure_rate > _MAX_ACCEPTABLE_FAILURE_RATE or not has_signals:
         logger.warning(
             "signal_radar_demo_scan_degraded_not_cached", market=state.market, universe=state.universe.key,
             failure_rate=round(failure_rate, 2), failure_breakdown=dict(failure_counts),
@@ -1379,6 +1338,8 @@ async def _publish_demo(state: _ScanState, resp: SignalRadarResponse, *, redis: 
         return
     # 还有失败的：能用，但缩短缓存让它尽快自愈（后台补齐后会以完整 TTL 重写）
     ttl = _DEMO_CACHE_TTL if not state.failures else _DEMO_DEGRADED_CACHE_TTL
+    if _quant_unavailable(resp):
+        ttl = min(ttl, 300)
     try:
         # 键按名义日期：read_demo_cache 只知道 demo_snapshot_date()，不知道对齐后的交易日
         await redis.set(_demo_cache_key(state.market, state.universe.key, state.demo_nominal, state.mode),
@@ -1413,7 +1374,6 @@ async def compute_demo_day(
         cutoff=(today - timedelta(days=45)).isoformat(), kind="demo", demo_nominal=demo_snapshot_date(),
     )
     generation = await _next_generation(redis, state.gen_key)
-    scan_constituents = await _prefilter_constituents(state, redis=redis)
     sem = asyncio.Semaphore(_SCAN_CONCURRENCY)
 
     async def _one(symbol: str, name: str) -> None:
@@ -1422,7 +1382,7 @@ async def compute_demo_day(
                 # 与 compute_market 同一套：命中限流让这个名额歇一会儿，别立刻放下一个去撞
                 await asyncio.sleep(_RATE_LIMIT_BACKOFF_SECONDS)
 
-    await asyncio.gather(*[_one(sym, name) for sym, name in scan_constituents])
+    await asyncio.gather(*[_one(sym, name) for sym, name in constituents])
     resp = await _assemble_demo(state)
     await _publish_demo(state, resp, redis=redis)
     await _after_scan(state, generation, redis=redis)

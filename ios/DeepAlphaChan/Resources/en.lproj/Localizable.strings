@@ -884,3 +884,11 @@
 "暂无符合量化筛选的信号" = "No signals match the quant filter";
 
 "量化评级 %@" = "Quant grade %@";
+
+"量化评级权重" = "Quant rating weight";
+"评级暂不可用，按技术信号排序" = "Ratings unavailable; ranked by technical signals";
+"评级权重 %lld%% · 已评级 %lld 只" = "Rating weight %lld%% · %lld rated stocks";
+"全部成分股参与缠论计算，不按评级过滤。排序按技术信号（含共振）80%、量化等级20%加权，取前10。" = "All constituents undergo Chan analysis without a rating cutoff. Ranking combines technical signals (including resonance) at 80% and quant grades at 20%, selecting the top 10.";
+"A+到F按等级顺序等距换算；缺失或超过7天的评级按中性处理，不剔除信号。历史日期只使用当时已生成的评级。" = "Grades from A+ to F map to evenly spaced values. Missing ratings or those older than 7 days receive a neutral weight; signals are retained. Historical dates use only ratings available then.";
+"评级已过期，按中性权重排序" = "Rating expired; neutral ranking weight";
+"评级不可用，按中性权重排序" = "Rating unavailable; neutral ranking weight";

@@ -1,4 +1,4 @@
-"""量化评级作为雷达准入门槛；只使用展示日已经生成的结果，不倒填历史。"""
+"""量化评级作为雷达排序因子；只使用展示日已经生成的结果，不倒填历史。"""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from app.services.quant_research.grading import GRADE_ORDER
 from app.services.quant_research.universe import normalize_us_symbol
 
 MAX_AGE_DAYS = 7
-KEEP_GRADES = {"A+", "A", "A-"}
+QUANT_WEIGHT = 0.2
 
 
 @dataclass(frozen=True)
@@ -75,15 +75,15 @@ def grade_on(history: dict[str, list[QuantGrade]], symbol: str, day: date) -> tu
         return entry, "stale"
     if entry.grade is None or entry.score is None:
         return entry, "missing"
-    return entry, "eligible" if entry.grade in KEEP_GRADES else "below_threshold"
+    return entry, "eligible"
 
 
-def apply_filter(day: RadarDayOut, history: dict[str, list[QuantGrade]] | None,
-                 symbols: list[str], *, preserve_sells: bool = False) -> RadarDayOut:
-    """完整候选池先过滤，再交给技术排序；自选卖出提醒不受评级门槛限制。"""
+def attach_grades(day: RadarDayOut, history: dict[str, list[QuantGrade]] | None,
+                 symbols: list[str]) -> RadarDayOut:
+    """只附加评级，任何等级、评级缺失或查询故障均保留技术信号。"""
     target = date.fromisoformat(day.date)
     grades = {s: grade_on(history or {}, s, target) for s in set(symbols)}
-    stats = RadarQuantFilterOut(preserve_sells=preserve_sells, status="unavailable" if history is None else "ready")
+    stats = RadarQuantFilterOut(status="unavailable" if history is None else "ready")
     for _, status in grades.values():
         setattr(stats, status, getattr(stats, status) + 1)
 
@@ -91,8 +91,6 @@ def apply_filter(day: RadarDayOut, history: dict[str, list[QuantGrade]] | None,
         kept = []
         for signal in signals:
             entry, status = grades.get(signal.symbol, (None, "missing"))
-            if status != "eligible" and not (preserve_sells and signal.side == "sell"):
-                continue
             kept.append(signal.model_copy(update={
                 "quant_grade": entry.grade if entry else None,
                 "quant_score": entry.score if entry else None,
@@ -105,3 +103,10 @@ def apply_filter(day: RadarDayOut, history: dict[str, list[QuantGrade]] | None,
     return day.model_copy(update={"signals": signals, "candidates": select(day.candidates),
                                  "buy_count": sum(s.side == "buy" for s in signals),
                                  "sell_count": sum(s.side == "sell" for s in signals), "quant_filter": stats})
+
+
+def rating_factor(signal: RadarSignalOut) -> float:
+    """13 档等级等距映射到 0~1；缺失或过期取中性 0.5，不视为低评级。"""
+    if signal.quant_status != "eligible" or signal.quant_grade not in GRADE_ORDER:
+        return 0.5
+    return 1.0 - GRADE_ORDER.index(signal.quant_grade) / (len(GRADE_ORDER) - 1)

@@ -1,4 +1,4 @@
-"""评级准入、历史时点和雷达完整候选池回归。"""
+"""评级权重、历史时点和雷达完整候选池回归。"""
 
 from datetime import date, datetime
 
@@ -23,20 +23,20 @@ def grade(value="A-", score=65, day=DAY, available=DAY):
     return qf.QuantGrade(value, score, day, available)
 
 
-def test_threshold_is_grade_not_raw_score_and_serializes():
+def test_all_grades_and_missing_data_retained_and_serialize():
     signals = [signal(s) for s in ("A", "B", "C", "D", "E")]
     day = RadarDayOut(date=str(DAY), buy_count=5, sell_count=0, signals=signals, candidates=signals)
     history = {"A": [grade()], "B": [grade("B+", 90)], "C": [grade("C+", 99)],
                "D": [grade(None)], "E": [grade("A+", 88)]}
-    out = qf.apply_filter(day, history, list(history))
-    assert [s.symbol for s in out.signals] == ["A", "E"]
-    assert [s.symbol for s in out.candidates] == ["A", "E"]
+    out = qf.attach_grades(day, history, list(history))
+    assert [s.symbol for s in out.signals] == ["A", "B", "C", "D", "E"]
+    assert [s.symbol for s in out.candidates] == ["A", "B", "C", "D", "E"]
     restored = RadarDayOut.model_validate_json(out.model_dump_json())
     assert restored.signals[0].quant_score == 65
-    assert restored.quant_filter.eligible == 2
-    assert restored.quant_filter.below_threshold == 2
+    assert restored.quant_filter.eligible == 4
+    assert restored.quant_filter.below_threshold == 0
     assert restored.quant_filter.missing == 1
-    assert restored.buy_count == 2
+    assert restored.buy_count == 5
 
 
 def test_no_future_or_backfilled_grade_and_no_fallback_from_new_unrated():
@@ -58,10 +58,10 @@ def test_stale_boundary_and_symbol_normalization():
 def test_watchlist_sells_survive_missing_and_low_ratings():
     signals = [signal("A"), signal("B", "sell"), signal("C", "sell")]
     day = RadarDayOut(date=str(DAY), buy_count=1, sell_count=2, signals=signals)
-    out = qf.apply_filter(day, {"B": [grade("F")]}, ["A", "B", "C"], preserve_sells=True)
-    assert [s.symbol for s in out.signals] == ["B", "C"]
-    assert out.sell_count == 2 and out.buy_count == 0
-    assert out.quant_filter.preserve_sells
+    out = qf.attach_grades(day, {"B": [grade("F")]}, ["A", "B", "C"])
+    assert [s.symbol for s in out.signals] == ["A", "B", "C"]
+    assert out.sell_count == 2 and out.buy_count == 1
+    assert out.quant_filter.mode == "weighted"
 
 
 def test_row_available_date_and_invalid_scores():
@@ -74,16 +74,18 @@ def test_row_available_date_and_invalid_scores():
     assert qf.grade_from_row(row).available_on == date(2026, 10, 2)
 
 
-def test_quant_only_breaks_technical_ties():
-    a = signal("A").model_copy(update={"quant_status": "eligible", "quant_score": 60})
-    b = signal("B").model_copy(update={"quant_status": "eligible", "quant_score": 80})
-    c = signal("C", strength=0.9).model_copy(update={"quant_status": "eligible", "quant_score": 50})
+def test_rating_is_weighted_and_missing_is_neutral():
+    a = signal("A", strength=0.5).model_copy(update={"quant_status": "eligible", "quant_grade": "F"})
+    b = signal("B", strength=0.4).model_copy(update={"quant_status": "eligible", "quant_grade": "A+"})
+    c = signal("C", strength=0.5).model_copy(update={"quant_status": "missing"})
     out = svc.rerank_with_resonance(RadarDayOut(date=str(DAY), buy_count=3, sell_count=0, signals=[a,b,c]), 3)
-    assert [s.symbol for s in out.signals] == ["C", "B", "A"]
+    assert [s.symbol for s in out.signals] == ["B", "C", "A"]
+    assert qf.rating_factor(a) == 0 and qf.rating_factor(b) == 1 and qf.rating_factor(c) == 0.5
+    assert qf.rating_factor(b.model_copy(update={"quant_status": "stale"})) == 0.5
 
 
 @pytest.mark.parametrize("market", ["us", "hk", "cn"])
-async def test_full_pool_filtered_before_top_n_and_candidates(monkeypatch, market):
+async def test_all_markets_keep_technical_signals(monkeypatch, market):
     symbols = [f"S{i}" for i in range(25)]
     async def load(*args):
         assert market == "us"
@@ -106,24 +108,15 @@ async def test_full_pool_filtered_before_top_n_and_candidates(monkeypatch, marke
         state.results[symbol] = ([raw] if i < 24 else [], [raw] if i == 24 else [], [str(DAY)])
     response = await svc._assemble(state, redis=None)
     day = response.days[0]
+    assert len(day.signals) == 3
     if market == "us":
-        assert seen == ["S23"]
-        assert [s.symbol for s in day.signals] == ["S23"]
-        assert [s.symbol for s in day.candidates] == ["S24"]
-        assert day.quant_filter.eligible == 2
+        assert day.quant_filter.eligible == 25
+        assert any(s.quant_grade == "B+" for s in day.signals)
         state.demo_nominal = str(DAY)
         demo = await svc._assemble_demo(state)
-        assert [s.symbol for s in demo.days[0].signals] == ["S23"]
-        assert demo.days[0].quant_filter.eligible == 2
-        class NoWriteRedis:
-            async def set(self, *args, **kwargs):
-                raise AssertionError("查询故障不能写缓存")
-        day.quant_filter.status = "unavailable"
-        assert await svc._publish(state, response, redis=NoWriteRedis()) is response
-        demo.days[0].quant_filter.status = "unavailable"
-        await svc._publish_demo(state, demo, redis=NoWriteRedis())
+        assert len(demo.days[0].signals) == 10
     else:
-        assert len(day.signals) == 3 and day.quant_filter is None
+        assert day.quant_filter is None
 
 
 async def test_query_failure_is_distinct_from_no_data(monkeypatch):
@@ -132,13 +125,13 @@ async def test_query_failure_is_distinct_from_no_data(monkeypatch):
     monkeypatch.setattr(qf.repository, "get_quant_grade_history", fail)
     assert await qf.load_grades("us", ["A"], [str(DAY)]) is None
     day = RadarDayOut(date=str(DAY), buy_count=1, sell_count=0, signals=[signal("A")])
-    assert qf.apply_filter(day, None, ["A"]).quant_filter.status == "unavailable"
-    assert qf.apply_filter(day, {}, ["A"]).quant_filter.status == "ready"
+    assert qf.attach_grades(day, None, ["A"]).quant_filter.status == "unavailable"
+    assert qf.attach_grades(day, {}, ["A"]).quant_filter.status == "ready"
 
 
 @pytest.mark.parametrize("failed", [False, True])
-async def test_index_prefilter_precedes_stock_calculation(monkeypatch, failed):
-    """未达标、缺失与过期股票不调用个股扫描；合格股票算完才取前十。"""
+async def test_full_index_scanned_even_when_ratings_fail(monkeypatch, failed):
+    """全部股票都参与计算，评级缺失或查询失败仍产生前十。"""
     today = date.today()
     eligible = [f"PASS{i}" for i in range(12)]
     symbols = eligible + ["LOW", "MISSING", "STALE"]
@@ -155,7 +148,6 @@ async def test_index_prefilter_precedes_stock_calculation(monkeypatch, failed):
                 "LOW": [grade("B+", day=today, available=today)],
                 "STALE": [grade(day=date(2020, 1, 1), available=date(2020, 1, 1))]}
     async def scan(symbol, name, **kwargs):
-        assert events[0] == "grades"
         events.append(symbol)
         raw = svc.RawSignal(symbol=symbol, name=symbol, side="buy", label="二买", signal_type="buy2",
                             date=str(today), price=1, strength=0.8, bias="bullish",
@@ -164,7 +156,6 @@ async def test_index_prefilter_precedes_stock_calculation(monkeypatch, failed):
     async def attach(*args, **kwargs):
         pass
     async def publish(state, response, **kwargs):
-        assert state.scan_count == (0 if failed else 12)
         return response
     monkeypatch.setattr(svc, "resolve_constituents", resolve)
     monkeypatch.setattr(svc, "fetch_kline", bars)
@@ -175,37 +166,26 @@ async def test_index_prefilter_precedes_stock_calculation(monkeypatch, failed):
     monkeypatch.setattr(svc, "_after_scan", attach)
     response = await svc.compute_market("us", redis=None, days=1)
     assert response.universe_size == 15
-    assert len(response.days[0].signals) == (0 if failed else 10)
-    assert set(events[1:]) == (set() if failed else set(eligible))
+    assert len(response.days[0].signals) == 10
+    assert set(events[:-1]) == set(symbols)
     assert events.count("grades") == 1
 
 
-async def test_prefilter_keeps_historical_eligible_union_and_skips_watchlist(monkeypatch):
-    async def bars(**kwargs):
-        return [{"time": "2026-09-29"}, {"time": "2026-09-30"}]
-    async def load(*args):
-        return {"PAST": [grade("B+"), grade(day=date(2026, 9, 29), available=date(2026, 9, 29))],
-                "NOW": [grade()], "LOW": [grade("B+")]}
-    monkeypatch.setattr(svc, "fetch_kline", bars)
-    monkeypatch.setattr(qf, "load_grades", load)
-    state = svc._ScanState(market="us", universe=get_universe("us"), is_watchlist=False,
-                           constituents=[(s,s) for s in ["PAST", "NOW", "LOW"]], user_id=None,
-                           mode="loose", days=2, top_n=10, max_age_days=25, start_date="2026-01-01",
-                           end_date=str(DAY), cutoff="2026-09-01")
-    assert [s for s, _ in await svc._prefilter_constituents(state, redis=None)] == ["PAST", "NOW"]
-    assert qf.grade_on(state.quant_grades, "PAST", DAY)[1] == "below_threshold"
-    state.is_watchlist = True
-    assert await svc._prefilter_constituents(state, redis=None) == state.constituents
-
-    state.is_watchlist = False
-    state.scan_count = 0
-    state.quant_grades = {}
-    state.demo_nominal = str(DAY)
-    class RecordingRedis:
-        written = False
-        async def set(self, *args, **kwargs):
-            self.written = True
-    redis = RecordingRedis()
-    empty = await svc._assemble_demo(state)
-    await svc._publish_demo(state, empty, redis=redis)
-    assert redis.written and empty.days[0].signals == []
+async def test_rating_outage_publishes_technical_snapshot(monkeypatch):
+    signal_day = RadarDayOut(date=str(DAY), buy_count=1, sell_count=0, signals=[signal("A")])
+    day = qf.attach_grades(signal_day, None, ["A"])
+    assert len(day.signals) == 1
+    response = svc.SignalRadarResponse(market="us", universe="nasdaq100", etf_name="纳指", universe_size=1,
+                                        as_of=str(DAY), top_n=10, days=[day], status="ready")
+    class Redis:
+        stored = None
+        ttl = None
+        async def set(self, key, value, ex=None):
+            self.stored = value
+            self.ttl = ex
+    redis = Redis()
+    await svc._write_cache(redis, response)
+    assert redis.ttl == 300
+    restored = svc.SignalRadarResponse.model_validate_json(redis.stored)
+    assert len(restored.days[0].signals) == 1
+    assert restored.days[0].quant_filter.status == "unavailable"

@@ -434,7 +434,7 @@ struct SignalRadarView: View {
                 fieldDecoration(width: w, height: h)
 
                 if layouts.isEmpty {
-                    Text(vm.selectedDay?.quantFilter == nil ? L("当日无买卖点信号") : L("暂无符合量化筛选的信号"))
+                    Text(L("当日无买卖点信号"))
                         .font(.subheadline)
                         .foregroundColor(Theme.textSecondary)
                         .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
@@ -789,9 +789,9 @@ struct SignalRadarView: View {
                     ])
                     infoSection(L("上榜排序怎么算"), rankingInfoLines)
                     if vm.selectedDay?.quantFilter != nil {
-                        infoSection(L("量化评级筛选"), [
-                            L("美股指数仅保留量化综合等级 A− 及以上；无评级或评级超过 7 天的股票不进入气泡，自选股保留卖出提醒。"),
-                            L("先筛评级，再按技术信号和共振排序；技术分相同时优先量化分较高者。历史日期只使用当时已经生成的评级。"),
+                        infoSection(L("量化评级权重"), [
+                            L("全部成分股参与缠论计算，不按评级过滤。排序按技术信号（含共振）80%、量化等级20%加权，取前10。"),
+                            L("A+到F按等级顺序等距换算；缺失或超过7天的评级按中性处理，不剔除信号。历史日期只使用当时已生成的评级。"),
                             L("长按气泡可查看量化等级、综合分和评级日期。"),
                         ])
                     }
