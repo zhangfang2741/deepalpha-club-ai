@@ -257,16 +257,15 @@ def dimension_desc(key: str, lang: Lang) -> str:
 
 
 def overall_text(o: OverallScore, lang: Lang) -> str | None:
-    """综合分与在标普 500 + 纳斯达克 100 样本中的排位。"""
+    """综合分与在标普1500 中的排位。"""
     if o.score is None or o.universe_percentile is None:
         return None
     if o.universe_percentile >= 50:
         top = max(1, round(100 - o.universe_percentile))
-        return _i(lang, f"综合分 {o.score:.1f} · 标普500+纳斯达克100 前 {top}%",
-                  f"Composite {o.score:.1f} · top {top}% of S&P 500 + Nasdaq-100")
+        return _i(lang, f"综合分 {o.score:.1f} · 标普1500 前 {top}%", f"Composite {o.score:.1f} · top {top}% of S&P 1500")
     bottom = max(1, round(o.universe_percentile))
-    return _i(lang, f"综合分 {o.score:.1f} · 标普500+纳斯达克100 后 {bottom}%",
-              f"Composite {o.score:.1f} · bottom {bottom}% of S&P 500 + Nasdaq-100")
+    return _i(lang, f"综合分 {o.score:.1f} · 标普1500 后 {bottom}%",
+              f"Composite {o.score:.1f} · bottom {bottom}% of S&P 1500")
 
 
 def overall_note(o: OverallScore, lang: Lang) -> str | None:
@@ -306,8 +305,8 @@ def peer_text(sector_name: str, n: int, lang: Lang, in_universe: bool = True) ->
     base = _i(lang, f"与{sector_name}板块 {n} 家公司比", f"Compared with {n} {sector_name} companies")
     if in_universe:
         return base
-    return base + _i(lang, "（本股不在标普500+纳斯达克100样本内，按该板块分布定位）",
-                     " (not in the S&P 500 + Nasdaq-100 sample; placed against the sector distribution)")
+    return base + _i(lang, "（本股不在标普1500样本内，按该板块分布定位）",
+                     " (not in the S&P 1500 sample; placed against the sector distribution)")
 
 
 def contains_forbidden(text: str) -> list[str]:

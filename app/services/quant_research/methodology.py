@@ -16,11 +16,11 @@ from app.services.quant_research.scoring import CAP_CEILING, MIN_SAMPLE
 
 _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
     (("和谁比", "Who it is compared with"),
-     ("标普500与纳斯达克100的并集按 GICS 11 个板块分组，每项指标只和同板块公司比较。"
-      "不在这两个指数并集内的美股，按它所在板块当天的分布定位。结果只表示在同行中的相对位置，"
+     ("标普1500（标普500 + 中盘400 + 小盘600）按 GICS 11 个板块分组，每项指标只和同板块公司比较。"
+      "不在标普1500 内的美股，按它所在板块当天的分布定位。结果只表示在同行中的相对位置，"
       "指标详情里同时给出本股数值与板块中位数。",
-      "The union of the S&P 500 and Nasdaq-100 is grouped into the 11 GICS sectors and every metric is "
-      "compared only within the sector. US stocks outside this union are placed against that day's sector "
+      "The S&P 1500 (S&P 500 + MidCap 400 + SmallCap 600) is grouped into the 11 GICS sectors and every metric is "
+      "compared only within the sector. US stocks outside the S&P 1500 are placed against that day's sector "
       "distribution. Grades describe relative position among peers; metric details also show the raw value and "
       "the sector median.")),
     (("单项指标", "Single metrics"),
@@ -44,10 +44,10 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
       "A dimension score is the equal-weighted average of its participating metric percentiles; with fewer than "
       "one third of the metrics (and at least 2) available, the dimension has no grade.")),
     (("综合等级", "Composite grade"),
-     (f"综合分 = 可用维度分的等权平均；再看综合分在标普500与纳斯达克100并集中的百分位，按同一把尺子定等级。"
+     (f"综合分 = 可用维度分的等权平均；再看综合分在标普1500 全体中的百分位，按同一把尺子定等级。"
       f"任一维度为 F 时，综合等级最高为 {CAP_CEILING}；覆盖的分析师少于 {MIN_ANALYSTS} 位时不给综合等级。",
       f"The composite score is the equal-weighted average of available dimension scores; its percentile across the "
-      f"whole S&P 500 + Nasdaq-100 union sets the grade on the same scale. If any dimension is F, the composite is capped at "
+      f"whole S&P 1500 sets the grade on the same scale. If any dimension is F, the composite is capped at "
       f"{CAP_CEILING}; with fewer than {MIN_ANALYSTS} covering analysts there is no composite grade.")),
     (("EPS 修正", "EPS revisions"),
      ("每天保存一次分析师一致预期，比较当前值与 30 / 90 天前的值；亏损收窄算上修。"

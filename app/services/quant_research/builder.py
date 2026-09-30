@@ -50,7 +50,7 @@ from app.schemas.quant_research import (
     Stage,
 )
 
-METHODOLOGY_VERSION = "q1"
+METHODOLOGY_VERSION = "q2"
 _REVISION_LOOKBACK = {"eps_fy1_30d": 30, "eps_fy1_90d": 90, "eps_fy2_90d": 90, "rev_fy1_90d": 90}
 
 

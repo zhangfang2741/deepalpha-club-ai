@@ -103,5 +103,5 @@ def test_fmt_metric_value():
 
 
 def test_overall_text_top_and_bottom():
-    assert overall_text(OverallScore(78.4, 92.1, "A", 5), "zh") == "综合分 78.4 · 标普500+纳斯达克100 前 8%"
-    assert overall_text(OverallScore(32.9, 6.2, "F", 5), "zh") == "综合分 32.9 · 标普500+纳斯达克100 后 6%"
+    assert overall_text(OverallScore(78.4, 92.1, "A", 5), "zh") == "综合分 78.4 · 标普1500 前 8%"
+    assert overall_text(OverallScore(32.9, 6.2, "F", 5), "zh") == "综合分 32.9 · 标普1500 后 6%"

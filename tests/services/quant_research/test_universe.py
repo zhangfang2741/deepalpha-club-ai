@@ -1,9 +1,8 @@
-"""标普500与纳斯达克100成分解析及板块映射。"""
+"""标普1500成分解析及板块映射。"""
 
 from app.services.quant_research.universe import (
     FMP_SECTOR_TO_GICS,
     GICS_SECTORS,
-    parse_nasdaq100_table,
     parse_sp_table,
     sector_name,
 )
@@ -18,33 +17,18 @@ HTML = """
 </tbody></table>
 """
 
-NASDAQ_HTML = """
-<table><thead><tr><th>Ticker</th><th>Company</th><th>ICB Industry[1]</th><th>ICB Subsector[1]</th></tr></thead>
-<tbody>
-<tr><td>NVDA</td><td>Nvidia</td><td>Technology</td><td>Semiconductors</td></tr>
-<tr><td>AMGN</td><td>Amgen</td><td>Health Care</td><td>Biotechnology</td></tr>
-<tr><td>CMCSA</td><td>Comcast</td><td>Telecommunications</td><td>Telecommunications Service Providers</td></tr>
-</tbody></table>
-"""
-
 
 def test_parse_sp_table_filters_and_maps():
     rows = parse_sp_table(HTML)
     assert rows == [("NVDA", "Nvidia", "information_technology"), ("BRK-B", "Berkshire Hathaway", "financials")]
 
 
-def test_parse_nasdaq100_table_maps_icb_industry_to_gics():
-    assert parse_nasdaq100_table(NASDAQ_HTML) == [
-        ("NVDA", "Nvidia", "information_technology"),
-        ("AMGN", "Amgen", "health_care"),
-        ("CMCSA", "Comcast", "communication_services"),
-    ]
-
-
-def test_quant_universe_targets_sp500_and_nasdaq100():
+def test_quant_universe_targets_sp1500():
     from app.services.quant_research import universe
 
-    assert set(universe.WIKI_PAGES) == {"sp500", "nasdaq100"}
+    assert set(universe.WIKI_PAGES) == {"sp500", "sp400", "sp600"}
+    # 键带 v2：避开 sp500_nasdaq100 时期与更早 sp1500 时期留下的旧缓存
+    assert universe.CACHE_KEY == "quant:universe:sp1500:v2"
 
 
 def test_fmp_sector_mapping_covers_all_gics():
