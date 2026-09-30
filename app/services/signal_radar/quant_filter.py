@@ -13,7 +13,10 @@ from app.services.quant_research.grading import GRADE_ORDER
 from app.services.quant_research.universe import normalize_us_symbol
 
 MAX_AGE_DAYS = 7
-QUANT_WEIGHT = 0.5
+# 2026-09-30 产品决定：雷达暂不引入评级作为排序权重，只把评级 mark 到气泡上
+# （QUANT_WEIGHT=0 时排序回到纯技术分）。恢复加权时改回 0.5，并升雷达缓存键
+# _mode_ns 的 quant 版本，否则旧缓存里的顺序还是旧权重排的。
+QUANT_WEIGHT = 0.0
 
 
 @dataclass(frozen=True)

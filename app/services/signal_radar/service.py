@@ -98,8 +98,10 @@ _CACHE_PREFIX = "signal_radar"
 # 否则部署后缓存里还是旧口径的气泡，与详情页（每次实时算）对不上。shape 版本只隔离雷达自身的
 # 筛选规则（不改变详情口径），开关或规则一变就升：shape5 = 恢复 78bee01 之前的筛选（宽松口径
 # 最后一笔上的未确认信号也上榜、收盘价跌破才失效、最新日「待确认」候选补位），形态过滤暂停。
+# quant 段隔离评级相关行为：quant_mark1 = 评级只 mark 展示、不参与排序（QUANT_WEIGHT=0），
+# 恢复加权或改权重时同步升版。
 def _mode_ns(mode: str) -> str:
-    return f"{get_policy(mode).version}:shape5:quant_weight2"
+    return f"{get_policy(mode).version}:shape5:quant_mark1"
 
 
 # czsc 形态过滤（chan/shape_filters：同向假突破 / 窄幅震荡 / 低波动）暂停应用，代码与测试保留。
@@ -310,9 +312,10 @@ def rerank_with_resonance(day: RadarDayOut, top_n: int) -> RadarDayOut:
         resonance = is_aligned_resonance(s.side, s.sub_level_verdict)
         technical = radar_score(_signal_level(s.signal_type), s.strength, age, resonance,
                                 confirmed=s.confirmed)
-        if s.quant_status is None:
+        if s.quant_status is None or not quant_filter.QUANT_WEIGHT:
             return technical, 0.0
-        # 技术分含最多 0.15 共振加分，先归一化，再按 50% 技术 / 50% 等级加权。
+        # 技术分含最多 0.15 共振加分，先归一化，再按权重混合（当前 QUANT_WEIGHT=0，
+        # 评级只展示不参与排序，恢复加权时升 _mode_ns 的 quant 版本）。
         score = ((1 - quant_filter.QUANT_WEIGHT) * technical / (1 + _RESONANCE_BONUS)
                  + quant_filter.QUANT_WEIGHT * quant_filter.rating_factor(s))
         return score, technical

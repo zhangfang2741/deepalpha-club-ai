@@ -1,4 +1,4 @@
-"""评级权重、历史时点和雷达完整候选池回归。"""
+"""评级展示（暂不参与排序）、历史时点和雷达完整候选池回归。"""
 
 from datetime import date, datetime
 
@@ -61,8 +61,8 @@ def test_watchlist_sells_survive_missing_and_low_ratings():
     out = qf.attach_grades(day, {"B": [grade("F")]}, ["A", "B", "C"])
     assert [s.symbol for s in out.signals] == ["A", "B", "C"]
     assert out.sell_count == 2 and out.buy_count == 1
-    assert out.quant_filter.mode == "weighted"
-    assert out.quant_filter.weight == 0.5
+    assert out.quant_filter.mode == "marked"
+    assert out.quant_filter.weight == 0.0
 
 
 def test_row_available_date_and_invalid_scores():
@@ -75,18 +75,20 @@ def test_row_available_date_and_invalid_scores():
     assert qf.grade_from_row(row).available_on == date(2026, 10, 2)
 
 
-def test_rating_is_weighted_and_missing_is_neutral():
+def test_rating_marks_only_and_order_follows_technical_score():
+    """评级只附加展示，排序回到纯技术分（2026-09-30 产品决定暂停权重）。"""
     a = signal("A", strength=0.5).model_copy(update={"quant_status": "eligible", "quant_grade": "F"})
     b = signal("B", strength=0.4).model_copy(update={"quant_status": "eligible", "quant_grade": "A+"})
     c = signal("C", strength=0.5).model_copy(update={"quant_status": "missing"})
     out = svc.rerank_with_resonance(RadarDayOut(date=str(DAY), buy_count=3, sell_count=0, signals=[a,b,c]), 3)
-    assert [s.symbol for s in out.signals] == ["B", "C", "A"]
+    assert [s.symbol for s in out.signals] == ["A", "C", "B"]
     assert qf.rating_factor(a) == 0 and qf.rating_factor(b) == 1 and qf.rating_factor(c) == 0.5
     assert qf.rating_factor(b.model_copy(update={"quant_status": "stale"})) == 0.5
 
 
-def test_quant_rating_weight_is_fifty_percent():
-    assert qf.QUANT_WEIGHT == 0.5
+def test_quant_rating_weight_disabled_for_now():
+    """恢复权重时改回 0.5，并同步升雷达缓存键 _mode_ns 的版本。"""
+    assert qf.QUANT_WEIGHT == 0.0
 
 
 @pytest.mark.parametrize("market", ["us", "hk", "cn"])
