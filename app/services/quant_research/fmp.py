@@ -21,6 +21,7 @@ MAX_ATTEMPTS = 4
 
 class FmpClient:
     def __init__(self, client: httpx.AsyncClient, redis: Redis | None, priority: Priority):
+        """按 priority 决定走用户额度还是批量额度。"""
         self.client = client
         self.redis = redis
         self.priority: Priority = priority

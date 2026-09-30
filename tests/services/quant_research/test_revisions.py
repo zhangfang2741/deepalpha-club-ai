@@ -1,3 +1,5 @@
+"""EPS 修正：变化率、回看、积累期。"""
+
 from datetime import date, timedelta
 
 import pytest

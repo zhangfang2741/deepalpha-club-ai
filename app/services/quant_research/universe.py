@@ -58,6 +58,7 @@ FMP_SECTOR_TO_GICS: dict[str, str] = {
 
 
 def sector_name(key: str, lang: str) -> str:
+    """GICS 板块展示名。"""
     _, zh, en = GICS_SECTORS[key]
     return zh if lang == "zh" else en
 

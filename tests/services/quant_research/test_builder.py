@@ -2,7 +2,7 @@
 
 import json
 import os
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 

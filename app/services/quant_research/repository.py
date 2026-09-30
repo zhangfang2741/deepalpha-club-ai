@@ -38,6 +38,7 @@ def _now() -> datetime:
 # ---------- 报表快照 ----------
 
 async def upsert_fundamental(market: str, symbol: str, income: list, cash: list, balance: dict | None) -> None:
+    """写入 / 更新一只股票的报表快照。"""
     latest = income[0] if income else {}
     values = {
         "market": market, "symbol": symbol,
@@ -58,6 +59,7 @@ async def upsert_fundamental(market: str, symbol: str, income: list, cash: list,
 
 
 async def get_fundamentals(market: str, symbols: list[str] | None = None) -> dict[str, QuantFundamentalSnapshot]:
+    """读取报表快照 {symbol: 行}。"""
     q = select(QuantFundamentalSnapshot).where(col(QuantFundamentalSnapshot.market) == market)
     if symbols is not None:
         q = q.where(col(QuantFundamentalSnapshot.symbol).in_(symbols))
@@ -69,8 +71,11 @@ async def get_fundamentals(market: str, symbols: list[str] | None = None) -> dic
 # ---------- 一致预期快照 ----------
 
 async def insert_estimates(rows: list[dict]) -> int:
-    """rows: market, symbol, snapshot_date, fiscal_date, eps_avg, eps_low, eps_high, revenue_avg,
-    ebitda_avg, ebit_avg, n_analysts。已存在的 (market, symbol, snapshot_date, fiscal_date) 不覆盖。"""
+    """批量写入一致预期快照，已存在的 (market, symbol, snapshot_date, fiscal_date) 不覆盖。
+
+    rows 字段：market, symbol, snapshot_date, fiscal_date, eps_avg, eps_low, eps_high, revenue_avg,
+    ebitda_avg, ebit_avg, n_analysts。
+    """
     if not rows:
         return 0
     now = _now()
@@ -86,6 +91,7 @@ async def insert_estimates(rows: list[dict]) -> int:
 
 
 async def get_estimate_history(market: str, symbols: list[str], since: date) -> dict[str, list[EstimatePoint]]:
+    """读取 since 之后的一致预期快照，按股票分组。"""
     q = (select(QuantEstimateSnapshot)
          .where(col(QuantEstimateSnapshot.market) == market,
                 col(QuantEstimateSnapshot.symbol).in_(symbols),
@@ -99,6 +105,7 @@ async def get_estimate_history(market: str, symbols: list[str], since: date) -> 
 
 
 async def earliest_estimate_date(market: str) -> date | None:
+    """最早一份预期快照的日期。"""
     async with AsyncSessionFactory() as s:
         return (await s.execute(
             select(func.min(col(QuantEstimateSnapshot.snapshot_date))).where(col(QuantEstimateSnapshot.market) == market)
@@ -108,6 +115,7 @@ async def earliest_estimate_date(market: str) -> date | None:
 # ---------- 板块分布 ----------
 
 async def replace_distributions(market: str, as_of: date, dists: Distributions) -> None:
+    """整体替换某日的板块分布。"""
     now = _now()
     async with AsyncSessionFactory() as s:
         await s.execute(delete(QuantSectorDistribution).where(
@@ -120,6 +128,7 @@ async def replace_distributions(market: str, as_of: date, dists: Distributions) 
 
 
 async def latest_distribution_date(market: str) -> date | None:
+    """最近一次批量的日期。"""
     async with AsyncSessionFactory() as s:
         return (await s.execute(
             select(func.max(col(QuantSectorDistribution.as_of))).where(col(QuantSectorDistribution.market) == market)
@@ -127,6 +136,7 @@ async def latest_distribution_date(market: str) -> date | None:
 
 
 async def get_distributions(market: str, as_of: date) -> Distributions:
+    """读取某日的全部板块分布。"""
     q = select(QuantSectorDistribution).where(col(QuantSectorDistribution.market) == market,
                                               col(QuantSectorDistribution.as_of) == as_of)
     async with AsyncSessionFactory() as s:
@@ -152,6 +162,7 @@ async def upsert_results(rows: list[dict]) -> None:
 
 
 async def get_latest_result(market: str, symbol: str) -> QuantResult | None:
+    """某只股票最近一天的结果。"""
     q = (select(QuantResult).where(col(QuantResult.market) == market, col(QuantResult.symbol) == symbol)
          .order_by(col(QuantResult.as_of).desc()).limit(1))
     async with AsyncSessionFactory() as s:
@@ -159,7 +170,7 @@ async def get_latest_result(market: str, symbol: str) -> QuantResult | None:
 
 
 async def get_prev_grades(market: str, before: date) -> dict[str, dict]:
-    """before 之前最近一个交易日每只股票的等级（防抖用）。"""
+    """取 before 之前最近一个交易日每只股票的等级（防抖用）。"""
     async with AsyncSessionFactory() as s:
         prev = (await s.execute(select(func.max(col(QuantResult.as_of))).where(
             col(QuantResult.market) == market, col(QuantResult.as_of) < before))).scalar()

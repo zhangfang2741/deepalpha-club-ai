@@ -1,3 +1,5 @@
+"""FMP 全局调用预算：分钟额度、批量额度、429 熔断、无 Redis 退化。"""
+
 import pytest
 
 from app.cache import fmp_budget

@@ -36,6 +36,7 @@ from app.core.middleware import (
 from app.core.observability import langfuse_init
 from app.services.database import database_service
 from app.services.memory import memory_service
+from app.services.quant_research.scheduler import run_quant_scheduler
 from app.services.signal_radar.scheduler import (
     run_signal_radar_prewarm_scheduler,
     run_signal_radar_sub_level_scheduler,
@@ -80,6 +81,7 @@ async def lifespan(app: FastAPI):
     supply_chain_scheduler_task: asyncio.Task[None] | None = None
     signal_radar_scheduler_task: asyncio.Task[None] | None = None
     signal_radar_sub_level_task: asyncio.Task[None] | None = None
+    quant_scheduler_task: asyncio.Task[None] | None = None
     logger.info(
         "application_startup",
         project_name=settings.PROJECT_NAME,
@@ -168,6 +170,12 @@ async def lifespan(app: FastAPI):
         # 共振标记盘中独立刷新（依赖预热产出的快照，随预热开关一起启用）
         signal_radar_sub_level_task = asyncio.create_task(run_signal_radar_sub_level_scheduler())
 
+    if settings.QUANT_BATCH_ENABLED:
+        # 量化研究夜间批量（美股标普1500 + A 股预期快照），FMP 调用受全局预算约束
+        quant_scheduler_task = asyncio.create_task(run_quant_scheduler())
+        logger.info("quant_scheduler_started", us_utc_hour=settings.QUANT_BATCH_UTC_HOUR,
+                    us_utc_minute=settings.QUANT_BATCH_UTC_MINUTE)
+
     yield
 
     # Cleanup on shutdown
@@ -189,6 +197,12 @@ async def lifespan(app: FastAPI):
             await signal_radar_sub_level_task
         except asyncio.CancelledError:
             logger.info("signal_radar_sub_level_scheduler_stopped")
+    if quant_scheduler_task:
+        quant_scheduler_task.cancel()
+        try:
+            await quant_scheduler_task
+        except asyncio.CancelledError:
+            logger.info("quant_scheduler_stopped")
     await close_redis()
     await cache_service.close()
     if agent._connection_pool:

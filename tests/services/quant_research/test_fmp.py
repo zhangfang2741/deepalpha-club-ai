@@ -1,3 +1,5 @@
+"""FMP 拉取封装：429 重试与上报、非 200 返回 None。"""
+
 import httpx
 
 from app.cache import fmp_budget

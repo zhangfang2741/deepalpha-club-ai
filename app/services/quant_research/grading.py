@@ -39,7 +39,7 @@ def cap_grade(grade: str, ceiling: str) -> str:
 
 
 def percentile_of(value: float, sorted_values: list[float], *, lower_better: bool) -> float:
-    """value 在 sorted_values（升序）中的百分位 0~100，方向统一成越高越好。
+    """计算 value 在 sorted_values（升序）中的百分位 0~100，方向统一成越高越好。
 
     越高越好：不大于它的比例；越低越好：不小于它的比例。样本为空时返回 50。
     """

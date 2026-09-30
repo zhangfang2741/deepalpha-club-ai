@@ -1,3 +1,5 @@
+"""标普1500 成分解析与板块映射。"""
+
 from app.services.quant_research.universe import FMP_SECTOR_TO_GICS, GICS_SECTORS, parse_sp_table, sector_name
 
 HTML = """

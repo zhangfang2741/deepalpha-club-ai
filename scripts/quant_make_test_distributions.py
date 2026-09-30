@@ -48,6 +48,7 @@ def _backfill(m: dict[str, MetricValue], ratios: dict, km: dict) -> None:
 
 
 def main() -> None:
+    """生成并写出分布文件。"""
     universe = json.loads((SEED / "universe.json").read_text())
     sectors = {u["symbol"]: _WIKI_TO_KEY.get(u["sector"]) for u in universe}
     metrics_all: dict[str, tuple[str, dict[str, MetricValue]]] = {}
@@ -63,7 +64,7 @@ def main() -> None:
         inputs[sym] = inp
     dists = build_distributions(metrics_all)
     composites = []
-    for sym, (sector, _) in metrics_all.items():
+    for sym in metrics_all:
         ev = evaluate(inputs[sym], [], dists)
         if ev.composite is not None:
             composites.append(ev.composite)

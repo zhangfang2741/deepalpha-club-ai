@@ -83,6 +83,7 @@ def quantile(sorted_values: list[float], q: float) -> float:
 
 
 def score_metric(key: str, mv: MetricValue, dist: list[float] | None, prev_grade: str | None) -> ScoredMetric:
+    """单个指标在板块分布中打分（百分位 + 防抖等级 + 中位数 / 分位统计）。"""
     lower_better = METRICS[key].direction == "lower_better"
     dist = dist or []
     n = len(dist)
@@ -120,12 +121,14 @@ def score_dimension(dim: str, scored: list[ScoredMetric], prev_grade: str | None
 
 
 def composite(dims: list[DimensionScore]) -> float | None:
+    """可用维度分的等权平均。"""
     usable = [d.score for d in dims if d.status == "ok" and d.score is not None]
     return round(sum(usable) / len(usable), 1) if usable else None
 
 
 def overall(dims: list[DimensionScore], overall_dist: list[float], n_analysts: int,
             prev_grade: str | None) -> OverallScore:
+    """综合等级：综合分在全体中的百分位 → 等级；一票否决与分析师不足处理。"""
     score = composite(dims)
     used = sum(d.status == "ok" for d in dims)
     if score is None:
@@ -155,6 +158,7 @@ def pick_key_fact(dim: DimensionScore) -> str | None:
 
 
 def mark_extremes(dims: list[DimensionScore]) -> None:
+    """标出分最高 / 最低的维度（首页卡片高亮）。"""
     usable = [d for d in dims if d.status == "ok" and d.score is not None]
     if len(usable) < 2:
         return

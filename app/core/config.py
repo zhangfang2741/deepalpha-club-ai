@@ -401,6 +401,12 @@ class Settings:
         self.FMP_RATE_LIMIT_PER_MIN = int(os.getenv("FMP_RATE_LIMIT_PER_MIN", "290"))
         self.FMP_BATCH_RATE_LIMIT_PER_MIN = int(os.getenv("FMP_BATCH_RATE_LIMIT_PER_MIN", "150"))
         self.FMP_BATCH_BREAKER_SECONDS = int(os.getenv("FMP_BATCH_BREAKER_SECONDS", "120"))
+        # 量化研究夜间批量（app/services/quant_research/scheduler.py）：美股 UTC 22:30（北京 06:30，
+        # 排在雷达美股预热之后）逐只计算标普1500；A 股一致预期快照 UTC 09:00（北京 17:00）。
+        self.QUANT_BATCH_ENABLED = os.getenv("QUANT_BATCH_ENABLED", "true").lower() in ("true", "1", "yes")
+        self.QUANT_BATCH_UTC_HOUR = int(os.getenv("QUANT_BATCH_UTC_HOUR", "22"))
+        self.QUANT_BATCH_UTC_MINUTE = int(os.getenv("QUANT_BATCH_UTC_MINUTE", "30"))
+        self.QUANT_CN_SNAPSHOT_UTC_HOUR = int(os.getenv("QUANT_CN_SNAPSHOT_UTC_HOUR", "9"))
 
         # Alpha Vantage API（电话会议记录抓取备用源）
         self.ALPHA_VANTAGE_KEY: str | None = os.getenv("ALPHA_VANTAGE_KEY", None)

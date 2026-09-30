@@ -104,6 +104,7 @@ def ntm(fy1: dict | None, fy2: dict | None, key: str, as_of: date) -> float | No
 
 
 def analyst_count(fy1: dict | None) -> int:
+    """FY1 覆盖的分析师人数（缺失为 0）。"""
     if not fy1:
         return 0
     return int(fy1.get("numAnalystsEps") or 0)

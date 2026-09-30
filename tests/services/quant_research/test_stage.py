@@ -1,3 +1,5 @@
+"""Dickinson 现金流阶段判定。"""
+
 import pytest
 
 from app.services.quant_research.stage import classify_stage, stage_of

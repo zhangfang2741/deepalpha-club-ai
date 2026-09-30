@@ -1,3 +1,5 @@
+"""打分聚合：分布、百分位、维度分、综合等级与一票否决。"""
+
 import pytest
 
 from app.services.quant_research.metrics import MetricValue

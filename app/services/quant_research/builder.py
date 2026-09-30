@@ -72,6 +72,7 @@ class Evaluation:
 
 def evaluate(inp: StockInputs, history: list[EstimatePoint], dists: Distributions,
              prev_grades: dict | None = None) -> Evaluation:
+    """算指标（含 EPS 修正）→ 板块内打分 → 维度分，prev_grades 用于防抖。"""
     prev = prev_grades or {}
     metrics = compute_metrics(inp)
     fy1, fy2 = inp.fy1, inp.fy2
@@ -101,6 +102,7 @@ def evaluate(inp: StockInputs, history: list[EstimatePoint], dists: Distribution
 
 
 def finalize_overall(ev: Evaluation, overall_dist: list[float], prev_grades: dict | None = None) -> Evaluation:
+    """用全体综合分分布定综合等级（含一票否决）。"""
     ev.overall = overall(ev.dims, overall_dist, ev.n_analysts, (prev_grades or {}).get("overall"))
     return ev
 
@@ -177,6 +179,7 @@ def _dimension_out(d: DimensionScore, ev: Evaluation, lang: tx.Lang) -> Dimensio
 
 
 def build_payload(ev: Evaluation, lang: tx.Lang, *, in_universe: bool, sector_sample: int) -> QuantResearchOut:
+    """把一只股票的评估结果组装成接口响应。"""
     inp, o = ev.inp, ev.overall
     sname = sector_name(inp.sector_key, lang)
     notes = [n for n in (tx.overall_note(o, lang) if o else None,
@@ -193,7 +196,7 @@ def build_payload(ev: Evaluation, lang: tx.Lang, *, in_universe: bool, sector_sa
         as_of=AsOf(price_date=inp.price_date, fiscal_period=inp.fiscal_period, filing_date=inp.filing_date,
                    estimates_date=ev.estimates_date),
         peer_group=PeerGroup(sector_key=inp.sector_key, sector_name=sname, sample_size=sector_sample,
-                             in_universe=in_universe, text=tx.peer_text(sname, sector_sample, lang)),
+                             in_universe=in_universe, text=tx.peer_text(sname, sector_sample, lang, in_universe)),
         stage=stage,
         overall=Overall(grade=o.grade if o else None, score=o.score if o else None,
                         universe_percentile=o.universe_percentile if o else None,
@@ -206,6 +209,7 @@ def build_payload(ev: Evaluation, lang: tx.Lang, *, in_universe: bool, sector_sa
 
 
 def unsupported(market: str, symbol: str, lang: tx.Lang) -> QuantResearchOut:
+    """不支持的市场（二期再接港股 / A 股）。"""
     return QuantResearchOut(
         market=market, symbol=symbol, name=None, status="unsupported_market",
         status_note=tx._i(lang, "量化研究暂只支持美股", "Quant research currently covers US stocks only"),
@@ -214,6 +218,7 @@ def unsupported(market: str, symbol: str, lang: tx.Lang) -> QuantResearchOut:
 
 
 def insufficient(market: str, symbol: str, lang: tx.Lang, reason: str | None = None) -> QuantResearchOut:
+    """数据不足（批量尚未跑过、样本外股票拉不到报表等）。"""
     return QuantResearchOut(
         market=market, symbol=symbol, name=None, status="insufficient_data",
         status_note=reason or tx._i(lang, "暂无足够数据生成量化研究", "Not enough data for quant research yet"),

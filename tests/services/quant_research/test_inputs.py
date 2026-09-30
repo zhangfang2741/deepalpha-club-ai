@@ -1,3 +1,5 @@
+"""报表 TTM、财年实际值、NTM 预期解析。"""
+
 from datetime import date
 
 from app.services.quant_research.inputs import (

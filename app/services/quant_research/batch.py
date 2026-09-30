@@ -61,6 +61,7 @@ def estimate_rows(market: str, symbol: str, snapshot_date: date, estimates: list
 
 
 def needs_refresh(snapshot, reported: set[str], symbol: str, as_of: date) -> bool:
+    """是否需要重拉报表：无快照、窗口内披露了新财报、或快照超过 100 天。"""
     if snapshot is None or symbol in reported:
         return True
     fetched = snapshot.fetched_at.date() if snapshot.fetched_at else None
@@ -101,6 +102,7 @@ async def _collect_one(fmp: FmpClient, symbol: str, sector: str, name: str, as_o
 
 async def run_us_batch(as_of: date, *, redis: Redis | None, client: httpx.AsyncClient,
                        limit: int | None = None) -> dict:
+    """美股标普1500 全量计算并落库，返回摘要。limit 只用于本地试跑前 N 只。"""
     started = datetime.now(UTC)
     fmp = FmpClient(client, redis, "batch")
     universe = await fetch_sp1500(redis)
@@ -208,6 +210,7 @@ def _f(v) -> float | None:
 
 
 async def run_cn_estimate_snapshot(as_of: date) -> dict:
+    """沪深300 + 中证500 一致预期快照落库（只补不覆盖）。"""
     from app.services.signal_radar.constituents import _fetch_akshare_index
 
     symbols: list[str] = []
@@ -233,4 +236,5 @@ async def run_cn_estimate_snapshot(as_of: date) -> dict:
 
 
 def dump_summary(summary: dict) -> str:
+    """批量摘要转 JSON 文本（命令行输出用）。"""
     return json.dumps(summary, ensure_ascii=False)

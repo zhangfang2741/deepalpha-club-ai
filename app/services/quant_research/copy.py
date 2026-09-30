@@ -59,6 +59,7 @@ def _i(lang: Lang, zh: str, en: str) -> str:
 # ---------- 数值格式 ----------
 
 def fmt_money(v: float, lang: Lang) -> str:
+    """金额按中文（亿 / 万亿）或英文（M / B / T）缩写。"""
     a = abs(v)
     if lang == "zh":
         if a >= 1e12:
@@ -78,6 +79,7 @@ def fmt_money(v: float, lang: Lang) -> str:
 
 
 def fmt_input(label: str, v: float | None, lang: Lang) -> str:
+    """算式输入值：每股数值 2 位小数，倍数 / 增速 1 位，金额缩写。"""
     if v is None:
         return "—"
     if label in _PER_SHARE:
@@ -101,11 +103,13 @@ def fmt_metric_value(key: str, v: float | None) -> str:
 
 
 def metric_name(key: str, lang: Lang) -> str:
+    """指标展示名。"""
     d = METRICS[key]
     return d.name_zh if lang == "zh" else d.name_en
 
 
 def label(name: str, lang: Lang) -> str:
+    """算式输入的标签。"""
     zh, en = INPUT_LABELS[name]
     return _i(lang, zh, en)
 
@@ -136,6 +140,7 @@ def share_below(sm: ScoredMetric) -> float | None:
 
 
 def position_phrase(sm: ScoredMetric, lang: Lang) -> str:
+    """「高于 / 低于板块 x% 的公司」（x 取 1~99）。"""
     below = share_below(sm)
     if below is None:
         return ""
@@ -146,6 +151,7 @@ def position_phrase(sm: ScoredMetric, lang: Lang) -> str:
 
 
 def key_fact_text(sm: ScoredMetric, lang: Lang) -> str:
+    """维度卡片上的关键事实：指标名 + 数值 + 板块位置。"""
     name = metric_name(sm.key, lang)
     if sm.mv.status == "not_meaningful":
         zh, en = _nm_reason(sm.key)
@@ -155,6 +161,7 @@ def key_fact_text(sm: ScoredMetric, lang: Lang) -> str:
 
 
 def position_text(sm: ScoredMetric, lang: Lang) -> str | None:
+    """指标详情里的「位置 → 百分位 → 等级」推导。"""
     if sm.percentile is None or sm.grade is None:
         return None
     p = f"{sm.percentile:.0f}"
@@ -172,6 +179,7 @@ def position_text(sm: ScoredMetric, lang: Lang) -> str | None:
 # ---------- 算式 ----------
 
 def metric_expression(key: str, mv: MetricValue, lang: Lang) -> str:
+    """带真实数字的算式，如「股价 227.21 ÷ NTM EPS 预期 13.67 = 16.6」。"""
     ins = mv.inputs
     if len(ins) < 2:
         return ""
@@ -190,6 +198,7 @@ def metric_expression(key: str, mv: MetricValue, lang: Lang) -> str:
 
 
 def dimension_formula(dim: DimensionScore) -> str | None:
+    """维度分算式「(p1 + p2 + …) ÷ n = 分 → 等级」。"""
     ps = [s.percentile for s in dim.metrics if s.percentile is not None]
     if dim.score is None or not ps:
         return None
@@ -199,6 +208,7 @@ def dimension_formula(dim: DimensionScore) -> str | None:
 # ---------- 状态说明 ----------
 
 def metric_status_note(sm: ScoredMetric, lang: Lang) -> str | None:
+    """指标特殊状态的说明（无意义 / 不适用 / 缺失 / 样本不足）。"""
     st, mv = sm.status, sm.mv
     if st == "ok":
         return None
@@ -225,6 +235,7 @@ def metric_status_note(sm: ScoredMetric, lang: Lang) -> str | None:
 
 
 def dimension_status_note(dim: DimensionScore, lang: Lang) -> str | None:
+    """维度状态说明（积累中 / 暂无等级）。"""
     if dim.status == "accumulating":
         d = dim.days_accumulated or 0
         return _i(lang, f"修正历史积累中（已 {d} 天）", f"Building revision history ({d} days so far)")
@@ -234,16 +245,19 @@ def dimension_status_note(dim: DimensionScore, lang: Lang) -> str | None:
 
 
 def dimension_name(key: str, lang: Lang) -> str:
+    """维度展示名。"""
     zh, en = DIMENSION_NAMES[key]
     return _i(lang, zh, en)
 
 
 def dimension_desc(key: str, lang: Lang) -> str:
+    """维度的一句话说明。"""
     zh, en = DIMENSION_DESC[key]
     return _i(lang, zh, en)
 
 
 def overall_text(o: OverallScore, lang: Lang) -> str | None:
+    """综合分与在标普1500 中的排位。"""
     if o.score is None or o.universe_percentile is None:
         return None
     top = max(1, round(100 - o.universe_percentile))
@@ -251,6 +265,7 @@ def overall_text(o: OverallScore, lang: Lang) -> str | None:
 
 
 def overall_note(o: OverallScore, lang: Lang) -> str | None:
+    """综合等级的附加说明（封顶 / 分析师不足）。"""
     if o.grade is None and o.extra.get("reason") == "few_analysts":
         return _i(lang, "分析师覆盖不足 3 位，不给综合等级", "Fewer than 3 covering analysts; no composite grade")
     if o.capped and o.cap_dimension:
@@ -260,17 +275,20 @@ def overall_note(o: OverallScore, lang: Lang) -> str | None:
 
 
 def dims_used_note(used: int, lang: Lang) -> str | None:
+    """少于 5 个维度参与时的说明。"""
     if used >= 5:
         return None
     return _i(lang, f"本次综合等级基于 {used} 个维度", f"Composite grade based on {used} dimensions")
 
 
 def stage_name(key: str, lang: Lang) -> str:
+    """阶段展示名。"""
     zh, en = STAGE_NAMES[key]
     return _i(lang, zh, en)
 
 
 def stage_note(key: str, unprofitable: bool, lang: Lang) -> str:
+    """阶段提示（中性表述）。"""
     zh, en = STAGE_NOTES[key]
     note = _i(lang, zh, en)
     if unprofitable:
@@ -278,11 +296,17 @@ def stage_note(key: str, unprofitable: bool, lang: Lang) -> str:
     return note
 
 
-def peer_text(sector_name: str, n: int, lang: Lang) -> str:
-    return _i(lang, f"与{sector_name}板块 {n} 家公司比", f"Compared with {n} {sector_name} companies")
+def peer_text(sector_name: str, n: int, lang: Lang, in_universe: bool = True) -> str:
+    """比较对象说明。"""
+    base = _i(lang, f"与{sector_name}板块 {n} 家公司比", f"Compared with {n} {sector_name} companies")
+    if in_universe:
+        return base
+    return base + _i(lang, "（本股不在标普1500 样本内，按该板块分布定位）",
+                     " (not in the S&P 1500 sample; placed against the sector distribution)")
 
 
 def contains_forbidden(text: str) -> list[str]:
+    """返回文本中出现的禁用词（英文按词边界、不区分大小写）。"""
     low = text.lower()
     hits = []
     for w in FORBIDDEN:

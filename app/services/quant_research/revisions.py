@@ -28,7 +28,7 @@ class EstimatePoint:
 
 def value_at(history: list[EstimatePoint], fiscal_date: str, target: date, field: str,
              tolerance_days: int = TOLERANCE_DAYS) -> float | None:
-    """target 当天或之前、相差不超过 tolerance_days 的最近一份快照里的值。"""
+    """取 target 当天或之前、相差不超过 tolerance_days 的最近一份快照里的值。"""
     best: EstimatePoint | None = None
     for p in history:
         if p.fiscal_date != fiscal_date or p.snapshot_date > target:
@@ -41,24 +41,27 @@ def value_at(history: list[EstimatePoint], fiscal_date: str, target: date, field
 
 
 def change(new: float | None, old: float | None) -> float | None:
+    """变化率 (新 − 旧) / |旧|；旧值为 0 或缺失返回 None。"""
     if new is None or old is None or old == 0:
         return None
     return (new - old) / abs(old)
 
 
 def accumulated_days(history: list[EstimatePoint], as_of: date) -> int:
+    """最早一份快照距今的天数。"""
     if not history:
         return 0
     return (as_of - min(p.snapshot_date for p in history)).days
 
 
 def revision_status(history: list[EstimatePoint], as_of: date) -> tuple[Literal["ok", "accumulating"], int]:
+    """历史不足 30 天为 accumulating，并返回已积累天数。"""
     days = accumulated_days(history, as_of)
     return ("accumulating" if days < PARTIAL_DAYS else "ok"), days
 
 
 _SPECS = [
-    # key, 财年(1/2), 字段, 回看天数
+    # 每项依次是：指标键、第几财年、快照字段、回看天数
     ("eps_fy1_30d", 1, "eps_avg", 30),
     ("eps_fy1_90d", 1, "eps_avg", 90),
     ("eps_fy2_90d", 2, "eps_avg", 90),

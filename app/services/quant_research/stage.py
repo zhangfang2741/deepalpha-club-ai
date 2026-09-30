@@ -27,6 +27,7 @@ _RULES = {
 
 
 def classify_stage(cfo: float | None, cfi: float | None, cff: float | None) -> str | None:
+    """三项现金流符号 → 阶段键；任一缺失返回 None。"""
     if cfo is None or cfi is None or cff is None:
         return None
 

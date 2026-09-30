@@ -1,3 +1,5 @@
+"""量化研究文案：措辞模板与禁用词守护。"""
+
 import itertools
 
 import pytest

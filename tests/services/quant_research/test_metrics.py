@@ -1,3 +1,5 @@
+"""指标注册表与报表口径计算（含特殊值）。"""
+
 from dataclasses import replace
 
 import pytest

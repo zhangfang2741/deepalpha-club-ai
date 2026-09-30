@@ -1,3 +1,5 @@
+"""等级分档、板块百分位与防抖动。"""
+
 from app.services.quant_research.grading import BANDS, grade_for, grade_with_hysteresis, percentile_of
 
 
