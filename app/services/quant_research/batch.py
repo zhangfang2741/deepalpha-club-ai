@@ -1,4 +1,4 @@
-"""夜间批量：美股标普1500 量化研究全量计算 + A 股一致预期快照。
+"""夜间批量：美股标普 500 + 纳斯达克 100 量化研究全量计算 + A 股一致预期快照。
 
 美股流程（run_us_batch）：
   成分 → 需要时重拉报表（新披露 / 无快照 / 超 100 天）→ 每只拉一致预期（写快照，只补不覆盖）与收盘价
@@ -33,7 +33,7 @@ from app.services.quant_research.inputs import StockInputs, analyst_count, build
 from app.services.quant_research.metrics import MetricValue, compute_metrics
 from app.services.quant_research.revisions import compute_revisions
 from app.services.quant_research.scoring import OVERALL_KEY, OVERALL_SECTOR, build_distributions
-from app.services.quant_research.universe import fetch_sp1500
+from app.services.quant_research.universe import fetch_target_universe
 
 MARKET = "us"
 LATEST_KEY = "quant:us:latest_as_of"
@@ -117,13 +117,13 @@ async def _collect_one(fmp: FmpClient, symbol: str, sector: str, name: str, as_o
 
 async def run_us_batch(as_of: date, *, redis: Redis | None, client: httpx.AsyncClient,
                        limit: int | None = None, sectors: set[str] | None = None) -> dict:
-    """美股标普1500 全量计算并落库，返回摘要。limit / sectors 只用于本地试跑（取部分板块或前 N 只）。"""
+    """计算标普 500 与纳斯达克 100 并集并落库，返回摘要。"""
     started = datetime.now(UTC)
     if not settings.FMP_API_KEY:
         logger.error("quant_batch_missing_fmp_key")
         return {"ok": False, "reason": "missing_fmp_key"}
     fmp = FmpClient(client, redis, "batch")
-    universe = await fetch_sp1500(redis)
+    universe = await fetch_target_universe(redis)
     if sectors:
         universe = {k: v for k, v in universe.items() if v[1] in sectors}
     symbols = sorted(universe)[:limit] if limit else sorted(universe)

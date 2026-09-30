@@ -139,7 +139,7 @@ deepalpha-club-ai/
 | 威科夫 | `/wyckoff` | `/wyckoff` | Wyckoff 阶段/事件 |
 | 一目均衡表 | `/ichimoku` | `/ichimoku` | Ichimoku 云图信号 |
 | 分析师上调 | `/analyst-upgrades` | `/analyst-upgrades` | 目标价上调榜（SP500/Nasdaq100）；`/overview/{symbol}` 为缠论 App 详情页「分析师评级」分段 |
-| 量化研究 | `/quant-research` | 缠论 App 详情页「量化研究」分段 | 美股五维度（估值/成长/盈利能力/动量/EPS 修正）标普1500 板块内百分位 → A+~F，三层下钻 + 方法说明 |
+| 量化研究 | `/quant-research` | 缠论 App 详情页「量化研究」分段 | 美股五维度（估值/成长/盈利能力/动量/EPS 修正）标普500+纳斯达克100板块内百分位 → A+~F，三层下钻 + 方法说明 |
 | 机构信号 | `/institutional-signals` | `/institutional-signals` | 13F 机构建仓榜 |
 | 行业研究 | `/research` | `/industry-research` | 深度行业研究 |
 | 企业研究 | `/sec` | `/company-research` | SEC 文件 + 公司画像 |

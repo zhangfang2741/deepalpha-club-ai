@@ -44,7 +44,7 @@ class RadarQuantFilterOut(BaseModel):
     """统计覆盖所选股票池，数量不是气泡数。"""
 
     mode: str = "weighted"
-    weight: float = 0.2
+    weight: float = 0.5
     min_grade: str | None = None
     status: str = "ready"
     eligible: int = 0

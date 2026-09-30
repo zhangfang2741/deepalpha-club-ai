@@ -62,6 +62,7 @@ def test_watchlist_sells_survive_missing_and_low_ratings():
     assert [s.symbol for s in out.signals] == ["A", "B", "C"]
     assert out.sell_count == 2 and out.buy_count == 1
     assert out.quant_filter.mode == "weighted"
+    assert out.quant_filter.weight == 0.5
 
 
 def test_row_available_date_and_invalid_scores():
@@ -82,6 +83,10 @@ def test_rating_is_weighted_and_missing_is_neutral():
     assert [s.symbol for s in out.signals] == ["B", "C", "A"]
     assert qf.rating_factor(a) == 0 and qf.rating_factor(b) == 1 and qf.rating_factor(c) == 0.5
     assert qf.rating_factor(b.model_copy(update={"quant_status": "stale"})) == 0.5
+
+
+def test_quant_rating_weight_is_fifty_percent():
+    assert qf.QUANT_WEIGHT == 0.5
 
 
 @pytest.mark.parametrize("market", ["us", "hk", "cn"])

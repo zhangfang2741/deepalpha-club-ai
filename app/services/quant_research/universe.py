@@ -1,7 +1,7 @@
-"""同行样本：标普1500（S&P 500 + 400 + 600）成分与 GICS 板块。
+"""量化评级股票池：标普 500 与纳斯达克 100 的并集及行业映射。
 
-成分取自维基百科成分表（含 GICS Sector 列），Redis 缓存 7 天。样本外股票用 FMP profile 的
-sector（FMP 自有分类）映射到 GICS 板块。
+两套成分均取自维基百科成分表，按代码去重后 Redis 缓存 7 天。纳斯达克 100 使用 ICB
+Industry 映射到项目统一的 GICS 板块键，保证行业分布与标普 500 成分使用同一套口径。
 """
 
 from __future__ import annotations
@@ -12,17 +12,17 @@ import json
 import re
 
 import httpx
+import pandas as pd
 from redis.asyncio import Redis
 
 from app.core.logging import logger
 
 WIKI_PAGES = {
     "sp500": "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
-    "sp400": "https://en.wikipedia.org/wiki/List_of_S%26P_400_companies",
-    "sp600": "https://en.wikipedia.org/wiki/List_of_S%26P_600_companies",
+    "nasdaq100": "https://en.wikipedia.org/wiki/List_of_NASDAQ-100_companies",
 }
 _UA = "Mozilla/5.0 (compatible; DeepAlphaQuant/1.0; +https://deepalpha.club)"
-CACHE_KEY = "quant:universe:sp1500"
+CACHE_KEY = "quant:universe:sp500_nasdaq100:v1"
 CACHE_TTL = 7 * 86400
 _SYMBOL_RE = re.compile(r"^[A-Z][A-Z\-]{0,6}$")
 
@@ -41,6 +41,19 @@ GICS_SECTORS: dict[str, tuple[str, str, str]] = {
     "utilities": ("Utilities", "公用事业", "Utilities"),
 }
 _WIKI_TO_KEY = {v[0]: k for k, v in GICS_SECTORS.items()}
+
+_NASDAQ_INDUSTRY_TO_GICS = {
+    "Technology": "information_technology",
+    "Consumer Discretionary": "consumer_discretionary",
+    "Industrials": "industrials",
+    "Health Care": "health_care",
+    "Consumer Staples": "consumer_staples",
+    "Utilities": "utilities",
+    "Telecommunications": "communication_services",
+    "Energy": "energy",
+    "Basic Materials": "materials",
+    "Financials": "financials",
+}
 
 FMP_SECTOR_TO_GICS: dict[str, str] = {
     "Technology": "information_technology",
@@ -70,8 +83,6 @@ def sector_name(key: str, lang: str) -> str:
 
 def parse_sp_table(html: str) -> list[tuple[str, str, str]]:
     """解析维基成分表 → [(symbol, name, sector_key)]。代码 . 换成 -，丢弃异常代码。"""
-    import pandas as pd
-
     try:
         tables = pd.read_html(io.StringIO(html))
     except ValueError:
@@ -89,8 +100,29 @@ def parse_sp_table(html: str) -> list[tuple[str, str, str]]:
     return []
 
 
-async def fetch_sp1500(redis: Redis | None) -> dict[str, tuple[str, str]]:
-    """{symbol: (name, sector_key)}。优先读 Redis；三页任一失败则不写缓存（避免残缺样本被缓存 7 天）。"""
+def parse_nasdaq100_table(html: str) -> list[tuple[str, str, str]]:
+    """解析纳斯达克 100 成分表（Ticker / Company / ICB Industry）并映射行业。"""
+    try:
+        tables = pd.read_html(io.StringIO(html))
+    except ValueError:
+        return []
+    for tbl in tables:
+        cols = [str(c) for c in tbl.columns]
+        industry_col = next((c for c in cols if c.startswith("ICB Industry")), None)
+        if "Ticker" not in cols or "Company" not in cols or industry_col is None:
+            continue
+        out = []
+        for sym, name, industry in zip(tbl["Ticker"], tbl["Company"], tbl[industry_col], strict=False):
+            symbol = str(sym).strip().replace(".", "-")
+            sector = _NASDAQ_INDUSTRY_TO_GICS.get(str(industry).strip())
+            if sector and _SYMBOL_RE.match(symbol):
+                out.append((symbol, str(name).strip(), sector))
+        return out
+    return []
+
+
+async def fetch_target_universe(redis: Redis | None) -> dict[str, tuple[str, str]]:
+    """返回标普 500 与纳斯达克 100 并集。"""
     if redis is not None:
         try:
             raw = await redis.get(CACHE_KEY)
@@ -104,11 +136,13 @@ async def fetch_sp1500(redis: Redis | None) -> dict[str, tuple[str, str]]:
         for index, url in WIKI_PAGES.items():
             try:
                 resp = await c.get(url)
-                rows = await asyncio.to_thread(parse_sp_table, resp.text) if resp.status_code == 200 else []
+                parser = parse_sp_table if index == "sp500" else parse_nasdaq100_table
+                rows = await asyncio.to_thread(parser, resp.text) if resp.status_code == 200 else []
             except Exception as e:  # noqa: BLE001
                 logger.warning("quant_universe_fetch_failed", index=index, error=str(e))
                 rows = []
-            if len(rows) < 300:
+            minimum = 450 if index == "sp500" else 90
+            if len(rows) < minimum:
                 complete = False
                 logger.warning("quant_universe_page_incomplete", index=index, count=len(rows))
             for sym, name, key in rows:
@@ -120,3 +154,8 @@ async def fetch_sp1500(redis: Redis | None) -> dict[str, tuple[str, str]]:
         except Exception as e:  # noqa: BLE001
             logger.warning("quant_universe_cache_write_failed", error=str(e))
     return out
+
+
+async def fetch_sp1500(redis: Redis | None) -> dict[str, tuple[str, str]]:
+    """兼容旧调用方；新的批处理入口使用 fetch_target_universe。"""
+    return await fetch_target_universe(redis)

@@ -171,7 +171,7 @@ async def lifespan(app: FastAPI):
         signal_radar_sub_level_task = asyncio.create_task(run_signal_radar_sub_level_scheduler())
 
     if settings.QUANT_BATCH_ENABLED:
-        # 量化研究夜间批量（美股标普1500 + A 股预期快照），FMP 调用受全局预算约束
+        # 量化研究夜间批量（美股标普500 + 纳斯达克100 + A 股预期快照），FMP 调用受全局预算约束
         quant_scheduler_task = asyncio.create_task(run_quant_scheduler())
         logger.info("quant_scheduler_started", us_utc_hour=settings.QUANT_BATCH_UTC_HOUR,
                     us_utc_minute=settings.QUANT_BATCH_UTC_MINUTE)

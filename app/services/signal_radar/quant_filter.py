@@ -13,7 +13,7 @@ from app.services.quant_research.grading import GRADE_ORDER
 from app.services.quant_research.universe import normalize_us_symbol
 
 MAX_AGE_DAYS = 7
-QUANT_WEIGHT = 0.2
+QUANT_WEIGHT = 0.5
 
 
 @dataclass(frozen=True)

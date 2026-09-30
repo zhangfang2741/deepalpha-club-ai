@@ -77,7 +77,7 @@ def env(monkeypatch):
     async def fake_universe(redis):
         return {s: (f"Co {s}", "information_technology") for s in SYMS}
 
-    monkeypatch.setattr(batch, "fetch_sp1500", fake_universe)
+    monkeypatch.setattr(batch, "fetch_target_universe", fake_universe)
     monkeypatch.setattr(batch, "FmpClient", lambda client, redis, priority: fake)
     monkeypatch.setattr(batch.settings, "FMP_API_KEY", "k")
     return mem, fake

@@ -99,7 +99,7 @@ _CACHE_PREFIX = "signal_radar"
 # 筛选规则（不改变详情口径），开关或规则一变就升：shape5 = 恢复 78bee01 之前的筛选（宽松口径
 # 最后一笔上的未确认信号也上榜、收盘价跌破才失效、最新日「待确认」候选补位），形态过滤暂停。
 def _mode_ns(mode: str) -> str:
-    return f"{get_policy(mode).version}:shape5:quant_weight1"
+    return f"{get_policy(mode).version}:shape5:quant_weight2"
 
 
 # czsc 形态过滤（chan/shape_filters：同向假突破 / 窄幅震荡 / 低波动）暂停应用，代码与测试保留。
@@ -312,7 +312,7 @@ def rerank_with_resonance(day: RadarDayOut, top_n: int) -> RadarDayOut:
                                 confirmed=s.confirmed)
         if s.quant_status is None:
             return technical, 0.0
-        # 技术分含最多 0.15 共振加分，先归一化，再按 80% 技术 / 20% 等级加权。
+        # 技术分含最多 0.15 共振加分，先归一化，再按 50% 技术 / 50% 等级加权。
         score = ((1 - quant_filter.QUANT_WEIGHT) * technical / (1 + _RESONANCE_BONUS)
                  + quant_filter.QUANT_WEIGHT * quant_filter.rating_factor(s))
         return score, technical

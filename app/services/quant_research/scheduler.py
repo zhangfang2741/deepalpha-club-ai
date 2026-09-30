@@ -19,7 +19,7 @@ from app.core.logging import logger
 from app.services.quant_research import repository as repo
 from app.services.quant_research.batch import run_cn_estimate_snapshot, run_us_batch
 
-# 批量锁 TTL：最长的一轮（首次全量 ~4800 次调用 @250/分钟）约 20~30 分钟，90 分钟足够。
+# 批量锁 TTL：最长的一轮（约 520 只股票、每只约 4 次调用）通常十几分钟，90 分钟足够。
 # 不能再长：部署会杀掉跑批中的进程，锁留在 Redis 里挡住下一次自举（2026-09-30 踩过 6h 死锁）。
 _LOCK_TTL = 90 * 60
 BOOTSTRAP_RETRY_SECONDS = 10 * 60
