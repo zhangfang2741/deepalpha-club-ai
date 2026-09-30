@@ -880,3 +880,5 @@
 "量化 ≥ %@ · 符合 %lld 只 · 低于门槛 %lld 只" = "Quant ≥ %@ · %lld eligible · %lld below threshold";
 "评级缺失 %lld 只 · 已过期 %lld 只" = "%lld unrated · %lld expired";
 "自选股卖出提醒保留" = "Watchlist sell alerts retained";
+
+"暂无符合量化筛选的信号" = "No signals match the quant filter";

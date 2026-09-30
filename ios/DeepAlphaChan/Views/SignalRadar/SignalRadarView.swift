@@ -434,7 +434,7 @@ struct SignalRadarView: View {
                 fieldDecoration(width: w, height: h)
 
                 if layouts.isEmpty {
-                    Text(L("当日无买卖点信号"))
+                    Text(vm.selectedDay?.quantFilter == nil ? L("当日无买卖点信号") : L("暂无符合量化筛选的信号"))
                         .font(.subheadline)
                         .foregroundColor(Theme.textSecondary)
                         .position(x: CGFloat(w / 2), y: CGFloat(h / 2))

@@ -65,6 +65,7 @@ async def load_grades(market: str, symbols: list[str], days: list[str]) -> dict[
 
 
 def grade_on(history: dict[str, list[QuantGrade]], symbol: str, day: date) -> tuple[QuantGrade | None, str]:
+    """取当时最新一条，缺失或过期时不回退到更老的优良评级。"""
     entries = [g for g in history.get(normalize_us_symbol(symbol), [])
                if g.as_of <= day and g.available_on <= day]
     if not entries:

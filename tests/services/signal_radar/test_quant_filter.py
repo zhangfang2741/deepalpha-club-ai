@@ -111,6 +111,17 @@ async def test_full_pool_filtered_before_top_n_and_candidates(monkeypatch, marke
         assert [s.symbol for s in day.signals] == ["S23"]
         assert [s.symbol for s in day.candidates] == ["S24"]
         assert day.quant_filter.eligible == 2
+        state.demo_nominal = str(DAY)
+        demo = await svc._assemble_demo(state)
+        assert [s.symbol for s in demo.days[0].signals] == ["S23"]
+        assert demo.days[0].quant_filter.eligible == 2
+        class NoWriteRedis:
+            async def set(self, *args, **kwargs):
+                raise AssertionError("查询故障不能写缓存")
+        day.quant_filter.status = "unavailable"
+        assert await svc._publish(state, response, redis=NoWriteRedis()) is response
+        demo.days[0].quant_filter.status = "unavailable"
+        await svc._publish_demo(state, demo, redis=NoWriteRedis())
     else:
         assert len(day.signals) == 3 and day.quant_filter is None
 
