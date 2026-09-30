@@ -21,10 +21,15 @@ struct RadarBubbleMetrics {
     static let nameToSymbol = 0.74
     static let minSymbolSize = 7.0
     static let minNameSize = 6.0
+    /// 评级字号：比名称字号更小一行。气泡直径严格不因评级行膨胀，
+    /// 放不下时交渲染层 minimumScaleFactor 与 lineLimit 兜底。
+    static let gradeToSymbol = 0.55
+    static let minGradeSize = 7.0
 
     let diameter: Double
     let symbolFont: CTFont
     let nameFont: CTFont
+    let gradeFont: CTFont
     let textWidth: Double
     /// 有名称就显示（名称为空时只显示代码）。
     let showsName: Bool
@@ -97,6 +102,8 @@ struct RadarBubbleMetrics {
         let d = base
         symbolFont = sf
         nameFont = nf
+        // 评级字号比符号字号更小，floor 与名称保持一致；直径不因评级行膨胀
+        gradeFont = makeSymbolFont(max(Self.minGradeSize, CTFontGetSize(sf) * Self.gradeToSymbol))
         diameter = d
         let inner = max(1, d - 2 * Self.textPadding(for: d))
         textWidth = max(1, sqrt(max(0, inner * inner - h * h)))

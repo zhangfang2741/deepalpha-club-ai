@@ -120,6 +120,17 @@ struct RadarBubble: View {
                         .truncationMode(.tail)
                         .padding(.horizontal, 4)
                 }
+                // 评级 mark 嵌入气泡内部（替代原右上角角标）：有评级时显示在最后一行，
+                // 直径仍由 symbol+name 决定，grade 字号独立、放不下由渲染层压缩兜底
+                if let grade = displayedGrade {
+                    Text(grade)
+                        .font(Font(metrics.gradeFont))
+                        .monospacedDigit()
+                        .foregroundStyle(.white.opacity(isCandidate ? 0.65 : 0.9))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .accessibilityHidden(true)
+                }
             }
             .frame(width: metrics.textWidth)
             .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
@@ -134,20 +145,6 @@ struct RadarBubble: View {
                     .background(Theme.background, in: Capsule())
                     .overlay(Capsule().stroke(Theme.textSecondary.opacity(0.6), lineWidth: 0.8))
                     .offset(y: 6)
-            }
-        }
-        .overlay(alignment: .topTrailing) {
-            if let grade = displayedGrade {
-                Text(grade)
-                    .font(.system(size: max(9, min(12, r * 0.22)), weight: .semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.textPrimary)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Theme.background, in: Capsule())
-                    .overlay(Capsule().stroke(Theme.textSecondary.opacity(0.5), lineWidth: 0.75))
-                    .offset(x: 4, y: -4)
-                    .accessibilityHidden(true)
             }
         }
         .overlay(alignment: .bottomTrailing) {
