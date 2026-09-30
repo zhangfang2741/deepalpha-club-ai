@@ -33,3 +33,4 @@ evals/reports/
 .codex/
 Claude outputs/
 marketing/chan/runs/.production.lock
+data/quant_seed/
