@@ -228,7 +228,7 @@ def compute_metrics(inp: StockInputs) -> dict[str, MetricValue]:
     enough_analysts = analyst_count(fy1) >= MIN_ANALYSTS
     est_meta = {
         "n_analysts": analyst_count(fy1),
-        "eps_low": _num(fy1, "epsLow"), "eps_high": _num(fy1, "epsHigh"),
+        "eps_fy1": _num(fy1, "epsAvg"), "eps_fy2": _num(fy2, "epsAvg"),
         "fy1_date": fy1.get("date") if fy1 else None, "fy2_date": fy2.get("date") if fy2 else None,
     }
 
@@ -286,10 +286,7 @@ def compute_metrics(inp: StockInputs) -> dict[str, MetricValue]:
     out["rev_yoy"] = _growth(rev, rev_p, [("rev_ttm", rev), ("rev_ttm_prev", rev_p)])
     rev_fy1 = _num(fy1, "revenueAvg") if enough_analysts else None
     out["rev_fwd"] = _growth(rev_fy1, fy0("revenue"), [("rev_fy1", rev_fy1), ("rev_fy0", fy0("revenue"))])
-    if inp.sector_key == "financials":
-        # 金融股报表营收是总收入口径（含利息收入），分析师预期是净收入口径，二者相除没有意义
-        out["rev_fwd"] = MetricValue(None, "not_applicable", out["rev_fwd"].inputs, "growth",
-                                     {"reason": "financials_revenue_basis"})
+
     if rev is not None and rev_3 is not None and rev > 0 and rev_3 > 0:
         out["rev_cagr3"] = MetricValue((rev / rev_3) ** (1 / 3) - 1, "ok", [("rev_ttm", rev), ("rev_ttm_3y", rev_3)],
                                        "cagr3")
@@ -318,6 +315,15 @@ def compute_metrics(inp: StockInputs) -> dict[str, MetricValue]:
     invested = (debt + equity - cash_st) if (debt is not None and equity is not None and cash_st is not None) else None
     out["roic"] = _ratio(nopat, invested, [("nopat", nopat), ("invested", invested)], den_nonpositive=na)
     out["asset_turn"] = _ratio(rev, assets, [("rev_ttm", rev), ("assets", assets)])
+
+    if inp.sector_key == "financials":
+        # 金融股：报表营收是总收入口径（含利息收入）而分析师预期是净收入口径，二者不可比；
+        # 经营现金流含存贷款变动，现金流类指标没有意义
+        out["rev_fwd"] = MetricValue(None, "not_applicable", out["rev_fwd"].inputs, "growth",
+                                     {"reason": "financials_revenue_basis"})
+        for key in ("pcf", "fcf_m"):
+            out[key] = MetricValue(None, "not_applicable", out[key].inputs, out[key].op,
+                                   {"reason": "financials_cash_flow"})
 
     # ---- 动量 ----
     closes = inp.closes

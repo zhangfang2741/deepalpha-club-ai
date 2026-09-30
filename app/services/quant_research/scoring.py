@@ -143,10 +143,12 @@ def overall(dims: list[DimensionScore], overall_dist: list[float], n_analysts: i
 
 
 def pick_key_fact(dim: DimensionScore) -> str | None:
-    """维度分 ≥ 50 取百分位最高的指标，否则取最低的；并列取注册表顺序靠前者。"""
+    """维度分 ≥ 50 取百分位最高的指标，否则取最低的；优先有真实数值的指标。"""
     part = [s for s in dim.metrics if s.percentile is not None]
     if dim.score is None or not part:
         return None
+    real = [s for s in part if s.mv.status == "ok"]
+    part = real or part  # 优先有真实数值的指标，「无意义」的信息量低
     if dim.score >= 50:
         return max(part, key=lambda s: s.percentile).key  # type: ignore[arg-type,return-value]
     return min(part, key=lambda s: s.percentile).key  # type: ignore[arg-type,return-value]

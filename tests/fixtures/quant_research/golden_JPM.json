@@ -1,0 +1,1665 @@
+{
+ "market": "us",
+ "symbol": "JPM",
+ "name": "JPMorgan Chase & Co.",
+ "status": "ok",
+ "status_note": null,
+ "methodology_version": "q1",
+ "as_of": {
+  "price_date": "2026-09-29",
+  "fiscal_period": "FY26 Q2",
+  "filing_date": "2026-08-06",
+  "estimates_date": null
+ },
+ "peer_group": {
+  "sector_key": "financials",
+  "sector_name": "金融",
+  "sample_size": 100,
+  "in_universe": true,
+  "text": "与金融板块 100 家公司比"
+ },
+ "stage": null,
+ "overall": {
+  "grade": "C",
+  "score": 50.6,
+  "universe_percentile": 51.7,
+  "dimensions_used": 4,
+  "capped": false,
+  "note": "本次综合等级基于 4 个维度",
+  "text": "综合分 50.6 · 标普1500 前 48%"
+ },
+ "dimensions": [
+  {
+   "key": "valuation",
+   "name": "估值",
+   "description": "股价相对利润、营收、现金流、资产的倍数",
+   "grade": "D-",
+   "score": 24.4,
+   "status": "ok",
+   "status_note": null,
+   "is_highest": false,
+   "is_lowest": true,
+   "key_fact": {
+    "metric": "peg_fwd",
+    "text": "前瞻 PEG 9.03，高于板块 98% 的公司"
+   },
+   "formula": "(40 + 24 + 30 + 2 + 29 + 18 + 28) ÷ 7 = 24.4 → D-",
+   "groups": [
+    {
+     "name": "市盈率",
+     "metrics": [
+      {
+       "key": "pe_ttm",
+       "name": "市盈率 TTM",
+       "description": "股价相对最近 12 个月每股收益的倍数",
+       "direction": "lower_better",
+       "value": 14.432572167169324,
+       "display_value": "14.4",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 40.2,
+       "grade": "C-",
+       "sector_median": 12.876923076923076,
+       "sector_median_display": "12.9",
+       "diff_to_median_pct": 12.1,
+       "distribution": {
+        "p10": 8.007302999338823,
+        "p25": 10.513655462184875,
+        "p50": 12.876923076923076,
+        "p75": 18.25,
+        "p90": 29.421530605388707
+       },
+       "formula": {
+        "expression": "股价 334.98 ÷ EPS TTM 23.21 = 14.4",
+        "inputs": [
+         {
+          "label": "股价",
+          "value": "334.98",
+          "note": "2026-09-29"
+         },
+         {
+          "label": "EPS TTM",
+          "value": "23.21",
+          "note": "FY26 Q2"
+         }
+        ]
+       },
+       "position_text": "高于 60% 的同板块公司 → 百分位 40 → C-"
+      },
+      {
+       "key": "pe_fwd",
+       "name": "前瞻市盈率",
+       "description": "股价相对分析师预期未来 12 个月每股收益的倍数",
+       "direction": "lower_better",
+       "value": 13.362736482247888,
+       "display_value": "13.4",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 24.2,
+       "grade": "D-",
+       "sector_median": 10.383136754803592,
+       "sector_median_display": "10.4",
+       "diff_to_median_pct": 28.7,
+       "distribution": {
+        "p10": 7.056959538351162,
+        "p25": 8.908421836415503,
+        "p50": 10.383136754803592,
+        "p75": 13.174816792182693,
+        "p90": 17.796864614932684
+       },
+       "formula": {
+        "expression": "股价 334.98 ÷ NTM EPS 预期 25.07 = 13.4",
+        "inputs": [
+         {
+          "label": "股价",
+          "value": "334.98",
+          "note": "2026-09-29"
+         },
+         {
+          "label": "NTM EPS 预期",
+          "value": "25.07",
+          "note": "10 位分析师均值 · 由本财年 24.79 与下财年 25.16 按剩余时间加权"
+         }
+        ]
+       },
+       "position_text": "高于 76% 的同板块公司 → 百分位 24 → D-"
+      }
+     ]
+    },
+    {
+     "name": "PEG",
+     "metrics": [
+      {
+       "key": "peg_ttm",
+       "name": "PEG TTM",
+       "description": "市盈率 TTM 除以最近一年 EPS 增速（%）",
+       "direction": "lower_better",
+       "value": 0.7561581492960489,
+       "display_value": "0.76",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 30.2,
+       "grade": "D",
+       "sector_median": 0.47075535964736553,
+       "sector_median_display": "0.47",
+       "diff_to_median_pct": 60.6,
+       "distribution": {
+        "p10": 0.06953390008266291,
+        "p25": 0.2562214052287582,
+        "p50": 0.47075535964736553,
+        "p75": 0.8983114306815532,
+        "p90": 1.8008243110910225
+       },
+       "formula": {
+        "expression": "市盈率 14.4 ÷ EPS 增速 % 19.1 = 0.76",
+        "inputs": [
+         {
+          "label": "市盈率",
+          "value": "14.4",
+          "note": null
+         },
+         {
+          "label": "EPS 增速 %",
+          "value": "19.1",
+          "note": null
+         }
+        ]
+       },
+       "position_text": "高于 70% 的同板块公司 → 百分位 30 → D"
+      },
+      {
+       "key": "peg_fwd",
+       "name": "前瞻 PEG",
+       "description": "前瞻市盈率除以分析师预期的下一年 EPS 增速（%）",
+       "direction": "lower_better",
+       "value": 9.030808816427847,
+       "display_value": "9.03",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 2.5,
+       "grade": "F",
+       "sector_median": 1.0530217323098494,
+       "sector_median_display": "1.05",
+       "diff_to_median_pct": 757.6,
+       "distribution": {
+        "p10": 0.33597693049030924,
+        "p25": 0.6369599320678951,
+        "p50": 1.0530217323098494,
+        "p75": 1.6369951013727055,
+        "p90": 2.7730206419744508
+       },
+       "formula": {
+        "expression": "市盈率 13.4 ÷ EPS 增速 % 1.5 = 9.03",
+        "inputs": [
+         {
+          "label": "市盈率",
+          "value": "13.4",
+          "note": null
+         },
+         {
+          "label": "EPS 增速 %",
+          "value": "1.5",
+          "note": null
+         }
+        ]
+       },
+       "position_text": "高于 98% 的同板块公司 → 百分位 2 → F"
+      }
+     ]
+    },
+    {
+     "name": "市销率",
+     "metrics": [
+      {
+       "key": "ps_ttm",
+       "name": "市销率 TTM",
+       "description": "市值相对最近 12 个月营收的倍数",
+       "direction": "lower_better",
+       "value": 3.1442535807521343,
+       "display_value": "3.1",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 28.6,
+       "grade": "D",
+       "sector_median": 2.3709252005801615,
+       "sector_median_display": "2.4",
+       "diff_to_median_pct": 32.6,
+       "distribution": {
+        "p10": 0.9147464749992752,
+        "p25": 1.5147608093360512,
+        "p50": 2.3709252005801615,
+        "p75": 3.35336501515298,
+        "p90": 5.196372395621511
+       },
+       "formula": {
+        "expression": "市值 9358.3 亿 ÷ 营收 TTM 2976.3 亿 = 3.1",
+        "inputs": [
+         {
+          "label": "市值",
+          "value": "9358.3 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "营收 TTM",
+          "value": "2976.3 亿",
+          "note": "FY26 Q2"
+         }
+        ]
+       },
+       "position_text": "高于 71% 的同板块公司 → 百分位 29 → D"
+      },
+      {
+       "key": "ps_fwd",
+       "name": "前瞻市销率",
+       "description": "市值相对分析师预期未来 12 个月营收的倍数",
+       "direction": "lower_better",
+       "value": 4.412236657631326,
+       "display_value": "4.4",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 17.8,
+       "grade": "F",
+       "sector_median": 2.8470578041135304,
+       "sector_median_display": "2.8",
+       "diff_to_median_pct": 55.0,
+       "distribution": {
+        "p10": 1.0110176562125313,
+        "p25": 1.810552118941771,
+        "p50": 2.8470578041135304,
+        "p75": 3.6171956881706118,
+        "p90": 5.157860142968219
+       },
+       "formula": {
+        "expression": "市值 9358.3 亿 ÷ NTM 营收预期 2121.0 亿 = 4.4",
+        "inputs": [
+         {
+          "label": "市值",
+          "value": "9358.3 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "NTM 营收预期",
+          "value": "2121.0 亿",
+          "note": "10 位分析师均值"
+         }
+        ]
+       },
+       "position_text": "高于 82% 的同板块公司 → 百分位 18 → F"
+      }
+     ]
+    },
+    {
+     "name": "EV/营收",
+     "metrics": [
+      {
+       "key": "ev_sales_ttm",
+       "name": "EV/营收 TTM",
+       "description": "企业价值（市值 + 负债 − 现金）相对最近 12 个月营收的倍数",
+       "direction": "lower_better",
+       "value": null,
+       "display_value": "—",
+       "status": "not_applicable",
+       "status_note": "企业价值为负（现金多于市值与负债之和），不适用，不参与计算",
+       "percentile": null,
+       "grade": null,
+       "sector_median": 3.0635876015030274,
+       "sector_median_display": "3.1",
+       "diff_to_median_pct": null,
+       "distribution": {
+        "p10": 1.0236099964018561,
+        "p25": 1.7698095058989831,
+        "p50": 3.0635876015030274,
+        "p75": 4.540622686078937,
+        "p90": 6.9049991996022975
+       },
+       "formula": {
+        "expression": "企业价值 -4488.4 亿 ÷ 营收 TTM 2976.3 亿 = —",
+        "inputs": [
+         {
+          "label": "企业价值",
+          "value": "-4488.4 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "营收 TTM",
+          "value": "2976.3 亿",
+          "note": "FY26 Q2"
+         }
+        ]
+       },
+       "position_text": null
+      },
+      {
+       "key": "ev_sales_fwd",
+       "name": "前瞻 EV/营收",
+       "description": "企业价值相对分析师预期未来 12 个月营收的倍数",
+       "direction": "lower_better",
+       "value": null,
+       "display_value": "—",
+       "status": "not_applicable",
+       "status_note": "企业价值为负（现金多于市值与负债之和），不适用，不参与计算",
+       "percentile": null,
+       "grade": null,
+       "sector_median": null,
+       "sector_median_display": null,
+       "diff_to_median_pct": null,
+       "distribution": null,
+       "formula": {
+        "expression": "企业价值 -4488.4 亿 ÷ NTM 营收预期 2121.0 亿 = —",
+        "inputs": [
+         {
+          "label": "企业价值",
+          "value": "-4488.4 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "NTM 营收预期",
+          "value": "2121.0 亿",
+          "note": "10 位分析师均值"
+         }
+        ]
+       },
+       "position_text": null
+      }
+     ]
+    },
+    {
+     "name": "EV/EBITDA",
+     "metrics": [
+      {
+       "key": "ev_ebitda_ttm",
+       "name": "EV/EBITDA TTM",
+       "description": "企业价值相对最近 12 个月 EBITDA 的倍数",
+       "direction": "lower_better",
+       "value": null,
+       "display_value": "—",
+       "status": "not_applicable",
+       "status_note": "企业价值为负（现金多于市值与负债之和），不适用，不参与计算",
+       "percentile": null,
+       "grade": null,
+       "sector_median": 10.968066016073479,
+       "sector_median_display": "11.0",
+       "diff_to_median_pct": null,
+       "distribution": {
+        "p10": 5.591290359342461,
+        "p25": 7.932493743165553,
+        "p50": 10.968066016073479,
+        "p75": 15.475475322149283,
+        "p90": 22.81638200446003
+       },
+       "formula": {
+        "expression": "企业价值 -4488.4 亿 ÷ EBITDA TTM 931.6 亿 = —",
+        "inputs": [
+         {
+          "label": "企业价值",
+          "value": "-4488.4 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "EBITDA TTM",
+          "value": "931.6 亿",
+          "note": "FY26 Q2"
+         }
+        ]
+       },
+       "position_text": null
+      },
+      {
+       "key": "ev_ebitda_fwd",
+       "name": "前瞻 EV/EBITDA",
+       "description": "企业价值相对分析师预期未来 12 个月 EBITDA 的倍数",
+       "direction": "lower_better",
+       "value": null,
+       "display_value": "—",
+       "status": "not_applicable",
+       "status_note": "企业价值为负（现金多于市值与负债之和），不适用，不参与计算",
+       "percentile": null,
+       "grade": null,
+       "sector_median": null,
+       "sector_median_display": null,
+       "diff_to_median_pct": null,
+       "distribution": null,
+       "formula": {
+        "expression": "企业价值 -4488.4 亿 ÷ NTM EBITDA 预期 935.3 亿 = —",
+        "inputs": [
+         {
+          "label": "企业价值",
+          "value": "-4488.4 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "NTM EBITDA 预期",
+          "value": "935.3 亿",
+          "note": "10 位分析师均值"
+         }
+        ]
+       },
+       "position_text": null
+      }
+     ]
+    },
+    {
+     "name": "EV/EBIT",
+     "metrics": [
+      {
+       "key": "ev_ebit_ttm",
+       "name": "EV/EBIT TTM",
+       "description": "企业价值相对最近 12 个月 EBIT 的倍数",
+       "direction": "lower_better",
+       "value": null,
+       "display_value": "—",
+       "status": "not_applicable",
+       "status_note": "企业价值为负（现金多于市值与负债之和），不适用，不参与计算",
+       "percentile": null,
+       "grade": null,
+       "sector_median": null,
+       "sector_median_display": null,
+       "diff_to_median_pct": null,
+       "distribution": null,
+       "formula": {
+        "expression": "企业价值 -4488.4 亿 ÷ EBIT TTM 839.0 亿 = —",
+        "inputs": [
+         {
+          "label": "企业价值",
+          "value": "-4488.4 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "EBIT TTM",
+          "value": "839.0 亿",
+          "note": "FY26 Q2"
+         }
+        ]
+       },
+       "position_text": null
+      },
+      {
+       "key": "ev_ebit_fwd",
+       "name": "前瞻 EV/EBIT",
+       "description": "企业价值相对分析师预期未来 12 个月 EBIT 的倍数",
+       "direction": "lower_better",
+       "value": null,
+       "display_value": "—",
+       "status": "not_applicable",
+       "status_note": "企业价值为负（现金多于市值与负债之和），不适用，不参与计算",
+       "percentile": null,
+       "grade": null,
+       "sector_median": null,
+       "sector_median_display": null,
+       "diff_to_median_pct": null,
+       "distribution": null,
+       "formula": {
+        "expression": "企业价值 -4488.4 亿 ÷ NTM EBIT 预期 875.3 亿 = —",
+        "inputs": [
+         {
+          "label": "企业价值",
+          "value": "-4488.4 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "NTM EBIT 预期",
+          "value": "875.3 亿",
+          "note": "10 位分析师均值"
+         }
+        ]
+       },
+       "position_text": null
+      }
+     ]
+    },
+    {
+     "name": "市净率",
+     "metrics": [
+      {
+       "key": "pb",
+       "name": "市净率",
+       "description": "市值相对股东权益（账面净资产）的倍数",
+       "direction": "lower_better",
+       "value": 2.4982344433232426,
+       "display_value": "2.5",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 27.5,
+       "grade": "D",
+       "sector_median": 1.4901640298434404,
+       "sector_median_display": "1.5",
+       "diff_to_median_pct": 67.6,
+       "distribution": {
+        "p10": 0.8934796032372694,
+        "p25": 1.0757797663716424,
+        "p50": 1.4901640298434404,
+        "p75": 2.715704600575407,
+        "p90": 5.394982494653554
+       },
+       "formula": {
+        "expression": "市值 9358.3 亿 ÷ 股东权益 3746.0 亿 = 2.5",
+        "inputs": [
+         {
+          "label": "市值",
+          "value": "9358.3 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "股东权益",
+          "value": "3746.0 亿",
+          "note": "FY26 Q2"
+         }
+        ]
+       },
+       "position_text": "高于 72% 的同板块公司 → 百分位 28 → D"
+      }
+     ]
+    },
+    {
+     "name": "市现率",
+     "metrics": [
+      {
+       "key": "pcf",
+       "name": "市现率 TTM",
+       "description": "市值相对最近 12 个月经营现金流的倍数",
+       "direction": "lower_better",
+       "value": null,
+       "display_value": "—",
+       "status": "not_applicable",
+       "status_note": "金融股经营现金流含存贷款变动，不适用，不参与计算",
+       "percentile": null,
+       "grade": null,
+       "sector_median": 9.662682365245308,
+       "sector_median_display": "9.7",
+       "diff_to_median_pct": null,
+       "distribution": {
+        "p10": 4.152067761391543,
+        "p25": 6.88073463236889,
+        "p50": 9.662682365245308,
+        "p75": 13.134770300368984,
+        "p90": 22.502975305022506
+       },
+       "formula": {
+        "expression": "市值 9358.3 亿 ÷ 经营现金流 TTM -1625.3 亿 = —",
+        "inputs": [
+         {
+          "label": "市值",
+          "value": "9358.3 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "经营现金流 TTM",
+          "value": "-1625.3 亿",
+          "note": "FY26 Q2"
+         }
+        ]
+       },
+       "position_text": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "key": "growth",
+   "name": "成长",
+   "description": "营收与利润的历史及预期增速",
+   "grade": "C+",
+   "score": 56.3,
+   "status": "ok",
+   "status_note": null,
+   "is_highest": false,
+   "is_lowest": false,
+   "key_fact": {
+    "metric": "rev_cagr3",
+    "text": "营收 3 年复合增速 +14%，高于板块 69% 的公司"
+   },
+   "formula": "(55 + 69 + 52 + 61 + 52 + 62 + 45 + 54) ÷ 8 = 56.3 → C+",
+   "groups": [
+    {
+     "name": "营收",
+     "metrics": [
+      {
+       "key": "rev_yoy",
+       "name": "营收同比",
+       "description": "最近 12 个月营收相比上一个 12 个月的增速",
+       "direction": "higher_better",
+       "value": 0.08035717526633879,
+       "display_value": "+8.0%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 54.8,
+       "grade": "C+",
+       "sector_median": 0.06994191232290592,
+       "sector_median_display": "+7.0%",
+       "diff_to_median_pct": 14.9,
+       "distribution": {
+        "p10": -0.06446635859521517,
+        "p25": 0.015154135373322664,
+        "p50": 0.06994191232290592,
+        "p75": 0.15974047991731588,
+        "p90": 0.31344209970551185
+       },
+       "formula": {
+        "expression": "营收 TTM 2976.3 亿 ÷ 上一个 12 个月营收 2754.9 亿 − 1 = +8.0%",
+        "inputs": [
+         {
+          "label": "营收 TTM",
+          "value": "2976.3 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "上一个 12 个月营收",
+          "value": "2754.9 亿",
+          "note": null
+         }
+        ]
+       },
+       "position_text": "高于 55% 的同板块公司 → 百分位 55 → C+"
+      },
+      {
+       "key": "rev_fwd",
+       "name": "营收预期增速",
+       "description": "分析师预期本财年营收相比上一完整财年实际值的增速",
+       "direction": "higher_better",
+       "value": null,
+       "display_value": "—",
+       "status": "not_applicable",
+       "status_note": "金融股报表营收与分析师预期口径不同，不适用，不参与计算",
+       "percentile": null,
+       "grade": null,
+       "sector_median": null,
+       "sector_median_display": null,
+       "diff_to_median_pct": null,
+       "distribution": null,
+       "formula": {
+        "expression": "本财年营收预期 2078.3 亿 ÷ 上一财年营收实际 2803.3 亿 − 1 = —",
+        "inputs": [
+         {
+          "label": "本财年营收预期",
+          "value": "2078.3 亿",
+          "note": "10 位分析师均值"
+         },
+         {
+          "label": "上一财年营收实际",
+          "value": "2803.3 亿",
+          "note": null
+         }
+        ]
+       },
+       "position_text": null
+      },
+      {
+       "key": "rev_cagr3",
+       "name": "营收 3 年复合增速",
+       "description": "最近 12 个月营收相比 3 年前同期的年化增速",
+       "direction": "higher_better",
+       "value": 0.13931381198469106,
+       "display_value": "+14%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 69.0,
+       "grade": "B",
+       "sector_median": 0.09816717579963874,
+       "sector_median_display": "+9.8%",
+       "diff_to_median_pct": 41.9,
+       "distribution": {
+        "p10": 0.008161912185915532,
+        "p25": 0.05014106443998456,
+        "p50": 0.09816717579963874,
+        "p75": 0.1551913484827087,
+        "p90": 0.2410216578653147
+       },
+       "formula": {
+        "expression": "(营收 TTM 2976.3 亿 ÷ 3 年前同期营收 2012.6 亿)^(1/3) − 1 = +14%",
+        "inputs": [
+         {
+          "label": "营收 TTM",
+          "value": "2976.3 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "3 年前同期营收",
+          "value": "2012.6 亿",
+          "note": null
+         }
+        ]
+       },
+       "position_text": "高于 69% 的同板块公司 → 百分位 69 → B"
+      }
+     ]
+    },
+    {
+     "name": "EBITDA",
+     "metrics": [
+      {
+       "key": "ebitda_yoy",
+       "name": "EBITDA 同比",
+       "description": "最近 12 个月 EBITDA 相比上一个 12 个月的增速",
+       "direction": "higher_better",
+       "value": 0.17601019983084432,
+       "display_value": "+18%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 52.2,
+       "grade": "C",
+       "sector_median": 0.16897934011717552,
+       "sector_median_display": "+17%",
+       "diff_to_median_pct": 4.2,
+       "distribution": {
+        "p10": -0.3292693472557766,
+        "p25": -0.01655461144575404,
+        "p50": 0.16897934011717552,
+        "p75": 0.41082143079419653,
+        "p90": 1.0478257510406652
+       },
+       "formula": {
+        "expression": "EBITDA TTM 931.6 亿 ÷ 上一个 12 个月 EBITDA 792.2 亿 − 1 = +18%",
+        "inputs": [
+         {
+          "label": "EBITDA TTM",
+          "value": "931.6 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "上一个 12 个月 EBITDA",
+          "value": "792.2 亿",
+          "note": null
+         }
+        ]
+       },
+       "position_text": "高于 52% 的同板块公司 → 百分位 52 → C"
+      },
+      {
+       "key": "ebitda_fwd",
+       "name": "EBITDA 预期增速",
+       "description": "分析师预期本财年 EBITDA 相比上一完整财年实际值的增速",
+       "direction": "higher_better",
+       "value": 0.16388225854868832,
+       "display_value": "+16%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 61.0,
+       "grade": "B-",
+       "sector_median": 0.10953199768696997,
+       "sector_median_display": "+11%",
+       "diff_to_median_pct": 49.6,
+       "distribution": {
+        "p10": -0.18187523893013624,
+        "p25": -0.002328418819188216,
+        "p50": 0.10953199768696997,
+        "p75": 0.272722698016336,
+        "p90": 0.5456090888420004
+       },
+       "formula": {
+        "expression": "本财年 EBITDA 预期 947.6 亿 ÷ 上一财年 EBITDA 实际 814.2 亿 − 1 = +16%",
+        "inputs": [
+         {
+          "label": "本财年 EBITDA 预期",
+          "value": "947.6 亿",
+          "note": "10 位分析师均值"
+         },
+         {
+          "label": "上一财年 EBITDA 实际",
+          "value": "814.2 亿",
+          "note": null
+         }
+        ]
+       },
+       "position_text": "高于 61% 的同板块公司 → 百分位 61 → B-"
+      }
+     ]
+    },
+    {
+     "name": "EBIT",
+     "metrics": [
+      {
+       "key": "ebit_yoy",
+       "name": "EBIT 同比",
+       "description": "最近 12 个月 EBIT 相比上一个 12 个月的增速",
+       "direction": "higher_better",
+       "value": 0.18091350552466756,
+       "display_value": "+18%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 51.8,
+       "grade": "C",
+       "sector_median": 0.16902613232966934,
+       "sector_median_display": "+17%",
+       "diff_to_median_pct": 7.0,
+       "distribution": {
+        "p10": -0.3528571758393475,
+        "p25": -0.0147295199055959,
+        "p50": 0.16902613232966934,
+        "p75": 0.40642060640455235,
+        "p90": 1.1975861153931706
+       },
+       "formula": {
+        "expression": "EBIT TTM 839.0 亿 ÷ 上一个 12 个月 EBIT 710.5 亿 − 1 = +18%",
+        "inputs": [
+         {
+          "label": "EBIT TTM",
+          "value": "839.0 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "上一个 12 个月 EBIT",
+          "value": "710.5 亿",
+          "note": null
+         }
+        ]
+       },
+       "position_text": "高于 52% 的同板块公司 → 百分位 52 → C"
+      },
+      {
+       "key": "ebit_fwd",
+       "name": "EBIT 预期增速",
+       "description": "分析师预期本财年 EBIT 相比上一完整财年实际值的增速",
+       "direction": "higher_better",
+       "value": 0.20809749930435983,
+       "display_value": "+21%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 62.3,
+       "grade": "B-",
+       "sector_median": 0.12967912657586267,
+       "sector_median_display": "+13%",
+       "diff_to_median_pct": 60.5,
+       "distribution": {
+        "p10": -0.18579748485443348,
+        "p25": 0.010923042474582478,
+        "p50": 0.12967912657586267,
+        "p75": 0.33452672839427294,
+        "p90": 0.6624619023311301
+       },
+       "formula": {
+        "expression": "本财年 EBIT 预期 877.0 亿 ÷ 上一财年 EBIT 实际 726.0 亿 − 1 = +21%",
+        "inputs": [
+         {
+          "label": "本财年 EBIT 预期",
+          "value": "877.0 亿",
+          "note": "10 位分析师均值"
+         },
+         {
+          "label": "上一财年 EBIT 实际",
+          "value": "726.0 亿",
+          "note": null
+         }
+        ]
+       },
+       "position_text": "高于 62% 的同板块公司 → 百分位 62 → B-"
+      }
+     ]
+    },
+    {
+     "name": "EPS",
+     "metrics": [
+      {
+       "key": "eps_yoy",
+       "name": "EPS 同比",
+       "description": "最近 12 个月稀释每股收益相比上一个 12 个月的增速",
+       "direction": "higher_better",
+       "value": 0.19086711133914824,
+       "display_value": "+19%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 44.6,
+       "grade": "C-",
+       "sector_median": 0.23023715415019752,
+       "sector_median_display": "+23%",
+       "diff_to_median_pct": -17.1,
+       "distribution": {
+        "p10": -0.2690355329949238,
+        "p25": 0.049135618479880794,
+        "p50": 0.23023715415019752,
+        "p75": 0.4119678702134064,
+        "p90": 1.1739457831325302
+       },
+       "formula": {
+        "expression": "EPS TTM 23.21 ÷ 上一个 12 个月 EPS 19.49 − 1 = +19%",
+        "inputs": [
+         {
+          "label": "EPS TTM",
+          "value": "23.21",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "上一个 12 个月 EPS",
+          "value": "19.49",
+          "note": null
+         }
+        ]
+       },
+       "position_text": "低于 55% 的同板块公司 → 百分位 45 → C-"
+      },
+      {
+       "key": "eps_fwd",
+       "name": "EPS 预期增速",
+       "description": "分析师预期本财年 EPS 相比上一完整财年实际值的增速",
+       "direction": "higher_better",
+       "value": 0.23907146426786596,
+       "display_value": "+24%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 54.5,
+       "grade": "C+",
+       "sector_median": 0.21267081604426008,
+       "sector_median_display": "+21%",
+       "diff_to_median_pct": 12.4,
+       "distribution": {
+        "p10": -0.004251386321626693,
+        "p25": 0.09360101712012114,
+        "p50": 0.21267081604426008,
+        "p75": 0.4774241681153344,
+        "p90": 1.1214716645237863
+       },
+       "formula": {
+        "expression": "本财年 EPS 预期 24.79 ÷ 上一财年 EPS 实际 20.01 − 1 = +24%",
+        "inputs": [
+         {
+          "label": "本财年 EPS 预期",
+          "value": "24.79",
+          "note": "10 位分析师均值"
+         },
+         {
+          "label": "上一财年 EPS 实际",
+          "value": "20.01",
+          "note": null
+         }
+        ]
+       },
+       "position_text": "高于 54% 的同板块公司 → 百分位 54 → C+"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "key": "profitability",
+   "name": "盈利能力",
+   "description": "利润率与资本回报",
+   "grade": "C+",
+   "score": 56.8,
+   "status": "ok",
+   "status_note": null,
+   "is_highest": false,
+   "is_lowest": false,
+   "key_fact": {
+    "metric": "roe",
+    "text": "ROE 17%，高于板块 66% 的公司"
+   },
+   "formula": "(44 + 62 + 64 + 62 + 66 + 42) ÷ 6 = 56.8 → C+",
+   "groups": [
+    {
+     "name": "毛利率",
+     "metrics": [
+      {
+       "key": "gross_m",
+       "name": "毛利率",
+       "description": "最近 12 个月毛利占营收的比例",
+       "direction": "higher_better",
+       "value": 0.6260327315855433,
+       "display_value": "63%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 44.0,
+       "grade": "C-",
+       "sector_median": 0.6399453945622084,
+       "sector_median_display": "64%",
+       "diff_to_median_pct": -2.2,
+       "distribution": {
+        "p10": 0.37201299557084105,
+        "p25": 0.5108873255917219,
+        "p50": 0.6399453945622084,
+        "p75": 0.7582953366528529,
+        "p90": 0.8494893698547691
+       },
+       "formula": {
+        "expression": "毛利 TTM 1863.3 亿 ÷ 营收 TTM 2976.3 亿 = 63%",
+        "inputs": [
+         {
+          "label": "毛利 TTM",
+          "value": "1863.3 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "营收 TTM",
+          "value": "2976.3 亿",
+          "note": "FY26 Q2"
+         }
+        ]
+       },
+       "position_text": "低于 56% 的同板块公司 → 百分位 44 → C-"
+      }
+     ]
+    },
+    {
+     "name": "EBIT 利润率",
+     "metrics": [
+      {
+       "key": "ebit_m",
+       "name": "EBIT 利润率",
+       "description": "最近 12 个月 EBIT 占营收的比例",
+       "direction": "higher_better",
+       "value": 0.2818840652750199,
+       "display_value": "28%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 62.5,
+       "grade": "B-",
+       "sector_median": 0.240119982127368,
+       "sector_median_display": "24%",
+       "diff_to_median_pct": 17.4,
+       "distribution": {
+        "p10": 0.08812154731960978,
+        "p25": 0.15702657224783423,
+        "p50": 0.240119982127368,
+        "p75": 0.32983100675895793,
+        "p90": 0.43959227800318573
+       },
+       "formula": {
+        "expression": "EBIT TTM 839.0 亿 ÷ 营收 TTM 2976.3 亿 = 28%",
+        "inputs": [
+         {
+          "label": "EBIT TTM",
+          "value": "839.0 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "营收 TTM",
+          "value": "2976.3 亿",
+          "note": "FY26 Q2"
+         }
+        ]
+       },
+       "position_text": "高于 62% 的同板块公司 → 百分位 62 → B-"
+      }
+     ]
+    },
+    {
+     "name": "EBITDA 利润率",
+     "metrics": [
+      {
+       "key": "ebitda_m",
+       "name": "EBITDA 利润率",
+       "description": "最近 12 个月 EBITDA 占营收的比例",
+       "direction": "higher_better",
+       "value": 0.3130029264228093,
+       "display_value": "31%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 64.1,
+       "grade": "B-",
+       "sector_median": 0.27390091288192886,
+       "sector_median_display": "27%",
+       "diff_to_median_pct": 14.3,
+       "distribution": {
+        "p10": 0.11394878452828294,
+        "p25": 0.19030863465528228,
+        "p50": 0.27390091288192886,
+        "p75": 0.36280502829667294,
+        "p90": 0.49608753593526267
+       },
+       "formula": {
+        "expression": "EBITDA TTM 931.6 亿 ÷ 营收 TTM 2976.3 亿 = 31%",
+        "inputs": [
+         {
+          "label": "EBITDA TTM",
+          "value": "931.6 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "营收 TTM",
+          "value": "2976.3 亿",
+          "note": "FY26 Q2"
+         }
+        ]
+       },
+       "position_text": "高于 64% 的同板块公司 → 百分位 64 → B-"
+      }
+     ]
+    },
+    {
+     "name": "净利率",
+     "metrics": [
+      {
+       "key": "net_m",
+       "name": "净利率",
+       "description": "最近 12 个月净利润占营收的比例",
+       "direction": "higher_better",
+       "value": 0.21861487133483182,
+       "display_value": "22%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 62.2,
+       "grade": "B-",
+       "sector_median": 0.18555831003744924,
+       "sector_median_display": "19%",
+       "diff_to_median_pct": 17.8,
+       "distribution": {
+        "p10": 0.047806324436371284,
+        "p25": 0.10474683969225537,
+        "p50": 0.18555831003744924,
+        "p75": 0.24832206207249663,
+        "p90": 0.3228741872822655
+       },
+       "formula": {
+        "expression": "净利润 TTM 650.7 亿 ÷ 营收 TTM 2976.3 亿 = 22%",
+        "inputs": [
+         {
+          "label": "净利润 TTM",
+          "value": "650.7 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "营收 TTM",
+          "value": "2976.3 亿",
+          "note": "FY26 Q2"
+         }
+        ]
+       },
+       "position_text": "高于 62% 的同板块公司 → 百分位 62 → B-"
+      }
+     ]
+    },
+    {
+     "name": "自由现金流利润率",
+     "metrics": [
+      {
+       "key": "fcf_m",
+       "name": "自由现金流利润率",
+       "description": "最近 12 个月自由现金流（经营现金流 − 资本开支）占营收的比例",
+       "direction": "higher_better",
+       "value": null,
+       "display_value": "—",
+       "status": "not_applicable",
+       "status_note": "金融股经营现金流含存贷款变动，不适用，不参与计算",
+       "percentile": null,
+       "grade": null,
+       "sector_median": 0.21763227796016504,
+       "sector_median_display": "22%",
+       "diff_to_median_pct": null,
+       "distribution": {
+        "p10": 0.030783179929104974,
+        "p25": 0.13421504634971604,
+        "p50": 0.21763227796016504,
+        "p75": 0.3191282047371062,
+        "p90": 0.46946920374594725
+       },
+       "formula": {
+        "expression": "自由现金流 TTM -1625.3 亿 ÷ 营收 TTM 2976.3 亿 = —",
+        "inputs": [
+         {
+          "label": "自由现金流 TTM",
+          "value": "-1625.3 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "营收 TTM",
+          "value": "2976.3 亿",
+          "note": "FY26 Q2"
+         }
+        ]
+       },
+       "position_text": null
+      }
+     ]
+    },
+    {
+     "name": "ROE",
+     "metrics": [
+      {
+       "key": "roe",
+       "name": "ROE",
+       "description": "最近 12 个月净利润相对股东权益的比例",
+       "direction": "higher_better",
+       "value": 0.1736982044751974,
+       "display_value": "17%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 66.0,
+       "grade": "B",
+       "sector_median": 0.1276447524817213,
+       "sector_median_display": "13%",
+       "diff_to_median_pct": 36.1,
+       "distribution": {
+        "p10": 0.059003544834142496,
+        "p25": 0.09028579434516418,
+        "p50": 0.1276447524817213,
+        "p75": 0.2048084403800611,
+        "p90": 0.3239272250685961
+       },
+       "formula": {
+        "expression": "净利润 TTM 650.7 亿 ÷ 股东权益 3746.0 亿 = 17%",
+        "inputs": [
+         {
+          "label": "净利润 TTM",
+          "value": "650.7 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "股东权益",
+          "value": "3746.0 亿",
+          "note": "FY26 Q2"
+         }
+        ]
+       },
+       "position_text": "高于 66% 的同板块公司 → 百分位 66 → B"
+      }
+     ]
+    },
+    {
+     "name": "ROA",
+     "metrics": [
+      {
+       "key": "roa",
+       "name": "ROA",
+       "description": "最近 12 个月净利润相对总资产的比例",
+       "direction": "higher_better",
+       "value": 0.012974298060505249,
+       "display_value": "1.3%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 42.1,
+       "grade": "C-",
+       "sector_median": 0.016697317501117043,
+       "sector_median_display": "1.7%",
+       "diff_to_median_pct": -22.3,
+       "distribution": {
+        "p10": 0.005071053482996467,
+        "p25": 0.010017491282713538,
+        "p50": 0.016697317501117043,
+        "p75": 0.049189383828513844,
+        "p90": 0.109495324372693
+       },
+       "formula": {
+        "expression": "净利润 TTM 650.7 亿 ÷ 总资产 5.02 万亿 = 1.3%",
+        "inputs": [
+         {
+          "label": "净利润 TTM",
+          "value": "650.7 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "总资产",
+          "value": "5.02 万亿",
+          "note": "FY26 Q2"
+         }
+        ]
+       },
+       "position_text": "低于 58% 的同板块公司 → 百分位 42 → C-"
+      }
+     ]
+    },
+    {
+     "name": "ROIC",
+     "metrics": [
+      {
+       "key": "roic",
+       "name": "ROIC",
+       "description": "税后 EBIT 相对投入资本（负债 + 股东权益 − 现金）的比例",
+       "direction": "higher_better",
+       "value": null,
+       "display_value": "—",
+       "status": "not_applicable",
+       "status_note": "投入资本为负，不适用，不参与计算",
+       "percentile": null,
+       "grade": null,
+       "sector_median": 0.04738882675575799,
+       "sector_median_display": "4.7%",
+       "diff_to_median_pct": null,
+       "distribution": {
+        "p10": 0.0050763826939156315,
+        "p25": 0.01285873869351259,
+        "p50": 0.04738882675575799,
+        "p75": 0.10638243718248203,
+        "p90": 0.19902506520549543
+       },
+       "formula": {
+        "expression": "税后 EBIT 650.7 亿 ÷ 投入资本 -1.01 万亿 = —",
+        "inputs": [
+         {
+          "label": "税后 EBIT",
+          "value": "650.7 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "投入资本",
+          "value": "-1.01 万亿",
+          "note": "FY26 Q2"
+         }
+        ]
+       },
+       "position_text": null
+      }
+     ]
+    },
+    {
+     "name": "资产周转率",
+     "metrics": [
+      {
+       "key": "asset_turn",
+       "name": "资产周转率",
+       "description": "最近 12 个月营收相对总资产的倍数",
+       "direction": "higher_better",
+       "value": 0.05934773778785496,
+       "display_value": "0.06",
+       "status": "insufficient_sample",
+       "status_note": "板块样本不足 20 家，不参与计算",
+       "percentile": null,
+       "grade": null,
+       "sector_median": null,
+       "sector_median_display": null,
+       "diff_to_median_pct": null,
+       "distribution": null,
+       "formula": {
+        "expression": "营收 TTM 2976.3 亿 ÷ 总资产 5.02 万亿 = 0.06",
+        "inputs": [
+         {
+          "label": "营收 TTM",
+          "value": "2976.3 亿",
+          "note": "FY26 Q2"
+         },
+         {
+          "label": "总资产",
+          "value": "5.02 万亿",
+          "note": "FY26 Q2"
+         }
+        ]
+       },
+       "position_text": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "key": "momentum",
+   "name": "动量",
+   "description": "最近 3 ~ 12 个月的股价涨跌",
+   "grade": "B-",
+   "score": 64.9,
+   "status": "ok",
+   "status_note": null,
+   "is_highest": true,
+   "is_lowest": false,
+   "key_fact": {
+    "metric": "r3m",
+    "text": "3 个月涨幅 +2.3%，高于板块 78% 的公司"
+   },
+   "formula": "(78 + 73 + 53 + 55) ÷ 4 = 64.9 → B-",
+   "groups": [
+    {
+     "name": "3 月",
+     "metrics": [
+      {
+       "key": "r3m",
+       "name": "3 个月涨幅",
+       "description": "最近 3 个月（63 个交易日）的前复权涨跌幅",
+       "direction": "higher_better",
+       "value": 0.02337091009073422,
+       "display_value": "+2.3%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 78.0,
+       "grade": "B+",
+       "sector_median": -0.03436038070656566,
+       "sector_median_display": "-3.4%",
+       "diff_to_median_pct": 168.0,
+       "distribution": {
+        "p10": -0.14735653367803395,
+        "p25": -0.094580489897791,
+        "p50": -0.03436038070656566,
+        "p75": 0.016179577654158894,
+        "p90": 0.1122964039216965
+       },
+       "formula": {
+        "expression": "最新收盘价 334.98 ÷ 期初收盘价 327.33 − 1 = +2.3%",
+        "inputs": [
+         {
+          "label": "最新收盘价",
+          "value": "334.98",
+          "note": "2026-09-29"
+         },
+         {
+          "label": "期初收盘价",
+          "value": "327.33",
+          "note": null
+         }
+        ]
+       },
+       "position_text": "高于 78% 的同板块公司 → 百分位 78 → B+"
+      }
+     ]
+    },
+    {
+     "name": "6 月",
+     "metrics": [
+      {
+       "key": "r6m",
+       "name": "6 个月涨幅",
+       "description": "最近 6 个月（126 个交易日）的前复权涨跌幅",
+       "direction": "higher_better",
+       "value": 0.18046305106248028,
+       "display_value": "+18%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 73.4,
+       "grade": "B+",
+       "sector_median": 0.09915110356536494,
+       "sector_median_display": "+9.9%",
+       "diff_to_median_pct": 82.0,
+       "distribution": {
+        "p10": -0.07424213524107257,
+        "p25": 0.016559914262414877,
+        "p50": 0.09915110356536494,
+        "p75": 0.18688662601544204,
+        "p90": 0.2921614726869362
+       },
+       "formula": {
+        "expression": "最新收盘价 334.98 ÷ 期初收盘价 283.77 − 1 = +18%",
+        "inputs": [
+         {
+          "label": "最新收盘价",
+          "value": "334.98",
+          "note": "2026-09-29"
+         },
+         {
+          "label": "期初收盘价",
+          "value": "283.77",
+          "note": null
+         }
+        ]
+       },
+       "position_text": "高于 73% 的同板块公司 → 百分位 73 → B+"
+      }
+     ]
+    },
+    {
+     "name": "9 月",
+     "metrics": [
+      {
+       "key": "r9m",
+       "name": "9 个月涨幅",
+       "description": "最近 9 个月（189 个交易日）的前复权涨跌幅",
+       "direction": "higher_better",
+       "value": 0.021560794120337956,
+       "display_value": "+2.2%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 52.9,
+       "grade": "C",
+       "sector_median": 0.00956392032991138,
+       "sector_median_display": "+1.0%",
+       "diff_to_median_pct": 125.4,
+       "distribution": {
+        "p10": -0.25910964829667854,
+        "p25": -0.12088480384965228,
+        "p50": 0.00956392032991138,
+        "p75": 0.12844417683508313,
+        "p90": 0.26489527468429014
+       },
+       "formula": {
+        "expression": "最新收盘价 334.98 ÷ 期初收盘价 327.91 − 1 = +2.2%",
+        "inputs": [
+         {
+          "label": "最新收盘价",
+          "value": "334.98",
+          "note": "2026-09-29"
+         },
+         {
+          "label": "期初收盘价",
+          "value": "327.91",
+          "note": null
+         }
+        ]
+       },
+       "position_text": "高于 53% 的同板块公司 → 百分位 53 → C"
+      }
+     ]
+    },
+    {
+     "name": "12 月",
+     "metrics": [
+      {
+       "key": "r12m",
+       "name": "12 个月涨幅",
+       "description": "最近 12 个月（252 个交易日）的前复权涨跌幅",
+       "direction": "higher_better",
+       "value": 0.059862051509207204,
+       "display_value": "+6.0%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 55.2,
+       "grade": "C+",
+       "sector_median": 0.03813115441022408,
+       "sector_median_display": "+3.8%",
+       "diff_to_median_pct": 57.0,
+       "distribution": {
+        "p10": -0.2936675704562313,
+        "p25": -0.09291644238263219,
+        "p50": 0.03813115441022408,
+        "p75": 0.17026446587198718,
+        "p90": 0.3250863798987175
+       },
+       "formula": {
+        "expression": "最新收盘价 334.98 ÷ 期初收盘价 316.06 − 1 = +6.0%",
+        "inputs": [
+         {
+          "label": "最新收盘价",
+          "value": "334.98",
+          "note": "2026-09-29"
+         },
+         {
+          "label": "期初收盘价",
+          "value": "316.06",
+          "note": null
+         }
+        ]
+       },
+       "position_text": "高于 55% 的同板块公司 → 百分位 55 → C+"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "key": "revisions",
+   "name": "EPS 修正",
+   "description": "分析师一致预期的近期调整",
+   "grade": null,
+   "score": null,
+   "status": "accumulating",
+   "status_note": "修正历史积累中（已 0 天）",
+   "is_highest": false,
+   "is_lowest": false,
+   "key_fact": null,
+   "formula": null,
+   "groups": [
+    {
+     "name": "本财年 EPS",
+     "metrics": [
+      {
+       "key": "eps_fy1_30d",
+       "name": "本财年 EPS 预期 30 天变化",
+       "description": "分析师对本财年每股收益的一致预期，相比 30 天前的变化",
+       "direction": "higher_better",
+       "value": null,
+       "display_value": "—",
+       "status": "missing",
+       "status_note": "数据缺失或增长基数为负，不参与计算",
+       "percentile": null,
+       "grade": null,
+       "sector_median": null,
+       "sector_median_display": null,
+       "diff_to_median_pct": null,
+       "distribution": null,
+       "formula": null,
+       "position_text": null
+      },
+      {
+       "key": "eps_fy1_90d",
+       "name": "本财年 EPS 预期 90 天变化",
+       "description": "分析师对本财年每股收益的一致预期，相比 90 天前的变化",
+       "direction": "higher_better",
+       "value": null,
+       "display_value": "—",
+       "status": "missing",
+       "status_note": "数据缺失或增长基数为负，不参与计算",
+       "percentile": null,
+       "grade": null,
+       "sector_median": null,
+       "sector_median_display": null,
+       "diff_to_median_pct": null,
+       "distribution": null,
+       "formula": null,
+       "position_text": null
+      }
+     ]
+    },
+    {
+     "name": "下财年 EPS",
+     "metrics": [
+      {
+       "key": "eps_fy2_90d",
+       "name": "下财年 EPS 预期 90 天变化",
+       "description": "分析师对下一财年每股收益的一致预期，相比 90 天前的变化",
+       "direction": "higher_better",
+       "value": null,
+       "display_value": "—",
+       "status": "missing",
+       "status_note": "数据缺失或增长基数为负，不参与计算",
+       "percentile": null,
+       "grade": null,
+       "sector_median": null,
+       "sector_median_display": null,
+       "diff_to_median_pct": null,
+       "distribution": null,
+       "formula": null,
+       "position_text": null
+      }
+     ]
+    },
+    {
+     "name": "本财年营收",
+     "metrics": [
+      {
+       "key": "rev_fy1_90d",
+       "name": "本财年营收预期 90 天变化",
+       "description": "分析师对本财年营收的一致预期，相比 90 天前的变化",
+       "direction": "higher_better",
+       "value": null,
+       "display_value": "—",
+       "status": "missing",
+       "status_note": "数据缺失或增长基数为负，不参与计算",
+       "percentile": null,
+       "grade": null,
+       "sector_median": null,
+       "sector_median_display": null,
+       "diff_to_median_pct": null,
+       "distribution": null,
+       "formula": null,
+       "position_text": null
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "disclaimer": "量化研究为基于公开财务数据的统计比较，不构成投资建议。"
+}

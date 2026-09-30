@@ -110,6 +110,21 @@ def label(name: str, lang: Lang) -> str:
     return _i(lang, zh, en)
 
 
+def _nm_reason(key: str) -> tuple[str, str]:
+    """「无意义」的具体原因（按指标的分母）。"""
+    if key.startswith("peg"):
+        return "EPS 增速或利润为负", "negative EPS growth or earnings"
+    if key == "pcf":
+        return "经营现金流为负", "negative operating cash flow"
+    if key in ("ps_ttm", "ps_fwd", "ev_sales_ttm", "ev_sales_fwd"):
+        return "营收为负", "negative revenue"
+    if key.startswith("ev_ebitda"):
+        return "EBITDA 为负", "negative EBITDA"
+    if key.startswith("ev_ebit"):
+        return "EBIT 为负", "negative EBIT"
+    return "利润为负", "negative earnings"
+
+
 # ---------- 位置描述 ----------
 
 def share_below(sm: ScoredMetric) -> float | None:
@@ -124,6 +139,7 @@ def position_phrase(sm: ScoredMetric, lang: Lang) -> str:
     below = share_below(sm)
     if below is None:
         return ""
+    below = min(max(below, 1.0), 99.0)
     if below >= 50:
         return _i(lang, f"高于板块 {below:.0f}% 的公司", f"higher than {below:.0f}% of sector peers")
     return _i(lang, f"低于板块 {100 - below:.0f}% 的公司", f"lower than {100 - below:.0f}% of sector peers")
@@ -132,7 +148,8 @@ def position_phrase(sm: ScoredMetric, lang: Lang) -> str:
 def key_fact_text(sm: ScoredMetric, lang: Lang) -> str:
     name = metric_name(sm.key, lang)
     if sm.mv.status == "not_meaningful":
-        return _i(lang, f"{name}无意义（利润为负），按最差计", f"{name} is not meaningful (negative earnings), scored as lowest")
+        zh, en = _nm_reason(sm.key)
+        return _i(lang, f"{name} 无意义（{zh}），按最差计", f"{name} is not meaningful ({en}), scored as lowest")
     sep = "，" if lang == "zh" else ", "
     return f"{name} {fmt_metric_value(sm.key, sm.mv.value)}{sep}{position_phrase(sm, lang)}"
 
@@ -144,11 +161,11 @@ def position_text(sm: ScoredMetric, lang: Lang) -> str | None:
     if sm.mv.status == "not_meaningful":
         return _i(lang, f"无意义，按最差计 → 百分位 0 → {sm.grade}",
                   f"Not meaningful, scored as lowest → percentile 0 → {sm.grade}")
-    below = share_below(sm)
-    if below is not None and below >= 50:
+    below = min(max(share_below(sm) or 0.0, 1.0), 99.0)
+    if below >= 50:
         head = _i(lang, f"高于 {below:.0f}% 的同板块公司", f"Higher than {below:.0f}% of sector peers")
     else:
-        head = _i(lang, f"低于 {100 - (below or 0):.0f}% 的同板块公司", f"Lower than {100 - (below or 0):.0f}% of sector peers")
+        head = _i(lang, f"低于 {100 - below:.0f}% 的同板块公司", f"Lower than {100 - below:.0f}% of sector peers")
     return _i(lang, f"{head} → 百分位 {p} → {sm.grade}", f"{head} → percentile {p} → {sm.grade}")
 
 
@@ -188,9 +205,12 @@ def metric_status_note(sm: ScoredMetric, lang: Lang) -> str | None:
     if st == "insufficient_sample":
         return _i(lang, "板块样本不足 20 家，不参与计算", "Fewer than 20 sector peers, excluded")
     if st == "not_meaningful":
-        return _i(lang, "分母为负（利润或现金流为负），无意义，按最差计",
-                  "Negative denominator (losses or negative cash flow): not meaningful, scored as lowest")
+        zh, en = _nm_reason(sm.key)
+        return _i(lang, f"{zh}，无意义，按最差计", f"{en[0].upper()}{en[1:]}: not meaningful, scored as lowest")
     if st == "not_applicable":
+        if mv.meta.get("reason") == "financials_cash_flow":
+            return _i(lang, "金融股经营现金流含存贷款变动，不适用，不参与计算",
+                      "Operating cash flow of financials includes deposit and loan flows; excluded")
         if mv.meta.get("reason") == "financials_revenue_basis":
             return _i(lang, "金融股报表营收与分析师预期口径不同，不适用，不参与计算",
                       "Reported and consensus revenue use different bases for financials; excluded")
