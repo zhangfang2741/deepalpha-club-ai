@@ -99,7 +99,7 @@ _CACHE_PREFIX = "signal_radar"
 # 筛选规则（不改变详情口径），开关或规则一变就升：shape5 = 恢复 78bee01 之前的筛选（宽松口径
 # 最后一笔上的未确认信号也上榜、收盘价跌破才失效、最新日「待确认」候选补位），形态过滤暂停。
 def _mode_ns(mode: str) -> str:
-    return f"{get_policy(mode).version}:shape5:quant1"
+    return f"{get_policy(mode).version}:shape5:quant2"
 
 
 # czsc 形态过滤（chan/shape_filters：同向假突破 / 窄幅震荡 / 低波动）暂停应用，代码与测试保留。
@@ -849,6 +849,11 @@ class _ScanState:
     demo_nominal: str = ""
     # symbol → (信号历史, 待确认候选, 最近K线日期)；只存拉数成功的
     results: dict[str, tuple[list[RawSignal], list[RawSignal], list[str]]] = field(default_factory=dict)
+    # 指数先评级筛选；固定本轮日期和评级快照，组装/补算复用，避免中途口径变化。
+    scan_calendar: list[str] | None = None
+    scan_count: int | None = None
+    quant_loaded: bool = False
+    quant_grades: dict[str, list[quant_filter.QuantGrade]] | None = None
     # symbol → 失败分类；补算成功后移除
     failures: dict[str, str] = field(default_factory=dict)
 
@@ -861,6 +866,36 @@ class _ScanState:
     def pending(self) -> list[str]:
         """还能补算的失败成分股。"""
         return [sym for sym, f in self.failures.items() if f in _RETRYABLE_FAILURES]
+
+
+async def _prefilter_constituents(state: _ScanState, *, redis: Redis) -> list[tuple[str, str]]:
+    """指数先筛评级再扫描；历史窗口取各展示日合格股票的并集，每只仅算一次。"""
+    if state.market != "us" or state.is_watchlist:
+        return state.constituents
+    end = state.demo_nominal if state.kind == "demo" else state.end_date
+    limit = state.days + state.max_age_days + 1
+    cutoff = (date.fromisoformat(end) - timedelta(days=30)).isoformat() if state.kind == "demo" else state.cutoff
+    try:
+        bars = await fetch_kline(user_id=state.user_id, symbol=state.universe.etf_symbol,
+                                 start_date=cutoff, end_date=end, freq="daily", redis=redis)
+    except Exception:
+        logger.exception("signal_radar_prefilter_calendar_failed", market=state.market)
+        bars = []
+    state.scan_calendar = trading_days_from_constituents(
+        [], etf_dates=[bar["time"] for bar in bars], cutoff=cutoff, end_date=end, limit=limit,
+    ) or _fallback_trading_days(end_date=end, limit=limit)
+    days = state.scan_calendar[:state.days]
+    symbols = [symbol for symbol, _ in state.constituents]
+    state.quant_grades = await quant_filter.load_grades(state.market, symbols, days)
+    state.quant_loaded = True
+    targets = [date.fromisoformat(day) for day in days]
+    selected = [(symbol, name) for symbol, name in state.constituents
+                if any(quant_filter.grade_on(state.quant_grades or {}, symbol, day)[1] == "eligible"
+                       for day in targets)]
+    state.scan_count = len(selected)
+    logger.info("signal_radar_universe_prefiltered", universe=state.universe.key,
+                total=len(state.constituents), scanned=len(selected), days=len(days))
+    return selected
 
 
 async def _scan_into(state: _ScanState, symbol: str, name: str, *, redis: Redis) -> str | None:
@@ -884,20 +919,23 @@ async def _assemble(state: _ScanState, *, redis: Redis) -> SignalRadarResponse:
     candidates = [c for _, cands, _ in state.results.values() for c in cands]
     # 展示的交易日历：以成分股日线为准（>=30% 成分股有K线的日期），并入参考 ETF 的日期；
     # 都拿不到才退化成「跳过周末」的近似日历。
-    try:
-        etf_bars = await fetch_kline(
-            user_id=state.user_id, symbol=state.universe.etf_symbol, start_date=state.cutoff,
-            end_date=state.end_date, freq="daily", redis=redis,
-        )
-    except Exception as e:  # noqa: BLE001
-        logger.warning("signal_radar_etf_kline_failed", market=state.market, error=str(e))
-        etf_bars = []
-    # 日历多取一段（最老展示日之前再往前 max_age_days 天），用来按交易日数信号年龄
-    limit = state.days + state.max_age_days + 1
-    calendar = trading_days_from_constituents(
-        [dates for _, _, dates in state.results.values() if dates],
-        etf_dates=[b["time"] for b in etf_bars], cutoff=state.cutoff, end_date=state.end_date, limit=limit,
-    ) or _fallback_trading_days(end_date=state.end_date, limit=limit)
+    if state.scan_calendar is not None:
+        calendar = state.scan_calendar
+    else:
+        try:
+            etf_bars = await fetch_kline(
+                user_id=state.user_id, symbol=state.universe.etf_symbol, start_date=state.cutoff,
+                end_date=state.end_date, freq="daily", redis=redis,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("signal_radar_etf_kline_failed", market=state.market, error=str(e))
+            etf_bars = []
+        # 日历多取一段（最老展示日之前再往前 max_age_days 天），用来按交易日数信号年龄
+        limit = state.days + state.max_age_days + 1
+        calendar = trading_days_from_constituents(
+            [dates for _, _, dates in state.results.values() if dates],
+            etf_dates=[b["time"] for b in etf_bars], cutoff=state.cutoff, end_date=state.end_date, limit=limit,
+        ) or _fallback_trading_days(end_date=state.end_date, limit=limit)
     trading_days = calendar[:state.days]
     top_n = state.top_n
 
@@ -917,7 +955,8 @@ async def _assemble(state: _ScanState, *, redis: Redis) -> SignalRadarResponse:
         pending_symbols=0 if state.is_watchlist else len(state.pending),
     )
     symbols = [symbol for symbol, _ in state.constituents]
-    grades = await quant_filter.load_grades(state.market, symbols, trading_days) if state.market == "us" else {}
+    grades = state.quant_grades if state.quant_loaded else (
+        await quant_filter.load_grades(state.market, symbols, trading_days) if state.market == "us" else {})
     for index, day in enumerate(resp.days):
         if index == 0:
             day.candidates = pick_candidates(
@@ -945,7 +984,8 @@ async def _publish(state: _ScanState, resp: SignalRadarResponse, *, redis: Redis
         return resp
     failure_counts = Counter(state.failures.values())
     failed_symbols = len(state.failures)
-    failure_rate = failed_symbols / len(state.constituents) if state.constituents else 0.0
+    scan_count = state.scan_count if state.scan_count is not None else len(state.constituents)
+    failure_rate = failed_symbols / scan_count if scan_count else 0.0
     logger.info(
         "signal_radar_computed", market=state.market, mode=state.mode,
         universe=len(state.constituents), symbols_with_signals=sum(1 for h, _, _ in state.results.values() if h),
@@ -1154,6 +1194,7 @@ async def compute_market(
     # 新一轮扫描：作废同一 (口径, 市场, universe) 上还在跑的旧补算
     generation = await _next_generation(redis, state.gen_key)
 
+    scan_constituents = await _prefilter_constituents(state, redis=redis)
     sem = asyncio.Semaphore(_SCAN_CONCURRENCY)
 
     async def _one(symbol: str, name: str) -> None:
@@ -1163,7 +1204,7 @@ async def compute_market(
                 # 让这个名额歇一会儿，给数据源一点喘息时间再继续消费队列。
                 await asyncio.sleep(_RATE_LIMIT_BACKOFF_SECONDS)
 
-    await asyncio.gather(*[_one(sym, name) for sym, name in constituents])
+    await asyncio.gather(*[_one(sym, name) for sym, name in scan_constituents])
 
     resp = await _publish(state, await _assemble(state, redis=redis), redis=redis)
     await _after_scan(state, generation, redis=redis)
@@ -1283,8 +1324,12 @@ def resolve_demo_target(nominal: str, per_symbol_dates: list[list[str]]) -> tupl
 async def _assemble_demo(state: _ScanState) -> SignalRadarResponse:
     """示例日快照：用今天的结构回看名义日期（对齐到之前最近交易日）那一天在场的信号。"""
     histories = [h for h, _, _ in state.results.values() if h]
-    target, calendar = resolve_demo_target(
-        state.demo_nominal, [dates for _, _, dates in state.results.values() if dates])
+    if state.scan_calendar is not None:
+        calendar = state.scan_calendar
+        target = calendar[0]
+    else:
+        target, calendar = resolve_demo_target(
+            state.demo_nominal, [dates for _, _, dates in state.results.values() if dates])
     resp = SignalRadarResponse(
         market=state.market,
         universe=state.universe.key,
@@ -1302,7 +1347,8 @@ async def _assemble_demo(state: _ScanState) -> SignalRadarResponse:
 
     symbols = [symbol for symbol, _ in state.constituents]
     if state.market == "us":
-        grades = await quant_filter.load_grades(state.market, symbols, [target])
+        grades = state.quant_grades if state.quant_loaded else await quant_filter.load_grades(
+            state.market, symbols, [target])
         resp.days[0] = quant_filter.apply_filter(resp.days[0], grades, symbols)
     resp.days[0] = rerank_with_resonance(resp.days[0], DEFAULT_TOP_N)
     return resp
@@ -1313,7 +1359,8 @@ async def _publish_demo(state: _ScanState, resp: SignalRadarResponse, *, redis: 
     if any(day.quant_filter and day.quant_filter.status == "unavailable" for day in resp.days):
         return
     failure_counts = Counter(state.failures.values())
-    failure_rate = len(state.failures) / len(state.constituents) if state.constituents else 0.0
+    scan_count = state.scan_count if state.scan_count is not None else len(state.constituents)
+    failure_rate = len(state.failures) / scan_count if scan_count else 0.0
     has_signals = any(h for h, _, _ in state.results.values())
     logger.info(
         "signal_radar_demo_scan_done", market=state.market, universe=state.universe.key, target=resp.as_of,
@@ -1323,7 +1370,8 @@ async def _publish_demo(state: _ScanState, resp: SignalRadarResponse, *, redis: 
     )
     # 大面积拉数失败（部署重启时各市场并发预热，行情源限流）算出来的残缺/空快照不能写进去，
     # 否则所有人半天都看到空雷达；不写缓存，后台补算补上后再写（或下一个请求重算）。
-    if failure_rate > _MAX_ACCEPTABLE_FAILURE_RATE or not has_signals:
+    # 评级预筛选确实没有合格股票时，空结果有效，可缓存以免重复扫描。
+    if failure_rate > _MAX_ACCEPTABLE_FAILURE_RATE or (not has_signals and state.scan_count != 0):
         logger.warning(
             "signal_radar_demo_scan_degraded_not_cached", market=state.market, universe=state.universe.key,
             failure_rate=round(failure_rate, 2), failure_breakdown=dict(failure_counts),
@@ -1365,6 +1413,7 @@ async def compute_demo_day(
         cutoff=(today - timedelta(days=45)).isoformat(), kind="demo", demo_nominal=demo_snapshot_date(),
     )
     generation = await _next_generation(redis, state.gen_key)
+    scan_constituents = await _prefilter_constituents(state, redis=redis)
     sem = asyncio.Semaphore(_SCAN_CONCURRENCY)
 
     async def _one(symbol: str, name: str) -> None:
@@ -1373,7 +1422,7 @@ async def compute_demo_day(
                 # 与 compute_market 同一套：命中限流让这个名额歇一会儿，别立刻放下一个去撞
                 await asyncio.sleep(_RATE_LIMIT_BACKOFF_SECONDS)
 
-    await asyncio.gather(*[_one(sym, name) for sym, name in constituents])
+    await asyncio.gather(*[_one(sym, name) for sym, name in scan_constituents])
     resp = await _assemble_demo(state)
     await _publish_demo(state, resp, redis=redis)
     await _after_scan(state, generation, redis=redis)

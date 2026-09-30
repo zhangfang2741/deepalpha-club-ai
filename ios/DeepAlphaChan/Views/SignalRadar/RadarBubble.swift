@@ -27,6 +27,20 @@ struct RadarBubble: View {
     /// 已确认（所在笔已走完）：左上角打勾。宽松口径下每天多数气泡落在还没走完的最后一笔上、
     /// 是未确认的，所以只给少数已确认的做标记，不给多数未确认的挂标签（画面更干净）。
     private var isConfirmed: Bool { !isCandidate && signal.confirmed }
+    /// 过期或缺失评级不显示角标，避免自选股卖出提醒展示失效等级。
+    private var displayedGrade: String? {
+        guard signal.quantStatus != "stale", signal.quantStatus != "missing" else { return nil }
+        return signal.quantGrade
+    }
+
+    private var accessibilityDescription: String {
+        var parts = [signal.symbol, signal.name, signal.isBuy ? L("买点") : L("卖点")]
+        parts.append(isCandidate ? L("待确认，不算买卖点") : (isConfirmed ? L("已确认") : L("未确认")))
+        if isNew { parts.append(L("所选日期当天新增")) }
+        if signal.isSubLevelResonance { parts.append(L("日线与30分钟共振")) }
+        if let grade = displayedGrade { parts.append(L("量化评级 %@", grade)) }
+        return parts.joined(separator: " ")
+    }
 
     var body: some View {
         content
@@ -65,13 +79,7 @@ struct RadarBubble: View {
             }
             .position(x: baseX, y: baseY)
             .accessibilityElement()
-            .accessibilityLabel(
-                "\(signal.symbol) \(signal.name) \(signal.isBuy ? L("买点") : L("卖点"))"
-                + (isCandidate ? " \(L("待确认，不算买卖点"))" : "")
-                + (isCandidate ? "" : " \(isConfirmed ? L("已确认") : L("未确认"))")
-                + (isNew ? " \(L("所选日期当天新增"))" : "")
-                + (signal.isSubLevelResonance ? " \(L("日线与30分钟共振"))" : "")
-            )
+            .accessibilityLabel(accessibilityDescription)
             .accessibilityAddTraits(.isButton)
             .onAppear {
                 floatY = -6
@@ -129,7 +137,21 @@ struct RadarBubble: View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            // "新"改放气泡外面右上角：挤在气泡内部会跟代码/名称文字抢地方。
+            if let grade = displayedGrade {
+                Text(grade)
+                    .font(.system(size: max(9, min(12, r * 0.22)), weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.textPrimary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Theme.background, in: Capsule())
+                    .overlay(Capsule().stroke(Theme.textSecondary.opacity(0.5), lineWidth: 0.75))
+                    .offset(x: 4, y: -4)
+                    .accessibilityHidden(true)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            // 评级占右上角，「新」移到右下角，与左下角共振标记分开。
             if isNew && !isCandidate {
                 Text(L("新"))
                     .font(.system(size: max(8, min(12, r * 0.22)), weight: .bold))
@@ -138,7 +160,7 @@ struct RadarBubble: View {
                     .padding(.vertical, 1.5)
                     .background(Theme.segment)
                     .clipShape(Capsule())
-                    .offset(x: 4, y: -4)
+                    .offset(x: 4, y: 4)
             }
         }
         .overlay(alignment: .topLeading) {

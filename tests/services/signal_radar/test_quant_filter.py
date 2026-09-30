@@ -134,3 +134,78 @@ async def test_query_failure_is_distinct_from_no_data(monkeypatch):
     day = RadarDayOut(date=str(DAY), buy_count=1, sell_count=0, signals=[signal("A")])
     assert qf.apply_filter(day, None, ["A"]).quant_filter.status == "unavailable"
     assert qf.apply_filter(day, {}, ["A"]).quant_filter.status == "ready"
+
+
+@pytest.mark.parametrize("failed", [False, True])
+async def test_index_prefilter_precedes_stock_calculation(monkeypatch, failed):
+    """未达标、缺失与过期股票不调用个股扫描；合格股票算完才取前十。"""
+    today = date.today()
+    eligible = [f"PASS{i}" for i in range(12)]
+    symbols = eligible + ["LOW", "MISSING", "STALE"]
+    events = []
+    async def resolve(*args, **kwargs):
+        return [(s,s) for s in symbols]
+    async def bars(**kwargs):
+        return [{"time": str(today)}]
+    async def load(market, requested, days):
+        events.append("grades")
+        if failed:
+            return None
+        return {**{s: [grade(day=today, available=today)] for s in eligible},
+                "LOW": [grade("B+", day=today, available=today)],
+                "STALE": [grade(day=date(2020, 1, 1), available=date(2020, 1, 1))]}
+    async def scan(symbol, name, **kwargs):
+        assert events[0] == "grades"
+        events.append(symbol)
+        raw = svc.RawSignal(symbol=symbol, name=symbol, side="buy", label="二买", signal_type="buy2",
+                            date=str(today), price=1, strength=0.8, bias="bullish",
+                            signal_strength="strong", confirmed=True, pivot_stage_depth=0.5)
+        return [raw], None, None, [str(today)]
+    async def attach(*args, **kwargs):
+        pass
+    async def publish(state, response, **kwargs):
+        assert state.scan_count == (0 if failed else 12)
+        return response
+    monkeypatch.setattr(svc, "resolve_constituents", resolve)
+    monkeypatch.setattr(svc, "fetch_kline", bars)
+    monkeypatch.setattr(qf, "load_grades", load)
+    monkeypatch.setattr(svc, "_scan_symbol", scan)
+    monkeypatch.setattr(svc, "attach_sub_levels", attach)
+    monkeypatch.setattr(svc, "_publish", publish)
+    monkeypatch.setattr(svc, "_after_scan", attach)
+    response = await svc.compute_market("us", redis=None, days=1)
+    assert response.universe_size == 15
+    assert len(response.days[0].signals) == (0 if failed else 10)
+    assert set(events[1:]) == (set() if failed else set(eligible))
+    assert events.count("grades") == 1
+
+
+async def test_prefilter_keeps_historical_eligible_union_and_skips_watchlist(monkeypatch):
+    async def bars(**kwargs):
+        return [{"time": "2026-09-29"}, {"time": "2026-09-30"}]
+    async def load(*args):
+        return {"PAST": [grade("B+"), grade(day=date(2026, 9, 29), available=date(2026, 9, 29))],
+                "NOW": [grade()], "LOW": [grade("B+")]}
+    monkeypatch.setattr(svc, "fetch_kline", bars)
+    monkeypatch.setattr(qf, "load_grades", load)
+    state = svc._ScanState(market="us", universe=get_universe("us"), is_watchlist=False,
+                           constituents=[(s,s) for s in ["PAST", "NOW", "LOW"]], user_id=None,
+                           mode="loose", days=2, top_n=10, max_age_days=25, start_date="2026-01-01",
+                           end_date=str(DAY), cutoff="2026-09-01")
+    assert [s for s, _ in await svc._prefilter_constituents(state, redis=None)] == ["PAST", "NOW"]
+    assert qf.grade_on(state.quant_grades, "PAST", DAY)[1] == "below_threshold"
+    state.is_watchlist = True
+    assert await svc._prefilter_constituents(state, redis=None) == state.constituents
+
+    state.is_watchlist = False
+    state.scan_count = 0
+    state.quant_grades = {}
+    state.demo_nominal = str(DAY)
+    class RecordingRedis:
+        written = False
+        async def set(self, *args, **kwargs):
+            self.written = True
+    redis = RecordingRedis()
+    empty = await svc._assemble_demo(state)
+    await svc._publish_demo(state, empty, redis=redis)
+    assert redis.written and empty.days[0].signals == []

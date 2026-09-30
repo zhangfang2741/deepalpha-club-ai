@@ -882,3 +882,5 @@
 "自选股卖出提醒保留" = "Watchlist sell alerts retained";
 
 "暂无符合量化筛选的信号" = "No signals match the quant filter";
+
+"量化评级 %@" = "Quant grade %@";
