@@ -16,6 +16,7 @@ from app.cache.client import current_redis
 from app.cache.operations import acquire_lock
 from app.core.config import settings
 from app.core.logging import logger
+from app.services.quant_research import repository as repo
 from app.services.quant_research.batch import run_cn_estimate_snapshot, run_us_batch
 
 _LOCK_TTL = 6 * 3600
@@ -35,6 +36,41 @@ def next_trigger(after: datetime, hour: int, minute: int, weekdays: set[int]) ->
 def us_session_date(trigger: datetime) -> date:
     """UTC 22:30 触发时，对应的美股交易日就是当天（美东收盘 20:00/21:00 UTC 之后）。"""
     return trigger.astimezone(UTC).date()
+
+
+def last_us_session(now: datetime) -> date:
+    """最近一个已收盘的美股交易日：now 晚于当日 UTC 22:30（收盘 + 数据源缓冲）取当天，否则取前一个工作日。
+
+    定时批量在 22:30 触发时结果与 us_session_date 一致；冷启动自举在任意时刻调用也得到正确口径。
+    """
+    now = now.astimezone(UTC)
+    sess = now.date()
+    if now < now.replace(hour=22, minute=30, second=0, microsecond=0):
+        sess -= timedelta(days=1)
+    while sess.weekday() >= 5:
+        sess -= timedelta(days=1)
+    return sess
+
+
+BOOTSTRAP_DELAY_SECONDS = 120
+
+
+async def _bootstrap_once() -> None:
+    """冷启动自举：从未跑过批量（没有任何板块分布）时，启动后先跑一次首次全量。
+
+    首次部署若等到定时点（北京时间 06:30），白天所有请求都会拿到「数据尚未生成」；
+    自举让结果在部署后 ~1 小时内可用。多实例 / 与定时批量并发由 Redis 锁保证只跑一次。
+    """
+    try:
+        await asyncio.sleep(BOOTSTRAP_DELAY_SECONDS)
+        if await repo.latest_distribution_date("us") is not None:
+            return
+        logger.info("quant_batch_bootstrap_start")
+        await _run_once("us", last_us_session(datetime.now(UTC)))
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:  # noqa: BLE001 自举失败不影响调度循环，定时批量会再跑
+        logger.exception("quant_batch_bootstrap_failed", error=str(e))
 
 
 async def _run_once(kind: str, day: date) -> None:
@@ -70,6 +106,7 @@ async def run_quant_scheduler() -> None:
         logger.info("quant_batch_disabled")
         return
     await asyncio.gather(
+        _bootstrap_once(),
         _loop("us", settings.QUANT_BATCH_UTC_HOUR, settings.QUANT_BATCH_UTC_MINUTE, {0, 1, 2, 3, 4}),
         _loop("cn", settings.QUANT_CN_SNAPSHOT_UTC_HOUR, 0, {0, 1, 2, 3, 4}),
     )

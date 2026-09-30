@@ -20,6 +20,7 @@ from app.services.quant_research.builder import (
     sector_sample_sizes,
     unsupported,
 )
+from app.services.quant_research import copy as tx
 from app.services.quant_research.copy import Lang
 from app.services.quant_research.fmp import FmpClient
 from app.services.quant_research.inputs import build_inputs
@@ -74,7 +75,10 @@ async def _cache(redis: Redis | None, key: str, out: QuantResearchOut, ttl: int)
 async def _compute_on_demand(symbol: str, lang: Lang, redis: Redis | None) -> QuantResearchOut:
     as_of = await repo.latest_distribution_date(MARKET)
     if as_of is None:
-        return insufficient(MARKET, symbol, lang)
+        return insufficient(
+            MARKET, symbol, lang,
+            tx._i(lang, "板块基准数据尚未生成：首次批量计算正在进行或尚未开始，完成约需 30~60 分钟",
+                  "Sector baselines are not ready yet: the first full computation takes about 30-60 minutes"))
     dists = await repo.get_distributions(MARKET, as_of)
     async with httpx.AsyncClient() as client:
         fmp = FmpClient(client, redis, "user")
@@ -89,7 +93,9 @@ async def _compute_on_demand(symbol: str, lang: Lang, redis: Redis | None) -> Qu
             await fmp.estimates_annual(symbol), await fmp.price_light(symbol, date.today()),
         )
     if not isinstance(income, list) or not income or not isinstance(px, list) or not px:
-        return insufficient(MARKET, symbol, lang)
+        return insufficient(MARKET, symbol, lang,
+                            tx._i(lang, "暂时无法获取该股票的数据，请稍后再试",
+                                  "Could not fetch data for this symbol, please try again later"))
     today = datetime.now(UTC).date()
     est_list = est if isinstance(est, list) else []
     # 看过的样本外股票也存一份当日预期，EPS 修正历史随之积累（只补不覆盖）

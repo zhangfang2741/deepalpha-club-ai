@@ -52,6 +52,7 @@ async def test_no_batch_yet_is_insufficient(monkeypatch):
     monkeypatch.setattr(service.repo, "latest_distribution_date", none)
     out = await service.get_quant_research("us", "RKLB", "en", redis=None)
     assert out.status == "insufficient_data"
+    assert "not ready" in (out.status_note or "")
 
 
 async def test_class_share_symbol_normalized(monkeypatch):
