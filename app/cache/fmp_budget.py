@@ -27,6 +27,12 @@ _WINDOW_TTL = 120
 _local_counts: dict[str, int] = {}
 _local_breaker_until = 0.0
 
+# 进程内串行化所有 Redis 访问：批量全量是 12 信号量 × 每股 gather 3 的并发 acquire，
+# 曾瞬时需要 ~36 条池连接打满 max_connections（Too many connections），降级进程内计数后
+# 跨进程限流失效。预算命令是亚毫秒级的，串行化后占用恒定 ≤1 条连接，也消除分钟边界
+# 集体醒来的连接风暴。锁内只做 Redis 命令，绝不 sleep。
+_redis_lock = asyncio.Lock()
+
 
 def _minute_keys(minute: int) -> tuple[str, str]:
     return f"fmp:budget:{minute}", f"fmp:budget:batch:{minute}"
@@ -81,18 +87,22 @@ async def acquire(
     limit_batch = limit_batch or settings.FMP_BATCH_RATE_LIMIT_PER_MIN
     while True:
         t = now()
-        if priority == "batch":
-            wait = await _breaker_remaining(redis, t)
-            if wait > 0:
-                await sleep(wait)
-                continue
         minute = int(t // 60)
         key_total, key_batch = _minute_keys(minute)
         until_next_minute = (minute + 1) * 60 - t + 0.05
-        if priority == "batch" and await _incr(redis, key_batch) > limit_batch:
-            await sleep(until_next_minute)
+        # 一轮判断的 Redis 命令持锁串行（见 _redis_lock 注释）；sleep 在锁外，
+        # 多个等待者醒来后在锁上排队，天然错峰
+        async with _redis_lock:
+            wait = await _breaker_remaining(redis, t) if priority == "batch" else 0.0
+            over_batch = over_total = False
+            if wait <= 0:
+                over_batch = (priority == "batch"
+                              and await _incr(redis, key_batch) > limit_batch)
+                over_total = not over_batch and await _incr(redis, key_total) > limit_total
+        if wait > 0:
+            await sleep(wait)
             continue
-        if await _incr(redis, key_total) > limit_total:
+        if over_batch or over_total:
             await sleep(until_next_minute)
             continue
         return
@@ -109,7 +119,8 @@ async def report_429(redis: Redis | None, priority: Priority, *, now: Callable[[
     if redis is None:
         return
     try:
-        await redis.set(BREAKER_KEY, "1", ex=seconds)
+        async with _redis_lock:
+            await redis.set(BREAKER_KEY, "1", ex=seconds)
     except Exception as e:  # noqa: BLE001
         logger.warning("fmp_budget_redis_error", op="set_breaker", error=str(e))
 

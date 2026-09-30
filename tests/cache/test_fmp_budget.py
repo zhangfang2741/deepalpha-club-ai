@@ -1,5 +1,7 @@
 """FMP 全局调用预算：分钟额度、批量额度、429 熔断、无 Redis 退化。"""
 
+import asyncio
+
 import pytest
 
 from app.cache import fmp_budget
@@ -111,6 +113,65 @@ async def test_local_fallback_without_redis():
     await report_429(None, "batch", now=c.now)
     await acquire(None, "batch", now=c.now, sleep=c.sleep, limit_total=10, limit_batch=2)
     assert c.slept[-1] == pytest.approx(fmp_budget.settings.FMP_BATCH_BREAKER_SECONDS)
+
+
+class _TrackingRedis(_FakeRedis):
+    """记录同时在执行的 Redis 命令数峰值（复现连接池并发需求）。
+
+    每个命令里 await sleep(0) 让出事件循环，制造出真实网络往返下的交错窗口。
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.in_flight = 0
+        self.peak = 0
+
+    def _enter(self):
+        self.in_flight += 1
+        self.peak = max(self.peak, self.in_flight)
+
+    async def incr(self, key):
+        self._enter()
+        try:
+            await asyncio.sleep(0)
+            return await super().incr(key)
+        finally:
+            self.in_flight -= 1
+
+    async def ttl(self, key):
+        self._enter()
+        try:
+            await asyncio.sleep(0)
+            return await super().ttl(key)
+        finally:
+            self.in_flight -= 1
+
+    async def set(self, key, value, ex=None, nx=False):
+        self._enter()
+        try:
+            await asyncio.sleep(0)
+            return await super().set(key, value, ex=ex, nx=nx)
+        finally:
+            self.in_flight -= 1
+
+
+async def test_acquire_redis_ops_are_serialized():
+    """批量全量的并发 acquire（12 信号量 × 每股 gather 3）不得同时占用多条池连接。
+
+    生产曾因 36 并发 ttl/incr 打满 20 连接的池（Too many connections），
+    降级进程内计数导致跨进程限流失效；预算模块对 Redis 的占用必须是串行的。
+    """
+    r = _TrackingRedis()
+
+    async def one():
+        await acquire(r, "batch", now=lambda: 60_000.0, sleep=_no_sleep,
+                      limit_total=1000, limit_batch=500)
+
+    async def _no_sleep(_s):
+        return None
+
+    await asyncio.gather(*(one() for _ in range(36)))
+    assert r.peak == 1
 
 
 class _BrokenRedis:
