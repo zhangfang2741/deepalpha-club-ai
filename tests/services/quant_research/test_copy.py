@@ -46,6 +46,7 @@ def _all_texts():
         texts += [overall_note(OverallScore(80, 90, "C+", 5, True, "valuation"), lang) or "",
                   overall_note(OverallScore(80, 90, None, 5, extra={"reason": "few_analysts"}), lang) or "",
                   overall_text(OverallScore(78.4, 92.1, "A", 5), lang) or "",
+                  overall_text(OverallScore(30.0, 6.0, "F", 5), lang) or "",
                   dims_used_note(4, lang) or "",
                   dimension_status_note(DimensionScore("revisions", "accumulating", None, None, [], days_accumulated=12), lang) or "",
                   dimension_status_note(DimensionScore("growth", "unavailable", None, None, []), lang) or ""]
@@ -99,3 +100,8 @@ def test_fmt_metric_value():
     assert fmt_metric_value("peg_fwd", 0.239) == "0.24"
     assert fmt_metric_value("gross_m", 0.747) == "75%"
     assert fmt_metric_value("r12m", -0.086) == "-8.6%"
+
+
+def test_overall_text_top_and_bottom():
+    assert overall_text(OverallScore(78.4, 92.1, "A", 5), "zh") == "综合分 78.4 · 标普1500 前 8%"
+    assert overall_text(OverallScore(32.9, 6.2, "F", 5), "zh") == "综合分 32.9 · 标普1500 后 6%"

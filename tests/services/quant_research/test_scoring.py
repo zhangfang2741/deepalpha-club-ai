@@ -65,7 +65,16 @@ def test_dimension_average_and_unavailable():
     d = score_dimension("valuation", [_sm("pe_ttm", 12), _sm("pb", 71), _sm("pcf", None)], None)
     assert d.status == "ok" and d.score == 41.5 and d.grade == "C-"
     u = score_dimension("valuation", [_sm("pe_ttm", 12), _sm("pb", None), _sm("pcf", None)], None)
-    assert u.status == "unavailable" and u.score is None
+    assert u.status == "unavailable" and u.score is None   # 3 项只 1 项参与，不足 2 项
+    # 9 项里 3 项参与（未盈利公司只剩营收增速）→ 仍给等级
+    growth = [_sm("rev_yoy", 90), _sm("rev_fwd", 80), _sm("rev_cagr3", 70)] + [_sm("eps_yoy", None)] * 6
+    assert score_dimension("growth", growth, None).status == "ok"
+    assert score_dimension("growth", growth[1:], None).status == "unavailable"
+
+
+def test_min_participating():
+    from app.services.quant_research.scoring import min_participating
+    assert [min_participating(n) for n in (1, 2, 3, 4, 9, 14)] == [1, 2, 2, 2, 3, 5]
     a = score_dimension("revisions", [], None, accumulating_days=12)
     assert a.status == "accumulating" and a.days_accumulated == 12
 

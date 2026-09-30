@@ -40,9 +40,9 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
       f"daily flip-flopping at the edges, a grade only changes once the percentile moves more than {HYSTERESIS:.0f} "
       f"points past the old band.")),
     (("维度分", "Dimension scores"),
-     ("维度分 = 该维度内参与计算的指标百分位的等权平均；参与计算的指标不足一半时，该维度暂无等级。",
+     ("维度分 = 该维度内参与计算的指标百分位的等权平均；参与计算的指标不足三分之一（且少于 2 项）时，该维度暂无等级。",
       "A dimension score is the equal-weighted average of its participating metric percentiles; with fewer than "
-      "half of the metrics available, the dimension has no grade.")),
+      "one third of the metrics (and at least 2) available, the dimension has no grade.")),
     (("综合等级", "Composite grade"),
      (f"综合分 = 可用维度分的等权平均；再看综合分在标普1500 全体中的百分位，按同一把尺子定等级。"
       f"任一维度为 F 时，综合等级最高为 {CAP_CEILING}；覆盖的分析师少于 {MIN_ANALYSTS} 位时不给综合等级。",

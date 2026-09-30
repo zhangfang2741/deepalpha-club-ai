@@ -240,7 +240,7 @@ def dimension_status_note(dim: DimensionScore, lang: Lang) -> str | None:
         d = dim.days_accumulated or 0
         return _i(lang, f"修正历史积累中（已 {d} 天）", f"Building revision history ({d} days so far)")
     if dim.status == "unavailable":
-        return _i(lang, "可用指标不足一半，暂无等级", "Fewer than half of the metrics are available; no grade")
+        return _i(lang, "可用指标太少（不足三分之一），暂无等级", "Too few metrics available (under one third); no grade")
     return None
 
 
@@ -260,8 +260,12 @@ def overall_text(o: OverallScore, lang: Lang) -> str | None:
     """综合分与在标普1500 中的排位。"""
     if o.score is None or o.universe_percentile is None:
         return None
-    top = max(1, round(100 - o.universe_percentile))
-    return _i(lang, f"综合分 {o.score:.1f} · 标普1500 前 {top}%", f"Composite {o.score:.1f} · top {top}% of S&P 1500")
+    if o.universe_percentile >= 50:
+        top = max(1, round(100 - o.universe_percentile))
+        return _i(lang, f"综合分 {o.score:.1f} · 标普1500 前 {top}%", f"Composite {o.score:.1f} · top {top}% of S&P 1500")
+    bottom = max(1, round(o.universe_percentile))
+    return _i(lang, f"综合分 {o.score:.1f} · 标普1500 后 {bottom}%",
+              f"Composite {o.score:.1f} · bottom {bottom}% of S&P 1500")
 
 
 def overall_note(o: OverallScore, lang: Lang) -> str | None:

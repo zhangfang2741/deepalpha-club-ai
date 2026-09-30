@@ -1,7 +1,7 @@
 """打分聚合：板块分布 → 指标百分位 / 等级 → 维度分 → 综合分 + 一票否决。纯函数。
 
 规则见设计 §3.2–3.5：not_meaningful 按最差（百分位 0）参与；not_applicable / missing /
-样本不足不参与；维度分 = 参与指标百分位等权平均，参与数不足一半 → 维度不可用；
+样本不足不参与；维度分 = 参与指标百分位等权平均，参与数不足三分之一（至少 2 项）→ 维度不可用；
 综合分 = 可用维度等权平均，在全体样本中的百分位定等级；任一维度 < 20（F）→ 综合最高 C+；
 分析师不足 3 位不给综合等级。
 """
@@ -114,10 +114,19 @@ def score_dimension(dim: str, scored: list[ScoredMetric], prev_grade: str | None
         return DimensionScore(dim, "accumulating", None, None, scored, days_accumulated=accumulating_days)
     total = expected if expected is not None else len(scored)
     part = [s for s in scored if s.percentile is not None]
-    if total == 0 or len(part) * 2 < total:
+    if total == 0 or len(part) < min_participating(total):
         return DimensionScore(dim, "unavailable", None, None, scored)
     score = round(sum(s.percentile for s in part) / len(part), 1)  # type: ignore[misc]
     return DimensionScore(dim, "ok", score, grade_with_hysteresis(score, prev_grade), scored)
+
+
+def min_participating(total: int) -> int:
+    """维度给等级所需的最少参与指标数：总数的三分之一（向上取整），且至少 2 项（总数不足 2 时取总数）。
+
+    原定「不足一半」会让未盈利公司的成长维度整体不可用（EBITDA / EBIT / EPS 增速基数为负全部缺失，
+    只剩营收三项），而营收增速恰是这类公司最该看的信息。
+    """
+    return min(total, max(2, math.ceil(total / 3)))
 
 
 def composite(dims: list[DimensionScore]) -> float | None:
