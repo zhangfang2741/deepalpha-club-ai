@@ -1,0 +1,232 @@
+"""一只股票的计算管线与响应组装（批量与按需共用）。
+
+两段式：evaluate() 算指标 → 打分 → 维度分；综合分分布要等全体维度分算完才有，
+所以 finalize_overall() 单独一步。build_payload() 把结果组装成 QuantResearchOut（zh / en）。
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from app.services.quant_research import copy as tx
+from app.services.quant_research.inputs import StockInputs, analyst_count
+from app.services.quant_research.metrics import (
+    DIMENSIONS,
+    METRICS,
+    MetricValue,
+    compute_metrics,
+)
+from app.services.quant_research.revisions import (
+    EstimatePoint,
+    compute_revisions,
+    revision_status,
+)
+from app.services.quant_research.scoring import (
+    DimensionScore,
+    Distributions,
+    OverallScore,
+    ScoredMetric,
+    mark_extremes,
+    overall,
+    pick_key_fact,
+    score_dimension,
+    score_metric,
+)
+from app.services.quant_research.stage import StageInfo, stage_of
+from app.services.quant_research.universe import sector_name
+from app.schemas.quant_research import (
+    AsOf,
+    CashFlows,
+    Dimension,
+    FormulaInput,
+    KeyFact,
+    MetricFormula,
+    MetricGroup,
+    MetricOut,
+    Overall,
+    PeerGroup,
+    QuantResearchOut,
+    Stage,
+)
+
+METHODOLOGY_VERSION = "q1"
+_REVISION_LOOKBACK = {"eps_fy1_30d": 30, "eps_fy1_90d": 90, "eps_fy2_90d": 90, "rev_fy1_90d": 90}
+
+
+@dataclass
+class Evaluation:
+    inp: StockInputs
+    metrics: dict[str, MetricValue]
+    dims: list[DimensionScore]
+    stage: StageInfo | None
+    n_analysts: int
+    overall: OverallScore | None = None
+    estimates_date: str | None = None
+    extra: dict = field(default_factory=dict)
+
+    @property
+    def composite(self) -> float | None:
+        usable = [d.score for d in self.dims if d.status == "ok" and d.score is not None]
+        return round(sum(usable) / len(usable), 1) if usable else None
+
+
+def evaluate(inp: StockInputs, history: list[EstimatePoint], dists: Distributions,
+             prev_grades: dict | None = None) -> Evaluation:
+    """算指标（含 EPS 修正）→ 板块内打分 → 维度分，prev_grades 用于防抖。"""
+    prev = prev_grades or {}
+    metrics = compute_metrics(inp)
+    fy1, fy2 = inp.fy1, inp.fy2
+    n = analyst_count(fy1)
+    metrics |= compute_revisions(history, inp.as_of, fy1.get("date") if fy1 else None,
+                                 fy2.get("date") if fy2 else None, n)
+    rev_state, rev_days = revision_status(history, inp.as_of)
+
+    dims: list[DimensionScore] = []
+    for dim in DIMENSIONS:
+        keys = [k for k, d in METRICS.items() if d.dimension == dim]
+        scored = [score_metric(k, metrics[k], dists.get((inp.sector_key, k)), prev.get(f"m:{k}")) for k in keys]
+        if dim == "revisions":
+            if rev_state == "accumulating":
+                dims.append(score_dimension(dim, scored, None, accumulating_days=rev_days))
+                continue
+            expected = sum(1 for k in keys if _REVISION_LOOKBACK[k] <= rev_days)
+            dims.append(score_dimension(dim, scored, prev.get(f"d:{dim}"), expected=expected))
+        else:
+            dims.append(score_dimension(dim, scored, prev.get(f"d:{dim}")))
+    mark_extremes(dims)
+    for d in dims:
+        d.key_fact = pick_key_fact(d)
+    snap_dates = [p.snapshot_date for p in history]
+    return Evaluation(inp, metrics, dims, stage_of(inp), n,
+                      estimates_date=max(snap_dates).isoformat() if snap_dates else None)
+
+
+def finalize_overall(ev: Evaluation, overall_dist: list[float], prev_grades: dict | None = None) -> Evaluation:
+    """用全体综合分分布定综合等级（含一票否决）。"""
+    ev.overall = overall(ev.dims, overall_dist, ev.n_analysts, (prev_grades or {}).get("overall"))
+    return ev
+
+
+def grades_of(ev: Evaluation) -> dict[str, str]:
+    """存库给次日防抖用：m:<指标>、d:<维度>、overall。"""
+    out: dict[str, str] = {}
+    for d in ev.dims:
+        if d.grade:
+            out[f"d:{d.key}"] = d.grade
+        for s in d.metrics:
+            if s.grade:
+                out[f"m:{s.key}"] = s.grade
+    if ev.overall and ev.overall.grade:
+        out["overall"] = ev.overall.grade
+    return out
+
+
+# ---------- 组装 ----------
+
+def _formula_inputs(sm: ScoredMetric, ev: Evaluation, lang: tx.Lang) -> list[FormulaInput]:
+    out = []
+    for name, v in sm.mv.inputs:
+        note = None
+        if name in ("price", "close_now"):
+            note = ev.inp.price_date
+        elif name.endswith("_ntm") or name.endswith("_fy1") or name.endswith("_fy2"):
+            meta = sm.mv.meta or ev.metrics["pe_fwd"].meta
+            n = meta.get("n_analysts") or ev.n_analysts
+            note = tx._i(lang, f"{n} 位分析师均值", f"mean of {n} analysts")
+            e1, e2 = meta.get("eps_fy1"), meta.get("eps_fy2")
+            if name == "eps_ntm" and e1 is not None and e2 is not None:
+                note += tx._i(lang, f" · 由本财年 {e1:.2f} 与下财年 {e2:.2f} 按剩余时间加权",
+                              f" · time-weighted from FY1 {e1:.2f} and FY2 {e2:.2f}")
+        elif name.endswith("_ttm") or name in ("equity", "assets", "invested", "nopat", "market_cap", "ev"):
+            note = ev.inp.fiscal_period
+        out.append(FormulaInput(label=tx.label(name, lang), value=tx.fmt_input(name, v, lang), note=note))
+    return out
+
+
+def _metric_out(sm: ScoredMetric, ev: Evaluation, lang: tx.Lang) -> MetricOut:
+    d = METRICS[sm.key]
+    expr = tx.metric_expression(sm.key, sm.mv, lang)
+    return MetricOut(
+        key=sm.key, name=d.name_zh if lang == "zh" else d.name_en,
+        description=d.desc_zh if lang == "zh" else d.desc_en, direction=d.direction,
+        value=sm.mv.value, display_value=tx.fmt_metric_value(sm.key, sm.mv.value),
+        status=sm.status, status_note=tx.metric_status_note(sm, lang),
+        percentile=sm.percentile, grade=sm.grade,
+        sector_median=sm.sector_median,
+        sector_median_display=tx.fmt_metric_value(sm.key, sm.sector_median) if sm.sector_median is not None else None,
+        diff_to_median_pct=round(sm.diff_to_median_pct, 1) if sm.diff_to_median_pct is not None else None,
+        distribution=sm.distribution,
+        formula=MetricFormula(expression=expr, inputs=_formula_inputs(sm, ev, lang)) if expr else None,
+        position_text=tx.position_text(sm, lang),
+    )
+
+
+def _dimension_out(d: DimensionScore, ev: Evaluation, lang: tx.Lang) -> Dimension:
+    groups: dict[str, list[MetricOut]] = {}
+    for sm in d.metrics:
+        md = METRICS[sm.key]
+        groups.setdefault(md.group if lang == "zh" else md.group_en, []).append(_metric_out(sm, ev, lang))
+    fact = next((s for s in d.metrics if s.key == d.key_fact), None)
+    return Dimension(
+        key=d.key, name=tx.dimension_name(d.key, lang), description=tx.dimension_desc(d.key, lang),
+        grade=d.grade, score=d.score, status=d.status,  # type: ignore[arg-type]
+        status_note=tx.dimension_status_note(d, lang),
+        is_highest=d.is_highest, is_lowest=d.is_lowest,
+        key_fact=KeyFact(metric=fact.key, text=tx.key_fact_text(fact, lang)) if fact else None,
+        formula=tx.dimension_formula(d),
+        groups=[MetricGroup(name=k, metrics=v) for k, v in groups.items()],
+    )
+
+
+def build_payload(ev: Evaluation, lang: tx.Lang, *, in_universe: bool, sector_sample: int) -> QuantResearchOut:
+    """把一只股票的评估结果组装成接口响应。"""
+    inp, o = ev.inp, ev.overall
+    sname = sector_name(inp.sector_key, lang)
+    notes = [n for n in (tx.overall_note(o, lang) if o else None,
+                         tx.dims_used_note(o.dimensions_used, lang) if o and o.grade else None) if n]
+    stage = None
+    if ev.stage:
+        stage = Stage(key=ev.stage.key, name=tx.stage_name(ev.stage.key, lang), unprofitable=ev.stage.unprofitable,
+                      cash_flows=CashFlows(operating=ev.stage.operating, investing=ev.stage.investing,
+                                           financing=ev.stage.financing),
+                      note=tx.stage_note(ev.stage.key, ev.stage.unprofitable, lang))
+    return QuantResearchOut(
+        market="us", symbol=inp.symbol, name=inp.name, status="ok",
+        methodology_version=METHODOLOGY_VERSION,
+        as_of=AsOf(price_date=inp.price_date, fiscal_period=inp.fiscal_period, filing_date=inp.filing_date,
+                   estimates_date=ev.estimates_date),
+        peer_group=PeerGroup(sector_key=inp.sector_key, sector_name=sname, sample_size=sector_sample,
+                             in_universe=in_universe, text=tx.peer_text(sname, sector_sample, lang, in_universe)),
+        stage=stage,
+        overall=Overall(grade=o.grade if o else None, score=o.score if o else None,
+                        universe_percentile=o.universe_percentile if o else None,
+                        dimensions_used=o.dimensions_used if o else 0, capped=bool(o and o.capped),
+                        note=("；" if lang == "zh" else "; ").join(notes) or None,
+                        text=tx.overall_text(o, lang) if o else None),
+        dimensions=[_dimension_out(d, ev, lang) for d in ev.dims],
+        disclaimer=tx.DISCLAIMER[lang],
+    )
+
+
+def unsupported(market: str, symbol: str, lang: tx.Lang) -> QuantResearchOut:
+    """不支持的市场（二期再接港股 / A 股）。"""
+    return QuantResearchOut(
+        market=market, symbol=symbol, name=None, status="unsupported_market",
+        status_note=tx._i(lang, "量化研究暂只支持美股", "Quant research currently covers US stocks only"),
+        methodology_version=METHODOLOGY_VERSION, disclaimer=tx.DISCLAIMER[lang],
+    )
+
+
+def insufficient(market: str, symbol: str, lang: tx.Lang, reason: str | None = None) -> QuantResearchOut:
+    """数据不足（批量尚未跑过、样本外股票拉不到报表等）。"""
+    return QuantResearchOut(
+        market=market, symbol=symbol, name=None, status="insufficient_data",
+        status_note=reason or tx._i(lang, "暂无足够数据生成量化研究", "Not enough data for quant research yet"),
+        methodology_version=METHODOLOGY_VERSION, disclaimer=tx.DISCLAIMER[lang],
+    )
+
+
+def sector_sample_sizes(dists: Distributions) -> dict[str, int]:
+    """各板块样本数：取收盘价动量指标（几乎全覆盖）的分布长度。"""
+    return {sector: len(v) for (sector, key), v in dists.items() if key == "r3m"}
+

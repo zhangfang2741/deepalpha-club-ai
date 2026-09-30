@@ -1,0 +1,117 @@
+"""同行样本：标普1500（S&P 500 + 400 + 600）成分与 GICS 板块。
+
+成分取自维基百科成分表（含 GICS Sector 列），Redis 缓存 7 天。样本外股票用 FMP profile 的
+sector（FMP 自有分类）映射到 GICS 板块。
+"""
+
+from __future__ import annotations
+
+import asyncio
+import io
+import json
+import re
+
+import httpx
+from redis.asyncio import Redis
+
+from app.core.logging import logger
+
+WIKI_PAGES = {
+    "sp500": "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
+    "sp400": "https://en.wikipedia.org/wiki/List_of_S%26P_400_companies",
+    "sp600": "https://en.wikipedia.org/wiki/List_of_S%26P_600_companies",
+}
+_UA = "Mozilla/5.0 (compatible; DeepAlphaQuant/1.0; +https://deepalpha.club)"
+CACHE_KEY = "quant:universe:sp1500"
+CACHE_TTL = 7 * 86400
+_SYMBOL_RE = re.compile(r"^[A-Z][A-Z\-]{0,6}$")
+
+# GICS 板块键 → (维基英文名, 中文名, 英文展示名)
+GICS_SECTORS: dict[str, tuple[str, str, str]] = {
+    "communication_services": ("Communication Services", "通信服务", "Communication Services"),
+    "consumer_discretionary": ("Consumer Discretionary", "可选消费", "Consumer Discretionary"),
+    "consumer_staples": ("Consumer Staples", "必需消费", "Consumer Staples"),
+    "energy": ("Energy", "能源", "Energy"),
+    "financials": ("Financials", "金融", "Financials"),
+    "health_care": ("Health Care", "医疗保健", "Health Care"),
+    "industrials": ("Industrials", "工业", "Industrials"),
+    "information_technology": ("Information Technology", "信息技术", "Information Technology"),
+    "materials": ("Materials", "原材料", "Materials"),
+    "real_estate": ("Real Estate", "房地产", "Real Estate"),
+    "utilities": ("Utilities", "公用事业", "Utilities"),
+}
+_WIKI_TO_KEY = {v[0]: k for k, v in GICS_SECTORS.items()}
+
+FMP_SECTOR_TO_GICS: dict[str, str] = {
+    "Technology": "information_technology",
+    "Healthcare": "health_care",
+    "Financial Services": "financials",
+    "Consumer Cyclical": "consumer_discretionary",
+    "Consumer Defensive": "consumer_staples",
+    "Basic Materials": "materials",
+    "Communication Services": "communication_services",
+    "Energy": "energy",
+    "Industrials": "industrials",
+    "Real Estate": "real_estate",
+    "Utilities": "utilities",
+}
+
+
+def sector_name(key: str, lang: str) -> str:
+    """GICS 板块展示名。"""
+    _, zh, en = GICS_SECTORS[key]
+    return zh if lang == "zh" else en
+
+
+def parse_sp_table(html: str) -> list[tuple[str, str, str]]:
+    """解析维基成分表 → [(symbol, name, sector_key)]。代码 . 换成 -，丢弃异常代码。"""
+    import pandas as pd
+
+    try:
+        tables = pd.read_html(io.StringIO(html))
+    except ValueError:
+        return []
+    for tbl in tables:
+        cols = [str(c) for c in tbl.columns]
+        if "Symbol" in cols and "GICS Sector" in cols:
+            out = []
+            for sym, name, sector in zip(tbl["Symbol"], tbl["Security"], tbl["GICS Sector"], strict=False):
+                s = str(sym).strip().replace(".", "-")
+                key = _WIKI_TO_KEY.get(str(sector).strip())
+                if key and _SYMBOL_RE.match(s):
+                    out.append((s, str(name).strip(), key))
+            return out
+    return []
+
+
+async def fetch_sp1500(redis: Redis | None) -> dict[str, tuple[str, str]]:
+    """{symbol: (name, sector_key)}。优先读 Redis；三页任一失败则不写缓存（避免残缺样本被缓存 7 天）。"""
+    if redis is not None:
+        try:
+            raw = await redis.get(CACHE_KEY)
+            if raw:
+                return {k: tuple(v) for k, v in json.loads(raw).items()}  # type: ignore[misc]
+        except Exception as e:  # noqa: BLE001
+            logger.warning("quant_universe_cache_read_failed", error=str(e))
+    out: dict[str, tuple[str, str]] = {}
+    complete = True
+    async with httpx.AsyncClient(timeout=30, headers={"User-Agent": _UA}, follow_redirects=True) as c:
+        for index, url in WIKI_PAGES.items():
+            try:
+                resp = await c.get(url)
+                rows = await asyncio.to_thread(parse_sp_table, resp.text) if resp.status_code == 200 else []
+            except Exception as e:  # noqa: BLE001
+                logger.warning("quant_universe_fetch_failed", index=index, error=str(e))
+                rows = []
+            if len(rows) < 300:
+                complete = False
+                logger.warning("quant_universe_page_incomplete", index=index, count=len(rows))
+            for sym, name, key in rows:
+                out.setdefault(sym, (name, key))
+    logger.info("quant_universe_fetched", count=len(out), complete=complete)
+    if complete and redis is not None:
+        try:
+            await redis.set(CACHE_KEY, json.dumps(out), ex=CACHE_TTL)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("quant_universe_cache_write_failed", error=str(e))
+    return out

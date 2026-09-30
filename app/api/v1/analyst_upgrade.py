@@ -3,14 +3,18 @@
 import json
 import zlib
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from redis.asyncio import Redis
 
+from app.api.v1.auth import get_current_user
 from app.cache.client import get_redis_optional
+from app.core.limiter import limiter
 from app.core.logging import logger
+from app.models.user import User
 from app.schemas.analyst_upgrade import (
+    AnalystOverviewOut,
     Nasdaq100UpgradesResponse,
     PriceTargetHistoryResponse,
     SP500UpgradesResponse,
@@ -20,6 +24,8 @@ from app.services.analyst_upgrade.nasdaq100 import (
     compute_nasdaq100_upgrades,
     compute_price_target_history,
 )
+from app.services.analyst_upgrade.overview import unsupported as overview_unsupported
+from app.services.analyst_upgrade.overview_service import get_analyst_overview
 from app.services.analyst_upgrade.sp500 import compute_sp500_upgrades
 
 router = APIRouter()
@@ -178,3 +184,19 @@ async def get_custom_price_target(
         months=len(data.points),
     )
     return data
+
+
+@router.get("/overview/{symbol}", response_model=AnalystOverviewOut)
+@limiter.limit("20 per minute")
+async def get_analyst_overview_route(
+    request: Request,
+    symbol: Annotated[str, Path(pattern=r"^[A-Za-z0-9][A-Za-z0-9\-\.]{0,11}$")],
+    market: Literal["us", "cn", "hk"] = Query("us"),
+    lang: Literal["zh", "en"] = Query("zh"),
+    user: User = Depends(get_current_user),
+    redis: Redis | None = Depends(get_redis_optional),
+) -> AnalystOverviewOut:
+    """个股分析师评级概览（缠论 App 详情页「分析师评级」Tab），暂只支持美股."""
+    if market != "us":
+        return overview_unsupported(symbol.upper(), lang)
+    return await get_analyst_overview(symbol, lang, redis=redis)

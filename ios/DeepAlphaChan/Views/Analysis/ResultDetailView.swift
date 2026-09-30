@@ -34,6 +34,31 @@ struct ResultDetailView: View {
     /// 一路从 MainTabView 穿过两条不同的调用链传下来。
     @StateObject private var watchlistVM = WatchlistViewModel()
 
+    /// 顶部分段：缠论结构（原整页，不改）/ 量化研究 / 分析师评级。后两个切过去才加载。
+    enum Segment: String, CaseIterable, Identifiable {
+        case structure, quant, analyst
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .structure: return L("缠论结构")
+            case .quant: return L("量化研究")
+            case .analyst: return L("分析师评级")
+            }
+        }
+    }
+
+    @State private var segment: Segment = {
+        #if DEBUG && targetEnvironment(simulator)
+        // 仅模拟器 Debug：-detailSegment=quant|analyst 直接打开到该分段（自动化截图验收用）
+        if let arg = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("-detailSegment=") }),
+           let seg = Segment(rawValue: String(arg.dropFirst("-detailSegment=".count))) {
+            return seg
+        }
+        #endif
+        return .structure
+    }()
+    @StateObject private var quantVM = QuantResearchViewModel()
+
     var body: some View {
         // 曾经尝试把图表固定在顶部、只让 ResultSegments 的 tab 内容单独滚动
         // （给它 .frame(maxHeight: .infinity)）——真机实测图表+MACD+图层图例
@@ -45,13 +70,16 @@ struct ResultDetailView: View {
         // （`proxy.scrollTo("result-sections")`），单纯切个 tab 却把用户已经
         // 往下翻的位置弹掉，体验是"跳来跳去"，已去掉——现在切 tab 只换内容，
         // 不动滚动位置。
-        GeometryReader { geo in
-            ScrollView {
-                pageContent(isStatic: false, width: geo.size.width)
+        VStack(spacing: 0) {
+            segmentPicker
+            GeometryReader { geo in
+                ScrollView {
+                    pageContent(isStatic: false, width: geo.size.width)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .onAppear { viewportWidth = geo.size.width }
+                .onChange(of: geo.size.width) { _, width in viewportWidth = width }
             }
-            .scrollBounceBehavior(.basedOnSize)
-            .onAppear { viewportWidth = geo.size.width }
-            .onChange(of: geo.size.width) { _, width in viewportWidth = width }
         }
         .background(Theme.background)
         .navigationTitle(navTitle)
@@ -106,12 +134,41 @@ struct ResultDetailView: View {
         return "\(vm.symbol.uppercased()) · \(ChanViewModel.freqLabel(vm.freq))"
     }
 
+    private var segmentPicker: some View {
+        Picker(L("分析视角"), selection: $segment) {
+            ForEach(Segment.allCases) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal, Theme.contentHInset)
+        .padding(.top, 4)
+        .padding(.bottom, 6)
+    }
+
     /// ScrollView 的完整内容，同时是分享长图的渲染源（PageSnapshot.render）。
     ///
     /// 抽成一个方法让屏幕显示与离屏长图复用同一棵视图树，修饰符与顺序保持
-    /// 一致——改这里会同时改变页面显示与分享图，两处永不走样。
-    /// 分享长图通过 isStatic 隐藏周期与全屏控件，并将 ResultSegments 的三段内容全部展开。
+    /// 一致——改这里会同时改变页面显示与分享图，两处永不走样。分享长图只截当前分段。
+    @ViewBuilder
     private func pageContent(isStatic: Bool, width: CGFloat?) -> some View {
+        switch segment {
+        case .structure:
+            structureContent(isStatic: isStatic, width: width)
+        case .quant:
+            QuantResearchTab(market: vm.market, symbol: vm.symbol, vm: quantVM, isStatic: isStatic)
+                .padding(.horizontal, Theme.contentHInset)
+                .padding(.vertical, Theme.contentVInset)
+                .frame(width: width)
+        case .analyst:
+            AnalystRatingTab(market: vm.market, symbol: vm.symbol, vm: quantVM)
+                .padding(.horizontal, Theme.contentHInset)
+                .padding(.vertical, Theme.contentVInset)
+                .frame(width: width)
+        }
+    }
+
+    /// 「缠论结构」分段（原整页内容，不改）。分享长图通过 isStatic 隐藏周期与全屏控件，
+    /// 并将 ResultSegments 的三段内容全部展开。
+    private func structureContent(isStatic: Bool, width: CGFloat?) -> some View {
         VStack(spacing: 14) {
             // 结论先行：状态、最新信号、次级别确认第一屏就能看到，不必翻过图表
             ConclusionCard(analysis: analysis, vm: vm, isStatic: isStatic)

@@ -1,0 +1,1736 @@
+[
+  {
+    "symbol": "JPM",
+    "date": "2026-09-29",
+    "price": 334.98,
+    "volume": 6012068
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-28",
+    "price": 336.59,
+    "volume": 10483748
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-25",
+    "price": 343.06,
+    "volume": 11464093
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-24",
+    "price": 338.56,
+    "volume": 6941733
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-23",
+    "price": 337.53,
+    "volume": 7078381
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-22",
+    "price": 340,
+    "volume": 11485600
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-21",
+    "price": 352.04,
+    "volume": 6414700
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-18",
+    "price": 349.67,
+    "volume": 18312433
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-17",
+    "price": 349.31,
+    "volume": 6485120
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-16",
+    "price": 348.92,
+    "volume": 8307796
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-15",
+    "price": 352.49,
+    "volume": 14030793
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-14",
+    "price": 350.13,
+    "volume": 9612162
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-11",
+    "price": 356.23,
+    "volume": 5355273
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-10",
+    "price": 353.56,
+    "volume": 4186391
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-09",
+    "price": 354.71,
+    "volume": 6319796
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-08",
+    "price": 353.51,
+    "volume": 5633145
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-04",
+    "price": 358.64,
+    "volume": 4875394
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-03",
+    "price": 362.06,
+    "volume": 5416619
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-02",
+    "price": 356.22,
+    "volume": 5343789
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-09-01",
+    "price": 354.95,
+    "volume": 5079819
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-31",
+    "price": 356.02,
+    "volume": 7964106
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-28",
+    "price": 357.62,
+    "volume": 3916485
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-27",
+    "price": 354.22,
+    "volume": 5214828
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-26",
+    "price": 356.5,
+    "volume": 5802515
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-25",
+    "price": 356.69,
+    "volume": 4298730
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-24",
+    "price": 356.39,
+    "volume": 4397594
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-21",
+    "price": 351.58,
+    "volume": 8112130
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-20",
+    "price": 351.55,
+    "volume": 6799700
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-19",
+    "price": 357.26,
+    "volume": 6696210
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-18",
+    "price": 363.25,
+    "volume": 5525100
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-17",
+    "price": 360.96,
+    "volume": 5282600
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-14",
+    "price": 362.84,
+    "volume": 5058600
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-13",
+    "price": 363.11,
+    "volume": 5102700
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-12",
+    "price": 365.18,
+    "volume": 4366800
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-11",
+    "price": 362.04,
+    "volume": 4576500
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-10",
+    "price": 359.79,
+    "volume": 5327500
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-07",
+    "price": 357.52,
+    "volume": 4566210
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-06",
+    "price": 356.3,
+    "volume": 5820107
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-05",
+    "price": 359.24,
+    "volume": 5269500
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-04",
+    "price": 357.52,
+    "volume": 8477203
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-08-03",
+    "price": 352.64,
+    "volume": 6436600
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-31",
+    "price": 351.79,
+    "volume": 6603422
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-30",
+    "price": 350.85,
+    "volume": 7607701
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-29",
+    "price": 344.71,
+    "volume": 8272605
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-28",
+    "price": 357.31,
+    "volume": 6538299
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-27",
+    "price": 356.2,
+    "volume": 7888760
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-24",
+    "price": 353.21,
+    "volume": 7520829
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-23",
+    "price": 349.9,
+    "volume": 10913025
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-22",
+    "price": 348.21,
+    "volume": 8040220
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-21",
+    "price": 345.23,
+    "volume": 6015334
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-20",
+    "price": 338.87,
+    "volume": 7723300
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-17",
+    "price": 341.1,
+    "volume": 9250900
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-16",
+    "price": 343.15,
+    "volume": 12432400
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-15",
+    "price": 346.91,
+    "volume": 10750000
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-14",
+    "price": 342.89,
+    "volume": 14537914
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-13",
+    "price": 334.53,
+    "volume": 7120300
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-10",
+    "price": 336.47,
+    "volume": 6299028
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-09",
+    "price": 335.47,
+    "volume": 15570600
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-08",
+    "price": 330.62,
+    "volume": 18505243
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-07",
+    "price": 339.22,
+    "volume": 7115819
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-06",
+    "price": 337.72,
+    "volume": 8673530
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-02",
+    "price": 334.47,
+    "volume": 8415407
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-07-01",
+    "price": 334.07,
+    "volume": 15210200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-30",
+    "price": 327.33,
+    "volume": 8080100
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-29",
+    "price": 329.39,
+    "volume": 7981800
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-26",
+    "price": 329.05,
+    "volume": 17640907
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-25",
+    "price": 335.12,
+    "volume": 10049358
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-24",
+    "price": 333.45,
+    "volume": 7907442
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-23",
+    "price": 334.14,
+    "volume": 7582217
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-22",
+    "price": 331.48,
+    "volume": 10182506
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-18",
+    "price": 325.22,
+    "volume": 20111030
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-17",
+    "price": 333.46,
+    "volume": 12246449
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-16",
+    "price": 331.14,
+    "volume": 11094900
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-15",
+    "price": 319.4,
+    "volume": 7988900
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-12",
+    "price": 320.72,
+    "volume": 7426200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-11",
+    "price": 313.49,
+    "volume": 9116617
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-10",
+    "price": 309.14,
+    "volume": 7446218
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-09",
+    "price": 312.7,
+    "volume": 11594600
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-08",
+    "price": 311.11,
+    "volume": 6827027
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-05",
+    "price": 312.37,
+    "volume": 9118800
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-04",
+    "price": 310.89,
+    "volume": 10345200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-03",
+    "price": 300.85,
+    "volume": 7003935
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-02",
+    "price": 300.96,
+    "volume": 8296234
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-06-01",
+    "price": 296.58,
+    "volume": 7930000
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-29",
+    "price": 299.31,
+    "volume": 13973665
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-28",
+    "price": 296.73,
+    "volume": 9766204
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-27",
+    "price": 299.28,
+    "volume": 11785439
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-26",
+    "price": 306.74,
+    "volume": 7731840
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-22",
+    "price": 306.38,
+    "volume": 5978568
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-21",
+    "price": 303,
+    "volume": 7874400
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-20",
+    "price": 301.98,
+    "volume": 9327002
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-19",
+    "price": 295.7,
+    "volume": 8066927
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-18",
+    "price": 300.73,
+    "volume": 7546300
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-15",
+    "price": 297.81,
+    "volume": 8699300
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-14",
+    "price": 299.91,
+    "volume": 7364315
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-13",
+    "price": 300.25,
+    "volume": 7709525
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-12",
+    "price": 304.88,
+    "volume": 9498214
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-11",
+    "price": 300,
+    "volume": 9512000
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-08",
+    "price": 302.1,
+    "volume": 9464300
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-07",
+    "price": 306.27,
+    "volume": 8359600
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-06",
+    "price": 314.9,
+    "volume": 8629538
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-05",
+    "price": 309.4,
+    "volume": 6316845
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-04",
+    "price": 307.65,
+    "volume": 7338200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-05-01",
+    "price": 312.47,
+    "volume": 6135400
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-30",
+    "price": 313.23,
+    "volume": 8865400
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-29",
+    "price": 309.25,
+    "volume": 8031805
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-28",
+    "price": 311.45,
+    "volume": 7398600
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-27",
+    "price": 311.63,
+    "volume": 7925317
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-24",
+    "price": 308.28,
+    "volume": 5215321
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-23",
+    "price": 311.69,
+    "volume": 6969700
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-22",
+    "price": 313.02,
+    "volume": 5545909
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-21",
+    "price": 313,
+    "volume": 7084300
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-20",
+    "price": 316.99,
+    "volume": 10772003
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-17",
+    "price": 310.29,
+    "volume": 11082400
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-16",
+    "price": 309.95,
+    "volume": 8208612
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-15",
+    "price": 305.93,
+    "volume": 9885824
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-14",
+    "price": 311.12,
+    "volume": 11455513
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-13",
+    "price": 313.68,
+    "volume": 8318221
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-10",
+    "price": 309.87,
+    "volume": 6069700
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-09",
+    "price": 310.33,
+    "volume": 6586601
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-08",
+    "price": 307.97,
+    "volume": 10590200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-07",
+    "price": 297.4,
+    "volume": 7849100
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-06",
+    "price": 295.45,
+    "volume": 7142621
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-02",
+    "price": 294.6,
+    "volume": 6669300
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-04-01",
+    "price": 295.38,
+    "volume": 11267200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-31",
+    "price": 294.16,
+    "volume": 12956900
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-30",
+    "price": 283.77,
+    "volume": 11734400
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-27",
+    "price": 282.84,
+    "volume": 9873300
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-26",
+    "price": 291.66,
+    "volume": 8669200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-25",
+    "price": 295.42,
+    "volume": 12188200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-24",
+    "price": 292.4,
+    "volume": 11092328
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-23",
+    "price": 289.91,
+    "volume": 11470841
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-20",
+    "price": 286.56,
+    "volume": 22436500
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-19",
+    "price": 287.97,
+    "volume": 9846700
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-18",
+    "price": 287.74,
+    "volume": 10057039
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-17",
+    "price": 286.89,
+    "volume": 8961200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-16",
+    "price": 286.16,
+    "volume": 8149008
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-13",
+    "price": 283.44,
+    "volume": 9091200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-12",
+    "price": 282.89,
+    "volume": 13760505
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-11",
+    "price": 287.52,
+    "volume": 10205000
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-10",
+    "price": 288.73,
+    "volume": 8344900
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-09",
+    "price": 289.92,
+    "volume": 12241100
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-06",
+    "price": 289.48,
+    "volume": 13496526
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-05",
+    "price": 293.55,
+    "volume": 12732500
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-04",
+    "price": 299.39,
+    "volume": 8055700
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-03",
+    "price": 300.26,
+    "volume": 10278216
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-03-02",
+    "price": 297.56,
+    "volume": 8508910
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-27",
+    "price": 300.3,
+    "volume": 18620800
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-26",
+    "price": 306.13,
+    "volume": 7007804
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-25",
+    "price": 303.3,
+    "volume": 8095520
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-24",
+    "price": 297.3,
+    "volume": 13554127
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-23",
+    "price": 297.67,
+    "volume": 12955428
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-20",
+    "price": 310.79,
+    "volume": 7792735
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-19",
+    "price": 308.05,
+    "volume": 6737705
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-18",
+    "price": 308.78,
+    "volume": 7209600
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-17",
+    "price": 307.13,
+    "volume": 8896800
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-13",
+    "price": 302.55,
+    "volume": 9114526
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-12",
+    "price": 302.64,
+    "volume": 13443400
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-11",
+    "price": 310.82,
+    "volume": 8703519
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-10",
+    "price": 318.24,
+    "volume": 9902224
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-09",
+    "price": 322.1,
+    "volume": 11477500
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-06",
+    "price": 322.4,
+    "volume": 17797443
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-05",
+    "price": 310.16,
+    "volume": 9388000
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-04",
+    "price": 317.27,
+    "volume": 9848802
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-03",
+    "price": 314.85,
+    "volume": 12688000
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-02-02",
+    "price": 308.14,
+    "volume": 9839400
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-30",
+    "price": 305.89,
+    "volume": 11953200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-29",
+    "price": 306.42,
+    "volume": 11580000
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-28",
+    "price": 300.77,
+    "volume": 9556743
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-27",
+    "price": 300.31,
+    "volume": 11527448
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-26",
+    "price": 301.04,
+    "volume": 11752700
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-23",
+    "price": 297.72,
+    "volume": 11107925
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-22",
+    "price": 303.63,
+    "volume": 10535822
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-21",
+    "price": 302.04,
+    "volume": 10270144
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-20",
+    "price": 302.74,
+    "volume": 12900620
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-16",
+    "price": 312.47,
+    "volume": 14652508
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-15",
+    "price": 309.34,
+    "volume": 14751447
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-14",
+    "price": 307.87,
+    "volume": 25951500
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-13",
+    "price": 310.9,
+    "volume": 19371200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-12",
+    "price": 324.49,
+    "volume": 12805100
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-09",
+    "price": 329.19,
+    "volume": 6738143
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-08",
+    "price": 329.79,
+    "volume": 11737100
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-07",
+    "price": 326.99,
+    "volume": 9815240
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-06",
+    "price": 334.61,
+    "volume": 7660800
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-05",
+    "price": 334.04,
+    "volume": 10752627
+  },
+  {
+    "symbol": "JPM",
+    "date": "2026-01-02",
+    "price": 325.48,
+    "volume": 8054040
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-31",
+    "price": 322.22,
+    "volume": 5048531
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-30",
+    "price": 323.52,
+    "volume": 7904300
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-29",
+    "price": 323.75,
+    "volume": 8635338
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-26",
+    "price": 327.91,
+    "volume": 4158300
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-24",
+    "price": 329.17,
+    "volume": 4289306
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-23",
+    "price": 325.93,
+    "volume": 6668305
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-22",
+    "price": 323.09,
+    "volume": 8354600
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-19",
+    "price": 317.21,
+    "volume": 24494412
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-18",
+    "price": 313,
+    "volume": 11444909
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-17",
+    "price": 314.98,
+    "volume": 8718700
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-16",
+    "price": 315.55,
+    "volume": 8331336
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-15",
+    "price": 320.02,
+    "volume": 10864122
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-12",
+    "price": 318.52,
+    "volume": 8982911
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-11",
+    "price": 317.38,
+    "volume": 9721900
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-10",
+    "price": 310.11,
+    "volume": 18874100
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-09",
+    "price": 300.51,
+    "volume": 18049223
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-08",
+    "price": 315.21,
+    "volume": 7417200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-05",
+    "price": 315.04,
+    "volume": 6518908
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-04",
+    "price": 316.1,
+    "volume": 9627834
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-03",
+    "price": 312.13,
+    "volume": 8535300
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-02",
+    "price": 307.88,
+    "volume": 7249043
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-12-01",
+    "price": 308.92,
+    "volume": 7727324
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-28",
+    "price": 313.08,
+    "volume": 4322448
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-26",
+    "price": 307.64,
+    "volume": 7910900
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-25",
+    "price": 303,
+    "volume": 8877200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-24",
+    "price": 298,
+    "volume": 10940200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-21",
+    "price": 298.02,
+    "volume": 11766810
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-20",
+    "price": 298.38,
+    "volume": 7501600
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-19",
+    "price": 303.27,
+    "volume": 5546600
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-18",
+    "price": 299.41,
+    "volume": 8077315
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-17",
+    "price": 300.37,
+    "volume": 8344046
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-14",
+    "price": 303.61,
+    "volume": 10327000
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-13",
+    "price": 309.48,
+    "volume": 8973300
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-12",
+    "price": 320.41,
+    "volume": 10578300
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-11",
+    "price": 315.62,
+    "volume": 5030216
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-10",
+    "price": 316.89,
+    "volume": 5794505
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-07",
+    "price": 314.21,
+    "volume": 7302347
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-06",
+    "price": 313.42,
+    "volume": 7206111
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-05",
+    "price": 311.68,
+    "volume": 6865200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-04",
+    "price": 309.25,
+    "volume": 7085200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-11-03",
+    "price": 309.35,
+    "volume": 7770040
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-31",
+    "price": 311.12,
+    "volume": 7721300
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-30",
+    "price": 309.44,
+    "volume": 7514600
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-29",
+    "price": 305.51,
+    "volume": 7520324
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-28",
+    "price": 305.36,
+    "volume": 6336000
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-27",
+    "price": 304.15,
+    "volume": 5642222
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-24",
+    "price": 300.44,
+    "volume": 7228330
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-23",
+    "price": 294.54,
+    "volume": 5438810
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-22",
+    "price": 294.11,
+    "volume": 8054115
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-21",
+    "price": 297.09,
+    "volume": 7372700
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-20",
+    "price": 302.36,
+    "volume": 6894943
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-17",
+    "price": 297.56,
+    "volume": 10153500
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-16",
+    "price": 298.54,
+    "volume": 10549447
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-15",
+    "price": 305.69,
+    "volume": 11354800
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-14",
+    "price": 302.08,
+    "volume": 16178800
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-13",
+    "price": 307.97,
+    "volume": 10788700
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-10",
+    "price": 300.89,
+    "volume": 8597400
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-09",
+    "price": 305.53,
+    "volume": 7060332
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-08",
+    "price": 304.03,
+    "volume": 6489900
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-07",
+    "price": 307.69,
+    "volume": 8454217
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-06",
+    "price": 309.18,
+    "volume": 7214502
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-03",
+    "price": 310.03,
+    "volume": 6029900
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-02",
+    "price": 307.55,
+    "volume": 7600000
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-10-01",
+    "price": 310.71,
+    "volume": 9235211
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-30",
+    "price": 315.43,
+    "volume": 11823315
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-29",
+    "price": 315.69,
+    "volume": 6462442
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-26",
+    "price": 316.06,
+    "volume": 7258136
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-25",
+    "price": 313.45,
+    "volume": 7083200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-24",
+    "price": 313.42,
+    "volume": 7310513
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-23",
+    "price": 312.74,
+    "volume": 8584420
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-22",
+    "price": 312.44,
+    "volume": 7520200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-19",
+    "price": 314.78,
+    "volume": 23568600
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-18",
+    "price": 313.23,
+    "volume": 8050700
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-17",
+    "price": 311.75,
+    "volume": 8657800
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-16",
+    "price": 309.19,
+    "volume": 10525600
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-15",
+    "price": 308.9,
+    "volume": 7122015
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-12",
+    "price": 306.91,
+    "volume": 6846700
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-11",
+    "price": 305.56,
+    "volume": 7942500
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-10",
+    "price": 300.54,
+    "volume": 7787303
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-09",
+    "price": 297.85,
+    "volume": 7848200
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-08",
+    "price": 292.91,
+    "volume": 8188506
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-05",
+    "price": 294.38,
+    "volume": 9837709
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-04",
+    "price": 303.82,
+    "volume": 6605800
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-03",
+    "price": 299.51,
+    "volume": 6316911
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-09-02",
+    "price": 299.7,
+    "volume": 7221900
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-29",
+    "price": 301.42,
+    "volume": 6796400
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-28",
+    "price": 301.07,
+    "volume": 6410535
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-27",
+    "price": 299.28,
+    "volume": 6056513
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-26",
+    "price": 298.57,
+    "volume": 6714749
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-25",
+    "price": 294.9,
+    "volume": 5856300
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-22",
+    "price": 296.24,
+    "volume": 8552847
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-21",
+    "price": 291.47,
+    "volume": 6624161
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-20",
+    "price": 292.24,
+    "volume": 7374244
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-19",
+    "price": 290.66,
+    "volume": 6031520
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-18",
+    "price": 291.53,
+    "volume": 5386900
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-15",
+    "price": 290.49,
+    "volume": 7340518
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-14",
+    "price": 294.16,
+    "volume": 6322400
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-13",
+    "price": 290.53,
+    "volume": 8420407
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-12",
+    "price": 292.85,
+    "volume": 8572034
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-11",
+    "price": 289.56,
+    "volume": 5510113
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-08",
+    "price": 288.76,
+    "volume": 6634506
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-07",
+    "price": 286.94,
+    "volume": 8057109
+  },
+  {
+    "symbol": "JPM",
+    "date": "2025-08-06",
+    "price": 291.35,
+    "volume": 6330200
+  }
+]

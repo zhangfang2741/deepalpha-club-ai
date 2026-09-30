@@ -1,0 +1,14 @@
+[
+  {
+    "symbol": "NVDA",
+    "lastMonthCount": 1,
+    "lastMonthAvgPriceTarget": 300,
+    "lastQuarterCount": 23,
+    "lastQuarterAvgPriceTarget": 341.43,
+    "lastYearCount": 94,
+    "lastYearAvgPriceTarget": 301.47,
+    "allTimeCount": 340,
+    "allTimeAvgPriceTarget": 151.94,
+    "publishers": "[\"StreetInsider\",\"Benzinga\",\"Pulse 2.0\",\"MarketWatch\",\"Barrons\"]"
+  }
+]
