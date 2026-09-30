@@ -1,6 +1,6 @@
 """数据访问层：需要本地 Postgres（infra/docker-compose 的 postgres 服务 + make migrate）。连不上则跳过。"""
 
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
@@ -91,3 +91,43 @@ async def test_radar_grade_history_is_scoped_and_includes_last_stale_row(clean):
     assert all("dimensions" not in r.payload_zh for r in result)
     assert await repo.get_quant_grade_history("nonexistent", ["NVDA"], date(2026, 9, 1), date(2026, 9, 30)) == []
     assert await repo.get_quant_grade_history(MARKET, [], date(2026, 9, 1), date(2026, 9, 30)) == []
+
+
+async def test_align_backfill_timestamps_marks_late_rows_at_batch_time(clean):
+    """白天补跑写入的行（created_at 晚于 as_of 的定时跑批点）对齐回定时点，当时的雷达日即可用。"""
+    from sqlalchemy import text
+
+    from app.services.signal_radar import quant_filter
+
+    payload = {"overall": {"grade": "A", "score": 70}, "as_of": {}}
+    base = {"market": MARKET, "sector_key": "tech", "payload_zh": payload, "payload_en": {}, "grades": {}}
+    await repo.upsert_results([dict(base, symbol="LATE", as_of=date(2026, 9, 29)),
+                               dict(base, symbol="ONIT", as_of=date(2026, 9, 29))])
+    # LATE = 次日 02:00 白天补跑；ONIT = 当晚 22:40 定时批，两种写入时刻都要可控
+    async with repo.AsyncSessionFactory() as s:
+        for sym, ts in (("LATE", datetime(2026, 9, 30, 2, 0)), ("ONIT", datetime(2026, 9, 29, 22, 40))):
+            await s.execute(text("UPDATE quant_results SET created_at = :ts, updated_at = :ts "
+                                 "WHERE market = :m AND symbol = :s"),
+                            {"ts": ts, "m": MARKET, "s": sym})
+        await s.commit()
+
+    async def history_of() -> dict:
+        rows = await repo.get_quant_grade_history(MARKET, ["LATE", "ONIT"], date(2026, 9, 29), date(2026, 9, 29))
+        out = {}
+        for r in rows:
+            entry = quant_filter.grade_from_row(r)
+            out[r.symbol] = [entry] if entry else []
+        return out
+
+    # 对齐前：补跑行的可用日被写入时刻卡住，昨天的雷达日看不到
+    assert quant_filter.grade_on(await history_of(), "LATE", date(2026, 9, 29))[1] == "missing"
+
+    assert await repo.align_backfill_timestamps(MARKET, 22, 30) == 1
+    assert await repo.align_backfill_timestamps(MARKET, 22, 30) == 0  # 幂等
+
+    rows = await repo.get_quant_grade_history(MARKET, ["LATE", "ONIT"], date(2026, 9, 29), date(2026, 9, 29))
+    stamps = {r.symbol: r.created_at for r in rows}
+    assert stamps["LATE"] == datetime(2026, 9, 29, 22, 30)
+    assert stamps["ONIT"] == datetime(2026, 9, 29, 22, 40)  # 正常写入不动
+    assert quant_filter.grade_on(await history_of(), "LATE", date(2026, 9, 29))[1] == "eligible"
+    assert quant_filter.grade_on(await history_of(), "ONIT", date(2026, 9, 29))[1] == "eligible"

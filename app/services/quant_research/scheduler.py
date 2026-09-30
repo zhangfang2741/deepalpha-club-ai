@@ -59,6 +59,32 @@ def last_us_session(now: datetime) -> date:
 BOOTSTRAP_DELAY_SECONDS = 120
 
 
+async def _drop_radar_snapshots(redis: object) -> None:
+    """评级可用性变化后清掉雷达快照缓存，让下一轮扫描带着评级重排。
+
+    键前缀与 signal_radar service._CACHE_PREFIX 一致（含每日快照 / 自选 / 示例日 /
+    generating 锁，后三者清掉最多触发一次重算，无害）。
+    """
+    keys = [k async for k in redis.scan_iter(match="signal_radar:*", count=200)]  # type: ignore[attr-defined]
+    if keys:
+        await redis.unlink(*keys)  # type: ignore[attr-defined]
+
+
+async def _align_backfill() -> None:
+    """启动时把补跑写入的评级行时间戳对齐回定时跑批时刻（幂等，见 repository 同名函数）。
+
+    2026-09-30 上线首日：自举在白天补跑 as_of=9-29 的批量，created_at=9-30 让全部
+    评级对当时的雷达展示日不可用（iOS 气泡无评级角标）。对齐后昨天的展示日即可用。
+    """
+    rows = await repo.align_backfill_timestamps("us", settings.QUANT_BATCH_UTC_HOUR,
+                                                settings.QUANT_BATCH_UTC_MINUTE)
+    if rows:
+        logger.info("quant_backfill_timestamps_aligned", market="us", rows=rows)
+        redis = current_redis()
+        if redis is not None:
+            await _drop_radar_snapshots(redis)
+
+
 async def _bootstrap_once() -> None:
     """冷启动自举：从未跑过批量（没有任何板块分布）时，启动后先跑一次首次全量。
 
@@ -66,6 +92,7 @@ async def _bootstrap_once() -> None:
     自举让结果在部署后 ~1 小时内可用。多实例 / 与定时批量并发由 Redis 锁保证只跑一次。
     """
     try:
+        await _align_backfill()
         await asyncio.sleep(BOOTSTRAP_DELAY_SECONDS)
         for attempt in range(BOOTSTRAP_MAX_ATTEMPTS):
             if await repo.latest_distribution_date("us") is not None:

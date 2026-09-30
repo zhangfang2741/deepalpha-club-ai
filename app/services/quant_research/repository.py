@@ -10,7 +10,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import col
 
@@ -172,6 +172,28 @@ class QuantGradeSnapshot:
     updated_at: datetime
     payload_zh: dict
     payload_en: dict
+
+
+async def align_backfill_timestamps(market: str, hour: int, minute: int) -> int:
+    """把补跑写入的行对齐回该评级日的定时跑批时刻，返回改动行数。
+
+    自举/故障重试在白天补跑时 created_at 落在 as_of 次日，雷达的可用日判断
+    （available_on 含写入时刻）会让这批评级对当时的展示日永远不可见。补跑的
+    语义是「补上当时本应发生的跑批」，时间戳应标定时点。以「写入日晚于评级日」
+    为补跑标志：当晚定时批（22:31~23:59 陆续写入，日期仍等于 as_of）不动。
+    幂等，可重复执行。
+    """
+    q = text("""
+        UPDATE quant_results
+        SET created_at = as_of + make_interval(hours => :hour, mins => :minute),
+            updated_at = as_of + make_interval(hours => :hour, mins => :minute)
+        WHERE market = :market
+          AND created_at::date > as_of
+    """)
+    async with AsyncSessionFactory() as s:
+        res = await s.execute(q, {"market": market, "hour": hour, "minute": minute})
+        await s.commit()
+        return res.rowcount or 0
 
 
 async def get_quant_grade_history(market: str, symbols: list[str], start: date, end: date) -> list[QuantGradeSnapshot]:

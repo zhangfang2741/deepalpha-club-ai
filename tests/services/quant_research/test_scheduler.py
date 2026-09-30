@@ -43,3 +43,48 @@ def test_lock_ttl_covers_slowest_run():
 
     assert 45 * 60 <= scheduler._LOCK_TTL <= 2 * 3600
     assert scheduler.BOOTSTRAP_RETRY_SECONDS <= scheduler._LOCK_TTL
+
+
+async def test_align_backfill_drops_radar_snapshots(monkeypatch):
+    """对齐改动过行时清掉雷达快照键，让下一轮扫描带着评级重排。"""
+    from app.services.quant_research import scheduler
+
+    async def fake_align(market, hour, minute):
+        assert (market, hour, minute) == ("us", scheduler.settings.QUANT_BATCH_UTC_HOUR,
+                                          scheduler.settings.QUANT_BATCH_UTC_MINUTE)
+        return 7
+
+    class FakeRedis:
+        def __init__(self):
+            self.unlinked: tuple = ()
+
+        def scan_iter(self, match=None, count=None):
+            async def gen():
+                yield b"signal_radar:ns:us:nasdaq100"
+                yield b"signal_radar:wl:us:1:abc"
+
+            return gen()
+
+        async def unlink(self, *keys):
+            self.unlinked = keys
+
+    fake = FakeRedis()
+    monkeypatch.setattr(scheduler.repo, "align_backfill_timestamps", fake_align)
+    monkeypatch.setattr(scheduler, "current_redis", lambda: fake)
+    await scheduler._align_backfill()
+    assert fake.unlinked == (b"signal_radar:ns:us:nasdaq100", b"signal_radar:wl:us:1:abc")
+
+
+async def test_align_backfill_no_change_keeps_cache(monkeypatch):
+    """没有行需要校正时不碰 Redis。"""
+    from app.services.quant_research import scheduler
+
+    async def fake_align(market, hour, minute):
+        return 0
+
+    def boom():
+        raise AssertionError("不应触碰 Redis")
+
+    monkeypatch.setattr(scheduler.repo, "align_backfill_timestamps", fake_align)
+    monkeypatch.setattr(scheduler, "current_redis", boom)
+    await scheduler._align_backfill()
