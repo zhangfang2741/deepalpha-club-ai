@@ -19,7 +19,11 @@ from app.core.logging import logger
 from app.services.quant_research import repository as repo
 from app.services.quant_research.batch import run_cn_estimate_snapshot, run_us_batch
 
-_LOCK_TTL = 6 * 3600
+# 批量锁 TTL：最长的一轮（首次全量 ~4800 次调用 @250/分钟）约 20~30 分钟，90 分钟足够。
+# 不能再长：部署会杀掉跑批中的进程，锁留在 Redis 里挡住下一次自举（2026-09-30 踩过 6h 死锁）。
+_LOCK_TTL = 90 * 60
+BOOTSTRAP_RETRY_SECONDS = 10 * 60
+BOOTSTRAP_MAX_ATTEMPTS = 12  # 重试共 ~2 小时；之后再等当天的定时点
 
 
 def next_trigger(after: datetime, hour: int, minute: int, weekdays: set[int]) -> datetime:
@@ -63,19 +67,31 @@ async def _bootstrap_once() -> None:
     """
     try:
         await asyncio.sleep(BOOTSTRAP_DELAY_SECONDS)
-        if await repo.latest_distribution_date("us") is not None:
-            return
-        logger.info("quant_batch_bootstrap_start")
-        await _run_once("us", last_us_session(datetime.now(UTC)))
+        for attempt in range(BOOTSTRAP_MAX_ATTEMPTS):
+            if await repo.latest_distribution_date("us") is not None:
+                return
+            logger.info("quant_batch_bootstrap_attempt", attempt=attempt)
+            # 锁被占（别的实例在跑 / 上一进程留下的锁）时 _run_once 只记日志不抛错，
+            # 这里靠重试等它跑完或过期，而不是放弃到下一个定时点
+            await _run_once("us", last_us_session(datetime.now(UTC)))
+            if await repo.latest_distribution_date("us") is not None:
+                return
+            await asyncio.sleep(BOOTSTRAP_RETRY_SECONDS)
+        logger.warning("quant_batch_bootstrap_gave_up", attempts=BOOTSTRAP_MAX_ATTEMPTS)
     except asyncio.CancelledError:
         raise
     except Exception as e:  # noqa: BLE001 自举失败不影响调度循环，定时批量会再跑
         logger.exception("quant_batch_bootstrap_failed", error=str(e))
 
 
+def _lock_key(kind: str, day: date) -> str:
+    """批量锁键。v2：跳过 2026-09-30 部署重启留下的 v1 6 小时死锁（自然过期即可，无需清理）。"""
+    return f"quant:batch_lock:v2:{kind}:{day.isoformat()}"
+
+
 async def _run_once(kind: str, day: date) -> None:
     redis = current_redis()
-    if redis is not None and not await acquire_lock(redis, f"quant:batch_lock:{kind}:{day.isoformat()}", _LOCK_TTL):
+    if redis is not None and not await acquire_lock(redis, _lock_key(kind, day), _LOCK_TTL):
         logger.info("quant_batch_skipped_locked", kind=kind, day=day.isoformat())
         return
     if kind == "us":

@@ -35,3 +35,11 @@ def test_last_us_session():
     # 周六凌晨 → 周五；周日凌晨 → 周五
     assert last_us_session(datetime(2026, 10, 3, 6, 0, tzinfo=UTC)) == date(2026, 10, 2)
     assert last_us_session(datetime(2026, 10, 4, 6, 0, tzinfo=UTC)) == date(2026, 10, 2)
+
+
+def test_lock_ttl_covers_slowest_run():
+    """锁 TTL 必须明显大于最慢一轮（首次全量 ~30 分钟），又不能长到重启后长期挡路。"""
+    from app.services.quant_research import scheduler
+
+    assert 45 * 60 <= scheduler._LOCK_TTL <= 2 * 3600
+    assert scheduler.BOOTSTRAP_RETRY_SECONDS <= scheduler._LOCK_TTL
