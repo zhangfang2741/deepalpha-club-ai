@@ -259,7 +259,9 @@ class Settings:
                 if self.VALKEY_HOST and not self.VALKEY_SSL:
                     self.VALKEY_SSL = False
 
-        self.VALKEY_MAX_CONNECTIONS = int(os.getenv("VALKEY_MAX_CONNECTIONS", "20"))
+        # 单进程同时执行的 Redis 命令数上限；进程内有业务/缓存两个池，多实例部署
+        # 注意 Upstash 并发连接档位（Free=100 / Pro=500）
+        self.VALKEY_MAX_CONNECTIONS = int(os.getenv("VALKEY_MAX_CONNECTIONS", "64"))
         self.CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "60"))
         self.RATE_LIMIT_USE_VALKEY = os.getenv("RATE_LIMIT_USE_VALKEY", "true").lower() in ("true", "1", "yes")
 
