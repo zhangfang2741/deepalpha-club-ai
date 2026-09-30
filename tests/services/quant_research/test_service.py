@@ -52,3 +52,19 @@ async def test_no_batch_yet_is_insufficient(monkeypatch):
     monkeypatch.setattr(service.repo, "latest_distribution_date", none)
     out = await service.get_quant_research("us", "RKLB", "en", redis=None)
     assert out.status == "insufficient_data"
+
+
+async def test_class_share_symbol_normalized(monkeypatch):
+    seen = {}
+
+    async def latest(market, symbol):
+        seen["symbol"] = symbol
+        return None
+
+    async def none(*a, **k):
+        return None
+
+    monkeypatch.setattr(service.repo, "get_latest_result", latest)
+    monkeypatch.setattr(service.repo, "latest_distribution_date", none)
+    await service.get_quant_research("us", "brk.b", "zh", redis=None)
+    assert seen["symbol"] == "BRK-B"

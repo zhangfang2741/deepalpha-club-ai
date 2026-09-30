@@ -117,12 +117,17 @@ def test_needs_refresh():
 
     class Snap:
         fetched_at = datetime(2026, 9, 1)
+        filing_date = "2026-08-26"
 
-    assert batch.needs_refresh(None, set(), "A", AS_OF)
-    assert batch.needs_refresh(Snap(), {"A"}, "A", AS_OF)
-    assert not batch.needs_refresh(Snap(), set(), "A", AS_OF)
+    assert batch.needs_refresh(None, {}, "A", AS_OF)
+    assert not batch.needs_refresh(Snap(), {}, "A", AS_OF)
+    # 9-25 发布财报，库里最新报表 8-26 披露 → FMP 还没更新新季度，每天重拉
+    assert batch.needs_refresh(Snap(), {"A": "2026-09-25"}, "A", AS_OF)
+    # 拿到新季度（披露日不早于发布日）后停止
+    Snap.filing_date = "2026-09-25"
+    assert not batch.needs_refresh(Snap(), {"A": "2026-09-25"}, "A", AS_OF)
     Snap.fetched_at = datetime(2026, 5, 1)
-    assert batch.needs_refresh(Snap(), set(), "A", AS_OF)
+    assert batch.needs_refresh(Snap(), {}, "A", AS_OF)
 
 
 async def test_missing_key_fails_loudly(monkeypatch):

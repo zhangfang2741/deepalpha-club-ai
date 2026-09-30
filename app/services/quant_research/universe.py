@@ -57,6 +57,11 @@ FMP_SECTOR_TO_GICS: dict[str, str] = {
 }
 
 
+def normalize_us_symbol(symbol: str) -> str:
+    """美股代码规范化：大写，类别股的点号换成连字符（BRK.B → BRK-B，与成分表、FMP 一致）。"""
+    return symbol.strip().upper().replace(".", "-")
+
+
 def sector_name(key: str, lang: str) -> str:
     """GICS 板块展示名。"""
     _, zh, en = GICS_SECTORS[key]

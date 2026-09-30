@@ -5,7 +5,7 @@
 - 批量任务（priority="batch"）另有 FMP_BATCH_RATE_LIMIT_PER_MIN 上限，给线上用户请求留余量；
 - 批量任务遇到任一 429 → report_429 设熔断键，所有批量调用暂停 FMP_BATCH_BREAKER_SECONDS，
   用户请求照常。
-Redis 不可用时退化为进程内计数（本地 / 测试可跑，但不跨进程）。
+Redis 不可用或出错时退化为进程内计数（不跨进程，但不会让 FMP 调用因此失败）。
 """
 
 from __future__ import annotations
@@ -32,20 +32,38 @@ def _minute_keys(minute: int) -> tuple[str, str]:
     return f"fmp:budget:{minute}", f"fmp:budget:batch:{minute}"
 
 
+def _local_incr(key: str) -> int:
+    if len(_local_counts) > 100:  # Redis 长时间不可用时别让分钟计数无限增长
+        suffix = key.rsplit(":", 1)[-1]
+        for k in [k for k in _local_counts if not k.endswith(suffix)]:
+            del _local_counts[k]
+    _local_counts[key] = _local_counts.get(key, 0) + 1
+    return _local_counts[key]
+
+
 async def _incr(redis: Redis | None, key: str) -> int:
+    """分钟计数；Redis 出错时退回进程内计数（限流降级为单进程，但不让 FMP 调用因此失败）。"""
     if redis is None:
-        _local_counts[key] = _local_counts.get(key, 0) + 1
-        return _local_counts[key]
-    n = int(await redis.incr(key))
-    if n == 1:
-        await redis.expire(key, _WINDOW_TTL)
-    return n
+        return _local_incr(key)
+    try:
+        n = int(await redis.incr(key))
+        if n == 1:
+            await redis.expire(key, _WINDOW_TTL)
+        return n
+    except Exception as e:  # noqa: BLE001
+        logger.warning("fmp_budget_redis_error", op="incr", error=str(e))
+        return _local_incr(key)
 
 
 async def _breaker_remaining(redis: Redis | None, now: float) -> float:
+    local = max(0.0, _local_breaker_until - now)
     if redis is None:
-        return max(0.0, _local_breaker_until - now)
-    ttl = int(await redis.ttl(BREAKER_KEY))
+        return local
+    try:
+        ttl = int(await redis.ttl(BREAKER_KEY))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("fmp_budget_redis_error", op="ttl", error=str(e))
+        return local
     return float(ttl) if ttl > 0 else 0.0
 
 
@@ -87,10 +105,13 @@ async def report_429(redis: Redis | None, priority: Priority, *, now: Callable[[
     if priority != "batch":
         return
     seconds = settings.FMP_BATCH_BREAKER_SECONDS
+    _local_breaker_until = now() + seconds  # 本进程总是记一份，Redis 出错时也能熔断
     if redis is None:
-        _local_breaker_until = now() + seconds
         return
-    await redis.set(BREAKER_KEY, "1", ex=seconds)
+    try:
+        await redis.set(BREAKER_KEY, "1", ex=seconds)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("fmp_budget_redis_error", op="set_breaker", error=str(e))
 
 
 def reset_local_state() -> None:
