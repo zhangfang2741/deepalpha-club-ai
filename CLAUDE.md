@@ -138,7 +138,8 @@ deepalpha-club-ai/
 | 信号雷达 | `/signal-radar` | iOS「雷达」Tab（页面标题「市场雷达」） | 扫描各市场指数成分股跑缠论，按日聚合买卖点前 10（气泡：红买绿卖、深浅=信号强弱、大小=一二三类、左上角「✓」= 已确认，不带勾 = 最后一笔上的未确认信号） |
 | 威科夫 | `/wyckoff` | `/wyckoff` | Wyckoff 阶段/事件 |
 | 一目均衡表 | `/ichimoku` | `/ichimoku` | Ichimoku 云图信号 |
-| 分析师上调 | `/analyst-upgrades` | `/analyst-upgrades` | 目标价上调榜（SP500/Nasdaq100） |
+| 分析师上调 | `/analyst-upgrades` | `/analyst-upgrades` | 目标价上调榜（SP500/Nasdaq100）；`/overview/{symbol}` 为缠论 App 详情页「分析师评级」分段 |
+| 量化研究 | `/quant-research` | 缠论 App 详情页「量化研究」分段 | 美股五维度（估值/成长/盈利能力/动量/EPS 修正）标普1500 板块内百分位 → A+~F，三层下钻 + 方法说明 |
 | 机构信号 | `/institutional-signals` | `/institutional-signals` | 13F 机构建仓榜 |
 | 行业研究 | `/research` | `/industry-research` | 深度行业研究 |
 | 企业研究 | `/sec` | `/company-research` | SEC 文件 + 公司画像 |
@@ -159,6 +160,16 @@ deepalpha-club-ai/
 > 同向假突破 / 窄幅震荡 / 低波动命中即不上榜。**不要**改回按笔终点日判定（分型极值K线天然偏向信号反面），
 > 也**不要**加回收盘位置（bar_classify）、区间震荡（cxt_range_oscillation）——真实数据校准会让雷达几乎清空，
 > 见 `docs/superpowers/specs/2026-09-27-radar-shape-filters-design.md`「校准后调整」。改规则须升缓存键 `_mode_ns` 的 shape 版本。
+
+> 量化研究约束（`app/services/quant_research`，设计见 `docs/superpowers/specs/2026-09-30-quant-research-design.md`）：
+> 口径贴近 Seeking Alpha 因子评级但**只给字母等级**，文案不出现买卖导向词与数据供应商名（`copy.FORBIDDEN`，
+> golden / 文案测试守护）；只展示时间（行情日、财报期、预期更新日）。指标全部用报表原始值自己算、带算式输入。
+> **FMP 套餐 300 次/分钟**：所有新代码的 FMP 调用经 `app/cache/fmp_budget.acquire`（Redis 分钟计数，跨进程），
+> 夜间批量 `priority="batch"` ≤150/分钟、遇 429 整体熔断 2 分钟；一次性脚本也必须限速（曾因 8 并发打满配额
+> 导致线上被限流）。一致预期快照 `quant_estimate_snapshots` **只补不覆盖**（point-in-time，EPS 修正与日后回测依赖），
+> 2026-09-30 首份快照来自 `data/quant_seed/`（git 忽略），用 `scripts/quant_seed_import.py` 导入。
+> 金融股的营收预期增速、市现率、FCF 利润率标「不适用」，且不做现金流阶段标注（口径不可比）。改分档 / 规则须升
+> `METHODOLOGY_VERSION` 并重生成 golden（`UPDATE_GOLDEN=1 uv run pytest tests/services/quant_research`）。
 
 > 新增一个投研模块时，通常需同步落地五处：`app/api/v1/<mod>.py`、`app/services/<mod>/`、`app/schemas/<mod>.py`、前端 `app/<mod>/page.tsx` + `lib/api/<mod>.ts`，并在 `api.py`、`TopNav.tsx` 注册。
 
