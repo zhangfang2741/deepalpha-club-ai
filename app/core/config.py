@@ -396,6 +396,11 @@ class Settings:
 
         # Financial Modeling Prep API
         self.FMP_API_KEY: str = os.getenv("FMP_API_KEY", "")
+        # FMP 全局调用预算（app/cache/fmp_budget.py，跨进程共享）：套餐实测 300 次/分钟，
+        # 总量留 10 次余量；批量任务单独限额，出现 429 时批量整体熔断，用户请求不受影响。
+        self.FMP_RATE_LIMIT_PER_MIN = int(os.getenv("FMP_RATE_LIMIT_PER_MIN", "290"))
+        self.FMP_BATCH_RATE_LIMIT_PER_MIN = int(os.getenv("FMP_BATCH_RATE_LIMIT_PER_MIN", "150"))
+        self.FMP_BATCH_BREAKER_SECONDS = int(os.getenv("FMP_BATCH_BREAKER_SECONDS", "120"))
 
         # Alpha Vantage API（电话会议记录抓取备用源）
         self.ALPHA_VANTAGE_KEY: str | None = os.getenv("ALPHA_VANTAGE_KEY", None)
