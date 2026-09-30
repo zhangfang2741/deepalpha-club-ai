@@ -399,7 +399,7 @@ class Settings:
         # FMP 全局调用预算（app/cache/fmp_budget.py，跨进程共享）：套餐实测 300 次/分钟，
         # 总量留 10 次余量；批量任务单独限额，出现 429 时批量整体熔断，用户请求不受影响。
         self.FMP_RATE_LIMIT_PER_MIN = int(os.getenv("FMP_RATE_LIMIT_PER_MIN", "290"))
-        self.FMP_BATCH_RATE_LIMIT_PER_MIN = int(os.getenv("FMP_BATCH_RATE_LIMIT_PER_MIN", "150"))
+        self.FMP_BATCH_RATE_LIMIT_PER_MIN = int(os.getenv("FMP_BATCH_RATE_LIMIT_PER_MIN", "250"))
         self.FMP_BATCH_BREAKER_SECONDS = int(os.getenv("FMP_BATCH_BREAKER_SECONDS", "120"))
         # 量化研究夜间批量（app/services/quant_research/scheduler.py）：美股 UTC 22:30（北京 06:30，
         # 排在雷达美股预热之后）逐只计算标普1500；A 股一致预期快照 UTC 09:00（北京 17:00）。
