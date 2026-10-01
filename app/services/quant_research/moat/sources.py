@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
 from typing import Literal
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -25,7 +26,11 @@ RUNS = 3
 ATTEMPTS = 4
 SOURCE_KEYS = ("intangible_assets", "switching_costs", "network_effect", "cost_advantage", "efficient_scale")
 ORDER = ("none", "weak", "moderate", "strong")
-_llm_gate = asyncio.Semaphore(24)  # 每只 3 次判断并发；12 只 × 3 = 36 次排队进 24 路
+# 大模型与 App 的对话 / 翻译共用同一个 MiniMax 套餐：24 路曾把套餐速率打满（429），连带影响线上功能。
+# 并发压到 4 路；遇到限流全局冷却一段时间再继续，而不是立刻重试加压。
+_llm_gate = asyncio.Semaphore(4)
+RATE_LIMIT_COOLDOWN = 90.0
+_cooldown_until = 0.0
 
 Strength = Literal["none", "weak", "moderate", "strong"]
 SourceKey = Literal["intangible_assets", "switching_costs", "network_effect", "cost_advantage", "efficient_scale"]
@@ -169,6 +174,23 @@ def invalid_reason(j: MoatJudgement | None) -> str | None:
     return None
 
 
+def _is_rate_limited(e: BaseException) -> bool:
+    text = f"{type(e).__name__} {e}".lower()
+    return "429" in text or "rate_limit" in text or "ratelimit" in text or "速率限制" in text
+
+
+def _start_cooldown() -> None:
+    global _cooldown_until
+    _cooldown_until = max(_cooldown_until, time.monotonic() + RATE_LIMIT_COOLDOWN)
+    logger.warning("quant_moat_llm_rate_limited", cooldown_seconds=RATE_LIMIT_COOLDOWN)
+
+
+async def _wait_cooldown() -> None:
+    delay = _cooldown_until - time.monotonic()
+    if delay > 0:
+        await asyncio.sleep(delay)
+
+
 async def judge_once(section: str, symbol: str) -> MoatJudgement:
     """一次判断（含重试与引用核对）。"""
     msgs = [SystemMessage(SYSTEM), HumanMessage(f"公司代码：{symbol}\n\n年报 Item 1（业务）原文：\n\n{section}")]
@@ -176,9 +198,12 @@ async def judge_once(section: str, symbol: str) -> MoatJudgement:
     for _ in range(ATTEMPTS):
         try:
             async with _llm_gate:
+                await _wait_cooldown()
                 out = await llm_service.call(msgs, response_format=MoatJudgement, temperature=0)
         except Exception as e:  # noqa: BLE001 结构化输出偶发失败，重试
             last = e
+            if _is_rate_limited(e):
+                _start_cooldown()
             continue
         reason = invalid_reason(neutralize(out) if out is not None else None)
         if reason is None:

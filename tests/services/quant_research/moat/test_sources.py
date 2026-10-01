@@ -71,3 +71,30 @@ def test_descriptive_trade_words_are_neutralized_not_rejected():
     bad = _j(["none"] * 5, reason_en="Data from FMP shows high margins.")
     neutralize(bad)
     assert invalid_reason(bad) and "FMP" in invalid_reason(bad)
+
+
+async def test_rate_limit_triggers_global_cooldown(monkeypatch):
+    """遇到 429 全局冷却：后续调用先等冷却结束，不立刻重试加压（大模型套餐与 App 其它功能共用）。"""
+    from app.services.quant_research.moat import sources
+
+    class RateLimitError(Exception):
+        pass
+
+    calls, sleeps = [], []
+    good = _j(["none"] * 5)
+
+    async def fake_call(*a, **k):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RateLimitError("Error code: 429 - rate_limit_error")
+        return good
+
+    async def fake_sleep(sec):
+        sleeps.append(sec)
+
+    monkeypatch.setattr(sources, "_cooldown_until", 0.0)
+    monkeypatch.setattr(sources.llm_service, "call", fake_call)
+    monkeypatch.setattr(sources.asyncio, "sleep", fake_sleep)
+    out = await sources.judge_once("x" * 100, "TEST")
+    assert len(calls) == 2 and out is good
+    assert sleeps and sleeps[0] > 60  # 第二次调用前等了冷却
