@@ -27,7 +27,7 @@ from app.services.quant_research.moat.tenk import TenK, business_section, latest
 from app.services.quant_research.universe import fetch_sp1500
 
 MARKET = "us"
-SYMBOL_CONCURRENCY = 6
+SYMBOL_CONCURRENCY = 12  # 冷启动约 1500 只：6 并发要 10 小时，实测无限流后提到 12
 
 
 async def _evidence(fmp: FmpClient, symbol: str, financial: bool, total_debt: float | None) -> dict | None:

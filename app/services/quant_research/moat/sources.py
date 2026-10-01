@@ -25,7 +25,7 @@ RUNS = 3
 ATTEMPTS = 3
 SOURCE_KEYS = ("intangible_assets", "switching_costs", "network_effect", "cost_advantage", "efficient_scale")
 ORDER = ("none", "weak", "moderate", "strong")
-_llm_gate = asyncio.Semaphore(8)
+_llm_gate = asyncio.Semaphore(24)  # 每只 3 次判断并发；12 只 × 3 = 36 次排队进 24 路
 
 Strength = Literal["none", "weak", "moderate", "strong"]
 SourceKey = Literal["intangible_assets", "switching_costs", "network_effect", "cost_advantage", "efficient_scale"]
