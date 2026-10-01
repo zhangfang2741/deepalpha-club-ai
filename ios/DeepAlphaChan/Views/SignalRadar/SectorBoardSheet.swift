@@ -86,24 +86,55 @@ struct SectorBoardList: View {
                     }
                     .frame(maxWidth: .infinity).padding(.top, 60)
                 } else {
-                    ProgressView().frame(maxWidth: .infinity).padding(.top, 60)
+                    skeleton
                 }
             }
             .padding(16)
+            .animation(.smooth(duration: 0.3), value: board?.asOf)
         }
+        .scrollIndicators(.hidden)
         .background(Theme.background)
         .navigationTitle(parentName ?? L("%@行业", market.title))
         .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
+        // 雷达换了选中日就重取；旧数据留在屏上直到新数据到，不闪空白。
+        .task(id: date) { await load() }
     }
 
     private func load() async {
         failed = false
         do {
-            board = try await MarketOverviewService.sectors(market: market, parent: parent, date: date)
+            let fresh = try await MarketOverviewService.sectors(market: market, parent: parent, date: date)
+            withAnimation(.smooth(duration: 0.3)) { board = fresh }
         } catch {
             failed = true
         }
+    }
+
+    /// 加载中的骨架：与真实行同高，数据一到原地替换，避免从转圈到列表的跳变。
+    private var skeleton: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            ForEach(0..<2, id: \.self) { _ in
+                VStack(spacing: 0) {
+                    ForEach(0..<4, id: \.self) { i in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 8) {
+                                RoundedRectangle(cornerRadius: 4).frame(width: 72, height: 16)
+                                RoundedRectangle(cornerRadius: 8).frame(width: 44, height: 14)
+                            }
+                            Spacer()
+                            RoundedRectangle(cornerRadius: 4).frame(width: 96, height: 24)
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 12)
+                        if i < 3 { Divider().overlay(Theme.border).padding(.leading, 14) }
+                    }
+                }
+                .background(Theme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+        }
+        .foregroundColor(Theme.textSecondary.opacity(0.18))
+        .redacted(reason: .placeholder)
+        .accessibilityHidden(true)
     }
 
     // MARK: - 顶部 / 底部
@@ -151,7 +182,7 @@ struct SectorBoardList: View {
         let selected = radar.selectedKey == nil
         return Button(action: onClear) {
             HStack(spacing: 10) {
-                Text(L("全部行业")).font(.body.weight(.semibold)).foregroundColor(Theme.textPrimary)
+                Text(L("全部行业")).font(.system(.body, design: .rounded).weight(.semibold)).foregroundColor(Theme.textPrimary)
                 if selected {
                     Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
                 }
@@ -164,7 +195,8 @@ struct SectorBoardList: View {
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(RowPressStyle())
+        .sensoryFeedback(.selection, trigger: selected)
         .accessibilityHint(L("雷达显示全部行业的信号"))
     }
 
@@ -181,7 +213,7 @@ struct SectorBoardList: View {
 
     private func chip(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.caption2.weight(.semibold).monospacedDigit())
+            .font(.system(.caption2, design: .rounded).weight(.semibold).monospacedDigit())
             .foregroundColor(color)
             .padding(.horizontal, 7).padding(.vertical, 2)
             .background(color.opacity(0.14))
@@ -193,8 +225,8 @@ struct SectorBoardList: View {
     private func section(_ title: String, rows: [SectorRow], maxAbs: Double) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Text(title).font(.subheadline.weight(.semibold)).foregroundColor(Theme.textPrimary)
-                Text("\(rows.count)").font(.caption.monospacedDigit()).foregroundColor(Theme.textSecondary)
+                Text(title).font(.system(.subheadline, design: .rounded).weight(.semibold)).foregroundColor(Theme.textPrimary)
+                Text("\(rows.count)").font(.system(.caption, design: .rounded).monospacedDigit()).foregroundColor(Theme.textSecondary)
             }
             .padding(.horizontal, 4)
             VStack(spacing: 0) {
@@ -216,7 +248,8 @@ struct SectorBoardList: View {
         let content = HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
-                    Text(row.name).font(.body.weight(.semibold)).foregroundColor(Theme.textPrimary)
+                    Text(row.name).font(.system(.body, design: .rounded).weight(.semibold)).foregroundColor(Theme.textPrimary)
+                        .lineLimit(1).minimumScaleFactor(0.8)
                     if selected {
                         Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
                     }
@@ -231,8 +264,10 @@ struct SectorBoardList: View {
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 6) {
                 Text(SectorBoardList.rsText(rs))
-                    .font(.title3.weight(.semibold).monospacedDigit())
+                    .font(.system(.title3, design: .rounded).weight(.semibold).monospacedDigit())
                     .foregroundColor((rs ?? 0) >= 0 ? Theme.up : Theme.down)
+                    .lineLimit(1)
+                    .contentTransition(.numericText())
                 StrengthBar(value: rs ?? 0, maxAbs: maxAbs)
                     .frame(width: 96, height: 5)
             }
@@ -246,7 +281,8 @@ struct SectorBoardList: View {
             Button {
                 onPick(row.key, row.name)
             } label: { content }
-            .buttonStyle(.plain)
+            .buttonStyle(RowPressStyle())
+            .sensoryFeedback(.selection, trigger: selected)
             .disabled(radar == nil)
             .accessibilityHint(radar == nil ? "" : L("在雷达上只看该行业"))
         } else {
@@ -273,11 +309,12 @@ struct SectorBoardList: View {
 private struct StrengthBar: View {
     let value: Double
     let maxAbs: Double
+    @State private var grown = false
 
     var body: some View {
         GeometryReader { geo in
             let half = geo.size.width / 2
-            let len = half * CGFloat(min(abs(value) / maxAbs, 1))
+            let len = half * CGFloat(min(abs(value) / maxAbs, 1)) * (grown ? 1 : 0)
             ZStack(alignment: .leading) {
                 Capsule().fill(Theme.textSecondary.opacity(0.15))
                 Capsule()
@@ -287,6 +324,18 @@ private struct StrengthBar: View {
                 Rectangle().fill(Theme.textSecondary.opacity(0.5)).frame(width: 1).offset(x: half)
             }
         }
+        .animation(.smooth(duration: 0.4), value: value)
+        .onAppear { withAnimation(.smooth(duration: 0.5).delay(0.05)) { grown = true } }
         .accessibilityHidden(true)
+    }
+}
+
+/// 行的按压反馈：按下时底色微亮、轻微缩小，松手弹回。
+private struct RowPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(configuration.isPressed ? Theme.textPrimary.opacity(0.06) : Color.clear)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.snappy(duration: 0.18), value: configuration.isPressed)
     }
 }
