@@ -60,6 +60,7 @@ struct RadarFactContext {
 
 // MARK: - 共用小件
 
+@MainActor
 enum RadarPanelStyle {
     /// 「二买 ✓」标签：底色与气泡同一套（方向 + 强弱深浅）。
     static func tag(_ signal: RadarSignal) -> some View {

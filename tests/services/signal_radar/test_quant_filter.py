@@ -194,7 +194,7 @@ async def test_rating_outage_publishes_technical_snapshot(monkeypatch):
     redis = Redis()
     await svc._write_cache(redis, response)
     assert redis.ttl == 300
-    restored = svc.SignalRadarResponse.model_validate_json(redis.stored)
+    restored = svc.unpack_snapshot(redis.stored)
     assert len(restored.days[0].signals) == 1
     assert restored.days[0].quant_filter.status == "unavailable"
 

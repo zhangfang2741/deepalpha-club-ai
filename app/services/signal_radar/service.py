@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 import weakref
+import zlib
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -309,8 +310,9 @@ def with_counts(day: RadarDayOut, signals: list[RadarSignalOut]) -> RadarDayOut:
                                   "sell_count": sum(s.side == "sell" for s in signals)})
 
 
-# 次级别补算上限（每只要拉 30 分钟K线，中英各算一份）：全部信号都补会把行情源打到限流
-_SUB_LEVEL_MAX = 60
+# 次级别补算上限：每只要分段拉 30 分钟K线（美股 FMP 约 3 次请求，且这条路径不经 fmp_budget），盘中每 30 分钟
+# 重刷一次。标普 500 实测一天约 27 个当日新信号，封顶 30 让盘中请求量与改版前（每个指数 20 只）同一量级。
+_SUB_LEVEL_MAX = 30
 
 
 def sub_level_targets(day: RadarDayOut, top_n: int = DEFAULT_TOP_N) -> set[str]:
@@ -646,7 +648,7 @@ async def refresh_sub_levels(
             sig.sub_level_label = fresh[sig.symbol].sub_level_label
     latest.sub_level_as_of = (now or datetime.now(UTC)).astimezone(UTC).replace(microsecond=0).isoformat()
     try:
-        await redis.set(_cache_key(market, universe_key, mode), latest.model_dump_json(), keepttl=True)
+        await redis.set(_cache_key(market, universe_key, mode), pack_snapshot(latest), keepttl=True)
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_sub_level_write_error", market=market, error=str(e))
         return False
@@ -748,6 +750,22 @@ def _classify_failure(exc: Exception) -> str:
     return "other"
 
 
+def pack_snapshot(resp: SignalRadarResponse) -> bytes:
+    """快照写 Redis 前 zlib 压缩。
+
+    存全部在场信号后标普 500 快照约 1MB（30 天 × 每天 36~98 个），逼近 Upstash 单次请求 1MB 上限；
+    实测压缩后约 19KB。
+    """
+    return zlib.compress(resp.model_dump_json().encode("utf-8"))
+
+
+def unpack_snapshot(raw: bytes | str) -> SignalRadarResponse:
+    """读快照：zlib 压缩的新格式，或升级前写入的明文 JSON（以 `{` 开头）。"""
+    if isinstance(raw, str) or raw[:1] == b"{":
+        return SignalRadarResponse.model_validate_json(raw)
+    return SignalRadarResponse.model_validate_json(zlib.decompress(raw))
+
+
 def _cache_key(market: str, universe_key: str, mode: str = DEFAULT_MODE) -> str:
     return f"{_CACHE_PREFIX}:{_mode_ns(mode)}:{market}:{universe_key}"
 
@@ -766,7 +784,7 @@ async def read_watchlist_cache(
     """读某用户某市场（当前自选清单）的自选雷达缓存。"""
     try:
         raw = await redis.get(watchlist_cache_key(market, user_id, watchlist, mode))
-        return SignalRadarResponse.model_validate_json(raw) if raw else None
+        return unpack_snapshot(raw) if raw else None
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_watchlist_cache_read_error", market=market, error=str(e))
         return None
@@ -783,7 +801,7 @@ async def _read_cache(
     if rawval is None:
         return None
     try:
-        return SignalRadarResponse.model_validate_json(rawval)
+        return unpack_snapshot(rawval)
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_cache_deserialize_error", market=market, error=str(e))
         return None
@@ -797,7 +815,8 @@ def _quant_unavailable(data: SignalRadarResponse) -> bool:
 async def _write_cache(redis: Redis, data: SignalRadarResponse) -> None:
     try:
         await redis.set(
-            _cache_key(data.market, data.universe, data.signal_mode), data.model_dump_json(), ex=300 if _quant_unavailable(data) else _cache_ttl()
+            _cache_key(data.market, data.universe, data.signal_mode), pack_snapshot(data),
+            ex=300 if _quant_unavailable(data) else _cache_ttl()
         )
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_cache_write_error", market=data.market, error=str(e))
@@ -1035,7 +1054,7 @@ async def _publish(state: _ScanState, resp: SignalRadarResponse, *, redis: Redis
         if state.user_id is not None:
             try:
                 await redis.set(watchlist_cache_key(state.market, state.user_id, state.constituents, state.mode),
-                                resp.model_dump_json(), ex=300 if _quant_unavailable(resp) else WATCHLIST_CACHE_TTL)
+                                pack_snapshot(resp), ex=300 if _quant_unavailable(resp) else WATCHLIST_CACHE_TTL)
             except Exception as e:  # noqa: BLE001
                 logger.warning("signal_radar_watchlist_cache_write_error", market=state.market, error=str(e))
         return resp
@@ -1339,7 +1358,7 @@ async def read_demo_cache(
     if raw is None:
         return None
     try:
-        return SignalRadarResponse.model_validate_json(raw)
+        return unpack_snapshot(raw)
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_demo_cache_deserialize_error", market=market, error=str(e))
         return None
@@ -1419,7 +1438,7 @@ async def _publish_demo(state: _ScanState, resp: SignalRadarResponse, *, redis: 
     try:
         # 键按名义日期：read_demo_cache 只知道 demo_snapshot_date()，不知道对齐后的交易日
         await redis.set(_demo_cache_key(state.market, state.universe.key, state.demo_nominal, state.mode),
-                        resp.model_dump_json(), ex=ttl)
+                        pack_snapshot(resp), ex=ttl)
         if state.sector_pools:
             await sectors.write_pools(redis, _mode_ns(state.mode), state.market, state.universe.key,
                                       state.sector_pools, ttl)
