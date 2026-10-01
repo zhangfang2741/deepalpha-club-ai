@@ -120,8 +120,8 @@ struct SectorBoardList: View {
         VStack(spacing: 0) {
             ForEach(0..<8, id: \.self) { i in
                 HStack(spacing: 8) {
-                    Circle().frame(width: 8, height: 8)
-                    RoundedRectangle(cornerRadius: 4).frame(width: 72, height: 14)
+                    RoundedRectangle(cornerRadius: 4).frame(width: 72, height: 16)
+                    RoundedRectangle(cornerRadius: 4).frame(width: 28, height: 12)
                     Spacer()
                     RoundedRectangle(cornerRadius: 4).frame(width: 58, height: 14)
                     RoundedRectangle(cornerRadius: 2).frame(width: 44, height: 4)
@@ -139,7 +139,7 @@ struct SectorBoardList: View {
 
     // MARK: - 顶部 / 底部
 
-    /// 顶部只留两件事：数据是哪天收盘的、圆点颜色是什么意思（同一行，图例靠右）。
+    /// 顶部只留一件事：数据是哪天收盘的。
     private func summary(_ board: SectorBoard) -> some View {
         HStack(spacing: 8) {
             if let asOf = board.asOf {
@@ -147,21 +147,8 @@ struct SectorBoardList: View {
                     .font(.caption).foregroundColor(Theme.textSecondary)
                     .lineLimit(1).minimumScaleFactor(0.8)
             }
-            Spacer(minLength: 4)
-            HStack(spacing: 8) {
-                legend("risk_on")
-                legend("neutral")
-                legend("risk_off")
-            }
         }
         .padding(.horizontal, 2)
-    }
-
-    private func legend(_ label: String) -> some View {
-        HStack(spacing: 5) {
-            Circle().fill(MarketHeader.regimeColor(label)).frame(width: 6, height: 6)
-            Text(Self.labelText(label)).font(.caption2).foregroundColor(Theme.textSecondary)
-        }
     }
 
     /// 说明文字退到底部：怎么排的、点行业会怎样、免责。
@@ -184,7 +171,7 @@ struct SectorBoardList: View {
         let selected = radar.selectedKey == nil
         return Button(action: onClear) {
             HStack(spacing: 8) {
-                Text(L("全部行业")).font(AnalysisType.title).foregroundColor(Theme.textPrimary)
+                Text(L("全部行业")).font(.body.weight(.semibold)).foregroundColor(Theme.textPrimary)
                 if selected {
                     Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
                 }
@@ -228,16 +215,19 @@ struct SectorBoardList: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
-    /// 单行：状态圆点 + 行业名 ……… 买卖点 · 强弱值 + 强弱条。一行约 40pt，半屏就能看到大半。
+    /// 单行：行业名 + 状态文字 ……… 买卖点 · 强弱值 + 强弱条。一行约 40pt，半屏就能看到大半。
     private func rowView(_ row: SectorRow, maxAbs: Double) -> some View {
         let selected = parent == nil && radar?.selectedKey == row.key
         let rs = row.rsVsMarket
         let counts = parent == nil ? radar?.counts[row.key] : nil
         let content = HStack(spacing: 8) {
-            Circle().fill(MarketHeader.regimeColor(row.label))
-                .frame(width: 8, height: 8)
-            Text(row.name).font(AnalysisType.title).foregroundColor(Theme.textPrimary)
+            Text(row.name).font(.body.weight(.semibold)).foregroundColor(Theme.textPrimary)
                 .lineLimit(1).minimumScaleFactor(0.8)
+            if let label = row.label {
+                Text(Self.labelText(label)).font(.caption)
+                    .foregroundColor(MarketHeader.regimeColor(label))
+                    .lineLimit(1)
+            }
             if selected {
                 Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
             }
