@@ -20,7 +20,7 @@ from app.schemas.regime import (
     SectorRegimePoint,
     SectorStageResult,
 )
-from app.services.regime.constants import SECTOR_CHILDREN, SECTOR_NAME_ZH
+from app.services.regime.constants import SECTOR_CHILDREN, SECTOR_NAME_ZH, SECTOR_SYMBOL
 
 router = APIRouter()
 
@@ -136,7 +136,7 @@ async def get_sector_regimes() -> SectorRegimeLatest:
             return list(rows)
 
     rows = await run_in_threadpool(_load)
-    points = [_to_sector_point(r) for r in rows]
+    points = [_to_sector_point(r) for r in rows if r.sector in SECTOR_SYMBOL]  # 丢掉已下线的旧行业行
     # 按 factor_weight 降序（越逐利越靠前），None 垫底
     points.sort(key=lambda p: (p.factor_weight is None, -(p.factor_weight or 0)))
     latest_date = points[0].trade_date if points else None

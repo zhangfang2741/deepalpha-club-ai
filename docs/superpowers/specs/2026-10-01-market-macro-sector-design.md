@@ -64,7 +64,7 @@
 - 点某一行 → 关闭弹层，雷达切到宽基 universe，并设置行业筛选；顶部显示「行业名 ✕」，点 ✕ 清除筛选并恢复进入前的 universe。
   （已修订：点某一行 = 在筛选条上选中该行业，不切换指数；买卖数改用当前雷达指数、当前选中日的统计，已选行业打勾。）
 - 美股有子行业的行业保留下钻（现有 `/regime/sectors/{sector}/children`）。
-- 行业分类：美股用现有 12 个板块（`regime.constants.SECTORS`）；A 股用申万一级 31 个；港股用恒生行业分类（约 12 个）。
+- 行业分类：美股严格按 GICS 11 个一级行业（`regime.constants.SECTORS`，半导体并回科技，只做一级、不下钻细分）；A 股用申万一级 31 个；港股用恒生行业分类（约 12 个）。
 
 ## 3. 后端设计
 
@@ -99,7 +99,7 @@
 ### 3.4 雷达行业标签与统计
 
 - 新增 `app/services/signal_radar/sector_tags.py`：宽基成分股 → 行业 key。
-  - 美股：复用基本面研究已有的 GICS 板块，映射到 12 个 regime 板块 key。
+  - 美股：复用基本面研究已有的 GICS 板块，映射到 11 个 regime 板块 key。
   - A 股：akshare 申万一级行业成分。
   - 港股：恒生行业分类（取不到时用 FMP profile 的 sector 兜底映射）。
   - 结果按周缓存（`signal_radar:sector_tags:{market}`，TTL 8 天）。

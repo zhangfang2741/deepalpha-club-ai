@@ -1459,7 +1459,7 @@ async def test_watchlist_snapshot_carries_sector_tags(monkeypatch):
     from app.services.signal_radar.universe import get_universe
 
     async def tags(market, redis):
-        return {"NVDA": "semiconductors"}
+        return {"NVDA": "technology"}
 
     async def bars(**kwargs):
         return [{"time": "2026-09-30"}]
@@ -1479,7 +1479,7 @@ async def test_watchlist_snapshot_carries_sector_tags(monkeypatch):
                            max_age_days=5, start_date="2026-01-01", end_date="2026-09-30", cutoff="2026-09-01")
     state.results["NVDA"] = ([_raw("NVDA", "2026-09-30", "buy", 0.8, level=2)], [], ["2026-09-30"])
     day = (await svc._assemble(state, redis=None)).days[0]
-    assert day.signals[0].sector == "semiconductors"
+    assert day.signals[0].sector == "technology"
 
 
 class TestSnapshotCompression:
@@ -1491,7 +1491,7 @@ class TestSnapshotCompression:
 
         sig = RadarSignalOut(symbol="NVDA", name="NVIDIA", side="buy", label="二买", signal_type="buy2",
                              date="2026-09-30", price=1.0, strength=0.5, bias="bullish",
-                             signal_strength="medium", confirmed=True, pivot_stage_depth=0.5, sector="semiconductors")
+                             signal_strength="medium", confirmed=True, pivot_stage_depth=0.5, sector="technology")
         days = [RadarDayOut(date="2026-09-30", buy_count=n, sell_count=0, signals=[sig] * n) for _ in range(30)]
         return svc.SignalRadarResponse(market="us", universe="sp500", etf_name="标普500", universe_size=503,
                                        as_of="2026-09-30", top_n=10, days=days, status="ready")

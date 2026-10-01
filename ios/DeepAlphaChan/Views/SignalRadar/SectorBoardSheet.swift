@@ -11,8 +11,8 @@ struct SectorRadarContext {
 }
 
 /// 行业弹层：各行业按相对大盘强弱从强到弱，每行带状态色点、强弱、当前雷达选中日的买卖点数。
-/// 点一级行业 → 关闭弹层，雷达在当前指数里只看该行业（等同于在筛选条上选中它，不切换指数）；
-/// 有子行业的可下钻看细分（只展示）。radar 为 nil（自选等没有行业统计的雷达）时行业只展示、不可筛。
+/// 行业严格按 GICS 一级行业，只有一级、不下钻。点行业 → 关闭弹层，雷达在当前指数里只看该行业
+/// （等同于在筛选条上选中它，不切换指数）。radar 为 nil（自选等没有行业统计的雷达）时行业只展示、不可筛。
 struct SectorBoardSheet: View {
     let market: StockMarket
     /// 按该日收盘取强弱（雷达所选日，与筛选条排序一致）；nil 取最新。
@@ -64,9 +64,6 @@ struct SectorBoardList: View {
         self.onPick = onPick
         self.onClear = onClear
     }
-
-    /// 右侧下钻列宽（没有细分的行同样留出，保证各行强弱值对齐）。
-    private static let drillWidth: CGFloat = 46
 
     var body: some View {
         ScrollView {
@@ -153,30 +150,42 @@ struct SectorBoardList: View {
         let sells = radar.totals?.sell ?? radar.counts.values.reduce(0) { $0 + ($1["sell"] ?? 0) }
         let selected = radar.selectedKey == nil
         return Button(action: onClear) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Text(L("全部行业")).font(.body.weight(.semibold)).foregroundColor(Theme.textPrimary)
-                        if selected {
-                            Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
-                        }
-                    }
-                    HStack(spacing: 6) {
-                        Text(L("%lld 买", buys)).foregroundColor(Theme.up)
-                        Text(L("%lld 卖", sells)).foregroundColor(Theme.down)
-                    }
-                    .font(.caption.monospacedDigit())
+            HStack(spacing: 10) {
+                Text(L("全部行业")).font(.body.weight(.semibold)).foregroundColor(Theme.textPrimary)
+                if selected {
+                    Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
                 }
                 Spacer(minLength: 8)
+                countChips(buy: buys, sell: sells)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 11)
+            .padding(.vertical, 12)
             .background(selected ? Theme.accent.opacity(0.12) : Theme.surface)
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityHint(L("雷达显示全部行业的信号"))
+    }
+
+    /// 买卖点数：红买绿卖的小胶囊，没有就不画。
+    @ViewBuilder
+    private func countChips(buy: Int, sell: Int) -> some View {
+        if buy + sell > 0 {
+            HStack(spacing: 6) {
+                if buy > 0 { chip(L("%lld 买", buy), color: Theme.up) }
+                if sell > 0 { chip(L("%lld 卖", sell), color: Theme.down) }
+            }
+        }
+    }
+
+    private func chip(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold).monospacedDigit())
+            .foregroundColor(color)
+            .padding(.horizontal, 7).padding(.vertical, 2)
+            .background(color.opacity(0.14))
+            .clipShape(Capsule())
     }
 
     // MARK: - 分组与行
@@ -199,12 +208,13 @@ struct SectorBoardList: View {
         }
     }
 
-    @ViewBuilder
+    /// 一行：左边行业名 + 状态胶囊，右边强弱值 + 强弱条，买卖点胶囊放在强弱条下方右对齐。
     private func rowView(_ row: SectorRow, maxAbs: Double) -> some View {
         let selected = parent == nil && radar?.selectedKey == row.key
         let rs = row.rsVsMarket
-        let content = HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+        let counts = parent == nil ? radar?.counts[row.key] : nil
+        let content = HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text(row.name).font(.body.weight(.semibold)).foregroundColor(Theme.textPrimary)
                     if selected {
@@ -213,61 +223,32 @@ struct SectorBoardList: View {
                 }
                 HStack(spacing: 6) {
                     if let label = row.label {
-                        HStack(spacing: 4) {
-                            Circle().fill(MarketHeader.regimeColor(label)).frame(width: 6, height: 6)
-                            Text(Self.labelText(label)).foregroundColor(MarketHeader.regimeColor(label))
-                        }
+                        chip(Self.labelText(label), color: MarketHeader.regimeColor(label))
                     }
-                    if parent == nil, let c = radar?.counts[row.key], (c["buy"] ?? 0) + (c["sell"] ?? 0) > 0 {
-                        Text("·").foregroundColor(Theme.textSecondary)
-                        Text(L("%lld 买", c["buy"] ?? 0)).foregroundColor(Theme.up)
-                        Text(L("%lld 卖", c["sell"] ?? 0)).foregroundColor(Theme.down)
-                    }
+                    countChips(buy: counts?["buy"] ?? 0, sell: counts?["sell"] ?? 0)
                 }
-                .font(.caption.monospacedDigit())
             }
             Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 5) {
+            VStack(alignment: .trailing, spacing: 6) {
                 Text(SectorBoardList.rsText(rs))
-                    .font(.subheadline.weight(.semibold).monospacedDigit())
+                    .font(.title3.weight(.semibold).monospacedDigit())
                     .foregroundColor((rs ?? 0) >= 0 ? Theme.up : Theme.down)
                 StrengthBar(value: rs ?? 0, maxAbs: maxAbs)
-                    .frame(width: 72, height: 4)
+                    .frame(width: 96, height: 5)
             }
         }
-        .padding(.leading, 14)
-        .padding(.trailing, parent == nil ? 0 : 14)
-        .padding(.vertical, 11)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
         .contentShape(Rectangle())
+        .background(selected ? Theme.accent.opacity(0.12) : Color.clear)
 
         if parent == nil {
-            HStack(spacing: 0) {
-                Button {
-                    onPick(row.key, row.name)
-                } label: { content }
-                .buttonStyle(.plain)
-                .disabled(radar == nil)
-                .accessibilityHint(radar == nil ? "" : L("在雷达上只看该行业"))
-                if row.hasChildren {
-                    NavigationLink {
-                        SectorBoardList(market: market, date: date, parent: row.key, parentName: row.name, radar: radar,
-                                        onPick: onPick)
-                    } label: {
-                        HStack(spacing: 1) {
-                            Text(L("细分")).font(.caption2)
-                            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
-                        }
-                        .foregroundColor(Theme.textSecondary)
-                        .frame(width: Self.drillWidth, alignment: .center)
-                        .frame(maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                    }
-                    .accessibilityLabel(L("查看细分行业"))
-                } else {
-                    Color.clear.frame(width: Self.drillWidth, height: 1)
-                }
-            }
-            .background(selected ? Theme.accent.opacity(0.12) : Color.clear)
+            Button {
+                onPick(row.key, row.name)
+            } label: { content }
+            .buttonStyle(.plain)
+            .disabled(radar == nil)
+            .accessibilityHint(radar == nil ? "" : L("在雷达上只看该行业"))
         } else {
             content
         }

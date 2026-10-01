@@ -153,6 +153,7 @@ deepalpha-club-ai/
 > 不要改回线程池——纯 Python HMM 循环占 GIL 会拖慢 API）。驱动因素 / 日历的 FMP 调用经 `FmpClient`（全局预算）。
 > 文案只描述环境，不出现买卖导向词与数据供应商 / 基金代码（`test_drivers.test_no_trading_words`）。
 > 雷达行业标签（`signal_radar/sectors.py`，指数雷达与自选雷达都打；自选列表接口也带 `sector`）的行业 key 与 regime `SECTORS` 一致（有测试守护）。
+> **行业严格按 GICS 11 个一级行业**（2026-10-01 起半导体并回科技，不再单列；App 只做一级、不下钻细分，宏观接口 `has_children` 恒 false）。改行业划分须升雷达 `_mode_ns`（当前 all2），旧标签随快照失效。
 > 行业池（每行业按旧综合分的前 N）只给旧版 App 的行业筛选用。
 
 > 信号雷达扫描约束（`app/services/signal_radar`）：同一 (口径, 市场, universe) 任一时刻只跑一轮全量扫描

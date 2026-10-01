@@ -2,7 +2,7 @@
 
 行业 key 与 regime 行业状态一致（app/services/regime/constants.SECTORS），这样行业弹层点哪个行业，
 雷达就能筛出同一个行业的气泡。第一期只有美股：标普1500 的 GICS 板块（复用基本面研究的成分表缓存），
-半导体从信息技术里单独拆出（regime 把半导体当独立行业）。
+严格按 GICS 一级行业，半导体属信息技术，不单列。
 
 每日快照只存前 N 个气泡，按行业筛选不能在它上面做——组装快照时（基本面排雷之后、截取前 N 之前）
 按行业各留一份前 N，存单独的键 signal_radar:sector:{口径}:{市场}:{universe}:{日期}，不撑大主缓存。
@@ -31,15 +31,7 @@ GICS_TO_SECTOR: dict[str, str] = {
     "real_estate": "realestate",
 }
 
-# 标普1500 里 GICS 子行业为半导体 / 半导体设备的主要成分（成分稳定，人工维护）
-US_SEMICONDUCTORS: frozenset[str] = frozenset({
-    "NVDA", "AVGO", "AMD", "QCOM", "TXN", "INTC", "MU", "ADI", "AMAT", "LRCX", "KLAC", "MCHP",
-    "NXPI", "ON", "MPWR", "SWKS", "TER", "QRVO", "ENTG", "MRVL", "MKSI", "LSCC", "SLAB", "CRUS",
-    "SYNA", "POWI", "AMKR", "OLED", "RMBS", "ONTO", "COHU", "FORM", "DIOD", "SMTC", "ACLS",
-    "KLIC", "UCTT", "ICHR", "AOSL", "MXL", "ALGM", "WOLF", "FSLR", "ENPH",
-})
-
-# 行业筛选用的宽基 universe（科技指数成分几乎都在科技 / 半导体，按行业筛没有意义）
+# 行业筛选用的宽基 universe（科技指数成分几乎都在科技，按行业筛没有意义）
 BROAD_UNIVERSE: dict[str, str] = {"us": "sp500", "cn": "csi300", "hk": "hsi"}
 
 SECTOR_POOL_PREFIX = "signal_radar:sector"
@@ -52,7 +44,7 @@ def us_tags_from_sp1500(sp1500: dict[str, tuple[str, str]]) -> dict[str, str]:
         key = GICS_TO_SECTOR.get(gics)
         if key is None:
             continue
-        out[symbol] = "semiconductors" if symbol in US_SEMICONDUCTORS else key
+        out[symbol] = key
     return out
 
 

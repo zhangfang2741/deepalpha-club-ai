@@ -74,9 +74,9 @@ def test_list_includes_sector_for_tagged_items(client):
 
     items = [_item("us", "NVDA", "英伟达"), _item("hk", "0700", "腾讯控股")]
     with patch.object(store, "list_items", AsyncMock(return_value=items)), \
-            patch.object(store, "sector_tags", AsyncMock(return_value={"us:NVDA": "semiconductors"})):
+            patch.object(store, "sector_tags", AsyncMock(return_value={"us:NVDA": "technology"})):
         body = client.get("/watchlist").json()
-    assert [i["sector"] for i in body["items"]] == ["semiconductors", None]
+    assert [i["sector"] for i in body["items"]] == ["technology", None]
 
 
 def test_add_to_watchlist(client):
