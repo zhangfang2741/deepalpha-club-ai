@@ -23,8 +23,12 @@ def test_unknown_mode_falls_back_to_default():
     assert normalize_mode("strict") == "strict"
 
 
-def test_loose_keeps_last_stroke_signal_as_unconfirmed():
-    """宽松：最后一笔上的信号照常输出（标未确认），不单列候选；严格：移入候选。"""
+def test_loose_keeps_last_stroke_signal_as_unconfirmed(monkeypatch):
+    """宽松：最后一笔上的信号照常输出（标未确认），不单列候选；严格：移入候选。
+
+    只检验候选拆分：让严格口径的 c/b 背驰判定「不能判定」、退回 czsc 笔级事件（合成数据按原文不背驰）。
+    """
+    monkeypatch.setattr("app.services.chan.signals._trend_leg_divergence", lambda *a, **k: (False, None))
     bars = _decaying_downtrend_bars()
     loose = ChanAnalyzer().analyze("DN", bars, mode="loose")
     strict = ChanAnalyzer().analyze("DN", bars, mode="strict")

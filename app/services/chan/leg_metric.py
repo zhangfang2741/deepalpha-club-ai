@@ -13,7 +13,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from app.services.chan.divergence import MACDData
+from typing import Literal
+
+from app.services.chan.divergence import MACDData, classify_strength
 from app.services.chan.stroke import Stroke
 
 
@@ -70,11 +72,21 @@ class DivergenceMetric(Protocol):
         """比较 c 段与 b 段；该度量算不出来（缺数据）返回 None。"""
         ...
 
+    def classify(self, primary_ratio: float) -> Literal["strong", "medium", "weak", "none"]:
+        """按本度量的 primary_ratio 分强弱档（各度量比值的量纲不同，阈值各自标定）。"""
+        ...
+
 
 @dataclass(frozen=True)
 class MacdAreaMetric:
     """缠论原文：c 段 MACD 面积小于 b 段即背驰（价格创新极值由调用方保证）。"""
     name: str = "macd_area"
+
+    # 阈值取自 51 只美股日线（2023-01 ~ 2026-09）85 个一类信号的面积比三分位（0.14 / 0.33），取整
+    def classify(self, primary_ratio: float) -> Literal["strong", "medium", "weak", "none"]:
+        if primary_ratio >= 1.0:
+            return "none"
+        return "strong" if primary_ratio < 0.15 else "medium" if primary_ratio < 0.35 else "weak"
 
     def compare(self, c: LegForce, b: LegForce) -> LegComparison | None:
         if c.area is None or b.area is None or b.area <= 0 or b.price <= 0:
@@ -90,6 +102,9 @@ class MacdAreaMetric:
 class ForceMetric:
     """价差 / 量能 / 时长：价差更弱，且量能或时长至少一项更弱（与 czsc 一类同一判据）。"""
     name: str = "force"
+
+    def classify(self, primary_ratio: float) -> Literal["strong", "medium", "weak", "none"]:
+        return classify_strength(primary_ratio)
 
     def compare(self, c: LegForce, b: LegForce) -> LegComparison | None:
         if b.price <= 0:

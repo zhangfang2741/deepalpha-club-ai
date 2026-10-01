@@ -187,7 +187,7 @@ def _in_trend(pivots: list[Pivot], time: str, is_buy: bool, price: float) -> boo
 
 
 def _trend_legs(
-    strokes: list[Stroke], pivots: list[Pivot], time: str,
+    strokes: list[Stroke], pivots: list[Pivot], time: str, is_buy: bool,
 ) -> tuple[list[Stroke], list[Stroke]] | None:
     """趋势背驰要比的两段：b 段（A 的离开点到 B 的进入点）与 c 段（B 的离开点到信号笔终点）。
 
@@ -197,8 +197,12 @@ def _trend_legs(
     if len(formed) < 2 or not formed[-1].elements or not formed[-2].elements:
         return None
     a, b = formed[-2], formed[-1]
-    entry, a_exit = b.elements[0].start_time, a.elements[-1].end_time
-    b_leg = [st for st in strokes if st.start_time >= a_exit and st.end_time <= entry]
+    # czsc 的相邻中枢首尾相接（A 的结束 = B 的开始）：A 的最后一笔就是离开 A 的那一笔，算 b 段的开头；
+    # 之后若还有笔才进入 B，一并算入。b 段方向必须与趋势一致（买：向下，卖：向上）。
+    entry = b.elements[0].start_time
+    b_leg = [st for st in strokes if st.start_time >= a.elements[-1].start_time and st.end_time <= entry]
+    if b_leg and (b_leg[-1].end_price < b_leg[0].start_price) != is_buy:
+        return None
     sig_start = next((st.start_time for st in strokes if st.end_time == time), None)
     if sig_start is None:
         return None
@@ -208,7 +212,7 @@ def _trend_legs(
 
 
 def _trend_leg_divergence(
-    strokes: list[Stroke], pivots: list[Pivot], time: str, is_buy: bool, lang: str,  # noqa: ARG001
+    strokes: list[Stroke], pivots: list[Pivot], time: str, is_buy: bool, lang: str,
     macd: MACDData | None = None, metric: DivergenceMetric | None = None,
 ) -> tuple[bool, DivergenceResult | None]:
     """一类的趋势背驰（缠论原文）：c 段（离开 B）对 b 段（A、B 之间）比力度，度量由 metric 决定。
@@ -216,7 +220,7 @@ def _trend_leg_divergence(
     返回（能否判定, 背驰结果）。b / c 段取不到、或该度量缺数据（如没传 MACD）时「不能判定」，
     调用方保留 czsc 的笔级判定；能判定而不背驰则返回 (True, None)，这个一类不成立。
     """
-    legs = _trend_legs(strokes, pivots, time)
+    legs = _trend_legs(strokes, pivots, time, is_buy)
     if legs is None:
         return False, None
     metric = metric or get_metric(None)
@@ -225,7 +229,7 @@ def _trend_leg_divergence(
         return False, None
     if not cmp.diverged:
         return True, None
-    strength = classify_strength(cmp.primary_ratio)
+    strength = metric.classify(cmp.primary_ratio)
     return True, DivergenceResult(
         is_diverged=True, type="trend", strength=strength if strength != "none" else "weak",
         price_ratio=cmp.price_ratio, volume_ratio=cmp.volume_ratio, length_ratio=cmp.length_ratio,

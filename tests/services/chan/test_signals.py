@@ -492,8 +492,13 @@ def test_no_signal_on_unfinished_last_stroke():
         assert sig_time not in {s.time for s in cut_result.signals}
 
 
-def test_signal_on_unfinished_stroke_becomes_candidate():
-    """最后一笔上的信号不算买卖点，但保留为「待确认」候选（供雷达单独展示）。"""
+def test_signal_on_unfinished_stroke_becomes_candidate(monkeypatch):
+    """最后一笔上的信号不算买卖点，但保留为「待确认」候选（供雷达单独展示）。
+
+    只检验候选拆分：合成数据的 c 段 MACD 面积反而大于 b 段（按原文不背驰），所以让背驰判定
+    「不能判定」、退回 czsc 笔级事件。
+    """
+    monkeypatch.setattr("app.services.chan.signals._trend_leg_divergence", lambda *a, **k: (False, None))
     result = ChanAnalyzer().analyze("DN", _decaying_downtrend_bars(), mode="strict")  # 数据停在底部，一买在最后一笔上
     last_end = result.strokes[-1].end_time
     assert all(s.time != last_end for s in result.signals)
@@ -560,7 +565,7 @@ def test_loose_keeps_type2_with_earlier_type1():
 # ---- 一类背驰：c 段（离开 B）对 b 段（A、B 之间） ----
 
 def _trend_with_legs(c_low: float):
-    """A(130–140) → b 段（132→112，跌 20）→ B(110–120) → c 段（120→c_low）。"""
+    """A(130–140) → b 段（离开 A 的 140→132 加 132→112，共跌 28）→ B(110–120) → c 段（120→c_low）。"""
     from app.services.chan.pivot import Pivot
     a_el = [_st("down", "2024-11-01", "2024-11-05", 140, 130), _st("up", "2024-11-05", "2024-11-10", 130, 140),
             _st("down", "2024-11-10", "2024-11-20", 140, 132)]
@@ -579,17 +584,17 @@ def _trend_with_legs(c_low: float):
 
 def test_buy1_force_metric_requires_c_leg_weaker_than_b_leg():
     from app.services.chan.leg_metric import get_metric
-    strokes, pivots = _trend_with_legs(c_low=105)  # c 段跌 15 < b 段跌 20，背驰
+    strokes, pivots = _trend_with_legs(c_low=105)  # c 段跌 15 < b 段跌 28，背驰
     sig = generate_all_signals([_ev("buy1", "2025-01-10", 105.0)], strokes, [_NO_DIV] * len(strokes), pivots,
                                metric=get_metric("force"))
     assert [x.type for x in sig] == ["buy1"]
-    assert sig[0].divergence is not None and sig[0].divergence.price_ratio == 0.77
+    assert sig[0].divergence is not None and sig[0].divergence.price_ratio == 0.57
 
 
 def test_buy1_force_metric_dropped_when_c_leg_not_weaker():
-    strokes, pivots = _trend_with_legs(c_low=95)  # c 段跌 25 > b 段跌 20，没有背驰
+    strokes, pivots = _trend_with_legs(c_low=88)  # c 段跌 32 > b 段跌 28，没有背驰
     from app.services.chan.leg_metric import get_metric
-    assert generate_all_signals([_ev("buy1", "2025-01-10", 95.0)], strokes, [_NO_DIV] * len(strokes), pivots,
+    assert generate_all_signals([_ev("buy1", "2025-01-10", 88.0)], strokes, [_NO_DIV] * len(strokes), pivots,
                                 metric=get_metric("force")) == []
 
 
@@ -610,9 +615,9 @@ def _macd_for(strokes, b_bar: float, c_bar: float):
 def test_buy1_macd_area_metric_is_the_default_and_fills_area_ratio():
     strokes, pivots = _trend_with_legs(c_low=105)
     sig = generate_all_signals([_ev("buy1", "2025-01-10", 105.0)], strokes, [_NO_DIV] * len(strokes), pivots,
-                               macd=_macd_for(strokes, 2.0, 1.0))
+                               macd=_macd_for(strokes, 2.0, 0.2))
     assert [x.type for x in sig] == ["buy1"]
-    assert sig[0].divergence.area_ratio == 0.5 and sig[0].divergence.strength == "strong"
+    assert sig[0].divergence.area_ratio == 0.1 and sig[0].divergence.strength == "strong"
     assert "MACD" in sig[0].description
 
 
@@ -630,5 +635,5 @@ def test_metric_is_switchable_without_changing_signal_shape():
     macd = _macd_for(strokes, 1.0, 2.0)  # 面积更大 → macd_area 否掉；force 仍成立
     sig = generate_all_signals([_ev("buy1", "2025-01-10", 105.0)], strokes, [_NO_DIV] * len(strokes), pivots,
                                macd=macd, metric=get_metric("force"))
-    assert [x.type for x in sig] == ["buy1"] and sig[0].divergence.price_ratio == 0.77
+    assert [x.type for x in sig] == ["buy1"] and sig[0].divergence.price_ratio == 0.57
     assert get_metric("nope").name == "macd_area"
