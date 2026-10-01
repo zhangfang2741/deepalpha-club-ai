@@ -19,7 +19,7 @@ class _FakeRedis:
 
 async def test_unsupported_market():
     out = await service.get_quant_research("hk", "0700", "zh", redis=None)
-    assert out.status == "unsupported_market" and out.status_note == "量化研究暂只支持美股"
+    assert out.status == "unsupported_market" and out.status_note == "基本面研究暂只支持美股"
 
 
 async def test_reads_db_result_and_caches(monkeypatch):

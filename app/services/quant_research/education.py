@@ -6,6 +6,7 @@ https://www.finra.org/investors/investing/investment-products/stocks/evaluating-
 """
 
 from app.schemas.quant_research import MetricInterpretation, QuantResearchOut
+from app.services.quant_research.copy import DISCLAIMER
 from app.services.quant_research.formulas import metric_calculation
 from app.services.quant_research.glossary import input_hint, plain_language, why_and_purpose
 from app.services.quant_research.metrics import INPUT_LABELS, METRICS, MetricDef
@@ -151,6 +152,7 @@ def metric_interpretation(metric: MetricDef, lang: str) -> MetricInterpretation:
 
 def enrich_education(payload: QuantResearchOut, lang: str) -> QuantResearchOut:
     """读取历史缓存时同步更新说明，不重算或修改历史指标值。"""
+    payload.disclaimer = DISCLAIMER["zh" if lang == "zh" else "en"]
     i = 0 if lang == "zh" else 1
     label_to_name = {labels[i]: name for name, labels in INPUT_LABELS.items()}
     for dimension in payload.dimensions:

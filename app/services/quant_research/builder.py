@@ -243,7 +243,7 @@ def unsupported(market: str, symbol: str, lang: tx.Lang) -> QuantResearchOut:
     """不支持的市场（二期再接港股 / A 股）。"""
     return QuantResearchOut(
         market=market, symbol=symbol, name=None, status="unsupported_market",
-        status_note=tx._i(lang, "量化研究暂只支持美股", "Quant research currently covers US stocks only"),
+        status_note=tx._i(lang, "基本面研究暂只支持美股", "Fundamental research currently covers US stocks only"),
         methodology_version=METHODOLOGY_VERSION, disclaimer=tx.DISCLAIMER[lang],
     )
 
@@ -252,7 +252,7 @@ def insufficient(market: str, symbol: str, lang: tx.Lang, reason: str | None = N
     """数据不足（批量尚未跑过、样本外股票拉不到报表等）。"""
     return QuantResearchOut(
         market=market, symbol=symbol, name=None, status="insufficient_data",
-        status_note=reason or tx._i(lang, "暂无足够数据生成量化研究", "Not enough data for quant research yet"),
+        status_note=reason or tx._i(lang, "暂无足够数据生成基本面研究", "Not enough data for fundamental research yet"),
         methodology_version=METHODOLOGY_VERSION, disclaimer=tx.DISCLAIMER[lang],
     )
 

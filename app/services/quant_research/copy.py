@@ -21,8 +21,8 @@ FORBIDDEN: list[str] = [
 ]
 
 DISCLAIMER = {
-    "zh": "量化研究为基于公开财务数据的统计比较，不构成投资建议。",
-    "en": "Quant research is a statistical comparison based on public financial data and is not investment advice.",
+    "zh": "基本面研究为基于公开财务数据的统计比较，不构成投资建议。",
+    "en": "Fundamental research is a statistical comparison based on public financial data and is not investment advice.",
 }
 
 DIMENSION_DESC: dict[str, tuple[str, str]] = {

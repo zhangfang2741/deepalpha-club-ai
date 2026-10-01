@@ -763,7 +763,7 @@
 "这是按营收增速与经营现金流做的阶段定位，不是完成进度。企业可能跨阶段变化；阶段标注不影响量化等级。" = "This locates the company by revenue growth and operating cash flow, not progress toward completion. Companies can move between stages; stage labels do not affect quant grades.";
 "金融公司的营收与现金流口径不同，本模型不判定阶段。" = "Financial companies report revenue and cash flow differently and are excluded from this stage model.";
 "暂无分析师数据" = "No analyst data";
-"暂无量化研究数据" = "No quant research data";
+"暂无基本面研究数据" = "No fundamental research data";
 "最低" = "Low";
 "最近评级变动" = "Recent rating changes";
 "最高" = "High";
@@ -793,7 +793,7 @@
 "越高在板块中排名越靠前" = "Higher ranks higher within the sector";
 "较板块中位 %@" = "%@ vs sector median";
 "近 12 个月 %lld 次发布" = "%lld published in 12 months";
-"量化研究" = "Quant Research";
+"基本面研究" = "Fundamental Research";
 "预期 %@ 更新" = "Estimates %@";
 "强力买入" = "Strong Buy";
 "买入" = "Buy";

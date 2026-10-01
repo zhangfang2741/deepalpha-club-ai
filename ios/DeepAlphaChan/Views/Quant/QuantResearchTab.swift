@@ -21,7 +21,7 @@ struct QuantResearchTab: View {
                 if r.isOK {
                     content(r)
                 } else {
-                    QuantMessageCard(text: r.statusNote ?? L("暂无量化研究数据"), footnote: r.disclaimer)
+                    QuantMessageCard(text: r.statusNote ?? L("暂无基本面研究数据"), footnote: r.disclaimer)
                 }
             }
         }

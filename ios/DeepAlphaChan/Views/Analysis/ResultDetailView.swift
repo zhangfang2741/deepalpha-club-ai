@@ -41,7 +41,7 @@ struct ResultDetailView: View {
         var title: String {
             switch self {
             case .structure: return L("缠论结构")
-            case .quant: return L("量化研究")
+            case .quant: return L("基本面研究")
             case .analyst: return L("分析师评级")
             }
         }

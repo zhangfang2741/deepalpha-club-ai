@@ -33,7 +33,11 @@ def test_legacy_payload_enrichment_preserves_research() -> None:
             for metric in group["metrics"]:
                 metric.pop("interpretation", None)
     payload = QuantResearchOut.model_validate(raw)
+    raw["disclaimer"] = "旧版免责声明"
+    payload = QuantResearchOut.model_validate(raw)
     enriched = enrich_education(payload, "zh").model_dump(mode="json")
+    assert enriched["disclaimer"].startswith("基本面研究")
+    raw["disclaimer"] = enriched["disclaimer"]
     for dimension in enriched["dimensions"]:
         for group in dimension["groups"]:
             for metric in group["metrics"]:
