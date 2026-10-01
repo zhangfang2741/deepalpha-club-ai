@@ -234,7 +234,7 @@ struct SectorBoardList: View {
         let rs = row.rsVsMarket
         let counts = parent == nil ? radar?.counts[row.key] : nil
         let content = HStack(spacing: 8) {
-            Circle().fill(row.label.map(MarketHeader.regimeColor) ?? Theme.textSecondary.opacity(0.4))
+            Circle().fill(MarketHeader.regimeColor(row.label))
                 .frame(width: 8, height: 8)
             Text(row.name).font(AnalysisType.title).foregroundColor(Theme.textPrimary)
                 .lineLimit(1).minimumScaleFactor(0.8)
