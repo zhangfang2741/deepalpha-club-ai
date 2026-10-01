@@ -31,11 +31,13 @@ from uuid import uuid4
 
 from redis.asyncio import Redis
 
+from app.cache.client import current_redis
 from app.cache.operations import incr_with_ttl, release_lock, scan_keys
 from app.core.config import settings
 from app.core.logging import logger
 from app.schemas.signal_radar import (
     RadarDayOut,
+    RadarSectorDayOut,
     RadarSignalOut,
     RadarUniverseOut,
     SignalRadarResponse,
@@ -48,7 +50,7 @@ from app.services.chan.signal_policy import DEFAULT_MODE, get_policy
 from app.services.chan.sub_level_service import current_sub_level
 from app.services.chan.bias import UNCONFIRMED_DISCOUNT
 from app.services.signal_radar.constituents import resolve_constituents
-from app.services.signal_radar import quant_filter
+from app.services.signal_radar import quant_filter, sectors
 from app.services.signal_radar.universe import MarketUniverse, get_universe, list_universes
 from app.services.skills.kline import LIVE_MAX_AGE, fetch_kline
 
@@ -863,6 +865,8 @@ class _ScanState:
     results: dict[str, tuple[list[RawSignal], list[RawSignal], list[str]]] = field(default_factory=dict)
     # symbol → 失败分类；补算成功后移除
     failures: dict[str, str] = field(default_factory=dict)
+    # 日期 → 行业 → 该行业前 N 个信号（_assemble 填，_publish 写进单独的键，见 sectors.py）
+    sector_pools: dict[str, dict[str, list[RadarSignalOut]]] = field(default_factory=dict)
 
     @property
     def gen_key(self) -> tuple[str, str, str]:
@@ -888,6 +892,18 @@ async def _scan_into(state: _ScanState, symbol: str, name: str, *, redis: Redis)
     cands = build_candidates(symbol, name, result) if result is not None else []
     state.results[symbol] = (history, cands, dates)
     return None
+
+
+def _sector_pools(day: RadarDayOut, tags: dict[str, str], top_n: int) -> dict[str, list[RadarSignalOut]]:
+    """给当天全部在场信号（排雷后、截取前 N 之前）打行业标签、写 sector_counts，返回每个行业的前 N。"""
+    if not tags:
+        return {}
+    sectors.tag_signals(day.signals, tags)
+    day.sector_counts = sectors.sector_counts(day.signals)
+    return {
+        key: rerank_with_resonance(RadarDayOut(date=day.date, buy_count=0, sell_count=0, signals=items), top_n).signals
+        for key, items in sectors.group_by_sector(day.signals).items()
+    }
 
 
 async def _assemble(state: _ScanState, *, redis: Redis) -> SignalRadarResponse:
@@ -930,6 +946,8 @@ async def _assemble(state: _ScanState, *, redis: Redis) -> SignalRadarResponse:
     )
     symbols = [symbol for symbol, _ in state.constituents]
     grades = await quant_filter.load_grades(state.market, symbols, trading_days) if state.market == "us" else {}
+    tags = {} if state.is_watchlist else await sectors.load_sector_tags(state.market, redis)
+    state.sector_pools = {}
     for index, day in enumerate(resp.days):
         if index == 0:
             day.candidates = pick_candidates(
@@ -938,11 +956,15 @@ async def _assemble(state: _ScanState, *, redis: Redis) -> SignalRadarResponse:
         if state.market == "us":
             # 排雷在取前 N 之前，被排除的名额由后面的信号递补；自选雷达只标注不排雷
             day = quant_filter.attach_grades(day, grades, symbols, screen=not state.is_watchlist)
+        pools = _sector_pools(day, tags, top_n)
         if index == 0:
             day = rerank_with_resonance(day, max(top_n, _RESONANCE_POOL))
             await attach_sub_levels(day, end_date=state.end_date, user_id=state.user_id, redis=redis,
                                     mode=state.mode)
             resp.sub_level_as_of = datetime.now(UTC).replace(microsecond=0).isoformat()
+            sectors.merge_sub_levels(pools, day.signals)
+        if tags:
+            state.sector_pools[day.date] = pools
         day = rerank_with_resonance(day, top_n)
         if index == 0:
             candidate_day = RadarDayOut(date=day.date, buy_count=0, sell_count=0, signals=day.candidates)
@@ -987,6 +1009,9 @@ async def _publish(state: _ScanState, resp: SignalRadarResponse, *, redis: Redis
             return stale
 
     await _write_cache(redis, resp)
+    if state.sector_pools:
+        await sectors.write_pools(redis, _mode_ns(state.mode), state.market, state.universe.key,
+                                  state.sector_pools, _cache_ttl())
     return resp
 
 
@@ -1315,6 +1340,9 @@ async def _assemble_demo(state: _ScanState) -> SignalRadarResponse:
     if state.market == "us":
         grades = await quant_filter.load_grades(state.market, symbols, [target])
         resp.days[0] = quant_filter.attach_grades(resp.days[0], grades, symbols, screen=True)
+    tags = await sectors.load_sector_tags(state.market, current_redis())
+    pools = _sector_pools(resp.days[0], tags, DEFAULT_TOP_N)
+    state.sector_pools = {resp.days[0].date: pools} if tags else {}
     resp.days[0] = rerank_with_resonance(resp.days[0], DEFAULT_TOP_N)
     return resp
 
@@ -1347,6 +1375,9 @@ async def _publish_demo(state: _ScanState, resp: SignalRadarResponse, *, redis: 
         # 键按名义日期：read_demo_cache 只知道 demo_snapshot_date()，不知道对齐后的交易日
         await redis.set(_demo_cache_key(state.market, state.universe.key, state.demo_nominal, state.mode),
                         resp.model_dump_json(), ex=ttl)
+        if state.sector_pools:
+            await sectors.write_pools(redis, _mode_ns(state.mode), state.market, state.universe.key,
+                                      state.sector_pools, ttl)
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_demo_cache_write_error", market=state.market, error=str(e))
 
@@ -1390,3 +1421,29 @@ async def compute_demo_day(
     await _publish_demo(state, resp, redis=redis)
     await _after_scan(state, generation, redis=redis)
     return resp
+
+
+# ---- 按行业（行业弹层 / 雷达行业筛选） ----
+
+async def latest_sector_counts(
+    redis: Redis, market: str, universe_key: str, mode: str = DEFAULT_MODE,
+) -> tuple[str, dict[str, dict[str, int]]] | None:
+    """读某 universe 已缓存快照最新一天的按行业买卖点数（只读缓存，不触发扫描）。"""
+    cached = await _read_cache(redis, market, universe_key, mode)
+    if cached is None or not cached.days:
+        return None
+    day = cached.days[0]
+    return day.date, day.sector_counts
+
+
+async def sector_day(
+    redis: Redis, market: str, universe_key: str, day: str, sector: str, mode: str = DEFAULT_MODE,
+) -> RadarSectorDayOut:
+    """某一天某行业的前 N 个气泡（组装快照时存下的行业池，见 sectors.py）。"""
+    signals = await sectors.read_pool(redis, _mode_ns(mode), market, universe_key, day, sector)
+    items = signals or []
+    return RadarSectorDayOut(
+        market=market, universe=universe_key, date=day, sector=sector, available=signals is not None,
+        buy_count=sum(s.side == "buy" for s in items), sell_count=sum(s.side == "sell" for s in items),
+        signals=items,
+    )

@@ -37,6 +37,7 @@ from app.core.observability import langfuse_init
 from app.services.database import database_service
 from app.services.memory import memory_service
 from app.services.quant_research.scheduler import run_quant_scheduler
+from app.services.regime.scheduler import run_regime_scheduler
 from app.services.signal_radar.scheduler import (
     run_signal_radar_prewarm_scheduler,
     run_signal_radar_sub_level_scheduler,
@@ -82,6 +83,7 @@ async def lifespan(app: FastAPI):
     signal_radar_scheduler_task: asyncio.Task[None] | None = None
     signal_radar_sub_level_task: asyncio.Task[None] | None = None
     quant_scheduler_task: asyncio.Task[None] | None = None
+    regime_scheduler_task: asyncio.Task[None] | None = None
     logger.info(
         "application_startup",
         project_name=settings.PROJECT_NAME,
@@ -176,6 +178,11 @@ async def lifespan(app: FastAPI):
         logger.info("quant_scheduler_started", us_utc_hour=settings.QUANT_BATCH_UTC_HOUR,
                     us_utc_minute=settings.QUANT_BATCH_UTC_MINUTE)
 
+    if settings.REGIME_SCHEDULER_ENABLED:
+        # 市场状态（大盘 + 行业）每日重算；雷达页顶部宏观格 / 行业格的数据源
+        regime_scheduler_task = asyncio.create_task(run_regime_scheduler())
+        logger.info("regime_scheduler_started")
+
     yield
 
     # Cleanup on shutdown
@@ -203,6 +210,12 @@ async def lifespan(app: FastAPI):
             await quant_scheduler_task
         except asyncio.CancelledError:
             logger.info("quant_scheduler_stopped")
+    if regime_scheduler_task:
+        regime_scheduler_task.cancel()
+        try:
+            await regime_scheduler_task
+        except asyncio.CancelledError:
+            logger.info("regime_scheduler_stopped")
     await close_redis()
     await cache_service.close()
     if agent._connection_pool:

@@ -1,0 +1,82 @@
+"""雷达按行业：标签、计数、行业池与计数一致、池子读写。"""
+import json
+
+from app.schemas.signal_radar import RadarDayOut, RadarSignalOut
+from app.services.signal_radar import sectors
+from app.services.signal_radar.service import _sector_pools
+
+
+def _sig(symbol: str, side: str = "buy", signal_type: str = "buy1", strength: float = 0.5) -> RadarSignalOut:
+    return RadarSignalOut(symbol=symbol, name=symbol, side=side, label="一买", signal_type=signal_type,
+                          date="2026-09-30", price=1.0, strength=strength, bias="neutral",
+                          signal_strength="medium", confirmed=True, pivot_stage_depth=0.5, age_days=0)
+
+
+def test_us_tags_split_semiconductors():
+    tags = sectors.us_tags_from_sp1500({
+        "NVDA": ("NVIDIA", "information_technology"), "MSFT": ("Microsoft", "information_technology"),
+        "XOM": ("Exxon", "energy"), "ZZZ": ("Unknown", "unknown"),
+    })
+    assert tags == {"NVDA": "semiconductors", "MSFT": "technology", "XOM": "energy"}
+
+
+def test_sector_keys_match_regime_sectors():
+    from app.services.regime.constants import SECTORS
+
+    regime_keys = {s["key"] for s in SECTORS}
+    assert set(sectors.GICS_TO_SECTOR.values()) | {"semiconductors"} == regime_keys
+
+
+def test_tag_and_count_skip_untagged():
+    sigs = sectors.tag_signals([_sig("NVDA"), _sig("AMD", "sell", "sell1"), _sig("XOM"), _sig("ASML")],
+                               {"NVDA": "semiconductors", "AMD": "semiconductors", "XOM": "energy"})
+    assert sigs[3].sector is None
+    assert sectors.sector_counts(sigs) == {"semiconductors": {"buy": 1, "sell": 1}, "energy": {"buy": 1, "sell": 0}}
+
+
+def test_dotted_symbol_normalized():
+    [s] = sectors.tag_signals([_sig("BRK.B")], {"BRK-B": "financials"})
+    assert s.sector == "financials"
+
+
+def test_pools_consistent_with_counts_and_capped():
+    tags = {f"S{i}": "technology" for i in range(15)} | {"E1": "energy"}
+    day = RadarDayOut(date="2026-09-30", buy_count=0, sell_count=0,
+                      signals=[_sig(f"S{i}", strength=i / 15) for i in range(15)] + [_sig("E1", "sell", "sell1")])
+    pools = _sector_pools(day, tags, top_n=10)
+    assert day.sector_counts == {"technology": {"buy": 15, "sell": 0}, "energy": {"buy": 0, "sell": 1}}
+    assert len(pools["technology"]) == 10
+    assert all(s.sector == "technology" for s in pools["technology"])
+    assert [s.symbol for s in pools["energy"]] == ["E1"]
+    assert _sector_pools(day, {}, top_n=10) == {}
+
+
+def test_merge_sub_levels():
+    pooled = _sig("NVDA")
+    ranked = _sig("NVDA")
+    ranked.sub_level_verdict, ranked.sub_level_label = "resonance_buy", "共振买点"
+    sectors.merge_sub_levels({"semiconductors": [pooled]}, [ranked])
+    assert pooled.sub_level_verdict == "resonance_buy"
+
+
+class _FakeRedis:
+    def __init__(self):
+        self.store: dict[str, str] = {}
+
+    async def set(self, key, value, ex=None):
+        self.store[key] = value
+
+    async def get(self, key):
+        return self.store.get(key)
+
+
+async def test_pool_roundtrip():
+    redis = _FakeRedis()
+    s = _sig("NVDA")
+    s.sector = "semiconductors"
+    await sectors.write_pools(redis, "ns", "us", "sp500", {"2026-09-30": {"semiconductors": [s]}}, ttl=60)
+    got = await sectors.read_pool(redis, "ns", "us", "sp500", "2026-09-30", "semiconductors")
+    assert got is not None and [x.symbol for x in got] == ["NVDA"]
+    assert await sectors.read_pool(redis, "ns", "us", "sp500", "2026-09-30", "energy") == []
+    assert await sectors.read_pool(redis, "ns", "us", "sp500", "2026-09-29", "energy") is None
+    assert json.loads(redis.store["signal_radar:sector:ns:us:sp500:2026-09-30"])["semiconductors"][0]["sector"]

@@ -38,6 +38,7 @@ class RadarSignalOut(BaseModel):
     quant_as_of: str | None = None
     quant_status: str | None = Field(default=None, description="eligible / below_threshold / missing / stale")
     age_days: int | None = Field(default=None, description="距展示日的交易日数，当天为 0")
+    sector: str | None = Field(default=None, description="行业 key（与 regime 行业状态一致）；没有行业分类时为空")
 
 
 class RadarExcludedOut(BaseModel):
@@ -86,6 +87,23 @@ class RadarDayOut(BaseModel):
         description="待确认候选（仅严格口径产出；宽松口径恒为空）：落在还没走完的最后一笔上，不算买卖点；"
                     "只在最新一天、补足剩余名额",
     )
+    sector_counts: dict[str, dict[str, int]] = Field(
+        default_factory=dict,
+        description="当天全部在场信号（排雷后、截取前 N 之前）按行业的买卖点数 {行业: {buy, sell}}；没有行业分类时为空",
+    )
+
+
+class RadarSectorDayOut(BaseModel):
+    """按行业筛选后的某一天气泡（GET /signal-radar/sector-day）。"""
+
+    market: str
+    universe: str
+    date: str
+    sector: str
+    available: bool = Field(description="这一天是否有行业数据（旧快照、没有行业分类的市场为 false）")
+    buy_count: int = 0
+    sell_count: int = 0
+    signals: list[RadarSignalOut] = Field(default_factory=list)
 
 
 class RadarUniverseOut(BaseModel):

@@ -22,7 +22,7 @@ from app.core.limiter import limiter
 from app.core.logging import logger
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.signal_radar import SignalRadarResponse
+from app.schemas.signal_radar import RadarSectorDayOut, SignalRadarResponse
 from app.services.signal_radar.service import (
     DEFAULT_TOP_N,
     WATCHLIST_KEY,
@@ -34,6 +34,7 @@ from app.services.signal_radar.service import (
     read_watchlist_cache,
     demo_lock_key,
     scan_lock_key,
+    sector_day,
     SCAN_LOCK_TTL,
 )
 from app.services.chan.signal_policy import DEFAULT_MODE, normalize_mode
@@ -157,6 +158,25 @@ async def _run_demo_scan(market: str, universe_key: str, mode: str = DEFAULT_MOD
             await release_lock(redis, _demo_generating_key(market, universe_key, mode))
         except Exception:  # noqa: BLE001
             pass
+
+
+@router.get("/sector-day", response_model=RadarSectorDayOut)
+@limiter.limit("60 per minute")
+async def signal_radar_sector_day(
+    request: Request,
+    market: str = Query(default="us", description="市场：us / cn / hk"),
+    universe: str = Query(description="universe 键（行业筛选用宽基，如 sp500）"),
+    date: str = Query(description="交易日 YYYY-MM-DD", pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    sector: str = Query(description="行业 key，如 semiconductors"),
+    mode: str | None = _MODE_QUERY,
+    user: User = Depends(get_current_user),
+    redis: Redis = Depends(get_redis),
+) -> RadarSectorDayOut:
+    """按行业筛选的某一天气泡：只读组装快照时存下的行业池，不触发扫描（不绕开扫描锁）。"""
+    uni = get_universe(market, universe)
+    if uni is None:
+        raise HTTPException(status_code=400, detail=f"不支持的市场/universe：{market}/{universe}")
+    return await sector_day(redis, market, uni.key, date, sector, normalize_mode(mode))
 
 
 @router.get("/demo", response_model=SignalRadarResponse)

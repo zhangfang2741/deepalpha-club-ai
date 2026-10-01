@@ -131,6 +131,7 @@ deepalpha-club-ai/
 | 因子探索 | `/skills` | `/skill-generator` | LLM 生成因子代码 → 沙箱执行 |
 | 市场状态 | `/regime` | 并入恐慌指数页(大盘) + 行业恐慌页(板块) | 三篮子 ODS/CF + HMM 逐利/观望/避险后验，写因子表；大盘级与行业级各一套 |
 | 恐慌指数 | `/fear-greed` | `/fear-greed` | 市场恐慌贪婪指数 + 大盘市场状态(regime) |
+| 宏观 / 行业 | `/macro` | iOS 雷达页顶部「宏观 / 情绪 / 行业」三格 + 弹层 | 大盘状态(regime) + 5 个驱动因素 + 未来 7 天宏观日历；行业相对强弱 + 宽基雷达按行业买卖点数，点行业筛雷达气泡（`/signal-radar/sector-day`）。第一期仅美股，A 股 / 港股 `available=false` |
 | 行业恐慌 | `/industry-panic` | `/industry-panic` | 各 GICS 行业 ETF 的 RSI 情绪 + 估值 + 板块状态(行业级 regime) |
 | ETF 资金流 | `/etf` | `/etf` | 资金流热力图 + 偏离度 |
 | 行业估值 | `/valuation` | （并入行业恐慌页） | GICS 行业 PE z-score |
@@ -146,6 +147,12 @@ deepalpha-club-ai/
 | 产业图谱 | `/supply-chain` | `/supply-chain` | 供应链知识图谱 |
 | 财报电话会 | `/transcripts` | `/(dashboard)/transcripts` | 转录 + AI 中文翻译 |
 | 结构性分析 | `/analysis` | `/analysis` | 结构性投资六层分析框架 |
+
+> 宏观 / 行业约束（`app/services/macro`，设计见 `docs/superpowers/specs/2026-10-01-market-macro-sector-design.md`）：
+> 数据来自 regime 两张因子表，由 `regime/scheduler.py` 每日重算（美股 UTC 22:45 + 启动补跑，**子进程 + 降优先级**，约 40 分钟，
+> 不要改回线程池——纯 Python HMM 循环占 GIL 会拖慢 API）。驱动因素 / 日历的 FMP 调用经 `FmpClient`（全局预算）。
+> 文案只描述环境，不出现买卖导向词与数据供应商 / 基金代码（`test_drivers.test_no_trading_words`）。
+> 雷达行业池（`signal_radar/sectors.py`）在排雷之后、截取前 N 之前生成，行业 key 与 regime `SECTORS` 一致（有测试守护）。
 
 > 信号雷达扫描约束（`app/services/signal_radar`）：同一 (口径, 市场, universe) 任一时刻只跑一轮全量扫描
 > ——接口与定时预热共用 `scan_lock_key` 原子锁（`acquire_lock` = SET NX EX），主动刷新有 5 分钟冷却；
