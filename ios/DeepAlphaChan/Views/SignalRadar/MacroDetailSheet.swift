@@ -1,13 +1,17 @@
+import Charts
 import SwiftUI
 
-/// 宏观弹层：市场状态 + 三态概率条 + 近一年状态色带 + 驱动因素 + 未来 7 天宏观日历。
-/// 只描述环境，不给操作建议。
+/// 环境弹层（雷达顶部「环境」格）：市场状态 + 三态概率条 + 近一年状态色带 + 情绪（恐慌贪婪）
+/// + 驱动因素 + 未来 7 天宏观日历。只描述环境，不给操作建议。
 struct MacroDetailSheet: View {
     let market: StockMarket
+    /// 情绪（恐慌贪婪指数），由雷达页已拉到的数据传入；nil 时不显示情绪卡。
+    var panic: PanicIndexResponse? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var data: MacroResponse?
     @State private var failed = false
+    @State private var showPanicDetail = false
 
     var body: some View {
         NavigationStack {
@@ -16,6 +20,7 @@ struct MacroDetailSheet: View {
                     if let data, let state = data.state {
                         stateCard(state)
                         if !data.history.isEmpty { historyBand(data.history) }
+                        if let panic { sentimentCard(panic) }
                         driversCard(data.drivers)
                         eventsCard(data.events)
                         footnote
@@ -34,7 +39,7 @@ struct MacroDetailSheet: View {
                 .padding(16)
             }
             .background(Theme.background)
-            .navigationTitle(L("%@宏观环境", market.title))
+            .navigationTitle(L("%@市场环境", market.title))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { Button(L("关闭")) { dismiss() } }
@@ -125,6 +130,55 @@ struct MacroDetailSheet: View {
                     Text(history.last?.date ?? "")
                 }
                 .font(.caption2).foregroundColor(Theme.textSecondary)
+            }
+        }
+    }
+
+    // MARK: - 情绪
+
+    private func sentimentCard(_ panic: PanicIndexResponse) -> some View {
+        SectionCard(title: L("情绪 · 恐慌贪婪"), titleFont: .subheadline.weight(.semibold)) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 16) {
+                    sentimentItem(L("当前"), panic.current, large: true)
+                    sentimentItem(L("一周前"), panic.previousWeek, large: false)
+                    sentimentItem(L("一月前"), panic.previousMonth, large: false)
+                    Spacer(minLength: 0)
+                }
+                Chart(Array(panic.history.suffix(60))) { p in
+                    LineMark(x: .value("date", p.date), y: .value("score", p.score))
+                        .foregroundStyle(PanicIndexStyle.ratingColor(panic.current.score))
+                        .lineStyle(StrokeStyle(lineWidth: 1.5))
+                        .interpolationMethod(.catmullRom)
+                }
+                .chartYScale(domain: 0...100)
+                .chartXAxis(.hidden)
+                .chartYAxis(.hidden)
+                .frame(height: 44)
+                HStack {
+                    Text(L("近 60 个交易日。分数 0~100，越低越恐慌、越高越贪婪。"))
+                        .font(.caption2).foregroundColor(Theme.textSecondary)
+                    Spacer(minLength: 8)
+                    Button(L("完整走势")) { showPanicDetail = true }
+                        .font(.caption.weight(.semibold))
+                        .tint(Theme.accent)
+                }
+            }
+        }
+        .sheet(isPresented: $showPanicDetail) {
+            PanicIndexDetailSheet(market: market, response: panic)
+        }
+    }
+
+    private func sentimentItem(_ title: String, _ snap: PanicIndexSnapshot, large: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.caption2).foregroundColor(Theme.textSecondary)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("\(Int(snap.score.rounded()))")
+                    .font(large ? .title2.bold() : .subheadline.bold())
+                    .foregroundColor(PanicIndexStyle.ratingColor(snap.score))
+                Text(PanicIndexStyle.ratingLabel(snap.rating))
+                    .font(.caption2).foregroundColor(Theme.textSecondary)
             }
         }
     }

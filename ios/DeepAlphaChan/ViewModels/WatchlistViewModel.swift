@@ -44,6 +44,74 @@ final class WatchlistViewModel: ObservableObject {
     /// 是否有被锁住、看不到状态的行（用来决定要不要展示升级提示）。
     var hasLockedPhases: Bool { tier != .premium && ownItems.count > 1 }
 
+    // MARK: - 环境与信号（与雷达同一套事实）
+
+    /// 自选股在场的信号（近 5 个交易日内出现、价格没走坏，与雷达同一规则，取自自选雷达最新一天），
+    /// key 为 `WatchlistItem.id`；一只有多条时取最新的。还没拉到时为空。
+    @Published private(set) var signals: [String: RadarSignal] = [:]
+    /// 信号是否已拉到过（拉到之前列表按市场分组，拉到后按「近 5 日有信号 / 暂无新信号」分组）。
+    @Published private(set) var signalsLoaded = false
+    /// 各市场大盘状态（横幅用）。
+    @Published private(set) var macro: [StockMarket: MacroState] = [:]
+    /// 美股行业强弱（行业圆点、相对大盘），key 为行业 key。
+    @Published private(set) var sectorRows: [String: SectorRow] = [:]
+    private var isLoadingFacts = false
+
+    /// 自选里出现过的市场（美 / A / 港 顺序）。
+    var markets: [StockMarket] {
+        StockMarket.allCases.filter { m in items.contains { $0.market == m.rawValue } }
+    }
+
+    /// 这一行是否有在场信号（不看档位：用于分组与「有信号」提示）。
+    func hasSignal(_ item: WatchlistItem) -> Bool { signals[item.id] != nil }
+
+    /// 这一行能看到的信号：与结构状态同一道档位门槛（高级版全部、示例股、免费看的那一支）。
+    func signal(for item: WatchlistItem) -> RadarSignal? {
+        guard tier == .premium || item.isSample || item.id == freePhaseItemID else { return nil }
+        return signals[item.id]
+    }
+
+    /// 拉横幅与信号：各市场大盘状态、美股行业强弱、各市场自选雷达最新一天的在场信号。
+    /// 都是锦上添花，任一失败只少显示一块，不影响列表。进行中不重复发起。
+    private func loadFacts() async {
+        guard !isLoadingFacts else { return }
+        isLoadingFacts = true
+        defer { isLoadingFacts = false }
+        var newSignals: [String: RadarSignal] = [:]
+        var anyLoaded = false
+        for market in markets {
+            if let o = try? await MarketOverviewService.overview(market: market), let state = o.macroState {
+                macro[market] = state
+            }
+            if let latest = await latestWatchlistSignals(market) {
+                anyLoaded = true
+                // 后端已按出现时间从新到旧排好，同一只取第一条（最新）
+                for sig in latest where newSignals["\(market.rawValue):\(sig.symbol)"] == nil {
+                    newSignals["\(market.rawValue):\(sig.symbol)"] = sig
+                }
+            }
+        }
+        if markets.contains(.us), let board = try? await MarketOverviewService.sectors(market: .us), board.available {
+            sectorRows = Dictionary(board.sectors.map { ($0.key, $0) }, uniquingKeysWith: { a, _ in a })
+        }
+        if anyLoaded {
+            signals = newSignals
+            signalsLoaded = true
+        }
+    }
+
+    /// 自选雷达（按用户自选算，首次可能在后台计算，轮询几次）最新一天在场的信号；拿不到返回 nil。
+    private func latestWatchlistSignals(_ market: StockMarket) async -> [RadarSignal]? {
+        for attempt in 0..<6 {
+            guard let resp = try? await SignalRadarService.fetch(market: market.rawValue, universe: RadarUniverse.watchlistKey)
+            else { return nil }
+            if !resp.isGenerating { return resp.days.first?.signals ?? [] }
+            guard attempt < 5, !Task.isCancelled else { return nil }
+            try? await Task.sleep(for: .seconds(3))
+        }
+        return nil
+    }
+
     private var memberships: Set<String> = []
 
     /// 自选上限，从 `GET /watchlist` 的 `max_items` 同步，不在端上硬编码——
@@ -74,6 +142,7 @@ final class WatchlistViewModel: ObservableObject {
         self.tier = tier
         try? await fetchAndApply(tier: tier)
         await loadPhases()
+        await loadFacts()
     }
 
     func refresh(tier: SubscriptionTier) async {
@@ -87,6 +156,7 @@ final class WatchlistViewModel: ObservableObject {
             return
         }
         await loadPhases()
+        await loadFacts()
     }
 
     /// 拉阶段标签：单独一次请求，比拉列表慢（要跑缠论分析）。失败隔 2 秒重试一次，

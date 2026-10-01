@@ -1,4 +1,4 @@
-"""评级展示（暂不参与排序）、历史时点和雷达完整候选池回归。"""
+"""评级只标注（不参与排序、不排雷）、历史时点和雷达全部在场信号回归。"""
 
 from datetime import date, datetime
 
@@ -115,13 +115,14 @@ async def test_all_markets_keep_technical_signals(monkeypatch, market):
         state.results[symbol] = ([raw] if i < 24 else [], [raw] if i == 24 else [], [str(DAY)])
     response = await svc._assemble(state, redis=None)
     day = response.days[0]
-    assert len(day.signals) == 3
+    assert len(day.signals) == 24, "快照存全部在场信号，不再截取前 N"
+    assert len(svc.legacy_view(response, 3).days[0].signals) == 3, "旧版 App 仍按前 N 截取"
     if market == "us":
         assert day.quant_filter.eligible == 25
         assert any(s.quant_grade == "B+" for s in day.signals)
         state.demo_nominal = str(DAY)
         demo = await svc._assemble_demo(state)
-        assert len(demo.days[0].signals) == 10
+        assert len(demo.days[0].signals) == 24
     else:
         assert day.quant_filter is None
 
@@ -138,7 +139,7 @@ async def test_query_failure_is_distinct_from_no_data(monkeypatch):
 
 @pytest.mark.parametrize("failed", [False, True])
 async def test_full_index_scanned_even_when_ratings_fail(monkeypatch, failed):
-    """全部股票都参与计算，评级缺失或查询失败仍产生前十。"""
+    """全部股票都参与计算，评级缺失或查询失败也照常呈现全部信号。"""
     today = date.today()
     eligible = [f"PASS{i}" for i in range(12)]
     symbols = eligible + ["LOW", "MISSING", "STALE"]
@@ -173,7 +174,7 @@ async def test_full_index_scanned_even_when_ratings_fail(monkeypatch, failed):
     monkeypatch.setattr(svc, "_after_scan", attach)
     response = await svc.compute_market("us", redis=None, days=1)
     assert response.universe_size == 15
-    assert len(response.days[0].signals) == 10
+    assert len(response.days[0].signals) == 15
     assert set(events[:-1]) == set(symbols)
     assert events.count("grades") == 1
 
@@ -198,56 +199,23 @@ async def test_rating_outage_publishes_technical_snapshot(monkeypatch):
     assert restored.days[0].quant_filter.status == "unavailable"
 
 
-# ---------- 基本面排雷（买点：盈利能力 F / EPS 修正 F；卖点：EPS 修正 A+） ----------
+# ---------- 基本面排雷已取消（2026-10-01）：评级只标注，任何等级的信号都照常呈现 ----------
 
 def dims(profitability=None, revisions=None, value="B", day=DAY, available=DAY):
     return qf.QuantGrade(value, 60, day, available, profitability=profitability, revisions=revisions)
 
 
-def screen(signals, history):
-    day = RadarDayOut(date=str(DAY), buy_count=0, sell_count=0, signals=signals)
-    return qf.attach_grades(day, history, [s.symbol for s in signals], screen=True)
-
-
-def test_buy_mines_excluded_by_profitability_or_revisions_f():
-    out = screen([signal("P"), signal("R"), signal("OK"), signal("DM")],
-                 {"P": [dims(profitability="F")], "R": [dims(revisions="F")],
-                  "OK": [dims(profitability="A", revisions="A+")], "DM": [dims(profitability="D-")]})
-    assert [s.symbol for s in out.signals] == ["OK", "DM"]
-    assert out.buy_count == 2
-    assert out.quant_filter.mode == "screened"
-    assert [(e.symbol, e.side, e.rule) for e in out.quant_filter.excluded] == [
-        ("P", "buy", "profitability_f"), ("R", "buy", "revisions_f")]
-
-
-def test_sell_mines_only_by_revisions_a_plus():
-    out = screen([signal("UP", "sell"), signal("A", "sell"), signal("PF", "sell")],
-                 {"UP": [dims(revisions="A+")], "A": [dims(revisions="A")], "PF": [dims(profitability="F")]})
-    assert [s.symbol for s in out.signals] == ["A", "PF"]
-    assert out.sell_count == 2
-    assert [(e.symbol, e.rule) for e in out.quant_filter.excluded] == [("UP", "revisions_a_plus")]
-
-
-def test_stale_missing_or_unavailable_grades_never_exclude():
-    old = dims(profitability="F", day=date(2026, 9, 1), available=date(2026, 9, 1))
-    assert [s.symbol for s in screen([signal("S"), signal("M")], {"S": [old]}).signals] == ["S", "M"]
-    day = RadarDayOut(date=str(DAY), buy_count=1, sell_count=0, signals=[signal("A")])
-    assert len(qf.attach_grades(day, None, ["A"], screen=True).signals) == 1
-
-
-def test_overall_missing_still_screens_by_fresh_dimension():
-    """综合等级缺失不代表维度等级不可用：维度 F 仍然排除。"""
-    out = screen([signal("A")], {"A": [dims(profitability="F", value=None)]})
-    assert out.signals == []
-
-
-def test_watchlist_not_screened_and_candidates_screened():
-    history = {"A": [dims(profitability="F")]}
-    day = RadarDayOut(date=str(DAY), buy_count=1, sell_count=0, signals=[signal("A")], candidates=[signal("A")])
-    marked = qf.attach_grades(day, history, ["A"])
-    assert len(marked.signals) == 1 and marked.quant_filter.excluded == []
-    screened = qf.attach_grades(day, history, ["A"], screen=True)
-    assert screened.signals == [] and screened.candidates == []
+def test_former_mines_are_kept_and_marked():
+    """盈利能力 F / EPS 修正 F 的买点、EPS 修正 A+ 的卖点不再剔除，评级照常标注。"""
+    signals = [signal("P"), signal("R"), signal("UP", "sell"), signal("OK")]
+    history = {"P": [dims(profitability="F", value="D")], "R": [dims(revisions="F")],
+               "UP": [dims(revisions="A+")], "OK": [dims()]}
+    day = RadarDayOut(date=str(DAY), buy_count=0, sell_count=0, signals=signals, candidates=[signal("P")])
+    out = qf.attach_grades(day, history, [s.symbol for s in signals])
+    assert [s.symbol for s in out.signals] == ["P", "R", "UP", "OK"]
+    assert [s.symbol for s in out.candidates] == ["P"]
+    assert out.signals[0].quant_grade == "D"
+    assert out.quant_filter.mode == "marked" and out.quant_filter.excluded == []
 
 
 def test_row_dimension_grades_read_from_grades_column():
@@ -259,12 +227,13 @@ def test_row_dimension_grades_read_from_grades_column():
     assert (entry.profitability, entry.revisions) == ("F", "A+")
 
 
-def test_cache_namespace_isolates_screening():
-    assert svc._mode_ns("loose").endswith(":quant_screen2")
+def test_cache_namespace_isolates_new_rules():
+    """取消排雷、改存全部信号后升了缓存键，旧快照（排雷 + 前 N）不会被读到。"""
+    assert svc._mode_ns("loose").endswith(":quant_mark2:all1")
 
 
-async def test_excluded_buy_frees_slot_for_next_signal(monkeypatch):
-    """被排除的买点在取前 N 之前剔除，空出的名额由后面的信号递补。"""
+async def test_snapshot_keeps_former_mine_for_every_universe(monkeypatch):
+    """指数快照、示例日、自选都不排雷：盈利能力 F 的买点照常在场。"""
     symbols = ["MINE", "S1", "S2", "S3"]
     async def load(*args):
         return {"MINE": [dims(profitability="F")]}
@@ -284,22 +253,11 @@ async def test_excluded_buy_frees_slot_for_next_signal(monkeypatch):
                             signal_strength="medium", confirmed=True, pivot_stage_depth=0.5)
         state.results[symbol] = ([raw], [], [str(DAY)])
     day = (await svc._assemble(state, redis=None)).days[0]
-    assert [s.symbol for s in day.signals] == ["S1", "S2", "S3"]
-    assert [e.symbol for e in day.quant_filter.excluded] == ["MINE"]
+    assert "MINE" in [s.symbol for s in day.signals]
+    assert day.quant_filter.excluded == []
     state.demo_nominal = str(DAY)
     demo = (await svc._assemble_demo(state)).days[0]
-    assert "MINE" not in [s.symbol for s in demo.signals]
+    assert "MINE" in [s.symbol for s in demo.signals]
     state.is_watchlist = True
     watch = (await svc._assemble(state, redis=None)).days[0]
     assert "MINE" in [s.symbol for s in watch.signals]
-
-
-def test_profitability_f_exempt_when_revisions_b_or_better():
-    """利润差但一致预期在上调（反转股，如 LITE）不算雷；修正缺失或偏弱时仍按盈利能力 F 排除。"""
-    out = screen([signal("UP"), signal("B"), signal("BM"), signal("NA"), signal("BOTH")],
-                 {"UP": [dims(profitability="F", revisions="A-")], "B": [dims(profitability="F", revisions="B")],
-                  "BM": [dims(profitability="F", revisions="B-")], "NA": [dims(profitability="F")],
-                  "BOTH": [dims(profitability="F", revisions="F")]})
-    assert [s.symbol for s in out.signals] == ["UP", "B"]
-    assert [(e.symbol, e.rule) for e in out.quant_filter.excluded] == [
-        ("BM", "profitability_f"), ("NA", "profitability_f"), ("BOTH", "profitability_f")]

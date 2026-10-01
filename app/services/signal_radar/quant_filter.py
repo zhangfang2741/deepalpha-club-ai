@@ -1,11 +1,7 @@
-"""量化评级附加到雷达气泡 + 基本面排雷；只使用展示日已经生成的结果，不倒填历史。
+"""量化评级附加到雷达气泡（只标注，不参与排序、不排除任何信号）；只使用展示日已经生成的结果，不倒填历史。
 
-排雷（不做回测，规则少而硬，只看与一两周信号相关的维度，动量 / 估值不参与）：
-- 买点：盈利能力 F（公司本身在亏钱 / 利润质量垫底）或 EPS 修正 F（一致预期被大幅下调）→ 不上榜；
-  豁免：盈利能力 F 但 EPS 修正 ≥ B（报表还差、预期在上调的反转股，如 LITE）不算雷——盈利能力回头看、
-  修正向前看，两者冲突时证据不确定，按「宁可漏拦不误杀」放行；
-- 卖点：EPS 修正 A+（一致预期被大幅上调）→ 不上榜。盈利能力强不说明卖点不成立，卖点不看它。
-评级缺失、过期或查询失败一律不排除；自选雷达不排雷（只标注）。改规则须升 service._mode_ns 的 quant 版本。
+2026-10-01 起雷达只呈现事实：此前的「基本面排雷」（盈利能力 F / EPS 修正 F 的买点、EPS 修正 A+ 的卖点
+不上榜）已取消，评级照常标在气泡上，由用户自己看。改这里的行为须升 service._mode_ns 的 quant 版本。
 """
 
 from __future__ import annotations
@@ -15,7 +11,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from app.core.logging import logger
-from app.schemas.signal_radar import RadarDayOut, RadarExcludedOut, RadarQuantFilterOut, RadarSignalOut
+from app.schemas.signal_radar import RadarDayOut, RadarQuantFilterOut, RadarSignalOut
 from app.services.quant_research import repository
 from app.services.quant_research.grading import GRADE_ORDER
 from app.services.quant_research.universe import normalize_us_symbol
@@ -25,15 +21,6 @@ MAX_AGE_DAYS = 7
 # （QUANT_WEIGHT=0 时排序回到纯技术分）。恢复加权时改回 0.5，并升雷达缓存键
 # _mode_ns 的 quant 版本，否则旧缓存里的顺序还是旧权重排的。
 QUANT_WEIGHT = 0.0
-
-# 排雷规则：(方向, 维度, 命中等级, 规则名, 豁免)。豁免 = (维度, 等级集合)：该维度落在集合内则不命中。
-# 阈值先取最保守的一档，观察后再放宽。
-_REVISIONS_B_OR_BETTER = frozenset(GRADE_ORDER[:GRADE_ORDER.index("B") + 1])
-MINE_RULES: list[tuple[str, str, frozenset[str], str, tuple[str, frozenset[str]] | None]] = [
-    ("buy", "profitability", frozenset({"F"}), "profitability_f", ("revisions", _REVISIONS_B_OR_BETTER)),
-    ("buy", "revisions", frozenset({"F"}), "revisions_f", None),
-    ("sell", "revisions", frozenset({"A+"}), "revisions_a_plus", None),
-]
 
 
 @dataclass(frozen=True)
@@ -102,54 +89,29 @@ def grade_on(history: dict[str, list[QuantGrade]], symbol: str, day: date) -> tu
     return entry, "eligible"
 
 
-def mine_rule(side: str, entry: QuantGrade | None, status: str) -> str | None:
-    """命中的排雷规则名；评级缺失或过期（不论维度等级）返回 None，不排除。"""
-    if entry is None or status == "stale":
-        return None
-    for rule_side, dim, grades, name, exempt in MINE_RULES:
-        if side != rule_side or getattr(entry, dim) not in grades:
-            continue
-        if exempt is not None and getattr(entry, exempt[0]) in exempt[1]:
-            continue
-        return name
-    return None
-
-
 def attach_grades(day: RadarDayOut, history: dict[str, list[QuantGrade]] | None,
-                 symbols: list[str], *, screen: bool = False) -> RadarDayOut:
-    """附加评级；screen=True 时另按 MINE_RULES 剔除信号（须在取前 N 之前调用，名额由后面递补）。
-
-    评级缺失或查询故障均保留技术信号。
-    """
+                 symbols: list[str]) -> RadarDayOut:
+    """给当天的信号附加评级（只标注）。评级缺失或查询故障均原样保留信号。"""
     target = date.fromisoformat(day.date)
     grades = {s: grade_on(history or {}, s, target) for s in set(symbols)}
-    stats = RadarQuantFilterOut(status="unavailable" if history is None else "ready",
-                                mode="screened" if screen else "marked")
+    stats = RadarQuantFilterOut(status="unavailable" if history is None else "ready", mode="marked")
     for _, status in grades.values():
         setattr(stats, status, getattr(stats, status) + 1)
 
-    def select(signals: list[RadarSignalOut], record: bool) -> list[RadarSignalOut]:
-        kept = []
+    def mark(signals: list[RadarSignalOut]) -> list[RadarSignalOut]:
+        out = []
         for signal in signals:
             entry, status = grades.get(signal.symbol, (None, "missing"))
-            rule = mine_rule(signal.side, entry, status) if screen else None
-            if rule is not None:
-                if record:
-                    stats.excluded.append(RadarExcludedOut(symbol=signal.symbol, name=signal.name, side=signal.side,
-                                                           signal_type=signal.signal_type, rule=rule))
-                continue
-            kept.append(signal.model_copy(update={
+            out.append(signal.model_copy(update={
                 "quant_grade": entry.grade if entry else None,
                 "quant_score": entry.score if entry else None,
                 "quant_as_of": entry.as_of.isoformat() if entry else None,
                 "quant_status": status,
             }))
-        return kept
+        return out
 
-    signals = select(day.signals, record=True)
-    return day.model_copy(update={"signals": signals, "candidates": select(day.candidates, record=False),
-                                 "buy_count": sum(s.side == "buy" for s in signals),
-                                 "sell_count": sum(s.side == "sell" for s in signals), "quant_filter": stats})
+    return day.model_copy(update={"signals": mark(day.signals), "candidates": mark(day.candidates),
+                                 "quant_filter": stats})
 
 
 def rating_factor(signal: RadarSignalOut) -> float:

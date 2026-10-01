@@ -1,10 +1,15 @@
 import SwiftUI
 
-/// 信号雷达 Tab —— 扫描各市场科技 ETF 成分股跑缠论，把每日买卖点前 10 只用气泡呈现。
+/// 信号雷达 Tab —— 扫描各市场指数成分股跑缠论，把每天在场的买卖点用气泡呈现。只陈列事实、不打分：
+/// 后端给的是选中日在场的全部信号（按出现时间从新到旧），不再截取「前 10」。
 ///
-/// 顶部 MarketHeader：市场分段控件 + 「宏观 / 情绪 / 行业」三格温度计（当前市场），
-/// 点格子看完整弹层。雷达上方的行业筛选条（美股指数雷达才有）在当前指数里只看某个行业的
-/// 气泡，再点一次或点「全部」取消；行业弹层里点行业等同于在筛选条上选中它。
+/// 自上而下一条线：顶部 MarketHeader「环境 / 行业 / 当日信号」三格 → 扇区雷达 → 气泡。
+/// 三格、扇区标签、气泡点开都是底部面板（RadarPanels），留在本页讲完；面板里「查看K线与结构详情」
+/// 才进详情页。
+///
+/// 扇区雷达（这一天有行业统计时，即美股指数雷达）：角度 = 行业，按当日相对大盘强弱从上往下排，
+/// 越靠上越强；每个行业最多画几个最新的气泡，其余在扇区标签上显示「+N」（SectorRadarLayout）。
+/// 没有行业统计（港股 / A 股 / 自选）时退回同心环雷达，最多画 ringFieldCap 个最新的，其余点「当日信号」看。
 ///
 /// 气泡编码（三个视觉维度对应三件不同的事，不再互相重复；纯实色气泡，
 /// 已确认的左上角打勾、不用边框虚实，见 RadarBubble）：
@@ -12,20 +17,20 @@ import SwiftUI
 ///   色块同一映射 SignalFormatting.strengthDepth），越强越深；
 /// - 大小：买卖点类型（一类最小、二类居中、三类最大——一类只是背驰迹象、尚待验证，
 ///   三类回踩完全不回中枢，确认程度最高）；
-/// - 居中程度：时间距离——当天信号位于中心，越早出现的信号越靠外；
+/// - 居中程度：时间距离——当天信号离中心最近，越早出现的信号越靠外；
 ///   后端会让一只股票的信号在被更新的信号覆盖前持续「在场」（见
 ///   app/services/signal_radar/service.py 的按日重建），所以翻看某一天时，
 ///   有的气泡是当天新出现的（右上角标"新"），有的是更早出现、一直有效到今天的。
 /// 底部可横滑的日期轨手动选某一天，看当天信号。
-/// 点气泡直接在本页自己的 NavigationStack 里 push 到缠论分析详情页——不经过
-/// 分析 Tab 的条件页中转，右滑手势/返回按钮也就自然直接回到信号页。
+/// 面板里点「查看K线与结构详情」才跑分析、在本页自己的 NavigationStack 里 push 到缠论分析详情页——
+/// 不经过分析 Tab 的条件页中转，右滑手势/返回按钮也就自然直接回到信号页。
 struct SignalRadarView: View {
     /// 与分析 Tab 共享的缠论状态（同 MorningReportTabView），这样从信号页
     /// 分析过的标的，切到分析 Tab 时条件与结果也是同步的。
     @ObservedObject var chanVM: ChanViewModel
 
     @StateObject private var vm = SignalRadarViewModel()
-    /// 叠在雷达左上角的指数切换按钮实测尺寸，气泡摆位时避开（见 layoutBubbles）。
+    /// 叠在雷达左上角的指数切换按钮实测尺寸，气泡摆位时避开（见 fieldObstacles）。
     @State private var switcherSize: CGSize = .zero
     @StateObject private var panicVM = PanicIndexViewModel()
     @StateObject private var overviewVM = MarketOverviewViewModel()
@@ -56,8 +61,10 @@ struct SignalRadarView: View {
     @State private var pickedDate = Date()
     /// 图例旁「算法说明」问号按钮打开的详细说明弹层状态。
     @State private var showAlgorithmInfo = false
-    /// 行业筛选条末尾「强弱」打开的行业弹层（强弱数值、状态说明、细分行业）。
-    @State private var showSectorBoard = false
+    /// 正在打开的底部面板（环境 / 行业 / 当日信号 / 某个气泡的四层事实）。
+    @State private var panel: RadarPanel?
+    /// 面板里点了「查看K线与结构详情」：等面板收起后再跑分析、push 详情页（见 sheet 的 onDismiss）。
+    @State private var pendingDetail: RadarSignal?
 
     var body: some View {
         NavigationStack {
@@ -80,14 +87,14 @@ struct SignalRadarView: View {
             .task(id: vm.demoKey) {
                 if !store.isPremium { await vm.loadDemoDay() }
             }
-            // 行业筛选：一次取回选中日全部行业的气泡，之后在行业间切换不再请求
-            .task(id: vm.sectorPoolKey) { await vm.loadSectorPoolsIfNeeded() }
-            // 行业强弱跟着所选日走：雷达翻到哪天，筛选条就按哪天收盘排序
+            // 行业强弱跟着所选日走：雷达翻到哪天，扇区就按哪天收盘的强弱排
             .task(id: vm.sectorBoardKey) { await vm.loadSectorBoardIfNeeded() }
-            .sheet(isPresented: $showSectorBoard) {
-                SectorBoardSheet(market: vm.market, date: vm.baseSelectedDay?.date, radar: sectorRadarContext) { key, name in
-                    vm.applySectorFilter(key: key, name: name)
-                }
+            .sheet(item: $panel, onDismiss: {
+                guard let s = pendingDetail else { return }
+                pendingDetail = nil
+                openSymbol(s.symbol, name: s.name)
+            }) { panel in
+                panelView(panel)
             }
             // 订阅层级同步进 vm（跟 ChanViewModel.hasSubLevelAccess 同一个模式，vm 本身
             // 不感知 StoreKit）。initial: true 保证首次进入就同步一次，不用等 tier 变化。
@@ -135,7 +142,14 @@ struct SignalRadarView: View {
     /// 声明时，气泡区换成锁定占位（consentLockedField）。
     private var radarContent: some View {
         VStack(spacing: 12) {
-            MarketHeader(radarVM: vm, panicVM: panicVM, overviewVM: overviewVM)
+            MarketHeader(radarVM: vm, panicVM: panicVM, overviewVM: overviewVM) { p in
+                // 行业 / 当日信号面板列的是选中日的真实信号，与气泡同一道免责声明门槛；环境不涉及个股
+                if needsConsent && p != .environment {
+                    showConsent = true
+                } else {
+                    panel = p
+                }
+            }
 
             if vm.isScanning {
                 scanningView
@@ -147,22 +161,15 @@ struct SignalRadarView: View {
                 emptyView
             } else {
                 metaRow
-                if !vm.sectorChips.isEmpty {
-                    sectorBar
-                }
                 if needsConsent {
                     consentLockedField
                 } else {
                     bubbleField
                         // 同一市场/指数重新加载时保留旧气泡、调暗，期间暂不响应点按；不再盖转圈，
                         // 加载提示只有「正在扫描」一种（切市场/指数走 scanningView）
-                        // 行业池取回前先显示前 N 里的同行业气泡，略调暗表示还会补全
-                        .opacity(vm.isReloading ? 0.35 : (vm.isLoadingSectorPools ? 0.6 : 1))
+                        .opacity(vm.isReloading ? 0.35 : 1)
                         .allowsHitTesting(!vm.isReloading)
                         .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
-                }
-                if let filter = vm.selectedDay?.quantFilter {
-                    RadarQuantFilterSummary(filter: filter)
                 }
                 legend
                 dateRail
@@ -439,24 +446,35 @@ struct SignalRadarView: View {
             let w = Double(geo.size.width)
             let h = Double(geo.size.height)
             let dayDate = vm.selectedDay?.date ?? ""
-            // 确认的买卖点 + 「待确认」候选一起排版；候选画成灰色虚线气泡
-            let candidateIDs = Set((vm.selectedDay?.candidates ?? []).map(\.id))
-            let signals = ((vm.selectedDay?.signals ?? []) + (vm.selectedDay?.candidates ?? []))
-                .sorted { $0.strength > $1.strength }
-            let layouts = SignalRadarView.layoutBubbles(
-                signals: signals, dayDate: dayDate, width: w, height: h, avoid: fieldObstacles(width: w))
+            let signals = vm.selectedDay?.signals ?? []
+            // 候选（仅严格口径产出，App 固定宽松口径，恒为空）只在同心环模式里画成灰色虚线气泡
+            let candidates = vm.selectedDay?.candidates ?? []
+            let candidateIDs = Set(candidates.map(\.id))
+            let sectorMode = vm.selectedDay?.hasSectorData == true
+            let field = sectorMode
+                ? SignalRadarView.layoutSectorField(
+                    signals: signals, order: vm.sectorOrder, names: { vm.sectorName($0) },
+                    rsLookup: { key in vm.selectedSectorBoard?.sectors.first(where: { $0.key == key })?.rsVsMarket },
+                    dayDate: dayDate, width: w, height: h, avoid: fieldObstacles(width: w))
+                : SignalRadarView.layoutRingField(
+                    signals: signals + candidates, dayDate: dayDate, width: w, height: h,
+                    avoid: fieldObstacles(width: w))
             ZStack {
-                fieldDecoration(width: w, height: h)
+                if sectorMode {
+                    sectorDecoration(field.wedges, width: w, height: h)
+                } else {
+                    fieldDecoration(width: w, height: h)
+                }
 
-                if layouts.isEmpty {
-                    Text(emptyFieldText)
+                if field.bubbles.isEmpty {
+                    Text(L("当日无买卖点信号"))
                         .font(.subheadline)
                         .foregroundColor(Theme.textSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
                         .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
                 } else {
-                    ForEach(layouts) { layout in
+                    ForEach(field.bubbles) { layout in
                         RadarBubble(
                             signal: layout.signal,
                             metrics: layout.metrics,
@@ -468,17 +486,35 @@ struct SignalRadarView: View {
                                 depth: SignalFormatting.strengthDepth(layout.signal.signalStrength)),
                             isNew: layout.signal.date == dayDate,
                             isCandidate: candidateIDs.contains(layout.signal.id),
-                            onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name) }
+                            onOpen: { panel = .signal(layout.signal) }
                         )
                         // 气泡任何时候都不做透明处理：刷新完直接出现，不淡入
                         .transition(.identity)
                     }
                 }
+
+                if sectorMode {
+                    ForEach(field.wedges) { wedge in
+                        wedgeLabel(wedge)
+                    }
+                } else if field.hidden > 0 {
+                    // 同心环最多画 ringFieldCap 个最新的，其余在「当日信号」里看全
+                    Button { panel = .signals } label: {
+                        Text(L("另有 %lld 个 · 查看全部", field.hidden))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(Theme.accent)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Theme.surface.opacity(0.92), in: Capsule())
+                            .overlay(Capsule().stroke(Theme.border, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .position(x: CGFloat(w / 2), y: CGFloat(h - 18))
+                }
             }
         }
-        // 画布吃满上下控件之外的全部空间（不再套固定宽高比）：顶部多了市场分段 + 三格 + 行业筛选条后，
-        // 按 1.1 宽高比 fit 会让画布按剩余高度缩窄、又靠左摆，环画在左侧一块窄区域里、背景却铺满整宽，
-        // 看起来环不在正中。现在 GeometryReader 拿到的就是整块画布，环与气泡按它的中心摆，椭圆半轴见 fieldRadii。
+        // 画布吃满上下控件之外的全部空间（不再套固定宽高比）：GeometryReader 拿到的就是整块画布，
+        // 环 / 扇区与气泡按它的中心摆，椭圆半轴见 fieldRadii。
         .frame(maxWidth: .infinity, minHeight: SignalRadarView.fieldMinHeight, maxHeight: .infinity)
         .background(
             RadialGradient(
@@ -503,87 +539,116 @@ struct SignalRadarView: View {
         return out
     }
 
-    /// 气泡区为空时的提示：行业筛选下点明是该行业这一天没有。
-    private var emptyFieldText: String {
-        guard let filter = vm.sectorFilter, vm.baseSelectedDay?.hasSectorData == true else { return L("当日无买卖点信号") }
-        return L("%@当日无买卖点信号", filter.name)
+    // MARK: - 扇区（行业）
+
+    /// 行业状态配色（逐利红 / 避险绿 / 观望灰）；没有强弱数据时灰。
+    private func sectorTint(_ key: String) -> Color {
+        MarketHeader.regimeColor(vm.selectedSectorBoard?.sectors.first(where: { $0.key == key })?.label)
     }
 
-    // MARK: - 行业筛选条（雷达上方）
-
-    /// 行业弹层里的买卖点数与已选行业：取雷达当前指数、当前选中日（与筛选条一致）。
-    private var sectorRadarContext: SectorRadarContext? {
-        guard let day = vm.baseSelectedDay, day.hasSectorData, let counts = day.sectorCounts else { return nil }
-        let name = vm.universes.first(where: { $0.key == vm.activeUniverseKey })?.displayName ?? ""
-        return SectorRadarContext(universeName: name, date: day.date, counts: counts, selectedKey: vm.sectorFilter?.key)
-    }
-
-    /// 「全部」+ 各行业（按该日相对大盘强弱从强到弱，圆点 = 行业状态，数量 = 选中后显示的气泡数，
-    /// 当天没信号的调暗），横向滑动；选中的自动滚到中间。末尾「强弱」打开行业弹层看数值与细分。
-    private var sectorBar: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    sectorBarChip(title: L("全部"), count: nil, selected: vm.sectorFilter == nil) {
-                        vm.clearSectorFilter()
+    /// 扇区底色：每个行业一块楔形，按行业状态着色、相邻深浅交替，边缘一条细分隔线。
+    private func sectorDecoration(_ wedges: [WedgeLabel], width w: Double, height h: Double) -> some View {
+        let (hRad, vRad) = SignalRadarView.fieldRadii(width: w, height: h)
+        // 颜色先在主线程取好（读 vm），Canvas 的绘制闭包里只用值
+        let tints = wedges.map { sectorTint($0.wedge.key) }
+        let shapes = wedges.map(\.wedge)
+        return ZStack {
+            Canvas { ctx, _ in
+                for (i, wedge) in shapes.enumerated() {
+                    var path = Path()
+                    path.move(to: CGPoint(x: w / 2, y: h / 2))
+                    let steps = 24
+                    for k in 0...steps {
+                        let a = wedge.center - wedge.halfWidth + 2 * wedge.halfWidth * Double(k) / Double(steps)
+                        let p = SectorRadarLayout.point(angle: a, radius: 1, width: w, height: h, hRad: hRad, vRad: vRad)
+                        path.addLine(to: CGPoint(x: p.x, y: p.y))
                     }
-                    .id("all")
-                    ForEach(vm.sectorChips) { chip in
-                        sectorBarChip(title: chip.name, count: chip.count, selected: vm.sectorFilter?.key == chip.key,
-                                      dot: chip.label.map(MarketHeader.regimeColor)) {
-                            vm.toggleSector(chip)
-                        }
-                        .id(chip.key)
-                    }
-                    Button { showSectorBoard = true } label: {
-                        HStack(spacing: 2) {
-                            Text(L("强弱")).font(.system(size: 12, weight: .semibold))
-                            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
-                        }
-                        .foregroundColor(Theme.accent)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(L("查看行业强弱"))
+                    path.closeSubpath()
+                    ctx.fill(path, with: .color(tints[i].opacity(i % 2 == 0 ? 0.16 : 0.10)))
+                    ctx.stroke(path, with: .color(Theme.border.opacity(0.8)), lineWidth: 0.6)
                 }
-                .padding(.horizontal, 1)
             }
-            .onChange(of: vm.sectorFilter?.key) { _, key in
-                withAnimation(.easeInOut(duration: 0.2)) { proxy.scrollTo(key ?? "all", anchor: .center) }
+            // 时间参考：内圈 = 当日附近，外圈 = 3 个交易日前
+            ForEach([1, 3], id: \.self) { days in
+                let r = SectorRadarLayout.radius(daysAgo: days)
+                Ellipse()
+                    .stroke(Theme.textSecondary.opacity(0.14), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    .frame(width: CGFloat(r * hRad * 2), height: CGFloat(r * vRad * 2))
+                    .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
             }
         }
-        .sensoryFeedback(.selection, trigger: vm.sectorFilter?.key)
+        .frame(width: CGFloat(w), height: CGFloat(h))
+        .allowsHitTesting(false)
     }
 
-    private func sectorBarChip(title: String, count: Int?, selected: Bool, dot: Color? = nil,
-                               action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                if let dot {
-                    Circle().fill(dot).frame(width: 6, height: 6)
-                        .overlay(Circle().stroke(Color.white.opacity(selected ? 0.8 : 0), lineWidth: 1))
+    /// 扇区标签：行业名 + 相对大盘强弱，画不下的气泡数「+N」；点开行业面板。
+    private func wedgeLabel(_ label: WedgeLabel) -> some View {
+        Button { panel = .sector(label.wedge.key) } label: {
+            HStack(spacing: 3) {
+                Text(label.name).font(.system(size: 10, weight: .semibold))
+                if let rs = label.rs {
+                    Text(SectorBoardList.rsText(rs)).font(.system(size: 9).monospacedDigit())
                 }
-                Text(title).font(.system(size: 12, weight: .semibold))
-                if let count {
-                    Text("\(count)")
-                        .font(.system(size: 11, weight: .medium).monospacedDigit())
-                        .foregroundColor(selected ? .white.opacity(0.85) : Theme.textSecondary)
+                if label.wedge.hidden > 0 {
+                    Text("+\(label.wedge.hidden)")
+                        .font(.system(size: 9, weight: .bold).monospacedDigit())
+                        .foregroundColor(Theme.accent)
                 }
             }
-            .foregroundColor(selected ? .white : Theme.textPrimary)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 6)
-            .background(selected ? Theme.accent : Theme.surface, in: Capsule())
-            .overlay(Capsule().stroke(selected ? Color.clear : Theme.border, lineWidth: 0.8))
-            .contentShape(Capsule())
-            // 当天没有信号的行业调暗（仍可点：选中后雷达给「当日无买卖点」提示）
-            .opacity(count == 0 && !selected ? 0.45 : 1)
+            .foregroundColor(sectorTint(label.wedge.key) == Theme.textSecondary ? Theme.textPrimary.opacity(0.8)
+                             : sectorTint(label.wedge.key))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Theme.background.opacity(0.82), in: Capsule())
+            .overlay(Capsule().stroke(sectorTint(label.wedge.key).opacity(0.5), lineWidth: 0.8))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(count.map { L("%@，%lld 个气泡", title, $0) } ?? title)
-        .accessibilityAddTraits(selected ? [.isSelected] : [])
+        .position(x: CGFloat(label.x), y: CGFloat(label.y))
+        .accessibilityLabel(L("%@，%lld 个在场信号", label.name, label.wedge.total))
+    }
+
+    // MARK: - 面板
+
+    /// 面板共用的当日事实；还没有选中日时为 nil。
+    private var factContext: RadarFactContext? {
+        guard let day = vm.selectedDay else { return nil }
+        return RadarFactContext(
+            market: vm.market, day: day, board: vm.selectedSectorBoard, order: vm.sectorOrder,
+            macro: overviewVM.overviews[vm.market]?.macroState, panic: panicVM.responses[vm.market],
+            sectorName: { vm.sectorName($0) })
+    }
+
+    /// 面板里点「查看K线与结构详情」：先收起面板，收起后（sheet 的 onDismiss）再跑分析、push 详情页。
+    private func openDetail(_ signal: RadarSignal) {
+        pendingDetail = signal
+        panel = nil
+    }
+
+    @ViewBuilder
+    private func panelView(_ panel: RadarPanel) -> some View {
+        switch panel {
+        case .environment:
+            MacroDetailSheet(market: vm.market, panic: panicVM.responses[vm.market])
+        case .sector(let key):
+            if let ctx = factContext {
+                RadarSectorSheet(context: ctx, initialKey: key, onOpenDetail: openDetail)
+            }
+        case .signals:
+            if let ctx = factContext {
+                RadarSignalListSheet(context: ctx, universeName: currentUniverseName, onOpenDetail: openDetail)
+            }
+        case .signal(let signal):
+            if let ctx = factContext {
+                NavigationStack {
+                    RadarSignalFactView(signal: signal, context: ctx, onOpenDetail: openDetail)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) { Button(L("关闭")) { self.panel = nil } }
+                        }
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+        }
     }
 
     // MARK: - universe 切换器（雷达左上角）
@@ -780,6 +845,100 @@ struct SignalRadarView: View {
         return layouts
     }
 
+    /// 一次摆位的结果：气泡、扇区标签（同心环模式为空）、没画出来的信号数（同心环模式）。
+    private struct FieldLayout {
+        var bubbles: [BubbleLayout]
+        var wedges: [WedgeLabel] = []
+        var hidden: Int = 0
+    }
+
+    /// 扇区标签：所属扇区 + 展示名 + 相对大盘强弱 + 画布上的位置。
+    private struct WedgeLabel: Identifiable {
+        let wedge: SectorRadarLayout.Wedge
+        let name: String
+        let rs: Double?
+        var x: Double
+        var y: Double
+        let width: Double
+        static let height = 18.0
+        var id: String { wedge.key }
+    }
+
+    /// 同心环模式（没有行业统计时）最多画这么多个最新的气泡；更多的在「当日信号」面板里看全。
+    static let ringFieldCap = 14
+
+    /// 同心环模式：只画最新的 ringFieldCap 个（后端已按出现时间从新到旧排好）。
+    private static func layoutRingField(
+        signals: [RadarSignal], dayDate: String, width w: Double, height h: Double,
+        avoid: [RadarOrbitSpacing.Obstacle]
+    ) -> FieldLayout {
+        let shown = Array(signals.prefix(ringFieldCap))
+        return FieldLayout(bubbles: layoutBubbles(signals: shown, dayDate: dayDate, width: w, height: h, avoid: avoid),
+                           hidden: signals.count - shown.count)
+    }
+
+    /// 标签宽度估算：中日韩字符约 10.5pt、其余约 6pt（10pt 字号）+ 左右内边距。
+    private static func labelWidth(_ text: String) -> Double {
+        text.reduce(12.0) { $0 + ($1.isASCII ? 6.0 : 10.5) }
+    }
+
+    /// 扇区模式：角度 = 行业（按 order 从强到弱、从上往下），半径 = 时间；每个行业最多画几个最新的。
+    /// 先按 SectorRadarLayout 给出初始位置，再做一轮碰撞松弛（扇区标签当作禁区），气泡被拉回自己的时间环。
+    private static func layoutSectorField(
+        signals: [RadarSignal], order: [String], names: (String) -> String, rsLookup: (String) -> Double?,
+        dayDate: String, width w: Double, height h: Double, avoid: [RadarOrbitSpacing.Obstacle]
+    ) -> FieldLayout {
+        guard !signals.isEmpty else { return FieldLayout(bubbles: []) }
+        func age(_ s: RadarSignal) -> Int { s.ageDays ?? daysAgo(from: s.date, to: dayDate) }
+        let ages = signals.map(age)
+        let plan = SectorRadarLayout.plan(sectors: signals.map(\.sector), ages: ages, order: order)
+        let (hRad, vRad) = fieldRadii(width: w, height: h)
+
+        // 扇区标签：放在扇区中线的最外沿，夹回画布内
+        let wedges: [WedgeLabel] = plan.wedges.map { wedge in
+            let name = names(wedge.key)
+            let rs = rsLookup(wedge.key)
+            var text = name + (rs.map { " " + SectorBoardList.rsText($0) } ?? "")
+            if wedge.hidden > 0 { text += " +\(wedge.hidden)" }
+            let lw = labelWidth(text)
+            let p = SectorRadarLayout.point(angle: wedge.center, radius: 1, width: w, height: h, hRad: hRad, vRad: vRad)
+            let x = min(max(p.x, lw / 2 + 4), max(lw / 2 + 4, w - lw / 2 - 4))
+            let y = min(max(p.y, WedgeLabel.height / 2 + 4), max(WedgeLabel.height / 2 + 4, h - WedgeLabel.height / 2 - 4))
+            return WedgeLabel(wedge: wedge, name: name, rs: rs, x: x, y: y, width: lw)
+        }
+        let labelObstacles = wedges.map {
+            RadarOrbitSpacing.Obstacle(x: $0.x - $0.width / 2, y: $0.y - WedgeLabel.height / 2,
+                                       width: $0.width, height: WedgeLabel.height)
+        }
+
+        let maxDiameter = max(1, min(w, h) - 2 * RadarBubbleMetrics.edgePadding)
+        let bases = plan.slots.map { diameter(forLevel: signals[$0.index].level) * ringSizeFactor(forDaysAgo: ages[$0.index]) }
+        let crowd = RadarOrbitSpacing.crowdScale(diameters: bases, width: w, height: h)
+        var layouts: [BubbleLayout] = []
+        var anchors: [RadarOrbitSpacing.Anchor] = []
+        for (slot, base) in zip(plan.slots, bases) {
+            let sig = signals[slot.index]
+            let metrics = RadarBubbleMetrics(symbol: sig.symbol, name: sig.name,
+                                             baseDiameter: base * crowd, maxDiameter: maxDiameter)
+            let p = SectorRadarLayout.point(angle: slot.angle, radius: slot.radius, width: w, height: h,
+                                            hRad: hRad, vRad: vRad)
+            layouts.append(BubbleLayout(signal: sig, metrics: metrics, x: p.x, y: p.y,
+                                        phase: Double(layouts.count) * 0.35, daysAgo: ages[slot.index]))
+            anchors.append(.init(rx: slot.radius * hRad, ry: slot.radius * vRad))
+        }
+        let relaxed = RadarOrbitSpacing.relax(
+            layouts.map { .init(x: $0.x, y: $0.y, diameter: $0.diameter) },
+            width: w, height: h, inset: RadarBubbleMetrics.edgePadding, obstacles: avoid + labelObstacles,
+            overlapRatio: bubbleOverlapRatio, anchors: anchors)
+        for i in layouts.indices {
+            layouts[i].x = relaxed[i].x
+            layouts[i].y = relaxed[i].y
+        }
+        // 叠层：越新画得越晚，重叠时新的浮在上面
+        layouts.sort { $0.daysAgo > $1.daysAgo }
+        return FieldLayout(bubbles: layouts, wedges: wedges)
+    }
+
     /// 允许两个气泡边缘重叠「较小直径 × 此比例」。0.2 时重叠最深处离被盖气泡中心仍有
     /// 约 0.6 个半径，中间的代码和名称不会被盖住；再大就开始压字。
     static let bubbleOverlapRatio: Double = 0.2
@@ -833,23 +992,12 @@ struct SignalRadarView: View {
                 sizeDot(diameter: SignalRadarView.diameter(forLevel: 3))
                 Text(L("大小=一二三类")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
-            HStack(spacing: 4) {
-                legendBadge(L("新"), color: Theme.segment)
-                Text(L("标签=状态")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
-            }
+            Text(vm.selectedDay?.hasSectorData == true ? L("扇区=行业，上强下弱") : L("越靠中心越新"))
+                .font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                .lineLimit(1).minimumScaleFactor(0.8)
             Spacer(minLength: 4)
             algorithmInfoButton
         }
-    }
-
-    /// 图例里的角标样例：与气泡上的「共振」「新」同一样式。
-    private func legendBadge(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.system(size: 8, weight: .bold))
-            .foregroundColor(.white)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1.5)
-            .background(color, in: Capsule())
     }
 
     /// 图例里的大小参考点：真实按 `diameter(forLevel:)` 等比缩小展示，不带文字标签
@@ -881,7 +1029,7 @@ struct SignalRadarView: View {
                     infoSection(L("气泡怎么看"), [
                         L("颜色：红=买点，绿=卖点；深浅=信号强弱（弱/中/强），越强越深，与详情页同一套判定。"),
                         L("大小：买卖点类型，一类最小、三类最大——越往后确认程度越高。"),
-                        L("位置：大致越靠中心信号越新（按信号出现后的交易日数，周末不算），三个圈依次是今天、3个交易日内、一周内；气泡太挤时会自动推开。"),
+                        L("位置：越靠中心信号越新（按信号出现后的交易日数，周末不算），气泡太挤时会自动推开。美股指数雷达按行业分成扇区，行业按当日相对大盘强弱从上往下排，越靠上越强。"),
                         L("角标：左上角「✓」= 已确认（所在笔已走完）；「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。没有「✓」的是最后一笔上的未确认信号，之后可能被新K线改写。"),
                     ])
                     infoSection(L("为什么点进详情页可能对不上"), [
@@ -894,15 +1042,8 @@ struct SignalRadarView: View {
                         L("每个市场提供「科技指数」（默认）和「大盘宽基」两套可切换范围，如美股的纳斯达克100 / 标普500。"),
                         L("成分股优先实时拉取官方/交易所数据源，取不到或数量不足时自动回退到内置清单，保证随时有得扫。"),
                     ])
-                    infoSection(L("上榜排序怎么算"), rankingInfoLines)
-                    if vm.selectedDay?.quantFilter != nil {
-                        infoSection(L("量化评级权重"), [
-                            L("全部成分股参与缠论计算，不按评级过滤。排序按技术信号（含共振）50%、量化等级50%加权，取前10。"),
-                            L("A+到F按等级顺序等距换算；缺失或超过7天的评级按中性处理，不剔除信号。历史日期只使用当时已生成的评级。"),
-                            L("长按气泡可查看量化等级、综合分和评级日期。"),
-                        ])
-                    }
-                    Text(L("以上打分口径与详情页强弱、确认状态判定完全一致，只是气泡取的是某一次扫描的快照。"))
+                    infoSection(L("雷达上显示哪些信号"), rankingInfoLines)
+                    Text(L("雷达只陈列按缠论规则得出的事实，不打分、不排名、不按基本面筛选；强弱与确认状态的判定与详情页完全一致，只是气泡取的是某一次扫描的快照。"))
                         .font(.footnote)
                         .foregroundColor(Theme.textSecondary)
                 }
@@ -962,20 +1103,14 @@ struct SignalRadarView: View {
         return f.string(from: date)
     }
 
-    /// 「上榜排序怎么算」（App 固定宽松口径：最后一笔上的买卖点也上榜，不带已确认勾）。
+    /// 「雷达上显示哪些信号」（App 固定宽松口径：最后一笔上的买卖点也显示，不带已确认勾）。
     private var rankingInfoLines: [String] {
-        var lines = [
-            L("综合分 = 35% 类型确定性 + 30% 强弱 + 35% 新鲜度，最新一天命中「共振」再额外加分。"),
-            L("类型确定性：一类 0.4（背驰，待验证）、二类 0.7（回落在价格密集区获得支撑）、三类 1.0（离开中枢后不回中枢，最强确认）。"),
-            L("新鲜度：按信号出现后的交易日数算（周末、休市不算），当天最高，第 5 个交易日归零，之后退场。"),
+        [
+            L("所选指数全部成分股都跑一遍缠论，某天在场的信号全部列出，按出现时间从新到旧，不打分、不截取前几名。"),
+            L("在场：信号出现后 5 个交易日内（周末、休市不算），且收盘价没有跌破买点价位（卖点：涨破）；走坏当天起移出雷达，详情页仍显示该买卖点。"),
+            L("最后一笔还在走时出现的买卖点也会显示（不带「✓」），之后可能被新K线改写；一周前的历史日期不再显示这类信号。"),
+            L("基本面评级只标在气泡上，不参与筛选；画不下的气泡在扇区标签上显示「+N」，点「当日信号」可看全部。"),
         ]
-        lines += [
-            L("最后一笔还在走时出现的买卖点也会上榜（气泡不带「✓」），之后可能被新K线改写；一周前的历史日期不再显示这类信号。"),
-            L("未确认的信号（落在最后一笔上的提前预判）：类型确定性和强弱两部分打 6 折，新鲜度不打折。"),
-            L("价格走坏即退场：信号出现后，收盘价跌破买点价位（卖点：涨破）当天起从雷达移出；详情页仍显示该买卖点。"),
-            L("每类买卖点先保底最多 2 个名额，其余按综合分从高到低补满，共取前 10 名。"),
-        ]
-        return lines
     }
 
     private func infoSection(_ title: String, _ lines: [String]) -> some View {

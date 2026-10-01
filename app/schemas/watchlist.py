@@ -29,6 +29,7 @@ class WatchlistItemOut(BaseResponse):
     created_at: datetime
     is_sample: bool = Field(default=False, description="默认送的示例自选：不占名额，免额度可看完整次级别")
     quant_grade: str | None = Field(default=None, description="基本面综合等级（仅美股、7 天内有效）；无则 null")
+    sector: str | None = Field(default=None, description="行业 key（与雷达扇区 / 行业强弱一致，仅美股）；无则 null")
 
 
 class WatchlistResponse(BaseResponse):

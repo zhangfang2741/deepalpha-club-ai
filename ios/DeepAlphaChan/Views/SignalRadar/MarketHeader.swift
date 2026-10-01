@@ -1,26 +1,19 @@
-import Charts
 import SwiftUI
 
-/// 雷达页顶部：市场分段控件 + 「宏观 / 情绪」两格温度计。
+/// 雷达页顶部：市场分段控件 + 「环境 / 行业 / 当日信号」三格，自上而下的一条线：
+/// 环境友不友好 → 钱往哪个行业走 → 哪些股票出现了结构信号。
 ///
-/// 两格展示的都是当前所选市场；点任意一格打开对应的完整弹层。两格各自加载、各自失败
-/// （失败那格显示重试），互不影响，也不影响下面的雷达。两格固定同一高度，异步数据到达
-/// 时不挤动雷达画布。行业强弱不再单独占一格：并进雷达上方的行业筛选条（按强弱排序 + 状态圆点，
-/// 末尾「强弱」打开行业弹层），见 SignalRadarView.sectorBar。
+/// 三格都只陈列事实，点开是底部面板（留在雷达页，见 RadarPanels）：环境 = 宏观状态 + 情绪；
+/// 行业 = 选中日相对大盘最强的行业（与扇区雷达同一份强弱表）；当日信号 = 选中日在场信号数。
+/// 各格各自加载、各自失败（失败那格显示重试），固定同一高度，异步数据到达时不挤动雷达画布。
 struct MarketHeader: View {
     @ObservedObject var radarVM: SignalRadarViewModel
     @ObservedObject var panicVM: PanicIndexViewModel
     @ObservedObject var overviewVM: MarketOverviewViewModel
+    let onOpen: (RadarPanel) -> Void
 
-    private enum SheetKind: String, Identifiable {
-        case macro, sentiment
-        var id: String { rawValue }
-    }
-
-    @State private var sheet: SheetKind?
-
-    /// 两格内容区高度：标题行之下的两行内容。
-    static let tileContentHeight: CGFloat = 40
+    /// 格子内容区高度：标题行之下的两行内容。
+    static let tileContentHeight: CGFloat = 34
 
     var body: some View {
         VStack(spacing: 8) {
@@ -31,48 +24,82 @@ struct MarketHeader: View {
             }
             .pickerStyle(.segmented)
 
-            HStack(spacing: 8) {
-                macroTile
-                sentimentTile
+            HStack(spacing: 6) {
+                environmentTile
+                sectorTile
+                signalsTile
             }
         }
         .task { panicVM.onAppear() }
         .task(id: radarVM.market) { overviewVM.load(radarVM.market) }
-        .sheet(item: $sheet) { kind in
-            switch kind {
-            case .macro:
-                MacroDetailSheet(market: radarVM.market)
-            case .sentiment:
-                if let resp = panicVM.responses[radarVM.market] {
-                    PanicIndexDetailSheet(market: radarVM.market, response: resp)
-                }
-            }
-        }
     }
 
     private var market: StockMarket { radarVM.market }
 
     private var overview: MarketOverview? { overviewVM.overviews[market] }
 
-    // MARK: - 两格
+    // MARK: - 三格
 
-    private var macroTile: some View {
-        tile(title: L("宏观"), enabled: overview?.macroState != nil, kind: .macro) {
-            if let overview, !overview.available {
-                buildingText
-            } else if let state = overview?.macroState {
+    private var environmentTile: some View {
+        let panic = panicVM.responses[market]
+        let state = overview?.macroState
+        return tile(title: L("环境"), enabled: state != nil || panic != nil, action: { onOpen(.environment) }) {
+            if let state {
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text(state.labelText)
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
                         .foregroundColor(MarketHeader.regimeColor(state.label))
                     Text("\(Int((state.probability * 100).rounded()))%")
                         .font(.system(size: 10))
                         .foregroundColor(Theme.textSecondary)
                 }
-                Text(macroSubtitle(overview?.nextEvent, state: state))
+            } else if let overview, !overview.available {
+                buildingText
+            } else if overview != nil {
+                preparingText
+            } else {
+                loadingOrRetry(failed: overviewVM.failedMarkets.contains(market)) { overviewVM.retry(market) }
+            }
+            if let panic {
+                Text(L("情绪 %lld %@", Int(panic.current.score.rounded()), PanicIndexStyle.ratingLabel(panic.current.rating)))
                     .font(.system(size: 10))
                     .foregroundColor(Theme.textSecondary)
                     .lineLimit(1)
+            } else if panicVM.failedMarkets.contains(market) {
+                Button { panicVM.retry(market) } label: {
+                    Text(L("情绪 重试")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                }
+            }
+        }
+    }
+
+    /// 选中日相对大盘最强的行业；这一天没有行业统计（自选、旧快照）时退回最新的摘要。
+    private var leadingSector: (key: String?, name: String, rs: Double?)? {
+        if let top = radarVM.selectedSectorBoard?.sectors.max(by: { ($0.rsVsMarket ?? -.infinity) < ($1.rsVsMarket ?? -.infinity) }) {
+            return (top.key, top.name, top.rsVsMarket)
+        }
+        if let s = overview?.strongest { return (nil, s.name, s.rsVsMarket) }
+        return nil
+    }
+
+    private var sectorTile: some View {
+        let lead = leadingSector
+        let canOpen = radarVM.selectedSectorBoard != nil && radarVM.selectedDay != nil
+        return tile(title: L("行业"), enabled: canOpen, action: {
+            if let key = lead?.key ?? radarVM.sectorOrder.first { onOpen(.sector(key)) }
+        }) {
+            if let lead {
+                Text(lead.name)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(Theme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text(L("领先 %@", SectorBoardList.rsText(lead.rs)))
+                    .font(.system(size: 10).monospacedDigit())
+                    .foregroundColor((lead.rs ?? 0) >= 0 ? Theme.up : Theme.down)
+                    .lineLimit(1)
+            } else if let overview, !overview.available {
+                buildingText
             } else if overview != nil {
                 preparingText
             } else {
@@ -81,22 +108,20 @@ struct MarketHeader: View {
         }
     }
 
-    private var sentimentTile: some View {
-        let resp = panicVM.responses[market]
-        return tile(title: L("情绪"), enabled: resp != nil, kind: .sentiment) {
-            if let resp {
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text("\(Int(resp.current.score.rounded()))")
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
-                        .foregroundColor(PanicIndexStyle.ratingColor(resp.current.score))
-                    Text(PanicIndexStyle.ratingLabel(resp.current.rating))
-                        .font(.system(size: 10))
-                        .foregroundColor(Theme.textSecondary)
-                        .lineLimit(1)
+    private var signalsTile: some View {
+        let day = radarVM.selectedDay
+        return tile(title: L("当日信号"), enabled: day != nil, action: { onOpen(.signals) }) {
+            if let day {
+                Text(L("%lld 个", day.signals.count))
+                    .font(.system(size: 15, weight: .bold).monospacedDigit())
+                    .foregroundColor(Theme.textPrimary)
+                HStack(spacing: 4) {
+                    Text(L("%lld 买", day.buyCount)).foregroundColor(Theme.up)
+                    Text(L("%lld 卖", day.sellCount)).foregroundColor(Theme.down)
                 }
-                sparkline(resp)
+                .font(.system(size: 10).monospacedDigit())
             } else {
-                loadingOrRetry(failed: panicVM.failedMarkets.contains(market)) { panicVM.retry(market) }
+                Text("--").font(.system(size: 15, weight: .bold)).foregroundColor(Theme.textSecondary)
             }
         }
     }
@@ -104,10 +129,10 @@ struct MarketHeader: View {
     // MARK: - 组件
 
     private func tile<Content: View>(
-        title: String, enabled: Bool, kind: SheetKind, @ViewBuilder content: () -> Content
+        title: String, enabled: Bool, action: @escaping () -> Void, @ViewBuilder content: () -> Content
     ) -> some View {
         // 用 Button 而不是 onTapGesture：按下有反馈，读屏 / 辅助功能也能激活
-        Button { sheet = kind } label: {
+        Button(action: action) {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 2) {
                 Text(title)
@@ -165,27 +190,6 @@ struct MarketHeader: View {
         } else {
             ProgressView().controlSize(.mini).padding(.top, 6)
         }
-    }
-
-    /// 迷你走势：近 60 个交易日，只给形状。
-    private func sparkline(_ resp: PanicIndexResponse) -> some View {
-        Chart(Array(resp.history.suffix(60))) { p in
-            LineMark(x: .value("date", p.date), y: .value("score", p.score))
-                .foregroundStyle(PanicIndexStyle.ratingColor(resp.current.score))
-                .lineStyle(StrokeStyle(lineWidth: 1.5))
-                .interpolationMethod(.catmullRom)
-        }
-        .chartYScale(domain: 0...100)
-        .chartXAxis(.hidden)
-        .chartYAxis(.hidden)
-        .frame(height: 16)
-    }
-
-    private func macroSubtitle(_ event: MacroEvent?, state: MacroState) -> String {
-        if let event {
-            return "\(MarketHeader.weekday(event.date)) \(event.name)"
-        }
-        return L("已持续 %lld 天", state.daysInState)
     }
 
     // MARK: - 共用格式

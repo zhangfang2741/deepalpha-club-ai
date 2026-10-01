@@ -101,11 +101,11 @@ _CACHE_PREFIX = "signal_radar"
 # 否则部署后缓存里还是旧口径的气泡，与详情页（每次实时算）对不上。shape 版本只隔离雷达自身的
 # 筛选规则（不改变详情口径），开关或规则一变就升：shape5 = 恢复 78bee01 之前的筛选（宽松口径
 # 最后一笔上的未确认信号也上榜、收盘价跌破才失效、最新日「待确认」候选补位），形态过滤暂停。
-# quant 段隔离评级相关行为：quant_screen2 = 评级不参与排序（QUANT_WEIGHT=0）+ 基本面排雷
-# （quant_filter.MINE_RULES，自选不排雷；screen2 加「盈利能力 F 但 EPS 修正 ≥ B」豁免）；
-# 此前 quant_mark1 = 只 mark 展示。改权重或排雷规则时同步升版。
+# quant 段隔离评级相关行为：quant_mark2 = 评级只标注、不排序也不排雷（此前 quant_screen2 有基本面排雷）。
+# all 段 = 快照存全部在场信号、按出现时间排（all1，2026-10-01 起；此前只存综合分前 N），
+# 旧版 App 的前 N 在接口层按旧综合分现截（legacy_view）。改权重、排雷或取舍规则时同步升版。
 def _mode_ns(mode: str) -> str:
-    return f"{get_policy(mode).version}:shape5:quant_screen2"
+    return f"{get_policy(mode).version}:shape5:quant_mark2:all1"
 
 
 # czsc 形态过滤（chan/shape_filters：同向假突破 / 窄幅震荡 / 低波动）暂停应用，代码与测试保留。
@@ -295,6 +295,52 @@ def _select_top_n(items: list, top_n: int, *, level_of, score_of) -> list:
     rest = sorted((x for x in items if id(x) not in chosen), key=score_of, reverse=True)
     picked.extend(rest[: max(0, top_n - len(picked))])
     return sorted(picked, key=score_of, reverse=True)[:top_n]
+
+
+def order_by_time(signals: list[RadarSignalOut]) -> list[RadarSignalOut]:
+    """呈现顺序：按信号出现日期，最新在前；同一天按代码排（只用事实排序，不打分）。"""
+    return sorted(sorted(signals, key=lambda s: s.symbol), key=lambda s: s.date, reverse=True)
+
+
+def with_counts(day: RadarDayOut, signals: list[RadarSignalOut]) -> RadarDayOut:
+    """换上新的信号列表并重算买卖点数。"""
+    return day.model_copy(update={"signals": signals,
+                                  "buy_count": sum(s.side == "buy" for s in signals),
+                                  "sell_count": sum(s.side == "sell" for s in signals)})
+
+
+# 次级别补算上限（每只要拉 30 分钟K线，中英各算一份）：全部信号都补会把行情源打到限流
+_SUB_LEVEL_MAX = 60
+
+
+def sub_level_targets(day: RadarDayOut, top_n: int = DEFAULT_TOP_N) -> set[str]:
+    """最新一天要补算次级别的股票：当天新出现的信号 + 旧版前 N 的候选池（旧版 App 按共振重排要用）。
+
+    先放当天新出现的（新版 App 气泡面板展示「30 分钟级别」这一事实），再补旧版候选池，总数封顶。
+    """
+    fresh = [s.symbol for s in order_by_time(day.signals) if (s.age_days or 0) == 0]
+    legacy = [s.symbol for s in rerank_with_resonance(day, max(top_n, _RESONANCE_POOL)).signals]
+    out: list[str] = []
+    for sym in fresh + legacy:
+        if sym not in out:
+            out.append(sym)
+    return set(out[:_SUB_LEVEL_MAX])
+
+
+def legacy_view(resp: SignalRadarResponse, top_n: int = DEFAULT_TOP_N) -> SignalRadarResponse:
+    """旧版 App（不带 scope=all）：每天按旧综合分（类型 + 强弱 + 新鲜度 + 共振）截取前 top_n。
+
+    新版 App 只呈现事实、拿全部在场信号；旧版的雷达布局按 10 个气泡设计，塞进全部信号会挤成一团。
+    """
+    days = []
+    for index, day in enumerate(resp.days):
+        top = rerank_with_resonance(day, top_n)
+        if index == 0 and day.candidates:
+            pool = RadarDayOut(date=day.date, buy_count=0, sell_count=0, signals=day.candidates)
+            top = top.model_copy(update={
+                "candidates": rerank_with_resonance(pool, max(0, top_n - len(top.signals))).signals})
+        days.append(top)
+    return resp.model_copy(update={"days": days, "top_n": top_n})
 
 
 def is_aligned_resonance(side: str, verdict: str | None) -> bool:
@@ -519,7 +565,7 @@ def build_days(
 
 async def attach_sub_levels(
     day: RadarDayOut, *, end_date: str, user_id: int | None, redis: Redis | None,
-    mode: str = DEFAULT_MODE,
+    mode: str = DEFAULT_MODE, only: set[str] | None = None,
 ) -> None:
     """给某一天的入榜气泡补算次级别结论（原地写入 sub_level_verdict/label）。
 
@@ -549,7 +595,7 @@ async def attach_sub_levels(
         sig.sub_level_verdict = sub.verdict
         sig.sub_level_label = sub.verdict_label
 
-    await asyncio.gather(*[_one(sig) for sig in day.signals])
+    await asyncio.gather(*[_one(sig) for sig in day.signals if only is None or sig.symbol in only])
 
 # 各市场开盘时段（UTC，工作日），末端多留半小时拿到收盘那根 30 分钟K线。
 # 美股按夏令时/冬令时取并集（13:30–21:00 UTC）；不识别节假日——休市日刷新只是空转。
@@ -586,13 +632,14 @@ async def refresh_sub_levels(
     if snapshot is None or not snapshot.days:
         return False
     day = snapshot.days[0]
-    await attach_sub_levels(day, end_date=date.today().isoformat(), user_id=user_id, redis=redis, mode=mode)
+    await attach_sub_levels(day, end_date=date.today().isoformat(), user_id=user_id, redis=redis, mode=mode,
+                            only=sub_level_targets(day))
 
     latest = await _read_cache(redis, market, universe_key, mode)
     if latest is None or not latest.days or latest.days[0].date != day.date:
         logger.info("signal_radar_sub_level_refresh_skipped", market=market, universe=universe_key)
         return False
-    fresh = {s.symbol: s for s in day.signals}
+    fresh = {s.symbol: s for s in day.signals if s.sub_level_verdict is not None}
     for sig in latest.days[0].signals:
         if sig.symbol in fresh:
             sig.sub_level_verdict = fresh[sig.symbol].sub_level_verdict
@@ -604,7 +651,7 @@ async def refresh_sub_levels(
         logger.warning("signal_radar_sub_level_write_error", market=market, error=str(e))
         return False
     logger.info("signal_radar_sub_levels_refreshed", market=market, universe=universe_key,
-                symbols=len(day.signals))
+                symbols=len(fresh))
     return True
 
 
@@ -897,7 +944,7 @@ async def _scan_into(state: _ScanState, symbol: str, name: str, *, redis: Redis)
 
 
 def _sector_pools(day: RadarDayOut, tags: dict[str, str], top_n: int) -> dict[str, list[RadarSignalOut]]:
-    """给当天全部在场信号（排雷后、截取前 N 之前）打行业标签、写 sector_counts，返回每个行业的前 N。"""
+    """给当天全部在场信号打行业标签、写 sector_counts，返回每个行业的前 N（旧版 App 的行业筛选用）。"""
     if not tags:
         return {}
     sectors.tag_signals(day.signals, tags)
@@ -948,7 +995,8 @@ async def _assemble(state: _ScanState, *, redis: Redis) -> SignalRadarResponse:
     )
     symbols = [symbol for symbol, _ in state.constituents]
     grades = await quant_filter.load_grades(state.market, symbols, trading_days) if state.market == "us" else {}
-    tags = {} if state.is_watchlist else await sectors.load_sector_tags(state.market, redis)
+    # 自选也打行业标签：自选页每行要显示所属行业（行业池只给指数雷达写，见 _publish）
+    tags = await sectors.load_sector_tags(state.market, redis)
     state.sector_pools = {}
     for index, day in enumerate(resp.days):
         if index == 0:
@@ -956,22 +1004,17 @@ async def _assemble(state: _ScanState, *, redis: Redis) -> SignalRadarResponse:
                 candidates, day.date, calendar, taken={x.symbol for x in day.signals},
                 slots=len(state.constituents), max_age_days=state.max_age_days)
         if state.market == "us":
-            # 排雷在取前 N 之前，被排除的名额由后面的信号递补；自选雷达只标注不排雷
-            day = quant_filter.attach_grades(day, grades, symbols, screen=not state.is_watchlist)
+            day = quant_filter.attach_grades(day, grades, symbols)  # 只标注，不排雷
         pools = _sector_pools(day, tags, top_n)
         if index == 0:
-            day = rerank_with_resonance(day, max(top_n, _RESONANCE_POOL))
             await attach_sub_levels(day, end_date=state.end_date, user_id=state.user_id, redis=redis,
-                                    mode=state.mode)
+                                    mode=state.mode, only=sub_level_targets(day, top_n))
             resp.sub_level_as_of = datetime.now(UTC).replace(microsecond=0).isoformat()
             sectors.merge_sub_levels(pools, day.signals)
         if tags:
             state.sector_pools[day.date] = pools
-        day = rerank_with_resonance(day, top_n)
-        if index == 0:
-            candidate_day = RadarDayOut(date=day.date, buy_count=0, sell_count=0, signals=day.candidates)
-            day.candidates = rerank_with_resonance(candidate_day, max(0, top_n - len(day.signals))).signals
-        resp.days[index] = day
+        # 快照存全部在场信号、按出现时间排；旧版 App 的前 N 在接口层现截（legacy_view）
+        resp.days[index] = with_counts(day, order_by_time(day.signals))
     return resp
 
 
@@ -1341,11 +1384,11 @@ async def _assemble_demo(state: _ScanState) -> SignalRadarResponse:
     symbols = [symbol for symbol, _ in state.constituents]
     if state.market == "us":
         grades = await quant_filter.load_grades(state.market, symbols, [target])
-        resp.days[0] = quant_filter.attach_grades(resp.days[0], grades, symbols, screen=True)
+        resp.days[0] = quant_filter.attach_grades(resp.days[0], grades, symbols)  # 只标注，不排雷
     tags = await sectors.load_sector_tags(state.market, current_redis())
     pools = _sector_pools(resp.days[0], tags, DEFAULT_TOP_N)
     state.sector_pools = {resp.days[0].date: pools} if tags else {}
-    resp.days[0] = rerank_with_resonance(resp.days[0], DEFAULT_TOP_N)
+    resp.days[0] = with_counts(resp.days[0], order_by_time(resp.days[0].signals))
     return resp
 
 

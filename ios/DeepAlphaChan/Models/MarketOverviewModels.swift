@@ -137,32 +137,6 @@ struct SectorBoard: Decodable {
     }
 }
 
-/// 某一天全部行业的气泡（GET /signal-radar/sector-pools）：一次取回，切行业不用再请求。
-struct RadarSectorPools: Decodable {
-    let universe: String
-    let date: String
-    /// false = 这一天没有行业池（旧快照还没重扫）。
-    let available: Bool
-    /// {行业 key: 该行业前 N 个气泡}；当天没有信号的行业不出现。
-    let sectors: [String: [RadarSignal]]
-}
-
-/// 雷达当前的行业筛选：在当前指数里只看这个行业的气泡（不切换指数）。
-struct RadarSectorFilter: Equatable {
-    let key: String
-    let name: String
-}
-
-/// 行业筛选条上的一格：行业 + 选中后会显示的气泡数 + 该日行业状态（逐利 / 观望 / 避险，圆点配色）。
-struct RadarSectorChip: Identifiable, Equatable {
-    let key: String
-    let name: String
-    let count: Int
-    /// risk_on / neutral / risk_off；没有当日强弱数据时为 nil（不画圆点）。
-    var label: String? = nil
-    var id: String { key }
-}
-
 /// 美股行业 key（与后端 regime 行业一致）→ 展示名；顺序即数量相同时的排序。
 enum RadarSectorCatalog {
     static let keys: [String] = [

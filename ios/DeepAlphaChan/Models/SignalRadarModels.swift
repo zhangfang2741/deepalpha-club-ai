@@ -91,7 +91,7 @@ struct RadarDay: Decodable, Identifiable {
     var candidates: [RadarSignal] { candidatesRaw ?? [] }
     /// 当天全部在场信号按行业的买卖点数（美股指数雷达才有；自选、港股 / A 股、旧后端为空）。
     let sectorCounts: [String: [String: Int]]?
-    /// 这一天能按行业筛选（有行业统计）。
+    /// 这一天有行业统计（雷达画成扇区）。
     var hasSectorData: Bool { !(sectorCounts ?? [:]).isEmpty }
 
     var id: String { date }
@@ -106,21 +106,10 @@ struct RadarDay: Decodable, Identifiable {
         case candidatesRaw = "candidates"
         case sectorCounts = "sector_counts"
     }
-
-    /// 行业筛选时拼出的一天：只含该行业的气泡、没有候选；排雷统计沿用当天的（覆盖整个股票池）。
-    init(date: String, signals: [RadarSignal], quantFilter: RadarQuantFilter?) {
-        self.date = date
-        self.quantFilter = quantFilter
-        self.buyCount = signals.filter(\.isBuy).count
-        self.sellCount = signals.count - buyCount
-        self.signals = signals
-        self.candidatesRaw = nil
-        self.sectorCounts = nil
-    }
 }
 
 /// 单只股票的当日买卖点信号。
-struct RadarSignal: Decodable, Identifiable {
+struct RadarSignal: Decodable, Identifiable, Hashable {
     let symbol: String
     let name: String
     let side: String          // buy / sell
@@ -128,7 +117,7 @@ struct RadarSignal: Decodable, Identifiable {
     let signalType: String    // buy1 / sell1 …
     let date: String
     let price: Double
-    /// 形态技术面强度 0~1（决定看板淘汰排序；气泡颜色深浅由 `signalStrength` 决定，
+    /// 形态技术面强度 0~1（旧版看板淘汰排序用；气泡颜色深浅由 `signalStrength` 决定，
     /// 大小由 `level`（一/二/三类）决定）
     let strength: Double
     let bias: String

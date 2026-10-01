@@ -138,3 +138,33 @@ def test_unknown_universe_rejected(ctx):
     resp = client.get("/signal-radar/demo", params={"market": "us", "universe": "hsi"})
     assert resp.status_code == 400
     assert spawned == []
+
+
+# ---- scope：新版 App 拿全部在场信号（按出现时间排），旧版 App 仍截取前 N ----
+
+def _snapshot_with(n: int) -> svc.SignalRadarResponse:
+    from app.schemas.signal_radar import RadarDayOut, RadarSignalOut
+
+    signals = [RadarSignalOut(symbol=f"S{i:02d}", name=f"S{i:02d}", side="buy", label="二买", signal_type="buy2",
+                              date="2026-09-30", price=1.0, strength=0.5, bias="bullish",
+                              signal_strength="medium", confirmed=True, pivot_stage_depth=0.5, age_days=0)
+               for i in range(n)]
+    day = RadarDayOut(date="2026-09-30", buy_count=n, sell_count=0, signals=signals)
+    return svc.SignalRadarResponse(market="us", universe="nasdaq100", etf_name="纳斯达克100", universe_size=100,
+                                   as_of="2026-09-30", top_n=10, days=[day], status="ready")
+
+
+def test_scope_all_returns_every_signal_default_keeps_top_n(ctx):
+    client, redis, _ = ctx
+    redis.store[svc._demo_cache_key("us", "nasdaq100", svc.demo_snapshot_date())] = \
+        _snapshot_with(25).model_dump_json()
+    full = client.get("/signal-radar/demo", params={"market": "us", "scope": "all"}).json()
+    legacy = client.get("/signal-radar/demo", params={"market": "us"}).json()
+    assert len(full["days"][0]["signals"]) == 25
+    assert len(legacy["days"][0]["signals"]) == svc.DEFAULT_TOP_N
+    assert legacy["days"][0]["buy_count"] == svc.DEFAULT_TOP_N
+
+
+def test_scope_rejects_unknown_value(ctx):
+    client, _, _ = ctx
+    assert client.get("/signal-radar/demo", params={"market": "us", "scope": "best"}).status_code == 422

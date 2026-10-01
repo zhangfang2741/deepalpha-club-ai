@@ -35,7 +35,7 @@ struct SectorBoardSheet: View {
 
 /// 层级（从主到次）：分组（跑赢 / 跑输大盘）→ 行业名 + 强弱值与强弱条 → 状态与当日买卖点 → 说明文字。
 /// 说明文字放到底部，顶部只留「哪天收盘」与状态图例，打开就先看到结论。
-private struct SectorBoardList: View {
+struct SectorBoardList: View {
     let market: StockMarket
     let date: String?
     let parent: String?
@@ -45,6 +45,17 @@ private struct SectorBoardList: View {
 
     @State private var board: SectorBoard?
     @State private var failed = false
+
+    /// 显式 init：有 private 的 @State，自动生成的成员初始化器只在本文件可见，雷达的行业面板要从别处推进来。
+    init(market: StockMarket, date: String?, parent: String?, parentName: String?, radar: SectorRadarContext?,
+         onPick: @escaping (_ key: String, _ name: String) -> Void) {
+        self.market = market
+        self.date = date
+        self.parent = parent
+        self.parentName = parentName
+        self.radar = radar
+        self.onPick = onPick
+    }
 
     /// 右侧下钻列宽（没有细分的行同样留出，保证各行强弱值对齐）。
     private static let drillWidth: CGFloat = 46
