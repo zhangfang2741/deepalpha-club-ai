@@ -192,54 +192,6 @@ _CONCEPTS: dict[str, tuple[str, str, str, str, str, str]] = {
         "How much analysts' average forecast for future results has been raised or cut recently — whether professionals have grown more or less optimistic.",
         "Positive = forecasts being raised, the business is doing better than expected; negative = forecasts being cut.",
     ),
-    "moat_gm_avg": (
-        "4 年平均毛利率",
-        "把最近 4 年每年的毛利率（每卖 100 元的货扣掉直接成本后剩多少）平均一下。看的是长期的定价能力，而不是某一年的好坏。",
-        "越高 = 长期都能把东西卖上价钱。",
-        "4-Year Average Gross Margin",
-        "The average of the last four years' gross margins (what's left from every $100 of sales after direct costs). It shows long-run pricing power rather than one good or bad year.",
-        "Higher = it has kept selling at good prices for years.",
-    ),
-    "moat_gm_vol": (
-        "毛利率波动",
-        "最近 4 年毛利率上下波动的幅度（标准差，单位是百分点）。比如毛利率每年都在 60% 左右，波动就小；今年 60%、明年 40%，波动就大。",
-        "越小越好 = 定价能力稳，不怎么受原材料涨价、对手降价的影响。",
-        "Gross Margin Volatility",
-        "How much gross margin has swung over the last four years (standard deviation, in percentage points). Around 60% every year means low volatility; 60% one year and 40% the next means high.",
-        "Lower is better = steady pricing power, little hurt by cost spikes or rivals' price cuts.",
-    ),
-    "moat_gm_trend": (
-        "毛利率 3 年变化",
-        "最近 12 个月的毛利率，和 3 年前同期相比多了还是少了几个百分点。",
-        "为正 = 毛利率在变厚，护城河在加宽；为负 = 在变薄，可能正被竞争侵蚀。",
-        "3-Year Gross Margin Change",
-        "How many percentage points the latest 12-month gross margin is above or below the same period 3 years ago.",
-        "Positive = margins thickening, the moat widening; negative = thinning, possibly eroded by competition.",
-    ),
-    "moat_om_min": (
-        "最差一年经营利润率",
-        "最近 4 年里，经营利润率（每卖 100 元扣掉成本和各项经营开销后还剩多少）最低的那一年是多少。",
-        "越高 = 就算是最差的年份也照样赚钱。",
-        "Worst-Year Operating Margin",
-        "The lowest operating margin (what's left from every $100 of sales after costs and running expenses) in the last four years.",
-        "Higher = it still made money even in its worst year.",
-    ),
-    "moat_om_vol": (
-        "经营利润率波动",
-        "最近 4 年经营利润率上下波动的幅度（标准差，单位是百分点）。",
-        "越小越好 = 主业赚钱很稳，不靠运气。",
-        "Operating Margin Volatility",
-        "How much operating margin has swung over the last four years (standard deviation, in percentage points).",
-        "Lower is better = the core business earns steadily, not by luck.",
-    ),
-    "moat_fcf_conv": (
-        "利润现金含量",
-        "最近 2 年公司真正落袋的自由现金流，占同期账面净利润的比例。100% 表示账上赚 100 元，口袋里也真进了 100 元。",
-        "越高 = 利润越实在；长期远低于 100%，说明利润很多停留在账面上。",
-        "Cash Conversion",
-        "Free cash flow actually banked over the last two years as a share of reported net income. 100% means every $100 of profit on paper also arrived as $100 of cash.",
-        "Higher = more real profits; far below 100% over time means much of the profit stays on paper.",
-    ),
 }
 
 _VALUATION_PREFIXES = (
@@ -343,46 +295,6 @@ _INPUT_BASE: dict[str, tuple[str, str]] = {
     "est_new": ("分析师们现在对这个财年的平均预测。", "Analysts' current average forecast for this fiscal year."),
     "est_old": ("同一批预测在当时（30 或 90 天前）的平均值，和现在比就知道是上调还是下调。",
                 "The same average forecast back then (30 or 90 days ago); comparing it with today shows raises or cuts."),
-    "gm_y0": (
-        "最近 12 个月的毛利率（毛利 ÷ 营收）。",
-        "Gross margin (gross profit ÷ revenue) for the last 12 months.",
-    ),
-    "gm_y1": (
-        "1 年前那 12 个月的毛利率。",
-        "Gross margin for the 12 months ending a year ago.",
-    ),
-    "gm_y2": (
-        "2 年前那 12 个月的毛利率。",
-        "Gross margin for the 12 months ending two years ago.",
-    ),
-    "gm_y3": (
-        "3 年前那 12 个月的毛利率。",
-        "Gross margin for the 12 months ending three years ago.",
-    ),
-    "om_y0": (
-        "最近 12 个月的经营利润率（EBIT ÷ 营收）。",
-        "Operating (EBIT) margin for the last 12 months.",
-    ),
-    "om_y1": (
-        "1 年前那 12 个月的经营利润率。",
-        "Operating margin for the 12 months ending a year ago.",
-    ),
-    "om_y2": (
-        "2 年前那 12 个月的经营利润率。",
-        "Operating margin for the 12 months ending two years ago.",
-    ),
-    "om_y3": (
-        "3 年前那 12 个月的经营利润率。",
-        "Operating margin for the 12 months ending three years ago.",
-    ),
-    "fcf_2y": (
-        "最近 2 年的自由现金流加总（经营现金流 − 资本开支）。",
-        "Free cash flow (operating cash flow − capital spending) summed over the last two years.",
-    ),
-    "net_2y": (
-        "最近 2 年的净利润加总。",
-        "Net income summed over the last two years.",
-    ),
 }
 
 _INPUT_PERIOD: list[tuple[str, tuple[str, str]]] = [
@@ -549,42 +461,6 @@ _WHY: dict[str, tuple[str, str, str, str]] = {
         "公司现在好不好，看前面几个维度；最近是在变好还是变差，看这一项。我们看分析师对今年、明年每股收益和今年营收的预测，在 30 天、90 天里改了多少。",
         "Analysts update their forecasts as news comes in. When many raise their expectations, the company is usually doing better than they thought.",
         "The other factors show how the company is doing now; this one shows whether things are getting better or worse lately. We track how much forecasts for this and next year's EPS and this year's revenue changed over 30 and 90 days.",
-    ),
-    "moat_gm_avg": (
-        "一年毛利率高可能是运气，好几年都高才说明东西真的值钱、别人抢不走。",
-        "护城河的第一项：先看长期的定价能力够不够强。",
-        "One year of high margins could be luck; several years in a row means the product is genuinely valuable and hard to take away.",
-        "The first moat check: is long-run pricing power strong enough?",
-    ),
-    "moat_gm_vol": (
-        "真正有护城河的公司，不管原材料涨价还是对手打价格战，都能守住价格，毛利率不会大起大落。",
-        "和平均毛利率一起看：既要高，也要稳。",
-        "A company with a real moat holds its prices through cost spikes and price wars, so its margins don't lurch up and down.",
-        "Read with average gross margin: margins should be both high and steady.",
-    ),
-    "moat_gm_trend": (
-        "护城河不是永久的。毛利率一年年变薄，往往是竞争对手正在追上来的早期信号。",
-        "看护城河的方向：在变宽还是在变窄。",
-        "Moats aren't permanent. Margins thinning year after year are often an early sign that rivals are catching up.",
-        "Shows the moat's direction: widening or narrowing.",
-    ),
-    "moat_om_min": (
-        "顺风时谁都赚钱，逆风时还能赚钱的才是好生意。最差的一年最能看出一家公司的底子。",
-        "看「最坏情况」下公司扛不扛得住。",
-        "Anyone makes money in good times; a good business still makes money in bad ones. The worst year reveals the most.",
-        "Checks whether the company holds up in the worst case.",
-    ),
-    "moat_om_vol": (
-        "利润忽高忽低的公司，很难判断它到底值多少钱；赚钱越稳，越说明生意有壁垒。",
-        "和最差一年利润率一起看：既要扛得住，也要稳。",
-        "It's hard to judge what a company is worth when profits jump around; steadier earnings suggest real barriers.",
-        "Read with worst-year margin: it should both hold up and stay steady.",
-    ),
-    "moat_fcf_conv": (
-        "有护城河的公司不需要靠赊账、压货来换增长，利润能稳稳变成现金。",
-        "检查前面看到的高利润是不是真的：账面赚的钱有没有真进口袋。金融公司现金流口径不同，不算分。",
-        "Companies with moats don't need to chase growth with generous credit or stuffed inventory; their profits reliably turn into cash.",
-        "Checks that the high profits seen elsewhere are real: did the money actually arrive? Not scored for financials, which count cash flow differently.",
     ),
 }
 

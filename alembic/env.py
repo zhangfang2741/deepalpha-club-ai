@@ -29,6 +29,7 @@ from app.models.regime_sector_features import RegimeSectorFeatures  # noqa: F401
 from app.models.quant_research import (  # noqa: F401
     QuantEstimateSnapshot,
     QuantFundamentalSnapshot,
+    QuantMoatAssessment,
     QuantResult,
     QuantSectorDistribution,
 )

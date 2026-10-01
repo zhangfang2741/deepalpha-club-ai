@@ -18,12 +18,14 @@ struct QuantResearch: Decodable {
     let stage: QuantStage?
     let overall: QuantOverall?
     let dimensions: [QuantDimension]
+    /// 护城河（Morningstar 框架：宽 / 窄 / 无）；旧响应没有此字段。
+    let moat: QuantMoat?
     let disclaimer: String
 
     var isOK: Bool { status == "ok" }
 
     enum CodingKeys: String, CodingKey {
-        case market, symbol, name, status, stage, overall, dimensions, disclaimer
+        case market, symbol, name, status, stage, overall, dimensions, disclaimer, moat
         case statusNote = "status_note"
         case methodologyVersion = "methodology_version"
         case asOf = "as_of"
@@ -240,8 +242,83 @@ extension QuantResearch {
     /// 计入综合等级的维度（五维成绩单、五维图、综合分解释）。
     var scoredDimensions: [QuantDimension] { dimensions.filter(\.countsInOverall) }
 
-    /// 护城河：只展示，放在综合等级下方。
-    var moat: QuantDimension? { dimensions.first { $0.key == "moat" } }
+}
+
+// MARK: - 护城河
+
+struct QuantMoatYear: Decodable, Identifiable {
+    let year: Int
+    let value: Double
+    var id: Int { year }
+}
+
+struct QuantMoatEvidence: Decodable {
+    let metric: String              // roic | roe
+    let metricName: String
+    let years: [QuantMoatYear]      // 新 → 旧
+    let costOfCapital: Double
+    let yearsAbove: Int
+    let nYears: Int
+    let avgSpread: Double?
+    let level: String               // strong | moderate | weak
+    let levelName: String
+    let text: String
+
+    enum CodingKeys: String, CodingKey {
+        case metric, years, level, text
+        case metricName = "metric_name"
+        case costOfCapital = "cost_of_capital"
+        case yearsAbove = "years_above"
+        case nYears = "n_years"
+        case avgSpread = "avg_spread"
+        case levelName = "level_name"
+    }
+}
+
+struct QuantMoatSource: Decodable, Identifiable {
+    let key: String
+    let name: String
+    let strength: String            // none | weak | moderate | strong
+    let strengthName: String
+    let reason: String
+    let quotes: [String]
+    var id: String { key }
+
+    /// 强度对应的实心点数（0 ~ 3）。
+    var dots: Int { ["none", "weak", "moderate", "strong"].firstIndex(of: strength) ?? 0 }
+
+    enum CodingKeys: String, CodingKey {
+        case key, name, strength, reason, quotes
+        case strengthName = "strength_name"
+    }
+}
+
+struct QuantMoat: Decodable {
+    let status: String              // ok | pending | not_covered
+    let statusNote: String?
+    let rating: String?             // wide | narrow | none
+    let ratingName: String?
+    let trend: String?              // widening | stable | narrowing
+    let trendName: String?
+    let summary: String?
+    let evidence: QuantMoatEvidence?
+    let sources: [QuantMoatSource]
+    let threats: String?
+    let filedDate: String?
+    let tenkUrl: String?
+    let methodNote: String
+
+    var isOK: Bool { status == "ok" && rating != nil }
+
+    enum CodingKeys: String, CodingKey {
+        case status, rating, trend, summary, evidence, sources, threats
+        case statusNote = "status_note"
+        case ratingName = "rating_name"
+        case trendName = "trend_name"
+        case filedDate = "filed_date"
+        case tenkUrl = "tenk_url"
+        case methodNote = "method_note"
+    }
 }
 
 // MARK: - 方法说明

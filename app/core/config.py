@@ -412,6 +412,9 @@ class Settings:
         self.QUANT_BATCH_UTC_HOUR = int(os.getenv("QUANT_BATCH_UTC_HOUR", "22"))
         self.QUANT_BATCH_UTC_MINUTE = int(os.getenv("QUANT_BATCH_UTC_MINUTE", "30"))
         self.QUANT_CN_SNAPSHOT_UTC_HOUR = int(os.getenv("QUANT_CN_SNAPSHOT_UTC_HOUR", "9"))
+        # 护城河（app/services/quant_research/moat）：部署后冷启动跑一遍，之后每天检查新 10-K
+        self.QUANT_MOAT_ENABLED = os.getenv("QUANT_MOAT_ENABLED", "true").lower() in ("true", "1", "yes")
+        self.QUANT_MOAT_UTC_HOUR = int(os.getenv("QUANT_MOAT_UTC_HOUR", "12"))
 
         # Alpha Vantage API（电话会议记录抓取备用源）
         self.ALPHA_VANTAGE_KEY: str | None = os.getenv("ALPHA_VANTAGE_KEY", None)

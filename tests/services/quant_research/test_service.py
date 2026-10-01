@@ -108,3 +108,45 @@ async def test_cache_from_older_methodology_is_ignored(monkeypatch):
     await service.get_quant_research("us", "NVDA", "zh", redis=redis)
     assert calls["db"] == 1
     assert service.METHODOLOGY_VERSION in service._cache_key("NVDA", "zh")
+
+
+async def test_moat_attached_at_read_time_and_not_cached(monkeypatch):
+    """护城河读取时附上：有评估 → 宽 / 窄 / 无；样本内没评估 → 评估中；不写进评分缓存。"""
+    from datetime import datetime
+
+    payload = json.loads((FIXTURE_DIR / "golden_NVDA.json").read_text())
+
+    class Row:
+        payload_zh = payload
+        payload_en = payload
+
+    class Moat:
+        rating, trend, filed_date, tenk_url = "wide", "widening", "2026-02-25", "https://sec.gov/x"
+        evidence = {"metric": "roic", "years": [[2025, 0.6], [2024, 0.5]], "cost_of_capital": 0.1,
+                    "years_above": 2, "n_years": 2, "avg_spread": 0.45, "level": "strong"}
+        sources = [{"source": "switching_costs", "strength": "strong", "reason_zh": "开发者被 CUDA 绑定",
+                    "reason_en": "Developers are tied to CUDA", "quotes": ["CUDA ..."]}]
+        threats = {"zh": "客户自研芯片", "en": "Customers building their own chips"}
+        assessed_at = datetime(2026, 10, 1)
+
+    async def latest(market, symbol):
+        return Row()
+
+    moat_rows = {"value": Moat()}
+
+    async def latest_moat(market, symbol, version):
+        return moat_rows["value"]
+
+    monkeypatch.setattr(service.repo, "get_latest_result", latest)
+    monkeypatch.setattr(service.repo, "latest_moat", latest_moat)
+    r = _FakeRedis()
+    out = await service.get_quant_research("us", "NVDA", "zh", redis=r)
+    assert out.moat and out.moat.status == "ok" and out.moat.rating_name == "宽护城河"
+    assert out.moat.trend_name == "超额回报在扩大" and out.moat.summary == "主要来源：转换成本"
+    assert "过去 2 年里 2 年 ROIC 高于资金成本" in out.moat.evidence.text
+    cached = json.loads(r.store[service._cache_key("NVDA", "zh")])
+    assert cached.get("moat") is None  # 评分缓存里不带护城河，评完即可见
+
+    moat_rows["value"] = None
+    out2 = await service.get_quant_research("us", "NVDA", "en", redis=r)
+    assert out2.moat.status == "pending" and out2.moat.rating is None

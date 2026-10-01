@@ -48,12 +48,8 @@ def test_payload_has_no_forbidden_words(sym, lang):
 def test_nvda_structure():
     ev = _run("NVDA")
     p = build_payload(ev, "zh", in_universe=True, sector_sample=191)
-    assert [d.key for d in p.dimensions] == ["valuation", "growth", "profitability", "momentum", "revisions", "moat"]
-    moat = p.dimensions[-1]
-    assert moat.counts_in_overall is False
-    # fixture 的板块分布（2026-09-30）早于护城河，没有它的分档 → 数值算出、但暂不评级
-    assert all(m.value is not None for g in moat.groups for m in g.metrics)
-    assert all(d.counts_in_overall for d in p.dimensions[:-1])
+    assert [d.key for d in p.dimensions] == ["valuation", "growth", "profitability", "momentum", "revisions"]
+    assert all(d.counts_in_overall for d in p.dimensions)
     rev = p.dimensions[4]
     assert rev.status == "accumulating" and rev.status_note == "修正历史积累中（已 0 天）"
     assert p.overall.dimensions_used == 4

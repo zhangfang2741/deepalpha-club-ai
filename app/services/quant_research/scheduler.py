@@ -13,12 +13,14 @@ from datetime import UTC, date, datetime, timedelta
 import httpx
 
 from app.cache.client import current_redis
-from app.cache.operations import acquire_lock
+from app.cache.operations import acquire_lock, release_lock
 from app.core.config import settings
 from app.core.logging import logger
 from app.services.quant_research import repository as repo
 from app.services.quant_research.batch import run_cn_estimate_snapshot, run_us_batch
 from app.services.quant_research.builder import METHODOLOGY_VERSION
+from app.services.quant_research.moat import METHOD_VERSION as MOAT_METHOD_VERSION
+from app.services.quant_research.moat.job import run_moat_job
 
 # 批量锁 TTL：最长的一轮（约 1500 只股票、每只约 4 次调用，批量限速 150/分钟）约 40 分钟，90 分钟足够。
 # 不能再长：部署会杀掉跑批中的进程，锁留在 Redis 里挡住下一次自举（2026-09-30 踩过 6h 死锁）。
@@ -153,12 +155,74 @@ async def _loop(kind: str, hour: int, minute: int, weekdays: set[int]) -> None:
             logger.exception("quant_batch_loop_failed", kind=kind, error=str(e))
 
 
+MOAT_LOCK_TTL = 15 * 60          # 短锁 + 心跳：进程被重启后锁很快过期，新进程能接着跑
+MOAT_LOCK_RENEW_SECONDS = 5 * 60
+MOAT_BOOTSTRAP_RETRY_SECONDS = 10 * 60
+MOAT_BOOTSTRAP_MAX_ATTEMPTS = 12
+
+
+def _moat_lock_key() -> str:
+    return f"quant:moat_lock:{MOAT_METHOD_VERSION}"
+
+
+async def _renew(redis: object, key: str) -> None:
+    while True:
+        await asyncio.sleep(MOAT_LOCK_RENEW_SECONDS)
+        await redis.expire(key, MOAT_LOCK_TTL)  # type: ignore[attr-defined]
+
+
+async def _run_moat_once() -> bool:
+    """跑一轮护城河任务；锁被占（别的实例 / 刚重启前的进程还在跑）返回 False。已评估的年报会跳过。"""
+    redis = current_redis()
+    key = _moat_lock_key()
+    if redis is not None and not await acquire_lock(redis, key, MOAT_LOCK_TTL):
+        logger.info("quant_moat_skipped_locked")
+        return False
+    renew = asyncio.create_task(_renew(redis, key)) if redis is not None else None
+    try:
+        await run_moat_job(redis)
+    finally:
+        if renew is not None:
+            renew.cancel()
+        if redis is not None:
+            await release_lock(redis, key)
+    return True
+
+
+async def _moat_loop() -> None:
+    """部署后先冷启动跑一遍（补齐没评估过的；锁被占就过会儿再试），之后每天检查一次新 10-K。"""
+    try:
+        await asyncio.sleep(BOOTSTRAP_DELAY_SECONDS)
+        for _ in range(MOAT_BOOTSTRAP_MAX_ATTEMPTS):
+            if await _run_moat_once():
+                break
+            await asyncio.sleep(MOAT_BOOTSTRAP_RETRY_SECONDS)
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:  # noqa: BLE001 冷启动失败不影响每日循环
+        logger.exception("quant_moat_bootstrap_failed", error=str(e))
+    while True:
+        trigger = next_trigger(datetime.now(UTC), settings.QUANT_MOAT_UTC_HOUR, 0, {0, 1, 2, 3, 4, 5, 6})
+        try:
+            await asyncio.sleep(max(0.0, (trigger - datetime.now(UTC)).total_seconds()))
+        except asyncio.CancelledError:
+            return
+        try:
+            await _run_moat_once()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            logger.exception("quant_moat_loop_failed", error=str(e))
+
+
 async def run_quant_scheduler() -> None:
     """美股批量 + A 股快照两个循环，直到进程退出。"""
     if not settings.QUANT_BATCH_ENABLED:
         logger.info("quant_batch_disabled")
         return
+    tasks = [_moat_loop()] if settings.QUANT_MOAT_ENABLED else []
     await asyncio.gather(
+        *tasks,
         _bootstrap_once(),
         _loop("us", settings.QUANT_BATCH_UTC_HOUR, settings.QUANT_BATCH_UTC_MINUTE, {0, 1, 2, 3, 4}),
         _loop("cn", settings.QUANT_CN_SNAPSHOT_UTC_HOUR, 0, {0, 1, 2, 3, 4}),

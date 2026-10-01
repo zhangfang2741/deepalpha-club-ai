@@ -35,7 +35,7 @@ def test_get_quant_research_ok(client):
     r = c.get("/api/v1/quant-research/us/nvda?lang=zh")
     assert r.status_code == 200
     body = r.json()
-    assert body["status"] == "ok" and len(body["dimensions"]) == 6
+    assert body["status"] == "ok" and len(body["dimensions"]) == 5
     assert "source" not in json.dumps(body)
     assert seen == {"market": "us", "symbol": "nvda", "lang": "zh"}
 
@@ -56,8 +56,8 @@ def test_methodology_no_auth_needed():
     c = TestClient(app)
     for lang in ("zh", "en"):
         body = c.get(f"/api/v1/quant-research/methodology?lang={lang}").json()
-        assert len(body["grade_bands"]) == 13 and len(body["dimensions"]) == 6
-        assert sum(len(d["metrics"]) for d in body["dimensions"]) == 46
+        assert len(body["grade_bands"]) == 13 and len(body["dimensions"]) == 5
+        assert sum(len(d["metrics"]) for d in body["dimensions"]) == 40
     from app.services.quant_research.copy import contains_forbidden
     text = json.dumps(body, ensure_ascii=False) + json.dumps(c.get("/api/v1/quant-research/methodology").json(),
                                                              ensure_ascii=False)

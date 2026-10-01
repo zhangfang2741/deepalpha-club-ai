@@ -18,6 +18,7 @@ from app.db.session import AsyncSessionFactory
 from app.models.quant_research import (
     QuantEstimateSnapshot,
     QuantFundamentalSnapshot,
+    QuantMoatAssessment,
     QuantResult,
     QuantSectorDistribution,
 )
@@ -144,7 +145,7 @@ async def latest_methodology_version(market: str) -> str | None:
         if latest is None:
             return None
         payload = (await s.execute(
-            select(QuantResult.payload_zh).where(col(QuantResult.market) == market,
+            select(col(QuantResult.payload_zh)).where(col(QuantResult.market) == market,
                                                  col(QuantResult.as_of) == latest).limit(1))).scalar()
     return (payload or {}).get("methodology_version")
 
@@ -268,3 +269,38 @@ async def delete_market(market: str) -> None:
         for model in (QuantEstimateSnapshot, QuantFundamentalSnapshot, QuantResult, QuantSectorDistribution):
             await s.execute(delete(model).where(col(model.market) == market))
         await s.commit()
+
+
+# ---------- 护城河 ----------
+
+async def moat_assessed(market: str, method_version: str) -> dict[str, set[str]]:
+    """已评估过的 {股票: {10-K 编号}}（当前方法版本），用于跳过已评估的年报。"""
+    q = select(col(QuantMoatAssessment.symbol), col(QuantMoatAssessment.accession)).where(
+        col(QuantMoatAssessment.market) == market, col(QuantMoatAssessment.method_version) == method_version)
+    out: dict[str, set[str]] = {}
+    async with AsyncSessionFactory() as s:
+        for sym, acc in (await s.execute(q)).all():
+            out.setdefault(sym, set()).add(acc)
+    return out
+
+
+async def insert_moat(row: dict) -> bool:
+    """写入一份护城河评估；同一 (股票, 10-K, 方法版本) 已存在则不覆盖（point-in-time）。"""
+    now = _now()
+    stmt = insert(QuantMoatAssessment).values(dict(row, created_at=now, updated_at=now)) \
+        .on_conflict_do_nothing(constraint="uq_quant_moat")
+    async with AsyncSessionFactory() as s:
+        res = await s.execute(stmt)
+        await s.commit()
+    return bool(res.rowcount)  # type: ignore[attr-defined]
+
+
+async def latest_moat(market: str, symbol: str, method_version: str) -> QuantMoatAssessment | None:
+    """该股最近一份年报的护城河评估。"""
+    q = (select(QuantMoatAssessment)
+         .where(col(QuantMoatAssessment.market) == market, col(QuantMoatAssessment.symbol) == symbol,
+                col(QuantMoatAssessment.method_version) == method_version)
+         .order_by(col(QuantMoatAssessment.filed_date).desc(), col(QuantMoatAssessment.assessed_at).desc())
+         .limit(1))
+    async with AsyncSessionFactory() as s:
+        return (await s.execute(q)).scalars().first()

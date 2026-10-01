@@ -119,6 +119,51 @@ class Dimension(BaseModel):
     counts_in_overall: bool = True  # False = 只展示、不计入综合等级（护城河）
 
 
+class MoatYear(BaseModel):
+    year: int
+    value: float          # 当年 ROIC（金融股为 ROE）
+
+
+class MoatEvidenceOut(BaseModel):
+    """财务证据：多年回报率 vs 资金成本。"""
+    metric: Literal["roic", "roe"]
+    metric_name: str
+    years: list[MoatYear]          # 新 → 旧
+    cost_of_capital: float
+    years_above: int
+    n_years: int
+    avg_spread: float | None
+    level: Literal["strong", "moderate", "weak"]
+    level_name: str
+    text: str                      # 一句话结论
+
+
+class MoatSourceOut(BaseModel):
+    key: str
+    name: str
+    strength: Literal["none", "weak", "moderate", "strong"]
+    strength_name: str
+    reason: str
+    quotes: list[str]              # 年报英文原文，逐字核对过
+
+
+class MoatOut(BaseModel):
+    """护城河（Morningstar 框架：宽 / 窄 / 无 + 趋势）。只展示，不计入综合等级。"""
+    status: Literal["ok", "pending", "not_covered"]
+    status_note: str | None = None
+    rating: Literal["wide", "narrow", "none"] | None = None
+    rating_name: str | None = None
+    trend: Literal["widening", "stable", "narrowing"] | None = None
+    trend_name: str | None = None
+    summary: str | None = None
+    evidence: MoatEvidenceOut | None = None
+    sources: list[MoatSourceOut] = []
+    threats: str | None = None
+    filed_date: str | None = None
+    tenk_url: str | None = None
+    method_note: str
+
+
 class QuantResearchOut(BaseModel):
     market: str
     symbol: str
@@ -131,6 +176,7 @@ class QuantResearchOut(BaseModel):
     stage: Stage | None = None
     overall: Overall | None = None
     dimensions: list[Dimension] = []
+    moat: MoatOut | None = None
     disclaimer: str
 
 

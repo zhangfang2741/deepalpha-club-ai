@@ -80,3 +80,30 @@ class QuantResult(UUIDModel, table=True):
     payload_zh: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     payload_en: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     grades: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+
+
+class QuantMoatAssessment(UUIDModel, table=True):
+    """护城河评估：财务证据（10 年 ROIC vs 资金成本）+ 来源（大模型读 10-K）。
+
+    一份 10-K（accession）× 方法版本只评一次；新年报出来另存一行，旧行保留（point-in-time）。
+    """
+
+    __tablename__: ClassVar[str] = "quant_moat_assessments"  # pyright: ignore[reportIncompatibleVariableOverride]
+    __table_args__ = (
+        UniqueConstraint("market", "symbol", "accession", "method_version", name="uq_quant_moat"),
+        Index("ix_quant_moat_market_symbol", "market", "symbol"),
+    )
+
+    market: str = Field(max_length=8, nullable=False)
+    symbol: str = Field(max_length=20, nullable=False)
+    accession: str = Field(max_length=32, nullable=False)      # 10-K 编号
+    filed_date: Optional[str] = Field(default=None, max_length=10)
+    tenk_url: Optional[str] = Field(default=None, max_length=300)
+    method_version: str = Field(max_length=8, nullable=False)
+    rating: str = Field(max_length=8, nullable=False)           # wide | narrow | none
+    trend: Optional[str] = Field(default=None, max_length=10)   # widening | stable | narrowing
+    evidence: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    sources: list = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    threats: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))  # {"zh": ..., "en": ...}
+    model_name: Optional[str] = Field(default=None, max_length=60)
+    assessed_at: datetime = Field(nullable=False)

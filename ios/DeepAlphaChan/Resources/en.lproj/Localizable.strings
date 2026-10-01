@@ -971,8 +971,6 @@
 "我们为什么用它" = "Why we use it";
 "只展示，不计入综合等级" = "Shown only, not in the composite grade";
 "护城河只展示，不计入综合分。" = "Moat is shown only and is not part of the composite score.";
-"好生意能否一直好下去" = "Can a good business stay good";
-"看好生意能不能一直好下去：最近 4 年利润率是不是一直够高、够稳，有没有在变薄，赚的钱有没有真变成现金。竞争对手越难抢走生意，这些数字就越稳。只展示，不计入综合等级。" = "Whether a good business can stay good: have margins stayed high and steady over the last 4 years, are they thinning, and do profits turn into real cash? The harder it is for rivals to take the business, the steadier these numbers are. Shown only, not in the composite grade.";
 "基本面等级 %@" = "Fundamental grade %@";
 
 /* 雷达页顶部宏观 / 情绪 / 行业三格及弹层 */
@@ -1028,3 +1026,30 @@
 "%@ 收盘 · 近 20 个交易日相对大盘" = "%@ close · vs. market, last 20 trading days";
 "按相对大盘的强弱排序；圆点为行业状态。" = "Sorted by strength relative to the market; dots show sector state.";
 "在雷达上只看该行业" = "Show only this sector on the radar";
+
+/* 基本面研究：护城河（Morningstar 框架） */
+"护城河" = "Moat";
+"评估中" = "Assessing";
+"暂未覆盖" = "Not covered";
+"主要威胁：" = "Main threats: ";
+"只展示，不计入综合等级 · 依据 %@ 年报" = "Shown only, not in the composite grade · based on the %@ annual report";
+"护城河是怎么评的" = "How the moat is assessed";
+"护城河评级怎么来的" = "How the moat rating was reached";
+"财务证据：回报率是否长期高于资金成本" = "Financial evidence: have returns stayed above the cost of capital?";
+"和 Morningstar 一样分三档：宽护城河 = 优势大概率能维持 20 年以上；窄护城河 = 大概率能维持 10 年以上；无护城河 = 利润容易被竞争拉低。" = "Three tiers, as with Morningstar: wide moat = the advantage will likely last 20+ years; narrow moat = likely 10+ years; no moat = profits are easily competed away.";
+"① 财务证据（%@）：" = "① Financial evidence (%@): ";
+"② 年报里的来源：" = "② Sources in the annual report: ";
+"宽 = 财务证据强 + 至少 1 个强来源（或 2 个中等来源）；窄 = 财务证据至少一般 + 至少 1 个中等以上来源；否则为无。来源再强，财务上长期跑不赢资金成本也不算有护城河。" = "Wide = strong financial evidence + at least 1 strong source (or 2 moderate); narrow = at least moderate evidence + at least 1 moderate-or-better source; otherwise none. However strong the sources, no moat if returns don't beat the cost of capital over time.";
+"趋势「%@」：比较最近 3 年和最早 3 年的平均超额回报，相差超过 2 个百分点才算扩大或收窄。" = "Trend \"%@\": compares average excess returns in the latest 3 years with the earliest 3; a change of more than 2 points counts as widening or narrowing.";
+"ROIC = 投进生意里的每 100 元一年赚回多少。只有长期高于资金成本（借钱和股东要求的回报），公司才是在创造价值。" = "ROIC = what each $100 put into the business earns in a year. A company only creates value if it stays above the cost of capital (the return lenders and shareholders require).";
+"银行、保险等金融公司的投入资本口径不可比，这里用 ROE（股东每投入 100 元一年赚回多少）对比股权资金成本。" = "Invested capital isn't comparable for banks and insurers, so ROE (what each $100 of shareholder money earns a year) is compared with the cost of equity.";
+"资金成本约 %@：按无风险利率 4.3%% + β × 股权风险溢价 5%% 估算（再与税后债务成本按市值 / 负债加权）。" = "Cost of capital about %@: risk-free rate 4.3%% + β × equity risk premium 5%%, weighted with the after-tax cost of debt by market value and debt.";
+"财务证据强 = 至少 8 年数据、最多 1 年没跑赢、平均高出 3 个百分点以上；一般 = 至少 5 年、七成年份跑赢且平均为正。" = "Strong evidence = at least 8 years of data, at most 1 year below, and an average of 3+ points above; moderate = at least 5 years, 70% of years above, positive on average.";
+"白线 = 资金成本" = "White line = cost of capital";
+"年报原文" = "From the annual report";
+"年报原文（%@ 10-K）" = "From the annual report (%@ 10-K)";
+"无形资产：让客户愿意多付钱、或让对手进不来的品牌、专利、牌照。" = "Intangible assets: brands, patents or licenses that make customers pay more or keep rivals out.";
+"转换成本：客户想换掉它，要付出很多钱、时间或风险。" = "Switching costs: customers would pay a lot in money, time or risk to replace it.";
+"网络效应：用的人越多，对每个用户越有价值，比如支付网络、交易平台。" = "Network effect: the more people use it, the more valuable it is to each user — like payment networks or marketplaces.";
+"成本优势：能比对手更便宜地做出同样的东西，而且长期如此。" = "Cost advantage: it can make the same thing more cheaply than rivals, for the long run.";
+"有效规模：市场只容得下少数几家，新来的进来大家都不赚钱，比如管道、机场。" = "Efficient scale: the market only supports a few players; a newcomer would leave everyone unprofitable — like pipelines or airports.";

@@ -11,7 +11,7 @@ from redis.asyncio import Redis
 
 from app.cache.operations import get_json, set_json
 from app.core.logging import logger
-from app.schemas.quant_research import QuantResearchOut
+from app.schemas.quant_research import MoatOut, QuantResearchOut
 from app.services.quant_research import repository as repo
 from app.services.quant_research.batch import HISTORY_DAYS, MARKET, estimate_rows
 from app.services.quant_research.builder import (
@@ -29,6 +29,8 @@ from app.services.quant_research.education import enrich_education
 from app.services.quant_research.fmp import FmpClient
 from app.services.quant_research.eps_trend import fetch_eps_trend, needs_trend
 from app.services.quant_research.inputs import build_inputs
+from app.services.quant_research.moat import METHOD_VERSION as MOAT_METHOD_VERSION
+from app.services.quant_research.moat.present import moat_out, moat_placeholder
 from app.services.quant_research.revisions import accumulated_days
 from app.services.quant_research.scoring import OVERALL_KEY, OVERALL_SECTOR
 from app.services.quant_research.universe import FMP_SECTOR_TO_GICS, normalize_us_symbol
@@ -43,6 +45,23 @@ def _cache_key(symbol: str, lang: str) -> str:
 
 
 async def get_quant_research(market: str, symbol: str, lang: Lang, *, redis: Redis | None) -> QuantResearchOut:
+    """评分结果（缓存 → 当日批量 → 样本外现算）+ 护城河（读取时附上，评完一只即可见一只）。"""
+    out = await _get_scores(market, symbol, lang, redis=redis)
+    if out.status == "ok":
+        out.moat = await _moat(out.symbol, lang, in_universe=bool(out.peer_group and out.peer_group.in_universe))
+    return out
+
+
+async def _moat(symbol: str, lang: Lang, *, in_universe: bool) -> MoatOut:
+    try:
+        row = await repo.latest_moat(MARKET, symbol, MOAT_METHOD_VERSION)
+    except Exception as e:  # noqa: BLE001 护城河读取失败不影响评分结果
+        logger.warning("quant_moat_read_failed", symbol=symbol, error=str(e))
+        row = None
+    return moat_out(row, lang) if row is not None else moat_placeholder(lang, in_universe=in_universe)
+
+
+async def _get_scores(market: str, symbol: str, lang: Lang, *, redis: Redis | None) -> QuantResearchOut:
     """缓存 → 当日批量结果 → 样本外现算。"""
     market, symbol = market.lower(), symbol.upper()
     if market != MARKET:

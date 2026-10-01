@@ -32,19 +32,8 @@ struct QuantResearchTab: View {
     private func content(_ r: QuantResearch) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             QuantResearchSummaryCard(research: r, isStatic: isStatic)
-            if r.moat != nil {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "shield.lefthalf.filled").font(QuantTypography.metadata)
-                            .foregroundStyle(Theme.accent).accessibilityHidden(true)
-                        Text(L("只展示，不计入综合等级"))
-                            .font(QuantTypography.metadata.weight(.semibold)).foregroundStyle(Theme.textSecondary)
-                    }
-                    .padding(.top, 12)
-                    dimensionRows(r, keys: ["moat"])
-                }
-                .padding(.horizontal, 14).padding(.bottom, 2)
-                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
+            if let moat = r.moat {
+                QuantMoatCard(moat: moat, isStatic: isStatic)
             }
             VStack(alignment: .leading, spacing: 8) {
                 Text(L("五维成绩单")).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)

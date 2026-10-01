@@ -12,6 +12,7 @@ struct QuantResearchTests {
         let root = CommandLine.arguments[1]
         try decodesGoldenPayloads(root: root)
         try decodesEducationCompatibility(root: root)
+        try decodesMoat()
         lifecycleStageBoundaries()
         try decodesAnalystOverview()
         layoutKeepsLabelsInside()
@@ -24,10 +25,8 @@ struct QuantResearchTests {
             let url = URL(fileURLWithPath: "\(root)/tests/fixtures/quant_research/golden_\(sym).json")
             let r = try JSONDecoder().decode(QuantResearch.self, from: Data(contentsOf: url))
             precondition(r.isOK && r.symbol == sym)
-            precondition(r.dimensions.map(\.key) == ["valuation", "growth", "profitability", "momentum", "revisions", "moat"])
-            precondition(r.scoredDimensions.map(\.key) == ["valuation", "growth", "profitability", "momentum", "revisions"],
-                         "护城河只展示，不进五维")
-            precondition(r.moat?.countsInOverall == false)
+            precondition(r.dimensions.map(\.key) == ["valuation", "growth", "profitability", "momentum", "revisions"])
+            precondition(r.scoredDimensions.count == 5, "护城河已移出维度，五维全部计入综合")
             precondition(r.dimensions[4].status == "accumulating")
             precondition(r.dimensions.filter(\.isHighest).count == 1, "\(sym) 最高维度只能有一个")
             precondition(!r.dimensions[0].allMetrics.isEmpty)
@@ -66,6 +65,23 @@ struct QuantResearchTests {
         precondition(byKey["roe"]?.fullNameSubtitle?.contains("净资产收益率") == true, "缩写指标要显示全称")
         precondition(byKey["gross_m"]?.fullNameSubtitle == nil, "名称已是全称时不重复")
         precondition(byKey["pe_fwd"]?.fullNameSubtitle == nil, "去掉期间修饰后重复的也不显示")
+    }
+
+    static func decodesMoat() throws {
+        let json = """
+        {"status":"ok","status_note":null,"rating":"wide","rating_name":"宽护城河","trend":"widening",
+         "trend_name":"超额回报在扩大","summary":"主要来源：转换成本",
+         "evidence":{"metric":"roic","metric_name":"投入资本回报率 ROIC","years":[{"year":2025,"value":0.6}],
+                     "cost_of_capital":0.1,"years_above":1,"n_years":1,"avg_spread":0.5,"level":"strong",
+                     "level_name":"财务证据强","text":"过去 1 年里 1 年 ROIC 高于资金成本"},
+         "sources":[{"key":"switching_costs","name":"转换成本","strength":"strong","strength_name":"强",
+                     "reason":"r","quotes":["q"]}],
+         "threats":"t","filed_date":"2026-02-25","tenk_url":"u","method_note":"m"}
+        """
+        let m = try JSONDecoder().decode(QuantMoat.self, from: Data(json.utf8))
+        precondition(m.isOK && m.sources.first?.dots == 3 && m.evidence?.yearsAbove == 1)
+        let pending = try JSONDecoder().decode(QuantMoat.self, from: Data(#"{"status":"pending","status_note":"评估中","sources":[],"method_note":"m"}"#.utf8))
+        precondition(!pending.isOK && pending.rating == nil)
     }
 
     static func lifecycleStageBoundaries() {

@@ -146,3 +146,53 @@ async def test_bootstrap_skips_when_results_are_current(monkeypatch):
     monkeypatch.setattr(scheduler, "_run_once", fake_run_once)
     await scheduler._bootstrap_once()
     assert runs == []
+
+
+async def test_moat_cold_start_retries_when_locked_and_releases_lock(monkeypatch):
+    """部署后冷启动：锁被占（重启前的进程还没过期）就过会儿再试；跑完释放锁。"""
+    from app.services.quant_research import scheduler
+
+    class FakeRedis:
+        def __init__(self):
+            self.keys = {scheduler._moat_lock_key(): "old-process"}
+            self.deleted = []
+
+        async def set(self, key, value, nx=False, ex=None):
+            if nx and key in self.keys:
+                return None
+            self.keys[key] = value
+            return True
+
+        async def expire(self, key, ttl):
+            return True
+
+        async def delete(self, key):
+            self.deleted.append(key)
+            self.keys.pop(key, None)
+
+    fake = FakeRedis()
+    runs = []
+    sleeps = []
+
+    async def fake_job(redis):
+        runs.append(redis)
+
+    async def fake_sleep(sec):
+        sleeps.append(sec)
+        if sec == scheduler.MOAT_BOOTSTRAP_RETRY_SECONDS:
+            fake.keys.pop(scheduler._moat_lock_key(), None)  # 旧进程的锁过期
+        if len(sleeps) > 5:
+            raise asyncio.CancelledError
+
+    import asyncio
+
+    monkeypatch.setattr(scheduler, "current_redis", lambda: fake)
+    monkeypatch.setattr(scheduler, "run_moat_job", fake_job)
+    monkeypatch.setattr(scheduler.asyncio, "sleep", fake_sleep)
+    try:
+        await scheduler._moat_loop()
+    except asyncio.CancelledError:
+        pass
+    # 先等启动延迟 → 锁被占，等一轮重试 → 跑；之后每天一轮（这里 sleep 立即返回，会空转几轮）
+    assert sleeps[:2] == [scheduler.BOOTSTRAP_DELAY_SECONDS, scheduler.MOAT_BOOTSTRAP_RETRY_SECONDS]
+    assert runs and fake.deleted and set(fake.deleted) == {scheduler._moat_lock_key()}

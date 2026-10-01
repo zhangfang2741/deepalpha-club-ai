@@ -115,8 +115,11 @@ def test_key_fact_and_extremes():
     assert not dims[2].is_highest and not dims[2].is_lowest
 
 
-def test_moat_is_display_only_and_never_moves_the_composite():
-    """护城河只展示：不进综合分、不算「基于 N 个维度」、F 也不触发封顶。"""
+def test_display_only_dimension_never_moves_the_composite(monkeypatch):
+    """只展示的维度：不进综合分、不算「基于 N 个维度」、F 也不触发封顶（机制保留，目前没有维度使用）。"""
+    from app.services.quant_research import scoring
+
+    monkeypatch.setattr(scoring, "DISPLAY_ONLY_DIMENSIONS", frozenset({"moat"}))
     base = [_dim("growth", 80), _dim("valuation", 60)]
     with_moat = base + [_dim("moat", 5)]
     assert composite(with_moat) == composite(base)

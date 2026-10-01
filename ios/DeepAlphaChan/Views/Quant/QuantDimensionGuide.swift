@@ -9,7 +9,6 @@ enum QuantDimensionGuide {
         case "valuation": return L("价格相对基本面如何")
         case "momentum": return L("市场近期如何定价")
         case "revisions": return L("盈利预期有何变化")
-        case "moat": return L("好生意能否一直好下去")
         default: return nil
         }
     }
@@ -26,8 +25,6 @@ enum QuantDimensionGuide {
             return L("看市场最近怎么给它定价：过去 3 到 12 个月股价涨跌了多少。它反映市场情绪，不代表公司本身变好。")
         case "revisions":
             return L("看专业人士的态度变化：分析师对未来业绩的平均预测，最近是上调还是下调。")
-        case "moat":
-            return L("看好生意能不能一直好下去：最近 4 年利润率是不是一直够高、够稳，有没有在变薄，赚的钱有没有真变成现金。竞争对手越难抢走生意，这些数字就越稳。只展示，不计入综合等级。")
         default:
             return nil
         }
