@@ -174,6 +174,15 @@ def invalid_reason(j: MoatJudgement | None) -> str | None:
     return None
 
 
+class QuotaExhausted(RuntimeError):
+    """大模型套餐用量到顶：本轮护城河任务应立即收工，把剩余额度留给 App 其它功能。"""
+
+
+def _is_quota_exhausted(e: BaseException) -> bool:
+    text = f"{e}".lower()
+    return "用量上限" in text or "(2056)" in text or "quota" in text or "insufficient_quota" in text
+
+
 def _is_rate_limited(e: BaseException) -> bool:
     text = f"{type(e).__name__} {e}".lower()
     return "429" in text or "rate_limit" in text or "ratelimit" in text or "速率限制" in text
@@ -202,6 +211,8 @@ async def judge_once(section: str, symbol: str) -> MoatJudgement:
                 out = await llm_service.call(msgs, response_format=MoatJudgement, temperature=0)
         except Exception as e:  # noqa: BLE001 结构化输出偶发失败，重试
             last = e
+            if _is_quota_exhausted(e):
+                raise QuotaExhausted(str(e)[:200]) from e
             if _is_rate_limited(e):
                 _start_cooldown()
             continue

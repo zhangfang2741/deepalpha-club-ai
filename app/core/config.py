@@ -415,6 +415,8 @@ class Settings:
         # 护城河（app/services/quant_research/moat）：部署后冷启动跑一遍，之后每天检查新 10-K
         self.QUANT_MOAT_ENABLED = os.getenv("QUANT_MOAT_ENABLED", "true").lower() in ("true", "1", "yes")
         self.QUANT_MOAT_UTC_HOUR = int(os.getenv("QUANT_MOAT_UTC_HOUR", "12"))
+        # 每轮最多新评估多少只（每只约 3~4 次大模型调用）；大模型套餐与 App 对话共用，别一次打满
+        self.QUANT_MOAT_DAILY_LIMIT = int(os.getenv("QUANT_MOAT_DAILY_LIMIT", "150"))
 
         # Alpha Vantage API（电话会议记录抓取备用源）
         self.ALPHA_VANTAGE_KEY: str | None = os.getenv("ALPHA_VANTAGE_KEY", None)

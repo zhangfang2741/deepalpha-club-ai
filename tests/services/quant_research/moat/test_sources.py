@@ -98,3 +98,20 @@ async def test_rate_limit_triggers_global_cooldown(monkeypatch):
     out = await sources.judge_once("x" * 100, "TEST")
     assert len(calls) == 2 and out is good
     assert sleeps and sleeps[0] > 60  # 第二次调用前等了冷却
+
+
+async def test_quota_exhausted_is_raised_immediately_without_retries(monkeypatch):
+    import pytest
+
+    from app.services.quant_research.moat import sources
+
+    calls = []
+
+    async def fake_call(*a, **k):
+        calls.append(1)
+        raise RuntimeError("Error code: 429 - 已达到 Token Plan 用量上限：请升级 Token Plan 套餐 (2056)")
+
+    monkeypatch.setattr(sources.llm_service, "call", fake_call)
+    with pytest.raises(sources.QuotaExhausted):
+        await sources.judge_once("x" * 100, "TEST")
+    assert len(calls) == 1

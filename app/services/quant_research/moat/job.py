@@ -22,7 +22,7 @@ from app.services.quant_research.fmp import FmpClient
 from app.services.quant_research.moat import METHOD_VERSION
 from app.services.quant_research.moat.evidence import compute_evidence
 from app.services.quant_research.moat.rating import combine
-from app.services.quant_research.moat.sources import judge
+from app.services.quant_research.moat.sources import QuotaExhausted, judge
 from app.services.quant_research.moat.tenk import TenK, business_section, latest_10k
 from app.services.quant_research.universe import fetch_sp1500
 
@@ -83,14 +83,20 @@ async def run_moat_job(redis: Redis | None, *, symbols: list[str] | None = None)
     # 从没评估过的先跑，让冷启动尽快覆盖更多股票
     todo.sort(key=lambda s: (s in done, s))
     fundamentals = await repo.get_fundamentals(MARKET, todo)
-    counts = {"checked": 0, "assessed": 0, "skipped": 0, "no_10k": 0, "failed": 0}
+    counts = {"checked": 0, "attempted": 0, "assessed": 0, "skipped": 0, "no_10k": 0, "failed": 0, "deferred": 0}
     sem = asyncio.Semaphore(SYMBOL_CONCURRENCY)
+    # 大模型套餐与 App 对话 / 翻译共用：每轮最多新评估 daily_limit 只；用量到顶立即收工，剩下的明天再评
+    daily_limit = settings.QUANT_MOAT_DAILY_LIMIT
+    stop = {"quota": False}
 
     async with httpx.AsyncClient(follow_redirects=True) as client:
         fmp = FmpClient(client, redis, "batch")
 
         async def one(sym: str) -> None:
             async with sem:
+                if stop["quota"] or counts["attempted"] >= daily_limit:
+                    counts["deferred"] += 1
+                    return
                 try:
                     tenk = await latest_10k(client, sym)
                     counts["checked"] += 1
@@ -103,11 +109,19 @@ async def run_moat_job(redis: Redis | None, *, symbols: list[str] | None = None)
                     snap = fundamentals.get(sym)
                     debt = (snap.balance or {}).get("totalDebt") if snap else None
                     sector = universe.get(sym, ("", ""))[1]
+                    if counts["attempted"] >= daily_limit:
+                        counts["deferred"] += 1
+                        return
+                    counts["attempted"] += 1
                     row = await assess(client, fmp, sym, sector, tenk, debt)
                     if row is not None and await repo.insert_moat(row):
                         counts["assessed"] += 1
                         logger.info("quant_moat_assessed", symbol=sym, rating=row["rating"], trend=row["trend"],
                                     progress=counts["checked"], total=len(todo))
+                except QuotaExhausted as e:
+                    stop["quota"] = True
+                    counts["deferred"] += 1
+                    logger.warning("quant_moat_quota_exhausted_stop", symbol=sym, error=str(e))
                 except Exception as e:  # noqa: BLE001 单只失败不影响整批
                     counts["failed"] += 1
                     logger.exception("quant_moat_symbol_failed", symbol=sym, error=str(e))
