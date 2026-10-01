@@ -1122,3 +1122,5 @@
 "暂无新信号" = "No recent signals";
 "%lld 只自选里 %lld 只近 5 日有在场信号" = "%2$lld of %1$lld watchlist stocks have active signals from the last 5 days";
 "有在场信号，升级后可见" = "Has an active signal — upgrade to see it";
+"扇区=行业，上强下弱，扇区里越靠里越新" = "Wedge = sector (stronger on top); newer toward the center";
+"位置：美股指数雷达按行业分成扇区，行业按当日相对大盘强弱从上往下排，越靠上越强；同一扇区里越靠里的信号越新，画不下的在扇区标签上显示「+N」。没有行业分类的雷达（港股 / A 股）越靠中心越新（按信号出现后的交易日数，周末不算）。" = "Position: US index radars are split into sector wedges, ordered top-down by that day's strength vs. the market. Within a wedge, newer signals sit closer to the center; those that don't fit show as \"+N\" on the wedge label. Radars without sectors (HK / China A) place newer signals closer to the center (trading days since appearing, weekends excluded).";
