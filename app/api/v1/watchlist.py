@@ -40,6 +40,7 @@ async def list_watchlist(
     items = await store.list_items(db, user.id)
     # 等级是一次批量查库，与列表同样快，直接随列表下发（不像中枢阶段要跑缠论、另开接口）
     grades = await store.quant_grades(items)
+    tags = await store.sector_tags(items)
     return WatchlistResponse(
         items=[
             WatchlistItemOut(
@@ -51,6 +52,7 @@ async def list_watchlist(
                 created_at=i.created_at,
                 is_sample=i.is_sample,
                 quant_grade=grades.get(f"{i.market}:{i.symbol}"),
+                sector=tags.get(f"{i.market}:{i.symbol}"),
             )
             for i in items
         ],

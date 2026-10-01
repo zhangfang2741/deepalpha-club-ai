@@ -1118,3 +1118,7 @@
 "近 60 个交易日。分数 0~100，越低越恐慌、越高越贪婪。" = "Last 60 trading days. 0–100: lower is more fearful, higher more greedy.";
 "完整走势" = "Full history";
 "其它" = "Other";
+"近 5 日有信号" = "Signals in the last 5 days";
+"暂无新信号" = "No recent signals";
+"%lld 只自选里 %lld 只近 5 日有在场信号" = "%2$lld of %1$lld watchlist stocks have active signals from the last 5 days";
+"有在场信号，升级后可见" = "Has an active signal — upgrade to see it";

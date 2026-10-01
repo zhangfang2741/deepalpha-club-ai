@@ -1,8 +1,10 @@
 import SwiftUI
 
 /// 自选 Tab：登录用户的关注清单。点一行复用分析 Tab 共享的 `ChanViewModel`
-/// 跑一遍缠论分析，进结果页——不新开一套查询逻辑，和「信号」页点气泡跳转分析
-/// 是同一个模式。
+/// 跑一遍缠论分析，进结果页——不新开一套查询逻辑。
+///
+/// 和雷达同一套语言、同样自上而下：顶部环境横幅（各市场大盘状态）→ 按「近 5 日有信号 / 暂无新信号」
+/// 分组 → 每行带行业状态圆点与相对大盘强弱、结构阶段、基本面等级、在场信号。只陈列事实。
 struct WatchlistView: View {
     @ObservedObject var chanVM: ChanViewModel
     @StateObject private var vm = WatchlistViewModel()
@@ -12,6 +14,8 @@ struct WatchlistView: View {
     /// 自选现在所有档位都能用（未订阅 1 支 / 基础版 10 支 / 高级版不限），
     /// 点已满时的「升级解锁更多」入口才弹这个付费墙，不再整体锁死。
     @State private var showPaywall = false
+    /// 环境横幅里点某个市场：打开该市场的环境面板（与雷达「环境」格同一个）。
+    @State private var envMarket: StockMarket?
 
     var body: some View {
         NavigationStack {
@@ -48,6 +52,50 @@ struct WatchlistView: View {
                     Button(L("好"), role: .cancel) {}
                 }
                 .sheet(isPresented: $showPaywall) { PaywallView() }
+                .sheet(item: $envMarket) { MacroDetailSheet(market: $0) }
+        }
+    }
+
+    // MARK: - 环境横幅
+
+    /// 各市场大盘状态一格一格排开（点开环境面板），下面一行写「几只近 5 日有信号」。
+    private var environmentBanner: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(vm.markets) { market in
+                        Button { envMarket = market } label: {
+                            HStack(spacing: 5) {
+                                let state = vm.macro[market]
+                                Circle().fill(MarketHeader.regimeColor(state?.label)).frame(width: 7, height: 7)
+                                Text(market.title).foregroundColor(Theme.textSecondary)
+                                if let state {
+                                    Text(L("%@ %lld%%", state.labelText, Int((state.probability * 100).rounded())))
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(MarketHeader.regimeColor(state.label))
+                                } else {
+                                    Text("--").foregroundColor(Theme.textSecondary)
+                                }
+                                Image(systemName: "chevron.right").font(.system(size: 8, weight: .semibold))
+                                    .foregroundColor(Theme.textSecondary.opacity(0.7))
+                            }
+                            .font(.caption)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(Theme.surface, in: Capsule())
+                            .overlay(Capsule().stroke(Theme.border, lineWidth: 0.8))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(L("%@市场环境", market.title))
+                    }
+                }
+            }
+            if vm.signalsLoaded {
+                let withSignals = vm.items.filter { vm.hasSignal($0) }.count
+                Text(L("%lld 只自选里 %lld 只近 5 日有在场信号", vm.items.count, withSignals))
+                    .font(.caption2)
+                    .foregroundColor(Theme.textSecondary)
+            }
         }
     }
 
@@ -131,6 +179,21 @@ struct WatchlistView: View {
         }
     }
 
+    /// 列表分组：信号拉到之前按市场分组；拉到之后分「近 5 日有信号」（最新在前）与「暂无新信号」。
+    private var sections: [(title: String, dot: Color, items: [WatchlistItem])] {
+        guard vm.signalsLoaded else {
+            return groupedItems.map { (title: $0.market.title, dot: marketColor($0.market), items: $0.items) }
+        }
+        let active = vm.items.filter { vm.hasSignal($0) }.sorted {
+            (vm.signals[$0.id]?.date ?? "") > (vm.signals[$1.id]?.date ?? "")
+        }
+        let quiet = vm.items.filter { !vm.hasSignal($0) }
+        var out: [(title: String, dot: Color, items: [WatchlistItem])] = []
+        if !active.isEmpty { out.append((title: L("近 5 日有信号"), dot: Theme.accent, items: active)) }
+        if !quiet.isEmpty { out.append((title: L("暂无新信号"), dot: Theme.textSecondary, items: quiet)) }
+        return out
+    }
+
     private var list: some View {
         List {
             Section {
@@ -144,14 +207,18 @@ struct WatchlistView: View {
                         .listRowSeparator(.hidden)
                         .listRowBackground(Theme.background)
                 }
+                environmentBanner
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Theme.background)
             }
-            ForEach(groupedItems, id: \.market) { group in
+            ForEach(sections, id: \.title) { group in
                 Section {
                     ForEach(group.items) { item in
                         Button {
                             open(item)
                         } label: {
-                            row(item, market: group.market)
+                            row(item, market: StockMarket(rawValue: item.market) ?? .us)
                         }
                         .buttonStyle(.plain)
                         .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
@@ -169,8 +236,8 @@ struct WatchlistView: View {
                     }
                 } header: {
                     HStack(spacing: 6) {
-                        Circle().fill(marketColor(group.market)).frame(width: 6, height: 6)
-                        Text(group.market.title)
+                        Circle().fill(group.dot).frame(width: 6, height: 6)
+                        Text(group.title)
                         Text("· \(group.items.count)")
                             .foregroundColor(Theme.textSecondary)
                     }
@@ -245,21 +312,49 @@ struct WatchlistView: View {
                             .accessibilityLabel(L("基本面等级 %@", grade))
                     }
                 }
-                // 只有拿到真正的名称（有别于代码）才显示副标题，否则不再原样重复代码。
-                if let name = item.displayName {
-                    Text(name)
-                        .font(.caption)
-                        .foregroundColor(Theme.textSecondary)
-                        .lineLimit(1)
+                // 名称（有别于代码才显示）· 行业状态圆点 + 行业名 + 相对大盘
+                HStack(spacing: 5) {
+                    if let name = item.displayName {
+                        Text(name).lineLimit(1)
+                    }
+                    if let key = item.sector {
+                        let row = vm.sectorRows[key]
+                        if item.displayName != nil { Text("·") }
+                        Circle().fill(MarketHeader.regimeColor(row?.label)).frame(width: 6, height: 6)
+                        Text(row?.name ?? RadarSectorCatalog.name(key)).lineLimit(1)
+                        if let rs = row?.rsVsMarket {
+                            Text(SectorBoardList.rsText(rs))
+                                .monospacedDigit()
+                                .foregroundColor(rs >= 0 ? Theme.up : Theme.down)
+                        }
+                    }
                 }
+                .font(.caption)
+                .foregroundColor(Theme.textSecondary)
             }
             Spacer()
             if let phase = vm.phase(for: item), let label = phase.phaseLabel {
                 Chip(text: label, color: Theme.phaseColor(phase: phase.phase, direction: phase.direction))
             }
-            Text(relativeTime(item.createdAt))
-                .font(.caption2)
-                .foregroundColor(Theme.textSecondary)
+            if let sig = vm.signal(for: item) {
+                // 在场信号：与雷达气泡同一套颜色；日期是信号出现那天
+                VStack(alignment: .trailing, spacing: 3) {
+                    RadarPanelStyle.tag(sig)
+                    Text(MarketHeader.monthDay(sig.date))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundColor(Theme.textSecondary)
+                }
+            } else if vm.hasSignal(item) {
+                // 有信号但当前档位看不到（与结构状态同一道门槛）
+                Image(systemName: "lock.fill")
+                    .font(.caption2)
+                    .foregroundColor(Theme.segment)
+                    .accessibilityLabel(L("有在场信号，升级后可见"))
+            } else {
+                Text(relativeTime(item.createdAt))
+                    .font(.caption2)
+                    .foregroundColor(Theme.textSecondary)
+            }
             Image(systemName: "chevron.right")
                 .font(.caption)
                 .foregroundColor(Theme.textSecondary)

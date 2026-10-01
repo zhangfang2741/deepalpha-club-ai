@@ -12,6 +12,8 @@ struct WatchlistItem: Decodable, Identifiable {
     var isSample: Bool { sampleFlag ?? false }
     /// 基本面综合等级（仅美股、7 天内有效，口径同雷达气泡）；港股 / A 股、无评级或旧后端为 nil。
     let quantGrade: String?
+    /// 行业 key（与雷达扇区、行业强弱同一套，仅美股）；没有分类或旧后端为 nil。
+    let sector: String?
 
     var id: String { "\(market):\(symbol)" }
 
@@ -20,6 +22,7 @@ struct WatchlistItem: Decodable, Identifiable {
         case createdAt = "created_at"
         case sampleFlag = "is_sample"
         case quantGrade = "quant_grade"
+        case sector
     }
 
     /// 列表副标题用的显示名：只有当 name 是真正有别于代码的名称时才返回。

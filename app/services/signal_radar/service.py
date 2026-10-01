@@ -995,7 +995,8 @@ async def _assemble(state: _ScanState, *, redis: Redis) -> SignalRadarResponse:
     )
     symbols = [symbol for symbol, _ in state.constituents]
     grades = await quant_filter.load_grades(state.market, symbols, trading_days) if state.market == "us" else {}
-    tags = {} if state.is_watchlist else await sectors.load_sector_tags(state.market, redis)
+    # 自选也打行业标签：自选页每行要显示所属行业（行业池只给指数雷达写，见 _publish）
+    tags = await sectors.load_sector_tags(state.market, redis)
     state.sector_pools = {}
     for index, day in enumerate(resp.days):
         if index == 0:

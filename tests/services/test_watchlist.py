@@ -278,3 +278,20 @@ async def test_quant_grades_skips_query_without_us_and_survives_failure(monkeypa
     assert await store.quant_grades([_wl("cn", "600519")]) == {}
     assert calls == []
     assert await store.quant_grades([_wl("us", "NVDA")]) == {}
+
+
+async def test_sector_tags_only_for_us_and_normalizes_symbols(monkeypatch):
+    """自选的行业 key：只给美股，代码按成分表规范化（BRK.B → BRK-B），没有分类的不给。"""
+    from types import SimpleNamespace
+
+    from app.services import watchlist as store
+    from app.services.signal_radar import sectors
+
+    async def tags(market, redis):
+        return {"NVDA": "semiconductors", "BRK-B": "financials"}
+
+    monkeypatch.setattr(sectors, "load_sector_tags", tags)
+    items = [SimpleNamespace(market="us", symbol=s) for s in ("NVDA", "BRK.B", "ZZZZ")] + \
+        [SimpleNamespace(market="hk", symbol="0700")]
+    assert await store.sector_tags(items) == {"us:NVDA": "semiconductors", "us:BRK.B": "financials"}
+    assert await store.sector_tags([SimpleNamespace(market="hk", symbol="0700")]) == {}

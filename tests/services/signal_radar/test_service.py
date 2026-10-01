@@ -1452,3 +1452,32 @@ class TestFactsOnlyPresentation:
         legacy = svc.legacy_view(resp, 5)
         assert len(legacy.days[0].signals) == 5 and legacy.days[0].buy_count == 5
         assert len(resp.days[0].signals) == 12, "快照本身不被改动"
+
+
+async def test_watchlist_snapshot_carries_sector_tags(monkeypatch):
+    """自选雷达也打行业标签（自选页每行显示所属行业），但不写行业池。"""
+    from app.services.signal_radar import quant_filter, sectors
+    from app.services.signal_radar.universe import get_universe
+
+    async def tags(market, redis):
+        return {"NVDA": "semiconductors"}
+
+    async def bars(**kwargs):
+        return [{"time": "2026-09-30"}]
+
+    async def no_grades(*args):
+        return {}
+
+    async def attach(day, **kwargs):
+        return None
+
+    monkeypatch.setattr(sectors, "load_sector_tags", tags)
+    monkeypatch.setattr(svc, "fetch_kline", bars)
+    monkeypatch.setattr(quant_filter, "load_grades", no_grades)
+    monkeypatch.setattr(svc, "attach_sub_levels", attach)
+    state = svc._ScanState(market="us", universe=get_universe("us"), is_watchlist=True,
+                           constituents=[("NVDA", "英伟达")], user_id=7, mode="loose", days=1, top_n=10,
+                           max_age_days=5, start_date="2026-01-01", end_date="2026-09-30", cutoff="2026-09-01")
+    state.results["NVDA"] = ([_raw("NVDA", "2026-09-30", "buy", 0.8, level=2)], [], ["2026-09-30"])
+    day = (await svc._assemble(state, redis=None)).days[0]
+    assert day.signals[0].sector == "semiconductors"

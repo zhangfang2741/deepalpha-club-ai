@@ -24,7 +24,8 @@ def _no_sample_seeding():
     from app.services import watchlist as store
 
     with patch.object(store, "ensure_samples", AsyncMock()) as m, \
-            patch.object(store, "quant_grades", AsyncMock(return_value={})):
+            patch.object(store, "quant_grades", AsyncMock(return_value={})), \
+            patch.object(store, "sector_tags", AsyncMock(return_value={})):
         yield m
 
 
@@ -65,6 +66,17 @@ def test_list_includes_quant_grade_for_rated_items(client):
             patch.object(store, "quant_grades", AsyncMock(return_value={"us:NVDA": "A-"})):
         body = client.get("/watchlist").json()
     assert [i["quant_grade"] for i in body["items"]] == ["A-", None]
+
+
+def test_list_includes_sector_for_tagged_items(client):
+    """美股带行业 key（与雷达扇区同一套），没有分类的为 null。"""
+    from app.services import watchlist as store
+
+    items = [_item("us", "NVDA", "英伟达"), _item("hk", "0700", "腾讯控股")]
+    with patch.object(store, "list_items", AsyncMock(return_value=items)), \
+            patch.object(store, "sector_tags", AsyncMock(return_value={"us:NVDA": "semiconductors"})):
+        body = client.get("/watchlist").json()
+    assert [i["sector"] for i in body["items"]] == ["semiconductors", None]
 
 
 def test_add_to_watchlist(client):
