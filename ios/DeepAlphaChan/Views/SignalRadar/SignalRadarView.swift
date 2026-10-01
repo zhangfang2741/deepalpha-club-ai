@@ -476,10 +476,10 @@ struct SignalRadarView: View {
                 }
             }
         }
-        // 横向椭圆：先确定画布比例，再让外层容器占满宽度；如果先撑满再套比例，
-        // 在纵向空间不足时 SwiftUI 会把整块画布按高度缩窄并居中，左侧边缘会被挤出空带。
-        .aspectRatio(SignalRadarView.fieldAspect, contentMode: .fit)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // 画布吃满上下控件之外的全部空间（不再套固定宽高比）：顶部多了市场分段 + 三格 + 行业筛选条后，
+        // 按 1.1 宽高比 fit 会让画布按剩余高度缩窄、又靠左摆，环画在左侧一块窄区域里、背景却铺满整宽，
+        // 看起来环不在正中。现在 GeometryReader 拿到的就是整块画布，环与气泡按它的中心摆，椭圆半轴见 fieldRadii。
+        .frame(maxWidth: .infinity, minHeight: SignalRadarView.fieldMinHeight, maxHeight: .infinity)
         .background(
             RadialGradient(
                 colors: [Color(hex: 0x131A26), Theme.background],
@@ -674,14 +674,11 @@ struct SignalRadarView: View {
     /// 落在最外环、角度又指向边缘的气泡（尤其是那颗被推到远端的孤立卖点）就会被
     /// 圆角容器裁掉一半。现在把「场半径」整体内缩这个边距，环线和气泡一起内移。
     static let fieldInset: Double = 18
-    /// 雷达画布宽高比与椭圆纵/横半轴比。图例精简成一行 + 问号弹层后空出的纵向空间
-    /// 让给了画布本身：宽高比从 1.3 收到 1.1（画布更高），ellipseRatio 从 0.72 提到
-    /// 0.9——不然只把画布拉高、椭圆纵向半轴仍卡在旧比例上限，新增的高度只会变成
-    /// 椭圆上下的空白，而不是让椭圆本身跟着变大。常见手机宽度下 0.9 已经让
-    /// `fieldRadii` 里 `min(h/2-fieldInset, hRad*ellipseRatio)` 的瓶颈从
-    /// ellipseRatio 切回画布高度本身，椭圆基本吃满新增的纵向空间。
-    static let fieldAspect: CGFloat = 1.1
-    static let ellipseRatio: Double = 0.9
+    /// 画布最小高度（小屏上方控件多时也保证雷达可用）；正常情况下画布吃满剩余高度。
+    static let fieldMinHeight: CGFloat = 240
+    /// 椭圆纵/横半轴比上限：画布改为吃满剩余高度后会比以前高，上限放到 1.0（最多是正圆），
+    /// 让环和气泡跟着用满纵向空间，而不是在上下留出大片空白。
+    static let ellipseRatio: Double = 1.0
 
     /// 气泡场的水平/垂直半轴：各方向取 (边长/2 - fieldInset)。以前用单一 min(w,h)/2
     /// 圆半径，画布一旦不是正方形（信号页画布通常比它高要宽），圆就卡在短边上、长边
