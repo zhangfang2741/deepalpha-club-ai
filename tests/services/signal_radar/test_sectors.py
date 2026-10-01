@@ -80,3 +80,30 @@ async def test_pool_roundtrip():
     assert await sectors.read_pool(redis, "ns", "us", "sp500", "2026-09-30", "energy") == []
     assert await sectors.read_pool(redis, "ns", "us", "sp500", "2026-09-29", "energy") is None
     assert json.loads(redis.store["signal_radar:sector:ns:us:sp500:2026-09-30"])["semiconductors"][0]["sector"]
+
+
+async def test_read_pools_returns_every_sector_of_the_day():
+    """一次取回当天全部行业池（App 切行业不用再请求）；没有池为 None。"""
+    redis = _FakeRedis()
+    a, b = _sig("NVDA"), _sig("XOM", side="sell", signal_type="sell2")
+    await sectors.write_pools(redis, "ns", "us", "nasdaq100", {"2026-09-30": {"semiconductors": [a], "energy": [b]}},
+                              ttl=60)
+    got = await sectors.read_pools(redis, "ns", "us", "nasdaq100", "2026-09-30")
+    assert got is not None and {k: [s.symbol for s in v] for k, v in got.items()} == {
+        "semiconductors": ["NVDA"], "energy": ["XOM"]}
+    assert await sectors.read_pools(redis, "ns", "us", "nasdaq100", "2026-09-29") is None
+    redis.store["signal_radar:sector:ns:us:nasdaq100:2026-09-28"] = "{bad"
+    assert await sectors.read_pools(redis, "ns", "us", "nasdaq100", "2026-09-28") is None
+
+
+async def test_sector_pools_response_counts(monkeypatch):
+    from app.services.signal_radar import service as svc
+
+    redis = _FakeRedis()
+    await sectors.write_pools(redis, svc._mode_ns("loose"), "us", "nasdaq100", {"2026-09-30": {
+        "semiconductors": [_sig("NVDA"), _sig("AMD", side="sell", signal_type="sell1")]}}, ttl=60)
+    out = await svc.sector_pools(redis, "us", "nasdaq100", "2026-09-30", "loose")
+    assert out.available and out.universe == "nasdaq100" and out.date == "2026-09-30"
+    assert [s.symbol for s in out.sectors["semiconductors"]] == ["NVDA", "AMD"]
+    missing = await svc.sector_pools(redis, "us", "nasdaq100", "2026-09-29", "loose")
+    assert not missing.available and missing.sectors == {}

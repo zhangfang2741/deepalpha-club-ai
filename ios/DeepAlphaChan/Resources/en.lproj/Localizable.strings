@@ -1007,3 +1007,17 @@
 "逐利" = "Risk-on";
 "避险" = "Risk-off";
 "驱动因素（近 20 个交易日）" = "Drivers (Last 20 Trading Days)";
+"科技" = "Technology";
+"半导体" = "Semiconductors";
+"通讯服务" = "Communication";
+"可选消费" = "Discretionary";
+"医疗" = "Health Care";
+"金融" = "Financials";
+"工业" = "Industrials";
+"能源" = "Energy";
+"材料" = "Materials";
+"必需消费" = "Staples";
+"公用事业" = "Utilities";
+"房地产" = "Real Estate";
+"%@，%lld 个气泡" = "%@, %lld bubbles";
+"买卖点为%@ %@ 的雷达统计；点行业即在雷达上只看该行业。" = "Buy/sell counts are from the %@ radar on %@. Tap a sector to show only its bubbles on the radar.";

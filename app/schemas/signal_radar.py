@@ -106,6 +106,17 @@ class RadarSectorDayOut(BaseModel):
     signals: list[RadarSignalOut] = Field(default_factory=list)
 
 
+class RadarSectorPoolsOut(BaseModel):
+    """某一天全部行业的气泡（GET /signal-radar/sector-pools）：App 一次取回，切行业不用再请求。"""
+
+    market: str
+    universe: str
+    date: str
+    available: bool = Field(description="这一天是否有行业数据（旧快照、没有行业分类的市场为 false）")
+    sectors: dict[str, list[RadarSignalOut]] = Field(
+        default_factory=dict, description="{行业 key: 该行业前 N 个气泡}；当天没有信号的行业不出现")
+
+
 class RadarUniverseOut(BaseModel):
     """一个可选的扫描 universe（供前端左上角切换器）。"""
 

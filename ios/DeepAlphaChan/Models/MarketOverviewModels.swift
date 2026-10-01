@@ -137,28 +137,54 @@ struct SectorBoard: Decodable {
     }
 }
 
-/// 按行业筛选后的某一天气泡（GET /signal-radar/sector-day）。
-struct RadarSectorDay: Decodable {
-    let market: String
+/// 某一天全部行业的气泡（GET /signal-radar/sector-pools）：一次取回，切行业不用再请求。
+struct RadarSectorPools: Decodable {
     let universe: String
     let date: String
-    let sector: String
+    /// false = 这一天没有行业池（旧快照还没重扫）。
     let available: Bool
-    let buyCount: Int
-    let sellCount: Int
-    let signals: [RadarSignal]
-
-    enum CodingKeys: String, CodingKey {
-        case market, universe, date, sector, available, signals
-        case buyCount = "buy_count"
-        case sellCount = "sell_count"
-    }
+    /// {行业 key: 该行业前 N 个气泡}；当天没有信号的行业不出现。
+    let sectors: [String: [RadarSignal]]
 }
 
-/// 雷达当前的行业筛选：行业 key / 展示名 + 进入筛选前的 universe（清除筛选时恢复）。
+/// 雷达当前的行业筛选：在当前指数里只看这个行业的气泡（不切换指数）。
 struct RadarSectorFilter: Equatable {
     let key: String
     let name: String
-    let universe: String
-    let previousUniverse: String?
+}
+
+/// 行业筛选条上的一格：行业 + 选中后会显示的气泡数。
+struct RadarSectorChip: Identifiable, Equatable {
+    let key: String
+    let name: String
+    let count: Int
+    var id: String { key }
+}
+
+/// 美股行业 key（与后端 regime 行业一致）→ 展示名；顺序即数量相同时的排序。
+enum RadarSectorCatalog {
+    static let keys: [String] = [
+        "technology", "semiconductors", "communication", "discretionary", "healthcare", "financials",
+        "industrials", "energy", "materials", "staples", "utilities", "realestate",
+    ]
+
+    static func name(_ key: String) -> String {
+        switch key {
+        case "technology": return L("科技")
+        case "semiconductors": return L("半导体")
+        case "communication": return L("通讯服务")
+        case "discretionary": return L("可选消费")
+        case "healthcare": return L("医疗")
+        case "financials": return L("金融")
+        case "industrials": return L("工业")
+        case "energy": return L("能源")
+        case "materials": return L("材料")
+        case "staples": return L("必需消费")
+        case "utilities": return L("公用事业")
+        case "realestate": return L("房地产")
+        default: return key
+        }
+    }
+
+    static func order(_ key: String) -> Int { keys.firstIndex(of: key) ?? keys.count }
 }

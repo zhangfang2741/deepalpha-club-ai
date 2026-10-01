@@ -146,62 +146,86 @@ final class SignalRadarViewModel: ObservableObject {
         return days[idx]
     }
 
-    /// 雷达展示的那一天：有行业筛选时换成该行业的气泡（行业池还没拿到时先给空的一天，
-    /// 气泡区按 isLoadingSectorDay / isSectorDayUnavailable 显示加载或提示）。
+    /// 雷达展示的那一天：有行业筛选时只留该行业的气泡（在当前指数里筛，不切换指数）。
+    /// 当天的行业池还没取回时，先用当天前 N 里同行业的气泡顶上（不空白、不转圈），取回后换成完整的。
+    /// 这一天没有行业统计（自选、港股 / A 股、旧快照）时筛选不生效，原样展示。
     var selectedDay: RadarDay? {
         guard let base = baseSelectedDay else { return nil }
-        guard let key = sectorDayKey else { return base }
-        return sectorDays[key] ?? RadarDay(date: base.date, buyCount: 0, sellCount: 0, signals: [])
+        guard let f = sectorFilter, base.hasSectorData else { return base }
+        let signals = sectorPoolKey.flatMap { sectorPools[$0] }?[f.key]
+            ?? base.signals.filter { $0.sector == f.key }
+        return RadarDay(date: base.date, signals: signals, quantFilter: base.quantFilter)
     }
 
     // MARK: - 行业筛选
 
-    /// 当前行业筛选（行业弹层点某个行业时设置，雷达同时切到宽基）。
+    /// 当前行业筛选（筛选条或行业弹层里选）；切市场时清除，切指数、切日期时保留。
     @Published private(set) var sectorFilter: RadarSectorFilter?
-    /// 已拿到的行业气泡，键为「行业|日期」。
-    @Published private(set) var sectorDays: [String: RadarDay] = [:]
-    /// 后端说这一天没有行业数据（旧快照还没重扫）。
-    @Published private(set) var unavailableSectorDays: Set<String> = []
-    @Published private(set) var loadingSectorKey: String?
+    /// 已取回的行业池，键为「指数|日期」，值为 {行业: 气泡}。快照重算后清空。
+    @Published private(set) var sectorPools: [String: [String: [RadarSignal]]] = [:]
+    @Published private(set) var loadingSectorPoolKey: String?
+    /// 后端说这一天没有行业池（旧快照还没重扫）：不再重复请求，按当天前 N 筛。
+    private var unavailableSectorPoolKeys: Set<String> = []
 
-    /// 筛选生效（已切到对应宽基）时当前日的「行业|日期」键，否则 nil。
-    var sectorDayKey: String? {
-        guard let f = sectorFilter, activeUniverseKey == f.universe, let day = baseSelectedDay else { return nil }
-        return "\(f.key)|\(day.date)"
+    /// 选中日的行业筛选条：当天有信号的行业，按选中后会显示的气泡数从多到少；
+    /// 已选的行业当天没有信号时也保留（数量 0），用户能看到「选着它、但今天没有」。
+    var sectorChips: [RadarSectorChip] {
+        guard let day = baseSelectedDay, day.hasSectorData, let counts = day.sectorCounts else { return [] }
+        let cap = response?.topN ?? 10
+        var chips = counts.compactMap { key, c -> RadarSectorChip? in
+            let n = min((c["buy"] ?? 0) + (c["sell"] ?? 0), cap)
+            return n > 0 ? RadarSectorChip(key: key, name: RadarSectorCatalog.name(key), count: n) : nil
+        }
+        if let f = sectorFilter, !chips.contains(where: { $0.key == f.key }) {
+            chips.append(RadarSectorChip(key: f.key, name: f.name, count: 0))
+        }
+        return chips.sorted {
+            $0.count != $1.count ? $0.count > $1.count : RadarSectorCatalog.order($0.key) < RadarSectorCatalog.order($1.key)
+        }
     }
-    var isLoadingSectorDay: Bool { sectorDayKey != nil && loadingSectorKey == sectorDayKey }
-    var isSectorDayUnavailable: Bool { sectorDayKey.map { unavailableSectorDays.contains($0) } ?? false }
 
-    func applySectorFilter(key: String, name: String, universe: String) {
-        let previous = sectorFilter?.previousUniverse ?? universeByMarket[market]
-        sectorFilter = RadarSectorFilter(key: key, name: name, universe: universe, previousUniverse: previous)
-        if activeUniverseKey != universe { switchUniverse(universe, keepSectorFilter: true) }
+    /// 需要行业池时（有筛选、这一天有行业统计）的「指数|日期」键，否则 nil。View 用它驱动取数。
+    var sectorPoolKey: String? {
+        guard sectorFilter != nil, let day = baseSelectedDay, day.hasSectorData,
+              let universe = response?.universe else { return nil }
+        return "\(universe)|\(day.date)"
     }
 
-    /// 清除筛选并恢复进入筛选前的指数范围。
+    /// 行业池取数中（气泡区先用前 N 里的同行业气泡，调暗一点表示还会补全）。
+    var isLoadingSectorPools: Bool {
+        guard let key = sectorPoolKey else { return false }
+        return loadingSectorPoolKey == key && sectorPools[key] == nil
+    }
+
+    /// 筛选条点某个行业：没选中就选中，已选中就取消。
+    func toggleSector(_ chip: RadarSectorChip) {
+        sectorFilter = sectorFilter?.key == chip.key ? nil : RadarSectorFilter(key: chip.key, name: chip.name)
+    }
+
+    /// 行业弹层里点某个行业：在当前指数里只看这个行业。
+    func applySectorFilter(key: String, name: String) {
+        sectorFilter = RadarSectorFilter(key: key, name: name)
+    }
+
     func clearSectorFilter() {
-        guard let f = sectorFilter else { return }
         sectorFilter = nil
-        let target = f.previousUniverse ?? Self.defaultUniverseKeys[market] ?? ""
-        if !target.isEmpty && target != activeUniverseKey { switchUniverse(target) }
     }
 
-    /// 拉当前日的行业气泡（View 用 `.task(id: sectorDayKey)` 驱动；已拿到或已知没有就跳过）。
-    func loadSectorDayIfNeeded() async {
-        guard let key = sectorDayKey, let f = sectorFilter, let day = baseSelectedDay,
-              sectorDays[key] == nil, !unavailableSectorDays.contains(key) else { return }
-        loadingSectorKey = key
-        defer { if loadingSectorKey == key { loadingSectorKey = nil } }
+    /// 取当前「指数|日期」的全部行业池（View 用 `.task(id: sectorPoolKey)` 驱动；已取到或已知没有就跳过）。
+    func loadSectorPoolsIfNeeded() async {
+        guard let key = sectorPoolKey, let day = baseSelectedDay, let universe = response?.universe,
+              sectorPools[key] == nil, !unavailableSectorPoolKeys.contains(key) else { return }
+        loadingSectorPoolKey = key
+        defer { if loadingSectorPoolKey == key { loadingSectorPoolKey = nil } }
         do {
-            let r = try await MarketOverviewService.sectorDay(
-                market: market, universe: f.universe, date: day.date, sector: f.key)
+            let r = try await MarketOverviewService.sectorPools(market: market, universe: universe, date: day.date)
             if r.available {
-                sectorDays[key] = RadarDay(date: r.date, buyCount: r.buyCount, sellCount: r.sellCount, signals: r.signals)
+                sectorPools[key] = r.sectors
             } else {
-                unavailableSectorDays.insert(key)
+                unavailableSectorPoolKeys.insert(key)
             }
         } catch {
-            // 网络失败不记「没有数据」，换个日期再回来会重试
+            // 网络失败不记「没有数据」，换个日期再回来会重试；期间按当天前 N 筛
         }
     }
 
@@ -280,10 +304,9 @@ final class SignalRadarViewModel: ObservableObject {
 
     /// 切换当前市场的 universe（科技窄基 ↔ 大盘宽基）。key 与当前生效的相同则忽略。
     /// 注意不清空 availableUniverses：正在计算时切换器仍要在，方便随时切回别的指数。
-    func switchUniverse(_ key: String, keepSectorFilter: Bool = false) {
+    /// 行业筛选保留：换到另一个美股指数接着看同一个行业；换到自选（没有行业统计）时筛选自动不生效。
+    func switchUniverse(_ key: String) {
         guard key != activeUniverseKey else { return }
-        // 用户手动换指数范围即退出行业筛选（行业筛选只在宽基上有意义）
-        if !keepSectorFilter { sectorFilter = nil }
         universeByMarket[market] = key
         pendingUniverseKey = key
         selectedDayIndex = 0
@@ -340,8 +363,8 @@ final class SignalRadarViewModel: ObservableObject {
             if market != requested || currentUniverse != requestedUniverse || SignalMode.current() != requestedMode { return }
             response = resp
             // 快照重算后行业池也重写了，丢掉旧的行业气泡
-            sectorDays = [:]
-            unavailableSectorDays = []
+            sectorPools = [:]
+            unavailableSectorPoolKeys = []
             if !resp.universes.isEmpty {
                 availableUniverses = resp.universes
                 universesByMarket[requested] = resp.universes

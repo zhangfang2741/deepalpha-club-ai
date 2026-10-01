@@ -38,6 +38,7 @@ from app.core.logging import logger
 from app.schemas.signal_radar import (
     RadarDayOut,
     RadarSectorDayOut,
+    RadarSectorPoolsOut,
     RadarSignalOut,
     RadarUniverseOut,
     SignalRadarResponse,
@@ -1435,6 +1436,15 @@ async def latest_sector_counts(
         return None
     day = cached.days[0]
     return day.date, day.sector_counts
+
+
+async def sector_pools(
+    redis: Redis, market: str, universe_key: str, day: str, mode: str = DEFAULT_MODE,
+) -> RadarSectorPoolsOut:
+    """某一天全部行业的前 N 个气泡（组装快照时存下的行业池，见 sectors.py）。"""
+    pools = await sectors.read_pools(redis, _mode_ns(mode), market, universe_key, day)
+    return RadarSectorPoolsOut(market=market, universe=universe_key, date=day,
+                               available=pools is not None, sectors=pools or {})
 
 
 async def sector_day(

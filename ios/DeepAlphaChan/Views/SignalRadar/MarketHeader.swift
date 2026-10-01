@@ -5,7 +5,7 @@ import SwiftUI
 ///
 /// 三格展示的都是当前所选市场；点任意一格打开对应的完整弹层。三格各自加载、各自失败
 /// （失败那格显示重试），互不影响，也不影响下面的雷达。三格固定同一高度，异步数据到达
-/// 时不挤动雷达画布。行业弹层里点某个行业 → 雷达切到宽基并只显示该行业的气泡。
+/// 时不挤动雷达画布。行业弹层里点某个行业 → 雷达在当前指数里只显示该行业的气泡。
 struct MarketHeader: View {
     @ObservedObject var radarVM: SignalRadarViewModel
     @ObservedObject var panicVM: PanicIndexViewModel
@@ -47,14 +47,21 @@ struct MarketHeader: View {
                     PanicIndexDetailSheet(market: radarVM.market, response: resp)
                 }
             case .sector:
-                SectorBoardSheet(market: radarVM.market) { key, name, universe in
-                    radarVM.applySectorFilter(key: key, name: name, universe: universe)
+                SectorBoardSheet(market: radarVM.market, radar: sectorRadarContext) { key, name in
+                    radarVM.applySectorFilter(key: key, name: name)
                 }
             }
         }
     }
 
     private var market: StockMarket { radarVM.market }
+
+    /// 行业弹层里的买卖点数与可筛选状态：取雷达当前指数、当前选中日（与筛选条一致）。
+    private var sectorRadarContext: SectorRadarContext? {
+        guard let day = radarVM.baseSelectedDay, day.hasSectorData, let counts = day.sectorCounts else { return nil }
+        let name = radarVM.universes.first(where: { $0.key == radarVM.activeUniverseKey })?.displayName ?? ""
+        return SectorRadarContext(universeName: name, date: day.date, counts: counts, selectedKey: radarVM.sectorFilter?.key)
+    }
     private var overview: MarketOverview? { overviewVM.overviews[market] }
 
     // MARK: - 三格
@@ -124,6 +131,8 @@ struct MarketHeader: View {
     private func tile<Content: View>(
         title: String, enabled: Bool, kind: SheetKind, @ViewBuilder content: () -> Content
     ) -> some View {
+        // 用 Button 而不是 onTapGesture：按下有反馈，读屏 / 辅助功能也能激活
+        Button { sheet = kind } label: {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 2) {
                 Text(title)
@@ -147,8 +156,9 @@ struct MarketHeader: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.border, lineWidth: 1))
         .contentShape(Rectangle())
-        .onTapGesture { if enabled { sheet = kind } }
-        .accessibilityAddTraits(enabled ? .isButton : [])
+        }
+        .buttonStyle(TilePressStyle())
+        .disabled(!enabled)
     }
 
     private var buildingText: some View {
@@ -249,5 +259,15 @@ struct MarketHeader: View {
         let parts = date.split(separator: "-")
         guard parts.count == 3 else { return date }
         return "\(parts[1])/\(parts[2])"
+    }
+}
+
+/// 三格按下时略微缩小、调暗；不可点时保持原样（不置灰，内容仍要看得清）。
+private struct TilePressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .opacity(configuration.isPressed ? 0.8 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }

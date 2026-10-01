@@ -1,17 +1,27 @@
 import SwiftUI
 
-/// 行业弹层：各行业按相对大盘强弱从强到弱，每行带状态色点、强弱、宽基雷达当日的买卖点数。
-/// 点一级行业 → 关闭弹层，雷达切到宽基并只显示该行业的气泡；有子行业的可下钻看细分（只展示）。
+/// 弹层里展示的雷达统计：当前雷达所看的指数、日期与按行业的买卖点数（与雷达上方的行业筛选条同一份）。
+struct SectorRadarContext {
+    let universeName: String
+    let date: String
+    let counts: [String: [String: Int]]
+    let selectedKey: String?
+}
+
+/// 行业弹层：各行业按相对大盘强弱从强到弱，每行带状态色点、强弱、当前雷达选中日的买卖点数。
+/// 点一级行业 → 关闭弹层，雷达在当前指数里只看该行业（等同于在筛选条上选中它，不切换指数）；
+/// 有子行业的可下钻看细分（只展示）。radar 为 nil（自选等没有行业统计的雷达）时行业只展示、不可筛。
 struct SectorBoardSheet: View {
     let market: StockMarket
-    let onPick: (_ key: String, _ name: String, _ universe: String) -> Void
+    let radar: SectorRadarContext?
+    let onPick: (_ key: String, _ name: String) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            SectorBoardList(market: market, parent: nil, parentName: nil) { key, name, universe in
-                onPick(key, name, universe)
+            SectorBoardList(market: market, parent: nil, parentName: nil, radar: radar) { key, name in
+                onPick(key, name)
                 dismiss()
             }
             .toolbar {
@@ -25,7 +35,8 @@ private struct SectorBoardList: View {
     let market: StockMarket
     let parent: String?
     let parentName: String?
-    let onPick: (_ key: String, _ name: String, _ universe: String) -> Void
+    let radar: SectorRadarContext?
+    let onPick: (_ key: String, _ name: String) -> Void
 
     @State private var board: SectorBoard?
     @State private var failed = false
@@ -78,12 +89,8 @@ private struct SectorBoardList: View {
     private func header(_ board: SectorBoard) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(L("按近 20 个交易日相对大盘的强弱排序，颜色为行业状态（红=逐利、灰=观望、绿=避险）。"))
-            if parent == nil, let name = board.radarUniverseName {
-                if let date = board.radarDate {
-                    Text(L("买卖点为%@成分股 %@ 的雷达统计；点行业只看该行业的气泡。", L(name), date))
-                } else {
-                    Text(L("点行业只看该行业在%@里的气泡。", L(name)))
-                }
+            if parent == nil, let radar {
+                Text(L("买卖点为%@ %@ 的雷达统计；点行业即在雷达上只看该行业。", radar.universeName, radar.date))
             }
             if let asOf = board.asOf { Text(L("%@ 收盘数据", asOf)) }
         }
@@ -97,11 +104,14 @@ private struct SectorBoardList: View {
         let content = HStack(spacing: 10) {
             Circle().fill(MarketHeader.regimeColor(row.label)).frame(width: 8, height: 8)
             Text(row.name).font(.subheadline.weight(.medium)).foregroundColor(Theme.textPrimary)
+            if parent == nil, radar?.selectedKey == row.key {
+                Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundColor(Theme.accent)
+            }
             Spacer(minLength: 6)
-            if parent == nil, row.buyCount + row.sellCount > 0 {
+            if parent == nil, let c = radar?.counts[row.key], (c["buy"] ?? 0) + (c["sell"] ?? 0) > 0 {
                 HStack(spacing: 4) {
-                    Text(L("%lld 买", row.buyCount)).foregroundColor(Theme.up)
-                    Text(L("%lld 卖", row.sellCount)).foregroundColor(Theme.down)
+                    Text(L("%lld 买", c["buy"] ?? 0)).foregroundColor(Theme.up)
+                    Text(L("%lld 卖", c["sell"] ?? 0)).foregroundColor(Theme.down)
                 }
                 .font(.caption.monospacedDigit())
             }
@@ -117,13 +127,13 @@ private struct SectorBoardList: View {
         if parent == nil {
             HStack(spacing: 0) {
                 Button {
-                    onPick(row.key, row.name, board.radarUniverse ?? "")
+                    onPick(row.key, row.name)
                 } label: { content }
                 .buttonStyle(.plain)
-                .disabled(board.radarUniverse == nil)
+                .disabled(radar == nil)
                 if row.hasChildren {
                     NavigationLink {
-                        SectorBoardList(market: market, parent: row.key, parentName: row.name, onPick: onPick)
+                        SectorBoardList(market: market, parent: row.key, parentName: row.name, radar: radar, onPick: onPick)
                     } label: {
                         Image(systemName: "list.bullet.indent")
                             .font(.system(size: 13))

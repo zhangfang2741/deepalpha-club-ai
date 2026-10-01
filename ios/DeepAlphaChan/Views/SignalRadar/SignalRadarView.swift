@@ -3,8 +3,8 @@ import SwiftUI
 /// 信号雷达 Tab —— 扫描各市场科技 ETF 成分股跑缠论，把每日买卖点前 10 只用气泡呈现。
 ///
 /// 顶部 MarketHeader：市场分段控件 + 「宏观 / 情绪 / 行业」三格温度计（当前市场），
-/// 点格子看完整弹层；行业弹层里点某个行业，雷达切到宽基并只显示该行业的气泡
-/// （右上角「行业 ✕」清除筛选，恢复原来的指数范围）。
+/// 点格子看完整弹层。雷达上方的行业筛选条（美股指数雷达才有）在当前指数里只看某个行业的
+/// 气泡，再点一次或点「全部」取消；行业弹层里点行业等同于在筛选条上选中它。
 ///
 /// 气泡编码（三个视觉维度对应三件不同的事，不再互相重复；纯实色气泡，
 /// 已确认的左上角打勾、不用边框虚实，见 RadarBubble）：
@@ -29,8 +29,6 @@ struct SignalRadarView: View {
     @State private var switcherSize: CGSize = .zero
     @StateObject private var panicVM = PanicIndexViewModel()
     @StateObject private var overviewVM = MarketOverviewViewModel()
-    /// 叠在雷达右上角的行业筛选标签实测尺寸，气泡摆位时同样避开。
-    @State private var sectorChipSize: CGSize = .zero
     @EnvironmentObject private var orientation: AppOrientation
     @EnvironmentObject private var store: StoreManager
     @EnvironmentObject private var usage: UsageTracker
@@ -80,8 +78,8 @@ struct SignalRadarView: View {
             .task(id: vm.demoKey) {
                 if !store.isPremium { await vm.loadDemoDay() }
             }
-            // 行业筛选：选中日变了（或刚切到宽基）就拉这一天该行业的气泡
-            .task(id: vm.sectorDayKey) { await vm.loadSectorDayIfNeeded() }
+            // 行业筛选：一次取回选中日全部行业的气泡，之后在行业间切换不再请求
+            .task(id: vm.sectorPoolKey) { await vm.loadSectorPoolsIfNeeded() }
             // 订阅层级同步进 vm（跟 ChanViewModel.hasSubLevelAccess 同一个模式，vm 本身
             // 不感知 StoreKit）。initial: true 保证首次进入就同步一次，不用等 tier 变化。
             // 降级/过期（如 StoreKit 交易更新把 tier 打回免费档）时若还没拉过免费预览，
@@ -140,13 +138,17 @@ struct SignalRadarView: View {
                 emptyView
             } else {
                 metaRow
+                if !vm.sectorChips.isEmpty {
+                    sectorBar
+                }
                 if needsConsent {
                     consentLockedField
                 } else {
                     bubbleField
                         // 同一市场/指数重新加载时保留旧气泡、调暗，期间暂不响应点按；不再盖转圈，
                         // 加载提示只有「正在扫描」一种（切市场/指数走 scanningView）
-                        .opacity(vm.isReloading ? 0.35 : 1)
+                        // 行业池取回前先显示前 N 里的同行业气泡，略调暗表示还会补全
+                        .opacity(vm.isReloading ? 0.35 : (vm.isLoadingSectorPools ? 0.6 : 1))
                         .allowsHitTesting(!vm.isReloading)
                         .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
                 }
@@ -437,10 +439,7 @@ struct SignalRadarView: View {
             ZStack {
                 fieldDecoration(width: w, height: h)
 
-                if vm.isLoadingSectorDay {
-                    ProgressView()
-                        .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
-                } else if layouts.isEmpty {
+                if layouts.isEmpty {
                     Text(emptyFieldText)
                         .font(.subheadline)
                         .foregroundColor(Theme.textSecondary)
@@ -484,50 +483,70 @@ struct SignalRadarView: View {
             universeSwitcher
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { switcherSize = $0 }
         }
-        .overlay(alignment: .topTrailing) {
-            if let filter = vm.sectorFilter {
-                sectorChip(filter)
-                    .onGeometryChange(for: CGSize.self) { $0.size } action: { sectorChipSize = $0 }
-            }
-        }
     }
 
-    /// 叠在雷达上的控件（左上角指数切换器、右上角行业筛选标签）占的区域，气泡摆位时避开。
+    /// 叠在雷达上的控件（左上角指数切换器）占的区域，气泡摆位时避开。
     private func fieldObstacles(width w: Double) -> [RadarOrbitSpacing.Obstacle] {
         var out: [RadarOrbitSpacing.Obstacle] = []
         if switcherSize != .zero {
             out.append(.init(x: 0, y: 0, width: Double(switcherSize.width), height: Double(switcherSize.height)))
         }
-        if vm.sectorFilter != nil && sectorChipSize != .zero {
-            out.append(.init(x: w - Double(sectorChipSize.width), y: 0,
-                             width: Double(sectorChipSize.width), height: Double(sectorChipSize.height)))
-        }
         return out
     }
 
-    /// 气泡区为空时的提示：行业筛选下区分「该行业当天没有信号」与「这一天还没有行业数据」。
+    /// 气泡区为空时的提示：行业筛选下点明是该行业这一天没有。
     private var emptyFieldText: String {
-        guard let filter = vm.sectorFilter else { return L("当日无买卖点信号") }
-        if vm.isSectorDayUnavailable { return L("这一天的行业数据还在生成，换一天看看") }
+        guard let filter = vm.sectorFilter, vm.baseSelectedDay?.hasSectorData == true else { return L("当日无买卖点信号") }
         return L("%@当日无买卖点信号", filter.name)
     }
 
-    /// 雷达右上角的行业筛选标签：点 ✕ 清除筛选并恢复原来的指数范围。
-    private func sectorChip(_ filter: RadarSectorFilter) -> some View {
-        Button { vm.clearSectorFilter() } label: {
-            HStack(spacing: 4) {
-                Text(filter.name).font(.system(size: 12, weight: .semibold))
-                Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
+    // MARK: - 行业筛选条（雷达上方）
+
+    /// 「全部」+ 当天有信号的行业（数量 = 选中后显示的气泡数），横向滑动；选中的自动滚到中间。
+    private var sectorBar: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    sectorBarChip(title: L("全部"), count: nil, selected: vm.sectorFilter == nil) {
+                        vm.clearSectorFilter()
+                    }
+                    .id("all")
+                    ForEach(vm.sectorChips) { chip in
+                        sectorBarChip(title: chip.name, count: chip.count, selected: vm.sectorFilter?.key == chip.key) {
+                            vm.toggleSector(chip)
+                        }
+                        .id(chip.key)
+                    }
+                }
+                .padding(.horizontal, 1)
             }
-            .foregroundColor(Theme.textPrimary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Theme.accent.opacity(0.25))
-            .clipShape(Capsule())
-            .overlay(Capsule().stroke(Theme.accent, lineWidth: 1))
+            .onChange(of: vm.sectorFilter?.key) { _, key in
+                withAnimation(.easeInOut(duration: 0.2)) { proxy.scrollTo(key ?? "all", anchor: .center) }
+            }
         }
-        .padding(10)
-        .accessibilityLabel(L("清除行业筛选：%@", filter.name))
+        .sensoryFeedback(.selection, trigger: vm.sectorFilter?.key)
+    }
+
+    private func sectorBarChip(title: String, count: Int?, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Text(title).font(.system(size: 12, weight: .semibold))
+                if let count {
+                    Text("\(count)")
+                        .font(.system(size: 11, weight: .medium).monospacedDigit())
+                        .foregroundColor(selected ? .white.opacity(0.85) : Theme.textSecondary)
+                }
+            }
+            .foregroundColor(selected ? .white : Theme.textPrimary)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .background(selected ? Theme.accent : Theme.surface, in: Capsule())
+            .overlay(Capsule().stroke(selected ? Color.clear : Theme.border, lineWidth: 0.8))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(count.map { L("%@，%lld 个气泡", title, $0) } ?? title)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 
     // MARK: - universe 切换器（雷达左上角）

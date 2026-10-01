@@ -123,9 +123,9 @@ async def write_pools(redis: Redis, mode_ns: str, market: str, universe: str,
             logger.warning("signal_radar_sector_pool_write_failed", market=market, day=day, error=str(e))
 
 
-async def read_pool(redis: Redis, mode_ns: str, market: str, universe: str, day: str,
-                    sector: str) -> list[RadarSignalOut] | None:
-    """None = 这一天没有行业池（旧快照 / 该市场没有行业分类）；[] = 有池但该行业当天没有信号。"""
+async def read_pools(redis: Redis, mode_ns: str, market: str, universe: str,
+                     day: str) -> dict[str, list[RadarSignalOut]] | None:
+    """当天全部行业池 {行业: 前 N 个气泡}；None = 这一天没有行业池（旧快照 / 该市场没有行业分类 / 读失败）。"""
     try:
         raw = await redis.get(pool_key(mode_ns, market, universe, day))
     except Exception as e:  # noqa: BLE001
@@ -135,7 +135,14 @@ async def read_pool(redis: Redis, mode_ns: str, market: str, universe: str, day:
         return None
     try:
         data = json.loads(raw)
-        return [RadarSignalOut.model_validate(x) for x in data.get(sector, [])]
+        return {k: [RadarSignalOut.model_validate(x) for x in v] for k, v in data.items()}
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_sector_pool_bad_json", market=market, day=day, error=str(e))
         return None
+
+
+async def read_pool(redis: Redis, mode_ns: str, market: str, universe: str, day: str,
+                    sector: str) -> list[RadarSignalOut] | None:
+    """None = 这一天没有行业池（旧快照 / 该市场没有行业分类）；[] = 有池但该行业当天没有信号。"""
+    pools = await read_pools(redis, mode_ns, market, universe, day)
+    return None if pools is None else pools.get(sector, [])

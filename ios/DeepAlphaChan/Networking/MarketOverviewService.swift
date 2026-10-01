@@ -18,10 +18,9 @@ enum MarketOverviewService {
         return try await APIClient.shared.get("/macro/\(market.rawValue)/sectors", query: query)
     }
 
-    static func sectorDay(market: StockMarket, universe: String, date: String, sector: String) async throws -> RadarSectorDay {
-        try await APIClient.shared.get("/signal-radar/sector-day", query: [
-            "market": market.rawValue, "universe": universe, "date": date, "sector": sector,
-            "mode": SignalMode.current(),
+    static func sectorPools(market: StockMarket, universe: String, date: String) async throws -> RadarSectorPools {
+        try await APIClient.shared.get("/signal-radar/sector-pools", query: [
+            "market": market.rawValue, "universe": universe, "date": date, "mode": SignalMode.current(),
         ])
     }
 }
