@@ -88,3 +88,61 @@ async def test_align_backfill_no_change_keeps_cache(monkeypatch):
     monkeypatch.setattr(scheduler.repo, "align_backfill_timestamps", fake_align)
     monkeypatch.setattr(scheduler, "current_redis", boom)
     await scheduler._align_backfill()
+
+
+async def test_bootstrap_rebuilds_when_methodology_version_changed(monkeypatch):
+    """方法版本变了 → 部署后立即重跑全量；锁带版本号，不被当天夜间批量锁挡住。"""
+    from datetime import date
+
+    from app.services.quant_research import scheduler
+
+    versions = iter(["q4", scheduler.METHODOLOGY_VERSION])
+    runs: list[tuple[str, str | None]] = []
+
+    async def fake_latest_date(market):
+        return date(2026, 9, 30)
+
+    async def fake_version(market):
+        return next(versions)
+
+    async def fake_run_once(kind, day, *, lock_suffix=None):
+        runs.append((kind, lock_suffix))
+
+    async def no_align():
+        return None
+
+    monkeypatch.setattr(scheduler, "BOOTSTRAP_DELAY_SECONDS", 0)
+    monkeypatch.setattr(scheduler, "_align_backfill", no_align)
+    monkeypatch.setattr(scheduler.repo, "latest_distribution_date", fake_latest_date)
+    monkeypatch.setattr(scheduler.repo, "latest_methodology_version", fake_version)
+    monkeypatch.setattr(scheduler, "_run_once", fake_run_once)
+    await scheduler._bootstrap_once()
+    assert runs == [("us", scheduler.METHODOLOGY_VERSION)]
+
+
+async def test_bootstrap_skips_when_results_are_current(monkeypatch):
+    from datetime import date
+
+    from app.services.quant_research import scheduler
+
+    runs = []
+
+    async def fake_latest_date(market):
+        return date(2026, 9, 30)
+
+    async def fake_version(market):
+        return scheduler.METHODOLOGY_VERSION
+
+    async def fake_run_once(kind, day, *, lock_suffix=None):
+        runs.append(kind)
+
+    async def no_align():
+        return None
+
+    monkeypatch.setattr(scheduler, "BOOTSTRAP_DELAY_SECONDS", 0)
+    monkeypatch.setattr(scheduler, "_align_backfill", no_align)
+    monkeypatch.setattr(scheduler.repo, "latest_distribution_date", fake_latest_date)
+    monkeypatch.setattr(scheduler.repo, "latest_methodology_version", fake_version)
+    monkeypatch.setattr(scheduler, "_run_once", fake_run_once)
+    await scheduler._bootstrap_once()
+    assert runs == []

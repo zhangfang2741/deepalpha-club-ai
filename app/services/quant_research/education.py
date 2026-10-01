@@ -103,6 +103,12 @@ _GUIDANCE: dict[str, tuple[str, str, str, str]] = {
         "Shows recent market pricing as supporting information about price trends.",
         "Price appreciation is not intrinsic-value growth or evidence of cheapness; assess earnings, cash flow and price.",
     ),
+    "moat": (
+        "看好生意能不能一直好下去：利润率长期够高、够稳，说明竞争对手很难抢走它的生意。",
+        "这里只有约 4 年数据，不足以覆盖完整的经济周期；周期性行业的利润率天然波动大，要和同行比着看。护城河暂不计入综合等级。",
+        "Asks whether a good business can stay good: margins that stay high and steady suggest competitors struggle to take its business.",
+        "Only about 4 years of data are used, less than a full economic cycle; cyclical industries naturally swing more, so compare with peers. Moat is not yet part of the composite grade.",
+    ),
     "revisions": (
         "观察分析师对同一财年的预期是否改善，帮助跟踪估值所依赖的假设。",
         "变化率 =（当前预期 − 历史预期）÷ |历史预期| × 100%。比较同一财年；预期不是实际业绩，历史不足时不评分。",

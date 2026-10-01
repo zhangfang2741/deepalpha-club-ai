@@ -116,6 +116,7 @@ class Dimension(BaseModel):
     key_fact: KeyFact | None
     formula: str | None
     groups: list[MetricGroup]
+    counts_in_overall: bool = True  # False = 只展示、不计入综合等级（护城河）
 
 
 class QuantResearchOut(BaseModel):

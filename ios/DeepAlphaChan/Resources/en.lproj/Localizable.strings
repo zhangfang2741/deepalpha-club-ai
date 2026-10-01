@@ -896,9 +896,6 @@
 
 /* 量化研究：成绩单与大白话解读 */
 "五维成绩单" = "Five-factor report card";
-"强项" = "Strengths";
-"短板" = "Weak spots";
-"各维度都在板块中游，没有特别突出的强项或短板。" = "Every factor sits mid-pack in its sector, with no standout strength or weak spot.";
 "等级是和同板块公司比出来的相对位置：A 档约前 20%，C 档居中，F 档约后 20%。" = "Grades show relative position within the sector: A ≈ top 20%, C ≈ middle, F ≈ bottom 20%.";
 "查看各项指标与解读" = "View metrics and explanations";
 "各项指标" = "Metrics";
@@ -967,12 +964,12 @@
 "横条 = 板块百分位（0 ~ 100），越长表示在同板块里越靠前；中间的竖线是第 50 百分位，也就是板块中位的位置。" = "The bar is the sector percentile (0–100): longer means further ahead of peers. The tick in the middle is the 50th percentile, where the sector median sits.";
 "右侧色块 = 这项指标的等级；点色块看等级怎么来的，点整行看指标的大白话解读和算式。" = "The colored block is the metric's grade. Tap it to see how the grade was reached; tap the row for a plain-English explanation and the formula.";
 "「—」表示数据不足或不适用，不参与评分。" = "\"—\" means not enough data or not applicable, and it isn't scored.";
-"强项和短板怎么定" = "How strengths and weak spots are picked";
-"强项 = 维度等级在 A 档（同板块约前 20%）。" = "Strength = a factor graded A (about the sector's top 20%).";
-"短板 = 维度等级在 D 或 F 档（同板块约后 40%）。" = "Weak spot = a factor graded D or F (about the sector's bottom 40%).";
-"B、C 档表示和同行差不多或略好，不单独列出。" = "B and C mean about the same as or slightly better than peers, so they aren't listed.";
 "算式" = "Arithmetic";
 "认识这个指标" = "About this metric";
 "是什么" = "What it is";
 "为什么重要" = "Why it matters";
 "我们为什么用它" = "Why we use it";
+"只展示，不计入综合等级" = "Shown only, not in the composite grade";
+"护城河只展示，不计入综合分。" = "Moat is shown only and is not part of the composite score.";
+"好生意能否一直好下去" = "Can a good business stay good";
+"看好生意能不能一直好下去：最近 4 年利润率是不是一直够高、够稳，有没有在变薄，赚的钱有没有真变成现金。竞争对手越难抢走生意，这些数字就越稳。只展示，不计入综合等级。" = "Whether a good business can stay good: have margins stayed high and steady over the last 4 years, are they thinning, and do profits turn into real cash? The harder it is for rivals to take the business, the steadier these numbers are. Shown only, not in the composite grade.";

@@ -24,8 +24,11 @@ struct QuantResearchTests {
             let url = URL(fileURLWithPath: "\(root)/tests/fixtures/quant_research/golden_\(sym).json")
             let r = try JSONDecoder().decode(QuantResearch.self, from: Data(contentsOf: url))
             precondition(r.isOK && r.symbol == sym)
-            precondition(r.dimensions.map(\.key) == ["valuation", "growth", "profitability", "momentum", "revisions"])
-            precondition(r.dimensions.last?.status == "accumulating")
+            precondition(r.dimensions.map(\.key) == ["valuation", "growth", "profitability", "momentum", "revisions", "moat"])
+            precondition(r.scoredDimensions.map(\.key) == ["valuation", "growth", "profitability", "momentum", "revisions"],
+                         "护城河只展示，不进五维")
+            precondition(r.moat?.countsInOverall == false)
+            precondition(r.dimensions[4].status == "accumulating")
             precondition(r.dimensions.filter(\.isHighest).count == 1, "\(sym) 最高维度只能有一个")
             precondition(!r.dimensions[0].allMetrics.isEmpty)
             if let stage = r.stage {
@@ -59,9 +62,6 @@ struct QuantResearchTests {
         precondition(roe.interpretation?.why?.isEmpty == false && roe.interpretation?.purpose?.isEmpty == false,
                      "每项指标都要讲清为什么重要、为什么选它")
         precondition(interpretation.why == nil && interpretation.purpose == nil, "旧响应缺少时仍应正常解码")
-        // NVDA：盈利能力 A+ 为强项、估值 C- 不算短板；积累中的维度不参与
-        precondition(research.strengths.map(\.key) == ["profitability"], "\(research.strengths.map(\.key))")
-        precondition(research.weaknesses.isEmpty)
         let byKey = Dictionary(uniqueKeysWithValues: research.dimensions.flatMap(\.allMetrics).map { ($0.key, $0) })
         precondition(byKey["roe"]?.fullNameSubtitle?.contains("净资产收益率") == true, "缩写指标要显示全称")
         precondition(byKey["gross_m"]?.fullNameSubtitle == nil, "名称已是全称时不重复")

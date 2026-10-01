@@ -69,4 +69,18 @@ def metric_calculation(metric: MetricDef, lang: str) -> str:
             f"(当前一致预期 − {days} 天前一致预期) ÷ |{days} 天前一致预期| × 100%（同一财年）",
             f"(Current consensus − consensus {days} days ago) ÷ |consensus {days} days ago| × 100% (same fiscal year)",
         )[language_index]
+    if metric.dimension == "moat":
+        return {
+            "moat_gm_avg": ("(4 个年度毛利率之和) ÷ 4，每个年度 = 12 个月毛利 ÷ 12 个月营收",
+                            "(Sum of four 12-month gross margins) ÷ 4; each = 12-month gross profit ÷ 12-month revenue"),
+            "moat_gm_vol": ("4 个年度毛利率的标准差（数值越小越稳）",
+                            "Standard deviation of four 12-month gross margins (smaller = steadier)"),
+            "moat_gm_trend": ("最近 12 个月毛利率 − 3 年前同期毛利率",
+                              "Gross margin, last 12 months − gross margin, same 12 months 3 years earlier"),
+            "moat_om_min": ("4 个年度 EBIT 利润率中最低的一个", "Lowest of four 12-month EBIT margins"),
+            "moat_om_vol": ("4 个年度 EBIT 利润率的标准差（数值越小越稳）",
+                            "Standard deviation of four 12-month EBIT margins (smaller = steadier)"),
+            "moat_fcf_conv": ("近 2 年自由现金流合计 ÷ 近 2 年净利润合计 × 100%",
+                              "Two-year free cash flow ÷ two-year net income × 100%"),
+        }[key][language_index]
     raise ValueError(f"指标缺少通用公式：{key}")

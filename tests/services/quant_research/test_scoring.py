@@ -7,6 +7,7 @@ from app.services.quant_research.scoring import (
     DimensionScore,
     ScoredMetric,
     build_distributions,
+    composite,
     mark_extremes,
     overall,
     pick_key_fact,
@@ -112,3 +113,13 @@ def test_key_fact_and_extremes():
     mark_extremes(dims)
     assert high.is_highest and low.is_lowest
     assert not dims[2].is_highest and not dims[2].is_lowest
+
+
+def test_moat_is_display_only_and_never_moves_the_composite():
+    """护城河只展示：不进综合分、不算「基于 N 个维度」、F 也不触发封顶。"""
+    base = [_dim("growth", 80), _dim("valuation", 60)]
+    with_moat = base + [_dim("moat", 5)]
+    assert composite(with_moat) == composite(base)
+    o = overall(with_moat, DIST, n_analysts=10, prev_grade=None)
+    o_base = overall(base, DIST, n_analysts=10, prev_grade=None)
+    assert (o.score, o.grade, o.dimensions_used, o.capped) == (o_base.score, o_base.grade, 2, False)

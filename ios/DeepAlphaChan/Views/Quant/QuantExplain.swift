@@ -260,9 +260,12 @@ struct QuantOverallGradeExplanation: View {
             if let o = research.overall, let score = o.score {
                 QuantExplainText(text: L("综合分 %@ = %lld 个已评分维度的平均：", QuantGradeScale.fmt(score), o.dimensionsUsed))
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
-                    ForEach(research.dimensions.filter(\.isOK)) { d in
+                    ForEach(research.scoredDimensions.filter(\.isOK)) { d in
                         QuantScoreItem(name: d.name, score: d.score, grade: d.grade)
                     }
+                }
+                if research.moat != nil {
+                    QuantExplainText(text: L("护城河只展示，不计入综合分。"), secondary: true)
                 }
                 if let p = o.universePercentile {
                     QuantExplainText(text: L("再把综合分和全部样本股票（标普1500 成分股）比，高于约 %@%% 的股票，排第 %@ 百分位。",
@@ -336,17 +339,6 @@ struct QuantDistributionExplanation: View {
                 ? L("白线是 %@。这项指标越低越好，所以左端（红）更好、右端（绿）更弱。", research.symbol)
                 : L("白线是 %@。这项指标越高越好，所以右端（红）更好、左端（绿）更弱。", research.symbol))
             QuantExplainText(text: L("超出 P10 ~ P90 的极端值贴边显示。"), secondary: true)
-        }
-    }
-}
-
-/// 强项 / 短板的判定。
-struct QuantHighlightExplanation: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            QuantExplainText(text: L("强项 = 维度等级在 A 档（同板块约前 20%）。"))
-            QuantExplainText(text: L("短板 = 维度等级在 D 或 F 档（同板块约后 40%）。"))
-            QuantExplainText(text: L("B、C 档表示和同行差不多或略好，不单独列出。"), secondary: true)
         }
     }
 }

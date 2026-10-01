@@ -9,11 +9,11 @@ from app.services.quant_research.metrics import DIMENSIONS, METRICS, compute_met
 from tests.services.quant_research.fixtures import load_inputs
 
 
-def test_registry_has_40_metrics_across_five_dimensions():
-    assert len(METRICS) == 40
+def test_registry_has_46_metrics_across_six_dimensions():
+    assert len(METRICS) == 46
     assert {m.dimension for m in METRICS.values()} == set(DIMENSIONS)
     counts = {d: sum(m.dimension == d for m in METRICS.values()) for d in DIMENSIONS}
-    assert counts == {"valuation": 14, "growth": 9, "profitability": 9, "momentum": 4, "revisions": 4}
+    assert counts == {"valuation": 14, "growth": 9, "profitability": 9, "momentum": 4, "revisions": 4, "moat": 6}
 
 
 def test_compute_returns_all_non_revision_metrics():
@@ -97,3 +97,48 @@ def test_financials_forward_revenue_growth_not_applicable():
     m = compute_metrics(load_inputs("JPM"))
     assert m["rev_fwd"].status == "not_applicable"
     assert m["rev_fwd"].meta["reason"] == "financials_revenue_basis"
+
+
+# ---------- 护城河：多年稳定性 / 持续性（只用已有的 16 季利润表、8 季现金流） ----------
+
+def _yearly(q, num, den="revenue"):
+    return [ttm(q, num, o) / ttm(q, den, o) for o in (0, 4, 8, 12)]  # type: ignore[operator]
+
+
+def test_moat_metrics_from_four_yearly_points():
+    import statistics
+
+    inp = load_inputs("NVDA")
+    m = compute_metrics(inp)
+    q = inp.quarters_income
+    gm, om = _yearly(q, "grossProfit"), _yearly(q, "ebit")
+    assert m["moat_gm_avg"].value == pytest.approx(sum(gm) / 4)
+    assert m["moat_gm_vol"].value == pytest.approx(statistics.pstdev(gm))
+    assert m["moat_gm_trend"].value == pytest.approx(gm[0] - gm[3])
+    assert m["moat_om_min"].value == pytest.approx(min(om))
+    assert m["moat_om_vol"].value == pytest.approx(statistics.pstdev(om))
+    assert [v for _, v in m["moat_gm_avg"].inputs] == pytest.approx(gm)
+    assert METRICS["moat_gm_vol"].direction == "lower_better"
+    assert METRICS["moat_om_vol"].direction == "lower_better"
+
+
+def test_moat_cash_conversion_uses_two_years():
+    inp = load_inputs("NVDA")
+    m = compute_metrics(inp)
+    cf, q = inp.quarters_cash, inp.quarters_income
+    fcf = sum(ttm(cf, "operatingCashFlow", o) + ttm(cf, "capitalExpenditure", o) for o in (0, 4))  # type: ignore[operator]
+    net = sum(ttm(q, "netIncome", o) for o in (0, 4))  # type: ignore[misc]
+    assert m["moat_fcf_conv"].value == pytest.approx(fcf / net)
+
+
+def test_moat_needs_sixteen_quarters():
+    inp = load_inputs("NVDA")
+    short = replace(inp, quarters_income=inp.quarters_income[:12])
+    m = compute_metrics(short)
+    for k in ("moat_gm_avg", "moat_gm_vol", "moat_gm_trend", "moat_om_min", "moat_om_vol"):
+        assert m[k].status == "missing", k
+
+
+def test_moat_cash_conversion_not_applicable_for_financials():
+    m = compute_metrics(load_inputs("JPM"))
+    assert m["moat_fcf_conv"].status == "not_applicable"

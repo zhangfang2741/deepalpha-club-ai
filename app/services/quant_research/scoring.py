@@ -12,7 +12,14 @@ import math
 from dataclasses import dataclass, field
 
 from app.services.quant_research.grading import cap_grade, grade_with_hysteresis, percentile_of
-from app.services.quant_research.metrics import DIMENSIONS, METRICS, MIN_ANALYSTS, MetricValue, Status
+from app.services.quant_research.metrics import (
+    DIMENSIONS,
+    DISPLAY_ONLY_DIMENSIONS,
+    METRICS,
+    MIN_ANALYSTS,
+    MetricValue,
+    Status,
+)
 
 MIN_SAMPLE = 20
 CAP_THRESHOLD = 20.0   # 维度分低于它（F）触发一票否决
@@ -131,22 +138,27 @@ def min_participating(total: int) -> int:
 
 def composite(dims: list[DimensionScore]) -> float | None:
     """可用维度分的等权平均。"""
-    usable = [d.score for d in dims if d.status == "ok" and d.score is not None]
+    usable = [d.score for d in _scored(dims) if d.status == "ok" and d.score is not None]
     return round(sum(usable) / len(usable), 1) if usable else None
+
+
+def _scored(dims: list[DimensionScore]) -> list[DimensionScore]:
+    """计入综合分的维度（去掉只展示的护城河）。"""
+    return [d for d in dims if d.key not in DISPLAY_ONLY_DIMENSIONS]
 
 
 def overall(dims: list[DimensionScore], overall_dist: list[float], n_analysts: int,
             prev_grade: str | None) -> OverallScore:
     """综合等级：综合分在全体中的百分位 → 等级；一票否决与分析师不足处理。"""
     score = composite(dims)
-    used = sum(d.status == "ok" for d in dims)
+    used = sum(d.status == "ok" for d in _scored(dims))
     if score is None:
         return OverallScore(None, None, None, used)
     pct = percentile_of(score, overall_dist, lower_better=False)
     if n_analysts < MIN_ANALYSTS:
         return OverallScore(score, pct, None, used, extra={"reason": "few_analysts"})
     grade = grade_with_hysteresis(pct, prev_grade)
-    weak = [d for d in dims if d.status == "ok" and d.score is not None and d.score < CAP_THRESHOLD]
+    weak = [d for d in _scored(dims) if d.status == "ok" and d.score is not None and d.score < CAP_THRESHOLD]
     if weak:
         capped = cap_grade(grade, CAP_CEILING)
         if capped != grade:  # 只有真的被压低才算「封顶」
@@ -168,7 +180,7 @@ def pick_key_fact(dim: DimensionScore) -> str | None:
 
 def mark_extremes(dims: list[DimensionScore]) -> None:
     """标出分最高 / 最低的维度（首页卡片高亮）。"""
-    usable = [d for d in dims if d.status == "ok" and d.score is not None]
+    usable = [d for d in _scored(dims) if d.status == "ok" and d.score is not None]
     if len(usable) < 2:
         return
     order = {k: i for i, k in enumerate(DIMENSIONS)}

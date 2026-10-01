@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.services.quant_research import repository as repo
 from app.services.quant_research.batch import run_cn_estimate_snapshot, run_us_batch
+from app.services.quant_research.builder import METHODOLOGY_VERSION
 
 # 批量锁 TTL：最长的一轮（约 1500 只股票、每只约 4 次调用，批量限速 150/分钟）约 40 分钟，90 分钟足够。
 # 不能再长：部署会杀掉跑批中的进程，锁留在 Redis 里挡住下一次自举（2026-09-30 踩过 6h 死锁）。
@@ -85,23 +86,31 @@ async def _align_backfill() -> None:
             await _drop_radar_snapshots(redis)
 
 
-async def _bootstrap_once() -> None:
-    """冷启动自举：从未跑过批量（没有任何板块分布）时，启动后先跑一次首次全量。
+async def _results_current() -> bool:
+    """已有批量结果，且方法版本与当前代码一致。"""
+    if await repo.latest_distribution_date("us") is None:
+        return False
+    return await repo.latest_methodology_version("us") == METHODOLOGY_VERSION
 
-    首次部署若等到定时点（北京时间 06:30），白天所有请求都会拿到「数据尚未生成」；
-    自举让结果在部署后 ~1 小时内可用。多实例 / 与定时批量并发由 Redis 锁保证只跑一次。
+
+async def _bootstrap_once() -> None:
+    """冷启动自举：没跑过批量、或已存结果的方法版本与代码不一致时，启动后立即跑一次全量。
+
+    首次部署若等到定时点（北京时间 06:30），白天所有请求都会拿到「数据尚未生成」或旧口径结果；
+    自举让新结果在部署后 ~1 小时内可用。锁键带方法版本：多实例只跑一次，
+    也不会被当天已跑完的夜间批量锁挡住。
     """
     try:
         await _align_backfill()
         await asyncio.sleep(BOOTSTRAP_DELAY_SECONDS)
         for attempt in range(BOOTSTRAP_MAX_ATTEMPTS):
-            if await repo.latest_distribution_date("us") is not None:
+            if await _results_current():
                 return
-            logger.info("quant_batch_bootstrap_attempt", attempt=attempt)
+            logger.info("quant_batch_bootstrap_attempt", attempt=attempt, version=METHODOLOGY_VERSION)
             # 锁被占（别的实例在跑 / 上一进程留下的锁）时 _run_once 只记日志不抛错，
             # 这里靠重试等它跑完或过期，而不是放弃到下一个定时点
-            await _run_once("us", last_us_session(datetime.now(UTC)))
-            if await repo.latest_distribution_date("us") is not None:
+            await _run_once("us", last_us_session(datetime.now(UTC)), lock_suffix=METHODOLOGY_VERSION)
+            if await _results_current():
                 return
             await asyncio.sleep(BOOTSTRAP_RETRY_SECONDS)
         logger.warning("quant_batch_bootstrap_gave_up", attempts=BOOTSTRAP_MAX_ATTEMPTS)
@@ -116,9 +125,10 @@ def _lock_key(kind: str, day: date) -> str:
     return f"quant:batch_lock:v2:{kind}:{day.isoformat()}"
 
 
-async def _run_once(kind: str, day: date) -> None:
+async def _run_once(kind: str, day: date, *, lock_suffix: str | None = None) -> None:
     redis = current_redis()
-    if redis is not None and not await acquire_lock(redis, _lock_key(kind, day), _LOCK_TTL):
+    key = _lock_key(kind, day) + (f":{lock_suffix}" if lock_suffix else "")
+    if redis is not None and not await acquire_lock(redis, key, _LOCK_TTL):
         logger.info("quant_batch_skipped_locked", kind=kind, day=day.isoformat())
         return
     if kind == "us":

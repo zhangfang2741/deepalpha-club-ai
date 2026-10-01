@@ -13,6 +13,7 @@ from app.services.quant_research import copy as tx
 from app.services.quant_research.education import metric_interpretation
 from app.services.quant_research.inputs import StockInputs, analyst_count
 from app.services.quant_research.metrics import (
+    DISPLAY_ONLY_DIMENSIONS,
     DIMENSIONS,
     METRICS,
     MetricValue,
@@ -28,6 +29,7 @@ from app.services.quant_research.scoring import (
     Distributions,
     OverallScore,
     ScoredMetric,
+    composite,
     mark_extremes,
     overall,
     pick_key_fact,
@@ -51,7 +53,7 @@ from app.schemas.quant_research import (
     Stage,
 )
 
-METHODOLOGY_VERSION = "q4"  # q3：EPS 修正过渡期用外部一致预期趋势；q4：阶段改为营收增速主轴
+METHODOLOGY_VERSION = "q5"  # q3：EPS 修正过渡期用外部一致预期趋势；q4：阶段改为营收增速主轴；q5：新增护城河（只展示）
 _REVISION_LOOKBACK = {"eps_fy1_30d": 30, "eps_fy1_90d": 90, "eps_fy2_90d": 90, "rev_fy1_90d": 90}
 
 
@@ -68,8 +70,7 @@ class Evaluation:
 
     @property
     def composite(self) -> float | None:
-        usable = [d.score for d in self.dims if d.status == "ok" and d.score is not None]
-        return round(sum(usable) / len(usable), 1) if usable else None
+        return composite(self.dims)
 
 
 def revision_metrics(inp: StockInputs, history: list[EstimatePoint]) -> dict[str, MetricValue]:
@@ -204,6 +205,7 @@ def _dimension_out(d: DimensionScore, ev: Evaluation, lang: tx.Lang) -> Dimensio
         key_fact=KeyFact(metric=fact.key, text=tx.key_fact_text(fact, lang)) if fact else None,
         formula=tx.dimension_formula(d),
         groups=[MetricGroup(name=k, metrics=v) for k, v in groups.items()],
+        counts_in_overall=d.key not in DISPLAY_ONLY_DIMENSIONS,
     )
 
 

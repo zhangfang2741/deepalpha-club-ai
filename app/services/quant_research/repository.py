@@ -136,6 +136,19 @@ async def latest_distribution_date(market: str) -> date | None:
         )).scalar()
 
 
+async def latest_methodology_version(market: str) -> str | None:
+    """最近一次批量结果的方法版本（取任一行 payload 里的 methodology_version）。"""
+    async with AsyncSessionFactory() as s:
+        latest = (await s.execute(
+            select(func.max(col(QuantResult.as_of))).where(col(QuantResult.market) == market))).scalar()
+        if latest is None:
+            return None
+        payload = (await s.execute(
+            select(QuantResult.payload_zh).where(col(QuantResult.market) == market,
+                                                 col(QuantResult.as_of) == latest).limit(1))).scalar()
+    return (payload or {}).get("methodology_version")
+
+
 async def get_distributions(market: str, as_of: date) -> Distributions:
     """读取某日的全部板块分布。"""
     q = select(QuantSectorDistribution).where(col(QuantSectorDistribution.market) == market,

@@ -118,6 +118,8 @@ struct QuantDimension: Decodable, Identifiable {
     let keyFact: QuantKeyFact?
     let formula: String?
     let groups: [QuantMetricGroup]
+    /// false = 只展示、不计入综合等级（护城河）；旧响应缺省为 true。
+    let countsInOverall: Bool
 
     var id: String { key }
     var isOK: Bool { status == "ok" }
@@ -129,6 +131,24 @@ struct QuantDimension: Decodable, Identifiable {
         case isHighest = "is_highest"
         case isLowest = "is_lowest"
         case keyFact = "key_fact"
+        case countsInOverall = "counts_in_overall"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        key = try c.decode(String.self, forKey: .key)
+        name = try c.decode(String.self, forKey: .name)
+        description = try c.decode(String.self, forKey: .description)
+        grade = try c.decodeIfPresent(String.self, forKey: .grade)
+        score = try c.decodeIfPresent(Double.self, forKey: .score)
+        status = try c.decode(String.self, forKey: .status)
+        statusNote = try c.decodeIfPresent(String.self, forKey: .statusNote)
+        isHighest = try c.decode(Bool.self, forKey: .isHighest)
+        isLowest = try c.decode(Bool.self, forKey: .isLowest)
+        keyFact = try c.decodeIfPresent(QuantKeyFact.self, forKey: .keyFact)
+        formula = try c.decodeIfPresent(String.self, forKey: .formula)
+        groups = try c.decode([QuantMetricGroup].self, forKey: .groups)
+        countsInOverall = try c.decodeIfPresent(Bool.self, forKey: .countsInOverall) ?? true
     }
 }
 
@@ -217,16 +237,11 @@ struct QuantMetric: Decodable, Identifiable {
 }
 
 extension QuantResearch {
-    /// 首页摘要的「强项 / 短板」：A 档（板块约前 20%）为强项，D / F 档为短板，按维度分高低排序。
-    var strengths: [QuantDimension] {
-        dimensions.filter { $0.isOK && $0.grade?.first == "A" }
-            .sorted { ($0.score ?? 0) > ($1.score ?? 0) }
-    }
+    /// 计入综合等级的维度（五维成绩单、五维图、综合分解释）。
+    var scoredDimensions: [QuantDimension] { dimensions.filter(\.countsInOverall) }
 
-    var weaknesses: [QuantDimension] {
-        dimensions.filter { $0.isOK && ($0.grade?.first == "D" || $0.grade?.first == "F") }
-            .sorted { ($0.score ?? 0) < ($1.score ?? 0) }
-    }
+    /// 护城河：只展示，放在综合等级下方。
+    var moat: QuantDimension? { dimensions.first { $0.key == "moat" } }
 }
 
 // MARK: - 方法说明

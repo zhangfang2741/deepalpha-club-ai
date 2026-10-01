@@ -31,6 +31,8 @@ DIMENSION_DESC: dict[str, tuple[str, str]] = {
     "profitability": ("利润率与资本回报", "Margins and returns on capital"),
     "momentum": ("最近 3 ~ 12 个月的股价涨跌", "Price change over the last 3 to 12 months"),
     "revisions": ("分析师一致预期的近期调整", "Recent changes in analyst consensus estimates"),
+    "moat": ("多年利润率的水平、稳定性与趋势，以及利润的现金含量（仅展示，不计入综合等级）",
+             "Multi-year margin level, stability and trend, plus cash conversion (shown only, not in the composite grade)"),
 }
 
 STAGE_NOTES: dict[str, tuple[str, str]] = {
@@ -49,7 +51,9 @@ STAGE_NOTES: dict[str, tuple[str, str]] = {
 _PER_SHARE = {"price", "eps_ttm", "eps_ttm_prev", "eps_ntm", "eps_fy1", "eps_fy2", "eps_fy0",
               "close_now", "close_then", "est_new", "est_old"}
 _PLAIN = {"pe", "growth_pct"}
+_PCT_INPUTS = {f"{p}_y{i}" for p in ("gm", "om") for i in range(4)}
 _SIGNED_DIMS = {"growth", "momentum", "revisions"}
+_SIGNED_KEYS = {"moat_gm_trend"}
 
 
 def _i(lang: Lang, zh: str, en: str) -> str:
@@ -86,6 +90,8 @@ def fmt_input(label: str, v: float | None, lang: Lang) -> str:
         return f"{v:.2f}"
     if label in _PLAIN:
         return f"{v:.1f}"
+    if label in _PCT_INPUTS:
+        return f"{v * 100:.1f}%"
     return fmt_money(v, lang)
 
 
@@ -97,7 +103,7 @@ def fmt_metric_value(key: str, v: float | None) -> str:
     if d.unit == "x":
         return f"{v:.2f}" if key.startswith("peg") or key == "asset_turn" else f"{v:.1f}"
     pct = v * 100
-    if d.dimension in _SIGNED_DIMS:
+    if d.dimension in _SIGNED_DIMS or key in _SIGNED_KEYS:
         return f"{pct:+.1f}%" if abs(pct) < 10 else f"{pct:+.0f}%"
     return f"{pct:.1f}%" if abs(pct) < 10 else f"{pct:.0f}%"
 
@@ -194,6 +200,13 @@ def metric_expression(key: str, mv: MetricValue, lang: Lang) -> str:
         return f"({A} ÷ {B})^(1/3) − 1 = {result}"
     if mv.op == "change":
         return f"({A} − {fmt_input(lb, b, lang)}) ÷ |{B}| = {result}"
+    if mv.op == "delta":
+        return f"{A} − {B} = {result}"
+    if mv.op in ("avg", "std", "min"):
+        vals = "、".join(fmt_input(n, v, lang) for n, v in ins) if lang == "zh" else \
+            ", ".join(fmt_input(n, v, lang) for n, v in ins)
+        fn = {"avg": ("平均", "average"), "std": ("标准差", "standard deviation"), "min": ("最低", "minimum")}[mv.op]
+        return _i(lang, f"{fn[0]}（{vals}）= {result}", f"{fn[1]}({vals}) = {result}")
     return ""
 
 

@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+import statistics
+
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -24,13 +26,16 @@ from app.services.quant_research.inputs import (
 
 Status = Literal["ok", "not_meaningful", "not_applicable", "missing", "insufficient_sample"]
 Direction = Literal["lower_better", "higher_better"]
-DIMENSIONS: list[str] = ["valuation", "growth", "profitability", "momentum", "revisions"]
+DIMENSIONS: list[str] = ["valuation", "growth", "profitability", "momentum", "revisions", "moat"]
+# 只展示、不计入综合分（不参与综合平均、维度计数与一票否决），校准分布后再决定是否纳入
+DISPLAY_ONLY_DIMENSIONS: frozenset[str] = frozenset({"moat"})
 DIMENSION_NAMES: dict[str, tuple[str, str]] = {
     "valuation": ("估值", "Valuation"),
     "growth": ("成长", "Growth"),
     "profitability": ("盈利能力", "Profitability"),
     "momentum": ("动量", "Momentum"),
     "revisions": ("EPS 修正", "EPS Revisions"),
+    "moat": ("护城河", "Moat"),
 }
 MIN_ANALYSTS = 3
 MOMENTUM_WINDOWS = {"r3m": 63, "r6m": 126, "r9m": 189, "r12m": 252}
@@ -55,7 +60,7 @@ def _d(key: str, dim: str, group: str, group_en: str, direction: Direction, name
     return MetricDef(key, dim, group, group_en, direction, name_zh, name_en, desc_zh, desc_en, unit)
 
 
-_V, _G, _P, _M, _R = "valuation", "growth", "profitability", "momentum", "revisions"
+_V, _G, _P, _M, _R, _W = "valuation", "growth", "profitability", "momentum", "revisions", "moat"
 _LO: Direction = "lower_better"
 _HI: Direction = "higher_better"
 
@@ -145,7 +150,26 @@ METRICS: dict[str, MetricDef] = {m.key: m for m in [
        "分析师对下一财年每股收益的一致预期，相比 90 天前的变化", "Change in FY2 consensus EPS vs 90 days ago", "pct"),
     _d("rev_fy1_90d", _R, "本财年营收", "FY1 revenue", _HI, "本财年营收预期 90 天变化", "FY1 revenue revision (90D)",
        "分析师对本财年营收的一致预期，相比 90 天前的变化", "Change in FY1 consensus revenue vs 90 days ago", "pct"),
+    # 护城河（只展示）：4 个年度点 = 最近 12 个月、1 / 2 / 3 年前的 12 个月
+    _d("moat_gm_avg", _W, "毛利率", "Gross margin", _HI, "4 年平均毛利率", "4Y average gross margin",
+       "最近 4 个年度（各 12 个月）毛利率的平均", "Average gross margin over the last four 12-month periods", "pct"),
+    _d("moat_gm_vol", _W, "毛利率", "Gross margin", _LO, "毛利率波动", "Gross margin volatility",
+       "最近 4 个年度毛利率的标准差（百分点）", "Standard deviation of gross margin over four 12-month periods (points)",
+       "pct"),
+    _d("moat_gm_trend", _W, "毛利率", "Gross margin", _HI, "毛利率 3 年变化", "3Y gross margin change",
+       "最近 12 个月毛利率减去 3 年前同期毛利率（百分点）", "Latest 12-month gross margin minus the one 3 years earlier (points)",
+       "pct"),
+    _d("moat_om_min", _W, "经营利润率", "Operating margin", _HI, "最差一年经营利润率", "Worst-year operating margin",
+       "最近 4 个年度 EBIT 利润率中最低的一年", "Lowest EBIT margin among the last four 12-month periods", "pct"),
+    _d("moat_om_vol", _W, "经营利润率", "Operating margin", _LO, "经营利润率波动", "Operating margin volatility",
+       "最近 4 个年度 EBIT 利润率的标准差（百分点）", "Standard deviation of EBIT margin over four 12-month periods (points)",
+       "pct"),
+    _d("moat_fcf_conv", _W, "利润现金含量", "Cash conversion", _HI, "利润现金含量", "Cash conversion",
+       "最近 2 年自由现金流合计 ÷ 净利润合计", "Two-year free cash flow over two-year net income", "pct"),
 ]}
+
+# 护城河的年度点偏移（季度）：0 = 最近 12 个月
+MOAT_OFFSETS = (0, 4, 8, 12)
 
 # 算式输入的标签（zh, en）
 INPUT_LABELS: dict[str, tuple[str, str]] = {
@@ -169,10 +193,15 @@ INPUT_LABELS: dict[str, tuple[str, str]] = {
     "pe": ("市盈率", "P/E"), "growth_pct": ("EPS 增速 %", "EPS growth %"),
     "close_now": ("最新收盘价", "Latest close"), "close_then": ("期初收盘价", "Starting close"),
     "est_new": ("当前一致预期", "Current consensus"), "est_old": ("当时一致预期", "Consensus then"),
+    "gm_y0": ("最近 12 个月毛利率", "Gross margin, last 12M"), "gm_y1": ("1 年前毛利率", "Gross margin, 1Y ago"),
+    "gm_y2": ("2 年前毛利率", "Gross margin, 2Y ago"), "gm_y3": ("3 年前毛利率", "Gross margin, 3Y ago"),
+    "om_y0": ("最近 12 个月经营利润率", "EBIT margin, last 12M"), "om_y1": ("1 年前经营利润率", "EBIT margin, 1Y ago"),
+    "om_y2": ("2 年前经营利润率", "EBIT margin, 2Y ago"), "om_y3": ("3 年前经营利润率", "EBIT margin, 3Y ago"),
+    "fcf_2y": ("近 2 年自由现金流", "2Y free cash flow"), "net_2y": ("近 2 年净利润", "2Y net income"),
 }
 
 
-Op = Literal["div", "growth", "cagr3", "ret", "peg", "change"]
+Op = Literal["div", "growth", "cagr3", "ret", "peg", "change", "avg", "std", "min", "delta"]
 
 
 @dataclass
@@ -327,6 +356,8 @@ def compute_metrics(inp: StockInputs) -> dict[str, MetricValue]:
             out[key] = MetricValue(None, "not_applicable", out[key].inputs, out[key].op,
                                    {"reason": "financials_cash_flow"})
 
+    out |= _moat_metrics(inp)
+
     # ---- 动量 ----
     closes = inp.closes
     for key, n in MOMENTUM_WINDOWS.items():
@@ -348,3 +379,51 @@ def _peg(pe: MetricValue, growth: float | None, *, nonpositive_base: bool = Fals
     if growth <= 0:
         return MetricValue(None, "not_meaningful", inputs, "peg")
     return MetricValue(pe.value / (growth * 100), "ok", inputs, "peg")  # type: ignore[operator]
+
+
+def _yearly_margins(q: list[dict], key: str) -> list[float] | None:
+    """4 个年度（各 12 个月）的利润率，新 → 旧；任一年缺数据或营收非正返回 None。"""
+    out = []
+    for o in MOAT_OFFSETS:
+        num, rev = ttm(q, key, o), ttm(q, "revenue", o)
+        if num is None or rev is None or rev <= 0:
+            return None
+        out.append(num / rev)
+    return out
+
+
+def _moat_metrics(inp: StockInputs) -> dict[str, MetricValue]:
+    """护城河六项：长期利润率水平、稳定性、趋势与利润的现金含量。"""
+    q, cf = inp.quarters_income, inp.quarters_cash
+    out: dict[str, MetricValue] = {}
+    for prefix, key, avg_key, vol_key in (("gm", "grossProfit", "moat_gm_avg", "moat_gm_vol"),
+                                          ("om", "ebit", None, "moat_om_vol")):
+        ys = _yearly_margins(q, key)
+        names = [f"{prefix}_y{i}" for i in range(4)]
+        inputs = list(zip(names, ys or [None] * 4, strict=True))
+        if ys is None:
+            for k in filter(None, (avg_key, vol_key)):
+                out[k] = _missing("std" if k == vol_key else "avg", inputs)
+            if prefix == "gm":
+                out["moat_gm_trend"] = _missing("delta", [inputs[0], inputs[3]])
+            else:
+                out["moat_om_min"] = _missing("min", inputs)
+            continue
+        out[vol_key] = MetricValue(statistics.pstdev(ys), "ok", inputs, "std")
+        if prefix == "gm":
+            out["moat_gm_avg"] = MetricValue(sum(ys) / len(ys), "ok", inputs, "avg")
+            out["moat_gm_trend"] = MetricValue(ys[0] - ys[3], "ok", [inputs[0], inputs[3]], "delta")
+        else:
+            out["moat_om_min"] = MetricValue(min(ys), "ok", inputs, "min")
+
+    ocf = [ttm(cf, "operatingCashFlow", o) for o in (0, 4)]
+    capex = [ttm(cf, "capitalExpenditure", o) for o in (0, 4)]
+    nets = [ttm(q, "netIncome", o) for o in (0, 4)]
+    fcf2 = (sum(ocf) + sum(capex)) if all(v is not None for v in ocf + capex) else None  # type: ignore[arg-type]
+    net2 = sum(nets) if all(v is not None for v in nets) else None  # type: ignore[arg-type]
+    inputs = [("fcf_2y", fcf2), ("net_2y", net2)]
+    if inp.sector_key == "financials":
+        out["moat_fcf_conv"] = MetricValue(None, "not_applicable", inputs, "div", {"reason": "financials_cash_flow"})
+    else:
+        out["moat_fcf_conv"] = _ratio(fcf2, net2, inputs, den_nonpositive="not_applicable")
+    return out
