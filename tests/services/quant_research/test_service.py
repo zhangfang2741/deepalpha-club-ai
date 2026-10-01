@@ -39,7 +39,7 @@ async def test_reads_db_result_and_caches(monkeypatch):
     r = _FakeRedis()
     out = await service.get_quant_research("US", "nvda", "zh", redis=r)
     assert out.symbol == "NVDA" and calls["db"] == 1
-    assert "quant:us:sym:NVDA:zh" in r.store
+    assert service._cache_key("NVDA", "zh") in r.store
     await service.get_quant_research("us", "NVDA", "zh", redis=r)
     assert calls["db"] == 1  # 第二次命中缓存
 
@@ -83,8 +83,28 @@ async def test_legacy_cache_receives_guidance_without_recomputation(monkeypatch)
 
     monkeypatch.setattr(service.repo, "get_latest_result", unexpected)
     redis = _FakeRedis()
-    redis.store["quant:us:sym:NVDA:zh"] = json.dumps(payload)
+    redis.store[service._cache_key("NVDA", "zh")] = json.dumps(payload)
     out = await service.get_quant_research("us", "NVDA", "zh", redis=redis)
     metrics = [metric for dimension in out.dimensions for group in dimension.groups for metric in group.metrics]
     assert all(metric.interpretation and metric.interpretation.role for metric in metrics)
     assert out.overall.model_dump() == payload["overall"]
+
+
+async def test_cache_from_older_methodology_is_ignored(monkeypatch):
+    """改规则部署后，旧版本缓存的结果（如样本外现算的旧阶段）不再命中。"""
+    calls = {"db": 0}
+
+    class Row:
+        payload_zh = json.loads((FIXTURE_DIR / "golden_NVDA.json").read_text())
+        payload_en = payload_zh
+
+    async def latest(*args, **kwargs):
+        calls["db"] += 1
+        return Row()
+
+    monkeypatch.setattr(service.repo, "get_latest_result", latest)
+    redis = _FakeRedis()
+    redis.store["quant:us:sym:NVDA:zh"] = json.dumps({"stale": True})  # 旧格式键
+    await service.get_quant_research("us", "NVDA", "zh", redis=redis)
+    assert calls["db"] == 1
+    assert service.METHODOLOGY_VERSION in service._cache_key("NVDA", "zh")

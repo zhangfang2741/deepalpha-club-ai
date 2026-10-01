@@ -15,6 +15,7 @@ from app.schemas.quant_research import QuantResearchOut
 from app.services.quant_research import repository as repo
 from app.services.quant_research.batch import HISTORY_DAYS, MARKET, estimate_rows
 from app.services.quant_research.builder import (
+    METHODOLOGY_VERSION,
     build_payload,
     evaluate,
     finalize_overall,
@@ -37,7 +38,8 @@ ON_DEMAND_TTL = 86400
 
 
 def _cache_key(symbol: str, lang: str) -> str:
-    return f"quant:us:sym:{symbol}:{lang}"
+    """带方法版本：改规则部署后旧口径缓存立即失效（样本外现算结果缓存 24 小时，否则要等批量跑完才清）。"""
+    return f"quant:us:sym:{METHODOLOGY_VERSION}:{symbol}:{lang}"
 
 
 async def get_quant_research(market: str, symbol: str, lang: Lang, *, redis: Redis | None) -> QuantResearchOut:
