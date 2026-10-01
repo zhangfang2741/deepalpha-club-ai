@@ -588,7 +588,7 @@ def test_buy1_force_metric_requires_c_leg_weaker_than_b_leg():
     sig = generate_all_signals([_ev("buy1", "2025-01-10", 105.0)], strokes, [_NO_DIV] * len(strokes), pivots,
                                metric=get_metric("force"))
     assert [x.type for x in sig] == ["buy1"]
-    assert sig[0].divergence is not None and sig[0].divergence.price_ratio == 0.57
+    assert sig[0].divergence is not None and sig[0].divergence.price_ratio == 0.77
 
 
 def test_buy1_force_metric_dropped_when_c_leg_not_weaker():
@@ -635,5 +635,58 @@ def test_metric_is_switchable_without_changing_signal_shape():
     macd = _macd_for(strokes, 1.0, 2.0)  # 面积更大 → macd_area 否掉；force 仍成立
     sig = generate_all_signals([_ev("buy1", "2025-01-10", 105.0)], strokes, [_NO_DIV] * len(strokes), pivots,
                                macd=macd, metric=get_metric("force"))
-    assert [x.type for x in sig] == ["buy1"] and sig[0].divergence.price_ratio == 0.57
+    assert [x.type for x in sig] == ["buy1"] and sig[0].divergence.price_ratio == 0.77
     assert get_metric("nope").name == "macd_area"
+
+
+# ---- c / b 段取法（缠论：离开中枢的整段走势，含离开笔） ----
+#
+# czsc 把「离开中枢的那一笔」吸收进中枢（它起点还在区间内）。旧实现的 c 段从「B 最后一个元素的终点」起算，
+# 漏掉了离开笔，c 段被砍到几乎为 0（真实数据：PEP c 段价差 0.11、XOM 1.00，而离开笔有 25~100 点），
+# 于是「背驰」几乎必然成立。下面用手工构造的、答案已知的结构固定住正确取法。
+
+def _legs_fixture():
+    """下跌趋势：A[130,140] → b 段 → B[100,110] → c 段。笔端点（时间, 价）：
+
+    A 内：140 → 130 → 140 → 132(离开笔起点) ；离开笔 132→108(进入 B 的 b 段)
+    B 内：108 → 110 → 100 → 110（区间 [100,110]）；离开笔 110 → 80（被吸收进 B 的最后一个元素）
+    之后：80 → 90 → 70（信号笔，c 段内含回抽）
+    """
+    from app.services.chan.pivot import Pivot
+    a_el = [_st("down", "2024-10-01", "2024-10-05", 140, 130), _st("up", "2024-10-05", "2024-10-10", 130, 140),
+            _st("down", "2024-10-10", "2024-10-20", 140, 132)]
+    a_exit = _st("down", "2024-10-20", "2024-11-10", 132, 108)  # 离开 A：被吸收进 A 的最后一个元素
+    a_el.append(a_exit)
+    b_el = [_st("up", "2024-11-10", "2024-11-15", 108, 110), _st("down", "2024-11-15", "2024-11-20", 110, 100),
+            _st("up", "2024-11-20", "2024-12-05", 100, 110)]
+    b_exit = _st("down", "2024-12-05", "2024-12-25", 110, 80)  # 离开 B：被吸收进 B 的最后一个元素
+    b_el.append(b_exit)
+    rebound = _st("up", "2024-12-25", "2025-01-05", 80, 90)
+    sig = _st("down", "2025-01-05", "2025-01-20", 90, 70)
+    strokes = [*a_el, *b_el, rebound, sig]
+    pa = Pivot(zg=140, zd=130, gg=142, dd=128, start_time="2024-10-01", end_time="2024-11-10",
+               level="stroke", elements=a_el)
+    pb = Pivot(zg=110, zd=100, gg=112, dd=98, start_time="2024-11-10", end_time="2024-12-25",
+               level="stroke", elements=b_el)
+    return strokes, [pa, pb]
+
+
+def test_c_leg_includes_the_leaving_stroke_absorbed_into_pivot():
+    from app.services.chan.signals import _trend_legs
+    strokes, pivots = _legs_fixture()
+    b_leg, c_leg = _trend_legs(strokes, pivots, "2025-01-20", True)
+    # c 段从 B 最后一次仍在区间内的端点（2024-12-05，110）出发，含离开笔 110→80
+    assert c_leg[0].start_time == "2024-12-05"  # 离开笔 110→80 的起点（分型价带 ±1 影线，不断言精确价）
+    assert [st.end_time for st in c_leg] == ["2024-12-25", "2025-01-05", "2025-01-20"]
+    # b 段对称：从 A 最后一次仍在区间内的端点出发，含离开笔 132→108
+    assert b_leg[0].start_time == "2024-10-20" and b_leg[-1].end_time == "2024-11-10"
+
+
+def test_buy1_not_new_low_below_b_end_is_not_type1():
+    from app.services.chan.leg_metric import get_metric
+    strokes, pivots = _legs_fixture()
+    # 信号价 108 高于 b 段终点（108 持平）→ 没创新低，不是一类
+    strokes[-1] = _st("down", "2025-01-05", "2025-01-20", 118, 108)
+    sig = generate_all_signals([_ev("buy1", "2025-01-20", 108.0)], strokes, [_NO_DIV] * len(strokes), pivots,
+                               metric=get_metric("force"))
+    assert "buy1" not in [x.type for x in sig]  # 夹具里另有三类卖点，与一类无关

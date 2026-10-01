@@ -186,28 +186,46 @@ def _in_trend(pivots: list[Pivot], time: str, is_buy: bool, price: float) -> boo
     return b.zd > a.zg and price > b.zg
 
 
+def _exit_stroke(
+    strokes: list[Stroke], lo: float, hi: float, is_buy: bool, start: str, end: str,
+) -> Stroke | None:
+    """离开中枢 [lo, hi] 的那一笔。
+
+    [start, end] 内最后一笔「与区间有重叠、沿趋势方向、终点越过区间边界」的笔
+    （买：向下且终点 < lo；卖：向上且终点 > hi）。
+
+    czsc 会把离开笔吸收进中枢（它的起点还在区间内），所以不能拿「中枢最后一个元素」当离开点；
+    取「最后一笔」是为了离开后又回到区间再离开时，以最近一次离开为准。
+    """
+    cand = [
+        st for st in strokes
+        if st.start_time >= start and st.end_time <= end and st.low <= hi and st.high >= lo
+        and (st.direction == "down") == is_buy and ((st.end_price < lo) if is_buy else (st.end_price > hi))
+    ]
+    return cand[-1] if cand else None
+
+
 def _trend_legs(
     strokes: list[Stroke], pivots: list[Pivot], time: str, is_buy: bool,
 ) -> tuple[list[Stroke], list[Stroke]] | None:
-    """趋势背驰要比的两段：b 段（A 的离开点到 B 的进入点）与 c 段（B 的离开点到信号笔终点）。
+    """趋势背驰要比的两段：b 段（离开 A 的那一笔起，到进入 B）与 c 段（离开 B 的那一笔起，到信号笔终点）。
 
+    b、c 都是「离开中枢的走势」，取法对称，都包含各自的离开笔（见 _exit_stroke）。
+    （曾经 c 段从「B 最后一个元素的终点」起算，漏掉了被 czsc 吸收进 B 的离开笔，c 段被砍到几乎为 0，
+    背驰几乎必然成立：真实数据 PEP c 段价差 0.11、XOM 1.00，而离开笔有 25~100 点。回归用例见 tests。）
     中枢没有笔明细、两段取不到时返回 None（调用方保留 czsc 笔级判定）。
     """
     formed = sorted((p for p in pivots if _formed_at(p) <= time), key=_formed_at)
     if len(formed) < 2 or not formed[-1].elements or not formed[-2].elements:
         return None
     a, b = formed[-2], formed[-1]
-    # czsc 的相邻中枢首尾相接（A 的结束 = B 的开始）：A 的最后一笔就是离开 A 的那一笔，算 b 段的开头；
-    # 之后若还有笔才进入 B，一并算入。b 段方向必须与趋势一致（买：向下，卖：向上）。
     entry = b.elements[0].start_time
-    b_leg = [st for st in strokes if st.start_time >= a.elements[-1].start_time and st.end_time <= entry]
-    if b_leg and (b_leg[-1].end_price < b_leg[0].start_price) != is_buy:
+    k_b = _exit_stroke(strokes, a.zd, a.zg, is_buy, a.elements[0].start_time, entry)
+    k_c = _exit_stroke(strokes, b.zd, b.zg, is_buy, entry, time)
+    if k_b is None or k_c is None:
         return None
-    sig_start = next((st.start_time for st in strokes if st.end_time == time), None)
-    if sig_start is None:
-        return None
-    c_from = max((e.end_time for e in b.elements if e.end_time <= sig_start), default=None)
-    c_leg = [st for st in strokes if c_from is not None and st.start_time >= c_from and st.end_time <= time]
+    b_leg = [st for st in strokes if st.start_time >= k_b.start_time and st.end_time <= entry]
+    c_leg = [st for st in strokes if st.start_time >= k_c.start_time and st.end_time <= time]
     return (b_leg, c_leg) if b_leg and c_leg else None
 
 
@@ -242,6 +260,10 @@ def _trend_leg_divergence(
     legs = _trend_legs(strokes, pivots, time, is_buy)
     if legs is None:
         return False, None
+    # 背驰的前提是价格创新极值：信号价要越过 b 段终点（买：更低，卖：更高），否则不是一类
+    b_end, price = legs[0][-1].end_price, legs[1][-1].end_price
+    if (price >= b_end) if is_buy else (price <= b_end):
+        return True, None
     return _compare_legs(leg_force(legs[1], macd), leg_force(legs[0], macd), lang, metric or get_metric(None))
 
 
