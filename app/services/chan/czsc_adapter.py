@@ -74,6 +74,16 @@ def ts_date(ts) -> str:
     return f"{day} {t.hour:02d}:{t.minute:02d}"
 
 
+def czsc_macd(c: CZSC):
+    """按 czsc 实际持有的 K 线（bars_raw）算 MACD，供背驰面积使用。
+
+    czsc 的 bars_raw 会少掉输入的第一根 K 线，EMA 起点因此晚一根；Rust 信号（dp_trend_legs）
+    也是按 bars_raw 算面积，两边必须同一口径才能逐位一致。API 展示用的 result.macd 不受影响。
+    """
+    from app.services.chan.divergence import calc_macd
+    return calc_macd([{"time": ts_date(rb.dt), "close": float(rb.close)} for rb in c.bars_raw])
+
+
 def extract_structures(c: CZSC, bars: list[dict]) -> CzscStructures:
     """把 czsc 的分型/笔/笔级中枢转换回项目内部 dataclass。
 

@@ -18,7 +18,7 @@ from app.services.chan.divergence import (
     force_text,
 )
 from app.services.chan.i18n import is_en
-from app.services.chan.leg_metric import DivergenceMetric, get_metric, leg_force
+from app.services.chan.leg_metric import DivergenceMetric, LegForce, get_metric, leg_force
 from app.services.chan.pivot import Pivot
 from app.services.chan.stroke import Stroke
 
@@ -211,20 +211,11 @@ def _trend_legs(
     return (b_leg, c_leg) if b_leg and c_leg else None
 
 
-def _trend_leg_divergence(
-    strokes: list[Stroke], pivots: list[Pivot], time: str, is_buy: bool, lang: str,
-    macd: MACDData | None = None, metric: DivergenceMetric | None = None,
+def _compare_legs(
+    c: LegForce, b: LegForce, lang: str, metric: DivergenceMetric,
 ) -> tuple[bool, DivergenceResult | None]:
-    """一类的趋势背驰（缠论原文）：c 段（离开 B）对 b 段（A、B 之间）比力度，度量由 metric 决定。
-
-    返回（能否判定, 背驰结果）。b / c 段取不到、或该度量缺数据（如没传 MACD）时「不能判定」，
-    调用方保留 czsc 的笔级判定；能判定而不背驰则返回 (True, None)，这个一类不成立。
-    """
-    legs = _trend_legs(strokes, pivots, time, is_buy)
-    if legs is None:
-        return False, None
-    metric = metric or get_metric(None)
-    cmp = metric.compare(leg_force(legs[1], macd), leg_force(legs[0], macd))
+    """C 段对 b 段按度量比较：（能否判定, 背驰结果）；该度量缺数据时「不能判定」。"""
+    cmp = metric.compare(c, b)
     if cmp is None:
         return False, None
     if not cmp.diverged:
@@ -236,6 +227,22 @@ def _trend_leg_divergence(
         area_ratio=cmp.area_ratio,
         description=force_text(cmp.price_ratio, cmp.volume_ratio, cmp.length_ratio, lang, cmp.area_ratio),
     )
+
+
+def _trend_leg_divergence(
+    strokes: list[Stroke], pivots: list[Pivot], time: str, is_buy: bool, lang: str,
+    macd: MACDData | None = None, metric: DivergenceMetric | None = None,
+) -> tuple[bool, DivergenceResult | None]:
+    """一类的趋势背驰（缠论原文）：c 段（离开 B）对 b 段（A、B 之间）比力度，度量由 metric 决定。
+
+    返回（能否判定, 背驰结果）。b / c 段取不到、或该度量缺数据（如没传 MACD）时「不能判定」，
+    调用方保留 czsc 的笔级判定；能判定而不背驰则返回 (True, None)，这个一类不成立。
+    这是纯 Python 实现（标准 czsc 下用）；自有 Rust 信号 dp_trend_legs 给出同样的原始力度，见 BsEvent.legs。
+    """
+    legs = _trend_legs(strokes, pivots, time, is_buy)
+    if legs is None:
+        return False, None
+    return _compare_legs(leg_force(legs[1], macd), leg_force(legs[0], macd), lang, metric or get_metric(None))
 
 
 def _formed_at(p: Pivot) -> str:
@@ -388,11 +395,20 @@ def generate_all_signals(
         want = "down" if ev.type == "buy1" else "up"
         if key in seen or direction_by_end.get(ev.bi_end_time) != want:
             continue
-        if not _in_trend(pivots, ev.bi_end_time, ev.type == "buy1", ev.bi_end_price):
-            continue
-        # 缠论原文：趋势背驰比较 c 段（离开 B）与 b 段（A、B 之间），不是末笔对前一笔
-        judged, leg_div = _trend_leg_divergence(strokes, pivots, ev.bi_end_time, ev.type == "buy1", lang,
-                                                macd=macd, metric=metric)
+        # 缠论原文：趋势背驰比较 c 段（离开 B）与 b 段（A、B 之间），不是末笔对前一笔。
+        # 事件带 Rust 信号给出的趋势 / 两段原始力度就直接用，否则（标准 czsc）退回 Python 实现。
+        if ev.legs is not None:
+            if not ev.legs.trend:
+                continue
+            judged, leg_div = (
+                _compare_legs(ev.legs.c, ev.legs.b, lang, metric or get_metric(None))
+                if ev.legs.b is not None and ev.legs.c is not None else (False, None)
+            )
+        else:
+            if not _in_trend(pivots, ev.bi_end_time, ev.type == "buy1", ev.bi_end_price):
+                continue
+            judged, leg_div = _trend_leg_divergence(strokes, pivots, ev.bi_end_time, ev.type == "buy1", lang,
+                                                    macd=macd, metric=metric)
         if judged and leg_div is None:
             continue
         seen.add(key)

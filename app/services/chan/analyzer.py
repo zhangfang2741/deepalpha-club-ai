@@ -25,7 +25,7 @@ from app.services.chan.divergence import (
 )
 from czsc import Freq
 
-from app.services.chan.czsc_adapter import build_czsc, extract_structures
+from app.services.chan.czsc_adapter import build_czsc, extract_structures, czsc_macd
 from app.services.chan.czsc_signals import scan_bs_events
 from app.services.chan.fractal import Fractal, MergedCandle
 from app.services.chan.i18n import is_en, pick
@@ -245,7 +245,7 @@ class ChanAnalyzer:
         result.shape_states = shape_states
         result.signals = policy.assemble(events, result.strokes, result.divergences, all_pivots, lang,
                                          stroke_done_at=stroke_done_at, stroke_started_at=stroke_started_at,
-                                         macd=result.macd)
+                                         macd=czsc_macd(czsc_obj))
         logger.debug("chan_signals", count=len(result.signals))
 
         # 9. 标注最右侧未确认结构（右侧滞后不确定性）

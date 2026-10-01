@@ -30,6 +30,7 @@ from typing import Literal
 from czsc import BarGenerator, CzscSignals, Freq
 
 from app.services.chan.czsc_adapter import ts_date, bars_to_raw_bars
+from app.services.chan.leg_metric import LegForce
 from app.services.chan.shape_filters import ShapeState, read_shape_state, shape_config
 
 SignalType = Literal["buy1", "buy2", "buy3", "sell1", "sell2", "sell3"]
@@ -47,6 +48,17 @@ _INIT_N = 20
 
 
 @dataclass(frozen=True)
+class LegState:
+    """Rust 信号 dp_trend_legs 在事件那根 K 线上的状态：趋势前提是否成立 + b / c 段原始力度。
+
+    b / c 为 None 表示趋势成立但两段取不到（调用方保留 czsc 笔级判定）。
+    """
+    trend: bool
+    b: LegForce | None = None
+    c: LegForce | None = None
+
+
+@dataclass(frozen=True)
 class BsEvent:
     """一次买卖点事件：bar_time 亮起，针对终点在 bi_end_time 的那一笔。"""
     type: SignalType
@@ -54,22 +66,40 @@ class BsEvent:
     bi_end_time: str
     bi_end_price: float
     span: str  # 一类信号命中的结构笔数（如 "9笔"），其余类型为空
+    legs: LegState | None = None  # 自有 Rust 信号给出的趋势 / b·c 段原始力度；标准 czsc 下为 None
 
 
 _DP_BI_TRACK = "dp_bi_track_V261001"
+_DP_TREND_LEGS = "dp_trend_legs_V261001"
 
 
-def _dp_signals_available() -> bool:
+def _dp_signals_available(name: str = _DP_BI_TRACK) -> bool:
     """自编译的 czsc（rust/czsc，带 dp_* 信号）才有；标准 PyPI 版没有，退回读 bi_list 副本。"""
     try:
         import czsc._native as native
         names = native.signals.list_signal_names()  # pyright: ignore[reportAttributeAccessIssue]
-        return any(n.endswith(_DP_BI_TRACK) for n in names)
+        return any(n.endswith(name) for n in names)
     except Exception:  # noqa: BLE001 — 探测失败一律当作不可用
         return False
 
 
 _HAS_DP = _dp_signals_available()
+_HAS_DP_LEGS = _dp_signals_available(_DP_TREND_LEGS)
+
+
+def _parse_leg(text: str) -> LegForce:
+    price, volume, length, area = (float(x) for x in text.split("#"))
+    return LegForce(price=price, volume=volume, length=int(length), area=area)
+
+
+def parse_leg_state(value: str) -> LegState:
+    """解析 dp_trend_legs 的信号值（如 `买趋势_28#600#12#3.4_15#350#9#1.1_0`）。"""
+    parts = value.split("_")
+    if parts[0] not in ("买趋势", "卖趋势"):
+        return LegState(trend=False)
+    if len(parts) < 3 or parts[1] == "无":
+        return LegState(trend=True)
+    return LegState(trend=True, b=_parse_leg(parts[1]), c=_parse_leg(parts[2]))
 
 
 def _dp_ts(s: str) -> str:
@@ -140,6 +170,11 @@ def scan_bs_events(
     if use_dp:
         config = [*config, {"name": _DP_BI_TRACK, "freq": label, "di": 1}]
     dp_key = f"{label}_D1笔轨迹_DP辅助V261001"
+    # 严格口径（只启用一类）才需要趋势 / 两段力度；宽松口径不用
+    use_legs = _HAS_DP_LEGS and "first" in families and "second" not in families and "third" not in families
+    legs_key = f"{label}_D1趋势腿_DP辅助V261001"
+    if use_legs:
+        config = [*config, {"name": _DP_TREND_LEGS, "freq": label, "di": 1}]
     if shape_states is not None:
         config = config + shape_config(label)
     bg = BarGenerator(label, [], max_count=len(raw) + 1)
@@ -195,6 +230,7 @@ def scan_bs_events(
                     events.append(BsEvent(
                         type=sig_type, bar_time=ts_date(bar.dt), bi_end_time=bi_end_time,
                         bi_end_price=float(bi.fx_b.fx), span=span,
+                        legs=parse_leg_state(s[legs_key]) if use_legs and sig_type in ("buy1", "sell1") else None,
                     ))
             prev[key] = v1
     return events

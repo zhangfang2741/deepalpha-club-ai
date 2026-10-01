@@ -177,7 +177,9 @@ pub fn dp_trend_legs_v261001(c: &CZSC, _params: &ParamView, _cache: &mut TaCache
         return other();
     };
     let is_buy = last.direction == Direction::Down;
-    let piv = dp_pivots(bis);
+    // 中枢只用「已确认」的笔分组（与 czsc `zs_list` 同口径：未完成区域不足 5 根 K 线时，最后一笔尚未确认）
+    let n_finished = if c.bars_ubi.len() < 5 { bis.len() - 1 } else { bis.len() };
+    let piv = dp_pivots(&bis[..n_finished]);
     if piv.len() < 2 {
         return other();
     }
