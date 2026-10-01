@@ -108,6 +108,37 @@ struct RadarDay: Decodable, Identifiable {
     }
 }
 
+extension RadarDay {
+    /// 没有行业标签的信号归入的行业 key（与 RadarDay.otherSectorKey 同值）。
+    static let otherSectorKey = "_other"
+
+    init(date: String, quantFilter: RadarQuantFilter?, buyCount: Int, sellCount: Int, signals: [RadarSignal],
+         candidates: [RadarSignal], sectorCounts: [String: [String: Int]]?) {
+        self.date = date
+        self.quantFilter = quantFilter
+        self.buyCount = buyCount
+        self.sellCount = sellCount
+        self.signals = signals
+        self.candidatesRaw = candidates
+        self.sectorCounts = sectorCounts
+    }
+
+    /// 只留某个行业的信号（买卖点数跟着重算）；行业统计原样保留，筛选菜单仍能显示各行业个数。
+    func filtered(sector key: String) -> RadarDay {
+        let kept = signals.filter { ($0.sector ?? RadarDay.otherSectorKey) == key }
+        return RadarDay(date: date, quantFilter: quantFilter,
+                        buyCount: kept.filter { $0.isBuy }.count, sellCount: kept.filter { !$0.isBuy }.count,
+                        signals: kept, candidates: candidates.filter { ($0.sector ?? RadarDay.otherSectorKey) == key },
+                        sectorCounts: sectorCounts)
+    }
+
+    /// 某个行业当天在场的信号数（来自行业统计；没有统计时按信号现数）。
+    func signalCount(sector key: String) -> Int {
+        if let counts = sectorCounts?[key] { return counts.values.reduce(0, +) }
+        return signals.filter { ($0.sector ?? RadarDay.otherSectorKey) == key }.count
+    }
+}
+
 /// 单只股票的当日买卖点信号。
 struct RadarSignal: Decodable, Identifiable, Hashable {
     let symbol: String

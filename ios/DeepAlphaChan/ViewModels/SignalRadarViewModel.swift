@@ -146,8 +146,20 @@ final class SignalRadarViewModel: ObservableObject {
         return days[idx]
     }
 
-    /// 雷达展示的那一天（全部在场信号，后端已按出现时间从新到旧排好）。
-    var selectedDay: RadarDay? { baseSelectedDay }
+    /// 雷达展示的那一天（后端已按出现时间从新到旧排好）；选了行业时只留该行业的信号。
+    var selectedDay: RadarDay? {
+        guard let day = baseSelectedDay else { return nil }
+        guard let key = sectorFilter, day.hasSectorData else { return day }
+        return day.filtered(sector: key)
+    }
+
+    /// 顶部「行业」卡片选中的行业 key；nil = 全部行业。切市场 / 指数时清空。
+    @Published private(set) var sectorFilter: String?
+
+    func setSectorFilter(_ key: String?) {
+        guard key != sectorFilter else { return }
+        sectorFilter = key
+    }
 
     // MARK: - 行业强弱（扇区雷达的角度顺序、行业面板）
 
@@ -249,6 +261,7 @@ final class SignalRadarViewModel: ObservableObject {
     func switchMarket(_ m: StockMarket) {
         guard m != market else { return }
         market = m
+        sectorFilter = nil
         // 不清空 response：新市场数据回来前保留旧内容（调暗 + 加载指示），页面不跳动
         // 不同市场的 universe 列表不同：换成这个市场之前拿到过的列表（没有就先空着），
         // 切换器与「正在扫描 X」立刻显示正确的指数名，不用等接口。
@@ -267,6 +280,7 @@ final class SignalRadarViewModel: ObservableObject {
     /// 注意不清空 availableUniverses：正在计算时切换器仍要在，方便随时切回别的指数。
     func switchUniverse(_ key: String) {
         guard key != activeUniverseKey else { return }
+        sectorFilter = nil
         universeByMarket[market] = key
         pendingUniverseKey = key
         selectedDayIndex = 0

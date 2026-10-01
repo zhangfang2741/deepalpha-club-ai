@@ -14,6 +14,8 @@ struct RadarBubble: View {
     /// 「待确认」候选：最后一笔还在走，不算买卖点——灰底 + 买卖方向色虚线边框 + 「待确认」标签，
     /// 不挂「新 / 共振」角标，与真实买卖点一眼区分。
     var isCandidate = false
+    /// 是否给已确认的信号画「✓」；全部都已确认（严格口径）时由雷达关掉。
+    var marksConfirmed = true
     let onOpen: () -> Void
 
     /// 持续漂浮的竖向偏移（onAppear 后在 0 ↔ 负值间无限往复）。
@@ -27,6 +29,7 @@ struct RadarBubble: View {
     /// 已确认（所在笔已走完）：左上角打勾。宽松口径下每天多数气泡落在还没走完的最后一笔上、
     /// 是未确认的，所以只给少数已确认的做标记，不给多数未确认的挂标签（画面更干净）。
     private var isConfirmed: Bool { !isCandidate && signal.confirmed }
+    private var showsConfirmedMark: Bool { isConfirmed && marksConfirmed }
     /// 过期或缺失评级不显示角标，避免自选股卖出提醒展示失效等级。
     private var displayedGrade: String? {
         guard signal.quantStatus != "stale", signal.quantStatus != "missing" else { return nil }
@@ -45,11 +48,13 @@ struct RadarBubble: View {
     var body: some View {
         content
             .frame(width: diameter, height: diameter)
+            // 阴影必须在漂浮 / 拖拽位移之前：放在之后，每一帧位移都要重画一遍模糊阴影，
+            // 十几个气泡一起漂浮时整页掉帧
+            .shadow(color: .black.opacity(dragging ? 0.5 : 0.35),
+                    radius: dragging ? 12 : 6, y: dragging ? 8 : 3)
             .scaleEffect(dragging ? 1.12 : 1.0)
             .offset(y: floatY)
             .offset(drag)
-            .shadow(color: .black.opacity(dragging ? 0.5 : 0.35),
-                    radius: dragging ? 12 : 6, y: dragging ? 8 : 3)
             .contentShape(Circle())
             .gesture(
                 DragGesture()
@@ -162,7 +167,7 @@ struct RadarBubble: View {
         }
         .overlay(alignment: .topLeading) {
             // 已确认：白色对勾 + 深色描边小圆，红 / 绿气泡上都清楚，不与买卖方向色混淆。
-            if isConfirmed {
+            if showsConfirmedMark {
                 let side = max(14, min(20, r * 0.36))
                 Image(systemName: "checkmark")
                     .font(.system(size: side * 0.55, weight: .heavy))

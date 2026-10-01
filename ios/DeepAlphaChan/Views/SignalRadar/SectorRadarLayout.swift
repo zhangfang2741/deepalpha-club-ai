@@ -10,7 +10,7 @@ import Foundation
 ///   其余在行业标签上显示「+N」，点开行业面板看全部。
 enum SectorRadarLayout {
     /// 没有行业标签的信号归入的扇区。
-    static let otherKey = "_other"
+    static let otherKey = "_other"  // 与 RadarDay.otherSectorKey 同值（模型层不依赖布局）
     /// 全图气泡总数上限（行业数更多时每个行业仍至少 1 个）。标普 500 实测每天 36~98 个在场信号、约 10 个行业。
     static let maxTotal = 36
     static let maxPerWedge = 6
@@ -128,8 +128,12 @@ enum SectorRadarLayout {
 
     // MARK: - 在扇区内摆放
 
-    /// 两个气泡允许重叠「较小直径 × 此比例」（代码 / 名称在气泡中间，盖不到）。
-    static let overlapRatio = 0.15
+    /// 两个气泡允许重叠「较小直径 × 此比例」。不重叠：叠在一起的气泡看着乱，画不下的计入「+N」。
+    static let overlapRatio = 0.0
+    /// 相邻气泡之间留的空隙（pt），让每个气泡轮廓清楚。
+    static let bubbleGap = 3.0
+    /// 气泡离禁区（扇区标签、指数切换器）至少再留这么多（pt）：角上的「新 / 共振」角标会伸出圆外。
+    static let obstacleMargin = 8.0
     /// 扇区内候选位置的最内圈（占场半径比例）：各扇区在圆心汇成一点，再往里谁都放不下。
     static let packInnerRadius = 0.16
 
@@ -158,7 +162,7 @@ enum SectorRadarLayout {
     ///   一个扇区找不到位置就停，余下的计入「+N」。
     static func pack(
         plan: (wedges: [Wedge], slots: [Slot]), diameters: [Double], width w: Double, height h: Double,
-        hRad: Double, vRad: Double, edge: Double, obstacles: [Rect]
+        hRad: Double, vRad: Double, edge: Double, obstacles: [Rect], outwardOnly: Bool = true
     ) -> (wedges: [Wedge], placements: [Placement]) {
         let meanRadius = ((hRad * hRad + vRad * vRad) / 2).squareRoot()
         guard meanRadius > 0 else { return (plan.wedges.map { $0.with(shown: 0) }, []) }
@@ -194,10 +198,10 @@ enum SectorRadarLayout {
             guard x >= rr - 1e-9, x <= w - rr + 1e-9, y >= rr - 1e-9, y <= h - rr + 1e-9 else { return false }
             for o in obstacles {
                 let nx = min(max(x, o.x), o.x + o.width), ny = min(max(y, o.y), o.y + o.height)
-                if hypot(x - nx, y - ny) < d / 2 { return false }
+                if hypot(x - nx, y - ny) < d / 2 + obstacleMargin { return false }
             }
             for p in placed {
-                let need = (d + p.diameter) / 2 - overlapRatio * min(d, p.diameter)
+                let need = (d + p.diameter) / 2 + bubbleGap - overlapRatio * min(d, p.diameter)
                 if hypot(x - p.x, y - p.y) < need { return false }
             }
             return true
@@ -230,8 +234,9 @@ enum SectorRadarLayout {
                 let index = queue[round]
                 let d = diameters[index]
                 var spots = candidates[wedge.key] ?? []
-                // 只往外找：同一扇区里后放的（更早的信号）不会比先放的更靠里
-                let floor = placed.last(where: { $0.wedgeKey == wedge.key }).map {
+                // 只往外找：同一扇区里后放的（更早的信号）不会比先放的更靠里。
+                // outwardOnly=false（整圆一个扇区）时允许填空隙：否则一个气泡落到外圈后，其余只能更往外，很快就放不下
+                let floor = !outwardOnly ? 0 : placed.last(where: { $0.wedgeKey == wedge.key }).map {
                     hypot(($0.x - w / 2) / hRad, ($0.y - h / 2) / vRad)
                 } ?? 0
                 var found: Int?

@@ -131,12 +131,12 @@ deepalpha-club-ai/
 | 因子探索 | `/skills` | `/skill-generator` | LLM 生成因子代码 → 沙箱执行 |
 | 市场状态 | `/regime` | 并入恐慌指数页(大盘) + 行业恐慌页(板块) | 三篮子 ODS/CF + HMM 逐利/观望/避险后验，写因子表；大盘级与行业级各一套 |
 | 恐慌指数 | `/fear-greed` | `/fear-greed` | 市场恐慌贪婪指数 + 大盘市场状态(regime) |
-| 宏观 / 行业 | `/macro` | iOS 雷达页顶部「环境 / 行业 / 当日信号」三格 + 扇区雷达（扇区 = 行业，按所选日相对大盘强弱从上往下排）；自选页顶部环境横幅 | 大盘状态(regime) + 5 个驱动因素 + 未来 7 天宏观日历；行业相对强弱（`?date=` 按雷达所选日）。`/signal-radar/sector-pools`、`/sector-day` 仅为旧版 App 保留（新版 App 用气泡自带的 `sector` 就地分扇区）。第一期仅美股，A 股 / 港股 `available=false` |
+| 宏观 / 行业 | `/macro` | iOS 雷达页顶部「大盘环境 › 行业 › 当日信号」三张卡片（行业卡片是下拉筛选，选了雷达只显示该行业，`SignalRadarViewModel.sectorFilter`）；自选页顶部环境横幅 | 大盘状态(regime) + 5 个驱动因素 + 未来 7 天宏观日历；行业相对强弱（`?date=` 按雷达所选日）。`/signal-radar/sector-pools`、`/sector-day` 仅为旧版 App 保留（新版 App 用气泡自带的 `sector` 在本地按行业筛选）。第一期仅美股，A 股 / 港股 `available=false` |
 | 行业恐慌 | `/industry-panic` | `/industry-panic` | 各 GICS 行业 ETF 的 RSI 情绪 + 估值 + 板块状态(行业级 regime) |
 | ETF 资金流 | `/etf` | `/etf` | 资金流热力图 + 偏离度 |
 | 行业估值 | `/valuation` | （并入行业恐慌页） | GICS 行业 PE z-score |
 | 缠论 | `/chan` | `/chan` | 缠论分笔/中枢/背驰 |
-| 信号雷达 | `/signal-radar` | iOS「雷达」Tab（页面标题「市场雷达」） | 扫描各市场指数成分股跑缠论，**只陈列事实**：某天在场的全部买卖点按出现时间排（`scope=all`，新版 App；不带 scope 的旧版 App 在接口层按旧综合分截前 10）。气泡：红买绿卖、深浅=信号强弱、大小=一二三类、左上角「✓」= 已确认；美股指数雷达画成扇区（行业），点气泡 / 扇区 / 顶部三格都是底部面板，「查看K线与结构详情」才进详情页 |
+| 信号雷达 | `/signal-radar` | iOS「雷达」Tab（页面标题「市场雷达」） | 扫描各市场指数成分股跑缠论，**只陈列事实**：某天在场的全部买卖点按出现时间排（`scope=all`，新版 App；不带 scope 的旧版 App 在接口层按旧综合分截前 10）。App 用严格口径，只画已成立的买卖点（「待确认」只在雷达上方显示个数）。气泡：红买绿卖、深浅=信号强弱、大小=一二三类；由内向外越靠中心越新、互不重叠（`SectorRadarLayout.pack` 整圆一个扇区）。按行业分扇区的画法已关闭（`SignalRadarView.sectorFieldEnabled=false`，代码与测试保留）。点气泡 / 顶部卡片都是底部面板，「查看K线与结构详情」才进详情页 |
 | 威科夫 | `/wyckoff` | `/wyckoff` | Wyckoff 阶段/事件 |
 | 一目均衡表 | `/ichimoku` | `/ichimoku` | Ichimoku 云图信号 |
 | 分析师上调 | `/analyst-upgrades` | `/analyst-upgrades` | 目标价上调榜（SP500/Nasdaq100）；`/overview/{symbol}` 为缠论 App 详情页「分析师评级」分段 |
@@ -209,7 +209,7 @@ deepalpha-club-ai/
 - 「什么算买卖点」有多套口径，都实现 `SignalPolicy`（`czsc_families` / `assemble` /
   `split_unconfirmed` + 名称、版本、中英文案），在 `SIGNAL_POLICIES` 注册，按名字 `get_policy(mode)` 取。
   analyzer、`/chan/analysis`、`/chan/sub-level`、信号雷达（快照 / 自选 / 示例日）都只传 `mode`、走接口，
-  **不要**写 `if mode == ...` 分支。**App 已取消口径选择、固定宽松口径**（iOS `SignalMode.current()` 恒为 loose）；
+  **不要**写 `if mode == ...` 分支。**App 不提供口径选择、固定严格口径**（2026-10-01 起，iOS `SignalMode.current()` 恒为 strict；线上旧版 App 仍请求 loose）；
   `GET /chan/signal-modes` 仅为旧版 App 兼容与以后重新开放保留。
 - `loose`（宽松，**默认**）= 严格化之前的口径：czsc 原生一/二/三类，最后一笔上的也输出（标未确认）。
   三族信号独立扫描、互不知晓，组装时（`generate_loose_signals`）必须做两条一致性约束（loose2 起）：
@@ -217,7 +217,8 @@ deepalpha-club-ai/
   无源二类丢弃。**不要**去掉——否则会出现同日同价「一买+二买」（CTAS 2026-09-24）、约四成二类无源。
   `strict`（严格）= 下文「买卖点组装」的缠论原文定义。
 - 新增口径（如「中等」）：写实现类 + 注册即可；雷达与次级别缓存键按 `policy.version` 自动隔离，
-  定时预热 / 盘中次级别刷新**只跑默认口径**（`scheduler._modes`），其余口径有请求时按需现算。
+  定时预热 / 盘中次级别刷新跑**默认（宽松，旧版 App）+ 严格（新版 App）**两套（`scheduler._modes`），其余口径有请求时按需现算；
+  旧版用户少了以后可以只留严格口径。
   **改了某口径的判定逻辑必须升它的 version**。
 
 **引擎分工（2026-09 起接入开源库 czsc，Rust 内核，PyPI `czsc`）**
@@ -268,7 +269,7 @@ deepalpha-club-ai/
   30 分钟级别（`freq=30min`）可见区间收窄到最近 30 天、预热 20 天（Yahoo 分钟线上限约 60 天）。
 
 **买卖点组装（严格口径 signals.generate_all_signals，信号质量别走偏）**
-- 宽松口径（`generate_loose_signals`，App 实际使用）的对应行为：最后一笔上的信号**留在 `signals`、
+- 宽松口径（`generate_loose_signals`，线上旧版 App 使用）的对应行为：最后一笔上的信号**留在 `signals`、
   标 `confirmed=false`**（不产出候选，`candidate_signals` 恒空，雷达 `candidates` 也恒空）；
   `detected_time` = czsc 事件亮起的那根K线，不推后到下一笔走完。下面「只落在已完成的笔上」
   「成立日 = 下一笔走完」两条**仅严格口径**。

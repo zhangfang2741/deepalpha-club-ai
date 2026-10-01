@@ -44,16 +44,21 @@ struct RadarBubbleMetrics {
         let base = min(max(baseDiameter, Self.minDiameter), cap)
         let start = max(Self.minSymbolSize, min(17, base * Self.symbolRatio))
 
+        // 建字体很贵（一个气泡要试十几个字号），按字号缓存，所有气泡共用
         func makeSymbolFont(_ size: Double) -> CTFont {
-            let system = CTFontCreateUIFontForLanguage(.system, size, nil)
-                ?? CTFontCreateWithName("Helvetica" as CFString, size, nil)
-            let traits = [kCTFontWeightTrait: 0.56] as CFDictionary
-            let descriptor = CTFontDescriptorCreateWithAttributes([kCTFontTraitsAttribute: traits] as CFDictionary)
-            return CTFontCreateCopyWithAttributes(system, size, nil, descriptor)
+            FontCache.shared.font(symbol: true, size: size) {
+                let system = CTFontCreateUIFontForLanguage(.system, size, nil)
+                    ?? CTFontCreateWithName("Helvetica" as CFString, size, nil)
+                let traits = [kCTFontWeightTrait: 0.56] as CFDictionary
+                let descriptor = CTFontDescriptorCreateWithAttributes([kCTFontTraitsAttribute: traits] as CFDictionary)
+                return CTFontCreateCopyWithAttributes(system, size, nil, descriptor)
+            }
         }
         func makeNameFont(_ size: Double) -> CTFont {
-            CTFontCreateUIFontForLanguage(.system, size, nil)
-                ?? CTFontCreateWithName("Helvetica" as CFString, size, nil)
+            FontCache.shared.font(symbol: false, size: size) {
+                CTFontCreateUIFontForLanguage(.system, size, nil)
+                    ?? CTFontCreateWithName("Helvetica" as CFString, size, nil)
+            }
         }
         func lineHeight(_ f: CTFont) -> Double {
             CTFontGetAscent(f) + CTFontGetDescent(f) + CTFontGetLeading(f)
@@ -107,5 +112,22 @@ struct RadarBubbleMetrics {
         diameter = d
         let inner = max(1, d - 2 * Self.textPadding(for: d))
         textWidth = max(1, sqrt(max(0, inner * inner - h * h)))
+    }
+}
+
+/// 气泡字体按（代码 / 名称，字号）缓存；字号以 0.5 为步长，总共只有几十种。
+private final class FontCache: @unchecked Sendable {
+    static let shared = FontCache()
+    private let lock = NSLock()
+    private var fonts: [String: CTFont] = [:]
+
+    func font(symbol: Bool, size: Double, make: () -> CTFont) -> CTFont {
+        let key = "\(symbol ? "s" : "n")\(size)"
+        lock.lock()
+        defer { lock.unlock() }
+        if let f = fonts[key] { return f }
+        let f = make()
+        fonts[key] = f
+        return f
     }
 }
