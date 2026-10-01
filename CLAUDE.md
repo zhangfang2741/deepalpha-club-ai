@@ -131,12 +131,12 @@ deepalpha-club-ai/
 | 因子探索 | `/skills` | `/skill-generator` | LLM 生成因子代码 → 沙箱执行 |
 | 市场状态 | `/regime` | 并入恐慌指数页(大盘) + 行业恐慌页(板块) | 三篮子 ODS/CF + HMM 逐利/观望/避险后验，写因子表；大盘级与行业级各一套 |
 | 恐慌指数 | `/fear-greed` | `/fear-greed` | 市场恐慌贪婪指数 + 大盘市场状态(regime) |
-| 宏观 / 行业 | `/macro` | iOS 雷达页顶部「宏观 / 情绪」两格 + 雷达上方行业筛选条（按所选日强弱排序，末尾「强弱」弹层） | 大盘状态(regime) + 5 个驱动因素 + 未来 7 天宏观日历；行业相对强弱 + 宽基雷达按行业买卖点数，雷达上方行业筛选条在当前指数里就地筛（`/signal-radar/sector-pools` 一次取当天全部行业池；`/sector-day` 仅为旧版 App 保留）。第一期仅美股，A 股 / 港股 `available=false` |
+| 宏观 / 行业 | `/macro` | iOS 雷达页顶部「环境 / 行业 / 当日信号」三格 + 扇区雷达（扇区 = 行业，按所选日相对大盘强弱从上往下排）；自选页顶部环境横幅 | 大盘状态(regime) + 5 个驱动因素 + 未来 7 天宏观日历；行业相对强弱（`?date=` 按雷达所选日）。`/signal-radar/sector-pools`、`/sector-day` 仅为旧版 App 保留（新版 App 用气泡自带的 `sector` 就地分扇区）。第一期仅美股，A 股 / 港股 `available=false` |
 | 行业恐慌 | `/industry-panic` | `/industry-panic` | 各 GICS 行业 ETF 的 RSI 情绪 + 估值 + 板块状态(行业级 regime) |
 | ETF 资金流 | `/etf` | `/etf` | 资金流热力图 + 偏离度 |
 | 行业估值 | `/valuation` | （并入行业恐慌页） | GICS 行业 PE z-score |
 | 缠论 | `/chan` | `/chan` | 缠论分笔/中枢/背驰 |
-| 信号雷达 | `/signal-radar` | iOS「雷达」Tab（页面标题「市场雷达」） | 扫描各市场指数成分股跑缠论，按日聚合买卖点前 10（气泡：红买绿卖、深浅=信号强弱、大小=一二三类、左上角「✓」= 已确认，不带勾 = 最后一笔上的未确认信号） |
+| 信号雷达 | `/signal-radar` | iOS「雷达」Tab（页面标题「市场雷达」） | 扫描各市场指数成分股跑缠论，**只陈列事实**：某天在场的全部买卖点按出现时间排（`scope=all`，新版 App；不带 scope 的旧版 App 在接口层按旧综合分截前 10）。气泡：红买绿卖、深浅=信号强弱、大小=一二三类、左上角「✓」= 已确认；美股指数雷达画成扇区（行业），点气泡 / 扇区 / 顶部三格都是底部面板，「查看K线与结构详情」才进详情页 |
 | 威科夫 | `/wyckoff` | `/wyckoff` | Wyckoff 阶段/事件 |
 | 一目均衡表 | `/ichimoku` | `/ichimoku` | Ichimoku 云图信号 |
 | 分析师上调 | `/analyst-upgrades` | `/analyst-upgrades` | 目标价上调榜（SP500/Nasdaq100）；`/overview/{symbol}` 为缠论 App 详情页「分析师评级」分段 |
@@ -152,7 +152,8 @@ deepalpha-club-ai/
 > 数据来自 regime 两张因子表，由 `regime/scheduler.py` 每日重算（美股 UTC 22:45 + 启动补跑，**子进程 + 降优先级**，约 40 分钟，
 > 不要改回线程池——纯 Python HMM 循环占 GIL 会拖慢 API）。驱动因素 / 日历的 FMP 调用经 `FmpClient`（全局预算）。
 > 文案只描述环境，不出现买卖导向词与数据供应商 / 基金代码（`test_drivers.test_no_trading_words`）。
-> 雷达行业池（`signal_radar/sectors.py`）在排雷之后、截取前 N 之前生成，行业 key 与 regime `SECTORS` 一致（有测试守护）。
+> 雷达行业标签（`signal_radar/sectors.py`，指数雷达与自选雷达都打；自选列表接口也带 `sector`）的行业 key 与 regime `SECTORS` 一致（有测试守护）。
+> 行业池（每行业按旧综合分的前 N）只给旧版 App 的行业筛选用。
 
 > 信号雷达扫描约束（`app/services/signal_radar`）：同一 (口径, 市场, universe) 任一时刻只跑一轮全量扫描
 > ——接口与定时预热共用 `scan_lock_key` 原子锁（`acquire_lock` = SET NX EX），主动刷新有 5 分钟冷却；
@@ -161,10 +162,13 @@ deepalpha-club-ai/
 > 轮次号存 Redis（`incr_with_ttl`），新一轮扫描开始旧补算自动退出。免费示例日（`compute_demo_day`）同一套补算。
 > 补算进度记为 Redis 标记（`signal_radar:backfill:*`，含进程 owner），进程重启后 `scheduler._resume_orphan_backfills`
 > 在启动预热之后接手别的进程没补完的。**不要**绕过锁直接起全量扫描。
-> 雷达**基本面排雷**（`signal_radar/quant_filter.MINE_RULES`，仅美股、自选雷达不排雷，见 `docs/radar_quant_filter.md`）：
-> 买点盈利能力 F（EPS 修正 ≥ B 的反转股豁免）或 EPS 修正 F、卖点 EPS 修正 A+ 不上榜，取前 N 之前剔除、名额递补；评级缺失 / 过期不排除。
-> **不要**用综合等级或动量排雷（一买的前提就是一段下跌，动量必然偏低，会系统性误杀一买）；评级仍不参与排序（`QUANT_WEIGHT=0`）。
-> 改规则须升 `_mode_ns` 的 quant 版本。
+> **雷达只呈现事实、不做推荐**（2026-10-01 起，设计见 `docs/superpowers/specs/2026-10-01-radar-facts-top-down-design.md`）：
+> 快照存每天**在场的全部信号**、按出现时间从新到旧（`order_by_time`），不打分、不截前 N、不按共振重排；
+> **基本面排雷已取消**（评级只标注，`quant_filter.attach_grades` 不再剔除任何信号）。只保留定义层面的规则：
+> 缠论口径、收盘价跌破（卖点涨破）即退场、5 个交易日有效期、一周前的展示日不显示未确认信号。
+> 旧版 App（不带 `scope=all`）的前 10 在接口层由 `legacy_view` 按旧综合分现截，**不要**把截取或排雷写回快照。
+> 次级别只补算最新一天「当天新出现的信号 + 旧版前 N 候选池」，封顶 `_SUB_LEVEL_MAX`（`sub_level_targets`），不要对全部信号补算（打满行情源）。
+> 改取舍规则须升 `_mode_ns`（当前 `quant_mark2:all1`）。
 > 雷达形态过滤（`chan/shape_filters.py`，仅雷达、详情页不受影响）**当前暂停**（`service._SHAPE_FILTERS_ENABLED=False`，
 > 代码与测试保留；实测它在 5 日窗口内几乎不剔信号。当时雷达变空的真正原因是 78bee01 的「未确认不上榜」，
 > 已在 2544d31 回退：宽松口径最后一笔上的信号照常上榜、`confirmed=false`，一周前的展示日不显示，收盘价跌破才退场）。启用时：按信号**成立日**（`detected_time`，宽松口径=czsc 事件点亮日）查 czsc 形态状态，
@@ -300,7 +304,7 @@ deepalpha-club-ai/
   30 分钟刷新周期；收盘后数据定型即一致。
   30 分钟失败只降级为 unavailable，不影响日线。30 分钟数据：美股 FMP 分段拉取，港股/A 股
   Yahoo `30m`（上限约 60 天）。分钟线时间为交易所本地 `YYYY-MM-DD HH:MM`（`ts_date` 零点才输出纯日期）。
-  信号雷达只对最新交易日入榜气泡补算（`attach_sub_levels`）。
+  信号雷达只对最新交易日的部分信号补算（`attach_sub_levels(only=sub_level_targets(...))`）。
 - 走势类型 `walk_type`（up_trend / down_trend / consolidation / none）由中枢排布判定，
   经响应字段暴露给前端。
 - 形态分析（recommendation）是**多因子加权净值**，单条依据可与结论方向相反是设计使然
