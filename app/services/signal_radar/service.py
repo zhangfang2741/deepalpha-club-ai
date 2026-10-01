@@ -310,8 +310,9 @@ def with_counts(day: RadarDayOut, signals: list[RadarSignalOut]) -> RadarDayOut:
                                   "sell_count": sum(s.side == "sell" for s in signals)})
 
 
-# 次级别补算上限（每只要拉 30 分钟K线，中英各算一份）：全部信号都补会把行情源打到限流
-_SUB_LEVEL_MAX = 60
+# 次级别补算上限：每只要分段拉 30 分钟K线（美股 FMP 约 3 次请求，且这条路径不经 fmp_budget），盘中每 30 分钟
+# 重刷一次。标普 500 实测一天约 27 个当日新信号，封顶 30 让盘中请求量与改版前（每个指数 20 只）同一量级。
+_SUB_LEVEL_MAX = 30
 
 
 def sub_level_targets(day: RadarDayOut, top_n: int = DEFAULT_TOP_N) -> set[str]:
