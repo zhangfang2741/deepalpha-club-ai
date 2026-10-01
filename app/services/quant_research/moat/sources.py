@@ -22,7 +22,7 @@ from app.services.llm.service import llm_service
 from app.services.quant_research.copy import contains_forbidden
 
 RUNS = 3
-ATTEMPTS = 3
+ATTEMPTS = 4
 SOURCE_KEYS = ("intangible_assets", "switching_costs", "network_effect", "cost_advantage", "efficient_scale")
 ORDER = ("none", "weak", "moderate", "strong")
 _llm_gate = asyncio.Semaphore(24)  # 每只 3 次判断并发；12 只 × 3 = 36 次排队进 24 路
@@ -123,14 +123,50 @@ def verify_quotes(j: MoatJudgement, section: str) -> MoatJudgement:
     return j
 
 
-def _valid(j: MoatJudgement | None) -> bool:
-    if j is None or {s.source for s in j.sources} != set(SOURCE_KEYS) or len(j.sources) != len(SOURCE_KEYS):
-        return False
+# 理由里描述生意的买卖动词（「能以高价 sell」「客户反复 buy」）不是投资建议，换成中性词而不是让整次判断作废；
+# 推荐 / 看多 / 上涨空间等导向词与数据商名不替换，仍判无效重试
+_NEUTRAL_EN = {"buy": "purchase", "buys": "purchases", "buying": "purchasing", "sell": "offer", "selling": "offering",
+               "sells": "offers", "bullish": "positive", "bearish": "negative", "upside": "potential"}
+_NEUTRAL_ZH = {"买入": "购入", "卖出": "售出"}
+
+
+def _neutral_en(text: str) -> str:
+    def repl(m: re.Match[str]) -> str:
+        w = m.group(0)
+        out = _NEUTRAL_EN[w.lower()]
+        return out.capitalize() if w[0].isupper() else out
+    return re.sub(r"\b(" + "|".join(_NEUTRAL_EN) + r")\b", repl, text, flags=re.I)
+
+
+def _neutral_zh(text: str) -> str:
+    for a, b in _NEUTRAL_ZH.items():
+        text = text.replace(a, b)
+    return text
+
+
+def neutralize(j: MoatJudgement) -> MoatJudgement:
+    """把理由 / 威胁里描述性的买卖动词换成中性词。"""
+    for s in j.sources:
+        s.reason_en, s.reason_zh = _neutral_en(s.reason_en), _neutral_zh(s.reason_zh)
+    j.threats_en, j.threats_zh = _neutral_en(j.threats_en), _neutral_zh(j.threats_zh)
+    return j
+
+
+def invalid_reason(j: MoatJudgement | None) -> str | None:
+    """输出不可用的原因；可用返回 None。"""
+    if j is None:
+        return "empty"
+    keys = [s.source for s in j.sources]
+    if sorted(keys) != sorted(SOURCE_KEYS):
+        return f"sources={keys}"
     texts = [t for s in j.sources for t in (s.reason_zh, s.reason_en)] + [j.threats_zh, j.threats_en]
-    if any(contains_forbidden(t) for t in texts):
-        return False
+    hits = sorted({w for t in texts for w in contains_forbidden(t)})
+    if hits:
+        return f"forbidden={hits}"
     english = [s.reason_en for s in j.sources] + [j.threats_en]
-    return not any(re.search(r"[一-鿿]", t) for t in english)
+    if any(re.search(r"[一-鿿]", t) for t in english):
+        return "chinese_in_english"
+    return None
 
 
 async def judge_once(section: str, symbol: str) -> MoatJudgement:
@@ -144,8 +180,10 @@ async def judge_once(section: str, symbol: str) -> MoatJudgement:
         except Exception as e:  # noqa: BLE001 结构化输出偶发失败，重试
             last = e
             continue
-        if _valid(out):
+        reason = invalid_reason(neutralize(out) if out is not None else None)
+        if reason is None:
             return verify_quotes(out, section)  # type: ignore[arg-type]
+        logger.info("quant_moat_judgement_invalid", symbol=symbol, reason=reason)
     raise RuntimeError(f"moat judgement failed after {ATTEMPTS} attempts: {last}")
 
 

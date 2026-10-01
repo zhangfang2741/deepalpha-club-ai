@@ -5,7 +5,7 @@ import json
 from app.services.quant_research.moat.sources import (
     SOURCE_KEYS,
     MoatJudgement,
-    _valid,
+    invalid_reason,
     merge_votes,
     verify_quotes,
 )
@@ -42,12 +42,12 @@ def test_merge_takes_median_strength_per_source():
 
 
 def test_invalid_when_missing_source_forbidden_words_or_chinese_in_english():
-    assert _valid(_j(["none"] * 5))
+    assert invalid_reason(_j(["none"] * 5)) is None
     dup = _j(["none"] * 5)
     dup.sources[1].source = "intangible_assets"
-    assert not _valid(dup)
-    assert not _valid(_j(["none"] * 5, reason_en="Investors should buy this stock."))
-    assert not _valid(_j(["none"] * 5, threats_en="竞争加剧"))
+    assert invalid_reason(dup).startswith("sources=")
+    assert invalid_reason(_j(["none"] * 5, reason_en="We recommend this stock.")) == "forbidden=['recommend']"
+    assert invalid_reason(_j(["none"] * 5, threats_en="竞争加剧")) == "chinese_in_english"
 
 
 def test_coerces_stringified_lists_from_model():
@@ -56,3 +56,18 @@ def test_coerces_stringified_lists_from_model():
            "threats_zh": "威胁", "threats_en": "threats"}
     j = MoatJudgement.model_validate(raw)
     assert len(j.sources) == 5 and j.sources[0].quotes == ["single quote string here ok"]
+
+
+def test_descriptive_trade_words_are_neutralized_not_rejected():
+    """理由里「能以高价 sell」这类描述生意的用法换成中性词，不让整只股票判断失败；数据商名仍然拒绝。"""
+    from app.services.quant_research.moat.sources import invalid_reason, neutralize
+
+    j = _j(["none"] * 5, reason_en="Its brand lets it sell at premium prices; customers buy repeatedly.")
+    j.sources[0].reason_zh = "公司能以高价卖出产品，客户反复买入。"
+    neutralize(j)
+    assert invalid_reason(j) is None
+    assert "sell" not in j.sources[0].reason_en.lower().split()
+    assert "卖出" not in j.sources[0].reason_zh
+    bad = _j(["none"] * 5, reason_en="Data from FMP shows high margins.")
+    neutralize(bad)
+    assert invalid_reason(bad) and "FMP" in invalid_reason(bad)
