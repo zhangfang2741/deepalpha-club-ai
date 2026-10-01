@@ -75,15 +75,12 @@ struct SectorBoardList: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 10) {
                 if let board, !board.sectors.isEmpty {
                     summary(board)
                     if parent == nil, let radar, let onClear { allRow(radar, onClear: onClear) }
                     let maxAbs = max(board.sectors.compactMap { $0.rsVsMarket.map(abs) }.max() ?? 0, 0.0001)
-                    let ahead = board.sectors.filter { ($0.rsVsMarket ?? -1) >= 0 }
-                    let behind = board.sectors.filter { ($0.rsVsMarket ?? -1) < 0 }
-                    if !ahead.isEmpty { section(L("跑赢大盘"), rows: ahead, maxAbs: maxAbs) }
-                    if !behind.isEmpty { section(L("跑输大盘"), rows: behind, maxAbs: maxAbs) }
+                    list(board.sectors, maxAbs: maxAbs)
                     footer
                 } else if failed || board != nil {
                     VStack(spacing: 10) {
@@ -97,7 +94,7 @@ struct SectorBoardList: View {
                     skeleton
                 }
             }
-            .padding(16)
+            .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 16)
             .animation(.smooth(duration: 0.3), value: board?.asOf)
         }
         .scrollIndicators(.hidden)
@@ -120,26 +117,21 @@ struct SectorBoardList: View {
 
     /// 加载中的骨架：与真实行同高，数据一到原地替换，避免从转圈到列表的跳变。
     private var skeleton: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            ForEach(0..<2, id: \.self) { _ in
-                VStack(spacing: 0) {
-                    ForEach(0..<4, id: \.self) { i in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 8) {
-                                RoundedRectangle(cornerRadius: 4).frame(width: 72, height: 16)
-                                RoundedRectangle(cornerRadius: 8).frame(width: 44, height: 14)
-                            }
-                            Spacer()
-                            RoundedRectangle(cornerRadius: 4).frame(width: 96, height: 24)
-                        }
-                        .padding(.horizontal, 14).padding(.vertical, 12)
-                        if i < 3 { Divider().overlay(Theme.border).padding(.leading, 14) }
-                    }
+        VStack(spacing: 0) {
+            ForEach(0..<8, id: \.self) { i in
+                HStack(spacing: 8) {
+                    Circle().frame(width: 8, height: 8)
+                    RoundedRectangle(cornerRadius: 4).frame(width: 72, height: 14)
+                    Spacer()
+                    RoundedRectangle(cornerRadius: 4).frame(width: 58, height: 14)
+                    RoundedRectangle(cornerRadius: 2).frame(width: 44, height: 4)
                 }
-                .background(Theme.surface)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .padding(.horizontal, 14).padding(.vertical, 12)
+                if i < 7 { Divider().overlay(Theme.border).padding(.leading, 14) }
             }
         }
+        .background(Theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
         .foregroundColor(Theme.textSecondary.opacity(0.18))
         .redacted(reason: .placeholder)
         .accessibilityHidden(true)
@@ -147,32 +139,34 @@ struct SectorBoardList: View {
 
     // MARK: - 顶部 / 底部
 
-    /// 顶部只留两件事：数据是哪天收盘的、圆点颜色是什么意思。
+    /// 顶部只留两件事：数据是哪天收盘的、圆点颜色是什么意思（同一行，图例靠右）。
     private func summary(_ board: SectorBoard) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: 8) {
             if let asOf = board.asOf {
-                Text(L("%@ 收盘 · 近 20 个交易日相对大盘", asOf))
-                    .font(.footnote).foregroundColor(Theme.textSecondary)
+                Text(L("%@ 收盘 · 近 20 日相对大盘", asOf))
+                    .font(.caption).foregroundColor(Theme.textSecondary)
+                    .lineLimit(1).minimumScaleFactor(0.8)
             }
-            HStack(spacing: 14) {
+            Spacer(minLength: 4)
+            HStack(spacing: 8) {
                 legend("risk_on")
                 legend("neutral")
                 legend("risk_off")
             }
         }
+        .padding(.horizontal, 2)
     }
 
     private func legend(_ label: String) -> some View {
         HStack(spacing: 5) {
-            Circle().fill(MarketHeader.regimeColor(label)).frame(width: 7, height: 7)
-            Text(Self.labelText(label)).font(.caption).foregroundColor(Theme.textSecondary)
+            Circle().fill(MarketHeader.regimeColor(label)).frame(width: 6, height: 6)
+            Text(Self.labelText(label)).font(.caption2).foregroundColor(Theme.textSecondary)
         }
     }
 
     /// 说明文字退到底部：怎么排的、点行业会怎样、免责。
     private var footer: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(L("按相对大盘的强弱排序；圆点为行业状态。"))
             if parent == nil, let radar {
                 Text(L("买卖点为%@ %@ 的雷达统计；点行业即在雷达上只看该行业。", radar.universeName, radar.date))
             }
@@ -189,18 +183,18 @@ struct SectorBoardList: View {
         let sells = radar.totals?.sell ?? radar.counts.values.reduce(0) { $0 + ($1["sell"] ?? 0) }
         let selected = radar.selectedKey == nil
         return Button(action: onClear) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Text(L("全部行业")).font(AnalysisType.title).foregroundColor(Theme.textPrimary)
                 if selected {
                     Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
                 }
                 Spacer(minLength: 8)
-                countChips(buy: buys, sell: sells)
+                countText(buy: buys, sell: sells)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.vertical, 10)
             .background(selected ? Theme.accent.opacity(0.12) : Theme.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
             .contentShape(Rectangle())
         }
         .buttonStyle(RowPressStyle())
@@ -208,82 +202,62 @@ struct SectorBoardList: View {
         .accessibilityHint(L("雷达显示全部行业的信号"))
     }
 
-    /// 买卖点数：红买绿卖的小胶囊，没有就不画。
+    /// 买卖点数：红买绿卖的小字，没有就不画。
     @ViewBuilder
-    private func countChips(buy: Int, sell: Int) -> some View {
+    private func countText(buy: Int, sell: Int) -> some View {
         if buy + sell > 0 {
             HStack(spacing: 6) {
-                if buy > 0 { chip(L("%lld 买", buy), color: Theme.up) }
-                if sell > 0 { chip(L("%lld 卖", sell), color: Theme.down) }
+                if buy > 0 { Text(L("%lld 买", buy)).foregroundColor(Theme.up) }
+                if sell > 0 { Text(L("%lld 卖", sell)).foregroundColor(Theme.down) }
             }
-        }
-    }
-
-    private func chip(_ text: String, color: Color) -> some View {
-        Text(text)
             .font(.caption2.weight(.semibold).monospacedDigit())
-            .foregroundColor(color)
-            .padding(.horizontal, 7).padding(.vertical, 2)
-            .background(color.opacity(0.14))
-            .clipShape(Capsule())
-    }
-
-    // MARK: - 分组与行
-
-    private func section(_ title: String, rows: [SectorRow], maxAbs: Double) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Text(title).font(AnalysisType.label).foregroundColor(Theme.textPrimary)
-                Text("\(rows.count)").font(.caption.monospacedDigit()).foregroundColor(Theme.textSecondary)
-            }
-            .padding(.horizontal, 4)
-            VStack(spacing: 0) {
-                ForEach(rows) { row in
-                    rowView(row, maxAbs: maxAbs)
-                    if row.id != rows.last?.id { Divider().overlay(Theme.border).padding(.leading, 14) }
-                }
-            }
-            .background(Theme.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
         }
     }
 
-    /// 一行：左边行业名 + 状态胶囊，右边强弱值 + 强弱条，买卖点胶囊放在强弱条下方右对齐。
+    // MARK: - 行
+
+    /// 所有行业一张卡，按相对大盘强弱从强到弱（正负由颜色与强弱条区分，不再分跑赢 / 跑输两组）。
+    private func list(_ rows: [SectorRow], maxAbs: Double) -> some View {
+        VStack(spacing: 0) {
+            ForEach(rows) { row in
+                rowView(row, maxAbs: maxAbs)
+                if row.id != rows.last?.id { Divider().overlay(Theme.border).padding(.leading, 14) }
+            }
+        }
+        .background(Theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    /// 单行：状态圆点 + 行业名 ……… 买卖点 · 强弱值 + 强弱条。一行约 40pt，半屏就能看到大半。
     private func rowView(_ row: SectorRow, maxAbs: Double) -> some View {
         let selected = parent == nil && radar?.selectedKey == row.key
         let rs = row.rsVsMarket
         let counts = parent == nil ? radar?.counts[row.key] : nil
-        let content = HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Text(row.name).font(AnalysisType.title).foregroundColor(Theme.textPrimary)
-                        .lineLimit(1).minimumScaleFactor(0.8)
-                    if selected {
-                        Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
-                    }
-                }
-                HStack(spacing: 6) {
-                    if let label = row.label {
-                        chip(Self.labelText(label), color: MarketHeader.regimeColor(label))
-                    }
-                    countChips(buy: counts?["buy"] ?? 0, sell: counts?["sell"] ?? 0)
-                }
+        let content = HStack(spacing: 8) {
+            Circle().fill(row.label.map(MarketHeader.regimeColor) ?? Theme.textSecondary.opacity(0.4))
+                .frame(width: 8, height: 8)
+            Text(row.name).font(AnalysisType.title).foregroundColor(Theme.textPrimary)
+                .lineLimit(1).minimumScaleFactor(0.8)
+            if selected {
+                Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
             }
-            Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 6) {
-                Text(SectorBoardList.rsText(rs))
-                    .font(.subheadline.weight(.semibold).monospacedDigit())
-                    .foregroundColor((rs ?? 0) >= 0 ? Theme.up : Theme.down)
-                    .lineLimit(1)
-                    .contentTransition(.numericText())
-                StrengthBar(value: rs ?? 0, maxAbs: maxAbs)
-                    .frame(width: 96, height: 5)
-            }
+            Spacer(minLength: 6)
+            countText(buy: counts?["buy"] ?? 0, sell: counts?["sell"] ?? 0)
+            Text(SectorBoardList.rsText(rs))
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .foregroundColor((rs ?? 0) >= 0 ? Theme.up : Theme.down)
+                .lineLimit(1)
+                .frame(minWidth: 58, alignment: .trailing)
+                .contentTransition(.numericText())
+            StrengthBar(value: rs ?? 0, maxAbs: maxAbs)
+                .frame(width: 44, height: 4)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.vertical, 10)
         .contentShape(Rectangle())
         .background(selected ? Theme.accent.opacity(0.12) : Color.clear)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(row.label.map { "\(row.name) \(Self.labelText($0)) \(SectorBoardList.rsText(rs))" } ?? row.name)
 
         if parent == nil {
             Button {
