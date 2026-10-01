@@ -1,4 +1,10 @@
-"""量化评级作为雷达排序因子；只使用展示日已经生成的结果，不倒填历史。"""
+"""量化评级附加到雷达气泡 + 基本面排雷；只使用展示日已经生成的结果，不倒填历史。
+
+排雷（不做回测，规则少而硬，只看与一两周信号相关的维度，动量 / 估值不参与）：
+- 买点：盈利能力 F（公司本身在亏钱 / 利润质量垫底）或 EPS 修正 F（一致预期被大幅下调）→ 不上榜；
+- 卖点：EPS 修正 A+（一致预期被大幅上调）→ 不上榜。盈利能力强不说明卖点不成立，卖点不看它。
+评级缺失、过期或查询失败一律不排除；自选雷达不排雷（只标注）。改规则须升 service._mode_ns 的 quant 版本。
+"""
 
 from __future__ import annotations
 
@@ -7,7 +13,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from app.core.logging import logger
-from app.schemas.signal_radar import RadarDayOut, RadarQuantFilterOut, RadarSignalOut
+from app.schemas.signal_radar import RadarDayOut, RadarExcludedOut, RadarQuantFilterOut, RadarSignalOut
 from app.services.quant_research import repository
 from app.services.quant_research.grading import GRADE_ORDER
 from app.services.quant_research.universe import normalize_us_symbol
@@ -18,6 +24,13 @@ MAX_AGE_DAYS = 7
 # _mode_ns 的 quant 版本，否则旧缓存里的顺序还是旧权重排的。
 QUANT_WEIGHT = 0.0
 
+# 排雷规则：(方向, 维度, 命中等级, 规则名)。阈值先取最保守的一档，观察后再放宽。
+MINE_RULES: list[tuple[str, str, frozenset[str], str]] = [
+    ("buy", "profitability", frozenset({"F"}), "profitability_f"),
+    ("buy", "revisions", frozenset({"F"}), "revisions_f"),
+    ("sell", "revisions", frozenset({"A+"}), "revisions_a_plus"),
+]
+
 
 @dataclass(frozen=True)
 class QuantGrade:
@@ -25,6 +38,8 @@ class QuantGrade:
     score: float | None
     as_of: date
     available_on: date
+    profitability: str | None = None
+    revisions: str | None = None
 
 
 def grade_from_row(row: repository.QuantGradeSnapshot) -> QuantGrade | None:
@@ -44,7 +59,9 @@ def grade_from_row(row: repository.QuantGradeSnapshot) -> QuantGrade | None:
                 dates.append(date.fromisoformat(str(raw)[:10]))
             except ValueError:
                 return None
-    return QuantGrade(grade if grade in GRADE_ORDER else None, score, row.as_of, max(dates))
+    dims = {k: v if v in GRADE_ORDER else None
+            for k, v in ((k, (row.grades or {}).get(f"d:{k}")) for k in ("profitability", "revisions"))}
+    return QuantGrade(grade if grade in GRADE_ORDER else None, score, row.as_of, max(dates), **dims)
 
 
 async def load_grades(market: str, symbols: list[str], days: list[str]) -> dict[str, list[QuantGrade]] | None:
@@ -81,19 +98,39 @@ def grade_on(history: dict[str, list[QuantGrade]], symbol: str, day: date) -> tu
     return entry, "eligible"
 
 
+def mine_rule(side: str, entry: QuantGrade | None, status: str) -> str | None:
+    """命中的排雷规则名；评级缺失或过期（不论维度等级）返回 None，不排除。"""
+    if entry is None or status == "stale":
+        return None
+    for rule_side, dim, grades, name in MINE_RULES:
+        if side == rule_side and getattr(entry, dim) in grades:
+            return name
+    return None
+
+
 def attach_grades(day: RadarDayOut, history: dict[str, list[QuantGrade]] | None,
-                 symbols: list[str]) -> RadarDayOut:
-    """只附加评级，任何等级、评级缺失或查询故障均保留技术信号。"""
+                 symbols: list[str], *, screen: bool = False) -> RadarDayOut:
+    """附加评级；screen=True 时另按 MINE_RULES 剔除信号（须在取前 N 之前调用，名额由后面递补）。
+
+    评级缺失或查询故障均保留技术信号。
+    """
     target = date.fromisoformat(day.date)
     grades = {s: grade_on(history or {}, s, target) for s in set(symbols)}
-    stats = RadarQuantFilterOut(status="unavailable" if history is None else "ready")
+    stats = RadarQuantFilterOut(status="unavailable" if history is None else "ready",
+                                mode="screened" if screen else "marked")
     for _, status in grades.values():
         setattr(stats, status, getattr(stats, status) + 1)
 
-    def select(signals: list[RadarSignalOut]) -> list[RadarSignalOut]:
+    def select(signals: list[RadarSignalOut], record: bool) -> list[RadarSignalOut]:
         kept = []
         for signal in signals:
             entry, status = grades.get(signal.symbol, (None, "missing"))
+            rule = mine_rule(signal.side, entry, status) if screen else None
+            if rule is not None:
+                if record:
+                    stats.excluded.append(RadarExcludedOut(symbol=signal.symbol, name=signal.name, side=signal.side,
+                                                           signal_type=signal.signal_type, rule=rule))
+                continue
             kept.append(signal.model_copy(update={
                 "quant_grade": entry.grade if entry else None,
                 "quant_score": entry.score if entry else None,
@@ -102,8 +139,8 @@ def attach_grades(day: RadarDayOut, history: dict[str, list[QuantGrade]] | None,
             }))
         return kept
 
-    signals = select(day.signals)
-    return day.model_copy(update={"signals": signals, "candidates": select(day.candidates),
+    signals = select(day.signals, record=True)
+    return day.model_copy(update={"signals": signals, "candidates": select(day.candidates, record=False),
                                  "buy_count": sum(s.side == "buy" for s in signals),
                                  "sell_count": sum(s.side == "sell" for s in signals), "quant_filter": stats})
 

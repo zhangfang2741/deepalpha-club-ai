@@ -40,8 +40,21 @@ class RadarSignalOut(BaseModel):
     age_days: int | None = Field(default=None, description="距展示日的交易日数，当天为 0")
 
 
+class RadarExcludedOut(BaseModel):
+    """基本面排雷排除的一条信号（不上榜，名额由后面的信号递补）。"""
+
+    symbol: str
+    name: str
+    side: str = Field(description="buy / sell")
+    signal_type: str
+    rule: str = Field(description="profitability_f / revisions_f（买点）/ revisions_a_plus（卖点）")
+
+
 class RadarQuantFilterOut(BaseModel):
-    """统计覆盖所选股票池，数量不是气泡数。mode=marked：只展示不参与排序。"""
+    """统计覆盖所选股票池，数量不是气泡数。
+
+    mode=marked：评级只展示；mode=screened：另按基本面排雷剔除信号（自选雷达不排雷）。
+    """
 
     mode: str = "marked"
     weight: float = 0.0
@@ -53,6 +66,7 @@ class RadarQuantFilterOut(BaseModel):
     stale: int = 0
     max_age_days: int = 7
     preserve_sells: bool = False
+    excluded: list[RadarExcludedOut] = Field(default_factory=list, description="当天被基本面排雷排除的信号")
 
 
 class RadarDayOut(BaseModel):

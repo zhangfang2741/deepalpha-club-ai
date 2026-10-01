@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
 from sqlalchemy import delete, func, or_, select, text
@@ -177,7 +177,7 @@ async def upsert_results(rows: list[dict]) -> None:
 
 @dataclass(frozen=True)
 class QuantGradeSnapshot:
-    """雷达只读取综合评级和数据日期，避免拉取全部指标明细。"""
+    """雷达只读取综合评级、数据日期和排雷用的维度等级，避免拉取全部指标明细。"""
 
     symbol: str
     as_of: date
@@ -185,6 +185,12 @@ class QuantGradeSnapshot:
     updated_at: datetime
     payload_zh: dict
     payload_en: dict
+    # 与 QuantResult.grades 同键（d:<维度>），只含 RADAR_DIMENSION_KEYS
+    grades: dict = field(default_factory=dict)
+
+
+# 雷达基本面排雷读取的维度等级（grades 列的键）
+RADAR_DIMENSION_KEYS = ("d:profitability", "d:revisions")
 
 
 async def align_backfill_timestamps(market: str, hour: int, minute: int) -> int:
@@ -221,7 +227,8 @@ async def get_quant_grade_history(market: str, symbols: list[str], start: date, 
     q = (select(col(QuantResult.symbol), col(QuantResult.as_of),
                 col(QuantResult.created_at), col(QuantResult.updated_at),
                 col(QuantResult.payload_zh)["overall"], col(QuantResult.payload_zh)["as_of"],
-                col(QuantResult.payload_en)["overall"], col(QuantResult.payload_en)["as_of"])
+                col(QuantResult.payload_en)["overall"], col(QuantResult.payload_en)["as_of"],
+                *(col(QuantResult.grades)[k] for k in RADAR_DIMENSION_KEYS))
          .where(col(QuantResult.market) == market,
                 col(QuantResult.symbol).in_(symbols), col(QuantResult.as_of) <= end,
                 or_(col(QuantResult.as_of) >= start, col(QuantResult.id).in_(previous)))
@@ -230,8 +237,9 @@ async def get_quant_grade_history(market: str, symbols: list[str], start: date, 
         rows = (await session.execute(q)).all()
     return [QuantGradeSnapshot(symbol, as_of, created, updated,
                               {"overall": zh, "as_of": zh_dates} if zh else {},
-                              {"overall": en, "as_of": en_dates} if en else {})
-            for symbol, as_of, created, updated, zh, zh_dates, en, en_dates in rows]
+                              {"overall": en, "as_of": en_dates} if en else {},
+                              {k: v for k, v in zip(RADAR_DIMENSION_KEYS, dims, strict=True) if v})
+            for symbol, as_of, created, updated, zh, zh_dates, en, en_dates, *dims in rows]
 
 
 async def get_latest_result(market: str, symbol: str) -> QuantResult | None:

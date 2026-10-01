@@ -89,6 +89,17 @@ async def test_radar_grade_history_is_scoped_and_includes_last_stale_row(clean):
     assert [(r.symbol, r.as_of.day, r.payload_zh["overall"]["grade"]) for r in result] == [
         ("NVDA", 29, "A"), ("NVDA", 2, "A-")]
     assert all("dimensions" not in r.payload_zh for r in result)
+    assert all(r.grades == {} for r in result)
+
+
+async def test_radar_grade_history_reads_mine_dimension_grades(clean):
+    """排雷只读 grades 列里的盈利能力 / EPS 修正，其余维度与指标等级不读。"""
+    await repo.upsert_results([{"market": MARKET, "symbol": "NVDA", "sector_key": "tech", "as_of": date(2026, 9, 30),
+                                "payload_zh": {"overall": {"grade": "B", "score": 60}}, "payload_en": {},
+                                "grades": {"overall": "B", "d:profitability": "F", "d:momentum": "A",
+                                           "m:pe_ttm": "C"}}])
+    [row] = await repo.get_quant_grade_history(MARKET, ["NVDA"], date(2026, 9, 30), date(2026, 9, 30))
+    assert row.grades == {"d:profitability": "F"}
     assert await repo.get_quant_grade_history("nonexistent", ["NVDA"], date(2026, 9, 1), date(2026, 9, 30)) == []
     assert await repo.get_quant_grade_history(MARKET, [], date(2026, 9, 1), date(2026, 9, 30)) == []
 

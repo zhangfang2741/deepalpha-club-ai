@@ -154,6 +154,10 @@ deepalpha-club-ai/
 > 轮次号存 Redis（`incr_with_ttl`），新一轮扫描开始旧补算自动退出。免费示例日（`compute_demo_day`）同一套补算。
 > 补算进度记为 Redis 标记（`signal_radar:backfill:*`，含进程 owner），进程重启后 `scheduler._resume_orphan_backfills`
 > 在启动预热之后接手别的进程没补完的。**不要**绕过锁直接起全量扫描。
+> 雷达**基本面排雷**（`signal_radar/quant_filter.MINE_RULES`，仅美股、自选雷达不排雷，见 `docs/radar_quant_filter.md`）：
+> 买点盈利能力 F 或 EPS 修正 F、卖点 EPS 修正 A+ 不上榜，取前 N 之前剔除、名额递补；评级缺失 / 过期不排除。
+> **不要**用综合等级或动量排雷（一买的前提就是一段下跌，动量必然偏低，会系统性误杀一买）；评级仍不参与排序（`QUANT_WEIGHT=0`）。
+> 改规则须升 `_mode_ns` 的 quant 版本。
 > 雷达形态过滤（`chan/shape_filters.py`，仅雷达、详情页不受影响）**当前暂停**（`service._SHAPE_FILTERS_ENABLED=False`，
 > 代码与测试保留；实测它在 5 日窗口内几乎不剔信号。当时雷达变空的真正原因是 78bee01 的「未确认不上榜」，
 > 已在 2544d31 回退：宽松口径最后一笔上的信号照常上榜、`confirmed=false`，一周前的展示日不显示，收盘价跌破才退场）。启用时：按信号**成立日**（`detected_time`，宽松口径=czsc 事件点亮日）查 czsc 形态状态，

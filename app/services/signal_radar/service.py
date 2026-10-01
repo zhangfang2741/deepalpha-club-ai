@@ -98,10 +98,10 @@ _CACHE_PREFIX = "signal_radar"
 # 否则部署后缓存里还是旧口径的气泡，与详情页（每次实时算）对不上。shape 版本只隔离雷达自身的
 # 筛选规则（不改变详情口径），开关或规则一变就升：shape5 = 恢复 78bee01 之前的筛选（宽松口径
 # 最后一笔上的未确认信号也上榜、收盘价跌破才失效、最新日「待确认」候选补位），形态过滤暂停。
-# quant 段隔离评级相关行为：quant_mark1 = 评级只 mark 展示、不参与排序（QUANT_WEIGHT=0），
-# 恢复加权或改权重时同步升版。
+# quant 段隔离评级相关行为：quant_screen1 = 评级不参与排序（QUANT_WEIGHT=0）+ 基本面排雷
+# （quant_filter.MINE_RULES，自选不排雷）；此前 quant_mark1 = 只 mark 展示。改权重或排雷规则时同步升版。
 def _mode_ns(mode: str) -> str:
-    return f"{get_policy(mode).version}:shape5:quant_mark1"
+    return f"{get_policy(mode).version}:shape5:quant_screen1"
 
 
 # czsc 形态过滤（chan/shape_filters：同向假突破 / 窄幅震荡 / 低波动）暂停应用，代码与测试保留。
@@ -936,9 +936,9 @@ async def _assemble(state: _ScanState, *, redis: Redis) -> SignalRadarResponse:
                 candidates, day.date, calendar, taken={x.symbol for x in day.signals},
                 slots=len(state.constituents), max_age_days=state.max_age_days)
         if state.market == "us":
-            day = quant_filter.attach_grades(day, grades, symbols)
+            # 排雷在取前 N 之前，被排除的名额由后面的信号递补；自选雷达只标注不排雷
+            day = quant_filter.attach_grades(day, grades, symbols, screen=not state.is_watchlist)
         if index == 0:
-            # 评级只影响排序，不剔除低评级或无评级信号。
             day = rerank_with_resonance(day, max(top_n, _RESONANCE_POOL))
             await attach_sub_levels(day, end_date=state.end_date, user_id=state.user_id, redis=redis,
                                     mode=state.mode)
@@ -1314,7 +1314,7 @@ async def _assemble_demo(state: _ScanState) -> SignalRadarResponse:
     symbols = [symbol for symbol, _ in state.constituents]
     if state.market == "us":
         grades = await quant_filter.load_grades(state.market, symbols, [target])
-        resp.days[0] = quant_filter.attach_grades(resp.days[0], grades, symbols)
+        resp.days[0] = quant_filter.attach_grades(resp.days[0], grades, symbols, screen=True)
     resp.days[0] = rerank_with_resonance(resp.days[0], DEFAULT_TOP_N)
     return resp
 

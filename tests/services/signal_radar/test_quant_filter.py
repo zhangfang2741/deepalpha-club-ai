@@ -196,3 +196,99 @@ async def test_rating_outage_publishes_technical_snapshot(monkeypatch):
     restored = svc.SignalRadarResponse.model_validate_json(redis.stored)
     assert len(restored.days[0].signals) == 1
     assert restored.days[0].quant_filter.status == "unavailable"
+
+
+# ---------- 基本面排雷（买点：盈利能力 F / EPS 修正 F；卖点：EPS 修正 A+） ----------
+
+def dims(profitability=None, revisions=None, value="B", day=DAY, available=DAY):
+    return qf.QuantGrade(value, 60, day, available, profitability=profitability, revisions=revisions)
+
+
+def screen(signals, history):
+    day = RadarDayOut(date=str(DAY), buy_count=0, sell_count=0, signals=signals)
+    return qf.attach_grades(day, history, [s.symbol for s in signals], screen=True)
+
+
+def test_buy_mines_excluded_by_profitability_or_revisions_f():
+    out = screen([signal("P"), signal("R"), signal("OK"), signal("DM")],
+                 {"P": [dims(profitability="F")], "R": [dims(revisions="F")],
+                  "OK": [dims(profitability="A", revisions="A+")], "DM": [dims(profitability="D-")]})
+    assert [s.symbol for s in out.signals] == ["OK", "DM"]
+    assert out.buy_count == 2
+    assert out.quant_filter.mode == "screened"
+    assert [(e.symbol, e.side, e.rule) for e in out.quant_filter.excluded] == [
+        ("P", "buy", "profitability_f"), ("R", "buy", "revisions_f")]
+
+
+def test_sell_mines_only_by_revisions_a_plus():
+    out = screen([signal("UP", "sell"), signal("A", "sell"), signal("PF", "sell")],
+                 {"UP": [dims(revisions="A+")], "A": [dims(revisions="A")], "PF": [dims(profitability="F")]})
+    assert [s.symbol for s in out.signals] == ["A", "PF"]
+    assert out.sell_count == 2
+    assert [(e.symbol, e.rule) for e in out.quant_filter.excluded] == [("UP", "revisions_a_plus")]
+
+
+def test_stale_missing_or_unavailable_grades_never_exclude():
+    old = dims(profitability="F", day=date(2026, 9, 1), available=date(2026, 9, 1))
+    assert [s.symbol for s in screen([signal("S"), signal("M")], {"S": [old]}).signals] == ["S", "M"]
+    day = RadarDayOut(date=str(DAY), buy_count=1, sell_count=0, signals=[signal("A")])
+    assert len(qf.attach_grades(day, None, ["A"], screen=True).signals) == 1
+
+
+def test_overall_missing_still_screens_by_fresh_dimension():
+    """综合等级缺失不代表维度等级不可用：维度 F 仍然排除。"""
+    out = screen([signal("A")], {"A": [dims(profitability="F", value=None)]})
+    assert out.signals == []
+
+
+def test_watchlist_not_screened_and_candidates_screened():
+    history = {"A": [dims(profitability="F")]}
+    day = RadarDayOut(date=str(DAY), buy_count=1, sell_count=0, signals=[signal("A")], candidates=[signal("A")])
+    marked = qf.attach_grades(day, history, ["A"])
+    assert len(marked.signals) == 1 and marked.quant_filter.excluded == []
+    screened = qf.attach_grades(day, history, ["A"], screen=True)
+    assert screened.signals == [] and screened.candidates == []
+
+
+def test_row_dimension_grades_read_from_grades_column():
+    row = QuantResult(market="us", symbol="A", as_of=DAY, sector_key="tech",
+                      created_at=datetime(2026, 9, 30), updated_at=datetime(2026, 9, 30),
+                      payload_zh={"overall": {"grade": "B", "score": 60}},
+                      grades={"overall": "B", "d:profitability": "F", "d:revisions": "A+"})
+    entry = qf.grade_from_row(row)
+    assert (entry.profitability, entry.revisions) == ("F", "A+")
+
+
+def test_cache_namespace_isolates_screening():
+    assert svc._mode_ns("loose").endswith(":quant_screen1")
+
+
+async def test_excluded_buy_frees_slot_for_next_signal(monkeypatch):
+    """被排除的买点在取前 N 之前剔除，空出的名额由后面的信号递补。"""
+    symbols = ["MINE", "S1", "S2", "S3"]
+    async def load(*args):
+        return {"MINE": [dims(profitability="F")]}
+    async def bars(**kwargs):
+        return [{"time": str(DAY)}]
+    async def attach(day, **kwargs):
+        pass
+    monkeypatch.setattr(qf, "load_grades", load)
+    monkeypatch.setattr(svc, "fetch_kline", bars)
+    monkeypatch.setattr(svc, "attach_sub_levels", attach)
+    state = svc._ScanState(market="us", universe=get_universe("us"), is_watchlist=False,
+                           constituents=[(s, s) for s in symbols], user_id=None, mode="loose", days=1,
+                           top_n=3, max_age_days=25, start_date="2026-01-01", end_date=str(DAY), cutoff=str(DAY))
+    for i, symbol in enumerate(symbols):
+        raw = svc.RawSignal(symbol=symbol, name=symbol, side="buy", label="二买", signal_type="buy2",
+                            date=str(DAY), price=1, strength=1 - i / 10, bias="bullish",
+                            signal_strength="medium", confirmed=True, pivot_stage_depth=0.5)
+        state.results[symbol] = ([raw], [], [str(DAY)])
+    day = (await svc._assemble(state, redis=None)).days[0]
+    assert [s.symbol for s in day.signals] == ["S1", "S2", "S3"]
+    assert [e.symbol for e in day.quant_filter.excluded] == ["MINE"]
+    state.demo_nominal = str(DAY)
+    demo = (await svc._assemble_demo(state)).days[0]
+    assert "MINE" not in [s.symbol for s in demo.signals]
+    state.is_watchlist = True
+    watch = (await svc._assemble(state, redis=None)).days[0]
+    assert "MINE" in [s.symbol for s in watch.signals]
