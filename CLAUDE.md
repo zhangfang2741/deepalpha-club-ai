@@ -131,7 +131,7 @@ deepalpha-club-ai/
 | 因子探索 | `/skills` | `/skill-generator` | LLM 生成因子代码 → 沙箱执行 |
 | 市场状态 | `/regime` | 并入恐慌指数页(大盘) + 行业恐慌页(板块) | 三篮子 ODS/CF + HMM 逐利/观望/避险后验，写因子表；大盘级与行业级各一套 |
 | 恐慌指数 | `/fear-greed` | `/fear-greed` | 市场恐慌贪婪指数 + 大盘市场状态(regime) |
-| 宏观 / 行业 | `/macro` | iOS 雷达页顶部「宏观 / 情绪 / 行业」三格 + 弹层 | 大盘状态(regime) + 5 个驱动因素 + 未来 7 天宏观日历；行业相对强弱 + 宽基雷达按行业买卖点数，雷达上方行业筛选条在当前指数里就地筛（`/signal-radar/sector-pools` 一次取当天全部行业池；`/sector-day` 仅为旧版 App 保留）。第一期仅美股，A 股 / 港股 `available=false` |
+| 宏观 / 行业 | `/macro` | iOS 雷达页顶部「宏观 / 情绪」两格 + 雷达上方行业筛选条（按所选日强弱排序，末尾「强弱」弹层） | 大盘状态(regime) + 5 个驱动因素 + 未来 7 天宏观日历；行业相对强弱 + 宽基雷达按行业买卖点数，雷达上方行业筛选条在当前指数里就地筛（`/signal-radar/sector-pools` 一次取当天全部行业池；`/sector-day` 仅为旧版 App 保留）。第一期仅美股，A 股 / 港股 `available=false` |
 | 行业恐慌 | `/industry-panic` | `/industry-panic` | 各 GICS 行业 ETF 的 RSI 情绪 + 估值 + 板块状态(行业级 regime) |
 | ETF 资金流 | `/etf` | `/etf` | 资金流热力图 + 偏离度 |
 | 行业估值 | `/valuation` | （并入行业恐慌页） | GICS 行业 PE z-score |

@@ -167,20 +167,55 @@ final class SignalRadarViewModel: ObservableObject {
     /// 后端说这一天没有行业池（旧快照还没重扫）：不再重复请求，按当天前 N 筛。
     private var unavailableSectorPoolKeys: Set<String> = []
 
-    /// 选中日的行业筛选条：当天有信号的行业，按选中后会显示的气泡数从多到少；
+    /// 选中日的行业筛选条（数量 = 选中后会显示的气泡数）。
+    /// 拿到该日行业强弱时：全部行业按相对大盘强弱从强到弱，带状态圆点，没信号的也列出（View 调暗）——
+    /// 筛选条同时回答「钱往哪走」和「谁有信号」。强弱还没取到 / 取不到时：只列有信号的，按数量从多到少。
     /// 已选的行业当天没有信号时也保留（数量 0），用户能看到「选着它、但今天没有」。
     var sectorChips: [RadarSectorChip] {
         guard let day = baseSelectedDay, day.hasSectorData, let counts = day.sectorCounts else { return [] }
         let cap = response?.topN ?? 10
-        var chips = counts.compactMap { key, c -> RadarSectorChip? in
-            let n = min((c["buy"] ?? 0) + (c["sell"] ?? 0), cap)
-            return n > 0 ? RadarSectorChip(key: key, name: RadarSectorCatalog.name(key), count: n) : nil
+        func count(_ key: String) -> Int {
+            min((counts[key]?["buy"] ?? 0) + (counts[key]?["sell"] ?? 0), cap)
+        }
+        var chips: [RadarSectorChip]
+        if let board = sectorBoardKey.flatMap({ sectorBoards[$0] }), !board.sectors.isEmpty {
+            chips = board.sectors.map { RadarSectorChip(key: $0.key, name: $0.name, count: count($0.key), label: $0.label) }
+            // 有信号但强弱表里没有的行业（理论上不会）放到最后，别丢
+            for key in counts.keys.sorted() where count(key) > 0 && !chips.contains(where: { $0.key == key }) {
+                chips.append(RadarSectorChip(key: key, name: RadarSectorCatalog.name(key), count: count(key)))
+            }
+        } else {
+            chips = counts.keys.compactMap { key in
+                count(key) > 0 ? RadarSectorChip(key: key, name: RadarSectorCatalog.name(key), count: count(key)) : nil
+            }
+            chips.sort {
+                $0.count != $1.count ? $0.count > $1.count : RadarSectorCatalog.order($0.key) < RadarSectorCatalog.order($1.key)
+            }
         }
         if let f = sectorFilter, !chips.contains(where: { $0.key == f.key }) {
             chips.append(RadarSectorChip(key: f.key, name: f.name, count: 0))
         }
-        return chips.sorted {
-            $0.count != $1.count ? $0.count > $1.count : RadarSectorCatalog.order($0.key) < RadarSectorCatalog.order($1.key)
+        return chips
+    }
+
+    /// 各日行业强弱（GET /macro/{market}/sectors?date=），键为「市场|日期」。
+    @Published private(set) var sectorBoards: [String: SectorBoard] = [:]
+    private var loadingSectorBoardKeys: Set<String> = []
+
+    /// 选中日需要行业强弱时的「市场|日期」键（这一天有行业统计才要），否则 nil。View 用它驱动取数。
+    var sectorBoardKey: String? {
+        guard let day = baseSelectedDay, day.hasSectorData else { return nil }
+        return "\(market.rawValue)|\(day.date)"
+    }
+
+    /// 取选中日的行业强弱（雷达翻到哪天、筛选条就按哪天收盘排序）。失败不记，换天再回来会重试。
+    func loadSectorBoardIfNeeded() async {
+        guard let key = sectorBoardKey, let day = baseSelectedDay,
+              sectorBoards[key] == nil, !loadingSectorBoardKeys.contains(key) else { return }
+        loadingSectorBoardKeys.insert(key)
+        defer { loadingSectorBoardKeys.remove(key) }
+        if let board = try? await MarketOverviewService.sectors(market: market, date: day.date), board.available {
+            sectorBoards[key] = board
         }
     }
 

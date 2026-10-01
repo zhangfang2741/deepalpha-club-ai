@@ -153,11 +153,13 @@ struct RadarSectorFilter: Equatable {
     let name: String
 }
 
-/// 行业筛选条上的一格：行业 + 选中后会显示的气泡数。
+/// 行业筛选条上的一格：行业 + 选中后会显示的气泡数 + 该日行业状态（逐利 / 观望 / 避险，圆点配色）。
 struct RadarSectorChip: Identifiable, Equatable {
     let key: String
     let name: String
     let count: Int
+    /// risk_on / neutral / risk_off；没有当日强弱数据时为 nil（不画圆点）。
+    var label: String? = nil
     var id: String { key }
 }
 

@@ -1,24 +1,25 @@
 import Charts
 import SwiftUI
 
-/// 雷达页顶部：市场分段控件 + 「宏观 / 情绪 / 行业」三格温度计。
+/// 雷达页顶部：市场分段控件 + 「宏观 / 情绪」两格温度计。
 ///
-/// 三格展示的都是当前所选市场；点任意一格打开对应的完整弹层。三格各自加载、各自失败
-/// （失败那格显示重试），互不影响，也不影响下面的雷达。三格固定同一高度，异步数据到达
-/// 时不挤动雷达画布。行业弹层里点某个行业 → 雷达在当前指数里只显示该行业的气泡。
+/// 两格展示的都是当前所选市场；点任意一格打开对应的完整弹层。两格各自加载、各自失败
+/// （失败那格显示重试），互不影响，也不影响下面的雷达。两格固定同一高度，异步数据到达
+/// 时不挤动雷达画布。行业强弱不再单独占一格：并进雷达上方的行业筛选条（按强弱排序 + 状态圆点，
+/// 末尾「强弱」打开行业弹层），见 SignalRadarView.sectorBar。
 struct MarketHeader: View {
     @ObservedObject var radarVM: SignalRadarViewModel
     @ObservedObject var panicVM: PanicIndexViewModel
     @ObservedObject var overviewVM: MarketOverviewViewModel
 
     private enum SheetKind: String, Identifiable {
-        case macro, sentiment, sector
+        case macro, sentiment
         var id: String { rawValue }
     }
 
     @State private var sheet: SheetKind?
 
-    /// 三格内容区高度：标题行之下的两行内容。
+    /// 两格内容区高度：标题行之下的两行内容。
     static let tileContentHeight: CGFloat = 40
 
     var body: some View {
@@ -33,7 +34,6 @@ struct MarketHeader: View {
             HStack(spacing: 8) {
                 macroTile
                 sentimentTile
-                sectorTile
             }
         }
         .task { panicVM.onAppear() }
@@ -46,25 +46,15 @@ struct MarketHeader: View {
                 if let resp = panicVM.responses[radarVM.market] {
                     PanicIndexDetailSheet(market: radarVM.market, response: resp)
                 }
-            case .sector:
-                SectorBoardSheet(market: radarVM.market, radar: sectorRadarContext) { key, name in
-                    radarVM.applySectorFilter(key: key, name: name)
-                }
             }
         }
     }
 
     private var market: StockMarket { radarVM.market }
 
-    /// 行业弹层里的买卖点数与可筛选状态：取雷达当前指数、当前选中日（与筛选条一致）。
-    private var sectorRadarContext: SectorRadarContext? {
-        guard let day = radarVM.baseSelectedDay, day.hasSectorData, let counts = day.sectorCounts else { return nil }
-        let name = radarVM.universes.first(where: { $0.key == radarVM.activeUniverseKey })?.displayName ?? ""
-        return SectorRadarContext(universeName: name, date: day.date, counts: counts, selectedKey: radarVM.sectorFilter?.key)
-    }
     private var overview: MarketOverview? { overviewVM.overviews[market] }
 
-    // MARK: - 三格
+    // MARK: - 两格
 
     private var macroTile: some View {
         tile(title: L("宏观"), enabled: overview?.macroState != nil, kind: .macro) {
@@ -107,21 +97,6 @@ struct MarketHeader: View {
                 sparkline(resp)
             } else {
                 loadingOrRetry(failed: panicVM.failedMarkets.contains(market)) { panicVM.retry(market) }
-            }
-        }
-    }
-
-    private var sectorTile: some View {
-        tile(title: L("行业"), enabled: overview?.strongest != nil, kind: .sector) {
-            if let overview, !overview.available {
-                buildingText
-            } else if let strongest = overview?.strongest {
-                sectorLine(strongest, up: true)
-                if let weakest = overview?.weakest { sectorLine(weakest, up: false) }
-            } else if overview != nil {
-                preparingText
-            } else {
-                loadingOrRetry(failed: overviewVM.failedMarkets.contains(market)) { overviewVM.retry(market) }
             }
         }
     }
@@ -190,18 +165,6 @@ struct MarketHeader: View {
         } else {
             ProgressView().controlSize(.mini).padding(.top, 6)
         }
-    }
-
-    private func sectorLine(_ s: SectorBrief, up: Bool) -> some View {
-        HStack(spacing: 3) {
-            Image(systemName: up ? "arrow.up" : "arrow.down")
-                .font(.system(size: 9, weight: .bold))
-            Text(s.name)
-                .font(.system(size: 13, weight: .semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .foregroundColor(up ? Theme.up : Theme.down)
     }
 
     /// 迷你走势：近 60 个交易日，只给形状。

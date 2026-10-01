@@ -143,16 +143,16 @@ def load_state_rows(limit: int = 260) -> list[StateRow]:
     return out
 
 
-def load_sector_rows(parent: str | None = None) -> list[SectorRow]:
-    """最新一个交易日的一级行业（parent=None）或某一级行业下的子行业。"""
+def load_sector_rows(parent: str | None = None, as_of: str | None = None) -> list[SectorRow]:
+    """最新一个交易日（as_of 给定时取不晚于它的最近交易日）的一级行业（parent=None）或某一级行业下的子行业。"""
     from app.db.session import get_sync_session_cm
 
     cond = col(RegimeSectorFeatures.parent).is_(None) if parent is None else RegimeSectorFeatures.parent == parent
+    day_q = select(RegimeSectorFeatures.trade_date).where(cond)
+    if as_of is not None:
+        day_q = day_q.where(RegimeSectorFeatures.trade_date <= as_of)
     with get_sync_session_cm() as session:
-        latest = session.exec(
-            select(RegimeSectorFeatures.trade_date).where(cond)
-            .order_by(col(RegimeSectorFeatures.trade_date).desc()).limit(1)
-        ).first()
+        latest = session.exec(day_q.order_by(col(RegimeSectorFeatures.trade_date).desc()).limit(1)).first()
         if latest is None:
             return []
         rows = session.exec(

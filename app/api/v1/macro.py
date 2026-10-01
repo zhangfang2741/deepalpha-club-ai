@@ -32,10 +32,12 @@ async def market_overview(market: str, lang: str = _LANG_QUERY,
 @router.get("/{market}/sectors", response_model=SectorBoardResponse)
 async def sector_board(market: str, lang: str = _LANG_QUERY,
                        parent: str | None = Query(default=None, description="下钻：一级行业 key"),
+                       date: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$",
+                                                description="按该日收盘取强弱（雷达所选日）；不传取最新"),
                        redis: Redis = Depends(get_redis)) -> SectorBoardResponse:
-    """行业弹层：各行业相对强弱 + 状态 + 宽基雷达当日按行业的买卖点数。"""
+    """行业弹层 / 雷达行业筛选条：各行业相对强弱 + 状态（不传 date 时另附宽基雷达最新一天的买卖点数）。"""
     _check(market)
-    return await get_sector_board(redis, market, lang, parent)
+    return await get_sector_board(redis, market, lang, parent, date)
 
 
 @router.get("/{market}", response_model=MacroResponse)

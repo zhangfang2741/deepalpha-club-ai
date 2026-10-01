@@ -56,6 +56,8 @@ struct SignalRadarView: View {
     @State private var pickedDate = Date()
     /// 图例旁「算法说明」问号按钮打开的详细说明弹层状态。
     @State private var showAlgorithmInfo = false
+    /// 行业筛选条末尾「强弱」打开的行业弹层（强弱数值、状态说明、细分行业）。
+    @State private var showSectorBoard = false
 
     var body: some View {
         NavigationStack {
@@ -80,6 +82,13 @@ struct SignalRadarView: View {
             }
             // 行业筛选：一次取回选中日全部行业的气泡，之后在行业间切换不再请求
             .task(id: vm.sectorPoolKey) { await vm.loadSectorPoolsIfNeeded() }
+            // 行业强弱跟着所选日走：雷达翻到哪天，筛选条就按哪天收盘排序
+            .task(id: vm.sectorBoardKey) { await vm.loadSectorBoardIfNeeded() }
+            .sheet(isPresented: $showSectorBoard) {
+                SectorBoardSheet(market: vm.market, date: vm.baseSelectedDay?.date, radar: sectorRadarContext) { key, name in
+                    vm.applySectorFilter(key: key, name: name)
+                }
+            }
             // 订阅层级同步进 vm（跟 ChanViewModel.hasSubLevelAccess 同一个模式，vm 本身
             // 不感知 StoreKit）。initial: true 保证首次进入就同步一次，不用等 tier 变化。
             // 降级/过期（如 StoreKit 交易更新把 tier 打回免费档）时若还没拉过免费预览，
@@ -502,7 +511,15 @@ struct SignalRadarView: View {
 
     // MARK: - 行业筛选条（雷达上方）
 
-    /// 「全部」+ 当天有信号的行业（数量 = 选中后显示的气泡数），横向滑动；选中的自动滚到中间。
+    /// 行业弹层里的买卖点数与已选行业：取雷达当前指数、当前选中日（与筛选条一致）。
+    private var sectorRadarContext: SectorRadarContext? {
+        guard let day = vm.baseSelectedDay, day.hasSectorData, let counts = day.sectorCounts else { return nil }
+        let name = vm.universes.first(where: { $0.key == vm.activeUniverseKey })?.displayName ?? ""
+        return SectorRadarContext(universeName: name, date: day.date, counts: counts, selectedKey: vm.sectorFilter?.key)
+    }
+
+    /// 「全部」+ 各行业（按该日相对大盘强弱从强到弱，圆点 = 行业状态，数量 = 选中后显示的气泡数，
+    /// 当天没信号的调暗），横向滑动；选中的自动滚到中间。末尾「强弱」打开行业弹层看数值与细分。
     private var sectorBar: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
@@ -512,11 +529,24 @@ struct SignalRadarView: View {
                     }
                     .id("all")
                     ForEach(vm.sectorChips) { chip in
-                        sectorBarChip(title: chip.name, count: chip.count, selected: vm.sectorFilter?.key == chip.key) {
+                        sectorBarChip(title: chip.name, count: chip.count, selected: vm.sectorFilter?.key == chip.key,
+                                      dot: chip.label.map(MarketHeader.regimeColor)) {
                             vm.toggleSector(chip)
                         }
                         .id(chip.key)
                     }
+                    Button { showSectorBoard = true } label: {
+                        HStack(spacing: 2) {
+                            Text(L("强弱")).font(.system(size: 12, weight: .semibold))
+                            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
+                        }
+                        .foregroundColor(Theme.accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(L("查看行业强弱"))
                 }
                 .padding(.horizontal, 1)
             }
@@ -527,9 +557,14 @@ struct SignalRadarView: View {
         .sensoryFeedback(.selection, trigger: vm.sectorFilter?.key)
     }
 
-    private func sectorBarChip(title: String, count: Int?, selected: Bool, action: @escaping () -> Void) -> some View {
+    private func sectorBarChip(title: String, count: Int?, selected: Bool, dot: Color? = nil,
+                               action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 4) {
+                if let dot {
+                    Circle().fill(dot).frame(width: 6, height: 6)
+                        .overlay(Circle().stroke(Color.white.opacity(selected ? 0.8 : 0), lineWidth: 1))
+                }
                 Text(title).font(.system(size: 12, weight: .semibold))
                 if let count {
                     Text("\(count)")
@@ -543,6 +578,8 @@ struct SignalRadarView: View {
             .background(selected ? Theme.accent : Theme.surface, in: Capsule())
             .overlay(Capsule().stroke(selected ? Color.clear : Theme.border, lineWidth: 0.8))
             .contentShape(Capsule())
+            // 当天没有信号的行业调暗（仍可点：选中后雷达给「当日无买卖点」提示）
+            .opacity(count == 0 && !selected ? 0.45 : 1)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(count.map { L("%@，%lld 个气泡", title, $0) } ?? title)

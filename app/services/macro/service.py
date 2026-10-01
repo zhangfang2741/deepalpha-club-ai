@@ -100,11 +100,15 @@ async def get_overview(redis: Redis | None, market: str, lang: str = "zh") -> Ma
 
 
 async def get_sector_board(redis: Redis | None, market: str, lang: str = "zh",
-                           parent: str | None = None) -> SectorBoardResponse:
-    """行业弹层（parent 为一级行业 key 时返回其子行业）。"""
+                           parent: str | None = None, date: str | None = None) -> SectorBoardResponse:
+    """行业弹层（parent 为一级行业 key 时返回其子行业）。
+
+    date 给定时按该日收盘取强弱（雷达翻到哪天、筛选条就按哪天排序），不附带雷达买卖点数（App 用自己当天的统计）；
+    不给时取最新一天并附带宽基雷达最新一天的买卖点数（旧版 App）。
+    """
     if market not in MACRO_MARKETS:
         return SectorBoardResponse(market=market, available=False)
-    key = f"macro:sectors:{market}:{parent or 'root'}:{lang}"
+    key = f"macro:sectors:{market}:{parent or 'root'}:{lang}" + (f":{date}" if date else "")
     if (hit := await cache.get_model(redis, key, SectorBoardResponse)) is not None:
         return hit
     from app.services.signal_radar.sectors import BROAD_UNIVERSE
@@ -112,8 +116,9 @@ async def get_sector_board(redis: Redis | None, market: str, lang: str = "zh",
     from app.services.signal_radar.universe import get_universe
 
     universe_key = BROAD_UNIVERSE[market]
-    rows = await asyncio.to_thread(regime_view.load_sector_rows, parent)
-    radar = await latest_sector_counts(redis, market, universe_key) if redis is not None and parent is None else None
+    rows = await asyncio.to_thread(regime_view.load_sector_rows, parent, date)
+    radar = (await latest_sector_counts(redis, market, universe_key)
+             if redis is not None and parent is None and date is None else None)
     radar_date, counts = radar if radar else (None, {})
     universe = get_universe(market, universe_key)
     resp = SectorBoardResponse(

@@ -1021,3 +1021,10 @@
 "房地产" = "Real Estate";
 "%@，%lld 个气泡" = "%@, %lld bubbles";
 "买卖点为%@ %@ 的雷达统计；点行业即在雷达上只看该行业。" = "Buy/sell counts are from the %@ radar on %@. Tap a sector to show only its bubbles on the radar.";
+"查看行业强弱" = "View sector strength";
+"跑赢大盘" = "Outperforming";
+"跑输大盘" = "Underperforming";
+"细分" = "Sub";
+"%@ 收盘 · 近 20 个交易日相对大盘" = "%@ close · vs. market, last 20 trading days";
+"按相对大盘的强弱排序；圆点为行业状态。" = "Sorted by strength relative to the market; dots show sector state.";
+"在雷达上只看该行业" = "Show only this sector on the radar";

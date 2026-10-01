@@ -12,9 +12,11 @@ enum MarketOverviewService {
         try await APIClient.shared.get("/macro/\(market.rawValue)", query: ["lang": lang])
     }
 
-    static func sectors(market: StockMarket, parent: String? = nil) async throws -> SectorBoard {
+    /// date：按该日收盘取强弱（雷达所选日）；nil 取最新。
+    static func sectors(market: StockMarket, parent: String? = nil, date: String? = nil) async throws -> SectorBoard {
         var query = ["lang": lang]
         if let parent { query["parent"] = parent }
+        if let date { query["date"] = date }
         return try await APIClient.shared.get("/macro/\(market.rawValue)/sectors", query: query)
     }
 
