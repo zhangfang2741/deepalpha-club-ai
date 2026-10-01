@@ -63,7 +63,8 @@ def _dp_signals_available() -> bool:
     """自编译的 czsc（rust/czsc，带 dp_* 信号）才有；标准 PyPI 版没有，退回读 bi_list 副本。"""
     try:
         import czsc._native as native
-        return any(n.endswith(_DP_BI_TRACK) for n in native.signals.list_signal_names()  # pyright: ignore[reportAttributeAccessIssue])
+        names = native.signals.list_signal_names()  # pyright: ignore[reportAttributeAccessIssue]
+        return any(n.endswith(_DP_BI_TRACK) for n in names)
     except Exception:  # noqa: BLE001 — 探测失败一律当作不可用
         return False
 
