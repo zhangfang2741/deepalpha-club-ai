@@ -61,7 +61,7 @@ async def evidence(fmp: FmpClient, symbol: str) -> dict:
     above = sum(s > 0 for s in spreads)
     avg = sum(spreads) / n if n else None
     trend = (sum(spreads[:3]) / 3 - sum(spreads[-3:]) / 3) if n >= 6 else None  # 近 3 年 − 早 3 年
-    if n >= 8 and above >= n - 1 and (avg or 0) >= 0.05:
+    if n >= 8 and above >= n - 1 and (avg or 0) >= 0.03:  # 校准：5% 会把 KO 判成窄
         level = "strong"
     elif n >= 5 and above >= 0.7 * n and (avg or 0) > 0:
         level = "moderate"
@@ -102,19 +102,20 @@ _KEYWORDS = re.compile(r"compet|trademark|patent|brand|licens|switching|network|
 
 
 def extract_business(html: str) -> str | None:
-    """10-K 正文的 Item 1（业务）：取行首「ITEM 1A 风险因素」标题前最近的「ITEM 1 业务」标题之间的正文
+    """10-K 正文的 Item 1（业务）：取行首「ITEM 1 业务」标题到「ITEM 1A 风险因素」标题之间的正文
     （目录里的同名条目只隔几十个字符，取最长的一段）。超长时保留开头 + 竞争 / 商标 / 专利等关键词段落。"""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         raw = BeautifulSoup(html, "lxml").get_text("\n")
     text = re.sub(r"[ \t\xa0\u2002\u2003\u2009\u200b]+", " ", raw)
     text = re.sub(r"\n\s*\n+", "\n", text)
-    best = ""
+    # 每个「1A 风险因素」标题与上一个之间，取第一个「1 业务」标题：避开目录，也避开每页页眉重复的「ITEM 1. BUSINESS」
+    best, prev = "", 0
     for e in (m.start() for m in re.finditer(r"(?im)^\W*item\W*1a\W*(?:\n\W*)?risk\W*factors\W*$", text)):
-        starts = [m.start() for m in re.finditer(
-            r"(?im)^\W*item\W*1(?![0-9a-z])\W*(?:\n\W*)?business\W*$", text[:e])]
-        if starts and e - starts[-1] > len(best):
-            best = text[starts[-1]:e]
+        first = re.search(r"(?im)^\W*item\W*1(?![0-9a-z])\W*(?:\n\W*)?business\W*$", text[prev:e])
+        if first and e - (prev + first.start()) > len(best):
+            best = text[prev + first.start():e]
+        prev = e
     if len(best) < 2000:
         return _keyword_fallback(text)
     if len(best) <= SECTION_CHARS:
