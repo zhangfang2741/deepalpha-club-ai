@@ -40,7 +40,7 @@ def filter_events(raw: list[dict], market: str, now: datetime, lang: str = "zh",
     tz = ZoneInfo(MARKET_TZ.get(market, "UTC"))
     countries = set(MARKET_COUNTRIES.get(market, []))
     utc = ZoneInfo("UTC")
-    out: list[tuple[datetime, MacroEventOut]] = []
+    out: list[tuple[datetime, int, MacroEventOut]] = []
     seen: set[tuple[str, str]] = set()
     for e in raw:
         country = str(e.get("country") or "")
@@ -63,10 +63,11 @@ def filter_events(raw: list[dict], market: str, now: datetime, lang: str = "zh",
         if key in seen:
             continue
         seen.add(key)
-        out.append((t, MacroEventOut(date=local.date().isoformat(), time=local.strftime("%H:%M"),
-                                     country=country, name=name, importance=importance)))
-    out.sort(key=lambda x: x[0])
-    return [ev for _, ev in out]
+        out.append((t, importance, MacroEventOut(date=local.date().isoformat(), time=local.strftime("%H:%M"),
+                                                 country=country, name=name, importance=importance)))
+    # 同一时刻发布的（如非农与失业率）重要的排前面
+    out.sort(key=lambda x: (x[0], -x[1]))
+    return [ev for _, _, ev in out]
 
 
 def next_key_event(events: list[MacroEventOut]) -> MacroEventOut | None:

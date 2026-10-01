@@ -41,3 +41,13 @@ def test_next_key_event_skips_low_importance():
     assert next_key_event(events).name == "非农就业"
     assert next_key_event(events[:1]).name == "ISM 制造业 PMI"
     assert next_key_event([]) is None
+
+
+def test_same_time_higher_importance_first():
+    raw = [
+        {"date": "2026-10-02 12:30:00", "country": "US", "event": "Unemployment Rate (Sep)", "impact": "High"},
+        {"date": "2026-10-02 12:30:00", "country": "US", "event": "Non Farm Payrolls (Sep)", "impact": "High"},
+    ]
+    events = filter_events(raw, "us", NOW)
+    assert [e.name for e in events] == ["非农就业", "失业率"]
+    assert next_key_event(events).name == "非农就业"
