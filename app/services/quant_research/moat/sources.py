@@ -149,23 +149,50 @@ def _neutral_zh(text: str) -> str:
     return text
 
 
-def neutralize(j: MoatJudgement) -> MoatJudgement:
-    """把理由 / 威胁里描述性的买卖动词换成中性词。"""
+def _protect(text: str, names: list[str]) -> tuple[str, list[str]]:
+    """把公司名换成占位符（如 Best Buy 里的 buy 不该被当成买卖措辞），返回替换后的文本与按出现顺序的原文。"""
+    alts = sorted({n for n in names if n}, key=len, reverse=True)
+    if not alts:
+        return text, []
+    kept: list[str] = []
+
+    def hold(m: re.Match[str]) -> str:
+        kept.append(m.group(0))
+        return "\x00N\x00"
+
+    return re.sub("|".join(re.escape(n) for n in alts), hold, text, flags=re.I), kept
+
+
+def _restore(text: str, kept: list[str]) -> str:
+    it = iter(kept)
+    return re.sub("\x00N\x00", lambda _m: next(it, ""), text)
+
+
+def _apply(text: str, fn, names: list[str]) -> str:
+    protected, kept = _protect(text, names)
+    return _restore(fn(protected), kept)
+
+
+def neutralize(j: MoatJudgement, names: list[str] | None = None) -> MoatJudgement:
+    """把理由 / 威胁里描述性的买卖动词换成中性词（公司名原样保留）。"""
+    ns = names or []
     for s in j.sources:
-        s.reason_en, s.reason_zh = _neutral_en(s.reason_en), _neutral_zh(s.reason_zh)
-    j.threats_en, j.threats_zh = _neutral_en(j.threats_en), _neutral_zh(j.threats_zh)
+        s.reason_en = _apply(s.reason_en, _neutral_en, ns)
+        s.reason_zh = _apply(s.reason_zh, _neutral_zh, ns)
+    j.threats_en = _apply(j.threats_en, _neutral_en, ns)
+    j.threats_zh = _apply(j.threats_zh, _neutral_zh, ns)
     return j
 
 
-def invalid_reason(j: MoatJudgement | None) -> str | None:
-    """输出不可用的原因；可用返回 None。"""
+def invalid_reason(j: MoatJudgement | None, names: list[str] | None = None) -> str | None:
+    """输出不可用的原因；可用返回 None。禁用词检查时忽略公司名（如 Best Buy）。"""
     if j is None:
         return "empty"
     keys = [s.source for s in j.sources]
     if sorted(keys) != sorted(SOURCE_KEYS):
         return f"sources={keys}"
     texts = [t for s in j.sources for t in (s.reason_zh, s.reason_en)] + [j.threats_zh, j.threats_en]
-    hits = sorted({w for t in texts for w in contains_forbidden(t)})
+    hits = sorted({w for t in texts for w in contains_forbidden(_protect(t, names or [])[0])})
     if hits:
         return f"forbidden={hits}"
     english = [s.reason_en for s in j.sources] + [j.threats_en]
@@ -200,7 +227,7 @@ async def _wait_cooldown() -> None:
         await asyncio.sleep(delay)
 
 
-async def judge_once(section: str, symbol: str) -> MoatJudgement:
+async def judge_once(section: str, symbol: str, names: list[str] | None = None) -> MoatJudgement:
     """一次判断（含重试与引用核对）。"""
     msgs = [SystemMessage(SYSTEM), HumanMessage(f"公司代码：{symbol}\n\n年报 Item 1（业务）原文：\n\n{section}")]
     last: Exception | None = None
@@ -216,7 +243,8 @@ async def judge_once(section: str, symbol: str) -> MoatJudgement:
             if _is_rate_limited(e):
                 _start_cooldown()
             continue
-        reason = invalid_reason(neutralize(out) if out is not None else None)
+        names_ = [symbol, *(names or [])]
+        reason = invalid_reason(neutralize(out, names_) if out is not None else None, names_)
         if reason is None:
             return verify_quotes(out, section)  # type: ignore[arg-type]
         logger.info("quant_moat_judgement_invalid", symbol=symbol, reason=reason)
@@ -233,9 +261,9 @@ def merge_votes(runs: list[MoatJudgement]) -> MoatJudgement:
     return MoatJudgement(sources=merged, threats_zh=runs[0].threats_zh, threats_en=runs[0].threats_en)
 
 
-async def judge(section: str, symbol: str) -> tuple[MoatJudgement, list[list[str]]]:
+async def judge(section: str, symbol: str, names: list[str] | None = None) -> tuple[MoatJudgement, list[list[str]]]:
     """独立判断 RUNS 次并合并；同时返回每种来源的投票（便于排查波动）。"""
-    runs = await asyncio.gather(*(judge_once(section, symbol) for _ in range(RUNS)))
+    runs = await asyncio.gather(*(judge_once(section, symbol, names) for _ in range(RUNS)))
     votes = [[next(s for s in r.sources if s.source == k).strength for r in runs] for k in SOURCE_KEYS]
     merged = merge_votes(list(runs))
     logger.info("quant_moat_judged", symbol=symbol, votes=votes)

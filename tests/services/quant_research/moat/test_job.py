@@ -54,3 +54,31 @@ async def test_quota_exhausted_stops_the_run(monkeypatch):
     out = await job.run_moat_job(None)
     assert len(calls) == 2 and out["assessed"] == 1 and out["failed"] == 0
     assert out["deferred"] == 9  # 到顶的那只 + 后面 8 只都留到下一轮
+
+
+async def test_daily_limit_survives_restarts_via_redis(monkeypatch):
+    """每日名额记在 Redis：今天已用完（比如之前那次部署跑过），重启后的冷启动不再新评估。"""
+    class FakeRedis:
+        def __init__(self):
+            self.v = {}
+
+        async def incr(self, k):
+            self.v[k] = self.v.get(k, 0) + 1
+            return self.v[k]
+
+        async def expire(self, k, ttl):
+            return True
+
+    async def assess(*a, **k):
+        return {"rating": "none", "trend": None}
+
+    async def universe(redis):
+        return {s: (s, "industrials") for s in [f"S{i}" for i in range(5)]}
+
+    _patch(monkeypatch, [f"S{i}" for i in range(5)], assess)
+    monkeypatch.setattr(job, "fetch_sp1500", universe)
+    monkeypatch.setattr(job.settings, "QUANT_MOAT_DAILY_LIMIT", 3)
+    r = FakeRedis()
+    first = await job.run_moat_job(r)
+    second = await job.run_moat_job(r)  # 模拟部署重启后的又一轮
+    assert first["assessed"] == 3 and second["assessed"] == 0 and second["deferred"] == 5

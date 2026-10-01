@@ -115,3 +115,15 @@ async def test_quota_exhausted_is_raised_immediately_without_retries(monkeypatch
     with pytest.raises(sources.QuotaExhausted):
         await sources.judge_once("x" * 100, "TEST")
     assert len(calls) == 1
+
+
+def test_company_name_with_trade_word_is_not_forbidden_or_rewritten():
+    """百思买（Best Buy）的公司名里有 buy：既不能判违规，也不能被替换成 Best Purchase。"""
+    from app.services.quant_research.moat.sources import invalid_reason, neutralize
+
+    j = _j(["none"] * 5, reason_en="Best Buy has a strong brand; it can sell services.")
+    j.sources[0].reason_zh = "Best Buy 的品牌认知度高。"
+    neutralize(j, names=["Best Buy", "Best Buy Co., Inc."])
+    assert invalid_reason(j, names=["Best Buy"]) is None
+    assert j.sources[0].reason_en.startswith("Best Buy has") and "offer services" in j.sources[0].reason_en
+    assert j.sources[0].reason_zh.startswith("Best Buy")

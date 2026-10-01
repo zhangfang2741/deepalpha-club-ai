@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 import httpx
 from redis.asyncio import Redis
 
+from app.cache.operations import incr_with_ttl
 from app.core.config import settings
 from app.core.logging import logger
 from app.services.llm.registry import llm_registry
@@ -52,7 +53,7 @@ def _model_name() -> str:
 
 
 async def assess(client: httpx.AsyncClient, fmp: FmpClient, symbol: str, sector_key: str, tenk: TenK,
-                 total_debt: float | None) -> dict | None:
+                 total_debt: float | None, name: str | None = None) -> dict | None:
     """评估一只股票的一份年报，返回待存档的行；数据不足返回 None。"""
     evidence = await _evidence(fmp, symbol, sector_key == "financials", total_debt)
     if evidence is None:
@@ -61,7 +62,7 @@ async def assess(client: httpx.AsyncClient, fmp: FmpClient, symbol: str, sector_
     section = await business_section(client, tenk)
     if section is None:
         return None
-    judgement, votes = await judge(section, symbol)
+    judgement, votes = await judge(section, symbol, [name] if name else None)
     sources = [dict(s.model_dump(), votes=v) for s, v in zip(judgement.sources, votes, strict=True)]
     rating = combine(evidence["level"], [s["strength"] for s in sources])
     return {
@@ -72,6 +73,21 @@ async def assess(client: httpx.AsyncClient, fmp: FmpClient, symbol: str, sector_
         "model_name": _model_name(),
         "assessed_at": datetime.now(UTC).replace(tzinfo=None),
     }
+
+
+def _daily_key() -> str:
+    return f"quant:moat_daily:{datetime.now(UTC).date().isoformat()}"
+
+
+async def _take_daily_slot(redis: Redis | None, limit: int) -> bool:
+    """跨进程的每日名额（UTC 日期）：部署重启不清零，一天内多次冷启动合计不超过 limit。"""
+    if redis is None:
+        return True
+    try:
+        return await incr_with_ttl(redis, _daily_key(), 2 * 86400) <= limit
+    except Exception as e:  # noqa: BLE001 Redis 不可用时退回进程内计数（counts["attempted"]）
+        logger.warning("quant_moat_daily_slot_failed", error=str(e))
+        return True
 
 
 async def run_moat_job(redis: Redis | None, *, symbols: list[str] | None = None) -> dict:
@@ -108,12 +124,12 @@ async def run_moat_job(redis: Redis | None, *, symbols: list[str] | None = None)
                         return
                     snap = fundamentals.get(sym)
                     debt = (snap.balance or {}).get("totalDebt") if snap else None
-                    sector = universe.get(sym, ("", ""))[1]
-                    if counts["attempted"] >= daily_limit:
+                    name, sector = universe.get(sym, ("", ""))
+                    if counts["attempted"] >= daily_limit or not await _take_daily_slot(redis, daily_limit):
                         counts["deferred"] += 1
                         return
                     counts["attempted"] += 1
-                    row = await assess(client, fmp, sym, sector, tenk, debt)
+                    row = await assess(client, fmp, sym, sector, tenk, debt, name)
                     if row is not None and await repo.insert_moat(row):
                         counts["assessed"] += 1
                         logger.info("quant_moat_assessed", symbol=sym, rating=row["rating"], trend=row["trend"],

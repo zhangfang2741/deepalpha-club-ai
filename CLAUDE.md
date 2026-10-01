@@ -189,7 +189,9 @@ deepalpha-club-ai/
 > 宽 / 窄 / 无 + 趋势。证据 = FMP 10 年 ROIC（金融股 ROE）vs CAPM 资金成本；来源 = 大模型读最新 10-K Item 1 判断五种来源，
 > **引用必须逐字核对**、3 次判断取中位数（MiniMax 温度 0 也不确定）。两者同时成立才有护城河。按 (股票, 10-K 编号, `moat.METHOD_VERSION`)
 > 存 `quant_moat_assessments`，一份年报只评一次；部署后冷启动补齐、每天 UTC 12:00 查新年报（短锁 + 心跳，重启后可续跑）。
-> 校准脚本 `scripts/moat_calibration.py`（12 只公开评级对照 11/12）。改判定规则须升 `moat.METHOD_VERSION`（会全量重评、耗大模型额度）。
+> **大模型额度**：与 App 对话 / 翻译共用 MiniMax 套餐，冷启动 24 路并发曾把套餐用量打满（2056）。现为 4 路 + 遇 429 全局冷却 +
+> 每日新评估上限 `QUANT_MOAT_DAILY_LIMIT`（Redis 按 UTC 日计数，重启不清零）+ 用量到顶立即收工；紧急停用设 `QUANT_MOAT_ENABLED=false`。
+> 判禁用词时保护公司名（Best Buy）。> 校准脚本 `scripts/moat_calibration.py`（12 只公开评级对照 11/12）。改判定规则须升 `moat.METHOD_VERSION`（会全量重评、耗大模型额度）。
 > **冷启动**：已存结果的 `METHODOLOGY_VERSION` 与代码不一致时，启动自举立即重跑全量（锁键带版本号），改规则后部署即生效、不等夜间批量。
 > **可解释**：App 上每个等级 / 分数 / 术语都可点开看「这一处」的解释（`Views/Quant/QuantExplain.swift`，带本股真实数字，
 > 不做统一说明页）；指标大白话与算式输入项解释在 `glossary.py`。iOS 的分档 / 防抖 / 封顶常量由 `test_education.py` 对齐后端守护。
