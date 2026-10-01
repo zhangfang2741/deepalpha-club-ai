@@ -24,7 +24,8 @@ from app.services.quant_research.moat.job import run_moat_job
 
 # 批量锁 TTL：最长的一轮（约 1500 只股票、每只约 4 次调用，批量限速 150/分钟）约 40 分钟，90 分钟足够。
 # 不能再长：部署会杀掉跑批中的进程，锁留在 Redis 里挡住下一次自举（2026-09-30 踩过 6h 死锁）。
-_LOCK_TTL = 90 * 60
+_LOCK_TTL = 15 * 60  # 短锁 + 心跳：部署重启后旧锁 15 分钟内过期（曾因 90 分钟死锁让 q6 冷启动多等 1 小时）
+_LOCK_RENEW_SECONDS = 5 * 60
 BOOTSTRAP_RETRY_SECONDS = 10 * 60
 BOOTSTRAP_MAX_ATTEMPTS = 12  # 重试共 ~2 小时；之后再等当天的定时点
 
@@ -133,11 +134,17 @@ async def _run_once(kind: str, day: date, *, lock_suffix: str | None = None) -> 
     if redis is not None and not await acquire_lock(redis, key, _LOCK_TTL):
         logger.info("quant_batch_skipped_locked", kind=kind, day=day.isoformat())
         return
-    if kind == "us":
-        async with httpx.AsyncClient() as client:
-            await run_us_batch(day, redis=redis, client=client)
-    else:
-        await run_cn_estimate_snapshot(day)
+    # 跑的过程中续期；跑完不删锁，让它自然过期，短时间内其它实例 / 触发不会重复跑
+    renew = asyncio.create_task(_renew(redis, key, _LOCK_TTL, _LOCK_RENEW_SECONDS)) if redis is not None else None
+    try:
+        if kind == "us":
+            async with httpx.AsyncClient() as client:
+                await run_us_batch(day, redis=redis, client=client)
+        else:
+            await run_cn_estimate_snapshot(day)
+    finally:
+        if renew is not None:
+            renew.cancel()
 
 
 async def _loop(kind: str, hour: int, minute: int, weekdays: set[int]) -> None:
@@ -165,10 +172,11 @@ def _moat_lock_key() -> str:
     return f"quant:moat_lock:{MOAT_METHOD_VERSION}"
 
 
-async def _renew(redis: object, key: str) -> None:
+async def _renew(redis: object, key: str, ttl: int, every: int) -> None:
+    """锁心跳：任务运行期间定期续期，进程被杀后锁在 ttl 内自然过期。"""
     while True:
-        await asyncio.sleep(MOAT_LOCK_RENEW_SECONDS)
-        await redis.expire(key, MOAT_LOCK_TTL)  # type: ignore[attr-defined]
+        await asyncio.sleep(every)
+        await redis.expire(key, ttl)  # type: ignore[attr-defined]
 
 
 async def _run_moat_once() -> bool:
@@ -178,7 +186,7 @@ async def _run_moat_once() -> bool:
     if redis is not None and not await acquire_lock(redis, key, MOAT_LOCK_TTL):
         logger.info("quant_moat_skipped_locked")
         return False
-    renew = asyncio.create_task(_renew(redis, key)) if redis is not None else None
+    renew = asyncio.create_task(_renew(redis, key, MOAT_LOCK_TTL, MOAT_LOCK_RENEW_SECONDS)) if redis is not None else None
     try:
         await run_moat_job(redis)
     finally:

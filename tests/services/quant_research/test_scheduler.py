@@ -37,11 +37,13 @@ def test_last_us_session():
     assert last_us_session(datetime(2026, 10, 4, 6, 0, tzinfo=UTC)) == date(2026, 10, 2)
 
 
-def test_lock_ttl_covers_slowest_run():
-    """锁 TTL 必须明显大于最慢一轮（首次全量 ~30 分钟），又不能长到重启后长期挡路。"""
+def test_lock_is_short_and_kept_alive_by_heartbeat():
+    """锁靠心跳续期盖住整轮（全量 ~30 分钟），TTL 本身要短：部署重启后旧锁很快过期，冷启动不被长期挡路。"""
     from app.services.quant_research import scheduler
 
-    assert 45 * 60 <= scheduler._LOCK_TTL <= 2 * 3600
+    assert scheduler._LOCK_TTL <= 20 * 60
+    assert scheduler._LOCK_RENEW_SECONDS * 2 < scheduler._LOCK_TTL
+    assert scheduler.MOAT_LOCK_RENEW_SECONDS * 2 < scheduler.MOAT_LOCK_TTL
     assert scheduler.BOOTSTRAP_RETRY_SECONDS <= scheduler._LOCK_TTL
 
 
