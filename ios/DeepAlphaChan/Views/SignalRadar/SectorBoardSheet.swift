@@ -24,14 +24,22 @@ struct SectorBoardSheet: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    /// 点选后留 0.2 秒：先看到对勾与触感反馈、雷达在后面换好，再收起弹层，而不是点完瞬间消失。
+    private func closeAfterFeedback() {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(200))
+            dismiss()
+        }
+    }
+
     var body: some View {
         NavigationStack {
             SectorBoardList(market: market, date: date, parent: nil, parentName: nil, radar: radar,
                             onPick: { key, name in
                                 onPick(key, name)
-                                dismiss()
+                                closeAfterFeedback()
                             },
-                            onClear: onClear.map { clear in { clear(); dismiss() } })
+                            onClear: onClear.map { clear in { clear(); closeAfterFeedback() } })
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { Button(L("关闭")) { dismiss() } }
             }
@@ -182,7 +190,7 @@ struct SectorBoardList: View {
         let selected = radar.selectedKey == nil
         return Button(action: onClear) {
             HStack(spacing: 10) {
-                Text(L("全部行业")).font(.system(.body, design: .rounded).weight(.semibold)).foregroundColor(Theme.textPrimary)
+                Text(L("全部行业")).font(AnalysisType.title).foregroundColor(Theme.textPrimary)
                 if selected {
                     Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
                 }
@@ -213,7 +221,7 @@ struct SectorBoardList: View {
 
     private func chip(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.system(.caption2, design: .rounded).weight(.semibold).monospacedDigit())
+            .font(.caption2.weight(.semibold).monospacedDigit())
             .foregroundColor(color)
             .padding(.horizontal, 7).padding(.vertical, 2)
             .background(color.opacity(0.14))
@@ -225,8 +233,8 @@ struct SectorBoardList: View {
     private func section(_ title: String, rows: [SectorRow], maxAbs: Double) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Text(title).font(.system(.subheadline, design: .rounded).weight(.semibold)).foregroundColor(Theme.textPrimary)
-                Text("\(rows.count)").font(.system(.caption, design: .rounded).monospacedDigit()).foregroundColor(Theme.textSecondary)
+                Text(title).font(AnalysisType.label).foregroundColor(Theme.textPrimary)
+                Text("\(rows.count)").font(.caption.monospacedDigit()).foregroundColor(Theme.textSecondary)
             }
             .padding(.horizontal, 4)
             VStack(spacing: 0) {
@@ -248,7 +256,7 @@ struct SectorBoardList: View {
         let content = HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
-                    Text(row.name).font(.system(.body, design: .rounded).weight(.semibold)).foregroundColor(Theme.textPrimary)
+                    Text(row.name).font(AnalysisType.title).foregroundColor(Theme.textPrimary)
                         .lineLimit(1).minimumScaleFactor(0.8)
                     if selected {
                         Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
@@ -264,7 +272,7 @@ struct SectorBoardList: View {
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 6) {
                 Text(SectorBoardList.rsText(rs))
-                    .font(.system(.title3, design: .rounded).weight(.semibold).monospacedDigit())
+                    .font(.subheadline.weight(.semibold).monospacedDigit())
                     .foregroundColor((rs ?? 0) >= 0 ? Theme.up : Theme.down)
                     .lineLimit(1)
                     .contentTransition(.numericText())
