@@ -14,16 +14,18 @@ enum QuantGradeStyle {
     }
 }
 
-/// 等级徽标（圆角小方块里一个等级字母）。
-struct QuantGradeBadge: View {
+/// 等级色块：用于成绩单与指标行，颜色同时编码强弱，暂无时为灰色破折号。
+struct QuantGradeBlock: View {
     let grade: String?
-    var size: CGFloat = 15
+    var side: CGFloat = 44
 
     var body: some View {
+        let color = QuantGradeStyle.color(grade)
         Text(grade ?? "—")
-            .font(.system(size: size, weight: .semibold))
-            .foregroundStyle(QuantGradeStyle.color(grade))
-            .frame(minWidth: size * 2.2, minHeight: size * 1.75)
-            .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 8))
+            .font(.system(size: side * 0.41, weight: .bold, design: .rounded))
+            .foregroundStyle(color)
+            .frame(width: side, height: side)
+            .background(color.opacity(grade == nil ? 0.06 : 0.13), in: RoundedRectangle(cornerRadius: side * 0.25))
+            .accessibilityLabel(grade ?? L("暂无"))
     }
 }

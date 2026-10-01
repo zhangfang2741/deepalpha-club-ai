@@ -51,6 +51,17 @@ struct QuantResearchTests {
         let legacy = Data(#"{"what":"指标定义","role":"投资含义","threshold":"适用边界"}"#.utf8)
         let interpretation = try JSONDecoder().decode(QuantMetricInterpretation.self, from: legacy)
         precondition(interpretation.calculation == nil, "旧响应缺少通用公式时仍应正常解码")
+        precondition(interpretation.plain == nil && interpretation.fullName == nil, "旧响应缺少大白话时仍应正常解码")
+        let roe = research.dimensions.flatMap(\.allMetrics).first { $0.key == "roe" }!
+        precondition(roe.interpretation?.fullName?.contains("净资产收益率") == true)
+        precondition(roe.interpretation?.plain?.isEmpty == false && roe.interpretation?.reading?.isEmpty == false)
+        // NVDA：盈利能力 A+ 为强项、估值 C- 不算短板；积累中的维度不参与
+        precondition(research.strengths.map(\.key) == ["profitability"], "\(research.strengths.map(\.key))")
+        precondition(research.weaknesses.isEmpty)
+        let byKey = Dictionary(uniqueKeysWithValues: research.dimensions.flatMap(\.allMetrics).map { ($0.key, $0) })
+        precondition(byKey["roe"]?.fullNameSubtitle?.contains("净资产收益率") == true, "缩写指标要显示全称")
+        precondition(byKey["gross_m"]?.fullNameSubtitle == nil, "名称已是全称时不重复")
+        precondition(byKey["pe_fwd"]?.fullNameSubtitle == nil, "去掉期间修饰后重复的也不显示")
     }
 
     static func lifecycleStageBoundaries() {

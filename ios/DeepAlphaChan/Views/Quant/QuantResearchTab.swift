@@ -30,28 +30,25 @@ struct QuantResearchTab: View {
 
     @ViewBuilder
     private func content(_ r: QuantResearch) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 16) {
             QuantResearchSummaryCard(research: r)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L("五维成绩单")).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
+                    .padding(.horizontal, 4)
+                VStack(alignment: .leading, spacing: 0) {
+                    groupCaption(L("生意与价格"))
+                    dimensionRows(r, keys: ["profitability", "growth", "valuation"])
+                    groupCaption(L("市场与预期"))
+                    dimensionRows(r, keys: ["momentum", "revisions"])
+                }
+                .padding(.horizontal, 14).padding(.bottom, 4)
+                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
+                Text(QuantDimensionGuide.gradeReading)
+                    .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 4)
+            }
             QuantStageTimeline(research: r, isStatic: isStatic)
-            VStack(alignment: .leading, spacing: 5) {
-                Text(L("判断依据")).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
-                Text(L("先看生意与价格，再看市场变化；点开查看指标。"))
-                    .font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
-            }
-            VStack(alignment: .leading, spacing: 0) {
-                Text(L("生意与价格")).font(QuantTypography.metadata.weight(.semibold))
-                    .foregroundStyle(Theme.accent).padding(.top, 16)
-                dimensionRows(r, keys: ["profitability", "growth", "valuation"])
-                Divider().overlay(Theme.border)
-                Text(L("市场与预期")).font(QuantTypography.metadata.weight(.semibold))
-                    .foregroundStyle(Theme.accent).padding(.top, 16)
-                dimensionRows(r, keys: ["momentum", "revisions"])
-            }
-            .padding(.horizontal, 16)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
-            if let peer = r.peerGroup {
-                Text(peer.text).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
-            }
             if !isStatic {
                 VStack(spacing: 0) {
                     DisclosureGroup {
@@ -92,9 +89,15 @@ struct QuantResearchTab: View {
         }
     }
 
+    private func groupCaption(_ text: String) -> some View {
+        Text(text).font(QuantTypography.metadata.weight(.semibold))
+            .foregroundStyle(Theme.textSecondary).padding(.top, 12)
+    }
+
     @ViewBuilder
     private func dimensionRows(_ research: QuantResearch, keys: [String]) -> some View {
-        ForEach(keys, id: \.self) { key in
+        ForEach(Array(keys.enumerated()), id: \.element) { index, key in
+            if index > 0 { Divider().overlay(Theme.border).padding(.leading, 56) }
             if let dimension = research.dimensions.first(where: { $0.key == key }) {
                 if isStatic {
                     QuantDimensionRow(dimension: dimension, isStatic: true)

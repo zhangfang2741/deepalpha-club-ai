@@ -25,141 +25,181 @@ struct QuantMetricSheet: View {
 }
 
 /// 指标详情的内容本体（不含滚动容器，便于离屏渲染验收）。
+/// 顺序按「先懂再看再算」：是什么（大白话）→ 本股在板块里的位置 → 高低怎么看 → 怎么算（折叠）。
 struct QuantMetricDetailContent: View {
     let metric: QuantMetric
     let research: QuantResearch
 
+    private var itp: QuantMetricInterpretation? { metric.interpretation }
+    /// 新版响应有大白话；旧缓存回退到口径描述。
+    private var plain: String? { itp?.plain.flatMap { $0.isEmpty ? nil : $0 } }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             heroHeader
-            if let pos = metric.positionText {
-                Text(pos).font(QuantTypography.emphasis).foregroundStyle(Theme.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if let itp = metric.interpretation, !itp.what.isEmpty {
-                interpretationBlock(itp)
-            }
-            if metric.interpretation == nil && !metric.description.isEmpty {
-                Text(metric.description).font(QuantTypography.body).foregroundStyle(Theme.textPrimary.opacity(0.85))
-                    .lineSpacing(3).fixedSize(horizontal: false, vertical: true)
-            }
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 10) {
-                    pill(L("方向"), metric.lowerBetter ? L("越低排名越靠前") : L("越高排名越靠前"))
-                    if let g = metric.grade, !g.isEmpty { pill(L("档位"), g) }
-                }
-                pill(L("方向"), metric.lowerBetter ? L("越低排名越靠前") : L("越高排名越靠前"))
-            }
-            if let f = metric.formula {
-                calcCard(f)
-            } else {
-                box(title: L("如何计算")) {
-                    Text(metric.interpretation?.calculation ?? metric.description)
-                        .font(QuantTypography.body).foregroundStyle(Theme.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(L("当前数据不足，暂无可代入的计算结果。"))
-                        .font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
-                }
-            }
-            if let note = metric.statusNote {
-                Text(note).font(QuantTypography.body).foregroundStyle(Theme.segment)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if let dist = metric.distribution, let peer = research.peerGroup {
-                Text(L("在%@板块 %lld 家公司中的位置", peer.sectorName, peer.sampleSize))
-                    .font(QuantTypography.emphasis).foregroundStyle(Theme.textSecondary)
-                DistributionStrip(distribution: dist, value: metric.value, valueLabel: metric.displayValue,
-                                  symbol: research.symbol, lowerBetter: metric.lowerBetter,
-                                  isPercent: metric.displayValue.hasSuffix("%"))
-            }
-            if metric.positionText != nil {
-                DisclosureGroup(L("等级是怎么算的？")) {
-                    Text(L("分档：≥93 A+ · ≥86 A · ≥80 A- · … · <20 F"))
-                        .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                 .font(QuantTypography.body).tint(Theme.accent)
-            }
+            plainBlock
+            positionBlock
+            readingBlock
+            calculationGroup
             DisclosureGroup(L("术语速查")) {
                 Text(L("TTM：最近 12 个月实际值\nFWD：基于分析师预期\nNTM：未来 12 个月；本页按财年剩余时间加权\nEPS：每股收益\nEBIT：息税前利润\nEBITDA：息税折旧摊销前利润\nEV：本页按市值 + 负债 − 现金计算\n百分位：按指标优劣方向换算的相对排名，不是收益率"))
                     .font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
                     .lineSpacing(6).frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 8)
             }
-             .font(QuantTypography.body).tint(Theme.accent)
-
-
+            .font(QuantTypography.body).tint(Theme.accent)
+            .padding(.horizontal, 4)
         }
         .padding(18)
     }
 
     private var heroHeader: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top) {
-                Text(metric.name).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(metric.name).font(QuantTypography.summary).foregroundStyle(Theme.textPrimary)
+                    if let full = itp?.fullName, !full.isEmpty, full != metric.name {
+                        Text(full).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
                 Spacer(minLength: 8)
-                QuantGradeBadge(grade: metric.grade)
+                QuantGradeBlock(grade: metric.grade, side: 48)
             }
-            Text(research.symbol).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
-            Text(metric.displayValue).font(QuantTypography.summary).monospacedDigit()
-                .foregroundStyle(Theme.textPrimary)
-            if let median = metric.sectorMedianDisplay {
-                Text(L("板块中位") + "  " + median)
-                     .font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
+            HStack(alignment: .firstTextBaseline, spacing: 14) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(research.symbol).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+                    Text(metric.displayValue).font(.system(size: 30, weight: .bold, design: .rounded)).monospacedDigit()
+                        .foregroundStyle(Theme.textPrimary)
+                }
+                if let median = metric.sectorMedianDisplay {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L("板块中位")).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+                        Text(median).font(QuantTypography.value).monospacedDigit().foregroundStyle(Theme.textSecondary)
+                    }
+                }
+                Spacer(minLength: 0)
             }
         }
-        .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 20))
+        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 18))
     }
 
-    private func interpretationBlock(_ itp: QuantMetricInterpretation) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "lightbulb.fill").font(QuantTypography.metadata)
-                Text(L("价值投资视角")).font(QuantTypography.metadata.weight(.semibold))
+    /// 一句话看懂：大白话释义（旧响应回退到口径描述）。
+    @ViewBuilder
+    private var plainBlock: some View {
+        let text = plain ?? itp?.what ?? metric.description
+        if !text.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(L("一句话看懂"), systemImage: "lightbulb.fill")
+                    .font(QuantTypography.metadata.weight(.semibold)).foregroundStyle(Theme.accent)
+                Text(text).font(QuantTypography.body).foregroundStyle(Theme.textPrimary.opacity(0.92))
+                    .lineSpacing(4).fixedSize(horizontal: false, vertical: true)
             }
-            .foregroundStyle(Theme.accent)
-            Text(itp.what).font(QuantTypography.body).foregroundStyle(Theme.textPrimary.opacity(0.92))
-                .lineSpacing(4).fixedSize(horizontal: false, vertical: true)
-            if !itp.role.isEmpty {
-                HStack(alignment: .top, spacing: 6) {
-                    Text(L("如何理解"))
-                        .font(QuantTypography.metadata.weight(.semibold))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Theme.surfaceAlt, in: Capsule())
-                        .foregroundStyle(Theme.textSecondary)
-                    Text(itp.role).font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
+            .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.accent.opacity(0.3)))
+        }
+    }
+
+    /// 本股在板块里的位置：一句结论 + 分布条。
+    @ViewBuilder
+    private var positionBlock: some View {
+        if metric.positionText != nil || metric.distribution != nil || metric.statusNote != nil {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(research.peerGroup.map { L("在%@板块 %lld 家公司中的位置", $0.sectorName, $0.sampleSize) }
+                     ?? L("在板块中的位置"))
+                    .font(QuantTypography.metadata.weight(.semibold)).foregroundStyle(Theme.textSecondary)
+                if let pos = metric.positionText {
+                    Text(pos).font(QuantTypography.emphasis).foregroundStyle(Theme.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if let note = metric.statusNote {
+                    Text(note).font(QuantTypography.body).foregroundStyle(Theme.segment)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let dist = metric.distribution {
+                    DistributionStrip(distribution: dist, value: metric.value, valueLabel: metric.displayValue,
+                                      symbol: research.symbol, lowerBetter: metric.lowerBetter,
+                                      isPercent: metric.displayValue.hasSuffix("%"))
+                        .padding(.top, 4)
+                }
             }
-            if !itp.threshold.isEmpty {
-                Divider().background(Theme.border)
+            .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+        }
+    }
+
+    /// 高低怎么看 + 需要注意的边界。
+    private var readingBlock: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(L("怎么看"), systemImage: metric.lowerBetter ? "arrow.down.circle" : "arrow.up.circle")
+                .font(QuantTypography.metadata.weight(.semibold)).foregroundStyle(Theme.textSecondary)
+            Text(itp?.reading.flatMap { $0.isEmpty ? nil : $0 }
+                 ?? (metric.lowerBetter ? L("越低排名越靠前") : L("越高排名越靠前")))
+                .font(QuantTypography.body).foregroundStyle(Theme.textPrimary)
+                .lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+            if let role = itp?.role, !role.isEmpty, plain == nil {
+                Text(role).font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
+                    .lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+            }
+            if let threshold = itp?.threshold, !threshold.isEmpty {
+                Divider().overlay(Theme.border)
                 HStack(alignment: .top, spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill").font(QuantTypography.metadata)
-                        .foregroundStyle(Theme.segment)
-                    Text(itp.threshold).font(QuantTypography.body).foregroundStyle(Theme.textPrimary.opacity(0.9))
-                        .lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(Theme.segment).padding(.top, 2)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(L("需要注意")).font(QuantTypography.metadata.weight(.semibold))
+                            .foregroundStyle(Theme.textSecondary)
+                        Text(threshold).font(QuantTypography.body).foregroundStyle(Theme.textPrimary.opacity(0.85))
+                            .lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }
         .padding(14).frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.accent.opacity(0.3)))
     }
 
-    private func pill(_ title: String, _ text: String) -> some View {
-        HStack(spacing: 6) {
-            Text(title).font(QuantTypography.metadata.weight(.semibold)).foregroundStyle(Theme.textSecondary)
-            Text(text).font(QuantTypography.metadata).foregroundStyle(Theme.textPrimary)
+    /// 怎么算：口径定义 + 代入本股数据 + 等级分档，默认折叠。
+    private var calculationGroup: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 10) {
+                if plain != nil, let what = itp?.what, !what.isEmpty {
+                    Text(what).font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let f = metric.formula {
+                    calcCard(f)
+                } else {
+                    box(title: nil) {
+                        Text(itp?.calculation ?? metric.description)
+                            .font(QuantTypography.body).foregroundStyle(Theme.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(L("当前数据不足，暂无可代入的计算结果。"))
+                            .font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
+                    }
+                }
+                if metric.positionText != nil {
+                    Text(L("等级 = 板块百分位分档：≥93 A+ · ≥86 A · ≥80 A- · … · <20 F"))
+                        .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 10)
+        } label: {
+            Label(L("怎么算"), systemImage: "function")
         }
-        .padding(.horizontal, 10).padding(.vertical, 6)
-        .background(Theme.surfaceAlt, in: Capsule())
+        .font(QuantTypography.body).foregroundStyle(Theme.textPrimary).tint(Theme.accent)
+        .padding(14)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
     }
 
     private func calcCard(_ f: QuantFormula) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(L("如何计算")).font(QuantTypography.metadata.weight(.semibold)).foregroundStyle(Theme.textSecondary)
             if let calculation = metric.interpretation?.calculation {
+                Text(L("公式")).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
                 Text(calculation).font(QuantTypography.body).foregroundStyle(Theme.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(L("代入本股数据")).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
@@ -188,8 +228,8 @@ struct QuantMetricDetailContent: View {
                 .padding(.top, 6)
             }
         }
-        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func box<C: View>(title: String?, @ViewBuilder _ content: () -> C) -> some View {

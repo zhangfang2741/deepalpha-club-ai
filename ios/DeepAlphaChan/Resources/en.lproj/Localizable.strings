@@ -892,3 +892,28 @@
 "A+到F按等级顺序等距换算；缺失或超过7天的评级按中性处理，不剔除信号。历史日期只使用当时已生成的评级。" = "Grades from A+ to F map to evenly spaced values. Missing ratings or those older than 7 days receive a neutral weight; signals are retained. Historical dates use only ratings available then.";
 "评级已过期，按中性权重排序" = "Rating expired; neutral ranking weight";
 "评级不可用，按中性权重排序" = "Rating unavailable; neutral ranking weight";
+
+/* 量化研究：成绩单与大白话解读 */
+"五维成绩单" = "Five-factor report card";
+"强项" = "Strengths";
+"短板" = "Weak spots";
+"各维度都在板块中游，没有特别突出的强项或短板。" = "Every factor sits mid-pack in its sector, with no standout strength or weak spot.";
+"等级是和同板块公司比出来的相对位置：A 档约前 20%，C 档居中，F 档约后 20%。" = "Grades show relative position within the sector: A ≈ top 20%, C ≈ middle, F ≈ bottom 20%.";
+"查看各项指标与解读" = "View metrics and explanations";
+"各项指标" = "Metrics";
+"点指标看大白话解读" = "Tap a metric for a plain-English explanation";
+"维度等级怎么来的" = "How this factor grade is derived";
+"板块中位 %@" = "Sector median %@";
+"查看大白话解读与计算" = "View plain-English explanation and calculation";
+"一句话看懂" = "In plain words";
+"在板块中的位置" = "Position in sector";
+"怎么看" = "How to read it";
+"需要注意" = "Keep in mind";
+"怎么算" = "How it's calculated";
+"公式" = "Formula";
+"等级 = 板块百分位分档：≥93 A+ · ≥86 A · ≥80 A- · … · <20 F" = "Grade = sector percentile band: ≥93 A+ · ≥86 A · ≥80 A- · … · <20 F";
+"看公司做生意的效率：每卖 100 元能留下多少利润和现金，股东和债主投进去的钱一年能赚回多少。" = "How efficiently the company makes money: how much profit and cash it keeps from every $100 of sales, and what a year's return is on the money shareholders and lenders put in.";
+"看生意有没有变大：营收、经营利润、每股收益比之前多了多少，以及分析师预计未来还能长多少。" = "Whether the business is getting bigger: how much revenue, operating profit and EPS have grown, and how much analysts expect them to grow.";
+"看价格贵不贵：买下这家公司，相当于付了几年的利润、营收或现金流。倍数越低，排名越靠前。" = "Whether the price is expensive: acquiring the company costs how many years of profit, revenue or cash flow. Lower multiples rank higher.";
+"看市场最近怎么给它定价：过去 3 到 12 个月股价涨跌了多少。它反映市场情绪，不代表公司本身变好。" = "How the market has priced it lately: share price change over the past 3 to 12 months. It reflects sentiment, not whether the business itself improved.";
+"看专业人士的态度变化：分析师对未来业绩的平均预测，最近是上调还是下调。" = "How professional views are shifting: whether analysts' average forecasts for future results have been raised or cut recently.";

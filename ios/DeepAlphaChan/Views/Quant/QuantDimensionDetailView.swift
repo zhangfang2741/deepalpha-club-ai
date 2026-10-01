@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 维度详情（从量化研究首页点维度卡片进入）：顶部展开维度分算式，下面按组列出每项指标——
-/// 本股 / 板块中位 / 差异、百分位条、单项等级；点指标弹出指标详情 sheet。
+/// 维度详情：顶部先用大白话讲清「这个维度看什么」和本股的关键事实，下面每项指标压成一行
+/// （名称 + 全称、本股 vs 板块中位、位置条、等级），点开看大白话解读与算式。
 struct QuantDimensionDetailView: View {
     let dimension: QuantDimension
     let research: QuantResearch
@@ -10,17 +10,39 @@ struct QuantDimensionDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 14) {
                 header
-                ForEach(dimension.groups) { group in
-                    QuantSectionHeader(text: group.name)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(L("各项指标")).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
+                        Spacer()
+                        Text(L("点指标看大白话解读")).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+                    }
+                    .padding(.horizontal, 4)
                     VStack(spacing: 0) {
-                        ForEach(Array(group.metrics.enumerated()), id: \.element.key) { i, m in
-                            if i > 0 { Divider().background(Theme.border) }
-                            Button { selected = m } label: { row(m) }.buttonStyle(.plain)
+                        ForEach(Array(dimension.allMetrics.enumerated()), id: \.element.key) { i, m in
+                            if i > 0 { Divider().overlay(Theme.border) }
+                            Button { selected = m } label: { QuantMetricRow(metric: m) }.buttonStyle(.plain)
                         }
                     }
                     .padding(.horizontal, 14)
+                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+                }
+                if let formula = dimension.formula {
+                    DisclosureGroup(L("维度等级怎么来的")) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(L("维度分 = 各项指标板块百分位的平均"))
+                                .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+                            Text(formula)
+                                .font(QuantTypography.emphasis.monospacedDigit())
+                                .foregroundStyle(Theme.textPrimary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 8)
+                    }
+                    .font(QuantTypography.body).foregroundStyle(Theme.textPrimary).tint(Theme.accent)
+                    .padding(14)
                     .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
                 }
                 Text(research.disclaimer)
@@ -41,81 +63,77 @@ struct QuantDimensionDetailView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(dimension.name).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
-                Spacer()
-                QuantGradeBadge(grade: dimension.grade)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 14) {
+                QuantGradeBlock(grade: dimension.isOK ? dimension.grade : nil, side: 56)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(dimension.name).font(QuantTypography.summary).foregroundStyle(Theme.textPrimary)
+                    if let peer = research.peerGroup {
+                        Text(peer.text).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+                    }
+                }
+                Spacer(minLength: 0)
             }
             if let fact = dimension.keyFact {
-                Text(fact.text).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
+                Text(fact.text).font(QuantTypography.emphasis).foregroundStyle(Theme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if let note = dimension.statusNote {
+                Text(note).font(QuantTypography.body).foregroundStyle(Theme.segment)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text(dimension.description).font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
-            if let formula = dimension.formula {
-                DisclosureGroup(L("展开评分计算")) {
-                    Text(L("维度分 = 各项指标板块百分位的平均"))
-                        .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
-                    Text(formula)
-                        .font(QuantTypography.emphasis.monospacedDigit())
-                        .foregroundStyle(Theme.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
+            if let intro = QuantDimensionGuide.intro(dimension.key) {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "lightbulb").font(QuantTypography.metadata).foregroundStyle(Theme.accent)
+                        .padding(.top, 2).accessibilityHidden(true)
+                    Text(intro).font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
+                        .lineSpacing(3).fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 10))
-            } else if let note = dimension.statusNote {
-                Text(note).font(QuantTypography.body).foregroundStyle(Theme.segment)
-            }
-            if let peer = research.peerGroup {
-                Text(peer.text).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
             }
         }
         .padding(14)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
     }
+}
 
-    private func row(_ m: QuantMetric) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top) {
-                Text(m.name).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
-                Spacer(minLength: 8)
-                QuantGradeBadge(grade: m.grade)
-            }
-            Text(m.interpretation?.what ?? m.description)
-                .font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(alignment: .top, spacing: 24) {
-                valueColumn(L("本股"), value: m.displayValue, prominent: true)
-                if let median = m.sectorMedianDisplay {
-                    valueColumn(L("板块中位"), value: median, prominent: false)
+/// 指标行：名称 + 全称一行，本股数值 vs 板块中位一行，下面一条位置条（中线 = 板块中位）。
+struct QuantMetricRow: View {
+    let metric: QuantMetric
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(metric.name).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
+                    if let subtitle = metric.fullNameSubtitle {
+                        Text(subtitle).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+                            .lineLimit(1)
+                    }
                 }
-                Spacer(minLength: 0)
+                Spacer(minLength: 8)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(metric.displayValue).font(QuantTypography.value).monospacedDigit()
+                        .foregroundStyle(Theme.textPrimary)
+                    if let median = metric.sectorMedianDisplay {
+                        Text(L("板块中位 %@", median)).font(QuantTypography.metadata).monospacedDigit()
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
+                QuantGradeBlock(grade: metric.grade, side: 34)
             }
-            if let p = m.percentile {
-                QuantPercentileBar(percentile: p, color: QuantGradeStyle.color(m.grade))
-                Text(L("第 %@ 百分位", String(format: "%.0f", p)))
-                    .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
-            }
-            if let note = m.statusNote {
-                Text(note).font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
+            if let p = metric.percentile {
+                QuantPercentileBar(percentile: p, color: QuantGradeStyle.color(metric.grade))
+                    .accessibilityHidden(true)
+            } else if let note = metric.statusNote {
+                Text(note).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Label(L("查看计算与价值解读"), systemImage: "info.circle")
-                .font(QuantTypography.metadata).foregroundStyle(Theme.accent)
         }
-        .padding(.vertical, 18)
+        .padding(.vertical, 12)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityHint(L("查看计算与价值解读"))
-    }
-
-    private func valueColumn(_ title: String, value: String, prominent: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
-            Text(value).font(prominent ? QuantTypography.value : QuantTypography.body)
-                .monospacedDigit().foregroundStyle(Theme.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+        .accessibilityHint(L("查看大白话解读与计算"))
     }
 }

@@ -9,6 +9,7 @@ import pytest
 
 from app.schemas.quant_research import QuantResearchOut
 from app.services.quant_research.builder import build_payload, evaluate
+from app.services.quant_research.copy import contains_forbidden
 from app.services.quant_research.education import enrich_education, metric_interpretation
 from app.services.quant_research.metrics import METRICS
 from tests.services.quant_research.fixtures import FIXTURE_DIR, load_inputs
@@ -37,6 +38,30 @@ def test_legacy_payload_enrichment_preserves_research() -> None:
             for metric in group["metrics"]:
                 assert metric.pop("interpretation")["role"]
     assert enriched == raw
+
+
+@pytest.mark.parametrize("lang", ["zh", "en"])
+def test_all_metrics_have_plain_language_explanation(lang: str) -> None:
+    """每项指标都要有全称、大白话释义和高低怎么看，且不出现买卖导向词。"""
+    for metric in METRICS.values():
+        guidance = metric_interpretation(metric, lang)
+        assert guidance.full_name and guidance.plain and guidance.reading, metric.key
+        for text in (guidance.full_name, guidance.plain, guidance.reading):
+            assert not contains_forbidden(text), (metric.key, text)
+            if lang == "en":
+                assert not any("一" <= char <= "鿿" for char in text), (metric.key, text)
+        # 大白话不能退化成计算口径本身
+        assert guidance.plain != guidance.what
+
+
+def test_plain_language_reads_like_everyday_words() -> None:
+    roe = metric_interpretation(METRICS["roe"], "zh")
+    assert "净资产收益率" in roe.full_name
+    assert "100 元" in roe.plain
+    pe_fwd = metric_interpretation(METRICS["pe_fwd"], "zh")
+    assert "预期" in pe_fwd.plain  # 前瞻口径要说明数字来自预期
+    r6m = metric_interpretation(METRICS["r6m"], "zh")
+    assert "6 个月" in r6m.plain
 
 
 @pytest.mark.parametrize("key, required", [

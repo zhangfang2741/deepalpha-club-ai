@@ -151,7 +151,16 @@ struct QuantMetricInterpretation: Decodable, Identifiable {
     let role: String
     let threshold: String
     let calculation: String?
+    /// 大白话三段（全称 / 日常语言释义 / 高低怎么看）；旧缓存响应可能缺失。
+    let fullName: String?
+    let plain: String?
+    let reading: String?
     var id: String { what }
+
+    enum CodingKeys: String, CodingKey {
+        case what, role, threshold, calculation, plain, reading
+        case fullName = "full_name"
+    }
 }
 
 struct QuantMetric: Decodable, Identifiable {
@@ -176,6 +185,16 @@ struct QuantMetric: Decodable, Identifiable {
     var id: String { key }
     var lowerBetter: Bool { direction == "lower_better" }
 
+    /// 全称副标题：只在它补充了信息时返回（如「ROE」→「净资产收益率 ROE…」）；
+    /// 去掉期间修饰后名称已是全称开头（「毛利率」「前瞻市盈率」）则不重复显示。
+    var fullNameSubtitle: String? {
+        guard let full = interpretation?.fullName, !full.isEmpty else { return nil }
+        var core = name
+        for token in ["前瞻", " TTM", " (TTM)", " (FWD)"] { core = core.replacingOccurrences(of: token, with: "") }
+        core = core.trimmingCharacters(in: .whitespaces)
+        return full.lowercased().hasPrefix(core.lowercased()) ? nil : full
+    }
+
     enum CodingKeys: String, CodingKey {
         case key, name, description, direction, value, status, percentile, grade, distribution, formula
         case displayValue = "display_value"
@@ -185,6 +204,19 @@ struct QuantMetric: Decodable, Identifiable {
         case diffToMedianPct = "diff_to_median_pct"
         case positionText = "position_text"
         case interpretation
+    }
+}
+
+extension QuantResearch {
+    /// 首页摘要的「强项 / 短板」：A 档（板块约前 20%）为强项，D / F 档为短板，按维度分高低排序。
+    var strengths: [QuantDimension] {
+        dimensions.filter { $0.isOK && $0.grade?.first == "A" }
+            .sorted { ($0.score ?? 0) > ($1.score ?? 0) }
+    }
+
+    var weaknesses: [QuantDimension] {
+        dimensions.filter { $0.isOK && ($0.grade?.first == "D" || $0.grade?.first == "F") }
+            .sorted { ($0.score ?? 0) < ($1.score ?? 0) }
     }
 }
 

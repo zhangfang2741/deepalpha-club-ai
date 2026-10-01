@@ -63,6 +63,9 @@ class MetricInterpretation(BaseModel):
     role: str = ""       # 在维度里的作用
     threshold: str = ""  # 适用边界
     calculation: str | None = None  # 通用公式，与真实数字代入分开
+    full_name: str = ""  # 全称（如「净资产收益率 ROE（Return on Equity）」）
+    plain: str = ""      # 大白话释义（带例子，不讲口径）
+    reading: str = ""    # 高 / 低怎么看
 
 
 class MetricOut(BaseModel):
