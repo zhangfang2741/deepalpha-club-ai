@@ -1,112 +1,8 @@
 import Charts
 import SwiftUI
 
-/// 三地恐慌指数小卡片 + 市场选择合二为一：点哪张卡就切到哪个市场（驱动下面的信号雷达），
-/// 三张卡本身永远同时可见，方便一眼对比三地情绪；选中的那张卡右上角多一个展开按钮，
-/// 点开看近一年完整曲线。
-struct PanicIndexStrip: View {
-    @ObservedObject var radarVM: SignalRadarViewModel
-    @ObservedObject var panicVM: PanicIndexViewModel
-
-    @State private var expanded: StockMarket?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                ForEach(StockMarket.allCases) { market in
-                    tile(market)
-                }
-            }
-            // 卡片本身"既展示数据又是市场切换器"这件事不明显，容易被当成纯信息卡——
-            // 点一下才发现下面的信号雷达跟着变了市场。补一行提示说明这个副作用。
-            Text(L("点击卡片切换市场"))
-                .font(.system(size: 9))
-                .foregroundColor(Theme.textSecondary)
-        }
-        .task { panicVM.onAppear() }
-        .sheet(item: $expanded) { market in
-            if let resp = panicVM.responses[market] {
-                PanicIndexDetailSheet(market: market, response: resp)
-            }
-        }
-    }
-
-    private func tile(_ market: StockMarket) -> some View {
-        let isSelected = radarVM.market == market
-        let resp = panicVM.responses[market]
-
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(market.title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(isSelected ? Theme.textPrimary : Theme.textSecondary)
-                Spacer()
-                if isSelected && resp != nil {
-                    Button { expanded = market } label: {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(Theme.textSecondary)
-                    }
-                    .accessibilityLabel(L("查看完整曲线"))
-                }
-            }
-
-            // 三种状态共用分数行、间距和走势图的高度，避免异步响应挤动下方雷达。
-            VStack(alignment: .leading, spacing: 6) {
-                if let resp {
-                    HStack(alignment: .firstTextBaseline, spacing: 3) {
-                        Text("\(Int(resp.current.score.rounded()))")
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundColor(PanicIndexStrip.ratingColor(resp.current.score))
-                        Text(PanicIndexStrip.ratingLabel(resp.current.rating))
-                            .font(.system(size: 10))
-                            .foregroundColor(Theme.textSecondary)
-                            .lineLimit(1)
-                    }
-                    .frame(height: 24)
-                    sparkline(resp)
-                } else if panicVM.failedMarkets.contains(market) {
-                    Button { panicVM.retry(market) } label: {
-                        HStack(spacing: 3) {
-                            Image(systemName: "arrow.clockwise").font(.system(size: 10))
-                            Text(L("重试")).font(.system(size: 11))
-                        }
-                        .foregroundColor(Theme.textSecondary)
-                    }
-                } else {
-                    ProgressView().controlSize(.mini)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: 54, alignment: .leading)
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(isSelected ? Theme.accent.opacity(0.12) : Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(isSelected ? Theme.accent : Theme.border, lineWidth: isSelected ? 1.5 : 1)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture { radarVM.switchMarket(market) }
-    }
-
-    /// 迷你走势图：只取近 60 个交易日（约 3 个月），隐藏坐标轴，纯粹给个「形状」。
-    private func sparkline(_ resp: PanicIndexResponse) -> some View {
-        let points = Array(resp.history.suffix(60))
-        return Chart(points) { p in
-            LineMark(x: .value("date", p.date), y: .value("score", p.score))
-                .foregroundStyle(PanicIndexStrip.ratingColor(resp.current.score))
-                .lineStyle(StrokeStyle(lineWidth: 1.5))
-                .interpolationMethod(.catmullRom)
-        }
-        .chartYScale(domain: 0...100)
-        .chartXAxis(.hidden)
-        .chartYAxis(.hidden)
-        .frame(height: 24)
-    }
-
+/// 恐慌指数的配色与档位文案：雷达页顶部「情绪」格、完整曲线弹层共用。
+enum PanicIndexStyle {
     /// 分数 → 颜色，5 个锚点对应五档中心（0-25 极度恐慌/25-45 恐慌/45-55 中性/
     /// 55-75 贪婪/75-100 极度贪婪的区间中点），锚点之间线性插值出连续渐变——
     /// 不是卡在几个色块之间突变，分数差 1 分颜色也只差一点点。
@@ -167,7 +63,7 @@ private struct PlotPoint: Identifiable {
 
 /// 展开态：完整曲线（默认停在最近约 3 个月，可左右拖动回看更早）+ 点按看具体数值
 /// + 当前/一周前/一月前快照。
-private struct PanicIndexDetailSheet: View {
+struct PanicIndexDetailSheet: View {
     let market: StockMarket
     let response: PanicIndexResponse
 
@@ -252,8 +148,8 @@ private struct PanicIndexDetailSheet: View {
             Text(title).font(.caption2).foregroundColor(Theme.textSecondary)
             Text("\(Int(snap.score.rounded()))")
                 .font(.title3.bold())
-                .foregroundColor(PanicIndexStrip.ratingColor(snap.score))
-            Text(PanicIndexStrip.ratingLabel(snap.rating))
+                .foregroundColor(PanicIndexStyle.ratingColor(snap.score))
+            Text(PanicIndexStyle.ratingLabel(snap.rating))
                 .font(.caption2)
                 .foregroundColor(Theme.textSecondary)
         }
@@ -271,7 +167,7 @@ private struct PanicIndexDetailSheet: View {
 
     /// 跟小卡片/迷你走势图用同一套恐慌-贪婪配色，不再是一条跟分数无关的蓝线——
     /// 之前展开大图和入口小卡片配色不统一，从花花绿绿的卡片点进来却看到素蓝线。
-    private var lineColor: Color { PanicIndexStrip.ratingColor(response.current.score) }
+    private var lineColor: Color { PanicIndexStyle.ratingColor(response.current.score) }
 
     private var chart: some View {
         Chart {
@@ -292,7 +188,7 @@ private struct PanicIndexDetailSheet: View {
                     .foregroundStyle(Theme.textSecondary.opacity(0.6))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                 PointMark(x: .value(L("日期"), selected.date), y: .value(L("分数"), selected.score))
-                    .foregroundStyle(PanicIndexStrip.ratingColor(selected.score))
+                    .foregroundStyle(PanicIndexStyle.ratingColor(selected.score))
                     .symbolSize(70)
                     .annotation(position: .top, overflowResolution: .init(x: .fit, y: .fit)) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -302,8 +198,8 @@ private struct PanicIndexDetailSheet: View {
                             HStack(spacing: 4) {
                                 Text("\(Int(selected.score.rounded()))")
                                     .font(.subheadline.bold())
-                                    .foregroundColor(PanicIndexStrip.ratingColor(selected.score))
-                                Text(PanicIndexStrip.ratingLabel(selected.rating))
+                                    .foregroundColor(PanicIndexStyle.ratingColor(selected.score))
+                                Text(PanicIndexStyle.ratingLabel(selected.rating))
                                     .font(.caption2)
                                     .foregroundColor(Theme.textSecondary)
                             }

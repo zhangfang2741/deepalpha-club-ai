@@ -89,6 +89,8 @@ struct RadarDay: Decodable, Identifiable {
     /// 补足剩余名额，画成灰色虚线气泡。旧缓存 / 旧后端没有这个字段时为空。
     private let candidatesRaw: [RadarSignal]?
     var candidates: [RadarSignal] { candidatesRaw ?? [] }
+    /// 当天全部在场信号按行业的买卖点数（宽基雷达才有；旧后端缺字段时为空）。
+    let sectorCounts: [String: [String: Int]]?
 
     var id: String { date }
     var total: Int { signals.count }
@@ -100,6 +102,18 @@ struct RadarDay: Decodable, Identifiable {
         case sellCount = "sell_count"
         case signals
         case candidatesRaw = "candidates"
+        case sectorCounts = "sector_counts"
+    }
+
+    /// 行业筛选时用行业池拼出的一天：没有候选、没有排雷统计。
+    init(date: String, buyCount: Int, sellCount: Int, signals: [RadarSignal]) {
+        self.date = date
+        self.quantFilter = nil
+        self.buyCount = buyCount
+        self.sellCount = sellCount
+        self.signals = signals
+        self.candidatesRaw = nil
+        self.sectorCounts = nil
     }
 }
 
@@ -134,6 +148,8 @@ struct RadarSignal: Decodable, Identifiable {
     let quantStatus: String?
     /// 距展示日的交易日数；旧响应缺失时客户端按自然日计算。
     let ageDays: Int?
+    /// 行业 key（与行业状态一致）；没有行业分类时为 nil。
+    let sector: String?
 
     var id: String { "\(symbol)-\(date)-\(signalType)" }
 
@@ -166,5 +182,6 @@ struct RadarSignal: Decodable, Identifiable {
         case quantAsOf = "quant_as_of"
         case quantStatus = "quant_status"
         case ageDays = "age_days"
+        case sector
     }
 }

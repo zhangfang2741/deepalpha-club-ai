@@ -974,3 +974,36 @@
 "好生意能否一直好下去" = "Can a good business stay good";
 "看好生意能不能一直好下去：最近 4 年利润率是不是一直够高、够稳，有没有在变薄，赚的钱有没有真变成现金。竞争对手越难抢走生意，这些数字就越稳。只展示，不计入综合等级。" = "Whether a good business can stay good: have margins stayed high and steady over the last 4 years, are they thinning, and do profits turn into real cash? The harder it is for rivals to take the business, the steadier these numbers are. Shown only, not in the composite grade.";
 "基本面等级 %@" = "Fundamental grade %@";
+
+/* 雷达页顶部宏观 / 情绪 / 行业三格及弹层 */
+"%@ 收盘数据" = "Close of %@";
+"%@宏观环境" = "%@ Macro";
+"%@当日无买卖点信号" = "No %@ signals that day";
+"%@行业" = "%@ Sectors";
+"%lld 买" = "%lld buy";
+"%lld 卖" = "%lld sell";
+"买卖点为%@成分股 %@ 的雷达统计；点行业只看该行业的气泡。" = "Signal counts are from the %@ radar on %@. Tap a sector to show only its bubbles.";
+"以上内容为对市场环境的客观描述，不构成任何投资建议。" = "This describes market conditions only and is not investment advice.";
+"宏观" = "Macro";
+"已持续 %lld 天" = "%lld days in state";
+"市场" = "Market";
+"市场状态" = "Market Regime";
+"情绪" = "Sentiment";
+"按近 20 个交易日相对大盘的强弱排序，颜色为行业状态（红=逐利、灰=观望、绿=避险）。" = "Sorted by 20-day strength relative to the market. Color shows sector regime (red = risk-on, gray = neutral, green = risk-off).";
+"数据准备中" = "Preparing data";
+"数据建设中" = "Coming soon";
+"时间为当地交易所时间。" = "Times are local exchange time.";
+"未来 7 天宏观日历" = "Macro Calendar (Next 7 Days)";
+"未来 7 天没有重要宏观事件" = "No major macro events in the next 7 days";
+"查看细分行业" = "View sub-industries";
+"概率 %lld%%" = "Probability %lld%%";
+"清除行业筛选：%@" = "Clear sector filter: %@";
+"点行业只看该行业在%@里的气泡。" = "Tap a sector to show only its bubbles in %@.";
+"由进攻、防御、现金三组资产的相对强弱，加上波动率和量能综合判定，按概率给出；%@ 收盘数据。" = "Based on the relative strength of offensive, defensive and cash assets, plus volatility and volume, expressed as probabilities. Close of %@.";
+"行业" = "Sectors";
+"观望" = "Neutral";
+"近一年状态" = "Past Year";
+"这一天的行业数据还在生成，换一天看看" = "Sector data for this day is still being generated. Try another day.";
+"逐利" = "Risk-on";
+"避险" = "Risk-off";
+"驱动因素（近 20 个交易日）" = "Drivers (Last 20 Trading Days)";

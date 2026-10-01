@@ -139,10 +139,70 @@ final class SignalRadarViewModel: ObservableObject {
         return [demoDay] + realDays
     }
 
-    var selectedDay: RadarDay? {
+    /// 日期轨上选中的那一天（未经行业筛选）。
+    var baseSelectedDay: RadarDay? {
         guard !days.isEmpty else { return nil }
         let idx = min(max(selectedDayIndex, 0), days.count - 1)
         return days[idx]
+    }
+
+    /// 雷达展示的那一天：有行业筛选时换成该行业的气泡（行业池还没拿到时先给空的一天，
+    /// 气泡区按 isLoadingSectorDay / isSectorDayUnavailable 显示加载或提示）。
+    var selectedDay: RadarDay? {
+        guard let base = baseSelectedDay else { return nil }
+        guard let key = sectorDayKey else { return base }
+        return sectorDays[key] ?? RadarDay(date: base.date, buyCount: 0, sellCount: 0, signals: [])
+    }
+
+    // MARK: - 行业筛选
+
+    /// 当前行业筛选（行业弹层点某个行业时设置，雷达同时切到宽基）。
+    @Published private(set) var sectorFilter: RadarSectorFilter?
+    /// 已拿到的行业气泡，键为「行业|日期」。
+    @Published private(set) var sectorDays: [String: RadarDay] = [:]
+    /// 后端说这一天没有行业数据（旧快照还没重扫）。
+    @Published private(set) var unavailableSectorDays: Set<String> = []
+    @Published private(set) var loadingSectorKey: String?
+
+    /// 筛选生效（已切到对应宽基）时当前日的「行业|日期」键，否则 nil。
+    var sectorDayKey: String? {
+        guard let f = sectorFilter, activeUniverseKey == f.universe, let day = baseSelectedDay else { return nil }
+        return "\(f.key)|\(day.date)"
+    }
+    var isLoadingSectorDay: Bool { sectorDayKey != nil && loadingSectorKey == sectorDayKey }
+    var isSectorDayUnavailable: Bool { sectorDayKey.map { unavailableSectorDays.contains($0) } ?? false }
+
+    func applySectorFilter(key: String, name: String, universe: String) {
+        let previous = sectorFilter?.previousUniverse ?? universeByMarket[market]
+        sectorFilter = RadarSectorFilter(key: key, name: name, universe: universe, previousUniverse: previous)
+        if activeUniverseKey != universe { switchUniverse(universe, keepSectorFilter: true) }
+    }
+
+    /// 清除筛选并恢复进入筛选前的指数范围。
+    func clearSectorFilter() {
+        guard let f = sectorFilter else { return }
+        sectorFilter = nil
+        let target = f.previousUniverse ?? Self.defaultUniverseKeys[market] ?? ""
+        if !target.isEmpty && target != activeUniverseKey { switchUniverse(target) }
+    }
+
+    /// 拉当前日的行业气泡（View 用 `.task(id: sectorDayKey)` 驱动；已拿到或已知没有就跳过）。
+    func loadSectorDayIfNeeded() async {
+        guard let key = sectorDayKey, let f = sectorFilter, let day = baseSelectedDay,
+              sectorDays[key] == nil, !unavailableSectorDays.contains(key) else { return }
+        loadingSectorKey = key
+        defer { if loadingSectorKey == key { loadingSectorKey = nil } }
+        do {
+            let r = try await MarketOverviewService.sectorDay(
+                market: market, universe: f.universe, date: day.date, sector: f.key)
+            if r.available {
+                sectorDays[key] = RadarDay(date: r.date, buyCount: r.buyCount, sellCount: r.sellCount, signals: r.signals)
+            } else {
+                unavailableSectorDays.insert(key)
+            }
+        } catch {
+            // 网络失败不记「没有数据」，换个日期再回来会重试
+        }
     }
 
     /// 免费预览锚定日期的字符串（未订阅时才有意义）；View 用它判断某个日期轨格子
@@ -203,6 +263,7 @@ final class SignalRadarViewModel: ObservableObject {
     func switchMarket(_ m: StockMarket) {
         guard m != market else { return }
         market = m
+        sectorFilter = nil
         // 不清空 response：新市场数据回来前保留旧内容（调暗 + 加载指示），页面不跳动
         // 不同市场的 universe 列表不同：换成这个市场之前拿到过的列表（没有就先空着），
         // 切换器与「正在扫描 X」立刻显示正确的指数名，不用等接口。
@@ -219,8 +280,10 @@ final class SignalRadarViewModel: ObservableObject {
 
     /// 切换当前市场的 universe（科技窄基 ↔ 大盘宽基）。key 与当前生效的相同则忽略。
     /// 注意不清空 availableUniverses：正在计算时切换器仍要在，方便随时切回别的指数。
-    func switchUniverse(_ key: String) {
+    func switchUniverse(_ key: String, keepSectorFilter: Bool = false) {
         guard key != activeUniverseKey else { return }
+        // 用户手动换指数范围即退出行业筛选（行业筛选只在宽基上有意义）
+        if !keepSectorFilter { sectorFilter = nil }
         universeByMarket[market] = key
         pendingUniverseKey = key
         selectedDayIndex = 0
@@ -276,6 +339,9 @@ final class SignalRadarViewModel: ObservableObject {
             // 加载期间用户切了市场或 universe，就丢弃这次结果，别覆盖新请求。
             if market != requested || currentUniverse != requestedUniverse || SignalMode.current() != requestedMode { return }
             response = resp
+            // 快照重算后行业池也重写了，丢掉旧的行业气泡
+            sectorDays = [:]
+            unavailableSectorDays = []
             if !resp.universes.isEmpty {
                 availableUniverses = resp.universes
                 universesByMarket[requested] = resp.universes
