@@ -667,9 +667,9 @@ def test_prewarm_scans_stalest_universe_first(monkeypatch):
     monkeypatch.setattr(scheduler, "compute_market", fake_compute)
     monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_BROAD_ENABLED", False)
     asyncio.run(scheduler._prewarm_once())
-    # 只预热默认口径（App 固定宽松，见 scheduler._modes），按缓存从旧到新排
-    assert {m for _, m in order} == {"loose"}
-    assert [u for u, _ in order][:3] == ["cn:star50", "hk:hstech", "us:nasdaq100"]
+    # 预热默认口径（旧版 App）与严格口径（新版 App），见 scheduler._modes；按缓存从旧到新排
+    assert {m for _, m in order} == {"loose", "strict"}
+    assert list(dict.fromkeys(u for u, _ in order))[:3] == ["cn:star50", "hk:hstech", "us:nasdaq100"]
 
 
 class TestCompositeRanking:
@@ -1301,11 +1301,12 @@ class TestConcurrencyGuards:
         monkeypatch.setattr(scheduler, "compute_market", fake_compute)
         monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_BROAD_ENABLED", False)
         await scheduler._prewarm_once(markets={"cn"})
-        assert scanned == [], "默认口径正被扫描持锁，这一份跳过"
+        assert scanned == [("star50", "strict")], "默认口径正被扫描持锁，这一份跳过；锁按口径分，严格口径照常预热"
 
         del redis.store[svc.scan_lock_key("cn", "star50", "loose")]
+        scanned.clear()
         await scheduler._prewarm_once(markets={"cn"})
-        assert scanned == [("star50", "loose")]
+        assert scanned == [("star50", "loose"), ("star50", "strict")]
         assert svc.scan_lock_key("cn", "star50", "loose") not in redis.store, "预热结束释放锁"
 
 
