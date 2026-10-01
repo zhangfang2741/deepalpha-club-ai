@@ -234,6 +234,16 @@ struct WatchlistView: View {
                             .padding(.horizontal, 5).padding(.vertical, 1)
                             .overlay(Capsule().stroke(Theme.segment.opacity(0.7), lineWidth: 0.8))
                     }
+                    // 基本面综合等级：没有评级（港股 / A 股、过期）就不显示，不放破折号占位
+                    if let grade = item.quantGrade {
+                        let color = QuantGradeStyle.color(grade)
+                        Text(grade)
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(color)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(color.opacity(0.13), in: RoundedRectangle(cornerRadius: 4))
+                            .accessibilityLabel(L("基本面等级 %@", grade))
+                    }
                 }
                 // 只有拿到真正的名称（有别于代码）才显示副标题，否则不再原样重复代码。
                 if let name = item.displayName {

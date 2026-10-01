@@ -1,10 +1,13 @@
 """自选股存取：直接对 watchlist_item 表做增删查，业务逻辑很薄不单独分层。"""
 from __future__ import annotations
 
+from datetime import date
+
 from sqlmodel import col, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models.watchlist import WatchlistItem
+from app.services.signal_radar import quant_filter
 from app.services.signal_radar.universe import resolve_name
 
 # 各订阅档自选上限：未订阅 1 / 基础版 10 / 高级版不限（None）。定死在这里而非
@@ -170,3 +173,22 @@ async def remove_item(db: AsyncSession, user_id: int, market: str, symbol: str) 
         await db.delete(existing)
     await db.commit()
     return True
+
+
+async def quant_grades(items: list[WatchlistItem]) -> dict[str, str]:
+    """自选里美股的当前基本面综合等级，键为 `{market}:{symbol}`。
+
+    与雷达同一口径（quant_filter.grade_on）：只给今天可用、7 天内的有效等级，过期或无等级不给，
+    不回退到更老的结果；港股 / A 股没有评级。查询失败返回空，列表照常展示。
+    """
+    us = [i.symbol for i in items if i.market == "us"]
+    if not us:
+        return {}
+    today = date.today()
+    history = await quant_filter.load_grades("us", us, [today.isoformat()])
+    out: dict[str, str] = {}
+    for symbol in us:
+        entry, status = quant_filter.grade_on(history or {}, symbol, today)
+        if status == "eligible" and entry is not None and entry.grade:
+            out[f"us:{symbol}"] = entry.grade
+    return out

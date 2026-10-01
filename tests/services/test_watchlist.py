@@ -232,3 +232,49 @@ class TestSampleRemoveAndReadd:
         else:
             raise AssertionError("重新加入已删的示例股会变成自己的自选，应当受名额限制")
         assert hidden.hidden is True
+
+
+# ---------- 自选列表的基本面等级 ----------
+
+def _wl(market: str, symbol: str) -> WatchlistItem:
+    return WatchlistItem(user_id=1, market=market, symbol=symbol, name=symbol)
+
+
+async def test_quant_grades_us_only_and_fresh_only(monkeypatch):
+    """只查美股；只给 7 天内有效且有综合等级的，过期 / 无等级 / 港 A 股都不给。"""
+    from datetime import date, timedelta
+
+    from app.services import watchlist as store
+    from app.services.signal_radar import quant_filter as qf
+
+    today = date.today()
+    seen: list = []
+
+    async def load(market, symbols, days):
+        seen.append((market, sorted(symbols), days))
+        old = today - timedelta(days=30)
+        return {"NVDA": [qf.QuantGrade("A-", 80, today, today)],
+                "BRK-B": [qf.QuantGrade("B", 60, today, today)],
+                "OLD": [qf.QuantGrade("A", 90, old, old)],
+                "NONE": [qf.QuantGrade(None, None, today, today)]}
+
+    monkeypatch.setattr(qf, "load_grades", load)
+    items = [_wl("us", "NVDA"), _wl("us", "BRK.B"), _wl("us", "OLD"), _wl("us", "NONE"), _wl("hk", "0700")]
+    assert await store.quant_grades(items) == {"us:NVDA": "A-", "us:BRK.B": "B"}
+    assert seen == [("us", ["BRK.B", "NONE", "NVDA", "OLD"], [today.isoformat()])]
+
+
+async def test_quant_grades_skips_query_without_us_and_survives_failure(monkeypatch):
+    from app.services import watchlist as store
+    from app.services.signal_radar import quant_filter as qf
+
+    calls: list = []
+
+    async def failed(*args):
+        calls.append(args)
+        return None
+
+    monkeypatch.setattr(qf, "load_grades", failed)
+    assert await store.quant_grades([_wl("cn", "600519")]) == {}
+    assert calls == []
+    assert await store.quant_grades([_wl("us", "NVDA")]) == {}

@@ -23,7 +23,8 @@ def _no_sample_seeding():
     """列表接口首次会补示例自选（写库）；这些用例只测接口本身，统一替掉。"""
     from app.services import watchlist as store
 
-    with patch.object(store, "ensure_samples", AsyncMock()) as m:
+    with patch.object(store, "ensure_samples", AsyncMock()) as m, \
+            patch.object(store, "quant_grades", AsyncMock(return_value={})):
         yield m
 
 
@@ -53,6 +54,17 @@ def test_list_watchlist_returns_items(client):
     items = resp.json()["items"]
     assert len(items) == 1
     assert items[0]["symbol"] == "AAPL"
+
+
+def test_list_includes_quant_grade_for_rated_items(client):
+    """美股有评级的带 quant_grade，其余为 null；评级不影响列表本身。"""
+    from app.services import watchlist as store
+
+    items = [_item("us", "NVDA", "英伟达"), _item("hk", "0700", "腾讯控股")]
+    with patch.object(store, "list_items", AsyncMock(return_value=items)), \
+            patch.object(store, "quant_grades", AsyncMock(return_value={"us:NVDA": "A-"})):
+        body = client.get("/watchlist").json()
+    assert [i["quant_grade"] for i in body["items"]] == ["A-", None]
 
 
 def test_add_to_watchlist(client):

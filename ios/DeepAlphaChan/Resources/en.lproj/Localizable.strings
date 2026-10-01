@@ -973,3 +973,4 @@
 "护城河只展示，不计入综合分。" = "Moat is shown only and is not part of the composite score.";
 "好生意能否一直好下去" = "Can a good business stay good";
 "看好生意能不能一直好下去：最近 4 年利润率是不是一直够高、够稳，有没有在变薄，赚的钱有没有真变成现金。竞争对手越难抢走生意，这些数字就越稳。只展示，不计入综合等级。" = "Whether a good business can stay good: have margins stayed high and steady over the last 4 years, are they thinning, and do profits turn into real cash? The harder it is for rivals to take the business, the steadier these numbers are. Shown only, not in the composite grade.";
+"基本面等级 %@" = "Fundamental grade %@";

@@ -38,6 +38,8 @@ async def list_watchlist(
     # 首次打开自选时补上默认示例股（每个用户只补一次，见 store.ensure_samples）
     await store.ensure_samples(db, user.id)
     items = await store.list_items(db, user.id)
+    # 等级是一次批量查库，与列表同样快，直接随列表下发（不像中枢阶段要跑缠论、另开接口）
+    grades = await store.quant_grades(items)
     return WatchlistResponse(
         items=[
             WatchlistItemOut(
@@ -48,6 +50,7 @@ async def list_watchlist(
                 name=store.display_name(i.market, i.symbol, i.name),
                 created_at=i.created_at,
                 is_sample=i.is_sample,
+                quant_grade=grades.get(f"{i.market}:{i.symbol}"),
             )
             for i in items
         ],
