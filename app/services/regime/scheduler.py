@@ -50,15 +50,31 @@ def is_stale(latest_market: str | None, latest_sector: str | None, session_day: 
 
 
 def _run_stages() -> dict:
+    """大盘 → 一级行业 → 子行业，各自算完即落库。
+
+    一级行业（行业格 / 行业弹层用）先落库，子行业（只用于下钻）随后：单个行业约 1 分钟，
+    全部 39 个一起算完才落库的话，首次部署要等 40 分钟行业格才有数据。
+    """
     from app.db.session import get_sync_session_cm
+    from app.services.regime.constants import SECTOR_PARENT
+    from app.services.regime.fetcher import SectorMarketData, fetch_sector_market_data
     from app.services.regime.pipeline import run_regime_stage
-    from app.services.regime.sector_pipeline import run_sector_regime_stage
+    from app.services.regime.sector_pipeline import compute_sector_regimes, persist_sector_records
 
     with get_sync_session_cm() as session:
         market = run_regime_stage(session)
-    with get_sync_session_cm() as session:
-        sector = run_sector_regime_stage(session)
-    return {"market_latest": market.get("latest_date"), "sectors": sector.get("sectors")}
+    data = fetch_sector_market_data()
+    primary = {k: v for k, v in data.sectors.items() if k not in SECTOR_PARENT}
+    children = {k: v for k, v in data.sectors.items() if k in SECTOR_PARENT}
+    written = 0
+    for subset in (primary, children):
+        part = SectorMarketData(dates=data.dates, vix_close=data.vix_close,
+                                market_close=data.market_close, sectors=subset)
+        records = compute_sector_regimes(part)
+        with get_sync_session_cm() as session:
+            written += persist_sector_records(session, records)
+        logger.info("regime_sector_subset_done", sectors=len(subset), written=written)
+    return {"market_latest": market.get("latest_date"), "sectors": len(data.sectors), "written": written}
 
 
 def _run_stages_low_priority() -> dict:
