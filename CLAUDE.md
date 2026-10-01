@@ -205,6 +205,13 @@ deepalpha-club-ai/
 改动 chan 前务必理解以下已确立的约束，否则容易走回头路。改动后跑 `uv run pytest tests/services/chan/`。
 设计与演进记录见 `docs/superpowers/specs/2026-09-23-czsc-chan-refactor-design.md`。
 
+**czsc 接入方式与性能（2026-10 实测，czsc 1.0.1）**
+- czsc 1.0.1 的信号函数是 Rust 内核注册表，**Python 自定义信号函数不会被调用**（`CzscSignals` 配置里写 `模块.函数` 被静默忽略，实测调用 0 次）。
+  所以「按 czsc 架构」= czsc 内核给结构 + 原生信号事件作触发，项目侧（`signals.py` / `leg_metric.py`）做组装与判定，不要尝试把背驰写成 czsc 信号函数。
+- `cs.kas[label]` 与 `.bi_list` 每次访问都是**整份结构的副本**（耗时随 K 线数 / 笔数线性增长，实测 56→259 微秒），逐根循环里重复取是 O(n²)。
+  `scan_bs_events` 每根 K 线最多取一次、没有触发 / 不记笔时刻就不取（51 只日线 43s → 22.5s，输出逐字节一致）。**不要**在逐根循环里再加 `cs.kas` / `bi_list` 访问。
+  剩余成本仍是每根一次副本（≈0.4s/只、939 根日线）；再降要换成不依赖副本的「笔变化」判据。
+
 **买卖点口径（`signal_policy.py`，统一接口 + 多套实现）**
 - 「什么算买卖点」有多套口径，都实现 `SignalPolicy`（`czsc_families` / `assemble` /
   `split_unconfirmed` + 名称、版本、中英文案），在 `SIGNAL_POLICIES` 注册，按名字 `get_policy(mode)` 取。

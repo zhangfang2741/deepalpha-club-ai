@@ -125,25 +125,34 @@ def scan_bs_events(
     events: list[BsEvent] = []
     # i 为截至当根已见的K线总根数（1-based，含前 _INIT_N 根预热）：波动率分层
     # 须知道「当时已见多少根」，序列总长不能代表信号日的信息量。
+    # 性能：cs.kas[label] / .bi_list 每次都是整份结构的副本（耗时随K线数、笔数线性增长），
+    # 逐根循环里重复取是 O(n²)。每根K线最多取一次 bi_list，并且只在真的需要时才取：
+    # 要记笔完成 / 成笔时刻，或有信号亮起。
+    track_bis = stroke_done_at is not None or stroke_started_at is not None
     for i, bar in enumerate(raw[_INIT_N:], start=_INIT_N + 1):
         cs.update_signals(bar)
         if shape_states is not None:
             shape_states[ts_date(bar.dt)] = read_shape_state(cs, label, bars_seen=i)
-        if stroke_done_at is not None:
-            bis = cs.kas[label].bi_list
-            if bis:
-                stroke_done_at.setdefault(ts_date(bis[-1].fx_b.dt), ts_date(bar.dt))
-        if stroke_started_at is not None:
-            bis = cs.kas[label].bi_list
-            if bis:
-                stroke_started_at.setdefault(ts_date(bis[-1].fx_a.dt), ts_date(bar.dt))
+        bis: list | None = None
+
+        def _bis() -> list:
+            nonlocal bis
+            if bis is None:
+                bis = cs.kas[label].bi_list
+            return bis
+
+        if track_bis and _bis():
+            if stroke_done_at is not None:
+                stroke_done_at.setdefault(ts_date(_bis()[-1].fx_b.dt), ts_date(bar.dt))
+            if stroke_started_at is not None:
+                stroke_started_at.setdefault(ts_date(_bis()[-1].fx_a.dt), ts_date(bar.dt))
         s = cs.s
         for key in keys:
             parts = s[key].split("_")
             v1 = parts[0]
             sig_type = _V1_TO_TYPE.get(v1)
             if sig_type is not None and prev[key] != v1:
-                bi = cs.kas[label].bi_list[-1]
+                bi = _bis()[-1]
                 bi_end_time = ts_date(bi.fx_b.dt)
                 if (sig_type, bi_end_time) not in seen:
                     seen.add((sig_type, bi_end_time))
