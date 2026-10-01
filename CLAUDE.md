@@ -162,7 +162,7 @@ deepalpha-club-ai/
 > 补算进度记为 Redis 标记（`signal_radar:backfill:*`，含进程 owner），进程重启后 `scheduler._resume_orphan_backfills`
 > 在启动预热之后接手别的进程没补完的。**不要**绕过锁直接起全量扫描。
 > 雷达**基本面排雷**（`signal_radar/quant_filter.MINE_RULES`，仅美股、自选雷达不排雷，见 `docs/radar_quant_filter.md`）：
-> 买点盈利能力 F 或 EPS 修正 F、卖点 EPS 修正 A+ 不上榜，取前 N 之前剔除、名额递补；评级缺失 / 过期不排除。
+> 买点盈利能力 F（EPS 修正 ≥ B 的反转股豁免）或 EPS 修正 F、卖点 EPS 修正 A+ 不上榜，取前 N 之前剔除、名额递补；评级缺失 / 过期不排除。
 > **不要**用综合等级或动量排雷（一买的前提就是一段下跌，动量必然偏低，会系统性误杀一买）；评级仍不参与排序（`QUANT_WEIGHT=0`）。
 > 改规则须升 `_mode_ns` 的 quant 版本。
 > 雷达形态过滤（`chan/shape_filters.py`，仅雷达、详情页不受影响）**当前暂停**（`service._SHAPE_FILTERS_ENABLED=False`，
