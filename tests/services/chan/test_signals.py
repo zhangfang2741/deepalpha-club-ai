@@ -130,8 +130,7 @@ def test_signal_records_detection_time_separately_from_stroke_end():
 
 
 def test_detection_time_is_when_next_stroke_completes():
-    """买卖点所在的笔要等下一笔走完（被 czsc 确认）才不会再延伸，信号这时才算成立：
-    detected_time 取下一笔完成的那根K线，不能早于它（否则历史雷达日会提前看到未来才成立的信号）。"""
+    """没有「下一笔首次成笔」记录时，退回下一笔完成的那根K线（兼容旧调用方）。"""
     legs, ev = _after_buy1(103, extra=(_st("up", "2025-01-20", "2025-01-25", 103, 116),))
     ev = [_ev("buy1", "2025-01-10", 100.0, bar_time="2025-01-12", span="9笔")]
     done = {"2025-01-10": "2025-01-12", "2025-01-15": "2025-01-17",
@@ -139,6 +138,29 @@ def test_detection_time_is_when_next_stroke_completes():
     sig = generate_all_signals(ev, legs, [_div("strong", 0.3)] + [_NO_DIV] * 3, _DOWN_TREND,
                                stroke_done_at=done)
     assert {(x.type, x.detected_time) for x in sig} >= {("buy1", "2025-01-17"), ("buy2", "2025-01-27")}
+
+
+def test_detection_time_is_when_next_stroke_first_forms():
+    """缠论里一笔由后一笔成笔来确认：成立日取「下一笔第一次成笔」的K线，而不是等下一笔整段走完——
+    下一笔一路延伸时，最终版本完成要晚很多（实测严格口径中位滞后 10 个交易日）。仍不早于亮起日。"""
+    legs, _ = _after_buy1(103, extra=(_st("up", "2025-01-20", "2025-01-25", 103, 116),))
+    ev = [_ev("buy1", "2025-01-10", 100.0, bar_time="2025-01-12", span="9笔")]
+    done = {"2025-01-10": "2025-01-12", "2025-01-15": "2025-01-17",
+            "2025-01-20": "2025-01-22", "2025-01-25": "2025-01-27"}
+    # 从 01-10 出发的上升笔 01-13 就第一次成笔了（之后一路延伸到 01-15，01-17 才是最终版本完成）
+    started = {"2025-01-10": "2025-01-13", "2025-01-15": "2025-01-16", "2025-01-20": "2025-01-23"}
+    sig = generate_all_signals(ev, legs, [_div("strong", 0.3)] + [_NO_DIV] * 3, _DOWN_TREND,
+                               stroke_done_at=done, stroke_started_at=started)
+    assert {(x.type, x.detected_time) for x in sig} >= {("buy1", "2025-01-13"), ("buy2", "2025-01-23")}
+
+
+def test_detection_time_never_earlier_than_light_up():
+    """下一笔成笔早于事件亮起时（亮起本身就晚），成立日取亮起日。"""
+    legs, _ = _after_buy1(103, extra=(_st("up", "2025-01-20", "2025-01-25", 103, 116),))
+    ev = [_ev("buy1", "2025-01-10", 100.0, bar_time="2025-01-14", span="9笔")]
+    sig = generate_all_signals(ev, legs, [_div("strong", 0.3)] + [_NO_DIV] * 3, _DOWN_TREND,
+                               stroke_done_at={}, stroke_started_at={"2025-01-10": "2025-01-13"})
+    assert [x.detected_time for x in sig if x.type == "buy1"] == ["2025-01-14"]
 
 
 def test_detection_time_on_last_stroke_keeps_early_date():

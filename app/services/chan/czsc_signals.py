@@ -90,6 +90,7 @@ def _signal_keys_and_config(
 
 def scan_bs_events(
     bars: list[dict], *, symbol: str, freq: Freq, stroke_done_at: dict[str, str] | None = None,
+    stroke_started_at: dict[str, str] | None = None,
     families: Iterable[SignalFamily] = ("first",),
     shape_states: dict[str, ShapeState] | None = None,
 ) -> list[BsEvent]:
@@ -99,6 +100,9 @@ def scan_bs_events(
 
     stroke_done_at：传入时逐根记录「笔终点 → 这一笔完成的那根K线」（czsc 的 bi_list
     只含已完成的笔，新出现的末笔即在当根完成），供二 / 三类作检测时间。
+
+    stroke_started_at：传入时逐根记录「笔终点 → 从这里出发的下一笔第一次成笔的那根K线」。缠论里
+    一笔由后一笔成笔来确认，严格口径用它作成立日（下一笔之后再延伸也不影响前一笔）。
 
     shape_states：传入时 config 追加形态过滤信号（shape_filters），逐根记录
     「日期 → 当日形态状态」，供雷达按信号日查表剔除假信号；None 时不算形态信号，
@@ -129,6 +133,10 @@ def scan_bs_events(
             bis = cs.kas[label].bi_list
             if bis:
                 stroke_done_at.setdefault(ts_date(bis[-1].fx_b.dt), ts_date(bar.dt))
+        if stroke_started_at is not None:
+            bis = cs.kas[label].bi_list
+            if bis:
+                stroke_started_at.setdefault(ts_date(bis[-1].fx_a.dt), ts_date(bar.dt))
         s = cs.s
         for key in keys:
             parts = s[key].split("_")

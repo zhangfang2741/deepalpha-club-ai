@@ -51,6 +51,7 @@ class SignalPolicy(Protocol):
     def assemble(
         self, events: list[BsEvent], strokes: list[Stroke], divergences: list[DivergenceResult],
         pivots: list[Pivot], lang: str, *, stroke_done_at: dict[str, str],
+        stroke_started_at: dict[str, str] | None = None,
     ) -> list[Signal]:
         """把 czsc 事件 + 结构组装成买卖点（按时间排序）。"""
         ...
@@ -74,7 +75,8 @@ class _PolicyInfo:
 class LoosePolicy(_PolicyInfo):
     """宽松（默认）：czsc 原生一 / 二 / 三类，最后一笔上的也算（标未确认）。"""
 
-    def assemble(self, events, strokes, divergences, pivots, lang, *, stroke_done_at):  # noqa: ARG002
+    def assemble(self, events, strokes, divergences, pivots, lang, *, stroke_done_at,  # noqa: ARG002
+                 stroke_started_at=None):  # noqa: ARG002
         return generate_loose_signals(events, strokes, divergences, pivots, lang)
 
     def split_unconfirmed(self, signals):
@@ -84,8 +86,9 @@ class LoosePolicy(_PolicyInfo):
 class StrictPolicy(_PolicyInfo):
     """严格：按缠论原文定义（趋势背驰一类、一类后的二类、中枢推出的三类），只落在已完成的笔上。"""
 
-    def assemble(self, events, strokes, divergences, pivots, lang, *, stroke_done_at):
-        return generate_all_signals(events, strokes, divergences, pivots, lang, stroke_done_at=stroke_done_at)
+    def assemble(self, events, strokes, divergences, pivots, lang, *, stroke_done_at, stroke_started_at=None):
+        return generate_all_signals(events, strokes, divergences, pivots, lang, stroke_done_at=stroke_done_at,
+                                    stroke_started_at=stroke_started_at)
 
     def split_unconfirmed(self, signals):
         # 最后一笔还在走（端点可能延伸甚至回到中枢），其上的买卖点尚不成立：移入候选
@@ -93,7 +96,8 @@ class StrictPolicy(_PolicyInfo):
 
 
 # 版本记录——strict：std1 严格按原文；std2 中枢「已形成」判定 + 一类被跌破作废 + 只落已完成的笔；
-# std3 新增 candidates；std4 日期改为成立日（所在笔的下一笔走完）。
+# std3 新增 candidates；std4 日期改为成立日（所在笔的下一笔走完）；std5 成立日改为下一笔第一次成笔
+# （缠论：一笔由后一笔确认），中位滞后由 10 个交易日缩短。
 # loose：loose1 严格化之前的口径；loose2 组装加一致性约束（同笔多信号按一类>三类>二类
 # 去重、无源二类过滤）。
 _ALL: tuple[SignalPolicy, ...] = (
@@ -104,7 +108,7 @@ _ALL: tuple[SignalPolicy, ...] = (
             czsc_families=("first", "second", "third"),
         ),
         StrictPolicy(
-            name="strict", version="std4", label_zh="严格", label_en="Strict",
+            name="strict", version="std5", label_zh="严格", label_en="Strict",
             description_zh="严格按缠论原文定义，只认已走完的笔",
             description_en="Textbook Chan definitions; only completed legs count",
             czsc_families=("first",),

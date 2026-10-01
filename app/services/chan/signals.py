@@ -300,6 +300,7 @@ def generate_all_signals(
     pivots: list[Pivot],
     lang: str = "zh",
     stroke_done_at: dict[str, str] | None = None,
+    stroke_started_at: dict[str, str] | None = None,
 ) -> list[Signal]:
     """严格按缠论标准定义组装买卖点，按时间排序、(类型, 时间) 去重。
 
@@ -377,13 +378,16 @@ def generate_all_signals(
     for sig_type, st, pivot in _derive_type3(strokes, pivots):
         _structural(sig_type, st, f"{pivot.zd:.2f}–{pivot.zg:.2f}")
 
-    # 成立日期：所在笔要等下一笔走完才不会再延伸，信号此时才算成立。detected_time 不早于
-    # 下一笔完成的那根K线，否则历史雷达日会提前看到未来才成立的信号、最新日又因「亮起」
-    # 太早被判过期。最后一笔上的（候选）没有下一笔，保留亮起日期。
+    # 成立日期：所在笔要等后一笔成笔才不会再延伸（缠论：一笔由后一笔确认），信号此时才算成立。
+    # detected_time 取「从这一笔终点出发的下一笔第一次成笔」的K线（stroke_started_at），不再等下一笔
+    # 整段走完——下一笔一路延伸时那要晚很多（std4 实测中位滞后 10 个交易日）；没有记录时退回下一笔
+    # 完成的K线。不早于亮起日，否则历史雷达日会提前看到未来才成立的信号。
+    # 最后一笔上的（候选）没有下一笔，保留亮起日期。
+    started = stroke_started_at or {}
     for x in signals:
         i = idx_by_end.get(x.time)
         if i is not None and i + 1 < len(strokes):
-            est = done_at.get(strokes[i + 1].end_time, "")
+            est = started.get(x.time) or done_at.get(strokes[i + 1].end_time, "")
             if est > x.detected_time:
                 x.detected_time = est
 

@@ -236,13 +236,15 @@ class ChanAnalyzer:
         #    口径（宽松 / 严格 / …）由 signal_policy 注册表提供，这里只走统一接口
         policy = get_policy(mode)
         stroke_done_at: dict[str, str] = {}
+        stroke_started_at: dict[str, str] = {}
         shape_states: dict[str, ShapeState] = {}
         events = scan_bs_events(bars, symbol=symbol, freq=czsc_freq, stroke_done_at=stroke_done_at,
+                                stroke_started_at=stroke_started_at,
                                 families=policy.czsc_families,
                                 shape_states=shape_states if shape_filters else None)
         result.shape_states = shape_states
         result.signals = policy.assemble(events, result.strokes, result.divergences, all_pivots, lang,
-                                         stroke_done_at=stroke_done_at)
+                                         stroke_done_at=stroke_done_at, stroke_started_at=stroke_started_at)
         logger.debug("chan_signals", count=len(result.signals))
 
         # 9. 标注最右侧未确认结构（右侧滞后不确定性）

@@ -78,6 +78,21 @@ def test_scan_only_emits_type1_and_records_stroke_completion():
     assert all(bar_time >= end for end, bar_time in done.items())
 
 
+def test_scan_records_when_next_stroke_first_forms():
+    """逐根记录「从某个笔终点出发的下一笔第一次成笔」的K线：不早于该终点、不晚于下一笔最终完成。"""
+    done: dict[str, str] = {}
+    started: dict[str, str] = {}
+    scan_bs_events(_decaying_downtrend_bars(), symbol="DN", freq=Freq.D, stroke_done_at=done,
+                   stroke_started_at=started)
+    assert started
+    assert all(bar_time > start for start, bar_time in started.items())
+    # 下一笔第一次成笔不会晚于它最终版本完成（最终版本只会更晚或同一根）
+    ends = sorted(done)
+    for prev_end, nxt_end in zip(ends, ends[1:]):
+        if prev_end in started:
+            assert started[prev_end] <= done[nxt_end]
+
+
 def test_events_deduped_by_type_and_stroke_and_sorted():
     events = scan_bs_events(_decaying_downtrend_bars(), symbol="DN", freq=Freq.D)
     keys = [(e.type, e.bi_end_time) for e in events]
