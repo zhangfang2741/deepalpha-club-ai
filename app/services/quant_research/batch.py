@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 import json
 from datetime import UTC, date, datetime, timedelta
 
@@ -21,6 +22,7 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.services.quant_research import repository as repo
 from app.services.quant_research.builder import (
+    revision_metrics,
     Evaluation,
     build_payload,
     evaluate,
@@ -28,10 +30,11 @@ from app.services.quant_research.builder import (
     grades_of,
     sector_sample_sizes,
 )
+from app.services.quant_research.eps_trend import fetch_eps_trend, needs_trend
 from app.services.quant_research.fmp import FmpClient
-from app.services.quant_research.inputs import StockInputs, analyst_count, build_inputs
+from app.services.quant_research.revisions import EstimatePoint, accumulated_days
+from app.services.quant_research.inputs import StockInputs, build_inputs
 from app.services.quant_research.metrics import MetricValue, compute_metrics
-from app.services.quant_research.revisions import compute_revisions
 from app.services.quant_research.scoring import OVERALL_KEY, OVERALL_SECTOR, build_distributions
 from app.services.quant_research.universe import fetch_sp1500
 
@@ -156,12 +159,10 @@ async def run_us_batch(as_of: date, *, redis: Redis | None, client: httpx.AsyncC
     inserted = await repo.insert_estimates(est_rows)
 
     histories = await repo.get_estimate_history(MARKET, list(inputs), as_of - timedelta(days=HISTORY_DAYS))
+    await attach_eps_trends(inputs, histories, as_of)
     metrics_all: dict[str, tuple[str, dict[str, MetricValue]]] = {}
     for sym, inp in inputs.items():
-        m = compute_metrics(inp)
-        fy1, fy2 = inp.fy1, inp.fy2
-        m |= compute_revisions(histories.get(sym, []), as_of, fy1.get("date") if fy1 else None,
-                               fy2.get("date") if fy2 else None, analyst_count(fy1))
+        m = compute_metrics(inp) | revision_metrics(inp, histories.get(sym, []))
         metrics_all[sym] = (inp.sector_key, m)
     dists = build_distributions(metrics_all)
 
@@ -202,6 +203,22 @@ async def run_us_batch(as_of: date, *, redis: Redis | None, client: httpx.AsyncC
     else:
         logger.error("quant_batch_us_nothing_computed", **summary)
     return summary
+
+
+async def attach_eps_trends(inputs: dict[str, StockInputs], histories: dict[str, list[EstimatePoint]],
+                            as_of: date) -> int:
+    """自有快照不满 90 天的股票补上外部 EPS 趋势（EPS 修正过渡期），返回补上的只数。"""
+    todo = [s for s in inputs if needs_trend(accumulated_days(histories.get(s, []), as_of))]
+
+    async def one(sym: str) -> None:
+        trend = await fetch_eps_trend(sym)
+        if trend is not None:
+            inputs[sym] = replace(inputs[sym], eps_trend=trend)
+
+    await asyncio.gather(*(one(s) for s in todo))
+    got = sum(1 for s in todo if inputs[s].eps_trend is not None)
+    logger.info("quant_eps_trend_attached", requested=len(todo), attached=got)
+    return got
 
 
 # ---------- A 股一致预期快照（为二期 EPS 修正积累历史） ----------

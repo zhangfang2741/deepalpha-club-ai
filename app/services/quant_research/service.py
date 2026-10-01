@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 
+from dataclasses import replace
+
 import httpx
 from redis.asyncio import Redis
 
@@ -24,7 +26,9 @@ from app.services.quant_research import copy as tx
 from app.services.quant_research.copy import Lang
 from app.services.quant_research.education import enrich_education
 from app.services.quant_research.fmp import FmpClient
+from app.services.quant_research.eps_trend import fetch_eps_trend, needs_trend
 from app.services.quant_research.inputs import build_inputs
+from app.services.quant_research.revisions import accumulated_days
 from app.services.quant_research.scoring import OVERALL_KEY, OVERALL_SECTOR
 from app.services.quant_research.universe import FMP_SECTOR_TO_GICS, normalize_us_symbol
 
@@ -105,6 +109,8 @@ async def _compute_on_demand(symbol: str, lang: Lang, redis: Redis | None) -> Qu
     inp = build_inputs(symbol=symbol, as_of=today, sector_key=sector, income=income,
                        cash=cash if isinstance(cash, list) else None, balance=bal,
                        estimates=est_list, prices=px, name=prof.get("companyName") if prof else None)
+    if needs_trend(accumulated_days(history, today)):
+        inp = replace(inp, eps_trend=await fetch_eps_trend(symbol))
     ev = evaluate(inp, history, dists)
     finalize_overall(ev, dists.get((OVERALL_SECTOR, OVERALL_KEY), []))
     n = sector_sample_sizes(dists).get(sector, 0)

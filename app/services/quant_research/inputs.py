@@ -8,6 +8,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # revisions → metrics → inputs，运行时导入会循环
+    from app.services.quant_research.revisions import EpsTrend
 
 
 @dataclass(frozen=True)
@@ -24,6 +28,7 @@ class StockInputs:
     balance: dict | None = None                                # 最新一季
     estimates: list[dict] = field(default_factory=list)        # 按财年截止日升序
     shares_diluted: float | None = None
+    eps_trend: EpsTrend | None = None                          # 外部一致预期趋势（EPS 修正过渡期用）
 
     @property
     def fy1(self) -> dict | None:

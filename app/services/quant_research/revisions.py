@@ -15,6 +15,8 @@ from app.services.quant_research.metrics import MetricValue
 TOLERANCE_DAYS = 7
 FULL_DAYS = 90
 PARTIAL_DAYS = 30
+# 外部趋势的「本财年 / 下财年」当前值与我们的 FY1 / FY2 预期相差超过它，视为财年口径没对齐，不用
+TREND_ALIGN_TOLERANCE = 0.15
 
 
 @dataclass(frozen=True)
@@ -24,6 +26,23 @@ class EstimatePoint:
     eps_avg: float | None
     revenue_avg: float | None
     n_analysts: int = 0
+
+
+@dataclass(frozen=True)
+class EpsTrend:
+    """外部一致预期趋势（过渡期用）：{回看天数: EPS 一致预期}，0 为当前值。
+
+    自有快照（point-in-time，只补不覆盖）不满回看天数时，EPS 修正改用它在同一数据源内算变化率，
+    不与自有快照混算（两家分析师样本不同，混算会造出假变化）；攒够天数后自动切回自有快照。
+    """
+    fy1: dict[int, float]
+    fy2: dict[int, float]
+
+
+def _aligned(trend_now: float | None, our_eps: float | None) -> bool:
+    if trend_now is None or our_eps is None or our_eps == 0:
+        return False
+    return abs(trend_now - our_eps) / abs(our_eps) <= TREND_ALIGN_TOLERANCE
 
 
 def value_at(history: list[EstimatePoint], fiscal_date: str, target: date, field: str,
@@ -70,19 +89,31 @@ _SPECS = [
 
 
 def compute_revisions(history: list[EstimatePoint], as_of: date, fy1_date: str | None,
-                      fy2_date: str | None, n_analysts: int, min_analysts: int = 3) -> dict[str, MetricValue]:
-    """四项修正指标。历史不够回看天数、分析师不足、找不到对应快照 → missing。"""
+                      fy2_date: str | None, n_analysts: int, min_analysts: int = 3, *,
+                      trend: EpsTrend | None = None, fy1_eps: float | None = None,
+                      fy2_eps: float | None = None) -> dict[str, MetricValue]:
+    """四项修正指标。自有快照够回看天数用自有快照；不够时 EPS 项用外部趋势过渡；都没有 → missing。"""
     days = accumulated_days(history, as_of)
     out: dict[str, MetricValue] = {}
     for key, fy, field, lookback in _SPECS:
         fiscal = fy1_date if fy == 1 else fy2_date
-        if fiscal is None or n_analysts < min_analysts or days < lookback:
+        if fiscal is None or n_analysts < min_analysts:
             out[key] = MetricValue(None, "missing", [], "change", {"days_accumulated": days})
             continue
-        new = value_at(history, fiscal, as_of, field)
-        old = value_at(history, fiscal, as_of - timedelta(days=lookback), field)
-        c = change(new, old)
-        inputs = [("est_new", new), ("est_old", old)]
-        meta = {"lookback_days": lookback, "fiscal_date": fiscal, "days_accumulated": days}
-        out[key] = MetricValue(c, "ok" if c is not None else "missing", inputs, "change", meta)
+        if days >= lookback:
+            new = value_at(history, fiscal, as_of, field)
+            old = value_at(history, fiscal, as_of - timedelta(days=lookback), field)
+            c = change(new, old)
+            inputs = [("est_new", new), ("est_old", old)]
+            meta = {"lookback_days": lookback, "fiscal_date": fiscal, "days_accumulated": days}
+            out[key] = MetricValue(c, "ok" if c is not None else "missing", inputs, "change", meta)
+            continue
+        series = (trend.fy1 if fy == 1 else trend.fy2) if trend and field == "eps_avg" else None
+        now, ago = (series.get(0), series.get(lookback)) if series else (None, None)
+        c = change(now, ago) if _aligned(now, fy1_eps if fy == 1 else fy2_eps) else None
+        if c is None:
+            out[key] = MetricValue(None, "missing", [], "change", {"days_accumulated": days})
+            continue
+        meta = {"lookback_days": lookback, "fiscal_date": fiscal, "days_accumulated": days, "source": "trend"}
+        out[key] = MetricValue(c, "ok", [("est_new", now), ("est_old", ago)], "change", meta)
     return out

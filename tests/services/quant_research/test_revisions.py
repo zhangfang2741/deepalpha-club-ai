@@ -66,3 +66,41 @@ def test_accumulating_status():
 def test_few_analysts_missing():
     r = compute_revisions(_series(100, 5.0, 5.5), AS_OF, FY1, FY2, n_analysts=2)
     assert all(v.status == "missing" for v in r.values())
+
+
+# ---------- 过渡期：自有快照不满回看天数时用外部一致预期趋势 ----------
+
+from app.services.quant_research.revisions import EpsTrend  # noqa: E402
+
+TREND = EpsTrend(fy1={0: 9.31, 30: 9.29, 90: 8.94}, fy2={0: 15.68, 30: 15.31, 90: 12.71})
+
+
+def test_trend_bridges_eps_revisions_while_history_is_short():
+    hist = _series(1, 9.3, 9.3)  # 自有快照只有 1 天
+    out = compute_revisions(hist, AS_OF, FY1, FY2, 20, trend=TREND, fy1_eps=9.3, fy2_eps=15.7)
+    assert out["eps_fy1_30d"].status == "ok"
+    assert out["eps_fy1_30d"].value == pytest.approx(9.31 / 9.29 - 1)
+    assert out["eps_fy1_90d"].value == pytest.approx(9.31 / 8.94 - 1)
+    assert out["eps_fy2_90d"].value == pytest.approx(15.68 / 12.71 - 1)
+    assert out["eps_fy1_30d"].meta["source"] == "trend"
+    # 营收没有外部趋势，仍需自有快照攒满 90 天
+    assert out["rev_fy1_90d"].status == "missing"
+
+
+def test_own_history_takes_over_once_long_enough():
+    hist = _series(95, 5.0, 5.5)
+    out = compute_revisions(hist, AS_OF, FY1, FY2, 20, trend=TREND, fy1_eps=5.5, fy2_eps=None)
+    assert out["eps_fy1_90d"].meta.get("source") != "trend"
+    assert out["eps_fy1_90d"].value == pytest.approx(5.5 / (5.0 + 0.5 * 5 / 95) - 1, rel=1e-3)
+
+
+def test_trend_skipped_when_fiscal_year_does_not_line_up():
+    """外部「本财年」与我们的 FY1 预期差太多，说明财年口径没对齐（如刚跨财年），宁缺不用。"""
+    out = compute_revisions([], AS_OF, FY1, FY2, 20, trend=TREND, fy1_eps=15.7, fy2_eps=15.7)
+    assert out["eps_fy1_30d"].status == "missing"
+    assert out["eps_fy2_90d"].status == "ok"
+
+
+def test_trend_respects_min_analysts():
+    out = compute_revisions([], AS_OF, FY1, FY2, 2, trend=TREND, fy1_eps=9.3, fy2_eps=15.7)
+    assert all(v.status == "missing" for v in out.values())

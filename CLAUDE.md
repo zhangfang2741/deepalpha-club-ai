@@ -167,6 +167,8 @@ deepalpha-club-ai/
 > **FMP 套餐 300 次/分钟**：所有新代码的 FMP 调用经 `app/cache/fmp_budget.acquire`（Redis 分钟计数，跨进程），
 > 夜间批量 `priority="batch"` ≤150/分钟、遇 429 整体熔断 2 分钟；一次性脚本也必须限速（曾因 8 并发打满配额
 > 导致线上被限流）。一致预期快照 `quant_estimate_snapshots` **只补不覆盖**（point-in-time，EPS 修正与日后回测依赖），
+> 自有快照不满 90 天时 EPS 修正用外部一致预期趋势过渡（`eps_trend.py`，同源内算变化率、**不写入快照表**、
+> 与 FY1/FY2 预期差 >15% 视为财年没对齐不用），攒满后自动切回自有快照；营收修正无外部趋势，仍需攒满 90 天。
 > 2026-09-30 首份快照来自 `data/quant_seed/`（git 忽略），用 `scripts/quant_seed_import.py` 导入。
 > **可解释**：App 上每个等级 / 分数 / 术语都可点开看「这一处」的解释（`Views/Quant/QuantExplain.swift`，带本股真实数字，
 > 不做统一说明页）；指标大白话与算式输入项解释在 `glossary.py`。iOS 的分档 / 防抖 / 封顶常量由 `test_education.py` 对齐后端守护。

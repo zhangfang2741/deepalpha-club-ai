@@ -51,7 +51,7 @@ from app.schemas.quant_research import (
     Stage,
 )
 
-METHODOLOGY_VERSION = "q2"
+METHODOLOGY_VERSION = "q3"  # q3：EPS 修正过渡期用外部一致预期趋势
 _REVISION_LOOKBACK = {"eps_fy1_30d": 30, "eps_fy1_90d": 90, "eps_fy2_90d": 90, "rev_fy1_90d": 90}
 
 
@@ -72,16 +72,33 @@ class Evaluation:
         return round(sum(usable) / len(usable), 1) if usable else None
 
 
+def revision_metrics(inp: StockInputs, history: list[EstimatePoint]) -> dict[str, MetricValue]:
+    """EPS 修正四项（批量算分布与单股评估共用，保证口径一致）。"""
+    fy1, fy2 = inp.fy1, inp.fy2
+    return compute_revisions(history, inp.as_of, fy1.get("date") if fy1 else None,
+                             fy2.get("date") if fy2 else None, analyst_count(fy1), trend=inp.eps_trend,
+                             fy1_eps=_num(fy1.get("epsAvg")) if fy1 else None,
+                             fy2_eps=_num(fy2.get("epsAvg")) if fy2 else None)
+
+
+def _num(v: object) -> float | None:
+    try:
+        return None if v is None else float(v)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
 def evaluate(inp: StockInputs, history: list[EstimatePoint], dists: Distributions,
              prev_grades: dict | None = None) -> Evaluation:
     """算指标（含 EPS 修正）→ 板块内打分 → 维度分，prev_grades 用于防抖。"""
     prev = prev_grades or {}
     metrics = compute_metrics(inp)
-    fy1, fy2 = inp.fy1, inp.fy2
-    n = analyst_count(fy1)
-    metrics |= compute_revisions(history, inp.as_of, fy1.get("date") if fy1 else None,
-                                 fy2.get("date") if fy2 else None, n)
+    n = analyst_count(inp.fy1)
+    metrics |= revision_metrics(inp, history)
     rev_state, rev_days = revision_status(history, inp.as_of)
+    bridged = {k for k in _REVISION_LOOKBACK if metrics[k].meta.get("source") == "trend"}
+    if bridged:  # 外部趋势已补上部分指标，不再整维「积累中」
+        rev_state = "ok"
 
     dims: list[DimensionScore] = []
     for dim in DIMENSIONS:
@@ -91,7 +108,7 @@ def evaluate(inp: StockInputs, history: list[EstimatePoint], dists: Distribution
             if rev_state == "accumulating":
                 dims.append(score_dimension(dim, scored, None, accumulating_days=rev_days))
                 continue
-            expected = sum(1 for k in keys if _REVISION_LOOKBACK[k] <= rev_days)
+            expected = sum(1 for k in keys if _REVISION_LOOKBACK[k] <= rev_days or k in bridged)
             dims.append(score_dimension(dim, scored, prev.get(f"d:{dim}"), expected=expected))
         else:
             dims.append(score_dimension(dim, scored, prev.get(f"d:{dim}")))
@@ -139,6 +156,9 @@ def _formula_inputs(sm: ScoredMetric, ev: Evaluation, lang: tx.Lang) -> list[For
             if name == "eps_ntm" and e1 is not None and e2 is not None:
                 note += tx._i(lang, f" · 由本财年 {e1:.2f} 与下财年 {e2:.2f} 按剩余时间加权",
                               f" · time-weighted from FY1 {e1:.2f} and FY2 {e2:.2f}")
+        elif name in ("est_new", "est_old") and sm.mv.meta.get("source") == "trend":
+            note = tx._i(lang, "过渡期：自有每日记录满 90 天前，用公开的一致预期趋势计算",
+                         "Bridge period: computed from public consensus trends until our daily records reach 90 days")
         elif name.endswith("_ttm") or name in ("equity", "assets", "invested", "nopat", "market_cap", "ev"):
             note = ev.inp.fiscal_period
         out.append(FormulaInput(label=tx.label(name, lang), value=tx.fmt_input(name, v, lang), note=note,
