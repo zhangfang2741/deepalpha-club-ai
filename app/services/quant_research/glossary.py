@@ -250,3 +250,73 @@ def plain_language(metric: MetricDef, lang: str) -> tuple[str, str, str]:
     if note:
         plain = f"{plain}{note}" if lang == "zh" else f"{plain} {note}"
     return full, plain, reading
+
+
+# 算式输入项：基础概念 + 期间口径，拼成一句大白话（zh, en）
+_INPUT_BASE: dict[str, tuple[str, str]] = {
+    "price": ("每一股在市场上的成交价格（已按分红、拆股前复权）。",
+              "The market price of one share (adjusted for dividends and splits)."),
+    "market_cap": ("市值 = 股价 × 总股数，即市场给整家公司股权的标价。",
+                   "Market cap = share price × shares outstanding: the market's price tag on all the equity."),
+    "ev": ("企业价值 = 市值 + 负债 − 现金，相当于连同债务一起买下整家公司的总价。",
+           "Enterprise value = market cap + debt − cash: the total price to acquire the whole company including its debt."),
+    "eps": ("EPS 每股收益 = 净利润 ÷ 总股数，即每一股分到多少利润。",
+            "EPS = net income ÷ shares outstanding: the profit attributable to each share."),
+    "rev": ("营收：公司售出产品和服务收到的总收入，还没扣任何成本。",
+            "Revenue: total income from selling products and services, before any costs."),
+    "ebitda": ("EBITDA：息税折旧摊销前利润，可粗略看作主营业务赚到的「毛现金」。",
+               "EBITDA: earnings before interest, taxes, depreciation and amortization — roughly the core business's gross cash earnings."),
+    "ebit": ("EBIT：息税前利润，扣掉成本、费用和折旧摊销后，还没付利息和交税的经营利润。",
+             "EBIT: operating profit after costs and depreciation, before interest and tax."),
+    "gross": ("毛利 = 营收 − 直接成本（原材料、生产、采购）。",
+              "Gross profit = revenue − direct costs (materials, production, purchasing)."),
+    "net": ("净利润：扣完所有成本、费用、利息和税后，最终归股东的利润。",
+            "Net income: profit left for shareholders after all costs, expenses, interest and taxes."),
+    "ocf": ("经营现金流：日常经营实际收进来减去付出去的现金，不含投资和融资。",
+            "Operating cash flow: cash actually collected minus paid in day-to-day operations, excluding investing and financing."),
+    "fcf": ("自由现金流 = 经营现金流 − 资本开支（买设备、建厂房），是真正可以自由支配的现金。",
+            "Free cash flow = operating cash flow − capital spending (equipment, facilities): the cash truly free to use."),
+    "equity": ("股东权益（账面净资产）= 总资产 − 总负债，即账面上属于股东的部分，取最近一期报表。",
+               "Shareholders' equity (book value) = total assets − total liabilities, from the latest balance sheet."),
+    "assets": ("总资产：公司拥有的全部资产（现金、厂房、存货、应收款等），取最近一期报表。",
+               "Total assets: everything the company owns (cash, plants, inventory, receivables…), from the latest balance sheet."),
+    "invested": ("投入资本 = 负债 + 股东权益 − 现金，即真正投进生意里的钱（不算闲置现金）。",
+                 "Invested capital = debt + equity − cash: money actually put to work in the business, excluding idle cash."),
+    "nopat": ("税后 EBIT = EBIT ×（1 − 税率），即假设没有负债时经营利润交完税还剩多少。",
+              "After-tax EBIT = EBIT × (1 − tax rate): operating profit after tax, as if the company had no debt."),
+    "pe": ("市盈率 = 股价 ÷ 每股收益，买下每 1 元利润要付的价格。",
+           "P/E = price ÷ EPS: the price paid for each $1 of profit."),
+    "growth_pct": ("每股收益的增速，以百分数代入，例如增长 20% 就代入 20。",
+                   "EPS growth entered as a percent number, e.g. 20% growth is entered as 20."),
+    "close_now": ("最近一个交易日的收盘价（已前复权，分红折算回股价）。",
+                  "The latest closing price (adjusted, with dividends folded back in)."),
+    "close_then": ("区间开始那天的收盘价（已前复权），用来算这段时间涨跌了多少。",
+                   "The adjusted closing price at the start of the window, used to measure the change."),
+    "est_new": ("分析师们现在对这个财年的平均预测。", "Analysts' current average forecast for this fiscal year."),
+    "est_old": ("同一批预测在当时（30 或 90 天前）的平均值，和现在比就知道是上调还是下调。",
+                "The same average forecast back then (30 or 90 days ago); comparing it with today shows raises or cuts."),
+}
+
+_INPUT_PERIOD: list[tuple[str, tuple[str, str]]] = [
+    ("_ttm_prev", ("这里取再往前 12 个月的实际数，用来算同比。", "Here: the actual figure for the 12 months before that, used for year-over-year growth.")),
+    ("_ttm_3y", ("这里取 3 年前同期 12 个月的实际数，用来算 3 年复合增速。", "Here: the actual 12-month figure from 3 years ago, used for 3-year CAGR.")),
+    ("_ttm", ("这里取最近 12 个月（最近 4 个季度加总）的实际数。", "Here: the actual figure for the trailing 12 months (last 4 quarters).")),
+    ("_ntm", ("这里取分析师对未来 12 个月的平均预测（按本财年、下财年剩余时间加权）。", "Here: analysts' average forecast for the next 12 months (time-weighted across this and next fiscal year).")),
+    ("_fy0", ("这里取上一个完整财年的实际数。", "Here: the actual figure for the last full fiscal year.")),
+    ("_fy1", ("这里取分析师对本财年的平均预测。", "Here: analysts' average forecast for the current fiscal year.")),
+    ("_fy2", ("这里取分析师对下一财年的平均预测。", "Here: analysts' average forecast for the next fiscal year.")),
+]
+
+
+def input_hint(name: str, lang: str) -> str | None:
+    """算式输入项的大白话解释（概念 + 取数口径）。"""
+    i = 0 if lang == "zh" else 1
+    base, period = name, ""
+    for suffix, texts in _INPUT_PERIOD:
+        if name.endswith(suffix):
+            base, period = name[: -len(suffix)], texts[i]
+            break
+    texts = _INPUT_BASE.get(base)
+    if texts is None:
+        return None
+    return texts[i] + (period if i == 0 else f" {period}" if period else "")

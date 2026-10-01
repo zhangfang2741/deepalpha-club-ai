@@ -13,6 +13,9 @@ struct QuantDimensionRow: View {
     var body: some View {
         HStack(spacing: 12) {
             QuantGradeBlock(grade: dimension.isOK ? dimension.grade : nil)
+                .quantExplain(L("%@等级怎么来的", dimension.name), enabled: !isStatic) {
+                    QuantDimensionGradeExplanation(dimension: dimension)
+                }
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(dimension.name).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)

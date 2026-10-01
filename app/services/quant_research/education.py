@@ -7,8 +7,8 @@ https://www.finra.org/investors/investing/investment-products/stocks/evaluating-
 
 from app.schemas.quant_research import MetricInterpretation, QuantResearchOut
 from app.services.quant_research.formulas import metric_calculation
-from app.services.quant_research.glossary import plain_language
-from app.services.quant_research.metrics import METRICS, MetricDef
+from app.services.quant_research.glossary import input_hint, plain_language
+from app.services.quant_research.metrics import INPUT_LABELS, METRICS, MetricDef
 
 # 同一经济含义共用解读，具体期间与分母由每项指标的定义明确。
 _GUIDANCE: dict[str, tuple[str, str, str, str]] = {
@@ -148,10 +148,16 @@ def metric_interpretation(metric: MetricDef, lang: str) -> MetricInterpretation:
 
 def enrich_education(payload: QuantResearchOut, lang: str) -> QuantResearchOut:
     """读取历史缓存时同步更新说明，不重算或修改历史指标值。"""
+    i = 0 if lang == "zh" else 1
+    label_to_name = {labels[i]: name for name, labels in INPUT_LABELS.items()}
     for dimension in payload.dimensions:
         for group in dimension.groups:
             for metric in group.metrics:
                 definition = METRICS.get(metric.key)
                 if definition is not None:
                     metric.interpretation = metric_interpretation(definition, lang)
+                for item in metric.formula.inputs if metric.formula else []:
+                    name = label_to_name.get(item.label)
+                    if name is not None:
+                        item.hint = input_hint(name, lang)
     return payload

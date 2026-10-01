@@ -31,7 +31,7 @@ struct QuantResearchTab: View {
     @ViewBuilder
     private func content(_ r: QuantResearch) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            QuantResearchSummaryCard(research: r)
+            QuantResearchSummaryCard(research: r, isStatic: isStatic)
             VStack(alignment: .leading, spacing: 8) {
                 Text(L("五维成绩单")).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
                     .padding(.horizontal, 4)
@@ -43,7 +43,8 @@ struct QuantResearchTab: View {
                 }
                 .padding(.horizontal, 14).padding(.bottom, 4)
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
-                Text(QuantDimensionGuide.gradeReading)
+                Text(isStatic ? QuantDimensionGuide.gradeReading
+                     : QuantDimensionGuide.gradeReading + L("点任意等级可查看评分标准。"))
                     .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 4)

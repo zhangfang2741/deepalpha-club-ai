@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from app.services.quant_research.glossary import input_hint
 from app.services.quant_research import copy as tx
 from app.services.quant_research.education import metric_interpretation
 from app.services.quant_research.inputs import StockInputs, analyst_count
@@ -140,7 +141,8 @@ def _formula_inputs(sm: ScoredMetric, ev: Evaluation, lang: tx.Lang) -> list[For
                               f" · time-weighted from FY1 {e1:.2f} and FY2 {e2:.2f}")
         elif name.endswith("_ttm") or name in ("equity", "assets", "invested", "nopat", "market_cap", "ev"):
             note = ev.inp.fiscal_period
-        out.append(FormulaInput(label=tx.label(name, lang), value=tx.fmt_input(name, v, lang), note=note))
+        out.append(FormulaInput(label=tx.label(name, lang), value=tx.fmt_input(name, v, lang), note=note,
+                                hint=input_hint(name, lang)))
     return out
 
 

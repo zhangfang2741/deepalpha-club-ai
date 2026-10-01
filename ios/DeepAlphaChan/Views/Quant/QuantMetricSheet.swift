@@ -41,14 +41,6 @@ struct QuantMetricDetailContent: View {
             positionBlock
             readingBlock
             calculationGroup
-            DisclosureGroup(L("术语速查")) {
-                Text(L("TTM：最近 12 个月实际值\nFWD：基于分析师预期\nNTM：未来 12 个月；本页按财年剩余时间加权\nEPS：每股收益\nEBIT：息税前利润\nEBITDA：息税折旧摊销前利润\nEV：本页按市值 + 负债 − 现金计算\n百分位：按指标优劣方向换算的相对排名，不是收益率"))
-                    .font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
-                    .lineSpacing(6).frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 8)
-            }
-            .font(QuantTypography.body).tint(Theme.accent)
-            .padding(.horizontal, 4)
         }
         .padding(18)
     }
@@ -65,6 +57,9 @@ struct QuantMetricDetailContent: View {
                 }
                 Spacer(minLength: 8)
                 QuantGradeBlock(grade: metric.grade, side: 48)
+                    .quantExplain(L("「%@」等级怎么来的", metric.name)) {
+                        QuantMetricGradeExplanation(metric: metric, peer: research.peerGroup)
+                    }
             }
             HStack(alignment: .firstTextBaseline, spacing: 14) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -74,9 +69,13 @@ struct QuantMetricDetailContent: View {
                 }
                 if let median = metric.sectorMedianDisplay {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(L("板块中位")).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+                        HStack(spacing: 3) {
+                            Text(L("板块中位")).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+                            QuantInfoMark()
+                        }
                         Text(median).font(QuantTypography.value).monospacedDigit().foregroundStyle(Theme.textSecondary)
                     }
+                    .quantExplain(L("板块中位是什么")) { QuantMedianExplanation(metric: metric, research: research) }
                 }
                 Spacer(minLength: 0)
             }
@@ -111,18 +110,33 @@ struct QuantMetricDetailContent: View {
                      ?? L("在板块中的位置"))
                     .font(QuantTypography.metadata.weight(.semibold)).foregroundStyle(Theme.textSecondary)
                 if let pos = metric.positionText {
-                    Text(pos).font(QuantTypography.emphasis).foregroundStyle(Theme.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(pos).font(QuantTypography.emphasis).foregroundStyle(Theme.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        QuantInfoMark()
+                    }
+                    .quantExplain(L("百分位和等级怎么来的")) {
+                        QuantMetricGradeExplanation(metric: metric, peer: research.peerGroup)
+                    }
                 }
                 if let note = metric.statusNote {
                     Text(note).font(QuantTypography.body).foregroundStyle(Theme.segment)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if let dist = metric.distribution {
-                    DistributionStrip(distribution: dist, value: metric.value, valueLabel: metric.displayValue,
-                                      symbol: research.symbol, lowerBetter: metric.lowerBetter,
-                                      isPercent: metric.displayValue.hasSuffix("%"))
-                        .padding(.top, 4)
+                    VStack(alignment: .leading, spacing: 2) {
+                        DistributionStrip(distribution: dist, value: metric.value, valueLabel: metric.displayValue,
+                                          symbol: research.symbol, lowerBetter: metric.lowerBetter,
+                                          isPercent: metric.displayValue.hasSuffix("%"))
+                        HStack(spacing: 4) {
+                            Text(L("P10、P25、P90 是什么？")).font(QuantTypography.metadata).foregroundStyle(Theme.accent)
+                            QuantInfoMark()
+                        }
+                    }
+                    .padding(.top, 4)
+                    .quantExplain(L("这条分布线怎么看")) {
+                        QuantDistributionExplanation(metric: metric, research: research)
+                    }
                 }
             }
             .padding(14).frame(maxWidth: .infinity, alignment: .leading)
@@ -212,7 +226,15 @@ struct QuantMetricDetailContent: View {
                     ForEach(f.inputs) { i in
                         Divider().background(Theme.border).padding(.vertical, 4)
                         HStack(alignment: .firstTextBaseline) {
-                            Text(i.label).foregroundStyle(Theme.textSecondary)
+                            if let hint = i.hint {
+                                HStack(spacing: 3) {
+                                    Text(i.label).foregroundStyle(Theme.textSecondary)
+                                    QuantInfoMark()
+                                }
+                                .quantExplain(i.label) { QuantExplainText(text: hint) }
+                            } else {
+                                Text(i.label).foregroundStyle(Theme.textSecondary)
+                            }
                             Spacer(minLength: 8)
                             VStack(alignment: .trailing, spacing: 2) {
                                 Text(i.value).monospacedDigit().foregroundStyle(Theme.textPrimary)

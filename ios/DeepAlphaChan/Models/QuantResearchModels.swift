@@ -138,6 +138,8 @@ struct QuantFormulaInput: Decodable, Identifiable {
     let label: String
     let value: String
     let note: String?
+    /// 大白话：这个输入是什么、取的哪个期间；旧缓存响应可能缺失。
+    let hint: String?
     var id: String { label }
 }
 

@@ -11,7 +11,8 @@ from app.schemas.quant_research import QuantResearchOut
 from app.services.quant_research.builder import build_payload, evaluate
 from app.services.quant_research.copy import contains_forbidden
 from app.services.quant_research.education import enrich_education, metric_interpretation
-from app.services.quant_research.metrics import METRICS
+from app.services.quant_research.glossary import input_hint
+from app.services.quant_research.metrics import INPUT_LABELS, METRICS
 from tests.services.quant_research.fixtures import FIXTURE_DIR, load_inputs
 
 
@@ -100,3 +101,43 @@ def test_missing_data_keeps_symbolic_formulas_without_fake_results(lang: str) ->
         assert metric.value is None and metric.formula is None
         assert metric.interpretation and metric.interpretation.calculation
         assert "÷" in metric.interpretation.calculation
+
+
+@pytest.mark.parametrize("lang", ["zh", "en"])
+def test_every_formula_input_has_plain_hint(lang: str) -> None:
+    """算式里每个输入项都能点开看大白话：这是什么 + 取的哪个期间。"""
+    for name in INPUT_LABELS:
+        hint = input_hint(name, lang)
+        assert hint, name
+        assert not contains_forbidden(hint), (name, hint)
+        if lang == "en":
+            assert not any("一" <= char <= "鿿" for char in hint), (name, hint)
+    assert "未来 12 个月" in (input_hint("eps_ntm", "zh") or "")
+    assert "再往前 12 个月" in (input_hint("rev_ttm_prev", "zh") or "")
+
+
+def test_legacy_payload_gets_input_hints() -> None:
+    raw = json.loads((FIXTURE_DIR / "golden_NVDA.json").read_text())
+    for dimension in raw["dimensions"]:
+        for group in dimension["groups"]:
+            for metric in group["metrics"]:
+                for item in (metric.get("formula") or {}).get("inputs", []):
+                    item.pop("hint", None)
+    enriched = enrich_education(QuantResearchOut.model_validate(raw), "zh")
+    inputs = [i for d in enriched.dimensions for g in d.groups for m in g.metrics if m.formula for i in m.formula.inputs]
+    assert inputs and all(i.hint for i in inputs)
+
+
+def test_ios_grade_scale_matches_backend() -> None:
+    """iOS「等级怎么来的」气泡里的分档 / 防抖 / 封顶常量必须与后端一致，否则解释会和真实等级对不上。"""
+    from app.services.quant_research.grading import BANDS, HYSTERESIS
+    from app.services.quant_research.scoring import CAP_CEILING, CAP_THRESHOLD, MIN_SAMPLE
+
+    root = Path(__file__).resolve().parents[3]
+    src = (root / "ios/DeepAlphaChan/Views/Quant/QuantExplain.swift").read_text()
+    bands = [(float(lo), g) for lo, g in re.findall(r'\((\d+), "([A-F][+-]?)"\)', src)]
+    assert bands == [(float(lo), g) for lo, g in BANDS]
+    assert re.search(rf"hysteresis: Double = {HYSTERESIS:g}\b", src)
+    assert re.search(rf"capThreshold: Double = {CAP_THRESHOLD:g}\b", src)
+    assert f'capCeiling = "{CAP_CEILING}"' in src
+    assert re.search(rf"minSample = {MIN_SAMPLE}\b", src)

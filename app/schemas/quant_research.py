@@ -50,6 +50,7 @@ class FormulaInput(BaseModel):
     label: str
     value: str
     note: str | None = None
+    hint: str | None = None  # 大白话：这个输入是什么、取的哪个期间
 
 
 class MetricFormula(BaseModel):

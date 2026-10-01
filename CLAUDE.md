@@ -168,6 +168,8 @@ deepalpha-club-ai/
 > 夜间批量 `priority="batch"` ≤150/分钟、遇 429 整体熔断 2 分钟；一次性脚本也必须限速（曾因 8 并发打满配额
 > 导致线上被限流）。一致预期快照 `quant_estimate_snapshots` **只补不覆盖**（point-in-time，EPS 修正与日后回测依赖），
 > 2026-09-30 首份快照来自 `data/quant_seed/`（git 忽略），用 `scripts/quant_seed_import.py` 导入。
+> **可解释**：App 上每个等级 / 分数 / 术语都可点开看「这一处」的解释（`Views/Quant/QuantExplain.swift`，带本股真实数字，
+> 不做统一说明页）；指标大白话与算式输入项解释在 `glossary.py`。iOS 的分档 / 防抖 / 封顶常量由 `test_education.py` 对齐后端守护。
 > 金融股的营收预期增速、市现率、FCF 利润率标「不适用」，且不做现金流阶段标注（口径不可比）。改分档 / 规则须升
 > `METHODOLOGY_VERSION` 并重生成 golden（`UPDATE_GOLDEN=1 uv run pytest tests/services/quant_research`）。
 
