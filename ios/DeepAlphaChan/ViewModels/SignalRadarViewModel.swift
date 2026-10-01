@@ -146,57 +146,10 @@ final class SignalRadarViewModel: ObservableObject {
         return days[idx]
     }
 
-    /// 雷达展示的那一天：有行业筛选时只留该行业的气泡（在当前指数里筛，不切换指数）。
-    /// 当天的行业池还没取回时，先用当天前 N 里同行业的气泡顶上（不空白、不转圈），取回后换成完整的。
-    /// 这一天没有行业统计（自选、港股 / A 股、旧快照）时筛选不生效，原样展示。
-    var selectedDay: RadarDay? {
-        guard let base = baseSelectedDay else { return nil }
-        guard let f = sectorFilter, base.hasSectorData else { return base }
-        let signals = sectorPoolKey.flatMap { sectorPools[$0] }?[f.key]
-            ?? base.signals.filter { $0.sector == f.key }
-        return RadarDay(date: base.date, signals: signals, quantFilter: base.quantFilter)
-    }
+    /// 雷达展示的那一天（全部在场信号，后端已按出现时间从新到旧排好）。
+    var selectedDay: RadarDay? { baseSelectedDay }
 
-    // MARK: - 行业筛选
-
-    /// 当前行业筛选（筛选条或行业弹层里选）；切市场时清除，切指数、切日期时保留。
-    @Published private(set) var sectorFilter: RadarSectorFilter?
-    /// 已取回的行业池，键为「指数|日期」，值为 {行业: 气泡}。快照重算后清空。
-    @Published private(set) var sectorPools: [String: [String: [RadarSignal]]] = [:]
-    @Published private(set) var loadingSectorPoolKey: String?
-    /// 后端说这一天没有行业池（旧快照还没重扫）：不再重复请求，按当天前 N 筛。
-    private var unavailableSectorPoolKeys: Set<String> = []
-
-    /// 选中日的行业筛选条（数量 = 选中后会显示的气泡数）。
-    /// 拿到该日行业强弱时：全部行业按相对大盘强弱从强到弱，带状态圆点，没信号的也列出（View 调暗）——
-    /// 筛选条同时回答「钱往哪走」和「谁有信号」。强弱还没取到 / 取不到时：只列有信号的，按数量从多到少。
-    /// 已选的行业当天没有信号时也保留（数量 0），用户能看到「选着它、但今天没有」。
-    var sectorChips: [RadarSectorChip] {
-        guard let day = baseSelectedDay, day.hasSectorData, let counts = day.sectorCounts else { return [] }
-        let cap = response?.topN ?? 10
-        func count(_ key: String) -> Int {
-            min((counts[key]?["buy"] ?? 0) + (counts[key]?["sell"] ?? 0), cap)
-        }
-        var chips: [RadarSectorChip]
-        if let board = sectorBoardKey.flatMap({ sectorBoards[$0] }), !board.sectors.isEmpty {
-            chips = board.sectors.map { RadarSectorChip(key: $0.key, name: $0.name, count: count($0.key), label: $0.label) }
-            // 有信号但强弱表里没有的行业（理论上不会）放到最后，别丢
-            for key in counts.keys.sorted() where count(key) > 0 && !chips.contains(where: { $0.key == key }) {
-                chips.append(RadarSectorChip(key: key, name: RadarSectorCatalog.name(key), count: count(key)))
-            }
-        } else {
-            chips = counts.keys.compactMap { key in
-                count(key) > 0 ? RadarSectorChip(key: key, name: RadarSectorCatalog.name(key), count: count(key)) : nil
-            }
-            chips.sort {
-                $0.count != $1.count ? $0.count > $1.count : RadarSectorCatalog.order($0.key) < RadarSectorCatalog.order($1.key)
-            }
-        }
-        if let f = sectorFilter, !chips.contains(where: { $0.key == f.key }) {
-            chips.append(RadarSectorChip(key: f.key, name: f.name, count: 0))
-        }
-        return chips
-    }
+    // MARK: - 行业强弱（扇区雷达的角度顺序、行业面板）
 
     /// 各日行业强弱（GET /macro/{market}/sectors?date=），键为「市场|日期」。
     @Published private(set) var sectorBoards: [String: SectorBoard] = [:]
@@ -219,49 +172,23 @@ final class SignalRadarViewModel: ObservableObject {
         }
     }
 
-    /// 需要行业池时（有筛选、这一天有行业统计）的「指数|日期」键，否则 nil。View 用它驱动取数。
-    var sectorPoolKey: String? {
-        guard sectorFilter != nil, let day = baseSelectedDay, day.hasSectorData,
-              let universe = response?.universe else { return nil }
-        return "\(universe)|\(day.date)"
+    /// 选中日的行业强弱表（还没取到 / 这一天没有行业统计时为 nil）。
+    var selectedSectorBoard: SectorBoard? {
+        sectorBoardKey.flatMap { sectorBoards[$0] }
     }
 
-    /// 行业池取数中（气泡区先用前 N 里的同行业气泡，调暗一点表示还会补全）。
-    var isLoadingSectorPools: Bool {
-        guard let key = sectorPoolKey else { return false }
-        return loadingSectorPoolKey == key && sectorPools[key] == nil
+    /// 选中日行业从强到弱的 key（扇区雷达按这个顺序从上往下摆）；强弱还没取到时为空，
+    /// 扇区按信号出现的先后排，取到后自动重排。
+    var sectorOrder: [String] {
+        (selectedSectorBoard?.sectors ?? [])
+            .sorted { ($0.rsVsMarket ?? -.infinity) > ($1.rsVsMarket ?? -.infinity) }
+            .map(\.key)
     }
 
-    /// 筛选条点某个行业：没选中就选中，已选中就取消。
-    func toggleSector(_ chip: RadarSectorChip) {
-        sectorFilter = sectorFilter?.key == chip.key ? nil : RadarSectorFilter(key: chip.key, name: chip.name)
-    }
-
-    /// 行业弹层里点某个行业：在当前指数里只看这个行业。
-    func applySectorFilter(key: String, name: String) {
-        sectorFilter = RadarSectorFilter(key: key, name: name)
-    }
-
-    func clearSectorFilter() {
-        sectorFilter = nil
-    }
-
-    /// 取当前「指数|日期」的全部行业池（View 用 `.task(id: sectorPoolKey)` 驱动；已取到或已知没有就跳过）。
-    func loadSectorPoolsIfNeeded() async {
-        guard let key = sectorPoolKey, let day = baseSelectedDay, let universe = response?.universe,
-              sectorPools[key] == nil, !unavailableSectorPoolKeys.contains(key) else { return }
-        loadingSectorPoolKey = key
-        defer { if loadingSectorPoolKey == key { loadingSectorPoolKey = nil } }
-        do {
-            let r = try await MarketOverviewService.sectorPools(market: market, universe: universe, date: day.date)
-            if r.available {
-                sectorPools[key] = r.sectors
-            } else {
-                unavailableSectorPoolKeys.insert(key)
-            }
-        } catch {
-            // 网络失败不记「没有数据」，换个日期再回来会重试；期间按当天前 N 筛
-        }
+    /// 行业 key → 展示名：优先用强弱表里后端给的名字，没有时用本地目录。
+    func sectorName(_ key: String) -> String {
+        if key == SectorRadarLayout.otherKey { return L("其它") }
+        return selectedSectorBoard?.sectors.first(where: { $0.key == key })?.name ?? RadarSectorCatalog.name(key)
     }
 
     /// 免费预览锚定日期的字符串（未订阅时才有意义）；View 用它判断某个日期轨格子
@@ -322,7 +249,6 @@ final class SignalRadarViewModel: ObservableObject {
     func switchMarket(_ m: StockMarket) {
         guard m != market else { return }
         market = m
-        sectorFilter = nil
         // 不清空 response：新市场数据回来前保留旧内容（调暗 + 加载指示），页面不跳动
         // 不同市场的 universe 列表不同：换成这个市场之前拿到过的列表（没有就先空着），
         // 切换器与「正在扫描 X」立刻显示正确的指数名，不用等接口。
@@ -339,7 +265,6 @@ final class SignalRadarViewModel: ObservableObject {
 
     /// 切换当前市场的 universe（科技窄基 ↔ 大盘宽基）。key 与当前生效的相同则忽略。
     /// 注意不清空 availableUniverses：正在计算时切换器仍要在，方便随时切回别的指数。
-    /// 行业筛选保留：换到另一个美股指数接着看同一个行业；换到自选（没有行业统计）时筛选自动不生效。
     func switchUniverse(_ key: String) {
         guard key != activeUniverseKey else { return }
         universeByMarket[market] = key
@@ -397,9 +322,6 @@ final class SignalRadarViewModel: ObservableObject {
             // 加载期间用户切了市场或 universe，就丢弃这次结果，别覆盖新请求。
             if market != requested || currentUniverse != requestedUniverse || SignalMode.current() != requestedMode { return }
             response = resp
-            // 快照重算后行业池也重写了，丢掉旧的行业气泡
-            sectorPools = [:]
-            unavailableSectorPoolKeys = []
             if !resp.universes.isEmpty {
                 availableUniverses = resp.universes
                 universesByMarket[requested] = resp.universes

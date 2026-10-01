@@ -19,10 +19,4 @@ enum MarketOverviewService {
         if let date { query["date"] = date }
         return try await APIClient.shared.get("/macro/\(market.rawValue)/sectors", query: query)
     }
-
-    static func sectorPools(market: StockMarket, universe: String, date: String) async throws -> RadarSectorPools {
-        try await APIClient.shared.get("/signal-radar/sector-pools", query: [
-            "market": market.rawValue, "universe": universe, "date": date, "mode": SignalMode.current(),
-        ])
-    }
 }

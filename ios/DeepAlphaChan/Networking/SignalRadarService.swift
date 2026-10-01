@@ -7,7 +7,7 @@ enum SignalRadarService {
     static func fetch(
         market: String, universe: String? = nil, refresh: Bool = false
     ) async throws -> SignalRadarResponse {
-        var query = ["market": market, "mode": SignalMode.current()]
+        var query = ["market": market, "mode": SignalMode.current(), "scope": "all"]
         if let universe, !universe.isEmpty { query["universe"] = universe }
         if refresh { query["refresh"] = "true" }
         return try await APIClient.shared.get("/signal-radar", query: query)
@@ -17,7 +17,7 @@ enum SignalRadarService {
     /// 随当前月份自动滚动；遇非交易日取之前最近交易日），真实数据，按所选 universe
     /// 计算（nil = 市场默认），可能返回 status=generating 需要轮询。
     static func demo(market: String, universe: String? = nil) async throws -> SignalRadarResponse {
-        var query = ["market": market, "mode": SignalMode.current()]
+        var query = ["market": market, "mode": SignalMode.current(), "scope": "all"]
         if let universe, !universe.isEmpty { query["universe"] = universe }
         return try await APIClient.shared.get("/signal-radar/demo", query: query)
     }
