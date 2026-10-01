@@ -1413,3 +1413,42 @@ class TestBackfillResumeAfterRestart:
         await scheduler._resume_orphan_backfills()
         assert calls == [("market", "us", "sp500", "strict"), ("demo", "hk", "hstech", "loose")]
         assert not any(k.startswith("signal_radar:generating") for k in redis.store), "接手后释放锁"
+
+
+class TestFactsOnlyPresentation:
+    """2026-10-01 起雷达只呈现事实：全部在场信号、按出现时间排；旧版 App 的前 N 在接口层现截。"""
+
+    @staticmethod
+    def _sig(sym, day, age=0, strength=0.5, level=2):
+        from app.schemas.signal_radar import RadarSignalOut
+
+        return RadarSignalOut(symbol=sym, name=sym, side="buy", label="二买", signal_type=f"buy{level}",
+                              date=day, price=1.0, strength=strength, bias="bullish",
+                              signal_strength="medium", confirmed=True, pivot_stage_depth=0.5, age_days=age)
+
+    def test_order_by_time_newest_first_then_symbol(self):
+        sigs = [self._sig("B", "2026-09-29"), self._sig("C", "2026-09-30"), self._sig("A", "2026-09-30")]
+        assert [s.symbol for s in svc.order_by_time(sigs)] == ["A", "C", "B"]
+
+    def test_sub_level_targets_prefers_fresh_and_caps(self, monkeypatch):
+        from app.schemas.signal_radar import RadarDayOut
+
+        monkeypatch.setattr(svc, "_SUB_LEVEL_MAX", 3)
+        old = [self._sig(f"OLD{i}", "2026-09-25", age=3, strength=0.8, level=3) for i in range(5)]
+        fresh = [self._sig(f"NEW{i}", "2026-09-30", age=0, strength=0.35, level=1) for i in range(2)]
+        day = RadarDayOut(date="2026-09-30", buy_count=7, sell_count=0, signals=old + fresh)
+        targets = svc.sub_level_targets(day, top_n=2)
+        assert {"NEW0", "NEW1"} <= targets, "当天新出现的信号先补算次级别"
+        assert len(targets) == 3
+
+    def test_legacy_view_cuts_each_day_to_top_n_without_touching_snapshot(self):
+        from app.schemas.signal_radar import RadarDayOut
+
+        sigs = [self._sig(f"S{i}", "2026-09-30", strength=0.3 + i / 100) for i in range(12)]
+        resp = svc.SignalRadarResponse(
+            market="us", universe="nasdaq100", etf_name="纳指", universe_size=100, as_of="2026-09-30",
+            top_n=10, status="ready",
+            days=[RadarDayOut(date="2026-09-30", buy_count=12, sell_count=0, signals=sigs)])
+        legacy = svc.legacy_view(resp, 5)
+        assert len(legacy.days[0].signals) == 5 and legacy.days[0].buy_count == 5
+        assert len(resp.days[0].signals) == 12, "快照本身不被改动"

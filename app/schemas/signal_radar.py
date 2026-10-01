@@ -14,8 +14,8 @@ class RadarSignalOut(BaseModel):
     signal_type: str = Field(description="买卖点类型：buy1/buy2/buy3/sell1/sell2/sell3")
     date: str = Field(description="信号出现日期 YYYY-MM-DD")
     price: float = Field(description="信号价位")
-    # 形态技术面强度（0~1）：由信号自身的 strong/medium/weak 标签折算，决定看板
-    # 满员时的淘汰排序（display_rank）。气泡大小由买卖点级别（一/二/三类）决定，
+    # 形态技术面强度（0~1）：由信号自身的 strong/medium/weak 标签折算，旧版 App 截取前 N 时
+    # 参与排序（display_rank）；新版 App 只按出现时间排。气泡大小由买卖点级别（一/二/三类）决定，
     # 颜色深浅由 signal_strength 决定（越强越深，与详情页买卖点「强/中/弱」一致）。
     strength: float = Field(description="形态技术面强度 0~1，决定看板淘汰排序")
     bias: str = Field(description="技术面倾向：bullish / bearish / neutral")
@@ -25,7 +25,7 @@ class RadarSignalOut(BaseModel):
     # （离开段/回抽确认/背驰转折）=深，见 app/services/chan/replay.py 按发生
     # 日期回溯的 pivot_phase_as_of。旧版 App 用它决定气泡深浅，新版改按 signal_strength，保留兼容。
     pivot_stage_depth: float = Field(description="信号发生当天的中枢阶段深浅 0~1（旧版 App 的气泡深浅）")
-    # 次级别确认（日线定方向 × 30 分钟找买卖点），只对最新交易日的入榜气泡补算；
+    # 次级别确认（日线定方向 × 30 分钟找买卖点），只对最新交易日的部分信号补算（见 service.sub_level_targets）；
     # 其余日期、补算失败或 30 分钟不可用时为 None。见 app/services/chan/sub_level.py。
     sub_level_verdict: str | None = Field(
         default=None,
@@ -42,7 +42,7 @@ class RadarSignalOut(BaseModel):
 
 
 class RadarExcludedOut(BaseModel):
-    """基本面排雷排除的一条信号（不上榜，名额由后面的信号递补）。"""
+    """基本面排雷排除的一条信号（2026-10-01 起不再排雷，恒为空，仅为旧版 App 兼容保留）。"""
 
     symbol: str
     name: str
@@ -54,7 +54,7 @@ class RadarExcludedOut(BaseModel):
 class RadarQuantFilterOut(BaseModel):
     """统计覆盖所选股票池，数量不是气泡数。
 
-    mode=marked：评级只展示；mode=screened：另按基本面排雷剔除信号（自选雷达不排雷）。
+    mode=marked：评级只展示（2026-10-01 起恒为 marked，不再排雷）。
     """
 
     mode: str = "marked"
@@ -67,11 +67,11 @@ class RadarQuantFilterOut(BaseModel):
     stale: int = 0
     max_age_days: int = 7
     preserve_sells: bool = False
-    excluded: list[RadarExcludedOut] = Field(default_factory=list, description="当天被基本面排雷排除的信号")
+    excluded: list[RadarExcludedOut] = Field(default_factory=list, description="已不再排雷，恒为空（旧版 App 兼容）")
 
 
 class RadarDayOut(BaseModel):
-    """某一交易日的当日信号快照（前 N 只）。"""
+    """某一交易日在场的信号快照。"""
 
     quant_filter: RadarQuantFilterOut | None = None
     date: str = Field(description="交易日 YYYY-MM-DD")
@@ -79,7 +79,7 @@ class RadarDayOut(BaseModel):
     sell_count: int = Field(description="当日卖点数量")
     signals: list[RadarSignalOut] = Field(
         default_factory=list,
-        description="当日上榜信号：每类先保底名额、其余按综合分（类型确定性 + 强弱 + 新鲜度 + 共振）取前 N，按综合分降序；"
+        description="当日在场的全部信号，按出现日期从新到旧（scope=all）；旧版 App（scope=top）为按旧综合分截取的前 N。"
                     "宽松口径下最后一笔上的信号也在这里，confirmed=false",
     )
     candidates: list[RadarSignalOut] = Field(
@@ -89,7 +89,7 @@ class RadarDayOut(BaseModel):
     )
     sector_counts: dict[str, dict[str, int]] = Field(
         default_factory=dict,
-        description="当天全部在场信号（排雷后、截取前 N 之前）按行业的买卖点数 {行业: {buy, sell}}；没有行业分类时为空",
+        description="当天全部在场信号按行业的买卖点数 {行业: {buy, sell}}；没有行业分类时为空",
     )
 
 
@@ -136,7 +136,7 @@ class SignalRadarResponse(BaseModel):
     etf_name: str = Field(description="当前 universe 展示名（标题用）")
     universe_size: int = Field(description="扫描的成分股数量")
     as_of: str = Field(description="数据生成时间 YYYY-MM-DD")
-    top_n: int = Field(description="每日展示的信号条数上限")
+    top_n: int = Field(description="旧版 App 每日展示的信号条数上限（scope=all 时不截取）")
     days: list[RadarDayOut] = Field(default_factory=list, description="最近交易日，最新在前")
     status: str = Field(default="ready", description="ready / generating（首次扫描进行中）")
     sub_level_as_of: str = Field(

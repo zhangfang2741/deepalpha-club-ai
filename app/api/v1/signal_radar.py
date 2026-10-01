@@ -1,6 +1,7 @@
 """信号雷达 API。
 
-扫描各市场科技 ETF 成分股跑缠论，返回最近若干交易日「每日买卖点前 N 只」。
+扫描各市场指数成分股跑缠论，返回最近若干交易日每天在场的全部买卖点（scope=all，新版 App，按出现时间排）；
+不带 scope 的旧版 App 仍按旧综合分截取每天前 N（service.legacy_view）。
 首次扫描较重（数十只 × 缠论），采用 stale-while-revalidate + generating 轮询：
 - 命中且新鲜 → 直接返回 ready；
 - 命中但陈旧（预热迟到/停摆）→ 先返回旧数据（ready），同时后台刷新，不让用户看空屏；
@@ -33,6 +34,7 @@ from app.services.signal_radar.service import (
     read_demo_cache,
     read_watchlist_cache,
     demo_lock_key,
+    legacy_view,
     scan_lock_key,
     sector_day,
     sector_pools,
@@ -73,6 +75,15 @@ def _generating_key(market: str, universe_key: str, mode: str = DEFAULT_MODE) ->
 
 
 _MODE_QUERY = Query(default=None, description="买卖点口径：loose（默认）/ strict，见 /chan/signal-modes")
+_SCOPE_QUERY = Query(
+    default="top", pattern="^(top|all)$",
+    description="all = 每天在场的全部信号、按出现时间排（新版 App）；top = 旧版 App，按旧综合分截取前 N",
+)
+
+
+def _scoped(resp: SignalRadarResponse, scope: str) -> SignalRadarResponse:
+    """按 scope 返回：all 原样（全部在场信号）；top 给旧版 App 截取前 N。"""
+    return resp if scope == "all" else legacy_view(resp, DEFAULT_TOP_N)
 
 
 async def _run_watchlist_scan(
@@ -95,6 +106,7 @@ async def _run_watchlist_scan(
 
 async def _watchlist_radar(
     market: str, user: User, db: AsyncSession, redis: Redis, refresh: bool, mode: str = DEFAULT_MODE,
+    scope: str = "top",
 ) -> SignalRadarResponse:
     """「自选」股票池：当前用户该市场的自选股；命中缓存直接返回，否则后台扫描并回 generating。"""
     items = [i for i in await list_items(db, user.id) if i.market == market]
@@ -111,7 +123,7 @@ async def _watchlist_radar(
         return empty("ready")  # 自选里还没有该市场的股票，前端提示去加入
     cached = await read_watchlist_cache(redis, market, user.id, watchlist, mode)
     if cached and (not refresh or _recently_computed(cached)):
-        return cached
+        return _scoped(cached, scope)
     # 原子抢锁：同一用户同一市场只跑一轮自选扫描（连点刷新、多端同时打开都不会叠加）
     gkey = _generating_key(market, f"{WATCHLIST_KEY}:u{user.id}", mode)
     if await acquire_lock(redis, gkey, _GENERATING_TTL):
@@ -207,6 +219,7 @@ async def signal_radar_demo(
         default=None, description="universe 键，如 nasdaq100 / sp500；缺省=该市场默认（科技指数）"
     ),
     mode: str | None = _MODE_QUERY,
+    scope: str = _SCOPE_QUERY,
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
 ) -> SignalRadarResponse:
@@ -229,7 +242,7 @@ async def signal_radar_demo(
     mode = normalize_mode(mode)
     cached = await read_demo_cache(redis, market, uni.key, mode)
     if cached is not None:
-        return cached
+        return _scoped(cached, scope)
 
     gkey = _demo_generating_key(market, uni.key, mode)
     if await acquire_lock(redis, gkey, _GENERATING_TTL):
@@ -260,6 +273,7 @@ async def signal_radar(
     ),
     refresh: bool = Query(default=False, description="强制重新扫描（后台）"),
     mode: str | None = _MODE_QUERY,
+    scope: str = _SCOPE_QUERY,
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
     db: AsyncSession = Depends(get_db),
@@ -267,7 +281,7 @@ async def signal_radar(
     """获取某 (市场, universe) 最近交易日的缠论买卖点雷达；universe=watchlist 为用户自选。"""
     mode = normalize_mode(mode)
     if universe == WATCHLIST_KEY and market in supported_markets():
-        return await _watchlist_radar(market, user, db, redis, refresh, mode)
+        return await _watchlist_radar(market, user, db, redis, refresh, mode, scope)
     uni = get_universe(market, universe)
     if uni is None:
         raise HTTPException(
@@ -300,13 +314,7 @@ async def signal_radar(
     # 有缓存就先返回（stale-while-revalidate）：哪怕正在后台刷新，也不让用户看空屏。
     # 只有真正冷启动（连一份旧缓存都没有）才回 generating，让前端轮询等待首扫。
     if cached is not None:
-        # 旧缓存可能仍有 15 只，响应时同步收窄，避免等待下一轮扫描才能生效。
-        cached.top_n = DEFAULT_TOP_N
-        for day in cached.days:
-            day.signals = day.signals[:DEFAULT_TOP_N]
-            day.buy_count = sum(signal.side == "buy" for signal in day.signals)
-            day.sell_count = sum(signal.side == "sell" for signal in day.signals)
-        return cached
+        return _scoped(cached, scope)
 
     return SignalRadarResponse(
         market=market,
