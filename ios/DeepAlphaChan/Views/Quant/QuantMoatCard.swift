@@ -1,75 +1,96 @@
 import SwiftUI
 
-/// 护城河卡片（Morningstar 框架）：宽 / 窄 / 无 + 趋势，一句财务证据，五种来源的强弱点阵。
-/// 点哪儿解释哪儿：评级 → 怎么评出来的；证据 → 历年回报率对比资金成本；每种来源 → 理由 + 年报原文。
+/// 护城河卡片（Morningstar 框架）：卡片只显示一行评级 + 趋势，点开弹出详情。
 struct QuantMoatCard: View {
     let moat: QuantMoat
     var isStatic = false
+    @State private var showingDetail = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            header
-            if moat.isOK {
-                if let ev = moat.evidence {
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(ev.text).font(QuantTypography.body).foregroundStyle(Theme.textPrimary.opacity(0.9))
-                            .fixedSize(horizontal: false, vertical: true)
-                        if !isStatic { QuantInfoMark() }
-                    }
-                    .quantExplain(L("财务证据：回报率是否长期高于资金成本"), enabled: !isStatic) {
-                        QuantMoatEvidenceExplanation(evidence: ev)
-                    }
+        if isStatic {
+            row
+        } else {
+            Button { showingDetail = true } label: { row }
+                .buttonStyle(.plain)
+                .accessibilityHint(L("查看护城河详情"))
+                .sheet(isPresented: $showingDetail) {
+                    QuantMoatSheet(moat: moat)
+                        .presentationDetents([.large])
                 }
-                VStack(spacing: 0) {
-                    ForEach(Array(moat.sources.enumerated()), id: \.element.id) { i, s in
-                        if i > 0 { Divider().overlay(Theme.border) }
-                        sourceRow(s)
-                    }
-                }
-                .padding(.horizontal, 10)
-                .background(Theme.surfaceAlt.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
-                if let threats = moat.threats, !threats.isEmpty {
-                    HStack(alignment: .top, spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle").font(QuantTypography.metadata)
-                            .foregroundStyle(Theme.segment).padding(.top, 2).accessibilityHidden(true)
-                        Text(L("主要威胁：") + threats).font(QuantTypography.metadata)
-                            .foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            } else if let note = moat.statusNote {
-                Text(note).font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var row: some View {
+        HStack(spacing: 10) {
+            QuantMoatHeader(moat: moat, explainable: false)
+            if !isStatic {
+                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.textSecondary).accessibilityHidden(true)
             }
-            footer
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
+        .contentShape(RoundedRectangle(cornerRadius: 16))
     }
+}
 
-    private var header: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "shield.lefthalf.filled").font(QuantTypography.title)
-                .foregroundStyle(QuantMoatStyle.color(moat.rating)).accessibilityHidden(true)
-            Text(L("护城河")).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
-            Spacer(minLength: 6)
-            if let name = moat.ratingName {
-                Text(name)
-                    .font(QuantTypography.emphasis).foregroundStyle(QuantMoatStyle.color(moat.rating))
-                    .padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(QuantMoatStyle.color(moat.rating).opacity(0.14), in: Capsule())
-                    .quantExplain(L("护城河评级怎么来的"), enabled: !isStatic) {
-                        QuantMoatRatingExplanation(moat: moat)
+/// 护城河详情（sheet）：一句财务证据，五种来源的强弱点阵，主要威胁。
+/// 点哪儿解释哪儿：评级 → 怎么评出来的；证据 → 历年回报率对比资金成本；每种来源 → 理由 + 年报原文。
+struct QuantMoatSheet: View {
+    let moat: QuantMoat
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    QuantMoatHeader(moat: moat, explainable: true)
+                    if moat.isOK {
+                        if let ev = moat.evidence {
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                Text(ev.text).font(QuantTypography.body).foregroundStyle(Theme.textPrimary.opacity(0.9))
+                                    .fixedSize(horizontal: false, vertical: true)
+                                QuantInfoMark()
+                            }
+                            .quantExplain(L("财务证据：回报率是否长期高于资金成本")) {
+                                QuantMoatEvidenceExplanation(evidence: ev)
+                            }
+                        }
+                        VStack(spacing: 0) {
+                            ForEach(Array(moat.sources.enumerated()), id: \.element.id) { i, s in
+                                if i > 0 { Divider().overlay(Theme.border) }
+                                sourceRow(s)
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .background(Theme.surfaceAlt.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
+                        if let threats = moat.threats, !threats.isEmpty {
+                            HStack(alignment: .top, spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle").font(QuantTypography.metadata)
+                                    .foregroundStyle(Theme.segment).padding(.top, 2).accessibilityHidden(true)
+                                Text(L("主要威胁：") + threats).font(QuantTypography.metadata)
+                                    .foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    } else if let note = moat.statusNote {
+                        Text(note).font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-            } else {
-                Text(moat.status == "pending" ? L("评估中") : L("暂未覆盖"))
-                    .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+                    footer
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
+                .padding(16)
             }
-            if let trend = moat.trendName {
-                Label(trend, systemImage: QuantMoatStyle.trendIcon(moat.trend))
-                    .labelStyle(.iconOnly).font(QuantTypography.metadata)
-                    .foregroundStyle(QuantMoatStyle.trendColor(moat.trend))
-                    .accessibilityLabel(trend)
+            .background(Theme.background)
+            .navigationTitle(L("护城河"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L("完成")) { dismiss() }
+                }
             }
         }
     }
@@ -82,15 +103,13 @@ struct QuantMoatCard: View {
             Text(s.strengthName).font(QuantTypography.metadata)
                 .foregroundStyle(s.dots >= 2 ? Theme.textPrimary : Theme.textSecondary)
                 .frame(minWidth: 18, alignment: .trailing)
-            if !isStatic {
-                Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Theme.textSecondary)
-                    .accessibilityHidden(true)
-            }
+            Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(Theme.textSecondary)
+                .accessibilityHidden(true)
         }
         .padding(.vertical, 9)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .quantExplain(s.name + " · " + s.strengthName, enabled: !isStatic) {
+        .quantExplain(s.name + " · " + s.strengthName) {
             QuantMoatSourceExplanation(source: s, filedDate: moat.filedDate)
         }
     }
@@ -99,10 +118,43 @@ struct QuantMoatCard: View {
         HStack(spacing: 4) {
             Text(moat.filedDate.map { L("只展示，不计入综合等级 · 依据 %@ 年报", $0) } ?? L("只展示，不计入综合等级"))
                 .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
-            if !isStatic { QuantInfoMark() }
+            QuantInfoMark()
         }
-        .quantExplain(L("护城河是怎么评的"), enabled: !isStatic) {
+        .quantExplain(L("护城河是怎么评的")) {
             QuantExplainText(text: moat.methodNote)
+        }
+    }
+}
+
+/// 标题行：盾牌 + 护城河 + 评级胶囊 + 趋势。卡片上整行可点，详情里评级胶囊单独可点开解释。
+private struct QuantMoatHeader: View {
+    let moat: QuantMoat
+    let explainable: Bool
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "shield.lefthalf.filled").font(QuantTypography.title)
+                .foregroundStyle(QuantMoatStyle.color(moat.rating)).accessibilityHidden(true)
+            Text(L("护城河")).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
+            Spacer(minLength: 6)
+            if let name = moat.ratingName {
+                Text(name)
+                    .font(QuantTypography.emphasis).foregroundStyle(QuantMoatStyle.color(moat.rating))
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(QuantMoatStyle.color(moat.rating).opacity(0.14), in: Capsule())
+                    .quantExplain(L("护城河评级怎么来的"), enabled: explainable) {
+                        QuantMoatRatingExplanation(moat: moat)
+                    }
+            } else {
+                Text(moat.status == "pending" ? L("评估中") : L("暂未覆盖"))
+                    .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+            }
+            if let trend = moat.trendName {
+                Label(trend, systemImage: QuantMoatStyle.trendIcon(moat.trend))
+                    .labelStyle(.iconOnly).font(QuantTypography.metadata)
+                    .foregroundStyle(QuantMoatStyle.trendColor(moat.trend))
+                    .accessibilityLabel(trend)
+            }
         }
     }
 }

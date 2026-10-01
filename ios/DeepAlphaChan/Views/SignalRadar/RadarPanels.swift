@@ -9,6 +9,8 @@ import SwiftUI
 /// 雷达页正在打开的面板。
 enum RadarPanel: Identifiable, Equatable {
     case environment
+    /// 选行业：顶部「行业」卡片打开，选了雷达只看该行业。
+    case sectorPicker
     case sector(String)
     case signals
     case signal(RadarSignal)
@@ -16,6 +18,7 @@ enum RadarPanel: Identifiable, Equatable {
     var id: String {
         switch self {
         case .environment: return "environment"
+        case .sectorPicker: return "sector-picker"
         case .sector(let key): return "sector-\(key)"
         case .signals: return "signals"
         case .signal(let s): return "signal-\(s.id)"
@@ -378,14 +381,29 @@ struct RadarSignalListSheet: View {
     let universeName: String
     let onOpenDetail: (RadarSignal) -> Void
 
-    @State private var side: String?
-    @State private var level: Int?
+    /// 当前筛选：nil = 全部；否则只看某一种买卖点（一买 / 二买 / 三买 / 一卖 / 二卖 / 三卖）。
+    @State private var kind: Kind?
     @Environment(\.dismiss) private var dismiss
 
-    private var filtered: [RadarSignal] {
-        context.day.signals.filter { s in
-            (side == nil || s.side == side) && (level == nil || s.level == level)
+    private struct Kind: Hashable {
+        let side: String
+        let level: Int
+
+        var title: String {
+            let i = max(0, min(level, 3) - 1)
+            return side == "buy" ? L(["一买", "二买", "三买"][i]) : L(["一卖", "二卖", "三卖"][i])
         }
+    }
+
+    private static let kinds: [Kind] = ["buy", "sell"].flatMap { side in (1...3).map { Kind(side: side, level: $0) } }
+
+    private func matches(_ s: RadarSignal, _ k: Kind?) -> Bool {
+        guard let k else { return true }
+        return s.side == k.side && s.level == k.level
+    }
+
+    private var filtered: [RadarSignal] {
+        context.day.signals.filter { matches($0, kind) }
     }
 
     var body: some View {
@@ -419,18 +437,17 @@ struct RadarSignalListSheet: View {
         .presentationDragIndicator(.visible)
     }
 
+    /// 一行单选：全部 / 一买 / 二买 / 三买 / 一卖 / 二卖 / 三卖，各带个数；当天没有的那种不显示。
     private var filters: some View {
-        let buys = context.day.signals.filter(\.isBuy).count
-        let sells = context.day.signals.count - buys
-        return ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                chip(L("全部"), on: side == nil) { side = nil }
-                chip(L("买 %lld", buys), on: side == "buy") { side = side == "buy" ? nil : "buy" }
-                chip(L("卖 %lld", sells), on: side == "sell") { side = side == "sell" ? nil : "sell" }
-                Rectangle().fill(Theme.border).frame(width: 1, height: 16).padding(.horizontal, 2)
-                chip(L("一类"), on: level == 1) { level = level == 1 ? nil : 1 }
-                chip(L("二类"), on: level == 2) { level = level == 2 ? nil : 2 }
-                chip(L("三类"), on: level == 3) { level = level == 3 ? nil : 3 }
+                chip(L("全部 %lld", context.day.signals.count), on: kind == nil) { kind = nil }
+                ForEach(Self.kinds, id: \.self) { k in
+                    let n = context.day.signals.filter { matches($0, k) }.count
+                    if n > 0 {
+                        chip("\(k.title) \(n)", on: kind == k) { kind = kind == k ? nil : k }
+                    }
+                }
             }
         }
     }

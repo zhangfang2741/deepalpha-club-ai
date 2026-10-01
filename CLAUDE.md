@@ -272,7 +272,7 @@ deepalpha-club-ai/
 - 宽松口径（`generate_loose_signals`，线上旧版 App 使用）的对应行为：最后一笔上的信号**留在 `signals`、
   标 `confirmed=false`**（不产出候选，`candidate_signals` 恒空，雷达 `candidates` 也恒空）；
   `detected_time` = czsc 事件亮起的那根K线，不推后到下一笔走完。下面「只落在已完成的笔上」
-  「成立日 = 下一笔走完」两条**仅严格口径**。
+  「成立日 = 下一笔首次成笔」两条**仅严格口径**。
 - czsc 一类信号是持续多根K线的「状态」，在切换为买卖点时记一次事件，绑定当时最后一笔；
   按（类型, 笔终点）去重。二 / 三类的检测时间取所属笔完成的那根K线（扫描时逐根记录
   `stroke_done_at`，不回看未来）。
@@ -281,10 +281,12 @@ deepalpha-club-ai/
 - **只落在已完成的笔上**（仅严格口径；`policy.split_unconfirmed` 在 `_mark_confirmations` 之后拆分）：最后一笔还在走，端点
   可能延伸甚至回到中枢，其上的买卖点尚不成立，不作为买卖点输出，而是放进
   `ChanAnalysisResult.candidate_signals`。雷达最新一天用它们补足剩余名额（`RadarDayOut.candidates`，
-  `pick_candidates`），App 画成灰色虚线「待确认」气泡、不计入买点 / 卖点数——**不要**把候选
+  `pick_candidates`），App 雷达只在上方显示「待确认」个数、不画气泡，详情页图上画成灰色虚线徽标，都不计入买点 / 卖点数——**不要**把候选
   混回 `signals`，也不要让它们占真实买卖点的名额。
-- **成立日 = 下一笔走完**（仅严格口径）：`detected_time` 不早于所在笔的下一笔完成的那根K线（`stroke_done_at`）。
-  用更早的「亮起日」会让历史雷达日提前看到未来才成立的信号、最新日又因太早被判过期进不了雷达。
+- **成立日 = 下一笔首次成笔**（仅严格口径，std5 起）：`detected_time` 取从所在笔终点出发的下一笔**第一次成笔**的那根K线
+  （`stroke_started_at`，czsc 逐根推进记录；缠论里一笔由后一笔确认），不早于事件亮起日。**不要**改回「下一笔整段走完」
+  （`stroke_done_at` 下一笔最终版本，std4）：下一笔一路延伸时成立日跟着往后推，实测中位滞后 10 个交易日、P75 19 天，
+  改后中位 6 天、P75 8 天。也不要用更早的「亮起日」：历史雷达日会提前看到未来才成立的信号。
 - **展示日期两边一致**：雷达气泡日期 = `detected_time`；详情接口 `SignalOut.detected_time` 同值（日线纯日期、
   分钟线带时分），App 列表 / 结论卡 / 次级别列表显示它，图上标记仍画在 `time`（所属笔终点，极值K线，
   通常在出现日左侧几根）。守护测试 `tests/services/chan/test_signal_out.py`。

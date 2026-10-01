@@ -153,9 +153,10 @@ final class SignalRadarViewModel: ObservableObject {
         return day.filtered(sector: key)
     }
 
-    /// 顶部「行业」卡片选中的行业 key；nil = 全部行业。切市场 / 指数时清空。
+    /// 顶部「行业」的筛选：nil = 全部行业（默认）。切市场 / 指数时回到全部行业。
     @Published private(set) var sectorFilter: String?
 
+    /// 用户在行业面板里选：nil = 全部行业。
     func setSectorFilter(_ key: String?) {
         guard key != sectorFilter else { return }
         sectorFilter = key

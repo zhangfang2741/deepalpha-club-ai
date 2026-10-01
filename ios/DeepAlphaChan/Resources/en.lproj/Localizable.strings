@@ -918,6 +918,7 @@
 
 /* 量化研究：点哪儿解释哪儿 */
 "查看解释" = "View explanation";
+"查看护城河详情" = "View moat details";
 "点任意等级可查看评分标准。" = " Tap any grade to see how it was reached.";
 "约前 20%：在同板块里明显领先" = "About the top 20%: clearly ahead of sector peers";
 "前 20% ~ 40%：好于多数同行" = "Top 20%–40%: better than most peers";
@@ -1135,3 +1136,8 @@
 "角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。" = "Badges: \"Resonance\" = daily direction agrees with 30-minute; \"New\" = first appeared that day.";
 "只显示已成立的买卖点：所在的笔已经走完，并且下一笔也走完了才算，所以会比价格转折晚几天出现。最后一笔还在走时出现的只算「待确认」，在雷达上方显示个数，不画进雷达。" = "Only established signals are shown: the stroke they sit on and the next stroke must both be complete, so they appear a few days after the turn. Signals on the still-moving last stroke count as \"pending\" — shown as a count above the radar, not drawn.";
 "基本面评级只标在气泡上，不参与筛选；画不下的气泡点「查看全部」可看全部。" = "Fundamental grades are labels only, never filters; tap \"See all\" for bubbles that don’t fit.";
+"雷达显示全部行业的信号" = "Show signals from all sectors on the radar";
+"查看全部信号" = "See all signals";
+"7天内" = "Within 7 days";
+"全部 %lld" = "All %lld";
+"三卖" = "3rd sell";

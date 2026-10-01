@@ -160,9 +160,11 @@ enum SectorRadarLayout {
     ///   （最新的在前），所以扇区里越靠里越新；
     /// - 候选位置要在画布内、不压到禁区（扇区标签、指数切换器）、与已放的气泡重叠不超过 overlapRatio；
     ///   一个扇区找不到位置就停，余下的计入「+N」。
+    /// - radiusRange 只在这段归一化半径里摆；existing 是之前已摆好的气泡（只避让、不在返回值里）。
     static func pack(
         plan: (wedges: [Wedge], slots: [Slot]), diameters: [Double], width w: Double, height h: Double,
-        hRad: Double, vRad: Double, edge: Double, obstacles: [Rect], outwardOnly: Bool = true
+        hRad: Double, vRad: Double, edge: Double, obstacles: [Rect], outwardOnly: Bool = true,
+        radiusRange: ClosedRange<Double>? = nil, existing: [Placement] = []
     ) -> (wedges: [Wedge], placements: [Placement]) {
         let meanRadius = ((hRad * hRad + vRad * vRad) / 2).squareRoot()
         guard meanRadius > 0 else { return (plan.wedges.map { $0.with(shown: 0) }, []) }
@@ -177,8 +179,9 @@ enum SectorRadarLayout {
             let size = max(ds.max() ?? 44, 1) / meanRadius
             let step = size * 0.4
             var list: [(angle: Double, radius: Double)] = []
-            var r = packInnerRadius
-            while r <= 1.0 + 1e-9 {
+            // radiusRange：只在这一圈带里摆（同心环按时间分带：当日 / 3 天内 / 7 天内）
+            var r = radiusRange?.lowerBound ?? packInnerRadius
+            while r <= (radiusRange?.upperBound ?? 1.0) + 1e-9 {
                 let usable = wedge.halfWidth * 0.92
                 let across = Int((2 * usable * r) / (size * 0.6))
                 if across <= 0 {
@@ -200,7 +203,8 @@ enum SectorRadarLayout {
                 let nx = min(max(x, o.x), o.x + o.width), ny = min(max(y, o.y), o.y + o.height)
                 if hypot(x - nx, y - ny) < d / 2 + obstacleMargin { return false }
             }
-            for p in placed {
+            // existing：之前几圈带已摆好的气泡，同样不能压
+            for p in existing + placed {
                 let need = (d + p.diameter) / 2 + bubbleGap - overlapRatio * min(d, p.diameter)
                 if hypot(x - p.x, y - p.y) < need { return false }
             }

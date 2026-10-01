@@ -6,6 +6,8 @@ struct SectorRadarContext {
     let date: String
     let counts: [String: [String: Int]]
     let selectedKey: String?
+    /// 当天全部买卖点数（含没有行业标签的），给「全部行业」一行用；nil 时按各行业相加。
+    var totals: (buy: Int, sell: Int)?
 }
 
 /// 行业弹层：各行业按相对大盘强弱从强到弱，每行带状态色点、强弱、当前雷达选中日的买卖点数。
@@ -17,15 +19,19 @@ struct SectorBoardSheet: View {
     let date: String?
     let radar: SectorRadarContext?
     let onPick: (_ key: String, _ name: String) -> Void
+    /// 选「全部行业」（取消筛选）；nil 时不显示这一行。
+    var onClear: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            SectorBoardList(market: market, date: date, parent: nil, parentName: nil, radar: radar) { key, name in
-                onPick(key, name)
-                dismiss()
-            }
+            SectorBoardList(market: market, date: date, parent: nil, parentName: nil, radar: radar,
+                            onPick: { key, name in
+                                onPick(key, name)
+                                dismiss()
+                            },
+                            onClear: onClear.map { clear in { clear(); dismiss() } })
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { Button(L("关闭")) { dismiss() } }
             }
@@ -42,19 +48,21 @@ struct SectorBoardList: View {
     let parentName: String?
     let radar: SectorRadarContext?
     let onPick: (_ key: String, _ name: String) -> Void
+    let onClear: (() -> Void)?
 
     @State private var board: SectorBoard?
     @State private var failed = false
 
     /// 显式 init：有 private 的 @State，自动生成的成员初始化器只在本文件可见，雷达的行业面板要从别处推进来。
     init(market: StockMarket, date: String?, parent: String?, parentName: String?, radar: SectorRadarContext?,
-         onPick: @escaping (_ key: String, _ name: String) -> Void) {
+         onPick: @escaping (_ key: String, _ name: String) -> Void, onClear: (() -> Void)? = nil) {
         self.market = market
         self.date = date
         self.parent = parent
         self.parentName = parentName
         self.radar = radar
         self.onPick = onPick
+        self.onClear = onClear
     }
 
     /// 右侧下钻列宽（没有细分的行同样留出，保证各行强弱值对齐）。
@@ -65,6 +73,7 @@ struct SectorBoardList: View {
             VStack(alignment: .leading, spacing: 18) {
                 if let board, !board.sectors.isEmpty {
                     summary(board)
+                    if parent == nil, let radar, let onClear { allRow(radar, onClear: onClear) }
                     let maxAbs = max(board.sectors.compactMap { $0.rsVsMarket.map(abs) }.max() ?? 0, 0.0001)
                     let ahead = board.sectors.filter { ($0.rsVsMarket ?? -1) >= 0 }
                     let behind = board.sectors.filter { ($0.rsVsMarket ?? -1) < 0 }
@@ -136,6 +145,38 @@ struct SectorBoardList: View {
         .font(.caption2)
         .foregroundColor(Theme.textSecondary)
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// 最上面一行「全部行业」：取消筛选，雷达回到全部信号。
+    private func allRow(_ radar: SectorRadarContext, onClear: @escaping () -> Void) -> some View {
+        let buys = radar.totals?.buy ?? radar.counts.values.reduce(0) { $0 + ($1["buy"] ?? 0) }
+        let sells = radar.totals?.sell ?? radar.counts.values.reduce(0) { $0 + ($1["sell"] ?? 0) }
+        let selected = radar.selectedKey == nil
+        return Button(action: onClear) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(L("全部行业")).font(.body.weight(.semibold)).foregroundColor(Theme.textPrimary)
+                        if selected {
+                            Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
+                        }
+                    }
+                    HStack(spacing: 6) {
+                        Text(L("%lld 买", buys)).foregroundColor(Theme.up)
+                        Text(L("%lld 卖", sells)).foregroundColor(Theme.down)
+                    }
+                    .font(.caption.monospacedDigit())
+                }
+                Spacer(minLength: 8)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(selected ? Theme.accent.opacity(0.12) : Theme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(L("雷达显示全部行业的信号"))
     }
 
     // MARK: - 分组与行

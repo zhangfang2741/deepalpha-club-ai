@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 雷达页顶部：市场分段控件 + 「大盘环境 › 最强行业 › 当日信号」三张横向卡片，自上而下的一条线：
+/// 雷达页顶部：市场分段控件 + 「大盘环境 › 行业」两张横向卡片，往下就是雷达，自上而下的一条线：
 /// 环境友不友好 → 钱往哪个行业走 → 哪些股票出现了结构信号。
 ///
 /// 三格都只陈列事实，点开是底部面板（留在雷达页，见 RadarPanels）：环境 = 宏观状态 + 情绪；
@@ -22,13 +22,11 @@ struct MarketHeader: View {
             }
             .pickerStyle(.segmented)
 
-            // 三张卡片横排、卡片之间一个「›」：大盘环境 → 最强行业 → 当日信号，一步步往下看
+            // 两张卡片横排、中间一个「›」：大盘环境 → 行业，往下就是雷达
             HStack(spacing: 2) {
                 environmentTile
                 stepArrow
                 sectorTile
-                stepArrow
-                signalsTile
             }
         }
         .task { panicVM.onAppear() }
@@ -89,77 +87,34 @@ struct MarketHeader: View {
             .sorted { ($0.rsVsMarket ?? -.infinity) > ($1.rsVsMarket ?? -.infinity) }
     }
 
-    /// 行业卡片：点开是下拉菜单——全部行业 / 各行业（从强到弱，带相对大盘强弱与当日信号数）；
-    /// 选了哪个行业，雷达与「当日信号」就只看这个行业（radarVM.sectorFilter）。
+    /// 行业卡片：点开选行业面板（行业强弱列表 + 「全部行业」），选了哪个行业雷达就只看这个行业
+    /// （radarVM.sectorFilter）。默认「全部行业」，副标题写最强的行业。
     private var sectorTile: some View {
-        let rows = sectorRows
-        let day = radarVM.baseSelectedDay
-        let canPick = !rows.isEmpty && day?.hasSectorData == true
+        let rows = radarVM.selectedSectorBoard?.sectors ?? []
+        let canPick = !rows.isEmpty && radarVM.baseSelectedDay?.hasSectorData == true
         let selected = radarVM.sectorFilter.flatMap { key in rows.first { $0.key == key } }
-        return Menu {
-            Button {
-                radarVM.setSectorFilter(nil)
-            } label: {
-                if radarVM.sectorFilter == nil { Label(L("全部行业"), systemImage: "checkmark") } else { Text(L("全部行业")) }
-            }
-            Divider()
-            ForEach(rows) { row in
-                Button {
-                    radarVM.setSectorFilter(row.key)
-                } label: {
-                    let text = "\(row.name)  \(SectorBoardList.rsText(row.rsVsMarket)) · \(L("%lld 个", day?.signalCount(sector: row.key) ?? 0))"
-                    if row.key == radarVM.sectorFilter { Label(text, systemImage: "checkmark") } else { Text(text) }
-                }
-            }
-            Divider()
-            Button(L("行业强弱详情"), systemImage: "chart.bar.xaxis") {
-                if let key = radarVM.sectorFilter ?? rows.first?.key { onOpen(.sector(key)) }
-            }
-        } label: {
-            tileBody(step: 2, title: L("行业"), trailingIcon: canPick ? "chevron.up.chevron.down" : nil) {
-                if let selected {
-                    Text(selected.name)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(Theme.accent)
-                        .minimumScaleFactor(0.8)
-                    Text(L("相对大盘 %@", SectorBoardList.rsText(selected.rsVsMarket)))
-                        .font(.system(size: 10).monospacedDigit())
-                        .foregroundColor((selected.rsVsMarket ?? 0) >= 0 ? Theme.up : Theme.down)
-                } else if let lead = leadingSector {
-                    Text(L("全部行业"))
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(Theme.textPrimary)
-                    Text(L("最强 %@ %@", lead.name, SectorBoardList.rsText(lead.rs)))
-                        .font(.system(size: 10).monospacedDigit())
-                        .foregroundColor(Theme.textSecondary)
-                } else if let overview, !overview.available {
-                    buildingText
-                } else if overview != nil {
-                    preparingText
-                } else {
-                    loadingOrRetry(failed: overviewVM.failedMarkets.contains(market)) { overviewVM.retry(market) }
-                }
-            }
-        }
-        .buttonStyle(TilePressStyle())
-        .disabled(!canPick)
-        .accessibilityLabel(L("选择行业"))
-    }
-
-    private var signalsTile: some View {
-        let day = radarVM.selectedDay
-        return tile(step: 3, title: L("当日信号"), enabled: day != nil, action: { onOpen(.signals) }) {
-            if let day {
-                Text(L("%lld 个", day.signals.count))
-                    .font(.system(size: 14, weight: .bold).monospacedDigit())
+        return tile(step: 2, title: L("行业"), enabled: canPick, action: { onOpen(.sectorPicker) }) {
+            if let selected {
+                Text(selected.name)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(Theme.accent)
+                    .minimumScaleFactor(0.8)
+                Text(L("相对大盘 %@", SectorBoardList.rsText(selected.rsVsMarket)))
+                    .font(.system(size: 10).monospacedDigit())
+                    .foregroundColor((selected.rsVsMarket ?? 0) >= 0 ? Theme.up : Theme.down)
+            } else if let lead = leadingSector {
+                Text(L("全部行业"))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundColor(Theme.textPrimary)
-                HStack(spacing: 4) {
-                    Text(L("%lld 买", day.buyCount)).foregroundColor(Theme.up)
-                    Text(L("%lld 卖", day.sellCount)).foregroundColor(Theme.down)
-                }
-                .font(.system(size: 10).monospacedDigit())
+                Text(L("最强 %@ %@", lead.name, SectorBoardList.rsText(lead.rs)))
+                    .font(.system(size: 10).monospacedDigit())
+                    .foregroundColor(Theme.textSecondary)
+            } else if let overview, !overview.available {
+                buildingText
+            } else if overview != nil {
+                preparingText
             } else {
-                Text("--").font(.system(size: 14, weight: .bold)).foregroundColor(Theme.textSecondary)
+                loadingOrRetry(failed: overviewVM.failedMarkets.contains(market)) { overviewVM.retry(market) }
             }
         }
     }
@@ -190,11 +145,11 @@ struct MarketHeader: View {
         .disabled(!enabled)
     }
 
-    /// 卡片外观。最后一步（当日信号）用主题色描边，作为落点；trailingIcon 标出点了会怎样（打开面板 / 下拉选择）。
+    /// 卡片外观。最后一步（行业）用主题色描边，作为落点；trailingIcon 标出点了会怎样（打开面板 / 下拉选择）。
     private func tileBody<Content: View>(
         step: Int, title: String, trailingIcon: String?, @ViewBuilder content: () -> Content
     ) -> some View {
-        let isLast = step == 3
+        let isLast = step == 2
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 2) {
                 Text(title)
