@@ -82,11 +82,12 @@ class MacdAreaMetric:
     """缠论原文：c 段 MACD 面积小于 b 段即背驰（价格创新极值由调用方保证）。"""
     name: str = "macd_area"
 
-    # 阈值取自 51 只美股日线（2023-01 ~ 2026-09）85 个一类信号的面积比三分位（0.14 / 0.33），取整
+    # 阈值取自 51 只美股日线（2023-01 ~ 2026-09）73 个一类信号的面积比三分位（0.14 / 0.41），取整；
+    # 注意：c 段含离开笔之后重新标定过（旧版 c 段被砍短，分布偏低）
     def classify(self, primary_ratio: float) -> Literal["strong", "medium", "weak", "none"]:
         if primary_ratio >= 1.0:
             return "none"
-        return "strong" if primary_ratio < 0.15 else "medium" if primary_ratio < 0.35 else "weak"
+        return "strong" if primary_ratio < 0.15 else "medium" if primary_ratio < 0.40 else "weak"
 
     def compare(self, c: LegForce, b: LegForce) -> LegComparison | None:
         if c.area is None or b.area is None or b.area <= 0 or b.price <= 0:

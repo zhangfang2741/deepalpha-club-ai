@@ -102,6 +102,32 @@ fn dp_pivots(bis: &[BI]) -> Vec<DpPivot> {
         .collect()
 }
 
+/// 离开中枢 [lo, hi] 的那一笔：[start, end] 内最后一笔「与区间有重叠、沿趋势方向、终点越过区间边界」的笔
+/// （买：向下且终点 < lo；卖：向上且终点 > hi）。czsc 会把离开笔吸收进中枢，所以不能拿中枢最后一个元素当离开点。
+/// 高低点用两端分型价（与 Python Stroke.high / low 同口径）。
+fn dp_exit_stroke(
+    bis: &[BI],
+    lo: f64,
+    hi: f64,
+    is_buy: bool,
+    start: chrono::DateTime<chrono::Utc>,
+    end: chrono::DateTime<chrono::Utc>,
+) -> Option<usize> {
+    bis.iter()
+        .enumerate()
+        .filter(|(_, x)| {
+            let (h, l) = (x.fx_a.fx.max(x.fx_b.fx), x.fx_a.fx.min(x.fx_b.fx));
+            x.fx_a.dt >= start
+                && x.fx_b.dt <= end
+                && l <= hi
+                && h >= lo
+                && (x.direction == Direction::Down) == is_buy
+                && if is_buy { x.fx_b.fx < lo } else { x.fx_b.fx > hi }
+        })
+        .map(|(k, _)| k)
+        .next_back()
+}
+
 fn dp_ema(values: &[f64], period: usize) -> Vec<f64> {
     let mut out = Vec::with_capacity(values.len());
     let k = 2.0 / (period as f64 + 1.0);
@@ -196,35 +222,32 @@ pub fn dp_trend_legs_v261001(c: &CZSC, _params: &ParamView, _cache: &mut TaCache
     let tag = if is_buy { "买趋势" } else { "卖趋势" };
     let none = || make_kline_signal_v3(&k1, k2, k3, tag, "无", "无");
 
-    // b 段：A 的最后一笔（离开笔）起，到进入 B 之前
+    // b 段：离开 A 的那一笔起，到进入 B；c 段：离开 B 的那一笔起，到信号笔终点（都含各自的离开笔）
     let entry = bis[b.s].fx_a.dt;
-    let a_exit_start = bis[a.e - 1].fx_a.dt;
-    let b_leg: Vec<BI> = bis
-        .iter()
-        .filter(|x| x.fx_a.dt >= a_exit_start && x.fx_b.dt <= entry)
-        .cloned()
-        .collect();
-    if b_leg.is_empty() || (b_leg[b_leg.len() - 1].fx_b.fx < b_leg[0].fx_a.fx) != is_buy {
-        return none();
-    }
-    // c 段：B 内最后一个在信号笔起点之前结束的笔的终点起，到信号笔终点
-    let sig_start = last.fx_a.dt;
-    let Some(c_from) = bis[b.s..b.e]
-        .iter()
-        .map(|x| x.fx_b.dt)
-        .filter(|t| *t <= sig_start)
-        .max()
-    else {
+    let end = last.fx_b.dt;
+    let Some(k_b) = dp_exit_stroke(bis, a.zd, a.zg, is_buy, bis[a.s].fx_a.dt, entry) else {
         return none();
     };
-    let end = last.fx_b.dt;
-    let c_leg: Vec<BI> = bis
+    let Some(k_c) = dp_exit_stroke(bis, b.zd, b.zg, is_buy, entry, end) else {
+        return none();
+    };
+    let b_leg: Vec<BI> = bis
         .iter()
-        .filter(|x| x.fx_a.dt >= c_from && x.fx_b.dt <= end)
+        .filter(|x| x.fx_a.dt >= bis[k_b].fx_a.dt && x.fx_b.dt <= entry)
         .cloned()
         .collect();
-    if c_leg.is_empty() {
+    let c_leg: Vec<BI> = bis
+        .iter()
+        .filter(|x| x.fx_a.dt >= bis[k_c].fx_a.dt && x.fx_b.dt <= end)
+        .cloned()
+        .collect();
+    if b_leg.is_empty() || c_leg.is_empty() || (b_leg[b_leg.len() - 1].fx_b.fx < b_leg[0].fx_a.fx) != is_buy {
         return none();
+    }
+    // 背驰的前提是价格创新极值：信号价要越过 b 段终点（买：更低，卖：更高），否则不是一类
+    let b_end = b_leg[b_leg.len() - 1].fx_b.fx;
+    if (is_buy && price >= b_end) || (!is_buy && price <= b_end) {
+        return other();
     }
     let closes: Vec<f64> = c.bars_raw.iter().map(|x| x.close).collect();
     let bar = dp_macd_bar(&closes);
