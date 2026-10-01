@@ -515,7 +515,7 @@ class TestSubLevelRefresh:
     """共振标记独立刷新：盘中每 30 分钟只重算最新一天入榜气泡的次级别，写回快照保留原 TTL。"""
 
     def _snapshot(self, day: str = "2026-09-24"):
-        from app.schemas.signal_radar import RadarDayOut, RadarSignalOut, SignalRadarResponse
+        from app.schemas.signal_radar import RadarDayOut, RadarSignalOut
 
         def sig(sym):
             return RadarSignalOut(symbol=sym, name=sym, side="sell", label="二卖", signal_type="sell2",
@@ -539,7 +539,6 @@ class TestSubLevelRefresh:
     async def test_refresh_updates_verdicts_and_keeps_ttl(self, monkeypatch):
         from datetime import UTC, datetime
 
-        from app.schemas.signal_radar import SignalRadarResponse
 
         redis = _FakeRedis()
         key = svc._cache_key("us", "nasdaq100")
@@ -550,7 +549,7 @@ class TestSubLevelRefresh:
         now = datetime(2026, 9, 24, 15, 0, tzinfo=UTC)
         assert await svc.refresh_sub_levels("us", "nasdaq100", redis=redis, now=now) is True
 
-        data = SignalRadarResponse.model_validate_json(redis.store[key])
+        data = svc.unpack_snapshot(redis.store[key])
         assert {s.sub_level_verdict for s in data.days[0].signals} == {"resonance_sell"}
         assert data.sub_level_as_of == "2026-09-24T15:00:00+00:00"
         assert redis.ttls[key] == 1000  # 保留原 TTL，不打乱「陈旧」判断与全量预热节奏
@@ -559,7 +558,6 @@ class TestSubLevelRefresh:
         """补算期间全量预热写入了新一天的快照：不能用旧气泡覆盖它。"""
         from datetime import UTC, datetime
 
-        from app.schemas.signal_radar import SignalRadarResponse
 
         redis = _FakeRedis()
         key = svc._cache_key("us", "nasdaq100")
@@ -572,7 +570,7 @@ class TestSubLevelRefresh:
         self._patch(monkeypatch, on_sub=replace)
         now = datetime(2026, 9, 25, 15, 0, tzinfo=UTC)
         assert await svc.refresh_sub_levels("us", "nasdaq100", redis=redis, now=now) is False
-        assert SignalRadarResponse.model_validate_json(redis.store[key]).days[0].date == "2026-09-25"
+        assert svc.unpack_snapshot(redis.store[key]).days[0].date == "2026-09-25"
 
     async def test_refresh_without_cache_is_noop(self):
         assert await svc.refresh_sub_levels("us", "nasdaq100", redis=_FakeRedis()) is False
@@ -1209,7 +1207,7 @@ class TestBackfillFailedConstituents:
         monkeypatch.setattr(svc, "_RATE_LIMIT_BACKOFF_SECONDS", 0)
 
     def _cached_symbols(self, redis) -> set[str]:
-        resp = SignalRadarResponse.model_validate_json(redis.store[svc._cache_key("us", "nasdaq100")])
+        resp = svc.unpack_snapshot(redis.store[svc._cache_key("us", "nasdaq100")])
         return {s.symbol for d in resp.days for s in d.signals}
 
     async def test_failed_symbols_backfilled_into_cache(self, monkeypatch):
@@ -1222,7 +1220,7 @@ class TestBackfillFailedConstituents:
 
         await svc.wait_backfills()
         assert "TSLA" in self._cached_symbols(redis), "补算成功后快照里要有 TSLA"
-        cached = SignalRadarResponse.model_validate_json(redis.store[svc._cache_key("us", "nasdaq100")])
+        cached = svc.unpack_snapshot(redis.store[svc._cache_key("us", "nasdaq100")])
         assert cached.pending_symbols == 0
         assert scanned.count("TSLA") == 3 and scanned.count("AAPL") == 1, "只重试失败的，成功的不重拉"
 
@@ -1339,7 +1337,7 @@ class TestDemoBackfill:
         assert resp.pending_symbols == 1 and redis.ttls[key] == svc._DEMO_DEGRADED_CACHE_TTL
 
         await svc.wait_backfills()
-        cached = SignalRadarResponse.model_validate_json(redis.store[key])
+        cached = svc.unpack_snapshot(redis.store[key])
         assert cached.pending_symbols == 0 and "S0" in {s.symbol for s in cached.days[0].signals}
         assert redis.ttls[key] == svc._DEMO_CACHE_TTL
         assert tries["S0"] == 2 and tries["S1"] == 1
@@ -1481,3 +1479,39 @@ async def test_watchlist_snapshot_carries_sector_tags(monkeypatch):
     state.results["NVDA"] = ([_raw("NVDA", "2026-09-30", "buy", 0.8, level=2)], [], ["2026-09-30"])
     day = (await svc._assemble(state, redis=None)).days[0]
     assert day.signals[0].sector == "semiconductors"
+
+
+class TestSnapshotCompression:
+    """快照存全部在场信号后标普 500 约 1MB：写 Redis 前 zlib 压缩（Upstash 单次请求上限 1MB），旧的明文 JSON 仍可读。"""
+
+    @staticmethod
+    def _resp(n: int):
+        from app.schemas.signal_radar import RadarDayOut, RadarSignalOut
+
+        sig = RadarSignalOut(symbol="NVDA", name="NVIDIA", side="buy", label="二买", signal_type="buy2",
+                             date="2026-09-30", price=1.0, strength=0.5, bias="bullish",
+                             signal_strength="medium", confirmed=True, pivot_stage_depth=0.5, sector="semiconductors")
+        days = [RadarDayOut(date="2026-09-30", buy_count=n, sell_count=0, signals=[sig] * n) for _ in range(30)]
+        return svc.SignalRadarResponse(market="us", universe="sp500", etf_name="标普500", universe_size=503,
+                                       as_of="2026-09-30", top_n=10, days=days, status="ready")
+
+    def test_pack_round_trip_and_much_smaller(self):
+        resp = self._resp(100)
+        packed = svc.pack_snapshot(resp)
+        assert isinstance(packed, bytes)
+        assert len(packed) < len(resp.model_dump_json()) / 5
+        assert svc.unpack_snapshot(packed) == resp
+
+    def test_unpack_reads_legacy_plain_json(self):
+        resp = self._resp(3)
+        raw = resp.model_dump_json()
+        assert svc.unpack_snapshot(raw) == resp
+        assert svc.unpack_snapshot(raw.encode()) == resp
+
+    async def test_write_then_read_cache_uses_compression(self):
+        redis = _FakeRedis()
+        resp = self._resp(5)
+        await svc._write_cache(redis, resp)
+        stored = redis.store[svc._cache_key("us", "sp500")]
+        assert isinstance(stored, bytes) and not stored.startswith(b"{")
+        assert await svc._read_cache(redis, "us", "sp500") == resp
