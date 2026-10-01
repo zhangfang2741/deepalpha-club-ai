@@ -2,6 +2,8 @@
 
 排雷（不做回测，规则少而硬，只看与一两周信号相关的维度，动量 / 估值不参与）：
 - 买点：盈利能力 F（公司本身在亏钱 / 利润质量垫底）或 EPS 修正 F（一致预期被大幅下调）→ 不上榜；
+  豁免：盈利能力 F 但 EPS 修正 ≥ B（报表还差、预期在上调的反转股，如 LITE）不算雷——盈利能力回头看、
+  修正向前看，两者冲突时证据不确定，按「宁可漏拦不误杀」放行；
 - 卖点：EPS 修正 A+（一致预期被大幅上调）→ 不上榜。盈利能力强不说明卖点不成立，卖点不看它。
 评级缺失、过期或查询失败一律不排除；自选雷达不排雷（只标注）。改规则须升 service._mode_ns 的 quant 版本。
 """
@@ -24,11 +26,13 @@ MAX_AGE_DAYS = 7
 # _mode_ns 的 quant 版本，否则旧缓存里的顺序还是旧权重排的。
 QUANT_WEIGHT = 0.0
 
-# 排雷规则：(方向, 维度, 命中等级, 规则名)。阈值先取最保守的一档，观察后再放宽。
-MINE_RULES: list[tuple[str, str, frozenset[str], str]] = [
-    ("buy", "profitability", frozenset({"F"}), "profitability_f"),
-    ("buy", "revisions", frozenset({"F"}), "revisions_f"),
-    ("sell", "revisions", frozenset({"A+"}), "revisions_a_plus"),
+# 排雷规则：(方向, 维度, 命中等级, 规则名, 豁免)。豁免 = (维度, 等级集合)：该维度落在集合内则不命中。
+# 阈值先取最保守的一档，观察后再放宽。
+_REVISIONS_B_OR_BETTER = frozenset(GRADE_ORDER[:GRADE_ORDER.index("B") + 1])
+MINE_RULES: list[tuple[str, str, frozenset[str], str, tuple[str, frozenset[str]] | None]] = [
+    ("buy", "profitability", frozenset({"F"}), "profitability_f", ("revisions", _REVISIONS_B_OR_BETTER)),
+    ("buy", "revisions", frozenset({"F"}), "revisions_f", None),
+    ("sell", "revisions", frozenset({"A+"}), "revisions_a_plus", None),
 ]
 
 
@@ -102,9 +106,12 @@ def mine_rule(side: str, entry: QuantGrade | None, status: str) -> str | None:
     """命中的排雷规则名；评级缺失或过期（不论维度等级）返回 None，不排除。"""
     if entry is None or status == "stale":
         return None
-    for rule_side, dim, grades, name in MINE_RULES:
-        if side == rule_side and getattr(entry, dim) in grades:
-            return name
+    for rule_side, dim, grades, name, exempt in MINE_RULES:
+        if side != rule_side or getattr(entry, dim) not in grades:
+            continue
+        if exempt is not None and getattr(entry, exempt[0]) in exempt[1]:
+            continue
+        return name
     return None
 
 

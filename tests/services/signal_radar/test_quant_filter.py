@@ -260,7 +260,7 @@ def test_row_dimension_grades_read_from_grades_column():
 
 
 def test_cache_namespace_isolates_screening():
-    assert svc._mode_ns("loose").endswith(":quant_screen1")
+    assert svc._mode_ns("loose").endswith(":quant_screen2")
 
 
 async def test_excluded_buy_frees_slot_for_next_signal(monkeypatch):
@@ -292,3 +292,14 @@ async def test_excluded_buy_frees_slot_for_next_signal(monkeypatch):
     state.is_watchlist = True
     watch = (await svc._assemble(state, redis=None)).days[0]
     assert "MINE" in [s.symbol for s in watch.signals]
+
+
+def test_profitability_f_exempt_when_revisions_b_or_better():
+    """利润差但一致预期在上调（反转股，如 LITE）不算雷；修正缺失或偏弱时仍按盈利能力 F 排除。"""
+    out = screen([signal("UP"), signal("B"), signal("BM"), signal("NA"), signal("BOTH")],
+                 {"UP": [dims(profitability="F", revisions="A-")], "B": [dims(profitability="F", revisions="B")],
+                  "BM": [dims(profitability="F", revisions="B-")], "NA": [dims(profitability="F")],
+                  "BOTH": [dims(profitability="F", revisions="F")]})
+    assert [s.symbol for s in out.signals] == ["UP", "B"]
+    assert [(e.symbol, e.rule) for e in out.quant_filter.excluded] == [
+        ("BM", "profitability_f"), ("NA", "profitability_f"), ("BOTH", "profitability_f")]

@@ -100,10 +100,11 @@ _CACHE_PREFIX = "signal_radar"
 # 否则部署后缓存里还是旧口径的气泡，与详情页（每次实时算）对不上。shape 版本只隔离雷达自身的
 # 筛选规则（不改变详情口径），开关或规则一变就升：shape5 = 恢复 78bee01 之前的筛选（宽松口径
 # 最后一笔上的未确认信号也上榜、收盘价跌破才失效、最新日「待确认」候选补位），形态过滤暂停。
-# quant 段隔离评级相关行为：quant_screen1 = 评级不参与排序（QUANT_WEIGHT=0）+ 基本面排雷
-# （quant_filter.MINE_RULES，自选不排雷）；此前 quant_mark1 = 只 mark 展示。改权重或排雷规则时同步升版。
+# quant 段隔离评级相关行为：quant_screen2 = 评级不参与排序（QUANT_WEIGHT=0）+ 基本面排雷
+# （quant_filter.MINE_RULES，自选不排雷；screen2 加「盈利能力 F 但 EPS 修正 ≥ B」豁免）；
+# 此前 quant_mark1 = 只 mark 展示。改权重或排雷规则时同步升版。
 def _mode_ns(mode: str) -> str:
-    return f"{get_policy(mode).version}:shape5:quant_screen1"
+    return f"{get_policy(mode).version}:shape5:quant_screen2"
 
 
 # czsc 形态过滤（chan/shape_filters：同向假突破 / 窄幅震荡 / 低波动）暂停应用，代码与测试保留。

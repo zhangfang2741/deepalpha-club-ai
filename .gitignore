@@ -34,3 +34,7 @@ evals/reports/
 Claude outputs/
 marketing/chan/runs/.production.lock
 data/quant_seed/
+data/moat_calibration/
+data/moat_calibration_run1/
+data/moat_calibration_v2a/
+data/moat_calibration_v2b/
