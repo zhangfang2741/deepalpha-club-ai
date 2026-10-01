@@ -244,9 +244,13 @@ deepalpha-club-ai/
     `_formed_at`）的中枢区间不重叠且依次下移（一卖为上移），信号价离开后一个中枢。**不要**改成
     「已结束」：背驰后价格回到最后中枢会把它延伸，结束时间晚于一买（DXCM 一买曾因此漏掉）。
     **盘整背驰不算一类**；下一次同向笔又创新低 / 新高的一类作废（`_holds`，背驰段还在延伸）。
-  - 一类的背驰（std6 起）= 缠论原文的 **c 段（离开 B）对 b 段（A、B 之间）**比力度（`signals._trend_leg_divergence`）：
-    c 段价差更弱且量能或时长至少一项更弱，否则不算一类；中枢没有笔明细时退回 czsc 笔级判定。不要改回「末笔对前一同向笔」。
-    同一笔终点同时命中二类与三类只留一个（三类 > 二类，与宽松口径同）。
+  - 一类的背驰（std6 起）= 缠论原文的 **c 段（离开 B）对 b 段（A、B 之间）**比力度（`signals._trend_leg_divergence`），
+    b / c 段按笔级中枢取（`_trend_legs`）；不要改回「末笔对前一同向笔」。中枢没有笔明细、或该度量缺数据（没传 MACD）时退回 czsc 笔级判定。
+  - **背驰度量可插拔**（std7，`chan/leg_metric.py`，`DivergenceMetric` 接口）：`macd_area`（默认，原文 MACD 红绿柱面积）/ `force`（价差·量能·时长）。
+    切换只改配置 `CHAN_DIVERGENCE_METRIC`，版本号 `std7.<度量名>` 自动隔离雷达缓存。**API 字段永远同一套**：`price_ratio / volume_ratio / length_ratio`
+    任何度量都填，`area_ratio` 仅 MACD 面积度量填；强弱分档用度量的 `primary_ratio`（`classify_strength` 阈值取自价差比，换面积比后需用真实数据重新标定）。
+    新增度量：实现 `compare(c, b)` + 注册进 `DIVERGENCE_METRICS`，不要在判定流程里写 `if metric == ...`。
+  - 同一笔终点同时命中二类与三类只留一个（三类 > 二类，与宽松口径同）。
   - 二类 = 一类后的第一次回落 / 反弹不破一类极值（`_derive_type2`，一类所在笔 i 的 i+2 笔）。
   - 三类 = 离开中枢后的第一次回落 / 反弹没有回到中枢（`_derive_type3`，复用 `pivot_phase` 的
     `_is_breakout` / `_classify_retrace` 配对，与「确认三买」同源）。

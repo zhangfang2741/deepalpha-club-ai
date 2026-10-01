@@ -244,7 +244,8 @@ class ChanAnalyzer:
                                 shape_states=shape_states if shape_filters else None)
         result.shape_states = shape_states
         result.signals = policy.assemble(events, result.strokes, result.divergences, all_pivots, lang,
-                                         stroke_done_at=stroke_done_at, stroke_started_at=stroke_started_at)
+                                         stroke_done_at=stroke_done_at, stroke_started_at=stroke_started_at,
+                                         macd=result.macd)
         logger.debug("chan_signals", count=len(result.signals))
 
         # 9. 标注最右侧未确认结构（右侧滞后不确定性）

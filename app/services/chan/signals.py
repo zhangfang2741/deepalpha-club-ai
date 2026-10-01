@@ -12,11 +12,13 @@ from app.services.chan.bias import SEGMENT_WEIGHT, STROKE_WEIGHT
 from app.services.chan.czsc_signals import BsEvent
 from app.services.chan.divergence import (
     DivergenceResult,
+    MACDData,
     _in_consolidation,
     classify_strength,
     force_text,
 )
 from app.services.chan.i18n import is_en
+from app.services.chan.leg_metric import DivergenceMetric, get_metric, leg_force
 from app.services.chan.pivot import Pivot
 from app.services.chan.stroke import Stroke
 
@@ -184,50 +186,51 @@ def _in_trend(pivots: list[Pivot], time: str, is_buy: bool, price: float) -> boo
     return b.zd > a.zg and price > b.zg
 
 
-def _leg_stats(legs: list[Stroke]) -> tuple[float, float, int]:
-    """一段走势（若干笔）的力度：价差（首笔起点到末笔终点）、量能合计、时长（笔长度合计）。"""
-    return (
-        abs(legs[0].start_price - legs[-1].end_price),
-        sum(float(st.power_volume) for st in legs),
-        sum(int(st.length) for st in legs),
-    )
+def _trend_legs(
+    strokes: list[Stroke], pivots: list[Pivot], time: str,
+) -> tuple[list[Stroke], list[Stroke]] | None:
+    """趋势背驰要比的两段：b 段（A 的离开点到 B 的进入点）与 c 段（B 的离开点到信号笔终点）。
 
-
-def _trend_leg_divergence(
-    strokes: list[Stroke], pivots: list[Pivot], time: str, is_buy: bool, lang: str,
-) -> tuple[bool, DivergenceResult | None]:
-    """一类的趋势背驰（缠论原文）：比较 c 段（离开最后中枢 B）与 b 段（A、B 之间）的力度。
-
-    返回（能否判定, 背驰结果）。中枢没有笔明细、b / c 段取不到时「不能判定」，调用方保留
-    czsc 的笔级判定；能判定时 c 段必须价差更弱，且量能或时长至少一项更弱，否则不算一类。
+    中枢没有笔明细、两段取不到时返回 None（调用方保留 czsc 笔级判定）。
     """
     formed = sorted((p for p in pivots if _formed_at(p) <= time), key=_formed_at)
     if len(formed) < 2 or not formed[-1].elements or not formed[-2].elements:
-        return False, None
+        return None
     a, b = formed[-2], formed[-1]
     entry, a_exit = b.elements[0].start_time, a.elements[-1].end_time
     b_leg = [st for st in strokes if st.start_time >= a_exit and st.end_time <= entry]
     sig_start = next((st.start_time for st in strokes if st.end_time == time), None)
     if sig_start is None:
-        return False, None
+        return None
     c_from = max((e.end_time for e in b.elements if e.end_time <= sig_start), default=None)
     c_leg = [st for st in strokes if c_from is not None and st.start_time >= c_from and st.end_time <= time]
-    if not b_leg or not c_leg:
+    return (b_leg, c_leg) if b_leg and c_leg else None
+
+
+def _trend_leg_divergence(
+    strokes: list[Stroke], pivots: list[Pivot], time: str, is_buy: bool, lang: str,  # noqa: ARG001
+    macd: MACDData | None = None, metric: DivergenceMetric | None = None,
+) -> tuple[bool, DivergenceResult | None]:
+    """一类的趋势背驰（缠论原文）：c 段（离开 B）对 b 段（A、B 之间）比力度，度量由 metric 决定。
+
+    返回（能否判定, 背驰结果）。b / c 段取不到、或该度量缺数据（如没传 MACD）时「不能判定」，
+    调用方保留 czsc 的笔级判定；能判定而不背驰则返回 (True, None)，这个一类不成立。
+    """
+    legs = _trend_legs(strokes, pivots, time)
+    if legs is None:
         return False, None
-    bp, bv, bl = _leg_stats(b_leg)
-    cp, cv, cl = _leg_stats(c_leg)
-    if bp <= 0:
+    metric = metric or get_metric(None)
+    cmp = metric.compare(leg_force(legs[1], macd), leg_force(legs[0], macd))
+    if cmp is None:
         return False, None
-    price_ratio = round(cp / bp, 2)
-    volume_ratio = round(cv / bv, 2) if bv > 0 else 1.0
-    length_ratio = round(cl / bl, 2) if bl > 0 else 1.0
-    if price_ratio >= 1 or (volume_ratio >= 1 and length_ratio >= 1):
+    if not cmp.diverged:
         return True, None
-    strength = classify_strength(price_ratio)
+    strength = classify_strength(cmp.primary_ratio)
     return True, DivergenceResult(
         is_diverged=True, type="trend", strength=strength if strength != "none" else "weak",
-        price_ratio=price_ratio, volume_ratio=volume_ratio, length_ratio=length_ratio,
-        description=force_text(price_ratio, volume_ratio, length_ratio, lang),
+        price_ratio=cmp.price_ratio, volume_ratio=cmp.volume_ratio, length_ratio=cmp.length_ratio,
+        area_ratio=cmp.area_ratio,
+        description=force_text(cmp.price_ratio, cmp.volume_ratio, cmp.length_ratio, lang, cmp.area_ratio),
     )
 
 
@@ -307,8 +310,8 @@ def _describe(sig_type: str, time: str, price: float, span: str,
               div: DivergenceResult | None, lang: str, ref: str = "") -> str:
     """ref：二类 = 对应一类的「日期 价格」；三类 = 所离开中枢的「下沿–上沿」。"""
     n = _span_count(span)
-    area = f"：{force_text(div.price_ratio, div.volume_ratio, div.length_ratio, lang)}" if div else ""
-    area_en = f": {force_text(div.price_ratio, div.volume_ratio, div.length_ratio, lang)}" if div else ""
+    area = f"：{force_text(div.price_ratio, div.volume_ratio, div.length_ratio, lang, div.area_ratio)}" if div else ""
+    area_en = f": {force_text(div.price_ratio, div.volume_ratio, div.length_ratio, lang, div.area_ratio)}" if div else ""
     if is_en(lang):
         legs = f"the last of {n} legs" if n else "the last leg"
         texts = {
@@ -348,6 +351,8 @@ def generate_all_signals(
     lang: str = "zh",
     stroke_done_at: dict[str, str] | None = None,
     stroke_started_at: dict[str, str] | None = None,
+    macd: MACDData | None = None,
+    metric: DivergenceMetric | None = None,
 ) -> list[Signal]:
     """严格按缠论标准定义组装买卖点，按时间排序、(类型, 时间) 去重。
 
@@ -382,7 +387,8 @@ def generate_all_signals(
         if not _in_trend(pivots, ev.bi_end_time, ev.type == "buy1", ev.bi_end_price):
             continue
         # 缠论原文：趋势背驰比较 c 段（离开 B）与 b 段（A、B 之间），不是末笔对前一笔
-        judged, leg_div = _trend_leg_divergence(strokes, pivots, ev.bi_end_time, ev.type == "buy1", lang)
+        judged, leg_div = _trend_leg_divergence(strokes, pivots, ev.bi_end_time, ev.type == "buy1", lang,
+                                                macd=macd, metric=metric)
         if judged and leg_div is None:
             continue
         seen.add(key)

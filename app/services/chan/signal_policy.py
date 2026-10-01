@@ -14,7 +14,9 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from app.services.chan.czsc_signals import BsEvent, SignalFamily
-from app.services.chan.divergence import DivergenceResult
+from app.core.config import settings
+from app.services.chan.divergence import DivergenceResult, MACDData
+from app.services.chan.leg_metric import get_metric
 from app.services.chan.pivot import Pivot
 from app.services.chan.signals import Signal, generate_all_signals, generate_loose_signals
 from app.services.chan.stroke import Stroke
@@ -51,7 +53,7 @@ class SignalPolicy(Protocol):
     def assemble(
         self, events: list[BsEvent], strokes: list[Stroke], divergences: list[DivergenceResult],
         pivots: list[Pivot], lang: str, *, stroke_done_at: dict[str, str],
-        stroke_started_at: dict[str, str] | None = None,
+        stroke_started_at: dict[str, str] | None = None, macd: MACDData | None = None,
     ) -> list[Signal]:
         """把 czsc 事件 + 结构组装成买卖点（按时间排序）。"""
         ...
@@ -70,13 +72,15 @@ class _PolicyInfo:
     description_zh: str
     description_en: str
     czsc_families: tuple[SignalFamily, ...]
+    # 严格口径的背驰度量名（背驰度量可插拔，见 leg_metric）；宽松口径不用
+    metric_name: str = ""
 
 
 class LoosePolicy(_PolicyInfo):
     """宽松（默认）：czsc 原生一 / 二 / 三类，最后一笔上的也算（标未确认）。"""
 
     def assemble(self, events, strokes, divergences, pivots, lang, *, stroke_done_at,  # noqa: ARG002
-                 stroke_started_at=None):  # noqa: ARG002
+                 stroke_started_at=None, macd=None):  # noqa: ARG002
         return generate_loose_signals(events, strokes, divergences, pivots, lang)
 
     def split_unconfirmed(self, signals):
@@ -86,9 +90,13 @@ class LoosePolicy(_PolicyInfo):
 class StrictPolicy(_PolicyInfo):
     """严格：按缠论原文定义（趋势背驰一类、一类后的二类、中枢推出的三类），只落在已完成的笔上。"""
 
-    def assemble(self, events, strokes, divergences, pivots, lang, *, stroke_done_at, stroke_started_at=None):
+    # 背驰度量由 CHAN_DIVERGENCE_METRIC 配置（macd_area=缠论原文 / force=价差量能时长），
+    # 版本号带度量名，雷达缓存键自动隔离
+    def assemble(self, events, strokes, divergences, pivots, lang, *, stroke_done_at, stroke_started_at=None,
+                 macd=None):
         return generate_all_signals(events, strokes, divergences, pivots, lang, stroke_done_at=stroke_done_at,
-                                    stroke_started_at=stroke_started_at)
+                                    stroke_started_at=stroke_started_at, macd=macd,
+                                    metric=get_metric(self.metric_name))
 
     def split_unconfirmed(self, signals):
         # 最后一笔还在走（端点可能延伸甚至回到中枢），其上的买卖点尚不成立：移入候选
@@ -98,9 +106,11 @@ class StrictPolicy(_PolicyInfo):
 # 版本记录——strict：std1 严格按原文；std2 中枢「已形成」判定 + 一类被跌破作废 + 只落已完成的笔；
 # std3 新增 candidates；std4 日期改为成立日（所在笔的下一笔走完）；std5 成立日改为下一笔第一次成笔
 # （缠论：一笔由后一笔确认），中位滞后由 10 个交易日缩短；
-# std6 一类背驰改为 c 段（离开 B）对 b 段（A、B 之间）比力度，同笔二 / 三类只留一个。
+# std6 一类背驰改为 c 段（离开 B）对 b 段（A、B 之间）比力度，同笔二 / 三类只留一个；
+# std7 背驰度量可插拔（leg_metric），默认原文 MACD 面积，版本号带度量名。
 # loose：loose1 严格化之前的口径；loose2 组装加一致性约束（同笔多信号按一类>三类>二类
 # 去重、无源二类过滤）。
+_METRIC = get_metric(settings.CHAN_DIVERGENCE_METRIC)
 _ALL: tuple[SignalPolicy, ...] = (
         LoosePolicy(
             name="loose", version="loose2", label_zh="宽松", label_en="Relaxed",
@@ -109,7 +119,7 @@ _ALL: tuple[SignalPolicy, ...] = (
             czsc_families=("first", "second", "third"),
         ),
         StrictPolicy(
-            name="strict", version="std6", label_zh="严格", label_en="Strict",
+            name="strict", version=f"std7.{_METRIC.name}", metric_name=_METRIC.name, label_zh="严格", label_en="Strict",
             description_zh="严格按缠论原文定义，只认已走完的笔",
             description_en="Textbook Chan definitions; only completed legs count",
             czsc_families=("first",),

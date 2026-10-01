@@ -34,6 +34,7 @@ class DivergenceResult:
     description: str
     volume_ratio: float = 1.0  # 量能比
     length_ratio: float = 1.0  # 时长比（去包含K线根数）
+    area_ratio: float | None = None  # MACD 面积比（仅 MACD 面积度量填，其余为 None）
 
 
 def calc_ema(values: list[float], period: int) -> list[float]:
@@ -91,13 +92,17 @@ def classify_strength(price_ratio: float) -> Literal["strong", "medium", "weak",
     return "weak"
 
 
-def force_text(price_ratio: float, volume_ratio: float, length_ratio: float, lang: str = "zh") -> str:
-    """力度比的人话：价差/量能/时长各是参照的几成。"""
-    return pick(
+def force_text(price_ratio: float, volume_ratio: float, length_ratio: float, lang: str = "zh",
+               area_ratio: float | None = None) -> str:
+    """力度比的人话：价差/量能/时长（有 MACD 面积时先说面积）各是参照的几成。"""
+    base = pick(
         lang,
         f"价差为前段的 {price_ratio:.2f} 倍、量能 {volume_ratio:.2f} 倍、时长 {length_ratio:.2f} 倍",
         f"price range {price_ratio:.2f}x, volume {volume_ratio:.2f}x, duration {length_ratio:.2f}x of the prior leg",
     )
+    if area_ratio is None:
+        return base
+    return pick(lang, f"MACD 面积为前段的 {area_ratio:.2f} 倍，", f"MACD area {area_ratio:.2f}x, ") + base
 
 
 def check_divergence(

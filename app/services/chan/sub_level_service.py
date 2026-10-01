@@ -99,6 +99,7 @@ def signal_out(sig: Signal) -> SignalOut:
         price_ratio=sig.divergence.price_ratio if sig.divergence else None,
         volume_ratio=sig.divergence.volume_ratio if sig.divergence else None,
         length_ratio=sig.divergence.length_ratio if sig.divergence else None,
+        area_ratio=sig.divergence.area_ratio if sig.divergence else None,
     )
 
 

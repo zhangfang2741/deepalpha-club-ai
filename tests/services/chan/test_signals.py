@@ -577,19 +577,58 @@ def _trend_with_legs(c_low: float):
     return [*a_el, b_leg, *b_el, c_leg], [pa, pb]
 
 
-def test_buy1_requires_c_leg_weaker_than_b_leg():
+def test_buy1_force_metric_requires_c_leg_weaker_than_b_leg():
+    from app.services.chan.leg_metric import get_metric
     strokes, pivots = _trend_with_legs(c_low=105)  # c 段跌 15 < b 段跌 20，背驰
-    sig = generate_all_signals([_ev("buy1", "2025-01-10", 105.0)], strokes, [_NO_DIV] * len(strokes), pivots)
+    sig = generate_all_signals([_ev("buy1", "2025-01-10", 105.0)], strokes, [_NO_DIV] * len(strokes), pivots,
+                               metric=get_metric("force"))
     assert [x.type for x in sig] == ["buy1"]
     assert sig[0].divergence is not None and sig[0].divergence.price_ratio == 0.77
 
 
-def test_buy1_dropped_when_c_leg_not_weaker_than_b_leg():
+def test_buy1_force_metric_dropped_when_c_leg_not_weaker():
     strokes, pivots = _trend_with_legs(c_low=95)  # c 段跌 25 > b 段跌 20，没有背驰
-    assert generate_all_signals([_ev("buy1", "2025-01-10", 95.0)], strokes, [_NO_DIV] * len(strokes), pivots) == []
+    from app.services.chan.leg_metric import get_metric
+    assert generate_all_signals([_ev("buy1", "2025-01-10", 95.0)], strokes, [_NO_DIV] * len(strokes), pivots,
+                                metric=get_metric("force")) == []
 
 
 def test_same_stroke_type2_and_type3_keep_one():
     # 一买后的回落同时是离开中枢后第一次回落未回中枢：同一笔终点只留三类
     from app.services.chan.signals import _DUP_PRIORITY
     assert _DUP_PRIORITY["buy3"] < _DUP_PRIORITY["buy2"]
+
+
+def _macd_for(strokes, b_bar: float, c_bar: float):
+    """b 段、c 段（各取 _trend_with_legs 里的时间范围）各铺一串固定绿柱，其余为 0。"""
+    from app.services.chan.divergence import MACDData
+    times = ["2024-11-20", "2024-11-25", "2024-12-01", "2024-12-20", "2024-12-25", "2025-01-10"]
+    bars = [b_bar, b_bar, b_bar, c_bar, c_bar, c_bar]
+    return MACDData(times=times, dif=[0.0] * 6, dea=[0.0] * 6, bar=[-x for x in bars])
+
+
+def test_buy1_macd_area_metric_is_the_default_and_fills_area_ratio():
+    strokes, pivots = _trend_with_legs(c_low=105)
+    sig = generate_all_signals([_ev("buy1", "2025-01-10", 105.0)], strokes, [_NO_DIV] * len(strokes), pivots,
+                               macd=_macd_for(strokes, 2.0, 1.0))
+    assert [x.type for x in sig] == ["buy1"]
+    assert sig[0].divergence.area_ratio == 0.5 and sig[0].divergence.strength == "strong"
+    assert "MACD" in sig[0].description
+
+
+def test_buy1_dropped_when_c_leg_macd_area_not_smaller():
+    # 价差、量能都更弱，但 MACD 面积更大：按原文度量不背驰
+    strokes, pivots = _trend_with_legs(c_low=105)
+    macd = _macd_for(strokes, 1.0, 2.0)
+    assert generate_all_signals([_ev("buy1", "2025-01-10", 105.0)], strokes, [_NO_DIV] * len(strokes), pivots,
+                                macd=macd) == []
+
+
+def test_metric_is_switchable_without_changing_signal_shape():
+    from app.services.chan.leg_metric import get_metric
+    strokes, pivots = _trend_with_legs(c_low=105)
+    macd = _macd_for(strokes, 1.0, 2.0)  # 面积更大 → macd_area 否掉；force 仍成立
+    sig = generate_all_signals([_ev("buy1", "2025-01-10", 105.0)], strokes, [_NO_DIV] * len(strokes), pivots,
+                               macd=macd, metric=get_metric("force"))
+    assert [x.type for x in sig] == ["buy1"] and sig[0].divergence.price_ratio == 0.77
+    assert get_metric("nope").name == "macd_area"
