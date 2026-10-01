@@ -181,8 +181,11 @@ deepalpha-club-ai/
 > 自有快照不满 90 天时 EPS 修正用外部一致预期趋势过渡（`eps_trend.py`，同源内算变化率、**不写入快照表**、
 > 与 FY1/FY2 预期差 >15% 视为财年没对齐不用），攒满后自动切回自有快照；营收修正无外部趋势，仍需攒满 90 天。
 > 2026-09-30 首份快照来自 `data/quant_seed/`（git 忽略），用 `scripts/quant_seed_import.py` 导入。
-> **护城河**（`moat`，只展示、不计入综合分 / 维度计数 / 封顶，`DISPLAY_ONLY_DIMENSIONS`）：用已有 16 季利润表 + 8 季现金流，
-> 4 个年度点的毛利率均值 / 波动 / 3 年变化、最差一年经营利润率 / 波动、2 年利润现金含量；App 放在综合等级下方，不进五维成绩单。
+> **护城河**（`app/services/quant_research/moat/`，只展示、不计入综合等级，读取时附到响应 `moat` 字段）：参照 Morningstar，
+> 宽 / 窄 / 无 + 趋势。证据 = FMP 10 年 ROIC（金融股 ROE）vs CAPM 资金成本；来源 = 大模型读最新 10-K Item 1 判断五种来源，
+> **引用必须逐字核对**、3 次判断取中位数（MiniMax 温度 0 也不确定）。两者同时成立才有护城河。按 (股票, 10-K 编号, `moat.METHOD_VERSION`)
+> 存 `quant_moat_assessments`，一份年报只评一次；部署后冷启动补齐、每天 UTC 12:00 查新年报（短锁 + 心跳，重启后可续跑）。
+> 校准脚本 `scripts/moat_calibration.py`（12 只公开评级对照 11/12）。改判定规则须升 `moat.METHOD_VERSION`（会全量重评、耗大模型额度）。
 > **冷启动**：已存结果的 `METHODOLOGY_VERSION` 与代码不一致时，启动自举立即重跑全量（锁键带版本号），改规则后部署即生效、不等夜间批量。
 > **可解释**：App 上每个等级 / 分数 / 术语都可点开看「这一处」的解释（`Views/Quant/QuantExplain.swift`，带本股真实数字，
 > 不做统一说明页）；指标大白话与算式输入项解释在 `glossary.py`。iOS 的分档 / 防抖 / 封顶常量由 `test_education.py` 对齐后端守护。
