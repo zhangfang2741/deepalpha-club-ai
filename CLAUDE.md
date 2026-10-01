@@ -210,7 +210,11 @@ deepalpha-club-ai/
   所以「按 czsc 架构」= czsc 内核给结构 + 原生信号事件作触发，项目侧（`signals.py` / `leg_metric.py`）做组装与判定，不要尝试把背驰写成 czsc 信号函数。
 - `cs.kas[label]` 与 `.bi_list` 每次访问都是**整份结构的副本**（耗时随 K 线数 / 笔数线性增长，实测 56→259 微秒），逐根循环里重复取是 O(n²)。
   `scan_bs_events` 每根 K 线最多取一次、没有触发 / 不记笔时刻就不取（51 只日线 43s → 22.5s，输出逐字节一致）。**不要**在逐根循环里再加 `cs.kas` / `bi_list` 访问。
-  剩余成本仍是每根一次副本（≈0.4s/只、939 根日线）；再降要换成不依赖副本的「笔变化」判据。
+  **自有 Rust 信号**（`rust/czsc`，czsc 1.0.1 的 vendoring 分叉，Apache-2.0；只在 `crates/czsc-signals` 新增 `dp.rs` 并在 `lib.rs` 注册 4 行，`czsc-core` 一行未改）：
+  `dp_bi_track_V261001` 直接在内核里报告末笔终点 / 起点，Python 不再取副本（51 只日线 43s → 4.3s，输出与基线逐字节一致）。
+  `czsc_signals._HAS_DP` 探测到分叉版就走 Rust 信号，标准 PyPI 版自动退回读 `bi_list` 的旧路径（两条路径输出一致，测试都过）。
+  编译：`cd rust/czsc && uvx maturin build --release -i python3.13`（约 10 分钟，产物 `target/wheels`）；部署用哪个 czsc 见下方待定项。
+  后续计划的信号（趋势前提 / b·c 段原始力度 / 一二三类触发）均按此方式加在 `dp.rs`，Rust 只输出原始量、判定与强弱分档仍在 Python（保持度量可切换、API 统一）。
 
 **买卖点口径（`signal_policy.py`，统一接口 + 多套实现）**
 - 「什么算买卖点」有多套口径，都实现 `SignalPolicy`（`czsc_families` / `assemble` /

@@ -56,6 +56,27 @@ class BsEvent:
     span: str  # 一类信号命中的结构笔数（如 "9笔"），其余类型为空
 
 
+_DP_BI_TRACK = "dp_bi_track_V261001"
+
+
+def _dp_signals_available() -> bool:
+    """自编译的 czsc（rust/czsc，带 dp_* 信号）才有；标准 PyPI 版没有，退回读 bi_list 副本。"""
+    try:
+        import czsc._native as native
+        return any(n.endswith(_DP_BI_TRACK) for n in native.signals.list_signal_names()  # pyright: ignore[reportAttributeAccessIssue])
+    except Exception:  # noqa: BLE001 — 探测失败一律当作不可用
+        return False
+
+
+_HAS_DP = _dp_signals_available()
+
+
+def _dp_ts(s: str) -> str:
+    """Dp 信号里的 YYYYMMDDHHMM → 项目统一时间字符串（与 ts_date 同口径）。"""
+    day = f"{s[0:4]}-{s[4:6]}-{s[6:8]}"
+    return day if s[8:12] == "0000" else f"{day} {s[8:10]}:{s[10:12]}"
+
+
 def _family_specs(label: str) -> dict[str, tuple[list[str], list[dict]]]:
     """信号族 → (状态键, czsc 信号配置)。"""
     return {
@@ -114,6 +135,10 @@ def scan_bs_events(
 
     label = freq.value
     keys, config = _signal_keys_and_config(label, families)
+    use_dp = _HAS_DP and (stroke_done_at is not None or stroke_started_at is not None)
+    if use_dp:
+        config = [*config, {"name": _DP_BI_TRACK, "freq": label, "di": 1}]
+    dp_key = f"{label}_D1笔轨迹_DP辅助V261001"
     if shape_states is not None:
         config = config + shape_config(label)
     bg = BarGenerator(label, [], max_count=len(raw) + 1)
@@ -141,12 +166,21 @@ def scan_bs_events(
                 bis = cs.kas[label].bi_list
             return bis
 
-        if track_bis and _bis():
+        s = cs.s
+        if use_dp:
+            # Rust 信号直接报告末笔的终点 / 起点，不必拷贝整份笔列表（O(1) 而不是 O(n)）
+            parts = s[dp_key].split("_")
+            if len(parts) >= 3 and parts[0] != "其他":
+                day = ts_date(bar.dt)
+                if stroke_done_at is not None:
+                    stroke_done_at.setdefault(_dp_ts(parts[1]), day)
+                if stroke_started_at is not None:
+                    stroke_started_at.setdefault(_dp_ts(parts[2]), day)
+        elif track_bis and _bis():
             if stroke_done_at is not None:
                 stroke_done_at.setdefault(ts_date(_bis()[-1].fx_b.dt), ts_date(bar.dt))
             if stroke_started_at is not None:
                 stroke_started_at.setdefault(ts_date(_bis()[-1].fx_a.dt), ts_date(bar.dt))
-        s = cs.s
         for key in keys:
             parts = s[key].split("_")
             v1 = parts[0]
