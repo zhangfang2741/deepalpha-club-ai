@@ -7,7 +7,7 @@ https://www.finra.org/investors/investing/investment-products/stocks/evaluating-
 
 from app.schemas.quant_research import MetricInterpretation, QuantResearchOut
 from app.services.quant_research.formulas import metric_calculation
-from app.services.quant_research.glossary import input_hint, plain_language
+from app.services.quant_research.glossary import input_hint, plain_language, why_and_purpose
 from app.services.quant_research.metrics import INPUT_LABELS, METRICS, MetricDef
 
 # 同一经济含义共用解读，具体期间与分母由每项指标的定义明确。
@@ -135,10 +135,13 @@ def metric_interpretation(metric: MetricDef, lang: str) -> MetricInterpretation:
     if key.endswith("_fwd"):
         limit += "前瞻数值来自分析师预期，并非已实现业绩。" if lang == "zh" else " Forward inputs are analyst estimates, not realized results."
     full_name, plain, reading = plain_language(metric, lang)
+    why, purpose = why_and_purpose(metric, lang)
     return MetricInterpretation(
         full_name=full_name,
         plain=plain,
         reading=reading,
+        why=why,
+        purpose=purpose,
         what=metric.desc_zh if lang == "zh" else metric.desc_en,
         role=role_zh if lang == "zh" else role_en,
         threshold=limit,

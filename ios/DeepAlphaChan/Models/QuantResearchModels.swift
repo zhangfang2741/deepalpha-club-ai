@@ -157,10 +157,13 @@ struct QuantMetricInterpretation: Decodable, Identifiable {
     let fullName: String?
     let plain: String?
     let reading: String?
+    /// 为什么重要 / 我们为什么用它（在评级里的作用）；旧缓存响应可能缺失。
+    let why: String?
+    let purpose: String?
     var id: String { what }
 
     enum CodingKeys: String, CodingKey {
-        case what, role, threshold, calculation, plain, reading
+        case what, role, threshold, calculation, plain, reading, why, purpose
         case fullName = "full_name"
     }
 }

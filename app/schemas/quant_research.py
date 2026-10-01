@@ -67,6 +67,8 @@ class MetricInterpretation(BaseModel):
     full_name: str = ""  # 全称（如「净资产收益率 ROE（Return on Equity）」）
     plain: str = ""      # 大白话释义（带例子，不讲口径）
     reading: str = ""    # 高 / 低怎么看
+    why: str = ""        # 为什么重要
+    purpose: str = ""    # 我们为什么用它（在评级里的作用）
 
 
 class MetricOut(BaseModel):

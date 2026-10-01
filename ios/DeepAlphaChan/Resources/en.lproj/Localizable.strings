@@ -971,3 +971,7 @@
 "短板 = 维度等级在 D 或 F 档（同板块约后 40%）。" = "Weak spot = a factor graded D or F (about the sector's bottom 40%).";
 "B、C 档表示和同行差不多或略好，不单独列出。" = "B and C mean about the same as or slightly better than peers, so they aren't listed.";
 "算式" = "Arithmetic";
+"认识这个指标" = "About this metric";
+"是什么" = "What it is";
+"为什么重要" = "Why it matters";
+"我们为什么用它" = "Why we use it";

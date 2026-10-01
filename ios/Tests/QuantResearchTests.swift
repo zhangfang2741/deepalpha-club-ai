@@ -55,6 +55,9 @@ struct QuantResearchTests {
         let roe = research.dimensions.flatMap(\.allMetrics).first { $0.key == "roe" }!
         precondition(roe.interpretation?.fullName?.contains("净资产收益率") == true)
         precondition(roe.interpretation?.plain?.isEmpty == false && roe.interpretation?.reading?.isEmpty == false)
+        precondition(roe.interpretation?.why?.isEmpty == false && roe.interpretation?.purpose?.isEmpty == false,
+                     "每项指标都要讲清为什么重要、为什么选它")
+        precondition(interpretation.why == nil && interpretation.purpose == nil, "旧响应缺少时仍应正常解码")
         // NVDA：盈利能力 A+ 为强项、估值 C- 不算短板；积累中的维度不参与
         precondition(research.strengths.map(\.key) == ["profitability"], "\(research.strengths.map(\.key))")
         precondition(research.weaknesses.isEmpty)

@@ -84,21 +84,37 @@ struct QuantMetricDetailContent: View {
         .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 18))
     }
 
-    /// 一句话看懂：大白话释义（旧响应回退到口径描述）。
+    /// 认识这个指标：是什么 → 为什么重要 → 我们为什么用它（旧响应只有口径描述时回退）。
     @ViewBuilder
     private var plainBlock: some View {
-        let text = plain ?? itp?.what ?? metric.description
-        if !text.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Label(L("一句话看懂"), systemImage: "lightbulb.fill")
+        let what = plain ?? itp?.what ?? metric.description
+        let why = nonEmpty(itp?.why) ?? (plain == nil ? nonEmpty(itp?.role) : nil)
+        let purpose = nonEmpty(itp?.purpose)
+        if !what.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                Label(L("认识这个指标"), systemImage: "lightbulb.fill")
                     .font(QuantTypography.metadata.weight(.semibold)).foregroundStyle(Theme.accent)
-                Text(text).font(QuantTypography.body).foregroundStyle(Theme.textPrimary.opacity(0.92))
-                    .lineSpacing(4).fixedSize(horizontal: false, vertical: true)
+                introSection(L("是什么"), what)
+                if let why { introSection(L("为什么重要"), why) }
+                if let purpose { introSection(L("我们为什么用它"), purpose) }
             }
             .padding(14).frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.accent.opacity(0.3)))
         }
+    }
+
+    private func introSection(_ title: String, _ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(QuantTypography.emphasis).foregroundStyle(Theme.textPrimary)
+            Text(text).font(QuantTypography.body).foregroundStyle(Theme.textPrimary.opacity(0.85))
+                .lineSpacing(4).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func nonEmpty(_ s: String?) -> String? {
+        guard let s, !s.isEmpty else { return nil }
+        return s
     }
 
     /// 本股在板块里的位置：一句结论 + 分布条。
@@ -153,10 +169,6 @@ struct QuantMetricDetailContent: View {
                  ?? (metric.lowerBetter ? L("越低排名越靠前") : L("越高排名越靠前")))
                 .font(QuantTypography.body).foregroundStyle(Theme.textPrimary)
                 .lineSpacing(3).fixedSize(horizontal: false, vertical: true)
-            if let role = itp?.role, !role.isEmpty, plain == nil {
-                Text(role).font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
-                    .lineSpacing(3).fixedSize(horizontal: false, vertical: true)
-            }
             if let threshold = itp?.threshold, !threshold.isEmpty {
                 Divider().overlay(Theme.border)
                 HStack(alignment: .top, spacing: 6) {

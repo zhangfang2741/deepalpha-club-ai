@@ -320,3 +320,152 @@ def input_hint(name: str, lang: str) -> str | None:
     if texts is None:
         return None
     return texts[i] + (period if i == 0 else f" {period}" if period else "")
+
+
+# concept -> (为什么重要 zh, 我们为什么用它 zh, why en, purpose en)
+_WHY: dict[str, tuple[str, str, str, str]] = {
+    "pe": (
+        "长期来看，股价跟着利润走。市盈率把「价格」和「利润」放在一起，是全球投资者最常用的估值尺子，几乎所有研报和财经新闻都会用到。",
+        "估值维度的核心指标。我们同时看最近 12 个月（已实现，有据可查）和未来 12 个月（预期，反映市场正在为什么定价）两个版本。亏损公司的市盈率没有意义，标为不适用、不参与评分。",
+        "Over the long run, share prices follow profits. P/E puts price and profit side by side and is the most widely used valuation yardstick in research and financial news.",
+        "The core valuation metric. We use both the trailing 12 months (actual, verifiable) and the next 12 months (forecast, what the market is pricing in). P/E is meaningless for loss-makers, so it is marked not applicable and left unscored.",
+    ),
+    "peg": (
+        "只看市盈率会冤枉高成长公司：长得快的公司本来就值更高的倍数。PEG 把增速考虑进来，区分「贵但长得快」和「贵又长不动」。",
+        "给估值维度补上成长视角，平衡市盈率对高成长公司的偏见。增速为负或接近零时比值会失真，不参与评分。",
+        "P/E alone penalizes fast growers, which deserve higher multiples. PEG factors in growth, separating \"pricey but growing fast\" from \"pricey and stalling\".",
+        "Adds a growth lens to valuation, offsetting P/E's bias against fast growers. When growth is negative or near zero the ratio distorts and is left unscored.",
+    ),
+    "ps": (
+        "营收比利润更稳定、更难调节，而且亏损公司没有市盈率可用。市销率让还没盈利或利润波动大的公司也能比较贵不贵。",
+        "让估值维度覆盖到亏损和利润波动大的公司，并和市盈率互相印证：市销率低而市盈率高，往往说明利润率偏低。",
+        "Revenue is steadier and harder to manipulate than profit, and loss-makers have no usable P/E. P/S lets unprofitable or volatile companies be compared on price too.",
+        "Extends valuation to loss-making and volatile companies and cross-checks P/E: a low P/S with a high P/E usually signals thin margins.",
+    ),
+    "ev_sales": (
+        "市值只算股东那部分，忽略了公司背的债和手里的现金。两家市值一样的公司，一家负债累累、一家现金充裕，真要整体买下来，代价完全不同。",
+        "在市销率的基础上把负债和现金算进来，避免高负债公司看起来「虚假便宜」。",
+        "Market cap counts only the shareholders' slice and ignores debt and cash. Two companies with equal market caps — one heavily indebted, one cash-rich — cost very different amounts to acquire outright.",
+        "Builds on P/S by bringing debt and cash into the price, so heavily indebted companies don't look falsely cheap.",
+    ),
+    "ev_ebitda": (
+        "这是企业并购中最常用的估值方法：收购方要承接全部债务，关心的是主营业务能产生多少现金利润。它不受折旧政策、税率和融资方式影响，不同公司之间可比性强。",
+        "估值维度里最「中性」的一把尺子，用来和市盈率互相校验：市盈率低但 EV/EBITDA 高，往往是负债多或一次性收益抬高了利润。",
+        "It is the go-to valuation method in mergers and acquisitions: an acquirer takes on all the debt and cares about the core business's cash earnings. It is unaffected by depreciation policy, tax rates and financing, so it compares well across companies.",
+        "The most neutral valuation yardstick, used to cross-check P/E: a low P/E with a high EV/EBITDA often means heavy debt or one-off gains are flattering profits.",
+    ),
+    "ev_ebit": (
+        "厂房设备会磨损、要花钱更新。EBITDA 没扣这部分，会让重资产公司看起来更便宜；EBIT 扣掉了折旧，更接近真实的经营利润。",
+        "在 EV/EBITDA 之外再加一道更严格的检验，防止重资产公司靠「不扣折旧」显得便宜。",
+        "Plants and equipment wear out and must be replaced. EBITDA ignores that, flattering capital-heavy firms; EBIT deducts depreciation and is closer to true operating profit.",
+        "A stricter check alongside EV/EBITDA, so capital-heavy companies can't look cheap just by leaving out depreciation.",
+    ),
+    "pb": (
+        "净资产是公司的「家底」。对银行、保险这类资产本身就是生意的行业，利润波动大时，市净率比市盈率更能反映价格是否合理。",
+        "给估值维度补上资产视角，对金融等资产密集的行业尤其有参考价值。",
+        "Book value is the company's net worth on paper. For banks and insurers, where assets are the business, P/B often says more than P/E when profits swing.",
+        "Adds an asset lens to valuation, especially useful for asset-heavy sectors such as financials.",
+    ),
+    "pcf": (
+        "利润可以通过会计处理调节，现金很难作假。很多财务问题最早都是在「利润好看但现金流差」上露出马脚的。",
+        "作为市盈率的现金版本，检验利润有没有真金白银支撑。金融股的经营现金流包含存贷款变动、不可比，标为不适用。",
+        "Profits can be shaped by accounting choices; cash is much harder to fake. Many financial problems first show up as \"good profits, weak cash flow\".",
+        "A cash version of P/E that checks whether profits are backed by real cash. For financials, operating cash flow includes deposit and loan movements and isn't comparable, so it is marked not applicable.",
+    ),
+    "rev_growth": (
+        "营收是一切利润的源头。没有营收增长，利润增长只能靠压缩成本，迟早会到头；持续扩大的营收是公司长期变大的根基。",
+        "成长维度的基础指标。我们看三个版本：同比（最近一年）、3 年复合（长期趋势，过滤单年波动）、预期增速（未来）——三者方向一致，说明成长更扎实。",
+        "Revenue is the source of all profit. Without revenue growth, profit can only grow by cutting costs, which eventually runs out; steadily rising revenue is the foundation of long-term growth.",
+        "The foundation of the growth factor. We use three versions: year-over-year (last year), 3-year CAGR (long-term trend, smoothing single-year noise) and forecast growth (the future). When all three agree, growth is on firmer ground.",
+    ),
+    "ebitda_growth": (
+        "营收增长不一定带来更多利润，靠打折冲量的增长没有意义。EBITDA 增速告诉你，增长是不是「赚钱的增长」。",
+        "检验营收增长有没有转化为经营利润；同时看已实现和预期两个版本。",
+        "Revenue growth doesn't always bring more profit — growth bought with discounts is hollow. EBITDA growth shows whether growth is profitable growth.",
+        "Checks whether revenue growth turns into operating earnings, using both actual and forecast versions.",
+    ),
+    "ebit_growth": (
+        "EBIT 扣掉了折旧，能看出增长是不是靠大量砸钱买设备换来的。EBIT 增速快于营收，说明规模越大越赚钱。",
+        "和 EBITDA 增速配合，看扣除设备损耗后经营利润是否仍在增长；同时看已实现和预期两个版本。",
+        "EBIT deducts depreciation, revealing whether growth was bought with heavy equipment spending. EBIT growing faster than revenue means scale is making the business more profitable.",
+        "Pairs with EBITDA growth to see whether operating profit still grows after equipment wear, using both actual and forecast versions.",
+    ),
+    "eps_growth": (
+        "股东真正拥有的是每一股，EPS 增长才直接对应每股价值的增长。长期来看，股价走势和每股收益的增长高度相关。",
+        "成长维度里离股东最近的指标，也是 PEG 的增速来源；同时看已实现和预期两个版本。",
+        "Shareholders own shares, so EPS growth maps directly to growth in per-share value. Over the long run, share prices track EPS growth closely.",
+        "The growth metric closest to shareholders and the growth input for PEG, using both actual and forecast versions.",
+    ),
+    "gross_m": (
+        "毛利率是公司「护城河」最直观的体现：产品有独特性、品牌有号召力，才能卖得比成本贵很多。毛利率高的公司才有余力投研发、做营销、扛住价格战。",
+        "盈利能力维度的第一层：先看产品本身赚不赚钱，再往下看扣完费用、利息、税之后还剩多少（经营利润率 → 净利率 → 自由现金流利润率）。",
+        "Gross margin is the most visible sign of a competitive moat: only distinctive products and strong brands can be priced far above cost. High-margin firms can afford R&D and marketing and can weather price wars.",
+        "The first layer of profitability: does the product itself make money? Later layers show what's left after expenses, interest and tax (operating margin → net margin → free cash flow margin).",
+    ),
+    "ebit_m": (
+        "毛利高不代表公司赚钱，销售、管理、研发费用可能把毛利吃光。经营利润率反映主营业务真正的赚钱能力和管理效率。",
+        "盈利能力维度的第二层：在毛利率基础上扣除各项经营费用，看主营业务本身的盈利水平。",
+        "High gross margin doesn't guarantee profit — selling, admin and R&D costs can eat it all. Operating margin shows the core business's real earning power and how well it is run.",
+        "The second layer of profitability: after operating expenses, how profitable is the core business itself?",
+    ),
+    "ebitda_m": (
+        "EBITDA 利润率排除了折旧政策和融资结构的影响，方便把资本结构不同的公司放在一起比较主业的现金创造能力。",
+        "和经营利润率配合看：两者差距大，说明折旧摊销重（重资产生意）；差距小，则是轻资产生意。",
+        "EBITDA margin strips out depreciation policy and financing structure, making it easy to compare core cash generation across differently financed companies.",
+        "Read alongside operating margin: a wide gap means heavy depreciation (a capital-heavy business); a narrow gap means an asset-light one.",
+    ),
+    "net_m": (
+        "净利率是所有成本、费用、利息、税扣完后的最终结果，直接决定股东能分到多少。",
+        "盈利能力维度的第三层：看最终落到股东手里的利润占比。",
+        "Net margin is the bottom line after every cost, expense, interest payment and tax — it decides what shareholders actually get.",
+        "The third layer of profitability: the share of revenue that finally reaches shareholders.",
+    ),
+    "fcf_m": (
+        "利润是会计数字，自由现金流才是公司真正能拿来分红、回购、还债、再投资的钱。长期回报优秀的公司，大多能持续产生大量自由现金流。",
+        "盈利能力维度的最后一层，检验利润能不能变成真金白银。金融股的现金流结构不同，标为不适用。",
+        "Profit is an accounting figure; free cash flow is the money a company can actually use for dividends, repurchases, debt repayment and reinvestment. Most companies with strong long-term returns generate plenty of it.",
+        "The final layer of profitability: can profits turn into real cash? Financials have a different cash-flow structure and are marked not applicable.",
+    ),
+    "roe": (
+        "ROE 衡量公司用股东的钱「钱生钱」的能力。能长期保持高 ROE 的公司，把赚到的利润再投进去还能获得高回报，股东的财富就会像复利一样增长。",
+        "盈利能力维度里从股东视角看回报。因为借钱也能把 ROE 撑高，我们同时看 ROA 和 ROIC 来交叉验证。",
+        "ROE measures how well a company turns shareholders' money into more money. A company that sustains high ROE can reinvest profits at high returns, compounding shareholder wealth.",
+        "Profitability from the shareholder's view. Because borrowing can inflate ROE, we cross-check it with ROA and ROIC.",
+    ),
+    "roa": (
+        "ROA 不区分钱是借来的还是股东的，衡量全部资产的赚钱效率，不容易被高杠杆美化。",
+        "和 ROE 配合看：ROE 高但 ROA 低，说明高回报主要靠借钱放大，风险更高。",
+        "ROA doesn't care whether money is borrowed or owned; it measures how efficiently all assets earn, and leverage can't easily dress it up.",
+        "Read alongside ROE: high ROE with low ROA means returns are mostly amplified by debt, which carries more risk.",
+    ),
+    "roic": (
+        "很多长期投资者把 ROIC 视为衡量生意质量最关键的指标：它回答「每投进去 1 元，生意本身能赚回多少」。长期高于资金成本，公司越扩张越创造价值；低于资金成本，扩张反而在消耗价值。",
+        "盈利能力维度里最能反映生意本身质量的指标，不受融资方式影响，用来和 ROE 互相校验。",
+        "Many long-term investors see ROIC as the key measure of business quality: for every $1 put in, what does the business earn? Above the cost of capital, growth creates value; below it, growth destroys value.",
+        "The profitability metric that best reflects business quality, independent of financing, and a cross-check on ROE.",
+    ),
+    "asset_turn": (
+        "赚钱有两条路：每笔生意赚得多（高利润率），或者用同样的资产做更多生意（高周转）。资产周转率衡量的是后一条。",
+        "补上盈利能力的「效率」一面，帮助理解回报率来自高利润率还是高周转。",
+        "There are two ways to earn: make more on each sale (high margins) or do more business with the same assets (high turnover). Asset turnover measures the second.",
+        "Adds the efficiency side of profitability, showing whether returns come from high margins or high turnover.",
+    ),
+    "momentum": (
+        "股价走势汇总了市场对公司最新信息的判断。量化研究中被反复验证的一个现象是：过去一段时间相对偏强的股票，之后一段时间往往仍相对偏强（动量效应）。",
+        "动量维度看市场怎么定价，与看公司本身的基本面维度互补。我们同时看 3、6、9、12 个月四个窗口再取平均，避免单一时间段的偶然波动。",
+        "Price trends summarize the market's reading of the latest information. One of the most repeatedly documented findings in quant research is that relatively strong stocks tend to stay relatively strong for a while (the momentum effect).",
+        "The momentum factor shows how the market is pricing the stock, complementing the fundamental factors. We average four windows — 3, 6, 9 and 12 months — to avoid one period's noise.",
+    ),
+    "revision": (
+        "分析师会根据公司最新的经营情况调整预测。预期持续上调，往往意味着公司经营好于原先设想；研究发现，盈利预期的变化方向对之后的股价表现有一定解释力。",
+        "反映「边际变化」：基本面是公司现在的状态，预期修正是最近在往哪边变。我们看本财年、下财年 EPS 和本财年营收在 30 / 90 天里的变化。",
+        "Analysts update forecasts as new business information arrives. Steady upward revisions usually mean the business is doing better than expected, and research finds the direction of revisions helps explain later share-price performance.",
+        "Captures change at the margin: fundamentals describe where the company is, revisions show which way things are moving. We track current- and next-year EPS and current-year revenue over 30 and 90 days.",
+    ),
+}
+
+
+def why_and_purpose(metric: MetricDef, lang: str) -> tuple[str, str]:
+    """返回（为什么重要, 我们为什么用它）。"""
+    zh_why, zh_purpose, en_why, en_purpose = _WHY[_concept(metric)]
+    return (zh_why, zh_purpose) if lang == "zh" else (en_why, en_purpose)

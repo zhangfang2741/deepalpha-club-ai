@@ -141,3 +141,19 @@ def test_ios_grade_scale_matches_backend() -> None:
     assert re.search(rf"capThreshold: Double = {CAP_THRESHOLD:g}\b", src)
     assert f'capCeiling = "{CAP_CEILING}"' in src
     assert re.search(rf"minSample = {MIN_SAMPLE}\b", src)
+
+
+@pytest.mark.parametrize("lang", ["zh", "en"])
+def test_every_metric_explains_why_and_purpose(lang: str) -> None:
+    """每项指标都要讲清：为什么重要、我们为什么选它（在评级里的作用）。"""
+    for metric in METRICS.values():
+        g = metric_interpretation(metric, lang)
+        assert g.why and g.purpose, metric.key
+        assert g.why != g.plain and g.purpose != g.why
+        for text in (g.why, g.purpose):
+            assert not contains_forbidden(text), (metric.key, text)
+            if lang == "en":
+                assert not any("一" <= char <= "鿿" for char in text), (metric.key, text)
+    gross = metric_interpretation(METRICS["gross_m"], "zh")
+    assert "护城河" in gross.why
+    assert "盈利能力" in gross.purpose
