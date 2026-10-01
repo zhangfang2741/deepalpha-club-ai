@@ -459,9 +459,10 @@ struct SignalRadarView: View {
                 }
             }
         }
-        // 横向椭圆：画布宽高比约 1.3 : 1，腾出的纵向空间留给下方图例与日期轨
-        .frame(maxWidth: .infinity)
+        // 横向椭圆：先确定画布比例，再让外层容器占满宽度；如果先撑满再套比例，
+        // 在纵向空间不足时 SwiftUI 会把整块画布按高度缩窄并居中，左侧边缘会被挤出空带。
         .aspectRatio(SignalRadarView.fieldAspect, contentMode: .fit)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RadialGradient(
                 colors: [Color(hex: 0x131A26), Theme.background],
