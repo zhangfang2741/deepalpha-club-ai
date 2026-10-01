@@ -555,3 +555,41 @@ def test_loose_keeps_type2_with_earlier_type1():
     events = [_ev("buy1", "2025-01-10", 100.0, span="5笔"), _ev("buy2", "2025-03-10", 105.0)]
     sig = generate_loose_signals(events, legs, [_div("strong", 0.3)] + [_NO_DIV] * 2, [])
     assert [(s.type, s.time) for s in sig] == [("buy1", "2025-01-10"), ("buy2", "2025-03-10")]
+
+
+# ---- 一类背驰：c 段（离开 B）对 b 段（A、B 之间） ----
+
+def _trend_with_legs(c_low: float):
+    """A(130–140) → b 段（132→112，跌 20）→ B(110–120) → c 段（120→c_low）。"""
+    from app.services.chan.pivot import Pivot
+    a_el = [_st("down", "2024-11-01", "2024-11-05", 140, 130), _st("up", "2024-11-05", "2024-11-10", 130, 140),
+            _st("down", "2024-11-10", "2024-11-20", 140, 132)]
+    b_leg = _st("down", "2024-11-20", "2024-12-01", 132, 112)
+    b_el = [_st("up", "2024-12-01", "2024-12-05", 112, 120), _st("down", "2024-12-05", "2024-12-10", 120, 110),
+            _st("up", "2024-12-10", "2024-12-20", 110, 120)]
+    c_leg = _st("down", "2024-12-20", "2025-01-10", 120, c_low)
+    for st, v in ((b_leg, 100.0), (c_leg, 60.0)):  # c 段量能更弱
+        st.power_volume, st.length = v, 10
+    pa = Pivot(zg=140, zd=130, gg=142, dd=128, start_time="2024-11-01", end_time="2024-11-20",
+               level="stroke", elements=a_el)
+    pb = Pivot(zg=120, zd=110, gg=122, dd=108, start_time="2024-12-01", end_time="2024-12-20",
+               level="stroke", elements=b_el)
+    return [*a_el, b_leg, *b_el, c_leg], [pa, pb]
+
+
+def test_buy1_requires_c_leg_weaker_than_b_leg():
+    strokes, pivots = _trend_with_legs(c_low=105)  # c 段跌 15 < b 段跌 20，背驰
+    sig = generate_all_signals([_ev("buy1", "2025-01-10", 105.0)], strokes, [_NO_DIV] * len(strokes), pivots)
+    assert [x.type for x in sig] == ["buy1"]
+    assert sig[0].divergence is not None and sig[0].divergence.price_ratio == 0.77
+
+
+def test_buy1_dropped_when_c_leg_not_weaker_than_b_leg():
+    strokes, pivots = _trend_with_legs(c_low=95)  # c 段跌 25 > b 段跌 20，没有背驰
+    assert generate_all_signals([_ev("buy1", "2025-01-10", 95.0)], strokes, [_NO_DIV] * len(strokes), pivots) == []
+
+
+def test_same_stroke_type2_and_type3_keep_one():
+    # 一买后的回落同时是离开中枢后第一次回落未回中枢：同一笔终点只留三类
+    from app.services.chan.signals import _DUP_PRIORITY
+    assert _DUP_PRIORITY["buy3"] < _DUP_PRIORITY["buy2"]

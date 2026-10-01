@@ -184,6 +184,53 @@ def _in_trend(pivots: list[Pivot], time: str, is_buy: bool, price: float) -> boo
     return b.zd > a.zg and price > b.zg
 
 
+def _leg_stats(legs: list[Stroke]) -> tuple[float, float, int]:
+    """一段走势（若干笔）的力度：价差（首笔起点到末笔终点）、量能合计、时长（笔长度合计）。"""
+    return (
+        abs(legs[0].start_price - legs[-1].end_price),
+        sum(float(st.power_volume) for st in legs),
+        sum(int(st.length) for st in legs),
+    )
+
+
+def _trend_leg_divergence(
+    strokes: list[Stroke], pivots: list[Pivot], time: str, is_buy: bool, lang: str,
+) -> tuple[bool, DivergenceResult | None]:
+    """一类的趋势背驰（缠论原文）：比较 c 段（离开最后中枢 B）与 b 段（A、B 之间）的力度。
+
+    返回（能否判定, 背驰结果）。中枢没有笔明细、b / c 段取不到时「不能判定」，调用方保留
+    czsc 的笔级判定；能判定时 c 段必须价差更弱，且量能或时长至少一项更弱，否则不算一类。
+    """
+    formed = sorted((p for p in pivots if _formed_at(p) <= time), key=_formed_at)
+    if len(formed) < 2 or not formed[-1].elements or not formed[-2].elements:
+        return False, None
+    a, b = formed[-2], formed[-1]
+    entry, a_exit = b.elements[0].start_time, a.elements[-1].end_time
+    b_leg = [st for st in strokes if st.start_time >= a_exit and st.end_time <= entry]
+    sig_start = next((st.start_time for st in strokes if st.end_time == time), None)
+    if sig_start is None:
+        return False, None
+    c_from = max((e.end_time for e in b.elements if e.end_time <= sig_start), default=None)
+    c_leg = [st for st in strokes if c_from is not None and st.start_time >= c_from and st.end_time <= time]
+    if not b_leg or not c_leg:
+        return False, None
+    bp, bv, bl = _leg_stats(b_leg)
+    cp, cv, cl = _leg_stats(c_leg)
+    if bp <= 0:
+        return False, None
+    price_ratio = round(cp / bp, 2)
+    volume_ratio = round(cv / bv, 2) if bv > 0 else 1.0
+    length_ratio = round(cl / bl, 2) if bl > 0 else 1.0
+    if price_ratio >= 1 or (volume_ratio >= 1 and length_ratio >= 1):
+        return True, None
+    strength = classify_strength(price_ratio)
+    return True, DivergenceResult(
+        is_diverged=True, type="trend", strength=strength if strength != "none" else "weak",
+        price_ratio=price_ratio, volume_ratio=volume_ratio, length_ratio=length_ratio,
+        description=force_text(price_ratio, volume_ratio, length_ratio, lang),
+    )
+
+
 def _formed_at(p: Pivot) -> str:
     """中枢形成的时刻：前三个构成元素走完；没有元素明细时退回结束时间。"""
     return p.elements[2].end_time if len(p.elements) >= 3 else p.end_time
@@ -334,12 +381,16 @@ def generate_all_signals(
             continue
         if not _in_trend(pivots, ev.bi_end_time, ev.type == "buy1", ev.bi_end_price):
             continue
+        # 缠论原文：趋势背驰比较 c 段（离开 B）与 b 段（A、B 之间），不是末笔对前一笔
+        judged, leg_div = _trend_leg_divergence(strokes, pivots, ev.bi_end_time, ev.type == "buy1", lang)
+        if judged and leg_div is None:
+            continue
         seen.add(key)
         div: DivergenceResult | None = None
         strength: Literal["strong", "medium", "weak"] = "weak"
         span_n = int(_span_count(ev.span) or 0)
-        forced = _first_bs_force(strokes, idx_by_end[ev.bi_end_time], span_n,
-                                 ev.type == "buy1", pivots, lang)
+        forced = leg_div or _first_bs_force(strokes, idx_by_end[ev.bi_end_time], span_n,
+                                            ev.type == "buy1", pivots, lang)
         dv = forced or div_by_end.get(ev.bi_end_time)
         if dv is not None and dv.is_diverged and dv.strength != "none":
             div = dv
@@ -377,6 +428,14 @@ def generate_all_signals(
     # 三类：离开中枢后第一次回落 / 反弹没有回到中枢
     for sig_type, st, pivot in _derive_type3(strokes, pivots):
         _structural(sig_type, st, f"{pivot.zd:.2f}–{pivot.zg:.2f}")
+
+    # 同一笔终点同时命中二类与三类（二买即三买）只留一个，口径同宽松：三类 > 二类
+    by_time: dict[str, Signal] = {}
+    for x in signals:
+        cur = by_time.get(x.time)
+        if cur is None or _DUP_PRIORITY[x.type] < _DUP_PRIORITY[cur.type]:
+            by_time[x.time] = x
+    signals = list(by_time.values())
 
     # 成立日期：所在笔要等后一笔成笔才不会再延伸（缠论：一笔由后一笔确认），信号此时才算成立。
     # detected_time 取「从这一笔终点出发的下一笔第一次成笔」的K线（stroke_started_at），不再等下一笔

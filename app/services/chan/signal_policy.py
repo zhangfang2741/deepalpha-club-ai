@@ -97,7 +97,8 @@ class StrictPolicy(_PolicyInfo):
 
 # 版本记录——strict：std1 严格按原文；std2 中枢「已形成」判定 + 一类被跌破作废 + 只落已完成的笔；
 # std3 新增 candidates；std4 日期改为成立日（所在笔的下一笔走完）；std5 成立日改为下一笔第一次成笔
-# （缠论：一笔由后一笔确认），中位滞后由 10 个交易日缩短。
+# （缠论：一笔由后一笔确认），中位滞后由 10 个交易日缩短；
+# std6 一类背驰改为 c 段（离开 B）对 b 段（A、B 之间）比力度，同笔二 / 三类只留一个。
 # loose：loose1 严格化之前的口径；loose2 组装加一致性约束（同笔多信号按一类>三类>二类
 # 去重、无源二类过滤）。
 _ALL: tuple[SignalPolicy, ...] = (
@@ -108,7 +109,7 @@ _ALL: tuple[SignalPolicy, ...] = (
             czsc_families=("first", "second", "third"),
         ),
         StrictPolicy(
-            name="strict", version="std5", label_zh="严格", label_en="Strict",
+            name="strict", version="std6", label_zh="严格", label_en="Strict",
             description_zh="严格按缠论原文定义，只认已走完的笔",
             description_en="Textbook Chan definitions; only completed legs count",
             czsc_families=("first",),
