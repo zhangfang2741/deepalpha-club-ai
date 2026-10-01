@@ -34,6 +34,8 @@ class Stage(BaseModel):
     unprofitable: bool
     cash_flows: CashFlows
     note: str
+    revenue_growth_pct: float | None = None   # 营收同比（%），阶段判定主轴
+    revenue_cagr_3y_pct: float | None = None  # 营收 3 年复合增速（%），不足 3 年为空
 
 
 class Overall(BaseModel):

@@ -60,7 +60,7 @@ def test_nvda_structure():
     assert pe_fwd.formula.inputs[0].note == ev.inp.price_date
     assert "位分析师均值" in pe_fwd.formula.inputs[1].note
     assert p.peer_group.text == "与信息技术板块 191 家公司比"
-    assert p.stage.key == "mature"
+    assert p.stage.key == "growth" and p.stage.revenue_growth_pct is not None
     assert sum(d.is_highest for d in p.dimensions) == 1 and sum(d.is_lowest for d in p.dimensions) == 1
 
 

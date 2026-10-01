@@ -155,5 +155,5 @@ def test_every_metric_explains_why_and_purpose(lang: str) -> None:
             if lang == "en":
                 assert not any("一" <= char <= "鿿" for char in text), (metric.key, text)
     gross = metric_interpretation(METRICS["gross_m"], "zh")
-    assert "护城河" in gross.why
+    assert "卖上价钱" in gross.why
     assert "盈利能力" in gross.purpose

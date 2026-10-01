@@ -73,10 +73,14 @@ struct QuantStage: Decodable {
     let unprofitable: Bool
     let cashFlows: QuantCashFlows
     let note: String
+    let revenueGrowthPct: Double?
+    let revenueCagr3yPct: Double?
 
     enum CodingKeys: String, CodingKey {
         case key, name, unprofitable, note
         case cashFlows = "cash_flows"
+        case revenueGrowthPct = "revenue_growth_pct"
+        case revenueCagr3yPct = "revenue_cagr_3y_pct"
     }
 }
 

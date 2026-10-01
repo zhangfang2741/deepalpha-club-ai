@@ -58,11 +58,14 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
       "the other dimensions. The change in the consensus mean is used rather than counts of raising or cutting "
       "analysts.")),
     (("公司阶段", "Company stage"),
-     ("按最近 12 个月经营 / 投资 / 筹资现金流的正负划分：初创（− − +）、成长（+ − +）、成熟（+ − −）、"
-      "收缩（− + ±），其余为调整期。只做标注，不影响等级；金融股不做阶段标注。",
-      "Stages follow the signs of trailing operating / investing / financing cash flows: introduction (− − +), "
-      "growth (+ − +), mature (+ − −), contraction (− + ±), otherwise shake-out. Stages are labels only and do not "
-      "change grades; financials are not labeled.")),
+     ("以营收增速为主、经营现金流为辅：营收同比 ≥ 15% 且 3 年复合 ≥ 10%（不足 3 年只看同比）为高增长，"
+      "经营现金流为正是成长期、否则初创期；营收同比 ≤ −5% 时经营现金流为正是调整期、否则收缩期；"
+      "其余经营现金流为正是成熟期、否则调整期。只做标注，不影响等级；金融股不做阶段标注。",
+      "Revenue growth leads and operating cash flow follows: revenue up ≥ 15% year over year with a 3-year CAGR "
+      "≥ 10% (year over year only with under 3 years of history) is high growth — growth with positive operating "
+      "cash flow, introduction otherwise. Revenue down ≥ 5% is shake-out with positive operating cash flow, "
+      "contraction otherwise. Everything else is mature with positive operating cash flow, shake-out otherwise. "
+      "Stages are labels only and do not change grades; financials are not labeled.")),
     (("更新时间", "Updates"),
      ("每个美股交易日收盘后重新计算；财报类数据在公司披露新财报后更新。页面上标注了行情日期、财报期与一致预期更新日。",
       "Recomputed after every US trading day; statement data refreshes after new filings. Pages show the price date, "

@@ -40,8 +40,8 @@ STAGE_NOTES: dict[str, tuple[str, str]] = {
                "Common focus points at this stage are revenue and earnings growth and margin trends"),
     "mature": ("这一阶段常见的关注点是估值、自由现金流和资本回报",
                "Common focus points at this stage are valuation, free cash flow and returns on capital"),
-    "shakeout": ("现金流结构处在变化中，各维度等级可能波动较大",
-                 "The cash-flow pattern is in transition; grades may fluctuate more than usual"),
+    "shakeout": ("营收或经营现金流处在变化中，各维度等级可能波动较大",
+                 "Revenue or operating cash flow is in transition; grades may fluctuate more than usual"),
     "decline": ("这一阶段常见的关注点是现金流和资产负债状况",
                 "Common focus points at this stage are cash flow and the balance sheet"),
 }

@@ -19,3 +19,24 @@ struct QuantStageCashFlowRow: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+/// 营收增速一行；缺失时显示原因（如上市不足 3 年）。
+struct QuantStageGrowthRow: View {
+    let title: String
+    let pct: Double?
+    let missingNote: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title).font(QuantTypography.body).foregroundStyle(Theme.textPrimary)
+            Spacer()
+            if let pct {
+                Text(String(format: "%+.1f%%", pct))
+                    .font(QuantTypography.value.monospacedDigit()).foregroundStyle(Theme.textPrimary)
+            } else {
+                Text(missingNote).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}

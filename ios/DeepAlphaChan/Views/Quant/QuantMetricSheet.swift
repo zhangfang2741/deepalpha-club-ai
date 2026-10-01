@@ -25,7 +25,7 @@ struct QuantMetricSheet: View {
 }
 
 /// 指标详情的内容本体（不含滚动容器，便于离屏渲染验收）。
-/// 顺序按「先懂再看再算」：是什么（大白话）→ 本股在板块里的位置 → 高低怎么看 → 怎么算（折叠）。
+/// 顺序按「先懂再看再算」：认识这个指标（是什么 / 为什么重要 / 我们为什么用它）→ 本股在板块里的位置 → 怎么算（折叠）。
 struct QuantMetricDetailContent: View {
     let metric: QuantMetric
     let research: QuantResearch
@@ -39,7 +39,6 @@ struct QuantMetricDetailContent: View {
             heroHeader
             plainBlock
             positionBlock
-            readingBlock
             calculationGroup
         }
         .padding(18)
@@ -158,33 +157,6 @@ struct QuantMetricDetailContent: View {
             .padding(14).frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
         }
-    }
-
-    /// 高低怎么看 + 需要注意的边界。
-    private var readingBlock: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label(L("怎么看"), systemImage: metric.lowerBetter ? "arrow.down.circle" : "arrow.up.circle")
-                .font(QuantTypography.metadata.weight(.semibold)).foregroundStyle(Theme.textSecondary)
-            Text(itp?.reading.flatMap { $0.isEmpty ? nil : $0 }
-                 ?? (metric.lowerBetter ? L("越低排名越靠前") : L("越高排名越靠前")))
-                .font(QuantTypography.body).foregroundStyle(Theme.textPrimary)
-                .lineSpacing(3).fixedSize(horizontal: false, vertical: true)
-            if let threshold = itp?.threshold, !threshold.isEmpty {
-                Divider().overlay(Theme.border)
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill").font(QuantTypography.metadata)
-                        .foregroundStyle(Theme.segment).padding(.top, 2)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(L("需要注意")).font(QuantTypography.metadata.weight(.semibold))
-                            .foregroundStyle(Theme.textSecondary)
-                        Text(threshold).font(QuantTypography.body).foregroundStyle(Theme.textPrimary.opacity(0.85))
-                            .lineSpacing(2).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-        }
-        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
     }
 
     /// 怎么算：口径定义 + 代入本股数据 + 等级分档，默认折叠。

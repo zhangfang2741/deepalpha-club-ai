@@ -34,7 +34,7 @@ struct QuantStageTimeline: View {
             }
             if current == nil {
                 Text(research.peerGroup?.sectorKey == "financials"
-                     ? L("金融公司的现金流结构不同，本模型不判定阶段。")
+                     ? L("金融公司的营收与现金流口径不同，本模型不判定阶段。")
                      : L("暂时没有可用的阶段结果，仍可点开了解各阶段。"))
                     .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
             } else {

@@ -38,7 +38,8 @@ struct QuantResearchTests {
         let pe = nvda.dimensions[0].allMetrics.first { $0.key == "pe_fwd" }!
         precondition(pe.formula?.expression.hasPrefix("股价 ") == true)
         precondition(pe.distribution?["p50"] != nil && pe.lowerBetter)
-        precondition(nvda.stage?.name == "成熟期")
+        precondition(nvda.stage?.name == "成长期")
+        precondition(nvda.stage?.revenueGrowthPct != nil)
         precondition(nvda.peerGroup?.inUniverse == true)
     }
 

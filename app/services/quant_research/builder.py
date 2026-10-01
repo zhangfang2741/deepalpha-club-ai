@@ -51,7 +51,7 @@ from app.schemas.quant_research import (
     Stage,
 )
 
-METHODOLOGY_VERSION = "q3"  # q3：EPS 修正过渡期用外部一致预期趋势
+METHODOLOGY_VERSION = "q4"  # q3：EPS 修正过渡期用外部一致预期趋势；q4：阶段改为营收增速主轴
 _REVISION_LOOKBACK = {"eps_fy1_30d": 30, "eps_fy1_90d": 90, "eps_fy2_90d": 90, "rev_fy1_90d": 90}
 
 
@@ -116,7 +116,8 @@ def evaluate(inp: StockInputs, history: list[EstimatePoint], dists: Distribution
     for d in dims:
         d.key_fact = pick_key_fact(d)
     snap_dates = [p.snapshot_date for p in history]
-    return Evaluation(inp, metrics, dims, stage_of(inp), n,
+    stage = stage_of(inp, metrics["rev_yoy"].value, metrics["rev_cagr3"].value)
+    return Evaluation(inp, metrics, dims, stage, n,
                       estimates_date=max(snap_dates).isoformat() if snap_dates else None)
 
 
@@ -141,6 +142,10 @@ def grades_of(ev: Evaluation) -> dict[str, str]:
 
 
 # ---------- 组装 ----------
+
+def _pct(v: float | None) -> float | None:
+    return round(v * 100, 1) if v is not None else None
+
 
 def _formula_inputs(sm: ScoredMetric, ev: Evaluation, lang: tx.Lang) -> list[FormulaInput]:
     out = []
@@ -213,7 +218,9 @@ def build_payload(ev: Evaluation, lang: tx.Lang, *, in_universe: bool, sector_sa
         stage = Stage(key=ev.stage.key, name=tx.stage_name(ev.stage.key, lang), unprofitable=ev.stage.unprofitable,
                       cash_flows=CashFlows(operating=ev.stage.operating, investing=ev.stage.investing,
                                            financing=ev.stage.financing),
-                      note=tx.stage_note(ev.stage.key, ev.stage.unprofitable, lang))
+                      note=tx.stage_note(ev.stage.key, ev.stage.unprofitable, lang),
+                      revenue_growth_pct=_pct(ev.stage.revenue_growth),
+                      revenue_cagr_3y_pct=_pct(ev.stage.revenue_cagr_3y))
     return QuantResearchOut(
         market="us", symbol=inp.symbol, name=inp.name, status="ok",
         methodology_version=METHODOLOGY_VERSION,

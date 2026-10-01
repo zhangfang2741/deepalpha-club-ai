@@ -29,25 +29,26 @@ enum QuantLifecycleStage: String, CaseIterable, Identifiable {
     var explanation: String {
         switch self {
         case .intro:
-            return L("经营与投资现金流均为净流出或零，同时筹资带来现金流入。本页将这种现金流结构标为初创期，不代表公司一定刚成立。")
+            return L("营收高速增长，但经营活动还没有产生正向现金流，扩张仍靠外部资金或账上存量支撑。营收基数为零、仍在烧钱的公司也归入这里。")
         case .growth:
-            return L("经营活动产生现金，投资现金流为净流出或零，同时筹资带来现金流入。本页将这种结构标为成长期。")
+            return L("营收高速增长，且经营活动已经能产生现金。增长持续性、利润率能否随规模提升是这一阶段的常见观察点。")
         case .mature:
-            return L("经营活动产生现金，投资与筹资活动均为净流出或零。本页将这种结构标为成熟期；筹资流出可能涉及还债、分红或回购，具体原因仍需查看财报。")
+            return L("营收增速平稳，经营活动稳定产生现金。现金多用于分红、回购或再投资，具体去向仍需查看财报。")
         case .shakeout:
-            return L("现金流组合未落入初创、成长、成熟或收缩规则，本页归为调整期。它不一定意味着经营恶化，也不能据此认定正在进入收缩。")
+            return L("营收在萎缩但经营仍有现金流入，或营收平稳但经营现金流转负。它不一定意味着经营恶化，也不能据此认定正在进入收缩。")
         case .decline:
-            return L("经营活动未产生正向净现金流，而投资活动带来现金流入。本页将这种结构标为收缩期；是否涉及资产处置等情况，需要进一步查看财报。")
+            return L("营收明显萎缩，且经营活动没有产生正向现金流。是否涉及行业下行、资产处置等情况，需要进一步查看财报。")
         }
     }
 
+    /// 门槛与后端 stage.py 一致（GROWTH_YOY_MIN / GROWTH_CAGR3_MIN / SHRINK_YOY_MAX），由后端 test_stage_ios_rules_match_thresholds 守护。
     var rule: String {
         switch self {
-        case .intro: return L("经营 ≤ 0 · 投资 ≤ 0 · 筹资 > 0")
-        case .growth: return L("经营 > 0 · 投资 ≤ 0 · 筹资 > 0")
-        case .mature: return L("经营 > 0 · 投资 ≤ 0 · 筹资 ≤ 0")
-        case .shakeout: return L("经营 > 0、投资 > 0（筹资不限）；或三项均 ≤ 0。")
-        case .decline: return L("经营 ≤ 0 · 投资 > 0 · 筹资不限")
+        case .intro: return L("营收同比 ≥ 15% 且 3 年复合 ≥ 10% · 经营现金流 ≤ 0")
+        case .growth: return L("营收同比 ≥ 15% 且 3 年复合 ≥ 10% · 经营现金流 > 0")
+        case .mature: return L("营收同比在 −5% ~ 15% 之间 · 经营现金流 > 0")
+        case .shakeout: return L("营收同比 ≤ −5% · 经营现金流 > 0；或营收同比在 −5% ~ 15% 之间 · 经营现金流 ≤ 0")
+        case .decline: return L("营收同比 ≤ −5% · 经营现金流 ≤ 0")
         }
     }
 

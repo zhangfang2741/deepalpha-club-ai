@@ -24,7 +24,7 @@ struct QuantStageDetailContent: View {
                 Text(L("判定规则")).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
                 Text(selected.rule).font(QuantTypography.body.monospacedDigit()).foregroundStyle(Theme.accent)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(L("使用最近 12 个月的现金流；零值与负值归为同一侧。"))
+                Text(L("营收同比 = 最近 12 个月营收 ÷ 上一个 12 个月 − 1；不足 3 年历史只看同比。经营现金流取最近 12 个月，零值归为 ≤ 0 一侧。"))
                     .font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
             }
             .padding(16).frame(maxWidth: .infinity, alignment: .leading)
@@ -33,13 +33,15 @@ struct QuantStageDetailContent: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(L("为什么判为%@？", selected.title))
                          .font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
-                    Text(L("三项实际现金流符合上面的阶段组合。"))
+                    Text(L("实际营收增速与经营现金流符合上面的规则。"))
                         .font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
+                    QuantStageGrowthRow(title: L("营收同比"), pct: stage.revenueGrowthPct,
+                                        missingNote: L("营收基数为零"))
+                    Divider().overlay(Theme.border)
+                    QuantStageGrowthRow(title: L("营收 3 年复合增速"), pct: stage.revenueCagr3yPct,
+                                        missingNote: L("不足 3 年历史"))
+                    Divider().overlay(Theme.border)
                     QuantStageCashFlowRow(title: L("经营现金流"), value: stage.cashFlows.operating)
-                    Divider().overlay(Theme.border)
-                    QuantStageCashFlowRow(title: L("投资现金流"), value: stage.cashFlows.investing)
-                    Divider().overlay(Theme.border)
-                    QuantStageCashFlowRow(title: L("筹资现金流"), value: stage.cashFlows.financing)
                     if let period = research.asOf?.fiscalPeriod {
                         Text(L("财报参考期：%@", period)).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
                     }
@@ -49,7 +51,7 @@ struct QuantStageDetailContent: View {
                 .padding(16)
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
             }
-            Text(L("这是现金流结构的阶段定位，不是完成进度。企业可能跨阶段变化；阶段标注不影响量化等级。"))
+            Text(L("这是按营收增速与经营现金流做的阶段定位，不是完成进度。企业可能跨阶段变化；阶段标注不影响量化等级。"))
                 .font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
