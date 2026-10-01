@@ -21,14 +21,14 @@ async def test_sector_board_reads_rows_as_of_requested_date(monkeypatch):
     def load(parent=None, as_of=None):
         calls.append((parent, as_of))
         return [SectorRow(as_of or "2026-09-30", "energy", 0.02, "risk_on", None, 0.6),
-                SectorRow(as_of or "2026-09-30", "semiconductors", 0.05, "risk_on", None, 0.7)]
+                SectorRow(as_of or "2026-09-30", "technology", 0.05, "risk_on", None, 0.7)]
 
     monkeypatch.setattr(regime_view, "load_sector_rows", load)
     redis = _Redis()
     resp = await svc.get_sector_board(redis, "us", "zh", None, date="2026-09-24")
     assert calls == [(None, "2026-09-24")]
     assert resp.as_of == "2026-09-24"
-    assert [s.key for s in resp.sectors] == ["semiconductors", "energy"]
+    assert [s.key for s in resp.sectors] == ["technology", "energy"]
     # 不同日期分开缓存；同一日期命中缓存不再查库
     await svc.get_sector_board(redis, "us", "zh", None, date="2026-09-24")
     await svc.get_sector_board(redis, "us", "zh", None, date="2026-09-23")

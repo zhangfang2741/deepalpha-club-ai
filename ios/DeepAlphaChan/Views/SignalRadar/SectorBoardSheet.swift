@@ -11,8 +11,8 @@ struct SectorRadarContext {
 }
 
 /// 行业弹层：各行业按相对大盘强弱从强到弱，每行带状态色点、强弱、当前雷达选中日的买卖点数。
-/// 点一级行业 → 关闭弹层，雷达在当前指数里只看该行业（等同于在筛选条上选中它，不切换指数）；
-/// 有子行业的可下钻看细分（只展示）。radar 为 nil（自选等没有行业统计的雷达）时行业只展示、不可筛。
+/// 行业严格按 GICS 一级行业，只有一级、不下钻。点行业 → 关闭弹层，雷达在当前指数里只看该行业
+/// （等同于在筛选条上选中它，不切换指数）。radar 为 nil（自选等没有行业统计的雷达）时行业只展示、不可筛。
 struct SectorBoardSheet: View {
     let market: StockMarket
     /// 按该日收盘取强弱（雷达所选日，与筛选条排序一致）；nil 取最新。
@@ -24,14 +24,22 @@ struct SectorBoardSheet: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    /// 点选后留 0.2 秒：先看到对勾与触感反馈、雷达在后面换好，再收起弹层，而不是点完瞬间消失。
+    private func closeAfterFeedback() {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(200))
+            dismiss()
+        }
+    }
+
     var body: some View {
         NavigationStack {
             SectorBoardList(market: market, date: date, parent: nil, parentName: nil, radar: radar,
                             onPick: { key, name in
                                 onPick(key, name)
-                                dismiss()
+                                closeAfterFeedback()
                             },
-                            onClear: onClear.map { clear in { clear(); dismiss() } })
+                            onClear: onClear.map { clear in { clear(); closeAfterFeedback() } })
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { Button(L("关闭")) { dismiss() } }
             }
@@ -65,20 +73,14 @@ struct SectorBoardList: View {
         self.onClear = onClear
     }
 
-    /// 右侧下钻列宽（没有细分的行同样留出，保证各行强弱值对齐）。
-    private static let drillWidth: CGFloat = 46
-
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 10) {
                 if let board, !board.sectors.isEmpty {
                     summary(board)
                     if parent == nil, let radar, let onClear { allRow(radar, onClear: onClear) }
                     let maxAbs = max(board.sectors.compactMap { $0.rsVsMarket.map(abs) }.max() ?? 0, 0.0001)
-                    let ahead = board.sectors.filter { ($0.rsVsMarket ?? -1) >= 0 }
-                    let behind = board.sectors.filter { ($0.rsVsMarket ?? -1) < 0 }
-                    if !ahead.isEmpty { section(L("跑赢大盘"), rows: ahead, maxAbs: maxAbs) }
-                    if !behind.isEmpty { section(L("跑输大盘"), rows: behind, maxAbs: maxAbs) }
+                    list(board.sectors, maxAbs: maxAbs)
                     footer
                 } else if failed || board != nil {
                     VStack(spacing: 10) {
@@ -89,54 +91,69 @@ struct SectorBoardList: View {
                     }
                     .frame(maxWidth: .infinity).padding(.top, 60)
                 } else {
-                    ProgressView().frame(maxWidth: .infinity).padding(.top, 60)
+                    skeleton
                 }
             }
-            .padding(16)
+            .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 16)
+            .animation(.smooth(duration: 0.3), value: board?.asOf)
         }
+        .scrollIndicators(.hidden)
         .background(Theme.background)
         .navigationTitle(parentName ?? L("%@行业", market.title))
         .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
+        // 雷达换了选中日就重取；旧数据留在屏上直到新数据到，不闪空白。
+        .task(id: date) { await load() }
     }
 
     private func load() async {
         failed = false
         do {
-            board = try await MarketOverviewService.sectors(market: market, parent: parent, date: date)
+            let fresh = try await MarketOverviewService.sectors(market: market, parent: parent, date: date)
+            withAnimation(.smooth(duration: 0.3)) { board = fresh }
         } catch {
             failed = true
         }
     }
 
-    // MARK: - 顶部 / 底部
-
-    /// 顶部只留两件事：数据是哪天收盘的、圆点颜色是什么意思。
-    private func summary(_ board: SectorBoard) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let asOf = board.asOf {
-                Text(L("%@ 收盘 · 近 20 个交易日相对大盘", asOf))
-                    .font(.footnote).foregroundColor(Theme.textSecondary)
-            }
-            HStack(spacing: 14) {
-                legend("risk_on")
-                legend("neutral")
-                legend("risk_off")
+    /// 加载中的骨架：与真实行同高，数据一到原地替换，避免从转圈到列表的跳变。
+    private var skeleton: some View {
+        VStack(spacing: 0) {
+            ForEach(0..<8, id: \.self) { i in
+                HStack(spacing: 8) {
+                    RoundedRectangle(cornerRadius: 4).frame(width: 72, height: 16)
+                    RoundedRectangle(cornerRadius: 4).frame(width: 28, height: 12)
+                    Spacer()
+                    RoundedRectangle(cornerRadius: 4).frame(width: 58, height: 14)
+                    RoundedRectangle(cornerRadius: 2).frame(width: 44, height: 4)
+                }
+                .padding(.horizontal, 14).padding(.vertical, 12)
+                if i < 7 { Divider().overlay(Theme.border).padding(.leading, 14) }
             }
         }
+        .background(Theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .foregroundColor(Theme.textSecondary.opacity(0.18))
+        .redacted(reason: .placeholder)
+        .accessibilityHidden(true)
     }
 
-    private func legend(_ label: String) -> some View {
-        HStack(spacing: 5) {
-            Circle().fill(MarketHeader.regimeColor(label)).frame(width: 7, height: 7)
-            Text(Self.labelText(label)).font(.caption).foregroundColor(Theme.textSecondary)
+    // MARK: - 顶部 / 底部
+
+    /// 顶部只留一件事：数据是哪天收盘的。
+    private func summary(_ board: SectorBoard) -> some View {
+        HStack(spacing: 8) {
+            if let asOf = board.asOf {
+                Text(L("%@ 收盘 · 近 20 日相对大盘", asOf))
+                    .font(.caption).foregroundColor(Theme.textSecondary)
+                    .lineLimit(1).minimumScaleFactor(0.8)
+            }
         }
+        .padding(.horizontal, 2)
     }
 
     /// 说明文字退到底部：怎么排的、点行业会怎样、免责。
     private var footer: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(L("按相对大盘的强弱排序；圆点为行业状态。"))
             if parent == nil, let radar {
                 Text(L("买卖点为%@ %@ 的雷达统计；点行业即在雷达上只看该行业。", radar.universeName, radar.date))
             }
@@ -153,121 +170,93 @@ struct SectorBoardList: View {
         let sells = radar.totals?.sell ?? radar.counts.values.reduce(0) { $0 + ($1["sell"] ?? 0) }
         let selected = radar.selectedKey == nil
         return Button(action: onClear) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Text(L("全部行业")).font(.body.weight(.semibold)).foregroundColor(Theme.textPrimary)
-                        if selected {
-                            Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
-                        }
-                    }
-                    HStack(spacing: 6) {
-                        Text(L("%lld 买", buys)).foregroundColor(Theme.up)
-                        Text(L("%lld 卖", sells)).foregroundColor(Theme.down)
-                    }
-                    .font(.caption.monospacedDigit())
+            HStack(spacing: 8) {
+                Text(L("全部行业")).font(.body.weight(.semibold)).foregroundColor(Theme.textPrimary)
+                if selected {
+                    Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
                 }
                 Spacer(minLength: 8)
+                countText(buy: buys, sell: sells)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 11)
+            .padding(.vertical, 10)
             .background(selected ? Theme.accent.opacity(0.12) : Theme.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(RowPressStyle())
+        .sensoryFeedback(.selection, trigger: selected)
         .accessibilityHint(L("雷达显示全部行业的信号"))
     }
 
-    // MARK: - 分组与行
-
-    private func section(_ title: String, rows: [SectorRow], maxAbs: Double) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    /// 买卖点数：红买绿卖的小字，没有就不画。
+    @ViewBuilder
+    private func countText(buy: Int, sell: Int) -> some View {
+        if buy + sell > 0 {
             HStack(spacing: 6) {
-                Text(title).font(.subheadline.weight(.semibold)).foregroundColor(Theme.textPrimary)
-                Text("\(rows.count)").font(.caption.monospacedDigit()).foregroundColor(Theme.textSecondary)
+                if buy > 0 { Text(L("%lld 买", buy)).foregroundColor(Theme.up) }
+                if sell > 0 { Text(L("%lld 卖", sell)).foregroundColor(Theme.down) }
             }
-            .padding(.horizontal, 4)
-            VStack(spacing: 0) {
-                ForEach(rows) { row in
-                    rowView(row, maxAbs: maxAbs)
-                    if row.id != rows.last?.id { Divider().overlay(Theme.border).padding(.leading, 14) }
-                }
-            }
-            .background(Theme.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .font(.caption2.weight(.semibold).monospacedDigit())
         }
     }
 
-    @ViewBuilder
+    // MARK: - 行
+
+    /// 所有行业一张卡，按相对大盘强弱从强到弱（正负由颜色与强弱条区分，不再分跑赢 / 跑输两组）。
+    private func list(_ rows: [SectorRow], maxAbs: Double) -> some View {
+        VStack(spacing: 0) {
+            ForEach(rows) { row in
+                rowView(row, maxAbs: maxAbs)
+                if row.id != rows.last?.id { Divider().overlay(Theme.border).padding(.leading, 14) }
+            }
+        }
+        .background(Theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    /// 单行：行业名 + 状态文字 ……… 买卖点 · 强弱值 + 强弱条。一行约 40pt，半屏就能看到大半。
     private func rowView(_ row: SectorRow, maxAbs: Double) -> some View {
         let selected = parent == nil && radar?.selectedKey == row.key
         let rs = row.rsVsMarket
-        let content = HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(row.name).font(.body.weight(.semibold)).foregroundColor(Theme.textPrimary)
-                    if selected {
-                        Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
-                    }
-                }
-                HStack(spacing: 6) {
-                    if let label = row.label {
-                        HStack(spacing: 4) {
-                            Circle().fill(MarketHeader.regimeColor(label)).frame(width: 6, height: 6)
-                            Text(Self.labelText(label)).foregroundColor(MarketHeader.regimeColor(label))
-                        }
-                    }
-                    if parent == nil, let c = radar?.counts[row.key], (c["buy"] ?? 0) + (c["sell"] ?? 0) > 0 {
-                        Text("·").foregroundColor(Theme.textSecondary)
-                        Text(L("%lld 买", c["buy"] ?? 0)).foregroundColor(Theme.up)
-                        Text(L("%lld 卖", c["sell"] ?? 0)).foregroundColor(Theme.down)
-                    }
-                }
-                .font(.caption.monospacedDigit())
+        let counts = parent == nil ? radar?.counts[row.key] : nil
+        let content = HStack(spacing: 8) {
+            Text(row.name).font(.body.weight(.semibold)).foregroundColor(Theme.textPrimary)
+                .lineLimit(1).minimumScaleFactor(0.8)
+            if let label = row.label {
+                Text(Self.labelText(label)).font(.caption)
+                    .foregroundColor(MarketHeader.regimeColor(label))
+                    .lineLimit(1)
             }
-            Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 5) {
-                Text(SectorBoardList.rsText(rs))
-                    .font(.subheadline.weight(.semibold).monospacedDigit())
-                    .foregroundColor((rs ?? 0) >= 0 ? Theme.up : Theme.down)
-                StrengthBar(value: rs ?? 0, maxAbs: maxAbs)
-                    .frame(width: 72, height: 4)
+            if selected {
+                Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
             }
+            Spacer(minLength: 6)
+            countText(buy: counts?["buy"] ?? 0, sell: counts?["sell"] ?? 0)
+            Text(SectorBoardList.rsText(rs))
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .foregroundColor((rs ?? 0) >= 0 ? Theme.up : Theme.down)
+                .lineLimit(1)
+                .frame(minWidth: 58, alignment: .trailing)
+                .contentTransition(.numericText())
+            StrengthBar(value: rs ?? 0, maxAbs: maxAbs)
+                .frame(width: 44, height: 4)
         }
-        .padding(.leading, 14)
-        .padding(.trailing, parent == nil ? 0 : 14)
-        .padding(.vertical, 11)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
         .contentShape(Rectangle())
+        .background(selected ? Theme.accent.opacity(0.12) : Color.clear)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(row.label.map { "\(row.name) \(Self.labelText($0)) \(SectorBoardList.rsText(rs))" } ?? row.name)
 
         if parent == nil {
-            HStack(spacing: 0) {
-                Button {
-                    onPick(row.key, row.name)
-                } label: { content }
-                .buttonStyle(.plain)
-                .disabled(radar == nil)
-                .accessibilityHint(radar == nil ? "" : L("在雷达上只看该行业"))
-                if row.hasChildren {
-                    NavigationLink {
-                        SectorBoardList(market: market, date: date, parent: row.key, parentName: row.name, radar: radar,
-                                        onPick: onPick)
-                    } label: {
-                        HStack(spacing: 1) {
-                            Text(L("细分")).font(.caption2)
-                            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
-                        }
-                        .foregroundColor(Theme.textSecondary)
-                        .frame(width: Self.drillWidth, alignment: .center)
-                        .frame(maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                    }
-                    .accessibilityLabel(L("查看细分行业"))
-                } else {
-                    Color.clear.frame(width: Self.drillWidth, height: 1)
-                }
-            }
-            .background(selected ? Theme.accent.opacity(0.12) : Color.clear)
+            Button {
+                onPick(row.key, row.name)
+            } label: { content }
+            .buttonStyle(RowPressStyle())
+            .sensoryFeedback(.selection, trigger: selected)
+            .disabled(radar == nil)
+            .accessibilityHint(radar == nil ? "" : L("在雷达上只看该行业"))
         } else {
             content
         }
@@ -292,11 +281,12 @@ struct SectorBoardList: View {
 private struct StrengthBar: View {
     let value: Double
     let maxAbs: Double
+    @State private var grown = false
 
     var body: some View {
         GeometryReader { geo in
             let half = geo.size.width / 2
-            let len = half * CGFloat(min(abs(value) / maxAbs, 1))
+            let len = half * CGFloat(min(abs(value) / maxAbs, 1)) * (grown ? 1 : 0)
             ZStack(alignment: .leading) {
                 Capsule().fill(Theme.textSecondary.opacity(0.15))
                 Capsule()
@@ -306,6 +296,18 @@ private struct StrengthBar: View {
                 Rectangle().fill(Theme.textSecondary.opacity(0.5)).frame(width: 1).offset(x: half)
             }
         }
+        .animation(.smooth(duration: 0.4), value: value)
+        .onAppear { withAnimation(.smooth(duration: 0.5).delay(0.05)) { grown = true } }
         .accessibilityHidden(true)
+    }
+}
+
+/// 行的按压反馈：按下时底色微亮、轻微缩小，松手弹回。
+private struct RowPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(configuration.isPressed ? Theme.textPrimary.opacity(0.06) : Color.clear)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.snappy(duration: 0.18), value: configuration.isPressed)
     }
 }

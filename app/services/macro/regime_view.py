@@ -12,12 +12,12 @@ from sqlmodel import col, select
 from app.models.regime_features import RegimeFeatures
 from app.models.regime_sector_features import RegimeSectorFeatures
 from app.schemas.macro import MacroStateOut, MacroStatePoint, SectorBriefOut, SectorRowOut
-from app.services.regime.constants import LABEL_ZH, SECTOR_CHILDREN, SECTOR_NAME_ZH
+from app.services.regime.constants import LABEL_ZH, SECTOR_NAME_ZH, SECTOR_SYMBOL
 
 LABEL_EN = {"risk_on": "Risk-on", "neutral": "Neutral", "risk_off": "Risk-off"}
 
 SECTOR_NAME_EN: dict[str, str] = {
-    "technology": "Technology", "semiconductors": "Semiconductors", "discretionary": "Discretionary",
+    "technology": "Technology", "discretionary": "Discretionary",
     "communication": "Communication", "financials": "Financials", "industrials": "Industrials",
     "energy": "Energy", "materials": "Materials", "healthcare": "Health Care", "staples": "Staples",
     "utilities": "Utilities", "realestate": "Real Estate",
@@ -104,7 +104,7 @@ def sector_rows(rows: list[SectorRow], counts: dict[str, dict[str, int]], lang: 
         SectorRowOut(
             key=r.sector, name=sector_name(r.sector, lang), rs_vs_market=r.rs_vs_market,
             label=r.confirmed_label or r.regime_label, p_risk_on=r.p_risk_on,
-            has_children=bool(SECTOR_CHILDREN.get(r.sector)),
+            has_children=False,  # 只做 GICS 一级行业，不再下钻细分
             buy_count=counts.get(r.sector, {}).get("buy", 0), sell_count=counts.get(r.sector, {}).get("sell", 0),
         )
         for r in rows
@@ -159,4 +159,4 @@ def load_sector_rows(parent: str | None = None, as_of: str | None = None) -> lis
             select(RegimeSectorFeatures).where(RegimeSectorFeatures.trade_date == latest, cond)
         ).all()
     return [SectorRow(r.trade_date, r.sector, r.rs_vs_market, r.confirmed_label, r.regime_label, r.p_risk_on)
-            for r in rows]
+            for r in rows if parent is not None or r.sector in SECTOR_SYMBOL]  # 丢掉已下线的旧一级行业行（如半导体）

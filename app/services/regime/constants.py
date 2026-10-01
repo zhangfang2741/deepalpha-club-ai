@@ -42,10 +42,9 @@ LABEL_ZH = {
 # 市场基准（板块相对强弱 RS 的对标）
 MARKET_SYMBOL = "SPY"
 
-# 11 个 GICS 行业 SPDR ETF：key（英文标识）/ symbol / 中文名
+# 11 个 GICS 一级行业 SPDR ETF：key（英文标识）/ symbol / 中文名。严格按 GICS，半导体属信息技术，不单列。
 SECTORS: list[dict[str, str]] = [
     {"key": "technology", "symbol": "XLK", "name": "科技"},
-    {"key": "semiconductors", "symbol": "SMH", "name": "半导体"},
     {"key": "discretionary", "symbol": "XLY", "name": "可选消费"},
     {"key": "communication", "symbol": "XLC", "name": "通讯服务"},
     {"key": "financials", "symbol": "XLF", "name": "金融"},
@@ -62,7 +61,7 @@ SECTOR_NAME_ZH: dict[str, str] = {s["key"]: s["name"] for s in SECTORS}
 SECTOR_SYMBOL: dict[str, str] = {s["key"]: s["symbol"] for s in SECTORS}
 
 # 子行业（细分）ETF：仅在有干净流动品种的一级行业下挂细分。parent 指向 SECTORS.key。
-# 半导体/必需消费/公用事业无合适细分 ETF，故不挂子行业。
+# 必需消费/公用事业无合适细分 ETF，故不挂子行业。App 只展示一级行业，细分仅供网页端。
 SUB_INDUSTRIES: list[dict[str, str]] = [
     # 科技
     {"key": "tech_software", "symbol": "IGV", "name": "软件", "parent": "technology"},

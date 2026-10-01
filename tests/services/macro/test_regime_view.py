@@ -34,19 +34,19 @@ def test_state_falls_back_to_raw_label_and_skips_empty():
 def test_sector_rows_sorted_with_counts():
     """行业按强弱排序并带买卖点数。"""
     rows = [SectorRow("d", "energy", -0.05, "risk_off", None, 0.1),
-            SectorRow("d", "semiconductors", 0.08, "risk_on", None, 0.8),
+            SectorRow("d", "healthcare", 0.08, "risk_on", None, 0.8),
             SectorRow("d", "technology", None, None, None, None)]
-    out = sector_rows(rows, {"semiconductors": {"buy": 5, "sell": 1}})
-    assert [s.key for s in out] == ["semiconductors", "energy", "technology"]
-    assert (out[0].name, out[0].buy_count, out[0].sell_count) == ("半导体", 5, 1)
-    assert out[2].has_children is True
+    out = sector_rows(rows, {"healthcare": {"buy": 5, "sell": 1}})
+    assert [s.key for s in out] == ["healthcare", "energy", "technology"]
+    assert (out[0].name, out[0].buy_count, out[0].sell_count) == ("医疗", 5, 1)
+    assert not any(s.has_children for s in out)  # 只做一级行业，不下钻
 
 
 def test_strongest_weakest():
     """最强 / 最弱行业。"""
     rows = [SectorRow("d", "energy", -0.05, "risk_off", None, 0.1),
-            SectorRow("d", "semiconductors", 0.08, "risk_on", None, 0.8)]
+            SectorRow("d", "healthcare", 0.08, "risk_on", None, 0.8)]
     s, w = strongest_weakest(rows)
     assert s is not None and w is not None
-    assert (s.key, w.key) == ("semiconductors", "energy")
+    assert (s.key, w.key) == ("healthcare", "energy")
     assert strongest_weakest([]) == (None, None)

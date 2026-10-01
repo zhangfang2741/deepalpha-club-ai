@@ -198,7 +198,7 @@ async def signal_radar_sector_day(
     market: str = Query(default="us", description="市场：us / cn / hk"),
     universe: str = Query(description="universe 键（行业筛选用宽基，如 sp500）"),
     date: str = Query(description="交易日 YYYY-MM-DD", pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    sector: str = Query(description="行业 key，如 semiconductors"),
+    sector: str = Query(description="行业 key，如 technology"),
     mode: str | None = _MODE_QUERY,
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
