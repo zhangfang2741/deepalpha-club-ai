@@ -138,7 +138,7 @@ struct MacroDetailSheet: View {
                     let w = size.width / CGFloat(history.count)
                     for (i, p) in history.enumerated() {
                         let rect = CGRect(x: CGFloat(i) * w, y: 0, width: w + 0.5, height: size.height)
-                        let color = p.label == nil ? Theme.surfaceAlt : MarketHeader.regimeColor(p.label).opacity(0.75)
+                        let color = p.label == nil ? Theme.surfaceAlt : MarketHeader.regimeColor(p.label).opacity(p.pending == true ? 0.4 : 0.75)
                         ctx.fill(Path(rect), with: .color(color))
                     }
                 }
@@ -150,6 +150,10 @@ struct MacroDetailSheet: View {
                     Text(history.last?.date ?? "")
                 }
                 .font(.caption2).foregroundColor(Theme.textSecondary)
+                if history.contains(where: { $0.pending == true }) {
+                    Text(L("最右侧浅色为尚未连续确认的最新判定。"))
+                        .font(.caption2).foregroundColor(Theme.textSecondary)
+                }
             }
         }
     }

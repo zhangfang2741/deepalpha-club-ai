@@ -94,8 +94,18 @@ def build_state(rows: list[StateRow], lang: str = "zh") -> MacroStateOut | None:
 
 
 def state_history(rows: list[StateRow]) -> list[MacroStatePoint]:
-    """近一年状态色带。"""
-    return [MacroStatePoint(date=r.trade_date, label=r.confirmed_label) for r in rows]
+    """近一年状态色带。
+
+    中间尚未确认的天数留空（状态切换期）；但末尾连续未确认的天数用当日原始判定补上并标 pending，
+    否则最新一天会是灰的，与上方「市场状态」卡片（确认标签缺失时用原始标签）对不上。
+    """
+    points = [MacroStatePoint(date=r.trade_date, label=r.confirmed_label) for r in rows]
+    for i in range(len(rows) - 1, -1, -1):
+        if rows[i].confirmed_label is not None:
+            break
+        if rows[i].regime_label is not None:
+            points[i] = MacroStatePoint(date=rows[i].trade_date, label=rows[i].regime_label, pending=True)
+    return points
 
 
 def sector_rows(rows: list[SectorRow], counts: dict[str, dict[str, int]], lang: str = "zh") -> list[SectorRowOut]:
