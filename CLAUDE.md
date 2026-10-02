@@ -136,7 +136,7 @@ deepalpha-club-ai/
 | ETF 资金流 | `/etf` | `/etf` | 资金流热力图 + 偏离度 |
 | 行业估值 | `/valuation` | （并入行业恐慌页） | GICS 行业 PE z-score |
 | 缠论 | `/chan` | `/chan` | 缠论分笔/中枢/背驰 |
-| 信号雷达 | `/signal-radar` | iOS「雷达」Tab（页面标题「市场雷达」） | 扫描各市场指数成分股跑缠论，**只陈列事实**：某天在场的全部买卖点按出现时间排（`scope=all`，新版 App；不带 scope 的旧版 App 在接口层按旧综合分截前 10）。App 用严格口径，只画已成立的买卖点（「待确认」只在雷达上方显示个数）。气泡：红买绿卖、深浅=信号强弱、大小=一二三类；由内向外越靠中心越新、互不重叠（`SectorRadarLayout.pack` 整圆一个扇区）。按行业分扇区的画法已关闭（`SignalRadarView.sectorFieldEnabled=false`，代码与测试保留）。点气泡 / 顶部卡片都是底部面板，「查看K线与结构详情」才进详情页 |
+| 信号雷达 | `/signal-radar` | iOS「雷达」Tab（页面标题「市场雷达」） | 扫描各市场指数成分股跑缠论，**只陈列事实**：某天在场的全部买卖点按出现时间排（`scope=all`，新版 App；不带 scope 的旧版 App 在接口层按旧综合分截前 10）。App 用严格口径，只画已成立的买卖点（「待确认」只在雷达上方显示个数）。气泡：红买绿卖、深浅=信号强弱、大小=一二三类（直径 62 / 88 / 116，再乘时间系数；允许叠 25%，拥挤缩放上限 0.45）；同心环模式下信号数 ≤ 10 个必须全部画出来（先放宽时间圈带、再缩小气泡），超过 10 个才折叠到「另有 N 个 · 查看全部」；由内向外越靠中心越新、互不重叠（`SectorRadarLayout.pack` 整圆一个扇区）。按行业分扇区的画法已关闭（`SignalRadarView.sectorFieldEnabled=false`，代码与测试保留）。点气泡 / 顶部卡片都是底部面板，「查看K线与结构详情」才进详情页 |
 | 威科夫 | `/wyckoff` | `/wyckoff` | Wyckoff 阶段/事件 |
 | 一目均衡表 | `/ichimoku` | `/ichimoku` | Ichimoku 云图信号 |
 | 分析师上调 | `/analyst-upgrades` | `/analyst-upgrades` | 目标价上调榜（SP500/Nasdaq100）；`/overview/{symbol}` 为缠论 App 详情页「分析师评级」分段 |
@@ -169,7 +169,7 @@ deepalpha-club-ai/
 > 缠论口径、收盘价跌破（卖点涨破）即退场、5 个交易日有效期、一周前的展示日不显示未确认信号。
 > 旧版 App（不带 `scope=all`）的前 10 在接口层由 `legacy_view` 按旧综合分现截，**不要**把截取或排雷写回快照。
 > 次级别只补算最新一天「当天新出现的信号 + 旧版前 N 候选池」，封顶 `_SUB_LEVEL_MAX`（`sub_level_targets`），不要对全部信号补算（打满行情源）。
-> 改取舍规则须升 `_mode_ns`（当前 `quant_mark2:all1`）。
+> 改取舍规则须升 `_mode_ns`（当前 `quant_mark2:all2:win2y`）。
 > 雷达形态过滤（`chan/shape_filters.py`，仅雷达、详情页不受影响）**当前暂停**（`service._SHAPE_FILTERS_ENABLED=False`，
 > 代码与测试保留；实测它在 5 日窗口内几乎不剔信号。当时雷达变空的真正原因是 78bee01 的「未确认不上榜」，
 > 已在 2544d31 回退：宽松口径最后一笔上的信号照常上榜、`confirmed=false`，一周前的展示日不显示，收盘价跌破才退场）。启用时：按信号**成立日**（`detected_time`，宽松口径=czsc 事件点亮日）查 czsc 形态状态，
@@ -294,17 +294,23 @@ deepalpha-club-ai/
   （`Stroke.power_price/power_volume/length`），线段为所含笔汇总。强弱按价差比分档：<0.6 强、
   <0.8 中、其余弱（取自 169 个真实一类信号的三分位点）。**MACD 不参与任何判定**，仅为 API
   `macd` 字段（旧版 App 副图）保留计算；新版 App 图表下方为力度面板。
+- **背驰术语一律用缠论原文**（2026-10 起）：只说「趋势背驰 / 盘整背驰」（`DivergenceResult.type`，API `StrokeOut.divergence_type` = `trend` / `consolidation`），
+  **不要自造概念**（顶背驰 / 底背驰、笔力度减弱、「趋势可能转折」等都已去掉）。阶段标题 / 依据 / 图上标签 / 图元解释都按类型显示；
+  歧义的地方（趋势背驰对应一类买卖点、盘整背驰不对应）只写在点开的解释里，不放标题。课程页 `LessonDiagrams` 与网页前端个别页面仍有旧叫法，未统一。
 
 **数据层（根治性，别在算法层补数据的锅）**
 - **前复权**：`skills/kline.py` 全链路用前复权价（FMP dividend-adjusted 端点、Yahoo
   `adjclose` 按比例回调 OHL、东财 qfq）。缠论是纯价格几何，不复权/半复权会在除息、
   A 股送转日产生人为跳空 → 假分型/假笔/假缺口。缓存键带 `qfq` 命名空间。
-- **窗口锚定**：`ChanAnalyzer.analyze(visible_from=...)` 在用户所选起点前多取 warmup
-  （API 层日线 180 天 / 周线 540 天）在完整序列上计算，再裁剪回可见窗口。裁剪时
-  **笔与笔级背驰、线段与线段级背驰按下标平行，必须一并过滤**（下游 zip 依赖对齐）。
-  详情页**始终预热**（`warmup_days` 参数已废弃被忽略）：czsc 要积累若干笔（一买>=5、三买>=7、
-  二买>=15）才出信号，不预热图表开头会没有买卖点。信号雷达取数起点同步前移（`_fetch_start`），
-  保证「从雷达点进详情」两边 K 线区间完全一致，有测试 `test_chan_window_alignment` 守护。
+- **日线固定分析起点（两年，2026-10 起）**：缠论的笔 / 中枢对「从哪根 K 线开始算」敏感——起点早几天就多出一笔，czsc 从第一笔往后
+  给中枢分组，整条序列的中枢整体错开，早期买卖点会凭空出现或消失（MNST 2025-10-31 三买：起点 2025-09-19 没有、2025-10-01 有）。
+  所以日线分析起点固定为 `chan/window.canonical_daily_start(截止日)` = 截止日 - 730 天、取当月 1 号（每月才变一次，K 线缓存键也稳定）；
+  详情页（`api/v1/chan.analysis_window`）、信号雷达（`_fetch_start`）、自选阶段（`watchlist_phases`）、次级别的大级别（`sub_level_service`）
+  **共用这个起点**，用户所选起始日期只决定显示哪一段（`visible_from = max(用户起点, 固定起点)`），不再影响结构。
+  测试 `tests/api/test_chan_window_alignment.py`。注意：固定窗口给的是**稳定而不是更对**——换固定起点早期分组会再变一次；改它须升雷达 `_mode_ns` 的窗口版本（当前 `win2y`）。
+  周线 / 30 分钟沿用旧口径：`ChanAnalyzer.analyze(visible_from=...)` 在可见起点前多取 warmup（周线 540 天 / 30 分钟 20 天）在完整序列上计算，再裁剪回可见窗口。
+  裁剪时**笔与笔级背驰、线段与线段级背驰按下标平行，必须一并过滤**（下游 zip 依赖对齐）。
+  czsc 要积累若干笔（一买>=5、三买>=7、二买>=15）才出信号，所以始终预热（`warmup_days` 参数已废弃被忽略）。
   30 分钟级别（`freq=30min`）可见区间收窄到最近 30 天、预热 20 天（Yahoo 分钟线上限约 60 天）。
 
 **买卖点组装（严格口径 signals.generate_all_signals，信号质量别走偏）**
