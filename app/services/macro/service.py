@@ -52,7 +52,7 @@ async def get_macro(redis: Redis | None, market: str, lang: str = "zh") -> Macro
     """宏观弹层。"""
     if market not in MACRO_MARKETS:
         return MacroResponse(market=market, available=False)
-    key = f"macro:resp:{market}:{lang}"
+    key = cache.response_key("resp", market, lang)
     if (hit := await cache.get_model(redis, key, MacroResponse)) is not None:
         return hit
     rows, series, raw_events = await asyncio.gather(
@@ -76,7 +76,7 @@ async def get_overview(redis: Redis | None, market: str, lang: str = "zh") -> Ma
     """顶部宏观格 + 行业格摘要。"""
     if market not in MACRO_MARKETS:
         return MarketOverviewResponse(market=market, available=False)
-    key = f"macro:overview:{market}:{lang}"
+    key = cache.response_key("overview", market, lang)
     if (hit := await cache.get_model(redis, key, MarketOverviewResponse)) is not None:
         return hit
     rows, sector_rows, raw_events = await asyncio.gather(
@@ -108,7 +108,7 @@ async def get_sector_board(redis: Redis | None, market: str, lang: str = "zh",
     """
     if market not in MACRO_MARKETS:
         return SectorBoardResponse(market=market, available=False)
-    key = f"macro:sectors:{market}:{parent or 'root'}:{lang}" + (f":{date}" if date else "")
+    key = cache.response_key("sectors", market, parent or "root", lang, *([date] if date else []))
     if (hit := await cache.get_model(redis, key, SectorBoardResponse)) is not None:
         return hit
     from app.services.signal_radar.sectors import BROAD_UNIVERSE
