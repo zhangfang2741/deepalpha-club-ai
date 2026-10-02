@@ -127,34 +127,62 @@ fn dp_exit_stroke(
         .next_back()
 }
 
-fn dp_ema(values: &[f64], period: usize) -> Vec<f64> {
-    let mut out = Vec::with_capacity(values.len());
-    let k = 2.0 / (period as f64 + 1.0);
-    for (i, v) in values.iter().enumerate() {
+/// MACD 柱的增量缓存（放在 czsc 的 TaCache 里，逐根只算新增的一根）。
+///
+/// 公式与运算顺序和 Python `calc_macd` 完全一致（EMA 以首值起算，柱 = 2 * (DIF - DEA)），逐位相同；
+/// 不足慢线周期（26 根）时调用方按全 0 处理（旧实现行为）。K 线序列被截断 / 末根被改写时整体重算。
+const DP_HIST: &str = "dp_macd_hist";
+const DP_ST: &str = "dp_macd_st"; // [ema_fast, ema_slow, dea, 首根 dt(ms), 末根 dt(ms), 末根 close]
+
+fn dp_macd_update(c: &CZSC, cache: &mut TaCache) {
+    let n = c.bars_raw.len();
+    let mut hist = cache.series.remove(DP_HIST).unwrap_or_default();
+    let mut st = cache.series.remove(DP_ST).unwrap_or_default();
+    let stale = n == 0
+        || hist.len() > n
+        || (!hist.is_empty()
+            && (st.len() != 6
+                || st[3] != c.bars_raw[0].dt.timestamp_millis() as f64
+                || st[4] != c.bars_raw[hist.len() - 1].dt.timestamp_millis() as f64
+                || st[5] != c.bars_raw[hist.len() - 1].close));
+    if stale {
+        hist.clear();
+        st.clear();
+    }
+    let (kf, ks, kd) = (2.0 / 13.0, 2.0 / 27.0, 2.0 / 10.0);
+    let (mut ef, mut es, mut dea) = if st.len() == 6 { (st[0], st[1], st[2]) } else { (0.0, 0.0, 0.0) };
+    for i in hist.len()..n {
+        let close = c.bars_raw[i].close;
+        let dif;
         if i == 0 {
-            out.push(*v);
+            ef = close;
+            es = close;
+            dif = ef - es;
+            dea = dif;
         } else {
-            let prev = out[i - 1];
-            out.push(v * k + prev * (1.0 - k));
+            ef = close * kf + ef * (1.0 - kf);
+            es = close * ks + es * (1.0 - ks);
+            dif = ef - es;
+            dea = dif * kd + dea * (1.0 - kd);
         }
+        hist.push(2.0 * (dif - dea));
     }
-    out
+    if n > 0 {
+        st = vec![
+            ef,
+            es,
+            dea,
+            c.bars_raw[0].dt.timestamp_millis() as f64,
+            c.bars_raw[n - 1].dt.timestamp_millis() as f64,
+            c.bars_raw[n - 1].close,
+        ];
+    }
+    cache.series.insert(DP_HIST.to_string(), hist);
+    cache.series.insert(DP_ST.to_string(), st);
 }
 
-/// MACD 柱（与 Python calc_macd 同公式 / 同运算顺序：EMA 以首值起算，柱 = 2 * (DIF - DEA)）；不足慢线周期时全 0。
-fn dp_macd_bar(closes: &[f64]) -> Vec<f64> {
-    if closes.len() < 26 {
-        return vec![0.0; closes.len()];
-    }
-    let fast = dp_ema(closes, 12);
-    let slow = dp_ema(closes, 26);
-    let dif: Vec<f64> = fast.iter().zip(slow.iter()).map(|(f, s)| f - s).collect();
-    let dea = dp_ema(&dif, 9);
-    dif.iter().zip(dea.iter()).map(|(d, e)| 2.0 * (d - e)).collect()
-}
-
-/// 一段走势（若干连续笔）的原始力度：价差 # 量能 # 时长 # MACD 面积（与走势同向的柱绝对值之和）。
-fn dp_leg_text(c: &CZSC, legs: &[BI], bar: &[f64]) -> String {
+/// 一段走势（若干连续笔，只读切片）的原始力度：价差 # 量能 # 时长 # MACD 面积（与走势同向的柱绝对值之和）。
+fn dp_leg_text(c: &CZSC, legs: &[BI], hist: &[f64], macd_ready: bool) -> String {
     let first = &legs[0];
     let last = &legs[legs.len() - 1];
     let price = (first.fx_a.fx - last.fx_b.fx).abs();
@@ -163,12 +191,21 @@ fn dp_leg_text(c: &CZSC, legs: &[BI], bar: &[f64]) -> String {
     let is_down = last.fx_b.fx < first.fx_a.fx;
     let (start, end) = (first.fx_a.dt, last.fx_b.dt);
     let mut area = 0.0_f64;
-    for (rb, v) in c.bars_raw.iter().zip(bar.iter()) {
-        if rb.dt >= start && rb.dt <= end && ((is_down && *v < 0.0) || (!is_down && *v > 0.0)) {
-            area += v.abs();
+    if macd_ready {
+        for (rb, v) in c.bars_raw.iter().zip(hist.iter()) {
+            if rb.dt >= start && rb.dt <= end && ((is_down && *v < 0.0) || (!is_down && *v > 0.0)) {
+                area += v.abs();
+            }
         }
     }
     format!("{}#{}#{}#{}", price, volume, length, area)
+}
+
+/// 连续笔的下标区间：起点不早于 start、终点不晚于 end 的笔（笔按时间严格递增，满足条件的必连续）
+fn dp_leg_range(bis: &[BI], start: chrono::DateTime<chrono::Utc>, end: chrono::DateTime<chrono::Utc>) -> Option<(usize, usize)> {
+    let lo = bis.iter().position(|x| x.fx_a.dt >= start)?;
+    let hi = bis.iter().rposition(|x| x.fx_b.dt <= end)?;
+    (lo <= hi).then_some((lo, hi + 1))
 }
 
 /// dp_trend_legs_V261001：趋势前提 + b / c 两段原始力度（缠论一类买卖点的结构依据）
@@ -192,7 +229,7 @@ fn dp_leg_text(c: &CZSC, legs: &[BI], bar: &[f64]) -> String {
     opcode = "DpTrendLegsV261001",
     param_kind = "DpTrendLegsV261001"
 )]
-pub fn dp_trend_legs_v261001(c: &CZSC, _params: &ParamView, _cache: &mut TaCache) -> Vec<Signal> {
+pub fn dp_trend_legs_v261001(c: &CZSC, _params: &ParamView, cache: &mut TaCache) -> Vec<Signal> {
     let k1 = c.freq.to_string();
     let k2 = "D1趋势腿";
     let k3 = "DP辅助V261001";
@@ -230,17 +267,14 @@ pub fn dp_trend_legs_v261001(c: &CZSC, _params: &ParamView, _cache: &mut TaCache
     let Some(k_c) = dp_exit_stroke(bis, b.zd, b.zg, is_buy, entry, end) else {
         return none();
     };
-    let b_leg: Vec<BI> = bis
-        .iter()
-        .filter(|x| x.fx_a.dt >= bis[k_b].fx_a.dt && x.fx_b.dt <= entry)
-        .cloned()
-        .collect();
-    let c_leg: Vec<BI> = bis
-        .iter()
-        .filter(|x| x.fx_a.dt >= bis[k_c].fx_a.dt && x.fx_b.dt <= end)
-        .cloned()
-        .collect();
-    if b_leg.is_empty() || c_leg.is_empty() || (b_leg[b_leg.len() - 1].fx_b.fx < b_leg[0].fx_a.fx) != is_buy {
+    let Some((b_lo, b_hi)) = dp_leg_range(bis, bis[k_b].fx_a.dt, entry) else {
+        return none();
+    };
+    let Some((c_lo, c_hi)) = dp_leg_range(bis, bis[k_c].fx_a.dt, end) else {
+        return none();
+    };
+    let (b_leg, c_leg) = (&bis[b_lo..b_hi], &bis[c_lo..c_hi]);
+    if (b_leg[b_leg.len() - 1].fx_b.fx < b_leg[0].fx_a.fx) != is_buy {
         return none();
     }
     // 背驰的前提是价格创新极值：信号价要越过 b 段终点（买：更低，卖：更高），否则不是一类
@@ -248,7 +282,8 @@ pub fn dp_trend_legs_v261001(c: &CZSC, _params: &ParamView, _cache: &mut TaCache
     if (is_buy && price >= b_end) || (!is_buy && price <= b_end) {
         return other();
     }
-    let closes: Vec<f64> = c.bars_raw.iter().map(|x| x.close).collect();
-    let bar = dp_macd_bar(&closes);
-    make_kline_signal_v3(&k1, k2, k3, tag, &dp_leg_text(c, &b_leg, &bar), &dp_leg_text(c, &c_leg, &bar))
+    dp_macd_update(c, cache);
+    let hist = cache.series.get(DP_HIST).map(Vec::as_slice).unwrap_or(&[]);
+    let macd_ready = c.bars_raw.len() >= 26; // 不足慢线周期时 MACD 全 0（旧实现行为）
+    make_kline_signal_v3(&k1, k2, k3, tag, &dp_leg_text(c, b_leg, hist, macd_ready), &dp_leg_text(c, c_leg, hist, macd_ready))
 }

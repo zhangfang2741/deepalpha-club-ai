@@ -87,6 +87,18 @@ _HAS_DP = _dp_signals_available()
 _HAS_DP_LEGS = _dp_signals_available(_DP_TREND_LEGS)
 
 
+def _dp_scan_available() -> bool:
+    """自编译 czsc 带 dp_scan_bs（整段逐根扫描在 Rust 里完成）。"""
+    try:
+        import czsc._native as native
+        return hasattr(native, "dp_scan_bs")
+    except Exception:  # noqa: BLE001 — 探测失败一律当作不可用
+        return False
+
+
+_HAS_DP_SCAN = _dp_scan_available()
+
+
 def _parse_leg(text: str) -> LegForce:
     price, volume, length, area = (float(x) for x in text.split("#"))
     return LegForce(price=price, volume=volume, length=int(length), area=area)
@@ -140,6 +152,39 @@ def _signal_keys_and_config(
     return keys, config
 
 
+def _scan_native(
+    bars: list[dict], *, symbol: str, label: str, families: Iterable[SignalFamily], use_legs: bool,
+    stroke_done_at: dict[str, str] | None, stroke_started_at: dict[str, str] | None,
+) -> list[BsEvent] | None:
+    """整段逐根扫描交给 Rust（dp_scan_bs，一次调用、期间释放 GIL）；任何异常返回 None，由调用方退回逐根循环。"""
+    import czsc._native as native
+
+    try:
+        keys, config = _signal_keys_and_config(label, families)
+        legs_key = f"{label}_D1趋势腿_DP辅助V261001" if use_legs else None
+        if use_legs:
+            config = [*config, {"name": _DP_TREND_LEGS, "freq": label, "di": 1}]
+        events, done, started = native.dp_scan_bs(  # pyright: ignore[reportAttributeAccessIssue]
+            symbol, label, [b["time"] for b in bars], [float(b["open"]) for b in bars],
+            [float(b["high"]) for b in bars], [float(b["low"]) for b in bars], [float(b["close"]) for b in bars],
+            [float(b["volume"]) for b in bars], config, keys,
+            stroke_done_at is not None or stroke_started_at is not None, legs_key, _INIT_N,
+        )
+    except Exception:  # noqa: BLE001 — 原生路径任何失败都退回逐根循环，结果一致只是慢
+        return None
+    if stroke_done_at is not None:
+        for k, v in done:
+            stroke_done_at.setdefault(k, v)
+    if stroke_started_at is not None:
+        for k, v in started:
+            stroke_started_at.setdefault(k, v)
+    return [
+        BsEvent(type=t, bar_time=bt, bi_end_time=et, bi_end_price=price, span=span,  # type: ignore[arg-type]
+                legs=parse_leg_state(legs) if legs is not None else None)
+        for t, bt, et, price, span, legs in events
+    ]
+
+
 def scan_bs_events(
     bars: list[dict], *, symbol: str, freq: Freq, stroke_done_at: dict[str, str] | None = None,
     stroke_started_at: dict[str, str] | None = None,
@@ -160,18 +205,24 @@ def scan_bs_events(
     「日期 → 当日形态状态」，供雷达按信号日查表剔除假信号；None 时不算形态信号，
     行为与现状一致。与 stroke_done_at 同构，一次推进零重复计算。
     """
+    label = freq.value
+    # 严格口径（只启用一类）才需要趋势 / 两段力度；宽松口径不用
+    use_legs = _HAS_DP_LEGS and "first" in families and "second" not in families and "third" not in families
+    if _HAS_DP_SCAN and shape_states is None:
+        native = _scan_native(bars, symbol=symbol, label=label, families=families, use_legs=use_legs,
+                              stroke_done_at=stroke_done_at, stroke_started_at=stroke_started_at)
+        if native is not None:
+            return native
+
     raw = bars_to_raw_bars(bars, symbol=symbol, freq=freq)
     if len(raw) <= _INIT_N:
         return []
 
-    label = freq.value
     keys, config = _signal_keys_and_config(label, families)
     use_dp = _HAS_DP and (stroke_done_at is not None or stroke_started_at is not None)
     if use_dp:
         config = [*config, {"name": _DP_BI_TRACK, "freq": label, "di": 1}]
     dp_key = f"{label}_D1笔轨迹_DP辅助V261001"
-    # 严格口径（只启用一类）才需要趋势 / 两段力度；宽松口径不用
-    use_legs = _HAS_DP_LEGS and "first" in families and "second" not in families and "third" not in families
     legs_key = f"{label}_D1趋势腿_DP辅助V261001"
     if use_legs:
         config = [*config, {"name": _DP_TREND_LEGS, "freq": label, "di": 1}]

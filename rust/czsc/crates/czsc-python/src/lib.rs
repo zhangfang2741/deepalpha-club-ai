@@ -7,6 +7,7 @@
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
 
+mod dp_scan;
 mod errors;
 mod signals_dispatcher;
 mod trader;
@@ -22,6 +23,9 @@ fn _native(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // 条目。这里用一次哑迭代强制把该 crate 链入最终的 cdylib，
     // 这样 import 时构造器就会跑起来。
     let _signals_count = inventory::iter::<czsc_signals::types::SignalDescriptor>().count();
+
+    // DeepAlpha：逐根扫描整段在 Rust 里完成（见 dp_scan.rs）
+    m.add_function(wrap_pyfunction!(dp_scan::dp_scan_bs, m)?)?;
 
     // Trader 表面 —— CzscTrader、CzscSignals、generate_czsc_signals。
     m.add_class::<trader::czsc_trader::PyCzscTrader>()?;
