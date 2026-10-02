@@ -45,6 +45,7 @@ from app.schemas.signal_radar import (
     SignalRadarResponse,
 )
 from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
+from app.services.chan.window import canonical_daily_start
 from app.services.chan.pivot_phase import PivotPhase
 from app.services.chan.replay import pivot_phase_as_of
 from app.services.chan.shape_filters import reject_reason
@@ -60,11 +61,6 @@ DEFAULT_TOP_N = 10
 
 _analyzer = ChanAnalyzer()
 
-# 缠论窗口锚定所需的 warmup 天数（与 chan.py 的日线口径一致）
-_WARMUP_DAYS = 180
-# 详情页日线默认预热天数（app/api/v1/chan.py 的 _WARMUP_DAYS['daily']）。雷达取数起点额外前移
-# 这么多天，使「从雷达点进详情」时详情页的取数区间与雷达完全一致。
-_DETAIL_WARMUP_DAYS = 180
 # 并发扫描的信号量：控制对行情源的压力
 _SCAN_CONCURRENCY = 8
 # 次级别补算（美股每只要分段请求 FMP 30 分钟）并发上限，避免撞限流
@@ -107,7 +103,7 @@ _CACHE_PREFIX = "signal_radar"
 # 旧版 App 的前 N 在接口层按旧综合分现截（legacy_view）。改权重、排雷或取舍规则时同步升版。
 # all2 = 行业标签严格按 GICS 一级行业（半导体并回科技，快照里旧的 semiconductors 标签随之失效）。
 def _mode_ns(mode: str) -> str:
-    return f"{get_policy(mode).version}:shape5:quant_mark2:all2"
+    return f"{get_policy(mode).version}:shape5:quant_mark2:all2:win2y"
 
 
 # czsc 形态过滤（chan/shape_filters：同向假突破 / 窄幅震荡 / 低波动）暂停应用，代码与测试保留。
@@ -826,10 +822,10 @@ async def _write_cache(redis: Redis, data: SignalRadarResponse) -> None:
 def _fetch_start(today: date, window: int) -> str:
     """雷达日线取数起点。
 
-    在可见区间起点（today - warmup - window*2，即 iOS 点进详情用的 start）之前，再前移
-    详情页的默认预热天数，保证与详情页取数区间一致，结构与买卖点一致。
+    与详情页同一个固定起点（canonical_daily_start，截止日往前两年取当月 1 号），结构不随窗口漂移，
+    从雷达点进详情两边的笔 / 中枢 / 买卖点完全一致。window 保留仅为接口兼容。
     """
-    return (today - timedelta(days=_WARMUP_DAYS + window * 2 + _DETAIL_WARMUP_DAYS)).isoformat()
+    return canonical_daily_start(today)
 
 
 # ---------------------------------------------------------------------------
