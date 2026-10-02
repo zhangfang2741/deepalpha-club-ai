@@ -41,6 +41,7 @@ from app.schemas.chan import (
 from app.services.chan.analyzer import ChanAnalyzer
 from app.services.chan.gap import analyze_structure_gap
 from app.services.chan.signal_policy import DEFAULT_MODE, SIGNAL_POLICIES, normalize_mode
+from app.services.chan.window import canonical_daily_start
 from app.services.chan.sub_level_service import current_sub_level
 from app.services.chan.sub_level_service import signal_out as _signal_out
 from app.services.skills.kline import LIVE_MAX_AGE, fetch_kline
@@ -82,6 +83,23 @@ def _anchor_start(start_date: str, freq: str, warmup_days: int | None = None) ->
     except ValueError:
         return start_date
     return (d - timedelta(days=days)).isoformat()
+
+
+def analysis_window(start_date: str, end_date: str, freq: str, warmup_days: int | None = None) -> tuple[str, str]:
+    """(取数起点, 可见起点)。
+
+    日线：取数起点固定为 canonical_daily_start(截止日)，与用户所选起始日期无关，结构不再随起点漂移；
+    可见起点 = max(用户所选, 固定起点)——选得比两年更早也只显示到两年前。
+    周线 / 30 分钟：沿用「可见起点 + 预热」。
+    """
+    visible = _visible_start(start_date, end_date, freq)
+    if freq == "daily":
+        try:
+            anchor = canonical_daily_start(end_date)
+        except ValueError:
+            return _anchor_start(visible, freq, warmup_days), visible
+        return anchor, max(visible, anchor)
+    return _anchor_start(visible, freq, warmup_days), visible
 
 
 def _zip_divergences(strokes: list, divergences: list) -> list[tuple]:
@@ -147,8 +165,7 @@ async def chan_analysis(
     # 窗口锚定：在用户所选起点之前多取一段 warmup K 线一起送入缠论，在完整序列上
     # 计算以消除左边界依赖（结构不随用户选的起始日期漂移），再裁剪回可见窗口。
     # 实测 ~30 根合并K线即可让可见区结构收敛，这里给足冗余：日线 180 天、周线 540 天。
-    start_date = _visible_start(start_date, end_date, freq)
-    anchor_start = _anchor_start(start_date, freq, warmup_days)
+    anchor_start, start_date = analysis_window(start_date, end_date, freq, warmup_days)
 
     # 详情页准实时：只用 1 分钟内的K线缓存，盘中能看到刚走出的K线
     bars = await _fetch_bars_or_http_error(user.id, symbol, anchor_start, end_date, freq, redis,

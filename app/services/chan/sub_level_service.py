@@ -19,6 +19,7 @@ from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
 from app.services.chan.signals import Signal
 from app.services.chan.signal_policy import DEFAULT_MODE, get_policy
 from app.services.chan.sub_level import LEVEL_PAIRS, SubLevelResult, build_sub_level
+from app.services.chan.window import canonical_daily_start
 from app.services.skills.kline import fetch_kline
 from app.utils.market import normalize as normalize_symbol
 
@@ -178,7 +179,8 @@ async def current_sub_level(
             except Exception as exc:  # noqa: BLE001 缓存结构过期当未命中
                 logger.warning("sub_level_cache_invalid", key=key, error=str(exc))
 
-    start = (date.fromisoformat(end) - timedelta(days=_PARENT_LOOKBACK_DAYS.get(parent_freq, 450))).isoformat()
+    start = (canonical_daily_start(end) if parent_freq == "daily"
+             else (date.fromisoformat(end) - timedelta(days=_PARENT_LOOKBACK_DAYS.get(parent_freq, 450))).isoformat())
 
     async def _fetch_parent_bars() -> list[dict]:
         if fetch_parent is not None:
