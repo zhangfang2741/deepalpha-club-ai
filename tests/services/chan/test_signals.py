@@ -606,7 +606,7 @@ def test_same_stroke_type2_and_type3_keep_one():
 
 
 def _macd_for(strokes, b_bar: float, c_bar: float):
-    """b 段、c 段（各取 _trend_with_legs 里的时间范围）各铺一串固定绿柱，其余为 0。"""
+    """给 b 段、c 段（_trend_with_legs 里的时间范围）各铺一串固定绿柱，其余为 0。"""
     from app.services.chan.divergence import MACDData
     times = ["2024-11-20", "2024-11-25", "2024-12-01", "2024-12-20", "2024-12-25", "2025-01-10"]
     bars = [b_bar, b_bar, b_bar, c_bar, c_bar, c_bar]
