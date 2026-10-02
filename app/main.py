@@ -91,6 +91,16 @@ async def lifespan(app: FastAPI):
         api_prefix=settings.API_V1_STR,
     )
 
+    from app.services.chan import czsc_adapter, czsc_signals
+
+    logger.info(
+        "chan_native_paths",
+        signals=czsc_signals._HAS_DP,
+        legs=czsc_signals._HAS_DP_LEGS,
+        scan=czsc_signals._HAS_DP_SCAN,
+        structures=czsc_adapter._HAS_DP_STRUCT,
+    )
+
     if os.getenv("SKIP_STARTUP_PREWARM", "false").lower() in ("true", "1", "yes"):
         logger.warning("startup_prewarm_skipped")
         yield

@@ -72,7 +72,16 @@ api_router.include_router(wyckoff_router, prefix="/wyckoff", tags=["wyckoff"])
 async def health_check():
     """Health check endpoint."""
     logger.info("health_check_called")
-    return {"status": "healthy", "version": "1.0.0"}
+    from app.services.chan import czsc_adapter, czsc_signals
+
+    # 缠论是否走了自编译 czsc 的 Rust 路径（部署后用 curl 即可确认镜像里的分叉 wheel 生效）
+    chan_native = {
+        "signals": czsc_signals._HAS_DP,
+        "legs": czsc_signals._HAS_DP_LEGS,
+        "scan": czsc_signals._HAS_DP_SCAN,
+        "structures": czsc_adapter._HAS_DP_STRUCT,
+    }
+    return {"status": "healthy", "version": "1.0.0", "chan_native": chan_native}
 
 
 @api_router.get("/hello")
