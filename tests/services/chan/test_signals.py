@@ -599,11 +599,6 @@ def test_buy1_force_metric_dropped_when_c_leg_not_weaker():
                                 metric=get_metric("force")) == []
 
 
-def test_same_stroke_type2_and_type3_keep_one():
-    # 一买后的回落同时是离开中枢后第一次回落未回中枢：同一笔终点只留三类
-    from app.services.chan.signals import _DUP_PRIORITY
-    assert _DUP_PRIORITY["buy3"] < _DUP_PRIORITY["buy2"]
-
 
 def _macd_for(strokes, b_bar: float, c_bar: float):
     """给 b 段、c 段（_trend_with_legs 里的时间范围）各铺一串固定绿柱，其余为 0。"""
@@ -692,3 +687,47 @@ def test_buy1_not_new_low_below_b_end_is_not_type1():
     sig = generate_all_signals([_ev("buy1", "2025-01-20", 108.0)], strokes, [_NO_DIV] * len(strokes), pivots,
                                metric=get_metric("force"))
     assert "buy1" not in [x.type for x in sig]  # 夹具里另有三类卖点，与一类无关
+
+
+# ---- 二 / 三类补充：严格口径二卖镜像、相等价边界、同笔二三类去重 ----
+
+def _after_sell1(second_high):
+    """一卖（100）→ 回落到 85 → 第一次反弹到 second_high。上涨趋势见 _UP_TREND（B 上沿 90）。"""
+    legs = [_st("up", "2025-01-01", "2025-01-10", 80, 100),
+            _st("down", "2025-01-10", "2025-01-15", 100, 85),
+            _st("up", "2025-01-15", "2025-01-20", 85, second_high)]
+    return legs, [_ev("sell1", "2025-01-10", 100.0, span="9笔")]
+
+
+def test_sell2_is_first_rebound_after_sell1_not_breaking_its_high():
+    legs, ev = _after_sell1(97)
+    sig = generate_all_signals(ev, legs, [_div("strong", 0.3)] + [_NO_DIV] * 2, _UP_TREND)
+    assert [(x.type, x.time) for x in sig if x.type in ("sell1", "sell2")] == [
+        ("sell1", "2025-01-10"), ("sell2", "2025-01-20")]
+    assert all(x.price == legs[2].end_price for x in sig if x.type == "sell2")
+
+
+def test_no_sell2_when_rebound_breaks_sell1_high():
+    legs, ev = _after_sell1(103)
+    sig = generate_all_signals(ev, legs, [_div("strong", 0.3)] + [_NO_DIV] * 2, _UP_TREND)
+    assert [x.type for x in sig if x.type in ("sell1", "sell2")] == []
+
+
+def test_buy3_needs_pullback_strictly_above_pivot_top():
+    """回落低点恰好等于中枢上沿：算回到中枢，不是三买。"""
+    touch = [_st("up", "2025-01-10", "2025-01-15", 95, 115), _st("down", "2025-01-15", "2025-01-20", 115, 101)]
+    assert touch[1].end_price == 100.0  # == _PIVOT 上沿
+    assert generate_all_signals([], touch, [_NO_DIV] * 2, _PIVOT) == []
+    clear = [_st("up", "2025-01-10", "2025-01-15", 95, 115), _st("down", "2025-01-15", "2025-01-20", 115, 102)]
+    assert [x.type for x in generate_all_signals([], clear, [_NO_DIV] * 2, _PIVOT)] == ["buy3"]
+
+
+def test_same_stroke_type2_and_type3_keep_only_type3():
+    """一买后的第一次回落，同时也是离开另一个中枢后的第一次回落未回中枢：二买即三买，同一笔只留三买。"""
+    p_new = _piv(95, 105, "2025-01-01", "2025-01-10")  # 一买笔终点处结束的中枢
+    legs = [_st("down", "2025-01-01", "2025-01-10", 120, 90),   # 一买：跌破 B 下沿，且在新中枢下沿 95 之下
+            _st("up", "2025-01-10", "2025-01-15", 90, 118),     # 离开新中枢（起点 89 <= 上沿 105 < 119）
+            _st("down", "2025-01-15", "2025-01-20", 118, 108)]  # 第一次回落：端点 107 > 上沿 105（三买），也 > 一买价（二买）
+    ev = [_ev("buy1", "2025-01-10", legs[0].end_price, span="9笔")]
+    sig = generate_all_signals(ev, legs, [_div("strong", 0.3)] + [_NO_DIV] * 2, [*_DOWN_TREND, p_new])
+    assert [(x.type, x.time) for x in sig] == [("buy1", "2025-01-10"), ("buy3", "2025-01-20")]
