@@ -945,9 +945,13 @@ struct SignalRadarView: View {
     /// 同心环模式最多尝试画这么多个最新的气泡；放不下的与超出的都在「当日信号」面板里看全。
     static let ringFieldCap = 24
 
+    /// 信号数不超过这个值时，同心环模式保证全部画出来（放不下就放宽圈带、缩小气泡），不出现「另有 N 个」；
+    /// 超过才只画最新的 ringFieldCap 个、其余折叠到「另有 N 个 · 查看全部」。
+    static let ringShowAllLimit = 10
+
     /// 同心环模式：按时间分三圈带摆——当日在最里圈、3 天内在中间、7 天内在最外圈（与环上标签一致，
     /// 见 ringSpecs / bandIndex）。每圈带里用 SectorRadarLayout.pack 把整圆当一个扇区，由内向外、互不重叠，
-    /// 外圈避开里圈已摆好的；某圈带放不下的计入「另有 N 个」。后端已按出现时间从新到旧排好。
+    /// 外圈避开里圈已摆好的；某圈带放不下的计入「另有 N 个」（信号数 ≤ ringShowAllLimit 时例外：放宽圈带、缩小气泡也要全画出来）。后端已按出现时间从新到旧排好。
     private static func layoutRingField(
         signals: [RadarSignal], dayDate: String, width w: Double, height h: Double,
         avoid: [RadarOrbitSpacing.Obstacle]
@@ -960,27 +964,43 @@ struct SignalRadarView: View {
 
         let maxDiameter = max(1, min(w, h) - 2 * RadarBubbleMetrics.edgePadding)
         let bases = zip(shown, ages).map { diameter(forLevel: $0.level) * ringSizeFactor(forDaysAgo: $1) }
-        let crowd = RadarOrbitSpacing.crowdScale(diameters: bases, width: w, height: h)
-        let metrics = zip(shown, bases).map {
-            RadarBubbleMetrics(symbol: $0.symbol, name: $0.name, baseDiameter: $1 * crowd, maxDiameter: maxDiameter)
-        }
         let obstacles = avoid.map { SectorRadarLayout.Rect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) }
             + ringLabelBoxes(width: w, height: h)
 
         // 每圈带的圆心范围：在两条环线之间、略收窄，气泡看得出落在哪一圈（不压在环线正中）
         let bands: [ClosedRange<Double>] = [0.0...0.27, 0.42...0.62, 0.76...1.0]
         let whole = SectorRadarLayout.Wedge(key: "_all", center: 0, halfWidth: .pi, total: shown.count, shown: shown.count)
-        var placed: [SectorRadarLayout.Placement] = []
-        for band in 0..<ringSpecs.count {
-            let members = shown.indices.filter { bandIndex(forDaysAgo: ages[$0]) == band }
-            guard !members.isEmpty else { continue }
-            let slots = members.map { SectorRadarLayout.Slot(index: $0, wedgeKey: whole.key, angle: 0, radius: 0) }
-            let packed = SectorRadarLayout.pack(
-                plan: ([whole], slots), diameters: metrics.map(\.diameter), width: w, height: h,
-                hRad: hRad, vRad: vRad, edge: RadarBubbleMetrics.edgePadding, obstacles: obstacles,
-                outwardOnly: false, radiusRange: bands[band], existing: placed)
-            placed += packed.placements
+
+        /// 按给定缩放摆一次：scale 在整体拥挤缩放之上再缩（直径下限由 RadarBubbleMetrics 兜底）；
+        /// relaxBands 时不再限制在各自的时间圈带里，整个圆内都可以摆（仍由内向外、越新越靠里）。
+        func attempt(scale: Double, relaxBands: Bool) -> (placed: [SectorRadarLayout.Placement], metrics: [RadarBubbleMetrics]) {
+            let crowd = RadarOrbitSpacing.crowdScale(diameters: bases, width: w, height: h) * scale
+            let metrics = zip(shown, bases).map {
+                RadarBubbleMetrics(symbol: $0.symbol, name: $0.name, baseDiameter: $1 * crowd, maxDiameter: maxDiameter)
+            }
+            var placed: [SectorRadarLayout.Placement] = []
+            for band in 0..<ringSpecs.count {
+                let members = shown.indices.filter { bandIndex(forDaysAgo: ages[$0]) == band }
+                guard !members.isEmpty else { continue }
+                let slots = members.map { SectorRadarLayout.Slot(index: $0, wedgeKey: whole.key, angle: 0, radius: 0) }
+                let packed = SectorRadarLayout.pack(
+                    plan: ([whole], slots), diameters: metrics.map(\.diameter), width: w, height: h,
+                    hRad: hRad, vRad: vRad, edge: RadarBubbleMetrics.edgePadding, obstacles: obstacles,
+                    outwardOnly: false, radiusRange: relaxBands ? 0.0...1.0 : bands[band], existing: placed)
+                placed += packed.placements
+            }
+            return (placed, metrics)
         }
+
+        var result = attempt(scale: 1, relaxBands: false)
+        if signals.count <= ringShowAllLimit {
+            // 不超过 ringShowAllLimit 个：必须全部画出来、不出现「另有 N 个」——先放宽时间圈带，再逐步缩小气泡
+            for scale in [1.0, 0.85, 0.7, 0.55] where result.placed.count < shown.count {
+                result = attempt(scale: scale, relaxBands: true)
+            }
+        }
+        let placed = result.placed
+        let metrics = result.metrics
         var layouts = placed.map { p in
             BubbleLayout(signal: shown[p.index], metrics: metrics[p.index], x: p.x, y: p.y,
                          phase: Double(p.index) * 0.35, daysAgo: ages[p.index])
@@ -1067,14 +1087,14 @@ struct SignalRadarView: View {
     /// 约 0.6 个半径，中间的代码和名称不会被盖住；再大就开始压字。
     static let bubbleOverlapRatio: Double = 0.2
 
-    /// 买卖点类型 → 气泡直径：一类 78 / 二类 90 / 三类 102。一类只是背驰迹象、尚待验证，
-    /// 三类回踩完全不回中枢、确认程度最高，越确认越大。三档面积比原先 (70/88/108) 收窄
-    /// 到约 1.7 倍（原先约 2.4 倍）：三类仍最大，但不至于让一类显得过小、三类过分抢眼。
+    /// 买卖点类型 → 气泡直径：一类 62 / 二类 88 / 三类 116。一类只是背驰迹象、尚待验证，最小；
+    /// 三类回踩完全不回中枢、确认程度最高，最大。拉开档位（面积约 1 : 2 : 3.5）是因为信号多时整体要缩小，
+    /// 档位太近缩完就分不出一二三类；再叠上时间系数（越旧越小）与颜色深浅（强弱），三个维度各自看得清。
     static func diameter(forLevel level: Int) -> Double {
         switch level {
-        case 1: return 78
-        case 2: return 90
-        default: return 102
+        case 1: return 62
+        case 2: return 88
+        default: return 116
         }
     }
 
