@@ -213,7 +213,7 @@ deepalpha-club-ai/
   **自有 Rust 信号**（`rust/czsc`，czsc 1.0.1 的 vendoring 分叉，Apache-2.0；只在 `crates/czsc-signals` 新增 `dp.rs` 并在 `lib.rs` 注册 4 行，`czsc-core` 一行未改）：
   `dp_bi_track_V261001` 直接在内核里报告末笔终点 / 起点，Python 不再取副本（51 只日线 43s → 4.3s，输出与基线逐字节一致）。
   `czsc_signals._HAS_DP` 探测到分叉版就走 Rust 信号，标准 PyPI 版自动退回读 `bi_list` 的旧路径（两条路径输出一致，测试都过）。
-  编译：`cd rust/czsc && uvx maturin build --release -i python3.13`（约 10 分钟，产物 `target/wheels`）；部署用哪个 czsc 见下方待定项。
+  编译：`cd rust/czsc && uvx maturin build --release -i python3.13`（约 10 分钟，产物 `target/wheels`）；**部署**：`Dockerfile` 多阶段——`czsc-build` 阶段（rust:1.90-slim-bookworm，与运行镜像同 glibc）编译 `rust/czsc`，运行镜像 `uv sync --frozen` 后用该 wheel `--reinstall --no-deps` 覆盖 PyPI 版，并断言 `dp_scan_bs / dp_structures / dp_macd` 存在（出问题让构建失败，不悄悄退回慢路径）。层缓存只跟 `rust/czsc` 内容有关，改应用代码不重编（首次约 10 分钟）。不要把本地编的 wheel 直接拷进镜像：它是 manylinux_2_39，Debian 12（glibc 2.36）加载不了。`railway.json` 的 watchPatterns 含 `rust/**`。
   `dp_trend_legs_V261001`：趋势前提（最后两个已确认中枢依次下移/上移、价格已离开 B）+ 价格越过 b 段终点（创新极值）+ b / c 段原始量（价差·量能·时长·起止时间；**不在 Rust 里算 MACD**，面积由 Python 用下面那条 MACD 序列按起止时间求和）。
   Rust 只输出**原始量**，是否背驰 / 强弱分档仍在 Python 的 `leg_metric`（保持度量可切换、API 统一）。严格口径的事件通过 `BsEvent.legs` 带着它走。
   中枢分组完全复刻 czsc `get_zs_seq`，且**只用已确认的笔**（`bars_ubi.len() < 5` 时排除最后一笔，与 czsc `zs_list` 同口径）。

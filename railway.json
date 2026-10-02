@@ -9,6 +9,7 @@
       "pyproject.toml",
       "uv.lock",
       "Dockerfile",
+      "rust/**",
       "Procfile",
       "railway.json"
     ]
