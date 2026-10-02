@@ -618,7 +618,8 @@ def test_buy1_macd_area_metric_is_the_default_and_fills_area_ratio():
     sig = generate_all_signals([_ev("buy1", "2025-01-10", 105.0)], strokes, [_NO_DIV] * len(strokes), pivots,
                                macd=_macd_for(strokes, 2.0, 0.2))
     assert [x.type for x in sig] == ["buy1"]
-    assert sig[0].divergence.area_ratio == 0.1 and sig[0].divergence.strength == "strong"
+    # 面积比不分强弱档（无实测依据）：背驰成立一律 medium
+    assert sig[0].divergence.area_ratio == 0.1 and sig[0].divergence.strength == "medium"
     assert "MACD" in sig[0].description
 
 
