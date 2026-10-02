@@ -288,10 +288,10 @@ async def test_sector_tags_only_for_us_and_normalizes_symbols(monkeypatch):
     from app.services.signal_radar import sectors
 
     async def tags(market, redis):
-        return {"NVDA": "semiconductors", "BRK-B": "financials"}
+        return {"NVDA": "technology", "BRK-B": "financials"}
 
     monkeypatch.setattr(sectors, "load_sector_tags", tags)
     items = [SimpleNamespace(market="us", symbol=s) for s in ("NVDA", "BRK.B", "ZZZZ")] + \
         [SimpleNamespace(market="hk", symbol="0700")]
-    assert await store.sector_tags(items) == {"us:NVDA": "semiconductors", "us:BRK.B": "financials"}
+    assert await store.sector_tags(items) == {"us:NVDA": "technology", "us:BRK.B": "financials"}
     assert await store.sector_tags([SimpleNamespace(market="hk", symbol="0700")]) == {}

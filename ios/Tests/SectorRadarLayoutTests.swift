@@ -87,15 +87,15 @@ struct SectorRadarLayoutTests {
 
     /// 2026-09-30 标普 500 实测分布（98 个信号、11 个行业，绝大多数是当日 / 前一日的）。
     static func realPlan() -> (sectors: [String?], ages: [Int], order: [String]) {
-        let counts: [(String, Int)] = [("technology", 17), ("industrials", 17), ("healthcare", 14), ("discretionary", 10),
-                                       ("semiconductors", 8), ("financials", 7), ("utilities", 6), ("communication", 6),
+        let counts: [(String, Int)] = [("technology", 25), ("industrials", 17), ("healthcare", 14), ("discretionary", 10),
+                                       ("financials", 7), ("utilities", 6), ("communication", 6),
                                        ("realestate", 6), ("staples", 5), ("materials", 2)]
         var sectors: [String?] = []
         var ages: [Int] = []
         for (key, n) in counts {
             for j in 0..<n { sectors.append(key); ages.append(j % 3 == 0 ? 1 : 0) }
         }
-        let order = ["technology", "semiconductors", "industrials", "communication", "healthcare", "financials",
+        let order = ["technology", "industrials", "communication", "healthcare", "financials",
                      "discretionary", "utilities", "materials", "realestate", "staples", "energy"]
         return (sectors, ages, order)
     }

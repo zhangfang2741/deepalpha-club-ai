@@ -137,17 +137,16 @@ struct SectorBoard: Decodable {
     }
 }
 
-/// 美股行业 key（与后端 regime 行业一致）→ 展示名；顺序即数量相同时的排序。
+/// 美股行业 key（GICS 11 个一级行业，与后端 regime 行业一致）→ 展示名；顺序即数量相同时的排序。
 enum RadarSectorCatalog {
     static let keys: [String] = [
-        "technology", "semiconductors", "communication", "discretionary", "healthcare", "financials",
+        "technology", "communication", "discretionary", "healthcare", "financials",
         "industrials", "energy", "materials", "staples", "utilities", "realestate",
     ]
 
     static func name(_ key: String) -> String {
         switch key {
         case "technology": return L("科技")
-        case "semiconductors": return L("半导体")
         case "communication": return L("通讯服务")
         case "discretionary": return L("可选消费")
         case "healthcare": return L("医疗")

@@ -38,13 +38,13 @@ async def test_sector_pools_for_current_universe(ctx):
     client, redis = ctx
     sig = RadarSignalOut(symbol="NVDA", name="英伟达", side="buy", label="一买", signal_type="buy1",
                          date="2026-09-30", price=1.0, strength=0.5, bias="bullish", signal_strength="medium",
-                         confirmed=True, pivot_stage_depth=0.5, sector="semiconductors")
+                         confirmed=True, pivot_stage_depth=0.5, sector="technology")
     await sectors.write_pools(redis, svc._mode_ns("loose"), "us", "nasdaq100",
-                              {"2026-09-30": {"semiconductors": [sig]}}, ttl=60)
+                              {"2026-09-30": {"technology": [sig]}}, ttl=60)
     body = client.get("/signal-radar/sector-pools",
                       params={"market": "us", "universe": "nasdaq100", "date": "2026-09-30"}).json()
     assert body["available"] is True and body["universe"] == "nasdaq100"
-    assert [s["symbol"] for s in body["sectors"]["semiconductors"]] == ["NVDA"]
+    assert [s["symbol"] for s in body["sectors"]["technology"]] == ["NVDA"]
     empty = client.get("/signal-radar/sector-pools",
                        params={"market": "us", "universe": "nasdaq100", "date": "2026-09-29"}).json()
     assert empty["available"] is False and empty["sectors"] == {}

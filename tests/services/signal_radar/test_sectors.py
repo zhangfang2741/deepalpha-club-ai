@@ -12,26 +12,26 @@ def _sig(symbol: str, side: str = "buy", signal_type: str = "buy1", strength: fl
                           signal_strength="medium", confirmed=True, pivot_stage_depth=0.5, age_days=0)
 
 
-def test_us_tags_split_semiconductors():
+def test_us_tags_follow_gics_sector():
     tags = sectors.us_tags_from_sp1500({
         "NVDA": ("NVIDIA", "information_technology"), "MSFT": ("Microsoft", "information_technology"),
         "XOM": ("Exxon", "energy"), "ZZZ": ("Unknown", "unknown"),
     })
-    assert tags == {"NVDA": "semiconductors", "MSFT": "technology", "XOM": "energy"}
+    assert tags == {"NVDA": "technology", "MSFT": "technology", "XOM": "energy"}
 
 
 def test_sector_keys_match_regime_sectors():
     from app.services.regime.constants import SECTORS
 
     regime_keys = {s["key"] for s in SECTORS}
-    assert set(sectors.GICS_TO_SECTOR.values()) | {"semiconductors"} == regime_keys
+    assert set(sectors.GICS_TO_SECTOR.values()) == regime_keys
 
 
 def test_tag_and_count_skip_untagged():
     sigs = sectors.tag_signals([_sig("NVDA"), _sig("AMD", "sell", "sell1"), _sig("XOM"), _sig("ASML")],
-                               {"NVDA": "semiconductors", "AMD": "semiconductors", "XOM": "energy"})
+                               {"NVDA": "technology", "AMD": "technology", "XOM": "energy"})
     assert sigs[3].sector is None
-    assert sectors.sector_counts(sigs) == {"semiconductors": {"buy": 1, "sell": 1}, "energy": {"buy": 1, "sell": 0}}
+    assert sectors.sector_counts(sigs) == {"technology": {"buy": 1, "sell": 1}, "energy": {"buy": 1, "sell": 0}}
 
 
 def test_dotted_symbol_normalized():
@@ -55,7 +55,7 @@ def test_merge_sub_levels():
     pooled = _sig("NVDA")
     ranked = _sig("NVDA")
     ranked.sub_level_verdict, ranked.sub_level_label = "resonance_buy", "共振买点"
-    sectors.merge_sub_levels({"semiconductors": [pooled]}, [ranked])
+    sectors.merge_sub_levels({"technology": [pooled]}, [ranked])
     assert pooled.sub_level_verdict == "resonance_buy"
 
 
@@ -73,24 +73,24 @@ class _FakeRedis:
 async def test_pool_roundtrip():
     redis = _FakeRedis()
     s = _sig("NVDA")
-    s.sector = "semiconductors"
-    await sectors.write_pools(redis, "ns", "us", "sp500", {"2026-09-30": {"semiconductors": [s]}}, ttl=60)
-    got = await sectors.read_pool(redis, "ns", "us", "sp500", "2026-09-30", "semiconductors")
+    s.sector = "technology"
+    await sectors.write_pools(redis, "ns", "us", "sp500", {"2026-09-30": {"technology": [s]}}, ttl=60)
+    got = await sectors.read_pool(redis, "ns", "us", "sp500", "2026-09-30", "technology")
     assert got is not None and [x.symbol for x in got] == ["NVDA"]
     assert await sectors.read_pool(redis, "ns", "us", "sp500", "2026-09-30", "energy") == []
     assert await sectors.read_pool(redis, "ns", "us", "sp500", "2026-09-29", "energy") is None
-    assert json.loads(redis.store["signal_radar:sector:ns:us:sp500:2026-09-30"])["semiconductors"][0]["sector"]
+    assert json.loads(redis.store["signal_radar:sector:ns:us:sp500:2026-09-30"])["technology"][0]["sector"]
 
 
 async def test_read_pools_returns_every_sector_of_the_day():
     """一次取回当天全部行业池（App 切行业不用再请求）；没有池为 None。"""
     redis = _FakeRedis()
     a, b = _sig("NVDA"), _sig("XOM", side="sell", signal_type="sell2")
-    await sectors.write_pools(redis, "ns", "us", "nasdaq100", {"2026-09-30": {"semiconductors": [a], "energy": [b]}},
+    await sectors.write_pools(redis, "ns", "us", "nasdaq100", {"2026-09-30": {"technology": [a], "energy": [b]}},
                               ttl=60)
     got = await sectors.read_pools(redis, "ns", "us", "nasdaq100", "2026-09-30")
     assert got is not None and {k: [s.symbol for s in v] for k, v in got.items()} == {
-        "semiconductors": ["NVDA"], "energy": ["XOM"]}
+        "technology": ["NVDA"], "energy": ["XOM"]}
     assert await sectors.read_pools(redis, "ns", "us", "nasdaq100", "2026-09-29") is None
     redis.store["signal_radar:sector:ns:us:nasdaq100:2026-09-28"] = "{bad"
     assert await sectors.read_pools(redis, "ns", "us", "nasdaq100", "2026-09-28") is None
@@ -101,9 +101,9 @@ async def test_sector_pools_response_counts(monkeypatch):
 
     redis = _FakeRedis()
     await sectors.write_pools(redis, svc._mode_ns("loose"), "us", "nasdaq100", {"2026-09-30": {
-        "semiconductors": [_sig("NVDA"), _sig("AMD", side="sell", signal_type="sell1")]}}, ttl=60)
+        "technology": [_sig("NVDA"), _sig("AMD", side="sell", signal_type="sell1")]}}, ttl=60)
     out = await svc.sector_pools(redis, "us", "nasdaq100", "2026-09-30", "loose")
     assert out.available and out.universe == "nasdaq100" and out.date == "2026-09-30"
-    assert [s.symbol for s in out.sectors["semiconductors"]] == ["NVDA", "AMD"]
+    assert [s.symbol for s in out.sectors["technology"]] == ["NVDA", "AMD"]
     missing = await svc.sector_pools(redis, "us", "nasdaq100", "2026-09-29", "loose")
     assert not missing.available and missing.sectors == {}
