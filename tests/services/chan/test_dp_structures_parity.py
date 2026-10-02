@@ -56,7 +56,7 @@ def _cases():
 
 
 def _assert_macd_close(a, b):
-    """czsc 的 Rust MACD 与 Python 回退差在浮点尾数（~1e-13），1e-9 内视为一致。"""
+    """Rust 版 czsc 的 Rust MACD 与 Python 回退差在浮点尾数（~1e-13），1e-9 内视为一致。"""
     assert a.times == b.times
     for x, y in ((a.dif, b.dif), (a.dea, b.dea), (a.bar, b.bar)):
         assert len(x) == len(y) and all(abs(u - v) <= 1e-9 for u, v in zip(x, y, strict=True))
