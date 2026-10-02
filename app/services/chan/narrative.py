@@ -228,13 +228,13 @@ def build_narrative(
 
     if div_dir == "up" and trend_up:
         details.append(pick(lang,
-            "上涨过程中出现了力度背离（顶背驰）：价格创新高但力度（价差、量能或时长）没跟上，是见顶的常见前兆。",
-            "A force divergence appeared during the advance (top divergence): price made new highs but "
-            "force (range, volume or duration) didn't follow — a common precursor to a top."))
+            "上涨过程中出现背驰：价格创新高但力度（价差、量能或时长）没跟上。",
+            "A divergence appeared during the advance: price made new highs but "
+            "force (range, volume or duration) didn't follow."))
     elif div_dir == "down" and trend_down:
         details.append(pick(lang,
-            "下跌过程中出现了力度背离（底背驰）：价格创新低但力度（价差、量能或时长）在减弱，是筑底的常见前兆。",
-            "A force divergence appeared during the decline (bottom divergence): price made new lows but "
-            "force (range, volume or duration) weakened — a common precursor to a bottom."))
+            "下跌过程中出现背驰：价格创新低但力度（价差、量能或时长）在减弱。",
+            "A divergence appeared during the decline: price made new lows but "
+            "force (range, volume or duration) weakened."))
 
     return MarketNarrative(phase=phase, phase_label=label, headline=headline, details=details)

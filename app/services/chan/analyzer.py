@@ -526,7 +526,7 @@ class ChanAnalyzer:
         if r.segment_divergences and r.segment_divergences[-1].is_diverged and r.segments:
             seg = r.segments[-1]
             dv = r.segment_divergences[-1]
-            kind = "顶背驰" if seg.direction == "up" else "底背驰"
+            kind = "背驰"
             kind_en = "top" if seg.direction == "up" else "bottom"
             if en:
                 notes.append(
@@ -666,13 +666,13 @@ class ChanAnalyzer:
         # ---- 因子 5：背驰（只削弱当前方向的力度）----
         if recent_div_dir == "up":
             factors.append(BiasFactor(pick(lang,
-                "上涨过程中出现顶背驰：价格创新高但力度（价差、量能或时长）跟不上，上涨在衰减",
-                "A top divergence appeared during the advance: price made new highs but force (range, "
+                "上涨过程中出现背驰：价格创新高但力度（价差、量能或时长）跟不上，上涨在衰减",
+                "A divergence appeared during the advance: price made new highs but force (range, "
                 "volume or duration) didn't follow — the push is decaying"), -DIVERGENCE_WEIGHT))
         elif recent_div_dir == "down":
             factors.append(BiasFactor(pick(lang,
-                "下跌过程中出现底背驰：价格创新低但力度（价差、量能或时长）在减弱，下跌在衰减",
-                "A bottom divergence appeared during the decline: price made new lows but force (range, "
+                "下跌过程中出现背驰：价格创新低但力度（价差、量能或时长）在减弱，下跌在衰减",
+                "A divergence appeared during the decline: price made new lows but force (range, "
                 "volume or duration) weakened — the selling is decaying"), DIVERGENCE_WEIGHT))
 
         # ---- 因子 6：量价配合 ----

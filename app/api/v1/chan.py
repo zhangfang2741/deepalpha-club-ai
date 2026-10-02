@@ -252,6 +252,7 @@ async def chan_analysis(
                 diverged=dv.is_diverged if dv else False,
                 # 未做比较（无前一个同向笔 / 未创新高低）的默认结果说明为空，不给比值
                 price_ratio=dv.price_ratio if dv and dv.description else None,
+                divergence_type=dv.type if dv and dv.is_diverged and dv.type in ("trend", "consolidation") else None,
             )
             for s, dv in _zip_divergences(result.strokes, result.divergences)
         ],
