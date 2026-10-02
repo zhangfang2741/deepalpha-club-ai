@@ -18,7 +18,7 @@ struct MacroDetailSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if let data, let state = data.state {
-                        stateCard(state)
+                        stateCard(state, sentimentScore: panic?.current.score)
                         if !data.history.isEmpty { historyBand(data.history) }
                         if let panic { sentimentCard(panic) }
                         driversCard(data.drivers)
@@ -59,7 +59,7 @@ struct MacroDetailSheet: View {
 
     // MARK: - 状态
 
-    private func stateCard(_ state: MacroState) -> some View {
+    private func stateCard(_ state: MacroState, sentimentScore: Double?) -> some View {
         SectionCard(title: L("市场状态"), titleFont: .subheadline.weight(.semibold)) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -76,7 +76,27 @@ struct MacroDetailSheet: View {
                 Text(L("由进攻、防御、现金三组资产的相对强弱，加上波动率和量能综合判定，按概率给出；%@ 收盘数据。", state.asOf))
                     .font(.caption2).foregroundColor(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if let note = consistencyNote(state, sentimentScore: sentimentScore) {
+                    Text(note)
+                        .font(.caption2).foregroundColor(Theme.textSecondary)
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 6))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
+        }
+    }
+
+    /// 状态与情绪方向相反时的一句说明（口径不同，不是数据错误）。
+    private func consistencyNote(_ state: MacroState, sentimentScore: Double?) -> String? {
+        guard let score = sentimentScore,
+              let kind = MacroConsistency.kind(label: state.label, score: score) else { return nil }
+        switch kind {
+        case .riskOnButFear:
+            return L("资金偏向进攻资产，但整体情绪仍偏恐慌。市场状态看近 20 个交易日的资金流向，情绪分看市场整体温度，两者口径不同，常见于下跌后的修复初期。")
+        case .riskOffButGreed:
+            return L("资金偏向防御资产，但整体情绪仍偏乐观。市场状态看近 20 个交易日的资金流向，情绪分看市场整体温度，两者口径不同，常见于上涨后的降温初期。")
         }
     }
 
