@@ -28,6 +28,8 @@ struct MacroState: Decodable, Equatable {
 struct MacroStatePoint: Decodable, Identifiable {
     let date: String
     let label: String?
+    /// 尚未连续满确认天数（只出现在末尾几天），label 为当日原始判定；旧后端不带该字段。
+    let pending: Bool?
     var id: String { date }
 }
 

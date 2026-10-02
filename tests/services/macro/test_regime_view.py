@@ -4,6 +4,7 @@ from app.services.macro.regime_view import (
     StateRow,
     build_state,
     sector_rows,
+    state_history,
     strongest_weakest,
 )
 
@@ -50,3 +51,19 @@ def test_strongest_weakest():
     assert s is not None and w is not None
     assert (s.key, w.key) == ("healthcare", "energy")
     assert strongest_weakest([]) == (None, None)
+
+
+def test_history_fills_unconfirmed_tail_with_raw_label():
+    """末尾未确认的天数用原始标签补色并标 pending，与状态卡片一致；中间的空档保持留空。"""
+    rows = [_row("d1", "risk_off"), _row("d2", None, raw="neutral"), _row("d3", "risk_on"),
+            _row("d4", None, raw="risk_on"), _row("d5", None, raw="risk_on")]
+    pts = state_history(rows)
+    assert [(p.label, p.pending) for p in pts] == [
+        ("risk_off", False), (None, False), ("risk_on", False), ("risk_on", True), ("risk_on", True)]
+    st = build_state(rows)
+    assert st is not None and pts[-1].label == st.label
+
+
+def test_history_all_confirmed_has_no_pending():
+    pts = state_history([_row("d1", "risk_on"), _row("d2", "risk_on")])
+    assert not any(p.pending for p in pts)

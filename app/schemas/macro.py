@@ -22,6 +22,7 @@ class MacroStatePoint(BaseModel):
 
     date: str
     label: str | None = Field(default=None, description="确认后的状态；样本不足时为空")
+    pending: bool = Field(default=False, description="true = 尚未连续满确认天数，label 取当日原始判定（只出现在末尾几天）")
 
 
 class MacroDriverOut(BaseModel):

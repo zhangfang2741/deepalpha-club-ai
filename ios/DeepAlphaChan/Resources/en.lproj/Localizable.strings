@@ -1141,3 +1141,6 @@
 "7天内" = "Within 7 days";
 "全部 %lld" = "All %lld";
 "三卖" = "3rd sell";
+"资金偏向进攻资产，但整体情绪仍偏恐慌。市场状态看近 20 个交易日的资金流向，情绪分看市场整体温度，两者口径不同，常见于下跌后的修复初期。" = "Money is leaning toward offensive assets, yet overall sentiment is still fearful. Regime tracks the last 20 trading days of fund flows, while the sentiment score gauges the market's overall mood. The two measure different things and often diverge early in a recovery after a sell-off.";
+"资金偏向防御资产，但整体情绪仍偏乐观。市场状态看近 20 个交易日的资金流向，情绪分看市场整体温度，两者口径不同，常见于上涨后的降温初期。" = "Money is leaning toward defensive assets, yet overall sentiment is still upbeat. Regime tracks the last 20 trading days of fund flows, while the sentiment score gauges the market's overall mood. The two measure different things and often diverge early in a cool-down after a rally.";
+"最右侧浅色为尚未连续确认的最新判定。" = "The lighter bars at the far right are the latest readings, not yet confirmed over consecutive days.";
