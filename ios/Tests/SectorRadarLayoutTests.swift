@@ -85,7 +85,7 @@ struct SectorRadarLayoutTests {
         assert(near(p.x, 100) && near(p.y, 10), "角度 0 在正上方")
     }
 
-    /// 2026-09-30 标普 500 实测分布（98 个信号、11 个行业，绝大多数是当日 / 前一日的）。
+    /// 2026-09-30 标普 500 实测分布（98 个信号；半导体并回科技后 10 个行业，绝大多数是当日 / 前一日的）。
     static func realPlan() -> (sectors: [String?], ages: [Int], order: [String]) {
         let counts: [(String, Int)] = [("technology", 25), ("industrials", 17), ("healthcare", 14), ("discretionary", 10),
                                        ("financials", 7), ("utilities", 6), ("communication", 6),
@@ -108,7 +108,8 @@ struct SectorRadarLayoutTests {
         let (wedges, placed) = SectorRadarLayout.pack(plan: plan, diameters: d, width: w, height: h,
                                                       hRad: 165, vRad: 147, edge: 12, obstacles: [])
         assert(placed.count >= 14, "真实分布下至少要画得下十几个：\(placed.count)")
-        assert(Set(placed.map(\.wedgeKey)).count == 11, "每个有信号的行业至少画一个")
+        // 行业数按数据算（半导体并回科技后是 10 个），不写死
+        assert(Set(placed.map(\.wedgeKey)).count == Set(real.sectors.compactMap { $0 }).count, "每个有信号的行业至少画一个")
         for p in placed {
             let wd = wedges.first { $0.key == p.wedgeKey }!
             // 气泡圆心落在自己的扇区里（角度按椭圆参数角算）

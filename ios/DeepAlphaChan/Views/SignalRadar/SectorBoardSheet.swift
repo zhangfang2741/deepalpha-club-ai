@@ -216,6 +216,7 @@ struct SectorBoardList: View {
     }
 
     /// 单行：行业名 + 状态文字 ……… 买卖点 · 强弱值 + 强弱条。一行约 40pt，半屏就能看到大半。
+    @ViewBuilder
     private func rowView(_ row: SectorRow, maxAbs: Double) -> some View {
         let selected = parent == nil && radar?.selectedKey == row.key
         let rs = row.rsVsMarket

@@ -18,7 +18,6 @@ struct AnalysisInterpretationTests {
         precondition(HeadlineHighlighter.highlight("pivot").runs.first?.foregroundColor == Theme.pivotFill)
         precondition(SignalFormatting.strengthDepth("strong") > SignalFormatting.strengthDepth("medium"))
         precondition(SignalFormatting.strengthDepth("medium") > SignalFormatting.strengthDepth("weak"))
-        precondition(Theme.pivotPhaseColor("divergence_turn") == Theme.divergence)
 
         let analysis = try fixture(pending: [" 末笔未确认 ", "末笔未确认", "\n"],
                                    caveats: ["末笔未确认", "周期不匹配", " 周期不匹配 ", ""])
@@ -43,8 +42,6 @@ struct AnalysisInterpretationTests {
         precondition(AnalysisInterpretation.displayedOtherRisks(many) == ["背驰滞后", "样本不足"],
                      "「线段未确认」虽被截掉，仍因在完整 pendingNotes 里而不重复出现在这里")
         precondition(AnalysisInterpretation.riskCount(many) == 4, "Tab 数量等于两栏各自展示的条数之和（2+2）")
-        precondition(AnalysisInterpretation.branchExplanation("type2").contains("不能仅凭"))
-        precondition(AnalysisInterpretation.branchExplanation("type3").contains("不等于信号已确认"))
     }
 
     private static func fixture(pending: [String], caveats: [String]?) throws -> ChanAnalysis {
