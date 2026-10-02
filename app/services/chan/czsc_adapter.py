@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import pandas as pd
 from czsc import CZSC, Direction, Freq, Mark, RawBar
@@ -12,6 +13,9 @@ from czsc import CZSC, Direction, Freq, Mark, RawBar
 from app.services.chan.fractal import Fractal, MergedCandle
 from app.services.chan.pivot import Pivot
 from app.services.chan.stroke import Stroke
+
+if TYPE_CHECKING:
+    from app.services.chan.divergence import MACDData
 
 
 def bars_to_raw_bars(bars: list[dict], *, symbol: str, freq: Freq) -> list[RawBar]:
@@ -82,6 +86,68 @@ def czsc_macd(c: CZSC):
     """
     from app.services.chan.divergence import calc_macd
     return calc_macd([{"time": ts_date(rb.dt), "close": float(rb.close)} for rb in c.bars_raw])
+
+
+def _dp_structures_available() -> bool:
+    """自编译 czsc 带 dp_structures（建结构 + 提取整段在 Rust 里完成）。"""
+    try:
+        import czsc._native as native
+        return hasattr(native, "dp_structures")
+    except Exception:  # noqa: BLE001 — 探测失败一律当作不可用
+        return False
+
+
+_HAS_DP_STRUCT = _dp_structures_available()
+
+
+def _from_native(res) -> tuple["CzscStructures", "MACDData"]:
+    """把 Rust 返回的纯数据（元组列表）实例化成项目数据类。
+
+    对象关系与 extract_structures 一致：相邻笔共享同一个端点分型对象；分型的左 / 中 / 右 K 线是独立对象
+    （不与 merged_candles 共用）。
+    """
+    from app.services.chan.divergence import MACDData
+
+    merged_t, fractals_t, strokes_t, pivots_t, (m_times, m_dif, m_dea, m_bar) = res
+
+    def mc(t) -> MergedCandle:
+        return MergedCandle(idx=t[0], time=t[1], open=t[2], high=t[3], low=t[4], close=t[5],
+                            raw_start=t[6], raw_end=t[7], volume=t[8], end_time=t[9])
+
+    merged = [mc(t) for t in merged_t]
+    fractals = [Fractal(type="top" if is_top else "bottom", candle=mc(m), left=mc(left), right=mc(right))
+                for is_top, left, m, right in fractals_t]
+    strokes = [Stroke(direction="up" if up else "down", start=fractals[a], end=fractals[b],
+                      power_price=pp, power_volume=pv, length=ln)
+               for up, a, b, pp, pv, ln in strokes_t]
+    pivots = [Pivot(zg=zg, zd=zd, gg=gg, dd=dd, start_time=st, end_time=et, level="stroke",
+                    elements=[strokes[i] for i in idxs])
+              for zg, zd, gg, dd, st, et, idxs in pivots_t]
+    return (CzscStructures(merged_candles=merged, fractals=fractals, strokes=strokes, stroke_pivots=pivots),
+            MACDData(times=m_times, dif=m_dif, dea=m_dea, bar=m_bar))
+
+
+def build_structures(
+    bars: list[dict], *, symbol: str, freq: Freq, min_bi_len: int = 0,
+) -> tuple["CzscStructures", "MACDData"]:
+    """建 czsc 结构并转成项目数据类，同时给出按 czsc 持有 K 线算的 MACD（背驰面积用）。
+
+    有 Rust 的 dp_structures 就一次调用完成（不创建 czsc 的 Python 对象、不经 pandas 时间）；
+    没有（标准 PyPI 版）或 Rust 出错，退回 build_czsc + extract_structures + czsc_macd，结果一致。
+    """
+    if _HAS_DP_STRUCT and min_bi_len == 0:
+        try:
+            import czsc._native as native
+            res = native.dp_structures(  # pyright: ignore[reportAttributeAccessIssue]
+                symbol, freq.value, [b["time"] for b in bars], [float(b["open"]) for b in bars],
+                [float(b["high"]) for b in bars], [float(b["low"]) for b in bars],
+                [float(b["close"]) for b in bars], [float(b["volume"]) for b in bars],
+            )
+            return _from_native(res)
+        except Exception:  # noqa: BLE001 — 原生路径任何失败都退回原实现
+            pass
+    c = build_czsc(bars, symbol=symbol, freq=freq, min_bi_len=min_bi_len)
+    return extract_structures(c, bars), czsc_macd(c)
 
 
 def extract_structures(c: CZSC, bars: list[dict]) -> CzscStructures:

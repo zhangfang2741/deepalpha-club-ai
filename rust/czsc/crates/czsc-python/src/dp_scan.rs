@@ -5,8 +5,8 @@
 // 建 K 线（直接解析时间字符串）→ 逐根推进 → 提取买卖点事件 → 记录笔完成 / 成笔时刻，
 // 只把「事件列表 + 两张笔时间表」交回 Python；计算期间释放 GIL，雷达可多线程并行扫描多只股票。
 use super::trader::czsc_signals::parse_signals_config;
-use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
-use czsc_core::objects::bar::{RawBar, RawBarBuilder};
+use super::dp_common::{build_raw, fmt_ts};
+use czsc_core::objects::bar::RawBar;
 use czsc_core::objects::freq::Freq;
 use czsc_core::objects::market::Market;
 use czsc_trader::czsc_signals::CzscSignals;
@@ -20,29 +20,6 @@ use std::str::FromStr;
 
 /// 事件：（类型, 亮起 K 线时间, 所属笔终点时间, 所属笔终点价, 一类命中的笔数 span, dp_trend_legs 原始信号值）
 type ScanEvent = (String, String, String, f64, String, Option<String>);
-
-/// 项目时间字符串 → UTC（朴素时间按 UTC 解释，与 Python 侧 `pd.Timestamp(time)` 喂给 czsc 的口径一致）
-fn parse_dt(s: &str) -> Result<DateTime<Utc>, String> {
-    let t = s.trim();
-    for f in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S"] {
-        if let Ok(n) = NaiveDateTime::parse_from_str(t, f) {
-            return Ok(n.and_utc());
-        }
-    }
-    NaiveDate::parse_from_str(t, "%Y-%m-%d")
-        .map(|d| d.and_hms_opt(0, 0, 0).unwrap().and_utc())
-        .map_err(|_| format!("无法解析时间: {s}"))
-}
-
-/// 与 Python `ts_date` 同口径：零点输出 YYYY-MM-DD，否则 YYYY-MM-DD HH:MM
-fn fmt_ts(dt: DateTime<Utc>) -> String {
-    let n = dt.naive_utc();
-    if n.format("%H:%M").to_string() == "00:00" {
-        n.format("%Y-%m-%d").to_string()
-    } else {
-        n.format("%Y-%m-%d %H:%M").to_string()
-    }
-}
 
 fn sig_type(v1: &str) -> Option<&'static str> {
     Some(match v1 {
@@ -77,23 +54,7 @@ fn scan(
     if n <= init_n {
         return Ok((vec![], vec![], vec![]));
     }
-    let mut raw: Vec<RawBar> = Vec::with_capacity(n);
-    for i in 0..n {
-        let bar = RawBarBuilder::default()
-            .symbol(symbol)
-            .dt(parse_dt(&times[i])?)
-            .freq(freq)
-            .id(i as i32)
-            .open(opens[i])
-            .close(closes[i])
-            .high(highs[i])
-            .low(lows[i])
-            .vol(vols[i])
-            .amount(closes[i] * vols[i])
-            .build()
-            .map_err(|e| format!("构造 RawBar 失败: {e}"))?;
-        raw.push(bar);
-    }
+    let raw: Vec<RawBar> = build_raw(symbol, freq, times, opens, highs, lows, closes, vols)?;
     let mut bg = BarGenerator::new(freq, vec![], n + 1, Market::Default).map_err(|e| e.to_string())?;
     bg.init_freq_with_bars(freq, raw[..init_n].iter().cloned())
         .map_err(|e| e.to_string())?;

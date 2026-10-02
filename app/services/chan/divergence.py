@@ -48,12 +48,22 @@ def calc_ema(values: list[float], period: int) -> list[float]:
     return result
 
 
+try:  # 自编译 czsc 带 Rust 版 MACD（与下面的 Python 实现逐位一致）；标准 czsc 没有
+    import czsc._native as _native
+    _dp_macd = getattr(_native, "dp_macd", None)
+except Exception:  # noqa: BLE001
+    _dp_macd = None
+
+
 def calc_macd(bars: list[dict], fast: int = 12, slow: int = 26, signal: int = 9) -> MACDData:
     """计算MACD指标。
 
     使用标准EMA公式：DIF = EMA(close, fast) - EMA(close, slow)，
     DEA = EMA(DIF, signal)，MACD = 2*(DIF-DEA)。
     """
+    if (fast, slow, signal) == (12, 26, 9) and _dp_macd is not None:
+        dif, dea, bar = _dp_macd([float(b["close"]) for b in bars])
+        return MACDData(times=[b["time"] for b in bars], dif=dif, dea=dea, bar=bar)
     if len(bars) < slow:
         times = [b["time"] for b in bars]
         n = len(bars)

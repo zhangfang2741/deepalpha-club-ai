@@ -222,6 +222,15 @@ deepalpha-club-ai/
   **端到端有一类已知、可解释的差异**：czsc 默认只留最近 50 笔（`max_bi_num`），Python 路径用「跑完全部数据后的最终结构」评估，最早一批事件缺中枢历史；
   Rust 在事件当时看到完整历史（点时刻，更准）。51 只样本里 20 个差异全部落在最终结构前段（距首笔 34~393 天），之后的信号两路径完全一致。
   MACD 面积统一基于 czsc 的 `bars_raw`（它比输入少第一根 K 线，EMA 起点晚一根），Python 侧用 `czsc_adapter.czsc_macd`，不要改回 `calc_macd(bars)`。
+  **逐根扫描与结构提取整段在 Rust（自编译 czsc 才有，标准版自动退回 Python 实现，结果一致）**：
+  `dp_scan_bs`（`rust/czsc/crates/czsc-python/src/dp_scan.rs`）一次调用完成建 K 线（直接解析时间字符串）→ 逐根推进 → 提取买卖点事件 → 记笔完成 / 成笔时刻，
+  计算期间释放 GIL；`dp_structures`（`dp_structures.rs`）一次调用完成建 CZSC + 提取合并 K 线 / 分型 / 笔 / 笔级中枢 + MACD，只返回纯数据，Python 的 `czsc_adapter._from_native`
+  只负责实例化数据类（保持「相邻笔共享端点分型对象」「分型左中右 K 线是独立对象」的对象关系）；`dp_macd` 与 `divergence.calc_macd` 逐位一致。
+  入口 `czsc_adapter.build_structures` / `czsc_signals._scan_native`，出任何错都退回原实现。
+  对照与守护：`test_dp_scan_parity.py` / `test_dp_structures_parity.py`（含整条 analyze 两路径结果相等、MACD 逐位相等、对象关系、出错退回，均验证过人为改坏会失败）；
+  真实数据 10 个数据集（美股两个年代 / A 股 / 港股的日线，三市场周线，三市场 30 分钟线）共 1042 只结构 + MACD + 整条分析零不一致，842 组整段扫描零不一致。
+  **性能（2094 根日线一次严格口径分析）：190ms → 73ms**，其中 84% 是 Rust 原生计算。**改动这些函数必须先改 Python 参考再对照，不要只改一边。**
+  **二 / 三类、`_holds`、去重不迁 Rust**（见下条）；二类实测无超额收益（四个样本合并 10 日 -0.29%，t=-0.6；一类 +2.7%、三类 +2.6%），但雷达**只陈列事实**，二类照常展示，不降级、不隐藏。
   **不迁二 / 三类到 Rust（2026-10 实测决定）**：一次严口径分析约 85ms，其中 czsc 内核逐根推进约 60%、结构转换约 17%，
   `generate_all_signals`（一类作废 / 二类 / 三类推导 / 同笔去重 / 成立日）合计约 1ms（1%），迁走收益≈0；而二类依赖一类事件，
   czsc 触发有「状态翻转才记一次」的细节，Rust 里逐位复刻风险大。二 / 三类、`_holds`、去重留在 Python。
