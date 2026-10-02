@@ -29,6 +29,7 @@ def test_loose_keeps_last_stroke_signal_as_unconfirmed(monkeypatch):
     只检验候选拆分：让严格口径的 c/b 背驰判定「不能判定」、退回 czsc 笔级事件（合成数据按原文不背驰）。
     """
     monkeypatch.setattr("app.services.chan.signals._trend_leg_divergence", lambda *a, **k: (False, None))
+    monkeypatch.setattr("app.services.chan.czsc_signals._HAS_DP_LEGS", False)  # Rust 路径的事件自带 legs，需一并关掉
     bars = _decaying_downtrend_bars()
     loose = ChanAnalyzer().analyze("DN", bars, mode="loose")
     strict = ChanAnalyzer().analyze("DN", bars, mode="strict")

@@ -214,7 +214,15 @@ deepalpha-club-ai/
   `dp_bi_track_V261001` 直接在内核里报告末笔终点 / 起点，Python 不再取副本（51 只日线 43s → 4.3s，输出与基线逐字节一致）。
   `czsc_signals._HAS_DP` 探测到分叉版就走 Rust 信号，标准 PyPI 版自动退回读 `bi_list` 的旧路径（两条路径输出一致，测试都过）。
   编译：`cd rust/czsc && uvx maturin build --release -i python3.13`（约 10 分钟，产物 `target/wheels`）；部署用哪个 czsc 见下方待定项。
-  后续计划的信号（趋势前提 / b·c 段原始力度 / 一二三类触发）均按此方式加在 `dp.rs`，Rust 只输出原始量、判定与强弱分档仍在 Python（保持度量可切换、API 统一）。
+  `dp_trend_legs_V261001`：趋势前提（最后两个已确认中枢依次下移/上移、价格已离开 B）+ 价格越过 b 段终点（创新极值）+ b / c 段原始力度（价差·量能·时长·MACD 面积）。
+  Rust 只输出**原始量**，是否背驰 / 强弱分档仍在 Python 的 `leg_metric`（保持度量可切换、API 统一）。严格口径的事件通过 `BsEvent.legs` 带着它走。
+  中枢分组完全复刻 czsc `get_zs_seq`，且**只用已确认的笔**（`bars_ubi.len() < 5` 时排除最后一笔，与 czsc `zs_list` 同口径）。
+  **两路径一致性**：同一时刻同一份结构上，Rust 信号与 Python 参考（`_in_trend` / `_trend_legs` / `leg_force`）逐位一致——51 只日线 11347 个快照零差异，
+  回归测试 `tests/services/chan/test_dp_legs_parity.py`（标准 czsc 下自动跳过；改任一边的取法都会报警，已验证人为改坏会失败）。
+  **端到端有一类已知、可解释的差异**：czsc 默认只留最近 50 笔（`max_bi_num`），Python 路径用「跑完全部数据后的最终结构」评估，最早一批事件缺中枢历史；
+  Rust 在事件当时看到完整历史（点时刻，更准）。51 只样本里 20 个差异全部落在最终结构前段（距首笔 34~393 天），之后的信号两路径完全一致。
+  MACD 面积统一基于 czsc 的 `bars_raw`（它比输入少第一根 K 线，EMA 起点晚一根），Python 侧用 `czsc_adapter.czsc_macd`，不要改回 `calc_macd(bars)`。
+  后续计划的信号（一二三类触发等）均按此方式加在 `dp.rs`，**每加一个先写 Python 参考 + 逐位对照测试，再切换**。
 
 **买卖点口径（`signal_policy.py`，统一接口 + 多套实现）**
 - 「什么算买卖点」有多套口径，都实现 `SignalPolicy`（`czsc_families` / `assemble` /

@@ -54,7 +54,6 @@ pub fn dp_bi_track_v261001(c: &CZSC, params: &ParamView, _cache: &mut TaCache) -
 /// 组的 zg / zd 取组内前三笔（缠论：上下沿由最初三笔决定，之后不变）。
 struct DpPivot {
     s: usize, // 组内第一笔下标
-    e: usize, // 组内最后一笔下标 + 1
     zg: f64,
     zd: f64,
 }
@@ -97,7 +96,7 @@ fn dp_pivots(bis: &[BI]) -> Vec<DpPivot> {
                 let (h, l) = (bi.get_high(), bi.get_low());
                 (h <= zg && h >= zd) || (l <= zg && l >= zd) || (h >= zg && l <= zd)
             });
-            ok.then_some(DpPivot { s, e, zg, zd })
+            ok.then_some(DpPivot { s, zg, zd })
         })
         .collect()
 }

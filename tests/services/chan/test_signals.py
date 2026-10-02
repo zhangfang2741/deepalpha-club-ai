@@ -499,6 +499,7 @@ def test_signal_on_unfinished_stroke_becomes_candidate(monkeypatch):
     「不能判定」、退回 czsc 笔级事件。
     """
     monkeypatch.setattr("app.services.chan.signals._trend_leg_divergence", lambda *a, **k: (False, None))
+    monkeypatch.setattr("app.services.chan.czsc_signals._HAS_DP_LEGS", False)  # Rust 路径的事件自带 legs，需一并关掉
     result = ChanAnalyzer().analyze("DN", _decaying_downtrend_bars(), mode="strict")  # 数据停在底部，一买在最后一笔上
     last_end = result.strokes[-1].end_time
     assert all(s.time != last_end for s in result.signals)
