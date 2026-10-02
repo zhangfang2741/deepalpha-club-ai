@@ -59,8 +59,19 @@ struct Stroke: Codable, Identifiable {
     /// 与前一个同向笔相比是否力度背驰，及价差力度比（未比较时为 nil）。
     let diverged: Bool?
     let priceRatio: Double?
+    /// 背驰类型（缠论原文术语）："trend" 趋势背驰 / "consolidation" 盘整背驰；旧后端无此字段。
+    let divergenceType: String?
 
     var id: String { "\(startTime)-\(endTime)" }
+
+    /// 背驰的原文名称：趋势背驰 / 盘整背驰；类型未知（旧后端）时只叫背驰。
+    var divergenceName: String {
+        switch divergenceType {
+        case "trend": return L("趋势背驰")
+        case "consolidation": return L("盘整背驰")
+        default: return L("背驰")
+        }
+    }
 
     enum CodingKeys: String, CodingKey {
         case direction, high, low, confirmed, length, diverged
@@ -71,6 +82,7 @@ struct Stroke: Codable, Identifiable {
         case powerPrice = "power_price"
         case powerVolume = "power_volume"
         case priceRatio = "price_ratio"
+        case divergenceType = "divergence_type"
     }
 }
 

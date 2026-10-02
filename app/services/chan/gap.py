@@ -108,8 +108,8 @@ def build_market_digest(result: ChanAnalysisResult) -> str:
     diverged = [(st, dv) for st, dv in zip(result.strokes, result.divergences, strict=False) if dv.is_diverged]
     if diverged:
         st, dv = diverged[-1]
-        kind = "顶背驰" if st.direction == "up" else "底背驰"
-        lines.append(f"最近背驰：{kind}（{dv.strength}），力度衰竭迹象")
+        kind = {"trend": "趋势背驰", "consolidation": "盘整背驰"}.get(dv.type, "背驰")
+        lines.append(f"最近背驰：{'上涨' if st.direction == 'up' else '下跌'}段{kind}（{dv.strength}）")
 
     if result.signals:
         recent = result.signals[-3:]

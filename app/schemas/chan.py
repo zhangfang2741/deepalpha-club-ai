@@ -42,6 +42,8 @@ class StrokeOut(BaseModel):
     # 该笔与前一个同向笔相比是否力度背驰，及价差力度比（未比较时为 None）
     diverged: bool = False
     price_ratio: Optional[float] = None
+    # 背驰类型（缠论原文术语）：trend = 趋势背驰、consolidation = 盘整背驰；未背驰为 None
+    divergence_type: Optional[Literal["trend", "consolidation"]] = None
 
 
 class SegmentOut(BaseModel):

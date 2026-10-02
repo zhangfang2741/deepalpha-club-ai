@@ -139,16 +139,22 @@ enum ChartExplainer {
         let top = c.direction == .up
         let ratio = c.priceRatio.map { String(format: "%.2f", $0) } ?? "-"
         let reason = top
-            ? L("价格创出新高，但这一笔的涨幅只有前一个同向笔的 %@ 倍，量能或时长也更弱——上涨的推动力在衰竭，是趋势可能见顶的信号。", ratio)
-            : L("价格创出新低，但这一笔的跌幅只有前一个同向笔的 %@ 倍，量能或时长也更弱——下跌的推动力在衰竭，是趋势可能见底的信号。", ratio)
+            ? L("价格创出新高，但这一笔的涨幅只有前一个同向笔的 %@ 倍，量能或时长也更弱——上涨的推动力已经跟不上。", ratio)
+            : L("价格创出新低，但这一笔的跌幅只有前一个同向笔的 %@ 倍，量能或时长也更弱——下跌的推动力已经跟不上。", ratio)
+        let kindNote: String
+        switch c.divergenceType {
+        case "trend": kindNote = L("趋势背驰：前面已有两个同向中枢，对应一类买卖点。")
+        case "consolidation": kindNote = L("盘整背驰：前面只有一个中枢，不对应一类买卖点。")
+        default: kindNote = ""
+        }
         return ChartExplanation(
-            title: top ? L("顶背驰") : L("底背驰"), color: Theme.divergence,
+            title: c.divergenceName, color: Theme.divergence,
             facts: [
                 (L("本笔"), "\(c.startTime) → \(c.endTime)  \(change(c.startPrice, c.endPrice))"),
                 (L("前一同向笔"), "\(p.startTime) → \(p.endTime)  \(change(p.startPrice, p.endPrice))"),
                 (L("价差比"), ratio),
             ],
-            reason: reason, lessonTerm: "背驰")
+            reason: kindNote.isEmpty ? reason : reason + "\n" + kindNote, lessonTerm: "背驰")
     }
 }
 

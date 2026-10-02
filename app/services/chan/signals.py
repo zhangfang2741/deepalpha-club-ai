@@ -371,9 +371,9 @@ def _describe(sig_type: str, time: str, price: float, span: str,
         legs = f"近{n}笔" if n else "近几笔"
         texts = {
             "buy1": f"一类买点：下跌趋势（两个依次下移的中枢）之后，{time} {legs}末笔创新低（{price:.2f}），"
-                    f"但力度弱于前一段，构成趋势底背驰{area}",
+                    f"但力度弱于前一段，构成趋势背驰{area}",
             "sell1": f"一类卖点：上涨趋势（两个依次上移的中枢）之后，{time} {legs}末笔创新高（{price:.2f}），"
-                     f"但力度弱于前一段，构成趋势顶背驰{area}",
+                     f"但力度弱于前一段，构成趋势背驰{area}",
             "buy2": f"二类买点：一类买点（{ref}）之后的第一次回落，{time} 低点 {price:.2f} 没有跌破一买低点",
             "sell2": f"二类卖点：一类卖点（{ref}）之后的第一次反弹，{time} 高点 {price:.2f} 没有升破一卖高点",
             "buy3": f"三类买点：向上离开中枢（{ref}）后的第一次回落，{time} 低点 {price:.2f} 仍在中枢上沿之上，没有回到中枢",
@@ -538,8 +538,8 @@ def _describe_loose(sig_type: str, time: str, price: float, span: str,
     else:
         legs = f"近{n}笔" if n else "近几笔"
         texts = {
-            "buy1": f"一类买点：{time} {legs}下跌中末笔创新低（{price:.2f}），但力度弱于前段，构成底背驰{area}",
-            "sell1": f"一类卖点：{time} {legs}上涨中末笔创新高（{price:.2f}），但力度弱于前段，构成顶背驰{area}",
+            "buy1": f"一类买点：{time} {legs}下跌中末笔创新低（{price:.2f}），但力度弱于前段，构成趋势背驰{area}",
+            "sell1": f"一类卖点：{time} {legs}上涨中末笔创新高（{price:.2f}），但力度弱于前段，构成趋势背驰{area}",
             "buy2": f"二类买点：{time} 回落低点（{price:.2f}）落在此前多次转折形成的价格密集区，获得支撑、未再创新低",
             "sell2": f"二类卖点：{time} 反弹高点（{price:.2f}）触及此前多次转折形成的价格密集区，受压回落、未再创新高",
             "buy3": f"三类买点：{time} 前五笔构成中枢后，回落低点（{price:.2f}）仍在中枢上沿之上没有回到中枢，且均线逐级抬升",

@@ -721,7 +721,7 @@ struct ChanChartView: View {
             }
 
             // 标签放在虚线中点、朝外侧（顶背驰在线上方、底背驰在线下方），避开端点上的买卖点徽标
-            let kind = cur.direction == .up ? L("顶背驰") : L("底背驰")
+            let kind = cur.divergenceName
             let label = cur.priceRatio.map { kind + String(format: " %.2f", $0) } ?? kind
             let resolved = ctx.resolve(Text(label).font(.system(size: 9, weight: .semibold))
                                         .foregroundColor(Theme.divergence))

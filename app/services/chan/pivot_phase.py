@@ -204,8 +204,17 @@ def _pick_current_pivot(result: "ChanAnalysisResult") -> tuple["Pivot", list["Pi
     return pivot, all_pivots, all_pivots.index(pivot)
 
 
+def _div_kind_name(div_kind: str | None, lang: str) -> str:
+    """背驰类型的缠论原文术语：趋势背驰 / 盘整背驰（类型未知时只叫背驰）。"""
+    if div_kind == "trend":
+        return pick(lang, "趋势背驰", "Trend divergence")
+    if div_kind == "consolidation":
+        return pick(lang, "盘整背驰", "Consolidation divergence")
+    return pick(lang, "背驰", "Divergence")
+
+
 def _phase_label(phase: Phase, direction: str | None, outcome: Outcome | None, lang: str,
-                 signaled: bool = False) -> str:
+                 signaled: bool = False, div_kind: str | None = None) -> str:
     """signaled：回抽笔上是否有对应的二/三类买卖点信号；没有时只描述结构，不声称「确认X买/卖」。"""
     up = direction == "up"
     if phase == "pivot_forming":
@@ -227,8 +236,8 @@ def _phase_label(phase: Phase, direction: str | None, outcome: Outcome | None, l
                          "Type-3 buy confirmed" if up else "Type-3 sell confirmed")
         return pick(lang, "确认二买" if up else "确认二卖",
                      "Type-2 buy confirmed" if up else "Type-2 sell confirmed")
-    return pick(lang, "顶背驰，趋势可能转折" if up else "底背驰，趋势可能转折",
-                 "Top divergence, trend may turn" if up else "Bottom divergence, trend may turn")
+    return pick(lang, f"{'上涨' if up else '下跌'}段{_div_kind_name(div_kind, lang)}",
+                 f"{_div_kind_name(div_kind, lang)} ({'up' if up else 'down'}-leg)")
 
 
 def _next_step_label(phase: Phase, lang: str, direction: str | None = None) -> str | None:
@@ -258,7 +267,7 @@ def _checklist(phase: Phase, phase_label: str, detail: str, pivot: "Pivot", lang
 
 
 def _reason(phase: Phase, direction: str | None, pivot: "Pivot", last_price: float,
-            pair: "_Pair | None", lang: str, signaled: bool = False) -> str:
+            pair: "_Pair | None", lang: str, signaled: bool = False, div_kind: str | None = None) -> str:
     up = direction == "up"
     if phase == "pivot_forming":
         return pick(lang,
@@ -304,10 +313,14 @@ def _reason(phase: Phase, direction: str | None, pivot: "Pivot", last_price: flo
             f"但未{'跌破' if up else '升破'}{far_edge} {far:.2f}，" + tail_zh,
             f"{verb_en} landed at {pair.retrace.end_price:.2f}, inside the pivot "
             f"{pivot.zd:.2f}-{pivot.zg:.2f}" + tail_en)
+    kind_zh = _div_kind_name(div_kind, "zh")
+    note_zh = {"trend": "趋势背驰对应一类买卖点。", "consolidation": "盘整背驰不构成一类买卖点。"}.get(div_kind or "", "")
+    note_en = {"trend": " A trend divergence corresponds to a type-1 signal.",
+               "consolidation": " A consolidation divergence is not a type-1 signal."}.get(div_kind or "", "")
     return pick(lang,
-        f"延续的{'上升' if up else '下降'}笔出现{'顶' if up else '底'}背驰，价格创新高/新低但力度（价差、量能或时长）减弱。",
-        f"The continuing {'up' if up else 'down'}-leg shows a {'top' if up else 'bottom'} divergence "
-        "— new extreme with weaker force (range, volume or duration).")
+        f"延续的{'上升' if up else '下降'}笔出现{kind_zh}，价格创新高/新低但力度（价差、量能或时长）减弱。{note_zh}",
+        f"The continuing {'up' if up else 'down'}-leg shows a {_div_kind_name(div_kind, lang).lower()} "
+        f"— new extreme with weaker force (range, volume or duration).{note_en}")
 
 
 def _branches(direction: str, pivot: "Pivot", lang: str) -> list[PhaseBranch]:
@@ -374,7 +387,7 @@ def _why_it_matters(phase: Phase, up: bool, lang: str) -> str:
                     "离开后若" + ("回落" if up else "反弹") + "不回到中枢，就确认三" + ("买" if up else "卖") +
                     "、趋势打开；若" + ("回落跌回" if up else "反弹升回") + "中枢，则回到中枢震荡。"),
         "retrace_confirmed": "买卖点确认之后，走势能走多远，看后续同向的笔还有没有力度、会不会出现背驰。",
-        "divergence_turn": "背驰意味着推动价格新高/新低的力度已经跟不上，是趋势可能见顶/见底的信号。",
+        "divergence_turn": "背驰：价格创新高/新低，但推动它的力度（价差、量能或时长）已经跟不上。趋势背驰对应一类买卖点，盘整背驰则不对应。",
     }
     en = {
         "pivot_forming": "Once a pivot forms, every later leg's strength, retest and pullback is measured against its top and bottom.",
@@ -383,8 +396,9 @@ def _why_it_matters(phase: Phase, up: bool, lang: str) -> str:
                     f"if the {'retest' if up else 'pullback'} stays out of the pivot, it confirms a type-3 signal "
                     "and the trend opens up; if it gets back in, the pivot oscillation resumes."),
         "retrace_confirmed": "How far the trend goes next depends on whether force holds or a divergence appears.",
-        "divergence_turn": "Divergence means the force driving new highs/lows can't keep up — a common "
-                            "precursor to a top or bottom.",
+        "divergence_turn": "Divergence: price makes a new high/low but the force behind it (range, volume or "
+                            "duration) can't keep up. A trend divergence corresponds to a type-1 signal; a "
+                            "consolidation divergence does not.",
     }
     return pick(lang, zh[phase], en[phase])
 
@@ -427,10 +441,11 @@ def _build_retrace_confirmed(pivot: "Pivot", pair: _Pair, lang: str, signaled: b
                        outcome=pair.outcome if pair.outcome != "back_to_range" else None)
 
 
-def _build_divergence_turn(pivot: "Pivot", pair: _Pair, turn_stroke: "Stroke", lang: str) -> PivotPhase:
+def _build_divergence_turn(pivot: "Pivot", pair: _Pair, turn_stroke: "Stroke", lang: str,
+                           div_kind: str | None = None) -> PivotPhase:
     phase: Phase = "divergence_turn"
-    label = _phase_label(phase, pair.direction, pair.outcome, lang)
-    reason = _reason(phase, pair.direction, pivot, pair.retrace.end_price, pair, lang)
+    label = _phase_label(phase, pair.direction, pair.outcome, lang, div_kind=div_kind)
+    reason = _reason(phase, pair.direction, pivot, pair.retrace.end_price, pair, lang, div_kind=div_kind)
     return PivotPhase(phase=phase, phase_label=label, direction=pair.direction, pivot=pivot,
                        checklist=_checklist(phase, label, reason, pivot, lang), reason=reason,
                        confirmed=turn_stroke.confirmed, branches=[],
@@ -453,7 +468,9 @@ def build_pivot_phase(result: "ChanAnalysisResult", lang: str = "zh") -> PivotPh
     if pair is not None:
         turn_stroke = _find_divergence_turn(result, remaining, pair.direction)
         if turn_stroke is not None:
-            return _build_divergence_turn(pivot, pair, turn_stroke, lang)
+            div_kind = next((dv.type for st, dv in zip(result.strokes, result.divergences, strict=False)
+                             if st is turn_stroke), None)
+            return _build_divergence_turn(pivot, pair, turn_stroke, lang, div_kind)
         return _build_retrace_confirmed(pivot, pair, lang, _has_matching_signal(result, pair))
 
     if open_breakout is not None:
