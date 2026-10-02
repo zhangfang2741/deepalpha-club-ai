@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.services.chan.bias import SEGMENT_WEIGHT, STROKE_WEIGHT
-from app.services.chan.czsc_signals import BsEvent
+from app.services.chan.czsc_signals import BsEvent, RawLeg
 from app.services.chan.divergence import (
     DivergenceResult,
     MACDData,
@@ -18,7 +18,7 @@ from app.services.chan.divergence import (
     force_text,
 )
 from app.services.chan.i18n import is_en
-from app.services.chan.leg_metric import DivergenceMetric, LegForce, get_metric, leg_force
+from app.services.chan.leg_metric import DivergenceMetric, LegForce, get_metric, leg_force, macd_area
 from app.services.chan.pivot import Pivot
 from app.services.chan.stroke import Stroke
 
@@ -229,6 +229,12 @@ def _trend_legs(
     return (b_leg, c_leg) if b_leg and c_leg else None
 
 
+def _raw_to_force(leg: RawLeg, macd: MACDData | None, is_buy: bool) -> LegForce:
+    """Rust 给的原始量 + 用 MACD 序列按起止时间算出的面积 → 一段走势的力度。"""
+    area = macd_area(macd, leg.start, leg.end, is_down=is_buy) if macd is not None else None
+    return LegForce(price=leg.price, volume=leg.volume, length=leg.length, area=area)
+
+
 def _compare_legs(
     c: LegForce, b: LegForce, lang: str, metric: DivergenceMetric,
 ) -> tuple[bool, DivergenceResult | None]:
@@ -423,7 +429,9 @@ def generate_all_signals(
             if not ev.legs.trend:
                 continue
             judged, leg_div = (
-                _compare_legs(ev.legs.c, ev.legs.b, lang, metric or get_metric(None))
+                _compare_legs(_raw_to_force(ev.legs.c, macd, ev.type == "buy1"),
+                              _raw_to_force(ev.legs.b, macd, ev.type == "buy1"), lang,
+                              metric or get_metric(None))
                 if ev.legs.b is not None and ev.legs.c is not None else (False, None)
             )
         else:

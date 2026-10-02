@@ -108,7 +108,7 @@ class StrictPolicy(_PolicyInfo):
 # （缠论：一笔由后一笔确认），中位滞后由 10 个交易日缩短；
 # std6 一类背驰改为 c 段（离开 B）对 b 段（A、B 之间）比力度，同笔二 / 三类只留一个；
 # std7 背驰度量可插拔（leg_metric），默认原文 MACD 面积，版本号带度量名；
-# std8 b 段取法对齐 czsc 首尾相接的中枢（A 的离开笔算 b 段），面积比强弱阈值按 51 只股票 85 个信号标定。
+# std9 MACD 改用 czsc 的 TA-Lib 兼容实现（仅预热区个别判定变化）；std8 b 段取法对齐 czsc 首尾相接的中枢（A 的离开笔算 b 段），面积比强弱阈值按 51 只股票 85 个信号标定。
 # loose：loose1 严格化之前的口径；loose2 组装加一致性约束（同笔多信号按一类>三类>二类
 # 去重、无源二类过滤）。
 _METRIC = get_metric(settings.CHAN_DIVERGENCE_METRIC)
@@ -120,7 +120,7 @@ _ALL: tuple[SignalPolicy, ...] = (
             czsc_families=("first", "second", "third"),
         ),
         StrictPolicy(
-            name="strict", version=f"std8.{_METRIC.name}", metric_name=_METRIC.name, label_zh="严格", label_en="Strict",
+            name="strict", version=f"std9.{_METRIC.name}", metric_name=_METRIC.name, label_zh="严格", label_en="Strict",
             description_zh="严格按缠论原文定义，只认已走完的笔",
             description_en="Textbook Chan definitions; only completed legs count",
             czsc_families=("first",),

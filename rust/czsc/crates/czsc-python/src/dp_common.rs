@@ -59,30 +59,10 @@ pub fn build_raw(
     Ok(raw)
 }
 
-/// EMA：以首值起算，`v * k + prev * (1 - k)`，运算顺序与 Python `calc_ema` 完全一致（逐位相同）
-fn ema(values: &[f64], period: usize) -> Vec<f64> {
-    let k = 2.0 / (period as f64 + 1.0);
-    let mut out: Vec<f64> = Vec::with_capacity(values.len());
-    for (i, v) in values.iter().enumerate() {
-        if i == 0 {
-            out.push(*v);
-        } else {
-            let prev = out[i - 1];
-            out.push(v * k + prev * (1.0 - k));
-        }
-    }
-    out
-}
-
-/// MACD（12 / 26 / 9）：返回 (DIF, DEA, 柱)；不足慢线周期（26 根）时全 0，与 Python `calc_macd` 一致
+/// MACD（12 / 26 / 9）：复用 czsc 的 TA-Lib 兼容实现（SMA 种子 + 前 33 根 NaN 预热），不再自己写。
+/// 返回 (DIF, DEA, 柱)：NaN 记 0；柱 = 2 * (DIF - DEA)（通达信 / 同花顺约定，与旧 API 量纲一致，面积比不受影响）。
 pub fn macd_series(closes: &[f64]) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
-    let n = closes.len();
-    if n < 26 {
-        return (vec![0.0; n], vec![0.0; n], vec![0.0; n]);
-    }
-    let (fast, slow) = (ema(closes, 12), ema(closes, 26));
-    let dif: Vec<f64> = fast.iter().zip(slow.iter()).map(|(f, s)| f - s).collect();
-    let dea = ema(&dif, 9);
-    let bar: Vec<f64> = dif.iter().zip(dea.iter()).map(|(d, e)| 2.0 * (d - e)).collect();
-    (dif, dea, bar)
+    let m = czsc_signals::utils::ta::calc_macd(closes, 12, 26, 9);
+    let zero_nan = |v: &[f64], k: f64| v.iter().map(|x| if x.is_finite() { k * x } else { 0.0 }).collect::<Vec<f64>>();
+    (zero_nan(&m.dif, 1.0), zero_nan(&m.dea, 1.0), zero_nan(&m.macd, 2.0))
 }

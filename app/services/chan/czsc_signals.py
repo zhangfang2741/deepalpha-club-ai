@@ -30,7 +30,6 @@ from typing import Literal
 from czsc import BarGenerator, CzscSignals, Freq
 
 from app.services.chan.czsc_adapter import ts_date, bars_to_raw_bars
-from app.services.chan.leg_metric import LegForce
 from app.services.chan.shape_filters import ShapeState, read_shape_state, shape_config
 
 SignalType = Literal["buy1", "buy2", "buy3", "sell1", "sell2", "sell3"]
@@ -48,14 +47,24 @@ _INIT_N = 20
 
 
 @dataclass(frozen=True)
+class RawLeg:
+    """Rust 信号给出的一段走势：价差 / 量能 / 时长 + 起止时间（MACD 面积由 Python 用 czsc 的 MACD 序列按起止时间算）。"""
+    price: float
+    volume: float
+    length: int
+    start: str
+    end: str
+
+
+@dataclass(frozen=True)
 class LegState:
-    """Rust 信号 dp_trend_legs 在事件那根 K 线上的状态：趋势前提是否成立 + b / c 段原始力度。
+    """Rust 信号 dp_trend_legs 在事件那根 K 线上的状态：趋势前提是否成立 + b / c 段原始量。
 
     b / c 为 None 表示趋势成立但两段取不到（调用方保留 czsc 笔级判定）。
     """
     trend: bool
-    b: LegForce | None = None
-    c: LegForce | None = None
+    b: RawLeg | None = None
+    c: RawLeg | None = None
 
 
 @dataclass(frozen=True)
@@ -99,13 +108,14 @@ def _dp_scan_available() -> bool:
 _HAS_DP_SCAN = _dp_scan_available()
 
 
-def _parse_leg(text: str) -> LegForce:
-    price, volume, length, area = (float(x) for x in text.split("#"))
-    return LegForce(price=price, volume=volume, length=int(length), area=area)
+def _parse_leg(text: str) -> RawLeg:
+    price, volume, length, start, end = text.split("#")
+    return RawLeg(price=float(price), volume=float(volume), length=int(float(length)),
+                  start=_dp_ts(start), end=_dp_ts(end))
 
 
 def parse_leg_state(value: str) -> LegState:
-    """解析 dp_trend_legs 的信号值（如 `买趋势_28#600#12#3.4_15#350#9#1.1_0`）。"""
+    """解析 dp_trend_legs 的信号值（如 `买趋势_28#600#12#202401020000#202402050000_...`）。"""
     parts = value.split("_")
     if parts[0] not in ("买趋势", "卖趋势"):
         return LegState(trend=False)

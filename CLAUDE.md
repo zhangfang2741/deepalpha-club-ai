@@ -214,14 +214,14 @@ deepalpha-club-ai/
   `dp_bi_track_V261001` 直接在内核里报告末笔终点 / 起点，Python 不再取副本（51 只日线 43s → 4.3s，输出与基线逐字节一致）。
   `czsc_signals._HAS_DP` 探测到分叉版就走 Rust 信号，标准 PyPI 版自动退回读 `bi_list` 的旧路径（两条路径输出一致，测试都过）。
   编译：`cd rust/czsc && uvx maturin build --release -i python3.13`（约 10 分钟，产物 `target/wheels`）；部署用哪个 czsc 见下方待定项。
-  `dp_trend_legs_V261001`：趋势前提（最后两个已确认中枢依次下移/上移、价格已离开 B）+ 价格越过 b 段终点（创新极值）+ b / c 段原始力度（价差·量能·时长·MACD 面积）。
+  `dp_trend_legs_V261001`：趋势前提（最后两个已确认中枢依次下移/上移、价格已离开 B）+ 价格越过 b 段终点（创新极值）+ b / c 段原始量（价差·量能·时长·起止时间；**不在 Rust 里算 MACD**，面积由 Python 用下面那条 MACD 序列按起止时间求和）。
   Rust 只输出**原始量**，是否背驰 / 强弱分档仍在 Python 的 `leg_metric`（保持度量可切换、API 统一）。严格口径的事件通过 `BsEvent.legs` 带着它走。
   中枢分组完全复刻 czsc `get_zs_seq`，且**只用已确认的笔**（`bars_ubi.len() < 5` 时排除最后一笔，与 czsc `zs_list` 同口径）。
   **两路径一致性**：同一时刻同一份结构上，Rust 信号与 Python 参考（`_in_trend` / `_trend_legs` / `leg_force`）逐位一致——51 只日线 11347 个快照零差异，
   回归测试 `tests/services/chan/test_dp_legs_parity.py`（标准 czsc 下自动跳过；改任一边的取法都会报警，已验证人为改坏会失败）。
   **端到端有一类已知、可解释的差异**：czsc 默认只留最近 50 笔（`max_bi_num`），Python 路径用「跑完全部数据后的最终结构」评估，最早一批事件缺中枢历史；
   Rust 在事件当时看到完整历史（点时刻，更准）。51 只样本里 20 个差异全部落在最终结构前段（距首笔 34~393 天），之后的信号两路径完全一致。
-  MACD 面积统一基于 czsc 的 `bars_raw`（它比输入少第一根 K 线，EMA 起点晚一根），Python 侧用 `czsc_adapter.czsc_macd`，不要改回 `calc_macd(bars)`。
+  **MACD 一律复用 czsc 自带的 TA-Lib 兼容实现**（Rust `calc_macd`，由 `dp_structures` / `dp_macd` 暴露，不再自己写 EMA）：EMA 以前 N 根简单平均作种子，数据不足的前 33 根记 0，柱 = 2×(DIF−DEA)（国内软件口径）；基于 czsc 的 `bars_raw`（比输入少第一根 K 线），Python 侧 `czsc_adapter.czsc_macd`，不要改回 `calc_macd(bars)`。标准 czsc 下 `divergence.calc_macd` 的 Python 回退与 TA-Lib 逐位一致（对照过 TA-Lib 0.8）。与旧自写实现（首价作种子）相比，面积比中位数差 0%，1336 个真实事件仅 4 个（0.3%）背驰判定翻转，全在 b 段处于最初 12~33 根的预热区。
   **逐根扫描与结构提取整段在 Rust（自编译 czsc 才有，标准版自动退回 Python 实现，结果一致）**：
   `dp_scan_bs`（`rust/czsc/crates/czsc-python/src/dp_scan.rs`）一次调用完成建 K 线（直接解析时间字符串）→ 逐根推进 → 提取买卖点事件 → 记笔完成 / 成笔时刻，
   计算期间释放 GIL；`dp_structures`（`dp_structures.rs`）一次调用完成建 CZSC + 提取合并 K 线 / 分型 / 笔 / 笔级中枢 + MACD，只返回纯数据，Python 的 `czsc_adapter._from_native`
@@ -278,7 +278,7 @@ deepalpha-club-ai/
   - 一类的背驰（std6 起）= 缠论原文的 **c 段（离开 B）对 b 段（A、B 之间）**比力度（`signals._trend_leg_divergence`），
     b / c 段按笔级中枢取（`_trend_legs`）：czsc 的相邻中枢首尾相接（A 结束 = B 开始），**A 的最后一笔就是离开笔，算 b 段开头**；**离开笔** = 与中枢区间有重叠、沿趋势方向、终点越过边界的最后一笔（`_exit_stroke`），b 段（对 A）、c 段（对 B）都从各自的离开笔起算、含离开笔。czsc 会把离开笔吸收进中枢，**不要**从「中枢最后一个元素的终点」起算（曾因此 c 段被砍短、背驰几乎必然成立，见 tests 回归用例）。另需信号价越过 b 段终点（创新极值）。不要改回「末笔对前一同向笔」。中枢没有笔明细、或该度量缺数据（没传 MACD）时退回 czsc 笔级判定。
   - **背驰度量可插拔**（std7，`chan/leg_metric.py`，`DivergenceMetric` 接口）：`macd_area`（默认，原文 MACD 红绿柱面积）/ `force`（价差·量能·时长）。
-    切换只改配置 `CHAN_DIVERGENCE_METRIC`，版本号 `std8.<度量名>` 自动隔离雷达缓存。**API 字段永远同一套**：`price_ratio / volume_ratio / length_ratio`
+    切换只改配置 `CHAN_DIVERGENCE_METRIC`，版本号 `std9.<度量名>` 自动隔离雷达缓存。**API 字段永远同一套**：`price_ratio / volume_ratio / length_ratio`
     任何度量都填，`area_ratio` 仅 MACD 面积度量填；强弱分档由度量自带的 `classify(primary_ratio)` 给出，各度量阈值各自标定：`force` 沿用价差比 0.6 / 0.8；`macd_area` **不分档**（背驰成立一律 `medium`；两个年代约 2000 个信号实测面积比与后续收益无关：秩相关 -0.02 / +0.03，p=0.52 / 0.38，背驰组对照组差不显著；原文也只有「面积更小即背驰」的二元标准）。**不要**再按面积比设阈值或分强弱档，除非有新的实证依据。
     新增度量：实现 `compare(c, b)` + 注册进 `DIVERGENCE_METRICS`，不要在判定流程里写 `if metric == ...`。
   - 同一笔终点同时命中二类与三类只留一个（三类 > 二类，与宽松口径同）。

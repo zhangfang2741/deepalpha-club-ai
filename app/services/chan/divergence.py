@@ -37,18 +37,19 @@ class DivergenceResult:
     area_ratio: float | None = None  # MACD 面积比（仅 MACD 面积度量填，其余为 None）
 
 
-def calc_ema(values: list[float], period: int) -> list[float]:
-    """指数移动平均"""
-    if not values:
-        return []
+def _ema_sma_seed(values: list[float], period: int, start: int) -> list[float]:
+    """TA-Lib 口径 EMA：从 start 起，种子 = values[start-period+1 .. start] 的简单平均；start 之前为 nan。"""
+    out = [float("nan")] * len(values)
+    if len(values) <= start or start < period - 1:
+        return out
     k = 2.0 / (period + 1)
-    result = [values[0]]
-    for v in values[1:]:
-        result.append(v * k + result[-1] * (1 - k))
-    return result
+    out[start] = sum(values[start - period + 1:start + 1]) / period
+    for i in range(start + 1, len(values)):
+        out[i] = values[i] * k + out[i - 1] * (1 - k)
+    return out
 
 
-try:  # 自编译 czsc 带 Rust 版 MACD（与下面的 Python 实现逐位一致）；标准 czsc 没有
+try:  # 自编译 czsc 带 Rust 版 MACD（复用 czsc 的 TA-Lib 兼容实现）；标准 czsc 走下面同口径的 Python 回退
     import czsc._native as _native
     _dp_macd = getattr(_native, "dp_macd", None)
 except Exception:  # noqa: BLE001
@@ -56,29 +57,31 @@ except Exception:  # noqa: BLE001
 
 
 def calc_macd(bars: list[dict], fast: int = 12, slow: int = 26, signal: int = 9) -> MACDData:
-    """计算MACD指标。
+    """计算 MACD（TA-Lib 口径：EMA 以前 N 根简单平均作种子，数据不足的前 slow+signal-2 根 DIF / DEA / 柱都记 0）。
 
-    使用标准EMA公式：DIF = EMA(close, fast) - EMA(close, slow)，
-    DEA = EMA(DIF, signal)，MACD = 2*(DIF-DEA)。
+    DIF = EMA(close, fast) - EMA(close, slow)，DEA = EMA(DIF, signal)，柱 = 2*(DIF-DEA)（国内行情软件口径）。
+    自编译 czsc 下直接调 czsc 的 Rust 实现（Python 回退与它在 1e-9 内一致，由 parity 测试守护）。
     """
-    if (fast, slow, signal) == (12, 26, 9) and _dp_macd is not None:
-        dif, dea, bar = _dp_macd([float(b["close"]) for b in bars])
-        return MACDData(times=[b["time"] for b in bars], dif=dif, dea=dea, bar=bar)
-    if len(bars) < slow:
-        times = [b["time"] for b in bars]
-        n = len(bars)
-        return MACDData(times=times, dif=[0.0] * n, dea=[0.0] * n, bar=[0.0] * n)
-
-    closes = [b["close"] for b in bars]
     times = [b["time"] for b in bars]
-
-    ema_fast = calc_ema(closes, fast)
-    ema_slow = calc_ema(closes, slow)
-
-    dif = [f - s for f, s in zip(ema_fast, ema_slow, strict=False)]
-    dea = calc_ema(dif, signal)
-    bar = [2 * (d - de) for d, de in zip(dif, dea, strict=False)]
-
+    closes = [float(b["close"]) for b in bars]
+    if (fast, slow, signal) == (12, 26, 9) and _dp_macd is not None:
+        dif, dea, bar = _dp_macd(closes)
+        return MACDData(times=times, dif=dif, dea=dea, bar=bar)
+    n = len(bars)
+    first = slow - 1
+    ema_fast = _ema_sma_seed(closes, fast, first)
+    ema_slow = _ema_sma_seed(closes, slow, first)
+    dif_raw = [f - s if i >= first else float("nan") for i, (f, s) in enumerate(zip(ema_fast, ema_slow, strict=False))]
+    dea_raw = [float("nan")] * n
+    if n > first + signal - 1:
+        dif_valid = dif_raw[first:]
+        dea_valid = _ema_sma_seed(dif_valid, signal, signal - 1)
+        dea_raw[first:] = dea_valid
+    nz = lambda v: v if v == v else 0.0  # noqa: E731 — nan → 0
+    ready = first + signal - 1  # czsc 与柱同起点才给 DIF（此前 DIF / DEA / 柱都记 0）
+    dif = [nz(v) if i >= ready else 0.0 for i, v in enumerate(dif_raw)]
+    dea = [nz(v) for v in dea_raw]
+    bar = [2 * (d - de) if de_raw == de_raw else 0.0 for d, de, de_raw in zip(dif, dea, dea_raw, strict=False)]
     return MACDData(times=times, dif=dif, dea=dea, bar=bar)
 
 

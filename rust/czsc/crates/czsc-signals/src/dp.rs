@@ -127,78 +127,24 @@ fn dp_exit_stroke(
         .next_back()
 }
 
-/// MACD 柱的增量缓存（放在 czsc 的 TaCache 里，逐根只算新增的一根）。
-///
-/// 公式与运算顺序和 Python `calc_macd` 完全一致（EMA 以首值起算，柱 = 2 * (DIF - DEA)），逐位相同；
-/// 不足慢线周期（26 根）时调用方按全 0 处理（旧实现行为）。K 线序列被截断 / 末根被改写时整体重算。
-const DP_HIST: &str = "dp_macd_hist";
-const DP_ST: &str = "dp_macd_st"; // [ema_fast, ema_slow, dea, 首根 dt(ms), 末根 dt(ms), 末根 close]
-
-fn dp_macd_update(c: &CZSC, cache: &mut TaCache) {
-    let n = c.bars_raw.len();
-    let mut hist = cache.series.remove(DP_HIST).unwrap_or_default();
-    let mut st = cache.series.remove(DP_ST).unwrap_or_default();
-    let stale = n == 0
-        || hist.len() > n
-        || (!hist.is_empty()
-            && (st.len() != 6
-                || st[3] != c.bars_raw[0].dt.timestamp_millis() as f64
-                || st[4] != c.bars_raw[hist.len() - 1].dt.timestamp_millis() as f64
-                || st[5] != c.bars_raw[hist.len() - 1].close));
-    if stale {
-        hist.clear();
-        st.clear();
-    }
-    let (kf, ks, kd) = (2.0 / 13.0, 2.0 / 27.0, 2.0 / 10.0);
-    let (mut ef, mut es, mut dea) = if st.len() == 6 { (st[0], st[1], st[2]) } else { (0.0, 0.0, 0.0) };
-    for i in hist.len()..n {
-        let close = c.bars_raw[i].close;
-        let dif;
-        if i == 0 {
-            ef = close;
-            es = close;
-            dif = ef - es;
-            dea = dif;
-        } else {
-            ef = close * kf + ef * (1.0 - kf);
-            es = close * ks + es * (1.0 - ks);
-            dif = ef - es;
-            dea = dif * kd + dea * (1.0 - kd);
-        }
-        hist.push(2.0 * (dif - dea));
-    }
-    if n > 0 {
-        st = vec![
-            ef,
-            es,
-            dea,
-            c.bars_raw[0].dt.timestamp_millis() as f64,
-            c.bars_raw[n - 1].dt.timestamp_millis() as f64,
-            c.bars_raw[n - 1].close,
-        ];
-    }
-    cache.series.insert(DP_HIST.to_string(), hist);
-    cache.series.insert(DP_ST.to_string(), st);
-}
-
-/// 一段走势（若干连续笔，只读切片）的原始力度：价差 # 量能 # 时长 # MACD 面积（与走势同向的柱绝对值之和）。
-fn dp_leg_text(c: &CZSC, legs: &[BI], hist: &[f64], macd_ready: bool) -> String {
+/// 一段走势（若干连续笔，只读切片）的结构量：价差 # 量能 # 时长 # 起点时间 # 终点时间。
+/// MACD 面积不在这里算：整条 MACD 只由 czsc 的 TA-Lib 兼容实现算一次，Python 按起止时间取面积
+/// （EMA 是因果的，过去的柱不会随新 K 线改变，事后一次算完与当时逐根算数值完全一致）。
+fn dp_leg_text(legs: &[BI]) -> String {
     let first = &legs[0];
     let last = &legs[legs.len() - 1];
     let price = (first.fx_a.fx - last.fx_b.fx).abs();
     let volume: f64 = legs.iter().map(|b| b.get_power_volume()).sum();
     let length: usize = legs.iter().map(|b| b.get_length()).sum();
-    let is_down = last.fx_b.fx < first.fx_a.fx;
-    let (start, end) = (first.fx_a.dt, last.fx_b.dt);
-    let mut area = 0.0_f64;
-    if macd_ready {
-        for (rb, v) in c.bars_raw.iter().zip(hist.iter()) {
-            if rb.dt >= start && rb.dt <= end && ((is_down && *v < 0.0) || (!is_down && *v > 0.0)) {
-                area += v.abs();
-            }
-        }
-    }
-    format!("{}#{}#{}#{}", price, volume, length, area)
+    let fmt = "%Y%m%d%H%M";
+    format!(
+        "{}#{}#{}#{}#{}",
+        price,
+        volume,
+        length,
+        first.fx_a.dt.format(fmt),
+        last.fx_b.dt.format(fmt)
+    )
 }
 
 /// 连续笔的下标区间：起点不早于 start、终点不晚于 end 的笔（笔按时间严格递增，满足条件的必连续）
@@ -216,10 +162,11 @@ fn dp_leg_range(bis: &[BI], start: chrono::DateTime<chrono::Utc>, end: chrono::D
 /// 1. 最后一笔向下 → 看买点，向上 → 看卖点；
 /// 2. 趋势前提：已形成的最后两个中枢 A、B 依次下移（买）/ 上移（卖），且该笔终点已离开 B；
 /// 3. b 段 = 离开 A 的那一笔起到进入 B；c 段 = B 最后一个中枢内笔的终点起到该笔终点；
-/// 4. 输出两段的原始力度，是否背驰由 Python 侧的背驰度量（可插拔）判定。
+/// 4. 输出两段的结构量（价差 / 量能 / 时长 / 起止时间），MACD 面积和是否背驰由 Python 侧按起止时间取面积、
+///    再由背驰度量（可插拔）判定。
 ///
 /// 信号列表示例：
-/// - `Signal('日线_D1趋势腿_DP辅助V261001_买趋势_28#600#12#3.4_15#350#9#1.1_0')`
+/// - `Signal('日线_D1趋势腿_DP辅助V261001_买趋势_28#600#12#202501010000#202502010000_15#350#9#202502010000#202503010000_0')`
 /// - `Signal('日线_D1趋势腿_DP辅助V261001_卖趋势_无_无_0')`（趋势成立但 b / c 段取不到）
 /// - `Signal('日线_D1趋势腿_DP辅助V261001_其他_任意_任意_0')`
 #[signal(
@@ -229,7 +176,7 @@ fn dp_leg_range(bis: &[BI], start: chrono::DateTime<chrono::Utc>, end: chrono::D
     opcode = "DpTrendLegsV261001",
     param_kind = "DpTrendLegsV261001"
 )]
-pub fn dp_trend_legs_v261001(c: &CZSC, _params: &ParamView, cache: &mut TaCache) -> Vec<Signal> {
+pub fn dp_trend_legs_v261001(c: &CZSC, _params: &ParamView, _cache: &mut TaCache) -> Vec<Signal> {
     let k1 = c.freq.to_string();
     let k2 = "D1趋势腿";
     let k3 = "DP辅助V261001";
@@ -282,8 +229,5 @@ pub fn dp_trend_legs_v261001(c: &CZSC, _params: &ParamView, cache: &mut TaCache)
     if (is_buy && price >= b_end) || (!is_buy && price <= b_end) {
         return other();
     }
-    dp_macd_update(c, cache);
-    let hist = cache.series.get(DP_HIST).map(Vec::as_slice).unwrap_or(&[]);
-    let macd_ready = c.bars_raw.len() >= 26; // 不足慢线周期时 MACD 全 0（旧实现行为）
-    make_kline_signal_v3(&k1, k2, k3, tag, &dp_leg_text(c, b_leg, hist, macd_ready), &dp_leg_text(c, c_leg, hist, macd_ready))
+    make_kline_signal_v3(&k1, k2, k3, tag, &dp_leg_text(b_leg), &dp_leg_text(c_leg))
 }

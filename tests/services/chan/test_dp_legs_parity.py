@@ -1,7 +1,7 @@
 """Rust 信号 dp_trend_legs 与 Python 参考实现（_in_trend / _trend_legs / leg_force）逐笔对照。
 
 同一时刻、同一份结构（czsc 在该根 K 线上的快照）上两边必须完全一致：趋势前提、b / c 段是否取到、
-两段的价差 / 量能 / 时长 / MACD 面积。只有自编译的 czsc（rust/czsc，带 dp_* 信号）才有 Rust 信号，
+两段的价差 / 量能 / 时长 / 起止时间（MACD 面积由 Python 按 czsc 的 MACD 序列算）。只有自编译的 czsc（rust/czsc，带 dp_* 信号）才有 Rust 信号，
 标准 PyPI 版自动跳过。改了 Rust 或 Python 任一边的取法，这条测试都会报警。
 """
 from __future__ import annotations
@@ -14,7 +14,7 @@ import pytest
 from czsc import BarGenerator, CzscSignals, Freq
 
 from app.services.chan import signals as S
-from app.services.chan.czsc_adapter import bars_to_raw_bars, czsc_macd, extract_structures
+from app.services.chan.czsc_adapter import bars_to_raw_bars, extract_structures
 from app.services.chan.czsc_signals import _HAS_DP, _HAS_DP_LEGS, _dp_ts
 from app.services.chan.leg_metric import leg_force
 
@@ -74,12 +74,14 @@ def _compare(bars: list[dict]) -> tuple[int, int]:
         if legs is None:
             continue
         legs_n += 1
-        mac = czsc_macd(cs.kas[_L])
+        # Rust 只给原始量（价差 / 量能 / 时长 + 起止时间）；MACD 面积由 Python 用 czsc 的 MACD 序列算，不在此对照
         for leg, txt in ((legs[0], v[1]), (legs[1], v[2])):
-            f = leg_force(leg, mac)
-            got = [float(x) for x in txt.split("#")]
-            exp = [f.price, f.volume, float(f.length), f.area]
+            f = leg_force(leg, None)
+            parts = txt.split("#")
+            got = [float(x) for x in parts[:3]]
+            exp = [f.price, f.volume, float(f.length)]
             assert all(abs(a - e) <= 1e-9 * max(1.0, abs(e)) for a, e in zip(got, exp, strict=True)), (i, got, exp)
+            assert (_dp_ts(parts[3]), _dp_ts(parts[4])) == (leg[0].start_time, leg[-1].end_time), (i, parts[3:])
     return trend_n, legs_n
 
 

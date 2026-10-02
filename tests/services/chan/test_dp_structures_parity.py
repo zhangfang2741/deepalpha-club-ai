@@ -9,6 +9,7 @@ from __future__ import annotations
 import datetime as dt
 
 import pytest
+from dataclasses import replace
 from czsc import Freq
 
 from app.services.chan import czsc_adapter as A
@@ -54,6 +55,13 @@ def _cases():
     yield "weekly", _weekly(_walk(4)), Freq.W
 
 
+def _assert_macd_close(a, b):
+    """czsc 的 Rust MACD 与 Python 回退差在浮点尾数（~1e-13），1e-9 内视为一致。"""
+    assert a.times == b.times
+    for x, y in ((a.dif, b.dif), (a.dea, b.dea), (a.bar, b.bar)):
+        assert len(x) == len(y) and all(abs(u - v) <= 1e-9 for u, v in zip(x, y, strict=True))
+
+
 @pytest.mark.parametrize("name,bars,freq", list(_cases()), ids=lambda v: v if isinstance(v, str) else "")
 def test_structures_and_macd_equal_python_implementation(name, bars, freq):
     (ps, pm), (rs, rm) = _py(bars, freq), _rs(bars, freq)
@@ -61,7 +69,7 @@ def test_structures_and_macd_equal_python_implementation(name, bars, freq):
     assert rs.fractals == ps.fractals
     assert rs.strokes == ps.strokes
     assert rs.stroke_pivots == ps.stroke_pivots
-    assert (rm.times, rm.dif, rm.dea, rm.bar) == (pm.times, pm.dif, pm.dea, pm.bar)  # 逐位相等
+    _assert_macd_close(rm, pm)
 
 
 def test_object_relationships_match_the_python_implementation():
@@ -96,7 +104,7 @@ def test_native_calc_macd_equals_python_for_all_lengths(n, monkeypatch):
     native = DV.calc_macd(bars)
     monkeypatch.setattr(DV, "_dp_macd", None)
     py = DV.calc_macd(bars)
-    assert (native.times, native.dif, native.dea, native.bar) == (py.times, py.dif, py.dea, py.bar)
+    _assert_macd_close(native, py)
 
 
 def test_build_structures_falls_back_when_native_fails(monkeypatch):
@@ -121,5 +129,6 @@ def test_whole_analysis_is_identical_on_both_paths(seed, mode, monkeypatch):
     monkeypatch.setattr(A, "_HAS_DP_STRUCT", False)
     monkeypatch.setattr(DV, "_dp_macd", None)
     py = ChanAnalyzer().analyze("T", bars, mode=mode)
-    assert native == py
+    _assert_macd_close(native.macd, py.macd)
+    assert replace(native, macd=py.macd) == py
     assert native.strokes and native.stroke_pivots
