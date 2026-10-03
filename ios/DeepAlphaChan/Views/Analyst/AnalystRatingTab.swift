@@ -33,7 +33,7 @@ struct AnalystRatingTab: View {
             if let r = o.ratings, let cur = r.current { ratingsCard(cur, r) }
             if let t = o.priceTarget { targetCard(t) }
             if let e = o.earnings, !e.quarters.isEmpty || e.next != nil { earningsCard(e) }
-            if !o.recentGrades.isEmpty { gradesCard(o.recentGrades) }
+            if !o.recentGrades.isEmpty { gradesCard(o.recentGrades, title: o.recentGradesTitle) }
             Text(o.note).font(.caption2).foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center).frame(maxWidth: .infinity).padding(.top, 4)
         }
@@ -47,11 +47,20 @@ struct AnalystRatingTab: View {
         ("强力卖出", \.strongSell, Theme.down),
     ]
 
+    /// 五档：A 股 / 港股用后端下发的名称（买入 / 增持 / 中性 / 减持 / 卖出，已按语言给出），美股用默认档位。
+    static func bucketList(_ labels: [String]?) -> [(String, KeyPath<AnalystOverview.RatingCounts, Int>, Color)] {
+        guard let labels, labels.count == buckets.count else {
+            return buckets.map { (L($0.0), $0.1, $0.2) }
+        }
+        return zip(labels, buckets).map { ($0, $1.1, $1.2) }
+    }
+
     private func ratingsCard(_ cur: AnalystOverview.RatingCounts, _ r: AnalystOverview.Ratings) -> some View {
-        card(title: L("评级分布"), trailing: L("%lld 位分析师 · 截至 %@", cur.total, String(cur.date.prefix(7)))) {
+        let buckets = Self.bucketList(r.bucketLabels)
+        return card(title: L("评级分布"), trailing: L("%lld 位分析师 · 截至 %@", cur.total, String(cur.date.prefix(7)))) {
             GeometryReader { geo in
                 HStack(spacing: 0) {
-                    ForEach(Self.buckets, id: \.0) { _, kp, color in
+                    ForEach(buckets, id: \.0) { _, kp, color in
                         Rectangle().fill(color)
                             .frame(width: cur.total > 0 ? geo.size.width * CGFloat(cur[keyPath: kp]) / CGFloat(cur.total) : 0)
                     }
@@ -60,10 +69,10 @@ struct AnalystRatingTab: View {
             }
             .frame(height: 12)
             HStack {
-                ForEach(Self.buckets, id: \.0) { name, kp, _ in
+                ForEach(buckets, id: \.0) { name, kp, _ in
                     VStack(spacing: 1) {
                         Text("\(cur[keyPath: kp])").font(.footnote.weight(.semibold)).foregroundStyle(Theme.textPrimary)
-                        Text(L(name)).font(.caption2).foregroundStyle(Theme.textSecondary)
+                        Text(name).font(.caption2).foregroundStyle(Theme.textSecondary)
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -126,15 +135,16 @@ struct AnalystRatingTab: View {
 
     // MARK: 最近评级变动
 
-    private func gradesCard(_ grades: [AnalystOverview.GradeChange]) -> some View {
-        card(title: L("最近评级变动"), trailing: nil) {
+    private func gradesCard(_ grades: [AnalystOverview.GradeChange], title: String?) -> some View {
+        card(title: title ?? L("最近评级变动"), trailing: nil) {
             VStack(spacing: 0) {
                 ForEach(Array(grades.enumerated()), id: \.element.id) { i, g in
                     if i > 0 { Divider().background(Theme.border) }
                     HStack(alignment: .firstTextBaseline) {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(g.firm).font(.footnote).foregroundStyle(Theme.textPrimary)
-                            Text(g.date).font(.caption2).foregroundStyle(Theme.textSecondary)
+                            Text(g.priceTarget.map { L("%@ · 目标价 %@", g.date, String(format: "%.2f", $0)) } ?? g.date)
+                                .font(.caption2).foregroundStyle(Theme.textSecondary)
                         }
                         Spacer()
                         Text(g.actionLabel).font(.caption2)

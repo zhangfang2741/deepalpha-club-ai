@@ -23,8 +23,10 @@ enum QuantResearchService {
         #if DEBUG && targetEnvironment(simulator)
         if let r: AnalystOverview = fixture("analyst_\(symbol.uppercased()).json") { return r }
         #endif
+        // bucket_labels=1：本版本按响应里的五档名称显示（A 股 / 港股是买入 / 增持 / 中性 / 减持 / 卖出），
+        // 后端只对带这个参数的请求返回 A 股 / 港股数据
         return try await APIClient.shared.get("/analyst-upgrades/overview/\(symbol.uppercased())",
-                                       query: ["market": market.rawValue, "lang": lang])
+                                       query: ["market": market.rawValue, "lang": lang, "bucket_labels": "1"])
     }
 
     #if DEBUG && targetEnvironment(simulator)

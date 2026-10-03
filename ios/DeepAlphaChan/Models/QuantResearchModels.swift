@@ -38,12 +38,15 @@ struct QuantAsOf: Decodable {
     let fiscalPeriod: String?
     let filingDate: String?
     let estimatesDate: String?
+    /// 港股：财务数据与预期折成港元时的汇率说明
+    let currencyNote: String?
 
     enum CodingKeys: String, CodingKey {
         case priceDate = "price_date"
         case fiscalPeriod = "fiscal_period"
         case filingDate = "filing_date"
         case estimatesDate = "estimates_date"
+        case currencyNote = "currency_note"
     }
 }
 
@@ -53,6 +56,8 @@ struct QuantPeerGroup: Decodable {
     let sampleSize: Int
     let inUniverse: Bool
     let text: String
+    /// 比较样本的叫法（标普1500 / A 股市值前 1800 / 港股通及大中型港股）；旧接口没有，按美股处理
+    let universeName: String?
 
     enum CodingKeys: String, CodingKey {
         case text
@@ -60,6 +65,7 @@ struct QuantPeerGroup: Decodable {
         case sectorName = "sector_name"
         case sampleSize = "sample_size"
         case inUniverse = "in_universe"
+        case universeName = "universe_name"
     }
 }
 
@@ -393,9 +399,12 @@ struct AnalystOverview: Decodable {
         let current: RatingCounts?
         let history: [RatingCounts]
         let changeText: String?
+        /// 五档名称（A 股 / 港股：买入 / 增持 / 中性 / 减持 / 卖出）；美股为空，用默认档位
+        let bucketLabels: [String]?
         enum CodingKeys: String, CodingKey {
             case current, history
             case changeText = "change_text"
+            case bucketLabels = "bucket_labels"
         }
     }
 
@@ -459,6 +468,7 @@ struct AnalystOverview: Decodable {
         let previousGradeLabel: String?
         let newGrade: String
         let newGradeLabel: String
+        let priceTarget: Double?
         var id: String { "\(date)-\(firm)-\(newGrade)" }
         enum CodingKeys: String, CodingKey {
             case date, firm, action
@@ -467,6 +477,7 @@ struct AnalystOverview: Decodable {
             case previousGradeLabel = "previous_grade_label"
             case newGrade = "new_grade"
             case newGradeLabel = "new_grade_label"
+            case priceTarget = "price_target"
         }
     }
 
@@ -477,6 +488,8 @@ struct AnalystOverview: Decodable {
     let priceTarget: PriceTarget?
     let earnings: Earnings?
     let recentGrades: [GradeChange]
+    /// 港股只有各券商最新评级时给出（「各券商最新评级」）
+    let recentGradesTitle: String?
     let note: String
 
     var isOK: Bool { status == "ok" }
@@ -486,5 +499,6 @@ struct AnalystOverview: Decodable {
         case statusNote = "status_note"
         case priceTarget = "price_target"
         case recentGrades = "recent_grades"
+        case recentGradesTitle = "recent_grades_title"
     }
 }

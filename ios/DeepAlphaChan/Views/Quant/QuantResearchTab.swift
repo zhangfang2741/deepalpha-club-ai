@@ -124,7 +124,10 @@ struct QuantResearchTab: View {
             parts.append(a.filingDate.map { L("财报 %@（%@ 披露）", p, $0) } ?? L("财报 %@", p))
         }
         if let e = a.estimatesDate { parts.append(L("预期 %@ 更新", e)) }
-        return parts.joined(separator: " · ")
+        let line = parts.joined(separator: " · ")
+        // 港股：财务数据与预期折成港元的汇率说明（后端按语言生成），另起一行
+        guard let note = a.currencyNote else { return line }
+        return line.isEmpty ? note : "\(line)\n\(note)"
     }
 }
 

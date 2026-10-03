@@ -268,8 +268,13 @@ struct QuantOverallGradeExplanation: View {
                     QuantExplainText(text: L("护城河只展示，不计入综合分。"), secondary: true)
                 }
                 if let p = o.universePercentile {
-                    QuantExplainText(text: L("再把综合分和全部样本股票（标普1500 成分股）比，高于约 %@%% 的股票，排第 %@ 百分位。",
-                                             QuantGradeScale.fmt(p.rounded()), QuantGradeScale.fmt(p.rounded())))
+                    if let universe = research.peerGroup?.universeName {
+                        QuantExplainText(text: L("再把综合分和全部样本股票（%@）比，高于约 %@%% 的股票，排第 %@ 百分位。",
+                                                 universe, QuantGradeScale.fmt(p.rounded()), QuantGradeScale.fmt(p.rounded())))
+                    } else {
+                        QuantExplainText(text: L("再把综合分和全部样本股票（标普1500 成分股）比，高于约 %@%% 的股票，排第 %@ 百分位。",
+                                                 QuantGradeScale.fmt(p.rounded()), QuantGradeScale.fmt(p.rounded())))
+                    }
                     if o.capped {
                         QuantBandScale(score: p)
                         QuantExplainText(text: L("按百分位本可以更高，但有维度分低于 %@（F 档），综合等级最高只给 %@——明显短板不能被其他强项掩盖。",
@@ -294,7 +299,11 @@ struct QuantPeerExplanation: View {
         VStack(alignment: .leading, spacing: 8) {
             QuantExplainText(text: L("每个指标只和%@板块的 %lld 家公司比。不同行业的生意模式差别很大，比如软件公司毛利率天然比超市高，跨行业比没有意义。",
                                      peer.sectorName, peer.sampleSize))
-            QuantExplainText(text: L("板块按全球行业分类标准（GICS）划分，样本是标普1500 成分股。"), secondary: true)
+            if let universe = peer.universeName {
+                QuantExplainText(text: L("板块按全球行业分类标准（GICS）一级行业划分，样本是%@。", universe), secondary: true)
+            } else {
+                QuantExplainText(text: L("板块按全球行业分类标准（GICS）划分，样本是标普1500 成分股。"), secondary: true)
+            }
             if !peer.inUniverse {
                 QuantExplainText(text: L("本股不在样本内，用同一套板块分布给它定位。"), secondary: true)
             }

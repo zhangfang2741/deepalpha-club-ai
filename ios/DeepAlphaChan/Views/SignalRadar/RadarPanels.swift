@@ -514,8 +514,8 @@ struct RadarSignalFactView: View {
         .navigationTitle(signal.symbol)
         .navigationBarTitleDisplayMode(.inline)
         .task(id: signal.id) {
-            // 只有美股有基本面研究；拉不到就只显示气泡上已有的综合等级
-            guard context.market == .us, research == nil else { return }
+            // 美股 / A 股 / 港股都有基本面研究；拉不到就只显示气泡上已有的综合等级
+            guard research == nil else { return }
             research = try? await QuantResearchService.research(market: context.market, symbol: signal.symbol)
         }
     }
@@ -618,7 +618,7 @@ struct RadarSignalFactView: View {
             return L("综合 %@", grade)
         }
         if let grade = RadarPanelStyle.gradeText(signal) { return L("综合 %@", grade) }
-        return context.market == .us ? L("暂无评级") : L("该市场暂未覆盖")
+        return L("暂无评级")
     }
 
     private var fundamentalSub: String? {

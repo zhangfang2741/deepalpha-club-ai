@@ -1148,3 +1148,8 @@
 "盘整背驰" = "Range div";
 "趋势背驰：前面已有两个同向中枢，对应一类买卖点。" = "Trend divergence: two same-direction pivots precede it — corresponds to a type-1 signal.";
 "盘整背驰：前面只有一个中枢，不对应一类买卖点。" = "Consolidation divergence: only one pivot precedes it — not a type-1 signal.";
+
+/* 基本面研究 / 分析师评级：A 股、港股 */
+"%@ · 目标价 %@" = "%@ · target %@";
+"再把综合分和全部样本股票（%@）比，高于约 %@%% 的股票，排第 %@ 百分位。" = "The composite score is then compared with all sample stocks (%@): higher than about %@%% of them, the %@th percentile.";
+"板块按全球行业分类标准（GICS）一级行业划分，样本是%@。" = "Sectors follow the 11 Global Industry Classification Standard (GICS) sectors; the sample is %@.";

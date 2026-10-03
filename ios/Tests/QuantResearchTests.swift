@@ -28,6 +28,7 @@ struct QuantResearchTests {
             precondition(r.dimensions.map(\.key) == ["valuation", "growth", "profitability", "momentum", "revisions"])
             precondition(r.scoredDimensions.count == 5, "护城河已移出维度，五维全部计入综合")
             precondition(r.dimensions[4].status == "accumulating")
+            precondition(r.peerGroup?.universeName == "标普1500" && r.asOf?.currencyNote == nil)
             precondition(r.dimensions.filter(\.isHighest).count == 1, "\(sym) 最高维度只能有一个")
             precondition(!r.dimensions[0].allMetrics.isEmpty)
             if let stage = r.stage {
@@ -108,6 +109,22 @@ struct QuantResearchTests {
         let o = try JSONDecoder().decode(AnalystOverview.self, from: Data(json.utf8))
         precondition(o.isOK && o.ratings?.current?.total == 63 && o.recentGrades.count == 1)
         precondition(o.earnings?.next?.date == "2026-11-18")
+        precondition(o.ratings?.bucketLabels == nil && o.recentGradesTitle == nil && o.recentGrades[0].priceTarget == nil)
+
+        // 港股：五档名称、各券商目标价、列表标题由后端下发；无业绩卡片
+        let hk = """
+        {"symbol":"00700","status":"ok","status_note":null,
+         "ratings":{"current":{"date":"2026-10-03","strong_buy":11,"buy":5,"hold":1,"sell":0,"strong_sell":0,"total":17},
+                    "history":[],"change_text":null,"bucket_labels":["买入","增持","中性","减持","卖出"]},
+         "price_target":null,"earnings":null,
+         "recent_grades":[{"date":"2026-09-02","firm":"摩根士丹利","action":"latest","action_label":"最新",
+                           "previous_grade":null,"previous_grade_label":null,"new_grade":"增持","new_grade_label":"增持",
+                           "price_target":550.0}],
+         "recent_grades_title":"各券商最新评级","note":"n"}
+        """
+        let h = try JSONDecoder().decode(AnalystOverview.self, from: Data(hk.utf8))
+        precondition(h.ratings?.bucketLabels?.count == 5 && h.recentGrades[0].priceTarget == 550)
+        precondition(h.recentGradesTitle == "各券商最新评级")
     }
 
     static func layoutKeepsLabelsInside() {
