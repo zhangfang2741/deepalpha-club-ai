@@ -12,6 +12,7 @@ from app.services.quant_research.glossary import input_hint
 from app.services.quant_research import copy as tx
 from app.services.quant_research.education import metric_interpretation
 from app.services.quant_research.inputs import StockInputs, analyst_count
+from app.services.quant_research.markets import profile
 from app.services.quant_research.metrics import (
     DISPLAY_ONLY_DIMENSIONS,
     DIMENSIONS,
@@ -102,8 +103,9 @@ def evaluate(inp: StockInputs, history: list[EstimatePoint], dists: Distribution
         rev_state = "ok"
 
     dims: list[DimensionScore] = []
+    unsupported = profile(inp.market).unsupported
     for dim in DIMENSIONS:
-        keys = [k for k, d in METRICS.items() if d.dimension == dim]
+        keys = [k for k, d in METRICS.items() if d.dimension == dim and k not in unsupported]
         scored = [score_metric(k, metrics[k], dists.get((inp.sector_key, k)), prev.get(f"m:{k}")) for k in keys]
         if dim == "revisions":
             if rev_state == "accumulating":
@@ -224,18 +226,20 @@ def build_payload(ev: Evaluation, lang: tx.Lang, *, in_universe: bool, sector_sa
                       revenue_growth_pct=_pct(ev.stage.revenue_growth),
                       revenue_cagr_3y_pct=_pct(ev.stage.revenue_cagr_3y))
     return QuantResearchOut(
-        market="us", symbol=inp.symbol, name=inp.name, status="ok",
+        market=inp.market, symbol=inp.symbol, name=inp.name, status="ok",
         methodology_version=METHODOLOGY_VERSION,
         as_of=AsOf(price_date=inp.price_date, fiscal_period=inp.fiscal_period, filing_date=inp.filing_date,
-                   estimates_date=ev.estimates_date),
+                   estimates_date=ev.estimates_date, currency_note=tx.currency_note(inp.fx, lang)),
         peer_group=PeerGroup(sector_key=inp.sector_key, sector_name=sname, sample_size=sector_sample,
-                             in_universe=in_universe, text=tx.peer_text(sname, sector_sample, lang, in_universe)),
+                             in_universe=in_universe,
+                             text=tx.peer_text(sname, sector_sample, lang, in_universe, inp.market),
+                             universe_name=profile(inp.market).universe(lang)),
         stage=stage,
         overall=Overall(grade=o.grade if o else None, score=o.score if o else None,
                         universe_percentile=o.universe_percentile if o else None,
                         dimensions_used=o.dimensions_used if o else 0, capped=bool(o and o.capped),
                         note=("；" if lang == "zh" else "; ").join(notes) or None,
-                        text=tx.overall_text(o, lang) if o else None),
+                        text=tx.overall_text(o, lang, inp.market) if o else None),
         dimensions=[_dimension_out(d, ev, lang) for d in ev.dims],
         disclaimer=tx.DISCLAIMER[lang],
     )

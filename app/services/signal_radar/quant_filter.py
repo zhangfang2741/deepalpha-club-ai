@@ -14,6 +14,7 @@ from app.core.logging import logger
 from app.schemas.signal_radar import RadarDayOut, RadarQuantFilterOut, RadarSignalOut
 from app.services.quant_research import repository
 from app.services.quant_research.grading import GRADE_ORDER
+from app.services.quant_research.markets import normalize_symbol
 from app.services.quant_research.universe import normalize_us_symbol
 
 MAX_AGE_DAYS = 7
@@ -57,19 +58,21 @@ def grade_from_row(row: repository.QuantGradeSnapshot) -> QuantGrade | None:
 
 async def load_grades(market: str, symbols: list[str], days: list[str]) -> dict[str, list[QuantGrade]] | None:
     """一次批量读取全股票池。None 表示查询失败，空字典表示确实没有评级。"""
-    if market != "us" or not symbols or not days:
+    if market not in ("us", "cn", "hk") or not symbols or not days:
         return {}
     try:
+        stored = {s: normalize_symbol(market, s) for s in symbols}  # 雷达代码 → 评级表代码（港股补齐 5 位）
         rows = await repository.get_quant_grade_history(
-            market, sorted({normalize_us_symbol(s) for s in symbols}),
+            market, sorted(set(stored.values())),
             date.fromisoformat(min(days)) - timedelta(days=MAX_AGE_DAYS), date.fromisoformat(max(days)),
         )
-        history: dict[str, list[QuantGrade]] = {}
+        by_stored: dict[str, list[QuantGrade]] = {}
         for row in rows:
             entry = grade_from_row(row)
             if entry is not None:
-                history.setdefault(normalize_us_symbol(row.symbol), []).append(entry)
-        return history
+                by_stored.setdefault(row.symbol, []).append(entry)
+        # 键与 grade_on 的查法一致（美股 BRK.B → BRK-B；A 股 / 港股原样）
+        return {normalize_us_symbol(s): by_stored[n] for s, n in stored.items() if n in by_stored}
     except Exception:
         logger.exception("signal_radar_quant_read_failed", market=market)
         return None

@@ -9,14 +9,16 @@
   "price_date": "2026-09-29",
   "fiscal_period": "FY26 Q2",
   "filing_date": "2026-08-06",
-  "estimates_date": null
+  "estimates_date": null,
+  "currency_note": null
  },
  "peer_group": {
   "sector_key": "real_estate",
   "sector_name": "房地产",
   "sample_size": 100,
   "in_universe": true,
-  "text": "与房地产板块 100 家公司比"
+  "text": "与房地产板块 100 家公司比",
+  "universe_name": "标普1500"
  },
  "stage": {
   "key": "mature",

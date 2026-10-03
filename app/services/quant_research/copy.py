@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
+from app.services.quant_research.markets import profile
 from app.services.quant_research.metrics import DIMENSION_NAMES, INPUT_LABELS, METRICS, MetricValue
 from app.services.quant_research.scoring import DimensionScore, OverallScore, ScoredMetric
 from app.services.quant_research.stage import STAGE_NAMES
@@ -18,6 +19,7 @@ FORBIDDEN: list[str] = [
     "买入", "卖出", "推荐", "看多", "看空", "强力", "上涨空间", "抄底", "逃顶",
     "buy", "sell", "recommend", "bullish", "bearish", "upside", "outperform", "underperform",
     "FMP", "Financial Modeling Prep", "financialmodelingprep", "akshare", "东方财富", "东财", "同花顺", "Yahoo",
+    "经济通", "ETNet", "新浪", "雅虎", "Eastmoney",
 ]
 
 DISCLAIMER = {
@@ -221,6 +223,9 @@ def metric_status_note(sm: ScoredMetric, lang: Lang) -> str | None:
         if mv.meta.get("reason") == "financials_cash_flow":
             return _i(lang, "金融股经营现金流含存贷款变动，不适用，不参与计算",
                       "Operating cash flow of financials includes deposit and loan flows; excluded")
+        if mv.meta.get("reason") == "financials_structure":
+            return _i(lang, "银行、券商、保险没有一般企业的有息负债与营业成本口径，不适用，不参与计算",
+                      "Banks, brokers and insurers have no comparable debt or cost-of-sales basis; excluded")
         if mv.meta.get("reason") == "financials_revenue_basis":
             return _i(lang, "金融股报表营收与分析师预期口径不同，不适用，不参与计算",
                       "Reported and consensus revenue use different bases for financials; excluded")
@@ -256,16 +261,17 @@ def dimension_desc(key: str, lang: Lang) -> str:
     return _i(lang, zh, en)
 
 
-def overall_text(o: OverallScore, lang: Lang) -> str | None:
-    """综合分与在标普1500 中的排位。"""
+def overall_text(o: OverallScore, lang: Lang, market: str = "us") -> str | None:
+    """综合分与在比较样本（美股标普1500 / A 股市值前 1800 / 港股样本）中的排位。"""
     if o.score is None or o.universe_percentile is None:
         return None
+    uni = profile(market).universe(lang)
     if o.universe_percentile >= 50:
         top = max(1, round(100 - o.universe_percentile))
-        return _i(lang, f"综合分 {o.score:.1f} · 标普1500 前 {top}%", f"Composite {o.score:.1f} · top {top}% of S&P 1500")
+        return _i(lang, f"综合分 {o.score:.1f} · {uni} 前 {top}%", f"Composite {o.score:.1f} · top {top}% of {uni}")
     bottom = max(1, round(o.universe_percentile))
-    return _i(lang, f"综合分 {o.score:.1f} · 标普1500 后 {bottom}%",
-              f"Composite {o.score:.1f} · bottom {bottom}% of S&P 1500")
+    return _i(lang, f"综合分 {o.score:.1f} · {uni} 后 {bottom}%",
+              f"Composite {o.score:.1f} · bottom {bottom}% of {uni}")
 
 
 def overall_note(o: OverallScore, lang: Lang) -> str | None:
@@ -300,13 +306,28 @@ def stage_note(key: str, unprofitable: bool, lang: Lang) -> str:
     return note
 
 
-def peer_text(sector_name: str, n: int, lang: Lang, in_universe: bool = True) -> str:
+def peer_text(sector_name: str, n: int, lang: Lang, in_universe: bool = True, market: str = "us") -> str:
     """比较对象说明。"""
     base = _i(lang, f"与{sector_name}板块 {n} 家公司比", f"Compared with {n} {sector_name} companies")
     if in_universe:
         return base
-    return base + _i(lang, "（本股不在标普1500样本内，按该板块分布定位）",
-                     " (not in the S&P 1500 sample; placed against the sector distribution)")
+    uni = profile(market).universe(lang)
+    return base + _i(lang, f"（本股不在{uni}样本内，按该板块分布定位）",
+                     f" (not in the {uni} sample; placed against the sector distribution)")
+
+
+def currency_note(fx: dict | None, lang: Lang) -> str | None:
+    """港股金额换算说明：报表原为人民币口径、预期为申报币种，统一折成港元（股价币种）。"""
+    if not fx or not fx.get("hkd_cny"):
+        return None
+    rate = 1 / fx["hkd_cny"]
+    zh = f"财务数据按 1 人民币 = {rate:.4f} 港元折算为港元"
+    en = f"Financials converted to HKD at 1 CNY = {rate:.4f} HKD"
+    cur = fx.get("estimate_currency")
+    if cur and cur not in ("CNY", "HKD"):
+        zh += f"；分析师预期原为 {cur}，按当日汇率折算"
+        en += f"; analyst estimates converted from {cur} at today's rate"
+    return _i(lang, zh, en)
 
 
 def contains_forbidden(text: str) -> list[str]:

@@ -411,7 +411,11 @@ class Settings:
         self.QUANT_BATCH_ENABLED = os.getenv("QUANT_BATCH_ENABLED", "true").lower() in ("true", "1", "yes")
         self.QUANT_BATCH_UTC_HOUR = int(os.getenv("QUANT_BATCH_UTC_HOUR", "22"))
         self.QUANT_BATCH_UTC_MINUTE = int(os.getenv("QUANT_BATCH_UTC_MINUTE", "30"))
-        self.QUANT_CN_SNAPSHOT_UTC_HOUR = int(os.getenv("QUANT_CN_SNAPSHOT_UTC_HOUR", "9"))
+        # A 股 / 港股基本面批量（收盘后；旧变量 QUANT_CN_SNAPSHOT_UTC_HOUR 仍兼容）
+        self.QUANT_CNHK_ENABLED = os.getenv("QUANT_CNHK_ENABLED", "true").lower() in ("true", "1", "yes")
+        self.QUANT_CN_BATCH_UTC_HOUR = int(os.getenv("QUANT_CN_BATCH_UTC_HOUR",
+                                                     os.getenv("QUANT_CN_SNAPSHOT_UTC_HOUR", "9")))
+        self.QUANT_HK_BATCH_UTC_HOUR = int(os.getenv("QUANT_HK_BATCH_UTC_HOUR", "10"))
         # 缠论严格口径一类背驰度量：macd_area（原文，MACD 面积）| force（价差/量能/时长）；见 chan/leg_metric.py
         self.CHAN_DIVERGENCE_METRIC = os.getenv("CHAN_DIVERGENCE_METRIC", "macd_area")
         # 护城河（app/services/quant_research/moat）：部署后冷启动跑一遍，之后每天检查新 10-K

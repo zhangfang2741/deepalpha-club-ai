@@ -94,7 +94,7 @@ def test_batch_run_endpoint_lock_semantics(client, monkeypatch):
     day = last_us_session(datetime.now(UTC))
     fake.keys.add(_lock_key("us", day))  # 模拟定时批量正在跑
     assert client[0].post("/api/v1/quant-research/batch/run").json() == {
-        "status": "already_running", "day": day.isoformat()}
+        "status": "already_running", "market": "us", "day": day.isoformat()}
     fake.keys.clear()
     body = client[0].post("/api/v1/quant-research/batch/run").json()
     assert body["status"] == "started" and body["day"] == day.isoformat()
@@ -120,5 +120,9 @@ async def test_run_manual_batch_releases_lock_on_failure(monkeypatch):
     fake = FakeRedis()
     monkeypatch.setattr(api, "run_us_batch", boom)
     monkeypatch.setattr(api, "current_redis", lambda: fake)
-    await api._run_manual_batch(date(2026, 9, 29))
+    await api._run_manual_batch("us", date(2026, 9, 29))
     assert fake.deleted == [_lock_key("us", date(2026, 9, 29))]
+
+    monkeypatch.setattr(api, "run_hk_batch", boom)
+    await api._run_manual_batch("hk", date(2026, 10, 2))
+    assert fake.deleted[-1] == _lock_key("hk", date(2026, 10, 2))

@@ -329,6 +329,14 @@ def compute_metrics(inp: StockInputs) -> dict[str, MetricValue]:
             out[key] = MetricValue(None, "not_applicable", out[key].inputs, out[key].op,
                                    {"reason": "financials_cash_flow"})
 
+    if inp.market != "us" and inp.sector_key == "financials" and bal is not None and bal.get("totalDebt") is None:
+        # A 股 / 港股的银行、券商、保险：报表没有一般企业的有息负债、营业成本、利息费用口径
+        # （见 cnhk/cn_source.py、hk_source.py），企业价值类与 EBIT / EBITDA 类指标不适用
+        for key in ("ev_sales_ttm", "ev_sales_fwd", "ev_ebitda_ttm", "ev_ebitda_fwd", "ev_ebit_ttm", "ev_ebit_fwd",
+                    "roic", "gross_m", "ebit_m", "ebitda_m", "ebit_yoy", "ebitda_yoy"):
+            out[key] = MetricValue(None, "not_applicable", out[key].inputs, out[key].op,
+                                   {"reason": "financials_structure"})
+
     # ---- 动量 ----
     closes = inp.closes
     for key, n in MOMENTUM_WINDOWS.items():

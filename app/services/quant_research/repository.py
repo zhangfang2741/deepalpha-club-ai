@@ -60,6 +60,35 @@ async def upsert_fundamental(market: str, symbol: str, income: list, cash: list,
         await s.commit()
 
 
+async def upsert_raw_reports(market: str, rows: list[dict]) -> int:
+    """A 股 / 港股：批量写入累计口径原始报告（rows：symbol, reports, balance）。
+
+    与美股共用 quant_fundamental_snapshots：income_quarters 存累计报告（cnhk/reports.py 的格式，新 → 旧），
+    cash_quarters 留空，balance 存最新资产负债表；读取时再换算成单季。
+    """
+    now = _now()
+    values = []
+    for r in rows:
+        reps = r["reports"]
+        latest = reps[0] if reps else {}
+        values.append({
+            "market": market, "symbol": r["symbol"], "latest_quarter_date": latest.get("report_date"),
+            "filing_date": latest.get("notice_date"), "income_quarters": reps, "cash_quarters": [],
+            "balance": r.get("balance"), "fetched_at": now, "created_at": now, "updated_at": now,
+        })
+    async with AsyncSessionFactory() as s:
+        for chunk in _chunks(values, 200):
+            stmt = insert(QuantFundamentalSnapshot).values(chunk)
+            stmt = stmt.on_conflict_do_update(
+                constraint="uq_quant_fundamental",
+                set_={k: stmt.excluded[k] for k in ("latest_quarter_date", "filing_date", "income_quarters",
+                                                    "cash_quarters", "balance", "fetched_at", "updated_at")},
+            )
+            await s.execute(stmt)
+        await s.commit()
+    return len(values)
+
+
 async def get_fundamentals(market: str, symbols: list[str] | None = None) -> dict[str, QuantFundamentalSnapshot]:
     """读取报表快照 {symbol: 行}。"""
     q = select(QuantFundamentalSnapshot).where(col(QuantFundamentalSnapshot.market) == market)

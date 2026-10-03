@@ -17,7 +17,8 @@ from app.cache.operations import acquire_lock, release_lock
 from app.core.config import settings
 from app.core.logging import logger
 from app.services.quant_research import repository as repo
-from app.services.quant_research.batch import run_cn_estimate_snapshot, run_us_batch
+from app.services.quant_research.batch import run_us_batch
+from app.services.quant_research.cnhk.batch import run_cn_batch, run_hk_batch
 from app.services.quant_research.builder import METHODOLOGY_VERSION
 from app.services.quant_research.moat import METHOD_VERSION as MOAT_METHOD_VERSION
 from app.services.quant_research.moat.job import run_moat_job
@@ -89,11 +90,42 @@ async def _align_backfill() -> None:
             await _drop_radar_snapshots(redis)
 
 
-async def _results_current() -> bool:
+async def _results_current(market: str = "us") -> bool:
     """已有批量结果，且方法版本与当前代码一致。"""
-    if await repo.latest_distribution_date("us") is None:
+    if await repo.latest_distribution_date(market) is None:
         return False
-    return await repo.latest_methodology_version("us") == METHODOLOGY_VERSION
+    return await repo.latest_methodology_version(market) == METHODOLOGY_VERSION
+
+
+def last_cnhk_session(now: datetime, close_hour: int) -> date:
+    """A 股 / 港股最近一个已收盘的工作日：UTC close_hour 之后取当天，否则取前一个工作日。
+
+    节假日按工作日处理：批量会用最近一根收盘价重算，结果不变。
+    """
+    now = now.astimezone(UTC)
+    sess = now.date() if now.hour >= close_hour else now.date() - timedelta(days=1)
+    while sess.weekday() >= 5:
+        sess -= timedelta(days=1)
+    return sess
+
+
+async def _bootstrap_cnhk(market: str, close_hour: int) -> None:
+    """A 股 / 港股冷启动自举：与美股同一套规则（无结果或方法版本变化时立即跑一次，锁被占就过会儿再试）。"""
+    try:
+        await asyncio.sleep(BOOTSTRAP_DELAY_SECONDS)
+        for attempt in range(BOOTSTRAP_MAX_ATTEMPTS):
+            if await _results_current(market):
+                return
+            logger.info("quant_batch_bootstrap_attempt", market=market, attempt=attempt, version=METHODOLOGY_VERSION)
+            await _run_once(market, last_cnhk_session(datetime.now(UTC), close_hour), lock_suffix=METHODOLOGY_VERSION)
+            if await _results_current(market):
+                return
+            await asyncio.sleep(BOOTSTRAP_RETRY_SECONDS)
+        logger.warning("quant_batch_bootstrap_gave_up", market=market, attempts=BOOTSTRAP_MAX_ATTEMPTS)
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:  # noqa: BLE001 自举失败不影响调度循环，定时批量会再跑
+        logger.exception("quant_batch_bootstrap_failed", market=market, error=str(e))
 
 
 async def _bootstrap_once() -> None:
@@ -140,8 +172,10 @@ async def _run_once(kind: str, day: date, *, lock_suffix: str | None = None) -> 
         if kind == "us":
             async with httpx.AsyncClient() as client:
                 await run_us_batch(day, redis=redis, client=client)
+        elif kind == "cn":
+            await run_cn_batch(day, redis=redis)
         else:
-            await run_cn_estimate_snapshot(day)
+            await run_hk_batch(day, redis=redis)
     finally:
         if renew is not None:
             renew.cancel()
@@ -224,14 +258,20 @@ async def _moat_loop() -> None:
 
 
 async def run_quant_scheduler() -> None:
-    """美股批量 + A 股快照两个循环，直到进程退出。"""
+    """美股 / A 股 / 港股批量与护城河的循环，直到进程退出。"""
     if not settings.QUANT_BATCH_ENABLED:
         logger.info("quant_batch_disabled")
         return
     tasks = [_moat_loop()] if settings.QUANT_MOAT_ENABLED else []
+    if settings.QUANT_CNHK_ENABLED:
+        tasks += [
+            _bootstrap_cnhk("cn", settings.QUANT_CN_BATCH_UTC_HOUR),
+            _bootstrap_cnhk("hk", settings.QUANT_HK_BATCH_UTC_HOUR),
+            _loop("cn", settings.QUANT_CN_BATCH_UTC_HOUR, 0, {0, 1, 2, 3, 4}),
+            _loop("hk", settings.QUANT_HK_BATCH_UTC_HOUR, 0, {0, 1, 2, 3, 4}),
+        ]
     await asyncio.gather(
         *tasks,
         _bootstrap_once(),
         _loop("us", settings.QUANT_BATCH_UTC_HOUR, settings.QUANT_BATCH_UTC_MINUTE, {0, 1, 2, 3, 4}),
-        _loop("cn", settings.QUANT_CN_SNAPSHOT_UTC_HOUR, 0, {0, 1, 2, 3, 4}),
     )

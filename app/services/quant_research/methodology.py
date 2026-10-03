@@ -66,10 +66,24 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
       "cash flow, introduction otherwise. Revenue down ≥ 5% is shake-out with positive operating cash flow, "
       "contraction otherwise. Everything else is mature with positive operating cash flow, shake-out otherwise. "
       "Stages are labels only and do not change grades; financials are not labeled.")),
+    (("A 股与港股", "China A-shares and Hong Kong"),
+     ("规则与美股完全相同，只是比较样本与数据不同：A 股和总市值前 1800 只 A 股（不含 ST）比，港股和港股通标的及总市值 20 亿港元以上的港股比；"
+      "行业按 GICS 11 个一级行业归类。报表为累计口径（一季、半年、三季、年报），换算成单季后计算最近 12 个月。"
+      "A 股的分析师预期没有 EBITDA / EBIT，港股的分析师预期没有营收、EBITDA / EBIT，相应的前瞻指标不显示；"
+      "银行、券商、保险不计算企业价值、毛利率、EBIT / EBITDA 类指标。港股财务数据与预期统一折成港元（股价币种），页面写明汇率。"
+      "EPS 修正用自有的每日一致预期记录，积累满 30 天后启用。护城河评估暂只覆盖美股。",
+      "Rules are identical to US stocks; only the peer sample and data differ. A-shares are compared with the 1,800 "
+      "largest A-shares by market cap (excluding ST names); Hong Kong stocks with Stock Connect constituents plus "
+      "stocks above HK$2 billion in market cap. Industries are mapped to the 11 GICS sectors. Statements are "
+      "year-to-date cumulative and are converted to quarters before computing trailing 12 months. A-share consensus "
+      "has no EBITDA / EBIT and Hong Kong consensus has no revenue, EBITDA or EBIT, so those forward metrics are not "
+      "shown; banks, brokers and insurers skip enterprise-value, gross-margin and EBIT / EBITDA metrics. Hong Kong "
+      "financials and estimates are converted to HKD (the price currency) and the rate is shown. EPS revisions use "
+      "our own daily consensus records and start after 30 days. Moat assessments currently cover US stocks only.")),
     (("更新时间", "Updates"),
-     ("每个美股交易日收盘后重新计算；财报类数据在公司披露新财报后更新。页面上标注了行情日期、财报期与一致预期更新日。",
-      "Recomputed after every US trading day; statement data refreshes after new filings. Pages show the price date, "
-      "fiscal period and consensus update date.")),
+     ("美股、A 股、港股各自在收盘后重新计算；财报类数据在公司披露新财报后更新。页面上标注了行情日期、财报期与一致预期更新日。",
+      "Recomputed after each market's close (US, A-shares, Hong Kong); statement data refreshes after new filings. "
+      "Pages show the price date, fiscal period and consensus update date.")),
 ]
 
 

@@ -12,6 +12,7 @@ class AsOf(BaseModel):
     fiscal_period: str | None = Field(None, description="最新财报期，如 FY27 Q2")
     filing_date: str | None = Field(None, description="财报披露日")
     estimates_date: str | None = Field(None, description="一致预期更新日")
+    currency_note: str | None = Field(default=None, description="金额币种说明（港股报表与预期折成港元时给出汇率）")
 
 
 class PeerGroup(BaseModel):
@@ -20,6 +21,7 @@ class PeerGroup(BaseModel):
     sample_size: int
     in_universe: bool
     text: str
+    universe_name: str | None = None  # 比较样本的叫法：标普1500 / A 股市值前 1800 / 港股通及大中型港股
 
 
 class CashFlows(BaseModel):

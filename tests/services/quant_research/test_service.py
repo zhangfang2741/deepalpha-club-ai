@@ -18,8 +18,38 @@ class _FakeRedis:
 
 
 async def test_unsupported_market():
-    out = await service.get_quant_research("hk", "0700", "zh", redis=None)
-    assert out.status == "unsupported_market" and out.status_note == "基本面研究暂只支持美股"
+    out = await service.get_quant_research("jp", "7203", "zh", redis=None)
+    assert out.status == "unsupported_market"
+
+
+def test_normalize_symbol_per_market():
+    assert service.normalize_symbol("hk", "0700") == "00700"
+    assert service.normalize_symbol("hk", "0700.HK") == "00700"
+    assert service.normalize_symbol("cn", "600519") == "600519"
+    assert service.normalize_symbol("cn", "SH600519") == "600519"
+    assert service.normalize_symbol("us", "brk.b") == "BRK-B"
+
+
+async def test_hk_routes_to_cnhk_on_demand_and_caches_both_languages(monkeypatch):
+    payload = json.loads((FIXTURE_DIR / "golden_NVDA.json").read_text())
+    seen = {}
+
+    async def latest(market, symbol):
+        seen["db"] = (market, symbol)
+        return None
+
+    async def compute(market, symbol, lang, redis):
+        seen["compute"] = (market, symbol, lang)
+        zh = service.QuantResearchOut(**{**payload, "market": "hk", "symbol": symbol})
+        return zh, zh.model_copy()
+
+    monkeypatch.setattr(service.repo, "get_latest_result", latest)
+    monkeypatch.setattr(service.cnhk_on_demand, "compute", compute)
+    r = _FakeRedis()
+    out = await service.get_quant_research("HK", "0700", "zh", redis=r)
+    assert seen == {"db": ("hk", "00700"), "compute": ("hk", "00700", "zh")}
+    assert out.status == "ok" and out.moat is None  # 护城河只有美股
+    assert {k.split(":")[-1] for k in r.store if k.startswith("quant:hk:sym:")} == {"zh", "en"}
 
 
 async def test_reads_db_result_and_caches(monkeypatch):

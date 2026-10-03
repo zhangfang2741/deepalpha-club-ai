@@ -17,9 +17,11 @@ from app.core.limiter import limiter
 from app.core.logging import logger
 from app.models.user import User
 from app.schemas.quant_research import MethodologyOut, QuantResearchOut
+from app.core.config import settings
 from app.services.quant_research.batch import run_us_batch
+from app.services.quant_research.cnhk.batch import run_cn_batch, run_hk_batch
 from app.services.quant_research.methodology import build_methodology
-from app.services.quant_research.scheduler import _LOCK_TTL, _lock_key, last_us_session
+from app.services.quant_research.scheduler import _LOCK_TTL, _lock_key, last_cnhk_session, last_us_session
 from app.services.quant_research.service import get_quant_research
 
 router = APIRouter()
@@ -37,39 +39,49 @@ async def quant_methodology(lang: Literal["zh", "en"] = Query("zh")) -> Methodol
 @limiter.limit("3 per minute")
 async def quant_batch_run(
     request: Request,
+    market: Literal["us", "cn", "hk"] = Query("us"),
     user: User = Depends(get_current_user),
 ) -> dict:
-    """手动触发美股批量（标普1500 全量），口径切换 / 补数时不用等夜间定时。
+    """手动触发批量（美股标普1500 / A 股市值前 1800 / 港股样本全量），口径切换 / 补数时不用等夜间定时。
 
     与定时批量、自举共用同一把 Redis 锁：同一天只跑一轮；正在跑时返回 already_running。
     后台执行不阻塞响应，结果照常写入 quant_results / 板块分布。
     """
-    day = last_us_session(datetime.now(UTC))
+    now = datetime.now(UTC)
+    day = last_us_session(now) if market == "us" else last_cnhk_session(now, _CLOSE_HOUR[market]())
     redis = current_redis()
-    if redis is not None and not await acquire_lock(redis, _lock_key("us", day), _LOCK_TTL):
-        logger.info("quant_batch_manual_skipped_locked", day=day.isoformat(), user_id=user.id)
-        return {"status": "already_running", "day": day.isoformat()}
-    logger.info("quant_batch_manual_started", day=day.isoformat(), user_id=user.id)
-    task = asyncio.create_task(_run_manual_batch(day))
+    if redis is not None and not await acquire_lock(redis, _lock_key(market, day), _LOCK_TTL):
+        logger.info("quant_batch_manual_skipped_locked", market=market, day=day.isoformat(), user_id=user.id)
+        return {"status": "already_running", "market": market, "day": day.isoformat()}
+    logger.info("quant_batch_manual_started", market=market, day=day.isoformat(), user_id=user.id)
+    task = asyncio.create_task(_run_manual_batch(market, day))
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
-    return {"status": "started", "day": day.isoformat()}
+    return {"status": "started", "market": market, "day": day.isoformat()}
 
 
-async def _run_manual_batch(day: date) -> None:
+_CLOSE_HOUR = {"cn": lambda: settings.QUANT_CN_BATCH_UTC_HOUR, "hk": lambda: settings.QUANT_HK_BATCH_UTC_HOUR}
+
+
+async def _run_manual_batch(market: str, day: date) -> None:
     """后台跑完手动批量；无论成败都释放锁，失败不挡当晚定时批（定时点重抢）。"""
     redis = current_redis()
     try:
-        async with httpx.AsyncClient() as client:
-            summary = await run_us_batch(day, redis=redis, client=client)
-        logger.info("quant_batch_manual_finished", day=day.isoformat(), summary=summary)
+        if market == "us":
+            async with httpx.AsyncClient() as client:
+                summary = await run_us_batch(day, redis=redis, client=client)
+        elif market == "cn":
+            summary = await run_cn_batch(day, redis=redis)
+        else:
+            summary = await run_hk_batch(day, redis=redis)
+        logger.info("quant_batch_manual_finished", market=market, day=day.isoformat(), summary=summary)
     except asyncio.CancelledError:
         raise
     except Exception:
-        logger.exception("quant_batch_manual_failed", day=day.isoformat())
+        logger.exception("quant_batch_manual_failed", market=market, day=day.isoformat())
     finally:
         if redis is not None:
-            await release_lock(redis, _lock_key("us", day))
+            await release_lock(redis, _lock_key(market, day))
 
 
 @router.get("/{market}/{symbol}", response_model=QuantResearchOut)

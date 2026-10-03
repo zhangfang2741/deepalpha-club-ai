@@ -29,6 +29,8 @@ class StockInputs:
     estimates: list[dict] = field(default_factory=list)        # 按财年截止日升序
     shares_diluted: float | None = None
     eps_trend: EpsTrend | None = None                          # 外部一致预期趋势（EPS 修正过渡期用）
+    market: str = "us"
+    fx: dict | None = None                                     # 港股换算：{"hkd_cny": 0.8544, "estimate_currency": "USD"}
 
     @property
     def fy1(self) -> dict | None:
@@ -40,12 +42,12 @@ class StockInputs:
 
     @property
     def fiscal_period(self) -> str | None:
-        """最新财报期，如「FY27 Q2」。"""
+        """最新财报期，如「FY27 Q2」；A 股 / 港股由累计报告换算而来，半年报写「H1」（periodLabel）。"""
         if not self.quarters_income:
             return None
         q = self.quarters_income[0]
         fy = str(q.get("fiscalYear") or "")[-2:]
-        return f"FY{fy} {q.get('period')}" if fy else None
+        return f"FY{fy} {q.get('periodLabel') or q.get('period')}" if fy else None
 
     @property
     def filing_date(self) -> str | None:

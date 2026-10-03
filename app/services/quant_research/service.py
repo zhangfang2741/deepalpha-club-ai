@@ -13,6 +13,7 @@ from app.cache.operations import get_json, set_json
 from app.core.logging import logger
 from app.schemas.quant_research import MoatOut, QuantResearchOut
 from app.services.quant_research import repository as repo
+from app.services.quant_research.cnhk import on_demand as cnhk_on_demand
 from app.services.quant_research.batch import HISTORY_DAYS, MARKET, estimate_rows
 from app.services.quant_research.builder import (
     METHODOLOGY_VERSION,
@@ -30,24 +31,28 @@ from app.services.quant_research.fmp import FmpClient
 from app.services.quant_research.eps_trend import fetch_eps_trend, needs_trend
 from app.services.quant_research.inputs import build_inputs
 from app.services.quant_research.moat import METHOD_VERSION as MOAT_METHOD_VERSION
+from app.services.quant_research.markets import normalize_symbol, profile
 from app.services.quant_research.moat.present import moat_out, moat_placeholder
 from app.services.quant_research.revisions import accumulated_days
 from app.services.quant_research.scoring import OVERALL_KEY, OVERALL_SECTOR
-from app.services.quant_research.universe import FMP_SECTOR_TO_GICS, normalize_us_symbol
+from app.services.quant_research.universe import FMP_SECTOR_TO_GICS
 
 RESULT_TTL = 6 * 3600          # 批量跑完会主动清缓存
 ON_DEMAND_TTL = 86400
 
 
-def _cache_key(symbol: str, lang: str) -> str:
+SUPPORTED_MARKETS = ("us", "cn", "hk")
+
+
+def _cache_key(symbol: str, lang: str, market: str = MARKET) -> str:
     """带方法版本：改规则部署后旧口径缓存立即失效（样本外现算结果缓存 24 小时，否则要等批量跑完才清）。"""
-    return f"quant:us:sym:{METHODOLOGY_VERSION}:{symbol}:{lang}"
+    return f"quant:{market}:sym:{METHODOLOGY_VERSION}:{symbol}:{lang}"
 
 
 async def get_quant_research(market: str, symbol: str, lang: Lang, *, redis: Redis | None) -> QuantResearchOut:
-    """评分结果（缓存 → 当日批量 → 样本外现算）+ 护城河（读取时附上，评完一只即可见一只）。"""
+    """评分结果（缓存 → 当日批量 → 样本外现算）+ 护城河（仅美股；读取时附上，评完一只即可见一只）。"""
     out = await _get_scores(market, symbol, lang, redis=redis)
-    if out.status == "ok":
+    if out.status == "ok" and profile(out.market).has_moat:
         out.moat = await _moat(out.symbol, lang, in_universe=bool(out.peer_group and out.peer_group.in_universe))
     return out
 
@@ -63,12 +68,12 @@ async def _moat(symbol: str, lang: Lang, *, in_universe: bool) -> MoatOut:
 
 async def _get_scores(market: str, symbol: str, lang: Lang, *, redis: Redis | None) -> QuantResearchOut:
     """缓存 → 当日批量结果 → 样本外现算。"""
-    market, symbol = market.lower(), symbol.upper()
-    if market != MARKET:
-        return unsupported(market, symbol, lang)
-    symbol = normalize_us_symbol(symbol)
+    market = market.lower()
+    if market not in SUPPORTED_MARKETS:
+        return unsupported(market, symbol.upper(), lang)
+    symbol = normalize_symbol(market, symbol)
 
-    key = _cache_key(symbol, lang)
+    key = _cache_key(symbol, lang, market)
     if redis is not None:
         try:
             cached = await get_json(redis, key)
@@ -77,13 +82,18 @@ async def _get_scores(market: str, symbol: str, lang: Lang, *, redis: Redis | No
         except Exception as e:  # noqa: BLE001
             logger.warning("quant_cache_read_failed", symbol=symbol, error=str(e))
 
-    row = await repo.get_latest_result(MARKET, symbol)
+    row = await repo.get_latest_result(market, symbol)
     if row is not None:
         out = enrich_education(QuantResearchOut(**(row.payload_zh if lang == "zh" else row.payload_en)), lang)
         await _cache(redis, key, out, RESULT_TTL)
         return out
 
-    out = await _compute_on_demand(symbol, lang, redis)
+    if market == MARKET:
+        out = await _compute_on_demand(symbol, lang, redis)
+    else:
+        out, other = await cnhk_on_demand.compute(market, symbol, lang, redis)
+        if other is not None:
+            await _cache(redis, _cache_key(symbol, "en" if lang == "zh" else "zh", market), other, ON_DEMAND_TTL)
     if out.status == "ok":
         await _cache(redis, key, out, ON_DEMAND_TTL)
     return out
