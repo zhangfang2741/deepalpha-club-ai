@@ -139,8 +139,8 @@ deepalpha-club-ai/
 | 信号雷达 | `/signal-radar` | iOS「雷达」Tab（页面标题「市场雷达」） | 扫描各市场指数成分股跑缠论，**只陈列事实**：某天在场的全部买卖点按出现时间排（`scope=all`，新版 App；不带 scope 的旧版 App 在接口层按旧综合分截前 10）。App 用严格口径，只画已成立的买卖点（「待确认」只在雷达上方显示个数）。气泡：红买绿卖、深浅=信号强弱、大小=一二三类（直径 62 / 88 / 116，再乘时间系数；允许叠 25%，拥挤缩放上限 0.45）；同心环模式下信号数 ≤ 10 个必须全部画出来（先放宽时间圈带、再缩小气泡），超过 10 个才折叠到「另有 N 个 · 查看全部」；由内向外越靠中心越新、互不重叠（`SectorRadarLayout.pack` 整圆一个扇区）。按行业分扇区的画法已关闭（`SignalRadarView.sectorFieldEnabled=false`，代码与测试保留）。点气泡 / 顶部卡片都是底部面板，「查看K线与结构详情」才进详情页 |
 | 威科夫 | `/wyckoff` | `/wyckoff` | Wyckoff 阶段/事件 |
 | 一目均衡表 | `/ichimoku` | `/ichimoku` | Ichimoku 云图信号 |
-| 分析师上调 | `/analyst-upgrades` | `/analyst-upgrades` | 目标价上调榜（SP500/Nasdaq100）；`/overview/{symbol}` 为缠论 App 详情页「分析师评级」分段 |
-| 基本面研究（代码内仍叫 quant_research） | `/quant-research` | 缠论 App 详情页「基本面研究」分段 | 美股五维度（估值/成长/盈利能力/动量/EPS 修正）标普500+纳斯达克100板块内百分位 → A+~F，三层下钻 + 方法说明 |
+| 分析师上调 | `/analyst-upgrades` | `/analyst-upgrades` | 目标价上调榜（SP500/Nasdaq100）；`/overview/{symbol}?market=us\|cn\|hk` 为缠论 App 详情页「分析师评级」分段（A 股 / 港股五档为买入 / 增持 / 中性 / 减持 / 卖出，只对带 `bucket_labels=1` 的新版 App 返回） |
+| 基本面研究（代码内仍叫 quant_research） | `/quant-research` | 缠论 App 详情页「基本面研究」分段 | 五维度（估值/成长/盈利能力/动量/EPS 修正）GICS 板块内百分位 → A+~F，三层下钻 + 方法说明；样本：美股标普1500、A 股市值前 1800、港股港股通 ∪ 市值 ≥ 20 亿港元 |
 | 机构信号 | `/institutional-signals` | `/institutional-signals` | 13F 机构建仓榜 |
 | 行业研究 | `/research` | `/industry-research` | 深度行业研究 |
 | 企业研究 | `/sec` | `/company-research` | SEC 文件 + 公司画像 |
@@ -198,6 +198,18 @@ deepalpha-club-ai/
 > 不做统一说明页）；指标大白话与算式输入项解释在 `glossary.py`。iOS 的分档 / 防抖 / 封顶常量由 `test_education.py` 对齐后端守护。
 > 金融股的营收预期增速、市现率、FCF 利润率标「不适用」，且不做现金流阶段标注（口径不可比）。改分档 / 规则须升
 > `METHODOLOGY_VERSION` 并重生成 golden（`UPDATE_GOLDEN=1 uv run pytest tests/services/quant_research`）。
+
+> A 股 / 港股基本面与分析师评级（`app/services/quant_research/cnhk/` + `analyst_upgrade/overview_cnhk.py`，设计见 `docs/superpowers/specs/2026-10-03-quant-cn-hk-design.md`）：
+> **评分管线与美股完全共用**（`batch.score_and_store` / `builder`），cnhk 只做「取数 + 换算成 FMP 同形输入」；市场差异集中在 `markets.MarketProfile`
+> （样本叫法、没有数据源而不显示的指标、护城河仅美股），**不要**在评分流程里写 `if market == ...`。
+> 数据源（均实测从 Railway 美国机房可达）：东财数据中心 F10 报表（A 股按报告期批量全市场，港股逐只）、东财 F10 盈利预测 / 研报列表（A 股预期与评级）、
+> 经济通盈利预测页（港股预期 / 评级 / 目标价）、Yahoo 收盘价（`fetch_kline`）、FMP forex（港股汇率）。FMP 的 A 股 / 港股报表与评级套餐不含（402）；
+> 东财行情 push2 海外断连；同花顺海外 301（线上从未写入过旧的 A 股快照，旧任务已删除）。所有东财 / 经济通请求走 `cnhk/http.py` 的进程级闸门（并发 + 间隔 + 重试、`trust_env=False`）。
+> **港股报表金额一律是人民币**（东财已把美元 / 港元申报的折成人民币；报告清单 CURRENCY 是原始申报币种），统一折成港元再算；预期按经济通表头单位（分 / 港仙 / 美仙）换算，
+> **快照存申报币种原值**（否则汇率波动会被当成 EPS 修正）。报表是累计口径，`reports.to_quarters` 换算单季（相邻累计点之差平摊，TTM / 同比 / 上一财年精确）。
+> A 股利润表 G 表含全部公司（`ORG_TYPE` 定类型），现金流 / 资产负债表按 G/B/S/I 分表；金融类不算 EV / 毛利 / EBIT(DA) 类（标「不适用」）。
+> A 股评级分布用 F10 官方「6 个月内」统计（研报列表只收录部分研报）；港股只有各券商最新评级、无历史。行业为东财行业静态映射到 GICS 11 个一级（`cnhk/sectors.py`，新行业须补映射）。
+> 调度：A 股工作日 UTC 09:00、港股 UTC 10:00，冷启动自举同美股；紧急停用 `QUANT_CNHK_ENABLED=false`。A 股报表每 30 天全量一次，平时只刷新披露窗口内的期次。
 
 > 新增一个投研模块时，通常需同步落地五处：`app/api/v1/<mod>.py`、`app/services/<mod>/`、`app/schemas/<mod>.py`、前端 `app/<mod>/page.tsx` + `lib/api/<mod>.ts`，并在 `api.py`、`TopNav.tsx` 注册。
 
