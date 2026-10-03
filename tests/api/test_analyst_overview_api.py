@@ -1,4 +1,4 @@
-"""分析师评级概览接口：鉴权后返回、非美股不支持、参数校验。"""
+"""分析师评级概览接口：鉴权后返回、A 股 / 港股只对新版 App（bucket_labels=1）开放、参数校验。"""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,8 +13,8 @@ from app.schemas.analyst_upgrade import AnalystOverviewOut
 def client(monkeypatch):
     app.dependency_overrides[get_current_user] = lambda: type("U", (), {"id": 1})()
 
-    async def fake(symbol, lang, *, redis):
-        return AnalystOverviewOut(symbol=symbol.upper(), status="ok", note="n")
+    async def fake(symbol, lang, *, redis, market="us"):
+        return AnalystOverviewOut(symbol=f"{market}:{symbol.upper()}", status="ok", note="n")
 
     monkeypatch.setattr(api_mod, "get_analyst_overview", fake)
     yield TestClient(app)
@@ -23,12 +23,14 @@ def client(monkeypatch):
 
 def test_overview_ok(client):
     body = client.get("/api/v1/analyst-upgrades/overview/nvda").json()
-    assert body["symbol"] == "NVDA" and body["status"] == "ok"
+    assert body["symbol"] == "us:NVDA" and body["status"] == "ok"
 
 
-def test_overview_non_us_unsupported(client):
-    body = client.get("/api/v1/analyst-upgrades/overview/0700?market=hk").json()
-    assert body["status"] == "unsupported_market"
+def test_overview_cn_hk_need_new_app(client):
+    old = client.get("/api/v1/analyst-upgrades/overview/0700?market=hk").json()
+    assert old["status"] == "unsupported_market" and "更新" in old["status_note"]
+    new = client.get("/api/v1/analyst-upgrades/overview/0700?market=hk&bucket_labels=1").json()
+    assert new["status"] == "ok" and new["symbol"] == "hk:0700"
 
 
 def test_overview_bad_params(client):

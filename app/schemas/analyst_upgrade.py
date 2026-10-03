@@ -86,6 +86,8 @@ class RatingSection(BaseResponse):
     current: RatingCounts | None = None
     history: list[RatingCounts] = Field(default_factory=list)
     change_text: str | None = Field(None, description="近 3 个月买入及以上人数变化的中性描述")
+    bucket_labels: list[str] | None = Field(
+        default=None, description="五档名称（A 股 / 港股：买入 / 增持 / 中性 / 减持 / 卖出）；为空时用美股档位（强力买入 … 强力卖出）")
 
 
 class PriceTargetSection(BaseResponse):
@@ -138,6 +140,7 @@ class GradeChange(BaseResponse):
     previous_grade_label: str | None = None
     new_grade: str
     new_grade_label: str
+    price_target: float | None = Field(default=None, description="本次给出的目标价（A 股人民币 / 港股港元）")
 
 
 class AnalystOverviewOut(BaseResponse):
@@ -150,4 +153,5 @@ class AnalystOverviewOut(BaseResponse):
     price_target: PriceTargetSection | None = None
     earnings: EarningsSection | None = None
     recent_grades: list[GradeChange] = Field(default_factory=list)
+    recent_grades_title: str | None = Field(default=None, description="评级列表标题（港股只有各券商最新评级时给出）")
     note: str

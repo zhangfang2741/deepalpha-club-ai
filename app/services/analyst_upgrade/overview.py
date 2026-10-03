@@ -160,7 +160,8 @@ def build_overview(symbol: str, lang: Lang, today: date, *, hist=None, ptc=None,
                               recent_grades=recent, note=NOTE[lang])
 
 
-def unsupported(symbol: str, lang: Lang) -> AnalystOverviewOut:
-    """非美股。"""
-    return AnalystOverviewOut(symbol=symbol, status="unsupported_market", note=NOTE[lang],
-                              status_note=_i(lang, "分析师评级暂只支持美股", "Analyst ratings currently cover US stocks only"))
+def unsupported(symbol: str, lang: Lang, *, needs_app_update: bool = False) -> AnalystOverviewOut:
+    """不支持的市场；needs_app_update：数据已支持，但旧版 App 显示不了（A 股 / 港股的五档名称不同）。"""
+    note = (_i(lang, "更新到最新版 App 即可查看 A 股 / 港股的分析师评级", "Update the app to see analyst ratings for China A-shares and Hong Kong stocks")
+            if needs_app_update else _i(lang, "分析师评级暂只支持美股", "Analyst ratings currently cover US stocks only"))
+    return AnalystOverviewOut(symbol=symbol, status="unsupported_market", note=NOTE[lang], status_note=note)

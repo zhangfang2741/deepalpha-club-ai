@@ -193,10 +193,15 @@ async def get_analyst_overview_route(
     symbol: Annotated[str, Path(pattern=r"^[A-Za-z0-9][A-Za-z0-9\-\.]{0,11}$")],
     market: Literal["us", "cn", "hk"] = Query("us"),
     lang: Literal["zh", "en"] = Query("zh"),
+    bucket_labels: Annotated[bool, Query(description="App 能按响应里的 bucket_labels 显示五档名称")] = False,
     user: User = Depends(get_current_user),
     redis: Redis | None = Depends(get_redis_optional),
 ) -> AnalystOverviewOut:
-    """个股分析师评级概览（缠论 App 详情页「分析师评级」Tab），暂只支持美股."""
-    if market != "us":
-        return overview_unsupported(symbol.upper(), lang)
-    return await get_analyst_overview(symbol, lang, redis=redis)
+    """个股分析师评级概览（缠论 App 详情页「分析师评级」Tab）.
+
+    A 股 / 港股的五档是「买入 / 增持 / 中性 / 减持 / 卖出」，旧版 App 写死美股档位（强力买入 …），
+    会把「买入」显示成「强力买入」——所以只有带 bucket_labels=1 的新版 App 才返回 A 股 / 港股数据。
+    """
+    if market != "us" and not bucket_labels:
+        return overview_unsupported(symbol.upper(), lang, needs_app_update=True)
+    return await get_analyst_overview(symbol, lang, redis=redis, market=market)
