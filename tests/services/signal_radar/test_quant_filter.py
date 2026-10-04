@@ -229,7 +229,7 @@ def test_row_dimension_grades_read_from_grades_column():
 
 def test_cache_namespace_isolates_new_rules():
     """取消排雷、改存全部信号后升了缓存键，旧快照（排雷 + 前 N）不会被读到。"""
-    assert svc._mode_ns("loose").endswith(":quant_mark2:all2:win2y")
+    assert svc._mode_ns("loose").endswith(":quant_mark2:all2:win2y_wu1y")
 
 
 async def test_snapshot_keeps_former_mine_for_every_universe(monkeypatch):

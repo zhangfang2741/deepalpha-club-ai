@@ -41,7 +41,7 @@ from app.schemas.chan import (
 from app.services.chan.analyzer import ChanAnalyzer
 from app.services.chan.gap import analyze_structure_gap
 from app.services.chan.signal_policy import DEFAULT_MODE, SIGNAL_POLICIES, normalize_mode
-from app.services.chan.window import canonical_daily_start
+from app.services.chan.window import canonical_daily_fetch_start, canonical_daily_start
 from app.services.chan.sub_level_service import current_sub_level
 from app.services.chan.sub_level_service import signal_out as _signal_out
 from app.services.skills.kline import LIVE_MAX_AGE, fetch_kline
@@ -88,17 +88,18 @@ def _anchor_start(start_date: str, freq: str, warmup_days: int | None = None) ->
 def analysis_window(start_date: str, end_date: str, freq: str, warmup_days: int | None = None) -> tuple[str, str]:
     """(取数起点, 可见起点)。
 
-    日线：取数起点固定为 canonical_daily_start(截止日)，与用户所选起始日期无关，结构不再随起点漂移；
-    可见起点 = max(用户所选, 固定起点)——选得比两年更早也只显示到两年前。
+    日线：取数起点固定为 canonical_daily_fetch_start(截止日)（显示起点再往前一年预热），与用户所选起始日期无关，
+    结构不再随起点漂移；可见起点 = max(用户所选, canonical_daily_start)——选得比两年更早也只显示到两年前。
     周线 / 30 分钟：沿用「可见起点 + 预热」。
     """
     visible = _visible_start(start_date, end_date, freq)
     if freq == "daily":
         try:
-            anchor = canonical_daily_start(end_date)
+            fetch_start = canonical_daily_fetch_start(end_date)
+            shown_from = canonical_daily_start(end_date)
         except ValueError:
             return _anchor_start(visible, freq, warmup_days), visible
-        return anchor, max(visible, anchor)
+        return fetch_start, max(visible, shown_from)
     return _anchor_start(visible, freq, warmup_days), visible
 
 

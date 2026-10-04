@@ -1,4 +1,4 @@
-"""日线分析起点固定（两年，按月对齐）：雷达、详情页、自选阶段、次级别的大级别用同一个起点，
+"""日线分析起点固定（显示两年 + 预热一年，按月对齐）：雷达、详情页、自选阶段、次级别的大级别用同一个起点，
 结构不随用户所选起始日期漂移。设计见 app/services/chan/window.py。
 
 背景：缠论的中枢是从第一笔往后分组的，起点早几天多出一笔，整条序列的中枢就整体错开
@@ -7,7 +7,7 @@
 from datetime import date
 
 from app.api.v1.chan import _anchor_start, _visible_start, analysis_window
-from app.services.chan.window import canonical_daily_start
+from app.services.chan.window import canonical_daily_fetch_start, canonical_daily_start
 from app.services.signal_radar import service as radar
 
 
@@ -16,6 +16,19 @@ def test_canonical_start_is_two_years_back_aligned_to_month_start():
     assert canonical_daily_start("2026-10-31") == "2024-10-01"  # 往前 730 天 = 2024-10-31，取当月 1 号
     assert canonical_daily_start("2026-11-01") == "2024-11-01"  # 跨月才变
     assert canonical_daily_start(date(2026, 9, 18)) == "2024-09-01"
+
+
+def test_fetch_start_adds_one_year_warmup_aligned_to_month_start():
+    """显示起点前再多算一年（预热只参与计算、不显示）。
+
+    缠论要攒够笔和中枢才出买卖点，没有预热时显示区第一年几乎没有买卖点（8 只样本严格口径 1 个，预热一年后 7 个，预热两年仍是 7 个）。
+    """
+    assert canonical_daily_fetch_start("2026-10-02") == "2023-10-01"
+    assert canonical_daily_fetch_start("2026-10-31") == "2023-10-01"
+    assert canonical_daily_fetch_start("2026-11-01") == "2023-11-01"
+    assert canonical_daily_fetch_start(date(2026, 9, 18)) == "2023-09-01"
+    starts = {canonical_daily_fetch_start(date(2026, 9, d)) for d in range(1, 31)}
+    assert len(starts) <= 2
 
 
 def test_canonical_start_changes_only_once_a_month():
@@ -27,13 +40,14 @@ def test_detail_anchor_ignores_user_start_date():
     """MNST 的场景：用户起点 2025-09-19 与 2025-10-01 必须取同一个分析起点。"""
     a1, v1 = analysis_window("2025-09-19", "2026-10-02", "daily")
     a2, v2 = analysis_window("2025-10-01", "2026-10-02", "daily")
-    assert a1 == a2 == "2024-10-01"
+    assert a1 == a2 == "2023-10-01"
     assert (v1, v2) == ("2025-09-19", "2025-10-01")  # 起点只决定显示哪一段
 
 
 def test_visible_start_cannot_precede_anchor():
     anchor, visible = analysis_window("2020-01-01", "2026-10-02", "daily")
-    assert visible == anchor == "2024-10-01"
+    assert anchor == "2023-10-01"
+    assert visible == "2024-10-01"  # 预热段只参与计算、不显示
 
 
 def test_radar_fetch_range_equals_detail_range():

@@ -51,9 +51,10 @@ extension RadarOrbitSpacing {
         return (2.0 + min(1.0, Double(d - 3) / 2.0)) / 3.0
     }
 
-    /// 时间 → 气泡尺寸系数：越远越小，按交易日连续递减（当天 1.0，5 天及更早 0.55），
+    /// 时间 → 气泡尺寸系数：越远越小，按交易日连续递减（当天 1.0，5 天及更早 0.7），
     /// horizon 与后端信号保留上限（5 个交易日）对齐。与一二三类对应的直径相乘。
-    static func timeSizeFactor(daysAgo: Int, horizon: Int = 5, minFactor: Double = 0.55) -> Double {
+    /// 不再降到 0.55：与类型档位叠乘后最旧的一类会缩到最小直径，和当天三类差得太悬殊。
+    static func timeSizeFactor(daysAgo: Int, horizon: Int = 5, minFactor: Double = 0.7) -> Double {
         let t = min(1, Double(max(0, daysAgo)) / Double(max(1, horizon)))
         return 1 - (1 - minFactor) * t
     }

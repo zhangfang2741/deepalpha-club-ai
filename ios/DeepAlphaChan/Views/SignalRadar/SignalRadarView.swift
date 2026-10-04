@@ -1087,14 +1087,15 @@ struct SignalRadarView: View {
     /// 约 0.6 个半径，中间的代码和名称不会被盖住；再大就开始压字。
     static let bubbleOverlapRatio: Double = 0.2
 
-    /// 买卖点类型 → 气泡直径：一类 62 / 二类 88 / 三类 116。一类只是背驰迹象、尚待验证，最小；
-    /// 三类回踩完全不回中枢、确认程度最高，最大。拉开档位（面积约 1 : 2 : 3.5）是因为信号多时整体要缩小，
-    /// 档位太近缩完就分不出一二三类；再叠上时间系数（越旧越小）与颜色深浅（强弱），三个维度各自看得清。
+    /// 买卖点类型 → 气泡直径：一类 58 / 二类 72 / 三类 86。一类只是背驰迹象、尚待验证，最小；
+    /// 三类回踩完全不回中枢、确认程度最高，最大。面积约 1 : 1.5 : 2.2——旧档位 62 / 88 / 116
+    /// （面积 1 : 2 : 3.5）再叠时间系数后大小差到 2.6 倍、整体也偏大；现在仍能分出三档，
+    /// 再叠上时间系数（越旧越小，最小卡在 RadarBubbleMetrics.minDiameter）与颜色深浅（强弱），三个维度各自看得清。
     static func diameter(forLevel level: Int) -> Double {
         switch level {
-        case 1: return 62
-        case 2: return 88
-        default: return 116
+        case 1: return 58
+        case 2: return 72
+        default: return 86
         }
     }
 
