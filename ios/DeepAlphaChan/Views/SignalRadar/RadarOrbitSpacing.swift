@@ -184,12 +184,15 @@ extension RadarOrbitSpacing {
     /// 否则 1。统一缩放不改变一二三类之间的大小关系，只在当天信号特别集中时生效。
     ///
     /// 2026-10 起气泡允许适度重叠（SectorRadarLayout.overlapRatio），上限放宽到 0.45，信号多时不再被压得一二三类分不出。
+    /// 2026-10-04 再放宽到 0.7：候选里放不下的会折叠成「另有 N 个」，但它们仍占着面积预算，
+    /// 0.45 时 24 个候选只画出 11 个，三类（86）被缩到约 53pt，和二类只差几 pt。允许重叠后实际占地比总面积小，
+    /// 0.7 让三类保持明显更大；放不下的照常折叠、在「当日信号」里看全。
     ///
     /// 上榜固定取前 10 名（见 SignalRadarView 算法说明），几乎每天都接近这个数，导致旧上限
     /// 0.5（气泡总面积占画布一半）几乎天天顶格生效——气泡感觉总是偏大。收紧到 0.32，10 个
     /// 气泡的常见场景下线性尺寸约缩小 20%（sqrt(0.32/0.5)），留出更多空白，同一二三类的
     /// 相对大小关系不变。
-    static func crowdScale(diameters: [Double], width: Double, height: Double, maxFill: Double = 0.45) -> Double {
+    static func crowdScale(diameters: [Double], width: Double, height: Double, maxFill: Double = 0.7) -> Double {
         let canvas = width * height
         guard canvas > 0 else { return 1 }
         let fill = diameters.map { Double.pi * $0 * $0 / 4 }.reduce(0, +) / canvas
