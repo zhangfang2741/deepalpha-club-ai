@@ -59,9 +59,18 @@ struct SignalDetailCard: View {
             Text(String(format: "%.2f", signal.price))
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(Theme.textSecondary)
-            Text(signal.displayTime)
-                .font(.caption2)
-                .foregroundStyle(Theme.textSecondary)
+            // 出现日（笔走完确认的那天）与图上标记（所在笔的极值 K 线）可能差好几周：
+            // 两个日期不同时折叠行就都写出来，对得上图，不必展开才知道
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(signal.displayTime)
+                    .font(.caption2)
+                    .foregroundStyle(Theme.textSecondary)
+                if signal.displayTime != signal.time {
+                    Text(L("图上 %@", signal.time))
+                        .font(.system(size: 9))
+                        .foregroundStyle(Theme.textSecondary.opacity(0.7))
+                }
+            }
             if !isStatic {
                 Image(systemName: expanded ? "chevron.up" : "chevron.down")
                     .font(.system(size: 9, weight: .semibold))
