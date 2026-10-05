@@ -420,6 +420,8 @@ class Settings:
         self.QUANT_HK_BATCH_UTC_HOUR = int(os.getenv("QUANT_HK_BATCH_UTC_HOUR", "10"))
         # 缠论严格口径一类背驰度量：macd_area（原文，MACD 面积）| force（价差/量能/时长）；见 chan/leg_metric.py
         self.CHAN_DIVERGENCE_METRIC = os.getenv("CHAN_DIVERGENCE_METRIC", "macd_area")
+        # 缠论原文：中枢延伸到 9 段即升级为更高级别中枢。一类趋势背驰要求信号时刻中枢 B 已有元素（笔）数不超过它；0 = 不限制
+        self.CHAN_PIVOT_EXTEND_LIMIT = int(os.getenv("CHAN_PIVOT_EXTEND_LIMIT", "9"))
         # 护城河（app/services/quant_research/moat）：部署后冷启动跑一遍，之后每天检查新 10-K
         self.QUANT_MOAT_ENABLED = os.getenv("QUANT_MOAT_ENABLED", "true").lower() in ("true", "1", "yes")
         self.QUANT_MOAT_UTC_HOUR = int(os.getenv("QUANT_MOAT_UTC_HOUR", "12"))
