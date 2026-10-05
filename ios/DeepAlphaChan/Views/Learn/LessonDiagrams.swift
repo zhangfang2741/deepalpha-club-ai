@@ -141,7 +141,7 @@ enum LessonDiagrams {
     }
 
     /// 背驰：两段上涨，第二段创新高但价差只有第一段的 0.58 倍（0.30 / 0.52）。
-    /// 画法与分析页一致：粉色实线连起两段终点，标「顶背驰 + 价差比」。
+    /// 画法与分析页一致：粉色实线连起两段终点，标「趋势背驰 + 面积比」。
     private static var divergence: DiagramSpec {
         let z = Zigzag(turns: [0.10, 0.62, 0.40, 0.70, 0.50])
         return DiagramSpec(
@@ -152,7 +152,7 @@ enum LessonDiagrams {
                       color: Theme.textSecondary, above: false),
                 .init(at: z.t(3), anchor: .value(0.30), text: L("第二段：创新高、涨得少"),
                       color: Theme.textSecondary, above: false),
-                .init(at: z.t(2), anchor: .value(0.70), text: L("顶背驰") + " 0.58",
+                .init(at: z.t(2), anchor: .value(0.70), text: L("趋势背驰") + " 0.58",
                       color: Theme.divergence, extraOffset: 6),
             ],
             divergences: [z.conn(1, 3)]
@@ -198,7 +198,7 @@ enum LessonDiagrams {
             labels: [
                 .init(at: (z.t(1) + z.t(4)) / 2, anchor: .value(0.90), text: L("示意图·中枢"), color: Theme.pivotFill),
                 .init(at: (z.t(5) + z.t(8)) / 2, anchor: .value(0.56), text: L("示意图·中枢"), color: Theme.pivotFill),
-                .init(at: z.t(7), anchor: .value(0.37), text: L("底背驰"), color: Theme.divergence, above: false),
+                .init(at: z.t(7), anchor: .value(0.37), text: L("趋势背驰"), color: Theme.divergence, above: false),
                 .init(at: z.t(9), anchor: .low, text: L("一买"), color: Theme.up, above: false, extraOffset: 2),
                 .init(at: z.t(11), anchor: .low, text: L("二买"), color: Theme.up, above: false, extraOffset: 2),
                 .init(at: z.t(15), anchor: .low, text: L("三买"), color: Theme.up, above: false, extraOffset: 2),

@@ -237,8 +237,12 @@ def _raw_to_force(leg: RawLeg, macd: MACDData | None, is_buy: bool) -> LegForce:
 
 def _compare_legs(
     c: LegForce, b: LegForce, lang: str, metric: DivergenceMetric,
+    b_end: tuple[str, float] | None = None,
 ) -> tuple[bool, DivergenceResult | None]:
-    """C 段对 b 段按度量比较：（能否判定, 背驰结果）；该度量缺数据时「不能判定」。"""
+    """C 段对 b 段按度量比较：（能否判定, 背驰结果）；该度量缺数据时「不能判定」。
+
+    b_end = b 段终点（时间, 价格），写进结果，图上背驰连线从它连到信号点。
+    """
     cmp = metric.compare(c, b)
     if cmp is None:
         return False, None
@@ -250,6 +254,7 @@ def _compare_legs(
         price_ratio=cmp.price_ratio, volume_ratio=cmp.volume_ratio, length_ratio=cmp.length_ratio,
         area_ratio=cmp.area_ratio,
         description=force_text(cmp.price_ratio, cmp.volume_ratio, cmp.length_ratio, lang, cmp.area_ratio),
+        b_end_time=b_end[0] if b_end else None, b_end_price=b_end[1] if b_end else None,
     )
 
 
@@ -270,7 +275,8 @@ def _trend_leg_divergence(
     b_end, price = legs[0][-1].end_price, legs[1][-1].end_price
     if (price >= b_end) if is_buy else (price <= b_end):
         return True, None
-    return _compare_legs(leg_force(legs[1], macd), leg_force(legs[0], macd), lang, metric or get_metric(None))
+    return _compare_legs(leg_force(legs[1], macd), leg_force(legs[0], macd), lang, metric or get_metric(None),
+                         b_end=(legs[0][-1].end_time, b_end))
 
 
 def _formed_at(p: Pivot) -> str:
@@ -412,6 +418,7 @@ def generate_all_signals(
     div_by_end = {s.end_time: dv for s, dv in zip(strokes, divergences, strict=False)}
     direction_by_end = {s.end_time: s.direction for s in strokes}
     idx_by_end = {s.end_time: i for i, s in enumerate(strokes)}
+    price_by_end = {s.end_time: s.end_price for s in strokes}
     signals: list[Signal] = []
     seen: set[tuple[str, str]] = set()
 
@@ -431,7 +438,8 @@ def generate_all_signals(
             judged, leg_div = (
                 _compare_legs(_raw_to_force(ev.legs.c, macd, ev.type == "buy1"),
                               _raw_to_force(ev.legs.b, macd, ev.type == "buy1"), lang,
-                              metric or get_metric(None))
+                              metric or get_metric(None),
+                              b_end=(ev.legs.b.end, price_by_end[ev.legs.b.end]) if ev.legs.b.end in price_by_end else None)
                 if ev.legs.b is not None and ev.legs.c is not None else (False, None)
             )
         else:

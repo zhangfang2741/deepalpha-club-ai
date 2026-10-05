@@ -35,6 +35,9 @@ class DivergenceResult:
     volume_ratio: float = 1.0  # 量能比
     length_ratio: float = 1.0  # 时长比（去包含K线根数）
     area_ratio: float | None = None  # MACD 面积比（仅 MACD 面积度量填，其余为 None）
+    # 一类趋势背驰里 b 段（A、B 之间）的终点：图上背驰连线的参照点（c 段终点就是信号点）；笔级背驰为 None
+    b_end_time: str | None = None
+    b_end_price: float | None = None
 
 
 def _ema_sma_seed(values: list[float], period: int, start: int) -> list[float]:
