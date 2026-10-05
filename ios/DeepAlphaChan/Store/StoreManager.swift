@@ -1,5 +1,8 @@
 import Foundation
+import OSLog
 import StoreKit
+
+private let storeLog = Logger(subsystem: "club.deepalpha.chan", category: "store")
 
 /// 订阅层级：免费 < 基础版（解锁全量缠论分析）< 高级版
 /// （基础版权益 + 次级别确认 / 信号雷达 / 自选批量状态计算）。数值越大权益越高，`max` 取较高档
@@ -141,8 +144,21 @@ final class StoreManager: ObservableObject {
             ])
             products = items
             loadFailed = items.isEmpty
+            // 空数组是最难查的一种失败：StoreKit 不抛错，只是什么都没返回，界面却显示
+            // 「暂时无法加载订阅信息」。把已知成因写进日志，省得每次从零排查。
+            if items.isEmpty {
+                storeLog.error("""
+                    商品列表为空（未抛错）。依次检查：\
+                    ①本地调试：Scheme 是否挂了 Configuration.storekit，且该文件里所有 identifier / id / \
+                    internalID 都是合法 UUID（含 DEEP 这类非十六进制字符时 Xcode 会静默忽略整个配置）；\
+                    ②真机 / TestFlight：App Store Connect 的付费应用协议是否「生效中」、产品 ID 是否与 \
+                    \(AppConfig.experienceMonthlyProductID, privacy: .public) / \
+                    \(AppConfig.premiumMonthlyProductID, privacy: .public) 完全一致、订阅是否处于可售状态
+                    """)
+            }
             await refreshIntroEligibility()
         } catch {
+            storeLog.error("商品加载失败: \(error.localizedDescription, privacy: .public)")
             loadFailed = true
         }
     }

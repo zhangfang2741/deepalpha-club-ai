@@ -1,5 +1,5 @@
 {
-  "identifier": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000001",
+  "identifier": "5C0F1A2B-0001-4A00-9000-DEE0A1FA0001",
   "nonRenewingSubscriptions": [],
   "products": [],
   "settings": {
@@ -13,7 +13,7 @@
   },
   "subscriptionGroups": [
     {
-      "id": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000010",
+      "id": "5C0F1A2B-0010-4A00-9000-DEE0A1FA0010",
       "localizations": [
         {
           "description": "",
@@ -29,7 +29,7 @@
           "displayPrice": "88.00",
           "familyShareable": false,
           "groupNumber": 1,
-          "internalID": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000011",
+          "internalID": "5C0F1A2B-0011-4A00-9000-DEE0A1FA0011",
           "localizations": [
             {
               "description": "解锁全部缠论分析，不受每日 3 支标的限制",
@@ -40,11 +40,11 @@
           "productID": "club.deepalpha.chan.pro.monthly",
           "recurringSubscriptionPeriod": "P1M",
           "referenceName": "Experience Monthly",
-          "subscriptionGroupID": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000010",
+          "subscriptionGroupID": "5C0F1A2B-0010-4A00-9000-DEE0A1FA0010",
           "type": "RecurringSubscription",
           "introductoryOffer": {
             "displayPrice": "38.00",
-            "internalID": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000012",
+            "internalID": "5C0F1A2B-0012-4A00-9000-DEE0A1FA0012",
             "numberOfPeriods": 1,
             "paymentMode": "payAsYouGo",
             "subscriptionPeriod": "P1M"
@@ -56,7 +56,7 @@
           "displayPrice": "388.00",
           "familyShareable": false,
           "groupNumber": 2,
-          "internalID": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000021",
+          "internalID": "5C0F1A2B-0021-4A00-9000-DEE0A1FA0021",
           "localizations": [
             {
               "description": "基础版全部权益 + 次级别确认、信号雷达、自选批量状态计算",
@@ -67,11 +67,11 @@
           "productID": "club.deepalpha.chan.premium.monthly",
           "recurringSubscriptionPeriod": "P1M",
           "referenceName": "Premium Monthly",
-          "subscriptionGroupID": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000010",
+          "subscriptionGroupID": "5C0F1A2B-0010-4A00-9000-DEE0A1FA0010",
           "type": "RecurringSubscription",
           "introductoryOffer": {
             "displayPrice": "188.00",
-            "internalID": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000022",
+            "internalID": "5C0F1A2B-0022-4A00-9000-DEE0A1FA0022",
             "numberOfPeriods": 1,
             "paymentMode": "payAsYouGo",
             "subscriptionPeriod": "P1M"
