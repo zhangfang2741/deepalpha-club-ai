@@ -1,32 +1,30 @@
 import SwiftUI
 import StoreKit
 
-/// 付费墙的一项权益：标题 + 一句说明（说清能做什么、和免费版的差别）。
-/// 只列订阅后才有的——免费版也能用的（买卖点与形态分析、三个市场）不列，
+/// 免费版 vs 会员的一行对比。`free` 为 nil 表示免费版没有这项（显示锁）；`member` 为 nil 表示会员有（显示对勾），
+/// 有具体额度时写文字。只列订阅后才有差异的——免费版也能用的（买卖点与形态分析、三个市场）不列，
 /// 否则等于把免费功能包装成付费权益（2.3.1，也会让用户觉得被误导）。
-private struct Benefit: Identifiable {
+private struct CompareRow: Identifiable {
     let icon: String
     let title: String
-    let detail: String
+    var free: String? = nil
+    var member: String? = nil
     var id: String { title }
 }
 
 /// 订阅付费墙。只有一个会员（2026-10-05 起，原基础版 / 高级版合并）。
 ///
-/// 版面（上到下）：皇冠 + 标题 → **价格卡（大字，一眼看到多少钱）** → 权益列表 → 恢复购买 / 续订披露 / 条款；
-/// 订阅按钮固定在屏幕底部（按钮上直接写价格），不用滑到底才找得到。价格、自动续订披露、恢复购买、条款 / 隐私链接
-/// 都在（苹果要求）。
+/// 版面（上到下）：皇冠 + 标题 → **价格卡（大字）** → **免费版 vs 会员对比表**（会员列高亮，免费版缺的用锁标出）→
+/// 恢复购买 / 续订披露 / 条款；订阅按钮固定在屏幕底部（按钮上直接写价格）。
+/// 配色与全 App 统一：主题蓝 `Theme.accent` 作强调色，皇冠沿用 App 里其他地方的琥珀色（`Theme.segment`）。
+/// 价格、自动续订披露、恢复购买、条款 / 隐私链接都在（苹果要求）。
 struct PaywallView: View {
     @EnvironmentObject var store: StoreManager
     @Environment(\.dismiss) private var dismiss
     @State private var restoring = false
 
-    /// 金色系：皇冠、价格、订阅按钮共用，整页只用这一个强调色（权益图标也用它的淡色），看着更统一、更有质感。
-    private static let goldLight = Color(hex: 0xFDE9A9)
-    private static let gold = Color(hex: 0xF5B93B)
-    private static let goldDeep = Color(hex: 0xE59A12)
-    private static let goldGradient = LinearGradient(
-        colors: [goldLight, gold], startPoint: .top, endPoint: .bottom)
+    /// 对比表两列的宽度：免费版 / 会员。
+    private static let columnWidth: CGFloat = 78
 
     var body: some View {
         NavigationStack {
@@ -34,7 +32,7 @@ struct PaywallView: View {
                 VStack(spacing: 20) {
                     header
                     content
-                    if store.membershipProduct != nil { benefitsCard }
+                    if store.membershipProduct != nil { compareCard }
                     restoreButton
                     legal
                 }
@@ -62,11 +60,11 @@ struct PaywallView: View {
         .suppressScreenshotShare()
     }
 
-    /// 底色：深色 + 顶部一团很淡的金色光晕，比纯黑底有层次。
+    /// 底色：App 统一的深色 + 顶部一团很淡的主题蓝光晕。
     private var background: some View {
         ZStack(alignment: .top) {
             Theme.background
-            RadialGradient(colors: [Self.gold.opacity(0.16), .clear],
+            RadialGradient(colors: [Theme.accent.opacity(0.16), .clear],
                            center: .top, startRadius: 0, endRadius: 360)
                 .frame(height: 360)
         }
@@ -77,11 +75,10 @@ struct PaywallView: View {
         VStack(spacing: 12) {
             Image(systemName: "crown.fill")
                 .font(.system(size: 30))
-                .foregroundStyle(Self.goldGradient)
+                .foregroundStyle(Theme.segment)
                 .frame(width: 68, height: 68)
-                .background(Self.gold.opacity(0.12), in: Circle())
-                .overlay(Circle().stroke(Self.gold.opacity(0.45), lineWidth: 1))
-                .shadow(color: Self.gold.opacity(0.35), radius: 18)
+                .background(Theme.segment.opacity(0.12), in: Circle())
+                .overlay(Circle().stroke(Theme.segment.opacity(0.4), lineWidth: 1))
             Text(L("DeepAlpha 会员"))
                 .font(.system(size: 28, weight: .bold)).foregroundColor(Theme.textPrimary)
             Text(L("不限次分析 · 市场雷达 · 次级别确认"))
@@ -138,10 +135,10 @@ struct PaywallView: View {
         .padding(.vertical, 22)
         .frame(maxWidth: .infinity)
         .background(
-            LinearGradient(colors: [Self.gold.opacity(0.14), Theme.surface],
+            LinearGradient(colors: [Theme.accent.opacity(0.16), Theme.surface],
                            startPoint: .top, endPoint: .bottom),
             in: RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Self.gold.opacity(0.5), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Theme.accent.opacity(0.55), lineWidth: 1))
     }
 
     /// 大字价格 +「/月」。价格串直接用 StoreKit 的 displayPrice（带币种符号与本地化格式），不自己拼；
@@ -150,7 +147,7 @@ struct PaywallView: View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             Text(price)
                 .font(.system(size: 46, weight: .bold, design: .rounded))
-                .foregroundStyle(Self.goldGradient)
+                .foregroundColor(Theme.textPrimary)
                 .minimumScaleFactor(0.6).lineLimit(1)
             if showsUnit {
                 Text(L("/月")).font(.title3.weight(.semibold)).foregroundColor(Theme.textSecondary)
@@ -160,9 +157,9 @@ struct PaywallView: View {
 
     private func badge(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11, weight: .bold)).foregroundColor(Theme.background)
+            .font(.system(size: 11, weight: .bold)).foregroundColor(.white)
             .padding(.horizontal, 10).padding(.vertical, 3)
-            .background(Self.goldGradient, in: Capsule())
+            .background(Theme.accent, in: Capsule())
     }
 
     private func caption(_ text: String) -> some View {
@@ -170,56 +167,101 @@ struct PaywallView: View {
             .multilineTextAlignment(.center).padding(.horizontal, 16)
     }
 
-    // MARK: - 权益
+    // MARK: - 免费版 vs 会员
 
     /// 与代码里的实际门禁一一对应（改门禁时同步改这里）：
-    /// - 不限次分析：免费每日 AppConfig.freeDailyQuota 支不同标的（UsageTracker），会员不限
-    /// - 次级别确认（日线×30 分钟、周线×日线）：会员专属（MainTabView.hasSubLevelAccess）
-    /// - 每日雷达：会员可看每日真实雷达，免费只有示例日；含近 30 个交易日历史回看
+    /// - 分析次数：免费每日 AppConfig.freeDailyQuota 支不同标的（UsageTracker），会员不限
+    /// - 次级别确认（日线×30 分钟、周线×日线）：会员专属，免费版只有示例股能看（MainTabView.hasSubLevelAccess、isSampleSymbol）
+    /// - 每日雷达：会员可看每日真实雷达，免费只有示例日
+    /// - 雷达历史回看：会员近 30 个交易日，免费没有
     /// - 自选上限：免费 1 / 会员不限（后端 app/services/watchlist.py TIER_LIMITS）
     /// - 自选结构状态：免费只显示最早加入的 1 支，会员全部（WatchlistViewModel.phase(for:)）
-    /// 文案只描述功能本身，不暗示收益或操作建议（3.1.1 / 5.2.5）。每条一行说明，尽量短。
-    private var benefits: [Benefit] {
+    /// 文案只描述功能本身，不暗示收益或操作建议（3.1.1 / 5.2.5）；对比只写真实差别，不夸大。
+    private var rows: [CompareRow] {
         [
-            Benefit(icon: "infinity", title: L("不限次分析"),
-                    detail: L("免费版每天 %lld 支标的", AppConfig.freeDailyQuota)),
-            Benefit(icon: "scope", title: L("次级别确认"),
-                    detail: L("日线对照 30 分钟，周线对照日线")),
-            Benefit(icon: "dot.radiowaves.left.and.right", title: L("每日市场雷达"),
-                    detail: L("美股 / A 股 / 港股主要指数，免费版仅示例日")),
-            Benefit(icon: "clock.arrow.circlepath", title: L("雷达历史回看"),
-                    detail: L("回看近 30 个交易日")),
-            Benefit(icon: "star.fill", title: L("自选不限数量"),
-                    detail: L("免费版最多 1 支")),
-            Benefit(icon: "square.stack.3d.up.fill", title: L("全部自选状态"),
-                    detail: L("结构阶段与最新信号，免费版仅 1 支")),
+            CompareRow(icon: "infinity", title: L("分析次数"),
+                       free: L("%lld 支/天", AppConfig.freeDailyQuota), member: L("不限")),
+            CompareRow(icon: "scope", title: L("次级别确认"), free: L("仅示例股")),
+            CompareRow(icon: "dot.radiowaves.left.and.right", title: L("每日市场雷达"), free: L("仅示例日")),
+            CompareRow(icon: "clock.arrow.circlepath", title: L("雷达历史回看"), member: L("%lld 个交易日", 30)),
+            CompareRow(icon: "star.fill", title: L("自选数量"), free: L("%lld 支", 1), member: L("不限")),
+            CompareRow(icon: "square.stack.3d.up.fill", title: L("自选状态"),
+                       free: L("%lld 支", 1), member: L("全部")),
         ]
     }
 
-    private var benefitsCard: some View {
+    /// 并排对比：会员列整列高亮（主题蓝底 + 描边）、免费版列整体调暗，缺的能力用锁标出——
+    /// 一眼看到「订阅后多了什么」。
+    private var compareCard: some View {
         VStack(spacing: 0) {
-            ForEach(Array(benefits.enumerated()), id: \.element.id) { i, benefit in
-                HStack(spacing: 14) {
-                    Image(systemName: benefit.icon)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(Self.gold)
-                        .frame(width: 32, height: 32)
-                        .background(Self.gold.opacity(0.12), in: RoundedRectangle(cornerRadius: 9))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(benefit.title).font(.subheadline.weight(.semibold)).foregroundColor(Theme.textPrimary)
-                        Text(benefit.detail).font(.caption).foregroundColor(Theme.textSecondary)
+            HStack(spacing: 0) {
+                Text(L("免费版与会员对比")).font(.caption.weight(.semibold)).foregroundColor(Theme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(L("免费版")).font(.caption.weight(.semibold)).foregroundColor(Theme.textSecondary)
+                    .frame(width: Self.columnWidth)
+                Text(L("会员")).font(.subheadline.weight(.bold)).foregroundColor(.white)
+                    .frame(width: Self.columnWidth)
+            }
+            .padding(.bottom, 10)
+
+            ForEach(Array(rows.enumerated()), id: \.element.id) { i, row in
+                HStack(spacing: 0) {
+                    HStack(spacing: 10) {
+                        Image(systemName: row.icon)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(Theme.accent)
+                            .frame(width: 28, height: 28)
+                            .background(Theme.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+                        Text(row.title).font(.subheadline.weight(.medium)).foregroundColor(Theme.textPrimary)
+                            .lineLimit(1).minimumScaleFactor(0.8)
                     }
-                    Spacer(minLength: 0)
-                    Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundColor(Self.gold)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    freeCell(row.free).frame(width: Self.columnWidth)
+                    memberCell(row.member).frame(width: Self.columnWidth)
                 }
-                .padding(.vertical, 11)
+                .padding(.vertical, 12)
                 .accessibilityElement(children: .combine)
-                if i < benefits.count - 1 { Divider().overlay(Theme.border).padding(.leading, 46) }
+                if i < rows.count - 1 { Divider().overlay(Theme.border) }
             }
         }
-        .padding(.horizontal, 16).padding(.vertical, 4)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.border, lineWidth: 1))
+        .padding(.horizontal, 16).padding(.vertical, 14)
+        .background(alignment: .trailing) { memberColumnHighlight }
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Theme.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+
+    /// 会员列的高亮底：贴着卡片右侧，盖住整列（含表头），比卡片内边距略宽。
+    private var memberColumnHighlight: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(LinearGradient(colors: [Theme.accent.opacity(0.9), Theme.accent.opacity(0.28)],
+                                 startPoint: .top, endPoint: .bottom))
+            .frame(width: Self.columnWidth + 8)
+            .padding(.trailing, 12)
+            .padding(.vertical, 6)
+            .zIndex(-1)
+    }
+
+    /// 免费版单元格：有额度写调暗的文字；没有这项显示锁。
+    @ViewBuilder
+    private func freeCell(_ value: String?) -> some View {
+        if let value {
+            Text(value).font(.footnote).foregroundColor(Theme.textSecondary)
+                .multilineTextAlignment(.center).lineLimit(1).minimumScaleFactor(0.8)
+        } else {
+            Image(systemName: "lock.fill").font(.system(size: 13)).foregroundColor(Theme.textSecondary.opacity(0.55))
+        }
+    }
+
+    /// 会员单元格：有具体额度写白色粗体；其余是对勾。
+    @ViewBuilder
+    private func memberCell(_ value: String?) -> some View {
+        if let value {
+            Text(value).font(.footnote.weight(.bold)).foregroundColor(.white)
+                .multilineTextAlignment(.center).lineLimit(1).minimumScaleFactor(0.8)
+        } else {
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 18)).foregroundColor(.white)
+        }
     }
 
     // MARK: - 底部订阅栏
@@ -231,15 +273,13 @@ struct PaywallView: View {
                 Task { await store.purchase(product) }
             } label: {
                 HStack(spacing: 8) {
-                    if store.purchasingProductID == product.id { ProgressView().tint(Theme.background) }
+                    if store.purchasingProductID == product.id { ProgressView().tint(.white) }
                     Text(buttonTitle(product)).font(.system(size: 17, weight: .bold))
                 }
                 .frame(maxWidth: .infinity).padding(.vertical, 15)
-                .background(
-                    LinearGradient(colors: [Self.gold, Self.goldDeep], startPoint: .top, endPoint: .bottom),
-                    in: RoundedRectangle(cornerRadius: 16))
-                .foregroundColor(Theme.background)
-                .shadow(color: Self.gold.opacity(0.3), radius: 12, y: 4)
+                .background(Theme.accent, in: RoundedRectangle(cornerRadius: 16))
+                .foregroundColor(.white)
+                .shadow(color: Theme.accent.opacity(0.35), radius: 12, y: 4)
             }
             .disabled(store.purchaseInProgress)
             Text(L("自动续订 · 可随时取消"))
