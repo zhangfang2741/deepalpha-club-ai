@@ -1242,3 +1242,5 @@
 "颜色：红 = 升档，绿 = 降档；颜色越深、气泡越大，变的档数越多。气泡最后一行是「▲ / ▼ 变档数」。" = "Color: red = upgrade, green = downgrade; darker and larger bubbles mean more notches. The last line in a bubble is ▲ / ▼ with the number of notches.";
 "数量：只画当天变档最多的前 10 只，其余点「另有 N 个 · 查看全部」。" = "Count: only the 10 biggest movers of the day are drawn; tap “N more · View all” for the rest.";
 "评级升降只是事实陈列，不代表后续涨跌，不构成投资建议。" = "Grade changes are shown as facts only. They do not predict future moves and are not investment advice.";
+"正在加载「%@」评级升降…" = "Loading grade changes for “%@”…";
+"评级是每日跑批的结果，稍候即可看到升降" = "Grades come from a daily batch; changes will appear in a moment";

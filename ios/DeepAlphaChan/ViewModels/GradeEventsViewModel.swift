@@ -12,14 +12,23 @@ final class GradeEventsViewModel: ObservableObject {
     /// 顶部行业胶囊的筛选（nil = 全部行业）：与缠论雷达共用同一个行业键，只留该行业的评级升降。
     @Published var sectorFilter: String?
 
+    /// 已加载数据对应的 (市场, 指数)，以及当前请求的 (市场, 指数)：两者不同 = 刚切了市场 / 指数、旧数据不能再展示。
     private var loadedKey = ""
+    private var requestedKey = ""
 
     /// 气泡最多画几只（变档最多的在前），其余点「另有 N 个 · 查看全部」。
     static let bubbleLimit = 10
     /// 13 档字母等级，A+ 最高、F 最低（与后端 GRADE_ORDER 一致）。
     static let gradeOrder = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F"]
 
-    var days: [GradeDay] { response?.days ?? [] }
+    /// 只有响应与当前所选 (市场, 指数) 一致才展示；切市场 / 指数后旧数据不再显示（与缠论雷达同一规则）。
+    var days: [GradeDay] { response != nil && loadedKey == requestedKey ? (response?.days ?? []) : [] }
+
+    /// 整页「正在加载」：当前所选范围还没有可展示的数据（首次进入、切市场 / 指数）。
+    var isScanning: Bool { isLoading && days.isEmpty }
+
+    /// 同一范围重新加载（如强制刷新）：旧气泡调暗、暂不响应点按。
+    var isReloading: Bool { isLoading && !days.isEmpty }
 
     var selectedDay: GradeDay? {
         guard !days.isEmpty else { return nil }
@@ -82,17 +91,20 @@ final class GradeEventsViewModel: ObservableObject {
 
     func load(market: String, universe: String?, force: Bool = false) async {
         let key = "\(market)|\(universe ?? "")"
+        requestedKey = key
         if !force, key == loadedKey, response != nil { return }
         isLoading = true
         failed = false
-        defer { isLoading = false }
+        defer { if requestedKey == key { isLoading = false } }
         do {
             let resp = try await SignalRadarService.gradeEvents(market: market, universe: universe)
+            // 加载期间用户又切了市场 / 指数：丢弃这次结果，别覆盖新请求
+            guard requestedKey == key else { return }
             loadedKey = key
             response = resp
             selectedIndex = 0
         } catch {
-            if Task.isCancelled { return }
+            if Task.isCancelled || requestedKey != key { return }
             failed = true
         }
     }

@@ -20,11 +20,7 @@ struct GradeEventsView<Field: View>: View {
     var body: some View {
         // 行间距、行高、底部免责声明都与缠论雷达（SignalRadarView.radarContent）保持一致，两个 tab 的画布高度才一样
         VStack(spacing: 12) {
-            if vm.isLoading && vm.response == nil {
-                Spacer()
-                ProgressView()
-                Spacer()
-            } else if vm.hasError {
+            if vm.hasError {
                 message(L("评级数据暂时读取失败，稍后再试"))
             } else if vm.days.isEmpty {
                 message(L("这个范围最近没有评级升降。评级历史需要至少两个评级日才能比较，刚上线的市场或节假日期间会暂时没有。"))

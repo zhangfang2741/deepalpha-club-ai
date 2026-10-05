@@ -245,6 +245,20 @@ struct SignalRadarView: View {
         }
     }
 
+    /// 基本面 tab 整页「正在加载」：与缠论的 scanningView 同一版式（转圈 + 加粗标题 + 说明），切市场 / 指数时出现。
+    private var gradeLoadingView: some View {
+        let scope = currentUniverseName.isEmpty ? vm.market.title : currentUniverseName
+        return VStack(spacing: 12) {
+            ProgressView().tint(Theme.accent)
+            Text(L("正在加载「%@」评级升降…", scope))
+                .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+            Text(L("评级是每日跑批的结果，稍候即可看到升降"))
+                .font(.footnote).foregroundColor(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     /// 基本面研究 tab：会员功能（与缠论雷达真实数据同一道门槛，未订阅点按弹付费墙），同样要先同意免责声明。
     @ViewBuilder
     private var fundamentalContent: some View {
@@ -258,11 +272,17 @@ struct SignalRadarView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if !consent.hasAgreed {
             consentLockedField
+        } else if gradeVM.isScanning {
+            gradeLoadingView
         } else {
             GradeEventsView(vm: gradeVM, universeName: currentUniverseName, sectorName: { vm.sectorName($0) },
                             showAll: $showGradeAll,
                             onOpen: { symbol, name in openSymbol(symbol, name: name, segment: .quant) }) {
                 bubbleField
+                    // 同一范围重新加载时保留旧气泡、调暗、暂不响应点按（与缠论同一处理）
+                    .opacity(gradeVM.isReloading ? 0.35 : 1)
+                    .allowsHitTesting(!gradeVM.isReloading)
+                    .animation(.easeInOut(duration: 0.2), value: gradeVM.isReloading)
             }
         }
     }
