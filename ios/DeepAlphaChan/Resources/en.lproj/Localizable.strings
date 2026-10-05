@@ -1158,3 +1158,5 @@
 "%@ · 目标价 %@" = "%@ · target %@";
 "再把综合分和全部样本股票（%@）比，高于约 %@%% 的股票，排第 %@ 百分位。" = "The composite score is then compared with all sample stocks (%@): higher than about %@%% of them, the %@th percentile.";
 "板块按全球行业分类标准（GICS）一级行业划分，样本是%@。" = "Sectors follow the 11 Global Industry Classification Standard (GICS) sectors; the sample is %@.";
+"当日 %lld 个信号" = "%lld signals today";
+"%lld 个行业有信号" = "%lld sectors with signals";

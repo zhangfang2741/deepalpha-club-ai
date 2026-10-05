@@ -1,6 +1,7 @@
 """宏观环境 / 市场概览编排：regime 因子表 + 驱动因素 + 宏观日历 + 宽基雷达按行业统计。
 
-第一期只有美股（MACRO_MARKETS）；A 股 / 港股返回 available=false，App 显示「数据建设中」。
+第一期只有美股（MACRO_MARKETS）有大盘状态与行业强弱；A 股 / 港股的大盘环境 available=false（App 显示「数据建设中」），
+行业弹层只给本土行业（申万 / 恒生一级）+ 雷达买卖点数，没有强弱。
 """
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from redis.asyncio import Redis
 
 from app.cache import macro_cache as cache
 from app.core.logging import logger
-from app.schemas.macro import MacroResponse, MarketOverviewResponse, SectorBoardResponse
+from app.schemas.macro import MacroResponse, MarketOverviewResponse, SectorBoardResponse, SectorRowOut
 from app.services.macro import fetcher, regime_view
 from app.services.macro.calendar import filter_events, next_key_event
 from app.services.macro.drivers import DRIVERS_BY_MARKET, evaluate_driver
@@ -99,6 +100,32 @@ async def get_overview(redis: Redis | None, market: str, lang: str = "zh") -> Ma
     return resp
 
 
+async def _native_sector_board(redis: Redis | None, market: str, names: tuple[str, ...],
+                               date: str | None) -> SectorBoardResponse:
+    """A 股 / 港股的行业弹层：本土行业全集 + 宽基雷达当日按行业的买卖点数。
+
+    没有行业相对强弱（regime 因子表只有美股），所以不带 rs_vs_market / label；
+    有信号的行业排前面（买卖点合计从多到少），其余按目录顺序。date 给定时不附带买卖点数（App 用自己当天的统计）。
+    """
+    from app.services.signal_radar.sectors import BROAD_UNIVERSE
+    from app.services.signal_radar.service import latest_sector_counts
+    from app.services.signal_radar.universe import get_universe
+
+    universe_key = BROAD_UNIVERSE[market]
+    radar = await latest_sector_counts(redis, market, universe_key) if redis is not None and date is None else None
+    radar_date, counts = radar if radar else (None, {})
+    rows = [
+        SectorRowOut(key=n, name=n, buy_count=counts.get(n, {}).get("buy", 0), sell_count=counts.get(n, {}).get("sell", 0))
+        for n in names
+    ]
+    rows.sort(key=lambda r: -(r.buy_count + r.sell_count))  # 稳定排序：同数量保持目录顺序
+    universe = get_universe(market, universe_key)
+    return SectorBoardResponse(
+        market=market, available=True, radar_universe=universe_key,
+        radar_universe_name=universe.etf_name if universe else None, radar_date=radar_date, sectors=rows,
+    )
+
+
 async def get_sector_board(redis: Redis | None, market: str, lang: str = "zh",
                            parent: str | None = None, date: str | None = None) -> SectorBoardResponse:
     """行业弹层（parent 为一级行业 key 时返回其子行业）。
@@ -106,12 +133,16 @@ async def get_sector_board(redis: Redis | None, market: str, lang: str = "zh",
     date 给定时按该日收盘取强弱（雷达翻到哪天、筛选条就按哪天排序），不附带雷达买卖点数（App 用自己当天的统计）；
     不给时取最新一天并附带宽基雷达最新一天的买卖点数（旧版 App）。
     """
+    from app.services.signal_radar.sectors import BROAD_UNIVERSE, native_sector_names
+
     if market not in MACRO_MARKETS:
-        return SectorBoardResponse(market=market, available=False)
+        names = native_sector_names(market)
+        if not names or parent is not None:
+            return SectorBoardResponse(market=market, available=False)
+        return await _native_sector_board(redis, market, names, date)
     key = cache.response_key("sectors", market, parent or "root", lang, *([date] if date else []))
     if (hit := await cache.get_model(redis, key, SectorBoardResponse)) is not None:
         return hit
-    from app.services.signal_radar.sectors import BROAD_UNIVERSE
     from app.services.signal_radar.service import latest_sector_counts
     from app.services.signal_radar.universe import get_universe
 
