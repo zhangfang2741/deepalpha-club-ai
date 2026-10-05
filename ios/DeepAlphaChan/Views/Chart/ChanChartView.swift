@@ -648,7 +648,29 @@ struct ChanChartView: View {
                 ctx.fill(pill, with: .color(color))
             }
             ctx.draw(badge.text, at: CGPoint(x: badgeRect.midX, y: badgeRect.midY), anchor: .center)
+
+            drawEstablishedMark(ctx, signal: sig, fromX: cx, height: height, range: range, bounds: bounds, color: color)
         }
+    }
+
+    /// 成立日标记：徽标画在所属笔的极值 K 线上，但买卖点要等下一笔成形才成立（可能晚好几周，
+    /// 如 AVGO 三卖：极值 09-22、成立 10-02）。成立日那根 K 线上什么都没有时，用户会以为「那天没有这个信号」。
+    /// 所以从徽标价位水平向右拉一条细虚线，终点画一个小空心圆点——圆点所在的 K 线就是列表里的成立日。
+    /// 待确认候选没有成立日；成立日还没滚进可见区（或和极值同一天）时不画。
+    private func drawEstablishedMark(_ ctx: GraphicsContext, signal sig: Signal, fromX: CGFloat,
+                                     height: CGFloat, range: VisibleRange, bounds: PriceBounds, color: Color) {
+        guard !sig.isCandidate, let detected = sig.detectedTime, detected != sig.time,
+              let idx = timeIndex[detected], idx >= range.start, idx < range.end else { return }
+        let endX = x(for: idx, range: range)
+        guard endX > fromX + 6 else { return }
+        let cy = y(for: sig.price, height: height, bounds: bounds)
+        var line = Path()
+        line.move(to: CGPoint(x: fromX, y: cy))
+        line.addLine(to: CGPoint(x: endX, y: cy))
+        ctx.stroke(line, with: .color(color.opacity(0.55)), style: StrokeStyle(lineWidth: 1, dash: [2, 3]))
+        let dot = Path(ellipseIn: CGRect(x: endX - 3.5, y: cy - 3.5, width: 7, height: 7))
+        ctx.fill(dot, with: .color(Theme.background))
+        ctx.stroke(dot, with: .color(color), style: StrokeStyle(lineWidth: 1.5))
     }
 
     // MARK: - 绘制：次级别下钻区间
