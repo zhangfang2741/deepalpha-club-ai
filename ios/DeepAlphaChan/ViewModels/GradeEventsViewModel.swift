@@ -9,6 +9,8 @@ final class GradeEventsViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var failed = false
     @Published var selectedIndex = 0
+    /// 顶部行业胶囊的筛选（nil = 全部行业）：与缠论雷达共用同一个行业键，只留该行业的评级升降。
+    @Published var sectorFilter: String?
 
     private var loadedKey = ""
 
@@ -30,7 +32,11 @@ final class GradeEventsViewModel: ObservableObject {
     // MARK: - 映射成缠论雷达的数据形状
 
     /// 选中那一天的全部评级升降（后端已按变档数从多到少、同档数按代码排）。
-    var dayEvents: [GradeEvent] { selectedDay?.events ?? [] }
+    var dayEvents: [GradeEvent] {
+        let all = selectedDay?.events ?? []
+        guard let key = sectorFilter else { return all }
+        return all.filter { ($0.sector ?? RadarDay.otherSectorKey) == key }
+    }
 
     /// 超过 bubbleLimit 被折叠的只数。
     var hiddenCount: Int { max(0, dayEvents.count - Self.bubbleLimit) }

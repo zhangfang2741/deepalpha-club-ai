@@ -27,7 +27,7 @@ struct GradeEventsView<Field: View>: View {
             } else if vm.hasError {
                 message(L("评级数据暂时读取失败，稍后再试"))
             } else if vm.days.isEmpty {
-                message(L("这个范围最近没有评级升降"))
+                message(L("这个范围最近没有评级升降。评级历史需要至少两个评级日才能比较，刚上线的市场或节假日期间会暂时没有。"))
             } else {
                 summaryRow
                 field()

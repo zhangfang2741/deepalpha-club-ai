@@ -102,6 +102,8 @@ struct SignalRadarView: View {
             }
             // 行业强弱跟着所选日走：雷达翻到哪天，扇区就按哪天收盘的强弱排
             .task(id: vm.sectorBoardKey) { await vm.loadSectorBoardIfNeeded() }
+            // 行业胶囊的筛选同步给基本面 tab（两个 tab 共用同一排行业胶囊）
+            .onChange(of: vm.sectorFilter, initial: true) { _, key in gradeVM.sectorFilter = key }
             // 切到基本面 tab、或在 tab 里换市场 / 指数时拉评级升降
             .task(id: "\(radarTab.rawValue)|\(vm.market.rawValue)|\(vm.activeUniverseKey)|\(store.isPremium)") {
                 if radarTab == .fundamental, store.isPremium {

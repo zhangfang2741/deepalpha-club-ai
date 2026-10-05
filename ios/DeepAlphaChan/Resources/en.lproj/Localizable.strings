@@ -1223,7 +1223,7 @@
 "查看订阅" = "View plans";
 "订阅后可查看股票池每天的综合评级升降" = "Subscribe to see daily composite-grade upgrades and downgrades across this universe";
 "评级数据暂时读取失败，稍后再试" = "Couldn't load ratings right now. Please try again later.";
-"这个范围最近没有评级升降" = "No grade changes in this universe recently";
+"这个范围最近没有评级升降。评级历史需要至少两个评级日才能比较，刚上线的市场或节假日期间会暂时没有。" = "No grade changes in this universe recently. At least two rating days are needed to compare, so newly launched markets and holiday periods may show nothing for now.";
 "%@ · 最近 10 天综合评级升降" = "%@ · composite grade changes, last 10 days";
 "升 %lld 档" = "Up %lld notches";
 "降 %lld 档" = "Down %lld notches";
