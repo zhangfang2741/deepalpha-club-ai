@@ -9,8 +9,8 @@ enum ChartElement: Identifiable, Equatable {
     case signal(Signal)
     /// 买卖点的成立日标记（徽标向右的虚线终点的圆点）：与徽标同一个信号，点它解释「为什么成立日比徽标晚」。
     case established(Signal)
-    /// 背驰：当前笔与参与比较的前一个同向笔。
-    case divergence(current: Stroke, previous: Stroke)
+    /// 背驰：c 段终点所在的笔 + 参照点（b 段终点；旧后端是前一个同向笔的终点）。
+    case divergence(current: Stroke, refTime: String, refPrice: Double)
 
     var id: String {
         switch self {
@@ -20,7 +20,7 @@ enum ChartElement: Identifiable, Equatable {
         case .pivot(let p): return "zs-\(p.id)"
         case .signal(let s): return "bs-\(s.id)"
         case .established(let s): return "est-\(s.id)"
-        case .divergence(let c, _): return "div-\(c.id)"
+        case .divergence(let c, _, _): return "div-\(c.id)"
         }
     }
 
@@ -47,7 +47,7 @@ enum ChartExplainer {
         case .pivot(let p): return pivot(p)
         case .signal(let s): return signal(s)
         case .established(let s): return established(s)
-        case .divergence(let c, let p): return divergence(c, p)
+        case .divergence(let c, let refTime, let refPrice): return divergence(c, refTime: refTime, refPrice: refPrice)
         }
     }
 
@@ -154,8 +154,25 @@ enum ChartExplainer {
             lessonTerm: "买卖点")
     }
 
-    private static func divergence(_ c: Stroke, _ p: Stroke) -> ChartExplanation {
+    private static func divergence(_ c: Stroke, refTime: String, refPrice: Double) -> ChartExplanation {
         let top = c.direction == .up
+        if let area = c.areaRatio {
+            // 新后端：缠论原文的趋势背驰——离开中枢的 c 段对两个中枢之间的 b 段，比 MACD 红绿柱面积
+            let areaText = String(format: "%.2f", area)
+            let reason = top
+                ? L("价格创出新高，但离开中枢的这一段（c 段）的 MACD 红绿柱面积只有两个中枢之间那一段（b 段）的 %@ 倍——上涨的推动力已经跟不上。", areaText)
+                : L("价格创出新低，但离开中枢的这一段（c 段）的 MACD 红绿柱面积只有两个中枢之间那一段（b 段）的 %@ 倍——下跌的推动力已经跟不上。", areaText)
+            var facts: [(String, String)] = [
+                (L("c 段终点"), "\(c.endTime)  \(price(c.endPrice))"),
+                (L("b 段终点"), "\(refTime)  \(price(refPrice))"),
+                (L("MACD 面积比"), areaText),
+            ]
+            if let pr = c.priceRatio { facts.append((L("价差比"), String(format: "%.2f", pr))) }
+            return ChartExplanation(
+                title: c.divergenceName, color: Theme.divergence, facts: facts,
+                reason: reason + "\n" + L("趋势背驰：前面已有两个依次同向、不重叠的中枢，对应一类买卖点。"), lessonTerm: "背驰")
+        }
+        // 旧后端：当前笔与前一个同向笔比价差 / 量能 / 时长
         let ratio = c.priceRatio.map { String(format: "%.2f", $0) } ?? "-"
         let reason = top
             ? L("价格创出新高，但这一笔的涨幅只有前一个同向笔的 %@ 倍，量能或时长也更弱——上涨的推动力已经跟不上。", ratio)
@@ -170,7 +187,7 @@ enum ChartExplainer {
             title: c.divergenceName, color: Theme.divergence,
             facts: [
                 (L("本笔"), "\(c.startTime) → \(c.endTime)  \(change(c.startPrice, c.endPrice))"),
-                (L("前一同向笔"), "\(p.startTime) → \(p.endTime)  \(change(p.startPrice, p.endPrice))"),
+                (L("参照点"), "\(refTime)  \(price(refPrice))"),
                 (L("价差比"), ratio),
             ],
             reason: kindNote.isEmpty ? reason : reason + "\n" + kindNote, lessonTerm: "背驰")

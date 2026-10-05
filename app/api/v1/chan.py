@@ -38,7 +38,8 @@ from app.schemas.chan import (
     StructureLayerOut,
     SubLevelResponse,
 )
-from app.services.chan.analyzer import ChanAnalyzer
+from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
+from app.services.chan.divergence import DivergenceResult
 from app.services.chan.gap import analyze_structure_gap
 from app.services.chan.signal_policy import DEFAULT_MODE, SIGNAL_POLICIES, normalize_mode
 from app.services.chan.window import canonical_daily_fetch_start, canonical_daily_start
@@ -103,9 +104,19 @@ def analysis_window(start_date: str, end_date: str, freq: str, warmup_days: int 
     return _anchor_start(visible, freq, warmup_days), visible
 
 
-def _zip_divergences(strokes: list, divergences: list) -> list[tuple]:
-    """笔与笔级背驰按下标平行；笔数不足 3 的早退分支不计算背驰（列表为空），此时补 None。"""
-    return [(s, divergences[i] if i < len(divergences) else None) for i, s in enumerate(strokes)]
+def _leg_divergence_marks(result: ChanAnalysisResult) -> dict[str, DivergenceResult]:
+    """图上背驰标注：{c 段终点那一笔的 end_time: 背驰结果}。
+
+    只取一类买卖点（含待确认候选）判定用的趋势背驰——c 段（离开 B）对 b 段（A、B 之间）、缠论原文的 MACD 面积；
+    没有 b 段终点（笔级退回判定）的一类不标。
+    """
+    marks = {}
+    for sig in (*result.signals, *result.candidate_signals):
+        dv = sig.divergence
+        if (sig.type in ("buy1", "sell1") and dv is not None and dv.is_diverged
+                and dv.b_end_time and dv.b_end_price is not None):
+            marks[sig.time] = dv
+    return marks
 
 
 async def _fetch_bars_or_http_error(
@@ -212,6 +223,8 @@ async def chan_analysis(
             ),
         )
 
+    marks = _leg_divergence_marks(result)
+
     structure_layers_out = [
         StructureLayerOut(layer=layer.layer, label=layer.label, title=layer.title, detail=layer.detail)
         for layer in result.structure_layers
@@ -250,12 +263,17 @@ async def chan_analysis(
                 power_price=s.power_price,
                 power_volume=s.power_volume,
                 length=s.length,
-                diverged=dv.is_diverged if dv else False,
-                # 未做比较（无前一个同向笔 / 未创新高低）的默认结果说明为空，不给比值
-                price_ratio=dv.price_ratio if dv and dv.description else None,
-                divergence_type=dv.type if dv and dv.is_diverged and dv.type in ("trend", "consolidation") else None,
+                # 图上的背驰标注 = 一类买卖点判定用的趋势背驰（c 段对 b 段，缠论原文），标在 c 段终点那一笔上；
+                # 不再逐笔与前一个同向笔比（那是近似，笔太短 MACD 面积不可靠）。其余分析（走势展望、中枢阶段等）
+                # 仍用 result.divergences 的笔级判断，不受影响。
+                diverged=s.end_time in marks,
+                price_ratio=marks[s.end_time].price_ratio if s.end_time in marks else None,
+                area_ratio=marks[s.end_time].area_ratio if s.end_time in marks else None,
+                div_ref_time=marks[s.end_time].b_end_time if s.end_time in marks else None,
+                div_ref_price=marks[s.end_time].b_end_price if s.end_time in marks else None,
+                divergence_type="trend" if s.end_time in marks else None,
             )
-            for s, dv in _zip_divergences(result.strokes, result.divergences)
+            for s in result.strokes
         ],
         segments=[
             SegmentOut(

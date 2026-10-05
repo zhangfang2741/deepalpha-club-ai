@@ -317,11 +317,12 @@ deepalpha-club-ai/
   - 严格口径**不要**用 czsc 的 `cxt_second_bs_V240524`（按端点价格重叠、不要求先有一类）或
     `cxt_third_bs_V230318`（5 笔局部中枢 + SMA34 均线过滤）——都偏离原文；实测 8 只股票一年
     由 62 个降到 9 个，全部符合标准定义。也**不要**换成 `tas_macd_first_bs_*` 这类纯 MACD 信号。
-- 背驰度量：**力度口径**（`divergence.py`，与 czsc 一类买卖点同一口径，保证可解释）——价格创新
-  高/新低，价差力度弱于前一个同向段，且量能或时长至少一项也更弱。力度三项取自 czsc 的笔
-  （`Stroke.power_price/power_volume/length`），线段为所含笔汇总。强弱按价差比分档：<0.6 强、
-  <0.8 中、其余弱（取自 169 个真实一类信号的三分位点）。**MACD 不参与任何判定**，仅为 API
-  `macd` 字段（旧版 App 副图）保留计算；新版 App 图表下方为力度面板。
+- 背驰度量分两层：①**笔 / 线段级**（`divergence.py`，价差·量能·时长力度口径，MACD 不参与）只服务文字结论 / 形态推荐 / 走势展望 /
+  中枢阶段 / 缺口 / 宽松口径强弱，**不再标在图上**；②**图上的背驰标注 = 一类趋势背驰**（2026-10-05 起）：只标 c 段（离开中枢 B）对 b 段
+  （A、B 之间）的 MACD 红绿柱面积比（缠论原文，`signals._trend_leg_divergence`），粉色线连 b 段终点 → c 段终点，标签「趋势背驰 + 面积比」，
+  不分强弱档。API：`DivergenceResult.b_end_time/b_end_price` → `/chan/analysis` 的 `StrokeOut` 在对应一类信号所在笔上给
+  `diverged=true / area_ratio / div_ref_time / div_ref_price`（`api/v1/chan._leg_divergence_marks`，含候选信号）；其余笔 `diverged=false`。
+  旧版 App 读不到新字段时退回「同向前一笔」作参照点。
 - **背驰术语一律用缠论原文**（2026-10 起）：只说「趋势背驰 / 盘整背驰」（`DivergenceResult.type`，API `StrokeOut.divergence_type` = `trend` / `consolidation`），
   **不要自造概念**（顶背驰 / 底背驰、笔力度减弱、「趋势可能转折」等都已去掉）。阶段标题 / 依据 / 图上标签 / 图元解释都按类型显示；
   歧义的地方（趋势背驰对应一类买卖点、盘整背驰不对应）只写在点开的解释里，不放标题。课程页 `LessonDiagrams` 与网页前端个别页面仍有旧叫法，未统一。

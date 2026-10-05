@@ -59,6 +59,11 @@ struct Stroke: Codable, Identifiable {
     /// 与前一个同向笔相比是否力度背驰，及价差力度比（未比较时为 nil）。
     let diverged: Bool?
     let priceRatio: Double?
+    /// 背驰按缠论原文标在「离开中枢的 c 段终点」这一笔上：MACD 面积比（c 段 / b 段）和参照点（b 段终点），
+    /// 图上连线从参照点连到本笔终点。旧后端没有这三项，退回「与前一个同向笔比」。
+    let areaRatio: Double?
+    let divRefTime: String?
+    let divRefPrice: Double?
     /// 背驰类型（缠论原文术语）："trend" 趋势背驰 / "consolidation" 盘整背驰；旧后端无此字段。
     let divergenceType: String?
 
@@ -82,8 +87,21 @@ struct Stroke: Codable, Identifiable {
         case powerPrice = "power_price"
         case powerVolume = "power_volume"
         case priceRatio = "price_ratio"
+        case areaRatio = "area_ratio"
+        case divRefTime = "div_ref_time"
+        case divRefPrice = "div_ref_price"
         case divergenceType = "divergence_type"
     }
+
+    /// 背驰连线的参照点：新后端给的 b 段终点；旧后端退回前一个同向笔的终点（previous 由调用方按「前两笔」传入）。
+    func divergenceRef(previous: Stroke?) -> (time: String, price: Double)? {
+        if let t = divRefTime, let p = divRefPrice { return (t, p) }
+        guard let previous, previous.direction == direction else { return nil }
+        return (previous.endTime, previous.endPrice)
+    }
+
+    /// 背驰标注上写的比值：新后端是 MACD 面积比，旧后端是价差比。
+    var divergenceRatio: Double? { areaRatio ?? priceRatio }
 }
 
 /// 线段。

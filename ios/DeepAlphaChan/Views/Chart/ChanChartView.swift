@@ -97,7 +97,7 @@ struct ChanChartView: View {
     // 主图偏矮，整体呈横向长方形（宽 ≈ 屏宽，明显大于高），看盘视觉更舒展
     var priceHeight: CGFloat = 240
     var macdHeight: CGFloat = 78
-    /// 详情页竖屏不显示 MACD：背驰按力度判定、MACD 不参与，放在第一屏只占位置还让人困惑
+    /// 详情页竖屏不显示 MACD：背驰结果已直接标在主图上（c 段对 b 段的 MACD 面积比），副图放在第一屏只占位置
     /// 该看哪个；全屏图与次级别图仍显示，供需要的人参考。
     var showsMACD = true
     private let timeAxisHeight: CGFloat = 22
@@ -111,7 +111,7 @@ struct ChanChartView: View {
     var body: some View {
         VStack(spacing: 0) {
             priceChart
-            // MACD 副图仅作参考（背驰不用它判定，判定结果标在主图上）
+            // MACD 副图供对照（趋势背驰用它的红绿柱面积判定，结果标在主图上）
             if showsMACD, analysis.macd != nil {
                 Divider().background(Theme.border)
                 macdChart
@@ -728,20 +728,20 @@ struct ChanChartView: View {
 
     // MARK: - 绘制：背驰标注
 
-    /// 力度背驰（价格创新高/低，但价差弱于前一个同向笔，且量能或时长也更弱）直接标在主图：
-    /// 粉色细实线连起参与比较的两笔终点（前一同向笔 → 当前笔），线中间标「顶背驰 0.52」
-    /// （价差比）。与行情软件画背离的习惯一致（实线连两个高点/低点 + 方向文字）；不用虚线，
-    /// 虚线在本图里专指「未确认」。一眼看出拿哪两段比、结论如何，与买卖点说明同一口径。
+    /// 背驰直接标在主图（缠论原文：离开中枢的 c 段对两个中枢之间的 b 段，比 MACD 红绿柱面积，与一类买卖点同一口径）：
+    /// 粉色细实线连起 b 段终点和 c 段终点，线中间标「趋势背驰 0.52」（面积比）。与行情软件画背离的习惯一致
+    /// （实线连两个高点/低点 + 方向文字）；不用虚线，虚线在本图里专指「未确认」。旧后端没有 b 段信息时，
+    /// 退回「当前笔与前一个同向笔」的老画法。
     private func drawDivergences(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
                                  range: VisibleRange, bounds: PriceBounds) {
         let strokes = analysis.strokes
-        guard strokes.count >= 3 else { return }
-        for k in 2..<strokes.count {
-            let cur = strokes[k], prev = strokes[k - 2]
-            guard cur.diverged == true, prev.direction == cur.direction,
-                  let pi = timeIndex[prev.endTime], let ci = timeIndex[cur.endTime],
+        for k in strokes.indices {
+            let cur = strokes[k]
+            guard cur.diverged == true,
+                  let ref = cur.divergenceRef(previous: k >= 2 ? strokes[k - 2] : nil),
+                  let pi = timeIndex[ref.time], let ci = timeIndex[cur.endTime],
                   ci >= range.start, pi < range.end else { continue }
-            let p1 = CGPoint(x: x(for: pi, range: range), y: y(for: prev.endPrice, height: height, bounds: bounds))
+            let p1 = CGPoint(x: x(for: pi, range: range), y: y(for: ref.price, height: height, bounds: bounds))
             let p2 = CGPoint(x: x(for: ci, range: range), y: y(for: cur.endPrice, height: height, bounds: bounds))
             var line = Path()
             line.move(to: p1)
@@ -756,7 +756,7 @@ struct ChanChartView: View {
 
             // 标签放在虚线中点、朝外侧（顶背驰在线上方、底背驰在线下方），避开端点上的买卖点徽标
             let kind = cur.divergenceName
-            let label = cur.priceRatio.map { kind + String(format: " %.2f", $0) } ?? kind
+            let label = cur.divergenceRatio.map { kind + String(format: " %.2f", $0) } ?? kind
             let resolved = ctx.resolve(Text(label).font(.system(size: 9, weight: .semibold))
                                         .foregroundColor(Theme.divergence))
             let size = resolved.measure(in: CGSize(width: 200, height: 40))
@@ -920,13 +920,16 @@ struct ChanChartView: View {
         }
         if let hit = ChartHitResolver.nearest(nearby) { return hit }
         let strokes = analysis.strokes
-        if vm.showDivergences, strokes.count >= 3 {
+        if vm.showDivergences {
             var best: (ChartElement, CGFloat)?
-            for k in 2..<strokes.count where strokes[k].diverged == true && strokes[k - 2].direction == strokes[k].direction {
-                guard let a = pt(strokes[k - 2].endTime, strokes[k - 2].endPrice),
+            for k in strokes.indices where strokes[k].diverged == true {
+                guard let ref = strokes[k].divergenceRef(previous: k >= 2 ? strokes[k - 2] : nil),
+                      let a = pt(ref.time, ref.price),
                       let b = pt(strokes[k].endTime, strokes[k].endPrice) else { continue }
                 let d = distance(loc, a, b)
-                if d < 12, d < (best?.1 ?? .infinity) { best = (.divergence(current: strokes[k], previous: strokes[k - 2]), d) }
+                if d < 12, d < (best?.1 ?? .infinity) {
+                    best = (.divergence(current: strokes[k], refTime: ref.time, refPrice: ref.price), d)
+                }
             }
             if let best { return best.0 }
         }
@@ -988,7 +991,7 @@ struct ChanChartView: View {
                 ring(pt(s.time, s.price), 8)
             }
         case .established(let s): ring(establishedPoint(s, range: range, height: height, bounds: bounds), 9)
-        case .divergence(let c, let p): line(pt(p.endTime, p.endPrice), pt(c.endTime, c.endPrice), 2.5)
+        case .divergence(let c, let refTime, let refPrice): line(pt(refTime, refPrice), pt(c.endTime, c.endPrice), 2.5)
         case .pivot(let p):
             guard let a = pt(p.startTime, p.zg), let b = pt(p.endTime, p.zd) else { return }
             ctx.stroke(Path(CGRect(x: a.x, y: a.y, width: max(2, b.x - a.x), height: max(1, b.y - a.y))),
