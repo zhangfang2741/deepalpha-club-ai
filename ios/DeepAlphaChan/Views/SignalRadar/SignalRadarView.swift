@@ -168,7 +168,10 @@ struct SignalRadarView: View {
                 }
             }
 
-            tabPicker
+            // 雷达画布里有下拉框（左上角）时不再单占一行；没有画布（加载 / 出错 / 锁定等）时用一行兜底，保证随时能切回
+            if !showsCanvas {
+                HStack { tabMenu; Spacer() }
+            }
 
             if radarTab == .fundamental {
                 fundamentalContent
@@ -206,35 +209,36 @@ struct SignalRadarView: View {
 
     // MARK: - 并列 tab
 
-    /// 分段控件式 tab：整行一条深色轨道，选中项是一块浅色滑块（中性灰、不是蓝色）。
-    /// 与上面的行业胶囊（单个圆角胶囊、选中蓝色）、下面的日期格（选中蓝色）形状和颜色都不同，不会混成一类控件；
-    /// 轨道上下留足间距，不贴着下一行的日期 / 买卖点统计。
-    private var tabPicker: some View {
-        HStack(spacing: 0) {
+    /// 画布左上角的下拉框：切换「缠论 / 基本面研究」。放进画布里（而不是画布上方单占一行），
+    /// 和行业胶囊、日期格都不在同一水平带上，不会混成一类控件。
+    private var tabMenu: some View {
+        Menu {
             ForEach(RadarTab.allCases) { tab in
-                let selected = tab == radarTab
-                Button {
-                    withAnimation(.easeInOut(duration: 0.15)) { radarTab = tab }
-                } label: {
-                    Text(tab.title)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(selected ? Theme.textPrimary : Theme.textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background {
-                            if selected {
-                                RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.14))
-                            }
-                        }
+                Button { radarTab = tab } label: {
+                    if tab == radarTab { Label(tab.title, systemImage: "checkmark") } else { Text(tab.title) }
                 }
-                .buttonStyle(.plain)
             }
+        } label: {
+            HStack(spacing: 4) {
+                Text(radarTab.title).font(.system(size: 12, weight: .semibold))
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold))
+            }
+            .foregroundColor(Theme.textPrimary)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(Theme.surface.opacity(0.92), in: Capsule())
+            .overlay(Capsule().stroke(Theme.border, lineWidth: 1))
         }
-        .padding(3)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 11))
-        .overlay(RoundedRectangle(cornerRadius: 11).stroke(Theme.border, lineWidth: 1))
-        .padding(.top, 2)
-        .padding(.bottom, 4)
+    }
+
+    /// 当前是否画着雷达画布（画布里自带下拉框；没有画布时才在上方补一行）。
+    private var showsCanvas: Bool {
+        switch radarTab {
+        case .chan:
+            return !vm.isScanning && !vm.isComputingInBackground && vm.errorMessage == nil
+                && !vm.days.isEmpty && !needsConsent
+        case .fundamental:
+            return store.isPremium && consent.hasAgreed && !gradeVM.hasError && !gradeVM.days.isEmpty
+        }
     }
 
     /// 基本面研究 tab：会员功能（与缠论雷达真实数据同一道门槛，未订阅点按弹付费墙），同样要先同意免责声明。
@@ -637,6 +641,7 @@ struct SignalRadarView: View {
             )
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(alignment: .topLeading) { tabMenu.padding(10) }
     }
 
     /// 雷达画布是否按行业分扇区。**当前关闭**：顶部漏斗已经按「大盘环境 → 最强行业 → 当日信号」
@@ -661,9 +666,11 @@ struct SignalRadarView: View {
         SignalRadarView.sectorFieldEnabled && vm.selectedDay?.hasSectorData == true
     }
 
-    /// 叠在雷达上的控件占的区域，气泡摆位时避开。指数切换器已并进顶部市场分段条，画布里没有叠加控件，所以为空。
-    /// （以前是左上角固定预留 150 × 40：实测按钮大小会在量出来后让气泡重摆、跳一下。）
-    private func fieldObstacles(width w: Double) -> [RadarOrbitSpacing.Obstacle] { [] }
+    /// 叠在雷达上的控件占的区域，气泡摆位时避开：左上角的 tab 下拉框，固定预留一块（不实测按钮大小——
+    /// 以前实测会在量出来后让气泡重摆、跳一下；固定值只取决于画布，不会跳）。
+    private func fieldObstacles(width w: Double) -> [RadarOrbitSpacing.Obstacle] {
+        [.init(x: 10, y: 10, width: 120, height: 32)]
+    }
 
     // MARK: - 扇区（行业）
 
