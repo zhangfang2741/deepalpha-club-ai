@@ -47,7 +47,7 @@ enum QuantGradeScale {
 // MARK: - 点击弹出解释
 
 extension View {
-    /// 点击弹出就地解释气泡；enabled 为 false（如分享长图）时原样显示。
+    /// 点击弹出解释（底部弹层，可上拉 / 滚动）；enabled 为 false（如分享长图）时原样显示。
     func quantExplain<C: View>(_ title: String, enabled: Bool = true,
                                @ViewBuilder content: @escaping () -> C) -> some View {
         modifier(QuantExplainModifier(title: title, enabled: enabled, explanation: content))
@@ -65,21 +65,28 @@ private struct QuantExplainModifier<C: View>: ViewModifier {
             Button { showing = true } label: { content.contentShape(Rectangle()) }
                 .buttonStyle(.plain)
                 .accessibilityHint(L("查看解释"))
-                .popover(isPresented: $showing, arrowEdge: .top) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(title).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            explanation()
+                // 用底部弹层而不是 popover 气泡：气泡贴着屏幕底部 / 嵌在半屏弹层里时，系统只给它很小的空间，
+                // 内容被压扁截断（标题、P10 / P90 看不到）还盖住下面的界面，且与深色卡片颜色太近；
+                // 弹层高度固定可预期，放不下就上拉 / 滚动。
+                .sheet(isPresented: $showing) {
+                    NavigationStack {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 12) {
+                                explanation()
+                            }
+                            .padding(16)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .padding(16)
-                        .frame(width: 320, alignment: .leading)
+                        .background(Theme.background)
+                        .navigationTitle(title)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) { Button(L("完成")) { showing = false } }
+                        }
                     }
-                    .frame(maxHeight: 520)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .background(Theme.surfaceAlt)
-                    .presentationCompactAdaptation(.popover)
-                    .presentationBackground(Theme.surfaceAlt)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+                    .presentationBackground(Theme.background)
                 }
         } else {
             content
