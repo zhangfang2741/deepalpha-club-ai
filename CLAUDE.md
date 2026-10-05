@@ -131,7 +131,7 @@ deepalpha-club-ai/
 | 因子探索 | `/skills` | `/skill-generator` | LLM 生成因子代码 → 沙箱执行 |
 | 市场状态 | `/regime` | 并入恐慌指数页(大盘) + 行业恐慌页(板块) | 三篮子 ODS/CF + HMM 逐利/观望/避险后验，写因子表；大盘级与行业级各一套 |
 | 恐慌指数 | `/fear-greed` | `/fear-greed` | 市场恐慌贪婪指数 + 大盘市场状态(regime) |
-| 宏观 / 行业 | `/macro` | iOS 雷达页顶部「大盘环境 › 行业」两张卡片（行业卡片打开行业强弱面板 `SectorBoardSheet`，默认全部行业，选了雷达只显示该行业，`SignalRadarViewModel.sectorFilter`）；自选页顶部环境横幅 | 大盘状态(regime) + 5 个驱动因素 + 未来 7 天宏观日历；行业相对强弱（`?date=` 按雷达所选日）。`/signal-radar/sector-pools`、`/sector-day` 仅为旧版 App 保留（新版 App 用气泡自带的 `sector` 在本地按行业筛选）。大盘状态与行业强弱美股 / A 股 / 港股都有（A 股 / 港股无驱动因素与日历；行业为申万 / 恒生一级） |
+| 宏观 / 行业 | `/macro` | iOS 雷达页顶部：市场分段条与「大盘环境」条合成一张市场卡；其下是行业横条（「全部行业」+ 各行业胶囊，从强到弱，点选即筛雷达 `SignalRadarViewModel.sectorFilter`，末尾列表按钮打开行业强弱面板 `SectorBoardSheet`）；自选页顶部环境横幅；自选页顶部环境横幅 | 大盘状态(regime) + 5 个驱动因素 + 未来 7 天宏观日历；行业相对强弱（`?date=` 按雷达所选日）。`/signal-radar/sector-pools`、`/sector-day` 仅为旧版 App 保留（新版 App 用气泡自带的 `sector` 在本地按行业筛选）。大盘状态与行业强弱美股 / A 股 / 港股都有（A 股 / 港股无驱动因素与日历；行业为申万 / 恒生一级） |
 | 行业恐慌 | `/industry-panic` | `/industry-panic` | 各 GICS 行业 ETF 的 RSI 情绪 + 估值 + 板块状态(行业级 regime) |
 | ETF 资金流 | `/etf` | `/etf` | 资金流热力图 + 偏离度 |
 | 行业估值 | `/valuation` | （并入行业恐慌页） | GICS 行业 PE z-score |

@@ -1,28 +1,23 @@
 import SwiftUI
 
-/// 雷达页顶部：市场分段控件（含指数选择，见 marketSegments）+ 「大盘环境 › 行业」两张横向卡片，往下就是雷达，自上而下的一条线：
-/// 环境友不友好 → 钱往哪个行业走 → 哪些股票出现了结构信号。
+/// 雷达页顶部，自上而下一条线：环境友不友好 → 钱往哪个行业走 → 哪些股票出现了结构信号。
 ///
-/// 三格都只陈列事实，点开是底部面板（留在雷达页，见 RadarPanels）：环境 = 宏观状态 + 情绪；
-/// 行业 = 选中日相对大盘最强的行业（与扇区雷达同一份强弱表）；当日信号 = 选中日在场信号数。
-/// 各格各自加载、各自失败（失败那格显示重试），固定同一高度，异步数据到达时不挤动雷达画布。
+/// 两块：
+/// 1. **市场卡**——美股 / A 股 / 港股分段条（选中那段下面写当前指数名，点它弹出指数列表）与「大盘环境」条合在同一张卡里：
+///    选哪个市场，紧挨着的下一行就是这个市场的环境（宏观状态 + 情绪），点开是环境面板。
+/// 2. **行业横条**——「全部」+ 各行业胶囊（从强到弱，带相对大盘强弱 / 当日信号数），直接点选就筛雷达，不用再开面板；
+///    末尾的列表按钮打开完整的行业强弱面板。
+/// 只陈列事实。各块各自加载、各自失败（失败显示重试），固定高度，异步数据到达时不挤动雷达画布。
 struct MarketHeader: View {
     @ObservedObject var radarVM: SignalRadarViewModel
     @ObservedObject var panicVM: PanicIndexViewModel
     @ObservedObject var overviewVM: MarketOverviewViewModel
     let onOpen: (RadarPanel) -> Void
 
-
     var body: some View {
         VStack(spacing: 8) {
-            marketSegments
-
-            // 两张卡片横排、中间一个「›」：大盘环境 → 行业，往下就是雷达
-            HStack(spacing: 2) {
-                environmentTile
-                stepArrow
-                sectorTile
-            }
+            marketCard
+            sectorRail
         }
         .task { panicVM.onAppear() }
         .task(id: radarVM.market) { overviewVM.load(radarVM.market) }
@@ -30,11 +25,22 @@ struct MarketHeader: View {
 
     private var market: StockMarket { radarVM.market }
 
+    // MARK: - 市场卡：分段条 + 大盘环境
+
+    private var marketCard: some View {
+        VStack(spacing: 0) {
+            marketSegments
+            Divider().overlay(Theme.border)
+            environmentStrip
+        }
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 13))
+        .overlay(RoundedRectangle(cornerRadius: 13).stroke(Theme.border, lineWidth: 1))
+    }
+
     // MARK: - 市场 + 指数（合成一个选择器）
 
     /// 美股 / A 股 / 港股分段条。已选中的那一段下面写当前指数名并带下拉箭头，**点它弹出该市场的指数列表**
-    /// （纳斯达克 100 / 标普 500 / 自选…）——以前指数下拉在雷达画布左上角，要先选市场再去画布里选指数，
-    /// 两处分开；现在市场和指数在同一处，画布左上角也空出来。其他段点一下切市场。
+    /// （纳斯达克 100 / 标普 500 / 自选…）。其他段点一下切市场。
     private var marketSegments: some View {
         HStack(spacing: 2) {
             ForEach(StockMarket.allCases) { m in
@@ -58,8 +64,6 @@ struct MarketHeader: View {
             }
         }
         .padding(3)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 13))
-        .overlay(RoundedRectangle(cornerRadius: 13).stroke(Theme.border, lineWidth: 1))
     }
 
     private func segment(_ m: StockMarket, selected: Bool, menu: Bool) -> some View {
@@ -82,162 +86,147 @@ struct MarketHeader: View {
 
     private var overview: MarketOverview? { overviewVM.overviews[market] }
 
-    // MARK: - 三格
+    // MARK: - 大盘环境条（市场卡下半）
 
-    private var environmentTile: some View {
+    /// 一行：「大盘环境」+ 宏观状态 + 概率 · 情绪分与档位；整行可点，打开环境面板。
+    private var environmentStrip: some View {
         let panic = panicVM.responses[market]
         let state = overview?.macroState
-        return tile(step: 1, title: L("大盘环境"), enabled: state != nil || panic != nil, action: { onOpen(.environment) }) {
-            if let state {
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text(state.labelText)
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundColor(MarketHeader.regimeColor(state.label))
-                    Text("\(Int((state.probability * 100).rounded()))%")
-                        .font(.system(size: 10))
-                        .foregroundColor(Theme.textSecondary)
-                }
-            } else if let overview, !overview.available {
-                buildingText
-            } else if overview != nil {
-                preparingText
-            } else {
-                loadingOrRetry(failed: overviewVM.failedMarkets.contains(market)) { overviewVM.retry(market) }
-            }
-            if let panic {
-                Text(L("情绪 %lld %@", Int(panic.current.score.rounded()), PanicIndexStyle.ratingLabel(panic.current.rating)))
-                    .font(.system(size: 10))
-                    .foregroundColor(Theme.textSecondary)
-                    .lineLimit(1)
-            } else if panicVM.failedMarkets.contains(market) {
-                Button { panicVM.retry(market) } label: {
-                    Text(L("情绪 重试")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
-                }
-            }
-        }
-    }
-
-    /// 选中日相对大盘最强的行业；这一天没有行业统计（自选、旧快照）时退回最新的摘要。
-    private var leadingSector: (key: String?, name: String, rs: Double?)? {
-        // 只在有强弱数据时才有「最强」（A 股 / 港股的行业没有强弱，只有信号统计）
-        if let top = radarVM.selectedSectorBoard?.sectors.filter({ $0.rsVsMarket != nil })
-            .max(by: { ($0.rsVsMarket ?? -.infinity) < ($1.rsVsMarket ?? -.infinity) }) {
-            return (top.key, top.name, top.rsVsMarket)
-        }
-        if let s = overview?.strongest { return (nil, s.name, s.rsVsMarket) }
-        return nil
-    }
-
-    /// 选中日行业从强到弱（筛选菜单的顺序）。
-    private var sectorRows: [SectorRow] {
-        (radarVM.selectedSectorBoard?.sectors ?? [])
-            .sorted { ($0.rsVsMarket ?? -.infinity) > ($1.rsVsMarket ?? -.infinity) }
-    }
-
-    /// 行业卡片：点开选行业面板（行业强弱列表 + 「全部行业」），选了哪个行业雷达就只看这个行业
-    /// （radarVM.sectorFilter）。默认「全部行业」，副标题写最强的行业。
-    private var sectorTile: some View {
-        let rows = radarVM.selectedSectorBoard?.sectors ?? []
-        let canPick = !rows.isEmpty && radarVM.baseSelectedDay?.hasSectorData == true
-        let selected = radarVM.sectorFilter.flatMap { key in rows.first { $0.key == key } }
-        return tile(step: 2, title: L("行业"), enabled: canPick, action: { onOpen(.sectorPicker) }) {
-            if let selected {
-                Text(selected.name)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(Theme.accent)
-                    .minimumScaleFactor(0.8)
-                if selected.rsVsMarket != nil {
-                    Text(L("相对大盘 %@", SectorBoardList.rsText(selected.rsVsMarket)))
-                        .font(.system(size: 10).monospacedDigit())
-                        .foregroundColor((selected.rsVsMarket ?? 0) >= 0 ? Theme.up : Theme.down)
+        let enabled = state != nil || panic != nil
+        return Button { onOpen(.environment) } label: {
+            HStack(spacing: 8) {
+                Text(L("大盘环境")).font(.caption.weight(.semibold)).foregroundColor(Theme.textSecondary)
+                if let state {
+                    HStack(alignment: .firstTextBaseline, spacing: 3) {
+                        Text(state.labelText)
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundColor(MarketHeader.regimeColor(state.label))
+                        Text("\(Int((state.probability * 100).rounded()))%")
+                            .font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                    }
+                } else if let overview, !overview.available {
+                    buildingText
+                } else if overview != nil {
+                    preparingText
                 } else {
-                    Text(L("当日 %lld 个信号", radarVM.baseSelectedDay?.signalCount(sector: selected.key) ?? 0))
-                        .font(.system(size: 10).monospacedDigit())
-                        .foregroundColor(Theme.textSecondary)
+                    loadingOrRetry(failed: overviewVM.failedMarkets.contains(market)) { overviewVM.retry(market) }
                 }
-            } else if let lead = leadingSector {
-                Text(L("全部行业"))
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(Theme.textPrimary)
-                Text(L("最强 %@ %@", lead.name, SectorBoardList.rsText(lead.rs)))
-                    .font(.system(size: 10).monospacedDigit())
-                    .foregroundColor(Theme.textSecondary)
-            } else if canPick {
-                // 没有行业强弱（A 股 / 港股）：只陈列当天哪些行业出现了信号
-                Text(L("全部行业"))
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(Theme.textPrimary)
-                Text(L("%lld 个行业有信号", radarVM.baseSelectedDay?.sectorCounts?.values.filter { $0.values.reduce(0, +) > 0 }.count ?? 0))
-                    .font(.system(size: 10).monospacedDigit())
-                    .foregroundColor(Theme.textSecondary)
-            } else if let overview, !overview.available {
-                buildingText
-            } else if overview != nil {
-                preparingText
-            } else {
-                loadingOrRetry(failed: overviewVM.failedMarkets.contains(market)) { overviewVM.retry(market) }
+                if let panic {
+                    Text("·").foregroundColor(Theme.textSecondary.opacity(0.6))
+                    Text(L("情绪 %lld %@", Int(panic.current.score.rounded()), PanicIndexStyle.ratingLabel(panic.current.rating)))
+                        .font(.system(size: 11)).foregroundColor(Theme.textSecondary).lineLimit(1)
+                } else if panicVM.failedMarkets.contains(market) {
+                    Button { panicVM.retry(market) } label: {
+                        Text(L("情绪 重试")).font(.system(size: 11)).foregroundColor(Theme.textSecondary)
+                    }
+                }
+                Spacer(minLength: 0)
+                if enabled {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(Theme.textSecondary.opacity(0.7))
+                }
             }
-        }
-    }
-
-    // MARK: - 组件
-
-    /// 卡片内容区高度：标题行之下的两行内容（固定高度，异步数据到达时不挤动雷达画布）。
-    private static let tileContentHeight: CGFloat = 34
-
-    /// 卡片之间表示递进的「›」。
-    private var stepArrow: some View {
-        Image(systemName: "chevron.compact.right")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundColor(Theme.textSecondary.opacity(0.6))
-            .frame(width: 10)
-            .accessibilityHidden(true)
-    }
-
-    /// 一张卡片：标题 + 两行内容；整张可点开对应面板。
-    private func tile<Content: View>(
-        step: Int, title: String, enabled: Bool, action: @escaping () -> Void, @ViewBuilder content: () -> Content
-    ) -> some View {
-        // 用 Button 而不是 onTapGesture：按下有反馈，读屏 / 辅助功能也能激活
-        Button(action: action) {
-            tileBody(step: step, title: title, trailingIcon: enabled ? "chevron.right" : nil, content: content)
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .contentShape(Rectangle())
         }
         .buttonStyle(TilePressStyle())
         .disabled(!enabled)
     }
 
-    /// 卡片外观。最后一步（行业）用主题色描边，作为落点；trailingIcon 标出点了会怎样（打开面板 / 下拉选择）。
-    private func tileBody<Content: View>(
-        step: Int, title: String, trailingIcon: String?, @ViewBuilder content: () -> Content
-    ) -> some View {
-        let isLast = step == 2
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 2) {
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(Theme.textSecondary)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-                if let trailingIcon {
-                    Image(systemName: trailingIcon)
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundColor(Theme.textSecondary.opacity(0.7))
+    // MARK: - 行业横条
+
+    /// 选中日行业：有强弱的从强到弱；没有强弱（A 股 / 港股）按当日信号数从多到少。
+    private var sectorRows: [SectorRow] {
+        let day = radarVM.baseSelectedDay
+        return (radarVM.selectedSectorBoard?.sectors ?? []).sorted {
+            switch ($0.rsVsMarket, $1.rsVsMarket) {
+            case let (a?, b?): return a > b
+            case (nil, nil): return (day?.signalCount(sector: $0.key) ?? 0) > (day?.signalCount(sector: $1.key) ?? 0)
+            case (_?, nil): return true
+            case (nil, _?): return false
+            }
+        }
+    }
+
+    /// 「全部」+ 各行业胶囊，点一下筛雷达（再点已选的取消）；末尾按钮打开完整行业面板。
+    /// 没有行业数据（美股以外建设中 / 自选 / 旧快照 / 加载中）时同一高度显示状态文字，不挤动画布。
+    private var sectorRail: some View {
+        let rows = sectorRows
+        let canPick = !rows.isEmpty && radarVM.baseSelectedDay?.hasSectorData == true
+        return HStack(spacing: 8) {
+            if canPick {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        sectorChip(title: L("全部行业"), detail: nil, detailColor: Theme.textSecondary,
+                                   selected: radarVM.sectorFilter == nil) { radarVM.setSectorFilter(nil) }
+                        ForEach(rows) { row in
+                            sectorChip(title: row.name, detail: chipDetail(row), detailColor: chipColor(row),
+                                       selected: radarVM.sectorFilter == row.key) {
+                                radarVM.setSectorFilter(radarVM.sectorFilter == row.key ? nil : row.key)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 1)
+                }
+                Button { onOpen(.sectorPicker) } label: {
+                    Image(systemName: "list.bullet")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Theme.accent)
+                        .frame(width: 34, height: 34)
+                        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.border, lineWidth: 1))
+                }
+                .accessibilityLabel(L("行业强弱"))
+            } else {
+                HStack(spacing: 6) {
+                    Text(L("行业")).font(.caption.weight(.semibold)).foregroundColor(Theme.textSecondary)
+                    if let overview, !overview.available {
+                        buildingText
+                    } else if overview != nil {
+                        preparingText
+                    } else {
+                        loadingOrRetry(failed: overviewVM.failedMarkets.contains(market)) { overviewVM.retry(market) }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12)
+            }
+        }
+        .frame(height: 34)
+    }
+
+    private func chipDetail(_ row: SectorRow) -> String {
+        if let rs = row.rsVsMarket { return SectorBoardList.rsText(rs) }
+        return "\(radarVM.baseSelectedDay?.signalCount(sector: row.key) ?? 0)"
+    }
+
+    private func chipColor(_ row: SectorRow) -> Color {
+        guard let rs = row.rsVsMarket else { return Theme.textSecondary }
+        return rs >= 0 ? Theme.up : Theme.down
+    }
+
+    private func sectorChip(title: String, detail: String?, detailColor: Color, selected: Bool,
+                            action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Text(title).font(.system(size: 13, weight: selected ? .bold : .medium)).lineLimit(1)
+                if let detail {
+                    Text(detail).font(.system(size: 10, weight: .semibold).monospacedDigit())
+                        .foregroundColor(selected ? Theme.textPrimary.opacity(0.85) : detailColor)
                 }
             }
-            VStack(alignment: .leading, spacing: 3) { content() }
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(height: MarketHeader.tileContentHeight, alignment: .topLeading)
+            .foregroundColor(selected ? Theme.textPrimary : Theme.textSecondary)
+            .padding(.horizontal, 11).frame(height: 32)
+            .background(selected ? Theme.accent.opacity(0.28) : Theme.surface, in: Capsule())
+            .overlay(Capsule().stroke(selected ? Theme.accent.opacity(0.7) : Theme.border, lineWidth: 1))
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12)
-            .stroke(isLast ? Theme.accent.opacity(0.55) : Theme.border, lineWidth: 1))
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
+
+    // MARK: - 组件
 
     private var buildingText: some View {
         Text(L("数据建设中"))
