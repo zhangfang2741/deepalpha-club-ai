@@ -57,6 +57,13 @@ def us_tags_from_sp1500(sp1500: dict[str, tuple[str, str]]) -> dict[str, str]:
     return out
 
 
+def native_sector_names(market: str) -> tuple[str, ...]:
+    """A 股 / 港股的本土行业全集（申万一级 / 恒生一级，key 即中文名）；美股用 regime 的 GICS 行业，这里返回空。"""
+    from app.services.quant_research.cnhk.sectors import HS_LEVEL1, SW_LEVEL1
+
+    return {"cn": SW_LEVEL1, "hk": HS_LEVEL1}.get(market, ())
+
+
 def cn_tags_from_meta(meta: dict[str, object]) -> dict[str, str]:
     """{代码: CnMeta} → {代码: 申万一级行业名}；行业未映射的不打标签。"""
     from app.services.quant_research.cnhk.sectors import cn_sw_industry

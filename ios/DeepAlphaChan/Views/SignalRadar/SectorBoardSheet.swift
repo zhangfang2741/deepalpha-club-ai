@@ -234,14 +234,17 @@ struct SectorBoardList: View {
             }
             Spacer(minLength: 6)
             countText(buy: counts?["buy"] ?? 0, sell: counts?["sell"] ?? 0)
-            Text(SectorBoardList.rsText(rs))
-                .font(.subheadline.weight(.semibold).monospacedDigit())
-                .foregroundColor((rs ?? 0) >= 0 ? Theme.up : Theme.down)
-                .lineLimit(1)
-                .frame(minWidth: 58, alignment: .trailing)
-                .contentTransition(.numericText())
-            StrengthBar(value: rs ?? 0, maxAbs: maxAbs)
-                .frame(width: 44, height: 4)
+            // 没有强弱数据（A 股 / 港股的本土行业）就不画强弱值与强弱条，只留买卖点数
+            if let rs {
+                Text(SectorBoardList.rsText(rs))
+                    .font(.subheadline.weight(.semibold).monospacedDigit())
+                    .foregroundColor(rs >= 0 ? Theme.up : Theme.down)
+                    .lineLimit(1)
+                    .frame(minWidth: 58, alignment: .trailing)
+                    .contentTransition(.numericText())
+                StrengthBar(value: rs, maxAbs: maxAbs)
+                    .frame(width: 44, height: 4)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
