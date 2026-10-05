@@ -22,7 +22,7 @@ import SwiftUI
 ///   app/services/signal_radar/service.py 的按日重建），所以翻看某一天时，
 ///   有的气泡是当天新出现的（右上角标"新"），有的是更早出现、一直有效到今天的。
 /// 底部可横滑的日期轨手动选某一天，看当天信号。
-/// 面板里点「查看K线与结构详情」才跑分析、在本页自己的 NavigationStack 里 push 到缠论分析详情页——
+/// 点气泡或面板列表里的某一行才跑分析、在本页自己的 NavigationStack 里 push 到缠论分析详情页——
 /// 不经过分析 Tab 的条件页中转，右滑手势/返回按钮也就自然直接回到信号页。
 struct SignalRadarView: View {
     /// 与分析 Tab 共享的缠论状态（同 MorningReportTabView），这样从信号页
