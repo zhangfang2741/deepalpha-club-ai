@@ -833,3 +833,18 @@ def test_pivot_b_size_counts_only_elements_finished_by_signal_time():
     assert pivot_b_size([p], "2024-01-22") == 4      # 之后才延伸出来的两笔不算（不看未来）
     assert pivot_b_size([p], "2024-01-02") == 0      # 中枢还没形成
     assert pivot_b_size([], "2024-01-22") == 0
+
+
+def test_zero_axis_pullback():
+    from app.services.chan.divergence import DivergenceResult, MACDData
+    from app.services.chan.signals import zero_axis_pullback
+
+    times = [f"t{i}" for i in range(8)]
+    dif = [0.0, 2.0, 4.0, 3.0, 1.5, 3.0, 5.0, 4.0]    # b 段 t1~t2 峰值 4，B 震荡期间最低 1.5，之后 c 段
+    macd = MACDData(times=times, dif=dif, dea=dif, bar=dif)
+    dv = DivergenceResult(is_diverged=True, type="trend", strength="medium", price_ratio=0.5, description="x",
+                          b_end_time="t2", b_end_price=1.0, b_start=("t1", 1.0), c_start=("t5", 1.0))
+    assert not zero_axis_pullback(dv, macd, True, 0.0)       # 没回到零轴
+    assert not zero_axis_pullback(dv, macd, True, 0.2)       # 1.5 > 0.2*4
+    assert zero_axis_pullback(dv, macd, True, 0.5)           # 1.5 <= 0.5*4
+    assert zero_axis_pullback(dv, None, True, 0.0)           # 缺 MACD：不据此否掉

@@ -283,6 +283,22 @@ def _trend_leg_divergence(
                          c_start=(legs[1][0].start_time, legs[1][0].start_price))
 
 
+def zero_axis_pullback(dv: DivergenceResult, macd: MACDData | None, is_sell: bool, ratio: float) -> bool:
+    """缠论原文的辅助条件：b 段与 c 段之间（中枢 B 震荡期间）黄白线回抽零轴，c 段才是重新起算的一段力度。
+
+    取 [b 段终点, c 段起点] 内 DIF 朝零轴方向的最小值（卖：min DIF；买：-max DIF），要求 <= ratio × b 段内 DIF 的峰值：
+    ratio=0 即真正回到 / 穿过零轴，0.2 表示回落到峰值的 20% 以内算「回抽」。缺数据（没有 MACD / 没有两段端点）时视为满足，不据此否掉信号。
+    """
+    if macd is None or dv.b_start is None or dv.c_start is None or dv.b_end_time is None:
+        return True
+    sgn = 1.0 if is_sell else -1.0
+    window = [sgn * d for t, d in zip(macd.times, macd.dif, strict=False) if dv.b_end_time <= t <= dv.c_start[0]]
+    b_leg = [sgn * d for t, d in zip(macd.times, macd.dif, strict=False) if dv.b_start[0] <= t <= dv.b_end_time]
+    if not window or not b_leg or max(b_leg) <= 0:
+        return True
+    return min(window) <= ratio * max(b_leg)
+
+
 def pivot_b_size(pivots: list[Pivot], time: str) -> int:
     """信号发生时刻，最后一个已形成中枢 B 里已有多少个构成元素（笔）——不看信号之后才延伸出来的部分。"""
     formed = [p for p in pivots if _formed_at(p) <= time]
@@ -412,6 +428,7 @@ def generate_all_signals(
     macd: MACDData | None = None,
     metric: DivergenceMetric | None = None,
     pivot_limit: int = 0,
+    zero_pullback: float | None = None,
 ) -> list[Signal]:
     """严格按缠论标准定义组装买卖点，按时间排序、(类型, 时间) 去重。
 
@@ -468,6 +485,9 @@ def generate_all_signals(
             judged, leg_div = _trend_leg_divergence(strokes, pivots, ev.bi_end_time, ev.type == "buy1", lang,
                                                     macd=macd, metric=metric)
         if judged and leg_div is None:
+            continue
+        if zero_pullback is not None and leg_div is not None and not zero_axis_pullback(
+                leg_div, macd, ev.type == "sell1", zero_pullback):
             continue
         seen.add(key)
         div: DivergenceResult | None = None

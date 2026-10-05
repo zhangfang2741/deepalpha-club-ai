@@ -83,6 +83,8 @@ class _PolicyInfo:
     unify_divergences: bool = False
     # 一类趋势背驰允许的中枢 B 元素数上限（缠论原文：延伸到 9 段升级为更高级别）；0 = 不限制
     pivot_limit: int = 0
+    # 一类趋势背驰要求 b、c 之间黄白线回抽零轴：None = 不要求；0 = 回到零轴；0.2 = 回落到 b 段峰值 20% 以内
+    zero_pullback: float | None = None
 
 
 class LoosePolicy(_PolicyInfo):
@@ -105,7 +107,8 @@ class StrictPolicy(_PolicyInfo):
                  macd=None):
         return generate_all_signals(events, strokes, divergences, pivots, lang, stroke_done_at=stroke_done_at,
                                     stroke_started_at=stroke_started_at, macd=macd,
-                                    metric=get_metric(self.metric_name), pivot_limit=self.pivot_limit)
+                                    metric=get_metric(self.metric_name), pivot_limit=self.pivot_limit,
+                                    zero_pullback=self.zero_pullback)
 
     def split_unconfirmed(self, signals):
         # 最后一笔还在走（端点可能延伸甚至回到中枢），其上的买卖点尚不成立：移入候选
@@ -130,8 +133,8 @@ _ALL: tuple[SignalPolicy, ...] = (
             czsc_families=("first", "second", "third"),
         ),
         StrictPolicy(
-            name="strict", version=f"std10.{_METRIC.name}", metric_name=_METRIC.name, unify_divergences=True,
-            pivot_limit=settings.CHAN_PIVOT_EXTEND_LIMIT, label_zh="严格", label_en="Strict",
+            name="strict", version=f"std10.{_METRIC.name}" + (f".zp{settings.CHAN_ZERO_PULLBACK:g}" if settings.CHAN_ZERO_PULLBACK is not None else ""), metric_name=_METRIC.name, unify_divergences=True,
+            pivot_limit=settings.CHAN_PIVOT_EXTEND_LIMIT, zero_pullback=settings.CHAN_ZERO_PULLBACK, label_zh="严格", label_en="Strict",
             description_zh="严格按缠论原文定义，只认已走完的笔",
             description_en="Textbook Chan definitions; only completed legs count",
             czsc_families=("first",),

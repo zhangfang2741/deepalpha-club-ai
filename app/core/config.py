@@ -422,6 +422,9 @@ class Settings:
         self.CHAN_DIVERGENCE_METRIC = os.getenv("CHAN_DIVERGENCE_METRIC", "macd_area")
         # 缠论原文：中枢延伸到 9 段即升级为更高级别中枢。一类趋势背驰要求信号时刻中枢 B 已有元素（笔）数不超过它；0 = 不限制
         self.CHAN_PIVOT_EXTEND_LIMIT = int(os.getenv("CHAN_PIVOT_EXTEND_LIMIT", "9"))
+        # 一类趋势背驰要求 b、c 之间黄白线回抽零轴（缠论原文辅助条件）：空 = 不要求；0 = 回到零轴；0.2 = 回落到 b 段 DIF 峰值 20% 以内
+        _zp = os.getenv("CHAN_ZERO_PULLBACK", "").strip()
+        self.CHAN_ZERO_PULLBACK: float | None = float(_zp) if _zp else None
         # 护城河（app/services/quant_research/moat）：部署后冷启动跑一遍，之后每天检查新 10-K
         self.QUANT_MOAT_ENABLED = os.getenv("QUANT_MOAT_ENABLED", "true").lower() in ("true", "1", "yes")
         self.QUANT_MOAT_UTC_HOUR = int(os.getenv("QUANT_MOAT_UTC_HOUR", "12"))
