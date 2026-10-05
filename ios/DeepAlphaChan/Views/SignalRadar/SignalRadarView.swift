@@ -76,6 +76,8 @@ struct SignalRadarView: View {
     @StateObject private var gradeVM = GradeEventsViewModel()
     /// 基本面 tab 里「另有 N 个 · 查看全部」打开的半屏。
     @State private var showGradeAll = false
+    /// 详情页打开时停在哪个分段：基本面 tab 点气泡 → 基本面研究；缠论 tab → nil（缠论结构）。
+    @State private var detailSegment: ResultDetailView.Segment?
 
     var body: some View {
         NavigationStack {
@@ -127,7 +129,7 @@ struct SignalRadarView: View {
             .overlay { if chanVM.isLoading { analysisLoadingOverlay } }
             .navigationDestination(isPresented: $showResults) {
                 if let analysis = chanVM.analysis {
-                    ResultDetailView(analysis: analysis, vm: chanVM)
+                    ResultDetailView(analysis: analysis, vm: chanVM, initialSegment: detailSegment)
                         .environmentObject(orientation)
                 }
             }
@@ -257,7 +259,7 @@ struct SignalRadarView: View {
         } else {
             GradeEventsView(vm: gradeVM, universeName: currentUniverseName, sectorName: { vm.sectorName($0) },
                             showAll: $showGradeAll,
-                            onOpen: { symbol, name in openSymbol(symbol, name: name) }) {
+                            onOpen: { symbol, name in openSymbol(symbol, name: name, segment: .quant) }) {
                 bubbleField
             }
         }
@@ -391,7 +393,8 @@ struct SignalRadarView: View {
     /// 未订阅会员时（含点开免费预览那一天）这次分析跟分析 Tab 一样走每日免费额度
     /// （usage.canUseFree/recordUse），额度用尽弹付费墙，不能绕开——免费预览只是
     /// 多给了一天可点的真实信号，不是无限次分析的后门。
-    private func openSymbol(_ symbol: String, name: String? = nil) {
+    private func openSymbol(_ symbol: String, name: String? = nil, segment: ResultDetailView.Segment? = nil) {
+        detailSegment = segment
         // 示例股（英伟达/茅台/腾讯）不扣额度，见 AppConfig.sampleSymbols
         let chargesQuota = !store.isSubscribed && !AppConfig.isSampleSymbol(market: vm.market, symbol: symbol)
         if chargesQuota && !usage.canUseFree(symbol: symbol) {
@@ -601,7 +604,8 @@ struct SignalRadarView: View {
                             isCandidate: candidateIDs.contains(layout.signal.id),
                             marksConfirmed: marksConfirmed,
                             // 点气泡直接进分析详情页（不再先弹底部面板）
-                            onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name) }
+                            onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name,
+                                                 segment: radarTab == .fundamental ? .quant : nil) }
                         )
                         // 气泡任何时候都不做透明处理：刷新完直接出现，不淡入
                         .transition(.identity)
