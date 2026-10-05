@@ -1229,5 +1229,9 @@
 "降 %lld 档" = "Down %lld notches";
 "升档" = "Upgrade";
 "降档" = "Downgrade";
-"颜色越深变档越多，气泡越大新等级越高" = "Darker color = more notches; larger bubble = higher new grade";
 "%@ 综合评级升降" = "%@ grade changes";
+"%@ · 综合评级升降" = "%@ · composite grade changes";
+"%lld 升档" = "%lld upgrades";
+"%lld 降档" = "%lld downgrades";
+"当日无评级升降" = "No grade changes on this day";
+"越靠中心越新 · 颜色越深变档越多 · 气泡越大新等级越高" = "Closer to center = newer · darker = more notches · larger = higher new grade";

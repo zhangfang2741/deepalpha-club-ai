@@ -1,25 +1,23 @@
 import SwiftUI
 
-/// 雷达「基本面研究」tab：股票池里每天综合等级升 / 降的股票，用气泡陈列。
-/// 气泡只显示当天变档最多的前 10 只（档数相同按代码排），更多的点「另有 N 个 · 查看全部」。
-/// 颜色与变档挂钩，且与缠论雷达同一套：升档 = 红（同买点）、降档 = 绿（同卖点），档数越多越深；气泡大小随新等级（A+ 最大、F 最小）。
-struct GradeEventsView: View {
+/// 雷达「基本面研究」tab 的外框：概览行 + 雷达画布（由 SignalRadarView 传入，与缠论雷达同一块画布：多环、浮动动画、摆位）
+/// + 图例 + 日期轨。画布里每个气泡 = 选中日在场的一只评级升降股票：代码 + 名称 + ▲/▼ 变档数；
+/// 升档红、降档绿（同缠论买卖点色），颜色越深变档越多，气泡越大新等级越高，越靠中心越新。
+struct GradeEventsView<Field: View>: View {
     @ObservedObject var vm: GradeEventsViewModel
     let universeName: String
     let sectorName: (String) -> String
+    /// 「查看全部」半屏是否打开（按钮在画布里，状态放在外面）。
+    @Binding var showAll: Bool
     /// 点某只股票：去看这只股票（与雷达气泡同一入口）。
     let onOpen: (String, String) -> Void
+    @ViewBuilder let field: () -> Field
 
-    /// 气泡最多画几个，其余折叠进「查看全部」。
-    static let bubbleLimit = 10
-
-    @State private var showAll = false
     /// 在「查看全部」里点了某一行：等面板收起后再打开个股。
     @State private var pending: GradeEvent?
 
     var body: some View {
         VStack(spacing: 10) {
-            header
             if vm.isLoading && vm.response == nil {
                 Spacer()
                 ProgressView()
@@ -29,9 +27,10 @@ struct GradeEventsView: View {
             } else if vm.days.isEmpty {
                 message(L("这个范围最近没有评级升降"))
             } else {
-                dayRail
-                bubbleField
+                summaryRow
+                field()
                 legend
+                dayRail
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -44,14 +43,19 @@ struct GradeEventsView: View {
         }
     }
 
-    // MARK: - 头部 / 日期轨
+    // MARK: - 概览 / 图例 / 日期轨
 
-    private var header: some View {
-        HStack {
-            Text(L("%@ · 最近 10 天综合评级升降", universeName))
+    /// 与缠论雷达的 metaRow 同一位置：指数名 + 在场的升降只数。
+    private var summaryRow: some View {
+        let all = vm.windowEvents
+        return HStack(spacing: 8) {
+            Text(L("%@ · 综合评级升降", universeName))
                 .font(.footnote).foregroundColor(Theme.textSecondary)
             Spacer()
+            Text(L("%lld 升档", all.filter { $0.event.isUp }.count)).foregroundColor(Theme.up)
+            Text(L("%lld 降档", all.filter { !$0.event.isUp }.count)).foregroundColor(Theme.down)
         }
+        .font(.footnote)
     }
 
     private func message(_ text: String) -> some View {
@@ -63,94 +67,13 @@ struct GradeEventsView: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// 日期轨：每一天写「月-日」和升降只数。
-    private var dayRail: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(Array(vm.days.enumerated()), id: \.element.id) { i, day in
-                    let selected = i == vm.selectedIndex
-                    Button { vm.selectedIndex = i } label: {
-                        VStack(spacing: 2) {
-                            Text(shortDate(day.date)).font(.system(size: 13, weight: .semibold))
-                            Text("▲\(day.upCount) ▼\(day.downCount)")
-                                .font(.system(size: 10)).foregroundColor(selected ? .white.opacity(0.85) : Theme.textSecondary)
-                        }
-                        .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(selected ? Theme.accent : Theme.surface, in: RoundedRectangle(cornerRadius: 10))
-                        .foregroundColor(selected ? .white : Theme.textPrimary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    // MARK: - 气泡
-
-    private var events: [GradeEvent] { vm.selectedDay?.events ?? [] }
-
-    /// 前 10 只（后端已按变档数从多到少、同档数按代码排）。
-    private var shown: [GradeEvent] { Array(events.prefix(Self.bubbleLimit)) }
-
-    private var bubbleField: some View {
-        VStack(spacing: 12) {
-            BubbleFlow(spacing: 8) {
-                ForEach(shown) { e in
-                    Button { onOpen(e.symbol, e.name) } label: { bubble(e) }
-                        .buttonStyle(.plain)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            if events.count > shown.count {
-                Button { showAll = true } label: {
-                    Text(L("另有 %lld 个 · 查看全部", events.count - shown.count))
-                        .font(.system(size: 13, weight: .semibold))
-                        .padding(.horizontal, 14).padding(.vertical, 7)
-                        .background(Theme.surface, in: Capsule())
-                        .foregroundColor(Theme.accent)
-                }
-                .buttonStyle(.plain)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.top, 6)
-    }
-
-    /// 13 档字母等级，A+ 最高、F 最低（与后端 GRADE_ORDER 一致）。
-    static let gradeOrder = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F"]
-
-    /// 气泡大小随新等级：A+ 最大、F 最小；颜色深浅才随变档数。
-    static func diameter(grade: String) -> CGFloat {
-        let idx = gradeOrder.firstIndex(of: grade) ?? (gradeOrder.count - 1)
-        return 92 - 3 * CGFloat(idx)
-    }
-
-    /// 与缠论雷达气泡同一套颜色：升档 = 红（同买点）、降档 = 绿（同卖点），深浅随变档数（1 档最浅，5 档及以上最深）。
-    static func fill(isUp: Bool, steps: Int) -> Color {
-        SignalFormatting.radarColor(side: isUp ? "buy" : "sell", depth: Double(min(max(steps, 1), 5) - 1) / 4)
-    }
-
-    static func tint(isUp: Bool) -> Color { isUp ? Theme.up : Theme.down }
-
-    private func bubble(_ e: GradeEvent) -> some View {
-        let d = Self.diameter(grade: e.toGrade)
-        return VStack(spacing: 1) {
-            Text(e.name).font(.system(size: 11, weight: .semibold)).lineLimit(1)
-            Text("\(e.fromGrade)→\(e.toGrade)").font(.system(size: 12, weight: .bold))
-            Text(e.isUp ? "▲\(e.steps)" : "▼\(e.steps)").font(.system(size: 10)).opacity(0.85)
-        }
-        .foregroundColor(.white)
-        .padding(4)
-        .frame(width: d, height: d)
-        .background(Circle().fill(Self.fill(isUp: e.isUp, steps: e.steps)))
-        .overlay(Circle().stroke(Self.tint(isUp: e.isUp).opacity(0.7), lineWidth: 1))
-    }
-
     private var legend: some View {
         HStack(spacing: 14) {
             legendDot(Theme.up, L("升档"))
             legendDot(Theme.down, L("降档"))
-            Text(L("颜色越深变档越多，气泡越大新等级越高")).font(.system(size: 11)).foregroundColor(Theme.textSecondary)
+            Text(L("越靠中心越新 · 颜色越深变档越多 · 气泡越大新等级越高"))
+                .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
+                .lineLimit(1).minimumScaleFactor(0.8)
             Spacer()
         }
     }
@@ -162,24 +85,62 @@ struct GradeEventsView: View {
         }
     }
 
+    /// 日期轨：与缠论雷达同一套格子（上面星期 / 今日，下面月-日）。
+    private var dayRail: some View {
+        VStack(spacing: 6) {
+            HStack {
+                Text(L("选择日期")).font(.caption).foregroundColor(Theme.textSecondary)
+                Spacer()
+                Text(L("← 左右滑动 →")).font(.caption2).foregroundColor(Theme.textSecondary)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(vm.days.enumerated()), id: \.element.id) { i, day in
+                        dayChip(day, active: i == vm.selectedIndex) { vm.selectedIndex = i }
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+        }
+    }
+
+    private func dayChip(_ day: GradeDay, active: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 3) {
+                Text(SignalRadarView.dayLabel(day.date))
+                    .font(.system(size: 9))
+                    .foregroundColor(active ? .white.opacity(0.85) : Theme.textSecondary)
+                Text(SignalRadarView.monthDay(day.date))
+                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .foregroundColor(active ? .white : Theme.textPrimary)
+            }
+            .frame(width: 56)
+            .padding(.vertical, 8)
+            .background(active ? Theme.accent : Theme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(active ? Theme.accent : Theme.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - 查看全部
 
     private var allSheet: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 8) {
-                    ForEach(events) { e in
+                    ForEach(vm.windowEvents, id: \.event.id) { item in
                         Button {
-                            pending = e
+                            pending = item.event
                             showAll = false
-                        } label: { row(e) }
+                        } label: { row(item.event) }
                         .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
             }
             .background(Theme.background)
-            .navigationTitle(L("%@ 综合评级升降", vm.selectedDay.map { shortDate($0.date) } ?? ""))
+            .navigationTitle(L("%@ 综合评级升降", vm.selectedDay.map { SignalRadarView.monthDay($0.date) } ?? ""))
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.medium, .large])
@@ -187,11 +148,10 @@ struct GradeEventsView: View {
     }
 
     private func row(_ e: GradeEvent) -> some View {
-        HStack(spacing: 10) {
+        let tint = e.isUp ? Theme.up : Theme.down
+        return HStack(spacing: 10) {
             Image(systemName: e.isUp ? "arrow.up.right" : "arrow.down.right")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundColor(Self.tint(isUp: e.isUp))
-                .frame(width: 22)
+                .font(.system(size: 14, weight: .bold)).foregroundColor(tint).frame(width: 22)
             VStack(alignment: .leading, spacing: 2) {
                 Text(e.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.textPrimary)
                 HStack(spacing: 6) {
@@ -204,55 +164,11 @@ struct GradeEventsView: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(e.fromGrade) → \(e.toGrade)")
                     .font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.textPrimary)
-                Text(e.isUp ? L("升 %lld 档", e.steps) : L("降 %lld 档", e.steps))
+                Text((e.isUp ? L("升 %lld 档", e.steps) : L("降 %lld 档", e.steps)) + " · " + SignalRadarView.monthDay(e.date))
                     .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
-    }
-
-    private func shortDate(_ iso: String) -> String { String(iso.dropFirst(5)) }
-}
-
-/// 简单的气泡流式布局：按行从左到右排，每行居中，放不下换行。
-private struct BubbleFlow: Layout {
-    var spacing: CGFloat = 8
-
-    private func rows(in width: CGFloat, subviews: Subviews) -> [[Int]] {
-        var rows: [[Int]] = [[]]
-        var x: CGFloat = 0
-        for (i, s) in subviews.enumerated() {
-            let w = s.sizeThatFits(.unspecified).width
-            if x > 0, x + w > width { rows.append([]); x = 0 }
-            rows[rows.count - 1].append(i)
-            x += w + spacing
-        }
-        return rows
-    }
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? 360
-        var height: CGFloat = 0
-        for row in rows(in: width, subviews: subviews) {
-            height += (row.map { subviews[$0].sizeThatFits(.unspecified).height }.max() ?? 0) + spacing
-        }
-        return CGSize(width: width, height: max(0, height - spacing))
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var y = bounds.minY
-        for row in rows(in: bounds.width, subviews: subviews) {
-            let sizes = row.map { subviews[$0].sizeThatFits(.unspecified) }
-            let rowWidth = sizes.map(\.width).reduce(0, +) + spacing * CGFloat(max(row.count - 1, 0))
-            var x = bounds.minX + (bounds.width - rowWidth) / 2
-            let rowHeight = sizes.map(\.height).max() ?? 0
-            for (k, i) in row.enumerated() {
-                subviews[i].place(at: CGPoint(x: x, y: y + (rowHeight - sizes[k].height) / 2),
-                                  proposal: ProposedViewSize(sizes[k]))
-                x += sizes[k].width + spacing
-            }
-            y += rowHeight + spacing
-        }
     }
 }
