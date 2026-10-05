@@ -189,8 +189,13 @@ struct RadarOrbitSpacingTests {
     }
 
     static func testCrowdScale() {
-        // 稀疏：不缩
-        assert(RadarOrbitSpacing.crowdScale(diameters: [60, 80], width: 400, height: 320) == 1, "不拥挤不缩")
+        // 稀疏：放大，最多 1.3 倍
+        assert(RadarOrbitSpacing.crowdScale(diameters: [60, 80], width: 400, height: 320) == 1.3, "稀疏日放大到上限")
+        let part = RadarOrbitSpacing.crowdScale(diameters: Array(repeating: 70.0, count: 5), width: 400, height: 320)
+        assert(part > 1 && part < 1.3, "稍稀疏时按面积连续放大")
+        // 适中：既不放大也不缩
+        assert(RadarOrbitSpacing.crowdScale(diameters: Array(repeating: 70.0, count: 8), width: 400, height: 320) == 1, "适中不缩放")
+        assert(RadarOrbitSpacing.crowdScale(diameters: [], width: 400, height: 320) == 1, "无气泡不放大")
         // 拥挤：缩放后总面积恰好等于上限比例
         let ds = Array(repeating: 110.0, count: 12)
         let k = RadarOrbitSpacing.crowdScale(diameters: ds, width: 400, height: 320, maxFill: 0.5, minScale: 0)
