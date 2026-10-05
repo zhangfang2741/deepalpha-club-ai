@@ -121,7 +121,7 @@ def force_text(price_ratio: float, volume_ratio: float, length_ratio: float, lan
     )
     if area_ratio is None:
         return base
-    return pick(lang, f"MACD 面积为前段的 {area_ratio:.2f} 倍，", f"MACD area {area_ratio:.2f}x, ") + base
+    return pick(lang, f"MACD 面积约为前段的 {area_ratio:.0%}，", f"MACD area about {area_ratio:.0%} of the prior leg, ") + base
 
 
 def check_divergence(

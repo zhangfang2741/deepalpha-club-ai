@@ -333,7 +333,7 @@ deepalpha-club-ai/
   严格口径下 `analyzer` 在 `split_unconfirmed` 之后用 `signals.unify_stroke_divergences` 把它重建为只含一类趋势背驰（`policy.unify_divergences`），
   **不要**再让叙事等模块读价差·量能·时长的笔对笔背驰。同一个 b 段终点图上只留一条线（成立优先、同级取最新，`signals.leg_divergence_marks`）。
   API：`DivergenceResult.b_end_time/b_end_price` → `/chan/analysis` 的 `StrokeOut` 在对应一类信号所在笔上给
-  `diverged=true / area_ratio / div_ref_*（b 段终点）/ div_b_start_* / div_c_start_*`；旧版 App 读不到新字段时退回「同向前一笔」作参照点。
+  `diverged=true / area_ratio / div_length_ratio / div_ref_*（b 段终点）/ div_b_start_* / div_c_start_*`；**面积比在 App 上写成百分比**（「趋势背驰 8%」），点开解释同时给时长比与价差比，并说明「面积是累计值、c 段常比 b 段短所以偏小」（NVDA 一卖 6% 里时长比就占 12%）；旧版 App 读不到新字段时退回「同向前一笔」作参照点。
   仍用价差·量能·时长力度口径的只剩：宽松口径（旧版 App，`unify_divergences=False`）与线段级背驰（`find_segment_divergences`，只在叙事里提一句）。
   改口径 / 背驰度量时，App 内教程（`lessons.json` 中英，背驰 / MACD / 三类买卖点）须同步改。
 - **背驰术语一律用缠论原文**（2026-10 起）：只说「趋势背驰 / 盘整背驰」（`DivergenceResult.type`，API `StrokeOut.divergence_type` = `trend` / `consolidation`），

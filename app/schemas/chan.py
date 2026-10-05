@@ -48,6 +48,7 @@ class StrokeOut(BaseModel):
     div_ref_time: Optional[str] = None
     div_ref_price: Optional[float] = None
     # b 段起点、c 段起点：图上分别画 b 段（起点→div_ref）与 c 段（起点→本笔终点）两条线；缺失时 App 只能画单线
+    div_length_ratio: Optional[float] = None   # c 段时长 / b 段时长：面积比偏小常因 c 段更短，解释里一并给出
     div_b_start_time: Optional[str] = None
     div_b_start_price: Optional[float] = None
     div_c_start_time: Optional[str] = None
