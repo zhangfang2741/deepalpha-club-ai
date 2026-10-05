@@ -9,10 +9,14 @@ struct SignalDetailCard: View {
 
     @State private var expanded = false
 
-    private var directionColor: Color { signal.isBuy ? Theme.up : Theme.down }
+    // 待确认候选不带买卖方向色（与图上灰色虚线徽标一致）：红 / 绿只给已成立的买卖点
+    private var directionColor: Color {
+        signal.isCandidate ? Theme.textSecondary : (signal.isBuy ? Theme.up : Theme.down)
+    }
     private var strengthColor: Color {
-        SignalFormatting.radarColor(side: signal.isBuy ? "buy" : "sell",
-                                    depth: SignalFormatting.strengthDepth(signal.strength.rawValue))
+        signal.isCandidate ? Theme.textSecondary.opacity(0.7)
+            : SignalFormatting.radarColor(side: signal.isBuy ? "buy" : "sell",
+                                          depth: SignalFormatting.strengthDepth(signal.strength.rawValue))
     }
 
     var body: some View {

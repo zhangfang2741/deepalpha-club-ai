@@ -372,3 +372,16 @@ def test_outcome_exposed_for_retrace_confirmed():
     lv = _chain(*base)
     ppl = build_pivot_phase(_result(lv, [_pivot_from(lv, 3, zg=99, zd=91)], []))
     assert (pp3.outcome, pp2.outcome, ppl.outcome) == ("type3", "type2", None)
+
+
+def test_retrace_without_signal_states_condition_not_signal_name():
+    """没有对应信号时不写「接近三买形态」，而是说清这一笔走完且满足什么才会成为买卖点。"""
+    strokes = _chain(("down", 100, 90), ("up", 90, 98), ("down", 98, 92),
+                     ("up", 92, 110), ("down", 110, 101))
+    pivot = _pivot_from(strokes, 5, zg=99, zd=91)
+    pp = build_pivot_phase(_result(strokes, [pivot], []))
+    assert pp is not None and pp.phase_label == "回落未跌回中枢"
+    assert "接近" not in pp.reason and "尚未出现" not in pp.reason
+    assert "这一笔走完后仍没有回到中枢，才会成为三买" in pp.reason
+    en = build_pivot_phase(_result(strokes, [pivot], []), lang="en")
+    assert en is not None and "becomes a type-3 buy" in en.reason

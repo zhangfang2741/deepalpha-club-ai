@@ -131,7 +131,8 @@ enum ChartExplainer {
             ? s.description + "\n" + L("所在的最后一笔还在走，端点可能延伸甚至回到中枢，按缠论尚不成立；这一笔走完才算买卖点。")
             : s.description
         return ChartExplanation(title: s.isCandidate ? L("%@（待确认）", s.label) : s.label,
-                                color: s.isBuy ? Theme.up : Theme.down,
+                                // 待确认候选不带买卖方向色（与图上灰色虚线徽标一致）
+                                color: s.isCandidate ? Theme.textSecondary : (s.isBuy ? Theme.up : Theme.down),
                                 facts: facts, reason: reason, lessonTerm: "买卖点")
     }
 
