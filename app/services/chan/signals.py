@@ -411,6 +411,7 @@ def generate_all_signals(
     stroke_started_at: dict[str, str] | None = None,
     macd: MACDData | None = None,
     metric: DivergenceMetric | None = None,
+    pivot_limit: int = 0,
 ) -> list[Signal]:
     """严格按缠论标准定义组装买卖点，按时间排序、(类型, 时间) 去重。
 
@@ -443,6 +444,9 @@ def generate_all_signals(
         key = (ev.type, ev.bi_end_time)
         want = "down" if ev.type == "buy1" else "up"
         if key in seen or direction_by_end.get(ev.bi_end_time) != want:
+            continue
+        # 中枢 B 延伸超过 9 段就已升级为更高级别中枢，原级别「a+A+b+B+c」的趋势前提不再成立
+        if pivot_limit and pivot_b_size(pivots, ev.bi_end_time) > pivot_limit:
             continue
         # 缠论原文：趋势背驰比较 c 段（离开 B）与 b 段（A、B 之间），不是末笔对前一笔。
         # 事件带 Rust 信号给出的趋势 / 两段原始力度就直接用，否则（标准 czsc）退回 Python 实现。

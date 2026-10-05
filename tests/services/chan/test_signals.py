@@ -821,3 +821,15 @@ def test_unify_stroke_divergences_only_marks_leg_divergence():
     out = unify_stroke_divergences(strokes, {"b": dv}, "zh")
     assert [d.is_diverged for d in out] == [False, True, False]
     assert out[1] is dv and out[0].type == "none"
+
+
+def test_pivot_b_size_counts_only_elements_finished_by_signal_time():
+    from types import SimpleNamespace as NS
+
+    from app.services.chan.signals import pivot_b_size
+
+    els = [NS(end_time=f"2024-01-{d:02d}") for d in (5, 10, 15, 20, 25, 28)]
+    p = NS(elements=els, end_time="2024-01-28")
+    assert pivot_b_size([p], "2024-01-22") == 4      # 之后才延伸出来的两笔不算（不看未来）
+    assert pivot_b_size([p], "2024-01-02") == 0      # 中枢还没形成
+    assert pivot_b_size([], "2024-01-22") == 0
