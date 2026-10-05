@@ -167,3 +167,42 @@ def test_every_native_sector_has_an_english_name():
     assert missing == []
     # 申万「公用事业」与恒生「公用事业」同名，共用一条；其余不应有未使用的多余条目
     assert set(NATIVE_SECTOR_EN) == set(SW_LEVEL1) | set(HS_LEVEL1)
+
+
+class _TagCacheRedis:
+    def __init__(self, store):
+        self.store = store
+
+    async def get(self, key):
+        return self.store.get(key)
+
+    async def set(self, key, value, ex=None):
+        self.store[key] = value
+
+
+async def test_stale_gics_tag_cache_is_discarded_and_refetched(monkeypatch):
+    """改行业划分后 24 小时内的旧缓存（GICS key）对不上申万面板：必须丢弃重取，而不是原样返回。"""
+    import json
+
+    store = {f"{sectors.CNHK_TAGS_PREFIX}:cn": json.dumps({"600519": "staples", "000001": "financials"})}
+    fresh = {f"{i:06d}": "电子" for i in range(1200)}
+
+    async def fake(market):
+        return fresh
+
+    monkeypatch.setattr(sectors, "_fetch_cnhk_tags", fake)
+    assert await sectors.load_sector_tags("cn", _TagCacheRedis(store)) == fresh
+    assert json.loads(store[f"{sectors.CNHK_TAGS_PREFIX}:cn"]) == fresh      # 新结果覆盖旧缓存
+
+
+async def test_valid_native_tag_cache_is_used(monkeypatch):
+    import json
+
+    cached = {"600519": "食品饮料", "000001": "银行"}
+    store = {f"{sectors.CNHK_TAGS_PREFIX}:cn": json.dumps(cached, ensure_ascii=False)}
+
+    async def boom(market):
+        raise AssertionError("不应重取")
+
+    monkeypatch.setattr(sectors, "_fetch_cnhk_tags", boom)
+    assert await sectors.load_sector_tags("cn", _TagCacheRedis(store)) == cached

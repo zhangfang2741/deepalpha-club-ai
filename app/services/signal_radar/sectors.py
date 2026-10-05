@@ -99,13 +99,24 @@ async def _fetch_cnhk_tags(market: str) -> dict[str, str]:
         return hk_tags_from_meta(await hk_source.fetch_meta(client, today))  # type: ignore[arg-type]
 
 
+def _tags_match_native(market: str, tags: dict[str, str]) -> bool:
+    """标签值是否全部属于本市场的本土行业全集（空表视为不匹配，让调用方重取）。"""
+    names = set(native_sector_names(market))
+    return bool(tags) and bool(names) and set(tags.values()) <= names
+
+
 async def _load_cnhk_tags(market: str, redis: Redis | None) -> dict[str, str]:
     key = f"{CNHK_TAGS_PREFIX}:{market}"
     if redis is not None:
         try:
             raw = await redis.get(key)
             if raw:
-                return json.loads(raw)
+                cached = json.loads(raw)
+                # 缓存里的行业 key 必须都在本市场的本土行业全集里：改行业划分（GICS → 申万 / 恒生）后，
+                # 24 小时内旧缓存的 key 对不上行业面板，会出现「全部行业有信号、点哪个行业都是 0」
+                if _tags_match_native(market, cached):
+                    return cached
+                logger.warning("signal_radar_sector_tags_stale", market=market)
         except Exception as e:  # noqa: BLE001
             logger.warning("signal_radar_sector_tags_cache_read_failed", market=market, error=str(e))
     tags = await _fetch_cnhk_tags(market)
