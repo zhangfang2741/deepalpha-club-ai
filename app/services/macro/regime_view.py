@@ -1,7 +1,7 @@
 """把 regime 因子表（大盘 / 行业）读成宏观格、行业格要的样子。
 
 纯函数（build_state / sector_rows / strongest_weakest）与 DB 读取（load_*，同步，调用方放线程池）分开，
-前者单测覆盖。大盘状态：美股读 regime_features，A 股 / 港股读 regime_market_features（带 market 列）；行业状态仍只有美股。
+前者单测覆盖。大盘状态：美股读 regime_features，A 股 / 港股读 regime_market_features（带 market 列）；行业状态：美股读 regime_sector_features，A 股 / 港股读 regime_market_sector_features（行业 = 申万 / 恒生一级，key 即中文名）。
 """
 from __future__ import annotations
 

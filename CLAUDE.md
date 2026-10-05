@@ -322,10 +322,10 @@ deepalpha-club-ai/
   （A、B 之间）的 MACD 红绿柱面积比（缠论原文，`signals._trend_leg_divergence`），粉色线连 b 段终点 → c 段终点，标签「趋势背驰 + 面积比」，
   不分强弱档。API：`DivergenceResult.b_end_time/b_end_price` → `/chan/analysis` 的 `StrokeOut` 在对应一类信号所在笔上给
   `diverged=true / area_ratio / div_ref_time / div_ref_price`（`api/v1/chan._leg_divergence_marks`，含候选信号）；其余笔 `diverged=false`。
-  旧版 App 读不到新字段时退回「同向前一笔」作参照点。
+  旧版 App 读不到新字段时退回「同向前一笔」作参照点。改口径 / 背驰度量时，App 内教程（`lessons.json` 中英，背驰 / MACD / 三类买卖点）须同步改。
 - **背驰术语一律用缠论原文**（2026-10 起）：只说「趋势背驰 / 盘整背驰」（`DivergenceResult.type`，API `StrokeOut.divergence_type` = `trend` / `consolidation`），
   **不要自造概念**（顶背驰 / 底背驰、笔力度减弱、「趋势可能转折」等都已去掉）。阶段标题 / 依据 / 图上标签 / 图元解释都按类型显示；
-  歧义的地方（趋势背驰对应一类买卖点、盘整背驰不对应）只写在点开的解释里，不放标题。课程页 `LessonDiagrams` 与网页前端个别页面仍有旧叫法，未统一。
+  歧义的地方（趋势背驰对应一类买卖点、盘整背驰不对应）只写在点开的解释里，不放标题。网页前端个别页面（`frontend/lib/chan-glossary.ts` 等）仍有旧叫法，未统一；iOS 教程 `lessons.json`（背驰 / MACD / 三类买卖点 / 走势级别）与 `LessonDiagrams` 已于 2026-10-05 对齐到本节与「买卖点口径」，**改口径时教程文字要一并改**（中英两份）。
 
 **数据层（根治性，别在算法层补数据的锅）**
 - **前复权**：`skills/kline.py` 全链路用前复权价（FMP dividend-adjusted 端点、Yahoo
