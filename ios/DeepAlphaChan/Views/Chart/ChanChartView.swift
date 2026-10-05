@@ -741,17 +741,44 @@ struct ChanChartView: View {
                   let ref = cur.divergenceRef(previous: k >= 2 ? strokes[k - 2] : nil),
                   let pi = timeIndex[ref.time], let ci = timeIndex[cur.endTime],
                   ci >= range.start, pi < range.end else { continue }
-            let p1 = CGPoint(x: x(for: pi, range: range), y: y(for: ref.price, height: height, bounds: bounds))
+            var p1 = CGPoint(x: x(for: pi, range: range), y: y(for: ref.price, height: height, bounds: bounds))
             let p2 = CGPoint(x: x(for: ci, range: range), y: y(for: cur.endPrice, height: height, bounds: bounds))
-            var line = Path()
-            line.move(to: p1)
-            line.addLine(to: p2)
-            ctx.stroke(line, with: .color(Theme.divergence),
-                       style: StrokeStyle(lineWidth: 1.3, lineCap: .round))
-            for pt in [p1, p2] {
-                let r: CGFloat = 2.6
-                ctx.fill(Path(ellipseIn: CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)),
-                         with: .color(Theme.divergence))
+            if let legs = cur.divergenceLegs,
+               let bi0 = timeIndex[legs.b.t0], let bi1 = timeIndex[legs.b.t1],
+               let ci0 = timeIndex[legs.c.t0], let ci1 = timeIndex[legs.c.t1] {
+                // 缠论原文：分别标出 b 段与 c 段；b 段淡一些，c 段（信号所在）实线，比值标在 c 段上
+                func seg(_ i0: Int, _ pr0: Double, _ i1: Int, _ pr1: Double) -> (CGPoint, CGPoint) {
+                    (CGPoint(x: x(for: i0, range: range), y: y(for: pr0, height: height, bounds: bounds)),
+                     CGPoint(x: x(for: i1, range: range), y: y(for: pr1, height: height, bounds: bounds)))
+                }
+                let (b0, b1) = seg(bi0, legs.b.p0, bi1, legs.b.p1)
+                let (c0, c1) = seg(ci0, legs.c.p0, ci1, legs.c.p1)
+                for (a, b, alpha, w) in [(b0, b1, 0.55, 1.6), (c0, c1, 1.0, 2.0)] as [(CGPoint, CGPoint, Double, CGFloat)] {
+                    var l = Path()
+                    l.move(to: a)
+                    l.addLine(to: b)
+                    ctx.stroke(l, with: .color(Theme.divergence.opacity(alpha)),
+                               style: StrokeStyle(lineWidth: w, lineCap: .round))
+                    for pt in [a, b] {
+                        let r: CGFloat = 2.4
+                        ctx.fill(Path(ellipseIn: CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)),
+                                 with: .color(Theme.divergence.opacity(alpha)))
+                    }
+                }
+                let tagB = ctx.resolve(Text("b").font(.system(size: 9, weight: .semibold)).foregroundColor(Theme.divergence.opacity(0.8)))
+                ctx.draw(tagB, at: CGPoint(x: (b0.x + b1.x) / 2, y: (b0.y + b1.y) / 2 + (cur.direction == .up ? 9 : -9)), anchor: .center)
+                p1 = c0
+            } else {
+                var line = Path()
+                line.move(to: p1)
+                line.addLine(to: p2)
+                ctx.stroke(line, with: .color(Theme.divergence),
+                           style: StrokeStyle(lineWidth: 1.3, lineCap: .round))
+                for pt in [p1, p2] {
+                    let r: CGFloat = 2.6
+                    ctx.fill(Path(ellipseIn: CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)),
+                             with: .color(Theme.divergence))
+                }
             }
 
             // 标签放在虚线中点、朝外侧（顶背驰在线上方、底背驰在线下方），避开端点上的买卖点徽标
@@ -940,7 +967,12 @@ struct ChanChartView: View {
                 guard let ref = strokes[k].divergenceRef(previous: k >= 2 ? strokes[k - 2] : nil),
                       let a = pt(ref.time, ref.price),
                       let b = pt(strokes[k].endTime, strokes[k].endPrice) else { continue }
-                let d = distance(loc, a, b)
+                var d = distance(loc, a, b)
+                if let legs = strokes[k].divergenceLegs,
+                   let b0 = pt(legs.b.t0, legs.b.p0), let b1 = pt(legs.b.t1, legs.b.p1),
+                   let c0 = pt(legs.c.t0, legs.c.p0), let c1 = pt(legs.c.t1, legs.c.p1) {
+                    d = min(distance(loc, b0, b1), distance(loc, c0, c1))
+                }
                 if d < 12, d < (best?.1 ?? .infinity) {
                     best = (.divergence(current: strokes[k], refTime: ref.time, refPrice: ref.price), d)
                 }
@@ -1005,7 +1037,13 @@ struct ChanChartView: View {
                 ring(pt(s.time, s.price), 8)
             }
         case .established(let s): ring(establishedPoint(s, range: range, height: height, bounds: bounds), 9)
-        case .divergence(let c, let refTime, let refPrice): line(pt(refTime, refPrice), pt(c.endTime, c.endPrice), 2.5)
+        case .divergence(let c, let refTime, let refPrice):
+            if let legs = c.divergenceLegs {
+                line(pt(legs.b.t0, legs.b.p0), pt(legs.b.t1, legs.b.p1), 2.5)
+                line(pt(legs.c.t0, legs.c.p0), pt(legs.c.t1, legs.c.p1), 2.5)
+            } else {
+                line(pt(refTime, refPrice), pt(c.endTime, c.endPrice), 2.5)
+            }
         case .pivot(let p):
             guard let a = pt(p.startTime, p.zg), let b = pt(p.endTime, p.zd) else { return }
             ctx.stroke(Path(CGRect(x: a.x, y: a.y, width: max(2, b.x - a.x), height: max(1, b.y - a.y))),

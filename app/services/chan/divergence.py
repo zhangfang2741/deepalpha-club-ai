@@ -38,6 +38,9 @@ class DivergenceResult:
     # 一类趋势背驰里 b 段（A、B 之间）的终点：图上背驰连线的参照点（c 段终点就是信号点）；笔级背驰为 None
     b_end_time: str | None = None
     b_end_price: float | None = None
+    # b 段起点 / c 段起点（时间, 价格）：图上分别标出 b 段与 c 段两条线用
+    b_start: tuple[str, float] | None = None
+    c_start: tuple[str, float] | None = None
 
 
 def _ema_sma_seed(values: list[float], period: int, start: int) -> list[float]:

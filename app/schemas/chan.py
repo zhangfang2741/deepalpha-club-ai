@@ -47,6 +47,11 @@ class StrokeOut(BaseModel):
     area_ratio: Optional[float] = None
     div_ref_time: Optional[str] = None
     div_ref_price: Optional[float] = None
+    # b 段起点、c 段起点：图上分别画 b 段（起点→div_ref）与 c 段（起点→本笔终点）两条线；缺失时 App 只能画单线
+    div_b_start_time: Optional[str] = None
+    div_b_start_price: Optional[float] = None
+    div_c_start_time: Optional[str] = None
+    div_c_start_price: Optional[float] = None
     # 背驰类型（缠论原文术语）：trend = 趋势背驰、consolidation = 盘整背驰；未背驰为 None
     divergence_type: Optional[Literal["trend", "consolidation"]] = None
 
