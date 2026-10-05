@@ -172,6 +172,10 @@ deepalpha-club-ai/
 > 行业 key 是中文名；英文名在 `cnhk/sectors.NATIVE_SECTOR_EN`（接口按 `lang=en` 返回，App 本地兜底走 `L(key)` + en 文案；有测试守护 43 个行业都有英文名，新增行业须补）。
 > `/macro/{cn|hk}/sectors`（`macro.service._native_sector_board`）返回本土行业全集 + 强弱（没算出来的行业强弱为空，App 不画强弱条、不写「最强」）+ 雷达当日买卖点数。
 
+> **雷达并列 tab**（2026-10-05 起，iOS `SignalRadarView.RadarTab`）：「缠论 / 基本面研究」。基本面研究 tab = 当前指数里**每天综合等级升降的股票**
+> （`GET /signal-radar/grade-events`，`signal_radar/grade_events.py`，读 `quant_results` 历史，相邻评级日综合等级不同即一条事件；会员功能、同样要先同意免责声明；
+> 升降用箭头 + 中性色，红 / 绿只给缠论已成立的买卖点；点一行进个股详情）。**分析师评级 tab 暂未做**：现有目标价上调榜是按月均 / 季均 / 年均算的状态快照
+> （仅标普 500 / 纳指 100），没有按天的机构评级事件；要做须先确认 FMP 套餐能否取机构评级事件接口（A 股 / 港股评级接口之前返回过 402）。
 > 信号雷达扫描约束（`app/services/signal_radar`）：同一 (口径, 市场, universe) 任一时刻只跑一轮全量扫描
 > ——接口与定时预热共用 `scan_lock_key` 原子锁（`acquire_lock` = SET NX EX），主动刷新有 5 分钟冷却；
 > 所有扫描 / 补算 / 示例日拉 K 线共用进程级闸门 `_fetch_gate`。拉数失败（限流 / 不可用）的成分股

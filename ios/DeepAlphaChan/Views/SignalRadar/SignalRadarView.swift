@@ -66,6 +66,14 @@ struct SignalRadarView: View {
     @State private var panel: RadarPanel?
     /// 面板列表里点了某一行：等面板收起后再跑分析、push 详情页（见 sheet 的 onDismiss）。
     @State private var pendingDetail: RadarSignal?
+    /// 雷达上方并列的 tab：缠论买卖点 / 基本面研究（评级升降）。分析师评级等接口数据备齐后再并进来。
+    enum RadarTab: String, CaseIterable, Identifiable {
+        case chan, fundamental
+        var id: String { rawValue }
+        var title: String { self == .chan ? L("缠论") : L("基本面研究") }
+    }
+    @State private var radarTab: RadarTab = .chan
+    @StateObject private var gradeVM = GradeEventsViewModel()
 
     var body: some View {
         NavigationStack {
@@ -90,6 +98,12 @@ struct SignalRadarView: View {
             }
             // 行业强弱跟着所选日走：雷达翻到哪天，扇区就按哪天收盘的强弱排
             .task(id: vm.sectorBoardKey) { await vm.loadSectorBoardIfNeeded() }
+            // 切到基本面 tab、或在 tab 里换市场 / 指数时拉评级升降
+            .task(id: "\(radarTab.rawValue)|\(vm.market.rawValue)|\(vm.activeUniverseKey)|\(store.isPremium)") {
+                if radarTab == .fundamental, store.isPremium {
+                    await gradeVM.load(market: vm.market.rawValue, universe: vm.activeUniverseKey)
+                }
+            }
             .sheet(item: $panel, onDismiss: {
                 guard let s = pendingDetail else { return }
                 pendingDetail = nil
@@ -152,7 +166,11 @@ struct SignalRadarView: View {
                 }
             }
 
-            if vm.isScanning {
+            tabPicker
+
+            if radarTab == .fundamental {
+                fundamentalContent
+            } else if vm.isScanning {
                 scanningView
             } else if vm.isComputingInBackground {
                 computingView
@@ -182,6 +200,45 @@ struct SignalRadarView: View {
         .padding(.top, 8)
         .padding(.bottom, 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    // MARK: - 并列 tab
+
+    private var tabPicker: some View {
+        HStack(spacing: 6) {
+            ForEach(RadarTab.allCases) { tab in
+                let selected = tab == radarTab
+                Button { radarTab = tab } label: {
+                    Text(tab.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .padding(.horizontal, 14).padding(.vertical, 6)
+                        .background(selected ? Theme.accent : Theme.surface, in: Capsule())
+                        .foregroundColor(selected ? .white : Theme.textSecondary)
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+        }
+    }
+
+    /// 基本面研究 tab：会员功能（与缠论雷达真实数据同一道门槛，未订阅点按弹付费墙），同样要先同意免责声明。
+    @ViewBuilder
+    private var fundamentalContent: some View {
+        if !store.isPremium {
+            VStack(spacing: 12) {
+                Image(systemName: "lock.fill").font(.system(size: 28)).foregroundColor(Theme.textSecondary)
+                Text(L("订阅后可查看股票池每天的综合评级升降"))
+                    .font(.footnote).foregroundColor(Theme.textSecondary).multilineTextAlignment(.center)
+                Button(L("查看订阅")) { showPaywall = true }.buttonStyle(.bordered).tint(Theme.accent)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if !consent.hasAgreed {
+            consentLockedField
+        } else {
+            GradeEventsView(vm: gradeVM, universeName: currentUniverseName, sectorName: { vm.sectorName($0) }) { symbol, name in
+                openSymbol(symbol, name: name)
+            }
+        }
     }
 
     // MARK: - 免责声明
