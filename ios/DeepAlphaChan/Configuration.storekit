@@ -68,7 +68,14 @@
           "recurringSubscriptionPeriod": "P1M",
           "referenceName": "Membership Monthly",
           "subscriptionGroupID": "5C0F1A2B-0010-4A00-9000-DEE0A1FA0010",
-          "type": "RecurringSubscription"
+          "type": "RecurringSubscription",
+          "introductoryOffer": {
+            "displayPrice": "128.00",
+            "internalID": "5C0F1A2B-0023-4A00-9000-DEE0A1FA0023",
+            "numberOfPeriods": 1,
+            "paymentMode": "payAsYouGo",
+            "subscriptionPeriod": "P1M"
+          }
         }
       ]
     }

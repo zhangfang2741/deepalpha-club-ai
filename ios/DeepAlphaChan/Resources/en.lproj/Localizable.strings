@@ -598,7 +598,7 @@
 "首月" = "first month";
 "前 %@" = "first %@";
 "新客%@" = "New users · %@";
-"新客专享%@，之后 %@/月，可随时取消" = "New-user price for the %1$@, then %2$@/month. Cancel anytime.";
+"活动价%@，之后 %@/月，可随时取消" = "Special price for the %1$@, then %2$@/month. Cancel anytime.";
 "市场雷达免责声明" = "Market Radar Disclaimer";
 "市场雷达基于公开行情数据，按缠论结构规则自动识别并汇总所选指数成分股的买卖点形态，供技术分析研究使用。" = "The Market Radar uses Chan-theory structure rules on public market data to identify and aggregate buy/sell patterns among the constituents of the selected index, for technical-analysis research.";
 "本功能展示的内容均为按标准缠论技术分析规则得出的结果，不构成任何投资建议、证券推荐或买卖要约。" = "All content shown is derived from standard Chan-theory technical analysis rules and does not constitute investment advice, a securities recommendation, or an offer to buy or sell.";
@@ -1153,7 +1153,7 @@
 "会员" = "Member";
 "订阅会员解锁次级别确认" = "Subscribe to unlock sub-level confirmation";
 "订阅会员，显示全部自选标的的结构状态" = "Subscribe to see the structure status of every watchlist item";
-"新客专享价仅限首次订阅的 Apple 账户，优惠期（%@）结束后按正价自动续订。" = "The new-user price is only for Apple Accounts subscribing for the first time. After the offer period (%@), it renews automatically at the regular price.";
+"活动价仅限首次订阅的 Apple 账户，优惠期（%@）结束后按正价自动续订。" = "The special price is only for Apple Accounts subscribing for the first time. After the offer period (%@), it renews automatically at the regular price.";
 "免费版每天可分析 %lld 支标的，会员不限次数" = "Free: %lld tickers per day. Members: unlimited";
 "日线对照 30 分钟、周线对照日线，看次级别是否与大级别方向一致" = "Daily vs 30-minute, weekly vs daily — see whether the lower level agrees with the higher one";
 "每日市场雷达" = "Daily market radar";
@@ -1168,3 +1168,11 @@
 "成立" = "Formed";
 "%@ · 成立日" = "%@ · formed";
 "缠论里买卖点要等后面的笔成形才算成立：这个%@的价位是 %@ 这根 K 线的极值，下一笔到 %@ 才第一次成形，所以这一天才成立。图上的徽标画在极值 K 线，虚线末端的圆点标的是成立日。" = "A Chan signal only counts once the following stroke has formed: this %@ sits at the extreme of the %@ candle, and the next stroke first formed on %@, so that is the day it was established. The badge is drawn on the extreme candle; the dot at the end of the dashed line marks the day it formed.";
+
+/* Paywall — compact layout */
+"免费版每天 %lld 支" = "Free: %lld per day";
+"日线对照 30 分钟，周线对照日线" = "Daily vs 30-min, weekly vs daily";
+"美股 / A 股 / 港股，免费版仅示例日" = "US / A-share / HK, free tier: demo day only";
+"回看近 30 个交易日" = "Last 30 trading days";
+"免费版仅显示最早加入的 1 支" = "Free: only the earliest 1 shown";
+"活动价" = "Special";
