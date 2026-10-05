@@ -106,6 +106,19 @@ final class SignalRadarViewModel: ObservableObject {
             ?? Self.defaultUniverseKeys[market] ?? ""
     }
 
+    /// 当前指数展示名：优先从列表里按高亮键取（计算中 response 为 nil 时也有名字），否则退回响应里的 etf_name。
+    /// 顶部市场分段条（已选中那一段下面的小字）与雷达页的扫描提示共用。
+    var activeUniverseName: String {
+        if let u = availableUniverses.first(where: { $0.key == activeUniverseKey }) { return u.displayName }
+        if activeUniverseKey == RadarUniverse.watchlistKey { return L("自选") }
+        // 切市场时 response 暂时还是上一个市场的（保留旧内容防跳动），它的名称不能拿来用，
+        // 否则选了 A 股却显示「正在扫描纳斯达克100」。还没拿到过这个市场的列表时用默认
+        // 指数名兜底，直接显示「科创50」，不先闪一下「A 股」。
+        if let response, response.market == market.rawValue { return L(response.etfName) }
+        if activeUniverseKey == Self.defaultUniverseKeys[market] { return Self.defaultUniverseNames[market] ?? "" }
+        return ""
+    }
+
     /// 各市场默认指数（与后端 universe.py 的 is_default 一致），只用于「从没进过这个市场、
     /// 还没拿到列表」时的展示兜底——切到 A 股直接显示「科创50」，不先闪「A 股」。
     static let defaultUniverseKeys: [StockMarket: String] = [.us: "nasdaq100", .cn: "star50", .hk: "hstech"]

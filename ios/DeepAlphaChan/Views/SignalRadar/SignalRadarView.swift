@@ -561,9 +561,6 @@ struct SignalRadarView: View {
             )
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(alignment: .topLeading) {
-            universeSwitcher
-        }
     }
 
     /// 雷达画布是否按行业分扇区。**当前关闭**：顶部漏斗已经按「大盘环境 → 最强行业 → 当日信号」
@@ -575,17 +572,9 @@ struct SignalRadarView: View {
         SignalRadarView.sectorFieldEnabled && vm.selectedDay?.hasSectorData == true
     }
 
-    /// 左上角指数切换器预留的区域（含它自己的 10pt 外边距）：最长的「纳斯达克100」实测约 128pt 宽，
-    /// 留 150 × 40 够所有指数名用。
-    ///
-    /// 以前是实测按钮大小再当禁区：第一帧还没量出来（或指数名称还没加载、按钮没渲染）时没有禁区，
-    /// 量出来后禁区一出现整张气泡图就重摆一次——刚打开时气泡会跳一下。固定预留后摆位只取决于数据和画布大小。
-    private static let switcherReserve = CGSize(width: 150, height: 40)
-
-    /// 叠在雷达上的控件（左上角指数切换器）占的区域，气泡摆位时避开。
-    private func fieldObstacles(width w: Double) -> [RadarOrbitSpacing.Obstacle] {
-        [.init(x: 0, y: 0, width: Double(Self.switcherReserve.width), height: Double(Self.switcherReserve.height))]
-    }
+    /// 叠在雷达上的控件占的区域，气泡摆位时避开。指数切换器已并进顶部市场分段条，画布里没有叠加控件，所以为空。
+    /// （以前是左上角固定预留 150 × 40：实测按钮大小会在量出来后让气泡重摆、跳一下。）
+    private func fieldObstacles(width w: Double) -> [RadarOrbitSpacing.Obstacle] { [] }
 
     // MARK: - 扇区（行业）
 
@@ -691,66 +680,9 @@ struct SignalRadarView: View {
 
     // MARK: - universe 切换器（雷达左上角）
 
-    /// 当前 universe 展示名：优先从列表里按高亮键取（计算中 response 为 nil 时也有名字），
-    /// 否则退回响应里的 etf_name。
-    private var currentUniverseName: String {
-        if let u = vm.universes.first(where: { $0.key == vm.activeUniverseKey }) {
-            return u.displayName
-        }
-        if vm.activeUniverseKey == RadarUniverse.watchlistKey { return L("自选") }
-        // 切市场时 response 暂时还是上一个市场的（保留旧内容防跳动），它的名称不能拿来用，
-        // 否则选了 A 股却显示「正在扫描纳斯达克100」。还没拿到过这个市场的列表时用默认
-        // 指数名兜底，直接显示「科创50」，不先闪一下「A 股」。
-        if let response = vm.response, response.market == vm.market.rawValue { return L(response.etfName) }
-        if vm.activeUniverseKey == SignalRadarViewModel.defaultUniverseKeys[vm.market] {
-            return SignalRadarViewModel.defaultUniverseNames[vm.market] ?? ""
-        }
-        return ""
-    }
-
-    /// 雷达左上角的 universe 切换器：科技窄基 ↔ 大盘宽基（如 恒生科技 ↔ 恒生指数）。
-    /// 只有该市场确实有多个 universe 时才是可点的下拉；否则退化成一个静态名牌，
-    /// 保证名称永远显示（metaRow 已不再重复显示名称）。
-    @ViewBuilder
-    private var universeSwitcher: some View {
-        if vm.universes.count > 1 {
-            Menu {
-                ForEach(vm.universes) { u in
-                    Button {
-                        vm.switchUniverse(u.key)
-                    } label: {
-                        if u.key == vm.activeUniverseKey {
-                            Label(u.displayName, systemImage: "checkmark")
-                        } else {
-                            Text(u.displayName)
-                        }
-                    }
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Text(currentUniverseName).font(.system(size: 12, weight: .semibold))
-                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
-                }
-                .foregroundColor(Theme.textPrimary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Theme.surface.opacity(0.92))
-                .clipShape(Capsule())
-                .overlay(Capsule().stroke(Theme.border, lineWidth: 1))
-            }
-            .padding(10)
-            .accessibilityLabel(L("切换指数范围"))
-        } else if !currentUniverseName.isEmpty {
-            Text(currentUniverseName)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(Theme.textPrimary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Theme.surface.opacity(0.92))
-                .clipShape(Capsule())
-                .padding(10)
-        }
-    }
+    /// 当前指数展示名（见 `SignalRadarViewModel.activeUniverseName`）。指数切换已并进顶部市场分段条
+    /// （点已选中的市场弹出该市场的指数列表），画布里不再有切换器。
+    private var currentUniverseName: String { vm.activeUniverseName }
 
     /// 按实际天数确定半径，按时间环带统一均分方向，避让不改变时间半径。
     private struct BubbleLayout: Identifiable {

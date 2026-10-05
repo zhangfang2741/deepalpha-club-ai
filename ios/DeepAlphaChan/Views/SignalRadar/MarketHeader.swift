@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 雷达页顶部：市场分段控件 + 「大盘环境 › 行业」两张横向卡片，往下就是雷达，自上而下的一条线：
+/// 雷达页顶部：市场分段控件（含指数选择，见 marketSegments）+ 「大盘环境 › 行业」两张横向卡片，往下就是雷达，自上而下的一条线：
 /// 环境友不友好 → 钱往哪个行业走 → 哪些股票出现了结构信号。
 ///
 /// 三格都只陈列事实，点开是底部面板（留在雷达页，见 RadarPanels）：环境 = 宏观状态 + 情绪；
@@ -15,12 +15,7 @@ struct MarketHeader: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Picker(L("市场"), selection: Binding(get: { radarVM.market }, set: { radarVM.switchMarket($0) })) {
-                ForEach(StockMarket.allCases) { m in
-                    Text(m.title).tag(m)
-                }
-            }
-            .pickerStyle(.segmented)
+            marketSegments
 
             // 两张卡片横排、中间一个「›」：大盘环境 → 行业，往下就是雷达
             HStack(spacing: 2) {
@@ -34,6 +29,56 @@ struct MarketHeader: View {
     }
 
     private var market: StockMarket { radarVM.market }
+
+    // MARK: - 市场 + 指数（合成一个选择器）
+
+    /// 美股 / A 股 / 港股分段条。已选中的那一段下面写当前指数名并带下拉箭头，**点它弹出该市场的指数列表**
+    /// （纳斯达克 100 / 标普 500 / 自选…）——以前指数下拉在雷达画布左上角，要先选市场再去画布里选指数，
+    /// 两处分开；现在市场和指数在同一处，画布左上角也空出来。其他段点一下切市场。
+    private var marketSegments: some View {
+        HStack(spacing: 2) {
+            ForEach(StockMarket.allCases) { m in
+                if m == radarVM.market, radarVM.universes.count > 1 {
+                    Menu {
+                        ForEach(radarVM.universes) { u in
+                            Button { radarVM.switchUniverse(u.key) } label: {
+                                if u.key == radarVM.activeUniverseKey {
+                                    Label(u.displayName, systemImage: "checkmark")
+                                } else {
+                                    Text(u.displayName)
+                                }
+                            }
+                        }
+                    } label: { segment(m, selected: true, menu: true) }
+                    .accessibilityLabel(L("切换指数范围"))
+                } else {
+                    Button { radarVM.switchMarket(m) } label: { segment(m, selected: m == radarVM.market, menu: false) }
+                        .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(3)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 13))
+        .overlay(RoundedRectangle(cornerRadius: 13).stroke(Theme.border, lineWidth: 1))
+    }
+
+    private func segment(_ m: StockMarket, selected: Bool, menu: Bool) -> some View {
+        VStack(spacing: 2) {
+            Text(m.title).font(.system(size: 14, weight: selected ? .bold : .medium))
+            // 固定占一行高度：未选中的段也留位，三段一样高，切换时分段条不会忽高忽低
+            HStack(spacing: 3) {
+                Text(selected ? radarVM.activeUniverseName : " ").font(.system(size: 10, weight: .medium)).lineLimit(1)
+                if selected, menu { Image(systemName: "chevron.down").font(.system(size: 7, weight: .bold)) }
+            }
+            .opacity(selected ? 0.85 : 0)
+        }
+        .foregroundColor(selected ? Theme.textPrimary : Theme.textSecondary)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .background(selected ? Theme.accent.opacity(0.28) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(selected ? Theme.accent.opacity(0.7) : .clear, lineWidth: 1))
+        .contentShape(Rectangle())
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
 
     private var overview: MarketOverview? { overviewVM.overviews[market] }
 
