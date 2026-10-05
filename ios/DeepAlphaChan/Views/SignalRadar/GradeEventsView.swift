@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 雷达「基本面研究」tab：股票池里每天综合等级升 / 降的股票，用气泡陈列。
 /// 气泡只显示当天变档最多的前 10 只（档数相同按代码排），更多的点「另有 N 个 · 查看全部」。
-/// 颜色与变档挂钩，且与缠论雷达同一套：升档 = 红（同买点）、降档 = 绿（同卖点），档数越多越深、气泡越大。
+/// 颜色与变档挂钩，且与缠论雷达同一套：升档 = 红（同买点）、降档 = 绿（同卖点），档数越多越深；气泡大小随新等级（A+ 最大、F 最小）。
 struct GradeEventsView: View {
     @ObservedObject var vm: GradeEventsViewModel
     let universeName: String
@@ -116,8 +116,14 @@ struct GradeEventsView: View {
         .padding(.top, 6)
     }
 
-    /// 气泡大小与深浅都随变档数：1 档最小最浅，5 档及以上封顶。
-    static func diameter(steps: Int) -> CGFloat { 64 + 9 * CGFloat(min(max(steps, 1), 5) - 1) }
+    /// 13 档字母等级，A+ 最高、F 最低（与后端 GRADE_ORDER 一致）。
+    static let gradeOrder = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F"]
+
+    /// 气泡大小随新等级：A+ 最大、F 最小；颜色深浅才随变档数。
+    static func diameter(grade: String) -> CGFloat {
+        let idx = gradeOrder.firstIndex(of: grade) ?? (gradeOrder.count - 1)
+        return 92 - 3 * CGFloat(idx)
+    }
 
     /// 与缠论雷达气泡同一套颜色：升档 = 红（同买点）、降档 = 绿（同卖点），深浅随变档数（1 档最浅，5 档及以上最深）。
     static func fill(isUp: Bool, steps: Int) -> Color {
@@ -127,7 +133,7 @@ struct GradeEventsView: View {
     static func tint(isUp: Bool) -> Color { isUp ? Theme.up : Theme.down }
 
     private func bubble(_ e: GradeEvent) -> some View {
-        let d = Self.diameter(steps: e.steps)
+        let d = Self.diameter(grade: e.toGrade)
         return VStack(spacing: 1) {
             Text(e.name).font(.system(size: 11, weight: .semibold)).lineLimit(1)
             Text("\(e.fromGrade)→\(e.toGrade)").font(.system(size: 12, weight: .bold))
@@ -144,7 +150,7 @@ struct GradeEventsView: View {
         HStack(spacing: 14) {
             legendDot(Theme.up, L("升档"))
             legendDot(Theme.down, L("降档"))
-            Text(L("颜色越深、气泡越大，变档越多")).font(.system(size: 11)).foregroundColor(Theme.textSecondary)
+            Text(L("颜色越深变档越多，气泡越大新等级越高")).font(.system(size: 11)).foregroundColor(Theme.textSecondary)
             Spacer()
         }
     }

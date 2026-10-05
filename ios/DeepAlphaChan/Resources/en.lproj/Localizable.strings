@@ -1230,5 +1230,5 @@
 "另有 %d 个 · 查看全部" = "%d more · View all";
 "升档" = "Upgrade";
 "降档" = "Downgrade";
-"颜色越深、气泡越大，变档越多" = "Darker and larger bubbles mean more notches";
+"颜色越深变档越多，气泡越大新等级越高" = "Darker color = more notches; larger bubble = higher new grade";
 "%@ 综合评级升降" = "%@ grade changes";
