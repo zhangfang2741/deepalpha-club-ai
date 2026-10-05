@@ -1164,4 +1164,7 @@
 "免费版最多 1 支" = "Free: 1 ticker";
 "全部自选状态" = "Status for every watchlist item";
 "每只自选都显示结构阶段与最新信号；免费版只显示最早加入的 1 支" = "Every watchlist item shows its structure stage and latest signal. Free: only the earliest-added one";
-"%@ 成立（图上虚线末端的圆点）；所在笔的极值在 %@，徽标画在那根 K 线。" = "Established on %@ (the dot at the end of the dashed line on the chart); the stroke's extreme was on %@, where the badge sits.";
+"%@ 成立（图上虚线末端标「成立」处）；所在笔的极值在 %@，徽标画在那根 K 线。" = "Established on %@ (marked "Formed" at the end of the dashed line on the chart); the stroke's extreme was on %@, where the badge sits.";
+"成立" = "Formed";
+"%@ · 成立日" = "%@ · formed";
+"缠论里买卖点要等后面的笔成形才算成立：这个%@的价位是 %@ 这根 K 线的极值，下一笔到 %@ 才第一次成形，所以这一天才成立。图上的徽标画在极值 K 线，虚线末端的圆点标的是成立日。" = "A Chan signal only counts once the following stroke has formed: this %@ sits at the extreme of the %@ candle, and the next stroke first formed on %@, so that is the day it was established. The badge is drawn on the extreme candle; the dot at the end of the dashed line marks the day it formed.";

@@ -7,6 +7,8 @@ enum ChartElement: Identifiable, Equatable {
     case segment(Segment)
     case pivot(Pivot)
     case signal(Signal)
+    /// 买卖点的成立日标记（徽标向右的虚线终点的圆点）：与徽标同一个信号，点它解释「为什么成立日比徽标晚」。
+    case established(Signal)
     /// 背驰：当前笔与参与比较的前一个同向笔。
     case divergence(current: Stroke, previous: Stroke)
 
@@ -17,6 +19,7 @@ enum ChartElement: Identifiable, Equatable {
         case .segment(let s): return "seg-\(s.id)"
         case .pivot(let p): return "zs-\(p.id)"
         case .signal(let s): return "bs-\(s.id)"
+        case .established(let s): return "est-\(s.id)"
         case .divergence(let c, _): return "div-\(c.id)"
         }
     }
@@ -43,6 +46,7 @@ enum ChartExplainer {
         case .segment(let s): return segment(s)
         case .pivot(let p): return pivot(p)
         case .signal(let s): return signal(s)
+        case .established(let s): return established(s)
         case .divergence(let c, let p): return divergence(c, p)
         }
     }
@@ -117,7 +121,7 @@ enum ChartExplainer {
     private static func signal(_ s: Signal) -> ChartExplanation {
         let dates: [(String, String)] = s.displayTime == s.time
             ? [(L("时间"), s.time)]
-            : [(L("出现"), s.displayTime), (L("极值 K 线"), s.time)]
+            : [(L("成立"), s.displayTime), (L("极值 K 线"), s.time)]
         var facts: [(String, String)] = dates + [
             (L("价格"), price(s.price)),
             (L("强弱"), SignalFormatting.strengthLabel(s.strength)),
@@ -134,6 +138,20 @@ enum ChartExplainer {
                                 // 待确认候选不带买卖方向色（与图上灰色虚线徽标一致）
                                 color: s.isCandidate ? Theme.textSecondary : (s.isBuy ? Theme.up : Theme.down),
                                 facts: facts, reason: reason, lessonTerm: "买卖点")
+    }
+
+    /// 成立日标记的说明：徽标在极值 K 线、成立日更晚，说清为什么。
+    private static func established(_ s: Signal) -> ChartExplanation {
+        ChartExplanation(
+            title: L("%@ · 成立日", s.label),
+            color: s.isBuy ? Theme.up : Theme.down,
+            facts: [
+                (L("成立"), s.displayTime),
+                (L("极值 K 线"), s.time),
+                (L("价格"), price(s.price)),
+            ],
+            reason: L("缠论里买卖点要等后面的笔成形才算成立：这个%@的价位是 %@ 这根 K 线的极值，下一笔到 %@ 才第一次成形，所以这一天才成立。图上的徽标画在极值 K 线，虚线末端的圆点标的是成立日。", s.label, s.time, s.displayTime),
+            lessonTerm: "买卖点")
     }
 
     private static func divergence(_ c: Stroke, _ p: Stroke) -> ChartExplanation {
