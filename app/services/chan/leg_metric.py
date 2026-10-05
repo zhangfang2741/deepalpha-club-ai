@@ -99,6 +99,28 @@ class MacdAreaMetric:
 
 
 @dataclass(frozen=True)
+class MacdAreaAvgMetric:
+    """MACD 面积按时长归一（每根 K 线平均面积）：c 段单位时间的力度小于 b 段即背驰。
+
+    累计面积与时长成正比，c 段通常比 b 段短得多，面积比几乎必然很小；归一后比的是「同样时间里谁更有力」。
+    只作实验 / 可选度量（CHAN_DIVERGENCE_METRIC=macd_area_avg），默认仍是 macd_area。
+    """
+    name: str = "macd_area_avg"
+
+    def classify(self, primary_ratio: float) -> Literal["strong", "medium", "weak", "none"]:
+        return "none" if primary_ratio >= 1.0 else "medium"
+
+    def compare(self, c: LegForce, b: LegForce) -> LegComparison | None:
+        if c.area is None or b.area is None or b.area <= 0 or b.price <= 0 or c.length <= 0 or b.length <= 0:
+            return None
+        ratio = _ratio(c.area / c.length, b.area / b.length)
+        return LegComparison(
+            diverged=ratio < 1, primary_ratio=ratio, price_ratio=_ratio(c.price, b.price),
+            volume_ratio=_ratio(c.volume, b.volume), length_ratio=_ratio(c.length, b.length), area_ratio=ratio,
+        )
+
+
+@dataclass(frozen=True)
 class ForceMetric:
     """价差 / 量能 / 时长：价差更弱，且量能或时长至少一项更弱（与 czsc 一类同一判据）。"""
     name: str = "force"
@@ -117,7 +139,7 @@ class ForceMetric:
         )
 
 
-DIVERGENCE_METRICS: dict[str, DivergenceMetric] = {m.name: m for m in (MacdAreaMetric(), ForceMetric())}
+DIVERGENCE_METRICS: dict[str, DivergenceMetric] = {m.name: m for m in (MacdAreaMetric(), MacdAreaAvgMetric(), ForceMetric())}
 DEFAULT_METRIC = "macd_area"
 
 
