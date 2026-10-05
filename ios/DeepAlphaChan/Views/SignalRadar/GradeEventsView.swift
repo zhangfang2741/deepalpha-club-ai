@@ -15,9 +15,11 @@ struct GradeEventsView<Field: View>: View {
 
     /// 在「查看全部」里点了某一行：等面板收起后再打开个股。
     @State private var pending: GradeEvent?
+    @State private var showInfo = false
 
     var body: some View {
-        VStack(spacing: 10) {
+        // 行间距、行高、底部免责声明都与缠论雷达（SignalRadarView.radarContent）保持一致，两个 tab 的画布高度才一样
+        VStack(spacing: 12) {
             if vm.isLoading && vm.response == nil {
                 Spacer()
                 ProgressView()
@@ -31,6 +33,8 @@ struct GradeEventsView<Field: View>: View {
                 field()
                 legend
                 dayRail
+                Spacer(minLength: 0)
+                disclaimer
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -72,10 +76,51 @@ struct GradeEventsView<Field: View>: View {
             legendDot(Theme.up, L("升档"))
             legendDot(Theme.down, L("降档"))
             Text(L("越靠中心评级越高 · 颜色越深、气泡越大变档越多"))
-                .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
+                .font(.system(size: 10)).foregroundColor(Theme.textSecondary)
                 .lineLimit(1).minimumScaleFactor(0.8)
-            Spacer()
+            Spacer(minLength: 4)
+            Button { showInfo = true } label: {
+                Image(systemName: "questionmark.circle")
+                    .font(.system(size: 15))
+                    .foregroundColor(Theme.textSecondary)
+            }
+            .accessibilityLabel(L("算法说明"))
+            .sheet(isPresented: $showInfo) { infoSheet }
         }
+    }
+
+    /// 与缠论雷达底部同一位置、同一字号的一行说明。
+    private var disclaimer: some View {
+        Text(L("评级由量化指标计算，仅为孤立观测，不构成投资建议。"))
+            .font(.caption2)
+            .foregroundColor(Theme.textSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 4)
+    }
+
+    /// 图例旁问号：这张雷达怎么看。
+    private var infoSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach([
+                        L("范围：当前所选指数的成分股。每只股票每天有一个综合等级（A+ 到 F 共 13 档），和上一个评级日相比变了几档，就是一条升降。"),
+                        L("环：变动之后的新等级。最里圈 A 段（A+ / A / A-），中间圈 B 段，最外圈 C 及以下。"),
+                        L("颜色：红 = 升档，绿 = 降档；颜色越深、气泡越大，变的档数越多。气泡最后一行是「▲ / ▼ 变档数」。"),
+                        L("数量：只画当天变档最多的前 10 只，其余点「另有 N 个 · 查看全部」。"),
+                        L("评级升降只是事实陈列，不代表后续涨跌，不构成投资建议。")
+                    ], id: \.self) { line in
+                        Text(line).font(.subheadline).foregroundColor(Theme.textPrimary)
+                    }
+                }
+                .padding(16)
+            }
+            .background(Theme.background)
+            .navigationTitle(L("算法说明"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("完成")) { showInfo = false } } }
+        }
+        .presentationDetents([.medium, .large])
     }
 
     private func legendDot(_ color: Color, _ text: String) -> some View {

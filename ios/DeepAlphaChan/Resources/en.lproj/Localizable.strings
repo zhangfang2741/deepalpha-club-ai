@@ -1236,3 +1236,9 @@
 "当日无评级升降" = "No grade changes on this day";
 "越靠中心评级越高 · 颜色越深、气泡越大变档越多" = "Closer to center = higher grade · darker and larger = more notches";
 "C 及以下" = "C & below";
+"评级由量化指标计算，仅为孤立观测，不构成投资建议。" = "Grades are computed from quantitative metrics; isolated observations only, not investment advice.";
+"范围：当前所选指数的成分股。每只股票每天有一个综合等级（A+ 到 F 共 13 档），和上一个评级日相比变了几档，就是一条升降。" = "Universe: constituents of the selected index. Each stock has one composite grade per day (13 notches, A+ to F); a change versus the previous rating day is one upgrade or downgrade.";
+"环：变动之后的新等级。最里圈 A 段（A+ / A / A-），中间圈 B 段，最外圈 C 及以下。" = "Rings: the new grade after the change. Inner ring A (A+ / A / A-), middle ring B, outer ring C and below.";
+"颜色：红 = 升档，绿 = 降档；颜色越深、气泡越大，变的档数越多。气泡最后一行是「▲ / ▼ 变档数」。" = "Color: red = upgrade, green = downgrade; darker and larger bubbles mean more notches. The last line in a bubble is ▲ / ▼ with the number of notches.";
+"数量：只画当天变档最多的前 10 只，其余点「另有 N 个 · 查看全部」。" = "Count: only the 10 biggest movers of the day are drawn; tap “N more · View all” for the rest.";
+"评级升降只是事实陈列，不代表后续涨跌，不构成投资建议。" = "Grade changes are shown as facts only. They do not predict future moves and are not investment advice.";
