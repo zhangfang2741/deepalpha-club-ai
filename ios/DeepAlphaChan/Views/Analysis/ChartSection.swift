@@ -15,8 +15,9 @@ struct ChartSection: View {
             ChartLegend(vm: vm, isStatic: isStatic, compact: true)
             // 主图不标次级别下钻区间：最右两根K线铺浅底没有说明，看起来像莫名的阴影；
             // 次级别结论在上方结论卡的「30 分钟确认」格里，区间只在弹出的 30 分钟图里标。
-            // 竖屏不画 MACD（背驰结果已标在主图上），全屏图里仍有。
-            ChanChartView(analysis: analysis, vm: vm, showsMACD: false,
+            // 竖屏也画 MACD 副图：趋势背驰比的就是 b 段与 c 段的红绿柱面积，副图上把这两段用粉色底标出来，
+            // 与主图的 b / c 两条线对得上。
+            ChanChartView(analysis: analysis, vm: vm,
                           onFullscreen: isStatic ? nil : onFullscreen)
         }
     }

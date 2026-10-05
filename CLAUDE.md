@@ -304,6 +304,13 @@ deepalpha-club-ai/
     `_formed_at`）的中枢区间不重叠且依次下移（一卖为上移），信号价离开后一个中枢。**不要**改成
     「已结束」：背驰后价格回到最后中枢会把它延伸，结束时间晚于一买（DXCM 一买曾因此漏掉）。
     **盘整背驰不算一类**；下一次同向笔又创新低 / 新高的一类作废（`_holds`，背驰段还在延伸）。
+    **中枢 B 延伸上限**（std10，`CHAN_PIVOT_EXTEND_LIMIT`，默认 9，0=不限）：缠论原文中枢延伸到 9 段即升级为更高级别中枢，原级别「a+A+b+B+c」不再成立；
+    信号时刻 B 已有元素（笔）数（`signals.pivot_b_size`，不看信号之后才延伸的部分）超过上限的一类不要。40 只美股近两年 60 个一类里丢 11 个
+    （含 DXCM 2026-04-29 一买，B 内 12 笔）；被丢与保留的信号 20 日方向调整收益无可区分差异（+5.3% n=9 / +3.2% n=47），所以这条是**原文依据、不是收益依据**，
+    觉得误伤就调大或设 0。
+    **黄白线回抽零轴**（`CHAN_ZERO_PULLBACK`，默认空=不要求；`signals.zero_axis_pullback`）：缠论原文的辅助条件——b、c 之间（B 震荡期间）DIF 要回到零轴附近，
+    c 段才算重新起算的一段力度。0=回到零轴，0.2=回落到 b 段 DIF 峰值 20% 以内（版本号带 `.zp<值>`）。46 个样本里 0 的口径只剩 20 个、0.2 剩 31 个，
+    被滤与保留的 20 日收益也无可区分差异，所以**默认不开**，要开先在更大样本上看信号数是否可接受。
   - 一类的背驰（std6 起）= 缠论原文的 **c 段（离开 B）对 b 段（A、B 之间）**比力度（`signals._trend_leg_divergence`），
     b / c 段按笔级中枢取（`_trend_legs`）：czsc 的相邻中枢首尾相接（A 结束 = B 开始），**A 的最后一笔就是离开笔，算 b 段开头**；**离开笔** = 与中枢区间有重叠、沿趋势方向、终点越过边界的最后一笔（`_exit_stroke`），b 段（对 A）、c 段（对 B）都从各自的离开笔起算、含离开笔。czsc 会把离开笔吸收进中枢，**不要**从「中枢最后一个元素的终点」起算（曾因此 c 段被砍短、背驰几乎必然成立，见 tests 回归用例）。另需信号价越过 b 段终点（创新极值）。不要改回「末笔对前一同向笔」。中枢没有笔明细、或该度量缺数据（没传 MACD）时退回 czsc 笔级判定。
   - **背驰度量可插拔**（std7，`chan/leg_metric.py`，`DivergenceMetric` 接口）：`macd_area`（默认，原文 MACD 红绿柱面积）/ `force`（价差·量能·时长）。
@@ -318,12 +325,12 @@ deepalpha-club-ai/
     `cxt_third_bs_V230318`（5 笔局部中枢 + SMA34 均线过滤）——都偏离原文；实测 8 只股票一年
     由 62 个降到 9 个，全部符合标准定义。也**不要**换成 `tas_macd_first_bs_*` 这类纯 MACD 信号。
 - 背驰口径统一为**一类趋势背驰**（2026-10-05 起，严格口径）：c 段（离开中枢 B）对 b 段（A、B 之间）的 MACD 红绿柱面积比（缠论原文，
-  `signals._trend_leg_divergence`），不分强弱档。图上标注（粉色线连 b 段终点 → c 段终点，「趋势背驰 + 面积比」）、一类买卖点、
+  `signals._trend_leg_divergence`），不分强弱档。图上标注（分别画 b 段、c 段两条粉线，比值标在 c 段上「趋势背驰 + 面积比」；**不要**连 b 终点 → c 终点的长线，会跨过整个中枢 B 长达数月）、一类买卖点、
   文字结论 / 形态推荐 / 走势展望 / 中枢阶段 / 缺口读到的「笔级背驰表」`result.divergences` 都是这一套：
   严格口径下 `analyzer` 在 `split_unconfirmed` 之后用 `signals.unify_stroke_divergences` 把它重建为只含一类趋势背驰（`policy.unify_divergences`），
   **不要**再让叙事等模块读价差·量能·时长的笔对笔背驰。同一个 b 段终点图上只留一条线（成立优先、同级取最新，`signals.leg_divergence_marks`）。
   API：`DivergenceResult.b_end_time/b_end_price` → `/chan/analysis` 的 `StrokeOut` 在对应一类信号所在笔上给
-  `diverged=true / area_ratio / div_ref_time / div_ref_price`；旧版 App 读不到新字段时退回「同向前一笔」作参照点。
+  `diverged=true / area_ratio / div_ref_*（b 段终点）/ div_b_start_* / div_c_start_*`；旧版 App 读不到新字段时退回「同向前一笔」作参照点。
   仍用价差·量能·时长力度口径的只剩：宽松口径（旧版 App，`unify_divergences=False`）与线段级背驰（`find_segment_divergences`，只在叙事里提一句）。
   改口径 / 背驰度量时，App 内教程（`lessons.json` 中英，背驰 / MACD / 三类买卖点）须同步改。
 - **背驰术语一律用缠论原文**（2026-10 起）：只说「趋势背驰 / 盘整背驰」（`DivergenceResult.type`，API `StrokeOut.divergence_type` = `trend` / `consolidation`），

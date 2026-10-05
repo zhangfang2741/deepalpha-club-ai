@@ -64,6 +64,11 @@ struct Stroke: Codable, Identifiable {
     let areaRatio: Double?
     let divRefTime: String?
     let divRefPrice: Double?
+    /// b 段起点、c 段起点：新后端给齐时图上分别画 b 段（起点→参照点）与 c 段（起点→本笔终点）两条线。
+    let divBStartTime: String?
+    let divBStartPrice: Double?
+    let divCStartTime: String?
+    let divCStartPrice: Double?
     /// 背驰类型（缠论原文术语）："trend" 趋势背驰 / "consolidation" 盘整背驰；旧后端无此字段。
     let divergenceType: String?
 
@@ -90,6 +95,10 @@ struct Stroke: Codable, Identifiable {
         case areaRatio = "area_ratio"
         case divRefTime = "div_ref_time"
         case divRefPrice = "div_ref_price"
+        case divBStartTime = "div_b_start_time"
+        case divBStartPrice = "div_b_start_price"
+        case divCStartTime = "div_c_start_time"
+        case divCStartPrice = "div_c_start_price"
         case divergenceType = "divergence_type"
     }
 
@@ -98,6 +107,14 @@ struct Stroke: Codable, Identifiable {
         if let t = divRefTime, let p = divRefPrice { return (t, p) }
         guard let previous, previous.direction == direction else { return nil }
         return (previous.endTime, previous.endPrice)
+    }
+
+    /// b 段、c 段两条线的端点（缠论原文：分别标出两段，而不是把端点连成一条跨过中枢的长线）；信息不全时为 nil。
+    var divergenceLegs: (b: (t0: String, p0: Double, t1: String, p1: Double),
+                         c: (t0: String, p0: Double, t1: String, p1: Double))? {
+        guard let bt = divBStartTime, let bp = divBStartPrice, let ct = divCStartTime, let cp = divCStartPrice,
+              let et = divRefTime, let ep = divRefPrice else { return nil }
+        return ((bt, bp, et, ep), (ct, cp, endTime, endPrice))
     }
 
     /// 背驰标注上写的比值：新后端是 MACD 面积比，旧后端是价差比。
