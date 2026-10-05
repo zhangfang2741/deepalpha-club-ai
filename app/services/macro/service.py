@@ -18,6 +18,9 @@ from app.services.macro.calendar import filter_events, next_key_event
 from app.services.macro.drivers import DRIVERS_BY_MARKET, evaluate_driver
 
 MACRO_MARKETS = frozenset({"us"})
+# 有大盘状态（regime）的市场：A 股 / 港股的大盘状态用各自 ETF 篮子（见 regime/cnhk.py），
+# 没有驱动因素（驱动因素的数据源只覆盖美股）；行业强弱仍只有 MACRO_MARKETS。
+STATE_MARKETS = frozenset({"us", "cn", "hk"})
 
 
 def _today() -> date:
@@ -37,6 +40,14 @@ async def _driver_series(redis: Redis | None, market: str) -> dict[str, list[tup
     return series
 
 
+async def _no_series() -> dict[str, list[tuple[str, float]]]:
+    return {}
+
+
+async def _no_rows() -> list:
+    return []
+
+
 async def _calendar(redis: Redis | None) -> list[dict]:
     today = _today()
     key = f"macro:calendar:{today.isoformat()}"
@@ -51,19 +62,21 @@ async def _calendar(redis: Redis | None) -> list[dict]:
 
 async def get_macro(redis: Redis | None, market: str, lang: str = "zh") -> MacroResponse:
     """宏观弹层。"""
-    if market not in MACRO_MARKETS:
+    if market not in STATE_MARKETS:
         return MacroResponse(market=market, available=False)
     key = cache.response_key("resp", market, lang)
     if (hit := await cache.get_model(redis, key, MacroResponse)) is not None:
         return hit
+    has_drivers = market in MACRO_MARKETS
     rows, series, raw_events = await asyncio.gather(
-        asyncio.to_thread(regime_view.load_state_rows), _driver_series(redis, market), _calendar(redis))
+        asyncio.to_thread(regime_view.load_state_rows, 260, market),
+        _driver_series(redis, market) if has_drivers else _no_series(), _calendar(redis))
     resp = MacroResponse(
         market=market,
         available=True,
         state=regime_view.build_state(rows, lang),
         history=regime_view.state_history(rows),
-        drivers=[evaluate_driver(spec, series.get(spec.key, []), lang) for spec in DRIVERS_BY_MARKET[market]],
+        drivers=[evaluate_driver(spec, series.get(spec.key, []), lang) for spec in DRIVERS_BY_MARKET.get(market, [])],
         events=filter_events(raw_events, market, datetime.now(UTC), lang),
     )
     if resp.state is not None:
@@ -75,14 +88,15 @@ async def get_macro(redis: Redis | None, market: str, lang: str = "zh") -> Macro
 
 async def get_overview(redis: Redis | None, market: str, lang: str = "zh") -> MarketOverviewResponse:
     """顶部宏观格 + 行业格摘要。"""
-    if market not in MACRO_MARKETS:
+    if market not in STATE_MARKETS:
         return MarketOverviewResponse(market=market, available=False)
     key = cache.response_key("overview", market, lang)
     if (hit := await cache.get_model(redis, key, MarketOverviewResponse)) is not None:
         return hit
+    # 行业强弱只有美股；A 股 / 港股只有大盘状态与宏观日历
     rows, sector_rows, raw_events = await asyncio.gather(
-        asyncio.to_thread(regime_view.load_state_rows, 30),
-        asyncio.to_thread(regime_view.load_sector_rows),
+        asyncio.to_thread(regime_view.load_state_rows, 30, market),
+        asyncio.to_thread(regime_view.load_sector_rows) if market in MACRO_MARKETS else _no_rows(),
         _calendar(redis),
     )
     strongest, weakest = regime_view.strongest_weakest(sector_rows, lang)

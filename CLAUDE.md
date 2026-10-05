@@ -131,7 +131,7 @@ deepalpha-club-ai/
 | 因子探索 | `/skills` | `/skill-generator` | LLM 生成因子代码 → 沙箱执行 |
 | 市场状态 | `/regime` | 并入恐慌指数页(大盘) + 行业恐慌页(板块) | 三篮子 ODS/CF + HMM 逐利/观望/避险后验，写因子表；大盘级与行业级各一套 |
 | 恐慌指数 | `/fear-greed` | `/fear-greed` | 市场恐慌贪婪指数 + 大盘市场状态(regime) |
-| 宏观 / 行业 | `/macro` | iOS 雷达页顶部「大盘环境 › 行业」两张卡片（行业卡片打开行业强弱面板 `SectorBoardSheet`，默认全部行业，选了雷达只显示该行业，`SignalRadarViewModel.sectorFilter`）；自选页顶部环境横幅 | 大盘状态(regime) + 5 个驱动因素 + 未来 7 天宏观日历；行业相对强弱（`?date=` 按雷达所选日）。`/signal-radar/sector-pools`、`/sector-day` 仅为旧版 App 保留（新版 App 用气泡自带的 `sector` 在本地按行业筛选）。第一期仅美股，A 股 / 港股 `available=false` |
+| 宏观 / 行业 | `/macro` | iOS 雷达页顶部「大盘环境 › 行业」两张卡片（行业卡片打开行业强弱面板 `SectorBoardSheet`，默认全部行业，选了雷达只显示该行业，`SignalRadarViewModel.sectorFilter`）；自选页顶部环境横幅 | 大盘状态(regime) + 5 个驱动因素 + 未来 7 天宏观日历；行业相对强弱（`?date=` 按雷达所选日）。`/signal-radar/sector-pools`、`/sector-day` 仅为旧版 App 保留（新版 App 用气泡自带的 `sector` 在本地按行业筛选）。大盘状态美股 / A 股 / 港股都有（A 股 / 港股无驱动因素与日历）；行业强弱仍仅美股 |
 | 行业恐慌 | `/industry-panic` | `/industry-panic` | 各 GICS 行业 ETF 的 RSI 情绪 + 估值 + 板块状态(行业级 regime) |
 | ETF 资金流 | `/etf` | `/etf` | 资金流热力图 + 偏离度 |
 | 行业估值 | `/valuation` | （并入行业恐慌页） | GICS 行业 PE z-score |
@@ -158,7 +158,13 @@ deepalpha-club-ai/
 > **A 股 / 港股行业标签**（2026-10-05 起，`sectors.load_sector_tags`）：A 股用本土**申万一级 31 个**（key 即中文名，如「电子」，不套 GICS；
 > 东财行业名即申万二级，`cnhk/sectors.CN_INDUSTRY_TO_SW` 归一级，与 `CN_INDUSTRY_TO_GICS` 键集一致有测试守护，新行业两张表都要补）；
 > 港股同理用本土**恒生行业分类一级 12 个**（key 即中文名，如「资讯科技业」，`HK_INDUSTRY_TO_HS` 与 GICS 表键集一致有测试守护，不套 GICS、不用 `HK_OVERRIDES`）。整市场一次取、Redis 缓存 24 小时，取回过少视为残缺不缓存。
-> 行业强弱（regime）仍只有美股；A 股 / 港股的「大盘环境」显示「数据建设中」，「行业」卡片 / 面板（`/macro/{cn|hk}/sectors`，`macro.service._native_sector_board`）
+> **A 股 / 港股大盘状态**（2026-10-05 起，`regime/cnhk.py`，表 `regime_market_features`，带 market 列，不动美股表）：与美股**同一条管线**
+> （`features.build_feature_series` → `engine.run_walk_forward` 走-前向 HMM，月末冻结、滤波后验、不回改），只换取数：基准 A 股沪深 300 ETF / 港股盈富基金，
+> 进攻 / 防御 / 现金三个等权 ETF 篮子见 `MARKET_CONFIGS`（Yahoo 日线，`skills.kline._fetch_yahoo`）。两个市场没有可用的波动率指数，特征里的 `vix` 槽换成
+> 「20 日 / 60 日已实现波动比」。选篮子要避开 Yahoo 历史残缺的品种（2828.HK 只有约 600 根，会把整个市场的共同历史截短），现金篮子年化波动须在 2% 内。
+> 调度 `regime/scheduler.run_cnhk_regime_scheduler`：A 股 UTC 07:40、港股 08:40 工作日，启动补跑，子进程降优先级（单市场约 1 分钟），紧急停用 `REGIME_CNHK_ENABLED=false`。
+> 已知局限：模型把高波动当偏避险（与美股同口径），A 股 2024-10-08 国庆后涨停潮被判成避险；两市场 ETF 上市较晚，有状态的区间约从 2022 年起。
+> 行业强弱（regime 行业表）仍只有美股；A 股 / 港股的「行业」卡片 / 面板（`/macro/{cn|hk}/sectors`，`macro.service._native_sector_board`）
 > 只列本土行业全集（申万 31 / 恒生 12）+ 雷达当日买卖点数，**没有强弱值**（`rs_vs_market` / `label` 为空，App 不画强弱条、不写「最强」）。
 
 > 信号雷达扫描约束（`app/services/signal_radar`）：同一 (口径, 市场, universe) 任一时刻只跑一轮全量扫描

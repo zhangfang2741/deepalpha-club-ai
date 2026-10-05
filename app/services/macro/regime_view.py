@@ -1,7 +1,7 @@
 """把 regime 因子表（大盘 / 行业）读成宏观格、行业格要的样子。
 
 纯函数（build_state / sector_rows / strongest_weakest）与 DB 读取（load_*，同步，调用方放线程池）分开，
-前者单测覆盖。第一期只有美股有数据（regime 表还没有 market 列，第二期接入 A 股 / 港股时再加）。
+前者单测覆盖。大盘状态：美股读 regime_features，A 股 / 港股读 regime_market_features（带 market 列）；行业状态仍只有美股。
 """
 from __future__ import annotations
 
@@ -139,14 +139,21 @@ def strongest_weakest(rows: list[SectorRow], lang: str = "zh") -> tuple[SectorBr
 
 # ---- DB 读取（同步） ----
 
-def load_state_rows(limit: int = 260) -> list[StateRow]:
-    """读最近 limit 个交易日的大盘状态（升序）。"""
+def load_state_rows(limit: int = 260, market: str = "us") -> list[StateRow]:
+    """读最近 limit 个交易日的大盘状态（升序）。美股读 regime_features，A 股 / 港股读 regime_market_features。"""
     from app.db.session import get_sync_session_cm
+    from app.models.regime_market_features import RegimeMarketFeatures
 
     with get_sync_session_cm() as session:
-        rows = session.exec(
-            select(RegimeFeatures).order_by(col(RegimeFeatures.trade_date).desc()).limit(limit)
-        ).all()
+        if market == "us":
+            rows = session.exec(
+                select(RegimeFeatures).order_by(col(RegimeFeatures.trade_date).desc()).limit(limit)
+            ).all()
+        else:
+            rows = session.exec(
+                select(RegimeMarketFeatures).where(RegimeMarketFeatures.market == market)
+                .order_by(col(RegimeMarketFeatures.trade_date).desc()).limit(limit)
+            ).all()
     out = [StateRow(r.trade_date, r.confirmed_label, r.regime_label, r.p_risk_on, r.p_neutral, r.p_risk_off)
            for r in rows]
     out.sort(key=lambda r: r.trade_date)

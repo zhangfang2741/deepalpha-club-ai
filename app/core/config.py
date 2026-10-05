@@ -408,6 +408,8 @@ class Settings:
         # 市场状态（大盘 + 行业 regime）每日重算（app/services/regime/scheduler.py）：美股 UTC 22:45，
         # 启动时数据落后则先补跑。雷达页顶部宏观格 / 行业格依赖它。
         self.REGIME_SCHEDULER_ENABLED = os.getenv("REGIME_SCHEDULER_ENABLED", "true").lower() in ("true", "1", "yes")
+        # A 股 / 港股大盘状态每日重算（A 股 UTC 07:40、港股 UTC 08:40，与美股同一条管线、各自 ETF 篮子）；紧急停用设 false
+        self.REGIME_CNHK_ENABLED = os.getenv("REGIME_CNHK_ENABLED", "true").lower() in ("true", "1", "yes")
         self.QUANT_BATCH_ENABLED = os.getenv("QUANT_BATCH_ENABLED", "true").lower() in ("true", "1", "yes")
         self.QUANT_BATCH_UTC_HOUR = int(os.getenv("QUANT_BATCH_UTC_HOUR", "22"))
         self.QUANT_BATCH_UTC_MINUTE = int(os.getenv("QUANT_BATCH_UTC_MINUTE", "30"))

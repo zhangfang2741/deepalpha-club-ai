@@ -55,3 +55,42 @@ async def test_cn_hk_sector_board_lists_native_sectors_without_strength(monkeypa
     # 下钻 / 未知市场仍不可用
     assert not (await svc.get_sector_board(_Redis(), "cn", "zh", "电子")).available
     assert not (await svc.get_sector_board(_Redis(), "jp", "zh", None)).available
+
+
+async def test_cn_hk_macro_has_state_but_no_drivers(monkeypatch):
+    rows = [regime_view.StateRow("2026-09-29", "risk_on", "risk_on", 0.7, 0.2, 0.1),
+            regime_view.StateRow("2026-09-30", "neutral", "neutral", 0.2, 0.7, 0.1)]
+    seen: list = []
+
+    def load(limit=260, market="us"):
+        seen.append(market)
+        return rows
+
+    async def calendar(redis):
+        return []
+
+    monkeypatch.setattr(regime_view, "load_state_rows", load)
+    monkeypatch.setattr(svc, "_calendar", calendar)
+    for market in ("cn", "hk"):
+        resp = await svc.get_macro(_Redis(), market, "zh")
+        assert resp.available and resp.state is not None and resp.state.label == "neutral"
+        assert resp.drivers == [] and len(resp.history) == 2
+    assert seen == ["cn", "hk"]
+
+    overview = await svc.get_overview(_Redis(), "cn", "zh")
+    assert overview.available and overview.macro_state is not None
+    assert overview.strongest is None and overview.weakest is None
+
+    # 没有大盘状态的市场仍不可用
+    assert not (await svc.get_macro(_Redis(), "jp", "zh")).available
+    assert not (await svc.get_overview(_Redis(), "jp", "zh")).available
+
+
+async def test_cn_macro_before_first_run_is_available_but_empty(monkeypatch):
+    async def calendar(redis):
+        return []
+
+    monkeypatch.setattr(regime_view, "load_state_rows", lambda limit=260, market="us": [])
+    monkeypatch.setattr(svc, "_calendar", calendar)
+    resp = await svc.get_macro(_Redis(), "cn", "zh")
+    assert resp.available and resp.state is None  # App 显示「数据准备中」（等第一轮计算）
