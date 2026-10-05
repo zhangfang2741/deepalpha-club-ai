@@ -68,6 +68,12 @@ struct PaywallView: View {
                 Text(L("暂时无法加载订阅信息")).foregroundColor(Theme.textPrimary)
                 Button(L("重试")) { Task { await store.loadProducts() } }
                     .buttonStyle(.bordered).tint(Theme.accent)
+                if let reason = store.loadDiagnostic {
+                    Text(reason)
+                        .font(.caption2).foregroundColor(Theme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .textSelection(.enabled)
+                }
             }
             .frame(maxWidth: .infinity).padding()
         } else {
