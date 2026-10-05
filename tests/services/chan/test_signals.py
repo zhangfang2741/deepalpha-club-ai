@@ -787,3 +787,22 @@ def test_chart_marks_only_from_type1_with_leg_reference():
         candidate_signals=[NS(type="sell1", time="T6", divergence=dv())],     # 待确认候选同样标
     )
     assert sorted(_leg_divergence_marks(result)) == ["T1", "T6"]
+
+
+def test_chart_marks_keep_one_line_per_b_end():
+    from types import SimpleNamespace as NS
+
+    from app.api.v1.chan import _leg_divergence_marks
+    from app.services.chan.divergence import DivergenceResult
+
+    def dv(b_end):
+        return DivergenceResult(is_diverged=True, type="trend", strength="medium", price_ratio=0.5,
+                                description="x", area_ratio=0.3, b_end_time=b_end, b_end_price=108.0)
+
+    result = NS(
+        signals=[NS(type="sell1", time="T1", divergence=dv("B1")), NS(type="sell1", time="T2", divergence=dv("B1")),
+                 NS(type="sell1", time="T3", divergence=dv("B2"))],
+        candidate_signals=[NS(type="sell1", time="T9", divergence=dv("B1")),   # 同 b 段终点：成立的优先于候选
+                           NS(type="sell1", time="T8", divergence=dv("B3"))],
+    )
+    assert sorted(_leg_divergence_marks(result)) == ["T2", "T3", "T8"]

@@ -108,15 +108,21 @@ def _leg_divergence_marks(result: ChanAnalysisResult) -> dict[str, DivergenceRes
     """图上背驰标注：{c 段终点那一笔的 end_time: 背驰结果}。
 
     只取一类买卖点（含待确认候选）判定用的趋势背驰——c 段（离开 B）对 b 段（A、B 之间）、缠论原文的 MACD 面积；
-    没有 b 段终点（笔级退回判定）的一类不标。
+    没有 b 段终点（笔级退回判定）的一类不标。同一个 b 段终点只留一条线（多条线共用一个起点、标签互相压住）：
+    已成立的信号优先于待确认候选，同级里取时间最新的。
     """
-    marks = {}
-    for sig in (*result.signals, *result.candidate_signals):
-        dv = sig.divergence
-        if (sig.type in ("buy1", "sell1") and dv is not None and dv.is_diverged
-                and dv.b_end_time and dv.b_end_price is not None):
-            marks[sig.time] = dv
-    return marks
+    best: dict[tuple[str, str], tuple[tuple[int, str], str, DivergenceResult]] = {}
+    for rank, sigs in ((1, result.signals), (0, result.candidate_signals)):
+        for sig in sigs:
+            dv = sig.divergence
+            if not (sig.type in ("buy1", "sell1") and dv is not None and dv.is_diverged
+                    and dv.b_end_time and dv.b_end_price is not None):
+                continue
+            key = (sig.type, dv.b_end_time)
+            cand = ((rank, sig.time), sig.time, dv)
+            if key not in best or cand[0] > best[key][0]:
+                best[key] = cand
+    return {time: dv for _, time, dv in best.values()}
 
 
 async def _fetch_bars_or_http_error(
