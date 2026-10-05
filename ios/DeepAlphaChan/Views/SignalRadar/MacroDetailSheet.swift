@@ -21,8 +21,10 @@ struct MacroDetailSheet: View {
                         stateCard(state, sentimentScore: panic?.current.score)
                         if !data.history.isEmpty { historyBand(data.history) }
                         if let panic { sentimentCard(panic) }
-                        driversCard(data.drivers)
-                        eventsCard(data.events)
+                        // 驱动因素与宏观日历的数据源只覆盖美股；A 股 / 港股没有就不画空卡片
+                        // （否则会写出「未来 7 天没有重要宏观事件」，其实是没有数据）
+                        if !data.drivers.isEmpty { driversCard(data.drivers) }
+                        if market == .us || !data.events.isEmpty { eventsCard(data.events) }
                         footnote
                     } else if let data, !data.available {
                         // 这个市场的大盘状态还没上线（A 股 / 港股）：重试没有意义，不给重试按钮；
