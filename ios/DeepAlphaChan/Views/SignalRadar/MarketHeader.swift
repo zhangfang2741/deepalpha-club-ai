@@ -25,6 +25,8 @@ struct MarketHeader: View {
 
     private var market: StockMarket { radarVM.market }
 
+    private static let allChipID = "_all"
+
     // MARK: - 市场卡：分段条 + 大盘环境
 
     private var marketCard: some View {
@@ -104,6 +106,9 @@ struct MarketHeader: View {
                         Text("\(Int((state.probability * 100).rounded()))%")
                             .font(.system(size: 10)).foregroundColor(Theme.textSecondary)
                     }
+                    RegimeBar(up: state.pRiskOn, mid: state.pNeutral, down: state.pRiskOff)
+                        .frame(width: 34, height: 4)
+                        .accessibilityHidden(true)
                 } else if let overview, !overview.available {
                     buildingText
                 } else if overview != nil {
@@ -114,7 +119,8 @@ struct MarketHeader: View {
                 if let panic {
                     Text("·").foregroundColor(Theme.textSecondary.opacity(0.6))
                     Text(L("情绪 %lld %@", Int(panic.current.score.rounded()), PanicIndexStyle.ratingLabel(panic.current.rating)))
-                        .font(.system(size: 11)).foregroundColor(Theme.textSecondary).lineLimit(1)
+                        .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
+                        .lineLimit(1).minimumScaleFactor(0.8)
                 } else if panicVM.failedMarkets.contains(market) {
                     Button { panicVM.retry(market) } label: {
                         Text(L("情绪 重试")).font(.system(size: 11)).foregroundColor(Theme.textSecondary)
@@ -157,18 +163,37 @@ struct MarketHeader: View {
         let canPick = !rows.isEmpty && radarVM.baseSelectedDay?.hasSectorData == true
         return HStack(spacing: 8) {
             if canPick {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        sectorChip(title: L("全部行业"), detail: nil, detailColor: Theme.textSecondary,
-                                   selected: radarVM.sectorFilter == nil) { radarVM.setSectorFilter(nil) }
-                        ForEach(rows) { row in
-                            sectorChip(title: row.name, detail: chipDetail(row), detailColor: chipColor(row),
-                                       selected: radarVM.sectorFilter == row.key) {
-                                radarVM.setSectorFilter(radarVM.sectorFilter == row.key ? nil : row.key)
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            sectorChip(title: L("全部行业"), detail: nil, detailColor: Theme.textSecondary,
+                                       selected: radarVM.sectorFilter == nil) { radarVM.setSectorFilter(nil) }
+                                .id(MarketHeader.allChipID)
+                            ForEach(rows) { row in
+                                sectorChip(title: row.name, detail: chipDetail(row), detailColor: chipColor(row),
+                                           selected: radarVM.sectorFilter == row.key) {
+                                    radarVM.setSectorFilter(radarVM.sectorFilter == row.key ? nil : row.key)
+                                }
+                                .id(row.key)
                             }
                         }
+                        .padding(.horizontal, 1)
                     }
-                    .padding(.horizontal, 1)
+                    // 右边缘淡出：提示后面还能滑，而不是把最后一个胶囊硬切一半
+                    .mask(
+                        HStack(spacing: 0) {
+                            Rectangle()
+                            LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                                .frame(width: 22)
+                        }
+                    )
+                    // 从行业面板里选了行业时，横条自动滚到它，不会选了却看不见
+                    .onChange(of: radarVM.sectorFilter) { _, key in
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            proxy.scrollTo(key ?? MarketHeader.allChipID, anchor: .center)
+                        }
+                    }
+                    .sensoryFeedback(.selection, trigger: radarVM.sectorFilter)
                 }
                 Button { onOpen(.sectorPicker) } label: {
                     Image(systemName: "list.bullet")
@@ -300,5 +325,32 @@ private struct TilePressStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .opacity(configuration.isPressed ? 0.8 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+
+/// 三态概率条：逐利（红）/ 观望（灰）/ 避险（绿）按概率分段，一眼看出当前状态占多大优势。
+/// 三个概率之和不到 1（取整、旧数据）时按比例归一化，全 0 时画一条灰底。
+private struct RegimeBar: View {
+    let up: Double
+    let mid: Double
+    let down: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            let total = max(up + mid + down, 0.0001)
+            HStack(spacing: 1) {
+                seg(Theme.up, up / total, geo.size.width)
+                seg(Theme.textSecondary.opacity(0.55), mid / total, geo.size.width)
+                seg(Theme.down, down / total, geo.size.width)
+            }
+        }
+        .clipShape(Capsule())
+        .background(Theme.border.opacity(0.6), in: Capsule())
+    }
+
+    @ViewBuilder
+    private func seg(_ color: Color, _ share: Double, _ width: CGFloat) -> some View {
+        if share > 0.01 { color.frame(width: max(width * share - 1, 1)) }
     }
 }
