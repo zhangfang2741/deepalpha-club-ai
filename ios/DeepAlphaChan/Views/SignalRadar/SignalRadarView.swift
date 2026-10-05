@@ -1425,7 +1425,7 @@ struct SignalRadarView: View {
         // response 在还没收到过任何回复（含 generating 态）之前是 nil，这时还
         // 不知道具体扫的是哪个 ETF，退回市场名兜底。
         let scope = currentUniverseName.isEmpty ? vm.market.title : currentUniverseName
-        // 顶部保留切换器：扫描/计算期间用户都能随时切回已算好的指数，不被困住。
+        // 市场 / 指数选择器在页面顶部的分段条里（MarketHeader），扫描/计算期间用户都能随时切回已算好的指数，不被困住。
         return ZStack(alignment: .topLeading) {
             VStack(spacing: 12) {
                 ProgressView().tint(Theme.accent)
@@ -1436,7 +1436,6 @@ struct SignalRadarView: View {
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            universeSwitcher
         }
     }
 
@@ -1458,7 +1457,6 @@ struct SignalRadarView: View {
                     .buttonStyle(.borderedProminent).tint(Theme.accent)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity).padding()
-            universeSwitcher
         }
     }
 
@@ -1495,7 +1493,6 @@ struct SignalRadarView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            universeSwitcher
         }
     }
 
