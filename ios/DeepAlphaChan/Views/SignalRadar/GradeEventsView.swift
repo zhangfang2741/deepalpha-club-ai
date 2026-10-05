@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 雷达「基本面研究」tab：股票池里每天综合等级升 / 降的股票，用气泡陈列。
 /// 气泡只显示当天变档最多的前 10 只（档数相同按代码排），更多的点「另有 N 个 · 查看全部」。
-/// 颜色与变档挂钩：蓝 = 升档、橙 = 降档，档数越多颜色越深、气泡越大；红 / 绿仍只留给缠论已成立的买卖点。
+/// 颜色与变档挂钩，且与缠论雷达同一套：升档 = 红（同买点）、降档 = 绿（同卖点），档数越多越深、气泡越大。
 struct GradeEventsView: View {
     @ObservedObject var vm: GradeEventsViewModel
     let universeName: String
@@ -119,10 +119,12 @@ struct GradeEventsView: View {
     /// 气泡大小与深浅都随变档数：1 档最小最浅，5 档及以上封顶。
     static func diameter(steps: Int) -> CGFloat { 64 + 9 * CGFloat(min(max(steps, 1), 5) - 1) }
 
+    /// 与缠论雷达气泡同一套颜色：升档 = 红（同买点）、降档 = 绿（同卖点），深浅随变档数（1 档最浅，5 档及以上最深）。
     static func fill(isUp: Bool, steps: Int) -> Color {
-        let base = isUp ? Theme.accent : Color(hex: 0xF59E0B)
-        return base.opacity(0.30 + 0.14 * Double(min(max(steps, 1), 5) - 1))
+        SignalFormatting.radarColor(side: isUp ? "buy" : "sell", depth: Double(min(max(steps, 1), 5) - 1) / 4)
     }
+
+    static func tint(isUp: Bool) -> Color { isUp ? Theme.up : Theme.down }
 
     private func bubble(_ e: GradeEvent) -> some View {
         let d = Self.diameter(steps: e.steps)
@@ -135,13 +137,13 @@ struct GradeEventsView: View {
         .padding(4)
         .frame(width: d, height: d)
         .background(Circle().fill(Self.fill(isUp: e.isUp, steps: e.steps)))
-        .overlay(Circle().stroke((e.isUp ? Theme.accent : Color(hex: 0xF59E0B)).opacity(0.7), lineWidth: 1))
+        .overlay(Circle().stroke(Self.tint(isUp: e.isUp).opacity(0.7), lineWidth: 1))
     }
 
     private var legend: some View {
         HStack(spacing: 14) {
-            legendDot(Theme.accent, L("升档"))
-            legendDot(Color(hex: 0xF59E0B), L("降档"))
+            legendDot(Theme.up, L("升档"))
+            legendDot(Theme.down, L("降档"))
             Text(L("颜色越深、气泡越大，变档越多")).font(.system(size: 11)).foregroundColor(Theme.textSecondary)
             Spacer()
         }
@@ -182,7 +184,7 @@ struct GradeEventsView: View {
         HStack(spacing: 10) {
             Image(systemName: e.isUp ? "arrow.up.right" : "arrow.down.right")
                 .font(.system(size: 14, weight: .bold))
-                .foregroundColor(e.isUp ? Theme.accent : Color(hex: 0xF59E0B))
+                .foregroundColor(Self.tint(isUp: e.isUp))
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 2) {
                 Text(e.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.textPrimary)
