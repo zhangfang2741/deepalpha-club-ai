@@ -1,7 +1,7 @@
 """把 regime 因子表（大盘 / 行业）读成宏观格、行业格要的样子。
 
 纯函数（build_state / sector_rows / strongest_weakest）与 DB 读取（load_*，同步，调用方放线程池）分开，
-前者单测覆盖。第一期只有美股有数据（regime 表还没有 market 列，第二期接入 A 股 / 港股时再加）。
+前者单测覆盖。大盘状态：美股读 regime_features，A 股 / 港股读 regime_market_features（带 market 列）；行业状态仍只有美股。
 """
 from __future__ import annotations
 
@@ -139,14 +139,21 @@ def strongest_weakest(rows: list[SectorRow], lang: str = "zh") -> tuple[SectorBr
 
 # ---- DB 读取（同步） ----
 
-def load_state_rows(limit: int = 260) -> list[StateRow]:
-    """读最近 limit 个交易日的大盘状态（升序）。"""
+def load_state_rows(limit: int = 260, market: str = "us") -> list[StateRow]:
+    """读最近 limit 个交易日的大盘状态（升序）。美股读 regime_features，A 股 / 港股读 regime_market_features。"""
     from app.db.session import get_sync_session_cm
+    from app.models.regime_market_features import RegimeMarketFeatures
 
     with get_sync_session_cm() as session:
-        rows = session.exec(
-            select(RegimeFeatures).order_by(col(RegimeFeatures.trade_date).desc()).limit(limit)
-        ).all()
+        if market == "us":
+            rows = session.exec(
+                select(RegimeFeatures).order_by(col(RegimeFeatures.trade_date).desc()).limit(limit)
+            ).all()
+        else:
+            rows = session.exec(
+                select(RegimeMarketFeatures).where(RegimeMarketFeatures.market == market)
+                .order_by(col(RegimeMarketFeatures.trade_date).desc()).limit(limit)
+            ).all()
     out = [StateRow(r.trade_date, r.confirmed_label, r.regime_label, r.p_risk_on, r.p_neutral, r.p_risk_off)
            for r in rows]
     out.sort(key=lambda r: r.trade_date)
@@ -170,3 +177,20 @@ def load_sector_rows(parent: str | None = None, as_of: str | None = None) -> lis
         ).all()
     return [SectorRow(r.trade_date, r.sector, r.rs_vs_market, r.confirmed_label, r.regime_label, r.p_risk_on)
             for r in rows if parent is not None or r.sector in SECTOR_SYMBOL]  # 丢掉已下线的旧一级行业行（如半导体）
+
+
+def load_market_sector_rows(market: str, as_of: str | None = None) -> list[SectorRow]:
+    """A 股 / 港股：最新一个交易日（as_of 给定时取不晚于它的最近交易日）的行业状态（申万 / 恒生一级，key 即行业名）。"""
+    from app.db.session import get_sync_session_cm
+    from app.models.regime_market_sector_features import RegimeMarketSectorFeatures as M
+
+    day_q = select(M.trade_date).where(M.market == market)
+    if as_of is not None:
+        day_q = day_q.where(M.trade_date <= as_of)
+    with get_sync_session_cm() as session:
+        latest = session.exec(day_q.order_by(col(M.trade_date).desc()).limit(1)).first()
+        if latest is None:
+            return []
+        rows = session.exec(select(M).where(M.market == market, M.trade_date == latest)).all()
+    return [SectorRow(r.trade_date, r.sector, r.rs_vs_market, r.confirmed_label, r.regime_label, r.p_risk_on)
+            for r in rows]

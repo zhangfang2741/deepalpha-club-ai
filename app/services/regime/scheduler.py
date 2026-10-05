@@ -116,3 +116,122 @@ async def run_regime_scheduler() -> None:
         trigger = next_trigger(now, _TRIGGER_HOUR, _TRIGGER_MINUTE, _WEEKDAYS)
         await asyncio.sleep(max(0.0, (trigger - now).total_seconds()))
         await run_once(trigger.date())
+
+
+# ---- A 股 / 港股大盘状态与行业状态（与美股同一套管线，见 regime/cnhk.py、cnhk_sector.py；每轮一个子进程、算完即落库） ----
+
+_CNHK_LOCK_TTL = 20 * 60  # 一个市场约 1 分钟，短锁：部署中断后最迟 20 分钟可重跑
+
+
+def _latest_cnhk_date(market: str) -> str | None:
+    from app.db.session import get_sync_session_cm
+    from app.models.regime_market_features import RegimeMarketFeatures
+
+    with get_sync_session_cm() as session:
+        return session.exec(
+            select(RegimeMarketFeatures.trade_date).where(RegimeMarketFeatures.market == market)
+            .order_by(col(RegimeMarketFeatures.trade_date).desc()).limit(1)).first()
+
+
+def _latest_cnhk_sector_date(market: str) -> str | None:
+    from app.db.session import get_sync_session_cm
+    from app.models.regime_market_sector_features import RegimeMarketSectorFeatures as M
+
+    with get_sync_session_cm() as session:
+        return session.exec(
+            select(M.trade_date).where(M.market == market).order_by(col(M.trade_date).desc()).limit(1)).first()
+
+
+def is_cnhk_stale(latest: str | None, session_day: date) -> bool:
+    """没有数据，或最新交易日早于最近一个已收盘的工作日（节假日会多补跑一次，无害）。"""
+    return latest is None or latest < session_day.isoformat()
+
+
+def _run_cnhk_stage(market: str) -> dict:
+    """子进程入口：降低优先级后抓数 → 算状态 → 落库。"""
+    try:
+        os.nice(10)
+    except OSError:
+        pass
+    from app.db.session import get_sync_session_cm
+    from app.services.regime.cnhk import run_market_stage
+
+    with get_sync_session_cm() as session:
+        return run_market_stage(session, market)
+
+
+async def run_cnhk_once(market: str, session_day: date) -> None:
+    """跑一轮某个市场的大盘状态（同一交易日多实例只跑一次）。"""
+    redis = current_redis()
+    lock_key = f"regime:run:{market}:{session_day.isoformat()}"
+    if redis is not None and not await acquire_lock(redis, lock_key, _CNHK_LOCK_TTL):
+        logger.info("regime_cnhk_skipped_locked", market=market, session=session_day.isoformat())
+        return
+    try:
+        loop = asyncio.get_running_loop()
+        with ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context("spawn")) as pool:
+            summary = await loop.run_in_executor(pool, _run_cnhk_stage, market)
+        logger.info("regime_cnhk_daily_done", session=session_day.isoformat(), **summary)
+        await macro_cache.drop_market(redis, market)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("regime_cnhk_daily_failed", market=market, session=session_day.isoformat(), error=str(e))
+
+
+_CNHK_SECTOR_LOCK_TTL = 60 * 60  # 行业状态 A 股约 8 分钟、港股约 3 分钟，长锁防止同一天被两个实例重复跑
+
+
+def _run_cnhk_sector_stage(market: str) -> dict:
+    """子进程入口：降低优先级后取成分股行情 → 合成行业指数 → 逐行业算状态 → 落库。"""
+    try:
+        os.nice(10)
+    except OSError:
+        pass
+    from app.db.session import get_sync_session_cm
+    from app.services.regime.cnhk_sector import run_sector_stage
+
+    with get_sync_session_cm() as session:
+        return run_sector_stage(session, market)
+
+
+async def run_cnhk_sector_once(market: str, session_day: date) -> None:
+    """跑一轮某个市场的行业状态（独立于大盘状态：单独的锁与子进程，大盘状态不用等它）。"""
+    redis = current_redis()
+    lock_key = f"regime:run:{market}:sector:{session_day.isoformat()}"
+    if redis is not None and not await acquire_lock(redis, lock_key, _CNHK_SECTOR_LOCK_TTL):
+        logger.info("regime_cnhk_sector_skipped_locked", market=market, session=session_day.isoformat())
+        return
+    try:
+        loop = asyncio.get_running_loop()
+        with ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context("spawn")) as pool:
+            summary = await loop.run_in_executor(pool, _run_cnhk_sector_stage, market)
+        logger.info("regime_cnhk_sector_daily_done", session=session_day.isoformat(), **summary)
+        await macro_cache.drop_market(redis, market)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("regime_cnhk_sector_daily_failed", market=market, session=session_day.isoformat(), error=str(e))
+
+
+async def _cnhk_market_loop(market: str) -> None:
+    from app.services.quant_research.scheduler import last_cnhk_session
+    from app.services.regime.cnhk import CLOSE_HOUR_UTC, TRIGGER_UTC
+
+    try:
+        session_day = last_cnhk_session(datetime.now(UTC), CLOSE_HOUR_UTC[market])
+        if is_cnhk_stale(await asyncio.to_thread(_latest_cnhk_date, market), session_day):
+            await run_cnhk_once(market, session_day)
+        if is_cnhk_stale(await asyncio.to_thread(_latest_cnhk_sector_date, market), session_day):
+            await run_cnhk_sector_once(market, session_day)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("regime_cnhk_bootstrap_failed", market=market, error=str(e))
+    hour, minute = TRIGGER_UTC[market]
+    while True:
+        now = datetime.now(UTC)
+        trigger = next_trigger(now, hour, minute, {0, 1, 2, 3, 4})
+        await asyncio.sleep(max(0.0, (trigger - now).total_seconds()))
+        await run_cnhk_once(market, trigger.date())
+        await run_cnhk_sector_once(market, trigger.date())
+
+
+async def run_cnhk_regime_scheduler() -> None:
+    """A 股 / 港股大盘状态调度：启动补跑 + 每个工作日收盘后重算（两个市场各一个循环，错开启动）。"""
+    await asyncio.sleep(_STARTUP_DELAY_SECONDS + 30)
+    await asyncio.gather(_cnhk_market_loop("cn"), _cnhk_market_loop("hk"))

@@ -1,7 +1,7 @@
 """宏观环境 / 市场概览编排：regime 因子表 + 驱动因素 + 宏观日历 + 宽基雷达按行业统计。
 
 第一期只有美股（MACRO_MARKETS）有大盘状态与行业强弱；A 股 / 港股的大盘环境 available=false（App 显示「数据建设中」），
-行业弹层只给本土行业（申万 / 恒生一级）+ 雷达买卖点数，没有强弱。
+行业弹层给本土行业（申万 / 恒生一级）+ 行业相对强弱（成分股等权合成的行业指数）+ 雷达买卖点数。
 """
 from __future__ import annotations
 
@@ -18,6 +18,9 @@ from app.services.macro.calendar import filter_events, next_key_event
 from app.services.macro.drivers import DRIVERS_BY_MARKET, evaluate_driver
 
 MACRO_MARKETS = frozenset({"us"})
+# 有大盘状态（regime）的市场：A 股 / 港股的大盘状态用各自 ETF 篮子（见 regime/cnhk.py），
+# 没有驱动因素（驱动因素的数据源只覆盖美股）；行业状态走各自的行业表（见 regime/cnhk_sector.py）。
+STATE_MARKETS = frozenset({"us", "cn", "hk"})
 
 
 def _today() -> date:
@@ -37,6 +40,10 @@ async def _driver_series(redis: Redis | None, market: str) -> dict[str, list[tup
     return series
 
 
+async def _no_series() -> dict[str, list[tuple[str, float]]]:
+    return {}
+
+
 async def _calendar(redis: Redis | None) -> list[dict]:
     today = _today()
     key = f"macro:calendar:{today.isoformat()}"
@@ -51,19 +58,21 @@ async def _calendar(redis: Redis | None) -> list[dict]:
 
 async def get_macro(redis: Redis | None, market: str, lang: str = "zh") -> MacroResponse:
     """宏观弹层。"""
-    if market not in MACRO_MARKETS:
+    if market not in STATE_MARKETS:
         return MacroResponse(market=market, available=False)
     key = cache.response_key("resp", market, lang)
     if (hit := await cache.get_model(redis, key, MacroResponse)) is not None:
         return hit
+    has_drivers = market in MACRO_MARKETS
     rows, series, raw_events = await asyncio.gather(
-        asyncio.to_thread(regime_view.load_state_rows), _driver_series(redis, market), _calendar(redis))
+        asyncio.to_thread(regime_view.load_state_rows, 260, market),
+        _driver_series(redis, market) if has_drivers else _no_series(), _calendar(redis))
     resp = MacroResponse(
         market=market,
         available=True,
         state=regime_view.build_state(rows, lang),
         history=regime_view.state_history(rows),
-        drivers=[evaluate_driver(spec, series.get(spec.key, []), lang) for spec in DRIVERS_BY_MARKET[market]],
+        drivers=[evaluate_driver(spec, series.get(spec.key, []), lang) for spec in DRIVERS_BY_MARKET.get(market, [])],
         events=filter_events(raw_events, market, datetime.now(UTC), lang),
     )
     if resp.state is not None:
@@ -75,14 +84,16 @@ async def get_macro(redis: Redis | None, market: str, lang: str = "zh") -> Macro
 
 async def get_overview(redis: Redis | None, market: str, lang: str = "zh") -> MarketOverviewResponse:
     """顶部宏观格 + 行业格摘要。"""
-    if market not in MACRO_MARKETS:
+    if market not in STATE_MARKETS:
         return MarketOverviewResponse(market=market, available=False)
     key = cache.response_key("overview", market, lang)
     if (hit := await cache.get_model(redis, key, MarketOverviewResponse)) is not None:
         return hit
+    # A 股 / 港股没有驱动因素；行业强弱来自各自的行业状态表
     rows, sector_rows, raw_events = await asyncio.gather(
-        asyncio.to_thread(regime_view.load_state_rows, 30),
-        asyncio.to_thread(regime_view.load_sector_rows),
+        asyncio.to_thread(regime_view.load_state_rows, 30, market),
+        (asyncio.to_thread(regime_view.load_sector_rows) if market in MACRO_MARKETS
+         else asyncio.to_thread(regime_view.load_market_sector_rows, market)),
         _calendar(redis),
     )
     strongest, weakest = regime_view.strongest_weakest(sector_rows, lang)
@@ -102,27 +113,35 @@ async def get_overview(redis: Redis | None, market: str, lang: str = "zh") -> Ma
 
 async def _native_sector_board(redis: Redis | None, market: str, names: tuple[str, ...],
                                date: str | None) -> SectorBoardResponse:
-    """A 股 / 港股的行业弹层：本土行业全集 + 宽基雷达当日按行业的买卖点数。
+    """A 股 / 港股的行业弹层：本土行业全集（申万 / 恒生一级）+ 行业相对强弱 + 宽基雷达当日按行业的买卖点数。
 
-    没有行业相对强弱（regime 因子表只有美股），所以不带 rs_vs_market / label；
-    有信号的行业排前面（买卖点合计从多到少），其余按目录顺序。date 给定时不附带买卖点数（App 用自己当天的统计）。
+    强弱来自 `regime_market_sector_features`（行业指数 = 市值最大的几只成分股等权合成，见 regime/cnhk_sector.py）；
+    还没算出来、或成分股不足的行业不带强弱（`rs_vs_market` / `label` 为空）。按强弱从强到弱排，没有强弱的按买卖点合计排在后面。
+    date 给定时按该日收盘取强弱、不附带买卖点数（App 用自己当天的统计）。
     """
     from app.services.signal_radar.sectors import BROAD_UNIVERSE
     from app.services.signal_radar.service import latest_sector_counts
     from app.services.signal_radar.universe import get_universe
 
     universe_key = BROAD_UNIVERSE[market]
+    state_rows = await asyncio.to_thread(regime_view.load_market_sector_rows, market, date)
+    by_key = {r.sector: r for r in state_rows}
     radar = await latest_sector_counts(redis, market, universe_key) if redis is not None and date is None else None
     radar_date, counts = radar if radar else (None, {})
-    rows = [
-        SectorRowOut(key=n, name=n, buy_count=counts.get(n, {}).get("buy", 0), sell_count=counts.get(n, {}).get("sell", 0))
-        for n in names
-    ]
-    rows.sort(key=lambda r: -(r.buy_count + r.sell_count))  # 稳定排序：同数量保持目录顺序
+    rows = []
+    for n in names:
+        r = by_key.get(n)
+        rows.append(SectorRowOut(
+            key=n, name=n,
+            rs_vs_market=r.rs_vs_market if r else None, label=(r.confirmed_label or r.regime_label) if r else None,
+            p_risk_on=r.p_risk_on if r else None,
+            buy_count=counts.get(n, {}).get("buy", 0), sell_count=counts.get(n, {}).get("sell", 0)))
+    rows.sort(key=lambda x: (x.rs_vs_market is None, -(x.rs_vs_market or 0.0), -(x.buy_count + x.sell_count)))
     universe = get_universe(market, universe_key)
     return SectorBoardResponse(
-        market=market, available=True, radar_universe=universe_key,
-        radar_universe_name=universe.etf_name if universe else None, radar_date=radar_date, sectors=rows,
+        market=market, available=True, as_of=state_rows[0].trade_date if state_rows else None,
+        radar_universe=universe_key, radar_universe_name=universe.etf_name if universe else None,
+        radar_date=radar_date, sectors=rows,
     )
 
 
