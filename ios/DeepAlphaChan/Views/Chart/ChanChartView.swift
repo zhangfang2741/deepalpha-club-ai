@@ -653,28 +653,34 @@ struct ChanChartView: View {
         }
     }
 
-    /// 成立日标记：徽标画在所属笔的极值 K 线上，但买卖点要等下一笔成形才成立（可能晚好几周，
+    /// 成立日标记的圆点位置：徽标画在所属笔的极值 K 线上，但买卖点要等下一笔成形才成立（可能晚好几周，
     /// 如 AVGO 三卖：极值 09-22、成立 10-02）。成立日那根 K 线上什么都没有时，用户会以为「那天没有这个信号」。
-    /// 所以从徽标价位水平向右拉一条细虚线，终点画一个小空心圆点——圆点所在的 K 线就是列表里的成立日。
-    /// 待确认候选没有成立日；成立日还没滚进可见区（或和极值同一天）时不画。
+    /// 所以从徽标价位水平向右拉一条细虚线，终点画一个小空心圆点并写「成立」——圆点所在的 K 线就是列表里的成立日。
+    /// 绘制与点击命中共用这个位置。待确认候选没有成立日；成立日还没滚进可见区（或和极值同一天）时返回 nil。
+    private func establishedPoint(_ sig: Signal, range: VisibleRange, height: CGFloat,
+                                  bounds: PriceBounds) -> CGPoint? {
+        guard !sig.isCandidate, let detected = sig.detectedTime, detected != sig.time,
+              let si = timeIndex[sig.time], si >= range.start, si < range.end,
+              let idx = timeIndex[detected], idx >= range.start, idx < range.end else { return nil }
+        let endX = x(for: idx, range: range)
+        guard endX > x(for: si, range: range) + 6 else { return nil }
+        return CGPoint(x: endX, y: y(for: sig.price, height: height, bounds: bounds))
+    }
+
     private func drawEstablishedMark(_ ctx: GraphicsContext, signal sig: Signal, fromX: CGFloat,
                                      height: CGFloat, range: VisibleRange, bounds: PriceBounds, color: Color) {
-        guard !sig.isCandidate, let detected = sig.detectedTime, detected != sig.time,
-              let idx = timeIndex[detected], idx >= range.start, idx < range.end else { return }
-        let endX = x(for: idx, range: range)
-        guard endX > fromX + 6 else { return }
-        let cy = y(for: sig.price, height: height, bounds: bounds)
+        guard let end = establishedPoint(sig, range: range, height: height, bounds: bounds) else { return }
         var line = Path()
-        line.move(to: CGPoint(x: fromX, y: cy))
-        line.addLine(to: CGPoint(x: endX, y: cy))
+        line.move(to: CGPoint(x: fromX, y: end.y))
+        line.addLine(to: end)
         ctx.stroke(line, with: .color(color.opacity(0.55)), style: StrokeStyle(lineWidth: 1, dash: [2, 3]))
-        let dot = Path(ellipseIn: CGRect(x: endX - 3.5, y: cy - 3.5, width: 7, height: 7))
+        let dot = Path(ellipseIn: CGRect(x: end.x - 3.5, y: end.y - 3.5, width: 7, height: 7))
         ctx.fill(dot, with: .color(Theme.background))
         ctx.stroke(dot, with: .color(color), style: StrokeStyle(lineWidth: 1.5))
-        // 圆点旁写「成立」：只有虚线和圆点没人看得懂（上线后用户问「绿圈圈是啥」）。字放在圆点左上方、线的上面，
-        // 靠右的信号不会被右侧价格轴裁掉
+        // 圆点旁写「成立」：只有虚线和圆点没人看得懂。字放在圆点左上方、线的上面，靠右的信号不会被价格轴裁掉。
+        // 点圆点或这两个字都弹说明（见 hitTest）
         let label = ctx.resolve(Text(L("成立")).font(.system(size: 9, weight: .bold)).foregroundColor(color))
-        ctx.draw(label, at: CGPoint(x: endX - 2, y: cy - 6), anchor: .bottomTrailing)
+        ctx.draw(label, at: CGPoint(x: end.x - 2, y: end.y - 6), anchor: .bottomTrailing)
     }
 
     // MARK: - 绘制：次级别下钻区间
@@ -891,6 +897,19 @@ struct ChanChartView: View {
                 }
             }
         }
+        // 成立日标记（圆点 + 「成立」两个字）：和徽标一样可点，弹出为什么成立日比徽标晚
+        if vm.showSignals {
+            for s in analysis.chartSignals {
+                guard let e = establishedPoint(s, range: range, height: height, bounds: bounds) else { continue }
+                let d = hypot(loc.x - e.x, loc.y - e.y)
+                let labelRect = CGRect(x: e.x - 30, y: e.y - 22, width: 32, height: 18)
+                if d < 14 {
+                    nearby.append((.established(s), d))
+                } else if labelRect.contains(loc) {
+                    nearby.append((.established(s), hypot(loc.x - labelRect.midX, loc.y - labelRect.midY)))
+                }
+            }
+        }
         // 分型先于背驰：背驰虚线两端就是分型点，点端点应出分型说明
         if vm.showFractals {
             for f in analysis.fractals {
@@ -968,6 +987,7 @@ struct ChanChartView: View {
             } else {
                 ring(pt(s.time, s.price), 8)
             }
+        case .established(let s): ring(establishedPoint(s, range: range, height: height, bounds: bounds), 9)
         case .divergence(let c, let p): line(pt(p.endTime, p.endPrice), pt(c.endTime, c.endPrice), 2.5)
         case .pivot(let p):
             guard let a = pt(p.startTime, p.zg), let b = pt(p.endTime, p.zd) else { return }
