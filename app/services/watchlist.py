@@ -195,20 +195,22 @@ async def quant_grades(items: list[WatchlistItem]) -> dict[str, str]:
 
 
 async def sector_tags(items: list[WatchlistItem]) -> dict[str, str]:
-    """自选里美股所属的行业 key（与雷达扇区、行业强弱同一套），键为 `{market}:{symbol}`。
+    """自选里各股所属的行业 key（与雷达扇区、行业强弱同一套），键为 `{market}:{symbol}`。
 
-    港股 / A 股暂无行业分类；取不到（成分表拉取失败）返回空，列表照常展示。
+    取不到（成分表 / 行业数据拉取失败）返回空，列表照常展示。
     """
-    us = [i.symbol for i in items if i.market == "us"]
-    if not us:
+    if not items:
         return {}
     from app.cache.client import current_redis
     from app.services.signal_radar import sectors
 
-    tags = await sectors.load_sector_tags("us", current_redis())
     out: dict[str, str] = {}
-    for symbol in us:
-        key = tags.get(symbol) or tags.get(symbol.upper().replace(".", "-"))
-        if key:
-            out[f"us:{symbol}"] = key
+    for market in sorted({i.market for i in items}):
+        tags = await sectors.load_sector_tags(market, current_redis())
+        for i in items:
+            if i.market != market:
+                continue
+            key = sectors.lookup_tag(tags, i.symbol)
+            if key:
+                out[f"{market}:{i.symbol}"] = key
     return out
