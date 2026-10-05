@@ -115,3 +115,14 @@ async def test_cn_macro_before_first_run_is_available_but_empty(monkeypatch):
     monkeypatch.setattr(svc, "_calendar", calendar)
     resp = await svc.get_macro(_Redis(), "cn", "zh")
     assert resp.available and resp.state is None  # App 显示「数据准备中」（等第一轮计算）
+
+
+async def test_native_sector_board_names_follow_language(monkeypatch):
+    monkeypatch.setattr(regime_view, "load_market_sector_rows", lambda market, as_of=None: [
+        SectorRow("2026-09-30", "医药生物", 0.065, "risk_on", "risk_on", 0.8)])
+    zh = await svc.get_sector_board(_Redis(), "cn", "zh", None, date="2026-09-30")
+    en = await svc.get_sector_board(_Redis(), "cn", "en", None, date="2026-09-30")
+    assert zh.sectors[0].name == "医药生物" and en.sectors[0].name == "Pharma & Biotech"
+    assert en.sectors[0].key == "医药生物"          # key 始终是中文名（雷达标签用它筛选）
+    hk = await svc.get_sector_board(_Redis(), "hk", "en", None, date="2026-09-30")
+    assert "Information Technology" in {s.name for s in hk.sectors}

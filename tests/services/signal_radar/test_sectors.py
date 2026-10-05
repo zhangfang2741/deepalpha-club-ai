@@ -158,3 +158,12 @@ async def test_load_cnhk_tags_skips_incomplete_result(monkeypatch):
 
     monkeypatch.setattr(sectors, "_fetch_cnhk_tags", fake)
     assert await sectors.load_sector_tags("cn", None) == {}
+
+
+def test_every_native_sector_has_an_english_name():
+    from app.services.quant_research.cnhk.sectors import HS_LEVEL1, NATIVE_SECTOR_EN, SW_LEVEL1
+
+    missing = [n for n in (*SW_LEVEL1, *HS_LEVEL1) if not NATIVE_SECTOR_EN.get(n)]
+    assert missing == []
+    # 申万「公用事业」与恒生「公用事业」同名，共用一条；其余不应有未使用的多余条目
+    assert set(NATIVE_SECTOR_EN) == set(SW_LEVEL1) | set(HS_LEVEL1)

@@ -211,3 +211,24 @@ def hk_sector(code: str, industry: str | None) -> str | None:
 def hk_hs_industry(industry: str | None) -> str | None:
     """港股东财行业 → 恒生行业分类一级名。"""
     return HK_INDUSTRY_TO_HS.get((industry or "").strip())
+
+
+# 本土行业（申万 / 恒生一级）的英文名：接口按 lang=en 返回、App 英文界面显示用（key 是中文名）。
+# 申万「公用事业」与恒生「公用事业」同名同义，共用一条。
+NATIVE_SECTOR_EN: dict[str, str] = {
+    # 申万一级
+    "农林牧渔": "Agriculture", "基础化工": "Chemicals", "钢铁": "Steel", "有色金属": "Nonferrous Metals",
+    "电子": "Electronics", "家用电器": "Home Appliances", "食品饮料": "Food & Beverage",
+    "纺织服饰": "Textiles & Apparel", "轻工制造": "Light Manufacturing", "医药生物": "Pharma & Biotech",
+    "公用事业": "Utilities", "交通运输": "Transportation", "房地产": "Real Estate", "商贸零售": "Retail & Trade",
+    "社会服务": "Social Services", "综合": "Conglomerates", "建筑材料": "Building Materials",
+    "建筑装饰": "Construction & Decoration", "电力设备": "Electrical Equipment", "机械设备": "Machinery",
+    "国防军工": "Defense", "汽车": "Autos", "计算机": "Computers", "传媒": "Media", "通信": "Telecom",
+    "银行": "Banks", "非银金融": "Non-bank Financials", "煤炭": "Coal", "石油石化": "Oil & Petrochemicals",
+    "环保": "Environmental Protection", "美容护理": "Beauty & Personal Care",
+    # 恒生一级
+    "能源业": "Energy", "原材料业": "Materials", "工业": "Industrials", "非必需性消费": "Consumer Discretionary",
+    "必需性消费": "Consumer Staples", "医疗保健业": "Health Care", "金融业": "Financials",
+    "地产建筑业": "Property & Construction", "资讯科技业": "Information Technology",
+    "电讯业": "Telecommunications", "综合企业": "Conglomerates",
+}

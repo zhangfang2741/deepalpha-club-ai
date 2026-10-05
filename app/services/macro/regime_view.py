@@ -36,7 +36,9 @@ SECTOR_NAME_EN: dict[str, str] = {
 def sector_name(key: str, lang: str) -> str:
     """行业展示名。"""
     if lang == "en":
-        return SECTOR_NAME_EN.get(key, key)
+        from app.services.quant_research.cnhk.sectors import NATIVE_SECTOR_EN
+
+        return SECTOR_NAME_EN.get(key) or NATIVE_SECTOR_EN.get(key, key)
     return SECTOR_NAME_ZH.get(key, key)
 
 
