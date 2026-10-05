@@ -20,10 +20,14 @@ from app.services.signal_radar.quant_filter import QuantGrade, grade_from_row
 from app.services.signal_radar.universe import get_universe
 
 DEFAULT_DAYS = 10
+# 某一天变档的股票超过股票池里有评级股票的这个比例，视为方法论升级 / 全员重评（不是真实的评级变化），整天不展示。
+# 线上实测：2026-09-30 标普 500 有一半股票变档，之后每天约 7%。
+BULK_DAY_RATIO = 0.3
 
 
 def build_events(
     history: dict[str, list[QuantGrade]], names: dict[str, str], tags: dict[str, str], since: date,
+    bulk_ratio: float = BULK_DAY_RATIO,
 ) -> list[RadarGradeDayOut]:
     """history: {雷达代码: 评级序列}。相邻评级日综合等级不同即一条事件，日期不早于 since；按日期从新到旧。"""
     by_day: dict[str, list[RadarGradeEventOut]] = {}
@@ -43,7 +47,11 @@ def build_events(
                 steps=abs(b - a), sector=sectors.lookup_tag(tags, symbol), score=cur.score,
             ))
     days = []
+    rated = max(len(history), 1)
     for day in sorted(by_day, reverse=True):
+        if len(by_day[day]) / rated > bulk_ratio:
+            logger.info("signal_radar_grade_events_bulk_day_skipped", day=day, events=len(by_day[day]), rated=rated)
+            continue
         events = sorted(by_day[day], key=lambda e: (-e.steps, e.symbol))
         days.append(RadarGradeDayOut(
             date=day, up_count=sum(e.direction == "up" for e in events),
