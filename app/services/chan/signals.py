@@ -238,6 +238,7 @@ def _raw_to_force(leg: RawLeg, macd: MACDData | None, is_buy: bool) -> LegForce:
 def _compare_legs(
     c: LegForce, b: LegForce, lang: str, metric: DivergenceMetric,
     b_end: tuple[str, float] | None = None,
+    b_start: tuple[str, float] | None = None, c_start: tuple[str, float] | None = None,
 ) -> tuple[bool, DivergenceResult | None]:
     """C 段对 b 段按度量比较：（能否判定, 背驰结果）；该度量缺数据时「不能判定」。
 
@@ -255,6 +256,7 @@ def _compare_legs(
         area_ratio=cmp.area_ratio,
         description=force_text(cmp.price_ratio, cmp.volume_ratio, cmp.length_ratio, lang, cmp.area_ratio),
         b_end_time=b_end[0] if b_end else None, b_end_price=b_end[1] if b_end else None,
+        b_start=b_start, c_start=c_start,
     )
 
 
@@ -276,7 +278,18 @@ def _trend_leg_divergence(
     if (price >= b_end) if is_buy else (price <= b_end):
         return True, None
     return _compare_legs(leg_force(legs[1], macd), leg_force(legs[0], macd), lang, metric or get_metric(None),
-                         b_end=(legs[0][-1].end_time, b_end))
+                         b_end=(legs[0][-1].end_time, b_end),
+                         b_start=(legs[0][0].start_time, legs[0][0].start_price),
+                         c_start=(legs[1][0].start_time, legs[1][0].start_price))
+
+
+def pivot_b_size(pivots: list[Pivot], time: str) -> int:
+    """信号发生时刻，最后一个已形成中枢 B 里已有多少个构成元素（笔）——不看信号之后才延伸出来的部分。"""
+    formed = [p for p in pivots if _formed_at(p) <= time]
+    if not formed:
+        return 0
+    b = max(formed, key=_formed_at)
+    return sum(1 for e in b.elements if e.end_time <= time)
 
 
 def _formed_at(p: Pivot) -> str:
@@ -419,6 +432,7 @@ def generate_all_signals(
     direction_by_end = {s.end_time: s.direction for s in strokes}
     idx_by_end = {s.end_time: i for i, s in enumerate(strokes)}
     price_by_end = {s.end_time: s.end_price for s in strokes}
+    price_by_start = {s.start_time: s.start_price for s in strokes}
     signals: list[Signal] = []
     seen: set[tuple[str, str]] = set()
 
@@ -439,7 +453,9 @@ def generate_all_signals(
                 _compare_legs(_raw_to_force(ev.legs.c, macd, ev.type == "buy1"),
                               _raw_to_force(ev.legs.b, macd, ev.type == "buy1"), lang,
                               metric or get_metric(None),
-                              b_end=(ev.legs.b.end, price_by_end[ev.legs.b.end]) if ev.legs.b.end in price_by_end else None)
+                              b_end=(ev.legs.b.end, price_by_end[ev.legs.b.end]) if ev.legs.b.end in price_by_end else None,
+                              b_start=(ev.legs.b.start, price_by_start[ev.legs.b.start]) if ev.legs.b.start in price_by_start else None,
+                              c_start=(ev.legs.c.start, price_by_start[ev.legs.c.start]) if ev.legs.c.start in price_by_start else None)
                 if ev.legs.b is not None and ev.legs.c is not None else (False, None)
             )
         else:

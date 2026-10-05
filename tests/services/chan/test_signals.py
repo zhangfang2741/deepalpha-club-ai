@@ -755,6 +755,9 @@ def test_trend_leg_divergence_carries_b_leg_end_for_chart_mark():
     # b 段（132→108）的终点 = 进入 B 的那一笔的终点；图上从它连到信号点
     # 夹具的笔端点价带 ±1 影线，价格不断言精确值
     assert dv.b_end_time == "2024-11-10" and dv.b_end_price == pytest.approx(108.0, abs=1.5)
+    # 图上分别画 b 段、c 段两条线：b 段在 b 终点之前开始，c 段从离开 B 的那一笔起、止于信号点，且 c 段起点在 b 段终点之后
+    assert dv.b_start is not None and dv.c_start is not None
+    assert dv.b_start[0] < dv.b_end_time <= dv.c_start[0] < "2025-01-20"
 
 
 def test_compare_legs_without_b_end_leaves_reference_empty():

@@ -105,6 +105,12 @@ def analysis_window(start_date: str, end_date: str, freq: str, warmup_days: int 
     return _anchor_start(visible, freq, warmup_days), visible
 
 
+def _pt(marks: dict[str, DivergenceResult], key: str, attr: str, i: int):
+    """取标注里 b_start / c_start 这对（时间, 价格）的第 i 项；没有则 None。"""
+    pair = getattr(marks[key], attr) if key in marks else None
+    return pair[i] if pair else None
+
+
 def _leg_divergence_marks(result: ChanAnalysisResult) -> dict[str, DivergenceResult]:
     """图上背驰标注：只取一类趋势背驰（含待确认候选），规则见 signals.leg_divergence_marks。"""
     return leg_divergence_marks(result.signals, result.candidate_signals)
@@ -262,6 +268,10 @@ async def chan_analysis(
                 area_ratio=marks[s.end_time].area_ratio if s.end_time in marks else None,
                 div_ref_time=marks[s.end_time].b_end_time if s.end_time in marks else None,
                 div_ref_price=marks[s.end_time].b_end_price if s.end_time in marks else None,
+                div_b_start_time=_pt(marks, s.end_time, "b_start", 0),
+                div_b_start_price=_pt(marks, s.end_time, "b_start", 1),
+                div_c_start_time=_pt(marks, s.end_time, "c_start", 0),
+                div_c_start_price=_pt(marks, s.end_time, "c_start", 1),
                 divergence_type="trend" if s.end_time in marks else None,
             )
             for s in result.strokes
