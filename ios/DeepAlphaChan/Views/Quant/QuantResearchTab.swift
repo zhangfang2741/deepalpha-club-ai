@@ -32,7 +32,7 @@ struct QuantResearchTab: View {
     private func content(_ r: QuantResearch) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             QuantResearchSummaryCard(research: r, isStatic: isStatic)
-            if let moat = r.moat {
+            if QuantMoatCard.isEnabled, let moat = r.moat {
                 QuantMoatCard(moat: moat, isStatic: isStatic)
             }
             VStack(alignment: .leading, spacing: 8) {

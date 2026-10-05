@@ -264,7 +264,7 @@ struct QuantOverallGradeExplanation: View {
                         QuantScoreItem(name: d.name, score: d.score, grade: d.grade)
                     }
                 }
-                if research.moat != nil {
+                if QuantMoatCard.isEnabled, research.moat != nil {
                     QuantExplainText(text: L("护城河只展示，不计入综合分。"), secondary: true)
                 }
                 if let p = o.universePercentile {

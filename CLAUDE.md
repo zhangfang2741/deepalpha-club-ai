@@ -191,7 +191,7 @@ deepalpha-club-ai/
 > 自有快照不满 90 天时 EPS 修正用外部一致预期趋势过渡（`eps_trend.py`，同源内算变化率、**不写入快照表**、
 > 与 FY1/FY2 预期差 >15% 视为财年没对齐不用），攒满后自动切回自有快照；营收修正无外部趋势，仍需攒满 90 天。
 > 2026-09-30 首份快照来自 `data/quant_seed/`（git 忽略），用 `scripts/quant_seed_import.py` 导入。
-> **护城河**（`app/services/quant_research/moat/`，只展示、不计入综合等级，读取时附到响应 `moat` 字段）：参照 Morningstar，
+> **护城河**（`app/services/quant_research/moat/`，只展示、不计入综合等级，读取时附到响应 `moat` 字段；**iOS 暂时不展示**：`QuantMoatCard.isEnabled=false`，2026-10-05 起「以后再说」，后端评估、接口字段与卡片代码都保留，改回 true 即恢复）：参照 Morningstar，
 > 宽 / 窄 / 无 + 趋势。证据 = FMP 10 年 ROIC（金融股 ROE）vs CAPM 资金成本；来源 = 大模型读最新 10-K Item 1 判断五种来源，
 > **引用必须逐字核对**、3 次判断取中位数（MiniMax 温度 0 也不确定）。两者同时成立才有护城河。按 (股票, 10-K 编号, `moat.METHOD_VERSION`)
 > 存 `quant_moat_assessments`，一份年报只评一次；部署后冷启动补齐、每天 UTC 12:00 查新年报（短锁 + 心跳，重启后可续跑）。
