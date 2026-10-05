@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 雷达「基本面研究」tab 的外框：概览行 + 雷达画布（由 SignalRadarView 传入，与缠论雷达同一块画布：多环、浮动动画、摆位）
 /// + 图例 + 日期轨。画布里每个气泡 = 选中日在场的一只评级升降股票：代码 + 名称 + ▲/▼ 变档数；
-/// 升档红、降档绿（同缠论买卖点色），颜色越深变档越多，气泡越大新等级越高，越靠中心越新。
+/// 升档红、降档绿（同缠论买卖点色）；环 = 新等级（A / B / C 及以下，越靠中心评级越高）；颜色越深、气泡越大变档越多。
 struct GradeEventsView<Field: View>: View {
     @ObservedObject var vm: GradeEventsViewModel
     let universeName: String
@@ -47,13 +47,13 @@ struct GradeEventsView<Field: View>: View {
 
     /// 与缠论雷达的 metaRow 同一位置：指数名 + 在场的升降只数。
     private var summaryRow: some View {
-        let all = vm.windowEvents
+        let all = vm.dayEvents
         return HStack(spacing: 8) {
             Text(L("%@ · 综合评级升降", universeName))
                 .font(.footnote).foregroundColor(Theme.textSecondary)
             Spacer()
-            Text(L("%lld 升档", all.filter { $0.event.isUp }.count)).foregroundColor(Theme.up)
-            Text(L("%lld 降档", all.filter { !$0.event.isUp }.count)).foregroundColor(Theme.down)
+            Text(L("%lld 升档", all.filter(\.isUp).count)).foregroundColor(Theme.up)
+            Text(L("%lld 降档", all.filter { !$0.isUp }.count)).foregroundColor(Theme.down)
         }
         .font(.footnote)
     }
@@ -71,7 +71,7 @@ struct GradeEventsView<Field: View>: View {
         HStack(spacing: 14) {
             legendDot(Theme.up, L("升档"))
             legendDot(Theme.down, L("降档"))
-            Text(L("越靠中心越新 · 颜色越深变档越多 · 气泡越大新等级越高"))
+            Text(L("越靠中心评级越高 · 颜色越深、气泡越大变档越多"))
                 .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
                 .lineLimit(1).minimumScaleFactor(0.8)
             Spacer()
@@ -129,11 +129,11 @@ struct GradeEventsView<Field: View>: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 8) {
-                    ForEach(vm.windowEvents, id: \.event.id) { item in
+                    ForEach(vm.dayEvents) { e in
                         Button {
-                            pending = item.event
+                            pending = e
                             showAll = false
-                        } label: { row(item.event) }
+                        } label: { row(e) }
                         .buttonStyle(.plain)
                     }
                 }
@@ -164,7 +164,7 @@ struct GradeEventsView<Field: View>: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(e.fromGrade) → \(e.toGrade)")
                     .font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.textPrimary)
-                Text((e.isUp ? L("升 %lld 档", e.steps) : L("降 %lld 档", e.steps)) + " · " + SignalRadarView.monthDay(e.date))
+                Text(e.isUp ? L("升 %lld 档", e.steps) : L("降 %lld 档", e.steps))
                     .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
             }
         }
