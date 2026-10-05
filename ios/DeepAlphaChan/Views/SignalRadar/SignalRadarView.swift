@@ -74,6 +74,8 @@ struct SignalRadarView: View {
     }
     @State private var radarTab: RadarTab = .chan
     @StateObject private var gradeVM = GradeEventsViewModel()
+    /// 基本面 tab 里「另有 N 个 · 查看全部」打开的半屏。
+    @State private var showGradeAll = false
 
     var body: some View {
         NavigationStack {
@@ -241,8 +243,10 @@ struct SignalRadarView: View {
         } else if !consent.hasAgreed {
             consentLockedField
         } else {
-            GradeEventsView(vm: gradeVM, universeName: currentUniverseName, sectorName: { vm.sectorName($0) }) { symbol, name in
-                openSymbol(symbol, name: name)
+            GradeEventsView(vm: gradeVM, universeName: currentUniverseName, sectorName: { vm.sectorName($0) },
+                            showAll: $showGradeAll,
+                            onOpen: { symbol, name in openSymbol(symbol, name: name) }) {
+                bubbleField
             }
         }
     }
@@ -527,15 +531,15 @@ struct SignalRadarView: View {
         GeometryReader { geo in
             let w = Double(geo.size.width)
             let h = Double(geo.size.height)
-            let dayDate = vm.selectedDay?.date ?? ""
-            let signals = vm.selectedDay?.signals ?? []
+            let dayDate = fieldDay?.date ?? ""
+            let signals = fieldDay?.signals ?? []
             // 「待确认」候选（最后一笔还没走完，按严格口径尚不成立）不画进雷达，只在上方一行显示个数：
             // 画成灰色虚线气泡会和真实买卖点挤在一起，雷达又满了
             let candidates: [RadarSignal] = []
             let candidateIDs = Set(candidates.map(\.id))
             // 全部都已确认（严格口径恒如此）时不画「✓」：每个气泡都有，等于没有
             let marksConfirmed = !signals.allSatisfy(\.confirmed)
-            let sectorMode = isSectorField
+            let sectorMode = radarTab == .chan && isSectorField
             let order = vm.sectorOrder
             let board = vm.selectedSectorBoard
             let avoid = fieldObstacles(width: w)
@@ -563,7 +567,7 @@ struct SignalRadarView: View {
                 }
 
                 if field.bubbles.isEmpty {
-                    Text(L("当日无买卖点信号"))
+                    Text(radarTab == .fundamental ? L("当日无评级升降") : L("当日无买卖点信号"))
                         .font(.subheadline)
                         .foregroundColor(Theme.textSecondary)
                         .multilineTextAlignment(.center)
@@ -598,10 +602,10 @@ struct SignalRadarView: View {
                     ForEach(field.wedges) { wedge in
                         wedgeLabel(wedge)
                     }
-                } else if field.hidden > 0 {
-                    // 同心环最多画 ringFieldCap 个最新的，其余在「当日信号」里看全
-                    Button { panel = .signals } label: {
-                        Text(L("另有 %lld 个 · 查看全部", field.hidden))
+                } else if field.hidden + hiddenExtra > 0 {
+                    // 同心环最多画 ringFieldCap 个最新的，其余在「当日信号」里看全（基本面 tab：前 10 只，其余看全部评级升降）
+                    Button { if radarTab == .fundamental { showGradeAll = true } else { panel = .signals } } label: {
+                        Text(L("另有 %lld 个 · 查看全部", field.hidden + hiddenExtra))
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundColor(Theme.accent)
                             .padding(.horizontal, 10)
@@ -630,6 +634,14 @@ struct SignalRadarView: View {
     /// 往下引，雷达只管陈列信号、按时间排（越靠中心越新），不再重复切行业；行业强弱看「最强行业」一行。
     /// 扇区摆位代码（SectorRadarLayout）与测试保留，改回 true 即恢复。
     static let sectorFieldEnabled = false
+
+    /// 雷达画布当前画的那一天：缠论 tab = 选中日的买卖点；基本面 tab = 选中日在场的评级升降（同一块画布）。
+    private var fieldDay: RadarDay? {
+        radarTab == .fundamental ? gradeVM.radarDay : vm.selectedDay
+    }
+
+    /// 画布之外被折叠的只数（基本面 tab 前 10 只之外的）。
+    private var hiddenExtra: Int { radarTab == .fundamental ? gradeVM.hiddenCount : 0 }
 
     private var isSectorField: Bool {
         SignalRadarView.sectorFieldEnabled && vm.selectedDay?.hasSectorData == true
