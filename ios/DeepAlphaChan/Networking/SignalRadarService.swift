@@ -21,4 +21,11 @@ enum SignalRadarService {
         if let universe, !universe.isEmpty { query["universe"] = universe }
         return try await APIClient.shared.get("/signal-radar/demo", query: query)
     }
+
+    /// 基本面研究 tab：某 (市场, universe) 最近几天综合等级升 / 降的股票。
+    static func gradeEvents(market: String, universe: String? = nil, days: Int = 10) async throws -> GradeEventsResponse {
+        var query = ["market": market, "days": String(days)]
+        if let universe, !universe.isEmpty { query["universe"] = universe }
+        return try await APIClient.shared.get("/signal-radar/grade-events", query: query)
+    }
 }

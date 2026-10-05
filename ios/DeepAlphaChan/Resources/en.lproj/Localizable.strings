@@ -1220,3 +1220,10 @@
 "价格创出新高，但离开中枢的这一段（c 段）的 MACD 红绿柱面积只有两个中枢之间那一段（b 段）的 %@——上涨的推动力已经跟不上。" = "Price made a new high, but the MACD bar area of the leg leaving the pivot (c leg) is only %@ of that of the leg between the two pivots (b leg) — the upward momentum is fading.";
 "趋势背驰：前面已有两个依次同向、不重叠的中枢，对应一类买卖点。" = "Trend divergence: two same-direction, non-overlapping pivots have already formed; it corresponds to a type-1 buy/sell point.";
 "面积是累计值，与时长成正比：c 段通常比 b 段短得多，所以这个比例往往偏小，请连同时长比、价差比一起看。" = "Area is cumulative and grows with duration: the c leg is usually much shorter than the b leg, so this ratio tends to be small — read it together with the duration and price-range ratios.";
+"查看订阅" = "View plans";
+"订阅后可查看股票池每天的综合评级升降" = "Subscribe to see daily composite-grade upgrades and downgrades across this universe";
+"评级数据暂时读取失败，稍后再试" = "Couldn't load ratings right now. Please try again later.";
+"这个范围最近没有评级升降" = "No grade changes in this universe recently";
+"%@ · 最近 10 天综合评级升降" = "%@ · composite grade changes, last 10 days";
+"升 %d 档" = "Up %d notches";
+"降 %d 档" = "Down %d notches";

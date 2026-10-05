@@ -169,6 +169,34 @@ def test_every_native_sector_has_an_english_name():
     assert set(NATIVE_SECTOR_EN) == set(SW_LEVEL1) | set(HS_LEVEL1)
 
 
+def test_grade_events_up_down_and_window():
+    from datetime import date
+
+    from app.services.signal_radar import grade_events as ge
+    from app.services.signal_radar import quant_filter as qf
+
+    def g(grade, d):
+        return qf.QuantGrade(grade, 70.0, date(2026, 10, d), date(2026, 10, d))
+
+    history = {
+        "AAA": [g("B", 1), g("B", 2), g("A-", 3), g("A-", 4)],        # 10-03 升 2 档（B→A-）
+        "BBB": [g("A", 1), g("B+", 2), g("B+", 3)],                    # 10-02 降 2 档
+        "CCC": [g("C", 1), g("C", 2), g("C", 3)],                      # 没变化
+        "DDD": [g("D", 1), g("D+", 3)],                                # 10-03 升 1 档
+    }
+    days = ge.build_events(history, {"AAA": "甲"}, {"AAA": "电子"}, since=date(2026, 10, 2))
+    assert [d.date for d in days] == ["2026-10-03", "2026-10-02"]
+    top = days[0]
+    assert (top.up_count, top.down_count) == (2, 0)
+    assert [e.symbol for e in top.events] == ["AAA", "DDD"]             # 档数多的在前
+    e = top.events[0]
+    assert (e.direction, e.from_grade, e.to_grade, e.steps, e.name, e.sector) == ("up", "B", "A-", 2, "甲", "电子")
+    d2 = days[1].events[0]
+    assert (d2.symbol, d2.direction, d2.steps) == ("BBB", "down", 2)
+    # since 之前的变化不算
+    assert ge.build_events(history, {}, {}, since=date(2026, 10, 4)) == []
+
+
 class _TagCacheRedis:
     def __init__(self, store):
         self.store = store
