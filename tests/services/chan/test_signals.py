@@ -848,3 +848,13 @@ def test_zero_axis_pullback():
     assert not zero_axis_pullback(dv, macd, True, 0.2)       # 1.5 > 0.2*4
     assert zero_axis_pullback(dv, macd, True, 0.5)           # 1.5 <= 0.5*4
     assert zero_axis_pullback(dv, None, True, 0.0)           # 缺 MACD：不据此否掉
+
+
+def test_macd_area_avg_metric_normalizes_by_length():
+    from app.services.chan.leg_metric import LegForce, get_metric
+
+    b = LegForce(price=10, volume=100, length=100, area=100.0)
+    c = LegForce(price=4, volume=10, length=10, area=12.0)           # 总面积 0.12 倍，但每根平均 1.2 倍
+    assert get_metric("macd_area").compare(c, b).diverged
+    cmp = get_metric("macd_area_avg").compare(c, b)
+    assert cmp is not None and not cmp.diverged and cmp.area_ratio == 1.2
