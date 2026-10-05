@@ -127,16 +127,23 @@ final class SignalRadarViewModel: ObservableObject {
         return response.universe.isEmpty || response.universe == activeUniverseKey
     }
 
-    /// 非会员且 demoDay 已就绪时，把它插到真实天数列表最前面：这是免费用户唯一
-    /// 能点开的一天，放第一格、默认选中，进页面直接看到它，不必先看最新一天再跳过去。
-    /// 预览日还在路上时返回空（见 isAwaitingDemo），页面显示扫描中。极少数情况下
-    /// （如月初，真实窗口正好覆盖到了上个月 1 号）这天本来就在真实数据里，不重复
-    /// 插入——直接展示真实数据，由 jumpToDemoDayIfPresent 选中它。
+    /// 非会员且 demoDay 已就绪时，示例日放在最前面：这是免费用户唯一能点开的一天，
+    /// 放第一格、默认选中，进页面直接看到它，不必先看最新一天再跳过去。
+    /// 预览日还在路上时返回空（见 isAwaitingDemo），页面显示扫描中。
+    ///
+    /// 示例日是「上个月 1 号」，后端真实窗口有 30 个交易日，所以每个月的前几周（如 10 月初的 09-01）
+    /// 这天本来就在真实数据里、排在第 20 来位——日期轨只摆前 10 格，示例日根本不在轨上，选中它之后
+    /// 「更多」在屏幕外，整条轨一格都不高亮。这种情况不重复插入，而是把真实窗口里的这一天**挪到最前面**
+    /// （展示的仍是真实数据）；窗口里没有它时才把 demoDay 插到最前面。
     var days: [RadarDay] {
         if isAwaitingDemo { return [] }
-        guard !isPremiumUser, let demoDay, !realDays.contains(where: { $0.date == demoDay.date })
-        else { return realDays }
-        return [demoDay] + realDays
+        guard !isPremiumUser, let demoDay else { return realDays }
+        guard let i = realDays.firstIndex(where: { $0.date == demoDay.date }) else {
+            return [demoDay] + realDays
+        }
+        var out = realDays
+        let day = out.remove(at: i)
+        return [day] + out
     }
 
     /// 日期轨上选中的那一天（未经行业筛选）。
