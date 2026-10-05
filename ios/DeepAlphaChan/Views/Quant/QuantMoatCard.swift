@@ -2,6 +2,10 @@ import SwiftUI
 
 /// 护城河卡片（Morningstar 框架）：卡片只显示一行评级 + 趋势，点开弹出详情。
 struct QuantMoatCard: View {
+    /// 护城河是否展示（2026-10-05 起暂时关闭，「以后再说」）：关掉后基本面研究页不显示这张卡，综合等级的解释里
+    /// 也不再提「护城河只展示，不计入综合分」。卡片、详情页、后端评估与接口字段都保留，改回 true 即恢复。
+    static let isEnabled = false
+
     let moat: QuantMoat
     var isStatic = false
     @State private var showingDetail = false
