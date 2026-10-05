@@ -76,7 +76,8 @@ final class GradeEventsViewModel: ObservableObject {
             // 颜色深浅：变 1 档最浅、2~3 档中、4 档及以上最深
             signalStrength: e.steps >= 4 ? "strong" : (e.steps >= 2 ? "medium" : "weak"),
             confirmed: true, pivotStageDepth: 0.5, subLevelVerdict: nil, subLevelLabel: nil,
-            quantGrade: nil, quantScore: nil, quantAsOf: nil, quantStatus: nil, ageDays: age, sector: e.sector)
+            // 气泡最后一行（缠论气泡里放评级的那一行）写「▲2 / ▼1」变档数
+            quantGrade: (e.isUp ? "▲" : "▼") + String(e.steps), quantScore: nil, quantAsOf: nil, quantStatus: nil, ageDays: age, sector: e.sector)
     }
 
     private static let parser: DateFormatter = {
