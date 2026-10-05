@@ -1291,21 +1291,44 @@ struct SignalRadarView: View {
                 Spacer()
                 Text(L("← 左右滑动 →")).font(.caption2).foregroundColor(Theme.textSecondary)
             }
+            ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     // 日期轨只摆最近 2 周（10 个交易日）的格子，够用又不用滑很远；
                     // 再往前的历史走"更多"里的日期选择器（范围覆盖后端返回的全部
                     // 天数，即近 1 个月），不用把几十个格子都塞进这条横滑条。
                     ForEach(Array(vm.days.prefix(SignalRadarView.visibleDayChipCount).enumerated()), id: \.element.id) { idx, day in
-                        dayChip(day, index: idx)
+                        dayChip(day, index: idx).id(day.id)
                     }
-                    moreDateChip
+                    moreDateChip.id(Self.moreChipID)
                 }
                 .padding(.horizontal, 2)
                 .padding(.top, demoBadgeInset)
             }
+            // 选中的日期默认滚到可见：未订阅时选中的是免费预览日（上个月 1 号，在轨道最右端），
+            // 不滚过去就得手动滑；跳到 10 个交易日之前的某天时则对准最后那格（高亮的「更多」）。
+            .onAppear { scrollToSelectedDay(proxy, animated: false) }
+            .onChange(of: vm.baseSelectedDay?.id) { _, _ in scrollToSelectedDay(proxy, animated: true) }
+            .onChange(of: vm.days.count) { _, _ in scrollToSelectedDay(proxy, animated: false) }
+            }
         }
         .sheet(isPresented: $showDatePicker) { datePickerSheet }
+    }
+
+    private static let moreChipID = "radar-date-more-chip"
+
+    /// 把选中日的格子滚到日期轨中间；等一帧让格子先完成布局再滚，否则初次进入时目标还没摆好。
+    private func scrollToSelectedDay(_ proxy: ScrollViewProxy, animated: Bool) {
+        guard let day = vm.baseSelectedDay else { return }
+        let outside = vm.selectedDayIndex >= SignalRadarView.visibleDayChipCount
+        let target: AnyHashable = outside ? Self.moreChipID : day.id
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(target, anchor: .center) }
+            } else {
+                proxy.scrollTo(target, anchor: .center)
+            }
+        }
     }
 
     /// 有「示例」标签时日期轨顶部多留的空间：标签骑在格子上沿外侧，
