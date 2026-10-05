@@ -142,7 +142,8 @@ def test_detection_time_is_when_next_stroke_completes():
 
 def test_detection_time_is_when_next_stroke_first_forms():
     """缠论里一笔由后一笔成笔来确认：成立日取「下一笔第一次成笔」的K线，而不是等下一笔整段走完——
-    下一笔一路延伸时，最终版本完成要晚很多（实测严格口径中位滞后 10 个交易日）。仍不早于亮起日。"""
+    下一笔一路延伸时，最终版本完成要晚很多（实测严格口径中位滞后 10 个交易日）。仍不早于亮起日。
+    """
     legs, _ = _after_buy1(103, extra=(_st("up", "2025-01-20", "2025-01-25", 103, 116),))
     ev = [_ev("buy1", "2025-01-10", 100.0, bar_time="2025-01-12", span="9笔")]
     done = {"2025-01-10": "2025-01-12", "2025-01-15": "2025-01-17",
@@ -731,3 +732,58 @@ def test_same_stroke_type2_and_type3_keep_only_type3():
     ev = [_ev("buy1", "2025-01-10", legs[0].end_price, span="9笔")]
     sig = generate_all_signals(ev, legs, [_div("strong", 0.3)] + [_NO_DIV] * 2, [*_DOWN_TREND, p_new])
     assert [(x.type, x.time) for x in sig] == [("buy1", "2025-01-10"), ("buy3", "2025-01-20")]
+
+
+# ---- 图上背驰标注 = 一类趋势背驰（c 段对 b 段）：结果带 b 段终点，作为连线的参照点 ----
+
+def test_trend_leg_divergence_carries_b_leg_end_for_chart_mark():
+    from app.services.chan.leg_metric import LegComparison
+    from app.services.chan.signals import _trend_leg_divergence
+
+    class AlwaysDiverged:  # 夹具里 c 段价差比 b 段大，真实度量不会判背驰；这里只测 b 段终点是否带出来
+        name = "stub"
+
+        def compare(self, c, b):
+            return LegComparison(True, 0.5, 0.5, 0.5, 0.5, 0.5)
+
+        def classify(self, primary_ratio):
+            return "medium"
+
+    strokes, pivots = _legs_fixture()
+    judged, dv = _trend_leg_divergence(strokes, pivots, "2025-01-20", True, "zh", metric=AlwaysDiverged())
+    assert judged and dv is not None and dv.is_diverged and dv.type == "trend"
+    # b 段（132→108）的终点 = 进入 B 的那一笔的终点；图上从它连到信号点
+    # 夹具的笔端点价带 ±1 影线，价格不断言精确值
+    assert dv.b_end_time == "2024-11-10" and dv.b_end_price == pytest.approx(108.0, abs=1.5)
+
+
+def test_compare_legs_without_b_end_leaves_reference_empty():
+    from app.services.chan.leg_metric import LegForce, get_metric
+    from app.services.chan.signals import _compare_legs
+    _, dv = _compare_legs(LegForce(10, 5, 4, 3.0), LegForce(20, 9, 8, 9.0), "zh", get_metric("macd_area"))
+    assert dv is not None and dv.is_diverged and dv.b_end_time is None and dv.b_end_price is None
+    _, dv2 = _compare_legs(LegForce(10, 5, 4, 3.0), LegForce(20, 9, 8, 9.0), "zh", get_metric("macd_area"),
+                           b_end=("2024-11-10", 108.0))
+    assert dv2 is not None and (dv2.b_end_time, dv2.b_end_price) == ("2024-11-10", 108.0) and dv2.area_ratio == 0.33
+
+
+def test_chart_marks_only_from_type1_with_leg_reference():
+    from types import SimpleNamespace as NS
+
+    from app.api.v1.chan import _leg_divergence_marks
+    from app.services.chan.divergence import DivergenceResult
+
+    def dv(b_end=True, diverged=True):
+        return DivergenceResult(is_diverged=diverged, type="trend", strength="medium", price_ratio=0.5,
+                                description="x", area_ratio=0.3,
+                                b_end_time="2024-11-10" if b_end else None, b_end_price=108.0 if b_end else None)
+
+    result = NS(
+        signals=[NS(type="buy1", time="T1", divergence=dv()),
+                 NS(type="buy1", time="T2", divergence=dv(b_end=False)),      # 笔级退回判定：没有 b 段，不标
+                 NS(type="buy2", time="T3", divergence=dv()),                 # 二类不标
+                 NS(type="sell1", time="T4", divergence=dv(diverged=False)),
+                 NS(type="sell1", time="T5", divergence=None)],
+        candidate_signals=[NS(type="sell1", time="T6", divergence=dv())],     # 待确认候选同样标
+    )
+    assert sorted(_leg_divergence_marks(result)) == ["T1", "T6"]

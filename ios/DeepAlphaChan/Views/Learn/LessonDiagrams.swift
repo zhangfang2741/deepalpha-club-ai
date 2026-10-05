@@ -141,7 +141,7 @@ enum LessonDiagrams {
     }
 
     /// 背驰：两段上涨，第二段创新高但价差只有第一段的 0.58 倍（0.30 / 0.52）。
-    /// 画法与分析页一致：粉色实线连起两段终点，标「背驰 + 价差比」（分析页上标原文名称：趋势背驰 / 盘整背驰）。
+    /// 画法与分析页一致：粉色实线连起两段终点，标「趋势背驰 + 面积比」。
     private static var divergence: DiagramSpec {
         let z = Zigzag(turns: [0.10, 0.62, 0.40, 0.70, 0.50])
         return DiagramSpec(
@@ -152,7 +152,7 @@ enum LessonDiagrams {
                       color: Theme.textSecondary, above: false),
                 .init(at: z.t(3), anchor: .value(0.30), text: L("第二段：创新高、涨得少"),
                       color: Theme.textSecondary, above: false),
-                .init(at: z.t(2), anchor: .value(0.70), text: L("背驰") + " 0.58",
+                .init(at: z.t(2), anchor: .value(0.70), text: L("趋势背驰") + " 0.58",
                       color: Theme.divergence, extraOffset: 6),
             ],
             divergences: [z.conn(1, 3)]

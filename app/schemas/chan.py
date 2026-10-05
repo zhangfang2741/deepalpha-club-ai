@@ -42,6 +42,11 @@ class StrokeOut(BaseModel):
     # 该笔与前一个同向笔相比是否力度背驰，及价差力度比（未比较时为 None）
     diverged: bool = False
     price_ratio: Optional[float] = None
+    # 背驰按缠论原文标在「离开中枢的 c 段终点」那一笔上（一类趋势背驰）：参照点 = b 段（A、B 之间）的终点，
+    # 图上连线从它连到本笔终点；面积比 = c 段 / b 段的 MACD 面积。旧后端 / 非原文度量时这几项为 None。
+    area_ratio: Optional[float] = None
+    div_ref_time: Optional[str] = None
+    div_ref_price: Optional[float] = None
     # 背驰类型（缠论原文术语）：trend = 趋势背驰、consolidation = 盘整背驰；未背驰为 None
     divergence_type: Optional[Literal["trend", "consolidation"]] = None
 
