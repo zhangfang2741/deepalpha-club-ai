@@ -714,7 +714,6 @@
 "%lld 只补算中" = "%lld stocks still loading";
 "最后一笔还在走时出现的买卖点也会上榜（气泡不带「✓」），之后可能被新K线改写；一周前的历史日期不再显示这类信号。" = "Signals on the still-unfolding last stroke are also listed (bubbles without \"✓\") and may be revised by new candles; historical dates more than a week back no longer show them.";
 "气泡日期是信号出现那天；详情页图上的标记画在所属笔的极值 K 线，通常在出现日左侧几根，展开该买卖点可看到两个日期。" = "A bubble's date is the day the signal appeared; on the details chart the marker sits on the stroke's extreme candle, usually a few candles to the left. Expand the signal to see both dates.";
-"%@ 出现；所在笔的极值在 %@，图上标记画在那根 K 线。" = "Appeared on %@; the stroke's extreme was on %@, where the chart marker sits.";
 "图上 %@" = "Chart %@";
 "出现" = "Appeared";
 "极值 K 线" = "Extreme candle";
@@ -1165,3 +1164,4 @@
 "免费版最多 1 支" = "Free: 1 ticker";
 "全部自选状态" = "Status for every watchlist item";
 "每只自选都显示结构阶段与最新信号；免费版只显示最早加入的 1 支" = "Every watchlist item shows its structure stage and latest signal. Free: only the earliest-added one";
+"%@ 成立（图上虚线末端的圆点）；所在笔的极值在 %@，徽标画在那根 K 线。" = "Established on %@ (the dot at the end of the dashed line on the chart); the stroke's extreme was on %@, where the badge sits.";
