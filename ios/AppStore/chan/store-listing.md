@@ -202,7 +202,7 @@ includes the sub-level view (30-minute under daily, daily under weekly), the
 Signals radar tab with history, and the unlimited watchlist with every item's
 status. The previous Basic product (club.deepalpha.chan.pro.monthly) is no
 longer for sale; existing Basic subscribers keep access to everything until
-their subscription ends. There is no free trial and no introductory offer.
+their subscription ends. There is no free trial. First-time subscribers get an introductory offer of 128 CNY for the first month (pay as you go), then it renews at the regular 188 CNY per month; the paywall shows the offer price, the struck-through regular price and the renewal price.
 
 HOW TO REACH THE PAYWALL
 Sign in with the demo account (use the "Email" tab; phone login only works

@@ -598,7 +598,6 @@
 "首月" = "first month";
 "前 %@" = "first %@";
 "新客%@" = "New users · %@";
-"新客专享%@，之后 %@/月，可随时取消" = "New-user price for the %1$@, then %2$@/month. Cancel anytime.";
 "市场雷达免责声明" = "Market Radar Disclaimer";
 "市场雷达基于公开行情数据，按缠论结构规则自动识别并汇总所选指数成分股的买卖点形态，供技术分析研究使用。" = "The Market Radar uses Chan-theory structure rules on public market data to identify and aggregate buy/sell patterns among the constituents of the selected index, for technical-analysis research.";
 "本功能展示的内容均为按标准缠论技术分析规则得出的结果，不构成任何投资建议、证券推荐或买卖要约。" = "All content shown is derived from standard Chan-theory technical analysis rules and does not constitute investment advice, a securities recommendation, or an offer to buy or sell.";
@@ -617,7 +616,6 @@
 "不限" = "Unlimited";
 "全部" = "All";
 "次级别确认" = "Sub-level confirmation";
-"不限次分析" = "Unlimited analysis";
 "自选状态" = "Watchlist phases";
 "不限次分析 · 市场雷达 · 次级别确认" = "Unlimited analysis · Market Radar · Sub-levels";
 "自选股 / 状态" = "Watchlist / phases";
@@ -1151,12 +1149,8 @@
 "会员" = "Member";
 "订阅会员解锁次级别确认" = "Subscribe to unlock sub-level confirmation";
 "订阅会员，显示全部自选标的的结构状态" = "Subscribe to see the structure status of every watchlist item";
-"新客专享价仅限首次订阅的 Apple 账户，优惠期（%@）结束后按正价自动续订。" = "The new-user price is only for Apple Accounts subscribing for the first time. After the offer period (%@), it renews automatically at the regular price.";
 "每日市场雷达" = "Daily market radar";
 "雷达历史回看" = "Radar history";
-"自选不限数量" = "Unlimited watchlist";
-"免费版最多 1 支" = "Free: 1 ticker";
-"全部自选状态" = "Status for every watchlist item";
 "%@ 成立（图上虚线末端标「成立」处）；所在笔的极值在 %@，徽标画在那根 K 线。" = "Established on %@ (marked \"Formed\" at the end of the dashed line on the chart); the stroke's extreme was on %@, where the badge sits.";
 "成立" = "Formed";
 "%@ · 成立日" = "%@ · formed";
@@ -1170,8 +1164,13 @@
 "订阅会员 · %@" = "Subscribe · %@";
 "订阅会员 · %@/月" = "Subscribe · %@/month";
 "自动续订 · 可随时取消" = "Auto-renews · Cancel anytime";
-"免费版每天 %lld 支标的" = "Free: %lld tickers per day";
-"日线对照 30 分钟，周线对照日线" = "Daily vs 30-minute, weekly vs daily";
-"美股 / A 股 / 港股主要指数，免费版仅示例日" = "US, China A and Hong Kong main indexes. Free: sample day only";
-"回看近 30 个交易日" = "Browse the last 30 trading days";
-"结构阶段与最新信号，免费版仅 1 支" = "Structure stage and latest signal. Free: 1 only";
+"%lld 支/天" = "%lld / day";
+"仅示例股" = "Samples only";
+"仅示例日" = "Sample day";
+"免费版与会员对比" = "Free vs Member";
+"%lld 个交易日" = "%lld trading days";
+"活动价 · %@" = "Offer · %@";
+"活动价仅限首次订阅，%@后 %@/月自动续订，可随时取消" = "Offer for first-time subscribers only. Renews at %2$@/month after %1$@; cancel anytime";
+"活动价 %@ · 立即订阅" = "Offer %@ · Subscribe";
+"%@后 %@/月自动续订，可随时取消" = "Renews at %2$@/month after %1$@; cancel anytime";
+"活动价仅限首次订阅的 Apple 账户，优惠期（%@）结束后按正价自动续订。" = "The offer price is only for Apple Accounts subscribing for the first time. After the offer period (%@), it renews automatically at the regular price.";
