@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// 雷达页的底部面板：点「行业」格或扇区标签 → 行业面板；点「当日信号」格 → 信号列表；
-/// 点气泡（或面板里的某一行）→ 这只股票的四层事实（大盘 / 行业 / 结构 / 基本面）。
+/// 雷达页的底部面板：点「行业」格或扇区标签 → 行业面板；点「当日信号」格 → 信号列表。
+/// 点气泡、或面板里的某一行，都直接进这只股票的缠论详情页（2026-10-05 起不再先弹「大盘 / 行业 / 结构 / 基本面」
+/// 四层事实页——多一层页面只是把详情页里已有的内容再摘一遍）。
 ///
-/// 全部留在雷达页里讲完，只陈列事实、不下结论：不出现「同向 / 一致 / 推荐」这类判断，
-/// 「查看K线与结构详情」才进详情页（详情页不变）。
+/// 只陈列事实、不下结论：不出现「同向 / 一致 / 推荐」这类判断。
 
 /// 雷达页正在打开的面板。
 enum RadarPanel: Identifiable, Equatable {
@@ -13,7 +13,6 @@ enum RadarPanel: Identifiable, Equatable {
     case sectorPicker
     case sector(String)
     case signals
-    case signal(RadarSignal)
 
     var id: String {
         switch self {
@@ -21,12 +20,11 @@ enum RadarPanel: Identifiable, Equatable {
         case .sectorPicker: return "sector-picker"
         case .sector(let key): return "sector-\(key)"
         case .signals: return "signals"
-        case .signal(let s): return "signal-\(s.id)"
         }
     }
 }
 
-/// 面板共用的当日事实：选中日的信号、行业强弱、大盘状态与情绪。
+/// 面板共用的当日事实：选中日的信号、行业强弱。
 struct RadarFactContext {
     let market: StockMarket
     let day: RadarDay
@@ -34,8 +32,6 @@ struct RadarFactContext {
     let board: SectorBoard?
     /// 选中日行业从强到弱的 key。
     let order: [String]
-    let macro: MacroState?
-    let panic: PanicIndexResponse?
     let sectorName: (String) -> String
 
     func row(_ key: String) -> SectorRow? { board?.sectors.first { $0.key == key } }
@@ -148,15 +144,16 @@ struct RadarSignalRow: View {
     }
 }
 
-/// 一组信号行（圆角卡片 + 分隔线），每行点进四层事实。
+/// 一组信号行（圆角卡片 + 分隔线），每行点一下直接进缠论详情页。
 private struct RadarSignalCard: View {
     let signals: [RadarSignal]
     let context: RadarFactContext
+    let onOpenDetail: (RadarSignal) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             ForEach(signals) { s in
-                NavigationLink(value: s) {
+                Button { onOpenDetail(s) } label: {
                     RadarSignalRow(signal: s, dayDate: context.day.date,
                                    sectorName: s.sector.map(context.sectorName),
                                    sectorLabel: s.sector.flatMap { context.row($0)?.label })
@@ -210,9 +207,6 @@ struct RadarSectorSheet: View {
             .navigationTitle(L("行业 · %@ 收盘", MarketHeader.monthDay(context.day.date)))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(L("关闭")) { dismiss() } } }
-            .navigationDestination(for: RadarSignal.self) { s in
-                RadarSignalFactView(signal: s, context: context, onOpenDetail: onOpenDetail)
-            }
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
@@ -314,7 +308,7 @@ struct RadarSectorSheet: View {
                     .padding(12)
                     .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
             } else {
-                RadarSignalCard(signals: list, context: context)
+                RadarSignalCard(signals: list, context: context, onOpenDetail: onOpenDetail)
             }
         }
     }
@@ -420,7 +414,7 @@ struct RadarSignalListSheet: View {
                             .font(.footnote).foregroundColor(Theme.textSecondary)
                             .frame(maxWidth: .infinity).padding(.top, 30)
                     } else {
-                        RadarSignalCard(signals: filtered, context: context)
+                        RadarSignalCard(signals: filtered, context: context, onOpenDetail: onOpenDetail)
                     }
                 }
                 .padding(16)
@@ -429,9 +423,6 @@ struct RadarSignalListSheet: View {
             .navigationTitle(L("%@ 的在场信号 · %lld 个", MarketHeader.monthDay(context.day.date), context.day.signals.count))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(L("关闭")) { dismiss() } } }
-            .navigationDestination(for: RadarSignal.self) { s in
-                RadarSignalFactView(signal: s, context: context, onOpenDetail: onOpenDetail)
-            }
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
@@ -464,169 +455,5 @@ struct RadarSignalListSheet: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(on ? [.isSelected] : [])
-    }
-}
-
-// MARK: - 一只股票的四层事实
-
-/// 点气泡后的面板：大盘 / 行业 / 结构 / 基本面四行，只陈列事实；底部按钮进详情页。
-struct RadarSignalFactView: View {
-    let signal: RadarSignal
-    let context: RadarFactContext
-    let onOpenDetail: (RadarSignal) -> Void
-
-    @State private var research: QuantResearch?
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                header
-                VStack(spacing: 0) {
-                    factRow(L("大盘"), main: marketMain, sub: marketSub)
-                    Divider().overlay(Theme.border)
-                    factRow(L("行业"), main: sectorMain, sub: sectorSub)
-                    Divider().overlay(Theme.border)
-                    factRow(L("结构"), main: structureMain, sub: structureSub)
-                    Divider().overlay(Theme.border)
-                    factRow(L("基本面"), main: fundamentalMain, sub: fundamentalSub)
-                }
-                .padding(.horizontal, 12)
-                .background(Theme.surface)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                Button { onOpenDetail(signal) } label: {
-                    Text(L("查看K线与结构详情"))
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
-                        .background(Theme.accent, in: RoundedRectangle(cornerRadius: 12))
-                        .foregroundColor(.white)
-                }
-                .buttonStyle(.plain)
-
-                Text(L("以上为按规则得出的事实陈列，不构成投资建议。"))
-                    .font(.caption2).foregroundColor(Theme.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-            }
-            .padding(16)
-        }
-        .background(Theme.background)
-        .navigationTitle(signal.symbol)
-        .navigationBarTitleDisplayMode(.inline)
-        .task(id: signal.id) {
-            // 美股 / A 股 / 港股都有基本面研究；拉不到就只显示气泡上已有的综合等级
-            guard research == nil else { return }
-            research = try? await QuantResearchService.research(market: context.market, symbol: signal.symbol)
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(signal.symbol).font(.title2.bold()).foregroundColor(Theme.textPrimary)
-                if !signal.name.isEmpty {
-                    Text(signal.name).font(.subheadline).foregroundColor(Theme.textSecondary).lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                RadarPanelStyle.tag(signal)
-            }
-            Text(L("%@ 出现 · 信号价位 %@", signal.date, String(format: "%.2f", signal.price)))
-                .font(.caption.monospacedDigit()).foregroundColor(Theme.textSecondary)
-        }
-    }
-
-    private func factRow(_ title: String, main: String, sub: String?) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Text(title)
-                .font(.caption).foregroundColor(Theme.textSecondary)
-                .frame(width: 44, alignment: .leading)
-                .padding(.top, 2)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(main).font(.subheadline.weight(.semibold)).foregroundColor(Theme.textPrimary)
-                if let sub {
-                    Text(sub).font(.caption).foregroundColor(Theme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 11)
-        .accessibilityElement(children: .combine)
-    }
-
-    // MARK: 大盘
-
-    private var marketMain: String {
-        guard let m = context.macro else { return L("暂无数据") }
-        return L("%@ %lld%%", m.labelText, Int((m.probability * 100).rounded()))
-    }
-
-    private var marketSub: String? {
-        var parts: [String] = []
-        if let m = context.macro { parts.append(L("已持续 %lld 天", m.daysInState)) }
-        if let p = context.panic {
-            parts.append(L("恐慌贪婪 %lld %@", Int(p.current.score.rounded()), PanicIndexStyle.ratingLabel(p.current.rating)))
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    // MARK: 行业
-
-    private var sectorKey: String { signal.sector ?? SectorRadarLayout.otherKey }
-
-    private var sectorMain: String {
-        guard signal.sector != nil else { return L("暂无行业分类") }
-        let name = context.sectorName(sectorKey)
-        if let rs = context.row(sectorKey)?.rsVsMarket {
-            return L("%@ · 相对大盘 %@", name, SectorBoardList.rsText(rs))
-        }
-        return name
-    }
-
-    private var sectorSub: String? {
-        guard signal.sector != nil else { return nil }
-        var parts: [String] = []
-        if let r = context.rank(sectorKey) { parts.append(L("%lld 个行业中第 %lld", r.total, r.rank)) }
-        if let label = context.row(sectorKey)?.label { parts.append(L("状态%@", SectorBoardList.labelText(label))) }
-        let others = context.signals(in: sectorKey).count - 1
-        if others > 0 { parts.append(L("同行业另有 %lld 个在场信号", others)) }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    // MARK: 结构
-
-    private var structureMain: String {
-        let state = signal.confirmed ? L("已确认") : L("未确认")
-        return L("%@ · %@ · 强弱%@", signal.label, state, RadarPanelStyle.strengthText(signal.signalStrength))
-    }
-
-    private var structureSub: String? {
-        var parts: [String] = []
-        if let label = signal.subLevelLabel, !label.isEmpty { parts.append(L("30 分钟：%@", label)) }
-        parts.append(signal.isBuy
-                     ? L("收盘价跌破 %@ 即从雷达移出", String(format: "%.2f", signal.price))
-                     : L("收盘价涨破 %@ 即从雷达移出", String(format: "%.2f", signal.price)))
-        if !signal.confirmed { parts.append(L("所在笔还没走完，之后可能被新K线改写")) }
-        return parts.joined(separator: " · ")
-    }
-
-    // MARK: 基本面
-
-    private var fundamentalMain: String {
-        if let r = research, r.isOK, let grade = r.overall?.grade {
-            if let moat = r.moat?.ratingName { return L("综合 %@ · 护城河 %@", grade, moat) }
-            return L("综合 %@", grade)
-        }
-        if let grade = RadarPanelStyle.gradeText(signal) { return L("综合 %@", grade) }
-        return L("暂无评级")
-    }
-
-    private var fundamentalSub: String? {
-        if let r = research, r.isOK {
-            let dims = r.scoredDimensions.compactMap { d in d.grade.map { "\(d.name) \($0)" } }
-            if !dims.isEmpty { return dims.joined(separator: " · ") }
-        }
-        if let asOf = signal.quantAsOf { return L("评级日期 %@", asOf) }
-        return nil
     }
 }
