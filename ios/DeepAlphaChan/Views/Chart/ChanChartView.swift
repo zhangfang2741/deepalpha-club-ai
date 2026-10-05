@@ -761,16 +761,30 @@ struct ChanChartView: View {
                                         .foregroundColor(Theme.divergence))
             let size = resolved.measure(in: CGSize(width: 200, height: 40))
             let dir: CGFloat = cur.direction == .up ? -1 : 1
-            let midY = clampY((p1.y + p2.y) / 2 + dir * (size.height / 2 + 5), height)
+            // b 段终点常在可见区左侧之外（线横跨整个中枢）：标签取线在可见区内那一截的中点，
+            // 而不是两端点中点，否则标签贴在图边缘、还会压在 c 段终点的买卖点徽标上。
+            let (vp1, vp2) = Self.clipSegment(p1, p2, toX: 0...plotWidth)
+            let midY = clampY((vp1.y + vp2.y) / 2 + dir * (size.height / 2 + 5), height)
             let boxW = size.width + 6
-            // 同样要夹住水平方向：背驰发生在可见区最左/最右那对笔端点时，标签原来
-            // 直接居中在两点中点上，会有一半画到可视区外面。
-            let boxX = min(max((p1.x + p2.x) / 2 - boxW / 2, 0), plotWidth - boxW)
+            let boxX = min(max((vp1.x + vp2.x) / 2 - boxW / 2, 0), plotWidth - boxW)
             let box = CGRect(x: boxX, y: midY - size.height / 2 - 1,
                              width: boxW, height: size.height + 2)
             ctx.fill(Path(roundedRect: box, cornerRadius: 3), with: .color(Theme.surface.opacity(0.85)))
             ctx.draw(resolved, at: CGPoint(x: box.midX, y: box.midY), anchor: .center)
         }
+    }
+
+    /// 把线段裁到 x 区间内（按斜率插值 y）；整段在区间外时原样返回。
+    static func clipSegment(_ a: CGPoint, _ b: CGPoint, toX r: ClosedRange<CGFloat>) -> (CGPoint, CGPoint) {
+        guard a.x != b.x else { return (a, b) }
+        func at(_ x: CGFloat) -> CGPoint {
+            CGPoint(x: x, y: a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x))
+        }
+        let (l, rt) = a.x <= b.x ? (a, b) : (b, a)
+        guard rt.x >= r.lowerBound, l.x <= r.upperBound else { return (a, b) }
+        let p = l.x < r.lowerBound ? at(r.lowerBound) : l
+        let q = rt.x > r.upperBound ? at(r.upperBound) : rt
+        return (p, q)
     }
 
     // MARK: - 绘制：MACD
