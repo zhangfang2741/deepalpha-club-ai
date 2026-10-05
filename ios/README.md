@@ -35,7 +35,7 @@ ios/
 ## 订阅 / 内购（StoreKit 2）
 
 - **只有一个会员**（2026-10-05 起，原基础版 ¥88 / 高级版合并）：自动续订月度订阅，商品 ID
-  `club.deepalpha.chan.premium.monthly`（`AppConfig.membershipMonthlyProductID`），**¥188/月**，无试用、无新客价。
+  `club.deepalpha.chan.premium.monthly`（`AppConfig.membershipMonthlyProductID`），**正价 ¥188/月**；活动价 **¥128**（入门优惠，新客首月，付费墙上显示「活动价」、划线正价、首月后的续订价）；无免费试用。
   权益：不限次缠论分析、30 分钟次级别 / 周线看日线、每日雷达与历史回看、自选不限数量与全部结构状态。
 - **旧基础版商品**（`club.deepalpha.chan.pro.monthly`，`legacyBasicMonthlyProductID`）已停售但**不能删除**：还在
   有效期内的老订阅者在 `StoreManager.refreshSubscriptionStatus` 里同样按会员处理，不需要重新订阅。
@@ -49,7 +49,7 @@ ios/
 
 价格由 App Store 返回，App 只显示它给的数字，所以**不改这几项，线上仍会显示旧价格**：
 
-1. `club.deepalpha.chan.premium.monthly`：价格改成 **¥188/月**（原正价 ¥388）；删除它的入门优惠（原新客首月 ¥188）。
+1. `club.deepalpha.chan.premium.monthly`：价格改成 **¥188/月**（原正价 ¥388）；入门优惠（Introductory Offer）改成 **按期付费 · ¥128 · 1 个月**（原新客首月 ¥188）。活动有起止时间的话在入门优惠里设「开始 / 结束日期」，结束后付费墙自动回到只显示 ¥188。
 2. `club.deepalpha.chan.pro.monthly`（旧基础版）：**停售**（Remove from sale），不要删除；删除它的入门优惠。
 3. 订阅显示名 / 描述改成「DeepAlpha 会员」，审核备注、App 描述里的订阅说明同步（见 `AppStore/chan/store-listing.md`）。
 4. 已订阅高级版（原价 ¥388）的用户：降价对已订阅用户自动生效、不需要用户同意（具体时点以 ASC 价格变更页提示为准）；已订阅基础版（¥88）的用户保持原价续订并享有全部权益。

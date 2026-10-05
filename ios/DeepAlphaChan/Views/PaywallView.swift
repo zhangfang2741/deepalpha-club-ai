@@ -112,7 +112,7 @@ struct PaywallView: View {
 
     // MARK: - 价格卡
 
-    /// 价格是整页最大的字。划线价只能是真实正价：正价 = product.displayPrice，新客价 = ASC 里配置的推介优惠，
+    /// 价格是整页最大的字。划线价只能是真实正价：正价 = product.displayPrice，活动价 = ASC 里配置的入门优惠（Introductory Offer，只对首次订阅的 Apple 账户生效），
     /// 两者都由 StoreKit 给出，且只对有资格的新客展示。不要在代码里写死「原价」倍数——
     /// 从未按那个价卖过的划线价属于虚构参考价，踩 App Store 2.3.1 / 5.6 与各地价格法。
     private func priceCard(_ product: Product) -> some View {
@@ -122,11 +122,11 @@ struct PaywallView: View {
                 priceLine(product.displayPrice)
                 caption(L("试用结束后 %@/月，可随时取消", product.displayPrice))
             } else if let intro = store.introDiscount(product) {
-                badge(L("新客%@", intro.durationText))
+                badge(L("活动价 · %@", intro.durationText))
                 priceLine(intro.priceText, showsUnit: false)
                 Text(L("%@/月", product.displayPrice))
                     .strikethrough().font(.footnote).foregroundColor(Theme.textSecondary)
-                caption(L("新客专享%@，之后 %@/月，可随时取消", intro.durationText, product.displayPrice))
+                caption(L("活动价仅限首次订阅，%@后 %@/月自动续订，可随时取消", intro.durationText, product.displayPrice))
             } else {
                 priceLine(product.displayPrice)
                 caption(L("自动续订 · 可随时取消"))
@@ -282,12 +282,20 @@ struct PaywallView: View {
                 .shadow(color: Theme.accent.opacity(0.35), radius: 12, y: 4)
             }
             .disabled(store.purchaseInProgress)
-            Text(L("自动续订 · 可随时取消"))
+            Text(footnote(product))
                 .font(.caption2).foregroundColor(Theme.textSecondary)
         }
         .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 8)
         .background(.ultraThinMaterial)
         .overlay(alignment: .top) { Divider().overlay(Theme.border) }
+    }
+
+    /// 按钮下的小字：有活动价时必须写清优惠期过后的价格（3.1.2 要求续订价清楚可见），否则「自动续订 · 可随时取消」。
+    private func footnote(_ product: Product) -> String {
+        if let intro = store.introDiscount(product) {
+            return L("%@后 %@/月自动续订，可随时取消", intro.durationText, product.displayPrice)
+        }
+        return L("自动续订 · 可随时取消")
     }
 
     /// 按钮文案：有试用写试用，有新客价写新客价，否则写「订阅会员 · 正价/月」——价格永远在按钮上。
@@ -296,7 +304,7 @@ struct PaywallView: View {
             return L("开始 %@免费试用", store.trialPeriodText(product) ?? "")
         }
         if let intro = store.introDiscount(product) {
-            return L("订阅会员 · %@", intro.priceText)
+            return L("活动价 %@ · 立即订阅", intro.priceText)
         }
         return L("订阅会员 · %@/月", product.displayPrice)
     }
@@ -322,7 +330,7 @@ struct PaywallView: View {
     /// 有新客价时的续订披露：写清优惠期多长、之后按什么价续订（3.1.2 要求续订价清楚可见）。
     private var introDisclosure: String? {
         guard let intro = store.products.lazy.compactMap({ store.introDiscount($0) }).first else { return nil }
-        return L("新客专享价仅限首次订阅的 Apple 账户，优惠期（%@）结束后按正价自动续订。", intro.durationText)
+        return L("活动价仅限首次订阅的 Apple 账户，优惠期（%@）结束后按正价自动续订。", intro.durationText)
     }
 
     /// 自动续订披露 + 条款/隐私链接（App Store 审核必备）。
