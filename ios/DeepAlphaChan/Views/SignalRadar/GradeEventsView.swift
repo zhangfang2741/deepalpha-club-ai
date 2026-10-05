@@ -19,7 +19,6 @@ struct GradeEventsView: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            header
             if vm.isLoading && vm.response == nil {
                 Spacer()
                 ProgressView()
@@ -29,9 +28,10 @@ struct GradeEventsView: View {
             } else if vm.days.isEmpty {
                 message(L("这个范围最近没有评级升降"))
             } else {
-                dayRail
+                summaryRow
                 bubbleField
                 legend
+                dayRail
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -44,14 +44,20 @@ struct GradeEventsView: View {
         }
     }
 
-    // MARK: - 头部 / 日期轨
+    // MARK: - 概览 / 日期轨
 
-    private var header: some View {
-        HStack {
-            Text(L("%@ · 最近 10 天综合评级升降", universeName))
+    /// 与缠论雷达的 metaRow 同一位置：指数名 + 当天升降只数。
+    private var summaryRow: some View {
+        HStack(spacing: 8) {
+            Text(L("%@ · 综合评级升降", universeName))
                 .font(.footnote).foregroundColor(Theme.textSecondary)
             Spacer()
+            if let day = vm.selectedDay {
+                Text(L("%lld 升档", day.upCount)).foregroundColor(Theme.up)
+                Text(L("%lld 降档", day.downCount)).foregroundColor(Theme.down)
+            }
         }
+        .font(.footnote)
     }
 
     private func message(_ text: String) -> some View {
@@ -63,26 +69,42 @@ struct GradeEventsView: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// 日期轨：每一天写「月-日」和升降只数。
+    /// 日期轨：与缠论雷达同一套格子（上面星期 / 今日，下面月-日）。
     private var dayRail: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(Array(vm.days.enumerated()), id: \.element.id) { i, day in
-                    let selected = i == vm.selectedIndex
-                    Button { vm.selectedIndex = i } label: {
-                        VStack(spacing: 2) {
-                            Text(shortDate(day.date)).font(.system(size: 13, weight: .semibold))
-                            Text("▲\(day.upCount) ▼\(day.downCount)")
-                                .font(.system(size: 10)).foregroundColor(selected ? .white.opacity(0.85) : Theme.textSecondary)
-                        }
-                        .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(selected ? Theme.accent : Theme.surface, in: RoundedRectangle(cornerRadius: 10))
-                        .foregroundColor(selected ? .white : Theme.textPrimary)
+        VStack(spacing: 6) {
+            HStack {
+                Text(L("选择日期")).font(.caption).foregroundColor(Theme.textSecondary)
+                Spacer()
+                Text(L("← 左右滑动 →")).font(.caption2).foregroundColor(Theme.textSecondary)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(vm.days.enumerated()), id: \.element.id) { i, day in
+                        dayChip(day, active: i == vm.selectedIndex) { vm.selectedIndex = i }
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(.horizontal, 2)
             }
         }
+    }
+
+    private func dayChip(_ day: GradeDay, active: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 3) {
+                Text(SignalRadarView.dayLabel(day.date))
+                    .font(.system(size: 9))
+                    .foregroundColor(active ? .white.opacity(0.85) : Theme.textSecondary)
+                Text(SignalRadarView.monthDay(day.date))
+                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .foregroundColor(active ? .white : Theme.textPrimary)
+            }
+            .frame(width: 56)
+            .padding(.vertical, 8)
+            .background(active ? Theme.accent : Theme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(active ? Theme.accent : Theme.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - 气泡
@@ -111,9 +133,8 @@ struct GradeEventsView: View {
                 }
                 .buttonStyle(.plain)
             }
-            Spacer(minLength: 0)
         }
-        .padding(.top, 6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// 13 档字母等级，A+ 最高、F 最低（与后端 GRADE_ORDER 一致）。
@@ -134,13 +155,24 @@ struct GradeEventsView: View {
 
     private func bubble(_ e: GradeEvent) -> some View {
         let d = Self.diameter(grade: e.toGrade)
+        // 与缠论气泡一致：代码 + 名称；等级变化由颜色（升降 / 深浅）和大小（新等级）表达，不写字母，
+        // 只保留下面一行「▲ / ▼ 变档数」。
         return VStack(spacing: 1) {
-            Text(e.name).font(.system(size: 11, weight: .semibold)).lineLimit(1)
-            Text("\(e.fromGrade)→\(e.toGrade)").font(.system(size: 12, weight: .bold))
-            Text(e.isUp ? "▲\(e.steps)" : "▼\(e.steps)").font(.system(size: 10)).opacity(0.85)
+            Text(e.symbol)
+                .font(.system(size: d * 0.19, weight: .bold))
+                .lineLimit(1).minimumScaleFactor(0.1).allowsTightening(true)
+            if !e.name.isEmpty {
+                Text(e.name)
+                    .font(.system(size: d * 0.14))
+                    .opacity(0.92)
+                    .lineLimit(1).minimumScaleFactor(0.85).truncationMode(.tail)
+            }
+            Text(e.isUp ? "▲\(e.steps)" : "▼\(e.steps)")
+                .font(.system(size: d * 0.12)).opacity(0.9)
         }
         .foregroundColor(.white)
-        .padding(4)
+        .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
+        .padding(.horizontal, d * 0.05)
         .frame(width: d, height: d)
         .background(Circle().fill(Self.fill(isUp: e.isUp, steps: e.steps)))
         .overlay(Circle().stroke(Self.tint(isUp: e.isUp).opacity(0.7), lineWidth: 1))

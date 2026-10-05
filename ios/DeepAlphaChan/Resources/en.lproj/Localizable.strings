@@ -1231,3 +1231,6 @@
 "降档" = "Downgrade";
 "颜色越深变档越多，气泡越大新等级越高" = "Darker color = more notches; larger bubble = higher new grade";
 "%@ 综合评级升降" = "%@ grade changes";
+"%@ · 综合评级升降" = "%@ · composite grade changes";
+"%lld 升档" = "%lld upgrades";
+"%lld 降档" = "%lld downgrades";

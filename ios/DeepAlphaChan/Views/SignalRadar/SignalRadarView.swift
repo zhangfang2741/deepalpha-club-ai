@@ -204,21 +204,27 @@ struct SignalRadarView: View {
 
     // MARK: - 并列 tab
 
+    /// 下划线式 tab（文字 + 选中项下方一条蓝线），和上面行业胶囊、日期格子的圆角块样式区分开。
     private var tabPicker: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 28) {
             ForEach(RadarTab.allCases) { tab in
                 let selected = tab == radarTab
                 Button { radarTab = tab } label: {
-                    Text(tab.title)
-                        .font(.system(size: 13, weight: .semibold))
-                        .padding(.horizontal, 14).padding(.vertical, 6)
-                        .background(selected ? Theme.accent : Theme.surface, in: Capsule())
-                        .foregroundColor(selected ? .white : Theme.textSecondary)
+                    VStack(spacing: 5) {
+                        Text(tab.title)
+                            .font(.system(size: 16, weight: selected ? .bold : .regular))
+                            .foregroundColor(selected ? Theme.textPrimary : Theme.textSecondary)
+                        Capsule()
+                            .fill(selected ? Theme.accent : Color.clear)
+                            .frame(height: 3)
+                    }
+                    .fixedSize()
                 }
                 .buttonStyle(.plain)
             }
             Spacer()
         }
+        .padding(.horizontal, 4)
     }
 
     /// 基本面研究 tab：会员功能（与缠论雷达真实数据同一道门槛，未订阅点按弹付费墙），同样要先同意免责声明。
