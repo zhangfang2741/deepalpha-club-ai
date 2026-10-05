@@ -153,7 +153,7 @@ deepalpha-club-ai/
 > 不要改回线程池——纯 Python HMM 循环占 GIL 会拖慢 API）。驱动因素 / 日历的 FMP 调用经 `FmpClient`（全局预算）。
 > 文案只描述环境，不出现买卖导向词与数据供应商 / 基金代码（`test_drivers.test_no_trading_words`）。
 > 雷达行业标签（`signal_radar/sectors.py`，指数雷达与自选雷达都打；自选列表接口也带 `sector`）的行业 key 与 regime `SECTORS` 一致（有测试守护）。
-> **行业严格按 GICS 11 个一级行业**（2026-10-01 起半导体并回科技，不再单列；App 只做一级、不下钻细分，宏观接口 `has_children` 恒 false）。改行业划分须升雷达 `_mode_ns`（当前 all2），旧标签随快照失效。
+> **行业严格按 GICS 11 个一级行业**（2026-10-01 起半导体并回科技，不再单列；App 只做一级、不下钻细分，宏观接口 `has_children` 恒 false）。改行业划分须升雷达 `_mode_ns`（当前 all3），旧标签随快照失效。
 > 行业池（每行业按旧综合分的前 N）只给旧版 App 的行业筛选用。
 > **A 股 / 港股行业标签**（2026-10-05 起，`sectors.load_sector_tags`）：A 股用本土**申万一级 31 个**（key 即中文名，如「电子」，不套 GICS；
 > 东财行业名即申万二级，`cnhk/sectors.CN_INDUSTRY_TO_SW` 归一级，与 `CN_INDUSTRY_TO_GICS` 键集一致有测试守护，新行业两张表都要补）；
@@ -173,7 +173,7 @@ deepalpha-club-ai/
 > 缠论口径、收盘价跌破（卖点涨破）即退场、5 个交易日有效期、一周前的展示日不显示未确认信号。
 > 旧版 App（不带 `scope=all`）的前 10 在接口层由 `legacy_view` 按旧综合分现截，**不要**把截取或排雷写回快照。
 > 次级别只补算最新一天「当天新出现的信号 + 旧版前 N 候选池」，封顶 `_SUB_LEVEL_MAX`（`sub_level_targets`），不要对全部信号补算（打满行情源）。
-> 改取舍规则须升 `_mode_ns`（当前 `quant_mark2:all2:win2y_wu1y`）。
+> 改取舍规则须升 `_mode_ns`（当前 `quant_mark2:all3:win2y_wu1y`）。
 > 雷达形态过滤（`chan/shape_filters.py`，仅雷达、详情页不受影响）**当前暂停**（`service._SHAPE_FILTERS_ENABLED=False`，
 > 代码与测试保留；实测它在 5 日窗口内几乎不剔信号。当时雷达变空的真正原因是 78bee01 的「未确认不上榜」，
 > 已在 2544d31 回退：宽松口径最后一笔上的信号照常上榜、`confirmed=false`，一周前的展示日不显示，收盘价跌破才退场）。启用时：按信号**成立日**（`detected_time`，宽松口径=czsc 事件点亮日）查 czsc 形态状态，
