@@ -308,6 +308,31 @@ struct ChanChartView: View {
         (CGFloat(index) - CGFloat(range.firstVisible)) * range.candleWidth + range.candleWidth / 2 + rubberOffset
     }
 
+    private func x(forIndex index: Double, range: VisibleRange) -> CGFloat {
+        (CGFloat(index) - CGFloat(range.firstVisible)) * range.candleWidth + range.candleWidth / 2 + rubberOffset
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        return f
+    }()
+
+    /// 时间对应的 K 线下标（可为负的小数）：窗口内取精确下标；早于窗口第一根时按日历天数外推
+    /// （用窗口内「每个自然日约几根 K 线」换算），用于把起点在可见区左侧之外的线段画到边缘。
+    private func legIndex(_ time: String) -> Double? {
+        if let i = timeIndex[time] { return Double(i) }
+        let candles = analysis.mergedCandles
+        guard candles.count > 1, let first = candles.first?.time, let last = candles.last?.time, time < first,
+              let d0 = Self.dayFormatter.date(from: String(first.prefix(10))),
+              let dl = Self.dayFormatter.date(from: String(last.prefix(10))),
+              let d = Self.dayFormatter.date(from: String(time.prefix(10))), dl > d0 else { return nil }
+        let barsPerDay = Double(candles.count - 1) / (dl.timeIntervalSince(d0) / 86400)
+        return -(d0.timeIntervalSince(d) / 86400) * barsPerDay
+    }
+
     private struct PriceBounds { let minP: Double; let maxP: Double }
 
     private func visiblePriceBounds(range: VisibleRange) -> PriceBounds {
@@ -736,38 +761,42 @@ struct ChanChartView: View {
         let strokes = analysis.strokes
         for k in strokes.indices {
             let cur = strokes[k]
-            guard cur.diverged == true,
-                  let ref = cur.divergenceRef(previous: k >= 2 ? strokes[k - 2] : nil),
-                  let pi = timeIndex[ref.time], let ci = timeIndex[cur.endTime],
-                  ci >= range.start, pi < range.end else { continue }
-            var p1 = CGPoint(x: x(for: pi, range: range), y: y(for: ref.price, height: height, bounds: bounds))
+            guard cur.diverged == true, let ci = timeIndex[cur.endTime], ci >= range.start else { continue }
             let p2 = CGPoint(x: x(for: ci, range: range), y: y(for: cur.endPrice, height: height, bounds: bounds))
-            if let legs = cur.divergenceLegs,
-               let bi0 = timeIndex[legs.b.t0], let bi1 = timeIndex[legs.b.t1],
-               let ci0 = timeIndex[legs.c.t0], let ci1 = timeIndex[legs.c.t1] {
-                // 缠论原文：分别标出 b 段与 c 段；b 段淡一些，c 段（信号所在）实线，比值标在 c 段上
-                func seg(_ i0: Int, _ pr0: Double, _ i1: Int, _ pr1: Double) -> (CGPoint, CGPoint) {
-                    (CGPoint(x: x(for: i0, range: range), y: y(for: pr0, height: height, bounds: bounds)),
-                     CGPoint(x: x(for: i1, range: range), y: y(for: pr1, height: height, bounds: bounds)))
+            var p1: CGPoint
+            if let legs = cur.divergenceLegs {
+                // 缠论原文：分别标出 b 段与 c 段；b 段淡一些，c 段（信号所在）实线，比值标在 c 段上。
+                // 线段起点可能在可见区左侧之外（b 段常有几个月长）：按日历天数外推到窗口外，再裁到可见区内，
+                // 不能因为起点不在窗口里就整条不画。
+                func pt(_ t: String, _ price: Double) -> CGPoint? {
+                    legIndex(t).map { CGPoint(x: x(forIndex: $0, range: range), y: y(for: price, height: height, bounds: bounds)) }
                 }
-                let (b0, b1) = seg(bi0, legs.b.p0, bi1, legs.b.p1)
-                let (c0, c1) = seg(ci0, legs.c.p0, ci1, legs.c.p1)
-                for (a, b, alpha, w) in [(b0, b1, 0.55, 1.6), (c0, c1, 1.0, 2.0)] as [(CGPoint, CGPoint, Double, CGFloat)] {
+                var drawn: [(CGPoint, CGPoint)] = []
+                for (leg, alpha, w) in [(legs.b, 0.55, 1.6), (legs.c, 1.0, 2.0)] as [((t0: String, p0: Double, t1: String, p1: Double), Double, CGFloat)] {
+                    guard let a0 = pt(leg.t0, leg.p0), let a1 = pt(leg.t1, leg.p1),
+                          max(a0.x, a1.x) >= 0, min(a0.x, a1.x) <= plotWidth else { drawn.append((p2, p2)); continue }
+                    let (c0, c1) = Self.clipSegment(a0, a1, toX: 0...plotWidth)
                     var l = Path()
-                    l.move(to: a)
-                    l.addLine(to: b)
+                    l.move(to: c0)
+                    l.addLine(to: c1)
                     ctx.stroke(l, with: .color(Theme.divergence.opacity(alpha)),
                                style: StrokeStyle(lineWidth: w, lineCap: .round))
-                    for pt in [a, b] {
+                    for (orig, shown) in [(a0, c0), (a1, c1)] where orig.x == shown.x {
                         let r: CGFloat = 2.4
-                        ctx.fill(Path(ellipseIn: CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)),
+                        ctx.fill(Path(ellipseIn: CGRect(x: shown.x - r, y: shown.y - r, width: r * 2, height: r * 2)),
                                  with: .color(Theme.divergence.opacity(alpha)))
                     }
+                    drawn.append((c0, c1))
                 }
-                let tagB = ctx.resolve(Text("b").font(.system(size: 9, weight: .semibold)).foregroundColor(Theme.divergence.opacity(0.8)))
-                ctx.draw(tagB, at: CGPoint(x: (b0.x + b1.x) / 2, y: (b0.y + b1.y) / 2 + (cur.direction == .up ? 9 : -9)), anchor: .center)
-                p1 = c0
-            } else {
+                if drawn[0].0 != drawn[0].1 {
+                    let tagB = ctx.resolve(Text("b").font(.system(size: 9, weight: .semibold)).foregroundColor(Theme.divergence.opacity(0.8)))
+                    ctx.draw(tagB, at: CGPoint(x: (drawn[0].0.x + drawn[0].1.x) / 2,
+                                               y: (drawn[0].0.y + drawn[0].1.y) / 2 + (cur.direction == .up ? 9 : -9)), anchor: .center)
+                }
+                p1 = drawn[1].0
+            } else if let ref = cur.divergenceRef(previous: k >= 2 ? strokes[k - 2] : nil),
+                      let pi = timeIndex[ref.time], pi < range.end {
+                p1 = CGPoint(x: x(for: pi, range: range), y: y(for: ref.price, height: height, bounds: bounds))
                 var line = Path()
                 line.move(to: p1)
                 line.addLine(to: p2)
@@ -778,6 +807,8 @@ struct ChanChartView: View {
                     ctx.fill(Path(ellipseIn: CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)),
                              with: .color(Theme.divergence))
                 }
+            } else {
+                continue
             }
 
             // 标签放在虚线中点、朝外侧（顶背驰在线上方、底背驰在线下方），避开端点上的买卖点徽标
@@ -831,8 +862,8 @@ struct ChanChartView: View {
         for st in analysis.strokes where st.diverged == true {
             guard let legs = st.divergenceLegs else { continue }
             for (tag, leg, alpha) in [("b", legs.b, 0.10), ("c", legs.c, 0.18)] as [(String, (t0: String, p0: Double, t1: String, p1: Double), Double)] {
-                guard let i0 = timeIndex[leg.t0], let i1 = timeIndex[leg.t1], i1 >= range.start, i0 < range.end else { continue }
-                let x0 = max(0, x(for: i0, range: range)), x1 = min(plotWidth, x(for: i1, range: range))
+                guard let i0 = legIndex(leg.t0), let i1 = legIndex(leg.t1) else { continue }
+                let x0 = max(0, x(forIndex: i0, range: range)), x1 = min(plotWidth, x(forIndex: i1, range: range))
                 guard x1 > x0 else { continue }
                 ctx.fill(Path(CGRect(x: x0, y: 0, width: x1 - x0, height: height)),
                          with: .color(Theme.divergence.opacity(alpha)))
