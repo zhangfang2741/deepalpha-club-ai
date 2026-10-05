@@ -109,14 +109,28 @@ async def test_sector_pools_response_counts(monkeypatch):
     assert not missing.available and missing.sectors == {}
 
 
-def test_cnhk_tags_from_meta_use_gics_mapping():
+def test_cn_tags_use_shenwan_level1_not_gics():
     from types import SimpleNamespace as NS
 
-    tags = sectors.cnhk_tags_from_meta({
-        "600519": NS(sector="consumer_staples"), "300750": NS(sector="industrials"),
-        "00700": NS(sector="communication_services"), "09999": NS(sector=None),
+    tags = sectors.cn_tags_from_meta({
+        "600519": NS(industry="白酒Ⅱ"), "300750": NS(industry="电池"), "688981": NS(industry="半导体"),
+        "000001": NS(industry="银行Ⅱ"), "999999": NS(industry="没见过的行业"),
     })
-    assert tags == {"600519": "staples", "300750": "industrials", "00700": "communication"}
+    assert tags == {"600519": "食品饮料", "300750": "电力设备", "688981": "电子", "000001": "银行"}
+
+
+def test_cn_sw_map_covers_all_known_industries_with_31_level1():
+    from app.services.quant_research.cnhk.sectors import CN_INDUSTRY_TO_GICS, CN_INDUSTRY_TO_SW, SW_LEVEL1
+
+    assert set(CN_INDUSTRY_TO_SW) == set(CN_INDUSTRY_TO_GICS)
+    assert len(SW_LEVEL1) == 31 and set(CN_INDUSTRY_TO_SW.values()) == set(SW_LEVEL1)
+
+
+def test_hk_tags_use_gics_mapping():
+    from types import SimpleNamespace as NS
+
+    tags = sectors.hk_tags_from_meta({"00700": NS(sector="communication_services"), "09999": NS(sector=None)})
+    assert tags == {"00700": "communication"}
 
 
 def test_lookup_tag_pads_hk_and_strips_suffix():
