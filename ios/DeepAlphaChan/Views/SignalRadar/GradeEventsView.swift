@@ -103,7 +103,7 @@ struct GradeEventsView: View {
             .frame(maxWidth: .infinity)
             if events.count > shown.count {
                 Button { showAll = true } label: {
-                    Text(L("另有 %d 个 · 查看全部", events.count - shown.count))
+                    Text(L("另有 %lld 个 · 查看全部", events.count - shown.count))
                         .font(.system(size: 13, weight: .semibold))
                         .padding(.horizontal, 14).padding(.vertical, 7)
                         .background(Theme.surface, in: Capsule())
@@ -204,7 +204,7 @@ struct GradeEventsView: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(e.fromGrade) → \(e.toGrade)")
                     .font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.textPrimary)
-                Text(e.isUp ? L("升 %d 档", e.steps) : L("降 %d 档", e.steps))
+                Text(e.isUp ? L("升 %lld 档", e.steps) : L("降 %lld 档", e.steps))
                     .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
             }
         }
