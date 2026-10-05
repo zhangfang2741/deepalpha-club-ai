@@ -39,11 +39,11 @@ struct SignalRadarView: View {
     @EnvironmentObject private var orientation: AppOrientation
     @EnvironmentObject private var store: StoreManager
     @EnvironmentObject private var usage: UsageTracker
-    /// 信号雷达图跟高级版完全是同一套 UI（同一个 vm），未订阅时唯一的区别：
+    /// 信号雷达图跟会员完全是同一套 UI（同一个 vm），未订阅时唯一的区别：
     /// vm.days 最前面多一天「上个月 1 号」的真实快照（见 SignalRadarViewModel.demoDay），
     /// 默认停在这天；点日期轨上其它天会弹这个付费墙，而不是真的切过去——见 selectDay。
     @State private var showPaywall = false
-    /// 免责声明：第一次查看非示例日的雷达图（即订阅高级版后的真实雷达）时弹出，
+    /// 免责声明：第一次查看非示例日的雷达图（即订阅会员后的真实雷达）时弹出，
     /// 同意前该日的气泡不显示；示例日（未订阅的免费预览）不弹。见 needsConsent。
     @StateObject private var consent = RadarConsent()
     @State private var consentChecked = false
@@ -75,7 +75,7 @@ struct SignalRadarView: View {
             .navigationTitle(L("市场雷达"))
             .navigationBarTitleDisplayMode(.inline)
             // 真实滚动窗口雷达对所有用户都拉（未订阅一样看得到市场卡片、图例、日期轨，
-            // 跟高级版一模一样，见 radarContent）；市场切换时 .task(id:) 额外拉一次
+            // 跟会员一模一样，见 radarContent）；市场切换时 .task(id:) 额外拉一次
             // 「上个月 1 号」免费预览快照，自动取消上一次未完成的请求、重新拉一次。
             .task { vm.onAppear() }
             // 后台补算未完成时定期静默重拉，补上的成分股不用用户手动刷新就能出现；
@@ -133,13 +133,13 @@ struct SignalRadarView: View {
     }
 
     /// 当前选中的是非示例日、且还没同意过免责声明。示例日（vm.unlockedDayDate，仅未订阅
-    /// 时存在）不需要；高级版没有示例日，所有日期都需要。
+    /// 时存在）不需要；会员没有示例日，所有日期都需要。
     private var needsConsent: Bool {
         guard !consent.hasAgreed, let day = vm.selectedDay else { return false }
         return day.date != vm.unlockedDayDate
     }
 
-    /// 正文：市场卡片 + 雷达。跟高级版完全同一套 UI，未订阅时唯一的区别在 vm.days
+    /// 正文：市场卡片 + 雷达。跟会员完全同一套 UI，未订阅时唯一的区别在 vm.days
     /// （最前面多一天免费预览）和 selectDay（点非解锁日弹付费墙）。非示例日未同意免责
     /// 声明时，气泡区换成锁定占位（consentLockedField）。
     private var radarContent: some View {
@@ -310,7 +310,7 @@ struct SignalRadarView: View {
     /// 与雷达相同（后端测试 test_chan_window_alignment 守护）。anchorDate 为气泡日期
     /// （信号出现日），详情页列表显示的也是出现日，图上标记则在所属笔的极值 K 线。
     ///
-    /// 未订阅高级版时（含点开免费预览那一天）这次分析跟分析 Tab 一样走每日免费额度
+    /// 未订阅会员时（含点开免费预览那一天）这次分析跟分析 Tab 一样走每日免费额度
     /// （usage.canUseFree/recordUse），额度用尽弹付费墙，不能绕开——免费预览只是
     /// 多给了一天可点的真实信号，不是无限次分析的后门。
     private func openSymbol(_ symbol: String, name: String? = nil) {
@@ -1407,8 +1407,8 @@ struct SignalRadarView: View {
         selectDay(bestIndex)
     }
 
-    /// 日期轨/日期选择器切某一天的唯一入口：未订阅高级版时只有免费预览那天
-    /// （vm.unlockedDayDate）能真的切过去，点其它天弹付费墙——雷达图本身跟高级版
+    /// 日期轨/日期选择器切某一天的唯一入口：未订阅会员时只有免费预览那天
+    /// （vm.unlockedDayDate）能真的切过去，点其它天弹付费墙——雷达图本身跟会员
     /// 一模一样，只是这一层门禁不同，不是另起一套「示例」界面。
     private func selectDay(_ index: Int) {
         let unlocked = store.isPremium
@@ -1426,7 +1426,7 @@ struct SignalRadarView: View {
         // 在日期轨上也提前露个头，不用一天天点过去找。
         let hasNew = day.signals.contains { $0.date == day.date }
         // 未订阅时的免费预览日（上个月 1 号）：标「示例」，说明这天是给你试看的样例，
-        // 不是雷达的最新结果。高级版没有这一天，也就不会出现这个标记。
+        // 不是雷达的最新结果。会员没有这一天，也就不会出现这个标记。
         let isDemo = !store.isPremium && day.date == vm.unlockedDayDate
         return Button {
             selectDay(index)

@@ -29,12 +29,12 @@ final class WatchlistViewModel: ObservableObject {
     /// 用户自己加的自选（不含默认送的示例股）：名额与「已收藏 x / y」只算这些。
     var ownItems: [WatchlistItem] { items.filter { !$0.isSample } }
 
-    /// 非高级版免费看状态的那一支：自己加的里最早的一支（列表按最近加入在前，取最后一个）。
+    /// 非会员免费看状态的那一支：自己加的里最早的一支（列表按最近加入在前，取最后一个）。
     /// 选最早而不是最新，位置稳定——新加一支不会把状态「挪走」。免费版上限 1 支，
-    /// 正好全部可见；「全部批量状态」是高级版权益。
+    /// 正好全部可见；「全部批量状态」是会员权益。
     private var freePhaseItemID: String? { tier == .premium ? nil : ownItems.last?.id }
 
-    /// 某一行要展示的状态：高级版全部可见；示例股所有人可见（完整展示高级版效果）；
+    /// 某一行要展示的状态：会员全部可见；示例股所有人可见（完整展示会员效果）；
     /// 其余档位自己加的只有 freePhaseItemID 那一支。
     func phase(for item: WatchlistItem) -> WatchlistPhase? {
         guard tier == .premium || item.isSample || item.id == freePhaseItemID else { return nil }
@@ -65,7 +65,7 @@ final class WatchlistViewModel: ObservableObject {
     /// 这一行是否有在场信号（不看档位：用于分组与「有信号」提示）。
     func hasSignal(_ item: WatchlistItem) -> Bool { signals[item.id] != nil }
 
-    /// 这一行能看到的信号：与结构状态同一道档位门槛（高级版全部、示例股、免费看的那一支）。
+    /// 这一行能看到的信号：与结构状态同一道档位门槛（会员全部、示例股、免费看的那一支）。
     func signal(for item: WatchlistItem) -> RadarSignal? {
         guard tier == .premium || item.isSample || item.id == freePhaseItemID else { return nil }
         return signals[item.id]
@@ -116,7 +116,7 @@ final class WatchlistViewModel: ObservableObject {
 
     /// 自选上限，从 `GET /watchlist` 的 `max_items` 同步，不在端上硬编码——
     /// 改上限只用改后端 `app.services.watchlist.TIER_LIMITS` 一处。nil 表示不限
-    /// （高级版）；1 是加载前的合理默认值，与未订阅档位一致。
+    /// （会员）；1 是加载前的合理默认值，与未订阅档位一致。
     @Published private(set) var maxItems: Int? = 1
     var isFull: Bool {
         guard let maxItems else { return false }
@@ -132,8 +132,7 @@ final class WatchlistViewModel: ObservableObject {
     /// 新结果回来直接替换，不闪、不转圈。
     ///
     /// tier：调用方（WatchlistView/ResultDetailView）按 `store.tier` 传入，决定自选上限
-    /// （见 fetchAndApply）——自选本身现在所有档位都能用，只是上限不同（未订阅 1 / 基础版
-    /// 10 / 高级版不限），不再是高级版专属。
+    /// （见 fetchAndApply）——自选本身现在所有档位都能用，只是上限不同（未订阅 1 / 会员不限），不再是会员专属。
     func onAppear(tier: SubscriptionTier) async {
         if items.isEmpty {
             await refresh(tier: tier)

@@ -7,7 +7,7 @@ import Foundation
 /// 用户主动勾选确认过才放行，降低「用户只看雷达买卖点做交易导致亏损」的误解
 /// 与由此带来的责任风险。
 ///
-/// 只在第一次查看非示例日的雷达图时出现（即订阅高级版后）；确认过不再重复弹，
+/// 只在第一次查看非示例日的雷达图时出现（即订阅会员后）；确认过不再重复弹，
 /// 除非声明文案发生实质性变化（见 currentVersion）。
 @MainActor
 final class RadarConsent: ObservableObject {

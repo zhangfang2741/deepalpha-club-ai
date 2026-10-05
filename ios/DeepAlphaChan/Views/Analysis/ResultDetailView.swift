@@ -88,7 +88,7 @@ struct ResultDetailView: View {
             ToolbarItem(placement: .topBarTrailing) { shareButton }
             ToolbarItem(placement: .topBarTrailing) { starButton }
         }
-        // 自选现在所有档位都能用（未订阅 1 支 / 基础版 10 支 / 高级版不限），
+        // 自选现在所有档位都能用（未订阅 1 支 / 会员不限），
         // 星标状态每个用户都要查，不再按 isPremium 短路。
         .task { await watchlistVM.refreshSilently(tier: store.tier) }
         .onReceive(NotificationCenter.default.publisher(for: .watchlistDidChange)) { _ in

@@ -32,14 +32,14 @@
           "internalID": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000011",
           "localizations": [
             {
-              "description": "解锁全部缠论分析，不受每日 3 支标的限制",
-              "displayName": "基础版 月度会员",
+              "description": "已停售；仍在有效期的老订阅者按会员处理",
+              "displayName": "基础版 月度会员（已停售）",
               "locale": "zh_CN"
             }
           ],
           "productID": "club.deepalpha.chan.pro.monthly",
           "recurringSubscriptionPeriod": "P1M",
-          "referenceName": "Experience Monthly",
+          "referenceName": "Legacy Basic Monthly (retired)",
           "subscriptionGroupID": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000010",
           "type": "RecurringSubscription",
           "introductoryOffer": {
@@ -53,29 +53,22 @@
         {
           "adHocOffers": [],
           "codeOffers": [],
-          "displayPrice": "388.00",
+          "displayPrice": "188.00",
           "familyShareable": false,
           "groupNumber": 2,
           "internalID": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000021",
           "localizations": [
             {
-              "description": "基础版全部权益 + 次级别确认、信号雷达、自选批量状态计算",
-              "displayName": "高级版 月度会员",
+              "description": "不限次缠论分析、次级别确认、信号雷达、自选批量状态计算",
+              "displayName": "DeepAlpha 会员 月度",
               "locale": "zh_CN"
             }
           ],
           "productID": "club.deepalpha.chan.premium.monthly",
           "recurringSubscriptionPeriod": "P1M",
-          "referenceName": "Premium Monthly",
+          "referenceName": "Membership Monthly",
           "subscriptionGroupID": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000010",
-          "type": "RecurringSubscription",
-          "introductoryOffer": {
-            "displayPrice": "188.00",
-            "internalID": "5C0F1A2B-DEEP-ALPHA-CHAN-000000000022",
-            "numberOfPeriods": 1,
-            "paymentMode": "payAsYouGo",
-            "subscriptionPeriod": "P1M"
-          }
+          "type": "RecurringSubscription"
         }
       ]
     }

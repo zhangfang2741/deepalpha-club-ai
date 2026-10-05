@@ -39,7 +39,7 @@ struct WatchlistItem: Decodable, Identifiable {
 struct WatchlistResponse: Decodable {
     let items: [WatchlistItem]
     /// 自选上限，按请求带的订阅档位算出，来自后端 `app.services.watchlist.TIER_LIMITS`，
-    /// 不在端上硬编码。nil 表示该档不限（高级版）。
+    /// 不在端上硬编码。nil 表示该档不限（会员）。
     let maxItems: Int?
 
     enum CodingKeys: String, CodingKey {

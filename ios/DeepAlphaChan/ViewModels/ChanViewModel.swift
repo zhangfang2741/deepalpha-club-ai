@@ -51,8 +51,8 @@ final class ChanViewModel: ObservableObject {
     /// 递增序号：切换标的/重新分析后，旧请求晚到的结果直接丢弃。
     private var subLevelRequestID = 0
 
-    /// 次级别确认（日线看 30 分钟、周线看日线）是高级版专属功能，由持有本 VM
-    /// 的视图（通过 StoreManager.isPremium）同步。非高级版直接跳过请求——
+    /// 次级别确认（日线看 30 分钟、周线看日线）是会员专属功能，由持有本 VM
+    /// 的视图（通过 StoreManager.isPremium）同步。非会员直接跳过请求——
     /// 省一次网络调用，也避免悄悄给没买这项权益的用户算出结果。
     var hasSubLevelAccess = false
 
@@ -184,7 +184,7 @@ final class ChanViewModel: ObservableObject {
 
     // MARK: - 次级别确认
 
-    /// 从付费墙升级到高级版后调用：若当前已有分析结果但次级别此前因未订阅被跳过，
+    /// 从付费墙订阅会员后调用：若当前已有分析结果但次级别此前因未订阅被跳过，
     /// 补一次请求，不用用户手动重新分析一遍。非日线/周线周期或本来就没有分析结果
     /// 时 `loadSubLevel` 内部的 guard 自然是空操作。
     func refreshSubLevelIfEligible() {
