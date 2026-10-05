@@ -97,8 +97,7 @@ struct ChanChartView: View {
     // 主图偏矮，整体呈横向长方形（宽 ≈ 屏宽，明显大于高），看盘视觉更舒展
     var priceHeight: CGFloat = 240
     var macdHeight: CGFloat = 78
-    /// 详情页竖屏不显示 MACD：背驰结果已直接标在主图上（c 段对 b 段的 MACD 面积比），副图放在第一屏只占位置
-    /// 该看哪个；全屏图与次级别图仍显示，供需要的人参考。
+    /// 是否画 MACD 副图（详情页竖屏、全屏都画；背驰的 b / c 两段在副图上用粉色底标出）。
     var showsMACD = true
     private let timeAxisHeight: CGFloat = 22
     // 右轴不再预留固定列：K 线铺满整宽，价格刻度以透明浮层画在右边缘、不遮挡蜡烛。
@@ -828,6 +827,19 @@ struct ChanChartView: View {
         func yv(_ v: Double) -> CGFloat { height - CGFloat((v - lo) / span) * height }
         let zeroY = yv(0)
 
+        // 趋势背驰的 b 段、c 段：在副图上铺粉色底并标 b / c，比的就是这两段里同向柱子的面积
+        for st in analysis.strokes where st.diverged == true {
+            guard let legs = st.divergenceLegs else { continue }
+            for (tag, leg, alpha) in [("b", legs.b, 0.10), ("c", legs.c, 0.18)] as [(String, (t0: String, p0: Double, t1: String, p1: Double), Double)] {
+                guard let i0 = timeIndex[leg.t0], let i1 = timeIndex[leg.t1], i1 >= range.start, i0 < range.end else { continue }
+                let x0 = max(0, x(for: i0, range: range)), x1 = min(plotWidth, x(for: i1, range: range))
+                guard x1 > x0 else { continue }
+                ctx.fill(Path(CGRect(x: x0, y: 0, width: x1 - x0, height: height)),
+                         with: .color(Theme.divergence.opacity(alpha)))
+                let t = ctx.resolve(Text(tag).font(.system(size: 9, weight: .semibold)).foregroundColor(Theme.divergence))
+                ctx.draw(t, at: CGPoint(x: (x0 + x1) / 2, y: 8), anchor: .center)
+            }
+        }
         // 柱
         let bw = max(1, range.candleWidth * 0.5)
         for i in range.start..<min(range.end, macd.bar.count) {
