@@ -155,3 +155,34 @@ class SignalRadarResponse(BaseModel):
     pending_symbols: int = Field(
         default=0, description="拉数失败、正在后台补算的成分股数；补齐后快照会自动重写（0=已全部算完）"
     )
+
+
+class RadarGradeEventOut(BaseModel):
+    """基本面研究 tab 的一条事件：某只股票在某天综合等级升 / 降。"""
+
+    symbol: str
+    name: str
+    date: str = Field(description="新等级的评级日 YYYY-MM-DD")
+    direction: str = Field(description="up = 升档 / down = 降档")
+    from_grade: str
+    to_grade: str
+    steps: int = Field(description="变动档数（13 档字母等级，A+ 最高、F 最低）")
+    sector: str | None = None
+    score: float | None = Field(default=None, description="新等级的综合分 0~100")
+
+
+class RadarGradeDayOut(BaseModel):
+    date: str
+    up_count: int
+    down_count: int
+    events: list[RadarGradeEventOut]
+
+
+class RadarGradeEventsResponse(BaseModel):
+    """某 (市场, universe) 最近若干评级日的综合等级升降事件（从新到旧）。"""
+
+    market: str
+    universe_key: str
+    universe_name: str = ""
+    days: list[RadarGradeDayOut] = Field(default_factory=list)
+    available: bool = Field(default=True, description="False = 评级数据读取失败（不是没有事件）")
