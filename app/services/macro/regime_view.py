@@ -177,3 +177,20 @@ def load_sector_rows(parent: str | None = None, as_of: str | None = None) -> lis
         ).all()
     return [SectorRow(r.trade_date, r.sector, r.rs_vs_market, r.confirmed_label, r.regime_label, r.p_risk_on)
             for r in rows if parent is not None or r.sector in SECTOR_SYMBOL]  # 丢掉已下线的旧一级行业行（如半导体）
+
+
+def load_market_sector_rows(market: str, as_of: str | None = None) -> list[SectorRow]:
+    """A 股 / 港股：最新一个交易日（as_of 给定时取不晚于它的最近交易日）的行业状态（申万 / 恒生一级，key 即行业名）。"""
+    from app.db.session import get_sync_session_cm
+    from app.models.regime_market_sector_features import RegimeMarketSectorFeatures as M
+
+    day_q = select(M.trade_date).where(M.market == market)
+    if as_of is not None:
+        day_q = day_q.where(M.trade_date <= as_of)
+    with get_sync_session_cm() as session:
+        latest = session.exec(day_q.order_by(col(M.trade_date).desc()).limit(1)).first()
+        if latest is None:
+            return []
+        rows = session.exec(select(M).where(M.market == market, M.trade_date == latest)).all()
+    return [SectorRow(r.trade_date, r.sector, r.rs_vs_market, r.confirmed_label, r.regime_label, r.p_risk_on)
+            for r in rows]

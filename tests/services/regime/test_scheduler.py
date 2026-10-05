@@ -21,3 +21,10 @@ def test_is_cnhk_stale():
     assert is_cnhk_stale("2026-09-29", date(2026, 9, 30))
     assert not is_cnhk_stale("2026-09-30", date(2026, 9, 30))
     assert not is_cnhk_stale("2026-10-01", date(2026, 9, 30))
+
+
+def test_cnhk_sector_scheduler_entrypoints_exist():
+    from app.services.regime import scheduler
+
+    assert callable(scheduler.run_cnhk_sector_once) and callable(scheduler._run_cnhk_sector_stage)
+    assert scheduler._CNHK_SECTOR_LOCK_TTL > scheduler._CNHK_LOCK_TTL

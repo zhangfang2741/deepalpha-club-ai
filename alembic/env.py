@@ -26,6 +26,7 @@ from app.models.graph_source import SourceDocument  # noqa: F401
 from app.models.finkg_triple import FinKGTriple  # noqa: F401
 from app.models.regime_features import RegimeFeatures  # noqa: F401
 from app.models.regime_market_features import RegimeMarketFeatures  # noqa: F401
+from app.models.regime_market_sector_features import RegimeMarketSectorFeatures  # noqa: F401
 from app.models.regime_sector_features import RegimeSectorFeatures  # noqa: F401
 from app.models.quant_research import (  # noqa: F401
     QuantEstimateSnapshot,
