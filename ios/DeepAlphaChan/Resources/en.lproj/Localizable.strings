@@ -1073,8 +1073,6 @@
 "大盘" = "Market";
 "结构" = "Structure";
 "基本面" = "Fundamentals";
-"查看K线与结构详情" = "View chart & structure";
-"以上为按规则得出的事实陈列，不构成投资建议。" = "Rule-based facts only — not investment advice.";
 "%@ 出现 · 信号价位 %@" = "Appeared %@ · level %@";
 "暂无数据" = "No data";
 "%@ %lld%%" = "%@ %lld%%";
@@ -1168,6 +1166,8 @@
 "成立" = "Formed";
 "%@ · 成立日" = "%@ · formed";
 "缠论里买卖点要等后面的笔成形才算成立：这个%@的价位是 %@ 这根 K 线的极值，下一笔到 %@ 才第一次成形，所以这一天才成立。图上的徽标画在极值 K 线，虚线末端的圆点标的是成立日。" = "A Chan signal only counts once the following stroke has formed: this %@ sits at the extreme of the %@ candle, and the next stroke first formed on %@, so that is the day it was established. The badge is drawn on the extreme candle; the dot at the end of the dashed line marks the day it formed.";
+"App Store 没有返回商品 %@（商品状态、价格或协议可能还没生效）" = "The App Store did not return product %@ (its status, price or the agreement may not be in effect yet)";
+"请求 App Store 出错：%@" = "App Store request failed: %@";
 "当日 %lld 个信号" = "%lld signals today";
 "%lld 个行业有信号" = "%lld sectors with signals";
 "%@大盘状态建设中，暂时只有市场情绪。" = "Market state for %@ is coming soon; only market sentiment is available for now.";

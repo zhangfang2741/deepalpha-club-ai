@@ -142,12 +142,19 @@ final class StoreManager: ObservableObject {
 
     // MARK: - 加载与状态
 
+    /// 商品加载失败的具体原因（付费墙上小字显示）：「暂时无法加载订阅信息」本身分不出是 App Store 没返回这个商品
+    /// （商品状态 / 协议 / 地区未上架）还是网络请求出错，排查时得知道是哪一种。
+    @Published private(set) var loadDiagnostic: String?
+
     func loadProducts() async {
         do {
             // 只加载在售的会员商品；旧的基础版商品已停售，不用加载（识别旧订阅者靠 currentEntitlements）
             let items = try await Product.products(for: [AppConfig.membershipMonthlyProductID])
             products = items
             loadFailed = items.isEmpty
+            loadDiagnostic = items.isEmpty
+                ? L("App Store 没有返回商品 %@（商品状态、价格或协议可能还没生效）", AppConfig.membershipMonthlyProductID)
+                : nil
             // 空数组是最难查的一种失败：StoreKit 不抛错，只是什么都没返回，界面却显示
             // 「暂时无法加载订阅信息」。把已知成因写进日志，省得每次从零排查。
             if items.isEmpty {
@@ -163,6 +170,7 @@ final class StoreManager: ObservableObject {
         } catch {
             storeLog.error("商品加载失败: \(error.localizedDescription, privacy: .public)")
             loadFailed = true
+            loadDiagnostic = L("请求 App Store 出错：%@", error.localizedDescription)
         }
     }
 

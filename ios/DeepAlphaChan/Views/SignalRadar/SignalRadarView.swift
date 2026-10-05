@@ -4,8 +4,8 @@ import SwiftUI
 /// 后端给的是选中日在场的全部信号（按出现时间从新到旧），不再截取「前 10」。
 ///
 /// 自上而下一条线：顶部 MarketHeader「环境 / 行业 / 当日信号」三格 → 扇区雷达 → 气泡。
-/// 三格、扇区标签、气泡点开都是底部面板（RadarPanels），留在本页讲完；面板里「查看K线与结构详情」
-/// 才进详情页。
+/// 三格、扇区标签点开是底部面板（RadarPanels：环境 / 行业 / 当日信号列表）；点气泡、或面板列表里的某一行，
+/// 都直接进缠论详情页（不再先弹「大盘 / 行业 / 结构 / 基本面」四层事实页）。
 ///
 /// 扇区雷达（这一天有行业统计时，即美股指数雷达）：角度 = 行业，按当日相对大盘强弱从上往下排，
 /// 越靠上越强；每个行业最多画几个最新的气泡，其余在扇区标签上显示「+N」（SectorRadarLayout）。
@@ -22,7 +22,7 @@ import SwiftUI
 ///   app/services/signal_radar/service.py 的按日重建），所以翻看某一天时，
 ///   有的气泡是当天新出现的（右上角标"新"），有的是更早出现、一直有效到今天的。
 /// 底部可横滑的日期轨手动选某一天，看当天信号。
-/// 面板里点「查看K线与结构详情」才跑分析、在本页自己的 NavigationStack 里 push 到缠论分析详情页——
+/// 点气泡或面板列表里的某一行才跑分析、在本页自己的 NavigationStack 里 push 到缠论分析详情页——
 /// 不经过分析 Tab 的条件页中转，右滑手势/返回按钮也就自然直接回到信号页。
 struct SignalRadarView: View {
     /// 与分析 Tab 共享的缠论状态（同 MorningReportTabView），这样从信号页
@@ -64,7 +64,7 @@ struct SignalRadarView: View {
     @State private var showAlgorithmInfo = false
     /// 正在打开的底部面板（环境 / 行业 / 当日信号 / 某个气泡的四层事实）。
     @State private var panel: RadarPanel?
-    /// 面板里点了「查看K线与结构详情」：等面板收起后再跑分析、push 详情页（见 sheet 的 onDismiss）。
+    /// 面板列表里点了某一行：等面板收起后再跑分析、push 详情页（见 sheet 的 onDismiss）。
     @State private var pendingDetail: RadarSignal?
 
     var body: some View {
@@ -652,11 +652,10 @@ struct SignalRadarView: View {
         guard let day = vm.selectedDay else { return nil }
         return RadarFactContext(
             market: vm.market, day: day, board: vm.selectedSectorBoard, order: vm.sectorOrder,
-            macro: overviewVM.overviews[vm.market]?.macroState, panic: panicVM.responses[vm.market],
             sectorName: { vm.sectorName($0) })
     }
 
-    /// 面板里点「查看K线与结构详情」：先收起面板，收起后（sheet 的 onDismiss）再跑分析、push 详情页。
+    /// 面板列表里点某一行：先收起面板，收起后（sheet 的 onDismiss）再跑分析、push 详情页。
     private func openDetail(_ signal: RadarSignal) {
         pendingDetail = signal
         panel = nil
@@ -686,17 +685,6 @@ struct SignalRadarView: View {
         case .signals:
             if let ctx = factContext {
                 RadarSignalListSheet(context: ctx, universeName: currentUniverseName, onOpenDetail: openDetail)
-            }
-        case .signal(let signal):
-            if let ctx = factContext {
-                NavigationStack {
-                    RadarSignalFactView(signal: signal, context: ctx, onOpenDetail: openDetail)
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) { Button(L("关闭")) { self.panel = nil } }
-                        }
-                }
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
             }
         }
     }
