@@ -1170,3 +1170,4 @@
 "缠论里买卖点要等后面的笔成形才算成立：这个%@的价位是 %@ 这根 K 线的极值，下一笔到 %@ 才第一次成形，所以这一天才成立。图上的徽标画在极值 K 线，虚线末端的圆点标的是成立日。" = "A Chan signal only counts once the following stroke has formed: this %@ sits at the extreme of the %@ candle, and the next stroke first formed on %@, so that is the day it was established. The badge is drawn on the extreme candle; the dot at the end of the dashed line marks the day it formed.";
 "当日 %lld 个信号" = "%lld signals today";
 "%lld 个行业有信号" = "%lld sectors with signals";
+"%@大盘状态建设中，暂时只有市场情绪。" = "Market state for %@ is coming soon; only market sentiment is available for now.";
