@@ -42,6 +42,7 @@ from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
 from app.services.chan.divergence import DivergenceResult
 from app.services.chan.gap import analyze_structure_gap
 from app.services.chan.signal_policy import DEFAULT_MODE, SIGNAL_POLICIES, normalize_mode
+from app.services.chan.signals import leg_divergence_marks
 from app.services.chan.window import canonical_daily_fetch_start, canonical_daily_start
 from app.services.chan.sub_level_service import current_sub_level
 from app.services.chan.sub_level_service import signal_out as _signal_out
@@ -105,24 +106,8 @@ def analysis_window(start_date: str, end_date: str, freq: str, warmup_days: int 
 
 
 def _leg_divergence_marks(result: ChanAnalysisResult) -> dict[str, DivergenceResult]:
-    """图上背驰标注：{c 段终点那一笔的 end_time: 背驰结果}。
-
-    只取一类买卖点（含待确认候选）判定用的趋势背驰——c 段（离开 B）对 b 段（A、B 之间）、缠论原文的 MACD 面积；
-    没有 b 段终点（笔级退回判定）的一类不标。同一个 b 段终点只留一条线（多条线共用一个起点、标签互相压住）：
-    已成立的信号优先于待确认候选，同级里取时间最新的。
-    """
-    best: dict[tuple[str, str], tuple[tuple[int, str], str, DivergenceResult]] = {}
-    for rank, sigs in ((1, result.signals), (0, result.candidate_signals)):
-        for sig in sigs:
-            dv = sig.divergence
-            if not (sig.type in ("buy1", "sell1") and dv is not None and dv.is_diverged
-                    and dv.b_end_time and dv.b_end_price is not None):
-                continue
-            key = (sig.type, dv.b_end_time)
-            cand = ((rank, sig.time), sig.time, dv)
-            if key not in best or cand[0] > best[key][0]:
-                best[key] = cand
-    return {time: dv for _, time, dv in best.values()}
+    """图上背驰标注：只取一类趋势背驰（含待确认候选），规则见 signals.leg_divergence_marks。"""
+    return leg_divergence_marks(result.signals, result.candidate_signals)
 
 
 async def _fetch_bars_or_http_error(

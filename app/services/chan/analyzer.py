@@ -38,7 +38,7 @@ from app.services.chan.pivot_phase import PivotPhase, build_pivot_phase
 from app.services.chan.segment import Segment, find_segments
 from app.services.chan.shape_filters import ShapeState
 from app.services.chan.signal_policy import DEFAULT_MODE, get_policy
-from app.services.chan.signals import Signal
+from app.services.chan.signals import Signal, leg_divergence_marks, unify_stroke_divergences
 from app.services.chan.stroke import Stroke
 from app.services.chan.structure_layers import (
     StructureLayer,
@@ -252,6 +252,10 @@ class ChanAnalyzer:
         self._mark_confirmations(result)
         #    最后一笔上的信号怎么处理由口径决定（严格：移入 candidate_signals；宽松：保留并标未确认）
         result.signals, result.candidate_signals = policy.split_unconfirmed(result.signals)
+        #    叙事 / 形态推荐 / 中枢阶段 / 缺口读到的「背驰」与图上标注、一类买卖点统一成一类趋势背驰（c 段对 b 段，MACD 面积）
+        if policy.unify_divergences:
+            result.divergences = unify_stroke_divergences(
+                result.strokes, leg_divergence_marks(result.signals, result.candidate_signals), lang)
 
         # 9b. 窗口锚定：把结构裁剪回可见窗口（在完整序列上算、只显示尾段）。
         #     裁剪放在摘要/建议之前，使 summary 的计数与可见结构一致。
@@ -666,14 +670,14 @@ class ChanAnalyzer:
         # ---- 因子 5：背驰（只削弱当前方向的力度）----
         if recent_div_dir == "up":
             factors.append(BiasFactor(pick(lang,
-                "上涨过程中出现背驰：价格创新高但力度（价差、量能或时长）跟不上，上涨在衰减",
-                "A divergence appeared during the advance: price made new highs but force (range, "
-                "volume or duration) didn't follow — the push is decaying"), -DIVERGENCE_WEIGHT))
+                "上涨过程中出现趋势背驰：价格创新高，但离开中枢这一段的 MACD 面积比前一段小，上涨在衰减",
+                "A trend divergence appeared during the advance: price made a new high, but the MACD area of the "
+                "leg leaving the pivot is smaller than the previous leg — the push is decaying"), -DIVERGENCE_WEIGHT))
         elif recent_div_dir == "down":
             factors.append(BiasFactor(pick(lang,
-                "下跌过程中出现背驰：价格创新低但力度（价差、量能或时长）在减弱，下跌在衰减",
-                "A divergence appeared during the decline: price made new lows but force (range, "
-                "volume or duration) weakened — the selling is decaying"), DIVERGENCE_WEIGHT))
+                "下跌过程中出现趋势背驰：价格创新低，但离开中枢这一段的 MACD 面积比前一段小，下跌在衰减",
+                "A trend divergence appeared during the decline: price made a new low, but the MACD area of the "
+                "leg leaving the pivot is smaller than the previous leg — the selling is decaying"), DIVERGENCE_WEIGHT))
 
         # ---- 因子 6：量价配合 ----
         if bars:

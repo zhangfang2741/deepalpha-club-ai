@@ -228,13 +228,13 @@ def build_narrative(
 
     if div_dir == "up" and trend_up:
         details.append(pick(lang,
-            "上涨过程中出现背驰：价格创新高但力度（价差、量能或时长）没跟上。",
-            "A divergence appeared during the advance: price made new highs but "
-            "force (range, volume or duration) didn't follow."))
+            "上涨过程中出现趋势背驰：价格创新高，但离开中枢这一段的 MACD 面积比前一段小。",
+            "A trend divergence appeared during the advance: price made a new high, but the MACD area "
+            "of the leg leaving the pivot is smaller than the previous leg."))
     elif div_dir == "down" and trend_down:
         details.append(pick(lang,
-            "下跌过程中出现背驰：价格创新低但力度（价差、量能或时长）在减弱。",
-            "A divergence appeared during the decline: price made new lows but "
-            "force (range, volume or duration) weakened."))
+            "下跌过程中出现趋势背驰：价格创新低，但离开中枢这一段的 MACD 面积比前一段小。",
+            "A trend divergence appeared during the decline: price made a new low, but the MACD area "
+            "of the leg leaving the pivot is smaller than the previous leg."))
 
     return MarketNarrative(phase=phase, phase_label=label, headline=headline, details=details)

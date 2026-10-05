@@ -46,6 +46,11 @@ class SignalPolicy(Protocol):
     def description_en(self) -> str: ...
 
     @property
+    def unify_divergences(self) -> bool:
+        """笔级背驰表是否只认一类趋势背驰（与图上标注同一口径）。"""
+        ...
+
+    @property
     def czsc_families(self) -> tuple[SignalFamily, ...]:
         """扫描时启用的 czsc 信号族。"""
         ...
@@ -74,6 +79,8 @@ class _PolicyInfo:
     czsc_families: tuple[SignalFamily, ...]
     # 严格口径的背驰度量名（背驰度量可插拔，见 leg_metric）；宽松口径不用
     metric_name: str = ""
+    # 笔级背驰表（叙事 / 形态推荐 / 中枢阶段 / 缺口读取）是否只认一类趋势背驰：与图上标注、一类买卖点同一口径
+    unify_divergences: bool = False
 
 
 class LoosePolicy(_PolicyInfo):
@@ -120,7 +127,7 @@ _ALL: tuple[SignalPolicy, ...] = (
             czsc_families=("first", "second", "third"),
         ),
         StrictPolicy(
-            name="strict", version=f"std9.{_METRIC.name}", metric_name=_METRIC.name, label_zh="严格", label_en="Strict",
+            name="strict", version=f"std9.{_METRIC.name}", metric_name=_METRIC.name, unify_divergences=True, label_zh="严格", label_en="Strict",
             description_zh="严格按缠论原文定义，只认已走完的笔",
             description_en="Textbook Chan definitions; only completed legs count",
             czsc_families=("first",),

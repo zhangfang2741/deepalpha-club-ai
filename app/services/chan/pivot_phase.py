@@ -325,6 +325,11 @@ def _reason(phase: Phase, direction: str | None, pivot: "Pivot", last_price: flo
     note_zh = {"trend": "趋势背驰对应一类买卖点。", "consolidation": "盘整背驰不构成一类买卖点。"}.get(div_kind or "", "")
     note_en = {"trend": " A trend divergence corresponds to a type-1 signal.",
                "consolidation": " A consolidation divergence is not a type-1 signal."}.get(div_kind or "", "")
+    if div_kind == "trend":
+        return pick(lang,
+            f"延续的{'上升' if up else '下降'}笔出现{kind_zh}，价格创新高/新低，但离开中枢这一段的 MACD 面积比前一段小。{note_zh}",
+            f"The continuing {'up' if up else 'down'}-leg shows a trend divergence — a new extreme, but the MACD area "
+            f"of the leg leaving the pivot is smaller than the previous leg.{note_en}")
     return pick(lang,
         f"延续的{'上升' if up else '下降'}笔出现{kind_zh}，价格创新高/新低但力度（价差、量能或时长）减弱。{note_zh}",
         f"The continuing {'up' if up else 'down'}-leg shows a {_div_kind_name(div_kind, lang).lower()} "
@@ -395,7 +400,7 @@ def _why_it_matters(phase: Phase, up: bool, lang: str) -> str:
                     "离开后若" + ("回落" if up else "反弹") + "不回到中枢，就确认三" + ("买" if up else "卖") +
                     "、趋势打开；若" + ("回落跌回" if up else "反弹升回") + "中枢，则回到中枢震荡。"),
         "retrace_confirmed": "买卖点确认之后，走势能走多远，看后续同向的笔还有没有力度、会不会出现背驰。",
-        "divergence_turn": "背驰：价格创新高/新低，但推动它的力度（价差、量能或时长）已经跟不上。趋势背驰对应一类买卖点，盘整背驰则不对应。",
+        "divergence_turn": "背驰：价格创新高/新低，但推动它的力度已经跟不上——缠论原文用离开中枢的一段与前一段比 MACD 红绿柱面积。趋势背驰对应一类买卖点，盘整背驰则不对应。",
     }
     en = {
         "pivot_forming": "Once a pivot forms, every later leg's strength, retest and pullback is measured against its top and bottom.",
@@ -404,9 +409,9 @@ def _why_it_matters(phase: Phase, up: bool, lang: str) -> str:
                     f"if the {'retest' if up else 'pullback'} stays out of the pivot, it confirms a type-3 signal "
                     "and the trend opens up; if it gets back in, the pivot oscillation resumes."),
         "retrace_confirmed": "How far the trend goes next depends on whether force holds or a divergence appears.",
-        "divergence_turn": "Divergence: price makes a new high/low but the force behind it (range, volume or "
-                            "duration) can't keep up. A trend divergence corresponds to a type-1 signal; a "
-                            "consolidation divergence does not.",
+        "divergence_turn": "Divergence: price makes a new high/low but the force behind it can't keep up — "
+                            "the textbook test compares the MACD bar area of the leg leaving the pivot with the previous leg. "
+                            "A trend divergence corresponds to a type-1 signal; a consolidation divergence does not.",
     }
     return pick(lang, zh[phase], en[phase])
 

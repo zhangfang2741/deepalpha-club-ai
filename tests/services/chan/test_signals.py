@@ -806,3 +806,15 @@ def test_chart_marks_keep_one_line_per_b_end():
                            NS(type="sell1", time="T8", divergence=dv("B3"))],
     )
     assert sorted(_leg_divergence_marks(result)) == ["T2", "T3", "T8"]
+
+
+def test_unify_stroke_divergences_only_marks_leg_divergence():
+    from app.services.chan.divergence import DivergenceResult
+    from app.services.chan.signals import unify_stroke_divergences
+
+    dv = DivergenceResult(is_diverged=True, type="trend", strength="medium", price_ratio=0.5,
+                          description="x", area_ratio=0.3, b_end_time="B", b_end_price=1.0)
+    strokes = [type("S", (), {"end_time": t})() for t in ("a", "b", "c")]
+    out = unify_stroke_divergences(strokes, {"b": dv}, "zh")
+    assert [d.is_diverged for d in out] == [False, True, False]
+    assert out[1] is dv and out[0].type == "none"

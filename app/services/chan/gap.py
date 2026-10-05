@@ -109,7 +109,8 @@ def build_market_digest(result: ChanAnalysisResult) -> str:
     if diverged:
         st, dv = diverged[-1]
         kind = {"trend": "趋势背驰", "consolidation": "盘整背驰"}.get(dv.type, "背驰")
-        lines.append(f"最近背驰：{'上涨' if st.direction == 'up' else '下跌'}段{kind}（{dv.strength}）")
+        lines.append(f"最近背驰：{'上涨' if st.direction == 'up' else '下跌'}段{kind}"
+                     + (f"（MACD 面积比 {dv.area_ratio:.2f}）" if dv.area_ratio is not None else ""))
 
     if result.signals:
         recent = result.signals[-3:]
