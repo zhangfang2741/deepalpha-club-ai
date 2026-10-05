@@ -251,3 +251,23 @@ def test_grade_events_skip_bulk_rerating_day():
     days = ge.build_events(history, {}, {}, since=date(2026, 10, 1))
     assert [d.date for d in days] == ["2026-10-03"]
     assert len(ge.build_events(history, {}, {}, since=date(2026, 10, 1), bulk_ratio=1.0)) == 2
+
+
+def test_grade_events_do_not_compare_across_methodology_versions():
+    from datetime import date
+
+    from app.services.signal_radar import grade_events as ge
+    from app.services.signal_radar import quant_filter as qf
+
+    def g(grade, d, version):
+        return qf.QuantGrade(grade, 70.0, date(2026, 10, d), date(2026, 10, d), version=version)
+
+    history = {
+        # 10-02 方法版本从 v1 变 v2：B→C 不是真实变化；同版本内 10-03 的 C→C+ 才算
+        "AAA": [g("B", 1, "v1"), g("C", 2, "v2"), g("C+", 3, "v2")],
+        # 缺版本信息（旧数据）时仍按等级比较
+        "BBB": [g("B", 1, None), g("A", 2, None)],
+    }
+    days = ge.build_events(history, {}, {}, since=date(2026, 10, 1), bulk_ratio=1.0)
+    got = {(d.date, e.symbol) for d in days for e in d.events}
+    assert got == {("2026-10-03", "AAA"), ("2026-10-02", "BBB")}

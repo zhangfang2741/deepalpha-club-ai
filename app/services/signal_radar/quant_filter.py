@@ -32,6 +32,8 @@ class QuantGrade:
     available_on: date
     profitability: str | None = None
     revisions: str | None = None
+    # 评级方法版本；None = 旧数据 / 缺失（评级升降事件只在两边都有版本且不同时才不比较）
+    version: str | None = None
 
 
 def grade_from_row(row: repository.QuantGradeSnapshot) -> QuantGrade | None:
@@ -53,7 +55,7 @@ def grade_from_row(row: repository.QuantGradeSnapshot) -> QuantGrade | None:
                 return None
     dims = {k: v if v in GRADE_ORDER else None
             for k, v in ((k, (row.grades or {}).get(f"d:{k}")) for k in ("profitability", "revisions"))}
-    return QuantGrade(grade if grade in GRADE_ORDER else None, score, row.as_of, max(dates), **dims)
+    return QuantGrade(grade if grade in GRADE_ORDER else None, score, row.as_of, max(dates), version=getattr(row, "methodology", None), **dims)
 
 
 async def load_grades(market: str, symbols: list[str], days: list[str]) -> dict[str, list[QuantGrade]] | None:

@@ -40,6 +40,9 @@ def build_events(
         for prev, cur in zip(seq, seq[1:], strict=False):
             if cur.as_of < since or prev.grade == cur.grade:
                 continue
+            # 评级方法升级后，同一只股票前后两行不是同一把尺子：不比较（否则方法升级当天会出现一大批假升降）
+            if prev.version and cur.version and prev.version != cur.version:
+                continue
             a, b = GRADE_ORDER.index(prev.grade or ""), GRADE_ORDER.index(cur.grade or "")
             by_day.setdefault(cur.as_of.isoformat(), []).append(RadarGradeEventOut(
                 symbol=symbol, name=names.get(symbol, symbol), date=cur.as_of.isoformat(),
