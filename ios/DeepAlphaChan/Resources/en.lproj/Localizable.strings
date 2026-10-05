@@ -676,11 +676,11 @@
 "三段走势重叠形成中枢之后，价格在中枢上沿与下沿之间反复（也叫中枢延伸），还没有一笔从中枢内出发、收在中枢外。这个阶段不产生买卖点。" = "After three overlapping legs form a pivot, price swings between its top and bottom (the pivot extends) and no stroke has yet started inside and closed outside. No signals in this phase.";
 "一笔从中枢内出发，向上收在中枢上沿之上、或向下收在中枢下沿之下，就是离开中枢。这是第三类买卖点的候选，还要等之后的回落（向上离开时）或反弹（向下离开时）来确认。" = "A stroke that starts inside the pivot and closes above its top (or below its bottom) leaves the pivot. It is a type-3 candidate, waiting for the pullback (after leaving upward) or rebound (after leaving downward) to confirm.";
 "离开中枢后的回落 / 反弹没有回到中枢 → 三买 / 三卖；回到了中枢里、但没有穿过另一侧边沿 → 二买 / 二卖。强弱看中枢级别，以及回落 / 反弹离中枢边沿还有多远。" = "If the pullback / rebound after leaving stays out of the pivot → type-3 buy / sell; if it gets back in without crossing the far edge → type-2. Strength depends on the pivot level and how far the pullback / rebound stays from the edge.";
-"买卖点确认之后，同方向继续走出新高 / 新低，但价差、量能或时长比前一段更弱，就是背驰：趋势背驰对应一卖或一买，盘整背驰则不对应。" = "After a signal, if the move keeps making new highs/lows but with weaker range, volume or duration, that is a divergence: a trend divergence corresponds to a type-1 sell/buy, a consolidation divergence does not.";
+"买卖点确认之后，同方向继续走出新高 / 新低，但离开中枢这一段的 MACD 面积比前一段小，就是背驰：趋势背驰对应一卖或一买，盘整背驰则不对应。" = "After a signal, if the move keeps making new highs/lows but the MACD area of the leg leaving the pivot is smaller than the previous leg, that is a divergence: a trend divergence corresponds to a type-1 sell/buy, a consolidation divergence does not.";
 "连续三段走势的价格区间有重叠，重叠的部分就是中枢——后面所有判断都从它开始。" = "Three consecutive legs overlap; the overlap is the pivot — every later judgment starts from it.";
 "一笔从中枢内出发，收在中枢上沿之上或下沿之下，进入「离开中枢」。" = "A stroke starts inside the pivot and closes above its top or below its bottom → \"Leaving the pivot\".";
 "离开中枢之后第一段反向走势：向上离开后叫回落，向下离开后叫反弹。没有回到中枢（三类），或回到中枢但没有穿过另一侧边沿（二类），进入「确认买卖点」。" = "The first counter-move after leaving: a pullback after leaving upward, a rebound after leaving downward. Staying out of the pivot (type-3) or getting back in without crossing the far edge (type-2) → \"Signal confirmed\".";
-"买卖点确认之后，同方向继续前进的笔，力度（价差 / 量能 / 时长）比前一个同向段更弱，进入「背驰 / 转折」。" = "After a signal is confirmed, a same-direction stroke with weaker force (range / volume / duration) than the previous one → \"Divergence / turn\".";
+"买卖点确认之后，同方向继续前进，离开中枢这一段的 MACD 面积比前一段小，进入「背驰 / 转折」。" = "After a signal is confirmed, the move keeps going but the MACD area of the leg leaving the pivot is smaller than the previous leg → \"Divergence / turn\".";
 "回落 / 反弹直接穿过了中枢另一侧边沿，重新回到中枢里——这次离开不算数，退回「中枢震荡」重新判断。" = "The pullback / rebound crosses the far edge back into the pivot — the exit is void; back to \"Pivot oscillation\".";
 "「确认买卖点」或「背驰 / 转折」之后，出现一次方向相反的突破并完成回落 / 反弹确认——整体重新判定，结论以新的为准。" = "After \"Signal confirmed\" or \"Divergence / turn\", an opposite breakout completes its own pullback / rebound — everything is re-evaluated and the new result wins.";
 "参考中枢（%@）：下沿 %@ — 上沿 %@" = "Reference pivot (%1$@): bottom %2$@ — top %3$@";
@@ -693,8 +693,8 @@
 "向下离开中枢后反弹，回到中枢内但没有升破上沿 %@" = "Left the pivot downward, pulled back inside but held the top %@";
 "向上离开中枢后回落，没有跌回中枢（%@ ~ %@）" = "Left the pivot upward and the pullback stayed out of it (%@ – %@)";
 "向下离开中枢后反弹，没有升回中枢（%@ ~ %@）" = "Left the pivot downward and the rebound stayed out of it (%@ – %@)";
-"上涨段出现背驰：价格创新高，但力度（价差、量能或时长）跟不上" = "Divergence on the up-leg: price made a new high but the force (range, volume or duration) can't keep up";
-"下跌段出现背驰：价格创新低，但力度（价差、量能或时长）跟不上" = "Divergence on the down-leg: price made a new low but the force (range, volume or duration) can't keep up";
+"上涨段出现趋势背驰：价格创新高，但离开中枢这一段的 MACD 面积比前一段小" = "Trend divergence on the up-leg: price made a new high, but the MACD area of the leg leaving the pivot is smaller than the previous leg";
+"下跌段出现趋势背驰：价格创新低，但离开中枢这一段的 MACD 面积比前一段小" = "Trend divergence on the down-leg: price made a new low, but the MACD area of the leg leaving the pivot is smaller than the previous leg";
 "价格与中枢（%@ ~ %@）的关系见下方说明" = "See below for how price relates to the pivot (%@ – %@)";
 "待确认" = "Pending";
 "待确认，不算买卖点" = "pending, not a buy/sell point";

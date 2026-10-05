@@ -69,7 +69,7 @@ struct PhaseDiagramCopy {
                 body: L("离开中枢后的回落 / 反弹没有回到中枢 → 三买 / 三卖；回到了中枢里、但没有穿过另一侧边沿 → 二买 / 二卖。强弱看中枢级别，以及回落 / 反弹离中枢边沿还有多远。"))
         case .divergence:
             return PhaseDiagramCopy(title: n,
-                body: L("买卖点确认之后，同方向继续走出新高 / 新低，但价差、量能或时长比前一段更弱，就是背驰：趋势背驰对应一卖或一买，盘整背驰则不对应。"))
+                body: L("买卖点确认之后，同方向继续走出新高 / 新低，但离开中枢这一段的 MACD 面积比前一段小，就是背驰：趋势背驰对应一卖或一买，盘整背驰则不对应。"))
         case .edgeForm:
             return PhaseDiagramCopy(title: L("动作：%@", n),
                 body: L("连续三段走势的价格区间有重叠，重叠的部分就是中枢——后面所有判断都从它开始。"))
@@ -81,7 +81,7 @@ struct PhaseDiagramCopy {
                 body: L("离开中枢之后第一段反向走势：向上离开后叫回落，向下离开后叫反弹。没有回到中枢（三类），或回到中枢但没有穿过另一侧边沿（二类），进入「确认买卖点」。"))
         case .edgeDiverge:
             return PhaseDiagramCopy(title: L("动作：%@", n),
-                body: L("买卖点确认之后，同方向继续前进的笔，力度（价差 / 量能 / 时长）比前一个同向段更弱，进入「背驰 / 转折」。"))
+                body: L("买卖点确认之后，同方向继续前进，离开中枢这一段的 MACD 面积比前一段小，进入「背驰 / 转折」。"))
         case .edgeFake:
             return PhaseDiagramCopy(title: L("动作：%@", n),
                 body: L("回落 / 反弹直接穿过了中枢另一侧边沿，重新回到中枢里——这次离开不算数，退回「中枢震荡」重新判断。"))
