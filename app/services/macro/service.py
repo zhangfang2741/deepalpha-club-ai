@@ -112,7 +112,7 @@ async def get_overview(redis: Redis | None, market: str, lang: str = "zh") -> Ma
 
 
 async def _native_sector_board(redis: Redis | None, market: str, names: tuple[str, ...],
-                               date: str | None) -> SectorBoardResponse:
+                               date: str | None, lang: str = "zh") -> SectorBoardResponse:
     """A 股 / 港股的行业弹层：本土行业全集（申万 / 恒生一级）+ 行业相对强弱 + 宽基雷达当日按行业的买卖点数。
 
     强弱来自 `regime_market_sector_features`（行业指数 = 市值最大的几只成分股等权合成，见 regime/cnhk_sector.py）；
@@ -132,7 +132,7 @@ async def _native_sector_board(redis: Redis | None, market: str, names: tuple[st
     for n in names:
         r = by_key.get(n)
         rows.append(SectorRowOut(
-            key=n, name=n,
+            key=n, name=regime_view.sector_name(n, lang),
             rs_vs_market=r.rs_vs_market if r else None, label=(r.confirmed_label or r.regime_label) if r else None,
             p_risk_on=r.p_risk_on if r else None,
             buy_count=counts.get(n, {}).get("buy", 0), sell_count=counts.get(n, {}).get("sell", 0)))
@@ -158,7 +158,7 @@ async def get_sector_board(redis: Redis | None, market: str, lang: str = "zh",
         names = native_sector_names(market)
         if not names or parent is not None:
             return SectorBoardResponse(market=market, available=False)
-        return await _native_sector_board(redis, market, names, date)
+        return await _native_sector_board(redis, market, names, date, lang)
     key = cache.response_key("sectors", market, parent or "root", lang, *([date] if date else []))
     if (hit := await cache.get_model(redis, key, SectorBoardResponse)) is not None:
         return hit

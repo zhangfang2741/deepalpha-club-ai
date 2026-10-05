@@ -169,6 +169,7 @@ deepalpha-club-ai/
 > 凭记忆猜代码会猜错，如 159715 是稀土不是纺织服饰），再喂给美股同一套行业管线 `sector_pipeline.compute_sector_regimes`（每行业独立走-前向 HMM，特征含相对大盘强弱 RS）。
 > 成分股少于 3 只的行业不出强弱。每行业约 15 秒（回看 1500 天；5 年约 50 秒），A 股 31 个约 8 分钟、港股 12 个约 3 分钟，所以**独立一轮**
 > （`run_cnhk_sector_once`，单独的锁与子进程，大盘状态不等它）；每个交易日约 250 + 100 次 Yahoo 请求（并发 3 + 间隔）。
+> 行业 key 是中文名；英文名在 `cnhk/sectors.NATIVE_SECTOR_EN`（接口按 `lang=en` 返回，App 本地兜底走 `L(key)` + en 文案；有测试守护 43 个行业都有英文名，新增行业须补）。
 > `/macro/{cn|hk}/sectors`（`macro.service._native_sector_board`）返回本土行业全集 + 强弱（没算出来的行业强弱为空，App 不画强弱条、不写「最强」）+ 雷达当日买卖点数。
 
 > 信号雷达扫描约束（`app/services/signal_radar`）：同一 (口径, 市场, universe) 任一时刻只跑一轮全量扫描

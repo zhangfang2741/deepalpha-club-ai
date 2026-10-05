@@ -159,7 +159,8 @@ enum RadarSectorCatalog {
         case "staples": return L("必需消费")
         case "utilities": return L("公用事业")
         case "realestate": return L("房地产")
-        default: return key
+        // A 股申万 / 港股恒生行业：key 就是中文名，走本地化表（中文界面原样，英文界面显示英文名）
+        default: return L(key)
         }
     }
 
