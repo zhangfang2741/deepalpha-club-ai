@@ -157,7 +157,7 @@ deepalpha-club-ai/
 > 行业池（每行业按旧综合分的前 N）只给旧版 App 的行业筛选用。
 > **A 股 / 港股行业标签**（2026-10-05 起，`sectors.load_sector_tags`）：A 股用本土**申万一级 31 个**（key 即中文名，如「电子」，不套 GICS；
 > 东财行业名即申万二级，`cnhk/sectors.CN_INDUSTRY_TO_SW` 归一级，与 `CN_INDUSTRY_TO_GICS` 键集一致有测试守护，新行业两张表都要补）；
-> 港股东财行业归 GICS 一级（与美股同 key）。整市场一次取、Redis 缓存 24 小时，取回过少视为残缺不缓存。
+> 港股同理用本土**恒生行业分类一级 12 个**（key 即中文名，如「资讯科技业」，`HK_INDUSTRY_TO_HS` 与 GICS 表键集一致有测试守护，不套 GICS、不用 `HK_OVERRIDES`）。整市场一次取、Redis 缓存 24 小时，取回过少视为残缺不缓存。
 > 行业强弱面板（regime）仍只有美股，A 股 / 港股面板显示「数据建设中」。
 
 > 信号雷达扫描约束（`app/services/signal_radar`）：同一 (口径, 市场, universe) 任一时刻只跑一轮全量扫描

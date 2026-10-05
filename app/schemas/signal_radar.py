@@ -38,7 +38,7 @@ class RadarSignalOut(BaseModel):
     quant_as_of: str | None = None
     quant_status: str | None = Field(default=None, description="eligible / below_threshold / missing / stale")
     age_days: int | None = Field(default=None, description="距展示日的交易日数，当天为 0")
-    sector: str | None = Field(default=None, description="行业 key：美股 / 港股与 regime 行业一致（GICS 一级），A 股为申万一级行业名；没有行业分类时为空")
+    sector: str | None = Field(default=None, description="行业 key：美股与 regime 行业一致（GICS 一级），A 股为申万一级行业名，港股为恒生一级行业名；没有行业分类时为空")
 
 
 class RadarExcludedOut(BaseModel):

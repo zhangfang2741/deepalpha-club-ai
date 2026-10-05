@@ -3,7 +3,7 @@
 行业 key 与 regime 行业状态一致（app/services/regime/constants.SECTORS），这样行业弹层点哪个行业，
 雷达就能筛出同一个行业的气泡。美股：标普1500 的 GICS 板块（复用基本面研究的成分表缓存），严格按 GICS 一级行业，半导体属信息技术，不单列。
 A 股：用本土的申万一级（31 个，key 即中文名，如「电子」「银行」），不套 GICS；东财行业名即申万二级，
-经 `quant_research/cnhk/sectors.py` 的 `CN_INDUSTRY_TO_SW` 归到一级。港股：东财行业经映射归到 GICS 一级。
+经 `quant_research/cnhk/sectors.py` 的 `CN_INDUSTRY_TO_SW` 归到一级。港股：用恒生行业分类一级（12 个，key 即中文名，如「资讯科技业」），不套 GICS，经 `HK_INDUSTRY_TO_HS` 归一级。
 A 股 / 港股整市场一次取、Redis 缓存 24 小时。
 
 每日快照只存前 N 个气泡，按行业筛选不能在它上面做——组装快照时（基本面排雷之后、截取前 N 之前）
@@ -70,10 +70,12 @@ def cn_tags_from_meta(meta: dict[str, object]) -> dict[str, str]:
 
 
 def hk_tags_from_meta(meta: dict[str, object]) -> dict[str, str]:
-    """{代码: HkMeta} → {代码: GICS 行业 key}；行业未映射的不打标签。"""
+    """{代码: HkMeta} → {代码: 恒生一级行业名}；行业未映射的不打标签。"""
+    from app.services.quant_research.cnhk.sectors import hk_hs_industry
+
     out: dict[str, str] = {}
     for code, m in meta.items():
-        key = GICS_TO_SECTOR.get(getattr(m, "sector", None) or "")
+        key = hk_hs_industry(getattr(m, "industry", None))
         if key:
             out[code] = key
     return out

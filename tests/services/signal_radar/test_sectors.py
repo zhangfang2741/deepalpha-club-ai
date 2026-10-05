@@ -126,11 +126,21 @@ def test_cn_sw_map_covers_all_known_industries_with_31_level1():
     assert len(SW_LEVEL1) == 31 and set(CN_INDUSTRY_TO_SW.values()) == set(SW_LEVEL1)
 
 
-def test_hk_tags_use_gics_mapping():
+def test_hk_tags_use_hang_seng_level1_not_gics():
     from types import SimpleNamespace as NS
 
-    tags = sectors.hk_tags_from_meta({"00700": NS(sector="communication_services"), "09999": NS(sector=None)})
-    assert tags == {"00700": "communication"}
+    tags = sectors.hk_tags_from_meta({
+        "00700": NS(industry="软件服务"), "00939": NS(industry="银行"), "01211": NS(industry="汽车"),
+        "09999": NS(industry="没见过的行业"),
+    })
+    assert tags == {"00700": "资讯科技业", "00939": "金融业", "01211": "非必需性消费"}
+
+
+def test_hk_hs_map_covers_all_known_industries_with_12_level1():
+    from app.services.quant_research.cnhk.sectors import HK_INDUSTRY_TO_GICS, HK_INDUSTRY_TO_HS, HS_LEVEL1
+
+    assert set(HK_INDUSTRY_TO_HS) == set(HK_INDUSTRY_TO_GICS)
+    assert len(HS_LEVEL1) == 12 and set(HK_INDUSTRY_TO_HS.values()) == set(HS_LEVEL1)
 
 
 def test_lookup_tag_pads_hk_and_strips_suffix():
