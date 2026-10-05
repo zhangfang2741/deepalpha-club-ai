@@ -103,7 +103,7 @@ struct SignalDetailCard: View {
                 .fixedSize(horizontal: false, vertical: true)
             if signal.displayTime != signal.time {
                 // 雷达与这里的日期都是出现日；图上标记画在所属笔的极值 K 线，所以会在出现日左侧
-                Text(L("%@ 成立（图上虚线末端的圆点）；所在笔的极值在 %@，徽标画在那根 K 线。", signal.displayTime, signal.time))
+                Text(L("%@ 成立（图上虚线末端标「成立」处）；所在笔的极值在 %@，徽标画在那根 K 线。", signal.displayTime, signal.time))
                     .font(.caption)
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

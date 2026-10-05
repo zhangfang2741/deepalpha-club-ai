@@ -671,6 +671,10 @@ struct ChanChartView: View {
         let dot = Path(ellipseIn: CGRect(x: endX - 3.5, y: cy - 3.5, width: 7, height: 7))
         ctx.fill(dot, with: .color(Theme.background))
         ctx.stroke(dot, with: .color(color), style: StrokeStyle(lineWidth: 1.5))
+        // 圆点旁写「成立」：只有虚线和圆点没人看得懂（上线后用户问「绿圈圈是啥」）。字放在圆点左上方、线的上面，
+        // 靠右的信号不会被右侧价格轴裁掉
+        let label = ctx.resolve(Text(L("成立")).font(.system(size: 9, weight: .bold)).foregroundColor(color))
+        ctx.draw(label, at: CGPoint(x: endX - 2, y: cy - 6), anchor: .bottomTrailing)
     }
 
     // MARK: - 绘制：次级别下钻区间
