@@ -316,6 +316,9 @@ deepalpha-club-ai/
   - **背驰度量可插拔**（std7，`chan/leg_metric.py`，`DivergenceMetric` 接口）：`macd_area`（默认，原文 MACD 红绿柱面积）/ `force`（价差·量能·时长）。
     切换只改配置 `CHAN_DIVERGENCE_METRIC`，版本号 `std9.<度量名>` 自动隔离雷达缓存。**API 字段永远同一套**：`price_ratio / volume_ratio / length_ratio`
     任何度量都填，`area_ratio` 仅 MACD 面积度量填；强弱分档由度量自带的 `classify(primary_ratio)` 给出，各度量阈值各自标定：`force` 沿用价差比 0.6 / 0.8；`macd_area` **不分档**（背驰成立一律 `medium`；两个年代约 2000 个信号实测面积比与后续收益无关：秩相关 -0.02 / +0.03，p=0.52 / 0.38，背驰组对照组差不显著；原文也只有「面积更小即背驰」的二元标准）。**不要**再按面积比设阈值或分强弱档，除非有新的实证依据。
+    `macd_area_avg`（可选，默认不用）= 面积按时长归一（每根 K 线平均面积）：累计面积正比于时长，c 段常比 b 段短得多，面积比易偏小（NVDA 2025-10-29 一卖
+    c 段 5 个交易日对 b 段约 4 个月，面积比 0.06、归一后约 0.5）。40 只美股 57 个一类：两种口径 38 个相同、各自独有 10 / 9 个，20 日收益无可区分差异，
+    所以没有换默认；换度量须升版本（版本号带度量名自动隔离）。
     新增度量：实现 `compare(c, b)` + 注册进 `DIVERGENCE_METRICS`，不要在判定流程里写 `if metric == ...`。
   - 同一笔终点同时命中二类与三类只留一个（三类 > 二类，与宽松口径同）。
   - 二类 = 一类后的第一次回落 / 反弹不破一类极值（`_derive_type2`，一类所在笔 i 的 i+2 笔）。
@@ -330,7 +333,7 @@ deepalpha-club-ai/
   严格口径下 `analyzer` 在 `split_unconfirmed` 之后用 `signals.unify_stroke_divergences` 把它重建为只含一类趋势背驰（`policy.unify_divergences`），
   **不要**再让叙事等模块读价差·量能·时长的笔对笔背驰。同一个 b 段终点图上只留一条线（成立优先、同级取最新，`signals.leg_divergence_marks`）。
   API：`DivergenceResult.b_end_time/b_end_price` → `/chan/analysis` 的 `StrokeOut` 在对应一类信号所在笔上给
-  `diverged=true / area_ratio / div_ref_*（b 段终点）/ div_b_start_* / div_c_start_*`；旧版 App 读不到新字段时退回「同向前一笔」作参照点。
+  `diverged=true / area_ratio / div_length_ratio / div_ref_*（b 段终点）/ div_b_start_* / div_c_start_*`；**面积比在 App 上写成百分比**（「趋势背驰 8%」），点开解释同时给时长比与价差比，并说明「面积是累计值、c 段常比 b 段短所以偏小」（NVDA 一卖 6% 里时长比就占 12%）；旧版 App 读不到新字段时退回「同向前一笔」作参照点。
   仍用价差·量能·时长力度口径的只剩：宽松口径（旧版 App，`unify_divergences=False`）与线段级背驰（`find_segment_divergences`，只在叙事里提一句）。
   改口径 / 背驰度量时，App 内教程（`lessons.json` 中英，背驰 / MACD / 三类买卖点）须同步改。
 - **背驰术语一律用缠论原文**（2026-10 起）：只说「趋势背驰 / 盘整背驰」（`DivergenceResult.type`，API `StrokeOut.divergence_type` = `trend` / `consolidation`），

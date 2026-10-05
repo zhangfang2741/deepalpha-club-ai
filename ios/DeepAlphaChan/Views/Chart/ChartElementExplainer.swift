@@ -158,19 +158,21 @@ enum ChartExplainer {
         let top = c.direction == .up
         if let area = c.areaRatio {
             // 新后端：缠论原文的趋势背驰——离开中枢的 c 段对两个中枢之间的 b 段，比 MACD 红绿柱面积
-            let areaText = String(format: "%.2f", area)
+            let areaText = String(format: "%.0f%%", area * 100)
             let reason = top
-                ? L("价格创出新高，但离开中枢的这一段（c 段）的 MACD 红绿柱面积只有两个中枢之间那一段（b 段）的 %@ 倍——上涨的推动力已经跟不上。", areaText)
-                : L("价格创出新低，但离开中枢的这一段（c 段）的 MACD 红绿柱面积只有两个中枢之间那一段（b 段）的 %@ 倍——下跌的推动力已经跟不上。", areaText)
+                ? L("价格创出新高，但离开中枢的这一段（c 段）的 MACD 红绿柱面积只有两个中枢之间那一段（b 段）的 %@——上涨的推动力已经跟不上。", areaText)
+                : L("价格创出新低，但离开中枢的这一段（c 段）的 MACD 红绿柱面积只有两个中枢之间那一段（b 段）的 %@——下跌的推动力已经跟不上。", areaText)
             var facts: [(String, String)] = [
                 (L("c 段终点"), "\(c.endTime)  \(price(c.endPrice))"),
                 (L("b 段终点"), "\(refTime)  \(price(refPrice))"),
                 (L("MACD 面积比"), areaText),
             ]
-            if let pr = c.priceRatio { facts.append((L("价差比"), String(format: "%.2f", pr))) }
+            if let lr = c.divLengthRatio { facts.append((L("时长比"), String(format: "%.0f%%", lr * 100))) }
+            if let pr = c.priceRatio { facts.append((L("价差比"), String(format: "%.0f%%", pr * 100))) }
             return ChartExplanation(
                 title: c.divergenceName, color: Theme.divergence, facts: facts,
-                reason: reason + "\n" + L("趋势背驰：前面已有两个依次同向、不重叠的中枢，对应一类买卖点。"), lessonTerm: "背驰")
+                reason: reason + "\n" + L("面积是累计值，与时长成正比：c 段通常比 b 段短得多，所以这个比例往往偏小，请连同时长比、价差比一起看。")
+                    + "\n" + L("趋势背驰：前面已有两个依次同向、不重叠的中枢，对应一类买卖点。"), lessonTerm: "背驰")
         }
         // 旧后端：当前笔与前一个同向笔比价差 / 量能 / 时长
         let ratio = c.priceRatio.map { String(format: "%.2f", $0) } ?? "-"
