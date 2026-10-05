@@ -206,27 +206,35 @@ struct SignalRadarView: View {
 
     // MARK: - 并列 tab
 
-    /// 下划线式 tab（文字 + 选中项下方一条蓝线），和上面行业胶囊、日期格子的圆角块样式区分开。
+    /// 分段控件式 tab：整行一条深色轨道，选中项是一块浅色滑块（中性灰、不是蓝色）。
+    /// 与上面的行业胶囊（单个圆角胶囊、选中蓝色）、下面的日期格（选中蓝色）形状和颜色都不同，不会混成一类控件；
+    /// 轨道上下留足间距，不贴着下一行的日期 / 买卖点统计。
     private var tabPicker: some View {
-        HStack(spacing: 28) {
+        HStack(spacing: 0) {
             ForEach(RadarTab.allCases) { tab in
                 let selected = tab == radarTab
-                Button { radarTab = tab } label: {
-                    VStack(spacing: 5) {
-                        Text(tab.title)
-                            .font(.system(size: 16, weight: selected ? .bold : .regular))
-                            .foregroundColor(selected ? Theme.textPrimary : Theme.textSecondary)
-                        Capsule()
-                            .fill(selected ? Theme.accent : Color.clear)
-                            .frame(height: 3)
-                    }
-                    .fixedSize()
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { radarTab = tab }
+                } label: {
+                    Text(tab.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(selected ? Theme.textPrimary : Theme.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background {
+                            if selected {
+                                RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.14))
+                            }
+                        }
                 }
                 .buttonStyle(.plain)
             }
-            Spacer()
         }
-        .padding(.horizontal, 4)
+        .padding(3)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 11))
+        .overlay(RoundedRectangle(cornerRadius: 11).stroke(Theme.border, lineWidth: 1))
+        .padding(.top, 2)
+        .padding(.bottom, 4)
     }
 
     /// 基本面研究 tab：会员功能（与缠论雷达真实数据同一道门槛，未订阅点按弹付费墙），同样要先同意免责声明。
