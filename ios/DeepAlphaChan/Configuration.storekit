@@ -41,14 +41,7 @@
           "recurringSubscriptionPeriod": "P1M",
           "referenceName": "Legacy Basic Monthly (retired)",
           "subscriptionGroupID": "5C0F1A2B-0010-4A00-9000-DEE0A1FA0010",
-          "type": "RecurringSubscription",
-          "introductoryOffer": {
-            "displayPrice": "38.00",
-            "internalID": "5C0F1A2B-0012-4A00-9000-DEE0A1FA0012",
-            "numberOfPeriods": 1,
-            "paymentMode": "payAsYouGo",
-            "subscriptionPeriod": "P1M"
-          }
+          "type": "RecurringSubscription"
         },
         {
           "adHocOffers": [],
