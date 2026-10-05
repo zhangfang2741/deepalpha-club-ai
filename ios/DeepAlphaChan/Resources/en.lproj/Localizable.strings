@@ -1227,7 +1227,6 @@
 "%@ · 最近 10 天综合评级升降" = "%@ · composite grade changes, last 10 days";
 "升 %lld 档" = "Up %lld notches";
 "降 %lld 档" = "Down %lld notches";
-"另有 %lld 个 · 查看全部" = "%lld more · View all";
 "升档" = "Upgrade";
 "降档" = "Downgrade";
 "颜色越深变档越多，气泡越大新等级越高" = "Darker color = more notches; larger bubble = higher new grade";
