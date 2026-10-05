@@ -24,6 +24,13 @@ struct MacroDetailSheet: View {
                         driversCard(data.drivers)
                         eventsCard(data.events)
                         footnote
+                    } else if let data, !data.available {
+                        // 这个市场的大盘状态还没上线（A 股 / 港股）：重试没有意义，不给重试按钮；
+                        // 情绪（恐慌贪婪）是有的，照常展示。
+                        if let panic { sentimentCard(panic) }
+                        Text(L("%@大盘状态建设中，暂时只有市场情绪。", market.title))
+                            .font(.footnote).foregroundColor(Theme.textSecondary)
+                            .frame(maxWidth: .infinity).padding(.top, panic == nil ? 60 : 8)
                     } else if failed || data != nil {
                         VStack(spacing: 10) {
                             Text(data == nil ? L("加载失败，请稍后再试") : L("数据准备中"))

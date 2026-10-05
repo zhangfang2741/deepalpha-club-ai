@@ -74,7 +74,9 @@ struct MarketHeader: View {
 
     /// 选中日相对大盘最强的行业；这一天没有行业统计（自选、旧快照）时退回最新的摘要。
     private var leadingSector: (key: String?, name: String, rs: Double?)? {
-        if let top = radarVM.selectedSectorBoard?.sectors.max(by: { ($0.rsVsMarket ?? -.infinity) < ($1.rsVsMarket ?? -.infinity) }) {
+        // 只在有强弱数据时才有「最强」（A 股 / 港股的行业没有强弱，只有信号统计）
+        if let top = radarVM.selectedSectorBoard?.sectors.filter({ $0.rsVsMarket != nil })
+            .max(by: { ($0.rsVsMarket ?? -.infinity) < ($1.rsVsMarket ?? -.infinity) }) {
             return (top.key, top.name, top.rsVsMarket)
         }
         if let s = overview?.strongest { return (nil, s.name, s.rsVsMarket) }
@@ -99,14 +101,28 @@ struct MarketHeader: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(Theme.accent)
                     .minimumScaleFactor(0.8)
-                Text(L("相对大盘 %@", SectorBoardList.rsText(selected.rsVsMarket)))
-                    .font(.system(size: 10).monospacedDigit())
-                    .foregroundColor((selected.rsVsMarket ?? 0) >= 0 ? Theme.up : Theme.down)
+                if selected.rsVsMarket != nil {
+                    Text(L("相对大盘 %@", SectorBoardList.rsText(selected.rsVsMarket)))
+                        .font(.system(size: 10).monospacedDigit())
+                        .foregroundColor((selected.rsVsMarket ?? 0) >= 0 ? Theme.up : Theme.down)
+                } else {
+                    Text(L("当日 %lld 个信号", radarVM.baseSelectedDay?.signalCount(sector: selected.key) ?? 0))
+                        .font(.system(size: 10).monospacedDigit())
+                        .foregroundColor(Theme.textSecondary)
+                }
             } else if let lead = leadingSector {
                 Text(L("全部行业"))
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(Theme.textPrimary)
                 Text(L("最强 %@ %@", lead.name, SectorBoardList.rsText(lead.rs)))
+                    .font(.system(size: 10).monospacedDigit())
+                    .foregroundColor(Theme.textSecondary)
+            } else if canPick {
+                // 没有行业强弱（A 股 / 港股）：只陈列当天哪些行业出现了信号
+                Text(L("全部行业"))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(Theme.textPrimary)
+                Text(L("%lld 个行业有信号", radarVM.baseSelectedDay?.sectorCounts?.values.filter { $0.values.reduce(0, +) > 0 }.count ?? 0))
                     .font(.system(size: 10).monospacedDigit())
                     .foregroundColor(Theme.textSecondary)
             } else if let overview, !overview.available {
