@@ -268,6 +268,7 @@ async def chan_analysis(
                 area_ratio=marks[s.end_time].area_ratio if s.end_time in marks else None,
                 div_ref_time=marks[s.end_time].b_end_time if s.end_time in marks else None,
                 div_ref_price=marks[s.end_time].b_end_price if s.end_time in marks else None,
+                div_length_ratio=marks[s.end_time].length_ratio if s.end_time in marks else None,
                 div_b_start_time=_pt(marks, s.end_time, "b_start", 0),
                 div_b_start_price=_pt(marks, s.end_time, "b_start", 1),
                 div_c_start_time=_pt(marks, s.end_time, "c_start", 0),

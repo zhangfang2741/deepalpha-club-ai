@@ -65,6 +65,8 @@ struct Stroke: Codable, Identifiable {
     let divRefTime: String?
     let divRefPrice: Double?
     /// b 段起点、c 段起点：新后端给齐时图上分别画 b 段（起点→参照点）与 c 段（起点→本笔终点）两条线。
+    /// c 段时长 / b 段时长（面积比偏小常因 c 段更短，说明里一并给出）。
+    let divLengthRatio: Double?
     let divBStartTime: String?
     let divBStartPrice: Double?
     let divCStartTime: String?
@@ -95,6 +97,7 @@ struct Stroke: Codable, Identifiable {
         case areaRatio = "area_ratio"
         case divRefTime = "div_ref_time"
         case divRefPrice = "div_ref_price"
+        case divLengthRatio = "div_length_ratio"
         case divBStartTime = "div_b_start_time"
         case divBStartPrice = "div_b_start_price"
         case divCStartTime = "div_c_start_time"
@@ -119,6 +122,12 @@ struct Stroke: Codable, Identifiable {
 
     /// 背驰标注上写的比值：新后端是 MACD 面积比，旧后端是价差比。
     var divergenceRatio: Double? { areaRatio ?? priceRatio }
+
+    /// 图上标签里的比值文字：新后端写成百分比（c 段力度约为 b 段的 8%），旧后端仍是价差比小数。
+    var divergenceRatioText: String? {
+        if let a = areaRatio { return String(format: "%.0f%%", a * 100) }
+        return priceRatio.map { String(format: "%.2f", $0) }
+    }
 }
 
 /// 线段。
