@@ -184,7 +184,7 @@ def test_grade_events_up_down_and_window():
         "CCC": [g("C", 1), g("C", 2), g("C", 3)],                      # 没变化
         "DDD": [g("D", 1), g("D+", 3)],                                # 10-03 升 1 档
     }
-    days = ge.build_events(history, {"AAA": "甲"}, {"AAA": "电子"}, since=date(2026, 10, 2))
+    days = ge.build_events(history, {"AAA": "甲"}, {"AAA": "电子"}, since=date(2026, 10, 2), bulk_ratio=1.0)
     assert [d.date for d in days] == ["2026-10-03", "2026-10-02"]
     top = days[0]
     assert (top.up_count, top.down_count) == (2, 0)
@@ -234,3 +234,40 @@ async def test_valid_native_tag_cache_is_used(monkeypatch):
 
     monkeypatch.setattr(sectors, "_fetch_cnhk_tags", boom)
     assert await sectors.load_sector_tags("cn", _TagCacheRedis(store)) == cached
+
+
+def test_grade_events_skip_bulk_rerating_day():
+    from datetime import date
+
+    from app.services.signal_radar import grade_events as ge
+    from app.services.signal_radar import quant_filter as qf
+
+    def g(grade, d):
+        return qf.QuantGrade(grade, 70.0, date(2026, 10, d), date(2026, 10, d))
+
+    # 10 只股票：10-02 全部变档（方法论升级式的全员重评）；10-03 只有 1 只变档
+    history = {f"S{i}": [g("B", 1), g("C", 2), g("C", 3)] for i in range(10)}
+    history["S0"] = [g("B", 1), g("C", 2), g("C+", 3)]
+    days = ge.build_events(history, {}, {}, since=date(2026, 10, 1))
+    assert [d.date for d in days] == ["2026-10-03"]
+    assert len(ge.build_events(history, {}, {}, since=date(2026, 10, 1), bulk_ratio=1.0)) == 2
+
+
+def test_grade_events_do_not_compare_across_methodology_versions():
+    from datetime import date
+
+    from app.services.signal_radar import grade_events as ge
+    from app.services.signal_radar import quant_filter as qf
+
+    def g(grade, d, version):
+        return qf.QuantGrade(grade, 70.0, date(2026, 10, d), date(2026, 10, d), version=version)
+
+    history = {
+        # 10-02 方法版本从 v1 变 v2：B→C 不是真实变化；同版本内 10-03 的 C→C+ 才算
+        "AAA": [g("B", 1, "v1"), g("C", 2, "v2"), g("C+", 3, "v2")],
+        # 缺版本信息（旧数据）时仍按等级比较
+        "BBB": [g("B", 1, None), g("A", 2, None)],
+    }
+    days = ge.build_events(history, {}, {}, since=date(2026, 10, 1), bulk_ratio=1.0)
+    got = {(d.date, e.symbol) for d in days for e in d.events}
+    assert got == {("2026-10-03", "AAA"), ("2026-10-02", "BBB")}

@@ -217,6 +217,8 @@ class QuantGradeSnapshot:
     payload_en: dict
     # 与 QuantResult.grades 同键（d:<维度>），只含 RADAR_DIMENSION_KEYS
     grades: dict = field(default_factory=dict)
+    # 评级方法版本（payload 里的 methodology_version）：评级升降事件不跨方法版本比较
+    methodology: str | None = None
 
 
 # 雷达基本面排雷读取的维度等级（grades 列的键）
@@ -257,6 +259,7 @@ async def get_quant_grade_history(market: str, symbols: list[str], start: date, 
     q = (select(col(QuantResult.symbol), col(QuantResult.as_of),
                 col(QuantResult.created_at), col(QuantResult.updated_at),
                 col(QuantResult.payload_zh)["overall"], col(QuantResult.payload_zh)["as_of"],
+                col(QuantResult.payload_zh)["methodology_version"].as_string(),
                 col(QuantResult.payload_en)["overall"], col(QuantResult.payload_en)["as_of"],
                 *(col(QuantResult.grades)[k] for k in RADAR_DIMENSION_KEYS))
          .where(col(QuantResult.market) == market,
@@ -268,8 +271,9 @@ async def get_quant_grade_history(market: str, symbols: list[str], start: date, 
     return [QuantGradeSnapshot(symbol, as_of, created, updated,
                               {"overall": zh, "as_of": zh_dates} if zh else {},
                               {"overall": en, "as_of": en_dates} if en else {},
-                              {k: v for k, v in zip(RADAR_DIMENSION_KEYS, dims, strict=True) if v})
-            for symbol, as_of, created, updated, zh, zh_dates, en, en_dates, *dims in rows]
+                              {k: v for k, v in zip(RADAR_DIMENSION_KEYS, dims, strict=True) if v},
+                              version)
+            for symbol, as_of, created, updated, zh, zh_dates, version, en, en_dates, *dims in rows]
 
 
 async def get_latest_result(market: str, symbol: str) -> QuantResult | None:
