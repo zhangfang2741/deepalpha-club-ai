@@ -29,17 +29,20 @@ struct PaywallView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 12) {
                     header
                     content
                     if store.membershipProduct != nil { compareCard }
-                    restoreButton
                     legal
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 24)
+                .padding(.top, 4)
+                .padding(.bottom, 12)
             }
+            // 整页压到一屏内（常见机型不用上下滑）：内容放得下时不弹性、不显示滚动条；
+            // 只有很小的屏幕才会真的滚动，作为兜底，不会把内容截掉
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollIndicators(.hidden)
             .background(background)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -72,20 +75,16 @@ struct PaywallView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             Image(systemName: "crown.fill")
-                .font(.system(size: 30))
+                .font(.system(size: 22))
                 .foregroundStyle(Theme.segment)
-                .frame(width: 68, height: 68)
+                .frame(width: 48, height: 48)
                 .background(Theme.segment.opacity(0.12), in: Circle())
                 .overlay(Circle().stroke(Theme.segment.opacity(0.4), lineWidth: 1))
             Text(L("DeepAlpha 会员"))
-                .font(.system(size: 28, weight: .bold)).foregroundColor(Theme.textPrimary)
-            Text(L("不限次分析 · 市场雷达 · 次级别确认"))
-                .font(.subheadline).foregroundColor(Theme.textSecondary)
-                .multilineTextAlignment(.center)
+                .font(.system(size: 24, weight: .bold)).foregroundColor(Theme.textPrimary)
         }
-        .padding(.top, 4)
     }
 
     @ViewBuilder
@@ -116,29 +115,32 @@ struct PaywallView: View {
     /// 两者都由 StoreKit 给出，且只对有资格的新客展示。不要在代码里写死「原价」倍数——
     /// 从未按那个价卖过的划线价属于虚构参考价，踩 App Store 2.3.1 / 5.6 与各地价格法。
     private func priceCard(_ product: Product) -> some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             if let trial = store.trialPeriodText(product) {
                 badge(L("%@免费试用", trial))
                 priceLine(product.displayPrice)
                 caption(L("试用结束后 %@/月，可随时取消", product.displayPrice))
             } else if let intro = store.introDiscount(product) {
                 badge(L("活动价 · %@", intro.durationText))
-                priceLine(intro.priceText, showsUnit: false)
-                Text(L("%@/月", product.displayPrice))
-                    .strikethrough().font(.footnote).foregroundColor(Theme.textSecondary)
+                // 活动价大字 + 同一行右边的划线正价，省一行高度
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    priceLine(intro.priceText, showsUnit: false)
+                    Text(L("%@/月", product.displayPrice))
+                        .strikethrough().font(.footnote).foregroundColor(Theme.textSecondary)
+                }
                 caption(L("活动价仅限首次订阅，%@后 %@/月自动续订，可随时取消", intro.durationText, product.displayPrice))
             } else {
                 priceLine(product.displayPrice)
                 caption(L("自动续订 · 可随时取消"))
             }
         }
-        .padding(.vertical, 22)
+        .padding(.vertical, 14)
         .frame(maxWidth: .infinity)
         .background(
             LinearGradient(colors: [Theme.accent.opacity(0.16), Theme.surface],
                            startPoint: .top, endPoint: .bottom),
-            in: RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Theme.accent.opacity(0.55), lineWidth: 1))
+            in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.accent.opacity(0.55), lineWidth: 1))
     }
 
     /// 大字价格 +「/月」。价格串直接用 StoreKit 的 displayPrice（带币种符号与本地化格式），不自己拼；
@@ -146,7 +148,7 @@ struct PaywallView: View {
     private func priceLine(_ price: String, showsUnit: Bool = true) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             Text(price)
-                .font(.system(size: 46, weight: .bold, design: .rounded))
+                .font(.system(size: 40, weight: .bold, design: .rounded))
                 .foregroundColor(Theme.textPrimary)
                 .minimumScaleFactor(0.6).lineLimit(1)
             if showsUnit {
@@ -163,7 +165,7 @@ struct PaywallView: View {
     }
 
     private func caption(_ text: String) -> some View {
-        Text(text).font(.caption).foregroundColor(Theme.textSecondary)
+        Text(text).font(.caption2).foregroundColor(Theme.textSecondary)
             .multilineTextAlignment(.center).padding(.horizontal, 16)
     }
 
@@ -202,16 +204,16 @@ struct PaywallView: View {
                 Text(L("会员")).font(.subheadline.weight(.bold)).foregroundColor(.white)
                     .frame(width: Self.columnWidth)
             }
-            .padding(.bottom, 10)
+            .padding(.bottom, 6)
 
             ForEach(Array(rows.enumerated()), id: \.element.id) { i, row in
                 HStack(spacing: 0) {
                     HStack(spacing: 10) {
                         Image(systemName: row.icon)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(Theme.accent)
-                            .frame(width: 28, height: 28)
-                            .background(Theme.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+                            .frame(width: 26, height: 26)
+                            .background(Theme.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 7))
                         Text(row.title).font(.subheadline.weight(.medium)).foregroundColor(Theme.textPrimary)
                             .lineLimit(1).minimumScaleFactor(0.8)
                     }
@@ -219,16 +221,16 @@ struct PaywallView: View {
                     freeCell(row.free).frame(width: Self.columnWidth)
                     memberCell(row.member).frame(width: Self.columnWidth)
                 }
-                .padding(.vertical, 12)
+                .padding(.vertical, 8)
                 .accessibilityElement(children: .combine)
                 if i < rows.count - 1 { Divider().overlay(Theme.border) }
             }
         }
-        .padding(.horizontal, 16).padding(.vertical, 14)
+        .padding(.horizontal, 16).padding(.vertical, 10)
         .background(alignment: .trailing) { memberColumnHighlight }
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Theme.border, lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
     /// 会员列的高亮底：贴着卡片右侧，盖住整列（含表头），比卡片内边距略宽。
@@ -315,7 +317,6 @@ struct PaywallView: View {
             Task { await store.restore(); restoring = false }
         } label: {
             Text(restoring ? L("恢复中…") : L("恢复购买"))
-                .font(.footnote).foregroundColor(Theme.accent)
         }
         .disabled(restoring)
     }
@@ -333,25 +334,27 @@ struct PaywallView: View {
         return L("活动价仅限首次订阅的 Apple 账户，优惠期（%@）结束后按正价自动续订。", intro.durationText)
     }
 
-    /// 自动续订披露 + 条款/隐私链接（App Store 审核必备）。
+    /// 自动续订披露 + 恢复购买 + 条款 / 隐私链接（App Store 审核必备），压成小字一块：
+    /// 披露文字在上，下面一行「恢复购买 · 服务条款 · 隐私政策」。
     private var legal: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             if let introDisclosure {
                 Text(introDisclosure)
-                    .font(.caption2).foregroundColor(Theme.textSecondary)
+                    .font(.system(size: 10)).foregroundColor(Theme.textSecondary)
                     .multilineTextAlignment(.center)
             }
             Text(anyProductOffersTrial
                  ? L("订阅为自动续订。免费试用结束后将按上述价格自动扣款，除非在当前订阅周期结束前至少 24 小时取消。你可随时在 App Store 账户设置中管理或取消订阅。")
                  : L("订阅为自动续订，将按上述价格自动扣款，除非在当前订阅周期结束前至少 24 小时取消。你可随时在 App Store 账户设置中管理或取消订阅。"))
-                .font(.caption2).foregroundColor(Theme.textSecondary)
+                .font(.system(size: 10)).foregroundColor(Theme.textSecondary)
                 .multilineTextAlignment(.center)
-            HStack(spacing: 16) {
+            HStack(spacing: 14) {
+                restoreButton
                 Link(L("服务条款"), destination: URL(string: "https://deepalpha.club/terms")!)
                 Link(L("隐私政策"), destination: URL(string: "https://deepalpha.club/privacy")!)
             }
             .font(.caption2).tint(Theme.accent)
         }
-        .padding(.top, 4)
+        .padding(.top, 2)
     }
 }
