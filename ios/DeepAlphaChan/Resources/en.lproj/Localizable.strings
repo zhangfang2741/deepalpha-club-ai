@@ -1122,8 +1122,6 @@
 "最强行业" = "Top sector";
 "全部行业" = "All sectors";
 "行业强弱详情" = "Sector strength";
-"相对大盘 %@" = "vs market %@";
-"最强 %@ %@" = "Top %@ %@";
 "选择行业" = "Choose sector";
 "位置：越靠中心信号越新，由内向外依次摆开、互不重叠，画不下的点「查看全部」看。美股可在顶部「行业」里选一个行业，雷达只显示该行业的信号。" = "Position: newer signals sit closer to the center, laid out from the inside out without overlapping; tap \"See all\" for those that don’t fit. For US stocks, pick a sector at the top to show only that sector’s signals.";
 "角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。" = "Badges: \"Resonance\" = daily direction agrees with 30-minute; \"New\" = first appeared that day.";
@@ -1157,8 +1155,6 @@
 "缠论里买卖点要等后面的笔成形才算成立：这个%@的价位是 %@ 这根 K 线的极值，下一笔到 %@ 才第一次成形，所以这一天才成立。图上的徽标画在极值 K 线，虚线末端的圆点标的是成立日。" = "A Chan signal only counts once the following stroke has formed: this %@ sits at the extreme of the %@ candle, and the next stroke first formed on %@, so that is the day it was established. The badge is drawn on the extreme candle; the dot at the end of the dashed line marks the day it formed.";
 "App Store 没有返回商品 %@（商品状态、价格或协议可能还没生效）" = "The App Store did not return product %@ (its status, price or the agreement may not be in effect yet)";
 "请求 App Store 出错：%@" = "App Store request failed: %@";
-"当日 %lld 个信号" = "%lld signals today";
-"%lld 个行业有信号" = "%lld sectors with signals";
 "%@大盘状态建设中，暂时只有市场情绪。" = "Market state for %@ is coming soon; only market sentiment is available for now.";
 "/月" = "/month";
 "订阅会员 · %@" = "Subscribe · %@";
@@ -1174,3 +1170,4 @@
 "活动价 %@ · 立即订阅" = "Offer %@ · Subscribe";
 "%@后 %@/月自动续订，可随时取消" = "Renews at %2$@/month after %1$@; cancel anytime";
 "活动价仅限首次订阅的 Apple 账户，优惠期（%@）结束后按正价自动续订。" = "The offer price is only for Apple Accounts subscribing for the first time. After the offer period (%@), it renews automatically at the regular price.";
+"行业强弱" = "Sector strength";
