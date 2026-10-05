@@ -31,7 +31,6 @@ struct SignalRadarView: View {
 
     @StateObject private var vm = SignalRadarViewModel()
     /// 叠在雷达左上角的指数切换按钮实测尺寸，气泡摆位时避开（见 fieldObstacles）。
-    @State private var switcherSize: CGSize = .zero
     /// 气泡摆位缓存（见 FieldLayoutCache）。
     @State private var layoutCache = FieldLayoutCache()
     @StateObject private var panicVM = PanicIndexViewModel()
@@ -563,9 +562,7 @@ struct SignalRadarView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(alignment: .topLeading) {
-            // 实测按钮大小（随指数名称长短变化），气泡摆位时当作禁区避开
             universeSwitcher
-                .onGeometryChange(for: CGSize.self) { $0.size } action: { switcherSize = $0 }
         }
     }
 
@@ -578,13 +575,16 @@ struct SignalRadarView: View {
         SignalRadarView.sectorFieldEnabled && vm.selectedDay?.hasSectorData == true
     }
 
+    /// 左上角指数切换器预留的区域（含它自己的 10pt 外边距）：最长的「纳斯达克100」实测约 128pt 宽，
+    /// 留 150 × 40 够所有指数名用。
+    ///
+    /// 以前是实测按钮大小再当禁区：第一帧还没量出来（或指数名称还没加载、按钮没渲染）时没有禁区，
+    /// 量出来后禁区一出现整张气泡图就重摆一次——刚打开时气泡会跳一下。固定预留后摆位只取决于数据和画布大小。
+    private static let switcherReserve = CGSize(width: 150, height: 40)
+
     /// 叠在雷达上的控件（左上角指数切换器）占的区域，气泡摆位时避开。
     private func fieldObstacles(width w: Double) -> [RadarOrbitSpacing.Obstacle] {
-        var out: [RadarOrbitSpacing.Obstacle] = []
-        if switcherSize != .zero {
-            out.append(.init(x: 0, y: 0, width: Double(switcherSize.width), height: Double(switcherSize.height)))
-        }
-        return out
+        [.init(x: 0, y: 0, width: Double(Self.switcherReserve.width), height: Double(Self.switcherReserve.height))]
     }
 
     // MARK: - 扇区（行业）

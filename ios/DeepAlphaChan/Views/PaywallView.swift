@@ -1,14 +1,13 @@
 import SwiftUI
 import StoreKit
 
-/// 付费墙的一行权益：只列订阅后才有的——免费版也能用的（买卖点与形态分析、三个市场）不列，
+/// 付费墙的一项权益：标题 + 一句说明（说清能做什么、和免费版的差别）。
+/// 只列订阅后才有的——免费版也能用的（买卖点与形态分析、三个市场）不列，
 /// 否则等于把免费功能包装成付费权益（2.3.1，也会让用户觉得被误导）。
-/// `value` 有值时右侧写具体额度（如「不限」），没有就是普通勾选项。
-private struct PlanRow: Identifiable {
-    let group: String
+private struct Benefit: Identifiable {
     let icon: String
     let title: String
-    var value: String? = nil
+    let detail: String
     var id: String { title }
 }
 
@@ -79,36 +78,27 @@ struct PaywallView: View {
     // MARK: - 权益数据
 
     /// 与代码里的实际门禁一一对应（改门禁时同步改这里）：
-    /// - 分析次数：免费每日 AppConfig.freeDailyQuota 支不同标的（UsageTracker），会员不限
+    /// - 不限次分析：免费每日 AppConfig.freeDailyQuota 支不同标的（UsageTracker），会员不限
+    /// - 次级别确认（日线×30 分钟、周线×日线）：会员专属（MainTabView.hasSubLevelAccess）
+    /// - 每日雷达：会员可看每日真实雷达，免费只有示例日；含近 30 个交易日历史回看
     /// - 自选上限：免费 1 / 会员不限（后端 app/services/watchlist.py TIER_LIMITS）
     /// - 自选结构状态：免费只显示最早加入的 1 支，会员全部（WatchlistViewModel.phase(for:)）
-    /// - 信号雷达：会员可看每日真实雷达（含近 30 个交易日历史回看），免费只有示例日
-    /// - 次级别确认（日线×30 分钟、周线×日线）：会员专属（MainTabView.hasSubLevelAccess）
     /// 文案只描述功能本身，不暗示收益或操作建议（3.1.1 / 5.2.5）。
-    private var planRows: [PlanRow] {
-        let analysis = L("缠论分析"), watchlist = L("自选股"), radar = L("市场雷达")
-        return [
-            PlanRow(group: analysis, icon: "infinity", title: L("分析次数"), value: L("不限")),
-            PlanRow(group: analysis, icon: "scope", title: L("30 分钟次级别")),
-            PlanRow(group: analysis, icon: "calendar", title: L("周线看日线")),
-            PlanRow(group: watchlist, icon: "star.fill", title: L("自选数量"), value: L("不限")),
-            PlanRow(group: watchlist, icon: "square.stack.3d.up.fill", title: L("自选状态"), value: L("全部")),
-            PlanRow(group: radar, icon: "dot.radiowaves.left.and.right", title: L("每日雷达")),
-            PlanRow(group: radar, icon: "clock.arrow.circlepath", title: L("历史回看")),
+    private var benefits: [Benefit] {
+        [
+            Benefit(icon: "infinity", title: L("不限次分析"),
+                    detail: L("免费版每天可分析 %lld 支标的，会员不限次数", AppConfig.freeDailyQuota)),
+            Benefit(icon: "scope", title: L("次级别确认"),
+                    detail: L("日线对照 30 分钟、周线对照日线，看次级别是否与大级别方向一致")),
+            Benefit(icon: "dot.radiowaves.left.and.right", title: L("每日市场雷达"),
+                    detail: L("扫描美股 / A 股 / 港股主要指数成分股，陈列当天在场的缠论买卖点；免费版只有示例日")),
+            Benefit(icon: "clock.arrow.circlepath", title: L("雷达历史回看"),
+                    detail: L("回看近 30 个交易日每一天的雷达")),
+            Benefit(icon: "star.fill", title: L("自选不限数量"),
+                    detail: L("免费版最多 1 支")),
+            Benefit(icon: "square.stack.3d.up.fill", title: L("全部自选状态"),
+                    detail: L("每只自选都显示结构阶段与最新信号；免费版只显示最早加入的 1 支")),
         ]
-    }
-
-    /// 按分组保持顺序（缠论分析 → 自选股 → 信号雷达）。
-    private var groupedPlanRows: [(group: String, rows: [PlanRow])] {
-        var out: [(group: String, rows: [PlanRow])] = []
-        for row in planRows {
-            if let i = out.firstIndex(where: { $0.group == row.group }) {
-                out[i].rows.append(row)
-            } else {
-                out.append((row.group, [row]))
-            }
-        }
-        return out
     }
 
     // MARK: - 会员卡
@@ -116,24 +106,22 @@ struct PaywallView: View {
     /// 一张卡：全部权益 + 价格 + 订阅按钮。
     private func membershipCard(_ product: Product) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 18) {
-                ForEach(groupedPlanRows, id: \.group) { section in
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(section.group)
-                            .font(.caption.bold()).foregroundColor(Theme.textSecondary)
-                        ForEach(section.rows) { row in
-                            HStack(spacing: 10) {
-                                Image(systemName: row.icon).foregroundColor(Theme.accent).frame(width: 24)
-                                Text(row.title).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
-                                Spacer(minLength: 8)
-                                if let value = row.value {
-                                    Text(value).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
-                                } else {
-                                    Image(systemName: "checkmark.circle.fill").foregroundColor(Theme.accent)
-                                }
-                            }
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(benefits) { benefit in
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: benefit.icon)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(Theme.accent)
+                            .frame(width: 32, height: 32)
+                            .background(Theme.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(benefit.title).font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+                            Text(benefit.detail).font(.caption).foregroundColor(Theme.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
+                        Spacer(minLength: 0)
                     }
+                    .accessibilityElement(children: .combine)
                 }
             }
             priceRow(product)

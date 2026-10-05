@@ -18,8 +18,9 @@ struct RadarBubble: View {
     var marksConfirmed = true
     let onOpen: () -> Void
 
-    /// 持续漂浮的竖向偏移（onAppear 后在 0 ↔ 负值间无限往复）。
-    @State private var floatY: CGFloat = 0
+    /// 持续漂浮的竖向偏移（在 -6 ↔ 6 间无限往复）。初值就是起点 -6：以前初值 0、onAppear 里才设成 -6，
+    /// 气泡在第一帧会突然上跳 6pt（刚打开雷达时看起来「动了一下」）。
+    @State private var floatY: CGFloat = -6
     /// 拖拽偏移；松手后用弹簧动画归零。
     @State private var drag: CGSize = .zero
     /// 拖拽中放大一点，给「被拎起来」的反馈。
@@ -87,7 +88,6 @@ struct RadarBubble: View {
             .accessibilityLabel(accessibilityDescription)
             .accessibilityAddTraits(.isButton)
             .onAppear {
-                floatY = -6
                 withAnimation(
                     .easeInOut(duration: Double.random(in: 2.2...3.4))
                         .repeatForever(autoreverses: true)

@@ -1155,3 +1155,13 @@
 "订阅会员解锁次级别确认" = "Subscribe to unlock sub-level confirmation";
 "订阅会员，显示全部自选标的的结构状态" = "Subscribe to see the structure status of every watchlist item";
 "新客专享价仅限首次订阅的 Apple 账户，优惠期（%@）结束后按正价自动续订。" = "The new-user price is only for Apple Accounts subscribing for the first time. After the offer period (%@), it renews automatically at the regular price.";
+"免费版每天可分析 %lld 支标的，会员不限次数" = "Free: %lld tickers per day. Members: unlimited";
+"日线对照 30 分钟、周线对照日线，看次级别是否与大级别方向一致" = "Daily vs 30-minute, weekly vs daily — see whether the lower level agrees with the higher one";
+"每日市场雷达" = "Daily market radar";
+"扫描美股 / A 股 / 港股主要指数成分股，陈列当天在场的缠论买卖点；免费版只有示例日" = "Scans the main index constituents in US, China A and Hong Kong markets and lists the Chan signals in play today. Free: sample day only";
+"雷达历史回看" = "Radar history";
+"回看近 30 个交易日每一天的雷达" = "Browse the radar for each of the last 30 trading days";
+"自选不限数量" = "Unlimited watchlist";
+"免费版最多 1 支" = "Free: 1 ticker";
+"全部自选状态" = "Status for every watchlist item";
+"每只自选都显示结构阶段与最新信号；免费版只显示最早加入的 1 支" = "Every watchlist item shows its structure stage and latest signal. Free: only the earliest-added one";

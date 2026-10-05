@@ -30,13 +30,22 @@ enum SubscriptionTier: Int, Comparable {
 @MainActor
 final class StoreManager: ObservableObject {
     @Published private(set) var products: [Product] = []
-    @Published private(set) var tier: SubscriptionTier = .free
+    /// 订阅状态。初值取上次查到的结果（见 `lastTierKey`）：StoreKit 查权益是异步的，初值一律 `.free` 时，
+    /// 会员打开 App 的头几百毫秒到几秒里，雷达会先按「未订阅」摆示例日、再切成真实数据，气泡图跟着变一次。
+    /// 这个缓存只用来避免界面先闪一下，真正的判断仍是 `refreshSubscriptionStatus` 查到的结果（随即覆盖）。
+    @Published private(set) var tier: SubscriptionTier = StoreManager.cachedTier()
     /// 正在购买的商品 ID（nil = 没有进行中的购买）。
     @Published private(set) var purchasingProductID: String?
     var purchaseInProgress: Bool { purchasingProductID != nil }
     @Published private(set) var loadFailed = false
 
     private var updatesTask: Task<Void, Never>?
+
+    private static let lastTierKey = "store.lastKnownTier"
+
+    private static func cachedTier() -> SubscriptionTier {
+        UserDefaults.standard.integer(forKey: lastTierKey) == SubscriptionTier.premium.rawValue ? .premium : .free
+    }
 
     init() {
         updatesTask = observeTransactionUpdates()
@@ -166,6 +175,7 @@ final class StoreManager: ObservableObject {
             }
         }
         tier = highest
+        UserDefaults.standard.set(highest.rawValue, forKey: Self.lastTierKey)
         // 买过一次（含用了新客价）资格就没了，购买/续订/跨设备同步后都要重新判定
         await refreshIntroEligibility()
     }
