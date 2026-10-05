@@ -12,7 +12,7 @@ enum WatchlistService {
         let removed: Bool
     }
 
-    /// tier：客户端按 StoreKit 判断出的订阅档（"free"/"basic"/"premium"），后端据此
+    /// tier：客户端按 StoreKit 判断出的订阅档（"free"/"premium"；"basic" 只有旧版 App 还会发），后端据此
     /// 算出自选上限（1/10/不限）随列表一起下发，见 app/services/watchlist.py。
     static func list(tier: String) async throws -> WatchlistResponse {
         try await APIClient.shared.get("/watchlist", query: ["tier": tier])

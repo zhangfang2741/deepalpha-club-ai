@@ -177,7 +177,7 @@ struct SubLevelSheet: View {
 }
 
 /// 结论卡里的「30 分钟确认」小格（周线页为「日线确认」），接替原图表下方的次级别结论行：
-/// 已算出 → 显示结论，点开次级别图；非高级版且非示例股 → 锁，点开付费墙；
+/// 已算出 → 显示结论，点开次级别图；非会员且非示例股 → 锁，点开付费墙；
 /// 加载中 → 转圈；不适用或失败 → 「暂不可用」。
 struct SubLevelTile: View {
     @ObservedObject var vm: ChanViewModel
@@ -207,12 +207,12 @@ struct SubLevelTile: View {
                         && (vm.freq == "daily" || vm.freq == "weekly") {
                 Button { showPaywall = true } label: {
                     tile {
-                        Label(L("高级版"), systemImage: "lock.fill")
+                        Label(L("会员"), systemImage: "lock.fill")
                             .foregroundStyle(Theme.textSecondary)
                     }
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint(L("订阅高级版解锁次级别确认"))
+                .accessibilityHint(L("订阅会员解锁次级别确认"))
                 .sheet(isPresented: $showPaywall) { PaywallView() }
             } else if !isStatic && vm.subLevelLoading {
                 tile {

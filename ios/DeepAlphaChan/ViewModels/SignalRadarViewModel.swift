@@ -9,9 +9,9 @@ final class SignalRadarViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    /// 免费预览锚定日期（「上个月 1 号」）的真实快照，未订阅高级版时插到 `days`
-    /// 最前面并默认选中，让日期轨在真实滚动窗口之外多出这一天可点；订阅高级版则
-    /// 完全不拉、不插——雷达图标是和高级版完全一样的一套 UI，唯一区别是免费用户默认
+    /// 免费预览锚定日期（「上个月 1 号」）的真实快照，未订阅会员时插到 `days`
+    /// 最前面并默认选中，让日期轨在真实滚动窗口之外多出这一天可点；订阅会员则
+    /// 完全不拉、不插——雷达图标是和会员完全一样的一套 UI，唯一区别是免费用户默认
     /// 停在这一天、点其它天会被拦下（见 SignalRadarView 的 dayChip/jumpToNearestDay
     /// 门禁），而不是另起一套「示例」界面。
     @Published private(set) var demoDay: RadarDay?
@@ -41,7 +41,7 @@ final class SignalRadarViewModel: ObservableObject {
     }
 
     /// 订阅层级由外部（持有本 VM 的 View）按 StoreManager 同步，VM 本身不感知
-    /// StoreKit——跟 ChanViewModel.hasSubLevelAccess 同一个模式。非高级版时：
+    /// StoreKit——跟 ChanViewModel.hasSubLevelAccess 同一个模式。非会员时：
     /// days 会把 demoDay 追加进来，且新数据到位时自动把选中日跳回 demoDay。
     var isPremiumUser: Bool = false {
         didSet {
@@ -127,7 +127,7 @@ final class SignalRadarViewModel: ObservableObject {
         return response.universe.isEmpty || response.universe == activeUniverseKey
     }
 
-    /// 非高级版且 demoDay 已就绪时，把它插到真实天数列表最前面：这是免费用户唯一
+    /// 非会员且 demoDay 已就绪时，把它插到真实天数列表最前面：这是免费用户唯一
     /// 能点开的一天，放第一格、默认选中，进页面直接看到它，不必先看最新一天再跳过去。
     /// 预览日还在路上时返回空（见 isAwaitingDemo），页面显示扫描中。极少数情况下
     /// （如月初，真实窗口正好覆盖到了上个月 1 号）这天本来就在真实数据里，不重复
@@ -226,7 +226,7 @@ final class SignalRadarViewModel: ObservableObject {
         return f.string(from: date)
     }
 
-    /// 数据到位（真实响应或 demoDay 任一更新）后，非高级版就把选中日跳回 demoDay，
+    /// 数据到位（真实响应或 demoDay 任一更新）后，非会员就把选中日跳回 demoDay，
     /// 不停在真实滚动窗口的「今天」——那天点不开，停在那没意义。已经选中 demoDay
     /// 或它还没加载出来时不做任何事。
     private func jumpToDemoDayIfPresent() {
@@ -358,13 +358,13 @@ final class SignalRadarViewModel: ObservableObject {
     }
 
     /// 拉「上个月 1 号」的免费预览快照（GET /signal-radar/demo），按当前（市场, universe），
-    /// 仅未订阅高级版时调用；由 `.task(id: demoKey)` 驱动，切市场/指数时 SwiftUI 自动
+    /// 仅未订阅会员时调用；由 `.task(id: demoKey)` 驱动，切市场/指数时 SwiftUI 自动
     /// 取消上一次未完成的调用、重新拉一次。轮询逻辑与 load() 同一套；轮询用尽仍在算就
     /// 安静放弃——不单独起一套「计算中」提示，日期轨里少这一天，之后重进页面再拉。
     func loadDemoDay() async {
         let key = demoKey
         let m = market
-        // 自选是高级版功能，没有免费预览；其余按所选指数（nil = 市场默认）
+        // 自选是会员功能，没有免费预览；其余按所选指数（nil = 市场默认）
         let u = currentUniverse == RadarUniverse.watchlistKey ? nil : currentUniverse
         // 同一键已在拉（onChange 与 .task(id:) 可能同时触发）就不重复发请求。
         guard loadingDemoKey != key else { return }

@@ -1,22 +1,23 @@
 import Foundation
 import StoreKit
 
-/// 订阅层级：免费 < 基础版（解锁全量缠论分析）< 高级版
-/// （基础版权益 + 次级别确认 / 信号雷达 / 自选批量状态计算）。数值越大权益越高，`max` 取较高档
-/// 即可判定「拥有该档或以上」。
+/// 订阅层级：免费 / 会员。
+///
+/// 2026-10-05 起只有一个会员（¥188/月，全部权益）。以前分基础版（¥88，解锁不限次分析）和高级版
+/// （另加次级别确认 / 信号雷达 / 自选批量状态），现在合并：旧的基础版订阅者续订期内同样按会员处理（见
+/// `refreshSubscriptionStatus`）。枚举保留 `premium` 这个名字，是因为全 App 的门禁和传给后端的
+/// 档位字符串（`apiValue`）都叫它，改名要连带改很多处而没有收益。
 enum SubscriptionTier: Int, Comparable {
     case free = 0
-    case experience = 1
-    case premium = 2
+    case premium = 1
 
     static func < (lhs: SubscriptionTier, rhs: SubscriptionTier) -> Bool { lhs.rawValue < rhs.rawValue }
 
-    /// 传给后端的档位字符串（如自选上限按档位区分，见 app/services/watchlist.py
-    /// 的 TIER_LIMITS）。"experience" 是历史命名，对外/对接口统一叫 "basic"。
+    /// 传给后端的档位字符串（自选上限按档位区分，见 app/services/watchlist.py 的 TIER_LIMITS；
+    /// 后端仍保留 "basic" 档，只为兼容还在发 "basic" 的旧版 App，新版不再发送）。
     var apiValue: String {
         switch self {
         case .free: return "free"
-        case .experience: return "basic"
         case .premium: return "premium"
         }
     }
@@ -29,14 +30,22 @@ enum SubscriptionTier: Int, Comparable {
 @MainActor
 final class StoreManager: ObservableObject {
     @Published private(set) var products: [Product] = []
-    @Published private(set) var tier: SubscriptionTier = .free
-    /// 正在购买的商品 ID（nil = 没有进行中的购买）。记 ID 而不是布尔：两档按钮并排时
-    /// 只有被点的那个转圈，另一个仅置灰防重复下单——布尔会让两个按钮一起转圈。
+    /// 订阅状态。初值取上次查到的结果（见 `lastTierKey`）：StoreKit 查权益是异步的，初值一律 `.free` 时，
+    /// 会员打开 App 的头几百毫秒到几秒里，雷达会先按「未订阅」摆示例日、再切成真实数据，气泡图跟着变一次。
+    /// 这个缓存只用来避免界面先闪一下，真正的判断仍是 `refreshSubscriptionStatus` 查到的结果（随即覆盖）。
+    @Published private(set) var tier: SubscriptionTier = StoreManager.cachedTier()
+    /// 正在购买的商品 ID（nil = 没有进行中的购买）。
     @Published private(set) var purchasingProductID: String?
     var purchaseInProgress: Bool { purchasingProductID != nil }
     @Published private(set) var loadFailed = false
 
     private var updatesTask: Task<Void, Never>?
+
+    private static let lastTierKey = "store.lastKnownTier"
+
+    private static func cachedTier() -> SubscriptionTier {
+        UserDefaults.standard.integer(forKey: lastTierKey) == SubscriptionTier.premium.rawValue ? .premium : .free
+    }
 
     init() {
         updatesTask = observeTransactionUpdates()
@@ -48,18 +57,14 @@ final class StoreManager: ObservableObject {
 
     deinit { updatesTask?.cancel() }
 
-    /// 是否拥有任一档订阅（基础版或高级版）：解锁无限次缠论分析。
+    /// 是否是会员：解锁不限次缠论分析、次级别确认、信号雷达、自选批量状态计算。
     var isSubscribed: Bool { tier != .free }
-    /// 是否拥有高级版：额外解锁次级别确认、信号雷达、自选批量状态计算。
+    /// 同 `isSubscribed`。合并成一个会员后两者含义相同，保留这个名字是因为各处门禁都在用它。
     var isPremium: Bool { tier == .premium }
 
-    /// 基础版月度订阅商品。
-    var experienceProduct: Product? {
-        products.first { $0.id == AppConfig.experienceMonthlyProductID }
-    }
-    /// 高级版月度订阅商品。
-    var premiumProduct: Product? {
-        products.first { $0.id == AppConfig.premiumMonthlyProductID }
+    /// 会员月度订阅商品（付费墙上卖的唯一商品）。
+    var membershipProduct: Product? {
+        products.first { $0.id == AppConfig.membershipMonthlyProductID }
     }
 
     /// 当前 Apple 账户是否还能享受推介优惠（新客价 / 免费试用）。Apple 按订阅群组判定：
@@ -136,9 +141,8 @@ final class StoreManager: ObservableObject {
 
     func loadProducts() async {
         do {
-            let items = try await Product.products(for: [
-                AppConfig.experienceMonthlyProductID, AppConfig.premiumMonthlyProductID,
-            ])
+            // 只加载在售的会员商品；旧的基础版商品已停售，不用加载（识别旧订阅者靠 currentEntitlements）
+            let items = try await Product.products(for: [AppConfig.membershipMonthlyProductID])
             products = items
             loadFailed = items.isEmpty
             await refreshIntroEligibility()
@@ -147,7 +151,7 @@ final class StoreManager: ObservableObject {
         }
     }
 
-    /// 两档在同一订阅群组，资格是群组级的，查任一商品即可。
+    /// 资格是订阅群组级的（旧基础版与会员同在一个群组），查会员商品即可。
     private func refreshIntroEligibility() async {
         guard let subscription = products.first?.subscription else {
             isEligibleForIntroOffer = false
@@ -156,22 +160,22 @@ final class StoreManager: ObservableObject {
         isEligibleForIntroOffer = await subscription.isEligibleForIntroOffer
     }
 
-    /// 遍历当前有效权益，判断订阅层级：两档都在有效期内（如降级过渡期）时取更高档。
+    /// 遍历当前有效权益判断是否是会员。旧的基础版商品（已停售）仍在有效期内的订阅者同样按会员处理——
+    /// 合并成一个会员后，已付费的人不能少权益，也不用重新订阅。
     func refreshSubscriptionStatus() async {
         var highest: SubscriptionTier = .free
         for await result in Transaction.currentEntitlements {
             guard case .verified(let transaction) = result, transaction.revocationDate == nil
             else { continue }
             switch transaction.productID {
-            case AppConfig.premiumMonthlyProductID:
-                highest = max(highest, .premium)
-            case AppConfig.experienceMonthlyProductID:
-                highest = max(highest, .experience)
+            case AppConfig.membershipMonthlyProductID, AppConfig.legacyBasicMonthlyProductID:
+                highest = .premium
             default:
                 continue
             }
         }
         tier = highest
+        UserDefaults.standard.set(highest.rawValue, forKey: Self.lastTierKey)
         // 买过一次（含用了新客价）资格就没了，购买/续订/跨设备同步后都要重新判定
         await refreshIntroEligibility()
     }

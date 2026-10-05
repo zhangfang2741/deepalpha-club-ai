@@ -101,13 +101,10 @@
 "语言" = "Language";
 "订阅" = "Subscription";
 "当前方案" = "Current plan";
-"基础版" = "Basic";
-"高级版" = "Premium";
 "功能" = "Features";
 "之后 %@/月" = "then %@/mo";
 "免费版" = "Free";
 "管理订阅" = "Manage subscription";
-"升级高级版" = "Upgrade to Premium";
 "查看订阅方案" = "View Plans";
 "恢复购买" = "Restore purchases";
 "关于" = "About";
@@ -193,8 +190,6 @@
 "%lld 年" = "%lld-year";
 "请仔细阅读（%lld 秒）" = "Please keep reading (%lld s)";
 "请先勾选上方确认" = "Check the box above first";
-"次级别确认 · 高级版解锁" = "Sub-level confirmation · Premium";
-"订阅高级版解锁次级别确认" = "Subscribe to Premium to unlock sub-level confirmation";
 "订阅为自动续订。免费试用结束后将按上述价格自动扣款，除非在当前订阅周期结束前至少 24 小时取消。你可随时在 App Store 账户设置中管理或取消订阅。" = "Subscription auto-renews. After the free trial you'll be charged the price above unless you cancel at least 24 hours before the current period ends. Manage or cancel anytime in your App Store account settings.";
 "订阅为自动续订，将按上述价格自动扣款，除非在当前订阅周期结束前至少 24 小时取消。你可随时在 App Store 账户设置中管理或取消订阅。" = "Subscription auto-renews and will be charged the price above unless you cancel at least 24 hours before the current period ends. Manage or cancel anytime in your App Store account settings.";
 
@@ -597,7 +592,6 @@
 "盘中：每 30 分钟刷新一次最新一天的「共振」标记（日线方向 × 30 分钟买卖点），气泡位置和大小不变。" = "Intraday: the latest day's \"resonance\" tags (daily direction × 30-minute signals) refresh every 30 minutes; bubble positions and sizes stay the same.";
 "自动补算：服务重启后会先补扫一轮；数据过旧时，你打开本页也会在后台重算，期间先显示上一次的结果。" = "Auto catch-up: after a server restart a scan runs right away; if the data is stale, opening this page triggers a background rescan while the previous result stays on screen.";
 "点进详情页是当下实时计算（不用缓存），盘中与气泡快照可能有出入，以详情页为准。" = "The detail page is computed live (no cache), so intraday it may differ from the bubble snapshot — the detail page is the reference.";
-"升级高级版，显示全部自选标的的结构状态" = "Upgrade to Premium to see the structural phase of every ticker";
 "示例" = "Sample";
 "在分析结果页点 ☆ 加入自选，左滑可移出" = "Tap ☆ on a result page to add; swipe left to remove";
 "%@/%@" = "%@/%@";
@@ -605,7 +599,6 @@
 "前 %@" = "first %@";
 "新客%@" = "New users · %@";
 "新客专享%@，之后 %@/月，可随时取消" = "New-user price for the %1$@, then %2$@/month. Cancel anytime.";
-"新客专享价仅限首次订阅的 Apple 账户，优惠期（%@）结束后按各方案正价自动续订。" = "The new-user price is only for Apple Accounts subscribing for the first time. After the offer period (%@), each plan renews automatically at its regular price.";
 "市场雷达免责声明" = "Market Radar Disclaimer";
 "市场雷达基于公开行情数据，按缠论结构规则自动识别并汇总所选指数成分股的买卖点形态，供技术分析研究使用。" = "The Market Radar uses Chan-theory structure rules on public market data to identify and aggregate buy/sell patterns among the constituents of the selected index, for technical-analysis research.";
 "本功能展示的内容均为按标准缠论技术分析规则得出的结果，不构成任何投资建议、证券推荐或买卖要约。" = "All content shown is derived from standard Chan-theory technical analysis rules and does not constitute investment advice, a securities recommendation, or an offer to buy or sell.";
@@ -1158,3 +1151,17 @@
 "%@ · 目标价 %@" = "%@ · target %@";
 "再把综合分和全部样本股票（%@）比，高于约 %@%% 的股票，排第 %@ 百分位。" = "The composite score is then compared with all sample stocks (%@): higher than about %@%% of them, the %@th percentile.";
 "板块按全球行业分类标准（GICS）一级行业划分，样本是%@。" = "Sectors follow the 11 Global Industry Classification Standard (GICS) sectors; the sample is %@.";
+"会员" = "Member";
+"订阅会员解锁次级别确认" = "Subscribe to unlock sub-level confirmation";
+"订阅会员，显示全部自选标的的结构状态" = "Subscribe to see the structure status of every watchlist item";
+"新客专享价仅限首次订阅的 Apple 账户，优惠期（%@）结束后按正价自动续订。" = "The new-user price is only for Apple Accounts subscribing for the first time. After the offer period (%@), it renews automatically at the regular price.";
+"免费版每天可分析 %lld 支标的，会员不限次数" = "Free: %lld tickers per day. Members: unlimited";
+"日线对照 30 分钟、周线对照日线，看次级别是否与大级别方向一致" = "Daily vs 30-minute, weekly vs daily — see whether the lower level agrees with the higher one";
+"每日市场雷达" = "Daily market radar";
+"扫描美股 / A 股 / 港股主要指数成分股，陈列当天在场的缠论买卖点；免费版只有示例日" = "Scans the main index constituents in US, China A and Hong Kong markets and lists the Chan signals in play today. Free: sample day only";
+"雷达历史回看" = "Radar history";
+"回看近 30 个交易日每一天的雷达" = "Browse the radar for each of the last 30 trading days";
+"自选不限数量" = "Unlimited watchlist";
+"免费版最多 1 支" = "Free: 1 ticker";
+"全部自选状态" = "Status for every watchlist item";
+"每只自选都显示结构阶段与最新信号；免费版只显示最早加入的 1 支" = "Every watchlist item shows its structure stage and latest signal. Free: only the earliest-added one";

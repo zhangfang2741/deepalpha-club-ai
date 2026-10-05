@@ -19,18 +19,18 @@ enum AppConfig {
 
     // MARK: - 订阅
     //
-    // 两档月度订阅，逐级递进：
-    //   基础版 —— 解锁全量缠论分析（不受每日次数限制），¥38/月。
-    //   高级版 —— 在基础版基础上，额外解锁次级别确认、信号雷达、自选批量状态计算，¥188/月。
-    // 具体定价与免费试用时长在 App Store Connect / Configuration.storekit 配置，
-    // 不写死在代码里（见 StoreManager.trialPeriodText，读商品实际配置生成文案）。
+    // 只有一个会员：月度订阅 ¥188/月，解锁全部权益（不限次缠论分析、30 分钟次级别 / 周线看日线、
+    // 每日雷达与历史回看、自选不限数量与全部结构状态）。以前分基础版（¥88）和高级版，2026-10-05 合并。
+    // 具体定价在 App Store Connect / Configuration.storekit 配置，不写死在代码里
+    // （见 StoreManager.trialPeriodText，读商品实际配置生成文案）。
 
-    /// 基础版月度订阅商品 ID（沿用历史商品 ID，避免破坏线上已订阅用户；商品 ID 里的
-    /// "pro" 是历史命名，与当前展示名「基础版」无关，不必为了改名同步改 ID）。
-    static let experienceMonthlyProductID = "club.deepalpha.chan.pro.monthly"
+    /// 会员月度订阅商品 ID（需与 App Store Connect / Configuration.storekit 一致）。
+    /// 沿用原高级版的商品 ID：它本来就是全部权益，价格在 ASC 改成 ¥188 即可，已订阅的高级版用户不受影响。
+    static let membershipMonthlyProductID = "club.deepalpha.chan.premium.monthly"
 
-    /// 高级版月度订阅商品 ID（需与 App Store Connect / Configuration.storekit 一致）。
-    static let premiumMonthlyProductID = "club.deepalpha.chan.premium.monthly"
+    /// 旧基础版月度订阅商品 ID（已停售，只用来识别还在有效期内的老订阅者，让他们按会员处理）。
+    /// 商品 ID 里的 "pro" 是历史命名。不能删除这个商品——已订阅的用户还在续订。
+    static let legacyBasicMonthlyProductID = "club.deepalpha.chan.pro.monthly"
 
     // MARK: - 示例自选
 
@@ -49,7 +49,7 @@ enum AppConfig {
         return raw == sample
     }
 
-    /// 免费用户每日可用的缠论分析次数（超出需订阅基础版或高级版）。
+    /// 免费用户每日可用的缠论分析次数（超出需订阅会员）。
     static let freeDailyQuota = 3
 
     // MARK: - 分享

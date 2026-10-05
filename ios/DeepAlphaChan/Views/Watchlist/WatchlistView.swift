@@ -11,7 +11,7 @@ struct WatchlistView: View {
     @EnvironmentObject private var store: StoreManager
 
     @State private var showResults = false
-    /// 自选现在所有档位都能用（未订阅 1 支 / 基础版 10 支 / 高级版不限），
+    /// 自选现在所有档位都能用（未订阅 1 支 / 会员不限），
     /// 点已满时的「升级解锁更多」入口才弹这个付费墙，不再整体锁死。
     @State private var showPaywall = false
     /// 环境横幅里点某个市场：打开该市场的环境面板（与雷达「环境」格同一个）。
@@ -100,8 +100,8 @@ struct WatchlistView: View {
     }
 
     /// 自选数量 / 上限，让用户在接近上限前就有数，不用加满了才在报错里第一次看到数字。
-    /// 高级版不限（maxItems 为 nil）时只显示已收藏数量，不显示「/ 上限」；接近或已达
-    /// 上限（未订阅/基础版）时额外给一个升级入口，直接引导到更高档位而不是让用户自己
+    /// 会员不限（maxItems 为 nil）时只显示已收藏数量，不显示「/ 上限」；接近或已达
+    /// 上限（未订阅）时额外给一个订阅入口，直接引导订阅而不是让用户自己
     /// 去「我的」页找订阅入口。
     ///
     /// 放在 List 里作为第一行，不能摆在 List 外面：外面的话下拉时大标题和列表一起被
@@ -137,13 +137,13 @@ struct WatchlistView: View {
         .font(.footnote)
     }
 
-    /// 非高级版只有最早加入的一支能看状态（见 WatchlistViewModel.phase(for:)），
+    /// 非会员只有最早加入的一支能看状态（见 WatchlistViewModel.phase(for:)），
     /// 其余行没有标签——不说明的话，用户只会觉得「状态没渲染出来、下拉也不刷新」。
     private var phaseLockedBanner: some View {
         Button { showPaywall = true } label: {
             HStack(spacing: 8) {
                 Image(systemName: "lock.fill").font(.caption)
-                Text(L("升级高级版，显示全部自选标的的结构状态"))
+                Text(L("订阅会员，显示全部自选标的的结构状态"))
                     .font(.caption)
                     .multilineTextAlignment(.leading)
                 Spacer(minLength: 0)

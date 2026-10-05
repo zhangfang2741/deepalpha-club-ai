@@ -34,19 +34,29 @@ ios/
 
 ## 订阅 / 内购（StoreKit 2）
 
-- **商品**：自动续订月度订阅，商品 ID `club.deepalpha.chan.pro.monthly`（见 `AppConfig`）。
-- **定价**：$9.9/月（在 App Store Connect 设置确切价格），**7 天免费试用**（引导优惠）。
-- **权益门禁**：
-  - 免费用户每日 `freeDailyQuota`（默认 3）次缠论分析，用尽弹付费墙。
-  - 结构 GAP 分析为**会员专属**。
-  - 会员无限次、解锁全部。
-- **校验方式**：端上 StoreKit 2（`Transaction.currentEntitlements`，Apple 签名 JWS）。
+- **只有一个会员**（2026-10-05 起，原基础版 ¥88 / 高级版合并）：自动续订月度订阅，商品 ID
+  `club.deepalpha.chan.premium.monthly`（`AppConfig.membershipMonthlyProductID`），**¥188/月**，无试用、无新客价。
+  权益：不限次缠论分析、30 分钟次级别 / 周线看日线、每日雷达与历史回看、自选不限数量与全部结构状态。
+- **旧基础版商品**（`club.deepalpha.chan.pro.monthly`，`legacyBasicMonthlyProductID`）已停售但**不能删除**：还在
+  有效期内的老订阅者在 `StoreManager.refreshSubscriptionStatus` 里同样按会员处理，不需要重新订阅。
+- **权益门禁**：免费用户每日 `freeDailyQuota`（默认 3）支不同标的的缠论分析，用尽弹付费墙；会员无限次、解锁全部。
+- **校验方式**：端上 StoreKit 2（`Transaction.currentEntitlements`，Apple 签名 JWS）。传给后端的档位只有
+  `free` / `premium`（后端 `TIER_LIMITS` 仍保留 `basic`，只为兼容旧版 App）。
   > 注意：每日额度计数在端上（UserDefaults），可被重装/改时间绕过。如需严格限制，
   > 后续可改为后端按用户校验 + App Store Server Notifications（见文末 TODO）。
 
+### 上线合并版前在 App Store Connect 要做的事（代码里不会改价格）
+
+价格由 App Store 返回，App 只显示它给的数字，所以**不改这几项，线上仍会显示旧价格**：
+
+1. `club.deepalpha.chan.premium.monthly`：价格改成 **¥188/月**（原正价 ¥388）；删除它的入门优惠（原新客首月 ¥188）。
+2. `club.deepalpha.chan.pro.monthly`（旧基础版）：**停售**（Remove from sale），不要删除；删除它的入门优惠。
+3. 订阅显示名 / 描述改成「DeepAlpha 会员」，审核备注、App 描述里的订阅说明同步（见 `AppStore/chan/store-listing.md`）。
+4. 已订阅高级版（原价 ¥388）的用户：降价对已订阅用户自动生效、不需要用户同意（具体时点以 ASC 价格变更页提示为准）；已订阅基础版（¥88）的用户保持原价续订并享有全部权益。
+
 ### 本地测试订阅（无需 App Store Connect）
 
-1. 工程已带 `DeepAlphaChan/Configuration.storekit`（含 Pro 月度 + 7 天试用）。
+1. 工程已带 `DeepAlphaChan/Configuration.storekit`（会员 ¥188/月 + 已停售的旧基础版，用来测试老订阅者按会员处理）。
 2. Xcode 菜单 `Product → Scheme → Edit Scheme → Run → Options`，
    把 **StoreKit Configuration** 选为 `Configuration.storekit`。
 3. 运行后即可在付费墙里走完整的购买/试用/恢复流程（沙盒模拟，不产生真实扣款）。
