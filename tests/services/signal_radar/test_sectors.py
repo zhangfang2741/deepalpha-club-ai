@@ -107,3 +107,30 @@ async def test_sector_pools_response_counts(monkeypatch):
     assert [s.symbol for s in out.sectors["technology"]] == ["NVDA", "AMD"]
     missing = await svc.sector_pools(redis, "us", "nasdaq100", "2026-09-29", "loose")
     assert not missing.available and missing.sectors == {}
+
+
+def test_cnhk_tags_from_meta_use_gics_mapping():
+    from types import SimpleNamespace as NS
+
+    tags = sectors.cnhk_tags_from_meta({
+        "600519": NS(sector="consumer_staples"), "300750": NS(sector="industrials"),
+        "00700": NS(sector="communication_services"), "09999": NS(sector=None),
+    })
+    assert tags == {"600519": "staples", "300750": "industrials", "00700": "communication"}
+
+
+def test_lookup_tag_pads_hk_and_strips_suffix():
+    tags = {"00700": "communication", "600519": "staples", "BRK-B": "financials"}
+    assert sectors.lookup_tag(tags, "0700") == "communication"
+    assert sectors.lookup_tag(tags, "700.HK") == "communication"
+    assert sectors.lookup_tag(tags, "600519.SH") == "staples"
+    assert sectors.lookup_tag(tags, "BRK.B") == "financials"
+    assert sectors.lookup_tag(tags, "000001") is None
+
+
+async def test_load_cnhk_tags_skips_incomplete_result(monkeypatch):
+    async def fake(market):
+        return {"600519": "staples"}
+
+    monkeypatch.setattr(sectors, "_fetch_cnhk_tags", fake)
+    assert await sectors.load_sector_tags("cn", None) == {}

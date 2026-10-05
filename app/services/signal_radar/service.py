@@ -102,9 +102,10 @@ _CACHE_PREFIX = "signal_radar"
 # all 段 = 快照存全部在场信号、按出现时间排（all1，2026-10-01 起；此前只存综合分前 N），
 # 旧版 App 的前 N 在接口层按旧综合分现截（legacy_view）。改权重、排雷或取舍规则时同步升版。
 # all2 = 行业标签严格按 GICS 一级行业（半导体并回科技，快照里旧的 semiconductors 标签随之失效）。
+# all3 = A 股 / 港股也打行业标签（东财行业 → GICS 一级），旧的无标签快照随之失效。
 # win2y_wu1y = 日线固定起点（两年）之前再预热一年（chan/window.canonical_daily_fetch_start），结构整体变一次。
 def _mode_ns(mode: str) -> str:
-    return f"{get_policy(mode).version}:shape5:quant_mark2:all2:win2y_wu1y"
+    return f"{get_policy(mode).version}:shape5:quant_mark2:all3:win2y_wu1y"
 
 
 # czsc 形态过滤（chan/shape_filters：同向假突破 / 窄幅震荡 / 低波动）暂停应用，代码与测试保留。
