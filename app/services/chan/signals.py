@@ -17,7 +17,7 @@ from app.services.chan.divergence import (
     classify_strength,
     force_text,
 )
-from app.services.chan.i18n import is_en
+from app.services.chan.i18n import is_en, pick
 from app.services.chan.leg_metric import DivergenceMetric, LegForce, get_metric, leg_force, macd_area
 from app.services.chan.pivot import Pivot
 from app.services.chan.stroke import Stroke
@@ -620,3 +620,34 @@ def generate_loose_signals(
     ]
     kept.sort(key=lambda x: (x.time, x.type))
     return kept
+
+
+def leg_divergence_marks(*groups: list[Signal]) -> dict[str, DivergenceResult]:
+    """一类趋势背驰（c 段对 b 段，MACD 面积）：{c 段终点那一笔的 end_time: 背驰结果}。
+
+    groups 按优先级从高到低传（已成立的买卖点在前、待确认候选在后）。没有 b 段终点（笔级退回判定）的一类不算；
+    同一个 b 段终点只留一条：高优先级组优先，同组取时间最新的。
+    """
+    best: dict[tuple[str, str], tuple[tuple[int, str], str, DivergenceResult]] = {}
+    for rank, sigs in zip(range(len(groups), 0, -1), groups, strict=True):
+        for sig in sigs:
+            dv = sig.divergence
+            if not (sig.type in ("buy1", "sell1") and dv is not None and dv.is_diverged
+                    and dv.b_end_time and dv.b_end_price is not None):
+                continue
+            key = (sig.type, dv.b_end_time)
+            cand = ((rank, sig.time), sig.time, dv)
+            if key not in best or cand[0] > best[key][0]:
+                best[key] = cand
+    return {time: dv for _, time, dv in best.values()}
+
+
+def unify_stroke_divergences(
+    strokes: list[Stroke], marks: dict[str, DivergenceResult], lang: str,
+) -> list[DivergenceResult]:
+    """与 strokes 按下标平行的背驰表，只认一类趋势背驰（与图上标注、一类买卖点同一口径）。"""
+    none = DivergenceResult(
+        is_diverged=False, type="none", strength="none", price_ratio=1.0,
+        description=pick(lang, "无背驰", "No divergence"),
+    )
+    return [marks.get(st.end_time, none) for st in strokes]
