@@ -189,14 +189,23 @@ struct RadarOrbitSpacingTests {
     }
 
     static func testCrowdScale() {
-        // 稀疏：不缩
-        assert(RadarOrbitSpacing.crowdScale(diameters: [60, 80], width: 400, height: 320) == 1, "不拥挤不缩")
+        // 稀疏：放大，最多 1.3 倍
+        assert(RadarOrbitSpacing.crowdScale(diameters: [60, 80], width: 400, height: 320) == 1.3, "稀疏日放大到上限")
+        let part = RadarOrbitSpacing.crowdScale(diameters: Array(repeating: 70.0, count: 5), width: 400, height: 320)
+        assert(part > 1 && part < 1.3, "稍稀疏时按面积连续放大")
+        // 适中：既不放大也不缩
+        assert(RadarOrbitSpacing.crowdScale(diameters: Array(repeating: 70.0, count: 8), width: 400, height: 320) == 1, "适中不缩放")
+        assert(RadarOrbitSpacing.crowdScale(diameters: [], width: 400, height: 320) == 1, "无气泡不放大")
         // 拥挤：缩放后总面积恰好等于上限比例
         let ds = Array(repeating: 110.0, count: 12)
-        let k = RadarOrbitSpacing.crowdScale(diameters: ds, width: 400, height: 320, maxFill: 0.5)
+        let k = RadarOrbitSpacing.crowdScale(diameters: ds, width: 400, height: 320, maxFill: 0.5, minScale: 0)
         assert(k < 1, "拥挤时缩小")
         let fill = ds.map { Double.pi * pow($0 * k, 2) / 4 }.reduce(0, +) / (400 * 320)
         assert(abs(fill - 0.5) < 1e-9, "缩到上限比例")
+        // 极度拥挤：缩放不低于下限，大小不随信号数无限缩小
+        let many = Array(repeating: 86.0, count: 40)
+        let floor = RadarOrbitSpacing.crowdScale(diameters: many, width: 289, height: 260)
+        assert(floor == 0.85, "拥挤缩放有下限 0.85")
         assert(RadarOrbitSpacing.crowdScale(diameters: [], width: 0, height: 0) == 1, "空画布不崩")
         print("RadarOrbitSpacing crowdScale 测试通过")
     }

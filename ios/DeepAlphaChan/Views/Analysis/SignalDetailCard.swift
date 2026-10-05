@@ -9,10 +9,14 @@ struct SignalDetailCard: View {
 
     @State private var expanded = false
 
-    private var directionColor: Color { signal.isBuy ? Theme.up : Theme.down }
+    // 待确认候选不带买卖方向色（与图上灰色虚线徽标一致）：红 / 绿只给已成立的买卖点
+    private var directionColor: Color {
+        signal.isCandidate ? Theme.textSecondary : (signal.isBuy ? Theme.up : Theme.down)
+    }
     private var strengthColor: Color {
-        SignalFormatting.radarColor(side: signal.isBuy ? "buy" : "sell",
-                                    depth: SignalFormatting.strengthDepth(signal.strength.rawValue))
+        signal.isCandidate ? Theme.textSecondary.opacity(0.7)
+            : SignalFormatting.radarColor(side: signal.isBuy ? "buy" : "sell",
+                                          depth: SignalFormatting.strengthDepth(signal.strength.rawValue))
     }
 
     var body: some View {
@@ -59,9 +63,18 @@ struct SignalDetailCard: View {
             Text(String(format: "%.2f", signal.price))
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(Theme.textSecondary)
-            Text(signal.displayTime)
-                .font(.caption2)
-                .foregroundStyle(Theme.textSecondary)
+            // 出现日（笔走完确认的那天）与图上标记（所在笔的极值 K 线）可能差好几周：
+            // 两个日期不同时折叠行就都写出来，对得上图，不必展开才知道
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(signal.displayTime)
+                    .font(.caption2)
+                    .foregroundStyle(Theme.textSecondary)
+                if signal.displayTime != signal.time {
+                    Text(L("图上 %@", signal.time))
+                        .font(.system(size: 9))
+                        .foregroundStyle(Theme.textSecondary.opacity(0.7))
+                }
+            }
             if !isStatic {
                 Image(systemName: expanded ? "chevron.up" : "chevron.down")
                     .font(.system(size: 9, weight: .semibold))

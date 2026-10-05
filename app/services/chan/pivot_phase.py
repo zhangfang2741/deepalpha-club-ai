@@ -294,9 +294,17 @@ def _reason(phase: Phase, direction: str | None, pivot: "Pivot", last_price: flo
             tail_zh = f"确认{kind}{side}。"
             tail_en = f" — type-{kind_en} {side_en} confirmed."
         else:
-            # 结构上像二/三类，但买卖点判定没有在这一笔上给出对应信号，不能说「确认」
-            tail_zh = f"结构上接近{kind}{side}形态，但尚未出现对应的{kind}{side}信号。"
-            tail_en = f" — shaped like a type-{kind_en} {side_en}, but no type-{kind_en} {side_en} signal has appeared."
+            # 结构上像二/三类，但买卖点判定没有在这一笔上给出对应信号，不能说「确认」。
+            # 也不写「接近三卖形态」：没有信号时页面上不该出现「三卖」当成已有的东西（红 / 绿只给已成立的买卖点），
+            # 改成说清成立条件——这一笔走完且满足什么，才会成为买卖点
+            if pair.outcome == "type3":
+                cond_zh, cond_en = "仍没有回到中枢", "still hasn't returned to the pivot"
+            else:
+                edge_zh = "中枢下沿" if up else "中枢上沿"
+                cond_zh = f"仍未{'跌破' if up else '升破'}{edge_zh}"
+                cond_en = f"still hasn't {'broken below' if up else 'broken above'} the far edge of the pivot"
+            tail_zh = f"这一笔走完后{cond_zh}，才会成为{kind}{side}。"
+            tail_en = f" — if this leg completes and {cond_en}, it becomes a type-{kind_en} {side_en}."
         verb, verb_en = ("回落", "Retest") if up else ("反弹", "Pullback")
         extreme = "低点" if up else "高点"
         if pair.outcome == "type3":

@@ -192,11 +192,24 @@ extension RadarOrbitSpacing {
     /// 0.5（气泡总面积占画布一半）几乎天天顶格生效——气泡感觉总是偏大。收紧到 0.32，10 个
     /// 气泡的常见场景下线性尺寸约缩小 20%（sqrt(0.32/0.5)），留出更多空白，同一二三类的
     /// 相对大小关系不变。
-    static func crowdScale(diameters: [Double], width: Double, height: Double, maxFill: Double = 0.7) -> Double {
+    ///
+    /// 2026-10-04 加下限 minScale（默认 0.85）：标普 500 一天 25~41 个信号，纳指 100 只有 3~9 个，
+    /// 没有下限时标普的气泡被缩到 0.58~0.67 倍（三类约 53pt），纳指却是原尺寸 86pt，同一类信号两个指数大小不一致。
+    /// 有下限后信号再多气泡也不会小于基准的 85%，放不下的折叠到「另有 N 个 · 查看全部」。
+    ///
+    /// 2026-10-05 稀疏放大：气泡总面积不到画布的 growFill（默认 0.2）时放大到刚好占满 growFill，最多 maxGrow（默认 1.3）倍。
+    /// 一天只有 3~4 个信号且都是一类 / 旧信号时，气泡只有 44~54pt、画布大片空着；放大后一二三类的大小比例不变，
+    /// 稀疏日整体大一些，信号多起来（面积 ≥ growFill）自然回到 1，再多才按上面的规则缩小。
+    static func crowdScale(
+        diameters: [Double], width: Double, height: Double, maxFill: Double = 0.7, minScale: Double = 0.85,
+        growFill: Double = 0.2, maxGrow: Double = 1.3
+    ) -> Double {
         let canvas = width * height
         guard canvas > 0 else { return 1 }
         let fill = diameters.map { Double.pi * $0 * $0 / 4 }.reduce(0, +) / canvas
-        return fill > maxFill ? (maxFill / fill).squareRoot() : 1
+        if fill > maxFill { return max(minScale, (maxFill / fill).squareRoot()) }
+        guard fill > 0, fill < growFill else { return 1 }
+        return min(maxGrow, (growFill / fill).squareRoot())
     }
 
     /// 画布上不能被气泡覆盖的矩形区域（左上角坐标 + 宽高），如叠在雷达上的指数切换按钮。

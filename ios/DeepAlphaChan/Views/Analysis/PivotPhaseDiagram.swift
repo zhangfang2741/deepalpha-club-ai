@@ -360,9 +360,14 @@ struct PivotPhaseDiagram: View {
             if showsDetail {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
-                    Text(phase.phaseLabel)
-                        .font(AnalysisType.title)
-                        .foregroundStyle(Theme.phaseColor(phase: phase.phase, direction: phase.direction))
+                    HStack(spacing: 4) {
+                        if let arrow = Theme.phaseArrow(direction: phase.direction) {
+                            Image(systemName: arrow).font(.system(size: 13, weight: .heavy))
+                        }
+                        Text(phase.phaseLabel)
+                    }
+                    .font(AnalysisType.title)
+                    .foregroundStyle(Theme.phaseColor(phase: phase.phase, direction: phase.direction))
                     Text(L("当前"))
                         .font(.caption2.bold())
                         .foregroundStyle(Theme.background)

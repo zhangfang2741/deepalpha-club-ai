@@ -36,16 +36,24 @@ enum Theme {
     /// 滚动内容容器的垂直内边距（首尾留白，与卡片间距一致）。
     static let contentVInset: CGFloat = 14
 
-    /// 中枢阶段沿用结构色，避免线段橙或涨跌绿被误读为进度状态。
-    /// 自选、详情和阶段讲解共用；方向与信号强弱另行表达。
-    /// 中枢阶段的配色：自选列表的状态标签、详情页的阶段标题、判定图的当前节点共用，
-    /// 三处必须一致。按多空倾向配色，与图上买卖点同一套（红=偏多 / 绿=偏空）：
-    /// direction 是离开中枢的方向——向上离开、确认三买偏多；但背驰转折时向上对应顶背驰，偏空。
-    /// 没有方向（中枢形成 / 震荡）为中性，用正文色。不再用中枢紫：和图上的中枢色块撞色。
+    /// 中枢阶段的配色：自选列表的状态标签、详情页的阶段标题、判定图的当前节点共用，三处必须一致。
+    ///
+    /// 2026-10-05 起一律用中性主题蓝，**不再按多空倾向用红 / 绿**：红 / 绿在本 App 只表示已成立的买卖点。
+    /// 以前阶段标题也按偏多 / 偏空着红绿，同一页里「红色一买 + 绿色阶段标题 + 绿色待确认三卖」会被读成又买又卖
+    /// （如 APP 2026-09-01：一买已成立，阶段「反弹未升回中枢」只是结构描述）。
+    /// 方向改用箭头表达（`phaseArrow`），参数保留以便三处调用方不用改。
     static func phaseColor(phase: String?, direction: String?) -> Color {
-        guard let direction, direction == "up" || direction == "down" else { return Theme.textPrimary }
-        let bullish = (direction == "up") != (phase == "divergence_turn")
-        return bullish ? Theme.up : Theme.down
+        Theme.accent
+    }
+
+    /// 阶段方向箭头的 SF Symbol 名：离开中枢的方向（价格向上 / 向下），不带偏多偏空含义。
+    /// 没有方向（中枢形成 / 震荡）返回 nil。
+    static func phaseArrow(direction: String?) -> String? {
+        switch direction {
+        case "up": return "arrow.up"
+        case "down": return "arrow.down"
+        default: return nil
+        }
     }
 
     /// 「当前」标记的颜色（判定图节点角标、详情卡片标题旁）：用中性主题蓝，

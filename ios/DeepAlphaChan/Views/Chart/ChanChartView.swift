@@ -593,7 +593,9 @@ struct ChanChartView: View {
             let compactPrefix = Localized.language() == .english
                 ? (sig.isBuy ? "B" : "S")
                 : (sig.isBuy ? "买" : "卖")
-            let text = compact ? compactPrefix + n : sig.label
+            var text = compact ? compactPrefix + n : sig.label
+            // 待确认候选前缀「待」，和已成立的买卖点（同样叫「卖 3」/ 三卖）一眼分开
+            if sig.isCandidate { text = (Localized.language() == .english ? "? " : "待") + text }
             let resolved = ctx.resolve(
                 Text(text).font(.system(size: 9, weight: .bold)).foregroundColor(.white))
             let textSize = resolved.measure(in: CGSize(width: 200, height: 40))
@@ -636,11 +638,11 @@ struct ChanChartView: View {
             arrow.closeSubpath()
             let pill = Path(roundedRect: badgeRect, cornerRadius: badgeH / 2)
             if sig.isCandidate {
-                // 待确认候选（严格模式，最后一笔还在走、不算买卖点）：与雷达同一画法——
-                // 灰底 + 买卖方向色虚线边框
+                // 待确认候选（严格模式，最后一笔还在走、不算买卖点）：灰底 + 灰色虚线边框，文字前缀「待」。
+                // 不再带买卖方向色：绿色虚线「卖 3」放在红色「买 1」旁边，会被读成又买又卖（APP 2026-09-01）
                 ctx.fill(arrow, with: .color(Theme.textSecondary.opacity(0.6)))
                 ctx.fill(pill, with: .color(Theme.textSecondary.opacity(0.35)))
-                ctx.stroke(pill, with: .color(color), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                ctx.stroke(pill, with: .color(Theme.textSecondary), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
             } else {
                 ctx.fill(arrow, with: .color(color))
                 ctx.fill(pill, with: .color(color))
