@@ -11,6 +11,13 @@ struct ResultDetailView: View {
     @EnvironmentObject private var orientation: AppOrientation
     @EnvironmentObject private var store: StoreManager
 
+    /// 指定打开时停在哪个分段（不传 = 缠论结构）：雷达「基本面研究」tab 点气泡直接进基本面研究分段。
+    init(analysis: ChanAnalysis, vm: ChanViewModel, initialSegment: Segment? = nil) {
+        self.analysis = analysis
+        self._vm = ObservedObject(wrappedValue: vm)
+        if let initialSegment { self._segment = State(initialValue: initialSegment) }
+    }
+
     @State private var showFullscreenChart = false
 
     /// 页面可视宽度，取自包在 ScrollView 外面的 GeometryReader。

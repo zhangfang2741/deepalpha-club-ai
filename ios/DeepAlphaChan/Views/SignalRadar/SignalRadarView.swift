@@ -76,6 +76,8 @@ struct SignalRadarView: View {
     @StateObject private var gradeVM = GradeEventsViewModel()
     /// 基本面 tab 里「另有 N 个 · 查看全部」打开的半屏。
     @State private var showGradeAll = false
+    /// 详情页打开时停在哪个分段：基本面 tab 点气泡 → 基本面研究；缠论 tab → nil（缠论结构）。
+    @State private var detailSegment: ResultDetailView.Segment?
 
     var body: some View {
         NavigationStack {
@@ -100,6 +102,8 @@ struct SignalRadarView: View {
             }
             // 行业强弱跟着所选日走：雷达翻到哪天，扇区就按哪天收盘的强弱排
             .task(id: vm.sectorBoardKey) { await vm.loadSectorBoardIfNeeded() }
+            // 行业胶囊的筛选同步给基本面 tab（两个 tab 共用同一排行业胶囊）
+            .onChange(of: vm.sectorFilter, initial: true) { _, key in gradeVM.sectorFilter = key }
             // 切到基本面 tab、或在 tab 里换市场 / 指数时拉评级升降
             .task(id: "\(radarTab.rawValue)|\(vm.market.rawValue)|\(vm.activeUniverseKey)|\(store.isPremium)") {
                 if radarTab == .fundamental, store.isPremium {
@@ -127,7 +131,7 @@ struct SignalRadarView: View {
             .overlay { if chanVM.isLoading { analysisLoadingOverlay } }
             .navigationDestination(isPresented: $showResults) {
                 if let analysis = chanVM.analysis {
-                    ResultDetailView(analysis: analysis, vm: chanVM)
+                    ResultDetailView(analysis: analysis, vm: chanVM, initialSegment: detailSegment)
                         .environmentObject(orientation)
                 }
             }
@@ -168,7 +172,10 @@ struct SignalRadarView: View {
                 }
             }
 
-            tabPicker
+            // 雷达画布里有下拉框（左上角）时不再单占一行；没有画布（加载 / 出错 / 锁定等）时用一行兜底，保证随时能切回
+            if !showsCanvas {
+                HStack { tabMenu; Spacer() }
+            }
 
             if radarTab == .fundamental {
                 fundamentalContent
@@ -206,27 +213,36 @@ struct SignalRadarView: View {
 
     // MARK: - 并列 tab
 
-    /// 下划线式 tab（文字 + 选中项下方一条蓝线），和上面行业胶囊、日期格子的圆角块样式区分开。
-    private var tabPicker: some View {
-        HStack(spacing: 28) {
+    /// 画布左上角的下拉框：切换「缠论 / 基本面研究」。放进画布里（而不是画布上方单占一行），
+    /// 和行业胶囊、日期格都不在同一水平带上，不会混成一类控件。
+    private var tabMenu: some View {
+        Menu {
             ForEach(RadarTab.allCases) { tab in
-                let selected = tab == radarTab
                 Button { radarTab = tab } label: {
-                    VStack(spacing: 5) {
-                        Text(tab.title)
-                            .font(.system(size: 16, weight: selected ? .bold : .regular))
-                            .foregroundColor(selected ? Theme.textPrimary : Theme.textSecondary)
-                        Capsule()
-                            .fill(selected ? Theme.accent : Color.clear)
-                            .frame(height: 3)
-                    }
-                    .fixedSize()
+                    if tab == radarTab { Label(tab.title, systemImage: "checkmark") } else { Text(tab.title) }
                 }
-                .buttonStyle(.plain)
             }
-            Spacer()
+        } label: {
+            HStack(spacing: 4) {
+                Text(radarTab.title).font(.system(size: 12, weight: .semibold))
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold))
+            }
+            .foregroundColor(Theme.textPrimary)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(Theme.surface.opacity(0.92), in: Capsule())
+            .overlay(Capsule().stroke(Theme.border, lineWidth: 1))
         }
-        .padding(.horizontal, 4)
+    }
+
+    /// 当前是否画着雷达画布（画布里自带下拉框；没有画布时才在上方补一行）。
+    private var showsCanvas: Bool {
+        switch radarTab {
+        case .chan:
+            return !vm.isScanning && !vm.isComputingInBackground && vm.errorMessage == nil
+                && !vm.days.isEmpty && !needsConsent
+        case .fundamental:
+            return store.isPremium && consent.hasAgreed && !gradeVM.hasError && !gradeVM.days.isEmpty
+        }
     }
 
     /// 基本面研究 tab：会员功能（与缠论雷达真实数据同一道门槛，未订阅点按弹付费墙），同样要先同意免责声明。
@@ -245,7 +261,7 @@ struct SignalRadarView: View {
         } else {
             GradeEventsView(vm: gradeVM, universeName: currentUniverseName, sectorName: { vm.sectorName($0) },
                             showAll: $showGradeAll,
-                            onOpen: { symbol, name in openSymbol(symbol, name: name) }) {
+                            onOpen: { symbol, name in openSymbol(symbol, name: name, segment: .quant) }) {
                 bubbleField
             }
         }
@@ -379,7 +395,8 @@ struct SignalRadarView: View {
     /// 未订阅会员时（含点开免费预览那一天）这次分析跟分析 Tab 一样走每日免费额度
     /// （usage.canUseFree/recordUse），额度用尽弹付费墙，不能绕开——免费预览只是
     /// 多给了一天可点的真实信号，不是无限次分析的后门。
-    private func openSymbol(_ symbol: String, name: String? = nil) {
+    private func openSymbol(_ symbol: String, name: String? = nil, segment: ResultDetailView.Segment? = nil) {
+        detailSegment = segment
         // 示例股（英伟达/茅台/腾讯）不扣额度，见 AppConfig.sampleSymbols
         let chargesQuota = !store.isSubscribed && !AppConfig.isSampleSymbol(market: vm.market, symbol: symbol)
         if chargesQuota && !usage.canUseFree(symbol: symbol) {
@@ -515,8 +532,8 @@ struct SignalRadarView: View {
 
     /// 环上时间标签：当日 / 3天内 / 7天内，小胶囊、画在气泡上层（位置见 ringLabelBoxes，摆位已避开）。
     private func ringLabels(width w: Double, height h: Double) -> some View {
-        ForEach(Array(zip(SignalRadarView.ringSpecs, SignalRadarView.ringLabelBoxes(width: w, height: h))), id: \.0.label) { spec, box in
-            Text(spec.label)
+        ForEach(Array(zip(SignalRadarView.ringSpecs.indices, SignalRadarView.ringLabelBoxes(width: w, height: h, labels: gradeRingLabels))), id: \.0) { i, box in
+            Text(gradeRingLabels?[i] ?? SignalRadarView.ringSpecs[i].label)
                 .font(.system(size: 9, weight: .medium))
                 .foregroundColor(Theme.textSecondary)
                 .frame(width: CGFloat(box.width), height: CGFloat(box.height))
@@ -549,7 +566,7 @@ struct SignalRadarView: View {
                 signals: signals, candidates: candidates, sectorMode: sectorMode, order: order,
                 rs: order.map { k in board?.sectors.first(where: { $0.key == k })?.rsVsMarket },
                 names: order.map { vm.sectorName($0) }, dayDate: dayDate, width: w, height: h,
-                avoid: avoid.map { [$0.x, $0.y, $0.width, $0.height] })
+                avoid: avoid.map { [$0.x, $0.y, $0.width, $0.height] }, gradeRings: gradeRingLabels)
             let field = layoutCache.value(for: key) {
                 sectorMode
                     ? SignalRadarView.layoutSectorField(
@@ -557,7 +574,8 @@ struct SignalRadarView: View {
                         rsLookup: { k in board?.sectors.first(where: { $0.key == k })?.rsVsMarket },
                         dayDate: dayDate, width: w, height: h, avoid: avoid)
                     : SignalRadarView.layoutRingField(
-                        signals: signals + candidates, dayDate: dayDate, width: w, height: h, avoid: avoid)
+                        signals: signals + candidates, dayDate: dayDate, width: w, height: h, avoid: avoid,
+                        gradeRings: gradeRingLabels)
             }
             ZStack {
                 if sectorMode {
@@ -584,11 +602,12 @@ struct SignalRadarView: View {
                             color: SignalRadarView.bubbleColor(
                                 side: layout.signal.side,
                                 depth: SignalFormatting.strengthDepth(layout.signal.signalStrength)),
-                            isNew: layout.signal.date == dayDate,
+                            isNew: radarTab == .chan && layout.signal.date == dayDate,
                             isCandidate: candidateIDs.contains(layout.signal.id),
                             marksConfirmed: marksConfirmed,
                             // 点气泡直接进分析详情页（不再先弹底部面板）
-                            onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name) }
+                            onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name,
+                                                 segment: radarTab == .fundamental ? .quant : nil) }
                         )
                         // 气泡任何时候都不做透明处理：刷新完直接出现，不淡入
                         .transition(.identity)
@@ -628,6 +647,7 @@ struct SignalRadarView: View {
             )
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(alignment: .topLeading) { tabMenu.padding(10) }
     }
 
     /// 雷达画布是否按行业分扇区。**当前关闭**：顶部漏斗已经按「大盘环境 → 最强行业 → 当日信号」
@@ -640,6 +660,11 @@ struct SignalRadarView: View {
         radarTab == .fundamental ? gradeVM.radarDay : vm.selectedDay
     }
 
+    /// 基本面 tab 的环文字（由内向外）：环 = 新等级；缠论 tab 为 nil（环 = 距查看日的交易日数，文字见 ringSpecs）。
+    private var gradeRingLabels: [String]? {
+        radarTab == .fundamental ? ["A", "B", L("C 及以下")] : nil
+    }
+
     /// 画布之外被折叠的只数（基本面 tab 前 10 只之外的）。
     private var hiddenExtra: Int { radarTab == .fundamental ? gradeVM.hiddenCount : 0 }
 
@@ -647,9 +672,11 @@ struct SignalRadarView: View {
         SignalRadarView.sectorFieldEnabled && vm.selectedDay?.hasSectorData == true
     }
 
-    /// 叠在雷达上的控件占的区域，气泡摆位时避开。指数切换器已并进顶部市场分段条，画布里没有叠加控件，所以为空。
-    /// （以前是左上角固定预留 150 × 40：实测按钮大小会在量出来后让气泡重摆、跳一下。）
-    private func fieldObstacles(width w: Double) -> [RadarOrbitSpacing.Obstacle] { [] }
+    /// 叠在雷达上的控件占的区域，气泡摆位时避开：左上角的 tab 下拉框，固定预留一块（不实测按钮大小——
+    /// 以前实测会在量出来后让气泡重摆、跳一下；固定值只取决于画布，不会跳）。
+    private func fieldObstacles(width w: Double) -> [RadarOrbitSpacing.Obstacle] {
+        [.init(x: 10, y: 10, width: 120, height: 32)]
+    }
 
     // MARK: - 扇区（行业）
 
@@ -902,6 +929,7 @@ struct SignalRadarView: View {
         let width: Double
         let height: Double
         let avoid: [[Double]]
+        let gradeRings: [String]?
     }
 
     /// 只缓存最近一次摆位。引用类型、不发布变化：写入缓存不会再触发一次刷新。
@@ -949,7 +977,7 @@ struct SignalRadarView: View {
     /// 外圈避开里圈已摆好的；某圈带放不下的计入「另有 N 个」（信号数 ≤ ringShowAllLimit 时例外：放宽圈带、缩小气泡也要全画出来）。后端已按出现时间从新到旧排好。
     private static func layoutRingField(
         signals: [RadarSignal], dayDate: String, width w: Double, height h: Double,
-        avoid: [RadarOrbitSpacing.Obstacle]
+        avoid: [RadarOrbitSpacing.Obstacle], gradeRings: [String]? = nil
     ) -> FieldLayout {
         guard !signals.isEmpty else { return FieldLayout(bubbles: []) }
         let shown = Array(signals.prefix(ringFieldCap))
@@ -958,9 +986,10 @@ struct SignalRadarView: View {
         let (hRad, vRad) = fieldRadii(width: w, height: h)
 
         let maxDiameter = max(1, min(w, h) - 2 * RadarBubbleMetrics.edgePadding)
-        let bases = zip(shown, ages).map { diameter(forLevel: $0.level) * ringSizeFactor(forDaysAgo: $1) }
+        // 基本面 tab（gradeRings 非空）：环 = 新等级、大小 = 变档数，不再按「越久越小」缩放
+        let bases = zip(shown, ages).map { diameter(forLevel: $0.level) * (gradeRings == nil ? ringSizeFactor(forDaysAgo: $1) : 1) }
         let obstacles = avoid.map { SectorRadarLayout.Rect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) }
-            + ringLabelBoxes(width: w, height: h)
+            + ringLabelBoxes(width: w, height: h, labels: gradeRings)
 
         // 每圈带的圆心范围：在两条环线之间、略收窄，气泡看得出落在哪一圈（不压在环线正中）
         let bands: [ClosedRange<Double>] = [0.0...0.27, 0.42...0.62, 0.76...1.0]
@@ -1005,10 +1034,10 @@ struct SignalRadarView: View {
     }
 
     /// 环上时间标签（当日 / 3天内 / 7天内）的位置：各环正上方。标签画在气泡上层，摆位时当禁区避开。
-    static func ringLabelBoxes(width w: Double, height h: Double) -> [SectorRadarLayout.Rect] {
+    static func ringLabelBoxes(width w: Double, height h: Double, labels: [String]? = nil) -> [SectorRadarLayout.Rect] {
         let (_, vRad) = fieldRadii(width: w, height: h)
-        return ringSpecs.map { spec in
-            let lw = labelWidth(spec.label) - 2
+        return ringSpecs.enumerated().map { i, spec in
+            let lw = labelWidth(labels?[i] ?? spec.label) - 2
             return SectorRadarLayout.Rect(x: w / 2 - lw / 2, y: h / 2 - vRad * spec.scale - ringLabelHeight / 2,
                                           width: lw, height: ringLabelHeight)
         }

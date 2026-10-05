@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 雷达「基本面研究」tab 的外框：概览行 + 雷达画布（由 SignalRadarView 传入，与缠论雷达同一块画布：多环、浮动动画、摆位）
 /// + 图例 + 日期轨。画布里每个气泡 = 选中日在场的一只评级升降股票：代码 + 名称 + ▲/▼ 变档数；
-/// 升档红、降档绿（同缠论买卖点色），颜色越深变档越多，气泡越大新等级越高，越靠中心越新。
+/// 升档红、降档绿（同缠论买卖点色）；环 = 新等级（A / B / C 及以下，越靠中心评级越高）；颜色越深、气泡越大变档越多。
 struct GradeEventsView<Field: View>: View {
     @ObservedObject var vm: GradeEventsViewModel
     let universeName: String
@@ -15,9 +15,11 @@ struct GradeEventsView<Field: View>: View {
 
     /// 在「查看全部」里点了某一行：等面板收起后再打开个股。
     @State private var pending: GradeEvent?
+    @State private var showInfo = false
 
     var body: some View {
-        VStack(spacing: 10) {
+        // 行间距、行高、底部免责声明都与缠论雷达（SignalRadarView.radarContent）保持一致，两个 tab 的画布高度才一样
+        VStack(spacing: 12) {
             if vm.isLoading && vm.response == nil {
                 Spacer()
                 ProgressView()
@@ -25,12 +27,14 @@ struct GradeEventsView<Field: View>: View {
             } else if vm.hasError {
                 message(L("评级数据暂时读取失败，稍后再试"))
             } else if vm.days.isEmpty {
-                message(L("这个范围最近没有评级升降"))
+                message(L("这个范围最近没有评级升降。评级历史需要至少两个评级日才能比较，刚上线的市场或节假日期间会暂时没有。"))
             } else {
                 summaryRow
                 field()
                 legend
                 dayRail
+                Spacer(minLength: 0)
+                disclaimer
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -47,13 +51,13 @@ struct GradeEventsView<Field: View>: View {
 
     /// 与缠论雷达的 metaRow 同一位置：指数名 + 在场的升降只数。
     private var summaryRow: some View {
-        let all = vm.windowEvents
+        let all = vm.dayEvents
         return HStack(spacing: 8) {
             Text(L("%@ · 综合评级升降", universeName))
                 .font(.footnote).foregroundColor(Theme.textSecondary)
             Spacer()
-            Text(L("%lld 升档", all.filter { $0.event.isUp }.count)).foregroundColor(Theme.up)
-            Text(L("%lld 降档", all.filter { !$0.event.isUp }.count)).foregroundColor(Theme.down)
+            Text(L("%lld 升档", all.filter(\.isUp).count)).foregroundColor(Theme.up)
+            Text(L("%lld 降档", all.filter { !$0.isUp }.count)).foregroundColor(Theme.down)
         }
         .font(.footnote)
     }
@@ -71,11 +75,52 @@ struct GradeEventsView<Field: View>: View {
         HStack(spacing: 14) {
             legendDot(Theme.up, L("升档"))
             legendDot(Theme.down, L("降档"))
-            Text(L("越靠中心越新 · 颜色越深变档越多 · 气泡越大新等级越高"))
-                .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
+            Text(L("越靠中心评级越高 · 颜色越深、气泡越大变档越多"))
+                .font(.system(size: 10)).foregroundColor(Theme.textSecondary)
                 .lineLimit(1).minimumScaleFactor(0.8)
-            Spacer()
+            Spacer(minLength: 4)
+            Button { showInfo = true } label: {
+                Image(systemName: "questionmark.circle")
+                    .font(.system(size: 15))
+                    .foregroundColor(Theme.textSecondary)
+            }
+            .accessibilityLabel(L("算法说明"))
+            .sheet(isPresented: $showInfo) { infoSheet }
         }
+    }
+
+    /// 与缠论雷达底部同一位置、同一字号的一行说明。
+    private var disclaimer: some View {
+        Text(L("评级由量化指标计算，仅为孤立观测，不构成投资建议。"))
+            .font(.caption2)
+            .foregroundColor(Theme.textSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 4)
+    }
+
+    /// 图例旁问号：这张雷达怎么看。
+    private var infoSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach([
+                        L("范围：当前所选指数的成分股。每只股票每天有一个综合等级（A+ 到 F 共 13 档），和上一个评级日相比变了几档，就是一条升降。"),
+                        L("环：变动之后的新等级。最里圈 A 段（A+ / A / A-），中间圈 B 段，最外圈 C 及以下。"),
+                        L("颜色：红 = 升档，绿 = 降档；颜色越深、气泡越大，变的档数越多。气泡最后一行是「▲ / ▼ 变档数」。"),
+                        L("数量：只画当天变档最多的前 10 只，其余点「另有 N 个 · 查看全部」。"),
+                        L("评级升降只是事实陈列，不代表后续涨跌，不构成投资建议。")
+                    ], id: \.self) { line in
+                        Text(line).font(.subheadline).foregroundColor(Theme.textPrimary)
+                    }
+                }
+                .padding(16)
+            }
+            .background(Theme.background)
+            .navigationTitle(L("算法说明"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("完成")) { showInfo = false } } }
+        }
+        .presentationDetents([.medium, .large])
     }
 
     private func legendDot(_ color: Color, _ text: String) -> some View {
@@ -129,11 +174,11 @@ struct GradeEventsView<Field: View>: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 8) {
-                    ForEach(vm.windowEvents, id: \.event.id) { item in
+                    ForEach(vm.dayEvents) { e in
                         Button {
-                            pending = item.event
+                            pending = e
                             showAll = false
-                        } label: { row(item.event) }
+                        } label: { row(e) }
                         .buttonStyle(.plain)
                     }
                 }
@@ -164,7 +209,7 @@ struct GradeEventsView<Field: View>: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(e.fromGrade) → \(e.toGrade)")
                     .font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.textPrimary)
-                Text((e.isUp ? L("升 %lld 档", e.steps) : L("降 %lld 档", e.steps)) + " · " + SignalRadarView.monthDay(e.date))
+                Text(e.isUp ? L("升 %lld 档", e.steps) : L("降 %lld 档", e.steps))
                     .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
             }
         }
