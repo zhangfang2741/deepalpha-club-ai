@@ -515,8 +515,8 @@ struct SignalRadarView: View {
 
     /// 环上时间标签：当日 / 3天内 / 7天内，小胶囊、画在气泡上层（位置见 ringLabelBoxes，摆位已避开）。
     private func ringLabels(width w: Double, height h: Double) -> some View {
-        ForEach(Array(zip(SignalRadarView.ringSpecs, SignalRadarView.ringLabelBoxes(width: w, height: h))), id: \.0.label) { spec, box in
-            Text(spec.label)
+        ForEach(Array(zip(SignalRadarView.ringSpecs.indices, SignalRadarView.ringLabelBoxes(width: w, height: h, labels: gradeRingLabels))), id: \.0) { i, box in
+            Text(gradeRingLabels?[i] ?? SignalRadarView.ringSpecs[i].label)
                 .font(.system(size: 9, weight: .medium))
                 .foregroundColor(Theme.textSecondary)
                 .frame(width: CGFloat(box.width), height: CGFloat(box.height))
@@ -549,7 +549,7 @@ struct SignalRadarView: View {
                 signals: signals, candidates: candidates, sectorMode: sectorMode, order: order,
                 rs: order.map { k in board?.sectors.first(where: { $0.key == k })?.rsVsMarket },
                 names: order.map { vm.sectorName($0) }, dayDate: dayDate, width: w, height: h,
-                avoid: avoid.map { [$0.x, $0.y, $0.width, $0.height] })
+                avoid: avoid.map { [$0.x, $0.y, $0.width, $0.height] }, gradeRings: gradeRingLabels)
             let field = layoutCache.value(for: key) {
                 sectorMode
                     ? SignalRadarView.layoutSectorField(
@@ -557,7 +557,8 @@ struct SignalRadarView: View {
                         rsLookup: { k in board?.sectors.first(where: { $0.key == k })?.rsVsMarket },
                         dayDate: dayDate, width: w, height: h, avoid: avoid)
                     : SignalRadarView.layoutRingField(
-                        signals: signals + candidates, dayDate: dayDate, width: w, height: h, avoid: avoid)
+                        signals: signals + candidates, dayDate: dayDate, width: w, height: h, avoid: avoid,
+                        gradeRings: gradeRingLabels)
             }
             ZStack {
                 if sectorMode {
@@ -584,7 +585,7 @@ struct SignalRadarView: View {
                             color: SignalRadarView.bubbleColor(
                                 side: layout.signal.side,
                                 depth: SignalFormatting.strengthDepth(layout.signal.signalStrength)),
-                            isNew: layout.signal.date == dayDate,
+                            isNew: radarTab == .chan && layout.signal.date == dayDate,
                             isCandidate: candidateIDs.contains(layout.signal.id),
                             marksConfirmed: marksConfirmed,
                             // 点气泡直接进分析详情页（不再先弹底部面板）
@@ -638,6 +639,11 @@ struct SignalRadarView: View {
     /// 雷达画布当前画的那一天：缠论 tab = 选中日的买卖点；基本面 tab = 选中日在场的评级升降（同一块画布）。
     private var fieldDay: RadarDay? {
         radarTab == .fundamental ? gradeVM.radarDay : vm.selectedDay
+    }
+
+    /// 基本面 tab 的环文字（由内向外）：环 = 新等级；缠论 tab 为 nil（环 = 距查看日的交易日数，文字见 ringSpecs）。
+    private var gradeRingLabels: [String]? {
+        radarTab == .fundamental ? ["A", "B", L("C 及以下")] : nil
     }
 
     /// 画布之外被折叠的只数（基本面 tab 前 10 只之外的）。
@@ -902,6 +908,7 @@ struct SignalRadarView: View {
         let width: Double
         let height: Double
         let avoid: [[Double]]
+        let gradeRings: [String]?
     }
 
     /// 只缓存最近一次摆位。引用类型、不发布变化：写入缓存不会再触发一次刷新。
@@ -949,7 +956,7 @@ struct SignalRadarView: View {
     /// 外圈避开里圈已摆好的；某圈带放不下的计入「另有 N 个」（信号数 ≤ ringShowAllLimit 时例外：放宽圈带、缩小气泡也要全画出来）。后端已按出现时间从新到旧排好。
     private static func layoutRingField(
         signals: [RadarSignal], dayDate: String, width w: Double, height h: Double,
-        avoid: [RadarOrbitSpacing.Obstacle]
+        avoid: [RadarOrbitSpacing.Obstacle], gradeRings: [String]? = nil
     ) -> FieldLayout {
         guard !signals.isEmpty else { return FieldLayout(bubbles: []) }
         let shown = Array(signals.prefix(ringFieldCap))
@@ -958,9 +965,10 @@ struct SignalRadarView: View {
         let (hRad, vRad) = fieldRadii(width: w, height: h)
 
         let maxDiameter = max(1, min(w, h) - 2 * RadarBubbleMetrics.edgePadding)
-        let bases = zip(shown, ages).map { diameter(forLevel: $0.level) * ringSizeFactor(forDaysAgo: $1) }
+        // 基本面 tab（gradeRings 非空）：环 = 新等级、大小 = 变档数，不再按「越久越小」缩放
+        let bases = zip(shown, ages).map { diameter(forLevel: $0.level) * (gradeRings == nil ? ringSizeFactor(forDaysAgo: $1) : 1) }
         let obstacles = avoid.map { SectorRadarLayout.Rect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) }
-            + ringLabelBoxes(width: w, height: h)
+            + ringLabelBoxes(width: w, height: h, labels: gradeRings)
 
         // 每圈带的圆心范围：在两条环线之间、略收窄，气泡看得出落在哪一圈（不压在环线正中）
         let bands: [ClosedRange<Double>] = [0.0...0.27, 0.42...0.62, 0.76...1.0]
@@ -1005,10 +1013,10 @@ struct SignalRadarView: View {
     }
 
     /// 环上时间标签（当日 / 3天内 / 7天内）的位置：各环正上方。标签画在气泡上层，摆位时当禁区避开。
-    static func ringLabelBoxes(width w: Double, height h: Double) -> [SectorRadarLayout.Rect] {
+    static func ringLabelBoxes(width w: Double, height h: Double, labels: [String]? = nil) -> [SectorRadarLayout.Rect] {
         let (_, vRad) = fieldRadii(width: w, height: h)
-        return ringSpecs.map { spec in
-            let lw = labelWidth(spec.label) - 2
+        return ringSpecs.enumerated().map { i, spec in
+            let lw = labelWidth(labels?[i] ?? spec.label) - 2
             return SectorRadarLayout.Rect(x: w / 2 - lw / 2, y: h / 2 - vRad * spec.scale - ringLabelHeight / 2,
                                           width: lw, height: ringLabelHeight)
         }
