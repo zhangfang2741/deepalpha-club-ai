@@ -40,7 +40,6 @@ struct AnalystRatingTab: View {
             if let t = o.priceTarget { targetCard(t) }
             if let e = o.earnings, !e.quarters.isEmpty || e.next != nil { earningsCard(e) }
             if !o.recentGrades.isEmpty { gradesCard(o.recentGrades, title: o.recentGradesTitle) }
-            if let news = o.relatedNews, !news.isEmpty { newsCard(news) }
             Text(o.note).font(.caption2).foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center).frame(maxWidth: .infinity).padding(.top, 4)
         }
@@ -167,66 +166,6 @@ struct AnalystRatingTab: View {
                 }
             }
         }
-    }
-
-    // MARK: 相关报道（港股：没有研报原文，补充媒体对券商观点的报道）
-
-    private func newsCard(_ news: [AnalystOverview.RelatedNews]) -> some View {
-        card(title: L("相关报道"), trailing: nil) {
-            VStack(spacing: 0) {
-                ForEach(Array(news.enumerated()), id: \.element.id) { i, n in
-                    if i > 0 { Divider().background(Theme.border) }
-                    if let url = URL(string: n.url) {
-                        Button {
-                            openedReport = OpenedReport(title: n.source ?? L("相关报道"), url: url, isNews: true)
-                        } label: {
-                            HStack(spacing: 8) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(n.title).font(.footnote).foregroundStyle(Theme.textPrimary)
-                                        .multilineTextAlignment(.leading)
-                                    Text([n.date, n.source].compactMap { $0 }.joined(separator: " · "))
-                                        .font(.caption2).foregroundStyle(Theme.textSecondary)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Theme.textSecondary)
-                            }
-                            .padding(.vertical, 8).frame(minHeight: 44).contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                Text(L("媒体对券商观点的报道，不是研报原文；点开在 App 内阅读"))
-                    .font(.caption2).foregroundStyle(Theme.textSecondary).padding(.top, 6)
-            }
-        }
-    }
-
-    private func gradeRow(_ g: AnalystOverview.GradeChange, linked: Bool) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(g.firm).font(.footnote).foregroundStyle(Theme.textPrimary)
-                Text(g.priceTarget.map { L("%@ · 目标价 %@", g.date, String(format: "%.2f", $0)) } ?? g.date)
-                    .font(.caption2).foregroundStyle(Theme.textSecondary)
-                if let title = g.reportTitle, !title.isEmpty {
-                    Text(title).font(.caption2).foregroundStyle(Theme.textSecondary)
-                        .lineLimit(2).multilineTextAlignment(.leading)
-                }
-            }
-            Spacer(minLength: 8)
-            Text(g.actionLabel).font(.caption2)
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 5))
-                .foregroundStyle(actionColor(g.action))
-            Text(g.previousGradeLabel.map { $0 == g.newGradeLabel ? g.newGradeLabel : "\($0) → \(g.newGradeLabel)" }
-                 ?? g.newGradeLabel)
-                .font(.footnote.weight(.medium)).foregroundStyle(Theme.textPrimary)
-            if linked {
-                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Theme.textSecondary)
-            }
-        }
-        .padding(.vertical, 8)
-        .frame(minHeight: 44)
-        .contentShape(Rectangle())
     }
 
     private func actionColor(_ action: String) -> Color {

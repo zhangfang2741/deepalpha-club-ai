@@ -94,22 +94,6 @@ async def research_reports(client: httpx.AsyncClient, code: str, begin: date, en
     return out
 
 
-HK_NEWS = "https://np-listapi.eastmoney.com/comm/wap/getListInfo"
-
-
-async def hk_news(client: httpx.AsyncClient, code: str, size: int = 200) -> list[dict]:
-    """港股个股资讯列表（新 → 旧）：标题、发布时间、来源、链接。失败返回空列表。"""
-    try:
-        resp = await get(client, "eastmoney", HK_NEWS, {
-            "client": "wap", "type": "1", "mTypeAndCode": f"116.{code.zfill(5)}",
-            "pageSize": str(size), "pageIndex": "1", "callback": ""})
-        data = resp.json() if resp.status_code == 200 else {}
-    except Exception as e:  # noqa: BLE001
-        logger.warning("eastmoney_hk_news_failed", code=code, error=str(e))
-        return []
-    return (data.get("data") or {}).get("list") or []
-
-
 def a_share_prefixed(code: str) -> str:
     """600519 → SH600519（6/9 开头沪市，8/4/920 北交所，其余深市）。"""
     if code.startswith(("6", "9")) and not code.startswith("920"):

@@ -74,23 +74,3 @@ def test_our_copy_has_no_forbidden_words():
     for o in (build_hk_overview("00005", "zh", TODAY, fc, 149.5), build_hk_overview("00005", "en", TODAY, fc, 149.5)):
         ours = [o.note, o.recent_grades_title, o.price_target.vs_price_text] + [g.action_label for g in o.recent_grades]
         assert all(contains_forbidden(t) == [] for t in ours if t), ours
-
-
-def test_hk_related_news_filters_rating_titles():
-    from app.services.analyst_upgrade.overview_cnhk import build_hk_related_news
-
-    rows = [{"Art_Title": "大摩：腾讯获“增持”评级", "Art_Url": "http://x/a", "Art_ShowTime": "2026-09-29 10:00:00", "Art_MediaName": "A"},
-            {"Art_Title": "南向资金净买入腾讯控股14亿港元", "Art_Url": "http://x/b", "Art_ShowTime": "2026-09-30 10:00:00"},
-            {"Art_Title": "花旗看好微信", "Art_Url": "javascript:1", "Art_ShowTime": "2026-09-25 10:00:00"},
-            {"Art_Title": "腾讯回购股份", "Art_Url": "http://x/c", "Art_ShowTime": "2026-09-24 10:00:00"}]
-    out = build_hk_related_news(rows)
-    assert [n.url for n in out] == ["http://x/a"] and out[0].date == "2026-09-29"
-
-
-def test_hk_related_news_drops_digests():
-    from app.services.analyst_upgrade.overview_cnhk import build_hk_related_news
-
-    rows = [{"Art_Title": "晚报丨高盛看好燃气轮机", "Art_Url": "http://x/1", "Art_ShowTime": "2026-09-23 10:00:00"},
-            {"Art_Title": "壹评级：Muse引爆个人智能体浪潮", "Art_Url": "http://x/2", "Art_ShowTime": "2026-09-23 10:00:00"},
-            {"Art_Title": "花旗看好微信“小微”成终极AI Agent", "Art_Url": "http://x/3", "Art_ShowTime": "2026-09-25 10:00:00"}]
-    assert [n.url for n in build_hk_related_news(rows)] == ["http://x/3"]

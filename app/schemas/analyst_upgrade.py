@@ -146,15 +146,6 @@ class GradeChange(BaseResponse):
     report_url: str | None = Field(default=None, description="研报原文 PDF 直链（仅 A 股有）")
 
 
-class RelatedNews(BaseResponse):
-    """与券商评级 / 目标价相关的媒体报道（港股：没有研报原文时的补充）."""
-
-    date: str
-    source: str | None = None
-    title: str
-    url: str
-
-
 class AnalystOverviewOut(BaseResponse):
     """个股分析师评级概览."""
 
@@ -165,6 +156,5 @@ class AnalystOverviewOut(BaseResponse):
     price_target: PriceTargetSection | None = None
     earnings: EarningsSection | None = None
     recent_grades: list[GradeChange] = Field(default_factory=list)
-    related_news: list[RelatedNews] = Field(default_factory=list, description="评级相关报道（仅港股）")
     recent_grades_title: str | None = Field(default=None, description="评级列表标题（港股只有各券商最新评级时给出）")
     note: str
