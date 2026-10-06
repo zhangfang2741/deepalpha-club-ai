@@ -40,6 +40,7 @@ struct AnalystRatingTab: View {
             if let t = o.priceTarget { targetCard(t) }
             if let e = o.earnings, !e.quarters.isEmpty || e.next != nil { earningsCard(e) }
             if !o.recentGrades.isEmpty { gradesCard(o.recentGrades, title: o.recentGradesTitle) }
+            if let news = o.relatedNews, !news.isEmpty { newsCard(news) }
             Text(o.note).font(.caption2).foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center).frame(maxWidth: .infinity).padding(.top, 4)
         }
@@ -179,6 +180,32 @@ struct AnalystRatingTab: View {
                         .font(.caption2).foregroundStyle(Theme.textSecondary)
                         .padding(.top, 6)
                 }
+            }
+        }
+    }
+
+    // MARK: 相关报道（港股：没有研报原文，补充媒体对券商观点的报道）
+
+    private func newsCard(_ news: [AnalystOverview.RelatedNews]) -> some View {
+        card(title: L("相关报道"), trailing: nil) {
+            VStack(spacing: 0) {
+                ForEach(Array(news.enumerated()), id: \.element.id) { i, n in
+                    if i > 0 { Divider().background(Theme.border) }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(n.title).font(.footnote).foregroundStyle(Theme.textPrimary)
+                            .multilineTextAlignment(.leading)
+                        Text([n.date, n.source].compactMap { $0 }.joined(separator: " · "))
+                            .font(.caption2).foregroundStyle(Theme.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if let url = URL(string: n.url) { openedReport = OpenedReport(title: n.source ?? L("相关报道"), url: url, isNews: true) }
+                    }
+                }
+                Text(L("媒体对券商观点的报道，不是研报原文；点开在 App 内阅读"))
+                    .font(.caption2).foregroundStyle(Theme.textSecondary).padding(.top, 6)
             }
         }
     }

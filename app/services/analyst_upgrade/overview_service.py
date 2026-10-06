@@ -15,7 +15,7 @@ from app.cache.operations import get_json, set_json
 from app.core.logging import logger
 from app.schemas.analyst_upgrade import AnalystOverviewOut
 from app.services.analyst_upgrade.overview import Lang, build_overview
-from app.services.analyst_upgrade.overview_cnhk import build_cn_overview, build_hk_overview
+from app.services.analyst_upgrade.overview_cnhk import build_cn_overview, build_hk_overview, build_hk_related_news
 from app.services.quant_research.cnhk import eastmoney as em
 from app.services.quant_research.cnhk import etnet
 from app.services.quant_research.cnhk.http import new_client
@@ -29,8 +29,8 @@ CACHE_TTL = 6 * 3600
 def cache_key(symbol: str, lang: str, market: str = "us") -> str:
     """缓存键（带版本号，结构变动时升版本）。美股键保持原样。"""
     if market != "us":
-        return f"analyst_upgrade:overview:v2:{market}:{symbol}:{lang}"
-    return f"analyst_upgrade:overview:v2:{symbol}:{lang}"
+        return f"analyst_upgrade:overview:v3:{market}:{symbol}:{lang}"
+    return f"analyst_upgrade:overview:v3:{symbol}:{lang}"
 
 
 async def get_analyst_overview(symbol: str, lang: Lang, *, redis: Redis | None,
@@ -90,7 +90,9 @@ async def _build_cnhk(market: str, symbol: str, lang: Lang, redis: Redis | None)
                 em.research_reports(client, symbol, today - timedelta(days=548), today), em.f10_forecast(client, symbol))
             out = build_cn_overview(symbol, lang, today, reports, price, f10)
         else:
-            html = await etnet.fetch(client, symbol)
+            html, news_rows = await asyncio.gather(etnet.fetch(client, symbol), em.hk_news(client, symbol))
             out = build_hk_overview(symbol, lang, today, etnet.parse(html) if html else None, price)
+            if out.status == "ok":
+                out.related_news = build_hk_related_news(news_rows)
     logger.info("analyst_overview_built", market=market, symbol=symbol, status=out.status)
     return out

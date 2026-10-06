@@ -1537,3 +1537,5 @@
 "点一行可在 App 内查看研报原文（首次下载，之后缓存在本机）" = "Tap a row to read the original report in the app (downloaded once, then cached on this device)";
 "保存到手机" = "Save to device";
 "点一行可在 App 内查看这次评级的相关报道（媒体文章，不是研报原文）" = "Tap a row to read media coverage of this rating in the app (a news article, not the original report)";
+"相关报道" = "Related coverage";
+"媒体对券商观点的报道，不是研报原文；点开在 App 内阅读" = "Media coverage of brokers' views, not the original reports; opens in the app";

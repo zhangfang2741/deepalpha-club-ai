@@ -459,6 +459,14 @@ struct AnalystOverview: Decodable {
         let next: NextEarnings?
     }
 
+    struct RelatedNews: Decodable, Identifiable {
+        let date: String
+        let source: String?
+        let title: String
+        let url: String
+        var id: String { url }
+    }
+
     struct GradeChange: Decodable, Identifiable {
         let date: String
         let firm: String
@@ -496,6 +504,8 @@ struct AnalystOverview: Decodable {
     let priceTarget: PriceTarget?
     let earnings: Earnings?
     let recentGrades: [GradeChange]
+    /// 评级相关报道（仅港股）
+    let relatedNews: [RelatedNews]?
     /// 港股只有各券商最新评级时给出（「各券商最新评级」）
     let recentGradesTitle: String?
     let note: String
@@ -507,6 +517,7 @@ struct AnalystOverview: Decodable {
         case statusNote = "status_note"
         case priceTarget = "price_target"
         case recentGrades = "recent_grades"
+        case relatedNews = "related_news"
         case recentGradesTitle = "recent_grades_title"
     }
 }

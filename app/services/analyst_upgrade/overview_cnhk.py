@@ -18,6 +18,7 @@ from app.schemas.analyst_upgrade import (
     PriceTargetSection,
     RatingCounts,
     RatingSection,
+    RelatedNews,
 )
 from app.services.analyst_upgrade.overview import NOTE, Lang, _i
 from app.services.quant_research.cnhk.etnet import EtnetForecast
@@ -175,6 +176,27 @@ def build_cn_overview(symbol: str, lang: Lang, today: date, reports: list[dict],
         return _empty(symbol, lang)
     return AnalystOverviewOut(symbol=symbol, status="ok", ratings=ratings, price_target=target, earnings=None,
                               recent_grades=recent, note=NOTE[lang])
+
+
+_RATING_WORDS = ("评级", "目标价", "目标股价", "看好", "看淡", "唱多", "唱空", "买入", "增持", "减持", "跑赢", "跑输")
+
+
+def build_hk_related_news(rows: list[dict], limit: int = 8) -> list[RelatedNews]:
+    """从个股资讯里挑出和券商观点相关的标题（评级 / 目标价 / 看好等），只收 http(s) 链接。"""
+    out: list[RelatedNews] = []
+    for r in rows:
+        title = str(r.get("Art_Title") or "").strip()
+        url = str(r.get("Art_Url") or "").strip()
+        if not title or not url.startswith(("http://", "https://")) or not any(w in title for w in _RATING_WORDS):
+            continue
+        # 资金流向类标题（「南向资金…净买入」）带「买入」但不是券商观点
+        if "净买入" in title or "净卖" in title:
+            continue
+        out.append(RelatedNews(date=str(r.get("Art_ShowTime") or "")[:10], source=r.get("Art_MediaName") or None,
+                               title=title, url=url))
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _report_url(info_code: str | None) -> str | None:
