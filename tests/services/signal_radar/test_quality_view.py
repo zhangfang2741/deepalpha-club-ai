@@ -109,3 +109,33 @@ def test_ex_momentum_keeps_veto_from_other_dimensions():
 def test_ex_momentum_drops_stocks_without_dimension_detail():
     ranked = [("OLD", _qg("A", None)), ("ONLYM", _qg("A", {"momentum": 90.0}))]
     assert qv.rerank_ex_momentum(ranked) == []
+
+
+async def test_good_stocks_ex_momentum_loads_dimension_scores(monkeypatch):
+    """回归：评级历史查询不带维度明细，去动量口径必须单独补查，否则所有股票都被丢、雷达变空。"""
+    from datetime import date
+
+    from app.services.signal_radar import fundamental_top
+
+    ranked = [(s, _qg("B", None)) for s in ("AAA", "BBB")]
+
+    async def fake_ranked(market, universe, redis, end):
+        return ranked, {}
+
+    async def fake_scores(market, pairs):
+        assert sorted(pairs) == [("AAA", date(2026, 10, 5)), ("BBB", date(2026, 10, 5))]
+        return {("AAA", date(2026, 10, 5)): {"valuation": 90.0, "momentum": 5.0},
+                ("BBB", date(2026, 10, 5)): {"valuation": 30.0, "momentum": 95.0}}
+
+    class NoRedis:
+        pass
+
+    async def no_cache(*a, **k):
+        return None
+
+    monkeypatch.setattr(fundamental_top, "load_ranked", fake_ranked)
+    monkeypatch.setattr(qv.repository, "get_dimension_scores", fake_scores)
+    monkeypatch.setattr(qv, "get_json", no_cache)
+    monkeypatch.setattr(qv, "set_json", no_cache)
+    good, rated, _ = await qv.good_stocks("us", "sp500", NoRedis(), datetime(2026, 10, 6, tzinfo=UTC), qv.QUALITY_GOOD_XM)
+    assert rated == 2 and "AAA" in good  # 动量 5 分不再拖累 AAA

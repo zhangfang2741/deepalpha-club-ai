@@ -276,6 +276,39 @@ async def get_quant_grade_history(market: str, symbols: list[str], start: date, 
             for symbol, as_of, created, updated, zh, zh_dates, version, en, en_dates, *dims in rows]
 
 
+async def get_dimension_scores(
+    market: str, pairs: list[tuple[str, date]],
+) -> dict[tuple[str, date], dict[str, float]]:
+    """(评级表代码, 评级日) → {维度: 分数}，只含状态 ok 且计入综合的维度。
+
+    雷达的评级历史查询故意不取维度明细（payload 很大）；只有「去动量」好股票口径需要，这里只展开
+    dimensions 数组里的 key / score，不拉指标明细。
+    """
+    if not pairs:
+        return {}
+    wanted = set(pairs)
+    q = text("""
+        SELECT r.symbol, r.as_of, d->>'key', d->>'score'
+        FROM quant_results r,
+             jsonb_array_elements(r.payload_zh::jsonb->'dimensions') d
+        WHERE r.market = :market
+          AND r.symbol = ANY(:symbols)
+          AND r.as_of >= :start AND r.as_of <= :end
+          AND d->>'status' = 'ok'
+          AND COALESCE(d->>'counts_in_overall', 'true') <> 'false'
+          AND d->>'score' IS NOT NULL
+    """)
+    params = {"market": market, "symbols": sorted({s for s, _ in pairs}),
+              "start": min(a for _, a in pairs), "end": max(a for _, a in pairs)}
+    async with AsyncSessionFactory() as s:
+        rows = (await s.execute(q, params)).all()
+    out: dict[tuple[str, date], dict[str, float]] = {}
+    for symbol, as_of, key, score in rows:
+        if (symbol, as_of) in wanted:
+            out.setdefault((symbol, as_of), {})[key] = float(score)
+    return out
+
+
 async def get_latest_result(market: str, symbol: str) -> QuantResult | None:
     """某只股票最近一天的结果。"""
     q = (select(QuantResult).where(col(QuantResult.market) == market, col(QuantResult.symbol) == symbol)

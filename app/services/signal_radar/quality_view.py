@@ -16,6 +16,8 @@ from redis.asyncio import Redis
 from app.cache.operations import get_json, set_json
 from app.core.logging import logger
 from app.schemas.signal_radar import RadarDayOut, RadarSignalOut, SignalRadarResponse
+from app.services.quant_research import repository
+from app.services.quant_research.markets import normalize_symbol
 from app.services.quant_research.grading import GRADE_ORDER, cap_grade, grade_for, percentile_of
 from app.services.quant_research.scoring import CAP_CEILING, CAP_THRESHOLD
 from app.services.signal_radar import analyst_events, fundamental_top
@@ -75,6 +77,13 @@ def rerank_ex_momentum(ranked: list[tuple[str, QuantGrade]]) -> list[tuple[str, 
     return sorted(out, key=lambda t: (GRADE_ORDER.index(t[1].grade or ""), -(t[1].score or 0), t[0]))
 
 
+async def _with_dim_scores(market: str, ranked: list[tuple[str, QuantGrade]]) -> list[tuple[str, QuantGrade]]:
+    """给最新评级补各维度分数（评级历史查询不带）。"""
+    stored = {s: normalize_symbol(market, s) for s, _ in ranked}
+    scores = await repository.get_dimension_scores(market, [(stored[s], g.as_of) for s, g in ranked])
+    return [(s, replace(g, dim_scores=scores.get((stored[s], g.as_of)))) for s, g in ranked]
+
+
 def _key(market: str, universe: str, mode: str = QUALITY_GOOD) -> str:
     base = f"signal_radar:good:v1:{market}:{universe}"
     return base if mode == QUALITY_GOOD else f"{base}:{mode}"
@@ -96,7 +105,11 @@ async def good_stocks(
         return None
     ranked, _ = loaded
     if mode == QUALITY_GOOD_XM:
-        ranked = rerank_ex_momentum(ranked)
+        try:
+            ranked = rerank_ex_momentum(await _with_dim_scores(market, ranked))
+        except Exception:
+            logger.exception("signal_radar_dim_scores_failed", market=market)
+            return None
     cutoff = choose_cutoff([g.grade for _, g in ranked if g.grade])
     ok = GRADE_ORDER[:GRADE_ORDER.index(cutoff) + 1]
     good = {s: {"grade": g.grade, "score": g.score, "as_of": g.as_of.isoformat()}

@@ -34,19 +34,8 @@ class QuantGrade:
     revisions: str | None = None
     # 评级方法版本；None = 旧数据 / 缺失（评级升降事件只在两边都有版本且不同时才不比较）
     version: str | None = None
-    # 各维度分数（0~100，只含状态 ok 的）；供「去动量」好股票口径重算综合分，旧数据可能没有
+    # 各维度分数（0~100，只含状态 ok 的）；评级历史查询不带，只有「去动量」好股票口径单独补查后填入
     dim_scores: dict[str, float] | None = None
-
-
-def _dim_scores(payload: dict) -> dict[str, float] | None:
-    out: dict[str, float] = {}
-    for d in payload.get("dimensions") or []:
-        score = d.get("score")
-        if (d.get("status") == "ok" and d.get("counts_in_overall", True) and d.get("key")
-                and isinstance(score, (int, float)) and not isinstance(score, bool)
-                and math.isfinite(score) and 0 <= score <= 100):
-            out[str(d["key"])] = float(score)
-    return out or None
 
 
 def grade_from_row(row: repository.QuantGradeSnapshot) -> QuantGrade | None:
@@ -69,7 +58,7 @@ def grade_from_row(row: repository.QuantGradeSnapshot) -> QuantGrade | None:
     dims = {k: v if v in GRADE_ORDER else None
             for k, v in ((k, (row.grades or {}).get(f"d:{k}")) for k in ("profitability", "revisions"))}
     return QuantGrade(grade if grade in GRADE_ORDER else None, score, row.as_of, max(dates), version=getattr(row, "methodology", None),
-                      dim_scores=_dim_scores(payload), **dims)
+                      **dims)
 
 
 async def load_grades(market: str, symbols: list[str], days: list[str]) -> dict[str, list[QuantGrade]] | None:
