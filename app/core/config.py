@@ -518,8 +518,9 @@ class Settings:
         # 否则缠论用户会收到署名「鹦鹉背单词」的验证码邮件，很容易被当成钓鱼邮件。
         # 短信侧不需要这样拆：阿里云号码认证用的是赠送签名，落款本来就不是 App 名。
         self.CHAN_BRAND_NAME = os.getenv("CHAN_BRAND_NAME", "DeepAlpha 缠论")
-        # 「联系我们」反馈的收件邮箱；留空则接口返回 503
-        self.FEEDBACK_TO_EMAIL = os.getenv("FEEDBACK_TO_EMAIL", "")
+        # 「联系我们」反馈的收件邮箱：默认用服务条款 / 隐私政策 / 支持页公示的联系邮箱，可用环境变量覆盖；
+        # 显式设为空串则接口返回 503。发信复用上面的 SMTP_* 配置。
+        self.FEEDBACK_TO_EMAIL = os.getenv("FEEDBACK_TO_EMAIL", "zfleo.sg@gmail.com")
 
         # 短信验证码（阿里云号码认证服务 PNVS / Dypnsapi 的「短信认证服务」）。
         # 用这个而不是通用短信服务 dysmsapi：免自建签名和模板的审核，用系统提供的
