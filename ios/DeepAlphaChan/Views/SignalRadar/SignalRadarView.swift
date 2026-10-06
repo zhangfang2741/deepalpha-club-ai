@@ -242,6 +242,7 @@ struct SignalRadarView: View {
                 && !vm.days.isEmpty && !needsConsent
         case .fundamental:
             return store.isPremium && consent.hasAgreed && !gradeVM.hasError && !gradeVM.days.isEmpty
+                && !gradeVM.needsLoading(scope: gradeScope)
         }
     }
 
@@ -272,7 +273,7 @@ struct SignalRadarView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if !consent.hasAgreed {
             consentLockedField
-        } else if gradeVM.isScanning {
+        } else if gradeVM.needsLoading(scope: gradeScope) || gradeVM.isScanning {
             gradeLoadingView
         } else {
             GradeEventsView(vm: gradeVM, universeName: currentUniverseName, sectorName: { vm.sectorName($0) },
@@ -284,7 +285,14 @@ struct SignalRadarView: View {
                     .allowsHitTesting(!gradeVM.isReloading)
                     .animation(.easeInOut(duration: 0.2), value: gradeVM.isReloading)
             }
+            // 换范围就整块重建：气泡重新出现、漂浮动画从头开始（缠论切指数时经 scanningView 也是重建）
+            .id(gradeVM.loadedKey)
         }
+    }
+
+    /// 基本面 tab 当前所选范围（市场 + 指数）的键，与 GradeEventsViewModel.load 的 key 同格式。
+    private var gradeScope: String {
+        GradeEventsViewModel.scopeKey(market: vm.market.rawValue, universe: vm.activeUniverseKey)
     }
 
     // MARK: - 免责声明

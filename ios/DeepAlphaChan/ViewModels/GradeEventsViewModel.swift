@@ -13,8 +13,10 @@ final class GradeEventsViewModel: ObservableObject {
     @Published var sectorFilter: String?
 
     /// 已加载数据对应的 (市场, 指数)，以及当前请求的 (市场, 指数)：两者不同 = 刚切了市场 / 指数、旧数据不能再展示。
-    private var loadedKey = ""
-    private var requestedKey = ""
+    @Published private(set) var loadedKey = ""
+    @Published private(set) var requestedKey = ""
+    /// 最近一次失败的范围；视图按「当前范围」判断，切到别的范围时旧失败不再算数。
+    @Published private(set) var failedKey = ""
 
     /// 气泡最多画几只（变档最多的在前），其余点「另有 N 个 · 查看全部」。
     static let bubbleLimit = 10
@@ -37,6 +39,13 @@ final class GradeEventsViewModel: ObservableObject {
 
     /// 读取失败（接口报错，或后端说评级数据读取失败）。
     var hasError: Bool { failed || response?.available == false }
+
+    /// 视图当前所选范围的键（与 load 里的 key 同格式）。
+    static func scopeKey(market: String, universe: String?) -> String { "\(market)|\(universe ?? "")" }
+
+    /// 视图当前所选范围还没有可展示的数据：切市场 / 指数的那一帧就为 true（不等 .task 起来、不依赖 isLoading），
+    /// 与缠论雷达「选了就立刻转圈」一致。已失败的范围不算（走出错态）。
+    func needsLoading(scope: String) -> Bool { loadedKey != scope && failedKey != scope }
 
     // MARK: - 映射成缠论雷达的数据形状
 
@@ -100,11 +109,12 @@ final class GradeEventsViewModel: ObservableObject {
     // MARK: - 拉取
 
     func load(market: String, universe: String?, force: Bool = false) async {
-        let key = "\(market)|\(universe ?? "")"
+        let key = Self.scopeKey(market: market, universe: universe)
         requestedKey = key
         if !force, key == loadedKey, response != nil { return }
         isLoading = true
         failed = false
+        if failedKey == key { failedKey = "" }
         defer { if requestedKey == key { isLoading = false } }
         do {
             let resp = try await SignalRadarService.gradeEvents(market: market, universe: universe)
@@ -116,6 +126,7 @@ final class GradeEventsViewModel: ObservableObject {
         } catch {
             if Task.isCancelled || requestedKey != key { return }
             failed = true
+            failedKey = key
         }
     }
 }
