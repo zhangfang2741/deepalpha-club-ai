@@ -70,6 +70,7 @@ struct ProfileView: View {
                     Link(destination: URL(string: "https://deepalpha.club/terms")!) {
                         Text(L("服务条款"))
                     }
+                    NavigationLink(L("联系我们")) { ContactUsView() }
                 }
 
                 Section {
