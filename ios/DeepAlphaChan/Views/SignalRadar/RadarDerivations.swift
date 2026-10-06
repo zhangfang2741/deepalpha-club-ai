@@ -4,7 +4,7 @@ import SwiftUI
 /// 口径来源：app/services/signal_radar/quality_view.py（门槛）、app/services/chan/sub_level.py（共振）、
 /// analyst_events.py（角标）、chan/signals.py（强弱）。改算法时这里的文字要一起改。
 enum RadarDerivations {
-    typealias Result = (conclusion: String, steps: [DerivationStep], caveat: String)
+    typealias Result = DerivationResult
 
     // MARK: - 基本面门槛
 
@@ -33,8 +33,12 @@ enum RadarDerivations {
                 title: L("只用当前等级"),
                 text: L("用的是每只股票当前的等级，不是信号出现那天的；评级暂时读取失败时不做筛选，雷达照常显示全部信号。")),
         ]
-        return (L("基本面：%lld 只达标，门槛 %@ 及以上", r.qualityGoodCount ?? 0, threshold), steps,
-                L("基本面靠前只是缩小观察范围，不是推荐名单，也不预测涨跌。门槛随股票池大小自动调整，不同指数的门槛不一样。"))
+        return DerivationResult(
+            conclusion: L("基本面：%lld 只达标，门槛 %@ 及以上", r.qualityGoodCount ?? 0, threshold), steps: steps,
+            caveat: L("基本面靠前只是缩小观察范围，不是推荐名单，也不预测涨跌。门槛随股票池大小自动调整，不同指数的门槛不一样。"),
+            means: L("按公开的财务和预期数据，这些公司在同行业里综合表现靠前。"),
+            notMeans: L("不是推荐名单；基本面好也可能股价已经很高，或者短期被市场冷落。"),
+            terms: ["基本面", "综合等级", "百分位", "同行业", "盈利预期修正"])
     }
 
     // MARK: - 共振标记
@@ -51,8 +55,12 @@ enum RadarDerivations {
                 title: L("对一对方向"),
                 text: L("日线偏多、30 分钟又出现买点（或日线偏空、30 分钟出现卖点），方向一致，叫「共振」；方向相反叫「逆势」；30 分钟还没有买卖点、或日线方向僵持，叫「等待」；30 分钟数据取不到叫「不可用」。")),
         ]
-        return (L("共振 = 日线方向和 30 分钟买卖点一致"), steps,
-                L("共振只说两个级别方向一致，不表示后续一定上涨或下跌。盘中每 30 分钟刷新一次。"))
+        return DerivationResult(
+            conclusion: L("共振 = 日线方向和 30 分钟买卖点一致"), steps: steps,
+            caveat: L("共振只说两个级别方向一致，不表示后续一定上涨或下跌。盘中每 30 分钟刷新一次。"),
+            means: L("大小两个时间周期的方向一致，信号更「同频」。"),
+            notMeans: L("不保证后续会涨或会跌，也不是买卖指令。"),
+            terms: ["共振", "次级别", "结构信号"])
     }
 
     // MARK: - 券商角标
@@ -69,8 +77,12 @@ enum RadarDerivations {
                 title: L("只做美股"),
                 text: L("A 股的研报没有上调 / 下调字段，港股只有各券商最新的评级，所以这个角标只对美股显示。")),
         ]
-        return (L("角标 = 近 90 天券商净上调 / 净下调家数"), steps,
-                L("只是评级调整次数的事实陈列，不代表评级对错，也不预测涨跌。"))
+        return DerivationResult(
+            conclusion: L("角标 = 近 90 天券商净上调 / 净下调家数"), steps: steps,
+            caveat: L("只是评级调整次数的事实陈列，不代表评级对错，也不预测涨跌。"),
+            means: L("近 90 天里，有几家券商调高（▲）或调低（▼）了对这只股票的评级。"),
+            notMeans: L("券商也会看错，评级变化不是买卖建议。"),
+            terms: ["券商评级"])
     }
 
     // MARK: - 气泡深浅
@@ -87,7 +99,11 @@ enum RadarDerivations {
                 title: L("颜色深浅"),
                 text: L("红买绿卖不变，强弱只改颜色的深浅：越强越深，越弱越浅。")),
         ]
-        return (L("深浅 = 信号强弱（强 / 中 / 弱）"), steps,
-                L("强弱描述的是这个结构自身的坚决程度，不是预期收益的大小。"))
+        return DerivationResult(
+            conclusion: L("深浅 = 信号强弱（强 / 中 / 弱）"), steps: steps,
+            caveat: L("强弱描述的是这个结构自身的坚决程度，不是预期收益的大小。"),
+            means: L("颜色越深，说明这个结构形态本身越清晰、越坚决。"),
+            notMeans: L("不是预期收益的大小：颜色深不等于赚得多，也不等于更可能成功。"),
+            terms: ["结构信号", "买卖点", "趋势背驰"])
     }
 }

@@ -154,7 +154,7 @@ struct SectorBoardList: View {
             // 用当前最强的行业当例子，讲「相对强弱」和「行业状态」是怎么来的
             if parent == nil, let top = board.sectors.first {
                 let derived = MacroDerivations.sector(top, market: market)
-                DerivationLink(title: L("行业强弱怎么算的"), conclusion: derived.conclusion, steps: derived.steps, caveat: derived.caveat)
+                DerivationLink(title: L("行业强弱怎么算的"), result: derived)
             }
         }
         .padding(.horizontal, 2)

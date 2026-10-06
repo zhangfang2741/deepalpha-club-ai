@@ -75,6 +75,7 @@ struct MacroDetailSheet: View {
                     Text(state.labelText)
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundColor(MarketHeader.regimeColor(state.label))
+                    TermHint(term: state.label == "risk_on" ? "逐利" : (state.label == "risk_off" ? "避险" : "观望"))
                     Text(L("概率 %lld%%", Int((state.probability * 100).rounded())))
                         .font(.subheadline).foregroundColor(Theme.textSecondary)
                     Spacer()
@@ -86,7 +87,7 @@ struct MacroDetailSheet: View {
                     .font(.caption2).foregroundColor(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 let derived = MacroDerivations.state(state, market: market)
-                DerivationLink(title: L("市场状态怎么算的"), conclusion: derived.conclusion, steps: derived.steps, caveat: derived.caveat)
+                DerivationLink(title: L("市场状态怎么算的"), result: derived)
                 if let note = consistencyNote(state, sentimentScore: sentimentScore) {
                     Text(note)
                         .font(.caption2).foregroundColor(Theme.textSecondary)
@@ -199,7 +200,7 @@ struct MacroDetailSheet: View {
                         .tint(Theme.accent)
                 }
                 let derived = MacroDerivations.sentiment(panic)
-                DerivationLink(title: L("情绪分怎么算的"), conclusion: derived.conclusion, steps: derived.steps, caveat: derived.caveat)
+                DerivationLink(title: L("情绪分怎么算的"), result: derived)
             }
         }
         .sheet(isPresented: $showPanicDetail) {
@@ -247,7 +248,7 @@ struct MacroDetailSheet: View {
                     }
                     // 点一整行：看这一项是怎么判出「上行 / 下行 / 持平」和对股票的影响的
                     .quantExplain(d.name) {
-                        DerivationContent(conclusion: derived.conclusion, steps: derived.steps, caveat: derived.caveat)
+                        DerivationContent(result: derived)
                     }
                     if d.id != drivers.last?.id { Divider().overlay(Theme.border) }
                 }

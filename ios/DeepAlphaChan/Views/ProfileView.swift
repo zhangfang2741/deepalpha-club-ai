@@ -10,6 +10,9 @@ struct ProfileView: View {
     @State private var showDeleteAlert = false
     @State private var showPaywall = false
     @State private var showManageSubscriptions = false
+    @State private var showTour = false
+    /// 是否显示专业数值（面积比 / 价差比 / 时长比等）。默认关：先让人看懂结论，需要时再打开。
+    @AppStorage(ProDetails.key) private var showProDetails = false
 
     var body: some View {
         NavigationStack {
@@ -43,6 +46,18 @@ struct ProfileView: View {
                             set: { UserDefaults.standard.set($0, forKey: "radar_quality_ex_momentum") }))
                 }
                 #endif
+
+                Section {
+                    Toggle(isOn: $showProDetails) {
+                        Label(L("显示专业数值"), systemImage: "function")
+                    }
+                    Button { showTour = true } label: {
+                        Label(L("重看新手导览"), systemImage: "play.circle")
+                    }
+                } footer: {
+                    Text(L("打开后，买卖点详情里会多出面积比、价差比、时长比等专业数值；点「怎么识别的」随时能看到它们是什么。"))
+                        .font(.caption2)
+                }
 
                 Section(L("订阅")) {
                     HStack {
@@ -123,6 +138,7 @@ struct ProfileView: View {
                 }
             }
             .sheet(isPresented: $showPaywall) { PaywallView() }
+            .sheet(isPresented: $showTour) { OnboardingTourView() }
             .manageSubscriptionsSheet(isPresented: $showManageSubscriptions)
             .alert(L("确认删除账号？"), isPresented: $showDeleteAlert) {
                 Button(L("取消"), role: .cancel) {}

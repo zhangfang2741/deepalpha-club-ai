@@ -9,6 +9,7 @@ struct GlossaryLink<Label: View>: View {
     @ViewBuilder var label: () -> Label
 
     @State private var article: LessonArticle?
+    @State private var entry: GlossaryEntry?
 
     var body: some View {
         if let entry = GlossaryIndex.article(for: term) {
@@ -29,6 +30,25 @@ struct GlossaryLink<Label: View>: View {
                 // 截图事件到它这里被吞掉：底下的结果页/全屏图表页收不到
                 // onDisappear、监听还活着，一旦响应就会和本 sheet 抢
                 // presenter，输掉后预览状态卡在非 nil，本页分享从此失效。
+                .suppressScreenshotShare()
+            }
+        } else if let found = GlossaryStore.entry(for: term) {
+            // 没有缠论教程的名词（市场环境 / 基本面等）退到名词小词典的解释
+            Button {
+                entry = found
+            } label: {
+                label()
+            }
+            .buttonStyle(.plain)
+            .sheet(item: $entry) { e in
+                NavigationStack {
+                    GlossaryEntryView(entry: e)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) { Button(L("完成")) { entry = nil } }
+                        }
+                }
+                .presentationDetents([.medium, .large])
+                .preferredColorScheme(.dark)
                 .suppressScreenshotShare()
             }
         } else {

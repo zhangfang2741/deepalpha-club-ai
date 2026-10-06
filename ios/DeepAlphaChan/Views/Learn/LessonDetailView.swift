@@ -5,6 +5,8 @@ struct LessonDetailView: View {
     let article: LessonArticle
     /// 以 sheet 形式弹出时显示关闭按钮；从列表 push 进来时不需要。
     var showsCloseButton = false
+    /// 页脚说明；缠论词条用默认的「通行解读」，新手入门等其它内容传自己的。
+    var footnote: String? = nil
 
     @Environment(\.dismiss) private var dismiss
 
@@ -55,7 +57,7 @@ struct LessonDetailView: View {
                         .textSelection(.enabled)
                 }
 
-                Text(L("以上为缠论的通行解读，仅供学习参考，不构成投资建议。"))
+                Text(footnote ?? L("以上为缠论的通行解读，仅供学习参考，不构成投资建议。"))
                     .font(.caption2)
                     .foregroundColor(Theme.textSecondary)
                     .padding(.top, 8)

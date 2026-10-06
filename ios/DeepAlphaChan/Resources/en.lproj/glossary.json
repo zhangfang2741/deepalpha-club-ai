@@ -1,0 +1,298 @@
+[
+ {
+  "key": "逐利",
+  "term": "Risk-on",
+  "category": "market",
+  "plain": "Money is willing to chase returns and favors offensive sectors such as tech and consumer discretionary; the market mood is upbeat.",
+  "example": "Over the last 20 trading days tech and discretionary stocks rose more than utilities and staples, which looks like risk-on.",
+  "notMeans": "It does not mean prices will keep rising, and it is not a signal to buy."
+ },
+ {
+  "key": "观望",
+  "term": "Neutral",
+  "category": "market",
+  "plain": "Money does not clearly favor offense or defense; everyone is waiting for a direction.",
+  "example": "Offensive and defensive sectors rise by similar amounts and volatility is low.",
+  "notMeans": "Neutral does not mean the market will stay flat; it can turn at any time."
+ },
+ {
+  "key": "避险",
+  "term": "Risk-off",
+  "category": "market",
+  "plain": "Money prefers steadier places such as utilities, staples and cash; the market mood is cautious.",
+  "example": "Stocks fall while short-term Treasuries do better than stocks over the same period.",
+  "notMeans": "It does not mean a crash is imminent, nor that the bottom is in."
+ },
+ {
+  "key": "市场状态",
+  "term": "Market state",
+  "category": "market",
+  "plain": "Sums up the last 20 trading days of money flow into risk-on, neutral or risk-off, with a probability for each.",
+  "example": "Risk-on 90%, neutral 1%, risk-off 9%: today looks most like risk-on.",
+  "notMeans": "The probability is how well today matches a historical state, not the chance that prices rise."
+ },
+ {
+  "key": "恐慌贪婪指数",
+  "term": "Fear & Greed index",
+  "category": "market",
+  "plain": "A 0–100 mood thermometer: lower is more fearful, higher is greedier. It combines several public market gauges.",
+  "example": "A reading of 43 falls in the fear band (25–44).",
+  "notMeans": "Extreme fear is not always a bottom and extreme greed is not always a top."
+ },
+ {
+  "key": "VIX",
+  "term": "VIX",
+  "category": "market",
+  "plain": "Measures how much volatility the market expects in US stocks over the next 30 days. The higher it is, the more nervous people are.",
+  "example": "It usually sits between 12 and 20 and jumps on big events.",
+  "notMeans": "A high reading does not mean a fall is coming, only that big swings are expected."
+ },
+ {
+  "key": "波动率",
+  "term": "Volatility",
+  "category": "market",
+  "plain": "How much a price swings up and down. High volatility means sharper moves in both directions.",
+  "example": "16% annualized volatility: over a year the price typically swings around 16% either way.",
+  "notMeans": "High volatility does not mean falling; rallies can be sharp too."
+ },
+ {
+  "key": "基点",
+  "term": "Basis point (bp)",
+  "category": "market",
+  "plain": "A common unit for interest rates. 1 bp = 0.01%, 100 bp = 1%.",
+  "example": "A rate moving from 4.78% to 5.31% rose 53 bp.",
+  "notMeans": null
+ },
+ {
+  "key": "美债利率",
+  "term": "10-year Treasury yield",
+  "category": "market",
+  "plain": "The rate the US government pays to borrow for 10 years; it works as a benchmark price of money. When it is high, borrowing is costly and stock valuations tend to be pressed down.",
+  "example": "When yields rise, growth companies (whose profits lie far in the future) are usually hit harder.",
+  "notMeans": "It is not simply 'yields up, stocks down'; the reason for the move matters."
+ },
+ {
+  "key": "10Y-2Y 利差",
+  "term": "10Y-2Y spread",
+  "category": "market",
+  "plain": "The 10-year rate minus the 2-year rate. Normally long rates are higher, so the spread is positive.",
+  "example": "0.47% means the 10-year rate is 0.47 percentage points above the 2-year rate.",
+  "notMeans": null
+ },
+ {
+  "key": "倒挂",
+  "term": "Inversion",
+  "category": "market",
+  "plain": "Short-term rates are higher than long-term rates, so the spread is negative. It has often appeared before slowdowns, so markets watch it closely.",
+  "example": "A 2-year rate of 4.9% and a 10-year rate of 4.5% give a spread of −0.4%: inverted.",
+  "notMeans": "Inversion is not a sure sign of recession and the timing is hard to predict."
+ },
+ {
+  "key": "进攻与防御",
+  "term": "Offense / Defense",
+  "category": "market",
+  "plain": "Offensive sectors (tech, discretionary, industrials) tend to gain most when the economy is good; defensive sectors (utilities, staples, health care) are needed even when it is weak.",
+  "example": "In good times people buy new phones and travel (offense); in bad times they still need power, groceries and care (defense).",
+  "notMeans": "This is a common grouping; individual companies may not fit."
+ },
+ {
+  "key": "相对强弱",
+  "term": "Relative strength",
+  "category": "market",
+  "plain": "A sector's (or stock's) return minus the market's return. Above 0 means it beat the market.",
+  "example": "Tech rose 5% and the market rose 3%, so relative strength is +2%.",
+  "notMeans": "Beating the market does not mean it will keep doing so; sector leadership rotates."
+ },
+ {
+  "key": "隐马尔可夫模型",
+  "term": "Hidden Markov model",
+  "category": "market",
+  "plain": "A statistical method that lets a computer find the typical 'states' in historical data on its own, instead of using hand-written rules.",
+  "example": "Shown five series of history, it separates three common combinations by itself.",
+  "notMeans": "It is not a crystal ball; it only works out which past situation today resembles."
+ },
+ {
+  "key": "成分股",
+  "term": "Constituents",
+  "category": "general",
+  "plain": "The stocks that make up an index. The index moves as these stocks move together, weighted.",
+  "example": "The S&P 500's constituents are 500 large US companies.",
+  "notMeans": null
+ },
+ {
+  "key": "标普500",
+  "term": "S&P 500",
+  "category": "general",
+  "plain": "An index of 500 large US companies, often used to represent the US stock market.",
+  "example": "Apple, Microsoft and Amazon are in it.",
+  "notMeans": null
+ },
+ {
+  "key": "纳斯达克100",
+  "term": "Nasdaq 100",
+  "category": "general",
+  "plain": "The 100 largest non-financial companies listed on the Nasdaq, with a high share of tech stocks.",
+  "example": null,
+  "notMeans": null
+ },
+ {
+  "key": "沪深300",
+  "term": "CSI 300",
+  "category": "general",
+  "plain": "An index of 300 large, actively traded companies in the A-share market.",
+  "example": null,
+  "notMeans": null
+ },
+ {
+  "key": "恒生指数",
+  "term": "Hang Seng Index",
+  "category": "general",
+  "plain": "An index of the most representative large companies in the Hong Kong market.",
+  "example": null,
+  "notMeans": null
+ },
+ {
+  "key": "基本面",
+  "term": "Fundamentals",
+  "category": "fundamental",
+  "plain": "How the company itself is doing: is it expensive, is it growing, does it make money. This is separate from recent price moves.",
+  "example": "A company with steadily growing sales and profit that ranks well among peers has good fundamentals.",
+  "notMeans": "Good fundamentals do not mean the price will rise; it may already be expensive or out of favor for now."
+ },
+ {
+  "key": "综合等级",
+  "term": "Composite grade (A+ to F)",
+  "category": "fundamental",
+  "plain": "Each of five items (valuation, growth, profitability, momentum, earnings-estimate revisions) is scored, averaged and mapped to a letter. The higher the letter, the more it leads its industry.",
+  "example": "A+ means it ranks in roughly the top 7% of its industry (93 points or more).",
+  "notMeans": "The grade describes the present; it is not a recommendation and does not predict returns."
+ },
+ {
+  "key": "百分位",
+  "term": "Percentile",
+  "category": "fundamental",
+  "plain": "Where you rank in a group. The 80th percentile means higher than 80% of peers.",
+  "example": "A profitability score of 85 means stronger than 85% of companies in the industry.",
+  "notMeans": "A percentile only shows rank, not absolute level; if the whole industry is weak, being first may still be weak."
+ },
+ {
+  "key": "同行业",
+  "term": "Same industry",
+  "category": "fundamental",
+  "plain": "A group of companies doing similar business. Comparisons are made within an industry so that, say, banks are not compared directly with tech firms.",
+  "example": "US stocks use the 11 GICS sectors, A-shares use Shenwan level 1 and Hong Kong uses Hang Seng level 1.",
+  "notMeans": null
+ },
+ {
+  "key": "估值",
+  "term": "Valuation",
+  "category": "fundamental",
+  "plain": "Whether the current price is expensive relative to what the company earns, often measured by the P/E ratio.",
+  "example": "Of two companies with the same profit, the one with the higher price has the higher valuation (is pricier).",
+  "notMeans": "A low valuation does not mean the price will rise; sometimes cheap has a reason."
+ },
+ {
+  "key": "市盈率",
+  "term": "P/E ratio",
+  "category": "fundamental",
+  "plain": "Price divided by annual earnings per share. Roughly: how many years of current profit it takes to earn back the price.",
+  "example": "A P/E of 20 means the price is 20 times one year of profit.",
+  "notMeans": "There is no absolute good or bad level; compare with the industry and its own history."
+ },
+ {
+  "key": "成长",
+  "term": "Growth",
+  "category": "fundamental",
+  "plain": "How fast the company's sales and profit are growing.",
+  "example": "Sales growing 20% a year is faster growth than 3% a year.",
+  "notMeans": "Fast growth may not last, and may already be in the price."
+ },
+ {
+  "key": "盈利能力",
+  "term": "Profitability",
+  "category": "fundamental",
+  "plain": "How efficiently the company makes money, e.g. how much profit is left from every 100 of sales.",
+  "example": "A 25% margin leaves 25 of profit on every 100 sold.",
+  "notMeans": null
+ },
+ {
+  "key": "动量",
+  "term": "Momentum",
+  "category": "fundamental",
+  "plain": "The tendency of recent price moves: if it has risen a lot lately, momentum is strong.",
+  "example": "Gains over the last 3, 6 and 12 months all rank near the top of peers: strong momentum.",
+  "notMeans": "Strong momentum does not mean it will keep rising; it may just be overheated."
+ },
+ {
+  "key": "EPS",
+  "term": "EPS (earnings per share)",
+  "category": "fundamental",
+  "plain": "The profit a company makes in a year divided across each share.",
+  "example": "A company earning 1 billion with 500 million shares has EPS of 2.",
+  "notMeans": null
+ },
+ {
+  "key": "盈利预期修正",
+  "term": "Earnings-estimate revisions",
+  "category": "fundamental",
+  "plain": "Whether analysts raise or lower their forecasts for a company's future profit.",
+  "example": "If several analysts lift this year's EPS forecast from 5.0 to 5.5, that is an upward revision.",
+  "notMeans": "An upward revision does not guarantee a rising price; the market may have priced it in."
+ },
+ {
+  "key": "券商评级",
+  "term": "Broker rating",
+  "category": "fundamental",
+  "plain": "An analyst's view of a stock (such as buy, hold, sell). An upgrade or downgrade means the view improved or worsened.",
+  "example": "A move from hold to buy is an upgrade.",
+  "notMeans": "Analysts can be wrong; a rating change is not a trade recommendation."
+ },
+ {
+  "key": "结构信号",
+  "term": "Structure signal",
+  "category": "structure",
+  "plain": "A position marker that Chan theory identifies from the shape of the price path (strokes, pivots), including type 1–3 buy and sell points. It describes the move; it is not a trade order.",
+  "example": "A 'type-1 buy' says: in a downtrend this leg has less force than the previous one.",
+  "notMeans": "It does not predict returns and is not advice."
+ },
+ {
+  "key": "待确认",
+  "term": "Pending",
+  "category": "structure",
+  "plain": "A signal that appears while the last stroke is still running; under Chan rules it does not count until that stroke finishes.",
+  "example": "The grey dashed badges on the chart are pending signals.",
+  "notMeans": "A pending signal can disappear and is not an established buy or sell point."
+ },
+ {
+  "key": "成立日",
+  "term": "Confirmation date",
+  "category": "structure",
+  "plain": "The day a buy or sell point is truly confirmed, a few days after the price turn.",
+  "example": "Price bottoms on Sept 22 but is only confirmed on Sept 30; the confirmation date is Sept 30.",
+  "notMeans": null
+ },
+ {
+  "key": "仓位",
+  "term": "Position size",
+  "category": "general",
+  "plain": "How much of your total money you put into one stock, as a share.",
+  "example": "Putting 20k of 100k into one stock is a 20% position.",
+  "notMeans": "There is no standard answer; it depends on how much loss you can bear."
+ },
+ {
+  "key": "回撤",
+  "term": "Drawdown",
+  "category": "general",
+  "plain": "How far a price has fallen from its peak.",
+  "example": "From 100 down to 80 is a 20% drawdown.",
+  "notMeans": "A small drawdown so far does not mean a large one cannot happen."
+ },
+ {
+  "key": "前复权",
+  "term": "Adjusted prices",
+  "category": "general",
+  "plain": "Past prices are adjusted for dividends and splits so before and after can be compared, avoiding fake gaps on ex-dates.",
+  "example": "After a 2-for-1 split the price halves overnight; an unadjusted chart would show a fake crash.",
+  "notMeans": null
+ }
+]

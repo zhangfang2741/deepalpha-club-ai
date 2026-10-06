@@ -3,7 +3,7 @@ import SwiftUI
 /// 买卖点「怎么识别的」：按严格口径（App 固定口径，见 app/services/chan/signal_policy.py 的 strict）
 /// 一步步讲，数字取这个信号自己的真实值。口径变了这里要一起改。
 enum SignalDerivation {
-    typealias Result = (conclusion: String, steps: [DerivationStep], caveat: String)
+    typealias Result = DerivationResult
 
     static func build(_ s: Signal) -> Result {
         switch s.type {
@@ -42,8 +42,13 @@ enum SignalDerivation {
                 text: L("这一笔走完、并且反方向的下一笔已经开始成形，才算成立，所以它比价格转折晚几天出现。后面如果价格继续创新极值，这个一类就作废。")),
         ]
         let head = s.areaRatio.map { L("%@：趋势背驰，面积比 %@", s.label, percent($0)) } ?? L("%@：趋势背驰", s.label)
-        return (head, steps,
-                L("面积是累计值，c 段常比 b 段短，所以面积比容易偏小，时长比一并列在上面供对照。一类只是背驰迹象，不保证转折，也不是操作建议。"))
+        return DerivationResult(
+            conclusion: head, steps: steps,
+            caveat: L("面积是累计值，c 段常比 b 段短，所以面积比容易偏小，时长比一并列在上面供对照。一类只是背驰迹象，不保证转折，也不是操作建议。"),
+            means: buy ? L("在下跌趋势里，这一段下跌的力气比上一段小，下跌有「后继乏力」的迹象。")
+                       : L("在上涨趋势里，这一段上涨的力气比上一段小，上涨有「后继乏力」的迹象。"),
+            notMeans: L("不预测接下来是反弹还是继续走，也不是买入或卖出的指令。"),
+            terms: ["趋势背驰", "中枢", "MACD", "面积比", "结构信号"])
     }
 
     // MARK: - 二类
@@ -60,8 +65,12 @@ enum SignalDerivation {
                           : L("一卖之后价格先回落、再第一次反弹，反弹的高点没有超过一卖的高点，就是二卖。")),
         ]
         steps.append(strengthStep(s))
-        return (L("%@：一类之后的第一次回落 / 反弹没有破极值", s.label), steps,
-                L("买卖点只是缠论对价格结构的一次观测，不预测涨跌，也不是操作建议。"))
+        return DerivationResult(
+            conclusion: L("%@：一类之后的第一次回落 / 反弹没有破极值", s.label), steps: steps,
+            caveat: L("买卖点只是缠论对价格结构的一次观测，不预测涨跌，也不是操作建议。"),
+            means: L("价格在一类之后第一次回头时，守住了一类的极值，走势结构保持完整。"),
+            notMeans: L("不保证后续会涨或会跌，也不是买卖指令。"),
+            terms: ["二买", "买卖点", "结构信号", "待确认"])
     }
 
     // MARK: - 三类
@@ -78,8 +87,12 @@ enum SignalDerivation {
                           : L("反弹的高点仍在中枢下沿之下，说明中枢下沿成了压力，就是三卖。")),
         ]
         steps.append(strengthStep(s))
-        return (L("%@：离开中枢后的第一次回落 / 反弹没有回到中枢", s.label), steps,
-                L("买卖点只是缠论对价格结构的一次观测，不预测涨跌，也不是操作建议。"))
+        return DerivationResult(
+            conclusion: L("%@：离开中枢后的第一次回落 / 反弹没有回到中枢", s.label), steps: steps,
+            caveat: L("买卖点只是缠论对价格结构的一次观测，不预测涨跌，也不是操作建议。"),
+            means: L("价格离开拉锯区间后第一次回头，没有重新回到区间里，说明离开是「站稳」的。"),
+            notMeans: L("不保证后续会涨或会跌，也不是买卖指令。"),
+            terms: ["三买", "中枢", "买卖点", "结构信号"])
     }
 
     private static func strengthStep(_ s: Signal) -> DerivationStep {

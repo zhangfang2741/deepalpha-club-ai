@@ -175,6 +175,11 @@ deepalpha-club-ai/
 > **产品目标：让普通人看得懂、能学到知识、靠理解而不是盲目去做投资决策**（2026-10-06）：任何新界面 / 文案先问「一个没学过金融的人能看懂吗」——术语第一次出现要有大白话解释或能点开看词条（`lessons.json` / `AnalysisTermLink`），数字要告诉人「意味着什么、不意味着什么」，结论要能追到推导（见下条）。
 > 边界：帮人理解 ≠ 替人决策。仍然只陈列事实与知识，不出现买卖导向措辞、不承诺收益（App Store 3.1.1 / 5.2.5 的高风险措辞，见 `ios/AppStore/chan/store-listing.md` 说明），免责声明照常保留。
 
+> **学习内容**（面向普通人，2026-10-06）：`Resources/{zh-Hans,en}.lproj/` 下三份 JSON——`glossary.json`（名词小词典，稳定中文键 `key`，含大白话 / 举例 / 不代表什么）、`guide.json`（新手入门 7 篇）、`lessons.json`（缠论入门 9 篇）；
+> 名词在界面上用 `TermChip` / `TermHint` / `GlossaryLink(term:)` 点开（先查缠论教程索引 `GlossaryIndex`，再查词典），推导弹层（`DerivationResult`）带「这说明 / 这不说明 / 相关名词」。
+> 新手导览 `OnboardingTourView`（首次进雷达弹一次，学习页 / 我的可重看）；专业数值（面积比 / 价差比 / 时长比）默认折叠，「我的 → 显示专业数值」打开（`ProDetails.key`）。
+> **新增术语要同时补词典条目（中英）**；推导里 `terms:` 引用的键必须能查到（`tests/ios_content` 守护）。解释一律不写成买卖建议。
+
 > **量化指标一律要有「怎么算的」推导**（2026-10-06 产品原则）：App 上任何算出来的结论（状态、分数、等级、强弱、门槛、角标、买卖点类型）都必须能点开看到「结论 → 几步推导（带这一处、这一天的真实数字）→ 局限」。
 > 统一外壳 `Views/Components/Derivation.swift`（`DerivationContent` / `DerivationLink`，底层复用量化研究的 `.quantExplain` 弹层）；每项文字单独写、不做统一说明页：
 > 宏观四项 `Views/SignalRadar/MacroDerivations.swift`（市场状态用后端 `state.inputs` 的当天原料、驱动因素用 `flat_band`）、雷达 `RadarDerivations.swift`（基本面门槛带 `quality_share / min_count / floor`）、买卖点 `Views/Analysis/SignalDerivation.swift`（严格口径）；基本面研究早已有（`QuantExplain.swift`）。

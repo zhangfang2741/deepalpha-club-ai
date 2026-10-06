@@ -5,7 +5,7 @@ import SwiftUI
 /// 口径来源：app/services/regime（状态）、app/services/macro/drivers.py（驱动因素）、
 /// 情绪分是第三方公开指数、这里只展示。改算法时这里的文字要一起改。
 enum MacroDerivations {
-    typealias Result = (conclusion: String, steps: [DerivationStep], caveat: String)
+    typealias Result = DerivationResult
 
     // MARK: - 市场状态
 
@@ -44,8 +44,18 @@ enum MacroDerivations {
                            text: L("为避免一天一变，同一种状态要连续 3 个交易日才算确认。现在的「%@」已持续 %lld 个交易日。",
                                    s.labelText, s.daysInState)),
         ]
-        return (L("当前判定：%@，概率 %@（%@ 收盘数据）", s.labelText, pct(s.probability), s.asOf), steps,
-                L("概率只说「今天更像哪种历史状态」，不预测涨跌，也不是操作建议。模型把高波动当偏避险，急涨急跌的行情里可能和直觉不一致。"))
+        let means: String
+        switch s.label {
+        case "risk_on": means = L("近 20 个交易日，资金更愿意买进攻型的板块（科技、可选消费等），市场整体偏积极。")
+        case "risk_off": means = L("近 20 个交易日，资金更偏向防御板块和现金，市场整体偏谨慎。")
+        default: means = L("近 20 个交易日，资金没有明显偏向进攻或防守，处在观望。")
+        }
+        return DerivationResult(
+            conclusion: L("当前判定：%@，概率 %@（%@ 收盘数据）", s.labelText, pct(s.probability), s.asOf), steps: steps,
+            caveat: L("概率只说「今天更像哪种历史状态」，不预测涨跌，也不是操作建议。模型把高波动当偏避险，急涨急跌的行情里可能和直觉不一致。"),
+            means: means,
+            notMeans: L("不代表接下来一定会涨或会跌，也不是让你买入或卖出的信号；概率不是「上涨的概率」。"),
+            terms: ["市场状态", "逐利", "观望", "避险", "隐马尔可夫模型", "进攻与防御"])
     }
 
     // MARK: - 情绪（恐慌贪婪）
@@ -64,8 +74,12 @@ enum MacroDerivations {
                            text: L("同一个指数在不同时点的分数，看情绪是在升温还是降温。"),
                            values: [item(L("当前"), p.current), item(L("一周前"), p.previousWeek), item(L("一月前"), p.previousMonth)]),
         ]
-        return (L("当前 %lld 分：%@", Int(p.current.score.rounded()), PanicIndexStyle.ratingLabel(p.current.rating)), steps,
-                L("情绪看的是市场整体的冷暖，和「市场状态」（看资金流向）口径不同，下跌后的修复初期两者常常方向不一致，不是数据错误。"))
+        return DerivationResult(
+            conclusion: L("当前 %lld 分：%@", Int(p.current.score.rounded()), PanicIndexStyle.ratingLabel(p.current.rating)), steps: steps,
+            caveat: L("情绪看的是市场整体的冷暖，和「市场状态」（看资金流向）口径不同，下跌后的修复初期两者常常方向不一致，不是数据错误。"),
+            means: L("数字越低说明大家越恐慌，越高说明越贪婪，反映的是当下的心态。"),
+            notMeans: L("极度恐慌不一定是底部，极度贪婪也不一定是顶部；它不是买卖信号。"),
+            terms: ["恐慌贪婪指数", "VIX", "市场状态"])
     }
 
     // MARK: - 驱动因素
@@ -102,8 +116,19 @@ enum MacroDerivations {
                      (L("判定"), d.direction == "up" ? L("上行") : d.direction == "down" ? L("下行") : L("持平"))]))
         steps.append(DerivationStep(title: L("判对股票的影响"), text: impactRule(d.key)))
         let conclusion = [d.name, MacroDetailSheet.valueText(d), MacroDetailSheet.changeText(d)].compactMap { $0 }.joined(separator: "  ")
-        return (conclusion + "\n" + d.text, steps,
-                L("这是对环境的描述，不是预测或建议；五项各自独立判断，没有加总成一个分数。"))
+        var terms = ["基点"]
+        switch d.key {
+        case "us10y": terms = ["美债利率", "基点"]
+        case "curve": terms = ["10Y-2Y 利差", "倒挂", "基点"]
+        case "vix": terms = ["VIX", "波动率"]
+        default: terms = []
+        }
+        return DerivationResult(
+            conclusion: conclusion + "\n" + d.text, steps: steps,
+            caveat: L("这是对环境的描述，不是预测或建议；五项各自独立判断，没有加总成一个分数。"),
+            means: L("这是影响股票整体估值的外部环境之一，方向变化说明环境在变松或变紧。"),
+            notMeans: L("单项变化决定不了股价，几项之间也可能互相抵消。"),
+            terms: terms)
     }
 
     private static func impactRule(_ key: String) -> String {
@@ -139,8 +164,12 @@ enum MacroDerivations {
             title: L("行业状态：每个行业单独算"),
             text: L("%@每个行业单独跑一个和大盘同类的统计模型，原料是行业涨跌、波动、恐慌指标、相对大盘强弱和资金流（成交量加权的收盘位置）；输出逐利 / 观望 / 避险的概率，同样连续 3 个交易日才确认。", indexText),
             values: row.label.map { [(L("当前状态"), SectorBoardList.labelText($0))] } ?? []))
-        return (L("%@：相对大盘 %@", row.name, DerivationFormat.pct(row.rsVsMarket)), steps,
-                L("强弱是近 20 个交易日的相对表现，不预测后续涨跌，也不是操作建议。成分股很少的行业不出强弱。"))
+        return DerivationResult(
+            conclusion: L("%@：相对大盘 %@", row.name, DerivationFormat.pct(row.rsVsMarket)), steps: steps,
+            caveat: L("强弱是近 20 个交易日的相对表现，不预测后续涨跌，也不是操作建议。成分股很少的行业不出强弱。"),
+            means: L("最近 20 个交易日，这个行业比大盘走得更好（正数）还是更差（负数）。"),
+            notMeans: L("领先不代表接下来继续领先，行业强弱会轮动；行业弱也不代表里面每家公司都差。"),
+            terms: ["相对强弱", "逐利", "同行业"])
     }
 
     private static func pct(_ v: Double) -> String { DerivationFormat.pct(v, digits: 0, signed: false) }

@@ -8,6 +8,8 @@ struct SignalDetailCard: View {
     var isStatic = false
 
     @State private var expanded = false
+    /// 专业数值（面积比 / 价差比 / 时长比）默认折叠，「我的」里可打开；静态长图不受影响。
+    @AppStorage(ProDetails.key) private var showProDetails = false
 
     // 待确认候选不带买卖方向色（与图上灰色虚线徽标一致）：红 / 绿只给已成立的买卖点
     private var directionColor: Color {
@@ -103,8 +105,7 @@ struct SignalDetailCard: View {
                 .fixedSize(horizontal: false, vertical: true)
             if !isStatic {
                 let derived = SignalDerivation.build(signal)
-                DerivationLink(title: L("%@ 怎么识别的", signal.label), conclusion: derived.conclusion,
-                               steps: derived.steps, caveat: derived.caveat)
+                DerivationLink(title: L("%@ 怎么识别的", signal.label), result: derived)
             }
             if signal.displayTime != signal.time {
                 // 雷达与这里的日期都是出现日；图上标记画在所属笔的极值 K 线，所以会在出现日左侧
@@ -125,12 +126,12 @@ struct SignalDetailCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if signal.type == .buy1 || signal.type == .sell1 {
-                WrapLayout(spacing: 12, lineSpacing: 4) {
+                if showProDetails || isStatic { WrapLayout(spacing: 12, lineSpacing: 4) {
                     if let area = signal.areaRatio { percentRatio(L("面积比"), value: area) }
                     ratio(L("价差比"), value: signal.priceRatio)
                     ratio(L("量能比"), value: signal.volumeRatio)
                     ratio(L("时长比"), value: signal.lengthRatio)
-                }
+                } }
                 AnalysisTermLink(term: "背驰", color: Theme.divergence)
             } else {
                 AnalysisTermLink(term: "买卖点", color: directionColor)

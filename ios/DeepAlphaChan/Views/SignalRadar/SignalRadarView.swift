@@ -70,6 +70,8 @@ struct SignalRadarView: View {
     @State private var pendingGood: (symbol: String, name: String)?
     /// 标题旁折叠：展开「市场 → 行业 → 好股票 → 买点」流程图。默认折叠。
     @State private var showFlow = false
+    /// 首次进入雷达时弹一次的新手导览（看过会记在 UserDefaults；学习页 / 我的里可重看）。
+    @State private var showTour = false
     /// 基本面名单（当前综合等级达标的股票 + 各自有没有买卖点）的数据。
     @StateObject private var goodVM = GoodStocksViewModel()
     /// 详情页打开时停在哪个分段：雷达气泡 → nil（缠论结构）。
@@ -86,7 +88,13 @@ struct SignalRadarView: View {
             // 真实滚动窗口雷达对所有用户都拉（未订阅一样看得到市场卡片、图例、日期轨，
             // 跟会员一模一样，见 radarContent）；市场切换时 .task(id:) 额外拉一次
             // 「上个月 1 号」免费预览快照，自动取消上一次未完成的请求、重新拉一次。
-            .task { vm.onAppear() }
+            .task {
+                vm.onAppear()
+                // 先给页面一点时间出来，再弹导览；还没同意免责声明时不弹（免得两个弹层抢）
+                try? await Task.sleep(for: .milliseconds(900))
+                if !OnboardingTourView.hasSeen && !needsConsent { showTour = true }
+            }
+            .sheet(isPresented: $showTour) { OnboardingTourView() }
             // 后台补算未完成时定期静默重拉，补上的成分股不用用户手动刷新就能出现；
             // 离开页面时 SwiftUI 自动取消，补算完成后 refreshWhileBackfilling 直接返回、不发请求。
             .task {
@@ -411,7 +419,7 @@ struct SignalRadarView: View {
                     // 点这一步：看「基本面 X 及以上」的门槛是怎么定出来的（带真实只数）
                     flowNode(3, L("基本面"), L("%lld 只 · %@ 及以上", good, threshold), highlight: .accent)
                         .quantExplain(L("基本面怎么算的")) {
-                            DerivationContent(conclusion: derived.conclusion, steps: derived.steps, caveat: derived.caveat)
+                            DerivationContent(result: derived)
                         }
                 } else {
                     flowNode(3, L("基本面"), threshold.isEmpty ? "—" : L("%lld 只 · %@ 及以上", good, threshold), highlight: .accent)
@@ -1350,8 +1358,7 @@ struct SignalRadarView: View {
         ]
         return HStack(spacing: 14) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                DerivationLink(title: item.0, conclusion: item.1.conclusion, steps: item.1.steps, caveat: item.1.caveat,
-                               label: item.0)
+                DerivationLink(title: item.0, result: item.1, label: item.0)
             }
             Spacer(minLength: 0)
         }
