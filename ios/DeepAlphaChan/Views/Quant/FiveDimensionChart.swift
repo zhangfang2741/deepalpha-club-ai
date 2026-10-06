@@ -19,6 +19,8 @@ struct FiveDimensionLayout {
     static let labelGap: CGFloat = 10
     /// 半径下限：窄屏 + 长英文标签时不再为了标签继续缩图，改为把标签往画布内平移。
     static let minRadius: CGFloat = 72
+    /// 紧凑模式（标签一行写完「名称 等级」）的半径下限
+    static let compactMinRadius: CGFloat = 54
     static let lineHeight: CGFloat = 16
 
     /// 按字符估算文字宽度：中日韩字符约 1 个字号宽，其余约 0.58 个字号宽。
@@ -34,7 +36,7 @@ struct FiveDimensionLayout {
     }
 
     /// titles：每个轴的标签（第一行名称、第二行等级）。
-    init(size: CGSize, titles: [(name: String, grade: String)], fontSize: CGFloat = 12.5) {
+    init(size: CGSize, titles: [(name: String, grade: String)], fontSize: CGFloat = 12.5, compact: Bool = false) {
         let count = max(titles.count, 3)
         let c = CGPoint(x: size.width / 2, y: size.height / 2)
         let bounds = CGRect(origin: .zero, size: size)
@@ -42,9 +44,9 @@ struct FiveDimensionLayout {
         var placed: [Label] = []
         while true {
             placed = titles.enumerated().map { i, t in
-                Self.place(title: t, dir: Self.direction(i, count: count), center: c, radius: r, fontSize: fontSize)
+                Self.place(title: t, dir: Self.direction(i, count: count), center: c, radius: r, fontSize: fontSize, compact: compact)
             }
-            if placed.allSatisfy({ bounds.contains($0.rect) }) || r <= Self.minRadius { break }
+            if placed.allSatisfy({ bounds.contains($0.rect) }) || r <= (compact ? Self.compactMinRadius : Self.minRadius) { break }
             r -= 4
         }
         center = c
@@ -58,10 +60,11 @@ struct FiveDimensionLayout {
     }
 
     private static func place(title: (name: String, grade: String), dir: CGVector, center: CGPoint,
-                              radius: CGFloat, fontSize: CGFloat) -> Label {
-        let width = max(estimatedWidth(title.name, fontSize: fontSize),
-                        estimatedWidth(title.grade, fontSize: fontSize)) + 2
-        let height = lineHeight * 2
+                              radius: CGFloat, fontSize: CGFloat, compact: Bool = false) -> Label {
+        // 紧凑：「名称 等级」一行写完（宽 = 两者之和 + 空格），高度只要一行
+        let width = (compact ? estimatedWidth(title.name, fontSize: fontSize) + 4 + estimatedWidth(title.grade, fontSize: fontSize)
+                             : max(estimatedWidth(title.name, fontSize: fontSize), estimatedWidth(title.grade, fontSize: fontSize))) + 2
+        let height = lineHeight * (compact ? 1 : 2)
         let anchor = CGPoint(x: center.x + dir.dx * (radius + labelGap), y: center.y + dir.dy * (radius + labelGap))
         let alignment: HorizontalAlignment
         var origin: CGPoint
@@ -94,11 +97,13 @@ struct FiveDimensionChart: View {
 
     /// 画布高度（含上下标签）：默认 280；顶部综合等级卡里用 230 更紧凑。半径 = 高度 / 2 − 标签占位，低于 minRadius（72）的高度会让标签压到图上，别再调小
     var height: CGFloat = 280
+    /// 紧凑：标签一行写完，画布可以更矮（顶部综合等级卡用 190）
+    var compact = false
 
     var body: some View {
         GeometryReader { geo in
             let titles = dimensions.map { (name: $0.name, grade: $0.grade ?? L("暂无")) }
-            let layout = FiveDimensionLayout(size: CGSize(width: geo.size.width, height: height), titles: titles)
+            let layout = FiveDimensionLayout(size: CGSize(width: geo.size.width, height: height), titles: titles, compact: compact)
             let n = dimensions.count
             ZStack(alignment: .topLeading) {
                 Canvas { ctx, _ in
@@ -132,11 +137,20 @@ struct FiveDimensionChart: View {
                 ForEach(Array(dimensions.enumerated()), id: \.element.key) { i, d in
                     let label = layout.labels[i]
                     Button { onSelect(d) } label: {
-                        VStack(alignment: label.alignment, spacing: 0) {
-                            Text(d.name).foregroundStyle(Theme.textPrimary)
-                            Text(d.grade ?? L("暂无"))
-                                .fontWeight(.semibold)
-                                .foregroundStyle(QuantGradeStyle.color(d.grade))
+                        Group {
+                            if compact {
+                                HStack(spacing: 4) {
+                                    Text(d.name).foregroundStyle(Theme.textPrimary)
+                                    Text(d.grade ?? L("暂无")).fontWeight(.semibold).foregroundStyle(QuantGradeStyle.color(d.grade))
+                                }
+                            } else {
+                                VStack(alignment: label.alignment, spacing: 0) {
+                                    Text(d.name).foregroundStyle(Theme.textPrimary)
+                                    Text(d.grade ?? L("暂无"))
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(QuantGradeStyle.color(d.grade))
+                                }
+                            }
                         }
                         .font(.system(size: 12.5))
                         .frame(width: label.rect.width, height: label.rect.height,
@@ -162,7 +176,7 @@ struct FiveDimensionChart: View {
             HStack(spacing: 4) {
                 Rectangle().stroke(Theme.textSecondary, style: StrokeStyle(lineWidth: 2, dash: [3, 2]))
                     .frame(width: 14, height: 1)
-                Text(L("板块中位"))
+                Text(L("板块中位 · 越靠外越靠前"))
             }
         }
         .font(.caption2)

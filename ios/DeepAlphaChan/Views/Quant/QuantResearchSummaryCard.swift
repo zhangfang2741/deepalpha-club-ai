@@ -8,14 +8,14 @@ struct QuantResearchSummaryCard: View {
     private var gradeColor: Color { QuantGradeStyle.color(research.overall?.grade) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center, spacing: 16) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 14) {
                 Text(research.overall?.grade ?? "—")
-                    .font(.system(size: 40, weight: .bold, design: .rounded)).monospacedDigit()
+                    .font(.system(size: 32, weight: .bold, design: .rounded)).monospacedDigit()
                     .foregroundStyle(gradeColor)
-                    .frame(width: 80, height: 80)
-                    .background(gradeColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 18))
-                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(gradeColor.opacity(0.35)))
+                    .frame(width: 64, height: 64)
+                    .background(gradeColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(gradeColor.opacity(0.35)))
                     .accessibilityLabel(L("综合等级") + " " + (research.overall?.grade ?? L("暂无")))
                     .quantExplain(L("综合等级怎么来的"), enabled: !isStatic) {
                         QuantOverallGradeExplanation(research: research)
@@ -48,20 +48,17 @@ struct QuantResearchSummaryCard: View {
             if research.scoredDimensions.count >= 3 {
                 Divider().overlay(Theme.border)
                 // 五维图：越靠外 = 在同板块里排名越靠前；只读展示，分享长图（isStatic）里也要画
-                FiveDimensionChart(dimensions: research.scoredDimensions, symbol: research.symbol, height: 230)
+                FiveDimensionChart(dimensions: research.scoredDimensions, symbol: research.symbol, height: 190, compact: true)
                     .allowsHitTesting(false)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(research.scoredDimensions.map { "\($0.name) \($0.grade ?? L("暂无"))" }.joined(separator: "，"))
-                Text(L("越靠外，说明在同板块里排名越靠前；虚线是板块中位水平。"))
-                    .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .center).multilineTextAlignment(.center)
             }
             if research.overall?.capped == true, let note = research.overall?.note {
                 Text(note).font(QuantTypography.metadata).foregroundStyle(Theme.segment)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(16)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(LinearGradient(colors: [Theme.surfaceAlt, Theme.surface], startPoint: .topLeading, endPoint: .bottomTrailing),
                     in: RoundedRectangle(cornerRadius: 16))
