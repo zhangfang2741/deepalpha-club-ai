@@ -1316,3 +1316,6 @@
 "提交" = "Submit";
 "已提交，谢谢你的反馈" = "Submitted. Thanks for your feedback.";
 "提交失败，请稍后再试" = "Submission failed, please try again later";
+"联系邮箱" = "Contact email";
+"用于回复你的邮箱" = "Email for our reply";
+"反馈内容" = "Message";

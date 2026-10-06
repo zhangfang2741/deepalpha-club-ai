@@ -30,9 +30,10 @@ async def submit_feedback(
         raise HTTPException(status_code=503, detail="反馈服务暂未开通")
 
     account = user.email or user.phone or f"user#{user.id}"
-    subject = f"[{settings.CHAN_BRAND_NAME}] 用户反馈 - {account}"
-    text = f"账号：{account}（ID {user.id}）\n\n{content}\n"
+    subject = f"[{settings.CHAN_BRAND_NAME}] 用户反馈 - {body.email}"
+    text = f"联系邮箱：{body.email}\n账号：{account}（ID {user.id}）\n\n{content}\n"
     page = (
+        f"<p>联系邮箱：{html.escape(body.email)}</p>"
         f"<p>账号：{html.escape(account)}（ID {user.id}）</p>"
         f"<p style=\"white-space:pre-wrap\">{html.escape(content)}</p>"
     )

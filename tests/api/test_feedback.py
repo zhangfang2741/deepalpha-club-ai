@@ -24,20 +24,25 @@ def test_feedback_sends_email(client):
     with patch.object(settings, "FEEDBACK_TO_EMAIL", "ops@example.com"), patch.object(
         email_service, "is_configured", return_value=True
     ), patch.object(email_service, "send_email", AsyncMock()) as send:
-        r = client.post("/api/v1/feedback", json={"content": "建议加个功能 <b>"})
+        r = client.post("/api/v1/feedback", json={"email": "me@x.com", "content": "建议加个功能 <b>"})
     assert r.status_code == 200
     to, subject, html_body, text = send.call_args.args[:4]
     assert to == "ops@example.com"
-    assert "u@example.com" in subject
+    assert "me@x.com" in subject and "me@x.com" in text
     assert "&lt;b&gt;" in html_body and "建议加个功能" in text
 
 
 def test_feedback_rejects_blank(client):
-    r = client.post("/api/v1/feedback", json={"content": "   "})
+    r = client.post("/api/v1/feedback", json={"email": "me@x.com", "content": "   "})
     assert r.status_code == 422
 
 
 def test_feedback_503_when_unconfigured(client):
     with patch.object(settings, "FEEDBACK_TO_EMAIL", ""):
-        r = client.post("/api/v1/feedback", json={"content": "hi"})
+        r = client.post("/api/v1/feedback", json={"email": "me@x.com", "content": "hi"})
     assert r.status_code == 503
+
+
+def test_feedback_rejects_bad_email(client):
+    r = client.post("/api/v1/feedback", json={"email": "nope", "content": "hi"})
+    assert r.status_code == 422
