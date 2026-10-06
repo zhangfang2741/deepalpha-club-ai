@@ -172,6 +172,9 @@ deepalpha-club-ai/
 > 行业 key 是中文名；英文名在 `cnhk/sectors.NATIVE_SECTOR_EN`（接口按 `lang=en` 返回，App 本地兜底走 `L(key)` + en 文案；有测试守护 43 个行业都有英文名，新增行业须补）。
 > `/macro/{cn|hk}/sectors`（`macro.service._native_sector_board`）返回本土行业全集 + 强弱（没算出来的行业强弱为空，App 不画强弱条、不写「最强」）+ 雷达当日买卖点数。
 
+> **产品目标：让普通人看得懂、能学到知识、靠理解而不是盲目去做投资决策**（2026-10-06）：任何新界面 / 文案先问「一个没学过金融的人能看懂吗」——术语第一次出现要有大白话解释或能点开看词条（`lessons.json` / `AnalysisTermLink`），数字要告诉人「意味着什么、不意味着什么」，结论要能追到推导（见下条）。
+> 边界：帮人理解 ≠ 替人决策。仍然只陈列事实与知识，不出现买卖导向措辞、不承诺收益（App Store 3.1.1 / 5.2.5 的高风险措辞，见 `ios/AppStore/chan/store-listing.md` 说明），免责声明照常保留。
+
 > **量化指标一律要有「怎么算的」推导**（2026-10-06 产品原则）：App 上任何算出来的结论（状态、分数、等级、强弱、门槛、角标、买卖点类型）都必须能点开看到「结论 → 几步推导（带这一处、这一天的真实数字）→ 局限」。
 > 统一外壳 `Views/Components/Derivation.swift`（`DerivationContent` / `DerivationLink`，底层复用量化研究的 `.quantExplain` 弹层）；每项文字单独写、不做统一说明页：
 > 宏观四项 `Views/SignalRadar/MacroDerivations.swift`（市场状态用后端 `state.inputs` 的当天原料、驱动因素用 `flat_band`）、雷达 `RadarDerivations.swift`（基本面门槛带 `quality_share / min_count / floor`）、买卖点 `Views/Analysis/SignalDerivation.swift`（严格口径）；基本面研究早已有（`QuantExplain.swift`）。
