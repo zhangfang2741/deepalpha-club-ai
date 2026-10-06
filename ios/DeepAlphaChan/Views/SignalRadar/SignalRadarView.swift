@@ -82,7 +82,6 @@ struct SignalRadarView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) { flowTitle }
-                ToolbarItem(placement: .topBarTrailing) { goodListButton }
             }
             // 真实滚动窗口雷达对所有用户都拉（未订阅一样看得到市场卡片、图例、日期轨，
             // 跟会员一模一样，见 radarContent）；市场切换时 .task(id:) 额外拉一次
@@ -467,14 +466,23 @@ struct SignalRadarView: View {
         .accessibilityLabel(showFlow ? L("收起流程图") : L("展开流程图"))
     }
 
-    /// 标题右侧的「名单」：基本面名单入口（会员功能；有门槛说明才显示）。
+    /// 雷达画布右上角的「名单」：基本面名单入口（会员功能；有门槛说明才显示）。
+    /// 以 overlay 叠在画布角上，不占版面、不参与气泡摆位（摆位只取决于数据与画布大小，不预留禁区）。
     @ViewBuilder
     private var goodListButton: some View {
         if let threshold = vm.response?.qualityThreshold, !threshold.isEmpty, store.isPremium {
-            Button(L("名单")) {
+            Button {
                 if needsConsent { showConsent = true } else { panel = .goodStocks }
+            } label: {
+                Label(L("名单"), systemImage: "list.bullet")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Theme.accent)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(Theme.surface.opacity(0.92), in: Capsule())
+                    .overlay(Capsule().stroke(Theme.border, lineWidth: 1))
             }
-            .font(.subheadline.weight(.semibold))
+            .buttonStyle(.plain)
+            .padding(8)
             .accessibilityLabel(L("基本面名单"))
         }
     }
@@ -685,6 +693,7 @@ struct SignalRadarView: View {
             )
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(alignment: .topTrailing) { goodListButton }
     }
 
     /// 雷达画布是否按行业分扇区。**当前关闭**：顶部漏斗已经按「大盘环境 → 最强行业 → 当日信号」
