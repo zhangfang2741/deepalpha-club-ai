@@ -78,8 +78,50 @@ extension ReportCache {
                 walk(root, level: 0)
                 if !out.isEmpty { return out }
             }
-            return headingToc(doc)
+            let headings = headingToc(doc)
+            if headings.count >= 3 { return headings }
+            // 既没有书签、也没有「第X节」（港股业绩公告、季报这类短文件）：取每页开头的短标题凑一份
+            let generic = genericToc(doc)
+            return generic.isEmpty ? headings : generic
         }.value
+    }
+
+    /// 通用兜底：每页取开头第一行「像标题的短行」（跳过纯页码、每页都出现的页眉），去掉「（续）」，同名只留第一次。只用于 80 页以内的短文件。
+    private static func genericToc(_ doc: PDFDocument) -> [PDFTocItem] {
+        guard doc.pageCount >= 3, doc.pageCount <= 80 else { return [] }
+        let pageLines: [[String]] = (0..<doc.pageCount).map { i in
+            (doc.page(at: i)?.string ?? "").components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        }
+        var frequency: [String: Int] = [:]
+        for lines in pageLines { for l in Set(lines.prefix(3)) { frequency[l, default: 0] += 1 } }
+        let runningHeaders = Set(frequency.filter { $0.value >= 3 }.keys)
+
+        func candidate(_ raw: String) -> String? {
+            var t = raw
+            for suffix in ["（續）", "（续）", "(續)", "(续)", "－續", "-續", "-续"] where t.hasSuffix(suffix) {
+                t = String(t.dropLast(suffix.count)).trimmingCharacters(in: .whitespaces)
+            }
+            guard (2...28).contains(t.count), !t.hasPrefix("•"), !t.hasPrefix("·"), !t.hasPrefix("-"),
+                  !t.lowercased().contains("http"), t.rangeOfCharacter(from: CharacterSet(charactersIn: "。，；：,;")) == nil else { return nil }
+            // 提取成乱码的行（字体没有字符映射）不能当标题
+            let readable = t.unicodeScalars.filter {
+                CharacterSet.alphanumerics.contains($0) || CharacterSet.whitespaces.contains($0) || ("\u{4E00}"..."\u{9FFF}").contains($0)
+            }.count
+            guard Double(readable) / Double(t.unicodeScalars.count) >= 0.8 else { return nil }
+            return t
+        }
+
+        var seen = Set<String>()
+        var out: [PDFTocItem] = []
+        for (i, lines) in pageLines.enumerated() {
+            for l in lines.prefix(4) {
+                if l.allSatisfy({ $0.isNumber }) || runningHeaders.contains(l) { continue }
+                if let t = candidate(l), seen.insert(t).inserted { out.append(PDFTocItem(title: t, level: 0, pageIndex: i)) }
+                break  // 只看第一条既不是页码、也不是页眉的行
+            }
+        }
+        return out.count >= 3 ? Array(out.prefix(40)) : []
     }
 
     private static func headingToc(_ doc: PDFDocument) -> [PDFTocItem] {
