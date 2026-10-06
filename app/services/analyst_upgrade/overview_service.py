@@ -30,7 +30,7 @@ def cache_key(symbol: str, lang: str, market: str = "us") -> str:
     """缓存键（带版本号，结构变动时升版本）。美股键保持原样。"""
     if market != "us":
         return f"analyst_upgrade:overview:v1:{market}:{symbol}:{lang}"
-    return f"analyst_upgrade:overview:v1:{symbol}:{lang}"
+    return f"analyst_upgrade:overview:v2:{symbol}:{lang}"
 
 
 async def get_analyst_overview(symbol: str, lang: Lang, *, redis: Redis | None,
@@ -53,16 +53,17 @@ async def get_analyst_overview(symbol: str, lang: Lang, *, redis: Redis | None,
 
     async with httpx.AsyncClient() as client:
         fmp = FmpClient(client, redis, "user")
-        hist, ptc, pts, earnings, grades, quote = await asyncio.gather(
+        hist, ptc, pts, earnings, grades, quote, grades_news = await asyncio.gather(
             fmp.get("grades-historical", symbol=symbol, limit=12),
             fmp.get("price-target-consensus", symbol=symbol),
             fmp.get("price-target-summary", symbol=symbol),
             fmp.get("earnings", symbol=symbol, limit=8),
             fmp.get("grades", symbol=symbol, limit=20),
             fmp.get("quote-short", symbol=symbol),
+            fmp.get("grades-news", symbol=symbol, limit=50),  # 评级变动对应的媒体报道；失败 / 套餐不含时为空，不影响其他区块
         )
     out = build_overview(symbol, lang, datetime.now(UTC).date(), hist=hist, ptc=ptc, pts=pts,
-                         earnings=earnings, grades=grades, quote=quote)
+                         earnings=earnings, grades=grades, quote=quote, grades_news=grades_news)
     await _store(redis, key, out)
     logger.info("analyst_overview_built", symbol=symbol, status=out.status)
     return out

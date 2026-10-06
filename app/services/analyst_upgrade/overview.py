@@ -129,8 +129,20 @@ def build_earnings(earnings: list | None, today: date) -> EarningsSection | None
     return EarningsSection(quarters=quarters, next=nxt)
 
 
-def build_recent_grades(grades: list | None, lang: Lang, limit: int = 10) -> list[GradeChange]:
-    """最近的机构评级变动（新 → 旧）。"""
+def _news_index(news: list | None) -> dict[tuple[str, str], dict]:
+    """评级新闻按 (日期, 券商) 建索引：同一次评级变动对应的媒体报道（只收 http(s) 链接）。"""
+    idx: dict[tuple[str, str], dict] = {}
+    for n in news or []:
+        if not isinstance(n, dict) or not n.get("newsURL") or not str(n["newsURL"]).startswith(("http://", "https://")):
+            continue
+        key = (str(n.get("publishedDate") or "")[:10], str(n.get("gradingCompany") or "").strip().lower())
+        idx.setdefault(key, n)
+    return idx
+
+
+def build_recent_grades(grades: list | None, lang: Lang, limit: int = 10, news: list | None = None) -> list[GradeChange]:
+    """最近的机构评级变动（新 → 旧）；news 为评级新闻，对得上同日同券商的挂上报道链接。"""
+    news_idx = _news_index(news)
     rows = sorted([g for g in grades or [] if isinstance(g, dict) and g.get("date") and g.get("newGrade")],
                   key=lambda g: g["date"], reverse=True)[:limit]
     out = []
@@ -138,7 +150,10 @@ def build_recent_grades(grades: list | None, lang: Lang, limit: int = 10) -> lis
         action = str(g.get("action") or "").lower()
         zh, en = ACTION_LABELS.get(action, (action, action.title()))
         prev = g.get("previousGrade") or None
+        hit = news_idx.get((str(g["date"])[:10], str(g.get("gradingCompany") or "").strip().lower()))
         out.append(GradeChange(
+            report_title=(hit.get("newsTitle") or None) if hit else None,
+            report_url=hit["newsURL"] if hit else None, report_kind="news" if hit else None,
             date=str(g["date"])[:10], firm=str(g.get("gradingCompany") or ""), action=action,
             action_label=_i(lang, zh, en), previous_grade=prev, previous_grade_label=grade_label(prev, lang),
             new_grade=str(g["newGrade"]), new_grade_label=grade_label(str(g["newGrade"]), lang) or "",
@@ -147,12 +162,12 @@ def build_recent_grades(grades: list | None, lang: Lang, limit: int = 10) -> lis
 
 
 def build_overview(symbol: str, lang: Lang, today: date, *, hist=None, ptc=None, pts=None, earnings=None,
-                   grades=None, quote=None) -> AnalystOverviewOut:
+                   grades=None, quote=None, grades_news=None) -> AnalystOverviewOut:
     """组装完整概览；各区块独立，任一缺失不影响其他。"""
     ratings = build_ratings(hist, lang)
     target = build_price_target(ptc, pts, quote, lang)
     earn = build_earnings(earnings, today)
-    recent = build_recent_grades(grades, lang)
+    recent = build_recent_grades(grades, lang, news=grades_news)
     if not any([ratings, target, earn, recent]):
         return AnalystOverviewOut(symbol=symbol, status="insufficient_data", note=NOTE[lang],
                                   status_note=_i(lang, "暂无分析师数据", "No analyst data available"))

@@ -142,6 +142,7 @@ class GradeChange(BaseResponse):
     new_grade_label: str
     price_target: float | None = Field(default=None, description="本次给出的目标价（A 股人民币 / 港股港元）")
     report_title: str | None = Field(default=None, description="研报标题（仅 A 股有）")
+    report_kind: str | None = Field(default=None, description="report = 研报原文 PDF（A 股）；news = 相关新闻报道（美股）")
     report_url: str | None = Field(default=None, description="研报原文 PDF 直链（仅 A 股有）")
 
 

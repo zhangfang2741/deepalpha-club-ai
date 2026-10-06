@@ -169,7 +169,7 @@ def build_cn_overview(symbol: str, lang: Lang, today: date, reports: list[dict],
             date=d.isoformat(), firm=str(r["orgSName"]), action=action, action_label=_i(lang, zh, en),
             previous_grade=prev_raw, previous_grade_label=prev_label, new_grade=raw_new, new_grade_label=new_label,
             price_target=_f(r.get("indvAimPriceT")),
-            report_title=(r.get("title") or None), report_url=_report_url(r.get("infoCode")),
+            report_title=(r.get("title") or None), report_url=_report_url(r.get("infoCode")), report_kind="report",
         ))
     if ratings is None and target is None and not recent:
         return _empty(symbol, lang)

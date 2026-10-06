@@ -472,6 +472,8 @@ struct AnalystOverview: Decodable {
         /// 研报标题 / 原文链接（仅 A 股有）
         let reportTitle: String?
         let reportUrl: String?
+        /// report = 研报原文 PDF；news = 相关新闻报道（美股）
+        let reportKind: String?
         var id: String { "\(date)-\(firm)-\(newGrade)" }
         enum CodingKeys: String, CodingKey {
             case date, firm, action
@@ -483,6 +485,7 @@ struct AnalystOverview: Decodable {
             case priceTarget = "price_target"
             case reportTitle = "report_title"
             case reportUrl = "report_url"
+            case reportKind = "report_kind"
         }
     }
 

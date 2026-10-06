@@ -1,5 +1,6 @@
 import SwiftUI
 import PDFKit
+import WebKit
 
 /// 研报原文：下载 PDF 到本地缓存（Caches/reports），之后离线可看；在 App 内阅读，不跳浏览器。
 enum ReportCache {
@@ -93,4 +94,32 @@ private struct PDFKitView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: PDFView, context: Context) {}
+}
+
+/// 评级相关的媒体报道：App 内网页阅读（不跳浏览器）。
+struct NewsWebView: View {
+    let title: String
+    let url: URL
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            WebContent(url: url)
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("完成")) { dismiss() } } }
+        }
+    }
+}
+
+private struct WebContent: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> WKWebView {
+        let v = WKWebView()
+        v.load(URLRequest(url: url))
+        return v
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
 }

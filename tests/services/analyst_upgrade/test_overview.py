@@ -77,3 +77,16 @@ def test_change_text_directions():
     assert build_ratings(rows, "zh").change_text.endswith("由 10 位减至 8 位")
     rows[-1]["analystRatingsBuy"] = 10
     assert "保持 10 位" in build_ratings(rows, "zh").change_text
+
+
+def test_recent_grades_attach_news_by_date_and_firm():
+    from app.services.analyst_upgrade.overview import build_recent_grades
+
+    grades = [{"date": "2026-10-06", "gradingCompany": "BNP Paribas", "newGrade": "Outperform", "previousGrade": "Outperform", "action": "maintain"},
+              {"date": "2026-10-01", "gradingCompany": "Cantor Fitzgerald", "newGrade": "Overweight", "action": "maintain"}]
+    news = [{"publishedDate": "2026-10-06 06:50:00", "gradingCompany": "bnp paribas", "newsURL": "https://example.com/a", "newsTitle": "T"},
+            {"publishedDate": "2026-10-01 01:00:00", "gradingCompany": "Cantor Fitzgerald", "newsURL": "javascript:alert(1)", "newsTitle": "bad"}]
+    out = build_recent_grades(grades, "en", news=news)
+    assert out[0].report_url == "https://example.com/a" and out[0].report_kind == "news" and out[0].report_title == "T"
+    assert out[1].report_url is None  # 非 http(s) 链接不收
+    assert build_recent_grades(grades, "en")[0].report_url is None  # 没有新闻时与旧行为一致

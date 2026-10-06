@@ -3,7 +3,7 @@ import SwiftUI
 /// 详情页「分析师评级」分段：评级分布、目标价、业绩预期 vs 实际、最近评级变动。
 /// 评级档位是分析师原话，只做引述；我们自己的文字只描述数字。
 struct AnalystRatingTab: View {
-    private struct OpenedReport: Identifiable { let title: String; let url: URL; var id: URL { url } }
+    private struct OpenedReport: Identifiable { let title: String; let url: URL; let isNews: Bool; var id: URL { url } }
     @State private var openedReport: OpenedReport?
 
     let market: StockMarket
@@ -28,7 +28,9 @@ struct AnalystRatingTab: View {
             }
         }
         .task { await vm.loadAnalyst(market: market, symbol: symbol) }
-        .sheet(item: $openedReport) { r in ReportPDFView(title: r.title, remote: r.url) }
+        .sheet(item: $openedReport) { r in
+            if r.isNews { NewsWebView(title: r.title, url: r.url) } else { ReportPDFView(title: r.title, remote: r.url) }
+        }
     }
 
     @ViewBuilder
@@ -167,11 +169,13 @@ struct AnalystRatingTab: View {
                     .contentShape(Rectangle())
                     .onTapGesture {
                         // 下载研报原文到本地缓存，在 App 内阅读
-                        if let s = g.reportUrl, let url = URL(string: s) { openedReport = OpenedReport(title: g.firm, url: url) }
+                        if let s = g.reportUrl, let url = URL(string: s) { openedReport = OpenedReport(title: g.firm, url: url, isNews: g.reportKind == "news") }
                     }
                 }
                 if grades.contains(where: { $0.reportUrl != nil }) {
-                    Text(L("点一行可在 App 内查看研报原文（首次下载，之后缓存在本机）"))
+                    Text(grades.contains(where: { $0.reportKind == "news" })
+                         ? L("点一行可在 App 内查看这次评级的相关报道（媒体文章，不是研报原文）")
+                         : L("点一行可在 App 内查看研报原文（首次下载，之后缓存在本机）"))
                         .font(.caption2).foregroundStyle(Theme.textSecondary)
                         .padding(.top, 6)
                 }
