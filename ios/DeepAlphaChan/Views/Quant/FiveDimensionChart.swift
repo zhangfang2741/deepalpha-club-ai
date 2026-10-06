@@ -92,7 +92,8 @@ struct FiveDimensionChart: View {
     let symbol: String
     var onSelect: (QuantDimension) -> Void = { _ in }
 
-    private let height: CGFloat = 280
+    /// 画布高度（含上下标签）：默认 280；顶部综合等级卡里用 230 更紧凑。半径 = 高度 / 2 − 标签占位，低于 minRadius（72）的高度会让标签压到图上，别再调小
+    var height: CGFloat = 280
 
     var body: some View {
         GeometryReader { geo in

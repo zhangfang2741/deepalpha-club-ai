@@ -48,7 +48,7 @@ struct QuantResearchSummaryCard: View {
             if research.scoredDimensions.count >= 3 {
                 Divider().overlay(Theme.border)
                 // 五维图：越靠外 = 在同板块里排名越靠前；只读展示，分享长图（isStatic）里也要画
-                FiveDimensionChart(dimensions: research.scoredDimensions, symbol: research.symbol)
+                FiveDimensionChart(dimensions: research.scoredDimensions, symbol: research.symbol, height: 230)
                     .allowsHitTesting(false)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(research.scoredDimensions.map { "\($0.name) \($0.grade ?? L("暂无"))" }.joined(separator: "，"))
