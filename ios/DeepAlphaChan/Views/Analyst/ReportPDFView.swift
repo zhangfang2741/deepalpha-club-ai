@@ -266,6 +266,8 @@ struct ReportReaderView: View {
     @State private var showSummary = false
     @State private var cachedSummary: ReportSummaryResponse?
     @State private var glow = false
+    /// 已知这份文件的文字提取不出来（字体缺字符映射）：不显示「AI 总结」按钮，免得点了才发现用不了
+    @State private var summaryUnavailable = false
     @State private var localURL: URL?
     @State private var shareURL: URL?
     @State private var failed = false
@@ -301,7 +303,7 @@ struct ReportReaderView: View {
         }
         .presentationDragIndicator(.visible)
         .overlay(alignment: .bottomTrailing) {
-            if let summary, documentVisible { summaryButton(summary) }
+            if let summary, documentVisible, !summaryUnavailable { summaryButton(summary) }
         }
         .sheet(isPresented: $showSummary) {
             if let summary {
@@ -316,6 +318,7 @@ struct ReportReaderView: View {
             let r = try? await QuantResearchService.reportSummary(market: summary.market, symbol: summary.symbol,
                                                                   kind: summary.kind, peek: true)
             if r?.status == "ready" { cachedSummary = r }
+            if r?.status == "unreadable" { summaryUnavailable = true }
         }
         .sheet(isPresented: $showToc) {
             PDFTocSheet(items: toc) { index in

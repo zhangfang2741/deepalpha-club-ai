@@ -37,6 +37,9 @@ _tasks: set[asyncio.Task] = set()
 _BANNED = ("建议买入", "建议卖出", "建议持有", "强烈推荐", "值得买", "值得买入", "稳赚", "必涨", "保证收益", "目标价", "买入评级",
            "strong buy", "buy rating", "we recommend", "price target")
 
+_UNREADABLE = {"zh": "这份财报的 PDF 字体缺少字符映射（常见于部分港股公司的文件），文字提取不出来，没法整理要点，请直接看原文。",
+               "en": "This PDF's fonts lack a character map (common for some Hong Kong filers), so its text cannot be extracted. Please read the original."}
+
 NOTE = {
     "zh": "由 AI 根据财报原文关键章节整理，可能有遗漏或误差，一切以原文为准；不构成投资建议。",
     "en": "Summarized by AI from key sections of the report; it may miss or misstate details. The original report prevails. Not investment advice.",
@@ -159,15 +162,18 @@ async def get_report_summary(market: str, symbol: str, lang: str, *, redis: Redi
     cached = await get_json(redis, _key(lang, report.url))
     if cached:
         return _out(report, lang, "ready", ReportSummary(**cached))
-    if not generate:
-        return _out(report, lang, "not_generated")
     fail = await get_json(redis, _key(lang, report.url, ":fail"))
+    if not generate:
+        # 只看缓存：已知文字提不出来的，直接告诉 App（它就不显示「AI 总结」按钮了）
+        if fail and fail.get("reason") == "unreadable":
+            return _out(report, lang, "unreadable", note=_UNREADABLE[lang])
+        return _out(report, lang, "not_generated")
     if fail:
-        reasons = {"unreadable": {"zh": "这份财报的文字无法提取（字体缺少字符映射），暂时没法整理要点，请看原文。",
-                                  "en": "Text cannot be extracted from this report; please read the original."},
+        reasons = {"unreadable": _UNREADABLE,
                    "quota": {"zh": "今天的 AI 额度用完了，稍后再试。", "en": "AI quota is used up for now; try again later."}}
         note = reasons.get(fail.get("reason", ""), {"zh": "生成失败，稍后再试。", "en": "Generation failed; try again later."})[lang]
-        return _out(report, lang, "limit_reached" if fail.get("reason") == "quota" else "unavailable", note=note)
+        status = "limit_reached" if fail.get("reason") == "quota" else "unreadable" if fail.get("reason") == "unreadable" else "unavailable"
+        return _out(report, lang, status, note=note)
 
     if not await acquire_lock(redis, _key(lang, report.url, ":lock"), LOCK_TTL):
         return _out(report, lang, "generating")  # 别人（或上一次请求）已经在生成

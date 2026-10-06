@@ -142,7 +142,7 @@ async def test_unreadable_text_is_reported_not_retried(patched, monkeypatch):
     redis = FakeRedis()
     await rs.get_report_summary("cn", "600150", "zh", redis=redis)
     out = await _wait_ready(redis)
-    assert out.status == "unavailable" and "无法提取" in (out.note or "") and patched["llm"] == 0
+    assert out.status == "unreadable" and "提取不出来" in (out.note or "") and patched["llm"] == 0
 
 
 async def test_disabled(monkeypatch):
@@ -166,3 +166,15 @@ def test_annual_filters_only_annual_columns():
             {"art_code": "AN1", "title": "年报", "notice_date": "2026-04-30", "columns": [{"column_name": "年度报告全文"}]}]
     assert pick_announcement(rows, _CN_ANNUAL, "zh", "600150").url.endswith("H2_AN1_1.pdf")
     assert list(_HK_ANNUAL) == ["年報"]
+
+
+async def test_peek_reports_unreadable_so_app_can_hide_button(patched, monkeypatch):
+    async def empty(report):
+        return ""
+
+    monkeypatch.setattr(rs, "_extract_text", empty)
+    redis = FakeRedis()
+    await rs.get_report_summary("cn", "600150", "zh", redis=redis)
+    await _wait_ready(redis)
+    out = await rs.get_report_summary("cn", "600150", "zh", redis=redis, generate=False)
+    assert out.status == "unreadable" and out.note
