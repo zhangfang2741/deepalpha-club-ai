@@ -268,12 +268,39 @@ async def get_quant_grade_history(market: str, symbols: list[str], start: date, 
          .order_by(col(QuantResult.as_of).desc(), col(QuantResult.updated_at).desc()))
     async with AsyncSessionFactory() as session:
         rows = (await session.execute(q)).all()
+    return _grade_snapshots(rows)
+
+
+def _grade_snapshots(rows) -> list[QuantGradeSnapshot]:
     return [QuantGradeSnapshot(symbol, as_of, created, updated,
                               {"overall": zh, "as_of": zh_dates} if zh else {},
                               {"overall": en, "as_of": en_dates} if en else {},
                               {k: v for k, v in zip(RADAR_DIMENSION_KEYS, dims, strict=True) if v},
                               version)
             for symbol, as_of, created, updated, zh, zh_dates, version, en, en_dates, *dims in rows]
+
+
+async def get_latest_quant_grades(market: str, symbols: list[str], start: date, end: date) -> list[QuantGradeSnapshot]:
+    """每只股票在 [start, end] 内最新的一行评级（DISTINCT ON，一只一行）。
+
+    只要「当前等级」的场景（好股票门槛 / 名单）用它：get_quant_grade_history 要把窗口内每天的行都读出来
+    （500 只 × 十几天，逐行解 JSON），标普 500 要十几秒；这里一只一行，快一个数量级。
+    """
+    if not symbols:
+        return []
+    q = (select(col(QuantResult.symbol), col(QuantResult.as_of),
+                col(QuantResult.created_at), col(QuantResult.updated_at),
+                col(QuantResult.payload_zh)["overall"], col(QuantResult.payload_zh)["as_of"],
+                col(QuantResult.payload_zh)["methodology_version"].as_string(),
+                col(QuantResult.payload_en)["overall"], col(QuantResult.payload_en)["as_of"],
+                *(col(QuantResult.grades)[k] for k in RADAR_DIMENSION_KEYS))
+         .where(col(QuantResult.market) == market, col(QuantResult.symbol).in_(symbols),
+                col(QuantResult.as_of) >= start, col(QuantResult.as_of) <= end)
+         .distinct(col(QuantResult.symbol))
+         .order_by(col(QuantResult.symbol), col(QuantResult.as_of).desc(), col(QuantResult.updated_at).desc()))
+    async with AsyncSessionFactory() as session:
+        rows = (await session.execute(q)).all()
+    return _grade_snapshots(rows)
 
 
 async def get_latest_result(market: str, symbol: str) -> QuantResult | None:

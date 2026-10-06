@@ -39,3 +39,62 @@ def test_net_counts_window():
 
 async def test_unknown_universe_none():
     assert await ft.fundamental_top("us", "nope", redis=None) is None   # type: ignore[arg-type]
+
+
+class _FakeRedis:
+    def __init__(self):
+        self.kv: dict[str, str] = {}
+
+    async def get(self, key):
+        return self.kv.get(key)
+
+    async def set(self, key, value, ex=None, nx=False):
+        self.kv[key] = value
+        return True
+
+    async def mget(self, keys):
+        return [self.kv.get(k) for k in keys]
+
+
+async def test_load_ranked_caches_second_call(monkeypatch):
+    """第二次不再读库、不再解析成分股：好股票门槛与名单共用同一份缓存。"""
+    import datetime as dt
+
+    calls = {"repo": 0, "pairs": 0}
+
+    async def fake_pairs(market, *, redis, universe_key):
+        calls["pairs"] += 1
+        return [("AAA", "甲"), ("BBB", "乙")]
+
+    class Row:
+        def __init__(self, symbol, grade, score):
+            self.symbol, self.grade, self.score = symbol, grade, score
+
+    async def fake_repo(market, symbols, start, end):
+        calls["repo"] += 1
+        return [Row("AAA", "A", 70.0), Row("BBB", "B", 55.0)]
+
+    def fake_grade_from_row(row):
+        return QuantGrade(row.grade, row.score, dt.date(2026, 10, 5), dt.date(2026, 10, 5), version="q6")
+
+    monkeypatch.setattr(ft, "resolve_constituents", fake_pairs)
+    monkeypatch.setattr(ft.repository, "get_latest_quant_grades", fake_repo)
+    monkeypatch.setattr(ft, "grade_from_row", fake_grade_from_row)
+    redis = _FakeRedis()
+    end = dt.date(2026, 10, 6)
+    first = await ft.load_ranked("us", "nasdaq100", redis, end)           # type: ignore[arg-type]
+    second = await ft.load_ranked("us", "nasdaq100", redis, end)          # type: ignore[arg-type]
+    assert calls == {"repo": 1, "pairs": 1}
+    assert [(s, g.grade, g.score) for s, g in first[0]] == [(s, g.grade, g.score) for s, g in second[0]]
+    assert second[1] == {"AAA": "甲", "BBB": "乙"}
+    assert second[0][0][1].version == "q6" and second[0][0][1].as_of == dt.date(2026, 10, 5)
+
+
+async def test_analyst_read_cache_uses_one_mget():
+    import json
+
+    redis = _FakeRedis()
+    redis.kv[ae.cache_key("AAA")] = json.dumps({"at": "x", "actions": []})
+    redis.kv[ae.cache_key("BAD")] = "not json"
+    out = await ae._read_cache(redis, ["AAA", "BBB", "BAD"])               # type: ignore[arg-type]
+    assert list(out) == ["AAA"]

@@ -10,6 +10,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from redis.asyncio import Redis
 
+from app.cache.operations import get_json, set_json
 from app.core.logging import logger
 from app.schemas.signal_radar import RadarFundamentalItemOut, RadarFundamentalResponse
 from app.services.quant_research import repository
@@ -35,15 +36,44 @@ def rank_latest(history: dict[str, list[QuantGrade]]) -> list[tuple[str, QuantGr
     return sorted(latest, key=lambda t: (GRADE_ORDER.index(t[1].grade or ""), -(t[1].score if t[1].score is not None else -1), t[0]))
 
 
+RANKED_CACHE_TTL = 600
+
+
+def _ranked_key(market: str, universe: str) -> str:
+    return f"signal_radar:ranked:v1:{market}:{universe}"
+
+
+def _encode_ranked(ranked: list[tuple[str, QuantGrade]], names: dict[str, str]) -> dict:
+    return {"names": names, "ranked": [
+        [s, g.grade, g.score, g.as_of.isoformat(), g.available_on.isoformat(), g.version] for s, g in ranked]}
+
+
+def _decode_ranked(raw: dict) -> tuple[list[tuple[str, QuantGrade]], dict[str, str]]:
+    ranked = [(s, QuantGrade(grade, score, date.fromisoformat(as_of), date.fromisoformat(avail), version=version))
+              for s, grade, score, as_of, avail, version in raw["ranked"]]
+    return ranked, dict(raw["names"])
+
+
 async def load_ranked(
     market: str, universe_key: str, redis: Redis, end: date,
 ) -> tuple[list[tuple[str, QuantGrade]], dict[str, str]] | None:
-    """股票池每只股票最新综合等级（不早于 LOOKBACK_DAYS 天前）的排序结果 + 代码→名称。读取失败返回 None。"""
+    """股票池每只股票最新综合等级（不早于 LOOKBACK_DAYS 天前）的排序结果 + 代码→名称。读取失败返回 None。
+
+    Redis 缓存 10 分钟（好股票门槛、好股票名单共用）：评级每天只在收盘后批量写一次，不用每次请求都读库
+    （标普 500 一次要十几秒）。读库只取每只股票最新一行（get_latest_quant_grades）。
+    """
+    key = _ranked_key(market, universe_key)
+    try:
+        cached = await get_json(redis, key)
+        if cached and "ranked" in cached:
+            return _decode_ranked(cached)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_ranked_cache_read_failed", error=str(e))
     pairs = await resolve_constituents(market, redis=redis, universe_key=universe_key)
     names = {s: n for s, n in pairs}
     try:
         stored = {s: normalize_symbol(market, s) for s in names}
-        rows = await repository.get_quant_grade_history(
+        rows = await repository.get_latest_quant_grades(
             market, sorted(set(stored.values())), end - timedelta(days=LOOKBACK_DAYS), end)
     except Exception:
         logger.exception("signal_radar_fundamental_top_read_failed", market=market)
@@ -54,7 +84,12 @@ async def load_ranked(
         if g is not None and (end - g.as_of).days <= LOOKBACK_DAYS:
             by_stored.setdefault(row.symbol, []).append(g)
     history = {s: by_stored[n] for s, n in stored.items() if n in by_stored}
-    return rank_latest(history), names
+    ranked = rank_latest(history)
+    try:
+        await set_json(redis, key, _encode_ranked(ranked, names), expire=RANKED_CACHE_TTL)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_ranked_cache_write_failed", error=str(e))
+    return ranked, names
 
 
 async def fundamental_top(

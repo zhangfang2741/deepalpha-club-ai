@@ -10,12 +10,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, date, datetime, timedelta
 
 import httpx
 from redis.asyncio import Redis
 
-from app.cache.operations import acquire_lock, get_json, release_lock, set_json
+from app.cache.operations import acquire_lock, release_lock, set_json
 from app.core.logging import logger
 from app.schemas.signal_radar import RadarAnalystDayOut, RadarAnalystEventOut, RadarAnalystEventsResponse
 from app.services.quant_research.fmp import FmpClient
@@ -116,14 +117,23 @@ def cache_key(symbol: str) -> str:
 
 
 async def _read_cache(redis: Redis, symbols: list[str]) -> dict[str, dict]:
+    """一次 MGET 读完所有股票的缓存（逐只 GET 是 N 次往返，标普 500 的好股票上百只）。"""
+    if not symbols:
+        return {}
+    try:
+        raws = await redis.mget([cache_key(s) for s in symbols])
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_analyst_cache_read_failed", error=str(e))
+        return {}
     out: dict[str, dict] = {}
-    for s in symbols:
-        try:
-            v = await get_json(redis, cache_key(s))
-        except Exception as e:  # noqa: BLE001
-            logger.warning("signal_radar_analyst_cache_read_failed", symbol=s, error=str(e))
+    for s, raw in zip(symbols, raws, strict=True):
+        if raw is None:
             continue
-        if v and isinstance(v.get("actions"), list):
+        try:
+            v = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
+        except (ValueError, UnicodeDecodeError):
+            continue
+        if isinstance(v, dict) and isinstance(v.get("actions"), list):
             out[s] = v
     return out
 
