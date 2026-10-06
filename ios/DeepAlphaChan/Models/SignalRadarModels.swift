@@ -172,6 +172,8 @@ struct RadarSignal: Decodable, Identifiable, Hashable {
     let ageDays: Int?
     /// 行业 key（与行业状态一致）；没有行业分类时为 nil。
     let sector: String?
+    /// 基本面雷达的分析师角标（「▲2」净上调 / 「▼1」净下调）；缠论雷达恒为 nil，不参与解码。
+    var analystMark: String? = nil
 
     var id: String { "\(symbol)-\(date)-\(signalType)" }
 
