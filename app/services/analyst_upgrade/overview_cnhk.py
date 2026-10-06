@@ -169,11 +169,19 @@ def build_cn_overview(symbol: str, lang: Lang, today: date, reports: list[dict],
             date=d.isoformat(), firm=str(r["orgSName"]), action=action, action_label=_i(lang, zh, en),
             previous_grade=prev_raw, previous_grade_label=prev_label, new_grade=raw_new, new_grade_label=new_label,
             price_target=_f(r.get("indvAimPriceT")),
+            report_title=(r.get("title") or None), report_url=_report_url(r.get("infoCode")),
         ))
     if ratings is None and target is None and not recent:
         return _empty(symbol, lang)
     return AnalystOverviewOut(symbol=symbol, status="ok", ratings=ratings, price_target=target, earnings=None,
                               recent_grades=recent, note=NOTE[lang])
+
+
+def _report_url(info_code: str | None) -> str | None:
+    """东财研报编号 → 研报原文页（只接受字母数字编号，避免拼出奇怪的链接）。"""
+    if not info_code or not str(info_code).isalnum():
+        return None
+    return f"https://data.eastmoney.com/report/zw_stock.jshtml?infocode={info_code}"
 
 
 def _cn_action(new: str | None, prev: str | None) -> str:

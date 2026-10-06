@@ -145,6 +145,10 @@ struct AnalystRatingTab: View {
                             Text(g.firm).font(.footnote).foregroundStyle(Theme.textPrimary)
                             Text(g.priceTarget.map { L("%@ · 目标价 %@", g.date, String(format: "%.2f", $0)) } ?? g.date)
                                 .font(.caption2).foregroundStyle(Theme.textSecondary)
+                            if let title = g.reportTitle, !title.isEmpty {
+                                Text(title).font(.caption2).foregroundStyle(Theme.textSecondary)
+                                    .lineLimit(2).multilineTextAlignment(.leading)
+                            }
                         }
                         Spacer()
                         Text(g.actionLabel).font(.caption2)
@@ -156,6 +160,16 @@ struct AnalystRatingTab: View {
                             .font(.footnote.weight(.medium)).foregroundStyle(Theme.textPrimary)
                     }
                     .padding(.vertical, 7)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        // 打开研报原文（第三方页面，在系统浏览器里看）
+                        if let s = g.reportUrl, let url = URL(string: s) { UIApplication.shared.open(url) }
+                    }
+                }
+                if grades.contains(where: { $0.reportUrl != nil }) {
+                    Text(L("点一行可查看研报原文（第三方页面，会跳到浏览器）"))
+                        .font(.caption2).foregroundStyle(Theme.textSecondary)
+                        .padding(.top, 6)
                 }
             }
         }
