@@ -8,6 +8,8 @@ struct SectorRadarContext {
     let selectedKey: String?
     /// 当天全部买卖点数（含没有行业标签的），给「全部行业」一行用；nil 时按各行业相加。
     var totals: (buy: Int, sell: Int)?
+    /// 基本面研究 tab：同一份 buy / sell 计数按「升档 / 降档」显示（buy = 升、sell = 降）。
+    var isGrade = false
 }
 
 /// 行业弹层：各行业按相对大盘强弱从强到弱，每行带状态色点、强弱、当前雷达选中日的买卖点数。
@@ -155,7 +157,9 @@ struct SectorBoardList: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: 4) {
             if parent == nil, let radar {
-                Text(L("买卖点为%@ %@ 的雷达统计；点行业即在雷达上只看该行业。", radar.universeName, radar.date))
+                Text(radar.isGrade
+                     ? L("升降档数为%@ %@ 的评级统计；点行业即在雷达上只看该行业。", radar.universeName, radar.date)
+                     : L("买卖点为%@ %@ 的雷达统计；点行业即在雷达上只看该行业。", radar.universeName, radar.date))
             }
             Text(L("以上内容为对市场环境的客观描述，不构成任何投资建议。"))
         }
@@ -176,7 +180,7 @@ struct SectorBoardList: View {
                     Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
                 }
                 Spacer(minLength: 8)
-                countText(buy: buys, sell: sells)
+                countText(buy: buys, sell: sells, isGrade: radar.isGrade)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
@@ -189,13 +193,13 @@ struct SectorBoardList: View {
         .accessibilityHint(L("雷达显示全部行业的信号"))
     }
 
-    /// 买卖点数：红买绿卖的小字，没有就不画。
+    /// 买卖点数（基本面 tab 为升降档数）：红买绿卖的小字，没有就不画。
     @ViewBuilder
-    private func countText(buy: Int, sell: Int) -> some View {
+    private func countText(buy: Int, sell: Int, isGrade: Bool = false) -> some View {
         if buy + sell > 0 {
             HStack(spacing: 6) {
-                if buy > 0 { Text(L("%lld 买", buy)).foregroundColor(Theme.up) }
-                if sell > 0 { Text(L("%lld 卖", sell)).foregroundColor(Theme.down) }
+                if buy > 0 { Text(isGrade ? L("%lld 升", buy) : L("%lld 买", buy)).foregroundColor(Theme.up) }
+                if sell > 0 { Text(isGrade ? L("%lld 降", sell) : L("%lld 卖", sell)).foregroundColor(Theme.down) }
             }
             .font(.caption2.weight(.semibold).monospacedDigit())
         }
@@ -233,7 +237,7 @@ struct SectorBoardList: View {
                 Image(systemName: "checkmark.circle.fill").font(.subheadline).foregroundColor(Theme.accent)
             }
             Spacer(minLength: 6)
-            countText(buy: counts?["buy"] ?? 0, sell: counts?["sell"] ?? 0)
+            countText(buy: counts?["buy"] ?? 0, sell: counts?["sell"] ?? 0, isGrade: radar?.isGrade ?? false)
             // 没有强弱数据（A 股 / 港股的本土行业）就不画强弱值与强弱条，只留买卖点数
             if let rs {
                 Text(SectorBoardList.rsText(rs))

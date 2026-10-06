@@ -12,14 +12,25 @@ final class GradeEventsViewModel: ObservableObject {
     /// 顶部行业胶囊的筛选（nil = 全部行业）：与缠论雷达共用同一个行业键，只留该行业的评级升降。
     @Published var sectorFilter: String?
 
-    private var loadedKey = ""
+    /// 已加载数据对应的 (市场, 指数)，以及当前请求的 (市场, 指数)：两者不同 = 刚切了市场 / 指数、旧数据不能再展示。
+    @Published private(set) var loadedKey = ""
+    @Published private(set) var requestedKey = ""
+    /// 最近一次失败的范围；视图按「当前范围」判断，切到别的范围时旧失败不再算数。
+    @Published private(set) var failedKey = ""
 
     /// 气泡最多画几只（变档最多的在前），其余点「另有 N 个 · 查看全部」。
     static let bubbleLimit = 10
     /// 13 档字母等级，A+ 最高、F 最低（与后端 GRADE_ORDER 一致）。
     static let gradeOrder = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F"]
 
-    var days: [GradeDay] { response?.days ?? [] }
+    /// 只有响应与当前所选 (市场, 指数) 一致才展示；切市场 / 指数后旧数据不再显示（与缠论雷达同一规则）。
+    var days: [GradeDay] { response != nil && loadedKey == requestedKey ? (response?.days ?? []) : [] }
+
+    /// 整页「正在加载」：当前所选范围还没有可展示的数据（首次进入、切市场 / 指数）。
+    var isScanning: Bool { isLoading && days.isEmpty }
+
+    /// 同一范围重新加载（如强制刷新）：旧气泡调暗、暂不响应点按。
+    var isReloading: Bool { isLoading && !days.isEmpty }
 
     var selectedDay: GradeDay? {
         guard !days.isEmpty else { return nil }
@@ -29,6 +40,13 @@ final class GradeEventsViewModel: ObservableObject {
     /// 读取失败（接口报错，或后端说评级数据读取失败）。
     var hasError: Bool { failed || response?.available == false }
 
+    /// 视图当前所选范围的键（与 load 里的 key 同格式）。
+    static func scopeKey(market: String, universe: String?) -> String { "\(market)|\(universe ?? "")" }
+
+    /// 视图当前所选范围还没有可展示的数据：切市场 / 指数的那一帧就为 true（不等 .task 起来、不依赖 isLoading），
+    /// 与缠论雷达「选了就立刻转圈」一致。已失败的范围不算（走出错态）。
+    func needsLoading(scope: String) -> Bool { loadedKey != scope && failedKey != scope }
+
     // MARK: - 映射成缠论雷达的数据形状
 
     /// 选中那一天的全部评级升降（后端已按变档数从多到少、同档数按代码排）。
@@ -36,6 +54,16 @@ final class GradeEventsViewModel: ObservableObject {
         let all = selectedDay?.events ?? []
         guard let key = sectorFilter else { return all }
         return all.filter { ($0.sector ?? RadarDay.otherSectorKey) == key }
+    }
+
+    /// 选中日各行业的升 / 降只数（不受行业筛选影响；key 同缠论雷达，buy = 升档、sell = 降档），给行业弹层用。
+    var sectorCounts: [String: [String: Int]] {
+        var out: [String: [String: Int]] = [:]
+        for e in selectedDay?.events ?? [] {
+            let key = e.sector ?? RadarDay.otherSectorKey
+            out[key, default: [:]][e.isUp ? "buy" : "sell", default: 0] += 1
+        }
+        return out
     }
 
     /// 超过 bubbleLimit 被折叠的只数。
@@ -81,19 +109,24 @@ final class GradeEventsViewModel: ObservableObject {
     // MARK: - 拉取
 
     func load(market: String, universe: String?, force: Bool = false) async {
-        let key = "\(market)|\(universe ?? "")"
+        let key = Self.scopeKey(market: market, universe: universe)
+        requestedKey = key
         if !force, key == loadedKey, response != nil { return }
         isLoading = true
         failed = false
-        defer { isLoading = false }
+        if failedKey == key { failedKey = "" }
+        defer { if requestedKey == key { isLoading = false } }
         do {
             let resp = try await SignalRadarService.gradeEvents(market: market, universe: universe)
+            // 加载期间用户又切了市场 / 指数：丢弃这次结果，别覆盖新请求
+            guard requestedKey == key else { return }
             loadedKey = key
             response = resp
             selectedIndex = 0
         } catch {
-            if Task.isCancelled { return }
+            if Task.isCancelled || requestedKey != key { return }
             failed = true
+            failedKey = key
         }
     }
 }
