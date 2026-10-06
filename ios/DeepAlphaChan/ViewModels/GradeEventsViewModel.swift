@@ -47,6 +47,16 @@ final class GradeEventsViewModel: ObservableObject {
         return all.filter { ($0.sector ?? RadarDay.otherSectorKey) == key }
     }
 
+    /// 选中日各行业的升 / 降只数（不受行业筛选影响；key 同缠论雷达，buy = 升档、sell = 降档），给行业弹层用。
+    var sectorCounts: [String: [String: Int]] {
+        var out: [String: [String: Int]] = [:]
+        for e in selectedDay?.events ?? [] {
+            let key = e.sector ?? RadarDay.otherSectorKey
+            out[key, default: [:]][e.isUp ? "buy" : "sell", default: 0] += 1
+        }
+        return out
+    }
+
     /// 超过 bubbleLimit 被折叠的只数。
     var hiddenCount: Int { max(0, dayEvents.count - Self.bubbleLimit) }
 

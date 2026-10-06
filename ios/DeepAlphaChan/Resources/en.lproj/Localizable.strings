@@ -1244,3 +1244,6 @@
 "评级升降只是事实陈列，不代表后续涨跌，不构成投资建议。" = "Grade changes are shown as facts only. They do not predict future moves and are not investment advice.";
 "正在加载「%@」评级升降…" = "Loading grade changes for “%@”…";
 "评级是每日跑批的结果，稍候即可看到升降" = "Grades come from a daily batch; changes will appear in a moment";
+"%lld 升" = "%lld up";
+"%lld 降" = "%lld down";
+"升降档数为%@ %@ 的评级统计；点行业即在雷达上只看该行业。" = "Up/down counts are rating changes for %@ on %@; tap a sector to filter the radar to it.";

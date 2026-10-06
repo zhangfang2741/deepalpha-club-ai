@@ -778,7 +778,17 @@ struct SignalRadarView: View {
         case .environment:
             MacroDetailSheet(market: vm.market, panic: panicVM.responses[vm.market])
         case .sectorPicker:
-            if let day = vm.baseSelectedDay {
+            if radarTab == .fundamental, let day = gradeVM.selectedDay {
+                SectorBoardSheet(
+                    market: vm.market, date: day.date,
+                    radar: SectorRadarContext(universeName: currentUniverseName, date: day.date,
+                                              counts: gradeVM.sectorCounts, selectedKey: vm.sectorFilter,
+                                              totals: (day.upCount, day.downCount), isGrade: true),
+                    onPick: { key, _ in vm.setSectorFilter(key) },
+                    onClear: { vm.setSectorFilter(nil) })
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            } else if let day = vm.baseSelectedDay {
                 SectorBoardSheet(
                     market: vm.market, date: day.date,
                     radar: SectorRadarContext(universeName: currentUniverseName, date: day.date,
