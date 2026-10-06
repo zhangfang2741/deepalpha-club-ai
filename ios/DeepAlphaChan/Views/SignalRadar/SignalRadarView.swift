@@ -68,12 +68,23 @@ struct SignalRadarView: View {
     @State private var pendingDetail: RadarSignal?
     /// 雷达上方并列的 tab：缠论买卖点 / 基本面研究（评级升降）。分析师评级等接口数据备齐后再并进来。
     enum RadarTab: String, CaseIterable, Identifiable {
-        case chan, fundamental
+        case chan, fundamental, analyst
         var id: String { rawValue }
-        var title: String { self == .chan ? L("缠论") : L("基本面研究") }
+        var title: String {
+            switch self {
+            case .chan: return L("缠论")
+            case .fundamental: return RadarEventKind.grade.tabTitle
+            case .analyst: return RadarEventKind.analyst.tabTitle
+            }
+        }
+        /// 基本面研究 / 分析师评级：同一块画布、同一套事件 VM，只是数据来源与文案不同。
+        var isEvents: Bool { self != .chan }
     }
     @State private var radarTab: RadarTab = .chan
-    @StateObject private var gradeVM = GradeEventsViewModel()
+    @StateObject private var gradeVM = GradeEventsViewModel(kind: .grade)
+    @StateObject private var analystVM = GradeEventsViewModel(kind: .analyst)
+    /// 当前事件 tab 用的 VM（缠论 tab 时不会用到，随便给 gradeVM）。
+    private var eventVM: GradeEventsViewModel { radarTab == .analyst ? analystVM : gradeVM }
     /// 基本面 tab 里「另有 N 个 · 查看全部」打开的半屏。
     @State private var showGradeAll = false
     /// 详情页打开时停在哪个分段：基本面 tab 点气泡 → 基本面研究；缠论 tab → nil（缠论结构）。
@@ -103,11 +114,14 @@ struct SignalRadarView: View {
             // 行业强弱跟着所选日走：雷达翻到哪天，扇区就按哪天收盘的强弱排
             .task(id: vm.sectorBoardKey) { await vm.loadSectorBoardIfNeeded() }
             // 行业胶囊的筛选同步给基本面 tab（两个 tab 共用同一排行业胶囊）
-            .onChange(of: vm.sectorFilter, initial: true) { _, key in gradeVM.sectorFilter = key }
+            .onChange(of: vm.sectorFilter, initial: true) { _, key in gradeVM.sectorFilter = key; analystVM.sectorFilter = key }
             // 切到基本面 tab、或在 tab 里换市场 / 指数时拉评级升降
             .task(id: "\(radarTab.rawValue)|\(vm.market.rawValue)|\(vm.activeUniverseKey)|\(store.isPremium)") {
-                if radarTab == .fundamental, store.isPremium {
-                    await gradeVM.load(market: vm.market.rawValue, universe: vm.activeUniverseKey)
+                if radarTab.isEvents, store.isPremium {
+                    await eventVM.load(market: vm.market.rawValue, universe: vm.activeUniverseKey)
+                    if radarTab == .analyst {
+                        await analystVM.pollWhilePending(market: vm.market.rawValue, universe: vm.activeUniverseKey)
+                    }
                 }
             }
             .sheet(item: $panel, onDismiss: {
@@ -177,7 +191,7 @@ struct SignalRadarView: View {
                 HStack { tabMenu; Spacer() }
             }
 
-            if radarTab == .fundamental {
+            if radarTab.isEvents {
                 fundamentalContent
             } else if vm.isScanning {
                 scanningView
@@ -240,9 +254,9 @@ struct SignalRadarView: View {
         case .chan:
             return !vm.isScanning && !vm.isComputingInBackground && vm.errorMessage == nil
                 && !vm.days.isEmpty && !needsConsent
-        case .fundamental:
-            return store.isPremium && consent.hasAgreed && !gradeVM.hasError && !gradeVM.days.isEmpty
-                && !gradeVM.needsLoading(scope: gradeScope)
+        case .fundamental, .analyst:
+            return store.isPremium && consent.hasAgreed && !eventVM.hasError && !eventVM.isUnsupported
+                && !eventVM.days.isEmpty && !eventVM.needsLoading(scope: gradeScope)
         }
     }
 
@@ -251,9 +265,9 @@ struct SignalRadarView: View {
         let scope = currentUniverseName.isEmpty ? vm.market.title : currentUniverseName
         return VStack(spacing: 12) {
             ProgressView().tint(Theme.accent)
-            Text(L("正在加载「%@」评级升降…", scope))
+            Text(String(format: eventVM.kind.loadingTitle, scope))
                 .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
-            Text(L("评级是每日跑批的结果，稍候即可看到升降"))
+            Text(eventVM.kind.loadingHint)
                 .font(.footnote).foregroundColor(Theme.textSecondary)
                 .multilineTextAlignment(.center)
         }
@@ -273,22 +287,25 @@ struct SignalRadarView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if !consent.hasAgreed {
             consentLockedField
-        } else if gradeVM.needsLoading(scope: gradeScope) || gradeVM.isScanning {
+        } else if eventVM.needsLoading(scope: gradeScope) || eventVM.isScanning {
             gradeLoadingView
         } else {
-            GradeEventsView(vm: gradeVM, universeName: currentUniverseName, sectorName: { vm.sectorName($0) },
+            GradeEventsView(vm: eventVM, universeName: currentUniverseName, sectorName: { vm.sectorName($0) },
                             showAll: $showGradeAll,
-                            onOpen: { symbol, name in openSymbol(symbol, name: name, segment: .quant) }) {
+                            onOpen: { symbol, name in openSymbol(symbol, name: name, segment: eventDetailSegment) }) {
                 bubbleField
                     // 同一范围重新加载时保留旧气泡、调暗、暂不响应点按（与缠论同一处理）
-                    .opacity(gradeVM.isReloading ? 0.35 : 1)
-                    .allowsHitTesting(!gradeVM.isReloading)
-                    .animation(.easeInOut(duration: 0.2), value: gradeVM.isReloading)
+                    .opacity(eventVM.isReloading ? 0.35 : 1)
+                    .allowsHitTesting(!eventVM.isReloading)
+                    .animation(.easeInOut(duration: 0.2), value: eventVM.isReloading)
             }
             // 换范围就整块重建：气泡重新出现、漂浮动画从头开始（缠论切指数时经 scanningView 也是重建）
-            .id(gradeVM.loadedKey)
+            .id("\(radarTab.rawValue)|\(eventVM.loadedKey)")
         }
     }
+
+    /// 事件 tab 点气泡进详情页停在哪一段：基本面 → 基本面研究；分析师评级 → 分析师评级。
+    private var eventDetailSegment: ResultDetailView.Segment { radarTab == .analyst ? .analyst : .quant }
 
     /// 基本面 tab 当前所选范围（市场 + 指数）的键，与 GradeEventsViewModel.load 的 key 同格式。
     private var gradeScope: String {
@@ -613,7 +630,7 @@ struct SignalRadarView: View {
                 }
 
                 if field.bubbles.isEmpty {
-                    Text(radarTab == .fundamental ? L("当日无评级升降") : L("当日无买卖点信号"))
+                    Text(radarTab.isEvents ? eventVM.kind.emptyDay : L("当日无买卖点信号"))
                         .font(.subheadline)
                         .foregroundColor(Theme.textSecondary)
                         .multilineTextAlignment(.center)
@@ -635,7 +652,7 @@ struct SignalRadarView: View {
                             marksConfirmed: marksConfirmed,
                             // 点气泡直接进分析详情页（不再先弹底部面板）
                             onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name,
-                                                 segment: radarTab == .fundamental ? .quant : nil) }
+                                                 segment: radarTab.isEvents ? eventDetailSegment : nil) }
                         )
                         // 气泡任何时候都不做透明处理：刷新完直接出现，不淡入
                         .transition(.identity)
@@ -651,7 +668,7 @@ struct SignalRadarView: View {
                     }
                 } else if field.hidden + hiddenExtra > 0 {
                     // 同心环最多画 ringFieldCap 个最新的，其余在「当日信号」里看全（基本面 tab：前 10 只，其余看全部评级升降）
-                    Button { if radarTab == .fundamental { showGradeAll = true } else { panel = .signals } } label: {
+                    Button { if radarTab.isEvents { showGradeAll = true } else { panel = .signals } } label: {
                         Text(L("另有 %lld 个 · 查看全部", field.hidden + hiddenExtra))
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundColor(Theme.accent)
@@ -685,16 +702,16 @@ struct SignalRadarView: View {
 
     /// 雷达画布当前画的那一天：缠论 tab = 选中日的买卖点；基本面 tab = 选中日在场的评级升降（同一块画布）。
     private var fieldDay: RadarDay? {
-        radarTab == .fundamental ? gradeVM.radarDay : vm.selectedDay
+        radarTab.isEvents ? eventVM.radarDay : vm.selectedDay
     }
 
     /// 基本面 tab 的环文字（由内向外）：环 = 新等级；缠论 tab 为 nil（环 = 距查看日的交易日数，文字见 ringSpecs）。
     private var gradeRingLabels: [String]? {
-        radarTab == .fundamental ? ["A", "B", L("C 及以下")] : nil
+        radarTab.isEvents ? eventVM.kind.ringLabels : nil
     }
 
     /// 画布之外被折叠的只数（基本面 tab 前 10 只之外的）。
-    private var hiddenExtra: Int { radarTab == .fundamental ? gradeVM.hiddenCount : 0 }
+    private var hiddenExtra: Int { radarTab.isEvents ? eventVM.hiddenCount : 0 }
 
     private var isSectorField: Bool {
         SignalRadarView.sectorFieldEnabled && vm.selectedDay?.hasSectorData == true
@@ -786,12 +803,12 @@ struct SignalRadarView: View {
         case .environment:
             MacroDetailSheet(market: vm.market, panic: panicVM.responses[vm.market])
         case .sectorPicker:
-            if radarTab == .fundamental, let day = gradeVM.selectedDay {
+            if radarTab.isEvents, let day = eventVM.selectedDay {
                 SectorBoardSheet(
                     market: vm.market, date: day.date,
                     radar: SectorRadarContext(universeName: currentUniverseName, date: day.date,
-                                              counts: gradeVM.sectorCounts, selectedKey: vm.sectorFilter,
-                                              totals: (day.upCount, day.downCount), isGrade: true),
+                                              counts: eventVM.sectorCounts, selectedKey: vm.sectorFilter,
+                                              totals: (day.upCount, day.downCount), eventWords: eventVM.kind.sectorWords),
                     onPick: { key, _ in vm.setSectorFilter(key) },
                     onClear: { vm.setSectorFilter(nil) })
                 .presentationDetents([.medium, .large])

@@ -22,8 +22,12 @@ struct GradeEventsView<Field: View>: View {
         VStack(spacing: 12) {
             if vm.hasError {
                 message(L("评级数据暂时读取失败，稍后再试"))
+            } else if vm.isUnsupported {
+                message(vm.kind.unsupportedMessage)
             } else if vm.days.isEmpty {
-                message(L("这个范围最近没有评级升降。评级历史需要至少两个评级日才能比较，刚上线的市场或节假日期间会暂时没有。"))
+                message(vm.pendingSymbols > 0
+                        ? L("正在汇总券商评级，还剩 %lld 只，稍候会自动出现", vm.pendingSymbols)
+                        : vm.kind.emptyMessage)
             } else {
                 summaryRow
                 field()
@@ -49,11 +53,11 @@ struct GradeEventsView<Field: View>: View {
     private var summaryRow: some View {
         let all = vm.dayEvents
         return HStack(spacing: 8) {
-            Text(L("%@ · 综合评级升降", universeName))
+            Text(String(format: vm.kind.summaryTitle, universeName))
                 .font(.footnote).foregroundColor(Theme.textSecondary)
             Spacer()
-            Text(L("%lld 升档", all.filter(\.isUp).count)).foregroundColor(Theme.up)
-            Text(L("%lld 降档", all.filter { !$0.isUp }.count)).foregroundColor(Theme.down)
+            Text("\(all.filter(\.isUp).count) \(vm.kind.upWord)").foregroundColor(Theme.up)
+            Text("\(all.filter { !$0.isUp }.count) \(vm.kind.downWord)").foregroundColor(Theme.down)
         }
         .font(.footnote)
     }
@@ -69,9 +73,9 @@ struct GradeEventsView<Field: View>: View {
 
     private var legend: some View {
         HStack(spacing: 14) {
-            legendDot(Theme.up, L("升档"))
-            legendDot(Theme.down, L("降档"))
-            Text(L("越靠中心评级越高 · 颜色越深、气泡越大变档越多"))
+            legendDot(Theme.up, vm.kind.upWord)
+            legendDot(Theme.down, vm.kind.downWord)
+            Text(vm.kind.legendHint)
                 .font(.system(size: 10)).foregroundColor(Theme.textSecondary)
                 .lineLimit(1).minimumScaleFactor(0.8)
             Spacer(minLength: 4)
@@ -87,7 +91,7 @@ struct GradeEventsView<Field: View>: View {
 
     /// 与缠论雷达底部同一位置、同一字号的一行说明。
     private var disclaimer: some View {
-        Text(L("评级由量化指标计算，仅为孤立观测，不构成投资建议。"))
+        Text(vm.kind.disclaimer)
             .font(.caption2)
             .foregroundColor(Theme.textSecondary)
             .frame(maxWidth: .infinity)
@@ -99,13 +103,7 @@ struct GradeEventsView<Field: View>: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    ForEach([
-                        L("范围：当前所选指数的成分股。每只股票每天有一个综合等级（A+ 到 F 共 13 档），和上一个评级日相比变了几档，就是一条升降。"),
-                        L("环：变动之后的新等级。最里圈 A 段（A+ / A / A-），中间圈 B 段，最外圈 C 及以下。"),
-                        L("颜色：红 = 升档，绿 = 降档；颜色越深、气泡越大，变的档数越多。气泡最后一行是「▲ / ▼ 变档数」。"),
-                        L("数量：只画当天变档最多的前 10 只，其余点「另有 N 个 · 查看全部」。"),
-                        L("评级升降只是事实陈列，不代表后续涨跌，不构成投资建议。")
-                    ], id: \.self) { line in
+                    ForEach(vm.kind.infoLines, id: \.self) { line in
                         Text(line).font(.subheadline).foregroundColor(Theme.textPrimary)
                     }
                 }
@@ -181,7 +179,7 @@ struct GradeEventsView<Field: View>: View {
                 .padding(.horizontal, 12).padding(.vertical, 8)
             }
             .background(Theme.background)
-            .navigationTitle(L("%@ 综合评级升降", vm.selectedDay.map { SignalRadarView.monthDay($0.date) } ?? ""))
+            .navigationTitle(String(format: vm.kind.allTitle, vm.selectedDay.map { SignalRadarView.monthDay($0.date) } ?? ""))
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.medium, .large])
@@ -203,10 +201,17 @@ struct GradeEventsView<Field: View>: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text("\(e.fromGrade) → \(e.toGrade)")
-                    .font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.textPrimary)
-                Text(e.isUp ? L("升 %lld 档", e.steps) : L("降 %lld 档", e.steps))
-                    .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
+                if vm.kind == .grade {
+                    Text("\(e.fromGrade) → \(e.toGrade)")
+                        .font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.textPrimary)
+                    Text(e.isUp ? L("升 %lld 档", e.steps) : L("降 %lld 档", e.steps))
+                        .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
+                } else {
+                    Text(e.isUp ? L("净上调 %lld 家", e.steps) : L("净下调 %lld 家", e.steps))
+                        .font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.textPrimary)
+                    Text(L("上调 %lld · 下调 %lld", e.upgrades, e.downgrades))
+                        .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
+                }
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
