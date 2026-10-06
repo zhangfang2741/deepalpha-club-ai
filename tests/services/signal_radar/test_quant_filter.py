@@ -193,7 +193,7 @@ async def test_rating_outage_publishes_technical_snapshot(monkeypatch):
             self.ttl = ex
     redis = Redis()
     await svc._write_cache(redis, response)
-    assert redis.ttl == 300
+    assert redis.ttl == svc._cache_ttl()  # 评级不可用也保留完整 TTL，靠陈旧判定后台重试
     restored = svc.unpack_snapshot(redis.stored)
     assert len(restored.days[0].signals) == 1
     assert restored.days[0].quant_filter.status == "unavailable"

@@ -807,6 +807,9 @@ async def _read_cache(
         return None
 
 
+_UNAVAILABLE_RETRY_AFTER = 300
+
+
 def _quant_unavailable(data: SignalRadarResponse) -> bool:
     """评级不可用时仍展示有效技术结果，并缩短快照有效期以便重试。"""
     return any(day.quant_filter is not None and day.quant_filter.status == "unavailable" for day in data.days)
@@ -816,7 +819,7 @@ async def _write_cache(redis: Redis, data: SignalRadarResponse) -> None:
     try:
         await redis.set(
             _cache_key(data.market, data.universe, data.signal_mode), pack_snapshot(data),
-            ex=300 if _quant_unavailable(data) else _cache_ttl()
+            ex=_cache_ttl()  # 评级不可用也保留完整 TTL，靠 peek_cache_entry 判陈旧后台重试（短 TTL 会让快照消失、用户撞上全量扫描）
         )
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_cache_write_error", market=data.market, error=str(e))
@@ -1270,7 +1273,8 @@ async def compute_market(
     return resp
 
 
-async def _cache_is_stale(redis: Redis, market: str, universe_key: str, mode: str = DEFAULT_MODE) -> bool:
+async def _cache_is_stale(redis: Redis, market: str, universe_key: str, mode: str = DEFAULT_MODE,
+                          stale_after: int | None = None) -> bool:
     """按剩余 TTL 反推缓存年龄，判断是否已陈旧（超过 _cache_stale_after）。
 
     年龄 = 完整 TTL - 剩余 TTL。拿不到剩余 TTL（异常）时保守地当作「不陈旧」，
@@ -1285,7 +1289,7 @@ async def _cache_is_stale(redis: Redis, market: str, universe_key: str, mode: st
     if remaining < 0:
         return True
     age = _cache_ttl() - remaining
-    return age >= _cache_stale_after()
+    return age >= (stale_after if stale_after is not None else _cache_stale_after())
 
 
 async def peek_cache_entry(
@@ -1302,7 +1306,9 @@ async def peek_cache_entry(
     cached = await _read_cache(redis, market, universe.key, mode)
     if cached is None:
         return None, False
-    return cached, await _cache_is_stale(redis, market, universe.key, mode)
+    # 评级暂不可用的快照：5 分钟后即视为陈旧，由后台重试补评级（旧数据照常先返回）
+    stale_after = _UNAVAILABLE_RETRY_AFTER if _quant_unavailable(cached) else None
+    return cached, await _cache_is_stale(redis, market, universe.key, mode, stale_after)
 
 
 async def get_market(
