@@ -507,7 +507,7 @@ struct SignalRadarView: View {
             let w = Double(geo.size.width)
             let h = Double(geo.size.height)
             let dayDate = vm.selectedDay?.date ?? ""
-            let signals = vm.selectedDay?.signals ?? []
+            let signals = SignalRadarView.buyFirst(vm.selectedDay?.signals ?? [])
             // 「待确认」候选（最后一笔还没走完，按严格口径尚不成立）不画进雷达，只在上方一行显示个数：
             // 画成灰色虚线气泡会和真实买卖点挤在一起，雷达又满了
             let candidates: [RadarSignal] = []
@@ -918,6 +918,12 @@ struct SignalRadarView: View {
     }
 
     /// 同心环模式最多尝试画这么多个最新的气泡；放不下的与超出的都在「当日信号」面板里看全。
+    /// 买点优先：买点排在卖点前面（各自保持出现时间从新到旧）。画布最多画 ringFieldCap 个，超出的折叠，
+    /// 排序后折叠掉的先是卖点——好股票里的买点是用户最关心的，不能被更新的卖点挤到「另有 N 个」里。
+    static func buyFirst(_ signals: [RadarSignal]) -> [RadarSignal] {
+        signals.filter { $0.side == "buy" } + signals.filter { $0.side != "buy" }
+    }
+
     static let ringFieldCap = 24
 
     /// 信号数不超过这个值时，同心环模式保证全部画出来（放不下就放宽圈带、缩小气泡），不出现「另有 N 个」；

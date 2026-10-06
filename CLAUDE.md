@@ -180,7 +180,8 @@ deepalpha-club-ai/
 > **评级读取失败时原样返回（不能因为评级挂了让雷达变空）**；达标名单 Redis 缓存 10 分钟（`signal_radar:good:v1:*`）。改门槛改 `GOOD_GRADES`，无需升 `_mode_ns`（不进快照）。
 > **分析师评级只作角标**（`RadarSignal.analystUp / analystDown` → `analystMark`，`RadarBubble` 右上角白色小胶囊）：近 30 天券商净上调「▲n」（红）/ 净下调「▼n」（绿），净 0 或没有数据不画；只做美股（A 股东财研报无上调 / 下调字段、港股只有最新评级）。
 > 数据 = FMP 个股评级变动 `grades`（`signal_radar/analyst_events.py`），**只对留下信号的好股票拉**，**接口只读 Redis 缓存**（`signal_radar:analyst:v1:{symbol}`，24 小时 TTL、6 小时算过期）；缺失 / 过期的由后台任务补（`FmpClient` 批量额度、并发 4、带锁），响应 `analyst_pending` = 还在补的只数，App 的静默轮询（`refreshWhileBackfilling`，90 秒）在 >0 时继续重拉。**不要**在请求路径里同步逐只拉 FMP。
-> **好股票名单**（雷达上方「名单」入口，`GoodStocksSheet` + `GET /signal-radar/fundamental-top`，会员功能）：当前综合等级达标的股票，分「近期有买卖点 / 暂无买卖点」两组（有没有买卖点按雷达当前各展示日的信号判断），每行写等级、券商角标与最近一个买卖点；点行进个股详情。名单取全池前 50（按等级高 → 低、综合分高 → 低），门槛用雷达响应的 `qualityThreshold` 在 App 端截。
+> **买点优先**（2026-10-06）：好股票里的买点是用户最关心的——画布超过 `ringFieldCap` 个要折叠时先折卖点（`SignalRadarView.buyFirst`，买点排前、各自保持时间从新到旧）；好股票名单分「近期有买点 / 近期只有卖点 / 暂无买卖点」三组，每行优先展示最近的买点。
+> **好股票名单**（雷达上方「名单」入口，`GoodStocksSheet` + `GET /signal-radar/fundamental-top`，会员功能）：当前综合等级达标的股票，分三组（有没有买卖点按雷达当前各展示日的信号判断），每行写等级、券商角标与最近一个买卖点；点行进个股详情。名单取全池前 50（按等级高 → 低、综合分高 → 低），门槛用雷达响应的 `qualityThreshold` 在 App 端截。
 > 旧接口 `GET /signal-radar/grade-events`（每日升降）与 `/analyst-events`（每日券商净升降）后端保留、App 不再使用。
 
 > 信号雷达扫描约束（`app/services/signal_radar`）：同一 (口径, 市场, universe) 任一时刻只跑一轮全量扫描

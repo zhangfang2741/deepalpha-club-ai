@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 「好股票」名单：当前综合等级达标的股票，按「有买卖点 / 暂无买卖点」分组，每行写等级、分析师角标与最近一个买卖点。
-/// 只陈列事实：不排序推荐，组内按综合等级从高到低。
+/// 「好股票」名单：当前综合等级达标的股票，按「近期有买点 / 近期只有卖点 / 暂无买卖点」分组（买点优先），
+/// 每行写等级、分析师角标与最近一个买卖点。只陈列事实：不排序推荐，组内按综合等级从高到低。
 struct GoodStocksSheet: View {
     @ObservedObject var vm: GoodStocksViewModel
     /// 最低综合等级（如 "B+"，后端门槛）。
@@ -13,17 +13,23 @@ struct GoodStocksSheet: View {
     /// 点某一行：先收起面板，收起后再打开个股。
     let onOpen: (String, String) -> Void
 
-    /// 每只股票最近的一个买卖点（days 最新在前，每天信号也是新到旧）。
+    /// 每只股票最近的一个买卖点（days 最新在前，每天信号也是新到旧）；买点优先：近期有买点时展示最近的买点，
+    /// 没有买点才展示最近的卖点。
     private func latestSignal(for symbol: String) -> RadarSignal? {
+        var firstSell: RadarSignal?
         for day in days {
-            if let s = day.signals.first(where: { $0.symbol == symbol }) { return s }
+            for s in day.signals where s.symbol == symbol {
+                if s.side == "buy" { return s }
+                if firstSell == nil { firstSell = s }
+            }
         }
-        return nil
+        return firstSell
     }
 
     var body: some View {
         let items = vm.items(atLeast: threshold)
-        let withSignal = items.filter { latestSignal(for: $0.symbol) != nil }
+        let withBuy = items.filter { latestSignal(for: $0.symbol)?.side == "buy" }
+        let onlySell = items.filter { latestSignal(for: $0.symbol).map { $0.side != "buy" } ?? false }
         let without = items.filter { latestSignal(for: $0.symbol) == nil }
         NavigationStack {
             ScrollView {
@@ -37,7 +43,9 @@ struct GoodStocksSheet: View {
                             .font(.footnote).foregroundColor(Theme.textSecondary)
                             .frame(maxWidth: .infinity).padding(.top, 40)
                     } else {
-                        section(L("近期有买卖点 · %lld 只", withSignal.count), withSignal)
+                        // 买点优先：先列近期有买点的，再列只有卖点的，最后是暂无买卖点的
+                        section(L("近期有买点 · %lld 只", withBuy.count), withBuy)
+                        section(L("近期只有卖点 · %lld 只", onlySell.count), onlySell)
                         section(L("暂无买卖点 · %lld 只", without.count), without)
                     }
                     Text(L("好股票 = 当前综合等级不低于 %@ 的股票；券商角标为近 30 天净上调 / 净下调（仅美股）。仅为事实陈列，不构成投资建议。", threshold ?? ""))
