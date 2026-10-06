@@ -562,8 +562,6 @@
 "上榜排序怎么算" = "How the ranking is scored";
 "综合分 = 35% 类型确定性 + 30% 强弱 + 35% 新鲜度，最新一天命中「共振」再额外加分。" = "Score = 35% type certainty + 30% strength + 35% freshness, with a bonus for hitting \"Aligned\" on the latest day.";
 "类型确定性：一类 0.4（背驰迹象，待验证）、二类 0.7（回踩不破中枢）、三类 1.0（完全不回中枢，最强确认）。" = "Type certainty: type 1 = 0.4 (a divergence hint, unconfirmed), type 2 = 0.7 (pullback holds the pivot), type 3 = 1.0 (pullback never re-enters the pivot — the strongest confirmation).";
-"每类买卖点先保底最多 2 个名额，其余按综合分从高到低补满，共取前 10 名。" = "Each signal type gets up to 2 guaranteed slots first; the rest are filled by score, for a top-10 list overall.";
-"以上打分口径与详情页强弱、确认状态判定完全一致，只是气泡取的是某一次扫描的快照。" = "This scoring matches the same strength and confirmation logic used on the analysis detail page — the bubbles just reflect a snapshot from one scan.";
 "为什么点进详情页可能对不上" = "Why the detail page can look different";
 "气泡是最近一次全量扫描那一刻的快照（历史日期下方会标出算出时刻），不是实时数据；点进详情页是用当下最新K线重新跑一遍缠论。" = "Bubbles are a snapshot from the last full scan (the computed time is shown under past dates), not live data; opening the detail page reruns the Chan analysis on the latest candles.";
 "缠论的笔和买卖点在最新几根K线上本身是临时性的，后续新K线一出现，原来某天的信号可能被延伸、改写甚至判定失效——这是分析方法的特性，不是数据错误。" = "Chan strokes and signals near the most recent candles are inherently provisional — once new candles arrive, a signal from an earlier day can be extended, rewritten, or invalidated. That's how the method works, not a data error.";
@@ -584,7 +582,6 @@
 "大小：买卖点类型，一类最小、三类最大——越往后确认程度越高。" = "Size: signal type — type 1 smallest, type 3 largest; later types are more confirmed.";
 "新鲜度：按信号出现后的交易日数算（周末、休市不算），当天最高，第 5 个交易日归零，之后退场。" = "Freshness: counted in trading days since the signal appeared (weekends and holidays excluded); highest on the day, zero on the 5th trading day, then it leaves the radar.";
 "未确认的信号（落在最后一笔上的提前预判）：类型确定性和强弱两部分打 6 折，新鲜度不打折。" = "Unconfirmed signals (early calls on the last, still-open stroke): the type-certainty and strength parts are discounted to 60%; freshness is not.";
-"价格走坏即退场：信号出现后，收盘价跌破买点价位（卖点：涨破）当天起从雷达移出；详情页仍显示该买卖点。" = "Exit on a broken price: once a close falls below the buy level (for sells, rises above it), the signal leaves the radar from that day; the details page still shows it.";
 "气泡多久更新一次" = "How often bubbles update";
 "当前数据：%@ 全量计算，共振标记 %@ 更新。" = "Current data: full scan at %@; resonance tags updated at %@.";
 "当前数据：%@ 全量计算。" = "Current data: full scan at %@.";
@@ -1102,7 +1099,7 @@
 "越靠中心越新" = "Closer to center = newer";
 "位置：越靠中心信号越新（按信号出现后的交易日数，周末不算），气泡太挤时会自动推开。美股指数雷达按行业分成扇区，行业按当日相对大盘强弱从上往下排，越靠上越强。" = "Position: the closer to the center, the newer the signal (trading days since it appeared, weekends excluded); crowded bubbles are nudged apart. US index radars are split into sector wedges, ordered top-down by that day's strength vs. the market.";
 "雷达上显示哪些信号" = "Which signals appear";
-"雷达只陈列按缠论规则得出的事实，不打分、不排名、不按基本面筛选；强弱与确认状态的判定与详情页完全一致，只是气泡取的是某一次扫描的快照。" = "The radar only lays out facts derived from Chan Theory rules — no scoring, ranking or fundamental filtering. Strength and confirmation match the detail page; bubbles are a snapshot from one scan.";
+"雷达只陈列按缠论规则得出的事实，不打分、不排名、不构成推荐；好股票门槛只用来缩小范围；强弱与确认状态的判定与详情页完全一致，只是气泡取的是某一次扫描的快照。" = "The radar only lists facts produced by Chan rules: no scoring, no ranking, no recommendation. The good-stock threshold only narrows the scope. Strength and confirmation are judged exactly as on the detail page; bubbles are a snapshot of one scan.";
 "所选指数全部成分股都跑一遍缠论，某天在场的信号全部列出，按出现时间从新到旧，不打分、不截取前几名。" = "Every constituent of the selected index is analyzed; all signals active on a day are listed, newest first, with no scoring or top-N cut.";
 "在场：信号出现后 5 个交易日内（周末、休市不算），且收盘价没有跌破买点价位（卖点：涨破）；走坏当天起移出雷达，详情页仍显示该买卖点。" = "Active: within 5 trading days of appearing, and no close below the buy level (above, for sells). Once broken it leaves the radar; the detail page still shows it.";
 "最后一笔还在走时出现的买卖点也会显示（不带「✓」），之后可能被新K线改写；一周前的历史日期不再显示这类信号。" = "Signals on a still-forming last stroke are shown too (no ✓) and may be revised by new bars; past dates over a week old omit them.";
@@ -1123,10 +1120,10 @@
 "全部行业" = "All sectors";
 "行业强弱详情" = "Sector strength";
 "选择行业" = "Choose sector";
-"位置：越靠中心信号越新，由内向外依次摆开、互不重叠，画不下的点「查看全部」看。美股可在顶部「行业」里选一个行业，雷达只显示该行业的信号。" = "Position: newer signals sit closer to the center, laid out from the inside out without overlapping; tap \"See all\" for those that don’t fit. For US stocks, pick a sector at the top to show only that sector’s signals.";
+"位置：越靠中心信号越新，由内向外依次摆开、互不重叠。信号不超过 10 个时全部画出；更多时先折叠卖点、保留买点，点「查看全部」看全部。顶部「行业」横条可选一个行业，雷达只显示该行业的信号。" = "Position: the closer to the center, the newer the signal; they are laid out from the inside out without overlapping. Up to 10 signals are all drawn; with more, sell points fold first and buy points stay — tap \"View all\" to see everything. Pick an industry in the \"Industry\" strip at the top to show only that industry.";
 "角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。" = "Badges: \"Resonance\" = daily direction agrees with 30-minute; \"New\" = first appeared that day.";
-"只显示已成立的买卖点：所在的笔已经走完，并且下一笔也走完了才算，所以会比价格转折晚几天出现。最后一笔还在走时出现的只算「待确认」，在雷达上方显示个数，不画进雷达。" = "Only established signals are shown: the stroke they sit on and the next stroke must both be complete, so they appear a few days after the turn. Signals on the still-moving last stroke count as \"pending\" — shown as a count above the radar, not drawn.";
-"基本面评级只标在气泡上，不参与筛选；画不下的气泡点「查看全部」可看全部。" = "Fundamental grades are labels only, never filters; tap \"See all\" for bubbles that don’t fit.";
+"只显示已成立的买卖点：所在的笔已经走完，并且下一笔已经开始成形（首次成笔）才算，所以会比价格转折晚几天出现。最后一笔还在走时出现的只算「待确认」，在雷达上方显示个数，不画进雷达。" = "Only established points are shown: the stroke they sit on must be finished and the next stroke must have started to form (first confirmed as a stroke), so they appear a few days after the price turn. Points on a stroke that is still running count only as \"pending\": the number is shown above the radar and they are not drawn.";
+"只留好股票的买卖点（见上方「什么是好股票」），其余股票的信号不画；画不下的气泡点「查看全部」可看全部。" = "Only buy/sell points of good stocks are kept (see \"What is a good stock\" above); signals of other stocks are not drawn. Tap \"View all\" for bubbles that do not fit.";
 "雷达显示全部行业的信号" = "Show signals from all sectors on the radar";
 "查看全部信号" = "See all signals";
 "7天内" = "Within 7 days";
@@ -1319,3 +1316,9 @@
 "联系邮箱" = "Contact email";
 "用于回复你的邮箱" = "Email for our reply";
 "反馈内容" = "Message";
+"气泡最后一行是该股票当前的综合等级；右上角白色小胶囊「▲n / ▼n」是近 90 天券商净上调 / 净下调家数（仅美股，没有数据或净 0 不显示）。" = "The last line of a bubble is the stock's current composite grade; the white capsule \"▲n / ▼n\" at the top right is the net number of broker upgrades / downgrades in the last 90 days (US only; hidden when there is no data or the net is 0).";
+"什么是好股票" = "What is a good stock";
+"雷达只画「好股票」的买卖点：先看市场和行业，再看哪些股票基本面好，最后看它们有没有买卖点。" = "The radar only draws buy/sell points of \"good stocks\": check the market and industry first, then which stocks have solid fundamentals, and finally whether they have buy/sell points.";
+"好股票 = 当前综合等级达标的股票。综合等级由估值、成长、盈利能力、动量、EPS 修正五个维度在同行业内的百分位平均得出，只给字母等级；任一维度为 F 时，综合等级最高 C+。" = "Good stock = a stock whose current composite grade meets the threshold. The grade averages the within-industry percentiles of five dimensions (valuation, growth, profitability, momentum, EPS revisions) and is shown as a letter only; if any dimension is F, the composite is capped at C+.";
+"门槛随股票池自动调整：取有评级股票的前 25%，至少 8 只，且不低于 B，同一等级整档纳入。顶部流程图写着当前门槛「X 及以上」。" = "The threshold adapts to the stock pool: the top 25% of rated stocks, at least 8, and never below B; a whole grade is included at once. The flow chart at the top shows the current threshold \"X and above\".";
+"用的是股票当前的等级，不是信号当天的；评级暂时读取失败时不做筛选，雷达照常显示全部信号。" = "The stock's current grade is used, not the grade on the signal day. If ratings cannot be read, no filtering is applied and the radar shows all signals.";
