@@ -72,7 +72,9 @@ struct ContactUsView: View {
             text = ""
             showDone = true
         } catch {
-            errorMessage = L("提交失败，请稍后再试")
+            // 透传后端 detail（如「反馈服务暂未开通」「发送失败」），没有时才用通用文案
+            let detail = (error as? APIError)?.message
+            errorMessage = detail.map { L("提交失败：%@", $0) } ?? L("提交失败，请稍后再试")
         }
     }
 }
