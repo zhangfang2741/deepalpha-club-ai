@@ -1530,3 +1530,5 @@
 "颜色越深，说明这个结构形态本身越清晰、越坚决。" = "The deeper the shade, the clearer and more decisive the structure itself.";
 "不是预期收益的大小：颜色深不等于赚得多，也不等于更可能成功。" = "It is not the size of expected returns: a deeper shade does not mean earning more or being more likely to work.";
 "%@ 收盘 · 近 20 日相对大盘" = "Close of %@ · 20-day strength vs market";
+"看推导过程（%lld 步）" = "See the derivation (%lld steps)";
+"第一次来？30 秒看懂这个 App" = "First time here? Understand this app in 30 seconds";

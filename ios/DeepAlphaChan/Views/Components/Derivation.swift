@@ -34,14 +34,19 @@ struct DerivationContent: View {
     var means: String?
     var notMeans: String?
     var terms: [String] = []
+    /// 推导过程默认折叠：第一屏只给结论和「这说明 / 这不说明」这两句大白话，想看细节再展开。
+    /// 没有这两句时（旧调用方）直接展开。
+    @State private var showSteps: Bool
 
     init(result: DerivationResult) {
         conclusion = result.conclusion; steps = result.steps; caveat = result.caveat
         means = result.means; notMeans = result.notMeans; terms = result.terms
+        _showSteps = State(initialValue: result.means == nil && result.notMeans == nil)
     }
 
     init(conclusion: String, steps: [DerivationStep], caveat: String? = nil) {
         self.conclusion = conclusion; self.steps = steps; self.caveat = caveat
+        _showSteps = State(initialValue: true)
     }
 
     var body: some View {
@@ -58,6 +63,21 @@ struct DerivationContent: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10))
             }
+            if !showSteps && !steps.isEmpty {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { showSteps = true }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(L("看推导过程（%lld 步）", steps.count)).font(QuantTypography.emphasis)
+                        Image(systemName: "chevron.down").font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundStyle(Theme.accent)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .background(Theme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+            }
+            if showSteps {
             ForEach(Array(steps.enumerated()), id: \.element.id) { idx, step in
                 HStack(alignment: .top, spacing: 10) {
                     Text("\(idx + 1)")
@@ -84,7 +104,8 @@ struct DerivationContent: View {
                     }
                 }
             }
-            if let caveat {
+            }
+            if showSteps, let caveat {
                 Text(caveat)
                     .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -125,6 +146,9 @@ struct DerivationLink: View {
             Text(label).font(.caption2.weight(.semibold))
         }
         .foregroundStyle(Theme.accent)
+        .padding(.vertical, 8)          // 字小，给足点击热区
+        .padding(.trailing, 8)
+        .contentShape(Rectangle())
         .quantExplain(title) {
             DerivationContent(result: result)
         }

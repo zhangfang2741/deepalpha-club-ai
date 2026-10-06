@@ -90,9 +90,13 @@ struct SignalRadarView: View {
             // 「上个月 1 号」免费预览快照，自动取消上一次未完成的请求、重新拉一次。
             .task {
                 vm.onAppear()
-                // 先给页面一点时间出来，再弹导览；还没同意免责声明时不弹（免得两个弹层抢）
+                // 首次进来：把悬浮的「投资观察流程」图展开一次（不弹全屏、不挡内容，点外面收起），
+                // 里面有「新手导览」入口；还没同意免责声明时先不展开，免得和免责声明抢。
                 try? await Task.sleep(for: .milliseconds(900))
-                if !OnboardingTourView.hasSeen && !needsConsent { showTour = true }
+                if !OnboardingTourView.hasSeen && !needsConsent {
+                    UserDefaults.standard.set(true, forKey: OnboardingTourView.seenKey)
+                    withAnimation(.easeInOut(duration: 0.2)) { showFlow = true }
+                }
             }
             .sheet(isPresented: $showTour) { OnboardingTourView() }
             // 后台补算未完成时定期静默重拉，补上的成分股不用用户手动刷新就能出现；
@@ -429,6 +433,16 @@ struct SignalRadarView: View {
                          highlight: signalStocks > 0 ? .accent : .muted)
             }
             Divider().overlay(Theme.border)
+            Button { showTour = true } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "play.circle").font(.caption)
+                    Text(L("第一次来？30 秒看懂这个 App")).font(.caption.weight(.semibold))
+                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold))
+                }
+                .foregroundColor(Theme.accent)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
             Text(L("这是一个投资观察流程：先看市场和行业，再看基本面靠前的股票，最后看它们的缠论结构。内容仅为按规则整理的事实，不构成投资建议。"))
                 .font(.caption2).foregroundColor(Theme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
