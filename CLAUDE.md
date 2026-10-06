@@ -172,6 +172,12 @@ deepalpha-club-ai/
 > 行业 key 是中文名；英文名在 `cnhk/sectors.NATIVE_SECTOR_EN`（接口按 `lang=en` 返回，App 本地兜底走 `L(key)` + en 文案；有测试守护 43 个行业都有英文名，新增行业须补）。
 > `/macro/{cn|hk}/sectors`（`macro.service._native_sector_board`）返回本土行业全集 + 强弱（没算出来的行业强弱为空，App 不画强弱条、不写「最强」）+ 雷达当日买卖点数。
 
+> **量化指标一律要有「怎么算的」推导**（2026-10-06 产品原则）：App 上任何算出来的结论（状态、分数、等级、强弱、门槛、角标、买卖点类型）都必须能点开看到「结论 → 几步推导（带这一处、这一天的真实数字）→ 局限」。
+> 统一外壳 `Views/Components/Derivation.swift`（`DerivationContent` / `DerivationLink`，底层复用量化研究的 `.quantExplain` 弹层）；每项文字单独写、不做统一说明页：
+> 宏观四项 `Views/SignalRadar/MacroDerivations.swift`（市场状态用后端 `state.inputs` 的当天原料、驱动因素用 `flat_band`）、雷达 `RadarDerivations.swift`（基本面门槛带 `quality_share / min_count / floor`）、买卖点 `Views/Analysis/SignalDerivation.swift`（严格口径）；基本面研究早已有（`QuantExplain.swift`）。
+> **改算法 / 阈值 / 权重时，对应的推导文字（中英）必须一起改**（口径来源已写在各文件头注释里）；新增量化指标没有推导说明不算完成。
+> 情绪分是第三方公开指数、我们只展示（说明里照实写「不是我们自己算的」，不出现供应商名）。
+
 > **用户界面里「好股票」一律叫「基本面」**（2026-10-06：流程图第三步「基本面」、名单「基本面名单」、算法说明「什么是基本面筛选」；代码、接口、测试里仍叫 good / quality，不改）。
 
 > **雷达 = 好股票的缠论买卖点**（2026-10-06 起，门槛由我们定、**不让用户选**）：用户要感知的是「市场怎么样、行业怎么样、好的股票有哪些、有没有买卖点」——顶部市场卡 / 行业横条 / 雷达画布 / 好股票名单依次回答。
