@@ -163,7 +163,6 @@ struct SignalRadarView: View {
     /// 声明时，气泡区换成锁定占位（consentLockedField）。
     private var radarContent: some View {
         VStack(spacing: 12) {
-            if showFlow { flowPanel }
             MarketHeader(radarVM: vm, panicVM: panicVM, overviewVM: overviewVM) { p in
                 // 行业 / 当日信号面板列的是选中日的真实信号，与气泡同一道免责声明门槛；环境不涉及个股
                 if needsConsent && p != .environment {
@@ -203,6 +202,20 @@ struct SignalRadarView: View {
         .padding(.top, 8)
         .padding(.bottom, 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // 流程图悬浮在页面上方（不占版面、不把下面的内容往下挤）；点流程图以外的地方收起
+        .overlay(alignment: .top) {
+            if showFlow {
+                ZStack(alignment: .top) {
+                    Color.black.opacity(0.28)
+                        .ignoresSafeArea()
+                        .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { showFlow = false } }
+                    flowPanel
+                        .padding(.horizontal, 12)
+                        .padding(.top, 6)
+                        .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
+                }
+            }
+        }
     }
 
     // MARK: - 免责声明
