@@ -29,8 +29,8 @@ CACHE_TTL = 6 * 3600
 def cache_key(symbol: str, lang: str, market: str = "us") -> str:
     """缓存键（带版本号，结构变动时升版本）。美股键保持原样。"""
     if market != "us":
-        return f"analyst_upgrade:overview:v3:{market}:{symbol}:{lang}"
-    return f"analyst_upgrade:overview:v3:{symbol}:{lang}"
+        return f"analyst_upgrade:overview:v4:{market}:{symbol}:{lang}"
+    return f"analyst_upgrade:overview:v4:{symbol}:{lang}"
 
 
 async def get_analyst_overview(symbol: str, lang: Lang, *, redis: Redis | None,
