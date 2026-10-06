@@ -78,7 +78,7 @@ final class SignalRadarViewModel: ObservableObject {
 
     private var todayLocalDay: String { Self.localDayFormatter.string(from: Date()) }
 
-    /// 每个市场记住上次选的 universe 键（nil=该市场默认科技指数）。切市场时各自恢复，
+    /// 每个市场记住上次选的 universe 键（nil=该市场默认大盘宽基指数）。切市场时各自恢复，
     /// 不会把港股选的「恒生指数」带到美股上。
     private var universeByMarket: [StockMarket: String] = [:]
 
@@ -113,17 +113,17 @@ final class SignalRadarViewModel: ObservableObject {
         if activeUniverseKey == RadarUniverse.watchlistKey { return L("自选") }
         // 切市场时 response 暂时还是上一个市场的（保留旧内容防跳动），它的名称不能拿来用，
         // 否则选了 A 股却显示「正在扫描纳斯达克100」。还没拿到过这个市场的列表时用默认
-        // 指数名兜底，直接显示「科创50」，不先闪一下「A 股」。
+        // 指数名兜底，直接显示「沪深300」，不先闪一下「A 股」。
         if let response, response.market == market.rawValue { return L(response.etfName) }
         if activeUniverseKey == Self.defaultUniverseKeys[market] { return Self.defaultUniverseNames[market] ?? "" }
         return ""
     }
 
     /// 各市场默认指数（与后端 universe.py 的 is_default 一致），只用于「从没进过这个市场、
-    /// 还没拿到列表」时的展示兜底——切到 A 股直接显示「科创50」，不先闪「A 股」。
-    static let defaultUniverseKeys: [StockMarket: String] = [.us: "nasdaq100", .cn: "star50", .hk: "hstech"]
+    /// 还没拿到列表」时的展示兜底——切到 A 股直接显示「沪深300」，不先闪「A 股」。
+    static let defaultUniverseKeys: [StockMarket: String] = [.us: "sp500", .cn: "csi300", .hk: "hsi"]
     static var defaultUniverseNames: [StockMarket: String] {
-        [.us: L("纳斯达克100"), .cn: L("科创50"), .hk: L("恒生科技")]
+        [.us: L("标普500"), .cn: L("沪深300"), .hk: L("恒生指数")]
     }
 
     /// 每个市场拿到过的 universe 列表：切回来时直接恢复，切换器和扫描提示都不用等接口。

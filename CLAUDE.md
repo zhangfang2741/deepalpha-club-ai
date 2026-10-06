@@ -184,6 +184,8 @@ deepalpha-club-ai/
 > **好股票名单**（雷达上方「名单」入口，`GoodStocksSheet` + `GET /signal-radar/fundamental-top`，会员功能）：当前综合等级达标的股票，分三组（有没有买卖点按雷达当前各展示日的信号判断），每行写等级、券商角标与最近一个买卖点；点行进个股详情。名单取全池前 50（按等级高 → 低、综合分高 → 低），门槛用雷达响应的 `qualityThreshold` 在 App 端截。
 > 旧接口 `GET /signal-radar/grade-events`（每日升降）与 `/analyst-events`（每日券商净升降）后端保留、App 不再使用。
 
+> **雷达默认指数**（2026-10-06 起，`universe.py` 的 `is_default`）：美股标普 500、A 股沪深 300、港股恒生指数（此前是科技指数）；iOS `SignalRadarViewModel.defaultUniverseKeys` 兜底与它一致。改默认须两边同步。
+
 > 信号雷达扫描约束（`app/services/signal_radar`）：同一 (口径, 市场, universe) 任一时刻只跑一轮全量扫描
 > ——接口与定时预热共用 `scan_lock_key` 原子锁（`acquire_lock` = SET NX EX），主动刷新有 5 分钟冷却；
 > 所有扫描 / 补算 / 示例日拉 K 线共用进程级闸门 `_fetch_gate`。拉数失败（限流 / 不可用）的成分股

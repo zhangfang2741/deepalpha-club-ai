@@ -641,7 +641,7 @@ def test_prewarm_scans_stalest_universe_first(monkeypatch):
     from app.services.signal_radar import scheduler
 
     order = []
-    ttl = {"us:nasdaq100": 40000, "cn:star50": 100, "hk:hstech": 5000}
+    ttl = {"us:sp500": 40000, "cn:csi300": 100, "hk:hsi": 5000}
 
     class _R:
         async def ttl(self, key):
@@ -669,7 +669,7 @@ def test_prewarm_scans_stalest_universe_first(monkeypatch):
     asyncio.run(scheduler._prewarm_once())
     # 预热默认口径（旧版 App）与严格口径（新版 App），见 scheduler._modes；按缓存从旧到新排
     assert {m for _, m in order} == {"loose", "strict"}
-    assert list(dict.fromkeys(u for u, _ in order))[:3] == ["cn:star50", "hk:hstech", "us:nasdaq100"]
+    assert list(dict.fromkeys(u for u, _ in order))[:3] == ["cn:csi300", "hk:hsi", "us:sp500"]
 
 
 class TestCompositeRanking:
@@ -906,7 +906,7 @@ class TestCloseTriggeredPrewarm:
         monkeypatch.setattr(scheduler, "compute_market", fake_compute)
         monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_BROAD_ENABLED", False)
         await scheduler._prewarm_once(markets={"cn"})
-        assert scanned == ["cn:star50"]
+        assert scanned == ["cn:csi300"]
 
 
 class TestUnconfirmedDiscount:
@@ -1287,7 +1287,7 @@ class TestConcurrencyGuards:
         from app.services.signal_radar import scheduler
 
         redis = _FakeRedis()
-        redis.store[svc.scan_lock_key("cn", "star50", "loose")] = "1"
+        redis.store[svc.scan_lock_key("cn", "csi300", "loose")] = "1"
         scanned = []
 
         async def fake_compute(market, *, redis, user_id, universe_key, mode):
@@ -1301,13 +1301,13 @@ class TestConcurrencyGuards:
         monkeypatch.setattr(scheduler, "compute_market", fake_compute)
         monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_BROAD_ENABLED", False)
         await scheduler._prewarm_once(markets={"cn"})
-        assert scanned == [("star50", "strict")], "默认口径正被扫描持锁，这一份跳过；锁按口径分，严格口径照常预热"
+        assert scanned == [("csi300", "strict")], "默认口径正被扫描持锁，这一份跳过；锁按口径分，严格口径照常预热"
 
-        del redis.store[svc.scan_lock_key("cn", "star50", "loose")]
+        del redis.store[svc.scan_lock_key("cn", "csi300", "loose")]
         scanned.clear()
         await scheduler._prewarm_once(markets={"cn"})
-        assert scanned == [("star50", "loose"), ("star50", "strict")]
-        assert svc.scan_lock_key("cn", "star50", "loose") not in redis.store, "预热结束释放锁"
+        assert scanned == [("csi300", "loose"), ("csi300", "strict")]
+        assert svc.scan_lock_key("cn", "csi300", "loose") not in redis.store, "预热结束释放锁"
 
 
 class TestDemoBackfill:

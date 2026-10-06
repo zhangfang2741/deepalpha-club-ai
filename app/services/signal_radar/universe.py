@@ -1,8 +1,8 @@
 """信号雷达的扫描 universe：每个市场提供「科技指数」+「大盘宽基指数」两套。
 
 一个市场（us/cn/hk）下有多个 universe，每个 universe 是一套扫描范围：
-- 科技指数（默认，`is_default=True`）：纳斯达克100 / 科创50 / 恒生科技；
-- 大盘宽基：标普500 / 沪深300 / 恒生指数（更全的一揽子）。
+- 大盘宽基（默认，`is_default=True`）：标普500 / 沪深300 / 恒生指数（更全的一揽子）；
+- 科技指数：纳斯达克100 / 科创50 / 恒生科技。
 
 成分股来源分策略（source）：
 - etf_holdings：拉某 ETF 的持仓（FMP，美股覆盖好）；
@@ -47,13 +47,12 @@ class MarketUniverse:
     max_scan: int = _TECH_MAX_SCAN       # 单 universe 扫描上限（控制扫描时长/数据源压力）
 
 
-# ── 美股：纳斯达克100（科技，默认）+ 标普500（大盘） ──────────────────────────
+# ── 美股：纳斯达克100（科技）+ 标普500（大盘，默认） ──────────────────────────
 _US_NASDAQ100 = MarketUniverse(
     market="us",
     key="nasdaq100",
     etf_name="纳斯达克100",
     etf_symbol="QQQ",
-    is_default=True,
     source=SOURCE_NASDAQ100,
     constituents=[
         ("NVDA", "英伟达"), ("AAPL", "苹果"), ("MSFT", "微软"), ("AVGO", "博通"),
@@ -73,6 +72,7 @@ _US_SP500 = MarketUniverse(
     key="sp500",
     etf_name="标普500",
     etf_symbol="^GSPC",
+    is_default=True,
     source=SOURCE_WIKI_SP500,
     max_scan=_BROAD_MAX_SCAN,
     # 静态兜底：跨行业大盘龙头（FMP 标普500 端点可用时会拿到全量 ~500 覆盖它）。
@@ -93,13 +93,12 @@ _US_SP500 = MarketUniverse(
     ],
 )
 
-# ── A 股：科创50（科技，默认）+ 沪深300（大盘） ──────────────────────────────
+# ── A 股：科创50（科技）+ 沪深300（大盘，默认） ──────────────────────────────
 _CN_STAR50 = MarketUniverse(
     market="cn",
     key="star50",
     etf_name="科创50",
     etf_symbol="588000",
-    is_default=True,
     source=SOURCE_AKSHARE_INDEX,
     source_arg="000688",
     constituents=[
@@ -121,6 +120,7 @@ _CN_CSI300 = MarketUniverse(
     key="csi300",
     etf_name="沪深300",
     etf_symbol="000300",
+    is_default=True,
     source=SOURCE_AKSHARE_INDEX,
     source_arg="000300",
     max_scan=_BROAD_MAX_SCAN,
@@ -144,13 +144,12 @@ _CN_CSI300 = MarketUniverse(
     ],
 )
 
-# ── 港股：恒生科技（科技，默认）+ 恒生指数（大盘） ──────────────────────────
+# ── 港股：恒生科技（科技）+ 恒生指数（大盘，默认） ──────────────────────────
 _HK_HSTECH = MarketUniverse(
     market="hk",
     key="hstech",
     etf_name="恒生科技",
     etf_symbol="3033",
-    is_default=True,
     source=SOURCE_ETF_HOLDINGS,
     constituents=[
         ("0700", "腾讯控股"), ("9988", "阿里巴巴"), ("3690", "美团"),
@@ -171,6 +170,7 @@ _HK_HSI = MarketUniverse(
     key="hsi",
     etf_name="恒生指数",
     etf_symbol="2800",
+    is_default=True,
     source=SOURCE_AKSHARE_INDEX,
     source_arg="HSI",
     max_scan=_BROAD_MAX_SCAN,
@@ -215,7 +215,7 @@ for _m, _lst in _BY_MARKET.items():
 def get_universe(market: str, key: str | None = None) -> MarketUniverse | None:
     """按市场 + universe 键取扫描配置。
 
-    key 为 None 时返回该市场的默认（科技指数）universe；市场或 key 未知返回 None。
+    key 为 None 时返回该市场的默认（大盘宽基）universe；市场或 key 未知返回 None。
     """
     if key is None:
         candidates = _BY_MARKET.get(market)

@@ -557,7 +557,7 @@
 "位置：大致越靠中心信号越新（按信号出现后的交易日数，周末不算），三个圈依次是今天、3个交易日内、一周内；气泡太挤时会自动推开。" = "Position: roughly, closer to center means more recent (counted in trading days since the signal appeared; weekends excluded). The rings mark today, within 3 trading days, and within 1 week; crowded bubbles are nudged apart.";
 "角标：左上角「✓」= 已确认（所在笔已走完）；「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。没有「✓」的是最后一笔上的未确认信号，之后可能被新K线改写。" = "Badges: \"✓\" at the top left means confirmed (its stroke has finished); \"Aligned\" means the daily and 30-minute directions agree; \"New\" means the signal appeared that day. Bubbles without \"✓\" are unconfirmed signals on the last stroke and may be revised by new candles.";
 "扫描范围怎么定" = "How the scan range is chosen";
-"每个市场提供「科技指数」（默认）和「大盘宽基」两套可切换范围，如美股的纳斯达克100 / 标普500。" = "Each market offers a switchable \"tech index\" (default) and a \"broad market\" range, e.g. Nasdaq 100 / S&P 500 for US stocks.";
+"每个市场提供「大盘宽基」（默认）和「科技指数」两套可切换范围，如美股的标普500 / 纳斯达克100。" = "Each market offers a \"broad market\" range (default) and a switchable \"tech index\" range, e.g. S&P 500 / Nasdaq 100 for US stocks.";
 "成分股优先实时拉取官方/交易所数据源，取不到或数量不足时自动回退到内置清单，保证随时有得扫。" = "Constituents are fetched live from official/exchange sources first, and fall back to a built-in list when unavailable or too few, so there's always something to scan.";
 "上榜排序怎么算" = "How the ranking is scored";
 "综合分 = 35% 类型确定性 + 30% 强弱 + 35% 新鲜度，最新一天命中「共振」再额外加分。" = "Score = 35% type certainty + 30% strength + 35% freshness, with a bonus for hitting \"Aligned\" on the latest day.";

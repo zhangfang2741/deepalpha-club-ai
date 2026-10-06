@@ -242,7 +242,7 @@ async def signal_radar_demo(
     request: Request,
     market: str = Query(default="us", description="市场：us / cn / hk"),
     universe: str | None = Query(
-        default=None, description="universe 键，如 nasdaq100 / sp500；缺省=该市场默认（科技指数）"
+        default=None, description="universe 键，如 nasdaq100 / sp500；缺省=该市场默认（大盘宽基：标普500 / 沪深300 / 恒生指数）"
     ),
     mode: str | None = _MODE_QUERY,
     scope: str = _SCOPE_QUERY,
@@ -347,7 +347,7 @@ async def signal_radar(
     request: Request,
     market: str = Query(default="us", description="市场：us / cn / hk"),
     universe: str | None = Query(
-        default=None, description="universe 键，如 nasdaq100 / sp500；缺省=该市场默认（科技指数）"
+        default=None, description="universe 键，如 nasdaq100 / sp500；缺省=该市场默认（大盘宽基：标普500 / 沪深300 / 恒生指数）"
     ),
     refresh: bool = Query(default=False, description="强制重新扫描（后台）"),
     mode: str | None = _MODE_QUERY,

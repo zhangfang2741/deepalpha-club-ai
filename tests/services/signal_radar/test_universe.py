@@ -19,16 +19,16 @@ class TestUniverse:
         assert get_universe("jp") is None
 
     def test_default_universe_per_market(self):
-        # 每个市场默认 universe 就是原来的科技指数
-        assert get_universe("us").key == "nasdaq100"
-        assert get_universe("cn").key == "star50"
-        assert get_universe("hk").key == "hstech"
+        # 每个市场默认 universe 是大盘宽基（2026-10-06 起）
+        assert get_universe("us").key == "sp500"
+        assert get_universe("cn").key == "csi300"
+        assert get_universe("hk").key == "hsi"
         for m in supported_markets():
             assert get_universe(m).is_default
 
     def test_each_market_has_two_universes(self):
-        # 每个市场：科技窄基 + 大盘宽基，默认排在前
-        expected = {"us": ["nasdaq100", "sp500"], "cn": ["star50", "csi300"], "hk": ["hstech", "hsi"]}
+        # 每个市场：大盘宽基（默认，排前）+ 科技窄基
+        expected = {"us": ["sp500", "nasdaq100"], "cn": ["csi300", "star50"], "hk": ["hsi", "hstech"]}
         for m, keys in expected.items():
             got = [u.key for u in list_universes(m)]
             assert got == keys, f"{m} universe 列表不符：{got}"
@@ -36,7 +36,8 @@ class TestUniverse:
 
     def test_get_universe_by_key(self):
         u = get_universe("us", "sp500")
-        assert u is not None and u.key == "sp500" and not u.is_default
+        assert u is not None and u.key == "sp500" and u.is_default
+        assert not get_universe("us", "nasdaq100").is_default
         assert get_universe("us", "does_not_exist") is None
         # 跨市场键不串：cn 下没有 sp500
         assert get_universe("cn", "sp500") is None

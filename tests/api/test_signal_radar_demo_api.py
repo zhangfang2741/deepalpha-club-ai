@@ -66,10 +66,10 @@ def test_cache_hit_returns_ready_snapshot_without_spawning(ctx):
     client, redis, spawned = ctx
     target = svc.demo_snapshot_date()
     cached = svc.SignalRadarResponse(
-        market="us", universe="nasdaq100", etf_name="纳斯达克100", universe_size=100,
+        market="us", universe="sp500", etf_name="标普500", universe_size=100,
         as_of=target, top_n=10, days=[], status="ready",
     )
-    redis.store[svc._demo_cache_key("us", "nasdaq100", target)] = cached.model_dump_json()
+    redis.store[svc._demo_cache_key("us", "sp500", target)] = cached.model_dump_json()
     body = client.get("/signal-radar/demo", params={"market": "us"}).json()
     assert body["status"] == "ready"
     assert body["as_of"] == target
@@ -106,7 +106,7 @@ def test_universe_param_scans_that_universe(ctx, recorded):
 def test_missing_universe_uses_market_default(ctx):
     client, _, _ = ctx
     body = client.get("/signal-radar/demo", params={"market": "us"}).json()
-    assert body["universe"] == "nasdaq100"
+    assert body["universe"] == "sp500"
 
 
 def test_cache_is_per_universe(ctx):
@@ -156,7 +156,7 @@ def _snapshot_with(n: int) -> svc.SignalRadarResponse:
 
 def test_scope_all_returns_every_signal_default_keeps_top_n(ctx):
     client, redis, _ = ctx
-    redis.store[svc._demo_cache_key("us", "nasdaq100", svc.demo_snapshot_date())] = \
+    redis.store[svc._demo_cache_key("us", "sp500", svc.demo_snapshot_date())] = \
         _snapshot_with(25).model_dump_json()
     full = client.get("/signal-radar/demo", params={"market": "us", "scope": "all"}).json()
     legacy = client.get("/signal-radar/demo", params={"market": "us"}).json()
