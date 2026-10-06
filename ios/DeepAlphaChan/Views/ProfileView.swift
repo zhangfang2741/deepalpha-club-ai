@@ -1,18 +1,10 @@
 import SwiftUI
 import StoreKit
 
-/// 我的：账号信息、语言、订阅、免责声明、登出。
+/// 我的：账号信息 + 订阅 / 偏好设置 / 帮助与关于 / 账号与安全四个二级入口 + 退出登录（功能都在 Views/Profile/ProfileSubpages.swift）。
 struct ProfileView: View {
     @EnvironmentObject var auth: AuthViewModel
-    @EnvironmentObject var store: StoreManager
-    @EnvironmentObject var localization: LocalizationManager
     @State private var showLogoutAlert = false
-    @State private var showDeleteAlert = false
-    @State private var showPaywall = false
-    @State private var showManageSubscriptions = false
-    @State private var showTour = false
-    /// 是否显示专业数值（面积比 / 价差比 / 时长比等）。默认关：先让人看懂结论，需要时再打开。
-    @AppStorage(ProDetails.key) private var showProDetails = false
 
     var body: some View {
         NavigationStack {
@@ -26,82 +18,24 @@ struct ProfileView: View {
                     }
                 }
 
-                Section(L("偏好设置")) {
-                    // 语言切换：跟随系统（按地区自动）/ 中文 / English。选完立刻生效。
-                    Picker(selection: $localization.preference) {
-                        Text(L("跟随系统")).tag(AppLanguage?.none)
-                        ForEach(AppLanguage.allCases) { lang in
-                            Text(lang.nativeName).tag(AppLanguage?.some(lang))
-                        }
-                    } label: {
-                        Label(L("语言"), systemImage: "globe")
-                    }
-                }
-
-                #if DEBUG
-                Section("调试") {
-                    Toggle("基本面门槛去掉动量（改完回雷达下拉刷新或重启）",
-                           isOn: Binding(
-                            get: { UserDefaults.standard.bool(forKey: "radar_quality_ex_momentum") },
-                            set: { UserDefaults.standard.set($0, forKey: "radar_quality_ex_momentum") }))
-                }
-                #endif
-
+                // 一级页只放入口，具体功能都在二级页里
                 Section {
-                    Toggle(isOn: $showProDetails) {
-                        Label(L("显示专业数值"), systemImage: "function")
-                    }
-                    Button { showTour = true } label: {
-                        Label(L("重看新手导览"), systemImage: "play.circle")
-                    }
-                } footer: {
-                    Text(L("打开后，买卖点详情里会多出面积比、价差比、时长比等专业数值；点「怎么识别的」随时能看到它们是什么。"))
-                        .font(.caption2)
-                }
-
-                Section(L("订阅")) {
-                    HStack {
-                        Text(L("当前方案")).foregroundColor(Theme.textSecondary)
-                        Spacer()
-                        switch store.tier {
-                        case .premium:
-                            Label(L("会员"), systemImage: "crown.fill")
-                                .font(.subheadline.bold()).foregroundColor(Theme.segment)
-                        case .free:
-                            Text(L("免费版")).foregroundColor(Theme.textPrimary)
+                    NavigationLink { SubscriptionSettingsView() } label: {
+                        HStack {
+                            Label(L("订阅"), systemImage: "crown")
+                            Spacer()
+                            SubscriptionTierBadge()
                         }
                     }
-                    if !store.isSubscribed {
-                        Button {
-                            showPaywall = true
-                        } label: {
-                            Label(L("查看订阅方案"), systemImage: "crown.fill")
-                                .foregroundColor(Theme.segment)
-                        }
+                    NavigationLink { PreferencesView() } label: {
+                        Label(L("偏好设置"), systemImage: "slider.horizontal.3")
                     }
-                    if store.isSubscribed {
-                        Button(L("管理订阅")) { showManageSubscriptions = true }
+                    NavigationLink { HelpAboutView() } label: {
+                        Label(L("帮助与关于"), systemImage: "questionmark.circle")
                     }
-                    Button(L("恢复购买")) { Task { await store.restore() } }
-                        .foregroundColor(Theme.accent)
-                }
-
-                Section(L("关于")) {
-                    row(L("版本"), appVersion)
-                    Link(destination: URL(string: "https://deepalpha.club/privacy")!) {
-                        Text(L("隐私政策"))
+                    NavigationLink { AccountSecurityView() } label: {
+                        Label(L("账号与安全"), systemImage: "lock.shield")
                     }
-                    Link(destination: URL(string: "https://deepalpha.club/terms")!) {
-                        Text(L("服务条款"))
-                    }
-                    NavigationLink(L("联系我们")) { ContactUsView() }
-                }
-
-                Section {
-                    Text(L("本 App 提供的缠论结构识别、买卖点标注与形态分析均由算法自动生成，仅供技术研究与学习参考，不构成任何投资建议或买卖要约。证券投资有风险，任何决策请自主判断并自负盈亏。"))
-                        .font(.caption).foregroundColor(Theme.textSecondary)
-                } header: {
-                    Text(L("免责声明"))
                 }
 
                 Section {
@@ -110,21 +44,6 @@ struct ProfileView: View {
                     } label: {
                         Text(L("退出登录")).frame(maxWidth: .infinity)
                     }
-                }
-
-                Section {
-                    Button(role: .destructive) {
-                        showDeleteAlert = true
-                    } label: {
-                        HStack {
-                            if auth.isLoading { ProgressView() }
-                            Text(L("删除账号")).frame(maxWidth: .infinity)
-                        }
-                    }
-                    .disabled(auth.isLoading)
-                } footer: {
-                    Text(L("删除账号将永久移除你的账户及关联数据，此操作不可恢复。"))
-                        .font(.caption2)
                 }
             }
             .navigationTitle(L("我的"))
@@ -136,18 +55,6 @@ struct ProfileView: View {
                     // 不需要 dismiss：登出后 RootView 会切回登录页
                     auth.logout()
                 }
-            }
-            .sheet(isPresented: $showPaywall) { PaywallView() }
-            .sheet(isPresented: $showTour) { OnboardingTourView() }
-            .manageSubscriptionsSheet(isPresented: $showManageSubscriptions)
-            .alert(L("确认删除账号？"), isPresented: $showDeleteAlert) {
-                Button(L("取消"), role: .cancel) {}
-                Button(L("永久删除"), role: .destructive) {
-                    // deleteAccount 成功后内部会 logout，RootView 自动切回登录页
-                    Task { _ = await auth.deleteAccount() }
-                }
-            } message: {
-                Text(L("此操作将永久删除你的账号及关联数据，且不可恢复。"))
             }
         }
         // 隐私页显式声明不参与截图分享：账号在这里可见，不该被拼进分享图。
@@ -161,11 +68,5 @@ struct ProfileView: View {
             Spacer()
             Text(value).foregroundColor(Theme.textPrimary)
         }
-    }
-
-    private var appVersion: String {
-        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
-        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
-        return "\(v) (\(b))"
     }
 }
