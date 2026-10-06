@@ -19,6 +19,17 @@ enum ReportCache {
         FileManager.default.fileExists(atPath: localURL(for: remote).path)
     }
 
+    /// 给分享 / 存到「文件」用的副本：缓存里的文件名是编号（H2_AN…_1.pdf），存到手机上不好认，换成「券商 标题.pdf」这样的名字。
+    static func shareCopy(of local: URL, name: String) -> URL {
+        let bad = CharacterSet(charactersIn: "/\\:*?\"<>|\n\r")
+        let clean = name.components(separatedBy: bad).joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        let base = String(clean.prefix(80))
+        let ext = local.pathExtension.isEmpty ? "html" : local.pathExtension
+        let dest = FileManager.default.temporaryDirectory.appendingPathComponent("\(base.isEmpty ? "report" : base).\(ext)")
+        try? FileManager.default.removeItem(at: dest)
+        do { try FileManager.default.copyItem(at: local, to: dest); return dest } catch { return local }
+    }
+
     /// 已缓存直接返回本地文件；否则下载、校验确实是 PDF 后落盘。
     static func load(_ remote: URL, isPDF: Bool = true) async throws -> URL {
         let local = localURL(for: remote)
@@ -38,54 +49,104 @@ enum ReportCache {
     }
 }
 
-/// 点研报行弹出的阅读页。
-struct ReportPDFView: View {
+/// 阅读页：PDF（研报、A 股 / 港股财报）、SEC 网页文档（美股财报，先下载到本机）、普通网页（媒体报道）共用一套外壳——
+/// 加载中 / 失败重试 / 左上角保存到手机 / 右上角完成。
+struct ReportReaderView: View {
+    enum Kind { case pdf, filing, page }
+
     let title: String
     let remote: URL
+    let kind: Kind
+    var shareName: String?
     @Environment(\.dismiss) private var dismiss
     @State private var localURL: URL?
+    @State private var shareURL: URL?
     @State private var failed = false
+    @State private var downloaded = false
 
     var body: some View {
         NavigationStack {
-            Group {
-                if let localURL {
-                    PDFKitView(url: localURL)
-                } else if failed {
-                    VStack(spacing: 10) {
-                        Image(systemName: "exclamationmark.triangle").font(.largeTitle).foregroundStyle(Theme.textSecondary)
-                        Text(L("研报原文加载失败")).font(.subheadline).foregroundStyle(Theme.textPrimary)
-                        Button(L("重试")) { Task { await load() } }
-                    }
-                } else {
-                    VStack(spacing: 10) {
-                        ProgressView()
-                        Text(L("正在下载研报…")).font(.caption).foregroundStyle(Theme.textSecondary)
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Theme.background)
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) { Button(L("完成")) { dismiss() } }
+                    if let shareURL {
+                        // 系统分享面板里选「存储到文件」即下载到手机
+                        ToolbarItem(placement: .cancellationAction) {
+                            ShareLink(item: shareURL) { Image(systemName: "square.and.arrow.down") }
+                                .accessibilityLabel(L("保存到手机"))
+                        }
                     }
                 }
+        }
+        .presentationDragIndicator(.visible)
+        .task { await load() }
+    }
+
+    @ViewBuilder private var content: some View {
+        switch kind {
+        case .page:
+            InAppWebView(url: remote, local: nil)
+        case .pdf:
+            if let localURL { PDFKitView(url: localURL) } else { status }
+        case .filing:
+            // 下载失败时直接在线打开网页（不能保存），比报错有用
+            if downloaded || failed { InAppWebView(url: remote, local: localURL) } else { status }
+        }
+    }
+
+    @ViewBuilder private var status: some View {
+        if failed {
+            VStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle").font(.largeTitle).foregroundStyle(Theme.textSecondary)
+                Text(L("加载失败，请检查网络后重试")).font(.subheadline).foregroundStyle(Theme.textPrimary)
+                Button(L("重试")) { Task { await load() } }
+                    .buttonStyle(.bordered).frame(minHeight: 44)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.background)
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button(L("完成")) { dismiss() } }
-                if let localURL {
-                    // 存到「文件」App / 发给别人：系统分享面板里选「存储到文件」即下载到手机
-                    ToolbarItem(placement: .cancellationAction) {
-                        ShareLink(item: localURL) { Image(systemName: "square.and.arrow.down") }
-                            .accessibilityLabel(L("保存到手机"))
-                    }
-                }
+        } else {
+            VStack(spacing: 10) {
+                ProgressView()
+                Text(L("正在下载…（只需首次，之后缓存在本机）")).font(.caption).foregroundStyle(Theme.textSecondary)
             }
         }
-        .task { await load() }
     }
 
     private func load() async {
         failed = false
-        do { localURL = try await ReportCache.load(remote) } catch { failed = true }
+        guard kind != .page else { return }
+        do {
+            let local = try await ReportCache.load(remote, isPDF: kind == .pdf)
+            localURL = local
+            shareURL = ReportCache.shareCopy(of: local, name: shareName ?? title)
+            downloaded = true
+        } catch {
+            failed = true
+        }
     }
+}
+
+/// 兼容的薄封装：各处调用点不用改。
+struct ReportPDFView: View {
+    let title: String
+    let remote: URL
+    var shareName: String?
+    var body: some View { ReportReaderView(title: title, remote: remote, kind: .pdf, shareName: shareName) }
+}
+
+struct FilingWebView: View {
+    let title: String
+    let remote: URL
+    var shareName: String?
+    var body: some View { ReportReaderView(title: title, remote: remote, kind: .filing, shareName: shareName) }
+}
+
+struct NewsWebView: View {
+    let title: String
+    let url: URL
+    var body: some View { ReportReaderView(title: title, remote: url, kind: .page) }
 }
 
 private struct PDFKitView: UIViewRepresentable {
@@ -94,6 +155,7 @@ private struct PDFKitView: UIViewRepresentable {
     func makeUIView(context: Context) -> PDFView {
         let v = PDFView()
         v.autoScales = true
+        v.backgroundColor = UIColor(Theme.background)
         v.document = PDFDocument(url: url)
         return v
     }
@@ -101,88 +163,67 @@ private struct PDFKitView: UIViewRepresentable {
     func updateUIView(_ uiView: PDFView, context: Context) {}
 }
 
-/// 评级相关的媒体报道：App 内网页阅读（不跳浏览器）。
-struct NewsWebView: View {
-    let title: String
+/// 网页（本地缓存文件或在线地址）：顶部有加载进度，加载失败给提示；支持左滑返回。
+private struct InAppWebView: View {
     let url: URL
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            WebContent(url: url)
-                .navigationTitle(title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("完成")) { dismiss() } } }
-        }
-    }
-}
-
-private struct WebContent: UIViewRepresentable {
-    let url: URL
-
-    func makeUIView(context: Context) -> WKWebView {
-        let v = WKWebView()
-        v.load(URLRequest(url: url))
-        return v
-    }
-
-    func updateUIView(_ uiView: WKWebView, context: Context) {}
-}
-
-/// 美股财报（SEC 网页文档）：下载到本机缓存后在 App 内阅读；下载失败时退回直接加载网页。可通过分享面板存到「文件」。
-struct FilingWebView: View {
-    let title: String
-    let remote: URL
-    @Environment(\.dismiss) private var dismiss
-    @State private var localURL: URL?
-    @State private var done = false
-
-    var body: some View {
-        NavigationStack {
-            Group {
-                if !done {
-                    VStack(spacing: 10) {
-                        ProgressView()
-                        Text(L("正在下载财报…")).font(.caption).foregroundStyle(Theme.textSecondary)
-                    }
-                } else {
-                    LocalWebContent(local: localURL, remote: remote)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.background)
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button(L("完成")) { dismiss() } }
-                if let localURL {
-                    ToolbarItem(placement: .cancellationAction) {
-                        ShareLink(item: localURL) { Image(systemName: "square.and.arrow.down") }
-                            .accessibilityLabel(L("保存到手机"))
-                    }
-                }
-            }
-        }
-        .task {
-            localURL = try? await ReportCache.load(remote, isPDF: false)
-            done = true
-        }
-    }
-}
-
-private struct LocalWebContent: UIViewRepresentable {
     let local: URL?
-    let remote: URL
+    @State private var loading = true
+    @State private var failed = false
+
+    var body: some View {
+        ZStack {
+            WebRepresentable(url: url, local: local, loading: $loading, failed: $failed)
+            if loading && !failed {
+                ProgressView().padding(14).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            }
+            if failed {
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle").font(.largeTitle).foregroundStyle(Theme.textSecondary)
+                    Text(L("页面打不开，可能是对方网站限制访问")).font(.subheadline).foregroundStyle(Theme.textPrimary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding().frame(maxWidth: .infinity, maxHeight: .infinity).background(Theme.background)
+            }
+        }
+    }
+}
+
+private struct WebRepresentable: UIViewRepresentable {
+    let url: URL
+    let local: URL?
+    @Binding var loading: Bool
+    @Binding var failed: Bool
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> WKWebView {
         let v = WKWebView()
+        v.navigationDelegate = context.coordinator
+        v.allowsBackForwardNavigationGestures = true
         if let local {
             v.loadFileURL(local, allowingReadAccessTo: local.deletingLastPathComponent())
         } else {
-            v.load(URLRequest(url: remote))
+            v.load(URLRequest(url: url))
         }
         return v
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}
+
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        let parent: WebRepresentable
+        init(_ parent: WebRepresentable) { self.parent = parent }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { parent.loading = false }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { finish(error) }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { finish(error) }
+
+        private func finish(_ error: Error) {
+            parent.loading = false
+            // 用户自己取消 / 跳转中断（-999）不算失败
+            if (error as NSError).code != NSURLErrorCancelled { parent.failed = true }
+        }
+    }
 }

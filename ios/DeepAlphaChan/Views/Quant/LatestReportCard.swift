@@ -11,23 +11,34 @@ struct LatestReportCard: View {
 
     var body: some View {
         Group {
-            if case .loaded(let r) = state, r.isOK { card(r) }
+            if case .loaded(let r) = state, r.isOK { card(r).transition(.opacity) }
         }
+        .animation(.easeOut(duration: 0.2), value: isLoaded)
         .task(id: symbol) { await load() }
         .sheet(item: $opened) { item in
             if let url = URL(string: item.report.url ?? "") {
                 if item.report.fileType == "html" {
-                    FilingWebView(title: item.report.title ?? L("最新财报"), remote: url)
+                    FilingWebView(title: item.report.title ?? L("最新财报"), remote: url, shareName: shareName(item.report))
                 } else {
-                    ReportPDFView(title: item.report.reportType ?? L("最新财报"), remote: url)
+                    ReportPDFView(title: item.report.reportType ?? L("最新财报"), remote: url, shareName: shareName(item.report))
                 }
             }
         }
     }
 
+    /// 存到手机时的文件名：「代码 报告类型 披露日」
+    private func shareName(_ r: LatestReport) -> String {
+        [symbol.uppercased(), r.reportType, r.filedDate].compactMap { $0 }.joined(separator: " ")
+    }
+
     private struct OpenedReport: Identifiable {
         let report: LatestReport
         var id: String { report.url ?? "" }
+    }
+
+    private var isLoaded: Bool {
+        if case .loaded = state { return true }
+        return false
     }
 
     private func card(_ r: LatestReport) -> some View {

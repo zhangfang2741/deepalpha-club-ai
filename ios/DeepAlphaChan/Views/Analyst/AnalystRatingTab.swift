@@ -3,7 +3,7 @@ import SwiftUI
 /// 详情页「分析师评级」分段：评级分布、目标价、业绩预期 vs 实际、最近评级变动。
 /// 评级档位是分析师原话，只做引述；我们自己的文字只描述数字。
 struct AnalystRatingTab: View {
-    private struct OpenedReport: Identifiable { let title: String; let url: URL; let isNews: Bool; var id: URL { url } }
+    private struct OpenedReport: Identifiable { let title: String; let url: URL; let isNews: Bool; var shareName: String? = nil; var id: URL { url } }
     @State private var openedReport: OpenedReport?
 
     let market: StockMarket
@@ -29,7 +29,7 @@ struct AnalystRatingTab: View {
         }
         .task { await vm.loadAnalyst(market: market, symbol: symbol) }
         .sheet(item: $openedReport) { r in
-            if r.isNews { NewsWebView(title: r.title, url: r.url) } else { ReportPDFView(title: r.title, remote: r.url) }
+            if r.isNews { NewsWebView(title: r.title, url: r.url) } else { ReportPDFView(title: r.title, remote: r.url, shareName: r.shareName) }
         }
     }
 
@@ -147,30 +147,15 @@ struct AnalystRatingTab: View {
             VStack(spacing: 0) {
                 ForEach(Array(grades.enumerated()), id: \.element.id) { i, g in
                     if i > 0 { Divider().background(Theme.border) }
-                    HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(g.firm).font(.footnote).foregroundStyle(Theme.textPrimary)
-                            Text(g.priceTarget.map { L("%@ · 目标价 %@", g.date, String(format: "%.2f", $0)) } ?? g.date)
-                                .font(.caption2).foregroundStyle(Theme.textSecondary)
-                            if let title = g.reportTitle, !title.isEmpty {
-                                Text(title).font(.caption2).foregroundStyle(Theme.textSecondary)
-                                    .lineLimit(2).multilineTextAlignment(.leading)
-                            }
-                        }
-                        Spacer()
-                        Text(g.actionLabel).font(.caption2)
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 5))
-                            .foregroundStyle(actionColor(g.action))
-                        Text(g.previousGradeLabel.map { $0 == g.newGradeLabel ? g.newGradeLabel : "\($0) → \(g.newGradeLabel)" }
-                             ?? g.newGradeLabel)
-                            .font(.footnote.weight(.medium)).foregroundStyle(Theme.textPrimary)
-                    }
-                    .padding(.vertical, 7)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        // 下载研报原文到本地缓存，在 App 内阅读
-                        if let s = g.reportUrl, let url = URL(string: s) { openedReport = OpenedReport(title: g.firm, url: url, isNews: g.reportKind == "news") }
+                    if let s = g.reportUrl, let url = URL(string: s) {
+                        // 有原文 / 报道的行：整行可点，右侧小箭头提示
+                        Button {
+                            openedReport = OpenedReport(title: g.firm, url: url, isNews: g.reportKind == "news",
+                                                        shareName: [g.firm, g.reportTitle].compactMap { $0 }.joined(separator: " "))
+                        } label: { gradeRow(g, linked: true) }
+                        .buttonStyle(.plain)
+                    } else {
+                        gradeRow(g, linked: false)
                     }
                 }
                 if grades.contains(where: { $0.reportUrl != nil }) {
@@ -191,23 +176,57 @@ struct AnalystRatingTab: View {
             VStack(spacing: 0) {
                 ForEach(Array(news.enumerated()), id: \.element.id) { i, n in
                     if i > 0 { Divider().background(Theme.border) }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(n.title).font(.footnote).foregroundStyle(Theme.textPrimary)
-                            .multilineTextAlignment(.leading)
-                        Text([n.date, n.source].compactMap { $0 }.joined(separator: " · "))
-                            .font(.caption2).foregroundStyle(Theme.textSecondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 8)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        if let url = URL(string: n.url) { openedReport = OpenedReport(title: n.source ?? L("相关报道"), url: url, isNews: true) }
+                    if let url = URL(string: n.url) {
+                        Button {
+                            openedReport = OpenedReport(title: n.source ?? L("相关报道"), url: url, isNews: true)
+                        } label: {
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(n.title).font(.footnote).foregroundStyle(Theme.textPrimary)
+                                        .multilineTextAlignment(.leading)
+                                    Text([n.date, n.source].compactMap { $0 }.joined(separator: " · "))
+                                        .font(.caption2).foregroundStyle(Theme.textSecondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Theme.textSecondary)
+                            }
+                            .padding(.vertical, 8).frame(minHeight: 44).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 Text(L("媒体对券商观点的报道，不是研报原文；点开在 App 内阅读"))
                     .font(.caption2).foregroundStyle(Theme.textSecondary).padding(.top, 6)
             }
         }
+    }
+
+    private func gradeRow(_ g: AnalystOverview.GradeChange, linked: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(g.firm).font(.footnote).foregroundStyle(Theme.textPrimary)
+                Text(g.priceTarget.map { L("%@ · 目标价 %@", g.date, String(format: "%.2f", $0)) } ?? g.date)
+                    .font(.caption2).foregroundStyle(Theme.textSecondary)
+                if let title = g.reportTitle, !title.isEmpty {
+                    Text(title).font(.caption2).foregroundStyle(Theme.textSecondary)
+                        .lineLimit(2).multilineTextAlignment(.leading)
+                }
+            }
+            Spacer(minLength: 8)
+            Text(g.actionLabel).font(.caption2)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 5))
+                .foregroundStyle(actionColor(g.action))
+            Text(g.previousGradeLabel.map { $0 == g.newGradeLabel ? g.newGradeLabel : "\($0) → \(g.newGradeLabel)" }
+                 ?? g.newGradeLabel)
+                .font(.footnote.weight(.medium)).foregroundStyle(Theme.textPrimary)
+            if linked {
+                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Theme.textSecondary)
+            }
+        }
+        .padding(.vertical, 8)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
     }
 
     private func actionColor(_ action: String) -> Color {

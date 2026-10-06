@@ -1542,3 +1542,6 @@
 "最新财报" = "Latest financial report";
 "披露于 %@" = "Filed %@";
 "正在下载财报…" = "Downloading the report…";
+"加载失败，请检查网络后重试" = "Failed to load. Check your network and try again";
+"正在下载…（只需首次，之后缓存在本机）" = "Downloading… (first time only, then cached on this device)";
+"页面打不开，可能是对方网站限制访问" = "This page can't be opened; the site may restrict access";
