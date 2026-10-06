@@ -1535,3 +1535,4 @@
 "研报原文加载失败" = "Failed to load the report";
 "正在下载研报…" = "Downloading the report…";
 "点一行可在 App 内查看研报原文（首次下载，之后缓存在本机）" = "Tap a row to read the original report in the app (downloaded once, then cached on this device)";
+"保存到手机" = "Save to device";

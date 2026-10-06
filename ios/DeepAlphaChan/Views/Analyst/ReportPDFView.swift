@@ -64,6 +64,13 @@ struct ReportPDFView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button(L("完成")) { dismiss() } }
+                if let localURL {
+                    // 存到「文件」App / 发给别人：系统分享面板里选「存储到文件」即下载到手机
+                    ToolbarItem(placement: .cancellationAction) {
+                        ShareLink(item: localURL) { Image(systemName: "square.and.arrow.down") }
+                            .accessibilityLabel(L("保存到手机"))
+                    }
+                }
             }
         }
         .task { await load() }
