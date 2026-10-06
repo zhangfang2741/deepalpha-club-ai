@@ -81,10 +81,11 @@ struct GoodStocksSheet: View {
         let signal = latestSignal(for: e.symbol)
         return HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(e.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.textPrimary)
+                // 代码在上、名称在下（与自选列表一致）
+                Text(e.symbol).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.textPrimary)
                 HStack(spacing: 6) {
-                    Text(e.symbol)
-                    if let sector = e.sector { Text("· " + sectorName(sector)) }
+                    if e.name != e.symbol { Text(e.name).lineLimit(1) }
+                    if let sector = e.sector { Text((e.name != e.symbol ? "· " : "") + sectorName(sector)).lineLimit(1) }
                 }
                 .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
             }
