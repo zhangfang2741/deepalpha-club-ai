@@ -85,3 +85,12 @@ def test_hk_related_news_filters_rating_titles():
             {"Art_Title": "腾讯回购股份", "Art_Url": "http://x/c", "Art_ShowTime": "2026-09-24 10:00:00"}]
     out = build_hk_related_news(rows)
     assert [n.url for n in out] == ["http://x/a"] and out[0].date == "2026-09-29"
+
+
+def test_hk_related_news_drops_digests():
+    from app.services.analyst_upgrade.overview_cnhk import build_hk_related_news
+
+    rows = [{"Art_Title": "晚报丨高盛看好燃气轮机", "Art_Url": "http://x/1", "Art_ShowTime": "2026-09-23 10:00:00"},
+            {"Art_Title": "壹评级：Muse引爆个人智能体浪潮", "Art_Url": "http://x/2", "Art_ShowTime": "2026-09-23 10:00:00"},
+            {"Art_Title": "花旗看好微信“小微”成终极AI Agent", "Art_Url": "http://x/3", "Art_ShowTime": "2026-09-25 10:00:00"}]
+    assert [n.url for n in build_hk_related_news(rows)] == ["http://x/3"]

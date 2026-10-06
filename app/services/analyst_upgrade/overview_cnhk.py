@@ -178,7 +178,9 @@ def build_cn_overview(symbol: str, lang: Lang, today: date, reports: list[dict],
                               recent_grades=recent, note=NOTE[lang])
 
 
-_RATING_WORDS = ("评级", "目标价", "目标股价", "看好", "看淡", "唱多", "唱空", "买入", "增持", "减持", "跑赢", "跑输")
+_RATING_WORDS = ("评级", "目标价", "目标股价", "看好", "看淡", "唱多", "唱空", "增持", "减持")
+# 晚报 / 早报 / 速递 / 专栏这类汇总文章，标题里偶然带「评级」「看好」但不是券商观点
+_DIGEST_WORDS = ("晚报", "早报", "速递", "日报", "周报", "精选", "壹评级", "收评", "午评", "盘前", "盘后")
 
 
 def build_hk_related_news(rows: list[dict], limit: int = 8) -> list[RelatedNews]:
@@ -190,7 +192,7 @@ def build_hk_related_news(rows: list[dict], limit: int = 8) -> list[RelatedNews]
         if not title or not url.startswith(("http://", "https://")) or not any(w in title for w in _RATING_WORDS):
             continue
         # 资金流向类标题（「南向资金…净买入」）带「买入」但不是券商观点
-        if "净买入" in title or "净卖" in title:
+        if "净买入" in title or "净卖" in title or any(w in title for w in _DIGEST_WORDS):
             continue
         out.append(RelatedNews(date=str(r.get("Art_ShowTime") or "")[:10], source=r.get("Art_MediaName") or None,
                                title=title, url=url))
