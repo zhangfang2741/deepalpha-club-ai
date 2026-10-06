@@ -2,13 +2,22 @@ import Foundation
 
 /// 信号雷达接口封装。
 enum SignalRadarService {
+    /// 好股票门槛口径：good（默认）/ good_xm（去掉动量维度）。仅 DEBUG 构建可通过「我的」页开关切换，正式版恒为 good。
+    static var qualityMode: String {
+        #if DEBUG
+        return UserDefaults.standard.bool(forKey: "radar_quality_ex_momentum") ? "good_xm" : "good"
+        #else
+        return "good"
+        #endif
+    }
+
     /// 拉取某 (市场, universe) 的信号雷达（首次可能返回 status=generating，需前端轮询）。
     /// universe 传 nil 时后端用该市场默认（科技指数）。
     static func fetch(
         market: String, universe: String? = nil, refresh: Bool = false
     ) async throws -> SignalRadarResponse {
         // quality=good：只留当前综合等级达标的股票的买卖点（门槛由后端定），并带分析师角标
-        var query = ["market": market, "mode": SignalMode.current(), "scope": "all", "quality": "good"]
+        var query = ["market": market, "mode": SignalMode.current(), "scope": "all", "quality": qualityMode]
         if let universe, !universe.isEmpty { query["universe"] = universe }
         if refresh { query["refresh"] = "true" }
         return try await APIClient.shared.get("/signal-radar", query: query)
@@ -18,7 +27,7 @@ enum SignalRadarService {
     /// 随当前月份自动滚动；遇非交易日取之前最近交易日），真实数据，按所选 universe
     /// 计算（nil = 市场默认），可能返回 status=generating 需要轮询。
     static func demo(market: String, universe: String? = nil) async throws -> SignalRadarResponse {
-        var query = ["market": market, "mode": SignalMode.current(), "scope": "all", "quality": "good"]
+        var query = ["market": market, "mode": SignalMode.current(), "scope": "all", "quality": qualityMode]
         if let universe, !universe.isEmpty { query["universe"] = universe }
         return try await APIClient.shared.get("/signal-radar/demo", query: query)
     }
