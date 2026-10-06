@@ -339,7 +339,7 @@ struct ReportReaderView: View {
         }
     }
 
-    /// 右下角圆形「AI 总结」按钮：无边框；有缓存时是紫 → 蓝 → 青的渐变球，带缓慢呼吸的光晕；没缓存时是毛玻璃圆、图标用同一组渐变。
+    /// 右下角圆形「AI 总结」按钮：无边框，始终是紫 → 蓝 → 青的渐变球 + 白色图标；只有已经有缓存（点开直接看）时才多一圈缓慢呼吸的光晕。
     private func summaryButton(_ s: ReportSummaryContext) -> some View {
         let cached = cachedSummary != nil
         let gradient = LinearGradient(
@@ -352,13 +352,13 @@ struct ReportReaderView: View {
                     Circle().fill(gradient).frame(width: 54, height: 54).blur(radius: 12)
                         .opacity(glow ? 0.65 : 0.25).scaleEffect(glow ? 1.25 : 1.0)
                 }
-                Circle().fill(cached ? AnyShapeStyle(gradient) : AnyShapeStyle(.ultraThinMaterial))
+                Circle().fill(gradient)
                 Image(systemName: "sparkles")
                     .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(cached ? AnyShapeStyle(Color.white) : AnyShapeStyle(gradient))
+                    .foregroundStyle(Color.white)
             }
             .frame(width: 54, height: 54)
-            .shadow(color: Color(red: 0.30, green: 0.45, blue: 1.0).opacity(cached ? 0.45 : 0.22), radius: cached ? 12 : 8, y: 4)
+            .shadow(color: Color(red: 0.30, green: 0.45, blue: 1.0).opacity(cached ? 0.45 : 0.25), radius: cached ? 12 : 8, y: 4)
         }
         .buttonStyle(.plain)
         .padding(.trailing, 18)
