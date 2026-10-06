@@ -363,7 +363,7 @@ private struct PDFKitView: UIViewRepresentable {
     }
 }
 
-/// 目录：按层级缩进，右侧是页码，点一条跳到对应页。
+/// 目录：一级是正文色、略粗，子级缩进且更淡；右侧小号页码。行紧凑（约 44pt）、分隔线很淡、背景和页面一致。
 private struct PDFTocSheet: View {
     let items: [PDFTocItem]
     let onSelect: (Int) -> Void
@@ -372,23 +372,29 @@ private struct PDFTocSheet: View {
         NavigationStack {
             List(items) { item in
                 Button { onSelect(item.pageIndex) } label: {
-                    HStack(alignment: .firstTextBaseline) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(item.title)
-                            .font(item.level == 0 ? .subheadline.weight(.semibold) : .footnote)
-                            .foregroundStyle(Theme.textPrimary)
+                            .font(.system(size: item.level == 0 ? 15 : 14, weight: item.level == 0 ? .medium : .regular))
+                            .foregroundStyle(item.level == 0 ? Theme.textPrimary : Theme.textSecondary)
                             .multilineTextAlignment(.leading)
-                            .padding(.leading, CGFloat(min(item.level, 4)) * 14)
+                            .lineLimit(2)
+                            .padding(.leading, CGFloat(min(item.level, 4)) * 16)
                         Spacer(minLength: 8)
-                        Text(L("第 %lld 页", item.pageIndex + 1))
-                            .font(.caption).monospacedDigit().foregroundStyle(Theme.textSecondary)
+                        Text("\(item.pageIndex + 1)")
+                            .font(.system(size: 13)).monospacedDigit()
+                            .foregroundStyle(Theme.textSecondary.opacity(0.8))
                     }
-                    .frame(minHeight: 44)
+                    .padding(.vertical, 11)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .listRowBackground(Theme.surface)
+                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
+                .listRowBackground(Color.clear)
+                .listRowSeparatorTint(Theme.border.opacity(0.5))
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .background(Theme.background)
             .navigationTitle(L("目录"))
             .navigationBarTitleDisplayMode(.inline)
