@@ -22,17 +22,10 @@ enum SignalRadarService {
         return try await APIClient.shared.get("/signal-radar/demo", query: query)
     }
 
-    /// 基本面研究 tab：某 (市场, universe) 最近几天综合等级升 / 降的股票。
-    static func gradeEvents(market: String, universe: String? = nil, days: Int = 10) async throws -> GradeEventsResponse {
-        var query = ["market": market, "days": String(days)]
+    /// 基本面研究 tab：某 (市场, universe) 当前综合等级最高的若干只（含近 30 天券商评级净上调 / 下调，仅美股）。
+    static func fundamentalTop(market: String, universe: String? = nil, limit: Int = 50) async throws -> FundamentalTopResponse {
+        var query = ["market": market, "limit": String(limit)]
         if let universe, !universe.isEmpty { query["universe"] = universe }
-        return try await APIClient.shared.get("/signal-radar/grade-events", query: query)
-    }
-
-    /// 分析师评级 tab：某 (市场, universe) 最近几天被券商净上调 / 下调评级的股票（仅美股有数据）。
-    static func analystEvents(market: String, universe: String? = nil, days: Int = 10) async throws -> GradeEventsResponse {
-        var query = ["market": market, "days": String(days)]
-        if let universe, !universe.isEmpty { query["universe"] = universe }
-        return try await APIClient.shared.get("/signal-radar/analyst-events", query: query)
+        return try await APIClient.shared.get("/signal-radar/fundamental-top", query: query)
     }
 }

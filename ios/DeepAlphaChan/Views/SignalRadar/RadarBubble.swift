@@ -179,6 +179,20 @@ struct RadarBubble: View {
                     .accessibilityHidden(true)
             }
         }
+        .overlay(alignment: .topTrailing) {
+            // 基本面雷达：近 30 天券商评级净上调（▲，红）/ 净下调（▼，绿）角标；白底小胶囊，红 / 绿气泡上都看得清。
+            if let mark = signal.analystMark, !isCandidate {
+                Text(mark)
+                    .font(.system(size: max(9, min(12, r * 0.22)), weight: .bold).monospacedDigit())
+                    .foregroundColor(mark.hasPrefix("▲") ? Theme.up : Theme.down)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1.5)
+                    .background(Color.white, in: Capsule())
+                    .overlay(Capsule().stroke(Theme.background.opacity(0.4), lineWidth: 0.8))
+                    .offset(x: 4, y: -4)
+                    .accessibilityHidden(true)
+            }
+        }
         .overlay(alignment: .bottomLeading) {
             // 日线定方向 × 30 分钟找买卖点同向（共振），只在最新交易日的入榜气泡上出现。
             if signal.isSubLevelResonance && !isCandidate {
