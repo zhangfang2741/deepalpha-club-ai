@@ -246,6 +246,14 @@ final class ReportDownloader: NSObject, URLSessionDownloadDelegate, @unchecked S
 
 /// 阅读页：PDF（研报、A 股 / 港股财报）、SEC 网页文档（美股财报，先下载到本机）、普通网页（媒体报道）共用一套外壳——
 /// 加载中 / 失败重试 / 左上角保存到手机 / 右上角完成。
+/// 阅读页右下角「AI 总结」需要的上下文：哪只股票的哪一份财报（kind = latest / annual）。
+struct ReportSummaryContext {
+    let market: StockMarket
+    let symbol: String
+    let kind: String
+    let report: LatestReport
+}
+
 struct ReportReaderView: View {
     enum Kind { case pdf, filing, page }
 
@@ -253,7 +261,10 @@ struct ReportReaderView: View {
     let remote: URL
     let kind: Kind
     var shareName: String?
+    var summary: ReportSummaryContext? = nil
     @Environment(\.dismiss) private var dismiss
+    @State private var showSummary = false
+    @State private var cachedSummary: ReportSummaryResponse?
     @State private var localURL: URL?
     @State private var shareURL: URL?
     @State private var failed = false
@@ -288,6 +299,23 @@ struct ReportReaderView: View {
                 }
         }
         .presentationDragIndicator(.visible)
+        .overlay(alignment: .bottomTrailing) {
+            if let summary, documentVisible { summaryButton(summary) }
+        }
+        .sheet(isPresented: $showSummary) {
+            if let summary {
+                ReportSummarySheet(market: summary.market, symbol: summary.symbol, report: summary.report,
+                                   kind: summary.kind, initial: cachedSummary)
+                    .presentationDetents([.large])
+            }
+        }
+        .task {
+            // 打开阅读页时静悄悄探一下有没有缓存好的总结（不触发生成）：有的话点「AI 总结」直接显示、按钮也会高亮
+            guard let summary else { return }
+            let r = try? await QuantResearchService.reportSummary(market: summary.market, symbol: summary.symbol,
+                                                                  kind: summary.kind, peek: true)
+            if r?.status == "ready" { cachedSummary = r }
+        }
         .sheet(isPresented: $showToc) {
             PDFTocSheet(items: toc) { index in
                 jumpTo = index
@@ -296,6 +324,33 @@ struct ReportReaderView: View {
             .presentationDetents([.medium, .large])
         }
         .task { await load() }
+    }
+
+    /// 文档已经显示出来（加载 / 整理版面期间不放浮动按钮）
+    private var documentVisible: Bool {
+        switch kind {
+        case .pdf: return displayURL != nil
+        case .filing: return downloaded || failed
+        case .page: return false
+        }
+    }
+
+    private func summaryButton(_ s: ReportSummaryContext) -> some View {
+        let cached = cachedSummary != nil
+        return Button { showSummary = true } label: {
+            Label(L("AI 总结"), systemImage: "sparkles")
+                .font(.system(size: 14, weight: .semibold))
+                .padding(.horizontal, 16)
+                .frame(minHeight: 44)
+                .foregroundStyle(cached ? Color.white : Theme.textPrimary)
+                .background(cached ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.ultraThinMaterial), in: Capsule())
+                .overlay(Capsule().stroke(Theme.border))
+                .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, 16)
+        .padding(.bottom, 28)
+        .accessibilityLabel(L("AI 总结"))
     }
 
     @ViewBuilder private var content: some View {
@@ -366,14 +421,16 @@ struct ReportPDFView: View {
     let title: String
     let remote: URL
     var shareName: String?
-    var body: some View { ReportReaderView(title: title, remote: remote, kind: .pdf, shareName: shareName) }
+    var summary: ReportSummaryContext? = nil
+    var body: some View { ReportReaderView(title: title, remote: remote, kind: .pdf, shareName: shareName, summary: summary) }
 }
 
 struct FilingWebView: View {
     let title: String
     let remote: URL
     var shareName: String?
-    var body: some View { ReportReaderView(title: title, remote: remote, kind: .filing, shareName: shareName) }
+    var summary: ReportSummaryContext? = nil
+    var body: some View { ReportReaderView(title: title, remote: remote, kind: .filing, shareName: shareName, summary: summary) }
 }
 
 struct NewsWebView: View {

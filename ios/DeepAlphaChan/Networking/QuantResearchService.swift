@@ -19,14 +19,17 @@ enum QuantResearchService {
         return try await APIClient.shared.get("/quant-research/methodology", query: ["lang": lang])
     }
 
-    static func latestReport(market: StockMarket, symbol: String) async throws -> LatestReport {
+    /// kind：latest = 最新一份定期报告；annual = 最新年报
+    static func latestReport(market: StockMarket, symbol: String, kind: String = "latest") async throws -> LatestReport {
         try await APIClient.shared.get("/quant-research/\(market.rawValue)/\(symbol.uppercased())/report",
-                                       query: ["lang": lang])
+                                       query: ["lang": lang, "kind": kind])
     }
 
-    static func reportSummary(market: StockMarket, symbol: String) async throws -> ReportSummaryResponse {
+    /// peek = true：只看有没有缓存好的 AI 总结，不触发生成
+    static func reportSummary(market: StockMarket, symbol: String, kind: String = "latest",
+                              peek: Bool = false) async throws -> ReportSummaryResponse {
         try await APIClient.shared.get("/quant-research/\(market.rawValue)/\(symbol.uppercased())/report/summary",
-                                       query: ["lang": lang])
+                                       query: ["lang": lang, "kind": kind, "peek": peek ? "true" : "false"])
     }
 
     static func analystOverview(market: StockMarket, symbol: String) async throws -> AnalystOverview {

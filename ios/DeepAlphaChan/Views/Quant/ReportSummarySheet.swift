@@ -5,12 +5,22 @@ struct ReportSummarySheet: View {
     let market: StockMarket
     let symbol: String
     let report: LatestReport
-    /// 点「阅读原文」：关闭本页后由外层打开原文
-    let onOpenOriginal: () -> Void
+    var kind: String = "latest"
+    /// 阅读页里已经探到的缓存：有就直接显示，不等网络
+    var initial: ReportSummaryResponse? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var response: ReportSummaryResponse?
     @State private var failed = false
+
+    init(market: StockMarket, symbol: String, report: LatestReport, kind: String = "latest", initial: ReportSummaryResponse? = nil) {
+        self.market = market
+        self.symbol = symbol
+        self.report = report
+        self.kind = kind
+        self.initial = initial
+        _response = State(initialValue: initial)
+    }
 
     var body: some View {
         NavigationStack {
@@ -26,7 +36,7 @@ struct ReportSummarySheet: View {
                 .padding(.vertical, Theme.contentVInset)
             }
             .background(Theme.background)
-            .navigationTitle(L("财报要点"))
+            .navigationTitle(L("AI 总结"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("完成")) { dismiss() } } }
         }
@@ -80,15 +90,6 @@ struct ReportSummarySheet: View {
         Text(response?.note ?? "").font(.caption2).foregroundStyle(Theme.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
 
-        Button {
-            dismiss()
-            onOpenOriginal()
-        } label: {
-            Label(L("阅读原文"), systemImage: "doc.text")
-                .font(.subheadline.weight(.medium))
-                .frame(maxWidth: .infinity, minHeight: 44)
-        }
-        .buttonStyle(.bordered)
     }
 
     private func section<C: View>(_ title: String, @ViewBuilder _ body: () -> C) -> some View {
@@ -124,7 +125,6 @@ struct ReportSummarySheet: View {
                 Image(systemName: "text.badge.xmark").font(.largeTitle).foregroundStyle(Theme.textSecondary)
                 Text(r.note ?? L("暂时没法整理这份财报的要点")).font(.subheadline).foregroundStyle(Theme.textPrimary)
                     .multilineTextAlignment(.center)
-                Button(L("阅读原文")) { dismiss(); onOpenOriginal() }.buttonStyle(.bordered).frame(minHeight: 44)
             } else {
                 ProgressView()
                 Text(L("正在整理要点…")).font(.subheadline).foregroundStyle(Theme.textPrimary)
@@ -137,9 +137,10 @@ struct ReportSummarySheet: View {
     /// 生成中就每 3 秒问一次，最多约 3 分钟。
     private func poll() async {
         failed = false
+        if response?.summary != nil { return }  // 已有缓存，直接显示
         for _ in 0..<60 {
             do {
-                let r = try await QuantResearchService.reportSummary(market: market, symbol: symbol)
+                let r = try await QuantResearchService.reportSummary(market: market, symbol: symbol, kind: kind)
                 response = r
                 if r.status != "generating" { return }
             } catch {

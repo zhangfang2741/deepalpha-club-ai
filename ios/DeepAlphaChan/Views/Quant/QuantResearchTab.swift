@@ -6,7 +6,7 @@ struct QuantResearchTab: View {
     let symbol: String
     @ObservedObject var vm: QuantResearchViewModel
     var isStatic = false
-    private enum ReportState { case loading, loaded(LatestReport), none }
+    private enum ReportState { case loading, loaded(LatestReport, annual: LatestReport?), none }
     @State private var reportState: ReportState = .loading
 
 
@@ -32,9 +32,14 @@ struct QuantResearchTab: View {
         .task(id: symbol) {
             guard !isStatic else { return }
             reportState = .loading
-            let r = try? await QuantResearchService.latestReport(market: market, symbol: symbol)
+            // 最新财报与最新年报一起取；年报取不到不影响最新财报
+            async let latest = try? QuantResearchService.latestReport(market: market, symbol: symbol)
+            async let annual = try? QuantResearchService.latestReport(market: market, symbol: symbol, kind: "annual")
+            let (r, a) = await (latest, annual)
             withAnimation(.easeOut(duration: 0.2)) {
-                if let r, r.isOK { reportState = .loaded(r) } else { reportState = .none }
+                if let r, r.isOK { reportState = .loaded(r, annual: a) }
+                else if let a, a.isOK { reportState = .loaded(a, annual: nil) }
+                else { reportState = .none }
             }
         }
     }
@@ -47,7 +52,7 @@ struct QuantResearchTab: View {
                 // 卡片先占位（带呼吸的骨架），数据到了原地换成真内容；取不到财报才收起，不让内容在加载完后突然被顶下去
                 switch reportState {
                 case .loading: LatestReportSkeleton().transition(.opacity)
-                case .loaded(let report): LatestReportCard(market: market, symbol: symbol, report: report).transition(.opacity)
+                case .loaded(let report, let annual): LatestReportCard(market: market, symbol: symbol, report: report, annual: annual).transition(.opacity)
                 case .none: EmptyView()
                 }
             }
