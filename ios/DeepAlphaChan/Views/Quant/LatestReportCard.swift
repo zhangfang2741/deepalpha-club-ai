@@ -8,9 +8,11 @@ struct LatestReportCard: View {
     /// 由上层加载好再传进来：卡片本身在没数据时是空视图，空视图上挂的 .task 不会执行，所以加载不能放在这里。
     let report: LatestReport
     @State private var opened: OpenedReport?
+    @State private var showSummary = false
 
     var body: some View {
         card(report)
+            .sheet(isPresented: $showSummary) { summarySheet }
             .sheet(item: $opened) { item in
                 if let url = URL(string: item.report.url ?? "") {
                     if item.report.fileType == "html" {
@@ -20,6 +22,13 @@ struct LatestReportCard: View {
                     }
                 }
             }
+    }
+
+    private var summarySheet: some View {
+        ReportSummarySheet(market: market, symbol: symbol, report: report) {
+            // 先让要点页收起，再开原文（同一时刻只能有一个 sheet）
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { opened = OpenedReport(report: report) }
+        }
     }
 
     /// 存到手机时的文件名：「代码 报告类型 披露日」
@@ -33,24 +42,46 @@ struct LatestReportCard: View {
     }
 
     private func card(_ r: LatestReport) -> some View {
-        Button { opened = OpenedReport(report: r) } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "doc.text").font(.title3).foregroundStyle(Theme.accent)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(L("最新财报")).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
-                    Text([r.reportType, r.filedDate.map { L("披露于 %@", $0) }].compactMap { $0 }.joined(separator: " · "))
-                        .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
-                    if let t = r.title, market != .us {
-                        Text(t).font(.caption2).foregroundStyle(Theme.textSecondary).lineLimit(2).multilineTextAlignment(.leading)
+        VStack(spacing: 0) {
+            Button { opened = OpenedReport(report: r) } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "doc.text").font(.title3).foregroundStyle(Theme.accent)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(L("最新财报")).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
+                        Text([r.reportType, r.filedDate.map { L("披露于 %@", $0) }].compactMap { $0 }.joined(separator: " · "))
+                            .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+                        if let t = r.title, market != .us {
+                            Text(t).font(.caption2).foregroundStyle(Theme.textSecondary).lineLimit(2).multilineTextAlignment(.leading)
+                        }
                     }
+                    Spacer()
+                    Text(L("阅读原文")).font(.caption).foregroundStyle(Theme.textSecondary)
+                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(Theme.textSecondary)
                 }
-                Spacer()
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(Theme.textSecondary)
+                .padding(14)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
+            .buttonStyle(.plain)
+
+            Divider().overlay(Theme.border).padding(.horizontal, 14)
+
+            Button { showSummary = true } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "sparkles").font(.title3).foregroundStyle(Theme.accent)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(L("中文要点")).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
+                        Text(L("AI 整理的重点：关键数字、变化与风险")).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(Theme.textSecondary)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
     }
 }

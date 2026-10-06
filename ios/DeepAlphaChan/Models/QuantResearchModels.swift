@@ -532,3 +532,41 @@ struct LatestReport: Decodable {
         case fileType = "file_type"
     }
 }
+
+
+/// 财报的中文要点（AI 整理）。status = generating 时客户端过几秒再请求。
+struct ReportSummaryResponse: Decodable {
+    struct KeyNumber: Decodable, Identifiable {
+        let label: String
+        let value: String
+        let change: String?
+        var id: String { label + value }
+    }
+
+    struct Summary: Decodable {
+        let headline: String
+        let keyNumbers: [KeyNumber]
+        let highlights: [String]
+        let watchPoints: [String]
+        let outlook: String
+
+        enum CodingKeys: String, CodingKey {
+            case headline, highlights, outlook
+            case keyNumbers = "key_numbers"
+            case watchPoints = "watch_points"
+        }
+    }
+
+    let status: String
+    let symbol: String
+    let reportType: String?
+    let filedDate: String?
+    let summary: Summary?
+    let note: String?
+
+    enum CodingKeys: String, CodingKey {
+        case status, symbol, summary, note
+        case reportType = "report_type"
+        case filedDate = "filed_date"
+    }
+}

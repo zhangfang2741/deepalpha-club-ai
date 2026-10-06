@@ -24,6 +24,11 @@ enum QuantResearchService {
                                        query: ["lang": lang])
     }
 
+    static func reportSummary(market: StockMarket, symbol: String) async throws -> ReportSummaryResponse {
+        try await APIClient.shared.get("/quant-research/\(market.rawValue)/\(symbol.uppercased())/report/summary",
+                                       query: ["lang": lang])
+    }
+
     static func analystOverview(market: StockMarket, symbol: String) async throws -> AnalystOverview {
         #if DEBUG && targetEnvironment(simulator)
         if let r: AnalystOverview = fixture("analyst_\(symbol.uppercased()).json") { return r }

@@ -1552,3 +1552,14 @@
 "正在整理版面…" = "Preparing the layout…";
 "目录" = "Contents";
 "第 %lld 页" = "Page %lld";
+"财报要点" = "Report key points";
+"关键数字" = "Key numbers";
+"这期发生了什么" = "What happened this period";
+"原文提到的风险与变化" = "Risks and changes mentioned in the report";
+"管理层的说法" = "What management said";
+"阅读原文" = "Read the original";
+"正在整理要点…" = "Preparing the key points…";
+"第一次生成要一会儿，之后所有人秒开" = "The first run takes a moment; after that it opens instantly for everyone";
+"暂时没法整理这份财报的要点" = "The key points for this report are not available right now";
+"中文要点" = "Key points in Chinese";
+"AI 整理的重点：关键数字、变化与风险" = "AI-prepared highlights: key numbers, changes and risks";
