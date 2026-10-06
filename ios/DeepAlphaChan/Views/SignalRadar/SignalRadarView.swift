@@ -391,13 +391,14 @@ struct SignalRadarView: View {
 
     // MARK: - 说明行
 
-    /// 标题旁的折叠：展开是一张简单的流程图（市场 → 行业 → 好股票 → 买点）。市场、行业上面的卡片 / 横条已经有了，
-    /// 这里只指一下；好股票（门槛由后端定、用户不能选）和买点写数字。折叠时雷达页和没有这张图一样干净。
+    /// 标题旁的折叠：展开是一张简单的投资观察流程图（市场 → 行业 → 好股票 → 结构）。市场、行业上面的卡片 / 横条已经有了，
+    /// 这里只指一下；好股票（门槛由后端定、用户不能选）和结构信号写数字。**文案不提买卖点**：这里只讲观察顺序，
+    /// 不引导操作，并带一句免责。折叠时雷达页和没有这张图一样干净。
     private var flowPanel: some View {
         let threshold = vm.response?.qualityThreshold ?? ""
         let good = vm.response?.qualityGoodCount ?? 0
-        // 近期（雷达展示的这些天）出现过买点的好股票只数
-        let buyStocks = Set(vm.days.flatMap(\.signals).filter { $0.side == "buy" }.map(\.symbol)).count
+        // 近期（雷达展示的这些天）出现过缠论结构信号的好股票只数（买卖不分）
+        let signalStocks = Set(vm.days.flatMap(\.signals).map(\.symbol)).count
         return VStack(spacing: 8) {
             HStack(alignment: .top, spacing: 0) {
                 flowNode(1, L("市场"), L("看下面的大盘环境"), highlight: .muted)
@@ -406,11 +407,11 @@ struct SignalRadarView: View {
                 flowLink
                 flowNode(3, L("好股票"), threshold.isEmpty ? "—" : L("%lld 只 · %@ 及以上", good, threshold), highlight: .accent)
                 flowLink
-                flowNode(4, L("买点"), buyStocks > 0 ? L("%lld 只 · 近期有买点", buyStocks) : L("近期没有买点"),
-                         highlight: buyStocks > 0 ? .up : .muted)
+                flowNode(4, L("结构"), signalStocks > 0 ? L("%lld 只 · 近期出现结构信号", signalStocks) : L("近期没有结构信号"),
+                         highlight: signalStocks > 0 ? .accent : .muted)
             }
             Divider().overlay(Theme.border)
-            Text(L("从大到小看：先看市场和行业，再看好股票，最后看它们有没有买点。雷达里只画好股票的买卖点。"))
+            Text(L("这是一个投资观察流程：先看市场和行业，再看基本面靠前的股票，最后看它们的缠论结构。内容仅为按规则整理的事实，不构成投资建议。"))
                 .font(.caption2).foregroundColor(Theme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1252,7 +1253,7 @@ struct SignalRadarView: View {
                         L("成分股优先实时拉取官方/交易所数据源，取不到或数量不足时自动回退到内置清单，保证随时有得扫。"),
                     ])
                     infoSection(L("什么是好股票"), [
-                        L("雷达只画「好股票」的买卖点：先看市场和行业，再看哪些股票基本面好，最后看它们有没有买卖点。"),
+                        L("雷达只画好股票的缠论结构信号：这是一个观察流程，先看市场和行业，再看哪些股票基本面靠前，最后看它们的缠论结构。"),
                         L("好股票 = 当前综合等级达标的股票。综合等级由估值、成长、盈利能力、动量、EPS 修正五个维度在同行业内的百分位平均得出，只给字母等级；任一维度为 F 时，综合等级最高 C+。"),
                         L("门槛随股票池自动调整：取有评级股票的前 25%，至少 8 只，且不低于 B，同一等级整档纳入。顶部流程图写着当前门槛「X 及以上」。"),
                         L("用的是股票当前的等级，不是信号当天的；评级暂时读取失败时不做筛选，雷达照常显示全部信号。"),
