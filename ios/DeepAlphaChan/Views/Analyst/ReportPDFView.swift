@@ -49,6 +49,50 @@ enum ReportCache {
     }
 }
 
+extension ReportCache {
+    /// 页面宽度不一致（竖版 A4 夹着横版表格页）时，PDFKit 按最宽的页缩放，竖版页就缩在中间、两边留一大片空。
+    /// 这种文件重新排一份「每页同宽」的副本（矢量内容原样画进去、文字保留），缓存在原文件旁边；页面本来就一致的直接用原文件。
+    static func fitted(_ local: URL) async -> URL {
+        await Task.detached(priority: .userInitiated) { () -> URL in
+            let out = local.deletingPathExtension().appendingPathExtension("fit.pdf")
+            if FileManager.default.fileExists(atPath: out.path) { return out }
+            guard let doc = PDFDocument(url: local), doc.pageCount > 1 else { return local }
+            let widths = (0..<doc.pageCount).compactMap { doc.page(at: $0)?.bounds(for: .cropBox).width }
+            guard let lo = widths.min(), let hi = widths.max(), hi - lo > 8 else { return local }
+            guard let cg = CGPDFDocument(local as CFURL) else { return local }
+
+            let fixedWidth: CGFloat = 595
+            let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: fixedWidth, height: 842))
+            let tmp = out.appendingPathExtension("part")
+            do {
+                try renderer.writePDF(to: tmp) { ctx in
+                    for i in 1...cg.numberOfPages {
+                        guard let page = cg.page(at: i) else { continue }
+                        var box = page.getBoxRect(.cropBox)
+                        if page.rotationAngle % 180 != 0 { box = CGRect(x: 0, y: 0, width: box.height, height: box.width) }
+                        let h = box.width > 0 ? box.height * fixedWidth / box.width : 842
+                        let rect = CGRect(x: 0, y: 0, width: fixedWidth, height: h)
+                        ctx.beginPage(withBounds: rect, pageInfo: [:])
+                        let c = ctx.cgContext
+                        c.saveGState()
+                        c.translateBy(x: 0, y: h)
+                        c.scaleBy(x: 1, y: -1)
+                        c.concatenate(page.getDrawingTransform(.cropBox, rect: rect, rotate: 0, preserveAspectRatio: true))
+                        c.drawPDFPage(page)
+                        c.restoreGState()
+                    }
+                }
+                try? FileManager.default.removeItem(at: out)
+                try FileManager.default.moveItem(at: tmp, to: out)
+                return out
+            } catch {
+                try? FileManager.default.removeItem(at: tmp)
+                return local
+            }
+        }.value
+    }
+}
+
 /// 带进度回调的下载：URLSession 的 async download 拿不到进度，所以自己接一个下载代理。
 /// 进度为 nil 表示服务器没给总大小（只能转圈）。
 final class ReportDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
@@ -119,6 +163,8 @@ struct ReportReaderView: View {
     @State private var shareURL: URL?
     @State private var failed = false
     @State private var downloaded = false
+    @State private var displayURL: URL?
+    @State private var preparing = false
     @State private var progress: Double?
 
     var body: some View {
@@ -148,7 +194,7 @@ struct ReportReaderView: View {
         case .page:
             InAppWebView(url: remote, local: nil)
         case .pdf:
-            if let localURL { PDFKitView(url: localURL) } else { status }
+            if let displayURL { PDFKitView(url: displayURL) } else { status }
         case .filing:
             // 下载失败时直接在线打开网页（不能保存），比报错有用
             if downloaded || failed { InAppWebView(url: remote, local: localURL) } else { status }
@@ -156,7 +202,12 @@ struct ReportReaderView: View {
     }
 
     @ViewBuilder private var status: some View {
-        if failed {
+        if preparing {
+            VStack(spacing: 10) {
+                ProgressView()
+                Text(L("正在整理版面…")).font(.subheadline).foregroundStyle(Theme.textPrimary)
+            }
+        } else if failed {
             VStack(spacing: 12) {
                 Image(systemName: "exclamationmark.triangle").font(.largeTitle).foregroundStyle(Theme.textSecondary)
                 Text(L("加载失败，请检查网络后重试")).font(.subheadline).foregroundStyle(Theme.textPrimary)
@@ -188,6 +239,11 @@ struct ReportReaderView: View {
             }
             localURL = local
             shareURL = ReportCache.shareCopy(of: local, name: shareName ?? title)
+            if kind == .pdf {
+                preparing = true
+                displayURL = await ReportCache.fitted(local)
+                preparing = false
+            }
             downloaded = true
         } catch {
             failed = true
@@ -222,6 +278,9 @@ private struct PDFKitView: UIViewRepresentable {
     func makeUIView(context: Context) -> PDFView {
         let v = PDFView()
         v.autoScales = true
+        v.displayMode = .singlePageContinuous
+        v.displayDirection = .vertical
+        v.pageBreakMargins = UIEdgeInsets(top: 8, left: 0, bottom: 8, right: 0)
         v.backgroundColor = UIColor(Theme.background)
         v.document = PDFDocument(url: url)
         return v
