@@ -6,6 +6,7 @@ struct QuantResearchTab: View {
     let symbol: String
     @ObservedObject var vm: QuantResearchViewModel
     var isStatic = false
+    @State private var latestReport: LatestReport?
 
 
     var body: some View {
@@ -26,13 +27,21 @@ struct QuantResearchTab: View {
             }
         }
         .task { await vm.loadResearch(market: market, symbol: symbol) }
+        // 最新财报单独加载：失败或没有就不显示这张卡，不影响其他内容
+        .task(id: symbol) {
+            guard !isStatic else { return }
+            let r = try? await QuantResearchService.latestReport(market: market, symbol: symbol)
+            withAnimation(.easeOut(duration: 0.2)) { latestReport = r }
+        }
     }
 
     @ViewBuilder
     private func content(_ r: QuantResearch) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             QuantResearchSummaryCard(research: r, isStatic: isStatic)
-            if !isStatic { LatestReportCard(market: market, symbol: symbol) }
+            if !isStatic, let report = latestReport, report.isOK {
+                LatestReportCard(market: market, symbol: symbol, report: report).transition(.opacity)
+            }
             if QuantMoatCard.isEnabled, let moat = r.moat {
                 QuantMoatCard(moat: moat, isStatic: isStatic)
             }

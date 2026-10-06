@@ -5,25 +5,21 @@ struct LatestReportCard: View {
     let market: StockMarket
     let symbol: String
 
-    private enum LoadState { case loading, loaded(LatestReport), none }
-    @State private var state: LoadState = .loading
+    /// 由上层加载好再传进来：卡片本身在没数据时是空视图，空视图上挂的 .task 不会执行，所以加载不能放在这里。
+    let report: LatestReport
     @State private var opened: OpenedReport?
 
     var body: some View {
-        Group {
-            if case .loaded(let r) = state, r.isOK { card(r).transition(.opacity) }
-        }
-        .animation(.easeOut(duration: 0.2), value: isLoaded)
-        .task(id: symbol) { await load() }
-        .sheet(item: $opened) { item in
-            if let url = URL(string: item.report.url ?? "") {
-                if item.report.fileType == "html" {
-                    FilingWebView(title: item.report.title ?? L("最新财报"), remote: url, shareName: shareName(item.report))
-                } else {
-                    ReportPDFView(title: item.report.reportType ?? L("最新财报"), remote: url, shareName: shareName(item.report))
+        card(report)
+            .sheet(item: $opened) { item in
+                if let url = URL(string: item.report.url ?? "") {
+                    if item.report.fileType == "html" {
+                        FilingWebView(title: item.report.title ?? L("最新财报"), remote: url, shareName: shareName(item.report))
+                    } else {
+                        ReportPDFView(title: item.report.reportType ?? L("最新财报"), remote: url, shareName: shareName(item.report))
+                    }
                 }
             }
-        }
     }
 
     /// 存到手机时的文件名：「代码 报告类型 披露日」
@@ -34,11 +30,6 @@ struct LatestReportCard: View {
     private struct OpenedReport: Identifiable {
         let report: LatestReport
         var id: String { report.url ?? "" }
-    }
-
-    private var isLoaded: Bool {
-        if case .loaded = state { return true }
-        return false
     }
 
     private func card(_ r: LatestReport) -> some View {
@@ -61,11 +52,5 @@ struct LatestReportCard: View {
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
-    }
-
-    private func load() async {
-        state = .loading
-        do { state = .loaded(try await QuantResearchService.latestReport(market: market, symbol: symbol)) }
-        catch { state = .none }
     }
 }
