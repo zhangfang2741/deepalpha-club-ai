@@ -89,18 +89,20 @@ struct GoodStocksSheet: View {
                 .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
             }
             Spacer()
-            if let signal {
-                VStack(alignment: .trailing, spacing: 2) {
-                    RadarPanelStyle.tag(signal)
-                    Text(signal.date).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
-                }
-            }
             if let mark = e.analystMark {
                 Text(mark)
                     .font(.system(size: 11, weight: .bold).monospacedDigit())
                     .foregroundColor(mark.hasPrefix("▲") ? Theme.up : Theme.down)
             }
             Text(e.grade).font(.system(size: 17, weight: .bold)).foregroundColor(Theme.textPrimary).frame(minWidth: 32, alignment: .trailing)
+            // 最近一个买卖点放在最后（行尾），固定宽度让各行的日期、标签上下对齐
+            VStack(alignment: .trailing, spacing: 2) {
+                if let signal {
+                    RadarPanelStyle.tag(signal)
+                    Text(signal.date).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                }
+            }
+            .frame(width: 88, alignment: .trailing)
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
