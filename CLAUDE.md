@@ -191,6 +191,7 @@ deepalpha-club-ai/
 > **财报中文要点**（`GET /quant-research/{market}/{symbol}/report/summary`，`quant_research/report_text.py`（挑章节）+ `report_summary.py`（大模型 + 缓存），App 的 `ReportSummarySheet`）：
 > 美股取 MD&A + 利润表、A 股 / 港股 PDF 取「财务概要 + 管理层讨论与分析」（目录页跳过、找不到章节退回开头），喂大模型结构化输出（headline / 关键数字 / 要点 / 风险 / 管理层表述），只依据原文、不预测、不给买卖建议（`_BANNED` 措辞命中的条目直接丢）。
 > **同一份财报只生成一次、全员共用**（Redis 60 天，键按财报链接哈希）；大模型额度与 App 对话 / 翻译共用，所以有：每日新生成上限 `REPORT_SUMMARY_DAILY_LIMIT`（UTC 日计数）、同一份财报的生成锁、失败冷却（10 分钟 / 额度用尽 30 分钟 / 文字不可读 24 小时）、紧急停用 `REPORT_SUMMARY_ENABLED=false`。生成放后台，接口立刻返回 generating，App 每 3 秒轮询。
+> **港股 PDF 乱码的兜底**：报告 PDF 提不出文字时，`report.find_results_announcement` 找同期的业绩公告（年报 → 末期 / 全年業績、中期报告 → 中期業績、季度 → 季度業績，披露日在报告前 150 天内）改用它做总结（阿里年报乱码、同期业绩公告可读，已实测）；腾讯的各期文件全是乱码，仍然只能提示「提取不出来」。
 > PDF 提取用 pypdf（`uv.lock` 是手工补的，因为沙箱里 `uv add` 解析不动 tradingagents；以后在本机 `uv lock` 会规范化）。**部分 PDF 字体没有字符映射、提取出来是乱码（实测腾讯港股中期报告）**：`looks_readable` 判断后明确告诉用户「文字无法提取」，不硬编。
 > 同一套阅读器也用于分析师评级里的研报原文（A 股 PDF）/ 相关报道（美股、港股，网页）。
 

@@ -58,6 +58,54 @@ def pick_announcement(rows: list[dict], columns: dict, lang: str, symbol: str) -
     return None
 
 
+def _results_columns(report_type: str | None) -> set[str]:
+    """报告类型 → 对应业绩公告的栏目名（港股年报 / 中期报告 / 季度业绩各有一份同期的业绩公告，文件小、字体通常正常）。"""
+    t = (report_type or "").lower()
+    if "年" in t and "季" not in t and "中" not in t or "annual" in t:
+        return {"末期業績", "全年業績"}
+    if "中" in t or "interim" in t:
+        return {"中期業績"}
+    return {"季度業績"}
+
+
+def pick_results_announcement(rows: list[dict], report_type: str | None, filed_date: str | None, max_days: int = 150) -> str | None:
+    """从港股公告（新 → 旧）里挑和这份报告同期的业绩公告：栏目对得上、披露日不晚于报告披露日、且在其前 max_days 天内。"""
+    from datetime import date as _date
+
+    cols = _results_columns(report_type)
+    try:
+        filed = _date.fromisoformat((filed_date or "")[:10])
+    except ValueError:
+        return None
+    for a in rows:
+        names = {c.get("column_name") for c in a.get("columns") or []}
+        code = str(a.get("art_code") or "")
+        if not (names & cols) or not code.isalnum():
+            continue
+        try:
+            d = _date.fromisoformat(str(a.get("notice_date") or "")[:10])
+        except ValueError:
+            continue
+        if 0 <= (filed - d).days <= max_days:
+            return PDF_URL.format(code=code)
+    return None
+
+
+async def find_results_announcement(symbol: str, report: LatestReportOut) -> str | None:
+    """港股：报告 PDF 提不出文字时，找同期业绩公告的 PDF 链接顶上。"""
+    async with new_client() as client:
+        for page in range(1, 6):
+            resp = await site_get(client, "eastmoney", ANN_API, {
+                "sr": "-1", "page_size": "100", "page_index": str(page), "ann_type": "H",
+                "client_source": "web", "stock_list": symbol, "f_node": "0", "s_node": "0"})
+            data = resp.json() if resp.status_code == 200 else {}
+            rows = (data.get("data") or {}).get("list") or []
+            hit = pick_results_announcement(rows, report.report_type, report.filed_date)
+            if hit or len(rows) < 100:
+                return hit
+    return None
+
+
 async def _latest_announced(client: httpx.AsyncClient, code: str, ann_type: str, columns: dict, lang: str,
                             symbol: str, pages: int = 3) -> LatestReportOut | None:
     """按页取公告（新 → 旧），某一页里一找到定期报告就停，不把后面几页也拉完。"""

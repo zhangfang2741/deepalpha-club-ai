@@ -93,7 +93,7 @@ def patched(monkeypatch):
     async def fake_report(*a, **k):
         return REPORT
 
-    async def fake_extract(report):
+    async def fake_extract(report, market=""):
         return "正文" * 400
 
     calls = {"llm": 0}
@@ -135,7 +135,7 @@ async def test_daily_limit_blocks_new_generation(patched, monkeypatch):
 
 
 async def test_unreadable_text_is_reported_not_retried(patched, monkeypatch):
-    async def empty(report):
+    async def empty(report, market=""):
         return ""
 
     monkeypatch.setattr(rs, "_extract_text", empty)
@@ -169,7 +169,7 @@ def test_annual_filters_only_annual_columns():
 
 
 async def test_peek_reports_unreadable_so_app_can_hide_button(patched, monkeypatch):
-    async def empty(report):
+    async def empty(report, market=""):
         return ""
 
     monkeypatch.setattr(rs, "_extract_text", empty)
@@ -178,3 +178,15 @@ async def test_peek_reports_unreadable_so_app_can_hide_button(patched, monkeypat
     await _wait_ready(redis)
     out = await rs.get_report_summary("cn", "600150", "zh", redis=redis, generate=False)
     assert out.status == "unreadable" and out.note
+
+
+def test_pick_results_announcement_matches_period_and_window():
+    from app.services.quant_research.report import pick_results_announcement
+
+    rows = [{"art_code": "AN9", "notice_date": "2026-08-12 00:00:00", "columns": [{"column_name": "中期業績"}]},
+            {"art_code": "AN8", "notice_date": "2026-05-20 00:00:00", "columns": [{"column_name": "末期業績"}, {"column_name": "季度業績"}]},
+            {"art_code": "AN7", "notice_date": "2025-05-20 00:00:00", "columns": [{"column_name": "末期業績"}]}]
+    assert pick_results_announcement(rows, "年报", "2026-06-18").endswith("H2_AN8_1.pdf")
+    assert pick_results_announcement(rows, "Annual report", "2026-06-18").endswith("H2_AN8_1.pdf")
+    assert pick_results_announcement(rows, "中报", "2026-08-25").endswith("H2_AN9_1.pdf")
+    assert pick_results_announcement(rows, "年报", "2027-06-18") is None  # 太久以前的不算同期

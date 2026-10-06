@@ -22,7 +22,7 @@ from app.services.llm import llm_service
 from app.services.llm.service import LLMQuotaExhausted
 from app.services.quant_research import report_text
 from app.services.quant_research.moat.tenk import SEC_HEADERS
-from app.services.quant_research.report import get_latest_report
+from app.services.quant_research.report import find_results_announcement, get_latest_report
 
 CACHE_TTL = 60 * 24 * 3600
 FAIL_TTL = 600
@@ -92,17 +92,28 @@ def sanitize(summary: ReportSummary) -> ReportSummary:
                          outlook=outlook.strip()[:400])
 
 
-async def _extract_text(report: LatestReportOut) -> str:
-    """下载财报原文并挑出关键章节；文字不可读返回空串。"""
-    assert report.url
+async def _extract_text(report: LatestReportOut, market: str = "") -> str:
+    """下载财报原文并挑出关键章节；文字不可读返回空串。港股报告 PDF 乱码时改用同期业绩公告（文件小、字体通常正常）。"""
+    text = await _extract_from(report.url or "", report)
+    if not text and market == "hk":
+        alt = await find_results_announcement(report.symbol, report)
+        if alt:
+            logger.info("report_summary_hk_results_fallback", symbol=report.symbol)
+            text = await _extract_from(alt, report)
+    return text
+
+
+async def _extract_from(url: str, report: LatestReportOut) -> str:
+    """下载一个文件并挑关键章节（不可读返回空串）。"""
+    assert url
     async with httpx.AsyncClient(follow_redirects=True, timeout=60) as client:
         if report.file_type == "html":
-            resp = await client.get(report.url, headers=SEC_HEADERS)
+            resp = await client.get(url, headers=SEC_HEADERS)
             resp.raise_for_status()
             form = (report.title or "").split(" ")[-1]
             text = report_text.us_sections(report_text.html_to_text(resp.text), form)
         else:
-            resp = await client.get(report.url)
+            resp = await client.get(url)
             resp.raise_for_status()
             if len(resp.content) > MAX_PDF_BYTES:
                 return ""
@@ -120,10 +131,10 @@ async def summarize_text(text: str, report: LatestReportOut, lang: str) -> Repor
     return sanitize(raw)
 
 
-async def _generate(redis: Redis, report: LatestReportOut, lang: str) -> None:
+async def _generate(redis: Redis, report: LatestReportOut, lang: str, market: str = "") -> None:
     url = report.url or ""
     try:
-        text = await _extract_text(report)
+        text = await _extract_text(report, market)
         if not text:
             await set_json(redis, _key(lang, url, ":fail"), {"reason": "unreadable"}, expire=24 * 3600)
             return
@@ -183,7 +194,7 @@ async def get_report_summary(market: str, symbol: str, lang: str, *, redis: Redi
         await release_lock(redis, _key(lang, report.url, ":lock"))
         return _out(report, lang, "limit_reached",
                     note={"zh": "今天新生成的要点数量已到上限，明天再来。", "en": "The daily limit of new summaries was reached; try again tomorrow."}[lang])
-    task = asyncio.create_task(_generate(redis, report, lang))
+    task = asyncio.create_task(_generate(redis, report, lang, market))
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)
     return _out(report, lang, "generating")
