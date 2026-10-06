@@ -93,11 +93,12 @@ async def latest_report(
     market: str = Path(..., pattern=r"^[a-zA-Z]{2}$"),
     symbol: str = Path(..., pattern=r"^[A-Za-z0-9][A-Za-z0-9\-\.]{0,11}$"),
     lang: Literal["zh", "en"] = Query("zh"),
+    kind: Literal["latest", "annual"] = Query("latest", description="latest = 最新一份定期报告；annual = 最新年报"),
     user: User = Depends(get_current_user),
     redis: Redis | None = Depends(get_redis_optional),
 ) -> LatestReportOut:
     """最新一份定期财报（年报 / 中报 / 季报）原文的位置；文件由 App 下载并缓存在本机。"""
-    out = await get_latest_report(market.lower(), symbol, lang, redis=redis)
+    out = await get_latest_report(market.lower(), symbol, lang, redis=redis, kind=kind)
     logger.info("latest_report_served", market=market, symbol=symbol.upper(), status=out.status, user_id=user.id)
     return out
 
@@ -109,11 +110,13 @@ async def latest_report_summary(
     market: str = Path(..., pattern=r"^[a-zA-Z]{2}$"),
     symbol: str = Path(..., pattern=r"^[A-Za-z0-9][A-Za-z0-9\-\.]{0,11}$"),
     lang: Literal["zh", "en"] = Query("zh"),
+    kind: Literal["latest", "annual"] = Query("latest"),
+    peek: bool = Query(False, description="只看缓存，不触发生成"),
     user: User = Depends(get_current_user),
     redis: Redis | None = Depends(get_redis_optional),
 ) -> ReportSummaryOut:
     """最新财报的中文要点。没有缓存时会触发后台生成并返回 generating，客户端隔几秒再请求。"""
-    out = await get_report_summary(market.lower(), symbol, lang, redis=redis)
+    out = await get_report_summary(market.lower(), symbol, lang, redis=redis, kind=kind, generate=not peek)
     logger.info("report_summary_served", market=market, symbol=symbol.upper(), status=out.status, user_id=user.id)
     return out
 

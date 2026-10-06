@@ -145,11 +145,12 @@ def _out(report: LatestReportOut, lang: str, status: str, summary: ReportSummary
                             filed_date=report.filed_date, summary=summary, note=note or (NOTE[lang] if summary else None))
 
 
-async def get_report_summary(market: str, symbol: str, lang: str, *, redis: Redis | None) -> ReportSummaryOut:
-    """缓存命中直接给；没有就（受每日上限约束）起一个后台生成，返回 generating。"""
+async def get_report_summary(market: str, symbol: str, lang: str, *, redis: Redis | None,
+                             kind: str = "latest", generate: bool = True) -> ReportSummaryOut:
+    """缓存命中直接给；没有就（受每日上限约束）起一个后台生成，返回 generating。generate=False 只看缓存（App 打开阅读页时探一下，不触发生成）。"""
     if not settings.REPORT_SUMMARY_ENABLED:
         return ReportSummaryOut(status="disabled", symbol=symbol.upper())
-    report = await get_latest_report(market, symbol, lang, redis=redis)
+    report = await get_latest_report(market, symbol, lang, redis=redis, kind=kind)
     if report.status != "ok" or not report.url:
         return ReportSummaryOut(status="unavailable", symbol=report.symbol)
     if redis is None:
@@ -158,6 +159,8 @@ async def get_report_summary(market: str, symbol: str, lang: str, *, redis: Redi
     cached = await get_json(redis, _key(lang, report.url))
     if cached:
         return _out(report, lang, "ready", ReportSummary(**cached))
+    if not generate:
+        return _out(report, lang, "not_generated")
     fail = await get_json(redis, _key(lang, report.url, ":fail"))
     if fail:
         reasons = {"unreadable": {"zh": "这份财报的文字无法提取（字体缺少字符映射），暂时没法整理要点，请看原文。",

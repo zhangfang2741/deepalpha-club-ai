@@ -26,6 +26,10 @@ _CN_COLUMNS = {"年度报告全文": ("年报", "Annual report"), "半年度报�
 _HK_COLUMNS = {"年報": ("年报", "Annual report"), "中期/半年度報告": ("中报", "Interim report"),
                "季度業績": ("季度业绩公告", "Quarterly results"), "中期業績": ("中期业绩公告", "Interim results"),
                "全年業績": ("全年业绩公告", "Annual results"), "末期業績": ("全年业绩公告", "Annual results")}
+# 只要年报：A 股「年度报告全文」、港股「年報」、美股 10-K / 20-F / 40-F
+_CN_ANNUAL = {k: v for k, v in _CN_COLUMNS.items() if k == "年度报告全文"}
+_HK_ANNUAL = {k: v for k, v in _HK_COLUMNS.items() if k == "年報"}
+_US_ANNUAL_FORMS = ("10-K", "20-F", "40-F")
 _US_LABELS = {"10-K": ("年报", "Annual report"), "10-Q": ("季报", "Quarterly report"),
               "20-F": ("年报", "Annual report"), "40-F": ("年报", "Annual report")}
 
@@ -34,9 +38,9 @@ def _label(pair: tuple[str, str], lang: str) -> str:
     return pair[0] if lang == "zh" else pair[1]
 
 
-def cache_key(market: str, symbol: str, lang: str) -> str:
+def cache_key(market: str, symbol: str, lang: str, kind: str = "latest") -> str:
     """缓存键（带版本号，结构变动时升版本）。"""
-    return f"quant_research:report:v1:{market}:{symbol}:{lang}"
+    return f"quant_research:report:v2:{kind}:{market}:{symbol}:{lang}"
 
 
 def pick_announcement(rows: list[dict], columns: dict, lang: str, symbol: str) -> LatestReportOut | None:
@@ -69,12 +73,14 @@ async def _latest_announced(client: httpx.AsyncClient, code: str, ann_type: str,
     return None
 
 
-async def get_latest_report(market: str, symbol: str, lang: str, *, redis: Redis | None) -> LatestReportOut:
-    """缓存 → 按市场取最新定期报告；取不到给 unavailable（不缓存）。"""
+async def get_latest_report(market: str, symbol: str, lang: str, *, redis: Redis | None,
+                            kind: str = "latest") -> LatestReportOut:
+    """缓存 → 按市场取最新定期报告（kind=annual 只取年报）；取不到给 unavailable（不缓存）。"""
+    annual = kind == "annual"
     if market not in ("us", "cn", "hk"):
         return LatestReportOut(status="unsupported_market", symbol=symbol.upper())
     symbol = normalize_symbol(market, symbol)
-    key = cache_key(market, symbol, lang)
+    key = cache_key(market, symbol, lang, kind)
     if redis is not None:
         try:
             cached = await get_json(redis, key)
@@ -87,17 +93,19 @@ async def get_latest_report(market: str, symbol: str, lang: str, *, redis: Redis
     try:
         if market == "us":
             async with httpx.AsyncClient() as client:
-                p = await tenk.latest_periodic(client, symbol)
+                p = await tenk.latest_periodic(client, symbol, _US_ANNUAL_FORMS) if annual else await tenk.latest_periodic(client, symbol)
             if p is not None:
                 label = _label(_US_LABELS[p.form], lang)
                 out = LatestReportOut(status="ok", symbol=symbol, title=f"{symbol} {p.form}", report_type=label,
                                       period=p.period, filed_date=p.filed_date, url=p.url, file_type="html")
         else:
             async with new_client() as client:
+                # 年报一年才一份，可能被后面的季报 / 中报埋得比较深：多翻几页
+                pages = 6 if annual else 3
                 if market == "cn":
-                    out = await _latest_announced(client, symbol, "A", _CN_COLUMNS, lang, symbol)
+                    out = await _latest_announced(client, symbol, "A", _CN_ANNUAL if annual else _CN_COLUMNS, lang, symbol, pages)
                 else:
-                    out = await _latest_announced(client, symbol, "H", _HK_COLUMNS, lang, symbol)
+                    out = await _latest_announced(client, symbol, "H", _HK_ANNUAL if annual else _HK_COLUMNS, lang, symbol, pages)
     except Exception as e:  # noqa: BLE001
         logger.warning("latest_report_failed", market=market, symbol=symbol, error=str(e))
     if out is None:

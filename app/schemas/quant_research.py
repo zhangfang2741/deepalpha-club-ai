@@ -242,7 +242,7 @@ class ReportSummary(BaseModel):
 class ReportSummaryOut(BaseModel):
     """最新财报的中文要点：生成需要一会儿，status=generating 时客户端过几秒再请求。"""
 
-    status: Literal["ready", "generating", "unavailable", "limit_reached", "disabled"]
+    status: Literal["ready", "generating", "unavailable", "limit_reached", "disabled", "not_generated"]
     symbol: str
     report_type: str | None = None
     filed_date: str | None = None

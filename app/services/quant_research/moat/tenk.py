@@ -87,15 +87,16 @@ class Periodic:
 _PERIODIC_FORMS = ("10-K", "10-Q", "20-F", "40-F")
 
 
-async def latest_periodic(client: httpx.AsyncClient, symbol: str) -> Periodic | None:
-    """最近一份定期报告（10-K / 10-Q，外国公司 20-F / 40-F）：表单、披露日、报告期末、正文链接。"""
+async def latest_periodic(client: httpx.AsyncClient, symbol: str,
+                          forms: tuple[str, ...] = _PERIODIC_FORMS) -> Periodic | None:
+    """最近一份定期报告（默认 10-K / 10-Q / 20-F / 40-F；只要年报传 ("10-K", "20-F", "40-F")）：表单、披露日、报告期末、正文链接。"""
     cik = await _cik(client, symbol)
     if cik is None:
         return None
     r = await _get(client, f"https://data.sec.gov/submissions/CIK{cik:010d}.json")
     r.raise_for_status()
     recent = r.json()["filings"]["recent"]  # 新 → 旧
-    idx = next((i for i, f in enumerate(recent["form"]) if f in _PERIODIC_FORMS), None)
+    idx = next((i for i, f in enumerate(recent["form"]) if f in forms), None)
     if idx is None:
         return None
     acc = recent["accessionNumber"][idx].replace("-", "")

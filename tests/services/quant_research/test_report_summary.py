@@ -148,3 +148,21 @@ async def test_unreadable_text_is_reported_not_retried(patched, monkeypatch):
 async def test_disabled(monkeypatch):
     monkeypatch.setattr(rs.settings, "REPORT_SUMMARY_ENABLED", False)
     assert (await rs.get_report_summary("cn", "600150", "zh", redis=FakeRedis())).status == "disabled"
+
+
+async def test_peek_does_not_generate(patched):
+    redis = FakeRedis()
+    out = await rs.get_report_summary("cn", "600150", "zh", redis=redis, generate=False)
+    assert out.status == "not_generated" and patched["llm"] == 0
+    await rs.get_report_summary("cn", "600150", "zh", redis=redis)
+    await _wait_ready(redis)
+    assert (await rs.get_report_summary("cn", "600150", "zh", redis=redis, generate=False)).status == "ready"
+
+
+def test_annual_filters_only_annual_columns():
+    from app.services.quant_research.report import _CN_ANNUAL, _HK_ANNUAL, pick_announcement
+
+    rows = [{"art_code": "AN2", "title": "半年报", "notice_date": "2026-08-31", "columns": [{"column_name": "半年度报告全文"}]},
+            {"art_code": "AN1", "title": "年报", "notice_date": "2026-04-30", "columns": [{"column_name": "年度报告全文"}]}]
+    assert pick_announcement(rows, _CN_ANNUAL, "zh", "600150").url.endswith("H2_AN1_1.pdf")
+    assert list(_HK_ANNUAL) == ["年報"]
