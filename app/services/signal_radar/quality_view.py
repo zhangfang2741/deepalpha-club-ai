@@ -106,7 +106,10 @@ async def good_stocks(
     ranked, _ = loaded
     if mode == QUALITY_GOOD_XM:
         try:
-            ranked = rerank_ex_momentum(await _with_dim_scores(market, ranked))
+            with_dims = await _with_dim_scores(market, ranked)
+            ranked = rerank_ex_momentum(with_dims)
+            logger.info("signal_radar_good_xm_ranked", market=market, universe=universe, rated=len(with_dims),
+                        with_dims=sum(1 for _, g in with_dims if g.dim_scores), kept=len(ranked))
         except Exception:
             logger.exception("signal_radar_dim_scores_failed", market=market)
             return None
