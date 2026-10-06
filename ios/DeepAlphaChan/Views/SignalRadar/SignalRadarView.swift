@@ -72,7 +72,7 @@ struct SignalRadarView: View {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .chan: return L("缠论")
+            case .chan: return L("缠论结构")
             case .fundamental: return RadarEventKind.grade.tabTitle
             case .analyst: return RadarEventKind.analyst.tabTitle
             }
