@@ -115,6 +115,7 @@ async def test_bootstrap_rebuilds_when_methodology_version_changed(monkeypatch):
 
     monkeypatch.setattr(scheduler, "BOOTSTRAP_DELAY_SECONDS", 0)
     monkeypatch.setattr(scheduler, "_align_backfill", no_align)
+    monkeypatch.setattr(scheduler, "_expected_us", lambda now=None: date(2026, 9, 30))
     monkeypatch.setattr(scheduler.repo, "latest_distribution_date", fake_latest_date)
     monkeypatch.setattr(scheduler.repo, "latest_methodology_version", fake_version)
     monkeypatch.setattr(scheduler, "_run_once", fake_run_once)
@@ -143,11 +144,55 @@ async def test_bootstrap_skips_when_results_are_current(monkeypatch):
 
     monkeypatch.setattr(scheduler, "BOOTSTRAP_DELAY_SECONDS", 0)
     monkeypatch.setattr(scheduler, "_align_backfill", no_align)
+    monkeypatch.setattr(scheduler, "_expected_us", lambda now=None: date(2026, 9, 30))
     monkeypatch.setattr(scheduler.repo, "latest_distribution_date", fake_latest_date)
     monkeypatch.setattr(scheduler.repo, "latest_methodology_version", fake_version)
     monkeypatch.setattr(scheduler, "_run_once", fake_run_once)
     await scheduler._bootstrap_once()
     assert runs == []
+
+
+async def test_bootstrap_reruns_when_latest_day_missing(monkeypatch):
+    """夜间批量被部署重启打断、最新评级日落后于应有日期 → 自举补跑（版本一致也补）。"""
+    from datetime import date
+
+    from app.services.quant_research import scheduler
+
+    latest = {"d": date(2026, 10, 2)}
+    runs: list[date] = []
+
+    async def fake_latest_date(market):
+        return latest["d"]
+
+    async def fake_version(market):
+        return scheduler.METHODOLOGY_VERSION
+
+    async def fake_run_once(kind, day, *, lock_suffix=None):
+        runs.append(day)
+        latest["d"] = day
+
+    async def no_align():
+        return None
+
+    monkeypatch.setattr(scheduler, "BOOTSTRAP_DELAY_SECONDS", 0)
+    monkeypatch.setattr(scheduler, "_align_backfill", no_align)
+    monkeypatch.setattr(scheduler, "_expected_us", lambda now=None: date(2026, 10, 5))
+    monkeypatch.setattr(scheduler, "last_us_session", lambda now: date(2026, 10, 5))
+    monkeypatch.setattr(scheduler.repo, "latest_distribution_date", fake_latest_date)
+    monkeypatch.setattr(scheduler.repo, "latest_methodology_version", fake_version)
+    monkeypatch.setattr(scheduler, "_run_once", fake_run_once)
+    await scheduler._bootstrap_once()
+    assert runs == [date(2026, 10, 5)]
+
+
+def test_expected_day_has_grace_after_schedule():
+    """定时点后宽限内还不算漏跑（夜间批量可能正在跑）；过了宽限才要求最新一天。"""
+    from datetime import UTC, date, datetime
+
+    from app.services.quant_research import scheduler
+
+    assert scheduler._expected_us(datetime(2026, 10, 5, 23, 0, tzinfo=UTC)) == date(2026, 10, 2)
+    assert scheduler._expected_us(datetime(2026, 10, 6, 0, 30, tzinfo=UTC)) == date(2026, 10, 5)
 
 
 async def test_moat_cold_start_retries_when_locked_and_releases_lock(monkeypatch):

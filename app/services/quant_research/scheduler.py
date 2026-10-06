@@ -90,11 +90,31 @@ async def _align_backfill() -> None:
             await _drop_radar_snapshots(redis)
 
 
-async def _results_current(market: str = "us") -> bool:
-    """已有批量结果，且方法版本与当前代码一致。"""
-    if await repo.latest_distribution_date(market) is None:
+# 自举判「最新一天缺失」时给定时批量留的宽限：定时点之后这么久还没写入才算漏跑（避免与正在跑的夜间批量重复）
+STALE_GRACE = timedelta(minutes=90)
+
+
+async def _results_current(market: str = "us", expected: date | None = None) -> bool:
+    """已有批量结果，方法版本与当前代码一致，且（给了 expected 时）最新评级日不早于它。
+
+    expected = 按定时点 + 宽限算出来「此刻应该已经跑完」的最近一个交易日。夜间批量跑到一半遇到部署重启
+    （进程被杀）会整天漏跑——2026-10-05 美股 22:30 批量被连续 5 次部署打断，次日基本面仍停在 10-02；
+    以前自举只看方法版本，不会补，现在最新评级日落后就补跑。
+    """
+    latest = await repo.latest_distribution_date(market)
+    if latest is None:
+        return False
+    if expected is not None and latest < expected:
         return False
     return await repo.latest_methodology_version(market) == METHODOLOGY_VERSION
+
+
+def _expected_us(now: datetime | None = None) -> date:
+    return last_us_session((now or datetime.now(UTC)) - STALE_GRACE)
+
+
+def _expected_cnhk(close_hour: int, now: datetime | None = None) -> date:
+    return last_cnhk_session((now or datetime.now(UTC)) - STALE_GRACE, close_hour)
 
 
 def last_cnhk_session(now: datetime, close_hour: int) -> date:
@@ -114,11 +134,11 @@ async def _bootstrap_cnhk(market: str, close_hour: int) -> None:
     try:
         await asyncio.sleep(BOOTSTRAP_DELAY_SECONDS)
         for attempt in range(BOOTSTRAP_MAX_ATTEMPTS):
-            if await _results_current(market):
+            if await _results_current(market, _expected_cnhk(close_hour)):
                 return
             logger.info("quant_batch_bootstrap_attempt", market=market, attempt=attempt, version=METHODOLOGY_VERSION)
             await _run_once(market, last_cnhk_session(datetime.now(UTC), close_hour), lock_suffix=METHODOLOGY_VERSION)
-            if await _results_current(market):
+            if await _results_current(market, _expected_cnhk(close_hour)):
                 return
             await asyncio.sleep(BOOTSTRAP_RETRY_SECONDS)
         logger.warning("quant_batch_bootstrap_gave_up", market=market, attempts=BOOTSTRAP_MAX_ATTEMPTS)
@@ -129,7 +149,7 @@ async def _bootstrap_cnhk(market: str, close_hour: int) -> None:
 
 
 async def _bootstrap_once() -> None:
-    """冷启动自举：没跑过批量、或已存结果的方法版本与代码不一致时，启动后立即跑一次全量。
+    """冷启动自举：没跑过批量、已存结果的方法版本与代码不一致、或最新评级日落后于应有日期（夜间批量被部署重启打断）时，启动后立即跑一次全量。
 
     首次部署若等到定时点（北京时间 06:30），白天所有请求都会拿到「数据尚未生成」或旧口径结果；
     自举让新结果在部署后 ~1 小时内可用。锁键带方法版本：多实例只跑一次，
@@ -139,13 +159,13 @@ async def _bootstrap_once() -> None:
         await _align_backfill()
         await asyncio.sleep(BOOTSTRAP_DELAY_SECONDS)
         for attempt in range(BOOTSTRAP_MAX_ATTEMPTS):
-            if await _results_current():
+            if await _results_current("us", _expected_us()):
                 return
             logger.info("quant_batch_bootstrap_attempt", attempt=attempt, version=METHODOLOGY_VERSION)
             # 锁被占（别的实例在跑 / 上一进程留下的锁）时 _run_once 只记日志不抛错，
             # 这里靠重试等它跑完或过期，而不是放弃到下一个定时点
             await _run_once("us", last_us_session(datetime.now(UTC)), lock_suffix=METHODOLOGY_VERSION)
-            if await _results_current():
+            if await _results_current("us", _expected_us()):
                 return
             await asyncio.sleep(BOOTSTRAP_RETRY_SECONDS)
         logger.warning("quant_batch_bootstrap_gave_up", attempts=BOOTSTRAP_MAX_ATTEMPTS)
