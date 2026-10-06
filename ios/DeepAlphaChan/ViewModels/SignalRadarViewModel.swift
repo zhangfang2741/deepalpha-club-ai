@@ -325,7 +325,8 @@ final class SignalRadarViewModel: ObservableObject {
     /// 后台还在补算（pendingSymbols > 0）时静默重拉缓存：补上的气泡与剩余只数随之更新。
     /// 不置 isLoading（不调暗、不打断浏览），不重置所选日期；只读缓存，不触发重新扫描。
     func refreshWhileBackfilling() async {
-        guard !isLoading, responseMatchesSelection, (response?.pendingSymbols ?? 0) > 0 else { return }
+        guard !isLoading, responseMatchesSelection,
+              (response?.pendingSymbols ?? 0) > 0 || (response?.analystPending ?? 0) > 0 else { return }
         let requested = market
         let requestedUniverse = currentUniverse
         guard let resp = try? await SignalRadarService.fetch(market: requested.rawValue, universe: requestedUniverse),

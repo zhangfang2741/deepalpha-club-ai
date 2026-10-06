@@ -7,7 +7,8 @@ enum SignalRadarService {
     static func fetch(
         market: String, universe: String? = nil, refresh: Bool = false
     ) async throws -> SignalRadarResponse {
-        var query = ["market": market, "mode": SignalMode.current(), "scope": "all"]
+        // quality=good：只留当前综合等级达标的股票的买卖点（门槛由后端定），并带分析师角标
+        var query = ["market": market, "mode": SignalMode.current(), "scope": "all", "quality": "good"]
         if let universe, !universe.isEmpty { query["universe"] = universe }
         if refresh { query["refresh"] = "true" }
         return try await APIClient.shared.get("/signal-radar", query: query)
@@ -17,12 +18,12 @@ enum SignalRadarService {
     /// 随当前月份自动滚动；遇非交易日取之前最近交易日），真实数据，按所选 universe
     /// 计算（nil = 市场默认），可能返回 status=generating 需要轮询。
     static func demo(market: String, universe: String? = nil) async throws -> SignalRadarResponse {
-        var query = ["market": market, "mode": SignalMode.current(), "scope": "all"]
+        var query = ["market": market, "mode": SignalMode.current(), "scope": "all", "quality": "good"]
         if let universe, !universe.isEmpty { query["universe"] = universe }
         return try await APIClient.shared.get("/signal-radar/demo", query: query)
     }
 
-    /// 基本面研究 tab：某 (市场, universe) 当前综合等级最高的若干只（含近 30 天券商评级净上调 / 下调，仅美股）。
+    /// 好股票名单：某 (市场, universe) 当前综合等级最高的若干只（含近 30 天券商评级净上调 / 下调，仅美股）。
     static func fundamentalTop(market: String, universe: String? = nil, limit: Int = 50) async throws -> FundamentalTopResponse {
         var query = ["market": market, "limit": String(limit)]
         if let universe, !universe.isEmpty { query["universe"] = universe }

@@ -40,6 +40,11 @@ struct SignalRadarResponse: Decodable {
     let computedAt: String?
     /// 拉数失败、正在后台补算的成分股数（补齐后快照自动重写）。旧后端无此字段。
     let pendingSymbols: Int?
+    /// 基本面门槛（后端 quality=good）：最低综合等级（如 B+）、达标只数、有评级只数、还在补的券商评级只数。旧后端无这些字段。
+    var qualityThreshold: String?
+    var qualityGoodCount: Int?
+    var qualityRatedCount: Int?
+    var analystPending: Int?
 
     enum CodingKeys: String, CodingKey {
         case market
@@ -54,6 +59,10 @@ struct SignalRadarResponse: Decodable {
         case subLevelAsOf = "sub_level_as_of"
         case computedAt = "computed_at"
         case pendingSymbols = "pending_symbols"
+        case qualityThreshold = "quality_threshold"
+        case qualityGoodCount = "quality_good_count"
+        case qualityRatedCount = "quality_rated_count"
+        case analystPending = "analyst_pending"
     }
 
     /// 共振结论更新时刻（本地时间 HH:mm），解析不了返回 nil。
@@ -172,8 +181,15 @@ struct RadarSignal: Decodable, Identifiable, Hashable {
     let ageDays: Int?
     /// 行业 key（与行业状态一致）；没有行业分类时为 nil。
     let sector: String?
-    /// 基本面雷达的分析师角标（「▲2」净上调 / 「▼1」净下调）；缠论雷达恒为 nil，不参与解码。
-    var analystMark: String? = nil
+    /// 近 30 天券商评级上调 / 下调家数（仅美股、后端 quality=good 时给；没有数据为 nil）。
+    var analystUp: Int? = nil
+    var analystDown: Int? = nil
+
+    /// 分析师角标：净上调「▲n」、净下调「▼n」；净 0 或没有数据返回 nil。
+    var analystMark: String? {
+        guard let up = analystUp, let down = analystDown, up != down else { return nil }
+        return up > down ? "▲\(up - down)" : "▼\(down - up)"
+    }
 
     var id: String { "\(symbol)-\(date)-\(signalType)" }
 
@@ -207,5 +223,7 @@ struct RadarSignal: Decodable, Identifiable, Hashable {
         case quantStatus = "quant_status"
         case ageDays = "age_days"
         case sector
+        case analystUp = "analyst_up"
+        case analystDown = "analyst_down"
     }
 }

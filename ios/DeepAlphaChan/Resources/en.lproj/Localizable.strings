@@ -1290,3 +1290,13 @@
 "角标：气泡右上角的白色小标是近 30 天券商评级的净调整——▲n 表示上调比下调多 n 家，▼n 表示下调比上调多 n 家，相同或没有则不显示。只统计美股；A 股、港股暂时没有这项数据。" = "Badge: the small white tag at a bubble's top right is the net broker rating change over the last 30 days — ▲n means n more upgrades than downgrades, ▼n the reverse; nothing is shown when equal or unavailable. US stocks only; A-shares and HK have no such data yet.";
 "数量：画布只画等级最高的前 10 只，其余在「查看完整榜单」里看。" = "Count: the canvas shows only the 10 top-rated stocks; see the rest in "View full ranking".";
 "评级与券商调整只是事实陈列，不代表后续涨跌，不构成投资建议。" = "Ratings and broker changes are a record of facts; they do not predict future moves and are not investment advice.";
+"仅看综合评级 %@ 及以上的好股票" = "Only stocks rated %@ or better";
+"%lld 只" = "%lld stocks";
+"名单" = "List";
+"好股票名单" = "Good stocks list";
+"正在加载好股票名单…" = "Loading good stocks…";
+"这个范围暂时没有达标的股票" = "No stocks meet the bar in this range yet";
+"近期有买卖点 · %lld 只" = "With recent signals · %lld";
+"暂无买卖点 · %lld 只" = "No signals · %lld";
+"好股票 = 当前综合等级不低于 %@ 的股票；券商角标为近 30 天净上调 / 净下调（仅美股）。仅为事实陈列，不构成投资建议。" = "Good stocks = current composite grade of %@ or better; broker badge = net upgrades / downgrades over the last 30 days (US only). A record of facts, not investment advice.";
+"%@ 好股票" = "%@ good stocks";

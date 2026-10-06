@@ -13,6 +13,8 @@ enum RadarPanel: Identifiable, Equatable {
     case sectorPicker
     case sector(String)
     case signals
+    /// 好股票名单：当前综合等级达标的股票，各自有没有买卖点。
+    case goodStocks
 
     var id: String {
         switch self {
@@ -20,6 +22,7 @@ enum RadarPanel: Identifiable, Equatable {
         case .sectorPicker: return "sector-picker"
         case .sector(let key): return "sector-\(key)"
         case .signals: return "signals"
+        case .goodStocks: return "good-stocks"
         }
     }
 }
