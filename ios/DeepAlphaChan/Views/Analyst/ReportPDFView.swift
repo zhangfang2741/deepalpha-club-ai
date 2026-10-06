@@ -49,7 +49,60 @@ enum ReportCache {
     }
 }
 
+/// PDF 目录里的一条。
+struct PDFTocItem: Identifiable {
+    let id = UUID()
+    let title: String
+    let level: Int
+    let pageIndex: Int
+}
+
 extension ReportCache {
+    /// 目录：优先用 PDF 自带的书签；没有书签时（A 股财报常见）按版式找「第X节 / 第X章」开头的页面凑一份。
+    /// 页码与重排副本一一对应（重排只改页面大小、不增删页）。
+    static func tableOfContents(of local: URL) async -> [PDFTocItem] {
+        await Task.detached(priority: .utility) { () -> [PDFTocItem] in
+            guard let doc = PDFDocument(url: local) else { return [] }
+            if let root = doc.outlineRoot, root.numberOfChildren > 0 {
+                var out: [PDFTocItem] = []
+                func walk(_ node: PDFOutline, level: Int) {
+                    for i in 0..<node.numberOfChildren {
+                        guard let child = node.child(at: i) else { continue }
+                        if let title = child.label, !title.trimmingCharacters(in: .whitespaces).isEmpty,
+                           let page = child.destination?.page {
+                            out.append(PDFTocItem(title: title, level: level, pageIndex: doc.index(for: page)))
+                        }
+                        walk(child, level: level + 1)
+                    }
+                }
+                walk(root, level: 0)
+                if !out.isEmpty { return out }
+            }
+            return headingToc(doc)
+        }.value
+    }
+
+    private static func headingToc(_ doc: PDFDocument) -> [PDFTocItem] {
+        let pattern = try? NSRegularExpression(pattern: "^\\s*第[一二三四五六七八九十百]+[节章]\\s*\\S.{0,30}$")
+        guard let pattern else { return [] }
+        func isHeading(_ line: String) -> Bool {
+            pattern.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil
+        }
+        var out: [PDFTocItem] = []
+        var seen = Set<String>()
+        for i in 0..<doc.pageCount {
+            guard let text = doc.page(at: i)?.string else { continue }
+            let lines = text.components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            // 目录页会一口气列出好几个「第X节」，不当作章节起点
+            if lines.filter(isHeading).count >= 3 { continue }
+            if let head = lines.prefix(4).first(where: isHeading), seen.insert(head).inserted {
+                out.append(PDFTocItem(title: head, level: 0, pageIndex: i))
+            }
+        }
+        return out
+    }
+
     /// 页面宽度不一致（竖版 A4 夹着横版表格页）时，PDFKit 按最宽的页缩放，竖版页就缩在中间、两边留一大片空。
     /// 这种文件重新排一份「每页同宽」的副本（矢量内容原样画进去、文字保留），缓存在原文件旁边；页面本来就一致的直接用原文件。
     static func fitted(_ local: URL) async -> URL {
@@ -165,6 +218,9 @@ struct ReportReaderView: View {
     @State private var downloaded = false
     @State private var displayURL: URL?
     @State private var preparing = false
+    @State private var toc: [PDFTocItem] = []
+    @State private var showToc = false
+    @State private var jumpTo: Int?
     @State private var progress: Double?
 
     var body: some View {
@@ -176,16 +232,27 @@ struct ReportReaderView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) { Button(L("完成")) { dismiss() } }
-                    if let shareURL {
-                        // 系统分享面板里选「存储到文件」即下载到手机
-                        ToolbarItem(placement: .cancellationAction) {
+                    ToolbarItemGroup(placement: .topBarLeading) {
+                        if let shareURL {
+                            // 系统分享面板里选「存储到文件」即下载到手机
                             ShareLink(item: shareURL) { Image(systemName: "square.and.arrow.down") }
                                 .accessibilityLabel(L("保存到手机"))
+                        }
+                        if !toc.isEmpty {
+                            Button { showToc = true } label: { Image(systemName: "list.bullet") }
+                                .accessibilityLabel(L("目录"))
                         }
                     }
                 }
         }
         .presentationDragIndicator(.visible)
+        .sheet(isPresented: $showToc) {
+            PDFTocSheet(items: toc) { index in
+                jumpTo = index
+                showToc = false
+            }
+            .presentationDetents([.medium, .large])
+        }
         .task { await load() }
     }
 
@@ -194,7 +261,7 @@ struct ReportReaderView: View {
         case .page:
             InAppWebView(url: remote, local: nil)
         case .pdf:
-            if let displayURL { PDFKitView(url: displayURL) } else { status }
+            if let displayURL { PDFKitView(url: displayURL, jumpTo: $jumpTo) } else { status }
         case .filing:
             // 下载失败时直接在线打开网页（不能保存），比报错有用
             if downloaded || failed { InAppWebView(url: remote, local: localURL) } else { status }
@@ -243,6 +310,7 @@ struct ReportReaderView: View {
                 preparing = true
                 displayURL = await ReportCache.fitted(local)
                 preparing = false
+                toc = await ReportCache.tableOfContents(of: local)
             }
             downloaded = true
         } catch {
@@ -274,6 +342,7 @@ struct NewsWebView: View {
 
 private struct PDFKitView: UIViewRepresentable {
     let url: URL
+    @Binding var jumpTo: Int?
 
     func makeUIView(context: Context) -> PDFView {
         let v = PDFView()
@@ -286,7 +355,45 @@ private struct PDFKitView: UIViewRepresentable {
         return v
     }
 
-    func updateUIView(_ uiView: PDFView, context: Context) {}
+    func updateUIView(_ uiView: PDFView, context: Context) {
+        guard let index = jumpTo, let page = uiView.document?.page(at: index) else { return }
+        // 跳到那一页的顶部
+        uiView.go(to: PDFDestination(page: page, at: CGPoint(x: 0, y: page.bounds(for: .cropBox).maxY)))
+        DispatchQueue.main.async { jumpTo = nil }
+    }
+}
+
+/// 目录：按层级缩进，右侧是页码，点一条跳到对应页。
+private struct PDFTocSheet: View {
+    let items: [PDFTocItem]
+    let onSelect: (Int) -> Void
+
+    var body: some View {
+        NavigationStack {
+            List(items) { item in
+                Button { onSelect(item.pageIndex) } label: {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(item.title)
+                            .font(item.level == 0 ? .subheadline.weight(.semibold) : .footnote)
+                            .foregroundStyle(Theme.textPrimary)
+                            .multilineTextAlignment(.leading)
+                            .padding(.leading, CGFloat(min(item.level, 4)) * 14)
+                        Spacer(minLength: 8)
+                        Text(L("第 %lld 页", item.pageIndex + 1))
+                            .font(.caption).monospacedDigit().foregroundStyle(Theme.textSecondary)
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(Theme.surface)
+            }
+            .listStyle(.plain)
+            .background(Theme.background)
+            .navigationTitle(L("目录"))
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
 }
 
 /// 网页（本地缓存文件或在线地址）：顶部有加载进度，加载失败给提示；支持左滑返回。
