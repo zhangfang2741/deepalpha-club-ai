@@ -39,6 +39,8 @@ class RadarSignalOut(BaseModel):
     quant_status: str | None = Field(default=None, description="eligible / below_threshold / missing / stale")
     age_days: int | None = Field(default=None, description="距展示日的交易日数，当天为 0")
     sector: str | None = Field(default=None, description="行业 key：美股与 regime 行业一致（GICS 一级），A 股为申万一级行业名，港股为恒生一级行业名；没有行业分类时为空")
+    analyst_up: int | None = Field(default=None, description="近 30 天券商上调家数（仅美股、quality=good 时给；None = 没有数据）")
+    analyst_down: int | None = Field(default=None, description="近 30 天券商下调家数；None 同上")
 
 
 class RadarExcludedOut(BaseModel):
@@ -155,6 +157,11 @@ class SignalRadarResponse(BaseModel):
     pending_symbols: int = Field(
         default=0, description="拉数失败、正在后台补算的成分股数；补齐后快照会自动重写（0=已全部算完）"
     )
+    quality: str = Field(default="", description="已应用的基本面门槛（quality=good → good）；空 = 未筛选")
+    quality_threshold: str = Field(default="", description="门槛的最低综合等级，如 B+（给界面写说明用）")
+    quality_good_count: int = Field(default=0, description="股票池里达标的只数")
+    quality_rated_count: int = Field(default=0, description="股票池里有评级的只数")
+    analyst_pending: int = Field(default=0, description="还在后台拉取券商评级的只数（>0 时角标可能不全）")
 
 
 class RadarGradeEventOut(BaseModel):

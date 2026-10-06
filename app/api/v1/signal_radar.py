@@ -51,6 +51,7 @@ from app.services.chan.signal_policy import DEFAULT_MODE, normalize_mode
 from app.services.watchlist import display_name, list_items
 from app.services.signal_radar.analyst_events import analyst_events
 from app.services.signal_radar.fundamental_top import fundamental_top
+from app.services.signal_radar.quality_view import apply_quality
 from app.services.signal_radar.grade_events import grade_events
 from app.services.signal_radar.universe import get_universe, supported_markets
 
@@ -89,6 +90,21 @@ _SCOPE_QUERY = Query(
     default="top", pattern="^(top|all)$",
     description="all = 每天在场的全部信号、按出现时间排（新版 App）；top = 旧版 App，按旧综合分截取前 N",
 )
+
+
+_QUALITY_QUERY = Query(
+    default=None,
+    description="good = 只留当前综合等级达标（A+ ~ B+）的股票的买卖点，并给气泡补分析师角标（新版 App，需 scope=all；"
+                "不带则不筛选，旧版 App 行为不变）",
+)
+
+
+async def _finish(resp: SignalRadarResponse, scope: str, quality: str | None, redis: Redis) -> SignalRadarResponse:
+    """按 scope 截取 + 可选的基本面门槛（只对 scope=all 生效，旧版 App 的 top 视图不动）。"""
+    out = _scoped(resp, scope)
+    if quality == "good" and scope == "all":
+        return await apply_quality(out, redis)
+    return out
 
 
 def _scoped(resp: SignalRadarResponse, scope: str) -> SignalRadarResponse:
@@ -230,6 +246,7 @@ async def signal_radar_demo(
     ),
     mode: str | None = _MODE_QUERY,
     scope: str = _SCOPE_QUERY,
+    quality: str | None = _QUALITY_QUERY,
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
 ) -> SignalRadarResponse:
@@ -252,7 +269,7 @@ async def signal_radar_demo(
     mode = normalize_mode(mode)
     cached = await read_demo_cache(redis, market, uni.key, mode)
     if cached is not None:
-        return _scoped(cached, scope)
+        return await _finish(cached, scope, quality, redis)
 
     gkey = _demo_generating_key(market, uni.key, mode)
     if await acquire_lock(redis, gkey, _GENERATING_TTL):
@@ -335,6 +352,7 @@ async def signal_radar(
     refresh: bool = Query(default=False, description="强制重新扫描（后台）"),
     mode: str | None = _MODE_QUERY,
     scope: str = _SCOPE_QUERY,
+    quality: str | None = _QUALITY_QUERY,
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
     db: AsyncSession = Depends(get_db),
@@ -375,7 +393,7 @@ async def signal_radar(
     # 有缓存就先返回（stale-while-revalidate）：哪怕正在后台刷新，也不让用户看空屏。
     # 只有真正冷启动（连一份旧缓存都没有）才回 generating，让前端轮询等待首扫。
     if cached is not None:
-        return _scoped(cached, scope)
+        return await _finish(cached, scope, quality, redis)
 
     return SignalRadarResponse(
         market=market,
