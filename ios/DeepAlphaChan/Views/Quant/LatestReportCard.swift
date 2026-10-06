@@ -85,3 +85,35 @@ struct LatestReportCard: View {
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
     }
 }
+
+
+/// 财报卡加载中的占位：和真实卡片同样的两行结构与高度，灰块缓慢明暗呼吸。
+struct LatestReportSkeleton: View {
+    @State private var dim = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            row(titleWidth: 84, subtitleWidth: 150)
+            Divider().overlay(Theme.border).padding(.horizontal, 14)
+            row(titleWidth: 72, subtitleWidth: 190)
+        }
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
+        .opacity(dim ? 0.55 : 1)
+        .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: dim)
+        .onAppear { dim = true }
+        .accessibilityLabel(L("正在加载最新财报"))
+    }
+
+    private func row(titleWidth: CGFloat, subtitleWidth: CGFloat) -> some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 6).fill(Theme.surfaceAlt).frame(width: 24, height: 24)
+            VStack(alignment: .leading, spacing: 6) {
+                RoundedRectangle(cornerRadius: 4).fill(Theme.surfaceAlt).frame(width: titleWidth, height: 14)
+                RoundedRectangle(cornerRadius: 4).fill(Theme.surfaceAlt).frame(width: subtitleWidth, height: 11)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+    }
+}

@@ -6,7 +6,8 @@ struct QuantResearchTab: View {
     let symbol: String
     @ObservedObject var vm: QuantResearchViewModel
     var isStatic = false
-    @State private var latestReport: LatestReport?
+    private enum ReportState { case loading, loaded(LatestReport), none }
+    @State private var reportState: ReportState = .loading
 
 
     var body: some View {
@@ -30,8 +31,11 @@ struct QuantResearchTab: View {
         // 最新财报单独加载：失败或没有就不显示这张卡，不影响其他内容
         .task(id: symbol) {
             guard !isStatic else { return }
+            reportState = .loading
             let r = try? await QuantResearchService.latestReport(market: market, symbol: symbol)
-            withAnimation(.easeOut(duration: 0.2)) { latestReport = r }
+            withAnimation(.easeOut(duration: 0.2)) {
+                if let r, r.isOK { reportState = .loaded(r) } else { reportState = .none }
+            }
         }
     }
 
@@ -39,8 +43,13 @@ struct QuantResearchTab: View {
     private func content(_ r: QuantResearch) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             QuantResearchSummaryCard(research: r, isStatic: isStatic)
-            if !isStatic, let report = latestReport, report.isOK {
-                LatestReportCard(market: market, symbol: symbol, report: report).transition(.opacity)
+            if !isStatic {
+                // 卡片先占位（带呼吸的骨架），数据到了原地换成真内容；取不到财报才收起，不让内容在加载完后突然被顶下去
+                switch reportState {
+                case .loading: LatestReportSkeleton().transition(.opacity)
+                case .loaded(let report): LatestReportCard(market: market, symbol: symbol, report: report).transition(.opacity)
+                case .none: EmptyView()
+                }
             }
             if QuantMoatCard.isEnabled, let moat = r.moat {
                 QuantMoatCard(moat: moat, isStatic: isStatic)

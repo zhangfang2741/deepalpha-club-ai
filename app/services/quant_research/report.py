@@ -54,18 +54,19 @@ def pick_announcement(rows: list[dict], columns: dict, lang: str, symbol: str) -
     return None
 
 
-async def _announcements(client: httpx.AsyncClient, code: str, ann_type: str, pages: int = 3) -> list[dict]:
-    out: list[dict] = []
+async def _latest_announced(client: httpx.AsyncClient, code: str, ann_type: str, columns: dict, lang: str,
+                            symbol: str, pages: int = 3) -> LatestReportOut | None:
+    """按页取公告（新 → 旧），某一页里一找到定期报告就停，不把后面几页也拉完。"""
     for page in range(1, pages + 1):
         resp = await site_get(client, "eastmoney", ANN_API, {
             "sr": "-1", "page_size": "100", "page_index": str(page), "ann_type": ann_type,
             "client_source": "web", "stock_list": code, "f_node": "0", "s_node": "0"})
         data = resp.json() if resp.status_code == 200 else {}
         rows = (data.get("data") or {}).get("list") or []
-        out.extend(rows)
-        if len(rows) < 100:
-            break
-    return out
+        hit = pick_announcement(rows, columns, lang, symbol)
+        if hit is not None or len(rows) < 100:
+            return hit
+    return None
 
 
 async def get_latest_report(market: str, symbol: str, lang: str, *, redis: Redis | None) -> LatestReportOut:
@@ -94,9 +95,9 @@ async def get_latest_report(market: str, symbol: str, lang: str, *, redis: Redis
         else:
             async with new_client() as client:
                 if market == "cn":
-                    out = pick_announcement(await _announcements(client, symbol, "A"), _CN_COLUMNS, lang, symbol)
+                    out = await _latest_announced(client, symbol, "A", _CN_COLUMNS, lang, symbol)
                 else:
-                    out = pick_announcement(await _announcements(client, symbol, "H"), _HK_COLUMNS, lang, symbol)
+                    out = await _latest_announced(client, symbol, "H", _HK_COLUMNS, lang, symbol)
     except Exception as e:  # noqa: BLE001
         logger.warning("latest_report_failed", market=market, symbol=symbol, error=str(e))
     if out is None:
