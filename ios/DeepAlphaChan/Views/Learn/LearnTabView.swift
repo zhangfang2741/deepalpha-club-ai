@@ -39,6 +39,7 @@ struct LearnTabView: View {
         ScrollView {
             VStack(spacing: 10) {
                 if !guides.isEmpty { guideSection }
+                methodsRow
                 glossaryRow
                 sectionTitle(L("缠论入门"))
                 intro
@@ -95,6 +96,23 @@ struct LearnTabView: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    private var methodsRow: some View {
+        NavigationLink { MethodsView() } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "function").font(.title3).foregroundColor(Theme.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("方法说明")).font(.subheadline.weight(.semibold)).foregroundColor(Theme.textPrimary)
+                    Text(L("市场状态、行业强弱、基本面、买卖点……都是怎么算的")).font(.caption).foregroundColor(Theme.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption).foregroundColor(Theme.textSecondary)
+            }
+            .padding(14).background(Theme.surface).clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 6)
     }
 
     private var glossaryRow: some View {

@@ -419,15 +419,7 @@ struct SignalRadarView: View {
                 flowLink
                 flowNode(2, L("行业"), L("看下面的行业横条"), highlight: .muted)
                 flowLink
-                if let resp = vm.response, let derived = RadarDerivations.fundamentals(resp) {
-                    // 点这一步：看「基本面 X 及以上」的门槛是怎么定出来的（带真实只数）
-                    flowNode(3, L("基本面"), L("%lld 只 · %@ 及以上", good, threshold), highlight: .accent)
-                        .quantExplain(L("基本面怎么算的")) {
-                            DerivationContent(result: derived)
-                        }
-                } else {
-                    flowNode(3, L("基本面"), threshold.isEmpty ? "—" : L("%lld 只 · %@ 及以上", good, threshold), highlight: .accent)
-                }
+                flowNode(3, L("基本面"), threshold.isEmpty ? "—" : L("%lld 只 · %@ 及以上", good, threshold), highlight: .accent)
                 flowLink
                 flowNode(4, L("结构"), signalStocks > 0 ? L("%lld 只 · 近期出现结构信号", signalStocks) : L("近期没有结构信号"),
                          highlight: signalStocks > 0 ? .accent : .muted)
@@ -1284,8 +1276,9 @@ struct SignalRadarView: View {
                         L("角标：「共振」= 日线方向与30分钟一致；「新」= 当日新出现的信号。"),
                         L("气泡最后一行是该股票当前的综合等级；右上角白色小胶囊「▲n / ▼n」是近 90 天券商净上调 / 净下调家数（仅美股，没有数据或净 0 不显示）。"),
                     ])
-                    // 每个编码都能点开看是怎么算出来的
-                    derivationRow
+                    Text(L("每一项是怎么算的，见「学习」页的「方法说明」。"))
+                        .font(.caption).foregroundColor(Theme.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     infoSection(L("为什么点进详情页可能对不上"), [
                         L("气泡是最近一次全量扫描那一刻的快照（历史日期下方会标出算出时刻），不是实时数据；点进详情页是用当下最新K线重新跑一遍缠论。"),
                         L("缠论的笔和买卖点在最新几根K线上本身是临时性的，后续新K线一出现，原来某天的信号可能被延伸、改写甚至判定失效——这是分析方法的特性，不是数据错误。"),
@@ -1361,21 +1354,6 @@ struct SignalRadarView: View {
         let f = DateFormatter()
         f.dateFormat = "M/d HH:mm"
         return f.string(from: date)
-    }
-
-    /// 「气泡怎么看」下面的一排「怎么算的」：深浅、共振、券商角标。
-    private var derivationRow: some View {
-        let items: [(String, RadarDerivations.Result)] = [
-            (L("深浅怎么算"), RadarDerivations.strength),
-            (L("共振怎么算"), RadarDerivations.resonance),
-            (L("角标怎么算"), RadarDerivations.analyst),
-        ]
-        return HStack(spacing: 14) {
-            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                DerivationLink(title: item.0, result: item.1, label: item.0)
-            }
-            Spacer(minLength: 0)
-        }
     }
 
     /// 「雷达上显示哪些信号」（App 固定严格口径：只显示已走完的笔上的买卖点，最后一笔上的只计「待确认」个数）。

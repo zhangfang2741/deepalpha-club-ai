@@ -18,7 +18,7 @@ struct MainTabView: View {
             return .analysis
         }
         #endif
-        return .signalRadar
+        return .analysis
     }()
     /// 推送路由（Task 13 的 PushNotificationManager 发 `.openMorningReport`）
     /// 写入目标市场。晨报 Tab 隐藏期间暂无人消费，先留着字段不删——

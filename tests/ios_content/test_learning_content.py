@@ -47,7 +47,8 @@ def test_derivation_terms_resolve():
     lesson_keys = set(re.findall(r'^\s*"([^"]+)":\s*"[a-z-]+",', index_src, re.M))
     known = keys | lesson_keys
     files = [ROOT / "Views" / "SignalRadar" / "MacroDerivations.swift", ROOT / "Views" / "SignalRadar" / "RadarDerivations.swift",
-             ROOT / "Views" / "Analysis" / "SignalDerivation.swift"]
+             ROOT / "Views" / "Analysis" / "SignalDerivation.swift",
+             ROOT / "Views" / "Learn" / "MethodsView.swift"]
     seen = 0
     for f in files:
         for group in re.findall(r"terms:\s*\[([^\]]*)\]", f.read_text()):
@@ -55,3 +56,8 @@ def test_derivation_terms_resolve():
                 seen += 1
                 assert term in known, f"{f.name} 引用的名词「{term}」在词典和教程索引里都查不到"
     assert seen > 15
+
+
+def test_guide_has_relation_lesson():
+    for lang in ("zh-Hans", "en"):
+        assert "guide-relation" in [a["id"] for a in _load(lang, "guide.json")]

@@ -181,6 +181,11 @@ deepalpha-club-ai/
 > **体验约束**（体验不好没人用）：说明类内容一律**渐进披露**——第一屏只给结论和「这说明 / 这不说明」，推导过程折叠、点开才展开；**不自动弹全屏**打断人（新手导览改为首次进雷达时展开一次悬浮的流程图、里面有入口，不弹 sheet）；入口字再小也要给足点击热区（≥ 44pt 或加 padding）；新增界面元素先问「会不会让主屏更挤、更慢」。
 > **新增术语要同时补词典条目（中英）**；推导里 `terms:` 引用的键必须能查到（`tests/ios_content` 守护）。解释一律不写成买卖建议。
 
+> **「怎么算的」集中放在学习页「方法说明」**（2026-10-06，`Views/Learn/MethodsView.swift` 的 `MethodDerivations`）：宏观 / 雷达 / 流程图等页面**不再**各放推导入口（避免到处都是）；
+> 学习页「方法说明」按组列出市场状态 / 情绪 / 驱动因素 / 行业强弱 / 基本面 / 买卖点 / 深浅 / 共振 / 角标，只讲方法、不带某天的数字（文字与下面三份 Derivations 同源，改算法两处一起改）。
+> 个股分析页 `SignalDetailCard` 的「怎么识别的」保留（带该信号自己的真实数字）。新手入门里 `guide-relation` 讲「市场 / 行业 / 基本面（慢变量，背景）与缠论结构（快变量，价格已走出的形状）」的关系：互相不能替代、都不预测、不加总成一个分数。
+> App 默认打开「分析」Tab（`MainTabView.selection`）。
+
 > **量化指标一律要有「怎么算的」推导**（2026-10-06 产品原则）：App 上任何算出来的结论（状态、分数、等级、强弱、门槛、角标、买卖点类型）都必须能点开看到「结论 → 几步推导（带这一处、这一天的真实数字）→ 局限」。
 > 统一外壳 `Views/Components/Derivation.swift`（`DerivationContent` / `DerivationLink`，底层复用量化研究的 `.quantExplain` 弹层）；每项文字单独写、不做统一说明页：
 > 宏观四项 `Views/SignalRadar/MacroDerivations.swift`（市场状态用后端 `state.inputs` 的当天原料、驱动因素用 `flat_band`）、雷达 `RadarDerivations.swift`（基本面门槛带 `quality_share / min_count / floor`）、买卖点 `Views/Analysis/SignalDerivation.swift`（严格口径）；基本面研究早已有（`QuantExplain.swift`）。
