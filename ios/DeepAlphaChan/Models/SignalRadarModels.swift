@@ -44,6 +44,10 @@ struct SignalRadarResponse: Decodable {
     var qualityThreshold: String?
     var qualityGoodCount: Int?
     var qualityRatedCount: Int?
+    /// 门槛的选法：目标 = 有评级股票的前 share，至少 minCount 只，不低于 floor（「怎么算的」说明用）。
+    var qualityShare: Double?
+    var qualityMinCount: Int?
+    var qualityFloor: String?
     var analystPending: Int?
 
     enum CodingKeys: String, CodingKey {
@@ -62,6 +66,9 @@ struct SignalRadarResponse: Decodable {
         case qualityThreshold = "quality_threshold"
         case qualityGoodCount = "quality_good_count"
         case qualityRatedCount = "quality_rated_count"
+        case qualityShare = "quality_share"
+        case qualityMinCount = "quality_min_count"
+        case qualityFloor = "quality_floor"
         case analystPending = "analyst_pending"
     }
 

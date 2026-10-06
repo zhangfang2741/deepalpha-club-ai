@@ -161,6 +161,10 @@ class SignalRadarResponse(BaseModel):
     quality_threshold: str = Field(default="", description="门槛的最低综合等级，如 B+（给界面写说明用）")
     quality_good_count: int = Field(default=0, description="股票池里达标的只数")
     quality_rated_count: int = Field(default=0, description="股票池里有评级的只数")
+    # 门槛的选法（「怎么算的」说明带真实数字用）：目标 = 有评级股票的前 share，至少 min_count 只，门槛不低于 floor
+    quality_share: float | None = Field(default=None, description="目标占比，如 0.25")
+    quality_min_count: int | None = Field(default=None, description="目标至少多少只")
+    quality_floor: str | None = Field(default=None, description="门槛不低于的等级，如 B")
     analyst_pending: int = Field(default=0, description="还在后台拉取券商评级的只数（>0 时角标可能不全）")
 
 

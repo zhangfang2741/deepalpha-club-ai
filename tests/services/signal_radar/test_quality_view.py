@@ -66,6 +66,7 @@ async def test_apply_quality_marks_response_and_survives_rating_failure(monkeypa
     monkeypatch.setattr(qv, "good_stocks", ok)
     out = await qv.apply_quality(resp, None, now=now)    # type: ignore[arg-type]  # cn：不碰 analyst 缓存
     assert out.quality == "good" and out.quality_threshold == "B+"
+    assert (out.quality_share, out.quality_min_count, out.quality_floor) == (0.25, 8, "B")  # 门槛选法随响应带给「怎么算的」说明
     assert (out.quality_good_count, out.quality_rated_count) == (2, 120)
     assert [s.symbol for s in out.days[0].signals] == ["AAA"]
 

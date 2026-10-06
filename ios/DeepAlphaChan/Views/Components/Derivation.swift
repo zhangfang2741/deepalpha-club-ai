@@ -65,11 +65,13 @@ struct DerivationLink: View {
     let conclusion: String
     let steps: [DerivationStep]
     var caveat: String?
+    /// 入口文字；一处有多个入口时（如气泡的深浅 / 共振 / 角标）用它区分。
+    var label: String = L("怎么算的")
 
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: "questionmark.circle").font(.system(size: 11))
-            Text(L("怎么算的")).font(.caption2.weight(.semibold))
+            Text(label).font(.caption2.weight(.semibold))
         }
         .foregroundStyle(Theme.accent)
         .quantExplain(title) {

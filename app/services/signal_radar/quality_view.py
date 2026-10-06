@@ -172,4 +172,5 @@ async def apply_quality(
     return resp.model_copy(update={
         "days": [filter_day(d, good, marks) for d in resp.days],
         "quality": mode, "quality_threshold": cutoff, "quality_good_count": len(good),
+        "quality_share": GOOD_SHARE, "quality_min_count": GOOD_MIN_COUNT, "quality_floor": GOOD_FLOOR,
         "quality_rated_count": rated, "analyst_pending": pending})
