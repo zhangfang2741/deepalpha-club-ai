@@ -220,3 +220,30 @@ class RadarAnalystEventsResponse(BaseModel):
     available: bool = Field(default=True, description="False = 数据读取失败（不是没有事件）")
     supported: bool = Field(default=True, description="False = 该市场没有按日券商评级变动数据（A 股 / 港股）")
     pending_symbols: int = Field(default=0, description="还在后台拉取评级变动的股票只数；>0 时事件可能不全")
+
+
+class RadarFundamentalItemOut(BaseModel):
+    """基本面雷达的一只股票：当前综合等级 + 近 30 天券商评级净上调 / 下调（美股）。"""
+
+    symbol: str
+    name: str
+    grade: str = Field(description="综合等级 A+ ~ F")
+    score: float | None = Field(default=None, description="综合分 0~100")
+    as_of: str = Field(description="评级日 YYYY-MM-DD")
+    sector: str | None = None
+    analyst_up: int | None = Field(default=None, description="近 30 天上调家数；None = 没有数据（A 股 / 港股，或还没拉到）")
+    analyst_down: int | None = Field(default=None, description="近 30 天下调家数；None 同上")
+
+
+class RadarFundamentalResponse(BaseModel):
+    """某 (市场, universe) 当前综合等级最高的若干只股票（从高到低）。"""
+
+    market: str
+    universe_key: str
+    universe_name: str = ""
+    as_of: str | None = Field(default=None, description="最新评级日")
+    rated: int = Field(default=0, description="股票池里有评级的只数")
+    items: list[RadarFundamentalItemOut] = Field(default_factory=list)
+    available: bool = Field(default=True, description="False = 评级数据读取失败（不是没有评级）")
+    analyst_supported: bool = Field(default=True, description="False = 该市场没有券商评级变动数据（A 股 / 港股）")
+    analyst_pending: int = Field(default=0, description="还在后台拉取券商评级的只数；>0 时角标可能不全")
