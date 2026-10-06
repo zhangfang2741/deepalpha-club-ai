@@ -132,7 +132,7 @@ enum MacroDerivations {
             terms: terms)
     }
 
-    static func impactRule(_ key: String) -> String {
+    private static func impactRule(_ key: String) -> String {
         switch key {
         case "us10y": return L("利率上行对股票偏不利（估值承压，成长股更敏感），下行偏有利，持平不判断。")
         case "curve": return L("利差只描述形态（走阔 / 收窄）、不判断利弊；利差为负叫倒挂，会单独提示。")

@@ -86,6 +86,8 @@ struct MacroDetailSheet: View {
                 Text(L("由进攻、防御、现金三组资产的相对强弱，加上大盘涨跌和波动综合判定，按概率给出；%@ 收盘数据。", state.asOf))
                     .font(.caption2).foregroundColor(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+                let derived = MacroDerivations.state(state, market: market)
+                DerivationLink(title: L("市场状态怎么算的"), result: derived)
                 if let note = consistencyNote(state, sentimentScore: sentimentScore) {
                     Text(note)
                         .font(.caption2).foregroundColor(Theme.textSecondary)
@@ -197,6 +199,8 @@ struct MacroDetailSheet: View {
                         .font(.caption.weight(.semibold))
                         .tint(Theme.accent)
                 }
+                let derived = MacroDerivations.sentiment(panic)
+                DerivationLink(title: L("情绪分怎么算的"), result: derived)
             }
         }
         .sheet(isPresented: $showPanicDetail) {
@@ -223,9 +227,11 @@ struct MacroDetailSheet: View {
         SectionCard(title: L("驱动因素（近 20 个交易日）"), titleFont: .subheadline.weight(.semibold)) {
             VStack(alignment: .leading, spacing: 12) {
                 ForEach(drivers) { d in
+                    let derived = MacroDerivations.driver(d)
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(alignment: .firstTextBaseline) {
                             Text(d.name).font(.footnote.weight(.medium)).foregroundColor(Theme.textPrimary)
+                            QuantInfoMark()
                             Spacer()
                             if let value = MacroDetailSheet.valueText(d) {
                                 Text(value).font(.footnote.monospacedDigit()).foregroundColor(Theme.textPrimary)
@@ -239,6 +245,10 @@ struct MacroDetailSheet: View {
                             }
                         }
                         Text(d.text).font(.caption).foregroundColor(Theme.textSecondary)
+                    }
+                    // 点一整行：看这一项是怎么判出「上行 / 下行 / 持平」和对股票的影响的
+                    .quantExplain(d.name) {
+                        DerivationContent(result: derived)
                     }
                     if d.id != drivers.last?.id { Divider().overlay(Theme.border) }
                 }
