@@ -1302,3 +1302,12 @@
 "近期只有卖点 · %lld 只" = "Only sell points lately · %lld";
 "· 近期 %lld 只有买点" = "· %lld with recent buy points";
 "· 近期没有买点" = "· no recent buy points";
+"好股票" = "Good stocks";
+"看下面的大盘环境" = "See market card below";
+"看下面的行业横条" = "See sector bar below";
+"%lld 只 · %@ 及以上" = "%lld · %@ or better";
+"%lld 只 · 近期有买点" = "%lld with recent buy points";
+"近期没有买点" = "No recent buy points";
+"从大到小看：先看市场和行业，再看好股票，最后看它们有没有买点。雷达里只画好股票的买卖点。" = "Top-down: market and sector first, then good stocks, then whether they have buy points. The radar only draws good stocks' signals.";
+"展开流程图" = "Show flow";
+"收起流程图" = "Hide flow";

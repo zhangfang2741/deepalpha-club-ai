@@ -68,6 +68,8 @@ struct SignalRadarView: View {
     @State private var pendingDetail: RadarSignal?
     /// 在好股票名单里点了某一行：收起面板后再打开个股（该股票可能当前没有买卖点，所以不是 RadarSignal）。
     @State private var pendingGood: (symbol: String, name: String)?
+    /// 标题旁折叠：展开「市场 → 行业 → 好股票 → 买点」流程图。默认折叠。
+    @State private var showFlow = false
     /// 好股票名单（当前综合等级达标的股票 + 各自有没有买卖点）的数据。
     @StateObject private var goodVM = GoodStocksViewModel()
     /// 详情页打开时停在哪个分段：雷达气泡 → nil（缠论结构）。
@@ -77,8 +79,11 @@ struct SignalRadarView: View {
         NavigationStack {
             radarContent
             .background(Theme.background)
-            .navigationTitle(L("市场雷达"))
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) { flowTitle }
+                ToolbarItem(placement: .topBarTrailing) { goodListButton }
+            }
             // 真实滚动窗口雷达对所有用户都拉（未订阅一样看得到市场卡片、图例、日期轨，
             // 跟会员一模一样，见 radarContent）；市场切换时 .task(id:) 额外拉一次
             // 「上个月 1 号」免费预览快照，自动取消上一次未完成的请求、重新拉一次。
@@ -158,6 +163,7 @@ struct SignalRadarView: View {
     /// 声明时，气泡区换成锁定占位（consentLockedField）。
     private var radarContent: some View {
         VStack(spacing: 12) {
+            if showFlow { flowPanel }
             MarketHeader(radarVM: vm, panicVM: panicVM, overviewVM: overviewVM) { p in
                 // 行业 / 当日信号面板列的是选中日的真实信号，与气泡同一道免责声明门槛；环境不涉及个股
                 if needsConsent && p != .environment {
@@ -177,7 +183,6 @@ struct SignalRadarView: View {
                 emptyView
             } else {
                 metaRow
-                qualityRow
                 if needsConsent {
                     consentLockedField
                 } else {
@@ -373,31 +378,89 @@ struct SignalRadarView: View {
 
     // MARK: - 说明行
 
-    /// 好股票门槛说明（后端定的、用户不能选）+ 名单入口：雷达只画当前综合等级达标的股票的买卖点。
-    @ViewBuilder
-    private var qualityRow: some View {
-        if let threshold = vm.response?.qualityThreshold, !threshold.isEmpty, store.isPremium {
-            Button {
-                if needsConsent { showConsent = true } else { panel = .goodStocks }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.seal").font(.system(size: 11)).foregroundColor(Theme.accent)
-                    Text(L("仅看综合评级 %@ 及以上的好股票", threshold))
-                        .font(.caption).foregroundColor(Theme.textSecondary)
-                    if let n = vm.response?.qualityGoodCount, n > 0 {
-                        Text(L("%lld 只", n)).font(.caption.weight(.semibold)).foregroundColor(Theme.textPrimary)
-                    }
-                    // 一句话说完「好股票里有没有买点」：近期（雷达展示的这些天）出现过买点的好股票只数
-                    let buyStocks = Set(vm.days.flatMap(\.signals).filter { $0.side == "buy" }.map(\.symbol)).count
-                    Text(buyStocks > 0 ? L("· 近期 %lld 只有买点", buyStocks) : L("· 近期没有买点"))
-                        .font(.caption).foregroundColor(buyStocks > 0 ? Theme.up : Theme.textSecondary)
-                    Spacer(minLength: 4)
-                    Text(L("名单")).font(.caption.weight(.semibold)).foregroundColor(Theme.accent)
-                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(Theme.textSecondary.opacity(0.7))
-                }
+    /// 标题旁的折叠：展开是一张简单的流程图（市场 → 行业 → 好股票 → 买点）。市场、行业上面的卡片 / 横条已经有了，
+    /// 这里只指一下；好股票（门槛由后端定、用户不能选）和买点写数字。折叠时雷达页和没有这张图一样干净。
+    private var flowPanel: some View {
+        let threshold = vm.response?.qualityThreshold ?? ""
+        let good = vm.response?.qualityGoodCount ?? 0
+        // 近期（雷达展示的这些天）出现过买点的好股票只数
+        let buyStocks = Set(vm.days.flatMap(\.signals).filter { $0.side == "buy" }.map(\.symbol)).count
+        return VStack(spacing: 8) {
+            HStack(alignment: .top, spacing: 0) {
+                flowNode(1, L("市场"), L("看下面的大盘环境"), highlight: .muted)
+                flowLink
+                flowNode(2, L("行业"), L("看下面的行业横条"), highlight: .muted)
+                flowLink
+                flowNode(3, L("好股票"), threshold.isEmpty ? "—" : L("%lld 只 · %@ 及以上", good, threshold), highlight: .accent)
+                flowLink
+                flowNode(4, L("买点"), buyStocks > 0 ? L("%lld 只 · 近期有买点", buyStocks) : L("近期没有买点"),
+                         highlight: buyStocks > 0 ? .up : .muted)
             }
-            .buttonStyle(.plain)
+            Divider().overlay(Theme.border)
+            Text(L("从大到小看：先看市场和行业，再看好股票，最后看它们有没有买点。雷达里只画好股票的买卖点。"))
+                .font(.caption2).foregroundColor(Theme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.border, lineWidth: 1))
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    private enum FlowHighlight { case muted, accent, up }
+
+    private func flowNode(_ n: Int, _ title: String, _ sub: String, highlight: FlowHighlight) -> some View {
+        let fill: Color = highlight == .accent ? Theme.accent : .clear
+        let stroke: Color = highlight == .up ? Theme.up : (highlight == .accent ? Theme.accent : Theme.border)
+        let numColor: Color = highlight == .accent ? .white : (highlight == .up ? Theme.up : Theme.textSecondary)
+        let subColor: Color = highlight == .up ? Theme.up : Theme.textSecondary
+        return VStack(spacing: 3) {
+            Text("\(n)")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(numColor)
+                .frame(width: 22, height: 22)
+                .background(fill, in: Circle())
+                .overlay(Circle().stroke(stroke, lineWidth: 1.5))
+            Text(title)
+                .font(.system(size: 11, weight: highlight == .muted ? .regular : .semibold))
+                .foregroundColor(highlight == .muted ? Theme.textSecondary : Theme.textPrimary)
+            Text(sub).font(.system(size: 10)).foregroundColor(subColor)
+                .multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var flowLink: some View {
+        Rectangle().fill(Theme.border).frame(width: 14, height: 1.5).padding(.top, 10)
+    }
+
+    /// 标题（「市场雷达」+ 折叠钮）：点一下展开 / 收起流程图。
+    private var flowTitle: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { showFlow.toggle() }
+        } label: {
+            HStack(spacing: 6) {
+                Text(L("市场雷达")).font(.headline).foregroundColor(Theme.textPrimary)
+                Image(systemName: showFlow ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(Theme.textSecondary)
+                    .frame(width: 22, height: 22)
+                    .background(Theme.surface, in: Circle())
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(showFlow ? L("收起流程图") : L("展开流程图"))
+    }
+
+    /// 标题右侧的「名单」：好股票名单入口（会员功能；有门槛说明才显示）。
+    @ViewBuilder
+    private var goodListButton: some View {
+        if let threshold = vm.response?.qualityThreshold, !threshold.isEmpty, store.isPremium {
+            Button(L("名单")) {
+                if needsConsent { showConsent = true } else { panel = .goodStocks }
+            }
+            .font(.subheadline.weight(.semibold))
             .accessibilityLabel(L("好股票名单"))
         }
     }
