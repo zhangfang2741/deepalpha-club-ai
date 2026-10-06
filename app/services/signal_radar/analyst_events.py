@@ -161,6 +161,7 @@ async def refresh_symbols(symbols: list[str], redis: Redis) -> int:
 
 
 async def refresh_in_background(market: str, universe: str, symbols: list[str], redis: Redis) -> None:
+    """后台补拉（带锁，同一 market / universe 范围同时只有一个在跑；失败只记日志）。"""
     lock = f"signal_radar:analyst:refresh:{market}:{universe}"
     if not await acquire_lock(redis, lock, REFRESH_LOCK_TTL):
         return
