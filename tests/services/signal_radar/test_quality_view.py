@@ -60,7 +60,7 @@ async def test_apply_quality_marks_response_and_survives_rating_failure(monkeypa
         days=[RadarDayOut(date="2026-10-05", buy_count=2, sell_count=0, signals=[_sig("AAA"), _sig("ZZZ")])])
     now = datetime(2026, 10, 6, tzinfo=UTC)
 
-    async def ok(market, universe, redis, now):
+    async def ok(market, universe, redis, now, mode="good"):
         return GOOD, 120, "B+"
 
     monkeypatch.setattr(qv, "good_stocks", ok)
@@ -69,9 +69,43 @@ async def test_apply_quality_marks_response_and_survives_rating_failure(monkeypa
     assert (out.quality_good_count, out.quality_rated_count) == (2, 120)
     assert [s.symbol for s in out.days[0].signals] == ["AAA"]
 
-    async def broken(market, universe, redis, now):
+    async def broken(market, universe, redis, now, mode="good"):
         return None
 
     monkeypatch.setattr(qv, "good_stocks", broken)
     same = await qv.apply_quality(resp, None, now=now)   # type: ignore[arg-type]
     assert same is resp                                   # 评级读取失败：原样返回，雷达不能因此变空
+
+
+def _qg(grade, dims):
+    from datetime import date
+
+    from app.services.signal_radar.quant_filter import QuantGrade
+
+    return QuantGrade(grade, 50.0, date(2026, 10, 5), date(2026, 10, 5), dim_scores=dims)
+
+
+def test_ex_momentum_rescues_stock_vetoed_only_by_momentum():
+    base = {"valuation": 80.0, "growth": 80.0, "profitability": 80.0, "revisions": 80.0}
+    ranked = [
+        ("GOOD", _qg("B", {**base, "momentum": 10.0})),   # 原口径被动量 F 一票否决封顶 C+
+        ("MID", _qg("A", {k: 50.0 for k in (*base, "momentum")})),
+        ("LOW", _qg("C", {k: 20.0 for k in (*base, "momentum")})),
+    ]
+    out = dict(qv.rerank_ex_momentum(ranked))
+    assert out["GOOD"].score == 80.0 and out["GOOD"].grade == "A+"
+    assert [s for s, _ in qv.rerank_ex_momentum(ranked)][0] == "GOOD"
+
+
+def test_ex_momentum_keeps_veto_from_other_dimensions():
+    ranked = [
+        ("X", _qg("A", {"valuation": 95.0, "growth": 95.0, "profitability": 10.0, "momentum": 90.0})),
+        ("Y", _qg("B", {"valuation": 40.0, "growth": 40.0, "profitability": 40.0, "momentum": 40.0})),
+    ]
+    out = dict(qv.rerank_ex_momentum(ranked))
+    assert out["X"].grade in ("C+", "C", "C-", "D+", "D", "D-", "F")  # 封顶 C+
+
+
+def test_ex_momentum_drops_stocks_without_dimension_detail():
+    ranked = [("OLD", _qg("A", None)), ("ONLYM", _qg("A", {"momentum": 90.0}))]
+    assert qv.rerank_ex_momentum(ranked) == []

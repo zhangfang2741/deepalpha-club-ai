@@ -51,7 +51,7 @@ from app.services.chan.signal_policy import DEFAULT_MODE, normalize_mode
 from app.services.watchlist import display_name, list_items
 from app.services.signal_radar.analyst_events import analyst_events
 from app.services.signal_radar.fundamental_top import fundamental_top
-from app.services.signal_radar.quality_view import apply_quality
+from app.services.signal_radar.quality_view import QUALITY_MODES, apply_quality
 from app.services.signal_radar.grade_events import grade_events
 from app.services.signal_radar.universe import get_universe, supported_markets
 
@@ -95,15 +95,15 @@ _SCOPE_QUERY = Query(
 _QUALITY_QUERY = Query(
     default=None,
     description="good = 只留当前综合等级达标（A+ ~ B+）的股票的买卖点，并给气泡补分析师角标（新版 App，需 scope=all；"
-                "不带则不筛选，旧版 App 行为不变）",
+                "不带则不筛选，旧版 App 行为不变）；good_xm = 同 good，但综合分与一票否决都不含动量维度",
 )
 
 
 async def _finish(resp: SignalRadarResponse, scope: str, quality: str | None, redis: Redis) -> SignalRadarResponse:
     """按 scope 截取 + 可选的基本面门槛（只对 scope=all 生效，旧版 App 的 top 视图不动）。"""
     out = _scoped(resp, scope)
-    if quality == "good" and scope == "all":
-        return await apply_quality(out, redis)
+    if quality in QUALITY_MODES and scope == "all":
+        return await apply_quality(out, redis, mode=quality)
     return out
 
 

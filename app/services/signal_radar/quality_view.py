@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from redis.asyncio import Redis
@@ -15,8 +16,10 @@ from redis.asyncio import Redis
 from app.cache.operations import get_json, set_json
 from app.core.logging import logger
 from app.schemas.signal_radar import RadarDayOut, RadarSignalOut, SignalRadarResponse
-from app.services.quant_research.grading import GRADE_ORDER
+from app.services.quant_research.grading import GRADE_ORDER, cap_grade, grade_for, percentile_of
+from app.services.quant_research.scoring import CAP_CEILING, CAP_THRESHOLD
 from app.services.signal_radar import analyst_events, fundamental_top
+from app.services.signal_radar.quant_filter import QuantGrade
 
 # 「好股票」门槛随股票池大小自适应（2026-10-06）：目标 = 有评级股票的前 GOOD_SHARE，但至少 GOOD_MIN_COUNT 只；
 # 从高到低累计各等级只数，到达目标的那一档就是门槛（整档纳入，不在同一档里切——界面才能写「X 及以上」）；
@@ -43,15 +46,45 @@ def choose_cutoff(grades: list[str]) -> str:
     return GRADE_ORDER[floor_idx]
 
 
-def _key(market: str, universe: str) -> str:
-    return f"signal_radar:good:v1:{market}:{universe}"
+QUALITY_GOOD = "good"
+QUALITY_GOOD_XM = "good_xm"  # 好股票门槛去掉动量维度（综合分与一票否决都不含动量）
+QUALITY_MODES = (QUALITY_GOOD, QUALITY_GOOD_XM)
+EXCLUDED_DIM = "momentum"
+
+
+def rerank_ex_momentum(ranked: list[tuple[str, QuantGrade]]) -> list[tuple[str, QuantGrade]]:
+    """去动量口径的重排。
+
+    综合分 = 其余维度分的等权平均，其余维度任一 < CAP_THRESHOLD 则等级封顶 CAP_CEILING；
+    等级 = 综合分在**本股票池**有评级股票中的百分位 → 等级（与全样本等级的字母不完全可比，只用来选股和显示）。
+    没有分数明细（旧数据）或除动量外无可用维度的股票丢弃；原本就没有综合等级（分析师不足）的也不进。
+    """
+    scored: list[tuple[str, QuantGrade, float, bool]] = []
+    for symbol, g in ranked:
+        dims = {k: v for k, v in (g.dim_scores or {}).items() if k != EXCLUDED_DIM}
+        if not dims:
+            continue
+        scored.append((symbol, g, sum(dims.values()) / len(dims), any(v < CAP_THRESHOLD for v in dims.values())))
+    dist = sorted(sc for _, _, sc, _ in scored)
+    out: list[tuple[str, QuantGrade]] = []
+    for symbol, g, sc, vetoed in scored:
+        grade = grade_for(percentile_of(sc, dist, lower_better=False))
+        if vetoed:
+            grade = cap_grade(grade, CAP_CEILING)
+        out.append((symbol, replace(g, grade=grade, score=round(sc, 1))))
+    return sorted(out, key=lambda t: (GRADE_ORDER.index(t[1].grade or ""), -(t[1].score or 0), t[0]))
+
+
+def _key(market: str, universe: str, mode: str = QUALITY_GOOD) -> str:
+    base = f"signal_radar:good:v1:{market}:{universe}"
+    return base if mode == QUALITY_GOOD else f"{base}:{mode}"
 
 
 async def good_stocks(
-    market: str, universe: str, redis: Redis, now: datetime,
+    market: str, universe: str, redis: Redis, now: datetime, mode: str = QUALITY_GOOD,
 ) -> tuple[dict[str, dict], int, str] | None:
     """({雷达代码: {grade, score, as_of}}（只含达标的）, 有评级的总只数, 门槛等级)；读取失败返回 None。Redis 缓存 10 分钟。"""
-    key = _key(market, universe)
+    key = _key(market, universe, mode)
     try:
         cached = await get_json(redis, key)
         if cached and isinstance(cached.get("good"), dict):
@@ -62,6 +95,8 @@ async def good_stocks(
     if loaded is None:
         return None
     ranked, _ = loaded
+    if mode == QUALITY_GOOD_XM:
+        ranked = rerank_ex_momentum(ranked)
     cutoff = choose_cutoff([g.grade for _, g in ranked if g.grade])
     ok = GRADE_ORDER[:GRADE_ORDER.index(cutoff) + 1]
     good = {s: {"grade": g.grade, "score": g.score, "as_of": g.as_of.isoformat()}
@@ -99,13 +134,13 @@ def filter_day(day: RadarDayOut, good: dict[str, dict], marks: dict[str, tuple[i
 
 
 async def apply_quality(
-    resp: SignalRadarResponse, redis: Redis, *, now: datetime | None = None,
+    resp: SignalRadarResponse, redis: Redis, *, now: datetime | None = None, mode: str = QUALITY_GOOD,
 ) -> SignalRadarResponse:
     """只留达标股票的买卖点（门槛自适应，见 choose_cutoff）。评级读取失败时原样返回（不能因为评级挂了让雷达变空）。"""
     now = now or datetime.now(UTC)
     if not resp.universe or not resp.days:
         return resp
-    loaded = await good_stocks(resp.market, resp.universe, redis, now)
+    loaded = await good_stocks(resp.market, resp.universe, redis, now, mode)
     if loaded is None:
         return resp
     good, rated, cutoff = loaded
@@ -120,5 +155,5 @@ async def apply_quality(
             pending = sum(1 for s in symbols if s not in cached)
     return resp.model_copy(update={
         "days": [filter_day(d, good, marks) for d in resp.days],
-        "quality": "good", "quality_threshold": cutoff, "quality_good_count": len(good),
+        "quality": mode, "quality_threshold": cutoff, "quality_good_count": len(good),
         "quality_rated_count": rated, "analyst_pending": pending})
