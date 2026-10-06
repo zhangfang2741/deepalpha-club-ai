@@ -265,6 +265,7 @@ struct ReportReaderView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showSummary = false
     @State private var cachedSummary: ReportSummaryResponse?
+    @State private var glow = false
     @State private var localURL: URL?
     @State private var shareURL: URL?
     @State private var failed = false
@@ -335,21 +336,32 @@ struct ReportReaderView: View {
         }
     }
 
+    /// 右下角圆形「AI 总结」按钮：无边框；有缓存时是紫 → 蓝 → 青的渐变球，带缓慢呼吸的光晕；没缓存时是毛玻璃圆、图标用同一组渐变。
     private func summaryButton(_ s: ReportSummaryContext) -> some View {
         let cached = cachedSummary != nil
+        let gradient = LinearGradient(
+            colors: [Color(red: 0.45, green: 0.36, blue: 1.0), Color(red: 0.22, green: 0.55, blue: 1.0), Color(red: 0.26, green: 0.86, blue: 0.92)],
+            startPoint: .topLeading, endPoint: .bottomTrailing)
         return Button { showSummary = true } label: {
-            Label(L("AI 总结"), systemImage: "sparkles")
-                .font(.system(size: 14, weight: .semibold))
-                .padding(.horizontal, 16)
-                .frame(minHeight: 44)
-                .foregroundStyle(cached ? Color.white : Theme.textPrimary)
-                .background(cached ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.ultraThinMaterial), in: Capsule())
-                .overlay(Capsule().stroke(Theme.border))
-                .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+            ZStack {
+                if cached {
+                    // 光晕：同色渐变虚化后在圆后面一明一暗
+                    Circle().fill(gradient).frame(width: 54, height: 54).blur(radius: 12)
+                        .opacity(glow ? 0.65 : 0.25).scaleEffect(glow ? 1.25 : 1.0)
+                }
+                Circle().fill(cached ? AnyShapeStyle(gradient) : AnyShapeStyle(.ultraThinMaterial))
+                Image(systemName: "sparkles")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(cached ? AnyShapeStyle(Color.white) : AnyShapeStyle(gradient))
+            }
+            .frame(width: 54, height: 54)
+            .shadow(color: Color(red: 0.30, green: 0.45, blue: 1.0).opacity(cached ? 0.45 : 0.22), radius: cached ? 12 : 8, y: 4)
         }
         .buttonStyle(.plain)
-        .padding(.trailing, 16)
-        .padding(.bottom, 28)
+        .padding(.trailing, 18)
+        .padding(.bottom, 30)
+        .onAppear { glow = true }
+        .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: glow)
         .accessibilityLabel(L("AI 总结"))
     }
 
