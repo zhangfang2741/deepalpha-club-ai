@@ -62,7 +62,8 @@ struct FiveDimensionLayout {
     private static func place(title: (name: String, grade: String), dir: CGVector, center: CGPoint,
                               radius: CGFloat, fontSize: CGFloat, compact: Bool = false) -> Label {
         // 紧凑：「名称 等级」一行写完（宽 = 两者之和 + 空格），高度只要一行
-        let width = (compact ? estimatedWidth(title.name, fontSize: fontSize) + 4 + estimatedWidth(title.grade, fontSize: fontSize)
+        // 紧凑标签：多留 10pt 余量（估算偏小会把「估值」截成「…」，实测出过），文字另用 fixedSize 不截断
+        let width = (compact ? estimatedWidth(title.name, fontSize: fontSize) + 4 + estimatedWidth(title.grade, fontSize: fontSize) + 10
                              : max(estimatedWidth(title.name, fontSize: fontSize), estimatedWidth(title.grade, fontSize: fontSize))) + 2
         let height = lineHeight * (compact ? 1 : 2)
         let anchor = CGPoint(x: center.x + dir.dx * (radius + labelGap), y: center.y + dir.dy * (radius + labelGap))
@@ -143,6 +144,8 @@ struct FiveDimensionChart: View {
                                     Text(d.name).foregroundStyle(Theme.textPrimary)
                                     Text(d.grade ?? L("暂无")).fontWeight(.semibold).foregroundStyle(QuantGradeStyle.color(d.grade))
                                 }
+                                .lineLimit(1)
+                                .fixedSize()
                             } else {
                                 VStack(alignment: label.alignment, spacing: 0) {
                                     Text(d.name).foregroundStyle(Theme.textPrimary)
