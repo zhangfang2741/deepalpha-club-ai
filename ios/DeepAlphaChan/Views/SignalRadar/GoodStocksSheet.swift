@@ -39,7 +39,7 @@ struct GoodStocksSheet: View {
                             .font(.footnote).foregroundColor(Theme.textSecondary)
                             .frame(maxWidth: .infinity).padding(.top, 40)
                     } else if items.isEmpty {
-                        Text(vm.isLoading ? L("正在加载好股票名单…") : L("这个范围暂时没有达标的股票"))
+                        Text(vm.isLoading ? L("正在加载基本面名单…") : L("这个范围暂时没有达标的股票"))
                             .font(.footnote).foregroundColor(Theme.textSecondary)
                             .frame(maxWidth: .infinity).padding(.top, 40)
                     } else {
@@ -48,14 +48,14 @@ struct GoodStocksSheet: View {
                         section(L("近期只有卖点 · %lld 只", onlySell.count), onlySell)
                         section(L("暂无买卖点 · %lld 只", without.count), without)
                     }
-                    Text(L("好股票 = 当前综合等级不低于 %@ 的股票；券商角标为近 90 天净上调 / 净下调（仅美股）。仅为事实陈列，不构成投资建议。", threshold ?? ""))
+                    Text(L("基本面靠前 = 当前综合等级不低于 %@ 的股票；券商角标为近 90 天净上调 / 净下调（仅美股）。仅为事实陈列，不构成投资建议。", threshold ?? ""))
                         .font(.caption2).foregroundColor(Theme.textSecondary)
                         .padding(.top, 8)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
             }
             .background(Theme.background)
-            .navigationTitle(L("%@ 好股票", universeName))
+            .navigationTitle(L("%@ 基本面", universeName))
             .navigationBarTitleDisplayMode(.inline)
         }
     }

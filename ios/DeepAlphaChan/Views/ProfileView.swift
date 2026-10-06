@@ -37,7 +37,7 @@ struct ProfileView: View {
 
                 #if DEBUG
                 Section("调试") {
-                    Toggle("好股票门槛去掉动量（改完回雷达下拉刷新或重启）",
+                    Toggle("基本面门槛去掉动量（改完回雷达下拉刷新或重启）",
                            isOn: Binding(
                             get: { UserDefaults.standard.bool(forKey: "radar_quality_ex_momentum") },
                             set: { UserDefaults.standard.set($0, forKey: "radar_quality_ex_momentum") }))

@@ -66,11 +66,11 @@ struct SignalRadarView: View {
     @State private var panel: RadarPanel?
     /// 面板列表里点了某一行：等面板收起后再跑分析、push 详情页（见 sheet 的 onDismiss）。
     @State private var pendingDetail: RadarSignal?
-    /// 在好股票名单里点了某一行：收起面板后再打开个股（该股票可能当前没有买卖点，所以不是 RadarSignal）。
+    /// 在基本面名单里点了某一行：收起面板后再打开个股（该股票可能当前没有买卖点，所以不是 RadarSignal）。
     @State private var pendingGood: (symbol: String, name: String)?
     /// 标题旁折叠：展开「市场 → 行业 → 好股票 → 买点」流程图。默认折叠。
     @State private var showFlow = false
-    /// 好股票名单（当前综合等级达标的股票 + 各自有没有买卖点）的数据。
+    /// 基本面名单（当前综合等级达标的股票 + 各自有没有买卖点）的数据。
     @StateObject private var goodVM = GoodStocksViewModel()
     /// 详情页打开时停在哪个分段：雷达气泡 → nil（缠论结构）。
     @State private var detailSegment: ResultDetailView.Segment?
@@ -101,7 +101,7 @@ struct SignalRadarView: View {
             }
             // 行业强弱跟着所选日走：雷达翻到哪天，扇区就按哪天收盘的强弱排
             .task(id: vm.sectorBoardKey) { await vm.loadSectorBoardIfNeeded() }
-            // 好股票名单：切市场 / 指数时拉一次（会员功能，与雷达同一道门槛）
+            // 基本面名单：切市场 / 指数时拉一次（会员功能，与雷达同一道门槛）
             .task(id: "\(vm.market.rawValue)|\(vm.activeUniverseKey)|\(store.isPremium)") {
                 if store.isPremium { await goodVM.load(market: vm.market.rawValue, universe: vm.activeUniverseKey) }
             }
@@ -397,7 +397,7 @@ struct SignalRadarView: View {
     private var flowPanel: some View {
         let threshold = vm.response?.qualityThreshold ?? ""
         let good = vm.response?.qualityGoodCount ?? 0
-        // 近期（雷达展示的这些天）出现过缠论结构信号的好股票只数（买卖不分）
+        // 近期（雷达展示的这些天）出现过缠论结构信号的基本面靠前股票只数（买卖不分）
         let signalStocks = Set(vm.days.flatMap(\.signals).map(\.symbol)).count
         return VStack(spacing: 8) {
             HStack(alignment: .top, spacing: 0) {
@@ -405,7 +405,7 @@ struct SignalRadarView: View {
                 flowLink
                 flowNode(2, L("行业"), L("看下面的行业横条"), highlight: .muted)
                 flowLink
-                flowNode(3, L("好股票"), threshold.isEmpty ? "—" : L("%lld 只 · %@ 及以上", good, threshold), highlight: .accent)
+                flowNode(3, L("基本面"), threshold.isEmpty ? "—" : L("%lld 只 · %@ 及以上", good, threshold), highlight: .accent)
                 flowLink
                 flowNode(4, L("结构"), signalStocks > 0 ? L("%lld 只 · 近期出现结构信号", signalStocks) : L("近期没有结构信号"),
                          highlight: signalStocks > 0 ? .accent : .muted)
@@ -467,7 +467,7 @@ struct SignalRadarView: View {
         .accessibilityLabel(showFlow ? L("收起流程图") : L("展开流程图"))
     }
 
-    /// 标题右侧的「名单」：好股票名单入口（会员功能；有门槛说明才显示）。
+    /// 标题右侧的「名单」：基本面名单入口（会员功能；有门槛说明才显示）。
     @ViewBuilder
     private var goodListButton: some View {
         if let threshold = vm.response?.qualityThreshold, !threshold.isEmpty, store.isPremium {
@@ -475,7 +475,7 @@ struct SignalRadarView: View {
                 if needsConsent { showConsent = true } else { panel = .goodStocks }
             }
             .font(.subheadline.weight(.semibold))
-            .accessibilityLabel(L("好股票名单"))
+            .accessibilityLabel(L("基本面名单"))
         }
     }
 
@@ -1252,14 +1252,14 @@ struct SignalRadarView: View {
                         L("每个市场提供「大盘宽基」（默认）和「科技指数」两套可切换范围，如美股的标普500 / 纳斯达克100。"),
                         L("成分股优先实时拉取官方/交易所数据源，取不到或数量不足时自动回退到内置清单，保证随时有得扫。"),
                     ])
-                    infoSection(L("什么是好股票"), [
-                        L("雷达只画好股票的缠论结构信号：这是一个观察流程，先看市场和行业，再看哪些股票基本面靠前，最后看它们的缠论结构。"),
-                        L("好股票 = 当前综合等级达标的股票。综合等级由估值、成长、盈利能力、动量、EPS 修正五个维度在同行业内的百分位平均得出，只给字母等级；任一维度为 F 时，综合等级最高 C+。"),
+                    infoSection(L("什么是基本面筛选"), [
+                        L("雷达只画基本面靠前的股票的缠论结构信号：这是一个观察流程，先看市场和行业，再看哪些股票基本面靠前，最后看它们的缠论结构。"),
+                        L("基本面靠前 = 当前综合等级达标的股票。综合等级由估值、成长、盈利能力、动量、EPS 修正五个维度在同行业内的百分位平均得出，只给字母等级；任一维度为 F 时，综合等级最高 C+。"),
                         L("门槛随股票池自动调整：取有评级股票的前 25%，至少 8 只，且不低于 B，同一等级整档纳入。顶部流程图写着当前门槛「X 及以上」。"),
                         L("用的是股票当前的等级，不是信号当天的；评级暂时读取失败时不做筛选，雷达照常显示全部信号。"),
                     ])
                     infoSection(L("雷达上显示哪些信号"), rankingInfoLines)
-                    Text(L("雷达只陈列按缠论规则得出的事实，不打分、不排名、不构成推荐；好股票门槛只用来缩小范围；强弱与确认状态的判定与详情页完全一致，只是气泡取的是某一次扫描的快照。"))
+                    Text(L("雷达只陈列按缠论规则得出的事实，不打分、不排名、不构成推荐；基本面门槛只用来缩小范围；强弱与确认状态的判定与详情页完全一致，只是气泡取的是某一次扫描的快照。"))
                         .font(.footnote)
                         .foregroundColor(Theme.textSecondary)
                 }
@@ -1325,7 +1325,7 @@ struct SignalRadarView: View {
             L("所选指数全部成分股都跑一遍缠论，某天在场的信号全部列出，按出现时间从新到旧，不打分、不截取前几名。"),
             L("在场：信号出现后 5 个交易日内（周末、休市不算），且收盘价没有跌破买点价位（卖点：涨破）；走坏当天起移出雷达，详情页仍显示该买卖点。"),
             L("只显示已成立的买卖点：所在的笔已经走完，并且下一笔已经开始成形（首次成笔）才算，所以会比价格转折晚几天出现。最后一笔还在走时出现的只算「待确认」，在雷达上方显示个数，不画进雷达。"),
-            L("只留好股票的买卖点（见上方「什么是好股票」），其余股票的信号不画；画不下的气泡点「查看全部」可看全部。"),
+            L("只留基本面靠前的股票的买卖点（见上方「什么是基本面筛选」），其余股票的信号不画；画不下的气泡点「查看全部」可看全部。"),
         ]
     }
 
