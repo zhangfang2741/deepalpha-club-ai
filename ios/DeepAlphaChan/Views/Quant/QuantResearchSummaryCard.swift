@@ -45,9 +45,9 @@ struct QuantResearchSummaryCard: View {
                 }
                 Spacer(minLength: 0)
             }
-            if !isStatic, research.scoredDimensions.count >= 3 {
+            if research.scoredDimensions.count >= 3 {
                 Divider().overlay(Theme.border)
-                // 五维图：越靠外 = 在同板块里排名越靠前；只读展示，各维度的详情在下方成绩单里点开
+                // 五维图：越靠外 = 在同板块里排名越靠前；只读展示，分享长图（isStatic）里也要画
                 FiveDimensionChart(dimensions: research.scoredDimensions, symbol: research.symbol)
                     .allowsHitTesting(false)
                     .accessibilityElement(children: .ignore)
