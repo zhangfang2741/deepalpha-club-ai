@@ -259,12 +259,12 @@ struct ReportReaderView: View {
     @ViewBuilder private var content: some View {
         switch kind {
         case .page:
-            InAppWebView(url: remote, local: nil)
+            InAppWebView(url: remote, local: nil, paper: false)
         case .pdf:
             if let displayURL { PDFKitView(url: displayURL, jumpTo: $jumpTo) } else { status }
         case .filing:
             // 下载失败时直接在线打开网页（不能保存），比报错有用
-            if downloaded || failed { InAppWebView(url: remote, local: localURL) } else { status }
+            if downloaded || failed { InAppWebView(url: remote, local: localURL, paper: true) } else { status }
         }
     }
 
@@ -406,12 +406,14 @@ private struct PDFTocSheet: View {
 private struct InAppWebView: View {
     let url: URL
     let local: URL?
+    /// 财报网页（SEC 文档）：整页白底、内容顶到屏幕两侧，读起来太满。加载后注入样式：深色底上放一张留边的「纸」。
+    let paper: Bool
     @State private var loading = true
     @State private var failed = false
 
     var body: some View {
         ZStack {
-            WebRepresentable(url: url, local: local, loading: $loading, failed: $failed)
+            WebRepresentable(url: url, local: local, paper: paper, loading: $loading, failed: $failed)
             if loading && !failed {
                 ProgressView().padding(14).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
             }
@@ -430,15 +432,25 @@ private struct InAppWebView: View {
 private struct WebRepresentable: UIViewRepresentable {
     let url: URL
     let local: URL?
+    let paper: Bool
     @Binding var loading: Bool
     @Binding var failed: Bool
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> WKWebView {
-        let v = WKWebView()
+        let config = WKWebViewConfiguration()
+        if paper {
+            let css = "html{background:#0b0e14 !important;} body{background:#fff !important;margin:10px auto !important;" +
+                "padding:14px 16px !important;box-sizing:border-box !important;border-radius:10px;" +
+                "max-width:calc(100vw - 20px) !important;overflow-x:auto;}"
+            let js = "var s=document.createElement('style');s.textContent='\(css)';document.head.appendChild(s);"
+            config.userContentController.addUserScript(WKUserScript(source: js, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        }
+        let v = WKWebView(frame: .zero, configuration: config)
         v.navigationDelegate = context.coordinator
         v.allowsBackForwardNavigationGestures = true
+        if paper { v.isOpaque = false; v.backgroundColor = UIColor(red: 0.043, green: 0.055, blue: 0.078, alpha: 1) }
         if let local {
             v.loadFileURL(local, allowingReadAccessTo: local.deletingLastPathComponent())
         } else {
