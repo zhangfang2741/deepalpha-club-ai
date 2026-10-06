@@ -168,6 +168,34 @@ struct AnalystRatingTab: View {
         }
     }
 
+    private func gradeRow(_ g: AnalystOverview.GradeChange, linked: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(g.firm).font(.footnote).foregroundStyle(Theme.textPrimary)
+                Text(g.priceTarget.map { L("%@ · 目标价 %@", g.date, String(format: "%.2f", $0)) } ?? g.date)
+                    .font(.caption2).foregroundStyle(Theme.textSecondary)
+                if let title = g.reportTitle, !title.isEmpty {
+                    Text(title).font(.caption2).foregroundStyle(Theme.textSecondary)
+                        .lineLimit(2).multilineTextAlignment(.leading)
+                }
+            }
+            Spacer(minLength: 8)
+            Text(g.actionLabel).font(.caption2)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 5))
+                .foregroundStyle(actionColor(g.action))
+            Text(g.previousGradeLabel.map { $0 == g.newGradeLabel ? g.newGradeLabel : "\($0) → \(g.newGradeLabel)" }
+                 ?? g.newGradeLabel)
+                .font(.footnote.weight(.medium)).foregroundStyle(Theme.textPrimary)
+            if linked {
+                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Theme.textSecondary)
+            }
+        }
+        .padding(.vertical, 8)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+    }
+
     private func actionColor(_ action: String) -> Color {
         switch action {
         case "upgrade": return Theme.up
