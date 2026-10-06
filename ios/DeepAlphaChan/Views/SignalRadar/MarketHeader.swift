@@ -196,7 +196,7 @@ struct MarketHeader: View {
                     .sensoryFeedback(.selection, trigger: radarVM.sectorFilter)
                 }
                 Button { onOpen(.sectorPicker) } label: {
-                    Image(systemName: "list.bullet")
+                    Image(systemName: "chart.bar.xaxis")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(Theme.accent)
                         .frame(width: 34, height: 34)
