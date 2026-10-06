@@ -172,14 +172,18 @@ deepalpha-club-ai/
 > 行业 key 是中文名；英文名在 `cnhk/sectors.NATIVE_SECTOR_EN`（接口按 `lang=en` 返回，App 本地兜底走 `L(key)` + en 文案；有测试守护 43 个行业都有英文名，新增行业须补）。
 > `/macro/{cn|hk}/sectors`（`macro.service._native_sector_board`）返回本土行业全集 + 强弱（没算出来的行业强弱为空，App 不画强弱条、不写「最强」）+ 雷达当日买卖点数。
 
-> **雷达并列 tab**（iOS `SignalRadarView.RadarTab`）：「缠论结构 / 基本面研究」两个，画布左上角下拉框切换（`tabMenu`，摆位给它固定预留 120×32 的禁区；没有画布的加载 / 出错 / 锁定状态才在上方补一行）。
-> **基本面研究 tab = 股票池当前综合等级最高的若干只，不按日期、没有日期轨**（2026-10-06 起；此前是「每天综合等级升降」+「分析师评级」两个按日 tab，A 股 / 港股历史太短长期空白、美股也常空，已合并改版）：
-> `GET /signal-radar/fundamental-top?market&universe&limit=50`（`signal_radar/fundamental_top.py`）读每只股票最新评级日（不早于 14 天前）的综合等级，按等级高 → 低、综合分高 → 低排，返回前 50；会员功能、同样要先同意免责声明。
-> 与缠论雷达**共用同一块画布**（多环 + 浮动动画 + 摆位，`SignalRadarView.bubbleField`）：`FundamentalRadarViewModel.radarDay` 把榜单映射成 `RadarDay / RadarSignal`——**环 = 等级段**（A 段最里、B 段中、C 及以下最外，借 `ageDays` 0 / 1 / 4 分圈，环文字由 `gradeRingLabels` 覆盖，`layoutRingField(gradeRings:)` 时气泡不按「越久越小」缩放）；统一用 buy 色（红，榜单没有买卖方向），大小 / 深浅随等级（A+ 最大最深，A 段其余中，其余最小最浅），最后一行（`quantGrade`）写等级字母；画布只画前 10 只，其余点「另有 N 个 · 查看全部」或榜单入口行看完整榜单（`FundamentalRadarView`，榜单入口行占缠论日期轨的位置、同高 76，保证两个 tab 画布一样高）；
-> **分析师评级只作角标**（`RadarSignal.analystMark`，`RadarBubble` 右上角白色小胶囊）：近 30 天券商评级净上调「▲n」（红）/ 净下调「▼n」（绿），净 0 或没有数据不画；只做美股（A 股东财研报无上调 / 下调字段、港股只有最新评级，响应 `analyst_supported=false`，图例也不画角标说明）。
-> 数据 = FMP 个股评级变动 `grades`（`signal_radar/analyst_events.py`），**只对榜单前 50 只拉**（不是整个股票池），**接口只读 Redis 缓存**（`signal_radar:analyst:v1:{symbol}`，24 小时 TTL、6 小时算过期）；缺失 / 过期的由后台任务补（`FmpClient` 批量额度、并发 4、带锁），响应 `analyst_pending` = 还在补的只数，App 在 >0 时每 20 秒静默重拉（`pollWhilePending`）。**不要**在请求路径里同步逐只拉 FMP。
-> 顶部行业胶囊的筛选同样作用于这个 tab（`FundamentalRadarViewModel.sectorFilter`，榜单项自带 `sector`，与缠论共用同一行业键）；行业强弱面板（`SectorBoardSheet`）在基本面 tab 下写「N 只上榜」（`SectorRadarContext.eventWords`）。切市场 / 指数的加载态与缠论一致（视图按当前范围键 `needsLoading(scope:)` 在切换那一帧就整页转圈、不等 `.task` 起来，换范围 `.id(loadedKey)` 整块重建让气泡漂浮动画重新开始；范围不同的旧数据不展示，同范围刷新 `isReloading` 调暗旧气泡，过期响应丢弃）。点气泡 / 榜单行进个股详情，且**直接停在详情页「基本面研究」分段**——`ResultDetailView(initialSegment: .quant)`，缠论 tab 仍进「缠论结构」。
-> 旧接口 `GET /signal-radar/grade-events`（每日升降）与 `/analyst-events`（每日券商净升降）后端保留、App 不再使用（旧版 App 可能还在调）。
+> **雷达 = 好股票的缠论买卖点**（2026-10-06 起，门槛由我们定、**不让用户选**）：用户要感知的是「市场怎么样、行业怎么样、好的股票有哪些、有没有买卖点」——顶部市场卡 / 行业横条 / 雷达画布 / 好股票名单依次回答。
+> 此前试过的「基本面研究」并列 tab（每日综合评级升降、综合等级榜、分析师评级 tab）都已下线：A 股 / 港股评级历史太短长期空白、榜单几乎不变、全红榜单读起来像推荐。**不要**再做并列 tab / 日期轨式的基本面视图。
+> **基本面门槛**（`signal_radar/quality_view.py`）：新版 App 请求带 `quality=good`（仅 `scope=all` 生效），接口层**现算、不写回快照**（快照仍存全部在场信号；旧版 App 不带 quality，行为不变）；
+> 只留**当前**综合等级达标的股票的买卖点——用当前等级、不是信号当天的（评级历史短，历史日期同样只留当前达标的）；**门槛随股票池自适应**（`quality_view.choose_cutoff`）：目标 = 有评级股票的前 `GOOD_SHARE`（25%），至少 `GOOD_MIN_COUNT`（8）只；从高到低累计各等级只数，到达目标的那一档即门槛、**整档纳入不在档内切**（界面才能写「X 及以上」），且不低于 `GOOD_FLOOR`（B，小池子 / 整体偏弱的池子不凑数）。2026-10-06 实测：纳指 100 → B（16 只）、标普 500 → B、沪深 300 → A-（78 只）、恒生指数 → A-、恒生科技 → B（8 只）；
+> 留下的信号 `quant_grade / score / as_of` 换成当前等级（气泡最后一行写等级字母）；买卖点数 / 行业计数按留下的重算；响应带 `quality_threshold / quality_good_count / quality_rated_count`，App **不**在雷达页上方加说明行 / 四步条（市场和行业上面的卡片 / 横条已经有了）：标题「市场雷达」旁一个折叠钮（`flowTitle`），点开是一张简单的流程图（`flowPanel`：①市场 ②行业 只写「看下面…」，③好股票「N 只 · X 及以上」④买点「M 只 · 近期有买点」，默认折叠，折叠时页面和没有它一样干净）；标题右侧「名单」按钮（`goodListButton`，会员功能）打开好股票名单。
+> **评级读取失败时原样返回（不能因为评级挂了让雷达变空）**；达标名单 Redis 缓存 10 分钟（`signal_radar:good:v1:*`）。改门槛改 `GOOD_SHARE / GOOD_MIN_COUNT / GOOD_FLOOR`，无需升 `_mode_ns`（不进快照）。
+> **分析师评级只作角标**（`RadarSignal.analystUp / analystDown` → `analystMark`，`RadarBubble` 右上角白色小胶囊）：近 90 天券商净上调「▲n」（红）/ 净下调「▼n」（绿），净 0 或没有数据不画；只做美股（A 股东财研报无上调 / 下调字段、港股只有最新评级）。
+> 数据 = FMP 个股评级变动 `grades`（`signal_radar/analyst_events.py`），**只对留下信号的好股票拉**，**接口只读 Redis 缓存**（`signal_radar:analyst:v2:{symbol}`，24 小时 TTL、6 小时算过期）；缺失 / 过期的由后台任务补（`FmpClient` 批量额度、并发 4、带锁），响应 `analyst_pending` = 还在补的只数，App 的静默轮询（`refreshWhileBackfilling`，90 秒）在 >0 时继续重拉。**不要**在请求路径里同步逐只拉 FMP。
+> **买点优先**（2026-10-06）：好股票里的买点是用户最关心的——画布超过 `ringFieldCap` 个要折叠时先折卖点（`SignalRadarView.buyFirst`，买点排前、各自保持时间从新到旧）；好股票名单分「近期有买点 / 近期只有卖点 / 暂无买卖点」三组，每行优先展示最近的买点。
+> **好股票名单**（雷达上方「名单」入口，`GoodStocksSheet` + `GET /signal-radar/fundamental-top`，会员功能）：当前综合等级达标的股票，分三组（有没有买卖点按雷达当前各展示日的信号判断），每行写等级、券商角标与最近一个买卖点；点行进个股详情。名单取全池前 50（按等级高 → 低、综合分高 → 低），门槛用雷达响应的 `qualityThreshold` 在 App 端截。
+> 旧接口 `GET /signal-radar/grade-events`（每日升降）与 `/analyst-events`（每日券商净升降）后端保留、App 不再使用。
+
 > 信号雷达扫描约束（`app/services/signal_radar`）：同一 (口径, 市场, universe) 任一时刻只跑一轮全量扫描
 > ——接口与定时预热共用 `scan_lock_key` 原子锁（`acquire_lock` = SET NX EX），主动刷新有 5 分钟冷却；
 > 所有扫描 / 补算 / 示例日拉 K 线共用进程级闸门 `_fetch_gate`。拉数失败（限流 / 不可用）的成分股
@@ -189,7 +193,7 @@ deepalpha-club-ai/
 > 在启动预热之后接手别的进程没补完的。**不要**绕过锁直接起全量扫描。
 > **雷达只呈现事实、不做推荐**（2026-10-01 起，设计见 `docs/superpowers/specs/2026-10-01-radar-facts-top-down-design.md`）：
 > 快照存每天**在场的全部信号**、按出现时间从新到旧（`order_by_time`），不打分、不截前 N、不按共振重排；
-> **基本面排雷已取消**（评级只标注，`quant_filter.attach_grades` 不再剔除任何信号）。只保留定义层面的规则：
+> **基本面排雷已取消**（快照里评级只标注，`quant_filter.attach_grades` 不再剔除任何信号；新版 App 的「好股票」门槛是接口层 `quality=good` 另算，见上）。只保留定义层面的规则：
 > 缠论口径、收盘价跌破（卖点涨破）即退场、5 个交易日有效期、一周前的展示日不显示未确认信号。
 > 旧版 App（不带 `scope=all`）的前 10 在接口层由 `legacy_view` 按旧综合分现截，**不要**把截取或排雷写回快照。
 > 次级别只补算最新一天「当天新出现的信号 + 旧版前 N 候选池」，封顶 `_SUB_LEVEL_MAX`（`sub_level_targets`），不要对全部信号补算（打满行情源）。

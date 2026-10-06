@@ -66,27 +66,24 @@ struct SignalRadarView: View {
     @State private var panel: RadarPanel?
     /// 面板列表里点了某一行：等面板收起后再跑分析、push 详情页（见 sheet 的 onDismiss）。
     @State private var pendingDetail: RadarSignal?
-    /// 雷达上方并列的 tab：缠论买卖点 / 基本面研究（评级升降）。分析师评级等接口数据备齐后再并进来。
-    enum RadarTab: String, CaseIterable, Identifiable {
-        case chan, fundamental
-        var id: String { rawValue }
-        var title: String { self == .chan ? L("缠论结构") : L("基本面研究") }
-        /// 基本面研究 tab：与缠论共用同一块画布，数据是综合等级榜（分析师评级只作角标）。
-        var isEvents: Bool { self == .fundamental }
-    }
-    @State private var radarTab: RadarTab = .chan
-    @StateObject private var fundVM = FundamentalRadarViewModel()
-    /// 基本面 tab 里「另有 N 个 · 查看全部」打开的半屏。
-    @State private var showGradeAll = false
-    /// 详情页打开时停在哪个分段：基本面 tab 点气泡 → 基本面研究；缠论 tab → nil（缠论结构）。
+    /// 在好股票名单里点了某一行：收起面板后再打开个股（该股票可能当前没有买卖点，所以不是 RadarSignal）。
+    @State private var pendingGood: (symbol: String, name: String)?
+    /// 标题旁折叠：展开「市场 → 行业 → 好股票 → 买点」流程图。默认折叠。
+    @State private var showFlow = false
+    /// 好股票名单（当前综合等级达标的股票 + 各自有没有买卖点）的数据。
+    @StateObject private var goodVM = GoodStocksViewModel()
+    /// 详情页打开时停在哪个分段：雷达气泡 → nil（缠论结构）。
     @State private var detailSegment: ResultDetailView.Segment?
 
     var body: some View {
         NavigationStack {
             radarContent
             .background(Theme.background)
-            .navigationTitle(L("市场雷达"))
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) { flowTitle }
+                ToolbarItem(placement: .topBarTrailing) { goodListButton }
+            }
             // 真实滚动窗口雷达对所有用户都拉（未订阅一样看得到市场卡片、图例、日期轨，
             // 跟会员一模一样，见 radarContent）；市场切换时 .task(id:) 额外拉一次
             // 「上个月 1 号」免费预览快照，自动取消上一次未完成的请求、重新拉一次。
@@ -104,16 +101,16 @@ struct SignalRadarView: View {
             }
             // 行业强弱跟着所选日走：雷达翻到哪天，扇区就按哪天收盘的强弱排
             .task(id: vm.sectorBoardKey) { await vm.loadSectorBoardIfNeeded() }
-            // 行业胶囊的筛选同步给基本面 tab（两个 tab 共用同一排行业胶囊）
-            .onChange(of: vm.sectorFilter, initial: true) { _, key in fundVM.sectorFilter = key }
-            // 切到基本面 tab、或在 tab 里换市场 / 指数时拉评级升降
-            .task(id: "\(radarTab.rawValue)|\(vm.market.rawValue)|\(vm.activeUniverseKey)|\(store.isPremium)") {
-                if radarTab.isEvents, store.isPremium {
-                    await fundVM.load(market: vm.market.rawValue, universe: vm.activeUniverseKey)
-                    await fundVM.pollWhilePending(market: vm.market.rawValue, universe: vm.activeUniverseKey)
-                }
+            // 好股票名单：切市场 / 指数时拉一次（会员功能，与雷达同一道门槛）
+            .task(id: "\(vm.market.rawValue)|\(vm.activeUniverseKey)|\(store.isPremium)") {
+                if store.isPremium { await goodVM.load(market: vm.market.rawValue, universe: vm.activeUniverseKey) }
             }
             .sheet(item: $panel, onDismiss: {
+                if let g = pendingGood {
+                    pendingGood = nil
+                    openSymbol(g.symbol, name: g.name)
+                    return
+                }
                 guard let s = pendingDetail else { return }
                 pendingDetail = nil
                 openSymbol(s.symbol, name: s.name)
@@ -166,6 +163,7 @@ struct SignalRadarView: View {
     /// 声明时，气泡区换成锁定占位（consentLockedField）。
     private var radarContent: some View {
         VStack(spacing: 12) {
+            if showFlow { flowPanel }
             MarketHeader(radarVM: vm, panicVM: panicVM, overviewVM: overviewVM) { p in
                 // 行业 / 当日信号面板列的是选中日的真实信号，与气泡同一道免责声明门槛；环境不涉及个股
                 if needsConsent && p != .environment {
@@ -175,14 +173,7 @@ struct SignalRadarView: View {
                 }
             }
 
-            // 雷达画布里有下拉框（左上角）时不再单占一行；没有画布（加载 / 出错 / 锁定等）时用一行兜底，保证随时能切回
-            if !showsCanvas {
-                HStack { tabMenu; Spacer() }
-            }
-
-            if radarTab.isEvents {
-                fundamentalContent
-            } else if vm.isScanning {
+            if vm.isScanning {
                 scanningView
             } else if vm.isComputingInBackground {
                 computingView
@@ -212,90 +203,6 @@ struct SignalRadarView: View {
         .padding(.top, 8)
         .padding(.bottom, 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-
-    // MARK: - 并列 tab
-
-    /// 画布左上角的下拉框：切换「缠论 / 基本面研究」。放进画布里（而不是画布上方单占一行），
-    /// 和行业胶囊、日期格都不在同一水平带上，不会混成一类控件。
-    private var tabMenu: some View {
-        Menu {
-            ForEach(RadarTab.allCases) { tab in
-                Button { radarTab = tab } label: {
-                    if tab == radarTab { Label(tab.title, systemImage: "checkmark") } else { Text(tab.title) }
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Text(radarTab.title).font(.system(size: 12, weight: .semibold))
-                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold))
-            }
-            .foregroundColor(Theme.textPrimary)
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(Theme.surface.opacity(0.92), in: Capsule())
-            .overlay(Capsule().stroke(Theme.border, lineWidth: 1))
-        }
-    }
-
-    /// 当前是否画着雷达画布（画布里自带下拉框；没有画布时才在上方补一行）。
-    private var showsCanvas: Bool {
-        switch radarTab {
-        case .chan:
-            return !vm.isScanning && !vm.isComputingInBackground && vm.errorMessage == nil
-                && !vm.days.isEmpty && !needsConsent
-        case .fundamental:
-            return store.isPremium && consent.hasAgreed && !fundVM.hasError
-                && !fundVM.filteredItems.isEmpty && !fundVM.needsLoading(scope: gradeScope)
-        }
-    }
-
-    /// 基本面 tab 整页「正在加载」：与缠论的 scanningView 同一版式（转圈 + 加粗标题 + 说明），切市场 / 指数时出现。
-    private var gradeLoadingView: some View {
-        let scope = currentUniverseName.isEmpty ? vm.market.title : currentUniverseName
-        return VStack(spacing: 12) {
-            ProgressView().tint(Theme.accent)
-            Text(L("正在加载「%@」综合评级…", scope))
-                .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
-            Text(L("评级是每日跑批的结果，稍候即可看到"))
-                .font(.footnote).foregroundColor(Theme.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    /// 基本面研究 tab：会员功能（与缠论雷达真实数据同一道门槛，未订阅点按弹付费墙），同样要先同意免责声明。
-    @ViewBuilder
-    private var fundamentalContent: some View {
-        if !store.isPremium {
-            VStack(spacing: 12) {
-                Image(systemName: "lock.fill").font(.system(size: 28)).foregroundColor(Theme.textSecondary)
-                Text(L("订阅后可查看股票池每天的综合评级升降"))
-                    .font(.footnote).foregroundColor(Theme.textSecondary).multilineTextAlignment(.center)
-                Button(L("查看订阅")) { showPaywall = true }.buttonStyle(.bordered).tint(Theme.accent)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if !consent.hasAgreed {
-            consentLockedField
-        } else if fundVM.needsLoading(scope: gradeScope) || fundVM.isScanning {
-            gradeLoadingView
-        } else {
-            FundamentalRadarView(vm: fundVM, universeName: currentUniverseName, sectorName: { vm.sectorName($0) },
-                                 showAll: $showGradeAll,
-                                 onOpen: { symbol, name in openSymbol(symbol, name: name, segment: .quant) }) {
-                bubbleField
-                    // 同一范围重新加载时保留旧气泡、调暗、暂不响应点按（与缠论同一处理）
-                    .opacity(fundVM.isReloading ? 0.35 : 1)
-                    .allowsHitTesting(!fundVM.isReloading)
-                    .animation(.easeInOut(duration: 0.2), value: fundVM.isReloading)
-            }
-            // 换范围就整块重建：气泡重新出现、漂浮动画从头开始（缠论切指数时经 scanningView 也是重建）
-            .id(fundVM.loadedKey)
-        }
-    }
-
-    /// 基本面 tab 当前所选范围（市场 + 指数）的键，与 FundamentalRadarViewModel.load 的 key 同格式。
-    private var gradeScope: String {
-        FundamentalRadarViewModel.scopeKey(market: vm.market.rawValue, universe: vm.activeUniverseKey)
     }
 
     // MARK: - 免责声明
@@ -471,6 +378,93 @@ struct SignalRadarView: View {
 
     // MARK: - 说明行
 
+    /// 标题旁的折叠：展开是一张简单的流程图（市场 → 行业 → 好股票 → 买点）。市场、行业上面的卡片 / 横条已经有了，
+    /// 这里只指一下；好股票（门槛由后端定、用户不能选）和买点写数字。折叠时雷达页和没有这张图一样干净。
+    private var flowPanel: some View {
+        let threshold = vm.response?.qualityThreshold ?? ""
+        let good = vm.response?.qualityGoodCount ?? 0
+        // 近期（雷达展示的这些天）出现过买点的好股票只数
+        let buyStocks = Set(vm.days.flatMap(\.signals).filter { $0.side == "buy" }.map(\.symbol)).count
+        return VStack(spacing: 8) {
+            HStack(alignment: .top, spacing: 0) {
+                flowNode(1, L("市场"), L("看下面的大盘环境"), highlight: .muted)
+                flowLink
+                flowNode(2, L("行业"), L("看下面的行业横条"), highlight: .muted)
+                flowLink
+                flowNode(3, L("好股票"), threshold.isEmpty ? "—" : L("%lld 只 · %@ 及以上", good, threshold), highlight: .accent)
+                flowLink
+                flowNode(4, L("买点"), buyStocks > 0 ? L("%lld 只 · 近期有买点", buyStocks) : L("近期没有买点"),
+                         highlight: buyStocks > 0 ? .up : .muted)
+            }
+            Divider().overlay(Theme.border)
+            Text(L("从大到小看：先看市场和行业，再看好股票，最后看它们有没有买点。雷达里只画好股票的买卖点。"))
+                .font(.caption2).foregroundColor(Theme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.border, lineWidth: 1))
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    private enum FlowHighlight { case muted, accent, up }
+
+    private func flowNode(_ n: Int, _ title: String, _ sub: String, highlight: FlowHighlight) -> some View {
+        let fill: Color = highlight == .accent ? Theme.accent : .clear
+        let stroke: Color = highlight == .up ? Theme.up : (highlight == .accent ? Theme.accent : Theme.border)
+        let numColor: Color = highlight == .accent ? .white : (highlight == .up ? Theme.up : Theme.textSecondary)
+        let subColor: Color = highlight == .up ? Theme.up : Theme.textSecondary
+        return VStack(spacing: 3) {
+            Text("\(n)")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(numColor)
+                .frame(width: 22, height: 22)
+                .background(fill, in: Circle())
+                .overlay(Circle().stroke(stroke, lineWidth: 1.5))
+            Text(title)
+                .font(.system(size: 11, weight: highlight == .muted ? .regular : .semibold))
+                .foregroundColor(highlight == .muted ? Theme.textSecondary : Theme.textPrimary)
+            Text(sub).font(.system(size: 10)).foregroundColor(subColor)
+                .multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var flowLink: some View {
+        Rectangle().fill(Theme.border).frame(width: 14, height: 1.5).padding(.top, 10)
+    }
+
+    /// 标题（「市场雷达」+ 折叠钮）：点一下展开 / 收起流程图。
+    private var flowTitle: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { showFlow.toggle() }
+        } label: {
+            HStack(spacing: 6) {
+                Text(L("市场雷达")).font(.headline).foregroundColor(Theme.textPrimary)
+                Image(systemName: showFlow ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(Theme.textSecondary)
+                    .frame(width: 22, height: 22)
+                    .background(Theme.surface, in: Circle())
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(showFlow ? L("收起流程图") : L("展开流程图"))
+    }
+
+    /// 标题右侧的「名单」：好股票名单入口（会员功能；有门槛说明才显示）。
+    @ViewBuilder
+    private var goodListButton: some View {
+        if let threshold = vm.response?.qualityThreshold, !threshold.isEmpty, store.isPremium {
+            Button(L("名单")) {
+                if needsConsent { showConsent = true } else { panel = .goodStocks }
+            }
+            .font(.subheadline.weight(.semibold))
+            .accessibilityLabel(L("好股票名单"))
+        }
+    }
+
     private var metaRow: some View {
         // 指数名称在雷达左上角的切换器里；这行是日期、更新时间与当天买卖点数（点开看全部信号）。
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -563,8 +557,8 @@ struct SignalRadarView: View {
 
     /// 环上时间标签：当日 / 3天内 / 7天内，小胶囊、画在气泡上层（位置见 ringLabelBoxes，摆位已避开）。
     private func ringLabels(width w: Double, height h: Double) -> some View {
-        ForEach(Array(zip(SignalRadarView.ringSpecs.indices, SignalRadarView.ringLabelBoxes(width: w, height: h, labels: gradeRingLabels))), id: \.0) { i, box in
-            Text(gradeRingLabels?[i] ?? SignalRadarView.ringSpecs[i].label)
+        ForEach(Array(zip(SignalRadarView.ringSpecs.indices, SignalRadarView.ringLabelBoxes(width: w, height: h, labels: nil))), id: \.0) { i, box in
+            Text(SignalRadarView.ringSpecs[i].label)
                 .font(.system(size: 9, weight: .medium))
                 .foregroundColor(Theme.textSecondary)
                 .frame(width: CGFloat(box.width), height: CGFloat(box.height))
@@ -579,15 +573,15 @@ struct SignalRadarView: View {
         GeometryReader { geo in
             let w = Double(geo.size.width)
             let h = Double(geo.size.height)
-            let dayDate = fieldDay?.date ?? ""
-            let signals = fieldDay?.signals ?? []
+            let dayDate = vm.selectedDay?.date ?? ""
+            let signals = SignalRadarView.buyFirst(vm.selectedDay?.signals ?? [])
             // 「待确认」候选（最后一笔还没走完，按严格口径尚不成立）不画进雷达，只在上方一行显示个数：
             // 画成灰色虚线气泡会和真实买卖点挤在一起，雷达又满了
             let candidates: [RadarSignal] = []
             let candidateIDs = Set(candidates.map(\.id))
             // 全部都已确认（严格口径恒如此）时不画「✓」：每个气泡都有，等于没有
             let marksConfirmed = !signals.allSatisfy(\.confirmed)
-            let sectorMode = radarTab == .chan && isSectorField
+            let sectorMode = isSectorField
             let order = vm.sectorOrder
             let board = vm.selectedSectorBoard
             let avoid = fieldObstacles(width: w)
@@ -597,7 +591,7 @@ struct SignalRadarView: View {
                 signals: signals, candidates: candidates, sectorMode: sectorMode, order: order,
                 rs: order.map { k in board?.sectors.first(where: { $0.key == k })?.rsVsMarket },
                 names: order.map { vm.sectorName($0) }, dayDate: dayDate, width: w, height: h,
-                avoid: avoid.map { [$0.x, $0.y, $0.width, $0.height] }, gradeRings: gradeRingLabels)
+                avoid: avoid.map { [$0.x, $0.y, $0.width, $0.height] }, gradeRings: nil)
             let field = layoutCache.value(for: key) {
                 sectorMode
                     ? SignalRadarView.layoutSectorField(
@@ -606,7 +600,7 @@ struct SignalRadarView: View {
                         dayDate: dayDate, width: w, height: h, avoid: avoid)
                     : SignalRadarView.layoutRingField(
                         signals: signals + candidates, dayDate: dayDate, width: w, height: h, avoid: avoid,
-                        gradeRings: gradeRingLabels)
+                        gradeRings: nil)
             }
             ZStack {
                 if sectorMode {
@@ -616,7 +610,7 @@ struct SignalRadarView: View {
                 }
 
                 if field.bubbles.isEmpty {
-                    Text(radarTab.isEvents ? L("这个范围暂时没有综合评级") : L("当日无买卖点信号"))
+                    Text(L("当日无买卖点信号"))
                         .font(.subheadline)
                         .foregroundColor(Theme.textSecondary)
                         .multilineTextAlignment(.center)
@@ -633,12 +627,11 @@ struct SignalRadarView: View {
                             color: SignalRadarView.bubbleColor(
                                 side: layout.signal.side,
                                 depth: SignalFormatting.strengthDepth(layout.signal.signalStrength)),
-                            isNew: radarTab == .chan && layout.signal.date == dayDate,
+                            isNew: layout.signal.date == dayDate,
                             isCandidate: candidateIDs.contains(layout.signal.id),
                             marksConfirmed: marksConfirmed,
                             // 点气泡直接进分析详情页（不再先弹底部面板）
-                            onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name,
-                                                 segment: radarTab.isEvents ? .quant : nil) }
+                            onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name) }
                         )
                         // 气泡任何时候都不做透明处理：刷新完直接出现，不淡入
                         .transition(.identity)
@@ -652,10 +645,10 @@ struct SignalRadarView: View {
                     ForEach(field.wedges) { wedge in
                         wedgeLabel(wedge)
                     }
-                } else if field.hidden + hiddenExtra > 0 {
+                } else if field.hidden > 0 {
                     // 同心环最多画 ringFieldCap 个最新的，其余在「当日信号」里看全（基本面 tab：前 10 只，其余看全部评级升降）
-                    Button { if radarTab.isEvents { showGradeAll = true } else { panel = .signals } } label: {
-                        Text(L("另有 %lld 个 · 查看全部", field.hidden + hiddenExtra))
+                    Button { panel = .signals } label: {
+                        Text(L("另有 %lld 个 · 查看全部", field.hidden))
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundColor(Theme.accent)
                             .padding(.horizontal, 10)
@@ -678,26 +671,12 @@ struct SignalRadarView: View {
             )
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(alignment: .topLeading) { tabMenu.padding(10) }
     }
 
     /// 雷达画布是否按行业分扇区。**当前关闭**：顶部漏斗已经按「大盘环境 → 最强行业 → 当日信号」
     /// 往下引，雷达只管陈列信号、按时间排（越靠中心越新），不再重复切行业；行业强弱看「最强行业」一行。
     /// 扇区摆位代码（SectorRadarLayout）与测试保留，改回 true 即恢复。
     static let sectorFieldEnabled = false
-
-    /// 雷达画布当前画的那一天：缠论 tab = 选中日的买卖点；基本面 tab = 选中日在场的评级升降（同一块画布）。
-    private var fieldDay: RadarDay? {
-        radarTab.isEvents ? fundVM.radarDay : vm.selectedDay
-    }
-
-    /// 基本面 tab 的环文字（由内向外）：环 = 新等级；缠论 tab 为 nil（环 = 距查看日的交易日数，文字见 ringSpecs）。
-    private var gradeRingLabels: [String]? {
-        radarTab.isEvents ? FundamentalRadarViewModel.ringLabels : nil
-    }
-
-    /// 画布之外被折叠的只数（基本面 tab 前 10 只之外的）。
-    private var hiddenExtra: Int { radarTab.isEvents ? fundVM.hiddenCount : 0 }
 
     private var isSectorField: Bool {
         SignalRadarView.sectorFieldEnabled && vm.selectedDay?.hasSectorData == true
@@ -789,19 +768,7 @@ struct SignalRadarView: View {
         case .environment:
             MacroDetailSheet(market: vm.market, panic: panicVM.responses[vm.market])
         case .sectorPicker:
-            if radarTab.isEvents, fundVM.radarDay != nil {
-                SectorBoardSheet(
-                    market: vm.market, date: fundVM.asOf,
-                    radar: SectorRadarContext(universeName: currentUniverseName, date: fundVM.asOf,
-                                              counts: fundVM.sectorCounts, selectedKey: vm.sectorFilter,
-                                              totals: (fundVM.items.count, 0),
-                                              eventWords: (up: L("只上榜"), down: "",
-                                                           note: L("上榜只数为%@ %@ 综合评级最高的前若干只中各行业的只数；点行业即在雷达上只看该行业。"))),
-                    onPick: { key, _ in vm.setSectorFilter(key) },
-                    onClear: { vm.setSectorFilter(nil) })
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-            } else if let day = vm.baseSelectedDay {
+            if let day = vm.baseSelectedDay {
                 SectorBoardSheet(
                     market: vm.market, date: day.date,
                     radar: SectorRadarContext(universeName: currentUniverseName, date: day.date,
@@ -820,6 +787,15 @@ struct SignalRadarView: View {
             if let ctx = factContext {
                 RadarSignalListSheet(context: ctx, universeName: currentUniverseName, onOpenDetail: openDetail)
             }
+        case .goodStocks:
+            GoodStocksSheet(vm: goodVM, threshold: vm.response?.qualityThreshold, universeName: currentUniverseName,
+                            days: vm.days, sectorName: { vm.sectorName($0) },
+                            onOpen: { symbol, name in
+                                pendingGood = (symbol, name)
+                                panel = nil
+                            })
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -1009,6 +985,12 @@ struct SignalRadarView: View {
     }
 
     /// 同心环模式最多尝试画这么多个最新的气泡；放不下的与超出的都在「当日信号」面板里看全。
+    /// 买点优先：买点排在卖点前面（各自保持出现时间从新到旧）。画布最多画 ringFieldCap 个，超出的折叠，
+    /// 排序后折叠掉的先是卖点——好股票里的买点是用户最关心的，不能被更新的卖点挤到「另有 N 个」里。
+    static func buyFirst(_ signals: [RadarSignal]) -> [RadarSignal] {
+        signals.filter { $0.side == "buy" } + signals.filter { $0.side != "buy" }
+    }
+
     static let ringFieldCap = 24
 
     /// 信号数不超过这个值时，同心环模式保证全部画出来（放不下就放宽圈带、缩小气泡），不出现「另有 N 个」；

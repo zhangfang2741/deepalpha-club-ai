@@ -48,7 +48,7 @@ struct FundamentalItem: Decodable, Identifiable {
     let score: Double?
     let asOf: String
     let sector: String?
-    /// 近 30 天券商上调 / 下调家数；nil = 没有数据（A 股 / 港股，或还没拉到）。
+    /// 近 90 天券商上调 / 下调家数；nil = 没有数据（A 股 / 港股，或还没拉到）。
     let analystUp: Int?
     let analystDown: Int?
 

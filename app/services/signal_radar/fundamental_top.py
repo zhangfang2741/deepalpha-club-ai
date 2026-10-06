@@ -1,12 +1,12 @@
 """雷达「基本面研究」tab：股票池里当前综合等级最高的若干只股票。
 
 不按日期：取每只股票最新一个评级日的综合等级，按等级（A+ 最高）再按综合分排序，返回前 N 只（画布画前 10，其余点「查看全部」）。
-分析师评级只作角标（美股）：近 30 天券商净上调 / 下调家数，由 analyst_events 的缓存读出；这些前 N 只里缓存缺失 / 过期的
+分析师评级只作角标（美股）：近 90 天券商净上调 / 下调家数，由 analyst_events 的缓存读出；这些前 N 只里缓存缺失 / 过期的
 交给后台补（批量额度、带锁），响应 analyst_pending 为还在补的只数。**只陈列事实**：不推荐、不打买卖标签。
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from redis.asyncio import Redis
 
@@ -22,7 +22,7 @@ from app.services.signal_radar.universe import get_universe
 
 DEFAULT_LIMIT = 50
 LOOKBACK_DAYS = 14          # 最新评级日不早于这么多天前（节假日 / 批量漏跑期间不拿过旧的评级冒充当前）
-ANALYST_WINDOW_DAYS = 30
+ANALYST_WINDOW_DAYS = 90
 
 
 def rank_latest(history: dict[str, list[QuantGrade]]) -> list[tuple[str, QuantGrade]]:
@@ -33,6 +33,28 @@ def rank_latest(history: dict[str, list[QuantGrade]]) -> list[tuple[str, QuantGr
         if valid:
             latest.append((symbol, max(valid, key=lambda g: (g.as_of, g.available_on))))
     return sorted(latest, key=lambda t: (GRADE_ORDER.index(t[1].grade or ""), -(t[1].score if t[1].score is not None else -1), t[0]))
+
+
+async def load_ranked(
+    market: str, universe_key: str, redis: Redis, end: date,
+) -> tuple[list[tuple[str, QuantGrade]], dict[str, str]] | None:
+    """股票池每只股票最新综合等级（不早于 LOOKBACK_DAYS 天前）的排序结果 + 代码→名称。读取失败返回 None。"""
+    pairs = await resolve_constituents(market, redis=redis, universe_key=universe_key)
+    names = {s: n for s, n in pairs}
+    try:
+        stored = {s: normalize_symbol(market, s) for s in names}
+        rows = await repository.get_quant_grade_history(
+            market, sorted(set(stored.values())), end - timedelta(days=LOOKBACK_DAYS), end)
+    except Exception:
+        logger.exception("signal_radar_fundamental_top_read_failed", market=market)
+        return None
+    by_stored: dict[str, list[QuantGrade]] = {}
+    for row in rows:
+        g = grade_from_row(row)
+        if g is not None and (end - g.as_of).days <= LOOKBACK_DAYS:
+            by_stored.setdefault(row.symbol, []).append(g)
+    history = {s: by_stored[n] for s, n in stored.items() if n in by_stored}
+    return rank_latest(history), names
 
 
 async def fundamental_top(
@@ -50,22 +72,10 @@ async def fundamental_top(
             market=market, universe_key=uni.key, universe_name=uni.etf_name,
             analyst_supported=market in analyst_events.SUPPORTED_MARKETS, **kw)
 
-    pairs = await resolve_constituents(market, redis=redis, universe_key=uni.key)
-    names = {s: n for s, n in pairs}
-    try:
-        stored = {s: normalize_symbol(market, s) for s in names}
-        rows = await repository.get_quant_grade_history(
-            market, sorted(set(stored.values())), end - timedelta(days=LOOKBACK_DAYS), end)
-    except Exception:
-        logger.exception("signal_radar_fundamental_top_read_failed", market=market)
+    loaded = await load_ranked(market, uni.key, redis, end)
+    if loaded is None:
         return resp(available=False)
-    by_stored: dict[str, list[QuantGrade]] = {}
-    for row in rows:
-        g = grade_from_row(row)
-        if g is not None and (end - g.as_of).days <= LOOKBACK_DAYS:
-            by_stored.setdefault(row.symbol, []).append(g)
-    history = {s: by_stored[n] for s, n in stored.items() if n in by_stored}
-    ranked = rank_latest(history)
+    ranked, names = loaded
     top = ranked[:max(1, limit)]
     tags = await sectors.load_sector_tags(market, redis)
 

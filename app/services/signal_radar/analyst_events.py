@@ -28,7 +28,7 @@ CACHE_TTL = 24 * 3600          # 缓存最长保留
 FRESH_SECONDS = 6 * 3600       # 超过这个时间算过期，后台重拉
 REFRESH_LOCK_TTL = 20 * 60
 FETCH_CONCURRENCY = 4
-GRADES_LIMIT = 100             # 大市值股票一个月就有二三十条变动，留足余量
+GRADES_LIMIT = 200             # 大市值股票一个月就有二三十条变动（含维持），90 天窗口留足余量
 MAX_FIRMS = 3
 SUPPORTED_MARKETS = {"us"}
 
@@ -112,7 +112,7 @@ def net_counts(actions: list[dict], since: date) -> tuple[int, int]:
 
 def cache_key(symbol: str) -> str:
     """单只股票评级变动缓存键。"""
-    return f"signal_radar:analyst:v1:{symbol}"
+    return f"signal_radar:analyst:v2:{symbol}"
 
 
 async def _read_cache(redis: Redis, symbols: list[str]) -> dict[str, dict]:
