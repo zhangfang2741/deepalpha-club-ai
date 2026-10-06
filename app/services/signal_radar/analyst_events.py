@@ -100,6 +100,14 @@ def build_events(
     return days
 
 
+def net_counts(actions: list[dict], since: date) -> tuple[int, int]:
+    """日期不早于 since 的上调 / 下调家数（维持评级不算）。"""
+    since_s = since.isoformat()
+    ups = sum(1 for a in actions if a["action"] == "upgrade" and a["date"] >= since_s)
+    downs = sum(1 for a in actions if a["action"] == "downgrade" and a["date"] >= since_s)
+    return ups, downs
+
+
 # ---------- 缓存 / 后台拉取 ----------
 
 def cache_key(symbol: str) -> str:
@@ -152,7 +160,7 @@ async def refresh_symbols(symbols: list[str], redis: Redis) -> int:
     return done
 
 
-async def _refresh_in_background(market: str, universe: str, symbols: list[str], redis: Redis) -> None:
+async def refresh_in_background(market: str, universe: str, symbols: list[str], redis: Redis) -> None:
     lock = f"signal_radar:analyst:refresh:{market}:{universe}"
     if not await acquire_lock(redis, lock, REFRESH_LOCK_TTL):
         return
@@ -163,6 +171,19 @@ async def _refresh_in_background(market: str, universe: str, symbols: list[str],
         logger.exception("signal_radar_analyst_refresh_failed", market=market, universe=universe)
     finally:
         await release_lock(redis, lock)
+
+
+async def cached_with_refresh(
+    market: str, scope: str, symbols: list[str], redis: Redis, now: datetime,
+) -> dict[str, dict]:
+    """读这些股票的评级变动缓存；缺失 / 过期的交给后台补（带锁，scope 区分不同调用方的锁）。返回已有缓存。"""
+    cached = await _read_cache(redis, symbols)
+    stale = [s for s in symbols if _is_stale(cached.get(s), now)]
+    if stale:
+        task = asyncio.create_task(refresh_in_background(market, scope, stale, redis))
+        _background.add(task)
+        task.add_done_callback(_background.discard)
+    return cached
 
 
 async def analyst_events(
@@ -182,15 +203,10 @@ async def analyst_events(
     pairs = await resolve_constituents(market, redis=redis, universe_key=uni.key)
     names = {s: n for s, n in pairs}
     try:
-        cached = await _read_cache(redis, sorted(names))
+        cached = await cached_with_refresh(market, uni.key, sorted(names), redis, now)
     except Exception:
         logger.exception("signal_radar_analyst_events_read_failed", market=market)
         return resp(available=False)
-    stale = [s for s in names if _is_stale(cached.get(s), now)]
-    if stale:
-        task = asyncio.create_task(_refresh_in_background(market, uni.key, stale, redis))
-        _background.add(task)
-        task.add_done_callback(_background.discard)
     tags = await sectors.load_sector_tags(market, redis)
     window = max(1, days)
     history = {s: cached[s]["actions"] for s in names if s in cached}

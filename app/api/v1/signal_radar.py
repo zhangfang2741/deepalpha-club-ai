@@ -25,6 +25,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.signal_radar import (
     RadarAnalystEventsResponse,
+    RadarFundamentalResponse,
     RadarGradeEventsResponse,
     RadarSectorDayOut,
     RadarSectorPoolsOut,
@@ -49,6 +50,7 @@ from app.services.signal_radar.service import (
 from app.services.chan.signal_policy import DEFAULT_MODE, normalize_mode
 from app.services.watchlist import display_name, list_items
 from app.services.signal_radar.analyst_events import analyst_events
+from app.services.signal_radar.fundamental_top import fundamental_top
 from app.services.signal_radar.grade_events import grade_events
 from app.services.signal_radar.universe import get_universe, supported_markets
 
@@ -283,6 +285,23 @@ async def signal_radar_grade_events(
 ) -> RadarGradeEventsResponse:
     """基本面研究 tab：股票池里每天综合等级升 / 降的股票（事实陈列，不打分不推荐）。"""
     resp = await grade_events(market, universe, redis=redis, days=days)
+    if resp is None:
+        raise HTTPException(status_code=400, detail=f"不支持的市场/universe：{market}/{universe}")
+    return resp
+
+
+@router.get("/fundamental-top", response_model=RadarFundamentalResponse)
+@limiter.limit("30 per minute")
+async def signal_radar_fundamental_top(
+    request: Request,
+    market: str = Query(default="us", description="市场：us / cn / hk"),
+    universe: str | None = Query(default=None, description="universe 键；缺省=该市场默认"),
+    limit: int = Query(default=50, ge=1, le=100, description="返回前多少只（按综合等级从高到低）"),
+    user: User = Depends(get_current_user),  # noqa: ARG001
+    redis: Redis = Depends(get_redis),
+) -> RadarFundamentalResponse:
+    """基本面雷达：股票池里当前综合等级最高的若干只（含近 30 天券商评级净上调 / 下调角标，仅美股）。"""
+    resp = await fundamental_top(market, universe, redis=redis, limit=limit)
     if resp is None:
         raise HTTPException(status_code=400, detail=f"不支持的市场/universe：{market}/{universe}")
     return resp
