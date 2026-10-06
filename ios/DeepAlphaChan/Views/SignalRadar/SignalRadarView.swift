@@ -387,6 +387,10 @@ struct SignalRadarView: View {
                     if let n = vm.response?.qualityGoodCount, n > 0 {
                         Text(L("%lld 只", n)).font(.caption.weight(.semibold)).foregroundColor(Theme.textPrimary)
                     }
+                    // 一句话说完「好股票里有没有买点」：近期（雷达展示的这些天）出现过买点的好股票只数
+                    let buyStocks = Set(vm.days.flatMap(\.signals).filter { $0.side == "buy" }.map(\.symbol)).count
+                    Text(buyStocks > 0 ? L("· 近期 %lld 只有买点", buyStocks) : L("· 近期没有买点"))
+                        .font(.caption).foregroundColor(buyStocks > 0 ? Theme.up : Theme.textSecondary)
                     Spacer(minLength: 4)
                     Text(L("名单")).font(.caption.weight(.semibold)).foregroundColor(Theme.accent)
                     Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))

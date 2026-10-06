@@ -1300,3 +1300,5 @@
 "%@ 好股票" = "%@ good stocks";
 "近期有买点 · %lld 只" = "With recent buy points · %lld";
 "近期只有卖点 · %lld 只" = "Only sell points lately · %lld";
+"· 近期 %lld 只有买点" = "· %lld with recent buy points";
+"· 近期没有买点" = "· no recent buy points";
