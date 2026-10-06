@@ -31,7 +31,7 @@ enum ReportCache {
     }
 
     /// 已缓存直接返回本地文件；否则下载、校验确实是 PDF 后落盘。
-    static func load(_ remote: URL, isPDF: Bool = true) async throws -> URL {
+    static func load(_ remote: URL, isPDF: Bool = true, onProgress: (@Sendable (Double?) -> Void)? = nil) async throws -> URL {
         let local = localURL(for: remote)
         if FileManager.default.fileExists(atPath: local.path), !isPDF || PDFDocument(url: local) != nil { return local }
         var request = URLRequest(url: remote)
@@ -39,13 +39,69 @@ enum ReportCache {
             // SEC 要求声明身份的 User-Agent，否则可能被拒
             request.setValue("DeepAlpha research contact@deepalpha.club", forHTTPHeaderField: "User-Agent")
         }
-        let (tmp, resp) = try await URLSession.shared.download(for: request)
+        let (tmp, resp) = try await ReportDownloader(onProgress: onProgress).download(request)
         guard (resp as? HTTPURLResponse)?.statusCode == 200, !isPDF || PDFDocument(url: tmp) != nil else {
             throw URLError(.cannotParseResponse)
         }
         try? FileManager.default.removeItem(at: local)
         try FileManager.default.moveItem(at: tmp, to: local)
         return local
+    }
+}
+
+/// 带进度回调的下载：URLSession 的 async download 拿不到进度，所以自己接一个下载代理。
+/// 进度为 nil 表示服务器没给总大小（只能转圈）。
+final class ReportDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+    private let onProgress: (@Sendable (Double?) -> Void)?
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<(URL, URLResponse), Error>?
+    private var task: URLSessionDownloadTask?
+    private var session: URLSession?
+
+    init(onProgress: (@Sendable (Double?) -> Void)?) { self.onProgress = onProgress }
+
+    func download(_ request: URLRequest) async throws -> (URL, URLResponse) {
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (c: CheckedContinuation<(URL, URLResponse), Error>) in
+                let s = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+                let t = s.downloadTask(with: request)
+                lock.lock(); continuation = c; session = s; task = t; lock.unlock()
+                t.resume()
+            }
+        } onCancel: {
+            lock.lock(); let t = task; lock.unlock()
+            t?.cancel()
+        }
+    }
+
+    private func finish(_ result: Result<(URL, URLResponse), Error>) {
+        lock.lock()
+        let c = continuation; continuation = nil
+        let s = session; session = nil
+        lock.unlock()
+        s?.finishTasksAndInvalidate()
+        c?.resume(with: result)
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
+                    totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        onProgress?(totalBytesExpectedToWrite > 0 ? Double(totalBytesWritten) / Double(totalBytesExpectedToWrite) : nil)
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        // 临时文件在这个回调返回后就会被系统删掉，必须在这里挪走
+        let dest = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        do {
+            try FileManager.default.moveItem(at: location, to: dest)
+            guard let resp = downloadTask.response else { throw URLError(.badServerResponse) }
+            finish(.success((dest, resp)))
+        } catch {
+            finish(.failure(error))
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error { finish(.failure(error)) }
     }
 }
 
@@ -63,6 +119,7 @@ struct ReportReaderView: View {
     @State private var shareURL: URL?
     @State private var failed = false
     @State private var downloaded = false
+    @State private var progress: Double?
 
     var body: some View {
         NavigationStack {
@@ -108,17 +165,27 @@ struct ReportReaderView: View {
             }
         } else {
             VStack(spacing: 10) {
-                ProgressView()
-                Text(L("正在下载…（只需首次，之后缓存在本机）")).font(.caption).foregroundStyle(Theme.textSecondary)
+                if let progress {
+                    ProgressView(value: progress).frame(width: 180)
+                    Text(L("正在下载… %lld%%", Int((progress * 100).rounded()))).font(.subheadline).foregroundStyle(Theme.textPrimary)
+                        .monospacedDigit()
+                } else {
+                    ProgressView()
+                    Text(L("正在下载…")).font(.subheadline).foregroundStyle(Theme.textPrimary)
+                }
+                Text(L("只需首次，之后缓存在本机")).font(.caption).foregroundStyle(Theme.textSecondary)
             }
         }
     }
 
     private func load() async {
         failed = false
+        progress = nil
         guard kind != .page else { return }
         do {
-            let local = try await ReportCache.load(remote, isPDF: kind == .pdf)
+            let local = try await ReportCache.load(remote, isPDF: kind == .pdf) { p in
+                Task { @MainActor in progress = p }
+            }
             localURL = local
             shareURL = ReportCache.shareCopy(of: local, name: shareName ?? title)
             downloaded = true

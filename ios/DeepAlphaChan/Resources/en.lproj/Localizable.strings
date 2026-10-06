@@ -1545,3 +1545,6 @@
 "加载失败，请检查网络后重试" = "Failed to load. Check your network and try again";
 "正在下载…（只需首次，之后缓存在本机）" = "Downloading… (first time only, then cached on this device)";
 "页面打不开，可能是对方网站限制访问" = "This page can't be opened; the site may restrict access";
+"正在下载… %lld%%" = "Downloading… %lld%%";
+"正在下载…" = "Downloading…";
+"只需首次，之后缓存在本机" = "First time only, then cached on this device";
