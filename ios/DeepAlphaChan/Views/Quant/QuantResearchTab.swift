@@ -66,16 +66,6 @@ struct QuantResearchTab: View {
             if !isStatic {
                 VStack(spacing: 0) {
                     DisclosureGroup {
-                        FiveDimensionChart(dimensions: r.scoredDimensions, symbol: r.symbol)
-                            .allowsHitTesting(false)
-                            .accessibilityElement(children: .ignore)
-                            .accessibilityLabel(r.scoredDimensions.map { "\($0.name) \($0.grade ?? L("暂无"))" }.joined(separator: "，"))
-                    } label: {
-                        Label(L("五维图对比"), systemImage: "chart.xyaxis.line")
-                            .frame(minHeight: 44)
-                    }
-                    Divider().overlay(Theme.border)
-                    DisclosureGroup {
                         VStack(alignment: .leading, spacing: 12) {
                             if let asOf = r.asOf {
                                 Text(asOfText(asOf)).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)

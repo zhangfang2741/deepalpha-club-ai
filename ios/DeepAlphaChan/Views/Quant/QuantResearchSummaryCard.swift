@@ -45,6 +45,17 @@ struct QuantResearchSummaryCard: View {
                 }
                 Spacer(minLength: 0)
             }
+            if !isStatic, research.scoredDimensions.count >= 3 {
+                Divider().overlay(Theme.border)
+                // 五维图：越靠外 = 在同板块里排名越靠前；只读展示，各维度的详情在下方成绩单里点开
+                FiveDimensionChart(dimensions: research.scoredDimensions, symbol: research.symbol)
+                    .allowsHitTesting(false)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(research.scoredDimensions.map { "\($0.name) \($0.grade ?? L("暂无"))" }.joined(separator: "，"))
+                Text(L("越靠外，说明在同板块里排名越靠前；虚线是板块中位水平。"))
+                    .font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .center).multilineTextAlignment(.center)
+            }
             if research.overall?.capped == true, let note = research.overall?.note {
                 Text(note).font(QuantTypography.metadata).foregroundStyle(Theme.segment)
                     .fixedSize(horizontal: false, vertical: true)
