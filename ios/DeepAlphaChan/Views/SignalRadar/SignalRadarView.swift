@@ -792,7 +792,8 @@ struct SignalRadarView: View {
                             days: vm.days, sectorName: { vm.sectorName($0) },
                             onOpen: { symbol, name in
                                 pendingGood = (symbol, name)
-                                panel = nil
+                                // panelView 的参数也叫 panel（let 常量），要关面板必须写 self.panel
+                                self.panel = nil
                             })
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
