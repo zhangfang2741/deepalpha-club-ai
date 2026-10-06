@@ -1,6 +1,6 @@
 import Foundation
 
-/// 「好股票」名单的数据：当前（市场, 指数）里综合等级最高的若干只（含近 30 天券商评级净上调 / 下调，仅美股）。
+/// 「好股票」名单的数据：当前（市场, 指数）里综合等级最高的若干只（含近 90 天券商评级净上调 / 下调，仅美股）。
 /// 门槛由后端定（雷达响应的 qualityThreshold），这里只负责拉名单；每只股票有没有买卖点由雷达自己的信号判断。
 @MainActor
 final class GoodStocksViewModel: ObservableObject {

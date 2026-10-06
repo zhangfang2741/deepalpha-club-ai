@@ -175,11 +175,11 @@ deepalpha-club-ai/
 > **雷达 = 好股票的缠论买卖点**（2026-10-06 起，门槛由我们定、**不让用户选**）：用户要感知的是「市场怎么样、行业怎么样、好的股票有哪些、有没有买卖点」——顶部市场卡 / 行业横条 / 雷达画布 / 好股票名单依次回答。
 > 此前试过的「基本面研究」并列 tab（每日综合评级升降、综合等级榜、分析师评级 tab）都已下线：A 股 / 港股评级历史太短长期空白、榜单几乎不变、全红榜单读起来像推荐。**不要**再做并列 tab / 日期轨式的基本面视图。
 > **基本面门槛**（`signal_radar/quality_view.py`）：新版 App 请求带 `quality=good`（仅 `scope=all` 生效），接口层**现算、不写回快照**（快照仍存全部在场信号；旧版 App 不带 quality，行为不变）；
-> 只留**当前**综合等级在 `GOOD_GRADES`（A+ / A / A- / B+，13 档最高 4 档）的股票的买卖点——用当前等级、不是信号当天的（评级历史短，历史日期同样只留当前达标的）；
+> 只留**当前**综合等级达标的股票的买卖点——用当前等级、不是信号当天的（评级历史短，历史日期同样只留当前达标的）；**门槛随股票池自适应**（`quality_view.choose_cutoff`）：目标 = 有评级股票的前 `GOOD_SHARE`（25%），至少 `GOOD_MIN_COUNT`（8）只；从高到低累计各等级只数，到达目标的那一档即门槛、**整档纳入不在档内切**（界面才能写「X 及以上」），且不低于 `GOOD_FLOOR`（B，小池子 / 整体偏弱的池子不凑数）。2026-10-06 实测：纳指 100 → B（16 只）、标普 500 → B、沪深 300 → A-（78 只）、恒生指数 → A-、恒生科技 → B（8 只）；
 > 留下的信号 `quant_grade / score / as_of` 换成当前等级（气泡最后一行写等级字母）；买卖点数 / 行业计数按留下的重算；响应带 `quality_threshold / quality_good_count / quality_rated_count`，App 在雷达上方写「仅看综合评级 B+ 及以上的好股票 · N 只」并给名单入口。
-> **评级读取失败时原样返回（不能因为评级挂了让雷达变空）**；达标名单 Redis 缓存 10 分钟（`signal_radar:good:v1:*`）。改门槛改 `GOOD_GRADES`，无需升 `_mode_ns`（不进快照）。
-> **分析师评级只作角标**（`RadarSignal.analystUp / analystDown` → `analystMark`，`RadarBubble` 右上角白色小胶囊）：近 30 天券商净上调「▲n」（红）/ 净下调「▼n」（绿），净 0 或没有数据不画；只做美股（A 股东财研报无上调 / 下调字段、港股只有最新评级）。
-> 数据 = FMP 个股评级变动 `grades`（`signal_radar/analyst_events.py`），**只对留下信号的好股票拉**，**接口只读 Redis 缓存**（`signal_radar:analyst:v1:{symbol}`，24 小时 TTL、6 小时算过期）；缺失 / 过期的由后台任务补（`FmpClient` 批量额度、并发 4、带锁），响应 `analyst_pending` = 还在补的只数，App 的静默轮询（`refreshWhileBackfilling`，90 秒）在 >0 时继续重拉。**不要**在请求路径里同步逐只拉 FMP。
+> **评级读取失败时原样返回（不能因为评级挂了让雷达变空）**；达标名单 Redis 缓存 10 分钟（`signal_radar:good:v1:*`）。改门槛改 `GOOD_SHARE / GOOD_MIN_COUNT / GOOD_FLOOR`，无需升 `_mode_ns`（不进快照）。
+> **分析师评级只作角标**（`RadarSignal.analystUp / analystDown` → `analystMark`，`RadarBubble` 右上角白色小胶囊）：近 90 天券商净上调「▲n」（红）/ 净下调「▼n」（绿），净 0 或没有数据不画；只做美股（A 股东财研报无上调 / 下调字段、港股只有最新评级）。
+> 数据 = FMP 个股评级变动 `grades`（`signal_radar/analyst_events.py`），**只对留下信号的好股票拉**，**接口只读 Redis 缓存**（`signal_radar:analyst:v2:{symbol}`，24 小时 TTL、6 小时算过期）；缺失 / 过期的由后台任务补（`FmpClient` 批量额度、并发 4、带锁），响应 `analyst_pending` = 还在补的只数，App 的静默轮询（`refreshWhileBackfilling`，90 秒）在 >0 时继续重拉。**不要**在请求路径里同步逐只拉 FMP。
 > **买点优先**（2026-10-06）：好股票里的买点是用户最关心的——画布超过 `ringFieldCap` 个要折叠时先折卖点（`SignalRadarView.buyFirst`，买点排前、各自保持时间从新到旧）；好股票名单分「近期有买点 / 近期只有卖点 / 暂无买卖点」三组，每行优先展示最近的买点。
 > **好股票名单**（雷达上方「名单」入口，`GoodStocksSheet` + `GET /signal-radar/fundamental-top`，会员功能）：当前综合等级达标的股票，分三组（有没有买卖点按雷达当前各展示日的信号判断），每行写等级、券商角标与最近一个买卖点；点行进个股详情。名单取全池前 50（按等级高 → 低、综合分高 → 低），门槛用雷达响应的 `qualityThreshold` 在 App 端截。
 > 旧接口 `GET /signal-radar/grade-events`（每日升降）与 `/analyst-events`（每日券商净升降）后端保留、App 不再使用。

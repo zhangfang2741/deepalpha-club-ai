@@ -1287,7 +1287,6 @@
 "%@ 综合评级榜" = "%@ composite rating ranking";
 "范围：当前所选指数的成分股。每只股票每天有一个综合等级（A+ 到 F 共 13 档），雷达取每只股票最新的一个，从高到低排。" = "Scope: constituents of the selected index. Each stock has a daily composite grade (13 levels, A+ to F); the radar uses each stock's latest grade, highest first.";
 "环：综合等级所在的段。最里圈 A 段（A+ / A / A-），中间圈 B 段，最外圈 C 及以下。气泡越大、颜色越深，等级越高。" = "Rings: the grade band. Innermost = A (A+ / A / A-), middle = B, outermost = C and below. Bigger and darker = higher grade.";
-"角标：气泡右上角的白色小标是近 30 天券商评级的净调整——▲n 表示上调比下调多 n 家，▼n 表示下调比上调多 n 家，相同或没有则不显示。只统计美股；A 股、港股暂时没有这项数据。" = "Badge: the small white tag at a bubble's top right is the net broker rating change over the last 30 days — ▲n means n more upgrades than downgrades, ▼n the reverse; nothing is shown when equal or unavailable. US stocks only; A-shares and HK have no such data yet.";
 "数量：画布只画等级最高的前 10 只，其余在「查看完整榜单」里看。" = "Count: the canvas shows only the 10 top-rated stocks; see the rest in "View full ranking".";
 "评级与券商调整只是事实陈列，不代表后续涨跌，不构成投资建议。" = "Ratings and broker changes are a record of facts; they do not predict future moves and are not investment advice.";
 "仅看综合评级 %@ 及以上的好股票" = "Only stocks rated %@ or better";
@@ -1297,7 +1296,7 @@
 "正在加载好股票名单…" = "Loading good stocks…";
 "这个范围暂时没有达标的股票" = "No stocks meet the bar in this range yet";
 "暂无买卖点 · %lld 只" = "No signals · %lld";
-"好股票 = 当前综合等级不低于 %@ 的股票；券商角标为近 30 天净上调 / 净下调（仅美股）。仅为事实陈列，不构成投资建议。" = "Good stocks = current composite grade of %@ or better; broker badge = net upgrades / downgrades over the last 30 days (US only). A record of facts, not investment advice.";
+"好股票 = 当前综合等级不低于 %@ 的股票；券商角标为近 90 天净上调 / 净下调（仅美股）。仅为事实陈列，不构成投资建议。" = "Good stocks = current composite grade of %@ or better; broker badge = net upgrades / downgrades over the last 90 days (US only). A record of facts, not investment advice.";
 "%@ 好股票" = "%@ good stocks";
 "近期有买点 · %lld 只" = "With recent buy points · %lld";
 "近期只有卖点 · %lld 只" = "Only sell points lately · %lld";

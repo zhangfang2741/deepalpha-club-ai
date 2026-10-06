@@ -1,7 +1,7 @@
 """雷达「基本面研究」tab：股票池里当前综合等级最高的若干只股票。
 
 不按日期：取每只股票最新一个评级日的综合等级，按等级（A+ 最高）再按综合分排序，返回前 N 只（画布画前 10，其余点「查看全部」）。
-分析师评级只作角标（美股）：近 30 天券商净上调 / 下调家数，由 analyst_events 的缓存读出；这些前 N 只里缓存缺失 / 过期的
+分析师评级只作角标（美股）：近 90 天券商净上调 / 下调家数，由 analyst_events 的缓存读出；这些前 N 只里缓存缺失 / 过期的
 交给后台补（批量额度、带锁），响应 analyst_pending 为还在补的只数。**只陈列事实**：不推荐、不打买卖标签。
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ from app.services.signal_radar.universe import get_universe
 
 DEFAULT_LIMIT = 50
 LOOKBACK_DAYS = 14          # 最新评级日不早于这么多天前（节假日 / 批量漏跑期间不拿过旧的评级冒充当前）
-ANALYST_WINDOW_DAYS = 30
+ANALYST_WINDOW_DAYS = 90
 
 
 def rank_latest(history: dict[str, list[QuantGrade]]) -> list[tuple[str, QuantGrade]]:

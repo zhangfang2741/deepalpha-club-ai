@@ -3,10 +3,11 @@
 产品口径（2026-10-06）：用户要的是「最好的股票里有没有缠论买卖点」，门槛由我们定、不让用户选。
 **不写回快照**（和 legacy_view 一样在接口层现算）：快照仍存全部在场信号、不排雷；只有新版 App 带 quality=good 才筛。
 门槛用每只股票**当前**的综合等级（不是信号当天的），历史日期的买卖点同样只留当前达标的股票。
-分析师角标（美股）= 近 30 天券商净上调 / 下调家数，读 analyst_events 缓存，缺失由后台补。
+分析师角标（美股）= 近 90 天券商净上调 / 下调家数，读 analyst_events 缓存，缺失由后台补。
 """
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime, timedelta
 
 from redis.asyncio import Redis
@@ -17,37 +18,59 @@ from app.schemas.signal_radar import RadarDayOut, RadarSignalOut, SignalRadarRes
 from app.services.quant_research.grading import GRADE_ORDER
 from app.services.signal_radar import analyst_events, fundamental_top
 
-# 「好股票」= 综合等级 A+ / A / A- / B+（13 档里的最高 4 档）。美股标普 500 约四分之一、纳指 100 约三分之一的有评级股票达标。
-GOOD_GRADES = tuple(GRADE_ORDER[:4])
-THRESHOLD_LABEL = GOOD_GRADES[-1]
+# 「好股票」门槛随股票池大小自适应（2026-10-06）：目标 = 有评级股票的前 GOOD_SHARE，但至少 GOOD_MIN_COUNT 只；
+# 从高到低累计各等级只数，到达目标的那一档就是门槛（整档纳入，不在同一档里切——界面才能写「X 及以上」）；
+# 门槛不低于 GOOD_FLOOR（小池子 / 整体偏弱的池子不能为了凑数把中下等级算成好股票）。
+# 实测（2026-10-06）：纳指 100 → B（16 只）、标普 500 → B、沪深 300 → A-（78 只）、恒生指数 → A-、恒生科技 → B（8 只）。
+GOOD_SHARE = 0.25
+GOOD_MIN_COUNT = 8
+GOOD_FLOOR = "B"
 GOOD_CACHE_TTL = 600
-ANALYST_WINDOW_DAYS = 30
+ANALYST_WINDOW_DAYS = 90
+
+
+def choose_cutoff(grades: list[str]) -> str:
+    """grades：有评级股票的等级（任意顺序）。返回门槛等级（含）：达标 = 等级不低于它。没有评级时返回 GOOD_FLOOR。"""
+    if not grades:
+        return GOOD_FLOOR
+    target = max(GOOD_MIN_COUNT, math.ceil(GOOD_SHARE * len(grades)))
+    floor_idx = GRADE_ORDER.index(GOOD_FLOOR)
+    cum = 0
+    for idx, grade in enumerate(GRADE_ORDER):
+        cum += sum(1 for g in grades if g == grade)
+        if cum >= target:
+            return GRADE_ORDER[min(idx, floor_idx)]
+    return GRADE_ORDER[floor_idx]
 
 
 def _key(market: str, universe: str) -> str:
     return f"signal_radar:good:v1:{market}:{universe}"
 
 
-async def good_stocks(market: str, universe: str, redis: Redis, now: datetime) -> tuple[dict[str, dict], int] | None:
-    """{雷达代码: {grade, score, as_of}}（只含达标的）和有评级的总只数；读取失败返回 None。Redis 缓存 10 分钟。"""
+async def good_stocks(
+    market: str, universe: str, redis: Redis, now: datetime,
+) -> tuple[dict[str, dict], int, str] | None:
+    """({雷达代码: {grade, score, as_of}}（只含达标的）, 有评级的总只数, 门槛等级)；读取失败返回 None。Redis 缓存 10 分钟。"""
     key = _key(market, universe)
     try:
         cached = await get_json(redis, key)
         if cached and isinstance(cached.get("good"), dict):
-            return cached["good"], int(cached.get("rated", 0))
+            return cached["good"], int(cached.get("rated", 0)), str(cached.get("cutoff") or GOOD_FLOOR)
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_good_cache_read_failed", error=str(e))
     loaded = await fundamental_top.load_ranked(market, universe, redis, now.date())
     if loaded is None:
         return None
     ranked, _ = loaded
+    cutoff = choose_cutoff([g.grade for _, g in ranked if g.grade])
+    ok = GRADE_ORDER[:GRADE_ORDER.index(cutoff) + 1]
     good = {s: {"grade": g.grade, "score": g.score, "as_of": g.as_of.isoformat()}
-            for s, g in ranked if g.grade in GOOD_GRADES}
+            for s, g in ranked if g.grade in ok}
     try:
-        await set_json(redis, key, {"good": good, "rated": len(ranked)}, expire=GOOD_CACHE_TTL)
+        await set_json(redis, key, {"good": good, "rated": len(ranked), "cutoff": cutoff}, expire=GOOD_CACHE_TTL)
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_good_cache_write_failed", error=str(e))
-    return good, len(ranked)
+    return good, len(ranked), cutoff
 
 
 def filter_day(day: RadarDayOut, good: dict[str, dict], marks: dict[str, tuple[int, int]]) -> RadarDayOut:
@@ -78,14 +101,14 @@ def filter_day(day: RadarDayOut, good: dict[str, dict], marks: dict[str, tuple[i
 async def apply_quality(
     resp: SignalRadarResponse, redis: Redis, *, now: datetime | None = None,
 ) -> SignalRadarResponse:
-    """只留达标股票的买卖点（门槛 GOOD_GRADES）。评级读取失败时原样返回（不能因为评级挂了让雷达变空）。"""
+    """只留达标股票的买卖点（门槛自适应，见 choose_cutoff）。评级读取失败时原样返回（不能因为评级挂了让雷达变空）。"""
     now = now or datetime.now(UTC)
     if not resp.universe or not resp.days:
         return resp
     loaded = await good_stocks(resp.market, resp.universe, redis, now)
     if loaded is None:
         return resp
-    good, rated = loaded
+    good, rated, cutoff = loaded
     marks: dict[str, tuple[int, int]] = {}
     pending = 0
     if resp.market in analyst_events.SUPPORTED_MARKETS:
@@ -97,5 +120,5 @@ async def apply_quality(
             pending = sum(1 for s in symbols if s not in cached)
     return resp.model_copy(update={
         "days": [filter_day(d, good, marks) for d in resp.days],
-        "quality": "good", "quality_threshold": THRESHOLD_LABEL, "quality_good_count": len(good),
+        "quality": "good", "quality_threshold": cutoff, "quality_good_count": len(good),
         "quality_rated_count": rated, "analyst_pending": pending})

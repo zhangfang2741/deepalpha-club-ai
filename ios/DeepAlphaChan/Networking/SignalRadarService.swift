@@ -23,7 +23,7 @@ enum SignalRadarService {
         return try await APIClient.shared.get("/signal-radar/demo", query: query)
     }
 
-    /// 好股票名单：某 (市场, universe) 当前综合等级最高的若干只（含近 30 天券商评级净上调 / 下调，仅美股）。
+    /// 好股票名单：某 (市场, universe) 当前综合等级最高的若干只（含近 90 天券商评级净上调 / 下调，仅美股）。
     static func fundamentalTop(market: String, universe: String? = nil, limit: Int = 50) async throws -> FundamentalTopResponse {
         var query = ["market": market, "limit": String(limit)]
         if let universe, !universe.isEmpty { query["universe"] = universe }

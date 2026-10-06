@@ -48,7 +48,7 @@ struct GoodStocksSheet: View {
                         section(L("近期只有卖点 · %lld 只", onlySell.count), onlySell)
                         section(L("暂无买卖点 · %lld 只", without.count), without)
                     }
-                    Text(L("好股票 = 当前综合等级不低于 %@ 的股票；券商角标为近 30 天净上调 / 净下调（仅美股）。仅为事实陈列，不构成投资建议。", threshold ?? ""))
+                    Text(L("好股票 = 当前综合等级不低于 %@ 的股票；券商角标为近 90 天净上调 / 净下调（仅美股）。仅为事实陈列，不构成投资建议。", threshold ?? ""))
                         .font(.caption2).foregroundColor(Theme.textSecondary)
                         .padding(.top, 8)
                 }

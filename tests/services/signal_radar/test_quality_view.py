@@ -16,9 +16,27 @@ GOOD = {"AAA": {"grade": "A+", "score": 80.0, "as_of": "2026-10-05"},
         "BBB": {"grade": "B+", "score": 60.0, "as_of": "2026-10-05"}}
 
 
-def test_good_grades_are_top_four():
-    assert qv.GOOD_GRADES == ("A+", "A", "A-", "B+")
-    assert qv.THRESHOLD_LABEL == "B+"
+def _pool(**counts):
+    return [g for g, n in counts.items() for _ in range(n)]
+
+
+def test_choose_cutoff_adapts_to_pool_and_respects_floor():
+    # 沪深 300 类：285 只，目标 72，A+30 / A27 / A-21 累计 78 ≥ 72 → A-
+    big = _pool(**{"A+": 30, "A": 27, "A-": 21, "B+": 16, "B": 6, "C": 185})
+    assert qv.choose_cutoff(big) == "A-"
+    # 恒生科技类：30 只，目标 max(8, 8)=8；A3 / A-3 / B2 累计 8 → B（整档纳入）
+    small = _pool(**{"A": 3, "A-": 3, "B": 2, "B-": 1, "C+": 5, "F": 16})
+    assert qv.choose_cutoff(small) == "B"
+    # 池子整体偏弱：目标凑不够也不低于 B 的地板
+    weak = _pool(**{"A": 1, "B-": 3, "C": 20})
+    assert qv.choose_cutoff(weak) == "B"
+    assert qv.choose_cutoff([]) == "B"
+
+
+def test_choose_cutoff_never_cuts_inside_a_grade():
+    # 目标 25% × 40 = 10：A+ 6 / A 6 累计 12 ≥ 10 → 整档纳入 A（共 12 只，不是 10 只）
+    grades = _pool(**{"A+": 6, "A": 6, "B": 8, "D": 20})
+    assert qv.choose_cutoff(grades) == "A"
 
 
 def test_filter_day_keeps_good_overrides_grade_and_recounts():
@@ -43,7 +61,7 @@ async def test_apply_quality_marks_response_and_survives_rating_failure(monkeypa
     now = datetime(2026, 10, 6, tzinfo=UTC)
 
     async def ok(market, universe, redis, now):
-        return GOOD, 120
+        return GOOD, 120, "B+"
 
     monkeypatch.setattr(qv, "good_stocks", ok)
     out = await qv.apply_quality(resp, None, now=now)    # type: ignore[arg-type]  # cn：不碰 analyst 缓存

@@ -181,7 +181,7 @@ struct RadarSignal: Decodable, Identifiable, Hashable {
     let ageDays: Int?
     /// 行业 key（与行业状态一致）；没有行业分类时为 nil。
     let sector: String?
-    /// 近 30 天券商评级上调 / 下调家数（仅美股、后端 quality=good 时给；没有数据为 nil）。
+    /// 近 90 天券商评级上调 / 下调家数（仅美股、后端 quality=good 时给；没有数据为 nil）。
     var analystUp: Int? = nil
     var analystDown: Int? = nil
 

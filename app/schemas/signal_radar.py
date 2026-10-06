@@ -39,8 +39,8 @@ class RadarSignalOut(BaseModel):
     quant_status: str | None = Field(default=None, description="eligible / below_threshold / missing / stale")
     age_days: int | None = Field(default=None, description="距展示日的交易日数，当天为 0")
     sector: str | None = Field(default=None, description="行业 key：美股与 regime 行业一致（GICS 一级），A 股为申万一级行业名，港股为恒生一级行业名；没有行业分类时为空")
-    analyst_up: int | None = Field(default=None, description="近 30 天券商上调家数（仅美股、quality=good 时给；None = 没有数据）")
-    analyst_down: int | None = Field(default=None, description="近 30 天券商下调家数；None 同上")
+    analyst_up: int | None = Field(default=None, description="近 90 天券商上调家数（仅美股、quality=good 时给；None = 没有数据）")
+    analyst_down: int | None = Field(default=None, description="近 90 天券商下调家数；None 同上")
 
 
 class RadarExcludedOut(BaseModel):
@@ -230,7 +230,7 @@ class RadarAnalystEventsResponse(BaseModel):
 
 
 class RadarFundamentalItemOut(BaseModel):
-    """基本面雷达的一只股票：当前综合等级 + 近 30 天券商评级净上调 / 下调（美股）。"""
+    """基本面雷达的一只股票：当前综合等级 + 近 90 天券商评级净上调 / 下调（美股）。"""
 
     symbol: str
     name: str
@@ -238,8 +238,8 @@ class RadarFundamentalItemOut(BaseModel):
     score: float | None = Field(default=None, description="综合分 0~100")
     as_of: str = Field(description="评级日 YYYY-MM-DD")
     sector: str | None = None
-    analyst_up: int | None = Field(default=None, description="近 30 天上调家数；None = 没有数据（A 股 / 港股，或还没拉到）")
-    analyst_down: int | None = Field(default=None, description="近 30 天下调家数；None 同上")
+    analyst_up: int | None = Field(default=None, description="近 90 天上调家数；None = 没有数据（A 股 / 港股，或还没拉到）")
+    analyst_down: int | None = Field(default=None, description="近 90 天下调家数；None 同上")
 
 
 class RadarFundamentalResponse(BaseModel):
