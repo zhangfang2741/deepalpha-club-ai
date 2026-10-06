@@ -65,7 +65,9 @@ async def get_analyst_overview(symbol: str, lang: Lang, *, redis: Redis | None,
     out = build_overview(symbol, lang, datetime.now(UTC).date(), hist=hist, ptc=ptc, pts=pts,
                          earnings=earnings, grades=grades, quote=quote, grades_news=grades_news)
     await _store(redis, key, out)
-    logger.info("analyst_overview_built", symbol=symbol, status=out.status)
+    logger.info("analyst_overview_built", symbol=symbol, status=out.status,
+                news_rows=len(grades_news) if isinstance(grades_news, list) else None,
+                news_linked=sum(1 for g in out.recent_grades if g.report_url))
     return out
 
 
