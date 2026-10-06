@@ -24,6 +24,8 @@ from app.services.signal_radar.service import (
     SCAN_LOCK_TTL,
     _cache_key,
     compute_demo_day,
+    demo_cache_is_stale,
+    read_demo_cache,
     demo_lock_key,
     list_backfill_markers,
     _SESSIONS_UTC,
@@ -103,6 +105,27 @@ async def _prewarm_once(markets: set[str] | None = None) -> None:
                 )
             finally:
                 await release_lock(redis, lock)
+            await _prewarm_demo(redis, u, mode)
+
+
+async def _prewarm_demo(redis, u, mode: str) -> None:
+    """顺带把免费预览（示例日）快照也预热 / 刷新：没有或陈旧才算，避免免费用户撞上整轮冷启动扫描。"""
+    try:
+        cached = await read_demo_cache(redis, u.market, u.key, mode)
+        if cached is not None and not await demo_cache_is_stale(redis, u.market, u.key, cached, mode):
+            return
+        lock = demo_lock_key(u.market, u.key, mode)
+        if not await acquire_lock(redis, lock, SCAN_LOCK_TTL):
+            return
+        try:
+            await compute_demo_day(u.market, u.key, redis=redis, mode=mode)
+            logger.info("signal_radar_demo_prewarmed", market=u.market, universe=u.key, mode=mode)
+        finally:
+            await release_lock(redis, lock)
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:  # noqa: BLE001 示例日预热失败不影响主预热
+        logger.warning("signal_radar_demo_prewarm_failed", market=u.market, universe=u.key, mode=mode, error=str(e))
 
 
 async def _resume_orphan_backfills() -> None:

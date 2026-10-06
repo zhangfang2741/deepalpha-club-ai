@@ -29,6 +29,10 @@ final class SignalRadarViewModel: ObservableObject {
 
     /// 已放弃拉取预览日的键（失败 / 轮询用尽仍在算 / 返回为空）。被取消不算放弃。
     @Published private(set) var demoGaveUpKey: String?
+    /// 非会员等示例日等了超过 demoWaitSeconds 仍没到：不再让整页卡在「正在扫描」，先展示真实数据，示例日到了再并进来
+    @Published private(set) var demoWaitExpiredKey: String?
+    /// 示例日最多等这么久（缓存命中通常 1 秒内；冷启动要算几分钟，不能让用户干等）
+    static let demoWaitSeconds: UInt64 = 4
 
     /// 未订阅且当前市场/指数的预览日还没到：这段时间不展示真实滚动窗口，否则会先闪出
     /// 最新一天的气泡、预览日到了再跳过去。
@@ -37,7 +41,7 @@ final class SignalRadarViewModel: ObservableObject {
     /// 按后者会先闪一下旧气泡调暗 +「正在刷新」，紧接着又换成「正在扫描」，两条提示前后
     /// 叠着出现。放弃后回落为 false，退回展示真实窗口（最新一天点不开，但至少不是空页）。
     var isAwaitingDemo: Bool {
-        !isPremiumUser && demoDay == nil && demoGaveUpKey != demoKey
+        !isPremiumUser && demoDay == nil && demoGaveUpKey != demoKey && demoWaitExpiredKey != demoKey
     }
 
     /// 订阅层级由外部（持有本 VM 的 View）按 StoreManager 同步，VM 本身不感知
@@ -392,6 +396,12 @@ final class SignalRadarViewModel: ObservableObject {
         loadingDemoKey = key
         // 只清自己设的：切换后新请求已把它改成新键，旧请求收尾时不能把它清掉。
         defer { if loadingDemoKey == key { loadingDemoKey = nil } }
+        // 等太久就先放真实数据出来（示例日之后到了再并进日期轨），不让整页卡在「正在扫描」
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.demoWaitSeconds * 1_000_000_000)
+            guard let self, self.demoDay == nil, self.demoKey == key, self.demoGaveUpKey != key else { return }
+            self.demoWaitExpiredKey = key
+        }
         do {
             var resp = try await SignalRadarService.demo(market: m.rawValue, universe: u)
             var tries = 0

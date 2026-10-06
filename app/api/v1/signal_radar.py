@@ -37,6 +37,7 @@ from app.services.signal_radar.service import (
     _universes_out,
     compute_demo_day,
     compute_market,
+    demo_cache_is_stale,
     peek_cache_entry,
     read_demo_cache,
     read_watchlist_cache,
@@ -268,13 +269,15 @@ async def signal_radar_demo(
         )
     mode = normalize_mode(mode)
     cached = await read_demo_cache(redis, market, uni.key, mode)
+    # 没有缓存、或缓存陈旧：后台起算一次（有缓存时先把旧的返回去，不让免费用户干等整轮扫描）
+    if cached is None or await demo_cache_is_stale(redis, market, uni.key, cached, mode):
+        gkey = _demo_generating_key(market, uni.key, mode)
+        if await acquire_lock(redis, gkey, _GENERATING_TTL):
+            _spawn(_run_demo_scan(market, uni.key, mode))
+            logger.info("signal_radar_demo_scan_spawned", market=market, universe=uni.key, user_id=user.id,
+                        reason="cold" if cached is None else "stale")
     if cached is not None:
         return await _finish(cached, scope, quality, redis)
-
-    gkey = _demo_generating_key(market, uni.key, mode)
-    if await acquire_lock(redis, gkey, _GENERATING_TTL):
-        _spawn(_run_demo_scan(market, uni.key, mode))
-        logger.info("signal_radar_demo_scan_spawned", market=market, universe=uni.key, user_id=user.id)
 
     return SignalRadarResponse(
         market=market,

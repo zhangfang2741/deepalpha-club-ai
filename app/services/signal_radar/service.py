@@ -121,9 +121,12 @@ WATCHLIST_CACHE_TTL = 1800
 
 # 免费预览快照（未订阅用户在雷达上能点开的唯一一天）：缓存键按目标日期区分。
 # 快照用截至今天的数据回看目标日（见 compute_demo_day），新 K 线可能改写结构，
-# 要跟详情页（每次按最新数据算）保持一致，所以半天重算一次，不能按「那天已过去、
-# 结果确定」长期缓存。
-_DEMO_CACHE_TTL = 3600 * 12
+# 要跟详情页（每次按最新数据算）保持一致，所以要定期重算，不能按「那天已过去、结果确定」长期缓存。
+# 但重算很慢（整个指数跑一遍），让用户干等会出现「每次打开都在扫描」：缓存留 3 天，
+# 超过 12 小时算陈旧——陈旧时先返回旧快照、后台悄悄重算（stale-while-revalidate），
+# 定时预热也会顺带刷新它，用户基本碰不到冷启动。
+_DEMO_CACHE_TTL = 3600 * 24 * 3
+_DEMO_STALE_AFTER = 3600 * 12
 # 部分成分股拉数失败时的缩短 TTL：结果能用但不完整，半小时后重算自愈
 _DEMO_DEGRADED_CACHE_TTL = 1800
 
@@ -1370,6 +1373,25 @@ async def read_demo_cache(
         return None
 
 
+async def demo_cache_is_stale(
+    redis: Redis, market: str, universe_key: str, cached: SignalRadarResponse, mode: str = DEFAULT_MODE,
+) -> bool:
+    """示例日快照是否该后台重算。
+
+    写入超过 _DEMO_STALE_AFTER，或评级暂不可用的快照超过 5 分钟，都算陈旧。年龄 = 完整 TTL − 剩余 TTL
+    （降级快照的短 TTL 也会因此被判陈旧）；读不到 TTL 时当作不陈旧。
+    """
+    try:
+        remaining = await redis.ttl(_demo_cache_key(market, universe_key, demo_snapshot_date(), mode))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_demo_cache_ttl_error", market=market, error=str(e))
+        return False
+    if remaining < 0:
+        return True
+    age = _DEMO_CACHE_TTL - remaining
+    return age >= (_UNAVAILABLE_RETRY_AFTER if _quant_unavailable(cached) else _DEMO_STALE_AFTER)
+
+
 def resolve_demo_target(nominal: str, per_symbol_dates: list[list[str]]) -> tuple[str, list[str]]:
     """免费预览的名义日期（上个月 1 号）→（实际展示的交易日, 该日及之前的真实交易日历）。
 
@@ -1439,8 +1461,7 @@ async def _publish_demo(state: _ScanState, resp: SignalRadarResponse, *, redis: 
         return
     # 还有失败的：能用，但缩短缓存让它尽快自愈（后台补齐后会以完整 TTL 重写）
     ttl = _DEMO_CACHE_TTL if not state.failures else _DEMO_DEGRADED_CACHE_TTL
-    if _quant_unavailable(resp):
-        ttl = min(ttl, 300)
+    # 评级暂不可用也保留完整 TTL（短 TTL 会让快照消失、用户撞上冷启动），改由 demo_cache_is_stale 在 5 分钟后判陈旧重算
     try:
         # 键按名义日期：read_demo_cache 只知道 demo_snapshot_date()，不知道对齐后的交易日
         await redis.set(_demo_cache_key(state.market, state.universe.key, state.demo_nominal, state.mode),
