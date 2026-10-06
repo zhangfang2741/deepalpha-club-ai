@@ -10,6 +10,8 @@ struct GoodStocksSheet: View {
     /// 雷达当前所有展示日（最新在前），用来找每只股票最近的买卖点。
     let days: [RadarDay]
     let sectorName: (String) -> String
+    /// 雷达顶部「行业」当前的筛选（nil = 全部行业）：名单跟着只列该行业的股票（后端按 sector 过滤，这里只用来写标题和空态）。
+    var sectorKey: String? = nil
     /// 点某一行：先收起面板，收起后再打开个股。
     let onOpen: (String, String) -> Void
 
@@ -39,10 +41,15 @@ struct GoodStocksSheet: View {
                             .font(.footnote).foregroundColor(Theme.textSecondary)
                             .frame(maxWidth: .infinity).padding(.top, 40)
                     } else if items.isEmpty {
-                        Text(vm.isLoading ? L("正在加载基本面名单…") : L("这个范围暂时没有达标的股票"))
+                        Text(vm.isLoading ? L("正在加载基本面名单…")
+                             : (sectorKey == nil ? L("这个范围暂时没有达标的股票") : L("这个行业暂时没有达标的股票")))
                             .font(.footnote).foregroundColor(Theme.textSecondary)
                             .frame(maxWidth: .infinity).padding(.top, 40)
                     } else {
+                        if let sectorKey {
+                            Text(L("行业：%@ · %lld 只", sectorName(sectorKey), items.count))
+                                .font(.footnote.weight(.semibold)).foregroundColor(Theme.accent)
+                        }
                         // 买点优先：先列近期有买点的，再列只有卖点的，最后是暂无买卖点的
                         section(L("近期有买点 · %lld 只", withBuy.count), withBuy)
                         section(L("近期只有卖点 · %lld 只", onlySell.count), onlySell)

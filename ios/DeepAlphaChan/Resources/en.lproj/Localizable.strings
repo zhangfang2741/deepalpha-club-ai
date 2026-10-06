@@ -1322,3 +1322,5 @@
 "%lld 只 · 近期出现结构信号" = "%lld stocks · recent structure signals";
 "近期没有结构信号" = "No recent structure signals";
 "这是一个投资观察流程：先看市场和行业，再看基本面靠前的股票，最后看它们的缠论结构。内容仅为按规则整理的事实，不构成投资建议。" = "This is an observation flow, not advice: check the market and industry first, then stocks with strong fundamentals, and finally their Chan structure. Content is facts organized by rules and is not investment advice.";
+"这个行业暂时没有达标的股票" = "No stocks in this industry meet the threshold yet";
+"行业：%@ · %lld 只" = "Industry: %@ · %lld stocks";

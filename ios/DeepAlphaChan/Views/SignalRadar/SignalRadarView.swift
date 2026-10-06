@@ -101,8 +101,11 @@ struct SignalRadarView: View {
             // 行业强弱跟着所选日走：雷达翻到哪天，扇区就按哪天收盘的强弱排
             .task(id: vm.sectorBoardKey) { await vm.loadSectorBoardIfNeeded() }
             // 基本面名单：切市场 / 指数时拉一次（会员功能，与雷达同一道门槛）
-            .task(id: "\(vm.market.rawValue)|\(vm.activeUniverseKey)|\(store.isPremium)") {
-                if store.isPremium { await goodVM.load(market: vm.market.rawValue, universe: vm.activeUniverseKey) }
+            // 顶部行业筛选变了也重拉（名单跟行业联动）
+            .task(id: "\(vm.market.rawValue)|\(vm.activeUniverseKey)|\(vm.sectorFilter ?? "")|\(store.isPremium)") {
+                if store.isPremium {
+                    await goodVM.load(market: vm.market.rawValue, universe: vm.activeUniverseKey, sector: vm.sectorFilter)
+                }
             }
             .sheet(item: $panel, onDismiss: {
                 if let g = pendingGood {
@@ -466,7 +469,7 @@ struct SignalRadarView: View {
         .accessibilityLabel(showFlow ? L("收起流程图") : L("展开流程图"))
     }
 
-    /// 雷达画布右上角的「名单」：基本面名单入口（会员功能；有门槛说明才显示）。
+    /// 雷达画布左下角的「名单」：基本面名单入口（会员功能；有门槛说明才显示）。
     /// 以 overlay 叠在画布角上，不占版面、不参与气泡摆位（摆位只取决于数据与画布大小，不预留禁区）。
     @ViewBuilder
     private var goodListButton: some View {
@@ -693,7 +696,7 @@ struct SignalRadarView: View {
             )
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(alignment: .topTrailing) { goodListButton }
+        .overlay(alignment: .bottomLeading) { goodListButton }
     }
 
     /// 雷达画布是否按行业分扇区。**当前关闭**：顶部漏斗已经按「大盘环境 → 最强行业 → 当日信号」
@@ -812,7 +815,7 @@ struct SignalRadarView: View {
             }
         case .goodStocks:
             GoodStocksSheet(vm: goodVM, threshold: vm.response?.qualityThreshold, universeName: currentUniverseName,
-                            days: vm.days, sectorName: { vm.sectorName($0) },
+                            days: vm.days, sectorName: { vm.sectorName($0) }, sectorKey: vm.sectorFilter,
                             onOpen: { symbol, name in
                                 pendingGood = (symbol, name)
                                 // panelView 的参数也叫 panel（let 常量），要关面板必须写 self.panel

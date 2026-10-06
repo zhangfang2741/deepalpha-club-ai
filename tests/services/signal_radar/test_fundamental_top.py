@@ -98,3 +98,26 @@ async def test_analyst_read_cache_uses_one_mget():
     redis.kv[ae.cache_key("BAD")] = "not json"
     out = await ae._read_cache(redis, ["AAA", "BBB", "BAD"])               # type: ignore[arg-type]
     assert list(out) == ["AAA"]
+
+
+async def test_sector_filter_applies_before_limit(monkeypatch):
+    """选了行业：先按行业过滤再取前 limit 只（否则全池前 N 里没有该行业的股票就会空）；rated 仍是全池有评级只数。"""
+    import datetime as dt
+
+    from app.services.signal_radar.quant_filter import QuantGrade
+
+    day = dt.date(2026, 10, 5)
+    ranked = [(f"S{i}", QuantGrade("A", 80.0 - i, day, day)) for i in range(6)]
+
+    async def fake_loaded(market, universe, redis, end):
+        return ranked, {s: s for s, _ in ranked}
+
+    async def fake_tags(market, redis):
+        return {"S0": "电子", "S1": "电子", "S4": "医药生物", "S5": "医药生物"}
+
+    monkeypatch.setattr(ft, "load_ranked", fake_loaded)
+    monkeypatch.setattr(ft.sectors, "load_sector_tags", fake_tags)
+    resp = await ft.fundamental_top("cn", "csi300", redis=None, limit=1, sector="医药生物")  # type: ignore[arg-type]
+    assert resp is not None
+    assert [i.symbol for i in resp.items] == ["S4"]
+    assert resp.rated == 6

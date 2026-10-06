@@ -314,11 +314,12 @@ async def signal_radar_fundamental_top(
     market: str = Query(default="us", description="市场：us / cn / hk"),
     universe: str | None = Query(default=None, description="universe 键；缺省=该市场默认"),
     limit: int = Query(default=50, ge=1, le=100, description="返回前多少只（按综合等级从高到低）"),
+    sector: str | None = Query(default=None, description="只列该行业（雷达顶部行业筛选的 key）；缺省=全部行业"),
     user: User = Depends(get_current_user),  # noqa: ARG001
     redis: Redis = Depends(get_redis),
 ) -> RadarFundamentalResponse:
     """基本面雷达：股票池里当前综合等级最高的若干只（含近 30 天券商评级净上调 / 下调角标，仅美股）。"""
-    resp = await fundamental_top(market, universe, redis=redis, limit=limit)
+    resp = await fundamental_top(market, universe, redis=redis, limit=limit, sector=sector)
     if resp is None:
         raise HTTPException(status_code=400, detail=f"不支持的市场/universe：{market}/{universe}")
     return resp

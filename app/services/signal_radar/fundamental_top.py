@@ -94,8 +94,9 @@ async def load_ranked(
 
 async def fundamental_top(
     market: str, universe_key: str | None, *, redis: Redis, limit: int = DEFAULT_LIMIT, now: datetime | None = None,
+    sector: str | None = None,
 ) -> RadarFundamentalResponse | None:
-    """None = 不支持的 universe。评级读取失败 available=False。"""
+    """None = 不支持的 universe。评级读取失败 available=False。sector 非空时先按行业过滤再取前 limit 只。"""
     uni = get_universe(market, universe_key)
     if uni is None:
         return None
@@ -111,8 +112,11 @@ async def fundamental_top(
     if loaded is None:
         return resp(available=False)
     ranked, names = loaded
-    top = ranked[:max(1, limit)]
     tags = await sectors.load_sector_tags(market, redis)
+    rated_all, newest = len(ranked), max((g.as_of for _, g in ranked), default=None)
+    if sector:
+        ranked = [(s, g) for s, g in ranked if sectors.lookup_tag(tags, s) == sector]
+    top = ranked[:max(1, limit)]
 
     marks: dict[str, tuple[int, int]] = {}
     pending = 0
@@ -130,5 +134,4 @@ async def fundamental_top(
         sector=sectors.lookup_tag(tags, s),
         analyst_up=marks[s][0] if s in marks else None, analyst_down=marks[s][1] if s in marks else None,
     ) for s, g in top]
-    newest = max((g.as_of for _, g in ranked), default=None)
-    return resp(as_of=newest.isoformat() if newest else None, rated=len(ranked), items=items, analyst_pending=pending)
+    return resp(as_of=newest.isoformat() if newest else None, rated=rated_all, items=items, analyst_pending=pending)

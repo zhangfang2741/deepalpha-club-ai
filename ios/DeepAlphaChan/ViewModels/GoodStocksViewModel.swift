@@ -22,15 +22,15 @@ final class GoodStocksViewModel: ObservableObject {
         return items.filter { (Self.gradeOrder.firstIndex(of: $0.grade) ?? Int.max) <= limit }
     }
 
-    func load(market: String, universe: String?) async {
-        let key = "\(market)|\(universe ?? "")"
+    func load(market: String, universe: String?, sector: String? = nil) async {
+        let key = "\(market)|\(universe ?? "")|\(sector ?? "")"
         requestedKey = key
         if key == loadedKey, response != nil { return }
         isLoading = true
         failed = false
         defer { if requestedKey == key { isLoading = false } }
         do {
-            let resp = try await SignalRadarService.fundamentalTop(market: market, universe: universe)
+            let resp = try await SignalRadarService.fundamentalTop(market: market, universe: universe, sector: sector)
             guard requestedKey == key else { return }
             loadedKey = key
             response = resp

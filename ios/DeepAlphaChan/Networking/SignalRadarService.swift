@@ -33,9 +33,11 @@ enum SignalRadarService {
     }
 
     /// 好股票名单：某 (市场, universe) 当前综合等级最高的若干只（含近 90 天券商评级净上调 / 下调，仅美股）。
-    static func fundamentalTop(market: String, universe: String? = nil, limit: Int = 50) async throws -> FundamentalTopResponse {
+    static func fundamentalTop(market: String, universe: String? = nil, sector: String? = nil, limit: Int = 50) async throws -> FundamentalTopResponse {
         var query = ["market": market, "limit": String(limit)]
         if let universe, !universe.isEmpty { query["universe"] = universe }
+        // 选了行业：后端先按行业过滤再取前 limit 只，名单才不会因为全池前 50 里没有该行业而变空
+        if let sector, !sector.isEmpty { query["sector"] = sector }
         return try await APIClient.shared.get("/signal-radar/fundamental-top", query: query)
     }
 }
