@@ -3,6 +3,7 @@ import SwiftUI
 /// 雷达上的量化指标「怎么算的」：基本面门槛、共振标记、券商角标、气泡深浅。
 /// 口径来源：app/services/signal_radar/quality_view.py（门槛）、app/services/chan/sub_level.py（共振）、
 /// analyst_events.py（角标）、chan/signals.py（强弱）。改算法时这里的文字要一起改。
+@MainActor
 enum RadarDerivations {
     typealias Result = DerivationResult
 

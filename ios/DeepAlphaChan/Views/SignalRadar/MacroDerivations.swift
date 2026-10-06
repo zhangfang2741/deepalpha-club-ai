@@ -4,6 +4,7 @@ import SwiftUI
 /// 文字按每一项单独写，数字取当天真实值（后端 `state.inputs`、驱动因素的 flat_band 等）。
 /// 口径来源：app/services/regime（状态）、app/services/macro/drivers.py（驱动因素）、
 /// 情绪分是第三方公开指数、这里只展示。改算法时这里的文字要一起改。
+@MainActor
 enum MacroDerivations {
     typealias Result = DerivationResult
 

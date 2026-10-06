@@ -2,6 +2,7 @@ import SwiftUI
 
 /// 买卖点「怎么识别的」：按严格口径（App 固定口径，见 app/services/chan/signal_policy.py 的 strict）
 /// 一步步讲，数字取这个信号自己的真实值。口径变了这里要一起改。
+@MainActor
 enum SignalDerivation {
     typealias Result = DerivationResult
 
