@@ -101,6 +101,11 @@ struct SignalDetailCard: View {
                 .foregroundStyle(Theme.textSecondary)
                 .lineSpacing(AnalysisType.bodyLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
+            if !isStatic {
+                let derived = SignalDerivation.build(signal)
+                DerivationLink(title: L("%@ 怎么识别的", signal.label), conclusion: derived.conclusion,
+                               steps: derived.steps, caveat: derived.caveat)
+            }
             if signal.displayTime != signal.time {
                 // 雷达与这里的日期都是出现日；图上标记画在所属笔的极值 K 线，所以会在出现日左侧
                 Text(L("%@ 成立（图上虚线末端标「成立」处）；所在笔的极值在 %@，徽标画在那根 K 线。", signal.displayTime, signal.time))
@@ -121,6 +126,7 @@ struct SignalDetailCard: View {
             }
             if signal.type == .buy1 || signal.type == .sell1 {
                 WrapLayout(spacing: 12, lineSpacing: 4) {
+                    if let area = signal.areaRatio { percentRatio(L("面积比"), value: area) }
                     ratio(L("价差比"), value: signal.priceRatio)
                     ratio(L("量能比"), value: signal.volumeRatio)
                     ratio(L("时长比"), value: signal.lengthRatio)
@@ -129,6 +135,15 @@ struct SignalDetailCard: View {
             } else {
                 AnalysisTermLink(term: "买卖点", color: directionColor)
             }
+        }
+    }
+
+    private func percentRatio(_ title: String, value: Double) -> some View {
+        HStack(spacing: 3) {
+            Text(title).font(.caption2).foregroundStyle(Theme.textSecondary)
+            Text(String(format: "%.0f%%", value * 100))
+                .font(.caption.monospacedDigit().bold())
+                .foregroundStyle(Theme.divergence)
         }
     }
 
