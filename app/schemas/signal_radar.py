@@ -186,3 +186,37 @@ class RadarGradeEventsResponse(BaseModel):
     universe_name: str = ""
     days: list[RadarGradeDayOut] = Field(default_factory=list)
     available: bool = Field(default=True, description="False = 评级数据读取失败（不是没有事件）")
+
+
+class RadarAnalystEventOut(BaseModel):
+    """分析师评级 tab 的一条事件：某只股票在某天的券商评级净升 / 降。"""
+
+    symbol: str
+    name: str
+    date: str = Field(description="评级变动日 YYYY-MM-DD")
+    direction: str = Field(description="up = 净上调 / down = 净下调")
+    steps: int = Field(description="净家数 |上调 - 下调|")
+    upgrades: int = Field(description="当天上调家数")
+    downgrades: int = Field(description="当天下调家数")
+    to_bucket: str = Field(description="新评级归类：buy / hold / sell（取同方向最新一条）")
+    firms: list[str] = Field(default_factory=list, description="同方向的券商，最多 3 家")
+    sector: str | None = None
+
+
+class RadarAnalystDayOut(BaseModel):
+    date: str
+    up_count: int
+    down_count: int
+    events: list[RadarAnalystEventOut]
+
+
+class RadarAnalystEventsResponse(BaseModel):
+    """某 (市场, universe) 最近若干天的分析师评级净升降事件（从新到旧）。"""
+
+    market: str
+    universe_key: str
+    universe_name: str = ""
+    days: list[RadarAnalystDayOut] = Field(default_factory=list)
+    available: bool = Field(default=True, description="False = 数据读取失败（不是没有事件）")
+    supported: bool = Field(default=True, description="False = 该市场没有按日券商评级变动数据（A 股 / 港股）")
+    pending_symbols: int = Field(default=0, description="还在后台拉取评级变动的股票只数；>0 时事件可能不全")

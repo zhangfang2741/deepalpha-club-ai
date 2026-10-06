@@ -24,6 +24,7 @@ from app.core.logging import logger
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.signal_radar import (
+    RadarAnalystEventsResponse,
     RadarGradeEventsResponse,
     RadarSectorDayOut,
     RadarSectorPoolsOut,
@@ -47,6 +48,7 @@ from app.services.signal_radar.service import (
 )
 from app.services.chan.signal_policy import DEFAULT_MODE, normalize_mode
 from app.services.watchlist import display_name, list_items
+from app.services.signal_radar.analyst_events import analyst_events
 from app.services.signal_radar.grade_events import grade_events
 from app.services.signal_radar.universe import get_universe, supported_markets
 
@@ -281,6 +283,23 @@ async def signal_radar_grade_events(
 ) -> RadarGradeEventsResponse:
     """基本面研究 tab：股票池里每天综合等级升 / 降的股票（事实陈列，不打分不推荐）。"""
     resp = await grade_events(market, universe, redis=redis, days=days)
+    if resp is None:
+        raise HTTPException(status_code=400, detail=f"不支持的市场/universe：{market}/{universe}")
+    return resp
+
+
+@router.get("/analyst-events", response_model=RadarAnalystEventsResponse)
+@limiter.limit("30 per minute")
+async def signal_radar_analyst_events(
+    request: Request,
+    market: str = Query(default="us", description="市场：us / cn / hk（仅美股有数据，其余 supported=false）"),
+    universe: str | None = Query(default=None, description="universe 键；缺省=该市场默认"),
+    days: int = Query(default=10, ge=1, le=30, description="最近多少个自然日"),
+    user: User = Depends(get_current_user),  # noqa: ARG001
+    redis: Redis = Depends(get_redis),
+) -> RadarAnalystEventsResponse:
+    """分析师评级 tab：股票池里每天被券商净上调 / 净下调评级的股票（事实陈列，不打分不推荐）。"""
+    resp = await analyst_events(market, universe, redis=redis, days=days)
     if resp is None:
         raise HTTPException(status_code=400, detail=f"不支持的市场/universe：{market}/{universe}")
     return resp
