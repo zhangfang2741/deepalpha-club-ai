@@ -3,6 +3,21 @@ import Foundation
 /// 雷达页顶部「宏观 / 行业」两格及其弹层的数据（GET /macro/{market}…）。
 /// A 股 / 港股数据未上线时 `available == false`，格子显示「数据建设中」。
 
+/// 当天喂给状态模型的原料（「怎么算的」说明里带真实数字）。收益 / 波动 / 强弱都是小数（0.05 = 5%）。
+struct MacroStateInputs: Decodable, Equatable {
+    let ret: Double?          // 基准近 20 个交易日涨跌（美股 = 纳指）
+    let vol: Double?          // 基准近 20 个交易日年化波动
+    let vix: Double?          // VIX 点位（只美股）
+    let volRatio: Double?     // 20 日 / 60 日已实现波动比（只 A 股 / 港股，替代 VIX）
+    let ods: Double?          // 进攻篮子 − 防御篮子 近 20 日涨幅差
+    let cf: Double?           // 现金篮子 − 风险资产 近 20 日涨幅差
+
+    enum CodingKeys: String, CodingKey {
+        case ret, vol, vix, ods, cf
+        case volRatio = "vol_ratio"
+    }
+}
+
 /// 大盘市场状态：逐利 / 观望 / 避险。
 struct MacroState: Decodable, Equatable {
     let label: String          // risk_on / neutral / risk_off
@@ -13,9 +28,10 @@ struct MacroState: Decodable, Equatable {
     let pRiskOff: Double
     let daysInState: Int
     let asOf: String
+    let inputs: MacroStateInputs?   // 旧后端没有
 
     enum CodingKeys: String, CodingKey {
-        case label, probability
+        case label, probability, inputs
         case labelText = "label_text"
         case pRiskOn = "p_risk_on"
         case pNeutral = "p_neutral"
@@ -43,11 +59,13 @@ struct MacroDriver: Decodable, Identifiable {
     let impact: String         // positive / negative / neutral
     let text: String
     let asOf: String?
+    let flatBand: Double?      // 持平阈值（与 unit 同单位）；旧后端没有
     var id: String { key }
 
     enum CodingKeys: String, CodingKey {
         case key, name, value, unit, change, direction, impact, text
         case asOf = "as_of"
+        case flatBand = "flat_band"
     }
 }
 

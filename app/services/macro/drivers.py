@@ -85,7 +85,7 @@ def evaluate_driver(spec: DriverSpec, series: list[tuple[str, float]], lang: str
     value = None if spec.unit == "change" else round(latest, 2)
     if len(series) <= WINDOW:
         return MacroDriverOut(key=spec.key, name=name, value=value, unit=spec.unit, impact="neutral",
-                              text=_pick(_UNAVAILABLE, lang), as_of=as_of)
+                              text=_pick(_UNAVAILABLE, lang), as_of=as_of, flat_band=spec.flat_band)
     base = series[-1 - WINDOW][1]
     if spec.unit == "percent":
         change = (latest - base) * 100  # 百分点 → 基点
@@ -103,4 +103,5 @@ def evaluate_driver(spec: DriverSpec, series: list[tuple[str, float]], lang: str
     if spec.key == "curve" and latest < 0:
         text = _INVERTED
     return MacroDriverOut(key=spec.key, name=name, value=value, unit=spec.unit, change=round(change, 1),
-                          direction=direction, impact=impact, text=_pick(text, lang), as_of=as_of)
+                          direction=direction, impact=impact, text=_pick(text, lang), as_of=as_of,
+                          flat_band=spec.flat_band)

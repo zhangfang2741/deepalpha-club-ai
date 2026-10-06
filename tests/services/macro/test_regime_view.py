@@ -67,3 +67,14 @@ def test_history_fills_unconfirmed_tail_with_raw_label():
 def test_history_all_confirmed_has_no_pending():
     pts = state_history([_row("d1", "risk_on"), _row("d2", "risk_on")])
     assert not any(p.pending for p in pts)
+
+
+def test_state_carries_model_inputs_for_explanation():
+    """「怎么算的」要带当天的真实原料：旧数据没有时 inputs 为 None，不影响其它字段。"""
+    row = StateRow("2026-10-05", "risk_on", "risk_on", 0.9, 0.01, 0.09,
+                   ret=0.0312, vol=0.1534, vix=16.8, ods=0.0215, cf=-0.0043)
+    st = build_state([row])
+    assert st is not None and st.inputs is not None
+    assert (st.inputs.ret, st.inputs.vix, st.inputs.ods, st.inputs.cf) == (0.0312, 16.8, 0.0215, -0.0043)
+    assert st.inputs.vol_ratio is None
+    assert build_state([StateRow("2026-10-05", "risk_on", "risk_on", 0.9, 0.01, 0.09)]).inputs is None

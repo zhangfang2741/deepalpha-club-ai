@@ -11,7 +11,7 @@ from sqlmodel import col, select
 
 from app.models.regime_features import RegimeFeatures
 from app.models.regime_sector_features import RegimeSectorFeatures
-from app.schemas.macro import MacroStateOut, MacroStatePoint, SectorBriefOut, SectorRowOut
+from app.schemas.macro import MacroStateInputsOut, MacroStateOut, MacroStatePoint, SectorBriefOut, SectorRowOut
 from app.services.regime.constants import LABEL_ZH, SECTOR_NAME_ZH, SECTOR_SYMBOL
 
 LABEL_EN = {"risk_on": "Risk-on", "neutral": "Neutral", "risk_off": "Risk-off"}
@@ -56,6 +56,13 @@ class StateRow:
     p_risk_on: float | None
     p_neutral: float | None
     p_risk_off: float | None
+    # 当天的模型原料（旧调用方 / 测试可不传）
+    ret: float | None = None
+    vol: float | None = None
+    vix: float | None = None
+    vol_ratio: float | None = None
+    ods: float | None = None
+    cf: float | None = None
 
 
 @dataclass(frozen=True)
@@ -92,7 +99,18 @@ def build_state(rows: list[StateRow], lang: str = "zh") -> MacroStateOut | None:
         label=label, label_text=label_text(label, lang), probability=round(probs.get(label, 0.0), 3),
         p_risk_on=round(probs["risk_on"], 3), p_neutral=round(probs["neutral"], 3),
         p_risk_off=round(probs["risk_off"], 3), days_in_state=days, as_of=last.trade_date,
+        inputs=_inputs(last),
     )
+
+
+def _inputs(r: StateRow) -> MacroStateInputsOut | None:
+    vals = (r.ret, r.vol, r.vix, r.vol_ratio, r.ods, r.cf)
+    if all(v is None for v in vals):
+        return None
+    def rd(v: float | None, n: int) -> float | None:
+        return None if v is None else round(v, n)
+    return MacroStateInputsOut(ret=rd(r.ret, 4), vol=rd(r.vol, 4), vix=rd(r.vix, 2),
+                               vol_ratio=rd(r.vol_ratio, 2), ods=rd(r.ods, 4), cf=rd(r.cf, 4))
 
 
 def state_history(rows: list[StateRow]) -> list[MacroStatePoint]:
@@ -156,8 +174,15 @@ def load_state_rows(limit: int = 260, market: str = "us") -> list[StateRow]:
                 select(RegimeMarketFeatures).where(RegimeMarketFeatures.market == market)
                 .order_by(col(RegimeMarketFeatures.trade_date).desc()).limit(limit)
             ).all()
-    out = [StateRow(r.trade_date, r.confirmed_label, r.regime_label, r.p_risk_on, r.p_neutral, r.p_risk_off)
-           for r in rows]
+    out = [
+        StateRow(r.trade_date, r.confirmed_label, r.regime_label, r.p_risk_on, r.p_neutral, r.p_risk_off,
+                 ret=getattr(r, "qqq_return", None) if market == "us" else getattr(r, "benchmark_return", None),
+                 vol=r.realized_vol,
+                 vix=getattr(r, "vix", None) if market == "us" else None,
+                 vol_ratio=None if market == "us" else getattr(r, "vol_ratio", None),
+                 ods=r.ods, cf=r.cf)
+        for r in rows
+    ]
     out.sort(key=lambda r: r.trade_date)
     return out
 

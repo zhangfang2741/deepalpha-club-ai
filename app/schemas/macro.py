@@ -4,6 +4,17 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
+class MacroStateInputsOut(BaseModel):
+    """当天喂给状态模型的原料（给「怎么算的」说明带真实数字）。收益 / 波动 / 强弱都是小数（0.05 = 5%）。"""
+
+    ret: float | None = Field(default=None, description="基准近 20 个交易日涨跌（美股 = 纳指）")
+    vol: float | None = Field(default=None, description="基准近 20 个交易日年化波动")
+    vix: float | None = Field(default=None, description="VIX 点位（只美股有）")
+    vol_ratio: float | None = Field(default=None, description="20 日 / 60 日已实现波动比（只 A 股 / 港股有，替代 VIX）")
+    ods: float | None = Field(default=None, description="进攻篮子 − 防御篮子 的近 20 日涨幅差")
+    cf: float | None = Field(default=None, description="现金篮子 − 风险资产 的近 20 日涨幅差")
+
+
 class MacroStateOut(BaseModel):
     """大盘市场状态（逐利 / 观望 / 避险）。"""
 
@@ -15,6 +26,7 @@ class MacroStateOut(BaseModel):
     p_risk_off: float
     days_in_state: int = Field(description="当前状态已连续多少个交易日")
     as_of: str = Field(description="交易日 YYYY-MM-DD")
+    inputs: MacroStateInputsOut | None = Field(default=None, description="当天的模型原料，旧数据可能没有")
 
 
 class MacroStatePoint(BaseModel):
@@ -37,6 +49,7 @@ class MacroDriverOut(BaseModel):
     impact: str = Field(description="对股票的影响：positive / negative / neutral")
     text: str = Field(description="一句大白话解读")
     as_of: str | None = None
+    flat_band: float | None = Field(default=None, description="持平阈值（与 unit 同单位）：|近 20 日变化| 小于它算持平")
 
 
 class MacroEventOut(BaseModel):
