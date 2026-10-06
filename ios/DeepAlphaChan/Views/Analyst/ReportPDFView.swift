@@ -11,8 +11,8 @@ enum ReportCache {
     }
 
     private static func localURL(for remote: URL) -> URL {
-        // 链接里的文件名本身就带研报编号，直接当缓存文件名
-        dir.appendingPathComponent(remote.lastPathComponent)
+        // 取路径最后两段当文件名：研报链接的文件名本身带编号；SEC 文档的上一级是披露编号，两段合起来不会重名
+        dir.appendingPathComponent(remote.pathComponents.suffix(2).joined(separator: "-"))
     }
 
     static func isCached(_ remote: URL) -> Bool {
@@ -20,11 +20,16 @@ enum ReportCache {
     }
 
     /// 已缓存直接返回本地文件；否则下载、校验确实是 PDF 后落盘。
-    static func load(_ remote: URL) async throws -> URL {
+    static func load(_ remote: URL, isPDF: Bool = true) async throws -> URL {
         let local = localURL(for: remote)
-        if FileManager.default.fileExists(atPath: local.path), PDFDocument(url: local) != nil { return local }
-        let (tmp, resp) = try await URLSession.shared.download(from: remote)
-        guard (resp as? HTTPURLResponse)?.statusCode == 200, PDFDocument(url: tmp) != nil else {
+        if FileManager.default.fileExists(atPath: local.path), !isPDF || PDFDocument(url: local) != nil { return local }
+        var request = URLRequest(url: remote)
+        if remote.host?.hasSuffix("sec.gov") == true {
+            // SEC 要求声明身份的 User-Agent，否则可能被拒
+            request.setValue("DeepAlpha research contact@deepalpha.club", forHTTPHeaderField: "User-Agent")
+        }
+        let (tmp, resp) = try await URLSession.shared.download(for: request)
+        guard (resp as? HTTPURLResponse)?.statusCode == 200, !isPDF || PDFDocument(url: tmp) != nil else {
             throw URLError(.cannotParseResponse)
         }
         try? FileManager.default.removeItem(at: local)
@@ -118,6 +123,64 @@ private struct WebContent: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let v = WKWebView()
         v.load(URLRequest(url: url))
+        return v
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
+}
+
+/// 美股财报（SEC 网页文档）：下载到本机缓存后在 App 内阅读；下载失败时退回直接加载网页。可通过分享面板存到「文件」。
+struct FilingWebView: View {
+    let title: String
+    let remote: URL
+    @Environment(\.dismiss) private var dismiss
+    @State private var localURL: URL?
+    @State private var done = false
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if !done {
+                    VStack(spacing: 10) {
+                        ProgressView()
+                        Text(L("正在下载财报…")).font(.caption).foregroundStyle(Theme.textSecondary)
+                    }
+                } else {
+                    LocalWebContent(local: localURL, remote: remote)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Theme.background)
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button(L("完成")) { dismiss() } }
+                if let localURL {
+                    ToolbarItem(placement: .cancellationAction) {
+                        ShareLink(item: localURL) { Image(systemName: "square.and.arrow.down") }
+                            .accessibilityLabel(L("保存到手机"))
+                    }
+                }
+            }
+        }
+        .task {
+            localURL = try? await ReportCache.load(remote, isPDF: false)
+            done = true
+        }
+    }
+}
+
+private struct LocalWebContent: UIViewRepresentable {
+    let local: URL?
+    let remote: URL
+
+    func makeUIView(context: Context) -> WKWebView {
+        let v = WKWebView()
+        if let local {
+            v.loadFileURL(local, allowingReadAccessTo: local.deletingLastPathComponent())
+        } else {
+            v.load(URLRequest(url: remote))
+        }
         return v
     }
 

@@ -521,3 +521,25 @@ struct AnalystOverview: Decodable {
         case recentGradesTitle = "recent_grades_title"
     }
 }
+
+
+/// 最新一份定期财报的位置（美股是 SEC 网页文档，A 股 / 港股是 PDF）。
+struct LatestReport: Decodable {
+    let status: String
+    let symbol: String
+    let title: String?
+    let reportType: String?
+    let period: String?
+    let filedDate: String?
+    let url: String?
+    let fileType: String?
+
+    var isOK: Bool { status == "ok" && url != nil }
+
+    enum CodingKeys: String, CodingKey {
+        case status, symbol, title, period, url
+        case reportType = "report_type"
+        case filedDate = "filed_date"
+        case fileType = "file_type"
+    }
+}

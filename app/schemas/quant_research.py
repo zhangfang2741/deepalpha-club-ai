@@ -208,3 +208,16 @@ class MethodologyOut(BaseModel):
     grade_bands: list[GradeBand]
     dimensions: list[MethodologyDimension]
     disclaimer: str
+
+
+class LatestReportOut(BaseModel):
+    """最新一份定期财报（年报 / 中报 / 季报）的原文文件。美股是 SEC 网页文档，A 股 / 港股是 PDF。"""
+
+    status: Literal["ok", "unavailable", "unsupported_market"]
+    symbol: str
+    title: str | None = None
+    report_type: str | None = Field(None, description="年报 / 中报 / 季报 / 业绩公告（按 lang 给文案）")
+    period: str | None = Field(None, description="报告期末（美股有）")
+    filed_date: str | None = Field(None, description="披露日")
+    url: str | None = None
+    file_type: Literal["pdf", "html"] | None = None

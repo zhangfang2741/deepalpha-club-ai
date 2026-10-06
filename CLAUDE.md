@@ -184,6 +184,10 @@ deepalpha-club-ai/
 > **产品介绍放在学习页「新手入门」**（2026-10-06）：`guide-app-tour`（五个 Tab 各做什么）、`guide-app-radar`（雷达页怎么读）、`guide-app-detail`（个股分析页怎么读：结论卡 / 图 / 三视角 / 买卖点 / 次级别 / 自选 / 分享 / 免费与会员）、`guide-relation`（市场 / 行业 / 基本面 与缠论结构的关系）。
 > 「怎么算的」仍**散落在各页面数字旁**（用户明确要这样，不要收拢到学习页）。改页面功能 / 入口时，对应的产品介绍篇（中英）要一起改。App 默认打开「分析」Tab。
 
+> **最新财报**（2026-10-06，基本面研究页顶部「最新财报」卡 + `GET /quant-research/{market}/{symbol}/report`，`quant_research/report.py`）：美股取 SEC 最近一份 10-K / 10-Q（外国公司 20-F / 40-F，网页文档）、A 股 / 港股取东财公告里最新的定期报告 PDF（A 股只收「…报告全文」栏目；港股收 年報 / 中期報告 / 季度與中期業績公告）。
+> 后端只给链接和元信息（Redis 12 小时），文件由 App 自己下载到本机缓存（`ReportCache`，Caches/reports）、App 内阅读（PDF 用 PDFKit、SEC 网页用 WKWebView），阅读页左上角分享面板可存到「文件」。SEC 请求必须带声明身份的 User-Agent（`tenk.SEC_HEADERS` / App 的 `ReportCache`）。
+> 同一套阅读器也用于分析师评级里的研报原文（A 股 PDF）/ 相关报道（美股、港股，网页）。
+
 > **量化指标一律要有「怎么算的」推导**（2026-10-06 产品原则）：App 上任何算出来的结论（状态、分数、等级、强弱、门槛、角标、买卖点类型）都必须能点开看到「结论 → 几步推导（带这一处、这一天的真实数字）→ 局限」。
 > 统一外壳 `Views/Components/Derivation.swift`（`DerivationContent` / `DerivationLink`，底层复用量化研究的 `.quantExplain` 弹层）；每项文字单独写、不做统一说明页：
 > 宏观四项 `Views/SignalRadar/MacroDerivations.swift`（市场状态用后端 `state.inputs` 的当天原料、驱动因素用 `flat_band`）、雷达 `RadarDerivations.swift`（基本面门槛带 `quality_share / min_count / floor`）、买卖点 `Views/Analysis/SignalDerivation.swift`（严格口径）；基本面研究早已有（`QuantExplain.swift`）。

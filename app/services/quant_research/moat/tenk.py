@@ -76,6 +76,36 @@ async def latest_10k(client: httpx.AsyncClient, symbol: str) -> TenK | None:
     return TenK(acc, recent["filingDate"][idx], url)
 
 
+@dataclass(frozen=True)
+class Periodic:
+    form: str
+    filed_date: str
+    period: str | None
+    url: str
+
+
+_PERIODIC_FORMS = ("10-K", "10-Q", "20-F", "40-F")
+
+
+async def latest_periodic(client: httpx.AsyncClient, symbol: str) -> Periodic | None:
+    """最近一份定期报告（10-K / 10-Q，外国公司 20-F / 40-F）：表单、披露日、报告期末、正文链接。"""
+    cik = await _cik(client, symbol)
+    if cik is None:
+        return None
+    r = await _get(client, f"https://data.sec.gov/submissions/CIK{cik:010d}.json")
+    r.raise_for_status()
+    recent = r.json()["filings"]["recent"]  # 新 → 旧
+    idx = next((i for i, f in enumerate(recent["form"]) if f in _PERIODIC_FORMS), None)
+    if idx is None:
+        return None
+    acc = recent["accessionNumber"][idx].replace("-", "")
+    doc = recent["primaryDocument"][idx]
+    # primaryDocument 常带 xsl 渲染前缀（如 xslF345X05/…），去掉才是原始文档；这里的文档名是纯文件名
+    url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{acc}/{doc}"
+    period = (recent.get("reportDate") or [None] * (idx + 1))[idx] or None
+    return Periodic(recent["form"][idx], recent["filingDate"][idx], period, url)
+
+
 async def business_section(client: httpx.AsyncClient, tenk: TenK) -> str | None:
     """下载 10-K 正文并截取 Item 1。"""
     r = await _get(client, tenk.url, timeout=90)
