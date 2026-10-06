@@ -104,3 +104,24 @@ async def test_direction_is_passed_through(monkeypatch, fake_redis):
     result = await svc.fetch_phase_labels([("us", "AAPL")], user_id=1, redis=fake_redis)
     assert result[0].direction == "up"
     assert result[0].phase_label == "确认三买"
+
+
+async def test_lang_is_passed_to_analyzer(monkeypatch, fake_redis):
+    """阶段标签语言跟随请求的 lang（英文界面不能再拿到中文标签）。"""
+    seen: list[str] = []
+
+    async def fake_fetch_kline(*, user_id, symbol, start_date, end_date, freq, redis):
+        return _bars()
+
+    class _Result:
+        pivot_phase = None
+
+    def fake_analyze(symbol, bars, *, lang, visible_from):
+        seen.append(lang)
+        return _Result()
+
+    monkeypatch.setattr(svc, "fetch_kline", fake_fetch_kline)
+    monkeypatch.setattr(svc._analyzer, "analyze", fake_analyze)
+    await svc.fetch_phase_labels([("us", "AAPL")], user_id=1, redis=fake_redis, lang="en")
+    await svc.fetch_phase_labels([("us", "AAPL")], user_id=1, redis=fake_redis)
+    assert seen == ["en", "zh"]

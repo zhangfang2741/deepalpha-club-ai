@@ -44,6 +44,7 @@ class WatchlistPhase:
 
 async def _phase_for_symbol(
     market: str, symbol: str, *, user_id: int, end_date: str, redis: Redis, sem: asyncio.Semaphore,
+    lang: str = "zh",
 ) -> WatchlistPhase:
     async with sem:
         visible_from = (date.fromisoformat(end_date) - timedelta(days=_VISIBLE_DAYS)).isoformat()
@@ -61,7 +62,7 @@ async def _phase_for_symbol(
             return WatchlistPhase(market=market, symbol=symbol, phase=None, phase_label=None)
 
         try:
-            result = _analyzer.analyze(symbol, bars, lang="zh", visible_from=visible_from)
+            result = _analyzer.analyze(symbol, bars, lang=lang, visible_from=visible_from)
         except Exception as e:  # noqa: BLE001 同上
             logger.warning("watchlist_phase_analyze_failed", symbol=symbol, error=str(e))
             return WatchlistPhase(market=market, symbol=symbol, phase=None, phase_label=None)
@@ -74,7 +75,7 @@ async def _phase_for_symbol(
 
 
 async def fetch_phase_labels(
-    items: list[tuple[str, str]], *, user_id: int, redis: Redis,
+    items: list[tuple[str, str]], *, user_id: int, redis: Redis, lang: str = "zh",
 ) -> list[WatchlistPhase]:
     """批量算一遍自选列表里每只标的当前的中枢阶段。
 
@@ -85,6 +86,6 @@ async def fetch_phase_labels(
     end_date = date.today().isoformat()
     sem = asyncio.Semaphore(_CONCURRENCY)
     return await asyncio.gather(*(
-        _phase_for_symbol(market, symbol, user_id=user_id, end_date=end_date, redis=redis, sem=sem)
+        _phase_for_symbol(market, symbol, user_id=user_id, end_date=end_date, redis=redis, sem=sem, lang=lang)
         for market, symbol in items
     ))

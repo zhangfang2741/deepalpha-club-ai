@@ -62,6 +62,7 @@ async def list_watchlist(
 
 @router.get("/phases", response_model=WatchlistPhasesResponse)
 async def get_watchlist_phases(
+    lang: str = Query(default="zh", description="阶段标签语言：zh / en"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
@@ -75,6 +76,7 @@ async def get_watchlist_phases(
     items = await store.list_items(db, user.id)
     results = await fetch_phase_labels(
         [(i.market, i.symbol) for i in items], user_id=user.id, redis=redis,
+        lang="en" if lang.lower().startswith("en") else "zh",
     )
     return WatchlistPhasesResponse(phases={
         f"{r.market}:{r.symbol}": WatchlistPhaseOut(

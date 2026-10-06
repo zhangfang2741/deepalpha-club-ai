@@ -66,7 +66,8 @@ struct RadarFactContext {
 enum RadarPanelStyle {
     /// 「二买 ✓」标签：底色与气泡同一套（方向 + 强弱深浅）。
     static func tag(_ signal: RadarSignal) -> some View {
-        Text(signal.confirmed ? "\(signal.label) ✓" : signal.label)
+        // 买卖点标签（一买 / 二卖…）由雷达快照给出、是中文，按 App 语言本地化
+        Text(signal.confirmed ? "\(L(signal.label)) ✓" : L(signal.label))
             .font(.system(size: 11, weight: .bold))
             .foregroundColor(.white)
             .padding(.horizontal, 8)

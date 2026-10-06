@@ -373,7 +373,6 @@ struct WatchlistView: View {
     private static let isoFormatterNoFraction = ISO8601DateFormatter()
     private static let relativeFormatter: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
-        f.locale = Locale.current
         f.unitsStyle = .short
         return f
     }()
@@ -382,6 +381,8 @@ struct WatchlistView: View {
     private func relativeTime(_ raw: String) -> String {
         let date = Self.isoFormatter.date(from: raw) ?? Self.isoFormatterNoFraction.date(from: raw)
         guard let date else { return "" }
+        // 跟随 App 语言而不是系统地区：英文界面不能出现「1周前」
+        Self.relativeFormatter.locale = Locale(identifier: Localized.language().localeIdentifier)
         return Self.relativeFormatter.localizedString(for: date, relativeTo: Date())
     }
 
