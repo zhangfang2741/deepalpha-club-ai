@@ -57,6 +57,7 @@ dependencies = [
     "aioapns>=4.0",
     "czsc>=1.0.1",
     "beautifulsoup4>=4.14.3",
+    "pypdf>=6.0.0",
     "lxml>=6.0.2",
 ]
 

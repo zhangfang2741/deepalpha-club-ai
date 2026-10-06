@@ -432,6 +432,9 @@ class Settings:
         self.QUANT_MOAT_UTC_HOUR = int(os.getenv("QUANT_MOAT_UTC_HOUR", "12"))
         # 每轮最多新评估多少只（每只约 3~4 次大模型调用）；大模型套餐与 App 对话共用，别一次打满
         self.QUANT_MOAT_DAILY_LIMIT = int(os.getenv("QUANT_MOAT_DAILY_LIMIT", "150"))
+        # 财报中文要点（大模型）：与 App 对话 / 翻译共用套餐，按 UTC 日限制新生成份数（同一份财报只生成一次、全员共用缓存）；紧急停用设 false
+        self.REPORT_SUMMARY_ENABLED = os.getenv("REPORT_SUMMARY_ENABLED", "true").lower() in ("true", "1", "yes")
+        self.REPORT_SUMMARY_DAILY_LIMIT = int(os.getenv("REPORT_SUMMARY_DAILY_LIMIT", "120"))
 
         # Alpha Vantage API（电话会议记录抓取备用源）
         self.ALPHA_VANTAGE_KEY: str | None = os.getenv("ALPHA_VANTAGE_KEY", None)

@@ -16,12 +16,13 @@ from app.cache.operations import acquire_lock, release_lock
 from app.core.limiter import limiter
 from app.core.logging import logger
 from app.models.user import User
-from app.schemas.quant_research import LatestReportOut, MethodologyOut, QuantResearchOut
+from app.schemas.quant_research import LatestReportOut, MethodologyOut, QuantResearchOut, ReportSummaryOut
 from app.core.config import settings
 from app.services.quant_research.batch import run_us_batch
 from app.services.quant_research.cnhk.batch import run_cn_batch, run_hk_batch
 from app.services.quant_research.methodology import build_methodology
 from app.services.quant_research.report import get_latest_report
+from app.services.quant_research.report_summary import get_report_summary
 from app.services.quant_research.scheduler import _LOCK_TTL, _lock_key, last_cnhk_session, last_us_session
 from app.services.quant_research.service import get_quant_research
 
@@ -98,6 +99,22 @@ async def latest_report(
     """最新一份定期财报（年报 / 中报 / 季报）原文的位置；文件由 App 下载并缓存在本机。"""
     out = await get_latest_report(market.lower(), symbol, lang, redis=redis)
     logger.info("latest_report_served", market=market, symbol=symbol.upper(), status=out.status, user_id=user.id)
+    return out
+
+
+@router.get("/{market}/{symbol}/report/summary", response_model=ReportSummaryOut)
+@limiter.limit("30 per minute")
+async def latest_report_summary(
+    request: Request,
+    market: str = Path(..., pattern=r"^[a-zA-Z]{2}$"),
+    symbol: str = Path(..., pattern=r"^[A-Za-z0-9][A-Za-z0-9\-\.]{0,11}$"),
+    lang: Literal["zh", "en"] = Query("zh"),
+    user: User = Depends(get_current_user),
+    redis: Redis | None = Depends(get_redis_optional),
+) -> ReportSummaryOut:
+    """最新财报的中文要点。没有缓存时会触发后台生成并返回 generating，客户端隔几秒再请求。"""
+    out = await get_report_summary(market.lower(), symbol, lang, redis=redis)
+    logger.info("report_summary_served", market=market, symbol=symbol.upper(), status=out.status, user_id=user.id)
     return out
 
 

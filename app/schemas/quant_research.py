@@ -221,3 +221,30 @@ class LatestReportOut(BaseModel):
     filed_date: str | None = Field(None, description="披露日")
     url: str | None = None
     file_type: Literal["pdf", "html"] | None = None
+
+
+class ReportKeyNumber(BaseModel):
+    label: str = Field(description="指标名，如 营收 / 净利润 / 每股收益")
+    value: str = Field(description="数值（带币种与单位，保留原文口径）")
+    change: str | None = Field(default=None, description="同比 / 环比变化，原文有才写")
+
+
+class ReportSummary(BaseModel):
+    """财报节选的结构化中文要点（大模型整理，只依据原文）。"""
+
+    headline: str = Field(description="一句话概括这期业绩，40 字以内")
+    key_numbers: list[ReportKeyNumber] = Field(default_factory=list, description="关键数字，最多 6 条，原文有才写")
+    highlights: list[str] = Field(default_factory=list, description="这期发生了什么，4~6 条")
+    watch_points: list[str] = Field(default_factory=list, description="原文提到的风险、不确定性或需要留意的变化，2~4 条")
+    outlook: str = Field(default="", description="管理层对后续的表述（用「管理层表示…」转述），没有就留空")
+
+
+class ReportSummaryOut(BaseModel):
+    """最新财报的中文要点：生成需要一会儿，status=generating 时客户端过几秒再请求。"""
+
+    status: Literal["ready", "generating", "unavailable", "limit_reached", "disabled"]
+    symbol: str
+    report_type: str | None = None
+    filed_date: str | None = None
+    summary: ReportSummary | None = None
+    note: str | None = Field(default=None, description="免责说明 / 失败原因")
