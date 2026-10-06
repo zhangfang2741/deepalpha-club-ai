@@ -3,6 +3,9 @@ import SwiftUI
 /// 详情页「分析师评级」分段：评级分布、目标价、业绩预期 vs 实际、最近评级变动。
 /// 评级档位是分析师原话，只做引述；我们自己的文字只描述数字。
 struct AnalystRatingTab: View {
+    private struct OpenedReport: Identifiable { let title: String; let url: URL; var id: URL { url } }
+    @State private var openedReport: OpenedReport?
+
     let market: StockMarket
     let symbol: String
     @ObservedObject var vm: QuantResearchViewModel
@@ -25,6 +28,7 @@ struct AnalystRatingTab: View {
             }
         }
         .task { await vm.loadAnalyst(market: market, symbol: symbol) }
+        .sheet(item: $openedReport) { r in ReportPDFView(title: r.title, remote: r.url) }
     }
 
     @ViewBuilder
@@ -162,12 +166,12 @@ struct AnalystRatingTab: View {
                     .padding(.vertical, 7)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        // 打开研报原文（第三方页面，在系统浏览器里看）
-                        if let s = g.reportUrl, let url = URL(string: s) { UIApplication.shared.open(url) }
+                        // 下载研报原文到本地缓存，在 App 内阅读
+                        if let s = g.reportUrl, let url = URL(string: s) { openedReport = OpenedReport(title: g.firm, url: url) }
                     }
                 }
                 if grades.contains(where: { $0.reportUrl != nil }) {
-                    Text(L("点一行可查看研报原文（第三方页面，会跳到浏览器）"))
+                    Text(L("点一行可在 App 内查看研报原文（首次下载，之后缓存在本机）"))
                         .font(.caption2).foregroundStyle(Theme.textSecondary)
                         .padding(.top, 6)
                 }

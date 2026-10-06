@@ -178,10 +178,10 @@ def build_cn_overview(symbol: str, lang: Lang, today: date, reports: list[dict],
 
 
 def _report_url(info_code: str | None) -> str | None:
-    """东财研报编号 → 研报原文页（只接受字母数字编号，避免拼出奇怪的链接）。"""
+    """东财研报编号 → 研报原文 PDF 直链（App 下载后在本地缓存、应用内阅读）（只接受字母数字编号，避免拼出奇怪的链接）。"""
     if not info_code or not str(info_code).isalnum():
         return None
-    return f"https://data.eastmoney.com/report/zw_stock.jshtml?infocode={info_code}"
+    return f"https://pdf.dfcfw.com/pdf/H3_{info_code}_1.pdf"
 
 
 def _cn_action(new: str | None, prev: str | None) -> str:
