@@ -148,15 +148,15 @@ final class SignalRadarViewModel: ObservableObject {
     /// 只存 ready 的响应；进程内有效，退出 App 即清空（磁盘上的缓存不做，免得显示隔夜旧数据）。
     private var snapshotCache: [String: (resp: SignalRadarResponse, at: Date)] = [:]
 
-    /// 内存缓存在这么久之内视为新鲜：切回去直接用、不再请求（后端快照一天才换一次，次级别 30 分钟一轮）。
-    private static let snapshotFreshSeconds: TimeInterval = 300
+    /// 内存缓存在这么久之内视为新鲜：切回去直接用、不再请求（后端快照一天才换一次，次级别 30 分钟一轮，与之对齐）。
+    private static let snapshotFreshSeconds: TimeInterval = 1800
 
     private func snapshotKey(_ market: StockMarket, _ universe: String) -> String {
         "\(market.rawValue)|\(universe)|\(SignalMode.current())"
     }
 
     /// 切换后若内存里有这个（市场, 指数, 口径）的上次结果，立刻当作当前 response。
-    /// 返回 true = 结果还新鲜（5 分钟内），调用方不用再请求：切市场一次完成、不闪、不重排。
+    /// 返回 true = 结果还新鲜（30 分钟内），调用方不用再请求：切市场一次完成、不闪、不重排。
     /// 返回 false = 缓存有但偏旧（先显示、再静默更新）或根本没有。
     @discardableResult
     private func applyCachedSnapshot() -> Bool {
@@ -167,6 +167,16 @@ final class SignalRadarViewModel: ObservableObject {
         pendingUniverseKey = nil
         isLoading = false
         return true
+    }
+
+    /// 两份快照的气泡（每天在场的信号 + 待确认）是不是完全一样：一样的话，刷新只是更新角标 / 共振 / 补算数，
+    /// 画面上气泡的位置和个数都不变，用户看不出有「换了一张图」，选中的日期也不该重置。
+    private func sameBubbles(_ a: SignalRadarResponse?, _ b: SignalRadarResponse) -> Bool {
+        guard let a, a.market == b.market, a.universe == b.universe, a.days.count == b.days.count else { return false }
+        return zip(a.days, b.days).allSatisfy { x, y in
+            x.date == y.date && x.signals.map(\.id) == y.signals.map(\.id)
+                && x.candidates.map(\.id) == y.candidates.map(\.id)
+        }
     }
 
     /// 两份快照是不是同一份（后端没有新数据）：是的话刷新结果不必替换界面，避免气泡白白重排、日期选择被重置。
@@ -442,8 +452,9 @@ final class SignalRadarViewModel: ObservableObject {
             // 加载期间用户切了市场或 universe，就丢弃这次结果，别覆盖新请求。
             if market != requested || currentUniverse != requestedUniverse || SignalMode.current() != requestedMode { return }
             // 后端没有新数据（同一份快照）：不替换界面，不重置日期选择，气泡不会白白重排一次
-            let unchanged = responseMatchesSelection && isSameSnapshot(response, resp)
-            if !unchanged { response = resp }
+            // 气泡一样（只是角标 / 共振 / 补算数变了）也算没变：静默替换数据，但不重置日期选择、不跳
+            let unchanged = responseMatchesSelection && (isSameSnapshot(response, resp) || sameBubbles(response, resp))
+            if !unchanged || !isSameSnapshot(response, resp) { response = resp }
             if !resp.isGenerating, !resp.days.isEmpty {
                 snapshotCache[snapshotKey(requested, resp.universe.isEmpty ? (requestedUniverse ?? activeUniverseKey) : resp.universe)] = (resp, Date())
             }
