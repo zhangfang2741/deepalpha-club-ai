@@ -1598,3 +1598,17 @@
 "宽松口径：最后一笔还没走完时也先标出（带 ✓ 的是已走完的），出现得更早，但后面的走势可能把它推翻。" = "Relaxed rule: signals on the unfinished last leg are shown early (✓ means the leg is complete); they appear earlier but later moves may overturn them.";
 "选好直接生效：雷达和个股详情页都按所选口径显示。所有内容仅供学习参考，不构成投资建议。" = "Takes effect immediately: the radar and stock detail pages follow the chosen rule. Everything here is for learning only and is not investment advice.";
 "决定「什么算买卖点」：严格最少，中等约多一倍（默认），宽松最多。点进去看每种的区别。" = "Decides what counts as a buy or sell point: Strict gives the fewest, Balanced about twice as many (default), Relaxed the most. Tap to see how they differ.";
+"%@：盘整背驰" = "%@: range divergence";
+"前面没有两个依次同向的中枢" = "No two successive same-direction pivots before it";
+"价格前面没有走出「两个依次下移、互不重叠的中枢」，所以不是教科书里的下跌趋势，这里的背驰发生在盘整里，叫盘整背驰。" = "Price did not form “two successive lower, non-overlapping pivots” beforehand, so this is not a textbook downtrend; the divergence happens inside a range and is called range divergence.";
+"价格前面没有走出「两个依次上移、互不重叠的中枢」，所以不是教科书里的上涨趋势，这里的背驰发生在盘整里，叫盘整背驰。" = "Price did not form “two successive higher, non-overlapping pivots” beforehand, so this is not a textbook uptrend; the divergence happens inside a range and is called range divergence.";
+"创新低，但这一笔的力度更小" = "New low, but this stroke is weaker";
+"创新高，但这一笔的力度更小" = "New high, but this stroke is weaker";
+"拿这一笔和前一个同方向的笔比：价差、量能、时长都更小，说明这一笔的推动力不如上一笔。" = "Compared with the previous stroke in the same direction, its price range, volume and duration are all smaller, so it has less push than the last one.";
+"哪些口径算一类" = "Which rules count it as type 1";
+"「严格」口径只认趋势背驰，这种信号不会出现；「中等」和「宽松」口径把盘整里的背驰也算作一类买卖点，所以信号更多。" = "The Strict rule only counts trend divergence, so this kind of signal never appears there; Balanced and Relaxed also count divergence inside ranges as type-1 points, which is why they show more signals.";
+"这一笔走完、并且反方向的下一笔已经开始成形，才算成立（宽松口径下最后一笔上的会先标出，带 ✓ 的才是已走完的）。后面如果价格继续创新极值，这个一类就作废。" = "It counts once this stroke is finished and the next stroke in the opposite direction has started to form (under Relaxed, signals on the last stroke are shown early; a ✓ means the stroke is finished). If price keeps making new extremes afterwards, this type-1 point is voided.";
+"盘整里的背驰不是缠论原文的一类，参考价值不如趋势背驰，要多看一眼更大的走势。它只是背驰迹象，不保证转折，也不是操作建议。" = "Divergence inside a range is not a textbook type-1 point and is less informative than trend divergence, so check the bigger picture too. It is only a sign of divergence, not a guaranteed turn and not advice.";
+"价格在盘整里创了新低，但这一段下跌的力气比上一段小。" = "Price made a new low inside a range, but this leg down is weaker than the previous one.";
+"价格在盘整里创了新高，但这一段上涨的力气比上一段小。" = "Price made a new high inside a range, but this leg up is weaker than the previous one.";
+"盘整背驰：前面只有一个中枢。「严格」口径下不对应一类买卖点；「中等」「宽松」口径下可能对应。" = "Range divergence: only one pivot before it. Under the Strict rule it does not correspond to a type-1 point; under Balanced / Relaxed it may.";

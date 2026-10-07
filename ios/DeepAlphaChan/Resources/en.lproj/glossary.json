@@ -294,5 +294,13 @@
   "plain": "Past prices are adjusted for dividends and splits so before and after can be compared, avoiding fake gaps on ex-dates.",
   "example": "After a 2-for-1 split the price halves overnight; an unadjusted chart would show a fake crash.",
   "notMeans": null
+ },
+ {
+  "key": "买卖点口径",
+  "term": "Signal rules",
+  "category": "structure",
+  "plain": "The set of rules that decides what counts as a buy or sell point. Strict gives the fewest and follows the Chan textbook; Balanced (default) also counts divergence inside ranges, about twice as many; Relaxed gives the most and the earliest, even marking the last unfinished stroke.",
+  "example": "For the same stock, Strict may show a single 1st buy on the chart while Relaxed shows several more.",
+  "notMeans": "A looser rule is not more accurate; it just shows more signals, and they are easier to overturn."
  }
 ]

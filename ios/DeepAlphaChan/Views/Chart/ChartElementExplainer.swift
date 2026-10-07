@@ -182,7 +182,7 @@ enum ChartExplainer {
         let kindNote: String
         switch c.divergenceType {
         case "trend": kindNote = L("趋势背驰：前面已有两个同向中枢，对应一类买卖点。")
-        case "consolidation": kindNote = L("盘整背驰：前面只有一个中枢，不对应一类买卖点。")
+        case "consolidation": kindNote = L("盘整背驰：前面只有一个中枢。「严格」口径下不对应一类买卖点；「中等」「宽松」口径下可能对应。")
         default: kindNote = ""
         }
         return ChartExplanation(

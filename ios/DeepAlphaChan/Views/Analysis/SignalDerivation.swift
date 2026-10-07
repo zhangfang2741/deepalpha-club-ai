@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// 买卖点「怎么识别的」：按严格口径（App 固定口径，见 app/services/chan/signal_policy.py 的 strict）
-/// 一步步讲，数字取这个信号自己的真实值。口径变了这里要一起改。
+/// 买卖点「怎么识别的」：按缠论原文的定义一步步讲（严格口径，见 app/services/chan/signal_policy.py 的 strict），
+/// 数字取这个信号自己的真实值。中等 / 宽松口径下，一类可能来自「盘整背驰」（没有 b、c 两段的面积比），
+/// 走 `firstWithoutTrend` 另讲。口径变了这里要一起改。
 @MainActor
 enum SignalDerivation {
     typealias Result = DerivationResult
@@ -21,6 +22,8 @@ enum SignalDerivation {
     // MARK: - 一类：趋势背驰
 
     private static func first(_ s: Signal) -> Result {
+        // 没有面积比 = 不是教科书的趋势背驰（中等 / 宽松口径才会有这种一类）
+        if s.areaRatio == nil, SignalMode.current() != "strict" { return firstWithoutTrend(s) }
         let buy = s.isBuy
         let steps = [
             DerivationStep(
@@ -50,6 +53,36 @@ enum SignalDerivation {
                        : L("在上涨趋势里，这一段上涨的力气比上一段小，上涨有「后继乏力」的迹象。"),
             notMeans: L("不预测接下来是反弹还是继续走，也不是买入或卖出的指令。"),
             terms: ["趋势背驰", "中枢", "MACD", "面积比", "结构信号"])
+    }
+
+    // MARK: - 一类：盘整背驰（中等 / 宽松口径）
+
+    private static func firstWithoutTrend(_ s: Signal) -> Result {
+        let buy = s.isBuy
+        let steps = [
+            DerivationStep(
+                title: L("前面没有两个依次同向的中枢"),
+                text: buy ? L("价格前面没有走出「两个依次下移、互不重叠的中枢」，所以不是教科书里的下跌趋势，这里的背驰发生在盘整里，叫盘整背驰。")
+                          : L("价格前面没有走出「两个依次上移、互不重叠的中枢」，所以不是教科书里的上涨趋势，这里的背驰发生在盘整里，叫盘整背驰。")),
+            DerivationStep(
+                title: buy ? L("创新低，但这一笔的力度更小") : L("创新高，但这一笔的力度更小"),
+                text: L("拿这一笔和前一个同方向的笔比：价差、量能、时长都更小，说明这一笔的推动力不如上一笔。"),
+                values: [(L("价差比"), percent(s.priceRatio)),
+                         (L("时长比"), percent(s.lengthRatio))]),
+            DerivationStep(
+                title: L("哪些口径算一类"),
+                text: L("「严格」口径只认趋势背驰，这种信号不会出现；「中等」和「宽松」口径把盘整里的背驰也算作一类买卖点，所以信号更多。")),
+            DerivationStep(
+                title: L("走完再确认"),
+                text: L("这一笔走完、并且反方向的下一笔已经开始成形，才算成立（宽松口径下最后一笔上的会先标出，带 ✓ 的才是已走完的）。后面如果价格继续创新极值，这个一类就作废。")),
+        ]
+        return DerivationResult(
+            conclusion: L("%@：盘整背驰", s.label), steps: steps,
+            caveat: L("盘整里的背驰不是缠论原文的一类，参考价值不如趋势背驰，要多看一眼更大的走势。它只是背驰迹象，不保证转折，也不是操作建议。"),
+            means: buy ? L("价格在盘整里创了新低，但这一段下跌的力气比上一段小。")
+                       : L("价格在盘整里创了新高，但这一段上涨的力气比上一段小。"),
+            notMeans: L("不预测接下来是反弹还是继续走，也不是买入或卖出的指令。"),
+            terms: ["趋势背驰", "中枢", "结构信号"])
     }
 
     // MARK: - 二类
