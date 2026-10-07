@@ -69,24 +69,36 @@ MUTED = (150, 165, 185)
 # 顺序即上传顺序，列表页只展示前 3 张的缩略图，所以最能说明「这是什么」的排前面。
 # 每张一个主色，避免 6 张刷下来全是一模一样的黑；主色取自 App 内的图层配色。
 SHOTS = [
-    # 前两张主打缠论本身（搜索结果缩略图只露前三张）
+    # 前三张主打缠论 + 三个市场（搜索结果缩略图只露前三张）
     ("01_chan_structure.png", "缠论结构\n一键自动画出",
-     "分型 · 笔 · 线段 · 中枢 · 买卖点，全部标在图上", (139, 92, 246)),   # Theme.pivotFill 中枢
-    ("02_fullscreen.png", "横屏全屏\n结构一目了然",
+     "美股 · A股 · 港股，分型 笔 线段 中枢 买卖点全部标出", (139, 92, 246)),  # Theme.pivotFill 中枢
+    ("02_three_markets.png", "美股 A股 港股\n一个 App 全覆盖",
+     "代码按各市场习惯输入，同一套缠论结构分析", (46, 189, 133)),          # Theme.down
+    ("03_fullscreen.png", "横屏全屏\n结构一目了然",
      "MACD 与成交量同屏，图层可以逐个开关", (245, 158, 11)),               # Theme.segment 线段
-    ("03_radar.png", "每天的买卖点\n一张雷达图看完",
-     "标普 500 · 沪深 300 · 恒生指数等成分股每天自动扫描", (96, 165, 250)),    # Theme.stroke 笔
-    ("04_signal_explain.png", "每个买卖点\n都有据可查",
-     "背驰力度、成立日期，真实数字逐条列出", (46, 189, 133)),             # Theme.down
-    ("05_fundamentals.png", "基本面体检\nA+ 到 F 一眼看懂",
+    ("04_radar.png", "每天的买卖点\n一张雷达图看完",
+     "标普 500 · 沪深 300 · 恒生指数等成分股每天自动扫描", (96, 165, 250)),  # Theme.stroke 笔
+    ("05_signal_explain.png", "每个买卖点\n都有据可查",
+     "背驰力度、成立日期，真实数字逐条列出", (46, 189, 133)),
+    ("06_fundamentals.png", "基本面体检\nA+ 到 F 一眼看懂",
      "估值 · 成长 · 盈利 · 动量 · 预期修正，同行业里比", (236, 72, 153)),
-    ("06_report_ai.png", "上百页财报\nAI 帮你划重点",
+    ("07_report_ai.png", "上百页财报\nAI 帮你划重点",
      "关键数字、变化与风险，一切以原文为准", (245, 158, 11)),
-    ("07_lesson.png", "零基础\n也能学会缠论",
+    ("08_lesson.png", "零基础\n也能学会缠论",
      "新手入门 + 9 篇图解课程 + 名词小词典", (96, 165, 250)),
-    ("08_watchlist.png", "自选股的结构阶段\n随时看",
+    ("09_watchlist.png", "三个市场的自选股\n结构阶段随时看",
      "技术分析与学习工具，不构成投资建议", (100, 116, 139)),
 ]
+
+
+# 一张图里放多台手机（三市场对比）：输出文件名 → [(源图, 角标), ...]，中间那台在最前。
+MULTI = {
+    "02_three_markets.png": [
+        ("02a_cn.png", "A股"),
+        ("02b_us.png", "美股"),
+        ("02c_hk.png", "港股"),
+    ],
+}
 
 
 def gradient(p: Preset, accent: tuple[int, int, int]) -> Image.Image:
@@ -119,7 +131,94 @@ def rounded(img: Image.Image, radius: int) -> Image.Image:
     return out
 
 
+def device(p: Preset, shot: Image.Image, dev_w: int) -> tuple[Image.Image, Image.Image]:
+    """按宽度缩放截图，返回（圆角机身, 描边）。"""
+    s = p.scale
+    dev_h = round(dev_w * shot.height / shot.width)
+    body = rounded(shot.resize((dev_w, dev_h), Image.LANCZOS), round(61 * s * dev_w / (818 * s)))
+    ring = Image.new("RGBA", (dev_w + 6, dev_h + 6), (0, 0, 0, 0))
+    ImageDraw.Draw(ring).rounded_rectangle(
+        [0, 0, dev_w + 5, dev_h + 5], radius=round(64 * s * dev_w / (818 * s)),
+        outline=(255, 255, 255, 46), width=3
+    )
+    return body, ring
+
+
+def build_multi(p: Preset, name: str, title: str, sub: str, accent: tuple[int, int, int]) -> None:
+    """三台手机：两侧略小、靠后、压暗，中间一台在最前；每台头顶一个市场角标。"""
+    s = p.scale
+    font_title, font_sub = p.font_title, p.font_sub
+    font_tag = ImageFont.truetype(FONT_PATH, round(46 * s), index=2)
+    items = [(Image.open(SRC / f).convert("RGB"), tag) for f, tag in MULTI[name]]
+
+    side_w, mid_w = round(600 * s), round(740 * s)
+    mid_h = round(mid_w * items[1][0].height / items[1][0].width)
+    mid_y = p.h - mid_h - round(110 * s)
+    side_y = mid_y + round(170 * s)
+    mid_x = (p.w - mid_w) // 2
+    side_xs = [round(-60 * s), p.w - side_w + round(60 * s)]
+
+    lines = title.split("\n")
+    lh = round(110 * s)
+    block_h = lh * len(lines)
+    sub_gap = round(28 * s)
+    tag_h = round(76 * s)
+    ty = (mid_y - tag_h - round(60 * s) - block_h - sub_gap - round(45 * s)) // 2 + round(30 * s)
+
+    canvas = gradient(p, accent)
+    glow(p, canvas, accent, p.w // 2, mid_y + mid_h // 3, round(640 * s))
+    draw = ImageDraw.Draw(canvas)
+
+    def tag(text: str, cx: int, top: int, strong: bool) -> None:
+        w = draw.textlength(text, font=font_tag) + round(56 * s)
+        margin = round(36 * s)
+        cx = min(max(cx, margin + w / 2), p.w - margin - w / 2)  # 不出画布
+        box = [cx - w / 2, top, cx + w / 2, top + tag_h]
+        fill = tuple(min(255, int(c * 0.9 + 20)) for c in accent) if strong else (38, 46, 62)
+        draw.rounded_rectangle(box, radius=tag_h // 2, fill=fill)
+        tw = draw.textlength(text, font=font_tag)
+        draw.text((cx - tw / 2, top + round(12 * s)), text, font=font_tag, fill=INK)
+
+    # 两侧（先画，被中间那台压住一部分），压暗 25% 拉开前后层次
+    for (shot, label), x in zip([items[0], items[2]], side_xs):
+        body, ring = device(p, shot, side_w)
+        dim = Image.new("RGBA", body.size, (0, 0, 0, 0))
+        dim.putalpha(body.getchannel("A").point(lambda a: a * 64 // 255))
+        canvas.paste(ring, (x - 3, side_y - 3), ring)
+        canvas.paste(body, (x, side_y), body)
+        canvas.paste(dim, (x, side_y), dim)
+    # 中间
+    shot, label = items[1]
+    body, ring = device(p, shot, mid_w)
+    shadow = Image.new("RGBA", (mid_w + 80, mid_h + 80), (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).rounded_rectangle([40, 40, mid_w + 40, mid_h + 40], radius=round(70 * s), fill=(0, 0, 0, 170))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(round(30 * s)))
+    canvas.paste(shadow, (mid_x - 40, mid_y - 30), shadow)
+    canvas.paste(ring, (mid_x - 3, mid_y - 3), ring)
+    canvas.paste(body, (mid_x, mid_y), body)
+    # 角标最后画，不会被机身挡住；两侧的居中在露出来的那一截上
+    tag(label, p.w // 2, mid_y - tag_h - round(28 * s), True)
+    left_vis = (max(side_xs[0], 0) + mid_x) // 2
+    right_vis = (mid_x + mid_w + min(side_xs[1] + side_w, p.w)) // 2
+    tag(items[0][1], left_vis, side_y - tag_h - round(28 * s), False)
+    tag(items[2][1], right_vis, side_y - tag_h - round(28 * s), False)
+
+    for i, line in enumerate(lines):
+        w = draw.textlength(line, font=font_title)
+        draw.text(((p.w - w) / 2, ty + i * lh), line, font=font_title, fill=INK)
+    sw = draw.textlength(sub, font=font_sub)
+    draw.text(((p.w - sw) / 2, ty + block_h + sub_gap), sub, font=font_sub, fill=MUTED)
+
+    out_dir = BASE / p.out
+    out_dir.mkdir(exist_ok=True)
+    canvas.save(out_dir / name, "PNG", optimize=True)
+    print(f"  ✓ {name}  {canvas.width}×{canvas.height}（三机位）")
+
+
 def build(p: Preset, name: str, title: str, sub: str, accent: tuple[int, int, int]) -> None:
+    if name in MULTI:
+        build_multi(p, name, title, sub, accent)
+        return
     shot = Image.open(SRC / name).convert("RGB")
     s = p.scale
     font_title, font_sub = p.font_title, p.font_sub
@@ -188,7 +287,8 @@ def main() -> None:
     if unknown:
         raise SystemExit(f"未知尺寸 {unknown}，可选：{list(PRESETS)}")
 
-    missing = [name for name, *_ in SHOTS if not (SRC / name).exists()]
+    sources = [f for name, *_ in SHOTS for f in ([x for x, _ in MULTI[name]] if name in MULTI else [name])]
+    missing = [f for f in sources if not (SRC / f).exists()]
     if missing:
         raise SystemExit(f"缺少 {len(missing)} 张源截图：{missing}")
 

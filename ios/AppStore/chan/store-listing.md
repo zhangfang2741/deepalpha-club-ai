@@ -278,23 +278,24 @@ Automatic Chan structure on candlestick charts, with nine illustrated lessons. U
 
 ## 七、截图（1.2，2026-10-07 重截）
 
-**上传 `screenshots-6.9-captioned/` 里的 8 张**（带标题版，1320×2868，传 6.9 英寸区）；`screenshots-6.5-captioned/` 是同一套的 1242×2688 版，6.5 英寸区可传可不传。
+**上传 `screenshots-6.9-captioned/` 里的 9 张**（带标题版，1320×2868，传 6.9 英寸区）；`screenshots-6.5-captioned/` 是同一套的 1242×2688 版，6.5 英寸区可传可不传。
 源图在 `screenshots-6.9/`，用 iPhone 17 Pro Max 模拟器 + Release 包、审核账号（免费用户）连生产接口截的真实数据，状态栏统一 9:41。
-缠论相关的 1–3 张用**宽松口径**截（我的 → 偏好设置 → 买卖点口径），买卖点更多、画面更丰富；全部图层（分型 / 线段）打开。
-改标题文案改 `make_captioned.py` 的 `SHOTS`，再跑 `uv run --with pillow --no-project python ios/AppStore/chan/make_captioned.py`。
+缠论相关的图用**宽松口径**截（我的 → 偏好设置 → 买卖点口径），买卖点更多、画面更丰富；全部图层（分型 / 线段）打开。
+第 2 张是三机位合成（`make_captioned.py` 的 `MULTI`，源图 `02a_cn / 02b_us / 02c_hk`）。改标题文案改 `SHOTS`，再跑 `uv run --with pillow --no-project python ios/AppStore/chan/make_captioned.py`。
 
 | 顺序 | 文件 | 标题 | 内容 |
 |------|------|------|------|
-| 1 | `01_chan_structure.png` | 缠论结构 一键自动画出 | NVDA 日线（宽松口径、全部图层）：结论卡、分型 / 笔 / 线段 / 中枢、一买二买二卖、MACD |
-| 2 | `02_fullscreen.png` | 横屏全屏 结构一目了然 | NVDA 横屏全屏 |
-| 3 | `03_radar.png` | 每天的买卖点 一张雷达图看完 | 标普 500 雷达（宽松口径，免费示例日） |
-| 4 | `04_signal_explain.png` | 每个买卖点 都有据可查 | UNH 一卖「怎么识别的」弹层 |
-| 5 | `05_fundamentals.png` | 基本面体检 A+ 到 F 一眼看懂 | NVDA 基本面研究 |
-| 6 | `06_report_ai.png` | 上百页财报 AI 帮你划重点 | NVDA 最新季报 AI 总结 |
-| 7 | `07_lesson.png` | 零基础 也能学会缠论 | 「三类买卖点」课程 |
-| 8 | `08_watchlist.png` | 自选股的结构阶段 随时看 | 自选（副标题写明不构成投资建议） |
+| 1 | `01_chan_structure.png` | 缠论结构 一键自动画出 | NVDA 日线（宽松口径、全部图层）；副标题写明美股 · A股 · 港股 |
+| 2 | `02_three_markets.png` | 美股 A股 港股 一个 App 全覆盖 | 三台手机：NVDA / 600519 茅台 / 0700 腾讯，各带市场角标 |
+| 3 | `03_fullscreen.png` | 横屏全屏 结构一目了然 | NVDA 横屏全屏 |
+| 4 | `04_radar.png` | 每天的买卖点 一张雷达图看完 | 标普 500 雷达（宽松口径，免费示例日） |
+| 5 | `05_signal_explain.png` | 每个买卖点 都有据可查 | UNH 一卖「怎么识别的」弹层 |
+| 6 | `06_fundamentals.png` | 基本面体检 A+ 到 F 一眼看懂 | NVDA 基本面研究 |
+| 7 | `07_report_ai.png` | 上百页财报 AI 帮你划重点 | NVDA 最新季报 AI 总结 |
+| 8 | `08_lesson.png` | 零基础 也能学会缠论 | 「三类买卖点」课程 |
+| 9 | `09_watchlist.png` | 三个市场的自选股 结构阶段随时看 | 自选（副标题写明不构成投资建议） |
 
-ASC 里删掉旧的 6 张（1.0 时的界面）再传这 8 张，前 3 张会出现在搜索结果缩略图里。
+ASC 里删掉旧的 6 张（1.0 时的界面）再传这 9 张，前 3 张会出现在搜索结果缩略图里。
 
 ---
 
