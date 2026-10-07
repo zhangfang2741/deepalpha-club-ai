@@ -19,13 +19,13 @@ enum AppConfig {
 
     // MARK: - 订阅
     //
-    // 只有一个会员：月度订阅 ¥188/月，解锁全部权益（不限次缠论分析、30 分钟次级别 / 周线看日线、
+    // 只有一个会员：月度订阅 ¥128/月，解锁全部权益（不限次缠论分析、30 分钟次级别 / 周线看日线、
     // 每日雷达与历史回看、自选不限数量与全部结构状态）。以前分基础版（¥88）和高级版，2026-10-05 合并。
     // 具体定价在 App Store Connect / Configuration.storekit 配置，不写死在代码里
     // （见 StoreManager.trialPeriodText，读商品实际配置生成文案）。
 
     /// 会员月度订阅商品 ID（需与 App Store Connect / Configuration.storekit 一致）。
-    /// 沿用原高级版的商品 ID：它本来就是全部权益，价格在 ASC 改成 ¥188 即可，已订阅的高级版用户不受影响。
+    /// 沿用原高级版的商品 ID：它本来就是全部权益，价格在 ASC 改成 ¥128 即可，已订阅的高级版用户不受影响。
     static let membershipMonthlyProductID = "club.deepalpha.chan.premium.monthly"
 
     /// 旧基础版月度订阅商品 ID（已停售，只用来识别还在有效期内的老订阅者，让他们按会员处理）。

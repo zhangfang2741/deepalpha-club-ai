@@ -85,7 +85,7 @@ DeepAlpha 缠论把 K 线图上的结构自动标出来，让你看懂行情在�
 ——
 
 关于订阅
-免费用户每日可分析 3 支不同标的。提供一个自动续订会员订阅，按月计费（¥188/月）：
+免费用户每日可分析 3 支不同标的。提供一个自动续订会员订阅，按月计费（¥128/月）：
 · 会员：不限次缠论分析，另含次级别确认、信号雷达与历史回看、自选不限数量与全部结构状态
 价格以 App 内及 App Store 显示为准。
 付款在确认购买时从你的 Apple 账户扣除。若在当前周期结束前 24 小时内
@@ -202,13 +202,13 @@ Two subscription tiers, a redesigned Signals radar, and tappable chart structure
 
 ```
 This version merges the previous Basic and Premium tiers into a single
-auto-renewing monthly membership (club.deepalpha.chan.premium.monthly, 188 CNY
+auto-renewing monthly membership (club.deepalpha.chan.premium.monthly, 128 CNY
 per month in China): it removes the free daily limit of 3 distinct tickers and
 includes the sub-level view (30-minute under daily, daily under weekly), the
 Signals radar tab with history, and the unlimited watchlist with every item's
 status. The previous Basic product (club.deepalpha.chan.pro.monthly) is no
 longer for sale; existing Basic subscribers keep access to everything until
-their subscription ends. There is no free trial. First-time subscribers get an introductory offer of 128 CNY for the first month (pay as you go), then it renews at the regular 188 CNY per month; the paywall shows the offer price, the struck-through regular price and the renewal price.
+their subscription ends. There is no free trial. First-time subscribers get an introductory offer of 58 CNY for the first month (pay as you go), then it renews at the regular 128 CNY per month; the paywall shows the offer price, the struck-through regular price and the renewal price.
 
 HOW TO REACH THE PAYWALL
 Sign in with the demo account (use the "Email" tab; phone login only works
