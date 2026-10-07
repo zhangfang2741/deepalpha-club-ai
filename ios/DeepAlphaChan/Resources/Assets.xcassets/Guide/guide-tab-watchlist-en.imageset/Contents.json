@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "guide-tab-watchlist-en.jpg",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

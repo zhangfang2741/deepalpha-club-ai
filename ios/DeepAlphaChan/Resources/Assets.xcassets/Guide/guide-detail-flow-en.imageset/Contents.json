@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "guide-detail-flow-en.jpg",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
