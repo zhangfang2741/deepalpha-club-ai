@@ -43,8 +43,8 @@ struct SubLevelSheet: View {
                     chart
                     if !sub.recentSignals.isEmpty { signals }
                     Text(isWeekly
-                         ? L("周线定方向、日线找进出点：两者同向为共振，反向多为次级别的反弹或回调。")
-                         : L("日线定方向、30 分钟找进出点：两者同向为共振，反向多为次级别的反弹或回调。"))
+                         ? L("周线看方向、日线看细节：两者同向为共振，反向多为次级别的反弹或回调。")
+                         : L("日线看方向、30 分钟看细节：两者同向为共振，反向多为次级别的反弹或回调。"))
                         .font(.caption2)
                         .foregroundColor(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
