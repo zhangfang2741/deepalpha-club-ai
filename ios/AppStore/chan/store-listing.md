@@ -276,26 +276,23 @@ Automatic Chan structure on candlestick charts, with nine illustrated lessons. U
 
 ---
 
-## 七、截图（`screenshots-6.9/`，1320×2868，6.9 英寸）
+## 七、截图（1.2，2026-10-07 重截）
 
-按此顺序上传，前两张最重要——列表页只展示前两张：
+**上传 `screenshots-6.9-captioned/` 里的 7 张**（带标题版，1320×2868，传 6.9 英寸区）；`screenshots-6.5-captioned/` 是同一套的 1242×2688 版，6.5 英寸区可传可不传。
+源图在 `screenshots-6.9/`，用 iPhone 17 Pro Max 模拟器 + Release 包、审核账号（免费用户）连生产接口截的真实数据，状态栏统一 9:41。
+改标题文案改 `make_captioned.py` 的 `SHOTS`，再跑 `uv run --with pillow --no-project python ios/AppStore/chan/make_captioned.py`。
 
-| 顺序 | 文件 | 展示内容 |
-|------|------|----------|
-| 1 | `01_analysis_us.png` | 美股完整分析：结构标注 + MACD + 形态分析（TSLA） |
-| 2 | `06_fullscreen.png` | 全屏大图，结构与买卖点一览 |
-| 3 | `02_analysis_hk.png` | 港股分析，证明多市场支持 |
-| 4 | `03_learn.png` | 9 篇入门词条列表 |
-| 5 | `04_lesson_detail.png` | 词条详情，含示意图 |
-| 6 | `05_query.png` | 查询条件与风险提示 |
+| 顺序 | 文件 | 标题 | 内容 |
+|------|------|------|------|
+| 1 | `01_radar.png` | 先看市场 再看结构 | 市场雷达：大盘环境、行业横条、气泡（免费示例日） |
+| 2 | `02_analysis_hk.png` | 缠论结构 自动画在图上 | 腾讯 0700 日线：结论卡、中枢、二买、MACD |
+| 3 | `03_signal_explain.png` | 每个买卖点 都讲清怎么来的 | UNH 一卖「怎么识别的」弹层 |
+| 4 | `04_fundamentals.png` | 基本面 五个维度一张图 | NVDA 基本面研究：A+、五维图、最新财报 / 年报 |
+| 5 | `05_report_ai.png` | 财报原文 AI 帮你划重点 | NVDA 最新季报 AI 总结 |
+| 6 | `06_lesson.png` | 看不懂 那就先学 | 缠论入门「三类买卖点」课程 |
+| 7 | `07_watchlist.png` | 技术分析与学习工具 不构成投资建议 | 自选：三个市场的结构阶段 |
 
-**均为真实数据**，通过审核账号连生产接口跑出来的，非拼接或模拟。
-状态栏已统一为 9:41 / 满电 / 满信号。
-
-> 6.9 英寸传了之后，6.5 英寸可不传，App Store 会自动缩放。
-> iPad 若不在支持设备列表内则无需 iPad 截图；本 App 的
-> `TARGETED_DEVICE_FAMILY` 含 iPad，**若不打算支持 iPad，
-> 提交前需在 ASC 的「支持设备」里取消勾选**，否则必须提供 iPad 截图。
+ASC 里删掉旧的 6 张（1.0 时的界面）再传这 7 张，前 3 张会出现在搜索结果缩略图里。
 
 ---
 
