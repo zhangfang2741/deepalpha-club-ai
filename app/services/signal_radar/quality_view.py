@@ -100,7 +100,8 @@ async def good_stocks(
             return cached["good"], int(cached.get("rated", 0)), str(cached.get("cutoff") or GOOD_FLOOR)
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_good_cache_read_failed", error=str(e))
-    loaded = await fundamental_top.load_ranked(market, universe, redis, now.date(), refresh=refresh)
+    # 只在刷新时才传 refresh（保持常规调用的签名不变）
+    loaded = await fundamental_top.load_ranked(market, universe, redis, now.date(), **({"refresh": True} if refresh else {}))
     if loaded is None:
         return None
     ranked, _ = loaded
