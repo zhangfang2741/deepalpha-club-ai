@@ -14,7 +14,13 @@ enum SignalRadarService {
         var query = ["market": market, "mode": SignalMode.current(), "scope": "all", "quality": qualityMode]
         if let universe, !universe.isEmpty { query["universe"] = universe }
         if refresh { query["refresh"] = "true" }
-        return try await APIClient.shared.get("/signal-radar", query: query)
+        let data = try await APIClient.shared.getData("/signal-radar", query: query)
+        let resp = try JSONDecoder().decode(SignalRadarResponse.self, from: data)
+        // 就绪的结果落盘：下次打开 App 先显示它（键与 ViewModel 的内存缓存键一致）
+        if !resp.isGenerating, !resp.days.isEmpty, !resp.universe.isEmpty, resp.universe != RadarUniverse.watchlistKey {
+            RadarDiskCache.write("\(market)|\(resp.universe)|\(SignalMode.current())", data)
+        }
+        return resp
     }
 
     /// 免费预览：未订阅会员用户唯一能点开的一天（后端固定算「上个月 1 号」，
@@ -23,7 +29,12 @@ enum SignalRadarService {
     static func demo(market: String, universe: String? = nil) async throws -> SignalRadarResponse {
         var query = ["market": market, "mode": SignalMode.current(), "scope": "all", "quality": qualityMode]
         if let universe, !universe.isEmpty { query["universe"] = universe }
-        return try await APIClient.shared.get("/signal-radar/demo", query: query)
+        let data = try await APIClient.shared.getData("/signal-radar/demo", query: query)
+        let resp = try JSONDecoder().decode(SignalRadarResponse.self, from: data)
+        if !resp.isGenerating, !resp.days.isEmpty, !resp.universe.isEmpty {
+            RadarDiskCache.write("demo|\(market)|\(resp.universe)|\(SignalMode.current())", data)
+        }
+        return resp
     }
 
     /// 好股票名单：某 (市场, universe) 当前综合等级最高的若干只（含近 90 天券商评级净上调 / 下调，仅美股）。

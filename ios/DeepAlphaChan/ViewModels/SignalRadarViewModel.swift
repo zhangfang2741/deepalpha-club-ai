@@ -13,6 +13,8 @@ final class SignalRadarViewModel: ObservableObject {
     @Published var isLoading = false
     /// 静默更新拖过 1.5 秒才为真：雷达角上的「更新中」提示用它，而不是 isReloading（后者一开始请求就为真，会一闪而过）。
     @Published private(set) var showsUpdatingHint = false
+    /// 后端真的在扫描（接口回 generating）。只有这时才写「正在扫描」；普通加载（缓存命中、通常 1 秒内）写「正在加载」，别让人以为每次都在重新算。
+    @Published private(set) var backendScanning = false
     @Published var errorMessage: String?
 
     /// 免费预览锚定日期（「上个月 1 号」）的真实快照，未订阅会员时插到 `days`
@@ -155,12 +157,24 @@ final class SignalRadarViewModel: ObservableObject {
         "\(market.rawValue)|\(universe)|\(SignalMode.current())"
     }
 
+    /// 内存里的上次结果；没有就读磁盘（上次打开 App 时存的），读到的放回内存。
+    private func cachedEntry(_ m: StockMarket, _ universe: String) -> (resp: SignalRadarResponse, at: Date)? {
+        let k = snapshotKey(m, universe)
+        if let e = snapshotCache[k] { return e }
+        guard universe != RadarUniverse.watchlistKey,
+              let (data, at) = RadarDiskCache.read(k),
+              let r = try? JSONDecoder().decode(SignalRadarResponse.self, from: data),
+              !r.isGenerating, !r.days.isEmpty else { return nil }
+        snapshotCache[k] = (r, at)
+        return (r, at)
+    }
+
     /// 切换后若内存里有这个（市场, 指数, 口径）的上次结果，立刻当作当前 response。
     /// 返回 true = 结果还新鲜（30 分钟内），调用方不用再请求：切市场一次完成、不闪、不重排。
     /// 返回 false = 缓存有但偏旧（先显示、再静默更新）或根本没有。
     @discardableResult
     private func applyCachedSnapshot() -> Bool {
-        guard let entry = snapshotCache[snapshotKey(market, activeUniverseKey)] else { return false }
+        guard let entry = cachedEntry(market, activeUniverseKey) else { return false }
         response = entry.resp
         jumpToDemoDayIfPresent()
         guard Date().timeIntervalSince(entry.at) < Self.snapshotFreshSeconds else { return false }
@@ -173,9 +187,22 @@ final class SignalRadarViewModel: ObservableObject {
     /// 否则每次切市场都是「正在扫描」→ 先放出真实最新一天 → 示例日到了再跳回去，画面变两次。
     private var demoCache: [String: (day: RadarDay, computedAt: String?, at: Date)] = [:]
 
+    /// 示例日：内存 → 磁盘（上次打开 App 时存的）。
+    private func cachedDemo() -> (day: RadarDay, computedAt: String?, at: Date)? {
+        if let e = demoCache[demoKey] { return e }
+        let universe = currentUniverse ?? activeUniverseKey
+        guard universe != RadarUniverse.watchlistKey,
+              let (data, at) = RadarDiskCache.read("demo|\(market.rawValue)|\(universe)|\(mode)"),
+              let r = try? JSONDecoder().decode(SignalRadarResponse.self, from: data),
+              !r.isGenerating, let day = r.days.first else { return nil }
+        let e = (day: day, computedAt: r.computedAt, at: at)
+        demoCache[demoKey] = e
+        return e
+    }
+
     /// 切换（市场 / 指数 / 口径）后，把这个键的示例日从内存恢复出来；没有就清空，等 loadDemoDay 去拉。
     private func restoreDemoFromCache() {
-        if let entry = demoCache[demoKey] {
+        if let entry = cachedDemo() {
             demoDay = entry.day
             demoComputedAt = entry.computedAt
         } else {
@@ -347,6 +374,14 @@ final class SignalRadarViewModel: ObservableObject {
 
     func onAppear() {
         guard !isLoading else { return }
+        // 冷启动：先拿磁盘里上次的结果顶上（示例日也是），新鲜（30 分钟内）就不用请求；否则先显示、再静默更新
+        if response == nil {
+            restoreDemoFromCache()
+            if applyCachedSnapshot() {
+                lastLoadedLocalDay = todayLocalDay
+                return
+            }
+        }
         // 首次进入（无数据）或已跨自然日（内存里的还是昨天的）都重拉，避免日期停住。
         if response == nil || lastLoadedLocalDay != todayLocalDay {
             Task { await load() }
@@ -439,6 +474,7 @@ final class SignalRadarViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         showsUpdatingHint = false
+        backendScanning = false
         // 有旧气泡在显示时，静默更新 1.5 秒内不打扰；拖得久才在角上提示「更新中」（以前一闪而过很突兀）
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: 1_500_000_000)
@@ -455,6 +491,7 @@ final class SignalRadarViewModel: ObservableObject {
             var delay = pollInterval
             while resp.isGenerating && tries < maxPolls {
                 if market != requested || currentUniverse != requestedUniverse || SignalMode.current() != requestedMode { return }
+                backendScanning = true
                 try await Task.sleep(nanoseconds: delay)
                 resp = try await SignalRadarService.fetch(
                     market: requested.rawValue, universe: requestedUniverse)
@@ -492,6 +529,7 @@ final class SignalRadarViewModel: ObservableObject {
         if market == requested && currentUniverse == requestedUniverse && SignalMode.current() == requestedMode {
             isLoading = false
             showsUpdatingHint = false
+            backendScanning = false
         }
     }
 
