@@ -39,13 +39,13 @@ from app.services.signal_radar.universe import all_universes
 
 
 def _modes() -> list[str]:
-    """预热 / 盘中次级别刷新覆盖的买卖点口径：默认（宽松）+ 严格。
+    """预热 / 盘中次级别刷新覆盖的买卖点口径：默认（宽松）+ 中等 + 严格（App 里用户可在三套之间切换）。
 
     新版 App 改用严格口径（雷达、详情页、次级别统一），线上旧版 App 仍请求宽松（默认）口径，
     两套都预热，否则每天第一个打开雷达的人要等一轮全量扫描。默认口径先跑；第二套的日线走
     K 线缓存，不重复拉数，额外开销主要是盘中 30 分钟次级别。旧版用户少了以后可以只留严格口径。
     """
-    return [DEFAULT_MODE, "strict"]
+    return [DEFAULT_MODE, "medium", "strict"]
 
 # 启动后先等一会儿再首扫，避开启动期其它预热任务抢资源。
 _STARTUP_DELAY_SECONDS = 45
@@ -131,7 +131,7 @@ async def _prewarm_demo(redis, u, mode: str) -> None:
 def _demo_targets(defaults_only: bool = False) -> list[tuple]:
     """免费示例日要预热的 (universe, 口径)：默认指数在前、严格口径（新版 App）在前。"""
     targets = [u for u in _target_universes() if u.is_default or not defaults_only]
-    modes = sorted(_modes(), key=lambda m: m != "strict")  # 严格口径先跑
+    modes = sorted(_modes(), key=lambda m: m != "medium")  # 中等（新版 App 默认）先跑
     ordered = sorted(targets, key=lambda u: not u.is_default)  # 稳定排序：默认指数先
     return [(u, m) for u in ordered for m in modes]
 

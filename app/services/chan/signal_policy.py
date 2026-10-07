@@ -85,7 +85,7 @@ class _PolicyInfo:
     pivot_limit: int = 0
     # 一类趋势背驰要求 b、c 之间黄白线回抽零轴：None = 不要求；0 = 回到零轴；0.2 = 回落到 b 段峰值 20% 以内
     zero_pullback: float | None = None
-    # 盘整里的背驰（不满足两中枢趋势前提）也算一类：放宽严格口径、买卖点更多（缠论原文不算，见 CHAN_CONSOLIDATION_FIRST_CLASS）
+    # 盘整里的背驰（不满足两中枢趋势前提）也算一类：比严格口径信号多约一倍（缠论原文不算，「中等」口径用）
     consolidation: bool = False
 
 
@@ -122,7 +122,7 @@ class StrictPolicy(_PolicyInfo):
 # （缠论：一笔由后一笔确认），中位滞后由 10 个交易日缩短；
 # std6 一类背驰改为 c 段（离开 B）对 b 段（A、B 之间）比力度，同笔二 / 三类只留一个；
 # std7 背驰度量可插拔（leg_metric），默认原文 MACD 面积，版本号带度量名；
-# std11 放宽：盘整里的背驰也算一类（CHAN_CONSOLIDATION_FIRST_CLASS，版本号带 .cons；15 只 A 股两年 37 → 78 个）；
+# medium：mid1 = 严格口径 + 盘整里的背驰也算一类（15 只 A 股两年 37 → 74 个；严格口径本身保持 std10 不变，旧缓存照用）；
 # std10 一类要求中枢 B 不超过 9 段（原文：延伸到 9 段升级，不再是原级别趋势）；
 # std9 MACD 改用 czsc 的 TA-Lib 兼容实现（仅预热区个别判定变化）；std8 b 段取法对齐 czsc 首尾相接的中枢（A 的离开笔算 b 段），面积比强弱阈值按 51 只股票 85 个信号标定。
 # loose：loose1 严格化之前的口径；loose2 组装加一致性约束（同笔多信号按一类>三类>二类
@@ -136,8 +136,15 @@ _ALL: tuple[SignalPolicy, ...] = (
             czsc_families=("first", "second", "third"),
         ),
         StrictPolicy(
-            name="strict", version=f"std11.{_METRIC.name}" + (".cons" if settings.CHAN_CONSOLIDATION_FIRST_CLASS else "") + (f".zp{settings.CHAN_ZERO_PULLBACK:g}" if settings.CHAN_ZERO_PULLBACK is not None else ""), metric_name=_METRIC.name, unify_divergences=True,
-            pivot_limit=settings.CHAN_PIVOT_EXTEND_LIMIT, zero_pullback=settings.CHAN_ZERO_PULLBACK, consolidation=settings.CHAN_CONSOLIDATION_FIRST_CLASS, label_zh="严格", label_en="Strict",
+            name="medium", version=f"mid1.{_METRIC.name}", metric_name=_METRIC.name, unify_divergences=True,
+            pivot_limit=settings.CHAN_PIVOT_EXTEND_LIMIT, consolidation=True, label_zh="中等", label_en="Balanced",
+            description_zh="在严格的基础上，盘整行情里的背驰也算，信号约多一倍；仍只认已走完的笔",
+            description_en="Strict plus divergences inside sideways ranges: about twice as many signals; completed legs only",
+            czsc_families=("first",),
+        ),
+        StrictPolicy(
+            name="strict", version=f"std10.{_METRIC.name}" + (f".zp{settings.CHAN_ZERO_PULLBACK:g}" if settings.CHAN_ZERO_PULLBACK is not None else ""), metric_name=_METRIC.name, unify_divergences=True,
+            pivot_limit=settings.CHAN_PIVOT_EXTEND_LIMIT, zero_pullback=settings.CHAN_ZERO_PULLBACK, label_zh="严格", label_en="Strict",
             description_zh="严格按缠论原文定义，只认已走完的笔",
             description_en="Textbook Chan definitions; only completed legs count",
             czsc_families=("first",),

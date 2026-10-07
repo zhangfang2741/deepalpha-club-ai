@@ -44,3 +44,13 @@ def test_default_analyze_is_loose():
     default = ChanAnalyzer().analyze("DN", bars)
     loose = ChanAnalyzer().analyze("DN", bars, mode="loose")
     assert [(s.type, s.time) for s in default.signals] == [(s.type, s.time) for s in loose.signals]
+
+
+def test_medium_is_strict_plus_consolidation() -> None:
+    """中等 = 严格口径 + 盘整背驰也算一类；严格口径本身不放宽，版本号互相隔离（缓存不串）。"""
+    from app.services.chan.signal_policy import SIGNAL_POLICIES
+    medium, strict = SIGNAL_POLICIES["medium"], SIGNAL_POLICIES["strict"]
+    assert medium.consolidation is True and strict.consolidation is False
+    assert medium.version != strict.version
+    assert medium.unify_divergences and strict.unify_divergences
+    assert {"loose", "medium", "strict"} <= set(SIGNAL_POLICIES)

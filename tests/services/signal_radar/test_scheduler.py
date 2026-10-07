@@ -3,10 +3,10 @@ from app.services.chan.signal_policy import DEFAULT_MODE, SIGNAL_POLICIES
 from app.services.signal_radar import scheduler
 
 
-def test_prewarm_covers_default_and_strict() -> None:
+def test_prewarm_covers_all_modes() -> None:
     """新版 App 改用严格口径，旧版仍请求宽松（默认）口径：两套都预热，默认口径先跑。"""
     assert len(SIGNAL_POLICIES) > 1
-    assert scheduler._modes() == [DEFAULT_MODE, "strict"]
+    assert scheduler._modes() == [DEFAULT_MODE, "medium", "strict"]
     assert all(m in SIGNAL_POLICIES for m in scheduler._modes())
 
 
@@ -14,7 +14,7 @@ def test_demo_targets_default_and_strict_first() -> None:
     """免费示例日预热：默认指数在前、严格口径（新版 App）在前；defaults_only 只含默认指数。"""
     targets = scheduler._demo_targets()
     assert targets, "没有预热目标"
-    assert targets[0][0].is_default and targets[0][1] == "strict"
+    assert targets[0][0].is_default and targets[0][1] == "medium"
     seen_non_default = False
     for u, _ in targets:
         if not u.is_default:
