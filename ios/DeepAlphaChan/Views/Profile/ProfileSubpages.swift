@@ -51,26 +51,13 @@ struct SubscriptionTierBadge: View {
     }
 }
 
-/// 偏好设置：语言、专业数值开关（以及仅调试包可见的开关）。
+/// 偏好设置：专业数值开关（以及仅调试包可见的开关）。
 struct PreferencesView: View {
-    @EnvironmentObject var localization: LocalizationManager
     /// 是否显示专业数值（面积比 / 价差比 / 时长比等）。默认关：先让人看懂结论，需要时再打开。
     @AppStorage(ProDetails.key) private var showProDetails = false
 
     var body: some View {
         List {
-            Section {
-                // 语言切换：跟随系统（按地区自动）/ 中文 / English。选完立刻生效。
-                Picker(selection: $localization.preference) {
-                    Text(L("跟随系统")).tag(AppLanguage?.none)
-                    ForEach(AppLanguage.allCases) { lang in
-                        Text(lang.nativeName).tag(AppLanguage?.some(lang))
-                    }
-                } label: {
-                    Label(L("语言"), systemImage: "globe")
-                }
-            }
-
             Section {
                 Toggle(isOn: $showProDetails) {
                     Label(L("显示专业数值"), systemImage: "function")
@@ -94,21 +81,11 @@ struct PreferencesView: View {
     }
 }
 
-/// 帮助与关于：新手导览、联系我们、隐私政策、服务条款、版本、免责声明。
-struct HelpAboutView: View {
-    @State private var showTour = false
+/// 关于：版本、隐私政策、服务条款、免责声明。（语言与帮助在「我的」一级页）
+struct AboutView: View {
 
     var body: some View {
         List {
-            Section(L("帮助")) {
-                Button { showTour = true } label: {
-                    Label(L("重看新手导览"), systemImage: "play.circle")
-                }
-                NavigationLink { ContactUsView() } label: {
-                    Label(L("联系我们"), systemImage: "envelope")
-                }
-            }
-
             Section(L("关于")) {
                 HStack {
                     Text(L("版本")).foregroundColor(Theme.textSecondary)
@@ -126,9 +103,8 @@ struct HelpAboutView: View {
                 Text(L("免责声明"))
             }
         }
-        .navigationTitle(L("帮助与关于"))
+        .navigationTitle(L("关于"))
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showTour) { OnboardingTourView() }
     }
 
     private var appVersion: String {

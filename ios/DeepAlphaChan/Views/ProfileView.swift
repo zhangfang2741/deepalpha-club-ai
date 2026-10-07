@@ -1,9 +1,11 @@
 import SwiftUI
 import StoreKit
 
-/// 我的：账号信息 + 订阅 / 偏好设置 / 帮助与关于 / 账号与安全四个二级入口 + 退出登录（功能都在 Views/Profile/ProfileSubpages.swift）。
+/// 我的：账号信息 + 语言 / 帮助放一级，订阅 / 偏好设置 / 关于 / 账号与安全是二级入口 + 退出登录（功能都在 Views/Profile/ProfileSubpages.swift）。
 struct ProfileView: View {
     @EnvironmentObject var auth: AuthViewModel
+    @EnvironmentObject var localization: LocalizationManager
+    @State private var showTour = false
     @State private var showLogoutAlert = false
 
     var body: some View {
@@ -18,7 +20,29 @@ struct ProfileView: View {
                     }
                 }
 
-                // 一级页只放入口，具体功能都在二级页里
+                // 语言：选完立刻生效（跟随系统 / 中文 / English）
+                Section {
+                    Picker(selection: $localization.preference) {
+                        Text(L("跟随系统")).tag(AppLanguage?.none)
+                        ForEach(AppLanguage.allCases) { lang in
+                            Text(lang.nativeName).tag(AppLanguage?.some(lang))
+                        }
+                    } label: {
+                        Label(L("语言"), systemImage: "globe")
+                    }
+                }
+
+                // 帮助：新手导览 + 联系我们
+                Section(L("帮助")) {
+                    Button { showTour = true } label: {
+                        Label(L("重看新手导览"), systemImage: "play.circle")
+                    }
+                    NavigationLink { ContactUsView() } label: {
+                        Label(L("联系我们"), systemImage: "envelope")
+                    }
+                }
+
+                // 其余功能都在二级页里
                 Section {
                     NavigationLink { SubscriptionSettingsView() } label: {
                         HStack {
@@ -30,8 +54,8 @@ struct ProfileView: View {
                     NavigationLink { PreferencesView() } label: {
                         Label(L("偏好设置"), systemImage: "slider.horizontal.3")
                     }
-                    NavigationLink { HelpAboutView() } label: {
-                        Label(L("帮助与关于"), systemImage: "questionmark.circle")
+                    NavigationLink { AboutView() } label: {
+                        Label(L("关于"), systemImage: "info.circle")
                     }
                     NavigationLink { AccountSecurityView() } label: {
                         Label(L("账号与安全"), systemImage: "lock.shield")
@@ -49,6 +73,7 @@ struct ProfileView: View {
             .navigationTitle(L("我的"))
             .navigationBarTitleDisplayMode(.inline)
             .task { if auth.profile == nil { await auth.loadProfile() } }
+            .sheet(isPresented: $showTour) { OnboardingTourView() }
             .alert(L("确认退出登录？"), isPresented: $showLogoutAlert) {
                 Button(L("取消"), role: .cancel) {}
                 Button(L("退出"), role: .destructive) {
