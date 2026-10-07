@@ -93,7 +93,7 @@ struct LessonDetailView: View {
 ///
 /// 截图存在 Assets.xcassets/Guide 里，按界面语言取：英文界面优先用 `资源名-en`，
 /// 没有就退回中文版。资源缺失时整段不显示（不出现空白框），内容测试会守护引用都存在。
-/// 截图较高，正文里限高显示，点开全屏看原图。
+/// 截图只裁内容区域（不含状态栏、页面标题），正文里与文字同宽显示，点开全屏看原图。
 struct LessonScreenshot: View {
     let caption: String
     let image: UIImage
@@ -117,7 +117,7 @@ struct LessonScreenshot: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
-                    .frame(maxHeight: 460)
+                    .frame(maxWidth: .infinity)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.textSecondary.opacity(0.25), lineWidth: 1))
             }
@@ -136,12 +136,16 @@ struct LessonScreenshot: View {
         .fullScreenCover(isPresented: $zoomed) {
             ZStack(alignment: .topTrailing) {
                 Color.black.ignoresSafeArea()
-                ScrollView {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 56)
+                // 矮图垂直居中，高图可以上下滚动
+                GeometryReader { geo in
+                    ScrollView {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 56)
+                            .frame(minHeight: geo.size.height)
+                    }
                 }
                 Button { zoomed = false } label: {
                     Image(systemName: "xmark.circle.fill")
