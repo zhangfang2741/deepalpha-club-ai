@@ -200,10 +200,21 @@ struct SignalRadarView: View {
                     consentLockedField
                 } else {
                     bubbleField
-                        // 同一市场/指数重新加载时保留旧气泡、调暗，期间暂不响应点按；不再盖转圈，
-                        // 加载提示只有「正在扫描」一种（切市场/指数走 scanningView）
-                        .opacity(vm.isReloading ? 0.35 : 1)
-                        .allowsHitTesting(!vm.isReloading)
+                        // 同一市场/指数重新加载时保留旧气泡、照常可点（不再调暗禁点——后台扫描慢时
+                        // 以前会整屏半透明点不动）；只在左上角放一个小「更新中」提示
+                        .overlay(alignment: .topLeading) {
+                            if vm.isReloading {
+                                HStack(spacing: 5) {
+                                    ProgressView().controlSize(.mini)
+                                    Text(L("更新中")).font(.caption2).foregroundColor(Theme.textSecondary)
+                                }
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(Theme.surface.opacity(0.85), in: Capsule())
+                                .padding(8)
+                                .allowsHitTesting(false)
+                                .transition(.opacity)
+                            }
+                        }
                         .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
                 }
                 legend
