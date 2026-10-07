@@ -25,6 +25,8 @@ struct PaywallView: View {
 
     /// 对比表两列的宽度：免费版 / 会员。
     private static let columnWidth: CGFloat = 78
+    /// 卡片 / 按钮的圆角：小而统一（8pt）。大圆角显得松垮、不精致。
+    private static let cornerRadius: CGFloat = 8
 
     var body: some View {
         NavigationStack {
@@ -58,6 +60,7 @@ struct PaywallView: View {
             // tier 变化（购买/恢复成功）即关闭
             .onChange(of: store.tier) { _, _ in dismiss() }
         }
+        .presentationCornerRadius(14)
         // 付费墙不参与截图分享：订阅价格与权益文案带法务口径，截出去容易被
         // 脱离上下文传播；且它常从「我的」页弹出，抑制声明与呈现路径无关才可靠。
         .suppressScreenshotShare()
@@ -137,10 +140,10 @@ struct PaywallView: View {
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity)
         .background(
-            LinearGradient(colors: [Theme.accent.opacity(0.16), Theme.surface],
+            LinearGradient(colors: [Theme.accent.opacity(0.10), Theme.surface],
                            startPoint: .top, endPoint: .bottom),
-            in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.accent.opacity(0.55), lineWidth: 1))
+            in: RoundedRectangle(cornerRadius: Self.cornerRadius))
+        .overlay(RoundedRectangle(cornerRadius: Self.cornerRadius).stroke(Theme.accent.opacity(0.45), lineWidth: 0.5))
     }
 
     /// 大字价格 +「/月」。价格串直接用 StoreKit 的 displayPrice（带币种符号与本地化格式），不自己拼；
@@ -161,7 +164,7 @@ struct PaywallView: View {
         Text(text)
             .font(.system(size: 11, weight: .bold)).foregroundColor(.white)
             .padding(.horizontal, 10).padding(.vertical, 3)
-            .background(Theme.accent, in: Capsule())
+            .background(Theme.accent, in: RoundedRectangle(cornerRadius: 3))
     }
 
     private func caption(_ text: String) -> some View {
@@ -213,7 +216,7 @@ struct PaywallView: View {
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(Theme.accent)
                             .frame(width: 26, height: 26)
-                            .background(Theme.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 7))
+                            .background(Theme.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 4))
                         Text(row.title).font(.subheadline.weight(.medium)).foregroundColor(Theme.textPrimary)
                             .lineLimit(1).minimumScaleFactor(0.8)
                     }
@@ -228,16 +231,17 @@ struct PaywallView: View {
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
         .background(alignment: .trailing) { memberColumnHighlight }
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.border, lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Self.cornerRadius))
+        .overlay(RoundedRectangle(cornerRadius: Self.cornerRadius).stroke(Theme.border, lineWidth: 0.5))
+        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius))
     }
 
     /// 会员列的高亮底：贴着卡片右侧，盖住整列（含表头），比卡片内边距略宽。
     private var memberColumnHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .fill(LinearGradient(colors: [Theme.accent.opacity(0.9), Theme.accent.opacity(0.28)],
-                                 startPoint: .top, endPoint: .bottom))
+        // 平的半透明底 + 细边，不再用大圆角渐变块：克制、不抢戏
+        RoundedRectangle(cornerRadius: 3)
+            .fill(Theme.accent.opacity(0.22))
+            .overlay(RoundedRectangle(cornerRadius: 3).stroke(Theme.accent.opacity(0.6), lineWidth: 0.5))
             .frame(width: Self.columnWidth + 8)
             .padding(.trailing, 12)
             .padding(.vertical, 6)
@@ -279,9 +283,8 @@ struct PaywallView: View {
                     Text(buttonTitle(product)).font(.system(size: 17, weight: .bold))
                 }
                 .frame(maxWidth: .infinity).padding(.vertical, 15)
-                .background(Theme.accent, in: RoundedRectangle(cornerRadius: 16))
+                .background(Theme.accent, in: RoundedRectangle(cornerRadius: Self.cornerRadius))
                 .foregroundColor(.white)
-                .shadow(color: Theme.accent.opacity(0.35), radius: 12, y: 4)
             }
             .disabled(store.purchaseInProgress)
             Text(footnote(product))
