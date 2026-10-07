@@ -128,6 +128,42 @@ async def _prewarm_demo(redis, u, mode: str) -> None:
         logger.warning("signal_radar_demo_prewarm_failed", market=u.market, universe=u.key, mode=mode, error=str(e))
 
 
+def _demo_targets(defaults_only: bool = False) -> list[tuple]:
+    """免费示例日要预热的 (universe, 口径)：默认指数在前、严格口径（新版 App）在前。"""
+    targets = [u for u in _target_universes() if u.is_default or not defaults_only]
+    modes = sorted(_modes(), key=lambda m: m != "strict")  # 严格口径先跑
+    ordered = sorted(targets, key=lambda u: not u.is_default)  # 稳定排序：默认指数先
+    return [(u, m) for u in ordered for m in modes]
+
+
+async def _prewarm_demos_all(defaults_only: bool = False) -> None:
+    """把免费示例日全部预热一遍（已有且不陈旧的直接跳过，几乎不花时间）。
+
+    免费用户唯一能点开的就是示例日，比整轮主扫描更要紧：启动后先跑默认指数的示例日，
+    再跑主预热；之后每小时巡检一次（月初示例日换目标日、Redis 被清、降级快照 30 分钟自愈都靠它）。
+    """
+    redis = current_redis()
+    if redis is None:
+        return
+    for u, mode in _demo_targets(defaults_only):
+        await _prewarm_demo(redis, u, mode)
+
+
+_DEMO_KEEPWARM_INTERVAL_SECONDS = 3600
+
+
+async def _demo_keepwarm_loop() -> None:
+    """每小时巡检一次示例日快照，缺了 / 陈旧 / 降级就补算。"""
+    while True:
+        try:
+            await asyncio.sleep(_DEMO_KEEPWARM_INTERVAL_SECONDS)
+            await _prewarm_demos_all()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 巡检失败等下一小时再来
+            logger.exception("signal_radar_demo_keepwarm_failed", error=str(e))
+
+
 async def _resume_orphan_backfills() -> None:
     """接手上一个进程没补完的补算（部署重启会中断进程内的补算任务）。
 
@@ -241,8 +277,19 @@ async def run_signal_radar_sub_level_scheduler() -> None:
             return
 
 
+_keepwarm_task: asyncio.Task[None] | None = None
+
+
 async def run_signal_radar_prewarm_scheduler() -> None:
-    """按各市场收盘时间触发全量重扫，直到进程退出。"""
+    """按各市场收盘时间触发全量重扫，直到进程退出；退出时一并停掉示例日巡检任务。"""
+    try:
+        await _prewarm_scheduler_body()
+    finally:
+        if _keepwarm_task is not None and not _keepwarm_task.done():
+            _keepwarm_task.cancel()
+
+
+async def _prewarm_scheduler_body() -> None:
     if not settings.SIGNAL_RADAR_PREWARM_ENABLED:
         logger.info("signal_radar_prewarm_disabled")
         # 不预热也要接手上一个进程没补完的补算，否则重启后那几只就一直缺着
@@ -263,6 +310,17 @@ async def run_signal_radar_prewarm_scheduler() -> None:
     markets = _target_markets()
     if not markets:
         return
+
+    # 免费示例日先于主扫描：免费用户唯一能点开的就是它，部署后不能让他们干等整轮扫描。
+    # 先把默认指数的示例日算好（K 线进缓存，后面的主扫描也受益），再起每小时巡检。
+    try:
+        await _prewarm_demos_all(defaults_only=True)
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:  # noqa: BLE001
+        logger.exception("signal_radar_demo_prewarm_first_failed", error=str(e))
+    global _keepwarm_task
+    _keepwarm_task = asyncio.create_task(_demo_keepwarm_loop())
 
     # 进程刚起来（部署/重启后）先扫一轮全部市场，保证很快就有缓存可用，不用干等到
     # 下一个收盘触发点——那最长可能要接近 24 小时（如果刚好错过当天的收盘时刻）。

@@ -8,3 +8,18 @@ def test_prewarm_covers_default_and_strict() -> None:
     assert len(SIGNAL_POLICIES) > 1
     assert scheduler._modes() == [DEFAULT_MODE, "strict"]
     assert all(m in SIGNAL_POLICIES for m in scheduler._modes())
+
+
+def test_demo_targets_default_and_strict_first() -> None:
+    """免费示例日预热：默认指数在前、严格口径（新版 App）在前；defaults_only 只含默认指数。"""
+    targets = scheduler._demo_targets()
+    assert targets, "没有预热目标"
+    assert targets[0][0].is_default and targets[0][1] == "strict"
+    seen_non_default = False
+    for u, _ in targets:
+        if not u.is_default:
+            seen_non_default = True
+        else:
+            assert not seen_non_default, "默认指数必须排在非默认指数前面"
+    assert all(u.is_default for u, _ in scheduler._demo_targets(defaults_only=True))
+    assert {m for _, m in targets} == set(scheduler._modes())

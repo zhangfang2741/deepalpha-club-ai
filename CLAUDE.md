@@ -217,6 +217,7 @@ deepalpha-club-ai/
 
 > **雷达默认指数**（2026-10-06 起，`universe.py` 的 `is_default`）：美股标普 500、A 股沪深 300、港股恒生指数（此前是科技指数）；iOS `SignalRadarViewModel.defaultUniverseKeys` 兜底与它一致。改默认须两边同步。
 
+> **免费示例日预热**（`scheduler._prewarm_demos_all`）：免费用户唯一能点开的是示例日，所以启动后**先**预热默认指数的示例日（严格口径优先）、再跑主扫描，之后每小时巡检一次（`_demo_keepwarm_loop`：月初换目标日、Redis 被清、降级快照自愈）；缓存 3 天、12 小时算陈旧（先返回旧的再后台重算）。
 > 信号雷达扫描约束（`app/services/signal_radar`）：同一 (口径, 市场, universe) 任一时刻只跑一轮全量扫描
 > ——接口与定时预热共用 `scan_lock_key` 原子锁（`acquire_lock` = SET NX EX），主动刷新有 5 分钟冷却；
 > 所有扫描 / 补算 / 示例日拉 K 线共用进程级闸门 `_fetch_gate`。拉数失败（限流 / 不可用）的成分股
