@@ -68,44 +68,59 @@ async def _prewarm_once(markets: set[str] | None = None) -> None:
     # 串行执行（大盘宽基成分多，避免多套扫描并发抢数据源），按缓存剩余有效期从短到长：
     # 最久没刷新的先扫。进程频繁重启（每次部署）时扫描常被打断，固定按美股→A股→港股的
     # 顺序会让排在后面的市场一直轮不到、停在旧快照上。
-    async def remaining_ttl(u) -> int:
+    async def remaining_ttl(u, mode: str) -> int:
         """缓存剩余秒数；没有缓存（-2）或读不到按最旧处理。"""
         try:
-            return int(await redis.ttl(_cache_key(u.market, u.key)))
+            return int(await redis.ttl(_cache_key(u.market, u.key, mode)))
         except Exception:  # noqa: BLE001
             return -2
 
     targets = _target_universes()
     if markets is not None:
         targets = [u for u in targets if u.market in markets]
-    ttls = [await remaining_ttl(u) for u in targets]
-    # 稳定排序：剩余 TTL 相同时保持原有顺序
-    ordered = [u for _, _, u in sorted(zip(ttls, range(len(targets)), targets, strict=True),
-                                       key=lambda x: (x[0], x[1]))]
-    for u in ordered:
-        for mode in _modes():
-            # 与接口触发的扫描共用同一把锁：用户刚好在扫这一份就跳过，不重复扫
-            lock = scan_lock_key(u.market, u.key, mode)
-            if not await acquire_lock(redis, lock, SCAN_LOCK_TTL):
-                logger.info("signal_radar_prewarm_skipped_locked", market=u.market, universe=u.key, mode=mode)
-                continue
-            try:
-                resp = await compute_market(
-                    u.market, redis=redis, user_id=None, universe_key=u.key, mode=mode,
-                )
-                logger.info(
-                    "signal_radar_prewarmed", market=u.market, universe=u.key, mode=mode, days=len(resp.days)
-                )
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:  # noqa: BLE001 单个 universe / 口径失败不影响其余
-                logger.exception(
-                    "signal_radar_prewarm_market_failed", market=u.market, universe=u.key, mode=mode,
-                    error=str(e),
-                )
-            finally:
-                await release_lock(redis, lock)
-            await _prewarm_demo(redis, u, mode)
+    pairs = [(u, m) for u in targets for m in _modes()]
+    ttls = [await remaining_ttl(u, m) for u, m in pairs]
+    # 冷启动优先级（部署 / 口径换版本后缓存全空，先让用户最可能打开的那几份就绪）：
+    # 默认指数先于其它指数、中等（App 默认口径）> 严格 > 宽松（旧版 App）；同档内按剩余 TTL 从短到长，
+    # 再保持原有顺序（稳定排序）。
+    ordered = _prewarm_order(pairs, ttls)
+    for u, mode in ordered:
+        # 与接口触发的扫描共用同一把锁：用户刚好在扫这一份就跳过，不重复扫
+        lock = scan_lock_key(u.market, u.key, mode)
+        if not await acquire_lock(redis, lock, SCAN_LOCK_TTL):
+            logger.info("signal_radar_prewarm_skipped_locked", market=u.market, universe=u.key, mode=mode)
+            continue
+        try:
+            resp = await compute_market(
+                u.market, redis=redis, user_id=None, universe_key=u.key, mode=mode,
+            )
+            logger.info(
+                "signal_radar_prewarmed", market=u.market, universe=u.key, mode=mode, days=len(resp.days)
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 单个 universe / 口径失败不影响其余
+            logger.exception(
+                "signal_radar_prewarm_market_failed", market=u.market, universe=u.key, mode=mode,
+                error=str(e),
+            )
+        finally:
+            await release_lock(redis, lock)
+        await _prewarm_demo(redis, u, mode)
+
+
+def _prewarm_order(pairs: list[tuple], ttls: list[int]) -> list[tuple]:
+    """主扫描顺序（纯函数，便于测试）：默认指数先于其它指数 → 中等 > 严格 > 宽松 → 剩余 TTL 短的先 → 原顺序。"""
+    order = _mode_priority()
+    idx = sorted(range(len(pairs)),
+                 key=lambda i: (not pairs[i][0].is_default, order.get(pairs[i][1], 99), ttls[i], i))
+    return [pairs[i] for i in idx]
+
+
+def _mode_priority() -> dict[str, int]:
+    """冷启动预热顺序：中等（新版 App 默认）→ 严格 → 其余（宽松，旧版 App）。"""
+    rank = {"medium": 0, "strict": 1}
+    return {m: rank.get(m, 2) for m in _modes()}
 
 
 async def _prewarm_demo(redis, u, mode: str) -> None:
