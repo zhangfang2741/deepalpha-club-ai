@@ -427,6 +427,8 @@ class Settings:
         # 一类趋势背驰要求 b、c 之间黄白线回抽零轴（缠论原文辅助条件）：空 = 不要求；0 = 回到零轴；0.2 = 回落到 b 段 DIF 峰值 20% 以内
         _zp = os.getenv("CHAN_ZERO_PULLBACK", "").strip()
         self.CHAN_ZERO_PULLBACK: float | None = float(_zp) if _zp else None
+        # 严格口径放宽：盘整里的背驰（不满足两中枢趋势前提）也算一类（缠论原文不算，但原文口径下信号太少）；设 false 回到原文口径
+        self.CHAN_CONSOLIDATION_FIRST_CLASS = os.getenv("CHAN_CONSOLIDATION_FIRST_CLASS", "true").lower() in ("true", "1", "yes")
         # 护城河（app/services/quant_research/moat）：部署后冷启动跑一遍，之后每天检查新 10-K
         self.QUANT_MOAT_ENABLED = os.getenv("QUANT_MOAT_ENABLED", "true").lower() in ("true", "1", "yes")
         self.QUANT_MOAT_UTC_HOUR = int(os.getenv("QUANT_MOAT_UTC_HOUR", "12"))

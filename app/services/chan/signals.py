@@ -429,6 +429,7 @@ def generate_all_signals(
     metric: DivergenceMetric | None = None,
     pivot_limit: int = 0,
     zero_pullback: float | None = None,
+    consolidation: bool = False,
 ) -> list[Signal]:
     """严格按缠论标准定义组装买卖点，按时间排序、(类型, 时间) 去重。
 
@@ -467,7 +468,10 @@ def generate_all_signals(
             continue
         # 缠论原文：趋势背驰比较 c 段（离开 B）与 b 段（A、B 之间），不是末笔对前一笔。
         # 事件带 Rust 信号给出的趋势 / 两段原始力度就直接用，否则（标准 czsc）退回 Python 实现。
-        if ev.legs is not None:
+        if ev.legs is not None and not ev.legs.trend and consolidation:
+            # 放宽：不满足两中枢趋势前提的（盘整里的背驰）也算一类，沿用 czsc 笔级力度判定
+            judged, leg_div = False, None
+        elif ev.legs is not None:
             if not ev.legs.trend:
                 continue
             judged, leg_div = (
@@ -479,9 +483,11 @@ def generate_all_signals(
                               c_start=(ev.legs.c.start, price_by_start[ev.legs.c.start]) if ev.legs.c.start in price_by_start else None)
                 if ev.legs.b is not None and ev.legs.c is not None else (False, None)
             )
-        else:
-            if not _in_trend(pivots, ev.bi_end_time, ev.type == "buy1", ev.bi_end_price):
+        elif not _in_trend(pivots, ev.bi_end_time, ev.type == "buy1", ev.bi_end_price):
+            if not consolidation:
                 continue
+            judged, leg_div = False, None
+        else:
             judged, leg_div = _trend_leg_divergence(strokes, pivots, ev.bi_end_time, ev.type == "buy1", lang,
                                                     macd=macd, metric=metric)
         if judged and leg_div is None:

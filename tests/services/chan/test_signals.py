@@ -232,6 +232,15 @@ def test_buy1_without_two_pivots_is_not_type1():
     assert generate_all_signals(ev, [down], [_div("strong", 0.3)], _DOWN_TREND[1:]) == []
 
 
+def test_buy1_consolidation_switch_accepts_non_trend_divergence():
+    """放宽开关（consolidation=True）：没有两个依次下移的中枢，盘整里的背驰也算一买；默认（False）仍不算。"""
+    down = _st("down", "2025-01-01", "2025-01-10", 120, 100)
+    ev = [_ev("buy1", "2025-01-10", 100.0)]
+    assert generate_all_signals(ev, [down], [_div("strong", 0.3)], []) == []
+    relaxed = generate_all_signals(ev, [down], [_div("strong", 0.3)], [], consolidation=True)
+    assert [x.type for x in relaxed] == ["buy1"]
+
+
 def test_buy1_with_overlapping_pivots_is_not_type1():
     """两个中枢区间重叠（B 上沿 132 ≥ A 下沿 130）：不是下跌趋势。"""
     overlap = [_piv(130, 140, "2024-11-01", "2024-11-20"), _piv(120, 132, "2024-12-01", "2024-12-20")]
