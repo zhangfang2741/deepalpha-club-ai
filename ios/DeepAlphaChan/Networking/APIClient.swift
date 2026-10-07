@@ -26,6 +26,8 @@ actor APIClient {
     }
 
     /// 登录成功后立即注入内存 token，避免首个请求等待 Keychain 读取。
+    func clearToken() { sessionToken = nil }
+
     func setToken(_ token: String) {
         sessionToken = token
     }
@@ -96,13 +98,14 @@ actor APIClient {
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
-            throw APIError(message: "数据解析失败，请稍后再试", statusCode: http.statusCode)
+            throw APIError(message: L("数据解析失败，请稍后再试"), statusCode: http.statusCode)
         }
     }
 
     private func sendData(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         var req = request
-        if let token = sessionToken ?? KeychainStore.loadToken() {
+        let token = sessionToken ?? KeychainStore.loadToken()
+        if let token {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
@@ -111,15 +114,22 @@ actor APIClient {
         do {
             (data, response) = try await session.data(for: req)
         } catch {
-            throw APIError(message: "网络连接失败，请检查网络后重试", statusCode: nil)
+            throw APIError(message: L("网络连接失败，请检查网络后重试"), statusCode: nil)
         }
 
         guard let http = response as? HTTPURLResponse else {
-            throw APIError(message: "服务器响应异常", statusCode: nil)
+            throw APIError(message: L("服务器响应异常"), statusCode: nil)
         }
 
+        // 带着登录凭证却被拒（过期 / 账号已删 / 密钥轮换）：通知全局退回登录页，
+        // 不要把后端的英文原文（Invalid authentication credentials）留在各个页面上。
+        if http.statusCode == 401, token != nil {
+            sessionToken = nil
+            await MainActor.run { NotificationCenter.default.post(name: .sessionExpired, object: nil) }
+            throw APIError(message: L("登录已过期，请重新登录"), statusCode: 401)
+        }
         guard (200..<300).contains(http.statusCode) else {
-            throw APIError(message: Self.detail(from: data) ?? "请求失败（\(http.statusCode)）",
+            throw APIError(message: Self.detail(from: data) ?? L("请求失败（%lld）", http.statusCode),
                            statusCode: http.statusCode)
         }
         return (data, http)
@@ -157,4 +167,9 @@ private extension CharacterSet {
         set.insert(charactersIn: "-._~")
         return set
     }()
+}
+
+extension Notification.Name {
+    /// 已登录状态下请求返回 401：AuthViewModel 收到后退出登录。
+    static let sessionExpired = Notification.Name("sessionExpired")
 }

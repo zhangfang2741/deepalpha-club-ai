@@ -167,7 +167,6 @@
 "不再受每日次数限制" = "No more daily limit";
 "扫描科技指数成分股，每日买卖点一图看全" = "Scan tech-index constituents; see every day's buy/sell signals in one view";
 "30 分钟次级别确认" = "30-min Lower-Level Check";
-"日线定方向、30 分钟找进出点，共振/逆势一眼分辨" = "Daily sets the direction, 30-min times entries — spot alignment vs. counter-trend at a glance";
 "自选批量状态计算" = "Watchlist Batch Status";
 "自选列表批量算出每只标的当前所处的结构阶段" = "Batch-computes the current structure phase for every stock in your watchlist";
 "结构 GAP 分析" = "Structure GAP analysis";
@@ -368,7 +367,7 @@
 "次级别确认（30 分钟）" = "Lower-Level Check (30-min)";
 "日线：" = "Daily: ";
 "30 分钟近两日买卖点" = "30-min buy/sell points, last 2 days";
-"日线定方向、30 分钟找进出点：两者同向为共振，反向多为次级别的反弹或回调。" = "The daily chart sets the direction; the 30-minute chart times entries and exits. When they agree it's aligned; when they disagree it's usually just a lower-level bounce or pullback.";
+"日线看方向、30 分钟看细节：两者同向为共振，反向多为次级别的反弹或回调。" = "The daily chart shows the direction; the 30-minute chart shows the detail. When they agree it's aligned; when they disagree it's usually just a lower-level bounce or pullback.";
 "日线与30分钟共振" = "Daily and 30-minute aligned";
 "共振" = "Aligned";
 
@@ -393,7 +392,7 @@
 "周线：" = "Weekly: ";
 "打开次级别图表" = "Opens the lower-level chart";
 "正在加载次级别…" = "Loading lower level…";
-"周线定方向、日线找进出点：两者同向为共振，反向多为次级别的反弹或回调。" = "The weekly chart sets the direction; the daily chart times entries and exits. When they agree it's aligned; when they disagree it's usually just a lower-level bounce or pullback.";
+"周线看方向、日线看细节：两者同向为共振，反向多为次级别的反弹或回调。" = "The weekly chart shows the direction; the daily chart shows the detail. When they agree it's aligned; when they disagree it's usually just a lower-level bounce or pullback.";
 "浅色底 = 最近两周（次级别判断所看的区间）" = "Shaded = last two weeks (the window the lower-level check looks at)";
 "日线近两周买卖点" = "Daily buy/sell points, last 2 weeks";
 "次级别 %@ 更新" = "Sub-level updated %@";
@@ -1614,3 +1613,10 @@
 "价格在盘整里创了新高，但这一段上涨的力气比上一段小。" = "Price made a new high inside a range, but this leg up is weaker than the previous one.";
 "盘整背驰：前面只有一个中枢。「严格」口径下不对应一类买卖点；「中等」「宽松」口径下可能对应。" = "Range divergence: only one pivot before it. Under the Strict rule it does not correspond to a type-1 point; under Balanced / Relaxed it may.";
 "正在加载「%@」…" = "Loading “%@”…";
+
+/* 网络层错误（APIClient） */
+"网络连接失败，请检查网络后重试" = "Network connection failed. Check your connection and try again.";
+"服务器响应异常" = "Unexpected server response.";
+"数据解析失败，请稍后再试" = "Couldn't read the data. Please try again later.";
+"登录已过期，请重新登录" = "Your session has expired. Please sign in again.";
+"请求失败（%lld）" = "Request failed (%lld).";

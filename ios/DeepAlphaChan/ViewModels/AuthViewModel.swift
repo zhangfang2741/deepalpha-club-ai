@@ -28,7 +28,19 @@ final class AuthViewModel: ObservableObject {
             KeychainStore.clearToken()
         }
         self.isAuthenticated = KeychainStore.loadToken() != nil
+        // 凭证失效（APIClient 收到 401）时退回登录页，而不是让各页面停在报错上
+        sessionExpiredObserver = NotificationCenter.default.addObserver(
+            forName: .sessionExpired, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.isAuthenticated else { return }
+                self.logout()
+                self.errorMessage = L("登录已过期，请重新登录")
+            }
+        }
     }
+
+    private var sessionExpiredObserver: NSObjectProtocol?
 
     // MARK: - 登录
 
@@ -101,6 +113,7 @@ final class AuthViewModel: ObservableObject {
 
     func logout() {
         KeychainStore.clearToken()
+        Task { await APIClient.shared.clearToken() }
         profile = nil
         isAuthenticated = false
     }
