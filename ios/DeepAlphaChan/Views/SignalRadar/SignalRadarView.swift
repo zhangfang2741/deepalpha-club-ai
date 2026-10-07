@@ -70,8 +70,6 @@ struct SignalRadarView: View {
     @State private var pendingGood: (symbol: String, name: String)?
     /// 标题旁折叠：展开「市场 → 行业 → 好股票 → 买点」流程图。默认折叠。
     @State private var showFlow = false
-    /// 右上角「买卖点口径」切换面板。
-    @State private var showModeSheet = false
     /// 首次进入雷达时弹一次的新手导览（看过会记在 UserDefaults；学习页 / 我的里可重看）。
     @State private var showTour = false
     /// 基本面名单（当前综合等级达标的股票 + 各自有没有买卖点）的数据。
@@ -86,10 +84,6 @@ struct SignalRadarView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) { flowTitle }
-                ToolbarItem(placement: .topBarTrailing) { modeButton }
-            }
-            .sheet(isPresented: $showModeSheet) {
-                SignalModeSheet(current: vm.mode) { vm.switchMode($0) }
             }
             // 真实滚动窗口雷达对所有用户都拉（未订阅一样看得到市场卡片、图例、日期轨，
             // 跟会员一模一样，见 radarContent）；市场切换时 .task(id:) 额外拉一次
@@ -499,21 +493,6 @@ struct SignalRadarView: View {
     }
 
     /// 标题（「市场雷达」+ 折叠钮）：点一下展开 / 收起流程图。
-    /// 右上角：当前买卖点口径（严格 / 中等 / 宽松），点开可切换并看区别说明。
-    private var modeButton: some View {
-        Button { showModeSheet = true } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "slider.horizontal.3").font(.system(size: 12, weight: .semibold))
-                Text(SignalMode.title(vm.mode)).font(.system(size: 13, weight: .semibold))
-            }
-            .foregroundColor(Theme.textPrimary)
-            .padding(.horizontal, 10).frame(minHeight: 32)
-            .background(Theme.surface, in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(L("买卖点口径"))
-    }
-
     private var flowTitle: some View {
         Button {
             withAnimation(.easeInOut(duration: 0.2)) { showFlow.toggle() }

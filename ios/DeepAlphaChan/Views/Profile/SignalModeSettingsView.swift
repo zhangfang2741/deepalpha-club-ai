@@ -1,11 +1,10 @@
 import SwiftUI
 
-/// 买卖点口径切换面板（市场雷达右上角）：三套口径看同一批股票，区别只在「什么算买卖点」。
+/// 买卖点口径设置页（我的 → 偏好设置 → 买卖点口径）：三套口径看同一批股票，区别只在「什么算买卖点」。
 /// 每一项写清楚怎么判定、信号多少、代价是什么，让人明白为什么切了之后气泡会变多 / 变少。
-struct SignalModeSheet: View {
-    let current: String
-    let onSelect: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
+struct SignalModeSettingsView: View {
+    /// 选了立刻生效：写入 UserDefaults 并发通知，雷达那边的 ViewModel 收到后自己重载。
+    @State private var current = SignalMode.current()
 
     private struct Option {
         let key: String
@@ -29,35 +28,29 @@ struct SignalModeSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 10) {
-                    Text(L("三种口径看的是同一批股票，区别只在「什么算买卖点」：越宽松，信号越多、出现越早，也越容易被后来的走势推翻。"))
-                        .font(.footnote).foregroundColor(Theme.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 4)
+        ScrollView {
+            VStack(spacing: 10) {
+                Text(L("三种口径看的是同一批股票，区别只在「什么算买卖点」：越宽松，信号越多、出现越早，也越容易被后来的走势推翻。"))
+                    .font(.footnote).foregroundColor(Theme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 4)
 
-                    ForEach(options, id: \.key) { opt in
-                        Button {
-                            onSelect(opt.key)
-                            dismiss()
-                        } label: { optionCard(opt) }
-                            .buttonStyle(.plain)
-                    }
-
-                    Text(L("切换后，雷达和个股详情页都按所选口径显示。所有内容仅供学习参考，不构成投资建议。"))
-                        .font(.caption2).foregroundColor(Theme.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 4).padding(.top, 4)
+                ForEach(options, id: \.key) { opt in
+                    Button {
+                        current = opt.key
+                        SignalMode.set(opt.key)
+                    } label: { optionCard(opt) }
+                        .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 16).padding(.vertical, 12)
+
+                Text(L("选好直接生效：雷达和个股详情页都按所选口径显示。所有内容仅供学习参考，不构成投资建议。"))
+                    .font(.caption2).foregroundColor(Theme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 4).padding(.top, 4)
             }
-            .background(Theme.background)
-            .navigationTitle(L("买卖点口径"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button(L("完成")) { dismiss() } }
-            }
+            .padding(.horizontal, 16).padding(.vertical, 12)
         }
-        .presentationDetents([.large])
+        .background(Theme.background)
+        .navigationTitle(L("买卖点口径"))
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private func optionCard(_ opt: Option) -> some View {

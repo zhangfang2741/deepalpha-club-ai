@@ -3,6 +3,10 @@ import Foundation
 /// 信号雷达状态：市场切换、拉取（含 generating 轮询）、日期选择。
 @MainActor
 final class SignalRadarViewModel: ObservableObject {
+    init() { observeModeChanges() }
+
+    deinit { if let modeObserver { NotificationCenter.default.removeObserver(modeObserver) } }
+
     @Published var market: StockMarket = .us
     @Published var response: SignalRadarResponse?
     @Published var selectedDayIndex: Int = 0
@@ -337,11 +341,23 @@ final class SignalRadarViewModel: ObservableObject {
         Task { await load() }
     }
 
+    /// 口径在「偏好设置」里被改了：雷达跟着切（不论雷达页当前是否可见）。
+    private func observeModeChanges() {
+        modeObserver = NotificationCenter.default.addObserver(
+            forName: SignalMode.didChange, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, SignalMode.current() != self.mode else { return }
+                self.switchMode(SignalMode.current())
+            }
+        }
+    }
+    private var modeObserver: NSObjectProtocol?
+
     /// 切换买卖点口径：旧口径的结果不能当新口径展示，先清掉（内存里有新口径的上次结果就直接用），再后台重拉。
     func switchMode(_ newMode: String) {
         guard newMode != mode, SignalMode.all.contains(newMode) else { return }
+        mode = newMode            // 先改自己：下面 set 会发通知，观察者看到相同就不会再进来
         SignalMode.set(newMode)
-        mode = newMode
         selectedDayIndex = 0
         pendingUniverseKey = nil
         demoDay = nil

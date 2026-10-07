@@ -315,8 +315,8 @@ deepalpha-club-ai/
 - 「什么算买卖点」有多套口径，都实现 `SignalPolicy`（`czsc_families` / `assemble` /
   `split_unconfirmed` + 名称、版本、中英文案），在 `SIGNAL_POLICIES` 注册，按名字 `get_policy(mode)` 取。
   analyzer、`/chan/analysis`、`/chan/sub-level`、信号雷达（快照 / 自选 / 示例日）都只传 `mode`、走接口，
-  **不要**写 `if mode == ...` 分支。**App 里用户自己切换口径**（2026-10-07 起，市场雷达右上角按钮 → `SignalModeSheet`，严格 / 中等 / 宽松三选一并写明区别；选择存 UserDefaults，`SignalMode.current()` 读取，默认 medium；雷达、详情、次级别都带同一个 `mode`；线上旧版 App 仍请求 loose）。
-  **三套口径定时任务都预热**（`scheduler._modes()` = loose / medium / strict，示例日中等优先）；改任一口径的判定须升它的 version，改 App 文案时 `SignalModeSheet` 的三段说明要同步。
+  **不要**写 `if mode == ...` 分支。**App 里用户自己切换口径**（2026-10-07 起，「我的 → 偏好设置 → 买卖点口径」→ `SignalModeSettingsView`，严格 / 中等 / 宽松三选一并写明区别；选择存 UserDefaults，`SignalMode.current()` 读取，默认 medium；雷达、详情、次级别都带同一个 `mode`；线上旧版 App 仍请求 loose）。
+  **三套口径定时任务都预热**（`scheduler._modes()` = loose / medium / strict，示例日中等优先）；改任一口径的判定须升它的 version，改 App 文案时 `SignalModeSettingsView` 的三段说明要同步。
   `medium`（`mid1`）= 严格 + 盘整里的背驰也算一类（`consolidation=True`，约 2 倍信号）；`GET /chan/signal-modes` 列出全部口径（App 现用本地文案）。
 - `loose`（宽松，**默认**）= 严格化之前的口径：czsc 原生一/二/三类，最后一笔上的也输出（标未确认）。
   三族信号独立扫描、互不知晓，组装时（`generate_loose_signals`）必须做两条一致性约束（loose2 起）：

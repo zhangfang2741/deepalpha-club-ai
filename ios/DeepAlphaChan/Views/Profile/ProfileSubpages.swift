@@ -51,13 +51,29 @@ struct SubscriptionTierBadge: View {
     }
 }
 
-/// 偏好设置：专业数值开关（以及仅调试包可见的开关）。
+/// 偏好设置：买卖点口径、专业数值开关（以及仅调试包可见的开关）。
 struct PreferencesView: View {
     /// 是否显示专业数值（面积比 / 价差比 / 时长比等）。默认关：先让人看懂结论，需要时再打开。
     @AppStorage(ProDetails.key) private var showProDetails = false
+    /// 当前口径：直接读 UserDefaults（SignalMode 的存储键），从二级页返回时随之刷新行右侧的名字。
+    @AppStorage(SignalMode.storageKey) private var savedMode = SignalMode.defaultKey
+    private var signalMode: String { SignalMode.all.contains(savedMode) ? savedMode : SignalMode.defaultKey }
 
     var body: some View {
         List {
+            Section {
+                NavigationLink { SignalModeSettingsView() } label: {
+                    HStack {
+                        Label(L("买卖点口径"), systemImage: "slider.horizontal.3")
+                        Spacer()
+                        Text(SignalMode.title(signalMode)).foregroundColor(Theme.textSecondary)
+                    }
+                }
+            } footer: {
+                Text(L("决定「什么算买卖点」：严格最少，中等约多一倍（默认），宽松最多。点进去看每种的区别。"))
+                    .font(.caption2)
+            }
+
             Section {
                 Toggle(isOn: $showProDetails) {
                     Label(L("显示专业数值"), systemImage: "function")
