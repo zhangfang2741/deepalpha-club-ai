@@ -51,7 +51,7 @@ struct SubscriptionTierBadge: View {
     }
 }
 
-/// 偏好设置：买卖点口径、专业数值开关（以及仅调试包可见的开关）。
+/// 偏好设置：买卖点口径、专业数值开关。
 struct PreferencesView: View {
     /// 是否显示专业数值（面积比 / 价差比 / 时长比等）。默认关：先让人看懂结论，需要时再打开。
     @AppStorage(ProDetails.key) private var showProDetails = false
@@ -82,15 +82,6 @@ struct PreferencesView: View {
                 Text(L("打开后，买卖点详情里会多出面积比、价差比、时长比等专业数值；点「怎么识别的」随时能看到它们是什么。"))
                     .font(.caption2)
             }
-
-            #if DEBUG
-            Section("调试") {
-                Toggle("基本面门槛去掉动量（改完回雷达下拉刷新或重启）",
-                       isOn: Binding(
-                        get: { UserDefaults.standard.bool(forKey: "radar_quality_ex_momentum") },
-                        set: { UserDefaults.standard.set($0, forKey: "radar_quality_ex_momentum") }))
-            }
-            #endif
         }
         .navigationTitle(L("偏好设置"))
         .navigationBarTitleDisplayMode(.inline)

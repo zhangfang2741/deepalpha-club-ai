@@ -2,14 +2,8 @@ import Foundation
 
 /// 信号雷达接口封装。
 enum SignalRadarService {
-    /// 好股票门槛口径：good（默认）/ good_xm（去掉动量维度）。仅 DEBUG 构建可通过「我的」页开关切换，正式版恒为 good。
-    static var qualityMode: String {
-        #if DEBUG
-        return UserDefaults.standard.bool(forKey: "radar_quality_ex_momentum") ? "good_xm" : "good"
-        #else
-        return "good"
-        #endif
-    }
+    /// 好股票门槛口径：恒为 good（后端 good_xm 去掉动量的实验口径只留给调试脚本，App 不再提供开关）。
+    static var qualityMode: String { "good" }
 
     /// 拉取某 (市场, universe) 的信号雷达（首次可能返回 status=generating，需前端轮询）。
     /// universe 传 nil 时后端用该市场默认（大盘宽基）。
