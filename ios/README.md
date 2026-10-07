@@ -34,25 +34,20 @@ ios/
 
 ## 订阅 / 内购（StoreKit 2）
 
-- **只有一个会员**（2026-10-05 起，原基础版 ¥88 / 高级版合并）：自动续订月度订阅，商品 ID
-  `club.deepalpha.chan.premium.monthly`（`AppConfig.membershipMonthlyProductID`），**正价 ¥128/月**；活动价 **¥58**（入门优惠，新客首月，付费墙上显示「活动价」、划线正价、首月后的续订价）；无免费试用。
-  权益：不限次缠论分析、30 分钟次级别 / 周线看日线、每日雷达与历史回看、自选不限数量与全部结构状态。
-- **旧基础版商品**（`club.deepalpha.chan.pro.monthly`，`legacyBasicMonthlyProductID`）已停售但**不能删除**：还在
-  有效期内的老订阅者在 `StoreManager.refreshSubscriptionStatus` 里同样按会员处理，不需要重新订阅。
+- **只有一个会员**：自动续订月度订阅，商品 ID `club.deepalpha.chan.pro.monthly`（`AppConfig.membershipMonthlyProductID`，
+  1.0 起就在线上卖的那个商品，ASC 里唯一已过审的订阅），**正价 ¥128/月**；活动价 **¥58**（入门优惠，新客首月，付费墙上显示「活动价」、划线正价、首月后的续订价）；无免费试用。
+  权益：不限次缠论分析、30 分钟次级别 / 周线看日线、每日雷达与历史回看、基本面名单、自选不限数量与全部结构状态。
+- 开发期间设计过基础版 / 高级版两档（`premium.monthly`），**从未在 ASC 创建、从未上线**，2026-10-07 发版检查时改回沿用 `pro.monthly`。
+  1.0 / 1.1 的老订阅者买的就是这个商品，升级后自动是会员；涨价时在 ASC 选「为现有订阅者保留当前价格」，他们继续按原价续订。
 - **权益门禁**：免费用户每日 `freeDailyQuota`（默认 3）支不同标的的缠论分析，用尽弹付费墙；会员无限次、解锁全部。
 - **校验方式**：端上 StoreKit 2（`Transaction.currentEntitlements`，Apple 签名 JWS）。传给后端的档位只有
   `free` / `premium`（后端 `TIER_LIMITS` 仍保留 `basic`，只为兼容旧版 App）。
   > 注意：每日额度计数在端上（UserDefaults），可被重装/改时间绕过。如需严格限制，
   > 后续可改为后端按用户校验 + App Store Server Notifications（见文末 TODO）。
 
-### 上线合并版前在 App Store Connect 要做的事（代码里不会改价格）
+### 上线 1.2 前在 App Store Connect 要做的事（代码里不会改价格）
 
-价格由 App Store 返回，App 只显示它给的数字，所以**不改这几项，线上仍会显示旧价格**：
-
-1. `club.deepalpha.chan.premium.monthly`：价格改成 **¥128/月**（原正价 ¥388）；入门优惠（Introductory Offer）改成 **按期付费 · ¥58 · 1 个月**（原新客首月 ¥188）。活动有起止时间的话在入门优惠里设「开始 / 结束日期」，结束后付费墙自动回到只显示 ¥128。
-2. `club.deepalpha.chan.pro.monthly`（旧基础版）：**停售**（Remove from sale），不要删除；删除它的入门优惠。
-3. 订阅显示名 / 描述改成「DeepAlpha 会员」，审核备注、App 描述里的订阅说明同步（见 `AppStore/chan/store-listing.md`）。
-4. 已订阅高级版（原价 ¥388）的用户：降价对已订阅用户自动生效、不需要用户同意（具体时点以 ASC 价格变更页提示为准）；已订阅基础版（¥88）的用户保持原价续订并享有全部权益。
+逐步操作见 `AppStore/chan/RELEASE-1.2.md`「二、订阅商品」。价格由 App Store 返回，App 只显示它给的数字，不改 ASC 线上仍是旧价格 + 7 天试用。
 
 ### 本地测试订阅（无需 App Store Connect）
 

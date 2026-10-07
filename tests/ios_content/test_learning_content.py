@@ -62,3 +62,32 @@ def test_guide_has_product_intro_and_relation():
         ids = [a["id"] for a in _load(lang, "guide.json")]
         for need in ("guide-app-tour", "guide-app-radar", "guide-app-detail", "guide-relation"):
             assert need in ids, (lang, need)
+
+
+SCREENSHOT = re.compile(r"^!\[([^\]]*)\]\(([^)]+)\)$")
+
+
+def _screenshots(lang: str, name: str) -> list[tuple[str, str, str]]:
+    """正文里单独成段的 `![说明](资源名)`，返回 (文章 id, 说明, 资源名)。"""
+    out = []
+    for a in _load(lang, name):
+        for p in a["body"].split("\n\n"):
+            m = SCREENSHOT.match(p.strip())
+            if m:
+                out.append((a["id"], m.group(1), m.group(2)))
+    return out
+
+
+def test_guide_screenshots_exist_and_match_between_languages():
+    """新手入门里的 App 截图：引用的资源都在 Assets 里（中英各一份），中英文插在同样的位置、说明非空。"""
+    assets = ROOT / "Resources" / "Assets.xcassets" / "Guide"
+    zh, en = _screenshots("zh-Hans", "guide.json"), _screenshots("en", "guide.json")
+    assert len(zh) >= 15
+    assert [(i, n) for i, _, n in zh] == [(i, n) for i, _, n in en]
+    for article, caption, name in zh + en:
+        assert caption.strip(), (article, name)
+        for asset in (name, f"{name}-en"):
+            assert (assets / f"{asset}.imageset" / f"{asset}.jpg").is_file(), f"{article} 引用的截图 {asset} 不存在"
+    used = {n for _, _, n in zh}
+    unused = {p.name.removesuffix(".imageset").removesuffix("-en") for p in assets.glob("*.imageset")} - used
+    assert not unused, f"没有被正文引用的截图：{sorted(unused)}"

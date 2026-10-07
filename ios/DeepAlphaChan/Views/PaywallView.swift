@@ -99,12 +99,15 @@ struct PaywallView: View {
                 Text(L("暂时无法加载订阅信息")).foregroundColor(Theme.textPrimary)
                 Button(L("重试")) { Task { await store.loadProducts() } }
                     .buttonStyle(.bordered).tint(Theme.accent)
+                // 诊断信息（商品 ID、「协议可能还没生效」）只给开发调试看：发布包里露给用户 / 审核员像半成品（2.1）
+                #if DEBUG
                 if let reason = store.loadDiagnostic {
                     Text(reason)
                         .font(.caption2).foregroundColor(Theme.textSecondary)
                         .multilineTextAlignment(.center)
                         .textSelection(.enabled)
                 }
+                #endif
             }
             .frame(maxWidth: .infinity).padding()
         } else {
@@ -179,6 +182,7 @@ struct PaywallView: View {
     /// - 次级别确认（日线×30 分钟、周线×日线）：会员专属，免费版只有示例股能看（MainTabView.hasSubLevelAccess、isSampleSymbol）
     /// - 每日雷达：会员可看每日真实雷达，免费只有示例日
     /// - 雷达历史回看：会员近 30 个交易日，免费没有
+    /// - 基本面名单：会员专属（SignalRadarView 的「名单」按钮只对会员显示）
     /// - 自选上限：免费 1 / 会员不限（后端 app/services/watchlist.py TIER_LIMITS）
     /// - 自选结构状态：免费只显示最早加入的 1 支，会员全部（WatchlistViewModel.phase(for:)）
     /// 文案只描述功能本身，不暗示收益或操作建议（3.1.1 / 5.2.5）；对比只写真实差别，不夸大。
@@ -189,6 +193,7 @@ struct PaywallView: View {
             CompareRow(icon: "scope", title: L("次级别确认"), free: L("仅示例股")),
             CompareRow(icon: "dot.radiowaves.left.and.right", title: L("每日市场雷达"), free: L("仅示例日")),
             CompareRow(icon: "clock.arrow.circlepath", title: L("雷达历史回看"), member: L("%lld 个交易日", 30)),
+            CompareRow(icon: "list.bullet.rectangle", title: L("基本面名单")),
             CompareRow(icon: "star.fill", title: L("自选数量"), free: L("%lld 支", 1), member: L("不限")),
             CompareRow(icon: "square.stack.3d.up.fill", title: L("自选状态"),
                        free: L("%lld 支", 1), member: L("全部")),

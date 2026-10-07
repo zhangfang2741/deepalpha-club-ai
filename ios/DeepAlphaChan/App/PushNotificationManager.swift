@@ -40,6 +40,17 @@ final class PushNotificationManager: NSObject, ObservableObject, UNUserNotificat
         #endif
     }
 
+    /// 晨报 Tab 隐藏期间调用：注销 1.1 时注册过的远程推送。推送只用来通知「晨报已生成」，
+    /// App 里却没有晨报可看——既不该为它申请权限（5.1.1），也不该继续收到这类推送。
+    /// 注销后 APNs 对旧 token 返回 Unregistered，后端发送自然失败，不需要发新接口。
+    func deactivate() {
+        #if !targetEnvironment(simulator)
+        if UIApplication.shared.isRegisteredForRemoteNotifications {
+            UIApplication.shared.unregisterForRemoteNotifications()
+        }
+        #endif
+    }
+
     nonisolated func didRegister(deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
         Task { @MainActor in

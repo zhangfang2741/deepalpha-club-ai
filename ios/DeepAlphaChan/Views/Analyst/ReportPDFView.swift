@@ -262,6 +262,9 @@ struct ReportReaderView: View {
     let kind: Kind
     var shareName: String?
     var summary: ReportSummaryContext? = nil
+    /// 能否「保存到手机」。券商研报是券商的版权内容：App 内可读，但不提供再分发（5.2.2）；
+    /// 公司自己披露的财报 / 公告照常可保存。
+    var allowsSaving = true
     @Environment(\.dismiss) private var dismiss
     @State private var showSummary = false
     @State private var cachedSummary: ReportSummaryResponse?
@@ -289,7 +292,7 @@ struct ReportReaderView: View {
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) { Button(L("完成")) { dismiss() } }
                     ToolbarItemGroup(placement: .topBarLeading) {
-                        if let shareURL {
+                        if allowsSaving, let shareURL {
                             // 系统分享面板里选「存储到文件」即下载到手机
                             ShareLink(item: shareURL) { Image(systemName: "square.and.arrow.down") }
                                 .accessibilityLabel(L("保存到手机"))
@@ -437,7 +440,11 @@ struct ReportPDFView: View {
     let remote: URL
     var shareName: String?
     var summary: ReportSummaryContext? = nil
-    var body: some View { ReportReaderView(title: title, remote: remote, kind: .pdf, shareName: shareName, summary: summary) }
+    var allowsSaving = true
+    var body: some View {
+        ReportReaderView(title: title, remote: remote, kind: .pdf, shareName: shareName, summary: summary,
+                         allowsSaving: allowsSaving)
+    }
 }
 
 struct FilingWebView: View {
@@ -578,6 +585,34 @@ private struct WebRepresentable: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate {
         let parent: WebRepresentable
         init(_ parent: WebRepresentable) { self.parent = parent }
+
+        /// 只在打开的那个网站里浏览：用户点到别的站点的链接交给 Safari。App 内网页不能变成
+        /// 一个可以随意上网的浏览器（年龄分级「不受限制的网页访问」申报为否）。
+        func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
+                     decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
+            guard action.navigationType == .linkActivated, let target = action.request.url else {
+                decisionHandler(.allow)
+                return
+            }
+            if target.isFileURL || Self.sameSite(target, parent.url) {
+                decisionHandler(.allow)
+            } else {
+                decisionHandler(.cancel)
+                if let scheme = target.scheme?.lowercased(), scheme == "https" || scheme == "http" {
+                    UIApplication.shared.open(target)
+                }
+            }
+        }
+
+        /// 同一个注册域（www.sec.gov 与 sec.gov 算同一个站）。
+        private static func sameSite(_ a: URL, _ b: URL) -> Bool {
+            func base(_ u: URL) -> String? {
+                guard let host = u.host?.lowercased() else { return nil }
+                return host.split(separator: ".").suffix(2).joined(separator: ".")
+            }
+            guard let x = base(a), let y = base(b) else { return false }
+            return x == y
+        }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { parent.loading = false }
 

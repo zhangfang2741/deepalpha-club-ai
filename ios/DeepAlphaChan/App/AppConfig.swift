@@ -25,12 +25,10 @@ enum AppConfig {
     // （见 StoreManager.trialPeriodText，读商品实际配置生成文案）。
 
     /// 会员月度订阅商品 ID（需与 App Store Connect / Configuration.storekit 一致）。
-    /// 沿用原高级版的商品 ID：它本来就是全部权益，价格在 ASC 改成 ¥128 即可，已订阅的高级版用户不受影响。
-    static let membershipMonthlyProductID = "club.deepalpha.chan.premium.monthly"
-
-    /// 旧基础版月度订阅商品 ID（已停售，只用来识别还在有效期内的老订阅者，让他们按会员处理）。
-    /// 商品 ID 里的 "pro" 是历史命名。不能删除这个商品——已订阅的用户还在续订。
-    static let legacyBasicMonthlyProductID = "club.deepalpha.chan.pro.monthly"
+    /// 沿用 1.0 起就在线上卖的 `pro.monthly`（ASC 里唯一已过审的订阅商品），价格 / 入门优惠只在 ASC 改。
+    /// 1.2 开发期间曾计划改卖 `premium.monthly`，但它从未在 ASC 创建过——不要再改回去，
+    /// 否则付费墙拿不到商品，审核按 2.1 必拒（2026-10-07 发版检查发现）。
+    static let membershipMonthlyProductID = "club.deepalpha.chan.pro.monthly"
 
     // MARK: - 示例自选
 
@@ -48,6 +46,10 @@ enum AppConfig {
         if market == .hk, let a = Int(raw), let b = Int(sample) { return a == b }
         return raw == sample
     }
+
+    /// 晨报是否上线。当前隐藏（MainTabView 里注释掉了晨报 Tab）：关着时不申请推送权限（推送只用来通知晨报）。
+    /// 重新挂回晨报 Tab 时改成 true。
+    static let morningReportEnabled = false
 
     /// 免费用户每日可用的缠论分析次数（超出需订阅会员）。
     static let freeDailyQuota = 3

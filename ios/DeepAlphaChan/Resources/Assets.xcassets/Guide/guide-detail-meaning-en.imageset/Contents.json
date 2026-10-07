@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "guide-detail-meaning-en.jpg",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

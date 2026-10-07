@@ -6,9 +6,8 @@ private let storeLog = Logger(subsystem: "club.deepalpha.chan", category: "store
 
 /// 订阅层级：免费 / 会员。
 ///
-/// 2026-10-05 起只有一个会员（¥128/月，全部权益）。以前分基础版（¥88，解锁不限次分析）和高级版
-/// （另加次级别确认 / 信号雷达 / 自选批量状态），现在合并：旧的基础版订阅者续订期内同样按会员处理（见
-/// `refreshSubscriptionStatus`）。枚举保留 `premium` 这个名字，是因为全 App 的门禁和传给后端的
+/// 只有一个会员（¥128/月，全部权益，商品 `AppConfig.membershipMonthlyProductID`）。开发期间分过基础版 / 高级版，
+/// 2026-10-05 合并、两档都没上线过。枚举保留 `premium` 这个名字，是因为全 App 的门禁和传给后端的
 /// 档位字符串（`apiValue`）都叫它，改名要连带改很多处而没有收益。
 enum SubscriptionTier: Int, Comparable {
     case free = 0
@@ -148,7 +147,6 @@ final class StoreManager: ObservableObject {
 
     func loadProducts() async {
         do {
-            // 只加载在售的会员商品；旧的基础版商品已停售，不用加载（识别旧订阅者靠 currentEntitlements）
             let items = try await Product.products(for: [AppConfig.membershipMonthlyProductID])
             products = items
             loadFailed = items.isEmpty
@@ -174,7 +172,7 @@ final class StoreManager: ObservableObject {
         }
     }
 
-    /// 资格是订阅群组级的（旧基础版与会员同在一个群组），查会员商品即可。
+    /// 资格是订阅群组级的，查会员商品即可。1.0 / 1.1 时用过 7 天免费试用的账户不再有资格享受新客价。
     private func refreshIntroEligibility() async {
         guard let subscription = products.first?.subscription else {
             isEligibleForIntroOffer = false
@@ -183,19 +181,14 @@ final class StoreManager: ObservableObject {
         isEligibleForIntroOffer = await subscription.isEligibleForIntroOffer
     }
 
-    /// 遍历当前有效权益判断是否是会员。旧的基础版商品（已停售）仍在有效期内的订阅者同样按会员处理——
-    /// 合并成一个会员后，已付费的人不能少权益，也不用重新订阅。
+    /// 遍历当前有效权益判断是否是会员。1.0 / 1.1 的订阅者买的就是同一个商品，升级后自动按会员处理。
     func refreshSubscriptionStatus() async {
         var highest: SubscriptionTier = .free
         for await result in Transaction.currentEntitlements {
-            guard case .verified(let transaction) = result, transaction.revocationDate == nil
+            guard case .verified(let transaction) = result, transaction.revocationDate == nil,
+                  transaction.productID == AppConfig.membershipMonthlyProductID
             else { continue }
-            switch transaction.productID {
-            case AppConfig.membershipMonthlyProductID, AppConfig.legacyBasicMonthlyProductID:
-                highest = .premium
-            default:
-                continue
-            }
+            highest = .premium
         }
         tier = highest
         UserDefaults.standard.set(highest.rawValue, forKey: Self.lastTierKey)
