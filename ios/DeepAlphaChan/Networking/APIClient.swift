@@ -48,6 +48,12 @@ actor APIClient {
         return try await send(req)
     }
 
+    /// 取原始 JSON 字节（雷达要把响应原样落盘，下次启动先显示上次的结果）。
+    func getData(_ path: String, query: [String: String] = [:]) async throws -> Data {
+        let req = request(path: path, method: "GET", query: query)
+        return try await sendData(req).0
+    }
+
     func postJSON<T: Decodable>(_ path: String, query: [String: String] = [:], body: Encodable) async throws -> T {
         var req = request(path: path, method: "POST", query: query)
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -86,6 +92,15 @@ actor APIClient {
     }
 
     private func send<T: Decodable>(_ request: URLRequest) async throws -> T {
+        let (data, http) = try await sendData(request)
+        do {
+            return try decoder.decode(T.self, from: data)
+        } catch {
+            throw APIError(message: "数据解析失败，请稍后再试", statusCode: http.statusCode)
+        }
+    }
+
+    private func sendData(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         var req = request
         if let token = sessionToken ?? KeychainStore.loadToken() {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -107,12 +122,7 @@ actor APIClient {
             throw APIError(message: Self.detail(from: data) ?? "请求失败（\(http.statusCode)）",
                            statusCode: http.statusCode)
         }
-
-        do {
-            return try decoder.decode(T.self, from: data)
-        } catch {
-            throw APIError(message: "数据解析失败，请稍后再试", statusCode: http.statusCode)
-        }
+        return (data, http)
     }
 
     /// 从 FastAPI 错误体里提取 `detail` 字段（可能是字符串或对象数组）。

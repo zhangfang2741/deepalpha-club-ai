@@ -1652,11 +1652,18 @@ struct SignalRadarView: View {
         return ZStack(alignment: .topLeading) {
             VStack(spacing: 12) {
                 ProgressView().tint(Theme.accent)
-                Text(L("正在扫描「%@」成分股…", scope))
-                    .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
-                Text(L("首次扫描较慢，稍候即可看到每日买卖点"))
-                    .font(.footnote).foregroundColor(Theme.textSecondary)
-                    .multilineTextAlignment(.center)
+                if vm.backendScanning {
+                    // 接口回 generating：后端真的在扫（缓存缺失，通常是刚部署后）
+                    Text(L("正在扫描「%@」成分股…", scope))
+                        .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+                    Text(L("首次扫描较慢，稍候即可看到每日买卖点"))
+                        .font(.footnote).foregroundColor(Theme.textSecondary)
+                        .multilineTextAlignment(.center)
+                } else {
+                    // 普通加载（结果已在服务器缓存好，只是在取）：不说「扫描」，别让人以为每次都重新算
+                    Text(L("正在加载「%@」…", scope))
+                        .font(.subheadline.bold()).foregroundColor(Theme.textPrimary)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
