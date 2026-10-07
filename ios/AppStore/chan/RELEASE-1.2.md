@@ -48,9 +48,9 @@ ASC → App → 「订阅」→ 群组「DeepAlpha Pro」→ `Pro Monthly`：
 | 此版本新增内容 | 第五节「1.2」中文 | 现在 ASC 里也是两档订阅的旧文案 |
 | 关键词 / 副标题 | 不用动 | 9 月已贴好优化后的关键词 |
 | 推广文本 | 可选 | 第六节，可随时改，不用审核 |
-| 截图 | `screenshots-6.9-captioned/` 8 张 | 已重截，见下 |
+| 截图 | `screenshots-6.9-captioned/` 9 张 | 已重截，见下 |
 
-**截图**：已重截（2026-10-07），上传 `screenshots-6.9-captioned/` 的 8 张，顺序与说明见 `store-listing.md` 第七节。ASC 里先删掉旧的 6 张（1.0 界面）。
+**截图**：已重截（2026-10-07），上传 `screenshots-6.9-captioned/` 的 9 张，顺序与说明见 `store-listing.md` 第七节。ASC 里先删掉旧的 6 张（1.0 界面）。
 
 **App 隐私（营养标签）**：在原来五项之外，**新增「其他用户内容」**（用途：App 功能；与身份关联：是；追踪：否）——
 自选列表按账号存在服务端。App 里的 `PrivacyInfo.xcprivacy` 已同步加上。
