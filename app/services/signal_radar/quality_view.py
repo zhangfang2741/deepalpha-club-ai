@@ -30,7 +30,7 @@ from app.services.signal_radar.quant_filter import QuantGrade
 GOOD_SHARE = 0.25
 GOOD_MIN_COUNT = 8
 GOOD_FLOOR = "B"
-GOOD_CACHE_TTL = 600
+GOOD_CACHE_TTL = 3 * 3600  # 与 fundamental_top.RANKED_CACHE_TTL 同；定时任务每小时巡检刷新，用户请求基本不会撞上读库
 ANALYST_WINDOW_DAYS = 90
 
 
@@ -90,17 +90,17 @@ def _key(market: str, universe: str, mode: str = QUALITY_GOOD) -> str:
 
 
 async def good_stocks(
-    market: str, universe: str, redis: Redis, now: datetime, mode: str = QUALITY_GOOD,
+    market: str, universe: str, redis: Redis, now: datetime, mode: str = QUALITY_GOOD, *, refresh: bool = False,
 ) -> tuple[dict[str, dict], int, str] | None:
-    """({雷达代码: {grade, score, as_of}}（只含达标的）, 有评级的总只数, 门槛等级)；读取失败返回 None。Redis 缓存 10 分钟。"""
+    """({雷达代码: {grade, score, as_of}}（只含达标的）, 有评级的总只数, 门槛等级)；读取失败返回 None。Redis 缓存 3 小时（refresh=True 跳过读缓存、重算并写回，给定时任务用）。"""
     key = _key(market, universe, mode)
     try:
-        cached = await get_json(redis, key)
+        cached = None if refresh else await get_json(redis, key)
         if cached and isinstance(cached.get("good"), dict):
             return cached["good"], int(cached.get("rated", 0)), str(cached.get("cutoff") or GOOD_FLOOR)
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_good_cache_read_failed", error=str(e))
-    loaded = await fundamental_top.load_ranked(market, universe, redis, now.date())
+    loaded = await fundamental_top.load_ranked(market, universe, redis, now.date(), refresh=refresh)
     if loaded is None:
         return None
     ranked, _ = loaded
@@ -122,6 +122,21 @@ async def good_stocks(
     except Exception as e:  # noqa: BLE001
         logger.warning("signal_radar_good_cache_write_failed", error=str(e))
     return good, len(ranked), cutoff
+
+
+async def warm_good(market: str, universe: str, redis: Redis, now: datetime) -> None:
+    """预热好股票门槛缓存：缓存已存在超过 1 小时（或缺失）才重算，其余直接跳过。
+
+    不预热的话，每 N 小时第一个请求要读一遍评级库（A 股 ~6 秒、标普 500 十几秒），那个用户就要干等。
+    """
+    key = _key(market, universe)
+    try:
+        remaining = await redis.ttl(key)
+        if remaining > GOOD_CACHE_TTL - 3600:
+            return
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_good_warm_ttl_failed", error=str(e))
+    await good_stocks(market, universe, redis, now, refresh=True)
 
 
 def filter_day(day: RadarDayOut, good: dict[str, dict], marks: dict[str, tuple[int, int]]) -> RadarDayOut:

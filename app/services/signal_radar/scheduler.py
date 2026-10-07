@@ -35,6 +35,7 @@ from app.services.signal_radar.service import (
     scan_lock_key,
 )
 from app.services.chan.signal_policy import DEFAULT_MODE
+from app.services.signal_radar.quality_view import warm_good
 from app.services.signal_radar.universe import all_universes
 
 
@@ -160,6 +161,18 @@ async def _prewarm_demos_all(defaults_only: bool = False) -> None:
     redis = current_redis()
     if redis is None:
         return
+    # 好股票门槛 / 评级排序缓存先热：示例日和雷达接口都要用它，冷了第一个用户要等读评级库（A 股 ~6 秒）
+    warmed: set[tuple[str, str]] = set()
+    for u, _ in _demo_targets(defaults_only):
+        if (u.market, u.key) in warmed:
+            continue
+        warmed.add((u.market, u.key))
+        try:
+            await warm_good(u.market, u.key, redis, datetime.now(UTC))
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 预热失败不影响示例日
+            logger.warning("signal_radar_good_warm_failed", market=u.market, universe=u.key, error=str(e))
     for u, mode in _demo_targets(defaults_only):
         await _prewarm_demo(redis, u, mode)
 

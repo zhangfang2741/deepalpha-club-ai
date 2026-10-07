@@ -36,7 +36,7 @@ def rank_latest(history: dict[str, list[QuantGrade]]) -> list[tuple[str, QuantGr
     return sorted(latest, key=lambda t: (GRADE_ORDER.index(t[1].grade or ""), -(t[1].score if t[1].score is not None else -1), t[0]))
 
 
-RANKED_CACHE_TTL = 600
+RANKED_CACHE_TTL = 3 * 3600  # 评级每天收盘后才批量写一次；定时任务每小时巡检刷新（见 quality_view.warm_good），用户请求基本不会撞上读库
 
 
 def _ranked_key(market: str, universe: str) -> str:
@@ -55,16 +55,16 @@ def _decode_ranked(raw: dict) -> tuple[list[tuple[str, QuantGrade]], dict[str, s
 
 
 async def load_ranked(
-    market: str, universe_key: str, redis: Redis, end: date,
+    market: str, universe_key: str, redis: Redis, end: date, *, refresh: bool = False,
 ) -> tuple[list[tuple[str, QuantGrade]], dict[str, str]] | None:
     """股票池每只股票最新综合等级（不早于 LOOKBACK_DAYS 天前）的排序结果 + 代码→名称。读取失败返回 None。
 
-    Redis 缓存 10 分钟（好股票门槛、好股票名单共用）：评级每天只在收盘后批量写一次，不用每次请求都读库
+    Redis 缓存 3 小时、定时任务刷新（好股票门槛、好股票名单共用；refresh=True 跳过读缓存，只给定时任务用）：评级每天只在收盘后批量写一次，不用每次请求都读库
     （标普 500 一次要十几秒）。读库只取每只股票最新一行（get_latest_quant_grades）。
     """
     key = _ranked_key(market, universe_key)
     try:
-        cached = await get_json(redis, key)
+        cached = None if refresh else await get_json(redis, key)
         if cached and "ranked" in cached:
             return _decode_ranked(cached)
     except Exception as e:  # noqa: BLE001
