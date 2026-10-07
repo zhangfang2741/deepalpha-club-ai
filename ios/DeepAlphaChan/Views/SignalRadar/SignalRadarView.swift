@@ -203,7 +203,7 @@ struct SignalRadarView: View {
                         // 同一市场/指数重新加载时保留旧气泡、照常可点（不再调暗禁点——后台扫描慢时
                         // 以前会整屏半透明点不动）；只在左上角放一个小「更新中」提示
                         .overlay(alignment: .topLeading) {
-                            if vm.isReloading {
+                            if vm.showsUpdatingHint {
                                 HStack(spacing: 5) {
                                     ProgressView().controlSize(.mini)
                                     Text(L("更新中")).font(.caption2).foregroundColor(Theme.textSecondary)
@@ -215,7 +215,7 @@ struct SignalRadarView: View {
                                 .transition(.opacity)
                             }
                         }
-                        .animation(.easeInOut(duration: 0.2), value: vm.isReloading)
+                        .animation(.easeInOut(duration: 0.2), value: vm.showsUpdatingHint)
                 }
                 legend
                 dateRail

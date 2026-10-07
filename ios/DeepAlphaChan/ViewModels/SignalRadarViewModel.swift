@@ -11,6 +11,8 @@ final class SignalRadarViewModel: ObservableObject {
     @Published var response: SignalRadarResponse?
     @Published var selectedDayIndex: Int = 0
     @Published var isLoading = false
+    /// 静默更新拖过 1.5 秒才为真：雷达角上的「更新中」提示用它，而不是 isReloading（后者一开始请求就为真，会一闪而过）。
+    @Published private(set) var showsUpdatingHint = false
     @Published var errorMessage: String?
 
     /// 免费预览锚定日期（「上个月 1 号」）的真实快照，未订阅会员时插到 `days`
@@ -144,17 +146,36 @@ final class SignalRadarViewModel: ObservableObject {
     /// 内存里的最近一次结果，按（市场, 指数, 口径）存：切市场 / 指数时先拿它立刻铺出气泡，
     /// 再后台静默更新（左上角「更新中」），不再每次都整页「正在扫描」干等接口。
     /// 只存 ready 的响应；进程内有效，退出 App 即清空（磁盘上的缓存不做，免得显示隔夜旧数据）。
-    private var snapshotCache: [String: SignalRadarResponse] = [:]
+    private var snapshotCache: [String: (resp: SignalRadarResponse, at: Date)] = [:]
+
+    /// 内存缓存在这么久之内视为新鲜：切回去直接用、不再请求（后端快照一天才换一次，次级别 30 分钟一轮）。
+    private static let snapshotFreshSeconds: TimeInterval = 300
 
     private func snapshotKey(_ market: StockMarket, _ universe: String) -> String {
         "\(market.rawValue)|\(universe)|\(SignalMode.current())"
     }
 
-    /// 切换后若内存里有这个（市场, 指数）的上次结果，立刻当作当前 response（后面的 load 照常刷新）。
-    private func applyCachedSnapshot() {
-        guard let cached = snapshotCache[snapshotKey(market, activeUniverseKey)] else { return }
-        response = cached
+    /// 切换后若内存里有这个（市场, 指数, 口径）的上次结果，立刻当作当前 response。
+    /// 返回 true = 结果还新鲜（5 分钟内），调用方不用再请求：切市场一次完成、不闪、不重排。
+    /// 返回 false = 缓存有但偏旧（先显示、再静默更新）或根本没有。
+    @discardableResult
+    private func applyCachedSnapshot() -> Bool {
+        guard let entry = snapshotCache[snapshotKey(market, activeUniverseKey)] else { return false }
+        response = entry.resp
         jumpToDemoDayIfPresent()
+        guard Date().timeIntervalSince(entry.at) < Self.snapshotFreshSeconds else { return false }
+        pendingUniverseKey = nil
+        isLoading = false
+        return true
+    }
+
+    /// 两份快照是不是同一份（后端没有新数据）：是的话刷新结果不必替换界面，避免气泡白白重排、日期选择被重置。
+    private func isSameSnapshot(_ a: SignalRadarResponse?, _ b: SignalRadarResponse) -> Bool {
+        guard let a else { return false }
+        return a.market == b.market && a.universe == b.universe && a.computedAt == b.computedAt
+            && a.subLevelAsOf == b.subLevelAsOf && a.pendingSymbols == b.pendingSymbols
+            && a.analystPending == b.analystPending && a.days.count == b.days.count
+            && a.qualityThreshold == b.qualityThreshold && a.qualityGoodCount == b.qualityGoodCount
     }
 
     /// 真实滚动窗口本身就有的天数，不含 demoDay。
@@ -322,7 +343,7 @@ final class SignalRadarViewModel: ObservableObject {
         // 是错的，不能留着当占位。
         demoDay = nil
         demoComputedAt = nil
-        applyCachedSnapshot()
+        if applyCachedSnapshot() { return }
         Task { await load() }
     }
 
@@ -337,7 +358,7 @@ final class SignalRadarViewModel: ObservableObject {
         // 示例日按 universe 算，旧指数的那天不能留着拼进新指数的日期轨（同 switchMarket）
         demoDay = nil
         demoComputedAt = nil
-        applyCachedSnapshot()
+        if applyCachedSnapshot() { return }
         Task { await load() }
     }
 
@@ -363,7 +384,7 @@ final class SignalRadarViewModel: ObservableObject {
         demoDay = nil
         demoComputedAt = nil
         response = nil
-        applyCachedSnapshot()
+        if applyCachedSnapshot() { return }
         Task { await load() }
     }
 
@@ -395,6 +416,13 @@ final class SignalRadarViewModel: ObservableObject {
     func load(refresh: Bool = false) async {
         isLoading = true
         errorMessage = nil
+        showsUpdatingHint = false
+        // 有旧气泡在显示时，静默更新 1.5 秒内不打扰；拖得久才在角上提示「更新中」（以前一闪而过很突兀）
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard let self, self.isLoading, self.isReloading else { return }
+            self.showsUpdatingHint = true
+        }
         let requested = market
         let requestedUniverse = currentUniverse
         let requestedMode = SignalMode.current()
@@ -413,17 +441,21 @@ final class SignalRadarViewModel: ObservableObject {
             }
             // 加载期间用户切了市场或 universe，就丢弃这次结果，别覆盖新请求。
             if market != requested || currentUniverse != requestedUniverse || SignalMode.current() != requestedMode { return }
-            response = resp
+            // 后端没有新数据（同一份快照）：不替换界面，不重置日期选择，气泡不会白白重排一次
+            let unchanged = responseMatchesSelection && isSameSnapshot(response, resp)
+            if !unchanged { response = resp }
             if !resp.isGenerating, !resp.days.isEmpty {
-                snapshotCache[snapshotKey(requested, resp.universe.isEmpty ? (requestedUniverse ?? activeUniverseKey) : resp.universe)] = resp
+                snapshotCache[snapshotKey(requested, resp.universe.isEmpty ? (requestedUniverse ?? activeUniverseKey) : resp.universe)] = (resp, Date())
             }
             if !resp.universes.isEmpty {
                 availableUniverses = resp.universes
                 universesByMarket[requested] = resp.universes
             }
             pendingUniverseKey = nil
-            selectedDayIndex = 0
-            jumpToDemoDayIfPresent()
+            if !unchanged {
+                selectedDayIndex = 0
+                jumpToDemoDayIfPresent()
+            }
             lastLoadedLocalDay = todayLocalDay
         } catch is CancellationError {
             return
@@ -434,7 +466,10 @@ final class SignalRadarViewModel: ObservableObject {
                 errorMessage = L("加载失败，请稍后再试")
             }
         }
-        if market == requested && currentUniverse == requestedUniverse && SignalMode.current() == requestedMode { isLoading = false }
+        if market == requested && currentUniverse == requestedUniverse && SignalMode.current() == requestedMode {
+            isLoading = false
+            showsUpdatingHint = false
+        }
     }
 
     /// 拉「上个月 1 号」的免费预览快照（GET /signal-radar/demo），按当前（市场, universe），
