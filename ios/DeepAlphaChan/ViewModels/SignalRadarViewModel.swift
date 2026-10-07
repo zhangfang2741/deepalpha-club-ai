@@ -41,8 +41,8 @@ final class SignalRadarViewModel: ObservableObject {
     @Published private(set) var demoGaveUpKey: String?
     /// 非会员等示例日等了超过 demoWaitSeconds 仍没到：不再让整页卡在「正在扫描」，先展示真实数据，示例日到了再并进来
     @Published private(set) var demoWaitExpiredKey: String?
-    /// 示例日最多等这么久（缓存命中通常 1 秒内；冷启动要算几分钟，不能让用户干等）
-    static let demoWaitSeconds: UInt64 = 4
+    /// 示例日最多等这么久（缓存命中通常 1 秒内；冷启动要算几分钟，不能让用户干等；等得太短会先放出真实最新一天、示例日到了再跳回去，画面变两次）
+    static let demoWaitSeconds: UInt64 = 10
 
     /// 未订阅且当前市场/指数的预览日还没到：这段时间不展示真实滚动窗口，否则会先闪出
     /// 最新一天的气泡、预览日到了再跳过去。
@@ -167,6 +167,21 @@ final class SignalRadarViewModel: ObservableObject {
         pendingUniverseKey = nil
         isLoading = false
         return true
+    }
+
+    /// 免费示例日的内存缓存（按 demoKey：市场 + 指数 + 口径）。切回去直接用、不再整页等示例日：
+    /// 否则每次切市场都是「正在扫描」→ 先放出真实最新一天 → 示例日到了再跳回去，画面变两次。
+    private var demoCache: [String: (day: RadarDay, computedAt: String?, at: Date)] = [:]
+
+    /// 切换（市场 / 指数 / 口径）后，把这个键的示例日从内存恢复出来；没有就清空，等 loadDemoDay 去拉。
+    private func restoreDemoFromCache() {
+        if let entry = demoCache[demoKey] {
+            demoDay = entry.day
+            demoComputedAt = entry.computedAt
+        } else {
+            demoDay = nil
+            demoComputedAt = nil
+        }
     }
 
     /// 两份快照的气泡（每天在场的信号 + 待确认）是不是完全一样：一样的话，刷新只是更新角标 / 共振 / 补算数，
@@ -351,8 +366,7 @@ final class SignalRadarViewModel: ObservableObject {
         // demoDay 是按市场拉的（见 loadDemoDay），不清掉的话新市场数据回来前会短暂
         // 把上一个市场的那天错误地拼进这个市场的日期轨——不同市场、不同股票，纯粹
         // 是错的，不能留着当占位。
-        demoDay = nil
-        demoComputedAt = nil
+        restoreDemoFromCache()
         if applyCachedSnapshot() { return }
         Task { await load() }
     }
@@ -366,8 +380,7 @@ final class SignalRadarViewModel: ObservableObject {
         pendingUniverseKey = key
         selectedDayIndex = 0
         // 示例日按 universe 算，旧指数的那天不能留着拼进新指数的日期轨（同 switchMarket）
-        demoDay = nil
-        demoComputedAt = nil
+        restoreDemoFromCache()
         if applyCachedSnapshot() { return }
         Task { await load() }
     }
@@ -391,8 +404,7 @@ final class SignalRadarViewModel: ObservableObject {
         SignalMode.set(newMode)
         selectedDayIndex = 0
         pendingUniverseKey = nil
-        demoDay = nil
-        demoComputedAt = nil
+        restoreDemoFromCache()
         response = nil
         if applyCachedSnapshot() { return }
         Task { await load() }
@@ -494,6 +506,8 @@ final class SignalRadarViewModel: ObservableObject {
         let u = currentUniverse == RadarUniverse.watchlistKey ? nil : currentUniverse
         // 同一键已在拉（onChange 与 .task(id:) 可能同时触发）就不重复发请求。
         guard loadingDemoKey != key else { return }
+        // 内存里的示例日还新鲜（30 分钟内，后端每天才换）：已经恢复出来了，不再请求
+        if demoDay != nil, let entry = demoCache[key], Date().timeIntervalSince(entry.at) < Self.snapshotFreshSeconds { return }
         loadingDemoKey = key
         // 只清自己设的：切换后新请求已把它改成新键，旧请求收尾时不能把它清掉。
         defer { if loadingDemoKey == key { loadingDemoKey = nil } }
@@ -520,9 +534,11 @@ final class SignalRadarViewModel: ObservableObject {
                 demoGaveUpKey = key  // 轮询用尽仍在算，或当天没有数据：放弃，退回真实窗口
                 return
             }
+            let same = demoDay.map { $0.date == day.date && $0.signals.map(\.id) == day.signals.map(\.id) } ?? false
+            demoCache[key] = (day, resp.computedAt, Date())
             demoDay = day
             demoComputedAt = resp.computedAt
-            jumpToDemoDayIfPresent()
+            if !same { jumpToDemoDayIfPresent() }
         } catch {
             // 被取消（切走了 / 页面消失）不算放弃，回来 .task 会重拉；真失败才放弃，
             // 退回真实滚动窗口的展示。URLSession 被取消抛的是 URLError，不是 CancellationError。
