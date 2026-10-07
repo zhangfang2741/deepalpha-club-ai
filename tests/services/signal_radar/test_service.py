@@ -667,8 +667,10 @@ def test_prewarm_scans_stalest_universe_first(monkeypatch):
     monkeypatch.setattr(scheduler, "compute_market", fake_compute)
     monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_BROAD_ENABLED", False)
     asyncio.run(scheduler._prewarm_once())
-    # 预热默认口径（旧版 App）与严格口径（新版 App），见 scheduler._modes；按缓存从旧到新排
-    assert {m for _, m in order} == {"loose", "strict"}
+    # 预热宽松（旧版 App）/ 中等 / 严格三套，见 scheduler._modes；冷启动优先级：中等先于严格先于宽松，
+    # 同一口径内按缓存从旧到新排（A 股 / 港股不会一直排在美股后面）
+    assert {m for _, m in order} == {"loose", "medium", "strict"}
+    assert order[:3] == [("cn:csi300", "medium"), ("hk:hsi", "medium"), ("us:sp500", "medium")]
     assert list(dict.fromkeys(u for u, _ in order))[:3] == ["cn:csi300", "hk:hsi", "us:sp500"]
 
 
