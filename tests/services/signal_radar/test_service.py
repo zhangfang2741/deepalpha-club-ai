@@ -634,6 +634,10 @@ def test_trading_days_ignore_dates_only_few_symbols_have():
     assert days == ["2026-09-24", "2026-09-23"]
 
 
+async def _no_demo_prewarm(*args, **kwargs) -> None:
+    """预热主扫描的顺序测试里不跑示例日预热（它会真去拉行情，慢且不确定）。"""
+
+
 def test_prewarm_scans_stalest_universe_first(monkeypatch):
     """频繁重启时先扫缓存最旧的 universe，A 股/港股不会一直排在美股后面轮不到。"""
     import asyncio
@@ -665,6 +669,7 @@ def test_prewarm_scans_stalest_universe_first(monkeypatch):
 
     monkeypatch.setattr(scheduler, "current_redis", lambda: _R())
     monkeypatch.setattr(scheduler, "compute_market", fake_compute)
+    monkeypatch.setattr(scheduler, "_prewarm_demo", _no_demo_prewarm)  # 示例日预热会真去拉行情，这里只测主扫描顺序
     monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_BROAD_ENABLED", False)
     asyncio.run(scheduler._prewarm_once())
     # 预热宽松（旧版 App）/ 中等 / 严格三套，见 scheduler._modes；冷启动优先级：中等先于严格先于宽松，
@@ -906,6 +911,7 @@ class TestCloseTriggeredPrewarm:
 
         monkeypatch.setattr(scheduler, "current_redis", lambda: _R())
         monkeypatch.setattr(scheduler, "compute_market", fake_compute)
+        monkeypatch.setattr(scheduler, "_prewarm_demo", _no_demo_prewarm)  # 示例日预热会真去拉行情，这里只测主扫描顺序
         monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_BROAD_ENABLED", False)
         await scheduler._prewarm_once(markets={"cn"})
         assert scanned == ["cn:csi300"]
@@ -1301,14 +1307,15 @@ class TestConcurrencyGuards:
 
         monkeypatch.setattr(scheduler, "current_redis", lambda: redis)
         monkeypatch.setattr(scheduler, "compute_market", fake_compute)
+        monkeypatch.setattr(scheduler, "_prewarm_demo", _no_demo_prewarm)  # 示例日预热会真去拉行情，这里只测主扫描顺序
         monkeypatch.setattr(settings, "SIGNAL_RADAR_PREWARM_BROAD_ENABLED", False)
         await scheduler._prewarm_once(markets={"cn"})
-        assert scanned == [("csi300", "strict")], "默认口径正被扫描持锁，这一份跳过；锁按口径分，严格口径照常预热"
+        assert scanned == [("csi300", "medium"), ("csi300", "strict")], "宽松口径正被扫描持锁，这一份跳过；锁按口径分，其余口径照常预热"
 
         del redis.store[svc.scan_lock_key("cn", "csi300", "loose")]
         scanned.clear()
         await scheduler._prewarm_once(markets={"cn"})
-        assert scanned == [("csi300", "loose"), ("csi300", "strict")]
+        assert scanned == [("csi300", "medium"), ("csi300", "strict"), ("csi300", "loose")]  # 冷启动优先级：中等 > 严格 > 宽松
         assert svc.scan_lock_key("cn", "csi300", "loose") not in redis.store, "预热结束释放锁"
 
 
