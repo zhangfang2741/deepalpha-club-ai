@@ -57,7 +57,7 @@ DeepAlpha 缠论把 K 线图上的缠论结构自动标出来，并配上大白�
 · 雷达画布汇总所选指数里基本面综合等级达标的股票近期出现的缠论买卖点结构：颜色是方向，大小是一二三类，越靠中心越新
 · 可按历史交易日翻看；会员可打开基本面名单
 · 美股、A 股、港股都有（标普 500、纳指 100、沪深 300、恒生指数等）
-所有内容只陈列按规则得出的事实，不打分、不排名，不构成投资建议。
+雷达用于展示结构事实；基本面评分与分位仅反映公开财务指标，不构成投资建议。
 
 【个股分析】
 输入代码即可得到完整的结构识别：分型、笔、线段、中枢、背驰，以及一二三类买卖点，全部直接画在图上，另附 MACD 副图。
@@ -110,7 +110,7 @@ Read the market top-down: market → sector → fundamentals → structure.
 - The radar collects recent Chan buy/sell-type structures among an index's stocks whose composite fundamentals grade meets the threshold. Color is direction, size is class 1/2/3, closer to the center is newer.
 - Browse past trading days; members can open the fundamentals list.
 - US, China A-share and Hong Kong (S&P 500, Nasdaq 100, CSI 300, Hang Seng and more).
-Everything shown is a rule-based fact. Nothing is scored or ranked, and nothing is investment advice.
+The radar displays structural facts. Fundamental scores and percentiles describe public financial metrics; they are not investment advice.
 
 STOCK ANALYSIS
 Enter a ticker to see fractals, strokes, segments, pivots, divergence and the three classes of buy/sell points drawn on the chart, with a MACD subchart.
@@ -278,21 +278,23 @@ Automatic Chan structure on candlestick charts, with nine illustrated lessons. U
 
 ## 七、截图（1.2，2026-10-07 重截）
 
-**上传 `screenshots-6.9-captioned/` 里的 7 张**（带标题版，1320×2868，传 6.9 英寸区）；`screenshots-6.5-captioned/` 是同一套的 1242×2688 版，6.5 英寸区可传可不传。
+**上传 `screenshots-6.9-captioned/` 里的 8 张**（带标题版，1320×2868，传 6.9 英寸区）；`screenshots-6.5-captioned/` 是同一套的 1242×2688 版，6.5 英寸区可传可不传。
 源图在 `screenshots-6.9/`，用 iPhone 17 Pro Max 模拟器 + Release 包、审核账号（免费用户）连生产接口截的真实数据，状态栏统一 9:41。
+缠论相关的 1–3 张用**宽松口径**截（我的 → 偏好设置 → 买卖点口径），买卖点更多、画面更丰富；全部图层（分型 / 线段）打开。
 改标题文案改 `make_captioned.py` 的 `SHOTS`，再跑 `uv run --with pillow --no-project python ios/AppStore/chan/make_captioned.py`。
 
 | 顺序 | 文件 | 标题 | 内容 |
 |------|------|------|------|
-| 1 | `01_radar.png` | 先看市场 再看结构 | 市场雷达：大盘环境、行业横条、气泡（免费示例日） |
-| 2 | `02_analysis_hk.png` | 缠论结构 自动画在图上 | 腾讯 0700 日线：结论卡、中枢、二买、MACD |
-| 3 | `03_signal_explain.png` | 每个买卖点 都讲清怎么来的 | UNH 一卖「怎么识别的」弹层 |
-| 4 | `04_fundamentals.png` | 基本面 五个维度一张图 | NVDA 基本面研究：A+、五维图、最新财报 / 年报 |
-| 5 | `05_report_ai.png` | 财报原文 AI 帮你划重点 | NVDA 最新季报 AI 总结 |
-| 6 | `06_lesson.png` | 看不懂 那就先学 | 缠论入门「三类买卖点」课程 |
-| 7 | `07_watchlist.png` | 技术分析与学习工具 不构成投资建议 | 自选：三个市场的结构阶段 |
+| 1 | `01_chan_structure.png` | 缠论结构 一键自动画出 | NVDA 日线（宽松口径、全部图层）：结论卡、分型 / 笔 / 线段 / 中枢、一买二买二卖、MACD |
+| 2 | `02_fullscreen.png` | 横屏全屏 结构一目了然 | NVDA 横屏全屏 |
+| 3 | `03_radar.png` | 每天的买卖点 一张雷达图看完 | 标普 500 雷达（宽松口径，免费示例日） |
+| 4 | `04_signal_explain.png` | 每个买卖点 都有据可查 | UNH 一卖「怎么识别的」弹层 |
+| 5 | `05_fundamentals.png` | 基本面体检 A+ 到 F 一眼看懂 | NVDA 基本面研究 |
+| 6 | `06_report_ai.png` | 上百页财报 AI 帮你划重点 | NVDA 最新季报 AI 总结 |
+| 7 | `07_lesson.png` | 零基础 也能学会缠论 | 「三类买卖点」课程 |
+| 8 | `08_watchlist.png` | 自选股的结构阶段 随时看 | 自选（副标题写明不构成投资建议） |
 
-ASC 里删掉旧的 6 张（1.0 时的界面）再传这 7 张，前 3 张会出现在搜索结果缩略图里。
+ASC 里删掉旧的 6 张（1.0 时的界面）再传这 8 张，前 3 张会出现在搜索结果缩略图里。
 
 ---
 
