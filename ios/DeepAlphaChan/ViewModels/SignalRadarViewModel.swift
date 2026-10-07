@@ -133,6 +133,22 @@ final class SignalRadarViewModel: ObservableObject {
     /// 每个市场拿到过的 universe 列表：切回来时直接恢复，切换器和扫描提示都不用等接口。
     private var universesByMarket: [StockMarket: [RadarUniverse]] = [:]
 
+    /// 内存里的最近一次结果，按（市场, 指数, 口径）存：切市场 / 指数时先拿它立刻铺出气泡，
+    /// 再后台静默更新（左上角「更新中」），不再每次都整页「正在扫描」干等接口。
+    /// 只存 ready 的响应；进程内有效，退出 App 即清空（磁盘上的缓存不做，免得显示隔夜旧数据）。
+    private var snapshotCache: [String: SignalRadarResponse] = [:]
+
+    private func snapshotKey(_ market: StockMarket, _ universe: String) -> String {
+        "\(market.rawValue)|\(universe)|\(SignalMode.current())"
+    }
+
+    /// 切换后若内存里有这个（市场, 指数）的上次结果，立刻当作当前 response（后面的 load 照常刷新）。
+    private func applyCachedSnapshot() {
+        guard let cached = snapshotCache[snapshotKey(market, activeUniverseKey)] else { return }
+        response = cached
+        jumpToDemoDayIfPresent()
+    }
+
     /// 真实滚动窗口本身就有的天数，不含 demoDay。
     private var realDays: [RadarDay] { responseMatchesSelection ? (response?.days ?? []) : [] }
 
@@ -298,6 +314,7 @@ final class SignalRadarViewModel: ObservableObject {
         // 是错的，不能留着当占位。
         demoDay = nil
         demoComputedAt = nil
+        applyCachedSnapshot()
         Task { await load() }
     }
 
@@ -312,6 +329,7 @@ final class SignalRadarViewModel: ObservableObject {
         // 示例日按 universe 算，旧指数的那天不能留着拼进新指数的日期轨（同 switchMarket）
         demoDay = nil
         demoComputedAt = nil
+        applyCachedSnapshot()
         Task { await load() }
     }
 
@@ -362,6 +380,9 @@ final class SignalRadarViewModel: ObservableObject {
             // 加载期间用户切了市场或 universe，就丢弃这次结果，别覆盖新请求。
             if market != requested || currentUniverse != requestedUniverse || SignalMode.current() != requestedMode { return }
             response = resp
+            if !resp.isGenerating, !resp.days.isEmpty {
+                snapshotCache[snapshotKey(requested, resp.universe.isEmpty ? (requestedUniverse ?? activeUniverseKey) : resp.universe)] = resp
+            }
             if !resp.universes.isEmpty {
                 availableUniverses = resp.universes
                 universesByMarket[requested] = resp.universes
