@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: 'DeepAlpha 缠论与投研平台隐私政策',
 }
 
-const UPDATED = '2025 年 7 月 12 日'
+const UPDATED = '2026 年 10 月 7 日'
 const CONTACT = 'zfleo.sg@gmail.com'
 
 export default function PrivacyPage() {
@@ -32,16 +32,24 @@ export default function PrivacyPage() {
           <Section title="一、我们收集的信息">
             <ul className="list-disc space-y-2 pl-5">
               <li>
-                <strong>账号信息：</strong>注册或登录时提供的电子邮箱、用户名，以及加密存储的密码
-                （我们仅保存经不可逆哈希处理后的密码，无法还原明文）。
+                <strong>账号信息：</strong>注册或登录时提供的电子邮箱或手机号（中国大陆手机号登录时
+                用于接收验证码）、用户名，以及加密存储的密码（我们仅保存经不可逆哈希处理后的密码，无法还原明文）。
               </li>
               <li>
                 <strong>Sign in with Apple：</strong>若你选择通过 Apple 登录，我们仅接收
-                Apple 提供的匿名用户标识与（你授权时的）邮箱，用于创建与识别账号。
+                Apple 提供的匿名用户标识，以及你授权时提供的邮箱与姓名（用作显示名），用于创建与识别账号。
               </li>
               <li>
                 <strong>你主动提交的反馈：</strong>在 App「我的 → 联系我们」中填写的联系邮箱与反馈内容，
                 仅用于回复你的问题与改进产品，不用于广告或向第三方出售。
+              </li>
+              <li>
+                <strong>自选列表：</strong>你在 App 中加入自选的股票代码，按账号保存在服务端，
+                用于在不同设备间同步与计算自选状态。
+              </li>
+              <li>
+                <strong>订阅状态：</strong>订阅通过 Apple App Store 购买与扣款，我们不接触你的支付信息；
+                App 在设备上读取 Apple 签名的订阅凭证判断会员状态，服务端不保存你的购买记录。
               </li>
               <li>
                 <strong>使用数据：</strong>你查询的股票代码、日期范围、分析偏好等操作记录，
@@ -69,12 +77,13 @@ export default function PrivacyPage() {
                 你所查询标的的公开市场数据。我们向其发送的是股票代码等查询参数，不含你的身份信息。
               </li>
               <li>
-                <strong>大语言模型服务商</strong>（如 OpenAI、Anthropic、Google 等）：用于
-                结构 GAP 等 AI 分析。相关文本可能被发送至模型服务商处理。
+                <strong>大语言模型服务商</strong>（如 MiniMax、OpenAI、Anthropic、Google 等）：用于
+                上市公司财报要点整理（AI 总结）等功能。发送给模型的只有公开的财报原文片段，
+                不含你的账号、联系方式等个人信息。
               </li>
               <li>
-                <strong>基础设施</strong>：数据库（Supabase）、缓存（Upstash）、部署与
-                CDN（Railway / Vercel / Cloudflare）用于存储与分发。
+                <strong>基础设施</strong>：数据库与缓存、应用部署（Railway）、网站托管与
+                CDN（Vercel / Cloudflare）用于存储与分发；「联系我们」的反馈通过邮件服务转发给我们。
               </li>
             </ul>
             <p className="mt-3">我们不会出售你的个人信息。</p>
@@ -96,7 +105,10 @@ export default function PrivacyPage() {
           </Section>
 
           <Section title="六、未成年人">
-            <p>本平台不面向 18 周岁以下人士。若我们发现误收集了未成年人信息，将尽快删除。</p>
+            <p>
+              本平台提供的是技术分析工具与学习内容，主要面向成年用户；未成年人请在监护人指导下使用，
+              且不应据此进行任何证券交易。若我们发现在未经监护人同意的情况下收集了未成年人的个人信息，将尽快删除。
+            </p>
           </Section>
 
           <Section title="七、政策更新">

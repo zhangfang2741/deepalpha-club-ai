@@ -46,186 +46,148 @@ chan theory,candlestick,technical analysis,pivot,divergence,MACD,stock chart,US 
 
 ## 三、App 描述（中文）
 
+> 1.2 版（2026-10-07 发版检查时整段重写，与 App 实际功能逐条对齐）。ASC 里**整段替换**，不要只改订阅那段。
+
 ```
-DeepAlpha 缠论把 K 线图上的结构自动标出来，让你看懂行情在走什么形态。
+DeepAlpha 缠论把 K 线图上的缠论结构自动标出来，并配上大白话解释和入门课程，帮你看懂行情在走什么形态。
 
-【自动标注缠论结构】
-输入代码即可得到完整的结构识别：K 线包含处理、分型、笔、线段、中枢、
-背驰，以及一二三类买卖点，全部直接画在图上。背驰按价差、量能、时长三项
-力度对比判定，每一项比值都写在说明里；另附 MACD 副图作参考。
+【市场雷达】
+按「市场 → 行业 → 基本面 → 结构」的顺序看市场：
+· 顶部是大盘环境（逐利 / 观望 / 避险三种状态的概率）和行业强弱横条，点一个行业就只看这个行业
+· 雷达画布汇总所选指数里基本面综合等级达标的股票近期出现的缠论买卖点结构：颜色是方向，大小是一二三类，越靠中心越新
+· 可按历史交易日翻看；会员可打开基本面名单
+· 美股、A 股、港股都有（标普 500、纳指 100、沪深 300、恒生指数等）
+所有内容只陈列按规则得出的事实，不打分、不排名，不构成投资建议。
 
-【三个市场】
-美股、A 股、港股统一分析，代码格式各按各市场习惯输入。支持日线与周线，
-并可在结果下方查看更低一级周期（日线看 30 分钟、周线看日线）的走势。
+【个股分析】
+输入代码即可得到完整的结构识别：分型、笔、线段、中枢、背驰，以及一二三类买卖点，全部直接画在图上，另附 MACD 副图。
+· 结论卡先告诉你当前处在中枢的哪个阶段，每个买卖点都能点开看「怎么识别的」，带这一处的真实数字
+· 买卖点口径可在严格 / 中等 / 宽松三种之间切换，每种的区别都写明了
+· 日线可看 30 分钟次级别、周线可看日线次级别
 
-【信号雷达与自选】
-先看市场环境和行业强弱，再看哪些股票基本面靠前，最后看它们有没有缠论买卖点：
-按指数扫描成分股，只把综合等级靠前的股票的买卖点结构以气泡图汇总展示，门槛
-随股票池自动调整，可按历史交易日翻看，另有基本面名单。美股气泡带券商评级
-变动角标。自选列表可批量查看每只标的当前所处的结构阶段。
-所有内容只陈列事实，不构成投资建议。
+【基本面研究】
+估值、成长、盈利能力、动量、EPS 修正五个维度，在同行业里比较后给出 A+ 到 F 的字母等级，每一项都能下钻看指标和算式。
+同一页可在 App 内阅读这家公司最新一期财报和年报原文（美股 SEC 文件、A 股 / 港股定期报告），阅读页可打开 AI 整理的中文要点（只依据原文，标注由 AI 生成，一切以原文为准）。
+另有分析师评级分布与近期评级变动。
 
-【联系我们】
-「我的」页的「联系我们」可直接提交问题或建议，留下邮箱即可收到回复。
+【自选】
+加入自选的股票按近期有无买卖点分组，一眼看到每只当前所处的结构阶段。
 
 【看不懂就先学】
-内置 9 篇缠论入门词条，从 K 线包含处理一路讲到走势级别，每篇配一张
-示意图，用的是和分析页完全相同的配色。图例和买卖点标签可以直接点开
-对应词条，不用在两个页面之间来回找。
+学习页有新手入门、9 篇缠论入门课程（每篇配示意图）和名词小词典。界面上的术语、等级、数字都能点开，看「这说明什么、不说明什么」。
 
 【看图不将就】
-图表支持横滑平移与双指缩放，可点开全屏查看更多 K 线。结构图层（分型、
-笔、线段、中枢、买卖点）可以逐个开关，只看你关心的那一层。
+图表支持平移、双指缩放与全屏，结构图层可以逐个开关；分析结果可一键生成长图分享。
 
-【形态分析】
-除了专业术语，另有一段大白话说明，讲清当前结构在描述什么样的市场状态。
-末笔、线段、中枢位置、背驰、量价各算一项，加权后给出技术面强弱，每一项
-的判断都逐条列出。风险提示单独一栏，说明这些判断有哪些不确定处。
+【联系我们】
+「我的 → 联系我们」可直接提交问题或建议，留下邮箱即可收到回复。
 
 ——
 
 关于订阅
-免费用户每日可分析 3 支不同标的。提供一个自动续订会员订阅，按月计费（¥128/月）：
-· 会员：不限次缠论分析，另含次级别确认、信号雷达与历史回看、自选不限数量与全部结构状态
-价格以 App 内及 App Store 显示为准。
-付款在确认购买时从你的 Apple 账户扣除。若在当前周期结束前 24 小时内
-未关闭自动续订，订阅将自动续期并按同样价格扣费。购买后可在
-App Store 账户设置中管理或关闭自动续订。
+免费用户每日可分析 3 支不同标的，雷达可查看示例日。提供一个自动续订会员订阅「DeepAlpha 会员」，按月计费，¥128/月：
+· 不限次缠论分析、次级别确认、每日市场雷达与 30 个交易日历史回看、基本面名单、自选不限数量与全部结构状态
+· 首次订阅的 Apple 账户可享首月活动价 ¥58，之后按 ¥128/月自动续订
+价格以 App 内及 App Store 显示为准。付款在确认购买时从你的 Apple 账户扣除。若在当前周期结束前至少 24 小时未关闭自动续订，订阅将自动续期并按同样价格扣费。购买后可在 App Store 账户设置中管理或关闭自动续订。
 
 使用条款（EULA）：https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
 隐私政策：https://deepalpha.club/privacy
 
 免责声明
-本 App 提供的全部内容均由算法基于公开行情数据自动生成，属于技术分析
-与学习材料，不构成任何投资建议、要约或承诺。缠论是一套走势结构的
-分析方法，其识别结果会随数据更新而变化，不具备预测能力。投资有风险，
-所有决策请自主判断并自行承担后果。
+本 App 提供的全部内容均由算法基于公开数据自动生成，属于技术分析与学习材料，不构成任何投资建议、要约或承诺。缠论是一套描述走势结构的分析方法，识别结果会随数据更新而变化，不具备预测能力。投资有风险，所有决策请自主判断并自行承担后果。
 ```
 
 ## 四、App 描述（英文）
 
+> ASC 目前只有简体中文一个本地化，英文描述**可选**：要加就在版本页「+」添加 English (U.S.)，同时要传英文截图。
+
 ```
-DeepAlpha Chan automatically marks structural patterns on candlestick charts,
-so you can see what shape the market is actually forming.
+DeepAlpha Chan automatically marks Chan-theory structure on candlestick charts, with plain-language explanations and built-in lessons, so you can see what shape the market is forming.
 
-AUTOMATIC CHAN STRUCTURE
-Enter a ticker to get the full structural breakdown: candle inclusion merging,
-fractals, strokes, segments, pivots, divergence, and the three classes of
-buy/sell points — all drawn directly on the chart. Divergence is judged by
-comparing price range, volume and duration, and each ratio is spelled out;
-a MACD subchart is included for reference.
+MARKET RADAR
+Read the market top-down: market → sector → fundamentals → structure.
+- The top card shows the broad-market regime (risk-on / neutral / risk-off probabilities) and a sector-strength strip; tap a sector to filter.
+- The radar collects recent Chan buy/sell-type structures among an index's stocks whose composite fundamentals grade meets the threshold. Color is direction, size is class 1/2/3, closer to the center is newer.
+- Browse past trading days; members can open the fundamentals list.
+- US, China A-share and Hong Kong (S&P 500, Nasdaq 100, CSI 300, Hang Seng and more).
+Everything shown is a rule-based fact. Nothing is scored or ranked, and nothing is investment advice.
 
-THREE MARKETS
-US, China A-share and Hong Kong equities in one place, each using its own
-familiar ticker format. Daily and weekly timeframes, with a one-tap view of the
-next lower timeframe (30-minute under daily, daily under weekly).
+STOCK ANALYSIS
+Enter a ticker to see fractals, strokes, segments, pivots, divergence and the three classes of buy/sell points drawn on the chart, with a MACD subchart.
+- A summary card shows the current pivot phase; every signal opens a "how it was detected" view with the real numbers.
+- Choose strict, medium or loose signal rules; the difference is explained in the app.
+- 30-minute sub-level under daily, daily under weekly.
 
-SIGNALS RADAR AND WATCHLIST
-Scan an index's constituents and see the day's buy/sell-type structures as a
-bubble map, browsable by past trading day. Your watchlist shows the current
-structural phase of every ticker at a glance.
+FUNDAMENTALS
+Valuation, growth, profitability, momentum and EPS revisions are compared within the industry and shown as letter grades from A+ to F, each with drill-down metrics and formulas.
+Read the company's latest periodic report and annual report in the app (SEC filings for US; periodic reports for A-share / HK), with an AI-generated summary of key points that is based only on the original text and labeled as AI-generated.
+Analyst rating distribution and recent rating changes are included.
+
+WATCHLIST
+Your watchlist is grouped by whether a buy/sell-type structure appeared recently, with each stock's current structural phase.
 
 LEARN AS YOU GO
-Nine built-in lessons take you from candle inclusion through to trend levels.
-Every lesson includes a diagram drawn with exactly the same colour language as
-the analysis chart. Terms in the legend and on signal labels are tappable and
-open the matching lesson.
+A beginner's guide, nine illustrated Chan lessons and a glossary. Terms, grades and numbers are tappable and explain what they do and do not mean.
 
 BUILT FOR READING CHARTS
-Pan horizontally, pinch to zoom, and open fullscreen to see more candles.
-Each structural layer can be toggled independently.
-
-PLAIN-LANGUAGE READING
-Alongside the technical terms, a plain-language summary describes what the
-current structure indicates and what to watch out for.
+Pan, pinch to zoom and go fullscreen; toggle each structural layer; share any analysis as a long image.
 
 --
 
 ABOUT SUBSCRIPTION
-Free users can analyse 3 distinct tickers per day. One auto-renewing monthly
-membership is available (CNY 188 per month):
-- Member: unlimited Chan analysis, plus the sub-level view, Signals radar with history, and an unlimited watchlist with every item's status
-Prices are shown in the app and on the App Store. Payment is
-charged to your Apple Account at confirmation of purchase. The subscription renews automatically at the same price unless
-auto-renew is turned off at least 24 hours before the end of the current
-period. You can manage or turn off auto-renew in your App Store account
-settings after purchase.
+Free users can analyze 3 distinct tickers per day and view a sample radar day. One auto-renewing monthly subscription, "DeepAlpha Membership", is available at CNY 128 per month (price varies by region):
+- Unlimited Chan analysis, sub-level view, the daily market radar with 30 trading days of history, the fundamentals list, and an unlimited watchlist with every item's status
+- First-time subscribers get an introductory price for the first month (CNY 58), then it renews at the regular price
+Prices are shown in the app and on the App Store. Payment is charged to your Apple Account at confirmation of purchase. The subscription renews automatically at the same price unless auto-renew is turned off at least 24 hours before the end of the current period. You can manage or turn off auto-renew in your App Store account settings.
 
 Terms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
 Privacy Policy: https://deepalpha.club/privacy
 
 DISCLAIMER
-All content is generated automatically by algorithms from public market data
-and is provided as technical-analysis and educational material only. It does
-not constitute investment advice, an offer, or any guarantee. Chan theory is a
-method of describing price structure; its output changes as data updates and it
-has no predictive power. Investing involves risk — all decisions and their
-consequences are your own.
+All content is generated automatically by algorithms from public data and is provided as technical-analysis and educational material only. It is not investment advice, an offer, or any guarantee. Chan theory describes price structure; its output changes as data updates and it has no predictive power. Investing involves risk; all decisions and their consequences are your own.
 ```
 
 ---
 
 ## 五、本版更新说明
 
-### 1.2（本版，2026-09-26，build 3）
+### 1.2（本版，2026-10-07 定稿，build 3）
+
+> 1.1 之后的改动很多，更新说明只挑用户能感知的大项；不写「更准」「更赚」这类效果承诺。
 
 中文：
 
 ```
-新增两档订阅、信号雷达全面改版，图表可直接点开结构说明。
+本版是一次大改版：市场雷达、基本面研究、财报阅读与新手学习内容全面上线。
 
-• 订阅分为基础版与高级版：基础版解除每日次数限制，高级版另加次级别确认、信号雷达与自选批量状态
-• 信号雷达改版：气泡颜色区分一二三类、大小表示强弱，参考环按今天/1 周/2 周排布；使用前需阅读风险提示
-• 次级别确认改为图上下钻：日线看 30 分钟，周线看日线
-• 点击 K 线上的分型、笔、线段、中枢、买卖点或背驰，弹出说明并可跳转对应课程
-• 图表下方新增力度面板，背驰按价差、量能、时长三项对比
-• 查询日期按各市场交易所时区换算，修复跨天后日期停在前一天的问题
+• 市场雷达改版：顶部看大盘环境与行业强弱，雷达汇总基本面达标股票的缠论买卖点结构，可按行业筛选、按历史日翻看
+• 新增基本面研究：五个维度在同行业内比较，给出 A+ 到 F 的字母等级，每项可下钻；支持美股、A 股、港股
+• 新增财报阅读：在 App 内阅读最新财报与年报原文，可打开 AI 整理的中文要点
+• 新增分析师评级分布与近期评级变动
+• 个股分析改版：结论卡置顶，买卖点可点开看「怎么识别的」；买卖点口径可选严格 / 中等 / 宽松
+• 学习页新增新手入门与名词小词典，界面上的术语和数字都能点开看解释
+• 订阅合并为一个「DeepAlpha 会员」，新客首月享活动价
+• 「我的 → 联系我们」可直接提交反馈
 ```
 
 英文：
 
 ```
-Two subscription tiers, a redesigned Signals radar, and tappable chart structures.
+A major update: the market radar, fundamentals, report reading and beginner learning content.
 
-• Subscriptions now come in Basic and Premium: Basic removes the daily limit; Premium adds the sub-level view, Signals radar and watchlist phase overview
-• Redesigned Signals radar: colour shows signal class, size shows strength, and rings mark today / 1 week / 2 weeks; a risk notice is shown before first use
-• Sub-level view is now a drill-down on the chart: 30-minute under daily, daily under weekly
-• Tap a fractal, stroke, segment, pivot, signal or divergence on the chart to see what it means and jump to the lesson
-• New strength panel under the chart; divergence compares price range, volume and duration
-• Query dates follow each market's exchange time zone; fixed the date getting stuck on the previous day
+• Redesigned market radar: market regime and sector strength on top; the radar collects Chan buy/sell-type structures among stocks that meet a fundamentals threshold, filterable by sector and browsable by past day
+• New fundamentals: five dimensions compared within the industry, shown as A+ to F letter grades with drill-down; US, A-share and HK
+• New report reader: read the latest periodic and annual reports in the app, with an AI-generated summary of key points
+• New analyst rating distribution and recent rating changes
+• Redesigned stock analysis: summary card on top, every signal explains how it was detected; choose strict / medium / loose signal rules
+• New beginner's guide and glossary; tap terms and numbers anywhere to see what they mean
+• One "DeepAlpha Membership" subscription, with an introductory price for the first month
+• Send feedback from Profile → Contact us
 ```
 
-### 1.2 审核备注（App 审核信息 → 备注；两个订阅的「审核备注」也用这份）
+### 1.2 审核备注（App 审核信息 → 备注）
 
-> 线上 `pro.monthly` 的审核备注还写着「唯一订阅、含 7 天试用、不解锁额外模块」，
-> 与 1.2 完全矛盾，必须整段替换。
-
-```
-This version merges the previous Basic and Premium tiers into a single
-auto-renewing monthly membership (club.deepalpha.chan.premium.monthly, 128 CNY
-per month in China): it removes the free daily limit of 3 distinct tickers and
-includes the sub-level view (30-minute under daily, daily under weekly), the
-Signals radar tab with history, and the unlimited watchlist with every item's
-status. The previous Basic product (club.deepalpha.chan.pro.monthly) is no
-longer for sale; existing Basic subscribers keep access to everything until
-their subscription ends. There is no free trial. First-time subscribers get an introductory offer of 58 CNY for the first month (pay as you go), then it renews at the regular 128 CNY per month; the paywall shows the offer price, the struck-through regular price and the renewal price.
-
-HOW TO REACH THE PAYWALL
-Sign in with the demo account (use the "Email" tab; phone login only works
-for mainland China numbers):
-  appreview@deepalpha.club / AppReview2026
-Then either: the crown icon on the Analysis tab, or Profile -> "View plans".
-Non-subscribers see a blurred preview on the Signals tab with an upgrade button.
-The paywall shows both plans, prices, the auto-renewal disclosure, Terms and
-Privacy links, and Restore Purchases.
-
-TESTING
-A sandbox Apple Account can purchase and restore both tiers. The first time a
-subscriber opens a live (non-sample) radar day, a disclaimer with a 10-second
-reading timer must be accepted before the bubbles are shown.
-All analysis is generated algorithmically from public market data for technical
-study only and is not investment advice. Network access is required.
-```
+见 `RELEASE-1.2.md`「四、审核备注」，那份是**本版唯一要贴的备注**（英文，约 3500 字符）。
 
 ### 1.1（2026-09，已上线）
 

@@ -29,7 +29,7 @@ struct AnalystRatingTab: View {
         }
         .task { await vm.loadAnalyst(market: market, symbol: symbol) }
         .sheet(item: $openedReport) { r in
-            if r.isNews { NewsWebView(title: r.title, url: r.url) } else { ReportPDFView(title: r.title, remote: r.url, shareName: r.shareName) }
+            if r.isNews { NewsWebView(title: r.title, url: r.url) } else { ReportPDFView(title: r.title, remote: r.url, shareName: r.shareName, allowsSaving: false) }
         }
     }
 

@@ -26,29 +26,9 @@
         {
           "adHocOffers": [],
           "codeOffers": [],
-          "displayPrice": "88.00",
-          "familyShareable": false,
-          "groupNumber": 1,
-          "internalID": "5C0F1A2B-0011-4A00-9000-DEE0A1FA0011",
-          "localizations": [
-            {
-              "description": "已停售；仍在有效期的老订阅者按会员处理",
-              "displayName": "基础版 月度会员（已停售）",
-              "locale": "zh_CN"
-            }
-          ],
-          "productID": "club.deepalpha.chan.pro.monthly",
-          "recurringSubscriptionPeriod": "P1M",
-          "referenceName": "Legacy Basic Monthly (retired)",
-          "subscriptionGroupID": "5C0F1A2B-0010-4A00-9000-DEE0A1FA0010",
-          "type": "RecurringSubscription"
-        },
-        {
-          "adHocOffers": [],
-          "codeOffers": [],
           "displayPrice": "128.00",
           "familyShareable": false,
-          "groupNumber": 2,
+          "groupNumber": 1,
           "internalID": "5C0F1A2B-0021-4A00-9000-DEE0A1FA0021",
           "localizations": [
             {
@@ -57,7 +37,7 @@
               "locale": "zh_CN"
             }
           ],
-          "productID": "club.deepalpha.chan.premium.monthly",
+          "productID": "club.deepalpha.chan.pro.monthly",
           "recurringSubscriptionPeriod": "P1M",
           "referenceName": "Membership Monthly",
           "subscriptionGroupID": "5C0F1A2B-0010-4A00-9000-DEE0A1FA0010",
