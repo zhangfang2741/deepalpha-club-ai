@@ -112,27 +112,38 @@ struct LessonScreenshot: View {
     }
 
     var body: some View {
-        VStack(spacing: 6) {
-            Button { zoomed = true } label: {
+        // 截图本身就是 App 界面，直接贴在正文里会和真实界面混在一起：
+        // 外面套一层浅一级底色的框、留内边距，图片单独圆角描边，说明放在框内底部。
+        Button { zoomed = true } label: {
+            VStack(alignment: .leading, spacing: 10) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
                     .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.textSecondary.opacity(0.25), lineWidth: 1))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.border, lineWidth: 1))
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "iphone")
+                        .font(.caption2)
+                    Text(caption)
+                        .font(.caption)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.caption2)
+                }
+                .foregroundColor(Theme.textSecondary)
+                .padding(.horizontal, 2)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(caption)
-            .accessibilityHint(L("点开看大图"))
-            if !caption.isEmpty {
-                Text(caption)
-                    .font(.caption)
-                    .foregroundColor(Theme.textSecondary)
-                    .multilineTextAlignment(.center)
-            }
+            .padding(12)
+            .background(Theme.surfaceAlt)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.border, lineWidth: 1))
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 4)
+        .buttonStyle(.plain)
+        .accessibilityLabel(caption)
+        .accessibilityHint(L("点开看大图"))
+        .padding(.vertical, 6)
         .fullScreenCover(isPresented: $zoomed) {
             ZStack(alignment: .topTrailing) {
                 Color.black.ignoresSafeArea()
