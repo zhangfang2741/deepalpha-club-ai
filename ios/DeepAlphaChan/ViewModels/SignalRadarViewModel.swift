@@ -25,7 +25,11 @@ final class SignalRadarViewModel: ObservableObject {
 
     /// 免费预览按（市场, universe）区分：同一市场切换纳斯达克100/标普500，示例日要跟着换。
     /// 也用作 View 里 `.task(id:)` 的 id。
-    var demoKey: String { "\(market.rawValue)|\(currentUniverse ?? "")" }
+    /// 带口径：切口径后示例日要按新口径重拉。
+    var demoKey: String { "\(market.rawValue)|\(currentUniverse ?? "")|\(mode)" }
+
+    /// 当前买卖点口径（strict / medium / loose），用户在雷达右上角切换；网络层读 `SignalMode.current()`，两边同步。
+    @Published private(set) var mode: String = SignalMode.current()
 
     /// 已放弃拉取预览日的键（失败 / 轮询用尽仍在算 / 返回为空）。被取消不算放弃。
     @Published private(set) var demoGaveUpKey: String?
@@ -329,6 +333,20 @@ final class SignalRadarViewModel: ObservableObject {
         // 示例日按 universe 算，旧指数的那天不能留着拼进新指数的日期轨（同 switchMarket）
         demoDay = nil
         demoComputedAt = nil
+        applyCachedSnapshot()
+        Task { await load() }
+    }
+
+    /// 切换买卖点口径：旧口径的结果不能当新口径展示，先清掉（内存里有新口径的上次结果就直接用），再后台重拉。
+    func switchMode(_ newMode: String) {
+        guard newMode != mode, SignalMode.all.contains(newMode) else { return }
+        SignalMode.set(newMode)
+        mode = newMode
+        selectedDayIndex = 0
+        pendingUniverseKey = nil
+        demoDay = nil
+        demoComputedAt = nil
+        response = nil
         applyCachedSnapshot()
         Task { await load() }
     }

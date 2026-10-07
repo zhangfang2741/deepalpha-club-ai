@@ -2,13 +2,33 @@ import Foundation
 
 /// 买卖点口径的无状态入口：网络层（非 MainActor）从这里读，跟 `Localized` 同一个做法。
 ///
-/// App 统一使用严格口径（缠论原文定义：买卖点落在已走完的笔上），雷达、详情页、次级别都带同一个
-/// `mode`，从雷达点进详情两边的买卖点一致。设置页不提供切换（忽略 UserDefaults 里残留的旧选择）。
-/// 后端默认口径仍是宽松（线上旧版 App 在用），两套都每天预热（scheduler._modes）。
+/// 三套口径（后端 app/services/chan/signal_policy.py，定时任务三套都预热）：
+/// strict 严格（缠论原文）/ medium 中等（默认，严格 + 盘整背驰）/ loose 宽松（最后一笔未走完也先标出）。
+/// 用户在「市场雷达」右上角自己切换，选择存在 UserDefaults；雷达、详情页、次级别都带同一个 `mode`，
+/// 从雷达点进详情两边的买卖点一致。
 enum SignalMode {
-    /// App 使用的口径。
-    static let defaultKey = "strict"
+    static let storageKey = "signal_mode"
+    /// 可选口径，按「从严到宽」排列（切换面板的顺序）。
+    static let all = ["strict", "medium", "loose"]
+    static let defaultKey = "medium"
 
-    /// 当前生效的口径键（每个接口请求都带上 `mode`）。
-    static func current() -> String { defaultKey }
+    /// 当前生效的口径键（每个接口请求都带上 `mode`）。存的值不认识（旧版本残留）就用默认。
+    static func current() -> String {
+        let saved = UserDefaults.standard.string(forKey: storageKey) ?? ""
+        return all.contains(saved) ? saved : defaultKey
+    }
+
+    static func set(_ key: String) {
+        guard all.contains(key) else { return }
+        UserDefaults.standard.set(key, forKey: storageKey)
+    }
+
+    /// 界面上的口径名。
+    static func title(_ key: String) -> String {
+        switch key {
+        case "strict": return L("严格")
+        case "loose": return L("宽松")
+        default: return L("中等")
+        }
+    }
 }
