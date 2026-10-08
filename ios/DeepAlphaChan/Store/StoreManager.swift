@@ -226,6 +226,20 @@ final class StoreManager: ObservableObject {
         await refreshSubscriptionStatus()
     }
 
+    // MARK: - 优惠码兑换
+
+    /// 系统优惠码兑换面板（`.offerCodeRedemption`）关闭后调用。
+    ///
+    /// 优惠码是 App Store Connect「订阅 → 优惠代码」里生成的 Apple Offer Code（如免费 1 个月），兑换成功即得到
+    /// 会员商品的正常订阅权益，门禁不用另做判断；不用自建兑换码，因为审核指南 3.1.1 不允许 App 自己的码解锁功能。
+    /// 兑换产生的交易也会从 `Transaction.updates` 进来，这里再主动刷新一次，面板一关状态就是新的。
+    func offerCodeRedemptionFinished(_ result: Result<Void, Error>) async {
+        if case .failure(let error) = result {
+            storeLog.error("优惠码兑换失败: \(error.localizedDescription, privacy: .public)")
+        }
+        await refreshSubscriptionStatus()
+    }
+
     // MARK: - 交易监听（续订、退款、跨设备同步）
 
     private func observeTransactionUpdates() -> Task<Void, Never> {

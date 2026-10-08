@@ -22,6 +22,7 @@ struct PaywallView: View {
     @EnvironmentObject var store: StoreManager
     @Environment(\.dismiss) private var dismiss
     @State private var restoring = false
+    @State private var showOfferCodeRedemption = false
 
     /// 对比表两列的宽度：免费版 / 会员。
     private static let columnWidth: CGFloat = 78
@@ -57,8 +58,11 @@ struct PaywallView: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if let product = store.membershipProduct { bottomBar(product) }
             }
-            // tier 变化（购买/恢复成功）即关闭
+            // tier 变化（购买/恢复/兑换优惠码成功）即关闭
             .onChange(of: store.tier) { _, _ in dismiss() }
+            .offerCodeRedemption(isPresented: $showOfferCodeRedemption) { result in
+                Task { await store.offerCodeRedemptionFinished(result) }
+            }
         }
         .presentationCornerRadius(14)
         // 付费墙不参与截图分享：订阅价格与权益文案带法务口径，截出去容易被
@@ -343,7 +347,7 @@ struct PaywallView: View {
     }
 
     /// 自动续订披露 + 恢复购买 + 条款 / 隐私链接（App Store 审核必备），压成小字一块：
-    /// 披露文字在上，下面一行「恢复购买 · 服务条款 · 隐私政策」。
+    /// 披露文字在上，下面一行「恢复购买 · 兑换优惠码 · 服务条款 · 隐私政策」。
     private var legal: some View {
         VStack(spacing: 6) {
             if let introDisclosure {
@@ -358,6 +362,7 @@ struct PaywallView: View {
                 .multilineTextAlignment(.center)
             HStack(spacing: 14) {
                 restoreButton
+                Button(L("兑换优惠码")) { showOfferCodeRedemption = true }
                 Link(L("服务条款"), destination: URL(string: "https://deepalpha.club/terms")!)
                 Link(L("隐私政策"), destination: URL(string: "https://deepalpha.club/privacy")!)
             }

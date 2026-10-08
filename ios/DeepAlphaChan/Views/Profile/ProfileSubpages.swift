@@ -3,11 +3,12 @@ import StoreKit
 
 // 「我的」里的二级页：把低频功能收进去，一级页只留账号、几个入口和退出登录。
 
-/// 订阅：当前方案、查看方案、管理订阅、恢复购买。
+/// 订阅：当前方案、查看方案、管理订阅、兑换优惠码、恢复购买。
 struct SubscriptionSettingsView: View {
     @EnvironmentObject var store: StoreManager
     @State private var showPaywall = false
     @State private var showManageSubscriptions = false
+    @State private var showOfferCodeRedemption = false
 
     var body: some View {
         List {
@@ -25,6 +26,9 @@ struct SubscriptionSettingsView: View {
                 if store.isSubscribed {
                     Button(L("管理订阅")) { showManageSubscriptions = true }
                 }
+                // 已是会员也给入口：Apple 的优惠码可以兑换给现有订阅者（延长免费期），由码的配置决定
+                Button(L("兑换优惠码")) { showOfferCodeRedemption = true }
+                    .foregroundColor(Theme.accent)
                 Button(L("恢复购买")) { Task { await store.restore() } }
                     .foregroundColor(Theme.accent)
             }
@@ -33,6 +37,9 @@ struct SubscriptionSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showPaywall) { PaywallView() }
         .manageSubscriptionsSheet(isPresented: $showManageSubscriptions)
+        .offerCodeRedemption(isPresented: $showOfferCodeRedemption) { result in
+            Task { await store.offerCodeRedemptionFinished(result) }
+        }
     }
 }
 
