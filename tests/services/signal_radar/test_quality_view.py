@@ -140,3 +140,28 @@ async def test_good_stocks_ex_momentum_loads_dimension_scores(monkeypatch):
     monkeypatch.setattr(qv, "set_json", no_cache)
     good, rated, _ = await qv.good_stocks("us", "sp500", NoRedis(), datetime(2026, 10, 6, tzinfo=UTC), qv.QUALITY_GOOD_XM)
     assert rated == 2 and "AAA" in good  # 动量 5 分不再拖累 AAA
+
+
+async def test_warm_good_refreshes_only_when_cache_is_older_than_an_hour(monkeypatch):
+    """预热：缓存不到 1 小时直接跳过；更旧或缺失才跳过缓存重算（让用户请求基本不会撞上读评级库）。"""
+    calls: list[bool] = []
+
+    async def fake_good_stocks(market, universe, redis, now, mode=qv.QUALITY_GOOD, *, refresh=False):  # noqa: ARG001
+        calls.append(refresh)
+        return {}, 0, "B"
+
+    monkeypatch.setattr(qv, "good_stocks", fake_good_stocks)
+
+    class R:
+        def __init__(self, ttl):
+            self._ttl = ttl
+
+        async def ttl(self, key):  # noqa: ARG002
+            return self._ttl
+
+    now = datetime(2026, 10, 7, tzinfo=UTC)
+    await qv.warm_good("cn", "csi300", R(qv.GOOD_CACHE_TTL - 60), now)   # 刚写 1 分钟：跳过
+    assert calls == []
+    await qv.warm_good("cn", "csi300", R(qv.GOOD_CACHE_TTL - 7200), now)  # 写了 2 小时：重算
+    await qv.warm_good("cn", "csi300", R(-2), now)                         # 没有缓存：重算
+    assert calls == [True, True]
