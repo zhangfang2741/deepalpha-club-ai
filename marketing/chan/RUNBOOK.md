@@ -18,16 +18,17 @@
 ## 顺序执行
 
 1. 先用 Buffer 连接器读取 `My organization` 下的频道身份、当天帖子和未确定的提交。两平台当日已成功则正常运营结束；测试模式可以生产新素材但只创建草稿，不重复公开发布。复盘应先于“当天已发布”的退出判断，24/72 小时未到期就不编造数据。
-2. 读取最近 14 天的 `daily/`、`runs/*/creative-brief.json`、发布文案与表现数据，建立题材去重表。连续 7 天不得重复相同的“标的 + 开头钩子 + 教学结构 + 画面路径”；连续两天不得使用相同标的作为主角，除非出现有权威来源支持的重大市场事件。若现有生产能力只能生成重复模板，必须停止发布并记录所缺能力，不得用旧模板兜底。
-3. 核验市场信息与候选来源。市场事实至少使用一个交易所、上市公司公告、SEC 文件或其他一手来源，并记录 URL、事件时间和市场日期。生产工具的候选参数只是调用方提供的顺序，不自动代表“热门”或市场评分。常青教程明确说明是历史结构教学，不能把测试候选筛选说成热点研究。
-4. 每次生产前写入 `creative-brief.json`，至少包含：`market_event`、`primary_source`、`symbol`、`chan_structure`、`format`、`hook_0_3s`、`app_actions`、`deepalpha_app_store_prompt`、`difference_from_last_14d`。从以下方向轮换，不能机械固定为“分型 + 笔”：市场事件后的结构复盘、财报前后结构对比、指数与个股强弱对照、一个误区纠正、一个结构信号拆解、图层前后对比、用户问题式教程、App 功能效率演示。没有可靠市场事件时可做常青教学，但必须更换标的、问题、画面路径或教学对象。
-5. 视频开头 0–3 秒必须给出与当天选题直接相关的问题、反差或可核验事实，并展示真实 App 或真实市场画面；5 秒内出现 App 核心能力。结尾 3–5 秒使用自然转化引导：画面与口播统一写“App Store 搜索 DeepAlpha 缠论”；YouTube 文案保留 App Store 直链。不得承诺收益、夸大信号或伪造实时性。
-6. 使用本项目已验证生产流程执行当天 `creative-brief.json` 对应的真实 App 操作。若 `scripts/chan_marketing.py` 尚不支持 brief 所需的标的、图层顺序、停留、缩放、滚动或 DeepAlpha 缠论下载引导，可先做最小安全扩展并跑测试；禁止退回硬编码的固定四段模板。没有合格结构或发生失败时，按下方“当日目标闭环”回到对应上游节点继续，不把单次尝试失败当作整日任务结束。
-7. 读取该运行的 `creative-brief.json`、`selection.json`、`script.json`、`events.json`、`production.json`，查看每个 `frame-*.jpg` 并核验声音内容、音量、时间对应、钩子兑现和“DeepAlpha 缠论”完整品牌名及下载引导。确认关键信息没有进入右侧 120 像素及底部 260 像素的平台覆盖区。不得仅凭文件存在就通过。完成核验后写 `review.json`，包含成片 `sha256`、`visual: passed`、`audio: passed`、`platform_safe_zone: passed`、`creative_brief_match: passed` 和实际核验依据。
-8. 执行 `uv run python scripts/chan_marketing.py upload --run-id 同一标识`。它会检查审核哈希，调用真实 `/api/v1/media/upload`，匿名 HEAD 与 GET，比较下载内容哈希；失败时禁止 Buffer 提交。上传结果保存在 `upload.json`。此处不会自动重试上传，避免不明确响应造成重复对象。
-9. 通过 Buffer 再次核实频道：TikTok `littlemonkey437`、YouTube `DeepAlpha`。每个平台提交前写入 `submit-频道.json`：日期、内容哈希、主题、频道 ID、`status: submitting`；获取响应后立即保存 postId 和真实状态。若中断在 submitting，先查询 Buffer，不再次盲目创建。
-10. 测试模式使用 `saveToDraft: true`，确认草稿视频和频道绑定正确即可验证提交，不把草稿写成公开发布成功。日常发布按授权执行，YouTube 必须提供标题与分类，两个平台标记合成配音。平台返回 sending 时保留待核验状态；只有 sent 和公开链接才写成功。
-11. 写入本次 `publish.json/md`，更新 `latest-selection.json/md`、`latest-production.md`、`latest-publish.md`。只更新对应成功阶段的指针，全部记录必须使用相同 run_id。测试产物标记 test，不覆盖日常发布事实。
+2. 识别最新版 APP，而不只确认二进制能够启动。读取 `ios/AppStore/chan/RELEASE-*-STATUS.md`、当前版本与构建号、最近涉及 `ios/DeepAlphaChan` 的提交和实际界面，建立最新版能力清单。能力清单至少核对实际存在的三市场覆盖、市场雷达、买卖点严格/中等/宽松口径、基本面评分与分位、财报入口与 AI 总结、学习页和自选；只记录当前源码或已发布版本真实具备的能力，不得臆造。
+3. 读取最近 14 天的 `daily/`、`runs/*/creative-brief.json`、发布文案与表现数据，建立题材去重表。连续 7 天不得重复相同的“标的 + 开头钩子 + 教学结构 + 画面路径”；连续两天不得使用相同标的作为主角，除非出现有权威来源支持的重大市场事件。若现有生产能力只能生成重复模板，必须停止发布并记录所缺能力，不得用旧模板兜底。
+4. 每天先完成四层研究再选题：市场层比较美股、A 股、港股或当天有可靠数据的市场；行业层用真实行业雷达比较行业强弱、结构状态或信号分布；个股层从所选行业的真实个股雷达或名单筛选标的；基本面层核实综合评分或等级、同行业或样本分位、关键维度以及最新财报或公司事实。最终形成“市场 → 行业 → 个股 → 基本面 → 缠论结构”的筛选链。市场事实至少使用一个交易所、上市公司公告、SEC 文件或其他一手来源，并记录 URL、事件时间、数据日期和最近交易日。任一层缺少可靠数据时必须换市场、行业或标的；缺失指标明确写缺失，禁止推断或填零。常青教程仍须展示完整四层 APP 路径，不得把测试候选筛选说成热点研究。
+5. 每次生产前写入 `creative-brief.json`，至少包含：`market_event`、`primary_source`、`symbol`、`chan_structure`、`format`、`hook_0_3s`、`app_actions`、`deepalpha_app_store_prompt`、`difference_from_last_14d`、`app_version`、`app_build`、`latest_app_capabilities`、`version_evidence`、`market_radar_snapshot`、`industry_radar_snapshot`、`stock_radar_snapshot`、`fundamental_snapshot`、`selection_funnel`、`selected_latest_capabilities`。四个 snapshot 分别记录真实界面证据、数据日期、核心事实和缺失项；`selection_funnel` 解释每一层如何筛到下一层。只选择一项新版功能、只做三市场切换或只重复分型、笔、线段均不算结合最新版 APP。
+6. 视频开头 0–3 秒必须给出与当天选题直接相关的问题、反差或可核验事实，并展示真实 App 或真实市场画面；5 秒内进入市场或行业雷达。20–45 秒内必须讲清一个结论，并真实完成至少五步有意义操作：市场雷达或市场/指数切换、进入行业雷达或行业面板、进入个股雷达/名单并选中个股、打开基本面评分与分位或财报、进入个股缠论结构。旁白和字幕必须分别点明市场、行业、个股、基本面与结构的关键事实。结尾 3–5 秒使用自然转化引导：画面与口播统一写“App Store 搜索 DeepAlpha 缠论”；YouTube 文案保留 App Store 直链。不得承诺收益、夸大信号或伪造实时性。
+7. 使用本项目已验证生产流程执行当天 `creative-brief.json` 对应的真实 App 操作。若 `scripts/chan_marketing.py` 尚不支持 brief 所需的标的、图层顺序、停留、缩放、滚动或 DeepAlpha 缠论下载引导，可先做最小安全扩展并跑测试；禁止退回硬编码的固定四段模板。没有合格结构或发生失败时，按下方“当日目标闭环”回到对应上游节点继续，不把单次尝试失败当作整日任务结束。
+8. 读取该运行的 `creative-brief.json`、`selection.json`、`script.json`、`events.json`、`production.json`，查看每个 `frame-*.jpg` 并核验声音内容、音量、时间对应、钩子兑现和“DeepAlpha 缠论”完整品牌名及下载引导。确认关键信息没有进入右侧 120 像素及底部 260 像素的平台覆盖区。不得仅凭文件存在就通过。完成核验后写 `review.json`，包含成片 `sha256`、`visual: passed`、`audio: passed`、`platform_safe_zone: passed`、`creative_brief_match: passed` 和实际核验依据；`creative_brief_match` 必须列出版本号、四层 snapshot、五步真实操作及各自关键帧/时间码，并证明旁白与画面事实一致。缺少任一层、任一步或证据即判失败。
+9. 执行 `uv run python scripts/chan_marketing.py upload --run-id 同一标识`。它会检查审核哈希，调用真实 `/api/v1/media/upload`，匿名 HEAD 与 GET，比较下载内容哈希；失败时禁止 Buffer 提交。上传结果保存在 `upload.json`。此处不会自动重试上传，避免不明确响应造成重复对象。
+10. 通过 Buffer 再次核实频道：TikTok `littlemonkey437`、YouTube `DeepAlpha`。每个平台提交前写入 `submit-频道.json`：日期、内容哈希、主题、频道 ID、`status: submitting`；获取响应后立即保存 postId 和真实状态。若中断在 submitting，先查询 Buffer，不再次盲目创建。
+11. 测试模式使用 `saveToDraft: true`，确认草稿视频和频道绑定正确即可验证提交，不把草稿写成公开发布成功。日常发布按授权执行，YouTube 必须提供标题与分类，两个平台标记合成配音。平台返回 sending 时保留待核验状态；只有 sent 和公开链接才写成功。
+12. 写入本次 `publish.json/md`，更新 `latest-selection.json/md`、`latest-production.md`、`latest-publish.md`。只更新对应成功阶段的指针，全部记录必须使用相同 run_id。测试产物标记 test，不覆盖日常发布事实。
 
 ## 故障恢复
 
@@ -39,7 +40,7 @@
 
 ## 当日目标闭环
 
-- 当日目标定义为：复盘已完成；一条符合创意 brief、全部审核闸门通过的新视频已上传；TikTok 与 YouTube 均为 `sent` 且有公开链接；“DeepAlpha 缠论”完整品牌名及 App Store 下载引导已在画面、口播和 YouTube 文案中核实。`draft`、`sending`、仅单频道成功或只有本地成片都不算完成。
+- 当日目标定义为：复盘已完成；完整的市场、行业、个股雷达、基本面与缠论结构筛选链已经核实并在真实 APP 中演示；创意 brief 与全部审核闸门通过；TikTok 与 YouTube 均为 `sent` 且有公开链接；“DeepAlpha 缠论”完整品牌名及 App Store 下载引导已在画面、口播和 YouTube 文案中核实。`draft`、`sending`、仅单频道成功、只有本地成片、只重复旧图层模板或只展示单个功能都不算完成。
 - 每天先创建 `daily-goal.json`，记录 `date_beijing`、目标、`status: in_progress`、尝试列表和已完成频道。每次失败都追加：`run_id`、失败阶段、根因、保留的有效证据、下一轮要改变的变量和返回节点。
 - 市场来源或候选不合格：回到市场研究与候选池，换一手来源、标的或创意角度；不得强行使用无结构标的。
 - 旁白时长、脚本或素材能力不足：回到 creative brief 和生产实现，调整文案、步骤或做最小安全扩展，跑测试后使用新 run_id 重产。

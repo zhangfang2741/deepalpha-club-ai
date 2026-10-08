@@ -1,0 +1,89 @@
+{
+  "date_beijing": "2026-10-08",
+  "goal": "完成到期复盘、差异化创意视频审核与媒体校验，并发布到 TikTok littlemonkey437 和 YouTube DeepAlpha；核实 DeepAlpha 缠论完整品牌名及 App Store 下载引导",
+  "status": "in_progress",
+  "standard_revision": {
+    "resumed_at_beijing": "2026-10-08T09:00:00+08:00",
+    "reason": "凌晨发布内容仅演示旧图层切换，不满足随后生效的最新版 APP 能力主演示、两次真实操作和版本证据门槛",
+    "previous_result": "双频道已 sent，作为防重复证据保留且绝不再次提交",
+    "required_next": "完成新版能力创意生产与审核；鉴于今日双频道已有 sent，发布前必须依据 Buffer 远端状态执行防重复裁决"
+  },
+  "resume_context": {
+    "user_update": "APP 已更新",
+    "previous_successful_run_id": "2026-09-19-0918",
+    "resume_entry": "先完成 Buffer 到期复盘和当日全状态防重复核验，再从新版 APP 的真实模拟器生产开始"
+  },
+  "attempts": [
+    {
+      "run_id": "2026-10-08-preflight-hp",
+      "failure_stage": "market_candidate_probe",
+      "root_cause": "APP 更新后专用模拟器内为 Release 包，模拟器专用 Debug 运营桥接未编译，请求启动参数被忽略",
+      "preserved_evidence": "Release 包安装时间 2026-10-07T20:37:02+08:00；request.json 已写入但 response.json 与 error.txt 均未生成",
+      "next_change": "按 RUNBOOK 构建并安装当前源码的 Debug 模拟器包，保留模拟器数据",
+      "return_node": "market_candidate_probe",
+      "resolution": "Debug 构建成功并安装；HP 探测返回 251 根 K 线、49 个已确认分型、48 笔、6 线段"
+    },
+    {
+      "run_id": "2026-10-08-0052",
+      "status": "failed_review",
+      "failure_stage": "creative_brief_match",
+      "root_cause": "第一处结构图层线段在 6.65 秒出现，超过 5 秒内展示 App 核心能力的门槛",
+      "preserved_evidence": "成片、四张审核帧、events.json、production.json 与 SHA-256 1bbba0474bdca1603cdabcee18a1a1cf4508b0169e439c7186fe110331508aaa",
+      "next_change": "缩短第一段旁白，仅保留事件反问，使线段操作在约 4 秒出现",
+      "return_node": "creative_brief",
+      "creative_brief": "marketing/chan/runs/2026-10-08-0052/creative-brief.json"
+    },
+    {
+      "run_id": "2026-10-08-0056",
+      "status": "failed_review",
+      "failure_stage": "creative_brief_match",
+      "root_cause": "第一处结构图层线段在 5.0348 秒出现，超过 5 秒门槛 0.0348 秒",
+      "preserved_evidence": "成片、审核帧、events.json、响度结果与 SHA-256 0fab519a03cd5929cad8affb5b303fa208a5b7a42d24edcddf453e40d9a531e3",
+      "next_change": "再次压缩事件反问旁白，确保首个图层在 5 秒前出现",
+      "return_node": "creative_brief",
+      "creative_brief": "marketing/chan/runs/2026-10-08-0056/creative-brief.json"
+    },
+    {
+      "run_id": "2026-10-08-0100",
+      "status": "succeeded",
+      "stage": "published",
+      "sha256": "68760c90c9425665ce06bd4ae9e0fdc35b78f2343f551d67fdde26e6cf61a22e",
+      "review": "marketing/chan/runs/2026-10-08-0100/review.json",
+      "creative_brief": "marketing/chan/runs/2026-10-08-0100/creative-brief.json"
+    },
+    {
+      "run_id": "2026-10-08-0900-preflight",
+      "status": "paused_by_duplicate_guard",
+      "failure_stage": "today_all_status_duplicate_check",
+      "root_cause": "Buffer 实时核实北京时间今日 TikTok 与 YouTube 均已有 sent；旧成片不满足随后生效的最新版能力门槛，但任何已 sent 频道绝不允许重复提交",
+      "preserved_evidence": "Buffer postId 6ac67ad3ea45b37c36bbb3f1 与 6ac67af320b8d89a0676badd 均 sent；latest-app-evidence-0900.json；latest-app-home-0900.png",
+      "next_change": "下一个可发布日先做到期 24 小时复盘，再扩展市场雷达、行业面板、个股选择、基本面评分与分位、个股缠论结构的完整真实操作链，并使用新 run_id 生产",
+      "return_node": "metrics_review_then_four_layer_research_and_minimal_implementation",
+      "resume_not_before_beijing": "2026-10-09T01:02:31+08:00"
+    }
+  ],
+  "completed_channels": {
+    "tiktok": {"post_id": "6ac67ad3ea45b37c36bbb3f1", "status": "sent", "public_url": "https://tiktok.com/@littlemonkey437/video/7693972213837417749"},
+    "youtube": {"post_id": "6ac67af320b8d89a0676badd", "status": "sent", "public_url": "https://www.youtube.com/watch?v=GRx__z8CPOs"}
+  },
+  "metrics_review": {
+    "status": "completed",
+    "receipt": "marketing/chan/runs/2026-10-08/metrics-review-0047.json",
+    "completed_at_beijing": "2026-10-08T00:47:08+08:00"
+  },
+  "today_duplicate_check": "clear_before_publish",
+  "today_duplicate_check_0900": {
+    "organization": "My organization",
+    "checked_at_beijing": "2026-10-08T09:02:29+08:00",
+    "states_checked": ["draft", "needs_approval", "scheduled", "sending", "sent", "error"],
+    "result": "TikTok 与 YouTube 各一条 sent；其余状态无帖子；禁止再次提交",
+    "metrics_note": "两帖 metricsUpdatedAt 均早于 24 小时门槛，不进行正式 24 小时复盘，缺失项不填零"
+  },
+  "latest_app_evidence": "marketing/chan/runs/2026-10-08/latest-app-evidence-0900.json",
+  "resume_entry": "2026-10-09 先复盘 postId 6ac67ad3ea45b37c36bbb3f1 与 6ac67af320b8d89a0676badd，再完成市场、行业、个股雷达、基本面和缠论结构五步真实操作链的最小生产扩展；不得重发 2026-10-08 内容",
+  "final_success_run_id": "2026-10-08-0100",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/9b57d5ec1dc74c44b71a13d3c08f59d74e5df2fb.mp4",
+  "deepalpha_app_store_prompt_evidence": {"on_screen": "frame-04.jpg 完整显示 App Store 搜索 / DeepAlpha 缠论", "narration": "第四段完整口播 App Store 搜索 DeepAlpha 缠论", "youtube_description": "完整品牌名与 https://apps.apple.com/app/id6806500280"},
+  "next_reviews_beijing": {"24h": "2026-10-09T01:02:31+08:00", "72h": "2026-10-11T01:02:31+08:00"},
+  "created_at_beijing": "2026-10-08"
+}

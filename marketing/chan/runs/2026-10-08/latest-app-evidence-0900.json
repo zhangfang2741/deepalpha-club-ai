@@ -1,0 +1,24 @@
+{
+  "captured_at_beijing": "2026-10-08T09:03:27+08:00",
+  "app_version": "1.2",
+  "app_build": "3",
+  "git_head": "cdc08c5c024dc64a861b1f0bd72a3fd75e187f28",
+  "release_evidence": "ios/AppStore/chan/RELEASE-1.2-STATUS.md",
+  "interface_evidence": "marketing/chan/runs/2026-10-08/latest-app-home-0900.png",
+  "latest_app_capabilities": [
+    "美股、A 股、港股三市场覆盖",
+    "市场雷达与市场、指数切换缓存",
+    "买卖点严格、中等、宽松三种口径",
+    "基本面综合评分、等级与分位",
+    "最新财报入口、应用内阅读与 AI 总结",
+    "重做的学习页",
+    "自选列表与结构状态"
+  ],
+  "interface_observation": "专用模拟器当前显示雷达、自选、分析、学习、我的五个 Tab；分析页可切换美股市场并显示 AAPL",
+  "production_capability_gap": "scripts/chan_marketing.py 与 MarketingAutomation 当前仅驱动个股分析图层，不能真实操作雷达、三市场、口径、基本面、财报 AI 总结、学习或自选",
+  "selected_latest_capability_for_next_attempt": "市场雷达的三市场切换",
+  "required_real_operations": [
+    "在雷达中从美股切换到 A 股并等待真实界面变化",
+    "再从 A 股切换到港股并等待真实界面变化"
+  ]
+}

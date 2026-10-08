@@ -1,0 +1,20 @@
+{
+  "run_id": "2026-10-08-0100",
+  "market_event": "Helmerich & Payne 于 2026-10-07 提交 8-K，称三大业务第四财季直接利润率处于或接近此前指引高端，其中国际业务直接利润率预计约 4500 万美元",
+  "event_time": "2026-10-07T12:20:20-04:00",
+  "primary_source": "https://www.sec.gov/Archives/edgar/data/46765/000004676526000055/a20261007guidanceupdate.htm",
+  "symbol": "HP",
+  "market_date": "2026-10-05",
+  "chan_structure": "251 根日线 K 线、49 个已确认分型、48 笔、6 线段；用已确认线段与分型区分经营指引事实和价格结构，不把指引偏强解释为买点",
+  "format": "公司指引事件复盘 + 结构层级误区纠正",
+  "hook_0_3s": "HP 指引靠近高端，结构就转强？",
+  "app_actions": ["展示 HP 原始日线与 MACD", "打开线段定位高层级结构", "在线段上叠加已确认分型", "关闭线段，仅保留分型复核拐点"],
+  "deepalpha_app_store_prompt": "App Store 搜索 DeepAlpha 缠论",
+  "difference_from_last_14d": "最近 14 天没有公开发布；本条使用 10 月 7 日公司 8-K 指引更新和 HP，采用原图到线段再叠加分型、最后仅保留分型的层级校对，区别于上一条 SPY 的均线误区与原图到分型、笔、线段路径",
+  "steps": [
+    {"step_id":"01","layers":[],"app_action":"展示 HP 原始日线与 MACD","on_screen_text":"HP · 日线","narration_text":"HP 指引靠近高端，结构就转强？","expected_visual":"真实 App 的 HP 原始日线与 MACD，0 至 3 秒展示事件反问","overlay_text":"HP 指引靠近高端\n结构就转强？"},
+    {"step_id":"02","layers":["segments"],"app_action":"打开线段定位高层级结构","on_screen_text":"先看线段层级","narration_text":"先开线段。它把多段走势放回更高层级，不跟着一条公告下结论。","expected_visual":"5 秒内线段图层出现，形成第一次有意义的 App 操作变化","overlay_text":"先看线段\n不追着公告猜方向"},
+    {"step_id":"03","layers":["segments","fractals"],"app_action":"在线段上叠加已确认分型","on_screen_text":"再核对已确认分型","narration_text":"再叠加已确认分型，核对线段拐点来自哪里。经营指引和价格结构是两件事。","expected_visual":"线段与红绿分型点同屏，形成第二次有意义的 App 操作变化","overlay_text":"指引是经营事实\n分型是价格结构"},
+    {"step_id":"04","layers":["fractals"],"app_action":"关闭线段，仅保留分型复核拐点","on_screen_text":"只保留分型复核","narration_text":"最后只保留分型复核。这是历史结构学习，不预测涨跌。App Store 搜索 DeepAlpha 缠论。","expected_visual":"线段关闭、分型保留，结尾画面完整显示 App Store 搜索 DeepAlpha 缠论","overlay_text":"App Store 搜索\nDeepAlpha 缠论"}
+  ]
+}

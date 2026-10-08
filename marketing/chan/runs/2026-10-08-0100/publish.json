@@ -1,0 +1,20 @@
+{
+  "date_beijing": "2026-10-08",
+  "run_id": "2026-10-08-0100",
+  "status": "sent",
+  "symbol": "HP",
+  "market_date": "2026-10-05",
+  "market_event": "Helmerich & Payne 10 月 7 日 8-K 指引更新",
+  "primary_source": "https://www.sec.gov/Archives/edgar/data/46765/000004676526000055/a20261007guidanceupdate.htm",
+  "creative_format": "公司指引事件复盘 + 结构层级误区纠正",
+  "difference_from_last_14d": "最近 14 天没有公开发布；以 HP 公司指引更新为事实切入，采用原图、线段、线段叠加分型、仅保留分型的层级校对，区别于上一条 SPY 均线误区路径",
+  "sha256": "68760c90c9425665ce06bd4ae9e0fdc35b78f2343f551d67fdde26e6cf61a22e",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/9b57d5ec1dc74c44b71a13d3c08f59d74e5df2fb.mp4",
+  "media_verification": {"anonymous_head": "200 video/mp4", "anonymous_get_sha256": "68760c90c9425665ce06bd4ae9e0fdc35b78f2343f551d67fdde26e6cf61a22e"},
+  "channels": {
+    "tiktok": {"channel": "littlemonkey437", "post_id": "6ac67ad3ea45b37c36bbb3f1", "status": "sent", "public_url": "https://tiktok.com/@littlemonkey437/video/7693972213837417749", "is_ai_generated": true},
+    "youtube": {"channel": "DeepAlpha", "post_id": "6ac67af320b8d89a0676badd", "status": "sent", "public_url": "https://www.youtube.com/watch?v=GRx__z8CPOs", "privacy": "public", "category": "Education", "is_ai_generated": true}
+  },
+  "deepalpha_app_store_prompt_evidence": {"on_screen": "frame-04.jpg 完整显示 App Store 搜索 / DeepAlpha 缠论", "narration": "第四段完整口播 App Store 搜索 DeepAlpha 缠论", "youtube_description": "完整品牌名及 https://apps.apple.com/app/id6806500280"},
+  "next_reviews_beijing": {"24h": "2026-10-09T01:02:31+08:00", "72h": "2026-10-11T01:02:31+08:00"}
+}

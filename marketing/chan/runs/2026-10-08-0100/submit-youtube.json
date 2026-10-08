@@ -1,0 +1,20 @@
+{
+  "date_beijing": "2026-10-08",
+  "run_id": "2026-10-08-0100",
+  "content_sha256": "68760c90c9425665ce06bd4ae9e0fdc35b78f2343f551d67fdde26e6cf61a22e",
+  "topic": "HP 指引靠近高端不等于缠论结构转强",
+  "channel_id": "6a9ce2eacd8b9c702c1543bf",
+  "channel": "YouTube DeepAlpha",
+  "status": "sent",
+  "post_id": "6ac67af320b8d89a0676badd",
+  "submitted_at_beijing": "2026-10-08T01:02:00+08:00",
+  "buffer_created_at": "2026-10-07T17:01:39.005Z",
+  "sent_at_beijing": "2026-10-08T01:01:53.713+08:00",
+  "public_url": "https://www.youtube.com/watch?v=GRx__z8CPOs",
+  "metadata_verified": {
+    "privacy": "public",
+    "category": "Education",
+    "is_ai_generated": true,
+    "made_for_kids": false
+  }
+}

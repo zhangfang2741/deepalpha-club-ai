@@ -1,0 +1,53 @@
+[
+  {
+    "step_id": "01",
+    "time_sec": 0.0,
+    "layers": [],
+    "app_action": "展示 HP 原始日线与 MACD",
+    "on_screen_text": "HP · 日线",
+    "narration_text": "HP 指引靠近高端，结构就转强？",
+    "expected_visual": "真实 App 的 HP 原始日线与 MACD，0 至 3 秒展示事件反问",
+    "overlay_text": "HP 指引靠近高端\n结构就转强？",
+    "duration_sec": 4.086712
+  },
+  {
+    "step_id": "02",
+    "time_sec": 4.686712,
+    "layers": [
+      "segments"
+    ],
+    "app_action": "打开线段定位高层级结构",
+    "on_screen_text": "先看线段层级",
+    "narration_text": "先开线段。它把多段走势放回更高层级，不跟着一条公告下结论。",
+    "expected_visual": "5 秒内线段图层出现，形成第一次有意义的 App 操作变化",
+    "overlay_text": "先看线段\n不追着公告猜方向",
+    "duration_sec": 6.954376
+  },
+  {
+    "step_id": "03",
+    "time_sec": 12.241088,
+    "layers": [
+      "segments",
+      "fractals"
+    ],
+    "app_action": "在线段上叠加已确认分型",
+    "on_screen_text": "再核对已确认分型",
+    "narration_text": "再叠加已确认分型，核对线段拐点来自哪里。经营指引和价格结构是两件事。",
+    "expected_visual": "线段与红绿分型点同屏，形成第二次有意义的 App 操作变化",
+    "overlay_text": "指引是经营事实\n分型是价格结构",
+    "duration_sec": 8.742313
+  },
+  {
+    "step_id": "04",
+    "time_sec": 21.583401,
+    "layers": [
+      "fractals"
+    ],
+    "app_action": "关闭线段，仅保留分型复核拐点",
+    "on_screen_text": "只保留分型复核",
+    "narration_text": "最后只保留分型复核。这是历史结构学习，不预测涨跌。App Store 搜索 DeepAlpha 缠论。",
+    "expected_visual": "线段关闭、分型保留，结尾画面完整显示 App Store 搜索 DeepAlpha 缠论",
+    "overlay_text": "App Store 搜索\nDeepAlpha 缠论",
+    "duration_sec": 9.462132
+  }
+]

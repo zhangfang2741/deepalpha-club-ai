@@ -1,0 +1,48 @@
+{
+  "reviewed_at_beijing": "2026-10-08T00:47:08+08:00",
+  "organization": {
+    "id": "6a9cdfc735acc2085b560c49",
+    "name": "My organization",
+    "timezone": "Asia/Singapore"
+  },
+  "channels": {
+    "tiktok": {
+      "id": "6a9ce3f9cd8b9c702c154602",
+      "name": "littlemonkey437",
+      "connected": true
+    },
+    "youtube": {
+      "id": "6a9ce2eacd8b9c702c1543bf",
+      "name": "DeepAlpha",
+      "connected": true
+    }
+  },
+  "due_reviews": [
+    {
+      "source_run_id": "2026-09-19-0918",
+      "windows": ["24h", "72h"],
+      "tiktok": {
+        "post_id": "6aade1b55fe629aa2666a625",
+        "status": "sent",
+        "public_url": "https://tiktok.com/@littlemonkey437/video/7687048289044286738",
+        "metrics_updated_at": "2026-10-06T21:08:31.681Z",
+        "views": 10,
+        "average_time_watched_seconds": 0.91
+      },
+      "youtube": {
+        "post_id": "6aade1d398827948876aa196",
+        "status": "sent",
+        "public_url": "https://www.youtube.com/watch?v=xT0vWrQLuJY",
+        "metrics_updated_at": "2026-10-07T13:54:27.258Z",
+        "views": 58
+      },
+      "coverage": "两平台指标更新时间均晚于 2026-09-22 的 72 小时门槛；未返回的指标保持缺失，不填零"
+    }
+  ],
+  "today_duplicate_check": {
+    "date_beijing": "2026-10-08",
+    "statuses_checked": ["draft", "needs_approval", "scheduled", "sending", "sent", "error"],
+    "matching_posts": [],
+    "result": "clear"
+  }
+}

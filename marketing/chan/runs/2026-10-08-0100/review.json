@@ -1,0 +1,16 @@
+{
+  "run_id": "2026-10-08-0100",
+  "reviewed_at_beijing": "2026-10-08T01:01:00+08:00",
+  "sha256": "68760c90c9425665ce06bd4ae9e0fdc35b78f2343f551d67fdde26e6cf61a22e",
+  "visual": "passed",
+  "audio": "passed",
+  "platform_safe_zone": "passed",
+  "creative_brief_match": "passed",
+  "evidence": {
+    "visual": "逐帧核验 frame-01 至 frame-04：HP 原始日线、线段、线段叠加分型、关闭线段仅保留分型均为真实新版 App 结果页；无系统弹窗或亮色遮挡，两次以上图层变化清晰",
+    "audio": "四段 MiniMax 中文旁白与 events.json 时间轴对应；整体响度 -16.37 LUFS、真峰值 -0.94 dBFS；第四段完整口播 App Store 搜索 DeepAlpha 缠论",
+    "platform_safe_zone": "720x1280 成片中内容位于 x=36–600、y=96–1020；右侧保留 120 像素、底部保留 260 像素，标题、图表和品牌下载引导未进入平台覆盖区",
+    "creative_brief_match": "0–3 秒以 HP 指引靠近高端是否等于结构转强开场；4.686 秒打开线段；12.24 秒叠加已确认分型；21.58 秒关闭线段；结尾画面与口播均为 App Store 搜索 DeepAlpha 缠论",
+    "encoding": "31.67 秒，720x1280，H.264/AAC，可完整解码"
+  }
+}

@@ -1,0 +1,29 @@
+[
+  {
+    "step_id": "01",
+    "actual_time_sec": 0.00020194053649902344,
+    "layers": []
+  },
+  {
+    "step_id": "02",
+    "actual_time_sec": 5.0348169803619385,
+    "layers": [
+      "segments"
+    ]
+  },
+  {
+    "layers": [
+      "segments",
+      "fractals"
+    ],
+    "step_id": "03",
+    "actual_time_sec": 12.322062015533447
+  },
+  {
+    "layers": [
+      "fractals"
+    ],
+    "actual_time_sec": 21.664700984954834,
+    "step_id": "04"
+  }
+]
