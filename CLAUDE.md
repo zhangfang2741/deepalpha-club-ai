@@ -153,7 +153,7 @@ deepalpha-club-ai/
 > 不要改回线程池——纯 Python HMM 循环占 GIL 会拖慢 API）。驱动因素 / 日历的 FMP 调用经 `FmpClient`（全局预算）。
 > 文案只描述环境，不出现买卖导向词与数据供应商 / 基金代码（`test_drivers.test_no_trading_words`）。
 > 雷达行业标签（`signal_radar/sectors.py`，指数雷达与自选雷达都打；自选列表接口也带 `sector`）的行业 key 与 regime `SECTORS` 一致（有测试守护）。
-> **行业严格按 GICS 11 个一级行业**（2026-10-01 起半导体并回科技，不再单列；雷达筛选只做一级；2026-10-09 起行业面板里有细分 ETF 的一级行业可就地展开看子行业强弱（`regime/constants.SUB_INDUSTRIES`，只看、不筛雷达，目前仅美股），`has_children` = 该一级行业有无细分 ETF）。改行业划分须升雷达 `_mode_ns`（当前 all4；A 股 / 港股改申万 / 恒生时漏升过，导致旧快照行业 key 对不上面板），旧标签随快照失效。
+> **行业严格按 GICS 11 个一级行业**（2026-10-01 起半导体并回科技，不再单列；App 只做一级、不下钻细分，宏观接口 `has_children` 恒 false）。改行业划分须升雷达 `_mode_ns`（当前 all4；A 股 / 港股改申万 / 恒生时漏升过，导致旧快照行业 key 对不上面板），旧标签随快照失效。
 > 行业池（每行业按旧综合分的前 N）只给旧版 App 的行业筛选用。
 > **A 股 / 港股行业标签**（2026-10-05 起，`sectors.load_sector_tags`）：A 股用本土**申万一级 31 个**（key 即中文名，如「电子」，不套 GICS；
 > 东财行业名即申万二级，`cnhk/sectors.CN_INDUSTRY_TO_SW` 归一级，与 `CN_INDUSTRY_TO_GICS` 键集一致有测试守护，新行业两张表都要补）；

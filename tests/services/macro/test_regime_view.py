@@ -40,15 +40,7 @@ def test_sector_rows_sorted_with_counts():
     out = sector_rows(rows, {"healthcare": {"buy": 5, "sell": 1}})
     assert [s.key for s in out] == ["healthcare", "energy", "technology"]
     assert (out[0].name, out[0].buy_count, out[0].sell_count) == ("医疗", 5, 1)
-    # 有细分 ETF 的一级行业可下钻看子行业（2026-10-09 起，只看、不筛雷达）；没有的不可下钻
-    assert {s.key: s.has_children for s in out} == {"healthcare": True, "energy": True, "technology": True}
-
-
-def test_sector_rows_children_flag():
-    """必需消费 / 公用事业没有细分 ETF，不可下钻；子行业本身不再下钻。"""
-    rows = [SectorRow("d", "staples", 0.01, "neutral", None, 0.5),
-            SectorRow("d", "tech_semis", 0.02, "risk_on", None, 0.9)]
-    assert {s.key: s.has_children for s in sector_rows(rows, {})} == {"staples": False, "tech_semis": False}
+    assert not any(s.has_children for s in out)  # 只做一级行业，不下钻
 
 
 def test_strongest_weakest():

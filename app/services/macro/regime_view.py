@@ -12,7 +12,7 @@ from sqlmodel import col, select
 from app.models.regime_features import RegimeFeatures
 from app.models.regime_sector_features import RegimeSectorFeatures
 from app.schemas.macro import MacroStateInputsOut, MacroStateOut, MacroStatePoint, SectorBriefOut, SectorRowOut
-from app.services.regime.constants import LABEL_ZH, SECTOR_CHILDREN, SECTOR_NAME_ZH, SECTOR_SYMBOL
+from app.services.regime.constants import LABEL_ZH, SECTOR_NAME_ZH, SECTOR_SYMBOL
 
 LABEL_EN = {"risk_on": "Risk-on", "neutral": "Neutral", "risk_off": "Risk-off"}
 
@@ -134,8 +134,7 @@ def sector_rows(rows: list[SectorRow], counts: dict[str, dict[str, int]], lang: 
         SectorRowOut(
             key=r.sector, name=sector_name(r.sector, lang), rs_vs_market=r.rs_vs_market,
             label=r.confirmed_label or r.regime_label, p_risk_on=r.p_risk_on,
-            # 有细分 ETF 的一级行业可下钻看子行业强弱（只看、不筛雷达；雷达行业仍是 GICS 一级）
-            has_children=bool(SECTOR_CHILDREN.get(r.sector)),
+            has_children=False,  # 只做 GICS 一级行业，不再下钻细分
             buy_count=counts.get(r.sector, {}).get("buy", 0), sell_count=counts.get(r.sector, {}).get("sell", 0),
         )
         for r in rows
