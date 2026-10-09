@@ -23,6 +23,7 @@ from app.schemas.chan import (
     GapJobStatus,
     MACDOut,
     MAOut,
+    BollOut,
     MarketNarrativeOut,
     MergedCandleOut,
     PhaseBranchOut,
@@ -43,7 +44,8 @@ from app.services import symbol_lookup
 from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
 from app.services.chan.divergence import DivergenceResult
 from app.services.chan.gap import analyze_structure_gap
-from app.services.chan.ma import align_to_times
+from app.services.chan.indicators import align_boll
+from app.services.chan.ma import MAData, align_to_times
 from app.services.chan.signal_policy import DEFAULT_MODE, SIGNAL_POLICIES, normalize_mode
 from app.services.chan.signals import leg_divergence_marks
 from app.services.chan.window import canonical_daily_fetch_start, canonical_daily_start
@@ -150,14 +152,29 @@ def _spawn(coro) -> None:
     task.add_done_callback(_background_tasks.discard)
 
 
-def _ma_out(result: ChanAnalysisResult) -> MAOut | None:
-    """均线按合并 K 线的时间对齐后输出（App 直接按下标画，不必再对时间）。"""
-    if result.ma is None:
+def _lines_out(data: MAData | None, result: ChanAnalysisResult) -> MAOut | None:
+    """一组按周期的线（均线 / EMA）按合并 K 线对齐后输出（App 直接按下标画，不必再对时间）。"""
+    if data is None:
         return None
     # 对齐到合并 K 线「所含最后一根原始 K 线」：合并 K 线的 time 是缠论选定的极值那根，可能早于最后一根，
-    # 用它取值最右一根的均线会停在几根之前（603019 30 分钟实测末值差 0.8 元）。
-    aligned = align_to_times(result.ma, [c.end_time or c.time for c in result.merged_candles])
-    return MAOut(periods=list(result.ma.periods), values={str(n): aligned[n] for n in result.ma.periods})
+    # 用它取值最右一根的线会停在几根之前（603019 30 分钟实测末值差 0.8 元）。
+    aligned = align_to_times(data, [c.end_time or c.time for c in result.merged_candles])
+    return MAOut(periods=list(data.periods), values={str(n): aligned[n] for n in data.periods})
+
+
+def _ma_out(result: ChanAnalysisResult) -> MAOut | None:
+    return _lines_out(result.ma, result)
+
+
+def _ema_out(result: ChanAnalysisResult) -> MAOut | None:
+    return _lines_out(result.ema, result)
+
+
+def _boll_out(result: ChanAnalysisResult) -> BollOut | None:
+    if result.boll is None:
+        return None
+    b = align_boll(result.boll, [c.end_time or c.time for c in result.merged_candles])
+    return BollOut(period=b.period, mult=b.mult, upper=b.upper, mid=b.mid, lower=b.lower)
 
 
 @router.get("/analysis", response_model=ChanAnalysisResponse)
@@ -327,6 +344,8 @@ async def chan_analysis(
             bar=result.macd.bar,
         ) if result.macd else None,
         ma=_ma_out(result),
+        ema=_ema_out(result),
+        boll=_boll_out(result),
         signals=[_signal_out(sig) for sig in result.signals],
         current_trend=result.current_trend,
         walk_type=result.walk_type,

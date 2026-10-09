@@ -94,6 +94,16 @@ class MAOut(BaseModel):
     values: dict[str, list[Optional[float]]]
 
 
+class BollOut(BaseModel):
+    """布林带：三条线与 merged_candles 一一对应，不足周期的位置为 null。"""
+
+    period: int
+    mult: float
+    upper: list[Optional[float]]
+    mid: list[Optional[float]]
+    lower: list[Optional[float]]
+
+
 class SignalOut(BaseModel):
     type: Literal["buy1", "buy2", "buy3", "sell1", "sell2", "sell3"]
     label: str
@@ -220,6 +230,8 @@ class ChanAnalysisResponse(BaseModel):
     segment_pivots: list[PivotOut]
     macd: Optional[MACDOut]
     ma: Optional[MAOut] = None  # 旧版 App 不读；与 merged_candles 对齐
+    ema: Optional[MAOut] = None  # 同 ma 的形状（periods + values），周期 12 / 26
+    boll: Optional[BollOut] = None
     signals: list[SignalOut]
     current_trend: str
     # 走势类型（基于中枢排布）：up_trend / down_trend / consolidation / none

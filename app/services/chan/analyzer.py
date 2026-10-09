@@ -15,6 +15,7 @@ from app.services.chan.bias import (
     BiasFactor,
     score_to_bias,
 )
+from app.services.chan.indicators import EMA_PERIODS, BollData, calc_boll, calc_ema
 from app.services.chan.ma import DEFAULT_PERIODS, MA_PERIODS, MAData, calc_ma
 from app.services.chan.divergence import (
     DivergenceResult,
@@ -92,6 +93,8 @@ class ChanAnalysisResult:
     macd: MACDData | None = None
     # 均线（日线 / 30 分钟 5·20·60，周线 5·10·20）：按含预热的完整原始 K 线算，输出时再对齐合并 K 线
     ma: MAData | None = None
+    ema: MAData | None = None
+    boll: BollData | None = None
 
     # 当前市场状态摘要
     current_trend: str = ""
@@ -187,6 +190,8 @@ class ChanAnalyzer:
         result.merged_candles = structures.merged_candles
         # 均线放在结构判断之前算：单边走势、分型 / 笔不足而提前返回时，图上仍然要有均线
         result.ma = calc_ma(bars, MA_PERIODS.get(freq, DEFAULT_PERIODS))
+        result.ema = calc_ema(bars, EMA_PERIODS)
+        result.boll = calc_boll(bars)
         logger.debug("chan_merged_candles", count=len(result.merged_candles))
         result.fractals = structures.fractals
         logger.debug("chan_fractals", count=len(result.fractals))
