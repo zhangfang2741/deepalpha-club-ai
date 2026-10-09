@@ -846,9 +846,28 @@ struct ChanChartView: View {
 
     // MARK: - 绘制：MACD
 
+    /// 把按原始 K 线算的 MACD 取成与合并 K 线一一对应（按合并 K 线的 `time` 查同一时刻的值）。
+    /// 找不到对应时刻（理论上不会）时用前一根的值，保证数组长度 = 合并 K 线数。
+    static func alignedMACD(_ macd: MACDData, to candles: [MergedCandle]) -> MACDData {
+        var index: [String: Int] = [:]
+        for (i, t) in macd.times.enumerated() { index[t] = i }
+        var times: [String] = [], dif: [Double] = [], dea: [Double] = [], bar: [Double] = []
+        for c in candles {
+            if let i = index[c.time], i < macd.dif.count, i < macd.dea.count, i < macd.bar.count {
+                dif.append(macd.dif[i]); dea.append(macd.dea[i]); bar.append(macd.bar[i])
+            } else {
+                dif.append(dif.last ?? 0); dea.append(dea.last ?? 0); bar.append(0)
+            }
+            times.append(c.time)
+        }
+        return MACDData(times: times, dif: dif, dea: dea, bar: bar)
+    }
+
     private func drawMACD(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat, range: VisibleRange) {
-        guard let macd = analysis.macd else { return }
-        // 与主图对齐：MACD 的 times 与 merged_candles 一一对应
+        guard let raw = analysis.macd else { return }
+        // MACD 按原始 K 线算（点数比去包含后的合并 K 线多），必须按时间对到合并 K 线上再画：
+        // 直接用同一个下标会越往右错位越多（603019 实测中段差约 3 个月）。口径与网页 ChanChart 一致。
+        let macd = Self.alignedMACD(raw, to: candles)
         var lo = 0.0, hi = 0.0
         for i in range.start..<min(range.end, macd.bar.count) {
             lo = min(lo, min(macd.bar[i], min(macd.dif[i], macd.dea[i])))
