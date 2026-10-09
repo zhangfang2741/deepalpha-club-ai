@@ -748,7 +748,7 @@
 "营收 3 年复合增速" = "Revenue 3Y CAGR";
 "营收基数为零" = "No prior revenue";
 "不足 3 年历史" = "Under 3 years of history";
-"这是按营收增速与经营现金流做的阶段定位，不是完成进度。企业可能跨阶段变化；阶段标注不影响量化等级。" = "This locates the company by revenue growth and operating cash flow, not progress toward completion. Companies can move between stages; stage labels do not affect quant grades.";
+"这是按营收增速与经营现金流做的阶段定位，不是完成进度。企业可能跨阶段变化。阶段会影响各维度在综合分里的占比（点综合等级可看），在门槛附近是平滑过渡的；但不改变任何单项指标在同板块里的百分位。" = "This places the company by revenue growth and operating cash flow; it is not a progress bar, and companies can move between stages. The stage changes how much each factor counts in the composite score (tap the composite grade to see it), glides smoothly near a threshold, and never changes any single metric's percentile within its sector.";
 "金融公司的营收与现金流口径不同，本模型不判定阶段。" = "Financial companies report revenue and cash flow differently and are excluded from this stage model.";
 "暂无分析师数据" = "No analyst data";
 "暂无基本面研究数据" = "No fundamental research data";

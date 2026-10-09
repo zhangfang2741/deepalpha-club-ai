@@ -99,7 +99,9 @@ def test_no_stale_five_dimension_claims():
 
     assert len(DIMENSIONS) == 6
     stale = ["五个维度", "五项取平均", "五维成绩单", "五维雷达", "五项各自打分", "Five dimensions", "five dimensions",
-             "five-factor", "Five-factor", "The five are averaged"]
+             "five-factor", "Five-factor", "The five are averaged",
+             # 阶段现在决定各维度权重（stage.STAGE_WEIGHTS），不再是「只做标注」
+             "不影响量化等级", "阶段标注不影响", "只做标注，不影响等级", "三项现金流的正负划分阶段", "do not change grades"]
     files = [p for p in (ROOT / "Views").rglob("*.swift") if "Moat" not in p.name]
     files += [RES / lang / name for lang in ("zh-Hans.lproj", "en.lproj")
               for name in ("glossary.json", "guide.json", "lessons.json", "Localizable.strings")]
