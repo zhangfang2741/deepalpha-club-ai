@@ -301,7 +301,12 @@ final class SignalRadarViewModel: ObservableObject {
               sectorBoards[key] == nil, !loadingSectorBoardKeys.contains(key) else { return }
         loadingSectorBoardKeys.insert(key)
         defer { loadingSectorBoardKeys.remove(key) }
-        if let board = try? await MarketOverviewService.sectors(market: market, date: day.date), board.available {
+        // 请求放进独立的 Task，不跟调用方（.task(id:)）一起被取消：页面刷新时 .task 会被取消再重启，
+        // 重启那次看到 key 还在 loading 就直接返回；若请求随第一次一起被取消，结果丢了又没人重试，
+        // 行业横条会一直停在「数据准备中」（免费用户的示例日实测必现）。
+        let market = market, date = day.date
+        let board = await Task { try? await MarketOverviewService.sectors(market: market, date: date) }.value
+        if let board, board.available {
             sectorBoards[key] = board
         }
     }
