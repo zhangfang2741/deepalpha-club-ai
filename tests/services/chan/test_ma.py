@@ -127,3 +127,16 @@ def test_ma_present_even_when_structure_too_weak_to_analyze():
     r = ChanAnalyzer().analyze("TEST", bars)
     assert len(r.fractals) < 2 or len(r.strokes) < 3  # 前提：确实提前返回了
     assert r.ma is not None and r.ma.series[5][-1] == pytest.approx(sum(b["close"] for b in bars[-5:]) / 5, abs=1e-3)
+
+
+@pytest.mark.parametrize("make,freq", [(_decaying_downtrend_bars, "daily"), (lambda: _intraday_bars(days=16), "30min")])
+def test_every_candle_end_time_is_found_in_macd_and_indicator_axes(make, freq):
+    """客户端（iOS / 网页）按 end_time 到 MACD 的时间轴取值；每根合并 K 线的 end_time（没有就用 time）
+    必须都能在 MACD 和各指标的时间轴里找到，否则图上会出现取不到值、被前一根顶替的错位。"""
+    r = ChanAnalyzer().analyze("TEST", make(), freq=freq)
+    macd_times, ma_times = set(r.macd.times), set(r.ma.times)
+    assert r.merged_candles
+    for c in r.merged_candles:
+        key = c.end_time or c.time
+        assert key in macd_times, (freq, key)
+        assert key in ma_times, (freq, key)
