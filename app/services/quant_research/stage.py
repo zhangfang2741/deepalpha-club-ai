@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from app.services.quant_research.inputs import StockInputs, ttm
 from app.services.quant_research.metrics import DIMENSIONS
@@ -93,7 +94,7 @@ def _ramp(x: float, lo: float, hi: float) -> float:
     return min(max((x - lo) / (hi - lo), 0.0), 1.0)
 
 
-def _blend(rows: Mapping[str | None, Mapping[str, float]], keys: Iterable[str], g1: float, g3: float | None, cfo_margin: float) -> dict[str, float]:
+def _blend(rows: Mapping[Any, Mapping[str, float]], keys: Iterable[str], g1: float, g3: float | None, cfo_margin: float) -> dict[str, float]:
     """在 rows 的五行（成长 / 成熟 / 调整 / 初创 / 收缩）之间按增速轴 × 现金轴双向线性插值。"""
     hi = _ramp(g1, *GROWTH_RAMP)
     if g3 is not None:
