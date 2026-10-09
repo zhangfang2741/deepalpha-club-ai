@@ -95,3 +95,35 @@ def test_api_returns_ma_aligned_with_merged_candles():
     n = len(body["merged_candles"])
     assert all(len(body["ma"]["values"][k]) == n for k in ("5", "20", "60"))
     assert any(v is not None for v in body["ma"]["values"]["5"])
+
+
+def test_ma_uses_last_raw_bar_of_each_merged_candle():
+    """合并 K 线的 time 可能早于它包含的最后一根原始 K 线（缠论选的是极值那根）；
+    均线要取最后一根那天的值，最右一根才对应最新价。"""
+    from app.api.v1.chan import _ma_out
+    from app.services.chan.analyzer import ChanAnalysisResult
+    from app.services.chan.fractal import MergedCandle
+
+    bars = _bars([1, 2, 3, 4, 5, 6, 7, 8])  # 01-01 .. 01-08，收盘 = 1..8
+    ma = calc_ma(bars, (3,))
+
+    def candle(idx, time, end):
+        return MergedCandle(idx=idx, time=time, open=1, high=2, low=0, close=1, raw_start=0, raw_end=0,
+                            volume=1.0, end_time=end)
+
+    # 第二根合并 K 线包含 01-04、01-05，缠论选的极值是 01-04，最后一根原始 K 线是 01-05
+    r = ChanAnalysisResult(symbol="T", bars_count=8)
+    r.ma = ma
+    r.merged_candles = [candle(0, "2025-01-03", "2025-01-03"), candle(1, "2025-01-04", "2025-01-05"),
+                        candle(2, "2025-01-08", None)]  # 没有 end_time 的（旧数据）退回 time
+    out = _ma_out(r)
+    assert out.values["3"] == [2.0, 4.0, 7.0]  # 01-05 的 MA3 = (3+4+5)/3 = 4，不是 01-04 的 3
+
+
+def test_ma_present_even_when_structure_too_weak_to_analyze():
+    """单边走势（分型不足）会提前返回；均线仍要有，图上只剩 K 线时也能看均线。"""
+    bars = [{"time": f"2025-01-{i + 1:02d}", "open": 10 + i, "high": 11 + i, "low": 9 + i, "close": 10.5 + i,
+             "volume": 1.0} for i in range(30)]
+    r = ChanAnalyzer().analyze("TEST", bars)
+    assert len(r.fractals) < 2 or len(r.strokes) < 3  # 前提：确实提前返回了
+    assert r.ma is not None and r.ma.series[5][-1] == pytest.approx(sum(b["close"] for b in bars[-5:]) / 5, abs=1e-3)

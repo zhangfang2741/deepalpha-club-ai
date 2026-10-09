@@ -154,7 +154,9 @@ def _ma_out(result: ChanAnalysisResult) -> MAOut | None:
     """均线按合并 K 线的时间对齐后输出（App 直接按下标画，不必再对时间）。"""
     if result.ma is None:
         return None
-    aligned = align_to_times(result.ma, [c.time for c in result.merged_candles])
+    # 对齐到合并 K 线「所含最后一根原始 K 线」：合并 K 线的 time 是缠论选定的极值那根，可能早于最后一根，
+    # 用它取值最右一根的均线会停在几根之前（603019 30 分钟实测末值差 0.8 元）。
+    aligned = align_to_times(result.ma, [c.end_time or c.time for c in result.merged_candles])
     return MAOut(periods=list(result.ma.periods), values={str(n): aligned[n] for n in result.ma.periods})
 
 

@@ -185,6 +185,8 @@ class ChanAnalyzer:
         czsc_freq = _CZSC_FREQ[freq]
         structures, area_macd = build_structures(bars, symbol=symbol, freq=czsc_freq)
         result.merged_candles = structures.merged_candles
+        # 均线放在结构判断之前算：单边走势、分型 / 笔不足而提前返回时，图上仍然要有均线
+        result.ma = calc_ma(bars, MA_PERIODS.get(freq, DEFAULT_PERIODS))
         logger.debug("chan_merged_candles", count=len(result.merged_candles))
         result.fractals = structures.fractals
         logger.debug("chan_fractals", count=len(result.fractals))
@@ -221,7 +223,6 @@ class ChanAnalyzer:
 
         # 6. MACD计算
         result.macd = calc_macd(bars)
-        result.ma = calc_ma(bars, MA_PERIODS.get(freq, DEFAULT_PERIODS))
 
         # 7. 背驰判断（结合笔级中枢区分趋势背驰 / 盘整背驰）
         result.divergences = find_stroke_divergences(result.strokes, lang, pivots=result.stroke_pivots)
