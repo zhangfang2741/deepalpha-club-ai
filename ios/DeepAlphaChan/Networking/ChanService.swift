@@ -20,6 +20,13 @@ enum ChanService {
         return try await APIClient.shared.get("/chan/analysis", query: query)
     }
 
+    /// 按名称 / 代码联想搜股票（A 股、港股、美股中文名都能搜）。
+    static func searchSymbols(query: String, market: StockMarket, limit: Int = 8) async throws -> [SymbolHit] {
+        try await APIClient.shared.get("/chan/symbol-search", query: [
+            "q": query, "market": market.rawValue, "limit": String(limit),
+        ])
+    }
+
     /// 次级别确认：大级别（与分析详情页同一窗口）定方向 × 次级别近期买卖点。
     /// 日线配 30 分钟近两日、周线配日线近两周；次级别取不到时后端仍返回 200，verdict 为 unavailable。
     static func subLevel(symbol: String, startDate: String, endDate: String,

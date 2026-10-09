@@ -482,3 +482,13 @@ struct SubLevel: Decodable {
         case recentSignals = "recent_signals"
     }
 }
+
+
+/// 搜索框联想的一条结果（`GET /chan/symbol-search`）。
+struct SymbolHit: Codable, Identifiable, Equatable {
+    let market: String
+    let symbol: String
+    let name: String
+
+    var id: String { "\(market):\(symbol)" }
+}

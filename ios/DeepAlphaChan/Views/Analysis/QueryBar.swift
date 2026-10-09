@@ -12,15 +12,56 @@ struct QueryBar: View {
     /// numberPad，没有回车键，不主动 resign 的话键盘会一直杵着挡住内容。
     @FocusState private var symbolFocused: Bool
 
-    /// 收起键盘并触发分析。
+    /// 名称联想结果。输入的不是合法代码（比如打了「曙光」）时，边输边搜，点一条就填入代码。
+    @State private var suggestions: [SymbolHit] = []
+    @State private var searchTask: Task<Void, Never>?
+    /// 点选联想把代码填进输入框会再触发一次 onChange；这个标记让那一次不要再搜、不要把列表又弹出来。
+    @State private var skipNextSearch = false
+
+    /// 收起键盘并触发分析。输入的是名称、还没点联想就回车 / 点分析时，取第一条联想。
     private func submit() {
+        if !vm.market.isValidSymbol(vm.symbol), let first = suggestions.first {
+            pick(first)
+            return
+        }
         symbolFocused = false
+        suggestions = []
         Task { await onSubmit() }
+    }
+
+    /// 选中一条联想：填入代码并直接分析。
+    private func pick(_ hit: SymbolHit) {
+        searchTask?.cancel()
+        // 填的值和输入框里已有的一样就不会触发 onChange，此时不能留着标记，否则会吞掉下一次真实输入
+        skipNextSearch = vm.symbol != hit.symbol
+        vm.symbol = hit.symbol
+        suggestions = []
+        submit()
+    }
+
+    /// 输入变化后 0.25 秒再搜（防抖）。A 股 / 港股已经是合法代码就不搜（代码是定长的，输完就是了）；
+    /// 美股代码长度不定，打到一半（如 APP）也可能想搜，所以美股一直搜。
+    private func scheduleSearch(_ text: String) {
+        searchTask?.cancel()
+        if skipNextSearch { skipNextSearch = false; return }
+        let query = text.trimmingCharacters(in: .whitespaces)
+        let market = vm.market
+        guard !query.isEmpty, market == .us || !market.isValidSymbol(query) else {
+            suggestions = []
+            return
+        }
+        searchTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard !Task.isCancelled else { return }
+            let hits = (try? await ChanService.searchSymbols(query: query, market: market)) ?? []
+            guard !Task.isCancelled, vm.market == market else { return }
+            suggestions = hits
+        }
     }
 
     /// 代码格式不对就不让点。按所选市场校验，规则与后端 market.py 一致。
     private var canSubmit: Bool {
-        !vm.isLoading && vm.market.isValidSymbol(vm.symbol)
+        !vm.isLoading && (vm.market.isValidSymbol(vm.symbol) || !suggestions.isEmpty)
     }
 
     var body: some View {
@@ -33,7 +74,9 @@ struct QueryBar: View {
                     TextField(vm.market.placeholder, text: $vm.symbol)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
-                        .keyboardType(vm.market == .us ? .asciiCapable : .numberPad)
+                        // 要能打中文名：A 股 / 港股也用默认键盘（原来是数字键盘，打不出汉字）
+                        .keyboardType(.default)
+                        .onChange(of: vm.symbol) { _, new in scheduleSearch(new) }
                         .foregroundColor(Theme.textPrimary)
                         .focused($symbolFocused)
                         .submitLabel(.search)
@@ -42,6 +85,8 @@ struct QueryBar: View {
                 .padding(10).background(Theme.surfaceAlt)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
             }
+
+            if !suggestions.isEmpty { suggestionList }
 
             Picker("", selection: $vm.freq) {
                 Text(L("日线")).tag("daily")
@@ -93,6 +138,7 @@ struct QueryBar: View {
                 vm.market = newValue
                 // A 股代码留在港股框里没有意义，还会让人以为能直接分析
                 vm.symbol = ""
+                suggestions = []
             }
         )
     }
@@ -117,6 +163,28 @@ struct QueryBar: View {
             .background(Theme.accent.opacity(0.12))
             .clipShape(RoundedRectangle(cornerRadius: 10))
         }
+    }
+
+    /// 联想列表：名称 + 代码，整行都是点击区域（≥ 44pt）。
+    private var suggestionList: some View {
+        VStack(spacing: 0) {
+            ForEach(suggestions) { hit in
+                Button { pick(hit) } label: {
+                    HStack {
+                        Text(hit.name).foregroundColor(Theme.textPrimary)
+                        Spacer()
+                        Text(hit.symbol).font(.footnote.monospacedDigit()).foregroundColor(Theme.textSecondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                if hit.id != suggestions.last?.id { Divider().background(Theme.border) }
+            }
+        }
+        .background(Theme.surfaceAlt)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     private func dateField(_ title: String, selection: Binding<Date>) -> some View {

@@ -1621,3 +1621,6 @@
 "数据解析失败，请稍后再试" = "Couldn't read the data. Please try again later.";
 "登录已过期，请重新登录" = "Your session has expired. Please sign in again.";
 "请求失败（%lld）" = "Request failed (%lld).";
+"代码或名称，如 AAPL / 苹果" = "Ticker or name, e.g. AAPL / Apple";
+"代码或名称，如 600519 / 茅台" = "Code or name, e.g. 600519 / Moutai";
+"代码或名称，如 0700 / 腾讯" = "Code or name, e.g. 0700 / Tencent";

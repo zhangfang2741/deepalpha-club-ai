@@ -94,9 +94,9 @@ enum StockMarket: String, CaseIterable, Identifiable {
 
     var placeholder: String {
         switch self {
-        case .us: return L("代码，如 AAPL")
-        case .cn: return L("6 位代码，如 600519")
-        case .hk: return L("4–5 位代码，如 0700")
+        case .us: return L("代码或名称，如 AAPL / 苹果")
+        case .cn: return L("代码或名称，如 600519 / 茅台")
+        case .hk: return L("代码或名称，如 0700 / 腾讯")
         }
     }
 
