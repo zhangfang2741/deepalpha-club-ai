@@ -1634,3 +1634,6 @@
 "标准差倍数" = "Std. dev. multiplier";
 "中轨是 N 根 K 线的均线，上下轨 = 中轨 ± 倍数 × 标准差。" = "The middle band is the N-bar MA; upper / lower = middle ± multiplier × standard deviation.";
 "恢复默认" = "Restore Defaults";
+
+"展开指标数值" = "Expand indicator values";
+"折叠指标数值" = "Collapse indicator values";

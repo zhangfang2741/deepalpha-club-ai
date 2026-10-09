@@ -83,6 +83,8 @@ struct ChanChartView: View {
     /// 本次拖动是否已判定为「横向平移图表」。第一次移动时按主方向定死，之后不再翻转，
     /// 避免拖到一半在平移和滚动之间来回横跳。nil = 尚未判定。
     @State private var panIsHorizontal: Bool? = nil
+    /// 左上角指标数值是否折叠（只显示指标名）。存本机，下次打开保持。
+    @AppStorage("chart.indicatorValuesCollapsed") private var indicatorValuesCollapsed = false
 
     /// 橡皮筋：滑到头后继续拖时，内容跟手位移的像素量（带阻尼），松手回弹到 0。
     /// 只作用于按时间定位的内容（蜡烛/笔/中枢/信号/时间轴），右轴刻度与价签不跟随。
@@ -196,18 +198,13 @@ struct ChanChartView: View {
             .overlay(alignment: .topLeading) {
                 let cursor = cursorIndex.flatMap { (0..<candles.count).contains($0) ? $0 : nil }
                 VStack(alignment: .leading, spacing: 0) {
-                    // 第一行：全屏按钮 + 指标数值（跟随光标；没有光标时是可见区最右一根）
-                    HStack(alignment: .center, spacing: 0) {
-                        if let onFullscreen {
-                            fullscreenButton(onFullscreen)
-                        }
-                        if anyIndicatorOn, !candles.isEmpty {
-                            indicatorValues(index: cursor ?? max(0, min(range.end, candles.count) - 1))
-                                .padding(.leading, onFullscreen == nil ? 8 : 0)
-                                .padding(.vertical, onFullscreen == nil ? 4 : 0)
-                                .frame(maxWidth: geo.size.width - (onFullscreen == nil ? 16 : 52), alignment: .leading)
-                                .allowsHitTesting(false)
-                        }
+                    // 指标数值（跟随光标；没有光标时是可见区最右一根），每个指标一行，可折叠
+                    if anyIndicatorOn, !candles.isEmpty {
+                        indicatorValues(index: cursor ?? max(0, min(range.end, candles.count) - 1))
+                            .padding(.leading, 8)
+                            .padding(.vertical, 4)
+                            // 右上角留给全屏按钮
+                            .frame(maxWidth: geo.size.width - (onFullscreen == nil ? 16 : 52), alignment: .leading)
                     }
                     if let ci = cursor {
                         cursorDetail(index: ci)
@@ -217,6 +214,11 @@ struct ChanChartView: View {
                             .padding(.horizontal, 8)
                             .allowsHitTesting(false)
                     }
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if let onFullscreen {
+                    fullscreenButton(onFullscreen)
                 }
             }
         }
@@ -1469,34 +1471,66 @@ struct ChanChartView: View {
 
     /// 已打开的指标在某根 K 线上的数值：MA5:12.34 MA20:12.10 … / BOLL(20,2) MID:… UPPER:… LOWER:…，颜色与图上线一致。
     /// 有十字光标时是光标那根，没有时是当前可见的最右一根——拖动 / 点按图表时跟着变。
+    /// 左上角指标数值：每个指标单独一行（MA 一行、EMA 一行、BOLL 一行），点一下折叠成只剩指标名的一行。
     private func indicatorValues(index: Int) -> some View {
-        var items: [(String, Color)] = []
+        // 每个指标一行：(指标名, 名字颜色, 数值项)
+        var rows: [(name: String, color: Color, items: [(String, Color)])] = []
         func lines(_ name: String, _ data: MAData?, _ colors: [Color]) {
             guard let data else { return }
-            for (k, period) in data.periods.enumerated() {
+            rows.append((name, colors.first ?? Theme.textSecondary, data.periods.enumerated().map { k, period in
                 let series = data.series(period)
                 let v = index < series.count ? series[index] : nil
-                items.append(("\(name)\(period):" + (v.map { String(format: "%.2f", $0) } ?? "--"),
-                              colors[min(k, colors.count - 1)]))
-            }
+                return ("\(name)\(period):" + (v.map { String(format: "%.2f", $0) } ?? "--"),
+                        colors[min(k, colors.count - 1)])
+            }))
         }
         if vm.isOn(.ma) { lines("MA", analysis.ma, Theme.maColors) }
         if vm.isOn(.ema) { lines("EMA", analysis.ema, Theme.emaColors) }
         if vm.isOn(.boll), let b = analysis.boll {
             func f(_ arr: [Double?]) -> String { index < arr.count ? (arr[index].map { String(format: "%.2f", $0) } ?? "--") : "--" }
             let m = b.mult == b.mult.rounded() ? String(Int(b.mult)) : String(format: "%.1f", b.mult)
-            items.append(("BOLL(\(b.period),\(m))", Theme.bollLine))
-            items.append(("MID:\(f(b.mid))", Theme.bollLine))
-            items.append(("UPPER:\(f(b.upper))", Theme.bollLine))
-            items.append(("LOWER:\(f(b.lower))", Theme.bollLine))
+            rows.append(("BOLL", Theme.bollLine, [("BOLL(\(b.period),\(m))", Theme.bollLine),
+                         ("MID:\(f(b.mid))", Theme.bollLine),
+                         ("UPPER:\(f(b.upper))", Theme.bollLine),
+                         ("LOWER:\(f(b.lower))", Theme.bollLine)]))
         }
-        return WrapLayout(spacing: 6, lineSpacing: 1) {
-            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                Text(item.0).foregroundColor(item.1)
+        return Button {
+            withAnimation(.easeInOut(duration: 0.15)) { indicatorValuesCollapsed.toggle() }
+        } label: {
+            HStack(alignment: .top, spacing: 4) {
+                if indicatorValuesCollapsed {
+                    // 折叠：只留指标名，一行
+                    HStack(spacing: 6) {
+                        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                            Text(row.name).foregroundColor(row.color)
+                        }
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 1) {
+                        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                            HStack(spacing: 6) {
+                                ForEach(Array(row.items.enumerated()), id: \.offset) { _, item in
+                                    Text(item.0).foregroundColor(item.1)
+                                }
+                            }
+                        }
+                    }
+                }
+                Image(systemName: indicatorValuesCollapsed ? "chevron.down" : "chevron.up")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundColor(Theme.textSecondary)
+                    .padding(.top, 2)
             }
+            .font(.system(size: 9.5, weight: .medium).monospacedDigit())
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            // 字很小，点击区域往外扩一些
+            .padding(.vertical, 4).padding(.trailing, 8)
+            .contentShape(Rectangle())
         }
-        .font(.system(size: 9.5, weight: .medium).monospacedDigit())
-        .lineLimit(1)
+        .buttonStyle(.plain)
+        .padding(.vertical, -4)
+        .accessibilityLabel(indicatorValuesCollapsed ? L("展开指标数值") : L("折叠指标数值"))
     }
 
     private var anyIndicatorOn: Bool { ChartIndicator.allCases.contains { vm.isOn($0) } }
