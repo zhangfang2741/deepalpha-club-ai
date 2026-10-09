@@ -78,3 +78,47 @@ def test_stage_ios_rules_match_thresholds():
     assert f"3 年复合 ≥ {GROWTH_CAGR3_MIN:.0%}" in rules
     assert f"营收同比 ≤ −{-SHRINK_YOY_MAX:.0%}" in rules
     assert f"−{-SHRINK_YOY_MAX:.0%} ~ {GROWTH_YOY_MIN:.0%}" in rules
+
+
+# ---------- 阶段权重与滞回 ----------
+
+def test_stage_weights_cover_every_stage_and_sum_to_one():
+    from app.services.quant_research.metrics import DIMENSIONS
+    from app.services.quant_research.stage import STAGE_NAMES, STAGE_WEIGHTS
+
+    assert set(STAGE_WEIGHTS) == set(STAGE_NAMES) | {None}
+    for stage, row in STAGE_WEIGHTS.items():
+        assert set(row) == set(DIMENSIONS), stage
+        assert sum(row.values()) == pytest.approx(1.0), stage
+        assert all(w > 0 for w in row.values()), stage
+
+
+def test_weights_for_unknown_stage_is_equal():
+    from app.services.quant_research.metrics import DIMENSIONS
+    from app.services.quant_research.stage import weights_for
+
+    w = weights_for(None)
+    assert all(v == pytest.approx(1 / len(DIMENSIONS)) for v in w.values())
+    assert weights_for("nonexistent") == w
+
+
+def test_growth_stage_leans_on_growth_not_valuation():
+    from app.services.quant_research.stage import weights_for
+
+    g, m = weights_for("growth"), weights_for("mature")
+    assert g["growth"] > m["growth"] and g["valuation"] < m["valuation"]
+
+
+def test_stage_hysteresis_keeps_growth_just_below_threshold():
+    # 同比 14% 在门槛（15%）下方 1 个点：上期是成长期就沿用，否则是成熟期
+    assert classify_stage(1, 0.14, 0.30) == "mature"
+    assert classify_stage(1, 0.14, 0.30, prev="growth") == "growth"
+    assert classify_stage(-1, 0.14, 0.30, prev="intro") == "intro"
+    # 掉得足够多就换
+    assert classify_stage(1, 0.10, 0.30, prev="growth") == "mature"
+
+
+def test_stage_hysteresis_does_not_stop_entering():
+    # 上期成熟期，同比刚好 15% 才进成长期（滞回只放宽「留下」，不放宽「进入」）
+    assert classify_stage(1, 0.149, 0.30, prev="mature") == "mature"
+    assert classify_stage(1, 0.15, 0.30, prev="mature") == "growth"

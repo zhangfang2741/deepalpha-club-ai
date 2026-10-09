@@ -119,6 +119,7 @@ class Dimension(BaseModel):
     formula: str | None
     groups: list[MetricGroup]
     counts_in_overall: bool = True  # False = 只展示、不计入综合等级（护城河）
+    weight_pct: int | None = None   # 这一维在综合分里的实际占比（%，按公司阶段加权、只在可用维度间归一）
 
 
 class MoatYear(BaseModel):

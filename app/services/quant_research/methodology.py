@@ -12,7 +12,23 @@ from app.services.quant_research import copy as tx
 from app.services.quant_research.builder import METHODOLOGY_VERSION
 from app.services.quant_research.grading import BANDS, HYSTERESIS
 from app.services.quant_research.metrics import DIMENSIONS, METRICS, MIN_ANALYSTS
-from app.services.quant_research.scoring import CAP_CEILING, MIN_SAMPLE
+from app.services.quant_research.scoring import CAP_CEILING, CAP_MIN_WEIGHT, MIN_SAMPLE
+from app.services.quant_research.stage import STAGE_NAMES, STAGE_WEIGHTS
+
+def _weights_text(lang: int) -> str:
+    """各阶段的权重一览，如「成长期 15 / 35 / 20 / 20 / 10」，直接取自 STAGE_WEIGHTS，改表即同步。"""
+    return "；".join(
+        f"{STAGE_NAMES[stage][lang]} " + " / ".join(f"{STAGE_WEIGHTS[stage][d] * 100:.0f}" for d in DIMENSIONS)
+        for stage in STAGE_NAMES)
+
+
+def _weights_zh() -> str:
+    return _weights_text(0)
+
+
+def _weights_en() -> str:
+    return _weights_text(1)
+
 
 _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
     (("和谁比", "Who it is compared with"),
@@ -44,11 +60,15 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
       "A dimension score is the equal-weighted average of its participating metric percentiles; with fewer than "
       "one third of the metrics (and at least 2) available, the dimension has no grade.")),
     (("综合等级", "Composite grade"),
-     (f"综合分 = 可用维度分的等权平均；再看综合分在标普1500 全体中的百分位，按同一把尺子定等级。"
-      f"任一维度为 F 时，综合等级最高为 {CAP_CEILING}；覆盖的分析师少于 {MIN_ANALYSTS} 位时不给综合等级。",
-      f"The composite score is the equal-weighted average of available dimension scores; its percentile across the "
-      f"whole S&P 1500 sets the grade on the same scale. If any dimension is F, the composite is capped at "
-      f"{CAP_CEILING}; with fewer than {MIN_ANALYSTS} covering analysts there is no composite grade.")),
+     (f"综合分 = 可用维度分按公司阶段加权平均（权重见「公司阶段」，缺失的维度在其余维度间重新归一）；"
+      f"再看综合分在标普1500 全体中的百分位，按同一把尺子定等级。"
+      f"综合分里权重不低于 {CAP_MIN_WEIGHT:.0%} 的维度为 F 时，综合等级最高为 {CAP_CEILING}（权重更低的维度没有一票否决权）；"
+      f"覆盖的分析师少于 {MIN_ANALYSTS} 位时不给综合等级。",
+      f"The composite score is a stage-weighted average of the available dimension scores (weights are listed under "
+      f"Company stage; missing dimensions are re-normalized over the rest); its percentile across the whole S&P 1500 "
+      f"sets the grade on the same scale. If a dimension carrying at least {CAP_MIN_WEIGHT:.0%} of the weight is F, "
+      f"the composite is capped at {CAP_CEILING} (lower-weight dimensions cannot veto); with fewer than "
+      f"{MIN_ANALYSTS} covering analysts there is no composite grade.")),
     (("EPS 修正", "EPS revisions"),
      ("每天保存一次分析师一致预期，比较当前值与 30 / 90 天前的值；亏损收窄算上修。"
       "历史不足 30 天时该维度显示「积累中」，综合等级基于其余维度。本维度用一致预期均值的变化，"
@@ -60,12 +80,17 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
     (("公司阶段", "Company stage"),
      ("以营收增速为主、经营现金流为辅：营收同比 ≥ 15% 且 3 年复合 ≥ 10%（不足 3 年只看同比）为高增长，"
       "经营现金流为正是成长期、否则初创期；营收同比 ≤ −5% 时经营现金流为正是调整期、否则收缩期；"
-      "其余经营现金流为正是成熟期、否则调整期。只做标注，不影响等级；金融股不做阶段标注。",
+      "其余经营现金流为正是成熟期、否则调整期。营收同比刚好越过门槛时，上期所在的阶段多保留 2 个百分点，避免来回切换。"
+      "阶段决定五个维度在综合分里的权重（估值 / 成长 / 盈利能力 / 动量 / EPS 修正）："
+      f"{_weights_zh()}。成长期看重增速、成熟期看重估值与赚钱能力；金融股不做阶段标注，五个维度等权。",
       "Revenue growth leads and operating cash flow follows: revenue up ≥ 15% year over year with a 3-year CAGR "
       "≥ 10% (year over year only with under 3 years of history) is high growth — growth with positive operating "
       "cash flow, introduction otherwise. Revenue down ≥ 5% is shake-out with positive operating cash flow, "
       "contraction otherwise. Everything else is mature with positive operating cash flow, shake-out otherwise. "
-      "Stages are labels only and do not change grades; financials are not labeled.")),
+      "A stage that was just crossed is kept for 2 extra points of growth to avoid flip-flopping. The stage sets the "
+      "weights of the five dimensions in the composite (valuation / growth / profitability / momentum / EPS "
+      f"revisions): {_weights_en()}. Growth stages lean on growth, mature stages on valuation and profitability; "
+      "financials are not labeled and use equal weights.")),
     (("A 股与港股", "China A-shares and Hong Kong"),
      ("规则与美股完全相同，只是比较样本与数据不同：A 股和总市值前 1800 只 A 股（不含 ST）比，港股和港股通标的及总市值 20 亿港元以上的港股比；"
       "行业按 GICS 11 个一级行业归类。报表为累计口径（一季、半年、三季、年报），换算成单季后计算最近 12 个月。"

@@ -135,7 +135,7 @@ def test_legacy_payload_gets_input_hints() -> None:
 def test_ios_grade_scale_matches_backend() -> None:
     """iOS「等级怎么来的」气泡里的分档 / 防抖 / 封顶常量必须与后端一致，否则解释会和真实等级对不上。"""
     from app.services.quant_research.grading import BANDS, HYSTERESIS
-    from app.services.quant_research.scoring import CAP_CEILING, CAP_THRESHOLD, MIN_SAMPLE
+    from app.services.quant_research.scoring import CAP_CEILING, CAP_MIN_WEIGHT, CAP_THRESHOLD, MIN_SAMPLE
 
     root = Path(__file__).resolve().parents[3]
     src = (root / "ios/DeepAlphaChan/Views/Quant/QuantExplain.swift").read_text()
@@ -144,6 +144,7 @@ def test_ios_grade_scale_matches_backend() -> None:
     assert re.search(rf"hysteresis: Double = {HYSTERESIS:g}\b", src)
     assert re.search(rf"capThreshold: Double = {CAP_THRESHOLD:g}\b", src)
     assert f'capCeiling = "{CAP_CEILING}"' in src
+    assert re.search(rf"capMinWeightPct = {round(CAP_MIN_WEIGHT * 100)}\b", src)
     assert re.search(rf"minSample = {MIN_SAMPLE}\b", src)
 
 

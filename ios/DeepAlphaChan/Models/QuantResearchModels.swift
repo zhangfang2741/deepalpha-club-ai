@@ -128,6 +128,8 @@ struct QuantDimension: Decodable, Identifiable {
     let groups: [QuantMetricGroup]
     /// false = 只展示、不计入综合等级（护城河）；旧响应缺省为 true。
     let countsInOverall: Bool
+    /// 这一维在综合分里的实际占比（%，按公司阶段加权）；旧响应缺省为 nil。
+    let weightPct: Int?
 
     var id: String { key }
     var isOK: Bool { status == "ok" }
@@ -140,6 +142,7 @@ struct QuantDimension: Decodable, Identifiable {
         case isLowest = "is_lowest"
         case keyFact = "key_fact"
         case countsInOverall = "counts_in_overall"
+        case weightPct = "weight_pct"
     }
 
     init(from decoder: Decoder) throws {
@@ -157,6 +160,7 @@ struct QuantDimension: Decodable, Identifiable {
         formula = try c.decodeIfPresent(String.self, forKey: .formula)
         groups = try c.decode([QuantMetricGroup].self, forKey: .groups)
         countsInOverall = try c.decodeIfPresent(Bool.self, forKey: .countsInOverall) ?? true
+        weightPct = try c.decodeIfPresent(Int.self, forKey: .weightPct)
     }
 }
 

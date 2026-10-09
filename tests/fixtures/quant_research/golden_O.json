@@ -4,7 +4,7 @@
  "name": "Realty Income Corporation",
  "status": "ok",
  "status_note": null,
- "methodology_version": "q6",
+ "methodology_version": "q7",
  "as_of": {
   "price_date": "2026-09-29",
   "fiscal_period": "FY26 Q2",
@@ -35,12 +35,12 @@
  },
  "overall": {
   "grade": "C-",
-  "score": 46.9,
-  "universe_percentile": 42.9,
+  "score": 47.3,
+  "universe_percentile": 43.7,
   "dimensions_used": 4,
   "capped": false,
   "note": "本次综合等级基于 4 个维度",
-  "text": "综合分 46.9 · 标普1500 后 43%"
+  "text": "综合分 47.3 · 标普1500 后 44%"
  },
  "dimensions": [
   {
@@ -790,7 +790,8 @@
      ]
     }
    ],
-   "counts_in_overall": true
+   "counts_in_overall": true,
+   "weight_pct": 35
   },
   {
    "key": "growth",
@@ -1288,7 +1289,8 @@
      ]
     }
    ],
-   "counts_in_overall": true
+   "counts_in_overall": true,
+   "weight_pct": 12
   },
   {
    "key": "profitability",
@@ -1805,7 +1807,8 @@
      ]
     }
    ],
-   "counts_in_overall": true
+   "counts_in_overall": true,
+   "weight_pct": 35
   },
   {
    "key": "momentum",
@@ -2048,7 +2051,8 @@
      ]
     }
    ],
-   "counts_in_overall": true
+   "counts_in_overall": true,
+   "weight_pct": 18
   },
   {
    "key": "revisions",
@@ -2195,7 +2199,8 @@
      ]
     }
    ],
-   "counts_in_overall": true
+   "counts_in_overall": true,
+   "weight_pct": null
   }
  ],
  "moat": null,

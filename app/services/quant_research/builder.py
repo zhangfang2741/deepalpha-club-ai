@@ -31,13 +31,14 @@ from app.services.quant_research.scoring import (
     OverallScore,
     ScoredMetric,
     composite,
+    effective_weights,
     mark_extremes,
     overall,
     pick_key_fact,
     score_dimension,
     score_metric,
 )
-from app.services.quant_research.stage import StageInfo, stage_of
+from app.services.quant_research.stage import StageInfo, stage_of, weights_for
 from app.services.quant_research.universe import sector_name
 from app.schemas.quant_research import (
     AsOf,
@@ -54,7 +55,7 @@ from app.schemas.quant_research import (
     Stage,
 )
 
-METHODOLOGY_VERSION = "q6"  # q3：EPS 修正过渡期用外部一致预期趋势；q4：阶段改为营收增速主轴；q5：新增护城河（只展示）；q6：护城河改为独立模块（宽 / 窄 / 无），移出维度
+METHODOLOGY_VERSION = "q7"  # q7：综合分按公司阶段给维度加权（不再等权），低权重维度无一票否决权；# q3：EPS 修正过渡期用外部一致预期趋势；q4：阶段改为营收增速主轴；q5：新增护城河（只展示）；q6：护城河改为独立模块（宽 / 窄 / 无），移出维度
 _REVISION_LOOKBACK = {"eps_fy1_30d": 30, "eps_fy1_90d": 90, "eps_fy2_90d": 90, "rev_fy1_90d": 90}
 
 
@@ -70,8 +71,13 @@ class Evaluation:
     extra: dict = field(default_factory=dict)
 
     @property
+    def weights(self) -> dict[str, float]:
+        """综合分里各维度的名义权重：由所处阶段决定（无阶段 = 等权）。"""
+        return weights_for(self.stage.key if self.stage else None)
+
+    @property
     def composite(self) -> float | None:
-        return composite(self.dims)
+        return composite(self.dims, self.weights)
 
 
 def revision_metrics(inp: StockInputs, history: list[EstimatePoint]) -> dict[str, MetricValue]:
@@ -119,14 +125,14 @@ def evaluate(inp: StockInputs, history: list[EstimatePoint], dists: Distribution
     for d in dims:
         d.key_fact = pick_key_fact(d)
     snap_dates = [p.snapshot_date for p in history]
-    stage = stage_of(inp, metrics["rev_yoy"].value, metrics["rev_cagr3"].value)
+    stage = stage_of(inp, metrics["rev_yoy"].value, metrics["rev_cagr3"].value, prev.get("stage"))
     return Evaluation(inp, metrics, dims, stage, n,
                       estimates_date=max(snap_dates).isoformat() if snap_dates else None)
 
 
 def finalize_overall(ev: Evaluation, overall_dist: list[float], prev_grades: dict | None = None) -> Evaluation:
     """用全体综合分分布定综合等级（含一票否决）。"""
-    ev.overall = overall(ev.dims, overall_dist, ev.n_analysts, (prev_grades or {}).get("overall"))
+    ev.overall = overall(ev.dims, overall_dist, ev.n_analysts, (prev_grades or {}).get("overall"), ev.weights)
     return ev
 
 
@@ -141,6 +147,8 @@ def grades_of(ev: Evaluation) -> dict[str, str]:
                 out[f"m:{s.key}"] = s.grade
     if ev.overall and ev.overall.grade:
         out["overall"] = ev.overall.grade
+    if ev.stage:  # 阶段滞回用
+        out["stage"] = ev.stage.key
     return out
 
 
@@ -193,7 +201,8 @@ def _metric_out(sm: ScoredMetric, ev: Evaluation, lang: tx.Lang) -> MetricOut:
     )
 
 
-def _dimension_out(d: DimensionScore, ev: Evaluation, lang: tx.Lang) -> Dimension:
+def _dimension_out(d: DimensionScore, ev: Evaluation, lang: tx.Lang,
+                   weights: dict[str, float] | None = None) -> Dimension:
     groups: dict[str, list[MetricOut]] = {}
     for sm in d.metrics:
         md = METRICS[sm.key]
@@ -208,6 +217,7 @@ def _dimension_out(d: DimensionScore, ev: Evaluation, lang: tx.Lang) -> Dimensio
         formula=tx.dimension_formula(d),
         groups=[MetricGroup(name=k, metrics=v) for k, v in groups.items()],
         counts_in_overall=d.key not in DISPLAY_ONLY_DIMENSIONS,
+        weight_pct=round(weights[d.key] * 100) if weights and d.key in weights else None,
     )
 
 
@@ -217,6 +227,7 @@ def build_payload(ev: Evaluation, lang: tx.Lang, *, in_universe: bool, sector_sa
     sname = sector_name(inp.sector_key, lang)
     notes = [n for n in (tx.overall_note(o, lang) if o else None,
                          tx.dims_used_note(o.dimensions_used, lang) if o and o.grade else None) if n]
+    eff_weights = effective_weights(ev.dims, ev.weights)
     stage = None
     if ev.stage:
         stage = Stage(key=ev.stage.key, name=tx.stage_name(ev.stage.key, lang), unprofitable=ev.stage.unprofitable,
@@ -240,7 +251,7 @@ def build_payload(ev: Evaluation, lang: tx.Lang, *, in_universe: bool, sector_sa
                         dimensions_used=o.dimensions_used if o else 0, capped=bool(o and o.capped),
                         note=("；" if lang == "zh" else "; ").join(notes) or None,
                         text=tx.overall_text(o, lang, inp.market) if o else None),
-        dimensions=[_dimension_out(d, ev, lang) for d in ev.dims],
+        dimensions=[_dimension_out(d, ev, lang, eff_weights) for d in ev.dims],
         disclaimer=tx.DISCLAIMER[lang],
     )
 

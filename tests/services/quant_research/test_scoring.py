@@ -126,3 +126,29 @@ def test_display_only_dimension_never_moves_the_composite(monkeypatch):
     o = overall(with_moat, DIST, n_analysts=10, prev_grade=None)
     o_base = overall(base, DIST, n_analysts=10, prev_grade=None)
     assert (o.score, o.grade, o.dimensions_used, o.capped) == (o_base.score, o_base.grade, 2, False)
+
+
+# ---------- 阶段权重 ----------
+
+def test_composite_weighted_and_renormalized():
+    dims = [_dim("valuation", 10), _dim("growth", 90)]
+    assert composite(dims) == 50.0                                           # 不传权重 = 等权
+    w = {"valuation": 0.2, "growth": 0.6, "momentum": 0.2}
+    assert composite(dims, w) == pytest.approx((10 * 0.2 + 90 * 0.6) / 0.8, abs=0.1)  # 只在可用维度间归一
+
+
+def test_cap_ignores_low_weight_dimension():
+    """估值权重低（成长期）时，估值 F 不再一票否决；权重高的维度 F 仍封顶。"""
+    w = {"valuation": 0.10, "growth": 0.40, "profitability": 0.30, "momentum": 0.20}
+    dims = [_dim("valuation", 5), _dim("growth", 95), _dim("profitability", 90), _dim("momentum", 90)]
+    o = overall(dims, DIST, n_analysts=10, prev_grade=None, weights=w)
+    assert not o.capped and o.score == 83.5 and o.grade == "A-"
+    dims = [_dim("valuation", 95), _dim("growth", 99), _dim("profitability", 5), _dim("momentum", 99)]
+    # 权重 30% 的盈利能力 F → 综合分约 70（B+）被封顶到 C+
+    o2 = overall(dims, DIST, n_analysts=10, prev_grade=None, weights=w)
+    assert o2.capped and o2.cap_dimension == "profitability"
+
+
+def test_cap_without_weights_unchanged():
+    dims = [_dim("valuation", 5), _dim("growth", 95), _dim("profitability", 95)]
+    assert overall(dims, DIST, n_analysts=10, prev_grade=None).capped

@@ -4,7 +4,7 @@
  "name": "NVIDIA Corporation",
  "status": "ok",
  "status_note": null,
- "methodology_version": "q6",
+ "methodology_version": "q7",
  "as_of": {
   "price_date": "2026-09-29",
   "fiscal_period": "FY27 Q2",
@@ -34,13 +34,13 @@
   "revenue_cagr_3y_pct": 110.1
  },
  "overall": {
-  "grade": "A-",
-  "score": 67.7,
-  "universe_percentile": 83.3,
+  "grade": "A",
+  "score": 70.8,
+  "universe_percentile": 87.1,
   "dimensions_used": 4,
   "capped": false,
   "note": "本次综合等级基于 4 个维度",
-  "text": "综合分 67.7 · 标普1500 前 17%"
+  "text": "综合分 70.8 · 标普1500 前 13%"
  },
  "dimensions": [
   {
@@ -790,7 +790,8 @@
      ]
     }
    ],
-   "counts_in_overall": true
+   "counts_in_overall": true,
+   "weight_pct": 17
   },
   {
    "key": "growth",
@@ -1288,7 +1289,8 @@
      ]
     }
    ],
-   "counts_in_overall": true
+   "counts_in_overall": true,
+   "weight_pct": 39
   },
   {
    "key": "profitability",
@@ -1805,7 +1807,8 @@
      ]
     }
    ],
-   "counts_in_overall": true
+   "counts_in_overall": true,
+   "weight_pct": 22
   },
   {
    "key": "momentum",
@@ -2048,7 +2051,8 @@
      ]
     }
    ],
-   "counts_in_overall": true
+   "counts_in_overall": true,
+   "weight_pct": 22
   },
   {
    "key": "revisions",
@@ -2195,7 +2199,8 @@
      ]
     }
    ],
-   "counts_in_overall": true
+   "counts_in_overall": true,
+   "weight_pct": null
   }
  ],
  "moat": null,

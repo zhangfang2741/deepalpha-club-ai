@@ -15,6 +15,7 @@ enum QuantGradeScale {
     static let hysteresis: Double = 2
     static let capThreshold: Double = 20
     static let capCeiling = "C+"
+    static let capMinWeightPct = 20   // 综合分里占比不低于它的维度才有一票否决权（对齐后端 scoring.CAP_MIN_WEIGHT）
     static let minSample = 20
 
     static func grade(for score: Double) -> String {
@@ -178,15 +179,16 @@ struct QuantBandStep: View {
     }
 }
 
-/// 名称 + 分数的一行小条目（维度分构成、综合分构成）。
+/// 名称 + 分数的一行小条目（维度分构成、综合分构成）；weightPct 非空时名称后写它在综合分里的占比。
 struct QuantScoreItem: View {
     let name: String
     let score: Double?
     let grade: String?
+    var weightPct: Int? = nil
 
     var body: some View {
         HStack(spacing: 6) {
-            Text(name).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary).lineLimit(1)
+            Text(weightPct.map { "\(name) \($0)%" } ?? name).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary).lineLimit(1)
             Spacer(minLength: 4)
             Text(score.map { QuantGradeScale.fmt($0.rounded()) } ?? "—")
                 .font(QuantTypography.metadata.weight(.semibold).monospacedDigit())
@@ -258,17 +260,27 @@ struct QuantDimensionGradeExplanation: View {
     }
 }
 
-/// 综合等级：各维度分平均 → 在全部样本中的百分位 → 等级（含封顶）。
+/// 综合等级：各维度分按公司阶段加权平均 → 在全部样本中的百分位 → 等级（含封顶）。
 struct QuantOverallGradeExplanation: View {
     let research: QuantResearch
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let o = research.overall, let score = o.score {
-                QuantExplainText(text: L("综合分 %@ = %lld 个已评分维度的平均：", QuantGradeScale.fmt(score), o.dimensionsUsed))
+                let weighted = research.scoredDimensions.contains { $0.weightPct != nil }
+                QuantExplainText(text: weighted
+                    ? L("综合分 %@ = %lld 个已评分维度按所处阶段加权的平均（名称后是它占综合分的比例）：", QuantGradeScale.fmt(score), o.dimensionsUsed)
+                    : L("综合分 %@ = %lld 个已评分维度的平均：", QuantGradeScale.fmt(score), o.dimensionsUsed))
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
                     ForEach(research.scoredDimensions.filter(\.isOK)) { d in
-                        QuantScoreItem(name: d.name, score: d.score, grade: d.grade)
+                        QuantScoreItem(name: d.name, score: d.score, grade: d.grade, weightPct: d.weightPct)
+                    }
+                }
+                if weighted {
+                    if let stage = research.stage {
+                        QuantExplainText(text: L("这家公司处在「%@」：不同阶段看重的东西不一样——成长期更看重增速，成熟期更看重估值和赚钱能力。", stage.name), secondary: true)
+                    } else {
+                        QuantExplainText(text: L("这家公司没有划分阶段，五个维度各占一样的比例。"), secondary: true)
                     }
                 }
                 if QuantMoatCard.isEnabled, research.moat != nil {
@@ -284,7 +296,8 @@ struct QuantOverallGradeExplanation: View {
                     }
                     if o.capped {
                         QuantBandScale(score: p)
-                        QuantExplainText(text: L("按百分位本可以更高，但有维度分低于 %@（F 档），综合等级最高只给 %@——明显短板不能被其他强项掩盖。",
+                        QuantExplainText(text: L("按百分位本可以更高，但有占比不低于 %lld%% 的维度分低于 %@（F 档），综合等级最高只给 %@——重要维度的明显短板不能被其他强项掩盖。",
+                                                 QuantGradeScale.capMinWeightPct,
                                                  QuantGradeScale.fmt(QuantGradeScale.capThreshold), QuantGradeScale.capCeiling))
                     } else {
                         QuantBandStep(score: p, grade: o.grade)

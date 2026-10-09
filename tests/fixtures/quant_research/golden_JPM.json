@@ -4,7 +4,7 @@
  "name": "JPMorgan Chase & Co.",
  "status": "ok",
  "status_note": null,
- "methodology_version": "q6",
+ "methodology_version": "q7",
  "as_of": {
   "price_date": "2026-09-29",
   "fiscal_period": "FY26 Q2",
@@ -778,7 +778,8 @@
      ]
     }
    ],
-   "counts_in_overall": true
+   "counts_in_overall": true,
+   "weight_pct": 25
   },
   {
    "key": "growth",
@@ -1270,7 +1271,8 @@
      ]
     }
    ],
-   "counts_in_overall": true
+   "counts_in_overall": true,
+   "weight_pct": 25
   },
   {
    "key": "profitability",
@@ -1787,7 +1789,8 @@
      ]
     }
    ],
-   "counts_in_overall": true
+   "counts_in_overall": true,
+   "weight_pct": 25
   },
   {
    "key": "momentum",
@@ -2030,7 +2033,8 @@
      ]
     }
    ],
-   "counts_in_overall": true
+   "counts_in_overall": true,
+   "weight_pct": 25
   },
   {
    "key": "revisions",
@@ -2177,7 +2181,8 @@
      ]
     }
    ],
-   "counts_in_overall": true
+   "counts_in_overall": true,
+   "weight_pct": null
   }
  ],
  "moat": null,
