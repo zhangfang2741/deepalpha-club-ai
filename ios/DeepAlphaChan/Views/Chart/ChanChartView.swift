@@ -182,13 +182,13 @@ struct ChanChartView: View {
                 }
             }
             .contentShape(Rectangle())
-            // 全部用 simultaneousGesture：与外层 ScrollView 并存，互不抢占。
-            // 横向拖动平移图表、纵向留给页面滚动、点按看十字光标、双指缩放；
+            // 与外层 ScrollView 并存，互不抢占：
+            // 横向拖动平移图表、纵向留给页面滚动（见 panGestureAttached）、点按看十字光标、双指缩放；
             // 左边缘的系统「右滑返回」起点在图表左侧之外，不受影响。
             // including: 而不是 isEnabled:——后者是 iOS 18 才有的重载，本工程部署目标 17.0。
             .simultaneousGesture(inspectTap(plotWidth: plotWidth, hitHeight: priceHeight), including: gestureMask)
-            .simultaneousGesture(panGesture(plotWidth: plotWidth), including: gestureMask)
             .simultaneousGesture(magnificationGesture(plotWidth: plotWidth), including: gestureMask)
+            .modifier(chartPan(plotWidth: plotWidth))
             .sheet(item: $selectedElement) { element in
                 ChartElementSheet(element: element)
                     .preferredColorScheme(.dark)
@@ -250,8 +250,8 @@ struct ChanChartView: View {
             // 柱子之间的空隙会漏掉触摸。
             .contentShape(Rectangle())
             .simultaneousGesture(inspectTap(plotWidth: plotWidth), including: gestureMask)
-            .simultaneousGesture(panGesture(plotWidth: plotWidth), including: gestureMask)
             .simultaneousGesture(magnificationGesture(plotWidth: plotWidth), including: gestureMask)
+            .modifier(chartPan(plotWidth: plotWidth))
         }
         .frame(height: macdHeight)
     }
@@ -1279,61 +1279,84 @@ struct ChanChartView: View {
                     panIsHorizontal = abs(value.translation.width) > abs(value.translation.height)
                 }
                 guard panIsHorizontal == true else { return }  // 纵向：交给页面滚动
-
-                // 光标已激活：横向拖动 = 移动光标到手指所在的 K 线（不再平移图表）
-                if cursorIndex != nil {
-                    cursorDragging = true
-                    cursorIndex = candleIndex(atX: value.location.x, plotWidth: plotWidth)
-                    return
-                }
-
-                // 否则：平移图表，滑到头进入橡皮筋
-                cursorDragging = true
-                rubberTimer?.invalidate()
-                momentumTimer?.invalidate()   // 新的拖动打断上一次惯性滑动
-                let range = visibleRange(plotWidth: plotWidth)
-                if dragAnchor == nil { dragAnchor = firstVisible }
-                let count = max(10, min(Double(candles.count), visibleCount))
-                let maxFirst = max(0, Double(candles.count) - count)
-                let deltaCandles = Double(-value.translation.width / range.candleWidth)
-                let target = (dragAnchor ?? firstVisible) + deltaCandles
-                let clamped = min(max(target, 0), maxFirst)
-                firstVisible = clamped
-                // 越界量（K 线单位）转成像素并加阻尼；越左 target<0 → 内容右移露白，反之亦然。
-                let over = target - clamped
-                rubberOffset = over == 0 ? 0
-                    : rubberband(-CGFloat(over) * range.candleWidth, dimension: plotWidth)
+                panChanged(translationX: value.translation.width, locationX: value.location.x, plotWidth: plotWidth)
             }
             .onEnded { value in
-                dragAnchor = nil
-                cursorDragging = false
                 let wasHorizontal = panIsHorizontal == true
                 panIsHorizontal = nil
-                // 光标态 / 非横向：不做惯性
-                guard cursorIndex == nil, wasHorizontal else {
-                    settleRubberBand()
-                    onWindowChange?(currentWindow)
-                    return
-                }
-                // 已在橡皮筋越界中：直接回弹，不叠加惯性
-                if abs(rubberOffset) > 1 {
-                    settleRubberBand()
-                    onWindowChange?(currentWindow)
-                    return
-                }
-                // 用系统预测落点得到「还会再滑过多少根 K 线」，据此做惯性减速
-                let cw = visibleRange(plotWidth: plotWidth).candleWidth
-                let predictedExtra = value.predictedEndTranslation.width - value.translation.width
-                let extraCandles = Double(-predictedExtra / cw)
-                if abs(extraCandles) > 0.8 {
-                    // 惯性还会继续改窗口，此刻上报的位置是过时的；
-                    // 回调挪到 startMomentum 停下来时发，否则分享图会是甩动前那一段。
-                    startMomentum(deltaCandles: extraCandles, plotWidth: plotWidth)
-                } else {
-                    settleRubberBand()
-                    onWindowChange?(currentWindow)
-                }
+                panEnded(horizontal: wasHorizontal,
+                         predictedExtraX: value.predictedEndTranslation.width - value.translation.width,
+                         plotWidth: plotWidth)
             }
+    }
+
+    /// 横向拖动过程中（SwiftUI 与 UIKit 两条手势路径共用）。
+    private func panChanged(translationX: CGFloat, locationX: CGFloat, plotWidth: CGFloat) {
+        // 光标已激活：横向拖动 = 移动光标到手指所在的 K 线（不再平移图表）
+        if cursorIndex != nil {
+            cursorDragging = true
+            cursorIndex = candleIndex(atX: locationX, plotWidth: plotWidth)
+            return
+        }
+
+        // 否则：平移图表，滑到头进入橡皮筋
+        cursorDragging = true
+        rubberTimer?.invalidate()
+        momentumTimer?.invalidate()   // 新的拖动打断上一次惯性滑动
+        let range = visibleRange(plotWidth: plotWidth)
+        if dragAnchor == nil { dragAnchor = firstVisible }
+        let count = max(10, min(Double(candles.count), visibleCount))
+        let maxFirst = max(0, Double(candles.count) - count)
+        let deltaCandles = Double(-translationX / range.candleWidth)
+        let target = (dragAnchor ?? firstVisible) + deltaCandles
+        let clamped = min(max(target, 0), maxFirst)
+        firstVisible = clamped
+        // 越界量（K 线单位）转成像素并加阻尼；越左 target<0 → 内容右移露白，反之亦然。
+        let over = target - clamped
+        rubberOffset = over == 0 ? 0
+            : rubberband(-CGFloat(over) * range.candleWidth, dimension: plotWidth)
+    }
+
+    /// 拖动结束：惯性 / 回弹 / 上报窗口。predictedExtraX = 预测落点比当前还会再滑多少像素。
+    private func panEnded(horizontal: Bool, predictedExtraX: CGFloat, plotWidth: CGFloat) {
+        dragAnchor = nil
+        cursorDragging = false
+        // 光标态 / 非横向：不做惯性
+        guard cursorIndex == nil, horizontal else {
+            settleRubberBand()
+            onWindowChange?(currentWindow)
+            return
+        }
+        // 已在橡皮筋越界中：直接回弹，不叠加惯性
+        if abs(rubberOffset) > 1 {
+            settleRubberBand()
+            onWindowChange?(currentWindow)
+            return
+        }
+        // 用预测落点得到「还会再滑过多少根 K 线」，据此做惯性减速
+        let cw = visibleRange(plotWidth: plotWidth).candleWidth
+        let extraCandles = Double(-predictedExtraX / cw)
+        if abs(extraCandles) > 0.8 {
+            // 惯性还会继续改窗口，此刻上报的位置是过时的；
+            // 回调挪到 startMomentum 停下来时发，否则分享图会是甩动前那一段。
+            startMomentum(deltaCandles: extraCandles, plotWidth: plotWidth)
+        } else {
+            settleRubberBand()
+            onWindowChange?(currentWindow)
+        }
+    }
+
+    /// 平移手势（见 ChartPanModifier）。iOS 18 起 SwiftUI 手势跑在 UIKit 手势系统上，ScrollView 里的 DragGesture
+    /// 即使是 simultaneousGesture、纵向时直接 return，也会把触摸占住，页面上下滚不动
+    /// （手指放在 K 线或 MACD 上都推不动页面）。所以 iOS 18+ 改用 UIKit 平移识别器：
+    /// 开始时按速度判方向，纵向直接不开始，触摸原样交还给页面滚动。iOS 17 仍用 DragGesture。
+    private func chartPan(plotWidth: CGFloat) -> ChartPanModifier<some Gesture> {
+        ChartPanModifier(
+            isEnabled: interactive,
+            fallback: panGesture(plotWidth: plotWidth),
+            onChanged: { tx, x in panChanged(translationX: tx, locationX: x, plotWidth: plotWidth) },
+            onEnded: { extra in panEnded(horizontal: true, predictedExtraX: extra, plotWidth: plotWidth) }
+        )
     }
 
     /// 双指缩放：放大=减少可见 K 线数量，缩小=增加。
