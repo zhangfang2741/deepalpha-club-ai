@@ -30,7 +30,9 @@ struct AnalysisTabView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
+                    // zIndex：联想浮层要盖在后面的额度提示 / 风险提示卡之上，否则被兄弟视图压住
                     QueryBar(vm: vm) { await triggerAnalysis() }
+                        .zIndex(1)
 
                     if !store.isSubscribed { quotaBanner }
 

@@ -85,8 +85,15 @@ struct QueryBar: View {
                 .padding(10).background(Theme.surfaceAlt)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
             }
-
-            if !suggestions.isEmpty { suggestionList }
+            // 联想是悬浮在输入行下方的浮层：不参与布局，下面的周期、日期、按钮位置纹丝不动。
+            // alignmentGuide 把浮层顶边对到输入行底边再留 6pt 空隙。
+            .overlay(alignment: .bottom) {
+                if symbolFocused && !suggestions.isEmpty {
+                    suggestionList
+                        .alignmentGuide(.bottom) { $0[.top] - 6 }
+                }
+            }
+            .zIndex(2)
 
             Picker("", selection: $vm.freq) {
                 Text(L("日线")).tag("daily")
@@ -120,8 +127,8 @@ struct QueryBar: View {
             }
         }
         .padding(14)
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        // 不能再 clipShape：浮层要伸出卡片盖住下面的内容，裁掉就看不见了。背景自带圆角即可。
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
     }
 
     /// 市场选择的绑定。清空代码这件事绑在**这个控件的交互**上，而不是绑在
@@ -169,7 +176,7 @@ struct QueryBar: View {
     /// 联想列表：名称 + 代码，整行都是点击区域（≥ 44pt）。
     private var suggestionList: some View {
         VStack(spacing: 0) {
-            ForEach(suggestions) { hit in
+            ForEach(suggestions.prefix(6)) { hit in
                 Button { pick(hit) } label: {
                     HStack {
                         Text(hit.name).foregroundColor(Theme.textPrimary)
@@ -181,11 +188,13 @@ struct QueryBar: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                if hit.id != suggestions.last?.id { Divider().background(Theme.border) }
+                if hit.id != suggestions.prefix(6).last?.id { Divider().background(Theme.border) }
             }
         }
         .background(Theme.surfaceAlt)
         .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.border, lineWidth: 1))
+        .shadow(color: .black.opacity(0.45), radius: 14, x: 0, y: 8)
     }
 
     private func dateField(_ title: String, selection: Binding<Date>) -> some View {
