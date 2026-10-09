@@ -38,6 +38,7 @@ from app.schemas.chan import (
     StructureLayerOut,
     SubLevelResponse,
 )
+from app.services import symbol_lookup
 from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
 from app.services.chan.divergence import DivergenceResult
 from app.services.chan.gap import analyze_structure_gap
@@ -432,6 +433,20 @@ async def chan_sub_level(
     return await current_sub_level(symbol, parent_freq, end_date=end_date, user_id=user.id,
                                    redis=redis, lang=lang, fetch_parent=fetch_parent,
                                    max_age=LIVE_MAX_AGE, mode=normalize_mode(mode))
+
+
+@router.get("/symbol-search")
+@limiter.limit("60 per minute")
+async def chan_symbol_search(
+    request: Request,
+    q: str = Query(min_length=1, max_length=30, description="股票名称或代码，如 中科曙光 / 603019 / AAPL"),
+    market: str = Query(pattern="^(us|cn|hk)$", description="市场：us / cn / hk"),
+    limit: int = Query(default=10, ge=1, le=20),
+    user: User = Depends(get_current_user),
+    redis: Redis = Depends(get_redis),
+) -> list[dict]:
+    """按名称 / 代码联想搜股票，返回 [{market, symbol, name}]；数据源失败时退回雷达成分清单，不报错。"""
+    return await symbol_lookup.search(market, q, redis=redis, limit=limit)
 
 
 @router.get("/signal-modes", response_model=SignalModesResponse)
