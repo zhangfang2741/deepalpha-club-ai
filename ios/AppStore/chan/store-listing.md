@@ -280,7 +280,7 @@ Automatic Chan structure on candlestick charts, with nine illustrated lessons. U
 
 **上传 `screenshots-6.9-captioned/` 里的 9 张**（带标题版，1320×2868，传 6.9 英寸区）；`screenshots-6.5-captioned/` 是同一套的 1242×2688 版，6.5 英寸区可传可不传。
 源图在 `screenshots-6.9/`，用 iPhone 17 Pro Max 模拟器 + Release 包、审核账号（免费用户）连生产接口截的真实数据，状态栏统一 9:41。
-缠论相关的图用**宽松口径**截（我的 → 偏好设置 → 买卖点口径），买卖点更多、画面更丰富；全部图层（分型 / 线段）打开。
+缠论相关的图用**宽松口径**截（我的 → 买卖点口径），买卖点更多、画面更丰富；全部图层（分型 / 线段）打开。
 第 2 张是三机位合成（`make_captioned.py` 的 `MULTI`，源图 `02a_cn / 02b_us / 02c_hk`）。改标题文案改 `SHOTS`，再跑 `uv run --with pillow --no-project python ios/AppStore/chan/make_captioned.py`。
 
 | 顺序 | 文件 | 标题 | 内容 |

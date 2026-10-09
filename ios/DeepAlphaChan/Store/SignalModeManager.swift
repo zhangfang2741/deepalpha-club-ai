@@ -4,7 +4,7 @@ import Foundation
 ///
 /// 三套口径（后端 app/services/chan/signal_policy.py，定时任务三套都预热）：
 /// strict 严格（缠论原文）/ medium 中等（默认，严格 + 盘整背驰）/ loose 宽松（最后一笔未走完也先标出）。
-/// 用户在「我的 → 偏好设置 → 买卖点口径」自己切换，选择存在 UserDefaults（改了会发 `didChange` 通知，雷达据此重载）；雷达、详情页、次级别都带同一个 `mode`，
+/// 用户在「我的 → 买卖点口径」自己切换，选择存在 UserDefaults（改了会发 `didChange` 通知，雷达据此重载）；雷达、详情页、次级别都带同一个 `mode`，
 /// 从雷达点进详情两边的买卖点一致。
 enum SignalMode {
     static let storageKey = "signal_mode"

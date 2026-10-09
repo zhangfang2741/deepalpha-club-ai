@@ -177,7 +177,7 @@ deepalpha-club-ai/
 
 > **学习内容**（面向普通人，2026-10-06）：`Resources/{zh-Hans,en}.lproj/` 下三份 JSON——`glossary.json`（名词小词典，稳定中文键 `key`，含大白话 / 举例 / 不代表什么）、`guide.json`（新手入门 7 篇）、`lessons.json`（缠论入门 9 篇）；
 > 名词在界面上用 `TermChip` / `TermHint` / `GlossaryLink(term:)` 点开（先查缠论教程索引 `GlossaryIndex`，再查词典），推导弹层（`DerivationResult`）带「这说明 / 这不说明 / 相关名词」。
-> 新手导览 `OnboardingTourView`（首次进雷达弹一次，学习页 / 我的可重看）；专业数值（面积比 / 价差比 / 时长比）默认折叠，「我的 → 显示专业数值」打开（`ProDetails.key`）。
+> 新手导览 `OnboardingTourView`（首次进雷达弹一次，学习页可重看；「我的」页的「重看新手导览」2026-10-09 起已去掉）；专业数值（面积比 / 价差比 / 时长比）默认折叠，「我的 → 显示专业数值」打开（`ProDetails.key`）。
 > **体验约束**（体验不好没人用）：说明类内容一律**渐进披露**——第一屏只给结论和「这说明 / 这不说明」，推导过程折叠、点开才展开；**不自动弹全屏**打断人（新手导览改为首次进雷达时展开一次悬浮的流程图、里面有入口，不弹 sheet）；入口字再小也要给足点击热区（≥ 44pt 或加 padding）；新增界面元素先问「会不会让主屏更挤、更慢」。
 > **新增术语要同时补词典条目（中英）**；推导里 `terms:` 引用的键必须能查到（`tests/ios_content` 守护）。解释一律不写成买卖建议。
 
@@ -316,7 +316,7 @@ deepalpha-club-ai/
 - 「什么算买卖点」有多套口径，都实现 `SignalPolicy`（`czsc_families` / `assemble` /
   `split_unconfirmed` + 名称、版本、中英文案），在 `SIGNAL_POLICIES` 注册，按名字 `get_policy(mode)` 取。
   analyzer、`/chan/analysis`、`/chan/sub-level`、信号雷达（快照 / 自选 / 示例日）都只传 `mode`、走接口，
-  **不要**写 `if mode == ...` 分支。**App 里用户自己切换口径**（2026-10-07 起，「我的 → 偏好设置 → 买卖点口径」→ `SignalModeSettingsView`，严格 / 中等 / 宽松三选一并写明区别；选择存 UserDefaults，`SignalMode.current()` 读取，默认 medium；雷达、详情、次级别都带同一个 `mode`；线上旧版 App 仍请求 loose）。
+  **不要**写 `if mode == ...` 分支。**App 里用户自己切换口径**（2026-10-07 起，「我的 → 买卖点口径」（一级页，2026-10-09 起）→ `SignalModeSettingsView`，严格 / 中等 / 宽松三选一并写明区别；选择存 UserDefaults，`SignalMode.current()` 读取，默认 medium；雷达、详情、次级别都带同一个 `mode`；线上旧版 App 仍请求 loose）。
   **三套口径定时任务都预热**（`scheduler._modes()` = loose / medium / strict，示例日中等优先）；改任一口径的判定须升它的 version，改 App 文案时 `SignalModeSettingsView` 的三段说明要同步。
   `medium`（`mid1`）= 严格 + 盘整里的背驰也算一类（`consolidation=True`，约 2 倍信号）；`GET /chan/signal-modes` 列出全部口径（App 现用本地文案）。
 - `loose`（宽松，**默认**）= 严格化之前的口径：czsc 原生一/二/三类，最后一笔上的也输出（标未确认）。

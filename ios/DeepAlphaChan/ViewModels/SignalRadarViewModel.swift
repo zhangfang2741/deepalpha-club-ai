@@ -420,7 +420,7 @@ final class SignalRadarViewModel: ObservableObject {
         Task { await load() }
     }
 
-    /// 口径在「偏好设置」里被改了：雷达跟着切（不论雷达页当前是否可见）。
+    /// 口径在「我的 → 买卖点口径」里被改了：雷达跟着切（不论雷达页当前是否可见）。
     private func observeModeChanges() {
         modeObserver = NotificationCenter.default.addObserver(
             forName: SignalMode.didChange, object: nil, queue: .main) { [weak self] _ in
