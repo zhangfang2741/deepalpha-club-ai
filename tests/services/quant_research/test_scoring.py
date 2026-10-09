@@ -170,3 +170,22 @@ def test_dimension_formula_shows_weights_only_when_unequal():
     assert "×" in dimension_formula(weighted) and "÷ 1.5" in dimension_formula(weighted)
     plain = score_dimension("valuation", [_sm("pe_ttm", 60), _sm("pb", 40)], None)
     assert "×" not in dimension_formula(plain) and "÷ 2" in dimension_formula(plain)
+
+
+def test_momentum_and_revisions_never_veto():
+    """动量是价格指标、EPS 修正是预期变化，都不是公司基本面：它们为 F 不触发一票否决，哪怕权重够高。"""
+    w = {"valuation": 0.2, "growth": 0.2, "profitability": 0.2, "momentum": 0.2, "revisions": 0.2}
+    strong = [_dim("valuation", 95), _dim("growth", 95), _dim("profitability", 95)]
+    for weak in ("momentum", "revisions"):
+        o = overall(strong + [_dim(weak, 5)], DIST, n_analysts=10, prev_grade=None, weights=w)
+        assert not o.capped, weak
+    o = overall(strong + [_dim("momentum", 5)], DIST, n_analysts=10, prev_grade=None)   # 不传权重（旧调用方式）也一样
+    assert not o.capped
+
+
+def test_fundamental_dimensions_still_veto():
+    w = {"valuation": 0.2, "growth": 0.2, "profitability": 0.2, "stability": 0.2, "momentum": 0.2}
+    for weak in ("valuation", "growth", "profitability", "stability"):
+        dims = [_dim(k, 95) for k in ("valuation", "growth", "profitability", "stability", "momentum") if k != weak]
+        o = overall(dims + [_dim(weak, 5)], DIST, n_analysts=10, prev_grade=None, weights=w)
+        assert o.capped and o.cap_dimension == weak, weak

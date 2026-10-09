@@ -930,7 +930,7 @@
 "综合分和排名是什么" = "What the composite score and rank mean";
 "综合分 %@ = %lld 个已评分维度的平均：" = "Composite score %@ = average of %lld graded factors:";
 "再把综合分和全部样本股票（标普1500 成分股）比，高于约 %@%% 的股票，排第 %@ 百分位。" = "The composite score is then compared with all sample stocks (S&P 1500): higher than about %@%% of them, the %@th percentile.";
-"按百分位本可以更高，但有占比不低于 %lld%% 的维度分低于 %@（F 档），综合等级最高只给 %@——重要维度的明显短板不能被其他强项掩盖。" = "The percentile alone would rank higher, but a factor carrying at least %lld%% of the weight scores below %@ (F), so the composite is capped at %@ — a clear weak spot in an important factor can't be hidden by strengths elsewhere.";
+"按百分位本可以更高，但有占比不低于 %lld%% 的基本面维度（估值 / 成长 / 盈利能力 / 财务稳健）分低于 %@（F 档），综合等级最高只给 %@——重要维度的明显短板不能被其他强项掩盖。" = "The percentile alone would rank higher, but a fundamental factor (valuation, growth, profitability or financial health) carrying at least %lld%% of the weight scores below %@ (F), so the composite is capped at %@ — a clear weak spot in an important factor can't be hidden by strengths elsewhere.";
 "综合分 %@ = %lld 个已评分维度按所处阶段加权的平均（名称后是它占综合分的比例）：" = "Composite score %@ = stage-weighted average of %lld graded factors (the percentage after each name is its share of the composite):";
 "这家公司处在「%@」：不同阶段看重的东西不一样——成长期更看重增速，成熟期更看重估值和赚钱能力。" = "This company is in the \"%@\" stage. Different stages weigh different things — growth stages lean on growth, mature stages on valuation and profitability.";
 "这家公司没有划分阶段，各个维度占一样的比例。" = "This company has no stage label, so all factors carry the same weight.";

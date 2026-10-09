@@ -93,12 +93,14 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
     (("综合等级", "Composite grade"),
      (f"综合分 = 可用维度分按公司阶段加权平均（权重见「公司阶段」，缺失的维度在其余维度间重新归一）；"
       f"再看综合分在标普1500 全体中的百分位，按同一把尺子定等级。"
-      f"综合分里权重不低于 {CAP_MIN_WEIGHT:.0%} 的维度为 F 时，综合等级最高为 {CAP_CEILING}（权重更低的维度没有一票否决权）；"
+      f"估值 / 成长 / 盈利能力 / 财务稳健里，综合分权重不低于 {CAP_MIN_WEIGHT:.0%} 的维度为 F 时，综合等级最高为 {CAP_CEILING}"
+      f"（权重更低的维度、以及股价类的动量和预期类的 EPS 修正，都没有一票否决权）；"
       f"覆盖的分析师少于 {MIN_ANALYSTS} 位时不给综合等级。",
       f"The composite score is a stage-weighted average of the available dimension scores (weights are listed under "
       f"Company stage; missing dimensions are re-normalized over the rest); its percentile across the whole S&P 1500 "
-      f"sets the grade on the same scale. If a dimension carrying at least {CAP_MIN_WEIGHT:.0%} of the weight is F, "
-      f"the composite is capped at {CAP_CEILING} (lower-weight dimensions cannot veto); with fewer than "
+      f"sets the grade on the same scale. If valuation, growth, profitability or financial health carries at least "
+      f"{CAP_MIN_WEIGHT:.0%} of the weight and is F, the composite is capped at {CAP_CEILING} (lower-weight "
+      f"dimensions, and the price-based momentum and expectation-based EPS revisions, cannot veto); with fewer than "
       f"{MIN_ANALYSTS} covering analysts there is no composite grade.")),
     (("财务稳健", "Financial health"),
      ("看偿债压力、短期流动性、现金能撑多久和利润的现金含量，共五项：净负债 / EBITDA（现金多于负债记 0）、"

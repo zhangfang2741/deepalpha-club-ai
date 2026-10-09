@@ -304,7 +304,7 @@ struct QuantOverallGradeExplanation: View {
                     }
                     if o.capped {
                         QuantBandScale(score: p)
-                        QuantExplainText(text: L("按百分位本可以更高，但有占比不低于 %lld%% 的维度分低于 %@（F 档），综合等级最高只给 %@——重要维度的明显短板不能被其他强项掩盖。",
+                        QuantExplainText(text: L("按百分位本可以更高，但有占比不低于 %lld%% 的基本面维度（估值 / 成长 / 盈利能力 / 财务稳健）分低于 %@（F 档），综合等级最高只给 %@——重要维度的明显短板不能被其他强项掩盖。",
                                                  QuantGradeScale.capMinWeightPct,
                                                  QuantGradeScale.fmt(QuantGradeScale.capThreshold), QuantGradeScale.capCeiling))
                     } else {

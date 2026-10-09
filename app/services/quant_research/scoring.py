@@ -23,6 +23,8 @@ from app.services.quant_research.metrics import (
 
 MIN_SAMPLE = 20
 CAP_THRESHOLD = 20.0   # 维度分低于它（F）触发一票否决
+# 价格 / 预期类维度不是公司基本面，永远没有一票否决权（动量 F = 股价近期弱，不能把基本面强的公司压到 C+）
+CAP_EXEMPT_DIMS = frozenset({"momentum", "revisions"})
 CAP_MIN_WEIGHT = 0.15  # 只有综合分里权重不低于它的维度才有否决权（权重低的维度本就不该一票定生死）
 CAP_CEILING = "C+"
 OVERALL_SECTOR = "_all"
@@ -172,7 +174,7 @@ def overall(dims: list[DimensionScore], overall_dist: list[float], n_analysts: i
             prev_grade: str | None, weights: dict[str, float] | None = None) -> OverallScore:
     """综合等级：综合分在全体中的百分位 → 等级；一票否决与分析师不足处理。
 
-    weights 不传 = 等权，且所有维度都有否决权（旧行为）；传了则只有权重 ≥ CAP_MIN_WEIGHT 的维度能否决。
+    weights 不传 = 所有基本面维度都有否决权；传了则只有权重 ≥ CAP_MIN_WEIGHT 的基本面维度能否决（动量 / EPS 修正永远不能）。
     """
     score = composite(dims, weights)
     used = sum(d.status == "ok" for d in _scored(dims))
@@ -183,6 +185,7 @@ def overall(dims: list[DimensionScore], overall_dist: list[float], n_analysts: i
         return OverallScore(score, pct, None, used, extra={"reason": "few_analysts"})
     grade = grade_with_hysteresis(pct, prev_grade)
     weak = [d for d in _scored(dims) if d.status == "ok" and d.score is not None and d.score < CAP_THRESHOLD
+            and d.key not in CAP_EXEMPT_DIMS
             and (weights is None or weights.get(d.key, 0.0) >= CAP_MIN_WEIGHT - 1e-9)]
     if weak:
         capped = cap_grade(grade, CAP_CEILING)
