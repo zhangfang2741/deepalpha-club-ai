@@ -17,6 +17,10 @@ struct QueryBar: View {
     @State private var searchTask: Task<Void, Never>?
     /// 点选联想把代码填进输入框会再触发一次 onChange；这个标记让那一次不要再搜、不要把列表又弹出来。
     @State private var skipNextSearch = false
+    /// 输入行（市场 + 输入框）的实际高度，浮层按它往下偏移。用 offset 而不是 alignmentGuide：
+    /// 上一版用 alignmentGuide 把浮层顶边对到输入行底边，实测没生效，列表反而底边对着输入行向上长，
+    /// 盖住了输入框和状态栏。offset 只改显示位置、不参与布局，下面的内容纹丝不动。
+    @State private var rowHeight: CGFloat = 44
 
     /// 收起键盘并触发分析。输入的是名称、还没点联想就回车 / 点分析时，取第一条联想。
     private func submit() {
@@ -85,12 +89,16 @@ struct QueryBar: View {
                 .padding(10).background(Theme.surfaceAlt)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
             }
-            // 联想是悬浮在输入行下方的浮层：不参与布局，下面的周期、日期、按钮位置纹丝不动。
-            // alignmentGuide 把浮层顶边对到输入行底边再留 6pt 空隙。
-            .overlay(alignment: .bottom) {
+            .background(GeometryReader { geo in
+                Color.clear
+                    .onAppear { rowHeight = geo.size.height }
+                    .onChange(of: geo.size.height) { _, h in rowHeight = h }
+            })
+            // 联想是悬浮在输入行下方的浮层：顶边在输入行底边下 6pt，向下展开，不参与布局。
+            .overlay(alignment: .topLeading) {
                 if symbolFocused && !suggestions.isEmpty {
                     suggestionList
-                        .alignmentGuide(.bottom) { $0[.top] - 6 }
+                        .offset(y: rowHeight + 6)
                 }
             }
             .zIndex(2)
@@ -176,19 +184,21 @@ struct QueryBar: View {
     /// 联想列表：名称 + 代码，整行都是点击区域（≥ 44pt）。
     private var suggestionList: some View {
         VStack(spacing: 0) {
-            ForEach(suggestions.prefix(6)) { hit in
+            ForEach(suggestions.prefix(5)) { hit in
                 Button { pick(hit) } label: {
                     HStack {
-                        Text(hit.name).foregroundColor(Theme.textPrimary)
-                        Spacer()
+                        // 单行 + 末尾截断：美股的英文全名很长（ETF 名字能到两行），不截断会把一行撑得很高
+                        Text(hit.name).foregroundColor(Theme.textPrimary).lineLimit(1).truncationMode(.tail)
+                        Spacer(minLength: 8)
                         Text(hit.symbol).font(.footnote.monospacedDigit()).foregroundColor(Theme.textSecondary)
+                            .lineLimit(1).fixedSize()
                     }
                     .padding(.horizontal, 12)
                     .frame(minHeight: 44)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                if hit.id != suggestions.prefix(6).last?.id { Divider().background(Theme.border) }
+                if hit.id != suggestions.prefix(5).last?.id { Divider().background(Theme.border) }
             }
         }
         .background(Theme.surfaceAlt)
