@@ -69,10 +69,18 @@ struct HorizontalPanGesture: UIGestureRecognizerRepresentable {
             return abs(v.x) > abs(v.y)
         }
 
-        /// 与点按、双指缩放并存；但不与页面滚动同时进行（横向拖图时页面不跟着抖）。
+        /// 与点按、双指缩放并存；不与其它拖动（页面滚动、返回手势）同时进行。
         func gestureRecognizer(_ g: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-            !(other.view is UIScrollView)
+            !(other is UIPanGestureRecognizer)
+        }
+
+        /// iOS 26 起导航栏「内容区任意位置右滑返回」是一个全屏的平移手势，会抢在图表平移前面，
+        /// 在图上往右拖就退回上一页。让除页面滚动以外的其它平移手势（返回手势）等本手势失败
+        /// （即纵向拖动）后才开始：横向拖图表 = 平移图表；屏幕左边缘的系统返回不在图表范围内，不受影响。
+        func gestureRecognizer(_ g: UIGestureRecognizer,
+                               shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+            other is UIPanGestureRecognizer && !(other.view is UIScrollView)
         }
     }
 }
