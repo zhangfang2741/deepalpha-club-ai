@@ -49,13 +49,13 @@ xcrun simctl install $SIM /tmp/dd-chan/Build/Products/Debug-iphonesimulator/Deep
 set -a; source ~/.config/deepalpha/marketing.env; set +a
 xcrun simctl terminate $SIM club.deepalpha.chan 2>/dev/null
 SIMCTL_CHILD_deepalphaDemoAccount="$CHAN_DEMO_ACCOUNT" SIMCTL_CHILD_deepalphaDemoPassword="$CHAN_DEMO_PASSWORD" \
-  xcrun simctl launch $SIM club.deepalpha.chan -deepalphaDemo     # 英文图另加启动参数 -en
+  xcrun simctl launch $SIM club.deepalpha.chan -deepalphaDemo     # 英文图另加启动参数 -app_language_preference en；中文可加 -app_language_preference zh-Hans
 # 点底部「我的」Tab（可用 /usr/local/bin/axe tap），截图：
 xcrun simctl io $SIM screenshot /tmp/profile.png
 ```
 
 把截图裁成与旧图相同的范围：从「语言」那一行到「账号与安全」那一行（含中间新增的「买卖点口径」和它下面的说明小字），左右贴着卡片边缘，然后缩放到宽 900 px、存成 JPG（质量约 85）：
-`sips -c <高> <宽> --cropOffset <上> <左> /tmp/profile.png --out /tmp/crop.png && sips -Z 900 -s format jpeg -s formatOptions 85 /tmp/crop.png --out <目标文件>`（宽高按实际像素算）。
+`sips -c <高> <宽> --cropOffset <上> <左> /tmp/profile.png --out /tmp/crop.png && sips --resampleWidth 900 -s format jpeg -s formatOptions 85 /tmp/crop.png --out <目标文件>`（宽高按实际像素算）。
 
 **验收**：打开两张新图确认：没有「重看新手导览」；「语言」下面是「买卖点口径 · 中等」一行；英文图全是英文。
 提交：`fix(ios/chan): 新手入门「我的」页配图换成新界面`。
@@ -229,8 +229,9 @@ asc validate --app 6806500280 --version 1.3      # 不能有 blocker
 
 | 日期 | 事项 | 结果 |
 |------|------|------|
-| | 换新手入门「我的」页配图 | |
-| | 版本号 1.3 (5) 提交 | |
+| 2026-10-09 | 换新手入门「我的」页配图 | 中英 900 px JPG 已目视验收；提交 `08701872` |
+| 2026-10-09 | 版本号 1.3 (5) 提交 | Debug / Release 均已更新，提交 `4d5f6601`，已推送 master |
+| 2026-10-09 | 发版前检查 | `tests/ios_content`：6 passed；iOS Simulator 编译通过（存在原有未使用变量警告）。额外 `make typecheck`：236 errors / 13 warnings，均在未改动的后端代码，日志 `/tmp/chan-1.3-typecheck.log` |
 | | 上传构建 | 构建 ID： |
 | | 建版本 / 关联构建 / 填文案 / 审核备注 | 版本 ID： |
 | | 提交审核 | 提交 ID： |
