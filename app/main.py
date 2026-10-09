@@ -22,7 +22,7 @@ from asgi_correlation_id import CorrelationIdMiddleware
 from app.api.v1.api import api_router
 from app.api.v1.chatbot import agent
 from app.api.v1.trading_desk import get_engine as get_trading_desk_engine
-from app.cache.client import close_redis, init_redis
+from app.cache.client import close_redis, current_redis, init_redis
 from app.core.cache import cache_service
 from app.core.config import settings
 from app.core.limiter import limiter
@@ -34,6 +34,7 @@ from app.core.middleware import (
     ProfilingMiddleware,
 )
 from app.core.observability import langfuse_init
+from app.services import symbol_lookup
 from app.services.database import database_service
 from app.services.memory import memory_service
 from app.services.quant_research.scheduler import run_quant_scheduler
@@ -85,6 +86,7 @@ async def lifespan(app: FastAPI):
     quant_scheduler_task: asyncio.Task[None] | None = None
     regime_scheduler_task: asyncio.Task[None] | None = None
     regime_cnhk_task: asyncio.Task[None] | None = None
+    symbol_names_task: asyncio.Task[None] | None = None
     logger.info(
         "application_startup",
         project_name=settings.PROJECT_NAME,
@@ -183,6 +185,9 @@ async def lifespan(app: FastAPI):
         # 共振标记盘中独立刷新（依赖预热产出的快照，随预热开关一起启用）
         signal_radar_sub_level_task = asyncio.create_task(run_signal_radar_sub_level_scheduler())
 
+    # 搜索框的 A 股 / 港股名称名单后台预热：冷拉要十几秒，别让第一个搜索的用户等
+    symbol_names_task = asyncio.create_task(symbol_lookup.prewarm(current_redis()))
+
     if settings.QUANT_BATCH_ENABLED:
         # 量化研究夜间批量（美股标普500 + 纳斯达克100 + A 股预期快照），FMP 调用受全局预算约束
         quant_scheduler_task = asyncio.create_task(run_quant_scheduler())
@@ -213,6 +218,12 @@ async def lifespan(app: FastAPI):
             await signal_radar_scheduler_task
         except asyncio.CancelledError:
             logger.info("signal_radar_prewarm_scheduler_stopped")
+    if symbol_names_task:
+        symbol_names_task.cancel()
+        try:
+            await symbol_names_task
+        except asyncio.CancelledError:
+            logger.info("symbol_names_prewarm_stopped")
     if signal_radar_sub_level_task:
         signal_radar_sub_level_task.cancel()
         try:

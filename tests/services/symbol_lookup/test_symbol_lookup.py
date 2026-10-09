@@ -96,3 +96,99 @@ def test_endpoint_returns_matches(client):
 def test_endpoint_rejects_bad_market_and_empty_q(client):
     assert client.get("/chan/symbol-search", params={"q": "x", "market": "jp"}).status_code == 422
     assert client.get("/chan/symbol-search", params={"q": "", "market": "cn"}).status_code == 422
+
+
+# ───────── 冷缓存：不能让用户干等（A 股全市场名单冷拉要十几秒，iOS 请求超时后列表就是空的）─────────
+
+@pytest.fixture(autouse=True)
+def clean_caches():
+    """进程内缓存 / 单飞任务 / 失败冷却都是模块级状态，每条测试前后清掉，免得互相串。"""
+    def reset():
+        for task in list(sl._INFLIGHT.values()):
+            task.cancel()
+        sl._MEM.clear()
+        sl._INFLIGHT.clear()
+        sl._FAILED_AT.clear()
+    reset()
+    yield
+    reset()
+
+
+@pytest.mark.asyncio
+async def test_cold_cache_answers_immediately_with_curated_then_full_table(clean_caches):
+    import asyncio
+
+    gate = asyncio.Event()
+    calls = 0
+
+    async def slow_fetch(market):
+        nonlocal calls
+        calls += 1
+        await gate.wait()
+        return {**CN, **{f"9{i:05d}": f"股票{i}" for i in range(3000)}}  # 够 3000 只，不被当成残缺
+
+    with patch.object(sl, "_fetch_name_table", slow_fetch):
+        # 名单还没拉回来：几十毫秒内就要有结果，用写死的成分兜底（贵州茅台在里面）
+        out = await asyncio.wait_for(sl.search("cn", "茅台", redis=None, limit=5, wait=0.05), timeout=2)
+        assert {"market": "cn", "symbol": "600519", "name": "贵州茅台"} in out
+        # 中科曙光不在写死的成分里，此时搜不到，是预期的降级
+        assert await sl.search("cn", "曙光", redis=None, limit=5, wait=0.05) == []
+        gate.set()
+        await asyncio.wait_for(sl._INFLIGHT["cn"], timeout=2)  # 后台拉完
+        # 拉完后全量可用
+        out2 = await sl.search("cn", "曙光", redis=None, limit=5)
+        assert out2 == [{"market": "cn", "symbol": "603019", "name": "中科曙光"}]
+    assert calls == 1  # 前面两次搜索共用同一次后台拉取（单飞），不会每次输入都去打东财
+
+
+@pytest.mark.asyncio
+async def test_concurrent_cold_searches_fetch_only_once(clean_caches):
+    import asyncio
+
+    calls = 0
+
+    async def fetch(market):
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0.05)
+        return {f"6{i:05d}": f"名{i}" for i in range(3500)}
+
+    with patch.object(sl, "_fetch_name_table", fetch):
+        await asyncio.gather(*[sl.search("cn", "名", redis=None, limit=3, wait=1) for _ in range(8)])
+        await asyncio.wait_for(sl._INFLIGHT["cn"], timeout=2) if "cn" in sl._INFLIGHT else None
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_failed_background_fetch_is_retried_next_time(clean_caches):
+    import asyncio
+
+    seq = [RuntimeError("down"), {f"6{i:05d}": f"名{i}" for i in range(3500)}]
+
+    async def fetch(market):
+        v = seq.pop(0)
+        if isinstance(v, Exception):
+            raise v
+        return v
+
+    with patch.object(sl, "_fetch_name_table", fetch), patch.object(sl, "_FAIL_COOLDOWN", 0.0):
+        await sl.search("cn", "名1", redis=None, limit=3, wait=1)  # 第一次失败，退回写死成分，不抛
+        await asyncio.sleep(0.01)
+        out = await sl.search("cn", "名1", redis=None, limit=3, wait=1)  # 第二次重新拉
+    assert out and out[0]["symbol"].startswith("6")
+
+
+@pytest.mark.asyncio
+async def test_failure_cooldown_does_not_hammer_source(clean_caches):
+    calls = 0
+
+    async def fetch(market):
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("down")
+
+    with patch.object(sl, "_fetch_name_table", fetch):
+        for _ in range(5):
+            out = await sl.search("cn", "茅台", redis=None, limit=3, wait=1)
+            assert out and out[0]["symbol"] == "600519"  # 一直能用兜底答复
+    assert calls == 1  # 冷却期内不重复去打数据源
