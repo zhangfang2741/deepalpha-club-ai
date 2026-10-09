@@ -9,6 +9,8 @@ struct GoodStocksSheet: View {
     let universeName: String
     /// 雷达当前所有展示日（最新在前），用来找每只股票最近的买卖点。
     let days: [RadarDay]
+    /// 免费用户看示例日时的日期：名单里的买卖点只按这一天判断，顶部写明。会员为 nil。
+    var demoDate: String? = nil
     let sectorName: (String) -> String
     /// 雷达顶部「行业」当前的筛选（nil = 全部行业）：名单跟着只列该行业的股票（后端按 sector 过滤，这里只用来写标题和空态）。
     var sectorKey: String? = nil
@@ -46,6 +48,10 @@ struct GoodStocksSheet: View {
                             .font(.footnote).foregroundColor(Theme.textSecondary)
                             .frame(maxWidth: .infinity).padding(.top, 40)
                     } else {
+                        if let demoDate {
+                            Text(L("示例日 %@ · 买卖点按这一天", demoDate))
+                                .font(.caption).foregroundColor(Theme.textSecondary)
+                        }
                         if let sectorKey {
                             Text(L("行业：%@ · %lld 只", sectorName(sectorKey), items.count))
                                 .font(.footnote.weight(.semibold)).foregroundColor(Theme.accent)

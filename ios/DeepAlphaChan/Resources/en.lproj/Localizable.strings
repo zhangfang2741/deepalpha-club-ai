@@ -1637,3 +1637,5 @@
 
 "展开指标数值" = "Expand indicator values";
 "折叠指标数值" = "Collapse indicator values";
+
+"示例日 %@ · 买卖点按这一天" = "Sample day %@ · buy/sell points as of that day";

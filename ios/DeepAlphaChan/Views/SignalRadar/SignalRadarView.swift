@@ -112,12 +112,10 @@ struct SignalRadarView: View {
             }
             // 行业强弱跟着所选日走：雷达翻到哪天，扇区就按哪天收盘的强弱排
             .task(id: vm.sectorBoardKey) { await vm.loadSectorBoardIfNeeded() }
-            // 基本面名单：切市场 / 指数时拉一次（会员功能，与雷达同一道门槛）
+            // 基本面名单：切市场 / 指数时拉一次（会员随时可看；免费用户只在示例日可看，见 goodListButton）
             // 顶部行业筛选变了也重拉（名单跟行业联动）
-            .task(id: "\(vm.market.rawValue)|\(vm.activeUniverseKey)|\(vm.sectorFilter ?? "")|\(store.isPremium)") {
-                if store.isPremium {
-                    await goodVM.load(market: vm.market.rawValue, universe: vm.activeUniverseKey, sector: vm.sectorFilter)
-                }
+            .task(id: "\(vm.market.rawValue)|\(vm.activeUniverseKey)|\(vm.sectorFilter ?? "")") {
+                await goodVM.load(market: vm.market.rawValue, universe: vm.activeUniverseKey, sector: vm.sectorFilter)
             }
             .sheet(item: $panel, onDismiss: {
                 if let g = pendingGood {
@@ -541,11 +539,16 @@ struct SignalRadarView: View {
         .accessibilityLabel(showFlow ? L("收起流程图") : L("展开流程图"))
     }
 
-    /// 雷达画布左下角的「名单」：基本面名单入口（会员功能；有门槛说明才显示）。
+    /// 免费用户当前选中的正是示例日。
+    private var isDemoDaySelected: Bool {
+        !store.isPremium && vm.unlockedDayDate != nil && vm.selectedDay?.date == vm.unlockedDayDate
+    }
+
+    /// 雷达画布左下角的「名单」：基本面名单入口（会员随时可看；免费用户选中示例日时也能看；有门槛说明才显示）。
     /// 以 overlay 叠在画布角上，不占版面、不参与气泡摆位（摆位只取决于数据与画布大小，不预留禁区）。
     @ViewBuilder
     private var goodListButton: some View {
-        if let threshold = vm.response?.qualityThreshold, !threshold.isEmpty, store.isPremium {
+        if let threshold = vm.response?.qualityThreshold, !threshold.isEmpty, store.isPremium || isDemoDaySelected {
             Button {
                 if needsConsent { showConsent = true } else { panel = .goodStocks }
             } label: {
@@ -886,8 +889,11 @@ struct SignalRadarView: View {
                 RadarSignalListSheet(context: ctx, universeName: currentUniverseName, onOpenDetail: openDetail)
             }
         case .goodStocks:
+            // 免费用户（只能看示例日）：买卖点只按示例日那一天判断，不把锁住的日期透出来
             GoodStocksSheet(vm: goodVM, threshold: vm.response?.qualityThreshold, universeName: currentUniverseName,
-                            days: vm.days, sectorName: { vm.sectorName($0) }, sectorKey: vm.sectorFilter,
+                            days: store.isPremium ? vm.days : vm.days.filter { $0.date == vm.unlockedDayDate },
+                            demoDate: store.isPremium ? nil : vm.unlockedDayDate,
+                            sectorName: { vm.sectorName($0) }, sectorKey: vm.sectorFilter,
                             onOpen: { symbol, name in
                                 pendingGood = (symbol, name)
                                 // panelView 的参数也叫 panel（let 常量），要关面板必须写 self.panel
