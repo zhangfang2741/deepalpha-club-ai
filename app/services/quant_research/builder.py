@@ -108,6 +108,8 @@ def evaluate(inp: StockInputs, history: list[EstimatePoint], dists: Distribution
     if bridged:  # 外部趋势已补上部分指标，不再整维「积累中」
         rev_state = "ok"
 
+    stage = stage_of(inp, metrics["rev_yoy"].value, metrics["rev_cagr3"].value)
+    val_weights = stage.valuation_weights if stage else None   # 估值倍数按阶段配权重（百分位仍和整个板块比）
     dims: list[DimensionScore] = []
     unsupported = profile(inp.market).unsupported
     for dim in DIMENSIONS:
@@ -120,12 +122,12 @@ def evaluate(inp: StockInputs, history: list[EstimatePoint], dists: Distribution
             expected = sum(1 for k in keys if _REVISION_LOOKBACK[k] <= rev_days or k in bridged)
             dims.append(score_dimension(dim, scored, prev.get(f"d:{dim}"), expected=expected))
         else:
-            dims.append(score_dimension(dim, scored, prev.get(f"d:{dim}")))
+            dims.append(score_dimension(dim, scored, prev.get(f"d:{dim}"),
+                                        metric_weights=val_weights if dim == "valuation" else None))
     mark_extremes(dims)
     for d in dims:
         d.key_fact = pick_key_fact(d)
     snap_dates = [p.snapshot_date for p in history]
-    stage = stage_of(inp, metrics["rev_yoy"].value, metrics["rev_cagr3"].value)
     return Evaluation(inp, metrics, dims, stage, n,
                       estimates_date=max(snap_dates).isoformat() if snap_dates else None)
 
@@ -180,14 +182,26 @@ def _formula_inputs(sm: ScoredMetric, ev: Evaluation, lang: tx.Lang) -> list[For
     return out
 
 
+def metric_weight(ev: Evaluation, key: str) -> float:
+    """这一项在维度分里的实际权重：估值倍数按阶段（连续插值），其余取 MetricDef.weight。"""
+    d = METRICS[key]
+    if d.dimension == "valuation" and ev.stage is not None:
+        return round(ev.stage.valuation_weights.get(key, d.weight), 3)
+    return d.weight
+
+
 def _metric_out(sm: ScoredMetric, ev: Evaluation, lang: tx.Lang) -> MetricOut:
     d = METRICS[sm.key]
     expr = tx.metric_expression(sm.key, sm.mv, lang)
+    weight = metric_weight(ev, sm.key)
+    status_note = tx.metric_status_note(sm, lang)
+    if weight == 0 and ev.stage is not None:  # 本阶段不用这项倍数：仍展示，但写明不参与
+        status_note = status_note or tx.stage_unused_note(tx.stage_name(ev.stage.key, lang), lang)
     return MetricOut(
         key=sm.key, name=d.name_zh if lang == "zh" else d.name_en,
         description=d.desc_zh if lang == "zh" else d.desc_en, direction=d.direction,
         value=sm.mv.value, display_value=tx.fmt_metric_value(sm.key, sm.mv.value),
-        status=sm.status, status_note=tx.metric_status_note(sm, lang),
+        status=sm.status, status_note=status_note,
         percentile=sm.percentile, grade=sm.grade,
         sector_median=sm.sector_median,
         sector_median_display=tx.fmt_metric_value(sm.key, sm.sector_median) if sm.sector_median is not None else None,
@@ -196,7 +210,7 @@ def _metric_out(sm: ScoredMetric, ev: Evaluation, lang: tx.Lang) -> MetricOut:
         formula=MetricFormula(expression=expr, inputs=_formula_inputs(sm, ev, lang)) if expr else None,
         position_text=tx.position_text(sm, lang),
         interpretation=metric_interpretation(d, lang),
-        weight=d.weight,
+        weight=weight,
     )
 
 
@@ -213,7 +227,7 @@ def _dimension_out(d: DimensionScore, ev: Evaluation, lang: tx.Lang,
         status_note=tx.dimension_status_note(d, lang),
         is_highest=d.is_highest, is_lowest=d.is_lowest,
         key_fact=KeyFact(metric=fact.key, text=tx.key_fact_text(fact, lang)) if fact else None,
-        formula=tx.dimension_formula(d),
+        formula=tx.dimension_formula(d, {k: metric_weight(ev, k) for k in (m.key for m in d.metrics)}),
         groups=[MetricGroup(name=k, metrics=v) for k, v in groups.items()],
         counts_in_overall=d.key not in DISPLAY_ONLY_DIMENSIONS,
         weight_pct=round(weights[d.key] * 100) if weights and d.key in weights else None,

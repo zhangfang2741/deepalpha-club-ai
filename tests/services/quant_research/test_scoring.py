@@ -189,3 +189,24 @@ def test_fundamental_dimensions_still_veto():
         dims = [_dim(k, 95) for k in ("valuation", "growth", "profitability", "stability", "momentum") if k != weak]
         o = overall(dims + [_dim(weak, 5)], DIST, n_analysts=10, prev_grade=None, weights=w)
         assert o.capped and o.cap_dimension == weak, weak
+
+
+def test_score_dimension_metric_weight_override_and_zero_weight():
+    """按阶段给的指标权重优先于 MetricDef.weight；权重为 0 的指标不进分数、也不占参与数。"""
+    sm = [_sm("pe_ttm", 0), _sm("ps_ttm", 100), _sm("pb", 100)]
+    d = score_dimension("valuation", sm, None, metric_weights={"pe_ttm": 0.0, "ps_ttm": 1.0, "pb": 1.0})
+    assert d.score == 100.0
+    d2 = score_dimension("valuation", sm, None, metric_weights={"pe_ttm": 3.0, "ps_ttm": 1.0, "pb": 0.0})
+    assert d2.score == 25.0                                            # (0×3 + 100×1) ÷ 4
+    only_zero = score_dimension("valuation", sm, None, metric_weights={"pe_ttm": 0.0, "ps_ttm": 0.0, "pb": 0.0})
+    assert only_zero.status == "unavailable"
+
+
+def test_dimension_formula_uses_effective_weights():
+    from app.services.quant_research.copy import dimension_formula
+
+    sm = [_sm("pe_ttm", 40), _sm("ps_ttm", 80), _sm("pb", 10)]
+    w = {"pe_ttm": 0.0, "ps_ttm": 1.0, "pb": 0.5}
+    d = score_dimension("valuation", sm, None, metric_weights=w)
+    f = dimension_formula(d, w)
+    assert "80×1" in f and "10×0.5" in f and "40" not in f.split("÷")[0]   # 权重 0 的不出现在算式里

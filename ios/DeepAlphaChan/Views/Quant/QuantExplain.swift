@@ -235,11 +235,13 @@ struct QuantDimensionGradeExplanation: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if dimension.isOK, let score = dimension.score {
-                let part = dimension.allMetrics.filter { $0.percentile != nil }
-                // 口径相近的指标合并计权（如三种 GAAP 利润率各 ×0.5），避免同一信息被重复计算
+                // 权重为 0 的指标本阶段不用（如成长期不看市净率）：仍展示，但不进分数
+                let unused = dimension.allMetrics.filter { $0.percentile != nil && $0.effectiveWeight == 0 }
+                let part = dimension.allMetrics.filter { $0.percentile != nil && $0.effectiveWeight > 0 }
+                // 口径相近的指标合并计权（如三种 GAAP 利润率各 ×0.5），估值倍数按公司阶段取舍权重
                 let weighted = part.contains { $0.effectiveWeight != 1 }
                 QuantExplainText(text: weighted
-                    ? L("%@分 %@ = 下面 %lld 项指标板块百分位的加权平均（名称后 ×0.5 表示口径相近、合并计权，避免同一信息被重复计算）：",
+                    ? L("%@分 %@ = 下面 %lld 项指标板块百分位的加权平均（名称后 ×0.5 表示口径相近或本阶段不太看重、权重较低）：",
                         dimension.name, QuantGradeScale.fmt(score), part.count)
                     : L("%@分 %@ = 下面 %lld 项指标板块百分位的平均：",
                         dimension.name, QuantGradeScale.fmt(score), part.count))
@@ -249,7 +251,10 @@ struct QuantDimensionGradeExplanation: View {
                                        score: m.percentile, grade: m.grade)
                     }
                 }
-                let skipped = dimension.allMetrics.count - part.count
+                if !unused.isEmpty {
+                    QuantExplainText(text: L("这家公司所处的阶段不看其中 %lld 项估值指标（如市净率），它们仍在下面展示，但不参与计算；每个指标仍然和同板块全体公司比百分位。", unused.count), secondary: true)
+                }
+                let skipped = dimension.allMetrics.count - part.count - unused.count
                 if skipped > 0 {
                     QuantExplainText(text: L("另有 %lld 项数据不足或不适用，不参与平均。", skipped), secondary: true)
                 }

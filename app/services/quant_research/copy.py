@@ -221,16 +221,21 @@ def metric_expression(key: str, mv: MetricValue, lang: Lang) -> str:
     return ""
 
 
-def dimension_formula(dim: DimensionScore) -> str | None:
-    """维度分算式「(p1 + p2 + …) ÷ n = 分 → 等级」。"""
+def dimension_formula(dim: DimensionScore, weights: dict[str, float] | None = None) -> str | None:
+    """维度分算式「(p1 + p2 + …) ÷ n = 分 → 等级」；有权重时写「(p1×w1 + …) ÷ Σw」（权重为 0 的指标不出现）。
+
+    weights = 按阶段给的指标权重，缺省取 MetricDef.weight。
+    """
     part = [s for s in dim.metrics if s.percentile is not None]
+    ws = {s.key: (weights.get(s.key, METRICS[s.key].weight) if weights is not None else METRICS[s.key].weight) for s in part}
+    part = [s for s in part if ws[s.key] > 0]
     if dim.score is None or not part:
         return None
-    ws = [METRICS[s.key].weight for s in part]
-    if all(w == ws[0] for w in ws):  # 等权：保持原样「(p1 + p2) ÷ n」
+    vals = [ws[s.key] for s in part]
+    if all(w == vals[0] for w in vals):  # 等权：保持原样「(p1 + p2) ÷ n」
         return f"({' + '.join(f'{s.percentile:.0f}' for s in part)}) ÷ {len(part)} = {dim.score:.1f} → {dim.grade}"
-    terms = " + ".join(f"{s.percentile:.0f}×{w:g}" for s, w in zip(part, ws, strict=True))
-    return f"({terms}) ÷ {sum(ws):g} = {dim.score:.1f} → {dim.grade}"
+    terms = " + ".join(f"{s.percentile:.0f}×{w:g}" for s, w in zip(part, vals, strict=True))
+    return f"({terms}) ÷ {sum(vals):g} = {dim.score:.1f} → {dim.grade}"
 
 
 # ---------- 状态说明 ----------
@@ -271,6 +276,12 @@ def metric_status_note(sm: ScoredMetric, lang: Lang) -> str | None:
     if sm.key in STABILITY_KEYS:
         return _i(lang, "报表里缺少所需数据，不参与计算", "Required statement data is not available; excluded")
     return _i(lang, "数据缺失或增长基数为负，不参与计算", "Data missing or negative growth base; excluded")
+
+
+def stage_unused_note(stage_name: str, lang: Lang) -> str:
+    """估值倍数在当前阶段权重为 0 时的说明（仍展示，不参与）。"""
+    return _i(lang, f"这家公司处在{stage_name}：这个阶段不看这项估值指标，只展示、不参与计算",
+              f"This company is in the {stage_name} stage: this valuation metric is not used at this stage; shown only")
 
 
 def dimension_status_note(dim: DimensionScore, lang: Lang) -> str | None:

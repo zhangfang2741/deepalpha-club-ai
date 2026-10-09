@@ -205,3 +205,66 @@ def test_stage_of_carries_blended_weights():
     near = stage_of(load_inputs("NVDA"), 0.15, None)
     assert near is not None and near.weights["growth"] < _rows()["growth"]["growth"]
     assert stage_of(load_inputs("JPM"), 0.1, 0.1) is None            # 金融股没有阶段 → 等权由调用方处理
+
+
+# ---------- 估值指标按阶段配权重（百分位仍和整个行业比，保证行业维度可比） ----------
+
+def _val_keys():
+    from app.services.quant_research.metrics import METRICS
+    return {k for k, m in METRICS.items() if m.dimension == "valuation"}
+
+
+def test_valuation_weight_rows_cover_all_valuation_metrics():
+    from app.services.quant_research.stage import STAGE_NAMES, VALUATION_WEIGHTS
+
+    assert set(VALUATION_WEIGHTS) == set(STAGE_NAMES)
+    for stage, row in VALUATION_WEIGHTS.items():
+        assert set(row) == _val_keys(), stage
+        assert all(w >= 0 for w in row.values()) and sum(row.values()) > 0, stage
+
+
+def test_mature_valuation_row_is_the_old_equal_weighting():
+    """成熟期保持原来的 14 项等权：改动只发生在成熟期以外的阶段。"""
+    from app.services.quant_research.stage import VALUATION_WEIGHTS
+
+    assert set(VALUATION_WEIGHTS["mature"].values()) == {1.0}
+
+
+def test_intro_stage_drops_profit_based_multiples():
+    """初创期（烧钱）：市盈率 / 利润倍数 / 市现率没有意义，只看营收类倍数。"""
+    from app.services.quant_research.stage import VALUATION_WEIGHTS
+
+    row = VALUATION_WEIGHTS["intro"]
+    for k in ("pe_ttm", "pe_fwd", "peg_ttm", "peg_fwd", "ev_ebitda_ttm", "ev_ebitda_fwd", "ev_ebit_ttm", "ev_ebit_fwd", "pcf"):
+        assert row[k] == 0, k
+    for k in ("ps_ttm", "ps_fwd", "ev_sales_ttm", "ev_sales_fwd"):
+        assert row[k] > 0, k
+
+
+def test_growth_stage_leans_forward_and_on_sales_not_book():
+    from app.services.quant_research.stage import VALUATION_WEIGHTS
+
+    row = VALUATION_WEIGHTS["growth"]
+    assert row["pe_fwd"] > row["pe_ttm"] and row["peg_fwd"] > row["peg_ttm"]
+    assert row["pb"] == 0 and row["ev_sales_fwd"] > 0
+
+
+def test_blend_valuation_weights_match_rows_and_are_continuous():
+    from app.services.quant_research.stage import VALUATION_WEIGHTS, blend_valuation_weights
+
+    far = blend_valuation_weights(0.30, 0.20, 0.20)
+    assert all(abs(far[k] - VALUATION_WEIGHTS["growth"][k]) < 1e-9 for k in far)
+    far = blend_valuation_weights(0.05, 0.05, 0.20)
+    assert all(abs(far[k] - VALUATION_WEIGHTS["mature"][k]) < 1e-9 for k in far)
+    prev = None
+    for i in range(-300, 501):
+        w = blend_valuation_weights(i / 1000, i / 1000, 0.10)
+        if prev is not None:   # 相对权重的行间差最大 1.5，过渡区宽 10 个点 → 每 0.1 个点最多变 0.015；整行跳变会 ≥ 0.5
+            assert max(abs(w[k] - prev[k]) for k in w) < 0.02, i
+        prev = w
+
+
+def test_stage_of_carries_valuation_weights():
+    info = stage_of(load_inputs("NVDA"), 0.83, 1.10)
+    assert info is not None and set(info.valuation_weights) == _val_keys()
+    assert info.valuation_weights["pb"] == 0                           # 成长期整行

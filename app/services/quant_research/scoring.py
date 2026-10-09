@@ -118,22 +118,31 @@ def score_metric(key: str, mv: MetricValue, dist: list[float] | None, prev_grade
 
 
 def score_dimension(dim: str, scored: list[ScoredMetric], prev_grade: str | None, *,
-                    expected: int | None = None, accumulating_days: int | None = None) -> DimensionScore:
-    """expected：本维度按规则应参与的指标数（EPS 修正积累期只算已到回看期的指标）。"""
+                    expected: int | None = None, accumulating_days: int | None = None,
+                    metric_weights: dict[str, float] | None = None) -> DimensionScore:
+    """expected：本维度按规则应参与的指标数（EPS 修正积累期只算已到回看期的指标）。
+
+    metric_weights：按阶段给的指标权重（优先于 MetricDef.weight）；权重为 0 的指标不进分数、也不占参与数
+    （它们仍展示，只是这一阶段不用）。
+    """
     if accumulating_days is not None:
         return DimensionScore(dim, "accumulating", None, None, scored, days_accumulated=accumulating_days)
-    total = expected if expected is not None else len(scored)
-    part = [s for s in scored if s.percentile is not None]
+    active = [s for s in scored if metric_weights.get(s.key, 1.0) > 0] if metric_weights is not None else scored
+    total = expected if expected is not None else len(active)
+    part = [s for s in active if s.percentile is not None]
     if total == 0 or len(part) < min_participating(total):
         return DimensionScore(dim, "unavailable", None, None, scored)
-    score = round(weighted_percentile(part), 1)
+    score = round(weighted_percentile(part, metric_weights), 1)
     return DimensionScore(dim, "ok", score, grade_with_hysteresis(score, prev_grade), scored)
 
 
-def weighted_percentile(part: list[ScoredMetric]) -> float:
-    """参与指标的百分位按指标权重加权平均（权重见 MetricDef.weight，默认 1 = 等权）。"""
-    total = sum(METRICS[s.key].weight for s in part)
-    return sum(s.percentile * METRICS[s.key].weight for s in part) / total  # type: ignore[operator]
+def weighted_percentile(part: list[ScoredMetric], metric_weights: dict[str, float] | None = None) -> float:
+    """参与指标的百分位按指标权重加权平均（默认取 MetricDef.weight，1 = 等权；metric_weights 按阶段覆盖）。"""
+    def w(s: ScoredMetric) -> float:
+        return metric_weights.get(s.key, METRICS[s.key].weight) if metric_weights is not None else METRICS[s.key].weight
+
+    total = sum(w(s) for s in part)
+    return sum(s.percentile * w(s) for s in part) / total  # type: ignore[operator]
 
 
 def min_participating(total: int) -> int:

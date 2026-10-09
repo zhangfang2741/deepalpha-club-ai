@@ -13,7 +13,7 @@ from app.services.quant_research.builder import METHODOLOGY_VERSION
 from app.services.quant_research.grading import BANDS, HYSTERESIS
 from app.services.quant_research.metrics import DIMENSIONS, METRICS, MIN_ANALYSTS
 from app.services.quant_research.scoring import CAP_CEILING, CAP_MIN_WEIGHT, MIN_SAMPLE
-from app.services.quant_research.stage import STAGE_NAMES, STAGE_WEIGHTS
+from app.services.quant_research.stage import STAGE_NAMES, STAGE_WEIGHTS, VALUATION_KEYS, VALUATION_WEIGHTS
 
 def _weights_text(lang: int) -> str:
     """各阶段的权重一览，如「成长期 15 / 35 / 20 / 20 / 10」，直接取自 STAGE_WEIGHTS，改表即同步。"""
@@ -59,6 +59,31 @@ def _metric_weights_en() -> str:
     return _metric_weights_text(1)
 
 
+def _valuation_weights_text(lang: int) -> str:
+    """各阶段估值倍数的取舍一览（直接取自 VALUATION_WEIGHTS，改表即同步）：不看的 / 减半的 / 其余等权。"""
+    out = []
+    for stage in ("growth", "intro", "shakeout", "decline"):
+        row = VALUATION_WEIGHTS[stage]
+        name = lambda k: METRICS[k].name_zh if lang == 0 else METRICS[k].name_en  # noqa: E731
+        sep = "、" if lang == 0 else ", "
+        top = max(row.values())
+        zero = [name(k) for k in VALUATION_KEYS if row[k] == 0]
+        part = [name(k) for k in VALUATION_KEYS if 0 < row[k] < top]
+        if lang == 0:
+            out.append(f"{STAGE_NAMES[stage][0]}：不看{sep.join(zero) or '无'}" + (f"；{sep.join(part)} 权重较低" if part else ""))
+        else:
+            out.append(f"{STAGE_NAMES[stage][1]}: skips {sep.join(zero) or 'none'}" + (f"; {sep.join(part)} at lower weight" if part else ""))
+    return ("；" if lang == 0 else "; ").join(out)
+
+
+def _valuation_weights_zh() -> str:
+    return _valuation_weights_text(0)
+
+
+def _valuation_weights_en() -> str:
+    return _valuation_weights_text(1)
+
+
 _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
     (("和谁比", "Who it is compared with"),
      ("标普1500（标普500 + 中盘400 + 小盘600）按 GICS 11 个板块分组，每项指标只和同板块公司比较。"
@@ -102,6 +127,16 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
       f"{CAP_MIN_WEIGHT:.0%} of the weight and is F, the composite is capped at {CAP_CEILING} (lower-weight "
       f"dimensions, and the price-based momentum and expectation-based EPS revisions, cannot veto); with fewer than "
       f"{MIN_ANALYSTS} covering analysts there is no composite grade.")),
+    (("估值指标按阶段取舍", "Valuation metrics by stage"),
+     (f"估值维度里的 14 个倍数，不同阶段看的重点不同，但比较对象不变：每个倍数仍然和同板块全体公司比百分位，所以不同公司在同一板块维度下可比。"
+      f"只改各倍数在估值分里的权重，同样按营收增速和经营现金流连续插值、不在门槛处跳变：成熟期保持 14 项等权；{_valuation_weights_zh()}。"
+      "利润为负的公司，市盈率 / 市现率这类倍数没有意义（会被当成最差），所以初创期干脆不看它们。权重为 0 的倍数仍然展示，只是不参与计算。",
+      "The 14 multiples in the valuation dimension carry different weight at different stages, but the comparison group "
+      "does not change: each multiple is still ranked against all companies in the same sector, so companies remain "
+      "comparable within a sector. Only the weight of each multiple in the valuation score changes, interpolated "
+      "continuously on revenue growth and operating cash flow so nothing jumps at a threshold. Mature keeps all 14 at equal weight; "
+      f"{_valuation_weights_en()}. Multiples based on profit are meaningless for loss-making companies "
+      "(they would be scored as lowest), so the introduction stage skips them. A zero-weight multiple is still shown but not used.")),
     (("财务稳健", "Financial health"),
      ("看偿债压力、短期流动性、现金能撑多久和利润的现金含量，共五项：净负债 / EBITDA（现金多于负债记 0）、"
       "利息保障倍数（没有利息支出、利息收入不低于利息支出、或超过 100 倍记 100）、流动比率、现金可支撑年数（按最近 12 个月自由现金流为负的速度估算，"

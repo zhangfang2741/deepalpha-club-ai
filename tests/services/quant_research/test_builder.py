@@ -128,3 +128,16 @@ def test_golden(sym):
         path.write_text(json.dumps(got, ensure_ascii=False, indent=1))
         pytest.skip(f"golden 已生成：{path.name}，人工核对后提交")
     assert got == json.loads(path.read_text())
+
+
+def test_valuation_metric_weights_follow_the_stage():
+    """估值指标按阶段配权重：成长期（NVDA）市净率不参与；无阶段（JPM）全部等权。百分位仍是板块内的。"""
+    nvda = build_payload(_run("NVDA"), "zh", in_universe=True, sector_sample=100)
+    val = next(d for d in nvda.dimensions if d.key == "valuation")
+    ms = {m.key: m for g in val.groups for m in g.metrics}
+    assert ms["pb"].weight == 0 and "不参与" in (ms["pb"].status_note or "")
+    assert ms["pe_fwd"].weight > ms["pe_ttm"].weight > 0
+    assert val.formula and "×" in val.formula
+    jpm = build_payload(_run("JPM"), "zh", in_universe=True, sector_sample=100)
+    jval = next(d for d in jpm.dimensions if d.key == "valuation")
+    assert {m.weight for g in jval.groups for m in g.metrics} == {1.0}
