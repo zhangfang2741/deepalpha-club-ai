@@ -87,6 +87,13 @@ class MACDOut(BaseModel):
     bar: list[float]
 
 
+class MAOut(BaseModel):
+    """均线：values 的键是周期（字符串），每条与 merged_candles 一一对应，不足周期的位置为 null。"""
+
+    periods: list[int]
+    values: dict[str, list[Optional[float]]]
+
+
 class SignalOut(BaseModel):
     type: Literal["buy1", "buy2", "buy3", "sell1", "sell2", "sell3"]
     label: str
@@ -212,6 +219,7 @@ class ChanAnalysisResponse(BaseModel):
     stroke_pivots: list[PivotOut]
     segment_pivots: list[PivotOut]
     macd: Optional[MACDOut]
+    ma: Optional[MAOut] = None  # 旧版 App 不读；与 merged_candles 对齐
     signals: list[SignalOut]
     current_trend: str
     # 走势类型（基于中枢排布）：up_trend / down_trend / consolidation / none

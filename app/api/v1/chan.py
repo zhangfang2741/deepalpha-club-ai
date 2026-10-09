@@ -22,6 +22,7 @@ from app.schemas.chan import (
     GapItemOut,
     GapJobStatus,
     MACDOut,
+    MAOut,
     MarketNarrativeOut,
     MergedCandleOut,
     PhaseBranchOut,
@@ -42,6 +43,7 @@ from app.services import symbol_lookup
 from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
 from app.services.chan.divergence import DivergenceResult
 from app.services.chan.gap import analyze_structure_gap
+from app.services.chan.ma import align_to_times
 from app.services.chan.signal_policy import DEFAULT_MODE, SIGNAL_POLICIES, normalize_mode
 from app.services.chan.signals import leg_divergence_marks
 from app.services.chan.window import canonical_daily_fetch_start, canonical_daily_start
@@ -146,6 +148,14 @@ def _spawn(coro) -> None:
     task = asyncio.create_task(coro)
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
+
+
+def _ma_out(result: ChanAnalysisResult) -> MAOut | None:
+    """均线按合并 K 线的时间对齐后输出（App 直接按下标画，不必再对时间）。"""
+    if result.ma is None:
+        return None
+    aligned = align_to_times(result.ma, [c.time for c in result.merged_candles])
+    return MAOut(periods=list(result.ma.periods), values={str(n): aligned[n] for n in result.ma.periods})
 
 
 @router.get("/analysis", response_model=ChanAnalysisResponse)
@@ -314,6 +324,7 @@ async def chan_analysis(
             dea=result.macd.dea,
             bar=result.macd.bar,
         ) if result.macd else None,
+        ma=_ma_out(result),
         signals=[_signal_out(sig) for sig in result.signals],
         current_trend=result.current_trend,
         walk_type=result.walk_type,

@@ -15,6 +15,7 @@ from app.services.chan.bias import (
     BiasFactor,
     score_to_bias,
 )
+from app.services.chan.ma import DEFAULT_PERIODS, MA_PERIODS, MAData, calc_ma
 from app.services.chan.divergence import (
     DivergenceResult,
     MACDData,
@@ -89,6 +90,8 @@ class ChanAnalysisResult:
     # 单独保留给雷达以「待确认」样式展示
     candidate_signals: list[Signal] = field(default_factory=list)
     macd: MACDData | None = None
+    # 均线（日线 / 30 分钟 5·20·60，周线 5·10·20）：按含预热的完整原始 K 线算，输出时再对齐合并 K 线
+    ma: MAData | None = None
 
     # 当前市场状态摘要
     current_trend: str = ""
@@ -218,6 +221,7 @@ class ChanAnalyzer:
 
         # 6. MACD计算
         result.macd = calc_macd(bars)
+        result.ma = calc_ma(bars, MA_PERIODS.get(freq, DEFAULT_PERIODS))
 
         # 7. 背驰判断（结合笔级中枢区分趋势背驰 / 盘整背驰）
         result.divergences = find_stroke_divergences(result.strokes, lang, pivots=result.stroke_pivots)
