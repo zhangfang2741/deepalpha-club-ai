@@ -9,7 +9,7 @@ import SwiftUI
 /// 3. 画：`ChanChartView` 主图叠加类加进 `priceChart` 的 Canvas（用 `vm.isOn(.xxx)` 判断），副图类仿 `macdChart`；
 /// 4. 名词要补 `glossary.json`（中英）。
 enum ChartIndicator: String, CaseIterable, Identifiable {
-    case ma, volume, macd
+    case ma, ema, boll, volume, macd
 
     /// 指标栏里分两组：叠在主图上的 / 底部的成交量与副图。
     enum Slot { case overlay, panel }
@@ -18,7 +18,7 @@ enum ChartIndicator: String, CaseIterable, Identifiable {
 
     var slot: Slot {
         switch self {
-        case .ma: return .overlay
+        case .ma, .ema, .boll: return .overlay
         case .volume, .macd: return .panel
         }
     }
@@ -26,6 +26,8 @@ enum ChartIndicator: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .ma: return L("均线")
+        case .ema: return "EMA"
+        case .boll: return "BOLL"
         case .volume: return L("成交量")
         case .macd: return "MACD"
         }
@@ -35,6 +37,7 @@ enum ChartIndicator: String, CaseIterable, Identifiable {
     var defaultOn: Bool {
         switch self {
         case .ma, .volume, .macd: return true
+        case .ema, .boll: return false
         }
     }
 
@@ -65,6 +68,8 @@ struct IndicatorBar: View {
     private func isAvailable(_ i: ChartIndicator) -> Bool {
         switch i {
         case .ma: return !(analysis.ma?.periods.isEmpty ?? true)
+        case .ema: return !(analysis.ema?.periods.isEmpty ?? true)
+        case .boll: return analysis.boll != nil
         case .volume: return analysis.mergedCandles.contains { ($0.volume ?? 0) > 0 }
         case .macd: return analysis.macd != nil
         }
@@ -87,6 +92,15 @@ struct IndicatorBar: View {
         }
     }
 
+    /// 按周期画的指标（均线 / EMA）：周期列表和各条线的颜色。其他指标没有。
+    private func lineKey(_ i: ChartIndicator) -> ([Int], [Color])? {
+        switch i {
+        case .ma: return analysis.ma.map { ($0.periods, Theme.maColors) }
+        case .ema: return analysis.ema.map { ($0.periods, Theme.emaColors) }
+        default: return nil
+        }
+    }
+
     private func chip(_ i: ChartIndicator) -> some View {
         let on = vm.isOn(i)
         return Button {
@@ -94,12 +108,12 @@ struct IndicatorBar: View {
         } label: {
             HStack(spacing: 4) {
                 Text(i.title)
-                // 均线打开时把各条线的颜色和周期写在旁边（5 20 60），看得懂哪条是哪条
-                if i == .ma, on, let periods = analysis.ma?.periods {
+                // 均线 / EMA 打开时把各条线的颜色和周期写在旁边（5 20 60），看得懂哪条是哪条
+                if on, let (periods, colors) = lineKey(i) {
                     ForEach(Array(periods.enumerated()), id: \.offset) { k, p in
                         Text("\(p)")
                             .font(.system(size: 9, weight: .semibold).monospacedDigit())
-                            .foregroundStyle(Theme.maColors[min(k, Theme.maColors.count - 1)])
+                            .foregroundStyle(colors[min(k, colors.count - 1)])
                     }
                 }
             }

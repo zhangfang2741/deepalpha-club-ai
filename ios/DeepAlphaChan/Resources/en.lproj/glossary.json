@@ -310,5 +310,21 @@
   "plain": "The average closing price of the last N candles, drawn as a line to show the rough direction of price over that stretch. Shorter lines (e.g. 5) hug the current price; longer ones (e.g. 60) are smoother and slower. Daily and 30-minute charts use 5 / 20 / 60; weekly uses 5 / 10 / 20.",
   "example": "A 20-day average of 10 means the average close over the last 20 trading days is about 10; a price above it is higher than that period's average.",
   "notMeans": "It is only an average of past prices and predicts nothing; price above or below the line does not mean it will keep rising or falling, and it is not a buy or sell signal."
+ },
+ {
+  "key": "指数均线",
+  "term": "Exponential moving average (EMA)",
+  "category": "general",
+  "plain": "Like a moving average it smooths price into a line, but recent prices carry more weight, so it tracks the latest moves more closely and reacts faster. The chart uses periods 12 and 26, the same building blocks as MACD.",
+  "example": "After a sudden jump, the 12-day EMA rises faster than the 12-day simple average.",
+  "notMeans": "Faster is not more accurate; it is easier to knock off course by short-term noise. It is a weighted average of past prices, predicts nothing, and is not a buy or sell signal."
+ },
+ {
+  "key": "布林带",
+  "term": "Bollinger Bands (BOLL)",
+  "category": "general",
+  "plain": "The 20-day average is the middle line; adding and subtracting 2 standard deviations gives the upper and lower lines, which form a band. The band widens when prices swing more and narrows when they calm down.",
+  "example": "Price spends most of its time inside the band; a sudden narrowing means recent swings have shrunk.",
+  "notMeans": "Touching the upper or lower line only means price is far from its 20-day average; it does not mean it will come back, and it is not a buy or sell signal."
  }
 ]
