@@ -156,8 +156,8 @@ METRICS: dict[str, MetricDef] = {m.key: m for m in [
        "（负债 − 现金）相对最近 12 个月 EBITDA 的倍数，约等于用经营利润还清净债务要几年；现金多过负债记 0",
        "(Debt − cash) over trailing EBITDA, roughly the years of operating profit needed to repay net debt; 0 when cash exceeds debt"),
     _d("interest_cov", _S, "利息保障", "Interest cover", _HI, "利息保障倍数", "Interest coverage",
-       "最近 12 个月 EBIT 相对利息支出的倍数，越高越不怕利息压力；没有利息支出记上限 100",
-       "Trailing EBIT over interest expense; 100 (the cap) when there is no interest expense"),
+       "最近 12 个月 EBIT 相对利息支出的倍数，越高越不怕利息压力；没有利息支出、或利息收入不低于利息支出记上限 100",
+       "Trailing EBIT over interest expense; 100 (the cap) when there is no interest expense or interest income is at least interest expense"),
     _d("current_ratio", _S, "短期偿债", "Liquidity", _HI, "流动比率", "Current ratio",
        "流动资产相对流动负债的倍数，衡量一年内到期的账能不能用手头的资产还上", "Current assets over current liabilities: can what is due within a year be covered by what is on hand"),
     _d("runway_years", _S, "现金储备", "Cash runway", _HI, "现金可支撑年数", "Cash runway (years)",
@@ -395,13 +395,18 @@ def _stability(inp: StockInputs, bal: dict | None, ebitda: float | None, ebit: f
     else:
         out["net_debt_ebitda"] = _multiple(net_debt, ebitda, nd_inputs, den_nonpositive=nm)
 
-    # 利息保障倍数：EBIT ÷ 利息支出；没有利息支出 = 没有利息压力（记上限）
+    # 利息保障倍数：EBIT ÷ 利息支出；没有利息支出、或利息收入不低于利息支出（净利息收入为正，
+    # 现金多的公司常见）= 没有利息压力（记上限）。只看利息支出会把 CRWD 这类现金远多于负债的公司误判成勉强付得起
     interest = ttm(inp.quarters_income, "interestExpense")
+    net_interest = ttm(inp.quarters_income, "netInterestIncome")
     ic_inputs = [("ebit_ttm", ebit), ("interest_ttm", abs(interest) if interest is not None else None)]
     if ebit is None or interest is None:
         out["interest_cov"] = _missing("div", ic_inputs)
     elif interest == 0:
         out["interest_cov"] = MetricValue(INTEREST_COVER_CAP, "ok", ic_inputs, "div", {"no_interest": True})
+    elif net_interest is not None and net_interest > 0:
+        out["interest_cov"] = MetricValue(INTEREST_COVER_CAP, "ok", ic_inputs, "div",
+                                          {"no_interest": True, "net_interest_income": True})
     else:
         out["interest_cov"] = MetricValue(min(ebit / abs(interest), INTEREST_COVER_CAP), "ok", ic_inputs, "div")
 

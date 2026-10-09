@@ -195,6 +195,9 @@ def metric_expression(key: str, mv: MetricValue, lang: Lang) -> str:
     # 财务稳健：「没有压力」与「触顶」的约定值要把原因写出来，否则算式和结果对不上
     if mv.meta.get("net_cash"):
         return _i(lang, f"{A} ≤ 0（现金多于负债）→ {result}", f"{A} ≤ 0 (cash exceeds debt) → {result}")
+    if mv.meta.get("net_interest_income"):
+        return _i(lang, f"{B}，但利息收入不低于利息支出（净利息收入为正，没有利息压力）→ 记上限 {result}",
+                  f"{B}, but interest income is at least interest expense (net interest income, no interest pressure) → capped at {result}")
     if mv.meta.get("no_interest"):
         return _i(lang, f"{B}（没有利息支出）→ 记上限 {result}", f"{B} (no interest expense) → capped at {result}")
     if mv.meta.get("self_funding"):

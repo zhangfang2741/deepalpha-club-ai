@@ -2243,7 +2243,7 @@
       {
        "key": "interest_cov",
        "name": "利息保障倍数",
-       "description": "最近 12 个月 EBIT 相对利息支出的倍数，越高越不怕利息压力；没有利息支出记上限 100",
+       "description": "最近 12 个月 EBIT 相对利息支出的倍数，越高越不怕利息压力；没有利息支出、或利息收入不低于利息支出记上限 100",
        "direction": "higher_better",
        "value": null,
        "display_value": "—",
@@ -2264,7 +2264,7 @@
        "formula": null,
        "position_text": null,
        "interpretation": {
-        "what": "最近 12 个月 EBIT 相对利息支出的倍数，越高越不怕利息压力；没有利息支出记上限 100",
+        "what": "最近 12 个月 EBIT 相对利息支出的倍数，越高越不怕利息压力；没有利息支出、或利息收入不低于利息支出记上限 100",
         "role": "观察经营利润对利息支出的覆盖程度，衡量负债的年度负担。",
         "threshold": "本页取最近 12 个月 EBIT 与利息支出，倍数截到 100；利息支出为 0 时记上限。利润下滑会让倍数快速下降。",
         "calculation": "EBIT TTM ÷ 利息支出 TTM",

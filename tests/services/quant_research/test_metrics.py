@@ -199,3 +199,25 @@ def test_financials_stability_not_applicable():
     m = compute_metrics(load_inputs("JPM"))
     for key in ("net_debt_ebitda", "interest_cov", "current_ratio", "runway_years", "cfo_ni"):
         assert m[key].status == "not_applicable", key
+
+
+def test_net_interest_income_means_no_interest_pressure():
+    """利息收入 ≥ 利息支出（净利息收入为正，现金多的公司常见）= 没有利息压力，不能用「EBIT ÷ 利息支出」判成勉强付得起。"""
+    inp = _with(load_inputs("O"), income={"netInterestIncome": 1e7})   # 每季净利息收入 1000 万，利息支出仍是真实值
+    m = compute_metrics(inp)["interest_cov"]
+    assert m.status == "ok" and m.value == 100.0
+    assert m.meta["no_interest"] is True and m.meta["net_interest_income"] is True
+
+
+def test_net_interest_expense_still_uses_ebit_over_interest():
+    inp = _with(load_inputs("O"), income={"netInterestIncome": -1e7})
+    m = compute_metrics(inp)["interest_cov"]
+    assert m.value < 100 and "net_interest_income" not in m.meta
+
+
+def test_missing_net_interest_falls_back_to_interest_expense():
+    """没有净利息字段（报表不给）时沿用「EBIT ÷ 利息支出」。"""
+    inp = load_inputs("O")
+    inc = [{k: v for k, v in q.items() if k != "netInterestIncome"} for q in inp.quarters_income]
+    m = compute_metrics(replace(inp, quarters_income=inc))["interest_cov"]
+    assert m.status == "ok" and m.value < 100
