@@ -1292,7 +1292,7 @@
 "暂无买卖点 · %lld 只" = "No signals · %lld";
 "基本面靠前 = 当前综合等级不低于 %@ 的股票；券商角标为近 90 天净上调 / 净下调（仅美股）。仅为事实陈列，不构成投资建议。" = "Strong fundamentals = current composite grade of %@ or better; broker badge = net upgrades / downgrades over the last 90 days (US only). A record of facts, not investment advice.";
 "股票" = "Stock";
-"券商" = "Brokers";
+"评级变动" = "Rating Δ";
 "等级" = "Grade";
 "最近买卖点" = "Latest signal";
 "近期有买点 · %lld 只" = "With recent buy points · %lld";

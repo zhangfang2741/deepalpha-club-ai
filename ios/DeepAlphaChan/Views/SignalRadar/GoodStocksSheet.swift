@@ -78,7 +78,7 @@ struct GoodStocksSheet: View {
     private var columnHeader: some View {
         HStack(spacing: 10) {
             Text(L("股票")).frame(maxWidth: .infinity, alignment: .leading)
-            Text(L("券商")).frame(width: Self.markWidth, alignment: .trailing)
+            Text(L("评级变动")).frame(width: Self.markWidth, alignment: .trailing)
             Text(L("等级")).frame(width: Self.gradeWidth, alignment: .trailing)
             Text(L("最近买卖点")).frame(width: Self.signalWidth, alignment: .trailing)
         }
@@ -87,7 +87,7 @@ struct GoodStocksSheet: View {
         .padding(.horizontal, 12).padding(.top, 2)
     }
 
-    private static let markWidth: CGFloat = 30
+    private static let markWidth: CGFloat = 46
     private static let gradeWidth: CGFloat = 32
     private static let signalWidth: CGFloat = 88
 
