@@ -14,7 +14,8 @@ struct SectorRadarContext {
 }
 
 /// 行业弹层：各行业按相对大盘强弱从强到弱，每行带状态色点、强弱、当前雷达选中日的买卖点数。
-/// 行业严格按 GICS 一级行业，只有一级、不下钻。点行业 → 关闭弹层，雷达在当前指数里只看该行业
+/// 雷达行业按 GICS 一级行业；有细分 ETF 的一级行业右侧有展开箭头，就地展开看子行业强弱（只看、不筛雷达，
+/// 目前只有美股）。点行业 → 关闭弹层，雷达在当前指数里只看该行业
 /// （等同于在筛选条上选中它，不切换指数）。radar 为 nil（自选等没有行业统计的雷达）时行业只展示、不可筛。
 struct SectorBoardSheet: View {
     let market: StockMarket
@@ -63,6 +64,11 @@ struct SectorBoardList: View {
 
     @State private var board: SectorBoard?
     @State private var failed = false
+    /// 已展开看子行业的一级行业。
+    @State private var expanded: Set<String> = []
+    /// 子行业强弱（按一级行业 key 缓存；展开时才取）。
+    @State private var children: [String: SectorBoard] = [:]
+    @State private var childFailed: Set<String> = []
 
     /// 显式 init：有 private 的 @State，自动生成的成员初始化器只在本文件可见，雷达的行业面板要从别处推进来。
     init(market: StockMarket, date: String?, parent: String?, parentName: String?, radar: SectorRadarContext?,
@@ -105,7 +111,28 @@ struct SectorBoardList: View {
         .navigationTitle(parentName ?? L("%@行业", market.title))
         .navigationBarTitleDisplayMode(.inline)
         // 雷达换了选中日就重取；旧数据留在屏上直到新数据到，不闪空白。
-        .task(id: date) { await load() }
+        .task(id: date) {
+            children = [:]
+            await load()
+            for key in expanded { await loadChildren(key) }
+        }
+    }
+
+    private func loadChildren(_ key: String) async {
+        childFailed.remove(key)
+        do {
+            let fresh = try await MarketOverviewService.sectors(market: market, parent: key, date: date)
+            withAnimation(.smooth(duration: 0.25)) { children[key] = fresh }
+        } catch {
+            childFailed.insert(key)
+        }
+    }
+
+    private func toggle(_ key: String) {
+        withAnimation(.smooth(duration: 0.25)) {
+            if expanded.contains(key) { expanded.remove(key) } else { expanded.insert(key) }
+        }
+        if expanded.contains(key), children[key] == nil { Task { await loadChildren(key) } }
     }
 
     private func load() async {
@@ -217,7 +244,11 @@ struct SectorBoardList: View {
     private func list(_ rows: [SectorRow], maxAbs: Double) -> some View {
         VStack(spacing: 0) {
             ForEach(rows) { row in
-                rowView(row, maxAbs: maxAbs)
+                HStack(spacing: 0) {
+                    rowView(row, maxAbs: maxAbs)
+                    if parent == nil, row.hasChildren { expandButton(row) }
+                }
+                if expanded.contains(row.key) { childList(row) }
                 if row.id != rows.last?.id { Divider().overlay(Theme.border).padding(.leading, 14) }
             }
         }
@@ -274,6 +305,66 @@ struct SectorBoardList: View {
         } else {
             content
         }
+    }
+
+    /// 一级行业右侧的展开箭头（与点行业名「筛雷达」分开：展开只看子行业，不改雷达）。
+    private func expandButton(_ row: SectorRow) -> some View {
+        let open = expanded.contains(row.key)
+        return Button { toggle(row.key) } label: {
+            Image(systemName: "chevron.down")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(Theme.textSecondary)
+                .rotationEffect(.degrees(open ? 180 : 0))
+                .frame(width: 36, height: 40)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, 4)
+        .accessibilityLabel(open ? L("收起%@的子行业", row.name) : L("展开%@的子行业", row.name))
+    }
+
+    /// 展开后的子行业：缩进、字小一号，强弱值 + 强弱条（按子行业自己的最大值归一），不带买卖点。
+    @ViewBuilder
+    private func childList(_ row: SectorRow) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let sub = children[row.key], !sub.sectors.isEmpty {
+                let subMax = max(sub.sectors.compactMap { $0.rsVsMarket.map(abs) }.max() ?? 0, 0.0001)
+                ForEach(sub.sectors) { c in
+                    HStack(spacing: 8) {
+                        Text(c.name).font(.subheadline).foregroundColor(Theme.textPrimary)
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                        if let label = c.label {
+                            Text(Self.labelText(label)).font(.caption2)
+                                .foregroundColor(MarketHeader.regimeColor(label))
+                        }
+                        Spacer(minLength: 6)
+                        if let rs = c.rsVsMarket {
+                            Text(SectorBoardList.rsText(rs))
+                                .font(.caption.weight(.semibold).monospacedDigit())
+                                .foregroundColor(rs >= 0 ? Theme.up : Theme.down)
+                                .frame(minWidth: 52, alignment: .trailing)
+                            StrengthBar(value: rs, maxAbs: subMax).frame(width: 44, height: 4)
+                        }
+                    }
+                    .padding(.vertical, 7)
+                    .accessibilityElement(children: .combine)
+                }
+                Text(L("子行业按细分行业基金计算，口径同上；只看强弱，不筛雷达。"))
+                    .font(.caption2).foregroundColor(Theme.textSecondary)
+                    .padding(.top, 2).padding(.bottom, 6)
+            } else if childFailed.contains(row.key) || children[row.key] != nil {
+                Button(children[row.key] == nil ? L("加载失败，点此重试") : L("暂无子行业数据")) {
+                    Task { await loadChildren(row.key) }
+                }
+                .font(.caption).foregroundColor(Theme.textSecondary)
+                .padding(.vertical, 8)
+            } else {
+                ProgressView().controlSize(.small).padding(.vertical, 8)
+            }
+        }
+        .padding(.leading, 28).padding(.trailing, 54)
+        .background(Theme.textPrimary.opacity(0.03))
+        .transition(.opacity)
     }
 
     static func labelText(_ label: String) -> String {

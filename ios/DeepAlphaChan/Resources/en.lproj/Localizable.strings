@@ -1639,3 +1639,9 @@
 "折叠指标数值" = "Collapse indicator values";
 
 "示例日 %@ · 买卖点按这一天" = "Sample day %@ · buy/sell points as of that day";
+
+"收起%@的子行业" = "Collapse %@ sub-industries";
+"展开%@的子行业" = "Expand %@ sub-industries";
+"子行业按细分行业基金计算，口径同上；只看强弱，不筛雷达。" = "Sub-industries are measured with sub-industry funds, same method as above; for viewing only, they don't filter the radar.";
+"加载失败，点此重试" = "Failed to load, tap to retry";
+"暂无子行业数据" = "No sub-industry data yet";

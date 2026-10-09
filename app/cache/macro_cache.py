@@ -20,7 +20,7 @@ from app.core.logging import logger
 
 RESPONSE_TTL = 600
 # 响应缓存版本：改动 schema 字段 / 展示口径（如色带 pending）后手动 +1，部署后旧 key 自然作废（TTL 10 分钟内回收）。
-RESPONSE_VERSION = 2
+RESPONSE_VERSION = 3  # 3：一级行业 has_children 按是否有细分 ETF（可下钻看子行业）
 SERIES_TTL = 3600
 CALENDAR_TTL = 6 * 3600
 
