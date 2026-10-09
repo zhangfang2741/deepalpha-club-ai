@@ -56,6 +56,7 @@ struct GoodStocksSheet: View {
                             Text(L("行业：%@ · %lld 只", sectorName(sectorKey), items.count))
                                 .font(.footnote.weight(.semibold)).foregroundColor(Theme.accent)
                         }
+                        columnHeader
                         // 买点优先：先列近期有买点的，再列只有卖点的，最后是暂无买卖点的
                         section(L("近期有买点 · %lld 只", withBuy.count), withBuy)
                         section(L("近期只有卖点 · %lld 只", onlySell.count), onlySell)
@@ -68,10 +69,27 @@ struct GoodStocksSheet: View {
                 .padding(.horizontal, 12).padding(.vertical, 8)
             }
             .background(Theme.background)
-            .navigationTitle(L("%@ 基本面", universeName))
+            .navigationTitle(universeName)
             .navigationBarTitleDisplayMode(.inline)
         }
     }
+
+    /// 列标题：与行内各列同宽、同对齐（券商 / 等级 / 最近买卖点列固定宽度，行与表头才对得齐）。
+    private var columnHeader: some View {
+        HStack(spacing: 10) {
+            Text(L("股票")).frame(maxWidth: .infinity, alignment: .leading)
+            Text(L("券商")).frame(width: Self.markWidth, alignment: .trailing)
+            Text(L("等级")).frame(width: Self.gradeWidth, alignment: .trailing)
+            Text(L("最近买卖点")).frame(width: Self.signalWidth, alignment: .trailing)
+        }
+        .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
+        .lineLimit(1).minimumScaleFactor(0.8)
+        .padding(.horizontal, 12).padding(.top, 2)
+    }
+
+    private static let markWidth: CGFloat = 30
+    private static let gradeWidth: CGFloat = 32
+    private static let signalWidth: CGFloat = 88
 
     @ViewBuilder
     private func section(_ title: String, _ list: [FundamentalItem]) -> some View {
@@ -96,12 +114,15 @@ struct GoodStocksSheet: View {
                 .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
             }
             Spacer()
-            if let mark = e.analystMark {
-                Text(mark)
-                    .font(.system(size: 11, weight: .bold).monospacedDigit())
-                    .foregroundColor(mark.hasPrefix("▲") ? Theme.up : Theme.down)
+            Group {
+                if let mark = e.analystMark {
+                    Text(mark)
+                        .font(.system(size: 11, weight: .bold).monospacedDigit())
+                        .foregroundColor(mark.hasPrefix("▲") ? Theme.up : Theme.down)
+                }
             }
-            Text(e.grade).font(.system(size: 17, weight: .bold)).foregroundColor(Theme.textPrimary).frame(minWidth: 32, alignment: .trailing)
+            .frame(width: Self.markWidth, alignment: .trailing)
+            Text(e.grade).font(.system(size: 17, weight: .bold)).foregroundColor(Theme.textPrimary).frame(width: Self.gradeWidth, alignment: .trailing)
             // 最近一个买卖点放在最后（行尾），固定宽度让各行的日期、标签上下对齐
             VStack(alignment: .trailing, spacing: 2) {
                 if let signal {
@@ -109,7 +130,7 @@ struct GoodStocksSheet: View {
                     Text(signal.date).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
                 }
             }
-            .frame(width: 88, alignment: .trailing)
+            .frame(width: Self.signalWidth, alignment: .trailing)
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
