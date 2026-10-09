@@ -1,4 +1,4 @@
-"""量化研究接口：个股五维度量化研究 + 方法说明。业务逻辑见 app/services/quant_research。"""
+"""量化研究接口：个股六维度量化研究 + 方法说明。业务逻辑见 app/services/quant_research。"""
 
 from __future__ import annotations
 
@@ -131,7 +131,7 @@ async def quant_research(
     user: User = Depends(get_current_user),
     redis: Redis | None = Depends(get_redis_optional),
 ) -> QuantResearchOut:
-    """个股量化研究（五维度、三层下钻所需的全部数据）。"""
+    """个股量化研究（六维度、三层下钻所需的全部数据）。"""
     out = await get_quant_research(market, symbol, lang, redis=redis)
     logger.info("quant_research_served", market=market, symbol=symbol.upper(), status=out.status, user_id=user.id)
     return out

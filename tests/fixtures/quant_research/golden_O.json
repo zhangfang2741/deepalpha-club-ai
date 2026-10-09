@@ -34,13 +34,13 @@
   "revenue_cagr_3y_pct": 17.2
  },
  "overall": {
-  "grade": "C-",
-  "score": 47.3,
-  "universe_percentile": 43.7,
-  "dimensions_used": 4,
+  "grade": "C",
+  "score": 49.6,
+  "universe_percentile": 49.5,
+  "dimensions_used": 5,
   "capped": false,
-  "note": "本次综合等级基于 4 个维度",
-  "text": "综合分 47.3 · 标普1500 后 44%"
+  "note": null,
+  "text": "综合分 49.6 · 标普1500 后 50%"
  },
  "dimensions": [
   {
@@ -791,7 +791,7 @@
     }
    ],
    "counts_in_overall": true,
-   "weight_pct": 35
+   "weight_pct": 28
   },
   {
    "key": "growth",
@@ -801,7 +801,7 @@
    "score": 55.7,
    "status": "ok",
    "status_note": null,
-   "is_highest": true,
+   "is_highest": false,
    "is_lowest": false,
    "key_fact": {
     "metric": "rev_cagr3",
@@ -1290,7 +1290,7 @@
     }
    ],
    "counts_in_overall": true,
-   "weight_pct": 12
+   "weight_pct": 9
   },
   {
    "key": "profitability",
@@ -1808,7 +1808,7 @@
     }
    ],
    "counts_in_overall": true,
-   "weight_pct": 35
+   "weight_pct": 28
   },
   {
    "key": "momentum",
@@ -2052,7 +2052,7 @@
     }
    ],
    "counts_in_overall": true,
-   "weight_pct": 18
+   "weight_pct": 14
   },
   {
    "key": "revisions",
@@ -2201,6 +2201,306 @@
    ],
    "counts_in_overall": true,
    "weight_pct": null
+  },
+  {
+   "key": "stability",
+   "name": "财务稳健",
+   "description": "偿债压力、短期流动性、现金能撑多久与利润的现金含量",
+   "grade": "C+",
+   "score": 58.0,
+   "status": "ok",
+   "status_note": null,
+   "is_highest": true,
+   "is_lowest": false,
+   "key_fact": {
+    "metric": "runway_years",
+    "text": "现金可支撑年数 10.0，高于板块 99% 的公司"
+   },
+   "formula": "(56 + 1 + 33 + 100 + 100) ÷ 5 = 58.0 → C+",
+   "groups": [
+    {
+     "name": "净负债",
+     "metrics": [
+      {
+       "key": "net_debt_ebitda",
+       "name": "净负债 / EBITDA",
+       "description": "（负债 − 现金）相对最近 12 个月 EBITDA 的倍数，约等于用经营利润还清净债务要几年；现金多过负债记 0",
+       "direction": "lower_better",
+       "value": 0.4997874301734153,
+       "display_value": "0.5",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 56.0,
+       "grade": "C+",
+       "sector_median": 1.1338983050847458,
+       "sector_median_display": "1.1",
+       "diff_to_median_pct": -55.9,
+       "distribution": {
+        "p10": 0.0,
+        "p25": 0.0,
+        "p50": 1.1338983050847458,
+        "p75": 3.5669491525423727,
+        "p90": 5.02677966101695
+       },
+       "formula": {
+        "expression": "净负债 22.1 亿 ÷ EBITDA TTM 44.2 亿 = 0.5",
+        "inputs": [
+         {
+          "label": "净负债",
+          "value": "22.1 亿",
+          "note": null,
+          "hint": "净负债 = 负债 − 现金及短期投资；为负说明现金比负债还多（净现金），取最近一期报表。"
+         },
+         {
+          "label": "EBITDA TTM",
+          "value": "44.2 亿",
+          "note": "FY26 Q2",
+          "hint": "EBITDA：息税折旧摊销前利润，可粗略看作主营业务赚到的「毛现金」。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
+         }
+        ]
+       },
+       "position_text": "低于 56% 的同板块公司 → 百分位 56 → C+",
+       "interpretation": {
+        "what": "（负债 − 现金）相对最近 12 个月 EBITDA 的倍数，约等于用经营利润还清净债务要几年；现金多过负债记 0",
+        "role": "观察用经营利润偿还净债务大约要几年，反映杠杆水平。",
+        "threshold": "EBITDA 没扣资本开支和利息；租赁多或周期性强的行业天然偏高，只和同板块比较。净现金公司记 0。",
+        "calculation": "净负债 ÷ EBITDA TTM",
+        "full_name": "净负债 / EBITDA Net Debt to EBITDA",
+        "plain": "把公司欠的钱扣掉手头现金，剩下的净债务，用公司一年主营业务赚到的「毛现金」来还，大约要几年。现金比负债多就是「净现金」，记 0。",
+        "reading": "越低 = 还债压力越小；0 = 现金已经够还清全部负债。",
+        "why": "借的钱到期要还，利息要付。负债压得太重的公司，业绩一遇到波动就容易出问题。",
+        "purpose": "最直接的偿债压力指标。EBITDA 为负又有净负债的公司按最差计。"
+       }
+      }
+     ]
+    },
+    {
+     "name": "利息保障",
+     "metrics": [
+      {
+       "key": "interest_cov",
+       "name": "利息保障倍数",
+       "description": "最近 12 个月 EBIT 相对利息支出的倍数，越高越不怕利息压力；没有利息支出记上限 100",
+       "direction": "higher_better",
+       "value": 1.6259526397148663,
+       "display_value": "1.6",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 1.0,
+       "grade": "F",
+       "sector_median": 50.5,
+       "sector_median_display": "50.5",
+       "diff_to_median_pct": -96.8,
+       "distribution": {
+        "p10": 10.9,
+        "p25": 25.75,
+        "p50": 50.5,
+        "p75": 75.25,
+        "p90": 90.10000000000001
+       },
+       "formula": {
+        "expression": "EBIT TTM 19.3 亿 ÷ 利息支出 TTM 11.9 亿 = 1.6",
+        "inputs": [
+         {
+          "label": "EBIT TTM",
+          "value": "19.3 亿",
+          "note": "FY26 Q2",
+          "hint": "EBIT：息税前利润，扣掉成本、费用和折旧摊销后，还没付利息和交税的经营利润。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
+         },
+         {
+          "label": "利息支出 TTM",
+          "value": "11.9 亿",
+          "note": "FY26 Q2",
+          "hint": "利息支出：公司一年为借款付出的利息，取绝对值。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
+         }
+        ]
+       },
+       "position_text": "低于 99% 的同板块公司 → 百分位 1 → F",
+       "interpretation": {
+        "what": "最近 12 个月 EBIT 相对利息支出的倍数，越高越不怕利息压力；没有利息支出记上限 100",
+        "role": "观察经营利润对利息支出的覆盖程度，衡量负债的年度负担。",
+        "threshold": "本页取最近 12 个月 EBIT 与利息支出，倍数截到 100；利息支出为 0 时记上限。利润下滑会让倍数快速下降。",
+        "calculation": "EBIT TTM ÷ 利息支出 TTM",
+        "full_name": "利息保障倍数 Interest Coverage",
+        "plain": "公司一年的经营利润（EBIT），够付利息多少次。比如 5 倍，表示赚的钱是利息的 5 倍，利润掉一大半也还付得起。没有利息支出的公司记上限 100。",
+        "reading": "越高 = 付利息越轻松；低于 2 倍说明利润勉强够付利息。",
+        "why": "利息是必须按时付的钱，付不起就会走到违约。",
+        "purpose": "和净负债 / EBITDA 互补：一个看欠多少，一个看每年付不付得起。"
+       }
+      }
+     ]
+    },
+    {
+     "name": "短期偿债",
+     "metrics": [
+      {
+       "key": "current_ratio",
+       "name": "流动比率",
+       "description": "流动资产相对流动负债的倍数，衡量一年内到期的账能不能用手头的资产还上",
+       "direction": "higher_better",
+       "value": 1.655577145164833,
+       "display_value": "1.7",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 33.0,
+       "grade": "D+",
+       "sector_median": 2.25,
+       "sector_median_display": "2.2",
+       "diff_to_median_pct": -26.4,
+       "distribution": {
+        "p10": 0.8500000000000001,
+        "p25": 1.375,
+        "p50": 2.25,
+        "p75": 3.125,
+        "p90": 3.6500000000000004
+       },
+       "formula": {
+        "expression": "流动资产 18.7 亿 ÷ 流动负债 11.3 亿 = 1.7",
+        "inputs": [
+         {
+          "label": "流动资产",
+          "value": "18.7 亿",
+          "note": null,
+          "hint": "流动资产：一年内能变成现金的资产（现金、应收账款、存货等），取最近一期报表。"
+         },
+         {
+          "label": "流动负债",
+          "value": "11.3 亿",
+          "note": null,
+          "hint": "流动负债：一年内要付出去的钱（应付账款、短期借款等），取最近一期报表。"
+         }
+        ]
+       },
+       "position_text": "低于 67% 的同板块公司 → 百分位 33 → D+",
+       "interpretation": {
+        "what": "流动资产相对流动负债的倍数，衡量一年内到期的账能不能用手头的资产还上",
+        "role": "观察一年内到期的账能否用一年内可变现的资产覆盖，衡量短期流动性。",
+        "threshold": "不同行业差别大：零售、公用事业低于 1 也不罕见；存货占比高时可变现性要打折。本页取最近一期报表期末值。",
+        "calculation": "流动资产 ÷ 流动负债",
+        "full_name": "流动比率 Current Ratio",
+        "plain": "一年内要付出去的钱（流动负债），手头一年内能变成现金的资产（现金、应收款、存货等，即流动资产）够不够盖住。1.5 倍表示每欠 1 块短期的钱，手里有 1.5 块短期能变现的资产。",
+        "reading": "越高 = 短期还账越宽裕；低于 1 说明短期资产不够盖短期负债。",
+        "why": "短期的账还不上，再好的长期前景也等不到。很多公司出问题，都是资金一时周转不开。",
+        "purpose": "衡量「近期会不会周转不灵」，和看长期负担的前两项互补。"
+       }
+      }
+     ]
+    },
+    {
+     "name": "现金储备",
+     "metrics": [
+      {
+       "key": "runway_years",
+       "name": "现金可支撑年数",
+       "description": "现金按最近 12 个月自由现金流为负的速度烧，能撑几年；自由现金流为正（不烧钱）记上限 10 年",
+       "direction": "higher_better",
+       "value": 10.0,
+       "display_value": "10.0",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 100.0,
+       "grade": "A+",
+       "sector_median": 10.0,
+       "sector_median_display": "10.0",
+       "diff_to_median_pct": 0.0,
+       "distribution": {
+        "p10": 3.27,
+        "p25": 7.724999999999999,
+        "p50": 10.0,
+        "p75": 10.0,
+        "p90": 10.0
+       },
+       "formula": {
+        "expression": "最近 12 个月自由现金流 21.8 亿（为正，不烧钱）→ 记上限 10.0 年",
+        "inputs": [
+         {
+          "label": "现金及短期投资",
+          "value": "5.5 亿",
+          "note": null,
+          "hint": "现金及短期投资：账上随时能动用的现金，取最近一期报表。"
+         },
+         {
+          "label": "年自由现金流出 TTM",
+          "value": "-21.8 亿",
+          "note": "FY26 Q2",
+          "hint": "年自由现金流出 = −自由现金流，即一年净花掉的现金（自由现金流为负时才有意义）。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
+         }
+        ]
+       },
+       "position_text": "高于 99% 的同板块公司 → 百分位 100 → A+",
+       "interpretation": {
+        "what": "现金按最近 12 个月自由现金流为负的速度烧，能撑几年；自由现金流为正（不烧钱）记上限 10 年",
+        "role": "观察现金按当前烧钱速度能维持多久，衡量不靠外部融资的生存时间。",
+        "threshold": "按最近 12 个月自由现金流估算，没有考虑未来融资、成本调整或现金流改善；自由现金流为正时记上限 10 年。",
+        "calculation": "现金及短期投资 ÷ 年自由现金流出 TTM",
+        "full_name": "现金可支撑年数 Cash Runway",
+        "plain": "如果公司继续按最近 12 个月的速度烧钱（自由现金流为负），手头现金能撑几年。自由现金流为正的公司不烧钱，记上限 10 年。",
+        "reading": "越高 = 越不用担心现金耗尽；低于 1 年说明现金可能很快见底，要靠融资续命。",
+        "why": "烧钱的公司，现金见底就要融资或大幅收缩，股东的权益容易被摊薄。",
+        "purpose": "专门盯初创、还没赚钱的公司：增长再快，钱撑不到盈利那天就没有意义。"
+       }
+      }
+     ]
+    },
+    {
+     "name": "盈利质量",
+     "metrics": [
+      {
+       "key": "cfo_ni",
+       "name": "经营现金流 / 净利润",
+       "description": "最近 12 个月经营现金流相对净利润的比例，越接近或超过 100% 说明利润越是真金白银",
+       "direction": "higher_better",
+       "value": 3.15449726395715,
+       "display_value": "315%",
+       "status": "ok",
+       "status_note": null,
+       "percentile": 100.0,
+       "grade": "A+",
+       "sector_median": 1.05,
+       "sector_median_display": "105%",
+       "diff_to_median_pct": 200.4,
+       "distribution": {
+        "p10": 0.45,
+        "p25": 0.6749999999999999,
+        "p50": 1.05,
+        "p75": 1.425,
+        "p90": 1.6500000000000001
+       },
+       "formula": {
+        "expression": "经营现金流 TTM 41.7 亿 ÷ 净利润 TTM 13.2 亿 = 315%",
+        "inputs": [
+         {
+          "label": "经营现金流 TTM",
+          "value": "41.7 亿",
+          "note": "FY26 Q2",
+          "hint": "经营现金流：日常经营实际收进来减去付出去的现金，不含投资和融资。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
+         },
+         {
+          "label": "净利润 TTM",
+          "value": "13.2 亿",
+          "note": "FY26 Q2",
+          "hint": "净利润：扣完所有成本、费用、利息和税后，最终归股东的利润。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
+         }
+        ]
+       },
+       "position_text": "高于 99% 的同板块公司 → 百分位 100 → A+",
+       "interpretation": {
+        "what": "最近 12 个月经营现金流相对净利润的比例，越接近或超过 100% 说明利润越是真金白银",
+        "role": "观察净利润有多少已经变成经营现金，检验利润质量。",
+        "threshold": "单年比值受收付款时点和季节性影响，高增长公司因垫付营运资金常偏低，应结合多年观察。净利润为负时不计算。",
+        "calculation": "经营现金流 TTM ÷ 净利润 TTM × 100%",
+        "full_name": "经营现金流 / 净利润 Cash Conversion",
+        "plain": "账面上赚的每 1 元净利润，实际收进了多少现金。100% 表示利润都变成了现金；明显低于 100%，说明利润很多还停留在账上（比如货发出去了还没收到钱）。",
+        "reading": "越高 = 利润越是真金白银；长期低于 80% 要留意利润质量。",
+        "why": "利润可以靠会计处理做得好看，现金很难作假。利润长期收不回现金的公司，往往藏着风险。",
+        "purpose": "检验利润的质量；亏损公司不参与（比值没有意义）。"
+       }
+      }
+     ]
+    }
+   ],
+   "counts_in_overall": true,
+   "weight_pct": 20
   }
  ],
  "moat": null,

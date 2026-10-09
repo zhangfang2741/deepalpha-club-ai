@@ -15,7 +15,7 @@ enum QuantGradeScale {
     static let hysteresis: Double = 2
     static let capThreshold: Double = 20
     static let capCeiling = "C+"
-    static let capMinWeightPct = 20   // 综合分里占比不低于它的维度才有一票否决权（对齐后端 scoring.CAP_MIN_WEIGHT）
+    static let capMinWeightPct = 15   // 综合分里占比不低于它的维度才有一票否决权（对齐后端 scoring.CAP_MIN_WEIGHT）
     static let minSample = 20
 
     static func grade(for score: Double) -> String {
@@ -280,7 +280,7 @@ struct QuantOverallGradeExplanation: View {
                     if let stage = research.stage {
                         QuantExplainText(text: L("这家公司处在「%@」：不同阶段看重的东西不一样——成长期更看重增速，成熟期更看重估值和赚钱能力。", stage.name), secondary: true)
                     } else {
-                        QuantExplainText(text: L("这家公司没有划分阶段，五个维度各占一样的比例。"), secondary: true)
+                        QuantExplainText(text: L("这家公司没有划分阶段，各个维度占一样的比例。"), secondary: true)
                     }
                 }
                 if QuantMoatCard.isEnabled, research.moat != nil {

@@ -23,7 +23,7 @@ from app.services.quant_research.metrics import (
 
 MIN_SAMPLE = 20
 CAP_THRESHOLD = 20.0   # 维度分低于它（F）触发一票否决
-CAP_MIN_WEIGHT = 0.20  # 只有综合分里权重不低于它的维度才有否决权（权重低的维度本就不该一票定生死）
+CAP_MIN_WEIGHT = 0.15  # 只有综合分里权重不低于它的维度才有否决权（权重低的维度本就不该一票定生死）
 CAP_CEILING = "C+"
 OVERALL_SECTOR = "_all"
 OVERALL_KEY = "_overall"

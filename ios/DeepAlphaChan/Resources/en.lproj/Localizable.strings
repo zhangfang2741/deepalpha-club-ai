@@ -727,8 +727,6 @@
 "下次披露预期 EPS" = "Next report EPS est.";
 "业绩：预期 vs 实际" = "Earnings: estimate vs actual";
 "中位" = "Median";
-"五个维度" = "Five dimensions";
-"五维总览" = "Five-dimension overview";
 "分析师评级" = "Analyst Ratings";
 "分析视角" = "View";
 "分档：≥93 A+ · ≥86 A · ≥80 A- · … · <20 F" = "Bands: ≥93 A+ · ≥86 A · ≥80 A- · … · <20 F";
@@ -828,7 +826,6 @@
 "先看生意与价格，再看市场变化；点开查看指标。" = "Start with the business and price, then market changes. Tap to explore metrics.";
 "生意与价格" = "Business and price";
 "市场与预期" = "Market and expectations";
-"五维图对比" = "Compare the five dimensions";
 "数据与方法" = "Data and methodology";
 "展开评分计算" = "How the score is calculated";
 
@@ -885,7 +882,7 @@
 "评级不可用，按中性权重排序" = "Rating unavailable; neutral ranking weight";
 
 /* 量化研究：成绩单与大白话解读 */
-"五维成绩单" = "Five-factor report card";
+"六维成绩单" = "Six-factor report card";
 "等级是和同板块公司比出来的相对位置：A 档约前 20%，C 档居中，F 档约后 20%。" = "Grades show relative position within the sector: A ≈ top 20%, C ≈ middle, F ≈ bottom 20%.";
 "查看各项指标与解读" = "View metrics and explanations";
 "各项指标" = "Metrics";
@@ -936,7 +933,7 @@
 "按百分位本可以更高，但有占比不低于 %lld%% 的维度分低于 %@（F 档），综合等级最高只给 %@——重要维度的明显短板不能被其他强项掩盖。" = "The percentile alone would rank higher, but a factor carrying at least %lld%% of the weight scores below %@ (F), so the composite is capped at %@ — a clear weak spot in an important factor can't be hidden by strengths elsewhere.";
 "综合分 %@ = %lld 个已评分维度按所处阶段加权的平均（名称后是它占综合分的比例）：" = "Composite score %@ = stage-weighted average of %lld graded factors (the percentage after each name is its share of the composite):";
 "这家公司处在「%@」：不同阶段看重的东西不一样——成长期更看重增速，成熟期更看重估值和赚钱能力。" = "This company is in the \"%@\" stage. Different stages weigh different things — growth stages lean on growth, mature stages on valuation and profitability.";
-"这家公司没有划分阶段，五个维度各占一样的比例。" = "This company has no stage label, so all five factors carry the same weight.";
+"这家公司没有划分阶段，各个维度占一样的比例。" = "This company has no stage label, so all factors carry the same weight.";
 "可用维度不足，暂不评综合等级。" = "Not enough factors are available; no composite grade yet.";
 "为什么只和同板块比" = "Why compare only within the sector";
 "每个指标只和%@板块的 %lld 家公司比。不同行业的生意模式差别很大，比如软件公司毛利率天然比超市高，跨行业比没有意义。" = "Each metric is compared only with the %2$lld companies in %1$@. Business models differ widely across industries — software margins are naturally far above a supermarket's — so cross-industry comparisons mislead.";
@@ -1315,7 +1312,7 @@
 "气泡最后一行是该股票当前的综合等级；右上角白色小胶囊「▲n / ▼n」是近 90 天券商净上调 / 净下调家数（仅美股，没有数据或净 0 不显示）。" = "The last line of a bubble is the stock's current composite grade; the white capsule \"▲n / ▼n\" at the top right is the net number of broker upgrades / downgrades in the last 90 days (US only; hidden when there is no data or the net is 0).";
 "什么是基本面筛选" = "What is the fundamentals screen";
 "雷达只画基本面靠前的股票的缠论结构信号：这是一个观察流程，先看市场和行业，再看哪些股票基本面靠前，最后看它们的缠论结构。" = "The radar only draws Chan structure signals of stocks with strong fundamentals. It is an observation flow: check the market and industry first, then which stocks have strong fundamentals, and finally their Chan structure.";
-"基本面靠前 = 当前综合等级达标的股票。综合等级由估值、成长、盈利能力、动量、EPS 修正五个维度在同行业内的百分位平均得出，只给字母等级；任一维度为 F 时，综合等级最高 C+。" = "Strong fundamentals = a stock whose current composite grade meets the threshold. The grade averages the within-industry percentiles of five dimensions (valuation, growth, profitability, momentum, EPS revisions) and is shown as a letter only; if any dimension is F, the composite is capped at C+.";
+"基本面靠前 = 当前综合等级达标的股票。综合等级由估值、成长、盈利能力、动量、EPS 修正、财务稳健六个维度在同行业内的百分位，按公司所处阶段加权得出，只给字母等级；重要维度为 F 时，综合等级最高 C+。" = "Strong fundamentals = a stock whose current composite grade meets the threshold. The grade combines the within-industry percentiles of six dimensions (valuation, growth, profitability, momentum, EPS revisions, financial health), weighted by the company's stage, and is shown as a letter only; if an important dimension is F, the composite is capped at C+.";
 "门槛随股票池自动调整：取有评级股票的前 25%，至少 8 只，且不低于 B，同一等级整档纳入。顶部流程图写着当前门槛「X 及以上」。" = "The threshold adapts to the stock pool: the top 25% of rated stocks, at least 8, and never below B; a whole grade is included at once. The flow chart at the top shows the current threshold \"X and above\".";
 "用的是股票当前的等级，不是信号当天的；评级暂时读取失败时不做筛选，雷达照常显示全部信号。" = "The stock's current grade is used, not the grade on the signal day. If ratings cannot be read, no filtering is applied and the radar shows all signals.";
 "提交失败：%@" = "Submission failed: %@";
@@ -1434,7 +1431,7 @@
 "面积比" = "Area ratio";
 "%@ 怎么识别的" = "How %@ is identified";
 "给每只股票一个综合等级" = "Give every stock a composite grade";
-"估值、成长、盈利能力、动量、EPS 修正五个维度，每个维度是这只股票在同行业里的百分位（越靠前分越高），五项取平均，再对应到 A+ 到 F 共 13 档字母。任一维度为 F 时，综合等级最高 C+。点进个股详情的「基本面研究」能看到每一项。" = "Five dimensions: valuation, growth, profitability, momentum and EPS revisions. Each is the stock's percentile within its industry (higher is better). The five are averaged and mapped to 13 letter grades from A+ to F. If any dimension is F, the composite is capped at C+. Open the stock's Fundamentals page to see each item.";
+"估值、成长、盈利能力、动量、EPS 修正、财务稳健六个维度，每个维度是这只股票在同行业里的百分位（越靠前分越高），再按公司所处阶段加权平均（成长期更看重增速，成熟期更看重估值和赚钱能力），对应到 A+ 到 F 共 13 档字母。重要维度为 F 时，综合等级最高 C+。点进个股详情的「基本面研究」能看到每一项和各自的占比。" = "Six dimensions: valuation, growth, profitability, momentum, EPS revisions and financial health. Each is the stock's percentile within its industry (higher is better). They are averaged with weights set by the company's stage (growth stages lean on growth, mature stages on valuation and profitability) and mapped to 13 letter grades from A+ to F. If an important dimension is F, the composite is capped at C+. Open the stock's Fundamentals page to see each item and its share.";
 "数一数有评级的股票" = "Count the rated stocks";
 "只统计当前这个指数里已经有综合等级的股票。" = "Only stocks in this index that already have a composite grade are counted.";
 "有评级的只数" = "Rated stocks";
@@ -1642,3 +1639,6 @@
 "折叠指标数值" = "Collapse indicator values";
 
 "示例日 %@ · 买卖点按这一天" = "Sample day %@ · buy/sell points as of that day";
+"财务底子" = "Financial footing";
+"债务与现金是否稳" = "Are debt and cash solid?";
+"看公司的底子扎不扎实：欠的钱多不多、利息压不压人、短期的账还得上还得不上、烧钱的话现金能撑多久，以及账面利润有没有变成真金白银。银行、保险等金融公司不适用。" = "How solid the company's footing is: how much it owes, how heavy the interest is, whether near-term bills can be paid, how long cash lasts if it is burning money, and whether paper profit turns into real cash. Not applicable to banks and insurers.";

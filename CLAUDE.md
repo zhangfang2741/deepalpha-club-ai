@@ -274,6 +274,19 @@ deepalpha-club-ai/
 > A 股评级分布用 F10 官方「6 个月内」统计（研报列表只收录部分研报）；港股只有各券商最新评级、无历史。行业为东财行业静态映射到 GICS 11 个一级（`cnhk/sectors.py`，新行业须补映射）。
 > 调度：A 股工作日 UTC 09:00、港股 UTC 10:00，冷启动自举同美股；紧急停用 `QUANT_CNHK_ENABLED=false`。A 股报表每 30 天全量一次，平时只刷新披露窗口内的期次。
 
+> **综合分按公司阶段加权 + 财务稳健维度**（`METHODOLOGY_VERSION` q7，2026-10-09）：基本面研究现为**六个维度**（估值 / 成长 / 盈利能力 / 动量 / EPS 修正 / 财务稳健），综合分不再等权——
+> 权重由 `stage.STAGE_WEIGHTS` 按公司阶段（初创 / 成长 / 成熟 / 调整 / 收缩）给定（成长期看增速、成熟期看估值与盈利、初创 / 调整 / 收缩期更看重财务稳健），无阶段（金融股等）等权；
+> 只在可用维度间重新归一（EPS 修正积累中、金融股没有财务稳健时照常）。**改权重表须升 `METHODOLOGY_VERSION`**，并同步 `methodology.py`（直接读表，自动同步）与 iOS 推导文案；
+> 每行和为 1、每阶段财务稳健权重 ≥ 一票否决门槛、成长 / 初创期估值权重 < 门槛，都有 `test_stage.py` 守护。
+> **一票否决只对综合分里权重 ≥ `CAP_MIN_WEIGHT`（15%）的维度生效**（`scoring.overall`）：成长期估值贵不再一票封顶 C+；财务稳健在每个阶段都有否决权。iOS 的 `capMinWeightPct` 由 `test_education.py` 对齐。
+> **阶段判定带滞回**（`stage.STAGE_HYSTERESIS`，营收同比越过门槛 2 个点内沿用上期阶段）：阶段一换整套权重跟着换，综合分会跳；上期阶段存在 `grades["stage"]`。
+> 响应 `Dimension.weight_pct` = 这一维在综合分里的实际占比（按可用维度归一，iOS 综合分解释里显示）。
+> **财务稳健五项**（`metrics._stability`）：净负债 / EBITDA、利息保障倍数、流动比率、现金可支撑年数、经营现金流 / 净利润。**「没有压力」一律记最好值、不当缺失**
+> （净现金记 0、没有利息支出记 100、自由现金流为正不烧钱记 10 年上限），否则无负债公司反而不参与评分；有净负债而 EBITDA ≤ 0 按最差计；净利润为负时现金含量不参与。
+> 金融股整维不适用（`financials_balance_sheet`）；A 股 / 港股报表没有流动资产 / 流动负债与利息支出，这两项在 `markets` 登记为无数据源。
+> 测试里 `distributions.json` 快照早于该维度，`test_builder._synthetic_stability_dists` 造了**合成**的稳健分布（仅供测试 / golden，不代表真实板块）；真实分布由批量任务重算。
+> 上线前须在真实数据上跑一遍批量，看综合等级分布有没有整体漂移、成长股与成熟板块有没有被误伤（离线只验证了逻辑，没验证分布）。
+
 > 新增一个投研模块时，通常需同步落地五处：`app/api/v1/<mod>.py`、`app/services/<mod>/`、`app/schemas/<mod>.py`、前端 `app/<mod>/page.tsx` + `lib/api/<mod>.ts`，并在 `api.py`、`TopNav.tsx` 注册。
 
 ## 缠论模块设计约束（app/services/chan）

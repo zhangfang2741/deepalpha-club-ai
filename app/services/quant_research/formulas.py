@@ -28,6 +28,11 @@ _RATIO_INPUTS: dict[str, tuple[str, str]] = {
     "roa": ("net_ttm", "assets"),
     "roic": ("nopat", "invested"),
     "asset_turn": ("rev_ttm", "assets"),
+    "net_debt_ebitda": ("net_debt", "ebitda_ttm"),
+    "interest_cov": ("ebit_ttm", "interest_ttm"),
+    "current_ratio": ("current_assets", "current_liabilities"),
+    "runway_years": ("cash", "burn_ttm"),
+    "cfo_ni": ("ocf_ttm", "net_ttm"),
 }
 
 

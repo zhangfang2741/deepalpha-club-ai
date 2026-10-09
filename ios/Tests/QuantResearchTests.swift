@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-// 量化研究：后端 golden JSON 解码（守护前后端契约）、五维图标签不越界、等级配色。
+// 量化研究：后端 golden JSON 解码（守护前后端契约）、六维图标签不越界、等级配色。
 func L(_ key: String, _ arguments: CVarArg...) -> String {
     String(format: key, arguments: arguments)
 }
@@ -25,9 +25,14 @@ struct QuantResearchTests {
             let url = URL(fileURLWithPath: "\(root)/tests/fixtures/quant_research/golden_\(sym).json")
             let r = try JSONDecoder().decode(QuantResearch.self, from: Data(contentsOf: url))
             precondition(r.isOK && r.symbol == sym)
-            precondition(r.dimensions.map(\.key) == ["valuation", "growth", "profitability", "momentum", "revisions"])
-            precondition(r.scoredDimensions.count == 5, "护城河已移出维度，五维全部计入综合")
+            precondition(r.dimensions.map(\.key) == ["valuation", "growth", "profitability", "momentum", "revisions", "stability"])
+            precondition(r.scoredDimensions.count == 6, "护城河已移出维度，六维全部计入综合")
             precondition(r.dimensions[4].status == "accumulating")
+            // 各维度在综合分里的占比（按阶段加权、只在可用维度间归一）：可用维度之和约 100，不可用的没有占比
+            let shares = r.dimensions.filter(\.isOK).compactMap(\.weightPct)
+            precondition(shares.count == r.dimensions.filter(\.isOK).count && abs(shares.reduce(0, +) - 100) <= 3,
+                         "\(sym) 维度占比之和应约为 100，实际 \(shares)")
+            precondition(r.dimensions.filter { !$0.isOK }.allSatisfy { $0.weightPct == nil })
             precondition(r.peerGroup?.universeName == "标普1500" && r.asOf?.currencyNote == nil)
             precondition(r.dimensions.filter(\.isHighest).count == 1, "\(sym) 最高维度只能有一个")
             precondition(!r.dimensions[0].allMetrics.isEmpty)
@@ -128,9 +133,9 @@ struct QuantResearchTests {
     }
 
     static func layoutKeepsLabelsInside() {
-        let names = [("估值", "C-"), ("成长", "B+"), ("盈利能力", "A+"), ("动量", "C+"), ("EPS 修正", "暂无")]
+        let names = [("估值", "C-"), ("成长", "B+"), ("盈利能力", "A+"), ("动量", "C+"), ("EPS 修正", "暂无"), ("财务稳健", "A-")]
         let longNames = [("Valuation", "C-"), ("Growth", "B+"), ("Profitability", "A+"),
-                         ("Momentum", "C+"), ("EPS Revisions", "A")]
+                         ("Momentum", "C+"), ("EPS Revisions", "A"), ("Financial Health", "B")]
         for width in [300.0, 342.0, 390.0] {
             for titles in [names, longNames] {
                 let size = CGSize(width: width, height: 280)
@@ -140,7 +145,7 @@ struct QuantResearchTests {
                     precondition(bounds.contains(l.rect), "标签越界 width=\(width) \(l.rect)")
                 }
                 precondition(layout.radius >= FiveDimensionLayout.minRadius, "半径过小 \(layout.radius)")
-                let top = layout.point(index: 0, count: 5, percentile: 100)
+                let top = layout.point(index: 0, count: 6, percentile: 100)
                 precondition(abs(top.x - layout.center.x) < 0.001 && top.y < layout.center.y, "第一根轴朝上")
             }
         }

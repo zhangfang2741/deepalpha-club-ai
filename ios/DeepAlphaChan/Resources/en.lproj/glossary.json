@@ -163,10 +163,11 @@
   "key": "综合等级",
   "term": "Composite grade (A+ to F)",
   "category": "fundamental",
-  "plain": "Each of five items (valuation, growth, profitability, momentum, earnings-estimate revisions) is scored, averaged and mapped to a letter. The higher the letter, the more it leads its industry.",
+  "plain": "Each of six items (valuation, growth, profitability, momentum, earnings-estimate revisions, financial health) is scored, then averaged with weights set by the company's stage (growth stages lean on growth, mature stages on valuation and profitability) and mapped to a letter. The higher the letter, the more it leads its industry.",
   "example": "A+ means it ranks in roughly the top 7% of its industry (93 points or more).",
   "notMeans": "The grade describes the present; it is not a recommendation and does not predict returns."
  },
+  {"key": "财务稳健", "term": "Financial health", "category": "fundamental", "plain": "How solid the company's footing is: how much it owes, how heavy the interest is, how long its cash lasts, and whether profit turns into real cash.", "example": "Of two companies with the same profit, one holds more cash than debt while the other is heavily indebted and interest nearly eats its profit — the first is financially healthier.", "notMeans": "Healthy does not mean profitable or predict the price; for banks and insurers debt is part of the business, so this item does not apply."},
  {
   "key": "百分位",
   "term": "Percentile",

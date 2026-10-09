@@ -122,3 +122,21 @@ def test_stage_hysteresis_does_not_stop_entering():
     # 上期成熟期，同比刚好 15% 才进成长期（滞回只放宽「留下」，不放宽「进入」）
     assert classify_stage(1, 0.149, 0.30, prev="mature") == "mature"
     assert classify_stage(1, 0.15, 0.30, prev="mature") == "growth"
+
+
+def test_every_stage_gives_stability_a_veto():
+    """财务稳健在每个阶段的权重都不低于一票否决门槛：偿债 / 现金出问题时综合等级必须能被压住。"""
+    from app.services.quant_research.scoring import CAP_MIN_WEIGHT
+    from app.services.quant_research.stage import STAGE_WEIGHTS
+
+    for stage, row in STAGE_WEIGHTS.items():
+        assert row["stability"] >= CAP_MIN_WEIGHT - 1e-9, stage
+
+
+def test_growth_stage_valuation_cannot_veto():
+    """成长期估值权重低于否决门槛：高增速公司估值贵不再一票封顶（本次改动的初衷）。"""
+    from app.services.quant_research.scoring import CAP_MIN_WEIGHT
+    from app.services.quant_research.stage import STAGE_WEIGHTS
+
+    assert STAGE_WEIGHTS["growth"]["valuation"] < CAP_MIN_WEIGHT
+    assert STAGE_WEIGHTS["intro"]["valuation"] < CAP_MIN_WEIGHT

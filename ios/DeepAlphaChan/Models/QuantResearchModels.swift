@@ -249,7 +249,7 @@ struct QuantMetric: Decodable, Identifiable {
 }
 
 extension QuantResearch {
-    /// 计入综合等级的维度（五维成绩单、五维图、综合分解释）。
+    /// 计入综合等级的维度（六维成绩单、六维图、综合分解释）。
     var scoredDimensions: [QuantDimension] { dimensions.filter(\.countsInOverall) }
 
 }

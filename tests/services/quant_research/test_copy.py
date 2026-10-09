@@ -105,3 +105,22 @@ def test_fmt_metric_value():
 def test_overall_text_top_and_bottom():
     assert overall_text(OverallScore(78.4, 92.1, "A", 5), "zh") == "综合分 78.4 · 标普1500 前 8%"
     assert overall_text(OverallScore(32.9, 6.2, "F", 5), "zh") == "综合分 32.9 · 标普1500 后 6%"
+
+
+def test_stability_not_applicable_dimension_note_and_expressions():
+    """金融股的稳健维度写「不适用」而不是「指标太少」；触顶 / 约定值的算式要写明原因。"""
+    from app.services.quant_research.copy import dimension_status_note, metric_expression
+    from app.services.quant_research.metrics import MetricValue
+    from app.services.quant_research.scoring import DimensionScore, ScoredMetric
+
+    na = MetricValue(None, "not_applicable", [], "div", {"reason": "financials_balance_sheet"})
+    dim = DimensionScore("stability", "unavailable", None, None,
+                         [ScoredMetric("cfo_ni", na, "not_applicable", None, None, 0)])
+    assert "不适用" in dimension_status_note(dim, "zh")
+    assert "Not applicable" in dimension_status_note(dim, "en")
+
+    burn = MetricValue(10.0, "ok", [("cash", 5e9), ("burn_ttm", -2e9)], "div", {"self_funding": True})
+    zh = metric_expression("runway_years", burn, "zh")
+    assert "自由现金流" in zh and "不烧钱" in zh and "年自由现金流出" not in zh   # 不把正的现金流写成「负的流出」
+    capped = MetricValue(100.0, "ok", [("ebit_ttm", 5e9), ("interest_ttm", 1e7)], "div")
+    assert "超过上限" in metric_expression("interest_cov", capped, "zh")

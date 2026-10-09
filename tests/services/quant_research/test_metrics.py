@@ -9,11 +9,11 @@ from app.services.quant_research.metrics import DIMENSIONS, METRICS, compute_met
 from tests.services.quant_research.fixtures import load_inputs
 
 
-def test_registry_has_40_metrics_across_five_dimensions():
-    assert len(METRICS) == 40
+def test_registry_has_45_metrics_across_six_dimensions():
+    assert len(METRICS) == 45
     assert {m.dimension for m in METRICS.values()} == set(DIMENSIONS)
     counts = {d: sum(m.dimension == d for m in METRICS.values()) for d in DIMENSIONS}
-    assert counts == {"valuation": 14, "growth": 9, "profitability": 9, "momentum": 4, "revisions": 4}
+    assert counts == {"valuation": 14, "growth": 9, "profitability": 9, "momentum": 4, "revisions": 4, "stability": 5}
 
 
 def test_compute_returns_all_non_revision_metrics():
@@ -98,3 +98,104 @@ def test_financials_forward_revenue_growth_not_applicable():
     assert m["rev_fwd"].status == "not_applicable"
     assert m["rev_fwd"].meta["reason"] == "financials_revenue_basis"
 
+
+
+# ---------- 财务稳健 ----------
+
+def _with(inp, *, balance=None, income=None, cash=None):
+    """改一只样本股的最新资产负债表 / 各季利润表 / 各季现金流字段。"""
+    kw = {}
+    if balance is not None:
+        kw["balance"] = dict(inp.balance, **balance)
+    if income is not None:
+        kw["quarters_income"] = [dict(q, **income) for q in inp.quarters_income]
+    if cash is not None:
+        kw["quarters_cash"] = [dict(q, **cash) for q in inp.quarters_cash]
+    return replace(inp, **kw)
+
+
+def test_stability_metrics_use_statement_values():
+    inp = load_inputs("NVDA")
+    m = compute_metrics(inp)
+    bal = inp.balance
+    cur = m["current_ratio"]
+    assert cur.status == "ok"
+    assert cur.value == pytest.approx(bal["totalCurrentAssets"] / bal["totalCurrentLiabilities"])
+    assert [n for n, _ in cur.inputs] == ["current_assets", "current_liabilities"]
+    cov = m["interest_cov"]
+    assert cov.status == "ok"
+    raw_cov = ttm(inp.quarters_income, "ebit") / abs(ttm(inp.quarters_income, "interestExpense"))
+    assert raw_cov > 100 and cov.value == 100.0               # NVDA 约 497 倍，截到上限 100
+    o_inp = load_inputs("O")                                   # 利息压力大的 REIT 不触顶
+    o_cov = compute_metrics(o_inp)["interest_cov"]
+    assert o_cov.value == pytest.approx(ttm(o_inp.quarters_income, "ebit") / abs(ttm(o_inp.quarters_income, "interestExpense")))
+    assert o_cov.value < 100
+    cfo = m["cfo_ni"]
+    assert cfo.value == pytest.approx(ttm(inp.quarters_cash, "operatingCashFlow") / ttm(inp.quarters_income, "netIncome"))
+
+
+def test_net_cash_company_has_zero_net_debt_ratio():
+    """现金多过负债 = 净现金：比值记 0（最好），不是负数、也不是缺失。"""
+    m = compute_metrics(_with(load_inputs("NVDA"), balance={"totalDebt": 10.0, "cashAndShortTermInvestments": 1e12}))
+    nd = m["net_debt_ebitda"]
+    assert nd.status == "ok" and nd.value == 0.0 and nd.meta["net_cash"] is True
+
+
+def test_net_debt_with_negative_ebitda_is_not_meaningful():
+    """有净负债而 EBITDA 为负：还不起的最差情形，按最差计。"""
+    inp = _with(load_inputs("NVDA"), balance={"totalDebt": 1e12, "cashAndShortTermInvestments": 1.0},
+                income={"ebitda": -1e9})
+    assert compute_metrics(inp)["net_debt_ebitda"].status == "not_meaningful"
+
+
+def test_net_debt_ratio_divides_by_ttm_ebitda():
+    inp = _with(load_inputs("NVDA"), balance={"totalDebt": 100e9, "cashAndShortTermInvestments": 40e9})
+    m = compute_metrics(inp)["net_debt_ebitda"]
+    assert m.value == pytest.approx(60e9 / ttm(inp.quarters_income, "ebitda"))
+
+
+def test_no_interest_expense_counts_as_best_coverage():
+    m = compute_metrics(_with(load_inputs("NVDA"), income={"interestExpense": 0.0}))["interest_cov"]
+    assert m.status == "ok" and m.value == 100.0 and m.meta["no_interest"] is True
+
+
+def test_interest_coverage_is_capped():
+    m = compute_metrics(_with(load_inputs("NVDA"), income={"interestExpense": 1.0}))["interest_cov"]
+    assert m.value == 100.0
+
+
+def test_runway_self_funding_vs_burning():
+    inp = load_inputs("NVDA")
+    ok = compute_metrics(inp)["runway_years"]
+    assert ok.value == 10.0 and ok.meta["self_funding"] is True       # 自由现金流为正：不烧钱，记上限
+    burn = _with(inp, balance={"cashAndShortTermInvestments": 24e9},
+                 cash={"operatingCashFlow": -1.5e9, "capitalExpenditure": -1.5e9})   # 每季烧 3B → 年烧 12B
+    r = compute_metrics(burn)["runway_years"]
+    assert r.status == "ok" and r.value == pytest.approx(2.0) and "self_funding" not in r.meta
+
+
+def test_runway_is_capped_at_ten_years():
+    burn = _with(load_inputs("NVDA"), balance={"cashAndShortTermInvestments": 1e12},
+                 cash={"operatingCashFlow": -1e6, "capitalExpenditure": -1e6})
+    assert compute_metrics(burn)["runway_years"].value == 10.0
+
+
+def test_cfo_to_net_income_not_applicable_when_loss():
+    m = compute_metrics(_with(load_inputs("NVDA"), income={"netIncome": -1e9}))["cfo_ni"]
+    assert m.status == "not_applicable" and m.value is None
+
+
+def test_missing_balance_fields_are_missing_not_zero():
+    """A 股 / 港股没有流动资产、利息：缺失而不是当成 0。"""
+    inp = load_inputs("NVDA")
+    bal = {k: v for k, v in inp.balance.items() if k not in ("totalCurrentAssets", "totalCurrentLiabilities")}
+    m = compute_metrics(replace(inp, balance=bal))
+    assert m["current_ratio"].status == "missing"
+    inc = [{k: v for k, v in q.items() if k != "interestExpense"} for q in inp.quarters_income]
+    assert compute_metrics(replace(inp, quarters_income=inc))["interest_cov"].status == "missing"
+
+
+def test_financials_stability_not_applicable():
+    m = compute_metrics(load_inputs("JPM"))
+    for key in ("net_debt_ebitda", "interest_cov", "current_ratio", "runway_years", "cfo_ni"):
+        assert m[key].status == "not_applicable", key

@@ -24,7 +24,7 @@ from app.services.quant_research.inputs import (
 
 Status = Literal["ok", "not_meaningful", "not_applicable", "missing", "insufficient_sample"]
 Direction = Literal["lower_better", "higher_better"]
-DIMENSIONS: list[str] = ["valuation", "growth", "profitability", "momentum", "revisions"]
+DIMENSIONS: list[str] = ["valuation", "growth", "profitability", "momentum", "revisions", "stability"]
 # 只展示、不计入综合分的维度（不参与综合平均、维度计数与一票否决）。护城河已改为独立模块（moat/），此处暂无
 DISPLAY_ONLY_DIMENSIONS: frozenset[str] = frozenset()
 DIMENSION_NAMES: dict[str, tuple[str, str]] = {
@@ -33,9 +33,13 @@ DIMENSION_NAMES: dict[str, tuple[str, str]] = {
     "profitability": ("盈利能力", "Profitability"),
     "momentum": ("动量", "Momentum"),
     "revisions": ("EPS 修正", "EPS Revisions"),
+    "stability": ("财务稳健", "Financial Health"),
 }
 MIN_ANALYSTS = 3
 MOMENTUM_WINDOWS = {"r3m": 63, "r6m": 126, "r9m": 189, "r12m": 252}
+INTEREST_COVER_CAP = 100.0   # 利息保障倍数上限（几乎没有利息的公司统一记上限，避免极端值）
+RUNWAY_CAP_YEARS = 10.0      # 现金可支撑年数上限（自由现金流为正 = 不烧钱，也记上限）
+STABILITY_KEYS = ("net_debt_ebitda", "interest_cov", "current_ratio", "runway_years", "cfo_ni")
 
 
 @dataclass(frozen=True)
@@ -57,7 +61,7 @@ def _d(key: str, dim: str, group: str, group_en: str, direction: Direction, name
     return MetricDef(key, dim, group, group_en, direction, name_zh, name_en, desc_zh, desc_en, unit)
 
 
-_V, _G, _P, _M, _R = "valuation", "growth", "profitability", "momentum", "revisions"
+_V, _G, _P, _M, _R, _S = "valuation", "growth", "profitability", "momentum", "revisions", "stability"
 _LO: Direction = "lower_better"
 _HI: Direction = "higher_better"
 
@@ -147,6 +151,20 @@ METRICS: dict[str, MetricDef] = {m.key: m for m in [
        "分析师对下一财年每股收益的一致预期，相比 90 天前的变化", "Change in FY2 consensus EPS vs 90 days ago", "pct"),
     _d("rev_fy1_90d", _R, "本财年营收", "FY1 revenue", _HI, "本财年营收预期 90 天变化", "FY1 revenue revision (90D)",
        "分析师对本财年营收的一致预期，相比 90 天前的变化", "Change in FY1 consensus revenue vs 90 days ago", "pct"),
+    # 财务稳健
+    _d("net_debt_ebitda", _S, "净负债", "Net debt", _LO, "净负债 / EBITDA", "Net debt / EBITDA",
+       "（负债 − 现金）相对最近 12 个月 EBITDA 的倍数，约等于用经营利润还清净债务要几年；现金多过负债记 0",
+       "(Debt − cash) over trailing EBITDA, roughly the years of operating profit needed to repay net debt; 0 when cash exceeds debt"),
+    _d("interest_cov", _S, "利息保障", "Interest cover", _HI, "利息保障倍数", "Interest coverage",
+       "最近 12 个月 EBIT 相对利息支出的倍数，越高越不怕利息压力；没有利息支出记上限 100",
+       "Trailing EBIT over interest expense; 100 (the cap) when there is no interest expense"),
+    _d("current_ratio", _S, "短期偿债", "Liquidity", _HI, "流动比率", "Current ratio",
+       "流动资产相对流动负债的倍数，衡量一年内到期的账能不能用手头的资产还上", "Current assets over current liabilities: can what is due within a year be covered by what is on hand"),
+    _d("runway_years", _S, "现金储备", "Cash runway", _HI, "现金可支撑年数", "Cash runway (years)",
+       "现金按最近 12 个月自由现金流为负的速度烧，能撑几年；自由现金流为正（不烧钱）记上限 10 年",
+       "Years of cash at the trailing 12-month free-cash-flow burn rate; 10 (the cap) when free cash flow is positive"),
+    _d("cfo_ni", _S, "盈利质量", "Earnings quality", _HI, "经营现金流 / 净利润", "Operating cash flow / net income",
+       "最近 12 个月经营现金流相对净利润的比例，越接近或超过 100% 说明利润越是真金白银", "Trailing operating cash flow over net income: near or above 100% means profit is backed by cash", "pct"),
 ]}
 
 # 算式输入的标签（zh, en）
@@ -171,6 +189,9 @@ INPUT_LABELS: dict[str, tuple[str, str]] = {
     "pe": ("市盈率", "P/E"), "growth_pct": ("EPS 增速 %", "EPS growth %"),
     "close_now": ("最新收盘价", "Latest close"), "close_then": ("期初收盘价", "Starting close"),
     "est_new": ("当前一致预期", "Current consensus"), "est_old": ("当时一致预期", "Consensus then"),
+    "net_debt": ("净负债", "Net debt"), "interest_ttm": ("利息支出 TTM", "Interest expense (TTM)"),
+    "current_assets": ("流动资产", "Current assets"), "current_liabilities": ("流动负债", "Current liabilities"),
+    "cash": ("现金及短期投资", "Cash & short-term investments"), "burn_ttm": ("年自由现金流出 TTM", "Free-cash-flow burn (TTM)"),
 }
 
 
@@ -226,7 +247,7 @@ def _num(d: dict | None, key: str) -> float | None:
 
 
 def compute_metrics(inp: StockInputs) -> dict[str, MetricValue]:
-    """估值 / 成长 / 盈利能力 / 动量共 36 项（EPS 修正见 revisions.compute_revisions）。"""
+    """估值 / 成长 / 盈利能力 / 动量 / 财务稳健共 41 项（EPS 修正见 revisions.compute_revisions）。"""
     q, cf, bal = inp.quarters_income, inp.quarters_cash, inp.balance
     fy1, fy2 = inp.fy1, inp.fy2
     enough_analysts = analyst_count(fy1) >= MIN_ANALYSTS
@@ -345,6 +366,61 @@ def compute_metrics(inp: StockInputs) -> dict[str, MetricValue]:
                                    [("close_now", closes[-1]), ("close_then", closes[-1 - n])], "ret", {"days": n})
         else:
             out[key] = _missing("ret")
+
+    out |= _stability(inp, bal, ebitda, ebit, net, ocf, fcf, debt, cash_st)
+    return out
+
+
+def _stability(inp: StockInputs, bal: dict | None, ebitda: float | None, ebit: float | None, net: float | None,
+               ocf: float | None, fcf: float | None, debt: float | None, cash_st: float | None,
+               ) -> dict[str, MetricValue]:
+    """财务稳健五项：偿债压力、短期流动性、现金能撑多久、利润的现金含量。
+
+    约定：「没有压力」一律记成该指标的最好值（净现金记 0、没有利息记上限、不烧钱记上限），
+    不当缺失——否则无负债的公司反而不参与评分。金融股负债本身就是经营的一部分，口径不可比，整维不适用。
+    """
+    if inp.sector_key == "financials":
+        return {k: MetricValue(None, "not_applicable", [], "div", {"reason": "financials_balance_sheet"})
+                for k in STABILITY_KEYS}
+    out: dict[str, MetricValue] = {}
+    nm, na = "not_meaningful", "not_applicable"
+
+    # 净负债 / EBITDA：现金多过负债 = 净现金（记 0）；有净负债而 EBITDA ≤ 0 = 还不起（最差）
+    net_debt = debt - cash_st if (debt is not None and cash_st is not None) else None
+    nd_inputs = [("net_debt", net_debt), ("ebitda_ttm", ebitda)]
+    if net_debt is None or ebitda is None:
+        out["net_debt_ebitda"] = _missing("div", nd_inputs)
+    elif net_debt <= 0:
+        out["net_debt_ebitda"] = MetricValue(0.0, "ok", nd_inputs, "div", {"net_cash": True})
+    else:
+        out["net_debt_ebitda"] = _multiple(net_debt, ebitda, nd_inputs, den_nonpositive=nm)
+
+    # 利息保障倍数：EBIT ÷ 利息支出；没有利息支出 = 没有利息压力（记上限）
+    interest = ttm(inp.quarters_income, "interestExpense")
+    ic_inputs = [("ebit_ttm", ebit), ("interest_ttm", abs(interest) if interest is not None else None)]
+    if ebit is None or interest is None:
+        out["interest_cov"] = _missing("div", ic_inputs)
+    elif interest == 0:
+        out["interest_cov"] = MetricValue(INTEREST_COVER_CAP, "ok", ic_inputs, "div", {"no_interest": True})
+    else:
+        out["interest_cov"] = MetricValue(min(ebit / abs(interest), INTEREST_COVER_CAP), "ok", ic_inputs, "div")
+
+    # 流动比率
+    ca, cl = _num(bal, "totalCurrentAssets"), _num(bal, "totalCurrentLiabilities")
+    out["current_ratio"] = _ratio(ca, cl, [("current_assets", ca), ("current_liabilities", cl)])
+
+    # 现金可支撑年数：自由现金流为正 = 不烧钱（记上限）；为负按年烧钱速度算
+    burn = -fcf if fcf is not None else None
+    rw_inputs = [("cash", cash_st), ("burn_ttm", burn)]
+    if cash_st is None or fcf is None:
+        out["runway_years"] = _missing("div", rw_inputs)
+    elif fcf >= 0:
+        out["runway_years"] = MetricValue(RUNWAY_CAP_YEARS, "ok", rw_inputs, "div", {"self_funding": True})
+    else:
+        out["runway_years"] = MetricValue(min(max(cash_st, 0.0) / burn, RUNWAY_CAP_YEARS), "ok", rw_inputs, "div")  # type: ignore[operator]
+
+    # 经营现金流 / 净利润：亏损时比值没有意义，不参与
+    out["cfo_ni"] = _ratio(ocf, net, [("ocf_ttm", ocf), ("net_ttm", net)], den_nonpositive=na)
     return out
 
 

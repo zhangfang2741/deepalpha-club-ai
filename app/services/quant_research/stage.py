@@ -34,14 +34,19 @@ SHRINK_YOY_MAX = -0.05
 # 滞回：上期已在某阶段时，营收同比越过门槛不到这个幅度仍沿用旧阶段（阶段一换，整套权重跟着换，综合分会跳）
 STAGE_HYSTERESIS = 0.02
 
-# 综合分里各维度的权重（每行和为 1）。依据：成长期看增速、成熟期看估值与赚钱能力、收缩期看估值安全垫；
+# 综合分里各维度的权重（每行和为 1）。依据：成长期看增速、成熟期看估值与赚钱能力、初创 / 调整 / 收缩期更看重偿债与现金能撑多久；
 # None = 没有阶段（金融股等）→ 等权。改权重须升 METHODOLOGY_VERSION，并同步 methodology.py 与 iOS 推导文案。
 STAGE_WEIGHTS: dict[str | None, dict[str, float]] = {
-    "intro":    {"valuation": 0.10, "growth": 0.40, "profitability": 0.10, "momentum": 0.25, "revisions": 0.15},
-    "growth":   {"valuation": 0.15, "growth": 0.35, "profitability": 0.20, "momentum": 0.20, "revisions": 0.10},
-    "mature":   {"valuation": 0.30, "growth": 0.10, "profitability": 0.30, "momentum": 0.15, "revisions": 0.15},
-    "shakeout": {"valuation": 0.30, "growth": 0.10, "profitability": 0.30, "momentum": 0.15, "revisions": 0.15},
-    "decline":  {"valuation": 0.35, "growth": 0.05, "profitability": 0.35, "momentum": 0.15, "revisions": 0.10},
+    "intro":    {"valuation": 0.08, "growth": 0.32, "profitability": 0.08, "momentum": 0.20, "revisions": 0.12,
+                 "stability": 0.20},
+    "growth":   {"valuation": 0.12, "growth": 0.30, "profitability": 0.18, "momentum": 0.15, "revisions": 0.10,
+                 "stability": 0.15},
+    "mature":   {"valuation": 0.25, "growth": 0.08, "profitability": 0.25, "momentum": 0.12, "revisions": 0.12,
+                 "stability": 0.18},
+    "shakeout": {"valuation": 0.22, "growth": 0.08, "profitability": 0.25, "momentum": 0.10, "revisions": 0.10,
+                 "stability": 0.25},
+    "decline":  {"valuation": 0.28, "growth": 0.04, "profitability": 0.28, "momentum": 0.10, "revisions": 0.05,
+                 "stability": 0.25},
     None:       {d: 1 / len(DIMENSIONS) for d in DIMENSIONS},
 }
 

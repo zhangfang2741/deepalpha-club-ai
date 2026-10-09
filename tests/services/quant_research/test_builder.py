@@ -14,9 +14,31 @@ from tests.services.quant_research.fixtures import FIXTURE_DIR, load_inputs
 SYMBOLS = ["NVDA", "JPM", "O", "XOM"]
 
 
+def _linspace(lo: float, hi: float, n: int) -> list[float]:
+    return [lo + (hi - lo) * i / (n - 1) for i in range(n)]
+
+
+def _synthetic_stability_dists() -> dict:
+    """财务稳健五项的**合成**板块分布（fixture 快照早于这个维度，没有真实分布）。
+
+    只用来让维度在测试里能被评分、golden 有确定的数；形状贴近真实（净现金公司挤在 0、不烧钱的公司挤在上限），
+    不代表任何真实板块。真实分布由批量任务按全样本重算。
+    """
+    from tests.services.quant_research.fixtures import SECTORS
+
+    shapes = {
+        "net_debt_ebitda": sorted([0.0] * 40 + _linspace(0.2, 6.0, 60)),
+        "interest_cov": _linspace(1.0, 100.0, 100),
+        "current_ratio": _linspace(0.5, 4.0, 100),
+        "runway_years": sorted(_linspace(0.3, 9.0, 30) + [10.0] * 70),
+        "cfo_ni": _linspace(0.3, 1.8, 100),
+    }
+    return {(sector, key): vals for sector in set(SECTORS.values()) for key, vals in shapes.items()}
+
+
 def _dists():
     raw = json.loads((FIXTURE_DIR / "distributions.json").read_text())
-    return {tuple(k.split("|")): v for k, v in raw.items()}
+    return {tuple(k.split("|")): v for k, v in raw.items()} | _synthetic_stability_dists()
 
 
 def _run(sym, history=None, prev=None, extra_dists=None):
@@ -48,12 +70,15 @@ def test_payload_has_no_forbidden_words(sym, lang):
 def test_nvda_structure():
     ev = _run("NVDA")
     p = build_payload(ev, "zh", in_universe=True, sector_sample=191)
-    assert [d.key for d in p.dimensions] == ["valuation", "growth", "profitability", "momentum", "revisions"]
+    assert [d.key for d in p.dimensions] == ["valuation", "growth", "profitability", "momentum", "revisions",
+                                             "stability"]
     assert all(d.counts_in_overall for d in p.dimensions)
     rev = p.dimensions[4]
     assert rev.status == "accumulating" and rev.status_note == "修正历史积累中（已 0 天）"
-    assert p.overall.dimensions_used == 4
-    assert p.overall.note == "本次综合等级基于 4 个维度"
+    assert p.overall.dimensions_used == 5          # 修正积累中不算；估值 / 成长 / 盈利 / 动量 / 稳健
+    assert p.overall.note is None
+    stab = p.dimensions[5]
+    assert stab.status == "ok" and stab.weight_pct is not None and stab.weight_pct > 0
     val = p.dimensions[0]
     assert val.formula and val.formula.endswith(f"→ {val.grade}")
     pe_fwd = next(m for g in val.groups for m in g.metrics if m.key == "pe_fwd")
