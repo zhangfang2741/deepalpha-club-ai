@@ -79,7 +79,7 @@ struct GoodStocksSheet: View {
         HStack(spacing: 10) {
             Text(L("股票")).frame(maxWidth: .infinity, alignment: .leading)
             Text(L("评级")).frame(width: Self.markWidth, alignment: .trailing)
-            Text(L("等级")).frame(width: Self.gradeWidth, alignment: .trailing)
+            Text(L("基本面")).frame(width: Self.gradeWidth, alignment: .trailing)
             Text(L("最近买卖点")).frame(width: Self.signalWidth, alignment: .trailing)
         }
         .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
@@ -88,7 +88,7 @@ struct GoodStocksSheet: View {
     }
 
     private static let markWidth: CGFloat = 36
-    private static let gradeWidth: CGFloat = 32
+    private static let gradeWidth: CGFloat = 40
     private static let signalWidth: CGFloat = 88
 
     @ViewBuilder
