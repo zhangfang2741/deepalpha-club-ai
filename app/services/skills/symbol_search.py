@@ -12,7 +12,8 @@ from app.cache.operations import get_json, set_json
 from app.core.logging import logger
 
 _FMP_KEY = os.environ.get("FMP_API_KEY", "")
-_FMP_SEARCH_URL = "https://financialmodelingprep.com/stable/search-symbol"
+_FMP_SEARCH_URL = "https://financialmodelingprep.com/stable/search-symbol"  # 按代码
+_FMP_SEARCH_NAME_URL = "https://financialmodelingprep.com/stable/search-name"  # 按公司名（apple → AAPL）
 _CACHE_TTL = 3600 * 24  # 24h
 _US_EXCHANGES = {"NASDAQ", "NYSE", "AMEX", "BATS", "NYSE ARCA"}
 
@@ -31,7 +32,7 @@ async def search_us_symbols(
     if not q:
         return []
 
-    cache_key = f"skill_symbol_search:us:{q.lower()}:{limit}"
+    cache_key = f"skill_symbol_search:us:v2:{q.lower()}:{limit}"  # v2：合并了按公司名搜索
     if redis:
         cached = await get_json(redis, cache_key)
         if cached is not None:
@@ -52,10 +53,10 @@ async def search_us_symbols(
     return filtered
 
 
-async def _fetch_fmp_search(query: str, limit: int) -> list[dict]:
+async def _fetch_endpoint(url: str, query: str, limit: int) -> list[dict]:
     def _sync():
         resp = httpx.get(
-            _FMP_SEARCH_URL,
+            url,
             params={"query": query, "limit": limit, "apikey": _FMP_KEY},
             timeout=10,
         )
@@ -66,3 +67,26 @@ async def _fetch_fmp_search(query: str, limit: int) -> list[dict]:
     loop = asyncio.get_event_loop()
     with ThreadPoolExecutor(max_workers=1) as pool:
         return await loop.run_in_executor(pool, _sync)
+
+
+async def _fetch_fmp_search(query: str, limit: int) -> list[dict]:
+    """代码搜索 + 公司名搜索并发，按 symbol 去重（代码命中在前）；一个失败用另一个，两个都失败才抛。"""
+    results = await asyncio.gather(
+        _fetch_endpoint(_FMP_SEARCH_URL, query, limit),
+        _fetch_endpoint(_FMP_SEARCH_NAME_URL, query, limit),
+        return_exceptions=True,
+    )
+    if all(isinstance(r, BaseException) for r in results):
+        raise results[0]  # type: ignore[misc]
+    merged: list[dict] = []
+    seen: set[str] = set()
+    for r in results:
+        if isinstance(r, BaseException):
+            logger.warning("symbol_search_fmp_endpoint_failed", query=query, error=str(r))
+            continue
+        for row in r:
+            sym = row.get("symbol")
+            if sym and sym not in seen:
+                seen.add(sym)
+                merged.append(row)
+    return merged
