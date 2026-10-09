@@ -111,7 +111,7 @@ struct ChanChartView: View {
         VStack(spacing: 0) {
             priceChart
             // MACD 副图供对照（趋势背驰用它的红绿柱面积判定，结果标在主图上）
-            if showsMACD, analysis.macd != nil {
+            if showsMACD, vm.isOn(.macd), analysis.macd != nil {
                 Divider().background(Theme.border)
                 macdChart
             }
@@ -152,10 +152,10 @@ struct ChanChartView: View {
                     drawGrid(ctx, size: CGSize(width: plotW, height: size.height),
                              bounds: priceBounds)
                     drawHighlight(ctx, plotWidth: plotW, height: size.height, range: range)
-                    drawVolume(ctx, plotWidth: plotW, height: size.height, range: range)
+                    if vm.isOn(.volume) { drawVolume(ctx, plotWidth: plotW, height: size.height, range: range) }
                     drawCandles(ctx, plotWidth: plotW, height: size.height,
                                 range: range, bounds: priceBounds)
-                    if vm.showMA { drawMA(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
+                    if vm.isOn(.ma) { drawMA(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showPivots { drawPivots(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showStrokes { drawStrokes(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showDivergences { drawDivergences(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
@@ -1382,7 +1382,7 @@ struct ChanChartView: View {
                     infoText(L("量"), Self.formatVolume(v)).font(.system(size: 10))
                 }
             }
-            if vm.showMA, let ma = analysis.ma {
+            if vm.isOn(.ma), let ma = analysis.ma {
                 HStack(spacing: 8) {
                     ForEach(Array(ma.periods.enumerated()), id: \.offset) { k, period in
                         let series = ma.series(period)

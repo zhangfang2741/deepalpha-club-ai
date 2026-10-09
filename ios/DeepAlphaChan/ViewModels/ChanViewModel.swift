@@ -68,8 +68,17 @@ final class ChanViewModel: ObservableObject {
     @Published var showPivots = true
     @Published var showSignals = true
     @Published var showDivergences = true
-    /// 均线默认开：最常用的叠加，不属于缠论结构，关掉可以让图面回到只剩结构。
-    @Published var showMA = true
+    /// 指标栏（均线 / 成交量 / MACD 等，见 ChartIndicator）的开关。存的是用户明确选过的，没选过的走各指标的默认值。
+    @Published private(set) var indicatorChoices: [String: Bool] = ChartIndicatorStore.load()
+
+    func isOn(_ indicator: ChartIndicator) -> Bool {
+        indicatorChoices[indicator.rawValue] ?? indicator.defaultOn
+    }
+
+    func toggle(_ indicator: ChartIndicator) {
+        indicatorChoices[indicator.rawValue] = !isOn(indicator)
+        ChartIndicatorStore.save(indicatorChoices)
+    }
 
     // GAP 分析
     @Published var industryView: String = ""

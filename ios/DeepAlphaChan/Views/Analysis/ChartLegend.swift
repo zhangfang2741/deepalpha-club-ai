@@ -11,8 +11,6 @@ struct ChartLegend: View {
     /// 紧凑模式（详情页竖屏）：只摆笔 / 中枢 / 买卖点三个常用开关，分型 / 线段 / 背驰和
     /// 「虚线=未确认」收进「更多图层」菜单，图例压成一行。全屏图与分享长图用完整图例。
     var compact = false
-    /// 当前图的均线周期（后端按周期给；没有就不显示均线开关）。
-    var maPeriods: [Int] = []
 
     var body: some View {
         if compact && !isStatic {
@@ -27,7 +25,6 @@ struct ChartLegend: View {
             item(Theme.stroke, "笔", isOn: $vm.showStrokes)
             item(Theme.pivotFill, "中枢", isOn: $vm.showPivots)
             item(Theme.up, "买卖点", isOn: $vm.showSignals, secondaryColor: Theme.down)
-            maItem
             Menu {
                 Toggle(L("分型"), isOn: $vm.showFractals)
                 Toggle(L("线段"), isOn: $vm.showSegments)
@@ -49,25 +46,6 @@ struct ChartLegend: View {
         .frame(maxWidth: maxWidth, alignment: .leading)
     }
 
-    /// 均线开关：打开时在旁边按各线的颜色写出周期（5 20 60），看得懂哪条是哪条。
-    /// 只写数字、不写「MA」前缀：竖屏紧凑图例一行要放下笔 / 中枢 / 买卖点 / 均线 / 更多图层。
-    @ViewBuilder private var maItem: some View {
-        if !maPeriods.isEmpty {
-            HStack(spacing: 3) {
-                item(Theme.maColors[1], "均线", isOn: $vm.showMA)
-                if vm.showMA {
-                    HStack(spacing: 2.5) {
-                        ForEach(Array(maPeriods.enumerated()), id: \.offset) { k, p in
-                            Text("\(p)")
-                                .font(.system(size: 8.5, weight: .semibold).monospacedDigit())
-                                .foregroundStyle(Theme.maColors[min(k, Theme.maColors.count - 1)])
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     /// 「更多图层」里当前打开了几个，标在按钮上，免得用户忘了图上多画了什么。
     private var moreOnCount: Int {
         [vm.showFractals, vm.showSegments, vm.showDivergences].filter { $0 }.count
@@ -83,7 +61,6 @@ struct ChartLegend: View {
                 item(Theme.pivotFill, "中枢", isOn: $vm.showPivots)
                 item(Theme.up, "买卖点", isOn: $vm.showSignals, secondaryColor: Theme.down)
                 item(Theme.divergence, "背驰", isOn: $vm.showDivergences)
-                maItem
                 // 说明放进同一个换行流里，不单独占一行
                 Text(L("虚线=未确认"))
                     .font(.system(size: 8.5))
