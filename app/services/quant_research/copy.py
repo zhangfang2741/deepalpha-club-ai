@@ -223,10 +223,14 @@ def metric_expression(key: str, mv: MetricValue, lang: Lang) -> str:
 
 def dimension_formula(dim: DimensionScore) -> str | None:
     """维度分算式「(p1 + p2 + …) ÷ n = 分 → 等级」。"""
-    ps = [s.percentile for s in dim.metrics if s.percentile is not None]
-    if dim.score is None or not ps:
+    part = [s for s in dim.metrics if s.percentile is not None]
+    if dim.score is None or not part:
         return None
-    return f"({' + '.join(f'{p:.0f}' for p in ps)}) ÷ {len(ps)} = {dim.score:.1f} → {dim.grade}"
+    ws = [METRICS[s.key].weight for s in part]
+    if all(w == ws[0] for w in ws):  # 等权：保持原样「(p1 + p2) ÷ n」
+        return f"({' + '.join(f'{s.percentile:.0f}' for s in part)}) ÷ {len(part)} = {dim.score:.1f} → {dim.grade}"
+    terms = " + ".join(f"{s.percentile:.0f}×{w:g}" for s, w in zip(part, ws, strict=True))
+    return f"({terms}) ÷ {sum(ws):g} = {dim.score:.1f} → {dim.grade}"
 
 
 # ---------- 状态说明 ----------

@@ -24,6 +24,7 @@ _RATIO_INPUTS: dict[str, tuple[str, str]] = {
     "ebitda_m": ("ebitda_ttm", "rev_ttm"),
     "net_m": ("net_ttm", "rev_ttm"),
     "fcf_m": ("fcf_ttm", "rev_ttm"),
+    "fcf_sbc_m": ("fcf_sbc_ttm", "rev_ttm"),
     "roe": ("net_ttm", "equity"),
     "roa": ("net_ttm", "assets"),
     "roic": ("nopat", "invested"),

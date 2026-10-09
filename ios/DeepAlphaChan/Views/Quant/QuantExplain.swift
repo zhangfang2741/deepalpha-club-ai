@@ -236,10 +236,18 @@ struct QuantDimensionGradeExplanation: View {
         VStack(alignment: .leading, spacing: 10) {
             if dimension.isOK, let score = dimension.score {
                 let part = dimension.allMetrics.filter { $0.percentile != nil }
-                QuantExplainText(text: L("%@分 %@ = 下面 %lld 项指标板块百分位的平均：",
-                                         dimension.name, QuantGradeScale.fmt(score), part.count))
+                // 口径相近的指标合并计权（如三种 GAAP 利润率各 ×0.5），避免同一信息被重复计算
+                let weighted = part.contains { $0.effectiveWeight != 1 }
+                QuantExplainText(text: weighted
+                    ? L("%@分 %@ = 下面 %lld 项指标板块百分位的加权平均（名称后 ×0.5 表示口径相近、合并计权，避免同一信息被重复计算）：",
+                        dimension.name, QuantGradeScale.fmt(score), part.count)
+                    : L("%@分 %@ = 下面 %lld 项指标板块百分位的平均：",
+                        dimension.name, QuantGradeScale.fmt(score), part.count))
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
-                    ForEach(part) { m in QuantScoreItem(name: m.name, score: m.percentile, grade: m.grade) }
+                    ForEach(part) { m in
+                        QuantScoreItem(name: m.effectiveWeight == 1 ? m.name : "\(m.name) ×\(String(format: "%g", m.effectiveWeight))",
+                                       score: m.percentile, grade: m.grade)
+                    }
                 }
                 let skipped = dimension.allMetrics.count - part.count
                 if skipped > 0 {

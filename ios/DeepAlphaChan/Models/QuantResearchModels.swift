@@ -222,8 +222,11 @@ struct QuantMetric: Decodable, Identifiable {
     let formula: QuantFormula?
     let positionText: String?
     let interpretation: QuantMetricInterpretation?
+    /// 在维度分里的权重（口径相近的利润 / 回报指标合并计权为 0.5，其余 1）；旧响应没有，按 1 处理。
+    let weight: Double?
 
     var id: String { key }
+    var effectiveWeight: Double { weight ?? 1 }
     var lowerBetter: Bool { direction == "lower_better" }
 
     /// 全称副标题：只在它补充了信息时返回（如「ROE」→「净资产收益率 ROE…」）；
@@ -244,7 +247,7 @@ struct QuantMetric: Decodable, Identifiable {
         case sectorMedianDisplay = "sector_median_display"
         case diffToMedianPct = "diff_to_median_pct"
         case positionText = "position_text"
-        case interpretation
+        case interpretation, weight
     }
 }
 

@@ -1642,3 +1642,4 @@
 "财务底子" = "Financial footing";
 "债务与现金是否稳" = "Are debt and cash solid?";
 "看公司的底子扎不扎实：欠的钱多不多、利息压不压人、短期的账还得上还得不上、烧钱的话现金能撑多久，以及账面利润有没有变成真金白银。银行、保险等金融公司不适用。" = "How solid the company's footing is: how much it owes, how heavy the interest is, whether near-term bills can be paid, how long cash lasts if it is burning money, and whether paper profit turns into real cash. Not applicable to banks and insurers.";
+"%@分 %@ = 下面 %lld 项指标板块百分位的加权平均（名称后 ×0.5 表示口径相近、合并计权，避免同一信息被重复计算）：" = "%@ score %@ = weighted average of the %lld metric percentiles below (×0.5 after a name means metrics built on the same information are combined so it is not counted twice):";

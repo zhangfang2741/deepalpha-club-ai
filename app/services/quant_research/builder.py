@@ -198,6 +198,7 @@ def _metric_out(sm: ScoredMetric, ev: Evaluation, lang: tx.Lang) -> MetricOut:
         formula=MetricFormula(expression=expr, inputs=_formula_inputs(sm, ev, lang)) if expr else None,
         position_text=tx.position_text(sm, lang),
         interpretation=metric_interpretation(d, lang),
+        weight=d.weight,
     )
 
 

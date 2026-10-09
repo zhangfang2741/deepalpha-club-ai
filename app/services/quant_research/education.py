@@ -139,6 +139,12 @@ _GUIDANCE: dict[str, tuple[str, str, str, str]] = {
         "Shows how much net income has turned into operating cash, a test of earnings quality.",
         "A single year is affected by payment timing and seasonality, and fast-growing firms often run low because of working-capital needs; look across years. Not computed when net income is negative.",
     ),
+    "fcf_sbc_m": (
+        "观察把股票薪酬也当成成本后，收入还能留下多少自由现金。",
+        "股权激励费用取现金流量表里的股票薪酬；不同公司的薪酬结构差别很大，只和同板块比较。报表没有该项时不计算。",
+        "Shows free cash left from revenue after also treating stock pay as a cost.",
+        "Stock-based compensation is taken from the cash flow statement; pay structures differ widely, so compare within a sector. Not computed when the statement lacks it.",
+    ),
 }
 
 

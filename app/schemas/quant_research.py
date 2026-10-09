@@ -93,6 +93,7 @@ class MetricOut(BaseModel):
     formula: MetricFormula | None = None
     position_text: str | None = None
     interpretation: MetricInterpretation | None = None
+    weight: float = 1.0  # 在维度分里的权重（口径相近的利润 / 回报指标合并计权，其余为 1）
 
 
 class MetricGroup(BaseModel):

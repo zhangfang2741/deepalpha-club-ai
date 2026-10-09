@@ -152,3 +152,21 @@ def test_cap_ignores_low_weight_dimension():
 def test_cap_without_weights_unchanged():
     dims = [_dim("valuation", 5), _dim("growth", 95), _dim("profitability", 95)]
     assert overall(dims, DIST, n_analysts=10, prev_grade=None).capped
+
+
+def test_score_dimension_uses_metric_weights():
+    """维度分 = 指标百分位按指标权重加权（盈利能力里口径相近的指标权重 0.5）。"""
+    sm = [_sm("fcf_m", 100), _sm("ebit_m", 0), _sm("net_m", 0)]      # 权重 1 / 0.5 / 0.5
+    d = score_dimension("profitability", sm, None)
+    assert d.score == 50.0                                          # (100×1 + 0×0.5 + 0×0.5) ÷ 2
+    equal = score_dimension("profitability", [_sm("fcf_m", 100), _sm("gross_m", 0)], None)
+    assert equal.score == 50.0
+
+
+def test_dimension_formula_shows_weights_only_when_unequal():
+    from app.services.quant_research.copy import dimension_formula
+
+    weighted = score_dimension("profitability", [_sm("fcf_m", 100), _sm("ebit_m", 40)], None)
+    assert "×" in dimension_formula(weighted) and "÷ 1.5" in dimension_formula(weighted)
+    plain = score_dimension("valuation", [_sm("pe_ttm", 60), _sm("pb", 40)], None)
+    assert "×" not in dimension_formula(plain) and "÷ 2" in dimension_formula(plain)

@@ -54,11 +54,12 @@ class MetricDef:
     desc_zh: str
     desc_en: str
     unit: Literal["x", "pct"]  # 倍数 / 百分比（显示用）
+    weight: float = 1.0        # 在维度分里的权重：口径相近的指标合并计权，避免同一信息被重复计算
 
 
 def _d(key: str, dim: str, group: str, group_en: str, direction: Direction, name_zh: str, name_en: str,
-       desc_zh: str, desc_en: str, unit: Literal["x", "pct"] = "x") -> MetricDef:
-    return MetricDef(key, dim, group, group_en, direction, name_zh, name_en, desc_zh, desc_en, unit)
+       desc_zh: str, desc_en: str, unit: Literal["x", "pct"] = "x", *, weight: float = 1.0) -> MetricDef:
+    return MetricDef(key, dim, group, group_en, direction, name_zh, name_en, desc_zh, desc_en, unit, weight)
 
 
 _V, _G, _P, _M, _R, _S = "valuation", "growth", "profitability", "momentum", "revisions", "stability"
@@ -118,21 +119,24 @@ METRICS: dict[str, MetricDef] = {m.key: m for m in [
     _d("gross_m", _P, "毛利率", "Gross margin", _HI, "毛利率", "Gross margin",
        "最近 12 个月毛利占营收的比例", "Trailing gross profit over revenue", "pct"),
     _d("ebit_m", _P, "EBIT 利润率", "EBIT margin", _HI, "EBIT 利润率", "EBIT margin",
-       "最近 12 个月 EBIT 占营收的比例", "Trailing EBIT over revenue", "pct"),
+       "最近 12 个月 EBIT 占营收的比例", "Trailing EBIT over revenue", "pct", weight=0.5),
     _d("ebitda_m", _P, "EBITDA 利润率", "EBITDA margin", _HI, "EBITDA 利润率", "EBITDA margin",
-       "最近 12 个月 EBITDA 占营收的比例", "Trailing EBITDA over revenue", "pct"),
+       "最近 12 个月 EBITDA 占营收的比例", "Trailing EBITDA over revenue", "pct", weight=0.5),
     _d("net_m", _P, "净利率", "Net margin", _HI, "净利率", "Net margin",
-       "最近 12 个月净利润占营收的比例", "Trailing net income over revenue", "pct"),
+       "最近 12 个月净利润占营收的比例", "Trailing net income over revenue", "pct", weight=0.5),
     _d("fcf_m", _P, "自由现金流利润率", "FCF margin", _HI, "自由现金流利润率", "FCF margin",
        "最近 12 个月自由现金流（经营现金流 − 资本开支）占营收的比例", "Trailing free cash flow over revenue", "pct"),
+    _d("fcf_sbc_m", _P, "自由现金流利润率", "FCF margin", _HI, "扣股权激励后自由现金流利润率", "FCF margin after stock comp",
+       "最近 12 个月（自由现金流 − 股权激励费用）占营收的比例：把用股票发给员工的薪酬也当成真实成本",
+       "Trailing (free cash flow − stock-based compensation) over revenue: counts pay in stock as a real cost", "pct"),
     _d("roe", _P, "ROE", "ROE", _HI, "ROE", "Return on equity",
-       "最近 12 个月净利润相对股东权益的比例", "Trailing net income over shareholders' equity", "pct"),
+       "最近 12 个月净利润相对股东权益的比例", "Trailing net income over shareholders' equity", "pct", weight=0.5),
     _d("roa", _P, "ROA", "ROA", _HI, "ROA", "Return on assets",
-       "最近 12 个月净利润相对总资产的比例", "Trailing net income over total assets", "pct"),
+       "最近 12 个月净利润相对总资产的比例", "Trailing net income over total assets", "pct", weight=0.5),
     _d("roic", _P, "ROIC", "ROIC", _HI, "ROIC", "Return on invested capital",
        "税后 EBIT 相对投入资本（负债 + 股东权益 − 现金）的比例", "After-tax EBIT over debt + equity − cash", "pct"),
     _d("asset_turn", _P, "资产周转率", "Asset turnover", _HI, "资产周转率", "Asset turnover",
-       "最近 12 个月营收相对总资产的倍数", "Trailing revenue over total assets", "pct"),
+       "最近 12 个月营收相对总资产的倍数", "Trailing revenue over total assets", "pct", weight=0.5),
     # 动量
     _d("r3m", _M, "3 月", "3M", _HI, "3 个月涨幅", "3M price change",
        "最近 3 个月（63 个交易日）的前复权涨跌幅", "Dividend-adjusted price change over 63 trading days", "pct"),
@@ -189,6 +193,7 @@ INPUT_LABELS: dict[str, tuple[str, str]] = {
     "pe": ("市盈率", "P/E"), "growth_pct": ("EPS 增速 %", "EPS growth %"),
     "close_now": ("最新收盘价", "Latest close"), "close_then": ("期初收盘价", "Starting close"),
     "est_new": ("当前一致预期", "Current consensus"), "est_old": ("当时一致预期", "Consensus then"),
+    "fcf_sbc_ttm": ("扣股权激励后自由现金流 TTM", "FCF after stock comp (TTM)"),
     "net_debt": ("净负债", "Net debt"), "interest_ttm": ("利息支出 TTM", "Interest expense (TTM)"),
     "current_assets": ("流动资产", "Current assets"), "current_liabilities": ("流动负债", "Current liabilities"),
     "cash": ("现金及短期投资", "Cash & short-term investments"), "burn_ttm": ("年自由现金流出 TTM", "Free-cash-flow burn (TTM)"),
@@ -247,7 +252,7 @@ def _num(d: dict | None, key: str) -> float | None:
 
 
 def compute_metrics(inp: StockInputs) -> dict[str, MetricValue]:
-    """估值 / 成长 / 盈利能力 / 动量 / 财务稳健共 41 项（EPS 修正见 revisions.compute_revisions）。"""
+    """估值 / 成长 / 盈利能力 / 动量 / 财务稳健共 42 项（EPS 修正见 revisions.compute_revisions）。"""
     q, cf, bal = inp.quarters_income, inp.quarters_cash, inp.balance
     fy1, fy2 = inp.fy1, inp.fy2
     enough_analysts = analyst_count(fy1) >= MIN_ANALYSTS
@@ -272,6 +277,8 @@ def compute_metrics(inp: StockInputs) -> dict[str, MetricValue]:
     ocf = ttm(cf, "operatingCashFlow")
     capex = ttm(cf, "capitalExpenditure")
     fcf = ocf + capex if (ocf is not None and capex is not None) else None
+    sbc = ttm(cf, "stockBasedCompensation")
+    fcf_sbc = fcf - sbc if (fcf is not None and sbc is not None) else None
 
     def fwd(key):  # NTM 一致预期，分析师不足时视为缺失
         return ntm(fy1, fy2, key, inp.as_of) if enough_analysts else None
@@ -333,6 +340,7 @@ def compute_metrics(inp: StockInputs) -> dict[str, MetricValue]:
     out["ebitda_m"] = _ratio(ebitda, rev, [("ebitda_ttm", ebitda), ("rev_ttm", rev)])
     out["net_m"] = _ratio(net, rev, [("net_ttm", net), ("rev_ttm", rev)])
     out["fcf_m"] = _ratio(fcf, rev, [("fcf_ttm", fcf), ("rev_ttm", rev)])
+    out["fcf_sbc_m"] = _ratio(fcf_sbc, rev, [("fcf_sbc_ttm", fcf_sbc), ("rev_ttm", rev)])
     out["roe"] = _ratio(net, equity, [("net_ttm", net), ("equity", equity)], den_nonpositive=na)
     out["roa"] = _ratio(net, assets, [("net_ttm", net), ("assets", assets)])
     tax_rate = min(max(tax / pretax, 0.0), 0.5) if (tax is not None and pretax and pretax > 0) else 0.21
@@ -346,7 +354,7 @@ def compute_metrics(inp: StockInputs) -> dict[str, MetricValue]:
         # 经营现金流含存贷款变动，现金流类指标没有意义
         out["rev_fwd"] = MetricValue(None, "not_applicable", out["rev_fwd"].inputs, "growth",
                                      {"reason": "financials_revenue_basis"})
-        for key in ("pcf", "fcf_m"):
+        for key in ("pcf", "fcf_m", "fcf_sbc_m"):
             out[key] = MetricValue(None, "not_applicable", out[key].inputs, out[key].op,
                                    {"reason": "financials_cash_flow"})
 

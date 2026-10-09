@@ -124,8 +124,14 @@ def score_dimension(dim: str, scored: list[ScoredMetric], prev_grade: str | None
     part = [s for s in scored if s.percentile is not None]
     if total == 0 or len(part) < min_participating(total):
         return DimensionScore(dim, "unavailable", None, None, scored)
-    score = round(sum(s.percentile for s in part) / len(part), 1)  # type: ignore[misc]
+    score = round(weighted_percentile(part), 1)
     return DimensionScore(dim, "ok", score, grade_with_hysteresis(score, prev_grade), scored)
+
+
+def weighted_percentile(part: list[ScoredMetric]) -> float:
+    """参与指标的百分位按指标权重加权平均（权重见 MetricDef.weight，默认 1 = 等权）。"""
+    total = sum(METRICS[s.key].weight for s in part)
+    return sum(s.percentile * METRICS[s.key].weight for s in part) / total  # type: ignore[operator]
 
 
 def min_participating(total: int) -> int:

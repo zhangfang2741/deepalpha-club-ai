@@ -19,7 +19,7 @@ def _linspace(lo: float, hi: float, n: int) -> list[float]:
 
 
 def _synthetic_stability_dists() -> dict:
-    """财务稳健五项的**合成**板块分布（fixture 快照早于这个维度，没有真实分布）。
+    """财务稳健五项与扣股权激励自由现金流利润率的**合成**板块分布（fixture 快照早于这两处，没有真实分布）。
 
     只用来让维度在测试里能被评分、golden 有确定的数；形状贴近真实（净现金公司挤在 0、不烧钱的公司挤在上限），
     不代表任何真实板块。真实分布由批量任务按全样本重算。
@@ -32,6 +32,7 @@ def _synthetic_stability_dists() -> dict:
         "current_ratio": _linspace(0.5, 4.0, 100),
         "runway_years": sorted(_linspace(0.3, 9.0, 30) + [10.0] * 70),
         "cfo_ni": _linspace(0.3, 1.8, 100),
+        "fcf_sbc_m": _linspace(-0.2, 0.4, 100),    # 盈利能力新增的现金口径，同样没有真实快照
     }
     return {(sector, key): vals for sector in set(SECTORS.values()) for key, vals in shapes.items()}
 

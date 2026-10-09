@@ -232,6 +232,14 @@ _CONCEPTS: dict[str, tuple[str, str, str, str, str, str]] = {
         "For each $1 of net income on paper, how much cash actually came in from operations. 100% means profit turned fully into cash; well below 100% means much of the profit is still on paper (for example goods shipped but not yet paid for).",
         "Higher = profit is better backed by cash; staying below 80% for long deserves attention.",
     ),
+    "fcf_sbc_m": (
+        "扣股权激励后自由现金流利润率 FCF Margin after Stock Comp",
+        "自由现金流利润率再扣掉「用股票发给员工的薪酬」。很多科技公司少发现金、多发股票，账上现金流看着很好，但这些股票最终会稀释股东，所以也算一种真实成本。",
+        "越高 = 即使把股票薪酬也当成本，公司仍然能留下真金白银；明显低于自由现金流利润率，说明股票薪酬占了很大比重。",
+        "FCF Margin after Stock Comp",
+        "Free cash flow margin after also subtracting pay given to employees in stock. Many tech companies pay less in cash and more in shares, which flatters cash flow, but those shares eventually dilute shareholders, so they are a real cost too.",
+        "Higher = the company still keeps real cash even when stock pay is counted as a cost; far below the plain free cash flow margin means stock pay is a large share of the story.",
+    ),
 }
 
 _VALUATION_PREFIXES = (
@@ -347,6 +355,8 @@ _INPUT_BASE: dict[str, tuple[str, str]] = {
              "Cash and short-term investments: cash available on short notice, from the latest balance sheet."),
     "burn": ("年自由现金流出 = −自由现金流，即一年净花掉的现金（自由现金流为负时才有意义）。",
              "Free-cash-flow burn = −free cash flow: cash spent on net over a year (meaningful only when free cash flow is negative)."),
+    "fcf_sbc": ("扣股权激励后自由现金流 = 自由现金流 − 股权激励费用（用股票发给员工的薪酬），把股票薪酬也当成真实成本。",
+                "Free cash flow after stock comp = free cash flow − stock-based compensation (pay given in shares), counting stock pay as a real cost."),
 }
 
 _INPUT_PERIOD: list[tuple[str, tuple[str, str]]] = [
@@ -543,6 +553,12 @@ _WHY: dict[str, tuple[str, str, str, str]] = {
         "检验利润的质量；亏损公司不参与（比值没有意义）。",
         "Profit can be dressed up by accounting; cash is much harder to fake. Companies whose profit never turns into cash often hide risks.",
         "Tests the quality of earnings. Loss-making companies are excluded because the ratio is meaningless.",
+    ),
+    "fcf_sbc_m": (
+        "股票薪酬不用掏现金，所以不会出现在现金流里，但它会让每一股变得更不值钱。只看现金流，会高估大量发股票薪酬的公司。",
+        "和自由现金流利润率对照看：两者差得越大，说明公司越依赖股票薪酬留住员工。",
+        "Stock pay costs no cash, so it never shows in cash flow, yet it makes each share worth less. Looking at cash flow alone overstates companies that pay heavily in stock.",
+        "Read it next to the plain free cash flow margin: the bigger the gap, the more the company relies on stock pay.",
     ),
 }
 

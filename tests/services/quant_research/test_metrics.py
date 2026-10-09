@@ -9,11 +9,11 @@ from app.services.quant_research.metrics import DIMENSIONS, METRICS, compute_met
 from tests.services.quant_research.fixtures import load_inputs
 
 
-def test_registry_has_45_metrics_across_six_dimensions():
-    assert len(METRICS) == 45
+def test_registry_has_46_metrics_across_six_dimensions():
+    assert len(METRICS) == 46
     assert {m.dimension for m in METRICS.values()} == set(DIMENSIONS)
     counts = {d: sum(m.dimension == d for m in METRICS.values()) for d in DIMENSIONS}
-    assert counts == {"valuation": 14, "growth": 9, "profitability": 9, "momentum": 4, "revisions": 4, "stability": 5}
+    assert counts == {"valuation": 14, "growth": 9, "profitability": 10, "momentum": 4, "revisions": 4, "stability": 5}
 
 
 def test_compute_returns_all_non_revision_metrics():
@@ -221,3 +221,37 @@ def test_missing_net_interest_falls_back_to_interest_expense():
     inc = [{k: v for k, v in q.items() if k != "netInterestIncome"} for q in inp.quarters_income]
     m = compute_metrics(replace(inp, quarters_income=inc))["interest_cov"]
     assert m.status == "ok" and m.value < 100
+
+
+# ---------- 盈利能力：现金口径 + 指标权重 ----------
+
+def test_fcf_after_stock_comp_margin():
+    inp = load_inputs("NVDA")
+    m = compute_metrics(inp)["fcf_sbc_m"]
+    fcf = ttm(inp.quarters_cash, "operatingCashFlow") + ttm(inp.quarters_cash, "capitalExpenditure")
+    sbc = ttm(inp.quarters_cash, "stockBasedCompensation")
+    rev = ttm(inp.quarters_income, "revenue")
+    assert m.status == "ok" and m.value == pytest.approx((fcf - sbc) / rev)
+    assert [n for n, _ in m.inputs] == ["fcf_sbc_ttm", "rev_ttm"]
+    assert m.value < compute_metrics(inp)["fcf_m"].value         # 扣掉股权激励只会更低
+
+
+def test_fcf_after_stock_comp_missing_without_sbc_field():
+    """报表不给股权激励（A 股 / 港股转换层）时缺失，不能当 0——否则等于没扣。"""
+    inp = load_inputs("NVDA")
+    cash = [{k: v for k, v in q.items() if k != "stockBasedCompensation"} for q in inp.quarters_cash]
+    assert compute_metrics(replace(inp, quarters_cash=cash))["fcf_sbc_m"].status == "missing"
+
+
+def test_financials_fcf_after_stock_comp_not_applicable():
+    assert compute_metrics(load_inputs("JPM"))["fcf_sbc_m"].status == "not_applicable"
+
+
+def test_profitability_metric_weights_dedupe_gaap_cluster():
+    """口径相近的 GAAP 利润 / 回报指标合并计权，现金口径的权重更高。"""
+    w = {k: m.weight for k, m in METRICS.items() if m.dimension == "profitability"}
+    assert w["fcf_m"] == w["fcf_sbc_m"] == w["gross_m"] == w["roic"] == 1.0
+    assert w["ebit_m"] == w["ebitda_m"] == w["net_m"] == w["roe"] == w["roa"] == w["asset_turn"] == 0.5
+    cash_share = (w["fcf_m"] + w["fcf_sbc_m"]) / sum(w.values())
+    assert cash_share > 0.25                                      # 以前 1/9 ≈ 11%
+    assert all(m.weight == 1.0 for m in METRICS.values() if m.dimension != "profitability")

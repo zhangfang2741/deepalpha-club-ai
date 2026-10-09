@@ -30,6 +30,35 @@ def _weights_en() -> str:
     return _weights_text(1)
 
 
+def _metric_weights_text(lang: int) -> str:
+    """权重不是 1 的指标一览（直接取自 METRICS，改权重即同步）；盈利能力里口径相近的利润 / 回报指标合并计权。"""
+    by_dim: dict[str, dict[float, list[str]]] = {}
+    for m in METRICS.values():
+        if m.weight != 1.0:
+            by_dim.setdefault(m.dimension, {}).setdefault(m.weight, []).append(m.name_zh if lang == 0 else m.name_en)
+    parts = []
+    for dim, groups in by_dim.items():
+        for w, names in groups.items():
+            sep = "、" if lang == 0 else ", "
+            dn = tx.dimension_name(dim, "zh" if lang == 0 else "en")
+            parts.append(f"{dn}里{sep.join(names)}各 {w:g}" if lang == 0 else f"in {dn}, {sep.join(names)} each carry {w:g}")
+    if not parts:
+        return ""
+    tail = ("，其余为 1：口径相近的指标合并计权，避免同一信息被重复计算（如三种利润率、三种回报率都以 GAAP 利润为基础）。"
+            if lang == 0 else
+            "; all others carry 1. Metrics built on the same information are combined so it is not counted several "
+            "times (the three margins and three returns all rest on GAAP profit).")
+    return ("；".join(parts) if lang == 0 else "; ".join(parts)) + tail
+
+
+def _metric_weights_zh() -> str:
+    return _metric_weights_text(0)
+
+
+def _metric_weights_en() -> str:
+    return _metric_weights_text(1)
+
+
 _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
     (("和谁比", "Who it is compared with"),
      ("标普1500（标普500 + 中盘400 + 小盘600）按 GICS 11 个板块分组，每项指标只和同板块公司比较。"
@@ -56,9 +85,11 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
       f"daily flip-flopping at the edges, a grade only changes once the percentile moves more than {HYSTERESIS:.0f} "
       f"points past the old band.")),
     (("维度分", "Dimension scores"),
-     ("维度分 = 该维度内参与计算的指标百分位的等权平均；参与计算的指标不足三分之一（且少于 2 项）时，该维度暂无等级。",
-      "A dimension score is the equal-weighted average of its participating metric percentiles; with fewer than "
-      "one third of the metrics (and at least 2) available, the dimension has no grade.")),
+     (f"维度分 = 该维度内参与计算的指标百分位的加权平均，多数指标权重相同；{_metric_weights_zh()}"
+      "参与计算的指标不足三分之一（且少于 2 项）时，该维度暂无等级。",
+      "A dimension score is the weighted average of its participating metric percentiles; most metrics carry the "
+      f"same weight. {_metric_weights_en()} With fewer than one third of the metrics (and at least 2) available, "
+      "the dimension has no grade.")),
     (("综合等级", "Composite grade"),
      (f"综合分 = 可用维度分按公司阶段加权平均（权重见「公司阶段」，缺失的维度在其余维度间重新归一）；"
       f"再看综合分在标普1500 全体中的百分位，按同一把尺子定等级。"
