@@ -17,10 +17,13 @@ struct ChartSection: View {
             // 次级别结论在上方结论卡的「30 分钟确认」格里，区间只在弹出的 30 分钟图里标。
             // 竖屏也画 MACD 副图：趋势背驰比的就是 b 段与 c 段的红绿柱面积，副图上把这两段用粉色底标出来，
             // 与主图的 b / c 两条线对得上。
-            ChanChartView(analysis: analysis, vm: vm,
-                          onFullscreen: isStatic ? nil : onFullscreen)
-            // 指标栏在图下方：点一下开 / 关均线、成交量、MACD（分享长图里不放）
-            if !isStatic { IndicatorBar(vm: vm, analysis: analysis) }
+            // 图和指标栏贴紧（指标栏是图的一部分，不跟下面的内容挤在一起）
+            VStack(alignment: .leading, spacing: 0) {
+                ChanChartView(analysis: analysis, vm: vm,
+                              onFullscreen: isStatic ? nil : onFullscreen)
+                // 指标栏在图下方：点一下开 / 关均线、EMA、BOLL（分享长图里不放）
+                if !isStatic { IndicatorBar(vm: vm, analysis: analysis) }
+            }
         }
     }
 }

@@ -105,7 +105,7 @@ struct IndicatorBar: View {
                     Image(systemName: "slider.horizontal.3")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Theme.textSecondary)
-                        .frame(width: 44, height: 36)
+                        .frame(width: 44, height: 30)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -114,7 +114,9 @@ struct IndicatorBar: View {
             .sheet(isPresented: $showSettings) {
                 IndicatorSettingsSheet(vm: vm, analysis: analysis)
                     .preferredColorScheme(.dark)
-                    .presentationDetents([.medium, .large])
+                    // 矮面板：标题 + 指标切换 + 最多 3 行参数 + 一句说明
+                    .presentationDetents([.height(270)])
+                    .presentationDragIndicator(.visible)
             }
         }
     }
@@ -128,7 +130,7 @@ struct IndicatorBar: View {
                 .font(.system(size: 12, weight: on ? .semibold : .regular))
                 .foregroundStyle(on ? Theme.accent : Theme.textSecondary)
                 .padding(.horizontal, 12)
-                .frame(minHeight: 36)
+                .frame(minHeight: 30)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -137,7 +139,8 @@ struct IndicatorBar: View {
     }
 }
 
-/// 指标参数设置：均线 3 条 / EMA 2 条的周期（每条可单独关掉）、BOLL 的周期与倍数。
+/// 指标参数设置（参考富途的紧凑面板）：顶部一排指标名切换，下面每条线一行
+/// 「勾选 · 颜色 · 名称 · − 数值 +」，字小行紧，一个矮的底部面板放得下，不铺满半屏。
 /// 点「完成」才生效（改了才重新请求一次分析）；「恢复默认」清掉自定义。
 struct IndicatorSettingsSheet: View {
     @ObservedObject var vm: ChanViewModel
@@ -147,76 +150,149 @@ struct IndicatorSettingsSheet: View {
     /// 每条线：周期 + 是否启用。
     struct Line: Identifiable { let id: Int; var period: Int; var enabled: Bool }
 
+    @State private var tab: ChartIndicator = .ma
     @State private var maLines: [Line] = []
     @State private var emaLines: [Line] = []
     @State private var bollPeriod = IndicatorSettings.defaultBoll.period
     @State private var bollMult = IndicatorSettings.defaultBoll.mult
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
+        VStack(spacing: 0) {
+            header
+            Divider().background(Theme.border)
+            tabs
+            VStack(spacing: 0) {
+                switch tab {
+                case .ma:
                     ForEach($maLines) { lineRow($0, prefix: "MA", colors: Theme.maColors) }
-                } header: {
-                    Text(L("均线"))
-                } footer: {
-                    Text(L("最近 N 根 K 线收盘价的平均。"))
-                }
-                Section {
+                case .ema:
                     ForEach($emaLines) { lineRow($0, prefix: "EMA", colors: Theme.emaColors) }
-                } header: {
-                    Text("EMA")
-                } footer: {
-                    Text(L("指数移动平均：越近的 K 线权重越大，比均线拐得快。"))
-                }
-                Section {
-                    Stepper(value: $bollPeriod, in: IndicatorSettings.periodRange) {
-                        valueLabel(L("周期"), "\(bollPeriod)", color: Theme.bollLine)
-                    }
-                    Stepper(value: $bollMult, in: IndicatorSettings.multRange, step: 0.5) {
-                        valueLabel(L("标准差倍数"), String(format: "%.1f", bollMult), color: Theme.bollLine)
-                    }
-                } header: {
-                    Text("BOLL")
-                } footer: {
-                    Text(L("中轨是 N 根 K 线的均线，上下轨 = 中轨 ± 倍数 × 标准差。"))
-                }
-                Section {
-                    Button(L("恢复默认")) { fill(from: IndicatorSettings()) }
+                case .boll:
+                    paramRow(L("周期"), color: Theme.bollLine,
+                             value: "\(bollPeriod)",
+                             minus: { bollPeriod = max(IndicatorSettings.periodRange.lowerBound, bollPeriod - 1) },
+                             plus: { bollPeriod = min(IndicatorSettings.periodRange.upperBound, bollPeriod + 1) })
+                    paramRow(L("标准差倍数"), color: Theme.bollLine,
+                             value: String(format: "%.1f", bollMult),
+                             minus: { bollMult = max(IndicatorSettings.multRange.lowerBound, bollMult - 0.5) },
+                             plus: { bollMult = min(IndicatorSettings.multRange.upperBound, bollMult + 0.5) })
                 }
             }
-            .navigationTitle(L("指标设置"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L("取消")) { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(L("完成")) { apply() }
-                }
-            }
+            .padding(.horizontal, 16)
+            Text(note)
+                .font(.caption2)
+                .foregroundStyle(Theme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.top, 6)
+            Spacer(minLength: 0)
         }
+        .background(Theme.surface)
         .onAppear { fill(from: vm.indicatorSettings) }
     }
 
-    private func lineRow(_ line: Binding<Line>, prefix: String, colors: [Color]) -> some View {
-        let color = colors[min(line.wrappedValue.id, colors.count - 1)]
-        return HStack {
-            Toggle("", isOn: line.enabled).labelsHidden()
-            Stepper(value: line.period, in: IndicatorSettings.periodRange) {
-                valueLabel("\(prefix)\(line.wrappedValue.id + 1)", "\(line.wrappedValue.period)", color: color)
+    private var header: some View {
+        HStack {
+            Button(L("恢复默认")) { fill(from: IndicatorSettings()) }
+                .font(.footnote)
+                .foregroundStyle(Theme.textSecondary)
+            Spacer()
+            Text(L("指标设置")).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.textPrimary)
+            Spacer()
+            Button(L("完成")) { apply() }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Theme.accent)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .frame(height: 44)
+    }
+
+    /// 指标名切换：纯文字，选中的变色加粗 + 下划线（与图表下方的指标栏同一种样式）。
+    private var tabs: some View {
+        HStack(spacing: 18) {
+            ForEach(ChartIndicator.allCases) { i in
+                Button { tab = i } label: {
+                    VStack(spacing: 4) {
+                        Text(i.title)
+                            .font(.system(size: 13, weight: tab == i ? .semibold : .regular))
+                            .foregroundStyle(tab == i ? Theme.textPrimary : Theme.textSecondary)
+                        Capsule().fill(tab == i ? Theme.accent : .clear).frame(width: 16, height: 2)
+                    }
+                    .frame(minHeight: 36)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            .disabled(!line.wrappedValue.enabled)
-            .opacity(line.wrappedValue.enabled ? 1 : 0.45)
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private var note: String {
+        switch tab {
+        case .ma: return L("最近 N 根 K 线收盘价的平均。")
+        case .ema: return L("指数移动平均：越近的 K 线权重越大，比均线拐得快。")
+        case .boll: return L("中轨是 N 根 K 线的均线，上下轨 = 中轨 ± 倍数 × 标准差。")
         }
     }
 
-    private func valueLabel(_ name: String, _ value: String, color: Color) -> some View {
+    private func lineRow(_ line: Binding<Line>, prefix: String, colors: [Color]) -> some View {
+        let l = line.wrappedValue
+        let color = colors[min(l.id, colors.count - 1)]
+        return HStack(spacing: 10) {
+            Button { line.wrappedValue.enabled.toggle() } label: {
+                Image(systemName: l.enabled ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 16))
+                    .foregroundStyle(l.enabled ? Theme.accent : Theme.textSecondary)
+                    .frame(width: 28, height: 36)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            stepperRow("\(prefix)\(l.id + 1)", color: color, value: "\(l.period)",
+                       minus: { line.wrappedValue.period = max(IndicatorSettings.periodRange.lowerBound, l.period - 1) },
+                       plus: { line.wrappedValue.period = min(IndicatorSettings.periodRange.upperBound, l.period + 1) })
+                .opacity(l.enabled ? 1 : 0.4)
+                .disabled(!l.enabled)
+        }
+    }
+
+    private func paramRow(_ name: String, color: Color, value: String,
+                          minus: @escaping () -> Void, plus: @escaping () -> Void) -> some View {
+        stepperRow(name, color: color, value: value, minus: minus, plus: plus)
+    }
+
+    /// 一行：颜色短线 + 名称，右边「− 数值 +」的小框。
+    private func stepperRow(_ name: String, color: Color, value: String,
+                            minus: @escaping () -> Void, plus: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
             Capsule().fill(color).frame(width: 12, height: 3)
-            Text(name).foregroundStyle(Theme.textSecondary)
-            Text(value).font(.body.monospacedDigit()).foregroundStyle(Theme.textPrimary)
+            Text(name).font(.system(size: 13)).foregroundStyle(Theme.textPrimary)
+            Spacer()
+            HStack(spacing: 0) {
+                stepButton("minus", action: minus)
+                Text(value)
+                    .font(.system(size: 13, weight: .medium).monospacedDigit())
+                    .foregroundStyle(Theme.textPrimary)
+                    .frame(width: 44)
+                stepButton("plus", action: plus)
+            }
+            .frame(height: 28)
+            .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 6))
         }
+        .frame(height: 40)
+    }
+
+    private func stepButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.textSecondary)
+                .frame(width: 32, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .buttonRepeatBehavior(.enabled)   // 按住连续加减
     }
 
     /// 用设置填表；没自定义过的用默认（均线默认随周期，与后端 `ma.MA_PERIODS` 一致）。
