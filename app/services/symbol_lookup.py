@@ -6,6 +6,9 @@ curated 成分（只有几十到几百只，但保证搜索框不报错）。美
 """
 from __future__ import annotations
 
+import asyncio
+import time
+
 import httpx
 from redis.asyncio import Redis
 
@@ -18,6 +21,15 @@ _CACHE_PREFIX = "symbol_search:names:v1"
 _CACHE_TTL = 3600 * 24
 # 取回过少视为残缺：不缓存、不用，退回 curated（A 股约 5400 只、港股约 2600 只）
 _MIN_COUNT = {"cn": 3000, "hk": 1000}
+# 冷缓存时最多等多久：A 股全市场名单冷拉要十几秒（iOS 请求会超时、列表就是空的），
+# 超过这个时间先用写死的成分兜底答复，名单在后台继续拉，拉完下一次搜索就是全量。
+_WAIT_BUDGET = 1.5
+# 拉取失败后这段时间内不再重试（数据源挂了时别每次输入都去打一遍）
+_FAIL_COOLDOWN = 30.0
+
+_MEM: dict[str, tuple[float, dict[str, str]]] = {}  # 进程内缓存：{市场: (时间, 名单)}，Redis 不可用时也能秒回
+_INFLIGHT: dict[str, asyncio.Task] = {}  # 单飞：同一市场同一时刻只拉一次
+_FAILED_AT: dict[str, float] = {}
 
 
 def _norm_code(code: str) -> str:
@@ -79,30 +91,80 @@ def _curated(market: str) -> dict[str, str]:
     return dict(_NAME_BY_MARKET.get(market, {}))
 
 
-async def load_name_table(market: str, redis: Redis | None) -> dict[str, str]:
-    """{代码: 名称}；全市场名单取不到或残缺时退回 curated，不缓存残缺结果。"""
-    key = f"{_CACHE_PREFIX}:{market}"
-    if redis is not None:
-        try:
-            cached = await get_json(redis, key)
-            if cached:
-                return cached
-        except Exception as e:  # noqa: BLE001 — 缓存挂了照样现取
-            logger.warning("symbol_search_cache_read_failed", market=market, error=str(e))
+def _mem_get(market: str) -> dict[str, str] | None:
+    item = _MEM.get(market)
+    if item and time.monotonic() - item[0] < _CACHE_TTL:
+        return item[1]
+    return None
+
+
+async def _load_full(market: str, redis: Redis | None) -> dict[str, str] | None:
+    """拉全市场名单并写缓存；失败 / 残缺返回 None（不缓存）。在后台任务里跑，不抛异常。"""
     try:
         table = await _fetch_name_table(market)
     except Exception as e:  # noqa: BLE001 — 数据源挂了不能让搜索框报错
         logger.warning("symbol_search_names_fetch_failed", market=market, error=str(e))
-        return _curated(market)
+        _FAILED_AT[market] = time.monotonic()
+        return None
     if len(table) < _MIN_COUNT.get(market, 1):
         logger.warning("symbol_search_names_incomplete", market=market, count=len(table))
-        return _curated(market)
+        _FAILED_AT[market] = time.monotonic()
+        return None
+    _MEM[market] = (time.monotonic(), table)
     if redis is not None:
         try:
-            await set_json(redis, key, table, expire=_CACHE_TTL)
+            await set_json(redis, f"{_CACHE_PREFIX}:{market}", table, expire=_CACHE_TTL)
         except Exception as e:  # noqa: BLE001
             logger.warning("symbol_search_cache_write_failed", market=market, error=str(e))
     return table
+
+
+def _ensure_loading(market: str, redis: Redis | None) -> asyncio.Task | None:
+    """后台拉取任务（单飞）；刚失败过且在冷却期内返回 None。"""
+    task = _INFLIGHT.get(market)
+    if task is not None and not task.done():
+        return task
+    if time.monotonic() - _FAILED_AT.get(market, -1e9) < _FAIL_COOLDOWN:
+        return None
+    task = asyncio.create_task(_load_full(market, redis))
+    _INFLIGHT[market] = task
+
+    def _cleanup(t: asyncio.Task, m: str = market) -> None:
+        if _INFLIGHT.get(m) is t:
+            _INFLIGHT.pop(m, None)
+
+    task.add_done_callback(_cleanup)
+    return task
+
+
+async def load_name_table(market: str, redis: Redis | None, *, wait: float = _WAIT_BUDGET) -> dict[str, str]:
+    """{代码: 名称}。内存 → Redis → 后台拉取（最多等 wait 秒，等不到先用 curated 兜底，不抛异常）。"""
+    mem = _mem_get(market)
+    if mem:
+        return mem
+    if redis is not None:
+        try:
+            cached = await get_json(redis, f"{_CACHE_PREFIX}:{market}")
+            if cached:
+                _MEM[market] = (time.monotonic(), cached)
+                return cached
+        except Exception as e:  # noqa: BLE001 — 缓存挂了照样现取
+            logger.warning("symbol_search_cache_read_failed", market=market, error=str(e))
+    task = _ensure_loading(market, redis)
+    if task is not None:
+        try:
+            table = await asyncio.wait_for(asyncio.shield(task), timeout=wait)
+            if table:
+                return table
+        except asyncio.TimeoutError:
+            logger.info("symbol_search_names_still_loading", market=market)
+    return _curated(market)
+
+
+async def prewarm(redis: Redis | None = None) -> None:
+    """启动时后台预热 A 股 / 港股名单，用户第一次搜索时缓存已经是热的。"""
+    for market in ("cn", "hk"):
+        await load_name_table(market, redis, wait=180)
 
 
 async def _search_us(query: str, redis: Redis | None, limit: int) -> list[dict]:
@@ -123,12 +185,13 @@ async def _search_us(query: str, redis: Redis | None, limit: int) -> list[dict]:
     return hits[:limit]
 
 
-async def search(market: str, query: str, *, redis: Redis | None = None, limit: int = 10) -> list[dict]:
+async def search(market: str, query: str, *, redis: Redis | None = None, limit: int = 10,
+                 wait: float = _WAIT_BUDGET) -> list[dict]:
     """返回 [{market, symbol, name}]，最多 limit 条；market 为 us / cn / hk。"""
     q = (query or "").strip()
     if not q:
         return []
     if market == "us":
         return await _search_us(q, redis, limit)
-    table = await load_name_table(market, redis)
+    table = await load_name_table(market, redis, wait=wait)
     return [{"market": market, "symbol": c, "name": n} for c, n in rank_matches(table, q, limit)]
