@@ -88,7 +88,7 @@ xcrun simctl io $SIM screenshot /tmp/profile.png
    asc xcode export --archive-path ../.asc/artifacts/DeepAlphaChan-1.3-5.xcarchive \
      --ipa-path ../.asc/artifacts/DeepAlphaChan-1.3-5.ipa --method app-store-connect --signing-style automatic \
      --team-id L565U2X5NL --overwrite --xcodebuild-flag=-allowProvisioningUpdates
-   asc ipa-info --ipa ../.asc/artifacts/DeepAlphaChan-1.3-5.ipa   # 核对版本 1.3、构建号 5、Bundle ID
+   asc ipa-info --path ../.asc/artifacts/DeepAlphaChan-1.3-5.ipa   # 核对版本 1.3、构建号 5、Bundle ID
    ```
    如果签名失败（本机钥匙串没有分发证书 / Xcode 没登录账号）：**【人工】**用 Xcode → Product → Archive → Distribute App → App Store Connect → Upload，然后直接跳到第 6 步。
 5. 上传：
@@ -232,7 +232,8 @@ asc validate --app 6806500280 --version 1.3      # 不能有 blocker
 | 2026-10-09 | 换新手入门「我的」页配图 | 中英 900 px JPG 已目视验收；提交 `08701872` |
 | 2026-10-09 | 版本号 1.3 (5) 提交 | Debug / Release 均已更新，提交 `4d5f6601`，已推送 master |
 | 2026-10-09 | 发版前检查 | `tests/ios_content`：6 passed；iOS Simulator 编译通过（存在原有未使用变量警告）。额外 `make typecheck`：236 errors / 13 warnings，均在未改动的后端代码，日志 `/tmp/chan-1.3-typecheck.log` |
-| | 上传构建 | 构建 ID： |
-| | 建版本 / 关联构建 / 填文案 / 审核备注 | 版本 ID： |
-| | 提交审核 | 提交 ID： |
+| 2026-10-09 | 正式归档 / 导出 | Release 归档与导出成功；IPA 核对为 1.3 (5)、club.deepalpha.chan、L565U2X5NL，产物在 `.asc/artifacts/` |
+| 2026-10-10 | 上传构建 | 构建 ID：`e8ec5e74-9427-454d-943a-da968c71a3ec`；版本 1.3 (5)，状态 `VALID` |
+| 2026-10-10 | 建版本 / 关联构建 / 填文案 / 审核备注 | 版本 ID：`62569786-341f-4840-8eb1-0d293d675e1e`；中英 Whats New 已更新；审核详情 ID：`a8366020-1d94-4cdd-9f5e-d0da11d6dbe5`，备注 3834 字符 |
+| 2026-10-10 | 提交审核 | 提交 ID：`04aea3c1-05d4-4a76-81a1-5393abc87bbd`；版本与审核状态均为 `WAITING_FOR_REVIEW` |
 | | 过审 / 发布 | |
