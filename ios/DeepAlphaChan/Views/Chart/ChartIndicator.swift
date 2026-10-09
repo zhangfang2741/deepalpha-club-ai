@@ -23,8 +23,9 @@ enum ChartIndicator: String, CaseIterable, Identifiable {
         }
     }
 
-    /// 用户没动过它时是开还是关。新增指标默认关最稳，不会让老用户的图面突然变样。
-    var defaultOn: Bool { self == .ma }
+    /// 用户没动过它时是开还是关。全部默认关（2026-10-09 起均线也不默认选中）：先看缠论结构，需要时再点开；
+    /// 用户明确点开过的仍按本机存的选择。
+    var defaultOn: Bool { false }
 }
 
 /// 用户的开关选择存本机。存「用户明确选过的」{指标 id: 开 / 关}，没选过的走 `defaultOn`：

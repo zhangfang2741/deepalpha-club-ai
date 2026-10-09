@@ -460,7 +460,7 @@ deepalpha-club-ai/
 - 均线 `app/services/chan/ma.py`：按含预热的完整前复权**原始 K 线收盘**算简单移动平均（日线 / 30 分钟 5·20·60，周线 5·10·20），再按合并 K 线的 **`end_time`（所含最后一根原始 K 线）**对齐输出 `/chan/analysis` 的 `ma` 字段
   （`values["5"]` 等与 `merged_candles` 一一对应，不足周期为 null）。**不要**用合并 K 线的 `time` 对齐（那是缠论选的极值那根，可能早于最后一根，最右一根均线会停在几根之前）；均线在结构判断之前算，分型 / 笔不足提前返回时也带均线。
 - EMA（12 / 26，TA-Lib 口径，与 MACD 同口径）和 BOLL（20 周期、2 倍**总体**标准差）在 `app/services/chan/indicators.py`，对齐方式同均线，接口字段 `ema`（形状同 `ma`）/ `boll`（upper / mid / lower）；默认关，指标栏里点开。
-- iOS 图表下方是**指标栏**（`Views/Chart/ChartIndicator.swift`：`ChartIndicator` 枚举 + `IndicatorBar`），点一下开 / 关，选择存本机（只存用户明确选过的，没选过走 `defaultOn`）。
+- iOS 图表下方是**指标栏**（`Views/Chart/ChartIndicator.swift`：`ChartIndicator` 枚举 + `IndicatorBar`），点一下开 / 关，选择存本机（只存用户明确选过的，没选过走 `defaultOn`；2026-10-09 起所有指标含均线都默认关）。
   **新增指标**：枚举加 case → 后端加按合并 K 线对齐的字段 → `ChanAnalysis` 加属性 + `IndicatorBar.isAvailable` 写何时有数据 → `ChanChartView` 里按 `vm.isOn(.xxx)` 画 → 词典补条目（中英）。新增指标默认关。
 - 30 分钟周期可在条件页选，**会员功能**（示例股除外，与次级别确认同一权益）；`ChanViewModel.apply` 没指定周期时 30 分钟回到日线，避免自选 / 雷达入口沿用它绕过门禁。
 
