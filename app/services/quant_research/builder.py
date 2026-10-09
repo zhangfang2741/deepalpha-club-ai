@@ -72,8 +72,8 @@ class Evaluation:
 
     @property
     def weights(self) -> dict[str, float]:
-        """综合分里各维度的名义权重：由所处阶段决定（无阶段 = 等权）。"""
-        return weights_for(self.stage.key if self.stage else None)
+        """综合分里各维度的名义权重：按营收增速与现金流连续插值（无阶段 = 等权）。"""
+        return self.stage.weights if self.stage else weights_for(None)
 
     @property
     def composite(self) -> float | None:
@@ -125,7 +125,7 @@ def evaluate(inp: StockInputs, history: list[EstimatePoint], dists: Distribution
     for d in dims:
         d.key_fact = pick_key_fact(d)
     snap_dates = [p.snapshot_date for p in history]
-    stage = stage_of(inp, metrics["rev_yoy"].value, metrics["rev_cagr3"].value, prev.get("stage"))
+    stage = stage_of(inp, metrics["rev_yoy"].value, metrics["rev_cagr3"].value)
     return Evaluation(inp, metrics, dims, stage, n,
                       estimates_date=max(snap_dates).isoformat() if snap_dates else None)
 
@@ -147,8 +147,6 @@ def grades_of(ev: Evaluation) -> dict[str, str]:
                 out[f"m:{s.key}"] = s.grade
     if ev.overall and ev.overall.grade:
         out["overall"] = ev.overall.grade
-    if ev.stage:  # 阶段滞回用
-        out["stage"] = ev.stage.key
     return out
 
 

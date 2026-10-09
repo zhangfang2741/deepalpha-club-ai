@@ -128,15 +128,20 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
     (("公司阶段", "Company stage"),
      ("以营收增速为主、经营现金流为辅：营收同比 ≥ 15% 且 3 年复合 ≥ 10%（不足 3 年只看同比）为高增长，"
       "经营现金流为正是成长期、否则初创期；营收同比 ≤ −5% 时经营现金流为正是调整期、否则收缩期；"
-      "其余经营现金流为正是成熟期、否则调整期。营收同比刚好越过门槛时，上期所在的阶段多保留 2 个百分点，避免来回切换。"
-      "阶段决定六个维度在综合分里的权重（估值 / 成长 / 盈利能力 / 动量 / EPS 修正 / 财务稳健）："
+      "其余经营现金流为正是成熟期、否则调整期。阶段只是界面上的标签；"
+      "综合分里六个维度的权重按营收增速和经营现金流连续插值，不在门槛处跳变：营收同比在 10% ~ 20%（中心 15%）、"
+      "0% ~ −10%（中心 −5%）之间，经营现金流占营收在 −5% ~ +5% 之间，权重在相邻两行之间平滑过渡，远离门槛时就是下列各行。"
+      "各阶段的基准权重行（估值 / 成长 / 盈利能力 / 动量 / EPS 修正 / 财务稳健）："
       f"{_weights_zh()}。成长期看重增速、成熟期看重估值与赚钱能力；金融股不做阶段标注，各维度等权（它们没有财务稳健维度，见该节）。",
       "Revenue growth leads and operating cash flow follows: revenue up ≥ 15% year over year with a 3-year CAGR "
       "≥ 10% (year over year only with under 3 years of history) is high growth — growth with positive operating "
       "cash flow, introduction otherwise. Revenue down ≥ 5% is shake-out with positive operating cash flow, "
       "contraction otherwise. Everything else is mature with positive operating cash flow, shake-out otherwise. "
-      "A stage that was just crossed is kept for 2 extra points of growth to avoid flip-flopping. The stage sets the "
-      "weights of the six dimensions in the composite (valuation / growth / profitability / momentum / EPS "
+      "The stage is only a label. The composite weights the six dimensions by interpolating continuously on revenue "
+      "growth and operating cash flow, so nothing jumps at a threshold: between 10% and 20% revenue growth (centre "
+      "15%), between 0% and −10% (centre −5%), and between −5% and +5% operating cash flow over revenue the weights "
+      "glide between neighbouring rows; far from a threshold they equal the rows below. Base rows by stage "
+      "(valuation / growth / profitability / momentum / EPS "
       f"revisions / financial health): {_weights_en()}. Growth stages lean on growth, mature stages on valuation and profitability; "
       "financials are not labeled and use equal weights (they have no financial-health dimension; see that section).")),
     (("A 股与港股", "China A-shares and Hong Kong"),
