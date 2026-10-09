@@ -111,7 +111,7 @@ struct ChanChartView: View {
         VStack(spacing: 0) {
             priceChart
             // MACD 副图供对照（趋势背驰用它的红绿柱面积判定，结果标在主图上）
-            if showsMACD, vm.isOn(.macd), analysis.macd != nil {
+            if showsMACD, analysis.macd != nil {
                 Divider().background(Theme.border)
                 macdChart
             }
@@ -152,7 +152,7 @@ struct ChanChartView: View {
                     drawGrid(ctx, size: CGSize(width: plotW, height: size.height),
                              bounds: priceBounds)
                     drawHighlight(ctx, plotWidth: plotW, height: size.height, range: range)
-                    if vm.isOn(.volume) { drawVolume(ctx, plotWidth: plotW, height: size.height, range: range) }
+                    drawVolume(ctx, plotWidth: plotW, height: size.height, range: range)
                     drawCandles(ctx, plotWidth: plotW, height: size.height,
                                 range: range, bounds: priceBounds)
                     if vm.isOn(.boll) { drawBoll(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
@@ -194,16 +194,29 @@ struct ChanChartView: View {
                     .preferredColorScheme(.dark)
             }
             .overlay(alignment: .topLeading) {
-                if let ci = cursorIndex, ci >= 0, ci < candles.count {
-                    cursorDetail(index: ci)
-                        .padding(6)
-                        .background(Theme.surfaceAlt)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .padding(8)
-                        .allowsHitTesting(false)
-                } else if let onFullscreen {
-                    // 光标激活时让位给光标详情（同在左上角）；右上角留给价格轴与末价
-                    fullscreenButton(onFullscreen)
+                let cursor = cursorIndex.flatMap { (0..<candles.count).contains($0) ? $0 : nil }
+                VStack(alignment: .leading, spacing: 0) {
+                    // 第一行：全屏按钮 + 指标数值（跟随光标；没有光标时是可见区最右一根）
+                    HStack(alignment: .center, spacing: 0) {
+                        if let onFullscreen {
+                            fullscreenButton(onFullscreen)
+                        }
+                        if anyIndicatorOn, !candles.isEmpty {
+                            indicatorValues(index: cursor ?? max(0, min(range.end, candles.count) - 1))
+                                .padding(.leading, onFullscreen == nil ? 8 : 0)
+                                .padding(.vertical, onFullscreen == nil ? 4 : 0)
+                                .frame(maxWidth: geo.size.width - (onFullscreen == nil ? 16 : 52), alignment: .leading)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    if let ci = cursor {
+                        cursorDetail(index: ci)
+                            .padding(6)
+                            .background(Theme.surfaceAlt)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .padding(.horizontal, 8)
+                            .allowsHitTesting(false)
+                    }
                 }
             }
         }
@@ -355,8 +368,8 @@ struct ChanChartView: View {
         let span = max(dataSpan * 1.24, minimumSpan)
         // 有量柱时向下扩出一截：量柱占主图底部 volumeShare，K 线最低点落在量柱区之上
         let volumePad = hasVolume ? span * 0.24 : 0
-        // 左上角有全屏按钮时顶部略多留白，最高的 K 线与卖点标记不被按钮压住
-        let topPad = onFullscreen != nil ? span * 0.10 : 0
+        // 左上角有全屏按钮 / 指标数值行时顶部略多留白，最高的 K 线与卖点标记不被压住
+        let topPad = (onFullscreen != nil || anyIndicatorOn) ? span * 0.10 : 0
         return PriceBounds(minP: midpoint - span / 2 - volumePad, maxP: midpoint + span / 2 + topPad)
     }
 
@@ -1424,33 +1437,44 @@ struct ChanChartView: View {
                     infoText(L("量"), Self.formatVolume(v)).font(.system(size: 10))
                 }
             }
-            if vm.isOn(.ma) { lineValuesRow("MA", analysis.ma, Theme.maColors, index) }
-            if vm.isOn(.ema) { lineValuesRow("EMA", analysis.ema, Theme.emaColors, index) }
-            if vm.isOn(.boll), let boll = analysis.boll, index < boll.mid.count,
-               let up = boll.upper[index], let mid = boll.mid[index], let low = boll.lower[index] {
-                Text("BOLL " + String(format: "%.2f / %.2f / %.2f", up, mid, low))
-                    .font(.system(size: 10))
-                    .foregroundColor(Theme.bollLine)
-            }
         }
     }
 
-    /// 光标详情里「按周期的线」一行：MA5 12.34  MA20 12.10 …，颜色与图上线一致。
-    @ViewBuilder
-    private func lineValuesRow(_ name: String, _ data: MAData?, _ colors: [Color], _ index: Int) -> some View {
-        if let data {
-            HStack(spacing: 8) {
-                ForEach(Array(data.periods.enumerated()), id: \.offset) { k, period in
-                    let series = data.series(period)
-                    if index < series.count, let v = series[index] {
-                        Text("\(name)\(period) " + String(format: "%.2f", v))
-                            .foregroundColor(colors[min(k, colors.count - 1)])
-                    }
-                }
+    // MARK: - 指标数值（主图左上角，参考富途）
+
+    /// 已打开的指标在某根 K 线上的数值：MA5:12.34 MA20:12.10 … / BOLL(20,2) MID:… UPPER:… LOWER:…，颜色与图上线一致。
+    /// 有十字光标时是光标那根，没有时是当前可见的最右一根——拖动 / 点按图表时跟着变。
+    private func indicatorValues(index: Int) -> some View {
+        var items: [(String, Color)] = []
+        func lines(_ name: String, _ data: MAData?, _ colors: [Color]) {
+            guard let data else { return }
+            for (k, period) in data.periods.enumerated() {
+                let series = data.series(period)
+                let v = index < series.count ? series[index] : nil
+                items.append(("\(name)\(period):" + (v.map { String(format: "%.2f", $0) } ?? "--"),
+                              colors[min(k, colors.count - 1)]))
             }
-            .font(.system(size: 10))
         }
+        if vm.isOn(.ma) { lines("MA", analysis.ma, Theme.maColors) }
+        if vm.isOn(.ema) { lines("EMA", analysis.ema, Theme.emaColors) }
+        if vm.isOn(.boll), let b = analysis.boll {
+            func f(_ arr: [Double?]) -> String { index < arr.count ? (arr[index].map { String(format: "%.2f", $0) } ?? "--") : "--" }
+            let m = b.mult == b.mult.rounded() ? String(Int(b.mult)) : String(format: "%.1f", b.mult)
+            items.append(("BOLL(\(b.period),\(m))", Theme.bollLine))
+            items.append(("MID:\(f(b.mid))", Theme.bollLine))
+            items.append(("UPPER:\(f(b.upper))", Theme.bollLine))
+            items.append(("LOWER:\(f(b.lower))", Theme.bollLine))
+        }
+        return WrapLayout(spacing: 6, lineSpacing: 1) {
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                Text(item.0).foregroundColor(item.1)
+            }
+        }
+        .font(.system(size: 9.5, weight: .medium).monospacedDigit())
+        .lineLimit(1)
     }
+
+    private var anyIndicatorOn: Bool { ChartIndicator.allCases.contains { vm.isOn($0) } }
 
     /// 成交量缩写：中文用万/亿，英文用 K/M/B。
     static func formatVolume(_ v: Double) -> String {

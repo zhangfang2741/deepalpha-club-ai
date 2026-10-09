@@ -46,6 +46,7 @@ class Step(BaseModel):
     step_id: str
     time_sec: float = 0
     layers: list[str]
+    screen_action: str | None = None
     app_action: str
     on_screen_text: str
     narration_text: str
@@ -188,6 +189,11 @@ def brief_steps(path: Path, symbol: str) -> list[Step]:
     steps = [Step.model_validate(step) for step in brief.get("steps", [])]
     if len(steps) < 4 or not any(step.overlay_text for step in steps):
         raise RuntimeError("创意 brief 至少需要四个步骤和画面文字钩子")
+    actions = [step.screen_action for step in steps if step.screen_action]
+    if actions:
+        required = ["market_radar", "industry_radar", "stock_radar", "fundamental", "chan_structure"]
+        if any(action not in actions for action in required):
+            raise RuntimeError("创意 brief 缺少市场、行业、个股、基本面、缠论结构五步真实操作链")
     return steps
 
 
@@ -332,7 +338,8 @@ async def encode(run: Path, state: Production, raw: Path) -> None:
     await command("ffmpeg", "-v", "error", "-i", str(output), "-f", "null", "-")
     for step in state.steps:
         # SwiftUI 图表重绘晚于状态事件数百毫秒；审核帧应取图层稳定后的画面。
-        review_time = min(step.time_sec + 1.8, elapsed - 0.1)
+        settle_time = 4.0 if step.screen_action == "fundamental" else 1.8
+        review_time = min(step.time_sec + settle_time, elapsed - 0.1)
         await command("ffmpeg", "-y", "-v", "error", "-ss", str(review_time), "-i", str(output),
                       "-frames:v", "1", "-pix_fmt", "yuvj420p", str(run / f"frame-{step.step_id}.jpg"))
     state.video = str(output)

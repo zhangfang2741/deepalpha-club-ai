@@ -17,6 +17,8 @@ enum ChanService {
         ]
         // 兼容旧后端保留；现后端忽略该参数、始终预热 180 天（与雷达取数区间一致）。
         if let warmupDays { query["warmup_days"] = String(warmupDays) }
+        // 用户在「指标设置」里改过的均线 / EMA / BOLL 参数（没改过不传，后端用默认）
+        query.merge(IndicatorSettings.load().queryItems) { _, new in new }
         return try await APIClient.shared.get("/chan/analysis", query: query)
     }
 

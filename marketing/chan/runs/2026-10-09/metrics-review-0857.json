@@ -1,0 +1,43 @@
+{
+  "reviewed_at_beijing": "2026-10-09T08:57:49+08:00",
+  "organization": "My organization",
+  "window": "24h",
+  "source_run_id": "2026-10-08-0100",
+  "thresholds_beijing": {
+    "tiktok": "2026-10-09T01:02:31+08:00",
+    "youtube": "2026-10-09T01:01:53+08:00"
+  },
+  "channels": {
+    "tiktok": {
+      "post_id": "6ac67ad3ea45b37c36bbb3f1",
+      "status": "sent",
+      "public_url": "https://tiktok.com/@littlemonkey437/video/7693972213837417749",
+      "metrics_updated_at": "2026-10-09T03:10:49.864+08:00",
+      "metrics": {
+        "views": 9,
+        "reactions": 0,
+        "comments": 0,
+        "shares": 0,
+        "reach": 0,
+        "engagement_rate_percentage": 0,
+        "total_time_watched_minutes": 0.7,
+        "average_time_watched_seconds": 2.68
+      }
+    },
+    "youtube": {
+      "post_id": "6ac67af320b8d89a0676badd",
+      "status": "sent",
+      "public_url": "https://www.youtube.com/watch?v=GRx__z8CPOs",
+      "metrics_updated_at": "2026-10-08T20:39:24.962+08:00",
+      "metrics": {
+        "views": 100,
+        "reactions": 0,
+        "comments": 0,
+        "engagement_rate_percentage": 0
+      },
+      "missing_metrics": ["average_time_watched_seconds", "shares", "reach"]
+    }
+  },
+  "coverage": "passed_24h_threshold",
+  "note": "只记录 Buffer 明确返回的指标；未返回指标保持缺失。"
+}

@@ -1627,3 +1627,10 @@
 
 "均线" = "MA";
 "成交量" = "Volume";
+"指标设置" = "Indicator Settings";
+"最近 N 根 K 线收盘价的平均。" = "Average closing price of the last N bars.";
+"指数移动平均：越近的 K 线权重越大，比均线拐得快。" = "Exponential moving average: recent bars weigh more, so it turns faster than the MA.";
+"周期" = "Period";
+"标准差倍数" = "Std. dev. multiplier";
+"中轨是 N 根 K 线的均线，上下轨 = 中轨 ± 倍数 × 标准差。" = "The middle band is the N-bar MA; upper / lower = middle ± multiplier × standard deviation.";
+"恢复默认" = "Restore Defaults";

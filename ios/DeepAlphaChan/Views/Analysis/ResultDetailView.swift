@@ -133,7 +133,16 @@ struct ResultDetailView: View {
                 .environmentObject(orientation)
         }
         #if DEBUG && targetEnvironment(simulator)
-        .task { await MarketingAutomation.playback(vm: vm) }
+        .onReceive(NotificationCenter.default.publisher(for: .marketingPlaybackStep)) { note in
+            guard note.userInfo?["screen_action"] as? String == "chan_structure" else { return }
+            segment = .structure
+            let layers = note.userInfo?["layers"] as? [String] ?? []
+            vm.showFractals = layers.contains("fractals")
+            vm.showStrokes = layers.contains("strokes")
+            vm.showPivots = layers.contains("pivots")
+            vm.showSegments = layers.contains("segments")
+            vm.showSignals = layers.contains("signals")
+        }
         #endif
     }
 

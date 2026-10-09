@@ -64,6 +64,14 @@ struct MainTabView: View {
             selection = .signalRadar
             push.pendingMarket = nil
         }
+        #if DEBUG && targetEnvironment(simulator)
+        .onReceive(NotificationCenter.default.publisher(for: .marketingPlaybackStep)) { note in
+            if note.userInfo?["screen_action"] as? String == "market_radar" {
+                selection = .signalRadar
+            }
+        }
+        .task { await MarketingAutomation.playback() }
+        #endif
         // chanVM 是跨 Tab 共享的长生命周期对象，次级别确认（会员专属）需要知道
         // 当前订阅层级——用 onChange 而非每次 runAnalysis 时现查，避免漏同步。
         .onChange(of: store.tier, initial: true) { _, _ in

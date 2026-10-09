@@ -1,0 +1,132 @@
+{
+  "run_id": "2026-10-09-0907",
+  "market_event": "美光于 2026-09-30 向 SEC 提交 8-K 并发布 2026 财年第四季度及全年业绩；第四季度营收 542.29 亿美元，上一季度为 414.56 亿美元，同时给出 2027 财年第一季度营收 615 亿美元上下 15 亿美元的展望",
+  "event_time": "2026-09-30T14:30:00-06:00",
+  "primary_source": "https://www.sec.gov/Archives/edgar/data/723125/000072312526000018/a2026q4ex991-pressrelease.htm",
+  "symbol": "MU",
+  "market_date": "2026-10-08",
+  "chan_structure": "最近交易日 2026-10-08；251 根日线 K 线、31 个已确认分型、31 笔、4 线段；雷达最新在场信号为已确认一卖，强度中等，次级别状态为等待信号",
+  "format": "五层筛选链反差教学：强市场、强行业和高基本面评分可与偏空价格结构同时存在",
+  "hook_0_3s": "美股逐利，科技最强，美光却出现确认一卖？",
+  "app_actions": [
+    "进入美股标普500市场雷达",
+    "打开行业雷达并查看科技相对强弱",
+    "打开个股雷达名单并选择 MU",
+    "进入 MU 基本面研究查看综合等级与分位",
+    "切回 MU 缠论结构并显示已确认分型与笔"
+  ],
+  "deepalpha_app_store_prompt": "App Store 搜索 DeepAlpha 缠论",
+  "difference_from_last_14d": "上一条 2026-10-08 使用 HP 公司指引与旧式图层层级校对；本条首次完整演示市场雷达、行业雷达、个股雷达、基本面分位和缠论结构，标的、钩子、教学结构与画面路径均不同",
+  "app_version": "1.2.1",
+  "app_build": "4",
+  "latest_app_capabilities": [
+    "美股、A 股、港股三市场与指数切换",
+    "市场雷达及市场环境概率",
+    "行业相对大盘强弱与结构状态",
+    "个股信号雷达及确认状态",
+    "严格、中等、宽松买卖点口径",
+    "基本面综合等级、样本分位与五维成绩",
+    "最新财报入口及 AI 总结",
+    "学习页四层关系与自选"
+  ],
+  "version_evidence": {
+    "app_store_connect_checked_at_beijing": "2026-10-09T09:06:00+08:00",
+    "app_store_state": "READY_FOR_DISTRIBUTION",
+    "build_state": "VALID",
+    "build_id": "5ce57689-1a0c-4ba3-967c-20e164b602b4",
+    "git_head": "7d98d825798a2f56fa9897d8fcd828472ba72aef",
+    "release_record": "ios/AppStore/chan/RELEASE-1.2.1.md",
+    "simulator": "DeepAlpha-Marketing-iPhone-17-Pro"
+  },
+  "market_radar_snapshot": {
+    "interface_evidence": "真实 App 已登录 signal-radar 接口及成片 frame-01.jpg 的标普500市场雷达",
+    "data_date": "2026-10-08",
+    "core_facts": "美股市场状态为逐利，概率 0.92；标普500 基本面门槛 B，达标 123 只；最新确认信号 8 个（5 买、3 卖）。同期沪深300 为 5 个确认信号（1 买、4 卖），恒生指数为 0 个",
+    "missing_items": ["市场雷达未提供指数点位，未推断或填零"]
+  },
+  "industry_radar_snapshot": {
+    "interface_evidence": "真实 App 行业雷达及成片 frame-02.jpg 的行业面板",
+    "data_date": "2026-10-08",
+    "core_facts": "科技为美股最强行业，状态逐利，相对大盘强弱 +0.046566；最新确认信号分布为 2 买、1 卖",
+    "missing_items": ["行业面板接口的买卖计数字段未回填时，以同日雷达 sector_counts 的 2 买、1 卖为准"]
+  },
+  "stock_radar_snapshot": {
+    "interface_evidence": "真实 App 个股雷达名单及成片 frame-03.jpg",
+    "data_date": "2026-10-08",
+    "core_facts": "MU 最新在场信号为一卖，已确认，强度中等，价格 1108.72；次级别为等待信号；科技行业内同日另有 CIEN 二买和 DELL 三买",
+    "missing_items": []
+  },
+  "fundamental_snapshot": {
+    "interface_evidence": "真实 App MU 基本面研究页及成片 frame-04.jpg",
+    "data_date": "2026-10-08",
+    "core_facts": "综合等级 A+，85.9 分，标普1500 前 1%；同行为信息技术 190 家；五个维度均参与，最低维度估值 B，最高维度 EPS 修正 A；最新财报为 FY26 Q4，提交日期 2026-09-30",
+    "primary_company_fact": "SEC 8-K 附件披露第四季度营收 542.29 亿美元，上一季度 414.56 亿美元",
+    "missing_items": ["本财年营收预期 90 天变化缺失，不参与计算"]
+  },
+  "selection_funnel": [
+    "市场：比较美股、A 股、港股同一数据日；美股确认信号最多且市场状态为逐利，进入下一层",
+    "行业：美股科技相对大盘 +0.046566，为最强行业且有 3 个确认信号，进入下一层",
+    "个股：科技信号中 MU 为已确认一卖且综合评分最高 A+ 85.9，形成强基本面与偏空结构的可讲反差",
+    "基本面：核实 A+、标普1500 前 1%、信息技术 190 家样本及 FY26 Q4 一手财报事实，不把高评分解释为价格方向",
+    "缠论结构：用已确认一卖、31 个确认分型、31 笔和 4 线段说明价格结构可与前三层不同向"
+  ],
+  "selected_latest_capabilities": [
+    "市场雷达",
+    "行业雷达",
+    "个股雷达",
+    "基本面综合等级与样本分位",
+    "个股缠论结构"
+  ],
+  "steps": [
+    {
+      "step_id": "01",
+      "layers": [],
+      "screen_action": "market_radar",
+      "app_action": "进入美股标普500市场雷达",
+      "on_screen_text": "美股 · 逐利",
+      "narration_text": "美股逐利，科技最强，美光却出现确认一卖？",
+      "expected_visual": "5 秒内显示真实美股市场雷达、数据日和市场状态",
+      "overlay_text": "美股逐利 · 科技最强\n美光却是一卖？"
+    },
+    {
+      "step_id": "02",
+      "layers": [],
+      "screen_action": "industry_radar",
+      "app_action": "打开行业雷达查看科技",
+      "on_screen_text": "科技 · 相对大盘 +4.66%",
+      "narration_text": "先看市场和行业。十月八日，美股逐利概率百分之九十二，科技相对大盘强百分之四点六六。",
+      "expected_visual": "真实行业面板显示科技行业及相对强弱",
+      "overlay_text": "行业层\n科技相对大盘 +4.66%"
+    },
+    {
+      "step_id": "03",
+      "layers": [],
+      "screen_action": "stock_radar",
+      "app_action": "打开个股雷达名单并选择 MU",
+      "on_screen_text": "MU · 已确认一卖",
+      "narration_text": "再进个股雷达。科技有三只确认信号，美光是一卖，已经确认，但它不是价格预测。",
+      "expected_visual": "真实当日个股信号名单显示代码、信号类型和确认状态",
+      "overlay_text": "个股层\nMU · 已确认一卖"
+    },
+    {
+      "step_id": "04",
+      "layers": [],
+      "screen_action": "fundamental",
+      "app_action": "选择 MU 并进入基本面研究",
+      "on_screen_text": "A+ · 标普1500 前 1%",
+      "narration_text": "基本面也不能省。美光综合 A 加，八十五点九分，标普一千五百前百分之一，但估值维度只有 B。",
+      "expected_visual": "真实 MU 基本面研究页显示综合等级、分位、同行样本和五维图",
+      "overlay_text": "基本面层\nA+ · 标普1500 前 1%"
+    },
+    {
+      "step_id": "05",
+      "layers": ["fractals", "strokes"],
+      "screen_action": "chan_structure",
+      "app_action": "切回 MU 缠论结构并显示分型与笔",
+      "on_screen_text": "31 个确认分型 · 31 笔",
+      "narration_text": "最后回到缠论结构：三十一个确认分型、三十一笔、四线段。不同层可以冲突，这才是筛选，不是荐股。App Store 搜索 DeepAlpha 缠论。",
+      "expected_visual": "真实 MU 结构页显示分型与笔，结尾完整显示下载引导",
+      "overlay_text": "不同层可以冲突 · 不构成建议\nApp Store 搜索 DeepAlpha 缠论"
+    }
+  ]
+}

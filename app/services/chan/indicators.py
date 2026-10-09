@@ -15,6 +15,52 @@ EMA_PERIODS = (12, 26)
 BOLL_PERIOD = 20
 BOLL_MULT = 2.0
 
+# 用户自定义参数的范围（App「指标设置」）。线数上限 = App 给每组线准备的颜色数。
+PERIOD_MIN, PERIOD_MAX = 2, 250
+MA_MAX_LINES = 3
+EMA_MAX_LINES = 2
+BOLL_MULT_MIN, BOLL_MULT_MAX = 0.5, 5.0
+
+
+@dataclass(frozen=True)
+class IndicatorParams:
+    """用户自定义的指标参数；None = 用默认（均线按周期默认，见 ma.MA_PERIODS）。"""
+
+    ma: tuple[int, ...] | None = None
+    ema: tuple[int, ...] | None = None
+    boll: tuple[int, float] | None = None
+
+
+def parse_periods(raw: str | None, *, max_count: int) -> tuple[int, ...] | None:
+    """「5,20,60」→ (5, 20, 60)（升序去重）。空 / 非法 / 越界一律返回 None（调用方回退默认，不报错）。"""
+    if not raw:
+        return None
+    try:
+        periods = sorted({int(p) for p in raw.split(",") if p.strip()})
+    except ValueError:
+        return None
+    if not periods or len(periods) > max_count:
+        return None
+    if any(p < PERIOD_MIN or p > PERIOD_MAX for p in periods):
+        return None
+    return tuple(periods)
+
+
+def parse_boll(raw: str | None) -> tuple[int, float] | None:
+    """「20,2」→ (20, 2.0)。非法 / 越界返回 None（回退默认）。"""
+    if not raw:
+        return None
+    parts = raw.split(",")
+    if len(parts) != 2:
+        return None
+    try:
+        period, mult = int(parts[0]), float(parts[1])
+    except ValueError:
+        return None
+    if not (PERIOD_MIN <= period <= PERIOD_MAX) or not (BOLL_MULT_MIN <= mult <= BOLL_MULT_MAX):
+        return None
+    return period, mult
+
 
 def calc_ema(bars: list[dict], periods: tuple[int, ...]) -> MAData:
     """指数移动平均：前 n 根简单平均作种子（TA-Lib 口径，与项目里的 MACD 同口径），不足 n 根记 None。"""

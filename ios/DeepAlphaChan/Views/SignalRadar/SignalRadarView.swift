@@ -162,8 +162,39 @@ struct SignalRadarView: View {
             .onChange(of: needsConsent, initial: true) { _, needs in
                 if needs { showConsent = true }
             }
+            #if DEBUG && targetEnvironment(simulator)
+            .onReceive(NotificationCenter.default.publisher(for: .marketingPlaybackStep)) { note in
+                handleMarketingStep(note)
+            }
+            #endif
         }
     }
+
+    #if DEBUG && targetEnvironment(simulator)
+    private func handleMarketingStep(_ note: Notification) {
+        guard let action = note.userInfo?["screen_action"] as? String else { return }
+        switch action {
+        case "market_radar":
+            panel = nil
+        case "industry_radar":
+            panel = .sectorPicker
+        case "stock_radar":
+            panel = .signals
+        case "fundamental":
+            panel = nil
+            detailSegment = .quant
+            let prefix = "-deepalphaDemoSymbol="
+            guard let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix(prefix) }) else { return }
+            let symbol = String(argument.dropFirst(prefix.count))
+            Task {
+                try? await Task.sleep(for: .milliseconds(700))
+                openSymbol(symbol, name: nil)
+            }
+        default:
+            break
+        }
+    }
+    #endif
 
     /// 当前选中的是非示例日、且还没同意过免责声明。示例日（vm.unlockedDayDate，仅未订阅
     /// 时存在）不需要；会员没有示例日，所有日期都需要。

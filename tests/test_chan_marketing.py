@@ -103,3 +103,43 @@ def test_creative_brief_drives_distinct_steps(tmp_path: Path) -> None:
 
     assert steps[2].layers == ["strokes", "segments"]
     assert steps[-1].overlay_text == "App Store 搜索 DeepAlpha 缠论"
+
+
+def test_latest_app_brief_requires_complete_research_path(tmp_path: Path) -> None:
+    """最新版 APP 创意必须在录屏前声明完整五步真实操作链。"""
+    brief = {
+        "symbol": "AAPL",
+        "steps": [
+            {"step_id": "01", "layers": [], "screen_action": "market_radar", "app_action": "切换市场雷达", "on_screen_text": "美股", "narration_text": "一", "expected_visual": "市场雷达", "overlay_text": "市场"},
+            {"step_id": "02", "layers": [], "screen_action": "industry_radar", "app_action": "打开行业雷达", "on_screen_text": "行业", "narration_text": "二", "expected_visual": "行业雷达", "overlay_text": "行业"},
+            {"step_id": "03", "layers": [], "screen_action": "stock_radar", "app_action": "打开个股名单", "on_screen_text": "个股", "narration_text": "三", "expected_visual": "个股名单", "overlay_text": "个股"},
+            {"step_id": "04", "layers": [], "screen_action": "fundamental", "app_action": "进入基本面", "on_screen_text": "基本面", "narration_text": "四", "expected_visual": "评分与分位", "overlay_text": "基本面"},
+            {"step_id": "05", "layers": ["fractals", "strokes"], "screen_action": "chan_structure", "app_action": "进入缠论结构", "on_screen_text": "结构", "narration_text": "五", "expected_visual": "缠论结构", "overlay_text": "App Store 搜索 DeepAlpha 缠论"},
+        ],
+    }
+    path = tmp_path / "creative-brief.json"
+    save(path, brief)
+
+    steps = brief_steps(path, "AAPL")
+
+    assert [step.screen_action for step in steps] == [
+        "market_radar", "industry_radar", "stock_radar", "fundamental", "chan_structure"
+    ]
+
+
+def test_latest_app_brief_rejects_missing_research_layer(tmp_path: Path) -> None:
+    """缺少行业或基本面等任一层时不得开始生产。"""
+    brief = {
+        "symbol": "AAPL",
+        "steps": [
+            {"step_id": "01", "layers": [], "screen_action": "market_radar", "app_action": "市场", "on_screen_text": "市场", "narration_text": "一", "expected_visual": "市场", "overlay_text": "市场"},
+            {"step_id": "02", "layers": [], "screen_action": "stock_radar", "app_action": "个股", "on_screen_text": "个股", "narration_text": "二", "expected_visual": "个股"},
+            {"step_id": "03", "layers": [], "screen_action": "fundamental", "app_action": "基本面", "on_screen_text": "基本面", "narration_text": "三", "expected_visual": "基本面"},
+            {"step_id": "04", "layers": [], "screen_action": "chan_structure", "app_action": "结构", "on_screen_text": "结构", "narration_text": "四", "expected_visual": "结构", "overlay_text": "App Store 搜索 DeepAlpha 缠论"},
+        ],
+    }
+    path = tmp_path / "creative-brief.json"
+    save(path, brief)
+
+    with pytest.raises(RuntimeError, match="五步真实操作链"):
+        brief_steps(path, "AAPL")

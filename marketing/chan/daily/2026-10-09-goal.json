@@ -1,0 +1,28 @@
+{
+  "date_beijing": "2026-10-09",
+  "goal": "完成到期复盘、市场到缠论结构四层研究与五步真实 APP 演示、全项审核、匿名媒体校验，并发布到 TikTok littlemonkey437 和 YouTube DeepAlpha",
+  "status": "in_progress",
+  "resume_context": {
+    "previous_run_id": "2026-10-08-0100",
+    "resume_entry": "先复盘 2026-10-08 两个原 postId，再完成市场、行业、个股雷达、基本面和缠论结构五步真实操作链的最小生产扩展",
+    "do_not_repeat": "不得重复提交 2026-10-08 已 sent 内容，不得退回旧图层模板"
+  },
+  "attempts": [],
+  "completed_channels": {},
+  "metrics_review": {
+    "status": "completed",
+    "window": "24h",
+    "receipt": "marketing/chan/runs/2026-10-09/metrics-review-0857.json"
+  },
+  "today_duplicate_check": {
+    "organization": "My organization",
+    "checked_at_beijing": "2026-10-09T08:57:49+08:00",
+    "channels": {
+      "tiktok": "littlemonkey437",
+      "youtube": "DeepAlpha"
+    },
+    "states_checked": ["draft", "needs_approval", "scheduled", "sending", "sent", "error"],
+    "result": "今天无帖子；两频道连接正常、未锁定"
+  },
+  "created_at_beijing": "2026-10-09T08:56:23+08:00"
+}

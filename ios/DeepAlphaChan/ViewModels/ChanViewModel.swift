@@ -68,8 +68,10 @@ final class ChanViewModel: ObservableObject {
     @Published var showPivots = true
     @Published var showSignals = true
     @Published var showDivergences = true
-    /// 指标栏（均线 / 成交量 / MACD 等，见 ChartIndicator）的开关。存的是用户明确选过的，没选过的走各指标的默认值。
+    /// 指标栏（均线 / EMA / BOLL，见 ChartIndicator）的开关。存的是用户明确选过的，没选过的走各指标的默认值。
     @Published private(set) var indicatorChoices: [String: Bool] = ChartIndicatorStore.load()
+    /// 指标参数（「指标设置」面板），请求分析时带上，见 `ChanService.analysis`。
+    @Published private(set) var indicatorSettings = IndicatorSettings.load()
 
     func isOn(_ indicator: ChartIndicator) -> Bool {
         indicatorChoices[indicator.rawValue] ?? indicator.defaultOn
@@ -78,6 +80,23 @@ final class ChanViewModel: ObservableObject {
     func toggle(_ indicator: ChartIndicator) {
         indicatorChoices[indicator.rawValue] = !isOn(indicator)
         ChartIndicatorStore.save(indicatorChoices)
+    }
+
+    /// 改了参数才重新请求（线是后端按含预热的原始 K 线算的，App 端算不出一样的值）。
+    func updateIndicatorSettings(_ s: IndicatorSettings) {
+        guard s != indicatorSettings else { return }
+        indicatorSettings = s
+        s.save()
+        // 新参数的线要显示出来：改了哪个就顺手打开哪个
+        if s.ma != nil, !isOn(.ma) { toggle(.ma) }
+        if s.ema != nil, !isOn(.ema) { toggle(.ema) }
+        if s.bollPeriod != nil, !isOn(.boll) { toggle(.boll) }
+        if analysis != nil { Task { await runAnalysis() } }
+    }
+
+    /// 均线默认周期，与后端 `app/services/chan/ma.py` 的 `MA_PERIODS` 一致。
+    static func defaultMAPeriods(freq: String) -> [Int] {
+        freq == "weekly" ? [5, 10, 20] : [5, 20, 60]
     }
 
     // GAP 分析

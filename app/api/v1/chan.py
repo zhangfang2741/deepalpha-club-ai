@@ -44,7 +44,14 @@ from app.services import symbol_lookup
 from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
 from app.services.chan.divergence import DivergenceResult
 from app.services.chan.gap import analyze_structure_gap
-from app.services.chan.indicators import align_boll
+from app.services.chan.indicators import (
+    EMA_MAX_LINES,
+    MA_MAX_LINES,
+    IndicatorParams,
+    align_boll,
+    parse_boll,
+    parse_periods,
+)
 from app.services.chan.ma import MAData, align_to_times
 from app.services.chan.signal_policy import DEFAULT_MODE, SIGNAL_POLICIES, normalize_mode
 from app.services.chan.signals import leg_divergence_marks
@@ -192,6 +199,9 @@ async def chan_analysis(
         default=None, ge=0,
         description="已废弃、被忽略：详情页始终按默认预热（日线180/周线540），保留仅为兼容旧版 App",
     ),
+    ma: str | None = Query(default=None, description="自定义均线周期，如 5,20,60（最多 3 条，2~250）；不传 = 默认"),
+    ema: str | None = Query(default=None, description="自定义 EMA 周期，如 12,26（最多 2 条，2~250）；不传 = 默认"),
+    boll: str | None = Query(default=None, description="自定义布林带「周期,倍数」，如 20,2；不传 = 默认"),
     user: User = Depends(get_current_user),
     redis: Redis = Depends(get_redis),
 ) -> ChanAnalysisResponse:
@@ -210,7 +220,14 @@ async def chan_analysis(
     bars = await _fetch_bars_or_http_error(user.id, symbol, anchor_start, end_date, freq, redis,
                                            max_age=LIVE_MAX_AGE)
     mode = normalize_mode(mode)
-    result = _analyzer.analyze(symbol, bars, lang=lang, visible_from=start_date, freq=freq, mode=mode)
+    # 非法参数不报错、回退默认（parse_* 返回 None）
+    indicator_params = IndicatorParams(
+        ma=parse_periods(ma, max_count=MA_MAX_LINES),
+        ema=parse_periods(ema, max_count=EMA_MAX_LINES),
+        boll=parse_boll(boll),
+    )
+    result = _analyzer.analyze(symbol, bars, lang=lang, visible_from=start_date, freq=freq, mode=mode,
+                               indicator_params=indicator_params)
 
     pivot_phase_out: PivotPhaseOut | None = None
     if result.pivot_phase:

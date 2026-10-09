@@ -15,7 +15,7 @@ from app.services.chan.bias import (
     BiasFactor,
     score_to_bias,
 )
-from app.services.chan.indicators import EMA_PERIODS, BollData, calc_boll, calc_ema
+from app.services.chan.indicators import EMA_PERIODS, BollData, IndicatorParams, calc_boll, calc_ema
 from app.services.chan.ma import DEFAULT_PERIODS, MA_PERIODS, MAData, calc_ma
 from app.services.chan.divergence import (
     DivergenceResult,
@@ -149,7 +149,7 @@ class ChanAnalyzer:
     def analyze(
         self, symbol: str, bars: list[dict], *, min_gap: int = 4, lang: str = "zh",
         visible_from: str | None = None, freq: str = "daily", mode: str = DEFAULT_MODE,
-        shape_filters: bool = False,
+        shape_filters: bool = False, indicator_params: IndicatorParams | None = None,
     ) -> ChanAnalysisResult:
         """对K线数据执行完整缠论分析。
 
@@ -171,6 +171,8 @@ class ChanAnalyzer:
         shape_filters: 是否同时产出逐日形态状态（result.shape_states），供信号雷达
             剔除假信号（同向假突破 / 窄幅震荡 / 低波动）。
             只加状态不改买卖点；详情页等非雷达路径不传。
+        indicator_params: 图表指标（均线 / EMA / BOLL）的用户自定义参数，只影响这几条线，
+            不影响缠论结构与买卖点。None = 默认参数。
         """
         logger.info("chan_analysis_start", symbol=symbol, bars=len(bars), freq=freq)
 
@@ -189,9 +191,11 @@ class ChanAnalyzer:
         structures, area_macd = build_structures(bars, symbol=symbol, freq=czsc_freq)
         result.merged_candles = structures.merged_candles
         # 均线放在结构判断之前算：单边走势、分型 / 笔不足而提前返回时，图上仍然要有均线
-        result.ma = calc_ma(bars, MA_PERIODS.get(freq, DEFAULT_PERIODS))
-        result.ema = calc_ema(bars, EMA_PERIODS)
-        result.boll = calc_boll(bars)
+        # 用户在 App「指标设置」里改过的参数优先，没改的用默认
+        params = indicator_params or IndicatorParams()
+        result.ma = calc_ma(bars, params.ma or MA_PERIODS.get(freq, DEFAULT_PERIODS))
+        result.ema = calc_ema(bars, params.ema or EMA_PERIODS)
+        result.boll = calc_boll(bars, *params.boll) if params.boll else calc_boll(bars)
         logger.debug("chan_merged_candles", count=len(result.merged_candles))
         result.fractals = structures.fractals
         logger.debug("chan_fractals", count=len(result.fractals))

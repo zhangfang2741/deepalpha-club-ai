@@ -23,6 +23,28 @@ enum MarketingAutomation {
                     object[key].map { URLQueryItem(name: key, value: $0) }
                 }
                 request = URLRequest(url: url.url!)
+            } else if operation == "signal_radar" {
+                var url = URLComponents(url: AppConfig.baseURL.appending(path: "/api/v1/signal-radar"),
+                                        resolvingAgainstBaseURL: false)!
+                url.queryItems = ["market", "universe", "mode", "scope", "quality"].compactMap { key in
+                    object[key].map { URLQueryItem(name: key, value: $0) }
+                }
+                request = URLRequest(url: url.url!)
+            } else if operation == "fundamental_top" {
+                var url = URLComponents(url: AppConfig.baseURL.appending(path: "/api/v1/signal-radar/fundamental-top"),
+                                        resolvingAgainstBaseURL: false)!
+                url.queryItems = ["market", "universe", "limit", "sector"].compactMap { key in
+                    object[key].map { URLQueryItem(name: key, value: $0) }
+                }
+                request = URLRequest(url: url.url!)
+            } else if operation == "quant_research" {
+                guard let market = object["market"], let symbol = object["symbol"] else {
+                    throw APIError(message: "基本面请求缺少市场或代码", statusCode: nil)
+                }
+                var url = URLComponents(url: AppConfig.baseURL.appending(path: "/api/v1/quant-research/\(market)/\(symbol)"),
+                                        resolvingAgainstBaseURL: false)!
+                url.queryItems = [URLQueryItem(name: "lang", value: object["lang"] ?? "zh")]
+                request = URLRequest(url: url.url!)
             } else if operation == "upload" {
                 let video = try Data(contentsOf: directory.appending(path: "upload.mp4"))
                 let boundary = UUID().uuidString
@@ -48,19 +70,15 @@ enum MarketingAutomation {
         }
     }
 
-    /// 读取同一份脚本，在真实结果页切换图层；由主机开始录屏后写入开始信号。
-    static func playback(vm: ChanViewModel) async {
+    /// 读取同一份脚本，在真实页面间切换并操作图层；由主机开始录屏后写入开始信号。
+    static func playback() async {
         guard ProcessInfo.processInfo.arguments.contains("-marketingPlayback") else { return }
         do {
             let data = try Data(contentsOf: directory.appending(path: "playback.json"))
             let steps = try JSONDecoder().decode([MarketingStep].self, from: data)
             guard !steps.isEmpty else { throw APIError(message: "录制脚本为空", statusCode: nil) }
-            vm.showFractals = false
-            vm.showStrokes = false
-            vm.showSegments = false
-            vm.showPivots = false
-            vm.showSignals = false
-            try await Task.sleep(for: .seconds(1))
+            if let first = steps.first { post(first) }
+            try await Task.sleep(for: .seconds(3))
             try Data("ready".utf8).write(to: directory.appending(path: "ready"), options: .atomic)
             let deadline = Date.now.addingTimeInterval(60)
             while !FileManager.default.fileExists(atPath: directory.appending(path: "start").path) {
@@ -72,18 +90,27 @@ enum MarketingAutomation {
             for step in steps {
                 let remaining = step.time_sec - Date.now.timeIntervalSince(start)
                 if remaining > 0 { try await Task.sleep(for: .seconds(remaining)) }
-                vm.showFractals = step.layers.contains("fractals")
-                vm.showStrokes = step.layers.contains("strokes")
-                vm.showPivots = step.layers.contains("pivots")
-                vm.showSegments = step.layers.contains("segments")
-                vm.showSignals = step.layers.contains("signals")
-                events.append(["step_id": step.step_id, "actual_time_sec": Date.now.timeIntervalSince(start), "layers": step.layers])
+                post(step)
+                events.append([
+                    "step_id": step.step_id,
+                    "actual_time_sec": Date.now.timeIntervalSince(start),
+                    "layers": step.layers,
+                    "screen_action": step.screen_action ?? ""
+                ])
                 let eventData = try JSONSerialization.data(withJSONObject: events, options: .prettyPrinted)
                 try eventData.write(to: directory.appending(path: "events.json"), options: .atomic)
             }
         } catch {
             try? Data(error.localizedDescription.utf8).write(to: directory.appending(path: "error.txt"), options: .atomic)
         }
+    }
+
+    private static func post(_ step: MarketingStep) {
+        NotificationCenter.default.post(
+            name: .marketingPlaybackStep,
+            object: nil,
+            userInfo: ["screen_action": step.screen_action ?? "", "layers": step.layers]
+        )
     }
 }
 #endif

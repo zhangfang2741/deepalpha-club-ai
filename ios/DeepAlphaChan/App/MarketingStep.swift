@@ -6,5 +6,10 @@ struct MarketingStep: Decodable {
     let step_id: String
     let time_sec: Double
     let layers: [String]
+    let screen_action: String?
+}
+
+extension Notification.Name {
+    static let marketingPlaybackStep = Notification.Name("marketingPlaybackStep")
 }
 #endif
