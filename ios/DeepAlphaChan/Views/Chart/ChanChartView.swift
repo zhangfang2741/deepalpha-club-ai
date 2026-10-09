@@ -517,8 +517,12 @@ struct ChanChartView: View {
             let values = ma.series(period)
             var path = Path()
             var drawing = false
-            // 多取一根，线才能从窗口左缘外一根画进来
-            for i in max(0, range.start - 1)..<min(range.end + 1, min(candles.count, values.count)) {
+            // 多取一根，线才能从窗口左缘外一根画进来。先判上下界：Swift 的 a..<b 在 a > b 时会直接崩溃，
+            // 均线长度比 K 线短（旧缓存 / 异常数据）时不能让整张图崩掉。
+            let lo = max(0, range.start - 1)
+            let hi = min(range.end + 1, min(candles.count, values.count))
+            guard lo < hi else { continue }
+            for i in lo..<hi {
                 guard let v = values[i] else { drawing = false; continue }
                 let pt = CGPoint(x: x(for: i, range: range), y: y(for: v, height: height, bounds: bounds))
                 if drawing { path.addLine(to: pt) } else { path.move(to: pt); drawing = true }

@@ -135,7 +135,13 @@ final class ChanViewModel: ObservableObject {
         self.displayName = (trimmed?.isEmpty == false) ? trimmed : nil
         if let startDate { self.startDate = startDate }
         if let endDate { self.endDate = endDate }
-        if let freq { self.freq = freq }
+        if let freq {
+            self.freq = freq
+        } else if self.freq == "30min" {
+            // 30 分钟是会员功能，只有在条件页的周期选择里主动选才算数；自选 / 雷达 / 历史等入口没指定周期时，
+            // 不能沿用上次选的 30 分钟（既绕过会员门禁，也会让人莫名其妙进到分钟图），回到日线。
+            self.freq = "daily"
+        }
         // 显式重置：从雷达进来带 0，其他入口传 nil 时要清掉上一次雷达留下的 0，
         // 否则分析 Tab 会一直沿用「不加 warmup」，左边界结构可能漂移。
         self.warmupDays = warmupDays
