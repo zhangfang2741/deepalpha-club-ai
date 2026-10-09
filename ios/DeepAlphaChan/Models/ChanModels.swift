@@ -184,6 +184,15 @@ struct MACDData: Codable {
     let bar: [Double]
 }
 
+/// 均线：每条与 merged_candles 一一对应（后端已按时间对齐），不足周期的位置为 nil。
+/// 日线 / 30 分钟 5·20·60，周线 5·10·20。旧后端没有这个字段。
+struct MAData: Codable {
+    let periods: [Int]
+    let values: [String: [Double?]]
+
+    func series(_ period: Int) -> [Double?] { values[String(period)] ?? [] }
+}
+
 /// 买卖点信号。
 struct Signal: Codable, Identifiable {
     enum Kind: String, Codable {
@@ -348,6 +357,8 @@ struct ChanAnalysis: Codable {
     let strokePivots: [Pivot]
     let segmentPivots: [Pivot]
     let macd: MACDData?
+    /// 均线（旧后端缺省）。带默认值：PreviewMock 等直接构造 ChanAnalysis 的地方不用改。
+    var ma: MAData? = nil
     let signals: [Signal]
     let currentTrend: String
     // 走势类型（基于中枢排布）：up_trend / down_trend / consolidation / none
@@ -376,7 +387,7 @@ struct ChanAnalysis: Codable {
     var chartSignals: [Signal] { signals + candidates }
 
     enum CodingKeys: String, CodingKey {
-        case symbol, fractals, strokes, segments, macd, signals, summary, recommendation, narrative
+        case symbol, fractals, strokes, segments, macd, ma, signals, summary, recommendation, narrative
         case candidateSignals = "candidate_signals"
         case barsCount = "bars_count"
         case mergedCandles = "merged_candles"

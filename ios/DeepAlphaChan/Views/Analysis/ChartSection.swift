@@ -12,7 +12,7 @@ struct ChartSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // 图例（兼图层开关）在 K 线图正上方，先看懂颜色再看图；竖屏用紧凑一行
-            ChartLegend(vm: vm, isStatic: isStatic, compact: true)
+            ChartLegend(vm: vm, isStatic: isStatic, compact: true, maPeriods: analysis.ma?.periods ?? [])
             // 主图不标次级别下钻区间：最右两根K线铺浅底没有说明，看起来像莫名的阴影；
             // 次级别结论在上方结论卡的「30 分钟确认」格里，区间只在弹出的 30 分钟图里标。
             // 竖屏也画 MACD 副图：趋势背驰比的就是 b 段与 c 段的红绿柱面积，副图上把这两段用粉色底标出来，

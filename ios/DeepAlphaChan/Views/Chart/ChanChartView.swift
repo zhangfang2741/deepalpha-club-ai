@@ -155,6 +155,7 @@ struct ChanChartView: View {
                     drawVolume(ctx, plotWidth: plotW, height: size.height, range: range)
                     drawCandles(ctx, plotWidth: plotW, height: size.height,
                                 range: range, bounds: priceBounds)
+                    if vm.showMA { drawMA(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showPivots { drawPivots(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showStrokes { drawStrokes(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showDivergences { drawDivergences(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
@@ -500,6 +501,30 @@ struct ChanChartView: View {
             let rect = CGRect(x: cx - bodyWidth / 2, y: top, width: bodyWidth, height: bodyH)
             ctx.fill(Path(roundedRect: rect, cornerSize: CGSize(width: 1, height: 1)),
                      with: .color(color))
+        }
+    }
+
+    // MARK: - 绘制：均线
+
+    /// 均线画在 K 线之上、结构之下。值缺失（不足周期）处断开；只画可见窗口，并裁剪到绘图区，
+    /// 不盖到右侧价格轴。均线值不参与纵轴范围计算（只是辅助线，不该把 K 线压扁）。
+    private func drawMA(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
+                        range: VisibleRange, bounds: PriceBounds) {
+        guard let ma = analysis.ma else { return }
+        var clipped = ctx
+        clipped.clip(to: Path(CGRect(x: 0, y: 0, width: plotWidth, height: height)))
+        for (k, period) in ma.periods.enumerated() {
+            let values = ma.series(period)
+            var path = Path()
+            var drawing = false
+            // 多取一根，线才能从窗口左缘外一根画进来
+            for i in max(0, range.start - 1)..<min(range.end + 1, min(candles.count, values.count)) {
+                guard let v = values[i] else { drawing = false; continue }
+                let pt = CGPoint(x: x(for: i, range: range), y: y(for: v, height: height, bounds: bounds))
+                if drawing { path.addLine(to: pt) } else { path.move(to: pt); drawing = true }
+            }
+            clipped.stroke(path, with: .color(Theme.maColors[min(k, Theme.maColors.count - 1)]),
+                           style: StrokeStyle(lineWidth: 1, lineCap: .round, lineJoin: .round))
         }
     }
 
@@ -1352,6 +1377,18 @@ struct ChanChartView: View {
                 if let v = c.volume, v > 0 {
                     infoText(L("量"), Self.formatVolume(v)).font(.system(size: 10))
                 }
+            }
+            if vm.showMA, let ma = analysis.ma {
+                HStack(spacing: 8) {
+                    ForEach(Array(ma.periods.enumerated()), id: \.offset) { k, period in
+                        let series = ma.series(period)
+                        if index < series.count, let v = series[index] {
+                            Text("MA\(period) " + String(format: "%.2f", v))
+                                .foregroundColor(Theme.maColors[min(k, Theme.maColors.count - 1)])
+                        }
+                    }
+                }
+                .font(.system(size: 10))
             }
         }
     }

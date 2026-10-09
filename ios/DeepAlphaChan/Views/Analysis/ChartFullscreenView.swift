@@ -27,7 +27,7 @@ struct ChartFullscreenView: View {
             VStack(spacing: 8) {
                 header
 
-                ChartLegend(vm: vm)
+                ChartLegend(vm: vm, maPeriods: analysis.ma?.periods ?? [])
                     .padding(.horizontal, 8)
 
                 ChanChartView(analysis: analysis, vm: vm,

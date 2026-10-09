@@ -68,6 +68,8 @@ final class ChanViewModel: ObservableObject {
     @Published var showPivots = true
     @Published var showSignals = true
     @Published var showDivergences = true
+    /// 均线默认开：最常用的叠加，不属于缠论结构，关掉可以让图面回到只剩结构。
+    @Published var showMA = true
 
     // GAP 分析
     @Published var industryView: String = ""
