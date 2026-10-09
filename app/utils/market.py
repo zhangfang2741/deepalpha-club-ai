@@ -28,9 +28,11 @@ class InvalidSymbolError(ValueError):
     """代码格式无法识别。"""
 
 
-_CN_PREFIX = re.compile(r"^(SH|SZ)", re.IGNORECASE)
+# 前缀只在后面紧跟数字时才算市场前缀（SH600519、SZ000001、HK0700）。
+# 不加这个限制，SHOP / SHW / SHEL / SHY / HKD 这些美股代码会被当成 A 股 / 港股前缀而报「代码应为 6 位数字」。
+_CN_PREFIX = re.compile(r"^(SH|SZ)(?=\d)", re.IGNORECASE)
 _CN_SUFFIX = re.compile(r"\.(SS|SZ|SH)$", re.IGNORECASE)
-_HK_PREFIX = re.compile(r"^HK", re.IGNORECASE)
+_HK_PREFIX = re.compile(r"^HK(?=\d)", re.IGNORECASE)
 _HK_SUFFIX = re.compile(r"\.HK$", re.IGNORECASE)
 _US_SYMBOL = re.compile(r"^[A-Z][A-Z.\-]{0,9}$")
 

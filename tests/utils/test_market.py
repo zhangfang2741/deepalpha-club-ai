@@ -120,3 +120,37 @@ def test_eastmoney_rejects_us():
 
     with pytest.raises(InvalidSymbolError):
         eastmoney_secid("AAPL")
+
+
+# ───────── 回归：SH / SZ / HK 开头的美股代码不能被当成 A 股 / 港股前缀 ─────────
+# 前缀只在后面紧跟数字时才算市场前缀（SH600519、SZ000001、HK0700）；SHOP、SHW、SHEL、SHY 这些是美股。
+
+@pytest.mark.parametrize("symbol", ["SHOP", "SHW", "SHEL", "SHY", "SHAK", "SHLS", "SZ", "SH", "HKD", "HKXX", "shop"])
+def test_us_tickers_starting_with_market_prefix_letters_are_us(symbol):
+    from app.utils.market import Market, detect_market, normalize
+
+    assert detect_market(symbol) is Market.US
+    market, clean = normalize(symbol)
+    assert market is Market.US and clean == symbol.upper()
+
+
+@pytest.mark.parametrize("symbol,market,clean", [
+    ("SH600519", "cn", "600519"),
+    ("sz000001", "cn", "000001"),
+    ("600519.SS", "cn", "600519"),
+    ("HK0700", "hk", "00700"),
+    ("hk00700", "hk", "00700"),
+    ("0700.HK", "hk", "00700"),
+])
+def test_explicit_market_prefix_with_digits_still_works(symbol, market, clean):
+    from app.utils.market import normalize
+
+    m, c = normalize(symbol)
+    assert (m.value, c) == (market, clean)
+
+
+def test_fmp_symbol_for_us_tickers_with_sh_prefix():
+    from app.utils.market import fmp_symbol
+
+    assert fmp_symbol("SHOP") == "SHOP"
+    assert fmp_symbol("SHW") == "SHW"
