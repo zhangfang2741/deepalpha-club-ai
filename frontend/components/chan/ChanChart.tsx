@@ -253,13 +253,18 @@ export function ChanChart({
       })
       macdChartRef.current = macdChart
 
-      // MACD 基于原始K线计算（时间点比合并后的K线多），需对齐到合并K线的时间，
-      // 否则两图 X 轴数据点数量不同，基于索引的联动会错位
+      // MACD 基于原始K线计算（时间点比合并后的K线多），需对齐到合并K线，
+      // 否则两图 X 轴数据点数量不同，基于索引的联动会错位。
+      // 取值取合并K线「所含最后一根原始K线」（end_time）那天：time 是缠论选定的极值那根，可能早于最后一根，
+      // 用它取值最右一根的 MACD 会停在几根之前（与 iOS、均线同一口径）；点仍画在 K 线自己的 time 上。
       const macd = data.macd
-      const mergedTimeSet = new Set(data.merged_candles.map((c) => c.time))
-      const aligned = macd.times
-        .map((t, i) => ({ time: t as Time, dif: macd.dif[i], dea: macd.dea[i], bar: macd.bar[i] }))
-        .filter((p) => mergedTimeSet.has(p.time as string))
+      const macdIndex = new Map(macd.times.map((t, i) => [t, i] as const))
+      const aligned = data.merged_candles.flatMap((c) => {
+        const i = macdIndex.get(c.end_time ?? c.time) ?? macdIndex.get(c.time)
+        return i === undefined
+          ? []
+          : [{ time: c.time as Time, dif: macd.dif[i], dea: macd.dea[i], bar: macd.bar[i] }]
+      })
 
       const difSeries = macdChart.addSeries(LineSeries, {
         color: '#3b82f6',

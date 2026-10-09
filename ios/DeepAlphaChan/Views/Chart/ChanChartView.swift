@@ -917,14 +917,16 @@ struct ChanChartView: View {
 
     // MARK: - 绘制：MACD
 
-    /// 把按原始 K 线算的 MACD 取成与合并 K 线一一对应（按合并 K 线的 `time` 查同一时刻的值）。
+    /// 把按原始 K 线算的 MACD 取成与合并 K 线一一对应。取值取合并 K 线「所含最后一根原始 K 线」（`endTime`）那天：
+    /// `time` 是缠论选定的极值那根，可能早于最后一根，用它取值最右一根的 MACD 会停在几根之前
+    /// （603019 30 分钟实测 DIF −1.531，实际 −1.289）；与均线 / EMA / 布林带同一口径。
     /// 找不到对应时刻（理论上不会）时用前一根的值，保证数组长度 = 合并 K 线数。
     static func alignedMACD(_ macd: MACDData, to candles: [MergedCandle]) -> MACDData {
         var index: [String: Int] = [:]
         for (i, t) in macd.times.enumerated() { index[t] = i }
         var times: [String] = [], dif: [Double] = [], dea: [Double] = [], bar: [Double] = []
         for c in candles {
-            if let i = index[c.time], i < macd.dif.count, i < macd.dea.count, i < macd.bar.count {
+            if let i = index[c.endTime ?? c.time] ?? index[c.time], i < macd.dif.count, i < macd.dea.count, i < macd.bar.count {
                 dif.append(macd.dif[i]); dea.append(macd.dea[i]); bar.append(macd.bar[i])
             } else {
                 dif.append(dif.last ?? 0); dea.append(dea.last ?? 0); bar.append(0)

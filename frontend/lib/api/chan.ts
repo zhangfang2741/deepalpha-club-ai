@@ -7,6 +7,8 @@ export interface MergedCandle {
   low: number
   open: number
   close: number
+  /** 所含最后一根原始 K 线的时间（旧后端没有）。MACD / 均线这类按原始 K 线算的指标按它取值。 */
+  end_time?: string | null
 }
 
 export interface Fractal {
