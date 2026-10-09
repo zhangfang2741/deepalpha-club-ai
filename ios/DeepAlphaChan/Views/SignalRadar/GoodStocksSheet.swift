@@ -62,7 +62,7 @@ struct GoodStocksSheet: View {
                         section(L("近期只有卖点 · %lld 只", onlySell.count), onlySell)
                         section(L("暂无买卖点 · %lld 只", without.count), without)
                     }
-                    Text(L("基本面靠前 = 当前综合等级不低于 %@ 的股票；券商角标为近 90 天净上调 / 净下调（仅美股）。仅为事实陈列，不构成投资建议。", threshold ?? ""))
+                    Text(L("基本面靠前 = 当前综合等级不低于 %@ 的股票；分析师评级变动角标为近 90 天净上调 / 净下调（仅美股）。仅为事实陈列，不构成投资建议。", threshold ?? ""))
                         .font(.caption2).foregroundColor(Theme.textSecondary)
                         .padding(.top, 8)
                 }
@@ -78,12 +78,12 @@ struct GoodStocksSheet: View {
     private var columnHeader: some View {
         HStack(spacing: 10) {
             Text(L("股票")).frame(maxWidth: .infinity, alignment: .leading)
-            Text(L("评级变动")).frame(width: Self.markWidth, alignment: .trailing)
+            Text(L("分析师\n评级变动")).multilineTextAlignment(.trailing).frame(width: Self.markWidth, alignment: .trailing)
             Text(L("等级")).frame(width: Self.gradeWidth, alignment: .trailing)
             Text(L("最近买卖点")).frame(width: Self.signalWidth, alignment: .trailing)
         }
         .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
-        .lineLimit(1).minimumScaleFactor(0.8)
+        .lineLimit(2).minimumScaleFactor(0.8)
         .padding(.horizontal, 12).padding(.top, 2)
     }
 
