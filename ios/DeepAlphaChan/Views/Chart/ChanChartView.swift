@@ -111,7 +111,7 @@ struct ChanChartView: View {
         VStack(spacing: 0) {
             priceChart
             // MACD 副图供对照（趋势背驰用它的红绿柱面积判定，结果标在主图上）
-            if showsMACD, analysis.macd != nil {
+            if showsMACD, vm.isOn(.macd), analysis.macd != nil {
                 Divider().background(Theme.border)
                 macdChart
             }
@@ -152,9 +152,12 @@ struct ChanChartView: View {
                     drawGrid(ctx, size: CGSize(width: plotW, height: size.height),
                              bounds: priceBounds)
                     drawHighlight(ctx, plotWidth: plotW, height: size.height, range: range)
-                    drawVolume(ctx, plotWidth: plotW, height: size.height, range: range)
+                    if vm.isOn(.volume) { drawVolume(ctx, plotWidth: plotW, height: size.height, range: range) }
                     drawCandles(ctx, plotWidth: plotW, height: size.height,
                                 range: range, bounds: priceBounds)
+                    if vm.isOn(.boll) { drawBoll(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
+                    if vm.isOn(.ma) { drawLines(ctx, analysis.ma, colors: Theme.maColors, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
+                    if vm.isOn(.ema) { drawLines(ctx, analysis.ema, colors: Theme.emaColors, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showPivots { drawPivots(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showStrokes { drawStrokes(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showDivergences { drawDivergences(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
@@ -503,6 +506,74 @@ struct ChanChartView: View {
         }
     }
 
+    // MARK: - 绘制：均线 / EMA / 布林带
+
+    /// 按周期画的线（均线、EMA 共用）。画在 K 线之上、结构之下。值缺失（不足周期）处断开；只画可见窗口，
+    /// 并裁剪到绘图区，不盖到右侧价格轴。线的值不参与纵轴范围计算（只是辅助线，不该把 K 线压扁）。
+    private func drawLines(_ ctx: GraphicsContext, _ data: MAData?, colors: [Color], plotWidth: CGFloat,
+                           height: CGFloat, range: VisibleRange, bounds: PriceBounds) {
+        guard let data else { return }
+        var clipped = ctx
+        clipped.clip(to: Path(CGRect(x: 0, y: 0, width: plotWidth, height: height)))
+        for (k, period) in data.periods.enumerated() {
+            strokeSeries(&clipped, data.series(period), color: colors[min(k, colors.count - 1)],
+                         range: range, height: height, bounds: bounds)
+        }
+    }
+
+    /// 布林带：上 / 下轨之间浅色填充，三条线同色（中轨实线、上下轨细一点）。
+    private func drawBoll(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
+                          range: VisibleRange, bounds: PriceBounds) {
+        guard let boll = analysis.boll else { return }
+        var clipped = ctx
+        clipped.clip(to: Path(CGRect(x: 0, y: 0, width: plotWidth, height: height)))
+        let lo = max(0, range.start - 1)
+        let hi = min(range.end + 1, min(candles.count, min(boll.upper.count, boll.lower.count)))
+        if lo < hi {
+            // 填充：把连续有值的一段围成一个多边形（上轨正向、下轨反向）
+            var seg: [Int] = []
+            func flush() {
+                guard seg.count > 1 else { seg = []; return }
+                var band = Path()
+                for (n, i) in seg.enumerated() {
+                    let pt = CGPoint(x: x(for: i, range: range), y: y(for: boll.upper[i] ?? 0, height: height, bounds: bounds))
+                    if n == 0 { band.move(to: pt) } else { band.addLine(to: pt) }
+                }
+                for i in seg.reversed() {
+                    band.addLine(to: CGPoint(x: x(for: i, range: range), y: y(for: boll.lower[i] ?? 0, height: height, bounds: bounds)))
+                }
+                band.closeSubpath()
+                clipped.fill(band, with: .color(Theme.bollLine.opacity(0.08)))
+                seg = []
+            }
+            for i in lo..<hi {
+                if boll.upper[i] != nil && boll.lower[i] != nil { seg.append(i) } else { flush() }
+            }
+            flush()
+        }
+        strokeSeries(&clipped, boll.upper, color: Theme.bollLine.opacity(0.8), width: 0.9, range: range, height: height, bounds: bounds)
+        strokeSeries(&clipped, boll.lower, color: Theme.bollLine.opacity(0.8), width: 0.9, range: range, height: height, bounds: bounds)
+        strokeSeries(&clipped, boll.mid, color: Theme.bollLine, width: 1.1, range: range, height: height, bounds: bounds)
+    }
+
+    /// 一条按合并 K 线下标对齐的线（nil 处断开）。a..<b 在 a > b 时 Swift 会崩，所以先判上下界：
+    /// 线的长度比 K 线短（旧缓存 / 异常数据）时不能让整张图崩掉。
+    private func strokeSeries(_ ctx: inout GraphicsContext, _ values: [Double?], color: Color, width: CGFloat = 1,
+                              range: VisibleRange, height: CGFloat, bounds: PriceBounds) {
+        // 多取一根，线才能从窗口左缘外一根画进来
+        let lo = max(0, range.start - 1)
+        let hi = min(range.end + 1, min(candles.count, values.count))
+        guard lo < hi else { return }
+        var path = Path()
+        var drawing = false
+        for i in lo..<hi {
+            guard let v = values[i] else { drawing = false; continue }
+            let pt = CGPoint(x: x(for: i, range: range), y: y(for: v, height: height, bounds: bounds))
+            if drawing { path.addLine(to: pt) } else { path.move(to: pt); drawing = true }
+        }
+        ctx.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round))
+    }
+
     // MARK: - 绘制：分型
 
     private func drawFractals(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
@@ -846,9 +917,28 @@ struct ChanChartView: View {
 
     // MARK: - 绘制：MACD
 
+    /// 把按原始 K 线算的 MACD 取成与合并 K 线一一对应（按合并 K 线的 `time` 查同一时刻的值）。
+    /// 找不到对应时刻（理论上不会）时用前一根的值，保证数组长度 = 合并 K 线数。
+    static func alignedMACD(_ macd: MACDData, to candles: [MergedCandle]) -> MACDData {
+        var index: [String: Int] = [:]
+        for (i, t) in macd.times.enumerated() { index[t] = i }
+        var times: [String] = [], dif: [Double] = [], dea: [Double] = [], bar: [Double] = []
+        for c in candles {
+            if let i = index[c.time], i < macd.dif.count, i < macd.dea.count, i < macd.bar.count {
+                dif.append(macd.dif[i]); dea.append(macd.dea[i]); bar.append(macd.bar[i])
+            } else {
+                dif.append(dif.last ?? 0); dea.append(dea.last ?? 0); bar.append(0)
+            }
+            times.append(c.time)
+        }
+        return MACDData(times: times, dif: dif, dea: dea, bar: bar)
+    }
+
     private func drawMACD(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat, range: VisibleRange) {
-        guard let macd = analysis.macd else { return }
-        // 与主图对齐：MACD 的 times 与 merged_candles 一一对应
+        guard let raw = analysis.macd else { return }
+        // MACD 按原始 K 线算（点数比去包含后的合并 K 线多），必须按时间对到合并 K 线上再画：
+        // 直接用同一个下标会越往右错位越多（603019 实测中段差约 3 个月）。口径与网页 ChanChart 一致。
+        let macd = Self.alignedMACD(raw, to: candles)
         var lo = 0.0, hi = 0.0
         for i in range.start..<min(range.end, macd.bar.count) {
             lo = min(lo, min(macd.bar[i], min(macd.dif[i], macd.dea[i])))
@@ -1334,6 +1424,31 @@ struct ChanChartView: View {
                     infoText(L("量"), Self.formatVolume(v)).font(.system(size: 10))
                 }
             }
+            if vm.isOn(.ma) { lineValuesRow("MA", analysis.ma, Theme.maColors, index) }
+            if vm.isOn(.ema) { lineValuesRow("EMA", analysis.ema, Theme.emaColors, index) }
+            if vm.isOn(.boll), let boll = analysis.boll, index < boll.mid.count,
+               let up = boll.upper[index], let mid = boll.mid[index], let low = boll.lower[index] {
+                Text("BOLL " + String(format: "%.2f / %.2f / %.2f", up, mid, low))
+                    .font(.system(size: 10))
+                    .foregroundColor(Theme.bollLine)
+            }
+        }
+    }
+
+    /// 光标详情里「按周期的线」一行：MA5 12.34  MA20 12.10 …，颜色与图上线一致。
+    @ViewBuilder
+    private func lineValuesRow(_ name: String, _ data: MAData?, _ colors: [Color], _ index: Int) -> some View {
+        if let data {
+            HStack(spacing: 8) {
+                ForEach(Array(data.periods.enumerated()), id: \.offset) { k, period in
+                    let series = data.series(period)
+                    if index < series.count, let v = series[index] {
+                        Text("\(name)\(period) " + String(format: "%.2f", v))
+                            .foregroundColor(colors[min(k, colors.count - 1)])
+                    }
+                }
+            }
+            .font(.system(size: 10))
         }
     }
 

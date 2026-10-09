@@ -19,6 +19,8 @@ struct ChartSection: View {
             // 与主图的 b / c 两条线对得上。
             ChanChartView(analysis: analysis, vm: vm,
                           onFullscreen: isStatic ? nil : onFullscreen)
+            // 指标栏在图下方：点一下开 / 关均线、成交量、MACD（分享长图里不放）
+            if !isStatic { IndicatorBar(vm: vm, analysis: analysis) }
         }
     }
 }

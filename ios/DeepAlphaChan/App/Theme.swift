@@ -24,6 +24,11 @@ enum Theme {
     static let topFractal = Color(hex: 0xEF4444)   // 顶分型
     static let bottomFractal = Color(hex: 0x22C55E)// 底分型
     static let divergence = Color(hex: 0xEC4899)   // 背驰标注（与线段橙区分）
+    /// 均线三条，按周期从短到长依次取色。避开红 / 绿（只给买卖点）和笔 / 中枢 / 背驰已用的蓝 / 紫 / 粉。
+    static let maColors: [Color] = [Color(hex: 0xE5E7EB), Color(hex: 0x22D3EE), Color(hex: 0xFACC15)]
+    /// 指数均线两条（12 / 26）；布林带三条线同色（石板灰），带内浅色填充。同样避开红 / 绿。
+    static let emaColors: [Color] = [Color(hex: 0xFB923C), Color(hex: 0xF0ABFC)]
+    static let bollLine = Color(hex: 0x94A3B8)
 
     // MARK: - 内容容器边距
 

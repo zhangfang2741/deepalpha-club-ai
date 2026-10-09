@@ -113,6 +113,11 @@ struct AnalysisTabView: View {
         let symbol = vm.symbol.trimmingCharacters(in: .whitespaces).uppercased()
         // 示例股（英伟达/茅台/腾讯）不扣额度，见 AppConfig.sampleSymbols
         let chargesQuota = !store.isSubscribed && !AppConfig.isSampleSymbol(market: vm.market, symbol: symbol)
+        // 30 分钟级别是会员功能（与次级别「30 分钟确认」同一权益）；示例股对所有人开放
+        if vm.freq == "30min" && chargesQuota {
+            showPaywall = true
+            return
+        }
         if chargesQuota && !symbol.isEmpty && !usage.canUseFree(symbol: symbol) {
             showPaywall = true
             return
