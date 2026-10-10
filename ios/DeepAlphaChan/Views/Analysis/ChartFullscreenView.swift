@@ -27,7 +27,7 @@ struct ChartFullscreenView: View {
             VStack(spacing: 8) {
                 header
 
-                ChartLegend(vm: vm)
+                ChartLegend(vm: vm, analysis: analysis)
                     .padding(.horizontal, 8)
 
                 VStack(spacing: 0) {

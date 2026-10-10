@@ -11,6 +11,8 @@ struct ChartLegend: View {
     /// 紧凑模式（详情页竖屏）：只摆笔 / 中枢 / 买卖点三个常用开关，分型 / 线段 / 背驰和
     /// 「虚线=未确认」收进「更多图层」菜单，图例压成一行。全屏图与分享长图用完整图例。
     var compact = false
+    /// 有分析结果时才能放「对比」下拉框（要知道威科夫 / SMC 有没有数据）；分享长图（isStatic）里不放。
+    var analysis: ChanAnalysis? = nil
 
     var body: some View {
         if compact && !isStatic {
@@ -42,8 +44,64 @@ struct ChartLegend: View {
                 .background(Theme.surfaceAlt.opacity(0.72), in: Capsule())
             }
             Spacer(minLength: 0)
+            // 图右上方（图外）：拿别的看盘方法和缠论对比
+            techniqueMenu
         }
         .frame(maxWidth: maxWidth, alignment: .leading)
+    }
+
+    /// 可选的对比技术：威科夫 / SMC，要这张图真有数据才列出来。
+    private var availableTechniques: [ChartIndicator] {
+        guard let analysis else { return [] }
+        return ChartIndicator.comparisons.filter { t in
+            switch t {
+            case .wyckoff: return analysis.wyckoff != nil
+            case .smc: return analysis.smc != nil
+            default: return false
+            }
+        }
+    }
+
+    /// 「对比」下拉框：选一个技术就把缠论图层收起来、只画它；选「缠论」回到默认。以后新增的对比技术加进
+    /// `ChartIndicator.comparisons` 即可。选了 SMC 时多一个子菜单，勾选图上画哪几类。
+    @ViewBuilder
+    private var techniqueMenu: some View {
+        if !isStatic, !availableTechniques.isEmpty {
+            let current = vm.comparison
+            Menu {
+                Button { vm.setComparison(nil) } label: {
+                    Label(L("缠论（默认）"), systemImage: current == nil ? "checkmark" : "scope")
+                }
+                ForEach(availableTechniques) { t in
+                    Button { vm.setComparison(t) } label: {
+                        if current == t { Label(t.title, systemImage: "checkmark") } else { Text(t.title) }
+                    }
+                }
+                if current == .smc {
+                    Divider()
+                    Menu(L("SMC 显示内容")) {
+                        Toggle(L("结构突破 / 转变"), isOn: $vm.smcLayers.structure)
+                        Toggle(L("订单块"), isOn: $vm.smcLayers.orderBlocks)
+                        Toggle(L("公允价值缺口"), isOn: $vm.smcLayers.fvg)
+                        Toggle(L("强弱高低点"), isOn: $vm.smcLayers.strongWeak)
+                        Toggle(L("溢价 / 折价区"), isOn: $vm.smcLayers.premiumDiscount)
+                        Toggle(L("等高 / 等低点"), isOn: $vm.smcLayers.equalLevels)
+                        Toggle(L("流动性扫荡"), isOn: $vm.smcLayers.sweeps)
+                        Toggle(L("前周期高低点"), isOn: $vm.smcLayers.keyLevels)
+                    }
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    Text(current?.title ?? L("对比"))
+                    Image(systemName: "chevron.down").font(.system(size: 7, weight: .bold))
+                }
+                .font(.system(size: 9.5, weight: current == nil ? .medium : .semibold))
+                .foregroundStyle(current == nil ? Theme.textSecondary : Theme.accent)
+                .padding(.horizontal, 8).padding(.vertical, 2.5)
+                .background(current == nil ? Theme.surfaceAlt.opacity(0.72) : Theme.accent.opacity(0.16), in: Capsule())
+            }
+            .accessibilityLabel(L("对比技术"))
+        }
     }
 
     /// 「更多图层」里当前打开了几个，标在按钮上，免得用户忘了图上多画了什么。
@@ -66,6 +124,7 @@ struct ChartLegend: View {
                     .font(.system(size: 8.5))
                     .foregroundStyle(Theme.textSecondary)
                     .padding(.horizontal, 2)
+                techniqueMenu
         }
         .frame(maxWidth: maxWidth, alignment: .leading)
     }

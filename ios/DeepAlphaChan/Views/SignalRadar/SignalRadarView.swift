@@ -313,12 +313,6 @@ struct SignalRadarView: View {
 
     private var trendHeader: some View {
         VStack(spacing: 6) {
-            Picker(L("动向类别"), selection: $vm.trendKind) {
-                ForEach(QuantTrendKind.allCases) { k in
-                    Text(trendKindTitle(k)).tag(k)
-                }
-            }
-            .pickerStyle(.segmented)
             HStack(spacing: 8) {
                 if let d = vm.trend?.asOf {
                     Text(L("数据日期：%@", d)).font(.caption).foregroundColor(Theme.textSecondary)
@@ -344,6 +338,33 @@ struct SignalRadarView: View {
                 }
             }
         }
+    }
+
+    /// 动向类别下拉框（预期上调 / 质地改善），放在雷达画布左上角；选项后面的数字是当前「精选 / 行业」筛选下的个数。
+    private var trendKindMenu: some View {
+        Menu {
+            ForEach(QuantTrendKind.allCases) { k in
+                Button { vm.trendKind = k } label: {
+                    if k == vm.trendKind {
+                        Label(trendKindTitle(k), systemImage: "checkmark")
+                    } else {
+                        Text(trendKindTitle(k))
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(trendKindTitle(vm.trendKind)).font(.system(size: 12, weight: .semibold))
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
+            }
+            .foregroundColor(Theme.textPrimary)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(Theme.surface.opacity(0.92), in: Capsule())
+            .overlay(Capsule().stroke(Theme.border, lineWidth: 1))
+            .frame(minHeight: 36)
+            .contentShape(Rectangle())
+        }
+        .accessibilityLabel(L("动向类别"))
     }
 
     private func trendKindTitle(_ k: QuantTrendKind) -> String {
@@ -433,6 +454,7 @@ struct SignalRadarView: View {
             )
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(alignment: .topLeading) { trendKindMenu.padding(8) }
     }
 
     private var trendLegend: some View {

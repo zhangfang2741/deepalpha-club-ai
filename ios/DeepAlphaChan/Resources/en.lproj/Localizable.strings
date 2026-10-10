@@ -1809,3 +1809,9 @@
 "评级雷达" = "Rating Radar";
 "评级雷达怎么算的" = "How the Rating Radar works";
 "评级雷达数据准备中：上线后的第一次计算约需 1 小时，稍后再来看。" = "Rating Radar data is being prepared: the first calculation after launch takes about an hour. Please check back later.";
+
+/* Compare technique menu */
+"SMC 显示内容" = "SMC display";
+"对比" = "Compare";
+"对比技术" = "Compare technique";
+"缠论（默认）" = "Chan (default)";
