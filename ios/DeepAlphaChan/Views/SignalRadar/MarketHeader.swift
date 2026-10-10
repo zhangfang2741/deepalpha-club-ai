@@ -46,15 +46,24 @@ struct MarketHeader: View {
     private var marketSegments: some View {
         HStack(spacing: 2) {
             ForEach(StockMarket.allCases) { m in
-                if m == radarVM.market, radarVM.universes.count > 1 {
+                if m == radarVM.market {
                     Menu {
                         ForEach(radarVM.universes) { u in
                             Button { radarVM.switchUniverse(u.key) } label: {
-                                if u.key == radarVM.activeUniverseKey {
+                                if u.key == radarVM.activeUniverseKey && !radarVM.trendMode {
                                     Label(u.displayName, systemImage: "checkmark")
                                 } else {
                                     Text(u.displayName)
                                 }
+                            }
+                        }
+                        Divider()
+                        // 基本面动向雷达：最近哪些公司在变好（预期上调 / 质地改善），同一张画布
+                        Button { radarVM.enterTrend() } label: {
+                            if radarVM.trendMode {
+                                Label(L("基本面动向"), systemImage: "checkmark")
+                            } else {
+                                Label(L("基本面动向"), systemImage: "chart.line.uptrend.xyaxis")
                             }
                         }
                     } label: { segment(m, selected: true, menu: true) }

@@ -470,5 +470,37 @@
   "plain": "The rebound after the sign of weakness that fails to make a new high, usually the last bounce before price leaves the range downward.",
   "example": "After breaking the lower edge price bounces back to it but cannot get back inside, then keeps falling.",
   "notMeans": "It only marks a position in the structure; it lags and can be wrong. It is not a buy or sell signal and does not predict what comes next."
+ },
+ {
+  "key": "一致预期",
+  "term": "Consensus estimate",
+  "category": "fundamental",
+  "plain": "The average of the forecasts made by the analysts who cover the company.",
+  "example": "If five analysts forecast EPS of 1.8, 2.0, 2.0, 2.1 and 2.1, the consensus is 2.0.",
+  "notMeans": "It is not the company's own guidance and is not guaranteed; analysts raise or cut it at any time."
+ },
+ {
+  "key": "毛利率",
+  "term": "Gross margin",
+  "category": "fundamental",
+  "plain": "Out of every 100 in sales, what is left after direct costs such as materials and production.",
+  "example": "Sales of 10 billion and direct costs of 6 billion give a 40% gross margin.",
+  "notMeans": "Selling, R&D and admin costs are not yet deducted, so a high gross margin does not mean high final profit."
+ },
+ {
+  "key": "经营利润率",
+  "term": "Operating margin",
+  "category": "fundamental",
+  "plain": "Out of every 100 in sales, what the core business earns after costs and day-to-day operating expenses.",
+  "example": "Sales of 10 billion and operating profit of 1.5 billion give a 15% operating margin.",
+  "notMeans": "It excludes one-off gains such as asset sales or investment income, so it can differ from the net margin."
+ },
+ {
+  "key": "自由现金流",
+  "term": "Free cash flow",
+  "category": "fundamental",
+  "plain": "Cash from operations minus spending on equipment and facilities: the money the company can actually use freely.",
+  "example": "3 billion of operating cash minus 1 billion of investment leaves 2 billion of free cash flow.",
+  "notMeans": "A negative year is not necessarily bad; the company may be investing heavily to grow."
  }
 ]
