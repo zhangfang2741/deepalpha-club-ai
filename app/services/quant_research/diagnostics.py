@@ -2,8 +2,15 @@
 
 用途：新方法版本（如 q7）上线后，对比它与上一版本在同一批股票上的结果——等级分布、各阶段的综合分、
 新旧等级升降、排名相关、并列指标占比——判断有没有整体漂移、成长股是否被抬得过高。
-纯函数，不碰数据库；读库在 repository.diagnostic_rows / get_distributions，接口在 api/v1/quant_research.py。
+纯函数，不碰数据库；读库在 repository.diagnostic_rows / get_distributions / panorama_rows / metric_values，接口在 api/v1/quant_research.py。
 **临时工具**：方法稳定后可以删掉接口与本模块。
+
+接口一览（均只读、只返回聚合、不含个股；删除时一并处理）：
+- ``GET /quant-research/diagnostics``：新旧方法版本对比、等级分布、阶段占比与阶段判定敏感面（``stage_sensitivity``）。
+- ``/diagnostics/scan``：从板块分布看指标覆盖 / 并列 / 极值。
+- ``/diagnostics/whatif``：「综合分和谁比」三种口径的反事实（q10 的论证依据）。
+- ``/diagnostics/netgap``：净利率与 EBIT 利润率的差距分布（一次性收益影响面）。
+- ``/diagnostics/panorama``：维度相关 / 名义占比 vs 有效影响 / 板块偏差 / 指标体检 / 冗余指标 / 统一尺度反事实 / 各阶段画像。
 """
 
 from __future__ import annotations
