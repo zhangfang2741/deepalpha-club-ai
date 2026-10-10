@@ -436,7 +436,7 @@ final class SignalRadarViewModel: ObservableObject {
 
     // MARK: - 基本面雷达 / 评级雷达（标题下拉菜单里与缠论雷达并列）
 
-    /// 打开后画布换成动向雷达（同一张画布、同一套圈与气泡）：基本面雷达（`/quant-research/{market}/trend-radar`：预期与我们自己的综合等级的变化）
+    /// 打开后画布换成动向雷达（同一张画布、同一套圈与气泡）：基本面雷达（`/quant-research/{market}/trend-radar`：我们自己的综合等级的变化）
     /// 或评级雷达（`/signal-radar/analyst-radar`：券商评级净上调 / 净下调）；都只看当前选中指数的成分股，与缠论雷达的日期无关。
     @Published private(set) var trendMode = false
     @Published private(set) var trendFlavor: TrendFlavor = .fundamental
@@ -449,7 +449,7 @@ final class SignalRadarViewModel: ObservableObject {
     private var analystUniverse: String?
     @Published private(set) var trendLoading = false
     @Published private(set) var trendError: String?
-    @Published var trendKind: QuantTrendKind = .estimates
+    @Published var trendKind: QuantTrendKind = .rating
 
     /// 「精选」开关：只画综合等级达到本市场「好股票」门槛的公司（默认开）；关掉看全部。旧后端没有 good 字段时不筛。
     @Published var trendOnlyGood = true
@@ -460,7 +460,7 @@ final class SignalRadarViewModel: ObservableObject {
 
     /// 某类别在当前「精选 / 行业」筛选下是否保留这一条。
     private func trendVisible(_ item: QuantTrendItem, kind: QuantTrendKind) -> Bool {
-        item.kind == kind.rawValue
+        kind.rawKinds.contains(item.kind)
             && (!trendOnlyGood || item.good ?? true)
             && (sectorFilter == nil || item.sector == sectorFilter)
     }
@@ -483,7 +483,7 @@ final class SignalRadarViewModel: ObservableObject {
     /// 当前类别不考虑任何筛选时有没有条目：空画布上分「没有达到门槛」和「被筛掉了」两种说法。
     var trendHasItemsBeforeFilter: Bool {
         guard let trend, trend.market == market.rawValue else { return false }
-        return trend.items.contains { $0.kind == trendKind.rawValue }
+        return trend.items.contains { trendKind.rawKinds.contains($0.kind) }
     }
 
     /// 评级雷达在这个市场没有数据（目前只有美股有券商评级变动）。

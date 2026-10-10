@@ -3,7 +3,7 @@
 数据同 `analyst_events`：FMP 个股评级变动（券商、日期、前后评级、动作），只有美股；维持评级不算。逐只拉取较慢（标普 500 约 4 分钟），
 所以只读 Redis 缓存、缺失 / 过期的由后台补，响应的 `pending_symbols` 是还在补的只数。
 
-规则：某只股票在窗口（7 / 30 / 90 天）里「上调家数 - 下调家数」> 0 记一条上调（`analyst_up`，App 画红），< 0 记一条下调（`analyst_down`，画绿），
+规则：某只股票在窗口（3 / 7 / 30 天）里「上调家数 - 下调家数」> 0 记一条上调（`analyst_up`，App 画红），< 0 记一条下调（`analyst_down`，画绿），
 按**最小的**满足条件的窗口放圈；一只股票上调、下调各可以有一条。幅度 = 净家数，同家数里越近的略大一点（只作先后）。
 「精选」沿用基本面雷达的门槛：综合等级达到本股票池的「好股票」门槛（`choose_cutoff`）。只陈列事实、不是推荐。
 """
@@ -14,6 +14,7 @@ from typing import Literal
 
 from redis.asyncio import Redis
 
+from app.cache.operations import get_json, set_json
 from app.core.logging import logger
 from app.schemas.quant_research import AnalystChangeOut, AnalystRadarOut, TrendFacts, TrendRadarItem
 from app.services.quant_research import repository
@@ -23,7 +24,7 @@ from app.services.signal_radar import analyst_events as ae
 from app.services.signal_radar import sectors
 from app.services.signal_radar.quality_view import choose_cutoff
 
-RINGS = (7, 30, 90)
+RINGS = (3, 7, 30)
 PER_KIND_LIMIT = 60
 GRADE_LOOKBACK_DAYS = 14        # 取每只股票最近这么多天内最新的一份综合等级
 
@@ -124,3 +125,34 @@ async def analyst_radar(
     history = {s: cached[s]["actions"] for s in symbols if s in cached}
     return build_analyst_radar(history, names=names, grades=grades, tags=tags, as_of=now.date(), market=market,
                                pending=sum(1 for s in symbols if s not in cached))
+
+
+_CACHE_TTL = 2 * 3600
+_PENDING_TTL = 60
+
+
+def _cache_key(market: str, scope: str) -> str:
+    return f"signal_radar:analyst_radar:v2:{market}:{scope}"
+
+
+async def cached_analyst_radar(
+    market: str, pairs: list[tuple[str, str]], scope: str, *, redis: Redis, refresh: bool = False,
+) -> AnalystRadarOut:
+    """评级雷达的缓存入口：用户请求只读缓存（后台每小时 `refresh=True` 重算一次写回），缓存没有才现算。
+
+    后台还在补拉券商数据（pending_symbols > 0）时只缓存 1 分钟，补齐后才缓存 2 小时。自选因人而异，不走这里（直接 analyst_radar）。
+    """
+    key = _cache_key(market, scope)
+    if not refresh:
+        try:
+            if cached := await get_json(redis, key):
+                return AnalystRadarOut(**cached)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("signal_radar_analyst_radar_cache_read_failed", market=market, error=str(e))
+    out = await analyst_radar(market, pairs, scope, redis=redis)
+    try:
+        await set_json(redis, key, out.model_dump(mode="json"),
+                       expire=_PENDING_TTL if out.pending_symbols else _CACHE_TTL)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_analyst_radar_cache_write_failed", market=market, error=str(e))
+    return out

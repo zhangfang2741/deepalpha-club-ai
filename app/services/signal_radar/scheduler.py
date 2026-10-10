@@ -36,6 +36,7 @@ from app.services.signal_radar.service import (
 )
 from app.services.chan.signal_policy import DEFAULT_MODE
 from app.services.signal_radar.quality_view import warm_good
+from app.services.signal_radar.trend_warm import trend_warm_loop
 from app.services.signal_radar.universe import all_universes
 
 
@@ -306,6 +307,7 @@ async def run_signal_radar_sub_level_scheduler() -> None:
 
 
 _keepwarm_task: asyncio.Task[None] | None = None
+_trend_warm_task: asyncio.Task[None] | None = None
 
 
 async def run_signal_radar_prewarm_scheduler() -> None:
@@ -313,8 +315,9 @@ async def run_signal_radar_prewarm_scheduler() -> None:
     try:
         await _prewarm_scheduler_body()
     finally:
-        if _keepwarm_task is not None and not _keepwarm_task.done():
-            _keepwarm_task.cancel()
+        for t in (_keepwarm_task, _trend_warm_task):
+            if t is not None and not t.done():
+                t.cancel()
 
 
 async def _prewarm_scheduler_body() -> None:
@@ -347,8 +350,9 @@ async def _prewarm_scheduler_body() -> None:
         raise
     except Exception as e:  # noqa: BLE001
         logger.exception("signal_radar_demo_prewarm_first_failed", error=str(e))
-    global _keepwarm_task
+    global _keepwarm_task, _trend_warm_task
     _keepwarm_task = asyncio.create_task(_demo_keepwarm_loop())
+    _trend_warm_task = asyncio.create_task(trend_warm_loop())   # 基本面 / 评级雷达的后台预热（用户请求只读缓存）
 
     # 进程刚起来（部署/重启后）先扫一轮全部市场，保证很快就有缓存可用，不用干等到
     # 下一个收盘触发点——那最长可能要接近 24 小时（如果刚好错过当天的收盘时刻）。

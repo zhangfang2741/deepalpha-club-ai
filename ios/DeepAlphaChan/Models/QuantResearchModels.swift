@@ -754,36 +754,36 @@ struct QuantTrendRadar: Decodable {
 enum TrendFlavor { case fundamental, analyst }
 
 /// 动向类别。红 = 向好（预期上调、等级上升、券商上调），绿 = 向差（预期下调、等级下降、券商下调），和缠论雷达红买绿卖同一套颜色。
-/// 基本面雷达：预期上调 / 预期下调 / 等级上升 / 等级下降（2026-10-10 起叫「等级」，和分析师「评级」区分）；评级雷达：评级上调 / 评级下调。
+/// 基本面雷达：只有「等级变化」（我们自己的综合等级，上升 + 下降放在一起；2026-10-10 起不再看盈利预期）；评级雷达：「评级变动」（券商上调 + 下调放在一起）。
 /// 后端的 quality（质地改善）类别只给旧版 App。
 enum QuantTrendKind: String, CaseIterable, Identifiable {
-    case estimates
-    case estimatesDown = "estimates_down"
     case rating
-    case ratingDown = "rating_down"
-    case analystUp = "analyst_up"
-    case analystDown = "analyst_down"
+    case analyst
     var id: String { rawValue }
 
     var flavor: TrendFlavor {
         switch self {
-        case .analystUp, .analystDown: return .analyst
+        case .analyst: return .analyst
         default: return .fundamental
         }
     }
-    /// 向差的一侧（画绿色）。
-    var isDown: Bool { self == .estimatesDown || self == .ratingDown || self == .analystDown }
+    /// 这一类包含后端的哪些 kind（预期变化 = 上调 + 下调，等级变化 = 上升 + 下降）。
+    var rawKinds: [String] {
+        switch self {
+        case .rating: return ["rating", "rating_down"]
+        case .analyst: return ["analyst_up", "analyst_down"]
+        default: return [rawValue]
+        }
+    }
+    /// 后端 kind 字符串是不是向差的一侧（estimates_down / rating_down / analyst_down）。
+    static func isDownKind(_ raw: String) -> Bool { raw.hasSuffix("_down") }
 
     static func kinds(for flavor: TrendFlavor) -> [QuantTrendKind] { allCases.filter { $0.flavor == flavor } }
 
     var title: String {
         switch self {
-        case .estimates: return L("预期上调")
-        case .estimatesDown: return L("预期下调")
-        case .rating: return L("等级上升")
-        case .ratingDown: return L("等级下降")
-        case .analystUp: return L("评级上调")
-        case .analystDown: return L("评级下调")
+        case .rating: return L("等级变化")
+        case .analyst: return L("评级变动")
         }
     }
 }

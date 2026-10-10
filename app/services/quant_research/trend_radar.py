@@ -2,7 +2,7 @@
 
 - 预期上调（estimates）：本财年 EPS 一致预期近 7 天涨 ≥ 2% 放最内圈，否则近 30 天 ≥ 5% 放中圈，否则近 90 天 ≥ 10% 放外圈；
   覆盖分析师 ≥ 3 位才算（人太少一致预期会被一两位分析师带着跳）。
-- 评级改善（rating，2026-10-10 起 App 用它代替下面的质地改善）：我们自己的综合等级，在**同一评级方法下**比窗口（7 / 30 / 90 天）里最早一个评级日至少
+- 评级改善（rating，2026-10-10 起 App 用它代替下面的质地改善）：我们自己的综合等级，在**同一评级方法下**比窗口（3 / 7 / 30 天，`RATING_RINGS`）里最早一个评级日至少
   升 1 档；按最小的那个窗口放圈。方法升级前后不是同一把尺子，不比较；刚升级时历史是空的，这一类会先空着、攒几天才有。
 - 质地改善（quality，旧版 App 还在用）：最近一季披露在 90 天内，经营利润率或自由现金流利润率比上一季高 ≥ 1 个百分点，
   四项（营收同比 / 毛利率 / 经营利润率 / 自由现金流利润率）里至少两项变好，且没有一项变差超过 3 个百分点；按披露距今放圈（7 / 30 / 90 天）。
@@ -14,6 +14,9 @@
 """
 
 from __future__ import annotations
+
+import asyncio
+import time
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -33,6 +36,8 @@ from app.services.signal_radar.quality_view import choose_cutoff
 from app.services.signal_radar.sectors import load_sector_tags, lookup_tag
 
 RINGS = (7, 30, 90)
+# 等级变化只看最近 3 天 / 1 周 / 1 个月（2026-10-10：窗口太多画布太满，评级方法刚改过历史也短）；RINGS 只给旧的预期 / 质地类别用
+RATING_RINGS = (3, 7, 30)
 EPS_UP = {7: 0.02, 30: 0.05, 90: 0.10}
 MIN_ANALYSTS = 3
 QUALITY_MARGIN_PP = 1.0        # 经营利润率或自由现金流利润率至少提高这么多
@@ -99,7 +104,7 @@ class GradePoint:
 
 
 def rating_item(points: list[GradePoint], *, down: bool = False) -> RatingChangeOut | None:
-    """综合等级是否在最近 7 / 30 / 90 天里升档（down=True 看降档）；返回落在哪一圈。不满足返回 None。
+    """综合等级是否在最近 3 / 7 / 30 天里升档（down=True 看降档）；返回落在哪一圈。不满足返回 None。
 
     只和同一评级方法（methodology_version）下的历史比：两边都有版本且不同就不比较（方法升级当天会有一大批假升降）。
     对比的是窗口内**最早**一个评级日（「N 天前 vs 现在」），按最小的窗口放圈。steps 总是正数（升 / 降了几档）。
@@ -110,7 +115,7 @@ def rating_item(points: list[GradePoint], *, down: bool = False) -> RatingChange
     cur = seq[-1]
     same = [p for p in seq[:-1] if not (p.version and cur.version and p.version != cur.version)]
     cur_rank = GRADE_ORDER.index(cur.grade or "")
-    for ring in RINGS:
+    for ring in RATING_RINGS:
         window = [p for p in same if p.as_of >= cur.as_of - timedelta(days=ring)]
         if not window:
             continue
@@ -212,7 +217,7 @@ async def _load_rating_changes(
 ) -> tuple[dict[str, RatingChangeOut], dict[str, RatingChangeOut]]:
     """池子里每只股票最近 90 天的综合等级序列 → (评级改善, 评级下降)。读取失败只是这两类为空，不影响其它类别。"""
     try:
-        rows = await repo.trend_grade_history(market, day - timedelta(days=RINGS[-1] + 5), day)
+        rows = await repo.trend_grade_history(market, day - timedelta(days=RATING_RINGS[-1] + 5), day)
     except Exception:  # noqa: BLE001
         logger.exception("quant_trend_rating_history_failed", market=market)
         return {}, {}
@@ -223,13 +228,41 @@ async def _load_rating_changes(
     return rating_changes(history), rating_changes(history, down=True)
 
 
+# 全市场的原料（最新一天的动向事实 + 90 天评级历史算出的升降）在进程里缓存：切换指数、自选、中英文都不用再读一遍库
+# （评级历史全市场约十几万行，是请求变慢的大头）。同一市场同时来多个请求只算一次（锁），新一天批量后换键。
+_INPUT_TTL = 30 * 60
+_inputs_cache: dict[tuple[str, str, str | None], tuple[float, tuple]] = {}
+_inputs_locks: dict[tuple[str, str], asyncio.Lock] = {}
+
+
+async def _market_inputs(market: str, lang: str, latest: str | None):
+    key = (market, lang, latest)
+    now = time.monotonic()
+    if (hit := _inputs_cache.get(key)) and now - hit[0] < _INPUT_TTL:
+        return hit[1]
+    lock = _inputs_locks.setdefault((market, lang), asyncio.Lock())
+    async with lock:
+        now = time.monotonic()
+        if (hit := _inputs_cache.get(key)) and now - hit[0] < _INPUT_TTL:
+            return hit[1]
+        day, rows = await repo.trend_radar_rows(market, lang, as_of=date.fromisoformat(latest) if latest else None)
+        ratings, ratings_down = (
+            await _load_rating_changes(market, day, {r["symbol"] for r in rows}) if rows and day else ({}, {}))
+        value = (day, rows, ratings, ratings_down)
+        if rows and day:
+            for k in [k for k in _inputs_cache if k[:2] == (market, lang)]:
+                del _inputs_cache[k]
+            _inputs_cache[key] = (time.monotonic(), value)
+        return value
+
+
 def filter_rows(rows: list[dict], members: set[str] | None) -> list[dict]:
     """只留股票池里的公司；members 为 None 表示不限（全市场），空集合表示池子是空的。"""
     return rows if members is None else [r for r in rows if r["symbol"] in members]
 
 
 def _cache_key(market: str, as_of: str, lang: str, scope: str = "all") -> str:
-    return f"quant:{market}:trend_radar:v5:{METHODOLOGY_VERSION}:{scope}:{as_of}:{lang}"
+    return f"quant:{market}:trend_radar:v6:{METHODOLOGY_VERSION}:{scope}:{as_of}:{lang}"
 
 
 async def get_trend_radar(market: str, lang: Lang, *, redis: Redis | None, members: set[str] | None = None,
@@ -249,11 +282,9 @@ async def get_trend_radar(market: str, lang: Lang, *, redis: Redis | None, membe
                 return TrendRadarOut(**cached)
         except Exception as e:  # noqa: BLE001 缓存不可用退回查库
             logger.warning("quant_trend_radar_cache_read_failed", market=market, error=str(e))
-    day, rows = await repo.trend_radar_rows(market, lang, as_of=date.fromisoformat(latest) if latest else None)
-    rows = filter_rows(rows, members)
+    day, all_rows, ratings, ratings_down = await _market_inputs(market, lang, latest)
+    rows = filter_rows(all_rows, members)
     tags = await load_sector_tags(market, redis) if rows else {}
-    ratings, ratings_down = (
-        await _load_rating_changes(market, day, {r["symbol"] for r in rows}) if rows and day else ({}, {}))
     out = build_trend_radar(rows, market=market, as_of=day, tags=tags, ratings=ratings, ratings_down=ratings_down)
     if use_cache and redis is not None and day is not None and rows:
         try:

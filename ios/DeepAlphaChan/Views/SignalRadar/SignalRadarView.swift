@@ -283,9 +283,9 @@ struct SignalRadarView: View {
 
     // MARK: - 基本面雷达 / 评级雷达（标题下拉菜单里与缠论雷达并列）
 
-    /// 与缠论雷达同一张画布、同一套同心圈与气泡：圈 = 最近 1 周 / 1 月 / 3 月，颜色深浅 = 变化幅度，气泡大小与字母 = 综合等级。
+    /// 与缠论雷达同一张画布、同一套同心圈与气泡：圈 = 最近 3 天 / 1 周 / 1 个月，颜色深浅 = 变化幅度，气泡大小与字母 = 综合等级。
     /// 颜色和缠论雷达一致：红 = 向好的一侧（预期上调 / 等级上升 / 券商上调），绿 = 向差的一侧（下调 / 下降），下拉框切换类别。
-    /// 基本面雷达看预期与我们自己的综合等级；评级雷达看券商评级（仅美股）。
+    /// 基本面雷达只看我们自己的综合等级变化；评级雷达看券商评级（仅美股）。
     @ViewBuilder
     private var trendContent: some View {
         trendHeader
@@ -305,13 +305,24 @@ struct SignalRadarView: View {
                 Button(L("重试")) { Task { await vm.loadTrend() } }
             }
         } else {
-            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            // 加载中给一句话：第一次打开要等后端算（基本面雷达读全池评级、评级雷达读券商数据），空转圈会让人以为卡住了
+            VStack(spacing: 12) {
+                ProgressView()
+                Text(vm.trendFlavor == .analyst
+                     ? L("正在读取券商评级变动，第一次打开可能要等十几秒…")
+                     : L("正在计算综合等级的变化，第一次打开可能要等十几秒…"))
+                    .font(.footnote)
+                    .foregroundColor(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         trendLegend
         Spacer(minLength: 0)
         Text(vm.trendFlavor == .analyst
              ? L("只陈列券商评级的变动事实，不代表股价会涨跌，不构成投资建议。")
-             : L("只陈列预期与财报的变化事实，不代表股价会涨跌，不构成投资建议。"))
+             : L("只陈列综合等级的变化事实，不代表股价会涨跌，不构成投资建议。"))
             .font(.caption2)
             .foregroundColor(Theme.textSecondary)
             .frame(maxWidth: .infinity)
@@ -345,38 +356,6 @@ struct SignalRadarView: View {
                 }
             }
         }
-    }
-
-    /// 动向类别下拉框（基本面雷达：预期上调 / 预期下调 / 等级上升 / 等级下降；评级雷达：评级上调 / 评级下调），放在雷达画布左上角；选项后面的数字是当前「精选 / 行业」筛选下的个数。
-    private var trendKindMenu: some View {
-        Menu {
-            ForEach(QuantTrendKind.kinds(for: vm.trendFlavor)) { k in
-                Button { vm.trendKind = k } label: {
-                    if k == vm.trendKind {
-                        Label(trendKindTitle(k), systemImage: "checkmark")
-                    } else {
-                        Text(trendKindTitle(k))
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Text(trendKindTitle(vm.trendKind)).font(.system(size: 12, weight: .semibold))
-                Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
-            }
-            .foregroundColor(Theme.textPrimary)
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(Theme.surface.opacity(0.92), in: Capsule())
-            .overlay(Capsule().stroke(Theme.border, lineWidth: 1))
-            .frame(minHeight: 36)
-            .contentShape(Rectangle())
-        }
-        .accessibilityLabel(L("动向类别"))
-    }
-
-    private func trendKindTitle(_ k: QuantTrendKind) -> String {
-        guard vm.trend?.market == vm.market.rawValue else { return k.title }
-        return k.title + " · \(vm.trendCount(k))"
     }
 
     private func trendMessage(_ text: String) -> some View {
@@ -425,10 +404,11 @@ struct SignalRadarView: View {
                             baseX: CGFloat(layout.x),
                             baseY: CGFloat(layout.y),
                             phase: layout.phase,
-                            color: SignalRadarView.trendColor(kind, depth: layout.signal.strength),
+                            color: SignalRadarView.trendColor(raw: layout.signal.date, depth: layout.signal.strength),
                             isNew: false,
                             marksConfirmed: false,
                             polished: true,
+                            gradeText: trendGradeText[layout.signal.date + ":" + layout.signal.symbol],
                             // 点气泡直接进个股详情：基本面雷达进「基本面研究」分段，评级雷达进「分析师评级」分段（和缠论雷达一样不先弹面板）
                             onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name, segment: vm.trendFlavor == .analyst ? .analyst : .quant) }
                         )
@@ -439,7 +419,7 @@ struct SignalRadarView: View {
                 if !vm.trendItems.isEmpty {
                     // 画布最多画 ringFieldCap 个；完整名单（含每只的具体变化）在列表里
                     Button { panel = .trendList } label: {
-                        Text(field.hidden > 0 ? L("另有 %lld 个 · 查看全部", field.hidden) : L("查看名单与变化"))
+                        Text(field.hidden > 0 ? L("另有 %lld 个 · 查看全部", field.hidden) : L("查看名单与变化 · %lld", vm.trendItems.count))
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundColor(Theme.accent)
                             .padding(.horizontal, 10)
@@ -461,19 +441,31 @@ struct SignalRadarView: View {
             )
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(alignment: .topLeading) { trendKindMenu.padding(8) }
+    }
+
+    private func trendGradientBar(down: Bool) -> some View {
+        Capsule()
+            .fill(LinearGradient(colors: [SignalRadarView.trendColor(raw: down ? "x_down" : "x", depth: 0),
+                                          SignalRadarView.trendColor(raw: down ? "x_down" : "x", depth: 1)],
+                                 startPoint: .leading, endPoint: .trailing))
+            .frame(width: 24, height: 8)
+    }
+
+    /// 评级变化气泡最后一行写「从 → 到」（如 B → A-），key = 后端 kind:代码（与 `RadarSignal.date` + `symbol` 对上）。
+    private var trendGradeText: [String: String] {
+        Dictionary(vm.trendItems.compactMap { it in
+            it.rating.map { (it.kind + ":" + it.symbol, $0.fromGrade + " → " + $0.toGrade) }
+        }, uniquingKeysWith: { a, _ in a })
     }
 
     private var trendLegend: some View {
         HStack(spacing: 12) {
-            // 颜色深浅 = 变化幅度：浅 → 深用同一色相渐变条表示
+            // 颜色深浅 = 变化幅度：浅 → 深用同一色相渐变条表示；合并类（预期 / 等级变化）红绿各一条
             HStack(spacing: 5) {
-                Capsule()
-                    .fill(LinearGradient(colors: [SignalRadarView.trendColor(vm.trendKind, depth: 0),
-                                                  SignalRadarView.trendColor(vm.trendKind, depth: 1)],
-                                         startPoint: .leading, endPoint: .trailing))
-                    .frame(width: 30, height: 8)
-                Text(L("颜色越深=变化越大")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                trendGradientBar(down: false)
+                if vm.trendKind.rawKinds.count > 1 { trendGradientBar(down: true) }
+                Text(vm.trendKind.rawKinds.count > 1 ? L("红=向好 绿=向差，越深变化越大") : L("颜色越深=变化越大"))
+                    .font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
             // 大小 = 综合等级
             HStack(spacing: 3) {
@@ -490,15 +482,16 @@ struct SignalRadarView: View {
         .minimumScaleFactor(0.85)
     }
 
-    /// 三圈标签：最近 1 周 / 1 月 / 3 月（后端 ring_days 7 / 30 / 90）。
-    static var trendRingLabels: [String] { [L("近1周"), L("近1月"), L("近3月")] }
+    /// 三圈标签：最近 3 天 / 1 周 / 1 个月（后端 ring_days 3 / 7 / 30）。
+    static var trendRingLabels: [String] { [L("近3天"), L("近1周"), L("近1月")] }
 
     /// 颜色和缠论雷达完全一致（用户 2026-10-10 要求）：直接用缠论雷达气泡的那条**不透明**渐变（`bubbleColor`，浅粉 → 深红），
     /// 颜色越深 = 变化越大；两类动向用画布左上角的下拉框区分，不再各用一个色，也不用透明度（以前用红色加透明度，发灰发透）。
     /// depth 是 0~1（变化幅度在当前显示的同类公司里的百分位），映射到渐变的 0.15~0.95，避开最浅 / 最深的两端。
     /// 向差的一侧（预期下调 / 等级下降 / 券商下调）用缠论雷达卖点的那条绿色渐变。
-    static func trendColor(_ kind: QuantTrendKind, depth: Double) -> Color {
-        bubbleColor(side: kind.isDown ? "sell" : "buy", depth: 0.15 + 0.8 * max(0, min(1, depth)))
+    /// 按条目自己的后端 kind 上色（「预期变化」「等级变化」里上调 / 上升红、下调 / 下降绿）；气泡的 `date` 字段存的就是它。
+    static func trendColor(raw: String, depth: Double) -> Color {
+        bubbleColor(side: QuantTrendKind.isDownKind(raw) ? "sell" : "buy", depth: 0.15 + 0.8 * max(0, min(1, depth)))
     }
 
     /// 评级雷达的气泡直径 = 综合等级，**按当前画出来的这批公司的等级范围拉开**：最高的最大（96）、最低的最小（48），
@@ -529,7 +522,7 @@ struct SignalRadarView: View {
     static func trendSignals(_ items: [QuantTrendItem]) -> [RadarSignal] {
         let depths = trendDepths(items.map { $0.magnitude ?? 1 })
         // 圈号用 bandIndex(forDaysAgo:) 的口径：0 → 内圈、≤3 → 中圈、其余 → 外圈
-        func age(_ ring: Int) -> Int { ring <= 7 ? 0 : (ring <= 30 ? 2 : 5) }
+        func age(_ ring: Int) -> Int { ring <= 3 ? 0 : (ring <= 7 ? 2 : 5) }
         return zip(items, depths).map { it, depth in
             RadarSignal(
                 symbol: it.symbol, name: it.name ?? "", side: "trend", label: "", signalType: "trend2",
@@ -789,19 +782,29 @@ struct SignalRadarView: View {
         Rectangle().fill(Theme.border).frame(width: 14, height: 1.5).padding(.top, 10)
     }
 
-    /// 标题下拉菜单：在「缠论雷达」（缠论买卖点）、「基本面雷达」（预期 / 综合等级的变化）与「评级雷达」（券商评级的变动）之间切换。
+    /// 标题下拉菜单：在「缠论雷达」（缠论买卖点）、「基本面雷达」（综合等级的变化）与「评级雷达」（券商评级的变动）之间切换。
     /// 标题文字就是当前所在的雷达，用户一眼知道在哪、点标题就能换。
     /// （以前菜单里还有一项「这一页怎么读」展开流程图，2026-10-10 起去掉；流程图只在首次进雷达时自动展开一次，新手导览在学习页可重看。）
+    private var radarChoice: Binding<Int> {
+        Binding(
+            get: { !vm.trendMode ? 0 : (vm.trendFlavor == .fundamental ? 1 : 2) },
+            set: { v in
+                switch v {
+                case 1: vm.enterTrend(.fundamental)
+                case 2: vm.enterTrend(.analyst)
+                default: vm.exitTrend()
+                }
+            })
+    }
+
     private var flowTitle: some View {
         Menu {
-            Button { vm.exitTrend() } label: {
-                Label(L("缠论雷达"), systemImage: vm.trendMode ? "scope" : "checkmark")
-            }
-            Button { vm.enterTrend(.fundamental) } label: {
-                Label(L("基本面雷达"), systemImage: vm.trendMode && vm.trendFlavor == .fundamental ? "checkmark" : "chart.line.uptrend.xyaxis")
-            }
-            Button { vm.enterTrend(.analyst) } label: {
-                Label(L("评级雷达"), systemImage: vm.trendMode && vm.trendFlavor == .analyst ? "checkmark" : "person.2.wave.2")
+            // 三个入口的图标固定不变（选中态由 Picker 自带的对勾标出，不再拿对勾顶掉图标）：
+            // 缠论 = 价格折线、基本面 = 财报文档、评级 = 星级
+            Picker(L("切换雷达"), selection: radarChoice) {
+                Label(L("缠论雷达"), systemImage: "waveform.path.ecg").tag(0)
+                Label(L("基本面雷达"), systemImage: "doc.text.magnifyingglass").tag(1)
+                Label(L("评级雷达"), systemImage: "star.leadinghalf.filled").tag(2)
             }
         } label: {
             HStack(spacing: 6) {
