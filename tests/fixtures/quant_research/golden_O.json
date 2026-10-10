@@ -4,7 +4,7 @@
  "name": "Realty Income Corporation",
  "status": "ok",
  "status_note": null,
- "methodology_version": "q10",
+ "methodology_version": "q11",
  "as_of": {
   "price_date": "2026-09-29",
   "fiscal_period": "FY26 Q2",
@@ -34,13 +34,13 @@
   "revenue_cagr_3y_pct": 17.2
  },
  "overall": {
-  "grade": "C",
-  "score": 48.6,
-  "universe_percentile": 46.9,
+  "grade": "C-",
+  "score": 48.0,
+  "universe_percentile": 45.0,
   "dimensions_used": 5,
   "capped": false,
   "note": null,
-  "text": "综合分 48.6 · 标普1500 后 47%"
+  "text": "综合分 48.0 · 标普1500 后 45%"
  },
  "dimensions": [
   {
@@ -811,8 +811,8 @@
    "key": "growth",
    "name": "成长",
    "description": "营收与利润的历史及预期增速",
-   "grade": "C",
-   "score": 52.9,
+   "grade": "C+",
+   "score": 56.2,
    "status": "ok",
    "status_note": null,
    "is_highest": false,
@@ -821,7 +821,7 @@
     "metric": "rev_cagr3",
     "text": "营收 3 年复合增速 +17%，高于板块 89% 的公司"
    },
-   "formula": "(59 + 25 + 89 + 14 + 58 + 15 + 78 + 63 + 75) ÷ 9 = 52.9 → C",
+   "formula": "(59 + 25 + 89 + 14 + 58 + 15 + 78 + 63 + 75) ÷ 9 = 56.2 → C+",
    "groups": [
     {
      "name": "营收",
@@ -1320,7 +1320,7 @@
    "name": "盈利能力",
    "description": "利润率与资本回报",
    "grade": "C+",
-   "score": 59.9,
+   "score": 56.7,
    "status": "ok",
    "status_note": null,
    "is_highest": true,
@@ -1329,7 +1329,7 @@
     "metric": "fcf_sbc_m",
     "text": "扣股权激励后自由现金流利润率 36%，高于板块 93% 的公司"
    },
-   "formula": "(74×1 + 42×0.5 + 62×0.5 + 60×0.5 + 62×1 + 93×1 + 38×0.5 + 38×0.5 + 40×1) ÷ 6.5 = 59.9 → C+",
+   "formula": "(74×1 + 42×0.5 + 62×0.5 + 60×0.5 + 62×1 + 93×1 + 38×0.5 + 38×0.5 + 40×1) ÷ 6.5 = 56.7 → C+",
    "groups": [
     {
      "name": "毛利率",

@@ -298,6 +298,10 @@ deepalpha-club-ai/
 > 金融股整维不适用（`financials_balance_sheet`）；A 股 / 港股报表没有流动资产 / 流动负债与利息支出，这两项在 `markets` 登记为无数据源。
 > 测试里 `distributions.json` 快照早于该维度，`test_builder._synthetic_stability_dists` 造了**合成**的稳健分布（仅供测试 / golden，不代表真实板块）；真实分布由批量任务重算。
 > 上线前须在真实数据上跑一遍批量，看综合等级分布有没有整体漂移、成长股与成熟板块有没有被误伤（离线只验证了逻辑，没验证分布）。
+> **q11（最后一轮规则改动，2026-10-10；之后只验证不再改规则）**：① 成对高度重复指标（`scoring.REDUNDANT_PAIRS`：fcf_m↔fcf_sbc_m、ebit_yoy↔ebitda_yoy、ebit_fwd↔ebitda_fwd，同维度秩相关 ≥ 0.9）两项都参与时各减半权重；
+> ② 美股净利润剔除大额营业外项目（`metrics._adjusted_net`：报表 EBIT 与经营利润之差 ≥ 经营利润绝对值 25% 才剔除，扣税后从净利润减，税率取实际 0~35%、缺失 21%；净利率 / ROE / ROA 共用，`MetricValue.meta.adjusted`；`inputs._operating_basis` 保留 `ebitReported`；A 股 / 港股无此字段不受影响）；
+> ③ 综合分先把各维度分换成全体百分位再加权（`scoring.composite(dim_dists)`，分布存 distributions 表 `("_all","_dim:<维度>")`，缺分布时退回原始维度分；一票否决仍看维度原始分 < 20）。
+> 效果依据：统一尺度反事实秩相关 ≥ 0.986；旧「已知局限」②③⑤由此解决，⑥ 经 `/diagnostics/panorama` 的 `by_stage` 验证不成立（成长期盈利能力没有系统性偏弱），不再追加按阶段取舍盈利能力权重。
 > **已知局限（q10 定版，2026-10-10 用线上诊断统计验证过，要改规则先用 `/quant-research/diagnostics*` 的统计论证、不要凭单只股票）**：
 > ① 阶段判定对分拆 / 并购 / 重述造成的季度序列断点敏感（WDC 同比被压成 13.4% 误判成熟期；美股同比极端 1.1%、A 股 4.3%、港股 7.4%，A 股 / 港股大多是真实剧烈波动、分不开真假，所以没加财年兜底）；
 > ② 净利率 / ROE / ROA / EPS 仍是 GAAP，含一次性收益（美股约 3.3% 的公司净利率比 EBIT 利润率高 10 点以上，A 股 0.3%、港股 1.2%）；

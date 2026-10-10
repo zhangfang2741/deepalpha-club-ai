@@ -1675,3 +1675,5 @@
 "派发后冲高" = "Upthrust after distribution";
 "弱势信号" = "Sign of weakness";
 "最后供给点" = "Last point of supply";
+
+"算综合分时，每个维度分先换成它在全体里的百分位再按上面的比例加权；成对高度重复的指标只算一份信息。" = "When computing the composite, each dimension score is first converted to its percentile among all companies and then weighted by the shares above; near-duplicate metrics count as one piece of information.";
