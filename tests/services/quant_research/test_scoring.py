@@ -228,9 +228,11 @@ def test_score_metric_reports_tie_and_worse_share():
 def test_cohort_distributions_only_for_big_enough_stages():
     from app.services.quant_research.scoring import COHORT_MIN, build_cohort_distributions, cohort_key
 
-    rows = [("mature", float(i)) for i in range(COHORT_MIN)] + [("intro", 1.0)] * (COHORT_MIN - 1) + [(None, 5.0)] * COHORT_MIN
+    rows = ([("mature", float(i)) for i in range(COHORT_MIN)] + [("growth", 1.0)] * (COHORT_MIN - 1) + [(None, 5.0)] * COHORT_MIN
+            + [("shakeout", 1.0)] * (3 * COHORT_MIN) + [("decline", 1.0)] * COHORT_MIN)
     d = build_cohort_distributions(rows)
-    assert set(d) == {cohort_key("mature"), cohort_key(None)}       # 初创期样本不够，不单独成组
+    # 成长期样本不够不成组；调整 / 收缩期样本再多也不成组（弱势阶段仍和全体比）
+    assert set(d) == {cohort_key("mature"), cohort_key(None)}
     assert d[cohort_key("mature")] == sorted(d[cohort_key("mature")])
 
 

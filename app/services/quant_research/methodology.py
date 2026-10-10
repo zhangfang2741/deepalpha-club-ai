@@ -121,16 +121,18 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
       f"估值 / 成长 / 盈利能力 / 财务稳健里，综合分权重不低于 {CAP_MIN_WEIGHT:.0%} 的维度为 F 时，综合等级最高为 {CAP_CEILING}"
       f"（权重更低的维度、以及股价类的动量和预期类的 EPS 修正，都没有一票否决权）；"
       f"覆盖的分析师少于 {MIN_ANALYSTS} 位时不给综合等级。"
-      "综合分的权重按公司阶段调整，不同阶段的综合分尺度不同，所以综合等级是拿综合分和「同阶段的公司」比出来的百分位"
-      "（该阶段样本不足 30 家时才和全体比）；同一板块里各维度的等级则可以直接比较。",
+      "综合分的权重按公司阶段调整，成长期、成熟期和未标阶段的公司，综合等级是拿综合分和「同阶段的公司」比出来的百分位"
+      "（样本不足 30 家时和全体比）；调整期、收缩期、初创期的综合分偏低是真实状况，仍和全体比，不会因为同阶段都弱而被抬高。同一板块里各维度的等级可以直接比较。",
       f"The composite score is a stage-weighted average of the available dimension scores (weights are listed under "
       f"Company stage; missing dimensions are re-normalized over the rest); its percentile among peers in the same stage "
       f"sets the grade on the same scale. If valuation, growth, profitability or financial health carries at least "
       f"{CAP_MIN_WEIGHT:.0%} of the weight and is F, the composite is capped at {CAP_CEILING} (lower-weight "
       f"dimensions, and the price-based momentum and expectation-based EPS revisions, cannot veto); with fewer than "
       f"{MIN_ANALYSTS} covering analysts there is no composite grade. Because the weights follow the "
-      "company's stage, the composite score is ranked against companies in the same stage (against everyone only when "
-      "that stage has fewer than 30 companies); dimension grades within a sector still compare directly.")),
+      "company's stage, the composite of growth, mature and unlabeled companies is ranked against companies in the same "
+      "stage (against everyone when fewer than 30); shake-out, contraction and introduction companies are still ranked "
+      "against everyone, because their lower scores are real and should not be lifted just because the whole stage is weak; "
+      "dimension grades within a sector still compare directly.")),
     (("估值指标按阶段取舍", "Valuation metrics by stage"),
      (f"估值维度里的 14 个倍数，不同阶段看的重点不同，但比较对象不变：每个倍数仍然和同板块全体公司比百分位，所以不同公司在同一板块维度下可比。"
       f"只改各倍数在估值分里的权重，同样按营收增速和经营现金流连续插值、不在门槛处跳变：成熟期 14 项按信息类别分配、同类不重复计算（盈利倍数、企业价值利润倍数、营收倍数、市现率各约 21%，市净率约 14%）；{_valuation_weights_zh()}。"
