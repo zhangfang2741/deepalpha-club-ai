@@ -34,13 +34,13 @@
   "revenue_cagr_3y_pct": 17.2
  },
  "overall": {
-  "grade": "C+",
-  "score": 51.7,
-  "universe_percentile": 53.8,
+  "grade": "C",
+  "score": 50.3,
+  "universe_percentile": 51.0,
   "dimensions_used": 5,
   "capped": false,
   "note": null,
-  "text": "综合分 51.7 · 标普1500 前 46%"
+  "text": "综合分 50.3 · 标普1500 前 49%"
  },
  "dimensions": [
   {
@@ -2298,17 +2298,17 @@
    "key": "stability",
    "name": "财务稳健",
    "description": "偿债压力、短期流动性、现金能撑多久与利润的现金含量",
-   "grade": "C+",
-   "score": 58.0,
+   "grade": "C",
+   "score": 51.1,
    "status": "ok",
    "status_note": null,
    "is_highest": false,
    "is_lowest": false,
    "key_fact": {
-    "metric": "runway_years",
-    "text": "现金可支撑年数 10.0，高于板块 99% 的公司"
+    "metric": "cfo_ni",
+    "text": "经营现金流 / 净利润 315%，高于板块 99% 的公司"
    },
-   "formula": "(56 + 1 + 33 + 100 + 100) ÷ 5 = 58.0 → C+",
+   "formula": "(56 + 1 + 33 + 66 + 100) ÷ 5 = 51.1 → C",
    "groups": [
     {
      "name": "净负债",
@@ -2493,8 +2493,8 @@
        "display_value": "10.0",
        "status": "ok",
        "status_note": null,
-       "percentile": 100.0,
-       "grade": "A+",
+       "percentile": 65.5,
+       "grade": "B-",
        "sector_median": 10.0,
        "sector_median_display": "10.0",
        "diff_to_median_pct": 0.0,
@@ -2522,7 +2522,7 @@
          }
         ]
        },
-       "position_text": "高于 99% 的同板块公司 → 百分位 100 → A+",
+       "position_text": "高于 66% 的同板块公司 → 百分位 66 → B-",
        "interpretation": {
         "what": "现金按最近 12 个月自由现金流为负的速度烧，能撑几年；自由现金流为正（不烧钱）记上限 10 年",
         "role": "观察现金按当前烧钱速度能维持多久，衡量不靠外部融资的生存时间。",

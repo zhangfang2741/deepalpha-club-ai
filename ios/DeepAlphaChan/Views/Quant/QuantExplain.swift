@@ -292,6 +292,7 @@ struct QuantOverallGradeExplanation: View {
                 if weighted {
                     if let stage = research.stage {
                         QuantExplainText(text: L("这家公司处在「%@」：不同阶段看重的东西不一样——成长期更看重增速，成熟期更看重估值和赚钱能力。", stage.name), secondary: true)
+                        QuantExplainText(text: L("所以同一板块里，各维度的等级可以直接比；综合等级是按阶段调整后的，处在不同阶段的公司之间不直接可比。"), secondary: true)
                     } else {
                         QuantExplainText(text: L("这家公司没有划分阶段，各个维度占一样的比例。"), secondary: true)
                     }

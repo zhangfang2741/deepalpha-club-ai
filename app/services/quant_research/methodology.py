@@ -120,13 +120,17 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
       f"再看综合分在标普1500 全体中的百分位，按同一把尺子定等级。"
       f"估值 / 成长 / 盈利能力 / 财务稳健里，综合分权重不低于 {CAP_MIN_WEIGHT:.0%} 的维度为 F 时，综合等级最高为 {CAP_CEILING}"
       f"（权重更低的维度、以及股价类的动量和预期类的 EPS 修正，都没有一票否决权）；"
-      f"覆盖的分析师少于 {MIN_ANALYSTS} 位时不给综合等级。",
+      f"覆盖的分析师少于 {MIN_ANALYSTS} 位时不给综合等级。"
+      "注意：综合分的权重按公司阶段调整，所以同一板块里各维度的等级可以直接比较，"
+      "而综合等级是「按阶段调整后」的结果，在处于不同阶段的公司之间不直接可比。",
       f"The composite score is a stage-weighted average of the available dimension scores (weights are listed under "
       f"Company stage; missing dimensions are re-normalized over the rest); its percentile across the whole S&P 1500 "
       f"sets the grade on the same scale. If valuation, growth, profitability or financial health carries at least "
       f"{CAP_MIN_WEIGHT:.0%} of the weight and is F, the composite is capped at {CAP_CEILING} (lower-weight "
       f"dimensions, and the price-based momentum and expectation-based EPS revisions, cannot veto); with fewer than "
-      f"{MIN_ANALYSTS} covering analysts there is no composite grade.")),
+      f"{MIN_ANALYSTS} covering analysts there is no composite grade. Note: because the composite weights follow the "
+      "company's stage, dimension grades within a sector compare directly, while the composite grade is stage-adjusted "
+      "and is not directly comparable between companies at different stages.")),
     (("估值指标按阶段取舍", "Valuation metrics by stage"),
      (f"估值维度里的 14 个倍数，不同阶段看的重点不同，但比较对象不变：每个倍数仍然和同板块全体公司比百分位，所以不同公司在同一板块维度下可比。"
       f"只改各倍数在估值分里的权重，同样按营收增速和经营现金流连续插值、不在门槛处跳变：成熟期保持 14 项等权；{_valuation_weights_zh()}。"

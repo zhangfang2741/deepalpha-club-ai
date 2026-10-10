@@ -32,8 +32,26 @@ def test_percentile_higher_better_and_lower_better():
     assert percentile_of(5, values, lower_better=True) == 20.0
 
 
-def test_percentile_ties_and_out_of_sample():
-    assert percentile_of(2, [2, 2, 2, 2], lower_better=False) == 100.0
+def test_percentile_ties_use_mean_rank():
+    """并列取平均排名：70% 的公司并列在极值时，它们不能都拿 100 分位（界面写的是「高于 x% 的公司」）。"""
+    dist = sorted([0.0] * 70 + [float(i) for i in range(1, 31)])      # 70 家净现金（净负债比 = 0）+ 30 家有负债
+    assert percentile_of(0.0, dist, lower_better=True) == 65.5        # 越低越好：(30 比它差 + 70 家并列的平均位次 35.5) ÷ 100
+    assert percentile_of(30.0, dist, lower_better=True) == 1.0        # 最差的那家仍是 1
+    cap = sorted([float(i) for i in range(1, 4)] + [10.0] * 97)       # 97% 并列在上限（不烧钱）
+    assert percentile_of(10.0, cap, lower_better=False) == 52.0       # 越高越好：并列 97 家占据位次 4~100，平均 52
+    assert percentile_of(3.0, cap, lower_better=False) == 3.0         # 唯一值的结果与旧算法一致
+    assert percentile_of(2, [2, 2, 2, 2], lower_better=False) == 62.5  # 全并列 = 正中间，不是 100
+    assert percentile_of(2, [2, 2, 2, 2], lower_better=True) == 62.5
+
+
+def test_percentile_unique_values_unchanged():
+    values = [float(i) for i in range(1, 101)]
+    for v in (1, 17, 50, 100):
+        assert percentile_of(v, values, lower_better=False) == v
+        assert percentile_of(v, values, lower_better=True) == 101 - v
+
+
+def test_percentile_out_of_sample():
     assert percentile_of(10, [1, 2, 3], lower_better=False) == 100.0
     assert percentile_of(0, [1, 2, 3], lower_better=False) == 0.0
     assert percentile_of(0, [1, 2, 3], lower_better=True) == 100.0
