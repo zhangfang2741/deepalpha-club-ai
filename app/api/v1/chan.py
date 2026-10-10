@@ -187,8 +187,18 @@ def _boll_out(result: ChanAnalysisResult) -> BollOut | None:
     return BollOut(period=b.period, mult=b.mult, upper=b.upper, mid=b.mid, lower=b.lower)
 
 
-def _wyckoff_out(symbol: str, bars: list[dict], result: ChanAnalysisResult, visible_from: str) -> WyckoffOverlayOut | None:
-    """威科夫图表指标：失败不影响缠论主体（指标是辅助，不能因为它让详情页打不开）。"""
+def _wyckoff_out(symbol: str, bars: list[dict], result: ChanAnalysisResult, visible_from: str,
+                 freq: str, end_date: str) -> WyckoffOverlayOut | None:
+    """威科夫图表指标：失败不影响缠论主体（指标是辅助，不能因为它让详情页打不开）。
+
+    日线用固定的两年窗口（与缠论同一个 canonical_daily_start），不随用户所选起始日期变短：
+    用户选了较晚的起点时，威科夫只看到短短几个月，识别不出结构、事件稀少（BABA 实测）。
+    """
+    if freq == "daily":
+        try:
+            visible_from = min(visible_from, canonical_daily_start(end_date))
+        except ValueError:
+            pass
     try:
         o = build_overlay(symbol, bars, [c.end_time or c.time for c in result.merged_candles], visible_from=visible_from)
     except Exception:
@@ -376,7 +386,7 @@ async def chan_analysis(
         ma=_ma_out(result),
         ema=_ema_out(result),
         boll=_boll_out(result),
-        wyckoff=_wyckoff_out(symbol, bars, result, start_date),
+        wyckoff=_wyckoff_out(symbol, bars, result, start_date, freq, end_date),
         signals=[_signal_out(sig) for sig in result.signals],
         current_trend=result.current_trend,
         walk_type=result.walk_type,
