@@ -130,7 +130,13 @@ struct IndicatorBar: View {
         let items = ChartIndicator.allCases.filter(isAvailable)
         if !items.isEmpty {
             HStack(spacing: 0) {
-                ForEach(items) { tab($0) }
+                ForEach(Array(items.enumerated()), id: \.element.id) { k, item in
+                    // 指标之间一条细竖线分隔，标签本身靠得更近（以前每个标签左右各留 12pt，五个排下来显得很松）
+                    if k > 0 {
+                        Rectangle().fill(Theme.textSecondary.opacity(0.4)).frame(width: 1, height: 12)
+                    }
+                    tab(item)
+                }
                 Spacer(minLength: 0)
                 Button {
                     showSettings = true
@@ -162,7 +168,7 @@ struct IndicatorBar: View {
             Text(i.title)
                 .font(.system(size: 12, weight: on ? .semibold : .regular))
                 .foregroundStyle(on ? Theme.accent : Theme.textSecondary)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 9)
                 .frame(minHeight: 30)
                 .contentShape(Rectangle())
         }
