@@ -15,7 +15,7 @@ enum RadarPanel: Identifiable, Equatable {
     case signals
     /// 好股票名单：当前综合等级达标的股票，各自有没有买卖点。
     case goodStocks
-    /// 基本面动向名单：当前类别（预期上调 / 质地改善）的全部公司与各自的变化。
+    /// 基本面动向名单：当前类别（预期上调 / 评级改善）的全部公司与各自的变化。
     case trendList
 
     var id: String {

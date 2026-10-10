@@ -284,7 +284,7 @@ struct SignalRadarView: View {
     // MARK: - 基本面动向雷达（指数下拉框里的「基本面动向」）
 
     /// 与缠论雷达同一张画布、同一套同心圈与气泡：圈 = 最近 1 周 / 1 月 / 3 月，气泡大小 = 变化幅度（同类里分三档），
-    /// 气泡里的字母 = 综合等级。颜色不用红 / 绿（红绿只留给已成立的买卖点），预期上调蓝、质地改善紫。
+    /// 气泡里的字母 = 综合等级。颜色不用红 / 绿（红绿只留给已成立的买卖点），预期上调、评级改善同一个红（和缠论雷达一致）。
     @ViewBuilder
     private var trendContent: some View {
         trendHeader
@@ -340,7 +340,7 @@ struct SignalRadarView: View {
         }
     }
 
-    /// 动向类别下拉框（预期上调 / 质地改善），放在雷达画布左上角；选项后面的数字是当前「精选 / 行业」筛选下的个数。
+    /// 动向类别下拉框（预期上调 / 评级改善），放在雷达画布左上角；选项后面的数字是当前「精选 / 行业」筛选下的个数。
     private var trendKindMenu: some View {
         Menu {
             ForEach(QuantTrendKind.allCases) { k in

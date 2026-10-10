@@ -1815,3 +1815,19 @@
 "对比" = "Compare";
 "对比技术" = "Compare technique";
 "缠论（默认）" = "Chan (default)";
+
+/* Rating radar: rating up */
+"不代表股价会涨：评级是和同行比出来的相对位置，只反映已披露的财务与预期。" = "It does not mean the share price will rise: a grade is a relative position against peers and only reflects disclosed financials and estimates.";
+"升的档数越多颜色越深；档数一样时，综合分涨得多的略深。" = "The more grades it moved up, the darker the colour; with the same number of grades, the bigger score gain is slightly darker.";
+"同一套评级方法下，综合等级比窗口开头至少高几档。评级方法升级前后不是同一把尺子，不拿来比。" = "Under the same rating method, the overall grade is at least this many steps higher than at the start of the window. Before and after a method upgrade is not the same yardstick, so those are not compared.";
+"和同类公司比，这家公司的综合表现在变好。" = "Against comparable companies, this company's overall standing is getting better.";
+"我们给每家公司的综合等级（A+ 最高、F 最低，共 13 档），每天评一次。比较它现在和最近 1 周 / 1 个月 / 3 个月里最早一次评级。" = "We give each company an overall grade (A+ highest, F lowest, 13 steps), re-rated every day. We compare today's grade with the earliest grade in the last 1 week / 1 month / 3 months.";
+"最近 3 个月没有综合等级上升的公司。评级方法升级后要重新攒几天历史，刚升级时这里会是空的。" = "No company's overall grade has moved up in the last 3 months. After a rating-method upgrade it takes a few days to rebuild history, so this is empty right after an upgrade.";
+"看多长时间里升的：1 周内升了放最内圈，否则 1 个月内，再否则 3 个月内。" = "By how recently it moved up: within 1 week goes in the innermost ring, otherwise within 1 month, otherwise within 3 months.";
+"综合分 %@" = "score %@";
+"综合等级 %@ → %@ · 升 %lld 档" = "Overall grade %@ → %@ · up %lld steps";
+"至少升几档" = "At least how many steps up";
+"评级改善" = "Rating up";
+"评级改善：我们给这家公司的综合等级比前一段时间更高。" = "Rating up: our overall grade for this company is higher than a while ago.";
+"评级方法最近调整过几次，每次调整后要重新攒几天历史才有数据，所以刚升级时这里可能是空的；A 股 / 港股的评级历史比美股更短。" = "The rating method has been adjusted a few times recently, and after each adjustment it takes a few days of history to have data, so this can be empty right after an upgrade; A-share / HK rating history is shorter than the US.";
+"评级日 %@ 对比 %@" = "Rated %@ vs %@";

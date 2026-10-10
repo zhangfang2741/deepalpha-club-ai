@@ -294,17 +294,29 @@ class StageRankingOut(BaseModel):
     self_item: StageRankingSelf | None = None
 
 
+class RatingChangeOut(BaseModel):
+    """评级改善：综合等级在同一评级方法下比窗口内最早一个评级日升了几档。"""
+    from_grade: str
+    to_grade: str
+    steps: int                         # 升了几档（A+ 到 F 共 13 档，相邻一档算 1）
+    score_delta: float | None = None   # 综合分变化（两边都有分数才有）
+    ring_days: int = 0                 # 升档发生在最近多少天内（7 / 30 / 90）
+    from_date: str                     # 对比的评级日
+    to_date: str                       # 最新评级日
+
+
 class TrendRadarItem(BaseModel):
     symbol: str
     name: str | None = None
     sector_name: str | None = None
     grade: str | None = None
-    kind: Literal["estimates", "quality"]
+    kind: Literal["estimates", "quality", "rating"]
     ring_days: int                     # 落在哪一圈：7 / 30 / 90
     strength: float                    # 变化本身：预期 = 该圈变化率；质地 = 改善的百分点合计
     magnitude: float = 1.0             # 变化是入圈门槛的几倍（预期 = 变化率 ÷ 该圈门槛；质地 = 改善百分点 ÷ 利润率门槛），跨圈可比，App 用它定颜色深浅
     good: bool = False                 # 综合等级达到本市场的「好股票」门槛（与信号雷达同一套自适应规则）
     sector: str | None = None          # 信号雷达的行业 key（与雷达顶部行业横条同一套），App 点行业筛选用
+    rating: RatingChangeOut | None = None   # kind == rating 时的等级变化
     facts: TrendFacts
 
 

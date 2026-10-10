@@ -653,6 +653,27 @@ struct QuantTrendFacts: Decodable, Hashable {
     }
 }
 
+/// 评级改善：综合等级在同一评级方法下比窗口内最早一个评级日升了几档。
+struct QuantRatingChange: Decodable, Hashable {
+    let fromGrade: String
+    let toGrade: String
+    let steps: Int
+    let scoreDelta: Double?
+    let ringDays: Int
+    let fromDate: String
+    let toDate: String
+
+    enum CodingKeys: String, CodingKey {
+        case steps
+        case fromGrade = "from_grade"
+        case toGrade = "to_grade"
+        case scoreDelta = "score_delta"
+        case ringDays = "ring_days"
+        case fromDate = "from_date"
+        case toDate = "to_date"
+    }
+}
+
 /// 基本面动向雷达的一只股票：属于哪一类、落在哪一圈。
 struct QuantTrendItem: Decodable, Identifiable, Hashable {
     let symbol: String
@@ -668,18 +689,20 @@ struct QuantTrendItem: Decodable, Identifiable, Hashable {
     let good: Bool?
     /// 信号雷达的行业 key（与雷达顶部行业横条同一套），点行业筛选用。
     let sector: String?
+    /// kind == rating 时的等级变化；旧后端 / 其它类别没有。
+    let rating: QuantRatingChange?
     let facts: QuantTrendFacts
 
     var id: String { kind + ":" + symbol }
 
     enum CodingKeys: String, CodingKey {
-        case symbol, name, grade, kind, strength, facts, magnitude, good, sector
+        case symbol, name, grade, kind, strength, facts, magnitude, good, sector, rating
         case sectorName = "sector_name"
         case ringDays = "ring_days"
     }
 }
 
-/// 基本面动向雷达：最近一周 / 一个月 / 三个月里预期上调或质地改善的公司（只陈列事实）。
+/// 评级雷达：最近一周 / 一个月 / 三个月里预期上调或评级改善的公司（只陈列事实）。
 struct QuantTrendRadar: Decodable {
     let market: String
     let asOf: String?
@@ -697,9 +720,9 @@ struct QuantTrendRadar: Decodable {
     }
 }
 
-/// 动向雷达的两类事实。
+/// 评级雷达的两类：预期上调、评级改善（2026-10-10 起「评级改善」代替原来的「质地改善」，后端的 quality 类别只给旧版 App）。
 enum QuantTrendKind: String, CaseIterable, Identifiable {
-    case estimates, quality
+    case estimates, rating
     var id: String { rawValue }
-    var title: String { self == .estimates ? L("预期上调") : L("质地改善") }
+    var title: String { self == .estimates ? L("预期上调") : L("评级改善") }
 }

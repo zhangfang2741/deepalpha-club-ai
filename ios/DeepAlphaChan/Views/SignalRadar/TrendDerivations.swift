@@ -34,26 +34,26 @@ enum TrendDerivations {
                 means: L("市场对这家公司今年能赚多少钱的看法在变好。"),
                 notMeans: L("不代表股价会涨：预期可能已经反映在股价里，之后也可能再被调低。"),
                 terms: ["EPS", "一致预期"])
-        case .quality:
+        case .rating:
+            let minSteps = Int(th["rating_min_steps"] ?? 1)
             let steps: [DerivationStep] = [
-                    DerivationStep(title: L("怎么比"),
-                                   text: L("都用最近 12 个月的口径：最近一季公布后的 12 个月，对比上一季公布时的 12 个月。看营收同比、毛利率、经营利润率、自由现金流利润率各变了几个百分点。")),
-                    DerivationStep(title: L("什么算改善"),
-                                   text: L("经营利润率或自由现金流利润率提高够多，四项里至少几项变好，而且没有哪一项明显变差。"),
-                                   values: [(L("利润率至少提高"), pp(th["quality_margin_pp"])),
-                                            (L("至少几项变好"), "\(Int(th["quality_improved_min"] ?? 2))"),
-                                            (L("任一项变差不超过"), pp(th["quality_worst_pp"]))]),
-                    DerivationStep(title: L("放哪一圈"), text: L("按最近一季财报披露离现在多久：1 周内、1 个月内、3 个月内。")),
-                    DerivationStep(title: L("颜色深浅"),
-                                   text: L("变好的百分点合计是利润率门槛的几倍，在当前画出来的公司里排个先后：颜色越深，变好得越多。")),
+                DerivationStep(title: L("看什么"),
+                               text: L("我们给每家公司的综合等级（A+ 最高、F 最低，共 13 档），每天评一次。比较它现在和最近 1 周 / 1 个月 / 3 个月里最早一次评级。")),
+                DerivationStep(title: L("什么算改善"),
+                               text: L("同一套评级方法下，综合等级比窗口开头至少高几档。评级方法升级前后不是同一把尺子，不拿来比。"),
+                               values: [(L("至少升几档"), "\(minSteps)")]),
+                DerivationStep(title: L("放哪一圈"),
+                               text: L("看多长时间里升的：1 周内升了放最内圈，否则 1 个月内，再否则 3 个月内。")),
+                DerivationStep(title: L("颜色深浅"),
+                               text: L("升的档数越多颜色越深；档数一样时，综合分涨得多的略深。")),
             ]
             return DerivationResult(
-                conclusion: L("质地改善：最近一季的财报比上一季更赚钱、增长没有明显放慢。"),
+                conclusion: L("评级改善：我们给这家公司的综合等级比前一段时间更高。"),
                 steps: steps + visualSteps(t),
-                caveat: L("单季对比会受季节影响（比如零售的旺季、淡季）；港股多是半年报，换算成季度后变化偏平滑。"),
-                means: L("这家公司最近一季赚钱的效率在提高。"),
-                notMeans: L("一个季度变好不代表趋势会持续，也不代表股价会涨。"),
-                terms: ["毛利率", "经营利润率", "自由现金流"])
+                caveat: L("评级方法最近调整过几次，每次调整后要重新攒几天历史才有数据，所以刚升级时这里可能是空的；A 股 / 港股的评级历史比美股更短。"),
+                means: L("和同类公司比，这家公司的综合表现在变好。"),
+                notMeans: L("不代表股价会涨：评级是和同行比出来的相对位置，只反映已披露的财务与预期。"),
+                terms: ["综合等级"])
         }
     }
 
@@ -74,11 +74,17 @@ enum TrendDerivations {
         if kind == .estimates && market != .us {
             return L("最近 1 周没有达到门槛的预期上调。A 股 / 港股的 1 个月、3 个月预期变化要等预期快照攒够（约 11 月起）。")
         }
-        return kind == .estimates ? L("最近没有达到门槛的预期上调") : L("最近 3 个月没有达到门槛的质地改善")
+        return kind == .estimates ? L("最近没有达到门槛的预期上调")
+            : L("最近 3 个月没有综合等级上升的公司。评级方法升级后要重新攒几天历史，刚升级时这里会是空的。")
     }
 
     /// 名单里一行的变化说明。
     static func factLine(_ item: QuantTrendItem) -> String {
+        if let r = item.rating {
+            var line = L("综合等级 %@ → %@ · 升 %lld 档", r.fromGrade, r.toGrade, r.steps)
+            if let d = r.scoreDelta { line += " · " + L("综合分 %@", String(format: "%+.1f", d)) }
+            return line
+        }
         let f = item.facts
         if item.kind == QuantTrendKind.estimates.rawValue {
             return L("盈利预期 近1周 %@ · 近1月 %@ · 近3月 %@",
@@ -87,8 +93,9 @@ enum TrendDerivations {
         return L("经营利润率 %@ · 现金利润率 %@ · 营收同比 %@", pp(f.dEbitMPp), pp(f.dFcfMPp), pp(f.dRevYoyPp))
     }
 
-    /// 名单里一行的对比期（质地改善）或分析师人数（预期上调）。
+    /// 名单里一行的对比期（评级改善）或分析师人数（预期上调）。
     static func contextLine(_ item: QuantTrendItem) -> String {
+        if let r = item.rating { return L("评级日 %@ 对比 %@", r.toDate, r.fromDate) }
         let f = item.facts
         if item.kind == QuantTrendKind.estimates.rawValue {
             return L("%lld 位分析师", f.nAnalysts)
