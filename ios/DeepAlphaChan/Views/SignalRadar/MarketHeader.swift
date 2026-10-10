@@ -57,15 +57,6 @@ struct MarketHeader: View {
                                 }
                             }
                         }
-                        Divider()
-                        // 基本面动向雷达：最近哪些公司在变好（预期上调 / 质地改善），同一张画布
-                        Button { radarVM.enterTrend() } label: {
-                            if radarVM.trendMode {
-                                Label(L("基本面动向"), systemImage: "checkmark")
-                            } else {
-                                Label(L("基本面动向"), systemImage: "chart.line.uptrend.xyaxis")
-                            }
-                        }
                     } label: { segment(m, selected: true, menu: true) }
                     .accessibilityLabel(L("切换指数范围"))
                 } else {

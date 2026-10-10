@@ -267,7 +267,7 @@ struct SignalRadarView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         // 流程图悬浮在页面上方（不占版面、不把下面的内容往下挤）；点流程图以外的地方收起
         .overlay(alignment: .top) {
-            if showFlow {
+            if showFlow && !vm.trendMode {
                 ZStack(alignment: .top) {
                     Color.black.opacity(0.28)
                         .ignoresSafeArea()
@@ -353,15 +353,19 @@ struct SignalRadarView: View {
             let kind = vm.trendKind
             let signals = SignalRadarView.trendSignals(vm.trendItems)
             let labels = SignalRadarView.trendRingLabels
+            // 圈的大小按各圈条数分配：A 股预期上调曾 22 只全在「近 1 周」，固定的最内圈只放得下 1 只
+            let scales = SignalRadarView.ringScales(counts: (0..<3).map { band in
+                signals.prefix(SignalRadarView.ringFieldCap).filter { SignalRadarView.bandIndex(forDaysAgo: $0.ageDays ?? 0) == band }.count
+            })
             let key = FieldLayoutKey(
                 signals: signals, candidates: [], sectorMode: false, order: [], rs: [], names: [],
                 dayDate: "trend-\(kind.rawValue)-\(trend.asOf ?? "")", width: w, height: h, avoid: [], gradeRings: labels)
             let field = layoutCache.value(for: key) {
                 SignalRadarView.layoutRingField(signals: signals, dayDate: "", width: w, height: h, avoid: [],
-                                                gradeRings: labels)
+                                                gradeRings: labels, ringScales: scales)
             }
             ZStack {
-                fieldDecoration(width: w, height: h)
+                fieldDecoration(width: w, height: h, ringScales: scales)
                 if field.bubbles.isEmpty {
                     Text(TrendDerivations.emptyText(kind: kind, market: vm.market))
                         .font(.subheadline)
@@ -386,7 +390,7 @@ struct SignalRadarView: View {
                         .transition(.identity)
                     }
                 }
-                ringLabels(width: w, height: h, labels: labels)
+                ringLabels(width: w, height: h, labels: labels, ringScales: scales)
                 if !vm.trendItems.isEmpty {
                     // 画布最多画 ringFieldCap 个；完整名单（含每只的具体变化）在列表里
                     Button { panel = .trendList } label: {
@@ -711,22 +715,46 @@ struct SignalRadarView: View {
         Rectangle().fill(Theme.border).frame(width: 14, height: 1.5).padding(.top, 10)
     }
 
-    /// 标题（「市场雷达」+ 折叠钮）：点一下展开 / 收起流程图。
+    /// 标题下拉菜单：在「市场雷达」（缠论买卖点）与「基本面动向」之间切换；最后一项展开 / 收起「怎么读这一页」流程图。
+    /// 标题文字就是当前所在的雷达，用户一眼知道在哪、点标题就能换。
     private var flowTitle: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.2)) { showFlow.toggle() }
+        Menu {
+            Button { vm.exitTrend() } label: {
+                if vm.trendMode {
+                    Label(L("市场雷达 · 缠论买卖点"), systemImage: "scope")
+                } else {
+                    Label(L("市场雷达 · 缠论买卖点"), systemImage: "checkmark")
+                }
+            }
+            Button { vm.enterTrend() } label: {
+                if vm.trendMode {
+                    Label(L("基本面动向 · 预期与财报变化"), systemImage: "checkmark")
+                } else {
+                    Label(L("基本面动向 · 预期与财报变化"), systemImage: "chart.line.uptrend.xyaxis")
+                }
+            }
+            if !vm.trendMode {
+                Divider()
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { showFlow.toggle() }
+                } label: {
+                    Label(showFlow ? L("收起流程图") : L("这一页怎么读"), systemImage: "list.number")
+                }
+            }
         } label: {
             HStack(spacing: 6) {
-                Text(L("市场雷达")).font(.headline).foregroundColor(Theme.textPrimary)
-                Image(systemName: showFlow ? "chevron.up" : "chevron.down")
+                Text(vm.trendMode ? L("基本面动向") : L("市场雷达"))
+                    .font(.headline).foregroundColor(Theme.textPrimary)
+                Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(Theme.textSecondary)
                     .frame(width: 22, height: 22)
                     .background(Theme.surface, in: Circle())
             }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(showFlow ? L("收起流程图") : L("展开流程图"))
+        .accessibilityLabel(L("切换雷达"))
     }
 
     /// 免费用户当前选中的正是示例日。
@@ -818,7 +846,7 @@ struct SignalRadarView: View {
 
     /// 气泡场的背景装饰：中心光晕 + 同心参考环。
     @ViewBuilder
-    private func fieldDecoration(width w: Double, height h: Double) -> some View {
+    private func fieldDecoration(width w: Double, height h: Double, ringScales: [Double]? = nil) -> some View {
         let base = min(w, h)
         // 参考环与气泡共用的内缩场半轴：椭圆填满画布，长边不再留大片空白。
         let (hRad, vRad) = SignalRadarView.fieldRadii(width: w, height: h)
@@ -833,10 +861,10 @@ struct SignalRadarView: View {
 
         // 同心参考环：越外越淡，呼应同一套"近实远虚"的纵深语言。环上的时间标签画在气泡上层
         // （ringLabels），气泡按时间分圈带摆（layoutRingField）。
-        ForEach(Array(SignalRadarView.ringSpecs.enumerated()), id: \.offset) { idx, spec in
+        ForEach(Array(SignalRadarView.ringScaleList(ringScales).enumerated()), id: \.offset) { idx, scale in
             // 横向椭圆：左右宽、上下窄，与气泡摆位同一套半轴
-            let rx = hRad * spec.scale
-            let ry = vRad * spec.scale
+            let rx = hRad * scale
+            let ry = vRad * scale
             Ellipse()
                 .stroke(Theme.textSecondary.opacity(0.16 - Double(idx) * 0.045),
                         style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
@@ -846,8 +874,8 @@ struct SignalRadarView: View {
     }
 
     /// 环上时间标签：当日 / 3天内 / 7天内，小胶囊、画在气泡上层（位置见 ringLabelBoxes，摆位已避开）。
-    private func ringLabels(width w: Double, height h: Double, labels: [String]? = nil) -> some View {
-        ForEach(Array(zip(SignalRadarView.ringSpecs.indices, SignalRadarView.ringLabelBoxes(width: w, height: h, labels: labels))), id: \.0) { i, box in
+    private func ringLabels(width w: Double, height h: Double, labels: [String]? = nil, ringScales: [Double]? = nil) -> some View {
+        ForEach(Array(zip(SignalRadarView.ringSpecs.indices, SignalRadarView.ringLabelBoxes(width: w, height: h, labels: labels, ringScales: ringScales))), id: \.0) { i, box in
             Text(labels?[i] ?? SignalRadarView.ringSpecs[i].label)
                 .font(.system(size: 9, weight: .medium))
                 .foregroundColor(Theme.textSecondary)
@@ -1305,7 +1333,7 @@ struct SignalRadarView: View {
     /// 外圈避开里圈已摆好的；某圈带放不下的计入「另有 N 个」（信号数 ≤ ringShowAllLimit 时例外：放宽圈带、缩小气泡也要全画出来）。后端已按出现时间从新到旧排好。
     private static func layoutRingField(
         signals: [RadarSignal], dayDate: String, width w: Double, height h: Double,
-        avoid: [RadarOrbitSpacing.Obstacle], gradeRings: [String]? = nil
+        avoid: [RadarOrbitSpacing.Obstacle], gradeRings: [String]? = nil, ringScales: [Double]? = nil
     ) -> FieldLayout {
         guard !signals.isEmpty else { return FieldLayout(bubbles: []) }
         let shown = Array(signals.prefix(ringFieldCap))
@@ -1317,10 +1345,10 @@ struct SignalRadarView: View {
         // 基本面 tab（gradeRings 非空）：环 = 新等级、大小 = 变档数，不再按「越久越小」缩放
         let bases = zip(shown, ages).map { diameter(forLevel: $0.level) * (gradeRings == nil ? ringSizeFactor(forDaysAgo: $1) : 1) }
         let obstacles = avoid.map { SectorRadarLayout.Rect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) }
-            + ringLabelBoxes(width: w, height: h, labels: gradeRings)
+            + ringLabelBoxes(width: w, height: h, labels: gradeRings, ringScales: ringScales)
 
         // 每圈带的圆心范围：在两条环线之间、略收窄，气泡看得出落在哪一圈（不压在环线正中）
-        let bands: [ClosedRange<Double>] = [0.0...0.27, 0.42...0.62, 0.76...1.0]
+        let bands = ringBands(ringScaleList(ringScales))
         let whole = SectorRadarLayout.Wedge(key: "_all", center: 0, halfWidth: .pi, total: shown.count, shown: shown.count)
 
         /// 按给定缩放摆一次：scale 在整体拥挤缩放之上再缩（直径下限由 RadarBubbleMetrics 兜底）；
@@ -1345,10 +1373,15 @@ struct SignalRadarView: View {
         }
 
         var result = attempt(scale: 1, relaxBands: false)
-        if signals.count <= ringShowAllLimit {
+        if ringScales == nil && signals.count <= ringShowAllLimit {
             // 不超过 ringShowAllLimit 个：必须全部画出来、不出现「另有 N 个」——先放宽时间圈带，再逐步缩小气泡
             for scale in [1.0, 0.85, 0.7, 0.55] where result.placed.count < shown.count {
                 result = attempt(scale: scale, relaxBands: true)
+            }
+        } else if ringScales != nil {
+            // 按条数分配圈大小的画布（基本面动向）：圈带不放宽（圈 = 近 1 周 / 1 月 / 3 月，不能混），放不下时缩小气泡再摆
+            for scale in [0.85, 0.7, 0.55] where result.placed.count < shown.count {
+                result = attempt(scale: scale, relaxBands: false)
             }
         }
         let placed = result.placed
@@ -1362,13 +1395,47 @@ struct SignalRadarView: View {
     }
 
     /// 环上时间标签（当日 / 3天内 / 7天内）的位置：各环正上方。标签画在气泡上层，摆位时当禁区避开。
-    static func ringLabelBoxes(width w: Double, height h: Double, labels: [String]? = nil) -> [SectorRadarLayout.Rect] {
+    static func ringLabelBoxes(width w: Double, height h: Double, labels: [String]? = nil,
+                               ringScales: [Double]? = nil) -> [SectorRadarLayout.Rect] {
         let (_, vRad) = fieldRadii(width: w, height: h)
+        let scales = ringScaleList(ringScales)
         return ringSpecs.enumerated().map { i, spec in
             let lw = labelWidth(labels?[i] ?? spec.label) - 2
-            return SectorRadarLayout.Rect(x: w / 2 - lw / 2, y: h / 2 - vRad * spec.scale - ringLabelHeight / 2,
+            return SectorRadarLayout.Rect(x: w / 2 - lw / 2, y: h / 2 - vRad * scales[i] - ringLabelHeight / 2,
                                           width: lw, height: ringLabelHeight)
         }
+    }
+
+    /// 三条环线的相对半径：没给就是缠论雷达固定的 1/3、2/3、1。
+    static func ringScaleList(_ custom: [Double]?) -> [Double] {
+        if let custom, custom.count == ringSpecs.count { return custom }
+        return ringSpecs.map(\.scale)
+    }
+
+    /// 由环线半径推出每圈带的圆心范围（在两条环线之间、略收窄）。固定环线时即 0~0.27 / 0.42~0.62 / 0.76~1.0。
+    static func ringBands(_ scales: [Double]) -> [ClosedRange<Double>] {
+        scales.indices.map { i in
+            let lo = i == 0 ? 0.0 : scales[i - 1] + 0.09
+            let hi = i == scales.count - 1 ? 1.0 : scales[i] - 0.05 - (i == 0 ? 0.01 : 0)
+            return lo...max(lo, hi)
+        }
+    }
+
+    /// 环线半径按各圈条数分配（基本面动向用）：某一圈条目多就把它画大，面积大致与条数成正比
+    /// （每圈另加 0.6 的底数，空圈也留一点位置）；相邻环线至少隔 0.15、最内圈不小于 0.2。
+    /// 缠论雷达不用它——那里圈 = 时间远近，固定间距才看得出「越靠中心越新」。
+    static func ringScales(counts: [Int]) -> [Double] {
+        guard counts.count == ringSpecs.count, counts.reduce(0, +) > 0 else { return ringSpecs.map(\.scale) }
+        let weights = counts.map { Double($0) + 0.6 }
+        let total = weights.reduce(0, +)
+        var cum = 0.0
+        var r = weights.map { w -> Double in cum += w; return (cum / total).squareRoot() }
+        let gap = 0.15
+        r[r.count - 1] = 1
+        for i in stride(from: r.count - 2, through: 0, by: -1) { r[i] = min(r[i], r[i + 1] - gap) }
+        r[0] = max(r[0], 0.2)
+        for i in 1..<r.count { r[i] = max(r[i], r[i - 1] + gap) }
+        return r.map { min($0, 1) }
     }
 
     static let ringLabelHeight = 16.0

@@ -439,8 +439,8 @@ final class SignalRadarViewModel: ObservableObject {
 
     // MARK: - 基本面动向雷达
 
-    /// 指数下拉框里的「基本面动向」：打开后画布换成动向雷达（同一张画布、同一套圈与气泡），
-    /// 数据来自 `/quant-research/{market}/trend-radar`，与缠论雷达的指数 / 日期无关；选回任一指数即退出。
+    /// 标题下拉菜单里的「基本面动向」：打开后画布换成动向雷达（同一张画布、同一套圈与气泡），
+    /// 数据来自 `/quant-research/{market}/trend-radar`，与缠论雷达的指数 / 日期无关；标题菜单选回「市场雷达」或选任一指数即退出。
     @Published private(set) var trendMode = false
     @Published private(set) var trend: QuantTrendRadar?
     @Published private(set) var trendLoading = false
@@ -457,6 +457,11 @@ final class SignalRadarViewModel: ObservableObject {
         guard !trendMode else { return }
         trendMode = true
         Task { await loadTrend() }
+    }
+
+    /// 回到缠论市场雷达（指数、日期都保持进入动向前的样子）。
+    func exitTrend() {
+        trendMode = false
     }
 
     func loadTrend() async {
