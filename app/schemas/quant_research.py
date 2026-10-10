@@ -168,6 +168,21 @@ class MoatOut(BaseModel):
     method_note: str
 
 
+class TrendFacts(BaseModel):
+    """基本面动向事实（批量时算好）：预期修正与最近一季的质地变化。不是评分、不进综合等级。"""
+    n_analysts: int = 0
+    eps_rev_7d: float | None = None    # 本财年 EPS 一致预期近 7 天变化率（小数）
+    eps_rev_30d: float | None = None
+    eps_rev_90d: float | None = None
+    quality_period: str | None = None       # 最近一季的季度截止日
+    quality_prev_period: str | None = None  # 对比的上一季
+    filing_date: str | None = None          # 最近一季的披露日
+    d_rev_yoy_pp: float | None = None       # 营收同比变化（百分点）
+    d_gross_m_pp: float | None = None       # 毛利率变化（百分点）
+    d_ebit_m_pp: float | None = None        # 经营利润率变化（百分点）
+    d_fcf_m_pp: float | None = None         # 自由现金流利润率变化（百分点）
+
+
 class QuantResearchOut(BaseModel):
     market: str
     symbol: str
@@ -181,6 +196,7 @@ class QuantResearchOut(BaseModel):
     overall: Overall | None = None
     dimensions: list[Dimension] = []
     moat: MoatOut | None = None
+    trend: TrendFacts | None = None  # 基本面动向事实（动向雷达用）；旧结果没有
     disclaimer: str
 
 
@@ -276,3 +292,24 @@ class StageRankingOut(BaseModel):
     cohort_size: int
     items: list[StageRankingItem]
     self_item: StageRankingSelf | None = None
+
+
+class TrendRadarItem(BaseModel):
+    symbol: str
+    name: str | None = None
+    sector_name: str | None = None
+    grade: str | None = None
+    kind: Literal["estimates", "quality"]
+    ring_days: int                     # 落在哪一圈：7 / 30 / 90
+    strength: float                    # 用于气泡大小与排序：预期 = 该圈变化率；质地 = 改善的百分点合计
+    facts: TrendFacts
+
+
+class TrendRadarOut(BaseModel):
+    """基本面动向雷达：最近一周 / 一个月 / 三个月里预期上调或质地改善的公司（只陈列事实，不排名次）。"""
+    market: str
+    as_of: str | None = None
+    rings: list[int]
+    thresholds: dict[str, float]       # 各圈预期上调门槛与质地改善门槛（推导说明用）
+    items: list[TrendRadarItem]
+    counts: dict[str, int]             # estimates / quality 各多少

@@ -179,6 +179,19 @@ async def latest_methodology_version(market: str) -> str | None:
     return (payload or {}).get("methodology_version")
 
 
+async def latest_has_payload_field(market: str, field: str) -> bool:
+    """最近一天的批量结果（取任一行）是否带某个 payload 字段；用来判断新增落库字段后是否需要补跑一次。"""
+    async with AsyncSessionFactory() as s:
+        latest = (await s.execute(
+            select(func.max(col(QuantResult.as_of))).where(col(QuantResult.market) == market))).scalar()
+        if latest is None:
+            return False
+        payload = (await s.execute(
+            select(col(QuantResult.payload_zh)).where(col(QuantResult.market) == market,
+                                                 col(QuantResult.as_of) == latest).limit(1))).scalar()
+    return field in (payload or {})
+
+
 async def get_distributions(market: str, as_of: date) -> Distributions:
     """读取某日的全部板块分布。"""
     q = select(QuantSectorDistribution).where(col(QuantSectorDistribution.market) == market,
@@ -669,3 +682,20 @@ async def stage_ranking_rows(market: str, stage: str, lang: str,
         if isinstance(score, (int, float)) and not isinstance(score, bool):
             out.append((symbol, name, overall.get("grade"), float(score), sector))
     return latest, out
+
+
+async def trend_radar_rows(market: str, lang: str, as_of: date | None = None) -> tuple[date | None, list[dict]]:
+    """某天（不传 = 最近一天）全部结果的动向事实：代码 / 名称 / 综合等级 / 板块名 / trend。只取几个 JSON 字段。"""
+    payload = QuantResult.payload_en if lang == "en" else QuantResult.payload_zh
+    async with AsyncSessionFactory() as s:
+        latest = as_of or (await s.execute(
+            select(func.max(col(QuantResult.as_of))).where(col(QuantResult.market) == market))).scalar()
+        if latest is None:
+            return None, []
+        q = (select(col(QuantResult.symbol), col(payload)["name"].as_string(),
+                    col(payload)["overall"]["grade"].as_string(),
+                    col(payload)["peer_group"]["sector_name"].as_string(), col(payload)["trend"])
+             .where(col(QuantResult.market) == market, col(QuantResult.as_of) == latest))
+        rows = (await s.execute(q)).all()
+    return latest, [{"symbol": sym, "name": name, "grade": grade, "sector_name": sector, "trend": trend}
+                    for sym, name, grade, sector, trend in rows if isinstance(trend, dict)]

@@ -23,6 +23,11 @@ from app.services.quant_research.builder import METHODOLOGY_VERSION
 from app.services.quant_research.moat import METHOD_VERSION as MOAT_METHOD_VERSION
 from app.services.quant_research.moat.job import run_moat_job
 
+# 结果里必须带的字段版本：新增落库字段（如 t1 = 基本面动向 trend）时升这里，部署后自举补跑一次全量，
+# 不改评分口径、不升 METHODOLOGY_VERSION；也用作自举锁键后缀，不会被同版本已跑完的锁挡住。
+PAYLOAD_TAG = "t1"
+BOOTSTRAP_TAG = f"{METHODOLOGY_VERSION}:{PAYLOAD_TAG}"
+
 # 批量锁 TTL：最长的一轮（约 1500 只股票、每只约 4 次调用，批量限速 150/分钟）约 40 分钟，90 分钟足够。
 # 不能再长：部署会杀掉跑批中的进程，锁留在 Redis 里挡住下一次自举（2026-09-30 踩过 6h 死锁）。
 _LOCK_TTL = 15 * 60  # 短锁 + 心跳：部署重启后旧锁 15 分钟内过期（曾因 90 分钟死锁让 q6 冷启动多等 1 小时）
@@ -106,7 +111,9 @@ async def _results_current(market: str = "us", expected: date | None = None) -> 
         return False
     if expected is not None and latest < expected:
         return False
-    return await repo.latest_methodology_version(market) == METHODOLOGY_VERSION
+    if await repo.latest_methodology_version(market) != METHODOLOGY_VERSION:
+        return False
+    return await repo.latest_has_payload_field(market, "trend")   # PAYLOAD_TAG t1：基本面动向事实
 
 
 def _expected_us(now: datetime | None = None) -> date:
@@ -137,7 +144,7 @@ async def _bootstrap_cnhk(market: str, close_hour: int) -> None:
             if await _results_current(market, _expected_cnhk(close_hour)):
                 return
             logger.info("quant_batch_bootstrap_attempt", market=market, attempt=attempt, version=METHODOLOGY_VERSION)
-            await _run_once(market, last_cnhk_session(datetime.now(UTC), close_hour), lock_suffix=METHODOLOGY_VERSION)
+            await _run_once(market, last_cnhk_session(datetime.now(UTC), close_hour), lock_suffix=BOOTSTRAP_TAG)
             if await _results_current(market, _expected_cnhk(close_hour)):
                 return
             await asyncio.sleep(BOOTSTRAP_RETRY_SECONDS)
@@ -164,7 +171,7 @@ async def _bootstrap_once() -> None:
             logger.info("quant_batch_bootstrap_attempt", attempt=attempt, version=METHODOLOGY_VERSION)
             # 锁被占（别的实例在跑 / 上一进程留下的锁）时 _run_once 只记日志不抛错，
             # 这里靠重试等它跑完或过期，而不是放弃到下一个定时点
-            await _run_once("us", last_us_session(datetime.now(UTC)), lock_suffix=METHODOLOGY_VERSION)
+            await _run_once("us", last_us_session(datetime.now(UTC)), lock_suffix=BOOTSTRAP_TAG)
             if await _results_current("us", _expected_us()):
                 return
             await asyncio.sleep(BOOTSTRAP_RETRY_SECONDS)

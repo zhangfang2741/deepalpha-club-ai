@@ -16,13 +16,14 @@ from app.cache.operations import acquire_lock, release_lock
 from app.core.limiter import limiter
 from app.core.logging import logger
 from app.models.user import User
-from app.schemas.quant_research import LatestReportOut, MethodologyOut, QuantResearchOut, ReportSummaryOut, StageRankingOut
+from app.schemas.quant_research import LatestReportOut, MethodologyOut, QuantResearchOut, ReportSummaryOut, StageRankingOut, TrendRadarOut
 from app.core.config import settings
 from app.services.quant_research.batch import run_us_batch
 from app.services.quant_research.builder import METHODOLOGY_VERSION
 from app.services.quant_research.cnhk.batch import run_cn_batch, run_hk_batch
 from app.services.quant_research.methodology import build_methodology
 from app.services.quant_research.ranking import get_stage_ranking
+from app.services.quant_research.trend_radar import get_trend_radar
 from app.services.quant_research.report import get_latest_report
 from app.services.quant_research.report_summary import get_report_summary
 from app.services.quant_research.scheduler import _LOCK_TTL, _lock_key, last_cnhk_session, last_us_session
@@ -265,6 +266,21 @@ async def _run_manual_batch(market: str, day: date) -> None:
     finally:
         if redis is not None:
             await release_lock(redis, _lock_key(market, day))
+
+
+@router.get("/{market}/trend-radar", response_model=TrendRadarOut)
+@limiter.limit("20 per minute")
+async def quant_trend_radar(
+    request: Request,
+    market: Literal["us", "cn", "hk"],
+    lang: Literal["zh", "en"] = Query("zh"),
+    user: User = Depends(get_current_user),
+    redis: Redis | None = Depends(get_redis_optional),
+) -> TrendRadarOut:
+    """基本面动向雷达：最近一周 / 一个月 / 三个月里预期上调或质地改善的公司（只陈列事实）。"""
+    out = await get_trend_radar(market, lang, redis=redis)
+    logger.info("quant_trend_radar_served", market=market, counts=out.counts, user_id=user.id)
+    return out
 
 
 @router.get("/{market}/stage-ranking", response_model=StageRankingOut)

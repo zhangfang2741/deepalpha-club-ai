@@ -2601,5 +2601,18 @@
   }
  ],
  "moat": null,
+ "trend": {
+  "n_analysts": 7,
+  "eps_rev_7d": null,
+  "eps_rev_30d": null,
+  "eps_rev_90d": null,
+  "quality_period": "2026-06-30",
+  "quality_prev_period": "2026-03-31",
+  "filing_date": "2026-08-06",
+  "d_rev_yoy_pp": -1.12,
+  "d_gross_m_pp": 0.0,
+  "d_ebit_m_pp": -0.07,
+  "d_fcf_m_pp": -31.76
+ },
  "disclaimer": "基本面研究为基于公开财务数据的统计比较，不构成投资建议。"
 }
