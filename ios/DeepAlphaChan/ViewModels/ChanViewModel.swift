@@ -73,7 +73,13 @@ final class ChanViewModel: ObservableObject {
     @Published var showSignals = true
     @Published var showDivergences = true
     /// 指标栏（均线 / EMA / BOLL，见 ChartIndicator）的开关。存的是用户明确选过的，没选过的走各指标的默认值。
-    @Published private(set) var indicatorChoices: [String: Bool] = ChartIndicatorStore.load()
+    /// 威科夫 / SMC 会收起缠论图层，而「开之前的图层状态」只存内存：这两个的开关不跨重启保留（启动时一律是关），
+    /// 否则重启后会出现「SMC 开着、缠论图层又按默认全显示」叠在一起。均线 / EMA / BOLL 仍按用户存的选择。
+    @Published private(set) var indicatorChoices: [String: Bool] = {
+        var choices = ChartIndicatorStore.load()
+        for i in ChartIndicator.allCases where i.hidesChanLayers { choices[i.rawValue] = nil }
+        return choices
+    }()
     /// 指标参数（「指标设置」面板），请求分析时带上，见 `ChanService.analysis`。
     @Published private(set) var indicatorSettings = IndicatorSettings.load()
 
@@ -82,8 +88,42 @@ final class ChanViewModel: ObservableObject {
     }
 
     func toggle(_ indicator: ChartIndicator) {
-        indicatorChoices[indicator.rawValue] = !isOn(indicator)
+        let turningOn = !isOn(indicator)
+        // 威科夫和 SMC 是两套互相独立的结构读法，叠在一起看不清：同时只开一个
+        if turningOn, indicator.hidesChanLayers {
+            for other in ChartIndicator.allCases where other != indicator && other.hidesChanLayers {
+                indicatorChoices[other.rawValue] = false
+            }
+        }
+        indicatorChoices[indicator.rawValue] = turningOn
         ChartIndicatorStore.save(indicatorChoices)
+        if indicator.hidesChanLayers { syncChanLayers() }
+    }
+
+    /// SMC 各类元素的显示开关（指标设置里勾选），存本机。
+    @Published var smcLayers = SmcLayers.load() {
+        didSet { smcLayers.save() }
+    }
+
+    /// 开威科夫 / SMC 前的缠论图层开关（分型 / 笔 / 线段 / 中枢 / 买卖点 / 背驰），只存在内存里。
+    private var chanLayersBeforeStructureIndicator: (fractals: Bool, strokes: Bool, segments: Bool,
+                                                     pivots: Bool, signals: Bool, divergences: Bool)?
+
+    /// 威科夫 / SMC 和缠论是几套不同的结构，叠在一起图面看不清：任一个打开时记下当前图层并全部关掉，
+    /// 都关掉后原样恢复（中途自己改过图层也以打开前的为准；在两者之间切换不会把「关着」存成原状态）。
+    private func syncChanLayers() {
+        let structureOn = ChartIndicator.allCases.contains { $0.hidesChanLayers && isOn($0) }
+        if structureOn {
+            guard chanLayersBeforeStructureIndicator == nil else { return }
+            chanLayersBeforeStructureIndicator = (showFractals, showStrokes, showSegments,
+                                                  showPivots, showSignals, showDivergences)
+            showFractals = false; showStrokes = false; showSegments = false
+            showPivots = false; showSignals = false; showDivergences = false
+        } else if let saved = chanLayersBeforeStructureIndicator {
+            showFractals = saved.fractals; showStrokes = saved.strokes; showSegments = saved.segments
+            showPivots = saved.pivots; showSignals = saved.signals; showDivergences = saved.divergences
+            chanLayersBeforeStructureIndicator = nil
+        }
     }
 
     /// 改了参数才重新请求（线是后端按含预热的原始 K 线算的，App 端算不出一样的值）。

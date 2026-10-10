@@ -161,6 +161,7 @@ struct ChanChartView: View {
                     if vm.isOn(.ma) { drawLines(ctx, analysis.ma, colors: Theme.maColors, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.isOn(.ema) { drawLines(ctx, analysis.ema, colors: Theme.emaColors, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.isOn(.wyckoff) { drawWyckoff(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
+                    if vm.isOn(.smc) { drawSmc(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showPivots { drawPivots(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showStrokes { drawStrokes(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showDivergences { drawDivergences(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
@@ -358,8 +359,8 @@ struct ChanChartView: View {
         var lo = Double.greatestFiniteMagnitude
         var hi = -Double.greatestFiniteMagnitude
         for i in range.start..<min(range.end, candles.count) {
-            lo = min(lo, candles[i].low)
-            hi = max(hi, candles[i].high)
+            lo = min(lo, wickLow(candles[i]))
+            hi = max(hi, wickHigh(candles[i]))
         }
         if lo > hi { return PriceBounds(minP: 0, maxP: 1) }
         // 保留原有上下各 12% 价差的标记留白。
@@ -508,8 +509,8 @@ struct ChanChartView: View {
             let color = c.isUp ? Theme.up : Theme.down
             // 影线
             var wick = Path()
-            wick.move(to: CGPoint(x: cx, y: y(for: c.high, height: height, bounds: bounds)))
-            wick.addLine(to: CGPoint(x: cx, y: y(for: c.low, height: height, bounds: bounds)))
+            wick.move(to: CGPoint(x: cx, y: y(for: wickHigh(c), height: height, bounds: bounds)))
+            wick.addLine(to: CGPoint(x: cx, y: y(for: wickLow(c), height: height, bounds: bounds)))
             ctx.stroke(wick, with: .color(color), lineWidth: wickWidth)
             // 实体：十字星（开≈收）时至少给 1pt 高度，否则整根蜡烛只剩影线
             let openY = y(for: c.open, height: height, bounds: bounds)
@@ -613,6 +614,232 @@ struct ChanChartView: View {
             clipped.draw(Text(e.code == "SPRING" ? "Spring" : e.code)
                             .font(.system(size: 9, weight: .bold)).foregroundColor(Theme.wyckoff),
                          at: c, anchor: .center)
+        }
+    }
+
+    // MARK: - 绘制：SMC（结构突破 / 订单块 / 缺口 / 等高低点 / 扫荡 / 溢价折价 / 强弱高低点 / 前周期高低点）
+
+    private func smcColor(_ isBull: Bool) -> Color { isBull ? Theme.smcBull : Theme.smcBear }
+
+    /// 结构突破标签中心：线（可见部分）的中点，向上突破在线上方、向下在线下方。线整段在窗口左侧之外返回 nil。
+    private func smcBreakLabelCenter(_ b: SmcBreak, range: VisibleRange, height: CGFloat, bounds: PriceBounds) -> CGPoint? {
+        let xb = x(for: b.breakIdx, range: range)
+        guard xb > 0 else { return nil }
+        let xa = max(x(for: b.levelIdx, range: range), 0)
+        return CGPoint(x: (xa + xb) / 2,
+                       y: y(for: b.level, height: height, bounds: bounds) + (b.isBull ? -7 : 7))
+    }
+
+    /// 等高 / 等低点标签中心：两点连线的中点，高点标在上方、低点在下方。
+    private func smcEqualLabelCenter(_ e: SmcEqualLevel, range: VisibleRange, height: CGFloat, bounds: PriceBounds) -> CGPoint {
+        CGPoint(x: (x(for: e.idx1, range: range) + x(for: e.idx2, range: range)) / 2,
+                y: y(for: e.price, height: height, bounds: bounds) + (e.isHigh ? -7 : 7))
+    }
+
+    /// 扫荡标记中心：扫荡那一天、被越过的价位上。
+    private func smcSweepCenter(_ w: SmcSweep, range: VisibleRange, height: CGFloat, bounds: PriceBounds) -> CGPoint {
+        CGPoint(x: x(for: w.idx, range: range), y: y(for: w.level, height: height, bounds: bounds))
+    }
+
+    /// 一条水平线（从 i0 到 i1 根；i1 为 nil 画到最后一根）的端点；不在窗口里返回 nil。
+    private func smcHLine(_ price: Double, from i0: Int, to i1: Int? = nil, range: VisibleRange,
+                          height: CGFloat, bounds: PriceBounds) -> (CGPoint, CGPoint)? {
+        let last = max(0, candles.count - 1)
+        let end = i1 ?? last
+        guard end >= range.start - 1, i0 <= range.end else { return nil }
+        let yy = y(for: price, height: height, bounds: bounds)
+        return (CGPoint(x: x(for: i0, range: range), y: yy), CGPoint(x: x(for: end, range: range), y: yy))
+    }
+
+    /// 一个区块的矩形（订单块 / 缺口）；不在窗口里返回 nil。
+    private func smcRect(top: Double, bottom: Double, from i0: Int, to i1: Int, range: VisibleRange,
+                         height: CGFloat, bounds: PriceBounds) -> CGRect? {
+        guard i1 >= range.start - 1, i0 <= range.end else { return nil }
+        let x0 = x(for: i0, range: range), x1 = x(for: i1, range: range)
+        let yTop = y(for: top, height: height, bounds: bounds)
+        let yBottom = y(for: bottom, height: height, bounds: bounds)
+        return CGRect(x: x0, y: yTop, width: max(2, x1 - x0), height: max(1, yBottom - yTop))
+    }
+
+    /// SMC 叠加层：区块与区域在下、线与标签在上；只画「指标设置 → SMC」里勾选的几类。
+    /// 画在 K 线之上；不参与纵轴范围计算（辅助标记，不该把 K 线压扁）。
+    private func drawSmc(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
+                         range: VisibleRange, bounds: PriceBounds) {
+        guard let m = analysis.smc else { return }
+        let layers = vm.smcLayers
+        var c = ctx
+        c.clip(to: Path(CGRect(x: 0, y: 0, width: plotWidth, height: height)))
+        let small = Font.system(size: 8, weight: .bold)
+        func line(_ a: CGPoint, _ b: CGPoint, _ color: Color, width: CGFloat = 1, dash: [CGFloat] = []) {
+            var p = Path(); p.move(to: a); p.addLine(to: b)
+            c.stroke(p, with: .color(color), style: StrokeStyle(lineWidth: width, dash: dash))
+        }
+
+        // 溢价 / 折价区：上半、下半各一层浅底 + 50% 中位虚线
+        if layers.premiumDiscount, let z = m.zone,
+           let top = smcRect(top: z.top, bottom: z.equilibrium, from: z.startIdx, to: z.endIdx, range: range, height: height, bounds: bounds),
+           let bottom = smcRect(top: z.equilibrium, bottom: z.bottom, from: z.startIdx, to: z.endIdx, range: range, height: height, bounds: bounds) {
+            c.fill(Path(top), with: .color(Theme.smcBear.opacity(0.07)))
+            c.fill(Path(bottom), with: .color(Theme.smcBull.opacity(0.07)))
+            line(CGPoint(x: top.minX, y: top.maxY), CGPoint(x: top.maxX, y: top.maxY), Theme.smcNeutral.opacity(0.7), width: 0.8, dash: [4, 3])
+            c.draw(Text("50%").font(small).foregroundColor(Theme.smcNeutral),
+                   at: CGPoint(x: top.maxX - 2, y: top.maxY - 1), anchor: .bottomTrailing)
+        }
+        if layers.fvg {
+            for g in m.fvgs {
+                guard let r = smcRect(top: g.top, bottom: g.bottom, from: g.idx, to: g.endIdx, range: range, height: height, bounds: bounds) else { continue }
+                c.fill(Path(r), with: .color(smcColor(g.isBull).opacity(0.13)))
+                c.draw(Text("FVG").font(small).foregroundColor(smcColor(g.isBull).opacity(0.9)),
+                       at: CGPoint(x: r.minX + 2, y: r.minY + 1), anchor: .topLeading)
+            }
+        }
+        if layers.orderBlocks {
+            for o in m.orderBlocks {
+                guard let r = smcRect(top: o.top, bottom: o.bottom, from: o.idx, to: o.endIdx, range: range, height: height, bounds: bounds) else { continue }
+                c.fill(Path(r), with: .color(smcColor(o.isBull).opacity(0.2)))
+                c.stroke(Path(r), with: .color(smcColor(o.isBull).opacity(0.75)), lineWidth: 0.8)
+                c.draw(Text("OB").font(small).foregroundColor(smcColor(o.isBull)),
+                       at: CGPoint(x: r.minX + 2, y: r.minY + 1), anchor: .topLeading)
+            }
+        }
+        if layers.keyLevels {
+            for k in m.keyLevels {
+                guard let (a, b) = smcHLine(k.price, from: k.startIdx, range: range, height: height, bounds: bounds) else { continue }
+                line(a, CGPoint(x: plotWidth, y: b.y), Theme.smcNeutral.opacity(0.6), width: 0.8, dash: [2, 3])
+                c.draw(Text(k.code).font(small).foregroundColor(Theme.smcNeutral),
+                       at: CGPoint(x: max(a.x, 0) + 2, y: a.y - 1), anchor: .bottomLeading)
+            }
+        }
+        if layers.strongWeak, let ex = m.extremes {
+            for (e, isHigh) in [(ex.high, true), (ex.low, false)] {
+                guard let (a, b) = smcHLine(e.price, from: e.idx, range: range, height: height, bounds: bounds) else { continue }
+                line(a, b, Theme.smcNeutral.opacity(0.85), width: 1.1)
+                let name = (e.strength == "strong" ? L("强") : L("弱")) + (isHigh ? L("高点") : L("低点"))
+                c.draw(Text(name).font(small).foregroundColor(Theme.smcNeutral),
+                       at: CGPoint(x: min(b.x, plotWidth - 4), y: b.y + (isHigh ? -1 : 1)),
+                       anchor: isHigh ? .bottomTrailing : .topTrailing)
+            }
+        }
+        if layers.equalLevels {
+            for e in m.equalLevels {
+                guard let (a, b) = smcHLine(e.price, from: e.idx1, to: e.idx2, range: range, height: height, bounds: bounds) else { continue }
+                line(a, b, Theme.smcNeutral, width: 1, dash: [1.5, 2.5])
+                c.draw(Text(e.isHigh ? "EQH" : "EQL").font(small).foregroundColor(Theme.smcNeutral),
+                       at: smcEqualLabelCenter(e, range: range, height: height, bounds: bounds), anchor: .center)
+            }
+        }
+        if layers.sweeps {
+            for w in m.sweeps {
+                guard let (a, b) = smcHLine(w.level, from: w.levelIdx, to: w.idx, range: range, height: height, bounds: bounds) else { continue }
+                line(a, b, Theme.smcNeutral.opacity(0.7), width: 0.8, dash: [3, 3])
+                let p = smcSweepCenter(w, range: range, height: height, bounds: bounds)
+                var d = Path()
+                d.move(to: CGPoint(x: p.x, y: p.y - 4)); d.addLine(to: CGPoint(x: p.x + 4, y: p.y))
+                d.addLine(to: CGPoint(x: p.x, y: p.y + 4)); d.addLine(to: CGPoint(x: p.x - 4, y: p.y))
+                d.closeSubpath()
+                c.fill(d, with: .color(Theme.smcNeutral))
+            }
+        }
+        if layers.structure {
+            for b in m.breaks {
+                guard let (a, e) = smcHLine(b.level, from: b.levelIdx, to: b.breakIdx, range: range, height: height, bounds: bounds),
+                      let center = smcBreakLabelCenter(b, range: range, height: height, bounds: bounds) else { continue }
+                let color = smcColor(b.isBull)
+                line(a, e, color, width: 1.1, dash: b.kind == "choch" ? [4, 3] : [])
+                c.fill(Path(ellipseIn: CGRect(x: e.x - 2, y: e.y - 2, width: 4, height: 4)), with: .color(color))
+                c.draw(Text(b.kind == "choch" ? "CHoCH" : "BOS").font(small).foregroundColor(color), at: center, anchor: .center)
+            }
+        }
+    }
+
+    /// SMC 命中判定：线 / 标签按距离，订单块 / 缺口按矩形（重叠时取面积小的）。只看勾选了的图层。
+    private func smcHit(_ loc: CGPoint, plotWidth: CGFloat, height: CGFloat,
+                        range: VisibleRange, bounds: PriceBounds) -> ChartElement? {
+        guard let m = analysis.smc else { return nil }
+        let layers = vm.smcLayers
+        func el(_ mark: SmcMark) -> ChartElement { .smc(mark, swingLen: m.swingLen) }
+        var near: [(ChartElement, CGFloat)] = []
+        func lineDist(_ price: Double, from i0: Int, to i1: Int? = nil, limit: CGFloat) -> CGFloat? {
+            guard let (a, b) = smcHLine(price, from: i0, to: i1, range: range, height: height, bounds: bounds) else { return nil }
+            let d = distance(loc, a, b)
+            return d < limit ? d : nil
+        }
+        if layers.structure {
+            for b in m.breaks {
+                if let c = smcBreakLabelCenter(b, range: range, height: height, bounds: bounds),
+                   abs(loc.x - c.x) < 22, abs(loc.y - c.y) < 10 {
+                    near.append((el(.brk(b)), hypot(loc.x - c.x, loc.y - c.y)))
+                } else if let d = lineDist(b.level, from: b.levelIdx, to: b.breakIdx, limit: 8) {
+                    near.append((el(.brk(b)), d + 4))
+                }
+            }
+        }
+        if layers.equalLevels {
+            for e in m.equalLevels {
+                let c = smcEqualLabelCenter(e, range: range, height: height, bounds: bounds)
+                if abs(loc.x - c.x) < 18, abs(loc.y - c.y) < 10 { near.append((el(.equal(e)), hypot(loc.x - c.x, loc.y - c.y))) }
+                else if let d = lineDist(e.price, from: e.idx1, to: e.idx2, limit: 8) { near.append((el(.equal(e)), d + 4)) }
+            }
+        }
+        if layers.sweeps {
+            for w in m.sweeps {
+                let c = smcSweepCenter(w, range: range, height: height, bounds: bounds)
+                let d = hypot(loc.x - c.x, loc.y - c.y)
+                if d < 12 { near.append((el(.sweep(w)), d)) }
+            }
+        }
+        if layers.strongWeak, let ex = m.extremes {
+            if let d = lineDist(ex.high.price, from: ex.high.idx, limit: 9) { near.append((el(.extreme(ex.high, isHigh: true)), d + 6)) }
+            if let d = lineDist(ex.low.price, from: ex.low.idx, limit: 9) { near.append((el(.extreme(ex.low, isHigh: false)), d + 6)) }
+        }
+        if layers.keyLevels {
+            for k in m.keyLevels { if let d = lineDist(k.price, from: k.startIdx, limit: 9) { near.append((el(.keyLevel(k)), d + 6)) } }
+        }
+        if layers.premiumDiscount, let z = m.zone, let d = lineDist(z.equilibrium, from: z.startIdx, to: z.endIdx, limit: 9) {
+            near.append((el(.zone(z)), d + 6))
+        }
+        if let hit = ChartHitResolver.nearest(near) { return hit }
+
+        var rects: [(ChartElement, CGFloat)] = []
+        if layers.orderBlocks {
+            for o in m.orderBlocks {
+                if let r = smcRect(top: o.top, bottom: o.bottom, from: o.idx, to: o.endIdx, range: range, height: height, bounds: bounds),
+                   r.contains(loc) { rects.append((el(.orderBlock(o)), r.width * r.height)) }
+            }
+        }
+        if layers.fvg {
+            for g in m.fvgs {
+                if let r = smcRect(top: g.top, bottom: g.bottom, from: g.idx, to: g.endIdx, range: range, height: height, bounds: bounds),
+                   r.contains(loc) { rects.append((el(.fvg(g)), r.width * r.height)) }
+            }
+        }
+        return ChartHitResolver.nearest(rects)
+    }
+
+    /// SMC 选中元素的高亮：区块描白边，线描粗白线，点画白圈。
+    private func drawSmcSelection(_ ctx: GraphicsContext, _ mark: SmcMark, plotWidth: CGFloat, height: CGFloat,
+                                  range: VisibleRange, bounds: PriceBounds) {
+        let glow = Color.white.opacity(0.9)
+        func hl(_ price: Double, from i0: Int, to i1: Int? = nil) {
+            guard let (a, b) = smcHLine(price, from: i0, to: i1, range: range, height: height, bounds: bounds) else { return }
+            var p = Path(); p.move(to: a); p.addLine(to: b)
+            ctx.stroke(p, with: .color(glow), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+        }
+        func box(_ top: Double, _ bottom: Double, _ i0: Int, _ i1: Int) {
+            guard let r = smcRect(top: top, bottom: bottom, from: i0, to: i1, range: range, height: height, bounds: bounds) else { return }
+            ctx.stroke(Path(r), with: .color(glow), lineWidth: 2)
+        }
+        switch mark {
+        case .brk(let b): hl(b.level, from: b.levelIdx, to: b.breakIdx)
+        case .orderBlock(let o): box(o.top, o.bottom, o.idx, o.endIdx)
+        case .fvg(let g): box(g.top, g.bottom, g.idx, g.endIdx)
+        case .equal(let e): hl(e.price, from: e.idx1, to: e.idx2)
+        case .sweep(let w):
+            let c = smcSweepCenter(w, range: range, height: height, bounds: bounds)
+            ctx.stroke(Path(ellipseIn: CGRect(x: c.x - 8, y: c.y - 8, width: 16, height: 16)), with: .color(glow), lineWidth: 2)
+        case .zone(let z): hl(z.equilibrium, from: z.startIdx, to: z.endIdx)
+        case .extreme(let e, _): hl(e.price, from: e.idx)
+        case .keyLevel(let k): hl(k.price, from: k.startIdx)
         }
     }
 
@@ -1133,6 +1360,8 @@ struct ChanChartView: View {
                 }
             }
         }
+        // SMC：打开时缠论图层已收起，命中就直接返回
+        if vm.isOn(.smc), let hit = smcHit(loc, plotWidth: plotWidth, height: height, range: range, bounds: bounds) { return hit }
         // 威科夫事件标记：和买卖点徽标、分型一起比距离，取离手指最近的
         if vm.isOn(.wyckoff), let events = analysis.wyckoff?.events {
             for e in events where e.idx >= range.start - 1 && e.idx <= range.end {
@@ -1241,6 +1470,7 @@ struct ChanChartView: View {
             }
         case .established(let s): ring(establishedPoint(s, range: range, height: height, bounds: bounds), 9)
         case .wyckoff(let e): ring(wyckoffLabelCenter(e, range: range, height: height, bounds: bounds), 10)
+        case .smc(let mark, _): drawSmcSelection(ctx, mark, plotWidth: plotWidth, height: height, range: range, bounds: bounds)
         case .divergence(let c, let refTime, let refPrice):
             if let legs = c.divergenceLegs {
                 line(pt(legs.b.t0, legs.b.p0), pt(legs.b.t1, legs.b.p1), 2.5)
@@ -1505,8 +1735,8 @@ struct ChanChartView: View {
                 .foregroundColor(Theme.textSecondary)
             HStack(spacing: 8) {
                 infoText(L("开"), String(format: "%.2f", c.open))
-                infoText(L("高"), String(format: "%.2f", c.high))
-                infoText(L("低"), String(format: "%.2f", c.low))
+                infoText(L("高"), String(format: "%.2f", wickHigh(c)))
+                infoText(L("低"), String(format: "%.2f", wickLow(c)))
                 infoText(L("收"), String(format: "%.2f", c.close))
             }
             .font(.system(size: 10))
@@ -1546,6 +1776,19 @@ struct ChanChartView: View {
                                             (w.stageName + (w.phase.isEmpty ? "" : " · " + L("%@ 阶段", w.phase)), Theme.wyckoff)]
             if let r = w.ranges.last { items.append((String(format: "%.2f–%.2f", r.support, r.resistance), Theme.wyckoff)) }
             rows.append((L("威科夫"), Theme.wyckoff, items))
+        }
+        if vm.isOn(.smc), let sm = analysis.smc {
+            // 结构方向（最近一次突破的方向）；勾了溢价 / 折价区时再写光标那根收盘在中位的哪一侧
+            var items: [(String, Color)] = [("SMC", Theme.smcNeutral)]
+            switch sm.trend {
+            case "bull": items.append((L("结构向上"), Theme.smcBull))
+            case "bear": items.append((L("结构向下"), Theme.smcBear))
+            default: items.append((L("结构不明"), Theme.smcNeutral))
+            }
+            if vm.smcLayers.premiumDiscount, let z = sm.zone, index < candles.count {
+                items.append((candles[index].close >= z.equilibrium ? L("溢价区") : L("折价区"), Theme.smcNeutral))
+            }
+            rows.append(("SMC", Theme.smcNeutral, items))
         }
         if vm.isOn(.boll), let b = analysis.boll {
             func f(_ arr: [Double?]) -> String { index < arr.count ? (arr[index].map { String(format: "%.2f", $0) } ?? "--") : "--" }
@@ -1595,6 +1838,12 @@ struct ChanChartView: View {
     }
 
     private var anyIndicatorOn: Bool { ChartIndicator.allCases.contains { vm.isOn($0) } }
+
+    /// 影线用哪组高低点：SMC / 威科夫是按原始 K 线算的，打开它们时影线用所含原始 K 线的真实最高 / 最低价，
+    /// 结构线和订单块 / 缺口的边才碰得到影线；缠论图层（合并 K 线）的画法不变。旧后端没有 raw_* 时退回合并后的值。
+    private var rawWicks: Bool { vm.isOn(.smc) || vm.isOn(.wyckoff) }
+    private func wickHigh(_ c: MergedCandle) -> Double { rawWicks ? (c.rawHigh ?? c.high) : c.high }
+    private func wickLow(_ c: MergedCandle) -> Double { rawWicks ? (c.rawLow ?? c.low) : c.low }
 
     /// 成交量缩写：中文用万/亿，英文用 K/M/B。
     static func formatVolume(_ v: Double) -> String {

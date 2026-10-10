@@ -31,6 +31,11 @@ enum Theme {
     static let bollLine = Color(hex: 0x94A3B8)
     /// 威科夫（交易区间 + 事件标记）：浅棕，避开红 / 绿（只给买卖点）与笔 / 中枢 / 背驰 / 均线已用的颜色。
     static let wyckoff = Color(hex: 0xD4A373)
+    /// SMC（结构突破 / 订单块 / 缺口等）：向上用蓝、向下用琥珀、中性用浅灰蓝——同样避开红 / 绿（只给买卖点）。
+    /// 打开 SMC 时缠论图层会被收起，所以可以复用笔 / 线段的色相而不会和它们混在一张图里。
+    static let smcBull = Color(hex: 0x60A5FA)
+    static let smcBear = Color(hex: 0xF59E0B)
+    static let smcNeutral = Color(hex: 0xCBD5E1)
     /// 基本面动向雷达：预期上调 / 质地改善（避开红绿——红绿只给已成立的买卖点）
     static let trendEstimates = Color(hex: 0x3B82F6)
     static let trendQuality = Color(hex: 0xA855F7)

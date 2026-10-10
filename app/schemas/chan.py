@@ -16,6 +16,9 @@ class MergedCandleOut(BaseModel):
     volume: float = 0.0
     # 合并K线所含最后一根原始K线的时间（展示用，笔/分型仍按 time 对位）
     end_time: str | None = None
+    # 所含原始K线的真实最高 / 最低价（SMC / 威科夫打开时 App 用它画影线；合并K线自己的 high / low 是去包含后的值，比影线短）
+    raw_high: float | None = None
+    raw_low: float | None = None
 
 
 class FractalOut(BaseModel):
@@ -136,6 +139,92 @@ class WyckoffOverlayOut(BaseModel):
     breakout: Literal["up", "down", "none"]
     ranges: list[WyckoffRangeOut] = []  # 按时间先后；阶段取最后一段
     events: list[WyckoffEventMarkOut] = []
+
+
+class SmcBreakOut(BaseModel):
+    """结构突破 BOS / 结构转变 CHoCH：从被突破的摆动点（level_idx）画到突破那根（break_idx）。"""
+
+    kind: Literal["bos", "choch"]
+    direction: Literal["bull", "bear"]
+    level: float
+    level_idx: int
+    break_idx: int
+    time: str
+
+
+class SmcOrderBlockOut(BaseModel):
+    direction: Literal["bull", "bear"]
+    top: float
+    bottom: float
+    idx: int
+    end_idx: int
+    mitigated: bool
+    volume_ratio: float
+    time: str
+
+
+class SmcFvgOut(BaseModel):
+    direction: Literal["bull", "bear"]
+    top: float
+    bottom: float
+    idx: int
+    end_idx: int
+    time: str
+
+
+class SmcEqualLevelOut(BaseModel):
+    kind: Literal["eqh", "eql"]
+    price: float
+    idx1: int
+    idx2: int
+
+
+class SmcSweepOut(BaseModel):
+    side: Literal["high", "low"]
+    level: float
+    level_idx: int
+    idx: int
+    time: str
+
+
+class SmcZoneOut(BaseModel):
+    top: float
+    bottom: float
+    equilibrium: float
+    start_idx: int
+    end_idx: int
+
+
+class SmcExtremeOut(BaseModel):
+    price: float
+    idx: int
+    strength: Literal["strong", "weak"]
+
+
+class SmcExtremesOut(BaseModel):
+    high: SmcExtremeOut
+    low: SmcExtremeOut
+
+
+class SmcKeyLevelOut(BaseModel):
+    code: Literal["PDH", "PDL", "PWH", "PWL", "PMH", "PML"]
+    price: float
+    start_idx: int
+
+
+class SmcOverlayOut(BaseModel):
+    """SMC 图表指标（见 services/smc/overlay.py）：位置都按 merged_candles 下标给，App 直接画。只有事实，没有操作措辞。"""
+
+    trend: Literal["bull", "bear", "none"]
+    swing_len: int
+    breaks: list[SmcBreakOut] = []
+    order_blocks: list[SmcOrderBlockOut] = []
+    fvgs: list[SmcFvgOut] = []
+    equal_levels: list[SmcEqualLevelOut] = []
+    sweeps: list[SmcSweepOut] = []
+    zone: Optional[SmcZoneOut] = None
+    extremes: Optional[SmcExtremesOut] = None
+    key_levels: list[SmcKeyLevelOut] = []
 
 
 class SignalOut(BaseModel):
@@ -267,6 +356,7 @@ class ChanAnalysisResponse(BaseModel):
     ema: Optional[MAOut] = None  # 同 ma 的形状（periods + values），周期 12 / 26
     boll: Optional[BollOut] = None
     wyckoff: Optional[WyckoffOverlayOut] = None  # 图表指标「威科夫」；旧版 App 不读
+    smc: Optional[SmcOverlayOut] = None  # 图表指标「SMC」；旧版 App 不读
     signals: list[SignalOut]
     current_trend: str
     # 走势类型（基于中枢排布）：up_trend / down_trend / consolidation / none
