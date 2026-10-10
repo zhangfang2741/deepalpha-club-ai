@@ -145,7 +145,7 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
      ("看偿债压力、短期流动性、现金能撑多久和利润的现金含量，共五项：净负债 / EBITDA（现金多于负债记 0）、"
       "利息保障倍数（没有利息支出、利息收入不低于利息支出、或超过 100 倍记 100）、流动比率、现金可支撑年数（按最近 12 个月自由现金流为负的速度估算，"
       "自由现金流为正的公司不烧钱，记上限 10 年）、经营现金流 / 净利润（净利润为负时不参与）。"
-      "「没有压力」一律记成该项的最好值，不当缺失；有净负债而 EBITDA 为负按最差计。"
+      "「没有压力」一律记成该项的最好值，不当缺失；有净负债而 EBITDA 为负按最差计；但报告 0 利息却有大笔负债属于数据缺口，该项不参与。EBIT / EBITDA 一律用经营利润口径（不含处置收益等营业外项目）。"
       "银行、保险等金融公司的负债本身就是经营的一部分，口径不可比，整个维度不参与综合分。"
       "A 股与港股的报表没有流动资产 / 流动负债与利息支出，只用其余三项。"
       "这个维度在每个阶段的权重都不低于一票否决门槛：财务稳健为 F 时，综合等级最高为 C+。",
@@ -154,7 +154,7 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
       "current ratio, cash runway in years (at the trailing 12-month free-cash-flow burn; companies with positive free "
       "cash flow burn nothing and are set to the 10-year cap) and operating cash flow / net income (excluded when net "
       "income is negative). \"No pressure\" is always scored as the best value rather than treated as missing; net debt "
-      "with negative EBITDA is scored as lowest. Debt is part of the business for banks and insurers, so the whole "
+      "with negative EBITDA is scored as lowest; zero reported interest alongside large debt is a data gap and the metric is left out. EBIT / EBITDA are always on an operating-income basis (excluding disposal gains and other non-operating items). Debt is part of the business for banks and insurers, so the whole "
       "dimension is left out for them. A-share and Hong Kong statements lack current assets / liabilities and interest "
       "expense, so only the other three are used. This dimension's weight is above the veto threshold in every stage: "
       "a financial-health F caps the composite at C+.")),

@@ -38,6 +38,7 @@ DIMENSION_NAMES: dict[str, tuple[str, str]] = {
 MIN_ANALYSTS = 3
 MOMENTUM_WINDOWS = {"r3m": 63, "r6m": 126, "r9m": 189, "r12m": 252}
 INTEREST_COVER_CAP = 100.0   # 利息保障倍数上限（几乎没有利息的公司统一记上限，避免极端值）
+INTEREST_GAP_DEBT_SHARE = 0.25   # 利息支出为 0 但负债超过 EBIT 的 25%：视为数据缺口（不参与），不记最好值
 RUNWAY_CAP_YEARS = 10.0      # 现金可支撑年数上限（自由现金流为正 = 不烧钱，也记上限）
 STABILITY_KEYS = ("net_debt_ebitda", "interest_cov", "current_ratio", "runway_years", "cfo_ni")
 
@@ -410,6 +411,8 @@ def _stability(inp: StockInputs, bal: dict | None, ebitda: float | None, ebit: f
     ic_inputs = [("ebit_ttm", ebit), ("interest_ttm", abs(interest) if interest is not None else None)]
     if ebit is None or interest is None:
         out["interest_cov"] = _missing("div", ic_inputs)
+    elif interest == 0 and debt is not None and ebit > 0 and debt > INTEREST_GAP_DEBT_SHARE * ebit:
+        out["interest_cov"] = _missing("div", ic_inputs)    # 有大笔负债却报告 0 利息（AAPL 的最新财年）：数据缺口，不当「没有利息压力」
     elif interest == 0:
         out["interest_cov"] = MetricValue(INTEREST_COVER_CAP, "ok", ic_inputs, "div", {"no_interest": True})
     elif net_interest is not None and net_interest > 0:

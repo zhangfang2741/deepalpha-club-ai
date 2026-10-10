@@ -35,20 +35,20 @@
  },
  "overall": {
   "grade": "C",
-  "score": 48.7,
-  "universe_percentile": 47.2,
+  "score": 48.3,
+  "universe_percentile": 46.0,
   "dimensions_used": 5,
   "capped": false,
   "note": null,
-  "text": "综合分 48.7 · 标普1500 后 47%"
+  "text": "综合分 48.3 · 标普1500 后 46%"
  },
  "dimensions": [
   {
    "key": "valuation",
    "name": "估值",
    "description": "股价相对利润、营收、现金流、资产的倍数",
-   "grade": "D+",
-   "score": 33.1,
+   "grade": "D",
+   "score": 32.8,
    "status": "ok",
    "status_note": null,
    "is_highest": false,
@@ -57,7 +57,7 @@
     "metric": "peg_ttm",
     "text": "PEG TTM 2.00，高于板块 86% 的公司"
    },
-   "formula": "(36×1 + 45×1 + 14×0.5 + 0×0.5 + 51×0.75 + 59×0.75 + 62×0.75 + 33×0.75 + 27×2 + 23×3) ÷ 11 = 33.1 → D+",
+   "formula": "(36×1 + 45×1 + 14×0.5 + 0×0.5 + 51×0.75 + 59×0.75 + 62×0.75 + 29×0.75 + 27×2 + 23×3) ÷ 11 = 32.8 → D",
    "groups": [
     {
      "name": "市盈率",
@@ -497,15 +497,15 @@
        "name": "EV/EBITDA TTM",
        "description": "企业价值相对最近 12 个月 EBITDA 的倍数",
        "direction": "lower_better",
-       "value": 9.819072746258266,
-       "display_value": "9.8",
+       "value": 10.324177658063855,
+       "display_value": "10.3",
        "status": "ok",
        "status_note": null,
-       "percentile": 32.9,
+       "percentile": 28.6,
        "grade": "D",
        "sector_median": 7.821684560336929,
        "sector_median_display": "7.8",
-       "diff_to_median_pct": 25.5,
+       "diff_to_median_pct": 32.0,
        "distribution": {
         "p10": 4.027929014239084,
         "p25": 5.514646106886327,
@@ -514,7 +514,7 @@
         "p90": 15.43389581477867
        },
        "formula": {
-        "expression": "企业价值 7052.5 亿 ÷ EBITDA TTM 718.2 亿 = 9.8",
+        "expression": "企业价值 7052.5 亿 ÷ EBITDA TTM 683.1 亿 = 10.3",
         "inputs": [
          {
           "label": "企业价值",
@@ -524,13 +524,13 @@
          },
          {
           "label": "EBITDA TTM",
-          "value": "718.2 亿",
+          "value": "683.1 亿",
           "note": "FY26 Q2",
           "hint": "EBITDA：息税折旧摊销前利润，可粗略看作主营业务赚到的「毛现金」。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
          }
         ]
        },
-       "position_text": "高于 67% 的同板块公司 → 百分位 33 → D",
+       "position_text": "高于 71% 的同板块公司 → 百分位 29 → D",
        "interpretation": {
         "what": "企业价值相对最近 12 个月 EBITDA 的倍数",
         "role": "用企业整体价格比较息税折旧摊销前利润，辅助比较不同融资结构的公司。",
@@ -600,8 +600,8 @@
        "name": "EV/EBIT TTM",
        "description": "企业价值相对最近 12 个月 EBIT 的倍数",
        "direction": "lower_better",
-       "value": 16.722107883817426,
-       "display_value": "16.7",
+       "value": 18.242024262176354,
+       "display_value": "18.2",
        "status": "insufficient_sample",
        "status_note": "板块样本不足 20 家，不参与计算",
        "percentile": null,
@@ -611,7 +611,7 @@
        "diff_to_median_pct": null,
        "distribution": null,
        "formula": {
-        "expression": "企业价值 7052.5 亿 ÷ EBIT TTM 421.8 亿 = 16.7",
+        "expression": "企业价值 7052.5 亿 ÷ EBIT TTM 386.6 亿 = 18.2",
         "inputs": [
          {
           "label": "企业价值",
@@ -621,7 +621,7 @@
          },
          {
           "label": "EBIT TTM",
-          "value": "421.8 亿",
+          "value": "386.6 亿",
           "note": "FY26 Q2",
           "hint": "EBIT：息税前利润，扣掉成本、费用和折旧摊销后，还没付利息和交税的经营利润。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
          }
@@ -812,16 +812,16 @@
    "name": "成长",
    "description": "营收与利润的历史及预期增速",
    "grade": "C+",
-   "score": 54.0,
+   "score": 57.4,
    "status": "ok",
    "status_note": null,
    "is_highest": false,
    "is_lowest": false,
    "key_fact": {
-    "metric": "rev_fwd",
-    "text": "营收预期增速 +28%，高于板块 77% 的公司"
+    "metric": "ebitda_fwd",
+    "text": "EBITDA 预期增速 +62%，高于板块 79% 的公司"
    },
-   "formula": "(45 + 77 + 32 + 38 + 74 + 40 + 67 + 48 + 65) ÷ 9 = 54.0 → C+",
+   "formula": "(45 + 77 + 32 + 49 + 79 + 45 + 76 + 48 + 65) ÷ 9 = 57.4 → C+",
    "groups": [
     {
      "name": "营收",
@@ -992,15 +992,15 @@
        "name": "EBITDA 同比",
        "description": "最近 12 个月 EBITDA 相比上一个 12 个月的增速",
        "direction": "higher_better",
-       "value": 0.016717626408470743,
-       "display_value": "+1.7%",
+       "value": 0.09792985952618216,
+       "display_value": "+9.8%",
        "status": "ok",
        "status_note": null,
-       "percentile": 37.7,
-       "grade": "D+",
+       "percentile": 49.3,
+       "grade": "C",
        "sector_median": 0.10665417321434179,
        "sector_median_display": "+11%",
-       "diff_to_median_pct": -84.3,
+       "diff_to_median_pct": -8.2,
        "distribution": {
         "p10": -0.30442499200865514,
         "p25": -0.05683109797681296,
@@ -1009,23 +1009,23 @@
         "p90": 1.8569078413675602
        },
        "formula": {
-        "expression": "EBITDA TTM 718.2 亿 ÷ 上一个 12 个月 EBITDA 706.4 亿 − 1 = +1.7%",
+        "expression": "EBITDA TTM 683.1 亿 ÷ 上一个 12 个月 EBITDA 622.2 亿 − 1 = +9.8%",
         "inputs": [
          {
           "label": "EBITDA TTM",
-          "value": "718.2 亿",
+          "value": "683.1 亿",
           "note": "FY26 Q2",
           "hint": "EBITDA：息税折旧摊销前利润，可粗略看作主营业务赚到的「毛现金」。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
          },
          {
           "label": "上一个 12 个月 EBITDA",
-          "value": "706.4 亿",
+          "value": "622.2 亿",
           "note": null,
           "hint": "EBITDA：息税折旧摊销前利润，可粗略看作主营业务赚到的「毛现金」。这里取再往前 12 个月的实际数，用来算同比。"
          }
         ]
        },
-       "position_text": "低于 62% 的同板块公司 → 百分位 38 → D+",
+       "position_text": "低于 51% 的同板块公司 → 百分位 49 → C",
        "interpretation": {
         "what": "最近 12 个月 EBITDA 相比上一个 12 个月的增速",
         "role": "观察生意是否扩大，以及增长能否转化为长期每股现金收益。",
@@ -1044,15 +1044,15 @@
        "name": "EBITDA 预期增速",
        "description": "分析师预期本财年 EBITDA 相比上一完整财年实际值的增速",
        "direction": "higher_better",
-       "value": 0.42926369379936347,
-       "display_value": "+43%",
+       "value": 0.6184537437386328,
+       "display_value": "+62%",
        "status": "ok",
        "status_note": null,
-       "percentile": 73.8,
+       "percentile": 78.7,
        "grade": "B+",
        "sector_median": 0.18502150224598357,
        "sector_median_display": "+19%",
-       "diff_to_median_pct": 132.0,
+       "diff_to_median_pct": 234.3,
        "distribution": {
         "p10": -0.18134668109030772,
         "p25": 0.009279958762886675,
@@ -1061,7 +1061,7 @@
         "p90": 1.131261609682611
        },
        "formula": {
-        "expression": "本财年 EBITDA 预期 970.0 亿 ÷ 上一财年 EBITDA 实际 678.6 亿 − 1 = +43%",
+        "expression": "本财年 EBITDA 预期 970.0 亿 ÷ 上一财年 EBITDA 实际 599.3 亿 − 1 = +62%",
         "inputs": [
          {
           "label": "本财年 EBITDA 预期",
@@ -1071,13 +1071,13 @@
          },
          {
           "label": "上一财年 EBITDA 实际",
-          "value": "678.6 亿",
+          "value": "599.3 亿",
           "note": null,
           "hint": "EBITDA：息税折旧摊销前利润，可粗略看作主营业务赚到的「毛现金」。这里取上一个完整财年的实际数。"
          }
         ]
        },
-       "position_text": "高于 74% 的同板块公司 → 百分位 74 → B+",
+       "position_text": "高于 79% 的同板块公司 → 百分位 79 → B+",
        "interpretation": {
         "what": "分析师预期本财年 EBITDA 相比上一完整财年实际值的增速",
         "role": "观察生意是否扩大，以及增长能否转化为长期每股现金收益。",
@@ -1101,15 +1101,15 @@
        "name": "EBIT 同比",
        "description": "最近 12 个月 EBIT 相比上一个 12 个月的增速",
        "direction": "higher_better",
-       "value": -0.08311230923083612,
-       "display_value": "-8.3%",
+       "value": 0.028984350047908114,
+       "display_value": "+2.9%",
        "status": "ok",
        "status_note": null,
-       "percentile": 40.0,
+       "percentile": 44.6,
        "grade": "C-",
        "sector_median": 0.06339592166363817,
        "sector_median_display": "+6.3%",
-       "diff_to_median_pct": -231.1,
+       "diff_to_median_pct": -54.3,
        "distribution": {
         "p10": -0.6190615685578852,
         "p25": -0.2433597792342187,
@@ -1118,23 +1118,23 @@
         "p90": 2.9913603816031302
        },
        "formula": {
-        "expression": "EBIT TTM 421.8 亿 ÷ 上一个 12 个月 EBIT 460.0 亿 − 1 = -8.3%",
+        "expression": "EBIT TTM 386.6 亿 ÷ 上一个 12 个月 EBIT 375.7 亿 − 1 = +2.9%",
         "inputs": [
          {
           "label": "EBIT TTM",
-          "value": "421.8 亿",
+          "value": "386.6 亿",
           "note": "FY26 Q2",
           "hint": "EBIT：息税前利润，扣掉成本、费用和折旧摊销后，还没付利息和交税的经营利润。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
          },
          {
           "label": "上一个 12 个月 EBIT",
-          "value": "460.0 亿",
+          "value": "375.7 亿",
           "note": null,
           "hint": "EBIT：息税前利润，扣掉成本、费用和折旧摊销后，还没付利息和交税的经营利润。这里取再往前 12 个月的实际数，用来算同比。"
          }
         ]
        },
-       "position_text": "低于 60% 的同板块公司 → 百分位 40 → C-",
+       "position_text": "低于 55% 的同板块公司 → 百分位 45 → C-",
        "interpretation": {
         "what": "最近 12 个月 EBIT 相比上一个 12 个月的增速",
         "role": "观察生意是否扩大，以及增长能否转化为长期每股现金收益。",
@@ -1153,15 +1153,15 @@
        "name": "EBIT 预期增速",
        "description": "分析师预期本财年 EBIT 相比上一完整财年实际值的增速",
        "direction": "higher_better",
-       "value": 0.6950890931193427,
-       "display_value": "+70%",
+       "value": 1.0913157940361837,
+       "display_value": "+109%",
        "status": "ok",
        "status_note": null,
-       "percentile": 67.3,
-       "grade": "B",
+       "percentile": 76.4,
+       "grade": "B+",
        "sector_median": 0.22866091306652536,
        "sector_median_display": "+23%",
-       "diff_to_median_pct": 204.0,
+       "diff_to_median_pct": 377.3,
        "distribution": {
         "p10": -0.33344242162860643,
         "p25": -0.0019010733639658328,
@@ -1170,7 +1170,7 @@
         "p90": 1.7646495702644367
        },
        "formula": {
-        "expression": "本财年 EBIT 预期 709.8 亿 ÷ 上一财年 EBIT 实际 418.7 亿 − 1 = +70%",
+        "expression": "本财年 EBIT 预期 709.8 亿 ÷ 上一财年 EBIT 实际 339.4 亿 − 1 = +109%",
         "inputs": [
          {
           "label": "本财年 EBIT 预期",
@@ -1180,13 +1180,13 @@
          },
          {
           "label": "上一财年 EBIT 实际",
-          "value": "418.7 亿",
+          "value": "339.4 亿",
           "note": null,
           "hint": "EBIT：息税前利润，扣掉成本、费用和折旧摊销后，还没付利息和交税的经营利润。这里取上一个完整财年的实际数。"
          }
         ]
        },
-       "position_text": "高于 67% 的同板块公司 → 百分位 67 → B",
+       "position_text": "高于 76% 的同板块公司 → 百分位 76 → B+",
        "interpretation": {
         "what": "分析师预期本财年 EBIT 相比上一完整财年实际值的增速",
         "role": "观察生意是否扩大，以及增长能否转化为长期每股现金收益。",
@@ -1319,17 +1319,17 @@
    "key": "profitability",
    "name": "盈利能力",
    "description": "利润率与资本回报",
-   "grade": "C",
-   "score": 47.4,
+   "grade": "C-",
+   "score": 45.8,
    "status": "ok",
    "status_note": null,
    "is_highest": false,
    "is_lowest": false,
    "key_fact": {
-    "metric": "gross_m",
-    "text": "毛利率 25%，低于板块 62% 的公司"
+    "metric": "ebit_m",
+    "text": "EBIT 利润率 11%，低于板块 65% 的公司"
    },
-   "formula": "(38×1 + 39×0.5 + 41×0.5 + 44×0.5 + 39×1 + 47×1 + 48×0.5 + 61×0.5 + 68×1) ÷ 6.5 = 47.4 → C",
+   "formula": "(38×1 + 35×0.5 + 35×0.5 + 44×0.5 + 39×1 + 47×1 + 48×0.5 + 61×0.5 + 62×1) ÷ 6.5 = 45.8 → C-",
    "groups": [
     {
      "name": "毛利率",
@@ -1396,15 +1396,15 @@
        "name": "EBIT 利润率",
        "description": "最近 12 个月 EBIT 占营收的比例",
        "direction": "higher_better",
-       "value": 0.1168088406359054,
-       "display_value": "12%",
+       "value": 0.10707638619620008,
+       "display_value": "11%",
        "status": "ok",
        "status_note": null,
-       "percentile": 39.4,
+       "percentile": 35.2,
        "grade": "D+",
        "sector_median": 0.14939444669485302,
        "sector_median_display": "15%",
-       "diff_to_median_pct": -21.8,
+       "diff_to_median_pct": -28.3,
        "distribution": {
         "p10": -0.0004112628639198133,
         "p25": 0.06701931446129933,
@@ -1413,11 +1413,11 @@
         "p90": 0.45068106609441155
        },
        "formula": {
-        "expression": "EBIT TTM 421.8 亿 ÷ 营收 TTM 3610.6 亿 = 12%",
+        "expression": "EBIT TTM 386.6 亿 ÷ 营收 TTM 3610.6 亿 = 11%",
         "inputs": [
          {
           "label": "EBIT TTM",
-          "value": "421.8 亿",
+          "value": "386.6 亿",
           "note": "FY26 Q2",
           "hint": "EBIT：息税前利润，扣掉成本、费用和折旧摊销后，还没付利息和交税的经营利润。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
          },
@@ -1429,7 +1429,7 @@
          }
         ]
        },
-       "position_text": "低于 61% 的同板块公司 → 百分位 39 → D+",
+       "position_text": "低于 65% 的同板块公司 → 百分位 35 → D+",
        "interpretation": {
         "what": "最近 12 个月 EBIT 占营收的比例",
         "role": "观察每一元收入能留下多少收益，持续性和同业差异有助于理解竞争力。",
@@ -1453,15 +1453,15 @@
        "name": "EBITDA 利润率",
        "description": "最近 12 个月 EBITDA 占营收的比例",
        "direction": "higher_better",
-       "value": 0.19892815598515481,
-       "display_value": "20%",
+       "value": 0.1891957015454495,
+       "display_value": "19%",
        "status": "ok",
        "status_note": null,
-       "percentile": 40.8,
-       "grade": "C-",
+       "percentile": 35.2,
+       "grade": "D+",
        "sector_median": 0.28596355407336826,
        "sector_median_display": "29%",
-       "diff_to_median_pct": -30.4,
+       "diff_to_median_pct": -33.8,
        "distribution": {
         "p10": 0.0997682956186808,
         "p25": 0.1575395681798804,
@@ -1470,11 +1470,11 @@
         "p90": 0.7297831700285606
        },
        "formula": {
-        "expression": "EBITDA TTM 718.2 亿 ÷ 营收 TTM 3610.6 亿 = 20%",
+        "expression": "EBITDA TTM 683.1 亿 ÷ 营收 TTM 3610.6 亿 = 19%",
         "inputs": [
          {
           "label": "EBITDA TTM",
-          "value": "718.2 亿",
+          "value": "683.1 亿",
           "note": "FY26 Q2",
           "hint": "EBITDA：息税折旧摊销前利润，可粗略看作主营业务赚到的「毛现金」。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
          },
@@ -1486,7 +1486,7 @@
          }
         ]
        },
-       "position_text": "低于 59% 的同板块公司 → 百分位 41 → C-",
+       "position_text": "低于 65% 的同板块公司 → 百分位 35 → D+",
        "interpretation": {
         "what": "最近 12 个月 EBITDA 占营收的比例",
         "role": "观察每一元收入能留下多少收益，持续性和同业差异有助于理解竞争力。",
@@ -1790,15 +1790,15 @@
        "name": "ROIC",
        "description": "税后 EBIT 相对投入资本（负债 + 股东权益 − 现金）的比例",
        "direction": "higher_better",
-       "value": 0.10772689093481541,
-       "display_value": "11%",
+       "value": 0.09875114002207228,
+       "display_value": "9.9%",
        "status": "ok",
        "status_note": null,
-       "percentile": 67.6,
-       "grade": "B",
+       "percentile": 62.0,
+       "grade": "B-",
        "sector_median": 0.07852367567037744,
        "sector_median_display": "7.9%",
-       "diff_to_median_pct": 37.2,
+       "diff_to_median_pct": 25.8,
        "distribution": {
         "p10": 0.017061377417333188,
         "p25": 0.04669050502497994,
@@ -1807,11 +1807,11 @@
         "p90": 0.17487669586248009
        },
        "formula": {
-        "expression": "税后 EBIT 313.7 亿 ÷ 投入资本 2911.6 亿 = 11%",
+        "expression": "税后 EBIT 287.5 亿 ÷ 投入资本 2911.6 亿 = 9.9%",
         "inputs": [
          {
           "label": "税后 EBIT",
-          "value": "313.7 亿",
+          "value": "287.5 亿",
           "note": "FY26 Q2",
           "hint": "税后 EBIT = EBIT ×（1 − 税率），即假设没有负债时经营利润交完税还剩多少。"
          },
@@ -1823,7 +1823,7 @@
          }
         ]
        },
-       "position_text": "高于 68% 的同板块公司 → 百分位 68 → B",
+       "position_text": "高于 62% 的同板块公司 → 百分位 62 → B-",
        "interpretation": {
         "what": "税后 EBIT 相对投入资本（负债 + 股东权益 − 现金）的比例",
         "role": "观察投入生意的资本创造多少税后经营收益，持续超过资本成本才可能创造价值。",
@@ -2298,8 +2298,8 @@
    "key": "stability",
    "name": "财务稳健",
    "description": "偿债压力、短期流动性、现金能撑多久与利润的现金含量",
-   "grade": "B-",
-   "score": 60.9,
+   "grade": "C+",
+   "score": 59.9,
    "status": "ok",
    "status_note": null,
    "is_highest": false,
@@ -2308,7 +2308,7 @@
     "metric": "cfo_ni",
     "text": "经营现金流 / 净利润 182%，高于板块 99% 的公司"
    },
-   "formula": "(57 + 64 + 18 + 66 + 100) ÷ 5 = 60.9 → B-",
+   "formula": "(57 + 59 + 18 + 66 + 100) ÷ 5 = 59.9 → C+",
    "groups": [
     {
      "name": "净负债",
@@ -2318,15 +2318,15 @@
        "name": "净负债 / EBITDA",
        "description": "（负债 − 现金）相对最近 12 个月 EBITDA 的倍数，约等于用经营利润还清净债务要几年；现金多过负债记 0",
        "direction": "lower_better",
-       "value": 0.4424643230073094,
-       "display_value": "0.4",
+       "value": 0.4652252199499349,
+       "display_value": "0.5",
        "status": "ok",
        "status_note": null,
        "percentile": 57.0,
        "grade": "C+",
        "sector_median": 1.1338983050847458,
        "sector_median_display": "1.1",
-       "diff_to_median_pct": -61.0,
+       "diff_to_median_pct": -59.0,
        "distribution": {
         "p10": 0.0,
         "p25": 0.0,
@@ -2335,7 +2335,7 @@
         "p90": 5.02677966101695
        },
        "formula": {
-        "expression": "净负债 317.8 亿 ÷ EBITDA TTM 718.2 亿 = 0.4",
+        "expression": "净负债 317.8 亿 ÷ EBITDA TTM 683.1 亿 = 0.5",
         "inputs": [
          {
           "label": "净负债",
@@ -2345,7 +2345,7 @@
          },
          {
           "label": "EBITDA TTM",
-          "value": "718.2 亿",
+          "value": "683.1 亿",
           "note": "FY26 Q2",
           "hint": "EBITDA：息税折旧摊销前利润，可粗略看作主营业务赚到的「毛现金」。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
          }
@@ -2375,15 +2375,15 @@
        "name": "利息保障倍数",
        "description": "最近 12 个月 EBIT 相对利息支出的倍数，越高越不怕利息压力；没有利息支出、或利息收入不低于利息支出记上限 100",
        "direction": "higher_better",
-       "value": 64.98459167950693,
-       "display_value": "65.0",
+       "value": 59.57010785824345,
+       "display_value": "59.6",
        "status": "ok",
        "status_note": null,
-       "percentile": 64.0,
-       "grade": "B-",
+       "percentile": 59.0,
+       "grade": "C+",
        "sector_median": 50.5,
        "sector_median_display": "50.5",
-       "diff_to_median_pct": 28.7,
+       "diff_to_median_pct": 18.0,
        "distribution": {
         "p10": 10.9,
         "p25": 25.75,
@@ -2392,11 +2392,11 @@
         "p90": 90.10000000000001
        },
        "formula": {
-        "expression": "EBIT TTM 421.8 亿 ÷ 利息支出 TTM 6.5 亿 = 65.0",
+        "expression": "EBIT TTM 386.6 亿 ÷ 利息支出 TTM 6.5 亿 = 59.6",
         "inputs": [
          {
           "label": "EBIT TTM",
-          "value": "421.8 亿",
+          "value": "386.6 亿",
           "note": "FY26 Q2",
           "hint": "EBIT：息税前利润，扣掉成本、费用和折旧摊销后，还没付利息和交税的经营利润。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
          },
@@ -2408,7 +2408,7 @@
          }
         ]
        },
-       "position_text": "高于 64% 的同板块公司 → 百分位 64 → B-",
+       "position_text": "高于 59% 的同板块公司 → 百分位 59 → C+",
        "interpretation": {
         "what": "最近 12 个月 EBIT 相对利息支出的倍数，越高越不怕利息压力；没有利息支出、或利息收入不低于利息支出记上限 100",
         "role": "观察经营利润对利息支出的覆盖程度，衡量负债的年度负担。",
