@@ -2,12 +2,14 @@ import SwiftUI
 
 /// 点企业阶段时展示：该阶段综合分前 30 家，并标出本股排在第几。
 /// 只陈列本模型的综合分（同阶段公司在一起比），不是推荐榜；本股不在前 30 时在末尾单独列出位置。
+/// 点别的公司打开它的分析（`StockAnalysisCover`，独立状态、走同样的免费额度）。
 struct QuantStageRankingSection: View {
     let selected: QuantLifecycleStage
     let research: QuantResearch
 
     @State private var ranking: QuantStageRanking?
     @State private var failed = false
+    @State private var opening: StockAnalysisCover.Target?
 
     /// 本股属于这个阶段时才传本股信息（别的阶段只看排名，不算本股位置）
     private var isCurrent: Bool { research.stage?.key == selected.rawValue }
@@ -28,6 +30,9 @@ struct QuantStageRankingSection: View {
         .padding(16).frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
         .task(id: selected) { await load() }
+        .fullScreenCover(item: $opening) { target in
+            StockAnalysisCover(target: target)
+        }
     }
 
     @ViewBuilder
@@ -67,8 +72,28 @@ struct QuantStageRankingSection: View {
         }
     }
 
+    @ViewBuilder
     private func row(rank: Int, symbol: String, name: String?, grade: String?, score: Double?,
                      highlight: Bool, approximate: Bool = false) -> some View {
+        if symbol.uppercased() == research.symbol.uppercased() {
+            rowContent(rank: rank, symbol: symbol, name: name, grade: grade, score: score,
+                       highlight: highlight, approximate: approximate, tappable: false)
+        } else {
+            Button {
+                if let market = StockMarket(rawValue: research.market) {
+                    opening = .init(market: market, symbol: symbol, name: name)
+                }
+            } label: {
+                rowContent(rank: rank, symbol: symbol, name: name, grade: grade, score: score,
+                           highlight: highlight, approximate: approximate, tappable: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(L("打开这只股票的分析"))
+        }
+    }
+
+    private func rowContent(rank: Int, symbol: String, name: String?, grade: String?, score: Double?,
+                            highlight: Bool, approximate: Bool, tappable: Bool) -> some View {
         HStack(spacing: 10) {
             Text(approximate ? "≈\(rank)" : "\(rank)")
                 .font(QuantTypography.body.monospacedDigit())
@@ -86,8 +111,12 @@ struct QuantStageRankingSection: View {
                     .font(QuantTypography.body.monospacedDigit()).foregroundStyle(Theme.textSecondary)
             }
             QuantGradeBlock(grade: grade, side: 30)
+            Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Theme.textSecondary)
+                .opacity(tappable ? 1 : 0)
         }
         .padding(.vertical, 6).padding(.horizontal, 6)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
         .background(highlight ? Theme.accent.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
     }
 
