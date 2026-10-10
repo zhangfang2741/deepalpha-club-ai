@@ -65,7 +65,7 @@ async def compute(market: str, symbol: str, lang: Lang, redis: Redis | None) -> 
                                                        "Could not fetch data for this symbol, please try again later")), None
     history = (await repo.get_estimate_history(market, [symbol], today - timedelta(days=HISTORY_DAYS)))[symbol]
     ev = evaluate(got.inputs, history, dists)
-    finalize_overall(ev, dists.get((OVERALL_SECTOR, OVERALL_KEY), []))
+    finalize_overall(ev, dists.get((OVERALL_SECTOR, OVERALL_KEY), []), None, dists)
     n = sector_sample_sizes(dists).get(got.inputs.sector_key, 0)
     other: Lang = "en" if lang == "zh" else "zh"
     logger.info("quant_on_demand_computed", market=market, symbol=symbol, sector=got.inputs.sector_key)

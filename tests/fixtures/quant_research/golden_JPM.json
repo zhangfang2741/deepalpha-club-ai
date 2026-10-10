@@ -4,7 +4,7 @@
  "name": "JPMorgan Chase & Co.",
  "status": "ok",
  "status_note": null,
- "methodology_version": "q7",
+ "methodology_version": "q8",
  "as_of": {
   "price_date": "2026-09-29",
   "fiscal_period": "FY26 Q2",

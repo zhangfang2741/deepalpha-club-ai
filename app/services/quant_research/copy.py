@@ -355,7 +355,12 @@ def overall_text(o: OverallScore, lang: Lang, market: str = "us") -> str | None:
     """综合分与在比较样本（美股标普1500 / A 股市值前 1800 / 港股样本）中的排位。"""
     if o.score is None or o.universe_percentile is None:
         return None
-    uni = profile(market).universe(lang)
+    cohort = o.extra.get("cohort")
+    if cohort:   # 综合分是和同阶段公司比的排位
+        uni = _i(lang, "其他未标阶段的公司" if cohort == "none" else f"同为{stage_name(cohort, lang)}的公司",
+                 "other companies without a stage label" if cohort == "none" else f"peers in the same stage ({stage_name(cohort, lang)})")
+    else:
+        uni = profile(market).universe(lang)
     if o.universe_percentile >= 50:
         top = max(1, round(100 - o.universe_percentile))
         return _i(lang, f"综合分 {o.score:.1f} · {uni} 前 {top}%", f"Composite {o.score:.1f} · top {top}% of {uni}")

@@ -30,6 +30,9 @@ CAP_MIN_WEIGHT = 0.15  # 只有综合分里权重不低于它的维度才有否�
 CAP_CEILING = "C+"
 OVERALL_SECTOR = "_all"
 OVERALL_KEY = "_overall"
+# 综合分的比较对象：同阶段公司（权重按阶段调整，不同阶段的综合分尺度不同，混在一起排会让成长股系统性偏高）。
+# 同阶段样本少于 COHORT_MIN 时（初创 / 收缩期等）退回全体分布。
+COHORT_MIN = 30
 
 
 @dataclass
@@ -160,6 +163,19 @@ def min_participating(total: int) -> int:
     return min(total, max(2, math.ceil(total / 3)))
 
 
+def cohort_key(stage_key: str | None) -> tuple[str, str]:
+    """同阶段综合分分布在 Distributions 里的键（无阶段记作 none）。"""
+    return OVERALL_SECTOR, f"{OVERALL_KEY}:{stage_key or 'none'}"
+
+
+def build_cohort_distributions(composites: list[tuple[str | None, float]]) -> Distributions:
+    """(阶段键, 综合分) 列表 → 每个样本数 ≥ COHORT_MIN 的阶段的有序综合分分布。"""
+    groups: dict[str | None, list[float]] = {}
+    for stage_key, score in composites:
+        groups.setdefault(stage_key, []).append(score)
+    return {cohort_key(k): sorted(v) for k, v in groups.items() if len(v) >= COHORT_MIN}
+
+
 def composite(dims: list[DimensionScore], weights: dict[str, float] | None = None) -> float | None:
     """可用维度分的加权平均；weights = 阶段权重（只在可用维度间重新归一），不传则等权。"""
     usable = [d for d in _scored(dims) if d.status == "ok" and d.score is not None]
@@ -186,11 +202,21 @@ def _scored(dims: list[DimensionScore]) -> list[DimensionScore]:
 
 
 def overall(dims: list[DimensionScore], overall_dist: list[float], n_analysts: int,
-            prev_grade: str | None, weights: dict[str, float] | None = None) -> OverallScore:
+            prev_grade: str | None, weights: dict[str, float] | None = None,
+            cohort_dist: list[float] | None = None, cohort: str | None = None) -> OverallScore:
     """综合等级：综合分在全体中的百分位 → 等级；一票否决与分析师不足处理。
 
     weights 不传 = 所有基本面维度都有否决权；传了则只有权重 ≥ CAP_MIN_WEIGHT 的基本面维度能否决（动量 / EPS 修正永远不能）。
+    cohort_dist 给了就用同阶段分布定百分位（结果 extra["cohort"] = 阶段键，文案据此写「同阶段公司」），否则用全体 overall_dist。
     """
+    out = _overall(dims, cohort_dist or overall_dist, n_analysts, prev_grade, weights)
+    if cohort_dist:
+        out.extra["cohort"] = cohort or "none"
+    return out
+
+
+def _overall(dims: list[DimensionScore], overall_dist: list[float], n_analysts: int,
+             prev_grade: str | None, weights: dict[str, float] | None) -> OverallScore:
     score = composite(dims, weights)
     used = sum(d.status == "ok" for d in _scored(dims))
     if score is None:

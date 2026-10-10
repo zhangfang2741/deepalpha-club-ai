@@ -35,7 +35,7 @@ from app.services.quant_research.fmp import FmpClient
 from app.services.quant_research.revisions import EstimatePoint, accumulated_days
 from app.services.quant_research.inputs import StockInputs, build_inputs
 from app.services.quant_research.metrics import MetricValue, compute_metrics
-from app.services.quant_research.scoring import OVERALL_KEY, OVERALL_SECTOR, build_distributions
+from app.services.quant_research.scoring import OVERALL_KEY, OVERALL_SECTOR, build_cohort_distributions, build_distributions
 from app.services.quant_research.universe import fetch_sp1500
 
 MARKET = "us"
@@ -183,11 +183,14 @@ async def score_and_store(market: str, as_of: date, inputs: dict[str, StockInput
                                     for s, inp in inputs.items()}
     overall_dist = sorted(ev.composite for ev in evals.values() if ev.composite is not None)
     dists[(OVERALL_SECTOR, OVERALL_KEY)] = overall_dist
+    cohorts = build_cohort_distributions([(ev.stage.key if ev.stage else None, ev.composite)
+                                          for ev in evals.values() if ev.composite is not None])
+    dists |= cohorts
     samples = sector_sample_sizes(dists)
 
     rows = []
     for sym, ev in evals.items():
-        finalize_overall(ev, overall_dist, prev.get(sym))
+        finalize_overall(ev, overall_dist, prev.get(sym), cohorts)
         n = samples.get(ev.inp.sector_key, 0)
         rows.append({
             "market": market, "symbol": sym, "as_of": as_of, "sector_key": ev.inp.sector_key,

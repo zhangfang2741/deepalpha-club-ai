@@ -121,24 +121,24 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
       f"估值 / 成长 / 盈利能力 / 财务稳健里，综合分权重不低于 {CAP_MIN_WEIGHT:.0%} 的维度为 F 时，综合等级最高为 {CAP_CEILING}"
       f"（权重更低的维度、以及股价类的动量和预期类的 EPS 修正，都没有一票否决权）；"
       f"覆盖的分析师少于 {MIN_ANALYSTS} 位时不给综合等级。"
-      "注意：综合分的权重按公司阶段调整，所以同一板块里各维度的等级可以直接比较，"
-      "而综合等级是「按阶段调整后」的结果，在处于不同阶段的公司之间不直接可比。",
+      "综合分的权重按公司阶段调整，不同阶段的综合分尺度不同，所以综合等级是拿综合分和「同阶段的公司」比出来的百分位"
+      "（该阶段样本不足 30 家时才和全体比）；同一板块里各维度的等级则可以直接比较。",
       f"The composite score is a stage-weighted average of the available dimension scores (weights are listed under "
-      f"Company stage; missing dimensions are re-normalized over the rest); its percentile across the whole S&P 1500 "
+      f"Company stage; missing dimensions are re-normalized over the rest); its percentile among peers in the same stage "
       f"sets the grade on the same scale. If valuation, growth, profitability or financial health carries at least "
       f"{CAP_MIN_WEIGHT:.0%} of the weight and is F, the composite is capped at {CAP_CEILING} (lower-weight "
       f"dimensions, and the price-based momentum and expectation-based EPS revisions, cannot veto); with fewer than "
-      f"{MIN_ANALYSTS} covering analysts there is no composite grade. Note: because the composite weights follow the "
-      "company's stage, dimension grades within a sector compare directly, while the composite grade is stage-adjusted "
-      "and is not directly comparable between companies at different stages.")),
+      f"{MIN_ANALYSTS} covering analysts there is no composite grade. Because the weights follow the "
+      "company's stage, the composite score is ranked against companies in the same stage (against everyone only when "
+      "that stage has fewer than 30 companies); dimension grades within a sector still compare directly.")),
     (("估值指标按阶段取舍", "Valuation metrics by stage"),
      (f"估值维度里的 14 个倍数，不同阶段看的重点不同，但比较对象不变：每个倍数仍然和同板块全体公司比百分位，所以不同公司在同一板块维度下可比。"
-      f"只改各倍数在估值分里的权重，同样按营收增速和经营现金流连续插值、不在门槛处跳变：成熟期保持 14 项等权；{_valuation_weights_zh()}。"
+      f"只改各倍数在估值分里的权重，同样按营收增速和经营现金流连续插值、不在门槛处跳变：成熟期 14 项按信息类别分配、同类不重复计算（盈利倍数、企业价值利润倍数、营收倍数、市现率各约 21%，市净率约 14%）；{_valuation_weights_zh()}。"
       "利润为负的公司，市盈率 / 市现率这类倍数没有意义（会被当成最差），所以初创期干脆不看它们。权重为 0 的倍数仍然展示，只是不参与计算。",
       "The 14 multiples in the valuation dimension carry different weight at different stages, but the comparison group "
       "does not change: each multiple is still ranked against all companies in the same sector, so companies remain "
       "comparable within a sector. Only the weight of each multiple in the valuation score changes, interpolated "
-      "continuously on revenue growth and operating cash flow so nothing jumps at a threshold. Mature keeps all 14 at equal weight; "
+      "continuously on revenue growth and operating cash flow so nothing jumps at a threshold. Mature splits the 14 by information family so the same signal is not counted repeatedly (earnings, EV-to-profit, sales multiples and price-to-cash-flow about 21% each, price-to-book about 14%); "
       f"{_valuation_weights_en()}. Multiples based on profit are meaningless for loss-making companies "
       "(they would be scored as lowest), so the introduction stage skips them. A zero-weight multiple is still shown but not used.")),
     (("财务稳健", "Financial health"),

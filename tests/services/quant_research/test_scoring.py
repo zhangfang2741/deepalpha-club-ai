@@ -223,3 +223,22 @@ def test_score_metric_reports_tie_and_worse_share():
     u = score_metric("pe_ttm", _mv(10), DIST, None)                          # 无并列：tie 只有自己
     assert u.tie_share == 0.01
     assert score_metric("pe_ttm", _mv(None, "not_meaningful"), DIST, None).tie_share is None
+
+
+def test_cohort_distributions_only_for_big_enough_stages():
+    from app.services.quant_research.scoring import COHORT_MIN, build_cohort_distributions, cohort_key
+
+    rows = [("mature", float(i)) for i in range(COHORT_MIN)] + [("intro", 1.0)] * (COHORT_MIN - 1) + [(None, 5.0)] * COHORT_MIN
+    d = build_cohort_distributions(rows)
+    assert set(d) == {cohort_key("mature"), cohort_key(None)}       # 初创期样本不够，不单独成组
+    assert d[cohort_key("mature")] == sorted(d[cohort_key("mature")])
+
+
+def test_overall_uses_cohort_distribution_and_marks_it():
+    dims = [_dim("valuation", 60), _dim("growth", 60), _dim("profitability", 60)]
+    whole = list(range(0, 101, 5))
+    cohort = [float(x) for x in range(40, 61)]          # 这一阶段整体分数更低 → 同样 60 分在组内排位更高
+    a = overall(dims, whole, n_analysts=10, prev_grade=None)
+    b = overall(dims, whole, n_analysts=10, prev_grade=None, cohort_dist=cohort, cohort="mature")
+    assert b.universe_percentile > a.universe_percentile
+    assert b.extra["cohort"] == "mature" and "cohort" not in a.extra
