@@ -160,7 +160,7 @@ struct MarketHeader: View {
     /// 没有行业数据（美股以外建设中 / 自选 / 旧快照 / 加载中）时同一高度显示状态文字，不挤动画布。
     private var sectorRail: some View {
         let rows = sectorRows
-        let canPick = !rows.isEmpty && radarVM.baseSelectedDay?.hasSectorData == true
+        let canPick = !rows.isEmpty && radarVM.baseSelectedDay?.sectorRailReady == true
         return HStack(spacing: 8) {
             if canPick {
                 ScrollViewReader { proxy in

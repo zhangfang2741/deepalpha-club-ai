@@ -291,7 +291,7 @@ final class SignalRadarViewModel: ObservableObject {
 
     /// 选中日需要行业强弱时的「市场|日期」键（这一天有行业统计才要），否则 nil。View 用它驱动取数。
     var sectorBoardKey: String? {
-        guard let day = baseSelectedDay, day.hasSectorData else { return nil }
+        guard let day = baseSelectedDay, day.sectorRailReady else { return nil }
         return "\(market.rawValue)|\(day.date)"
     }
 
