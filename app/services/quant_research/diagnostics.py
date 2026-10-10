@@ -11,6 +11,7 @@
 - ``/diagnostics/whatif``：「综合分和谁比」三种口径的反事实（q10 的论证依据）。
 - ``/diagnostics/netgap``：净利率与 EBIT 利润率的差距分布（一次性收益影响面）。
 - ``/diagnostics/sbcwhatif``：盈利能力里新增「加回股权激励的经营利润率」的反事实（影响面测算，不改评分）。
+- ``/diagnostics/nongaap``：抽样核查 FMP 非 GAAP 实际 EPS 的覆盖率与和 GAAP EPS 的差距（评估是否改用，不改评分）。
 - ``/diagnostics/panorama``：维度相关 / 名义占比 vs 有效影响 / 板块偏差 / 指标体检 / 冗余指标 / 统一尺度反事实 / 各阶段画像。
 """
 
@@ -657,3 +658,46 @@ def sbc_adjust_whatif(rows: list[SbcRow]) -> dict:
         "loss_making_positive_fcf": summarize_group(loss_pos_fcf),
         "adj_vs_ebit_rank_corr": spearman([r.ebit_m for r in usable], adj),           # type: ignore[arg-type]
     }
+
+
+# ---------- 抽样核查：非 GAAP 实际 EPS（FMP 财报日历）的覆盖率与和 GAAP 的差距 ----------
+
+@dataclass(frozen=True)
+class NgRow:
+    sector: str | None
+    stage: str | None
+    gaap_ttm: float | None            # 近 4 个季度摊薄 EPS（GAAP）之和
+    ng_ttm: float | None              # 近 4 个季度实际 EPS（非 GAAP）之和；不足 4 个季度为 None
+    ng_quarters: int                  # 有实际 EPS 的季度数
+
+
+def nongaap_summary(rows: list[NgRow]) -> dict:
+    """覆盖率（≥4 / ≥8 个季度）与口径差距分档（只含聚合，不含个股）。
+
+    gap = |非 GAAP − GAAP| / max(|GAAP|, 0.05)：>25%、>100% 两档；另算「GAAP 亏损而非 GAAP 盈利」。
+    """
+    if len(rows) < MIN_GROUP * 2:
+        return {"note": "样本不足"}
+
+    def part(rs: list[NgRow]) -> dict:
+        cov = [r for r in rs if r.ng_ttm is not None and r.gaap_ttm is not None]
+        out: dict = {"n": len(rs), "coverage_4q": _share(sum(r.ng_quarters >= 4 for r in rs), len(rs)),
+                     "coverage_8q": _share(sum(r.ng_quarters >= 8 for r in rs), len(rs))}
+        if len(cov) < MIN_GROUP:
+            return out | {"note": "可比样本不足"}
+        gaps = [abs(r.ng_ttm - r.gaap_ttm) / max(abs(r.gaap_ttm), 0.05) for r in cov]      # type: ignore[operator]
+        out |= {
+            "compared": len(cov),
+            "gap_gt_25pct": _share(sum(g > 0.25 for g in gaps), len(cov)),
+            "gap_gt_100pct": _share(sum(g > 1.0 for g in gaps), len(cov)),
+            "gaap_loss_nongaap_profit": _share(sum(r.gaap_ttm <= 0 < r.ng_ttm for r in cov), len(cov)),   # type: ignore[operator]
+            "nongaap_lower": _share(sum(r.ng_ttm < r.gaap_ttm for r in cov), len(cov)),                   # type: ignore[operator]
+        }
+        return out
+
+    out = {"n": len(rows), **{k: v for k, v in part(rows).items() if k != "n"}}
+    stages: dict[str, list[NgRow]] = {}
+    for r in rows:
+        stages.setdefault(r.stage or "none", []).append(r)
+    out["by_stage"] = {k: part(v) if len(v) >= MIN_GROUP else {"n": len(v), "note": "样本不足"} for k, v in sorted(stages.items())}
+    return out
