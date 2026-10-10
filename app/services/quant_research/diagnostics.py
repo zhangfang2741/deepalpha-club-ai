@@ -28,6 +28,8 @@ class DiagRow:
     capped: bool
     stage: str | None
     dim_grades: dict[str, str | None]
+    rev_yoy_pct: float | None = None        # 阶段判定用的营收同比（%）
+    rev_cagr3_pct: float | None = None      # 3 年复合（%）
 
 
 def _avg_ranks(xs: list[float]) -> list[float]:
@@ -77,6 +79,7 @@ def summarize(rows: list[DiagRow]) -> dict:
         "stage_counts": dict(Counter(r.stage or "none" for r in rows)),
     }
     out["dimension_grade_share"] = {d: _band_share(rows, d) for d in DIMENSIONS}
+    out["stage_sensitivity"] = stage_sensitivity(rows)
     by_stage: dict[str, dict] = {}
     for stage in sorted({r.stage or "none" for r in graded}):
         g = [r for r in graded if (r.stage or "none") == stage]
@@ -281,3 +284,24 @@ def whatif_cohort(rows: list[DiagRow]) -> dict:
                          "share_f": _share(sum(x == len(GRADE_ORDER) - 1 for x in grades), len(graded))}
     out["overall"] = total
     return out
+
+
+def stage_sensitivity(rows: list[DiagRow]) -> dict:
+    """阶段判定的敏感面（只读已存的营收同比 / 3 年复合，输出为占比）：
+
+    ramp_zone = 同比在 10%~20%（成长门槛 15% 两侧，标签与权重最容易不一致）；
+    extreme_yoy = 同比 > 100% 或 < -50%（多为分拆 / 并购 / 重述造成的序列断点，WDC 一类）；
+    cagr_missing = 没有 3 年复合（上市不足 3 年或历史缺失）；no_yoy = 同比缺失（无法分阶段）。
+    """
+    staged = [r for r in rows if r.stage is not None]
+    if len(staged) < MIN_GROUP:
+        return {"note": "样本不足"}
+    yoy = [r.rev_yoy_pct for r in staged if r.rev_yoy_pct is not None]
+    return {
+        "staged": len(staged),
+        "no_yoy": _share(len(staged) - len(yoy), len(staged)),
+        "ramp_zone_10_20": _share(sum(10.0 <= v <= 20.0 for v in yoy), len(staged)),
+        "extreme_yoy": _share(sum(v > 100.0 or v < -50.0 for v in yoy), len(staged)),
+        "cagr_missing": _share(sum(r.rev_cagr3_pct is None for r in staged), len(staged)),
+        "yoy_percentiles": {f"p{q}": round(sorted(yoy)[min(len(yoy) - 1, int(q / 100 * len(yoy)))], 1) for q in (5, 25, 50, 75, 95)} if yoy else {},
+    }

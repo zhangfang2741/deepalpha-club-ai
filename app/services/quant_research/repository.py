@@ -416,6 +416,10 @@ async def diagnostic_dates(market: str, limit: int = 6) -> list[tuple[date, str 
     return out
 
 
+def _num_or_none(v: object) -> float | None:
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
 async def diagnostic_rows(market: str, as_of: date) -> list:
     """某天全部结果的诊断行：只取等级 / 阶段 / 综合分 / 各维度等级几个 JSON 字段，不拉指标明细。"""
     from app.services.quant_research.diagnostics import DiagRow  # 避免模块级循环依赖
@@ -436,5 +440,7 @@ async def diagnostic_rows(market: str, as_of: date) -> list:
             float(score) if isinstance(score, (int, float)) else None,
             float(pct) if isinstance(pct, (int, float)) else None,
             bool(overall.get("capped")), stage.get("key") if isinstance(stage, dict) else None,
-            {k[2:]: v for k, v in grades.items() if k.startswith("d:")}))
+            {k[2:]: v for k, v in grades.items() if k.startswith("d:")},
+            _num_or_none(stage.get("revenue_growth_pct")) if isinstance(stage, dict) else None,
+            _num_or_none(stage.get("revenue_cagr_3y_pct")) if isinstance(stage, dict) else None))
     return out
