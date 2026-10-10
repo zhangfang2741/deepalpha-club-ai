@@ -504,7 +504,7 @@ deepalpha-club-ai/
 - iOS 图表下方是**指标栏**（`Views/Chart/ChartIndicator.swift`：`ChartIndicator` 枚举 + `IndicatorBar`），点一下开 / 关，选择存本机（只存用户明确选过的，没选过走 `defaultOn`；2026-10-09 起所有指标含均线都默认关）。
   **新增指标**：枚举加 case → 后端加按合并 K 线对齐的字段 → `ChanAnalysis` 加属性 + `IndicatorBar.isAvailable` 写何时有数据 → `ChanChartView` 里按 `vm.isOn(.xxx)` 画 → 词典补条目（中英）。新增指标默认关。
 - **威科夫指标**（指标栏第四个，默认关）：后端 `/chan/analysis` 的 `wyckoff` 字段（`app/services/wyckoff/overlay.py`，复用 `wyckoff/analyzer`，约 2ms，失败不影响主体）——只拿**可见窗口**（`visible_from` 之后）的 K 线分析，事件与交易区间按合并 K 线的 `end_time` 对齐成**下标**（App 直接按下标画，同均线思路）。
-  **点开威科夫（或 SMC）时把缠论图层（分型 / 笔 / 线段 / 中枢 / 买卖点 / 背驰）全部关掉，再点关掉时原样恢复；威科夫与 SMC 同时只开一个**（`ChartIndicator.hidesChanLayers`、`ChanViewModel.toggle` → `syncChanLayers`，开前状态只存内存）。
+  **点开威科夫（或 SMC）时把缠论图层（分型 / 笔 / 线段 / 中枢 / 买卖点 / 背驰）全部关掉，再点关掉时原样恢复；威科夫与 SMC 同时只开一个**（`ChartIndicator.hidesChanLayers`、`ChanViewModel.toggle` → `syncChanLayers`，开前状态只存内存；**重启后威科夫 / SMC 一律回到关、缠论图层回默认**，不跨重启保留它们的开关）。
   图上只画交易区间（浅棕色带 + 上下沿虚线）+ 事件代码标记（SC / Spring / SOS …，点标记弹说明，`ChartElement.wyckoff`），左上角数值行写阶段与区间上下沿；**不带操作建议、不带「买点 / 离场点」措辞**（网页端 `/wyckoff/analysis` 的 recommendation 与事件 description 里有这类词，**不要**搬进 overlay，`test_overlay_has_no_trading_wording` 守护）。
   **滚动识别多段结构**（`overlay.build_overlay`）：威科夫分析一次只认「量比最高的那个高潮」及其区间，视窗里大部分时间什么都没有（BABA 实测只剩 SC、AR）。所以价格收盘离开区间（超出 15% 区间宽度）后，从突破那根起再分析一遍找下一段，最多 `MAX_STRUCTURES`=4 段（接口字段 `ranges` 数组，阶段取最后一段）；一段里认不出结构就往后挪 `SCAN_STEP`=60 根再试；宽度不到支撑价 4%（`MIN_RANGE_WIDTH`，RKLB 实测 2.4%）或不足 `MIN_SPAN`=3 根的不算区间；每段区间与事件只画到突破为止（突破后重复的 SOS / SOW 是趋势里的放量，NVDA 实测 11 个）。
   **日线用固定两年窗口**（`canonical_daily_start`，与缠论同口径），不随用户所选起始日期变短——选了较晚的起点会让威科夫只看到几个月、识别不出结构。

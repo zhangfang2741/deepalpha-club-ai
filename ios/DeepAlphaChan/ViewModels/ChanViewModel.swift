@@ -73,7 +73,13 @@ final class ChanViewModel: ObservableObject {
     @Published var showSignals = true
     @Published var showDivergences = true
     /// 指标栏（均线 / EMA / BOLL，见 ChartIndicator）的开关。存的是用户明确选过的，没选过的走各指标的默认值。
-    @Published private(set) var indicatorChoices: [String: Bool] = ChartIndicatorStore.load()
+    /// 威科夫 / SMC 会收起缠论图层，而「开之前的图层状态」只存内存：这两个的开关不跨重启保留（启动时一律是关），
+    /// 否则重启后会出现「SMC 开着、缠论图层又按默认全显示」叠在一起。均线 / EMA / BOLL 仍按用户存的选择。
+    @Published private(set) var indicatorChoices: [String: Bool] = {
+        var choices = ChartIndicatorStore.load()
+        for i in ChartIndicator.allCases where i.hidesChanLayers { choices[i.rawValue] = nil }
+        return choices
+    }()
     /// 指标参数（「指标设置」面板），请求分析时带上，见 `ChanService.analysis`。
     @Published private(set) var indicatorSettings = IndicatorSettings.load()
 
