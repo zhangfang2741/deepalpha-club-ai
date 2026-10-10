@@ -1803,3 +1803,9 @@
 "越靠中心越近" = "Closer to the centre = more recent";
 "颜色越深=变化越大" = "Darker = bigger change";
 "默认只画综合等级达到门槛的公司，和市场雷达里的基本面名单是同一个门槛：本市场有评级的公司里约前 25%，至少 8 只，不低于 B，整档纳入。点上面的「精选」可以切到全部。" = "By default only companies whose overall grade reaches the threshold are drawn. It is the same threshold as the fundamentals list in the market radar: about the top 25% of rated companies in this market, at least 8, never below B, whole grades included. Tap \"Curated\" above to switch to all.";
+
+/* Radar names */
+"缠论雷达" = "Chan Radar";
+"评级雷达" = "Rating Radar";
+"评级雷达怎么算的" = "How the Rating Radar works";
+"评级雷达数据准备中：上线后的第一次计算约需 1 小时，稍后再来看。" = "Rating Radar data is being prepared: the first calculation after launch takes about an hour. Please check back later.";

@@ -290,7 +290,7 @@ struct SignalRadarView: View {
         trendHeader
         if let trend = vm.trend, trend.market == vm.market.rawValue {
             if trend.asOf == nil {
-                trendMessage(L("基本面动向数据准备中：上线后的第一次计算约需 1 小时，稍后再来看。"))
+                trendMessage(L("评级雷达数据准备中：上线后的第一次计算约需 1 小时，稍后再来看。"))
             } else {
                 trendField(trend)
             }
@@ -339,7 +339,7 @@ struct SignalRadarView: View {
                     .buttonStyle(.plain)
                 }
                 if let trend = vm.trend {
-                    DerivationLink(title: L("基本面动向怎么算的"),
+                    DerivationLink(title: L("评级雷达怎么算的"),
                                    result: TrendDerivations.rules(trend, kind: vm.trendKind, market: vm.market))
                 }
             }
@@ -464,11 +464,11 @@ struct SignalRadarView: View {
     /// 三圈标签：最近 1 周 / 1 月 / 3 月（后端 ring_days 7 / 30 / 90）。
     static var trendRingLabels: [String] { [L("近1周"), L("近1月"), L("近3月")] }
 
-    /// 预期上调蓝、质地改善紫；颜色越深 = 变化越大。depth 是 0~1（变化幅度在当前显示的同类公司里的百分位），
-    /// 连续映射到不透明度：最浅 0.32、最深 0.98，一眼看出谁变化最大。
+    /// 颜色和缠论雷达保持一致（2026-10-10 用户要求）：同一个红（`Theme.up`），颜色越深 = 变化越大；
+    /// 两类动向用上面的分段控件区分，不再各用一个色。depth 是 0~1（变化幅度在当前显示的同类公司里的百分位），
+    /// 连续映射到不透明度：最浅 0.32、最深 0.98。
     static func trendColor(_ kind: QuantTrendKind, depth: Double) -> Color {
-        let base = kind == .estimates ? Theme.trendEstimates : Theme.trendQuality
-        return base.opacity(0.32 + 0.66 * max(0, min(1, depth)))
+        Theme.up.opacity(0.32 + 0.66 * max(0, min(1, depth)))
     }
 
     /// 气泡直径 = 综合等级：A+ 最大，往下每档小一点，D 及以下取最小；没有评级取中间值。
@@ -766,35 +766,20 @@ struct SignalRadarView: View {
         Rectangle().fill(Theme.border).frame(width: 14, height: 1.5).padding(.top, 10)
     }
 
-    /// 标题下拉菜单：在「市场雷达」（缠论买卖点）与「基本面动向」之间切换；最后一项展开 / 收起「怎么读这一页」流程图。
+    /// 标题下拉菜单：在「缠论雷达」（缠论买卖点）与「评级雷达」（预期上调 / 质地改善）之间切换。
     /// 标题文字就是当前所在的雷达，用户一眼知道在哪、点标题就能换。
+    /// （以前菜单里还有一项「这一页怎么读」展开流程图，2026-10-10 起去掉；流程图只在首次进雷达时自动展开一次，新手导览在学习页可重看。）
     private var flowTitle: some View {
         Menu {
             Button { vm.exitTrend() } label: {
-                if vm.trendMode {
-                    Label(L("市场雷达 · 缠论买卖点"), systemImage: "scope")
-                } else {
-                    Label(L("市场雷达 · 缠论买卖点"), systemImage: "checkmark")
-                }
+                Label(L("缠论雷达"), systemImage: vm.trendMode ? "scope" : "checkmark")
             }
             Button { vm.enterTrend() } label: {
-                if vm.trendMode {
-                    Label(L("基本面动向 · 预期与财报变化"), systemImage: "checkmark")
-                } else {
-                    Label(L("基本面动向 · 预期与财报变化"), systemImage: "chart.line.uptrend.xyaxis")
-                }
-            }
-            if !vm.trendMode {
-                Divider()
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { showFlow.toggle() }
-                } label: {
-                    Label(showFlow ? L("收起流程图") : L("这一页怎么读"), systemImage: "list.number")
-                }
+                Label(L("评级雷达"), systemImage: vm.trendMode ? "checkmark" : "chart.line.uptrend.xyaxis")
             }
         } label: {
             HStack(spacing: 6) {
-                Text(vm.trendMode ? L("基本面动向") : L("市场雷达"))
+                Text(vm.trendMode ? L("评级雷达") : L("缠论雷达"))
                     .font(.headline).foregroundColor(Theme.textPrimary)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .bold))

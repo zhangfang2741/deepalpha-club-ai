@@ -95,3 +95,22 @@ def test_good_items_are_kept_first_when_over_the_limit(monkeypatch):
     out = build_trend_radar(rows, market="us", as_of=AS_OF)
     est = [i for i in out.items if i.kind == "estimates"]
     assert sum(i.good for i in est) == 2 and sum(not i.good for i in est) == 2    # 达标 ≤ 2、其余 ≤ 2，互不挤占
+
+
+def test_filter_rows_keeps_only_pool_members():
+    from app.services.quant_research.trend_radar import filter_rows
+
+    rows = [{"symbol": "AAA"}, {"symbol": "BBB"}, {"symbol": "CCC"}]
+    assert [r["symbol"] for r in filter_rows(rows, {"AAA", "CCC"})] == ["AAA", "CCC"]
+    assert filter_rows(rows, None) == rows                    # 不限股票池：原样
+    assert filter_rows(rows, set()) == []                      # 空池（自选里没有该市场的股票）：什么也不留
+
+
+def test_good_cutoff_is_computed_inside_the_pool():
+    """门槛按股票池自适应：同样是 B，放在 8 只全是 B 的小池子里仍然达标（门槛不会被全市场的分布拉高）。"""
+    from app.services.quant_research.trend_radar import filter_rows
+
+    market = _pool(["G1"]) + [_est_row(f"S{k}", "B", eps_rev_7d=0.05) for k in range(8)]
+    small = filter_rows(market, {f"S{k}" for k in range(8)})
+    out = build_trend_radar(small, market="us", as_of=AS_OF)
+    assert out.good_grade == "B" and all(i.good for i in out.items)

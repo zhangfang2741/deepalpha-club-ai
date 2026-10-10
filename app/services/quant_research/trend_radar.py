@@ -118,27 +118,40 @@ def build_trend_radar(rows: list[dict], *, market: str, as_of: date | None,
                 "estimates_good": sum(i.good for i in est), "quality_good": sum(i.good for i in qual)})
 
 
-def _cache_key(market: str, as_of: str, lang: str) -> str:
-    return f"quant:{market}:trend_radar:v2:{METHODOLOGY_VERSION}:{as_of}:{lang}"
+def filter_rows(rows: list[dict], members: set[str] | None) -> list[dict]:
+    """只留股票池里的公司；members 为 None 表示不限（全市场），空集合表示池子是空的。"""
+    return rows if members is None else [r for r in rows if r["symbol"] in members]
 
 
-async def get_trend_radar(market: str, lang: Lang, *, redis: Redis | None) -> TrendRadarOut:
-    """最近一天的动向雷达；整份结果按（方法版本, 批量日期, 语言）缓存 6 小时，新一天批量后自动换键。"""
+def _cache_key(market: str, as_of: str, lang: str, scope: str = "all") -> str:
+    return f"quant:{market}:trend_radar:v3:{METHODOLOGY_VERSION}:{scope}:{as_of}:{lang}"
+
+
+async def get_trend_radar(market: str, lang: Lang, *, redis: Redis | None, members: set[str] | None = None,
+                          scope: str = "all", cacheable: bool = True) -> TrendRadarOut:
+    """最近一天的动向雷达；整份结果按（方法版本, 股票池, 批量日期, 语言）缓存 6 小时，新一天批量后自动换键。
+
+    members / scope：只看某个指数（或自选）的成分股，和信号雷达选的指数一致；「好股票」门槛也按这个池子重新算
+    （与雷达「基本面名单」同一口径）。members 为 None 是全市场。自选因人而异，传 cacheable=False 不缓存。
+    """
     latest: str | None = None
+    use_cache = redis is not None and cacheable
     if redis is not None:
         try:
             raw = await redis.get(latest_key(market))
             latest = (raw.decode() if isinstance(raw, bytes) else raw) or None
-            if latest and (cached := await get_json(redis, _cache_key(market, latest, lang))):
+            if use_cache and latest and (cached := await get_json(redis, _cache_key(market, latest, lang, scope))):
                 return TrendRadarOut(**cached)
         except Exception as e:  # noqa: BLE001 缓存不可用退回查库
             logger.warning("quant_trend_radar_cache_read_failed", market=market, error=str(e))
     day, rows = await repo.trend_radar_rows(market, lang, as_of=date.fromisoformat(latest) if latest else None)
+    rows = filter_rows(rows, members)
     tags = await load_sector_tags(market, redis) if rows else {}
     out = build_trend_radar(rows, market=market, as_of=day, tags=tags)
-    if redis is not None and day is not None and rows:
+    if use_cache and redis is not None and day is not None and rows:
         try:
-            await set_json(redis, _cache_key(market, day.isoformat(), lang), out.model_dump(mode="json"), expire=CACHE_TTL)
+            await set_json(redis, _cache_key(market, day.isoformat(), lang, scope), out.model_dump(mode="json"),
+                           expire=CACHE_TTL)
         except Exception as e:  # noqa: BLE001
             logger.warning("quant_trend_radar_cache_write_failed", market=market, error=str(e))
     return out

@@ -50,7 +50,7 @@ struct MarketHeader: View {
                     Menu {
                         ForEach(radarVM.universes) { u in
                             Button { radarVM.switchUniverse(u.key) } label: {
-                                if u.key == radarVM.activeUniverseKey && !radarVM.trendMode {
+                                if u.key == radarVM.activeUniverseKey {
                                     Label(u.displayName, systemImage: "checkmark")
                                 } else {
                                     Text(u.displayName)
