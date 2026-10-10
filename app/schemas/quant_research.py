@@ -340,3 +340,9 @@ class TrendRadarOut(BaseModel):
     items: list[TrendRadarItem]
     counts: dict[str, int]             # estimates / quality 各多少；estimates_good / quality_good 是其中达标的
     good_grade: str | None = None      # 「好股票」门槛等级（含）：综合等级不低于它算 good；没有评级时为 None
+
+
+class AnalystRadarOut(TrendRadarOut):
+    """评级雷达（分析师评级）：形状同基本面雷达，另带还在补的只数与是否支持该市场。"""
+    pending_symbols: int = 0           # 券商评级变动还没缓存好、后台在补的只数；App 在 > 0 时隔一会儿再取
+    supported: bool = True             # 只有美股有按日的券商评级变动
