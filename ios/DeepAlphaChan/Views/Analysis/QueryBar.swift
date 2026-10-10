@@ -190,13 +190,14 @@ struct QueryBar: View {
                 Button { pick(hit) } label: {
                     HStack {
                         // 单行 + 末尾截断：美股的英文全名很长（ETF 名字能到两行），不截断会把一行撑得很高
-                        Text(hit.name).foregroundColor(Theme.textPrimary).lineLimit(1).truncationMode(.tail)
+                        // 字号比输入框（默认 17pt）小一档：联想是辅助，不该比输入框还抢眼
+                        Text(hit.name).font(.system(size: 14)).foregroundColor(Theme.textPrimary).lineLimit(1).truncationMode(.tail)
                         Spacer(minLength: 8)
-                        Text(hit.symbol).font(.footnote.monospacedDigit()).foregroundColor(Theme.textSecondary)
+                        Text(hit.symbol).font(.system(size: 12).monospacedDigit()).foregroundColor(Theme.textSecondary)
                             .lineLimit(1).fixedSize()
                     }
-                    .padding(.horizontal, 12)
-                    .frame(minHeight: 44)
+                    .padding(.horizontal, 10)
+                    .frame(minHeight: 38)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
