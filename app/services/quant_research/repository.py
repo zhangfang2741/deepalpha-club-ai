@@ -566,3 +566,44 @@ async def symbol_sample(market: str, as_of: date, n: int) -> list[tuple[str, str
         return []
     step = max(1, len(rows) // n)
     return [(sym, sector, stage.get("key") if isinstance(stage, dict) else None) for sym, sector, stage in rows[::step][:n]]
+
+
+async def nongaap_whatif_rows(market: str, as_of: date, page: int = 100, pause: float = 0.25) -> list[dict]:
+    """非 GAAP 反事实用的行：代码（仅用于取数，不进响应）、板块、阶段、综合分、估值 / 成长两维的指标百分位与权重、GAAP 市盈率是否有意义。"""
+    import asyncio
+
+    from app.services.quant_research.diagnostics import DimRec  # 避免模块级循环依赖
+
+    def num(v: object) -> float | None:
+        return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+    out: list[dict] = []
+    offset = 0
+    while True:
+        q = (select(col(QuantResult.symbol), col(QuantResult.sector_key), col(QuantResult.payload_zh)["overall"],
+                    col(QuantResult.payload_zh)["stage"], col(QuantResult.payload_zh)["dimensions"])
+             .where(col(QuantResult.market) == market, col(QuantResult.as_of) == as_of)
+             .order_by(col(QuantResult.symbol)).limit(page).offset(offset))
+        async with AsyncSessionFactory() as s:
+            rows = (await s.execute(q)).all()
+        if not rows:
+            return out
+        for symbol, sector, overall, stage, dims in rows:
+            dd: dict = {}
+            pe_ok = False
+            for d in dims if isinstance(dims, list) else []:
+                if not isinstance(d, dict) or d.get("key") not in ("valuation", "growth"):
+                    continue
+                ms = []
+                for g in d.get("groups", []):
+                    for m in g.get("metrics", []):
+                        if m.get("key"):
+                            ms.append((m["key"], num(m.get("percentile")), float(m.get("weight", 1.0))))
+                            if m["key"] == "pe_ttm":
+                                pe_ok = m.get("status") == "ok"
+                wp = d.get("weight_pct")
+                dd[d["key"]] = DimRec(int(wp) if isinstance(wp, int) else None, num(d.get("score")), tuple(ms))
+            out.append({"symbol": symbol, "sector": sector, "stage": stage.get("key") if isinstance(stage, dict) else None,
+                        "score": num((overall if isinstance(overall, dict) else {}).get("score")), "dims": dd, "pe_ok": pe_ok})
+        offset += page
+        await asyncio.sleep(pause)

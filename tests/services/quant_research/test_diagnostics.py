@@ -224,3 +224,33 @@ def test_nongaap_summary_buckets_and_suppression():
     assert out["by_stage"]["growth"]["gaap_loss_nongaap_profit"] == 1.0
     assert "symbol" not in str(out)
     assert nongaap_summary(rows[:5])["note"] == "样本不足"
+
+
+def _ng_row(sector, stage, score, pe_pct, g_pct, price, ng, ng_prior):
+    from app.services.quant_research.diagnostics import DimRec, NgFull
+
+    val = DimRec(15, 40.0, (("pe_ttm", pe_pct, 1.0), ("ps_ttm", 40.0, 1.0)))
+    gro = DimRec(30, 70.0, (("eps_yoy", g_pct, 1.0), ("rev_yoy", 70.0, 1.0)))
+    return NgFull(sector, stage, score, {"valuation": val, "growth": gro}, pe_pct is not None, price, ng, ng_prior)
+
+
+def test_nongaap_whatif_lifts_gaap_loss_makers_and_reports_groups():
+    from app.services.quant_research.diagnostics import nongaap_whatif
+
+    rows = []
+    for i in range(20):   # GAAP 亏损（原 pe 缺失、增速缺失）但非 GAAP 盈利且增长 → 估值与成长新增参与项
+        rows.append(_ng_row("tech", "growth", 50.0 + i * 0.1, None, None, 100.0, 4.0 + i * 0.1, 3.0))
+    for i in range(20):   # 两口径基本一致
+        rows.append(_ng_row("tech", "growth", 51.0 + i * 0.1, 50.0, 50.0, 100.0, 5.0 + i * 0.05, 4.5))
+    out = nongaap_whatif(rows)
+    assert out["n"] == 40
+    assert out["by_group"]["gaap_loss"]["n"] == 20
+    assert out["by_group"]["gaap_profit"]["n"] == 20
+    assert out["overall"]["rank_corr"] is not None
+    assert "symbol" not in str(out)
+
+
+def test_nongaap_whatif_small_sample():
+    from app.services.quant_research.diagnostics import nongaap_whatif
+
+    assert nongaap_whatif([])["note"] == "样本不足"

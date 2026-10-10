@@ -12,6 +12,7 @@
 - ``/diagnostics/netgap``：净利率与 EBIT 利润率的差距分布（一次性收益影响面）。
 - ``/diagnostics/sbcwhatif``：盈利能力里新增「加回股权激励的经营利润率」的反事实（影响面测算，不改评分）。
 - ``/diagnostics/nongaap``：抽样核查 FMP 非 GAAP 实际 EPS 的覆盖率与和 GAAP EPS 的差距（评估是否改用，不改评分）。
+- ``/diagnostics/nongaap-whatif``：全体美股改用非 GAAP EPS（市盈率 / EPS 同比 / PEG）的等级反事实（后台任务，不改评分）。
 - ``/diagnostics/panorama``：维度相关 / 名义占比 vs 有效影响 / 板块偏差 / 指标体检 / 冗余指标 / 统一尺度反事实 / 各阶段画像。
 """
 
@@ -701,3 +702,141 @@ def nongaap_summary(rows: list[NgRow]) -> dict:
         stages.setdefault(r.stage or "none", []).append(r)
     out["by_stage"] = {k: part(v) if len(v) >= MIN_GROUP else {"n": len(v), "note": "样本不足"} for k, v in sorted(stages.items())}
     return out
+
+
+# ---------- 反事实：美股 EPS 类指标改用非 GAAP 实际 EPS ----------
+
+@dataclass(frozen=True)
+class DimRec:
+    weight_pct: int | None                                      # 这一维在综合分里的占比 %
+    score: float | None
+    metrics: tuple[tuple[str, float | None, float], ...]       # (指标键, 板块内百分位, 生效权重)
+
+
+@dataclass(frozen=True)
+class NgFull:
+    sector: str | None
+    stage: str | None
+    overall_score: float | None
+    dims: dict[str, DimRec]
+    pe_gaap_ok: bool                  # 原来 GAAP 市盈率有意义（GAAP EPS > 0）
+    price: float | None
+    ng_ttm: float | None              # 近 4 个季度非 GAAP 实际 EPS 之和
+    ng_prior: float | None            # 再往前 4 个季度之和
+
+
+def _dim_score(metrics: list[tuple[str, float | None, float]]) -> float | None:
+    from app.services.quant_research.scoring import REDUNDANT_PAIRS
+
+    w = {k: wt for k, p, wt in metrics if p is not None and wt > 0}
+    pct = {k: p for k, p, _ in metrics if p is not None}
+    for a, b in REDUNDANT_PAIRS:
+        if a in w and b in w:
+            w[a] *= 0.5
+            w[b] *= 0.5
+    total = sum(w.values())
+    return sum(pct[k] * wt for k, wt in w.items()) / total if total > 0 else None
+
+
+def nongaap_whatif(rows: list[NgFull]) -> dict:
+    """反事实：把过去 12 个月市盈率 / PEG / EPS 同比换成非 GAAP 实际 EPS 口径（板块内百分位重算），估计综合等级的变化。
+
+    近似：只重算估值与成长两维分（按各指标生效权重加权），综合分改变量 ≈ 各维占比 × 维度分改变量；
+    综合排位在同阶段（成长 / 成熟 / 无阶段且样本 ≥ 30）或全体里重排。不含防抖、一票否决、维度百分位重标。
+    比较用「重建的旧维度分 vs 重建的新维度分」，避免重建误差；输出只含聚合。
+    """
+    from app.services.quant_research.grading import GRADE_ORDER, grade_for, percentile_of
+
+    usable = [r for r in rows if r.overall_score is not None and r.price and r.ng_ttm is not None]
+    if len(usable) < MIN_GROUP * 3:
+        return {"note": "样本不足"}
+
+    new_pe: list[float | None] = []
+    new_g: list[float | None] = []
+    new_peg: list[float | None] = []
+    for r in usable:
+        pe = r.price / r.ng_ttm if r.ng_ttm > 0 else None                    # type: ignore[operator]
+        g = (r.ng_ttm / r.ng_prior - 1) if (r.ng_prior is not None and r.ng_prior > 0) else None   # type: ignore[operator]
+        new_pe.append(pe)
+        new_g.append(g)
+        new_peg.append(pe / (g * 100) if pe is not None and g is not None and g > 0 else None)
+
+    def dist(vals: list[float | None], sector: str | None) -> list[float]:
+        return sorted(v for v, r in zip(vals, usable, strict=True) if v is not None and r.sector == sector)
+
+    new_pcts: dict[str, list[float | None]] = {"pe_ttm": [], "eps_yoy": [], "peg_ttm": []}
+    for (key, vals, lower) in (("pe_ttm", new_pe, True), ("eps_yoy", new_g, False), ("peg_ttm", new_peg, True)):
+        cache: dict[str | None, list[float]] = {}
+        for v, r in zip(vals, usable, strict=True):
+            d = cache.setdefault(r.sector, dist(vals, r.sector))
+            new_pcts[key].append(percentile_of(v, d, lower_better=lower) if (v is not None and len(d) >= MIN_GROUP) else None)
+
+    olds: list[float] = []
+    news: list[float] = []
+    recon_err: list[float] = []
+    val_delta: list[float] = []
+    gro_delta: list[float] = []
+    for i, r in enumerate(usable):
+        delta = 0.0
+        for dim, keys in (("valuation", ("pe_ttm", "peg_ttm")), ("growth", ("eps_yoy",))):
+            rec = r.dims.get(dim)
+            if rec is None or rec.weight_pct is None:
+                continue
+            old_m = list(rec.metrics)
+            new_m = [(k, new_pcts[k][i] if k in keys else p, wt) for k, p, wt in old_m]
+            so, sn = _dim_score(old_m), _dim_score(new_m)
+            if so is None or sn is None:
+                continue
+            if rec.score is not None:
+                recon_err.append(abs(so - rec.score))
+            d = (sn - so) * rec.weight_pct / 100
+            delta += d
+            (val_delta if dim == "valuation" else gro_delta).append(sn - so)
+        olds.append(float(r.overall_score))                                      # type: ignore[arg-type]
+        news.append(float(r.overall_score) + delta)                              # type: ignore[arg-type]
+
+    stages = [r.stage or "none" for r in usable]
+    groups: dict[str, list[int]] = {}
+    for i, st in enumerate(stages):
+        groups.setdefault(st, []).append(i)
+    cohort_stages = {st for st in ("growth", "mature", "none") if len(groups.get(st, [])) >= 30}
+
+    def ranks(vals: list[float]) -> list[float]:
+        allv = sorted(vals)
+        out = []
+        for i, v in enumerate(vals):
+            pool = sorted(vals[j] for j in groups[stages[i]]) if stages[i] in cohort_stages else allv
+            out.append(percentile_of(v, pool, lower_better=False))
+        return out
+
+    p_old, p_new = ranks(olds), ranks(news)
+    g_old = [GRADE_ORDER.index(grade_for(p)) for p in p_old]
+    g_new = [GRADE_ORDER.index(grade_for(p)) for p in p_new]
+
+    def summarize_group(idx: list[int]) -> dict:
+        if len(idx) < MIN_GROUP:
+            return {"n": len(idx), "note": "样本不足"}
+        d = [g_old[i] - g_new[i] for i in idx]                                   # 正 = 等级上升
+        return {"n": len(idx), "mean_pct_change": round(statistics.mean(p_new[i] - p_old[i] for i in idx), 1),
+                "unchanged_share": _share(sum(x == 0 for x in d), len(idx)),
+                "up_share": _share(sum(x > 0 for x in d), len(idx)), "down_share": _share(sum(x < 0 for x in d), len(idx)),
+                "up_3plus_share": _share(sum(x >= 3 for x in d), len(idx)),
+                "down_3plus_share": _share(sum(x <= -3 for x in d), len(idx)),
+                "mean_old_pct": round(statistics.mean(p_old[i] for i in idx), 1)}
+
+    loss = [i for i, r in enumerate(usable) if not r.pe_gaap_ok]
+    profit = [i for i, r in enumerate(usable) if r.pe_gaap_ok]
+    n = len(usable)
+    return {
+        "n": n,
+        "overall": {"rank_corr": spearman(p_old, p_new),
+                    "unchanged_share": _share(sum(a == b for a, b in zip(g_old, g_new, strict=True)), n),
+                    "up_3plus_share": _share(sum(a - b >= 3 for a, b in zip(g_old, g_new, strict=True)), n),
+                    "down_3plus_share": _share(sum(b - a >= 3 for a, b in zip(g_old, g_new, strict=True)), n)},
+        "by_group": {"gaap_loss": summarize_group(loss), "gaap_profit": summarize_group(profit)},
+        "by_stage": {st: summarize_group(idx) for st, idx in sorted(groups.items())},
+        "dimension_score_change": {
+            "valuation_mean": round(statistics.mean(val_delta), 2) if val_delta else None,
+            "growth_mean": round(statistics.mean(gro_delta), 2) if gro_delta else None},
+        "recon_mean_abs_error": round(statistics.mean(recon_err), 2) if recon_err else None,
+    }
