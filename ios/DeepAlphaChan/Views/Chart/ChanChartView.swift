@@ -590,7 +590,7 @@ struct ChanChartView: View {
         guard let w = analysis.wyckoff else { return }
         var clipped = ctx
         clipped.clip(to: Path(CGRect(x: 0, y: 0, width: plotWidth, height: height)))
-        if let r = w.tradingRange {
+        for r in w.ranges {
             let x0 = x(for: r.startIdx, range: range)
             let x1 = x(for: r.endIdx, range: range)
             let top = y(for: r.resistance, height: height, bounds: bounds)
@@ -1544,7 +1544,7 @@ struct ChanChartView: View {
             // 阶段 + 交易区间上下沿；结构不明时只写「结构不明」，图上也不画东西
             var items: [(String, Color)] = [(L("威科夫"), Theme.wyckoff),
                                             (w.stageName + (w.phase.isEmpty ? "" : " · " + L("%@ 阶段", w.phase)), Theme.wyckoff)]
-            if let r = w.tradingRange { items.append((String(format: "%.2f–%.2f", r.support, r.resistance), Theme.wyckoff)) }
+            if let r = w.ranges.last { items.append((String(format: "%.2f–%.2f", r.support, r.resistance), Theme.wyckoff)) }
             rows.append((L("威科夫"), Theme.wyckoff, items))
         }
         if vm.isOn(.boll), let b = analysis.boll {

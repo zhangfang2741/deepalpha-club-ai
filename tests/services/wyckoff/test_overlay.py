@@ -12,7 +12,7 @@ def _times(bars: list[dict]) -> list[str]:
 def test_overlay_aligns_events_and_range_to_candle_index():
     bars = _make_accumulation_bars()
     o = build_overlay("TEST", bars, _times(bars))
-    assert o is not None and o.trading_range is not None
+    assert o is not None and o.ranges
     assert o.stage == "markup" or o.context == "accumulation"
     codes = {e.code for e in o.events}
     assert {"SC", "AR"} <= codes
@@ -20,7 +20,8 @@ def test_overlay_aligns_events_and_range_to_candle_index():
         # 合并 K 线与原始 K 线一一对应时，下标就是原始下标
         assert bars[e.idx]["time"] == e.time
         assert e.side in ("high", "low")
-    assert o.trading_range.start_idx <= o.trading_range.end_idx <= len(bars) - 1
+    r0 = o.ranges[0]
+    assert r0.start_idx <= r0.end_idx <= len(bars) - 1
     sc = next(e for e in o.events if e.code == "SC")
     assert sc.side == "low"
 
@@ -64,8 +65,8 @@ def test_overlay_range_and_events_stop_at_breakout():
     """价格收盘离开区间后，区间带与事件都只到突破那根（之后的放量是趋势，不是区间结构）。"""
     bars = _make_accumulation_bars()
     o = build_overlay("TEST", bars, _times(bars))
-    assert o is not None and o.trading_range is not None
-    r = o.trading_range
+    assert o is not None and o.ranges
+    r = o.ranges[0]
     # 夹具末尾是连续放量上冲出区间：区间不该一直画到最后一根
     assert o.breakout == "up"
     assert r.end_idx < len(bars) - 1
@@ -91,5 +92,20 @@ def test_overlay_degenerate_range_is_undetermined():
     finally:
         mod.MIN_RANGE_WIDTH = old
     assert o is not None
-    assert o.trading_range is None and o.events == []
+    assert o.ranges == [] and o.events == []
     assert o.stage == "undetermined" and o.context == "undetermined"
+
+
+def test_overlay_rolls_to_next_structure_after_breakout():
+    """价格离开区间后从突破处再识别一段：两段走势 → 两段区间，按时间先后、不重叠。"""
+    first = _make_accumulation_bars()
+    second = [dict(b, time=b["time"].replace("2024-01", "2024-02")) for b in first]
+    bars = first + second
+    o = build_overlay("TEST", bars, _times(bars))
+    assert o is not None
+    assert len(o.ranges) >= 2
+    for a, b in zip(o.ranges, o.ranges[1:]):
+        assert a.start_idx < b.start_idx and a.end_idx <= b.end_idx
+    # 事件都落在某一段区间的时间范围内（突破之后不再标）
+    for e in o.events:
+        assert any(r.start_idx - 8 <= e.idx <= r.end_idx for r in o.ranges), e

@@ -134,7 +134,7 @@ class WyckoffOverlayOut(BaseModel):
     phase: str
     phase_label: str
     breakout: Literal["up", "down", "none"]
-    trading_range: Optional[WyckoffRangeOut] = None
+    ranges: list[WyckoffRangeOut] = []  # 按时间先后；阶段取最后一段
     events: list[WyckoffEventMarkOut] = []
 
 

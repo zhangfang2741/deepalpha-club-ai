@@ -210,12 +210,12 @@ struct WyckoffOverlay: Codable {
     let stage: String
     let phase: String
     let breakout: String
-    let tradingRange: WyckoffRange?
+    /// 识别到的交易区间（按时间先后，最多 4 段）；阶段（stage / phase）是最后一段的。
+    let ranges: [WyckoffRange]
     let events: [WyckoffEventMark]
 
     enum CodingKeys: String, CodingKey {
-        case context, stage, phase, breakout, events
-        case tradingRange = "trading_range"
+        case context, stage, phase, breakout, ranges, events
     }
 
     /// 阶段名（界面文案；后端的 stage_label 中英混写，不直接用）。
