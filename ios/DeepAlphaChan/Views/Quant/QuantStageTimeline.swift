@@ -6,6 +6,8 @@ struct QuantStageTimeline: View {
     var isStatic = false
     @State private var selectedStage: QuantLifecycleStage?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// 在全屏分析页里时显式带进弹层：排名里点公司原地换股票，不再叠一层全屏页
+    @Environment(\.openStockAnalysis) private var openStockAnalysis
 
     private var current: QuantLifecycleStage? {
         research.stage.flatMap { QuantLifecycleStage(rawValue: $0.key) }
@@ -46,6 +48,7 @@ struct QuantStageTimeline: View {
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
         .sheet(item: $selectedStage) { stage in
             QuantStageSheet(selected: stage, research: research)
+                .environment(\.openStockAnalysis, openStockAnalysis)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }

@@ -10,6 +10,9 @@ struct QuantStageRankingSection: View {
     @State private var ranking: QuantStageRanking?
     @State private var failed = false
     @State private var opening: StockAnalysisCover.Target?
+    /// 已经在全屏分析页里时由它提供：原地换股票，不再叠一层（见 `StockAnalysisCover`）
+    @Environment(\.openStockAnalysis) private var openInPlace
+    @Environment(\.dismiss) private var dismissSheet
 
     /// 本股属于这个阶段时才传本股信息（别的阶段只看排名，不算本股位置）
     private var isCurrent: Bool { research.stage?.key == selected.rawValue }
@@ -80,8 +83,13 @@ struct QuantStageRankingSection: View {
                        highlight: highlight, approximate: approximate, tappable: false)
         } else {
             Button {
-                if let market = StockMarket(rawValue: research.market) {
-                    opening = .init(market: market, symbol: symbol, name: name)
+                guard let market = StockMarket(rawValue: research.market) else { return }
+                let target = StockAnalysisCover.Target(market: market, symbol: symbol, name: name)
+                if let openInPlace {
+                    dismissSheet()          // 先收起企业阶段弹层，再把全屏页换成这只股票
+                    openInPlace(target)
+                } else {
+                    opening = target
                 }
             } label: {
                 rowContent(rank: rank, symbol: symbol, name: name, grade: grade, score: score,
