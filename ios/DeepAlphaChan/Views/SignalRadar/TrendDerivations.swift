@@ -54,28 +54,24 @@ enum TrendDerivations {
                 means: L("和同类公司比，这家公司的综合表现在变好（红）或变差（绿）。"),
                 notMeans: L("不代表股价会涨跌：等级是和同行比出来的相对位置，只反映已披露的财务与预期。"),
                 terms: ["综合等级"])
-        case .analystUp, .analystDown:
-            let down = kind.isDown
+        case .analyst:
             let steps: [DerivationStep] = [
                 DerivationStep(title: L("看什么"),
                                text: L("各家券商对这只股票的评级动作：上调（比如从持有升到买入）和下调（反过来）。同一家券商在窗口内多次调整只算一次，取最新的一次。")),
                 DerivationStep(title: L("什么算净上调 / 净下调"),
-                               text: L("窗口内上调的家数减去下调的家数，大于 0 是净上调，小于 0 是净下调；一样多不画。"),
+                               text: L("窗口内上调的家数减去下调的家数，大于 0 是净上调（红），小于 0 是净下调（绿）；一样多不画。"),
                                values: [(L("至少净差几家"), "\(Int(th["analyst_min_net"] ?? 1))")]),
                 DerivationStep(title: L("放哪一圈"),
-                               text: L("近 1 周就已经净上调（净下调）的放最内圈，否则看近 1 个月，再否则近 3 个月。同一只股票上调和下调都有时，两边的列表里各出现一次。")),
+                               text: L("近 1 周就已经净上调（净下调）的放最内圈，否则看近 1 个月，再否则近 3 个月。同一只股票上调和下调都有时，会画两个气泡。")),
                 DerivationStep(title: L("颜色深浅"),
-                               text: down ? L("净下调的家数越多颜色越深；家数一样时，越近的略深。")
-                                          : L("净上调的家数越多颜色越深；家数一样时，越近的略深。")),
+                               text: L("净变动的家数越多颜色越深；家数一样时，越近的略深。")),
             ]
             return DerivationResult(
-                conclusion: down ? L("评级下调：近期有券商把这只股票的评级调低。")
-                                 : L("评级上调：近期有券商把这只股票的评级调高。"),
-                steps: steps + visualSteps(t, down: down),
+                conclusion: L("评级变动：近期有券商调高（红）或调低（绿）了这只股票的评级。"),
+                steps: steps + visualSteps(t, down: nil),
                 caveat: L("目前只有美股有券商评级变动数据；券商的评级动作有时滞后于股价，也可能只是重申。"),
-                means: down ? L("更多专业机构对这只股票的看法在变谨慎。") : L("更多专业机构对这只股票的看法在变乐观。"),
-                notMeans: down ? L("不代表股价会跌：券商评级常常滞后于股价，也不总是对的。")
-                               : L("不代表股价会涨：券商评级常常滞后于股价，也不总是对的。"),
+                means: L("更多专业机构对这只股票的看法在变乐观（红）或变谨慎（绿）。"),
+                notMeans: L("不代表股价会涨跌：券商评级常常滞后于股价，也不总是对的。"),
                 terms: ["分析师评级"])
         }
     }
@@ -105,8 +101,7 @@ enum TrendDerivations {
                 : L("最近没有达到门槛的预期变化")
         case .rating:
             return L("最近 3 个月没有综合等级变化的公司。评级方法升级后要重新攒几天历史，刚升级时这里会是空的。")
-        case .analystUp: return L("最近 3 个月这个股票池里没有被券商净上调评级的股票")
-        case .analystDown: return L("最近 3 个月这个股票池里没有被券商净下调评级的股票")
+        case .analyst: return L("最近 3 个月这个股票池里没有被券商净上调或净下调评级的股票")
         }
     }
 

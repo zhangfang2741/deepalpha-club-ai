@@ -358,8 +358,22 @@ struct SignalRadarView: View {
         }
     }
 
-    /// 动向类别下拉框（基本面雷达：预期上调 / 预期下调 / 等级上升 / 等级下降；评级雷达：评级上调 / 评级下调），放在雷达画布左上角；选项后面的数字是当前「精选 / 行业」筛选下的个数。
+    /// 动向类别下拉框（基本面雷达：预期上调 / 预期下调 / 等级上升 / 等级下降；评级雷达：评级变动），放在雷达画布左上角；选项后面的数字是当前「精选 / 行业」筛选下的个数。
+    @ViewBuilder
     private var trendKindMenu: some View {
+        if QuantTrendKind.kinds(for: vm.trendFlavor).count <= 1 {
+            // 只有一类（评级雷达的「评级变动」）：不用下拉，只显示名称和个数
+            Text(trendKindTitle(vm.trendKind)).font(.system(size: 12, weight: .semibold))
+                .foregroundColor(Theme.textPrimary)
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(Theme.surface.opacity(0.92), in: Capsule())
+                .overlay(Capsule().stroke(Theme.border, lineWidth: 1))
+        } else {
+            trendKindDropdown
+        }
+    }
+
+    private var trendKindDropdown: some View {
         Menu {
             ForEach(QuantTrendKind.kinds(for: vm.trendFlavor)) { k in
                 Button { vm.trendKind = k } label: {
@@ -487,7 +501,7 @@ struct SignalRadarView: View {
         HStack(spacing: 12) {
             // 颜色深浅 = 变化幅度：浅 → 深用同一色相渐变条表示；合并类（预期 / 等级变化）红绿各一条
             HStack(spacing: 5) {
-                trendGradientBar(down: vm.trendKind.isDown)
+                trendGradientBar(down: false)
                 if vm.trendKind.rawKinds.count > 1 { trendGradientBar(down: true) }
                 Text(vm.trendKind.rawKinds.count > 1 ? L("红=向好 绿=向差，越深变化越大") : L("颜色越深=变化越大"))
                     .font(.system(size: 10)).foregroundColor(Theme.textSecondary)
@@ -514,10 +528,6 @@ struct SignalRadarView: View {
     /// 颜色越深 = 变化越大；两类动向用画布左上角的下拉框区分，不再各用一个色，也不用透明度（以前用红色加透明度，发灰发透）。
     /// depth 是 0~1（变化幅度在当前显示的同类公司里的百分位），映射到渐变的 0.15~0.95，避开最浅 / 最深的两端。
     /// 向差的一侧（预期下调 / 等级下降 / 券商下调）用缠论雷达卖点的那条绿色渐变。
-    static func trendColor(_ kind: QuantTrendKind, depth: Double) -> Color {
-        bubbleColor(side: kind.isDown ? "sell" : "buy", depth: 0.15 + 0.8 * max(0, min(1, depth)))
-    }
-
     /// 按条目自己的后端 kind 上色（「预期变化」「等级变化」里上调 / 上升红、下调 / 下降绿）；气泡的 `date` 字段存的就是它。
     static func trendColor(raw: String, depth: Double) -> Color {
         bubbleColor(side: QuantTrendKind.isDownKind(raw) ? "sell" : "buy", depth: 0.15 + 0.8 * max(0, min(1, depth)))
