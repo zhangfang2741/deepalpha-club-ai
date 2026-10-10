@@ -153,3 +153,13 @@ def test_position_phrase_with_heavy_ties_says_tied_not_higher():
     assert "tied" in position_phrase(sm, "en")
     plain = ScoredMetric("pe_ttm", MetricValue(10.0, "ok"), "ok", 91.0, "A", 100, tie_share=0.01, worse_share=0.9)
     assert position_phrase(plain, "zh") == "低于板块 91% 的公司"          # 无并列：沿用原来的说法
+
+
+def test_overall_text_names_the_same_stage_peers():
+    from app.services.quant_research.copy import overall_text
+    from app.services.quant_research.scoring import OverallScore
+
+    o = OverallScore(48.1, 37.0, "D+", 6, extra={"cohort": "mature"})
+    assert overall_text(o, "zh") == "综合分 48.1 · 同为成熟期的公司 后 37%"
+    assert "same stage" in overall_text(o, "en")
+    assert "标普" in overall_text(OverallScore(48.1, 37.0, "D+", 6), "zh")      # 没有同阶段分组时仍和样本比

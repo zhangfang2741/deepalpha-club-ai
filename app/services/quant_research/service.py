@@ -143,7 +143,7 @@ async def _compute_on_demand(symbol: str, lang: Lang, redis: Redis | None) -> Qu
     if needs_trend(accumulated_days(history, today)):
         inp = replace(inp, eps_trend=await fetch_eps_trend(symbol))
     ev = evaluate(inp, history, dists)
-    finalize_overall(ev, dists.get((OVERALL_SECTOR, OVERALL_KEY), []))
+    finalize_overall(ev, dists.get((OVERALL_SECTOR, OVERALL_KEY), []), None, dists)
     n = sector_sample_sizes(dists).get(sector, 0)
     out = build_payload(ev, lang, in_universe=False, sector_sample=n)
     other = build_payload(ev, "en" if lang == "zh" else "zh", in_universe=False, sector_sample=n)

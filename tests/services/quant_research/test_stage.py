@@ -223,11 +223,20 @@ def test_valuation_weight_rows_cover_all_valuation_metrics():
         assert all(w >= 0 for w in row.values()) and sum(row.values()) > 0, stage
 
 
-def test_mature_valuation_row_is_the_old_equal_weighting():
-    """成熟期保持原来的 14 项等权：改动只发生在成熟期以外的阶段。"""
+def test_mature_valuation_row_weights_by_information_family():
+    """成熟期：14 个倍数按 4 类信息分配权重（同一类不重复数），总量仍是 14，与其他阶段行插值时量纲一致。"""
     from app.services.quant_research.stage import VALUATION_WEIGHTS
 
-    assert set(VALUATION_WEIGHTS["mature"].values()) == {1.0}
+    row = VALUATION_WEIGHTS["mature"]
+    assert abs(sum(row.values()) - 14.0) < 1e-9
+    fam = {
+        "earnings": ("pe_ttm", "pe_fwd", "peg_ttm", "peg_fwd"),
+        "ev_profit": ("ev_ebitda_ttm", "ev_ebitda_fwd", "ev_ebit_ttm", "ev_ebit_fwd"),
+        "sales": ("ps_ttm", "ps_fwd", "ev_sales_ttm", "ev_sales_fwd"),
+    }
+    assert [sum(row[k] for k in ks) for ks in fam.values()] == [3.0, 3.0, 3.0]
+    assert row["pb"] == 2 and row["pcf"] == 3
+    assert all(v > 0 for v in row.values())          # 成熟期 14 项都看
 
 
 def test_intro_stage_drops_profit_based_multiples():
@@ -259,8 +268,8 @@ def test_blend_valuation_weights_match_rows_and_are_continuous():
     prev = None
     for i in range(-300, 501):
         w = blend_valuation_weights(i / 1000, i / 1000, 0.10)
-        if prev is not None:   # 相对权重的行间差最大 1.5，过渡区宽 10 个点 → 每 0.1 个点最多变 0.015；整行跳变会 ≥ 0.5
-            assert max(abs(w[k] - prev[k]) for k in w) < 0.02, i
+        if prev is not None:   # 相对权重的行间差最大 2，过渡区宽 10 个点 → 每 0.1 个点最多变 0.02；整行跳变会 ≥ 0.5
+            assert max(abs(w[k] - prev[k]) for k in w) < 0.025, i
         prev = w
 
 

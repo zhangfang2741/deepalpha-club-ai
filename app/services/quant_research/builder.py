@@ -30,6 +30,7 @@ from app.services.quant_research.scoring import (
     Distributions,
     OverallScore,
     ScoredMetric,
+    cohort_key,
     composite,
     effective_weights,
     mark_extremes,
@@ -55,7 +56,7 @@ from app.schemas.quant_research import (
     Stage,
 )
 
-METHODOLOGY_VERSION = "q7"  # q7：综合分按公司阶段给维度加权（不再等权），低权重维度无一票否决权；# q3：EPS 修正过渡期用外部一致预期趋势；q4：阶段改为营收增速主轴；q5：新增护城河（只展示）；q6：护城河改为独立模块（宽 / 窄 / 无），移出维度
+METHODOLOGY_VERSION = "q8"  # q8：综合分在同阶段公司里排位（样本够多时）、成熟期估值倍数按信息类别分权；q7：综合分按公司阶段给维度加权（不再等权），低权重维度无一票否决权；# q3：EPS 修正过渡期用外部一致预期趋势；q4：阶段改为营收增速主轴；q5：新增护城河（只展示）；q6：护城河改为独立模块（宽 / 窄 / 无），移出维度
 _REVISION_LOOKBACK = {"eps_fy1_30d": 30, "eps_fy1_90d": 90, "eps_fy2_90d": 90, "rev_fy1_90d": 90}
 
 
@@ -132,9 +133,13 @@ def evaluate(inp: StockInputs, history: list[EstimatePoint], dists: Distribution
                       estimates_date=max(snap_dates).isoformat() if snap_dates else None)
 
 
-def finalize_overall(ev: Evaluation, overall_dist: list[float], prev_grades: dict | None = None) -> Evaluation:
-    """用全体综合分分布定综合等级（含一票否决）。"""
-    ev.overall = overall(ev.dims, overall_dist, ev.n_analysts, (prev_grades or {}).get("overall"), ev.weights)
+def finalize_overall(ev: Evaluation, overall_dist: list[float], prev_grades: dict | None = None,
+                     cohort_dists: Distributions | None = None) -> Evaluation:
+    """定综合等级（含一票否决）：综合分在同阶段公司里的百分位（该阶段样本够多时），否则在全体里的百分位。"""
+    stage_key = ev.stage.key if ev.stage else None
+    cohort = (cohort_dists or {}).get(cohort_key(stage_key))
+    ev.overall = overall(ev.dims, overall_dist, ev.n_analysts, (prev_grades or {}).get("overall"), ev.weights,
+                         cohort_dist=cohort, cohort=stage_key)
     return ev
 
 

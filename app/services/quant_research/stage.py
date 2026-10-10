@@ -66,7 +66,11 @@ def _vrow(**w: float) -> dict[str, float]:
 
 
 VALUATION_WEIGHTS: dict[str, dict[str, float]] = {
-    "mature":   {k: 1.0 for k in VALUATION_KEYS},
+    # 成熟期：14 个倍数本质是 4 类信息（盈利 / 企业价值·利润 / 营收 / 资产·现金），旧版每项权重 1，同一类被数 3~4 遍；
+    # 现按类分配（盈利 3、企业价值·利润 3、营收 3、市净率 2、市现率 3，合计仍 14，与其他阶段行插值时量纲一致），类内再等分。
+    "mature":   _vrow(pe_ttm=1, pe_fwd=1, peg_ttm=0.5, peg_fwd=0.5,
+                      ev_ebitda_ttm=0.75, ev_ebitda_fwd=0.75, ev_ebit_ttm=0.75, ev_ebit_fwd=0.75,
+                      ps_ttm=0.75, ps_fwd=0.75, ev_sales_ttm=0.75, ev_sales_fwd=0.75, pb=2, pcf=3),
     "growth":   _vrow(pe_ttm=0.5, pe_fwd=1, peg_ttm=0.5, peg_fwd=1, ps_ttm=1, ps_fwd=1, ev_sales_ttm=1, ev_sales_fwd=1,
                       ev_ebitda_ttm=0.5, ev_ebitda_fwd=0.5, ev_ebit_ttm=0, ev_ebit_fwd=0.5, pb=0, pcf=1),
     "intro":    _vrow(ps_ttm=1, ps_fwd=1, ev_sales_ttm=1, ev_sales_fwd=1, pb=0.5),
