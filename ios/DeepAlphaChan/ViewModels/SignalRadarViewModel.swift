@@ -460,7 +460,7 @@ final class SignalRadarViewModel: ObservableObject {
 
     /// 某类别在当前「精选 / 行业」筛选下是否保留这一条。
     private func trendVisible(_ item: QuantTrendItem, kind: QuantTrendKind) -> Bool {
-        item.kind == kind.rawValue
+        kind.rawKinds.contains(item.kind)
             && (!trendOnlyGood || item.good ?? true)
             && (sectorFilter == nil || item.sector == sectorFilter)
     }
@@ -483,7 +483,7 @@ final class SignalRadarViewModel: ObservableObject {
     /// 当前类别不考虑任何筛选时有没有条目：空画布上分「没有达到门槛」和「被筛掉了」两种说法。
     var trendHasItemsBeforeFilter: Bool {
         guard let trend, trend.market == market.rawValue else { return false }
-        return trend.items.contains { $0.kind == trendKind.rawValue }
+        return trend.items.contains { trendKind.rawKinds.contains($0.kind) }
     }
 
     /// 评级雷达在这个市场没有数据（目前只有美股有券商评级变动）。

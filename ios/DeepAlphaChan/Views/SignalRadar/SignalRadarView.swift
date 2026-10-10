@@ -436,7 +436,7 @@ struct SignalRadarView: View {
                             baseX: CGFloat(layout.x),
                             baseY: CGFloat(layout.y),
                             phase: layout.phase,
-                            color: SignalRadarView.trendColor(kind, depth: layout.signal.strength),
+                            color: SignalRadarView.trendColor(raw: layout.signal.date, depth: layout.signal.strength),
                             isNew: false,
                             marksConfirmed: false,
                             polished: true,
@@ -475,16 +475,22 @@ struct SignalRadarView: View {
         .overlay(alignment: .topLeading) { trendKindMenu.padding(8) }
     }
 
+    private func trendGradientBar(down: Bool) -> some View {
+        Capsule()
+            .fill(LinearGradient(colors: [SignalRadarView.trendColor(raw: down ? "x_down" : "x", depth: 0),
+                                          SignalRadarView.trendColor(raw: down ? "x_down" : "x", depth: 1)],
+                                 startPoint: .leading, endPoint: .trailing))
+            .frame(width: 24, height: 8)
+    }
+
     private var trendLegend: some View {
         HStack(spacing: 12) {
-            // 颜色深浅 = 变化幅度：浅 → 深用同一色相渐变条表示
+            // 颜色深浅 = 变化幅度：浅 → 深用同一色相渐变条表示；合并类（预期 / 等级变化）红绿各一条
             HStack(spacing: 5) {
-                Capsule()
-                    .fill(LinearGradient(colors: [SignalRadarView.trendColor(vm.trendKind, depth: 0),
-                                                  SignalRadarView.trendColor(vm.trendKind, depth: 1)],
-                                         startPoint: .leading, endPoint: .trailing))
-                    .frame(width: 30, height: 8)
-                Text(L("颜色越深=变化越大")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                trendGradientBar(down: vm.trendKind.isDown)
+                if vm.trendKind.rawKinds.count > 1 { trendGradientBar(down: true) }
+                Text(vm.trendKind.rawKinds.count > 1 ? L("红=向好 绿=向差，越深变化越大") : L("颜色越深=变化越大"))
+                    .font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
             // 大小 = 综合等级
             HStack(spacing: 3) {
@@ -510,6 +516,11 @@ struct SignalRadarView: View {
     /// 向差的一侧（预期下调 / 等级下降 / 券商下调）用缠论雷达卖点的那条绿色渐变。
     static func trendColor(_ kind: QuantTrendKind, depth: Double) -> Color {
         bubbleColor(side: kind.isDown ? "sell" : "buy", depth: 0.15 + 0.8 * max(0, min(1, depth)))
+    }
+
+    /// 按条目自己的后端 kind 上色（「预期变化」「等级变化」里上调 / 上升红、下调 / 下降绿）；气泡的 `date` 字段存的就是它。
+    static func trendColor(raw: String, depth: Double) -> Color {
+        bubbleColor(side: QuantTrendKind.isDownKind(raw) ? "sell" : "buy", depth: 0.15 + 0.8 * max(0, min(1, depth)))
     }
 
     /// 评级雷达的气泡直径 = 综合等级，**按当前画出来的这批公司的等级范围拉开**：最高的最大（96）、最低的最小（48），
