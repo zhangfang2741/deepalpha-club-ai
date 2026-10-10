@@ -289,7 +289,7 @@ deepalpha-club-ai/
 > 权重为 0 的倍数仍展示（`MetricOut.weight=0` + 状态说明），不进分数也不占「参与数」（`score_dimension(metric_weights=...)`）；`MetricOut.weight` 是这家公司实际生效的权重。改表须升 `METHODOLOGY_VERSION`，`test_stage.py` 守护（行覆盖 14 项、成熟期全 1、初创期利润类为 0、插值连续）。
 > **百分位并列取平均位次**（`grading.percentile_of`）：净现金（净负债比 0）、不烧钱（年数封顶）、没有利息（倍数封顶）这类指标大量公司并列在极值（实测 31% / 43% / 97%），
 > 以前并列者全拿 100 分位——界面写「高于板块 100% 的公司」不真，稳健维度也被整体抬高（样本均分 63 → 49）。无并列时结果与旧算法完全一致（`test_grading` 守护）。
-> **综合分在同阶段公司里排位**（q8，`scoring.build_cohort_distributions` / `finalize_overall(cohort_dists)`）：权重按阶段调整后成长股综合分系统性偏高（q7 实测美股成长期 B- 及以上 61%、成熟期 35%），所以综合分的百分位改为和**同阶段标签**的公司比（`COHORT_MIN`=30，样本不足的阶段 / 初创、收缩期退回全体；无阶段的金融股自成一组）；各阶段分布存在 distributions 表 `("_all", "_overall:<阶段>")`，样本外按需计算也读它；`Overall.text` 写「同为成熟期的公司 后 37%」。各维度等级仍是板块内可比。
+> **综合分在同阶段公司里排位**（q8，`scoring.build_cohort_distributions` / `finalize_overall(cohort_dists)`）：权重按阶段调整后成长股综合分系统性偏高（q7 实测美股成长期 B- 及以上 61%、成熟期 35%），所以综合分的百分位改为和**同阶段标签**的公司比（`COHORT_MIN`=30、仅 `COHORT_STAGES` = 成长 / 成熟 / 无阶段（q10）；**调整 / 收缩 / 初创期仍和全体比**——q8 全阶段同阶段比实测抹平了弱势：A 股收缩期 B- 及以上 4% → 56%、美股调整期 20% → 40%、港股初创期 13% → 39%，q10 还原到全体口径的数字，成长 / 成熟 / 无阶段不变；依据 `GET /quant-research/diagnostics/whatif` 反事实；无阶段的金融股自成一组）；各阶段分布存在 distributions 表 `("_all", "_overall:<阶段>")`，样本外按需计算也读它；`Overall.text` 写「同为成熟期的公司 后 37%」。各维度等级仍是板块内可比。
 > **EBIT / EBITDA 用经营利润口径**（q9，`inputs._operating_basis`：FMP 的 ebit / ebitda 含营业外收益，WDC 一年约 54.5 亿；A 股 / 港股没有该字段原样）；**利息支出报 0 但负债超过 EBIT 的 25% 视为数据缺口、该项不参与**（AAPL 最新财年 FMP 报 0）。
 > **利息保障倍数在净利息收入为正（利息收入 ≥ 利息支出）时记上限 100**：现金多于负债的公司（如 CRWD）不能被「EBIT ÷ 利息支出」误判成勉强付得起。
 > 响应 `Dimension.weight_pct` = 这一维在综合分里的实际占比（按可用维度归一，iOS 综合分解释里显示）。

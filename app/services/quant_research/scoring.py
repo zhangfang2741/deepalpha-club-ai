@@ -31,8 +31,11 @@ CAP_CEILING = "C+"
 OVERALL_SECTOR = "_all"
 OVERALL_KEY = "_overall"
 # 综合分的比较对象：同阶段公司（权重按阶段调整，不同阶段的综合分尺度不同，混在一起排会让成长股系统性偏高）。
-# 同阶段样本少于 COHORT_MIN 时（初创 / 收缩期等）退回全体分布。
+# 同阶段样本少于 COHORT_MIN 时退回全体分布。
+# 只有成长 / 成熟 / 无阶段做同阶段排位（q10）：调整 / 收缩 / 初创期综合分偏低是真实状况，和同阶段比会把弱势抹平
+# （q8 实测 A 股收缩期 B- 及以上 4% → 56%、美股调整期 20% → 40%），它们仍和全体比。依据：/diagnostics/whatif 反事实。
 COHORT_MIN = 30
+COHORT_STAGES: tuple[str | None, ...] = ("growth", "mature", None)
 
 
 @dataclass
@@ -169,10 +172,11 @@ def cohort_key(stage_key: str | None) -> tuple[str, str]:
 
 
 def build_cohort_distributions(composites: list[tuple[str | None, float]]) -> Distributions:
-    """(阶段键, 综合分) 列表 → 每个样本数 ≥ COHORT_MIN 的阶段的有序综合分分布。"""
+    """(阶段键, 综合分) 列表 → COHORT_STAGES 里样本数 ≥ COHORT_MIN 的阶段的有序综合分分布。"""
     groups: dict[str | None, list[float]] = {}
     for stage_key, score in composites:
-        groups.setdefault(stage_key, []).append(score)
+        if stage_key in COHORT_STAGES:
+            groups.setdefault(stage_key, []).append(score)
     return {cohort_key(k): sorted(v) for k, v in groups.items() if len(v) >= COHORT_MIN}
 
 
