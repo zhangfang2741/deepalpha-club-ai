@@ -163,6 +163,24 @@ async def quant_diagnostics_nongaap(request: Request, market: Literal["us"] = Qu
     return {"status": "ok", "market": market, "as_of": day.isoformat(), "version": version, **diag.nongaap_summary(rows)}
 
 
+@router.get("/diagnostics/nongaap-whatif")
+@limiter.limit("6 per minute")
+async def quant_diagnostics_nongaap_whatif(request: Request, restart: bool = Query(False)) -> dict:
+    """美股改用非 GAAP 实际 EPS（市盈率 / EPS 同比 / PEG）的等级反事实：后台任务，接口只触发 / 查询进度，结果放进程内存。
+
+    全体约 1500 次 FMP 调用（走全局预算、批量优先级）。restart=true 丢弃上次结果重跑。只返回聚合，不含个股。临时工具，随 /diagnostics 一起删除。
+    """
+    from app.services.quant_research import nongaap_job
+    from app.services.quant_research import repository as repo
+
+    dates = await repo.diagnostic_dates("us")
+    if not dates:
+        return {"status": "no_data"}
+    if restart:
+        nongaap_job.reset()
+    return await nongaap_job.start("us", dates[0][0], current_redis())
+
+
 @router.get("/diagnostics/panorama")
 @limiter.limit("2 per minute")
 async def quant_diagnostics_panorama(request: Request, market: Literal["us", "cn", "hk"] = Query("us")) -> dict:
