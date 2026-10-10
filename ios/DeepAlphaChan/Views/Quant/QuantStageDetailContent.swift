@@ -51,6 +51,7 @@ struct QuantStageDetailContent: View {
                 .padding(16)
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
             }
+            QuantStageRankingSection(selected: selected, research: research)
             Text(L("这是按营收增速与经营现金流做的阶段定位，不是完成进度。企业可能跨阶段变化。阶段会影响各维度在综合分里的占比（点综合等级可看），在门槛附近是平滑过渡的；但不改变任何单项指标在同板块里的百分位。"))
                 .font(QuantTypography.body).foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)

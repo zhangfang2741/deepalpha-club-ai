@@ -1677,3 +1677,11 @@
 "最后供给点" = "Last point of supply";
 
 "算综合分时，每个维度分先换成它在全体里的百分位再按上面的比例加权；成对高度重复的指标只算一份信息。" = "When computing the composite, each dimension score is first converted to its percentile among all companies and then weighted by the shares above; near-duplicate metrics count as one piece of information.";
+"%@综合分排名" = "%@ · composite ranking";
+"排名暂时加载不出来，稍后再试。" = "The ranking couldn't be loaded. Please try again later.";
+"这个阶段暂时没有样本公司。" = "No sample companies are in this stage yet.";
+"%@ 在 %lld 家%@公司里排第 %lld。" = "%1$@ ranks #%4$lld among %2$lld %3$@ companies.";
+"%@ 不在样本内，按它的综合分估算，在 %lld 家%@公司里约排第 %lld。" = "%1$@ is outside the sample; by its composite score it would rank about #%4$lld among %2$lld %3$@ companies.";
+"共 %lld 家%@公司，按综合分从高到低。" = "%1$lld %2$@ companies, sorted by composite score from high to low.";
+"排名只是本模型综合分的高低：同阶段公司在一起比，综合分包含估值、动量等会随股价变化的维度。不代表公司好坏的定论，也不构成投资建议。" = "The ranking only reflects this model's composite score among companies in the same stage. The composite includes price-sensitive factors such as valuation and momentum. It is not a verdict on the company and is not investment advice.";
+"数据日期：%@" = "Data date: %@";
