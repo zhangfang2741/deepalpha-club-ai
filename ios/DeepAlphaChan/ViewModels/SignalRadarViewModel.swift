@@ -176,6 +176,12 @@ final class SignalRadarViewModel: ObservableObject {
     private func applyCachedSnapshot() -> Bool {
         guard let entry = cachedEntry(market, activeUniverseKey) else { return false }
         response = entry.resp
+        // 指数列表跟着缓存一起恢复：缓存新鲜时不再请求接口，而 availableUniverses 只在接口返回时才会设——
+        // 冷启动读磁盘缓存（universesByMarket 是空的）后，市场分段条的指数下拉就一直不出现（只有 1 个选项时不显示下拉）。
+        if !entry.resp.universes.isEmpty {
+            availableUniverses = entry.resp.universes
+            universesByMarket[market] = entry.resp.universes
+        }
         jumpToDemoDayIfPresent()
         guard Date().timeIntervalSince(entry.at) < Self.snapshotFreshSeconds else { return false }
         pendingUniverseKey = nil
