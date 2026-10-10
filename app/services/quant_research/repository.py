@@ -554,3 +554,15 @@ async def sbc_rows(market: str, as_of: date, page: int = 100, pause: float = 0.2
                               prof_score, prof_w, vals.get("ebit_m"), vals.get("fcf_m"), vals.get("fcf_sbc_m"), tuple(keys)))
         offset += page
         await asyncio.sleep(pause)
+
+
+async def symbol_sample(market: str, as_of: date, n: int) -> list[tuple[str, str | None, str | None]]:
+    """按代码排序后等距抽样 n 只 (代码, 板块, 阶段)。仅供一次性核查用，代码不会进入任何响应。"""
+    q = (select(col(QuantResult.symbol), col(QuantResult.sector_key), col(QuantResult.payload_zh)["stage"])
+         .where(col(QuantResult.market) == market, col(QuantResult.as_of) == as_of).order_by(col(QuantResult.symbol)))
+    async with AsyncSessionFactory() as s:
+        rows = (await s.execute(q)).all()
+    if not rows:
+        return []
+    step = max(1, len(rows) // n)
+    return [(sym, sector, stage.get("key") if isinstance(stage, dict) else None) for sym, sector, stage in rows[::step][:n]]

@@ -204,3 +204,23 @@ def test_sbc_adjust_whatif_small_sample():
     from app.services.quant_research.diagnostics import sbc_adjust_whatif
 
     assert sbc_adjust_whatif([])["note"] == "样本不足"
+
+
+def test_nongaap_summary_buckets_and_suppression():
+    from app.services.quant_research.diagnostics import NgRow, nongaap_summary
+
+    rows = []
+    for i in range(12):   # 亏损但非 GAAP 盈利（成长）
+        rows.append(NgRow("tech", "growth", -1.0 - i * 0.01, 1.5, 8))
+    for i in range(14):   # 两口径基本一致（成熟）
+        rows.append(NgRow("health", "mature", 5.0 + i * 0.1, 5.1 + i * 0.1, 8))
+    for _ in range(4):    # 没有实际 EPS
+        rows.append(NgRow("health", "mature", 2.0, None, 0))
+    out = nongaap_summary(rows)
+    assert out["n"] == 30
+    assert out["coverage_4q"] == round(26 / 30, 3)
+    assert out["gaap_loss_nongaap_profit"] == round(12 / 26, 3)
+    assert out["gap_gt_100pct"] == round(12 / 26, 3)
+    assert out["by_stage"]["growth"]["gaap_loss_nongaap_profit"] == 1.0
+    assert "symbol" not in str(out)
+    assert nongaap_summary(rows[:5])["note"] == "样本不足"

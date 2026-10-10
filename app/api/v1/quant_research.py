@@ -142,6 +142,27 @@ async def quant_diagnostics_sbcwhatif(request: Request, market: Literal["us", "c
             **diag.sbc_adjust_whatif(await repo.sbc_rows(market, day))}
 
 
+@router.get("/diagnostics/nongaap")
+@limiter.limit("1 per minute")
+async def quant_diagnostics_nongaap(request: Request, market: Literal["us"] = Query("us"),
+                                    n: int = Query(60, ge=20, le=100)) -> dict:
+    """抽样核查 FMP 非 GAAP 实际 EPS：覆盖率（≥4 / ≥8 个季度）与和 GAAP EPS 的差距分档。
+
+    每只抽样股票 2 次 FMP 调用（走全局预算、批量优先级），只返回聚合，不含个股代码。临时工具，与 /diagnostics 一起在方法稳定后删除。
+    """
+    from app.services.quant_research import diagnostics as diag
+    from app.services.quant_research import nongaap_probe
+    from app.services.quant_research import repository as repo
+
+    dates = await repo.diagnostic_dates(market)
+    if not dates:
+        return {"status": "no_data"}
+    day, version, _ = dates[0]
+    sample = await repo.symbol_sample(market, day, n)
+    rows = await nongaap_probe.probe(sample, day, current_redis())
+    return {"status": "ok", "market": market, "as_of": day.isoformat(), "version": version, **diag.nongaap_summary(rows)}
+
+
 @router.get("/diagnostics/panorama")
 @limiter.limit("2 per minute")
 async def quant_diagnostics_panorama(request: Request, market: Literal["us", "cn", "hk"] = Query("us")) -> dict:
