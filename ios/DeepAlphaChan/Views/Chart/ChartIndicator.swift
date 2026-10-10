@@ -28,6 +28,10 @@ enum ChartIndicator: String, CaseIterable, Identifiable {
     /// 威科夫和 SMC 是两套结构读法，打开时会把缠论图层收起来（`ChanViewModel.syncChanLayers`），两者也不同时开。
     var hidesChanLayers: Bool { self == .wyckoff || self == .smc }
 
+    /// 「对比」下拉框里的技术（威科夫、SMC，以后还会加）：拿别的看盘方法和缠论对照，不在图下方的指标栏里，
+    /// 在图上方右侧的下拉框里选（见 `ChartLegend.techniqueMenu`）。
+    static let comparisons: [ChartIndicator] = [.wyckoff, .smc]
+
     /// 用户没动过它时是开还是关。全部默认关（2026-10-09 起均线也不默认选中）：先看缠论结构，需要时再点开；
     /// 用户明确点开过的仍按本机存的选择。
     var defaultOn: Bool { false }
@@ -127,10 +131,17 @@ struct IndicatorBar: View {
     }
 
     var body: some View {
-        let items = ChartIndicator.allCases.filter(isAvailable)
+        // 威科夫 / SMC 在图上方右侧的「对比」下拉框里，这里只放均线 / EMA / BOLL 这类叠加指标
+        let items = ChartIndicator.allCases.filter { !$0.hidesChanLayers && isAvailable($0) }
         if !items.isEmpty {
             HStack(spacing: 0) {
-                ForEach(items) { tab($0) }
+                ForEach(Array(items.enumerated()), id: \.element.id) { k, item in
+                    // 指标之间一条细竖线分隔，标签本身靠得更近（以前每个标签左右各留 12pt，五个排下来显得很松）
+                    if k > 0 {
+                        Rectangle().fill(Theme.textSecondary.opacity(0.4)).frame(width: 1, height: 12)
+                    }
+                    tab(item)
+                }
                 Spacer(minLength: 0)
                 Button {
                     showSettings = true
@@ -148,7 +159,7 @@ struct IndicatorBar: View {
                 IndicatorSettingsSheet(vm: vm, analysis: analysis)
                     .preferredColorScheme(.dark)
                     // 矮面板：标题 + 指标切换 + 最多 3 行参数 + 一句说明
-                    .presentationDetents([.height(300)])
+                    .presentationDetents([.height(270)])
                     .presentationDragIndicator(.visible)
             }
         }
@@ -162,7 +173,7 @@ struct IndicatorBar: View {
             Text(i.title)
                 .font(.system(size: 12, weight: on ? .semibold : .regular))
                 .foregroundStyle(on ? Theme.accent : Theme.textSecondary)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 9)
                 .frame(minHeight: 30)
                 .contentShape(Rectangle())
         }
@@ -209,21 +220,9 @@ struct IndicatorSettingsSheet: View {
                              value: String(format: "%.1f", bollMult),
                              minus: { bollMult = max(IndicatorSettings.multRange.lowerBound, bollMult - 0.5) },
                              plus: { bollMult = min(IndicatorSettings.multRange.upperBound, bollMult + 0.5) })
-                case .wyckoff:
-                    // 没有可调参数：识别规则是固定的，说明写在下面的 note 里
+                case .wyckoff, .smc:
+                    // 在「对比」下拉框里，不在指标设置里
                     EmptyView()
-                case .smc:
-                    // 识别规则固定；这里只选图上画哪几类（点一下立即生效，不用点「完成」）
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 0) {
-                        smcToggle(L("结构突破 / 转变"), \.structure)
-                        smcToggle(L("订单块"), \.orderBlocks)
-                        smcToggle(L("公允价值缺口"), \.fvg)
-                        smcToggle(L("强弱高低点"), \.strongWeak)
-                        smcToggle(L("溢价 / 折价区"), \.premiumDiscount)
-                        smcToggle(L("等高 / 等低点"), \.equalLevels)
-                        smcToggle(L("流动性扫荡"), \.sweeps)
-                        smcToggle(L("前周期高低点"), \.keyLevels)
-                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -259,7 +258,7 @@ struct IndicatorSettingsSheet: View {
     /// 指标名切换：纯文字，选中的变色加粗 + 下划线（与图表下方的指标栏同一种样式）。
     private var tabs: some View {
         HStack(spacing: 18) {
-            ForEach(ChartIndicator.allCases) { i in
+            ForEach(ChartIndicator.allCases.filter { !$0.hidesChanLayers }) { i in
                 Button { tab = i } label: {
                     VStack(spacing: 4) {
                         Text(i.title)
@@ -282,26 +281,8 @@ struct IndicatorSettingsSheet: View {
         case .ma: return L("最近 N 根 K 线收盘价的平均。")
         case .ema: return L("指数移动平均：越近的 K 线权重越大，比均线拐得快。")
         case .boll: return L("中轨是 N 根 K 线的均线，上下轨 = 中轨 ± 倍数 × 标准差。")
-        case .wyckoff: return L("威科夫：先找一次放量的恐慌 / 追涨高潮，再把之后的横盘画成交易区间，并标出区间里出现的事件（点标记看解释）。只标出位置，不是买卖信号。")
-        case .smc: return L("SMC：按 K 线自己的高低点标出结构突破 / 转变、订单块、价格缺口等位置（点标记看解释）。图上画哪几类在上面勾选。只标出位置，不是买卖信号。")
+        case .wyckoff, .smc: return ""
         }
-    }
-
-    /// SMC 图层勾选项：整行可点，点一下立即生效。
-    private func smcToggle(_ title: String, _ kp: WritableKeyPath<SmcLayers, Bool>) -> some View {
-        let on = vm.smcLayers[keyPath: kp]
-        return Button { vm.smcLayers[keyPath: kp].toggle() } label: {
-            HStack(spacing: 8) {
-                Image(systemName: on ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 16))
-                    .foregroundStyle(on ? Theme.accent : Theme.textSecondary)
-                Text(title).font(.system(size: 13)).foregroundStyle(Theme.textPrimary)
-                Spacer(minLength: 0)
-            }
-            .frame(height: 36)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 
     private func lineRow(_ line: Binding<Line>, prefix: String, colors: [Color]) -> some View {

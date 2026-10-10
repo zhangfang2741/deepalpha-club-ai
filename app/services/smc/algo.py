@@ -257,7 +257,7 @@ def detect_fvgs(bars: list[dict]) -> list[Fvg]:
             m = bars[i - 1]
             mo = m["open"]
             mbody = (m["close"] - mo) / mo * 100 if mo else 0.0
-            thr = FVG_BODY_MULT * (body_sum / (i - 1)) if i > 1 else 0.0   # 不含第 i 根本身
+            thr = FVG_BODY_MULT * (body_sum / i)   # 平均实体 = 第 0..i-1 根（含中间那根自己，与 LuxAlgo 的累计均值一致）
             first, third = bars[i - 2], bars[i]
             if mbody > thr and third["low"] > first["high"] and m["close"] > first["high"]:
                 out.append(Fvg("bull", i - 1, third["low"], first["high"], None))

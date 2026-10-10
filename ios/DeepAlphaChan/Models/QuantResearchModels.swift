@@ -662,12 +662,18 @@ struct QuantTrendItem: Decodable, Identifiable, Hashable {
     let kind: String          // estimates | quality
     let ringDays: Int         // 7 / 30 / 90
     let strength: Double
+    /// 变化是入圈门槛的几倍（跨圈可比），气泡颜色深浅用它。旧后端没有。
+    let magnitude: Double?
+    /// 综合等级达到本市场的「好股票」门槛（精选）。旧后端没有，按达标处理。
+    let good: Bool?
+    /// 信号雷达的行业 key（与雷达顶部行业横条同一套），点行业筛选用。
+    let sector: String?
     let facts: QuantTrendFacts
 
     var id: String { kind + ":" + symbol }
 
     enum CodingKeys: String, CodingKey {
-        case symbol, name, grade, kind, strength, facts
+        case symbol, name, grade, kind, strength, facts, magnitude, good, sector
         case sectorName = "sector_name"
         case ringDays = "ring_days"
     }
@@ -681,10 +687,13 @@ struct QuantTrendRadar: Decodable {
     let thresholds: [String: Double]
     let items: [QuantTrendItem]
     let counts: [String: Int]
+    /// 「好股票」门槛等级（含）；没有评级 / 旧后端为 nil。
+    let goodGrade: String?
 
     enum CodingKeys: String, CodingKey {
         case market, rings, thresholds, items, counts
         case asOf = "as_of"
+        case goodGrade = "good_grade"
     }
 }
 

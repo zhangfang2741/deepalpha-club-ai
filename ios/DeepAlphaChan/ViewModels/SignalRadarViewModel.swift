@@ -125,7 +125,6 @@ final class SignalRadarViewModel: ObservableObject {
     /// 当前指数展示名：优先从列表里按高亮键取（计算中 response 为 nil 时也有名字），否则退回响应里的 etf_name。
     /// 顶部市场分段条（已选中那一段下面的小字）与雷达页的扫描提示共用。
     var activeUniverseName: String {
-        if trendMode { return L("基本面动向") }
         if let u = availableUniverses.first(where: { $0.key == activeUniverseKey }) { return u.displayName }
         if activeUniverseKey == RadarUniverse.watchlistKey { return L("自选") }
         // 切市场时 response 暂时还是上一个市场的（保留旧内容防跳动），它的名称不能拿来用，
@@ -422,10 +421,6 @@ final class SignalRadarViewModel: ObservableObject {
     /// 切换当前市场的 universe（科技窄基 ↔ 大盘宽基）。key 与当前生效的相同则忽略。
     /// 注意不清空 availableUniverses：正在计算时切换器仍要在，方便随时切回别的指数。
     func switchUniverse(_ key: String) {
-        if trendMode {
-            trendMode = false            // 从「基本面动向」切回某个指数的缠论雷达
-            if key == activeUniverseKey { return }
-        }
         guard key != activeUniverseKey else { return }
         sectorFilter = nil
         universeByMarket[market] = key
@@ -433,6 +428,8 @@ final class SignalRadarViewModel: ObservableObject {
         selectedDayIndex = 0
         // 示例日按 universe 算，旧指数的那天不能留着拼进新指数的日期轨（同 switchMarket）
         restoreDemoFromCache()
+        // 评级雷达里换指数：指数是两个雷达共用的（市场分段条下面那个），只重取评级雷达，缠论雷达的数据等切回去再补
+        if trendMode { Task { await loadTrend() }; return }
         if applyCachedSnapshot() { return }
         Task { await load() }
     }
@@ -443,14 +440,45 @@ final class SignalRadarViewModel: ObservableObject {
     /// 数据来自 `/quant-research/{market}/trend-radar`，与缠论雷达的指数 / 日期无关；标题菜单选回「市场雷达」或选任一指数即退出。
     @Published private(set) var trendMode = false
     @Published private(set) var trend: QuantTrendRadar?
+    /// `trend` 是哪个指数的（和 `activeUniverseKey` 对不上就是旧的，不能拿来画）。
+    @Published private(set) var trendUniverse: String?
     @Published private(set) var trendLoading = false
     @Published private(set) var trendError: String?
     @Published var trendKind: QuantTrendKind = .estimates
 
-    /// 当前类别的条目（后端已按圈、按幅度排好）。
+    /// 「精选」开关：只画综合等级达到本市场「好股票」门槛的公司（默认开）；关掉看全部。旧后端没有 good 字段时不筛。
+    @Published var trendOnlyGood = true
+
+    /// 综合等级从高到低；排序、气泡大小都按它。
+    static let gradeOrder = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F"]
+    static func gradeRank(_ grade: String?) -> Int { grade.flatMap { gradeOrder.firstIndex(of: $0) } ?? gradeOrder.count }
+
+    /// 某类别在当前「精选 / 行业」筛选下是否保留这一条。
+    private func trendVisible(_ item: QuantTrendItem, kind: QuantTrendKind) -> Bool {
+        item.kind == kind.rawValue
+            && (!trendOnlyGood || item.good ?? true)
+            && (sectorFilter == nil || item.sector == sectorFilter)
+    }
+
+    /// 当前类别、当前筛选下的条目：综合等级高的在前，同等级变化大的在前（画布最多画 ringFieldCap 个，先留最好的）。
     var trendItems: [QuantTrendItem] {
         guard let trend, trend.market == market.rawValue else { return [] }
-        return trend.items.filter { $0.kind == trendKind.rawValue }
+        return trend.items.filter { trendVisible($0, kind: trendKind) }.sorted {
+            let a = Self.gradeRank($0.grade), b = Self.gradeRank($1.grade)
+            return a != b ? a < b : ($0.magnitude ?? 1) > ($1.magnitude ?? 1)
+        }
+    }
+
+    /// 某类别在当前筛选下有几个（分段控件上的数字）。
+    func trendCount(_ kind: QuantTrendKind) -> Int {
+        guard let trend, trend.market == market.rawValue else { return 0 }
+        return trend.items.filter { trendVisible($0, kind: kind) }.count
+    }
+
+    /// 当前类别不考虑任何筛选时有没有条目：空画布上分「没有达到门槛」和「被筛掉了」两种说法。
+    var trendHasItemsBeforeFilter: Bool {
+        guard let trend, trend.market == market.rawValue else { return false }
+        return trend.items.contains { $0.kind == trendKind.rawValue }
     }
 
     func enterTrend() {
@@ -459,23 +487,28 @@ final class SignalRadarViewModel: ObservableObject {
         Task { await loadTrend() }
     }
 
-    /// 回到缠论市场雷达（指数、日期都保持进入动向前的样子）。
+    /// 回到缠论雷达。若在评级雷达里换过指数，缠论雷达还停在旧指数上，补一次加载。
     func exitTrend() {
         trendMode = false
+        guard !responseMatchesSelection else { return }
+        if applyCachedSnapshot() { return }
+        Task { await load() }
     }
 
     func loadTrend() async {
         let m = market.rawValue
-        if trend?.market != m { trend = nil }
+        let u = activeUniverseKey
+        if trend?.market != m || trendUniverse != u { trend = nil }
         trendError = nil
         trendLoading = true
         defer { trendLoading = false }
         do {
-            let fresh = try await QuantResearchService.trendRadar(market: m)
-            guard m == market.rawValue else { return }   // 加载期间切了市场，丢弃旧结果
+            let fresh = try await QuantResearchService.trendRadar(market: m, universe: u)
+            guard m == market.rawValue, u == activeUniverseKey else { return }   // 加载期间切了市场 / 指数，丢弃旧结果
             trend = fresh
+            trendUniverse = u
         } catch {
-            guard m == market.rawValue else { return }
+            guard m == market.rawValue, u == activeUniverseKey else { return }
             trendError = error.localizedDescription
         }
     }

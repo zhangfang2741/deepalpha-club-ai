@@ -301,7 +301,10 @@ class TrendRadarItem(BaseModel):
     grade: str | None = None
     kind: Literal["estimates", "quality"]
     ring_days: int                     # 落在哪一圈：7 / 30 / 90
-    strength: float                    # 用于气泡大小与排序：预期 = 该圈变化率；质地 = 改善的百分点合计
+    strength: float                    # 变化本身：预期 = 该圈变化率；质地 = 改善的百分点合计
+    magnitude: float = 1.0             # 变化是入圈门槛的几倍（预期 = 变化率 ÷ 该圈门槛；质地 = 改善百分点 ÷ 利润率门槛），跨圈可比，App 用它定颜色深浅
+    good: bool = False                 # 综合等级达到本市场的「好股票」门槛（与信号雷达同一套自适应规则）
+    sector: str | None = None          # 信号雷达的行业 key（与雷达顶部行业横条同一套），App 点行业筛选用
     facts: TrendFacts
 
 
@@ -312,4 +315,5 @@ class TrendRadarOut(BaseModel):
     rings: list[int]
     thresholds: dict[str, float]       # 各圈预期上调门槛与质地改善门槛（推导说明用）
     items: list[TrendRadarItem]
-    counts: dict[str, int]             # estimates / quality 各多少
+    counts: dict[str, int]             # estimates / quality 各多少；estimates_good / quality_good 是其中达标的
+    good_grade: str | None = None      # 「好股票」门槛等级（含）：综合等级不低于它算 good；没有评级时为 None

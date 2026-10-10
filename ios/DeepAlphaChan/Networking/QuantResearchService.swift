@@ -43,13 +43,17 @@ enum QuantResearchService {
         return await StageRankingCache.shared.get(key)
     }
 
-    /// 基本面动向雷达（每天随批量更新一次）；本机内存缓存 30 分钟。
-    static func trendRadar(market: String) async throws -> QuantTrendRadar {
-        let key = "trend|" + market + "|" + lang
-        if let hit = await TrendRadarCache.shared.get(key) { return hit }
-        let fresh: QuantTrendRadar = try await APIClient.shared.get("/quant-research/\(market)/trend-radar",
-                                                                   query: ["lang": lang])
-        await TrendRadarCache.shared.set(key, fresh)
+    /// 评级雷达（后端叫基本面动向雷达，每天随批量更新一次）；本机内存缓存 30 分钟。
+    /// universe：信号雷达选的指数（sp500 / nasdaq100 / watchlist …），只看它的成分股，「好股票」门槛也按这个池子算；
+    /// 空 = 全市场。自选因人而异，不走本机缓存。
+    static func trendRadar(market: String, universe: String = "") async throws -> QuantTrendRadar {
+        let key = "trend|" + market + "|" + universe + "|" + lang
+        let cacheable = universe != RadarUniverse.watchlistKey
+        if cacheable, let hit = await TrendRadarCache.shared.get(key) { return hit }
+        var query = ["lang": lang]
+        if !universe.isEmpty { query["universe"] = universe }
+        let fresh: QuantTrendRadar = try await APIClient.shared.get("/quant-research/\(market)/trend-radar", query: query)
+        if cacheable { await TrendRadarCache.shared.set(key, fresh) }
         return fresh
     }
 

@@ -100,7 +100,18 @@ final class ChanViewModel: ObservableObject {
         if indicator.hidesChanLayers { syncChanLayers() }
     }
 
-    /// SMC 各类元素的显示开关（指标设置里勾选），存本机。
+    /// 当前选中的「对比」技术（威科夫 / SMC / 以后别的）；nil = 只看缠论。
+    var comparison: ChartIndicator? {
+        ChartIndicator.comparisons.first { isOn($0) }
+    }
+
+    /// 在「对比」下拉框里选：同一时间只开一个，选 nil 回到只看缠论（缠论图层随之恢复，见 `syncChanLayers`）。
+    func setComparison(_ target: ChartIndicator?) {
+        if let current = comparison, current != target { toggle(current) }
+        if let target, !isOn(target) { toggle(target) }
+    }
+
+    /// SMC 各类元素的显示开关（「对比」下拉框里勾选），存本机。
     @Published var smcLayers = SmcLayers.load() {
         didSet { smcLayers.save() }
     }

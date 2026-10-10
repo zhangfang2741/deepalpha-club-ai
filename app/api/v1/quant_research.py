@@ -9,18 +9,21 @@ from typing import Literal
 import httpx
 from fastapi import APIRouter, Depends, Path, Query, Request
 from redis.asyncio import Redis
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.v1.auth import get_current_user
 from app.cache.client import current_redis, get_redis_optional
 from app.cache.operations import acquire_lock, release_lock
 from app.core.limiter import limiter
 from app.core.logging import logger
+from app.db.session import get_db
 from app.models.user import User
 from app.schemas.quant_research import LatestReportOut, MethodologyOut, QuantResearchOut, ReportSummaryOut, StageRankingOut, TrendRadarOut
 from app.core.config import settings
 from app.services.quant_research.batch import run_us_batch
 from app.services.quant_research.builder import METHODOLOGY_VERSION
 from app.services.quant_research.cnhk.batch import run_cn_batch, run_hk_batch
+from app.services.quant_research.markets import normalize_symbol
 from app.services.quant_research.methodology import build_methodology
 from app.services.quant_research.ranking import get_stage_ranking
 from app.services.quant_research.trend_radar import get_trend_radar
@@ -28,6 +31,10 @@ from app.services.quant_research.report import get_latest_report
 from app.services.quant_research.report_summary import get_report_summary
 from app.services.quant_research.scheduler import _LOCK_TTL, _lock_key, last_cnhk_session, last_us_session
 from app.services.quant_research.service import get_quant_research
+from app.services.signal_radar.constituents import resolve_constituents
+from app.services.signal_radar.service import WATCHLIST_KEY
+from app.services.signal_radar.universe import get_universe
+from app.services.watchlist import list_items
 
 router = APIRouter()
 
@@ -274,12 +281,28 @@ async def quant_trend_radar(
     request: Request,
     market: Literal["us", "cn", "hk"],
     lang: Literal["zh", "en"] = Query("zh"),
+    universe: str | None = Query(None, description="股票池：信号雷达的 universe 键（sp500 / nasdaq100 …）或 watchlist；缺省 = 全市场"),
     user: User = Depends(get_current_user),
     redis: Redis | None = Depends(get_redis_optional),
+    db: AsyncSession = Depends(get_db),
 ) -> TrendRadarOut:
-    """基本面动向雷达：最近一周 / 一个月 / 三个月里预期上调或质地改善的公司（只陈列事实）。"""
-    out = await get_trend_radar(market, lang, redis=redis)
-    logger.info("quant_trend_radar_served", market=market, counts=out.counts, user_id=user.id)
+    """基本面动向雷达（App 里叫「评级雷达」）：最近一周 / 一个月 / 三个月里预期上调或质地改善的公司（只陈列事实）。"""
+    members: set[str] | None = None
+    scope = "all"
+    cacheable = True
+    if universe == WATCHLIST_KEY:
+        items = [i for i in await list_items(db, user.id) if i.market == market]
+        members = {normalize_symbol(market, i.symbol) for i in items}
+        scope, cacheable = WATCHLIST_KEY, False
+    elif universe:
+        uni = get_universe(market, universe)
+        if uni is not None and redis is not None:
+            pairs = await resolve_constituents(market, redis=redis, universe_key=uni.key)
+            if pairs:
+                members = {normalize_symbol(market, s) for s, _ in pairs}
+                scope = uni.key
+    out = await get_trend_radar(market, lang, redis=redis, members=members, scope=scope, cacheable=cacheable)
+    logger.info("quant_trend_radar_served", market=market, scope=scope, counts=out.counts, user_id=user.id)
     return out
 
 

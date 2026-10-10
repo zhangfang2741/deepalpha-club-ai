@@ -1790,3 +1790,28 @@
 "连续三根 K 线里，第一根和第三根之间留下一段没有被覆盖的价格空档，并且中间那根的实体明显大于此前的平均实体。价格回到缺口远端就算被填补，图上只画还没填补的。" = "Across three consecutive candles, a stretch of price between the first and third candle was never covered, and the middle candle's body is clearly larger than the earlier average body. Once price returns to the far edge the gap counts as filled; only unfilled gaps are drawn.";
 "量比 = 这根 K 线成交量 ÷ 这段行情的平均成交量。" = "Volume ratio = this candle's volume ÷ the average volume over this stretch.";
 "高点" = "high";
+
+/* Fundamental trend radar redesign */
+"上调幅度是该圈门槛的几倍，在当前画出来的公司里排个先后：颜色越深，上调得越多。" = "How many times the ring's threshold the upgrade is, ranked among the companies currently drawn: the darker the colour, the bigger the upgrade.";
+"全部 · 含未达标" = "All · incl. below threshold";
+"变好的百分点合计是利润率门槛的几倍，在当前画出来的公司里排个先后：颜色越深，变好得越多。" = "How many times the margin threshold the total improvement is, ranked among the companies currently drawn: the darker the colour, the bigger the improvement.";
+"大小=综合等级" = "Size = overall grade";
+"当前筛选下没有符合的公司。点上面的「精选」切到全部，或选「全部行业」。" = "No companies match the current filter. Tap \"Curated\" above to see all, or choose \"All sectors\".";
+"精选" = "Curated";
+"精选 · %@ 及以上" = "Curated · %@ and above";
+"综合等级：A+ 最大，往下每一档小一点，D 及以下最小。气泡里的字母就是综合等级。" = "Overall grade: A+ is the largest, each step down is a little smaller, D and below are the smallest. The letter inside a bubble is the overall grade.";
+"越靠中心越近" = "Closer to the centre = more recent";
+"颜色越深=变化越大" = "Darker = bigger change";
+"默认只画综合等级达到门槛的公司，和市场雷达里的基本面名单是同一个门槛：本市场有评级的公司里约前 25%，至少 8 只，不低于 B，整档纳入。点上面的「精选」可以切到全部。" = "By default only companies whose overall grade reaches the threshold are drawn. It is the same threshold as the fundamentals list in the market radar: about the top 25% of rated companies in this market, at least 8, never below B, whole grades included. Tap \"Curated\" above to switch to all.";
+
+/* Radar names */
+"缠论雷达" = "Chan Radar";
+"评级雷达" = "Rating Radar";
+"评级雷达怎么算的" = "How the Rating Radar works";
+"评级雷达数据准备中：上线后的第一次计算约需 1 小时，稍后再来看。" = "Rating Radar data is being prepared: the first calculation after launch takes about an hour. Please check back later.";
+
+/* Compare technique menu */
+"SMC 显示内容" = "SMC display";
+"对比" = "Compare";
+"对比技术" = "Compare technique";
+"缠论（默认）" = "Chan (default)";
