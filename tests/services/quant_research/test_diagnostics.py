@@ -177,3 +177,30 @@ def test_by_stage_profile_shows_stage_specific_weakness():
     assert g["dimension_scores"]["profitability"]["mean"] == 25.0 and g["dimension_scores"]["profitability"]["share_weak_lt30"] == 1.0
     assert g["profitability_metric_mean_pct"] == {"gross_m": 80.0, "roic": 5.0}      # 毛利率高、GAAP 回报极低
     assert "intro" not in r                                                         # 样本不足不给数字
+
+
+def test_sbc_adjust_whatif_lifts_stock_comp_heavy_and_leaves_light_alone():
+    from app.services.quant_research.diagnostics import SbcRow, sbc_adjust_whatif
+
+    rows = []
+    # 重股权激励组：经营利润率为负，加回股权激励后接近盈亏平衡（排位上升）
+    for i in range(20):
+        rows.append(SbcRow("tech", "growth", 50.0 + i * 0.2, 10.0, 40, -0.05 + i * 0.002, 0.10, 0.0,
+                           ("ebit_m", "gross_m", "roic")))
+    # 无股权激励组：加回量为 0，排位不变
+    for i in range(20):
+        rows.append(SbcRow("tech", "growth", 51.0 + i * 0.2, 60.0, 40, 0.05 + i * 0.005, 0.05, 0.05,
+                           ("ebit_m", "gross_m", "roic")))
+    out = sbc_adjust_whatif(rows)
+    heavy = out["by_sbc_share"]["ge_10pct"]
+    light = out["by_sbc_share"]["lt_3pct"]
+    assert heavy["n"] == 20 and light["n"] == 20
+    assert heavy["mean_pct_change"] > light["mean_pct_change"]
+    assert out["overall"]["rank_corr"] is not None
+    assert "symbol" not in str(out)
+
+
+def test_sbc_adjust_whatif_small_sample():
+    from app.services.quant_research.diagnostics import sbc_adjust_whatif
+
+    assert sbc_adjust_whatif([])["note"] == "样本不足"

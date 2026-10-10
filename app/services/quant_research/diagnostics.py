@@ -10,6 +10,7 @@
 - ``/diagnostics/scan``：从板块分布看指标覆盖 / 并列 / 极值。
 - ``/diagnostics/whatif``：「综合分和谁比」三种口径的反事实（q10 的论证依据）。
 - ``/diagnostics/netgap``：净利率与 EBIT 利润率的差距分布（一次性收益影响面）。
+- ``/diagnostics/sbcwhatif``：盈利能力里新增「加回股权激励的经营利润率」的反事实（影响面测算，不改评分）。
 - ``/diagnostics/panorama``：维度相关 / 名义占比 vs 有效影响 / 板块偏差 / 指标体检 / 冗余指标 / 统一尺度反事实 / 各阶段画像。
 """
 
@@ -542,3 +543,117 @@ def by_stage_profile(rows: list[PanoRow]) -> dict:
                 prof[k] = round(statistics.mean(ps), 1)
         out[stage] = {"n": len(g), "dimension_scores": dims, "profitability_metric_mean_pct": prof}
     return out
+
+
+# ---------- 反事实：盈利能力新增「加回股权激励的经营利润率」 ----------
+
+SBC_METRIC_WEIGHT = 0.5      # 与 EBIT 利润率同量级的权重
+
+
+@dataclass(frozen=True)
+class SbcRow:
+    """一只股票（不含代码）：测算「加回股权激励」所需的字段。"""
+    sector: str | None
+    stage: str | None
+    overall_score: float | None
+    prof_score: float | None            # 盈利能力维度分
+    prof_weight_pct: int | None         # 盈利能力在综合分里的占比 %
+    ebit_m: float | None                # 经营（EBIT）利润率
+    fcf_m: float | None
+    fcf_sbc_m: float | None             # 扣股权激励后的自由现金流利润率；fcf_m − fcf_sbc_m = 股权激励 / 营收
+    prof_keys: tuple[str, ...]          # 盈利能力里参与评分的指标键（算现有总权重）
+
+
+def _prof_weight(keys: tuple[str, ...]) -> float:
+    from app.services.quant_research.metrics import METRICS
+    from app.services.quant_research.scoring import REDUNDANT_PAIRS
+
+    w = {k: METRICS[k].weight for k in keys if k in METRICS}
+    for a, b in REDUNDANT_PAIRS:
+        if a in w and b in w:
+            w[a] *= 0.5
+            w[b] *= 0.5
+    return sum(w.values())
+
+
+def sbc_adjust_whatif(rows: list[SbcRow]) -> dict:
+    """测算：给盈利能力加一项「(EBIT + 股权激励) / 营收」（板块内百分位，权重 0.5）会怎样。
+
+    近似：新盈利能力分 = 旧分按现有总权重与新项加权；综合分改变量 ≈ 盈利能力占比 × 维度分改变量；
+    综合排位在同阶段（成长 / 成熟 / 无阶段且样本 ≥ 30）或全体内重新排。不含防抖、一票否决、维度百分位重标，
+    所以只看方向与影响面。输出按「股权激励占营收」分档与阶段汇总，不含个股。
+    """
+    from app.services.quant_research.grading import GRADE_ORDER, grade_for, percentile_of
+
+    usable = [r for r in rows if None not in (r.overall_score, r.prof_score, r.prof_weight_pct, r.ebit_m, r.fcf_m, r.fcf_sbc_m)]
+    if len(usable) < MIN_GROUP * 3:
+        return {"note": "样本不足"}
+    sbc = [max(0.0, float(r.fcf_m) - float(r.fcf_sbc_m)) for r in usable]          # type: ignore[arg-type]
+    adj = [float(r.ebit_m) + s for r, s in zip(usable, sbc, strict=True)]          # type: ignore[arg-type]
+    by_sector: dict[str, list[float]] = {}
+    for r, a in zip(usable, adj, strict=True):
+        by_sector.setdefault(r.sector or "?", []).append(a)
+    sector_sorted = {k: sorted(v) for k, v in by_sector.items() if len(v) >= MIN_GROUP}
+
+    new_scores: list[float] = []
+    for r, a in zip(usable, adj, strict=True):
+        dist = sector_sorted.get(r.sector or "?")
+        if dist is None:
+            new_scores.append(float(r.overall_score))                                # type: ignore[arg-type]
+            continue
+        pct_adj = percentile_of(a, dist, lower_better=False)
+        w_old = _prof_weight(r.prof_keys) or 1.0
+        new_prof = (float(r.prof_score) * w_old + pct_adj * SBC_METRIC_WEIGHT) / (w_old + SBC_METRIC_WEIGHT)  # type: ignore[arg-type]
+        new_scores.append(float(r.overall_score) + float(r.prof_weight_pct) / 100 * (new_prof - float(r.prof_score)))  # type: ignore[arg-type]
+
+    olds = [float(r.overall_score) for r in usable]                                  # type: ignore[arg-type]
+    stages = [r.stage or "none" for r in usable]
+    groups: dict[str, list[int]] = {}
+    for i, st in enumerate(stages):
+        groups.setdefault(st, []).append(i)
+    cohort_stages = {st for st in ("growth", "mature", "none") if len(groups.get(st, [])) >= 30}
+
+    def ranks(vals: list[float]) -> list[float]:
+        allv = sorted(vals)
+        out = []
+        for i, v in enumerate(vals):
+            if stages[i] in cohort_stages:
+                pool = sorted(vals[j] for j in groups[stages[i]])
+            else:
+                pool = allv
+            out.append(percentile_of(v, pool, lower_better=False))
+        return out
+
+    p_old, p_new = ranks(olds), ranks(new_scores)
+    g_old = [GRADE_ORDER.index(grade_for(p)) for p in p_old]
+    g_new = [GRADE_ORDER.index(grade_for(p)) for p in p_new]
+
+    def summarize_group(idx: list[int]) -> dict:
+        if len(idx) < MIN_GROUP:
+            return {"n": len(idx), "note": "样本不足"}
+        d = [g_old[i] - g_new[i] for i in idx]                                         # 正 = 等级上升
+        return {"n": len(idx), "mean_pct_change": round(statistics.mean(p_new[i] - p_old[i] for i in idx), 1),
+                "up_share": _share(sum(x > 0 for x in d), len(idx)),
+                "down_share": _share(sum(x < 0 for x in d), len(idx)),
+                "up_3plus_share": _share(sum(x >= 3 for x in d), len(idx)),
+                "mean_old_pct": round(statistics.mean(p_old[i] for i in idx), 1)}
+
+    def bucket(s: float) -> str:
+        return "ge_10pct" if s >= 0.10 else "3_10pct" if s >= 0.03 else "lt_3pct"
+
+    by_bucket: dict[str, list[int]] = {}
+    for i, s in enumerate(sbc):
+        by_bucket.setdefault(bucket(s), []).append(i)
+    loss = [i for i, r in enumerate(usable) if float(r.ebit_m) < 0]                  # type: ignore[arg-type]
+    loss_pos_fcf = [i for i in loss if float(usable[i].fcf_m) > 0]                   # type: ignore[arg-type]
+    return {
+        "n": len(usable),
+        "overall": {"rank_corr": spearman(p_old, p_new), "unchanged_share": _share(sum(a == b for a, b in zip(g_old, g_new, strict=True)), len(usable)),
+                    "up_3plus_share": _share(sum(a - b >= 3 for a, b in zip(g_old, g_new, strict=True)), len(usable)),
+                    "down_3plus_share": _share(sum(b - a >= 3 for a, b in zip(g_old, g_new, strict=True)), len(usable))},
+        "by_sbc_share": {k: summarize_group(v) for k, v in sorted(by_bucket.items())},
+        "by_stage": {st: summarize_group(idx) for st, idx in sorted(groups.items())},
+        "loss_making": summarize_group(loss),
+        "loss_making_positive_fcf": summarize_group(loss_pos_fcf),
+        "adj_vs_ebit_rank_corr": spearman([r.ebit_m for r in usable], adj),           # type: ignore[arg-type]
+    }
