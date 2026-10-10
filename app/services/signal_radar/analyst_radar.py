@@ -14,6 +14,7 @@ from typing import Literal
 
 from redis.asyncio import Redis
 
+from app.cache.operations import get_json, set_json
 from app.core.logging import logger
 from app.schemas.quant_research import AnalystChangeOut, AnalystRadarOut, TrendFacts, TrendRadarItem
 from app.services.quant_research import repository
@@ -124,3 +125,34 @@ async def analyst_radar(
     history = {s: cached[s]["actions"] for s in symbols if s in cached}
     return build_analyst_radar(history, names=names, grades=grades, tags=tags, as_of=now.date(), market=market,
                                pending=sum(1 for s in symbols if s not in cached))
+
+
+_CACHE_TTL = 2 * 3600
+_PENDING_TTL = 60
+
+
+def _cache_key(market: str, scope: str) -> str:
+    return f"signal_radar:analyst_radar:v1:{market}:{scope}"
+
+
+async def cached_analyst_radar(
+    market: str, pairs: list[tuple[str, str]], scope: str, *, redis: Redis, refresh: bool = False,
+) -> AnalystRadarOut:
+    """评级雷达的缓存入口：用户请求只读缓存（后台每小时 `refresh=True` 重算一次写回），缓存没有才现算。
+
+    后台还在补拉券商数据（pending_symbols > 0）时只缓存 1 分钟，补齐后才缓存 2 小时。自选因人而异，不走这里（直接 analyst_radar）。
+    """
+    key = _cache_key(market, scope)
+    if not refresh:
+        try:
+            if cached := await get_json(redis, key):
+                return AnalystRadarOut(**cached)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("signal_radar_analyst_radar_cache_read_failed", market=market, error=str(e))
+    out = await analyst_radar(market, pairs, scope, redis=redis)
+    try:
+        await set_json(redis, key, out.model_dump(mode="json"),
+                       expire=_PENDING_TTL if out.pending_symbols else _CACHE_TTL)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("signal_radar_analyst_radar_cache_write_failed", market=market, error=str(e))
+    return out

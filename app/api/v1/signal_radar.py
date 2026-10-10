@@ -51,7 +51,7 @@ from app.services.signal_radar.service import (
 from app.services.chan.signal_policy import DEFAULT_MODE, normalize_mode
 from app.services.watchlist import display_name, list_items
 from app.services.signal_radar.analyst_events import analyst_events
-from app.services.signal_radar.analyst_radar import analyst_radar
+from app.services.signal_radar.analyst_radar import analyst_radar, cached_analyst_radar
 from app.services.signal_radar.constituents import resolve_constituents
 from app.schemas.quant_research import AnalystRadarOut
 from app.services.signal_radar.fundamental_top import fundamental_top
@@ -352,7 +352,9 @@ async def signal_radar_analyst_radar(
             raise HTTPException(status_code=400, detail=f"不支持的市场/universe：{market}/{universe}")
         pairs = await resolve_constituents(market, redis=redis, universe_key=uni.key)
         scope = uni.key
-    return await analyst_radar(market, list(pairs), scope, redis=redis)
+    if scope == WATCHLIST_KEY:   # 自选因人而异，不缓存
+        return await analyst_radar(market, list(pairs), scope, redis=redis)
+    return await cached_analyst_radar(market, list(pairs), scope, redis=redis)
 
 
 @router.get("/analyst-events", response_model=RadarAnalystEventsResponse)
