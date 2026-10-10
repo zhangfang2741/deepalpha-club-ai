@@ -84,6 +84,27 @@ final class ChanViewModel: ObservableObject {
     func toggle(_ indicator: ChartIndicator) {
         indicatorChoices[indicator.rawValue] = !isOn(indicator)
         ChartIndicatorStore.save(indicatorChoices)
+        if indicator == .wyckoff { syncChanLayers(forWyckoffOn: isOn(.wyckoff)) }
+    }
+
+    /// 开威科夫前的缠论图层开关（分型 / 笔 / 线段 / 中枢 / 买卖点 / 背驰），只存在内存里。
+    private var chanLayersBeforeWyckoff: (fractals: Bool, strokes: Bool, segments: Bool,
+                                          pivots: Bool, signals: Bool, divergences: Bool)?
+
+    /// 威科夫和缠论是两套结构，叠在一起图面看不清：打开威科夫时记下当前图层并全部关掉，
+    /// 关掉威科夫时原样恢复（中途自己改过图层也以开威科夫前的为准）。
+    private func syncChanLayers(forWyckoffOn on: Bool) {
+        if on {
+            guard chanLayersBeforeWyckoff == nil else { return }
+            chanLayersBeforeWyckoff = (showFractals, showStrokes, showSegments,
+                                       showPivots, showSignals, showDivergences)
+            showFractals = false; showStrokes = false; showSegments = false
+            showPivots = false; showSignals = false; showDivergences = false
+        } else if let saved = chanLayersBeforeWyckoff {
+            showFractals = saved.fractals; showStrokes = saved.strokes; showSegments = saved.segments
+            showPivots = saved.pivots; showSignals = saved.signals; showDivergences = saved.divergences
+            chanLayersBeforeWyckoff = nil
+        }
     }
 
     /// 改了参数才重新请求（线是后端按含预热的原始 K 线算的，App 端算不出一样的值）。
