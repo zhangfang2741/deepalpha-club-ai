@@ -278,3 +278,15 @@ def test_analyze_handles_short_or_flat_input():
     flat = _bars([10.0] * 30)
     res = algo.analyze(flat, swing_len=3)
     assert res.breaks == [] and res.order_blocks == []
+
+
+def test_fvg_threshold_is_twice_the_mean_body_of_all_earlier_candles():
+    """阈值 = 2 × 第 0..i-1 根实体的均值（含中间那根自己）。中间实体 1.04% 刚好越过 1.01%（但不到除以 i-1 时的 1.063%）。"""
+    bars = [{"time": f"2025-01-{d + 1:02d}", "open": 100.0, "high": 100.6, "low": 99.9, "close": 100.5, "volume": 1.0}
+            for d in range(20)]                                               # 20 根实体 0.5%
+    bars.append({"time": "2025-02-01", "open": 100.0, "high": 100.2, "low": 99.9, "close": 100.1, "volume": 1.0})    # 第一根，实体 0.1%
+    mid_close = 100.1 * 1.0104
+    bars.append({"time": "2025-02-02", "open": 100.1, "high": mid_close + 0.05, "low": 100.1, "close": mid_close, "volume": 1.0})
+    bars.append({"time": "2025-02-03", "open": mid_close, "high": 102.0, "low": 100.5, "close": 101.5, "volume": 1.0})
+    gaps = [g for g in algo.analyze(bars, swing_len=3).fvgs if g.idx == 21]
+    assert gaps and (gaps[0].bottom, gaps[0].top) == (100.2, 100.5)
