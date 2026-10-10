@@ -577,3 +577,49 @@ struct ReportSummaryResponse: Decodable {
         case filedDate = "filed_date"
     }
 }
+
+/// 同阶段综合分排名（点企业阶段时展示）：只陈列本模型结果。
+struct QuantStageRanking: Decodable {
+    let stage: String
+    let asOf: String?
+    let cohortSize: Int
+    let items: [QuantStageRankingItem]
+    let selfItem: QuantStageRankingSelf?
+
+    enum CodingKeys: String, CodingKey {
+        case stage, items
+        case asOf = "as_of"
+        case cohortSize = "cohort_size"
+        case selfItem = "self_item"
+    }
+}
+
+struct QuantStageRankingItem: Decodable, Identifiable {
+    let rank: Int
+    let symbol: String
+    let name: String?
+    let grade: String?
+    let score: Double
+    let sectorName: String?
+    let isSelf: Bool
+
+    var id: String { symbol }
+
+    enum CodingKeys: String, CodingKey {
+        case rank, symbol, name, grade, score
+        case sectorName = "sector_name"
+        case isSelf = "is_self"
+    }
+}
+
+struct QuantStageRankingSelf: Decodable {
+    let rank: Int
+    let total: Int
+    /// false = 本股不在样本内，名次按它自己的综合分估算
+    let inUniverse: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case rank, total
+        case inUniverse = "in_universe"
+    }
+}

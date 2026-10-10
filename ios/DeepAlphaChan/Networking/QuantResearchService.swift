@@ -19,6 +19,15 @@ enum QuantResearchService {
         return try await APIClient.shared.get("/quant-research/methodology", query: ["lang": lang])
     }
 
+    /// 同阶段综合分排名：前 limit 家 + 本股位置（样本外股票按它自己的综合分估算名次）
+    static func stageRanking(market: String, stage: String, symbol: String?, score: Double?,
+                             limit: Int = 30) async throws -> QuantStageRanking {
+        var query = ["lang": lang, "stage": stage, "limit": String(limit)]
+        if let symbol { query["symbol"] = symbol.uppercased() }
+        if let score { query["score"] = String(format: "%.1f", score) }
+        return try await APIClient.shared.get("/quant-research/\(market)/stage-ranking", query: query)
+    }
+
     /// kind：latest = 最新一份定期报告；annual = 最新年报
     static func latestReport(market: StockMarket, symbol: String, kind: String = "latest") async throws -> LatestReport {
         try await APIClient.shared.get("/quant-research/\(market.rawValue)/\(symbol.uppercased())/report",

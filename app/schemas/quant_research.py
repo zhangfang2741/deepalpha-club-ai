@@ -250,3 +250,29 @@ class ReportSummaryOut(BaseModel):
     filed_date: str | None = None
     summary: ReportSummary | None = None
     note: str | None = Field(default=None, description="免责说明 / 失败原因")
+
+
+class StageRankingItem(BaseModel):
+    rank: int
+    symbol: str
+    name: str | None = None
+    grade: str | None = None
+    score: float
+    sector_name: str | None = None
+    is_self: bool = False
+
+
+class StageRankingSelf(BaseModel):
+    rank: int
+    total: int
+    in_universe: bool  # false = 本股不在样本内，名次按它自己的综合分估算
+
+
+class StageRankingOut(BaseModel):
+    """同阶段综合分排名（点企业阶段时展示）：只陈列本模型结果。"""
+    market: str
+    stage: str
+    as_of: str | None = None
+    cohort_size: int
+    items: list[StageRankingItem]
+    self_item: StageRankingSelf | None = None

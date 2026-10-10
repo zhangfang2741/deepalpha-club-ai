@@ -202,3 +202,20 @@ def test_diagnostics_whatif_is_aggregate_only(monkeypatch):
     assert r.status_code == 200 and "LEAK" not in r.text
     body = r.json()
     assert body["by_stage"]["shakeout"]["selective"]["percentile_mean"] < body["by_stage"]["shakeout"]["all_stages"]["percentile_mean"]
+
+
+def test_stage_ranking_route(client, monkeypatch):
+    from app.schemas.quant_research import StageRankingOut
+
+    c, _ = client
+    seen = {}
+
+    async def fake(market, stage, lang, *, symbol, score, limit):
+        seen.update(market=market, stage=stage, symbol=symbol, score=score, limit=limit)
+        return StageRankingOut(market=market, stage=stage, as_of="2026-10-09", cohort_size=0, items=[])
+
+    monkeypatch.setattr(api_mod, "get_stage_ranking", fake)
+    r = c.get("/api/v1/quant-research/us/stage-ranking?stage=growth&symbol=SNOW&score=54.8")
+    assert r.status_code == 200 and r.json()["stage"] == "growth"
+    assert seen == {"market": "us", "stage": "growth", "symbol": "SNOW", "score": 54.8, "limit": 30}
+    assert c.get("/api/v1/quant-research/us/stage-ranking?stage=foo").status_code == 422

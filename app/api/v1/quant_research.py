@@ -16,12 +16,13 @@ from app.cache.operations import acquire_lock, release_lock
 from app.core.limiter import limiter
 from app.core.logging import logger
 from app.models.user import User
-from app.schemas.quant_research import LatestReportOut, MethodologyOut, QuantResearchOut, ReportSummaryOut
+from app.schemas.quant_research import LatestReportOut, MethodologyOut, QuantResearchOut, ReportSummaryOut, StageRankingOut
 from app.core.config import settings
 from app.services.quant_research.batch import run_us_batch
 from app.services.quant_research.builder import METHODOLOGY_VERSION
 from app.services.quant_research.cnhk.batch import run_cn_batch, run_hk_batch
 from app.services.quant_research.methodology import build_methodology
+from app.services.quant_research.ranking import get_stage_ranking
 from app.services.quant_research.report import get_latest_report
 from app.services.quant_research.report_summary import get_report_summary
 from app.services.quant_research.scheduler import _LOCK_TTL, _lock_key, last_cnhk_session, last_us_session
@@ -264,6 +265,24 @@ async def _run_manual_batch(market: str, day: date) -> None:
     finally:
         if redis is not None:
             await release_lock(redis, _lock_key(market, day))
+
+
+@router.get("/{market}/stage-ranking", response_model=StageRankingOut)
+@limiter.limit("20 per minute")
+async def quant_stage_ranking(
+    request: Request,
+    market: Literal["us", "cn", "hk"],
+    stage: Literal["intro", "growth", "mature", "shakeout", "decline"] = Query(...),
+    symbol: str | None = Query(None, pattern=r"^[A-Za-z0-9][A-Za-z0-9\-\.]{0,11}$"),
+    score: float | None = Query(None, ge=0, le=100),
+    limit: int = Query(30, ge=5, le=50),
+    lang: Literal["zh", "en"] = Query("zh"),
+    user: User = Depends(get_current_user),
+) -> StageRankingOut:
+    """同阶段综合分排名（点企业阶段时展示前若干家，并标出本股位置）；样本外股票按传入的综合分估算名次。"""
+    out = await get_stage_ranking(market, stage, lang, symbol=symbol, score=score, limit=limit)
+    logger.info("quant_stage_ranking_served", market=market, stage=stage, cohort=out.cohort_size, user_id=user.id)
+    return out
 
 
 @router.get("/{market}/{symbol}/report", response_model=LatestReportOut)
