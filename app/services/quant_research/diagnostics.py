@@ -172,6 +172,11 @@ FAT_TAIL_RATIO = 20.0      # 极值 / 第 99 百分位超过它：极少数异�
 THIN_COVERAGE = 0.6        # 指标有值的公司数 / 板块样本数低于它：数据源覆盖不足
 
 
+# 合理性边界（拟用于 q10 的数据异常判定；这里只数有多少值越界，用数据说话后再决定要不要采用）
+SANITY_BOUNDS: dict[str, float] = {"r3m": 10.0, "r6m": 10.0, "r9m": 10.0, "r12m": 20.0,
+                                   "gross_m": 20.0, "ebit_m": 20.0, "ebitda_m": 20.0, "net_m": 20.0, "fcf_m": 20.0}
+
+
 def _quantile(sorted_vals: list[float], q: float) -> float:
     return sorted_vals[min(len(sorted_vals) - 1, int(q * len(sorted_vals)))]
 
@@ -216,6 +221,63 @@ def scan_distributions(dists: dict[tuple[str, str], list[float]]) -> dict:
             "median_largest_tie_share": round(statistics.median(tie), 3) if tie else None,
             "flags": flags,
         }
+        if key in SANITY_BOUNDS:
+            bound = SANITY_BOUNDS[key]
+            out["metrics"][key]["beyond_sanity_bound"] = {"bound": bound, "count": sum(abs(v) > bound for v in pooled)}
         if flags:
             out["flagged"][key] = flags
+    return out
+
+
+COHORT_STAGES_Q10 = ("growth", "mature", "none")   # 方案：只有样本大且本身不是弱势的阶段做同阶段排位
+COHORT_MIN_SAMPLE = 30                               # 与 scoring.COHORT_MIN 一致
+
+
+def whatif_cohort(rows: list[DiagRow]) -> dict:
+    """反事实：用已存的综合分，比较三种「综合分和谁比」的口径下各阶段的等级分布（不含防抖与一票否决，只看排位口径的差异）。
+
+    universe = 全体（q7）；all_stages = 每个样本 ≥30 的阶段都和同阶段比（q8 / q9 现状）；
+    selective = 只有 growth / mature / none 和同阶段比，其余阶段仍和全体比（q10 方案）。
+    只读已落库的结果，输出为各阶段汇总，分组少于 MIN_GROUP 只不给数字。
+    """
+    from app.services.quant_research.grading import grade_for, percentile_of
+
+    scored = [r for r in rows if r.score is not None]
+    if len(scored) < MIN_GROUP:
+        return {"note": "样本不足"}
+    allv = sorted(float(r.score) for r in scored)                                     # type: ignore[arg-type]
+    by_stage: dict[str, list[float]] = {}
+    for r in scored:
+        by_stage.setdefault(r.stage or "none", []).append(float(r.score))             # type: ignore[arg-type]
+    cohort = {k: sorted(v) for k, v in by_stage.items() if len(v) >= COHORT_MIN_SAMPLE}
+
+    def pct(r: DiagRow, scheme: str) -> float:
+        s = float(r.score)                                                             # type: ignore[arg-type]
+        stage = r.stage or "none"
+        use = stage in cohort and (scheme == "all_stages" or (scheme == "selective" and stage in COHORT_STAGES_Q10))
+        return percentile_of(s, cohort[stage] if use else allv, lower_better=False)
+
+    graded = [r for r in scored if r.grade in GRADE_ORDER]       # 有综合等级的（分析师够）
+    b_minus = GRADE_ORDER.index("B-")
+    out: dict = {"scored": len(scored), "graded": len(graded), "cohort_stages": sorted(cohort), "by_stage": {}}
+    for stage in sorted({r.stage or "none" for r in graded}):
+        g = [r for r in graded if (r.stage or "none") == stage]
+        if len(g) < MIN_GROUP:
+            continue
+        entry: dict = {"n": len(g), "cohort_size": len(by_stage.get(stage, []))}
+        for scheme in ("universe", "all_stages", "selective"):
+            ps = [pct(r, scheme) for r in g]
+            grades = [GRADE_ORDER.index(grade_for(p)) for p in ps]
+            entry[scheme] = {
+                "percentile_mean": round(statistics.mean(ps), 1),
+                "share_b_minus_or_better": _share(sum(x <= b_minus for x in grades), len(g)),
+                "share_f": _share(sum(x == len(GRADE_ORDER) - 1 for x in grades), len(g)),
+            }
+        out["by_stage"][stage] = entry
+    total: dict = {}
+    for scheme in ("universe", "all_stages", "selective"):
+        grades = [GRADE_ORDER.index(grade_for(pct(r, scheme))) for r in graded]
+        total[scheme] = {"share_b_minus_or_better": _share(sum(x <= b_minus for x in grades), len(graded)),
+                         "share_f": _share(sum(x == len(GRADE_ORDER) - 1 for x in grades), len(graded))}
+    out["overall"] = total
     return out

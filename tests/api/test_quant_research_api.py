@@ -181,3 +181,24 @@ def test_diagnostics_scan_reads_only_distributions(monkeypatch):
     body = r.json()
     assert body["version"] == "q9" and body["flagged"] == {"interest_cov": ["tie_heavy"]}
     assert body["metrics"]["pe_ttm"]["flags"] == []
+
+
+def test_diagnostics_whatif_is_aggregate_only(monkeypatch):
+    from datetime import date
+
+    from app.services.quant_research import repository as repo
+    from app.services.quant_research.diagnostics import DiagRow
+
+    async def fake_dates(market, limit=6):
+        return [(date(2026, 10, 10), "q9", 80)]
+
+    async def fake_rows(market, as_of):
+        rows = [DiagRow(f"LEAKCHECK{i}", "q9", "B", 50.0 + i * 0.1, 60.0, False, "mature", {}) for i in range(50)]
+        return rows + [DiagRow(f"LEAKWEAK{i}", "q9", "D", 20.0 + i * 0.1, 20.0, False, "shakeout", {}) for i in range(30)]
+
+    monkeypatch.setattr(repo, "diagnostic_dates", fake_dates)
+    monkeypatch.setattr(repo, "diagnostic_rows", fake_rows)
+    r = TestClient(app).get("/api/v1/quant-research/diagnostics/whatif?market=us")
+    assert r.status_code == 200 and "LEAK" not in r.text
+    body = r.json()
+    assert body["by_stage"]["shakeout"]["selective"]["percentile_mean"] < body["by_stage"]["shakeout"]["all_stages"]["percentile_mean"]

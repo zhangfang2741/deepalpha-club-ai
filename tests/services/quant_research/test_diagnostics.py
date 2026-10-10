@@ -80,3 +80,18 @@ def test_scan_distributions_flags_ties_fat_tails_and_thin_coverage():
     assert "fat_tail" in r["flagged"]["roe"]
     assert {"thin_coverage", "sparse_sectors"} <= set(r["flagged"]["pb"])
     assert all("symbol" not in str(v) for v in r["metrics"].values())
+
+
+def test_whatif_cohort_selective_keeps_weak_stages_on_the_universe_scale():
+    """selective：成长 / 成熟只和同阶段比；调整期这类弱势阶段仍和全体比，所以它的弱势不会被抹平。"""
+    from app.services.quant_research.diagnostics import whatif_cohort
+
+    rows = [DiagRow(f"m{i}", "q9", "B", 50.0 + i * 0.1, None, False, "mature", {}) for i in range(60)]
+    rows += [DiagRow(f"w{i}", "q9", "C", 20.0 + i * 0.1, None, False, "shakeout", {}) for i in range(40)]   # 整体明显更弱
+    r = whatif_cohort(rows)
+    sk = r["by_stage"]["shakeout"]
+    assert sk["all_stages"]["percentile_mean"] > 45          # 和同阶段比：弱势被抹平，平均排位回到 50 上下
+    assert sk["selective"]["percentile_mean"] < 25           # 仍和全体比：保持真实的弱
+    assert abs(sk["selective"]["percentile_mean"] - sk["universe"]["percentile_mean"]) < 1e-6
+    mt = r["by_stage"]["mature"]
+    assert mt["selective"] == mt["all_stages"]               # 成熟期两种口径一致

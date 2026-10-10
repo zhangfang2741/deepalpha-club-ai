@@ -87,6 +87,24 @@ async def quant_diagnostics_scan(request: Request, market: Literal["us", "cn", "
     return {"status": "ok", "market": market, "as_of": day.isoformat(), "version": version, **scan}
 
 
+@router.get("/diagnostics/whatif")
+@limiter.limit("6 per minute")
+async def quant_diagnostics_whatif(request: Request, market: Literal["us", "cn", "hk"] = Query("us")) -> dict:
+    """反事实：用最新一天已存的综合分，比较「综合分和谁比」三种口径（全体 / 所有阶段同阶段比 / 只有成长·成熟·无阶段同阶段比）下各阶段的等级分布。
+
+    只读已落库结果，不读数据源、不写库；只返回各阶段汇总。临时工具，与 /diagnostics 一起在方法稳定后删除。
+    """
+    from app.services.quant_research import diagnostics as diag
+    from app.services.quant_research import repository as repo
+
+    dates = await repo.diagnostic_dates(market)
+    if not dates:
+        return {"status": "no_data"}
+    day, version, _ = dates[0]
+    return {"status": "ok", "market": market, "as_of": day.isoformat(), "version": version,
+            **diag.whatif_cohort(await repo.diagnostic_rows(market, day))}
+
+
 @router.post("/batch/run")
 @limiter.limit("3 per minute")
 async def quant_batch_run(
