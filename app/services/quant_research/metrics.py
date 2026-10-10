@@ -237,6 +237,26 @@ def _ratio(num: float | None, den: float | None, inputs, *, den_nonpositive: Sta
     return MetricValue(num / den, "ok", inputs, "div")
 
 
+NONOP_ADJ_SHARE = 0.25   # 营业外项目占经营利润超过这个比例才剔除（小额噪声不动）
+
+
+def _adjusted_net(net: float | None, ebit: float | None, ebit_reported: float | None,
+                  tax: float | None, pretax: float | None) -> tuple[float | None, float | None]:
+    """净利润剔除大额营业外项目（处置收益 / 公允价值变动等），返回 (调整后净利润, 扣税后的剔除额)。
+
+    只有美股（FMP 行有 ebitReported）才有数据：报表 EBIT 与经营利润的差额 ≥ 经营利润绝对值的 25% 才剔除，
+    按实际税率（0~35%，取不到用 21%）扣税后从净利润里减去；否则原样返回 (net, None)。
+    """
+    if net is None or ebit is None or ebit_reported is None or ebit == 0:
+        return net, None
+    gap = ebit_reported - ebit
+    if abs(gap) < NONOP_ADJ_SHARE * abs(ebit):
+        return net, None
+    rate = min(max(tax / pretax, 0.0), 0.35) if (tax is not None and pretax and pretax > 0) else 0.21
+    after_tax = gap * (1 - rate)
+    return net - after_tax, after_tax
+
+
 def _growth(cur: float | None, base: float | None, inputs) -> MetricValue:
     if cur is None or base is None or base <= 0:
         return _missing("growth", inputs)
@@ -276,6 +296,7 @@ def compute_metrics(inp: StockInputs) -> dict[str, MetricValue]:
     eps, eps_p = ttm(q, "epsDiluted"), ttm(q, "epsDiluted", 4)
     gross, net = ttm(q, "grossProfit"), ttm(q, "netIncome")
     pretax, tax = ttm(q, "incomeBeforeTax"), ttm(q, "incomeTaxExpense")
+    net, nonop = _adjusted_net(net, ebit, ttm(q, "ebitReported"), tax, pretax)
     ocf = ttm(cf, "operatingCashFlow")
     capex = ttm(cf, "capitalExpenditure")
     fcf = ocf + capex if (ocf is not None and capex is not None) else None
@@ -345,6 +366,9 @@ def compute_metrics(inp: StockInputs) -> dict[str, MetricValue]:
     out["fcf_sbc_m"] = _ratio(fcf_sbc, rev, [("fcf_sbc_ttm", fcf_sbc), ("rev_ttm", rev)])
     out["roe"] = _ratio(net, equity, [("net_ttm", net), ("equity", equity)], den_nonpositive=na)
     out["roa"] = _ratio(net, assets, [("net_ttm", net), ("assets", assets)])
+    if nonop is not None:
+        for key in ("net_m", "roe", "roa"):
+            out[key].meta = {**out[key].meta, "adjusted": True, "nonop_after_tax": nonop}
     tax_rate = min(max(tax / pretax, 0.0), 0.5) if (tax is not None and pretax and pretax > 0) else 0.21
     nopat = ebit * (1 - tax_rate) if ebit is not None else None
     invested = (debt + equity - cash_st) if (debt is not None and equity is not None and cash_st is not None) else None

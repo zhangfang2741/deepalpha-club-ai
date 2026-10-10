@@ -129,6 +129,7 @@ def _operating_basis(row: dict) -> dict:
     if oi is None:
         return row
     out = dict(row)
+    out["ebitReported"] = _num(row.get("ebit"))   # 报表口径留底：与经营利润的差额 = 营业外项目（q11 剔除净利润里的一次性项目用）
     out["ebit"] = oi
     da = _num(row.get("depreciationAndAmortization"))
     if da is not None:

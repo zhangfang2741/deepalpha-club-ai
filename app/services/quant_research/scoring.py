@@ -148,13 +148,25 @@ def score_dimension(dim: str, scored: list[ScoredMetric], prev_grade: str | None
     return DimensionScore(dim, "ok", score, grade_with_hysteresis(score, prev_grade), scored)
 
 
-def weighted_percentile(part: list[ScoredMetric], metric_weights: dict[str, float] | None = None) -> float:
-    """参与指标的百分位按指标权重加权平均（默认取 MetricDef.weight，1 = 等权；metric_weights 按阶段覆盖）。"""
-    def w(s: ScoredMetric) -> float:
-        return metric_weights.get(s.key, METRICS[s.key].weight) if metric_weights is not None else METRICS[s.key].weight
+# 同一维度内秩相关 ≥ 0.9 的成对指标（q11）：两项同时参与时各自权重减半，合计只算一份信息
+REDUNDANT_PAIRS: tuple[tuple[str, str], ...] = (
+    ("fcf_m", "fcf_sbc_m"), ("ebit_yoy", "ebitda_yoy"), ("ebit_fwd", "ebitda_fwd"),
+)
 
-    total = sum(w(s) for s in part)
-    return sum(s.percentile * w(s) for s in part) / total  # type: ignore[operator]
+
+def weighted_percentile(part: list[ScoredMetric], metric_weights: dict[str, float] | None = None) -> float:
+    """参与指标的百分位按指标权重加权平均（默认取 MetricDef.weight，1 = 等权；metric_weights 按阶段覆盖）。
+
+    成对冗余指标（REDUNDANT_PAIRS）两项都参与时各减半；只剩一项时照常。
+    """
+    weights = {s.key: (metric_weights.get(s.key, METRICS[s.key].weight) if metric_weights is not None
+                       else METRICS[s.key].weight) for s in part}
+    for a, b in REDUNDANT_PAIRS:
+        if a in weights and b in weights:
+            weights[a] *= 0.5
+            weights[b] *= 0.5
+    total = sum(weights.values())
+    return sum(s.percentile * weights[s.key] for s in part) / total  # type: ignore[operator]
 
 
 def min_participating(total: int) -> int:
@@ -180,8 +192,26 @@ def build_cohort_distributions(composites: list[tuple[str | None, float]]) -> Di
     return {cohort_key(k): sorted(v) for k, v in groups.items() if len(v) >= COHORT_MIN}
 
 
-def composite(dims: list[DimensionScore], weights: dict[str, float] | None = None) -> float | None:
-    """可用维度分的加权平均；weights = 阶段权重（只在可用维度间重新归一），不传则等权。"""
+DIM_KEY = "_dim"
+
+
+def dim_dist_key(dim: str) -> tuple[str, str]:
+    """维度分在全体里的有序分布键（q11：综合分先把各维度分转成全体百分位再加权）。"""
+    return OVERALL_SECTOR, f"{DIM_KEY}:{dim}"
+
+
+def build_dim_distributions(dim_scores: dict[str, list[float]]) -> Distributions:
+    """维度 → 全体维度分列表，转成可存库的有序分布。"""
+    return {dim_dist_key(k): sorted(v) for k, v in dim_scores.items() if v}
+
+
+def composite(dims: list[DimensionScore], weights: dict[str, float] | None = None,
+              dim_dists: dict[str, list[float]] | None = None) -> float | None:
+    """可用维度分的加权平均；weights = 阶段权重（只在可用维度间重新归一），不传则等权。
+
+    dim_dists（维度 → 全体维度分有序列表）给了就先把各维度分换成全体百分位再加权：
+    各维度分的离散程度不同（有的维度分普遍挤在中间），直接平均会让「名义权重」≠「对排名的有效影响」。
+    """
     usable = [d for d in _scored(dims) if d.status == "ok" and d.score is not None]
     if not usable:
         return None
@@ -189,7 +219,12 @@ def composite(dims: list[DimensionScore], weights: dict[str, float] | None = Non
     total = sum(w)
     if total <= 0:
         return None
-    return round(sum(d.score * wi for d, wi in zip(usable, w, strict=True)) / total, 1)  # type: ignore[operator]
+
+    def val(d: DimensionScore) -> float:
+        dist = (dim_dists or {}).get(d.key)
+        return percentile_of(d.score, dist, lower_better=False) if dist else d.score  # type: ignore[arg-type]
+
+    return round(sum(val(d) * wi for d, wi in zip(usable, w, strict=True)) / total, 1)
 
 
 def effective_weights(dims: list[DimensionScore], weights: dict[str, float] | None) -> dict[str, float]:
@@ -207,21 +242,23 @@ def _scored(dims: list[DimensionScore]) -> list[DimensionScore]:
 
 def overall(dims: list[DimensionScore], overall_dist: list[float], n_analysts: int,
             prev_grade: str | None, weights: dict[str, float] | None = None,
-            cohort_dist: list[float] | None = None, cohort: str | None = None) -> OverallScore:
+            cohort_dist: list[float] | None = None, cohort: str | None = None,
+            dim_dists: dict[str, list[float]] | None = None) -> OverallScore:
     """综合等级：综合分在全体中的百分位 → 等级；一票否决与分析师不足处理。
 
     weights 不传 = 所有基本面维度都有否决权；传了则只有权重 ≥ CAP_MIN_WEIGHT 的基本面维度能否决（动量 / EPS 修正永远不能）。
     cohort_dist 给了就用同阶段分布定百分位（结果 extra["cohort"] = 阶段键，文案据此写「同阶段公司」），否则用全体 overall_dist。
     """
-    out = _overall(dims, cohort_dist or overall_dist, n_analysts, prev_grade, weights)
+    out = _overall(dims, cohort_dist or overall_dist, n_analysts, prev_grade, weights, dim_dists)
     if cohort_dist:
         out.extra["cohort"] = cohort or "none"
     return out
 
 
 def _overall(dims: list[DimensionScore], overall_dist: list[float], n_analysts: int,
-             prev_grade: str | None, weights: dict[str, float] | None) -> OverallScore:
-    score = composite(dims, weights)
+             prev_grade: str | None, weights: dict[str, float] | None,
+             dim_dists: dict[str, list[float]] | None = None) -> OverallScore:
+    score = composite(dims, weights, dim_dists)
     used = sum(d.status == "ok" for d in _scored(dims))
     if score is None:
         return OverallScore(None, None, None, used)

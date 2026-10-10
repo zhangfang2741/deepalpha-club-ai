@@ -4,7 +4,7 @@
  "name": "Exxon Mobil Corporation",
  "status": "ok",
  "status_note": null,
- "methodology_version": "q10",
+ "methodology_version": "q11",
  "as_of": {
   "price_date": "2026-09-29",
   "fiscal_period": "FY26 Q2",
@@ -812,7 +812,7 @@
    "name": "成长",
    "description": "营收与利润的历史及预期增速",
    "grade": "C+",
-   "score": 57.4,
+   "score": 56.0,
    "status": "ok",
    "status_note": null,
    "is_highest": false,
@@ -821,7 +821,7 @@
     "metric": "ebitda_fwd",
     "text": "EBITDA 预期增速 +62%，高于板块 79% 的公司"
    },
-   "formula": "(45 + 77 + 32 + 49 + 79 + 45 + 76 + 48 + 65) ÷ 9 = 57.4 → C+",
+   "formula": "(45 + 77 + 32 + 49 + 79 + 45 + 76 + 48 + 65) ÷ 9 = 56.0 → C+",
    "groups": [
     {
      "name": "营收",
@@ -1319,8 +1319,8 @@
    "key": "profitability",
    "name": "盈利能力",
    "description": "利润率与资本回报",
-   "grade": "C-",
-   "score": 45.8,
+   "grade": "C",
+   "score": 46.3,
    "status": "ok",
    "status_note": null,
    "is_highest": false,
@@ -1329,7 +1329,7 @@
     "metric": "ebit_m",
     "text": "EBIT 利润率 11%，低于板块 65% 的公司"
    },
-   "formula": "(38×1 + 35×0.5 + 35×0.5 + 44×0.5 + 39×1 + 47×1 + 48×0.5 + 61×0.5 + 62×1) ÷ 6.5 = 45.8 → C-",
+   "formula": "(38×1 + 35×0.5 + 35×0.5 + 44×0.5 + 39×1 + 47×1 + 48×0.5 + 61×0.5 + 62×1) ÷ 6.5 = 46.3 → C",
    "groups": [
     {
      "name": "毛利率",

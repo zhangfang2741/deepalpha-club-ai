@@ -32,6 +32,7 @@ from app.services.quant_research.scoring import (
     ScoredMetric,
     cohort_key,
     composite,
+    dim_dist_key,
     effective_weights,
     mark_extremes,
     overall,
@@ -56,7 +57,7 @@ from app.schemas.quant_research import (
     Stage,
 )
 
-METHODOLOGY_VERSION = "q10"  # q10：综合分只有成长 / 成熟 / 无阶段做同阶段排位，调整 / 收缩 / 初创期仍和全体比；q9：EBIT / EBITDA 改用经营利润口径、0 利息但有大笔负债视为数据缺口；q8：综合分在同阶段公司里排位（样本够多时）、成熟期估值倍数按信息类别分权；q7：综合分按公司阶段给维度加权（不再等权），低权重维度无一票否决权；# q3：EPS 修正过渡期用外部一致预期趋势；q4：阶段改为营收增速主轴；q5：新增护城河（只展示）；q6：护城河改为独立模块（宽 / 窄 / 无），移出维度
+METHODOLOGY_VERSION = "q11"  # q11：成对冗余指标（FCF 利润率 / EBIT·EBITDA 增速）权重减半、美股净利润剔除大额营业外项目、综合分先把各维度分换成全体百分位再加权；q10：综合分只有成长 / 成熟 / 无阶段做同阶段排位，调整 / 收缩 / 初创期仍和全体比；q9：EBIT / EBITDA 改用经营利润口径、0 利息但有大笔负债视为数据缺口；q8：综合分在同阶段公司里排位（样本够多时）、成熟期估值倍数按信息类别分权；q7：综合分按公司阶段给维度加权（不再等权），低权重维度无一票否决权；# q3：EPS 修正过渡期用外部一致预期趋势；q4：阶段改为营收增速主轴；q5：新增护城河（只展示）；q6：护城河改为独立模块（宽 / 窄 / 无），移出维度
 _REVISION_LOOKBACK = {"eps_fy1_30d": 30, "eps_fy1_90d": 90, "eps_fy2_90d": 90, "rev_fy1_90d": 90}
 
 
@@ -70,6 +71,7 @@ class Evaluation:
     overall: OverallScore | None = None
     estimates_date: str | None = None
     extra: dict = field(default_factory=dict)
+    dim_dists: dict[str, list[float]] = field(default_factory=dict)   # 维度 → 全体维度分有序分布（综合分用）
 
     @property
     def weights(self) -> dict[str, float]:
@@ -78,7 +80,7 @@ class Evaluation:
 
     @property
     def composite(self) -> float | None:
-        return composite(self.dims, self.weights)
+        return composite(self.dims, self.weights, self.dim_dists)
 
 
 def revision_metrics(inp: StockInputs, history: list[EstimatePoint]) -> dict[str, MetricValue]:
@@ -138,8 +140,10 @@ def finalize_overall(ev: Evaluation, overall_dist: list[float], prev_grades: dic
     """定综合等级（含一票否决）：综合分在同阶段公司里的百分位（该阶段样本够多时），否则在全体里的百分位。"""
     stage_key = ev.stage.key if ev.stage else None
     cohort = (cohort_dists or {}).get(cohort_key(stage_key))
+    if not ev.dim_dists:  # 单股按需路径：从存库的分布里取
+        ev.dim_dists = {d.key: v for d in ev.dims if (v := (cohort_dists or {}).get(dim_dist_key(d.key)))}
     ev.overall = overall(ev.dims, overall_dist, ev.n_analysts, (prev_grades or {}).get("overall"), ev.weights,
-                         cohort_dist=cohort, cohort=stage_key)
+                         cohort_dist=cohort, cohort=stage_key, dim_dists=ev.dim_dists)
     return ev
 
 

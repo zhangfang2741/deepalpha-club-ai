@@ -275,3 +275,33 @@ def test_cash_conversion_is_capped_at_100_percent():
     assert over.value == CFO_NI_CAP and over.meta.get("capped") is True
     below = compute_metrics(_with(inp, cash={"operatingCashFlow": 0.4 * net / 4}))["cfo_ni"]    # 收现不足 100%：照实算
     assert below.value < CFO_NI_CAP and "capped" not in below.meta
+
+
+# ---------- q11：营业外项目剔除后的净利润（仅美股 FMP 行有 ebitReported） ----------
+
+def _nonop_inp(ebit_reported: float | None, operating: float = 100.0, net: float = 80.0):
+    inp = load_inputs("NVDA")
+    qs = []
+    for q in inp.quarters_income:
+        row = {k: v for k, v in q.items() if k != "ebitReported"}
+        row.update(operatingIncome=operating, ebit=operating, netIncome=net, incomeTaxExpense=0.0, incomeBeforeTax=0.0)
+        if ebit_reported is not None:
+            row["ebitReported"] = ebit_reported
+        qs.append(row)
+    return replace(inp, quarters_income=qs)
+
+
+def test_net_income_strips_large_nonoperating_gain():
+    # 报表 EBIT 比经营利润高 100%（营业外收益），净利润应扣掉税后的差额（税率缺失取 21%）
+    m = compute_metrics(_nonop_inp(ebit_reported=200.0))
+    assert m["net_m"].meta["adjusted"] is True
+    rev = ttm(_nonop_inp(200.0).quarters_income, "revenue")
+    assert m["net_m"].value == pytest.approx((4 * 80.0 - 4 * 100.0 * 0.79) / rev)
+
+
+def test_net_income_keeps_reported_when_gap_small_or_missing():
+    for rep in (110.0, None):
+        m = compute_metrics(_nonop_inp(ebit_reported=rep))
+        assert not m["net_m"].meta.get("adjusted")
+        rev = ttm(_nonop_inp(rep).quarters_income, "revenue")
+        assert m["net_m"].value == pytest.approx(4 * 80.0 / rev)

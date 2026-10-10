@@ -4,7 +4,7 @@
  "name": "NVIDIA Corporation",
  "status": "ok",
  "status_note": null,
- "methodology_version": "q10",
+ "methodology_version": "q11",
  "as_of": {
   "price_date": "2026-09-29",
   "fiscal_period": "FY27 Q2",
@@ -35,12 +35,12 @@
  },
  "overall": {
   "grade": "A",
-  "score": 72.3,
-  "universe_percentile": 88.8,
+  "score": 73.1,
+  "universe_percentile": 89.7,
   "dimensions_used": 5,
   "capped": false,
   "note": null,
-  "text": "综合分 72.3 · 标普1500 前 11%"
+  "text": "综合分 73.1 · 标普1500 前 10%"
  },
  "dimensions": [
   {
@@ -811,8 +811,8 @@
    "key": "growth",
    "name": "成长",
    "description": "营收与利润的历史及预期增速",
-   "grade": "B+",
-   "score": 78.6,
+   "grade": "A-",
+   "score": 81.0,
    "status": "ok",
    "status_note": null,
    "is_highest": false,
@@ -821,7 +821,7 @@
     "metric": "rev_cagr3",
     "text": "营收 3 年复合增速 +110%，高于板块 99% 的公司"
    },
-   "formula": "(99 + 97 + 100 + 86 + 60 + 83 + 52 + 81 + 50) ÷ 9 = 78.6 → B+",
+   "formula": "(99 + 97 + 100 + 86 + 60 + 83 + 52 + 81 + 50) ÷ 9 = 81.0 → A-",
    "groups": [
     {
      "name": "营收",
@@ -1320,7 +1320,7 @@
    "name": "盈利能力",
    "description": "利润率与资本回报",
    "grade": "A+",
-   "score": 94.8,
+   "score": 94.4,
    "status": "ok",
    "status_note": null,
    "is_highest": true,
@@ -1329,7 +1329,7 @@
     "metric": "net_m",
     "text": "净利率 64%，高于板块 99% 的公司"
    },
-   "formula": "(79×1 + 98×0.5 + 98×0.5 + 100×0.5 + 95×1 + 99×1 + 92×0.5 + 100×0.5 + 100×1) ÷ 6.5 = 94.8 → A+",
+   "formula": "(79×1 + 98×0.5 + 98×0.5 + 100×0.5 + 95×1 + 99×1 + 92×0.5 + 100×0.5 + 100×1) ÷ 6.5 = 94.4 → A+",
    "groups": [
     {
      "name": "毛利率",

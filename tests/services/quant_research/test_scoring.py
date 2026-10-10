@@ -244,3 +244,24 @@ def test_overall_uses_cohort_distribution_and_marks_it():
     b = overall(dims, whole, n_analysts=10, prev_grade=None, cohort_dist=cohort, cohort="mature")
     assert b.universe_percentile > a.universe_percentile
     assert b.extra["cohort"] == "mature" and "cohort" not in a.extra
+
+
+# ---------- q11：成对冗余指标减半权重、维度分先转全体百分位再加权 ----------
+
+def test_redundant_pair_weight_is_halved_when_both_present():
+    from app.services.quant_research.scoring import weighted_percentile
+    a, b, c = _sm("fcf_m", 80), _sm("fcf_sbc_m", 80), _sm("gross_m", 20)
+    # fcf_m / fcf_sbc_m 各 0.5 → 合计 1 与 gross_m 的 1 等重：(80*1 + 20*1) / 2 = 50
+    assert weighted_percentile([a, b, c]) == pytest.approx(50.0)
+    # 只有一个时不减半
+    assert weighted_percentile([a, c]) == pytest.approx(50.0)
+
+
+def test_composite_uses_dimension_percentiles_when_given():
+    from app.services.quant_research.scoring import composite
+    dims = [_dim("growth", 90.0), _dim("stability", 50.0)]
+    raw = composite(dims, None)
+    scaled = composite(dims, None, {"growth": [10.0, 20.0, 90.0, 95.0], "stability": [10.0, 50.0, 60.0, 70.0]})
+    assert raw == pytest.approx(70.0)
+    # 90 在 growth 分布里 75 分位（4 个里位次 3），50 在 stability 里 50 分位 → 62.5
+    assert scaled == pytest.approx(62.5, abs=0.1)

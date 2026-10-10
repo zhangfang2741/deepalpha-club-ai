@@ -122,7 +122,10 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
       f"（权重更低的维度、以及股价类的动量和预期类的 EPS 修正，都没有一票否决权）；"
       f"覆盖的分析师少于 {MIN_ANALYSTS} 位时不给综合等级。"
       "综合分的权重按公司阶段调整，成长期、成熟期和未标阶段的公司，综合等级是拿综合分和「同阶段的公司」比出来的百分位"
-      "（样本不足 30 家时和全体比）；调整期、收缩期、初创期的综合分偏低是真实状况，仍和全体比，不会因为同阶段都弱而被抬高。同一板块里各维度的等级可以直接比较。",
+      "（样本不足 30 家时和全体比）；调整期、收缩期、初创期的综合分偏低是真实状况，仍和全体比，不会因为同阶段都弱而被抬高。同一板块里各维度的等级可以直接比较。"
+      "综合分里每个维度先换成它在全体里的百分位再加权，避免分数挤在中间的维度被稀释。"
+      "同一维度内高度重复的成对指标（自由现金流利润率与扣股权激励后的、EBIT 与 EBITDA 的同比和预期增速）两项同时参与时各减半，只算一份信息；"
+      "美股净利润里金额很大的营业外项目（处置收益、公允价值变动等，超过经营利润的四分之一）扣税后剔除，再算净利率、ROE、ROA。",
       f"The composite score is a stage-weighted average of the available dimension scores (weights are listed under "
       f"Company stage; missing dimensions are re-normalized over the rest); its percentile among peers in the same stage "
       f"sets the grade on the same scale. If valuation, growth, profitability or financial health carries at least "
@@ -132,7 +135,11 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
       "company's stage, the composite of growth, mature and unlabeled companies is ranked against companies in the same "
       "stage (against everyone when fewer than 30); shake-out, contraction and introduction companies are still ranked "
       "against everyone, because their lower scores are real and should not be lifted just because the whole stage is weak; "
-      "dimension grades within a sector still compare directly.")),
+      "dimension grades within a sector still compare directly. Each dimension score is first converted to its percentile among "
+      "all companies before being weighted, so dimensions whose scores bunch in the middle are not diluted. Near-duplicate metric pairs "
+      "in one dimension (FCF margin with and without stock comp; EBIT vs EBITDA growth, trailing and forward) each count half when "
+      "both are present; for US companies, large non-operating items in net income (disposal gains, fair-value changes; more than "
+      "a quarter of operating income) are removed after tax before net margin, ROE and ROA.")),
     (("估值指标按阶段取舍", "Valuation metrics by stage"),
      (f"估值维度里的 14 个倍数，不同阶段看的重点不同，但比较对象不变：每个倍数仍然和同板块全体公司比百分位，所以不同公司在同一板块维度下可比。"
       f"只改各倍数在估值分里的权重，同样按营收增速和经营现金流连续插值、不在门槛处跳变：成熟期 14 项按信息类别分配、同类不重复计算（盈利倍数、企业价值利润倍数、营收倍数、市现率各约 21%，市净率约 14%）；{_valuation_weights_zh()}。"

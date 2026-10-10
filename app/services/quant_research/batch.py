@@ -35,7 +35,13 @@ from app.services.quant_research.fmp import FmpClient
 from app.services.quant_research.revisions import EstimatePoint, accumulated_days
 from app.services.quant_research.inputs import StockInputs, build_inputs
 from app.services.quant_research.metrics import MetricValue, compute_metrics
-from app.services.quant_research.scoring import OVERALL_KEY, OVERALL_SECTOR, build_cohort_distributions, build_distributions
+from app.services.quant_research.scoring import (
+    OVERALL_KEY,
+    OVERALL_SECTOR,
+    build_cohort_distributions,
+    build_dim_distributions,
+    build_distributions,
+)
 from app.services.quant_research.universe import fetch_sp1500
 
 MARKET = "us"
@@ -181,6 +187,15 @@ async def score_and_store(market: str, as_of: date, inputs: dict[str, StockInput
     prev = await repo.get_prev_grades(market, as_of)
     evals: dict[str, Evaluation] = {s: evaluate(inp, histories.get(s, []), dists, prev.get(s))
                                     for s, inp in inputs.items()}
+    dim_scores: dict[str, list[float]] = {}
+    for ev in evals.values():
+        for d in ev.dims:
+            if d.status == "ok" and d.score is not None:
+                dim_scores.setdefault(d.key, []).append(d.score)
+    dists |= build_dim_distributions(dim_scores)
+    by_dim = {k: sorted(v) for k, v in dim_scores.items()}
+    for ev in evals.values():
+        ev.dim_dists = by_dim
     overall_dist = sorted(ev.composite for ev in evals.values() if ev.composite is not None)
     dists[(OVERALL_SECTOR, OVERALL_KEY)] = overall_dist
     cohorts = build_cohort_distributions([(ev.stage.key if ev.stage else None, ev.composite)

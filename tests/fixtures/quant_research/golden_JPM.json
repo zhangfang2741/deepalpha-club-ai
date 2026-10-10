@@ -4,7 +4,7 @@
  "name": "JPMorgan Chase & Co.",
  "status": "ok",
  "status_note": null,
- "methodology_version": "q10",
+ "methodology_version": "q11",
  "as_of": {
   "price_date": "2026-09-29",
   "fiscal_period": "FY26 Q2",
@@ -800,7 +800,7 @@
    "name": "成长",
    "description": "营收与利润的历史及预期增速",
    "grade": "C+",
-   "score": 56.3,
+   "score": 56.1,
    "status": "ok",
    "status_note": null,
    "is_highest": false,
@@ -809,7 +809,7 @@
     "metric": "rev_cagr3",
     "text": "营收 3 年复合增速 +14%，高于板块 69% 的公司"
    },
-   "formula": "(55 + 69 + 52 + 61 + 52 + 62 + 45 + 54) ÷ 8 = 56.3 → C+",
+   "formula": "(55 + 69 + 52 + 61 + 52 + 62 + 45 + 54) ÷ 8 = 56.1 → C+",
    "groups": [
     {
      "name": "营收",
