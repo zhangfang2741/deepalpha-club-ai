@@ -405,7 +405,6 @@ struct SignalRadarView: View {
                             color: SignalRadarView.trendColor(raw: layout.signal.date, depth: layout.signal.strength),
                             isNew: false,
                             marksConfirmed: false,
-                            polished: true,
                             gradeText: trendGradeText[layout.signal.date + ":" + layout.signal.symbol],
                             // 点气泡直接进个股详情：基本面雷达进「基本面研究」分段，评级雷达进「分析师评级」分段（和缠论雷达一样不先弹面板）
                             onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name, segment: vm.trendFlavor == .analyst ? .analyst : .quant) }
