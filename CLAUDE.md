@@ -517,6 +517,8 @@ deepalpha-club-ai/
   **摆动长度的校准**（2026-10，8 只美股 / 港股 / A 股近三年日线）：长度 3~5 时两年里有 25~40 次突破、一屏全是线，10 时每只约 9~15 次，所以日线取 10；LuxAlgo 默认的「主结构 50 / 内部结构 5」在两年日线上要么太稀要么太密，这里只取一级。改长度须同步改推导 / 说明里写的数字。
   **只陈列位置与事实**：说明文字以「只标出位置，不是买卖信号」收尾，不出现买卖导向措辞（`test_overlay_has_no_trading_wording` 守护；订单块不叫「入场区」，溢价 / 折价不是「贵 / 便宜」，强弱高低点只是按结构方向的命名）。
   iOS：图层勾选在「指标设置 → SMC」（`SmcLayers`，存本机；默认只开结构 / 订单块 / 缺口，其余按需，全开会铺满整张图），点标记 / 线 / 方块看解释（`ChartElement.smc`，`ChartElementExplainer.smc`），颜色向上蓝 `Theme.smcBull`、向下琥珀 `Theme.smcBear`、中性 `Theme.smcNeutral`（避开红绿）。词典 10 条（SMC / 结构突破 / 结构转变 / 订单块 / 公允价值缺口 / 等高低点 / 流动性扫荡 / 溢价与折价 / 强弱高低点 / 前周期高低点，`glossary.json` 中英），新手入门 `guide-app-detail` 已补。
+  **影线用原始高低点**（2026-10-10）：SMC / 威科夫按**原始 K 线**算，而图上是缠论去包含后的合并 K 线——合并 K 线的 high / low 是按方向合并出来的（上行取高点最大、低点最大），比真实影线短，结构线 / 订单块的边会飘在影线外（NVDA 订单块约一半超出所在合并 K 线）。
+  所以 `/chan/analysis` 的每根 `merged_candles` 多带 `raw_high / raw_low`（`chan/raw_extremes.py`，按 `MergedCandle.raw_start..raw_end` 取所含原始 K 线的最高 / 最低，三只股票 1362 根逐根核对过下标偏移为 0），打开 SMC / 威科夫时 App 用它们画影线并参与纵轴范围（`ChanChartView.wickHigh / wickLow`），缠论图层开着时画法不变。**不要**改成在合并 K 线上算 SMC：突破只有约一半相同、FVG 会少一半多（0700.HK 7 → 3）。
   **改识别规则 / 阈值时，说明文字（`ChartElementExplainer.smc`）与词典条目（中英）一起改**。**已知局限**：规则按两份开源实现取舍、没有针对 A 股 / 港股单独标定；FVG 的 2 倍实体阈值、等高低点的 0.1×ATR 沿用 LuxAlgo 默认值。
 - 30 分钟周期可在条件页选，**会员功能**（示例股除外，与次级别确认同一权益）；`ChanViewModel.apply` 没指定周期时 30 分钟回到日线，避免自选 / 雷达入口沿用它绕过门禁。
 

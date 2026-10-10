@@ -359,8 +359,8 @@ struct ChanChartView: View {
         var lo = Double.greatestFiniteMagnitude
         var hi = -Double.greatestFiniteMagnitude
         for i in range.start..<min(range.end, candles.count) {
-            lo = min(lo, candles[i].low)
-            hi = max(hi, candles[i].high)
+            lo = min(lo, wickLow(candles[i]))
+            hi = max(hi, wickHigh(candles[i]))
         }
         if lo > hi { return PriceBounds(minP: 0, maxP: 1) }
         // 保留原有上下各 12% 价差的标记留白。
@@ -509,8 +509,8 @@ struct ChanChartView: View {
             let color = c.isUp ? Theme.up : Theme.down
             // 影线
             var wick = Path()
-            wick.move(to: CGPoint(x: cx, y: y(for: c.high, height: height, bounds: bounds)))
-            wick.addLine(to: CGPoint(x: cx, y: y(for: c.low, height: height, bounds: bounds)))
+            wick.move(to: CGPoint(x: cx, y: y(for: wickHigh(c), height: height, bounds: bounds)))
+            wick.addLine(to: CGPoint(x: cx, y: y(for: wickLow(c), height: height, bounds: bounds)))
             ctx.stroke(wick, with: .color(color), lineWidth: wickWidth)
             // 实体：十字星（开≈收）时至少给 1pt 高度，否则整根蜡烛只剩影线
             let openY = y(for: c.open, height: height, bounds: bounds)
@@ -1735,8 +1735,8 @@ struct ChanChartView: View {
                 .foregroundColor(Theme.textSecondary)
             HStack(spacing: 8) {
                 infoText(L("开"), String(format: "%.2f", c.open))
-                infoText(L("高"), String(format: "%.2f", c.high))
-                infoText(L("低"), String(format: "%.2f", c.low))
+                infoText(L("高"), String(format: "%.2f", wickHigh(c)))
+                infoText(L("低"), String(format: "%.2f", wickLow(c)))
                 infoText(L("收"), String(format: "%.2f", c.close))
             }
             .font(.system(size: 10))
@@ -1838,6 +1838,12 @@ struct ChanChartView: View {
     }
 
     private var anyIndicatorOn: Bool { ChartIndicator.allCases.contains { vm.isOn($0) } }
+
+    /// 影线用哪组高低点：SMC / 威科夫是按原始 K 线算的，打开它们时影线用所含原始 K 线的真实最高 / 最低价，
+    /// 结构线和订单块 / 缺口的边才碰得到影线；缠论图层（合并 K 线）的画法不变。旧后端没有 raw_* 时退回合并后的值。
+    private var rawWicks: Bool { vm.isOn(.smc) || vm.isOn(.wyckoff) }
+    private func wickHigh(_ c: MergedCandle) -> Double { rawWicks ? (c.rawHigh ?? c.high) : c.high }
+    private func wickLow(_ c: MergedCandle) -> Double { rawWicks ? (c.rawLow ?? c.low) : c.low }
 
     /// 成交量缩写：中文用万/亿，英文用 K/M/B。
     static func formatVolume(_ v: Double) -> String {

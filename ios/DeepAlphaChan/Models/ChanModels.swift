@@ -7,6 +7,8 @@ struct MergedCandle: Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case idx, time, high, low, open, close, volume
         case endTime = "end_time"
+        case rawHigh = "raw_high"
+        case rawLow = "raw_low"
     }
 
     let idx: Int
@@ -21,6 +23,10 @@ struct MergedCandle: Codable, Identifiable {
     /// 按它对位；今天被昨天包含时 `time` 仍是昨天，展示要用 `displayTime` 才看得出今天在里面。
     /// 可选：旧后端无此字段。
     let endTime: String?
+    /// 所含原始 K 线的真实最高 / 最低价。`high` / `low` 是缠论去包含后的值，比影线短；
+    /// 打开 SMC / 威科夫时影线用这两个（见 `ChanChartView.wickHigh`）。可选：旧后端无此字段。
+    var rawHigh: Double? = nil
+    var rawLow: Double? = nil
 
     /// 时间轴、十字光标、「数据截至」等展示用的时间。
     var displayTime: String { endTime ?? time }

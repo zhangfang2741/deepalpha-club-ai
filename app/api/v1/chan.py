@@ -58,6 +58,7 @@ from app.services.chan.indicators import (
 from app.services.chan.ma import MAData, align_to_times
 from app.services.chan.signal_policy import DEFAULT_MODE, SIGNAL_POLICIES, normalize_mode
 from app.services.chan.signals import leg_divergence_marks
+from app.services.chan.raw_extremes import raw_extremes
 from app.services.chan.window import canonical_daily_fetch_start, canonical_daily_start
 from app.services.chan.sub_level_service import current_sub_level
 from app.services.chan.sub_level_service import signal_out as _signal_out
@@ -330,8 +331,10 @@ async def chan_analysis(
                 close=mc.close,
                 volume=mc.volume,
                 end_time=mc.end_time or None,
+                raw_high=rx[0],
+                raw_low=rx[1],
             )
-            for mc in result.merged_candles
+            for mc, rx in zip(result.merged_candles, raw_extremes(bars, result.merged_candles), strict=True)
         ],
         fractals=[
             FractalOut(type=f.type, time=f.time, price=f.price, idx=f.idx, confirmed=f.confirmed)

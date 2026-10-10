@@ -16,6 +16,9 @@ class MergedCandleOut(BaseModel):
     volume: float = 0.0
     # 合并K线所含最后一根原始K线的时间（展示用，笔/分型仍按 time 对位）
     end_time: str | None = None
+    # 所含原始K线的真实最高 / 最低价（SMC / 威科夫打开时 App 用它画影线；合并K线自己的 high / low 是去包含后的值，比影线短）
+    raw_high: float | None = None
+    raw_low: float | None = None
 
 
 class FractalOut(BaseModel):
