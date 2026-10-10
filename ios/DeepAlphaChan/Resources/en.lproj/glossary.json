@@ -167,7 +167,14 @@
   "example": "A+ means it ranks in roughly the top 7% of its industry (93 points or more).",
   "notMeans": "The grade describes the present; it is not a recommendation and does not predict returns."
  },
-  {"key": "财务稳健", "term": "Financial health", "category": "fundamental", "plain": "How solid the company's footing is: how much it owes, how heavy the interest is, how long its cash lasts, and whether profit turns into real cash.", "example": "Of two companies with the same profit, one holds more cash than debt while the other is heavily indebted and interest nearly eats its profit — the first is financially healthier.", "notMeans": "Healthy does not mean profitable or predict the price; for banks and insurers debt is part of the business, so this item does not apply."},
+ {
+  "key": "财务稳健",
+  "term": "Financial health",
+  "category": "fundamental",
+  "plain": "How solid the company's footing is: how much it owes, how heavy the interest is, how long its cash lasts, and whether profit turns into real cash.",
+  "example": "Of two companies with the same profit, one holds more cash than debt while the other is heavily indebted and interest nearly eats its profit — the first is financially healthier.",
+  "notMeans": "Healthy does not mean profitable or predict the price; for banks and insurers debt is part of the business, so this item does not apply."
+ },
  {
   "key": "百分位",
   "term": "Percentile",
@@ -327,5 +334,141 @@
   "plain": "The 20-day average is the middle line; adding and subtracting 2 standard deviations gives the upper and lower lines, which form a band. The band widens when prices swing more and narrows when they calm down.",
   "example": "Price spends most of its time inside the band; a sudden narrowing means recent swings have shrunk.",
   "notMeans": "Touching the upper or lower line only means price is far from its 20-day average; it does not mean it will come back, and it is not a buy or sell signal."
+ },
+ {
+  "key": "威科夫",
+  "term": "Wyckoff method",
+  "category": "structure",
+  "plain": "A century-old way of reading charts, summarised by Richard Wyckoff. It looks only at price and volume to judge how big money quietly buys at lows (accumulation), pushes up (markup), quietly sells at highs (distribution), and then the price falls (markdown) — and how these four stages cycle. With the Wyckoff indicator on, the chart shades the detected trading range and marks events inside it (SC, Spring, SOS…). How it is found: first a high-volume climax (volume about 1.6× the average or more, after a one-way move of roughly 12% or more), then the sideways stretch after it is drawn as the trading range, and events are located inside the range from price and volume.",
+  "example": "A stock falls a long way, then one day prints huge volume and a sharp low (selling climax), bounces, retests and moves sideways for a long time, then breaks out on volume — that is accumulation → markup in Wyckoff terms.",
+  "notMeans": "It marks which stage the structure looks like it is in; it lags and can be wrong. It does not predict moves and is not a buy or sell signal. Like Chan theory, it is just one way of looking at a chart."
+ },
+ {
+  "key": "交易区间",
+  "term": "Trading range",
+  "category": "structure",
+  "plain": "A stretch where price bounces between an upper edge (resistance) and a lower edge (support) without a clear direction. Wyckoff thought big money completes its accumulation or distribution here. The chart shows it as a shaded band with two dashed edges.",
+  "example": "For half a year the stock moves between 62 and 78: buyers step in near 62 every time and sellers near 78 every time. That stretch is a trading range.",
+  "notMeans": "A range does not mean the price will break up or down; a longer range only means a longer build-up, and the direction still depends on what follows."
+ },
+ {
+  "key": "初步支撑",
+  "term": "Preliminary support (PS)",
+  "category": "structure",
+  "plain": "The first volume-backed buying during a decline: the fall continues, but some buyers step in, hinting that selling pressure is starting to be absorbed.",
+  "example": "After a string of down days the stock closes with a long lower shadow on heavy volume, then keeps drifting lower — that day may be the PS.",
+  "notMeans": "It only marks a position in the structure; it lags and can be wrong. It is not a buy or sell signal and does not predict what comes next."
+ },
+ {
+  "key": "卖出高潮",
+  "term": "Selling climax (SC)",
+  "category": "structure",
+  "plain": "Panic selling: extreme volume and a wide down-move, often marking the low of the trading range. Wyckoff accumulation starts from it.",
+  "example": "One day volume is 6× normal and price drops sharply and closes low, then a rebound follows.",
+  "notMeans": "It only marks a position in the structure; it lags and can be wrong. It is not a buy or sell signal and does not predict what comes next."
+ },
+ {
+  "key": "自动反弹",
+  "term": "Automatic rally (AR)",
+  "category": "structure",
+  "plain": "The first rebound after selling pressure is exhausted; its high usually sets the upper edge of the trading range.",
+  "example": "After the selling climax price rises for a few days to 78; that high becomes the upper edge.",
+  "notMeans": "It only marks a position in the structure; it lags and can be wrong. It is not a buy or sell signal and does not predict what comes next."
+ },
+ {
+  "key": "二次测试",
+  "term": "Secondary test (ST)",
+  "category": "structure",
+  "plain": "Price falls back toward the area of the selling-climax low; clearly lower volume than then suggests lighter selling.",
+  "example": "Price drops back to 63 (near the 62 low) but volume is only a sixth of the climax day.",
+  "notMeans": "It only marks a position in the structure; it lags and can be wrong. It is not a buy or sell signal and does not predict what comes next."
+ },
+ {
+  "key": "弹簧/震仓",
+  "term": "Spring",
+  "category": "structure",
+  "plain": "Price briefly dips below the lower edge and quickly closes back inside, like a spring pressed down and released. Wyckoff saw it as the final shake-out.",
+  "example": "The lower edge is 62; one day the low hits 58 but it closes back at 68.",
+  "notMeans": "It only marks a position in the structure; it lags and can be wrong. It is not a buy or sell signal and does not predict what comes next."
+ },
+ {
+  "key": "测试",
+  "term": "Test",
+  "category": "structure",
+  "plain": "A second pullback to the Spring low on very low volume, suggesting little supply remains below.",
+  "example": "A few days after the Spring, price returns near 59 on half the usual volume.",
+  "notMeans": "It only marks a position in the structure; it lags and can be wrong. It is not a buy or sell signal and does not predict what comes next."
+ },
+ {
+  "key": "强势信号",
+  "term": "Sign of strength (SOS)",
+  "category": "structure",
+  "plain": "A wide up-move on rising volume that approaches or breaks the upper edge, showing demand taking over.",
+  "example": "Several days of rising volume push the close above the 78 upper edge.",
+  "notMeans": "It only marks a position in the structure; it lags and can be wrong. It is not a buy or sell signal and does not predict what comes next."
+ },
+ {
+  "key": "最后支撑点",
+  "term": "Last point of support (LPS)",
+  "category": "structure",
+  "plain": "The pullback after the sign of strength that no longer makes new lows, usually the last dip before price leaves the range.",
+  "example": "After the breakout price pulls back near 76 without falling back into the range, then continues up.",
+  "notMeans": "It only marks a position in the structure; it lags and can be wrong. It is not a buy or sell signal and does not predict what comes next."
+ },
+ {
+  "key": "回踩确认",
+  "term": "Back-up (BU)",
+  "category": "structure",
+  "plain": "After breaking out, price comes back to touch the old upper edge, which has turned from resistance into support.",
+  "example": "After breaking 78 price returns to about 78 without falling through, then moves higher.",
+  "notMeans": "It only marks a position in the structure; it lags and can be wrong. It is not a buy or sell signal and does not predict what comes next."
+ },
+ {
+  "key": "初步供给",
+  "term": "Preliminary supply (PSY)",
+  "category": "structure",
+  "plain": "The first heavy-volume stall during an advance: the rise continues, but some sellers step in, hinting that buying is starting to be absorbed.",
+  "example": "After a run-up the stock spikes on heavy volume and closes with a long upper shadow.",
+  "notMeans": "It only marks a position in the structure; it lags and can be wrong. It is not a buy or sell signal and does not predict what comes next."
+ },
+ {
+  "key": "买入高潮",
+  "term": "Buying climax (BC)",
+  "category": "structure",
+  "plain": "A chase-the-rally surge on heavy volume, often marking the high of the trading range. Wyckoff distribution starts from it.",
+  "example": "One day volume is 5× normal, price surges and fades from the high, and a pullback follows.",
+  "notMeans": "It only marks a position in the structure; it lags and can be wrong. It is not a buy or sell signal and does not predict what comes next."
+ },
+ {
+  "key": "冲高回落",
+  "term": "Upthrust (UT)",
+  "category": "structure",
+  "plain": "Price briefly pokes above the upper edge and quickly falls back inside, like a failed breakout.",
+  "example": "The upper edge is 100; one day the high reaches 103 but it closes back at 98.",
+  "notMeans": "It only marks a position in the structure; it lags and can be wrong. It is not a buy or sell signal and does not predict what comes next."
+ },
+ {
+  "key": "派发后冲高",
+  "term": "Upthrust after distribution (UTAD)",
+  "category": "structure",
+  "plain": "An upthrust late in a distribution range: price pushes above the upper edge, fails to hold, and then weakens.",
+  "example": "After a long high-level range, one last push above the upper edge fails, and price then slides lower.",
+  "notMeans": "It only marks a position in the structure; it lags and can be wrong. It is not a buy or sell signal and does not predict what comes next."
+ },
+ {
+  "key": "弱势信号",
+  "term": "Sign of weakness (SOW)",
+  "category": "structure",
+  "plain": "A wide down-move on rising volume that approaches or breaks the lower edge, showing supply taking over.",
+  "example": "Several days of falling volume push the close below the lower edge.",
+  "notMeans": "It only marks a position in the structure; it lags and can be wrong. It is not a buy or sell signal and does not predict what comes next."
+ },
+ {
+  "key": "最后供给点",
+  "term": "Last point of supply (LPSY)",
+  "category": "structure",
+  "plain": "The rebound after the sign of weakness that fails to make a new high, usually the last bounce before price leaves the range downward.",
+  "example": "After breaking the lower edge price bounces back to it but cannot get back inside, then keeps falling.",
+  "notMeans": "It only marks a position in the structure; it lags and can be wrong. It is not a buy or sell signal and does not predict what comes next."
  }
 ]

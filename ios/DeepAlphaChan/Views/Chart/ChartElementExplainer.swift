@@ -11,6 +11,8 @@ enum ChartElement: Identifiable, Equatable {
     case established(Signal)
     /// 背驰：c 段终点所在的笔 + 参照点（b 段终点；旧后端是前一个同向笔的终点）。
     case divergence(current: Stroke, refTime: String, refPrice: Double)
+    /// 威科夫事件标记（指标栏打开「威科夫」后图上的 SC / Spring / SOS 等）。
+    case wyckoff(WyckoffEventMark)
 
     var id: String {
         switch self {
@@ -21,6 +23,7 @@ enum ChartElement: Identifiable, Equatable {
         case .signal(let s): return "bs-\(s.id)"
         case .established(let s): return "est-\(s.id)"
         case .divergence(let c, _, _): return "div-\(c.id)"
+        case .wyckoff(let e): return "wk-\(e.id)"
         }
     }
 
@@ -48,6 +51,7 @@ enum ChartExplainer {
         case .signal(let s): return signal(s)
         case .established(let s): return established(s)
         case .divergence(let c, let refTime, let refPrice): return divergence(c, refTime: refTime, refPrice: refPrice)
+        case .wyckoff(let e): return wyckoff(e)
         }
     }
 
@@ -56,6 +60,18 @@ enum ChartExplainer {
     static func change(_ from: Double, _ to: Double) -> String {
         guard from != 0 else { return "-" }
         return String(format: "%+.1f%%", (to - from) / from * 100)
+    }
+
+    /// 威科夫事件：只说「这是什么事件、依据哪几个数」，大白话 / 举例 / 不代表什么在词典里（点下面的「学习」）。
+    private static func wyckoff(_ e: WyckoffEventMark) -> ChartExplanation {
+        ChartExplanation(
+            title: "\(L(e.name)) · \(e.code)",
+            color: Theme.wyckoff,
+            facts: [(L("时间"), e.time), (L("价格"), price(e.price)),
+                    (L("量比"), String(format: "%.1f×", e.volumeRatio)),
+                    (L("阶段"), L("%@ 阶段", e.phase))],
+            reason: L("这是威科夫体系里的「%@」事件，按这一天的价格、成交量和它在交易区间里的位置判定。量比 = 这天成交量 ÷ 这段行情的平均成交量。它只标出结构上的位置，不是买卖信号，后续走势还需要确认。", L(e.name)),
+            lessonTerm: e.name)
     }
 
     private static func fractal(_ f: Fractal) -> ChartExplanation {

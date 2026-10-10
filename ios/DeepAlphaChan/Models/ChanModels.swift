@@ -202,6 +202,70 @@ struct BollData: Codable {
     let lower: [Double?]
 }
 
+/// 威科夫图表指标（后端 `/chan/analysis` 的 wyckoff 字段）：交易区间 + 事件标记 + 当前阶段。
+/// 位置都按 mergedCandles 的下标给，直接画，不必再对时间。只陈列结构事实，不含操作建议。
+struct WyckoffOverlay: Codable {
+    let context: String
+    /// accumulation / markup / distribution / markdown / undetermined
+    let stage: String
+    let phase: String
+    let breakout: String
+    let tradingRange: WyckoffRange?
+    let events: [WyckoffEventMark]
+
+    enum CodingKeys: String, CodingKey {
+        case context, stage, phase, breakout, events
+        case tradingRange = "trading_range"
+    }
+
+    /// 阶段名（界面文案；后端的 stage_label 中英混写，不直接用）。
+    var stageName: String {
+        switch stage {
+        case "accumulation": return L("吸筹")
+        case "markup": return L("拉升")
+        case "distribution": return L("派发")
+        case "markdown": return L("下跌")
+        default: return L("结构不明")
+        }
+    }
+}
+
+struct WyckoffRange: Codable {
+    /// accumulation / distribution
+    let kind: String
+    let support: Double
+    let resistance: Double
+    let startIdx: Int
+    let endIdx: Int
+
+    enum CodingKeys: String, CodingKey {
+        case kind, support, resistance
+        case startIdx = "start_idx"
+        case endIdx = "end_idx"
+    }
+}
+
+struct WyckoffEventMark: Codable, Identifiable {
+    /// SC / AR / ST / SPRING / SOS / UT / UTAD / SOW / LPS / LPSY / PS / PSY / BC / TEST / BU
+    let code: String
+    /// 中文名（词典的键，界面用 L(name) 本地化）
+    let name: String
+    let idx: Int
+    let time: String
+    let price: Double
+    /// high：标在 K 线上方；low：标在下方
+    let side: String
+    let phase: String
+    let volumeRatio: Double
+
+    var id: String { "\(code)-\(idx)" }
+
+    enum CodingKeys: String, CodingKey {
+        case code, name, idx, time, price, side, phase
+        case volumeRatio = "volume_ratio"
+    }
+}
+
 /// 买卖点信号。
 struct Signal: Codable, Identifiable {
     enum Kind: String, Codable {
@@ -371,6 +435,8 @@ struct ChanAnalysis: Codable {
     /// 指数均线（周期 12 / 26，形状同均线）与布林带；旧后端缺省。
     var ema: MAData? = nil
     var boll: BollData? = nil
+    /// 威科夫图表指标；旧后端缺省。
+    var wyckoff: WyckoffOverlay? = nil
     let signals: [Signal]
     let currentTrend: String
     // 走势类型（基于中枢排布）：up_trend / down_trend / consolidation / none
@@ -399,7 +465,7 @@ struct ChanAnalysis: Codable {
     var chartSignals: [Signal] { signals + candidates }
 
     enum CodingKeys: String, CodingKey {
-        case symbol, fractals, strokes, segments, macd, ma, ema, boll, signals, summary, recommendation, narrative
+        case symbol, fractals, strokes, segments, macd, ma, ema, boll, wyckoff, signals, summary, recommendation, narrative
         case candidateSignals = "candidate_signals"
         case barsCount = "bars_count"
         case mergedCandles = "merged_candles"
