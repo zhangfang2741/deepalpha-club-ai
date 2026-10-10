@@ -1735,3 +1735,9 @@
 "基本面动向" = "Fundamental trends";
 "预期上调" = "Estimates up";
 "质地改善" = "Quality improving";
+
+/* 雷达标题菜单 */
+"市场雷达 · 缠论买卖点" = "Market radar · Chan signals";
+"基本面动向 · 预期与财报变化" = "Fundamental trends · estimates & filings";
+"这一页怎么读" = "How to read this page";
+"切换雷达" = "Switch radar";
