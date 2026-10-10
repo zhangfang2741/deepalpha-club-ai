@@ -95,3 +95,17 @@ def test_whatif_cohort_selective_keeps_weak_stages_on_the_universe_scale():
     assert abs(sk["selective"]["percentile_mean"] - sk["universe"]["percentile_mean"]) < 1e-6
     mt = r["by_stage"]["mature"]
     assert mt["selective"] == mt["all_stages"]               # 成熟期两种口径一致
+
+
+def test_stage_sensitivity_counts_ramp_extreme_and_missing():
+    from app.services.quant_research.diagnostics import stage_sensitivity
+
+    def row(i, yoy, cagr):
+        return DiagRow(f"s{i}", "q10", "B", 50.0, 50.0, False, "mature", {}, yoy, cagr)
+
+    rows = ([row(i, 5.0, 3.0) for i in range(6)] + [row(10 + i, 15.0, 8.0) for i in range(2)]
+            + [row(20, 250.0, None), row(21, -80.0, 4.0), row(22, None, None)])
+    r = stage_sensitivity(rows)
+    assert r["staged"] == 11
+    assert r["ramp_zone_10_20"] == round(2 / 11, 3) and r["extreme_yoy"] == round(2 / 11, 3)
+    assert r["cagr_missing"] == round(2 / 11, 3) and r["no_yoy"] == round(1 / 11, 3)
