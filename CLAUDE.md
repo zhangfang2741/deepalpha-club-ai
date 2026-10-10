@@ -521,6 +521,7 @@ deepalpha-club-ai/
   所以 `/chan/analysis` 的每根 `merged_candles` 多带 `raw_high / raw_low`（`chan/raw_extremes.py`，按 `MergedCandle.raw_start..raw_end` 取所含原始 K 线的最高 / 最低，三只股票 1362 根逐根核对过下标偏移为 0），打开 SMC / 威科夫时 App 用它们画影线并参与纵轴范围（`ChanChartView.wickHigh / wickLow`），缠论图层开着时画法不变。**不要**改成在合并 K 线上算 SMC：突破只有约一半相同、FVG 会少一半多（0700.HK 7 → 3）。
   **改识别规则 / 阈值时，说明文字（`ChartElementExplainer.smc`）与词典条目（中英）一起改**。**已知局限**：规则按两份开源实现取舍、没有针对 A 股 / 港股单独标定；FVG 的 2 倍实体阈值、等高低点的 0.1×ATR 沿用 LuxAlgo 默认值。
 - 30 分钟周期可在条件页选，**会员功能**（示例股除外，与次级别确认同一权益）；`ChanViewModel.apply` 没指定周期时 30 分钟回到日线，避免自选 / 雷达入口沿用它绕过门禁。
+- **截屏后自动生成的分享图**（`Share/WindowCapture.swift`）：App 收到系统截屏通知后自己再截一张前台窗口，**不含状态栏（系统 window 截不到）、顶部导航栏（返回 / 标题 / 分享 / 收藏）和底部 TabBar**，再拼品牌脚与二维码。导航栏、TabBar 都是「当前真的可见才裁、没有就不裁」（全屏图表页 `fullScreenCover` 盖在上面时下层导航栏看不见，按最上层被呈现的控制器找；拿不准一律不裁——误裁会切掉内容、漏裁只多一条栏）。裁掉顶部后画布起点不在 (0, 0)，用显式平移取图。
 
 ## 后端分层规则
 - `api/v1/` 只做请求解析、参数校验、调用 service、返回响应，不写业务逻辑。
