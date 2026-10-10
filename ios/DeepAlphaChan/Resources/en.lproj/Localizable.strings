@@ -1926,3 +1926,4 @@
 "近 3 天就已经净上调（净下调）的放最内圈，否则看近 1 周，再否则近 1 个月。同一只股票上调和下调都有时，会画两个气泡。" = "Net upgraded (downgraded) within the last 3 days goes in the innermost ring, otherwise the last week, otherwise the last month. A stock with both upgrades and downgrades gets two bubbles.";
 "最近 1 个月没有综合等级变化的公司。评级方法升级后要重新攒几天历史，刚升级时这里会是空的。" = "No company's overall grade has changed in the last month. After a rating-method upgrade it takes a few days to rebuild history, so this is empty right after an upgrade.";
 "最近 1 个月这个股票池里没有被券商净上调或净下调评级的股票" = "No stock in this pool was net-upgraded or net-downgraded by brokers in the last month";
+"查看名单与变化 · %lld" = "View list and changes · %lld";

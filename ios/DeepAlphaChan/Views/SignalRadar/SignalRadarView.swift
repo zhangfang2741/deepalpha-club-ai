@@ -358,52 +358,6 @@ struct SignalRadarView: View {
         }
     }
 
-    /// 动向类别下拉框（基本面雷达只有「等级变化」、评级雷达只有「评级变动」，都只有一类时不做下拉），放在雷达画布左上角；选项后面的数字是当前「精选 / 行业」筛选下的个数。
-    @ViewBuilder
-    private var trendKindMenu: some View {
-        if QuantTrendKind.kinds(for: vm.trendFlavor).count <= 1 {
-            // 只有一类（评级雷达的「评级变动」）：不用下拉，只显示名称和个数
-            Text(trendKindTitle(vm.trendKind)).font(.system(size: 12, weight: .semibold))
-                .foregroundColor(Theme.textPrimary)
-                .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(Theme.surface.opacity(0.92), in: Capsule())
-                .overlay(Capsule().stroke(Theme.border, lineWidth: 1))
-        } else {
-            trendKindDropdown
-        }
-    }
-
-    private var trendKindDropdown: some View {
-        Menu {
-            ForEach(QuantTrendKind.kinds(for: vm.trendFlavor)) { k in
-                Button { vm.trendKind = k } label: {
-                    if k == vm.trendKind {
-                        Label(trendKindTitle(k), systemImage: "checkmark")
-                    } else {
-                        Text(trendKindTitle(k))
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Text(trendKindTitle(vm.trendKind)).font(.system(size: 12, weight: .semibold))
-                Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
-            }
-            .foregroundColor(Theme.textPrimary)
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(Theme.surface.opacity(0.92), in: Capsule())
-            .overlay(Capsule().stroke(Theme.border, lineWidth: 1))
-            .frame(minHeight: 36)
-            .contentShape(Rectangle())
-        }
-        .accessibilityLabel(L("动向类别"))
-    }
-
-    private func trendKindTitle(_ k: QuantTrendKind) -> String {
-        guard vm.trend?.market == vm.market.rawValue else { return k.title }
-        return k.title + " · \(vm.trendCount(k))"
-    }
-
     private func trendMessage(_ text: String) -> some View {
         Text(text)
             .font(.subheadline)
@@ -465,7 +419,7 @@ struct SignalRadarView: View {
                 if !vm.trendItems.isEmpty {
                     // 画布最多画 ringFieldCap 个；完整名单（含每只的具体变化）在列表里
                     Button { panel = .trendList } label: {
-                        Text(field.hidden > 0 ? L("另有 %lld 个 · 查看全部", field.hidden) : L("查看名单与变化"))
+                        Text(field.hidden > 0 ? L("另有 %lld 个 · 查看全部", field.hidden) : L("查看名单与变化 · %lld", vm.trendItems.count))
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundColor(Theme.accent)
                             .padding(.horizontal, 10)
@@ -487,7 +441,6 @@ struct SignalRadarView: View {
             )
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(alignment: .topLeading) { trendKindMenu.padding(8) }
     }
 
     private func trendGradientBar(down: Bool) -> some View {
