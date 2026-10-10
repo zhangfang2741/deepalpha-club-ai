@@ -284,7 +284,7 @@ struct SignalRadarView: View {
 
     /// 与缠论雷达同一张画布、同一套同心圈与气泡：圈 = 最近 3 天 / 1 周 / 1 个月，颜色深浅 = 变化幅度，气泡大小与字母 = 综合等级。
     /// 颜色和缠论雷达一致：红 = 向好的一侧（预期上调 / 等级上升 / 券商上调），绿 = 向差的一侧（下调 / 下降），下拉框切换类别。
-    /// 基本面雷达只看我们自己的综合等级变化；评级雷达看券商评级（仅美股）。
+    /// 基本面雷达只看我们自己的综合等级变化；评级雷达看券商评级（美股 / A 股 / 港股，旧后端只有美股时显示下面的提示）。
     @ViewBuilder
     private var trendContent: some View {
         trendHeader
@@ -388,7 +388,7 @@ struct SignalRadarView: View {
                 if field.bubbles.isEmpty {
                     Text(vm.trendHasItemsBeforeFilter
                          ? L("当前筛选下没有符合的公司。点上面的「精选」切到全部，或选「全部行业」。")
-                         : TrendDerivations.emptyText(kind: kind, market: vm.market))
+                         : TrendDerivations.emptyText(kind: kind, market: vm.market, trend: trend))
                         .font(.subheadline)
                         .foregroundColor(Theme.textSecondary)
                         .multilineTextAlignment(.center)

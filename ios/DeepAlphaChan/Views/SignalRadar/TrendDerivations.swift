@@ -49,7 +49,7 @@ enum TrendDerivations {
             return DerivationResult(
                 conclusion: L("评级变动：近期有券商调高（红）或调低（绿）了这只股票的评级。"),
                 steps: steps + visualSteps(t, down: nil),
-                caveat: L("目前只有美股有券商评级变动数据；券商的评级动作有时滞后于股价，也可能只是重申。"),
+                caveat: L("数据来源：美股为各券商的评级动作；A 股为券商研报里的本次评级与上次评级（A 股券商很少调整评级，这里常常很空）；港股从开始每天比对各券商评级那天起累计。券商的评级动作有时滞后于股价。"),
                 means: L("更多专业机构对这只股票的看法在变乐观（红）或变谨慎（绿）。"),
                 notMeans: L("不代表股价会涨跌：券商评级常常滞后于股价，也不总是对的。"),
                 terms: ["分析师评级"])
@@ -73,11 +73,19 @@ enum TrendDerivations {
     }
 
     /// 画布上没有气泡时的说明。
-    static func emptyText(kind: QuantTrendKind, market: StockMarket) -> String {
+    static func emptyText(kind: QuantTrendKind, market: StockMarket, trend: QuantTrendRadar? = nil) -> String {
         switch kind {
         case .rating:
             return L("最近 1 个月没有综合等级变化的公司。评级方法升级后要重新攒几天历史，刚升级时这里会是空的。")
-        case .analyst: return L("最近 1 个月这个股票池里没有被券商净上调或净下调评级的股票")
+        case .analyst:
+            // A 股 / 港股：说明为什么空——A 股券商很少改评级；港股从开始比对那天起才有数据
+            if market == .cn, let n = trend?.marketActions {
+                return L("A 股券商很少调整评级（大多是维持或首次覆盖）：最近 1 个月全市场只有 %lld 次评级上调或下调，这个股票池里没有。", n)
+            }
+            if market == .hk, let since = trend?.trackingSince {
+                return L("港股评级变动从 %@ 起每天比对各券商评级累计，这个股票池里暂时还没有上调或下调。", since)
+            }
+            return L("最近 1 个月这个股票池里没有被券商净上调或净下调评级的股票")
         }
     }
 

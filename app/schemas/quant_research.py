@@ -348,4 +348,6 @@ class TrendRadarOut(BaseModel):
 class AnalystRadarOut(TrendRadarOut):
     """评级雷达（分析师评级）：形状同基本面雷达，另带还在补的只数与是否支持该市场。"""
     pending_symbols: int = 0           # 券商评级变动还没缓存好、后台在补的只数；App 在 > 0 时隔一会儿再取
-    supported: bool = True             # 只有美股有按日的券商评级变动
+    supported: bool = True             # 该市场有没有券商评级变动数据（美股 / A 股 / 港股都有；旧版本只有美股）
+    tracking_since: str | None = None  # 港股：从哪天开始逐日比对券商评级（之前没有数据）；美股 / A 股为空
+    market_actions: int | None = None  # A 股 / 港股：最近 30 天全市场（不限股票池）一共几次评级上调 / 下调，App 空状态里说明「为什么空」

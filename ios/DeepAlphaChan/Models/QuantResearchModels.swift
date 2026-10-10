@@ -708,6 +708,11 @@ struct QuantAnalystChange: Decodable, Hashable {
     /// 先按券商原名细分出「强力」两档（Strong Buy / Top Pick → 强力买入，Strong Sell → 强力卖出），其余用后端的三档归类；
     /// 五档也相同（如 Buy → Outperform）才写券商原名。缺数据为 nil。
     var changeText: String? {
+        // A 股 / 港股的评级本来就是中文五档（买入 / 增持 / 中性 / 减持 / 卖出），直接写原文最清楚
+        if let f = fromGrade, let t = toGrade, !f.isEmpty, !t.isEmpty, f != t,
+           (f + t).unicodeScalars.contains(where: { $0.value > 0x2E80 }) {
+            return f + " → " + t
+        }
         func level(grade: String?, bucket: String?) -> String? {
             let g = (grade ?? "").lowercased()
             if g.contains("strong sell") { return L("强力卖出") }
@@ -770,12 +775,18 @@ struct QuantTrendRadar: Decodable {
     /// 评级雷达（分析师）专有：还在后台补拉的只数；supported == false = 这个市场没有券商评级数据。
     let pendingSymbols: Int?
     let supported: Bool?
+    /// 评级雷达 · 港股：从哪天开始逐日比对券商评级（之前没有数据）。
+    let trackingSince: String?
+    /// 评级雷达 · A 股 / 港股：最近 30 天全市场（不限股票池）一共几次评级上调 / 下调，空状态里说明「为什么空」。
+    let marketActions: Int?
 
     enum CodingKeys: String, CodingKey {
         case market, rings, thresholds, items, counts, supported
         case asOf = "as_of"
         case goodGrade = "good_grade"
         case pendingSymbols = "pending_symbols"
+        case trackingSince = "tracking_since"
+        case marketActions = "market_actions"
     }
 }
 

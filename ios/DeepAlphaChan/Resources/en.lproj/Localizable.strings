@@ -1927,3 +1927,7 @@
 "最近 1 个月没有综合等级变化的公司。评级方法升级后要重新攒几天历史，刚升级时这里会是空的。" = "No company's overall grade has changed in the last month. After a rating-method upgrade it takes a few days to rebuild history, so this is empty right after an upgrade.";
 "最近 1 个月这个股票池里没有被券商净上调或净下调评级的股票" = "No stock in this pool was net-upgraded or net-downgraded by brokers in the last month";
 "查看名单与变化 · %lld" = "View list and changes · %lld";
+
+"A 股券商很少调整评级（大多是维持或首次覆盖）：最近 1 个月全市场只有 %lld 次评级上调或下调，这个股票池里没有。" = "A-share brokers rarely change ratings (most reports reiterate or initiate coverage): only %lld upgrades or downgrades across the whole market in the last month, none in this pool.";
+"港股评级变动从 %@ 起每天比对各券商评级累计，这个股票池里暂时还没有上调或下调。" = "Hong Kong rating changes are tracked by comparing each broker's rating daily since %@; no upgrades or downgrades in this pool yet.";
+"数据来源：美股为各券商的评级动作；A 股为券商研报里的本次评级与上次评级（A 股券商很少调整评级，这里常常很空）；港股从开始每天比对各券商评级那天起累计。券商的评级动作有时滞后于股价。" = "Sources: US — each broker's rating actions; A-shares — the current and previous rating in each broker report (A-share brokers rarely change ratings, so this is often empty); Hong Kong — accumulated by comparing each broker's rating daily since tracking began. Broker actions can lag the share price.";

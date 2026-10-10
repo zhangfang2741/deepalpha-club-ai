@@ -40,10 +40,17 @@ _background: set[asyncio.Task] = set()
 
 
 def bucket_of(grade: str | None) -> str:
-    """把券商各家的评级名归成 buy / hold / sell（Neutral / Equal-Weight / Market Perform 等都算 hold）。"""
+    """把券商各家的评级名归成 buy / hold / sell（Neutral / Equal-Weight / Market Perform 等都算 hold）。
+
+    A 股 / 港股的中文评级按五档（`cnhk.ratings.tier`）：买入、增持 → buy；中性 → hold；减持、卖出 → sell。
+    """
+    from app.services.quant_research.cnhk.ratings import tier
+
     g = (grade or "").strip().lower()
     if not g:
         return "hold"
+    if (t := tier(grade)) is not None:
+        return "buy" if t <= 1 else ("hold" if t == 2 else "sell")
     if any(w in g for w in _SELL):       # 先判卖：「Strong Sell」「Underperform」不能被「perform」类误判
         return "sell"
     if any(w in g for w in _BUY):

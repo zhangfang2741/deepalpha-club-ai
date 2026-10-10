@@ -21,7 +21,7 @@ from app.services.quant_research import repository
 from app.services.quant_research.grading import GRADE_ORDER
 from app.services.quant_research.markets import normalize_symbol
 from app.services.signal_radar import analyst_events as ae
-from app.services.signal_radar import sectors
+from app.services.signal_radar import cnhk_analyst, sectors
 from app.services.signal_radar.quality_view import choose_cutoff
 
 RINGS = (3, 7, 30)
@@ -48,7 +48,7 @@ _SIDES: tuple[tuple[bool, Literal["analyst_up", "analyst_down"]], ...] = ((True,
 
 def build_analyst_radar(
     history: dict[str, list[dict]], *, names: dict[str, str], grades: dict[str, str | None], tags: dict[str, str],
-    as_of: date, market: str, pending: int = 0, supported: bool = True,
+    as_of: date, market: str, pending: int = 0, supported: bool = True, tracking_since: str | None = None,
 ) -> AnalystRadarOut:
     """history：{代码: 评级变动动作（新到旧）}；grades：{代码: 综合等级}；tags：代码 → 雷达行业 key。"""
     rated = [g for g in grades.values() if g in GRADE_ORDER]
@@ -90,7 +90,8 @@ def build_analyst_radar(
         counts[f"{kind}_good"] = sum(i.good for i in keep)
     return AnalystRadarOut(
         market=market, as_of=as_of.isoformat(), rings=list(RINGS), thresholds={"analyst_min_net": 1.0},
-        items=items, counts=counts, good_grade=cutoff, pending_symbols=pending, supported=supported)
+        items=items, counts=counts, good_grade=cutoff, pending_symbols=pending, supported=supported,
+        tracking_since=tracking_since)
 
 
 async def _grades_for(market: str, pairs: list[tuple[str, str]], end: date) -> dict[str, str | None]:
@@ -113,6 +114,8 @@ async def analyst_radar(
 ) -> AnalystRadarOut:
     """pairs：[(代码, 名称)] 股票池（指数成分股或自选）；scope：后台补拉的锁范围。非美股 supported=False。"""
     now = now or datetime.now(UTC)
+    if market in cnhk_analyst.MARKETS:
+        return await _cnhk_radar(market, pairs, redis=redis)
     if market not in ae.SUPPORTED_MARKETS:
         return build_analyst_radar({}, names={}, grades={}, tags={}, as_of=now.date(), market=market, supported=False)
     names = {s: n for s, n in pairs}
@@ -129,12 +132,27 @@ async def analyst_radar(
                                pending=sum(1 for s in symbols if s not in cached))
 
 
+async def _cnhk_radar(market: str, pairs: list[tuple[str, str]], *, redis: Redis) -> AnalystRadarOut:
+    """A 股 / 港股：动作来自 `cnhk_analyst`（A 股东财研报前后评级、港股逐日比对），规则与美股同一个 build_analyst_radar。"""
+    as_of = cnhk_analyst.today_local()
+    actions, since = await cnhk_analyst.actions_for(market, redis, as_of)
+    names = {s: n for s, n in pairs}
+    history = {s: actions[k] for s in names if (k := normalize_symbol(market, s)) in actions}
+    tags = await sectors.load_sector_tags(market, redis)
+    grades = await _grades_for(market, pairs, as_of)
+    out = build_analyst_radar(history, names=names, grades=grades, tags=tags, as_of=as_of, market=market,
+                              tracking_since=since)
+    window = (as_of - timedelta(days=RINGS[-1])).isoformat()
+    out.market_actions = sum(1 for lst in actions.values() for a in lst if a["date"] >= window)
+    return out
+
+
 _CACHE_TTL = 2 * 3600
 _PENDING_TTL = 60
 
 
 def _cache_key(market: str, scope: str) -> str:
-    return f"signal_radar:analyst_radar:v3:{market}:{scope}"  # v3：带最近一次动作的前后评级
+    return f"signal_radar:analyst_radar:v4:{market}:{scope}"  # v4：A 股 / 港股也有数据（v3 起带最近一次动作的前后评级）
 
 
 async def cached_analyst_radar(
