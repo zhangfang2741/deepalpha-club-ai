@@ -298,7 +298,7 @@ deepalpha-club-ai/
 > 金融股整维不适用（`financials_balance_sheet`）；A 股 / 港股报表没有流动资产 / 流动负债与利息支出，这两项在 `markets` 登记为无数据源。
 > 测试里 `distributions.json` 快照早于该维度，`test_builder._synthetic_stability_dists` 造了**合成**的稳健分布（仅供测试 / golden，不代表真实板块）；真实分布由批量任务重算。
 > 上线前须在真实数据上跑一遍批量，看综合等级分布有没有整体漂移、成长股与成熟板块有没有被误伤（离线只验证了逻辑，没验证分布）。
-> **同阶段排名**（2026-10-10，`GET /quant-research/{market}/stage-ranking?stage=&symbol=&score=`，`quant_research/ranking.py`；iOS 点企业阶段弹层底部 `QuantStageRankingSection`）：列出该阶段综合分前 30 家 + 本股名次（样本外股票按它自己的综合分估算、标「≈」）。只陈列本模型结果、不是推荐榜：放在阶段解释里、不做独立 tab / 榜单页，文案带「不代表公司好坏的定论，也不构成投资建议」。点其中别的公司用全屏的 `StockAnalysisCover` 打开它的分析（自带一份 ChanViewModel、不覆盖当前详情页；免费额度规则同分析 Tab）。
+> **同阶段排名**（2026-10-10，`GET /quant-research/{market}/stage-ranking?stage=&symbol=&score=`，`quant_research/ranking.py`；iOS 点企业阶段弹层底部 `QuantStageRankingSection`）：列出该阶段综合分前 30 家 + 本股名次（样本外股票按它自己的综合分估算、标「≈」）。只陈列本模型结果、不是推荐榜：放在阶段解释里、不做独立 tab / 榜单页，文案带「不代表公司好坏的定论，也不构成投资建议」。整阶段排序数据 Redis 缓存 6 小时（`quant:{market}:stage_rank:{方法版本}:{批量日期}:{阶段}:{语言}`，批量日期取 `batch.latest_key`，新一天批量后自动换键；本股名次每次现算），App 本机内存再缓存 30 分钟（`StageRankingCache`）。点其中别的公司用全屏的 `StockAnalysisCover` 打开它的分析（自带一份 ChanViewModel、不覆盖当前详情页；免费额度规则同分析 Tab）。
 > **q11（最后一轮规则改动，2026-10-10；之后只验证不再改规则）**：① 成对高度重复指标（`scoring.REDUNDANT_PAIRS`：fcf_m↔fcf_sbc_m、ebit_yoy↔ebitda_yoy、ebit_fwd↔ebitda_fwd，同维度秩相关 ≥ 0.9）两项都参与时各减半权重；
 > ② 美股净利润剔除大额营业外项目（`metrics._adjusted_net`：报表 EBIT 与经营利润之差 ≥ 经营利润绝对值 25% 才剔除，扣税后从净利润减，税率取实际 0~35%、缺失 21%；净利率 / ROE / ROA 共用，`MetricValue.meta.adjusted`；`inputs._operating_basis` 保留 `ebitReported`；A 股 / 港股无此字段不受影响）；
 > ③ 综合分先把各维度分换成全体百分位再加权（`scoring.composite(dim_dists)`，分布存 distributions 表 `("_all","_dim:<维度>")`，缺分布时退回原始维度分；一票否决仍看维度原始分 < 20）。

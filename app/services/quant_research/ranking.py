@@ -6,13 +6,21 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import date
 
+from redis.asyncio import Redis
+
+from app.cache.operations import get_json, set_json
+from app.core.logging import logger
 from app.schemas.quant_research import StageRankingItem, StageRankingOut, StageRankingSelf
 from app.services.quant_research import repository as repo
+from app.services.quant_research.batch import latest_key
+from app.services.quant_research.builder import METHODOLOGY_VERSION
 from app.services.quant_research.copy import Lang
 
 RANKING_LIMIT_MAX = 50
+CACHE_TTL = 6 * 3600   # 键里带批量日期与方法版本：新一天批量跑完或改规则后自动换键
 
 
 @dataclass(frozen=True)
@@ -44,10 +52,49 @@ def build_stage_ranking(rows: list[RankRow], stage: str, *, market: str, as_of: 
                            self_item=self_item)
 
 
+def _cache_key(market: str, as_of: str, stage: str, lang: str) -> str:
+    return f"quant:{market}:stage_rank:{METHODOLOGY_VERSION}:{as_of}:{stage}:{lang}"
+
+
+async def _latest_as_of(redis: Redis | None, market: str) -> str | None:
+    """批量跑完写在 Redis 的最近日期（读不到返回 None，退回查库）。"""
+    if redis is None:
+        return None
+    try:
+        raw = await redis.get(latest_key(market))
+    except Exception as e:  # noqa: BLE001 缓存读失败退回查库
+        logger.warning("quant_stage_rank_latest_failed", market=market, error=str(e))
+        return None
+    if isinstance(raw, bytes):
+        raw = raw.decode()
+    return raw or None
+
+
+async def _load_rows(market: str, stage: str, lang: Lang, redis: Redis | None) -> tuple[str | None, list[RankRow]]:
+    """该阶段全部有综合分的股票：先读缓存（整阶段一份，和本股无关），没有再查库并写缓存。"""
+    as_of = await _latest_as_of(redis, market)
+    if redis is not None and as_of:
+        try:
+            cached = await get_json(redis, _cache_key(market, as_of, stage, lang))
+            if cached:
+                return cached["as_of"], [RankRow(**r) for r in cached["rows"]]
+        except Exception as e:  # noqa: BLE001
+            logger.warning("quant_stage_rank_cache_read_failed", market=market, stage=stage, error=str(e))
+    day, raw = await repo.stage_ranking_rows(market, stage, lang, as_of=date.fromisoformat(as_of) if as_of else None)
+    rows = [RankRow(*r) for r in raw]
+    day_s = day.isoformat() if day else None
+    if redis is not None and day_s and rows:
+        try:
+            await set_json(redis, _cache_key(market, day_s, stage, lang),
+                           {"as_of": day_s, "rows": [asdict(r) for r in rows]}, expire=CACHE_TTL)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("quant_stage_rank_cache_write_failed", market=market, stage=stage, error=str(e))
+    return day_s, rows
+
+
 async def get_stage_ranking(market: str, stage: str, lang: Lang, *, symbol: str | None, score: float | None,
-                            limit: int) -> StageRankingOut:
-    """最近一天该阶段的排名（样本内股票）。"""
-    as_of, rows = await repo.stage_ranking_rows(market, stage, lang)
-    return build_stage_ranking([RankRow(*r) for r in rows], stage, market=market,
-                               as_of=as_of.isoformat() if as_of else None, symbol=symbol, score=score,
+                            limit: int, redis: Redis | None = None) -> StageRankingOut:
+    """最近一天该阶段的排名（样本内股票）；整阶段的排序数据缓存 6 小时，本股名次每次现算（很快）。"""
+    as_of, rows = await _load_rows(market, stage, lang, redis)
+    return build_stage_ranking(rows, stage, market=market, as_of=as_of, symbol=symbol, score=score,
                                limit=min(limit, RANKING_LIMIT_MAX))

@@ -121,13 +121,18 @@ struct QuantStageRankingSection: View {
     }
 
     private func load() async {
-        ranking = nil
         failed = false
+        let symbol = isCurrent ? research.symbol : nil
+        let score = isCurrent ? research.overall?.score : nil
+        if let hit = await QuantResearchService.cachedStageRanking(market: research.market, stage: selected.rawValue,
+                                                                    symbol: symbol, score: score) {
+            ranking = hit
+            return
+        }
+        ranking = nil
         do {
             ranking = try await QuantResearchService.stageRanking(
-                market: research.market, stage: selected.rawValue,
-                symbol: isCurrent ? research.symbol : nil,
-                score: isCurrent ? research.overall?.score : nil)
+                market: research.market, stage: selected.rawValue, symbol: symbol, score: score)
         } catch {
             failed = true
         }
