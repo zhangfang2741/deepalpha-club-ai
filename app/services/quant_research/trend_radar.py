@@ -15,6 +15,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
+
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -223,6 +226,34 @@ async def _load_rating_changes(
     return rating_changes(history), rating_changes(history, down=True)
 
 
+# 全市场的原料（最新一天的动向事实 + 90 天评级历史算出的升降）在进程里缓存：切换指数、自选、中英文都不用再读一遍库
+# （评级历史全市场约十几万行，是请求变慢的大头）。同一市场同时来多个请求只算一次（锁），新一天批量后换键。
+_INPUT_TTL = 30 * 60
+_inputs_cache: dict[tuple[str, str, str | None], tuple[float, tuple]] = {}
+_inputs_locks: dict[tuple[str, str], asyncio.Lock] = {}
+
+
+async def _market_inputs(market: str, lang: str, latest: str | None):
+    key = (market, lang, latest)
+    now = time.monotonic()
+    if (hit := _inputs_cache.get(key)) and now - hit[0] < _INPUT_TTL:
+        return hit[1]
+    lock = _inputs_locks.setdefault((market, lang), asyncio.Lock())
+    async with lock:
+        now = time.monotonic()
+        if (hit := _inputs_cache.get(key)) and now - hit[0] < _INPUT_TTL:
+            return hit[1]
+        day, rows = await repo.trend_radar_rows(market, lang, as_of=date.fromisoformat(latest) if latest else None)
+        ratings, ratings_down = (
+            await _load_rating_changes(market, day, {r["symbol"] for r in rows}) if rows and day else ({}, {}))
+        value = (day, rows, ratings, ratings_down)
+        if rows and day:
+            for k in [k for k in _inputs_cache if k[:2] == (market, lang)]:
+                del _inputs_cache[k]
+            _inputs_cache[key] = (time.monotonic(), value)
+        return value
+
+
 def filter_rows(rows: list[dict], members: set[str] | None) -> list[dict]:
     """只留股票池里的公司；members 为 None 表示不限（全市场），空集合表示池子是空的。"""
     return rows if members is None else [r for r in rows if r["symbol"] in members]
@@ -249,11 +280,9 @@ async def get_trend_radar(market: str, lang: Lang, *, redis: Redis | None, membe
                 return TrendRadarOut(**cached)
         except Exception as e:  # noqa: BLE001 缓存不可用退回查库
             logger.warning("quant_trend_radar_cache_read_failed", market=market, error=str(e))
-    day, rows = await repo.trend_radar_rows(market, lang, as_of=date.fromisoformat(latest) if latest else None)
-    rows = filter_rows(rows, members)
+    day, all_rows, ratings, ratings_down = await _market_inputs(market, lang, latest)
+    rows = filter_rows(all_rows, members)
     tags = await load_sector_tags(market, redis) if rows else {}
-    ratings, ratings_down = (
-        await _load_rating_changes(market, day, {r["symbol"] for r in rows}) if rows and day else ({}, {}))
     out = build_trend_radar(rows, market=market, as_of=day, tags=tags, ratings=ratings, ratings_down=ratings_down)
     if use_cache and redis is not None and day is not None and rows:
         try:
