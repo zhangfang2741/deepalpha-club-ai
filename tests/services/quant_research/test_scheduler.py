@@ -2,9 +2,22 @@
 
 from datetime import UTC, date, datetime
 
+import pytest
+
 from app.services.quant_research.scheduler import next_trigger, us_session_date
 
 WEEKDAYS = {0, 1, 2, 3, 4}
+
+
+@pytest.fixture(autouse=True)
+def _payload_has_trend(monkeypatch):
+    """默认最近一天结果已带基本面动向字段（不连库）；个别用例自己覆盖。"""
+    from app.services.quant_research import scheduler
+
+    async def has(market, field):
+        return True
+
+    monkeypatch.setattr(scheduler.repo, "latest_has_payload_field", has)
 
 
 def test_next_trigger_same_day_and_next_day():
@@ -120,7 +133,7 @@ async def test_bootstrap_rebuilds_when_methodology_version_changed(monkeypatch):
     monkeypatch.setattr(scheduler.repo, "latest_methodology_version", fake_version)
     monkeypatch.setattr(scheduler, "_run_once", fake_run_once)
     await scheduler._bootstrap_once()
-    assert runs == [("us", scheduler.METHODOLOGY_VERSION)]
+    assert runs == [("us", scheduler.BOOTSTRAP_TAG)]
 
 
 async def test_bootstrap_skips_when_results_are_current(monkeypatch):
@@ -243,3 +256,40 @@ async def test_moat_cold_start_retries_when_locked_and_releases_lock(monkeypatch
     # 先等启动延迟 → 锁被占，等一轮重试 → 跑；之后每天一轮（这里 sleep 立即返回，会空转几轮）
     assert sleeps[:2] == [scheduler.BOOTSTRAP_DELAY_SECONDS, scheduler.MOAT_BOOTSTRAP_RETRY_SECONDS]
     assert runs and fake.deleted and set(fake.deleted) == {scheduler._moat_lock_key()}
+
+
+
+async def test_bootstrap_reruns_when_payload_lacks_trend(monkeypatch):
+    """新增落库字段（基本面动向 trend）后，版本一致也补跑一次全量；锁键带 PAYLOAD_TAG。"""
+    from datetime import date
+
+    from app.services.quant_research import scheduler
+
+    has_trend = iter([False, True])
+    runs: list[tuple[str, str | None]] = []
+
+    async def fake_latest_date(market):
+        return date(2026, 9, 30)
+
+    async def fake_version(market):
+        return scheduler.METHODOLOGY_VERSION
+
+    async def fake_has(market, field):
+        assert field == "trend"
+        return next(has_trend)
+
+    async def fake_run_once(kind, day, *, lock_suffix=None):
+        runs.append((kind, lock_suffix))
+
+    async def no_align():
+        return None
+
+    monkeypatch.setattr(scheduler, "BOOTSTRAP_DELAY_SECONDS", 0)
+    monkeypatch.setattr(scheduler, "_align_backfill", no_align)
+    monkeypatch.setattr(scheduler, "_expected_us", lambda now=None: date(2026, 9, 30))
+    monkeypatch.setattr(scheduler.repo, "latest_distribution_date", fake_latest_date)
+    monkeypatch.setattr(scheduler.repo, "latest_methodology_version", fake_version)
+    monkeypatch.setattr(scheduler.repo, "latest_has_payload_field", fake_has)
+    monkeypatch.setattr(scheduler, "_run_once", fake_run_once)
+    await scheduler._bootstrap_once()
+    assert runs == [("us", scheduler.BOOTSTRAP_TAG)]

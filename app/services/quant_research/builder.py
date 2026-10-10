@@ -41,6 +41,7 @@ from app.services.quant_research.scoring import (
     score_metric,
 )
 from app.services.quant_research.stage import StageInfo, stage_of, weights_for
+from app.services.quant_research.trend import trend_facts
 from app.services.quant_research.universe import sector_name
 from app.schemas.quant_research import (
     AsOf,
@@ -132,7 +133,8 @@ def evaluate(inp: StockInputs, history: list[EstimatePoint], dists: Distribution
         d.key_fact = pick_key_fact(d)
     snap_dates = [p.snapshot_date for p in history]
     return Evaluation(inp, metrics, dims, stage, n,
-                      estimates_date=max(snap_dates).isoformat() if snap_dates else None)
+                      estimates_date=max(snap_dates).isoformat() if snap_dates else None,
+                      extra={"trend": trend_facts(inp, history, metrics)})
 
 
 def finalize_overall(ev: Evaluation, overall_dist: list[float], prev_grades: dict | None = None,
@@ -274,6 +276,7 @@ def build_payload(ev: Evaluation, lang: tx.Lang, *, in_universe: bool, sector_sa
                         note=("；" if lang == "zh" else "; ").join(notes) or None,
                         text=tx.overall_text(o, lang, inp.market) if o else None),
         dimensions=[_dimension_out(d, ev, lang, eff_weights) for d in ev.dims],
+        trend=ev.extra.get("trend"),
         disclaimer=tx.DISCLAIMER[lang],
     )
 

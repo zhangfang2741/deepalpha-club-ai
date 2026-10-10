@@ -219,3 +219,18 @@ def test_stage_ranking_route(client, monkeypatch):
     assert r.status_code == 200 and r.json()["stage"] == "growth"
     assert seen == {"market": "us", "stage": "growth", "symbol": "SNOW", "score": 54.8, "limit": 30}
     assert c.get("/api/v1/quant-research/us/stage-ranking?stage=foo").status_code == 422
+
+
+def test_trend_radar_route(client, monkeypatch):
+    from app.schemas.quant_research import TrendRadarOut
+
+    c, _ = client
+
+    async def fake(market, lang, *, redis):
+        return TrendRadarOut(market=market, as_of="2026-10-09", rings=[7, 30, 90], thresholds={}, items=[],
+                             counts={"estimates": 0, "quality": 0})
+
+    monkeypatch.setattr(api_mod, "get_trend_radar", fake)
+    r = c.get("/api/v1/quant-research/hk/trend-radar")
+    assert r.status_code == 200 and r.json()["market"] == "hk"
+    assert c.get("/api/v1/quant-research/xx/trend-radar").status_code == 422
