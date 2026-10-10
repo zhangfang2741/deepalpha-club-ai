@@ -11,7 +11,7 @@ import SwiftUI
 /// 4. 参数可调的话在 `IndicatorSettings` / `IndicatorSettingsSheet` 加一项，后端 `/chan/analysis` 加对应查询参数；
 /// 5. 名词要补 `glossary.json`（中英）。
 enum ChartIndicator: String, CaseIterable, Identifiable {
-    case ma, ema, boll, wyckoff
+    case ma, ema, boll, wyckoff, smc
 
     var id: String { rawValue }
 
@@ -21,8 +21,12 @@ enum ChartIndicator: String, CaseIterable, Identifiable {
         case .ema: return "EMA"
         case .boll: return "BOLL"
         case .wyckoff: return L("威科夫")
+        case .smc: return "SMC"
         }
     }
+
+    /// 威科夫和 SMC 是两套结构读法，打开时会把缠论图层收起来（`ChanViewModel.syncChanLayers`），两者也不同时开。
+    var hidesChanLayers: Bool { self == .wyckoff || self == .smc }
 
     /// 用户没动过它时是开还是关。全部默认关（2026-10-09 起均线也不默认选中）：先看缠论结构，需要时再点开；
     /// 用户明确点开过的仍按本机存的选择。
@@ -40,6 +44,31 @@ enum ChartIndicatorStore {
 
     static func save(_ choices: [String: Bool]) {
         UserDefaults.standard.set(choices, forKey: key)
+    }
+}
+
+/// SMC 指标里各类元素的显示开关（「指标设置 → SMC」里勾选，存本机）。
+/// 全开会铺满整张图：默认只开结构突破 / 订单块 / 缺口，其余按需勾选。
+struct SmcLayers: Codable, Equatable {
+    var structure = true
+    var orderBlocks = true
+    var fvg = true
+    var strongWeak = false
+    var premiumDiscount = false
+    var equalLevels = false
+    var sweeps = false
+    var keyLevels = false
+
+    private static let key = "chart.smcLayers.v1"
+
+    static func load() -> SmcLayers {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let s = try? JSONDecoder().decode(SmcLayers.self, from: data) else { return SmcLayers() }
+        return s
+    }
+
+    func save() {
+        if let data = try? JSONEncoder().encode(self) { UserDefaults.standard.set(data, forKey: Self.key) }
     }
 }
 
@@ -93,6 +122,7 @@ struct IndicatorBar: View {
         case .ema: return !(analysis.ema?.periods.isEmpty ?? true)
         case .boll: return analysis.boll != nil
         case .wyckoff: return analysis.wyckoff != nil
+        case .smc: return analysis.smc != nil
         }
     }
 
@@ -118,7 +148,7 @@ struct IndicatorBar: View {
                 IndicatorSettingsSheet(vm: vm, analysis: analysis)
                     .preferredColorScheme(.dark)
                     // 矮面板：标题 + 指标切换 + 最多 3 行参数 + 一句说明
-                    .presentationDetents([.height(270)])
+                    .presentationDetents([.height(300)])
                     .presentationDragIndicator(.visible)
             }
         }
@@ -182,6 +212,18 @@ struct IndicatorSettingsSheet: View {
                 case .wyckoff:
                     // 没有可调参数：识别规则是固定的，说明写在下面的 note 里
                     EmptyView()
+                case .smc:
+                    // 识别规则固定；这里只选图上画哪几类（点一下立即生效，不用点「完成」）
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 0) {
+                        smcToggle(L("结构突破 / 转变"), \.structure)
+                        smcToggle(L("订单块"), \.orderBlocks)
+                        smcToggle(L("公允价值缺口"), \.fvg)
+                        smcToggle(L("强弱高低点"), \.strongWeak)
+                        smcToggle(L("溢价 / 折价区"), \.premiumDiscount)
+                        smcToggle(L("等高 / 等低点"), \.equalLevels)
+                        smcToggle(L("流动性扫荡"), \.sweeps)
+                        smcToggle(L("前周期高低点"), \.keyLevels)
+                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -241,7 +283,25 @@ struct IndicatorSettingsSheet: View {
         case .ema: return L("指数移动平均：越近的 K 线权重越大，比均线拐得快。")
         case .boll: return L("中轨是 N 根 K 线的均线，上下轨 = 中轨 ± 倍数 × 标准差。")
         case .wyckoff: return L("威科夫：先找一次放量的恐慌 / 追涨高潮，再把之后的横盘画成交易区间，并标出区间里出现的事件（点标记看解释）。只标出位置，不是买卖信号。")
+        case .smc: return L("SMC：按 K 线自己的高低点标出结构突破 / 转变、订单块、价格缺口等位置（点标记看解释）。图上画哪几类在上面勾选。只标出位置，不是买卖信号。")
         }
+    }
+
+    /// SMC 图层勾选项：整行可点，点一下立即生效。
+    private func smcToggle(_ title: String, _ kp: WritableKeyPath<SmcLayers, Bool>) -> some View {
+        let on = vm.smcLayers[keyPath: kp]
+        return Button { vm.smcLayers[keyPath: kp].toggle() } label: {
+            HStack(spacing: 8) {
+                Image(systemName: on ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 16))
+                    .foregroundStyle(on ? Theme.accent : Theme.textSecondary)
+                Text(title).font(.system(size: 13)).foregroundStyle(Theme.textPrimary)
+                Spacer(minLength: 0)
+            }
+            .frame(height: 36)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func lineRow(_ line: Binding<Line>, prefix: String, colors: [Color]) -> some View {

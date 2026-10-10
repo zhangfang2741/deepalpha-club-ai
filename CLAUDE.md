@@ -504,11 +504,20 @@ deepalpha-club-ai/
 - iOS 图表下方是**指标栏**（`Views/Chart/ChartIndicator.swift`：`ChartIndicator` 枚举 + `IndicatorBar`），点一下开 / 关，选择存本机（只存用户明确选过的，没选过走 `defaultOn`；2026-10-09 起所有指标含均线都默认关）。
   **新增指标**：枚举加 case → 后端加按合并 K 线对齐的字段 → `ChanAnalysis` 加属性 + `IndicatorBar.isAvailable` 写何时有数据 → `ChanChartView` 里按 `vm.isOn(.xxx)` 画 → 词典补条目（中英）。新增指标默认关。
 - **威科夫指标**（指标栏第四个，默认关）：后端 `/chan/analysis` 的 `wyckoff` 字段（`app/services/wyckoff/overlay.py`，复用 `wyckoff/analyzer`，约 2ms，失败不影响主体）——只拿**可见窗口**（`visible_from` 之后）的 K 线分析，事件与交易区间按合并 K 线的 `end_time` 对齐成**下标**（App 直接按下标画，同均线思路）。
-  **点开威科夫时把缠论图层（分型 / 笔 / 线段 / 中枢 / 买卖点 / 背驰）全部关掉，再点关掉威科夫时原样恢复**（`ChanViewModel.toggle` → `syncChanLayers`，开前状态只存内存）。
+  **点开威科夫（或 SMC）时把缠论图层（分型 / 笔 / 线段 / 中枢 / 买卖点 / 背驰）全部关掉，再点关掉时原样恢复；威科夫与 SMC 同时只开一个**（`ChartIndicator.hidesChanLayers`、`ChanViewModel.toggle` → `syncChanLayers`，开前状态只存内存）。
   图上只画交易区间（浅棕色带 + 上下沿虚线）+ 事件代码标记（SC / Spring / SOS …，点标记弹说明，`ChartElement.wyckoff`），左上角数值行写阶段与区间上下沿；**不带操作建议、不带「买点 / 离场点」措辞**（网页端 `/wyckoff/analysis` 的 recommendation 与事件 description 里有这类词，**不要**搬进 overlay，`test_overlay_has_no_trading_wording` 守护）。
   **滚动识别多段结构**（`overlay.build_overlay`）：威科夫分析一次只认「量比最高的那个高潮」及其区间，视窗里大部分时间什么都没有（BABA 实测只剩 SC、AR）。所以价格收盘离开区间（超出 15% 区间宽度）后，从突破那根起再分析一遍找下一段，最多 `MAX_STRUCTURES`=4 段（接口字段 `ranges` 数组，阶段取最后一段）；一段里认不出结构就往后挪 `SCAN_STEP`=60 根再试；宽度不到支撑价 4%（`MIN_RANGE_WIDTH`，RKLB 实测 2.4%）或不足 `MIN_SPAN`=3 根的不算区间；每段区间与事件只画到突破为止（突破后重复的 SOS / SOW 是趋势里的放量，NVDA 实测 11 个）。
   **日线用固定两年窗口**（`canonical_daily_start`，与缠论同口径），不随用户所选起始日期变短——选了较晚的起点会让威科夫只看到几个月、识别不出结构。
   颜色用浅棕 `Theme.wyckoff`（避开红 / 绿与笔 / 中枢 / 背驰 / 均线已用色）。词典 17 条（威科夫 / 交易区间 / 15 个事件，`glossary.json` 中英），新手入门 `guide-app-detail` 已补指标栏一条。**已知局限**：事件的判定阈值（量比 1.6、前序趋势 12%）沿用网页端，未针对 App 的两年窗口标定。
+- **SMC 指标**（指标栏第五个，默认关，2026-10-10）：后端 `/chan/analysis` 的 `smc` 字段（`app/services/smc/algo.py` 纯函数识别 + `overlay.py` 对齐合并 K 线下标，失败不影响主体），
+  口径参照 LuxAlgo「Smart Money Concepts」与 joshyattridge/smart-money-concepts，只做有明确规则、能由 K 线直接算出的：
+  ① 摆动高 / 低点（左右各 `SWING_LEN_BY_FREQ` 根：日线 10 / 周线 5 / 30 分钟 10，**右侧确认后才生效**）；② 结构突破 BOS / 转变 CHoCH（收盘越过最近已确认的摆动点，顺结构方向 BOS、逆向 CHoCH，每个摆动点只被突破一次）；
+  ③ 订单块（突破时取被突破摆动点到突破前反向极值那根 K 线的整根区间，收盘反向穿过即失效，**只画未失效的**，最多 6 个）；④ 公允价值缺口 FVG（三根 K 线缺口，中间那根实体须大于此前平均实体 2 倍，价格回到远端即填补，**只画未填补的**，最多 8 个）；
+  ⑤ 等高 / 等低点（相邻小级别摆动点之差 < 0.1×ATR）；⑥ 流动性扫荡（影线越过未被收盘突破的摆动点、收盘回到原侧）；⑦ 溢价 / 折价区 + 50% 中位（最近摆动高低点随新高新低延伸）；⑧ 强弱高低点（同一组极值，结构向下高点为强、向上低点为强）；⑨ 前日 / 周 / 月高低点（日线画周、月，30 分钟画日、周，周线画月）。
+  **摆动长度的校准**（2026-10，8 只美股 / 港股 / A 股近三年日线）：长度 3~5 时两年里有 25~40 次突破、一屏全是线，10 时每只约 9~15 次，所以日线取 10；LuxAlgo 默认的「主结构 50 / 内部结构 5」在两年日线上要么太稀要么太密，这里只取一级。改长度须同步改推导 / 说明里写的数字。
+  **只陈列位置与事实**：说明文字以「只标出位置，不是买卖信号」收尾，不出现买卖导向措辞（`test_overlay_has_no_trading_wording` 守护；订单块不叫「入场区」，溢价 / 折价不是「贵 / 便宜」，强弱高低点只是按结构方向的命名）。
+  iOS：图层勾选在「指标设置 → SMC」（`SmcLayers`，存本机；默认只开结构 / 订单块 / 缺口，其余按需，全开会铺满整张图），点标记 / 线 / 方块看解释（`ChartElement.smc`，`ChartElementExplainer.smc`），颜色向上蓝 `Theme.smcBull`、向下琥珀 `Theme.smcBear`、中性 `Theme.smcNeutral`（避开红绿）。词典 10 条（SMC / 结构突破 / 结构转变 / 订单块 / 公允价值缺口 / 等高低点 / 流动性扫荡 / 溢价与折价 / 强弱高低点 / 前周期高低点，`glossary.json` 中英），新手入门 `guide-app-detail` 已补。
+  **改识别规则 / 阈值时，说明文字（`ChartElementExplainer.smc`）与词典条目（中英）一起改**。**已知局限**：规则按两份开源实现取舍、没有针对 A 股 / 港股单独标定；FVG 的 2 倍实体阈值、等高低点的 0.1×ATR 沿用 LuxAlgo 默认值。
 - 30 分钟周期可在条件页选，**会员功能**（示例股除外，与次级别确认同一权益）；`ChanViewModel.apply` 没指定周期时 30 分钟回到日线，避免自选 / 雷达入口沿用它绕过门禁。
 
 ## 后端分层规则

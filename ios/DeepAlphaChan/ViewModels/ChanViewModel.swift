@@ -82,28 +82,41 @@ final class ChanViewModel: ObservableObject {
     }
 
     func toggle(_ indicator: ChartIndicator) {
-        indicatorChoices[indicator.rawValue] = !isOn(indicator)
+        let turningOn = !isOn(indicator)
+        // 威科夫和 SMC 是两套互相独立的结构读法，叠在一起看不清：同时只开一个
+        if turningOn, indicator.hidesChanLayers {
+            for other in ChartIndicator.allCases where other != indicator && other.hidesChanLayers {
+                indicatorChoices[other.rawValue] = false
+            }
+        }
+        indicatorChoices[indicator.rawValue] = turningOn
         ChartIndicatorStore.save(indicatorChoices)
-        if indicator == .wyckoff { syncChanLayers(forWyckoffOn: isOn(.wyckoff)) }
+        if indicator.hidesChanLayers { syncChanLayers() }
     }
 
-    /// 开威科夫前的缠论图层开关（分型 / 笔 / 线段 / 中枢 / 买卖点 / 背驰），只存在内存里。
-    private var chanLayersBeforeWyckoff: (fractals: Bool, strokes: Bool, segments: Bool,
-                                          pivots: Bool, signals: Bool, divergences: Bool)?
+    /// SMC 各类元素的显示开关（指标设置里勾选），存本机。
+    @Published var smcLayers = SmcLayers.load() {
+        didSet { smcLayers.save() }
+    }
 
-    /// 威科夫和缠论是两套结构，叠在一起图面看不清：打开威科夫时记下当前图层并全部关掉，
-    /// 关掉威科夫时原样恢复（中途自己改过图层也以开威科夫前的为准）。
-    private func syncChanLayers(forWyckoffOn on: Bool) {
-        if on {
-            guard chanLayersBeforeWyckoff == nil else { return }
-            chanLayersBeforeWyckoff = (showFractals, showStrokes, showSegments,
-                                       showPivots, showSignals, showDivergences)
+    /// 开威科夫 / SMC 前的缠论图层开关（分型 / 笔 / 线段 / 中枢 / 买卖点 / 背驰），只存在内存里。
+    private var chanLayersBeforeStructureIndicator: (fractals: Bool, strokes: Bool, segments: Bool,
+                                                     pivots: Bool, signals: Bool, divergences: Bool)?
+
+    /// 威科夫 / SMC 和缠论是几套不同的结构，叠在一起图面看不清：任一个打开时记下当前图层并全部关掉，
+    /// 都关掉后原样恢复（中途自己改过图层也以打开前的为准；在两者之间切换不会把「关着」存成原状态）。
+    private func syncChanLayers() {
+        let structureOn = ChartIndicator.allCases.contains { $0.hidesChanLayers && isOn($0) }
+        if structureOn {
+            guard chanLayersBeforeStructureIndicator == nil else { return }
+            chanLayersBeforeStructureIndicator = (showFractals, showStrokes, showSegments,
+                                                  showPivots, showSignals, showDivergences)
             showFractals = false; showStrokes = false; showSegments = false
             showPivots = false; showSignals = false; showDivergences = false
-        } else if let saved = chanLayersBeforeWyckoff {
+        } else if let saved = chanLayersBeforeStructureIndicator {
             showFractals = saved.fractals; showStrokes = saved.strokes; showSegments = saved.segments
             showPivots = saved.pivots; showSignals = saved.signals; showDivergences = saved.divergences
-            chanLayersBeforeWyckoff = nil
+            chanLayersBeforeStructureIndicator = nil
         }
     }
 

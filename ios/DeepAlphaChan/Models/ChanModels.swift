@@ -266,6 +266,157 @@ struct WyckoffEventMark: Codable, Identifiable {
     }
 }
 
+/// SMC 图表指标（后端 `/chan/analysis` 的 smc 字段）：结构突破 / 转变、订单块、公允价值缺口、等高低点、流动性扫荡、
+/// 溢价折价区、强弱高低点、前周期高低点。位置都按 mergedCandles 的下标给，直接画。只陈列结构事实，不含操作建议。
+struct SmcOverlay: Codable {
+    /// bull / bear / none：最近一次结构突破的方向
+    let trend: String
+    /// 摆动点长度（左右各 N 根），说明文字里用
+    let swingLen: Int
+    let breaks: [SmcBreak]
+    let orderBlocks: [SmcOrderBlock]
+    let fvgs: [SmcFvg]
+    let equalLevels: [SmcEqualLevel]
+    let sweeps: [SmcSweep]
+    let zone: SmcZone?
+    let extremes: SmcExtremes?
+    let keyLevels: [SmcKeyLevel]
+
+    enum CodingKeys: String, CodingKey {
+        case trend, breaks, fvgs, sweeps, zone, extremes
+        case swingLen = "swing_len"
+        case orderBlocks = "order_blocks"
+        case equalLevels = "equal_levels"
+        case keyLevels = "key_levels"
+    }
+}
+
+/// 结构突破（BOS）/ 结构转变（CHoCH）：从被突破的摆动点画到突破那根。
+struct SmcBreak: Codable, Identifiable {
+    /// bos / choch
+    let kind: String
+    /// bull（向上突破）/ bear（向下突破）
+    let direction: String
+    let level: Double
+    let levelIdx: Int
+    let breakIdx: Int
+    let time: String
+
+    var id: String { "brk-\(kind)-\(breakIdx)" }
+    var isBull: Bool { direction == "bull" }
+
+    enum CodingKeys: String, CodingKey {
+        case kind, direction, level, time
+        case levelIdx = "level_idx"
+        case breakIdx = "break_idx"
+    }
+}
+
+struct SmcOrderBlock: Codable, Identifiable {
+    let direction: String
+    let top: Double
+    let bottom: Double
+    let idx: Int
+    let endIdx: Int
+    let mitigated: Bool
+    let volumeRatio: Double
+    let time: String
+
+    var id: String { "ob-\(direction)-\(idx)" }
+    var isBull: Bool { direction == "bull" }
+
+    enum CodingKeys: String, CodingKey {
+        case direction, top, bottom, idx, mitigated, time
+        case endIdx = "end_idx"
+        case volumeRatio = "volume_ratio"
+    }
+}
+
+struct SmcFvg: Codable, Identifiable {
+    let direction: String
+    let top: Double
+    let bottom: Double
+    let idx: Int
+    let endIdx: Int
+    let time: String
+
+    var id: String { "fvg-\(direction)-\(idx)" }
+    var isBull: Bool { direction == "bull" }
+
+    enum CodingKeys: String, CodingKey {
+        case direction, top, bottom, idx, time
+        case endIdx = "end_idx"
+    }
+}
+
+struct SmcEqualLevel: Codable, Identifiable {
+    /// eqh / eql
+    let kind: String
+    let price: Double
+    let idx1: Int
+    let idx2: Int
+
+    var id: String { "eq-\(kind)-\(idx2)" }
+    var isHigh: Bool { kind == "eqh" }
+}
+
+struct SmcSweep: Codable, Identifiable {
+    /// high（越过高点）/ low（越过低点）
+    let side: String
+    let level: Double
+    let levelIdx: Int
+    let idx: Int
+    let time: String
+
+    var id: String { "sw-\(side)-\(idx)" }
+    var isHigh: Bool { side == "high" }
+
+    enum CodingKeys: String, CodingKey {
+        case side, level, idx, time
+        case levelIdx = "level_idx"
+    }
+}
+
+struct SmcZone: Codable {
+    let top: Double
+    let bottom: Double
+    let equilibrium: Double
+    let startIdx: Int
+    let endIdx: Int
+
+    enum CodingKeys: String, CodingKey {
+        case top, bottom, equilibrium
+        case startIdx = "start_idx"
+        case endIdx = "end_idx"
+    }
+}
+
+struct SmcExtreme: Codable {
+    let price: Double
+    let idx: Int
+    /// strong / weak
+    let strength: String
+}
+
+struct SmcExtremes: Codable {
+    let high: SmcExtreme
+    let low: SmcExtreme
+}
+
+struct SmcKeyLevel: Codable, Identifiable {
+    /// PDH / PDL / PWH / PWL / PMH / PML
+    let code: String
+    let price: Double
+    let startIdx: Int
+
+    var id: String { "key-\(code)" }
+
+    enum CodingKeys: String, CodingKey {
+        case code, price
+        case startIdx = "start_idx"
+    }
+}
+
 /// 买卖点信号。
 struct Signal: Codable, Identifiable {
     enum Kind: String, Codable {
@@ -437,6 +588,8 @@ struct ChanAnalysis: Codable {
     var boll: BollData? = nil
     /// 威科夫图表指标；旧后端缺省。
     var wyckoff: WyckoffOverlay? = nil
+    /// SMC 图表指标；旧后端缺省。
+    var smc: SmcOverlay? = nil
     let signals: [Signal]
     let currentTrend: String
     // 走势类型（基于中枢排布）：up_trend / down_trend / consolidation / none
@@ -465,7 +618,7 @@ struct ChanAnalysis: Codable {
     var chartSignals: [Signal] { signals + candidates }
 
     enum CodingKeys: String, CodingKey {
-        case symbol, fractals, strokes, segments, macd, ma, ema, boll, wyckoff, signals, summary, recommendation, narrative
+        case symbol, fractals, strokes, segments, macd, ma, ema, boll, wyckoff, smc, signals, summary, recommendation, narrative
         case candidateSignals = "candidate_signals"
         case barsCount = "bars_count"
         case mergedCandles = "merged_candles"

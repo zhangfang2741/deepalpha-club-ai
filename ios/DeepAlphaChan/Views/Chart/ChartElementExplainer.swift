@@ -13,6 +13,9 @@ enum ChartElement: Identifiable, Equatable {
     case divergence(current: Stroke, refTime: String, refPrice: Double)
     /// 威科夫事件标记（指标栏打开「威科夫」后图上的 SC / Spring / SOS 等）。
     case wyckoff(WyckoffEventMark)
+    /// SMC 指标里的元素（结构突破 / 订单块 / 缺口 / 等高低点 / 扫荡 / 溢价折价 / 强弱高低点 / 前周期高低点）。
+    /// `swingLen` 是后端识别摆动点用的长度，说明文字里要写出来。
+    case smc(SmcMark, swingLen: Int)
 
     var id: String {
         switch self {
@@ -24,10 +27,38 @@ enum ChartElement: Identifiable, Equatable {
         case .established(let s): return "est-\(s.id)"
         case .divergence(let c, _, _): return "div-\(c.id)"
         case .wyckoff(let e): return "wk-\(e.id)"
+        case .smc(let m, _): return "smc-\(m.id)"
         }
     }
 
     static func == (a: ChartElement, b: ChartElement) -> Bool { a.id == b.id }
+}
+
+/// SMC 指标里可以点开的元素。
+enum SmcMark: Identifiable {
+    case brk(SmcBreak)
+    case orderBlock(SmcOrderBlock)
+    case fvg(SmcFvg)
+    case equal(SmcEqualLevel)
+    case sweep(SmcSweep)
+    /// 溢价 / 折价区的 50% 中位线
+    case zone(SmcZone)
+    /// 强 / 弱高低点：isHigh 表示高点
+    case extreme(SmcExtreme, isHigh: Bool)
+    case keyLevel(SmcKeyLevel)
+
+    var id: String {
+        switch self {
+        case .brk(let b): return b.id
+        case .orderBlock(let o): return o.id
+        case .fvg(let g): return g.id
+        case .equal(let e): return e.id
+        case .sweep(let w): return w.id
+        case .zone: return "zone"
+        case .extreme(_, let isHigh): return isHigh ? "ext-high" : "ext-low"
+        case .keyLevel(let k): return k.id
+        }
+    }
 }
 
 /// 点击元素后弹出的简短说明：标题、关键数据、为什么出现在这里、对应课程。
@@ -52,6 +83,7 @@ enum ChartExplainer {
         case .established(let s): return established(s)
         case .divergence(let c, let refTime, let refPrice): return divergence(c, refTime: refTime, refPrice: refPrice)
         case .wyckoff(let e): return wyckoff(e)
+        case .smc(let m, let swingLen): return smc(m, swingLen: swingLen)
         }
     }
 
@@ -72,6 +104,93 @@ enum ChartExplainer {
                     (L("阶段"), L("%@ 阶段", e.phase))],
             reason: L("这是威科夫体系里的「%@」事件，按这一天的价格、成交量和它在交易区间里的位置判定。量比 = 这天成交量 ÷ 这段行情的平均成交量。它只标出结构上的位置，不是买卖信号，后续走势还需要确认。", L(e.name)),
             lessonTerm: e.name)
+    }
+
+    /// SMC 元素：只说「这是什么、依据哪几个数」，大白话 / 举例 / 不代表什么在词典里（点下面的「学习」）。
+    /// 所有说明都以「只标出位置，不是买卖信号」收尾；不出现买卖导向措辞（App Store 3.1.1 / 5.2.5）。
+    private static func smc(_ m: SmcMark, swingLen: Int) -> ChartExplanation {
+        let note = L("它只标出结构上的位置，不是买卖信号，后续走势还需要确认。")
+        func range(_ lo: Double, _ hi: Double) -> String { "\(price(lo)) – \(price(hi))" }
+        switch m {
+        case .brk(let b):
+            let dir = b.isBull ? L("向上") : L("向下")
+            let swing = b.isBull ? L("高点") : L("低点")
+            let isBos = b.kind == "bos"
+            let reason = isBos
+                ? L("收盘价%@越过了最近一个已确认的摆动%@，方向和之前的结构一致，这叫结构突破（BOS）。摆动点 = 左右各 %lld 根 K 线里最高 / 最低的那个点。", dir, swing, swingLen)
+                : L("收盘价%@越过了最近一个已确认的摆动%@，方向和之前的结构相反，这叫结构转变（CHoCH）。摆动点 = 左右各 %lld 根 K 线里最高 / 最低的那个点。", dir, swing, swingLen)
+            return ChartExplanation(
+                title: isBos ? "\(L("结构突破")) · BOS" : "\(L("结构转变")) · CHoCH",
+                color: b.isBull ? Theme.smcBull : Theme.smcBear,
+                facts: [(L("突破日"), b.time), (L("被突破的价位"), price(b.level)), (L("方向"), dir)],
+                reason: reason + note,
+                lessonTerm: isBos ? "结构突破" : "结构转变")
+        case .orderBlock(let o):
+            let reason = o.isBull
+                ? L("向上突破发生时，从被突破的高点到突破之前，最低的那一根 K 线的整根区间，就是一个订单块。收盘价向下跌破它就失效，图上只画还没失效的。")
+                : L("向下突破发生时，从被突破的低点到突破之前，最高的那一根 K 线的整根区间，就是一个订单块。收盘价向上越过它就失效，图上只画还没失效的。")
+            return ChartExplanation(
+                title: "\(L("订单块")) · OB",
+                color: o.isBull ? Theme.smcBull : Theme.smcBear,
+                facts: [(L("日期"), o.time), (L("区间"), range(o.bottom, o.top)),
+                        (L("量比"), String(format: "%.1f×", o.volumeRatio))],
+                reason: reason + L("量比 = 这根 K 线成交量 ÷ 这段行情的平均成交量。") + note,
+                lessonTerm: "订单块")
+        case .fvg(let g):
+            return ChartExplanation(
+                title: "\(L("公允价值缺口")) · FVG",
+                color: g.isBull ? Theme.smcBull : Theme.smcBear,
+                facts: [(L("日期"), g.time), (L("缺口"), range(g.bottom, g.top)),
+                        (L("方向"), g.isBull ? L("向上") : L("向下"))],
+                reason: L("连续三根 K 线里，第一根和第三根之间留下一段没有被覆盖的价格空档，并且中间那根的实体明显大于此前的平均实体。价格回到缺口远端就算被填补，图上只画还没填补的。") + note,
+                lessonTerm: "公允价值缺口")
+        case .equal(let e):
+            return ChartExplanation(
+                title: e.isHigh ? "\(L("等高点")) · EQH" : "\(L("等低点")) · EQL",
+                color: Theme.smcNeutral,
+                facts: [(L("价位"), price(e.price))],
+                reason: (e.isHigh
+                    ? L("相邻两个摆动高点的差小于 0.1 倍平均波幅（ATR），看起来差不多一样高，叫等高点。")
+                    : L("相邻两个摆动低点的差小于 0.1 倍平均波幅（ATR），看起来差不多一样低，叫等低点。")) + note,
+                lessonTerm: "等高低点")
+        case .sweep(let w):
+            return ChartExplanation(
+                title: "\(L("流动性扫荡")) · Sweep",
+                color: Theme.smcNeutral,
+                facts: [(L("日期"), w.time), (L("越过的价位"), price(w.level))],
+                reason: (w.isHigh
+                    ? L("这天的影线越过了一个还没被收盘突破的摆动高点，但收盘又回到了它下方，叫流动性扫荡。")
+                    : L("这天的影线越过了一个还没被收盘突破的摆动低点，但收盘又回到了它上方，叫流动性扫荡。")) + note,
+                lessonTerm: "流动性扫荡")
+        case .zone(let z):
+            return ChartExplanation(
+                title: L("溢价区 / 折价区"),
+                color: Theme.smcNeutral,
+                facts: [(L("上沿"), price(z.top)), (L("中位"), price(z.equilibrium)), (L("下沿"), price(z.bottom))],
+                reason: L("取最近的摆动高点和摆动低点（之后被更高的高点 / 更低的低点延伸），它们之间 50% 以上叫溢价区、50% 以下叫折价区。它只说价格在这一段里的相对位置。") + note,
+                lessonTerm: "溢价与折价")
+        case .extreme(let e, let isHigh):
+            let strong = e.strength == "strong"
+            let name = (strong ? L("强") : L("弱")) + (isHigh ? L("高点") : L("低点"))
+            return ChartExplanation(
+                title: name,
+                color: Theme.smcNeutral,
+                facts: [(L("价位"), price(e.price))],
+                reason: L("按当前的结构方向给最近的高低点起的名字：结构向下时，高点叫强高点、低点叫弱低点；结构向上时，低点叫强低点、高点叫弱高点。这只是命名，不是对后续走势的判断。") + note,
+                lessonTerm: "强弱高低点")
+        case .keyLevel(let k):
+            let names: [String: String] = [
+                "PDH": L("前日高点"), "PDL": L("前日低点"),
+                "PWH": L("前周高点"), "PWL": L("前周低点"),
+                "PMH": L("前月高点"), "PML": L("前月低点"),
+            ]
+            return ChartExplanation(
+                title: "\(names[k.code] ?? k.code) · \(k.code)",
+                color: Theme.smcNeutral,
+                facts: [(L("价位"), price(k.price))],
+                reason: L("上一个已经走完的周期里的最高 / 最低价，线从当前这个周期的第一根 K 线画起。") + note,
+                lessonTerm: "前周期高低点")
+        }
     }
 
     private static func fractal(_ f: Fractal) -> ChartExplanation {

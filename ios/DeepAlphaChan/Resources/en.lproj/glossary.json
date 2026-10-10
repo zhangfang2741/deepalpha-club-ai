@@ -472,6 +472,86 @@
   "notMeans": "It only marks a position in the structure; it lags and can be wrong. It is not a buy or sell signal and does not predict what comes next."
  },
  {
+  "key": "SMC",
+  "term": "SMC (Smart Money Concepts)",
+  "category": "structure",
+  "plain": "A way of reading structure from the candles' own highs and lows: find the swing highs and lows first, then see whether price closes beyond them (a break or change of structure), and mark the order blocks left before the break, price gaps between three candles, equal highs and lows, and swing points that wicks swept past. With \"SMC\" turned on, the Chan layers are tucked away and only SMC is drawn; you can pick which kinds to show in indicator settings.",
+  "example": "Price keeps making new highs, then one day closes below the previous swing low. SMC marks a \"change of structure\" there, and the last up candle before that drop becomes an order block.",
+  "notMeans": "It marks positions in price structure with fixed rules and no prediction. \"Smart money\" is just the method's name and does not mean anyone is buying or selling. It is not a buy or sell signal and does not predict direction."
+ },
+ {
+  "key": "结构突破",
+  "term": "Break of structure (BOS)",
+  "category": "structure",
+  "plain": "A close beyond the most recent confirmed swing high (up) or swing low (down) in the same direction as the existing structure. A swing point is the highest / lowest point among several candles on each side; it is only confirmed once the candles to its right have formed, so it is never changed afterwards. The chart draws a line from the swing point to the day of the break, labeled \"BOS\".",
+  "example": "The stock is already making new highs: the previous high was 120, and this time it closes at 124, beyond that swing high. That is an upward break of structure.",
+  "notMeans": "It only says the structure continued, not that it will keep going; a close beyond a level can reverse quickly. It is not a buy or sell signal."
+ },
+ {
+  "key": "结构转变",
+  "term": "Change of structure (CHoCH)",
+  "category": "structure",
+  "plain": "A close beyond the most recent confirmed swing point in the opposite direction to the existing structure. For example, price has been making new highs and one day closes below the previous swing low. The chart draws it as a dashed line labeled \"CHoCH\". The only difference from a break of structure is direction: with the old direction it is a break, against it it is a change.",
+  "example": "The stock has been rising and the previous swing low is 98. One day it closes at 96, below that low. That is a downward change of structure.",
+  "notMeans": "It only says the direction of the structure changed, not how far or how long; price can return to the old direction afterwards. It is not a buy or sell signal."
+ },
+ {
+  "key": "订单块",
+  "term": "Order block (OB)",
+  "category": "structure",
+  "plain": "When a break of structure happens, the whole range of the one candle that moved furthest against the break between the broken swing point and the break: the lowest candle for an upward break, the highest for a downward one. If a close crosses it the other way, the order block is invalidated; only valid ones are drawn. The chart shows a box labeled \"OB\".",
+  "example": "Price rises from 100 to 120 and breaks the previous high. The lowest candle before the break spans 104–106, and that 104–106 range is an order block.",
+  "notMeans": "It only marks a position; price does not have to return there, and if it does it is not guaranteed to be held up or held down. It is not a buy or sell signal."
+ },
+ {
+  "key": "公允价值缺口",
+  "term": "Fair value gap (FVG)",
+  "category": "structure",
+  "plain": "Across three consecutive candles, a stretch of price between the first and third candle that was never covered, where the middle candle's body is clearly larger than the earlier average body (more than 2× the average). Once price comes back to the far edge, the gap counts as filled; only unfilled gaps are drawn. The chart shows a light block labeled \"FVG\".",
+  "example": "The first candle's high is 100.6 and the third candle's low is 102.0; the big middle candle jumped straight over 100.6–102.0. That stretch is the gap.",
+  "notMeans": "It says price moved fast through that stretch with no trading in it; it does not mean price will come back to fill it. It is not a buy or sell signal."
+ },
+ {
+  "key": "等高低点",
+  "term": "Equal highs / equal lows (EQH / EQL)",
+  "category": "structure",
+  "plain": "Two adjacent swing highs (lows) whose difference is less than 0.1× the average range (ATR), so they look about equally high (low). The chart joins them with a dotted line labeled \"EQH\" or \"EQL\".",
+  "example": "Two highs are 85.08 and 85.12, a difference of 0.04, while the average range is 1.5; 0.04 is below 0.15, so they count as equal highs.",
+  "notMeans": "It only says the two points are close in price; it does not mean they will be broken or that price will turn there. It is not a buy or sell signal."
+ },
+ {
+  "key": "流动性扫荡",
+  "term": "Liquidity sweep",
+  "category": "structure",
+  "plain": "A day when a wick goes beyond a swing high (or low) that has not yet been closed beyond, but the close comes back to the original side. The chart draws a dashed line from the swing point to that day with a small diamond. The difference from a break of structure: a break needs a close beyond, a sweep is only a wick beyond with no close beyond.",
+  "example": "The previous swing high is 120. One day the high reaches 122 but it closes at 118: the wick went past 120 and the close did not. That is a sweep.",
+  "notMeans": "It only records that a wick went past; it does not mean a reversal follows, nor who caused it. It is not a buy or sell signal."
+ },
+ {
+  "key": "溢价与折价",
+  "term": "Premium / discount zone",
+  "category": "structure",
+  "plain": "Take the latest swing high and swing low (extended by any later higher high or lower low) and split the range in half: above 50% is the premium zone, below 50% is the discount zone, and the line in the middle is the equilibrium. The chart shows two light bands and a dashed 50% line; the top-left tells which side the last close is on.",
+  "example": "The latest leg runs from 100 to 140, so the equilibrium is 120. A close at 130 is above it (premium zone) and a close at 110 is below it (discount zone).",
+  "notMeans": "It only says where price sits within this stretch; \"premium\" and \"discount\" do not mean expensive or cheap, and certainly not a call to buy or sell."
+ },
+ {
+  "key": "强弱高低点",
+  "term": "Strong / weak highs and lows",
+  "category": "structure",
+  "plain": "Names given to the latest highs and lows by the current structure direction: when structure points down (the latest break was downward), the high is called the strong high and the low the weak low; when it points up, the low is the strong low and the high the weak high. They use the edges of the premium / discount zone and extend with new highs and lows.",
+  "example": "The latest break was downward, so the latest high at 150 is called the strong high and the latest low at 120 the weak low.",
+  "notMeans": "This is only naming by structure direction, not a judgment about what comes next; \"strong\" and \"weak\" do not say which is more likely to be broken. It is not a buy or sell signal."
+ },
+ {
+  "key": "前周期高低点",
+  "term": "Previous day / week / month high and low (PDH / PDL / PWH / PWL / PMH / PML)",
+  "category": "structure",
+  "plain": "The highest and lowest prices of the last completed period, drawn from the first candle of the current period. Daily charts show the previous week and month, 30-minute charts the previous day and week, weekly charts the previous month. They are labeled PWH (previous week high), PWL (previous week low), and so on.",
+  "example": "On a daily chart, if last week's high was 155.13 and low 143.95, those two lines are drawn from this week's first candle.",
+  "notMeans": "They are just the previous period's high and low prices; price approaching or crossing them does not imply any direction. It is not a buy or sell signal."
+ },
+ {
   "key": "一致预期",
   "term": "Consensus estimate",
   "category": "fundamental",
