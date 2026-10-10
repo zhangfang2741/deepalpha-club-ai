@@ -4,7 +4,7 @@
  "name": "NVIDIA Corporation",
  "status": "ok",
  "status_note": null,
- "methodology_version": "q8",
+ "methodology_version": "q9",
  "as_of": {
   "price_date": "2026-09-29",
   "fiscal_period": "FY27 Q2",
@@ -35,12 +35,12 @@
  },
  "overall": {
   "grade": "A",
-  "score": 72.2,
-  "universe_percentile": 88.7,
+  "score": 72.3,
+  "universe_percentile": 88.8,
   "dimensions_used": 5,
   "capped": false,
   "note": null,
-  "text": "综合分 72.2 · 标普1500 前 11%"
+  "text": "综合分 72.3 · 标普1500 前 11%"
  },
  "dimensions": [
   {
@@ -48,7 +48,7 @@
    "name": "估值",
    "description": "股价相对利润、营收、现金流、资产的倍数",
    "grade": "C-",
-   "score": 41.3,
+   "score": 40.7,
    "status": "ok",
    "status_note": null,
    "is_highest": false,
@@ -57,7 +57,7 @@
     "metric": "ps_ttm",
     "text": "市销率 TTM 18.2，高于板块 92% 的公司"
    },
-   "formula": "(63×0.5 + 60×1 + 79×0.5 + 98×1 + 8×1 + 19×1 + 8×1 + 47×0.5 + 22×1) ÷ 7.5 = 41.3 → C-",
+   "formula": "(63×0.5 + 60×1 + 79×0.5 + 98×1 + 8×1 + 19×1 + 8×1 + 39×0.5 + 22×1) ÷ 7.5 = 40.7 → C-",
    "groups": [
     {
      "name": "市盈率",
@@ -497,15 +497,15 @@
        "name": "EV/EBITDA TTM",
        "description": "企业价值相对最近 12 个月 EBITDA 的倍数",
        "direction": "lower_better",
-       "value": 23.35497032101238,
-       "display_value": "23.4",
+       "value": 27.11479261276122,
+       "display_value": "27.1",
        "status": "ok",
        "status_note": null,
-       "percentile": 47.3,
-       "grade": "C",
+       "percentile": 39.0,
+       "grade": "D+",
        "sector_median": 22.556046101411354,
        "sector_median_display": "22.6",
-       "diff_to_median_pct": 3.5,
+       "diff_to_median_pct": 20.2,
        "distribution": {
         "p10": 9.36899644692759,
         "p25": 13.725144648817611,
@@ -514,7 +514,7 @@
         "p90": 66.8741450893949
        },
        "formula": {
-        "expression": "企业价值 5.46 万亿 ÷ EBITDA TTM 2336.7 亿 = 23.4",
+        "expression": "企业价值 5.46 万亿 ÷ EBITDA TTM 2012.7 亿 = 27.1",
         "inputs": [
          {
           "label": "企业价值",
@@ -524,13 +524,13 @@
          },
          {
           "label": "EBITDA TTM",
-          "value": "2336.7 亿",
+          "value": "2012.7 亿",
           "note": "FY27 Q2",
           "hint": "EBITDA：息税折旧摊销前利润，可粗略看作主营业务赚到的「毛现金」。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
          }
         ]
        },
-       "position_text": "高于 53% 的同板块公司 → 百分位 47 → C",
+       "position_text": "高于 61% 的同板块公司 → 百分位 39 → D+",
        "interpretation": {
         "what": "企业价值相对最近 12 个月 EBITDA 的倍数",
         "role": "用企业整体价格比较息税折旧摊销前利润，辅助比较不同融资结构的公司。",
@@ -600,8 +600,8 @@
        "name": "EV/EBIT TTM",
        "description": "企业价值相对最近 12 个月 EBIT 的倍数",
        "direction": "lower_better",
-       "value": 23.72939320810505,
-       "display_value": "23.7",
+       "value": 27.620778777096756,
+       "display_value": "27.6",
        "status": "insufficient_sample",
        "status_note": "板块样本不足 20 家，不参与计算",
        "percentile": null,
@@ -611,7 +611,7 @@
        "diff_to_median_pct": null,
        "distribution": null,
        "formula": {
-        "expression": "企业价值 5.46 万亿 ÷ EBIT TTM 2299.8 亿 = 23.7",
+        "expression": "企业价值 5.46 万亿 ÷ EBIT TTM 1975.8 亿 = 27.6",
         "inputs": [
          {
           "label": "企业价值",
@@ -621,7 +621,7 @@
          },
          {
           "label": "EBIT TTM",
-          "value": "2299.8 亿",
+          "value": "1975.8 亿",
           "note": "FY27 Q2",
           "hint": "EBIT：息税前利润，扣掉成本、费用和折旧摊销后，还没付利息和交税的经营利润。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
          }
@@ -812,7 +812,7 @@
    "name": "成长",
    "description": "营收与利润的历史及预期增速",
    "grade": "B+",
-   "score": 77.9,
+   "score": 78.6,
    "status": "ok",
    "status_note": null,
    "is_highest": false,
@@ -821,7 +821,7 @@
     "metric": "rev_cagr3",
     "text": "营收 3 年复合增速 +110%，高于板块 99% 的公司"
    },
-   "formula": "(99 + 97 + 100 + 90 + 54 + 86 + 46 + 81 + 50) ÷ 9 = 77.9 → B+",
+   "formula": "(99 + 97 + 100 + 86 + 60 + 83 + 52 + 81 + 50) ÷ 9 = 78.6 → B+",
    "groups": [
     {
      "name": "营收",
@@ -992,15 +992,15 @@
        "name": "EBITDA 同比",
        "description": "最近 12 个月 EBITDA 相比上一个 12 个月的增速",
        "direction": "higher_better",
-       "value": 1.2642809383993723,
-       "display_value": "+126%",
+       "value": 1.0478419242587655,
+       "display_value": "+105%",
        "status": "ok",
        "status_note": null,
-       "percentile": 89.5,
+       "percentile": 86.2,
        "grade": "A",
        "sector_median": 0.19479211726245782,
        "sector_median_display": "+19%",
-       "diff_to_median_pct": 549.0,
+       "diff_to_median_pct": 437.9,
        "distribution": {
         "p10": -0.2482897001461647,
         "p25": -0.033573394668376055,
@@ -1009,23 +1009,23 @@
         "p90": 1.2719910315634846
        },
        "formula": {
-        "expression": "EBITDA TTM 2336.7 亿 ÷ 上一个 12 个月 EBITDA 1032.0 亿 − 1 = +126%",
+        "expression": "EBITDA TTM 2012.7 亿 ÷ 上一个 12 个月 EBITDA 982.8 亿 − 1 = +105%",
         "inputs": [
          {
           "label": "EBITDA TTM",
-          "value": "2336.7 亿",
+          "value": "2012.7 亿",
           "note": "FY27 Q2",
           "hint": "EBITDA：息税折旧摊销前利润，可粗略看作主营业务赚到的「毛现金」。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
          },
          {
           "label": "上一个 12 个月 EBITDA",
-          "value": "1032.0 亿",
+          "value": "982.8 亿",
           "note": null,
           "hint": "EBITDA：息税折旧摊销前利润，可粗略看作主营业务赚到的「毛现金」。这里取再往前 12 个月的实际数，用来算同比。"
          }
         ]
        },
-       "position_text": "高于 90% 的同板块公司 → 百分位 90 → A",
+       "position_text": "高于 86% 的同板块公司 → 百分位 86 → A",
        "interpretation": {
         "what": "最近 12 个月 EBITDA 相比上一个 12 个月的增速",
         "role": "观察生意是否扩大，以及增长能否转化为长期每股现金收益。",
@@ -1044,15 +1044,15 @@
        "name": "EBITDA 预期增速",
        "description": "分析师预期本财年 EBITDA 相比上一完整财年实际值的增速",
        "direction": "higher_better",
-       "value": 0.7414318126348995,
-       "display_value": "+74%",
+       "value": 0.8894201859941455,
+       "display_value": "+89%",
        "status": "ok",
        "status_note": null,
-       "percentile": 53.5,
+       "percentile": 59.7,
        "grade": "C+",
        "sector_median": 0.6202457243250981,
        "sector_median_display": "+62%",
-       "diff_to_median_pct": 19.5,
+       "diff_to_median_pct": 43.4,
        "distribution": {
         "p10": 0.14196007277216005,
         "p25": 0.3367938637721416,
@@ -1061,7 +1061,7 @@
         "p90": 2.912239039989419
        },
        "formula": {
-        "expression": "本财年 EBITDA 预期 2517.3 亿 ÷ 上一财年 EBITDA 实际 1445.5 亿 − 1 = +74%",
+        "expression": "本财年 EBITDA 预期 2517.3 亿 ÷ 上一财年 EBITDA 实际 1332.3 亿 − 1 = +89%",
         "inputs": [
          {
           "label": "本财年 EBITDA 预期",
@@ -1071,13 +1071,13 @@
          },
          {
           "label": "上一财年 EBITDA 实际",
-          "value": "1445.5 亿",
+          "value": "1332.3 亿",
           "note": null,
           "hint": "EBITDA：息税折旧摊销前利润，可粗略看作主营业务赚到的「毛现金」。这里取上一个完整财年的实际数。"
          }
         ]
        },
-       "position_text": "高于 54% 的同板块公司 → 百分位 54 → C+",
+       "position_text": "高于 60% 的同板块公司 → 百分位 60 → C+",
        "interpretation": {
         "what": "分析师预期本财年 EBITDA 相比上一完整财年实际值的增速",
         "role": "观察生意是否扩大，以及增长能否转化为长期每股现金收益。",
@@ -1101,15 +1101,15 @@
        "name": "EBIT 同比",
        "description": "最近 12 个月 EBIT 相比上一个 12 个月的增速",
        "direction": "higher_better",
-       "value": 1.2793767840152235,
-       "display_value": "+128%",
+       "value": 1.0585219991456642,
+       "display_value": "+106%",
        "status": "ok",
        "status_note": null,
-       "percentile": 85.6,
+       "percentile": 82.6,
        "grade": "A-",
        "sector_median": 0.25693488097580164,
        "sector_median_display": "+26%",
-       "diff_to_median_pct": 397.9,
+       "diff_to_median_pct": 312.0,
        "distribution": {
         "p10": -0.30868525637311905,
         "p25": 0.006518866922908262,
@@ -1118,23 +1118,23 @@
         "p90": 1.9568307490683616
        },
        "formula": {
-        "expression": "EBIT TTM 2299.8 亿 ÷ 上一个 12 个月 EBIT 1009.0 亿 − 1 = +128%",
+        "expression": "EBIT TTM 1975.8 亿 ÷ 上一个 12 个月 EBIT 959.8 亿 − 1 = +106%",
         "inputs": [
          {
           "label": "EBIT TTM",
-          "value": "2299.8 亿",
+          "value": "1975.8 亿",
           "note": "FY27 Q2",
           "hint": "EBIT：息税前利润，扣掉成本、费用和折旧摊销后，还没付利息和交税的经营利润。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
          },
          {
           "label": "上一个 12 个月 EBIT",
-          "value": "1009.0 亿",
+          "value": "959.8 亿",
           "note": null,
           "hint": "EBIT：息税前利润，扣掉成本、费用和折旧摊销后，还没付利息和交税的经营利润。这里取再往前 12 个月的实际数，用来算同比。"
          }
         ]
        },
-       "position_text": "高于 86% 的同板块公司 → 百分位 86 → A-",
+       "position_text": "高于 83% 的同板块公司 → 百分位 83 → A-",
        "interpretation": {
         "what": "最近 12 个月 EBIT 相比上一个 12 个月的增速",
         "role": "观察生意是否扩大，以及增长能否转化为长期每股现金收益。",
@@ -1153,15 +1153,15 @@
        "name": "EBIT 预期增速",
        "description": "分析师预期本财年 EBIT 相比上一完整财年实际值的增速",
        "direction": "higher_better",
-       "value": 0.7401485104404095,
-       "display_value": "+74%",
+       "value": 0.891252235775039,
+       "display_value": "+89%",
        "status": "ok",
        "status_note": null,
-       "percentile": 45.5,
-       "grade": "C-",
+       "percentile": 51.9,
+       "grade": "C",
        "sector_median": 0.8339592196535945,
        "sector_median_display": "+83%",
-       "diff_to_median_pct": -11.2,
+       "diff_to_median_pct": 6.9,
        "distribution": {
         "p10": 0.1787175883839184,
         "p25": 0.383690588067296,
@@ -1170,7 +1170,7 @@
         "p90": 4.950314543742728
        },
        "formula": {
-        "expression": "本财年 EBIT 预期 2465.9 亿 ÷ 上一财年 EBIT 实际 1417.1 亿 − 1 = +74%",
+        "expression": "本财年 EBIT 预期 2465.9 亿 ÷ 上一财年 EBIT 实际 1303.9 亿 − 1 = +89%",
         "inputs": [
          {
           "label": "本财年 EBIT 预期",
@@ -1180,13 +1180,13 @@
          },
          {
           "label": "上一财年 EBIT 实际",
-          "value": "1417.1 亿",
+          "value": "1303.9 亿",
           "note": null,
           "hint": "EBIT：息税前利润，扣掉成本、费用和折旧摊销后，还没付利息和交税的经营利润。这里取上一个完整财年的实际数。"
          }
         ]
        },
-       "position_text": "低于 54% 的同板块公司 → 百分位 46 → C-",
+       "position_text": "高于 52% 的同板块公司 → 百分位 52 → C",
        "interpretation": {
         "what": "分析师预期本财年 EBIT 相比上一完整财年实际值的增速",
         "role": "观察生意是否扩大，以及增长能否转化为长期每股现金收益。",
@@ -1320,16 +1320,16 @@
    "name": "盈利能力",
    "description": "利润率与资本回报",
    "grade": "A+",
-   "score": 95.0,
+   "score": 94.8,
    "status": "ok",
    "status_note": null,
    "is_highest": true,
    "is_lowest": false,
    "key_fact": {
-    "metric": "ebit_m",
-    "text": "EBIT 利润率 76%，高于板块 99% 的公司"
+    "metric": "net_m",
+    "text": "净利率 64%，高于板块 99% 的公司"
    },
-   "formula": "(79×1 + 100×0.5 + 100×0.5 + 100×0.5 + 95×1 + 99×1 + 92×0.5 + 100×0.5 + 100×1) ÷ 6.5 = 95.0 → A+",
+   "formula": "(79×1 + 98×0.5 + 98×0.5 + 100×0.5 + 95×1 + 99×1 + 92×0.5 + 100×0.5 + 100×1) ÷ 6.5 = 94.8 → A+",
    "groups": [
     {
      "name": "毛利率",
@@ -1396,15 +1396,15 @@
        "name": "EBIT 利润率",
        "description": "最近 12 个月 EBIT 占营收的比例",
        "direction": "higher_better",
-       "value": 0.7590875634140787,
-       "display_value": "76%",
+       "value": 0.6521426284537362,
+       "display_value": "65%",
        "status": "ok",
        "status_note": null,
-       "percentile": 100.0,
+       "percentile": 98.4,
        "grade": "A+",
        "sector_median": 0.13028601836688647,
        "sector_median_display": "13%",
-       "diff_to_median_pct": 482.6,
+       "diff_to_median_pct": 400.5,
        "distribution": {
         "p10": 0.025924930957371795,
         "p25": 0.0540899376995846,
@@ -1413,11 +1413,11 @@
         "p90": 0.37005779351733675
        },
        "formula": {
-        "expression": "EBIT TTM 2299.8 亿 ÷ 营收 TTM 3029.7 亿 = 76%",
+        "expression": "EBIT TTM 1975.8 亿 ÷ 营收 TTM 3029.7 亿 = 65%",
         "inputs": [
          {
           "label": "EBIT TTM",
-          "value": "2299.8 亿",
+          "value": "1975.8 亿",
           "note": "FY27 Q2",
           "hint": "EBIT：息税前利润，扣掉成本、费用和折旧摊销后，还没付利息和交税的经营利润。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
          },
@@ -1429,7 +1429,7 @@
          }
         ]
        },
-       "position_text": "高于 99% 的同板块公司 → 百分位 100 → A+",
+       "position_text": "高于 98% 的同板块公司 → 百分位 98 → A+",
        "interpretation": {
         "what": "最近 12 个月 EBIT 占营收的比例",
         "role": "观察每一元收入能留下多少收益，持续性和同业差异有助于理解竞争力。",
@@ -1453,15 +1453,15 @@
        "name": "EBITDA 利润率",
        "description": "最近 12 个月 EBITDA 占营收的比例",
        "direction": "higher_better",
-       "value": 0.7712571253164515,
-       "display_value": "77%",
+       "value": 0.664312190356109,
+       "display_value": "66%",
        "status": "ok",
        "status_note": null,
-       "percentile": 100.0,
+       "percentile": 97.9,
        "grade": "A+",
        "sector_median": 0.18751138074898666,
        "sector_median_display": "19%",
-       "diff_to_median_pct": 311.3,
+       "diff_to_median_pct": 254.3,
        "distribution": {
         "p10": 0.05220859283020464,
         "p25": 0.0899795461771233,
@@ -1470,11 +1470,11 @@
         "p90": 0.4536424158563225
        },
        "formula": {
-        "expression": "EBITDA TTM 2336.7 亿 ÷ 营收 TTM 3029.7 亿 = 77%",
+        "expression": "EBITDA TTM 2012.7 亿 ÷ 营收 TTM 3029.7 亿 = 66%",
         "inputs": [
          {
           "label": "EBITDA TTM",
-          "value": "2336.7 亿",
+          "value": "2012.7 亿",
           "note": "FY27 Q2",
           "hint": "EBITDA：息税折旧摊销前利润，可粗略看作主营业务赚到的「毛现金」。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
          },
@@ -1486,7 +1486,7 @@
          }
         ]
        },
-       "position_text": "高于 99% 的同板块公司 → 百分位 100 → A+",
+       "position_text": "高于 98% 的同板块公司 → 百分位 98 → A+",
        "interpretation": {
         "what": "最近 12 个月 EBITDA 占营收的比例",
         "role": "观察每一元收入能留下多少收益，持续性和同业差异有助于理解竞争力。",
@@ -1790,15 +1790,15 @@
        "name": "ROIC",
        "description": "税后 EBIT 相对投入资本（负债 + 股东权益 − 现金）的比例",
        "direction": "higher_better",
-       "value": 1.1460283790157384,
-       "display_value": "115%",
+       "value": 0.9845688368447281,
+       "display_value": "98%",
        "status": "ok",
        "status_note": null,
        "percentile": 99.5,
        "grade": "A+",
        "sector_median": 0.087268549036869,
        "sector_median_display": "8.7%",
-       "diff_to_median_pct": 1213.2,
+       "diff_to_median_pct": 1028.2,
        "distribution": {
         "p10": 0.0023252122553912963,
         "p25": 0.04995836316515596,
@@ -1807,11 +1807,11 @@
         "p90": 0.25392209213551575
        },
        "formula": {
-        "expression": "税后 EBIT 1930.8 亿 ÷ 投入资本 1684.8 亿 = 115%",
+        "expression": "税后 EBIT 1658.8 亿 ÷ 投入资本 1684.8 亿 = 98%",
         "inputs": [
          {
           "label": "税后 EBIT",
-          "value": "1930.8 亿",
+          "value": "1658.8 亿",
           "note": "FY27 Q2",
           "hint": "税后 EBIT = EBIT ×（1 − 税率），即假设没有负债时经营利润交完税还剩多少。"
          },
@@ -2345,7 +2345,7 @@
          },
          {
           "label": "EBITDA TTM",
-          "value": "2336.7 亿",
+          "value": "2012.7 亿",
           "note": "FY27 Q2",
           "hint": "EBITDA：息税折旧摊销前利润，可粗略看作主营业务赚到的「毛现金」。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
          }
@@ -2396,7 +2396,7 @@
         "inputs": [
          {
           "label": "EBIT TTM",
-          "value": "2299.8 亿",
+          "value": "1975.8 亿",
           "note": "FY27 Q2",
           "hint": "EBIT：息税前利润，扣掉成本、费用和折旧摊销后，还没付利息和交税的经营利润。这里取最近 12 个月（最近 4 个季度加总）的实际数。"
          },
@@ -2553,7 +2553,7 @@
        "percentile": 27.0,
        "grade": "D",
        "sector_median": 1.05,
-       "sector_median_display": "105%",
+       "sector_median_display": "≥100%",
        "diff_to_median_pct": -33.7,
        "distribution": {
         "p10": 0.45,
@@ -2587,7 +2587,7 @@
         "calculation": "经营现金流 TTM ÷ 净利润 TTM × 100%",
         "full_name": "经营现金流 / 净利润 Cash Conversion",
         "plain": "账面上赚的每 1 元净利润，实际收进了多少现金。100% 表示利润都变成了现金；明显低于 100%，说明利润很多还停留在账上（比如货发出去了还没收到钱）。",
-        "reading": "越高 = 利润越是真金白银；长期低于 80% 要留意利润质量。",
+        "reading": "越高 = 利润越是真金白银；长期低于 80% 要留意利润质量。超过 100% 一律按 100% 算，再高不代表更稳。",
         "why": "利润可以靠会计处理做得好看，现金很难作假。利润长期收不回现金的公司，往往藏着风险。",
         "purpose": "检验利润的质量；亏损公司不参与（比值没有意义）。"
        },

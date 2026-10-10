@@ -68,6 +68,25 @@ async def quant_diagnostics(request: Request, market: Literal["us", "cn", "hk"] 
     return out
 
 
+@router.get("/diagnostics/scan")
+@limiter.limit("6 per minute")
+async def quant_diagnostics_scan(request: Request, market: Literal["us", "cn", "hk"] = Query("us")) -> dict:
+    """全景扫描：从最新一天的板块分布看每个指标有没有异常（覆盖不足 / 并列严重 / 极值离谱 / 板块缺失）。
+
+    只读一次分布表（已落库的聚合数据），不读个股、不请求任何数据源，对线上基本无负担；只返回指标统计，不含个股。
+    临时工具：与 /diagnostics 一起在方法稳定后删除。
+    """
+    from app.services.quant_research import diagnostics as diag
+    from app.services.quant_research import repository as repo
+
+    dates = await repo.diagnostic_dates(market)
+    if not dates:
+        return {"status": "no_data"}
+    day, version, _ = dates[0]
+    scan = diag.scan_distributions(await repo.get_distributions(market, day))
+    return {"status": "ok", "market": market, "as_of": day.isoformat(), "version": version, **scan}
+
+
 @router.post("/batch/run")
 @limiter.limit("3 per minute")
 async def quant_batch_run(

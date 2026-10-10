@@ -72,3 +72,20 @@ def test_build_inputs_nvda():
     assert inp.balance and inp.balance["totalAssets"] > 0
     assert inp.as_of == AS_OF
     assert inp.price_date == max(p["date"] for p in raw("NVDA", "px"))
+
+
+def test_build_inputs_uses_operating_income_for_ebit_and_ebitda():
+    """FMP 的 ebit / ebitda 含营业外收益（WDC 一年约 54.5 亿，占 EBIT 的一半以上）：改用经营利润口径，与分析师预期的 EBIT 同口径。"""
+    from datetime import date
+
+    from app.services.quant_research.inputs import build_inputs
+
+    row = {"date": "2026-07-03", "operatingIncome": 4_453e6, "depreciationAndAmortization": 375e6,
+           "ebit": 9_905e6, "ebitda": 10_280e6}
+    no_oi = {"date": "2026-04-03", "ebit": 100.0, "ebitda": 120.0, "depreciationAndAmortization": 20.0}   # A 股 / 港股行没有 operatingIncome
+    inp = build_inputs(symbol="WDC", as_of=date(2026, 10, 10), sector_key="information_technology",
+                       income=[row, no_oi], cash=None, balance=None, estimates=None, prices=None)
+    first, second = inp.quarters_income
+    assert first["ebit"] == 4_453e6 and first["ebitda"] == 4_453e6 + 375e6
+    assert second["ebit"] == 100.0 and second["ebitda"] == 120.0           # 没有经营利润字段的行不动
+    assert row["ebit"] == 9_905e6                                          # 不改调用方传入的原始数据

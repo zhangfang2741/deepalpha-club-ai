@@ -4,7 +4,7 @@
  "name": "JPMorgan Chase & Co.",
  "status": "ok",
  "status_note": null,
- "methodology_version": "q8",
+ "methodology_version": "q9",
  "as_of": {
   "price_date": "2026-09-29",
   "fiscal_period": "FY26 Q2",
@@ -2468,7 +2468,7 @@
        "percentile": null,
        "grade": null,
        "sector_median": 1.05,
-       "sector_median_display": "105%",
+       "sector_median_display": "≥100%",
        "diff_to_median_pct": null,
        "distribution": {
         "p10": 0.45,
@@ -2486,7 +2486,7 @@
         "calculation": "经营现金流 TTM ÷ 净利润 TTM × 100%",
         "full_name": "经营现金流 / 净利润 Cash Conversion",
         "plain": "账面上赚的每 1 元净利润，实际收进了多少现金。100% 表示利润都变成了现金；明显低于 100%，说明利润很多还停留在账上（比如货发出去了还没收到钱）。",
-        "reading": "越高 = 利润越是真金白银；长期低于 80% 要留意利润质量。",
+        "reading": "越高 = 利润越是真金白银；长期低于 80% 要留意利润质量。超过 100% 一律按 100% 算，再高不代表更稳。",
         "why": "利润可以靠会计处理做得好看，现金很难作假。利润长期收不回现金的公司，往往藏着风险。",
         "purpose": "检验利润的质量；亏损公司不参与（比值没有意义）。"
        },

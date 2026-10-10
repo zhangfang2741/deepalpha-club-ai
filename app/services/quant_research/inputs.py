@@ -117,11 +117,31 @@ def analyst_count(fy1: dict | None) -> int:
     return int(fy1.get("numAnalystsEps") or 0)
 
 
+def _operating_basis(row: dict) -> dict:
+    """EBIT / EBITDA 改用经营利润口径（不改传入的原始行）。
+
+    FMP 的 ebit / ebitda 由「税前利润 + 利息」倒推，会把处置收益、公允价值变动等营业外项目算进来
+    （WDC 一年约 54.5 亿，EBIT 99 亿对经营利润 44.5 亿），抬高利润率 / ROIC / 利息保障，压低 EV/EBIT 与 EV/EBITDA；
+    分析师预期的 EBIT 是经营口径，两边也对不上。有经营利润字段时：ebit = 经营利润，ebitda = 经营利润 + 折旧摊销（缺折旧摊销则保留原值）。
+    A 股 / 港股的行没有这个字段，原样返回。
+    """
+    oi = _num(row.get("operatingIncome"))
+    if oi is None:
+        return row
+    out = dict(row)
+    out["ebit"] = oi
+    da = _num(row.get("depreciationAndAmortization"))
+    if da is not None:
+        out["ebitda"] = oi + da
+    return out
+
+
 def build_inputs(*, symbol: str, as_of: date, sector_key: str, income: list | None, cash: list | None,
                  balance: list | dict | None, estimates: list | None, prices: list | None,
                  name: str | None = None) -> StockInputs:
     """把 FMP 原始响应整理成 StockInputs（排序、取最新值）。"""
-    inc = sorted([q for q in (income or []) if isinstance(q, dict)], key=lambda q: q.get("date", ""), reverse=True)
+    inc = sorted([_operating_basis(q) for q in (income or []) if isinstance(q, dict)],
+                 key=lambda q: q.get("date", ""), reverse=True)
     cf = sorted([q for q in (cash or []) if isinstance(q, dict)], key=lambda q: q.get("date", ""), reverse=True)
     if isinstance(balance, list):
         balance = max(balance, key=lambda q: q.get("date", "")) if balance else None

@@ -255,3 +255,23 @@ def test_profitability_metric_weights_dedupe_gaap_cluster():
     cash_share = (w["fcf_m"] + w["fcf_sbc_m"]) / sum(w.values())
     assert cash_share > 0.25                                      # 以前 1/9 ≈ 11%
     assert all(m.weight == 1.0 for m in METRICS.values() if m.dimension != "profitability")
+
+
+def test_zero_interest_with_large_debt_is_a_data_gap_not_best_coverage():
+    """AAPL 最新财年 FMP 把利息支出报成 0，但有上千亿负债：不能当成「没有利息压力」记满分，而是不参与。"""
+    inp = _with(load_inputs("NVDA"), income={"interestExpense": 0.0}, balance={"totalDebt": 500e9})
+    assert compute_metrics(inp)["interest_cov"].status == "missing"
+
+
+def test_cash_conversion_is_capped_at_100_percent():
+    """经营现金流 / 净利润超过 100% 只代表利润全有现金支撑，再高不更稳（科技股常因股权激励 / 折旧加回达 150%+）：封顶记 100%。"""
+    from app.services.quant_research.metrics import CFO_NI_CAP
+
+    inp = load_inputs("NVDA")
+    ocf, net = ttm(inp.quarters_cash, "operatingCashFlow"), ttm(inp.quarters_income, "netIncome")
+    m = compute_metrics(inp)["cfo_ni"]
+    assert m.status == "ok" and m.value == pytest.approx(min(ocf / net, CFO_NI_CAP))
+    over = compute_metrics(_with(inp, cash={"operatingCashFlow": 10 * abs(ocf)}))["cfo_ni"]    # 现金流远大于利润
+    assert over.value == CFO_NI_CAP and over.meta.get("capped") is True
+    below = compute_metrics(_with(inp, cash={"operatingCashFlow": 0.4 * net / 4}))["cfo_ni"]    # 收现不足 100%：照实算
+    assert below.value < CFO_NI_CAP and "capped" not in below.meta

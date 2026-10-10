@@ -12,6 +12,8 @@ from app.services.quant_research.markets import profile
 from app.services.quant_research.metrics import (
     DIMENSION_NAMES,
     INPUT_LABELS,
+    CFO_NI_CAP,
+    CFO_NI_CAP,
     INTEREST_COVER_CAP,
     METRICS,
     RUNWAY_CAP_YEARS,
@@ -125,6 +127,8 @@ def fmt_metric_display(key: str, v: float | None, lang: Lang) -> str:
         return _i(lang, f"≥{RUNWAY_CAP_YEARS:g} 年", f"≥{RUNWAY_CAP_YEARS:g} years")
     if key == "interest_cov" and v >= INTEREST_COVER_CAP:
         return _i(lang, f"≥{INTEREST_COVER_CAP:g} 倍", f"≥{INTEREST_COVER_CAP:g}x")
+    if key == "cfo_ni" and v >= CFO_NI_CAP:
+        return _i(lang, f"≥{CFO_NI_CAP:.0%}", f"≥{CFO_NI_CAP:.0%}")
     if key == "net_debt_ebitda" and v == 0:
         return _i(lang, "净现金", "Net cash")
     return fmt_metric_value(key, v)
