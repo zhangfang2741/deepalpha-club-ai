@@ -131,8 +131,13 @@ def compare(old: list[DiagRow], new: list[DiagRow]) -> dict:
         "mean_score_new": round(statistics.mean(new_scores), 1),
         "by_stage_new": {},
     }
-    for stage in sorted({n[s].stage or "none" for s in common}):
-        ss = [s for s in common if (n[s].stage or "none") == stage]
+    # 无阶段公司再按有没有财务稳健等级拆开（判断排位下滑是不是缺这一维造成的）
+    groups = {stage: [s for s in common if (n[s].stage or "none") == stage]
+              for stage in sorted({n[s].stage or "none" for s in common})}
+    none_all = groups.get("none", [])
+    groups["none_with_stability"] = [s for s in none_all if n[s].dim_grades.get("stability")]
+    groups["none_without_stability"] = [s for s in none_all if not n[s].dim_grades.get("stability")]
+    for stage, ss in groups.items():
         if len(ss) < MIN_GROUP:
             continue
         po = [float(p) for p in (o[s].percentile for s in ss) if p is not None]
