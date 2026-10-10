@@ -32,6 +32,17 @@ class DiagRow:
     rev_cagr3_pct: float | None = None      # 3 年复合（%）
 
 
+@dataclass
+class PanoRow:
+    """全景统计用的一行：不含代码，只保留板块 / 阶段 / 综合 / 各维度 / 各指标的聚合所需字段。"""
+    sector: str | None
+    stage: str | None
+    overall_score: float | None
+    overall_pct: float | None
+    dims: dict[str, tuple[float | None, int | None]]          # 维度键 → (分数, 在综合分里的占比 %)
+    metrics: dict[str, tuple[str, float | None, str]]         # 指标键 → (状态, 板块内百分位, 所属维度键)
+
+
 def _avg_ranks(xs: list[float]) -> list[float]:
     order = sorted(range(len(xs)), key=lambda i: xs[i])
     ranks = [0.0] * len(xs)
@@ -304,4 +315,136 @@ def stage_sensitivity(rows: list[DiagRow]) -> dict:
         "extreme_yoy": _share(sum(v > 100.0 or v < -50.0 for v in yoy), len(staged)),
         "cagr_missing": _share(sum(r.rev_cagr3_pct is None for r in staged), len(staged)),
         "yoy_percentiles": {f"p{q}": round(sorted(yoy)[min(len(yoy) - 1, int(q / 100 * len(yoy)))], 1) for q in (5, 25, 50, 75, 95)} if yoy else {},
+    }
+
+
+def net_margin_gap(values: list[dict[str, float]]) -> dict:
+    """净利率 vs 经营（EBIT）利润率：净利率明显高于经营利润率，多是处置收益 / 公允价值变动 / 税收收益等一次性项目（WDC 一类）。
+
+    只看同时有两项的公司；输出各档占比，不含个股。gap = 净利率 − EBIT 利润率（百分点）。
+    """
+    pairs = [(v["net_m"], v["ebit_m"]) for v in values if "net_m" in v and "ebit_m" in v]
+    if len(pairs) < MIN_GROUP:
+        return {"note": "样本不足"}
+    gaps = [(n - e) * 100 for n, e in pairs]
+    total = len(gaps)
+    return {
+        "paired": total,
+        "gap_gt_5pt": _share(sum(g > 5 for g in gaps), total),
+        "gap_gt_10pt": _share(sum(g > 10 for g in gaps), total),
+        "gap_gt_20pt": _share(sum(g > 20 for g in gaps), total),
+        "net_margin_gt_50pct": _share(sum(n > 0.5 for n, _ in pairs), total),
+        "gap_percentiles_pt": {f"p{q}": round(sorted(gaps)[min(total - 1, int(q / 100 * total))], 1) for q in (50, 90, 95, 99)},
+    }
+
+
+PANO_MIN_SECTOR = 10      # 板块少于这个只数不给均值
+PANO_SECTOR_BIAS_PT = 8.0       # 板块平均综合排位偏离 50 超过它：板块偏差
+PANO_METRIC_BIAS_PT = 8.0       # 指标平均百分位偏离 50 超过它：该指标的百分位分布不均
+PANO_REDUNDANT_CORR = 0.9       # 同维度内两个指标百分位的秩相关超过它：信息重复
+
+
+def _pair_corr(a: dict[int, float], b: dict[int, float]) -> float | None:
+    keys = sorted(set(a) & set(b))
+    return spearman([a[k] for k in keys], [b[k] for k in keys]) if len(keys) >= 30 else None
+
+
+def _ok_pcts(rows: list[PanoRow], key: str) -> dict[int, float]:
+    out: dict[int, float] = {}
+    for j, r in enumerate(rows):
+        m = r.metrics.get(key)
+        if m is not None and m[0] == "ok" and m[1] is not None:
+            out[j] = m[1]
+    return out
+
+
+def panorama(rows: list[PanoRow]) -> dict:
+    """维度与指标的统计体检（只读已存结果、输出为聚合）：
+
+    1. dim_corr：各维度分数的两两秩相关（太高 = 信息重复，接近 0 = 互相独立）；
+    2. dim_influence：每个维度「名义占比」vs「对综合分的有效影响」（权重 × 分数与综合分的协方差占比），看有没有维度名不副实；
+    3. sector_bias：各板块平均综合排位（综合分是全体排位，板块结构性偏高 / 偏低要留意）；
+    4. metric_quality：每个指标的状态占比、平均百分位、两端占比，标出覆盖不足 / 百分位分布不均；
+    5. metric_redundancy：同维度内百分位高度相关的指标对。
+    """
+    scored = [r for r in rows if r.overall_score is not None]
+    if len(scored) < MIN_GROUP:
+        return {"note": "样本不足"}
+    dim_keys = sorted({k for r in scored for k in r.dims})
+    # 1) 维度间相关
+    dim_vals: dict[str, dict[int, float]] = {d: {} for d in dim_keys}
+    for i, r in enumerate(scored):
+        for d, (sc, _w) in r.dims.items():
+            if sc is not None:
+                dim_vals[d][i] = sc
+    dim_corr = {f"{a}~{b}": c for i, a in enumerate(dim_keys) for b in dim_keys[i + 1:]
+                if (c := _pair_corr(dim_vals[a], dim_vals[b])) is not None}
+    # 2) 名义占比 vs 有效影响（协方差占比，和为 1）
+    comp = [float(r.overall_score) for r in scored]                                    # type: ignore[arg-type]
+    mc = statistics.mean(comp)
+    var_c = statistics.pvariance(comp)
+    influence: dict[str, dict] = {}
+    for d in dim_keys:
+        contrib = [((r.dims[d][0] or 0.0) * (r.dims[d][1] or 0) / 100.0) if d in r.dims else 0.0 for r in scored]
+        mx = statistics.mean(contrib)
+        cov = statistics.mean((x - mx) * (c - mc) for x, c in zip(contrib, comp, strict=True))
+        weights = [r.dims[d][1] for r in scored if d in r.dims and r.dims[d][1] is not None]
+        influence[d] = {"nominal_weight_pct": round(statistics.mean(weights), 1) if weights else None,
+                        "effective_influence_pct": round(cov / var_c * 100, 1) if var_c else None,
+                        "covered_share": _share(len(weights), len(scored))}
+    # 3) 板块偏差
+    by_sector: dict[str, list[PanoRow]] = {}
+    for r in scored:
+        by_sector.setdefault(r.sector or "unknown", []).append(r)
+    sector_bias = {}
+    for sec, rs in sorted(by_sector.items()):
+        pcts = [r.overall_pct for r in rs if r.overall_pct is not None]
+        if len(rs) < PANO_MIN_SECTOR or not pcts:
+            continue
+        sector_bias[sec] = {"n": len(rs), "mean_pct": round(statistics.mean(pcts), 1),
+                            "share_top_quartile": _share(sum(p >= 75 for p in pcts), len(pcts)),
+                            "flag": abs(statistics.mean(pcts) - 50) > PANO_SECTOR_BIAS_PT}
+    # 4) 指标体检
+    metric_keys = sorted({k for r in rows for k in r.metrics})
+    quality: dict[str, dict] = {}
+    for k in metric_keys:
+        have = [r.metrics[k] for r in rows if k in r.metrics]
+        total = len(have)
+        status = Counter(s for s, _, _ in have)
+        pcts = [p for s, p, _ in have if s == "ok" and p is not None]
+        ok_share = _share(status.get("ok", 0), total)
+        flags = []
+        if ok_share is not None and ok_share < 0.6:
+            flags.append("low_ok_share")
+        if pcts and abs(statistics.mean(pcts) - 50) > PANO_METRIC_BIAS_PT:
+            flags.append("skewed_percentile")
+        quality[k] = {"n": total, "ok": ok_share,
+                      "not_meaningful": _share(status.get("not_meaningful", 0), total),
+                      "not_applicable": _share(status.get("not_applicable", 0), total),
+                      "missing": _share(status.get("missing", 0), total),
+                      "mean_pct": round(statistics.mean(pcts), 1) if pcts else None,
+                      "at_bottom_5": _share(sum(p <= 5 for p in pcts), len(pcts)) if pcts else None,
+                      "at_top_95": _share(sum(p >= 95 for p in pcts), len(pcts)) if pcts else None,
+                      "flags": flags}
+    # 5) 同维度指标冗余
+    by_dim: dict[str, list[str]] = {}
+    for r in rows:
+        for k, (_s, _p, d) in r.metrics.items():
+            by_dim.setdefault(d, [])
+            if k not in by_dim[d]:
+                by_dim[d].append(k)
+    redundant = []
+    for d, ks in by_dim.items():
+        for i, a in enumerate(sorted(ks)):
+            for b in sorted(ks)[i + 1:]:
+                va = _ok_pcts(rows, a)
+                vb = _ok_pcts(rows, b)
+                c = _pair_corr(va, vb)
+                if c is not None and c >= PANO_REDUNDANT_CORR:
+                    redundant.append({"dimension": d, "pair": f"{a}~{b}", "corr": c})
+    return {
+        "n": len(rows), "scored": len(scored), "dim_corr": dim_corr, "dim_influence": influence,
+        "sector_bias": sector_bias, "metric_quality": quality,
+        "flagged_metrics": {k: v["flags"] for k, v in quality.items() if v["flags"]},
+        "redundant_metric_pairs": sorted(redundant, key=lambda x: -x["corr"])[:15],
     }
