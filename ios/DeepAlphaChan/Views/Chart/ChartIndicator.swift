@@ -11,7 +11,7 @@ import SwiftUI
 /// 4. 参数可调的话在 `IndicatorSettings` / `IndicatorSettingsSheet` 加一项，后端 `/chan/analysis` 加对应查询参数；
 /// 5. 名词要补 `glossary.json`（中英）。
 enum ChartIndicator: String, CaseIterable, Identifiable {
-    case ma, ema, boll
+    case ma, ema, boll, wyckoff
 
     var id: String { rawValue }
 
@@ -20,6 +20,7 @@ enum ChartIndicator: String, CaseIterable, Identifiable {
         case .ma: return L("均线")
         case .ema: return "EMA"
         case .boll: return "BOLL"
+        case .wyckoff: return L("威科夫")
         }
     }
 
@@ -91,6 +92,7 @@ struct IndicatorBar: View {
         case .ma: return !(analysis.ma?.periods.isEmpty ?? true)
         case .ema: return !(analysis.ema?.periods.isEmpty ?? true)
         case .boll: return analysis.boll != nil
+        case .wyckoff: return analysis.wyckoff != nil
         }
     }
 
@@ -177,6 +179,9 @@ struct IndicatorSettingsSheet: View {
                              value: String(format: "%.1f", bollMult),
                              minus: { bollMult = max(IndicatorSettings.multRange.lowerBound, bollMult - 0.5) },
                              plus: { bollMult = min(IndicatorSettings.multRange.upperBound, bollMult + 0.5) })
+                case .wyckoff:
+                    // 没有可调参数：识别规则是固定的，说明写在下面的 note 里
+                    EmptyView()
                 }
             }
             .padding(.horizontal, 16)
@@ -235,6 +240,7 @@ struct IndicatorSettingsSheet: View {
         case .ma: return L("最近 N 根 K 线收盘价的平均。")
         case .ema: return L("指数移动平均：越近的 K 线权重越大，比均线拐得快。")
         case .boll: return L("中轨是 N 根 K 线的均线，上下轨 = 中轨 ± 倍数 × 标准差。")
+        case .wyckoff: return L("威科夫：先找一次放量的恐慌 / 追涨高潮，再把之后的横盘画成交易区间，并标出区间里出现的事件（点标记看解释）。只标出位置，不是买卖信号。")
         }
     }
 

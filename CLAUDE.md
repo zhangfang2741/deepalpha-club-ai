@@ -487,6 +487,9 @@ deepalpha-club-ai/
 - EMA（12 / 26，TA-Lib 口径，与 MACD 同口径）和 BOLL（20 周期、2 倍**总体**标准差）在 `app/services/chan/indicators.py`，对齐方式同均线，接口字段 `ema`（形状同 `ma`）/ `boll`（upper / mid / lower）；默认关，指标栏里点开。
 - iOS 图表下方是**指标栏**（`Views/Chart/ChartIndicator.swift`：`ChartIndicator` 枚举 + `IndicatorBar`），点一下开 / 关，选择存本机（只存用户明确选过的，没选过走 `defaultOn`；2026-10-09 起所有指标含均线都默认关）。
   **新增指标**：枚举加 case → 后端加按合并 K 线对齐的字段 → `ChanAnalysis` 加属性 + `IndicatorBar.isAvailable` 写何时有数据 → `ChanChartView` 里按 `vm.isOn(.xxx)` 画 → 词典补条目（中英）。新增指标默认关。
+- **威科夫指标**（指标栏第四个，默认关）：后端 `/chan/analysis` 的 `wyckoff` 字段（`app/services/wyckoff/overlay.py`，复用 `wyckoff/analyzer`，约 2ms，失败不影响主体）——只拿**可见窗口**（`visible_from` 之后）的 K 线分析，事件与交易区间按合并 K 线的 `end_time` 对齐成**下标**（App 直接按下标画，同均线思路）。
+  图上只画交易区间（浅棕色带 + 上下沿虚线）+ 事件代码标记（SC / Spring / SOS …，点标记弹说明，`ChartElement.wyckoff`），左上角数值行写阶段与区间上下沿；**不带操作建议、不带「买点 / 离场点」措辞**（网页端 `/wyckoff/analysis` 的 recommendation 与事件 description 里有这类词，**不要**搬进 overlay，`test_overlay_has_no_trading_wording` 守护）。
+  颜色用浅棕 `Theme.wyckoff`（避开红 / 绿与笔 / 中枢 / 背驰 / 均线已用色）。词典 17 条（威科夫 / 交易区间 / 15 个事件，`glossary.json` 中英），新手入门 `guide-app-detail` 已补指标栏一条。**已知局限**：威科夫识别按「整段可见窗口里量比最高的合格高潮」定区间，窗口内有多段结构时只画一段；事件的判定阈值（量比 1.6、前序趋势 12%）沿用网页端，未针对 App 的两年窗口标定。
 - 30 分钟周期可在条件页选，**会员功能**（示例股除外，与次级别确认同一权益）；`ChanViewModel.apply` 没指定周期时 30 分钟回到日线，避免自选 / 雷达入口沿用它绕过门禁。
 
 ## 后端分层规则

@@ -104,6 +104,40 @@ class BollOut(BaseModel):
     lower: list[Optional[float]]
 
 
+class WyckoffEventMarkOut(BaseModel):
+    """威科夫事件标记：按 merged_candles 下标定位，App 直接画。只有事实，没有操作措辞。"""
+
+    code: str  # SC / AR / ST / SPRING / SOS / UT / UTAD / SOW / LPS / LPSY / PS / PSY / BC / TEST / BU
+    name: str  # 中文名
+    idx: int
+    time: str
+    price: float
+    side: Literal["high", "low"]  # 标在 K 线上方 / 下方
+    phase: str  # A / B / C / D / E
+    volume_ratio: float  # 相对均量倍数
+
+
+class WyckoffRangeOut(BaseModel):
+    kind: Literal["accumulation", "distribution"]
+    support: float
+    resistance: float
+    start_idx: int
+    end_idx: int
+
+
+class WyckoffOverlayOut(BaseModel):
+    """威科夫图表指标：交易区间 + 事件 + 当前阶段（见 services/wyckoff/overlay.py）。"""
+
+    context: str
+    stage: str  # accumulation / markup / distribution / markdown / undetermined
+    stage_label: str
+    phase: str
+    phase_label: str
+    breakout: Literal["up", "down", "none"]
+    trading_range: Optional[WyckoffRangeOut] = None
+    events: list[WyckoffEventMarkOut] = []
+
+
 class SignalOut(BaseModel):
     type: Literal["buy1", "buy2", "buy3", "sell1", "sell2", "sell3"]
     label: str
@@ -232,6 +266,7 @@ class ChanAnalysisResponse(BaseModel):
     ma: Optional[MAOut] = None  # 旧版 App 不读；与 merged_candles 对齐
     ema: Optional[MAOut] = None  # 同 ma 的形状（periods + values），周期 12 / 26
     boll: Optional[BollOut] = None
+    wyckoff: Optional[WyckoffOverlayOut] = None  # 图表指标「威科夫」；旧版 App 不读
     signals: list[SignalOut]
     current_trend: str
     # 走势类型（基于中枢排布）：up_trend / down_trend / consolidation / none

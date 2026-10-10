@@ -1647,3 +1647,31 @@
 "%@分 %@ = 下面 %lld 项指标板块百分位的加权平均（名称后 ×0.5 表示口径相近或本阶段不太看重、权重较低）：" = "%@ score %@ = weighted average of the %lld metric percentiles below (×0.5 after a name means a lower weight: built on the same information, or valued less at this stage):";
 "这家公司所处的阶段不看其中 %lld 项估值指标（如市净率），它们仍在下面展示，但不参与计算；每个指标仍然和同板块全体公司比百分位。" = "At this company's stage, %lld of these valuation metrics (such as price-to-book) are not used. They are still shown below but do not count; every metric is still ranked against all companies in the same sector.";
 "所以成长期、成熟期和未标阶段的公司，综合等级是拿综合分和「同阶段的公司」比出来的排位；调整期、收缩期、初创期的综合分偏低是真实状况，仍和全体比、不会因为同阶段都弱而被抬高。同一板块里各维度的等级可以直接比。" = "So for growth, mature and unlabeled companies the composite grade ranks the composite score against companies in the same stage; shake-out, contraction and introduction companies are still ranked against everyone, because their lower scores are real and should not be lifted just because the whole stage is weak. Within a sector, dimension grades still compare directly.";
+
+/* Wyckoff indicator */
+"威科夫" = "Wyckoff";
+"吸筹" = "Accumulation";
+"拉升" = "Markup";
+"派发" = "Distribution";
+"下跌" = "Markdown";
+"结构不明" = "No clear structure";
+"%@ 阶段" = "Phase %@";
+"量比" = "Volume ratio";
+"阶段" = "Phase";
+"威科夫：先找一次放量的恐慌 / 追涨高潮，再把之后的横盘画成交易区间，并标出区间里出现的事件（点标记看解释）。只标出位置，不是买卖信号。" = "Wyckoff: find a high-volume panic / chase climax first, draw the sideways stretch after it as the trading range, and mark the events inside it (tap a mark for an explanation). It only marks positions and is not a buy or sell signal.";
+"这是威科夫体系里的「%@」事件，按这一天的价格、成交量和它在交易区间里的位置判定。量比 = 这天成交量 ÷ 这段行情的平均成交量。它只标出结构上的位置，不是买卖信号，后续走势还需要确认。" = "This is the Wyckoff event \"%@\", judged from the day's price, volume and its position in the trading range. Volume ratio = that day's volume ÷ the average volume over this stretch. It only marks a structural position, is not a buy or sell signal, and later price action still has to confirm it.";
+"初步支撑" = "Preliminary support";
+"卖出高潮" = "Selling climax";
+"自动反弹" = "Automatic rally";
+"二次测试" = "Secondary test";
+"弹簧/震仓" = "Spring";
+"测试" = "Test";
+"强势信号" = "Sign of strength";
+"最后支撑点" = "Last point of support";
+"回踩确认" = "Back-up";
+"初步供给" = "Preliminary supply";
+"买入高潮" = "Buying climax";
+"冲高回落" = "Upthrust";
+"派发后冲高" = "Upthrust after distribution";
+"弱势信号" = "Sign of weakness";
+"最后供给点" = "Last point of supply";

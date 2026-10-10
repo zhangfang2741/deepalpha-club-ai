@@ -29,6 +29,8 @@ enum Theme {
     /// 指数均线两条（12 / 26）；布林带三条线同色（石板灰），带内浅色填充。同样避开红 / 绿。
     static let emaColors: [Color] = [Color(hex: 0xFB923C), Color(hex: 0xF0ABFC)]
     static let bollLine = Color(hex: 0x94A3B8)
+    /// 威科夫（交易区间 + 事件标记）：浅棕，避开红 / 绿（只给买卖点）与笔 / 中枢 / 背驰 / 均线已用的颜色。
+    static let wyckoff = Color(hex: 0xD4A373)
 
     // MARK: - 内容容器边距
 

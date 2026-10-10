@@ -160,6 +160,7 @@ struct ChanChartView: View {
                     if vm.isOn(.boll) { drawBoll(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.isOn(.ma) { drawLines(ctx, analysis.ma, colors: Theme.maColors, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.isOn(.ema) { drawLines(ctx, analysis.ema, colors: Theme.emaColors, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
+                    if vm.isOn(.wyckoff) { drawWyckoff(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showPivots { drawPivots(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showStrokes { drawStrokes(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
                     if vm.showDivergences { drawDivergences(ctx, plotWidth: plotW, height: size.height, range: range, bounds: priceBounds) }
@@ -569,6 +570,50 @@ struct ChanChartView: View {
         strokeSeries(&clipped, boll.upper, color: Theme.bollLine.opacity(0.8), width: 0.9, range: range, height: height, bounds: bounds)
         strokeSeries(&clipped, boll.lower, color: Theme.bollLine.opacity(0.8), width: 0.9, range: range, height: height, bounds: bounds)
         strokeSeries(&clipped, boll.mid, color: Theme.bollLine, width: 1.1, range: range, height: height, bounds: bounds)
+    }
+
+    // MARK: - 绘制：威科夫（交易区间 + 事件标记）
+
+    /// 事件标记离价格点的垂直距离（标签中心）。
+    private static let wyckoffLabelOffset: CGFloat = 11
+
+    /// 标记中心：事件价位上 / 下方一点（side=high 在上、low 在下），命中判定与高亮都用它。
+    private func wyckoffLabelCenter(_ e: WyckoffEventMark, range: VisibleRange, height: CGFloat, bounds: PriceBounds) -> CGPoint {
+        let dy = e.side == "high" ? -Self.wyckoffLabelOffset : Self.wyckoffLabelOffset
+        return CGPoint(x: x(for: e.idx, range: range), y: y(for: e.price, height: height, bounds: bounds) + dy)
+    }
+
+    /// 交易区间（浅色底 + 上下沿虚线）+ 事件标记（事件代码，点一下看解释）。
+    /// 画在 K 线之上、缠论结构之下；不参与纵轴范围计算（辅助标记，不该把 K 线压扁）。
+    private func drawWyckoff(_ ctx: GraphicsContext, plotWidth: CGFloat, height: CGFloat,
+                             range: VisibleRange, bounds: PriceBounds) {
+        guard let w = analysis.wyckoff else { return }
+        var clipped = ctx
+        clipped.clip(to: Path(CGRect(x: 0, y: 0, width: plotWidth, height: height)))
+        if let r = w.tradingRange {
+            let x0 = x(for: r.startIdx, range: range)
+            let x1 = x(for: r.endIdx, range: range)
+            let top = y(for: r.resistance, height: height, bounds: bounds)
+            let bottom = y(for: r.support, height: height, bounds: bounds)
+            let rect = CGRect(x: x0, y: top, width: max(2, x1 - x0), height: max(1, bottom - top))
+            clipped.fill(Path(rect), with: .color(Theme.wyckoff.opacity(0.08)))
+            for edge in [top, bottom] {
+                var line = Path()
+                line.move(to: CGPoint(x: x0, y: edge))
+                line.addLine(to: CGPoint(x: x1, y: edge))
+                clipped.stroke(line, with: .color(Theme.wyckoff.opacity(0.85)),
+                               style: StrokeStyle(lineWidth: 0.9, dash: [5, 3]))
+            }
+        }
+        for e in w.events where e.idx >= range.start - 1 && e.idx <= range.end {
+            let anchor = CGPoint(x: x(for: e.idx, range: range), y: y(for: e.price, height: height, bounds: bounds))
+            clipped.fill(Path(ellipseIn: CGRect(x: anchor.x - 2, y: anchor.y - 2, width: 4, height: 4)),
+                         with: .color(Theme.wyckoff))
+            let c = wyckoffLabelCenter(e, range: range, height: height, bounds: bounds)
+            clipped.draw(Text(e.code == "SPRING" ? "Spring" : e.code)
+                            .font(.system(size: 9, weight: .bold)).foregroundColor(Theme.wyckoff),
+                         at: c, anchor: .center)
+        }
     }
 
     /// 一条按合并 K 线下标对齐的线（nil 处断开）。a..<b 在 a > b 时 Swift 会崩，所以先判上下界：
@@ -1088,6 +1133,14 @@ struct ChanChartView: View {
                 }
             }
         }
+        // 威科夫事件标记：和买卖点徽标、分型一起比距离，取离手指最近的
+        if vm.isOn(.wyckoff), let events = analysis.wyckoff?.events {
+            for e in events where e.idx >= range.start - 1 && e.idx <= range.end {
+                let c = wyckoffLabelCenter(e, range: range, height: height, bounds: bounds)
+                let dx = abs(loc.x - c.x), dy = abs(loc.y - c.y)
+                if dx < 16, dy < 12 { nearby.append((.wyckoff(e), hypot(dx, dy))) }
+            }
+        }
         // 成立日标记（圆点 + 「成立」两个字）：和徽标一样可点，弹出为什么成立日比徽标晚
         if vm.showSignals {
             for s in analysis.chartSignals {
@@ -1187,6 +1240,7 @@ struct ChanChartView: View {
                 ring(pt(s.time, s.price), 8)
             }
         case .established(let s): ring(establishedPoint(s, range: range, height: height, bounds: bounds), 9)
+        case .wyckoff(let e): ring(wyckoffLabelCenter(e, range: range, height: height, bounds: bounds), 10)
         case .divergence(let c, let refTime, let refPrice):
             if let legs = c.divergenceLegs {
                 line(pt(legs.b.t0, legs.b.p0), pt(legs.b.t1, legs.b.p1), 2.5)
@@ -1486,6 +1540,13 @@ struct ChanChartView: View {
         }
         if vm.isOn(.ma) { lines("MA", analysis.ma, Theme.maColors) }
         if vm.isOn(.ema) { lines("EMA", analysis.ema, Theme.emaColors) }
+        if vm.isOn(.wyckoff), let w = analysis.wyckoff {
+            // 阶段 + 交易区间上下沿；结构不明时只写「结构不明」，图上也不画东西
+            var items: [(String, Color)] = [(L("威科夫"), Theme.wyckoff),
+                                            (w.stageName + (w.phase.isEmpty ? "" : " · " + L("%@ 阶段", w.phase)), Theme.wyckoff)]
+            if let r = w.tradingRange { items.append((String(format: "%.2f–%.2f", r.support, r.resistance), Theme.wyckoff)) }
+            rows.append((L("威科夫"), Theme.wyckoff, items))
+        }
         if vm.isOn(.boll), let b = analysis.boll {
             func f(_ arr: [Double?]) -> String { index < arr.count ? (arr[index].map { String(format: "%.2f", $0) } ?? "--") : "--" }
             let m = b.mult == b.mult.rounded() ? String(Int(b.mult)) : String(format: "%.1f", b.mult)

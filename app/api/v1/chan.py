@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import asdict
 from datetime import date, timedelta
 from uuid import uuid4
 
@@ -39,6 +40,7 @@ from app.schemas.chan import (
     StructureGapResponse,
     StructureLayerOut,
     SubLevelResponse,
+    WyckoffOverlayOut,
 )
 from app.services import symbol_lookup
 from app.services.chan.analyzer import ChanAnalysisResult, ChanAnalyzer
@@ -59,6 +61,7 @@ from app.services.chan.window import canonical_daily_fetch_start, canonical_dail
 from app.services.chan.sub_level_service import current_sub_level
 from app.services.chan.sub_level_service import signal_out as _signal_out
 from app.services.skills.kline import LIVE_MAX_AGE, fetch_kline
+from app.services.wyckoff.overlay import build_overlay
 
 router = APIRouter()
 _analyzer = ChanAnalyzer()
@@ -182,6 +185,16 @@ def _boll_out(result: ChanAnalysisResult) -> BollOut | None:
         return None
     b = align_boll(result.boll, [c.end_time or c.time for c in result.merged_candles])
     return BollOut(period=b.period, mult=b.mult, upper=b.upper, mid=b.mid, lower=b.lower)
+
+
+def _wyckoff_out(symbol: str, bars: list[dict], result: ChanAnalysisResult, visible_from: str) -> WyckoffOverlayOut | None:
+    """威科夫图表指标：失败不影响缠论主体（指标是辅助，不能因为它让详情页打不开）。"""
+    try:
+        o = build_overlay(symbol, bars, [c.end_time or c.time for c in result.merged_candles], visible_from=visible_from)
+    except Exception:
+        logger.exception("wyckoff_overlay_failed", symbol=symbol)
+        return None
+    return WyckoffOverlayOut.model_validate(asdict(o)) if o else None
 
 
 @router.get("/analysis", response_model=ChanAnalysisResponse)
@@ -363,6 +376,7 @@ async def chan_analysis(
         ma=_ma_out(result),
         ema=_ema_out(result),
         boll=_boll_out(result),
+        wyckoff=_wyckoff_out(symbol, bars, result, start_date),
         signals=[_signal_out(sig) for sig in result.signals],
         current_trend=result.current_trend,
         walk_type=result.walk_type,
