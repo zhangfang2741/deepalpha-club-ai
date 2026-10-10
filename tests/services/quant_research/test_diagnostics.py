@@ -162,3 +162,18 @@ def test_rebalance_whatif_equalizes_dispersion():
     assert r["influence_current_pct"]["a"] > 90 and r["influence_current_pct"]["b"] < 10
     assert r["influence_rescaled_pct"]["b"] > r["influence_current_pct"]["b"] + 30
     assert 0 < r["rank_corr_current_vs_rescaled"] < 1 and "symbol" not in str(r)
+
+
+def test_by_stage_profile_shows_stage_specific_weakness():
+    from app.services.quant_research.diagnostics import PanoRow, by_stage_profile
+
+    def row(stage, prof, gm, gaap):
+        return PanoRow("s", stage, 50.0, 50.0, {"profitability": (prof, 20)},
+                       {"gross_m": ("ok", gm, "profitability"), "roic": ("ok", gaap, "profitability")})
+
+    rows = [row("growth", 25.0, 80.0, 5.0) for _ in range(12)] + [row("mature", 60.0, 50.0, 60.0) for _ in range(12)] + [row("intro", 10.0, 50.0, 5.0)]
+    r = by_stage_profile(rows)
+    g = r["growth"]
+    assert g["dimension_scores"]["profitability"]["mean"] == 25.0 and g["dimension_scores"]["profitability"]["share_weak_lt30"] == 1.0
+    assert g["profitability_metric_mean_pct"] == {"gross_m": 80.0, "roic": 5.0}      # 毛利率高、GAAP 回报极低
+    assert "intro" not in r                                                         # 样本不足不给数字

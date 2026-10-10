@@ -448,6 +448,7 @@ def panorama(rows: list[PanoRow]) -> dict:
         "flagged_metrics": {k: v["flags"] for k, v in quality.items() if v["flags"]},
         "redundant_metric_pairs": sorted(redundant, key=lambda x: -x["corr"])[:15],
         "rebalance_whatif": rebalance_whatif(scored),
+        "by_stage": by_stage_profile(rows),
     }
 
 
@@ -508,3 +509,29 @@ def rebalance_whatif(scored: list[PanoRow]) -> dict:
         },
         "top_quartile_overlap": _share(len(top_cur & top_alt), len(top_cur)),
     }
+
+
+def by_stage_profile(rows: list[PanoRow]) -> dict:
+    """各阶段的维度平均分、弱分占比，以及盈利能力里各指标的平均百分位（看某个阶段在某类指标上是否系统性偏低）。
+
+    只读已存数据；分组少于 MIN_GROUP 只不给数字。弱分 = 维度分 < 30，强分 = ≥ 70。
+    """
+    out: dict = {}
+    for stage in sorted({r.stage or "none" for r in rows}):
+        g = [r for r in rows if (r.stage or "none") == stage]
+        if len(g) < MIN_GROUP:
+            continue
+        dims: dict[str, dict] = {}
+        for d in sorted({k for r in g for k in r.dims}):
+            xs = [sc for r in g if d in r.dims and (sc := r.dims[d][0]) is not None]
+            if len(xs) >= MIN_GROUP:
+                dims[d] = {"n": len(xs), "mean": round(statistics.mean(xs), 1),
+                           "share_weak_lt30": _share(sum(x < 30 for x in xs), len(xs)),
+                           "share_strong_ge70": _share(sum(x >= 70 for x in xs), len(xs))}
+        prof: dict[str, float] = {}
+        for k in sorted({k for r in g for k, (_s, _p, dim) in r.metrics.items() if dim == "profitability"}):
+            ps = [p for r in g if k in r.metrics and r.metrics[k][0] == "ok" and (p := r.metrics[k][1]) is not None]
+            if len(ps) >= MIN_GROUP:
+                prof[k] = round(statistics.mean(ps), 1)
+        out[stage] = {"n": len(g), "dimension_scores": dims, "profitability_metric_mean_pct": prof}
+    return out
