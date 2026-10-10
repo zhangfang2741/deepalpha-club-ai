@@ -9,7 +9,15 @@ import re
 from typing import Literal
 
 from app.services.quant_research.markets import profile
-from app.services.quant_research.metrics import DIMENSION_NAMES, INPUT_LABELS, METRICS, STABILITY_KEYS, MetricValue
+from app.services.quant_research.metrics import (
+    DIMENSION_NAMES,
+    INPUT_LABELS,
+    INTEREST_COVER_CAP,
+    METRICS,
+    RUNWAY_CAP_YEARS,
+    STABILITY_KEYS,
+    MetricValue,
+)
 from app.services.quant_research.scoring import DimensionScore, OverallScore, ScoredMetric
 from app.services.quant_research.stage import STAGE_NAMES
 
@@ -106,6 +114,22 @@ def fmt_metric_value(key: str, v: float | None) -> str:
     return f"{pct:.1f}%" if abs(pct) < 10 else f"{pct:.0f}%"
 
 
+def fmt_metric_display(key: str, v: float | None, lang: Lang) -> str:
+    """界面上显示的指标值：封顶 / 约定值写成它真正的意思（≥10 年、≥100 倍、净现金），不显示成像真的一样的 10.0 / 100.0 / 0.0。
+
+    算式里仍用 fmt_metric_value 的数字（算式会写明「记上限」）。
+    """
+    if v is None:
+        return "—"
+    if key == "runway_years" and v >= RUNWAY_CAP_YEARS:
+        return _i(lang, f"≥{RUNWAY_CAP_YEARS:g} 年", f"≥{RUNWAY_CAP_YEARS:g} years")
+    if key == "interest_cov" and v >= INTEREST_COVER_CAP:
+        return _i(lang, f"≥{INTEREST_COVER_CAP:g} 倍", f"≥{INTEREST_COVER_CAP:g}x")
+    if key == "net_debt_ebitda" and v == 0:
+        return _i(lang, "净现金", "Net cash")
+    return fmt_metric_value(key, v)
+
+
 def metric_name(key: str, lang: Lang) -> str:
     """指标展示名。"""
     d = METRICS[key]
@@ -145,11 +169,25 @@ def share_below(sm: ScoredMetric) -> float | None:
     return 100 - sm.percentile if lower_better else sm.percentile
 
 
+TIE_NOTE_SHARE = 0.15  # 并列占比达到它就改用「好于 x%、与 y% 并列」的说法（否则「高于 x%」会把并列者算成被超过）
+
+
+def _tie_phrase(sm: ScoredMetric, lang: Lang) -> str | None:
+    if sm.tie_share is None or sm.worse_share is None or sm.tie_share < TIE_NOTE_SHARE:
+        return None
+    worse, tie = round(sm.worse_share * 100), round(sm.tie_share * 100)
+    return _i(lang, f"好于板块 {worse}% 的公司，与 {tie}% 的公司并列",
+              f"better than {worse}% of sector peers, tied with {tie}%")
+
+
 def position_phrase(sm: ScoredMetric, lang: Lang) -> str:
-    """「高于 / 低于板块 x% 的公司」（x 取 1~99）。"""
+    """「高于 / 低于板块 x% 的公司」（x 取 1~99）；并列严重时写「好于 x%、与 y% 并列」。"""
     below = share_below(sm)
     if below is None:
         return ""
+    tied = _tie_phrase(sm, lang)
+    if tied:
+        return tied
     below = min(max(below, 1.0), 99.0)
     if below >= 50:
         return _i(lang, f"高于板块 {below:.0f}% 的公司", f"higher than {below:.0f}% of sector peers")
@@ -163,7 +201,7 @@ def key_fact_text(sm: ScoredMetric, lang: Lang) -> str:
         zh, en = _nm_reason(sm.key)
         return _i(lang, f"{name} 无意义（{zh}），按最差计", f"{name} is not meaningful ({en}), scored as lowest")
     sep = "，" if lang == "zh" else ", "
-    return f"{name} {fmt_metric_value(sm.key, sm.mv.value)}{sep}{position_phrase(sm, lang)}"
+    return f"{name} {fmt_metric_display(sm.key, sm.mv.value, lang)}{sep}{position_phrase(sm, lang)}"
 
 
 def position_text(sm: ScoredMetric, lang: Lang) -> str | None:
@@ -174,7 +212,12 @@ def position_text(sm: ScoredMetric, lang: Lang) -> str | None:
     if sm.mv.status == "not_meaningful":
         return _i(lang, f"无意义，按最差计 → 百分位 0 → {sm.grade}",
                   f"Not meaningful, scored as lowest → percentile 0 → {sm.grade}")
+    tied = _tie_phrase(sm, lang)
     below = min(max(share_below(sm) or 0.0, 1.0), 99.0)
+    if tied:
+        head = (tied[0].upper() + tied[1:]) if lang == "en" else tied
+        tail = _i(lang, "（并列取平均位次）", " (ties take the average rank)")
+        return _i(lang, f"{head}{tail} → 百分位 {p} → {sm.grade}", f"{head}{tail} → percentile {p} → {sm.grade}")
     if below >= 50:
         head = _i(lang, f"高于 {below:.0f}% 的同板块公司", f"Higher than {below:.0f}% of sector peers")
     else:

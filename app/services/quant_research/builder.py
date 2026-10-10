@@ -200,11 +200,11 @@ def _metric_out(sm: ScoredMetric, ev: Evaluation, lang: tx.Lang) -> MetricOut:
     return MetricOut(
         key=sm.key, name=d.name_zh if lang == "zh" else d.name_en,
         description=d.desc_zh if lang == "zh" else d.desc_en, direction=d.direction,
-        value=sm.mv.value, display_value=tx.fmt_metric_value(sm.key, sm.mv.value),
+        value=sm.mv.value, display_value=tx.fmt_metric_display(sm.key, sm.mv.value, lang),
         status=sm.status, status_note=status_note,
         percentile=sm.percentile, grade=sm.grade,
         sector_median=sm.sector_median,
-        sector_median_display=tx.fmt_metric_value(sm.key, sm.sector_median) if sm.sector_median is not None else None,
+        sector_median_display=tx.fmt_metric_display(sm.key, sm.sector_median, lang) if sm.sector_median is not None else None,
         diff_to_median_pct=round(sm.diff_to_median_pct, 1) if sm.diff_to_median_pct is not None else None,
         distribution=sm.distribution,
         formula=MetricFormula(expression=expr, inputs=_formula_inputs(sm, ev, lang)) if expr else None,
