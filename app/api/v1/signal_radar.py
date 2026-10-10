@@ -51,6 +51,9 @@ from app.services.signal_radar.service import (
 from app.services.chan.signal_policy import DEFAULT_MODE, normalize_mode
 from app.services.watchlist import display_name, list_items
 from app.services.signal_radar.analyst_events import analyst_events
+from app.services.signal_radar.analyst_radar import analyst_radar
+from app.services.signal_radar.constituents import resolve_constituents
+from app.schemas.quant_research import AnalystRadarOut
 from app.services.signal_radar.fundamental_top import fundamental_top
 from app.services.signal_radar.quality_view import QUALITY_MODES, apply_quality
 from app.services.signal_radar.grade_events import grade_events
@@ -326,6 +329,30 @@ async def signal_radar_fundamental_top(
     if resp is None:
         raise HTTPException(status_code=400, detail=f"不支持的市场/universe：{market}/{universe}")
     return resp
+
+
+@router.get("/analyst-radar", response_model=AnalystRadarOut)
+@limiter.limit("30 per minute")
+async def signal_radar_analyst_radar(
+    request: Request,
+    market: str = Query(default="us", description="市场：us / cn / hk（仅美股有数据，其余 supported=false）"),
+    universe: str | None = Query(default=None, description="universe 键或 watchlist；缺省=该市场默认"),
+    user: User = Depends(get_current_user),
+    redis: Redis = Depends(get_redis),
+    db: AsyncSession = Depends(get_db),
+) -> AnalystRadarOut:
+    """评级雷达（分析师评级）：近 7 / 30 / 90 天券商净上调 / 净下调的股票（事实陈列，不打分不推荐）。"""
+    if universe == WATCHLIST_KEY:
+        items = [i for i in await list_items(db, user.id) if i.market == market]
+        pairs = [(i.symbol, display_name(market, i.symbol, i.name)) for i in items]
+        scope = WATCHLIST_KEY
+    else:
+        uni = get_universe(market, universe)
+        if uni is None:
+            raise HTTPException(status_code=400, detail=f"不支持的市场/universe：{market}/{universe}")
+        pairs = await resolve_constituents(market, redis=redis, universe_key=uni.key)
+        scope = uni.key
+    return await analyst_radar(market, list(pairs), scope, redis=redis)
 
 
 @router.get("/analyst-events", response_model=RadarAnalystEventsResponse)

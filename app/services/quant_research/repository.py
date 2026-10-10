@@ -349,6 +349,25 @@ async def get_latest_quant_grades(market: str, symbols: list[str], start: date, 
     return _grade_snapshots(rows)
 
 
+async def trend_grade_history(
+    market: str, start: date, end: date,
+) -> list[tuple[str, date, str | None, float | None, str | None]]:
+    """某市场 [start, end] 内每只股票每个评级日的 (代码, 评级日, 综合等级, 综合分, 方法版本)，代码、评级日升序。
+
+    评级改善用：只取四个 JSON 字段、不读整份 payload（全市场 90 天约十几万行，读整份太慢）。
+    """
+    payload = QuantResult.payload_zh
+    q = (select(col(QuantResult.symbol), col(QuantResult.as_of),
+                col(payload)["overall"]["grade"].as_string(),
+                col(payload)["overall"]["score"].as_float(),
+                col(payload)["methodology_version"].as_string())
+         .where(col(QuantResult.market) == market, col(QuantResult.as_of) >= start, col(QuantResult.as_of) <= end)
+         .order_by(col(QuantResult.symbol), col(QuantResult.as_of)))
+    async with AsyncSessionFactory() as s:
+        rows = (await s.execute(q)).all()
+    return [(sym, day, grade, score, version) for sym, day, grade, score, version in rows]
+
+
 async def get_latest_result(market: str, symbol: str) -> QuantResult | None:
     """某只股票最近一天的结果。"""
     q = (select(QuantResult).where(col(QuantResult.market) == market, col(QuantResult.symbol) == symbol)

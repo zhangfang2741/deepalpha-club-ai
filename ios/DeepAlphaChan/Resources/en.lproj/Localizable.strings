@@ -1815,3 +1815,77 @@
 "对比" = "Compare";
 "对比技术" = "Compare technique";
 "缠论（默认）" = "Chan (default)";
+
+/* Rating radar: rating up */
+"不代表股价会涨：评级是和同行比出来的相对位置，只反映已披露的财务与预期。" = "It does not mean the share price will rise: a grade is a relative position against peers and only reflects disclosed financials and estimates.";
+"升的档数越多颜色越深；档数一样时，综合分涨得多的略深。" = "The more grades it moved up, the darker the colour; with the same number of grades, the bigger score gain is slightly darker.";
+"同一套评级方法下，综合等级比窗口开头至少高几档。评级方法升级前后不是同一把尺子，不拿来比。" = "Under the same rating method, the overall grade is at least this many steps higher than at the start of the window. Before and after a method upgrade is not the same yardstick, so those are not compared.";
+"和同类公司比，这家公司的综合表现在变好。" = "Against comparable companies, this company's overall standing is getting better.";
+"我们给每家公司的综合等级（A+ 最高、F 最低，共 13 档），每天评一次。比较它现在和最近 1 周 / 1 个月 / 3 个月里最早一次评级。" = "We give each company an overall grade (A+ highest, F lowest, 13 steps), re-rated every day. We compare today's grade with the earliest grade in the last 1 week / 1 month / 3 months.";
+"最近 3 个月没有综合等级上升的公司。评级方法升级后要重新攒几天历史，刚升级时这里会是空的。" = "No company's overall grade has moved up in the last 3 months. After a rating-method upgrade it takes a few days to rebuild history, so this is empty right after an upgrade.";
+"看多长时间里升的：1 周内升了放最内圈，否则 1 个月内，再否则 3 个月内。" = "By how recently it moved up: within 1 week goes in the innermost ring, otherwise within 1 month, otherwise within 3 months.";
+"综合分 %@" = "score %@";
+"综合等级 %@ → %@ · 升 %lld 档" = "Overall grade %@ → %@ · up %lld steps";
+"至少升几档" = "At least how many steps up";
+"评级改善" = "Rating up";
+"评级改善：我们给这家公司的综合等级比前一段时间更高。" = "Rating up: our overall grade for this company is higher than a while ago.";
+"评级方法最近调整过几次，每次调整后要重新攒几天历史才有数据，所以刚升级时这里可能是空的；A 股 / 港股的评级历史比美股更短。" = "The rating method has been adjusted a few times recently, and after each adjustment it takes a few days of history to have data, so this can be empty right after an upgrade; A-share / HK rating history is shorter than the US.";
+"评级日 %@ 对比 %@" = "Rated %@ vs %@";
+
+/* Rating radar sizes */
+"综合等级：在当前画出来的公司里，等级最高的最大、最低的最小，中间按名次均分。气泡里的字母就是综合等级。画布最多画 12 个，其余在「查看名单与变化」里。" = "Overall grade: among the companies currently drawn, the highest grade is the largest and the lowest the smallest, with the rest spread evenly by rank. The letter inside a bubble is the overall grade. At most 12 are drawn on the canvas; the rest are in \"View list and changes\".";
+
+/* 基本面雷达 / 评级雷达（分析师）*/
+"下调幅度是该圈门槛的几倍，在当前画出来的公司里排个先后：颜色越深，下调得越多。" = "How many times the ring's threshold the cut is, ranked among the companies drawn: the darker, the bigger the cut.";
+"不代表股价会涨：券商评级常常滞后于股价，也不总是对的。" = "Does not mean the price will rise: broker ratings often lag the price and are not always right.";
+"不代表股价会涨：等级是和同行比出来的相对位置，只反映已披露的财务与预期。" = "Does not mean the price will rise: the grade is a relative position against peers and only reflects disclosed financials and expectations.";
+"不代表股价会跌：券商评级常常滞后于股价，也不总是对的。" = "Does not mean the price will fall: broker ratings often lag the price and are not always right.";
+"不代表股价会跌：等级是和同行比出来的相对位置，只反映已披露的财务与预期。" = "Does not mean the price will fall: the grade is a relative position against peers and only reflects disclosed financials and expectations.";
+"不代表股价会跌：预期可能已经反映在股价里，之后也可能再被调高。" = "Does not mean the price will fall: expectations may already be in the price and can be raised again later.";
+"什么算上升" = "What counts as a rise";
+"什么算下降" = "What counts as a fall";
+"什么算净上调 / 净下调" = "What counts as a net upgrade / downgrade";
+"净上调的家数越多颜色越深；家数一样时，越近的略深。" = "The more brokers net-upgrading, the darker; with equal counts, the more recent is slightly darker.";
+"净下调的家数越多颜色越深；家数一样时，越近的略深。" = "The more brokers net-downgrading, the darker; with equal counts, the more recent is slightly darker.";
+"只陈列券商评级的变动事实，不代表股价会涨跌，不构成投资建议。" = "Only lists changes in broker ratings. It does not mean the price will rise or fall and is not investment advice.";
+"只陈列预期与财报的变化事实，不代表股价会涨跌，不构成投资建议。" = "Only lists changes in expectations and financials. It does not mean the price will rise or fall and is not investment advice.";
+"各家券商对这只股票的评级动作：上调（比如从持有升到买入）和下调（反过来）。同一家券商在窗口内多次调整只算一次，取最新的一次。" = "Rating actions by brokers on this stock: upgrades (e.g. Hold to Buy) and downgrades (the reverse). A broker that changes several times in the window counts once, using its latest action.";
+"同一套评级方法下，综合等级比窗口开头至少低几档。评级方法升级前后不是同一把尺子，不拿来比。" = "Under the same rating method, how many steps the overall grade is below the start of the window. Grades before and after a method upgrade are not comparable, so they are not compared.";
+"和同类公司比，这家公司的综合表现在变差。" = "Against similar companies, this company's overall standing is getting worse.";
+"基本面雷达" = "Fundamentals Radar";
+"基本面雷达怎么算的" = "How the Fundamentals Radar works";
+"基本面雷达数据准备中：上线后的第一次计算约需 1 小时，稍后再来看。" = "Fundamentals Radar data is being prepared: the first run after launch takes about an hour. Check back later.";
+"市场对这家公司今年能赚多少钱的看法在变差。" = "The market's view of how much this company will earn this year is getting worse.";
+"更多专业机构对这只股票的看法在变乐观。" = "More professional institutions are turning optimistic on this stock.";
+"更多专业机构对这只股票的看法在变谨慎。" = "More professional institutions are turning cautious on this stock.";
+"最近 1 周没有达到门槛的预期变化。A 股 / 港股的 1 个月、3 个月预期变化要等预期快照攒够（约 11 月起）。" = "No expectation change reached the threshold in the last week. For A-shares / HK stocks, 1-month and 3-month changes need enough expectation snapshots first (from about November).";
+"最近 3 个月没有综合等级下降的公司。评级方法升级后要重新攒几天历史，刚升级时这里会是空的。" = "No company's overall grade has moved down in the last 3 months. After a rating-method upgrade it takes a few days to rebuild history, so this is empty right after an upgrade.";
+"最近 3 个月这个股票池里没有被券商净上调评级的股票" = "No stock in this pool was net-upgraded by brokers in the last 3 months";
+"最近 3 个月这个股票池里没有被券商净下调评级的股票" = "No stock in this pool was net-downgraded by brokers in the last 3 months";
+"最近一次 %@" = "Latest %@";
+"最近没有达到门槛的预期下调" = "No expectation cut reached the threshold recently";
+"目前只有美股有券商评级变动数据；券商的评级动作有时滞后于股价，也可能只是重申。" = "Only US stocks have broker rating-change data for now; broker actions sometimes lag the price and may merely reiterate.";
+"看多长时间里变的：1 周内变了放最内圈，否则 1 个月内，再否则 3 个月内。" = "How long the change took: changed within 1 week goes in the innermost ring, otherwise within 1 month, otherwise within 3 months.";
+"窗口内上调的家数减去下调的家数，大于 0 是净上调，小于 0 是净下调；一样多不画。" = "Upgrades minus downgrades in the window: above 0 is a net upgrade, below 0 a net downgrade; equal counts are not drawn.";
+"等级上升" = "Grade up";
+"等级上升：我们给这家公司的综合等级比前一段时间更高。" = "Grade up: our overall grade for this company is higher than a while ago.";
+"等级下降" = "Grade down";
+"等级下降：我们给这家公司的综合等级比前一段时间更低。" = "Grade down: our overall grade for this company is lower than a while ago.";
+"红与绿" = "Red and green";
+"红色 = 向好的一侧（上调 / 上升），和缠论雷达里红买绿卖同一套颜色，只表示方向。" = "Red = the improving side (upgrade / rise), the same colors as red-buy green-sell on the Chan Radar. It only shows direction.";
+"综合等级 %@ → %@ · 降 %lld 档" = "Overall grade %@ → %@ · down %lld steps";
+"绿色 = 向差的一侧（下调 / 下降），和缠论雷达里红买绿卖同一套颜色，只表示方向。" = "Green = the worsening side (downgrade / fall), the same colors as red-buy green-sell on the Chan Radar. It only shows direction.";
+"至少净差几家" = "Minimum net difference (brokers)";
+"至少降几档" = "Minimum steps down";
+"评级上调" = "Rating upgrade";
+"评级上调：近期有券商把这只股票的评级调高。" = "Rating upgrade: a broker recently raised its rating on this stock.";
+"评级下调" = "Rating downgrade";
+"评级下调：近期有券商把这只股票的评级调低。" = "Rating downgrade: a broker recently lowered its rating on this stock.";
+"评级雷达数据准备中：券商评级正在后台拉取，稍后再来看。" = "Rating Radar data is being prepared: broker ratings are being fetched in the background. Check back later.";
+"评级雷达目前只有美股的券商评级数据，A 股 / 港股暂时没有。可以看看基本面雷达。" = "The Rating Radar only has broker rating data for US stocks for now, not A-shares or HK stocks. Try the Fundamentals Radar.";
+"近 1 周就已经净上调（净下调）的放最内圈，否则看近 1 个月，再否则近 3 个月。同一只股票上调和下调都有时，两边的列表里各出现一次。" = "Net upgraded (downgraded) within the last week goes in the innermost ring, otherwise the last month, otherwise the last 3 months. A stock with both upgrades and downgrades appears once in each list.";
+"近 1 周降幅够了放最内圈，否则看近 1 个月，再否则看近 3 个月（门槛和上调同一套，方向相反）。" = "A big enough cut in the last week goes in the innermost ring, otherwise the last month, otherwise the last 3 months (same thresholds as upgrades, opposite direction).";
+"近%lld天 · 上调 %lld 家 · 下调 %lld 家" = "Last %lld days · %lld upgrades · %lld downgrades";
+"降的档数越多颜色越深；档数一样时，综合分跌得多的略深。" = "The more steps down, the darker; with equal steps, the bigger score drop is slightly darker.";
+"预期下调" = "Expectation cut";
+"预期下调：分析师在调低这家公司本财年的每股盈利预期。" = "Expectation cut: analysts are lowering their EPS forecast for this company's current fiscal year.";

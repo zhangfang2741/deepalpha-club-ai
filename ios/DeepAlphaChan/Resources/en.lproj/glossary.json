@@ -582,5 +582,13 @@
   "plain": "Cash from operations minus spending on equipment and facilities: the money the company can actually use freely.",
   "example": "3 billion of operating cash minus 1 billion of investment leaves 2 billion of free cash flow.",
   "notMeans": "A negative year is not necessarily bad; the company may be investing heavily to grow."
+ },
+ {
+  "key": "分析师评级",
+  "term": "Analyst rating",
+  "category": "fundamental",
+  "plain": "The view a broker's research analyst gives on a stock, usually buy, hold or sell. Moving it up is an upgrade, moving it down is a downgrade.",
+  "example": "A broker moving a stock from Hold to Buy is one upgrade.",
+  "notMeans": "It is not a guarantee about the price, often lags the price, and different brokers name their tiers differently."
  }
 ]

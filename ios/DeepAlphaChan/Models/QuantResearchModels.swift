@@ -653,6 +653,51 @@ struct QuantTrendFacts: Decodable, Hashable {
     }
 }
 
+/// 综合等级 13 档，从高到低；排序、评级雷达的气泡大小都按它。放在不带 actor 隔离的枚举里，静态布局函数也能直接用。
+enum GradeOrder {
+    static let all = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F"]
+    /// 名次：0 = A+（最高）；没有评级 / 认不出的排在最后。
+    static func rank(_ grade: String?) -> Int { grade.flatMap { all.firstIndex(of: $0) } ?? all.count }
+}
+
+/// 评级改善：综合等级在同一评级方法下比窗口内最早一个评级日升了几档。
+struct QuantRatingChange: Decodable, Hashable {
+    let fromGrade: String
+    let toGrade: String
+    let steps: Int
+    let scoreDelta: Double?
+    let ringDays: Int
+    let fromDate: String
+    let toDate: String
+
+    enum CodingKeys: String, CodingKey {
+        case steps
+        case fromGrade = "from_grade"
+        case toGrade = "to_grade"
+        case scoreDelta = "score_delta"
+        case ringDays = "ring_days"
+        case fromDate = "from_date"
+        case toDate = "to_date"
+    }
+}
+
+/// 评级雷达（分析师评级）：窗口内券商净上调 / 净下调。
+struct QuantAnalystChange: Decodable, Hashable {
+    let up: Int
+    let down: Int
+    let windowDays: Int
+    let lastDate: String?
+    let firms: [String]
+    let toBucket: String?
+
+    enum CodingKeys: String, CodingKey {
+        case up, down, firms
+        case windowDays = "window_days"
+        case lastDate = "last_date"
+        case toBucket = "to_bucket"
+    }
+}
+
 /// 基本面动向雷达的一只股票：属于哪一类、落在哪一圈。
 struct QuantTrendItem: Decodable, Identifiable, Hashable {
     let symbol: String
@@ -668,18 +713,22 @@ struct QuantTrendItem: Decodable, Identifiable, Hashable {
     let good: Bool?
     /// 信号雷达的行业 key（与雷达顶部行业横条同一套），点行业筛选用。
     let sector: String?
+    /// kind == rating 时的等级变化；旧后端 / 其它类别没有。
+    let rating: QuantRatingChange?
+    /// kind == analyst_up / analyst_down 时的券商评级变动。
+    let analyst: QuantAnalystChange?
     let facts: QuantTrendFacts
 
     var id: String { kind + ":" + symbol }
 
     enum CodingKeys: String, CodingKey {
-        case symbol, name, grade, kind, strength, facts, magnitude, good, sector
+        case symbol, name, grade, kind, strength, facts, magnitude, good, sector, rating, analyst
         case sectorName = "sector_name"
         case ringDays = "ring_days"
     }
 }
 
-/// 基本面动向雷达：最近一周 / 一个月 / 三个月里预期上调或质地改善的公司（只陈列事实）。
+/// 评级雷达：最近一周 / 一个月 / 三个月里预期上调或评级改善的公司（只陈列事实）。
 struct QuantTrendRadar: Decodable {
     let market: String
     let asOf: String?
@@ -689,17 +738,52 @@ struct QuantTrendRadar: Decodable {
     let counts: [String: Int]
     /// 「好股票」门槛等级（含）；没有评级 / 旧后端为 nil。
     let goodGrade: String?
+    /// 评级雷达（分析师）专有：还在后台补拉的只数；supported == false = 这个市场没有券商评级数据。
+    let pendingSymbols: Int?
+    let supported: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case market, rings, thresholds, items, counts
+        case market, rings, thresholds, items, counts, supported
         case asOf = "as_of"
         case goodGrade = "good_grade"
+        case pendingSymbols = "pending_symbols"
     }
 }
 
-/// 动向雷达的两类事实。
+/// 两个雷达：基本面雷达（预期 / 我们自己的综合等级）、评级雷达（分析师评级）。
+enum TrendFlavor { case fundamental, analyst }
+
+/// 动向类别。红 = 向好（预期上调、等级上升、券商上调），绿 = 向差（预期下调、等级下降、券商下调），和缠论雷达红买绿卖同一套颜色。
+/// 基本面雷达：预期上调 / 预期下调 / 等级上升 / 等级下降（2026-10-10 起叫「等级」，和分析师「评级」区分）；评级雷达：评级上调 / 评级下调。
+/// 后端的 quality（质地改善）类别只给旧版 App。
 enum QuantTrendKind: String, CaseIterable, Identifiable {
-    case estimates, quality
+    case estimates
+    case estimatesDown = "estimates_down"
+    case rating
+    case ratingDown = "rating_down"
+    case analystUp = "analyst_up"
+    case analystDown = "analyst_down"
     var id: String { rawValue }
-    var title: String { self == .estimates ? L("预期上调") : L("质地改善") }
+
+    var flavor: TrendFlavor {
+        switch self {
+        case .analystUp, .analystDown: return .analyst
+        default: return .fundamental
+        }
+    }
+    /// 向差的一侧（画绿色）。
+    var isDown: Bool { self == .estimatesDown || self == .ratingDown || self == .analystDown }
+
+    static func kinds(for flavor: TrendFlavor) -> [QuantTrendKind] { allCases.filter { $0.flavor == flavor } }
+
+    var title: String {
+        switch self {
+        case .estimates: return L("预期上调")
+        case .estimatesDown: return L("预期下调")
+        case .rating: return L("等级上升")
+        case .ratingDown: return L("等级下降")
+        case .analystUp: return L("评级上调")
+        case .analystDown: return L("评级下调")
+        }
+    }
 }

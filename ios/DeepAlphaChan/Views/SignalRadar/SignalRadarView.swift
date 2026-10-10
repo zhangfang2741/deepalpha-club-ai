@@ -122,7 +122,7 @@ struct SignalRadarView: View {
             .sheet(item: $panel, onDismiss: {
                 if let t = pendingTrend {
                     pendingTrend = nil
-                    openSymbol(t.symbol, name: t.name, segment: .quant)
+                    openSymbol(t.symbol, name: t.name, segment: vm.trendFlavor == .analyst ? .analyst : .quant)
                     return
                 }
                 if let g = pendingGood {
@@ -281,16 +281,21 @@ struct SignalRadarView: View {
         }
     }
 
-    // MARK: - 基本面动向雷达（指数下拉框里的「基本面动向」）
+    // MARK: - 基本面雷达 / 评级雷达（标题下拉菜单里与缠论雷达并列）
 
-    /// 与缠论雷达同一张画布、同一套同心圈与气泡：圈 = 最近 1 周 / 1 月 / 3 月，气泡大小 = 变化幅度（同类里分三档），
-    /// 气泡里的字母 = 综合等级。颜色不用红 / 绿（红绿只留给已成立的买卖点），预期上调蓝、质地改善紫。
+    /// 与缠论雷达同一张画布、同一套同心圈与气泡：圈 = 最近 1 周 / 1 月 / 3 月，颜色深浅 = 变化幅度，气泡大小与字母 = 综合等级。
+    /// 颜色和缠论雷达一致：红 = 向好的一侧（预期上调 / 等级上升 / 券商上调），绿 = 向差的一侧（下调 / 下降），下拉框切换类别。
+    /// 基本面雷达看预期与我们自己的综合等级；评级雷达看券商评级（仅美股）。
     @ViewBuilder
     private var trendContent: some View {
         trendHeader
-        if let trend = vm.trend, trend.market == vm.market.rawValue {
+        if vm.analystUnsupported {
+            trendMessage(L("评级雷达目前只有美股的券商评级数据，A 股 / 港股暂时没有。可以看看基本面雷达。"))
+        } else if let trend = vm.trend, trend.market == vm.market.rawValue {
             if trend.asOf == nil {
-                trendMessage(L("评级雷达数据准备中：上线后的第一次计算约需 1 小时，稍后再来看。"))
+                trendMessage(vm.trendFlavor == .analyst
+                             ? L("评级雷达数据准备中：券商评级正在后台拉取，稍后再来看。")
+                             : L("基本面雷达数据准备中：上线后的第一次计算约需 1 小时，稍后再来看。"))
             } else {
                 trendField(trend)
             }
@@ -304,7 +309,9 @@ struct SignalRadarView: View {
         }
         trendLegend
         Spacer(minLength: 0)
-        Text(L("只陈列预期与财报的变化事实，不代表股价会涨，不构成投资建议。"))
+        Text(vm.trendFlavor == .analyst
+             ? L("只陈列券商评级的变动事实，不代表股价会涨跌，不构成投资建议。")
+             : L("只陈列预期与财报的变化事实，不代表股价会涨跌，不构成投资建议。"))
             .font(.caption2)
             .foregroundColor(Theme.textSecondary)
             .frame(maxWidth: .infinity)
@@ -333,17 +340,17 @@ struct SignalRadarView: View {
                     .buttonStyle(.plain)
                 }
                 if let trend = vm.trend {
-                    DerivationLink(title: L("评级雷达怎么算的"),
+                    DerivationLink(title: vm.trendFlavor == .analyst ? L("评级雷达怎么算的") : L("基本面雷达怎么算的"),
                                    result: TrendDerivations.rules(trend, kind: vm.trendKind, market: vm.market))
                 }
             }
         }
     }
 
-    /// 动向类别下拉框（预期上调 / 质地改善），放在雷达画布左上角；选项后面的数字是当前「精选 / 行业」筛选下的个数。
+    /// 动向类别下拉框（基本面雷达：预期上调 / 预期下调 / 等级上升 / 等级下降；评级雷达：评级上调 / 评级下调），放在雷达画布左上角；选项后面的数字是当前「精选 / 行业」筛选下的个数。
     private var trendKindMenu: some View {
         Menu {
-            ForEach(QuantTrendKind.allCases) { k in
+            ForEach(QuantTrendKind.kinds(for: vm.trendFlavor)) { k in
                 Button { vm.trendKind = k } label: {
                     if k == vm.trendKind {
                         Label(trendKindTitle(k), systemImage: "checkmark")
@@ -390,14 +397,14 @@ struct SignalRadarView: View {
             let labels = SignalRadarView.trendRingLabels
             // 圈的大小按各圈条数分配：A 股预期上调曾 22 只全在「近 1 周」，固定的最内圈只放得下 1 只
             let scales = SignalRadarView.ringScales(counts: (0..<3).map { band in
-                signals.prefix(SignalRadarView.ringFieldCap).filter { SignalRadarView.bandIndex(forDaysAgo: $0.ageDays ?? 0) == band }.count
+                signals.prefix(SignalRadarView.trendFieldCap).filter { SignalRadarView.bandIndex(forDaysAgo: $0.ageDays ?? 0) == band }.count
             })
             let key = FieldLayoutKey(
                 signals: signals, candidates: [], sectorMode: false, order: [], rs: [], names: [],
                 dayDate: "trend-\(kind.rawValue)-\(trend.asOf ?? "")", width: w, height: h, avoid: [], gradeRings: labels)
             let field = layoutCache.value(for: key) {
                 SignalRadarView.layoutRingField(signals: signals, dayDate: "", width: w, height: h, avoid: [],
-                                                gradeRings: labels, ringScales: scales)
+                                                gradeRings: labels, ringScales: scales, cap: SignalRadarView.trendFieldCap)
             }
             ZStack {
                 fieldDecoration(width: w, height: h, ringScales: scales)
@@ -422,8 +429,8 @@ struct SignalRadarView: View {
                             isNew: false,
                             marksConfirmed: false,
                             polished: true,
-                            // 点气泡直接进个股的「基本面研究」分段（和缠论雷达一样不先弹面板）
-                            onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name, segment: .quant) }
+                            // 点气泡直接进个股详情：基本面雷达进「基本面研究」分段，评级雷达进「分析师评级」分段（和缠论雷达一样不先弹面板）
+                            onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name, segment: vm.trendFlavor == .analyst ? .analyst : .quant) }
                         )
                         .transition(.identity)
                     }
@@ -470,8 +477,8 @@ struct SignalRadarView: View {
             }
             // 大小 = 综合等级
             HStack(spacing: 3) {
-                sizeDot(diameter: SignalRadarView.trendDiameter(grade: "C"))
-                sizeDot(diameter: SignalRadarView.trendDiameter(grade: "A+"))
+                sizeDot(diameter: 48)
+                sizeDot(diameter: 96)
                 Text(L("大小=综合等级")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
             }
             Text(L("越靠中心越近"))
@@ -486,29 +493,23 @@ struct SignalRadarView: View {
     /// 三圈标签：最近 1 周 / 1 月 / 3 月（后端 ring_days 7 / 30 / 90）。
     static var trendRingLabels: [String] { [L("近1周"), L("近1月"), L("近3月")] }
 
-    /// 颜色和缠论雷达保持一致（2026-10-10 用户要求）：同一个红（`Theme.up`），颜色越深 = 变化越大；
-    /// 两类动向用上面的分段控件区分，不再各用一个色。depth 是 0~1（变化幅度在当前显示的同类公司里的百分位），
-    /// 连续映射到不透明度：最浅 0.32、最深 0.98。
+    /// 颜色和缠论雷达完全一致（用户 2026-10-10 要求）：直接用缠论雷达气泡的那条**不透明**渐变（`bubbleColor`，浅粉 → 深红），
+    /// 颜色越深 = 变化越大；两类动向用画布左上角的下拉框区分，不再各用一个色，也不用透明度（以前用红色加透明度，发灰发透）。
+    /// depth 是 0~1（变化幅度在当前显示的同类公司里的百分位），映射到渐变的 0.15~0.95，避开最浅 / 最深的两端。
+    /// 向差的一侧（预期下调 / 等级下降 / 券商下调）用缠论雷达卖点的那条绿色渐变。
     static func trendColor(_ kind: QuantTrendKind, depth: Double) -> Color {
-        Theme.up.opacity(0.32 + 0.66 * max(0, min(1, depth)))
+        bubbleColor(side: kind.isDown ? "sell" : "buy", depth: 0.15 + 0.8 * max(0, min(1, depth)))
     }
 
-    /// 气泡直径 = 综合等级：A+ 最大，往下每档小一点，D 及以下取最小；没有评级取中间值。
-    /// （以前大小是变化幅度、颜色深浅是评级的反面——现在改成：大小 = 评级，颜色深浅 = 变化幅度。）
-    static func trendDiameter(grade: String?) -> Double {
-        switch grade {
-        case "A+": return 88
-        case "A": return 82
-        case "A-": return 76
-        case "B+": return 70
-        case "B": return 64
-        case "B-": return 58
-        case "C+": return 54
-        case "C": return 50
-        case "C-": return 47
-        case nil: return 56
-        default: return 44      // D+ / D / D- / F
-        }
+    /// 评级雷达的气泡直径 = 综合等级，**按当前画出来的这批公司的等级范围拉开**：最高的最大（96）、最低的最小（48），
+    /// 中间按名次均分。精选之后画出来的多半只有 A- / A / A+，按绝对档位每档只差几个点，肉眼分不出（2026-10-10 用户反馈「大小不明显」）。
+    /// 这批公司等级全一样时统一取中间值；没有评级取 56。
+    static func trendDiameter(grade: String?, best: Int, worst: Int) -> Double {
+        let rank = GradeOrder.rank(grade)
+        guard grade != nil, rank < GradeOrder.all.count else { return 56 }
+        guard worst > best else { return 72 }
+        let t = Double(worst - rank) / Double(worst - best)     // 1 = 这批里最好，0 = 最差
+        return 48 + 48 * max(0, min(1, t))
     }
 
     /// 变化幅度（入圈门槛的倍数）在同类公司里的百分位：0 最小、1 最大；只有一个时取 0.6。并列取平均名次。
@@ -788,7 +789,7 @@ struct SignalRadarView: View {
         Rectangle().fill(Theme.border).frame(width: 14, height: 1.5).padding(.top, 10)
     }
 
-    /// 标题下拉菜单：在「缠论雷达」（缠论买卖点）与「评级雷达」（预期上调 / 质地改善）之间切换。
+    /// 标题下拉菜单：在「缠论雷达」（缠论买卖点）、「基本面雷达」（预期 / 综合等级的变化）与「评级雷达」（券商评级的变动）之间切换。
     /// 标题文字就是当前所在的雷达，用户一眼知道在哪、点标题就能换。
     /// （以前菜单里还有一项「这一页怎么读」展开流程图，2026-10-10 起去掉；流程图只在首次进雷达时自动展开一次，新手导览在学习页可重看。）
     private var flowTitle: some View {
@@ -796,12 +797,15 @@ struct SignalRadarView: View {
             Button { vm.exitTrend() } label: {
                 Label(L("缠论雷达"), systemImage: vm.trendMode ? "scope" : "checkmark")
             }
-            Button { vm.enterTrend() } label: {
-                Label(L("评级雷达"), systemImage: vm.trendMode ? "checkmark" : "chart.line.uptrend.xyaxis")
+            Button { vm.enterTrend(.fundamental) } label: {
+                Label(L("基本面雷达"), systemImage: vm.trendMode && vm.trendFlavor == .fundamental ? "checkmark" : "chart.line.uptrend.xyaxis")
+            }
+            Button { vm.enterTrend(.analyst) } label: {
+                Label(L("评级雷达"), systemImage: vm.trendMode && vm.trendFlavor == .analyst ? "checkmark" : "person.2.wave.2")
             }
         } label: {
             HStack(spacing: 6) {
-                Text(vm.trendMode ? L("评级雷达") : L("缠论雷达"))
+                Text(!vm.trendMode ? L("缠论雷达") : (vm.trendFlavor == .analyst ? L("评级雷达") : L("基本面雷达")))
                     .font(.headline).foregroundColor(Theme.textPrimary)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .bold))
@@ -1381,6 +1385,8 @@ struct SignalRadarView: View {
     }
 
     static let ringFieldCap = 24
+    /// 评级雷达画布最多画几个气泡（2026-10-10：24 个太挤，12 个看得清；其余在「查看全部」名单里）。
+    static let trendFieldCap = 12
 
     /// 信号数不超过这个值时，同心环模式保证全部画出来（放不下就放宽圈带、缩小气泡），不出现「另有 N 个」；
     /// 超过才只画最新的 ringFieldCap 个、其余折叠到「另有 N 个 · 查看全部」。
@@ -1391,19 +1397,23 @@ struct SignalRadarView: View {
     /// 外圈避开里圈已摆好的；某圈带放不下的计入「另有 N 个」（信号数 ≤ ringShowAllLimit 时例外：放宽圈带、缩小气泡也要全画出来）。后端已按出现时间从新到旧排好。
     private static func layoutRingField(
         signals: [RadarSignal], dayDate: String, width w: Double, height h: Double,
-        avoid: [RadarOrbitSpacing.Obstacle], gradeRings: [String]? = nil, ringScales: [Double]? = nil
+        avoid: [RadarOrbitSpacing.Obstacle], gradeRings: [String]? = nil, ringScales: [Double]? = nil,
+        cap: Int = SignalRadarView.ringFieldCap
     ) -> FieldLayout {
         guard !signals.isEmpty else { return FieldLayout(bubbles: []) }
-        let shown = Array(signals.prefix(ringFieldCap))
+        let shown = Array(signals.prefix(cap))
         func age(_ s: RadarSignal) -> Int { s.ageDays ?? daysAgo(from: s.date, to: dayDate) }
         let ages = shown.map(age)
         let (hRad, vRad) = fieldRadii(width: w, height: h)
 
         let maxDiameter = max(1, min(w, h) - 2 * RadarBubbleMetrics.edgePadding)
         // 基本面 tab（gradeRings 非空）：环 = 新等级、大小 = 变档数，不再按「越久越小」缩放
+        // 评级雷达：大小 = 综合等级，按这批公司的等级范围拉伸（见 trendDiameter）
+        let trendRanks = shown.filter { $0.side == "trend" && $0.quantGrade != nil }.map { GradeOrder.rank($0.quantGrade) }
+        let bestRank = trendRanks.min() ?? 0, worstRank = trendRanks.max() ?? 0
         let bases = zip(shown, ages).map { signal, daysOld in
             signal.side == "trend"
-                ? trendDiameter(grade: signal.quantGrade)      // 基本面动向：大小 = 综合等级
+                ? trendDiameter(grade: signal.quantGrade, best: bestRank, worst: worstRank)
                 : diameter(forLevel: signal.level) * (gradeRings == nil ? ringSizeFactor(forDaysAgo: daysOld) : 1)
         }
         let obstacles = avoid.map { SectorRadarLayout.Rect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) }
