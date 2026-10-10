@@ -192,6 +192,54 @@ _CONCEPTS: dict[str, tuple[str, str, str, str, str, str]] = {
         "How much analysts' average forecast for future results has been raised or cut recently — whether professionals have grown more or less optimistic.",
         "Positive = forecasts being raised, the business is doing better than expected; negative = forecasts being cut.",
     ),
+    "net_debt_ebitda": (
+        "净负债 / EBITDA Net Debt to EBITDA",
+        "把公司欠的钱扣掉手头现金，剩下的净债务，用公司一年主营业务赚到的「毛现金」来还，大约要几年。现金比负债多就是「净现金」，记 0。",
+        "越低 = 还债压力越小；0 = 现金已经够还清全部负债。",
+        "Net Debt to EBITDA",
+        "Subtract cash from what the company owes, then ask how many years of its core business's gross cash earnings it would take to repay what is left. If cash exceeds debt the company has \"net cash\" and scores 0.",
+        "Lower = less repayment pressure; 0 = cash already covers all debt.",
+    ),
+    "interest_cov": (
+        "利息保障倍数 Interest Coverage",
+        "公司一年的经营利润（EBIT），够付利息多少次。比如 5 倍，表示赚的钱是利息的 5 倍，利润掉一大半也还付得起。没有利息支出的公司记上限 100。",
+        "越高 = 付利息越轻松；低于 2 倍说明利润勉强够付利息。",
+        "Interest Coverage",
+        "How many times over a year of operating profit (EBIT) covers the interest bill. At 5x, profit could fall by most of its size and interest would still be payable. A company with no interest expense is set to the cap of 100.",
+        "Higher = interest is easier to pay; below about 2x means profit barely covers interest.",
+    ),
+    "current_ratio": (
+        "流动比率 Current Ratio",
+        "一年内要付出去的钱（流动负债），手头一年内能变成现金的资产（现金、应收款、存货等，即流动资产）够不够盖住。1.5 倍表示每欠 1 块短期的钱，手里有 1.5 块短期能变现的资产。",
+        "越高 = 短期还账越宽裕；低于 1 说明短期资产不够盖短期负债。",
+        "Current Ratio",
+        "Whether assets that can be turned into cash within a year (cash, receivables, inventory — current assets) cover what must be paid within a year (current liabilities). At 1.5x, every $1 of short-term debt has $1.5 of short-term assets behind it.",
+        "Higher = more room to pay near-term bills; below 1 means short-term assets do not cover short-term liabilities.",
+    ),
+    "runway_years": (
+        "现金可支撑年数 Cash Runway",
+        "如果公司继续按最近 12 个月的速度烧钱（自由现金流为负），手头现金能撑几年。自由现金流为正的公司不烧钱，记上限 10 年。",
+        "越高 = 越不用担心现金耗尽；低于 1 年说明现金可能很快见底，要靠融资续命。",
+        "Cash Runway",
+        "If the company keeps burning cash at its trailing 12-month rate (negative free cash flow), how many years its cash on hand would last. Companies with positive free cash flow burn nothing and are set to the cap of 10 years.",
+        "Higher = less worry about running out of cash; under 1 year means cash may run out soon unless more is raised.",
+    ),
+    "cfo_ni": (
+        "经营现金流 / 净利润 Cash Conversion",
+        "账面上赚的每 1 元净利润，实际收进了多少现金。100% 表示利润都变成了现金；明显低于 100%，说明利润很多还停留在账上（比如货发出去了还没收到钱）。",
+        "越高 = 利润越是真金白银；长期低于 80% 要留意利润质量。",
+        "Cash Conversion",
+        "For each $1 of net income on paper, how much cash actually came in from operations. 100% means profit turned fully into cash; well below 100% means much of the profit is still on paper (for example goods shipped but not yet paid for).",
+        "Higher = profit is better backed by cash; staying below 80% for long deserves attention.",
+    ),
+    "fcf_sbc_m": (
+        "扣股权激励后自由现金流利润率 FCF Margin after Stock Comp",
+        "自由现金流利润率再扣掉「用股票发给员工的薪酬」。很多科技公司少发现金、多发股票，账上现金流看着很好，但这些股票最终会稀释股东，所以也算一种真实成本。",
+        "越高 = 即使把股票薪酬也当成本，公司仍然能留下真金白银；明显低于自由现金流利润率，说明股票薪酬占了很大比重。",
+        "FCF Margin after Stock Comp",
+        "Free cash flow margin after also subtracting pay given to employees in stock. Many tech companies pay less in cash and more in shares, which flatters cash flow, but those shares eventually dilute shareholders, so they are a real cost too.",
+        "Higher = the company still keeps real cash even when stock pay is counted as a cost; far below the plain free cash flow margin means stock pay is a large share of the story.",
+    ),
 }
 
 _VALUATION_PREFIXES = (
@@ -295,6 +343,20 @@ _INPUT_BASE: dict[str, tuple[str, str]] = {
     "est_new": ("分析师们现在对这个财年的平均预测。", "Analysts' current average forecast for this fiscal year."),
     "est_old": ("同一批预测在当时（30 或 90 天前）的平均值，和现在比就知道是上调还是下调。",
                 "The same average forecast back then (30 or 90 days ago); comparing it with today shows raises or cuts."),
+    "net_debt": ("净负债 = 负债 − 现金及短期投资；为负说明现金比负债还多（净现金），取最近一期报表。",
+                 "Net debt = debt − cash and short-term investments; negative means cash exceeds debt (net cash), from the latest balance sheet."),
+    "interest": ("利息支出：公司一年为借款付出的利息，取绝对值。",
+                 "Interest expense: the interest the company paid on its borrowings, taken as a positive number."),
+    "current_assets": ("流动资产：一年内能变成现金的资产（现金、应收账款、存货等），取最近一期报表。",
+                       "Current assets: assets that can be turned into cash within a year (cash, receivables, inventory…), from the latest balance sheet."),
+    "current_liabilities": ("流动负债：一年内要付出去的钱（应付账款、短期借款等），取最近一期报表。",
+                            "Current liabilities: money due within a year (payables, short-term borrowings…), from the latest balance sheet."),
+    "cash": ("现金及短期投资：账上随时能动用的现金，取最近一期报表。",
+             "Cash and short-term investments: cash available on short notice, from the latest balance sheet."),
+    "burn": ("年自由现金流出 = −自由现金流，即一年净花掉的现金（自由现金流为负时才有意义）。",
+             "Free-cash-flow burn = −free cash flow: cash spent on net over a year (meaningful only when free cash flow is negative)."),
+    "fcf_sbc": ("扣股权激励后自由现金流 = 自由现金流 − 股权激励费用（用股票发给员工的薪酬），把股票薪酬也当成真实成本。",
+                "Free cash flow after stock comp = free cash flow − stock-based compensation (pay given in shares), counting stock pay as a real cost."),
 }
 
 _INPUT_PERIOD: list[tuple[str, tuple[str, str]]] = [
@@ -461,6 +523,42 @@ _WHY: dict[str, tuple[str, str, str, str]] = {
         "公司现在好不好，看前面几个维度；最近是在变好还是变差，看这一项。我们看分析师对今年、明年每股收益和今年营收的预测，在 30 天、90 天里改了多少。",
         "Analysts update their forecasts as news comes in. When many raise their expectations, the company is usually doing better than they thought.",
         "The other factors show how the company is doing now; this one shows whether things are getting better or worse lately. We track how much forecasts for this and next year's EPS and this year's revenue changed over 30 and 90 days.",
+    ),
+    "net_debt_ebitda": (
+        "借的钱到期要还，利息要付。负债压得太重的公司，业绩一遇到波动就容易出问题。",
+        "最直接的偿债压力指标。EBITDA 为负又有净负债的公司按最差计。",
+        "Borrowed money must be repaid with interest. A heavily indebted company is fragile when earnings wobble.",
+        "The most direct gauge of repayment pressure. A company with net debt and negative EBITDA is scored as lowest.",
+    ),
+    "interest_cov": (
+        "利息是必须按时付的钱，付不起就会走到违约。",
+        "和净负债 / EBITDA 互补：一个看欠多少，一个看每年付不付得起。",
+        "Interest must be paid on time; failing to pay leads to default.",
+        "Complements net debt / EBITDA: one asks how much is owed, the other whether the yearly cost is affordable.",
+    ),
+    "current_ratio": (
+        "短期的账还不上，再好的长期前景也等不到。很多公司出问题，都是资金一时周转不开。",
+        "衡量「近期会不会周转不灵」，和看长期负担的前两项互补。",
+        "Without the cash to pay near-term bills, even a good long-term outlook never arrives. Many companies get into trouble because of a short-term cash crunch.",
+        "Measures near-term liquidity, complementing the two long-term burden metrics above.",
+    ),
+    "runway_years": (
+        "烧钱的公司，现金见底就要融资或大幅收缩，股东的权益容易被摊薄。",
+        "专门盯初创、还没赚钱的公司：增长再快，钱撑不到盈利那天就没有意义。",
+        "A cash-burning company that runs out of cash must raise money or cut deeply, often diluting shareholders.",
+        "Aimed at early, not-yet-profitable companies: rapid growth means little if the cash runs out before profits arrive.",
+    ),
+    "cfo_ni": (
+        "利润可以靠会计处理做得好看，现金很难作假。利润长期收不回现金的公司，往往藏着风险。",
+        "检验利润的质量；亏损公司不参与（比值没有意义）。",
+        "Profit can be dressed up by accounting; cash is much harder to fake. Companies whose profit never turns into cash often hide risks.",
+        "Tests the quality of earnings. Loss-making companies are excluded because the ratio is meaningless.",
+    ),
+    "fcf_sbc_m": (
+        "股票薪酬不用掏现金，所以不会出现在现金流里，但它会让每一股变得更不值钱。只看现金流，会高估大量发股票薪酬的公司。",
+        "和自由现金流利润率对照看：两者差得越大，说明公司越依赖股票薪酬留住员工。",
+        "Stock pay costs no cash, so it never shows in cash flow, yet it makes each share worth less. Looking at cash flow alone overstates companies that pay heavily in stock.",
+        "Read it next to the plain free cash flow margin: the bigger the gap, the more the company relies on stock pay.",
     ),
 }
 

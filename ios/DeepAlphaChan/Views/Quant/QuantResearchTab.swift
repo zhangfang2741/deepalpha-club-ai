@@ -60,13 +60,18 @@ struct QuantResearchTab: View {
                 QuantMoatCard(moat: moat, isStatic: isStatic)
             }
             VStack(alignment: .leading, spacing: 8) {
-                Text(L("五维成绩单")).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
+                Text(L("六维成绩单")).font(QuantTypography.title).foregroundStyle(Theme.textPrimary)
                     .padding(.horizontal, 4)
                 VStack(alignment: .leading, spacing: 0) {
                     groupCaption(L("生意与价格"))
                     dimensionRows(r, keys: ["profitability", "growth", "valuation"])
                     groupCaption(L("市场与预期"))
                     dimensionRows(r, keys: ["momentum", "revisions"])
+                    // 旧缓存的响应没有财务稳健维度：没有就连小标题一起不画
+                    if r.dimensions.contains(where: { $0.key == "stability" }) {
+                        groupCaption(L("财务底子"))
+                        dimensionRows(r, keys: ["stability"])
+                    }
                 }
                 .padding(.horizontal, 14).padding(.bottom, 4)
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))

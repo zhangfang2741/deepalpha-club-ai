@@ -23,6 +23,9 @@ from app.services.quant_research.metrics import (
 
 MIN_SAMPLE = 20
 CAP_THRESHOLD = 20.0   # 维度分低于它（F）触发一票否决
+# 价格 / 预期类维度不是公司基本面，永远没有一票否决权（动量 F = 股价近期弱，不能把基本面强的公司压到 C+）
+CAP_EXEMPT_DIMS = frozenset({"momentum", "revisions"})
+CAP_MIN_WEIGHT = 0.15  # 只有综合分里权重不低于它的维度才有否决权（权重低的维度本就不该一票定生死）
 CAP_CEILING = "C+"
 OVERALL_SECTOR = "_all"
 OVERALL_KEY = "_overall"
@@ -115,16 +118,31 @@ def score_metric(key: str, mv: MetricValue, dist: list[float] | None, prev_grade
 
 
 def score_dimension(dim: str, scored: list[ScoredMetric], prev_grade: str | None, *,
-                    expected: int | None = None, accumulating_days: int | None = None) -> DimensionScore:
-    """expected：本维度按规则应参与的指标数（EPS 修正积累期只算已到回看期的指标）。"""
+                    expected: int | None = None, accumulating_days: int | None = None,
+                    metric_weights: dict[str, float] | None = None) -> DimensionScore:
+    """expected：本维度按规则应参与的指标数（EPS 修正积累期只算已到回看期的指标）。
+
+    metric_weights：按阶段给的指标权重（优先于 MetricDef.weight）；权重为 0 的指标不进分数、也不占参与数
+    （它们仍展示，只是这一阶段不用）。
+    """
     if accumulating_days is not None:
         return DimensionScore(dim, "accumulating", None, None, scored, days_accumulated=accumulating_days)
-    total = expected if expected is not None else len(scored)
-    part = [s for s in scored if s.percentile is not None]
+    active = [s for s in scored if metric_weights.get(s.key, 1.0) > 0] if metric_weights is not None else scored
+    total = expected if expected is not None else len(active)
+    part = [s for s in active if s.percentile is not None]
     if total == 0 or len(part) < min_participating(total):
         return DimensionScore(dim, "unavailable", None, None, scored)
-    score = round(sum(s.percentile for s in part) / len(part), 1)  # type: ignore[misc]
+    score = round(weighted_percentile(part, metric_weights), 1)
     return DimensionScore(dim, "ok", score, grade_with_hysteresis(score, prev_grade), scored)
+
+
+def weighted_percentile(part: list[ScoredMetric], metric_weights: dict[str, float] | None = None) -> float:
+    """参与指标的百分位按指标权重加权平均（默认取 MetricDef.weight，1 = 等权；metric_weights 按阶段覆盖）。"""
+    def w(s: ScoredMetric) -> float:
+        return metric_weights.get(s.key, METRICS[s.key].weight) if metric_weights is not None else METRICS[s.key].weight
+
+    total = sum(w(s) for s in part)
+    return sum(s.percentile * w(s) for s in part) / total  # type: ignore[operator]
 
 
 def min_participating(total: int) -> int:
@@ -136,10 +154,24 @@ def min_participating(total: int) -> int:
     return min(total, max(2, math.ceil(total / 3)))
 
 
-def composite(dims: list[DimensionScore]) -> float | None:
-    """可用维度分的等权平均。"""
-    usable = [d.score for d in _scored(dims) if d.status == "ok" and d.score is not None]
-    return round(sum(usable) / len(usable), 1) if usable else None
+def composite(dims: list[DimensionScore], weights: dict[str, float] | None = None) -> float | None:
+    """可用维度分的加权平均；weights = 阶段权重（只在可用维度间重新归一），不传则等权。"""
+    usable = [d for d in _scored(dims) if d.status == "ok" and d.score is not None]
+    if not usable:
+        return None
+    w = [(weights or {}).get(d.key, 1.0) if weights else 1.0 for d in usable]
+    total = sum(w)
+    if total <= 0:
+        return None
+    return round(sum(d.score * wi for d, wi in zip(usable, w, strict=True)) / total, 1)  # type: ignore[operator]
+
+
+def effective_weights(dims: list[DimensionScore], weights: dict[str, float] | None) -> dict[str, float]:
+    """实际参与综合分的维度权重（只在可用维度间归一，和为 1）；用于页面展示「这一维占综合分多少」。"""
+    usable = [d for d in _scored(dims) if d.status == "ok" and d.score is not None]
+    raw = {d.key: ((weights or {}).get(d.key, 1.0) if weights else 1.0) for d in usable}
+    total = sum(raw.values())
+    return {k: v / total for k, v in raw.items()} if total > 0 else {}
 
 
 def _scored(dims: list[DimensionScore]) -> list[DimensionScore]:
@@ -148,9 +180,12 @@ def _scored(dims: list[DimensionScore]) -> list[DimensionScore]:
 
 
 def overall(dims: list[DimensionScore], overall_dist: list[float], n_analysts: int,
-            prev_grade: str | None) -> OverallScore:
-    """综合等级：综合分在全体中的百分位 → 等级；一票否决与分析师不足处理。"""
-    score = composite(dims)
+            prev_grade: str | None, weights: dict[str, float] | None = None) -> OverallScore:
+    """综合等级：综合分在全体中的百分位 → 等级；一票否决与分析师不足处理。
+
+    weights 不传 = 所有基本面维度都有否决权；传了则只有权重 ≥ CAP_MIN_WEIGHT 的基本面维度能否决（动量 / EPS 修正永远不能）。
+    """
+    score = composite(dims, weights)
     used = sum(d.status == "ok" for d in _scored(dims))
     if score is None:
         return OverallScore(None, None, None, used)
@@ -158,7 +193,9 @@ def overall(dims: list[DimensionScore], overall_dist: list[float], n_analysts: i
     if n_analysts < MIN_ANALYSTS:
         return OverallScore(score, pct, None, used, extra={"reason": "few_analysts"})
     grade = grade_with_hysteresis(pct, prev_grade)
-    weak = [d for d in _scored(dims) if d.status == "ok" and d.score is not None and d.score < CAP_THRESHOLD]
+    weak = [d for d in _scored(dims) if d.status == "ok" and d.score is not None and d.score < CAP_THRESHOLD
+            and d.key not in CAP_EXEMPT_DIMS
+            and (weights is None or weights.get(d.key, 0.0) >= CAP_MIN_WEIGHT - 1e-9)]
     if weak:
         capped = cap_grade(grade, CAP_CEILING)
         if capped != grade:  # 只有真的被压低才算「封顶」

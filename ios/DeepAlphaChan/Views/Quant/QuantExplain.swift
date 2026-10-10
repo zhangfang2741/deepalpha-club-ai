@@ -15,6 +15,7 @@ enum QuantGradeScale {
     static let hysteresis: Double = 2
     static let capThreshold: Double = 20
     static let capCeiling = "C+"
+    static let capMinWeightPct = 15   // 综合分里占比不低于它的维度才有一票否决权（对齐后端 scoring.CAP_MIN_WEIGHT）
     static let minSample = 20
 
     static func grade(for score: Double) -> String {
@@ -178,15 +179,16 @@ struct QuantBandStep: View {
     }
 }
 
-/// 名称 + 分数的一行小条目（维度分构成、综合分构成）。
+/// 名称 + 分数的一行小条目（维度分构成、综合分构成）；weightPct 非空时名称后写它在综合分里的占比。
 struct QuantScoreItem: View {
     let name: String
     let score: Double?
     let grade: String?
+    var weightPct: Int? = nil
 
     var body: some View {
         HStack(spacing: 6) {
-            Text(name).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary).lineLimit(1)
+            Text(weightPct.map { "\(name) \($0)%" } ?? name).font(QuantTypography.metadata).foregroundStyle(Theme.textSecondary).lineLimit(1)
             Spacer(minLength: 4)
             Text(score.map { QuantGradeScale.fmt($0.rounded()) } ?? "—")
                 .font(QuantTypography.metadata.weight(.semibold).monospacedDigit())
@@ -233,13 +235,26 @@ struct QuantDimensionGradeExplanation: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if dimension.isOK, let score = dimension.score {
-                let part = dimension.allMetrics.filter { $0.percentile != nil }
-                QuantExplainText(text: L("%@分 %@ = 下面 %lld 项指标板块百分位的平均：",
-                                         dimension.name, QuantGradeScale.fmt(score), part.count))
+                // 权重为 0 的指标本阶段不用（如成长期不看市净率）：仍展示，但不进分数
+                let unused = dimension.allMetrics.filter { $0.percentile != nil && $0.effectiveWeight == 0 }
+                let part = dimension.allMetrics.filter { $0.percentile != nil && $0.effectiveWeight > 0 }
+                // 口径相近的指标合并计权（如三种 GAAP 利润率各 ×0.5），估值倍数按公司阶段取舍权重
+                let weighted = part.contains { $0.effectiveWeight != 1 }
+                QuantExplainText(text: weighted
+                    ? L("%@分 %@ = 下面 %lld 项指标板块百分位的加权平均（名称后 ×0.5 表示口径相近或本阶段不太看重、权重较低）：",
+                        dimension.name, QuantGradeScale.fmt(score), part.count)
+                    : L("%@分 %@ = 下面 %lld 项指标板块百分位的平均：",
+                        dimension.name, QuantGradeScale.fmt(score), part.count))
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
-                    ForEach(part) { m in QuantScoreItem(name: m.name, score: m.percentile, grade: m.grade) }
+                    ForEach(part) { m in
+                        QuantScoreItem(name: m.effectiveWeight == 1 ? m.name : "\(m.name) ×\(String(format: "%g", m.effectiveWeight))",
+                                       score: m.percentile, grade: m.grade)
+                    }
                 }
-                let skipped = dimension.allMetrics.count - part.count
+                if !unused.isEmpty {
+                    QuantExplainText(text: L("这家公司所处的阶段不看其中 %lld 项估值指标（如市净率），它们仍在下面展示，但不参与计算；每个指标仍然和同板块全体公司比百分位。", unused.count), secondary: true)
+                }
+                let skipped = dimension.allMetrics.count - part.count - unused.count
                 if skipped > 0 {
                     QuantExplainText(text: L("另有 %lld 项数据不足或不适用，不参与平均。", skipped), secondary: true)
                 }
@@ -258,17 +273,28 @@ struct QuantDimensionGradeExplanation: View {
     }
 }
 
-/// 综合等级：各维度分平均 → 在全部样本中的百分位 → 等级（含封顶）。
+/// 综合等级：各维度分按公司阶段加权平均 → 在全部样本中的百分位 → 等级（含封顶）。
 struct QuantOverallGradeExplanation: View {
     let research: QuantResearch
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let o = research.overall, let score = o.score {
-                QuantExplainText(text: L("综合分 %@ = %lld 个已评分维度的平均：", QuantGradeScale.fmt(score), o.dimensionsUsed))
+                let weighted = research.scoredDimensions.contains { $0.weightPct != nil }
+                QuantExplainText(text: weighted
+                    ? L("综合分 %@ = %lld 个已评分维度按所处阶段加权的平均（名称后是它占综合分的比例）：", QuantGradeScale.fmt(score), o.dimensionsUsed)
+                    : L("综合分 %@ = %lld 个已评分维度的平均：", QuantGradeScale.fmt(score), o.dimensionsUsed))
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
                     ForEach(research.scoredDimensions.filter(\.isOK)) { d in
-                        QuantScoreItem(name: d.name, score: d.score, grade: d.grade)
+                        QuantScoreItem(name: d.name, score: d.score, grade: d.grade, weightPct: d.weightPct)
+                    }
+                }
+                if weighted {
+                    if let stage = research.stage {
+                        QuantExplainText(text: L("这家公司处在「%@」：不同阶段看重的东西不一样——成长期更看重增速，成熟期更看重估值和赚钱能力。", stage.name), secondary: true)
+                        QuantExplainText(text: L("所以同一板块里，各维度的等级可以直接比；综合等级是按阶段调整后的，处在不同阶段的公司之间不直接可比。"), secondary: true)
+                    } else {
+                        QuantExplainText(text: L("这家公司没有划分阶段，各个维度占一样的比例。"), secondary: true)
                     }
                 }
                 if QuantMoatCard.isEnabled, research.moat != nil {
@@ -284,7 +310,8 @@ struct QuantOverallGradeExplanation: View {
                     }
                     if o.capped {
                         QuantBandScale(score: p)
-                        QuantExplainText(text: L("按百分位本可以更高，但有维度分低于 %@（F 档），综合等级最高只给 %@——明显短板不能被其他强项掩盖。",
+                        QuantExplainText(text: L("按百分位本可以更高，但有占比不低于 %lld%% 的基本面维度（估值 / 成长 / 盈利能力 / 财务稳健）分低于 %@（F 档），综合等级最高只给 %@——重要维度的明显短板不能被其他强项掩盖。",
+                                                 QuantGradeScale.capMinWeightPct,
                                                  QuantGradeScale.fmt(QuantGradeScale.capThreshold), QuantGradeScale.capCeiling))
                     } else {
                         QuantBandStep(score: p, grade: o.grade)

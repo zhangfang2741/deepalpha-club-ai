@@ -126,3 +126,87 @@ def test_display_only_dimension_never_moves_the_composite(monkeypatch):
     o = overall(with_moat, DIST, n_analysts=10, prev_grade=None)
     o_base = overall(base, DIST, n_analysts=10, prev_grade=None)
     assert (o.score, o.grade, o.dimensions_used, o.capped) == (o_base.score, o_base.grade, 2, False)
+
+
+# ---------- 阶段权重 ----------
+
+def test_composite_weighted_and_renormalized():
+    dims = [_dim("valuation", 10), _dim("growth", 90)]
+    assert composite(dims) == 50.0                                           # 不传权重 = 等权
+    w = {"valuation": 0.2, "growth": 0.6, "momentum": 0.2}
+    assert composite(dims, w) == pytest.approx((10 * 0.2 + 90 * 0.6) / 0.8, abs=0.1)  # 只在可用维度间归一
+
+
+def test_cap_ignores_low_weight_dimension():
+    """估值权重低（成长期）时，估值 F 不再一票否决；权重高的维度 F 仍封顶。"""
+    w = {"valuation": 0.10, "growth": 0.40, "profitability": 0.30, "momentum": 0.20}
+    dims = [_dim("valuation", 5), _dim("growth", 95), _dim("profitability", 90), _dim("momentum", 90)]
+    o = overall(dims, DIST, n_analysts=10, prev_grade=None, weights=w)
+    assert not o.capped and o.score == 83.5 and o.grade == "A-"
+    dims = [_dim("valuation", 95), _dim("growth", 99), _dim("profitability", 5), _dim("momentum", 99)]
+    # 权重 30% 的盈利能力 F → 综合分约 70（B+）被封顶到 C+
+    o2 = overall(dims, DIST, n_analysts=10, prev_grade=None, weights=w)
+    assert o2.capped and o2.cap_dimension == "profitability"
+
+
+def test_cap_without_weights_unchanged():
+    dims = [_dim("valuation", 5), _dim("growth", 95), _dim("profitability", 95)]
+    assert overall(dims, DIST, n_analysts=10, prev_grade=None).capped
+
+
+def test_score_dimension_uses_metric_weights():
+    """维度分 = 指标百分位按指标权重加权（盈利能力里口径相近的指标权重 0.5）。"""
+    sm = [_sm("fcf_m", 100), _sm("ebit_m", 0), _sm("net_m", 0)]      # 权重 1 / 0.5 / 0.5
+    d = score_dimension("profitability", sm, None)
+    assert d.score == 50.0                                          # (100×1 + 0×0.5 + 0×0.5) ÷ 2
+    equal = score_dimension("profitability", [_sm("fcf_m", 100), _sm("gross_m", 0)], None)
+    assert equal.score == 50.0
+
+
+def test_dimension_formula_shows_weights_only_when_unequal():
+    from app.services.quant_research.copy import dimension_formula
+
+    weighted = score_dimension("profitability", [_sm("fcf_m", 100), _sm("ebit_m", 40)], None)
+    assert "×" in dimension_formula(weighted) and "÷ 1.5" in dimension_formula(weighted)
+    plain = score_dimension("valuation", [_sm("pe_ttm", 60), _sm("pb", 40)], None)
+    assert "×" not in dimension_formula(plain) and "÷ 2" in dimension_formula(plain)
+
+
+def test_momentum_and_revisions_never_veto():
+    """动量是价格指标、EPS 修正是预期变化，都不是公司基本面：它们为 F 不触发一票否决，哪怕权重够高。"""
+    w = {"valuation": 0.2, "growth": 0.2, "profitability": 0.2, "momentum": 0.2, "revisions": 0.2}
+    strong = [_dim("valuation", 95), _dim("growth", 95), _dim("profitability", 95)]
+    for weak in ("momentum", "revisions"):
+        o = overall(strong + [_dim(weak, 5)], DIST, n_analysts=10, prev_grade=None, weights=w)
+        assert not o.capped, weak
+    o = overall(strong + [_dim("momentum", 5)], DIST, n_analysts=10, prev_grade=None)   # 不传权重（旧调用方式）也一样
+    assert not o.capped
+
+
+def test_fundamental_dimensions_still_veto():
+    w = {"valuation": 0.2, "growth": 0.2, "profitability": 0.2, "stability": 0.2, "momentum": 0.2}
+    for weak in ("valuation", "growth", "profitability", "stability"):
+        dims = [_dim(k, 95) for k in ("valuation", "growth", "profitability", "stability", "momentum") if k != weak]
+        o = overall(dims + [_dim(weak, 5)], DIST, n_analysts=10, prev_grade=None, weights=w)
+        assert o.capped and o.cap_dimension == weak, weak
+
+
+def test_score_dimension_metric_weight_override_and_zero_weight():
+    """按阶段给的指标权重优先于 MetricDef.weight；权重为 0 的指标不进分数、也不占参与数。"""
+    sm = [_sm("pe_ttm", 0), _sm("ps_ttm", 100), _sm("pb", 100)]
+    d = score_dimension("valuation", sm, None, metric_weights={"pe_ttm": 0.0, "ps_ttm": 1.0, "pb": 1.0})
+    assert d.score == 100.0
+    d2 = score_dimension("valuation", sm, None, metric_weights={"pe_ttm": 3.0, "ps_ttm": 1.0, "pb": 0.0})
+    assert d2.score == 25.0                                            # (0×3 + 100×1) ÷ 4
+    only_zero = score_dimension("valuation", sm, None, metric_weights={"pe_ttm": 0.0, "ps_ttm": 0.0, "pb": 0.0})
+    assert only_zero.status == "unavailable"
+
+
+def test_dimension_formula_uses_effective_weights():
+    from app.services.quant_research.copy import dimension_formula
+
+    sm = [_sm("pe_ttm", 40), _sm("ps_ttm", 80), _sm("pb", 10)]
+    w = {"pe_ttm": 0.0, "ps_ttm": 1.0, "pb": 0.5}
+    d = score_dimension("valuation", sm, None, metric_weights=w)
+    f = dimension_formula(d, w)
+    assert "80×1" in f and "10×0.5" in f and "40" not in f.split("÷")[0]   # 权重 0 的不出现在算式里

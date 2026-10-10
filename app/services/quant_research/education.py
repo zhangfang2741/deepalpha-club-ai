@@ -109,6 +109,42 @@ _GUIDANCE: dict[str, tuple[str, str, str, str]] = {
         "Tracks changes in expectations for the same fiscal year to monitor valuation assumptions.",
         "Change = (current − historical estimate) / |historical estimate| × 100%. Compare the same fiscal year; forecasts are not actuals. Insufficient history is unscored.",
     ),
+    "net_debt_ebitda": (
+        "观察用经营利润偿还净债务大约要几年，反映杠杆水平。",
+        "EBITDA 没扣资本开支和利息；租赁多或周期性强的行业天然偏高，只和同板块比较。净现金公司记 0。",
+        "Shows roughly how many years of operating profit would repay net debt, a measure of leverage.",
+        "EBITDA excludes capital spending and interest; lease-heavy or cyclical sectors run higher, so compare within a sector. Net-cash companies score 0.",
+    ),
+    "interest_cov": (
+        "观察经营利润对利息支出的覆盖程度，衡量负债的年度负担。",
+        "本页取最近 12 个月 EBIT 与利息支出，倍数截到 100；利息支出为 0 时记上限。利润下滑会让倍数快速下降。",
+        "Shows how well operating profit covers interest expense, the yearly burden of debt.",
+        "Uses trailing 12-month EBIT and interest expense, capped at 100; zero interest expense is set to the cap. A profit decline lowers the ratio quickly.",
+    ),
+    "current_ratio": (
+        "观察一年内到期的账能否用一年内可变现的资产覆盖，衡量短期流动性。",
+        "不同行业差别大：零售、公用事业低于 1 也不罕见；存货占比高时可变现性要打折。本页取最近一期报表期末值。",
+        "Shows whether assets realizable within a year cover bills due within a year, a measure of near-term liquidity.",
+        "Norms differ by industry: below 1 is not unusual in retail or utilities, and inventory-heavy balance sheets are less liquid. Uses the latest period-end balance sheet.",
+    ),
+    "runway_years": (
+        "观察现金按当前烧钱速度能维持多久，衡量不靠外部融资的生存时间。",
+        "按最近 12 个月自由现金流估算，没有考虑未来融资、成本调整或现金流改善；自由现金流为正时记上限 10 年。",
+        "Shows how long cash lasts at the current burn rate, the time a company can survive without outside funding.",
+        "Estimated from trailing 12-month free cash flow, ignoring future financing, cost cuts or improving cash flow; capped at 10 years, and set to the cap when free cash flow is positive.",
+    ),
+    "cfo_ni": (
+        "观察净利润有多少已经变成经营现金，检验利润质量。",
+        "单年比值受收付款时点和季节性影响，高增长公司因垫付营运资金常偏低，应结合多年观察。净利润为负时不计算。",
+        "Shows how much net income has turned into operating cash, a test of earnings quality.",
+        "A single year is affected by payment timing and seasonality, and fast-growing firms often run low because of working-capital needs; look across years. Not computed when net income is negative.",
+    ),
+    "fcf_sbc_m": (
+        "观察把股票薪酬也当成成本后，收入还能留下多少自由现金。",
+        "股权激励费用取现金流量表里的股票薪酬；不同公司的薪酬结构差别很大，只和同板块比较。报表没有该项时不计算。",
+        "Shows free cash left from revenue after also treating stock pay as a cost.",
+        "Stock-based compensation is taken from the cash flow statement; pay structures differ widely, so compare within a sector. Not computed when the statement lacks it.",
+    ),
 }
 
 
@@ -131,6 +167,8 @@ def metric_interpretation(metric: MetricDef, lang: str) -> MetricInterpretation:
             family = key
     elif family == "profitability":
         family = key if key in _GUIDANCE else "margin"
+    elif family == "stability":
+        family = key
     role_zh, limit_zh, role_en, limit_en = _GUIDANCE[family]
     limit = limit_zh if lang == "zh" else limit_en
     if key.endswith("_fwd"):

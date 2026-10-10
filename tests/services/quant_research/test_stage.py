@@ -78,3 +78,193 @@ def test_stage_ios_rules_match_thresholds():
     assert f"3 年复合 ≥ {GROWTH_CAGR3_MIN:.0%}" in rules
     assert f"营收同比 ≤ −{-SHRINK_YOY_MAX:.0%}" in rules
     assert f"−{-SHRINK_YOY_MAX:.0%} ~ {GROWTH_YOY_MIN:.0%}" in rules
+
+
+# ---------- 阶段权重与滞回 ----------
+
+def test_stage_weights_cover_every_stage_and_sum_to_one():
+    from app.services.quant_research.metrics import DIMENSIONS
+    from app.services.quant_research.stage import STAGE_NAMES, STAGE_WEIGHTS
+
+    assert set(STAGE_WEIGHTS) == set(STAGE_NAMES) | {None}
+    for stage, row in STAGE_WEIGHTS.items():
+        assert set(row) == set(DIMENSIONS), stage
+        assert sum(row.values()) == pytest.approx(1.0), stage
+        assert all(w > 0 for w in row.values()), stage
+
+
+def test_weights_for_unknown_stage_is_equal():
+    from app.services.quant_research.metrics import DIMENSIONS
+    from app.services.quant_research.stage import weights_for
+
+    w = weights_for(None)
+    assert all(v == pytest.approx(1 / len(DIMENSIONS)) for v in w.values())
+    assert weights_for("nonexistent") == w
+
+
+def test_growth_stage_leans_on_growth_not_valuation():
+    from app.services.quant_research.stage import weights_for
+
+    g, m = weights_for("growth"), weights_for("mature")
+    assert g["growth"] > m["growth"] and g["valuation"] < m["valuation"]
+
+
+def test_every_stage_gives_stability_a_veto():
+    """财务稳健在每个阶段的权重都不低于一票否决门槛：偿债 / 现金出问题时综合等级必须能被压住。"""
+    from app.services.quant_research.scoring import CAP_MIN_WEIGHT
+    from app.services.quant_research.stage import STAGE_WEIGHTS
+
+    for stage, row in STAGE_WEIGHTS.items():
+        assert row["stability"] >= CAP_MIN_WEIGHT - 1e-9, stage
+
+
+def test_growth_stage_valuation_cannot_veto():
+    """成长期估值权重低于否决门槛：高增速公司估值贵不再一票封顶（本次改动的初衷）。"""
+    from app.services.quant_research.scoring import CAP_MIN_WEIGHT
+    from app.services.quant_research.stage import STAGE_WEIGHTS
+
+    assert STAGE_WEIGHTS["growth"]["valuation"] < CAP_MIN_WEIGHT
+    assert STAGE_WEIGHTS["intro"]["valuation"] < CAP_MIN_WEIGHT
+
+
+# ---------- 连续权重（营收增速 × 现金流利润率双向插值，不再按阶段档位跳变） ----------
+
+def _rows():
+    from app.services.quant_research.stage import STAGE_WEIGHTS
+    return STAGE_WEIGHTS
+
+
+def _close(a, b):
+    return all(abs(a[k] - b[k]) < 1e-9 for k in b)
+
+
+def test_blend_matches_stage_rows_far_from_thresholds():
+    from app.services.quant_research.stage import blend_weights
+
+    r = _rows()
+    assert _close(blend_weights(0.30, 0.20, 0.20), r["growth"])      # 高增长 + 现金流为正
+    assert _close(blend_weights(0.30, 0.20, -0.20), r["intro"])      # 高增长 + 烧钱
+    assert _close(blend_weights(0.05, 0.05, 0.20), r["mature"])
+    assert _close(blend_weights(0.05, 0.05, -0.20), r["shakeout"])
+    assert _close(blend_weights(-0.15, -0.05, 0.20), r["shakeout"])  # 萎缩但现金流为正
+    assert _close(blend_weights(-0.15, -0.05, -0.20), r["decline"])
+
+
+def test_blend_is_midway_at_the_thresholds():
+    from app.services.quant_research.stage import blend_weights
+
+    r = _rows()
+    mid = blend_weights(0.15, None, 0.20)                            # 恰在 15% 门槛：成长与成熟各半
+    assert _close(mid, {k: (r["growth"][k] + r["mature"][k]) / 2 for k in r["growth"]})
+    cash_mid = blend_weights(0.30, 0.20, 0.0)                        # 现金流利润率 0：成长与初创各半
+    assert _close(cash_mid, {k: (r["growth"][k] + r["intro"][k]) / 2 for k in r["growth"]})
+
+
+def test_blend_weights_sum_to_one_and_have_no_cliffs():
+    """整个定义域上权重和为 1，且增速 / 现金流利润率每动 0.1 个点，任一维度权重变化都很小（旧档位制在门槛处会整行跳 10+ 个点）。"""
+    from app.services.quant_research.stage import blend_weights
+
+    prev = None
+    for i in range(-300, 501):                                       # 营收同比 −30% ~ +50%
+        g = i / 1000
+        w = blend_weights(g, g, 0.10)
+        assert sum(w.values()) == pytest.approx(1.0)
+        if prev is not None:
+            assert max(abs(w[k] - prev[k]) for k in w) < 0.01, g
+        prev = w
+    prev = None
+    for i in range(-100, 101):                                       # 现金流利润率 −10% ~ +10%
+        w = blend_weights(0.30, 0.20, i / 1000)
+        assert sum(w.values()) == pytest.approx(1.0)
+        if prev is not None:
+            assert max(abs(w[k] - prev[k]) for k in w) < 0.01, i
+        prev = w
+
+
+def test_three_year_cagr_discounts_high_growth():
+    """同比很高但 3 年复合不足（如停产后复产）：不能按高增长给权重。"""
+    from app.services.quant_research.stage import blend_weights
+
+    assert _close(blend_weights(0.30, 0.0, 0.20), _rows()["mature"])
+    assert blend_weights(0.30, 0.10, 0.20)["growth"] > _rows()["mature"]["growth"]   # 刚到门槛：介于两者之间
+
+
+def test_stability_keeps_veto_weight_everywhere():
+    from app.services.quant_research.scoring import CAP_MIN_WEIGHT
+    from app.services.quant_research.stage import blend_weights
+
+    for g in (-0.3, -0.05, 0.0, 0.1, 0.15, 0.4):
+        for c in (-0.2, 0.0, 0.2):
+            assert blend_weights(g, g, c)["stability"] >= CAP_MIN_WEIGHT - 1e-9
+
+
+def test_stage_of_carries_blended_weights():
+    info = stage_of(load_inputs("NVDA"), 0.83, 1.10)
+    assert info is not None and info.key == "growth"
+    assert _close(info.weights, _rows()["growth"])                   # NVDA 增速 / 现金流都远离门槛 = 整行
+    near = stage_of(load_inputs("NVDA"), 0.15, None)
+    assert near is not None and near.weights["growth"] < _rows()["growth"]["growth"]
+    assert stage_of(load_inputs("JPM"), 0.1, 0.1) is None            # 金融股没有阶段 → 等权由调用方处理
+
+
+# ---------- 估值指标按阶段配权重（百分位仍和整个行业比，保证行业维度可比） ----------
+
+def _val_keys():
+    from app.services.quant_research.metrics import METRICS
+    return {k for k, m in METRICS.items() if m.dimension == "valuation"}
+
+
+def test_valuation_weight_rows_cover_all_valuation_metrics():
+    from app.services.quant_research.stage import STAGE_NAMES, VALUATION_WEIGHTS
+
+    assert set(VALUATION_WEIGHTS) == set(STAGE_NAMES)
+    for stage, row in VALUATION_WEIGHTS.items():
+        assert set(row) == _val_keys(), stage
+        assert all(w >= 0 for w in row.values()) and sum(row.values()) > 0, stage
+
+
+def test_mature_valuation_row_is_the_old_equal_weighting():
+    """成熟期保持原来的 14 项等权：改动只发生在成熟期以外的阶段。"""
+    from app.services.quant_research.stage import VALUATION_WEIGHTS
+
+    assert set(VALUATION_WEIGHTS["mature"].values()) == {1.0}
+
+
+def test_intro_stage_drops_profit_based_multiples():
+    """初创期（烧钱）：市盈率 / 利润倍数 / 市现率没有意义，只看营收类倍数。"""
+    from app.services.quant_research.stage import VALUATION_WEIGHTS
+
+    row = VALUATION_WEIGHTS["intro"]
+    for k in ("pe_ttm", "pe_fwd", "peg_ttm", "peg_fwd", "ev_ebitda_ttm", "ev_ebitda_fwd", "ev_ebit_ttm", "ev_ebit_fwd", "pcf"):
+        assert row[k] == 0, k
+    for k in ("ps_ttm", "ps_fwd", "ev_sales_ttm", "ev_sales_fwd"):
+        assert row[k] > 0, k
+
+
+def test_growth_stage_leans_forward_and_on_sales_not_book():
+    from app.services.quant_research.stage import VALUATION_WEIGHTS
+
+    row = VALUATION_WEIGHTS["growth"]
+    assert row["pe_fwd"] > row["pe_ttm"] and row["peg_fwd"] > row["peg_ttm"]
+    assert row["pb"] == 0 and row["ev_sales_fwd"] > 0
+
+
+def test_blend_valuation_weights_match_rows_and_are_continuous():
+    from app.services.quant_research.stage import VALUATION_WEIGHTS, blend_valuation_weights
+
+    far = blend_valuation_weights(0.30, 0.20, 0.20)
+    assert all(abs(far[k] - VALUATION_WEIGHTS["growth"][k]) < 1e-9 for k in far)
+    far = blend_valuation_weights(0.05, 0.05, 0.20)
+    assert all(abs(far[k] - VALUATION_WEIGHTS["mature"][k]) < 1e-9 for k in far)
+    prev = None
+    for i in range(-300, 501):
+        w = blend_valuation_weights(i / 1000, i / 1000, 0.10)
+        if prev is not None:   # 相对权重的行间差最大 1.5，过渡区宽 10 个点 → 每 0.1 个点最多变 0.015；整行跳变会 ≥ 0.5
+            assert max(abs(w[k] - prev[k]) for k in w) < 0.02, i
+        prev = w
+
+
+def test_stage_of_carries_valuation_weights():
+    info = stage_of(load_inputs("NVDA"), 0.83, 1.10)
+    assert info is not None and set(info.valuation_weights) == _val_keys()
+    assert info.valuation_weights["pb"] == 0                           # 成长期整行

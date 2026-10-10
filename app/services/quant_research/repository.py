@@ -397,3 +397,44 @@ async def latest_moat(market: str, symbol: str, method_version: str) -> QuantMoa
          .limit(1))
     async with AsyncSessionFactory() as s:
         return (await s.execute(q)).scalars().first()
+
+
+# ---------- 上线诊断（只读汇总用，见 diagnostics.py） ----------
+
+async def diagnostic_dates(market: str, limit: int = 6) -> list[tuple[date, str | None, int]]:
+    """最近几天有结果的日期（新 → 旧）：(as_of, 方法版本, 行数)。版本取当天任一行 payload 里的 methodology_version。"""
+    async with AsyncSessionFactory() as s:
+        days = (await s.execute(
+            select(col(QuantResult.as_of), func.count()).where(col(QuantResult.market) == market)
+            .group_by(col(QuantResult.as_of)).order_by(col(QuantResult.as_of).desc()).limit(limit))).all()
+        out = []
+        for as_of, n in days:
+            ver = (await s.execute(
+                select(col(QuantResult.payload_zh)["methodology_version"].as_string())
+                .where(col(QuantResult.market) == market, col(QuantResult.as_of) == as_of).limit(1))).scalar()
+            out.append((as_of, ver, n))
+    return out
+
+
+async def diagnostic_rows(market: str, as_of: date) -> list:
+    """某天全部结果的诊断行：只取等级 / 阶段 / 综合分 / 各维度等级几个 JSON 字段，不拉指标明细。"""
+    from app.services.quant_research.diagnostics import DiagRow  # 避免模块级循环依赖
+
+    q = (select(col(QuantResult.symbol), col(QuantResult.grades),
+                col(QuantResult.payload_zh)["overall"], col(QuantResult.payload_zh)["stage"],
+                col(QuantResult.payload_zh)["methodology_version"].as_string())
+         .where(col(QuantResult.market) == market, col(QuantResult.as_of) == as_of))
+    async with AsyncSessionFactory() as s:
+        rows = (await s.execute(q)).all()
+    out = []
+    for symbol, grades, overall, stage, version in rows:
+        overall = overall if isinstance(overall, dict) else {}
+        grades = grades if isinstance(grades, dict) else {}
+        score, pct = overall.get("score"), overall.get("universe_percentile")
+        out.append(DiagRow(
+            symbol, version, overall.get("grade"),
+            float(score) if isinstance(score, (int, float)) else None,
+            float(pct) if isinstance(pct, (int, float)) else None,
+            bool(overall.get("capped")), stage.get("key") if isinstance(stage, dict) else None,
+            {k[2:]: v for k, v in grades.items() if k.startswith("d:")}))
+    return out

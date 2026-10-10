@@ -9,7 +9,7 @@ import re
 from typing import Literal
 
 from app.services.quant_research.markets import profile
-from app.services.quant_research.metrics import DIMENSION_NAMES, INPUT_LABELS, METRICS, MetricValue
+from app.services.quant_research.metrics import DIMENSION_NAMES, INPUT_LABELS, METRICS, STABILITY_KEYS, MetricValue
 from app.services.quant_research.scoring import DimensionScore, OverallScore, ScoredMetric
 from app.services.quant_research.stage import STAGE_NAMES
 
@@ -33,6 +33,8 @@ DIMENSION_DESC: dict[str, tuple[str, str]] = {
     "profitability": ("利润率与资本回报", "Margins and returns on capital"),
     "momentum": ("最近 3 ~ 12 个月的股价涨跌", "Price change over the last 3 to 12 months"),
     "revisions": ("分析师一致预期的近期调整", "Recent changes in analyst consensus estimates"),
+    "stability": ("偿债压力、短期流动性、现金能撑多久与利润的现金含量",
+                  "Debt burden, near-term liquidity, cash runway and how much profit turns into cash"),
 }
 
 STAGE_NOTES: dict[str, tuple[str, str]] = {
@@ -124,6 +126,8 @@ def _nm_reason(key: str) -> tuple[str, str]:
         return "经营现金流为负", "negative operating cash flow"
     if key in ("ps_ttm", "ps_fwd", "ev_sales_ttm", "ev_sales_fwd"):
         return "营收为负", "negative revenue"
+    if key == "net_debt_ebitda":
+        return "EBITDA 为负而仍有净负债", "negative EBITDA while carrying net debt"
     if key.startswith("ev_ebitda"):
         return "EBITDA 为负", "negative EBITDA"
     if key.startswith("ev_ebit"):
@@ -188,6 +192,24 @@ def metric_expression(key: str, mv: MetricValue, lang: Lang) -> str:
     (la, a), (lb, b) = ins[0], ins[1]
     A, B = f"{label(la, lang)} {fmt_input(la, a, lang)}", f"{label(lb, lang)} {fmt_input(lb, b, lang)}"
     result = fmt_metric_value(key, mv.value) if mv.value is not None else "—"
+    # 财务稳健：「没有压力」与「触顶」的约定值要把原因写出来，否则算式和结果对不上
+    if mv.meta.get("net_cash"):
+        return _i(lang, f"{A} ≤ 0（现金多于负债）→ {result}", f"{A} ≤ 0 (cash exceeds debt) → {result}")
+    if mv.meta.get("net_interest_income"):
+        return _i(lang, f"{B}，但利息收入不低于利息支出（净利息收入为正，没有利息压力）→ 记上限 {result}",
+                  f"{B}, but interest income is at least interest expense (net interest income, no interest pressure) → capped at {result}")
+    if mv.meta.get("no_interest"):
+        return _i(lang, f"{B}（没有利息支出）→ 记上限 {result}", f"{B} (no interest expense) → capped at {result}")
+    if mv.meta.get("self_funding"):
+        fcf = fmt_input(lb, -b if b is not None else None, lang)
+        return _i(lang, f"最近 12 个月自由现金流 {fcf}（为正，不烧钱）→ 记上限 {result} 年",
+                  f"Trailing 12-month free cash flow {fcf} (positive, no burn) → capped at {result} years")
+    if mv.op == "div" and key in ("interest_cov", "runway_years") and a is not None and b and mv.value is not None:
+        raw = a / b
+        if raw > mv.value + 1e-9:  # 被上限截断
+            unit_zh, unit_en = ("", "") if key == "interest_cov" else (" 年", " years")
+            return _i(lang, f"{A} ÷ {B} = {raw:.1f}{unit_zh}，超过上限按 {result}{unit_zh} 计",
+                      f"{A} ÷ {B} = {raw:.1f}{unit_en}, above the cap, counted as {result}{unit_en}")
     if mv.op == "div" or mv.op == "peg":
         return f"{A} ÷ {B} = {result}"
     if mv.op in ("growth", "ret"):
@@ -199,12 +221,21 @@ def metric_expression(key: str, mv: MetricValue, lang: Lang) -> str:
     return ""
 
 
-def dimension_formula(dim: DimensionScore) -> str | None:
-    """维度分算式「(p1 + p2 + …) ÷ n = 分 → 等级」。"""
-    ps = [s.percentile for s in dim.metrics if s.percentile is not None]
-    if dim.score is None or not ps:
+def dimension_formula(dim: DimensionScore, weights: dict[str, float] | None = None) -> str | None:
+    """维度分算式「(p1 + p2 + …) ÷ n = 分 → 等级」；有权重时写「(p1×w1 + …) ÷ Σw」（权重为 0 的指标不出现）。
+
+    weights = 按阶段给的指标权重，缺省取 MetricDef.weight。
+    """
+    part = [s for s in dim.metrics if s.percentile is not None]
+    ws = {s.key: (weights.get(s.key, METRICS[s.key].weight) if weights is not None else METRICS[s.key].weight) for s in part}
+    part = [s for s in part if ws[s.key] > 0]
+    if dim.score is None or not part:
         return None
-    return f"({' + '.join(f'{p:.0f}' for p in ps)}) ÷ {len(ps)} = {dim.score:.1f} → {dim.grade}"
+    vals = [ws[s.key] for s in part]
+    if all(w == vals[0] for w in vals):  # 等权：保持原样「(p1 + p2) ÷ n」
+        return f"({' + '.join(f'{s.percentile:.0f}' for s in part)}) ÷ {len(part)} = {dim.score:.1f} → {dim.grade}"
+    terms = " + ".join(f"{s.percentile:.0f}×{w:g}" for s, w in zip(part, vals, strict=True))
+    return f"({terms}) ÷ {sum(vals):g} = {dim.score:.1f} → {dim.grade}"
 
 
 # ---------- 状态说明 ----------
@@ -226,6 +257,12 @@ def metric_status_note(sm: ScoredMetric, lang: Lang) -> str | None:
         if mv.meta.get("reason") == "financials_structure":
             return _i(lang, "银行、券商、保险没有一般企业的有息负债与营业成本口径，不适用，不参与计算",
                       "Banks, brokers and insurers have no comparable debt or cost-of-sales basis; excluded")
+        if mv.meta.get("reason") == "financials_balance_sheet":
+            return _i(lang, "银行、保险等金融公司的负债本身就是经营的一部分，偿债口径不可比，不适用，不参与计算",
+                      "For banks and insurers debt is part of the business itself, so debt-burden metrics are not comparable; excluded")
+        if sm.key == "cfo_ni":
+            return _i(lang, "净利润为负，比值没有意义，不适用，不参与计算",
+                      "Net income is negative, so the ratio is meaningless; excluded")
         if mv.meta.get("reason") == "financials_revenue_basis":
             return _i(lang, "金融股报表营收与分析师预期口径不同，不适用，不参与计算",
                       "Reported and consensus revenue use different bases for financials; excluded")
@@ -236,7 +273,15 @@ def metric_status_note(sm: ScoredMetric, lang: Lang) -> str | None:
             return _i(lang, "投入资本为负，不适用，不参与计算", "Negative invested capital; excluded")
         return _i(lang, "企业价值为负（现金多于市值与负债之和），不适用，不参与计算",
                   "Negative enterprise value (cash exceeds market cap plus debt); excluded")
+    if sm.key in STABILITY_KEYS:
+        return _i(lang, "报表里缺少所需数据，不参与计算", "Required statement data is not available; excluded")
     return _i(lang, "数据缺失或增长基数为负，不参与计算", "Data missing or negative growth base; excluded")
+
+
+def stage_unused_note(stage_name: str, lang: Lang) -> str:
+    """估值倍数在当前阶段权重为 0 时的说明（仍展示，不参与）。"""
+    return _i(lang, f"这家公司处在{stage_name}：这个阶段不看这项估值指标，只展示、不参与计算",
+              f"This company is in the {stage_name} stage: this valuation metric is not used at this stage; shown only")
 
 
 def dimension_status_note(dim: DimensionScore, lang: Lang) -> str | None:
@@ -245,6 +290,8 @@ def dimension_status_note(dim: DimensionScore, lang: Lang) -> str | None:
         d = dim.days_accumulated or 0
         return _i(lang, f"修正历史积累中（已 {d} 天）", f"Building revision history ({d} days so far)")
     if dim.status == "unavailable":
+        if dim.metrics and all(m.status == "not_applicable" for m in dim.metrics):
+            return _i(lang, "此维度不适用于这类公司，不参与综合分", "Not applicable to this kind of company; left out of the composite")
         return _i(lang, "可用指标太少（不足三分之一），暂无等级", "Too few metrics available (under one third); no grade")
     return None
 
@@ -285,7 +332,7 @@ def overall_note(o: OverallScore, lang: Lang) -> str | None:
 
 
 def dims_used_note(used: int, lang: Lang) -> str | None:
-    """少于 5 个维度参与时的说明。"""
+    """少于 5 个维度参与时的说明（金融股没有财务稳健、新股还在积累 EPS 修正，常态是 5 个）。"""
     if used >= 5:
         return None
     return _i(lang, f"本次综合等级基于 {used} 个维度", f"Composite grade based on {used} dimensions")

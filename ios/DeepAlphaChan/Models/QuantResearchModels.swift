@@ -128,6 +128,8 @@ struct QuantDimension: Decodable, Identifiable {
     let groups: [QuantMetricGroup]
     /// false = 只展示、不计入综合等级（护城河）；旧响应缺省为 true。
     let countsInOverall: Bool
+    /// 这一维在综合分里的实际占比（%，按公司阶段加权）；旧响应缺省为 nil。
+    let weightPct: Int?
 
     var id: String { key }
     var isOK: Bool { status == "ok" }
@@ -140,6 +142,7 @@ struct QuantDimension: Decodable, Identifiable {
         case isLowest = "is_lowest"
         case keyFact = "key_fact"
         case countsInOverall = "counts_in_overall"
+        case weightPct = "weight_pct"
     }
 
     init(from decoder: Decoder) throws {
@@ -157,6 +160,7 @@ struct QuantDimension: Decodable, Identifiable {
         formula = try c.decodeIfPresent(String.self, forKey: .formula)
         groups = try c.decode([QuantMetricGroup].self, forKey: .groups)
         countsInOverall = try c.decodeIfPresent(Bool.self, forKey: .countsInOverall) ?? true
+        weightPct = try c.decodeIfPresent(Int.self, forKey: .weightPct)
     }
 }
 
@@ -218,8 +222,11 @@ struct QuantMetric: Decodable, Identifiable {
     let formula: QuantFormula?
     let positionText: String?
     let interpretation: QuantMetricInterpretation?
+    /// 在维度分里的权重（口径相近的利润 / 回报指标合并计权为 0.5，其余 1）；旧响应没有，按 1 处理。
+    let weight: Double?
 
     var id: String { key }
+    var effectiveWeight: Double { weight ?? 1 }
     var lowerBetter: Bool { direction == "lower_better" }
 
     /// 全称副标题：只在它补充了信息时返回（如「ROE」→「净资产收益率 ROE…」）；
@@ -240,12 +247,12 @@ struct QuantMetric: Decodable, Identifiable {
         case sectorMedianDisplay = "sector_median_display"
         case diffToMedianPct = "diff_to_median_pct"
         case positionText = "position_text"
-        case interpretation
+        case interpretation, weight
     }
 }
 
 extension QuantResearch {
-    /// 计入综合等级的维度（五维成绩单、五维图、综合分解释）。
+    /// 计入综合等级的维度（六维成绩单、六维图、综合分解释）。
     var scoredDimensions: [QuantDimension] { dimensions.filter(\.countsInOverall) }
 
 }

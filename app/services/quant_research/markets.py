@@ -22,14 +22,19 @@ class MarketProfile:
 
 _NO_EBIT_ESTIMATES = frozenset({"ebitda_fwd", "ebit_fwd", "ev_ebitda_fwd", "ev_ebit_fwd"})
 _NO_REVENUE_ESTIMATES = frozenset({"ps_fwd", "ev_sales_fwd", "rev_fwd", "rev_fy1_90d"})
+# 东财 / 经济通转换后的报表没有流动资产 / 流动负债与利息支出，对应两项稳健指标无数据源
+_NO_LIQUIDITY_DETAIL = frozenset({"current_ratio", "interest_cov"})
+# 同上：转换后的现金流量表没有股权激励费用，扣股权激励的现金口径只有美股
+_NO_STOCK_COMP = frozenset({"fcf_sbc_m"})
 
 PROFILES: dict[str, MarketProfile] = {
     "us": MarketProfile("us", "标普1500", "S&P 1500", has_moat=True),
     # A 股一致预期只有 EPS / 营收 / 净利润，没有 EBITDA / EBIT
-    "cn": MarketProfile("cn", "A 股市值前 1800", "top 1,800 A-shares by market cap", _NO_EBIT_ESTIMATES),
+    "cn": MarketProfile("cn", "A 股市值前 1800", "top 1,800 A-shares by market cap",
+                         _NO_EBIT_ESTIMATES | _NO_LIQUIDITY_DETAIL | _NO_STOCK_COMP),
     # 港股一致预期只有 EPS / 净利润
     "hk": MarketProfile("hk", "港股通及大中型港股", "Stock Connect and large/mid-cap HK stocks",
-                        _NO_EBIT_ESTIMATES | _NO_REVENUE_ESTIMATES),
+                        _NO_EBIT_ESTIMATES | _NO_REVENUE_ESTIMATES | _NO_LIQUIDITY_DETAIL | _NO_STOCK_COMP),
 }
 
 

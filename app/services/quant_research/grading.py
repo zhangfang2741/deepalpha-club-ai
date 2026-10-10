@@ -41,11 +41,19 @@ def cap_grade(grade: str, ceiling: str) -> str:
 def percentile_of(value: float, sorted_values: list[float], *, lower_better: bool) -> float:
     """计算 value 在 sorted_values（升序）中的百分位 0~100，方向统一成越高越好。
 
-    越高越好：不大于它的比例；越低越好：不小于它的比例。样本为空时返回 50。
+    越高越好：不大于它的比例；越低越好：不小于它的比例。**并列取平均位次**：m 家并列时，它们占据的 m 个位次取中间值，
+    而不是都拿最高位次——否则净现金（净负债比 = 0）、不烧钱（年数封顶）这类大量公司并列在极值的指标，
+    会让几乎所有公司都显示「高于板块 100% 的公司」，也把对应维度整体抬高。没有并列时与「不大于它的比例」完全一致。
+    样本为空时返回 50。
     """
     n = len(sorted_values)
     if n == 0:
         return 50.0
+    lt, le = bisect_left(sorted_values, value), bisect_right(sorted_values, value)
+    m = le - lt                                   # 与 value 并列的家数（样本外的值 m = 0）
     if lower_better:
-        return round((n - bisect_left(sorted_values, value)) / n * 100, 1)
-    return round(bisect_right(sorted_values, value) / n * 100, 1)
+        worse_or_tied = n - lt                    # 不小于它的家数
+        rank = worse_or_tied - (m - 1) / 2 if m else worse_or_tied
+    else:
+        rank = lt + (m + 1) / 2 if m else le      # 位次：严格小于它的家数 + 并列者的平均位次
+    return round(rank / n * 100, 1)

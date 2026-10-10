@@ -35,7 +35,7 @@ def test_get_quant_research_ok(client):
     r = c.get("/api/v1/quant-research/us/nvda?lang=zh")
     assert r.status_code == 200
     body = r.json()
-    assert body["status"] == "ok" and len(body["dimensions"]) == 5
+    assert body["status"] == "ok" and len(body["dimensions"]) == 6
     assert "source" not in json.dumps(body)
     assert seen == {"market": "us", "symbol": "nvda", "lang": "zh"}
 
@@ -56,8 +56,8 @@ def test_methodology_no_auth_needed():
     c = TestClient(app)
     for lang in ("zh", "en"):
         body = c.get(f"/api/v1/quant-research/methodology?lang={lang}").json()
-        assert len(body["grade_bands"]) == 13 and len(body["dimensions"]) == 5
-        assert sum(len(d["metrics"]) for d in body["dimensions"]) == 40
+        assert len(body["grade_bands"]) == 13 and len(body["dimensions"]) == 6
+        assert sum(len(d["metrics"]) for d in body["dimensions"]) == 46
     from app.services.quant_research.copy import contains_forbidden
     text = json.dumps(body, ensure_ascii=False) + json.dumps(c.get("/api/v1/quant-research/methodology").json(),
                                                              ensure_ascii=False)
@@ -126,3 +126,36 @@ async def test_run_manual_batch_releases_lock_on_failure(monkeypatch):
     monkeypatch.setattr(api, "run_hk_batch", boom)
     await api._run_manual_batch("hk", date(2026, 10, 2))
     assert fake.deleted[-1] == _lock_key("hk", date(2026, 10, 2))
+
+
+def test_diagnostics_is_aggregate_only_and_needs_no_login(monkeypatch):
+    """诊断接口不登录也能访问，但只返回汇总：任何个股代码都不能出现在响应里。"""
+    from datetime import date
+
+    from app.api.v1 import quant_research as api_mod
+    from app.services.quant_research import repository as repo
+    from app.services.quant_research.diagnostics import DiagRow
+
+    def rows(version, grade):
+        return [DiagRow(f"LEAKCHECK{i}", version, grade, 60.0 + i * 0.1, 70.0, False, "growth", {"stability": "B"})
+                for i in range(15)]
+
+    async def fake_dates(market, limit=6):
+        return [(date(2026, 10, 10), "q7", 15), (date(2026, 10, 9), "q6", 15)]
+
+    async def fake_rows(market, as_of):
+        return rows("q7", "B") if as_of == date(2026, 10, 10) else rows("q6", "C")
+
+    async def fake_dists(market, as_of):
+        return {("it", "runway_years"): sorted([1.0] * 5 + [10.0] * 95)}
+
+    monkeypatch.setattr(repo, "diagnostic_dates", fake_dates)
+    monkeypatch.setattr(repo, "diagnostic_rows", fake_rows)
+    monkeypatch.setattr(repo, "get_distributions", fake_dists)
+    r = TestClient(app).get("/api/v1/quant-research/diagnostics?market=us")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "ok" and body["new"]["n"] == 15 and body["old"]["versions"] == {"q6": 15}
+    assert body["compare"]["paired"] == 15 and body["ties"]["runway_years"]["median_largest_tie_share"] == 0.95
+    assert "LEAKCHECK" not in r.text
+    assert api_mod.METHODOLOGY_VERSION == body["current_methodology"]

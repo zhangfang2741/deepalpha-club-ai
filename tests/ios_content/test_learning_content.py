@@ -91,3 +91,24 @@ def test_guide_screenshots_exist_and_match_between_languages():
     used = {n for _, _, n in zh}
     unused = {p.name.removesuffix(".imageset").removesuffix("-en") for p in assets.glob("*.imageset")} - used
     assert not unused, f"没有被正文引用的截图：{sorted(unused)}"
+
+
+def test_no_stale_five_dimension_claims():
+    """基本面研究现在是六个维度、按公司阶段加权：界面与学习内容里不能再说「五个维度」「五项取平均」（后端 DIMENSIONS 为准）。"""
+    from app.services.quant_research.metrics import DIMENSIONS
+
+    assert len(DIMENSIONS) == 6
+    stale = ["五个维度", "五项取平均", "五维成绩单", "五维雷达", "五项各自打分", "Five dimensions", "five dimensions",
+             "five-factor", "Five-factor", "The five are averaged",
+             # 阶段现在决定各维度权重（stage.STAGE_WEIGHTS），不再是「只做标注」
+             "不影响量化等级", "阶段标注不影响", "只做标注，不影响等级", "三项现金流的正负划分阶段", "do not change grades"]
+    files = [p for p in (ROOT / "Views").rglob("*.swift") if "Moat" not in p.name]
+    files += [RES / lang / name for lang in ("zh-Hans.lproj", "en.lproj")
+              for name in ("glossary.json", "guide.json", "lessons.json", "Localizable.strings")]
+    hits = []
+    for f in files:
+        text = f.read_text()
+        for w in stale:
+            if w in text:
+                hits.append(f"{f.name}: {w}")
+    assert hits == [], f"文案仍写着五维：{hits}"

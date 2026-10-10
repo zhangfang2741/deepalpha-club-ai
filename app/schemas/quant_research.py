@@ -93,6 +93,7 @@ class MetricOut(BaseModel):
     formula: MetricFormula | None = None
     position_text: str | None = None
     interpretation: MetricInterpretation | None = None
+    weight: float = 1.0  # 在维度分里的权重（口径相近的利润 / 回报指标合并计权，其余为 1）
 
 
 class MetricGroup(BaseModel):
@@ -119,6 +120,7 @@ class Dimension(BaseModel):
     formula: str | None
     groups: list[MetricGroup]
     counts_in_overall: bool = True  # False = 只展示、不计入综合等级（护城河）
+    weight_pct: int | None = None   # 这一维在综合分里的实际占比（%，按公司阶段加权、只在可用维度间归一）
 
 
 class MoatYear(BaseModel):

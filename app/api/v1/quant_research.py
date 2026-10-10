@@ -1,4 +1,4 @@
-"""量化研究接口：个股五维度量化研究 + 方法说明。业务逻辑见 app/services/quant_research。"""
+"""量化研究接口：个股六维度量化研究 + 方法说明。业务逻辑见 app/services/quant_research。"""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from app.models.user import User
 from app.schemas.quant_research import LatestReportOut, MethodologyOut, QuantResearchOut, ReportSummaryOut
 from app.core.config import settings
 from app.services.quant_research.batch import run_us_batch
+from app.services.quant_research.builder import METHODOLOGY_VERSION
 from app.services.quant_research.cnhk.batch import run_cn_batch, run_hk_batch
 from app.services.quant_research.methodology import build_methodology
 from app.services.quant_research.report import get_latest_report
@@ -35,6 +36,36 @@ _background_tasks: set[asyncio.Task] = set()
 async def quant_methodology(lang: Literal["zh", "en"] = Query("zh")) -> MethodologyOut:
     """方法说明（「等级是怎么算的？」）。"""
     return build_methodology(lang)
+
+
+@router.get("/diagnostics")
+@limiter.limit("6 per minute")
+async def quant_diagnostics(request: Request, market: Literal["us", "cn", "hk"] = Query("us")) -> dict:
+    """评分方法上线诊断：最新一天与上一方法版本的**汇总**对比（等级分布 / 阶段 / 升降 / 并列占比）。
+
+    只读、不需要登录、**只返回汇总统计，不含任何个股代码或明细**（分组少于 10 只不给均值）。
+    临时工具：方法稳定后删除本接口与 services/quant_research/diagnostics.py。
+    """
+    from app.services.quant_research import diagnostics as diag
+    from app.services.quant_research import repository as repo
+
+    dates = await repo.diagnostic_dates(market)
+    if not dates:
+        return {"status": "no_data"}
+    new_day, new_ver, _ = dates[0]
+    old_day = next((d for d in dates[1:] if d[1] != new_ver), None)
+    new_rows = await repo.diagnostic_rows(market, new_day)
+    out: dict = {
+        "status": "ok", "market": market, "current_methodology": METHODOLOGY_VERSION,
+        "days": [{"as_of": d.isoformat(), "version": v, "rows": n} for d, v, n in dates],
+        "new": {"as_of": new_day.isoformat(), **diag.summarize(new_rows)},
+    }
+    if old_day is not None:
+        old_rows = await repo.diagnostic_rows(market, old_day[0])
+        out["old"] = {"as_of": old_day[0].isoformat(), **diag.summarize(old_rows)}
+        out["compare"] = diag.compare(old_rows, new_rows)
+    out["ties"] = diag.tie_stats(await repo.get_distributions(market, new_day))
+    return out
 
 
 @router.post("/batch/run")
@@ -131,7 +162,7 @@ async def quant_research(
     user: User = Depends(get_current_user),
     redis: Redis | None = Depends(get_redis_optional),
 ) -> QuantResearchOut:
-    """个股量化研究（五维度、三层下钻所需的全部数据）。"""
+    """个股量化研究（六维度、三层下钻所需的全部数据）。"""
     out = await get_quant_research(market, symbol, lang, redis=redis)
     logger.info("quant_research_served", market=market, symbol=symbol.upper(), status=out.status, user_id=user.id)
     return out

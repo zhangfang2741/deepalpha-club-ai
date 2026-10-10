@@ -12,7 +12,77 @@ from app.services.quant_research import copy as tx
 from app.services.quant_research.builder import METHODOLOGY_VERSION
 from app.services.quant_research.grading import BANDS, HYSTERESIS
 from app.services.quant_research.metrics import DIMENSIONS, METRICS, MIN_ANALYSTS
-from app.services.quant_research.scoring import CAP_CEILING, MIN_SAMPLE
+from app.services.quant_research.scoring import CAP_CEILING, CAP_MIN_WEIGHT, MIN_SAMPLE
+from app.services.quant_research.stage import STAGE_NAMES, STAGE_WEIGHTS, VALUATION_KEYS, VALUATION_WEIGHTS
+
+def _weights_text(lang: int) -> str:
+    """各阶段的权重一览，如「成长期 15 / 35 / 20 / 20 / 10」，直接取自 STAGE_WEIGHTS，改表即同步。"""
+    return "；".join(
+        f"{STAGE_NAMES[stage][lang]} " + " / ".join(f"{STAGE_WEIGHTS[stage][d] * 100:.0f}" for d in DIMENSIONS)
+        for stage in STAGE_NAMES)
+
+
+def _weights_zh() -> str:
+    return _weights_text(0)
+
+
+def _weights_en() -> str:
+    return _weights_text(1)
+
+
+def _metric_weights_text(lang: int) -> str:
+    """权重不是 1 的指标一览（直接取自 METRICS，改权重即同步）；盈利能力里口径相近的利润 / 回报指标合并计权。"""
+    by_dim: dict[str, dict[float, list[str]]] = {}
+    for m in METRICS.values():
+        if m.weight != 1.0:
+            by_dim.setdefault(m.dimension, {}).setdefault(m.weight, []).append(m.name_zh if lang == 0 else m.name_en)
+    parts = []
+    for dim, groups in by_dim.items():
+        for w, names in groups.items():
+            sep = "、" if lang == 0 else ", "
+            dn = tx.dimension_name(dim, "zh" if lang == 0 else "en")
+            parts.append(f"{dn}里{sep.join(names)}各 {w:g}" if lang == 0 else f"in {dn}, {sep.join(names)} each carry {w:g}")
+    if not parts:
+        return ""
+    tail = ("，其余为 1：口径相近的指标合并计权，避免同一信息被重复计算（如三种利润率、三种回报率都以 GAAP 利润为基础）。"
+            if lang == 0 else
+            "; all others carry 1. Metrics built on the same information are combined so it is not counted several "
+            "times (the three margins and three returns all rest on GAAP profit).")
+    return ("；".join(parts) if lang == 0 else "; ".join(parts)) + tail
+
+
+def _metric_weights_zh() -> str:
+    return _metric_weights_text(0)
+
+
+def _metric_weights_en() -> str:
+    return _metric_weights_text(1)
+
+
+def _valuation_weights_text(lang: int) -> str:
+    """各阶段估值倍数的取舍一览（直接取自 VALUATION_WEIGHTS，改表即同步）：不看的 / 减半的 / 其余等权。"""
+    out = []
+    for stage in ("growth", "intro", "shakeout", "decline"):
+        row = VALUATION_WEIGHTS[stage]
+        name = lambda k: METRICS[k].name_zh if lang == 0 else METRICS[k].name_en  # noqa: E731
+        sep = "、" if lang == 0 else ", "
+        top = max(row.values())
+        zero = [name(k) for k in VALUATION_KEYS if row[k] == 0]
+        part = [name(k) for k in VALUATION_KEYS if 0 < row[k] < top]
+        if lang == 0:
+            out.append(f"{STAGE_NAMES[stage][0]}：不看{sep.join(zero) or '无'}" + (f"；{sep.join(part)} 权重较低" if part else ""))
+        else:
+            out.append(f"{STAGE_NAMES[stage][1]}: skips {sep.join(zero) or 'none'}" + (f"; {sep.join(part)} at lower weight" if part else ""))
+    return ("；" if lang == 0 else "; ").join(out)
+
+
+def _valuation_weights_zh() -> str:
+    return _valuation_weights_text(0)
+
+
+def _valuation_weights_en() -> str:
+    return _valuation_weights_text(1)
+
 
 _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
     (("和谁比", "Who it is compared with"),
@@ -40,15 +110,54 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
       f"daily flip-flopping at the edges, a grade only changes once the percentile moves more than {HYSTERESIS:.0f} "
       f"points past the old band.")),
     (("维度分", "Dimension scores"),
-     ("维度分 = 该维度内参与计算的指标百分位的等权平均；参与计算的指标不足三分之一（且少于 2 项）时，该维度暂无等级。",
-      "A dimension score is the equal-weighted average of its participating metric percentiles; with fewer than "
-      "one third of the metrics (and at least 2) available, the dimension has no grade.")),
+     (f"维度分 = 该维度内参与计算的指标百分位的加权平均，多数指标权重相同；{_metric_weights_zh()}"
+      "参与计算的指标不足三分之一（且少于 2 项）时，该维度暂无等级。",
+      "A dimension score is the weighted average of its participating metric percentiles; most metrics carry the "
+      f"same weight. {_metric_weights_en()} With fewer than one third of the metrics (and at least 2) available, "
+      "the dimension has no grade.")),
     (("综合等级", "Composite grade"),
-     (f"综合分 = 可用维度分的等权平均；再看综合分在标普1500 全体中的百分位，按同一把尺子定等级。"
-      f"任一维度为 F 时，综合等级最高为 {CAP_CEILING}；覆盖的分析师少于 {MIN_ANALYSTS} 位时不给综合等级。",
-      f"The composite score is the equal-weighted average of available dimension scores; its percentile across the "
-      f"whole S&P 1500 sets the grade on the same scale. If any dimension is F, the composite is capped at "
-      f"{CAP_CEILING}; with fewer than {MIN_ANALYSTS} covering analysts there is no composite grade.")),
+     (f"综合分 = 可用维度分按公司阶段加权平均（权重见「公司阶段」，缺失的维度在其余维度间重新归一）；"
+      f"再看综合分在标普1500 全体中的百分位，按同一把尺子定等级。"
+      f"估值 / 成长 / 盈利能力 / 财务稳健里，综合分权重不低于 {CAP_MIN_WEIGHT:.0%} 的维度为 F 时，综合等级最高为 {CAP_CEILING}"
+      f"（权重更低的维度、以及股价类的动量和预期类的 EPS 修正，都没有一票否决权）；"
+      f"覆盖的分析师少于 {MIN_ANALYSTS} 位时不给综合等级。"
+      "注意：综合分的权重按公司阶段调整，所以同一板块里各维度的等级可以直接比较，"
+      "而综合等级是「按阶段调整后」的结果，在处于不同阶段的公司之间不直接可比。",
+      f"The composite score is a stage-weighted average of the available dimension scores (weights are listed under "
+      f"Company stage; missing dimensions are re-normalized over the rest); its percentile across the whole S&P 1500 "
+      f"sets the grade on the same scale. If valuation, growth, profitability or financial health carries at least "
+      f"{CAP_MIN_WEIGHT:.0%} of the weight and is F, the composite is capped at {CAP_CEILING} (lower-weight "
+      f"dimensions, and the price-based momentum and expectation-based EPS revisions, cannot veto); with fewer than "
+      f"{MIN_ANALYSTS} covering analysts there is no composite grade. Note: because the composite weights follow the "
+      "company's stage, dimension grades within a sector compare directly, while the composite grade is stage-adjusted "
+      "and is not directly comparable between companies at different stages.")),
+    (("估值指标按阶段取舍", "Valuation metrics by stage"),
+     (f"估值维度里的 14 个倍数，不同阶段看的重点不同，但比较对象不变：每个倍数仍然和同板块全体公司比百分位，所以不同公司在同一板块维度下可比。"
+      f"只改各倍数在估值分里的权重，同样按营收增速和经营现金流连续插值、不在门槛处跳变：成熟期保持 14 项等权；{_valuation_weights_zh()}。"
+      "利润为负的公司，市盈率 / 市现率这类倍数没有意义（会被当成最差），所以初创期干脆不看它们。权重为 0 的倍数仍然展示，只是不参与计算。",
+      "The 14 multiples in the valuation dimension carry different weight at different stages, but the comparison group "
+      "does not change: each multiple is still ranked against all companies in the same sector, so companies remain "
+      "comparable within a sector. Only the weight of each multiple in the valuation score changes, interpolated "
+      "continuously on revenue growth and operating cash flow so nothing jumps at a threshold. Mature keeps all 14 at equal weight; "
+      f"{_valuation_weights_en()}. Multiples based on profit are meaningless for loss-making companies "
+      "(they would be scored as lowest), so the introduction stage skips them. A zero-weight multiple is still shown but not used.")),
+    (("财务稳健", "Financial health"),
+     ("看偿债压力、短期流动性、现金能撑多久和利润的现金含量，共五项：净负债 / EBITDA（现金多于负债记 0）、"
+      "利息保障倍数（没有利息支出、利息收入不低于利息支出、或超过 100 倍记 100）、流动比率、现金可支撑年数（按最近 12 个月自由现金流为负的速度估算，"
+      "自由现金流为正的公司不烧钱，记上限 10 年）、经营现金流 / 净利润（净利润为负时不参与）。"
+      "「没有压力」一律记成该项的最好值，不当缺失；有净负债而 EBITDA 为负按最差计。"
+      "银行、保险等金融公司的负债本身就是经营的一部分，口径不可比，整个维度不参与综合分。"
+      "A 股与港股的报表没有流动资产 / 流动负债与利息支出，只用其余三项。"
+      "这个维度在每个阶段的权重都不低于一票否决门槛：财务稳健为 F 时，综合等级最高为 C+。",
+      "Five metrics on debt burden, near-term liquidity, cash runway and how much profit turns into cash: net debt / "
+      "EBITDA (0 when cash exceeds debt), interest coverage (100 when there is no interest expense, interest income is at least interest expense, or it exceeds 100x), "
+      "current ratio, cash runway in years (at the trailing 12-month free-cash-flow burn; companies with positive free "
+      "cash flow burn nothing and are set to the 10-year cap) and operating cash flow / net income (excluded when net "
+      "income is negative). \"No pressure\" is always scored as the best value rather than treated as missing; net debt "
+      "with negative EBITDA is scored as lowest. Debt is part of the business for banks and insurers, so the whole "
+      "dimension is left out for them. A-share and Hong Kong statements lack current assets / liabilities and interest "
+      "expense, so only the other three are used. This dimension's weight is above the veto threshold in every stage: "
+      "a financial-health F caps the composite at C+.")),
     (("EPS 修正", "EPS revisions"),
      ("每天保存一次分析师一致预期，比较当前值与 30 / 90 天前的值；亏损收窄算上修。"
       "历史不足 30 天时该维度显示「积累中」，综合等级基于其余维度。本维度用一致预期均值的变化，"
@@ -60,12 +169,22 @@ _SECTIONS: list[tuple[tuple[str, str], tuple[str, str]]] = [
     (("公司阶段", "Company stage"),
      ("以营收增速为主、经营现金流为辅：营收同比 ≥ 15% 且 3 年复合 ≥ 10%（不足 3 年只看同比）为高增长，"
       "经营现金流为正是成长期、否则初创期；营收同比 ≤ −5% 时经营现金流为正是调整期、否则收缩期；"
-      "其余经营现金流为正是成熟期、否则调整期。只做标注，不影响等级；金融股不做阶段标注。",
+      "其余经营现金流为正是成熟期、否则调整期。阶段只是界面上的标签；"
+      "综合分里六个维度的权重按营收增速和经营现金流连续插值，不在门槛处跳变：营收同比在 10% ~ 20%（中心 15%）、"
+      "0% ~ −10%（中心 −5%）之间，经营现金流占营收在 −5% ~ +5% 之间，权重在相邻两行之间平滑过渡，远离门槛时就是下列各行。"
+      "各阶段的基准权重行（估值 / 成长 / 盈利能力 / 动量 / EPS 修正 / 财务稳健）："
+      f"{_weights_zh()}。成长期看重增速、成熟期看重估值与赚钱能力；金融股不做阶段标注，各维度等权（它们没有财务稳健维度，见该节）。",
       "Revenue growth leads and operating cash flow follows: revenue up ≥ 15% year over year with a 3-year CAGR "
       "≥ 10% (year over year only with under 3 years of history) is high growth — growth with positive operating "
       "cash flow, introduction otherwise. Revenue down ≥ 5% is shake-out with positive operating cash flow, "
       "contraction otherwise. Everything else is mature with positive operating cash flow, shake-out otherwise. "
-      "Stages are labels only and do not change grades; financials are not labeled.")),
+      "The stage is only a label. The composite weights the six dimensions by interpolating continuously on revenue "
+      "growth and operating cash flow, so nothing jumps at a threshold: between 10% and 20% revenue growth (centre "
+      "15%), between 0% and −10% (centre −5%), and between −5% and +5% operating cash flow over revenue the weights "
+      "glide between neighbouring rows; far from a threshold they equal the rows below. Base rows by stage "
+      "(valuation / growth / profitability / momentum / EPS "
+      f"revisions / financial health): {_weights_en()}. Growth stages lean on growth, mature stages on valuation and profitability; "
+      "financials are not labeled and use equal weights (they have no financial-health dimension; see that section).")),
     (("A 股与港股", "China A-shares and Hong Kong"),
      ("规则与美股完全相同，只是比较样本与数据不同：A 股和总市值前 1800 只 A 股（不含 ST）比，港股和港股通标的及总市值 20 亿港元以上的港股比；"
       "行业按 GICS 11 个一级行业归类。报表为累计口径（一季、半年、三季、年报），换算成单季后计算最近 12 个月。"
