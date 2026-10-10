@@ -388,7 +388,7 @@ def panorama(rows: list[PanoRow]) -> dict:
         contrib = [((r.dims[d][0] or 0.0) * (r.dims[d][1] or 0) / 100.0) if d in r.dims else 0.0 for r in scored]
         mx = statistics.mean(contrib)
         cov = statistics.mean((x - mx) * (c - mc) for x, c in zip(contrib, comp, strict=True))
-        weights = [r.dims[d][1] for r in scored if d in r.dims and r.dims[d][1] is not None]
+        weights = [float(w) for r in scored if d in r.dims and (w := r.dims[d][1]) is not None]
         influence[d] = {"nominal_weight_pct": round(statistics.mean(weights), 1) if weights else None,
                         "effective_influence_pct": round(cov / var_c * 100, 1) if var_c else None,
                         "covered_share": _share(len(weights), len(scored))}
@@ -447,4 +447,64 @@ def panorama(rows: list[PanoRow]) -> dict:
         "sector_bias": sector_bias, "metric_quality": quality,
         "flagged_metrics": {k: v["flags"] for k, v in quality.items() if v["flags"]},
         "redundant_metric_pairs": sorted(redundant, key=lambda x: -x["corr"])[:15],
+        "rebalance_whatif": rebalance_whatif(scored),
+    }
+
+
+def _influence(contribs: dict[str, list[float]], comp: list[float]) -> dict[str, float]:
+    """各维度对综合分的有效影响（贡献与综合分的协方差 ÷ 综合分方差，%）。"""
+    mc = statistics.mean(comp)
+    var_c = statistics.pvariance(comp)
+    out: dict[str, float] = {}
+    for d, xs in contribs.items():
+        mx = statistics.mean(xs)
+        out[d] = round(statistics.mean((x - mx) * (c - mc) for x, c in zip(xs, comp, strict=True)) / var_c * 100, 1) if var_c else 0.0
+    return out
+
+
+def rebalance_whatif(scored: list[PanoRow]) -> dict:
+    """反事实：把每个维度分数先换成它在全体里的百分位（同一把尺度），再按同样的实际权重合成。
+
+    目的：权重表写的占比是否真的等于「对排名的影响」。维度分数分散度不同（取平均的指标个数、相关性不同），
+    名义占比会和有效影响脱节；这里看统一尺度后：综合排名变多少（秩相关）、有效影响是否贴近名义占比、等级变化的分布。
+    只读已存的维度分数与权重，不含阶段同阶段排位 / 一票否决 / 防抖（只比较排位口径差异）。
+    """
+    from app.services.quant_research.grading import grade_for, percentile_of
+
+    dims = sorted({d for r in scored for d in r.dims})
+    dist = {d: sorted(r.dims[d][0] for r in scored if d in r.dims and r.dims[d][0] is not None) for d in dims}   # type: ignore[misc]
+    cur: list[float] = []
+    alt: list[float] = []
+    contrib_cur: dict[str, list[float]] = {d: [] for d in dims}
+    contrib_alt: dict[str, list[float]] = {d: [] for d in dims}
+    for r in scored:
+        use = [(d, sc, w) for d, (sc, w) in r.dims.items() if sc is not None and w]
+        tw = sum(w for _, _, w in use)
+        if not use or tw <= 0:
+            continue
+        a = {d: percentile_of(sc, dist[d], lower_better=False) for d, sc, _ in use}
+        cur.append(float(r.overall_score))                                           # type: ignore[arg-type]
+        alt.append(sum(a[d] * w for d, _, w in use) / tw)
+        have = {d: (sc, w) for d, sc, w in use}
+        for d in dims:
+            contrib_cur[d].append(have[d][0] * have[d][1] / tw if d in have else 0.0)
+            contrib_alt[d].append(a[d] * have[d][1] / tw if d in have else 0.0)
+    if len(cur) < MIN_GROUP:
+        return {"note": "样本不足"}
+    sc_c, sc_a = sorted(cur), sorted(alt)
+    notch = [GRADE_ORDER.index(grade_for(percentile_of(c, sc_c, lower_better=False)))
+             - GRADE_ORDER.index(grade_for(percentile_of(a, sc_a, lower_better=False))) for c, a in zip(cur, alt, strict=True)]
+    top_cur = {i for i, c in enumerate(cur) if percentile_of(c, sc_c, lower_better=False) >= 75}
+    top_alt = {i for i, a in enumerate(alt) if percentile_of(a, sc_a, lower_better=False) >= 75}
+    return {
+        "n": len(cur),
+        "rank_corr_current_vs_rescaled": spearman(cur, alt),
+        "influence_current_pct": _influence(contrib_cur, cur),
+        "influence_rescaled_pct": _influence(contrib_alt, alt),
+        "grade_change_share": {
+            "same": _share(sum(n == 0 for n in notch), len(notch)),
+            "within_1_notch": _share(sum(abs(n) <= 1 for n in notch), len(notch)),
+            "ge_3_notches": _share(sum(abs(n) >= 3 for n in notch), len(notch)),
+        },
+        "top_quartile_overlap": _share(len(top_cur & top_alt), len(top_cur)),
     }

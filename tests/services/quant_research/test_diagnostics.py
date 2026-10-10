@@ -144,3 +144,21 @@ def test_panorama_flags_redundancy_sector_bias_and_low_coverage():
     assert any(p["pair"] == "pe~pe_fwd" for p in r["redundant_metric_pairs"])
     assert set(r["dim_influence"]) == {"valuation", "growth"} and "growth~valuation" in r["dim_corr"]
     assert "symbol" not in str(r)
+
+
+def test_rebalance_whatif_equalizes_dispersion():
+    """维度 A 分散度大、B 分散度小而名义占比相同：统一尺度后 B 的有效影响应明显上升、A 下降。"""
+    import random
+
+    from app.services.quant_research.diagnostics import PanoRow, rebalance_whatif
+
+    rnd = random.Random(3)
+    rows = []
+    for _ in range(400):
+        a = rnd.uniform(0, 100)
+        b = 50 + rnd.uniform(-5, 5)                       # 几乎不分散
+        rows.append(PanoRow("s", "mature", (a + b) / 2, None, {"a": (a, 50), "b": (b, 50)}, {}))
+    r = rebalance_whatif(rows)
+    assert r["influence_current_pct"]["a"] > 90 and r["influence_current_pct"]["b"] < 10
+    assert r["influence_rescaled_pct"]["b"] > r["influence_current_pct"]["b"] + 30
+    assert 0 < r["rank_corr_current_vs_rescaled"] < 1 and "symbol" not in str(r)
