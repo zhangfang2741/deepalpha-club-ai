@@ -124,6 +124,24 @@ async def quant_diagnostics_netgap(request: Request, market: Literal["us", "cn",
     return {"status": "ok", "market": market, "as_of": day.isoformat(), "version": version, **diag.net_margin_gap(values)}
 
 
+@router.get("/diagnostics/sbcwhatif")
+@limiter.limit("2 per minute")
+async def quant_diagnostics_sbcwhatif(request: Request, market: Literal["us", "cn", "hk"] = Query("us")) -> dict:
+    """反事实：盈利能力新增「加回股权激励的经营利润率」会改变谁（影响面测算，不改评分）。
+
+    分页读已落库结果（页间让出时间），不请求任何数据源；只返回聚合，不含个股。临时工具，与 /diagnostics 一起在方法稳定后删除。
+    """
+    from app.services.quant_research import diagnostics as diag
+    from app.services.quant_research import repository as repo
+
+    dates = await repo.diagnostic_dates(market)
+    if not dates:
+        return {"status": "no_data"}
+    day, version, _ = dates[0]
+    return {"status": "ok", "market": market, "as_of": day.isoformat(), "version": version,
+            **diag.sbc_adjust_whatif(await repo.sbc_rows(market, day))}
+
+
 @router.get("/diagnostics/panorama")
 @limiter.limit("2 per minute")
 async def quant_diagnostics_panorama(request: Request, market: Literal["us", "cn", "hk"] = Query("us")) -> dict:

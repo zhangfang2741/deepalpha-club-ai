@@ -510,3 +510,47 @@ async def diagnostic_rows(market: str, as_of: date) -> list:
             _num_or_none(stage.get("revenue_growth_pct")) if isinstance(stage, dict) else None,
             _num_or_none(stage.get("revenue_cagr_3y_pct")) if isinstance(stage, dict) else None))
     return out
+
+
+async def sbc_rows(market: str, as_of: date, page: int = 100, pause: float = 0.25) -> list:
+    """测算「加回股权激励」用的行（不含代码）：板块 / 阶段 / 综合分 / 盈利能力分与占比 / 三个利润率。分页读、页间让出时间。"""
+    import asyncio
+
+    from app.services.quant_research.diagnostics import SbcRow  # 避免模块级循环依赖
+
+    def num(v: object) -> float | None:
+        return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+    out: list = []
+    offset = 0
+    while True:
+        q = (select(col(QuantResult.sector_key), col(QuantResult.payload_zh)["overall"], col(QuantResult.payload_zh)["stage"],
+                    col(QuantResult.payload_zh)["dimensions"])
+             .where(col(QuantResult.market) == market, col(QuantResult.as_of) == as_of)
+             .order_by(col(QuantResult.symbol)).limit(page).offset(offset))
+        async with AsyncSessionFactory() as s:
+            rows = (await s.execute(q)).all()
+        if not rows:
+            return out
+        for sector, overall, stage, dims in rows:
+            overall = overall if isinstance(overall, dict) else {}
+            prof_score = prof_w = None
+            vals: dict[str, float] = {}
+            keys: list[str] = []
+            for d in dims if isinstance(dims, list) else []:
+                if not isinstance(d, dict):
+                    continue
+                if d.get("key") == "profitability" and d.get("status") == "ok":
+                    prof_score = num(d.get("score"))
+                    prof_w = int(d["weight_pct"]) if isinstance(d.get("weight_pct"), int) else None
+                for g in d.get("groups", []):
+                    for m in g.get("metrics", []):
+                        if m.get("status") == "ok" and num(m.get("value")) is not None:
+                            if m.get("key") in ("ebit_m", "fcf_m", "fcf_sbc_m"):
+                                vals[m["key"]] = float(m["value"])
+                            if d.get("key") == "profitability":
+                                keys.append(m["key"])
+            out.append(SbcRow(sector, stage.get("key") if isinstance(stage, dict) else None, num(overall.get("score")),
+                              prof_score, prof_w, vals.get("ebit_m"), vals.get("fcf_m"), vals.get("fcf_sbc_m"), tuple(keys)))
+        offset += page
+        await asyncio.sleep(pause)
