@@ -648,11 +648,13 @@ async def profile_rows(market: str, as_of: date, page: int = 100, pause: float =
         await asyncio.sleep(pause)
 
 
-async def stage_ranking_rows(market: str, stage: str, lang: str) -> tuple[date | None, list[tuple]]:
-    """最近一天某阶段全部有综合分的股票：(代码, 名称, 综合等级, 综合分, 板块名)。只取几个 JSON 字段。"""
+async def stage_ranking_rows(market: str, stage: str, lang: str,
+                             as_of: date | None = None) -> tuple[date | None, list[tuple]]:
+    """某天（不传 = 最近一天）某阶段全部有综合分的股票：(代码, 名称, 综合等级, 综合分, 板块名)。只取几个 JSON 字段。"""
     payload = QuantResult.payload_en if lang == "en" else QuantResult.payload_zh
     async with AsyncSessionFactory() as s:
-        latest = (await s.execute(select(func.max(col(QuantResult.as_of))).where(col(QuantResult.market) == market))).scalar()
+        latest = as_of or (await s.execute(
+            select(func.max(col(QuantResult.as_of))).where(col(QuantResult.market) == market))).scalar()
         if latest is None:
             return None, []
         q = (select(col(QuantResult.symbol), col(payload)["name"].as_string(), col(payload)["overall"],

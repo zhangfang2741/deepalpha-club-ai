@@ -210,7 +210,7 @@ def test_stage_ranking_route(client, monkeypatch):
     c, _ = client
     seen = {}
 
-    async def fake(market, stage, lang, *, symbol, score, limit):
+    async def fake(market, stage, lang, *, symbol, score, limit, redis=None):
         seen.update(market=market, stage=stage, symbol=symbol, score=score, limit=limit)
         return StageRankingOut(market=market, stage=stage, as_of="2026-10-09", cohort_size=0, items=[])
 

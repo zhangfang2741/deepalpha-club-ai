@@ -278,9 +278,10 @@ async def quant_stage_ranking(
     limit: int = Query(30, ge=5, le=50),
     lang: Literal["zh", "en"] = Query("zh"),
     user: User = Depends(get_current_user),
+    redis: Redis | None = Depends(get_redis_optional),
 ) -> StageRankingOut:
     """同阶段综合分排名（点企业阶段时展示前若干家，并标出本股位置）；样本外股票按传入的综合分估算名次。"""
-    out = await get_stage_ranking(market, stage, lang, symbol=symbol, score=score, limit=limit)
+    out = await get_stage_ranking(market, stage, lang, symbol=symbol, score=score, limit=limit, redis=redis)
     logger.info("quant_stage_ranking_served", market=market, stage=stage, cohort=out.cohort_size, user_id=user.id)
     return out
 

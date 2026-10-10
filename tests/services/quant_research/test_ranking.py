@@ -36,3 +36,47 @@ def test_self_outside_universe_estimated_by_score():
 def test_empty_cohort():
     out = build_stage_ranking([], "decline", market="us", as_of=None, symbol="X", score=10.0, limit=30)
     assert out.cohort_size == 0 and out.items == [] and out.self_item is None
+
+
+class _FakeRedis:
+    def __init__(self, latest):
+        self.store = {"quant:us:latest_as_of": latest} if latest else {}
+
+    async def get(self, key):
+        return self.store.get(key)
+
+    async def set(self, key, value, ex=None):
+        self.store[key] = value
+
+
+async def test_rows_cached_per_stage_and_reused(monkeypatch):
+    from datetime import date
+
+    from app.services.quant_research import ranking
+
+    calls = []
+
+    async def fake_rows(market, stage, lang, as_of=None):
+        calls.append(as_of)
+        return date(2026, 10, 9), [("AAA", "A", "B", 80.0, "IT"), ("BBB", "B", "C", 60.0, "IT")]
+
+    monkeypatch.setattr(ranking.repo, "stage_ranking_rows", fake_rows)
+    redis = _FakeRedis("2026-10-09")
+    a = await ranking.get_stage_ranking("us", "growth", "zh", symbol="BBB", score=None, limit=30, redis=redis)
+    b = await ranking.get_stage_ranking("us", "growth", "zh", symbol="AAA", score=None, limit=30, redis=redis)
+    assert len(calls) == 1 and calls[0] == date(2026, 10, 9)        # 第二次走缓存，不再查库
+    assert a.self_item.rank == 2 and b.self_item.rank == 1           # 本股名次每次现算
+    assert b.as_of == "2026-10-09" and b.items[0].symbol == "AAA"
+
+
+async def test_without_redis_falls_back_to_db(monkeypatch):
+    from datetime import date
+
+    from app.services.quant_research import ranking
+
+    async def fake_rows(market, stage, lang, as_of=None):
+        return date(2026, 10, 9), [("AAA", "A", "B", 80.0, "IT")]
+
+    monkeypatch.setattr(ranking.repo, "stage_ranking_rows", fake_rows)
+    out = await ranking.get_stage_ranking("us", "growth", "zh", symbol=None, score=None, limit=30, redis=None)
+    assert out.cohort_size == 1

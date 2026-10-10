@@ -19,13 +19,28 @@ enum QuantResearchService {
         return try await APIClient.shared.get("/quant-research/methodology", query: ["lang": lang])
     }
 
-    /// 同阶段综合分排名：前 limit 家 + 本股位置（样本外股票按它自己的综合分估算名次）
+    /// 同阶段综合分排名：前 limit 家 + 本股位置（样本外股票按它自己的综合分估算名次）。
+    /// 本机内存缓存 30 分钟（排名每天只随批量变一次），反复点开企业阶段不再等网络。
     static func stageRanking(market: String, stage: String, symbol: String?, score: Double?,
                              limit: Int = 30) async throws -> QuantStageRanking {
         var query = ["lang": lang, "stage": stage, "limit": String(limit)]
         if let symbol { query["symbol"] = symbol.uppercased() }
         if let score { query["score"] = String(format: "%.1f", score) }
-        return try await APIClient.shared.get("/quant-research/\(market)/stage-ranking", query: query)
+        let key = market + "|" + query.sorted { $0.key < $1.key }.map { $0.key + "=" + $0.value }.joined(separator: "&")
+        if let hit = await StageRankingCache.shared.get(key) { return hit }
+        let fresh: QuantStageRanking = try await APIClient.shared.get("/quant-research/\(market)/stage-ranking", query: query)
+        await StageRankingCache.shared.set(key, fresh)
+        return fresh
+    }
+
+    /// 只给企业阶段弹层同步取缓存用（有缓存就不显示加载圈）
+    static func cachedStageRanking(market: String, stage: String, symbol: String?, score: Double?,
+                                   limit: Int = 30) async -> QuantStageRanking? {
+        var query = ["lang": lang, "stage": stage, "limit": String(limit)]
+        if let symbol { query["symbol"] = symbol.uppercased() }
+        if let score { query["score"] = String(format: "%.1f", score) }
+        let key = market + "|" + query.sorted { $0.key < $1.key }.map { $0.key + "=" + $0.value }.joined(separator: "&")
+        return await StageRankingCache.shared.get(key)
     }
 
     /// kind：latest = 最新一份定期报告；annual = 最新年报
@@ -59,4 +74,20 @@ enum QuantResearchService {
         return try? JSONDecoder().decode(T.self, from: data)
     }
     #endif
+}
+
+/// 同阶段排名的本机内存缓存（30 分钟；App 重启即清空）。
+actor StageRankingCache {
+    static let shared = StageRankingCache()
+    private var store: [String: (at: Date, value: QuantStageRanking)] = [:]
+    private let ttl: TimeInterval = 30 * 60
+
+    func get(_ key: String) -> QuantStageRanking? {
+        guard let hit = store[key], Date().timeIntervalSince(hit.at) < ttl else { return nil }
+        return hit.value
+    }
+
+    func set(_ key: String, _ value: QuantStageRanking) {
+        store[key] = (Date(), value)
+    }
 }
