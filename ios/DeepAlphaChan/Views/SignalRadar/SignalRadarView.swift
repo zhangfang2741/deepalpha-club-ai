@@ -283,7 +283,7 @@ struct SignalRadarView: View {
 
     // MARK: - 基本面雷达 / 评级雷达（标题下拉菜单里与缠论雷达并列）
 
-    /// 与缠论雷达同一张画布、同一套同心圈与气泡：圈 = 最近 1 周 / 1 月 / 3 月，颜色深浅 = 变化幅度，气泡大小与字母 = 综合等级。
+    /// 与缠论雷达同一张画布、同一套同心圈与气泡：圈 = 最近 3 天 / 1 周 / 1 个月，颜色深浅 = 变化幅度，气泡大小与字母 = 综合等级。
     /// 颜色和缠论雷达一致：红 = 向好的一侧（预期上调 / 等级上升 / 券商上调），绿 = 向差的一侧（下调 / 下降），下拉框切换类别。
     /// 基本面雷达只看我们自己的综合等级变化；评级雷达看券商评级（仅美股）。
     @ViewBuilder
@@ -454,6 +454,7 @@ struct SignalRadarView: View {
                             isNew: false,
                             marksConfirmed: false,
                             polished: true,
+                            gradeText: trendGradeText[layout.signal.date + ":" + layout.signal.symbol],
                             // 点气泡直接进个股详情：基本面雷达进「基本面研究」分段，评级雷达进「分析师评级」分段（和缠论雷达一样不先弹面板）
                             onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name, segment: vm.trendFlavor == .analyst ? .analyst : .quant) }
                         )
@@ -497,6 +498,13 @@ struct SignalRadarView: View {
             .frame(width: 24, height: 8)
     }
 
+    /// 评级变化气泡最后一行写「从 → 到」（如 B → A-），key = 后端 kind:代码（与 `RadarSignal.date` + `symbol` 对上）。
+    private var trendGradeText: [String: String] {
+        Dictionary(vm.trendItems.compactMap { it in
+            it.rating.map { (it.kind + ":" + it.symbol, $0.fromGrade + " → " + $0.toGrade) }
+        }, uniquingKeysWith: { a, _ in a })
+    }
+
     private var trendLegend: some View {
         HStack(spacing: 12) {
             // 颜色深浅 = 变化幅度：浅 → 深用同一色相渐变条表示；合并类（预期 / 等级变化）红绿各一条
@@ -521,8 +529,8 @@ struct SignalRadarView: View {
         .minimumScaleFactor(0.85)
     }
 
-    /// 三圈标签：最近 1 周 / 1 月 / 3 月（后端 ring_days 7 / 30 / 90）。
-    static var trendRingLabels: [String] { [L("近1周"), L("近1月"), L("近3月")] }
+    /// 三圈标签：最近 3 天 / 1 周 / 1 个月（后端 ring_days 3 / 7 / 30）。
+    static var trendRingLabels: [String] { [L("近3天"), L("近1周"), L("近1月")] }
 
     /// 颜色和缠论雷达完全一致（用户 2026-10-10 要求）：直接用缠论雷达气泡的那条**不透明**渐变（`bubbleColor`，浅粉 → 深红），
     /// 颜色越深 = 变化越大；两类动向用画布左上角的下拉框区分，不再各用一个色，也不用透明度（以前用红色加透明度，发灰发透）。
@@ -561,7 +569,7 @@ struct SignalRadarView: View {
     static func trendSignals(_ items: [QuantTrendItem]) -> [RadarSignal] {
         let depths = trendDepths(items.map { $0.magnitude ?? 1 })
         // 圈号用 bandIndex(forDaysAgo:) 的口径：0 → 内圈、≤3 → 中圈、其余 → 外圈
-        func age(_ ring: Int) -> Int { ring <= 7 ? 0 : (ring <= 30 ? 2 : 5) }
+        func age(_ ring: Int) -> Int { ring <= 3 ? 0 : (ring <= 7 ? 2 : 5) }
         return zip(items, depths).map { it, depth in
             RadarSignal(
                 symbol: it.symbol, name: it.name ?? "", side: "trend", label: "", signalType: "trend2",

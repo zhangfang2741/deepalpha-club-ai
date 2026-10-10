@@ -18,12 +18,12 @@ enum TrendDerivations {
             let minSteps = Int(th["rating_min_steps"] ?? 1)
             let steps: [DerivationStep] = [
                 DerivationStep(title: L("看什么"),
-                               text: L("我们给每家公司的综合等级（A+ 最高、F 最低，共 13 档），每天评一次。比较它现在和最近 1 周 / 1 个月 / 3 个月里最早一次评级。")),
+                               text: L("我们给每家公司的综合等级（A+ 最高、F 最低，共 13 档），每天评一次。比较它现在和最近 3 天 / 1 周 / 1 个月里最早一次评级。")),
                 DerivationStep(title: L("什么算上升 / 下降"),
                                text: L("同一套评级方法下，综合等级比窗口开头至少高几档是上升（红），至少低几档是下降（绿）。评级方法升级前后不是同一把尺子，不拿来比。"),
                                values: [(L("至少变几档"), "\(minSteps)")]),
                 DerivationStep(title: L("放哪一圈"),
-                               text: L("看多长时间里变的：1 周内变了放最内圈，否则 1 个月内，再否则 3 个月内。")),
+                               text: L("看多长时间里变的：3 天内变了放最内圈，否则 1 周内，再否则 1 个月内。")),
                 DerivationStep(title: L("颜色深浅"),
                                text: L("变的档数越多颜色越深；档数一样时，综合分变化大的略深。")),
             ]
@@ -42,7 +42,7 @@ enum TrendDerivations {
                                text: L("窗口内上调的家数减去下调的家数，大于 0 是净上调（红），小于 0 是净下调（绿）；一样多不画。"),
                                values: [(L("至少净差几家"), "\(Int(th["analyst_min_net"] ?? 1))")]),
                 DerivationStep(title: L("放哪一圈"),
-                               text: L("近 1 周就已经净上调（净下调）的放最内圈，否则看近 1 个月，再否则近 3 个月。同一只股票上调和下调都有时，会画两个气泡。")),
+                               text: L("近 3 天就已经净上调（净下调）的放最内圈，否则看近 1 周，再否则近 1 个月。同一只股票上调和下调都有时，会画两个气泡。")),
                 DerivationStep(title: L("颜色深浅"),
                                text: L("净变动的家数越多颜色越深；家数一样时，越近的略深。")),
             ]
@@ -76,8 +76,8 @@ enum TrendDerivations {
     static func emptyText(kind: QuantTrendKind, market: StockMarket) -> String {
         switch kind {
         case .rating:
-            return L("最近 3 个月没有综合等级变化的公司。评级方法升级后要重新攒几天历史，刚升级时这里会是空的。")
-        case .analyst: return L("最近 3 个月这个股票池里没有被券商净上调或净下调评级的股票")
+            return L("最近 1 个月没有综合等级变化的公司。评级方法升级后要重新攒几天历史，刚升级时这里会是空的。")
+        case .analyst: return L("最近 1 个月这个股票池里没有被券商净上调或净下调评级的股票")
         }
     }
 

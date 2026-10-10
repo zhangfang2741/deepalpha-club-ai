@@ -11,7 +11,7 @@ struct TrendListSheet: View {
 
     private var groups: [(label: String, items: [QuantTrendItem])] {
         let labels = SignalRadarView.trendRingLabels
-        return [(7, labels[0]), (30, labels[1]), (90, labels[2])].compactMap { ring, label in
+        return [(3, labels[0]), (7, labels[1]), (30, labels[2])].compactMap { ring, label in
             let g = items.filter { $0.ringDays == ring }
             return g.isEmpty ? nil : (label, g)
         }

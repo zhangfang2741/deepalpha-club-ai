@@ -1920,3 +1920,9 @@
 "评级变动" = "Rating changes";
 "正在计算综合等级的变化，第一次打开可能要等十几秒…" = "Working out changes in overall grades. The first open may take ten seconds or so…";
 "只陈列综合等级的变化事实，不代表股价会涨跌，不构成投资建议。" = "Only lists changes in overall grades. It does not mean the price will rise or fall and is not investment advice.";
+"近3天" = "Last 3d";
+"我们给每家公司的综合等级（A+ 最高、F 最低，共 13 档），每天评一次。比较它现在和最近 3 天 / 1 周 / 1 个月里最早一次评级。" = "Our overall grade for each company (A+ highest, F lowest, 13 steps), graded daily. Compare it now with its earliest grade in the last 3 days / 1 week / 1 month.";
+"看多长时间里变的：3 天内变了放最内圈，否则 1 周内，再否则 1 个月内。" = "How long the change took: changed within 3 days goes in the innermost ring, otherwise within 1 week, otherwise within 1 month.";
+"近 3 天就已经净上调（净下调）的放最内圈，否则看近 1 周，再否则近 1 个月。同一只股票上调和下调都有时，会画两个气泡。" = "Net upgraded (downgraded) within the last 3 days goes in the innermost ring, otherwise the last week, otherwise the last month. A stock with both upgrades and downgrades gets two bubbles.";
+"最近 1 个月没有综合等级变化的公司。评级方法升级后要重新攒几天历史，刚升级时这里会是空的。" = "No company's overall grade has changed in the last month. After a rating-method upgrade it takes a few days to rebuild history, so this is empty right after an upgrade.";
+"最近 1 个月这个股票池里没有被券商净上调或净下调评级的股票" = "No stock in this pool was net-upgraded or net-downgraded by brokers in the last month";

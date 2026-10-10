@@ -18,6 +18,8 @@ struct RadarBubble: View {
     var marksConfirmed = true
     /// 质感：左上一抹高光 + 一圈细白边（基本面动向用，让深浅不同的气泡更像一颗颗球、不是一块块平色）。
     var polished = false
+    /// 最后一行代替综合等级字母的文字（评级变化气泡写「B → A-」，一眼看清从几级到几级）。
+    var gradeText: String? = nil
     let onOpen: () -> Void
 
     /// 持续漂浮的竖向偏移（在 -6 ↔ 6 间无限往复）。初值就是起点 -6：以前初值 0、onAppear 里才设成 -6，
@@ -134,7 +136,7 @@ struct RadarBubble: View {
                 }
                 // 评级 mark 嵌入气泡内部（替代原右上角角标）：有评级时显示在最后一行，
                 // 直径仍由 symbol+name 决定，grade 字号独立、放不下由渲染层压缩兜底
-                if let grade = displayedGrade {
+                if let grade = gradeText ?? displayedGrade {
                     Text(grade)
                         .font(Font(metrics.gradeFont))
                         .monospacedDigit()
