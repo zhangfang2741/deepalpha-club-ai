@@ -74,7 +74,9 @@ def build_analyst_radar(
                 symbol=symbol, name=names.get(symbol, symbol), grade=grade, kind=kind, ring_days=ring,
                 strength=float(net), magnitude=magnitude, good=bool(good), sector=sectors.lookup_tag(tags, symbol),
                 analyst=AnalystChangeOut(up=ups, down=downs, window_days=ring, last_date=side[0]["date"],
-                                         firms=firms[: ae.MAX_FIRMS], to_bucket=ae.bucket_of(side[0]["new"])),
+                                         firms=firms[: ae.MAX_FIRMS], to_bucket=ae.bucket_of(side[0]["new"]),
+                                         from_bucket=ae.bucket_of(side[0]["prev"]), from_grade=side[0]["prev"],
+                                         to_grade=side[0]["new"]),
                 facts=TrendFacts()))
     items: list[TrendRadarItem] = []
     counts: dict[str, int] = {}
@@ -132,7 +134,7 @@ _PENDING_TTL = 60
 
 
 def _cache_key(market: str, scope: str) -> str:
-    return f"signal_radar:analyst_radar:v2:{market}:{scope}"
+    return f"signal_radar:analyst_radar:v3:{market}:{scope}"  # v3：带最近一次动作的前后评级
 
 
 async def cached_analyst_radar(

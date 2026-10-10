@@ -313,6 +313,9 @@ class AnalystChangeOut(BaseModel):
     last_date: str                     # 窗口里最近一次上调 / 下调的日期（按这一类的方向）
     firms: list[str] = []              # 最近几家（最多 3 家）
     to_bucket: str = ""                # 最近一次动作的新评级归类：buy / hold / sell
+    from_bucket: str = ""              # 最近一次动作的原评级归类：buy / hold / sell（气泡写「从 → 到」）
+    from_grade: str = ""               # 最近一次动作的券商原评级名（如 Neutral）；归类相同时 App 改写原名
+    to_grade: str = ""                 # 最近一次动作的券商新评级名（如 Outperform）
 
 
 class TrendRadarItem(BaseModel):

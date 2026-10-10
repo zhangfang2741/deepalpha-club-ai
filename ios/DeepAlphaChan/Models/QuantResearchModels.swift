@@ -689,12 +689,41 @@ struct QuantAnalystChange: Decodable, Hashable {
     let lastDate: String?
     let firms: [String]
     let toBucket: String?
+    /// 最近一次动作的原评级归类与券商原名（旧后端没有，为 nil）。
+    let fromBucket: String?
+    let fromGrade: String?
+    let toGrade: String?
 
     enum CodingKeys: String, CodingKey {
         case up, down, firms
         case windowDays = "window_days"
         case lastDate = "last_date"
         case toBucket = "to_bucket"
+        case fromBucket = "from_bucket"
+        case fromGrade = "from_grade"
+        case toGrade = "to_grade"
+    }
+
+    /// 气泡最后一行的「从 → 到」，用与分析师评级分段相同的五档名（强力买入 / 买入 / 持有 / 卖出 / 强力卖出）：
+    /// 先按券商原名细分出「强力」两档（Strong Buy / Top Pick → 强力买入，Strong Sell → 强力卖出），其余用后端的三档归类；
+    /// 五档也相同（如 Buy → Outperform）才写券商原名。缺数据为 nil。
+    var changeText: String? {
+        func level(grade: String?, bucket: String?) -> String? {
+            let g = (grade ?? "").lowercased()
+            if g.contains("strong sell") { return L("强力卖出") }
+            if g.contains("strong buy") || g.contains("top pick") || g.contains("conviction buy") { return L("强力买入") }
+            switch bucket {
+            case "buy": return L("买入")
+            case "hold": return L("持有")
+            case "sell": return L("卖出")
+            default: return nil
+            }
+        }
+        if let f = level(grade: fromGrade, bucket: fromBucket), let t = level(grade: toGrade, bucket: toBucket), f != t {
+            return f + " → " + t
+        }
+        if let f = fromGrade, let t = toGrade, !f.isEmpty, !t.isEmpty, f != t { return f + " → " + t }
+        return nil
     }
 }
 

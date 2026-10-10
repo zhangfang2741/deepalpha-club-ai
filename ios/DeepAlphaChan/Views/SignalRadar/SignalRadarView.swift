@@ -374,10 +374,9 @@ struct SignalRadarView: View {
             let kind = vm.trendKind
             let signals = SignalRadarView.trendSignals(vm.trendItems)
             let labels = SignalRadarView.trendRingLabels
-            // 圈的大小按各圈条数分配：A 股预期上调曾 22 只全在「近 1 周」，固定的最内圈只放得下 1 只
-            let scales = SignalRadarView.ringScales(counts: (0..<3).map { band in
-                signals.prefix(SignalRadarView.trendFieldCap).filter { SignalRadarView.bandIndex(forDaysAgo: $0.ageDays ?? 0) == band }.count
-            })
+            // 圈的间距与缠论雷达一致（固定 1/3、2/3、1，2026-10-11 起）：以前按各圈条数分配，条数不均时三个圈挤在一起或拉得很开，看着不协调。
+            // 显式传入（而不是 nil）是为了沿用评级雷达的摆法：放不下时只缩小气泡、不放宽圈带（圈 = 时间段，不能混）。
+            let scales = SignalRadarView.ringSpecs.map(\.scale)
             let key = FieldLayoutKey(
                 signals: signals, candidates: [], sectorMode: false, order: [], rs: [], names: [],
                 dayDate: "trend-\(kind.rawValue)-\(trend.asOf ?? "")", width: w, height: h, avoid: [], gradeRings: labels)
@@ -451,10 +450,13 @@ struct SignalRadarView: View {
             .frame(width: 24, height: 8)
     }
 
-    /// 评级变化气泡最后一行写「从 → 到」（如 B → A-），key = 后端 kind:代码（与 `RadarSignal.date` + `symbol` 对上）。
+    /// 变化类气泡最后一行写「从 → 到」，key = 后端 kind:代码（与 `RadarSignal.date` + `symbol` 对上）：
+    /// 基本面雷达写综合等级（B → A-）；评级雷达写最近一次券商评级变动（持有 → 买入，见 `QuantAnalystChange.changeText`）。
     private var trendGradeText: [String: String] {
         Dictionary(vm.trendItems.compactMap { it in
-            it.rating.map { (it.kind + ":" + it.symbol, $0.fromGrade + " → " + $0.toGrade) }
+            if let r = it.rating { return (it.kind + ":" + it.symbol, r.fromGrade + " → " + r.toGrade) }
+            if let text = it.analyst?.changeText { return (it.kind + ":" + it.symbol, text) }
+            return nil
         }, uniquingKeysWith: { a, _ in a })
     }
 
@@ -1494,23 +1496,6 @@ struct SignalRadarView: View {
             let hi = i == scales.count - 1 ? 1.0 : scales[i] - 0.05 - (i == 0 ? 0.01 : 0)
             return lo...max(lo, hi)
         }
-    }
-
-    /// 环线半径按各圈条数分配（基本面动向用）：某一圈条目多就把它画大，面积大致与条数成正比
-    /// （每圈另加 0.6 的底数，空圈也留一点位置）；相邻环线至少隔 0.15、最内圈不小于 0.2。
-    /// 缠论雷达不用它——那里圈 = 时间远近，固定间距才看得出「越靠中心越新」。
-    static func ringScales(counts: [Int]) -> [Double] {
-        guard counts.count == ringSpecs.count, counts.reduce(0, +) > 0 else { return ringSpecs.map(\.scale) }
-        let weights = counts.map { Double($0) + 0.6 }
-        let total = weights.reduce(0, +)
-        var cum = 0.0
-        var r = weights.map { w -> Double in cum += w; return (cum / total).squareRoot() }
-        let gap = 0.15
-        r[r.count - 1] = 1
-        for i in stride(from: r.count - 2, through: 0, by: -1) { r[i] = min(r[i], r[i + 1] - gap) }
-        r[0] = max(r[0], 0.2)
-        for i in 1..<r.count { r[i] = max(r[i], r[i - 1] + gap) }
-        return r.map { min($0, 1) }
     }
 
     static let ringLabelHeight = 16.0

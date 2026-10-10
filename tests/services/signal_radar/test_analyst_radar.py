@@ -82,3 +82,15 @@ def test_sorted_by_ring_then_strength_and_carries_names_sector_and_pending():
 def test_unsupported_market_is_empty():
     out = build_analyst_radar({}, names={}, grades={}, tags={}, as_of=AS_OF, market="cn", pending=0, supported=False)
     assert out.supported is False and out.items == []
+
+
+def test_latest_action_carries_from_and_to_ratings():
+    """气泡写「从 → 到」：取这一方向最近一次动作的前后评级（原名 + 买入 / 持有 / 卖出归档）。"""
+    out = _build({
+        "UP": [_a("2026-10-08", "GS", "Buy", "upgrade", "Hold"), _a("2026-10-01", "MS", "Outperform", "upgrade", "Neutral")],
+        "DOWN": [_a("2026-10-08", "JPM", "Underweight", "downgrade", "Neutral")],
+    })
+    by = {i.symbol: i.analyst for i in out.items}
+    assert (by["UP"].from_grade, by["UP"].to_grade, by["UP"].from_bucket, by["UP"].to_bucket) == ("Hold", "Buy", "hold", "buy")
+    assert (by["DOWN"].from_grade, by["DOWN"].to_grade, by["DOWN"].from_bucket, by["DOWN"].to_bucket) == (
+        "Neutral", "Underweight", "hold", "sell")

@@ -27,7 +27,6 @@ struct ConclusionCard: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(tint.opacity(0.35), lineWidth: 1))
     }
 
     private var phase: PivotPhase? { analysis.pivotPhase }
