@@ -40,6 +40,7 @@ from app.schemas.chan import (
     StructureGapResponse,
     StructureLayerOut,
     SubLevelResponse,
+    SmcOverlayOut,
     WyckoffOverlayOut,
 )
 from app.services import symbol_lookup
@@ -61,6 +62,7 @@ from app.services.chan.window import canonical_daily_fetch_start, canonical_dail
 from app.services.chan.sub_level_service import current_sub_level
 from app.services.chan.sub_level_service import signal_out as _signal_out
 from app.services.skills.kline import LIVE_MAX_AGE, fetch_kline
+from app.services.smc.overlay import build_overlay as build_smc_overlay
 from app.services.wyckoff.overlay import build_overlay
 
 router = APIRouter()
@@ -187,24 +189,42 @@ def _boll_out(result: ChanAnalysisResult) -> BollOut | None:
     return BollOut(period=b.period, mult=b.mult, upper=b.upper, mid=b.mid, lower=b.lower)
 
 
-def _wyckoff_out(symbol: str, bars: list[dict], result: ChanAnalysisResult, visible_from: str,
-                 freq: str, end_date: str) -> WyckoffOverlayOut | None:
-    """威科夫图表指标：失败不影响缠论主体（指标是辅助，不能因为它让详情页打不开）。
+def _indicator_window_start(visible_from: str, freq: str, end_date: str) -> str:
+    """威科夫 / SMC 这类要看一整段结构的指标共用的起点。
 
-    日线用固定的两年窗口（与缠论同一个 canonical_daily_start），不随用户所选起始日期变短：
-    用户选了较晚的起点时，威科夫只看到短短几个月，识别不出结构、事件稀少（BABA 实测）。
+    日线用固定的两年窗口（与缠论同一个 canonical_daily_start），不随用户所选起始日期变短——
+    用户选了较晚的起点时，指标只看到短短几个月，识别不出结构、事件稀少（BABA 实测）。
     """
     if freq == "daily":
         try:
-            visible_from = min(visible_from, canonical_daily_start(end_date))
+            return min(visible_from, canonical_daily_start(end_date))
         except ValueError:
             pass
+    return visible_from
+
+
+def _wyckoff_out(symbol: str, bars: list[dict], result: ChanAnalysisResult, visible_from: str,
+                 freq: str, end_date: str) -> WyckoffOverlayOut | None:
+    """威科夫图表指标：失败不影响缠论主体（指标是辅助，不能因为它让详情页打不开）。"""
+    visible_from = _indicator_window_start(visible_from, freq, end_date)
     try:
         o = build_overlay(symbol, bars, [c.end_time or c.time for c in result.merged_candles], visible_from=visible_from)
     except Exception:
         logger.exception("wyckoff_overlay_failed", symbol=symbol)
         return None
     return WyckoffOverlayOut.model_validate(asdict(o)) if o else None
+
+
+def _smc_out(symbol: str, bars: list[dict], result: ChanAnalysisResult, visible_from: str,
+             freq: str, end_date: str) -> SmcOverlayOut | None:
+    """SMC 图表指标：同样失败不影响缠论主体。"""
+    visible_from = _indicator_window_start(visible_from, freq, end_date)
+    try:
+        o = build_smc_overlay(bars, [c.end_time or c.time for c in result.merged_candles], freq, visible_from=visible_from)
+    except Exception:
+        logger.exception("smc_overlay_failed", symbol=symbol)
+        return None
+    return SmcOverlayOut.model_validate(asdict(o)) if o else None
 
 
 @router.get("/analysis", response_model=ChanAnalysisResponse)
@@ -387,6 +407,7 @@ async def chan_analysis(
         ema=_ema_out(result),
         boll=_boll_out(result),
         wyckoff=_wyckoff_out(symbol, bars, result, start_date, freq, end_date),
+        smc=_smc_out(symbol, bars, result, start_date, freq, end_date),
         signals=[_signal_out(sig) for sig in result.signals],
         current_trend=result.current_trend,
         walk_type=result.walk_type,

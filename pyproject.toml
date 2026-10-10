@@ -165,6 +165,7 @@ convention = "google"
 "app/models/regime_market_features.py" = ["D415"]
 "app/models/regime_market_sector_features.py" = ["D415"]
 "app/services/graph/*.py" = ["D415"]
+"app/services/smc/*.py" = ["D415"]
 "app/schemas/supply_chain.py" = ["D415"]
 "app/api/v1/supply_chain.py" = ["D415"]
 "alembic/versions/*.py" = ["D415"]
