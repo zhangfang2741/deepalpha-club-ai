@@ -47,7 +47,7 @@ def test_derivation_terms_resolve():
     lesson_keys = set(re.findall(r'^\s*"([^"]+)":\s*"[a-z-]+",', index_src, re.M))
     known = keys | lesson_keys
     files = [ROOT / "Views" / "SignalRadar" / "MacroDerivations.swift", ROOT / "Views" / "SignalRadar" / "RadarDerivations.swift",
-             ROOT / "Views" / "Analysis" / "SignalDerivation.swift"]
+             ROOT / "Views" / "Analysis" / "SignalDerivation.swift", ROOT / "Views" / "SignalRadar" / "TrendDerivations.swift"]
     seen = 0
     for f in files:
         for group in re.findall(r"terms:\s*\[([^\]]*)\]", f.read_text()):

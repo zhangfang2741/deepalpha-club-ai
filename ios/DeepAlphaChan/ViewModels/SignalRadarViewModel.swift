@@ -125,6 +125,7 @@ final class SignalRadarViewModel: ObservableObject {
     /// 当前指数展示名：优先从列表里按高亮键取（计算中 response 为 nil 时也有名字），否则退回响应里的 etf_name。
     /// 顶部市场分段条（已选中那一段下面的小字）与雷达页的扫描提示共用。
     var activeUniverseName: String {
+        if trendMode { return L("基本面动向") }
         if let u = availableUniverses.first(where: { $0.key == activeUniverseKey }) { return u.displayName }
         if activeUniverseKey == RadarUniverse.watchlistKey { return L("自选") }
         // 切市场时 response 暂时还是上一个市场的（保留旧内容防跳动），它的名称不能拿来用，
@@ -413,6 +414,7 @@ final class SignalRadarViewModel: ObservableObject {
         // 把上一个市场的那天错误地拼进这个市场的日期轨——不同市场、不同股票，纯粹
         // 是错的，不能留着当占位。
         restoreDemoFromCache()
+        if trendMode { Task { await loadTrend() } }
         if applyCachedSnapshot() { return }
         Task { await load() }
     }
@@ -420,6 +422,10 @@ final class SignalRadarViewModel: ObservableObject {
     /// 切换当前市场的 universe（科技窄基 ↔ 大盘宽基）。key 与当前生效的相同则忽略。
     /// 注意不清空 availableUniverses：正在计算时切换器仍要在，方便随时切回别的指数。
     func switchUniverse(_ key: String) {
+        if trendMode {
+            trendMode = false            // 从「基本面动向」切回某个指数的缠论雷达
+            if key == activeUniverseKey { return }
+        }
         guard key != activeUniverseKey else { return }
         sectorFilter = nil
         universeByMarket[market] = key
@@ -429,6 +435,44 @@ final class SignalRadarViewModel: ObservableObject {
         restoreDemoFromCache()
         if applyCachedSnapshot() { return }
         Task { await load() }
+    }
+
+    // MARK: - 基本面动向雷达
+
+    /// 指数下拉框里的「基本面动向」：打开后画布换成动向雷达（同一张画布、同一套圈与气泡），
+    /// 数据来自 `/quant-research/{market}/trend-radar`，与缠论雷达的指数 / 日期无关；选回任一指数即退出。
+    @Published private(set) var trendMode = false
+    @Published private(set) var trend: QuantTrendRadar?
+    @Published private(set) var trendLoading = false
+    @Published private(set) var trendError: String?
+    @Published var trendKind: QuantTrendKind = .estimates
+
+    /// 当前类别的条目（后端已按圈、按幅度排好）。
+    var trendItems: [QuantTrendItem] {
+        guard let trend, trend.market == market.rawValue else { return [] }
+        return trend.items.filter { $0.kind == trendKind.rawValue }
+    }
+
+    func enterTrend() {
+        guard !trendMode else { return }
+        trendMode = true
+        Task { await loadTrend() }
+    }
+
+    func loadTrend() async {
+        let m = market.rawValue
+        if trend?.market != m { trend = nil }
+        trendError = nil
+        trendLoading = true
+        defer { trendLoading = false }
+        do {
+            let fresh = try await QuantResearchService.trendRadar(market: m)
+            guard m == market.rawValue else { return }   // 加载期间切了市场，丢弃旧结果
+            trend = fresh
+        } catch {
+            guard m == market.rawValue else { return }
+            trendError = error.localizedDescription
+        }
     }
 
     /// 口径在「我的 → 买卖点口径」里被改了：雷达跟着切（不论雷达页当前是否可见）。

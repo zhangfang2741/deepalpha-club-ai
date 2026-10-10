@@ -43,6 +43,16 @@ enum QuantResearchService {
         return await StageRankingCache.shared.get(key)
     }
 
+    /// 基本面动向雷达（每天随批量更新一次）；本机内存缓存 30 分钟。
+    static func trendRadar(market: String) async throws -> QuantTrendRadar {
+        let key = "trend|" + market + "|" + lang
+        if let hit = await TrendRadarCache.shared.get(key) { return hit }
+        let fresh: QuantTrendRadar = try await APIClient.shared.get("/quant-research/\(market)/trend-radar",
+                                                                   query: ["lang": lang])
+        await TrendRadarCache.shared.set(key, fresh)
+        return fresh
+    }
+
     /// kind：latest = 最新一份定期报告；annual = 最新年报
     static func latestReport(market: StockMarket, symbol: String, kind: String = "latest") async throws -> LatestReport {
         try await APIClient.shared.get("/quant-research/\(market.rawValue)/\(symbol.uppercased())/report",
@@ -88,6 +98,22 @@ actor StageRankingCache {
     }
 
     func set(_ key: String, _ value: QuantStageRanking) {
+        store[key] = (Date(), value)
+    }
+}
+
+/// 基本面动向雷达的本机内存缓存（30 分钟；App 重启即清空）。
+actor TrendRadarCache {
+    static let shared = TrendRadarCache()
+    private var store: [String: (at: Date, value: QuantTrendRadar)] = [:]
+    private let ttl: TimeInterval = 30 * 60
+
+    func get(_ key: String) -> QuantTrendRadar? {
+        guard let hit = store[key], Date().timeIntervalSince(hit.at) < ttl else { return nil }
+        return hit.value
+    }
+
+    func set(_ key: String, _ value: QuantTrendRadar) {
         store[key] = (Date(), value)
     }
 }

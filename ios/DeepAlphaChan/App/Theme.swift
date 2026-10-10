@@ -31,6 +31,9 @@ enum Theme {
     static let bollLine = Color(hex: 0x94A3B8)
     /// 威科夫（交易区间 + 事件标记）：浅棕，避开红 / 绿（只给买卖点）与笔 / 中枢 / 背驰 / 均线已用的颜色。
     static let wyckoff = Color(hex: 0xD4A373)
+    /// 基本面动向雷达：预期上调 / 质地改善（避开红绿——红绿只给已成立的买卖点）
+    static let trendEstimates = Color(hex: 0x3B82F6)
+    static let trendQuality = Color(hex: 0xA855F7)
 
     // MARK: - 内容容器边距
 

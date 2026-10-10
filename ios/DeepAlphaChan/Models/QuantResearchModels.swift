@@ -623,3 +623,74 @@ struct QuantStageRankingSelf: Decodable {
         case inUniverse = "in_universe"
     }
 }
+
+/// 基本面动向事实（后端批量时算好）：预期修正与最近一季 vs 上一季的质地变化。
+struct QuantTrendFacts: Decodable, Hashable {
+    let nAnalysts: Int
+    let epsRev7d: Double?
+    let epsRev30d: Double?
+    let epsRev90d: Double?
+    let qualityPeriod: String?
+    let qualityPrevPeriod: String?
+    let filingDate: String?
+    let dRevYoyPp: Double?
+    let dGrossMPp: Double?
+    let dEbitMPp: Double?
+    let dFcfMPp: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case nAnalysts = "n_analysts"
+        case epsRev7d = "eps_rev_7d"
+        case epsRev30d = "eps_rev_30d"
+        case epsRev90d = "eps_rev_90d"
+        case qualityPeriod = "quality_period"
+        case qualityPrevPeriod = "quality_prev_period"
+        case filingDate = "filing_date"
+        case dRevYoyPp = "d_rev_yoy_pp"
+        case dGrossMPp = "d_gross_m_pp"
+        case dEbitMPp = "d_ebit_m_pp"
+        case dFcfMPp = "d_fcf_m_pp"
+    }
+}
+
+/// 基本面动向雷达的一只股票：属于哪一类、落在哪一圈。
+struct QuantTrendItem: Decodable, Identifiable, Hashable {
+    let symbol: String
+    let name: String?
+    let sectorName: String?
+    let grade: String?
+    let kind: String          // estimates | quality
+    let ringDays: Int         // 7 / 30 / 90
+    let strength: Double
+    let facts: QuantTrendFacts
+
+    var id: String { kind + ":" + symbol }
+
+    enum CodingKeys: String, CodingKey {
+        case symbol, name, grade, kind, strength, facts
+        case sectorName = "sector_name"
+        case ringDays = "ring_days"
+    }
+}
+
+/// 基本面动向雷达：最近一周 / 一个月 / 三个月里预期上调或质地改善的公司（只陈列事实）。
+struct QuantTrendRadar: Decodable {
+    let market: String
+    let asOf: String?
+    let rings: [Int]
+    let thresholds: [String: Double]
+    let items: [QuantTrendItem]
+    let counts: [String: Int]
+
+    enum CodingKeys: String, CodingKey {
+        case market, rings, thresholds, items, counts
+        case asOf = "as_of"
+    }
+}
+
+/// 动向雷达的两类事实。
+enum QuantTrendKind: String, CaseIterable, Identifiable {
+    case estimates, quality
+    var id: String { rawValue }
+    var title: String { self == .estimates ? L("预期上调") : L("质地改善") }
+}

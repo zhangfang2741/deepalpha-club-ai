@@ -68,6 +68,8 @@ struct SignalRadarView: View {
     @State private var pendingDetail: RadarSignal?
     /// 在基本面名单里点了某一行：收起面板后再打开个股（该股票可能当前没有买卖点，所以不是 RadarSignal）。
     @State private var pendingGood: (symbol: String, name: String)?
+    /// 在基本面动向列表里点了某一行：收起面板后打开个股的「基本面研究」分段。
+    @State private var pendingTrend: (symbol: String, name: String)?
     /// 标题旁折叠：展开「市场 → 行业 → 好股票 → 买点」流程图。默认折叠。
     @State private var showFlow = false
     /// 首次进入雷达时弹一次的新手导览（看过会记在 UserDefaults；学习页 / 我的里可重看）。
@@ -118,6 +120,11 @@ struct SignalRadarView: View {
                 await goodVM.load(market: vm.market.rawValue, universe: vm.activeUniverseKey, sector: vm.sectorFilter)
             }
             .sheet(item: $panel, onDismiss: {
+                if let t = pendingTrend {
+                    pendingTrend = nil
+                    openSymbol(t.symbol, name: t.name, segment: .quant)
+                    return
+                }
                 if let g = pendingGood {
                     pendingGood = nil
                     openSymbol(g.symbol, name: g.name)
@@ -215,7 +222,9 @@ struct SignalRadarView: View {
                 }
             }
 
-            if vm.isScanning {
+            if vm.trendMode {
+                trendContent
+            } else if vm.isScanning {
                 scanningView
             } else if vm.isComputingInBackground {
                 computingView
@@ -269,6 +278,187 @@ struct SignalRadarView: View {
                         .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
                 }
             }
+        }
+    }
+
+    // MARK: - 基本面动向雷达（指数下拉框里的「基本面动向」）
+
+    /// 与缠论雷达同一张画布、同一套同心圈与气泡：圈 = 最近 1 周 / 1 月 / 3 月，气泡大小 = 变化幅度（同类里分三档），
+    /// 气泡里的字母 = 综合等级。颜色不用红 / 绿（红绿只留给已成立的买卖点），预期上调蓝、质地改善紫。
+    @ViewBuilder
+    private var trendContent: some View {
+        trendHeader
+        if let trend = vm.trend, trend.market == vm.market.rawValue {
+            if trend.asOf == nil {
+                trendMessage(L("基本面动向数据准备中：上线后的第一次计算约需 1 小时，稍后再来看。"))
+            } else {
+                trendField(trend)
+            }
+        } else if let err = vm.trendError {
+            VStack(spacing: 10) {
+                trendMessage(err)
+                Button(L("重试")) { Task { await vm.loadTrend() } }
+            }
+        } else {
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        trendLegend
+        Spacer(minLength: 0)
+        Text(L("只陈列预期与财报的变化事实，不代表股价会涨，不构成投资建议。"))
+            .font(.caption2)
+            .foregroundColor(Theme.textSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 4)
+    }
+
+    private var trendHeader: some View {
+        VStack(spacing: 6) {
+            Picker(L("动向类别"), selection: $vm.trendKind) {
+                ForEach(QuantTrendKind.allCases) { k in
+                    Text(trendKindTitle(k)).tag(k)
+                }
+            }
+            .pickerStyle(.segmented)
+            HStack(spacing: 8) {
+                if let d = vm.trend?.asOf {
+                    Text(L("数据日期：%@", d)).font(.caption).foregroundColor(Theme.textSecondary)
+                }
+                Spacer(minLength: 4)
+                if let trend = vm.trend {
+                    DerivationLink(title: L("基本面动向怎么算的"),
+                                   result: TrendDerivations.rules(trend, kind: vm.trendKind, market: vm.market))
+                }
+            }
+        }
+    }
+
+    private func trendKindTitle(_ k: QuantTrendKind) -> String {
+        guard let n = vm.trend?.counts[k.rawValue], vm.trend?.market == vm.market.rawValue else { return k.title }
+        return k.title + " · \(n)"
+    }
+
+    private func trendMessage(_ text: String) -> some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundColor(Theme.textSecondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, minHeight: SignalRadarView.fieldMinHeight, maxHeight: .infinity)
+    }
+
+    private func trendField(_ trend: QuantTrendRadar) -> some View {
+        GeometryReader { geo in
+            let w = Double(geo.size.width)
+            let h = Double(geo.size.height)
+            let kind = vm.trendKind
+            let signals = SignalRadarView.trendSignals(vm.trendItems)
+            let labels = SignalRadarView.trendRingLabels
+            let key = FieldLayoutKey(
+                signals: signals, candidates: [], sectorMode: false, order: [], rs: [], names: [],
+                dayDate: "trend-\(kind.rawValue)-\(trend.asOf ?? "")", width: w, height: h, avoid: [], gradeRings: labels)
+            let field = layoutCache.value(for: key) {
+                SignalRadarView.layoutRingField(signals: signals, dayDate: "", width: w, height: h, avoid: [],
+                                                gradeRings: labels)
+            }
+            ZStack {
+                fieldDecoration(width: w, height: h)
+                if field.bubbles.isEmpty {
+                    Text(TrendDerivations.emptyText(kind: kind, market: vm.market))
+                        .font(.subheadline)
+                        .foregroundColor(Theme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .position(x: CGFloat(w / 2), y: CGFloat(h / 2))
+                } else {
+                    ForEach(field.bubbles) { layout in
+                        RadarBubble(
+                            signal: layout.signal,
+                            metrics: layout.metrics,
+                            baseX: CGFloat(layout.x),
+                            baseY: CGFloat(layout.y),
+                            phase: layout.phase,
+                            color: SignalRadarView.trendColor(kind, level: layout.signal.level),
+                            isNew: false,
+                            marksConfirmed: false,
+                            // 点气泡直接进个股的「基本面研究」分段（和缠论雷达一样不先弹面板）
+                            onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name, segment: .quant) }
+                        )
+                        .transition(.identity)
+                    }
+                }
+                ringLabels(width: w, height: h, labels: labels)
+                if !vm.trendItems.isEmpty {
+                    // 画布最多画 ringFieldCap 个；完整名单（含每只的具体变化）在列表里
+                    Button { panel = .trendList } label: {
+                        Text(field.hidden > 0 ? L("另有 %lld 个 · 查看全部", field.hidden) : L("查看名单与变化"))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(Theme.accent)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Theme.surface.opacity(0.92), in: Capsule())
+                            .overlay(Capsule().stroke(Theme.border, lineWidth: 1))
+                            .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .position(x: CGFloat(w / 2), y: CGFloat(h - 22))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: SignalRadarView.fieldMinHeight, maxHeight: .infinity)
+        .background(
+            RadialGradient(
+                colors: [Color(hex: 0x131A26), Theme.background],
+                center: .center, startRadius: 6, endRadius: 280
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var trendLegend: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 4) {
+                Circle().fill(SignalRadarView.trendColor(vm.trendKind, level: 3)).frame(width: 8, height: 8)
+                Text(vm.trendKind.title).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+            }
+            HStack(spacing: 3) {
+                sizeDot(diameter: SignalRadarView.diameter(forLevel: 1))
+                sizeDot(diameter: SignalRadarView.diameter(forLevel: 3))
+                Text(L("大小=变化幅度")).font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+            }
+            Text(L("越靠中心越近 · 字母=综合等级"))
+                .font(.system(size: 10)).foregroundColor(Theme.textSecondary)
+                .lineLimit(1).minimumScaleFactor(0.8)
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// 三圈标签：最近 1 周 / 1 月 / 3 月（后端 ring_days 7 / 30 / 90）。
+    static var trendRingLabels: [String] { [L("近1周"), L("近1月"), L("近3月")] }
+
+    /// 预期上调蓝、质地改善紫；同类里变化越大越深（分三档，与气泡大小同一档）。
+    static func trendColor(_ kind: QuantTrendKind, level: Int) -> Color {
+        let base = kind == .estimates ? Theme.trendEstimates : Theme.trendQuality
+        return base.opacity([0.6, 0.78, 0.95][max(0, min(2, level - 1))])
+    }
+
+    /// 动向条目 → 气泡用的 RadarSignal：圈由 ring_days 决定（7 / 30 / 90 天 → 第 1 / 2 / 3 圈），
+    /// 大小按同类里变化幅度分三档（signalType 末位 1 / 2 / 3），等级字母 = 综合等级。
+    static func trendSignals(_ items: [QuantTrendItem]) -> [RadarSignal] {
+        let sorted = items.map(\.strength).sorted()
+        func level(_ v: Double) -> Int {
+            guard sorted.count >= 3 else { return 2 }
+            let lo = sorted[sorted.count / 3], hi = sorted[(sorted.count * 2) / 3]
+            return v >= hi ? 3 : (v >= lo ? 2 : 1)
+        }
+        // 圈号用 bandIndex(forDaysAgo:) 的口径：0 → 内圈、≤3 → 中圈、其余 → 外圈
+        func age(_ ring: Int) -> Int { ring <= 7 ? 0 : (ring <= 30 ? 2 : 5) }
+        return items.map { it in
+            RadarSignal(
+                symbol: it.symbol, name: it.name ?? "", side: "trend", label: "", signalType: "trend\(level(it.strength))",
+                date: it.kind, price: 0, strength: it.strength, bias: "", signalStrength: "medium", confirmed: true,
+                pivotStageDepth: 0, subLevelVerdict: nil, subLevelLabel: nil, quantGrade: it.grade, quantScore: nil,
+                quantAsOf: nil, quantStatus: it.grade == nil ? "missing" : "ok", ageDays: age(it.ringDays),
+                sector: it.sectorName)
         }
     }
 
@@ -656,9 +846,9 @@ struct SignalRadarView: View {
     }
 
     /// 环上时间标签：当日 / 3天内 / 7天内，小胶囊、画在气泡上层（位置见 ringLabelBoxes，摆位已避开）。
-    private func ringLabels(width w: Double, height h: Double) -> some View {
-        ForEach(Array(zip(SignalRadarView.ringSpecs.indices, SignalRadarView.ringLabelBoxes(width: w, height: h, labels: nil))), id: \.0) { i, box in
-            Text(SignalRadarView.ringSpecs[i].label)
+    private func ringLabels(width w: Double, height h: Double, labels: [String]? = nil) -> some View {
+        ForEach(Array(zip(SignalRadarView.ringSpecs.indices, SignalRadarView.ringLabelBoxes(width: w, height: h, labels: labels))), id: \.0) { i, box in
+            Text(labels?[i] ?? SignalRadarView.ringSpecs[i].label)
                 .font(.system(size: 9, weight: .medium))
                 .foregroundColor(Theme.textSecondary)
                 .frame(width: CGFloat(box.width), height: CGFloat(box.height))
@@ -888,6 +1078,14 @@ struct SignalRadarView: View {
             if let ctx = factContext {
                 RadarSignalListSheet(context: ctx, universeName: currentUniverseName, onOpenDetail: openDetail)
             }
+        case .trendList:
+            TrendListSheet(kind: vm.trendKind, items: vm.trendItems, asOf: vm.trend?.asOf,
+                           onOpen: { symbol, name in
+                               pendingTrend = (symbol, name)
+                               self.panel = nil
+                           })
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         case .goodStocks:
             // 免费用户（只能看示例日）：买卖点只按示例日那一天判断，不把锁住的日期透出来
             GoodStocksSheet(vm: goodVM, threshold: vm.response?.qualityThreshold, universeName: currentUniverseName,
