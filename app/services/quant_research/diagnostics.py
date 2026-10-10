@@ -13,6 +13,7 @@
 - ``/diagnostics/sbcwhatif``：盈利能力里新增「加回股权激励的经营利润率」的反事实（影响面测算，不改评分）。
 - ``/diagnostics/nongaap``：抽样核查 FMP 非 GAAP 实际 EPS 的覆盖率与和 GAAP EPS 的差距（评估是否改用，不改评分）。
 - ``/diagnostics/nongaap-whatif``：全体美股改用非 GAAP EPS（市盈率 / EPS 同比 / PEG）的等级反事实（后台任务，不改评分）。
+- ``/diagnostics/lossprofile``：「GAAP 经营亏损但现金流为正的高增长公司」这一类的规模、等级分布与被哪些维度拖低。
 - ``/diagnostics/panorama``：维度相关 / 名义占比 vs 有效影响 / 板块偏差 / 指标体检 / 冗余指标 / 统一尺度反事实 / 各阶段画像。
 """
 
@@ -840,3 +841,60 @@ def nongaap_whatif(rows: list[NgFull]) -> dict:
             "growth_mean": round(statistics.mean(gro_delta), 2) if gro_delta else None},
         "recon_mean_abs_error": round(statistics.mean(recon_err), 2) if recon_err else None,
     }
+
+
+# ---------- 「SNOW / CRWD 型」公司的规模与等级分布 ----------
+
+@dataclass(frozen=True)
+class ProfileRow:
+    stage: str | None
+    grade: str | None
+    percentile: float | None          # 综合排位（同阶段 / 全体）
+    ebit_m: float | None
+    fcf_m: float | None
+    fcf_sbc_m: float | None
+    rev_yoy: float | None             # 营收同比（小数）
+    dim_scores: dict[str, float | None]
+
+
+def _band(grade: str) -> str:
+    i = GRADE_ORDER.index(grade)
+    return "b_or_better" if i <= GRADE_ORDER.index("B-") else "c" if i <= GRADE_ORDER.index("C-") else "d" if i < len(GRADE_ORDER) - 1 else "f"
+
+
+def loss_profile(rows: list[ProfileRow], growth_cut: float = 0.15) -> dict:
+    """GAAP 经营亏损（EBIT 利润率 < 0）但自由现金流为正的高增长公司（营收同比 ≥ growth_cut）有多少、等级怎么分布、被哪些维度拖低。
+
+    对照组：真烧钱（经营亏损且现金流 ≤ 0）、盈利的高增长公司、全体。只含聚合，不含个股。
+    """
+    usable = [r for r in rows if r.ebit_m is not None and r.fcf_m is not None and r.rev_yoy is not None]
+    if len(usable) < MIN_GROUP * 3:
+        return {"note": "样本不足"}
+
+    def part(rs: list[ProfileRow]) -> dict:
+        if len(rs) < MIN_GROUP:
+            return {"n": len(rs), "note": "样本不足"}
+        graded = [r for r in rs if r.grade in GRADE_ORDER]
+        out: dict = {"n": len(rs), "share_of_universe": _share(len(rs), len(usable))}
+        if graded:
+            bands = Counter(_band(r.grade) for r in graded)                          # type: ignore[arg-type]
+            out["grade_bands"] = {k: _share(bands.get(k, 0), len(graded)) for k in ("b_or_better", "c", "d", "f")}
+        pcts = [r.percentile for r in rs if r.percentile is not None]
+        if pcts:
+            out["mean_percentile"] = round(statistics.mean(pcts), 1)
+        dims = sorted({d for r in rs for d in r.dim_scores})
+        by_dim = {d: [v for r in rs if (v := r.dim_scores.get(d)) is not None] for d in dims}
+        out["mean_dimension_score"] = {d: round(statistics.mean(v), 1) for d, v in by_dim.items() if len(v) >= MIN_GROUP}
+        out["share_dimension_weak_lt30"] = {d: _share(sum(x < 30 for x in v), len(v)) for d, v in by_dim.items() if v}
+        known = [r for r in rs if r.fcf_sbc_m is not None]
+        if len(known) >= MIN_GROUP:
+            out["share_fcf_after_sbc_positive"] = _share(sum(r.fcf_sbc_m > 0 for r in known), len(known))                          # type: ignore[operator]
+        return out
+
+    loss_pos = [r for r in usable if r.ebit_m < 0 < r.fcf_m]                          # type: ignore[operator]
+    loss_pos_hg = [r for r in loss_pos if r.rev_yoy >= growth_cut]                    # type: ignore[operator]
+    burn = [r for r in usable if r.ebit_m < 0 and r.fcf_m <= 0]                       # type: ignore[operator]
+    prof_hg = [r for r in usable if r.ebit_m >= 0 and r.rev_yoy >= growth_cut]        # type: ignore[operator]
+    return {"universe": len(usable), "growth_cut": growth_cut,
+            "groups": {"loss_fcf_positive_high_growth": part(loss_pos_hg), "loss_fcf_positive_all": part(loss_pos),
+                       "loss_burning_cash": part(burn), "profitable_high_growth": part(prof_hg), "all": part(usable)}}

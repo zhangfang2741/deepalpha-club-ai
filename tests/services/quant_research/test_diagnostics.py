@@ -254,3 +254,30 @@ def test_nongaap_whatif_small_sample():
     from app.services.quant_research.diagnostics import nongaap_whatif
 
     assert nongaap_whatif([])["note"] == "样本不足"
+
+
+def _pr(grade, pct, ebit_m, fcf_m, fcf_sbc_m, rev_yoy, **dims):
+    from app.services.quant_research.diagnostics import ProfileRow
+
+    return ProfileRow("growth", grade, pct, ebit_m, fcf_m, fcf_sbc_m, rev_yoy, dims)
+
+
+def test_loss_profile_groups_and_drag_dimensions():
+    from app.services.quant_research.diagnostics import loss_profile
+
+    rows = []
+    for i in range(15):   # 经营亏损 + 现金流为正 + 高增长（SNOW / CRWD 型）
+        rows.append(_pr("D+", 30.0, -0.1, 0.2, 0.05 if i % 2 else -0.02, 0.3, growth=85.0, profitability=15.0, valuation=10.0, stability=60.0))
+    for _ in range(15):   # 真烧钱
+        rows.append(_pr("F", 5.0, -0.3, -0.2, -0.3, 0.2, growth=70.0, profitability=5.0, valuation=20.0, stability=10.0))
+    for _ in range(15):   # 盈利
+        rows.append(_pr("B", 70.0, 0.15, 0.2, 0.15, 0.2, growth=70.0, profitability=75.0, valuation=40.0, stability=70.0))
+    out = loss_profile(rows)
+    g = out["groups"]["loss_fcf_positive_high_growth"]
+    assert g["n"] == 15 and g["share_of_universe"] == round(15 / 45, 3)
+    assert g["grade_bands"]["d"] == 1.0
+    assert g["mean_dimension_score"]["profitability"] == 15.0
+    assert g["share_fcf_after_sbc_positive"] == round(7 / 15, 3)
+    assert out["groups"]["profitable_high_growth"]["grade_bands"]["b_or_better"] == 1.0
+    assert "symbol" not in str(out)
+    assert loss_profile(rows[:5])["note"] == "样本不足"
