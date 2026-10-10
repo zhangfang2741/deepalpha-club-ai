@@ -450,8 +450,8 @@ final class SignalRadarViewModel: ObservableObject {
     @Published var trendOnlyGood = true
 
     /// 综合等级从高到低；排序、气泡大小都按它。
-    static let gradeOrder = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F"]
-    static func gradeRank(_ grade: String?) -> Int { grade.flatMap { gradeOrder.firstIndex(of: $0) } ?? gradeOrder.count }
+    static let gradeOrder = GradeOrder.all
+    static func gradeRank(_ grade: String?) -> Int { GradeOrder.rank(grade) }
 
     /// 某类别在当前「精选 / 行业」筛选下是否保留这一条。
     private func trendVisible(_ item: QuantTrendItem, kind: QuantTrendKind) -> Bool {

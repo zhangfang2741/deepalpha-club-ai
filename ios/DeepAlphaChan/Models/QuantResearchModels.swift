@@ -653,6 +653,13 @@ struct QuantTrendFacts: Decodable, Hashable {
     }
 }
 
+/// 综合等级 13 档，从高到低；排序、评级雷达的气泡大小都按它。放在不带 actor 隔离的枚举里，静态布局函数也能直接用。
+enum GradeOrder {
+    static let all = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F"]
+    /// 名次：0 = A+（最高）；没有评级 / 认不出的排在最后。
+    static func rank(_ grade: String?) -> Int { grade.flatMap { all.firstIndex(of: $0) } ?? all.count }
+}
+
 /// 评级改善：综合等级在同一评级方法下比窗口内最早一个评级日升了几档。
 struct QuantRatingChange: Decodable, Hashable {
     let fromGrade: String

@@ -59,7 +59,7 @@ enum TrendDerivations {
 
     /// 两类共用的最后两步：气泡大小 = 综合等级；精选 = 只画综合等级达到门槛的公司。
     private static func visualSteps(_ t: QuantTrendRadar) -> [DerivationStep] {
-        var steps = [DerivationStep(title: L("气泡大小"), text: L("综合等级：A+ 最大，往下每一档小一点，D 及以下最小。气泡里的字母就是综合等级。"))]
+        var steps = [DerivationStep(title: L("气泡大小"), text: L("综合等级：在当前画出来的公司里，等级最高的最大、最低的最小，中间按名次均分。气泡里的字母就是综合等级。画布最多画 12 个，其余在「查看名单与变化」里。"))]
         if let grade = t.goodGrade {
             steps.append(DerivationStep(
                 title: L("精选"),
