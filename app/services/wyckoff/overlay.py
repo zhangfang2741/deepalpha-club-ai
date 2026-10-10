@@ -13,6 +13,12 @@ from app.services.wyckoff.analyzer import WyckoffAnalyzer
 
 _analyzer = WyckoffAnalyzer()
 
+# 区间太窄（宽度不到支撑价的这个比例）视为没有识别出有效交易区间：真实数据里这类「区间」是几根 K 线的小波动，
+# 画出来是一条细线加一堆事件，只会误导（RKLB 实测 22.01–22.55，宽度 2.4%）。
+MIN_RANGE_WIDTH = 0.04
+# 突破判定缓冲：与 phases.determine_phase 一致（区间宽度的 15%）。
+_BREAK_BUF = 0.15
+
 
 @dataclass
 class OverlayEvent:
@@ -53,6 +59,19 @@ def _candle_index(end_times: list[str], t: str) -> int | None:
     return i if i < len(end_times) else None
 
 
+def _breakout_time(bars: list[dict], start_time: str, support: float, resistance: float, width: float) -> str | None:
+    """区间起点之后第一根收盘离开区间（超出 15% 区间宽度缓冲）的 K 线时间；一直在区间内返回 None。"""
+    buf = width * _BREAK_BUF if width > 0 else resistance * 0.01
+    for b in bars:
+        t = str(b["time"])
+        if t <= start_time:
+            continue
+        c = float(b["close"])
+        if c > resistance + buf or c < support - buf:
+            return t
+    return None
+
+
 def build_overlay(symbol: str, bars: list[dict], end_times: list[str], *, visible_from: str | None = None) -> WyckoffOverlay | None:
     """威科夫结构裁成图上叠加物。
 
@@ -79,16 +98,27 @@ def build_overlay(symbol: str, bars: list[dict], end_times: list[str], *, visibl
     )
     if r.trading_range is None:
         return out
+    tr = r.trading_range
+    if tr.support <= 0 or tr.width / tr.support < MIN_RANGE_WIDTH:
+        # 区间无效：整体按「结构不明」处理，阶段标签也跟着改（阶段是由这个区间推出来的）
+        return WyckoffOverlay(context="undetermined", stage="undetermined", stage_label="结构不明",
+                              phase="", phase_label="", breakout="none")
 
     by_time = {str(b["time"]): b for b in use}
-    tr = r.trading_range
+    # 区间画到突破那根为止（价格已离开区间后，区间不再描述当前，带子拉到今天会把整段行情罩住）；
+    # 事件也只留到突破为止——之后重复出现的 SOS / SOW 是趋势里的放量，不是区间里的结构（NVDA 实测 11 个 SOS）。
+    cut = _breakout_time(use, tr.start_time, tr.support, tr.resistance, tr.width)
+    last = len(end_times) - 1
+    end_idx = last if cut is None else (_candle_index(end_times, cut) or last)
     start = _candle_index(end_times, tr.start_time)
     if start is not None:
         out.trading_range = OverlayRange(
             kind=tr.kind, support=tr.support, resistance=tr.resistance,
-            start_idx=start, end_idx=len(end_times) - 1,
+            start_idx=start, end_idx=max(start, end_idx),
         )
     for e in r.events:
+        if cut is not None and e.time > cut:
+            continue
         idx = _candle_index(end_times, e.time)
         if idx is None:
             continue

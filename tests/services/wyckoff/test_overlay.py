@@ -20,7 +20,7 @@ def test_overlay_aligns_events_and_range_to_candle_index():
         # 合并 K 线与原始 K 线一一对应时，下标就是原始下标
         assert bars[e.idx]["time"] == e.time
         assert e.side in ("high", "low")
-    assert o.trading_range.start_idx <= o.trading_range.end_idx == len(bars) - 1
+    assert o.trading_range.start_idx <= o.trading_range.end_idx <= len(bars) - 1
     sc = next(e for e in o.events if e.code == "SC")
     assert sc.side == "low"
 
@@ -58,3 +58,38 @@ def test_overlay_has_no_trading_wording():
     text = json.dumps(dataclasses.asdict(o), ensure_ascii=False)
     for w in ("买点", "卖点", "低吸", "减仓", "离场", "做空", "建议"):
         assert w not in text
+
+
+def test_overlay_range_and_events_stop_at_breakout():
+    """价格收盘离开区间后，区间带与事件都只到突破那根（之后的放量是趋势，不是区间结构）。"""
+    bars = _make_accumulation_bars()
+    o = build_overlay("TEST", bars, _times(bars))
+    assert o is not None and o.trading_range is not None
+    r = o.trading_range
+    # 夹具末尾是连续放量上冲出区间：区间不该一直画到最后一根
+    assert o.breakout == "up"
+    assert r.end_idx < len(bars) - 1
+    assert all(e.idx <= r.end_idx for e in o.events)
+    assert bars[r.end_idx]["close"] > r.resistance
+
+
+def test_overlay_degenerate_range_is_undetermined():
+    """区间宽度不到支撑价 4% 时按结构不明处理：不画带、不标事件、阶段也不保留。"""
+    from app.services.wyckoff import overlay as mod
+    from app.services.wyckoff.analyzer import WyckoffAnalyzer
+
+    bars = _make_accumulation_bars()
+    r = WyckoffAnalyzer().analyze("TEST", bars)
+    assert r.trading_range is not None
+    wide = r.trading_range.width / r.trading_range.support
+    assert wide > mod.MIN_RANGE_WIDTH  # 夹具本身是宽区间
+
+    old = mod.MIN_RANGE_WIDTH
+    try:
+        mod.MIN_RANGE_WIDTH = wide + 0.01  # 抬高门槛 → 夹具的区间变成「太窄」
+        o = build_overlay("TEST", bars, _times(bars))
+    finally:
+        mod.MIN_RANGE_WIDTH = old
+    assert o is not None
+    assert o.trading_range is None and o.events == []
+    assert o.stage == "undetermined" and o.context == "undetermined"
