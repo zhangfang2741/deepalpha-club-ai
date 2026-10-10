@@ -184,3 +184,63 @@ def test_build_adds_rating_items_with_magnitude_good_flag_and_no_trend_needed():
     assert by["G1"].rating.from_grade == "B" and by["G1"].rating.steps == 2
     assert out.counts["rating"] == 2 and out.counts["rating_good"] == 2
     assert out.thresholds["rating_min_steps"] == 1
+
+
+# ── 下调一侧（绿色）：预期下调、等级下降 ────────────────────────────────────
+
+
+def test_estimates_down_mirrors_the_up_rule():
+    assert estimates_item(TrendFacts(n_analysts=5, eps_rev_7d=-0.03), down=True) == (7, 0.03)      # 强度取绝对值
+    assert estimates_item(TrendFacts(n_analysts=5, eps_rev_7d=-0.01, eps_rev_30d=-0.06), down=True) == (30, 0.06)
+    assert estimates_item(TrendFacts(n_analysts=5, eps_rev_90d=-0.05), down=True) is None            # 不够 10%
+    assert estimates_item(TrendFacts(n_analysts=2, eps_rev_7d=-0.5), down=True) is None              # 分析师太少
+    assert estimates_item(TrendFacts(n_analysts=5, eps_rev_7d=0.5), down=True) is None               # 上调不算下调
+    assert estimates_item(TrendFacts(n_analysts=5, eps_rev_7d=-0.5)) is None                         # 下调不算上调
+
+
+def test_rating_decline_mirrors_the_improvement_rule():
+    from app.services.quant_research.trend_radar import rating_item
+
+    pts = [_gp("2026-10-02", "A", 80.0), _gp("2026-10-09", "B+", 66.0)]
+    r = rating_item(pts, down=True)
+    assert r is not None
+    assert (r.ring_days, r.steps, r.from_grade, r.to_grade, r.score_delta) == (7, 2, "A", "B+", -14.0)
+    assert rating_item(pts) is None                                                           # 降档不算改善
+    assert rating_item([_gp("2026-10-02", "B"), _gp("2026-10-09", "A")], down=True) is None  # 升档不算下降
+    # 跨方法版本照样不比较
+    assert rating_item([_gp("2026-10-05", "A", version="q10"), _gp("2026-10-09", "C", version="q11")], down=True) is None
+
+
+def test_rating_changes_down_has_the_same_bulk_guard():
+    from app.services.quant_research.trend_radar import rating_changes
+
+    history = {f"S{k}": [_gp("2026-10-05", "A"), _gp("2026-10-09", "C" if k < 5 else "A")] for k in range(10)}
+    assert rating_changes(history, down=True) == {}
+
+
+def test_build_adds_down_kinds_and_keeps_them_apart_from_the_up_kinds():
+    from app.services.quant_research.trend_radar import rating_item
+
+    rows = _pool(["G1"]) + [_est_row("DN", "A", eps_rev_7d=-0.05), _est_row("UP", "A", eps_rev_7d=0.05)]
+    down = {"DN": rating_item([_gp("2026-10-05", "A", 80.0), _gp("2026-10-09", "B", 60.0)], down=True)}
+    up = {"UP": rating_item([_gp("2026-10-05", "B", 60.0), _gp("2026-10-09", "A", 80.0)])}
+    out = build_trend_radar(rows, market="us", as_of=AS_OF, ratings=up, ratings_down=down)
+    kinds = {(i.symbol, i.kind) for i in out.items}
+    assert ("DN", "estimates_down") in kinds and ("DN", "rating_down") in kinds
+    assert ("UP", "estimates") in kinds and ("UP", "rating") in kinds
+    assert ("DN", "estimates") not in kinds and ("UP", "estimates_down") not in kinds
+    dn = next(i for i in out.items if i.symbol == "DN" and i.kind == "rating_down")
+    assert dn.magnitude == 3.2                                  # 降 3 档 + 综合分 -20 的零头 0.2，全是正数
+    assert dn.rating is not None and dn.rating.steps == 3
+    assert out.counts["estimates_down"] == 1 and out.counts["rating_down"] == 1
+
+
+def test_rating_down_counts_as_good_when_it_used_to_be_good():
+    """好股票里谁在变差才是下调一侧该看的：现在已经掉出门槛的，只要原来达标也留下（否则最值得看的恰好被「精选」筛掉）。"""
+    from app.services.quant_research.trend_radar import rating_item
+
+    rows = _pool(["G1"]) + [_est_row("FELL", "C", eps_rev_7d=0.0)]
+    down = {"FELL": rating_item([_gp("2026-10-05", "A", 80.0), _gp("2026-10-09", "C", 45.0)], down=True)}
+    out = build_trend_radar(rows, market="us", as_of=AS_OF, ratings_down=down)
+    fell = next(i for i in out.items if i.symbol == "FELL" and i.kind == "rating_down")
+    assert fell.good                                           # 现在 C 不达标，但原来 A 达标

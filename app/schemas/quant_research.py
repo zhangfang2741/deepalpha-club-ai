@@ -305,18 +305,29 @@ class RatingChangeOut(BaseModel):
     to_date: str                       # 最新评级日
 
 
+class AnalystChangeOut(BaseModel):
+    """评级雷达：窗口内券商的净上调 / 净下调（FMP 个股评级变动；维持评级不算）。"""
+    up: int                            # 窗口内上调家数
+    down: int                          # 窗口内下调家数
+    window_days: int                   # 7 / 30 / 90
+    last_date: str                     # 窗口里最近一次上调 / 下调的日期（按这一类的方向）
+    firms: list[str] = []              # 最近几家（最多 3 家）
+    to_bucket: str = ""                # 最近一次动作的新评级归类：buy / hold / sell
+
+
 class TrendRadarItem(BaseModel):
     symbol: str
     name: str | None = None
     sector_name: str | None = None
     grade: str | None = None
-    kind: Literal["estimates", "quality", "rating"]
+    kind: Literal["estimates", "estimates_down", "quality", "rating", "rating_down", "analyst_up", "analyst_down"]
     ring_days: int                     # 落在哪一圈：7 / 30 / 90
     strength: float                    # 变化本身：预期 = 该圈变化率；质地 = 改善的百分点合计
     magnitude: float = 1.0             # 变化是入圈门槛的几倍（预期 = 变化率 ÷ 该圈门槛；质地 = 改善百分点 ÷ 利润率门槛），跨圈可比，App 用它定颜色深浅
     good: bool = False                 # 综合等级达到本市场的「好股票」门槛（与信号雷达同一套自适应规则）
     sector: str | None = None          # 信号雷达的行业 key（与雷达顶部行业横条同一套），App 点行业筛选用
     rating: RatingChangeOut | None = None   # kind == rating 时的等级变化
+    analyst: AnalystChangeOut | None = None  # kind 为 analyst_up / analyst_down 时的券商评级变动
     facts: TrendFacts
 
 
