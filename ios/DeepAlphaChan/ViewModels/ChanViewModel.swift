@@ -5,7 +5,11 @@ import SwiftUI
 @MainActor
 final class ChanViewModel: ObservableObject {
     // 查询参数
-    @Published var symbol: String = "AAPL"
+    /// 代码一变就清掉 displayName：名称属于上一只标的，沿用会串到新代码上
+    /// （RKLB 加自选后显示成上一只看过的「东山精密」）。入口能提供名称时在改完代码后再设。
+    @Published var symbol: String = "AAPL" {
+        didSet { if symbol != oldValue { displayName = nil } }
+    }
     /// 用户显式选择的市场。不靠代码形态猜——猜是能猜对，但 4~6 位数字在
     /// A 股和港股之间有歧义时，用户没有办法纠正。选了就以选的为准。
     @Published var market: StockMarket = .us

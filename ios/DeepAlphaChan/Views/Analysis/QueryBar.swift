@@ -39,6 +39,8 @@ struct QueryBar: View {
         // 填的值和输入框里已有的一样就不会触发 onChange，此时不能留着标记，否则会吞掉下一次真实输入
         skipNextSearch = vm.symbol != hit.symbol
         vm.symbol = hit.symbol
+        // 联想自带名称：必须在改完代码之后设（代码一变会清掉旧名称）
+        vm.displayName = hit.name.isEmpty ? nil : hit.name
         suggestions = []
         submit()
     }
