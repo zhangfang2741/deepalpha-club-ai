@@ -1,0 +1,35 @@
+[
+  {
+    "step_id": "01",
+    "screen_action": "market_radar",
+    "actual_time_sec": 0.0003679990768432617,
+    "layers": []
+  },
+  {
+    "step_id": "02",
+    "layers": [],
+    "screen_action": "industry_radar",
+    "actual_time_sec": 5.418552994728088
+  },
+  {
+    "screen_action": "stock_radar",
+    "layers": [],
+    "step_id": "03",
+    "actual_time_sec": 15.700914025306702
+  },
+  {
+    "actual_time_sec": 23.719941020011902,
+    "layers": [],
+    "screen_action": "fundamental",
+    "step_id": "04"
+  },
+  {
+    "screen_action": "chan_structure",
+    "actual_time_sec": 32.80686295032501,
+    "layers": [
+      "fractals",
+      "strokes"
+    ],
+    "step_id": "05"
+  }
+]

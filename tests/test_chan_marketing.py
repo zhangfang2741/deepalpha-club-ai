@@ -21,6 +21,15 @@ from scripts.chan_marketing import (
     wait_file,
 )
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_marketing_fundamental_step_opens_quant_segment() -> None:
+    source = (ROOT / "ios/DeepAlphaChan/Views/SignalRadar/SignalRadarView.swift").read_text()
+    fundamental_branch = source.split('case "fundamental":', 1)[1].split("default:", 1)[0]
+
+    assert "openSymbol(symbol, name: nil, segment: .quant)" in fundamental_branch
+
 
 def test_error_prevents_stale_response(tmp_path: Path) -> None:
     """存在旧响应也不能掩盖本次错误."""

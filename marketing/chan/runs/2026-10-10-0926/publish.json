@@ -1,0 +1,44 @@
+{
+  "date_beijing": "2026-10-10",
+  "run_id": "2026-10-10-0926",
+  "status": "sent",
+  "symbol": "LLY",
+  "market_date": "2026-09-01",
+  "market_event": "礼来 2026 年第二季度业绩与全年营收指引",
+  "primary_source": "https://www.sec.gov/Archives/edgar/data/59478/000005947826000077/q226lillysalesandearningsp.htm",
+  "creative_format": "市场到缠论结构五层筛选链反差教学",
+  "difference_from_last_14d": "首次使用真实示例快照串联市场、行业、个股确认信号、六维基本面分位与最新缠论结构；标的、钩子、结论和画面路径均不同",
+  "sha256": "5bd5f544e682207fdffdb5f8badf500effcf6015b25980ed42244fa38bbcd341",
+  "media_url": "https://api.deepalpha.club/api/v1/media/files/6402a7db8ae340f29019d698ed49a3e388bcb449.mp4",
+  "media_verification": {
+    "anonymous_head": "passed video/mp4",
+    "anonymous_get_sha256": "5bd5f544e682207fdffdb5f8badf500effcf6015b25980ed42244fa38bbcd341"
+  },
+  "channels": {
+    "tiktok": {
+      "channel": "littlemonkey437",
+      "post_id": "6ac99579b07d37ac97593f5b",
+      "status": "sent",
+      "public_url": "https://tiktok.com/@littlemonkey437/video/7694846460587805972",
+      "is_ai_generated": true
+    },
+    "youtube": {
+      "channel": "DeepAlpha",
+      "post_id": "6ac995b4f91f772d457a5f0f",
+      "status": "sent",
+      "public_url": "https://www.youtube.com/watch?v=lJriVwOldZw",
+      "privacy": "public",
+      "category": "Education",
+      "is_ai_generated": true
+    }
+  },
+  "deepalpha_app_store_prompt_evidence": {
+    "on_screen": "frame-05.jpg 完整显示 App Store 搜索 DeepAlpha 缠论",
+    "narration": "第五段完整口播 App Store 搜索 DeepAlpha 缠论",
+    "youtube_description": "完整品牌名及 https://apps.apple.com/app/id6806500280"
+  },
+  "next_reviews_beijing": {
+    "24h": "2026-10-11T09:35:20+08:00",
+    "72h": "2026-10-13T09:35:20+08:00"
+  }
+}

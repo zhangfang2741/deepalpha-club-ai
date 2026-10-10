@@ -1,0 +1,27 @@
+# 选题回执
+
+{
+  "run_id": "2026-10-10-0920",
+  "date": "2026-10-10",
+  "status": "success",
+  "mode": "五层筛选链反差教学：信号数量不是唯一选股理由，必须同时核对行业、基本面、一手事实与价格结构",
+  "selected": {
+    "symbol": "MU",
+    "eligible": true,
+    "confirmed_fractals": 8,
+    "bars_count": 251,
+    "last_bar": "2026-10-09",
+    "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+  },
+  "candidates": [
+    {
+      "symbol": "MU",
+      "eligible": true,
+      "confirmed_fractals": 8,
+      "bars_count": 251,
+      "last_bar": "2026-10-09",
+      "source": "https://api.deepalpha.club/api/v1/chan/analysis"
+    }
+  ],
+  "note": "基于一手事件来源制作：美光于 2026-09-30 向 SEC 提交 8-K 并发布 2026 财年第四季度及全年业绩；第四季度营收 542.3 亿美元，上一季度为 414.6 亿美元，并给出 2027 财年第一季度营收 615 亿美元上下 15 亿美元的展望；只讲已确认历史结构"
+}

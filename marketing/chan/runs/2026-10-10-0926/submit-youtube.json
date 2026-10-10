@@ -1,0 +1,20 @@
+{
+  "date_beijing": "2026-10-10",
+  "run_id": "2026-10-10-0926",
+  "content_sha256": "5bd5f544e682207fdffdb5f8badf500effcf6015b25980ed42244fa38bbcd341",
+  "topic": "市场与行业偏强不等于 LLY 个股结构同步",
+  "channel_id": "6a9ce2eacd8b9c702c1543bf",
+  "channel": "YouTube DeepAlpha",
+  "status": "sent",
+  "post_id": "6ac995b4f91f772d457a5f0f",
+  "submitted_at_beijing": "2026-10-10T09:32:36+08:00",
+  "sent_at_beijing": "2026-10-10T09:32:38+08:00",
+  "public_url": "https://www.youtube.com/watch?v=lJriVwOldZw",
+  "metadata_verified": {
+    "privacy": "public",
+    "category": "Education",
+    "is_ai_generated": true,
+    "made_for_kids": false,
+    "app_store_url": "https://apps.apple.com/app/id6806500280"
+  }
+}

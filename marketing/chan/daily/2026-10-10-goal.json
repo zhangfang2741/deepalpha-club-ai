@@ -1,0 +1,128 @@
+{
+  "date_beijing": "2026-10-10",
+  "goal": "完成到期复盘、市场到缠论结构四层研究与五步真实 APP 演示、全项审核、匿名媒体校验，并发布到 TikTok littlemonkey437 和 YouTube DeepAlpha",
+  "status": "achieved",
+  "resume_context": {
+    "previous_incomplete_date": "2026-10-09",
+    "previous_brief": "marketing/chan/runs/2026-10-09-0907/creative-brief.json",
+    "resume_entry": "刷新三市场、行业、个股、基本面和缠论结构证据；按当前 1.3 (5) 源码与实际界面使用新 run_id 生产",
+    "do_not_repeat": "不得补发 2026-10-09 内容，不得复用 1.2.1 (4) 版本证据，不得退回旧图层模板"
+  },
+  "attempts": [
+    {
+      "run_id": "2026-10-10-0912",
+      "status": "failed_production",
+      "failure_stage": "speech",
+      "root_cause": "五段 MiniMax 中文旁白合计 52.68 秒，超过 20–45 秒硬门槛",
+      "preserved_evidence": "完整四层研究、版本证据、creative-brief.json、selection.json、analysis-MU.json 与五段旁白",
+      "next_change": "只压缩旁白措辞，保持市场、行业、个股、基本面、缠论结构五步操作和数据事实不变",
+      "return_node": "creative_brief",
+      "creative_brief": "marketing/chan/runs/2026-10-10-0912/creative-brief.json"
+    },
+    {
+      "run_id": "2026-10-10-0920",
+      "status": "failed_review",
+      "failure_stage": "creative_brief_match",
+      "root_cause": "真实画面停在 2026-09-01 示例雷达，个股名单未显示 MU；基本面仍在加载，结构步骤触发数据源请求过于频繁弹窗，旁白与画面事实不一致",
+      "preserved_evidence": "44.87 秒 H.264/AAC 成片、五张关键帧、完整时间轴、-16.47 LUFS、SHA-256 fde1011b14d36f9601d0a18b7fcda7d438368961259f8c2ca10dea73442da035",
+      "next_change": "恢复模拟器真实当前雷达/订阅状态，避开分析接口限流并预加载 MU 基本面与结构；使用新 run_id 完整重产",
+      "return_node": "simulator_recovery_and_playback_implementation",
+      "creative_brief": "marketing/chan/runs/2026-10-10-0920/creative-brief.json"
+    },
+    {
+      "run_id": "2026-10-10-0935",
+      "status": "failed_production",
+      "failure_stage": "speech",
+      "root_cause": "LLY 常青五层路径的五段旁白合计 48.49 秒，超过 45 秒硬门槛",
+      "preserved_evidence": "LLY 四层研究、SEC 一手来源、creative-brief.json、selection.json、analysis-LLY.json 与五段旁白",
+      "next_change": "压缩市场、行业和结构旁白，保留示例快照口径、五层事实和 DeepAlpha 缠论 App Store 下载引导",
+      "return_node": "creative_brief",
+      "creative_brief": "marketing/chan/runs/2026-10-10-0935/creative-brief.json"
+    },
+    {
+      "run_id": "2026-10-10-0940",
+      "status": "failed_production",
+      "failure_stage": "speech",
+      "root_cause": "压缩后旁白仍为 45.17 秒，超过 45 秒硬门槛 0.17 秒",
+      "preserved_evidence": "完整 LLY 五层 brief、selection.json、analysis-LLY.json 与五段旁白",
+      "next_change": "删除一处不影响事实的冗词，将时长压到 45 秒内",
+      "return_node": "creative_brief",
+      "creative_brief": "marketing/chan/runs/2026-10-10-0940/creative-brief.json"
+    },
+    {
+      "run_id": "2026-10-10-0945",
+      "status": "failed_review",
+      "failure_stage": "creative_brief_match",
+      "root_cause": "基本面自动化分支先设置 detailSegment=.quant，随后 openSymbol 的默认 segment=nil 将其覆盖，步骤 04 实际落到缠论结构页",
+      "preserved_evidence": "44.45 秒 H.264/AAC 成片、五张关键帧、完整时间轴与 SHA-256 5823d72395c08fa2a69829d96d205ff04c85cd1231873c51c51be4dbc2860f65；该成片审核失败且禁止上传",
+      "next_change": "增加红灯回归测试，最小修复为 openSymbol(symbol, name: nil, segment: .quant)，重新构建并安装 Debug 包后使用新 run_id 完整重产",
+      "return_node": "playback_implementation",
+      "creative_brief": "marketing/chan/runs/2026-10-10-0945/creative-brief.json"
+    }
+  ],
+  "completed_channels": {
+    "tiktok": {
+      "post_id": "6ac99579b07d37ac97593f5b",
+      "status": "sent",
+      "public_url": "https://tiktok.com/@littlemonkey437/video/7694846460587805972"
+    },
+    "youtube": {
+      "post_id": "6ac995b4f91f772d457a5f0f",
+      "status": "sent",
+      "public_url": "https://www.youtube.com/watch?v=lJriVwOldZw"
+    }
+  },
+  "publishing": {
+    "run_id": "2026-10-10-0926",
+    "media_url": "https://api.deepalpha.club/api/v1/media/files/6402a7db8ae340f29019d698ed49a3e388bcb449.mp4",
+    "sha256": "5bd5f544e682207fdffdb5f8badf500effcf6015b25980ed42244fa38bbcd341",
+    "tiktok": {
+      "channel": "littlemonkey437",
+      "status": "sent",
+      "post_id": "6ac99579b07d37ac97593f5b",
+      "submitted_at_beijing": "2026-10-10T09:31:37+08:00",
+      "sent_at_beijing": "2026-10-10T09:35:20+08:00",
+      "public_url": "https://tiktok.com/@littlemonkey437/video/7694846460587805972"
+    },
+    "youtube": {
+      "channel": "DeepAlpha",
+      "status": "sent",
+      "post_id": "6ac995b4f91f772d457a5f0f",
+      "submitted_at_beijing": "2026-10-10T09:32:36+08:00",
+      "sent_at_beijing": "2026-10-10T09:32:38+08:00",
+      "public_url": "https://www.youtube.com/watch?v=lJriVwOldZw"
+    }
+  },
+  "metrics_review": {
+    "status": "completed_no_due_window",
+    "checked_at_beijing": "2026-10-10T09:03:30+08:00",
+    "note": "2026-10-08 正式内容 24 小时复盘已于 2026-10-09 完成；72 小时门槛为 2026-10-11T01:02:31+08:00，当前未到期，不提前填报"
+  },
+  "today_duplicate_check": {
+    "organization": "My organization",
+    "checked_at_beijing": "2026-10-10T09:03:30+08:00",
+    "channels": {
+      "tiktok": "littlemonkey437",
+      "youtube": "DeepAlpha"
+    },
+    "states_checked": ["draft", "needs_approval", "scheduled", "sending", "sent", "error"],
+    "result": "今天无帖子；两频道连接正常、未锁定"
+  },
+  "final": {
+    "run_id": "2026-10-10-0926",
+    "creative_brief": "marketing/chan/runs/2026-10-10-0926/creative-brief.json",
+    "review": "marketing/chan/runs/2026-10-10-0926/review.json",
+    "publish": "marketing/chan/runs/2026-10-10-0926/publish.json",
+    "four_layer_evidence": "市场雷达、行业雷达、LLY 个股雷达、基本面与缠论结构均在 frame-01 至 frame-05 逐帧通过",
+    "five_step_keyframes": ["frame-01.jpg@1.8s", "frame-02.jpg@7.2s", "frame-03.jpg@16.9s", "frame-04.jpg@26.4s", "frame-05.jpg@33.1s"],
+    "version_evidence": "公开版 1.2.1 (4)；1.3 (5) WAITING_FOR_REVIEW，未作为已上线版本宣传",
+    "brand_prompt_evidence": "frame-05 及末段旁白均为 App Store 搜索 DeepAlpha 缠论；YouTube 文案含 App Store 直链",
+    "failure_fix": "为基本面自动化增加红灯回归测试并将 .quant 作为 openSymbol 参数传入；测试、pyright 与 iOS Debug 构建通过后完整重产",
+    "next_reviews_beijing": {
+      "24h": "2026-10-11T09:35:20+08:00",
+      "72h": "2026-10-13T09:35:20+08:00"
+    }
+  },
+  "achieved_at_beijing": "2026-10-10T09:35:43+08:00",
+  "created_at_beijing": "2026-10-10T09:03:30+08:00"
+}

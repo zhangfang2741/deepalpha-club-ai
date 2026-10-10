@@ -1,0 +1,98 @@
+{
+  "run_id": "2026-10-10-0945",
+  "status": "awaiting_review",
+  "stage": "review",
+  "symbol": "LLY",
+  "video": "/Users/zhangfang/deepalpha-club-ai/marketing/chan/runs/2026-10-10-0945/teaching.mp4",
+  "sha256": "5823d72395c08fa2a69829d96d205ff04c85cd1231873c51c51be4dbc2860f65",
+  "duration_sec": 44.447619,
+  "steps": [
+    {
+      "step_id": "01",
+      "time_sec": 0.0,
+      "layers": [],
+      "screen_action": "market_radar",
+      "app_action": "进入美股标普500市场雷达并显示三市场切换",
+      "on_screen_text": "2026-09-01 真实示例快照",
+      "narration_text": "美股逐利，医疗走强，礼来却是一卖？",
+      "expected_visual": "5 秒内显示真实美股标普500示例快照、日期和 Risk-on 91%",
+      "overlay_text": "美股逐利 · 医疗 +7.1%\n礼来却是一卖？",
+      "duration_sec": 4.818141
+    },
+    {
+      "step_id": "02",
+      "time_sec": 5.418140999999999,
+      "layers": [],
+      "screen_action": "industry_radar",
+      "app_action": "打开行业雷达比较能源与医疗保健",
+      "on_screen_text": "医疗保健 +7.1% · 1 卖",
+      "narration_text": "九月一日真实示例快照：市场逐利百分之九十一，医疗相对大盘强百分之七点一。",
+      "expected_visual": "真实行业面板显示能源与医疗保健相对强弱及医疗保健 1 个卖点",
+      "overlay_text": "市场 → 行业\n医疗 +7.1% · 1 卖",
+      "duration_sec": 9.682721
+    },
+    {
+      "step_id": "03",
+      "time_sec": 15.700862,
+      "layers": [],
+      "screen_action": "stock_radar",
+      "app_action": "打开个股雷达名单并选择 LLY",
+      "on_screen_text": "LLY · 已确认一卖",
+      "narration_text": "个股名单里，礼来是一卖，已经确认，强度中等；它不是预测。",
+      "expected_visual": "真实个股信号名单显示 LLY、医疗保健、强度中等与确认状态",
+      "overlay_text": "个股层\nLLY · 已确认一卖",
+      "duration_sec": 7.418776
+    },
+    {
+      "step_id": "04",
+      "time_sec": 23.719638000000003,
+      "layers": [],
+      "screen_action": "fundamental",
+      "app_action": "选择 LLY 并进入基本面研究",
+      "on_screen_text": "A · 标普1500 前 15%",
+      "narration_text": "基本面综合 A，六十点六分，标普一千五百前百分之十五；估值只有 D 减。",
+      "expected_visual": "真实 LLY 基本面研究页显示综合等级、分位、同行样本和六维评分",
+      "overlay_text": "基本面层\nA · 标普1500 前 15%",
+      "duration_sec": 8.486893
+    },
+    {
+      "step_id": "05",
+      "time_sec": 32.80653100000001,
+      "layers": [
+        "fractals",
+        "strokes"
+      ],
+      "screen_action": "chan_structure",
+      "app_action": "切回 LLY 缠论结构并显示分型与笔",
+      "on_screen_text": "37 个确认分型 · 37 笔",
+      "narration_text": "结构有三十七个确认分型、三十七笔、三线段。市场强不等于个股同步。App Store 搜索 DeepAlpha 缠论。",
+      "expected_visual": "真实 LLY 结构页显示分型与笔，结尾完整显示下载引导",
+      "overlay_text": "强市场 ≠ 个股同步\nApp Store 搜索 DeepAlpha 缠论",
+      "duration_sec": 11.041088
+    }
+  ],
+  "checks": {
+    "codecs": {
+      "video": "h264",
+      "audio": "aac"
+    },
+    "decode": "passed",
+    "timeline": "passed",
+    "platform_safe_zone": {
+      "canvas": "720x1280",
+      "content_rect": {
+        "x": 36,
+        "y": 96,
+        "width": 564,
+        "height": 924
+      },
+      "reserved": {
+        "right": 120,
+        "bottom": 260
+      },
+      "status": "awaiting_visual_review"
+    },
+    "visual_review": "pending",
+    "audio_review": "pending"
+  }
+}

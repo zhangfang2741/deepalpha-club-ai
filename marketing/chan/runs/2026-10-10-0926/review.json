@@ -1,0 +1,16 @@
+{
+  "run_id": "2026-10-10-0926",
+  "reviewed_at_beijing": "2026-10-10T09:29:00+08:00",
+  "sha256": "5bd5f544e682207fdffdb5f8badf500effcf6015b25980ed42244fa38bbcd341",
+  "visual": "passed",
+  "audio": "passed",
+  "platform_safe_zone": "passed",
+  "creative_brief_match": "passed",
+  "evidence": {
+    "visual": "逐帧核验 frame-01 至 frame-05：市场雷达显示 US/A-Share/HK、2026-09-01、Risk-on 91%；行业面板显示 Energy +11.9% 与 Health Care +7.1%、1 sell；个股名单显示 LLY、Health Care、Strength Medium、A、1st sell 已确认；基本面页显示 A、60.6、S&P 1500 前15%、163 家医疗保健公司、六维雷达与最新财报；结构页显示 LLY 日线、分型、笔和信号。无系统弹窗或亮色遮挡。",
+    "audio": "五段 MiniMax 中文旁白文件均可完整解码，成片音轨为 AAC；events.json 的五步实际切换时间分别为 0.000、5.418、15.098、22.431、31.263 秒，与旁白时间轴一致；整体响度 -16.1 LUFS、真峰值 -1.2 dBFS；结尾完整口播 App Store 搜索 DeepAlpha 缠论。",
+    "platform_safe_zone": "720x1280 成片中内容位于 x=36-600、y=96-1020；右侧保留 120 像素、底部保留 260 像素，五层标题、关键数据和品牌下载引导均未进入平台覆盖区。",
+    "creative_brief_match": "版本：公开版 1.2.1 (4)，待审 1.3 (5) 未冒充上线。市场 1.8 秒帧显示三市场入口与美股示例快照；行业 7.2 秒帧显示能源和医疗强弱；个股 16.9 秒帧显示 LLY 已确认一卖与中等强度；基本面 26.4 秒帧显示 A、60.6、前15%、163 家样本和六维评分；结构 33.1 秒帧显示分型、笔与一卖信号。五步画面分别对应旁白中的市场、行业、个股、基本面与缠论结构事实；末段画面和口播均为 App Store 搜索 DeepAlpha 缠论。",
+    "encoding": "44.10 秒，720x1280，30fps，H.264/AAC，可完整解码；成片 SHA-256 为 5bd5f544e682207fdffdb5f8badf500effcf6015b25980ed42244fa38bbcd341。"
+  }
+}

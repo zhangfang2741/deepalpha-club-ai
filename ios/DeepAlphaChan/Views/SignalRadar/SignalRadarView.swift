@@ -187,13 +187,12 @@ struct SignalRadarView: View {
             panel = .signals
         case "fundamental":
             panel = nil
-            detailSegment = .quant
             let prefix = "-deepalphaDemoSymbol="
             guard let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix(prefix) }) else { return }
             let symbol = String(argument.dropFirst(prefix.count))
             Task {
                 try? await Task.sleep(for: .milliseconds(700))
-                openSymbol(symbol, name: nil)
+                openSymbol(symbol, name: nil, segment: .quant)
             }
         default:
             break
