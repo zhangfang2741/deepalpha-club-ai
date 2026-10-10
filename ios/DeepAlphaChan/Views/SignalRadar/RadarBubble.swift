@@ -16,6 +16,8 @@ struct RadarBubble: View {
     var isCandidate = false
     /// 是否给已确认的信号画「✓」；全部都已确认（严格口径）时由雷达关掉。
     var marksConfirmed = true
+    /// 质感：左上一抹高光 + 一圈细白边（基本面动向用，让深浅不同的气泡更像一颗颗球、不是一块块平色）。
+    var polished = false
     let onOpen: () -> Void
 
     /// 持续漂浮的竖向偏移（在 -6 ↔ 6 间无限往复）。初值就是起点 -6：以前初值 0、onAppear 里才设成 -6，
@@ -105,6 +107,11 @@ struct RadarBubble: View {
                 Circle().strokeBorder(color, style: StrokeStyle(lineWidth: 1.6, dash: [4, 3]))
             } else {
                 Circle().fill(color)
+                if polished {
+                    Circle().fill(LinearGradient(colors: [.white.opacity(0.26), .clear],
+                                                 startPoint: .topLeading, endPoint: .center))
+                    Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+                }
             }
 
             VStack(spacing: 1) {

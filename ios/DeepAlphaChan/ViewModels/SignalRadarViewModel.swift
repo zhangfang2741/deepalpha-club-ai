@@ -447,10 +447,39 @@ final class SignalRadarViewModel: ObservableObject {
     @Published private(set) var trendError: String?
     @Published var trendKind: QuantTrendKind = .estimates
 
-    /// 当前类别的条目（后端已按圈、按幅度排好）。
+    /// 「精选」开关：只画综合等级达到本市场「好股票」门槛的公司（默认开）；关掉看全部。旧后端没有 good 字段时不筛。
+    @Published var trendOnlyGood = true
+
+    /// 综合等级从高到低；排序、气泡大小都按它。
+    static let gradeOrder = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F"]
+    static func gradeRank(_ grade: String?) -> Int { grade.flatMap { gradeOrder.firstIndex(of: $0) } ?? gradeOrder.count }
+
+    /// 某类别在当前「精选 / 行业」筛选下是否保留这一条。
+    private func trendVisible(_ item: QuantTrendItem, kind: QuantTrendKind) -> Bool {
+        item.kind == kind.rawValue
+            && (!trendOnlyGood || item.good ?? true)
+            && (sectorFilter == nil || item.sector == sectorFilter)
+    }
+
+    /// 当前类别、当前筛选下的条目：综合等级高的在前，同等级变化大的在前（画布最多画 ringFieldCap 个，先留最好的）。
     var trendItems: [QuantTrendItem] {
         guard let trend, trend.market == market.rawValue else { return [] }
-        return trend.items.filter { $0.kind == trendKind.rawValue }
+        return trend.items.filter { trendVisible($0, kind: trendKind) }.sorted {
+            let a = Self.gradeRank($0.grade), b = Self.gradeRank($1.grade)
+            return a != b ? a < b : ($0.magnitude ?? 1) > ($1.magnitude ?? 1)
+        }
+    }
+
+    /// 某类别在当前筛选下有几个（分段控件上的数字）。
+    func trendCount(_ kind: QuantTrendKind) -> Int {
+        guard let trend, trend.market == market.rawValue else { return 0 }
+        return trend.items.filter { trendVisible($0, kind: kind) }.count
+    }
+
+    /// 当前类别不考虑任何筛选时有没有条目：空画布上分「没有达到门槛」和「被筛掉了」两种说法。
+    var trendHasItemsBeforeFilter: Bool {
+        guard let trend, trend.market == market.rawValue else { return false }
+        return trend.items.contains { $0.kind == trendKind.rawValue }
     }
 
     func enterTrend() {
