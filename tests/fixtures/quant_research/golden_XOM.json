@@ -34,13 +34,13 @@
   "revenue_cagr_3y_pct": -0.3
  },
  "overall": {
-  "grade": "C",
-  "score": 48.3,
-  "universe_percentile": 46.0,
+  "grade": "C-",
+  "score": 46.1,
+  "universe_percentile": 41.4,
   "dimensions_used": 5,
   "capped": false,
   "note": null,
-  "text": "综合分 48.3 · 标普1500 后 46%"
+  "text": "综合分 46.1 · 标普1500 后 41%"
  },
  "dimensions": [
   {
@@ -2298,17 +2298,17 @@
    "key": "stability",
    "name": "财务稳健",
    "description": "偿债压力、短期流动性、现金能撑多久与利润的现金含量",
-   "grade": "C+",
-   "score": 59.9,
+   "grade": "C",
+   "score": 49.3,
    "status": "ok",
    "status_note": null,
    "is_highest": false,
    "is_lowest": false,
    "key_fact": {
-    "metric": "cfo_ni",
-    "text": "经营现金流 / 净利润 182%，高于板块 99% 的公司"
+    "metric": "current_ratio",
+    "text": "流动比率 1.1，低于板块 82% 的公司"
    },
-   "formula": "(57 + 59 + 18 + 66 + 100) ÷ 5 = 59.9 → C+",
+   "formula": "(57 + 59 + 18 + 66 + 47) ÷ 5 = 49.3 → C",
    "groups": [
     {
      "name": "净负债",
@@ -2546,15 +2546,15 @@
        "name": "经营现金流 / 净利润",
        "description": "最近 12 个月经营现金流相对净利润的比例，越接近或超过 100% 说明利润越是真金白银",
        "direction": "higher_better",
-       "value": 1.8233354702811613,
-       "display_value": "182%",
+       "value": 1.0,
+       "display_value": "≥100%",
        "status": "ok",
        "status_note": null,
-       "percentile": 100.0,
-       "grade": "A+",
+       "percentile": 47.0,
+       "grade": "C",
        "sector_median": 1.05,
-       "sector_median_display": "105%",
-       "diff_to_median_pct": 73.7,
+       "sector_median_display": "≥100%",
+       "diff_to_median_pct": -4.8,
        "distribution": {
         "p10": 0.45,
         "p25": 0.6749999999999999,
@@ -2563,7 +2563,7 @@
         "p90": 1.6500000000000001
        },
        "formula": {
-        "expression": "经营现金流 TTM 597.3 亿 ÷ 净利润 TTM 327.6 亿 = 182%",
+        "expression": "经营现金流 TTM 597.3 亿 ÷ 净利润 TTM 327.6 亿 = 100%",
         "inputs": [
          {
           "label": "经营现金流 TTM",
@@ -2579,7 +2579,7 @@
          }
         ]
        },
-       "position_text": "高于 99% 的同板块公司 → 百分位 100 → A+",
+       "position_text": "低于 53% 的同板块公司 → 百分位 47 → C",
        "interpretation": {
         "what": "最近 12 个月经营现金流相对净利润的比例，越接近或超过 100% 说明利润越是真金白银",
         "role": "观察净利润有多少已经变成经营现金，检验利润质量。",
@@ -2587,7 +2587,7 @@
         "calculation": "经营现金流 TTM ÷ 净利润 TTM × 100%",
         "full_name": "经营现金流 / 净利润 Cash Conversion",
         "plain": "账面上赚的每 1 元净利润，实际收进了多少现金。100% 表示利润都变成了现金；明显低于 100%，说明利润很多还停留在账上（比如货发出去了还没收到钱）。",
-        "reading": "越高 = 利润越是真金白银；长期低于 80% 要留意利润质量。",
+        "reading": "越高 = 利润越是真金白银；长期低于 80% 要留意利润质量。超过 100% 一律按 100% 算，再高不代表更稳。",
         "why": "利润可以靠会计处理做得好看，现金很难作假。利润长期收不回现金的公司，往往藏着风险。",
         "purpose": "检验利润的质量；亏损公司不参与（比值没有意义）。"
        },

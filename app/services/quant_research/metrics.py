@@ -39,6 +39,7 @@ MIN_ANALYSTS = 3
 MOMENTUM_WINDOWS = {"r3m": 63, "r6m": 126, "r9m": 189, "r12m": 252}
 INTEREST_COVER_CAP = 100.0   # 利息保障倍数上限（几乎没有利息的公司统一记上限，避免极端值）
 INTEREST_GAP_DEBT_SHARE = 0.25   # 利息支出为 0 但负债超过 EBIT 的 25%：视为数据缺口（不参与），不记最好值
+CFO_NI_CAP = 1.0             # 经营现金流 / 净利润上限：超过 100% 只说明利润全有现金支撑，再高不代表更稳健
 RUNWAY_CAP_YEARS = 10.0      # 现金可支撑年数上限（自由现金流为正 = 不烧钱，也记上限）
 STABILITY_KEYS = ("net_debt_ebitda", "interest_cov", "current_ratio", "runway_years", "cfo_ni")
 
@@ -436,7 +437,10 @@ def _stability(inp: StockInputs, bal: dict | None, ebitda: float | None, ebit: f
         out["runway_years"] = MetricValue(min(max(cash_st, 0.0) / burn, RUNWAY_CAP_YEARS), "ok", rw_inputs, "div")  # type: ignore[operator]
 
     # 经营现金流 / 净利润：亏损时比值没有意义，不参与
-    out["cfo_ni"] = _ratio(ocf, net, [("ocf_ttm", ocf), ("net_ttm", net)], den_nonpositive=na)
+    cfo_ni = _ratio(ocf, net, [("ocf_ttm", ocf), ("net_ttm", net)], den_nonpositive=na)
+    if cfo_ni.status == "ok" and cfo_ni.value is not None and cfo_ni.value > CFO_NI_CAP:
+        cfo_ni = MetricValue(CFO_NI_CAP, "ok", cfo_ni.inputs, cfo_ni.op, {**cfo_ni.meta, "capped": True})
+    out["cfo_ni"] = cfo_ni
     return out
 
 

@@ -227,10 +227,10 @@ _CONCEPTS: dict[str, tuple[str, str, str, str, str, str]] = {
     "cfo_ni": (
         "经营现金流 / 净利润 Cash Conversion",
         "账面上赚的每 1 元净利润，实际收进了多少现金。100% 表示利润都变成了现金；明显低于 100%，说明利润很多还停留在账上（比如货发出去了还没收到钱）。",
-        "越高 = 利润越是真金白银；长期低于 80% 要留意利润质量。",
+        "越高 = 利润越是真金白银；长期低于 80% 要留意利润质量。超过 100% 一律按 100% 算，再高不代表更稳。",
         "Cash Conversion",
         "For each $1 of net income on paper, how much cash actually came in from operations. 100% means profit turned fully into cash; well below 100% means much of the profit is still on paper (for example goods shipped but not yet paid for).",
-        "Higher = profit is better backed by cash; staying below 80% for long deserves attention.",
+        "Higher = profit is better backed by cash; staying below 80% for long deserves attention. Anything above 100% counts as 100%: more is no safer.",
     ),
     "fcf_sbc_m": (
         "扣股权激励后自由现金流利润率 FCF Margin after Stock Comp",
