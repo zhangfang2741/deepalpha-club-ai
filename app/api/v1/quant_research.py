@@ -181,6 +181,24 @@ async def quant_diagnostics_nongaap_whatif(request: Request, restart: bool = Que
     return await nongaap_job.start("us", dates[0][0], current_redis())
 
 
+@router.get("/diagnostics/lossprofile")
+@limiter.limit("2 per minute")
+async def quant_diagnostics_lossprofile(request: Request, market: Literal["us", "cn", "hk"] = Query("us")) -> dict:
+    """「GAAP 经营亏损但现金流为正的高增长公司」（SNOW / CRWD 型）的规模、等级分布与被哪些维度拖低，对照真烧钱 / 盈利高增长 / 全体。
+
+    分页读已落库结果（页间让出时间），不请求任何数据源；只返回聚合，不含个股。临时工具，与 /diagnostics 一起在方法稳定后删除。
+    """
+    from app.services.quant_research import diagnostics as diag
+    from app.services.quant_research import repository as repo
+
+    dates = await repo.diagnostic_dates(market)
+    if not dates:
+        return {"status": "no_data"}
+    day, version, _ = dates[0]
+    return {"status": "ok", "market": market, "as_of": day.isoformat(), "version": version,
+            **diag.loss_profile(await repo.profile_rows(market, day))}
+
+
 @router.get("/diagnostics/panorama")
 @limiter.limit("2 per minute")
 async def quant_diagnostics_panorama(request: Request, market: Literal["us", "cn", "hk"] = Query("us")) -> dict:

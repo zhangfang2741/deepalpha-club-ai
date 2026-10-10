@@ -607,3 +607,42 @@ async def nongaap_whatif_rows(market: str, as_of: date, page: int = 100, pause: 
                         "score": num((overall if isinstance(overall, dict) else {}).get("score")), "dims": dd, "pe_ok": pe_ok})
         offset += page
         await asyncio.sleep(pause)
+
+
+async def profile_rows(market: str, as_of: date, page: int = 100, pause: float = 0.25) -> list:
+    """「SNOW / CRWD 型」画像用的行（不含代码）：阶段 / 综合等级与排位 / 各维度分 / 三个利润率与营收同比。分页读、页间让出时间。"""
+    import asyncio
+
+    from app.services.quant_research.diagnostics import ProfileRow  # 避免模块级循环依赖
+
+    def num(v: object) -> float | None:
+        return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+    out: list = []
+    offset = 0
+    while True:
+        q = (select(col(QuantResult.payload_zh)["overall"], col(QuantResult.payload_zh)["stage"], col(QuantResult.payload_zh)["dimensions"])
+             .where(col(QuantResult.market) == market, col(QuantResult.as_of) == as_of)
+             .order_by(col(QuantResult.symbol)).limit(page).offset(offset))
+        async with AsyncSessionFactory() as s:
+            rows = (await s.execute(q)).all()
+        if not rows:
+            return out
+        for overall, stage, dims in rows:
+            overall = overall if isinstance(overall, dict) else {}
+            vals: dict[str, float] = {}
+            scores: dict[str, float | None] = {}
+            for d in dims if isinstance(dims, list) else []:
+                if not isinstance(d, dict) or d.get("counts_in_overall") is False:
+                    continue
+                if d.get("status") == "ok":
+                    scores[d["key"]] = num(d.get("score"))
+                for g in d.get("groups", []):
+                    for m in g.get("metrics", []):
+                        if m.get("status") == "ok" and m.get("key") in ("ebit_m", "fcf_m", "fcf_sbc_m", "rev_yoy") and num(m.get("value")) is not None:
+                            vals[m["key"]] = float(m["value"])
+            out.append(ProfileRow(stage.get("key") if isinstance(stage, dict) else None, overall.get("grade"),
+                                  num(overall.get("universe_percentile")), vals.get("ebit_m"), vals.get("fcf_m"), vals.get("fcf_sbc_m"),
+                                  vals.get("rev_yoy"), scores))
+        offset += page
+        await asyncio.sleep(pause)
