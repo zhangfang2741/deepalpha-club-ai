@@ -151,13 +151,33 @@ struct ResultDetailView: View {
     }
 
     private var segmentPicker: some View {
-        Picker(L("分析视角"), selection: $segment) {
-            ForEach(Segment.allCases) { Text($0.title).tag($0) }
+        // 纯文字标签栏（行情软件样式）：选中项加大加粗 + 一小段强调色下划线，其余灰字，靠左排开。
+        HStack(spacing: 8) {
+            ForEach(Segment.allCases) { item in
+                let selected = segment == item
+                Button {
+                    segment = item
+                } label: {
+                    VStack(spacing: 4) {
+                        Text(item.title)
+                            .font(.system(size: selected ? 18 : 16, weight: selected ? .bold : .regular))
+                            .foregroundStyle(selected ? Theme.textPrimary : Theme.textSecondary)
+                        Capsule()
+                            .fill(selected ? Theme.accent : Color.clear)
+                            .frame(width: 16, height: 3)
+                    }
+                    .padding(.horizontal, 8)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+            Spacer(minLength: 0)
         }
-        .pickerStyle(.segmented)
-        .padding(.horizontal, Theme.contentHInset)
-        .padding(.top, 4)
-        .padding(.bottom, 6)
+        .padding(.horizontal, Theme.contentHInset - 8)
+        .padding(.top, 0)
+        .padding(.bottom, 2)
     }
 
     /// ScrollView 的完整内容，同时是分享长图的渲染源（PageSnapshot.render）。
