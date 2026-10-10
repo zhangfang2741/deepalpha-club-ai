@@ -118,3 +118,29 @@ def test_net_margin_gap_buckets():
     r = net_margin_gap(vals)
     assert r["paired"] == 10 and r["gap_gt_5pt"] == 0.2 and r["gap_gt_10pt"] == 0.1 and r["gap_gt_20pt"] == 0.1
     assert r["net_margin_gt_50pct"] == 0.1
+
+
+def test_panorama_flags_redundancy_sector_bias_and_low_coverage():
+    import random
+
+    from app.services.quant_research.diagnostics import PanoRow, panorama
+
+    rnd = random.Random(7)
+    rows = []
+    for i in range(120):
+        base = rnd.uniform(0, 100)
+        sec = "utilities" if i < 40 else "tech"
+        pct_a = base
+        dims = {"valuation": (base, 40), "growth": (rnd.uniform(0, 100), 60)}
+        metrics = {
+            "pe": ("ok", pct_a, "valuation"), "pe_fwd": ("ok", min(100.0, pct_a + 1), "valuation"),    # 与 pe 几乎同序
+            "rare": ("ok" if i % 5 == 0 else "missing", pct_a, "growth"),                              # 覆盖不足
+        }
+        score = (35 if sec == "utilities" else 62) + rnd.uniform(-5, 5)
+        rows.append(PanoRow(sec, "mature", score, score, dims, metrics))
+    r = panorama(rows)
+    assert r["sector_bias"]["utilities"]["flag"] is True and r["sector_bias"]["tech"]["flag"] is True
+    assert "low_ok_share" in r["flagged_metrics"]["rare"]
+    assert any(p["pair"] == "pe~pe_fwd" for p in r["redundant_metric_pairs"])
+    assert set(r["dim_influence"]) == {"valuation", "growth"} and "growth~valuation" in r["dim_corr"]
+    assert "symbol" not in str(r)

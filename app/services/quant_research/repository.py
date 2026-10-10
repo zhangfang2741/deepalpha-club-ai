@@ -447,6 +447,45 @@ async def metric_values(market: str, as_of: date, keys: tuple[str, ...], page: i
         await asyncio.sleep(pause)
 
 
+async def panorama_rows(market: str, as_of: date, page: int = 100, pause: float = 0.25) -> list:
+    """全景统计用的行（不含代码）：板块 / 阶段 / 综合 / 各维度 / 各指标。分页读、页间让出时间，对线上数据库基本无压力。"""
+    import asyncio
+
+    from app.services.quant_research.diagnostics import PanoRow  # 避免模块级循环依赖
+
+    def num(v: object) -> float | None:
+        return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+    out: list = []
+    offset = 0
+    while True:
+        q = (select(col(QuantResult.sector_key), col(QuantResult.payload_zh)["overall"], col(QuantResult.payload_zh)["stage"],
+                    col(QuantResult.payload_zh)["dimensions"])
+             .where(col(QuantResult.market) == market, col(QuantResult.as_of) == as_of)
+             .order_by(col(QuantResult.symbol)).limit(page).offset(offset))
+        async with AsyncSessionFactory() as s:
+            rows = (await s.execute(q)).all()
+        if not rows:
+            return out
+        for sector, overall, stage, dims in rows:
+            overall = overall if isinstance(overall, dict) else {}
+            dd: dict = {}
+            mm: dict = {}
+            for d in dims if isinstance(dims, list) else []:
+                if not isinstance(d, dict) or d.get("counts_in_overall") is False:
+                    continue
+                if d.get("status") == "ok":
+                    dd[d["key"]] = (num(d.get("score")), int(d["weight_pct"]) if isinstance(d.get("weight_pct"), int) else None)
+                for g in d.get("groups", []):
+                    for m in g.get("metrics", []):
+                        if m.get("key"):
+                            mm[m["key"]] = (str(m.get("status")), num(m.get("percentile")), d["key"])
+            out.append(PanoRow(sector, stage.get("key") if isinstance(stage, dict) else None,
+                               num(overall.get("score")), num(overall.get("universe_percentile")), dd, mm))
+        offset += page
+        await asyncio.sleep(pause)
+
+
 async def diagnostic_rows(market: str, as_of: date) -> list:
     """某天全部结果的诊断行：只取等级 / 阶段 / 综合分 / 各维度等级几个 JSON 字段，不拉指标明细。"""
     from app.services.quant_research.diagnostics import DiagRow  # 避免模块级循环依赖
