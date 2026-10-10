@@ -281,16 +281,21 @@ struct SignalRadarView: View {
         }
     }
 
-    // MARK: - 基本面动向雷达（指数下拉框里的「基本面动向」）
+    // MARK: - 基本面雷达 / 评级雷达（标题下拉菜单里与缠论雷达并列）
 
-    /// 与缠论雷达同一张画布、同一套同心圈与气泡：圈 = 最近 1 周 / 1 月 / 3 月，气泡大小 = 变化幅度（同类里分三档），
-    /// 气泡里的字母 = 综合等级。颜色不用红 / 绿（红绿只留给已成立的买卖点），预期上调、评级改善同一个红（和缠论雷达一致）。
+    /// 与缠论雷达同一张画布、同一套同心圈与气泡：圈 = 最近 1 周 / 1 月 / 3 月，颜色深浅 = 变化幅度，气泡大小与字母 = 综合等级。
+    /// 颜色和缠论雷达一致：红 = 向好的一侧（预期上调 / 等级上升 / 券商上调），绿 = 向差的一侧（下调 / 下降），下拉框切换类别。
+    /// 基本面雷达看预期与我们自己的综合等级；评级雷达看券商评级（仅美股）。
     @ViewBuilder
     private var trendContent: some View {
         trendHeader
-        if let trend = vm.trend, trend.market == vm.market.rawValue {
+        if vm.analystUnsupported {
+            trendMessage(L("评级雷达目前只有美股的券商评级数据，A 股 / 港股暂时没有。可以看看基本面雷达。"))
+        } else if let trend = vm.trend, trend.market == vm.market.rawValue {
             if trend.asOf == nil {
-                trendMessage(L("评级雷达数据准备中：上线后的第一次计算约需 1 小时，稍后再来看。"))
+                trendMessage(vm.trendFlavor == .analyst
+                             ? L("评级雷达数据准备中：券商评级正在后台拉取，稍后再来看。")
+                             : L("基本面雷达数据准备中：上线后的第一次计算约需 1 小时，稍后再来看。"))
             } else {
                 trendField(trend)
             }
@@ -304,7 +309,9 @@ struct SignalRadarView: View {
         }
         trendLegend
         Spacer(minLength: 0)
-        Text(L("只陈列预期与财报的变化事实，不代表股价会涨，不构成投资建议。"))
+        Text(vm.trendFlavor == .analyst
+             ? L("只陈列券商评级的变动事实，不代表股价会涨跌，不构成投资建议。")
+             : L("只陈列预期与财报的变化事实，不代表股价会涨跌，不构成投资建议。"))
             .font(.caption2)
             .foregroundColor(Theme.textSecondary)
             .frame(maxWidth: .infinity)
@@ -333,17 +340,17 @@ struct SignalRadarView: View {
                     .buttonStyle(.plain)
                 }
                 if let trend = vm.trend {
-                    DerivationLink(title: L("评级雷达怎么算的"),
+                    DerivationLink(title: vm.trendFlavor == .analyst ? L("评级雷达怎么算的") : L("基本面雷达怎么算的"),
                                    result: TrendDerivations.rules(trend, kind: vm.trendKind, market: vm.market))
                 }
             }
         }
     }
 
-    /// 动向类别下拉框（预期上调 / 评级改善），放在雷达画布左上角；选项后面的数字是当前「精选 / 行业」筛选下的个数。
+    /// 动向类别下拉框（基本面雷达：预期上调 / 预期下调 / 等级上升 / 等级下降；评级雷达：评级上调 / 评级下调），放在雷达画布左上角；选项后面的数字是当前「精选 / 行业」筛选下的个数。
     private var trendKindMenu: some View {
         Menu {
-            ForEach(QuantTrendKind.allCases) { k in
+            ForEach(QuantTrendKind.kinds(for: vm.trendFlavor)) { k in
                 Button { vm.trendKind = k } label: {
                     if k == vm.trendKind {
                         Label(trendKindTitle(k), systemImage: "checkmark")
@@ -489,8 +496,9 @@ struct SignalRadarView: View {
     /// 颜色和缠论雷达完全一致（用户 2026-10-10 要求）：直接用缠论雷达气泡的那条**不透明**渐变（`bubbleColor`，浅粉 → 深红），
     /// 颜色越深 = 变化越大；两类动向用画布左上角的下拉框区分，不再各用一个色，也不用透明度（以前用红色加透明度，发灰发透）。
     /// depth 是 0~1（变化幅度在当前显示的同类公司里的百分位），映射到渐变的 0.15~0.95，避开最浅 / 最深的两端。
+    /// 向差的一侧（预期下调 / 等级下降 / 券商下调）用缠论雷达卖点的那条绿色渐变。
     static func trendColor(_ kind: QuantTrendKind, depth: Double) -> Color {
-        bubbleColor(side: "buy", depth: 0.15 + 0.8 * max(0, min(1, depth)))
+        bubbleColor(side: kind.isDown ? "sell" : "buy", depth: 0.15 + 0.8 * max(0, min(1, depth)))
     }
 
     /// 评级雷达的气泡直径 = 综合等级，**按当前画出来的这批公司的等级范围拉开**：最高的最大（96）、最低的最小（48），
@@ -781,7 +789,7 @@ struct SignalRadarView: View {
         Rectangle().fill(Theme.border).frame(width: 14, height: 1.5).padding(.top, 10)
     }
 
-    /// 标题下拉菜单：在「缠论雷达」（缠论买卖点）与「评级雷达」（预期上调 / 质地改善）之间切换。
+    /// 标题下拉菜单：在「缠论雷达」（缠论买卖点）、「基本面雷达」（预期 / 综合等级的变化）与「评级雷达」（券商评级的变动）之间切换。
     /// 标题文字就是当前所在的雷达，用户一眼知道在哪、点标题就能换。
     /// （以前菜单里还有一项「这一页怎么读」展开流程图，2026-10-10 起去掉；流程图只在首次进雷达时自动展开一次，新手导览在学习页可重看。）
     private var flowTitle: some View {
@@ -789,12 +797,15 @@ struct SignalRadarView: View {
             Button { vm.exitTrend() } label: {
                 Label(L("缠论雷达"), systemImage: vm.trendMode ? "scope" : "checkmark")
             }
-            Button { vm.enterTrend() } label: {
-                Label(L("评级雷达"), systemImage: vm.trendMode ? "checkmark" : "chart.line.uptrend.xyaxis")
+            Button { vm.enterTrend(.fundamental) } label: {
+                Label(L("基本面雷达"), systemImage: vm.trendMode && vm.trendFlavor == .fundamental ? "checkmark" : "chart.line.uptrend.xyaxis")
+            }
+            Button { vm.enterTrend(.analyst) } label: {
+                Label(L("评级雷达"), systemImage: vm.trendMode && vm.trendFlavor == .analyst ? "checkmark" : "person.2.wave.2")
             }
         } label: {
             HStack(spacing: 6) {
-                Text(vm.trendMode ? L("评级雷达") : L("缠论雷达"))
+                Text(!vm.trendMode ? L("缠论雷达") : (vm.trendFlavor == .analyst ? L("评级雷达") : L("基本面雷达")))
                     .font(.headline).foregroundColor(Theme.textPrimary)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .bold))

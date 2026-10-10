@@ -681,6 +681,23 @@ struct QuantRatingChange: Decodable, Hashable {
     }
 }
 
+/// 评级雷达（分析师评级）：窗口内券商净上调 / 净下调。
+struct QuantAnalystChange: Decodable, Hashable {
+    let up: Int
+    let down: Int
+    let windowDays: Int
+    let lastDate: String?
+    let firms: [String]
+    let toBucket: String?
+
+    enum CodingKeys: String, CodingKey {
+        case up, down, firms
+        case windowDays = "window_days"
+        case lastDate = "last_date"
+        case toBucket = "to_bucket"
+    }
+}
+
 /// 基本面动向雷达的一只股票：属于哪一类、落在哪一圈。
 struct QuantTrendItem: Decodable, Identifiable, Hashable {
     let symbol: String
@@ -698,12 +715,14 @@ struct QuantTrendItem: Decodable, Identifiable, Hashable {
     let sector: String?
     /// kind == rating 时的等级变化；旧后端 / 其它类别没有。
     let rating: QuantRatingChange?
+    /// kind == analyst_up / analyst_down 时的券商评级变动。
+    let analyst: QuantAnalystChange?
     let facts: QuantTrendFacts
 
     var id: String { kind + ":" + symbol }
 
     enum CodingKeys: String, CodingKey {
-        case symbol, name, grade, kind, strength, facts, magnitude, good, sector, rating
+        case symbol, name, grade, kind, strength, facts, magnitude, good, sector, rating, analyst
         case sectorName = "sector_name"
         case ringDays = "ring_days"
     }
@@ -719,17 +738,52 @@ struct QuantTrendRadar: Decodable {
     let counts: [String: Int]
     /// 「好股票」门槛等级（含）；没有评级 / 旧后端为 nil。
     let goodGrade: String?
+    /// 评级雷达（分析师）专有：还在后台补拉的只数；supported == false = 这个市场没有券商评级数据。
+    let pendingSymbols: Int?
+    let supported: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case market, rings, thresholds, items, counts
+        case market, rings, thresholds, items, counts, supported
         case asOf = "as_of"
         case goodGrade = "good_grade"
+        case pendingSymbols = "pending_symbols"
     }
 }
 
-/// 评级雷达的两类：预期上调、评级改善（2026-10-10 起「评级改善」代替原来的「质地改善」，后端的 quality 类别只给旧版 App）。
+/// 两个雷达：基本面雷达（预期 / 我们自己的综合等级）、评级雷达（分析师评级）。
+enum TrendFlavor { case fundamental, analyst }
+
+/// 动向类别。红 = 向好（预期上调、等级上升、券商上调），绿 = 向差（预期下调、等级下降、券商下调），和缠论雷达红买绿卖同一套颜色。
+/// 基本面雷达：预期上调 / 预期下调 / 等级上升 / 等级下降（2026-10-10 起叫「等级」，和分析师「评级」区分）；评级雷达：评级上调 / 评级下调。
+/// 后端的 quality（质地改善）类别只给旧版 App。
 enum QuantTrendKind: String, CaseIterable, Identifiable {
-    case estimates, rating
+    case estimates
+    case estimatesDown = "estimates_down"
+    case rating
+    case ratingDown = "rating_down"
+    case analystUp = "analyst_up"
+    case analystDown = "analyst_down"
     var id: String { rawValue }
-    var title: String { self == .estimates ? L("预期上调") : L("评级改善") }
+
+    var flavor: TrendFlavor {
+        switch self {
+        case .analystUp, .analystDown: return .analyst
+        default: return .fundamental
+        }
+    }
+    /// 向差的一侧（画绿色）。
+    var isDown: Bool { self == .estimatesDown || self == .ratingDown || self == .analystDown }
+
+    static func kinds(for flavor: TrendFlavor) -> [QuantTrendKind] { allCases.filter { $0.flavor == flavor } }
+
+    var title: String {
+        switch self {
+        case .estimates: return L("预期上调")
+        case .estimatesDown: return L("预期下调")
+        case .rating: return L("等级上升")
+        case .ratingDown: return L("等级下降")
+        case .analystUp: return L("评级上调")
+        case .analystDown: return L("评级下调")
+        }
+    }
 }

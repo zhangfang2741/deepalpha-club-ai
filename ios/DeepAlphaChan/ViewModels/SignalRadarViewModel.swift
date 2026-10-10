@@ -434,14 +434,19 @@ final class SignalRadarViewModel: ObservableObject {
         Task { await load() }
     }
 
-    // MARK: - 基本面动向雷达
+    // MARK: - 基本面雷达 / 评级雷达（标题下拉菜单里与缠论雷达并列）
 
-    /// 标题下拉菜单里的「基本面动向」：打开后画布换成动向雷达（同一张画布、同一套圈与气泡），
-    /// 数据来自 `/quant-research/{market}/trend-radar`，与缠论雷达的指数 / 日期无关；标题菜单选回「市场雷达」或选任一指数即退出。
+    /// 打开后画布换成动向雷达（同一张画布、同一套圈与气泡）：基本面雷达（`/quant-research/{market}/trend-radar`：预期与我们自己的综合等级的变化）
+    /// 或评级雷达（`/signal-radar/analyst-radar`：券商评级净上调 / 净下调）；都只看当前选中指数的成分股，与缠论雷达的日期无关。
     @Published private(set) var trendMode = false
-    @Published private(set) var trend: QuantTrendRadar?
-    /// `trend` 是哪个指数的（和 `activeUniverseKey` 对不上就是旧的，不能拿来画）。
-    @Published private(set) var trendUniverse: String?
+    @Published private(set) var trendFlavor: TrendFlavor = .fundamental
+    @Published private(set) var fundamentalTrend: QuantTrendRadar?
+    @Published private(set) var analystTrend: QuantTrendRadar?
+    /// 当前雷达的数据。
+    var trend: QuantTrendRadar? { trendFlavor == .fundamental ? fundamentalTrend : analystTrend }
+    /// 两份数据各是哪个指数的（和 `activeUniverseKey` 对不上就是旧的，不能拿来画）。
+    private var fundamentalUniverse: String?
+    private var analystUniverse: String?
     @Published private(set) var trendLoading = false
     @Published private(set) var trendError: String?
     @Published var trendKind: QuantTrendKind = .estimates
@@ -469,7 +474,7 @@ final class SignalRadarViewModel: ObservableObject {
         }
     }
 
-    /// 某类别在当前筛选下有几个（分段控件上的数字）。
+    /// 某类别在当前筛选下有几个（下拉框选项后面的数字）。
     func trendCount(_ kind: QuantTrendKind) -> Int {
         guard let trend, trend.market == market.rawValue else { return 0 }
         return trend.items.filter { trendVisible($0, kind: kind) }.count
@@ -481,13 +486,22 @@ final class SignalRadarViewModel: ObservableObject {
         return trend.items.contains { $0.kind == trendKind.rawValue }
     }
 
-    func enterTrend() {
-        guard !trendMode else { return }
+    /// 评级雷达在这个市场没有数据（目前只有美股有券商评级变动）。
+    var analystUnsupported: Bool {
+        trendMode && trendFlavor == .analyst && analystTrend?.market == market.rawValue && analystTrend?.supported == false
+    }
+
+    /// 进入某个雷达；已经在里面且是同一个就忽略，在另一个里面就切过去（指数不变）。
+    func enterTrend(_ flavor: TrendFlavor = .fundamental) {
+        guard !trendMode || trendFlavor != flavor else { return }
         trendMode = true
+        trendFlavor = flavor
+        trendKind = QuantTrendKind.kinds(for: flavor)[0]
+        trendError = nil
         Task { await loadTrend() }
     }
 
-    /// 回到缠论雷达。若在评级雷达里换过指数，缠论雷达还停在旧指数上，补一次加载。
+    /// 回到缠论雷达。若在别的雷达里换过指数，缠论雷达还停在旧指数上，补一次加载。
     func exitTrend() {
         trendMode = false
         guard !responseMatchesSelection else { return }
@@ -498,17 +512,38 @@ final class SignalRadarViewModel: ObservableObject {
     func loadTrend() async {
         let m = market.rawValue
         let u = activeUniverseKey
-        if trend?.market != m || trendUniverse != u { trend = nil }
+        let flavor = trendFlavor
+        func stale() -> Bool { m != market.rawValue || u != activeUniverseKey || flavor != trendFlavor }
+        switch flavor {
+        case .fundamental: if fundamentalTrend?.market != m || fundamentalUniverse != u { fundamentalTrend = nil }
+        case .analyst: if analystTrend?.market != m || analystUniverse != u { analystTrend = nil }
+        }
         trendError = nil
         trendLoading = true
         defer { trendLoading = false }
         do {
-            let fresh = try await QuantResearchService.trendRadar(market: m, universe: u)
-            guard m == market.rawValue, u == activeUniverseKey else { return }   // 加载期间切了市场 / 指数，丢弃旧结果
-            trend = fresh
-            trendUniverse = u
+            switch flavor {
+            case .fundamental:
+                let fresh = try await QuantResearchService.trendRadar(market: m, universe: u)
+                guard !stale() else { return }   // 加载期间切了市场 / 指数 / 雷达，丢弃旧结果
+                fundamentalTrend = fresh
+                fundamentalUniverse = u
+            case .analyst:
+                var tries = 0
+                while true {
+                    let fresh = try await SignalRadarService.analystRadar(market: m, universe: u)
+                    guard !stale() else { return }
+                    analystTrend = fresh
+                    analystUniverse = u
+                    // 后台还在补拉券商数据：每 6 秒静默重拉一次，最多 10 次（约 1 分钟）
+                    guard (fresh.pendingSymbols ?? 0) > 0, tries < 10 else { break }
+                    tries += 1
+                    try? await Task.sleep(nanoseconds: 6_000_000_000)
+                    guard !Task.isCancelled, !stale() else { return }
+                }
+            }
         } catch {
-            guard m == market.rawValue, u == activeUniverseKey else { return }
+            guard !stale() else { return }
             trendError = error.localizedDescription
         }
     }

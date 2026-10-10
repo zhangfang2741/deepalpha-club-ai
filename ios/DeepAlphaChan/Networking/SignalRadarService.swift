@@ -45,4 +45,11 @@ enum SignalRadarService {
         if let sector, !sector.isEmpty { query["sector"] = sector }
         return try await APIClient.shared.get("/signal-radar/fundamental-top", query: query)
     }
+
+    /// 评级雷达（分析师评级）：股票池里近 7 / 30 / 90 天被券商净上调 / 净下调的股票。后台还在补拉时 pendingSymbols > 0，调用方静默重拉。
+    static func analystRadar(market: String, universe: String? = nil) async throws -> QuantTrendRadar {
+        var query = ["market": market]
+        if let universe, !universe.isEmpty { query["universe"] = universe }
+        return try await APIClient.shared.get("/signal-radar/analyst-radar", query: query)
+    }
 }
