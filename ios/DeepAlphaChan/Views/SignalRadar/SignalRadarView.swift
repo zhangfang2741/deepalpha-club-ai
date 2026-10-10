@@ -792,16 +792,26 @@ struct SignalRadarView: View {
     /// 标题下拉菜单：在「缠论雷达」（缠论买卖点）、「基本面雷达」（预期 / 综合等级的变化）与「评级雷达」（券商评级的变动）之间切换。
     /// 标题文字就是当前所在的雷达，用户一眼知道在哪、点标题就能换。
     /// （以前菜单里还有一项「这一页怎么读」展开流程图，2026-10-10 起去掉；流程图只在首次进雷达时自动展开一次，新手导览在学习页可重看。）
+    private var radarChoice: Binding<Int> {
+        Binding(
+            get: { !vm.trendMode ? 0 : (vm.trendFlavor == .fundamental ? 1 : 2) },
+            set: { v in
+                switch v {
+                case 1: vm.enterTrend(.fundamental)
+                case 2: vm.enterTrend(.analyst)
+                default: vm.exitTrend()
+                }
+            })
+    }
+
     private var flowTitle: some View {
         Menu {
-            Button { vm.exitTrend() } label: {
-                Label(L("缠论雷达"), systemImage: vm.trendMode ? "scope" : "checkmark")
-            }
-            Button { vm.enterTrend(.fundamental) } label: {
-                Label(L("基本面雷达"), systemImage: vm.trendMode && vm.trendFlavor == .fundamental ? "checkmark" : "chart.line.uptrend.xyaxis")
-            }
-            Button { vm.enterTrend(.analyst) } label: {
-                Label(L("评级雷达"), systemImage: vm.trendMode && vm.trendFlavor == .analyst ? "checkmark" : "person.2.wave.2")
+            // 三个入口的图标固定不变（选中态由 Picker 自带的对勾标出，不再拿对勾顶掉图标）：
+            // 缠论 = 价格折线、基本面 = 财报文档、评级 = 星级
+            Picker(L("切换雷达"), selection: radarChoice) {
+                Label(L("缠论雷达"), systemImage: "waveform.path.ecg").tag(0)
+                Label(L("基本面雷达"), systemImage: "doc.text.magnifyingglass").tag(1)
+                Label(L("评级雷达"), systemImage: "star.leadinghalf.filled").tag(2)
             }
         } label: {
             HStack(spacing: 6) {
