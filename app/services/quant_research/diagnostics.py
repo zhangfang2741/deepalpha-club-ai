@@ -305,3 +305,23 @@ def stage_sensitivity(rows: list[DiagRow]) -> dict:
         "cagr_missing": _share(sum(r.rev_cagr3_pct is None for r in staged), len(staged)),
         "yoy_percentiles": {f"p{q}": round(sorted(yoy)[min(len(yoy) - 1, int(q / 100 * len(yoy)))], 1) for q in (5, 25, 50, 75, 95)} if yoy else {},
     }
+
+
+def net_margin_gap(values: list[dict[str, float]]) -> dict:
+    """净利率 vs 经营（EBIT）利润率：净利率明显高于经营利润率，多是处置收益 / 公允价值变动 / 税收收益等一次性项目（WDC 一类）。
+
+    只看同时有两项的公司；输出各档占比，不含个股。gap = 净利率 − EBIT 利润率（百分点）。
+    """
+    pairs = [(v["net_m"], v["ebit_m"]) for v in values if "net_m" in v and "ebit_m" in v]
+    if len(pairs) < MIN_GROUP:
+        return {"note": "样本不足"}
+    gaps = [(n - e) * 100 for n, e in pairs]
+    total = len(gaps)
+    return {
+        "paired": total,
+        "gap_gt_5pt": _share(sum(g > 5 for g in gaps), total),
+        "gap_gt_10pt": _share(sum(g > 10 for g in gaps), total),
+        "gap_gt_20pt": _share(sum(g > 20 for g in gaps), total),
+        "net_margin_gt_50pct": _share(sum(n > 0.5 for n, _ in pairs), total),
+        "gap_percentiles_pt": {f"p{q}": round(sorted(gaps)[min(total - 1, int(q / 100 * total))], 1) for q in (50, 90, 95, 99)},
+    }

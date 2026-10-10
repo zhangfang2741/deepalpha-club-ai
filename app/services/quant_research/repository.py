@@ -420,6 +420,33 @@ def _num_or_none(v: object) -> float | None:
     return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
+async def metric_values(market: str, as_of: date, keys: tuple[str, ...], page: int = 100,
+                        pause: float = 0.25) -> list[dict[str, float]]:
+    """某天全部结果里指定指标的值（不含代码）。分页读、每页之间让出时间，对线上数据库基本无压力（一次性诊断用）。"""
+    import asyncio
+
+    out: list[dict[str, float]] = []
+    offset = 0
+    while True:
+        q = (select(col(QuantResult.payload_zh)["dimensions"])
+             .where(col(QuantResult.market) == market, col(QuantResult.as_of) == as_of)
+             .order_by(col(QuantResult.symbol)).limit(page).offset(offset))
+        async with AsyncSessionFactory() as s:
+            rows = (await s.execute(q)).all()
+        if not rows:
+            return out
+        for (dims,) in rows:
+            vals: dict[str, float] = {}
+            for d in dims if isinstance(dims, list) else []:
+                for g in d.get("groups", []) if isinstance(d, dict) else []:
+                    for m in g.get("metrics", []):
+                        if m.get("key") in keys and isinstance(m.get("value"), (int, float)) and m.get("status") == "ok":
+                            vals[m["key"]] = float(m["value"])
+            out.append(vals)
+        offset += page
+        await asyncio.sleep(pause)
+
+
 async def diagnostic_rows(market: str, as_of: date) -> list:
     """某天全部结果的诊断行：只取等级 / 阶段 / 综合分 / 各维度等级几个 JSON 字段，不拉指标明细。"""
     from app.services.quant_research.diagnostics import DiagRow  # 避免模块级循环依赖

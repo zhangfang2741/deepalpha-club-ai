@@ -109,3 +109,12 @@ def test_stage_sensitivity_counts_ramp_extreme_and_missing():
     assert r["staged"] == 11
     assert r["ramp_zone_10_20"] == round(2 / 11, 3) and r["extreme_yoy"] == round(2 / 11, 3)
     assert r["cagr_missing"] == round(2 / 11, 3) and r["no_yoy"] == round(1 / 11, 3)
+
+
+def test_net_margin_gap_buckets():
+    from app.services.quant_research.diagnostics import net_margin_gap
+
+    vals = [{"net_m": 0.10, "ebit_m": 0.12}] * 8 + [{"net_m": 0.73, "ebit_m": 0.35}, {"net_m": 0.20, "ebit_m": 0.12}, {"net_m": 0.4}]
+    r = net_margin_gap(vals)
+    assert r["paired"] == 10 and r["gap_gt_5pt"] == 0.2 and r["gap_gt_10pt"] == 0.1 and r["gap_gt_20pt"] == 0.1
+    assert r["net_margin_gt_50pct"] == 0.1

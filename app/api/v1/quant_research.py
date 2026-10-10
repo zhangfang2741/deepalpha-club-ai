@@ -105,6 +105,25 @@ async def quant_diagnostics_whatif(request: Request, market: Literal["us", "cn",
             **diag.whatif_cohort(await repo.diagnostic_rows(market, day))}
 
 
+@router.get("/diagnostics/netgap")
+@limiter.limit("2 per minute")
+async def quant_diagnostics_netgap(request: Request, market: Literal["us", "cn", "hk"] = Query("us")) -> dict:
+    """净利率 vs EBIT 利润率的差距分布（一次性收益对净利润口径指标的影响面）。
+
+    分页读已落库结果里的两个指标值（每页之间让出时间），不请求任何数据源；只返回占比 / 分位，不含个股。
+    临时工具，与 /diagnostics 一起在方法稳定后删除。
+    """
+    from app.services.quant_research import diagnostics as diag
+    from app.services.quant_research import repository as repo
+
+    dates = await repo.diagnostic_dates(market)
+    if not dates:
+        return {"status": "no_data"}
+    day, version, _ = dates[0]
+    values = await repo.metric_values(market, day, ("net_m", "ebit_m"))
+    return {"status": "ok", "market": market, "as_of": day.isoformat(), "version": version, **diag.net_margin_gap(values)}
+
+
 @router.post("/batch/run")
 @limiter.limit("3 per minute")
 async def quant_batch_run(
