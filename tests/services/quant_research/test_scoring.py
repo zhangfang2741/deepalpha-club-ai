@@ -210,3 +210,16 @@ def test_dimension_formula_uses_effective_weights():
     d = score_dimension("valuation", sm, None, metric_weights=w)
     f = dimension_formula(d, w)
     assert "80×1" in f and "10×0.5" in f and "40" not in f.split("÷")[0]   # 权重 0 的不出现在算式里
+
+
+def test_score_metric_reports_tie_and_worse_share():
+    """并列严重的指标要告诉界面「好于 x%、与 y% 并列」，不能只说「高于 x%」。"""
+    debt = [0.0] * 60 + [float(i) for i in range(1, 41)]                    # 越低越好：60% 净现金并列在 0
+    s = score_metric("net_debt_ebitda", _mv(0.0), debt, None)
+    assert s.tie_share == 0.6 and s.worse_share == 0.4
+    runway = [1.0, 2.0, 3.0] + [10.0] * 97                                   # 越高越好：97% 并列在上限
+    r = score_metric("runway_years", _mv(10.0), runway, None)
+    assert r.tie_share == 0.97 and r.worse_share == 0.03
+    u = score_metric("pe_ttm", _mv(10), DIST, None)                          # 无并列：tie 只有自己
+    assert u.tie_share == 0.01
+    assert score_metric("pe_ttm", _mv(None, "not_meaningful"), DIST, None).tie_share is None

@@ -2490,13 +2490,13 @@
        "description": "现金按最近 12 个月自由现金流为负的速度烧，能撑几年；自由现金流为正（不烧钱）记上限 10 年",
        "direction": "higher_better",
        "value": 10.0,
-       "display_value": "10.0",
+       "display_value": "≥10 年",
        "status": "ok",
        "status_note": null,
        "percentile": 65.5,
        "grade": "B-",
        "sector_median": 10.0,
-       "sector_median_display": "10.0",
+       "sector_median_display": "≥10 年",
        "diff_to_median_pct": 0.0,
        "distribution": {
         "p10": 3.27,
@@ -2522,7 +2522,7 @@
          }
         ]
        },
-       "position_text": "高于 66% 的同板块公司 → 百分位 66 → B-",
+       "position_text": "好于板块 30% 的公司，与 70% 的公司并列（并列取平均位次） → 百分位 66 → B-",
        "interpretation": {
         "what": "现金按最近 12 个月自由现金流为负的速度烧，能撑几年；自由现金流为正（不烧钱）记上限 10 年",
         "role": "观察现金按当前烧钱速度能维持多久，衡量不靠外部融资的生存时间。",

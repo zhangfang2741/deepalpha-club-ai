@@ -124,3 +124,32 @@ def test_stability_not_applicable_dimension_note_and_expressions():
     assert "自由现金流" in zh and "不烧钱" in zh and "年自由现金流出" not in zh   # 不把正的现金流写成「负的流出」
     capped = MetricValue(100.0, "ok", [("ebit_ttm", 5e9), ("interest_ttm", 1e7)], "div")
     assert "超过上限" in metric_expression("interest_cov", capped, "zh")
+
+
+def test_display_value_shows_caps_not_fake_numbers():
+    """封顶值显示成「≥10 年 / ≥100 倍 / 净现金」，不显示成像真的一样的 10.0 / 100.0 / 0.0。"""
+    from app.services.quant_research.copy import fmt_metric_display
+
+    assert fmt_metric_display("runway_years", 10.0, "zh") == "≥10 年"
+    assert fmt_metric_display("runway_years", 10.0, "en") == "≥10 years"
+    assert fmt_metric_display("runway_years", 2.35, "zh") == "2.4"
+    assert fmt_metric_display("interest_cov", 100.0, "zh") == "≥100 倍"
+    assert fmt_metric_display("interest_cov", 3.9, "zh") == "3.9"
+    assert fmt_metric_display("net_debt_ebitda", 0.0, "zh") == "净现金"
+    assert fmt_metric_display("net_debt_ebitda", 0.0, "en") == "Net cash"
+    assert fmt_metric_display("net_debt_ebitda", 1.25, "zh") == "1.2"
+    assert fmt_metric_display("pe_ttm", 28.72, "zh") == "28.7"           # 其他指标与 fmt_metric_value 一致
+    assert fmt_metric_display("gross_m", None, "zh") == "—"
+
+
+def test_position_phrase_with_heavy_ties_says_tied_not_higher():
+    from app.services.quant_research.copy import position_phrase
+    from app.services.quant_research.metrics import MetricValue
+    from app.services.quant_research.scoring import ScoredMetric
+
+    sm = ScoredMetric("runway_years", MetricValue(10.0, "ok"), "ok", 72.0, "B", 398, tie_share=0.54, worse_share=0.46)
+    zh = position_phrase(sm, "zh")
+    assert "好于板块 46% 的公司" in zh and "54%" in zh and "并列" in zh and "高于" not in zh
+    assert "tied" in position_phrase(sm, "en")
+    plain = ScoredMetric("pe_ttm", MetricValue(10.0, "ok"), "ok", 91.0, "A", 100, tie_share=0.01, worse_share=0.9)
+    assert position_phrase(plain, "zh") == "低于板块 91% 的公司"          # 无并列：沿用原来的说法

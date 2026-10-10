@@ -2427,7 +2427,7 @@
        "percentile": null,
        "grade": null,
        "sector_median": 10.0,
-       "sector_median_display": "10.0",
+       "sector_median_display": "≥10 年",
        "diff_to_median_pct": null,
        "distribution": {
         "p10": 3.27,

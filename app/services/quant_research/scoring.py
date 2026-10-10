@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import math
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, field
 
 from app.services.quant_research.grading import cap_grade, grade_with_hysteresis, percentile_of
@@ -42,6 +43,8 @@ class ScoredMetric:
     sector_median: float | None = None
     diff_to_median_pct: float | None = None
     distribution: dict[str, float] | None = None
+    tie_share: float | None = None    # 板块里与它数值相同的公司占比（含自己）：封顶 / 净现金这类指标常有大量并列
+    worse_share: float | None = None  # 板块里严格比它差的公司占比（按指标方向）
 
 
 @dataclass
@@ -113,6 +116,9 @@ def score_metric(key: str, mv: MetricValue, dist: list[float] | None, prev_grade
         base.percentile = 0.0
     else:
         base.percentile = percentile_of(mv.value, dist, lower_better=lower_better)  # type: ignore[arg-type]
+        lt, le = bisect_left(dist, mv.value), bisect_right(dist, mv.value)  # type: ignore[type-var]
+        base.tie_share = round((le - lt) / n, 3)
+        base.worse_share = round(((n - le) if lower_better else lt) / n, 3)
     base.grade = grade_with_hysteresis(base.percentile, prev_grade)
     return base
 
