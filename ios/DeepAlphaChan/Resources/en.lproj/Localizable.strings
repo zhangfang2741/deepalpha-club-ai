@@ -1889,3 +1889,5 @@
 "降的档数越多颜色越深；档数一样时，综合分跌得多的略深。" = "The more steps down, the darker; with equal steps, the bigger score drop is slightly darker.";
 "预期下调" = "Expectation cut";
 "预期下调：分析师在调低这家公司本财年的每股盈利预期。" = "Expectation cut: analysts are lowering their EPS forecast for this company's current fiscal year.";
+"正在读取券商评级变动，第一次打开可能要等十几秒…" = "Reading broker rating changes. The first open may take ten seconds or so…";
+"正在计算预期与综合等级的变化，第一次打开可能要等十几秒…" = "Working out changes in expectations and overall grades. The first open may take ten seconds or so…";

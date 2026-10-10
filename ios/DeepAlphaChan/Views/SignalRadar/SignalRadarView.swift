@@ -305,7 +305,18 @@ struct SignalRadarView: View {
                 Button(L("重试")) { Task { await vm.loadTrend() } }
             }
         } else {
-            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            // 加载中给一句话：第一次打开要等后端算（基本面雷达读全池评级、评级雷达读券商数据），空转圈会让人以为卡住了
+            VStack(spacing: 12) {
+                ProgressView()
+                Text(vm.trendFlavor == .analyst
+                     ? L("正在读取券商评级变动，第一次打开可能要等十几秒…")
+                     : L("正在计算预期与综合等级的变化，第一次打开可能要等十几秒…"))
+                    .font(.footnote)
+                    .foregroundColor(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         trendLegend
         Spacer(minLength: 0)
