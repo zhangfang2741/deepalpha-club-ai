@@ -37,7 +37,7 @@ struct TrendListSheet: View {
                         }
                         Text(kind.flavor == .analyst
                              ? L("只陈列券商评级的变动事实，不代表股价会涨跌，不构成投资建议。")
-                             : L("只陈列预期与财报的变化事实，不代表股价会涨跌，不构成投资建议。"))
+                             : L("只陈列综合等级的变化事实，不代表股价会涨跌，不构成投资建议。"))
                             .font(.caption2).foregroundColor(Theme.textSecondary)
                             .padding(.top, 8)
                     }

@@ -285,7 +285,7 @@ struct SignalRadarView: View {
 
     /// 与缠论雷达同一张画布、同一套同心圈与气泡：圈 = 最近 1 周 / 1 月 / 3 月，颜色深浅 = 变化幅度，气泡大小与字母 = 综合等级。
     /// 颜色和缠论雷达一致：红 = 向好的一侧（预期上调 / 等级上升 / 券商上调），绿 = 向差的一侧（下调 / 下降），下拉框切换类别。
-    /// 基本面雷达看预期与我们自己的综合等级；评级雷达看券商评级（仅美股）。
+    /// 基本面雷达只看我们自己的综合等级变化；评级雷达看券商评级（仅美股）。
     @ViewBuilder
     private var trendContent: some View {
         trendHeader
@@ -310,7 +310,7 @@ struct SignalRadarView: View {
                 ProgressView()
                 Text(vm.trendFlavor == .analyst
                      ? L("正在读取券商评级变动，第一次打开可能要等十几秒…")
-                     : L("正在计算预期与综合等级的变化，第一次打开可能要等十几秒…"))
+                     : L("正在计算综合等级的变化，第一次打开可能要等十几秒…"))
                     .font(.footnote)
                     .foregroundColor(Theme.textSecondary)
                     .multilineTextAlignment(.center)
@@ -322,7 +322,7 @@ struct SignalRadarView: View {
         Spacer(minLength: 0)
         Text(vm.trendFlavor == .analyst
              ? L("只陈列券商评级的变动事实，不代表股价会涨跌，不构成投资建议。")
-             : L("只陈列预期与财报的变化事实，不代表股价会涨跌，不构成投资建议。"))
+             : L("只陈列综合等级的变化事实，不代表股价会涨跌，不构成投资建议。"))
             .font(.caption2)
             .foregroundColor(Theme.textSecondary)
             .frame(maxWidth: .infinity)
@@ -358,7 +358,7 @@ struct SignalRadarView: View {
         }
     }
 
-    /// 动向类别下拉框（基本面雷达：预期上调 / 预期下调 / 等级上升 / 等级下降；评级雷达：评级变动），放在雷达画布左上角；选项后面的数字是当前「精选 / 行业」筛选下的个数。
+    /// 动向类别下拉框（基本面雷达只有「等级变化」、评级雷达只有「评级变动」，都只有一类时不做下拉），放在雷达画布左上角；选项后面的数字是当前「精选 / 行业」筛选下的个数。
     @ViewBuilder
     private var trendKindMenu: some View {
         if QuantTrendKind.kinds(for: vm.trendFlavor).count <= 1 {
@@ -821,7 +821,7 @@ struct SignalRadarView: View {
         Rectangle().fill(Theme.border).frame(width: 14, height: 1.5).padding(.top, 10)
     }
 
-    /// 标题下拉菜单：在「缠论雷达」（缠论买卖点）、「基本面雷达」（预期 / 综合等级的变化）与「评级雷达」（券商评级的变动）之间切换。
+    /// 标题下拉菜单：在「缠论雷达」（缠论买卖点）、「基本面雷达」（综合等级的变化）与「评级雷达」（券商评级的变动）之间切换。
     /// 标题文字就是当前所在的雷达，用户一眼知道在哪、点标题就能换。
     /// （以前菜单里还有一项「这一页怎么读」展开流程图，2026-10-10 起去掉；流程图只在首次进雷达时自动展开一次，新手导览在学习页可重看。）
     private var radarChoice: Binding<Int> {

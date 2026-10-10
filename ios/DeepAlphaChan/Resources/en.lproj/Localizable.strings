@@ -1918,3 +1918,5 @@
 "不代表股价会涨跌：券商评级常常滞后于股价，也不总是对的。" = "Does not mean the price will rise or fall: broker ratings often lag the price and are not always right.";
 "最近 3 个月这个股票池里没有被券商净上调或净下调评级的股票" = "No stock in this pool was net-upgraded or net-downgraded by brokers in the last 3 months";
 "评级变动" = "Rating changes";
+"正在计算综合等级的变化，第一次打开可能要等十几秒…" = "Working out changes in overall grades. The first open may take ten seconds or so…";
+"只陈列综合等级的变化事实，不代表股价会涨跌，不构成投资建议。" = "Only lists changes in overall grades. It does not mean the price will rise or fall and is not investment advice.";
