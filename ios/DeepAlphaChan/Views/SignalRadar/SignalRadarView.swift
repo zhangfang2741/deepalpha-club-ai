@@ -122,7 +122,7 @@ struct SignalRadarView: View {
             .sheet(item: $panel, onDismiss: {
                 if let t = pendingTrend {
                     pendingTrend = nil
-                    openSymbol(t.symbol, name: t.name, segment: .quant)
+                    openSymbol(t.symbol, name: t.name, segment: vm.trendFlavor == .analyst ? .analyst : .quant)
                     return
                 }
                 if let g = pendingGood {
@@ -429,8 +429,8 @@ struct SignalRadarView: View {
                             isNew: false,
                             marksConfirmed: false,
                             polished: true,
-                            // 点气泡直接进个股的「基本面研究」分段（和缠论雷达一样不先弹面板）
-                            onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name, segment: .quant) }
+                            // 点气泡直接进个股详情：基本面雷达进「基本面研究」分段，评级雷达进「分析师评级」分段（和缠论雷达一样不先弹面板）
+                            onOpen: { openSymbol(layout.signal.symbol, name: layout.signal.name, segment: vm.trendFlavor == .analyst ? .analyst : .quant) }
                         )
                         .transition(.identity)
                     }
