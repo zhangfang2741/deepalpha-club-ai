@@ -80,7 +80,9 @@ enum TrendDerivations {
         case .analyst:
             // A 股 / 港股：说明为什么空——A 股券商很少改评级；港股从开始比对那天起才有数据
             if market == .cn, let n = trend?.marketActions {
-                return L("A 股券商很少调整评级（大多是维持或首次覆盖）：最近 1 个月全市场只有 %lld 次评级上调或下调，这个股票池里没有。", n)
+                return n == 0
+                    ? L("A 股券商很少调整评级（大多是维持或首次覆盖）：最近 1 个月全市场都没有评级上调或下调。")
+                    : L("A 股券商很少调整评级（大多是维持或首次覆盖）：最近 1 个月全市场只有 %lld 次评级上调或下调，这个股票池里没有。", n)
             }
             if market == .hk, let since = trend?.trackingSince {
                 return L("港股评级变动从 %@ 起每天比对各券商评级累计，这个股票池里暂时还没有上调或下调。", since)
