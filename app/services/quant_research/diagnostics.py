@@ -165,3 +165,57 @@ def tie_stats(dists: dict[tuple[str, str], list[float]], keys: tuple[str, ...] |
             shares.append(top / len(vals))
         out[k] = {"sectors": len(shares), "median_largest_tie_share": round(statistics.median(shares), 3) if shares else None}
     return out
+
+
+TIE_HEAVY_SHARE = 0.25     # 某板块某指标最大并列占比超过它：平均位次之外，该指标区分度也有限
+FAT_TAIL_RATIO = 20.0      # 极值 / 第 99 百分位超过它：极少数异常值（单位 / 一次性项目 / 数据错）
+THIN_COVERAGE = 0.6        # 指标有值的公司数 / 板块样本数低于它：数据源覆盖不足
+
+
+def _quantile(sorted_vals: list[float], q: float) -> float:
+    return sorted_vals[min(len(sorted_vals) - 1, int(q * len(sorted_vals)))]
+
+
+def scan_distributions(dists: dict[tuple[str, str], list[float]]) -> dict:
+    """全景扫描：从板块分布（已落库的聚合数据）看每个指标有没有异常，**不读个股、不碰数据源**。
+
+    每个指标汇总：覆盖率、分位、负值占比、最大并列占比、极值倍数，并给出标记（tie_heavy / fat_tail / thin_coverage /
+    sparse_sectors）。输出只含指标键与统计量，不含个股。
+    """
+    sample = {sector: len(v) for (sector, key), v in dists.items() if key == "r3m"}
+    total_sample = sum(sample.values())
+    by_metric: dict[str, dict[str, list[float]]] = {}
+    for (sector, key), vals in dists.items():
+        if key.startswith("_") or sector.startswith("_"):      # 综合分分布不是指标
+            continue
+        by_metric.setdefault(key, {})[sector] = vals
+    out: dict = {"sample_total": total_sample, "metrics": {}, "flagged": {}}
+    for key, per_sector in sorted(by_metric.items()):
+        pooled = sorted(v for vals in per_sector.values() for v in vals)
+        if not pooled:
+            continue
+        sectors_with = {s: vals for s, vals in per_sector.items() if vals}
+        tie = [max(Counter(vals).values()) / len(vals) for vals in sectors_with.values() if len(vals) >= 20]
+        p99, p95 = _quantile(pooled, 0.99), _quantile(pooled, 0.95)
+        flags = []
+        coverage = len(pooled) / total_sample if total_sample else None
+        if coverage is not None and coverage < THIN_COVERAGE:
+            flags.append("thin_coverage")
+        if tie and statistics.median(tie) > TIE_HEAVY_SHARE:
+            flags.append("tie_heavy")
+        if p99 > 0 and pooled[-1] / p99 > FAT_TAIL_RATIO or p99 < 0 and pooled[0] / p99 > FAT_TAIL_RATIO:
+            flags.append("fat_tail")
+        if len(sectors_with) < len(sample):
+            flags.append("sparse_sectors")
+        out["metrics"][key] = {
+            "n": len(pooled), "coverage": round(coverage, 3) if coverage is not None else None,
+            "sectors": len(sectors_with),
+            "p1": round(_quantile(pooled, 0.01), 4), "p50": round(_quantile(pooled, 0.5), 4),
+            "p95": round(p95, 4), "p99": round(p99, 4), "max": round(pooled[-1], 4),
+            "negative_share": round(sum(v < 0 for v in pooled) / len(pooled), 3),
+            "median_largest_tie_share": round(statistics.median(tie), 3) if tie else None,
+            "flags": flags,
+        }
+        if flags:
+            out["flagged"][key] = flags
+    return out

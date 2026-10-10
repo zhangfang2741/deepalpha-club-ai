@@ -159,3 +159,25 @@ def test_diagnostics_is_aggregate_only_and_needs_no_login(monkeypatch):
     assert body["compare"]["paired"] == 15 and body["ties"]["runway_years"]["median_largest_tie_share"] == 0.95
     assert "LEAKCHECK" not in r.text
     assert api_mod.METHODOLOGY_VERSION == body["current_methodology"]
+
+
+def test_diagnostics_scan_reads_only_distributions(monkeypatch):
+    """全景扫描只读分布表：不登录可访问、只返回指标统计，路由不能被 /{market}/{symbol} 抢走。"""
+    from datetime import date
+
+    from app.services.quant_research import repository as repo
+
+    async def fake_dates(market, limit=6):
+        return [(date(2026, 10, 10), "q9", 100)]
+
+    async def fake_dists(market, as_of):
+        vals = sorted([float(i) for i in range(1, 101)])
+        return {("it", "r3m"): vals, ("it", "pe_ttm"): vals, ("it", "interest_cov"): sorted([100.0] * 80 + vals[:20])}
+
+    monkeypatch.setattr(repo, "diagnostic_dates", fake_dates)
+    monkeypatch.setattr(repo, "get_distributions", fake_dists)
+    r = TestClient(app).get("/api/v1/quant-research/diagnostics/scan?market=us")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["version"] == "q9" and body["flagged"] == {"interest_cov": ["tie_heavy"]}
+    assert body["metrics"]["pe_ttm"]["flags"] == []

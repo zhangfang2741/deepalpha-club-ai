@@ -59,3 +59,24 @@ def test_tie_stats_median_largest_tie_share():
     t = tie_stats(dists, ("runway_years", "cfo_ni"))
     assert t["runway_years"] == {"sectors": 2, "median_largest_tie_share": 0.74}   # (97% + 51%) 的中位数
     assert t["cfo_ni"]["median_largest_tie_share"] == 0.01
+
+
+def test_scan_distributions_flags_ties_fat_tails_and_thin_coverage():
+    from app.services.quant_research.diagnostics import scan_distributions
+
+    normal = [float(i) for i in range(1, 101)]
+    dists = {
+        ("tech", "r3m"): normal, ("fin", "r3m"): normal,                      # 板块样本 100 + 100
+        ("tech", "pe_ttm"): normal, ("fin", "pe_ttm"): normal,                # 正常
+        ("tech", "interest_cov"): [100.0] * 60 + normal[:40], ("fin", "interest_cov"): [100.0] * 60 + normal[:40],  # 并列严重
+        ("tech", "roe"): normal[:-1] + [100000.0], ("fin", "roe"): normal,    # 极值离谱
+        ("tech", "pb"): normal[:30],                                          # 覆盖不足 + 只有一个板块有值
+        ("_all", "_overall"): normal,                                         # 综合分分布不是指标
+    }
+    r = scan_distributions(dists)
+    assert r["sample_total"] == 200 and "_overall" not in r["metrics"]
+    assert r["metrics"]["pe_ttm"]["flags"] == []
+    assert "tie_heavy" in r["flagged"]["interest_cov"]
+    assert "fat_tail" in r["flagged"]["roe"]
+    assert {"thin_coverage", "sparse_sectors"} <= set(r["flagged"]["pb"])
+    assert all("symbol" not in str(v) for v in r["metrics"].values())
