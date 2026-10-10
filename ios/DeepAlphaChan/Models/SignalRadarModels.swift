@@ -109,6 +109,9 @@ struct RadarDay: Decodable, Identifiable {
     let sectorCounts: [String: [String: Int]]?
     /// 这一天有行业统计（雷达画成扇区）。
     var hasSectorData: Bool { !(sectorCounts ?? [:]).isEmpty }
+    /// 行业横条可以展示：这一天有行业统计，或这一天本来就没有任何信号。
+    /// 没有买卖点的日子 sectorCounts 必然是空的（待确认候选不进行业统计），但行业强弱（按收盘算）照样有——不能因此显示成「数据准备中」。
+    var sectorRailReady: Bool { hasSectorData || signals.isEmpty }
 
     var id: String { date }
     var total: Int { signals.count }
